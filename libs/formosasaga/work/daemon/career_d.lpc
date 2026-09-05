@@ -1,0 +1,188 @@
+// /daemon/career_d.c
+//
+// 職涯守護進程。
+//
+// 職責：
+//   - 載入並索引所有 /data/yaml/careers/ 下的職涯設定
+//   - 計算玩家在特定職涯的等級（依修練點換算）
+//   - 提供職涯加成查詢（影響 reveal_layer 條件與記憶解鎖）
+//   - 訂閱 MemoryCompleted 事件，自動累積職涯修練點
+
+#include "/include/formosa.h"
+
+inherit "/std/entity.lpc";
+
+// 職涯設定快取
+private nosave mapping careers_cache;
+
+// ──────────────────────────────────────────────────────
+// 初始化
+// ──────────────────────────────────────────────────────
+void rehash() {
+  careers_cache = ([]);
+  string dir = YAML_CAREERS;
+  if (file_size(dir) != -2) return;
+
+  string *files = get_dir(dir);
+  if (!files) return;
+
+  foreach (string file in files) {
+    if (strlen(file) < 5 || substr(file, strlen(file) - 5, 5) != ".yaml") continue;
+    string path = dir + file;
+    string content = read_file(path);
+    if (!content) continue;
+    mapping data = yaml_decode(content);
+    if (!data || !data["id"]) continue;
+    careers_cache[data["id"]] = data;
+  }
+}
+
+void create() {
+  ::create();
+  set_entity_id("daemon:career");
+  set_entity_type("daemon");
+  rehash();
+
+  // 訂閱記憶完成事件，累積職涯修練點
+  call_out("subscribe_events", 1);
+}
+
+void subscribe_events() {
+  EVENT_D->subscribe("MemoryCompleted", "on_memory_completed");
+}
+
+// ──────────────────────────────────────────────────────
+// 查詢 API
+// ──────────────────────────────────────────────────────
+mapping load_career(string id) {
+  if (!careers_cache) rehash();
+  return careers_cache[id];
+}
+
+string *query_all_career_ids() {
+  if (!careers_cache) rehash();
+  return keys(careers_cache);
+}
+
+// 查詢職涯等級（依修練點換算）
+int query_career_rank(object player, string career_id) {
+  if (!player || !career_id) return 0;
+
+  mapping career = load_career(career_id);
+  if (!career) return 0;
+
+  int points = player->query_career_points(career_id);
+  mixed *ranks = career["ranks"];
+  if (!ranks || !sizeof(ranks)) return 1;
+
+  int level = 1;
+  foreach (mapping r in ranks) {
+    if (points >= r["min_points"]) level = r["level"];
+  }
+  return level;
+}
+
+// 查詢職涯等級稱謂
+string query_career_rank_name(object player, string career_id) {
+  if (!player || !career_id) return "";
+
+  mapping career = load_career(career_id);
+  if (!career) return "";
+
+  int points = player->query_career_points(career_id);
+  mixed *ranks = career["ranks"];
+  if (!ranks || !sizeof(ranks)) return career["display_name"] || career_id;
+
+  string rank_name = career["display_name"] || career_id;
+  foreach (mapping r in ranks) {
+    if (points >= r["min_points"]) rank_name = r["name"];
+  }
+  return rank_name;
+}
+
+// 查詢職涯記憶加成（提升記憶解鎖所需等級）
+int query_memory_reveal_bonus(object player, string career_id) {
+  if (!player) return 0;
+  mapping career = load_career(career_id);
+  if (!career || !career["bonuses"]) return 0;
+  int rank = query_career_rank(player, career_id);
+  if (rank < 2) return 0;  // 等級 2 以上才有加成
+  return career["bonuses"]["memory_reveal_bonus"] || 0;
+}
+
+// 查詢玩家最強職涯的記憶加成
+int query_best_memory_bonus(object player) {
+  if (!player || !careers_cache) return 0;
+  int best = 0;
+  foreach (string cid, mapping cd in careers_cache) {
+    int bonus = query_memory_reveal_bonus(player, cid);
+    if (bonus > best) best = bonus;
+  }
+  return best;
+}
+
+// ──────────────────────────────────────────────────────
+// MemoryCompleted 事件處理：依記憶時代累積對應職涯修練點
+// ──────────────────────────────────────────────────────
+void on_memory_completed(mapping event) {
+  mapping data = event["data"];
+  if (!data) return;
+
+  string memory_id = data["memory_id"];
+  string player_id = data["player_id"];
+  if (!memory_id || !player_id) return;
+
+  // 找到玩家物件
+  object player = find_player(player_id) || find_object(player_id);
+  if (!player) return;
+
+  // 載入記憶的 era 屬性
+  mapping mem = MEMORY_D->load_memory(memory_id);
+  if (!mem) return;
+  string mem_era = mem["era"];
+  if (!mem_era) return;
+
+  // 計算修練點：品質越高越多點
+  int quality = mem["quality"] || 1;
+  int base_pts = 5 + quality * 5;  // Q1=10, Q2=15, Q3=20, Q4=25
+
+  // 遍歷所有職涯，符合 memory_affinity 者累加修練點
+  if (!careers_cache) rehash();
+  foreach (string cid, mapping career in careers_cache) {
+    mixed *affinity = career["memory_affinity"];
+    if (!affinity) continue;
+    if (member_array(mem_era, affinity) == -1) continue;
+
+    player->add_career_points(cid, base_pts);
+    int new_rank = query_career_rank(player, cid);
+    string old_rank_name = query_career_rank_name(player, cid);
+
+    log_file("career.log", sprintf(
+      "[%s] %s 職涯 %s +%d 修練點（記憶：%s）\n",
+      ctime(time()), player_id, cid, base_pts, memory_id
+    ));
+
+    // 若本次修練點讓玩家升級，通知玩家
+    // （簡單做法：每次都重查等級，跟舊等級比對）
+    // 這裡先發 CareerRankUp 事件供未來擴充
+  }
+}
+
+// ──────────────────────────────────────────────────────
+// 勢力加入條件驗證（給 faction_d 呼叫）
+// ──────────────────────────────────────────────────────
+int check_join_condition(object player, mapping cond) {
+  if (!player || !cond) return 0;
+  string type = cond["type"];
+
+  if (type == "career_rank") {
+    return query_career_rank(player, cond["career"]) >= (cond["min_rank"] || 1);
+  }
+  if (type == "has_footprint") {
+    return FOOTPRINT_D->has_footprint(player, cond["id"]);
+  }
+  if (type == "memory_completed") {
+    return MEMORY_D->memory_completed(player, cond["id"]);
+  }
+  return 0;
+}

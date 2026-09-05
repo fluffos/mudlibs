@@ -1,0 +1,77 @@
+// /std/pet.c - 寵物基底類別
+#include "/include/ansi.h"
+#include "/include/config.h"
+
+inherit "/std/npc";
+
+object owner;
+int loyalty;
+
+void create() {
+  ::create();
+  loyalty = 100;
+  set_behaviour(BEHAV_PASSIVE);  // 預設被動，跟隨主人
+}
+
+void set_owner(object ob) {
+  owner = ob;
+  if (ob) {
+    set_name(ob->query_name() + "的" + query_name());
+    set_short(ob->query_name() + "的" + query_short());
+    // 自動建立跟隨關係
+    ob->add_follower(this_object());
+    set_leader(ob);
+  }
+}
+
+object query_owner() { return owner; }
+
+void heart_beat() {
+  ::heart_beat();
+
+  if (!owner) {
+    // 如果主人不在了，寵物變回普通 NPC 或消失
+    set_heart_beat(0);
+    return;
+  }
+
+  // 🚀 戰鬥連動：如果主人正在戰鬥，且寵物不在戰鬥中
+  if (owner->query_combat_target() && !query_combat_target()) {
+    attacked_by(owner->query_combat_target());
+  }
+}
+
+// 寵物指令介面
+int do_pet_cmd(string cmd, string arg) {
+  if (this_player() != owner) return 0;
+
+  switch (cmd) {
+    case "dismiss":
+    case "解散":
+      write("你解散了 " + query_name() + "。\n");
+      owner->set_pet(0);
+      owner->remove_follower(this_object());
+      destruct(this_object());
+      return 1;
+    case "stay":
+    case "原地待命":
+      write(query_name() + " 現在原地待命。\n");
+      owner->remove_follower(this_object());
+      set_leader(0);
+      return 1;
+    case "follow":
+    case "跟隨":
+      write(query_name() + " 開始跟隨你。\n");
+      owner->add_follower(this_object());
+      set_leader(owner);
+      return 1;
+  }
+  return 0;
+}
+
+void init() {
+  ::init();
+  if (this_player() == owner) {
+    add_action("do_pet_cmd", "pet");
+  }
+}

@@ -1,0 +1,248 @@
+// /testlib/cmds/admin/cmd_audit.c
+// 統一管理員稽核指令 (Wizard Unified Audit Command)
+// 支援：
+//   audit settlement <ID>     (聚落地標與設定載入稽核)
+//   audit errors              (查詢系統錯誤日誌)
+//   audit status              (查詢當前 MUD 記憶體與執行狀態)
+
+#include "/include/ansi.h"
+
+inherit "/std/object";
+
+int do_settlement_audit(object me, string id) {
+  mapping result;
+  string *sites;
+  int i;
+  string *isolated_sites = ({});
+
+  write(HIY "正在對聚落 " + id + " 進行遊戲內稽核（P23.2 Settlement Audit）...\n" NOR);
+
+  result = "/daemon/settlement_d"->load_settlement(id);
+  if (!result) {
+    write(RED "錯誤：找不到聚落「" + id + "」的設定檔或載入失敗。\n" NOR);
+    return 1;
+  }
+
+  write("==================================================\n");
+  write(" 聚落遊戲內稽核: " + result["name"] + " (" + id + ")\n");
+  write("==================================================\n");
+
+  sites = result["sites"];
+  if (!pointerp(sites) || !sizeof(sites)) {
+    write(RED "警告：該聚落沒有配置任何 Sites (地標)。\n" NOR);
+  } else {
+    mapping all_mems = "/daemon/memory_d"->query_all_memories();
+    mapping all_quests = "/daemon/quest_d"->query_all_quests();
+
+    write(HIC "地標清單與狀態查核：\n" NOR);
+    for (i = 0; i < sizeof(sites); i++) {
+      object site_obj = "/daemon/settlement_d"->get_site_object(sites[i]);
+      if (!site_obj) {
+        write(sprintf("  [%-25s] %s\n", sites[i], RED "● 載入失敗 (檔案不存在或語法錯誤)" NOR));
+      } else {
+        string name = site_obj->query_prop("canonical_name");
+        if (!name) name = site_obj->query_prop("name");
+
+        // 檢查是否為孤立地標：掃描是否被任何 memories 或 quests 參照
+        int referenced = 0;
+
+        // 1. 記憶參照檢查
+        if (mapp(all_mems)) {
+          foreach (string mem_id, mapping mem_data in all_mems) {
+            if (mem_data["trigger_site"] == sites[i]) {
+              referenced = 1;
+              break;
+            }
+          }
+        }
+
+        // 2. 任務目標參照檢查
+        if (!referenced && mapp(all_quests)) {
+          foreach (string q_id, mapping q_data in all_quests) {
+            mixed objs = q_data["objectives"];
+            if (pointerp(objs)) {
+              foreach (mapping obj in objs) {
+                if (obj["site"] == sites[i]) {
+                  referenced = 1;
+                  break;
+                }
+              }
+            }
+            if (referenced) break;
+          }
+        }
+
+        if (!referenced) {
+          isolated_sites += ({ name ? name : sites[i] });
+          write(sprintf(
+            "  [%-25s] %s %s %s\n",
+            sites[i],
+            GRN "✓ 已載入" NOR,
+            name ? ("(" + name + ")") : "",
+            YEL "[⚠ 孤立地標 - 無記憶/任務觸發]" NOR
+          ));
+        } else {
+          write(sprintf(
+            "  [%-25s] %s %s\n",
+            sites[i],
+            GRN "✓ 已載入" NOR,
+            name ? ("(" + name + ")") : ""
+          ));
+        }
+      }
+    }
+  }
+
+  write("==================================================\n");
+  if (sizeof(isolated_sites) > 0) {
+    write(sprintf(YEL "警報！檢測到 %d 個孤立地標（無任何記憶或任務參照）：\n" NOR, sizeof(isolated_sites)));
+    for (i = 0; i < sizeof(isolated_sites); i++) {
+      write("  - " + isolated_sites[i] + "\n");
+    }
+  } else {
+    write(GRN "恭喜！所有地標皆有對應的記憶或任務觸發關係。\n" NOR);
+  }
+  write("==================================================\n");
+  write(GRN "聚落載入與孤立地標稽核完成。\n" NOR);
+  return 1;
+}
+
+int do_routes_audit(object me, string id) {
+  mapping result;
+  string *sites;
+  int i, j;
+  string *eras = ({ "indigenous", "qing", "japanese", "postwar", "modern" });
+
+  write(HIY "正在對聚落 " + id + " 進行路線與時代地名稽核（Audit Routes）...\n" NOR);
+
+  result = "/daemon/settlement_d"->load_settlement(id);
+  if (!result) {
+    write(RED "錯誤：找不到聚落「" + id + "」的設定檔或載入失敗。\n" NOR);
+    return 1;
+  }
+
+  sites = result["sites"];
+  if (!pointerp(sites) || !sizeof(sites)) {
+    write(RED "警告：該聚落沒有配置任何 Sites (地標)。\n" NOR);
+    return 1;
+  }
+
+  write("====================================================================\n");
+  write(" 聚落路線與時代地名稽核: " + result["name"] + " (" + id + ")\n");
+  write("====================================================================\n");
+
+  for (i = 0; i < sizeof(sites); i++) {
+    string site_id = sites[i];
+    mapping s_data = "/daemon/site_d"->load_site(site_id);
+    if (!s_data) {
+      write(sprintf("  %-25s : %s\n", site_id, RED "● 無法讀取地標資料" NOR));
+      continue;
+    }
+
+    string canon_name = s_data["canonical_name"] || s_data["name"] || site_id;
+    write(sprintf("\n" HIC "📍 地標 ID: %s (%s)\n" NOR, site_id, canon_name));
+
+    // 1. 印出各時代的對應名稱
+    write("   " WHT "【各時代地名變遷】" NOR "\n");
+    int has_era_name = 0;
+    for (j = 0; j < sizeof(eras); j++) {
+      string era_name = "/daemon/site_d"->query_name_in_era(site_id, eras[j]);
+      if (era_name && era_name != site_id && era_name != canon_name) {
+        write(sprintf("     %-12s -> %s\n", eras[j] + ":", era_name));
+        has_era_name = 1;
+      }
+    }
+    if (!has_era_name) {
+      write("     (無各時代特殊命名，統一使用預設地名)\n");
+    }
+
+    // 2. 印出連通路線
+    write("   " WHT "【地圖連通路徑 (Routes)】" NOR "\n");
+    string *conn = s_data["connections"] || ({});
+    if (sizeof(conn) > 0) {
+      for (j = 0; j < sizeof(conn); j++) {
+        string neighbor = conn[j];
+        string neighbor_name = "/daemon/site_d"->query_name_in_era(neighbor, "modern");
+        write(sprintf("     --> %-25s (%s)\n", neighbor, neighbor_name));
+      }
+    } else {
+      write(YEL "     (⚠ 此地標為孤島，沒有對外連結任何路線！)\n" NOR);
+    }
+  }
+
+  write("====================================================================\n");
+  write(GRN "聚落路線與時代地名稽核完成。\n" NOR);
+  return 1;
+}
+
+int do_errors_audit(object me) {
+  string content;
+  write(HIW "=== 最近系統錯誤日誌 (settlement_errors.log) ===\n" NOR);
+  content = read_file("/log/settlement_errors.log");
+  if (!content || content == "") {
+    write(GRN "無任何錯誤記錄。\n" NOR);
+  } else {
+    write(content);
+  }
+  return 1;
+}
+
+int main(object me, string verb, string arg) {
+  string cmd, subarg;
+
+  if (me->query_role() != "god") {
+    write("只有管理員可以使用此指令。\n");
+    return 1;
+  }
+
+  if (!arg || arg == "") {
+    write(HIW "語法指南 (audit <子指令> [參數])：\n" NOR
+      "  audit settlement <聚落ID>  - 檢查聚落、地標載入與孤立地標狀態\n"
+      "  audit routes <聚落ID>      - 查詢聚落在不同時代下的路線與地標名稱\n"
+      "  audit errors               - 顯示最近的聚落載入錯誤日誌\n"
+      "  audit status               - 顯示 MUD 核心系統狀態\n");
+    return 1;
+  }
+
+  if (sscanf(arg, "%s %s", cmd, subarg) != 2) {
+    cmd = arg;
+    subarg = "";
+  }
+
+  cmd = trim(cmd);
+  subarg = trim(subarg);
+
+  switch (cmd) {
+    case "settlement":
+      if (subarg == "") {
+        write("請指定聚落 ID。例如：audit settlement minxiong\n");
+        return 1;
+      }
+      return do_settlement_audit(me, subarg);
+    case "routes":
+      if (subarg == "") {
+        write("請指定聚落 ID。例如：audit routes minxiong\n");
+        return 1;
+      }
+      return do_routes_audit(me, subarg);
+    case "errors":
+      return do_errors_audit(me);
+    case "status":
+      return "/cmds/admin/cmd_status"->main(me, "status", "");
+    default:
+      write("未知的稽核項目。請輸入 audit 取得說明。\n");
+      return 1;
+  }
+}
+
+string help() {
+  return "【指令】\n  audit <項目>  管理員統一稽核工具，提供聚落載入、錯誤日誌與系統狀態一鍵檢查。\n";
+}
+
+string *query_verbs() {
+  return ({ "audit" });
+}
+
+string query_category() {
+  return "系統工具";
+}

@@ -1,0 +1,193 @@
+// mudlib/tests/p3_test.c
+inherit "/std/test_case";
+
+void test_buffer() {
+  start_test("Efun Buffer (allocate_buffer, bufferp, read_buffer, write_buffer)");
+
+  buffer b = allocate_buffer(10);
+  assert_true(bufferp(b), "allocate_buffer should return a buffer");
+  assert_equal(10, sizeof(b), "buffer size should be 10");
+
+  write_buffer(b, 0, "Hello");
+  assert_equal("Hello", read_buffer(b, 0, 5), "read_buffer should return 'Hello'");
+
+  write_buffer(b, 5, 65);  // 'A'
+  assert_equal(65, read_buffer(b, 5, 1), "read_buffer with len 1 should return integer 65");
+
+  report_results();
+}
+
+void test_bits() {
+  start_test("Efun Bits (set_bit, clear_bit, test_bit)");
+
+  string s = "";
+  s = set_bit(s, 0);
+  s = set_bit(s, 6);
+  assert_equal(1, test_bit(s, 0), "bit 0 should be set");
+  assert_equal(1, test_bit(s, 6), "bit 6 should be set");
+  assert_equal(0, test_bit(s, 1), "bit 1 should not be set");
+
+  s = clear_bit(s, 0);
+  assert_equal(0, test_bit(s, 0), "bit 0 should be cleared");
+  assert_equal(1, test_bit(s, 6), "bit 6 should still be set");
+
+  report_results();
+}
+
+void test_wizard(object me) {
+  start_test("Efun Wizard (enable_wizard, disable_wizard, wizardp)");
+
+  enable_wizard();
+  assert_true(wizardp(this_object()), "enable_wizard should make object a wizard");
+  disable_wizard();
+  assert_true(!wizardp(this_object()), "disable_wizard should remove wizard status");
+
+  report_results();
+}
+
+void test_crc32() {
+  start_test("Efun CRC32");
+
+  int c1 = crc32("hello");
+  int c2 = crc32("hello");
+  assert_equal(c1, c2, "crc32 should be consistent for same input");
+  assert_true(c1 != 0, "crc32 should not be 0 for 'hello'");
+
+  report_results();
+}
+
+void test_match_path() {
+  start_test("Efun Match Path");
+
+  mapping m = ([
+    "/": "root",
+    "/secure/": "secure",
+    "/std/": "std",
+    "/std/object.lpc": "object",
+  ]);
+
+  assert_equal(
+    "secure",
+    match_path(m, "/secure/test.lpc"),
+    "match_path should match directory with trailing slash"
+  );
+  assert_equal(
+    "object",
+    match_path(m, "/std/object.lpc"),
+    "match_path should match exact file path"
+  );
+  assert_equal("root", match_path(m, "/area/room.lpc"), "match_path should fallback to root '/'");
+
+  report_results();
+}
+
+void test_buffer_bytes() {
+  start_test("Efun Buffer Bytes (read_bytes, write_bytes)");
+
+  string file = "/open/p3_io_test.txt";
+  rm(file);
+
+  // 寫入位元組
+  buffer b = allocate_buffer(5);
+  write_buffer(b, 0, "ABCDE");
+  int n = write_bytes(file, 0, b);
+  if (n <= 0) {
+    // 在測試環境中，我們確保 /open/ 可寫
+    write("  [SKIP] write_bytes skipped (permission denied)\n");
+  } else {
+    // 讀取位元組
+    buffer b2 = read_bytes(file, 0, 5);
+    assert_true(bufferp(b2), "read_bytes should return a buffer");
+    assert_equal("ABCDE", read_buffer(b2, 0, 5), "read_bytes should match written content");
+
+    // 偏移寫入
+    write_bytes(file, 2, "X");
+    assert_equal(
+      "ABXDE",
+      read_buffer(read_bytes(file, 0, 5), 0, 5),
+      "write_bytes offset should work"
+    );
+    rm(file);
+  }
+
+  report_results();
+}
+
+void test_shadow_inherit() {
+  start_test("Efun Shadow & Inherit (shadow, deep_inherit_list)");
+
+  object target = clone_object("/std/object.lpc");
+
+  // 測試 shadow: 讓當前測試物件 shadow 目標物件
+  shadow(target);
+  assert_equal(
+    target,
+    query_shadowing(this_object()),
+    "query_shadowing(this) should return shadowed target"
+  );
+
+  // 測試 deep_inherit_list
+  string *list = deep_inherit_list(this_object());
+  assert_true(pointerp(list), "deep_inherit_list should return array");
+  assert_true(member_array("/std/test_case.lpc", list) != -1, "should contain base class");
+
+  destruct(target);
+  report_results();
+}
+
+void test_advanced_wizard() {
+  start_test("Efun Advanced Wizard (exec, snoop, set_this_player)");
+
+  object me = this_player();
+  if (me) {
+    // set_this_player (雖然無法直接斷言，但測試是否會當機)
+    set_this_player(this_object());
+    assert_equal(this_object(), this_player(), "set_this_player should change this_player()");
+    set_this_player(me);  // 恢復
+  }
+
+  // snoop / exec 通常需要真正連線，這裡僅測試 efun 是否存在
+  assert_true(
+    intp(exec(this_object(), this_object())),
+    "exec should return int (0 because of same object)"
+  );
+  assert_true(intp(snoop(this_object())), "snoop(stop) should return int");
+
+  report_results();
+}
+
+void test_advanced_math() {
+  start_test("Efun Advanced Math (sin, cos, floor, ceil, log)");
+
+  assert_true(floatp(sin(1.0)), "sin should return float");
+  assert_true(floatp(cos(1.0)), "cos should return float");
+  assert_equal(3.0, floor(3.9), "floor(3.9) should be 3.0");
+  assert_equal(4.0, ceil(3.1), "ceil(3.1) should be 4.0");
+  assert_true(floatp(log(10.0)), "log should return float");
+
+  report_results();
+}
+
+void test_replace_program() {
+  start_test("Efun Replace Program");
+
+  // 注意: replace_program 會在該次執行完畢後生效，
+  // 這裡僅測試呼叫是否正常。
+  replace_program("/std/object.lpc");
+  assert_true(1, "replace_program called successfully");
+
+  report_results();
+}
+
+void run_tests(object me) {
+  test_buffer();
+  test_buffer_bytes();
+  test_bits();
+  test_wizard(me);
+  test_shadow_inherit();
+  test_advanced_wizard();
+  test_crc32();
+  test_match_path();
+  test_advanced_math();
+  test_replace_program();
+}

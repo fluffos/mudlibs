@@ -1,0 +1,62 @@
+// /tests/test_combat_team.c
+inherit "/std/test_case";
+
+void run_tests(object me) {
+  start_test("戰鬥團隊與 PK 保護驗證");
+
+  object leader = clone_object("/std/user.lpc");
+  object member = clone_object("/std/user.lpc");
+  object enemy = clone_object("/std/user.lpc");
+
+  leader->set_name("隊長");
+  member->set_name("隊員");
+  enemy->set_name("壞人");
+
+  leader->set_id("leader");
+  member->set_id("member");
+  enemy->set_id("enemy");
+
+  // 1. 建立團隊
+  object party_d = load_object("/daemon/party_d.lpc");
+  leader->set_leader(leader);
+  leader->add_follower(member);
+  member->set_leader(leader);
+
+  // 2. 測試 PK 判定：敵人攻擊隊員，隊長反擊應為合法
+  object pk_d = load_object("/daemon/pk_d.lpc");
+
+  // 模擬敵人鎖定隊員作為目標 (真正的攻擊開始)
+  enemy->attacked_by(member);  // 讓 enemy 把 member 當目標 (這裡雖然是反過來調用，但能設定 target)
+  // 修正：應該是 enemy 攻擊 member
+  enemy->set_combat_target(member);
+
+  // 檢查隊長攻擊敵人是否合法
+  int legal = pk_d->is_legal_attack(leader, enemy);
+  assert_equal(1, legal, "隊長反擊『正在攻擊隊員』的人應為合法");
+
+  // 3. 測試惡意攻擊
+  legal = pk_d->is_legal_attack(enemy, leader);
+  assert_equal(0, legal, "敵人無故攻擊隊長應為惡意攻擊 (不合法)");
+
+  // 4. 測試戰利品綁定 (Loot Binding)
+  object slime = clone_object("/npc/slime.lpc");
+  slime->set_name("測試史萊姆");
+  object room = load_object("/area/newbie/room_4_4.lpc");
+  slime->move_object(room);
+
+  // 模擬隊長擊殺史萊姆
+  slime->set_combat_target(leader);
+  slime->on_death();
+
+  object corpse = present("corpse", room);
+  assert_true(objectp(corpse), "擊殺後應該產生屍體");
+  if (corpse) {
+    assert_equal("leader", corpse->query_team_owner(), "屍體應歸屬於隊長的團隊 ID");
+  }
+
+  report_results();
+  destruct(leader);
+  destruct(member);
+  destruct(enemy);
+  if (slime) destruct(slime);
+}

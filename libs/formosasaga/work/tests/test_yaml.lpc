@@ -1,0 +1,78 @@
+// /tests/test_yaml.c
+inherit "/std/test_case";
+
+void run_tests(object me) {
+  start_test("YAML 序列化與反序列化 (yaml_decode & yaml_encode)");
+
+  // 1. 測試基礎 yaml_decode
+  string yaml_str = "name: \"民雄\"\n" +
+    "population: 1200\n" +
+    "culture: 42\n" +
+    "industry:\n" +
+    "  - \"鳳梨\"\n" +
+    "  - \"糖業\"\n" +
+    "enabled: true\n";
+
+  mixed data = yaml_decode(yaml_str);
+  assert_equal(1, mapp(data), "解碼結果應該是 Mapping");
+  assert_equal("民雄", data["name"], "解碼名稱欄位");
+  assert_equal(1200, data["population"], "解碼整數欄位");
+  assert_equal(42, data["culture"], "解碼整數文化值");
+  assert_equal(1, arrayp(data["industry"]), "解碼列表欄位為陣列");
+  assert_equal(2, sizeof(data["industry"]), "陣列長度為 2");
+  assert_equal("鳳梨", data["industry"][0], "解碼陣列元素 0");
+  assert_equal("糖業", data["industry"][1], "解碼陣列元素 1");
+  assert_equal(1, data["enabled"], "解碼布林值為 1 (true)");
+
+  // 2. 測試 yaml_encode
+  mapping test_map = ([
+    "id": "tainan",
+    "culture": 99,
+    "features": ({ "古蹟", "小吃" })
+  ]);
+  string encoded = yaml_encode(test_map);
+  mixed decoded = yaml_decode(encoded);
+
+  assert_equal(1, mapp(decoded), "再次解碼後應為 Mapping");
+  assert_equal("tainan", decoded["id"], "再次解碼的 id 欄位");
+  assert_equal(99, decoded["culture"], "再次解碼的 culture 欄位");
+  assert_equal(2, sizeof(decoded["features"]), "再次解碼的 features 長度");
+  assert_equal("古蹟", decoded["features"][0], "再次解碼的 features 元素 0");
+
+  // 3. 測試領域事件與聚落探索聯動 (M1 核心循環)
+  start_test("M1 核心循環 (事件與聚落聯動)");
+
+  object set_d = load_object("/daemon/settlement_d.lpc");
+  object fp_d = load_object("/daemon/footprint_d.lpc");
+  object tl_d = load_object("/daemon/timeline_d.lpc");
+  object ev_d = load_object("/secure/event_d.lpc");
+
+  // 重置民雄的狀態
+  set_d->add_memory("minxiong", -set_d->query_memory("minxiong") + 35);
+  set_d->add_culture("minxiong", -set_d->query_culture("minxiong") + 42);
+  set_d->add_population("minxiong", -set_d->query_population("minxiong") + 1200);
+
+  // 重置時間軸進度
+  tl_d->add_world_progress(-tl_d->query_world_progress());
+
+  // 模擬玩家獲得踏印 (清空原記錄以確保能觸發)
+  me->clear_footprints();
+  fp_d->add_footprint(me, "sugar_railway_minxiong");
+
+  // 手動觸發事件分發以同步化非同步佇列
+  ev_d->dispatch_loop();
+
+  // 斷言驗證：
+  // 3.1. 玩家成功獲得踏印
+  assert_equal(1, me->has_footprint_record("sugar_railway_minxiong"), "玩家應持有踏印記錄");
+
+  // 3.2. 聚落數值更新 (35 + 5 = 40; 42 + 3 = 45; 1200 + 20 = 1220)
+  assert_equal(40, set_d->query_memory("minxiong"), "民雄記憶值應累加至 40");
+  assert_equal(45, set_d->query_culture("minxiong"), "民雄文化值應累加至 45");
+  assert_equal(1220, set_d->query_population("minxiong"), "民雄人口值應累加至 1220");
+
+  // 3.3. 時代進度累加 (0 + 5 = 5)
+  assert_equal(5, tl_d->query_world_progress(), "時代進度應累加至 5");
+
+  report_results();
+}

@@ -1,0 +1,220 @@
+// /daemon/incident_d.c
+// 歷史事件聚合器 (Incident System)
+// 負責載入與管理所有 incidents (線索與事件)
+
+#include "/include/formosa.h"
+
+mapping incidents = ([]);
+mapping clue_to_incident = ([]);
+/* fluffos prototypes */
+void check_trigger(object player, string source_type, string source_id, string extra);
+int grant_clue(object player, string clue_id);
+// clue_id -> incident_id
+
+void load_incidents() {
+  string dir = "/data/yaml/incidents/";
+  mixed files = get_dir(dir + "*.yaml");
+
+  incidents = ([]);
+  clue_to_incident = ([]);
+
+  foreach (string file in files) {
+    mapping data = yaml_decode(read_file(dir + file));
+    if (!data || !data["incident_id"]) continue;
+
+    string id = data["incident_id"];
+    incidents[id] = data;
+
+    if (arrayp(data["clues"])) {
+      foreach (mapping clue in data["clues"]) {
+        if (clue["clue_id"]) {
+          clue_to_incident[clue["clue_id"]] = id;
+        }
+      }
+    }
+  }
+
+  log_file(
+    "system",
+    sprintf("[%s] Incident Daemon Loaded %d incidents.\n", ctime(time()), sizeof(incidents))
+  );
+}
+
+void on_memory_completed(mapping data) {
+  if (!data || !data["player"] || !data["memory_id"]) return;
+  check_trigger(data["player"], "memory", "memory:" + data["memory_id"], 0);
+}
+
+void on_quest_completed(mapping data) {
+  if (!data || !data["player"] || !data["quest_id"]) return;
+  check_trigger(data["player"], "quest", data["quest_id"], 0);
+}
+
+void create() {
+  load_incidents();
+  EVENT_D->subscribe("MemoryCompleted", "on_memory_completed", this_object());
+  EVENT_D->subscribe("QuestCompleted", "on_quest_completed", this_object());
+}
+
+mapping query_incidents() {
+  return incidents;
+}
+
+mapping query_incident(string id) {
+  return incidents[id];
+}
+
+string query_incident_by_clue(string clue_id) {
+  return clue_to_incident[clue_id];
+}
+
+mapping query_clue(string clue_id) {
+  string inc_id = clue_to_incident[clue_id];
+  if (!inc_id) return 0;
+
+  mapping inc = incidents[inc_id];
+  if (arrayp(inc["clues"])) {
+    foreach (mapping clue in inc["clues"]) {
+      if (clue["clue_id"] == clue_id) {
+        return clue;
+      }
+    }
+  }
+  return 0;
+}
+
+// 檢查是否有線索可以觸發
+void check_trigger(object player, string source_type, string source_id, string extra) {
+  if (!player || !source_type || !source_id) return;
+
+  foreach (string inc_id, mapping inc in incidents) {
+    if (arrayp(inc["clues"])) {
+      foreach (mapping clue in inc["clues"]) {
+        if (clue["source_type"] == source_type && clue["source_id"] == source_id) {
+          // 針對 npc_ask 需要額外比對 ask_topic
+          if (source_type == "npc_ask" && clue["ask_topic"] && extra && clue["ask_topic"] != extra) {
+            continue;
+          }
+          grant_clue(player, clue["clue_id"]);
+        }
+      }
+    }
+  }
+}
+
+// 觸發給予線索
+int grant_clue(object player, string clue_id) {
+  if (!player || !clue_id) return 0;
+
+  string inc_id = clue_to_incident[clue_id];
+  if (!inc_id) return 0;
+
+  mapping inc = incidents[inc_id];
+
+  // 檢查時代條件
+  if (inc["era_active"] && inc["era_active"] != TIMELINE_D->query_current_era()) {
+    return 0;  // 時代不符合
+  }
+
+  // 初始化玩家線索
+  if (!player->query_temp("investigation_clues")) {
+    player->set_temp("investigation_clues", ([]));
+  }
+  mapping p_clues = player->query_temp("investigation_clues");
+
+  // 已經有了
+  if (p_clues[clue_id]) return 0;
+
+  // 儲存線索 (實體存檔)
+  mapping perm_clues = player->query("investigation_clues") || ([]);
+  if (perm_clues[clue_id]) {
+    // 已經有永久存檔
+    p_clues[clue_id] = 1;
+    return 0;
+  }
+
+  perm_clues[clue_id] = time();
+  player->set("investigation_clues", perm_clues);
+  p_clues[clue_id] = 1;
+
+  mapping clue_data = query_clue(clue_id);
+
+  tell_object(player, sprintf("【系統提示】你獲得了新的事件線索：「%s - %s」\n", inc["name"], clue_data["name"]));
+  tell_object(player, sprintf("            （使用 'incident' 指令查看詳細情報）\n"));
+
+  // 檢查是否收集完全
+  int total = sizeof(inc["clues"]);
+  int collected = 0;
+  foreach (mapping c in inc["clues"]) {
+    if (perm_clues[c["clue_id"]]) collected++;
+  }
+
+  if (collected >= total) {
+    tell_object(player, sprintf("✨ 【系統提示】你已收集完「%s」的所有線索！可以進行結案推演了！\n", inc["name"]));
+  }
+
+  return 1;
+}
+
+// 結案推演
+int resolve_incident(object player, string inc_id) {
+  if (!player || !inc_id) return 0;
+
+  mapping inc = incidents[inc_id];
+  if (!inc) {
+    tell_object(player, "找不到這個事件。\n");
+    return 0;
+  }
+
+  mapping perm_clues = player->query("investigation_clues") || ([]);
+  mapping resolved = player->query("resolved_incidents") || ([]);
+
+  if (resolved[inc_id]) {
+    tell_object(player, "你已經解決過這個事件了。\n");
+    return 0;
+  }
+
+  // 檢查是否所有線索都有
+  int total = sizeof(inc["clues"]);
+  int collected = 0;
+  if (arrayp(inc["clues"])) {
+    foreach (mapping c in inc["clues"]) {
+      if (perm_clues[c["clue_id"]]) collected++;
+    }
+  }
+
+  if (collected < total) {
+    tell_object(player, sprintf("你還未收集齊「%s」的所有線索 (%d/%d)。\n", inc["name"], collected, total));
+    return 0;
+  }
+
+  // 結案成功
+  resolved[inc_id] = time();
+  player->set("resolved_incidents", resolved);
+
+  tell_object(player, sprintf("🔍 【事件結案】你成功解開了「%s」的真相！\n", inc["name"]));
+  if (inc["truth"]) {
+    tell_object(player, sprintf("真相：%s\n", inc["truth"]));
+  } else {
+    tell_object(player, "你揭開了隱藏在事件背後的真相。\n");
+  }
+
+  // 發放獎勵
+  mapping reward = inc["completion_reward"];
+  if (reward) {
+    if (reward["exp"]) {
+      player->add_exp(reward["exp"]);
+      tell_object(player, sprintf("你獲得了 %d 點經驗值。\n", reward["exp"]));
+    }
+    if (reward["faction"] && reward["reputation"]) {
+      FACTION_D->add_reputation(player, reward["faction"], reward["reputation"]);
+    }
+    if (reward["unlock_site"]) {
+      // 未來擴充
+    }
+  }
+
+  EVENT_D->publish("IncidentResolved", ([ "player": player, "incident_id": inc_id ]));
+
+  return 1;
+}

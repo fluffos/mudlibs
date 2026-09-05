@@ -1,0 +1,99 @@
+// /cmds/admin/cmd_yamllint.c
+// 檢查與驗證 MUD 內的 YAML 靜態資料庫
+// 語法：yamllint [目錄/檔案]
+// 範例：yamllint /data/yaml/settlements/
+
+#include "/include/ansi.h"
+#include "/include/formosa.h"
+
+inherit "/std/object";
+
+private int lint_file(string path) {
+  if (file_size(path) <= 0) return 0;
+  string content = read_file(path);
+  if (!content) {
+    write(sprintf("$HIR$❌ 無法讀取檔案: $NOR$%s\n", path));
+    return 0;
+  }
+
+  // yaml_decode 會在失敗時觸發 go 驅動日誌 preview，此處回傳 0 代表失敗
+  mixed data = yaml_decode(content);
+  if (!data) {
+    write(sprintf("$HIR$❌ YAML 解析失敗: $NOR$%s\n", path));
+    return 0;
+  }
+  return 1;
+}
+
+private int lint_dir(string dir_path) {
+  if (dir_path[strlen(dir_path) - 1] != '/') dir_path += "/";
+  string *files = get_dir(dir_path);
+  if (!files) return 0;
+
+  int total = 0;
+  int failed = 0;
+
+  foreach (string file in files) {
+    if (file == "." || file == "..") continue;
+    string path = dir_path + file;
+    if (file_size(path) == -2) {
+      // 遞迴子目錄
+      mapping res = lint_dir(path);
+      total += res["total"];
+      failed += res["failed"];
+    } else if (strlen(file) > 5 && substr(file, strlen(file) - 5, 5) == ".yaml") {
+      total++;
+      if (!lint_file(path)) {
+        failed++;
+      }
+    }
+  }
+  return ([ "total": total, "failed": failed ]);
+}
+
+int main(object me, string verb, string arg) {
+  if (me->query_role() != "god") {
+    write("只有管理員可以使用此指令。\n");
+    return 1;
+  }
+
+  string path = "/data/yaml/";
+  if (arg && arg != "") {
+    path = arg;
+  }
+
+  write(sprintf("$HIW$🔍 開始掃描並驗證 YAML 語法：%s$NOR$\n", path));
+
+  int f_size = file_size(path);
+  if (f_size == -1) {
+    write("$HIR$❌ 目標路徑不存在。$NOR$\n");
+    return 1;
+  }
+
+  if (f_size == -2) {
+    mixed res = lint_dir(path);
+    int total = res["total"];
+    int failed = res["failed"];
+    write("$HIW$==========================================$NOR$\n");
+    if (failed == 0) {
+      write(sprintf("$HIG$✨ 恭喜！該目錄下所有 %d 個 YAML 設定檔皆驗證成功！$NOR$\n", total));
+    } else {
+      write(sprintf("$HIR$⚠️ 警報！共有 %d/%d 個 YAML 檔案解析錯誤！$NOR$\n", failed, total));
+    }
+    write("$HIW$==========================================$NOR$\n");
+  } else {
+    if (lint_file(path)) {
+      write("$HIG$✨ 驗證成功！$NOR$\n");
+    }
+  }
+
+  return 1;
+}
+
+string help() {
+  return "【管理指令】\n" +
+    "  yamllint [路徑]    檢查指定檔案或目錄（遞迴）下的所有 YAML 語法格式\n";
+}
+
+string *query_verbs() { return ({ "yamllint" }); }
+string query_category() { return "Admin"; }

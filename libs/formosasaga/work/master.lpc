@@ -1,0 +1,169 @@
+// master.c
+// 這是 MUD 引擎啟動後第一個載入的總管物件
+
+inherit "/secure/valid.lpc";
+
+/* fluffos prototypes */
+object connect(mixed port_or_lang);
+
+void create() {
+  ::create();
+  write("===================================\n");
+  write("  MudScript Master Object 啟動成功 \n");
+  write("===================================\n");
+
+  // Daemon loads are catch()'d so a single YAML/compat miss does not
+  // take down the whole boot (Go MudOS-v22 → FluffOS port).
+  catch(load_object("/secure/event_d.lpc"));
+  catch(load_object("/daemon/timeline_d.lpc"));
+  catch(load_object("/daemon/settlement_d.lpc"));
+  catch(load_object("/daemon/footprint_d.lpc"));
+  catch(load_object("/daemon/faction_d.lpc"));
+  catch(load_object("/daemon/historical_event_d.lpc"));
+  catch(load_object("/daemon/era_d.lpc"));
+  catch(load_object("/daemon/site_d.lpc"));
+  catch(load_object("/daemon/route_d.lpc"));
+  catch(load_object("/daemon/chronicle_d.lpc"));
+}
+
+void run_test_mode() {
+  object test_cmd = load_object("/cmds/admin/cmd_tests.lpc");
+  if (test_cmd) {
+    object fake_me = clone_object("/std/user.lpc");
+    fake_me->set_id("tester");
+    fake_me->set_role("god");
+    int failures = test_cmd->main(fake_me, "tests", "");
+    destruct(fake_me);
+
+    // 如果失敗次數 > 0，則以結束代碼 1 關閉
+    if (failures > 0) {
+      shutdown(1);
+    } else {
+      shutdown(0);
+    }
+  } else {
+    write("無法載入測試指令，測試失敗。\n");
+    shutdown(1);
+  }
+}
+
+// ==========================================
+// 1. 玩家連線入口 (非常重要)
+// ==========================================
+// 當玩家透過 TCP 連線時，Driver 的 AcceptConnection 會呼叫此函式
+// FluffOS apply is connect(int port). The Go driver passed a browser
+// language string. Ignore a numeric port and default to zh-TW.
+varargs object connect(mixed port_or_lang) {
+  object login_ob = clone_object("/std/login.lpc");
+  if (login_ob) {
+    if (stringp(port_or_lang))
+      login_ob->set_browser_lang(port_or_lang);
+    else
+      login_ob->set_browser_lang("zh-TW");
+  }
+  return login_ob;
+}
+
+// ==========================================
+// 2. 系統權限標籤 (UIDs)
+// ==========================================
+// Driver 啟動時會呼叫這兩個函式來確立系統最高權限的 UID
+// 傳統 MUD 依賴這兩個字串來判斷某個物件是否具有讀寫核心檔案的權限
+
+string get_root_uid() {
+  return "Root";
+}
+
+string get_bb_uid() {
+  return "Backbone";
+}
+
+// 🚀 新增：告知 Driver SimulEfun 的存放路徑
+string get_simul_efun() {
+  return "/secure/simul_efun.lpc";
+}
+
+int is_creator(string id) {
+  // 透過 get_dir 掃描是否已經有存檔
+  mixed *files = get_dir("/data/user/*.o");
+  if (sizeof(files) == 0) {
+    return 1;  // 第一個登入者自動獲得 God 權限
+  }
+  return 0;
+}
+
+// ==========================================
+// 3. 錯誤處理攔截 (Error Handling)
+// ==========================================
+// 當 Evaluator 執行期間發生崩潰 (Runtime Error) 時，Driver 會呼叫此函式
+// 傳入的參數是錯誤訊息字串與發生錯誤的檔案名稱
+void runtime_error(string err_msg, string file) {
+  write("【系統嚴重警告】執行期錯誤！\n");
+  write("檔案：" + file + "\n");
+  write("訊息：" + err_msg + "\n");
+}
+
+// ── FluffOS master applies (Go MudOS-v22 → FluffOS) ──
+
+string creator_file(string filename) {
+  return "Root";
+}
+
+string author_file(string filename) { return "Root"; }
+string domain_file(string filename) { return "Root"; }
+string privs_file(string filename) { return "Root"; }
+
+int valid_seteuid(object ob, string euid) { return 1; }
+int valid_override(string file, string fun, string name) { return 1; }
+int valid_shadow(object ob) { return 1; }
+int valid_object(object ob) { return 1; }
+int valid_bind(object binder, object old, object newob) { return 1; }
+int valid_hide(object ob) { return 1; }
+
+void flag(string str) {}
+
+string *epilog(int load_empty) { return ({}); }
+
+void preload(string file) {
+  catch(load_object(file));
+}
+
+object compile_object(string path) { return 0; }
+
+void log_error(string file, string message) {
+  if (file_size("/log") != -2)
+    mkdir("/log");
+  if (strsrch(message, "arning:") != -1)
+    return;
+  write_file("/log/log_error", message);
+}
+
+void error_handler(mapping err, int caught) {
+  string msg;
+  if (!err) return;
+  msg = sprintf("%s:%d %s\n", err["file"] || "?", err["line"], err["error"] || "");
+  if (file_size("/log") != -2)
+    mkdir("/log");
+  write_file("/log/debug.log", msg);
+}
+
+void crash(string error, object command_giver, object current) {
+  write_file("/log/crash", ctime(time()) + " " + error + "\n");
+}
+
+string object_name(object ob) {
+  if (ob && function_exists("query_name", ob))
+    return ob->query_name();
+  return 0;
+}
+
+string get_save_file_name(string file, object who) { return 0; }
+int save_ed_setup(object who, int code) { return 1; }
+int retrieve_ed_setup(object who) { return 0; }
+string make_path_absolute(string file) { return file; }
+
+string *parse_command_id_list() { return ({ "the", "a", "an" }); }
+string *parse_command_plural_id_list() { return ({}); }
+string *parse_command_adjectiv_id_list() { return ({}); }
+string *parse_command_prepos_list() { return ({ "in", "on", "at", "to", "from", "with" }); }
+string parse_command_all_word() { return "all"; }

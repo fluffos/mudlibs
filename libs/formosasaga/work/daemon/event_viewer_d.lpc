@@ -1,0 +1,176 @@
+// /daemon/event_viewer_d.c
+// 
+// 2D 歷史/地景事件視覺化守護進程 (Event Viewer Daemon)
+// 用於在特定的關鍵場景或歷史事件中，渲染二維視覺小圖（以 LM/mc_map 協定推送到前端）
+
+#include "/include/formosa.h"
+
+inherit "/std/object.lpc";
+
+mapping query_block_colors() {
+  return ([
+    "grass": "#4CAF50",
+    "dirt": "#795548",
+    "stone": "#9E9E9E",
+    "wood": "#8D6E63",
+    "log": "#5D4037",
+    "planks": "#FFCC80",
+    "leaves": "#2E7D32",
+    "sand": "#FDD835",
+    "water": "#1E88E5",
+    "coal": "#37474F",
+    "iron": "#B0BEC5",
+    "gold": "#FFD600",
+    "brick": "#BF360C"
+  ]);
+}
+
+mapping query_emoji_to_block() {
+  return ([
+    "🟩": "grass",
+    "🟫": "dirt",
+    "🪨": "stone",
+    "🪵": "log",
+    "🌲": "log",
+    "🌳": "log",
+    "🌿": "leaves",
+    "☘️": "leaves",
+    "🍀": "leaves",
+    "🟨": "sand",
+    "🏖️": "sand",
+    "🟦": "water",
+    "🌊": "water",
+    "🧱": "brick",
+    "⬜": "stone",
+    "⬛": "coal",
+    "⚙️": "iron",
+    "💰": "gold"
+  ]);
+}
+
+mapping query_emoji_to_npc() {
+  return ([
+    "🐑": "sheep",
+    "🐰": "rabbit",
+    "🐄": "cow",
+    "🐐": "goat",
+    "🐺": "wolf",
+    "🐻": "bear",
+    "🐅": "tiger",
+    "🐆": "leopard",
+    "🦉": "owl",
+    "🦇": "bat",
+    "👾": "slime",
+    "🐟": "fish",
+    "🚶": "villager"
+  ]);
+}
+
+void trigger_event_view(object player, string site_id) {
+  if (!player || !userp(player)) return;
+
+  // 清理 site_id
+  string clean_id = site_id;
+  int colon_idx = strsrch(clean_id, ":");
+  if (colon_idx != -1) {
+    clean_id = substr(clean_id, colon_idx + 1, strlen(clean_id) - colon_idx - 1);
+  }
+
+  string map_str = "";
+  string world_name = "";
+
+  if (clean_id == "minxiong") {
+    world_name = "打貓的初遇 - 民雄鄉";
+    map_str = "🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳\n"
+      "🌳🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🌳\n"
+      "🌳🟩🟩🟫🟫🟫🟫🟫🟫🟫🟩🟩🟩🟩🌳\n"
+      "🌳🟩🟩🟫🟩🟩🟩🟩🟩🟫🟩🟩🟩🟩🌳\n"
+      "🌳🟩🧱🧱🧱🟩🌳🌳🟩🟫🟩🟩🌿🌿🌳\n"
+      "🌳🟩🧱⛩️🧱🟩🌳🌳🟩🟫🟩🟩🌿🌿🌳\n"
+      "🌳🟩🧱🧱🧱🟩🟩🟩🟩🟫🟩🟩🟩🟩🌳\n"
+      "🌳🟩🟩🟫🟫🟫🟫🟫🟫🟫🟫🟫🟫🟩🌳\n"
+      "🌳🟩🟩🟫🟩🟩🟩🟩🟩🟫🟩🟩🟫🟩🌳\n"
+      "🌳🟩🟩🟫🟩🟦🟦🟦🟩🟫🟩🟩🟫🟩🌳\n"
+      "🌳🟩🟩🟩🟩🟦🌊🟦🟩🟩🟩🟩🟩🟩\n"
+      "🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳";
+  } else if (clean_id == "minxiong_old_station" || clean_id == "station") {
+    world_name = "民雄老車站月台";
+    map_str = "⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜\n"
+      "⬜🚂⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛⬛🟩⬜\n"
+      "⬜⬜⬜🟫🟫🟫🟫🟫🟫🟫🟫🟫🟫🟩⬜\n"
+      "⬜🧱🧱🧱🧱🧱🧱🧱🧱🧱🧱🧱🧱🧱⬜\n"
+      "⬜🧱🟫🟫🟫🟫🟫🟫🟫🟫🟫🟫🟫🧱\n"
+      "⬜🧱🟫🟩🟩🟩🟩🟩🟩🟩🟩🟩🟫🧱\n"
+      "⬜🧱🟫🟩🌳🌳🌳🟩🟩🚶🟩🟩🟫🧱\n"
+      "⬜🧱🟫🟩🌳🌳🌳🟩🟩🟩🟩🟩🟫🧱\n"
+      "⬜🧱🧱🧱🧱🧱🧱🧱🧱🧱🧱🧱🧱🧱\n"
+      "⬜🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩\n"
+      "⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜";
+  } else if (clean_id == "dashiye_temple" || clean_id == "temple") {
+    world_name = "民雄大士爺廟";
+    map_str = "🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳\n"
+      "🌳🟩🟩🧱🧱🧱🧱🧱🧱🧱🧱🟩🟩🟩🌳\n"
+      "🌳🟩🟩🧱⬜⬜⛩️⬜⬜🧱🟩🟩🟩🌳\n"
+      "🌳🟩🟩🧱⬜⬜⬜⬜⬜🧱🟩🟩🟩🌳\n"
+      "🌳🟩🟩🧱🧱🧱🧱🧱🧱🧱🧱🟩🟩🟩\n"
+      "🌳🟩🟩🟩🟩🟩🟫🟩🟩🟩🟩🟩🟩🟩\n"
+      "🌳🟩🟩🟩🟩🟩🟫🟩🟩🟩🟩🟩🟩🟩\n"
+      "🌳🟫🟫🟫🟫🟫🟫🟫🟫🟫🟫🟫🟫🟫\n"
+      "🌳🟫🟩🟩🟩🟩🟫🟩🟩🟩🟩🟩🟩🟫\n"
+      "🌳🟫🟩🦁🟩🟩🟫🟩🟩🦁🟩🟩🟩🟫\n"
+      "🌳🟫🟩🟩🟩🟩🟫🟩🟩🟩🟩🟩🟩🟫\n"
+      "🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳🌳";
+  } else {
+    return;  // 無特殊地圖
+  }
+
+  // 解析地圖字串
+  mapping blocks = ([]);
+  mapping npc_pos = ([]);
+
+  string *lines = explode(map_str, "\n");
+  int h = sizeof(lines);
+  int w = 16;  // 預設寬度
+  mapping e2b = query_emoji_to_block();
+  int mob_idx = 1;
+
+  for (int i = 0; i < h; i++) {
+    int y = h - 1 - i;  // 從下往上
+    string line = lines[i];
+    string *chars = explode(line, "");
+    int line_w = sizeof(chars);
+    if (line_w > w) w = line_w;
+
+    for (int x = 0; x < line_w; x++) {
+      string char = chars[x];
+      string key = sprintf("%d,%d", x, y);
+      if (e2b[char]) {
+        blocks[key] = e2b[char];
+      } else if (char != " " && char != "") {
+        // 非預設方塊符號視為 NPC / 地標圖標
+        string nid = sprintf("evt_npc_%d", mob_idx++);
+        npc_pos[nid] = ({ x, y, char });
+      }
+    }
+  }
+
+  mapping online = ([
+    player->get_id(): ({ w / 2, 0 })  // 玩家固定在下方中間生成
+  ]);
+
+  mapping payload = ([
+    "world_name": world_name,
+    "blocks": blocks,
+    "block_colors": query_block_colors(),
+    "players": online,
+    "npcs": npc_pos,
+    "self_id": player->get_id(),
+    "width": w,
+    "height": h
+  ]);
+
+  tell_object(player, sprintf(
+    "{\"ui\":\"mc_map\",\"data\":%s}\n",
+    json_encode(payload)
+  ));
+}

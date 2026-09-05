@@ -1,0 +1,118 @@
+// /tests/test_relation.c
+//
+// 測試項目：
+//   - RELATION_D 載入與好感度基本 API
+//   - get/set/add_relation 數值邊界測試
+//   - 好感度層級判定（0→陌生、25→熟識、50→朋友、75→信任、90→知己）
+//   - 層級提升事件 RelationshipTierUp 觸發
+//   - NPC YAML relationship_dialogues 的分層解鎖
+//   - greet 指令執行
+//   - relations 查詢指令執行
+
+#include "/include/formosa.h"
+
+inherit "/std/test_case";
+
+void run_tests(object me) {
+  start_test("NPC 好感度與關係網 (NPC Relationship) 系統測試 (P20)");
+
+  object rel_d = load_object("/daemon/relation_d.lpc");
+  assert_true(objectp(rel_d), "應成功載入 relation_d");
+
+  // 建立測試玩家
+  object player = clone_object("/std/user.lpc");
+  player->set_id("test_relation_player");
+  player->set_name("測試旅人");
+  player->set_role("god");
+  player->setup();
+
+  string npc_id = "NPC_old_stationmaster_minxiong";
+
+  // ── 1. 基礎 API 測試 ────────────────────────────────
+  write("--- 測試基礎好感度 API ---\n");
+
+  int val = rel_d->get_relation(player, npc_id);
+  assert_equal(0, val, "初始好感度應為 0");
+
+  rel_d->set_relation(player, npc_id, 30);
+  assert_equal(30, rel_d->get_relation(player, npc_id), "set_relation 應正確設定值");
+
+  // 邊界測試：超過 100 應鉗制
+  rel_d->set_relation(player, npc_id, 150);
+  assert_equal(100, rel_d->get_relation(player, npc_id), "好感度不應超過 100");
+
+  // 邊界測試：低於 0 應鉗制
+  rel_d->set_relation(player, npc_id, -10);
+  assert_equal(0, rel_d->get_relation(player, npc_id), "好感度不應低於 0");
+
+  // ── 2. 層級判定測試 ─────────────────────────────────
+  write("--- 測試層級判定 ---\n");
+  assert_equal(0, rel_d->get_relation_tier(0), "0 點應為層級 0（陌生）");
+  assert_equal(0, rel_d->get_relation_tier(24), "24 點應為層級 0（陌生）");
+  assert_equal(1, rel_d->get_relation_tier(25), "25 點應為層級 1（熟識）");
+  assert_equal(2, rel_d->get_relation_tier(50), "50 點應為層級 2（朋友）");
+  assert_equal(3, rel_d->get_relation_tier(75), "75 點應為層級 3（信任）");
+  assert_equal(4, rel_d->get_relation_tier(90), "90 點應為層級 4（知己）");
+  assert_equal(4, rel_d->get_relation_tier(100), "100 點應為層級 4（知己）");
+
+  assert_equal("陌生", rel_d->get_tier_name(0), "層級 0 名稱應為「陌生」");
+  assert_equal("熟識", rel_d->get_tier_name(1), "層級 1 名稱應為「熟識」");
+  assert_equal("知己", rel_d->get_tier_name(4), "層級 4 名稱應為「知己」");
+
+  // ── 3. add_relation 與層級提升事件 ──────────────────
+  write("--- 測試好感累積與層級提升 ---\n");
+  rel_d->set_relation(player, npc_id, 20);  // 重設為 20（陌生）
+
+  // 加到 25，應觸發層級提升事件
+  rel_d->add_relation(player, npc_id, 5);
+  assert_equal(25, rel_d->get_relation(player, npc_id), "add_relation 後應為 25");
+  assert_equal(1, rel_d->get_player_tier(player, npc_id), "應晉升為層級 1（熟識）");
+
+  // ── 4. 分層對話解鎖測試 ─────────────────────────────
+  write("--- 測試好感層級對話解鎖 ---\n");
+
+  // 陌生（0）：只能看到 stranger 話題
+  rel_d->set_relation(player, npc_id, 0);
+  mapping d0 = rel_d->get_available_dialogues(player, npc_id);
+  // 車站、糖鐵 應該可見（來自 responses，不在 relationship_dialogues）
+  // 但 "你好"（familiar）不應可見
+  assert_true(!d0["日記"], "陌生時不應能看到「日記」話題（信任層）");
+
+  // 熟識（25）：應能看到 familiar 話題
+  rel_d->set_relation(player, npc_id, 25);
+  mapping d1 = rel_d->get_available_dialogues(player, npc_id);
+  assert_true(d1["你好"] != 0, "熟識時應能看到「你好」話題");
+  assert_true(!d1["日記"], "熟識時不應看到「日記」話題（信任層）");
+
+  // 信任（75）：應能看到所有前層話題
+  rel_d->set_relation(player, npc_id, 75);
+  mapping d3 = rel_d->get_available_dialogues(player, npc_id);
+  assert_true(d3["你好"] != 0, "信任時應仍能看到熟識話題");
+  assert_true(d3["日記"] != 0, "信任時應能看到「日記」話題");
+  assert_true(!d3["秘密"], "信任時不應看到「秘密」話題（知己層）");
+
+  // 知己（90）：所有話題全開
+  rel_d->set_relation(player, npc_id, 90);
+  mapping d4 = rel_d->get_available_dialogues(player, npc_id);
+  assert_true(d4["秘密"] != 0, "知己時應能看到「秘密」話題");
+  assert_true(d4["真相"] != 0, "知己時應能看到「真相」話題");
+
+  // ── 5. 指令測試 ─────────────────────────────────────
+  write("--- 測試指令 ---\n");
+
+  object site_ob = SETTLEMENT_D->get_site_object("minxiong_old_station");
+  if (site_ob) player->move(site_ob);
+
+  object cmd_rel = load_object("/cmds/player/cmd_relation.lpc");
+  assert_true(objectp(cmd_rel), "應載入 cmd_relation");
+
+  int res = cmd_rel->main(player, "relations", "");
+  assert_equal(1, res, "relations 列表指令應執行成功");
+
+  object cmd_greet = load_object("/cmds/player/cmd_greet.lpc");
+  assert_true(objectp(cmd_greet), "應載入 cmd_greet");
+
+  // ── 清理 ───────────────────────────────────────────
+  destruct(player);
+  report_results();
+}

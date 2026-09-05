@@ -1,0 +1,202 @@
+// mudlib/cmds/cmd_career.c
+//
+// 職涯與勢力指令。
+//
+// 指令：
+//   career          — 查看所有職涯修練狀況
+//   career <職涯id> — 查看特定職涯詳情
+//   faction         — 查看可加入的勢力清單
+//   faction join <id> — 加入指定勢力
+
+#include "/include/ansi.h"
+#include "/include/formosa.h"
+
+inherit "/std/object";
+
+// ──────────────────────────────────────────────────────
+// 輔助：顯示進度條
+// ──────────────────────────────────────────────────────
+string progress_bar(int current, int target, int width) {
+  if (target <= 0) return "[---------]";
+  int filled = (current * width) / target;
+  if (filled > width) filled = width;
+  string bar = "[";
+  for (int i = 0; i < width; i++) {
+    bar += (i < filled) ? "█" : "░";
+  }
+  bar += "]";
+  return bar;
+}
+
+// ──────────────────────────────────────────────────────
+// career 指令
+// ──────────────────────────────────────────────────────
+int do_career(object me, string arg) {
+  string *cids = CAREER_D->query_all_career_ids();
+  if (!cids || !sizeof(cids)) {
+    write(C_WARN + "  目前沒有任何職涯資料。\n" + NOR);
+    return 1;
+  }
+
+  // 查看特定職涯
+  if (arg && arg != "") {
+    mapping career = CAREER_D->load_career(arg);
+    if (!career) {
+      write(C_WARN + "  找不到職涯「" + arg + "」。\n" + NOR);
+      return 1;
+    }
+
+    int pts = me->query_career_points(arg);
+    int rank = CAREER_D->query_career_rank(me, arg);
+    string rname = CAREER_D->query_career_rank_name(me, arg);
+    mixed *ranks = career["ranks"];
+
+    // 計算下一等級門檻
+    int next_pts = -1;
+    string next_rname = "";
+    if (ranks) {
+      foreach (mapping r in ranks) {
+        if (r["min_points"] > pts) {
+          next_pts = r["min_points"];
+          next_rname = r["name"];
+          break;
+        }
+      }
+    }
+
+    write("\n" + C_TITLE + "【" + career["name"] + "・" + career["display_name"] + "】" + NOR + "\n\n");
+    write("  " + (career["description"] || "") + "\n\n");
+    write(sprintf("  當前稱謂：%s%s%s（等級 %d）\n", C_GOOD, rname, NOR, rank));
+    write(sprintf("  修練點數：%s%d%s\n", C_GOOD, pts, NOR));
+
+    if (next_pts > 0) {
+      string bar = progress_bar(pts, next_pts, 20);
+      write(sprintf("  下一等級：%s（需 %d 點）\n", next_rname, next_pts));
+      write(sprintf("  進度：%s%s%s %d/%d\n\n", C_DIM, bar, NOR, pts, next_pts));
+    } else {
+      write("\n  " + C_GOOD + "【已達最高等級】" + NOR + "\n\n");
+    }
+
+    // 顯示親和記憶類型
+    mixed *affinity = career["memory_affinity"];
+    if (affinity && sizeof(affinity)) {
+      write("  記憶親和：" + implode(affinity, "、") + "\n");
+    }
+    write("\n");
+    return 1;
+  }
+
+  // 顯示所有職涯概覽
+  write("\n" + C_TITLE + "【職涯修練】" + NOR + "\n\n");
+  write(sprintf("  %-8s  %-10s  %-6s  %s\n", "職涯", "稱謂", "等級", "修練點"));
+  write("  " + "────────────────────────────────────────" + "\n");
+  foreach (string cid in cids) {
+    mapping career = CAREER_D->load_career(cid);
+    if (!career) continue;
+    int pts = me->query_career_points(cid);
+    int rank = CAREER_D->query_career_rank(me, cid);
+    string rname = CAREER_D->query_career_rank_name(me, cid);
+    write(sprintf("  %-8s  %-10s  %-6d  %d\n",
+      career["name"] || cid, rname, rank, pts));
+  }
+  write("\n  輸入 career <職涯名> 查看詳情（如：career farmer）\n\n");
+  return 1;
+}
+
+// ──────────────────────────────────────────────────────
+// faction 指令
+// ──────────────────────────────────────────────────────
+int do_faction(object me, string arg) {
+  // 處理 join 子指令
+  if (arg && strsrch(arg, "join ") == 0) {
+    string fid = substr(arg, 5, strlen(arg) - 5);
+    fid = trim(fid);
+    if (!fid || fid == "") {
+      write(C_WARN + "  用法：faction join <勢力id>\n" + NOR);
+      return 1;
+    }
+    if (!FACTION_D->is_valid_faction(fid)) {
+      write(C_WARN + "  找不到勢力「" + fid + "」。\n" + NOR);
+      return 1;
+    }
+    if (!FACTION_D->can_join(me, fid)) {
+      write(C_WARN + "  你尚未滿足加入「" + FACTION_D->query_faction_name(fid) + "」的條件。\n" + NOR);
+      return 1;
+    }
+    FACTION_D->join_faction(me, fid);
+    return 1;
+  }
+
+  // 顯示當前聚落的所有勢力
+  string current_faction = me->query_faction();
+
+  // 取得當前所在聚落
+  object env = environment(me);
+  string settlement_id = "";
+  if (env && env->query_is_site()) {
+    settlement_id = env->query_settlement_id();
+  }
+
+  write("\n" + C_TITLE + "【勢力】" + NOR + "\n\n");
+
+  if (current_faction && current_faction != "") {
+    string fname = FACTION_D->query_faction_name(current_faction);
+    write(sprintf("  當前勢力：%s%s%s（%s）\n\n", C_GOOD, fname || current_faction, NOR, current_faction));
+  } else {
+    write("  當前勢力：" + C_DIM + "無所屬" + NOR + "\n\n");
+  }
+
+  string *all_fids = FACTION_D->query_all_faction_ids();
+  if (!all_fids || !sizeof(all_fids)) {
+    write(C_DIM + "  目前沒有可加入的勢力。\n" + NOR);
+    write("\n");
+    return 1;
+  }
+
+  write(sprintf("  %-20s  %-8s  %-12s  %s\n", "勢力名稱", "類型", "所在聚落", "可加入"));
+  write("  " + "───────────────────────────────────────────────────────" + "\n");
+
+  foreach (string fid in all_fids) {
+    mapping f = FACTION_D->load_faction(fid);
+    if (!f) continue;
+    int joinable = FACTION_D->can_join(me, fid);
+    string join_str = joinable ? (C_GOOD + "✓" + NOR) : (C_DIM + "✗" + NOR);
+    string is_current = (fid == current_faction) ? " ◀ 已加入" : "";
+    write(sprintf("  %-20s  %-8s  %-12s  %s%s\n",
+      f["name"] || fid,
+      f["type"] || "—",
+      f["settlement"] || "—",
+      join_str,
+      is_current));
+  }
+  write("\n  輸入 faction join <id> 加入勢力（如：faction join liu_clan）\n\n");
+  return 1;
+}
+
+// ──────────────────────────────────────────────────────
+// 指令入口
+// ──────────────────────────────────────────────────────
+int main(object me, string verb, string arg) {
+  if (!arg) arg = "";
+  arg = trim(arg);
+
+  if (verb == "career" || verb == "職涯") return do_career(me, arg);
+  if (verb == "faction" || verb == "勢力") return do_faction(me, arg);
+  return 0;
+}
+
+string *query_verbs() {
+  return ({ "career", "faction", "職涯", "勢力" });
+}
+
+string query_category() {
+  return select_lang(([ "en": "Explore", "zh-TW": "探索", "zh-CN": "探索" ]));
+}
+
+string help() {
+  return select_lang(([
+    "en": "【Career & Faction Commands】\n  career             View all career training progress.\n  career <id>        View details of a specific career (e.g. career farmer).\n  faction            View available factions and your current affiliation.\n  faction join <id>  Join a faction if you meet the conditions.\n",
+    "zh-TW": "【職涯與勢力指令】\n  career             查看所有職涯修練進度。\n  career <職涯>      查看特定職涯詳情（如：career farmer）。\n  faction            查看可加入的勢力清單與當前歸屬。\n  faction join <id>  加入指定勢力（如：faction join liu_clan）。\n",
+    "zh-CN": "【职涯与势力指令】\n  career             查看所有职涯修练进度。\n  career <职涯>      查看特定职涯详情。\n  faction            查看可加入的势力清单与当前归属。\n  faction join <id>  加入指定势力。\n"
+  ]));
+}

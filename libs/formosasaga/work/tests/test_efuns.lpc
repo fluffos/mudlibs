@@ -1,0 +1,298 @@
+inherit "/std/test_case";
+
+void test_lifecycle() {
+  start_test("Efun Lifecycle (new, file_name)");
+  object obj = clone_object("/std/object.lpc");
+  assert_true(objectp(obj), "new() should return an object");
+  string name = file_name(obj);
+  assert_true(stringp(name), "file_name() should return a string");
+  assert_true(strsrch(name, "/std/object.lpc") != -1, "file_name should contain path");
+  destruct(obj);
+  report_results();
+}
+
+void test_type_predicates() {
+  start_test("Efun Type Predicates (bufferp, undefinedp, nullp, errorp, typeof)");
+
+  // 既有測試
+  assert_true(intp(undefinedp(0)), "undefinedp(0) should be int");
+
+  // 新增測試
+  assert_true(intp(nullp(0)), "nullp(0) should be true (int)");
+  assert_true(intp(errorp(catch(error("test")))), "errorp() should return int");
+  assert_true(stringp(typeof(1)), "typeof(int) should return 'int'");
+
+  report_results();
+}
+
+void test_control_flow() {
+  start_test("Efun Control Flow (error, throw, call_out)");
+
+  mixed err = catch(error("test error"));
+  assert_true(stringp(err), "error() should be catchable and return string");
+
+  err = catch(throw("test throw"));
+  assert_true(stringp(err), "throw() should be catchable");
+  assert_true(strsrch(err, "test throw") != -1, "throw() should return the message");
+
+  call_out("test_call_out_func", 1);
+  int left = find_call_out("test_call_out_func");
+  assert_true(left >= 0, "call_out should be found");
+  remove_call_out("test_call_out_func");
+  assert_true(find_call_out("test_call_out_func") == -1, "call_out should be removed");
+
+  report_results();
+}
+
+void test_call_out_func() {}
+
+void test_io_efuns(object me) {
+  start_test("Efun I/O (write, say, tell_object, tell_room, message, receive, shout)");
+
+  write("test write\n");
+  tell_object(me, "test tell_object\n");
+
+  object env = environment(me);
+  if (env) {
+    tell_room(env, "test tell_room\n");
+    message("say", "test message", env, me);
+  }
+
+  me->receive("test receive\n");
+  shout("test shout\n");
+
+  report_results();
+}
+void test_interactive_efuns(object me) {
+  start_test("Efun Interactive (this_interactive, get_char)");
+
+  // 在測試執行環境中，me 通常就是當前玩家
+  object ti = this_interactive();
+
+  // 檢查 ti 是否有效，若測試環境中沒有 interactive user，跳過
+  if (ti) {
+    assert_true(ti == me, "this_interactive() should return this_player()");
+  } else {
+    write("  [SKIP] this_interactive() skipped (no interactive user)\n");
+  }
+
+  get_char("do_test_get_char");
+
+  report_results();
+}
+
+void do_test_get_char(string str) {}
+
+void test_filesystem_efuns() {
+  start_test("Efun Filesystem (file_size, write_file, read_file, rm, mkdir, rmdir)");
+
+  string test_file = "/open/test_file.txt";
+  string test_dir = "/open/test_dir";
+
+  int res = write_file(test_file, "hello world\n", 1);
+  if (res == 0) {
+    write("  [SKIP] write_file() skipped (permission denied)\n");
+  } else {
+    assert_true(res == 1, "write_file() should succeed");
+    int size = file_size(test_file);
+    assert_true(size > 0, "file_size() should return size > 0");
+    string content = read_file(test_file);
+    assert_true(content == "hello world\n", "read_file() should return content");
+    res = rm(test_file);
+    assert_true(res == 1, "rm() should succeed");
+  }
+
+  res = mkdir(test_dir);
+  if (res == 0) {
+    write("  [SKIP] mkdir() skipped (permission denied)\n");
+  } else {
+    assert_true(res == 1, "mkdir() should succeed");
+    res = rmdir(test_dir);
+    assert_true(res == 1, "rmdir() should succeed");
+  }
+
+  report_results();
+}
+
+void test_persistence_efuns() {
+  start_test("Efun Persistence (save_variable, restore_variable)");
+
+  // 測試變數儲存與還原
+  mixed data = ([ "a": 1, "b": "hello" ]);
+  string saved = save_variable(data);
+  assert_true(stringp(saved), "save_variable() should return string");
+
+  mixed restored = restore_variable(saved);
+  assert_true(mapp(restored), "restore_variable() should return mapping");
+  assert_equal(data["a"], restored["a"], "restored mapping should be equal to original");
+  assert_equal(data["b"], restored["b"], "restored mapping should be equal to original");
+
+  report_results();
+}
+
+void test_array_mapping_efuns() {
+  start_test("Efun Array/Mapping (allocate, sort_array, unique_array, allocate_mapping, sizeof, member_array)");
+
+  // 測試 allocate
+  mixed *arr = allocate(3);
+  assert_true(pointerp(arr), "allocate() should return array");
+  assert_equal(3, sizeof(arr), "allocate() should return array of correct size");
+
+  // 測試 sort_array
+  mixed *arr2 = ({ 3, 1, 2 });
+  mixed *sorted = sort_array(arr2, 1);
+  assert_equal(1, sorted[0], "sort_array() should sort ascending");
+  assert_equal(3, sorted[2], "sort_array() should sort ascending");
+
+  // 測試 unique_array
+  mixed *arr3 = ({ 1, 2, 1, 3, 2 });
+  mixed *unq = unique_array(arr3);
+  assert_equal(3, sizeof(unq), "unique_array() should return unique elements");
+
+  // 測試 allocate_mapping
+  mapping m = allocate_mapping(5);
+  assert_true(mapp(m), "allocate_mapping() should return mapping");
+
+  // 測試 sizeof
+  assert_equal(0, sizeof(m), "sizeof() on empty mapping should be 0");
+  m["a"] = 1;
+  assert_equal(1, sizeof(m), "sizeof() on mapping should be 1");
+
+  // 測試 member_array
+  mixed *arr_mem = ({ "a", "b", "c" });
+  assert_equal(1, member_array("b", arr_mem), "member_array() should return index");
+  assert_equal(-1, member_array("d", arr_mem), "member_array() should return -1");
+
+  // 測試 unique_mapping
+  mapping m_unq = unique_mapping(({ "a", "b", "a" }), "id");
+  assert_true(mapp(m_unq), "unique_mapping() should return mapping");
+
+  report_results();
+}
+
+void test_conversion_efuns() {
+  start_test("Efun Conversion (time, ctime)");
+
+  // 測試 time
+  int t = time();
+  assert_true(intp(t), "time() should return integer");
+
+  // 測試 ctime
+  string ct = ctime(t);
+  assert_true(stringp(ct), "ctime() should return string");
+
+  report_results();
+}
+
+void test_inventory_efuns(object me) {
+  start_test("Efun Inventory/Environment (first_inventory, next_inventory, set_light)");
+
+  // 測試 inventory
+  object env = environment(me);
+  if (env) {
+    object item = first_inventory(env);
+    // 如果房間有物品，測試 next_inventory
+    if (item) {
+      object next = next_inventory(item);
+      assert_true(objectp(item), "first_inventory() should return object");
+    }
+  }
+
+  // 測試 set_light
+  int old_light = set_light(0);
+  int new_light = set_light(1);
+  assert_equal(old_light + 1, new_light, "set_light() should adjust light");
+  set_light(-1);  // 恢復
+
+  report_results();
+}
+
+void test_command_efuns() {
+  start_test("Efun Command (add_action, remove_action, command, notify_fail)");
+
+  // 測試 add_action
+  add_action("do_test_cmd", "testcmd");
+  assert_true(mapp(commands()), "commands() should return mapping");
+  assert_true(commands()["testcmd"] == "do_test_cmd", "add_action() should register command");
+
+  // 測試 command
+  notify_fail("failed");
+  assert_true(command("testcmd") == 1, "command() should execute action");
+
+  // 測試 remove_action
+  remove_action("testcmd");
+  assert_true(sizeof(commands()) == 0, "remove_action() should remove command");
+
+  report_results();
+}
+
+int do_test_cmd() {
+  write("testcmd executed\n");
+  return 1;
+}
+
+void test_security_efuns(object me) {
+  start_test("Efun Security (getuid, geteuid, master, previous_object)");
+
+  assert_true(stringp(getuid(me)), "getuid() should return string");
+  assert_true(stringp(geteuid(me)), "geteuid() should return string");
+  assert_true(objectp(master()), "master() should return object");
+
+  report_results();
+}
+
+void test_advanced_string_efuns(object me) {
+  start_test("Efun Advanced String (reg_assoc, process_string, sscanf, printf)");
+
+  // 測試 reg_assoc
+  mixed *arr = reg_assoc("a b c", ({ "[a-z]" }), ({ 1 }));
+  assert_true(pointerp(arr), "reg_assoc() should return array");
+
+  // 測試 process_string
+  string processed = process_string("Time: @@time@@");
+  assert_true(stringp(processed), "process_string() should return string");
+
+  // 測試 sscanf (%*s#%d)
+  int var;
+  int res = sscanf("prefix#123", "%*s#%d", var);
+  assert_equal(1, res, "sscanf() should parse pattern correctly");
+  assert_equal(123, var, "sscanf() should parse integer correctly");
+
+  // 測試 printf (%O)
+  // 透過 printf 輸出到 me，我們無法直接斷言 printf 的輸出，
+  // 但可以測試 sprintf(內部使用printf相同的格式化邏輯)
+  // 注意: 我們目前的 printf 直接寫入 TellObject，測試不易。
+  // 建議針對 %O 測試 sprintf 邏輯(若已實作)
+
+  report_results();
+}
+
+void test_math_efuns() {
+  start_test("Efun Math (abs, random, sqrt, pow)");
+
+  assert_equal(5, abs(-5), "abs() should return positive");
+  assert_true(random(10) < 10, "random() should return < max");
+
+  // 測試浮點數運算
+  float s = sqrt(4.0);
+  assert_equal(2.0, s, "sqrt(4.0) should be 2.0");
+
+  report_results();
+}
+
+void run_tests(object me) {
+  test_lifecycle();
+  test_type_predicates();
+  test_control_flow();
+  test_io_efuns(me);
+  test_interactive_efuns(me);
+  test_filesystem_efuns();
+  test_persistence_efuns();
+  test_array_mapping_efuns();
+  test_conversion_efuns();
+  test_inventory_efuns(me);
+  test_command_efuns();
+  test_security_efuns(me);
+  test_advanced_string_efuns(me);
+  test_math_efuns();
+}

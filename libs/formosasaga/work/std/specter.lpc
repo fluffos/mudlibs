@@ -1,0 +1,175 @@
+// /std/specter.c
+//
+// 失源者標準物件。
+//
+// 失源者是當聚落記憶度過低時自動生成的存在。
+// 玩家可以透過對話、閱讀記憶或共鳴儀式來「解除」它。
+//
+// 失源者有四種型態（來自 formosa.h 定義）：
+//   SP_LOST_NAME    - 失名者：不記得自己叫什麼
+//   SP_LOST_PLACE   - 失鄉者：不記得自己來自哪裡
+//   SP_LOST_TONGUE  - 失語者：無法開口訴說記憶
+//   SP_LOST_HISTORY - 失史者：完全從歷史中消失
+
+#include "/include/formosa.h"
+
+inherit "/std/entity.lpc";
+
+private string settlement_id;
+private string specter_id;
+private string specter_type;
+private int born_time;
+
+/* fluffos prototypes */
+void resolve(object player);
+
+// ── 初始化 ────────────────────────────────────────────
+void setup(string sid, string sp_id, string sp_type) {
+  settlement_id = sid;
+  specter_id = sp_id;
+  specter_type = sp_type;
+  born_time = time();
+
+  set_entity_type("specter");
+
+  // 依型態設定名稱與描述
+  switch (sp_type) {
+    case SP_LOST_NAME:
+      set_entity_id("specter:lost_name:" + sp_id);
+      set_display_name("失名者");
+      set_prop("description",
+        "一個透明的輪廓，在空氣中若隱若現。\n" +
+        "它張嘴想說什麼，卻連自己的名字都想不起來。\n" +
+        "眼神中充滿了茫然與渴望。");
+      set_prop("ask_response",
+        "它努力地動了動嘴唇，發出模糊的聲音：\n" +
+        "「我……我是……我叫……」\n" +
+        "然後陷入一片沉默，像是那個名字已經從世界上消失了。");
+      break;
+
+    case SP_LOST_PLACE:
+      set_entity_id("specter:lost_place:" + sp_id);
+      set_display_name("失鄉者");
+      set_prop("description",
+        "一個身影，像是從很遠的地方走來，卻找不到回家的路。\n" +
+        "它的腳步虛浮，似乎隨時可能消散在風中。\n" +
+        "臉上帶著永遠找不到歸宿的哀愁。");
+      set_prop("ask_response",
+        "「我的家……在哪裡……」\n" +
+        "它的聲音像是從很深的水底傳來。\n" +
+        "「我走了很久很久，但我忘了，我忘了我從哪裡來。」");
+      break;
+
+    case SP_LOST_TONGUE:
+      set_entity_id("specter:lost_tongue:" + sp_id);
+      set_display_name("失語者");
+      set_prop("description",
+        "一個緊閉著嘴的身影，手中握著什麼，卻無法訴說。\n" +
+        "它的嘴唇顫動著，眼淚無聲地流下，\n" +
+        "那些想說的話，都被遺忘悄悄偷走了。");
+      set_prop("ask_response",
+        "它拼命搖頭，想說卻說不出口。\n" +
+        "最後，它伸出手，在空氣中描繪了什麼——\n" +
+        "那像是一個地名，或者一個人的臉，轉眼間又消散了。");
+      break;
+
+    case SP_LOST_HISTORY:
+    default:
+      set_entity_id("specter:lost_history:" + sp_id);
+      set_display_name("失史者");
+      set_prop("description",
+        "幾乎看不見的存在——像是一個從歷史課本裡被橡皮擦抹去的名字。\n" +
+        "它站在那裡，但周圍的空氣對它視而不見。\n" +
+        "彷彿它從未存在過，又彷彿它曾經改變過一切。");
+      set_prop("ask_response",
+        "沉默。\n" +
+        "但在那沉默之中，你隱約感覺到——\n" +
+        "一個龐大的、已被遺忘的故事，正試圖穿越時間觸碰你的記憶。");
+      break;
+  }
+}
+
+// ── 查詢 ──────────────────────────────────────────────
+string query_settlement_id() { return settlement_id; }
+string query_specter_id() { return specter_id; }
+string query_specter_type() { return specter_type; }
+int query_born_time() { return born_time; }
+int query_is_specter() { return 1; }
+
+// ── 玩家互動 ──────────────────────────────────────────
+// look at specter
+string query_long() {
+  return "\n" + C_HISTORY + "【" + query_display_name() + "】" + NOR + "\n" + query_prop("description") + "\n\n" + C_DIM + "（輸入 ask 失源者名 或 commune 可嘗試與它溝通）\n" + NOR;
+}
+
+// ask <specter> about <anything>
+void respond_to_ask(object player) {
+  if (!objectp(player)) return;
+  tell_object(player, "\n" + C_HISTORY + "【" + query_display_name() + "說】" + NOR + "\n");
+  tell_object(player, query_prop("ask_response") + "\n\n");
+
+  // 嘗試觸發記憶解鎖（把這個 site 當觸發點）
+  object env = environment(this_object());
+  if (env && env->query_is_site()) {
+    MEMORY_D->check_trigger_memory(player, env);
+  }
+}
+
+// ── 解除條件 ──────────────────────────────────────────
+// 玩家透過 commune 或特定記憶解鎖後，可解除失源者
+int can_resolve(object player) {
+  if (!player) return 0;
+
+  // 必要條件：玩家在此聚落已解鎖至少一則記憶
+  string *unlocked = player->query_unlocked_memories();
+  if (!unlocked || !sizeof(unlocked)) return 0;
+
+  // 依型態設定不同解除條件
+  switch (specter_type) {
+    case SP_LOST_NAME:
+      // 解除失名者：需要至少 1 則記憶解鎖
+      return sizeof(unlocked) >= 1;
+
+    case SP_LOST_PLACE:
+      // 解除失鄉者：需要聚落踏印
+      return FOOTPRINT_D->has_footprint(player, "settlement:" + settlement_id);
+
+    case SP_LOST_TONGUE:
+      // 解除失語者：需要 3 則記憶解鎖
+      return sizeof(unlocked) >= 3;
+
+    case SP_LOST_HISTORY:
+      // 解除失史者：需要文人等級 2+
+      return player->query_career_rank("scholar") >= 2;
+
+    default:
+      return sizeof(unlocked) >= 2;
+  }
+}
+
+void resolve(object player) {
+  if (!can_resolve(player)) {
+    tell_object(player,
+      C_WARN + "  你還沒有足夠的歷史理解來解除這個失源者。\n" + NOR);
+    return;
+  }
+
+  string sp_name = query_display_name();
+  tell_object(player,
+    "\n" + C_GOOD + "【記憶復甦】" + NOR + "\n" +
+    "你緩緩地把那些記憶的片段分享給它——\n" +
+    "那些地名、那些人名、那些被時間淹沒的故事。\n\n" +
+    "「……謝謝你。」\n\n" +
+    sp_name + "的輪廓漸漸清晰，然後慢慢融入這片土地的記憶之中。\n" +
+    "這裡的空氣彷彿輕盈了一些。\n\n");
+
+  tell_room(environment(this_object()),
+    "\n" + C_GOOD + player->query_name() + " 成功解除了一個" + sp_name + "的困縛。\n\n",
+    ({ player }));
+
+  // 通知 settlement_d 解除失源者
+  SETTLEMENT_D->resolve_specter(settlement_id, specter_id, player);
+
+  // 銷毀物件
+  destruct(this_object());
+}

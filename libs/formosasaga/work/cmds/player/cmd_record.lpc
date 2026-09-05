@@ -1,0 +1,168 @@
+// /cmds/cmd_record.c
+// 文人專屬指令：記錄/考據與編寫地方誌
+//
+// 指令用法：
+//   record                 - 一般考據，獲得經驗與修練點。
+//   record write           - 檢視當前聚落的歷史大事紀，準備編寫地方誌。
+//   record publish <標題>:<內容> - 編寫並發表一篇關於當前聚落的地方誌。
+//   record list            - 列出當前聚落的所有地方誌。
+//   record read <編號>     - 閱讀特定地方誌，獲得文史涵養與點數獎勵。
+
+#include "/include/ansi.h"
+#include "/include/formosa.h"
+
+inherit "/std/object";
+
+int main(object me, string verb, string arg) {
+  if (me->query("career") != "scholar") {
+    write(select_lang(([
+      "zh-TW": "你並非文人，不懂得如何進行考據與記錄。\n",
+      "en": "You are not a scholar and do not know how to record history.\n"
+    ])));
+    return 1;
+  }
+
+  object here = environment(me);
+  string settlement = here ? here->query_settlement_id() : "";
+  if (!settlement || settlement == "") {
+    write("這裡不屬於任何已知聚落，無法進行文史記錄。\n");
+    return 1;
+  }
+
+  // ── 模式一：列出聚落地方誌 (record list) ─────────────────
+  if (arg == "list") {
+    mapping *chronicles = CHRONICLE_D->query_settlement_chronicles(settlement);
+    if (!sizeof(chronicles)) {
+      write("目前此聚落尚未有文人留下地方誌。\n");
+      return 1;
+    }
+    write(HIW "\n=== " + SETTLEMENT_D->query_settlement_name(settlement) + " 的地方誌文獻 ===\n" NOR);
+    int idx = 1;
+    foreach (mapping c in chronicles) {
+      write(sprintf("  [%d] %s (著者：%s，點閱：%d)\n", idx, c["title"], c["author"], c["reads"] || 0));
+      idx++;
+    }
+    write("使用 record read <編號> 研讀文獻。\n");
+    me->set_temp("reading_chronicles", chronicles);  // 用於對應讀者輸入 index
+    return 1;
+  }
+
+  // ── 模式二：研讀地方誌 (record read <編號>) ──────────────
+  if (arg && sscanf(arg, "read %s", arg) == 1) {
+    mixed *chronicles = me->query_temp("reading_chronicles");
+    if (!chronicles || !sizeof(chronicles)) {
+      // 如果暫存不存在，直接重新獲取
+      chronicles = CHRONICLE_D->query_settlement_chronicles(settlement);
+    }
+    int idx = to_int(arg);
+    if (idx <= 0 || idx > sizeof(chronicles)) {
+      write("無效的地方誌編號。請先輸入 record list 檢視。\n");
+      return 1;
+    }
+    mapping target = chronicles[idx - 1];
+    if (!CHRONICLE_D->read_chronicle(me, target["id"])) {
+      write("讀取文獻發生錯誤。\n");
+    }
+    return 1;
+  }
+
+  // ── 模式三：檢視歷史大事紀以準備編寫 (record write) ─────────
+  if (arg == "write") {
+    mapping *records = CHRONICLE_D->query_historic_records(settlement);
+    write(HIW "\n=== " + SETTLEMENT_D->query_settlement_name(settlement) + " 歷史大事紀 ===\n" NOR);
+    if (!sizeof(records)) {
+      write("此聚落最近沒有發生足以載入史冊的大事。\n");
+    } else {
+      foreach (mapping r in records) {
+        write(sprintf("[%s] %s：%s\n", ctime(r["time"]), r["player"], r["desc"]));
+      }
+    }
+    write("\n你可以參考大事紀，提筆編寫風土地方誌。\n");
+    write("指令：record publish <標題>:<內容>\n");
+    return 1;
+  }
+
+  // ── 模式四：發表地方誌 (record publish <標題>:<內容>) ─────────
+  if (arg && sscanf(arg, "publish %s", arg) == 1) {
+    string title, content;
+    if (sscanf(arg, "%s:%s", title, content) != 2) {
+      write("格式錯誤！正確用法：record publish <標題>:<內容>\n");
+      return 1;
+    }
+    if (strlen(title) < 2 || strlen(content) < 10) {
+      write("地方誌的標題或內容過短，無法發表。（標題需2字以上，內容需10字以上）\n");
+      return 1;
+    }
+
+    string author_name = me->query_name();
+    string author_id = me->query_id()[0];
+
+    if (CHRONICLE_D->publish_chronicle(title, author_name, author_id, settlement, content)) {
+      write(HIG "發表成功！《" + title + "》已收錄入此地地方誌，並為聚落帶來記憶度提升。\n" NOR);
+      // 文人發表獲得額外較多修練點與經驗
+      me->add_exp(30);
+      CAREER_D->add_points(me, "scholar", 10);
+    } else {
+      write("發表失敗，請檢查輸入內容。\n");
+    }
+    return 1;
+  }
+
+  // ── 模式五：一般文史考據 (預設) ───────────────────────
+  string msg;
+  int exp_gain = 10;
+
+  // 嘉義與鹿港等文化發源地給予加成
+  if (settlement == "chiayi" || settlement == "lukang") {
+    msg = "在這裡，豐富的文史底蘊讓你文思泉湧，你提筆記錄下珍貴的口述歷史與風土民情。";
+    exp_gain = 25;
+  } else {
+    msg = "你仔細觀察周遭的環境與碑文，試圖從蛛絲馬跡中考據出被遺忘的歷史碎片。";
+    exp_gain = 12;
+  }
+
+  write(HMAG + msg + NOR + "\n");
+  say(me->query_name() + " 拿出手札，認真地記錄著周遭的文史細節。\n");
+
+  me->add_exp(exp_gain);
+  write("你獲得了 " + exp_gain + " 點經驗值。\n");
+
+  if (CAREER_D) {
+    CAREER_D->add_points(me, "scholar", 3);  // 文人記錄固定增加較多修練點
+  }
+
+  // 機率性自動將當前考據寫入大事紀
+  if (random(100) < 30) {
+    string rec_desc = sprintf("在此進行了深度的文史考據，發現了部分「%s」的佚失歷史",
+      environment(me)->query_display_name() || "地標");
+    CHRONICLE_D->add_historic_record(settlement, "research", rec_desc, me->query_name());
+    write(HIY "你的研究成果被記錄進了當地的歷史大事紀中！\n" NOR);
+  }
+
+  return 1;
+}
+
+string help() {
+  return select_lang(([
+    "zh-TW": "【指令】\n"
+    "  record                     (文人專屬) 進行基本的歷史考據與記錄。\n"
+    "  record write               檢視當前聚落的重大大事紀，為編寫做準備。\n"
+    "  record publish <標題>:<內容> 撰寫並發表地方風土誌。\n"
+    "  record list                列出當前聚落所有已發表的地方誌。\n"
+    "  record read <編號>         閱讀特定編號的地方誌以獲得文史素養與獎勵。\n",
+    "en": "【Command】\n"
+    "  record                     (Scholar only) Perform basic historical research.\n"
+    "  record write               Check current settlement history records.\n"
+    "  record publish <title>:<content> Publish a local chronicle.\n"
+    "  record list                List all chronicles of this settlement.\n"
+    "  record read <number>       Read a chronicle to gain rewards.\n"
+  ]));
+}
+
+string *query_verbs() {
+  return ({ "record", "research" });
+}
+
+string query_category() {
+  return "職涯";
+}

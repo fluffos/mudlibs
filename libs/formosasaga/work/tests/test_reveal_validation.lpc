@@ -1,0 +1,62 @@
+// /tests/test_reveal_validation.c
+// 測試條件顯示層 (Reveal Layer) 與資料驗證 (Validation) 機制
+inherit "/std/test_case";
+
+#include "/include/formosa.h"
+
+void run_tests(object me) {
+  // 1. 驗證聚落 validation 機制
+  start_test("聚落驗證 (Settlement Validation) 測試");
+  object set_d = load_object("/daemon/settlement_d.lpc");
+  assert_equal(1, objectp(set_d), "應該載入 settlement_d");
+
+  // 建立合法的測試聚落 Mapping
+  mapping valid_settlement = ([
+    "id": "minxiong",
+    "name": "民雄",
+    "level": "village",
+    "population": 1200,
+    "memory": 35,
+    "culture": 42,
+    "trade": 18,
+    "cohesion": 50,
+    "industry": ({ "鳳梨", "糖業" })
+  ]);
+  assert_equal(1, set_d->validate_settlement(valid_settlement), "合法的聚落結構應驗證通過");
+
+  // 測試不合法的結構 (負數人口)
+  mapping invalid_settlement = copy(valid_settlement);
+  invalid_settlement["population"] = -100;
+  assert_equal(0, set_d->validate_settlement(invalid_settlement), "人口為負數時應驗證失敗");
+
+  // 2. 驗證顯示層 (Reveal Layer) 測試
+  start_test("條件顯示層 (Reveal Layer) 解析測試");
+  object minxiong_site = load_object("/area/settlements/minxiong.lpc");
+  assert_equal(1, objectp(minxiong_site), "應該載入 minxiong_site 地點物件");
+
+  // 模擬玩家物件
+  object test_player = clone_object("/std/user.lpc");
+  assert_equal(1, objectp(test_player), "應該成功 clone test_player");
+  test_player->set_id("tester");
+  test_player->set_name("測試者");
+
+  // 初始狀態下 (沒有任何 footprint 且沒完成時代) 進行 reveal 解析
+  mapping initial_reveals = minxiong_site->resolve_reveals(test_player);
+  assert_equal(0, sizeof(initial_reveals["texts"]), "初始玩家不應看到任何浮現文字");
+  assert_equal(0, sizeof(initial_reveals["npcs"]), "初始玩家不應看到任何浮現 NPC");
+
+  // 模擬玩家獲得 footprint 踏印
+  object footprint_d = load_object("/daemon/footprint_d.lpc");
+  assert_equal(1, objectp(footprint_d), "應該載入 footprint_d");
+
+  // 授予 geo:chiayi_city，此時滿足民雄地圖中的「層級二」條件
+  footprint_d->grant_footprint(test_player, "geo:chiayi_city", FP_GEO, "chiayi_city", FQ_GLIMPSE);
+  mapping granted_reveals = minxiong_site->resolve_reveals(test_player);
+  assert_equal(1, sizeof(granted_reveals["npcs"]), "玩家獲得嘉義市踏印後，民雄的老站長 NPC 應浮現");
+  assert_equal("NPC_old_stationmaster_minxiong", granted_reveals["npcs"][0], "浮現的 NPC ID 應與設定符合");
+
+  // 銷毀模擬對象，避免記憶體殘留
+  destruct(test_player);
+
+  report_results();
+}

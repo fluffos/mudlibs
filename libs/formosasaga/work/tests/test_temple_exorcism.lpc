@@ -1,0 +1,157 @@
+// /tests/test_temple_exorcism.c
+// 廟委鎮煞任務完整流程整合測試
+//
+// 測試流程：
+//   1. 完成前置任務 (old_station_master_wish)
+//   2. 向廟祝接取 temple_exorcism
+//   3. 前置任務未完成者無法接取（前置鎖定測試）
+//   4. 組隊後進入大士爺廟，看得到秘境線索
+//   5. 從地下陣法室蒐集三枚鎮符石
+//   6. 回廟祝回報並完成任務，獲得護符 + 聲望
+
+#include "/include/formosa.h"
+
+inherit "/std/test_case";
+
+string query_role() { return "god"; }
+
+void run_tests(object me) {
+  start_test("廟委鎮煞任務 (Demo Quest) 完整流程測試");
+
+  object q_d = load_object("/secure/quest_d.lpc") || load_object("/daemon/quest_d.lpc");
+  assert_true(objectp(q_d), "應成功載入任務守護進程");
+
+  // ── 建立測試玩家 ────────────────────────────────────────
+  object player = clone_object("/std/user.lpc");
+  player->set_id("test_temple_quest");
+  player->set_name("測試鎮煞者");
+  player->set_role("god");
+  player->set_lang("zh-TW");
+  player->set_level(5);
+  player->setup();
+
+  // ── 1. 前置任務鎖定測試：尚未完成 old_station_master_wish ─
+  write("--- 測試前置任務鎖定 ---\n");
+  int blocked = q_d->accept_quest(player, "temple_exorcism");
+  assert_equal(0, blocked, "尚未完成前置任務時，不應能接受廟委委託");
+
+  // ── 2. 模擬完成前置任務 + 升級達到 level 5 ────────────────
+  player->set_quest("old_station_master_wish", ([ "status": "completed", "end_time": time() ]));
+  player->set_level(5);
+
+  // ── 3. 正式接取廟委委託 ────────────────────────────────
+  write("--- 接取廟委委託 ---\n");
+  // 加入 debug：確認等級與前置任務
+  write("player level = " + player->query_level() + "\n");
+  mapping pre_check = player->query_quest("old_station_master_wish");
+  write("prereq quest status = " + (mapp(pre_check) ? pre_check["status"] : "(nil)") + "\n");
+
+  int accepted = q_d->accept_quest(player, "temple_exorcism");
+  write("accept_result = " + accepted + "\n");
+  assert_equal(1, accepted, "完成前置任務後，應能接受廟委委託");
+
+  mapping qdata = player->query_quest("temple_exorcism");
+  assert_true(mapp(qdata), "任務資料應存在");
+  if (mapp(qdata)) {
+    assert_equal("active", qdata["status"], "任務狀態應為 active");
+  }
+
+  // ── 4. reveal_layer 條件測試：任務進行中才看得到秘境線索 ─
+  write("--- 測試 reveal_layer 秘境線索條件 ---\n");
+  object temple = SETTLEMENT_D->get_site_object("dashiye_temple");
+  assert_true(objectp(temple), "應成功載入大士爺廟地標");
+
+  if (temple) {
+    player->move(temple);
+    temple->player_enter(player);
+
+    // 單人時不應看到秘境線索（in_party = false）
+    mapping reveals_solo = temple->resolve_reveals(player);
+    int solo_found_clue = 0;
+    foreach (string t in reveals_solo["texts"]) {
+      if (strsrch(t, "線索顯現") != -1) solo_found_clue = 1;
+    }
+    assert_equal(0, solo_found_clue, "單人時不應看到秘境組隊線索");
+
+    // 模擬組隊（設定 leader）
+    object leader_mock = clone_object("/std/user.lpc");
+    leader_mock->set_id("test_leader");
+    leader_mock->set_name("隊長甲");
+    player->set_leader(leader_mock);
+
+    mapping reveals_party = temple->resolve_reveals(player);
+
+    int party_found_clue = 0;
+    foreach (string t in reveals_party["texts"]) {
+      if (strsrch(t, "線索顯現") != -1) party_found_clue = 1;
+    }
+    assert_equal(1, party_found_clue, "組隊且持有任務時，應看到秘境線索");
+
+    player->set_leader(0);
+    if (leader_mock) destruct(leader_mock);
+  }
+
+  // ── 5. 蒐集三枚鎮符石 ────────────────────────────────────
+  write("--- 蒐集三枚鎮符石 ---\n");
+  int stones_to_get = 3;
+  for (int i = 0; i < stones_to_get; i++) {
+    object stone = clone_object("/item/ward_stone.lpc");
+    assert_true(objectp(stone), sprintf("應成功建立第 %d 枚鎮符石", i + 1));
+    if (stone) stone->move_object(player);
+  }
+
+  // 手動計算背包中的鎮符石數量（避免 closure 相容問題）
+  object *all_inv = all_inventory(player);
+  int stone_count = 0;
+  foreach (object inv_ob in all_inv) {
+    if (inv_ob->query_id("ward_stone")) stone_count++;
+  }
+  write("stone_count = " + stone_count + "\n");
+  assert_equal(3, stone_count, "玩家背包中應有3枚鎮符石");
+
+  // ── 6. 嘗試在鎮符石不足時回報（應失敗）────────────────
+  // 先扣掉一枚模擬不足情況
+  object *all_inv2 = all_inventory(player);
+  object first_stone = 0;
+  foreach (object inv_ob2 in all_inv2) {
+    if (inv_ob2->query_id("ward_stone")) { first_stone = inv_ob2; break; }
+  }
+  if (first_stone) destruct(first_stone);
+  write("--- 測試鎮符石不足時回報 ---\n");
+  int early_complete = q_d->complete_quest(player, "temple_exorcism");
+  assert_equal(0, early_complete, "鎮符石不足（2/3）時，不應能完成任務");
+
+  // 補回第三枚
+  object stone3 = clone_object("/item/ward_stone.lpc");
+  if (stone3) stone3->move_object(player);
+
+  // ── 7. 正式回報完成任務 ────────────────────────────────
+  write("--- 回報廟祝，完成任務 ---\n");
+  int completed = q_d->complete_quest(player, "temple_exorcism");
+  assert_equal(1, completed, "擁有 3 枚鎮符石時，應能成功完成任務");
+
+  // ── 8. 驗證獎勵 ────────────────────────────────────────
+  write("--- 驗證獎勵發放 ---\n");
+  assert_true(player->query_exp() > 0, "完成任務後應獲得經驗值");
+
+  object amulet = present("temple_amulet", player) || present("大士爺護符", player);
+  assert_true(objectp(amulet), "背包中應獲得大士爺護符");
+
+  // 驗證陣營聲望
+  int rep = player->query_faction_reputation("dashiye_temple_council");
+  assert_equal(30, rep, "廟委聲望應增加 30 點");
+  write("廟委聲望 = " + rep + "\n");
+
+  // ── 9. 驗證任務狀態 ────────────────────────────────────
+  mapping final_qdata = player->query_quest("temple_exorcism");
+  assert_true(mapp(final_qdata), "任務資料應存在");
+  if (mapp(final_qdata)) {
+    assert_equal("completed", final_qdata["status"], "任務最終狀態應為 completed");
+  }
+
+  // ── 清理 ───────────────────────────────────────────────
+  if (amulet) destruct(amulet);
+  if (player) destruct(player);
+
+  report_results();
+}

@@ -1,0 +1,201 @@
+// /daemon/relation_d.c
+//
+// NPC 好感度與關係網守護進程 (Relationship Daemon) — P20
+//
+// 職責：
+//   - 儲存並管理玩家與每個 NPC 的好感度數值（0~100）
+//   - 判定好感度層級（陌生/熟識/朋友/信任/知己）
+//   - 提供好感度增減 API，並在層級提升時發送事件與通知
+//   - 資料儲存在玩家存檔（player->query("npc_relations")）
+//
+// 好感度層級定義：
+//   RELATION_STRANGER  (  0): 陌生 — 客套應對，不透露私事
+//   RELATION_FAMILIAR  ( 25): 熟識 — 認得你了，話多一些
+//   RELATION_FRIEND    ( 50): 朋友 — 分享日常，提供任務線索
+//   RELATION_TRUSTED   ( 75): 信任 — 拜託私事，給予特殊協助
+//   RELATION_INTIMATE  ( 90): 知己 — 吐露心聲，解鎖深層記憶
+//
+// Canon 參照：docs/TODO.md § P20
+
+#include "/include/ansi.h"
+#include "/include/formosa.h"
+
+inherit "/std/object";
+
+// ── 層級常數 ──────────────────────────────────────────
+
+#define RELATION_STRANGER   0
+#define RELATION_FAMILIAR  25
+#define RELATION_FRIEND    50
+#define RELATION_TRUSTED   75
+#define RELATION_INTIMATE  90
+
+// 每次互動增加的好感度（預設值）
+#define REL_GAIN_GREET   2
+#define REL_GAIN_GIVE    8
+#define REL_GAIN_QUEST   15
+#define REL_GAIN_CHAT    1
+
+/* fluffos prototypes */
+int get_relation_tier(int val);
+string get_tier_name(int tier);
+
+void create() {
+  ::create();
+  call_out("subscribe_events", 1);
+}
+
+void subscribe_events() {
+  EVENT_D->subscribe("QuestCompleted", "on_quest_completed", this_object());
+}
+
+// ── 核心 API ──────────────────────────────────────────
+
+// 取得玩家對某 NPC 的好感度值
+int get_relation(object player, string npc_id) {
+  if (!player || !npc_id) return 0;
+  mapping rels = player->query("npc_relations");
+  if (!rels) return 0;
+  return rels[npc_id] || 0;
+}
+
+// 設定好感度（鉗制在 0~100）
+void set_relation(object player, string npc_id, int val) {
+  if (!player || !npc_id) return;
+  if (val < 0) val = 0;
+  if (val > 100) val = 100;
+  mapping rels = player->query("npc_relations") || ([]);
+  rels[npc_id] = val;
+  player->set("npc_relations", rels);
+  player->save();
+}
+
+// 增加好感度（傳回提升後的值）
+int add_relation(object player, string npc_id, int delta) {
+  if (!player || !npc_id || delta <= 0) return get_relation(player, npc_id);
+
+  int old_val = get_relation(player, npc_id);
+  int new_val = old_val + delta;
+  if (new_val > 100) new_val = 100;
+
+  set_relation(player, npc_id, new_val);
+
+  // 判斷是否跨越好感層級
+  int old_tier = get_relation_tier(old_val);
+  int new_tier = get_relation_tier(new_val);
+
+  if (new_tier > old_tier) {
+    string tier_name = get_tier_name(new_tier);
+    tell_object(player,
+      "\n" + C_GOOD + "【關係提升】" + C_RESET +
+      "你與「" + NPC_D->query_npc_name(npc_id) + "」的關係提升至「" +
+      C_TITLE + tier_name + C_RESET + "」！\n");
+
+    // 發送事件，供其他系統（如 CODEX_D、INCIDENT_D）監聽
+    EVENT_D->publish("RelationshipTierUp", ([
+      "player": player,
+      "player_id": player->query_entity_id(),
+      "npc_id": npc_id,
+      "old_tier": old_tier,
+      "new_tier": new_tier,
+      "tier_name": tier_name,
+    ]));
+  }
+
+  return new_val;
+}
+
+// 依數值回傳層級 (0~4)
+int get_relation_tier(int val) {
+  if (val >= RELATION_INTIMATE) return 4;
+  if (val >= RELATION_TRUSTED) return 3;
+  if (val >= RELATION_FRIEND) return 2;
+  if (val >= RELATION_FAMILIAR) return 1;
+  return 0;
+}
+
+// 依玩家物件直接回傳層級
+int get_player_tier(object player, string npc_id) {
+  return get_relation_tier(get_relation(player, npc_id));
+}
+
+// 層級對應名稱
+string get_tier_name(int tier) {
+  switch (tier) {
+    case 4: return "知己";
+    case 3: return "信任";
+    case 2: return "朋友";
+    case 1: return "熟識";
+    default: return "陌生";
+  }
+}
+
+// 依玩家好感度取得對應層級的 NPC 對話（從 YAML config 取）
+// YAML 格式：
+//   relationship_dialogues:
+//     stranger:  { 話題: "台詞" }
+//     familiar:  { 話題: "台詞" }
+//     friend:    { 話題: "台詞" }
+//     trusted:   { 話題: "台詞" }
+//     intimate:  { 話題: "台詞" }
+string *tier_keys() {
+  return ({ "intimate", "trusted", "friend", "familiar", "stranger" });
+}
+
+// 取得玩家在當前好感層級下，能看到的 NPC 對話 mapping
+// 採「累積解鎖」：層級愈高，能看到愈多之前層級的對話
+mapping get_available_dialogues(object player, string npc_id) {
+  mapping config = NPC_D->query_npc_config(npc_id);
+  if (!config || !config["relationship_dialogues"]) return ([]);
+
+  mapping rel_d = config["relationship_dialogues"];
+  int tier = get_player_tier(player, npc_id);
+
+  // 從低到高累積，tier 0 只能看 stranger，tier 4 可看全部
+  string *tier_order = ({ "stranger", "familiar", "friend", "trusted", "intimate" });
+  mapping result = ([]);
+  int i;
+  for (i = 0; i <= tier && i < sizeof(tier_order); i++) {
+    string tkey = tier_order[i];
+    if (mapp(rel_d[tkey])) {
+      foreach (string topic, mixed resp in rel_d[tkey]) {
+        result[topic] = resp;
+      }
+    }
+  }
+  return result;
+}
+
+// ── 事件監聽 ──────────────────────────────────────────
+
+void on_quest_completed(mapping event) {
+  mapping data = event["data"];
+  if (!data) return;
+  object player = data["player"];
+  string qid = data["quest_id"];
+  if (!player || !qid) return;
+
+  // 嘗試從 quest 的 YAML 取得 related_npc 欄位
+  object qd = find_object("/daemon/quest_d.lpc");
+  if (!qd) qd = load_object("/daemon/quest_d.lpc");
+  if (!qd) return;
+  mapping qinfo = qd->query_quest_info(qid);
+  if (!qinfo || !qinfo["related_npc"]) return;
+
+  string npc_id = qinfo["related_npc"];
+  add_relation(player, npc_id, REL_GAIN_QUEST);
+}
+
+// ── 查詢 API（供 cmd_relation.c 使用） ───────────────
+
+// 取得玩家所有 NPC 好感度清單（以層級排序）
+mapping query_all_relations(object player) {
+  if (!player) return ([]);
+  mapping rels = player->query("npc_relations") || ([]);
+  // 過濾掉好感度為 0 的（尚未互動的 NPC 不顯示）
+  mapping result = ([]);
+  foreach (string npc_id, int val in rels) {
+    if (val > 0) result[npc_id] = val;
+  }
+  return result;
+}

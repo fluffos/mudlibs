@@ -1,0 +1,147 @@
+// /tests/test_sugar_railway_repair.c
+// 糖鐵搶修任務完整流程整合測試
+//
+// 測試流程：
+//   1. 向監督員接取 sugar_railway_repair (前置任務未完成者無法接取)
+//   2. 模擬完成前置任務 (temple_exorcism)
+//   3. 正式接取糖鐵搶修委託
+//   4. 進入甘蔗田，看得到秘境/脫軌火車頭線索 (需組隊)
+//   5. 蒐集三枚火車零件
+//   6. 零件不足時回報 (應失敗)
+//   7. 回報並完成任務，獲得紀念徽章 + 糖業組合聲望
+
+#include "/include/formosa.h"
+
+inherit "/std/test_case";
+
+string query_role() { return "god"; }
+
+void run_tests(object me) {
+  start_test("糖鐵搶修任務 (Sugar Railway Repair) 完整流程測試");
+
+  object q_d = load_object("/secure/quest_d.lpc") || load_object("/daemon/quest_d.lpc");
+  assert_true(objectp(q_d), "應成功載入任務守護進程");
+
+  // ── 建立測試玩家 ────────────────────────────────────────
+  object player = clone_object("/std/user.lpc");
+  player->set_id("test_sugar_repair_player");
+  player->set_name("測試鐵路工");
+  player->set_role("god");
+  player->set_lang("zh-TW");
+  player->set_level(6);
+  player->setup();
+
+  // ── 1. 前置任務鎖定測試：尚未完成 temple_exorcism ──
+  write("--- 測試前置任務鎖定 ---\n");
+  int blocked = q_d->accept_quest(player, "sugar_railway_repair");
+  assert_equal(0, blocked, "尚未完成前置任務時，不應能接受糖鐵搶修委託");
+
+  // ── 2. 模擬完成前置任務 ──────────────────
+  player->set_quest("temple_exorcism", ([ "status": "completed", "end_time": time() ]));
+
+  // ── 3. 正式接取委託 ────────────────────────────────
+  write("--- 接取糖鐵委託 ---\n");
+  int accepted = q_d->accept_quest(player, "sugar_railway_repair");
+  assert_equal(1, accepted, "完成前置任務後，應能接受糖鐵委託");
+
+  mapping qdata = player->query_quest("sugar_railway_repair");
+  assert_true(mapp(qdata), "任務資料應存在");
+  if (mapp(qdata)) {
+    assert_equal("active", qdata["status"], "任務狀態應為 active");
+  }
+
+  // ── 4. reveal_layer 條件測試 ─
+  write("--- 測試 reveal_layer 甘蔗田脫軌線索條件 ---\n");
+  object field = SETTLEMENT_D->get_site_object("sugarcane_field");
+  assert_true(objectp(field), "應成功載入甘蔗田地標");
+
+  if (field) {
+    player->move(field);
+    field->player_enter(player);
+
+    // 單人時不應看到秘境線索
+    mapping reveals_solo = field->resolve_reveals(player);
+    int solo_found_clue = 0;
+    foreach (string t in reveals_solo["texts"]) {
+      if (strsrch(t, "線索顯現") != -1) solo_found_clue = 1;
+    }
+    assert_equal(0, solo_found_clue, "單人時不應看到火車脫軌組隊線索");
+
+    // 模擬組隊
+    object leader_mock = clone_object("/std/user.lpc");
+    leader_mock->set_id("test_sugar_leader");
+    leader_mock->set_name("工頭");
+    player->set_leader(leader_mock);
+
+    mapping reveals_party = field->resolve_reveals(player);
+    int party_found_clue = 0;
+    foreach (string t in reveals_party["texts"]) {
+      if (strsrch(t, "線索顯現") != -1) party_found_clue = 1;
+    }
+    assert_equal(1, party_found_clue, "組隊且持有任務時，應看到線索");
+
+    player->set_leader(0);
+    if (leader_mock) destruct(leader_mock);
+  }
+
+  // ── 5. 蒐集三枚火車零件 ────────────────────────────────────
+  write("--- 蒐集三枚火車零件 ---\n");
+  int parts_to_get = 3;
+  for (int i = 0; i < parts_to_get; i++) {
+    object part = clone_object("/item/train_part.lpc");
+    assert_true(objectp(part), sprintf("應成功建立第 %d 枚火車零件", i + 1));
+    if (part) part->move_object(player);
+  }
+
+  object *all_inv = all_inventory(player);
+  int part_count = 0;
+  foreach (object inv_ob in all_inv) {
+    if (inv_ob->query_id("train_part")) part_count++;
+  }
+  assert_equal(3, part_count, "玩家背包中應有 3 枚火車零件");
+
+  // ── 6. 零件不足時回報 ────────────────
+  object *all_inv2 = all_inventory(player);
+  object first_part = 0;
+  foreach (object inv_ob2 in all_inv2) {
+    if (inv_ob2->query_id("train_part")) { first_part = inv_ob2; break; }
+  }
+  if (first_part) destruct(first_part);
+  write("--- 測試火車零件不足時回報 ---\n");
+  int early_complete = q_d->complete_quest(player, "sugar_railway_repair");
+  assert_equal(0, early_complete, "零件不足時，不應能完成任務");
+
+  // 補回零件
+  object part3 = clone_object("/item/train_part.lpc");
+  if (part3) part3->move_object(player);
+
+  // ── 7. 正式回報完成任務 ────────────────────────────────
+  write("--- 回報糖廠監督員，完成任務 ---\n");
+  int completed = q_d->complete_quest(player, "sugar_railway_repair");
+  assert_equal(1, completed, "擁有 3 枚火車零件時，應能成功完成任務");
+
+  // ── 8. 驗證獎勵 ────────────────────────────────────────
+  write("--- 驗證獎勵發放 ---\n");
+  assert_true(player->query_exp() > 0, "完成任務後應獲得經驗值");
+
+  object medal = present("sugar_rail_medal", player) || present("五分車紀念章", player);
+  assert_true(objectp(medal), "背包中應獲得五分車紀念章");
+
+  // 驗證陣營聲望
+  int rep = player->query_faction_reputation("sugar_guild");
+  assert_equal(30, rep, "糖業組合聲望應增加 30 點");
+  write("糖業組合聲望 = " + rep + "\n");
+
+  // ── 9. 驗證任務狀態 ────────────────────────────────────
+  mapping final_qdata = player->query_quest("sugar_railway_repair");
+  assert_true(mapp(final_qdata), "任務資料應存在");
+  if (mapp(final_qdata)) {
+    assert_equal("completed", final_qdata["status"], "任務最終狀態應為 completed");
+  }
+
+  // ── 清理 ───────────────────────────────────────────────
+  if (medal) destruct(medal);
+  if (player) destruct(player);
+
+  report_results();
+}

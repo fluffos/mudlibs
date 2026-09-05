@@ -1,0 +1,160 @@
+// /daemon/combat_d.c
+// 戰鬥守護進程 (Combat Daemon)
+// 負責處理所有進階技能與職業招式的邏輯
+
+#include "/include/ansi.h"
+
+inherit "/std/object";
+mapping skills;
+
+
+void create() {
+  ::create();
+  skills = ([
+    // ── 鬥士 (Fighter) 技能 ──
+    "bash": ([
+      "name": "重擊",
+      "type": "physical",
+      "guild": "fighter",
+      "mp": 15,
+      "level": 5,
+      "msg": "你猛地發力，對 $target 發起了一記沉重的 $name！\n",
+      "apply_func": "skill_bash"
+    ]),
+
+    "double_strike": ([
+      "name": "連環快劍",
+      "type": "physical",
+      "guild": "fighter",
+      "mp": 25,
+      "level": 15,
+      "msg": "你身形一閃，瞬間對 $target 攻出了兩劍！\n",
+      "apply_func": "skill_double_strike"
+    ]),
+
+    // ── 法師 (Mage) 技能 ──
+    "fireball": ([
+      "name": "火球術",
+      "type": "magic",
+      "guild": "mage",
+      "mp": 20,
+      "level": 5,
+      "msg": "🔥 你手心聚起一顆火球，呼嘯著飛向 $target！\n",
+      "apply_func": "skill_fireball"
+    ]),
+
+    // ── 牧師 (Priest) 技能 ──
+    "heal": ([
+      "name": "治療術",
+      "type": "support",
+      "guild": "priest",
+      "mp": 15,
+      "level": 1,
+      "msg": "✨ 一道聖潔的光芒籠罩了 $target，傷口開始迅速癒合。\n",
+      "apply_func": "skill_heal"
+    ])
+  ]);
+}
+
+// ── 技能實作 ──
+
+int skill_bash(object me, object target) {
+  int dmg = me->query_attack() * 150 / 100 + random(20);
+  target->take_damage(dmg);
+  return dmg;
+}
+
+int skill_double_strike(object me, object target) {
+  int dmg = me->query_attack() + random(10);
+  target->take_damage(dmg);
+  dmg = me->query_attack() + random(10);
+  target->take_damage(dmg);
+  return dmg;
+}
+
+int skill_fireball(object me, object target) {
+  int dmg = me->query_stat("int") * 4 + random(30);
+  target->take_damage(dmg);
+  return dmg;
+}
+
+int skill_heal(object me, object target) {
+  int heal = me->query_stat("wis") * 5 + random(20);
+  target->heal_hp(heal);
+  return heal;
+}
+
+mapping query_recipe(string id) { return skills[id]; }
+
+int do_perform(object me, string sid, string target_arg) {
+  mapping s = skills[sid];
+  if (!s) {
+    write("沒有這種特殊招式。\n");
+    return 0;
+  }
+
+  // 檢查職業限制
+  if (me->query_guild() != s["guild"] && me->query_role() != "god") {
+    write("這不是你職業所能掌握的技巧。\n");
+    return 0;
+  }
+
+  // 檢查技能等級
+  if (me->query_skill(sid) < s["level"] && me->query_role() != "god") {
+    write("你的『" + s["name"] + "』等級不足，無法發揮出這招的威力。\n");
+    return 0;
+  }
+
+  // 檢查 MP
+  if (me->query_mp() < s["mp"]) {
+    write("你的法力不足（需要 " + s["mp"] + " 點）。\n");
+    return 0;
+  }
+
+  // 尋找目標
+  object target;
+  if (target_arg == "") {
+    target = me->query_combat_target();
+  } else {
+    target = present(target_arg, environment(me));
+  }
+
+  if (!target && s["type"] != "support") {
+    write("你要對誰發動招式？\n");
+    return 0;
+  }
+
+  // 如果是治療類，預設目標是自己
+  if (sid == "heal" && !target) target = me;
+
+  if (target && !living(target)) {
+    write("你只能對生物使用招式。\n");
+    return 0;
+  }
+
+  // 消耗資源
+  me->use_mp(s["mp"]);
+
+  // 輸出訊息
+  string msg = s["msg"];
+  msg = replace_string(msg, "$target", target->query_name());
+  msg = replace_string(msg, "$name", s["name"]);
+  write(msg);
+  say(me->query_name() + " 施展了『" + s["name"] + "』！\n");
+
+  // 執行效果 (使用 call_other 呼叫本物件內的實作函式)
+  call_other(this_object(), s["apply_func"], me, target);
+
+  // 進入戰鬥狀態（如果不是戰鬥中）
+  if (s["type"] == "physical" || s["type"] == "magic") {
+    if (target != me) {
+      me->attacked_by(target);
+      target->attacked_by(me);
+    }
+  }
+
+  me->save();
+  return 1;
+}
+
+mapping query_all_skills() { return skills; }

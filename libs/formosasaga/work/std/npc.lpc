@@ -1,0 +1,910 @@
+// std/npc.c - NPC / 怪物基底類別
+
+#include "/include/config.h"
+#include "/include/formosa.h"
+
+inherit "/std/living.lpc";
+
+// ── NPC 專屬欄位 ────────────────────────────────────────────────
+int exp_reward;    // 擊殺後給予的經驗值
+int gold_reward;   // 掉落金幣數量
+mixed drop_list;     // 掉落物清單：({"/path/item.lpc", ...})
+mapping harvest_data;  // 🚀 新增：可採集的物資 ([ "file": "...", "msg": "...", "chance": 100 ])
+mapping skills_to_teach;  // 🚀 新增：可傳授的技能 ([ "sid": max_level ])
+int respawn_time;  // 重生時間（秒），0 = 不重生
+int is_tamable;    // 🚀 新增：是否可被馴服
+string aggro_msg;     // 主動攻擊時的訊息
+
+// ── 棲息地與行為模式 ──────────────────────────────────────
+string habitat;       // HABITAT_LAND / WATER / UNDERGROUND / SKY / CAVE
+int behaviour;     // 位元旗標：BEHAV_AGGRESSIVE | BEHAV_GUARD | BEHAV_PATROL | BEHAV_WANDER
+int aggro_range;   // 主動攻擊偵測範圍（格數，0=不主動）
+int flee_hp_pct;   // 逃跑血量百分比 (預設 20)
+int flee_chance;   // 逃跑成功機率 (0~100, 預設 50)
+mixed patrol_rooms;  // 巡邏路線 ({"/area/newbie/room_x_y.lpc", ...})
+int patrol_idx;    // 目前巡邏位置索引
+int sight_flags;   // 位元旗標: 1=夜視, 2=水中視覺, 4=隱形偵測
+string special_atk;   // 特殊攻擊名稱（空=無）
+int special_atk_chance;  // 特殊攻擊機率 (0~100)
+
+// ── 自由移動屬性 ──────────────────────────────────────
+string home_room;     // 出生點 (房間路徑)
+int move_range;    // 可移動的最大距離 (Manhattan Distance, 0=固定)
+int wander_chance;  // 每次心跳隨機移動的機率 (0~100)
+
+// 🚀 新增：記憶與好鬥屬性
+int aggressive;    // 是否主動攻擊玩家
+object last_attacker;  // 記住最後一個戰鬥的玩家
+
+// 🚀 新增：P14 日程表屬性
+mixed schedule_default_site;
+mixed schedule_routines;
+mixed schedule_overrides;
+string current_action_msg;
+string current_schedule_site;
+
+/* fluffos prototypes */
+void init();
+int id(string str);
+void heart_beat();
+void do_attack();
+void do_special_attack();
+void attacked_by(object attacker);
+
+void create() {
+  ::create();
+  enable_commands();
+
+  set_name("怪物");
+  set_short("一隻怪物");
+  set_long("這是一隻普通的怪物，看起來不太友善。\n");
+  set_id(({ "monster", "怪物" }));
+
+  level = 1;
+  stat_str = 8;
+  stat_dex = 8;
+  stat_con = 8;
+  recalc_stats();
+  hp = max_hp;
+  mp = max_mp;
+
+  exp_reward = 50;
+  gold_reward = 10;
+  drop_list = ({});
+  harvest_data = ([]);
+  skills_to_teach = ([]);
+  respawn_time = 0;
+  aggro_msg = "";
+
+  // 預設值
+  habitat = HABITAT_LAND;
+  behaviour = BEHAV_PASSIVE;
+  aggro_range = 0;
+  flee_hp_pct = 20;
+  flee_chance = 50;
+  patrol_rooms = ({});
+  patrol_idx = 0;
+  sight_flags = 0;
+  special_atk = "";
+  special_atk_chance = 0;
+
+  home_room = "";
+  move_range = 0;
+  wander_chance = 0;
+
+  aggressive = 0;
+  last_attacker = 0;
+
+  current_action_msg = "";
+  current_schedule_site = "";
+
+  set_heart_beat(1);
+
+  // 訂閱虛擬時間更新事件 (P14)
+  EVENT_D->subscribe("GameTimeTick", "on_time_tick", this_object());
+}
+
+// init() 在玩家進入 NPC 所在房間時由 driver 呼叫
+void init() {
+  // 第一次移動到某個房間時，若 home_room 未設定，則將該處設為家
+  if (home_room == "") {
+    object env = environment(this_object());
+    if (env) {
+      home_room = object_name(env);
+      // 去除可能存在的 clone ID
+      int pos = strsrch(home_room, "#");
+      if (pos != -1) home_room = substr(home_room, 0, pos);
+    }
+  }
+}
+
+int id(string str) {
+  object env = environment(this_object());
+  if (env && env->query_is_site()) {
+    object tp = this_player();
+    if (tp && userp(tp)) {
+      if (tp->query_role() == "god" || wizardp(tp)) {
+        return ::id(str);
+      }
+      string full_id = query_entity_id();
+      string short_id = full_id;
+      if (full_id) {
+        int colon_idx = strsrch(full_id, ":");
+        if (colon_idx != -1) {
+          short_id = substr(full_id, colon_idx + 1, strlen(full_id) - colon_idx - 1);
+        }
+      }
+      if (!env->npc_visible_to_player(tp, short_id)) {
+        return 0;
+      }
+    }
+  }
+  return ::id(str);
+}
+
+// ── 設定 / 查詢 ──────────────────────────────────────────────────
+void set_exp_reward(int v) { exp_reward = v; }
+void set_gold_reward(int v) { gold_reward = v; }
+void set_drop_list(mixed l) { drop_list = l; }
+void set_harvest_data(mapping d) { harvest_data = d; }
+void set_skill_to_teach(string s, int lv) {
+  if (!skills_to_teach) skills_to_teach = ([]); skills_to_teach[s] = lv;
+}
+void set_respawn(int v) { respawn_time = v; }
+void set_tamable(int v) { is_tamable = v; }
+void set_aggro_msg(string s) { aggro_msg = s; }
+void set_habitat(string h) { habitat = h; }
+void set_behaviour(int b) { behaviour = b; }
+void set_aggro_range(int v) { aggro_range = v; }
+void set_flee_hp_pct(int v) { flee_hp_pct = v; }
+void set_flee_chance(int v) { flee_chance = v; }
+void set_patrol_rooms(mixed r) { patrol_rooms = r; }
+void set_sight_flags(int v) { sight_flags = v; }
+void set_special_atk(string s, int pct) {
+  special_atk = s;
+  special_atk_chance = pct;
+}
+void set_home_room(string r) { home_room = r; }
+void set_move_range(int v) { move_range = v; }
+void set_wander_chance(int v) { wander_chance = v; }
+void set_aggressive(int v) { aggressive = v; }
+void set_schedule(mixed def_site, mixed routines, mixed overrides) {
+  schedule_default_site = def_site;
+  schedule_routines = routines;
+  schedule_overrides = overrides;
+}
+string query_action_msg() { return current_action_msg; }
+
+string query_habitat() { return habitat; }
+int query_behaviour() { return behaviour; }
+mapping query_skills_to_teach() { return skills_to_teach; }
+int query_aggro_range() { return aggro_range; }
+string query_home_room() { return home_room; }
+int query_move_range() { return move_range; }
+int query_tamable() { return is_tamable; }
+int is_npc() { return 1; }  // P14: 用於 site.c 辨識 NPC
+
+// ── P14: 日程表執行邏輯 ──────────────────────────────
+void execute_routine(mapping routine) {
+  if (!routine) return;
+
+  string loc = routine["location"];
+  string msg = routine["action_msg"];
+
+  if (msg && msg != "") current_action_msg = select_lang(msg);
+
+  if (loc && loc != "" && loc != current_schedule_site) {
+    current_schedule_site = loc;
+    // 如果目前不在那個地方，就移動過去
+    object env = environment(this_object());
+    if (env && env->query_entity_id() != "site:" + loc) {
+      // 嘗試透過 SETTLEMENT_D 找到目標 Site
+      object dest = load_object("/daemon/settlement_d.lpc")->get_site_object(loc);
+      if (dest && dest != env) {
+        say(query_name() + " 看了看時間，動身前往其他地方了。\n");
+        move_object(dest);
+        say(query_name() + " 走了過來。\n");
+      }
+    }
+  }
+}
+
+void on_time_tick(mapping data) {
+  if (!schedule_routines) return;
+  if (is_dead || in_combat) return;
+
+  int mins = data["minutes"];
+
+  // 1. 檢查 overrides
+  if (arrayp(schedule_overrides)) {
+    foreach (mapping ov in schedule_overrides) {
+      mapping cond = ov["condition"];
+      if (cond) {
+        if (cond["type"] == "era_active" && !ERA_D->is_era_active(cond["era"])) continue;
+        if (cond["type"] == "global_event" && !TIMELINE_D->global_event_triggered(cond["event"])) continue;
+      }
+      // 條件符合
+      mixed r_list = ov["routines"];
+      if (arrayp(r_list)) {
+        foreach (mapping r in r_list) {
+          if (SCHEDULE_D->is_time_in_range(mins, r["time"])) {
+            execute_routine(r);
+            return;
+          }
+        }
+      }
+    }
+  }
+
+  // 2. 檢查 routines
+  if (arrayp(schedule_routines)) {
+    foreach (mapping r in schedule_routines) {
+      if (SCHEDULE_D->is_time_in_range(mins, r["time"])) {
+        execute_routine(r);
+        return;
+      }
+    }
+  }
+}
+
+// ── 輔助：計算兩個房間之間的距離 ─────────────────────
+int calculate_distance(object room1, object room2) {
+  if (!room1 || !room2) return 999;
+  mixed c1 = room1->query_coordinate();
+  mixed c2 = room2->query_coordinate();
+  if (!arrayp(c1) || !arrayp(c2) || sizeof(c1) < 3 || sizeof(c2) < 3) return 999;
+
+  int dx = c1[0] - c2[0];
+  int dy = c1[1] - c2[1];
+  int dz = c1[2] - c2[2];
+  if (dx < 0) dx = -dx;
+  if (dy < 0) dy = -dy;
+  if (dz < 0) dz = -dz;
+  return dx + dy + dz;
+}
+
+// ── 互動：對話 ───────────────────────────────────────────────────
+
+// 收集所有來源的關鍵字回應（自己、房間、持有物）
+mapping query_all_responses() {
+  mapping all = ([]);
+  mapping from;
+  mixed ks;
+  int i, j;
+
+  // 1. 來自房間
+  object env = environment(this_object());
+  if (env) {
+    from = env->query_responses();
+    if (mapp(from)) {
+      ks = keys(from);
+      for (i = 0; i < sizeof(ks); i++) {
+        if (!all[ks[i]]) all[ks[i]] = ({});
+        all[ks[i]] += from[ks[i]];
+      }
+    }
+  }
+
+  // 2. 來自持有物
+  object *inv = all_inventory(this_object());
+  for (j = 0; j < sizeof(inv); j++) {
+    from = inv[j]->query_responses();
+    if (mapp(from)) {
+      ks = keys(from);
+      for (i = 0; i < sizeof(ks); i++) {
+        if (!all[ks[i]]) all[ks[i]] = ({});
+        all[ks[i]] += from[ks[i]];
+      }
+    }
+  }
+
+  // 3. 來自 NPC 自己
+  from = query_responses();
+  if (mapp(from)) {
+    ks = keys(from);
+    for (i = 0; i < sizeof(ks); i++) {
+      if (!all[ks[i]]) all[ks[i]] = ({});
+      all[ks[i]] += from[ks[i]];
+    }
+  }
+
+  return all;
+}
+
+// 執行回應
+void do_respond(mixed msg) {
+  if (!msg || msg == "") return;
+
+  string final_msg = "";
+  if (mapp(msg)) {
+    final_msg = select_lang(msg);
+  } else {
+    final_msg = msg;
+  }
+
+  say(query_name() + " 說：「" + final_msg + "」\n");
+}
+
+// 攔截聽到的訊息
+void catch_tell(string msg) {
+  // 只對玩家的說話內容反應，避免 NPC 之間產生無限迴圈
+  object tp = this_player();
+  if (!tp || !userp(tp)) return;
+
+  // 判斷是否有人說話。格式通常為：Name 說：「Content」
+  // 使用更寬鬆的匹配：只要包含 ：「 和 」
+  int start = strsrch(msg, "：「");
+  if (start == -1) return;
+
+  int end = strsrch(msg, "」", 1);
+  if (end == -1 || end <= start + 2) return;
+
+  // "：「" 長度為 2 (：, 「)
+  string content = substr(msg, start + 2, end - (start + 2));
+  string lc_content = lower_case(trim(content));
+
+  mapping all_resp = query_all_responses();
+  if (!mapp(all_resp)) return;
+
+  mixed ks = keys(all_resp);
+  int i;
+
+  for (i = 0; i < sizeof(ks); i++) {
+    if (!stringp(ks[i])) continue;
+
+    string keyword = lower_case(ks[i]);
+    if (strsrch(lc_content, keyword) != -1) {
+      mixed options = all_resp[ks[i]];
+      string final_msg = "";
+      if (arrayp(options)) {
+        if (sizeof(options) > 0) {
+          final_msg = options[random(sizeof(options))];
+        }
+      } else if (stringp(options)) {
+        final_msg = options;
+      }
+
+      if (final_msg && final_msg != "") {
+        // 稍微延遲一下再回應，感覺比較真實
+        call_out("do_respond", 1, final_msg);
+        return;  // 每次說話只針對一個關鍵字反應
+      }
+    }
+  }
+}
+
+// 供互動指令呼叫：玩家主動打招呼，好感 +2
+void do_greet(object player) {
+  if (!player) return;
+  string npc_id = query_entity_id();
+  int colon = strsrch(npc_id, ":");
+  if (colon != -1) npc_id = substr(npc_id, colon + 1, strlen(npc_id) - colon - 1);
+
+  int old_val = RELATION_D->get_relation(player, npc_id);
+  int new_val = RELATION_D->add_relation(player, npc_id, 2);
+
+  string my_name = query_name();
+  string tier_name = RELATION_D->get_tier_name(RELATION_D->get_player_tier(player, npc_id));
+
+  if (old_val == 0) {
+    tell_object(player, my_name + " 點頭致意：「你好，第一次見面。」\n");
+  } else {
+    tell_object(player, my_name + " 微笑點頭：「又見面了。」\n");
+  }
+  if (new_val > old_val && new_val % 5 == 0) {
+    tell_object(player, C_DIM + "（好感度：" + new_val + "/100 " + tier_name + "）" + C_RESET + "\n");
+  }
+}
+
+int do_chat(object me, string topic) {
+  if (!topic || topic == "") return 0;
+
+  // 取得 NPC ID（去除 "npc:" 前綴）
+  string npc_id = query_entity_id();
+  int colon = strsrch(npc_id, ":");
+  if (colon != -1) npc_id = substr(npc_id, colon + 1, strlen(npc_id) - colon - 1);
+
+  // P20：合併好感層級對話與標準對話
+  mapping rel_dialogues = RELATION_D->get_available_dialogues(me, npc_id);
+  mapping all_resp = query_all_responses();
+  // 好感對話優先覆蓋標準對話（更私密的說法）
+  foreach (string k, mixed v in rel_dialogues) {
+    all_resp[k] = v;
+  }
+
+  string my_name = query_name();
+
+  // 優先精確匹配
+  if (all_resp[topic]) {
+    mixed options = all_resp[topic];
+    string final_msg = "";
+    if (arrayp(options)) {
+      if (sizeof(options) > 0) {
+        final_msg = options[random(sizeof(options))];
+      }
+    } else {
+      final_msg = options;
+    }
+    if (final_msg != "") {
+      if (mapp(final_msg)) final_msg = select_lang(final_msg);
+      tell_object(me, my_name + " 告訴你：「" + final_msg + "」\n");
+      // P20: 每次對話 +1 好感
+      RELATION_D->add_relation(me, npc_id, 1);
+      return 1;
+    }
+  }
+
+  // 模糊匹配與特殊話題
+  string lc_topic = lower_case(topic);
+  mixed ks = keys(all_resp);
+  int i;
+  for (i = 0; i < sizeof(ks); i++) {
+    if (lower_case(ks[i]) == lc_topic) {
+      mixed options = all_resp[ks[i]];
+      string final_msg = "";
+      if (arrayp(options)) {
+        if (sizeof(options) > 0) {
+          final_msg = options[random(sizeof(options))];
+        }
+      } else {
+        final_msg = options;
+      }
+      if (final_msg != "") {
+        if (mapp(final_msg)) final_msg = select_lang(final_msg);
+        string npc_say = _t("npc_says");
+        npc_say = replace_string(npc_say, "$name", my_name);
+        npc_say = replace_string(npc_say, "$msg", final_msg);
+        tell_object(me, npc_say + "\n");
+        return 1;
+      }
+    }
+  }
+
+  if (topic == "here" || topic == "這裡") {
+    string msg = _t("npc_good_place");
+    string npc_say = _t("npc_says");
+    npc_say = replace_string(npc_say, "$name", my_name);
+    npc_say = replace_string(npc_say, "$msg", msg);
+    tell_object(me, npc_say + "\n");
+    return 1;
+  }
+  if (topic == "name" || topic == "名字") {
+    string msg = _t("npc_name_is");
+    msg = replace_string(msg, "$name", my_name);
+    string npc_say = _t("npc_says");
+    npc_say = replace_string(npc_say, "$name", my_name);
+    npc_say = replace_string(npc_say, "$msg", msg);
+    tell_object(me, npc_say + "\n");
+    return 1;
+  }
+  if (lc_topic == "topics" || topic == "話題" || topic == "topic") {
+    mixed t_keys = keys(all_resp);
+    if (sizeof(t_keys) == 0) {
+      string msg = _t("npc_no_topics");
+      string npc_say = _t("npc_says");
+      npc_say = replace_string(npc_say, "$name", my_name);
+      npc_say = replace_string(npc_say, "$msg", msg);
+      tell_object(me, npc_say + "\n");
+    } else {
+      string list = implode(t_keys, ", ");
+      string msg = _t("npc_topics_list");
+      msg = replace_string(msg, "$list", list);
+      string npc_say = _t("npc_says");
+      npc_say = replace_string(npc_say, "$name", my_name);
+      npc_say = replace_string(npc_say, "$msg", msg);
+      tell_object(me, npc_say + "\n");
+    }
+    return 1;
+  }
+
+  return 0;
+}
+
+// ── 自由移動邏輯 ─────────────────────────────────────────────
+void do_wander() {
+  object env = environment(this_object());
+  if (!env) return;
+
+  mapping exits = env->query_exits();
+  if (!exits) return;
+
+  string *dirs = keys(exits);
+  string dir = dirs[random(sizeof(dirs))];
+  string dest_path = exits[dir];
+
+  if (!dest_path || dest_path == "" || dest_path == "/") return;
+
+  object dest = load_object(dest_path);
+  if (!dest) return;
+
+  // 檢查目的地是否超出移動範圍
+  if (home_room != "" && move_range > 0) {
+    object home = load_object(home_room);
+    if (home && calculate_distance(dest, home) > move_range) {
+      return;  // 太遠了，不去
+    }
+  }
+
+  object lang_d = load_object("/daemon/language_d.lpc");
+
+  // 廣播離開訊息
+  lang_d->broadcast_event(env, "say_leave", ([ "$name": this_object(), "$dir": dir ]));
+
+  if (this_object()->move(dest, dir)) {
+    // 廣播抵達訊息
+    // 🚀 關鍵修正：抵達訊息應該顯示「反向」
+    string from_dir = query_reverse_dir(dir);
+    lang_d->broadcast_event(dest, "say_arrive", ([ "$name": this_object(), "$dir": from_dir ]));
+  }
+}
+
+// ── 巡邏邏輯 ─────────────────────────────────────────────────────
+void do_patrol() {
+  if (!patrol_rooms || sizeof(patrol_rooms) == 0) return;
+  patrol_idx = (patrol_idx + 1) % sizeof(patrol_rooms);
+
+  string path = patrol_rooms[patrol_idx];
+  if (!path || path == "" || path == "/") return;
+
+  object dest = find_object(path);
+  if (!dest) dest = load_object(path);
+  if (dest && dest != environment(this_object())) {
+    move_object(dest);
+  }
+}
+
+// ── 逃跑邏輯 ─────────────────────────────────────────────────────
+void do_flee() {
+  string msg = select_lang(([
+    "en": query_name() + " senses danger and flees!",
+    "zh-TW": query_name() + " 見勢不妙，拔腿逃跑！",
+    "zh-CN": query_name() + " 见势 not 妙，拔腿逃跑！"
+  ]));
+  say(msg + "\n");
+  stop_combat();
+  // 嘗試隨機往相鄰房間移動
+  object env = environment(this_object());
+  if (env) {
+    mixed exits = env->query_exits();
+    if (exits && sizeof(exits) > 0) {
+      mixed dirs = keys(exits);
+      string dir = dirs[random(sizeof(dirs))];
+      object dest = load_object(exits[dir]);
+      if (dest) move_object(dest);
+    }
+  }
+}
+
+// ── 心跳：AI 邏輯 ──────────────────────────────────────
+void heart_beat() {
+  if (is_dead) { return; }
+
+  object mob = this_object();
+  object env = environment(mob);
+
+  if (in_combat && combat_target) {
+    if (combat_target->query_hp() <= 0) {
+      stop_combat();
+      return;
+    }
+
+    // 🚀 檢查目標是否還在同一個房間
+    if (environment(combat_target) != env) {
+      stop_combat();
+      return;
+    }
+
+    // 🚀 逃跑判定：血量低於門檻 且 機率命中
+    if (hp * 100 / max_hp <= flee_hp_pct) {
+      if (random(100) < flee_chance) {
+        do_flee();
+        return;
+      }
+    }
+
+    do_attack();
+    return;
+  }
+
+  // 🚀 1. 檢查主動攻擊 (Aggressive) 或 宿敵重逢 (Memory)
+  if (env && !env->query_no_combat()) {
+    object *inv = all_inventory(env);
+    foreach (object ob in inv) {
+      if (!userp(ob) || ob->query_hp() <= 0) continue;
+
+      // 判斷是否主動攻擊，或是遇到宿敵且血量過半
+      if (aggressive || (ob == last_attacker && hp * 100 / max_hp > 50)) {
+        if (aggro_msg && aggro_msg != "") {
+          say(aggro_msg);
+        } else {
+          say(query_name() + " 咆哮一聲，對 " + ob->query_name() + " 發起了主動攻擊！\n");
+        }
+        attacked_by(ob);
+        return;
+      }
+    }
+  }
+
+  // 🚀 使用 bitwise & 檢查行為旗標，可疊加多種行為
+
+
+  // 1. 巡邏行為
+  if ((behaviour & BEHAV_PATROL) && sizeof(patrol_rooms) > 0) {
+    do_patrol();
+    return;
+  }
+
+  // 2. 隨機移動行為
+  if (move_range > 0 && wander_chance > 0) {
+    if (random(100) < wander_chance) {
+      do_wander();
+    }
+  }
+}
+
+// ── 戰鬥：NPC 攻擊 ───────────────────────────────────────────────
+void do_attack() {
+  if (!combat_target || is_dead) { return; }
+
+  // 🚀 新增：攻擊時損耗武器耐久度 (1% 機率損耗 1 點)
+  if (equip_weapon && random(100) < 1) {
+    equip_weapon->damage_durability(1);
+    if (equip_weapon->query_durability() <= 0) {
+      tell_object(this_object(), "$HIW$你的 " + equip_weapon->query_name() + " 損壞了！\n$NOR$");
+      recalc_stats();  // 重新計算屬性
+    }
+  }
+
+  // 特殊攻擊判定
+  if (special_atk != "" && random(100) < special_atk_chance) {
+    do_special_attack();
+    return;
+  }
+
+  int hit_roll = random(100);
+  int hit_chance = HIT_RATE_BASE + (stat_dex - combat_target->query_stat(STAT_DEX));
+  if (hit_roll > hit_chance) {
+    tell_object(combat_target,
+      query_name() + " 攻擊你，但沒打中！\n");
+    return;
+  }
+
+  int raw = attack - combat_target->query_defence();
+  if (raw < 1) { raw = 1; }
+  int variation = random(raw / 3 + 1);
+  raw = raw - variation / 2 + random(variation);
+
+  string crit_str = "";
+  if (random(100) < CRIT_RATE_BASE) {
+    raw = raw * CRIT_MULTIPLIER;
+    crit_str = "【暴擊！】";
+  }
+
+  combat_target->take_damage(raw);
+  tell_object(combat_target,
+    crit_str + query_name() + " 對你造成了 " + sprintf("%d", raw) + " 點傷害！" +
+    "（你剩 " + sprintf("%d", combat_target->query_hp()) + "/" +
+    sprintf("%d", combat_target->query_max_hp()) + " HP）\n");
+
+  // 🚀 觸發對方的被攻擊判定（讓玩家自動反擊）
+  combat_target->attacked_by(this_object());
+
+  if (combat_target->query_hp() <= 0) {
+    tell_object(combat_target, "你被 " + query_name() + " 擊倒了！\n");
+    combat_target->die();
+    stop_combat();
+  }
+}
+
+// ── 特殊攻擊（子類別可 override）────────────────────────────────
+void do_special_attack() {
+  if (!combat_target || is_dead) return;
+  int raw = (attack - combat_target->query_defence()) * 2;
+  if (raw < 1) raw = 1;
+  combat_target->take_damage(raw);
+  tell_object(combat_target,
+    "【特殊技：" + special_atk + "】" +
+    query_name() + " 對你造成了 " + sprintf("%d", raw) + " 點傷害！\n");
+
+  // 🚀 觸發對方的被攻擊判定
+  combat_target->attacked_by(this_object());
+
+  if (combat_target->query_hp() <= 0) {
+    combat_target->die();
+    stop_combat();
+  }
+}
+
+// ── 被攻擊後，自動迎戰 ───────────────────────────────────────────
+void attacked_by(object attacker) {
+  if (is_dead) { return; }
+
+  // 🚀 新增：被攻擊時隨機損耗一件防具耐久度 (1% 機率)
+  if (random(100) < 1) {
+    mixed slots = ({ SLOT_HEAD, SLOT_BODY, SLOT_LEGS, SLOT_HANDS, SLOT_FEET, SLOT_SHIELD });
+    object armour = query_equip(slots[random(sizeof(slots))]);
+    if (armour) {
+      armour->damage_durability(1);
+      if (armour->query_durability() <= 0) {
+        tell_object(this_object(), "$HIW$你的 " + armour->query_name() + " 損壞了！\n$NOR$");
+        recalc_stats();
+      }
+    }
+  }
+
+  // 🚀 記住最後一個攻擊者
+  if (userp(attacker)) {
+    last_attacker = attacker;
+  }
+
+  object env = environment(this_object());
+  if (env && env->query_no_combat()) return;
+
+  // 🚀 強制開啟心跳，確保 AI 會執行攻擊
+  set_heart_beat(1);
+
+  if (!in_combat) {
+    ::attacked_by(attacker);
+    if (in_combat) {  // 確保父類別沒有攔截
+      if (aggro_msg && aggro_msg != "") {
+        say(aggro_msg);
+      } else {
+        say(query_name() + " 怒目而視，準備反擊！\n");
+      }
+    }
+  }
+}
+
+// ── 死亡 ─────────────────────────────────────────────────────────
+void on_death() {
+  say(query_name() + " 倒下了！\n");
+
+  object killer = combat_target;
+  string owner_team = "";
+  if (killer && userp(killer)) {
+    object leader = killer->query_leader();
+    if (leader) owner_team = leader->get_id();
+    else owner_team = killer->get_id();
+  }
+
+  // 產生屍體
+  object corpse = clone_object("/std/corpse.lpc");
+  if (corpse) {
+    corpse->set_owner(query_name());
+    // 🚀 設定屍體歸屬 (Loot Binding)
+    if (owner_team != "") {
+      corpse->set_team_owner(owner_team);
+    }
+
+    // 🚀 新增：轉移採集資料
+    if (mapp(harvest_data)) {
+      corpse->set_harvest_data(harvest_data);
+    }
+    corpse->move_object(environment(this_object()));
+
+    // 將遺物移入屍體
+    int i;
+    for (i = 0; i < sizeof(drop_list); i++) {
+      object item = clone_object(drop_list[i]);
+      if (item) {
+        item->move_object(corpse);
+      }
+    }
+  }
+
+  if (killer && living(killer)) {
+    int final_exp = exp_reward;
+    int final_gold = gold_reward;
+
+    // 🚀 團隊加成：每多一人增加 10% 經驗
+    object leader = killer->query_leader();
+    if (leader) {
+      object *members = leader->query_followers();
+      int count = sizeof(members);
+      if (count > 1) {
+        final_exp = final_exp * (100 + (count - 1) * 10) / 100;
+        // 平分給在場的隊員
+        foreach (object m in members) {
+          if (m && environment(m) == environment(this_object()) && m->query_hp() > 0) {
+            m->gain_exp(final_exp / count);
+            m->gain_potential(exp_reward / 10 / count + 1);
+            m->gain_gold(final_gold / count + 1);
+            tell_object(m, "$HIW$【團隊】你分到了 $NOR$" + (final_exp / count) + " 點經驗值。\n");
+          }
+        }
+      } else {
+        killer->gain_exp(final_exp);
+        killer->gain_potential(exp_reward / 10 + 1);
+        killer->gain_gold(final_gold);
+      }
+    } else {
+      killer->gain_exp(final_exp);
+      killer->gain_potential(exp_reward / 10 + 1);
+      killer->gain_gold(final_gold);
+    }
+
+    // 🚀 任務進度通知
+    if (userp(killer)) {
+      load_object("/daemon/quest_d.lpc")->check_kill_progress(killer, base_name(this_object()));
+    }
+  }
+
+  if (respawn_time > 0 && home_room != "") {
+    object home = find_object(home_room);
+    if (!home) home = load_object(home_room);
+
+    if (home) {
+      home->call_out("spawn_npc", respawn_time, base_name(this_object()));
+    }
+  }
+
+  destruct(this_object());
+}
+
+// ── NPC 專用垃圾回收 ──────────────────────────────────
+int clean_up(int inherited_count) {
+  if (inherited_count > 0) return 1;
+
+  // 1. 如果正在戰鬥中，不清理
+  if (this_object()->query_combat_target()) return 1;
+
+  // 2. 如果環境中有玩家，不清理
+  object env = environment(this_object());
+  if (env) {
+    object *here = all_inventory(env);
+    foreach (object ob in here) {
+      if (userp(ob)) return 1;
+    }
+  }
+
+  // 3. 閒置超過 15 分鐘則回收 (通常用於回收走遠的怪物)
+  if (query_idle(this_object()) > 900) {
+    // 藍圖不清理
+    if (strsrch(object_name(this_object()), "#") == -1) return 1;
+
+    destruct(this_object());
+    return 0;
+  }
+
+  return 1;
+}
+
+// 複寫 YAML 載入，額外解析 NPC 與怪物屬性
+int init_from_yaml(string path) {
+  if (!::init_from_yaml(path)) return 0;
+
+  string content = read_file(path);
+  mapping data = yaml_decode(content);
+
+  if (member_array("level", keys(data)) != -1) level = data["level"];
+  if (member_array("stat_str", keys(data)) != -1) stat_str = data["stat_str"];
+  if (member_array("stat_dex", keys(data)) != -1) stat_dex = data["stat_dex"];
+  if (member_array("stat_con", keys(data)) != -1) stat_con = data["stat_con"];
+  if (member_array("exp_reward", keys(data)) != -1) exp_reward = data["exp_reward"];
+  if (member_array("gold_reward", keys(data)) != -1) gold_reward = data["gold_reward"];
+  if (data["drop_list"]) drop_list = data["drop_list"];
+  if (data["harvest_data"]) harvest_data = data["harvest_data"];
+  if (data["skills_to_teach"]) skills_to_teach = data["skills_to_teach"];
+  if (member_array("respawn_time", keys(data)) != -1) respawn_time = data["respawn_time"];
+  if (data["aggro_msg"]) aggro_msg = data["aggro_msg"];
+  if (data["habitat"]) habitat = data["habitat"];
+  if (member_array("behaviour", keys(data)) != -1) behaviour = data["behaviour"];
+  if (member_array("aggro_range", keys(data)) != -1) aggro_range = data["aggro_range"];
+  if (member_array("flee_hp_pct", keys(data)) != -1) flee_hp_pct = data["flee_hp_pct"];
+  if (member_array("flee_chance", keys(data)) != -1) flee_chance = data["flee_chance"];
+  if (data["patrol_rooms"]) patrol_rooms = data["patrol_rooms"];
+  if (data["special_atk"]) special_atk = data["special_atk"];
+  if (member_array(
+    "special_atk_chance",
+    keys(data)
+  ) != -1) special_atk_chance = data["special_atk_chance"];
+  if (member_array("move_range", keys(data)) != -1) move_range = data["move_range"];
+  if (member_array("wander_chance", keys(data)) != -1) wander_chance = data["wander_chance"];
+  if (member_array("aggressive", keys(data)) != -1) aggressive = data["aggressive"];
+
+  recalc_stats();
+  hp = max_hp;
+  mp = max_mp;
+
+  return 1;
+}

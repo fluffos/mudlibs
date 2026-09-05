@@ -1,0 +1,389 @@
+// /daemon/world_state_d.c
+//
+// 歷史事件驅動的世界狀態守護進程 (World State Evolution Daemon) — P21
+//
+// 職責：
+//   - 載入 /data/yaml/world_states/ 下所有「狀態鏈」定義
+//   - 監聽 IncidentResolved / QuestCompleted / MemoryCompleted 事件
+//   - 評估各狀態鏈的推進條件，滿足時自動推進至下一狀態
+//   - 執行狀態效果（site 描述注入、NPC 生成/移除、任務解鎖、記憶解鎖、聚落值提升）
+//   - 持久化目前各狀態鏈的進度（.o 存檔）
+//   - 提供 site.c 查詢「世界狀態注入描述」的介面（取代硬切 era）
+//
+// 設計：Incident 結案 ➔ 條件評估 ➔ 推進狀態 ➔ 執行效果 ➔ 廣播
+//
+// Canon 參照：docs/TODO.md § P21
+
+#include "/include/ansi.h"
+#include "/include/formosa.h"
+
+inherit "/std/object";
+
+// ── 資料結構 ──────────────────────────────────────────
+// state_chains: ([ chain_id: chain_definition_mapping ])  — 從 YAML 載入
+// chain_progress: ([ chain_id: current_state_id ])        — 持久化
+
+private nosave mapping state_chains;  // YAML 定義快取（nosave，每次重啟重掃）
+private mapping chain_progress;
+/* fluffos prototypes */
+void advance_to_state(string chain_id, mapping state, mapping chain);
+void apply_effects(mapping effects, string settlement_id);
+// 各鏈的目前狀態（持久化）
+
+// ── 持久化 ────────────────────────────────────────────
+
+void save_state() {
+  if (file_size("/data/state/world_state/") < 0)
+    mkdir("/data/state/world_state/");
+  save_object("/data/state/world_state/progress");
+}
+
+void restore_state() {
+  if (file_size("/data/state/world_state/progress.o") > 0) {
+    if (catch(restore_object("/data/state/world_state/progress")))
+      chain_progress = ([]);
+  } else {
+    chain_progress = ([]);
+    save_state();
+  }
+}
+
+// ── 載入 YAML 狀態鏈定義 ──────────────────────────────
+
+void scan_dir(string dir) {
+  mixed files = get_dir(dir);
+  if (!files) return;
+  foreach (string file in files) {
+    if (file == "." || file == "..") continue;
+    string path = dir + file;
+    if (file_size(path) == -2) { scan_dir(path + "/"); continue; }
+    if (strlen(file) < 5 || substr(file, strlen(file) - 5, 5) != ".yaml") continue;
+    string content = read_file(path);
+    if (!content) continue;
+    mapping data = yaml_decode(content);
+    if (!data || !data["id"]) continue;
+    state_chains[data["id"]] = data;
+  }
+}
+
+void rehash() {
+  state_chains = ([]);
+  if (file_size("/data/yaml/world_states/") == -2)
+    scan_dir("/data/yaml/world_states/");
+}
+
+// ── 生命週期 ──────────────────────────────────────────
+
+void create() {
+  ::create();
+  rehash();
+  restore_state();
+  call_out("subscribe_events", 1);
+}
+
+void subscribe_events() {
+  EVENT_D->subscribe("IncidentResolved", "on_incident_resolved", this_object());
+  EVENT_D->subscribe("QuestCompleted", "on_quest_completed", this_object());
+  EVENT_D->subscribe("MemoryCompleted", "on_memory_completed", this_object());
+}
+
+// ── 條件評估 ──────────────────────────────────────────
+// 評估一個 unlock_condition 是否已達成（所有條件全域判定，與具體玩家無關）
+
+private int eval_condition(mapping cond) {
+  if (!mapp(cond)) return 0;
+  string ctype = cond["type"];
+
+  if (ctype == "incident_resolved") {
+    // 全域已結案事件清單：簡化實作用 chain_progress 隱含字段
+    return chain_progress["_resolved_incidents:" + cond["incident_id"]] || 0;
+  }
+  if (ctype == "quest_completed") {
+    return chain_progress["_completed_quests:" + cond["quest_id"]] || 0;
+  }
+  if (ctype == "memory_unlocked") {
+    // 記憶解鎖是玩家個人行為；這裡判斷「任意玩家已解鎖」
+    return chain_progress["_unlocked_memories:" + cond["memory_id"]] || 0;
+  }
+  if (ctype == "all_of") {
+    mixed sub = cond["conditions"];
+    if (!pointerp(sub)) return 0;
+    foreach (mapping sc in sub) {
+      if (!eval_condition(sc)) return 0;
+    }
+    return 1;
+  }
+  return 0;
+}
+
+// ── 取得一條鏈目前的狀態 mapping ──────────────────────
+
+mapping get_current_state(string chain_id) {
+  if (!state_chains[chain_id]) return 0;
+  mapping chain = state_chains[chain_id];
+  if (!pointerp(chain["states"])) return 0;
+
+  string cur_id = chain_progress[chain_id] || "";
+  if (cur_id == "") {
+    // 尚未啟動，回傳 state_0（初始狀態）
+    return chain["states"][0];
+  }
+  foreach (mapping st in chain["states"]) {
+    if (st["id"] == cur_id) return st;
+  }
+  return chain["states"][0];
+}
+
+// ── 嘗試推進特定鏈的狀態 ──────────────────────────────
+
+void try_advance_chain(string chain_id) {
+  mapping chain = state_chains[chain_id];
+  if (!chain || !pointerp(chain["states"])) return;
+
+  string cur_id = chain_progress[chain_id] || "";
+  mixed *states = chain["states"];
+
+  // 找出目前狀態的索引
+  int cur_idx = 0;
+  int i;
+  for (i = 0; i < sizeof(states); i++) {
+    if (states[i]["id"] == cur_id) { cur_idx = i; break; }
+  }
+
+  // 嘗試推進到下一個狀態
+  for (i = cur_idx + 1; i < sizeof(states); i++) {
+    mapping next_st = states[i];
+    mapping cond = next_st["unlock_condition"];
+    if (!cond || eval_condition(cond)) {
+      // 條件滿足（或不需要條件）— 推進
+      advance_to_state(chain_id, next_st, chain);
+      // 推進後繼續嘗試下一個（可能跳過多個已滿足的狀態）
+    } else {
+      break;  // 碰到不滿足的，停止
+    }
+  }
+}
+
+// ── 執行狀態推進 ──────────────────────────────────────
+
+void advance_to_state(string chain_id, mapping state, mapping chain) {
+  string old_id = chain_progress[chain_id] || "state_0";
+  string new_id = state["id"];
+
+  if (old_id == new_id) return;  // 已在此狀態
+
+  chain_progress[chain_id] = new_id;
+  save_state();
+
+  string state_name = state["name"] || new_id;
+  string chain_name = chain["name"] || chain_id;
+
+  log_file("world_state",
+    sprintf("[%s] Chain '%s' advanced: %s -> %s (%s)\n",
+      ctime(time()), chain_id, old_id, new_id, state_name));
+
+  // 執行效果
+  apply_effects(state["effects"], chain["settlement"]);
+
+  // 廣播
+  mapping effects = state["effects"];
+  if (mapp(effects) && effects["broadcast"]) {
+    object *players = users();
+    if (players) {
+      foreach (object p in players) {
+        tell_object(p,
+          "\n" + C_HISTORY +
+          "【世界演化】" + C_RESET + effects["broadcast"] + "\n");
+      }
+    }
+  }
+
+  // 發送事件
+  EVENT_D->publish("WorldStateAdvanced", ([
+    "chain_id": chain_id,
+    "old_state": old_id,
+    "new_state": new_id,
+    "state_name": state_name,
+    "settlement": chain["settlement"],
+  ]));
+}
+
+// ── 執行狀態效果 ──────────────────────────────────────
+
+void apply_effects(mapping effects, string settlement_id) {
+  if (!mapp(effects)) return;
+
+  // 1. 聚落維度提升
+  if (mapp(effects["settlement_boost"]) && settlement_id) {
+    foreach (string dim, int val in effects["settlement_boost"]) {
+      catch(SETTLEMENT_D->add_dim(settlement_id, dim, val));
+    }
+  }
+
+  // 2. 強制解鎖記憶（全域廣播給在線玩家）
+  if (pointerp(effects["memory_unlock"])) {
+    object *players = users();
+    foreach (string mid in effects["memory_unlock"]) {
+      if (players) {
+        foreach (object p in players) {
+          if (p && userp(p)) {
+            catch(MEMORY_D->on_fragment_accessible(p, mid));
+          }
+        }
+      }
+    }
+  }
+
+  // 3. NPC 生成
+  if (pointerp(effects["npc_spawn"])) {
+    foreach (mapping spawn in effects["npc_spawn"]) {
+      string npc_id = spawn["npc_id"];
+      string site_id = spawn["site_id"];
+      if (!npc_id || !site_id) continue;
+      object site_ob = SETTLEMENT_D->get_site_object(site_id);
+      if (!site_ob) continue;
+      // 確認 NPC 尚未在場
+      int already_there = 0;
+      object *inv = all_inventory(site_ob);
+      foreach (object ob in inv) {
+        if (ob->is_npc() && strsrch(ob->query_entity_id(), npc_id) != -1) {
+          already_there = 1;
+          break;
+        }
+      }
+      if (!already_there) {
+        object npc_ob = NPC_D->create_npc(npc_id);
+        if (npc_ob) npc_ob->move_object(site_ob);
+      }
+    }
+  }
+
+  // 4. NPC 旗標設置（供 schedule override 與 relation_d 條件）
+  if (mapp(effects["npc_flag"])) {
+    foreach (string npc_id, string flag in effects["npc_flag"]) {
+      // 設到全域旗標，NPC schedule override 可讀
+      catch(TIMELINE_D->set_global_event("npc_flag:" + npc_id + ":" + flag, 1));
+    }
+  }
+
+  // 5. Site 解鎖（加入 route_d 連通性）
+  if (pointerp(effects["site_unlock"])) {
+    foreach (string site_id in effects["site_unlock"]) {
+      catch(ROUTE_D->unlock_site(site_id));
+    }
+  }
+
+  // 6. Quest 解鎖（設定全域旗標，quest_d 在 npc_ask 中檢查）
+  if (pointerp(effects["quest_unlock"])) {
+    foreach (string qid in effects["quest_unlock"]) {
+      catch(TIMELINE_D->set_global_event("quest_unlocked:" + qid, 1));
+    }
+  }
+}
+
+// ── 事件監聽 ──────────────────────────────────────────
+
+void on_incident_resolved(mapping event) {
+  mapping data = event["data"];
+  if (!data) return;
+  string iid = data["incident_id"];
+  if (!iid) return;
+
+  // 記錄全域已結案
+  chain_progress["_resolved_incidents:" + iid] = 1;
+  save_state();
+
+  // 評估所有鏈
+  foreach (string chain_id, mapping chain in state_chains) {
+    try_advance_chain(chain_id);
+  }
+}
+
+void on_quest_completed(mapping event) {
+  mapping data = event["data"];
+  if (!data) return;
+  string qid = data["quest_id"];
+  if (!qid) return;
+
+  chain_progress["_completed_quests:" + qid] = 1;
+  save_state();
+
+  foreach (string chain_id, mapping chain in state_chains) {
+    try_advance_chain(chain_id);
+  }
+}
+
+void on_memory_completed(mapping event) {
+  mapping data = event["data"];
+  if (!data) return;
+  string mid = data["memory_id"];
+  if (!mid) return;
+
+  chain_progress["_unlocked_memories:" + mid] = 1;
+  save_state();
+
+  foreach (string chain_id, mapping chain in state_chains) {
+    try_advance_chain(chain_id);
+  }
+}
+
+// ── 查詢 API ──────────────────────────────────────────
+
+// site.c / do_look() 呼叫：取得世界狀態對特定 site 的描述注入
+string query_site_state_desc(string site_id) {
+  string out = "";
+  foreach (string chain_id, mapping chain in state_chains) {
+    mapping cur = get_current_state(chain_id);
+    if (!cur) continue;
+    mapping eff = cur["effects"];
+    if (!mapp(eff)) continue;
+    mapping injects = eff["site_desc_inject"];
+    if (mapp(injects) && injects[site_id]) {
+      out += "\n" + C_MEMORY + injects[site_id] + C_RESET + "\n";
+    }
+  }
+  return out;
+}
+
+// 取得特定狀態鏈的目前狀態 ID
+string query_chain_state(string chain_id) {
+  return chain_progress[chain_id] || "state_0";
+}
+
+// 取得所有鏈的進度摘要
+mapping query_all_chain_progress() {
+  mapping result = ([]);
+  foreach (string chain_id, mapping chain in state_chains) {
+    string cur = chain_progress[chain_id] || "state_0";
+    mapping cur_st = get_current_state(chain_id);
+    result[chain_id] = ([
+      "current_state": cur,
+      "state_name": cur_st ? (cur_st["name"] || cur) : cur,
+      "settlement": chain["settlement"] || "",
+    ]);
+  }
+  return result;
+}
+
+// 管理員手動推進（測試用）
+void admin_advance(string chain_id, string state_id) {
+  mapping chain = state_chains[chain_id];
+  if (!chain) return;
+  foreach (mapping st in chain["states"]) {
+    if (st["id"] == state_id) {
+      advance_to_state(chain_id, st, chain);
+      return;
+    }
+  }
+}
+
+// 管理員手動重置（測試用）
+void admin_reset_chain(string chain_id) {
+  m_delete(chain_progress, chain_id);
+  // 清除相關的全域旗標快取（重置時只清鏈進度，不清解案紀錄）
+  save_state();
+}
+
+mapping query_all_chains() {
+  return copy(state_chains);
+}

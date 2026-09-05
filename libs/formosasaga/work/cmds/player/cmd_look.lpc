@@ -1,0 +1,109 @@
+// mudlib/cmds/cmd_look.c
+// 查看指令守護進程：look / l / examine / ex
+
+inherit "/std/object";
+
+int main(object me, string verb, string arg) {
+  object here = environment(me);
+  if (!here) {
+    write(_t("void") + "\n");
+    return 1;
+  }
+
+  if (!arg) {
+    here->look_room(me);
+    return 1;
+  }
+
+  arg = lower_case(arg);
+
+  // 方向正規化與中文支援
+  mapping dir_map = ([
+    "n": "north", "north": "north", "北": "north", "北方": "north",
+    "s": "south", "south": "south", "南": "south", "南方": "south",
+    "e": "east", "east": "east", "東": "east", "東方": "east",
+    "w": "west", "west": "west", "西": "west", "西方": "west",
+    "u": "up", "up": "up", "上": "up", "上方": "up",
+    "d": "down", "down": "down", "下": "down", "下方": "down"
+  ]);
+
+  string dir = dir_map[arg];
+  if (dir) {
+    mixed exits = here->query_exits();
+    if (mapp(exits)) {
+      mixed dest_path = exits[dir];
+      if (dest_path) {
+        object dest = load_object(dest_path);
+        if (dest) {
+          write(select_lang(([
+            "en": "You look to the " + dir + ":\n",
+            "zh-TW": "你往 " + dir + " 看了看：\n",
+            "zh-CN": "你往 " + dir + " 看了看：\n"
+          ])));
+          write("  " + dest->query_short() + "\n");
+          return 1;
+        } else {
+          write(select_lang(([
+            "en": "You look to the " + dir + ", but it is too dark to see anything.\n",
+            "zh-TW": "你往 " + dir + " 看了看，但那裡太暗了，什麼都看不清楚。\n",
+            "zh-CN": "你往 " + dir + " 看了看，但那里太暗了，什么都看不清楚。\n"
+          ])));
+          if (me->query_role() == "god" || me->query_role() == "wizard") {
+            write(sprintf("DEBUG: Failed to load dest room: %O\n", dest_path));
+          }
+          return 1;
+        }
+      } else {
+        if (me->query_role() == "god" || me->query_role() == "wizard") {
+          write(sprintf("DEBUG: Direction '%s' not found in exits keys: %O\n", dir, keys(exits)));
+        }
+      }
+    } else {
+      if (me->query_role() == "god" || me->query_role() == "wizard") {
+        write(sprintf("DEBUG: here->query_exits() returned non-mapping: %O\n", exits));
+      }
+    }
+  }
+
+  // 看房間裡的物件
+  object target = present(arg, here);
+  if (target) {
+    write(target->query_long());
+    return 1;
+  }
+
+  // 看背包裡的物件
+  target = present(arg, me);
+  if (target) {
+    write(target->query_long());
+    return 1;
+  }
+
+  // 看房間裝飾物
+  string item_desc = here->look_at_item(arg);
+  if (item_desc) {
+    write(item_desc + "\n");
+    return 1;
+  }
+
+  string not_found = _t("not_found");
+  not_found = replace_string(not_found, "$arg", arg);
+  write(not_found + "\n");
+  return 1;
+}
+
+string *query_verbs() {
+  return ({ "look", "l", "examine", "ex" });
+}
+
+string query_category() {
+  return select_lang(([ "en": "View", "zh-TW": "查看", "zh-CN": "查看" ]));
+}
+
+string help() {
+  return "【查看指令】\n" +
+    "  look (l)              查看目前房間\n" +
+    "  look <目標>           查看房間或背包中的物品\n" +
+    "  look <方向>           查看該方向的情況\n" +
+    "  examine (ex) <目標>   同 look，更仔細地檢視\n";
+}

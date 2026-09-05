@@ -1,0 +1,202 @@
+// /cmds/player/cmd_codex.c
+//
+// 歷史百科圖鑑指令 (P19)
+//
+// 指令用法：
+//   codex             顯示圖鑑總覽（各分類數量與完成率）
+//   codex memory      列出已收錄的記憶碎片條目
+//   codex quest       列出已完成的任務條目
+//   codex incident    列出已解開的歷史事件條目
+//   codex <id>        顯示特定條目的詳細資訊（跨分類搜尋）
+
+#include "/include/ansi.h"
+#include "/include/formosa.h"
+
+inherit "/std/object";
+
+// ── 格式化輔助 ──────────────────────────────────────────
+
+private string format_bar(int pct, int width) {
+  int filled = (pct * width) / 100;
+  string bar = "";
+  int i;
+  for (i = 0; i < filled; i++) bar += "█";
+  for (; i < width; i++) bar += "░";
+  return bar;
+}
+
+private string format_timestamp(int ts) {
+  if (!ts) return "—";
+  return ctime(ts);  // LPC 內建格式
+}
+
+// ── 顯示總覽 ──────────────────────────────────────────
+
+private void show_overview(object me) {
+  mapping summary = CODEX_D->query_codex_summary(me);
+  mapping totals = CODEX_D->query_world_totals();
+
+  int mem_got = summary["memory"] || 0;
+  int mem_tot = totals["memory"] || 1;
+  int qst_got = summary["quest"] || 0;
+  int qst_tot = totals["quest"] || 1;
+  int inc_got = summary["incident"] || 0;
+  int inc_tot = totals["incident"] || 1;
+
+  int mem_pct = (mem_got * 100) / mem_tot;
+  int qst_pct = (qst_got * 100) / qst_tot;
+  int inc_pct = (inc_got * 100) / inc_tot;
+  int total_pct = ((mem_pct + qst_pct + inc_pct) / 3);
+
+  write("\n");
+  write(C_TITLE + "╔══════════════════════════════════════════╗\n" + C_RESET);
+  write(C_TITLE + "║        《源流福爾摩沙》歷史百科圖鑑       ║\n" + C_RESET);
+  write(C_TITLE + "╚══════════════════════════════════════════╝\n" + C_RESET);
+  write(sprintf("  玩家：%s%s%s\n\n", C_GOOD, me->query_display_name(), C_RESET));
+
+  write(sprintf("  %s記憶碎片%s  [%s]  %d / %d (%d%%)\n",
+    C_MEMORY, C_RESET,
+    format_bar(mem_pct, 20),
+    mem_got, mem_tot, mem_pct));
+
+  write(sprintf("  %s已完任務%s  [%s]  %d / %d (%d%%)\n",
+    C_HISTORY, C_RESET,
+    format_bar(qst_pct, 20),
+    qst_got, qst_tot, qst_pct));
+
+  write(sprintf("  %s歷史事件%s  [%s]  %d / %d (%d%%)\n",
+    C_REVEAL, C_RESET,
+    format_bar(inc_pct, 20),
+    inc_got, inc_tot, inc_pct));
+
+  write("\n");
+  write(sprintf("  " + C_TITLE + "歷史真相完成率" + C_RESET + "  [%s]  %d%%\n",
+    format_bar(total_pct, 20), total_pct));
+  write("\n");
+  write(C_DIM + "  codex memory / codex quest / codex incident — 查閱各分類條目\n" + C_RESET);
+  write("\n");
+}
+
+// ── 顯示特定分類清單 ──────────────────────────────────
+
+private string category_label(string cat) {
+  if (cat == "memory") return C_MEMORY + "記憶碎片" + C_RESET;
+  if (cat == "quest") return C_HISTORY + "任務歷程" + C_RESET;
+  if (cat == "incident") return C_REVEAL + "歷史事件" + C_RESET;
+  return cat;
+}
+
+private void show_category(object me, string category) {
+  mapping entries = CODEX_D->query_codex_category(me, category);
+  if (!sizeof(entries)) {
+    write("你的圖鑑中尚無「" + category_label(category) + "」的收錄條目。\n");
+    write(C_DIM + "探索地標、完成任務或解開歷史謎題後，條目將自動收錄。\n" + C_RESET);
+    return;
+  }
+
+  write("\n");
+  write(C_TITLE + "【歷史圖鑑：" + C_RESET + category_label(category) + C_TITLE + "】" + C_RESET + "\n");
+  write(C_DIM + "─────────────────────────────────────────\n" + C_RESET);
+
+  int idx = 1;
+  mixed *id_list = ({});
+  foreach (string eid, mapping entry in entries) {
+    id_list += ({ eid });
+    string title = entry["title"] || eid;
+    string ts = format_timestamp(entry["unlocked_at"]);
+    // 截斷過長標題
+    if (strlen(title) > 28) title = substr(title, 0, 26) + "…";
+    write(sprintf("  %s%-3d%s %-30s  %s%s%s\n",
+      C_DIM, idx, C_RESET,
+      title,
+      C_DIM, ts, C_RESET));
+    idx++;
+  }
+
+  write("\n" + C_DIM + "輸入 codex <id> 查看詳細說明。\n" + C_RESET + "\n");
+
+  // 暫存 id 列表供後續 read 操作
+  me->set_temp("codex_list_" + category, id_list);
+}
+
+// ── 顯示單一條目詳細 ─────────────────────────────────
+
+private void show_entry(object me, string keyword) {
+  // 嘗試在三個分類中搜尋（精確 ID 或標題子字串）
+  string found_cat = 0;
+  string found_id = 0;
+  mapping found_entry = 0;
+
+  string *categories = ({ "memory", "quest", "incident" });
+  foreach (string cat in categories) {
+    mapping entries = CODEX_D->query_codex_category(me, cat);
+    foreach (string eid, mapping entry in entries) {
+      if (lower_case(eid) == lower_case(keyword) ||
+        strsrch(lower_case(entry["title"] || ""), lower_case(keyword)) != -1) {
+        found_cat = cat;
+        found_id = eid;
+        found_entry = entry;
+        break;
+      }
+    }
+    if (found_entry) break;
+  }
+
+  if (!found_entry) {
+    write("在圖鑑中找不到符合「" + keyword + "」的條目。\n");
+    write(C_DIM + "提示：請先輸入 codex memory / codex quest / codex incident 查閱清單。\n" + C_RESET);
+    return;
+  }
+
+  write("\n");
+  write(C_TITLE + "【" + (found_entry["title"] || found_id) + "】" + C_RESET + "\n");
+  write(C_DIM + "分類：" + C_RESET + category_label(found_cat) + "\n");
+  write(C_DIM + "收錄時間：" + C_RESET + format_timestamp(found_entry["unlocked_at"]) + "\n");
+  if (found_entry["summary"] && found_entry["summary"] != "") {
+    write("\n" + found_entry["summary"] + "\n");
+  }
+  write("\n");
+}
+
+// ── 主入口 ──────────────────────────────────────────
+
+int main(object me, string verb, string arg) {
+  if (!arg || arg == "") {
+    show_overview(me);
+    return 1;
+  }
+
+  string lower_arg = lower_case(trim(arg));
+
+  if (lower_arg == "memory" || lower_arg == "記憶") {
+    show_category(me, "memory");
+    return 1;
+  }
+  if (lower_arg == "quest" || lower_arg == "任務") {
+    show_category(me, "quest");
+    return 1;
+  }
+  if (lower_arg == "incident" || lower_arg == "事件") {
+    show_category(me, "incident");
+    return 1;
+  }
+
+  // 否則視為關鍵字搜尋
+  show_entry(me, arg);
+  return 1;
+}
+
+string *query_verbs() { return ({ "codex", "圖鑑" }); }
+
+string query_category() { return "探索"; }
+
+string help() {
+  return "【歷史百科圖鑑】\n"
+    "  codex              顯示圖鑑總覽與各分類完成率。\n"
+    "  codex memory       列出已收錄的記憶碎片條目。\n"
+    "  codex quest        列出已完成的任務條目。\n"
+    "  codex incident     列出已解開的歷史事件條目。\n"
+    "  codex <關鍵字>     搜尋並顯示特定條目的詳細資訊。\n"
+    "\n"
+    "圖鑑條目在你首次造訪地標、完成任務或解開歷史謎題時自動收錄。\n";
+}

@@ -1,0 +1,114 @@
+// /tests/test_tainan_anping.c
+//
+// 測試項目：
+//   - 驗證台南與安平、新港社等歷史地理節點可旅行 (travel)
+//   - 驗證安平在不同時代下的 Reveal Layers 正常過濾與浮現歷史層入口
+//   - 驗證解鎖安平與新港社時代記憶，為後續多重時代模板提供正確性保證
+
+#include "/include/formosa.h"
+
+inherit "/std/test_case";
+
+void run_tests(object me) {
+  start_test("台南安平多歷史層與記憶碎片整合測試 (P9.1)");
+
+  object route_d = load_object("/daemon/route_d.lpc");
+  object tl_d = load_object("/daemon/timeline_d.lpc");
+  assert_true(objectp(route_d), "應載入 route_d");
+  assert_true(objectp(tl_d), "應載入 timeline_d");
+
+  // 保存原先時代狀態
+  string original_era = tl_d->query_current_era();
+  int original_progress = tl_d->query_world_progress();
+
+  // 建立測試尋源者玩家
+  object player = clone_object("/std/user.lpc");
+  player->set_id("test_anping_player");
+  player->set_name("測試府城人");
+  player->set_role("god");
+  player->setup();
+
+  // 給予島嶼記憶天賦，以滿足 reveal_layers 中 has_talent 條件
+  player->set_prop("talent_" + TALENT_ISLAND_MEMORY, 1);
+
+  // ── 1. 測試跨區域旅行到台南 ──────────────────────────────────
+  write("--- 測試跨區域旅行至台南與安平 ---\n");
+
+  // 把玩家移到嘉義市
+  object chiayi_ob = SETTLEMENT_D->get_site_object("chiayi_city");
+  assert_true(objectp(chiayi_ob), "應載入嘉義市聚落物件");
+  player->move(chiayi_ob);
+
+  // 模擬時代為 v0_2 讓路線啟用
+  write_file("/data/state/system/timeline.o", "current_era_id \"v0_2\"\nworld_progress 0\n", 1);
+  tl_d->restore_state();
+  route_d->rehash();
+
+  // 執行 travel 至台南
+  int travel_to_tainan = chiayi_ob->do_travel(player, "台南市");
+  assert_equal(1, travel_to_tainan, "應可從嘉義市 travel 到台南市");
+
+  object tainan_ob = environment(player);
+  assert_true(objectp(tainan_ob), "玩家當前環境應在台南聚落");
+
+  // 從台南主聚落前往安平 site
+  int travel_to_anping = tainan_ob->do_travel(player, "安平");
+  assert_equal(1, travel_to_anping, "應可從台南市 travel 到安平地標");
+
+  object anping_ob = environment(player);
+  assert_equal("site:tainan_anping", anping_ob->query_entity_id(), "地標ID應為 tainan_anping");
+
+  // ── 2. 測試 Reveal Layers 與歷史層入口 ────────────────────────
+  write("--- 測試 Reveal Layers 與不同時代之歷史入口 ---\n");
+
+  // 在 v0_2 (海商紀) 下，安平應顯現「進入海商紀的大員海灣」入口，但不應顯現 v1_0 (清領) 的入口
+  mapping revealed_v0_2 = anping_ob->resolve_reveals(player);
+  assert_true(sizeof(revealed_v0_2["entries"]) > 0, "應浮現歷史層入口");
+
+  int has_v0_2_entry = 0;
+  int has_v1_0_entry = 0;
+  foreach (mapping entry in revealed_v0_2["entries"]) {
+    if (entry["era"] == "v0_2") has_v0_2_entry = 1;
+    if (entry["era"] == "v1_0") has_v1_0_entry = 1;
+  }
+  assert_equal(1, has_v0_2_entry, "應包含 v0_2 (大員海灣) 入口");
+  assert_equal(0, has_v1_0_entry, "在 v0_2 時代中，不應提早浮現 v1_0 清領入口");
+
+  // 推進時代至 v1_0 (清領)
+  write_file("/data/state/system/timeline.o", "current_era_id \"v1_0\"\nworld_progress 0\n", 1);
+  tl_d->restore_state();
+
+  // 再次解析，此時已滿足 era_completed: v0_2，清領入口應浮現
+  mapping revealed_v1_0 = anping_ob->resolve_reveals(player);
+  has_v1_0_entry = 0;
+  foreach (mapping entry in revealed_v1_0["entries"]) {
+    if (entry["era"] == "v1_0") has_v1_0_entry = 1;
+  }
+  assert_equal(1, has_v1_0_entry, "推進時代後，應浮現 v1_0 (清領) 安平港街入口");
+
+  // ── 3. 測試記憶解鎖 ──────────────────────────────────────────
+  write("--- 測試台南與新港社記憶解鎖 ---\n");
+  // 移動到安平觸發解鎖
+  player->move(anping_ob);
+  anping_ob->player_enter(player);
+
+  // 驗證是否解鎖了大員海港記憶
+  assert_true(player->query_unlocked_memories() && member_array(
+    "tainan_anping_001",
+    player->query_unlocked_memories()
+  ) != -1,
+    "進入安平後應自動解鎖安平記憶片段");
+
+  // 還原時代狀態
+  write_file(
+    "/data/state/system/timeline.o",
+    sprintf("current_era_id \"%s\"\nworld_progress %d\n", original_era, original_progress),
+    1
+  );
+  tl_d->restore_state();
+  route_d->rehash();
+
+  // 清理
+  destruct(player);
+  report_results();
+}

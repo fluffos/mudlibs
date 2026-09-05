@@ -1,0 +1,66 @@
+// mudlib/std/corpse.c
+// 屍體物件：所有生物死後產生的遺留物
+
+#include "/include/config.h"
+#include "/include/ansi.h"
+
+inherit "/std/container.lpc";
+
+mapping harvest_data;  // 🚀 新增：可採集物資
+string team_owner;   // 🚀 新增：屍體歸屬 (團隊 ID)
+int expire_time;  // 🚀 新增：歸屬過期時間
+mapping penalty_data;  // 🚀 新增：死亡懲罰資料 (用於跑屍恢復)
+
+void create() {
+  ::create();
+  set_name("無名屍體");
+  set_short("一具無名屍體");
+  set_long("這是一具死後的屍體，看起來有些蒼白。\n");
+  set_id(({ "corpse", "corpse_id", "屍體", "死體" }));
+  harvest_data = ([]);
+  penalty_data = ([]);
+  team_owner = "";
+  expire_time = 0;
+
+  // 預設 60 秒後自動消失 (留點時間給玩家撿寶)
+  call_out("destruct_me", 60);
+}
+
+// 設定是誰的屍體
+void set_owner(string owner_name) {
+  set_name(owner_name + " 的屍體");
+  set_short(owner_name + " 的" + "$RED$死體$NOR$");
+  set_long("這是一具 " + owner_name + " 的屍體，隨著時間流逝正在漸漸變冷。\n");
+}
+
+void set_harvest_data(mapping d) { harvest_data = d; }
+mapping query_harvest_data() { return harvest_data; }
+
+void set_penalty_data(mapping d) { penalty_data = d; }
+mapping query_penalty_data() { return penalty_data; }
+
+void set_team_owner(string tid) {
+  team_owner = tid;
+  expire_time = time() + 30;  // 歸屬保護 30 秒
+}
+
+string query_team_owner() {
+  if (time() > expire_time) return "";  // 過期後任何人可撿
+  return team_owner;
+}
+
+
+void destruct_me() {
+  object env = environment(this_object());
+  if (env) {
+    tell_room(env, "一陣微風吹過，" + query_short() + " 化作塵土消失了。\n");
+  }
+  destruct(this_object());
+}
+
+// 屍體不允許其他生物進入 (除非是寄生蟲？但目前不考慮)
+int can_receive(object ob) {
+  if (!ob) return 0;
+  if (living(ob)) return 0;
+  return ::can_receive(ob);
+}

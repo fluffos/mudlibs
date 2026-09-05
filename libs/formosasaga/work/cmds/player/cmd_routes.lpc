@@ -1,0 +1,105 @@
+// /cmds/player/cmd_routes.c
+// 路線與地名查詢指令 (Routes and Era Names Query)
+// 提供給玩家或巫師查詢特定聚落地標連通路線，以及不同時代名稱變遷的工具。
+
+#include "/include/ansi.h"
+#include "/include/formosa.h"
+
+inherit "/std/object";
+
+int main(object me, string verb, string arg) {
+  string id;
+  mapping result;
+  string *sites;
+  int i, j;
+  string *eras = ({ "indigenous", "qing", "japanese", "postwar", "modern" });
+
+  if (!arg || arg == "") {
+    // 預設抓取玩家當前所在的聚落
+    object env = environment(me);
+    if (env) {
+      id = env->query_settlement_id();
+    }
+    if (!id || id == "") {
+      write(YEL "說明：請指定聚落 ID。例如：routes minxiong" NOR "\n");
+      return 1;
+    }
+  } else {
+    id = trim(arg);
+  }
+
+  result = "/daemon/settlement_d"->load_settlement(id);
+  if (!result) {
+    write(RED "錯誤：找不到聚落「" + id + "」的設定檔或載入失敗。" NOR "\n");
+    return 1;
+  }
+
+  sites = result["sites"];
+  if (!pointerp(sites) || !sizeof(sites)) {
+    write(RED "該聚落目前沒有配置任何地標。" NOR "\n");
+    return 1;
+  }
+
+  write("\n" + HIC "╔══════════════════════════════════════════════════════════════╗" + NOR "\n");
+  write(sprintf(HIC "║  %s (%s) 路線與時代地名變遷清單" + NOR "\n", result["name"], id));
+  write(HIC "╚══════════════════════════════════════════════════════════════╝" + NOR "\n");
+
+  for (i = 0; i < sizeof(sites); i++) {
+    string site_id = sites[i];
+    mapping s_data = "/daemon/site_d"->load_site(site_id);
+    if (!s_data) {
+      write(sprintf("  %-25s : %s\n", site_id, RED "● 無法讀取地標資料" NOR));
+      continue;
+    }
+
+    string canon_name = s_data["canonical_name"] || s_data["name"] || site_id;
+    write(sprintf("\n" HIC "📍 地標: %s (%s)" NOR "\n", canon_name, site_id));
+
+    // 1. 各時代的名稱變遷
+    int has_era_name = 0;
+    string era_details = "";
+    for (j = 0; j < sizeof(eras); j++) {
+      string era_name = "/daemon/site_d"->query_name_in_era(site_id, eras[j]);
+      if (era_name && era_name != site_id && era_name != canon_name) {
+        string era_title = select_lang(([
+          "indigenous": "原住民時代",
+          "qing": "清領時期",
+          "japanese": "日治時期",
+          "postwar": "戰後初期",
+          "modern": "現代"
+        ])[eras[j]] || eras[j]);
+
+        era_details += sprintf("     %-12s -> %s\n", era_title + ":", era_name);
+        has_era_name = 1;
+      }
+    }
+    if (has_era_name) {
+      write("   " WHT "【時代地名變遷】" NOR "\n" + era_details);
+    }
+
+    // 2. 連通路線
+    string *conn = s_data["connections"] || ({});
+    if (sizeof(conn) > 0) {
+      write("   " WHT "【聯外路線】" NOR "\n");
+      for (j = 0; j < sizeof(conn); j++) {
+        string neighbor = conn[j];
+        string neighbor_name = "/daemon/site_d"->query_name_in_era(neighbor, "modern");
+        write(sprintf("     --> %-25s (%s)\n", neighbor, neighbor_name));
+      }
+    } else {
+      write(YEL "   (⚠ 此地標為孤立地點，沒有與其他地點連通。)" NOR "\n");
+    }
+  }
+  write("\n" + HIC "══════════════════════════════════════════════════════════════" + NOR "\n\n");
+  return 1;
+}
+
+string help() {
+  return select_lang(([
+    "zh-TW": "【指令】\n  routes [聚落ID]    查詢指定聚落地標的連通路徑以及不同歷史時代下的名稱變遷。\n  (提示：如果不輸入參數，將自動顯示您當前所處聚落的路線清單)\n",
+    "en": "【Command】\n  routes [settlement_id]  Query the route connections and historical name changes of sites in a settlement.\n"
+  ]));
+}
+
+string *query_verbs() { return ({ "routes" }); }
+string query_category() { return "地理探索"; }

@@ -1,0 +1,502 @@
+// /daemon/settlement_d.c
+//
+// 聚落守護進程。
+//
+// 職責：
+//   - 載入聚落靜態設定（YAML）
+//   - 管理聚落六維動態數值（JSON 存檔）
+//   - 判定升級、失源者生成
+//   - 提供 site 物件的查詢與載入
+//
+// 設計原則：
+//   Daemon 只做協調與計算，不持有主體狀態。
+//   狀態由各聚落的 .o 存檔持有，Daemon 是計算服務。
+//
+// Canon 參照：
+//   docs/mudlib/02_domain_model.md（SettlementService）
+//   docs/mudlib/05_data_storage.md（Entity Hydration Pattern）
+
+#include "/include/formosa.h"
+
+inherit "/std/entity.lpc";
+
+// ── 記憶體快取 ────────────────────────────────────────
+// 已載入的聚落執行期狀態
+// ([ settlement_id: runtime_mapping ])
+private nosave mapping active_settlements;
+
+// 已載入的 site 物件
+// ([ site_id: site_object ])
+private nosave mapping active_sites;
+
+// 歷史名稱快取
+// ([ settlement_id: ([ era_id: name ]) ])
+private nosave mapping names_cache;
+
+/* fluffos prototypes */
+int add_dim(string settlement_id, string dim, int delta);
+void _check_oblivion(string settlement_id, int memory_val);
+void _spawn_specter(string settlement_id, string specter_type);
+void _check_upgrade(string settlement_id);
+object get_site_object(string site_id);
+void _save_settlement(string id, mapping data);
+
+void create() {
+  entity::create();
+  set_entity_id("daemon:settlement");
+  set_entity_type("daemon");
+  active_settlements = ([]);
+  active_sites = ([]);
+  names_cache = ([]);
+
+  // 訂閱踏印事件，更新聚落記憶值
+  catch(EVENT_D->subscribe("FootprintGained", "on_footprint_gained"));
+  catch(EVENT_D->subscribe("MemoryCompleted", "on_memory_completed"));
+  catch(EVENT_D->subscribe("SpecterResolved", "on_specter_resolved"));
+}
+
+// ── 載入聚落（Entity Hydration Pattern）──────────────
+mapping load_settlement(string id) {
+  if (active_settlements[id]) return active_settlements[id];
+
+  // 1. 靜態 YAML
+  string yaml_path = YAML_SETTLEMENTS + id + ".yaml";
+  if (file_size(yaml_path) <= 0) {
+    log_file("settlement_errors.log",
+      sprintf("[%s] 找不到聚落 YAML：%s\n", ctime(time()), yaml_path));
+    return 0;
+  }
+
+  mapping static_data = yaml_decode(read_file(yaml_path));
+  if (!static_data) return 0;
+
+  mixed t = static_data["tier"];
+  if (stringp(t)) {
+    if (t == "village") t = TIER_VILLAGE;
+    else if (t == "city3") t = TIER_CITY3;
+    else if (t == "city2") t = TIER_CITY2;
+    else if (t == "city1") t = TIER_CITY1;
+    else t = TIER_VILLAGE;
+    static_data["tier"] = t;
+  }
+
+  // 快取名稱對照
+  mapping n_map = ([]);
+  if (pointerp(static_data["names"])) {
+    foreach (mapping name_entry in static_data["names"]) {
+      if (name_entry["era"] && name_entry["name"]) {
+        n_map[name_entry["era"]] = name_entry["name"];
+      }
+    }
+  }
+  names_cache[id] = n_map;
+
+  mapping runtime = copy(static_data);
+
+  // 2. 動態存檔覆蓋
+  string save_path = STATE_SETTLEMENTS + id;
+  if (file_size(save_path + ".o") > 0) {
+    object helper = clone_object("/std/entity.lpc");
+    if (helper) {
+      if (helper->restore_object(save_path)) {
+        // 只覆蓋六維動態數值
+        foreach (string dim in ({
+          DIM_POPULATION, DIM_INDUSTRY, DIM_CULTURE,
+          DIM_MEMORY, DIM_TRADE, DIM_COHESION
+        })) {
+          mixed val = helper->query_prop(dim);
+          if (intp(val)) runtime[dim] = val;
+        }
+        // 失源者列表
+        mixed sp = helper->query_prop("specters_active");
+        if (sp) runtime["specters_active"] = sp;
+      }
+      destruct(helper);
+    }
+  } else {
+    _save_settlement(id, runtime);
+  }
+
+  active_settlements[id] = runtime;
+  return runtime;
+}
+
+mapping query_names_mapping(string id) {
+  if (!names_cache) names_cache = ([]);
+  if (!names_cache[id]) {
+    load_settlement(id);
+  }
+  return names_cache[id] || ([]);
+}
+
+string query_name_in_era(string id, string era_id) {
+  mapping names = query_names_mapping(id);
+  if (names && names[era_id]) return names[era_id];
+  mapping s = load_settlement(id);
+  if (s) return s["canonical_name"] || s["name"] || id;
+  return id;
+}
+
+string *load_sites_for_settlement(string id) {
+  mapping s = load_settlement(id);
+  if (!s) return ({});
+  return s["sites"] || ({});
+}
+
+// ── 六維 API ─────────────────────────────────────────
+int query_dim(string settlement_id, string dim) {
+  mapping s = load_settlement(settlement_id);
+  if (!s) return 0;
+  return s[dim] || 0;
+}
+
+int query_memory(string id) { return query_dim(id, DIM_MEMORY); }
+int query_culture(string id) { return query_dim(id, DIM_CULTURE); }
+int query_population(string id) { return query_dim(id, DIM_POPULATION); }
+int query_industry(string id) { return query_dim(id, DIM_INDUSTRY); }
+int query_trade(string id) { return query_dim(id, DIM_TRADE); }
+int query_cohesion(string id) { return query_dim(id, DIM_COHESION); }
+
+int add_memory(string id, int delta) { return add_dim(id, DIM_MEMORY, delta); }
+int add_culture(string id, int delta) { return add_dim(id, DIM_CULTURE, delta); }
+int add_population(string id, int delta) { return add_dim(id, DIM_POPULATION, delta); }
+int add_industry(string id, int delta) { return add_dim(id, DIM_INDUSTRY, delta); }
+int add_trade(string id, int delta) { return add_dim(id, DIM_TRADE, delta); }
+int add_cohesion(string id, int delta) { return add_dim(id, DIM_COHESION, delta); }
+
+// delta 可正可負
+int add_dim(string settlement_id, string dim, int delta) {
+  mapping s = load_settlement(settlement_id);
+  if (!s) return 0;
+
+  int old_val = s[dim] || 0;
+  int new_val = old_val + delta;
+  if (new_val < 0) new_val = 0;
+  if (new_val > 100) new_val = 100;
+
+  s[dim] = new_val;
+  _save_settlement(settlement_id, s);
+
+  EVENT_D->publish("SettlementChanged", ([
+    "settlement_id": settlement_id,
+    "dim": dim,
+    "old_value": old_val,
+    "new_value": new_val,
+  ]));
+
+  // 記憶值變動時，檢查失源者
+  if (dim == DIM_MEMORY)
+    _check_oblivion(settlement_id, new_val);
+
+  // 檢查升級條件
+  _check_upgrade(settlement_id);
+
+  return new_val;
+}
+
+// 直接設定（供初始化或 GM 使用）
+void set_dim(string settlement_id, string dim, int val) {
+  mapping s = load_settlement(settlement_id);
+  if (!s) return;
+  if (val < 0) val = 0;
+  if (val > 100) val = 100;
+  s[dim] = val;
+  _save_settlement(settlement_id, s);
+}
+
+// ── 失源者管理 ────────────────────────────────────────
+mixed *query_active_specters(string settlement_id) {
+  mapping s = load_settlement(settlement_id);
+  if (!s) return ({});
+  return s["specters_active"] || ({});
+}
+
+private void _check_oblivion(string settlement_id, int memory_val) {
+  if (memory_val < OBLIVION_SPECTER) {
+    mapping s = load_settlement(settlement_id);
+    string sp_type = "";
+
+    // 優先以記憶子項目最低者決定失源者型態
+    if (s && mapp(s["memory_breakdown"])) {
+      mapping mb = s["memory_breakdown"];
+      float min_val = 999.0;
+      string min_key = "";
+      foreach (string k, float v in mb) {
+        if (v < min_val) {
+          min_val = v;
+          min_key = k;
+        }
+      }
+      if (min_key == "named_persons") sp_type = SP_LOST_NAME;
+      else if (min_key == "sites") sp_type = SP_LOST_PLACE;
+      else if (min_key == "oral_tradition") sp_type = SP_LOST_TONGUE;
+      else if (min_key == "history_events") sp_type = SP_LOST_HISTORY;
+    }
+
+    // 備用方案：依記憶值深度決定失源者型態
+    if (sp_type == "") {
+      if (memory_val < OBLIVION_CRISIS) {
+        sp_type = SP_LOST_HISTORY;
+      } else {
+        sp_type = SP_LOST_NAME;
+      }
+    }
+
+    _spawn_specter(settlement_id, sp_type);
+  } else if (memory_val < OBLIVION_WARN) {
+    EVENT_D->publish("OblivionRising", ([
+      "settlement_id": settlement_id,
+      "memory_val": memory_val,
+    ]));
+  }
+}
+
+private void _spawn_specter(string settlement_id, string specter_type) {
+  mapping s = load_settlement(settlement_id);
+  if (!s) return;
+
+  mixed *existing = s["specters_active"] || ({});
+
+  // 避免重複生成同型態失源者
+  foreach (mapping sp in existing)
+    if (sp["type"] == specter_type) return;
+
+  string specter_id = sprintf("SP_%s_%s_%d",
+    settlement_id, specter_type, time());
+
+  mapping specter = ([
+    "id": specter_id,
+    "type": specter_type,
+    "born": time(),
+  ]);
+
+  s["specters_active"] = existing + ({ specter });
+  _save_settlement(settlement_id, s);
+
+  // 🚀 實體化：clone 失源者物件並放入聚落的某個地標
+  string *sites = load_sites_for_settlement(settlement_id);
+  if (sites && sizeof(sites)) {
+    // 挑記憶相關的地標（或第一個地標）
+    string target_site = sites[0];
+    object site_ob = get_site_object(target_site);
+    if (site_ob) {
+      object sp_ob = clone_object("/std/specter.lpc");
+      if (sp_ob) {
+        sp_ob->setup(settlement_id, specter_id, specter_type);
+        sp_ob->move_object(site_ob);
+      }
+    }
+  }
+
+  EVENT_D->publish("SpecterSpawned", ([
+    "settlement_id": settlement_id,
+    "specter_id": specter_id,
+    "specter_type": specter_type,
+  ]));
+}
+
+void resolve_specter(string settlement_id, string specter_id, object player) {
+  mapping s = load_settlement(settlement_id);
+  if (!s) return;
+
+  mixed *existing = s["specters_active"] || ({});
+  mixed *remaining = ({});
+  foreach (mapping sp in existing)
+    if (sp["id"] != specter_id) remaining += ({ sp });
+
+  s["specters_active"] = remaining;
+  _save_settlement(settlement_id, s);
+
+  EVENT_D->publish("SpecterResolved", ([
+    "settlement_id": settlement_id,
+    "specter_id": specter_id,
+    "resolver": player ? player->query_entity_id() : "system",
+  ]));
+}
+
+// ── 升級判定 ──────────────────────────────────────────
+private void _check_upgrade(string settlement_id) {
+  mapping s = load_settlement(settlement_id);
+  if (!s) return;
+
+  int tier = s["tier"] || TIER_VILLAGE;
+
+  // 記憶不可缺失特判：記憶 < 30 禁止升級
+  if ((s[DIM_MEMORY] || 0) < 30) {
+    log_file("settlement_errors.log",
+      sprintf("[%s] 聚落 %s 記憶值低於 30%s，禁止升級。\n", ctime(time()), s["name"] || settlement_id, "%"));
+    return;
+  }
+
+  int target_tier = 0;
+
+  if (tier == TIER_VILLAGE) {
+    // 村級 → 3級城 (4 -> 3)
+    if ((s[DIM_MEMORY] || 0) >= 60 &&
+      (s[DIM_CULTURE] || 0) >= 50 &&
+      (s[DIM_COHESION] || 0) >= 50 &&
+      (s[DIM_POPULATION] || 0) >= 45 &&
+      (s[DIM_INDUSTRY] || 0) >= 40 &&
+      (s[DIM_TRADE] || 0) >= 40) {
+      target_tier = TIER_CITY3;
+    }
+  } else if (tier == TIER_CITY3) {
+    // 3級城 → 2級城 (3 -> 2)
+    if ((s[DIM_MEMORY] || 0) >= 70 &&
+      (s[DIM_CULTURE] || 0) >= 60 &&
+      (s[DIM_COHESION] || 0) >= 60 &&
+      (s[DIM_POPULATION] || 0) >= 60 &&
+      (s[DIM_INDUSTRY] || 0) >= 55 &&
+      (s[DIM_TRADE] || 0) >= 55) {
+      target_tier = TIER_CITY2;
+    }
+  } else if (tier == TIER_CITY2) {
+    // 2級城 → 1級大城 (2 -> 1)
+    if ((s[DIM_MEMORY] || 0) >= 80 &&
+      (s[DIM_CULTURE] || 0) >= 70 &&
+      (s[DIM_COHESION] || 0) >= 70 &&
+      (s[DIM_POPULATION] || 0) >= 80 &&
+      (s[DIM_INDUSTRY] || 0) >= 70 &&
+      (s[DIM_TRADE] || 0) >= 70) {
+      target_tier = TIER_CITY1;
+    }
+  }
+
+  if (target_tier > 0) {
+    int old_tier = tier;
+    s["tier"] = target_tier;
+    _save_settlement(settlement_id, s);
+    EVENT_D->publish("SettlementUpgraded", ([
+      "settlement_id": settlement_id,
+      "from_tier": old_tier,
+      "to_tier": target_tier,
+    ]));
+  }
+}
+
+// ── Site 物件管理 ─────────────────────────────────────
+object get_site_object(string site_id) {
+  if (active_sites[site_id] && objectp(active_sites[site_id]))
+    return active_sites[site_id];
+
+  // 嘗試載入對應的 LPC 物件
+  string path = "/area/settlements/" + site_id + ".lpc";
+  if (file_size(path) <= 0)
+    path = "/area/sites/" + site_id + ".lpc";
+
+  if (file_size(path) > 0) {
+    object ob;
+    string err = catch(ob = load_object(path));
+    if (err) {
+      log_file("settlement_errors.log", "Error loading " + path + ": " + err + "\n");
+    }
+    if (ob) {
+      active_sites[site_id] = ob;
+      return ob;
+    }
+    return 0;
+  }
+
+  // 🚀 核心修改：如果 LPC 檔案不存在，嘗試從 SITE_D 載入 YAML 設定並動態 Clone
+  mapping yaml_data = SITE_D->load_site(site_id);
+  if (yaml_data) {
+    object ob = clone_object("/std/site.lpc");
+    if (ob) {
+      ob->setup_from_yaml(yaml_data);
+      active_sites[site_id] = ob;
+      return ob;
+    }
+  }
+
+  return 0;
+}
+
+// ── 事件回呼 ──────────────────────────────────────────
+void on_footprint_gained(mapping event) {
+  mapping data = event["data"];
+  string footprint_id = data["footprint_id"];
+  string category = data["category"];
+
+  // 從踏印 id 解析所屬聚落（慣例：geo:minxiong:... 或 FOOTPRINT_D 提供）
+  string s_id = catch(FOOTPRINT_D->query_footprint_settlement(footprint_id));
+  if (!s_id) return;
+
+  // 地理踏印 → 記憶 +3、文化 +1
+  if (category == FP_GEO) {
+    add_dim(s_id, DIM_MEMORY, 3);
+    add_dim(s_id, DIM_CULTURE, 1);
+  }
+  // 人情踏印 → 凝聚 +3、記憶 +2
+  if (category == FP_RELATION) {
+    add_dim(s_id, DIM_COHESION, 3);
+    add_dim(s_id, DIM_MEMORY, 2);
+  }
+  // 技藝踏印 → 文化 +3、產業 +1
+  if (category == FP_CRAFT) {
+    add_dim(s_id, DIM_CULTURE, 3);
+    add_dim(s_id, DIM_INDUSTRY, 1);
+  }
+  // 聚落踏印 → 記憶 +5（最直接）
+  if (category == FP_SETTLEMENT) {
+    add_dim(s_id, DIM_MEMORY, 5);
+  }
+}
+
+void on_memory_completed(mapping event) {
+  mapping data = event["data"];
+  string s_id = data["settlement_id"];
+  if (!s_id) return;
+
+  // 基礎記憶加成 +8
+  int bonus = 8;
+
+  // 若解鎖記憶的玩家在此聚落有勢力加成，額外提升
+  string player_id = data["player_id"];
+  if (player_id) {
+    object player = find_player(player_id) || find_object(player_id);
+    if (player) {
+      int faction_bonus = FACTION_D->query_memory_bonus(player, s_id);
+      bonus += faction_bonus;
+    }
+  }
+
+  add_dim(s_id, DIM_MEMORY, bonus);
+}
+
+void on_specter_resolved(mapping event) {
+  mapping data = event["data"];
+  string s_id = data["settlement_id"];
+  if (!s_id) return;
+  // 失源者解除 → 記憶回升 +10
+  add_dim(s_id, DIM_MEMORY, 10);
+}
+
+// ── 存檔（只存動態數值）──────────────────────────────
+private void _save_settlement(string id, mapping data) {
+  string save_path = STATE_SETTLEMENTS + id;
+  if (file_size(STATE_SETTLEMENTS) < 0)
+    catch(mkdir(STATE_SETTLEMENTS));
+
+  object helper = clone_object("/std/entity.lpc");
+  if (!helper) return;
+
+  foreach (string dim in ({
+    DIM_POPULATION, DIM_INDUSTRY, DIM_CULTURE,
+    DIM_MEMORY, DIM_TRADE, DIM_COHESION
+  }))
+    helper->set_prop(dim, data[dim] || 0);
+
+  helper->set_prop("specters_active", data["specters_active"] || ({}));
+  mixed t = data["tier"];
+  if (stringp(t)) {
+    if (t == "village") t = TIER_VILLAGE;
+    else if (t == "city3") t = TIER_CITY3;
+    else if (t == "city2") t = TIER_CITY2;
+    else if (t == "city1") t = TIER_CITY1;
+    else t = TIER_VILLAGE;
+  }
+  helper->set_prop("tier", t || TIER_VILLAGE);
+
+  catch(helper->save_object(save_path));
+  destruct(helper);
+}

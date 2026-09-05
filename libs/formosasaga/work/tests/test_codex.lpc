@@ -1,0 +1,130 @@
+// /tests/test_codex.c
+//
+// 測試項目：
+//   - CODEX_D 載入與事件訂閱
+//   - 解鎖記憶後自動收錄至個人圖鑑
+//   - 完成任務後自動收錄至個人圖鑑
+//   - 解開歷史事件後自動收錄至個人圖鑑
+//   - codex 指令顯示總覽與分類清單
+//   - 防重複收錄機制
+
+#include "/include/formosa.h"
+
+inherit "/std/test_case";
+
+void run_tests(object me) {
+  start_test("歷史百科圖鑑 (Codex Encyclopedia) 系統測試 (P19)");
+
+  // ── 載入必要 Daemon ────────────────────────────────
+  object codex_d = load_object("/daemon/codex_d.lpc");
+  assert_true(objectp(codex_d), "應成功載入 codex_d");
+
+  // ── 建立測試玩家 ───────────────────────────────────
+  object explorer = clone_object("/std/user.lpc");
+  explorer->set_id("test_explorer");
+  explorer->set_name("測試探索者");
+  explorer->set_role("god");
+  explorer->setup();
+
+  // 確認圖鑑初始為空
+  mapping summary = codex_d->query_codex_summary(explorer);
+  assert_equal(0, summary["memory"], "初始時記憶圖鑑應為空");
+  assert_equal(0, summary["quest"], "初始時任務圖鑑應為空");
+  assert_equal(0, summary["incident"], "初始時事件圖鑑應為空");
+
+  // ── 測試 1：記憶解鎖後自動收錄 ──────────────────────
+  write("--- 測試記憶自動收錄 ---\n");
+  EVENT_D->publish("MemoryCompleted", ([
+    "player_id": "player:test_explorer",
+    "memory_id": "minxiong_sugar_001",
+    "settlement_id": "minxiong",
+    "progress": 10,
+    "timestamp": time(),
+  ]));
+
+  // 等待事件分發
+  while (EVENT_D->query_queue_size() > 0) {
+    EVENT_D->dispatch_loop();
+  }
+
+  summary = codex_d->query_codex_summary(explorer);
+  assert_equal(1, summary["memory"], "解鎖記憶後圖鑑應自動收錄 1 筆");
+
+  mapping mem_entries = codex_d->query_codex_category(explorer, "memory");
+  assert_true(mem_entries["minxiong_sugar_001"] != 0, "圖鑑應包含 minxiong_sugar_001 條目");
+  assert_true(mem_entries["minxiong_sugar_001"]["unlocked_at"] > 0, "條目應有收錄時間戳");
+
+  // 重複觸發應防重複收錄
+  EVENT_D->publish("MemoryCompleted", ([
+    "player_id": "player:test_explorer",
+    "memory_id": "minxiong_sugar_001",
+    "settlement_id": "minxiong",
+    "progress": 10,
+    "timestamp": time(),
+  ]));
+  while (EVENT_D->query_queue_size() > 0) {
+    EVENT_D->dispatch_loop();
+  }
+  summary = codex_d->query_codex_summary(explorer);
+  assert_equal(1, summary["memory"], "重複事件不應重複收錄（防重複機制）");
+
+  // ── 測試 2：任務完成後自動收錄 ──────────────────────
+  write("--- 測試任務自動收錄 ---\n");
+  EVENT_D->publish("QuestCompleted", ([
+    "player": explorer,
+    "quest_id": "minxiong_sugar_quest_01",
+  ]));
+  while (EVENT_D->query_queue_size() > 0) {
+    EVENT_D->dispatch_loop();
+  }
+
+  summary = codex_d->query_codex_summary(explorer);
+  assert_equal(1, summary["quest"], "完成任務後圖鑑應自動收錄 1 筆");
+
+  // ── 測試 3：事件結案後自動收錄 ──────────────────────
+  write("--- 測試歷史事件自動收錄 ---\n");
+  EVENT_D->publish("IncidentResolved", ([
+    "player": explorer,
+    "incident_id": "minxiong_sugar_incident",
+  ]));
+  while (EVENT_D->query_queue_size() > 0) {
+    EVENT_D->dispatch_loop();
+  }
+
+  summary = codex_d->query_codex_summary(explorer);
+  assert_equal(1, summary["incident"], "解開事件後圖鑑應自動收錄 1 筆");
+
+  // ── 測試 4：codex 指令執行 ───────────────────────────
+  write("--- 測試 codex 指令 ---\n");
+  object cmd_codex = load_object("/cmds/player/cmd_codex.lpc");
+  assert_true(objectp(cmd_codex), "應載入 cmd_codex 指令物件");
+
+  // 讓玩家到某個 site 去（否則部分指令可能要求環境）
+  object site_ob = SETTLEMENT_D->get_site_object("minxiong_old_station");
+  if (site_ob) explorer->move(site_ob);
+
+  int res;
+  res = cmd_codex->main(explorer, "codex", "");
+  assert_equal(1, res, "codex 總覽指令應成功執行");
+
+  res = cmd_codex->main(explorer, "codex", "memory");
+  assert_equal(1, res, "codex memory 指令應成功執行");
+
+  res = cmd_codex->main(explorer, "codex", "quest");
+  assert_equal(1, res, "codex quest 指令應成功執行");
+
+  res = cmd_codex->main(explorer, "codex", "incident");
+  assert_equal(1, res, "codex incident 指令應成功執行");
+
+  // 關鍵字搜尋
+  res = cmd_codex->main(explorer, "codex", "minxiong_sugar_001");
+  assert_equal(1, res, "codex 關鍵字搜尋應成功執行");
+
+  // 搜尋不存在的條目
+  res = cmd_codex->main(explorer, "codex", "不存在的條目xyz");
+  assert_equal(1, res, "搜尋不存在條目時應提示而非崩潰");
+
+  // ── 清理 ──────────────────────────────────────────
+  destruct(explorer);
+  report_results();
+}

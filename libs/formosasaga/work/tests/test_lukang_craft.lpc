@@ -1,0 +1,90 @@
+// /tests/test_lukang_craft.c
+//
+// 測試項目：
+//   - 驗證鹿港各地標 YAML 載入與地理路線連通 (travel)
+//   - 驗證匠人 (artisan) 在鹿港老街時的專屬 Reveal Layer 條件顯現與木雕師 NPC
+//   - 驗證在鹿港老街使用 craft 指令時，匠人能獲得額外加成的經驗與修練點
+//   - 驗證匠人在特定條件下自動觸發解鎖鹿港傳統工藝木雕記憶
+
+#include "/include/formosa.h"
+
+inherit "/std/test_case";
+
+void run_tests(object me) {
+  start_test("鹿港工藝聚落與職涯深化整合測試 (P9.2)");
+
+  object route_d = load_object("/daemon/route_d.lpc");
+  object career_d = load_object("/daemon/career_d.lpc");
+  assert_true(objectp(route_d), "應載入 route_d");
+  assert_true(objectp(career_d), "應載入 career_d");
+
+  // 建立一個匠人角色
+  object artisan = clone_object("/std/user.lpc");
+  artisan->set_id("test_artisan");
+  artisan->set_name("測試木雕師");
+  artisan->set_role("god");
+  artisan->set_career_rank("artisan", 1);
+  artisan->setup();
+
+  // ── 1. 測試地標載入與地理旅行 ──────────────────────────────────
+  write("--- 測試地標與地理旅行至鹿港老街 ---\n");
+
+  // 把玩家移到台南
+  object tainan_ob = SETTLEMENT_D->get_site_object("tainan_anping");
+  assert_true(objectp(tainan_ob), "應載入台南安平物件");
+  artisan->move(tainan_ob);
+
+  // 執行 travel 至鹿港老街
+  int travel_to_lukang = tainan_ob->do_travel(artisan, "鹿港老街");
+  assert_equal(1, travel_to_lukang, "應可從台南 travel 到鹿港老街");
+
+  object old_street = environment(artisan);
+  assert_true(objectp(old_street), "玩家當前環境應在鹿港老街");
+  assert_equal("site:lukang_old_street", old_street->query_entity_id(), "地標ID應為 lukang_old_street");
+
+  // ── 2. 測試 匠人 Reveal Layers 專屬 NPC ──────────────────────
+  write("--- 測試匠人專屬 Reveal Layer 與 NPC 浮現 ---\n");
+
+  // 因為 artisan 的 career_rank 符合大於等於 1 條件，老街上應浮現木雕工坊與老雕刻師 NPC
+  mapping revealed = old_street->resolve_reveals(artisan);
+  assert_true(sizeof(revealed["npcs"]) > 0, "老街應浮現特定 NPC");
+  assert_true(
+    member_array("lukang_master_woodcarver", revealed["npcs"]) != -1,
+    "浮現 NPC 應包含 lukang_master_woodcarver"
+  );
+
+  // ── 3. 測試 鹿港專屬工藝指令與加成 ───────────────────────────
+  write("--- 測試鹿港專屬 craft 工藝指令與加成 ---\n");
+  int init_exp = artisan->query("exp");
+  int init_points = career_d->query_career_points(artisan, "artisan");
+
+  object cmd_ob = load_object("/cmds/player/cmd_craft.lpc");
+  assert_true(objectp(cmd_ob), "應載入 cmd_craft 指令物件");
+
+  int res = cmd_ob->main(artisan, "craft", "");
+  assert_equal(1, res, "執行 craft 指令應成功");
+
+  // 驗證加成後的經驗與修練點數 (在鹿港應獲得 25 點經驗與 5 點修練點)
+  int post_exp = artisan->query("exp");
+  int post_points = career_d->query_career_points(artisan, "artisan");
+
+  assert_equal(init_exp + 25, post_exp, "在鹿港進行工藝，應獲得 25 點經驗加成");
+  assert_equal(init_points + 5, post_points, "在鹿港進行工藝，應獲得 5 點匠人修練點加成");
+
+  // ── 4. 測試 匠人專屬工藝記憶碎片解鎖 ──────────────────────────
+  write("--- 測試匠人專屬木雕記憶解鎖 ---\n");
+  // 進入時會自動檢查 trigger_site，此時 artisan 的 artisan 職等為 1 且觸發 site 符合，應解鎖
+  artisan->move(tainan_ob);  // 先移開
+  artisan->move(old_street);  // 重新進入
+  old_street->player_enter(artisan);
+
+  assert_true(artisan->query_unlocked_memories() && member_array(
+    "lukang_wood_001",
+    artisan->query_unlocked_memories()
+  ) != -1,
+    "進入老街後，符合條件的匠人應解鎖木雕記憶");
+
+  // 清理
+  destruct(artisan);
+  report_results();
+}

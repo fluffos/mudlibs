@@ -1,0 +1,86 @@
+// /tests/test_era_routes.c
+//
+// 測試項目：
+//   - 驗證路線在不同歷史時代（Era）下的動態啟用與過濾（P8.1）
+//   - 當時代不符合時，無法透過 query_connections() 或 query_travel_time() 查詢到該路線
+
+#include "/include/formosa.h"
+
+inherit "/std/test_case";
+
+void run_tests(object me) {
+  start_test("動態跨區域地理與時代切換路徑機制測試 (P8.1)");
+
+  object tl_d = load_object("/daemon/timeline_d.lpc");
+  object route_d = load_object("/daemon/route_d.lpc");
+
+  assert_true(objectp(tl_d), "應載入 timeline_d");
+  assert_true(objectp(route_d), "應載入 route_d");
+
+  // 重新初始化 timeline 狀態，確保測試環境的一致性
+  // 保存原本的時代狀態，方便測試後還原
+  string original_era = tl_d->query_current_era();
+  int original_progress = tl_d->query_world_progress();
+
+  // ── 1. 建立測試專用的動態路線 YAML 寫入 ───────────────────────
+  // 我們寫入一條僅在 "v1_0" (或 v1.0) 啟用的路線，連接 "test_town_a" 與 "test_town_b"
+  string test_route_yaml = "id: route_test_era_restriction\n"
+    "nodes:\n"
+    "  - test_town_a\n"
+    "  - test_town_b\n"
+    "travel_time:\n"
+    "  walk: 30m\n"
+    "eras:\n"
+    "  - v1.0\n"
+    "  - modern\n";
+
+  write_file("/data/yaml/routes/settlements/route_test_era_restriction.yaml", test_route_yaml, 1);
+  route_d->rehash();
+
+  // ── 2. 在 v0_1 時代測試 ──────────────────────────────────────
+  // 強制設定當前時代為 v0_1
+  // 為了安全起見，我們利用 restore_object 來模擬或是暫時修改變數（因為 timeline_d 沒寫 set_current_era，我們直接手動 save/restore 物件屬性或重建）
+  // 或是我們可以使用內建的時代推進來測試。
+  // 在 timeline_d 中，預設是 v0_1。
+
+  // 如果 timeline_d 當前是 v0_1：
+  string current_era = tl_d->query_current_era();
+  write("當前時代為: " + current_era + "\n");
+
+  // 因為 route_test_era_restriction 只在 v1.0 / modern 啟用，在 v0_1 下不應該連通
+  string *conns = route_d->query_connections("test_town_a");
+  assert_equal(-1, member_array("test_town_b", conns), "在 v0_1 時代下，限制為 v1.0/modern 的路線不應連通");
+
+  string t_time = route_d->query_travel_time("test_town_a", "test_town_b", "walk");
+  assert_equal(0, t_time, "在 v0_1 時代下，限制為 v1.0/modern 的路線不應有 travel_time");
+
+  // ── 3. 模擬時代推進到 v1_0 時代測試 ──────────────────────────
+  // 為了改變 timeline_d 的 era_id，我們可以手動呼叫其儲存/載入，或為測試目的在 timeline_d 中新增暫時改變 era 屬性的機制，或直接暫時寫檔 timeline.o
+  // 這裡我們直接寫入 timeline.o 以最快且不侵入 timeline_d 的方式模擬
+  write_file("/data/state/system/timeline.o", "current_era_id \"v1_0\"\nworld_progress 0\n", 1);
+  tl_d->restore_state();
+
+  write("推進後時代為: " + tl_d->query_current_era() + "\n");
+  assert_equal("v1_0", tl_d->query_current_era(), "時代應已成功切換為 v1_0");
+
+  // 再次查詢，現在應該要連通
+  conns = route_d->query_connections("test_town_a");
+  assert_true(member_array("test_town_b", conns) != -1, "在 v1_0 (v1.0) 時代下，該路線應該要連通");
+
+  t_time = route_d->query_travel_time("test_town_a", "test_town_b", "walk");
+  assert_equal("30m", t_time, "在 v1_0 (v1.0) 時代下，應可查到旅行時間 30m");
+
+  // ── 4. 還原與清理 ──────────────────────────────────────────
+  rm("/data/yaml/routes/settlements/route_test_era_restriction.yaml");
+  route_d->rehash();
+
+  // 還原 timeline 狀態
+  write_file(
+    "/data/state/system/timeline.o",
+    sprintf("current_era_id \"%s\"\nworld_progress %d\n", original_era, original_progress),
+    1
+  );
+  tl_d->restore_state();
+
+  report_results();
+}

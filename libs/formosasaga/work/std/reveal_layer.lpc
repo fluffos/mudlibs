@@ -1,0 +1,211 @@
+// /std/reveal_layer.c
+//
+// 條件顯示層系統。
+//
+// 這是《源流福爾摩沙》最核心的機制之一。
+// 同一個地方，不同的玩家看見不同的東西。
+//
+// 設計原則：
+//   玩家不知道自己「還沒看見什麼」。
+//   條件達到，東西自然浮現。
+//   就像真實的理解：你不知道你不知道什麼。
+//
+// Canon 參照：docs/mudlib/02_domain_model.md（Reveal 條件類型）
+//
+// 使用方式：
+//   任何繼承 site.c 的物件，在 create() 裡呼叫 add_reveal_layer()
+//
+// 範例：
+//   add_reveal_layer(([
+//       "condition": RC_ALL,
+//       "checks": ({
+//           ([ "type": RC_FOOTPRINT, "id": "xilaya_plain" ]),
+//           ([ "type": RC_ERA_DONE,  "era": "v2.1" ]),
+//       }),
+//       "text":  "空氣裡有什麼東西，說不清楚。",
+//       "npc":   "NPC_elder_sugarmill",
+//       "entry": ([ "era": "v2.1", "label": "1910年的民雄" ]),
+//   ]));
+
+#include "/include/formosa.h"
+
+// ── 資料結構 ──────────────────────────────────────────
+//
+// reveal_layers 是一個有序陣列。
+// 每個元素是一個 mapping，結構如下：
+//
+// ([
+//   "condition": RC_ALL | RC_ANY,
+//   "checks":   ({ mapping, ... }),
+//   "text":     string,       // 浮現的文字（可選）
+//   "npc":      string,       // 浮現的 NPC id（可選）
+//   "entry":    mapping,      // 歷史層入口（可選）
+//   "memory":   string,       // 記憶碎片 id（可選）
+//   "once":     int,          // 1=只顯示一次
+// ])
+//
+// checks 元素結構：
+//   ([ "type": RC_FOOTPRINT,      "id": "xilaya_plain" ])
+//   ([ "type": RC_ERA_DONE,       "era": "v2.1" ])
+//   ([ "type": RC_CAREER_RANK,    "track": "修復師", "min_rank": 2 ])
+//   ([ "type": RC_SETTLEMENT_MEM, "settlement": "minxiong", "min": 60 ])
+//   ([ "type": RC_TALENT,         "talent": TALENT_ISLAND_MEMORY ])
+//   ([ "type": RC_GLOBAL_EVENT,   "event": "EP008b_triggered" ])
+
+private nosave mixed *reveal_layers;
+
+/* fluffos prototypes */
+void create();
+void add_reveal_layer(mapping layer);
+
+void create() {
+  reveal_layers = ({});
+}
+
+// ── 新增顯示層 ────────────────────────────────────────
+void add_reveal_layer(mapping layer) {
+  if (!layer["condition"]) layer["condition"] = RC_ALL;
+  if (!layer["checks"]) layer["checks"] = ({});
+  reveal_layers += ({ layer });
+
+  if (layer["npc"]) {
+    call_out("spawn_reveal_npc", 0, layer["npc"]);
+  }
+}
+
+void spawn_reveal_npc(string npc_id) {
+  if (present(npc_id, this_object())) {
+    return;
+  }
+  object npc_ob;
+  catch(npc_ob = NPC_D->create_npc(npc_id));
+  if (npc_ob) {
+    catch(npc_ob->move(this_object()));
+  }
+}
+
+// 快捷：單一踏印條件
+void add_footprint_reveal(string footprint_id, string text) {
+  add_reveal_layer(([
+    "condition": RC_ALL,
+    "checks": ({ ([ "type": RC_FOOTPRINT, "id": footprint_id ]) }),
+    "text": text,
+  ]));
+}
+
+// 快捷：天賦 + 時代完成，顯示歷史層入口
+void add_history_entry(string era_id, string label, string preview_text) {
+  add_reveal_layer(([
+    "condition": RC_ALL,
+    "checks": ({
+      ([ "type": RC_TALENT, "talent": TALENT_ISLAND_MEMORY ]),
+      ([ "type": RC_ERA_DONE, "era": era_id ]),
+    }),
+    "text": preview_text,
+    "entry": ([ "era": era_id, "label": label ]),
+  ]));
+}
+
+// ── 條件判定 ──────────────────────────────────────────
+private int check_single(object player, mapping chk) {
+  string type = chk["type"];
+
+  if (type == RC_FOOTPRINT)
+    return FOOTPRINT_D->has_footprint(player, chk["id"]);
+
+  if (type == RC_FOOTPRINT_MIN)
+    return FOOTPRINT_D->query_quality(player, chk["id"]) >= chk["min_quality"];
+
+  if (type == RC_ERA_DONE)
+    return TIMELINE_D->era_completed(chk["era"]);
+
+  if (type == RC_MEMORY_DONE)
+    return MEMORY_D->memory_completed(player, chk["memory_id"]);
+
+  if (type == RC_CAREER_RANK)
+    return player->query_career_rank(chk["track"]) >= chk["min_rank"];
+
+  if (type == RC_SETTLEMENT_MEM) {
+    int mem = SETTLEMENT_D->query_dim(chk["settlement"], DIM_MEMORY);
+    return mem >= chk["min"];
+  }
+
+  if (type == RC_TALENT)
+    return player->has_talent(chk["talent"]);
+
+  if (type == RC_GLOBAL_EVENT)
+    return TIMELINE_D->global_event_triggered(chk["event"]);
+
+  if (type == RC_HAS_QUEST) {
+    mapping quests = player->query_quests();
+    if (!quests) return 0;
+    mapping q = quests[chk["quest_id"]];
+    if (!q) return 0;
+    if (chk["status"] && q["status"] != chk["status"]) return 0;
+    return 1;
+  }
+
+  if (type == RC_IN_PARTY) {
+    object leader = player->query_leader();
+    return leader ? 1 : 0;
+  }
+
+  return 0;
+}
+
+private int check_layer(object player, mapping layer) {
+  mixed *checks = layer["checks"];
+  string cond = layer["condition"];
+
+  if (!checks || !sizeof(checks)) return 1;
+
+  if (cond == RC_ANY) {
+    foreach (mapping chk in checks)
+      if (check_single(player, chk)) return 1;
+    return 0;
+  }
+
+  // RC_ALL（預設）
+  foreach (mapping chk in checks)
+    if (!check_single(player, chk)) return 0;
+  return 1;
+}
+
+// ── 主要輸出 ──────────────────────────────────────────
+// 回傳本次玩家可見的所有浮現內容：
+// ([
+//   "texts":    ({ string ... }),
+//   "npcs":     ({ npc_id ... }),
+//   "entries":  ({ ([ "era":, "label": ]) ... }),
+//   "memories": ({ memory_id ... }),
+// ])
+mapping resolve_reveals(object player) {
+  mixed *texts = ({});
+  mixed *npcs = ({});
+  mixed *entries = ({});
+  mixed *memories = ({});
+
+  foreach (mapping layer in reveal_layers) {
+    if (!check_layer(player, layer)) continue;
+
+    if (layer["once"]) {
+      string seen_key = "seen_" + md5(sprintf("%O", layer));
+      if (player->query_temp(seen_key)) continue;
+      player->set_temp(seen_key, 1);
+    }
+
+    if (layer["text"]) texts += ({ layer["text"] });
+    if (layer["npc"]) npcs += ({ layer["npc"] });
+    if (layer["entry"]) entries += ({ layer["entry"] });
+    if (layer["memory"]) memories += ({ layer["memory"] });
+  }
+
+  return ([
+    "texts": texts,
+    "npcs": npcs,
+    "entries": entries,
+    "memories": memories,
+  ]);
+}
+
+mixed *query_reveal_layers() { return copy(reveal_layers); }

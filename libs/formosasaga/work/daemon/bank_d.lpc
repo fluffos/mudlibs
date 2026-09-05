@@ -1,0 +1,74 @@
+// /daemon/bank_d.c
+// 銀行守護進程 (Bank Daemon)
+
+#include "/include/ansi.h"
+#include "/include/config.h"
+
+// 利息時率 0.001% (0.00001)
+#define INTEREST_RATE_HOUR 0.00001
+
+inherit "/std/object";
+
+void create() {
+  ::create();
+}
+
+// 更新利息
+void update_interest(object me) {
+  int now = time();
+  int last = me->query_last_bank_time();
+  int balance = me->query_bank_balance();
+
+  if (balance <= 0) {
+    me->set_last_bank_time(now);
+    return;
+  }
+
+  int duration = now - last;
+  if (duration < 60) return;  // 至少一分鐘才計算一次，避免過度計算
+
+  // 利息計算公式: 餘額 * 時率 * (持續秒數 / 3600)
+  // 由於 LPC 目前主要使用整數，我們需要小心精度
+  // 0.001% = 1 / 100,000
+  // 利息 = balance * duration / (3600 * 100,000)
+
+  float rate = 0.00001;
+  float hours = to_float(duration) / 3600.0;
+  int interest = to_int(to_float(balance) * rate * hours);
+
+  if (interest > 0) {
+    me->add_bank_balance(interest);
+    tell_object(me, "$HIG$【銀行】結算利息，你的帳戶增加了 $NOR$" + interest + "$HIG$ 銅幣。\n$NOR$");
+  }
+
+  me->set_last_bank_time(now);
+  me->save();
+}
+
+int deposit(object me, int amount) {
+  update_interest(me);
+  if (amount <= 0) return 0;
+  if (me->query_money() < amount) {
+    write("$HIR$你身上沒有那麼多錢。\n$NOR$");
+    return 0;
+  }
+  me->add_money(-amount);
+  me->add_bank_balance(amount);
+  write("$HIG$你存入了 $NOR$" + amount + "$HIG$ 銅幣。目前餘額：$NOR$" + me->query_bank_balance() + "\n");
+  me->save();
+  return 1;
+}
+
+int withdraw(object me, int amount) {
+  update_interest(me);
+  if (amount <= 0) return 0;
+  if (me->query_bank_balance() < amount) {
+    write("$HIR$你的銀行存款不足。\n$NOR$");
+    return 0;
+  }
+  me->add_bank_balance(-amount);
+  me->add_money(amount);
+  write("$HIW$你提領了 $NOR$" + amount + "$HIW$ 銅幣。目前餘額：$NOR$" + me->query_bank_balance() + "\n");
+  me->save();
+  return 1;
+}

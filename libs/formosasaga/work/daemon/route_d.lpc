@@ -1,0 +1,195 @@
+// /daemon/route_d.c
+//
+// 路線與通道管理服務。
+//
+// 職責：
+//   - 載入與索引所有 data/yaml/routes/ 下的路線定義（包含聯外交通與聯內通道）
+//   - 提供旅行耗時與鄰近通路的動態查詢。
+
+#include "/include/formosa.h"
+
+inherit "/std/entity.lpc";
+
+private nosave mapping route_cache;  // ([ route_id: route_data ])
+private nosave mapping names_cache;  // ([ route_id: ([ era_id: name ]) ])
+
+void scan_dir(string dir) {
+  string *files = get_dir(dir);
+  if (!files) return;
+
+  foreach (string file in files) {
+    if (file == "." || file == "..") continue;
+    string path = dir + file;
+    int sz = file_size(path);
+    if (sz == -2) {
+      // 目錄，遞迴掃描
+      scan_dir(path + "/");
+    } else if (strlen(file) >= 5 && substr(file, strlen(file) - 5, 5) == ".yaml") {
+      string content = read_file(path);
+      if (!content) continue;
+      mapping data = yaml_decode(content);
+      if (!data || !data["id"]) continue;
+
+      string id = data["id"];
+      route_cache[id] = data;
+
+      // 快取多語系/多時代名稱
+      mapping n_map = ([]);
+      if (pointerp(data["names"])) {
+        foreach (mapping name_entry in data["names"]) {
+          if (name_entry["era"] && name_entry["name"]) {
+            n_map[name_entry["era"]] = name_entry["name"];
+          }
+        }
+      }
+      names_cache[id] = n_map;
+    }
+  }
+}
+
+void rehash() {
+  route_cache = ([]);
+  names_cache = ([]);
+  scan_dir("/data/yaml/routes/");
+}
+
+void create() {
+  ::create();
+  set_entity_id("daemon:route");
+  set_entity_type("daemon");
+  rehash();
+}
+
+mapping load_route(string route_id) {
+  if (!route_cache) rehash();
+  return route_cache[route_id];
+}
+
+mapping query_names_mapping(string route_id) {
+  if (!names_cache) rehash();
+  return names_cache[route_id];
+}
+
+string query_travel_time(string from, string to, string transport_type) {
+  if (!route_cache) rehash();
+  string cur_era = TIMELINE_D->query_current_era();
+  string cur_era_dot = replace_string(cur_era, "_", ".");
+
+  foreach (string id, mapping r in route_cache) {
+    // 時代過濾 (P8.1): 如果定義了 eras，必須包含當前時代
+    if (pointerp(r["eras"])) {
+      if (member_array(cur_era, r["eras"]) == -1 && member_array(cur_era_dot, r["eras"]) == -1) {
+        continue;
+      }
+    }
+
+    mixed nodes = r["nodes"];
+    if (pointerp(nodes) && member_array(from, nodes) != -1 && member_array(to, nodes) != -1) {
+      mixed tt = r["travel_time"];
+      if (mapp(tt)) {
+        if (transport_type && tt[transport_type]) return tt[transport_type];
+        mixed ks = keys(tt);
+        if (sizeof(ks) > 0) return tt[ks[0]];
+      } else if (stringp(tt)) {
+        return tt;
+      }
+    }
+  }
+  return 0;
+}
+
+string *query_connections(string site_id) {
+  if (!route_cache) rehash();
+  string *conn = ({});
+  string cur_era = TIMELINE_D->query_current_era();
+  string cur_era_dot = replace_string(cur_era, "_", ".");
+
+  // 1. 聯外/全域交通路線
+  foreach (string id, mapping r in route_cache) {
+    // 時代過濾 (P8.1): 如果定義了 eras，必須包含當前時代 (不論是 v1.0 還是 v1_0 格式)
+    if (pointerp(r["eras"])) {
+      if (member_array(cur_era, r["eras"]) == -1 && member_array(cur_era_dot, r["eras"]) == -1) {
+        continue;
+      }
+    }
+
+    mixed nodes = r["nodes"];
+    if (pointerp(nodes) && member_array(site_id, nodes) != -1) {
+      foreach (string node in nodes) {
+        if (node != site_id && member_array(node, conn) == -1) {
+          conn += ({ node });
+        }
+      }
+    }
+  }
+
+  // 2. 判斷是否直接傳入聚落 ID (例如 "minxiong")。若是，自動連通其旗下的所有子 site
+  mapping sett = SETTLEMENT_D->load_settlement(site_id);
+  if (sett) {
+    mixed sites = sett["sites"];
+    if (pointerp(sites)) {
+      foreach (string s in sites) {
+        if (member_array(s, conn) == -1) conn += ({ s });
+      }
+    }
+    return conn;
+  }
+
+  // 3. 聚落內部地景拓樸 (從 site_d 查詢地標所屬聚落，再從 settlement_d 取得 map_data)
+  mapping s_data = SITE_D->load_site(site_id);
+  if (s_data && s_data["settlement"]) {
+    string s_id = s_data["settlement"];
+    mapping sett_info = SETTLEMENT_D->load_settlement(s_id);
+    if (sett_info) {
+      // 自動加回與聚落主節點的雙向連通
+      if (member_array(s_id, conn) == -1) {
+        conn += ({ s_id });
+      }
+
+      // 處理 map_data 內部的短 ID (如 "station", "market") 或 完整 ID 的匹配
+      mapping map_data = sett_info["map_data"];
+      if (map_data) {
+        string lookup_key = site_id;
+        // 如果 map_data 裡用的是短 ID，進行短 ID 轉換
+        if (!map_data[lookup_key]) {
+          if (strsrch(lookup_key, s_id + "_") == 0) {
+            string short_id = substr(
+              lookup_key,
+              strlen(s_id) + 1,
+              strlen(lookup_key) - strlen(s_id) - 1
+            );
+            if (map_data[short_id]) {
+              lookup_key = short_id;
+            }
+          }
+        }
+
+        if (map_data[lookup_key]) {
+          mixed internal_conns = map_data[lookup_key]["connections"];
+          if (pointerp(internal_conns)) {
+            foreach (string iconn in internal_conns) {
+              string resolved_conn = iconn;
+              // 如果拓樸寫的是短 ID (如 "market")，自動補上聚落字首變成 "minxiong_market"
+              if (file_size(YAML_SITES + s_id + "/" + iconn + ".yaml") <= 0) {
+                // 嘗試加上 settlement 字首補全
+                string prefix_conn = s_id + "_" + iconn;
+                if (file_size(YAML_SITES + s_id + "/" + prefix_conn + ".yaml") > 0 || SITE_D->load_site(prefix_conn)) {
+                  resolved_conn = prefix_conn;
+                } else if (iconn == "station" && SITE_D->load_site(s_id + "_old_station")) {
+                  // 特殊容錯：station -> minxiong_old_station
+                  resolved_conn = s_id + "_old_station";
+                }
+              }
+
+              if (member_array(resolved_conn, conn) == -1) {
+                conn += ({ resolved_conn });
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return conn;
+}

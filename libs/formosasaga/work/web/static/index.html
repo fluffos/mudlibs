@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="utf-8">
+    <title>Fantasy Space MUD</title>
+    <style>
+        html, body { height: 100%; margin: 0; background: #000; color: #ccc; font-family: 'Consolas', monospace; overflow: hidden; }
+        #wrapper { display: grid; grid-template-areas: "look" "send"; grid-template-rows: 1fr 60px; height: 100vh; width: 100vw; position: relative; }
+        
+        /* 🚀 側邊滑出面板設計 */
+        .overlay-panel { 
+            position: absolute; top: 0; left: 0; width: 320px; height: calc(100vh - 60px); 
+            background: rgba(20, 20, 20, 0.98); border-right: 2px solid #4CAF50;
+            display: none; flex-direction: column; overflow: hidden; z-index: 500;
+            box-shadow: 10px 0 30px rgba(0,0,0,0.8);
+            animation: slideIn 0.3s ease-out;
+        }
+        @keyframes slideIn { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+        .overlay-panel.active { display: flex; }
+        .panel-header { background: #333; padding: 10px 15px; font-weight: bold; color: #4CAF50; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444; }
+        .panel-content { flex: 1; overflow-y: auto; padding: 15px; }
+
+        #look-area { grid-area: look; background: #000; overflow-y: auto; padding: 20px; font-size: 18px; line-height: 1.6; position: relative; scroll-behavior: smooth; }
+        #look-content { padding-bottom: 20px; }
+        #send-area { grid-area: send; background: #111; display: flex; align-items: center; padding: 0 15px; gap: 10px; position: relative; border-top: 1px solid #333; z-index: 1200; }
+        
+        #toolbar { position: absolute; bottom: 70px; left: 15px; display: flex; gap: 5px; z-index: 1000; }
+        .tool-btn { background: rgba(34, 34, 34, 0.8); border: 1px solid #4CAF50; color: #fff; padding: 5px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; transition: all 0.2s; backdrop-filter: blur(4px); }
+        .tool-btn:hover { background: #333; color: #4CAF50; }
+        .tool-btn.active { background: #4CAF50; color: #fff; font-weight: bold; }
+
+        .stat-box { background: #1a1a1a; border-radius: 4px; padding: 8px 12px; border-left: 4px solid #4CAF50; margin-bottom: 8px; }
+        .stat-label { font-size: 12px; color: #888; }
+        .stat-value { font-weight: bold; color: #fff; display: block; font-size: 16px; }
+
+        .cmd-group { margin-bottom: 15px; }
+        .cmd-cat { cursor: pointer; color: #4CAF50; font-weight: bold; margin-bottom: 5px; display: block; }
+        .cmd-list { display: none; padding-left: 10px; }
+        .cmd-list.active { display: block; }
+        .cmd-row { display: flex; margin-bottom: 4px; gap: 4px; }
+        .btn-cmd { flex: 1; background: #222; color: #00ff00; border: 1px solid #333; padding: 5px; cursor: pointer; text-align: left; font-size: 14px; }
+        .btn-cmd:hover { background: #333; border-color: #4CAF50; }
+        
+        #socials-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+        .btn-social { background: #222; border: 1px solid #333; border-radius: 6px; color: #fff; padding: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 22px; transition: all 0.2s; }
+        .btn-social:hover { background: #4CAF50; border-color: #fff; }
+
+        #msg { flex: 1; background: #000; border: 1px solid #4CAF50; color: #00ff00; padding: 12px; font-size: 18px; outline: none; border-radius: 4px; }
+        #btn-send { background: #4CAF50; color: #fff; border: none; padding: 10px 20px; cursor: pointer; border-radius: 4px; font-weight: bold; }
+
+        /* 🚀 強力抗填充密技：隱藏文字，但 type 維持 text */
+        #msg.mask-mode { -webkit-text-security: disc !timportant; }
+
+        #history-box { position: absolute; bottom: 60px; left: 15px; right: 15px; background: #1a1a1a; border: 1px solid #4CAF50; border-radius: 8px 8px 0 0; max-height: 200px; overflow-y: auto; display: none; z-index: 1100; box-shadow: 0 -5px 20px rgba(0,0,0,0.5); }
+        .history-item { padding: 10px 20px; cursor: pointer; border-bottom: 1px solid #333; color: #0f0; font-family: monospace; }
+        .history-item:hover { background: #333; }
+        .history-header { background: #333; color: #888; padding: 5px 15px; font-size: 11px; display: flex; justify-content: space-between; }
+
+        #mc-container { position: fixed; top: 20px; right: 20px; width: 350px; height: 350px; background: rgba(20, 20, 20, 0.95); border: 2px solid #4CAF50; border-radius: 8px; display: none; flex-direction: column; z-index: 200; box-shadow: 0 10px 30px rgba(0,0,0,0.8); overflow: hidden; }
+        #mc-canvas { flex: 1; cursor: crosshair; image-rendering: pixelated; width: 100%; height: 100%; }
+        #mc-ui { height: 36px; background: #222; display: flex; align-items: center; padding: 0 8px; gap: 6px; border-bottom: 1px solid #444; font-size: 11px; }
+        .mc-btn { background: #333; border: 1px solid #555; color: #fff; padding: 2px 6px; cursor: pointer; font-size: 11px; border-radius: 4px; }
+        .mc-btn.active { background: #4CAF50; border-color: #fff; }
+
+        #minimap-container { position: absolute; top: 20px; right: 20px; background: rgba(30, 30, 30, 0.9); border: 1px solid #4CAF50; border-radius: 8px; padding: 10px; display: grid; grid-template-columns: repeat(5, 32px); grid-template-rows: repeat(5, 32px); gap: 4px; z-index: 100; display: none; }
+        .map-cell { background: #111; border: 1px solid #333; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+        .map-room { background: #333; }
+        .map-center { background: #1976D2; color: #fff; }
+        .map-exit { cursor: pointer; border-color: #4CAF50; }
+        
+        .cmd-link { color: #4CAF50; text-decoration: underline; cursor: pointer; font-weight: bold; }
+        .star { position: absolute; background: white; border-radius: 50%; opacity: 0.3; animation: twinkle var(--duration) infinite; pointer-events: none; }
+        @keyframes twinkle { 0%, 100% { opacity: 0.2; transform: scale(1); } 50% { opacity: 1; transform: scale(1.2); } }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+        /* 🚀 Web IDE / Explorer Styles */
+        #editor-layout { display: flex; flex: 1; overflow: hidden; }
+        #explorer-sidebar { width: 220px; background: #252526; border-right: 1px solid #333; display: flex; flex-direction: column; }
+        #explorer-header { padding: 8px 12px; background: #333; font-size: 11px; color: #888; display: flex; justify-content: space-between; border-bottom: 1px solid #444; }
+        #explorer-tree { flex: 1; overflow-y: auto; padding: 5px; font-size: 13px; }
+        .tree-item { padding: 4px 8px; cursor: pointer; border-radius: 3px; display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .tree-item:hover { background: #2a2d2e; }
+        .tree-item.active { background: #37373d; color: #fff; }
+        .tree-folder { color: #dcb67a; }
+        .tree-file { color: #ccc; }
+
+        /* Scaffolding Dialog */
+        #scaffolding-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 2000; }
+        #scaffolding-dialog { background: #252526; border: 1px solid #4CAF50; border-radius: 8px; width: 400px; padding: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.8); }
+        .template-option { background: #333; border: 1px solid #444; padding: 12px; margin-bottom: 8px; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+        .template-option:hover { background: #444; border-color: #4CAF50; }
+        .template-name { font-weight: bold; color: #4CAF50; display: block; }
+        .template-desc { font-size: 12px; color: #888; }
+
+        #suggestion-box { position: absolute; bottom: 65px; left: 15px; right: 15px; background: rgba(20, 20, 20, 0.98); border: 1px solid #4CAF50; max-height: 250px; overflow-y: auto; display: none; z-index: 1100; border-radius: 8px; }
+        .suggest-item { padding: 10px 20px; cursor: pointer; border-bottom: 1px solid #333; display: flex; justify-content: space-between; }
+        .suggest-item.active { background: #4CAF50; color: #fff; }
+    </style>
+    <script src="monaco-editor.js"></script>
+</head>
+<body>
+<div id="wrapper">
+    <div id="toolbar">
+        <button class="tool-btn" onclick="togglePanel('panel-info', this)">📊 Status</button>
+        <button class="tool-btn" onclick="togglePanel('panel-cmds', this)">📜 Commands</button>
+        <button class="tool-btn" onclick="togglePanel('panel-socials', this)">🎭 Socials</button>
+    </div>
+
+    <div id="panel-info" class="overlay-panel">
+        <div class="panel-header">Character Status <span onclick="togglePanel('panel-info')" style="cursor:pointer">×</span></div>
+        <div id="info-area" class="panel-content"></div>
+    </div>
+
+    <div id="panel-cmds" class="overlay-panel">
+        <div class="panel-header">Command List <span onclick="togglePanel('panel-cmds')" style="cursor:pointer">×</span></div>
+        <div id="cmds-area" class="panel-content">Loading commands...</div>
+    </div>
+
+    <div id="panel-socials" class="overlay-panel">
+        <div class="panel-header">Social Actions <span onclick="togglePanel('panel-socials')" style="cursor:pointer">×</span></div>
+        <div id="socials-area" class="panel-content"></div>
+    </div>
+
+    <div id="panel-import" class="overlay-panel">
+        <div class="panel-header">Import Emoji Map <span onclick="togglePanel('panel-import')" style="cursor:pointer">×</span></div>
+        <div class="panel-content" style="display:flex; flex-direction:column; gap:10px;">
+            <div style="font-size:12px; color:#888;">貼上多行 Emoji 地圖，將從您目前座標往右上建構：</div>
+            <textarea id="import-area" 
+                      style="flex:1; min-height:200px; background:#000; color:#fff; border:1px solid #4CAF50; font-family:monospace; padding:10px; font-size:14px; line-height:1.2;"
+                      placeholder="🟩🟩🟩\n🟩🚶🟩\n🟦🟦🟦"></textarea>
+            <div style="display:flex; gap:10px;">
+                <button class="mc-btn" onclick="document.getElementById('import-area').value=''" style="flex:1;">Clear</button>
+                <button class="mc-btn" onclick="submitMapImport()" style="flex:2; background:#4CAF50;">Confirm Import</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="panel-editor" class="overlay-panel" style="width: 80%; height: 80%; top: 10%; left: 10%; border: 2px solid #2196F3;">
+        <div class="panel-header" style="background: #1565C0;">
+            <span id="editor-title">Editor</span>
+            <div style="display:flex; gap:10px;">
+                <button class="tool-btn" onclick="requestTemplates()" title="New File from Template">➕ New File</button>
+                <button class="tool-btn" onclick="refreshExplorer()" title="Refresh Explorer">🔄 Refresh</button>
+                <span onclick="closeEditor()" style="cursor:pointer; margin-left:10px;">×</span>
+            </div>
+        </div>
+        <div class="panel-content" style="display:flex; flex-direction:column; padding: 0;">
+            <div id="editor-layout">
+                <div id="explorer-sidebar">
+                    <div id="explorer-header">
+                        <span id="explorer-path">/</span>
+                        <span onclick="goParentDir()" style="cursor:pointer" title="Go Parent">⬆️</span>
+                    </div>
+                    <div id="explorer-tree"></div>
+                </div>
+                <div id="editor-container" style="flex:1; background:#1e1e1e;"></div>
+            </div>
+            <div style="background:#252526; padding:10px 15px; display:flex; gap:10px; border-top:1px solid #333;">
+                <button class="tool-btn" onclick="saveEditorFile()" style="background:#2196F3; border-color:#2196F3;">💾 Save (Ctrl+S)</button>
+                <button class="tool-btn" onclick="closeEditor()">❌ Close</button>
+                <span id="editor-status" style="margin-left:auto; font-size:12px; color:#888; align-self:center;"></span>
+            </div>
+        </div>
+    </div>
+
+    <div id="scaffolding-overlay" onclick="closeScaffolding()">
+        <div id="scaffolding-dialog" onclick="event.stopPropagation()">
+            <div class="panel-header" style="background:transparent; padding:0 0 15px 0; border-bottom:1px solid #444; margin-bottom:15px;">
+                <span>Choose Template</span>
+                <span onclick="closeScaffolding()" style="cursor:pointer">×</span>
+            </div>
+            <div id="template-list">
+                <!-- Templates will be injected here -->
+            </div>
+            <div style="margin-top:15px; display:flex; flex-direction:column; gap:10px;">
+                <input id="new-file-path" type="text" placeholder="/path/to/new_file.c" style="background:#000; border:1px solid #4CAF50; color:#fff; padding:8px; outline:none;">
+                <button class="mc-btn" onclick="confirmScaffolding()" style="background:#4CAF50;">Create File</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="mc-container">
+        <div id="mc-ui">
+            <span style="color:#4CAF50; font-weight:bold;">Visual Map</span>
+        </div>
+        <canvas id="mc-canvas"></canvas>
+    </div>
+
+    <div id="look-area">
+        <div id="minimap-container"></div>
+        <div id="look-content"></div>
+    </div>
+
+    <div id="send-area">
+        <div id="suggestion-box"></div>
+        <div id="history-box"></div>
+        
+        <!-- 🚀 最終防線指令輸入框：
+             1. 始終維持 type="text"，徹底讓 Chrome 失去掃描目標
+             2. 使用 readonly 動態切換法，阻斷自動填充引擎的掛接
+        -->
+        <input id="msg" 
+               type="text"
+               placeholder="Type command..." 
+               autocomplete="off"
+               readonly
+               onfocus="this.removeAttribute('readonly');"
+               onmousedown="this.removeAttribute('readonly');"
+               name="terminal_input_stream" 
+               spellcheck="false"
+               autofocus>
+        
+        <button onclick="sendMsg()" id="btn-send">Send</button>
+    </div>
+</div>
+
+<script>
+    let ws, historyCmds = [], histIdx = -1, msgInput, suggestIdx = -1, isInputHidden = false;
+    let mcData = null, mcMode = false, mcAction = 'dig', mcZoom = 32;
+    const mcColors = {
+        grass:'#4CAF50', dirt:'#795548', stone:'#9E9E9E',
+        wood:'#8D6E63', log:'#5D4037', planks:'#FFCC80',
+        leaves:'#2E7D32', sand:'#FDD835', water:'#1E88E5',
+        coal:'#37474F', iron:'#B0BEC5', gold:'#FFD600',
+        brick:'#BF360C', player:'#2196F3', self:'#FFEB3B'
+    };
+
+    window.onload = () => {
+        msgInput = document.getElementById("msg");
+        initLocalization();
+        initInputHandlers();
+        connect();
+        initStars();
+    };
+
+    function togglePanel(id, btn) {
+        const panel = document.getElementById(id);
+        const isActive = panel.classList.contains('active');
+        
+        // 關閉所有面板
+        document.querySelectorAll('.overlay-panel').forEach(p => p.classList.remove('active'));
+        document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+
+        if (!isActive) {
+            panel.classList.add('active');
+            if (btn) btn.classList.add('active');
+        }
+    }
+
+    function initLocalization() {
+        const isZH = (navigator.language || navigator.userLanguage).startsWith('zh');
+        if (isZH) {
+            msgInput.placeholder = "點擊查看歷史或輸入指令...";
+            document.getElementById("btn-send").innerText = "發送";
+            document.querySelector('.tool-btn[onclick*="info"]').innerText = "📊 狀態";
+            document.querySelector('.tool-btn[onclick*="cmds"]').innerText = "📜 指令";
+            document.querySelector('.tool-btn[onclick*="socials"]').innerText = "🎭 社交";
+            document.querySelector('.mc-btn[onclick*="sendCmd(\'back\')"]').innerText = "離開創界";
+        }
+    }
+
+    function connect() {
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        ws = new WebSocket(protocol + "//" + location.host + "/ws");
+        ws.onmessage = (e) => {
+            const msg = JSON.parse(e.data);
+            if (msg.type === "mud_text" || msg.type === "mud_html" || msg.type === "edit_file" || msg.type === "chat" || msg.type === "compile_error" || msg.type === "compile_success") {
+                const p = (msg.type === "chat" ? (msg.username + ": " + msg.payload) : msg.payload).trim();
+                
+                // Pass message to embedded Author Tool if it exists
+                const iframe = document.getElementById('author-iframe');
+                if (iframe && iframe.contentWindow && typeof iframe.contentWindow.handleMUDMessage === 'function') {
+                    iframe.contentWindow.handleMUDMessage(e.data);
+                }
+
+                if (msg.type === "compile_error") { handleCompileError(msg.payload); return; }
+                if (msg.type === "compile_success") { handleCompileSuccess(msg.payload); return; }
+
+                if (p === "__INPUT_HIDDEN__") {
+                    isInputHidden = true;
+                    msgInput.style.webkitTextSecurity = "disc";
+                    return;
+                }
+                
+                if (msg.type === "mud_html") { appendRaw(p); return; }
+
+
+                if (p.startsWith("{") && p.endsWith("}")) {
+                    try { handleUIData(JSON.parse(p)); } catch (err) { handleMultiJSON(p); }
+                } else {
+                    appendLook(p);
+                }
+            }
+        };
+    }
+
+    function handleMultiJSON(p) {
+        const fixedP = p.replace(/\}\s*\{/g, "}\n{");
+        fixedP.split('\n').forEach(line => {
+            try { handleUIData(JSON.parse(line.trim())); } catch(e) {}
+        });
+    }
+
+    function handleUIData(ui) {
+        if (ui.ui === "score") {
+            const d = ui.data;
+            document.getElementById("info-area").innerHTML = `
+                <div class="stat-box"><span class="stat-label">❤️ HP</span><span class="stat-value">${d.hp}/${d.max_hp}</span></div>
+                <div class="stat-box"><span class="stat-label">✨ MP</span><span class="stat-value">${d.mp}/${d.max_mp}</span></div>
+                <div class="stat-box"><span class="stat-label">💰 GOLD</span><span class="stat-value">${parseColorTags(d.money)}</span></div>
+            `;
+        } else if (ui.ui === "cmd_list") { renderCmdList(ui.data, ui.title); window.allCommands = ui.data; }
+        else if (ui.ui === "socials") { renderSocials(ui.data, ui.title); window.allSocials = ui.data; }
+        else if (ui.ui === "minimap") renderMiniMap(ui.data);
+        else if (ui.ui === "nature") handleNatureData(ui.data);
+        else if (ui.ui === "mc_map") handleMCMap(ui.data);
+        else if (ui.ui === "mc_exit") toggleMCMode(false); 
+        else if (ui.ui === "ls") renderExplorer(ui.path, ui.data);
+        else if (ui.ui === "templates") showScaffolding(ui.data);
+        else if (ui.ui === "open_author") openAuthorTool();
+        else if (ui.ui === "edit_file") {
+            if (document.getElementById('panel-author') && document.getElementById('panel-author').style.display !== 'none') {
+                // If author tool is open, we do not open the default editor. 
+                // The iframe message forwarding will handle passing the full raw JSON string to author.html.
+            } else {
+                openEditor(ui);
+            }
+        }
+    }
+
+    function openAuthorTool() {
+        let panel = document.getElementById('panel-author');
+        if (!panel) {
+            panel = document.createElement('div');
+            panel.id = 'panel-author';
+            panel.className = 'overlay-panel';
+            panel.style.cssText = 'width: 95%; height: 95%; top: 2.5%; left: 2.5%; border: 2px solid #4CAF50; z-index: 3000; background: #0f1115; flex-direction: column; display: flex; box-shadow: 0 10px 50px rgba(0,0,0,0.9);';
+            panel.innerHTML = `
+                <div class="panel-header" style="background:#111;">
+                    <span>Content Authoring Tool (P22)</span>
+                    <span onclick="document.getElementById('panel-author').style.display='none'" style="cursor:pointer; color:#888;">×</span>
+                </div>
+                <iframe id="author-iframe" src="/author.html" style="width:100%; flex:1; border:none;"></iframe>
+            `;
+            document.body.appendChild(panel);
+            
+            const iframe = document.getElementById('author-iframe');
+            iframe.onload = () => {
+                iframe.contentWindow.setProxyWebSocket(ws);
+                setTimeout(() => {
+                    if (iframe.contentWindow && typeof iframe.contentWindow.loadContentList === 'function') {
+                        iframe.contentWindow.loadContentList('settlements');
+                    }
+                }, 100);
+            };
+        } else {
+            panel.style.display = 'flex';
+            const iframe = document.getElementById('author-iframe');
+            if (iframe && iframe.contentWindow && typeof iframe.contentWindow.loadContentList === 'function') {
+                iframe.contentWindow.loadContentList('settlements');
+            }
+        }
+    }
+
+    function renderCmdList(cats, title) {
+        const area = document.getElementById("cmds-area");
+        area.innerHTML = "";
+        for (let c in cats) {
+            let group = document.createElement("div"); group.className = "cmd-group";
+            let cat = document.createElement("span"); cat.className = "cmd-cat"; cat.innerText = c;
+            let list = document.createElement("div"); list.className = "cmd-list";
+            cat.onclick = () => { list.classList.toggle('active'); };
+            cats[c].forEach(cmd => {
+                let row = document.createElement("div"); row.className = "cmd-row";
+                row.innerHTML = `<button class="btn-cmd" onclick="fillInput('${cmd}')">${cmd}</button>`;
+                list.appendChild(row);
+            });
+            group.appendChild(cat); group.appendChild(list); area.appendChild(group);
+        }
+    }
+
+    function renderSocials(socials, title) {
+        const grid = document.getElementById("socials-area");
+        grid.innerHTML = `<div id='socials-grid'></div>`;
+        const container = document.getElementById("socials-grid");
+        for (let k in socials) {
+            const btn = document.createElement("button"); btn.className = "btn-social";
+            btn.onclick = () => sendCmd(k); btn.innerHTML = `<span>${socials[k].icon}</span>`;
+            btn.title = k + ": " + socials[k].label; container.appendChild(btn);
+        }
+    }
+
+    function handleMCMap(data) {
+        if (!mcMode) toggleMCMode(true);
+        mcData = data;
+        if (data.world_name) {
+            document.querySelector("#mc-ui span").innerText = data.world_name;
+        }
+        renderMCMap();
+    }
+
+    function toggleMCMode(on) {
+        mcMode = on;
+        document.getElementById('mc-container').style.display = on ? 'flex' : 'none';
+        document.getElementById('look-content').style.display = 'block'; // Keep MUD descriptions visible concurrently!
+        if (on) initMCCanvas();
+    }
+
+    function initMCCanvas() {
+        const canvas = document.getElementById('mc-canvas');
+        canvas.width = canvas.offsetWidth; canvas.height = canvas.offsetHeight;
+        canvas.oncontextmenu = (e) => e.preventDefault();
+        canvas.onwheel = (e) => {
+            e.preventDefault();
+            if (e.deltaY < 0) mcZoom = Math.min(100, mcZoom + 4);
+            else mcZoom = Math.max(10, mcZoom - 4);
+            renderMCMap();
+        };
+        window.onresize = () => { if (mcMode) initMCCanvas(); };
+    }
+
+    function renderMCMap() {
+        const canvas = document.getElementById('mc-canvas'); if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const { width, height, blocks, block_colors, players, self_id } = mcData;
+        const colors = Object.assign({}, mcColors, block_colors || {});
+        const selfPos = players[self_id] || [Math.floor(width/2), Math.floor(height/2)];
+        const cw = canvas.width, ch = canvas.height;
+        const centerX = cw / 2, centerY = ch / 2;
+
+        ctx.fillStyle = '#0d1b2a'; ctx.fillRect(0, 0, cw, ch);
+
+        const wx0 = centerX + (0 - selfPos[0]) * mcZoom;
+        const wy0 = centerY - (0 - selfPos[1]) * mcZoom;
+        const wx1 = centerX + (width - selfPos[0]) * mcZoom;
+        const wy1 = centerY - (height - selfPos[1]) * mcZoom;
+        ctx.strokeStyle = 'rgba(255,100,100,0.5)'; ctx.lineWidth = 2;
+        ctx.setLineDash([6, 4]);
+        ctx.strokeRect(wx0, wy1, wx1 - wx0, wy0 - wy1);
+        ctx.setLineDash([]);
+
+        if (mcZoom >= 20) {
+            ctx.strokeStyle = 'rgba(255,255,255,0.04)'; ctx.lineWidth = 0.5;
+            const startX = Math.floor((0 - centerX / mcZoom) + selfPos[0]);
+            const startY = Math.floor((0 - centerY / mcZoom) + selfPos[1]);
+            for (let gx = startX; gx < startX + Math.ceil(cw/mcZoom)+2; gx++) {
+                const sx = centerX + (gx - selfPos[0]) * mcZoom;
+                ctx.beginPath(); ctx.moveTo(sx, 0); ctx.lineTo(sx, ch); ctx.stroke();
+            }
+            for (let gy = startY; gy < startY + Math.ceil(ch/mcZoom)+2; gy++) {
+                const sy = centerY - (gy - selfPos[1]) * mcZoom;
+                ctx.beginPath(); ctx.moveTo(0, sy); ctx.lineTo(cw, sy); ctx.stroke();
+            }
+        }
+
+        for (let key in blocks) {
+            const [bx, by] = key.split(',').map(Number);
+            const sx = centerX + (bx - selfPos[0]) * mcZoom;
+            const sy = centerY - (by - selfPos[1]) * mcZoom;
+            if (sx < -mcZoom || sx > cw || sy < -mcZoom || sy > ch) continue;
+            ctx.fillStyle = colors[blocks[key]] || '#aaa';
+            ctx.fillRect(sx, sy - mcZoom, mcZoom, mcZoom);
+            if (mcZoom >= 16) {
+                ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 0.5;
+                ctx.strokeRect(sx, sy - mcZoom, mcZoom, mcZoom);
+            }
+            if (mcZoom >= 40) {
+                ctx.fillStyle = 'rgba(255,255,255,0.7)';
+                ctx.font = Math.max(8, mcZoom/4) + 'px monospace';
+                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.fillText(blocks[key], sx + mcZoom/2, sy - mcZoom/2);
+            }
+        }
+
+        for (let pid in players) {
+            const ppos = players[pid];
+            const sx = centerX + (ppos[0] - selfPos[0]) * mcZoom;
+            const sy = centerY - (ppos[1] - selfPos[1]) * mcZoom;
+            const r = Math.max(4, mcZoom * 0.35);
+            const isSelf = (pid === self_id);
+            ctx.fillStyle = isSelf ? '#FFEB3B' : '#2196F3';
+            ctx.beginPath(); ctx.arc(sx + mcZoom/2, sy - mcZoom/2, r, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = isSelf ? '#fff' : '#90CAF9'; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.arc(sx + mcZoom/2, sy - mcZoom/2, r, 0, Math.PI*2); stroke();
+            ctx.fillStyle = isSelf ? '#FFD600' : '#fff';
+            ctx.font = 'bold ' + Math.max(10, mcZoom/3) + 'px monospace';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+            ctx.fillText(pid, sx + mcZoom/2, sy - mcZoom - 2);
+        }
+
+        if (mcData.npcs) {
+            for (let nid in mcData.npcs) {
+                const npos = mcData.npcs[nid];
+                const sx = centerX + (npos[0] - selfPos[0]) * mcZoom;
+                const sy = centerY - (npos[1] - selfPos[1]) * mcZoom;
+                const icon = npos[2] || '👾';
+                ctx.font = Math.max(12, mcZoom * 0.8) + 'px sans-serif';
+                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.fillText(icon, sx + mcZoom/2, sy - mcZoom/2);
+            }
+        }
+
+        ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(6, 6, 90, 22);
+        ctx.fillStyle = '#adf'; ctx.font = '12px monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+        ctx.fillText(`zoom ${mcZoom}px`, 10, 10);
+    }
+
+    function promptImportMap() {
+        togglePanel('panel-import');
+    }
+
+    function submitMapImport() {
+        const input = document.getElementById("import-area").value;
+        if (input) {
+            sendCmd(`mc import ${input}`);
+            togglePanel('panel-import');
+        }
+    }
+
+    function renderMiniMap(d) {
+        const m = document.getElementById("minimap-container");
+        if (!d.grid || d.grid.length === 0) {
+            m.style.display = "none";
+            return;
+        }
+        let html = `<div id="minimap-title-bar">${d.center_name || "Unknown Location"}</div><div id="minimap-grid">`;
+        const exits = new Set(d.exits || []);
+        for (let y = 0; y < d.grid.length; y++) {
+            for (let x = 0; x < d.grid[y].length; x++) {
+                const cell = d.grid[y][x]; let content = "", classes = "map-cell map-" + cell, onClick = "";
+                if (cell === "player") { content = "👤"; classes += " map-center"; }
+                const dx = x - 2, dy = y - 2; let dir = (dx === 0 && dy === -1) ? "north" : (dx === 0 && dy === 1) ? "south" : (dx === -1 && dy === 0) ? "west" : (dx === 1 && dy === 0) ? "east" : "";
+                if (dir && exits.has(dir) && cell !== "void") { classes += " map-exit"; onClick = `onclick="sendCmd('go ${dir}')"`; content = {north:"⬆️",south:"⬇️",west:"⬅️",east:"➡️"}[dir]; }
+                html += `<div class="${classes}" ${onClick}>${content}</div>`;
+            }
+        }
+        html += "</div>";
+        m.innerHTML = html; m.style.display = "flex";
+    }
+
+    function sendCmd(cmd) {
+        if (cmd !== "") {
+            if (historyCmds.length === 0 || historyCmds[historyCmds.length - 1] !== cmd) {
+                historyCmds.push(cmd);
+            }
+        }
+        histIdx = historyCmds.length;
+        hideHistory();
+        ws.send(JSON.stringify({ type: "cmd", payload: cmd }));
+        const echo = (isInputHidden ? "******" : cmd).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+        appendRaw("<span style='color:#888'>&gt;&gt; " + echo + "</span>");
+    }
+
+    // appendRaw: 已是 HTML，直接插入，不做 escape 或 parseOutput
+    function appendRaw(html) {
+        const area = document.getElementById("look-area"), content = document.getElementById("look-content");
+        const div = document.createElement("div");
+        div.style.whiteSpace = "pre-wrap";
+        div.innerHTML = html;
+        content.appendChild(div);
+        setTimeout(() => { area.scrollTop = area.scrollHeight; }, 10);
+    }
+
+    function appendLook(t) {
+        const area = document.getElementById("look-area"), content = document.getElementById("look-content");
+        // 所有輸入一律視為純文字，先 escape HTML，再交給 parseOutput 處理
+        let p = t
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;");
+        p = parseOutput(p);
+        // [顯示文字|指令] 可點擊連結
+        p = p.replace(/\[(.*?)\]/g, (m, p1) => {
+            let pts = p1.split('|'), d = pts[0], c = pts.length > 1 ? pts[1] : pts[0];
+            return `<span class="cmd-link" onclick="sendCmd('${c.replace(/'/g, "\\'")}')">${d}</span>`;
+        });
+        const div = document.createElement("div");
+        div.style.whiteSpace = "pre-wrap";
+        div.innerHTML = p;
+        content.appendChild(div);
+        setTimeout(() => { area.scrollTop = area.scrollHeight; }, 10);
+    }
+
+    // parseOutput: 統一處理所有輸出轉換
+    // 順序：ANSI → $TAG$ → {tag} → markdown
+    // 輸入已是 HTML-escaped 純文字，輸出是帶 HTML 標籤的字串。
+    function parseOutput(t) {
+        let res = t;
+        let open = 0;
+        // ── 0. 標題佔位符（最先跑，在所有 HTML 生成之前）────────────────────
+        res = res.replace(/###([^#\n]+)###/g, "\x00H3\x00$1\x00/H3\x00");
+        res = res.replace(/##([^#\n]+)##/g,   "\x00H2\x00$1\x00/H2\x00");
+        res = res.replace(/#([^#\n]+)#/g,     "\x00H1\x00$1\x00/H1\x00");
+
+
+        // ── 1. ANSI escape code ─────────────────────────────────────────────
+        // 串連式用法：HIR + "文字" + NOR 展開後是 \x1b[1;31m文字\x1b[0m
+        const ansiMap = {
+            "0;30":"#555",    "0;31":"#ff5555", "0;32":"#55ff55", "0;33":"#ffff55",
+            "0;34":"#5555ff", "0;35":"#ff55ff", "0;36":"#55ffff", "0;37":"#ffffff",
+            "30":"#555",      "31":"#ff5555",   "32":"#55ff55",   "33":"#ffff55",
+            "34":"#5555ff",   "35":"#ff55ff",   "36":"#55ffff",   "37":"#ffffff",
+            "1;30":"#888",    "1;31":"#ff7777", "1;32":"#77ff77", "1;33":"#ffff77",
+            "1;34":"#7777ff", "1;35":"#ff77ff", "1;36":"#77ffff", "1;37":"#ffffff",
+            "41;1":"bg:#a33", "42;1":"bg:#3a3", "43;1":"bg:#aa3",
+            "44;1":"bg:#33a", "45;1":"bg:#a3a", "46;1":"bg:#3aa", "47;1":"bg:#aaa",
+            "40":"bg:#000",   "41":"bg:#500",   "42":"bg:#050",   "43":"bg:#550",
+            "44":"bg:#005",   "45":"bg:#505",   "46":"bg:#055",   "47":"bg:#555",
+            "1":"bold", "4":"underline", "5":"blink", "7":"reverse", "1;7":"bold-reverse",
+        };
+        res = res.replace(/\x1b\[([0-9;]+)m/g, (m, code) => {
+            if (code === "0" || code === "2;37;0") {
+                let s = ""; while (open > 0) { s += "</span>"; open--; } return s;
+            }
+            const v = ansiMap[code];
+            if (!v) return "";
+            open++;
+            if (v === "bold")         return `<span style="font-weight:bold">`;
+            if (v === "underline")    return `<span style="text-decoration:underline">`;
+            if (v === "blink")        return `<span style="animation:blink 1s step-end infinite">`;
+            if (v === "reverse")      return `<span style="filter:invert(1)">`;
+            if (v === "bold-reverse") return `<span style="font-weight:bold;filter:invert(1)">`;
+            if (v.startsWith("bg:"))  return `<span style="background:${v.slice(3)}">`;
+            return `<span style="color:${v}">`;
+        });
+        while (open > 0) { res += "</span>"; open--; }
+        open = 0;
+
+        // ── 2. $TAG$ 嵌入式顏色巨集 ─────────────────────────────────────────
+        // 嵌入式用法："xxx$HIY$yyy$NOR$zzz"
+        // $ 不是 HTML 特殊字元，escape 後仍是原樣
+        if (res.includes("$")) {
+            const tagMap = {
+                "$BLK$":"#555",     "$RED$":"#ff5555", "$GRN$":"#55ff55", "$YEL$":"#ffff55",
+                "$BLU$":"#5555ff",  "$MAG$":"#ff55ff", "$CYN$":"#55ffff", "$WHT$":"#ffffff",
+                "$HIK$":"#888",
+                "$HIR$":"#ff7777",  "$HIG$":"#77ff77", "$HIY$":"#ffff77",
+                "$HIB$":"#7777ff",  "$HIM$":"#ff77ff", "$HIC$":"#77ffff", "$HIW$":"#ffffff",
+                "$U$":"underline",  "$REV$":"reverse", "$HIREV$":"bold-reverse",
+                "$BLINK$":"blink",  "$BOLD$":"bold",
+            };
+            res = res.replace(/\$([A-Z0-9]+)\$/g, (m, name) => {
+                const key = "$" + name + "$";
+                if (key === "$NOR$") {
+                    let s = ""; while (open > 0) { s += "</span>"; open--; } return s;
+                }
+                const v = tagMap[key];
+                if (!v) return m;
+                open++;
+                if (v === "bold")         return `<span style="font-weight:bold">`;
+                if (v === "underline")    return `<span style="text-decoration:underline">`;
+                if (v === "blink")        return `<span style="animation:blink 1s step-end infinite">`;
+                if (v === "reverse")      return `<span style="filter:invert(1)">`;
+                if (v === "bold-reverse") return `<span style="font-weight:bold;filter:invert(1)">`;
+                return `<span style="color:${v}">`;
+            });
+            while (open > 0) { res += "</span>"; open--; }
+            open = 0;
+        }
+
+        // ── 3. {r}{g} 舊式標籤（向下相容）──────────────────────────────────
+        if (res.includes("{")) {
+            const oldMap = {
+                "r":"#ff5555","g":"#55ff55","b":"#5555ff","y":"#ffff55",
+                "c":"#55ffff","m":"#ff55ff","w":"#ffffff","gr":"#888",
+            };
+            res = res.replace(/\{([a-z]+)\}/g, (m, tag) => {
+                if (tag === "n") {
+                    let s = ""; while (open > 0) { s += "</span>"; open--; } return s;
+                }
+                if (oldMap[tag]) { open++; return `<span style="color:${oldMap[tag]}">`;  }
+                return m;
+            });
+            while (open > 0) { res += "</span>"; open--; }
+        }
+
+        // ── 4. Markdown-like 語法（標題已在步驟 0 標記）───────────────────────
+        // 分隔線（單獨一行）
+        res = res.replace(/^---\s*$/gm, "<hr style='border:none;border-top:1px solid #444;margin:4px 0'>");
+        res = res.replace(/^===\s*$/gm, "<hr style='border:none;border-top:2px double #888;margin:4px 0'>");
+
+        // 刪除線
+        res = res.replace(/~~([^\n~]+)~~/g,
+            "<span style='text-decoration:line-through;opacity:0.7'>$1</span>");
+
+        // 粗斜體 *** 先比對
+        res = res.replace(/\*{3}([^\n*]+)\*{3}/g,
+            "<span style='font-weight:bold;font-style:italic;color:#ffe'>$1</span>");
+        // 粗體
+        res = res.replace(/\*{2}([^\n*]+)\*{2}/g,
+            "<span style='font-weight:bold;color:#fff'>$1</span>");
+        // 斜體
+        res = res.replace(/\*([^\n*]+)\*/g,
+            "<span style='font-style:italic;color:#cce'>$1</span>");
+
+        // 佔位符 → 標題 HTML（inline span，不換行）
+        res = res.replace(/\x00H3\x00([^\x00]*)\x00\/H3\x00/g,
+            "<span style='font-size:1.0em;font-weight:bold;color:rgb(170,170,170)'>$1</span>");
+        res = res.replace(/\x00H2\x00([^\x00]*)\x00\/H2\x00/g,
+            "<span style='font-size:1.2em;font-weight:bold;color:rgb(221,221,221)'>$1</span>");
+        res = res.replace(/\x00H1\x00([^\x00]*)\x00\/H1\x00/g,
+            "<span style='font-size:1.4em;font-weight:bold;color:rgb(255,255,119)'>$1</span>");
+
+        return res;
+    }
+
+    function initStars() {
+        const area = document.getElementById("look-area");
+        for (let i = 0; i < 40; i++) {
+            const s = document.createElement("div"); s.className = "star";
+            const sz = (Math.random() * 2 + 1) + "px"; s.style.width = sz; s.style.height = sz;
+            s.style.left = Math.random() * 100 + "%"; s.style.top = Math.random() * 100 + "%";
+            s.style.setProperty("--duration", (Math.random() * 3 + 2) + "s"); area.appendChild(s);
+        }
+    }
+
+    function initInputHandlers() {
+        msgInput.onclick = (e) => {
+            e.stopPropagation();
+            if (historyCmds.length > 0) showHistory();
+        };
+        window.addEventListener('keydown', (e) => {
+/*
+            if (mcMode) {
+                if (document.activeElement === msgInput && msgInput.value !== "" && e.key !== "Enter") return;
+                const key = e.key.toLowerCase();
+                let dir = { w: 'n', s: 's', a: 'w', d: 'e', arrowup: 'n', arrowdown: 's', arrowleft: 'w', arrowright: 'e' }[key];
+                if (dir) { e.preventDefault(); sendCmd(`mc move ${dir}`); return; }
+            }
+*/
+
+            if (document.activeElement === msgInput) {
+                if (e.key === "ArrowUp") { e.preventDefault(); if (histIdx > 0) { histIdx--; msgInput.value = historyCmds[histIdx]; } }
+                else if (e.key === "ArrowDown") { e.preventDefault(); if (histIdx < historyCmds.length - 1) { histIdx++; msgInput.value = historyCmds[histIdx]; } else { histIdx = historyCmds.length; msgInput.value = ""; } }
+                else if (e.key === "Enter") sendMsg();
+                else if (e.key === "Escape") hideHistory();
+            }
+        });
+    }
+
+    function showHistory() {
+        const box = document.getElementById("history-box");
+        let html = '<div class="history-header"><span>Command History</span><span onclick="hideHistory()" style="cursor:pointer">×</span></div>';
+        const recent = historyCmds.slice(-10).reverse();
+        recent.forEach(cmd => {
+            html += `<div class="history-item" onclick="useHistory('${cmd.replace(/'/g, "\\'")}')">${cmd}</div>`;
+        });
+        box.innerHTML = html; box.style.display = "block";
+    }
+
+    function hideHistory() { document.getElementById("history-box").style.display = "none"; }
+    function useHistory(cmd) { msgInput.value = cmd; hideHistory(); msgInput.focus(); }
+
+    function sendMsg() { 
+        const v = msgInput.value;
+        sendCmd(v); 
+        msgInput.value = ""; 
+        isInputHidden = false;
+        msgInput.style.webkitTextSecurity = "none";
+        msgInput.focus(); 
+    }
+    function fillInput(c) { msgInput.value = c + " "; msgInput.focus(); }
+    function handleNatureData(d) {
+        document.body.style.background = d.is_day ? "linear-gradient(to bottom, #1a2a6c, #b21f1f, #fdbb2d)" : "linear-gradient(to bottom, #000000, #0f0c29, #000000)";
+    }
+
+    // --- Web IDE / Monaco Editor Logic ---
+    let monacoEditor = null;
+    let currentEditPath = "";
+    let pendingEditorData = null;
+
+    // 初始化 Monaco
+    require.config({ paths: { 'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs' }});
+    
+    function initMonaco() {
+        require(['vs/editor/editor.main'], function() {
+            // 定義 LPC 語法高亮
+            monaco.languages.register({ id: 'lpc' });
+            monaco.languages.setMonarchTokensProvider('lpc', {
+                keywords: [
+                    'inherit', 'mixed', 'object', 'string', 'int', 'float', 'mapping', 'array', 
+                    'void', 'private', 'protected', 'public', 'nomask', 'varargs', 'virtual', 
+                    'static', 'status', 'if', 'else', 'for', 'while', 'foreach', 'switch', 
+                    'case', 'default', 'break', 'continue', 'return'
+                ],
+                tokenizer: {
+                    root: [
+                        [/[a-zA-Z_]\w*/, {
+                            cases: {
+                                '@keywords': 'keyword',
+                                '@default': 'identifier'
+                            }
+                        }],
+                        [/\/\/.*$/, 'comment'],
+                        [/\/\*/, 'comment', '@comment'],
+                        [/"([^"\\]|\\.)*$/, 'string.invalid'],
+                        [/"/, 'string', '@string'],
+                        [/[{}()\[\]]/, '@brackets'],
+                        [/[0-9]+/, 'number'],
+                    ],
+                    comment: [
+                        [/[^\/*]+/, 'comment'],
+                        [/\*\//, 'comment', '@pop'],
+                        [/[\/*]/, 'comment']
+                    ],
+                    string: [
+                        [/[^\\"]+/, 'string'],
+                        [/\\./, 'string.escape'],
+                        [/"/, 'string', '@pop']
+                    ],
+                }
+            });
+
+            monacoEditor = monaco.editor.create(document.getElementById('editor-container'), {
+                value: '',
+                language: 'lpc',
+                theme: 'vs-dark',
+                automaticLayout: true,
+                fontSize: 16,
+                minimap: { enabled: true },
+                wordWrap: "on"
+            });
+
+            // 快捷鍵支援
+            monacoEditor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, function() {
+                saveEditorFile();
+            });
+
+            if (pendingEditorData) {
+                openEditor(pendingEditorData);
+                pendingEditorData = null;
+            }
+        }, function(err) {
+            console.error("Monaco Load Error:", err);
+            document.getElementById("editor-status").style.color = "#ff5252";
+            document.getElementById("editor-status").innerText = "❌ Engine Load Failed. Check network or try refresh.";
+        });
+    }
+
+    initMonaco();
+
+    function handleCompileError(msg) {
+        const status = document.getElementById("editor-status");
+        status.style.color = "#ff5252";
+        status.innerText = "❌ Compilation Error: " + msg;
+    }
+
+    function handleCompileSuccess(path) {
+        const status = document.getElementById("editor-status");
+        status.style.color = "#4CAF50";
+        status.innerText = "✅ Saved & Compiled: " + path;
+        setTimeout(() => { 
+            if (status.innerText.includes("Compiled")) status.innerText = ""; 
+        }, 5000);
+    }
+
+    function closeEditor() {
+        if (currentEditPath) {
+            ws.send(JSON.stringify({ type: "close_file", payload: currentEditPath }));
+            currentEditPath = null;
+        }
+        document.getElementById('panel-editor').classList.remove('active');
+    }
+
+    function openEditor(data) {
+        currentEditPath = data.path;
+        document.getElementById("editor-title").innerText = "📝 Editing: " + data.path;
+        
+        if (monacoEditor) {
+            const ext = data.path.split('.').pop();
+            const lang = (ext === 'c' || ext === 'h') ? 'lpc' : 'plaintext';
+            monaco.editor.setModelLanguage(monacoEditor.getModel(), lang);
+            monacoEditor.setValue(data.content);
+            document.getElementById("editor-status").innerText = "";
+        } else {
+            pendingEditorData = data;
+            document.getElementById("editor-status").innerText = "Loading Editor Engine...";
+        }
+        
+        document.querySelectorAll('.overlay-panel').forEach(p => p.classList.remove('active'));
+        document.getElementById('panel-editor').classList.add('active');
+        if (monacoEditor) setTimeout(() => monacoEditor.focus(), 100);
+
+        // 如果 Explorer 是空的，自動重新整理
+        if (document.getElementById("explorer-tree").innerHTML === "") {
+            refreshExplorer();
+        }
+    }
+
+    function saveEditorFile() {
+        if (!currentEditPath || !monacoEditor) return;
+        const content = monacoEditor.getValue();
+        ws.send(JSON.stringify({ 
+            type: "save_file", 
+            payload: JSON.stringify({ path: currentEditPath, content: content }) 
+        }));
+        document.getElementById("editor-status").innerText = "Saving...";
+        setTimeout(() => { 
+            document.getElementById("editor-status").innerText = "Saved at " + new Date().toLocaleTimeString(); 
+        }, 500);
+    }
+
+    // --- File Explorer Logic ---
+    let currentExplorerPath = "/";
+
+    function refreshExplorer() {
+        sendCmd("ls_json " + currentExplorerPath);
+    }
+
+    function renderExplorer(path, data) {
+        currentExplorerPath = path;
+        document.getElementById("explorer-path").innerText = path;
+        const tree = document.getElementById("explorer-tree");
+        tree.innerHTML = "";
+
+        // data: ({ ({ name, size, mtime }), ... })
+        data.forEach(item => {
+            const name = item[0];
+            const isDir = name.endsWith("/");
+            const div = document.createElement("div");
+            div.className = "tree-item " + (isDir ? "tree-folder" : "tree-file");
+            div.innerHTML = (isDir ? "📁 " : "📄 ") + name;
+            div.onclick = () => {
+                if (isDir) {
+                    openDir(path + name);
+                } else {
+                    editFile(path + name);
+                }
+            };
+            tree.appendChild(div);
+        });
+    }
+
+    function openDir(path) {
+        // 規範化路徑：確保以 / 結尾且不重複 //
+        let p = path.replace(/\/+/g, "/");
+        if (!p.endsWith("/")) p += "/";
+        currentExplorerPath = p;
+        refreshExplorer();
+    }
+
+    function goParentDir() {
+        if (currentExplorerPath === "/") return;
+        let parts = currentExplorerPath.split("/").filter(x => x !== "");
+        parts.pop();
+        let p = "/" + parts.join("/");
+        if (p !== "/") p += "/";
+        openDir(p);
+    }
+
+    function editFile(path) {
+        sendCmd("edit " + path);
+    }
+
+    // --- Scaffolding Logic ---
+    let currentTemplates = {};
+    let selectedTemplate = "";
+
+    function requestTemplates() {
+        sendCmd("templates");
+    }
+
+    function showScaffolding(templates) {
+        currentTemplates = templates;
+        const list = document.getElementById("template-list");
+        list.innerHTML = "";
+        selectedTemplate = "";
+
+        for (let type in templates) {
+            const div = document.createElement("div");
+            div.className = "template-option";
+            div.id = "tpl-" + type;
+            div.innerHTML = `
+                <span class="template-name">${type.toUpperCase()}</span>
+                <span class="template-desc">Create a new ${type} from basic structure.</span>
+            `;
+            div.onclick = () => {
+                document.querySelectorAll(".template-option").forEach(o => o.style.borderColor = "#444");
+                div.style.borderColor = "#4CAF50";
+                selectedTemplate = type;
+            };
+            list.appendChild(div);
+        }
+        document.getElementById("scaffolding-overlay").style.display = "flex";
+        document.getElementById("new-file-path").value = currentExplorerPath + "new_file.c";
+    }
+
+    function closeScaffolding() {
+        document.getElementById("scaffolding-overlay").style.display = "none";
+    }
+
+    function confirmScaffolding() {
+        if (!selectedTemplate) { alert("Please select a template."); return; }
+        const path = document.getElementById("new-file-path").value;
+        if (!path) { alert("Please enter a file path."); return; }
+        
+        // 🚀 關鍵：透過 edit 指令並傳入範本名稱來啟動
+        sendCmd("edit " + path + " " + selectedTemplate);
+        closeScaffolding();
+    }
+
+    document.addEventListener('click', (e) => {
+        hideHistory();
+        if (['INPUT','BUTTON','A','SELECT','OPTION'].includes(e.target.tagName) || 
+            e.target.classList.contains('cmd-link') || 
+            e.target.classList.contains('map-exit') ||
+            e.target.closest('#panel-editor')) return;
+        if (!window.getSelection().toString() && msgInput) msgInput.focus();
+    });
+    function setMCAction(a, btn) {
+        mcAction = a;
+        document.querySelectorAll('.mc-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+    }
+</script>
+</body>
+</html>

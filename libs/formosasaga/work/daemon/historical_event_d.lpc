@@ -1,0 +1,145 @@
+// /daemon/historical_event_d.c
+#include "/include/ansi.h"
+
+inherit "/std/object";
+
+private nosave mapping loaded_events;
+
+void create() {
+  ::create();
+  loaded_events = ([]);
+}
+
+// 載入歷史事件資料
+mapping load_event(string id) {
+  if (!id || id == "") return 0;
+  if (loaded_events[id]) {
+    return loaded_events[id];
+  }
+
+  string yaml_path = sprintf("/world/events/%s.yaml", id);
+  if (file_size(yaml_path) <= 0) {
+    return 0;
+  }
+
+  string content = read_file(yaml_path);
+  if (!content) return 0;
+
+  mapping data = yaml_decode(content);
+  if (!data) return 0;
+
+  loaded_events[id] = data;
+  return data;
+}
+
+int is_valid_event(string id) {
+  return load_event(id) != 0;
+}
+
+// 驗證歷史事件 (記憶) YAML 結構
+int validate_event(mapping data) {
+  if (!data || !mapp(data)) return 0;
+
+  // 必填欄位檢查
+  if (!stringp(data["id"]) || !stringp(data["name"]) || !stringp(data["era"]) || !stringp(data["location"]) || !stringp(data["type"])) {
+    log_file(
+      "validation_errors.log",
+      sprintf("歷史事件驗證失敗: 缺少 id, name, era, location, 或 type 等必要字串欄位。\n")
+    );
+    return 0;
+  }
+
+  // 關鍵 NPCs 必須為陣列
+  if (data["critical_npcs"]) {
+    if (!pointerp(data["critical_npcs"])) {
+      log_file(
+        "validation_errors.log",
+        sprintf("歷史事件 %s (%s) 驗證失敗: critical_npcs 必須是陣列\n", data["name"], data["id"])
+      );
+      return 0;
+    }
+    foreach (mixed npc in data["critical_npcs"]) {
+      if (!stringp(npc)) {
+        log_file(
+          "validation_errors.log",
+          sprintf("歷史事件 %s (%s) 驗證失敗: critical_npcs 包含非字串元素\n", data["name"], data["id"])
+        );
+        return 0;
+      }
+    }
+  }
+
+  return 1;
+}
+
+// 驗證此記憶事件在目前世界時代 (Era) 與聚落是否能被啟動/喚醒
+int validate_event_activation(string event_id, string settlement_id) {
+  mapping e = load_event(event_id);
+  if (!e) {
+    log_file("validation_errors.log", sprintf("歷史事件啟動失敗: 找不到事件 id '%s'\n", event_id));
+    return 0;
+  }
+
+  // 1. 驗證 YAML 格式合法性
+  if (!validate_event(e)) {
+    return 0;
+  }
+
+  // 2. 時代版本驗證 (必須與當前 TIMELINE_D 的 Era 一致或相容)
+  string current_era = load_object("/daemon/timeline_d.lpc")->query_current_era();
+
+  // 如果事件定義的 era 與目前世界 era 不同，則限制啟動
+  // 註：這可依據專案設計決定是否允許過去時代的事件啟動，這裡先設計為 era 必須相同
+  if (e["era"] != current_era) {
+    // 特別為版本做點對應轉換 (e.g. 歷史事件寫 v2.1，但系統可能在 v0_1)
+    // 取得 timeline 的 ID 做比對，不一致就不允許觸發
+    log_file(
+      "validation_errors.log",
+      sprintf(
+        "歷史事件 %s (%s) 啟動失敗: 時代不符。事件時代：%s，目前世界時代：%s\n",
+        e["name"],
+        event_id,
+        e["era"],
+        current_era
+      )
+    );
+    return 0;
+  }
+
+  return 1;
+}
+
+string query_event_name(string id) {
+  mapping e = load_event(id);
+  return e ? e["name"] : 0;
+}
+
+string query_event_era(string id) {
+  mapping e = load_event(id);
+  return e ? e["era"] : 0;
+}
+
+string query_event_location(string id) {
+  mapping e = load_event(id);
+  return e ? e["location"] : 0;
+}
+
+string query_event_type(string id) {
+  mapping e = load_event(id);
+  return e ? e["type"] : 0;
+}
+
+string *query_event_npcs(string id) {
+  mapping e = load_event(id);
+  return e ? e["critical_npcs"] : ({});
+}
+
+string *query_event_flow(string id) {
+  mapping e = load_event(id);
+  return e ? e["player_flow"] : ({});
+}
+
+string *query_event_rewards(string id) {
+  mapping e = load_event(id);
+  return e ? e["rewards"] : ({});
+}

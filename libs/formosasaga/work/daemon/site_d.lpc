@@ -1,0 +1,111 @@
+// /daemon/site_d.c
+//
+// 地標管理服務。
+//
+// 職責：
+//   - 載入並索引所有 data/yaml/sites/{settlement}/{site}.yaml
+//   - 提供地標連通性、歷史名稱與元數據查詢。
+
+#include "/include/formosa.h"
+
+inherit "/std/entity.lpc";
+
+private nosave mapping site_cache;  // ([ site_id: site_data_mapping ])
+private nosave mapping names_cache;  // ([ site_id: ([ era_id: name ]) ])
+
+void rehash() {
+  site_cache = ([]);
+  names_cache = ([]);
+
+  string *settlements = get_dir(YAML_SITES);
+  if (!settlements) return;
+
+  foreach (string s_id in settlements) {
+    if (s_id == "." || s_id == "..") continue;
+    string dir = YAML_SITES + s_id + "/";
+    if (file_size(dir) != -2) continue;  // 必須是目錄
+
+    string *files = get_dir(dir);
+    if (!files) continue;
+
+    foreach (string file in files) {
+      if (strlen(file) < 5 || substr(file, strlen(file) - 5, 5) != ".yaml") continue;
+      string path = dir + file;
+      string content = read_file(path);
+      if (!content) continue;
+      mapping data = yaml_decode(content);
+      if (!data || !data["id"]) continue;
+
+      string id = data["id"];
+      site_cache[id] = data;
+
+      // 建立歷史名稱快取
+      mapping n_map = ([]);
+      if (pointerp(data["names"])) {
+        foreach (mapping name_entry in data["names"]) {
+          if (name_entry["era"] && name_entry["name"]) {
+            n_map[name_entry["era"]] = name_entry["name"];
+          }
+        }
+      }
+      names_cache[id] = n_map;
+    }
+  }
+}
+
+void create() {
+  ::create();
+  set_entity_id("daemon:site");
+  set_entity_type("daemon");
+  rehash();
+}
+
+mapping load_site(string site_id) {
+  if (!site_cache) rehash();
+  if (site_cache[site_id]) return site_cache[site_id];
+
+  // 查缺補漏/容錯：如果沒有靜態 YAML，且 LPC 實體檔確切存在於磁碟上，才嘗試載入 LPC 實體動態補完 mapping
+  string path = "/area/settlements/" + site_id + ".lpc";
+  if (file_size(path) <= 0)
+    path = "/area/sites/" + site_id + ".lpc";
+
+  if (file_size(path) > 0) {
+    object ob = SETTLEMENT_D->get_site_object(site_id);
+    if (ob) {
+      mapping data = ([
+        "id": site_id,
+        "settlement": ob->query_settlement_id(),
+        "canonical_name": ob->query_display_name(),
+        "is_heritage": ob->query_is_heritage(),
+        "connections": keys(ob->query_neighbors() || ([])),
+      ]);
+      site_cache[site_id] = data;
+      return data;
+    }
+  }
+  return 0;
+}
+
+mapping query_names_mapping(string site_id) {
+  if (!names_cache) rehash();
+  return names_cache[site_id] || ([]);
+}
+
+string *get_connections(string site_id) {
+  mapping site = load_site(site_id);
+  if (!site) return ({});
+  return site["connections"] || ({});
+}
+
+string query_name_in_era(string site_id, string era_id) {
+  mapping names = query_names_mapping(site_id);
+  if (names && names[era_id]) return names[era_id];
+  mapping site = load_site(site_id);
+  if (site) return site["canonical_name"] || site_id;
+  return site_id;
+}
+
+mapping query_all_sites() {
+  if (!site_cache) rehash();
+  return copy(site_cache);
+}

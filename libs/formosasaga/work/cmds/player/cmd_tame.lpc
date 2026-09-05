@@ -1,0 +1,172 @@
+// /cmds/cmd_tame.c
+// 馴服指令：將野外生物收為寵物
+
+inherit "/std/object";
+
+#include "/include/ansi.h"
+
+int main(object me, string verb, string arg) {
+  if (!arg || arg == "") {
+    write(select_lang(([
+      "en": "What do you want to tame? Usage: tame <target>\n",
+      "zh-TW": "你要馴服什麼？用法：tame <對象>\n",
+      "zh-CN": "你要驯服什么？用法：tame <对象>\n"
+    ])));
+    return 1;
+  }
+
+  object here = environment(me);
+  object target = present(arg, here);
+
+  if (!target) {
+    write(select_lang(([
+      "en": "There is no \"",
+      "zh-TW": "這裡沒有叫「",
+      "zh-CN": "这里没有叫「"
+    ])) + arg + select_lang(([ "en": "\" here.\n", "zh-TW": "」的東西。\n", "zh-CN": "」的东西。\n" ])));
+    return 1;
+  }
+
+  if (!living(target) || userp(target)) {
+    write(select_lang(([
+      "en": "You cannot tame this target.\n",
+      "zh-TW": "你無法馴服這個對象。\n",
+      "zh-CN": "你无法驯服这个对象。\n"
+    ])));
+    return 1;
+  }
+
+  if (!target->query_tamable()) {
+    write(target->query_name() + select_lang(([
+      "en": " is too wild to be tamed.\n",
+      "zh-TW": " 野性難馴，無法被收服。\n",
+      "zh-CN": " 野性难驯，无法被收服。\n"
+    ])));
+    return 1;
+  }
+
+  if (me->query_pet()) {
+    write(select_lang(([
+      "en": "You already have a pet. Please dismiss your current pet first.\n",
+      "zh-TW": "你已經有一隻寵物了，請先解散當前的寵物。\n",
+      "zh-CN": "你已经有一只宠物了，请先解散当前的宠物。\n"
+    ])));
+    return 1;
+  }
+
+  int skill = me->query_skill("taming");
+  if (skill <= 0) {
+    write(select_lang(([
+      "en": "You know nothing about taming. You don't even know where to start.\n",
+      "zh-TW": "你完全不懂馴獸之道，根本無從下手。\n",
+      "zh-CN": "你完全不懂驯兽之道，根本无从下手。\n"
+    ])));
+    return 1;
+  }
+
+  // 馴服難度：跟對方的血量百分比有關
+  int hp_pct = target->query_hp() * 100 / target->query_max_hp();
+
+  if (hp_pct > 30) {
+    write(target->query_name() + select_lang(([
+      "en": " is full of energy and fiercely resisting your taming!\n",
+      "zh-TW": " 體力充沛，正瘋狂反抗你的馴服！\n",
+      "zh-CN": " 体力充沛，正疯狂反抗你的驯服！\n"
+    ])));
+    write(select_lang(([
+      "en": "Hint: Weaken its health first (below 30%) to increase success rate.\n",
+      "zh-TW": "提示：先削弱對方的生命力（低於 30%）會更容易成功。\n",
+      "zh-CN": "提示：先削弱对方的生命力（低于 30%）会更容易成功。\n"
+    ])));
+  }
+
+  write(select_lang(([
+    "en": "You try to tame ",
+    "zh-TW": "你開始嘗試馴服 ",
+    "zh-CN": "你开始尝试驯服 "
+  ])) + target->query_name() + "...\n");
+  say(me->query_name() + select_lang(([
+    "en": " tries to tame ",
+    "zh-TW": " 開始對 ",
+    "zh-CN": " 开始对 "
+  ])) + target->query_name() + select_lang(([
+    "en": ".\n",
+    "zh-TW": " 進行馴服。\n",
+    "zh-CN": " 进行驯服。\n"
+  ])));
+
+  // 成功機率公式：(技能等級 / 2) + (30 - HP百分比)
+  int chance = (skill / 2) + (30 - hp_pct);
+  if (getenv("MUD_TEST_MODE")) chance = 100;  // 🚀 測試模式保證成功
+  if (chance < 5) chance = 5;  // 基本保底 5%
+  if (chance > 95 && !getenv("MUD_TEST_MODE")) chance = 95;  // 最高 95%
+
+  if (random(100) < chance) {
+    write("$HIG$" + select_lang(([
+      "en": "Success! ",
+      "zh-TW": "成功了！",
+      "zh-CN": "成功了！"
+    ])) + "$NOR$" + target->query_name() + select_lang(([
+      "en": " meekly lowers its head and acknowledges you as master.\n",
+      "zh-TW": " 溫順地低下了頭，認你為主。\n",
+      "zh-CN": " 温顺地低下了头，认你为主。\n"
+    ])));
+    say(target->query_name() + select_lang(([
+      "en": " acknowledges ",
+      "zh-TW": " 認 ",
+      "zh-CN": " 认 "
+    ])) + me->query_name() + select_lang(([
+      "en": " as master.\n",
+      "zh-TW": " 為主人了。\n",
+      "zh-CN": " 为主人了。\n"
+    ])));
+
+    // 🚀 關鍵轉換：將 NPC 轉為 Pet 物件
+    string base = base_name(target);
+    object pet = clone_object("/std/pet.lpc");
+    if (pet) {
+      // 複製屬性 (這裡簡化處理，實際可能需要更複雜的屬性繼承)
+      pet->set_name(target->query_name());
+      pet->set_id(target->query_id());
+      pet->set_level(target->query_level());
+      pet->set_owner(me);
+      me->set_pet(pet);
+
+      // 銷毀原 NPC
+      destruct(target);
+      pet->move_object(here);
+    }
+    me->improve_skill("taming", 10);
+  } else {
+    write(select_lang(([
+      "en": "Taming failed, ",
+      "zh-TW": "馴服失敗了，",
+      "zh-CN": "驯服失败了，"
+    ])) + target->query_name() + select_lang(([
+      "en": " becomes even angrier!\n",
+      "zh-TW": " 變得更加憤怒！\n",
+      "zh-CN": " 变得更加愤怒！\n"
+    ])));
+    target->attacked_by(me);
+    me->improve_skill("taming", 2);
+  }
+
+  me->save();
+  return 1;
+}
+
+string help() {
+  return select_lang(([
+    "en": "【Command】\n  tame <target>    Try to tame a weakened wild creature as a pet.\n  (Hint: Lower health means higher success rate)\n",
+    "zh-TW": "【指令】\n  tame <對象>    嘗試收服虛弱的野外生物作為寵物。\n  (提示：對象血量越低，成功率越高)\n",
+    "zh-CN": "【指令】\n  tame <对象>    尝试收服虚弱的野外生物作为宠物。\n  (提示：对象血量越低，成功率越高)\n"
+  ]));
+}
+
+string *query_verbs() {
+  return ({ "tame" });
+}
+
+string query_category() {
+  return select_lang(([ "en": "Special", "zh-TW": "特殊", "zh-CN": "特殊" ]));
+}

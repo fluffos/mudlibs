@@ -1,0 +1,281 @@
+// /daemon/oblivion_d.c
+//
+// 遺忘守護進程。
+//
+// 職責：
+//   - 週期性衰減所有已載入聚落的記憶值（時間流逝帶來遺忘）
+//   - 監聽 OblivionRising / SpecterSpawned 事件並通知附近玩家
+//   - 管理全島遺忘危機（OblivionCrisis）狀態
+//   - 提供危機查詢 API，供玩家透過 commune 指令確認局勢
+
+#include "/include/formosa.h"
+
+inherit "/std/entity.lpc";
+
+// ── 危機狀態 ──────────────────────────────────────────
+// ([ settlement_id: ({ crisis_mapping, ... }) ])
+private nosave mapping crisis_registry;
+
+// 衰減週期（秒）：每 300 秒（5分鐘）全島記憶衰減一次
+#define DECAY_INTERVAL  300
+// 每次衰減量：基礎 -1，有失源者未解除的聚落 -2
+#define DECAY_BASE      1
+#define DECAY_SPECTER   2
+
+/* fluffos prototypes */
+void _broadcast_crisis_warning(string sid, int mem_val);
+
+void create() {
+  ::create();
+  set_entity_id("daemon:oblivion");
+  set_entity_type("daemon");
+  crisis_registry = ([]);
+
+  // 訂閱事件
+  call_out("subscribe_events", 1);
+
+  // 啟動週期性記憶衰減
+  call_out("memory_decay_tick", DECAY_INTERVAL);
+}
+
+void subscribe_events() {
+  EVENT_D->subscribe("OblivionRising", "on_oblivion_rising");
+  EVENT_D->subscribe("SpecterSpawned", "on_specter_spawned");
+  EVENT_D->subscribe("SpecterResolved", "on_specter_resolved");
+  EVENT_D->subscribe("EraShifted", "on_era_shifted");
+}
+
+// ── 週期性記憶衰減 ────────────────────────────────────
+void memory_decay_tick() {
+  // 取得所有已知聚落
+  string *settlement_ids = ({});
+  string dir = YAML_SETTLEMENTS;
+  string *files = get_dir(dir);
+  if (files) {
+    foreach (string file in files) {
+      if (strlen(file) < 5) continue;
+      if (substr(file, strlen(file) - 5, 5) != ".yaml") continue;
+      settlement_ids += ({ substr(file, 0, strlen(file) - 5) });
+    }
+  }
+
+  foreach (string sid in settlement_ids) {
+    mapping s = SETTLEMENT_D->load_settlement(sid);
+    if (!s) continue;
+
+    int current_mem = s[DIM_MEMORY] || 0;
+    if (current_mem <= 0) {
+      call_out("memory_decay_tick", DECAY_INTERVAL);
+      continue;
+    }
+
+    // 有未解除的失源者：衰減加倍
+    mixed *specters = SETTLEMENT_D->query_active_specters(sid);
+    int decay = (specters && sizeof(specters) > 0) ? DECAY_SPECTER : DECAY_BASE;
+
+    int new_mem = SETTLEMENT_D->add_memory(sid, -decay);
+
+    log_file("oblivion.log", sprintf(
+      "[%s] %s 記憶衰減 -%d → %d（失源者：%d 個）\n",
+      ctime(time()), sid, decay, new_mem, sizeof(specters || ({}))
+    ));
+
+    // 衰退至危機閾值，廣播警告
+    if (new_mem <= OBLIVION_CRISIS && new_mem > 0) {
+      _broadcast_crisis_warning(sid, new_mem);
+    }
+  }
+
+  // 繼續下一個週期
+  call_out("memory_decay_tick", DECAY_INTERVAL);
+}
+
+// ── 危機廣播 ──────────────────────────────────────────
+private void _broadcast_crisis_warning(string sid, int mem_val) {
+  mapping s = SETTLEMENT_D->load_settlement(sid);
+  string name = s ? (s["canonical_name"] || sid) : sid;
+
+  // 廣播給所有線上玩家
+  string msg = sprintf(
+    "\n" + C_WARN + "【遺忘危機】" + NOR +
+    "「%s」的歷史記憶正在快速消逝（記憶值：%d）！\n" +
+    "  前往當地，解除失源者的困縛，才能阻止這片土地被遺忘。\n\n",
+    name, mem_val
+  );
+
+  object *players = users();
+  if (players) {
+    foreach (object p in players) {
+      if (objectp(p)) tell_object(p, msg);
+    }
+  }
+
+  // 發送全域危機事件
+  EVENT_D->publish("OblivionCrisis", ([
+    "settlement_id": sid,
+    "memory_val": mem_val,
+    "timestamp": time()
+  ]));
+}
+
+// ── 事件回呼 ──────────────────────────────────────────
+void on_oblivion_rising(mapping event) {
+  mapping data = event["data"];
+  string sid = data["settlement_id"];
+  int mem_val = data["memory_val"];
+  if (!sid) return;
+
+  mapping s = SETTLEMENT_D->load_settlement(sid);
+  string name = s ? (s["canonical_name"] || sid) : sid;
+
+  // 通知在該聚落各地標的玩家
+  string *sites = SETTLEMENT_D->load_sites_for_settlement(sid);
+  foreach (string site_id in (sites || ({}))) {
+    object site_ob = SETTLEMENT_D->get_site_object(site_id);
+    if (!site_ob) continue;
+    object *occupants = all_inventory(site_ob);
+    foreach (object ob in occupants) {
+      if (ob && ob->query_is_player()) {
+        tell_object(ob, sprintf(
+          "\n" + C_WARN + "【遺忘警訊】" + NOR +
+          "你感覺到「%s」的歷史記憶正在逐漸模糊...\n",
+          name
+        ));
+      }
+    }
+  }
+}
+
+void on_specter_spawned(mapping event) {
+  mapping data = event["data"];
+  string sid = data["settlement_id"];
+  string sp_type = data["specter_type"];
+  if (!sid) return;
+
+  mapping s = SETTLEMENT_D->load_settlement(sid);
+  string name = s ? (s["canonical_name"] || sid) : sid;
+
+  // 依型態產生不同警語
+  string type_desc;
+  switch (sp_type) {
+    case SP_LOST_NAME: type_desc = "失名者（一個不再被記得名字的靈魂）"; break;
+    case SP_LOST_PLACE: type_desc = "失鄉者（一個忘記故鄉的靈魂）"; break;
+    case SP_LOST_TONGUE: type_desc = "失語者（一個無法訴說記憶的靈魂）"; break;
+    case SP_LOST_HISTORY: type_desc = "失史者（一個被歷史抹去的靈魂）"; break;
+    default: type_desc = "失源者"; break;
+  }
+
+  string msg = sprintf(
+    "\n" + C_HISTORY + "【失源者降臨】" + NOR +
+    "「%s」出現了 %s。\n" +
+    "  歷史的遺忘正在將這個靈魂從記憶中抹去——\n" +
+    "  解除它，才能讓那段記憶重新活在這片土地上。\n\n",
+    name, type_desc
+  );
+
+  object *players = users();
+  if (players) {
+    foreach (object p in players) {
+      if (objectp(p)) tell_object(p, msg);
+    }
+  }
+
+  // 記錄危機
+  if (!crisis_registry[sid]) crisis_registry[sid] = ({});
+  crisis_registry[sid] += ([
+    "specter_id": data["specter_id"],
+    "specter_type": sp_type,
+    "born": time()
+  ]);
+}
+
+void on_specter_resolved(mapping event) {
+  mapping data = event["data"];
+  string sid = data["settlement_id"];
+  string sp_id = data["specter_id"];
+  string resolver = data["resolver"];
+  if (!sid) return;
+
+  mapping s = SETTLEMENT_D->load_settlement(sid);
+  string name = s ? (s["canonical_name"] || sid) : sid;
+
+  // 移除危機登記
+  if (crisis_registry[sid]) {
+    mixed *remaining = ({});
+    foreach (mapping cr in crisis_registry[sid]) {
+      if (cr["specter_id"] != sp_id) remaining += ({ cr });
+    }
+    crisis_registry[sid] = remaining;
+  }
+
+  string msg = sprintf(
+    "\n" + C_GOOD + "【記憶復甦】" + NOR +
+    "「%s」的一個失源者已被解除。\n" +
+    "  那段被遺忘的記憶，再次迴盪在這片土地上。\n\n",
+    name
+  );
+  object *players = users();
+  if (players) {
+    foreach (object p in players) {
+      if (objectp(p)) tell_object(p, msg);
+    }
+  }
+}
+
+void on_era_shifted(mapping event) {
+  // 時代推展時，全島記憶值重置到較高基線（新時代帶來新的記憶能量）
+  mapping data = event["data"];
+  string new_era = data["to_era"];
+  string dir = YAML_SETTLEMENTS;
+  string *files = get_dir(dir);
+  if (!files) return;
+
+  foreach (string file in files) {
+    if (strlen(file) < 5) continue;
+    if (substr(file, strlen(file) - 5, 5) != ".yaml") continue;
+    string sid = substr(file, 0, strlen(file) - 5);
+    // 時代更替，記憶值至少提升到 40（避免立即觸發危機）
+    int cur = SETTLEMENT_D->query_memory(sid);
+    if (cur < 40) {
+      SETTLEMENT_D->add_memory(sid, 40 - cur);
+    }
+  }
+
+  log_file("oblivion.log", sprintf(
+    "[%s] 時代推展至 %s，全島記憶值已重置至安全線。\n",
+    ctime(time()), new_era
+  ));
+}
+
+// ── 查詢 API ──────────────────────────────────────────
+mapping query_crisis_registry() {
+  return copy(crisis_registry);
+}
+
+// 查詢特定聚落的危機狀態
+mapping query_settlement_crisis(string sid) {
+  if (!crisis_registry[sid]) return 0;
+  return ([
+    "settlement_id": sid,
+    "active_specters": sizeof(crisis_registry[sid]),
+    "details": crisis_registry[sid]
+  ]);
+}
+
+// 全島危機摘要（供 commune 指令使用）
+mixed *query_global_crisis_summary() {
+  mixed *summary = ({});
+  foreach (string sid, mixed *crises in crisis_registry) {
+    if (!sizeof(crises)) continue;
+    mapping s = SETTLEMENT_D->load_settlement(sid);
+    string name = s ? (s["canonical_name"] || sid) : sid;
+    int mem = SETTLEMENT_D->query_memory(sid);
+    summary += ([
+      "settlement_id": sid,
+      "name": name,
+      "memory": mem,
+      "active_specters": sizeof(crises)
+    ]);
+  }
+  return summary;
+}

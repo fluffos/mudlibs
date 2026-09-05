@@ -1,0 +1,167 @@
+#include "/include/config.h"
+// /daemon/interstellar_d.c
+// 星際網路守護進程 (Interstellar Daemon)
+// 負責處理跨伺服器 (P2P) 的通訊，具備重複訊息過濾功能
+
+#include "/include/ansi.h"
+
+inherit "/std/object";
+
+// 🚀 用於過濾重複訊息的緩存
+mapping last_messages;
+
+void create() {
+  ::create();
+  last_messages = ([]);
+}
+
+// 當收到來自 P2P 網路的訊息時，由 Driver 呼叫此函式
+void receive_p2p_message(string sender, string content, string type) {
+  if (!content || content == "") return;
+  if (!sender || sender == "") sender = "Unknown";
+  if (!type || type == "") type = "chat";
+
+  // 🚀 關鍵：重複訊息過濾 (De-bounce)
+  // 對於 Distributed Object RPC (dist_msg)，我們放寬過濾，由 dist_d 自行處理序列
+  string msg_key = sender + ":" + content;
+  int now = time();
+
+  int is_rpc = (strsrch(content, "dist_msg|") == 0);
+
+  if (!is_rpc && mapp(last_messages[msg_key]) && (now - last_messages[msg_key]["time"] < 2)) {
+    return;
+  }
+
+  last_messages[msg_key] = ([ "time": now ]);
+
+  if (sizeof(last_messages) > 200) {
+    last_messages = ([]);
+  }
+
+  // ── Interstellar SSH Session 協議路由 ───────────────────
+  // 格式：fs_session|from_mudlib|to_mudlib|msg_type|session_id|payload
+  if (strsrch(content, "fs_session|") == 0) {
+    object ssh_d = load_object("/daemon/ssh_d.lpc");
+    if (ssh_d) {
+      ssh_d->receive_fs_session(content);
+    }
+    return;
+  }
+
+  // ── Fantasy Space 跨服協議路由 ──────────────────────────
+
+  // 格式：fs_query|from|to|query_type|payload
+  if (strsrch(content, "fs_query|") == 0 || strsrch(content, "fs_resp|") == 0) {
+    object fs_d = load_object("/secure/fs_d.lpc");
+    if (!fs_d) return;
+
+    string *parts = explode(content, "|");
+    if (sizeof(parts) < 4) return;
+
+    string tag = parts[0];
+    string from_mudlib = parts[1];
+    string to_mudlib = parts[2];
+    string query_type = parts[3];
+
+    string payload = "";
+    for (int i = 4; i < sizeof(parts); i++) {
+      payload += parts[i];
+      if (i < sizeof(parts) - 1) payload += "|";
+    }
+
+    if (tag == "fs_query" && (to_mudlib == FS_MUDLIB_ID || to_mudlib == "*")) {
+      fs_d->handle_fs_query(from_mudlib, query_type, payload);
+    } else if (tag == "fs_resp" && (to_mudlib == FS_MUDLIB_ID || to_mudlib == "*")) {
+      fs_d->receive_fs_response(from_mudlib, query_type, payload);
+    }
+    return;
+  }
+
+  // ── Fantasy Space presence 協議路由 ─────────────────────
+  // 格式：fs_presence|from_mudlib|to_mudlib|action|player_name|room_path|extra
+  if (strsrch(content, "fs_presence|") == 0) {
+    object fs_d = load_object("/secure/fs_d.lpc");
+    if (!fs_d) return;
+
+    string *parts = explode(content, "|");
+    // 最少需要：fs_presence | from | to | action | player_name | room_path
+    if (sizeof(parts) < 6) return;
+
+    string from_mudlib = parts[1];
+    string to_mudlib = parts[2];
+    string action = parts[3];
+    string player_name = parts[4];
+    string room_path = parts[5];
+
+    // extra 可能含有 | (例如 say 訊息)，需重新組裝
+    string extra = "";
+    for (int i = 6; i < sizeof(parts); i++) {
+      extra += parts[i];
+      if (i < sizeof(parts) - 1) extra += "|";
+    }
+
+    // 只處理目標是本 mudlib（或廣播 *）的訊息
+    if (to_mudlib == FS_MUDLIB_ID || to_mudlib == "*") {
+      // 不處理自己廣播給自己的訊息
+      if (from_mudlib != FS_MUDLIB_ID) {
+        fs_d->handle_fs_presence(from_mudlib, action, player_name, room_path, extra);
+      }
+    }
+    return;
+  }
+
+  // ── Distributed Object Model (dist_msg) 路由 ───────────
+  // 格式：dist_msg|from|to|action|json
+  if (strsrch(content, "dist_msg|") == 0) {
+    object dist_d = load_object("/daemon/dist_d.lpc");
+    if (!dist_d) {
+      printf("❌ [Interstellar] 無法載入 dist_d，忽略 RPC。\n");
+      return;
+    }
+
+    string *parts = explode(content, "|");
+    if (sizeof(parts) < 4) return;
+
+    string from_mudlib = parts[1];
+    string to_mudlib = parts[2];
+    string action = parts[3];
+
+    // json 可能含有 |，需重新組裝
+    string json = "";
+    for (int i = 4; i < sizeof(parts); i++) {
+      json += parts[i];
+      if (i < sizeof(parts) - 1) json += "|";
+    }
+
+    if (to_mudlib == FS_MUDLIB_ID || to_mudlib == "*") {
+      if (from_mudlib != FS_MUDLIB_ID) {
+        printf("🛸 [Interstellar] 路由 RPC 至 dist_d: %s\n", action);
+        dist_d->handle_dist_msg(from_mudlib, action, json);
+      }
+    }
+    return;
+  }
+
+  // ── 一般跨服聊天訊息 ─────────────────────────────────────
+  string full_msg;
+
+  if (type == "system") {
+    full_msg = "$HIW$【FS 廣播】$NOR$" + content + "\n";
+  } else {
+    string prefix = "$HIM$" + select_lang(([
+      "en": "[Fantasy Space] ",
+      "zh-TW": "【Fantasy Space】",
+      "zh-CN": "【Fantasy Space】"
+    ])) + "$NOR$";
+    full_msg = prefix + sender + "：" + content + "\n";
+  }
+
+  object *users_list = users();
+  if (!users_list) return;
+
+  foreach (object u in users_list) {
+    if (u && userp(u) && interactive(u)) {
+      tell_object(u, full_msg);
+    }
+  }
+}

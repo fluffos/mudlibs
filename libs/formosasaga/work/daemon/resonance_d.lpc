@@ -1,0 +1,217 @@
+// /daemon/resonance_d.c
+//
+// 共鳴守護進程。
+//
+// 職責：
+//   - 追蹤哪些玩家正在同一地標（Site）停留
+//   - 當多名玩家同在一個 Site 時觸發「共鳴」效果
+//   - 共鳴效果：加速記憶解鎖、提升聚落記憶值、給予共鳴修練點
+//   - 玩家可主動發起 commune（共鳴儀式），召喚更強的共鳴效果
+
+#include "/include/formosa.h"
+
+inherit "/std/entity.lpc";
+
+// ── 共鳴追蹤 ──────────────────────────────────────────
+// ([ site_id: ([ player_id: { player_ob, enter_time } ]) ])
+private nosave mapping site_presence;
+
+// 共鳴門檻：同一地點幾人才觸發共鳴
+#define RESONANCE_THRESHOLD 2
+// 共鳴冷卻時間（秒）：同一 site 的共鳴效果冷卻
+#define RESONANCE_COOLDOWN  120
+// ([ site_id: last_resonance_time ])
+private nosave mapping resonance_cooldowns;
+
+/* fluffos prototypes */
+void _check_resonance(string site_id);
+void _trigger_resonance(string site_id, int player_count);
+
+void create() {
+  ::create();
+  set_entity_id("daemon:resonance");
+  set_entity_type("daemon");
+  site_presence = ([]);
+  resonance_cooldowns = ([]);
+
+  call_out("subscribe_events", 1);
+}
+
+void subscribe_events() {
+  EVENT_D->subscribe("PlayerEnteredSite", "on_player_entered");
+  EVENT_D->subscribe("PlayerLeftSite", "on_player_left");
+}
+
+// ── 玩家進入地標 ──────────────────────────────────────
+void on_player_entered(mapping event) {
+  mapping data = event["data"];
+  string site_id = data["site_id"];
+  string player_id = data["player_id"];
+  object player = data["player"];
+  if (!site_id || !player_id || !objectp(player)) return;
+
+  if (!site_presence[site_id]) site_presence[site_id] = ([]);
+  site_presence[site_id][player_id] = ([
+    "player": player,
+    "enter_time": time()
+  ]);
+
+  // 檢查是否達到共鳴門檻
+  _check_resonance(site_id);
+}
+
+// ── 玩家離開地標 ──────────────────────────────────────
+void on_player_left(mapping event) {
+  mapping data = event["data"];
+  string site_id = data["site_id"];
+  string player_id = data["player_id"];
+  if (!site_id || !player_id) return;
+
+  if (site_presence[site_id]) {
+    m_delete(site_presence[site_id], player_id);
+    if (sizeof(site_presence[site_id]) == 0) {
+      m_delete(site_presence, site_id);
+    }
+  }
+}
+
+// ── 共鳴觸發檢查 ──────────────────────────────────────
+private void _check_resonance(string site_id) {
+  if (!site_presence[site_id]) return;
+  int count = sizeof(site_presence[site_id]);
+  if (count < RESONANCE_THRESHOLD) return;
+
+  // 冷卻檢查
+  int last = resonance_cooldowns[site_id] || 0;
+  if (time() - last < RESONANCE_COOLDOWN) return;
+
+  resonance_cooldowns[site_id] = time();
+  _trigger_resonance(site_id, count);
+}
+
+// ── 觸發共鳴效果 ──────────────────────────────────────
+private void _trigger_resonance(string site_id, int player_count) {
+  // 收集有效玩家
+  mixed *players = ({});
+  foreach (string pid, mapping presence in site_presence[site_id]) {
+    object p = presence["player"];
+    if (objectp(p)) players += ({ p });
+  }
+  if (!sizeof(players)) return;
+
+  // 計算共鳴強度（人越多效果越強，上限 5 人）
+  int intensity = player_count;
+  if (intensity > 5) intensity = 5;
+
+  // 取得地標所屬聚落
+  object first = players[0];
+  object env = environment(first);
+  string settlement_id = "";
+  if (env && env->query_is_site()) {
+    settlement_id = env->query_settlement_id();
+  }
+
+  // 共鳴記憶加成
+  int mem_bonus = intensity * 3;
+  if (settlement_id && settlement_id != "") {
+    SETTLEMENT_D->add_memory(settlement_id, mem_bonus);
+  }
+
+  // 給每個玩家發送共鳴訊息與職涯修練點
+  string site_name = env ? (env->query_display_name() || site_id) : site_id;
+  string msg = sprintf(
+    "\n" + C_REVEAL + "【歷史共鳴】" + NOR +
+    "%d 名旅人在「%s」聚集，引發了歷史的共鳴！\n" +
+    "  這片土地的記憶因你們的存在而更加清晰。\n\n",
+    player_count, site_name
+  );
+
+  foreach (object p in players) {
+    tell_object(p, msg);
+    // 各職涯均獲得少量共鳴修練點
+    string *cids = CAREER_D->query_all_career_ids();
+    foreach (string cid in (cids || ({}))) {
+      p->add_career_points(cid, intensity);
+    }
+  }
+
+  // 發送共鳴事件
+  EVENT_D->publish("ResonanceTriggered", ([
+    "site_id": site_id,
+    "settlement_id": settlement_id,
+    "player_count": player_count,
+    "intensity": intensity,
+    "mem_bonus": mem_bonus,
+    "timestamp": time()
+  ]));
+
+  log_file("resonance.log", sprintf(
+    "[%s] %s 共鳴觸發（%d 人，強度 %d，記憶 +%d）\n",
+    ctime(time()), site_id, player_count, intensity, mem_bonus
+  ));
+}
+
+// ── 主動共鳴儀式（玩家使用 commune 指令觸發）──────────
+// 需要玩家有足夠的職涯等級（文等級 2+ 或農等級 3+）
+int initiate_commune(object player) {
+  if (!objectp(player)) return 0;
+
+  object env = environment(player);
+  if (!env || !env->query_is_site()) {
+    tell_object(player, C_WARN + "  共鳴儀式只能在歷史地標中進行。\n" + NOR);
+    return 0;
+  }
+
+  string site_id = env->query_entity_id();
+  // 移除 "site:" 前綴
+  int colon = strsrch(site_id, ":");
+  if (colon != -1) site_id = substr(site_id, colon + 1, strlen(site_id) - colon - 1);
+
+  // 條件：文等級 2+ 或農等級 3+
+  int scholar_rank = player->query_career_rank("scholar");
+  int farmer_rank = player->query_career_rank("farmer");
+  if (scholar_rank < 2 && farmer_rank < 3) {
+    tell_object(player, C_WARN +
+      "  你對這片土地的理解還不夠深入，無法引導共鳴。\n" +
+      "  需要文人等級 2（文士）或農人等級 3（農藝師）才能進行共鳴儀式。\n" + NOR);
+    return 0;
+  }
+
+  // 冷卻檢查
+  int last = resonance_cooldowns[site_id] || 0;
+  int remain = RESONANCE_COOLDOWN - (time() - last);
+  if (remain > 0) {
+    tell_object(player, sprintf(
+      C_DIM + "  此地的共鳴能量尚在恢復中（還需 %d 秒）。\n" + NOR, remain));
+    return 0;
+  }
+
+  // 主動共鳴：強制觸發，效果依在場人數計算
+  if (!site_presence[site_id]) site_presence[site_id] = ([]);
+  site_presence[site_id][player->query_entity_id()] = ([
+    "player": player,
+    "enter_time": time()
+  ]);
+
+  int count = sizeof(site_presence[site_id]);
+  resonance_cooldowns[site_id] = time();
+  _trigger_resonance(site_id, count > 0 ? count : 1);
+
+  return 1;
+}
+
+// ── 查詢 API ──────────────────────────────────────────
+mapping query_site_presence(string site_id) {
+  return copy(site_presence[site_id] || ([]));
+}
+
+int query_player_count(string site_id) {
+  if (!site_presence[site_id]) return 0;
+  return sizeof(site_presence[site_id]);
+}
+
+int query_resonance_cooldown(string site_id) {
+  int last = resonance_cooldowns[site_id] || 0;
+  int remain = RESONANCE_COOLDOWN - (time() - last);
+  return remain > 0 ? remain : 0;
+}

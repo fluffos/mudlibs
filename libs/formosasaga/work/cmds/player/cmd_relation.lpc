@@ -1,0 +1,123 @@
+// /cmds/player/cmd_relation.c
+//
+// 好感度查詢指令 (P20)
+//
+// 用法：
+//   relations               顯示所有認識的 NPC 好感度列表
+//   relations <NPC名稱>     顯示特定 NPC 的好感度詳情
+
+#include "/include/ansi.h"
+#include "/include/formosa.h"
+
+inherit "/std/object";
+
+private string tier_color(int tier) {
+  switch (tier) {
+    case 4: return C_GOOD;    // 知己 — 綠
+    case 3: return C_TITLE;   // 信任 — 白
+    case 2: return C_HISTORY;  // 朋友 — 紫
+    case 1: return C_MEMORY;  // 熟識 — 黃
+    default: return C_DIM;    // 陌生 — 灰
+  }
+}
+
+private string format_bar(int val, int width) {
+  int filled = (val * width) / 100;
+  string bar = "";
+  int i;
+  for (i = 0; i < filled; i++) bar += "■";
+  for (; i < width; i++) bar += "□";
+  return bar;
+}
+
+int main(object me, string verb, string arg) {
+  if (!arg || arg == "") {
+    // 顯示所有認識的 NPC
+    mapping all = RELATION_D->query_all_relations(me);
+    if (!sizeof(all)) {
+      write("\n你尚未與任何人建立深厚的關係。\n");
+      write(C_DIM + "提示：使用 greet <NPC名稱> 打招呼、ask <NPC名稱> <話題> 對話，可增進好感。\n" + C_RESET + "\n");
+      return 1;
+    }
+
+    write("\n" + C_TITLE + "【我的人際關係】" + C_RESET + "\n");
+    write(C_DIM + "─────────────────────────────────────────\n" + C_RESET);
+
+    foreach (string npc_id, int val in all) {
+      string npc_name = NPC_D->query_npc_name(npc_id);
+      int tier = RELATION_D->get_relation_tier(val);
+      string tier_name = RELATION_D->get_tier_name(tier);
+      string col = tier_color(tier);
+
+      write(sprintf("  %s%-12s%s  [%s]  %s%-4s%s  %d/100\n",
+        col, npc_name, C_RESET,
+        format_bar(val, 16),
+        col, tier_name, C_RESET,
+        val));
+    }
+    write("\n" + C_DIM + "relations <NPC名稱> — 查看特定 NPC 的詳細資訊\n" + C_RESET + "\n");
+    return 1;
+  }
+
+  // 搜尋特定 NPC
+  string target_id = 0;
+  string target_name = 0;
+  // 先在 npc_d 快取中搜尋（by name 或 id）
+  // 簡化：直接嘗試以 arg 為 id，若無則跑全部 config 搜尋
+  mapping all_rels = RELATION_D->query_all_relations(me);
+  foreach (string npc_id, int val in all_rels) {
+    string npc_name = NPC_D->query_npc_name(npc_id);
+    if (lower_case(npc_id) == lower_case(arg) ||
+      strsrch(lower_case(npc_name), lower_case(arg)) != -1) {
+      target_id = npc_id;
+      target_name = npc_name;
+      break;
+    }
+  }
+
+  if (!target_id) {
+    write("你尚未與「" + arg + "」建立任何關係，或查無此人。\n");
+    return 1;
+  }
+
+  int val = RELATION_D->get_relation(me, target_id);
+  int tier = RELATION_D->get_relation_tier(val);
+  string tier_name = RELATION_D->get_tier_name(tier);
+  string col = tier_color(tier);
+
+  // 下一層級門檻
+  int next_thresh = 0;
+  if (tier < 4) {
+    int *thresholds = ({ 25, 50, 75, 90 });
+    next_thresh = thresholds[tier];
+  }
+
+  write("\n" + C_TITLE + "【" + target_name + "】的關係詳情" + C_RESET + "\n");
+  write(C_DIM + "─────────────────────────────────\n" + C_RESET);
+  write(sprintf("  好感度：%s%d/100%s  [%s]\n", col, val, C_RESET, format_bar(val, 20)));
+  write(sprintf("  關係層級：%s%s%s\n", col, tier_name, C_RESET));
+  if (next_thresh > 0) {
+    write(sprintf("  升至下一層：還需 %d 點\n", next_thresh - val));
+  } else {
+    write("  已達最高層級！\n");
+  }
+
+  // 顯示可用對話話題提示
+  mapping dialogues = RELATION_D->get_available_dialogues(me, target_id);
+  if (sizeof(dialogues)) {
+    write("\n  " + C_DIM + "目前可聊的話題：" + C_RESET + implode(keys(dialogues), "、") + "\n");
+  }
+  write("\n");
+  return 1;
+}
+
+string *query_verbs() { return ({ "relations", "關係", "好感" }); }
+string query_category() { return "社交"; }
+string help() {
+  return "【人際關係】\n"
+    "  relations              顯示所有認識的 NPC 好感度列表。\n"
+    "  relations <NPC名稱>   查看特定 NPC 的好感詳情與可用話題。\n"
+    "\n"
+    "好感度層級：陌生(0) → 熟識(25) → 朋友(50) → 信任(75) → 知己(90)\n"
+    "提升好感度：greet 打招呼(+2)、ask 對話(+1)、完成相關任務(+15)\n";
+}

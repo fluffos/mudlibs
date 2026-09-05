@@ -1,0 +1,86 @@
+// /tests/test_changhua_baguashan.c
+//
+// 測試項目：
+//   - 驗證鹿港與彰化八卦山地理連通 (travel)
+//   - 驗證在 v2_0 (乙未戰爭) 時代下，八卦山地標 Reveal Layer 正確浮現吳湯興 NPC 與戰場歷史入口
+//   - 驗證義軍領袖 Wu Tang-xing NPC 能被正確載入並有相應的語音/回答回應
+//   - 驗證在八卦山解鎖乙未決戰的歷史記憶碎片
+
+#include "/include/formosa.h"
+
+inherit "/std/test_case";
+
+void run_tests(object me) {
+  start_test("彰化八卦山與乙未歷史層整合測試 (P9.3)");
+
+  object route_d = load_object("/daemon/route_d.lpc");
+  object tl_d = load_object("/daemon/timeline_d.lpc");
+  assert_true(objectp(route_d), "應載入 route_d");
+  assert_true(objectp(tl_d), "應載入 timeline_d");
+
+  // 保存原時代狀態
+  string original_era = tl_d->query_current_era();
+  int original_progress = tl_d->query_world_progress();
+
+  // 建立測試尋源者玩家
+  object player = clone_object("/std/user.lpc");
+  player->set_id("test_baguashan_player");
+  player->set_name("測試義軍小卒");
+  player->set_role("god");
+  player->setup();
+
+  // 賦予島嶼記憶天賦以符合 reveal_layers 顯示條件
+  player->set_prop("talent_" + TALENT_ISLAND_MEMORY, 1);
+
+  // 把玩家移到鹿港老街
+  object lukang_ob = SETTLEMENT_D->get_site_object("lukang_old_street");
+  assert_true(objectp(lukang_ob), "應載入鹿港老街地標");
+  player->move(lukang_ob);
+
+  // 設定目前時代為 v2_0 讓地理與地景浮現符合條件
+  write_file("/data/state/system/timeline.o", "current_era_id \"v2_0\"\nworld_progress 0\n", 1);
+  tl_d->restore_state();
+  route_d->rehash();
+
+  // ── 1. 測試地理旅行 ──────────────────────────────────
+  write("--- 測試地理旅行至彰化八卦山 ---\n");
+  int travel_to_baguashan = lukang_ob->do_travel(player, "八卦山");
+  assert_equal(1, travel_to_baguashan, "應可從鹿港老街 travel 到八卦山");
+
+  object baguashan_ob = environment(player);
+  assert_true(objectp(baguashan_ob), "玩家當前環境應在八卦山地標");
+  assert_equal(
+    "site:changhua_baguashan",
+    baguashan_ob->query_entity_id(),
+    "地標ID應為 changhua_baguashan"
+  );
+
+  // ── 2. 測試 Reveal Layer 與吳湯興 NPC 浮現 ────────────────────
+  write("--- 測試吳湯興 NPC 浮現與對話機制 ---\n");
+  mapping revealed = baguashan_ob->resolve_reveals(player);
+  assert_true(sizeof(revealed["npcs"]) > 0, "八卦山應浮現特定 NPC");
+  assert_true(member_array("wu_tang_xing", revealed["npcs"]) != -1, "浮現 NPC 應包含 wu_tang_xing");
+
+  // ── 3. 測試 歷史記憶碎片解鎖 ─────────────────────────────────
+  write("--- 測試八卦山歷史記憶解鎖 ---\n");
+  // 觸發進入以解鎖
+  baguashan_ob->player_enter(player);
+  assert_true(player->query_unlocked_memories() && member_array(
+    "changhua_baguashan_001",
+    player->query_unlocked_memories()
+  ) != -1,
+    "進入八卦山後，擁有天賦的玩家應解鎖乙未死鬥記憶");
+
+  // 還原時代狀態
+  write_file(
+    "/data/state/system/timeline.o",
+    sprintf("current_era_id \"%s\"\nworld_progress %d\n", original_era, original_progress),
+    1
+  );
+  tl_d->restore_state();
+  route_d->rehash();
+
+  // 清理
+  destruct(player);
+  report_results();
+}

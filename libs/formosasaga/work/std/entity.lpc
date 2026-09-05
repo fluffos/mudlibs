@@ -1,0 +1,84 @@
+// /std/entity.c
+//
+// 《源流福爾摩沙》最基礎物件。
+// 取代傳統 MUD 的 /std/object.c。
+//
+// 設計原則：
+//   不假設戰鬥、不假設 HP、不假設等級。
+//   只提供身份識別、屬性存取、事件發送三件事。
+//
+// Canon 參照：docs/mudlib/00_vision.md（開發者十誡）
+
+#include "/include/formosa.h"
+
+inherit "/std/object.lpc";
+
+// ── 身份 ──────────────────────────────────────────────
+private string entity_id;        // 全域唯一 ID，格式：type:name，如 "settlement:minxiong"
+private string entity_type;      // "settlement" / "site" / "player" / "npc" / "memory"
+private string display_name;     // 顯示名稱（中文）
+
+// ── 屬性存取（通用 KV，避免硬編碼欄位）─────────────────
+mapping props;           // 動態屬性
+
+// ── 生命週期 ──────────────────────────────────────────
+void create() {
+  ::create();
+  props = ([]);
+}
+
+// ── 身份 API ──────────────────────────────────────────
+void set_entity_id(string id) { entity_id = id; }
+string query_entity_id() {
+  if (entity_id && entity_id != "") return entity_id;
+  // 容錯補回：如果沒有設定 entity_id，從檔名自動提取
+  string name = object_name(this_object());
+  int pos = strsrch(name, "#");
+  if (pos != -1) name = substr(name, 0, pos);
+  string *parts = explode(name, "/");
+  if (sizeof(parts) > 0) {
+    string f_base = parts[sizeof(parts) - 1];
+    if (strlen(f_base) > 4 && substr(f_base, strlen(f_base) - 4, 4) == ".lpc") {
+      f_base = substr(f_base, 0, strlen(f_base) - 4);
+    }
+    entity_id = (entity_type || "site") + ":" + f_base;
+  }
+  return entity_id;
+}
+
+void set_entity_type(string t) { entity_type = t; }
+string query_entity_type() { return entity_type; }
+
+void set_display_name(string n) { display_name = n; }
+string query_display_name() { return display_name; }
+
+// ── 屬性 API ──────────────────────────────────────────
+void set_prop(string key, mixed val) {
+  props[key] = val;
+}
+
+mixed query_prop(string key) {
+  return props[key];
+}
+
+mixed query_prop_default(string key, mixed default_val) {
+  if (member(props, key)) return props[key];
+  return default_val;
+}
+
+void add_prop(string key, int delta) {
+  if (!intp(props[key])) props[key] = 0;
+  props[key] += delta;
+}
+
+mapping query_all_props() {
+  return copy(props);
+}
+
+// ── 事件發送（委託給 EVENT_D）─────────────────────────
+// 不直接依賴 EVENT_D 路徑，透過 formosa.h 的 macro
+void emit(string event_type, mapping data) {
+  data["source_id"] = entity_id;
+  data["source_type"] = entity_type;
+  catch(EVENT_D->publish(event_type, data));
+}

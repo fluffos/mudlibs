@@ -1,0 +1,109 @@
+// /cmds/player/cmd_incident.c
+// 事件調查指令
+
+int main(object caller, string arg) {
+  if (!caller) return 0;
+
+  mapping perm_clues = caller->query("investigation_clues") || ([]);
+  mapping resolved = caller->query("resolved_incidents") || ([]);
+
+  if (!arg || arg == "") {
+    // 列出進行中與已解決的事件
+    mapping incidents = INCIDENT_D->query_incidents();
+    if (!incidents || sizeof(incidents) == 0) {
+      tell_object(caller, "目前世上尚無任何事件。\n");
+      return 1;
+    }
+
+    string output = "【歷史事件與調查進度】\n";
+    output += "--------------------------------------------------\n";
+
+    mapping inc_progress = ([]);  // incident_id -> collected count
+    foreach (string clue_id, int has in perm_clues) {
+      string inc_id = INCIDENT_D->query_incident_by_clue(clue_id);
+      if (inc_id) {
+        if (!inc_progress[inc_id]) inc_progress[inc_id] = 0;
+        inc_progress[inc_id]++;
+      }
+    }
+
+    foreach (string inc_id, mapping inc in incidents) {
+      int total = sizeof(inc["clues"] || ([]));
+      if (resolved[inc_id]) {
+        output += sprintf("[已結案] %s - 進度: 100%%\n", inc["name"]);
+      } else if (inc_progress[inc_id] && inc_progress[inc_id] > 0) {
+        int collected = inc_progress[inc_id];
+        int percent = (total > 0) ? (collected * 100 / total) : 0;
+        output += sprintf(
+          "[調查中] %s - 進度: %d%% (線索: %d/%d)\n",
+          inc["name"],
+          percent,
+          collected,
+          total
+        );
+      }
+    }
+    output += "--------------------------------------------------\n";
+    output += "使用 `incident <事件ID>` 查看詳細線索與進度，或 `incident resolve <事件ID>` 進行結案。\n";
+    tell_object(caller, output);
+    return 1;
+  }
+
+  string *args = explode(arg, " ");
+  if (args[0] == "resolve" && sizeof(args) > 1) {
+    INCIDENT_D->resolve_incident(caller, args[1]);
+    return 1;
+  }
+
+  // 查看單一事件
+  string inc_id = arg;
+  mapping inc = INCIDENT_D->query_incident(inc_id);
+  if (!inc) {
+    tell_object(caller, "找不到這個事件。\n");
+    return 1;
+  }
+
+  string output = sprintf("【事件卷宗：%s】\n", inc["name"]);
+  output += sprintf("簡述：%s\n\n", inc["description"]);
+  output += "收集到的線索：\n";
+
+  int total = sizeof(inc["clues"]);
+  int collected = 0;
+
+  if (arrayp(inc["clues"])) {
+    foreach (mapping clue in inc["clues"]) {
+      if (perm_clues[clue["clue_id"]]) {
+        output += sprintf("  ✓ %s：%s\n", clue["name"], clue["description"]);
+        collected++;
+      } else {
+        output += sprintf("  ？ %s：(尚未獲得)\n", clue["name"]);
+      }
+    }
+  }
+
+  int percent = (total > 0) ? (collected * 100 / total) : 0;
+  output += sprintf("\n目前進度：%d%% (%d / %d)\n", percent, collected, total);
+
+  // 進度條
+  int bars = percent / 10;
+  output += "進度條：[";
+  for (int i = 0; i < 10; i++) {
+    if (i < bars) output += "█";
+    else output += "░";
+  }
+  output += "]\n";
+
+  if (resolved[inc_id]) {
+    output += "【狀態】已結案 (100%)\n";
+    if (inc["truth"]) {
+      output += sprintf("\n【歷史真相】\n%s\n", inc["truth"]);
+    }
+  } else if (collected >= total) {
+    output += "【狀態】證據確鑿 (100%)，可使用 `incident resolve " + inc_id + "` 解鎖歷史真相。\n";
+  } else {
+    output += "【狀態】調查中\n";
+  }
+
+  tell_object(caller, output);
+  return 1;
+}

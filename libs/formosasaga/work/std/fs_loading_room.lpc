@@ -1,0 +1,49 @@
+// /std/fs_loading_room.c
+// 玩家進入遠端出口時，等待遠端 room 資料的臨時房間
+
+#include "/include/config.h"
+#include "/include/ansi.h"
+
+inherit "/std/room.lpc";
+
+string target_mudlib;
+string target_room;
+
+/* fluffos prototypes */
+void heart_beat();
+
+void create() {
+  ::create();
+  set_short("$HIY$傳送門（載入中）$NOR$");
+  set_long("你站在一個閃爍的傳送門中。目的地的資料正在從星際網路載入，請稍候...\n");
+  set_coordinate(-1, -1, -1);
+  set_heart_beat(1);
+}
+
+void set_target_mudlib(string m) { target_mudlib = m; }
+void set_target_room(string r) { target_room = r; }
+string query_target_mudlib() { return target_mudlib; }
+string query_target_room() { return target_room; }
+int query_is_loading_room() { return 1; }
+
+// 每 2 秒檢查一次，room 就緒就自動傳送
+void heart_beat() {
+  if (!target_mudlib || !target_room) return;
+  string virt_path = FS_CACHE_DIR + "/" + target_mudlib + target_room;
+  object dest = find_object(virt_path);
+  if (!dest) {
+    // 🚀 關鍵修正：先檢查檔案是否存在，避免 load_object 噴 runtime error
+    if (file_size(virt_path) > 0) {
+      dest = load_object(virt_path);
+    }
+  }
+  if (!dest) return;
+
+  object *here = all_inventory(this_object());
+  foreach (object u in here) {
+    if (!u || !userp(u)) continue;
+    u->move(dest, "portal");
+    dest->look_room(u);
+  }
+  destruct(this_object());
+}

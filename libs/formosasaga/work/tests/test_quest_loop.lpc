@@ -1,0 +1,103 @@
+// /tests/test_quest_loop.c
+#include "/include/formosa.h"
+inherit "/std/test_case";
+
+string query_role() { return "god"; }
+
+void run_tests(object me) {
+  start_test("老站長引導任務 (探索->踏印->任務->時代) 完整循環測試");
+
+  // 1. 建立測試玩家並設定基本資料
+  object player = clone_object("/std/user.lpc");
+  player->set_id("test_wade_quest_loop");
+  player->set_name("測試任務員");
+  player->set_role("god");
+  player->set_lang("zh-TW");
+  player->set_level(1);
+  player->setup();
+  player->clear_footprints();
+  player->set_footprint_atlas(([ "test": 123 ]));
+  mapping test_atlas = player->query_footprint_atlas();
+  write("TEST INIT ATLAS = " + sprintf("%O", test_atlas) + "\n");
+  player->set_footprint_atlas(([]));
+
+  // 2. 載入民雄老街與民雄老車站地標
+  object station = SETTLEMENT_D->get_site_object("minxiong_old_station");
+  assert_true(objectp(station), "應成功載入民雄老車站地標");
+
+  if (station) {
+    player->move(station);
+    station->player_enter(player);
+    // 模擬玩家已探訪民雄鬼屋（以滿足老站長出現的條件）
+    FOOTPRINT_D->grant_footprint(
+      player,
+      "ghost_house_minxiong",
+      FP_SETTLEMENT,
+      "minxiong",
+      FQ_GLIMPSE
+    );
+
+    // 手動同步觸發 NPC 生成（避免等待非同步 call_out）
+    station->spawn_reveal_npc("old_station_master");
+
+    // 3. 尋找老站長 NPC (由於測試執行者是 god 角色，NPC 自動可見)
+    object npc = present("old_station_master", station) || present("老站長", station);
+    assert_true(objectp(npc), "老車站月台應該能找到「老站長」NPC");
+
+    if (npc) {
+      object q_d = load_object("/secure/quest_d.lpc") || load_object("/daemon/quest_d.lpc");
+      assert_true(objectp(q_d), "應成功載入任務守護進程");
+
+      // 4. 玩家向老站長詢問「任務」
+      write("--- 詢問任務 --- \n");
+      npc->do_chat(player, "任務");
+
+      // 5. 玩家接受任務 "old_station_master_wish"
+      int accepted = q_d->accept_quest(player, "old_station_master_wish");
+      assert_equal(1, accepted, "玩家應該能成功接受老站長的委託任務");
+
+      // 6. 嘗試回報任務（此時沒有踏印，應該失敗）
+      int completed_early = q_d->complete_quest(player, "old_station_master_wish");
+      assert_equal(0, completed_early, "未獲得踏印前，回報任務應該失敗");
+
+      // 7. 模擬玩家探索民雄老街獲得「糖鐵踏印」
+      write("--- 獲得糖鐵踏印 --- \n");
+      int grant_ret = FOOTPRINT_D->grant_footprint(
+        player,
+        "sugar_railway_minxiong",
+        FP_SETTLEMENT,
+        "minxiong",
+        FQ_GLIMPSE
+      );
+      write("grant_ret = " + grant_ret + "\n");
+      mapping cur_atlas = player->query_footprint_atlas();
+      write("cur_atlas = " + sprintf("%O", cur_atlas) + "\n");
+      int has_fp = FOOTPRINT_D->has_footprint(player, "sugar_railway_minxiong");
+      write("has_fp = " + has_fp + "\n");
+      assert_true(has_fp, "玩家應成功獲得糖鐵踏印");
+
+      // 8. 獲得踏印後回報任務
+      write("--- 回報並完成任務 --- \n");
+      int completed_success = q_d->complete_quest(player, "old_station_master_wish");
+      write("completed_success = " + completed_success + "\n");
+      assert_equal(1, completed_success, "獲得踏印後，回報任務應該成功");
+
+      // 9. 檢查任務獎勵（經驗、金幣、車票物件）
+      assert_true(player->query_exp() > 0, "完成任務後玩家應該獲得經驗值");
+
+      object ticket = present("ticket", player) || present("乘車券", player);
+
+      assert_true(objectp(ticket), "玩家背包中應獲得獎勵物件：落灰的乘車券");
+      if (ticket) destruct(ticket);
+
+      // 10. 檢查任務狀態是否標記為 completed
+      mapping qdata = player->query_quest("old_station_master_wish");
+      assert_true(mapp(qdata), "玩家任務資料應存在");
+      if (qdata) {
+        assert_equal("completed", qdata["status"], "任務狀態應為 completed");
+      }
+    }
+  }
+  if (player) destruct(player);
+  report_results();
+}

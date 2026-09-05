@@ -1,0 +1,215 @@
+// /daemon/footprint_d.c
+//
+// 踏印守護進程。
+//
+// 職責：
+//   - 授予踏印（防重複、防刷）
+//   - 查詢玩家踏印狀態
+//   - 品質升級
+//   - 通知 EVENT_D
+//
+// Canon 參照：
+//   docs/mudlib/02_domain_model.md（Footprint Aggregate）
+//   docs/canon/footprint_system.md
+
+#include "/include/formosa.h"
+
+inherit "/std/entity.lpc";
+
+/* fluffos prototypes */
+int grant_footprint(
+  object player,
+  string fp_id,
+  string category,
+  string settlement_id,
+  int quality
+);
+void _try_grant(object player, string fp_id, string category, string s_id);
+void _notify_player_new(object player, string fp_id, string category, int quality);
+void _notify_player_upgrade(object player, string fp_id, int old_q, int new_q);
+string _quality_label(int q);
+void emit_footprint_event(object player, string fp_id, string category, string s_id);
+
+void create() {
+  entity::create();
+  set_entity_id("daemon:footprint");
+  set_entity_type("daemon");
+}
+
+// ── 玩家進入 Site 時自動觸發 ─────────────────────────
+void on_player_enter_site(object player, object site) {
+  string s_id = site->query_settlement_id();
+  string era = site->query_era_id();
+
+  // 地理踏印 id 慣例：geo:<settlement_id>
+  if (s_id) {
+    string fp_id = "geo:" + s_id;
+    _try_grant(player, fp_id, FP_GEO, s_id);
+  }
+
+  // 時代場景踏印（如果是歷史層 site）
+  if (era && era != "modern") {
+    string fp_id = "era:" + site->query_entity_id();
+    _try_grant(player, fp_id, FP_ERA, s_id);
+  }
+}
+
+void add_footprint(object player, string fp_id) {
+  if (!player || !fp_id) return;
+  // 解析聚落 (例如 "sugar_railway_minxiong" -> "minxiong")
+  string s_id = 0;
+  string category = FP_SETTLEMENT;
+  if (strsrch(fp_id, "_minxiong") != -1) {
+    s_id = "minxiong";
+    category = FP_SETTLEMENT;
+  }
+  grant_footprint(player, fp_id, category, s_id, FQ_GLIMPSE);
+}
+
+// ── 授予踏印（主 API）────────────────────────────────
+//
+// 回傳：
+//   1  = 首次取得
+//   2  = 品質提升
+//   0  = 已有且無提升
+//  -1  = 失敗
+//
+int grant_footprint(object player, string fp_id, string category,
+  string settlement_id, int quality) {
+  if (!player || !fp_id) return -1;
+  if (!quality) quality = FQ_GLIMPSE;
+
+  mapping atlas = player->query_footprint_atlas();
+  if (!atlas) {
+    atlas = ([]);
+    player->set_footprint_atlas(atlas);
+  }
+
+  if (!atlas[fp_id]) {
+    // 首次取得
+    atlas[fp_id] = ([
+      "id": fp_id,
+      "category": category,
+      "quality": quality,
+      "settlement_id": settlement_id,
+      "obtained_at": time(),
+    ]);
+    player->set_footprint_atlas(atlas);
+    player->add_footprint_record(fp_id);
+    if (stringp(player->get_id()) && strsrch(player->get_id(), "test") != 0) {
+      player->save_me();
+    }
+
+    _notify_player_new(player, fp_id, category, quality);
+
+    emit_footprint_event(player, fp_id, category, settlement_id);
+    return 1;
+
+  } else if (atlas[fp_id]["quality"] < quality) {
+    // 品質提升
+    int old_q = atlas[fp_id]["quality"];
+    atlas[fp_id]["quality"] = quality;
+    player->set_footprint_atlas(atlas);
+    if (stringp(player->get_id()) && strsrch(player->get_id(), "test") != 0) {
+      player->save_me();
+    }
+
+    _notify_player_upgrade(player, fp_id, old_q, quality);
+
+    emit("FootprintUpgraded", ([
+      "player_id": player->query_entity_id(),
+      "footprint_id": fp_id,
+      "old_quality": old_q,
+      "new_quality": quality,
+    ]));
+    return 2;
+  }
+
+  return 0;
+}
+
+// ── 查詢 API ──────────────────────────────────────────
+int has_footprint(object player, string fp_id) {
+  if (!player) return 0;
+  mapping atlas = player->query_footprint_atlas();
+  return atlas && atlas[fp_id] ? 1 : 0;
+}
+
+int query_quality(object player, string fp_id) {
+  if (!player) return 0;
+  mapping atlas = player->query_footprint_atlas();
+  if (!atlas || !atlas[fp_id]) return 0;
+  return atlas[fp_id]["quality"];
+}
+
+// 從踏印 id 解析所屬聚落（供 settlement_d 使用）
+string query_footprint_settlement(string fp_id) {
+  // 慣例：geo:minxiong → "minxiong"
+  //        era:taipei_city_gate_v1.9 → 需查詢 site
+  mixed *parts = explode(fp_id, ":");
+  if (sizeof(parts) >= 2 && parts[0] == "geo")
+    return parts[1];
+  return 0;
+}
+
+// ── 內部方法 ──────────────────────────────────────────
+private void _try_grant(object player, string fp_id,
+  string category, string s_id) {
+  // 防刷：同一個 session 內，同一個 fp_id 只檢查一次
+  string seen = "fp_checked_" + fp_id;
+  if (player->query_temp(seen)) return;
+  player->set_temp(seen, 1);
+
+  grant_footprint(player, fp_id, category, s_id, FQ_GLIMPSE);
+}
+
+private void _notify_player_new(object player, string fp_id,
+  string category, int quality) {
+  mapping labels = ([
+    FP_GEO: "地理踏印",
+    FP_RELATION: "人情踏印",
+    FP_CRAFT: "技藝踏印",
+    FP_SETTLEMENT: "聚落踏印",
+    FP_ERA: "時代踏印",
+    FP_SOURCE: "源流踏印",
+  ]);
+
+  string cat_label = labels[category] || category;
+  string q_label = _quality_label(quality);
+
+  tell_object(player,
+    "\n" + C_MEMORY +
+    "【踏印】" + cat_label + "：" + fp_id +
+    "（" + q_label + "）" +
+    C_RESET + "\n");
+}
+
+private void _notify_player_upgrade(object player, string fp_id,
+  int old_q, int new_q) {
+  tell_object(player,
+    "\n" + C_GOOD +
+    "【踏印深化】" + fp_id +
+    "：" + _quality_label(old_q) +
+    " → " + _quality_label(new_q) +
+    C_RESET + "\n");
+}
+
+private string _quality_label(int q) {
+  switch (q) {
+    case FQ_GLIMPSE: return "初識";
+    case FQ_FAMILIAR: return "熟悉";
+    case FQ_DEEP: return "深入";
+    case FQ_SOURCE: return "源流";
+    default: return "未知";
+  }
+}
+
+private void emit_footprint_event(object player, string fp_id,
+  string category, string s_id) {
+  emit("FootprintGained", ([
+    "player_id": player->query_entity_id(),
+    "footprint_id": fp_id,
+    "category": category,
+    "settlement_id": s_id,
+  ]));
+}

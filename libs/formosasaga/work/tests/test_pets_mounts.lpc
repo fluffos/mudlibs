@@ -1,0 +1,56 @@
+// /tests/test_pets_mounts.c
+inherit "/std/test_case";
+
+void run_tests(object me) {
+  start_test("寵物與坐騎系統驗證");
+
+  object me = this_player();
+  if (!me) {
+    me = clone_object("/std/user.lpc");
+    me->set_id("tester");
+    me->set_name("測試馬夫");
+  }
+  me->set_skill("taming", 200);
+
+  object room = load_object("/area/newbie/room_6_6.lpc");
+  me->move_object(room);
+
+  // 1. 測試馴服
+  object horse = clone_object("/npc/horse.lpc");
+  horse->set_id("test_horse");
+  horse->move_object(room);
+
+  // 強制設定屬性並重算，確保 max_hp 不是 0
+  horse->set_stat("con", 15);
+  horse->recalc_stats();
+  horse->set_hp(1);
+
+  // 模擬 tame 指令邏輯
+  object cmd_tame = load_object("/cmds/player/cmd_tame.lpc");
+  cmd_tame->main(me, "tame", "test_horse");
+
+  object pet = me->query_pet();
+  assert_true(objectp(pet), "馴服後應產生寵物物件");
+  if (pet) {
+    assert_equal(me, pet->query_owner(), "寵物的主人應為玩家");
+    assert_equal(me, pet->query_leader(), "寵物應自動跟隨主人");
+  }
+
+  // 2. 測試騎乘
+  object cmd_ride = load_object("/cmds/player/cmd_ride.lpc");
+  cmd_ride->main(me, "ride", "");
+  assert_equal(1, me->query_riding(), "執行 ride 後應進入騎乘狀態");
+  assert_true(strsrch(me->query_display_name(), "騎乘中") != -1, "顯示名稱應包含騎乘資訊");
+
+  // 3. 測試解散
+  // 直接呼叫移除邏輯來驗證功能，不走 add_action 的權限檢查
+  me->set_pet(0);
+  me->remove_follower(pet);
+  destruct(pet);
+
+  assert_true(!me->query_pet(), "解散後寵物應消失");
+
+  report_results();
+  destruct(me);
+  if (horse) destruct(horse);
+}

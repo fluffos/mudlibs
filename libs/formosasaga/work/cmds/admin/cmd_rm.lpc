@@ -1,0 +1,108 @@
+// /cmds/admin/cmd_rm.c
+// 刪除檔案指令：rm <路徑>
+
+#include "/include/config.h"
+#include "/include/ansi.h"
+
+inherit "/std/object";
+
+int main(object me, string verb, string arg) {
+  if (me->query_role() != "god" && me->query_role() != "wizard") {
+    return 0;
+  }
+  if (!arg || arg == "") {
+    write(select_lang(([
+      "en": "Usage: rm <file path>\n",
+      "zh-TW": "用法：rm <檔案路徑>\n",
+      "zh-CN": "用法：rm <文件路径>\n"
+    ])));
+    return 1;
+  }
+
+  arg = resolv_path(arg);
+
+  // 授權檢查 (God 不受限)
+  if (me->query_role() != "god") {
+    string *wp = me->query_write_paths();
+    int allowed = 0;
+
+    // 1. 檢查自定義授權路徑
+    if (wp) {
+      foreach (string p in wp) {
+        if (strsrch(arg, p) == 0) {
+          allowed = 1;
+          break;
+        }
+      }
+    }
+
+    // 2. 檢查 Wizard 預設授權路徑
+    if (!allowed && me->query_role() == "wizard") {
+      string *default_paths = ({
+        "/area/",
+        "/npc/",
+        "/item/",
+        "/cmds/",
+        "/log/",
+        "/open/",
+        "/tests/",
+        "/u/"
+      });
+      foreach (string p in default_paths) {
+        if (strsrch(arg, p) == 0) {
+          allowed = 1;
+          break;
+        }
+      }
+    }
+
+    if (!allowed) {
+      write("rm: permission denied: " + arg + "\n");
+      return 1;
+    }
+  }
+
+  if (file_size(arg) == -1) {
+    write("$RED$" + select_lang(([
+      "en": "Error: File does not exist ",
+      "zh-TW": "錯誤：檔案不存在 ",
+      "zh-CN": "错误：文件不存在 "
+    ])) + "$NOR$" + arg + "\n");
+    return 1;
+  }
+
+  if (file_size(arg) == -2) {
+    write("$RED$" + select_lang(([
+      "en": "Error: Target is a directory, please use rmdir.\n",
+      "zh-TW": "錯誤：目標是目錄，請使用 rmdir。\n",
+      "zh-CN": "错误：目标是目录，请使用 rmdir。\n"
+    ])) + "$NOR$");
+    return 1;
+  }
+
+  if (rm(arg)) {
+    write("$HIG$" + select_lang(([
+      "en": "File successfully deleted: ",
+      "zh-TW": "檔案已成功刪除：",
+      "zh-CN": "文件已成功删除："
+    ])) + "$NOR$" + arg + "\n");
+  } else {
+    write("$HIR$" + select_lang(([
+      "en": "Delete failed. Please check permissions or file status.\n",
+      "zh-TW": "刪除失敗。請檢查權限或檔案狀態。\n",
+      "zh-CN": "删除失败。请检查权限或文件状态。\n"
+    ])) + "$NOR$");
+  }
+
+  return 1;
+
+  string *query_verbs() { return ({ "rm" }); }
+  string query_category() { return "Admin"; }
+
+  string help() {
+    return select_lang(([
+      "en": "【Admin Command】\n  rm <path>    Permanently delete the specified file.\n",
+      "zh-TW": "【管理指令】\n  rm <路徑>    永久刪除指定的檔案。\n",
+      "zh-CN": "【管理指令】\n  rm <路径>    永久删除指定的文件。\n"
+    ]));
+  }

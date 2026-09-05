@@ -1,0 +1,63 @@
+// /cmds/cmd_fsleave.c
+// 離開遠端伺服器，返回本機
+
+#include "/include/config.h"
+#include "/include/ansi.h"
+
+inherit "/std/object";
+
+int main(object me, string verb, string arg) {
+  if (me->query_temp("ssh_session_id") || me->query_temp("ssh_pending")) {
+    object ssh_d = find_object("/daemon/ssh_d.lpc");
+    if (!ssh_d) ssh_d = load_object("/daemon/ssh_d.lpc");
+    if (ssh_d) {
+      ssh_d->client_send_disconnect(me);
+      return 1;
+    }
+  }
+
+  object env = environment(me);
+  if (!env || !env->is_proxy_room()) {
+    write("你目前不在任何遠端伺服器中。\n");
+    return 1;
+  }
+
+  string remote_mud = env->query_remote_mud();
+  string shadow_uuid = env->query_shadow_uuid();
+
+  // 通知遠端銷毀 shadow_player
+  if (shadow_uuid && shadow_uuid != "") {
+    object dist_d = find_object("/daemon/dist_d.lpc");
+    if (!dist_d) dist_d = load_object("/daemon/dist_d.lpc");
+    if (dist_d) {
+      dist_d->send_dist_msg(remote_mud, "disconnect", ([
+        "uuid": shadow_uuid
+      ]));
+    }
+  }
+
+  write("$HIM$【傳送門】$NOR$" + "你從 " + "$HIY$" + remote_mud + "$NOR$" +
+    " 離線，意識回到了本機...\n");
+
+  // 把玩家移回本機起始點
+  object home = load_object(START_ROOM);
+  if (home) {
+    me->move(home, "portal");
+    home->look_room(me);
+  } else {
+    write("$RED$警告：找不到本機起始點 " + START_ROOM + "\n$NOR$");
+  }
+
+  // 銷毀 proxy room
+  destruct(env);
+  return 1;
+}
+
+string *query_verbs() { return ({ "fsleave" }); }
+string query_category() {
+  return select_lang(([ "en": "Fantasy Space", "zh-TW": "星際網路" ]));
+}
+
+string help() {
+  return "  fsleave   離開遠端伺服器，返回本機。\n";
+}

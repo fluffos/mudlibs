@@ -1,0 +1,188 @@
+// /tests/test_oblivion_resonance.c
+// 遺忘浪潮與失源者共鳴儀式整合測試
+//
+// 測試項目：
+//   1. 聚落記憶值衰減與遺忘危機事件觸發
+//   2. 記憶值過低時，失源者 (Specter) 正確生成於地標
+//   3. 玩家與失源者互動 (ask) 及其解除條件 (resolve)
+//   4. 主動共鳴儀式 (commune 指令) 觸發、冷卻與限制條件
+
+#include "/include/formosa.h"
+
+inherit "/std/test_case";
+
+string query_role() { return "god"; }
+
+void run_tests(object me) {
+  start_test("遺忘浪潮與失源者共鳴儀式整合測試");
+
+  object ob_d = load_object("/daemon/oblivion_d.lpc");
+  object res_d = load_object("/daemon/resonance_d.lpc");
+  assert_true(objectp(ob_d), "應成功載入 oblivion_d");
+  assert_true(objectp(res_d), "應成功載入 resonance_d");
+
+  // 重新載入 settlement_d 以清空執行期快取並讀取全新狀態
+  object s_d = find_object("/daemon/settlement_d.lpc");
+  if (s_d) destruct(s_d);
+
+  // 確保底層存檔也被刪除以保持測試獨立性
+  rm("/data/state/settlements/minxiong.o");
+
+  s_d = load_object("/daemon/settlement_d.lpc");
+  assert_true(objectp(s_d), "應成功重新載入 settlement_d");
+  // Ensure EVENT_D subscriptions are updated
+  EVENT_D->unsubscribe("SpecterResolved");
+  EVENT_D->subscribe("SpecterResolved", "on_specter_resolved");
+
+  // ── 1. 建立測試環境 ──────────────────────────────────
+  object player = clone_object("/std/user.lpc");
+  player->set_id("test_oblivion_player");
+  player->set_name("測試尋源者");
+  player->set_role("god");
+  player->set_lang("zh-TW");
+  player->setup();
+
+  // 取得民雄車站地標與聚落ID
+  object site_ob = SETTLEMENT_D->get_site_object("minxiong_old_station");
+  assert_true(objectp(site_ob), "應成功載入民雄車站地標");
+  if (!site_ob) {
+    destruct(player);
+    report_results();
+    return;
+  }
+
+  string settlement_id = "minxiong";
+
+  // Process any remaining events from previous tests first to clean the environment
+  while (EVENT_D->query_queue_size() > 0) {
+    EVENT_D->dispatch_loop();
+  }
+
+  // 初始化聚落記憶值至 80
+  SETTLEMENT_D->set_dim(settlement_id, DIM_MEMORY, 80);
+  assert_equal(80, SETTLEMENT_D->query_memory(settlement_id), "記憶值初始化應為 80");
+
+  // 手動模擬記憶衰減到 25 (觸發 OblivionRising 警訊)
+  SETTLEMENT_D->add_memory(settlement_id, -55);
+  assert_equal(25, SETTLEMENT_D->query_memory(settlement_id), "記憶值扣除後應為 25");
+
+  // 手動模擬記憶衰減到 15 (觸發 SpecterSpawned)
+  SETTLEMENT_D->add_memory(settlement_id, -10);
+  while (EVENT_D->query_queue_size() > 0) {
+    EVENT_D->dispatch_loop();
+  }
+  assert_equal(15, SETTLEMENT_D->query_memory(settlement_id), "記憶值扣除後應為 15");
+
+  // 手動模擬記憶衰減到 9 (觸發 OblivionCrisis 危機門檻)
+  SETTLEMENT_D->add_memory(settlement_id, -6);
+  while (EVENT_D->query_queue_size() > 0) {
+    EVENT_D->dispatch_loop();
+  }
+  assert_equal(9, SETTLEMENT_D->query_memory(settlement_id), "記憶值扣除後應為 9");
+
+  // ── 3. 測試失源者 (Specter) 自動生成 ─────────────────
+  write("--- 測試失源者自動生成 ---\n");
+  // 當記憶低於 30，settlement_d 應自動生成失源者。
+  // 我們掃描民雄所有地標，看看是否有失源者被放入
+  string *sites = SETTLEMENT_D->load_sites_for_settlement(settlement_id);
+  object target_site = 0;
+  object specter = 0;
+  foreach (string s_id in sites) {
+    object sob = SETTLEMENT_D->get_site_object(s_id);
+    if (sob) {
+      object *inv = all_inventory(sob);
+      foreach (object ob in inv) {
+        if (ob->query_is_specter()) {
+          specter = ob;
+          target_site = sob;
+          break;
+        }
+      }
+    }
+    if (specter) break;
+  }
+  assert_true(objectp(target_site), "應成功找到放置失源者的地標");
+
+  assert_true(objectp(specter), "記憶過低時，地標應自動生成失源者實體");
+
+  if (specter) {
+    write("生成失源者型態: " + specter->query_specter_type() + "\n");
+    assert_equal(settlement_id, specter->query_settlement_id(), "失源者的聚落 ID 應正確對應");
+
+    // ── 4. 測試失源者互動與解除邏輯 ─────────────────
+    write("--- 測試失源者互動與解除 ---\n");
+    // 4.1 尚未解鎖記憶的玩家，無法解除
+    int can_res = specter->can_resolve(player);
+    assert_equal(0, can_res, "尚未解鎖任何記憶的玩家，不應能解除失源者");
+
+    // 4.2 模擬玩家解鎖記憶，使符合 can_resolve 條件
+    player->add_unlocked_memory("MEM_minxiong_ghosthouse_1895");  // 解鎖 1 則記憶
+    // 賦予該聚落地標踏印，以滿足 SP_LOST_PLACE 或是 SP_LOST_NAME
+    FOOTPRINT_D->grant_footprint(
+      player,
+      "settlement:" + settlement_id,
+      "settlement",
+      settlement_id,
+      FQ_GLIMPSE
+    );
+
+    // 將玩家職涯文人 rank 升為 2 (滿足 SP_LOST_HISTORY 等高級條件)
+    player->set_career_rank("scholar", 2);
+
+    can_res = specter->can_resolve(player);
+    assert_equal(1, can_res, "滿足條件後，玩家應可解除失源者");
+
+    // 4.3 執行解除，並驗證記憶值回升與失源者消亡
+    int before_mem = SETTLEMENT_D->query_memory(settlement_id);
+    specter->resolve(player);
+
+    // Loop dispatching until the event queue in EVENT_D is entirely empty
+    while (EVENT_D->query_queue_size() > 0) {
+      EVENT_D->dispatch_loop();
+    }
+
+    int after_mem = SETTLEMENT_D->query_memory(settlement_id);
+    assert_equal(before_mem + 10, after_mem, "成功解除失源者後，聚落記憶應回升 10 點");
+    assert_true(!specter || !environment(specter), "解除後，失源者物件應已被銷毀");
+  }
+
+  // ── 5. 測試主動共鳴儀式 (Commune Command) ───────────
+  write("--- 測試主動共鳴儀式 ---\n");
+  // 把玩家移到車站地標
+  player->move(site_ob);
+  site_ob->player_enter(player);
+
+  // 5.1 未達職涯門檻玩家
+  object weak_player = clone_object("/std/user.lpc");
+  weak_player->set_id("test_weak_player");
+  weak_player->set_name("弱尋源者");
+  weak_player->setup();
+  weak_player->move(site_ob);
+  site_ob->player_enter(weak_player);
+
+  int fail_commune = res_d->initiate_commune(weak_player);
+  assert_equal(0, fail_commune, "職涯未達標玩家應無法主動發起共鳴");
+  destruct(weak_player);
+
+  // 5.2 已達標玩家 (文士 2+) 發起共鳴
+  player->set_career_rank("scholar", 2);
+  int prev_mem = SETTLEMENT_D->query_memory(settlement_id);
+
+  int ok_commune = res_d->initiate_commune(player);
+  assert_equal(1, ok_commune, "文士職涯達標玩家應成功發起共鳴");
+
+  int current_mem = SETTLEMENT_D->query_memory(settlement_id);
+  assert_true(current_mem > prev_mem, "共鳴儀式成功後，聚落記憶值應有所增加");
+
+  // 5.3 驗證冷卻時間 (Resonance Cooldown)
+  int remain_cd = res_d->query_resonance_cooldown("minxiong_old_station");
+  assert_true(remain_cd > 0, "共鳴後，該地標應進入冷卻時間");
+
+  int double_commune = res_d->initiate_commune(player);
+  assert_equal(0, double_commune, "冷卻時間內，不應能再次發起共鳴儀式");
+
+  // ── 清理 ───────────────────────────────────────────
+  if (player) destruct(player);
+
+  report_results();
+}

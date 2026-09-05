@@ -1,0 +1,113 @@
+// /daemon/era_d.c
+//
+// 時代/名稱解析服務。
+//
+// 職責：
+//   - 依據玩家當前所在的遊戲時代，解析聚落、地標、路線的歷史名稱。
+//   - 提供循序上溯與降級處理的名稱解析。
+
+#include "/include/formosa.h"
+
+inherit "/std/entity.lpc";
+
+private nosave string *era_order = ({
+  "indigenous",
+  "qing_early",
+  "qing_late",
+  "qing",
+  "japanese",
+  "roc",
+  "modern"
+});
+
+void create() {
+  ::create();
+  set_entity_id("daemon:era");
+  set_entity_type("daemon");
+}
+
+// 遊戲時代對應歷史時期
+string map_game_era_to_hist_era(string game_era) {
+  if (!game_era) return "modern";
+
+  switch (game_era) {
+    case "v0_1": return "indigenous";
+    case "v0_2": return "qing_early";
+    case "v1_0": return "qing_late";
+    case "v2_0":
+    case "v2_1":
+    case "v2_2": return "japanese";
+    case "v3_0":
+    case "v3_1":
+    case "v3_2": return "roc";
+    case "modern": return "modern";
+    default: return game_era;
+  }
+}
+
+// 核心名稱解析方法
+string resolve_name(string entity_id, string entity_type, object player) {
+  string game_era = "modern";
+  if (player) {
+    // 先取 timeline_d 當前全域時代
+    game_era = TIMELINE_D->query_current_era();
+  }
+
+  string target_hist_era = map_game_era_to_hist_era(game_era);
+  mapping names_cache = ([]);
+
+  if (entity_type == "settlement") {
+    names_cache = SETTLEMENT_D->query_names_mapping(entity_id);
+  } else if (entity_type == "site") {
+    names_cache = SITE_D->query_names_mapping(entity_id);
+    if (!names_cache || sizeof(names_cache) == 0) {
+      mapping sett_cache = SETTLEMENT_D->query_names_mapping(entity_id);
+      if (sett_cache && sizeof(sett_cache) > 0) {
+        names_cache = sett_cache;
+        entity_type = "settlement";
+      }
+    }
+  } else if (entity_type == "route") {
+    names_cache = ROUTE_D->query_names_mapping(entity_id);
+  }
+
+  if (!names_cache || sizeof(names_cache) == 0) {
+    // Fallback to canonical name
+    if (entity_type == "settlement") {
+      mapping s = SETTLEMENT_D->load_settlement(entity_id);
+      if (s) return s["canonical_name"] || s["name"] || entity_id;
+    } else if (entity_type == "site") {
+      mapping s = SITE_D->load_site(entity_id);
+      if (s) return s["canonical_name"] || entity_id;
+    } else if (entity_type == "route") {
+      mapping r = ROUTE_D->load_route(entity_id);
+      if (r) return r["name"] || entity_id;
+    }
+    return entity_id;
+  }
+
+  // 1. 精確匹配
+  if (names_cache[target_hist_era]) return names_cache[target_hist_era];
+
+  // 2. 特殊對照
+  if ((target_hist_era == "qing_early" || target_hist_era == "qing_late") && names_cache["qing"]) {
+    return names_cache["qing"];
+  }
+
+  // 3. 循序上溯
+  int idx = member_array(target_hist_era, era_order);
+  if (idx != -1) {
+    for (int i = idx - 1; i >= 0; i--) {
+      string fallback_era = era_order[i];
+      if (names_cache[fallback_era]) return names_cache[fallback_era];
+    }
+  }
+
+  // 4. 降級兜底 (順向尋找或使用現代名稱)
+  if (names_cache["modern"]) return names_cache["modern"];
+
+  mixed ks = keys(names_cache);
+  if (sizeof(ks) > 0) return names_cache[ks[0]];
+
+  return entity_id;
+}

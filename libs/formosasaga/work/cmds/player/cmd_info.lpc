@@ -1,0 +1,96 @@
+// mudlib/cmds/cmd_info.c
+// 資訊指令守護進程：score / status
+
+#include "/include/ansi.h"
+inherit "/std/object";
+
+int main(object me, string verb, string arg) {
+  string pk_str = select_lang(([ "en": "Normal", "zh-TW": "普通", "zh-CN": "普通" ]));
+  if (me->is_red_name()) {
+    pk_str = select_lang(([ "en": "Red Name", "zh-TW": "紅名", "zh-CN": "红名" ]));
+  }
+
+  // 1. 建立角色數值資料
+  mapping data = ([
+    "name": me->query_name(),
+    "level": me->query_level(),
+    "hp": me->query_hp(),
+    "max_hp": me->query_max_hp(),
+    "mp": me->query_mp(),
+    "max_mp": me->query_max_mp(),
+    "money": me->query_money_plain(),
+    "pk": pk_str,
+    "atk": me->query_attack(),
+    "def": me->query_defence(),
+    "label_hp": _t("label_hp"),
+    "label_mp": _t("label_mp"),
+    "label_wealth": _t("label_wealth"),
+    "label_atk": _t("label_atk")
+  ]);
+
+  // 2. 建立指令清單 (從 command_d 動態取得，避免被截斷)
+  object cmd_d = load_object("/secure/command_d.lpc");
+  mapping cmds = ([]);
+  if (cmd_d) {
+    cmds = cmd_d->query_categorized_commands(me->query_lang());
+
+    // 如果不是巫師，過濾掉管理類別
+    if (me->query_role() != "god" && me->query_role() != "wizard") {
+      object lang_d = load_object("/daemon/language_d.lpc");
+      string admin_cat = lang_d->translate("cat_admin", me->query_lang());
+      m_delete(cmds, admin_cat);
+    }
+  } else {
+    // 備援：若抓不到 daemon 則顯示簡易版
+    cmds = ([
+      _t("cat_basic"): ({ "look", "inventory", "score", "help" })
+    ]);
+  }
+
+  // 3. 組合完整的 UI 更新封包或純文字輸出
+  if (is_web_client(me)) {
+    string score_payload = sprintf("{\"ui\": \"score\", \"data\": %s}", json_encode(data));
+    string cmd_payload = sprintf(
+      "{\"ui\": \"cmd_list\", \"title\": \"%s\", \"data\": %s}",
+      _t("cmd_list"),
+      json_encode(cmds)
+    );
+
+    // 🚀 使用 tell_object 確保訊息發送給正確的玩家連線，
+    // 且不會在背景更新時（沒有 player context）噴到 server console。
+    tell_object(me, score_payload);
+    tell_object(me, cmd_payload);
+  }
+
+  // 只有當玩家主動輸入指令 (如 score, status) 時，才顯示文字版
+  // 如果 verb 為空 (代表由 heart_beat 或系統背景觸發)，則不顯示文字
+  if (verb && verb != "") {
+    write("\n" + "$HIW$【角色資訊】 " + data["name"] + "$NOR$" + "\n");
+    write(sprintf("  %-10s : %d\n", "等級", data["level"]));
+    write(sprintf("  %-10s : %d / %d\n", data["label_hp"], data["hp"], data["max_hp"]));
+    write(sprintf("  %-10s : %d / %d\n", data["label_mp"], data["mp"], data["max_mp"]));
+    write(sprintf("  %-10s : %s\n", data["label_wealth"], data["money"]));
+    write(sprintf("  %-10s : %s\n", "狀態", data["pk"]));
+    write(sprintf("  %-10s : %d\n", "攻擊力", data["atk"]));
+    write(sprintf("  %-10s : %d\n", "防禦力", data["def"]));
+    write("\n");
+  }
+
+  return 1;
+}
+
+string *query_verbs() {
+  return ({ "info", "score", "status" });
+}
+
+string query_category() {
+  return select_lang(([ "en": "View", "zh-TW": "查看", "zh-CN": "查看" ]));
+}
+
+string help() {
+  return select_lang(([
+    "en": "【Status Commands】\n  score / status  View detailed character status, including HP, MP, level and attributes.\n",
+    "zh-TW": "【狀態指令】\n  score / status  查看角色的詳細狀態資訊，包含 HP、MP、等級與屬性。\n",
+    "zh-CN": "【状态指令】\n  score / status  查看角色的详细状态资讯，包含 HP、MP、等级与属性。\n"
+  ]));
+}

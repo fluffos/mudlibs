@@ -1,0 +1,169 @@
+// /secure/valid.c
+// 權限管理物件
+
+#include "/include/config.h"
+
+inherit "/std/object";
+
+void create() {
+  ::create();
+}
+
+// valid_read: 控制檔案讀取權限
+// FluffOS passes an euid string as the second apply argument; the Go
+// driver passed the calling object. Allow non-object callers (boot,
+// driver applies) rather than crashing on base_name(string).
+mixed valid_read(string path, mixed user, string func) {
+  if (!user || !objectp(user)) return 1;
+
+  // 🚀 核心修正：如果是系統物件 (位於 /secure/ 或 /std/) 讀取，直接允許
+  // 這樣 login.c 才能檢查玩家是否存在
+  string creator = base_name(user);
+  if (strsrch(creator, "/secure/") == 0 || strsrch(creator, "/std/") == 0) {
+    return 1;
+  }
+
+  // 🚀 核心修正：角色判定應該優先看 this_player()
+  object tp = this_player();
+  string role;
+  if (tp && userp(tp)) {
+    role = tp->query_role();
+  } else {
+    role = user->query_role();
+  }
+
+  if (role == "god") return 1;
+
+  // 保護敏感目錄
+  if (strsrch(path, "/secure/") == 0 || strsrch(path, "/data/user/") == 0) {
+    if (role == "wizard") return 1;
+
+    // 玩家只能讀取自己的資料
+    if (strsrch(path, "/data/user/") == 0) {
+      string uid = user->get_id();
+      if (uid && uid != "" && strsrch(path, "/" + uid + ".o") != -1) return 1;
+    }
+    return 0;
+  }
+
+  return 1;  // 預設允許讀取
+}
+
+mixed valid_write(string path, mixed user, string func) {
+  string role;
+  string *paths;
+  string caller_file = "";
+
+  // FluffOS apply: second arg is usually an euid string, not an object.
+  if (!objectp(user)) return 1;
+  caller_file = base_name(user);
+
+  // 🚀 關鍵：深度沙盒與幻影模式
+  if (user) {
+    // 1. 如果呼叫者是來自遠端緩存的物件，嚴格禁止寫入緩存目錄以外的地方
+    if (strsrch(caller_file, FS_CACHE_DIR) == 0) {
+      // 提取該物件所屬的 mudlib_id
+      string rel = substr(caller_file, strlen(FS_CACHE_DIR) + 1, strlen(caller_file));
+      int slash = strsrch(rel, "/");
+      if (slash != -1) {
+        string mid = substr(rel, 0, slash);
+        string my_sandbox = FS_CACHE_DIR + "/" + mid + "/";
+        // 只允許寫入自己的沙盒內部或日誌
+        if (strsrch(path, my_sandbox) == 0 || path == "/log" || strsrch(path, "/log/") == 0) {
+          return 1;
+        }
+        return 0;
+      }
+    }
+
+    // 2. 如果是玩家物件且處於幻影模式 (在遠端世界)
+    if (userp(user) && user->query_current_mudlib() != "") {
+      // 幻影禁止任何寫入操作
+      return 0;
+    }
+  }
+
+  // 1. 沒有使用者物件 → 系統守護進程背景呼叫
+  if (!user || user == 0) {
+    if (strsrch(path, "/data/") == 0) return 1;
+    if (path == "/log" || strsrch(path, "/log/") == 0) return 1;
+    return 0;
+  }
+
+  // 2. /secure/ 守護進程（nature_d, quest_d, guild_d 等）白名單
+  //    這些物件在有玩家 context 下被呼叫時，caller_file 是 /secure/xxx
+  if (strsrch(caller_file, "/secure/") == 0) {
+    if (strsrch(path, "/data/") == 0) return 1;
+    if (path == "/log" || strsrch(path, "/log/") == 0) return 1;
+  }
+
+  // 🚀 核心修正：角色判定應該優先看 this_player()
+  // 如果是玩家下令的動作（透過指令物件），應該以該玩家的權限為準
+  object tp = this_player();
+  if (tp && userp(tp)) {
+    role = tp->query_role();
+  } else {
+    role = user->query_role();
+  }
+
+  // 2. 天神擁有絕對權限
+  if (role == "god") { return 1; }
+
+  // 3. 巫師 (Wizard) 權限：允許開發遊戲內容
+  if (role == "wizard") {
+    // 允許寫入區域、NPC、物品、指令、使用者工作目錄等非核心目錄
+    if (strsrch(path, "/area/") == 0 ||
+      strsrch(path, "/npc/") == 0 ||
+      strsrch(path, "/item/") == 0 ||
+      strsrch(path, "/cmds/") == 0 ||
+      path == "/log" ||
+      strsrch(path, "/log/") == 0 ||
+      strsrch(path, "/open/") == 0 ||
+      strsrch(path, "/tests/") == 0 ||
+      strsrch(path, "/u/") == 0) {
+      return 1;
+    }
+
+  }
+
+  // 4. 檢查個別授權的路徑 (透過 add_write_path 給予的)
+  paths = user->query_write_paths();
+  if (paths) {
+    foreach (string p in paths) {
+      if (strsrch(path, p) == 0) { return 1; }
+    }
+  }
+
+  // 5. 特殊例外
+  // 允許測試目錄寫入 /open/ 以便進行驗證
+  if (strsrch(caller_file, "/tests/") == 0) {
+    if (strsrch(path, "/open/") == 0) return 1;
+  }
+
+  // 允許 system_d 儲存系統設定
+  if (caller_file == "/secure/system_d" || caller_file == "/std/login") {
+    if (path == "/data/system.o") return 1;
+  }
+
+  if (caller_file == "/secure/fs_d") {
+    if (strsrch(path, FS_CACHE_DIR) == 0) return 1;
+  }
+  // LM 世界存檔與聚落動態資料存檔
+  if (strsrch(caller_file, "/area/lm/") == 0) {
+    // 允許 /data/lm 目錄本身（mkdir 時 path 沒有結尾斜線）及其子路徑
+    if (strsrch(path, "/data/lm") == 0) return 1;
+  }
+  if (strsrch(caller_file, "/daemon/") == 0 || strsrch(caller_file, "/std/") == 0) {
+    if (strsrch(path, "/data/state/") == 0) return 1;
+  }
+
+
+  // 允許使用者儲存自己的資料 (/data/user/) 或 備份 (/data/backup/user/)
+  if (strsrch(path, "/data/user/") == 0 || strsrch(path, "/data/backup/user/") == 0) {
+    string uid = user->get_id();
+    if (uid && uid != "" && strsrch(path, uid) != -1) {
+      return 1;
+    }
+  }
+  return 0;
+}

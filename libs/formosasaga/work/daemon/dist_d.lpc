@@ -1,0 +1,302 @@
+// /daemon/dist_d.c
+// Distributed Object Model Daemon
+// 負責處理跨服物件的虛擬化、UUID 管理與 RPC 通訊
+
+#include "/include/config.h"
+#include "/include/ansi.h"
+
+inherit "/std/object";
+
+// 遠端物件與本地代理 (Proxy) 的映射
+// ([ mudlib_id: ([ remote_uuid: proxy_ob ]) ])
+private mapping remote_proxies;
+
+// 影子玩家對應表 (Shadow Players)
+// 當遠端玩家來到本機時，本機為其建立的 shadow_player
+// ([ shadow_uuid: shadow_ob ])
+private mapping shadow_players;
+
+/* fluffos prototypes */
+void handle_disconnect(string from_mudlib, mapping payload);
+void handle_connect(string from_mudlib, mapping payload);
+void handle_connect_reply(string from_mudlib, mapping payload);
+void sync_room_to_remote(string to_mudlib, object room, string target_uuid);
+void sync_inventory_to_remote(string to_mudlib, object shadow, string visitor_uuid);
+void handle_sync_room(string from_mudlib, mapping payload);
+void handle_sync_inventory(string from_mudlib, mapping payload);
+void handle_output(string from_mudlib, mapping payload);
+void handle_cmd(string from_mudlib, mapping payload);
+
+void create() {
+  ::create();
+  remote_proxies = ([]);
+  shadow_players = ([]);
+}
+
+mapping query_shadow_players() { return shadow_players; }
+
+// ══════════════════════════════════════════════════════════════
+// UUID 管理
+// ══════════════════════════════════════════════════════════════
+
+// 這裡的 query_uuid 與 find_by_uuid 已經由 Driver Efun 提供，
+// 所以 dist_d 只需要維護 remote <-> local 的映射。
+
+// ══════════════════════════════════════════════════════════════
+// RPC 通訊核心
+// ══════════════════════════════════════════════════════════════
+
+// 傳送分散式訊息
+// 格式：dist_msg|from|to|action|payload(json)
+void send_dist_msg(string to_mudlib, string action, mixed payload) {
+  string json = json_encode(payload);
+  string msg = "dist_msg|" + FS_MUDLIB_ID + "|" + to_mudlib + "|" + action + "|" + json;
+  p2p_broadcast(msg);
+}
+
+// 處理接收到的分散式訊息
+void handle_dist_msg(string from_mudlib, string action, string json) {
+  mixed payload = json_decode(json);
+  if (!payload) {
+    printf("⚠️ [DistD] 無法解析來自 %s 的 JSON 訊息。\n", from_mudlib);
+    return;
+  }
+
+  printf("📡 [DistD] 收到來自 %s 的 RPC: %s\n", from_mudlib, action);
+
+  switch (action) {
+    case "connect":
+      handle_connect(from_mudlib, payload);
+      break;
+    case "connect_reply":
+      handle_connect_reply(from_mudlib, payload);
+      break;
+    case "sync_room":
+      handle_sync_room(from_mudlib, payload);
+      break;
+    case "sync_inventory":
+      handle_sync_inventory(from_mudlib, payload);
+      break;
+    case "output":
+      handle_output(from_mudlib, payload);
+      break;
+    case "cmd":
+      handle_cmd(from_mudlib, payload);
+      break;
+    case "disconnect":
+      handle_disconnect(from_mudlib, payload);
+      break;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// 協議處理邏輯
+// ══════════════════════════════════════════════════════════════
+
+// 0. 處理斷線請求 (遠端玩家 fsleave)
+private void handle_disconnect(string from_mudlib, mapping payload) {
+  string s_uuid = payload["uuid"];
+  if (!s_uuid || s_uuid == "") return;
+
+  object shadow = shadow_players[s_uuid];
+  if (shadow) {
+    // 通知同房間的本地玩家
+    object env = environment(shadow);
+    if (env) {
+      string pname = shadow->query_name();
+      string msg = "$HIM$[Fantasy Space] $NOR$" + "$HIY$" + pname + "$NOR$" +
+        "$GRA$ @" + from_mudlib + "$NOR$" + " 離開了這個世界。
+";
+      object *inv = all_inventory(env);
+      foreach (object ob in inv) {
+        if (ob && userp(ob) && interactive(ob)) {
+          tell_object(ob, msg);
+        }
+      }
+    }
+    destruct(shadow);
+  }
+  m_delete(shadow_players, s_uuid);
+}
+
+// 1. 處理連線請求 (當有玩家想從遠端進入本機)
+private void handle_connect(string from_mudlib, mapping payload) {
+  string player_name = payload["name"];
+  string visitor_uuid = payload["uuid"];  // 這是遠端玩家在它本機的 UUID
+
+  // 為其建立一個 Shadow Player
+  object shadow = clone_object("/std/shadow_player.lpc");
+  if (!shadow) return;
+
+  shadow->set_name(player_name);
+  shadow->set_remote_mud(from_mudlib);
+  shadow->set_remote_uuid(visitor_uuid);
+
+  string shadow_uuid = query_uuid(shadow);
+  shadow_players[shadow_uuid] = shadow;
+
+  // 尋找玩家的 $HOME 空間
+  object home_d = load_object("/daemon/home_d.lpc");
+  object start_room;
+  if (home_d) {
+    start_room = home_d->query_home(player_name);
+  }
+
+  if (!start_room) {
+    start_room = load_object(START_ROOM);
+  }
+
+  if (start_room) {
+    shadow->move(start_room);
+
+    // 回傳成功訊息，並同步當前房間狀態
+    mapping resp = ([
+      "visitor_uuid": visitor_uuid,  // 讓遠端知道是哪個 Proxy 要啟動
+      "shadow_uuid": shadow_uuid,   // 讓遠端知道對應的影子 UUID
+      "room_uuid": query_uuid(start_room)
+    ]);
+    send_dist_msg(from_mudlib, "connect_reply", resp);
+
+    // 同步房間資訊給遠端 Proxy
+    sync_room_to_remote(from_mudlib, start_room, visitor_uuid);
+    // 同步影子玩家的背包
+    sync_inventory_to_remote(from_mudlib, shadow, visitor_uuid);
+  }
+}
+
+// 1.5 處理連線回覆 (本地玩家跨服成功)
+private void handle_connect_reply(string from_mudlib, mapping payload) {
+  string visitor_uuid = payload["visitor_uuid"];
+  string shadow_uuid = payload["shadow_uuid"];
+
+  object me = find_by_uuid(visitor_uuid);
+  if (me) {
+    object env = environment(me);
+    if (env && env->is_proxy_room()) {
+      env->set_shadow_uuid(shadow_uuid);
+      write("$HIG$[DistD] 分散式連結成功，影子 ID: " + shadow_uuid + "\n$NOR$");
+      me->remote_look();
+    }
+  }
+}
+
+// 同步房間狀態給遠端
+void sync_room_to_remote(string to_mudlib, object room, string target_uuid) {
+  if (!room) return;
+
+  mapping data = ([
+    "target_uuid": target_uuid,  // 哪個 Proxy 要更新
+    "uuid": query_uuid(room),
+    "short": room->short(),
+    "long": room->long(),
+    "exits": room->query_exits(),  // ([ "north": "/area/..." ])
+    "items": ({})
+  ]);
+
+  // 收集房間裡的物品 (NPC & Items)
+  object *inv = all_inventory(room);
+  foreach (object ob in inv) {
+    if (ob && !ob->is_shadow_player()) {  // 不把影子自己也傳回去
+      data["items"] += ({ ([
+        "uuid": query_uuid(ob),
+        "name": ob->query_name(),
+        "short": ob->short(),
+        "is_living": living(ob)
+      ]) });
+    }
+  }
+
+  send_dist_msg(to_mudlib, "sync_room", data);
+}
+
+// 同步影子玩家的背包
+void sync_inventory_to_remote(string to_mudlib, object shadow, string visitor_uuid) {
+  if (!shadow) return;
+
+  object *inv = all_inventory(shadow);
+  mapping data = ([
+    "target_uuid": visitor_uuid,
+    "items": ({})
+  ]);
+
+  foreach (object ob in inv) {
+    data["items"] += ({ ([
+      "uuid": query_uuid(ob),
+      "name": ob->query_name(),
+      "short": ob->short(),
+      "is_living": living(ob)
+    ]) });
+  }
+
+  send_dist_msg(to_mudlib, "sync_inventory", data);
+}
+
+// 2. 處理房間同步 (本機作為 Visitor，接收遠端 Proxy Room 的資料)
+private void handle_sync_room(string from_mudlib, mapping payload) {
+  string visitor_uuid = payload["target_uuid"];
+  object me = find_by_uuid(visitor_uuid);
+
+  if (me) {
+    object env = environment(me);
+    if (env && env->is_proxy_room()) {
+      env->update_state(payload);
+    }
+  }
+}
+
+// 2.5 處理背包同步
+private void handle_sync_inventory(string from_mudlib, mapping payload) {
+  string visitor_uuid = payload["target_uuid"];
+  object me = find_by_uuid(visitor_uuid);
+  if (me) {
+    object env = environment(me);
+    if (env && env->is_proxy_room()) {
+      env->update_inventory(payload);
+    }
+  }
+}
+
+// 3. 處理輸出 (遠端 Shadow 產生的文字 -> 傳回本地 Proxy)
+private void handle_output(string from_mudlib, mapping payload) {
+  string target_uuid = payload["uuid"];
+  object target = find_by_uuid(target_uuid);
+  if (target) {
+    tell_object(target, payload["msg"]);
+  }
+}
+
+// 4. 處理命令 (本地 Proxy 發出命令 -> 遠端 Shadow 執行)
+private void handle_cmd(string from_mudlib, mapping payload) {
+  string shadow_uuid = payload["uuid"];
+  object shadow = shadow_players[shadow_uuid];
+  if (shadow) {
+    // 以影子的身份執行命令
+    shadow->do_remote_cmd(payload["cmd"]);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// 使用者介面：發起跨服
+// ══════════════════════════════════════════════════════════════
+
+void start_fsgoto(object me, string to_mudlib) {
+  string my_uuid = query_uuid(me);
+
+  // 建立 Proxy Room 並立刻移入（玩家在這裡等待連線）
+  object proxy_room = clone_object("/std/proxy/room.lpc");
+  if (!proxy_room) {
+    write("$RED$系統錯誤：無法建立 Proxy Room。\n$NOR$");
+    return;
+  }
+  proxy_room->set_remote_mud(to_mudlib);
+  me->move(proxy_room, "portal");
+
+  write("$HIM$[Fantasy Space] $NOR$" + "正在連接 " + "$HIY$" + to_mudlib + "$NOR$" + "...\n" +
+    "$GRA$（連線後所有指令將在遠端執行；輸入 fsleave 返回本機）\n$NOR$");
+
+  // 送出連線請求
+  send_dist_msg(to_mudlib, "connect", ([
+    "name": me->query_name(),
+    "uuid": my_uuid
+  ]));
+}

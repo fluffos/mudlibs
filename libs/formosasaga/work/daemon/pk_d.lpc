@@ -1,0 +1,45 @@
+// /daemon/pk_d.c
+// PK 與 團隊保護守護進程
+
+#include "/include/ansi.h"
+
+inherit "/std/object";
+
+void create() {
+  ::create();
+}
+
+// 檢查 A 攻擊 B 是否屬於「合法自衛」或「團隊保護」
+int is_legal_attack(object a, object b) {
+  // 1. 攻擊怪物永遠合法
+  if (!userp(b)) return 1;
+
+  // 2. 攻擊紅名玩家合法
+  if (b->is_red_name()) return 1;
+
+  // 3. 攻擊「正在攻擊我」的人合法
+  if (b->query_combat_target() == a) return 1;
+
+  // 4. 🚀 團隊保護：攻擊「正在攻擊我團隊成員」的人合法
+  object a_leader = a->query_leader();
+  if (a_leader) {
+    object *members = a_leader->query_followers();
+    foreach (object m in members) {
+      if (b->query_combat_target() == m) return 1;
+    }
+  }
+
+  return 0;  // 否則就是惡意攻擊
+}
+
+// 處理玩家死亡時的 PK 判定
+void check_kill_penalty(object killer, object victim) {
+  if (!userp(killer) || !userp(victim)) return;
+
+  // 如果是惡意殺害無辜玩家
+  if (!is_legal_attack(killer, victim)) {
+    killer->add_pk_score(1);
+    tell_object(killer, "$HIR$⚠️ 你殺害了無辜玩家，罪惡值提升了！你現在是紅名狀態。\n$NOR$");
+    shout("$HIR$【公告】$NOR$" + killer->query_name() + " 在 " + environment(killer)->query_short() + " 惡意殺害了 " + victim->query_name() + "！\n");
+  }
+}

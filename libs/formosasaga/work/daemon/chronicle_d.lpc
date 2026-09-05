@@ -1,0 +1,213 @@
+// /daemon/chronicle_d.c
+//
+// 歷史文獻與編年史服務 (Chronicle Daemon)。
+//
+// 職責：
+//   - 收集玩家觸發的重大歷史事件（如記憶解鎖、失源者解除、任務完成）。
+//   - 儲存由文人 (Scholar) 編寫並發表的「地方誌」(Chronicles)。
+//   - 允許玩家查詢編年史與地方誌文獻。
+//   - 提供地方誌閱讀機制，讓讀者可從中獲得聚落記憶值回升與職涯修練點。
+
+#include "/include/ansi.h"
+#include "/include/formosa.h"
+
+inherit "/std/object";
+
+// 歷史事件紀錄結構：({ ([ "time": timestamp, "type": string, "desc": string, "player": string, "settlement": string ]) })
+private mapping historic_records;  // ([ settlement_id: ({ record_mapping }) ])
+
+// 玩家發表的地方誌結構：([ chronicle_id: ([ "title": string, "author": string, "author_id": string, "settlement_id": string, "content": string, "time": timestamp, "reads": int ]) ])
+private mapping local_chronicles;
+
+void save_state() {
+  if (file_size("/data/state/system/") < 0) {
+    mkdir("/data/state/system/");
+  }
+  save_object("/data/state/system/chronicle");
+}
+
+void restore_state() {
+  if (file_size("/data/state/system/chronicle.o") > 0) {
+    if (catch(restore_object("/data/state/system/chronicle"))) {
+      historic_records = ([]);
+      local_chronicles = ([]);
+    }
+  } else {
+    historic_records = ([]);
+    local_chronicles = ([]);
+    save_state();
+  }
+}
+
+void create() {
+  ::create();
+  restore_state();
+
+  // 訂閱事件以自動記錄歷史軌跡
+  call_out("subscribe_events", 1);
+}
+
+void subscribe_events() {
+  EVENT_D->subscribe("MemoryCompleted", "on_memory_completed");
+  EVENT_D->subscribe("SpecterResolved", "on_specter_resolved");
+}
+
+// ── 紀錄 API ──────────────────────────────────────────
+
+void add_historic_record(string settlement_id, string type, string desc, string player_name) {
+  if (!settlement_id) return;
+  if (!historic_records) historic_records = ([]);
+  if (!historic_records[settlement_id]) historic_records[settlement_id] = ({});
+
+  mapping rec = ([
+    "time": time(),
+    "type": type,
+    "desc": desc,
+    "player": player_name || "未知尋源者",
+  ]);
+
+  historic_records[settlement_id] += ({ rec });
+  save_state();
+}
+
+mapping *query_historic_records(string settlement_id) {
+  if (!historic_records) return ({});
+  return historic_records[settlement_id] || ({});
+}
+
+// ── 地方誌編寫與發表 ────────────────────────────────────
+
+int publish_chronicle(
+  string title,
+  string author_name,
+  string author_id,
+  string settlement_id,
+  string content
+) {
+  if (!title || !author_id || !settlement_id || !content) return 0;
+  if (!local_chronicles) local_chronicles = ([]);
+
+  string cid = sprintf("%s_%d", settlement_id, time());
+  local_chronicles[cid] = ([
+    "id": cid,
+    "title": title,
+    "author": author_name,
+    "author_id": author_id,
+    "settlement_id": settlement_id,
+    "content": content,
+    "time": time(),
+    "reads": 0,
+  ]);
+
+  save_state();
+
+  // 發表地方誌對聚落文明有正面回饋
+  SETTLEMENT_D->add_memory(settlement_id, 3);
+
+  shout(HIM "\n【風土誌發表】\n文人 " + author_name + " 發表了關於 " +
+    SETTLEMENT_D->query_settlement_name(settlement_id) + " 的地方誌《" + title + "》！" + NOR + "\n\n");
+
+  return 1;
+}
+
+mapping query_chronicle(string cid) {
+  if (!local_chronicles) return 0;
+  return local_chronicles[cid];
+}
+
+mapping *query_settlement_chronicles(string settlement_id) {
+  if (!local_chronicles) return ({});
+  mapping *res = ({});
+  foreach (string id, mapping c in local_chronicles) {
+    if (c["settlement_id"] == settlement_id) {
+      res += ({ c });
+    }
+  }
+  return res;
+}
+
+// ── 閱讀與效益機制 ─────────────────────────────────────
+
+int read_chronicle(object player, string cid) {
+  if (!player || !cid) return 0;
+  if (!local_chronicles || !local_chronicles[cid]) return 0;
+
+  mapping c = local_chronicles[cid];
+  c["reads"] = (c["reads"] || 0) + 1;
+  save_state();
+
+  // 顯示內容給玩家
+  tell_object(player, HIB "\n========================================\n" NOR);
+  tell_object(player, HIW "《" + c["title"] + "》\n" NOR);
+  tell_object(player, CYN "著述者：" + c["author"] + " (" + c["author_id"] + ")\n" NOR);
+  tell_object(player, YEL "發表年份：" + ctime(c["time"]) + "\n" NOR);
+  tell_object(player, HIB "----------------------------------------\n" NOR);
+  tell_object(player, c["content"] + "\n");
+  tell_object(player, HIB "========================================\n" NOR);
+
+  // 玩家每日/每本首次閱讀獲得文人點數或聚落記憶值回升
+  string read_key = "read_chronicle_" + cid;
+  if (!player->query_temp(read_key)) {
+    player->set_temp(read_key, 1);
+
+    // 讀者可獲得文士職涯點數 (Scholar Points) 與少量經驗
+    object career_d = find_object("/daemon/career_d.lpc");
+    if (career_d) {
+      career_d->add_points(player, "scholar", 2);
+    }
+    player->add_exp(5);
+    tell_object(player, GRN "你仔細研讀了這本地方誌，增長了文史涵養與 5 點經驗值。\n" NOR);
+
+    // 閱讀推廣使聚落歷史記憶再次被重視，記憶值回升
+    SETTLEMENT_D->add_memory(c["settlement_id"], 1);
+  }
+
+  return 1;
+}
+
+// ── 事件監聽 ──────────────────────────────────────────
+
+void on_memory_completed(mapping event) {
+  mapping data = event["data"];
+  if (!data) return;
+
+  string mid = data["memory_id"];
+  string pid = data["player_id"];
+  string s_id = "unknown";
+
+  // 嘗試從 memory_d 取得此記憶片段關聯的聚落
+  object mem_d = find_object("/daemon/memory_d.lpc");
+  if (mem_d) {
+    mapping mem_info = mem_d->query_memory_fragment(mid);
+    if (mem_info && mem_info["trigger_site"]) {
+      // 嘗試取得地標的聚落 ID
+      mapping site_info = SITE_D->load_site(mem_info["trigger_site"]);
+      if (site_info && site_info["settlement"]) {
+        s_id = site_info["settlement"];
+      }
+    }
+  }
+
+  string p_name = pid;
+  object p_ob = find_player(pid);
+  if (p_ob) p_name = p_ob->query_name();
+
+  string desc = sprintf("解鎖了歷史記憶碎片《%s》", mid);
+  add_historic_record(s_id, "memory", desc, p_name);
+}
+
+void on_specter_resolved(mapping event) {
+  mapping data = event["data"];
+  if (!data) return;
+
+  string s_id = data["settlement_id"];
+  string sp_id = data["specter_id"];
+  string resolver = data["resolver"];
+
+  string p_name = resolver;
+  object p_ob = find_player(resolver);
+  if (p_ob) p_name = p_ob->query_name();
+
+  string desc = sprintf("成功引導共鳴解除失源者 (%s) 的遺忘危機", sp_id);
+  add_historic_record(s_id, "specter", desc, p_name);
+}

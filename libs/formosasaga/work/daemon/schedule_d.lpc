@@ -1,0 +1,76 @@
+// /daemon/schedule_d.c
+// 虛擬時間與日程管理守護進程 (Schedule Daemon)
+
+#include "/include/formosa.h"
+
+inherit "/std/entity.lpc";
+
+// 遊戲時間設定
+// 假設現實 1 秒 = 遊戲 1 分鐘，現實 24 分鐘 = 遊戲 1 天
+#define REAL_SECONDS_PER_GAME_MINUTE 1
+#define GAME_MINUTES_PER_DAY 1440
+
+private int game_time_minutes = 0;  // 當前遊戲時間 (分鐘, 0-1439)
+private int game_day = 1;
+
+void time_tick() {
+  game_time_minutes += 15;  // 每次 tick 推進 15 遊戲分鐘 (即 15 秒執行一次)
+
+  if (game_time_minutes >= GAME_MINUTES_PER_DAY) {
+    game_time_minutes -= GAME_MINUTES_PER_DAY;
+    game_day++;
+    EVENT_D->publish("GameDayChanged", ([ "day": game_day ]));
+  }
+
+  // 格式化目前時間 HH:MM
+  int hh = game_time_minutes / 60;
+  int mm = game_time_minutes % 60;
+  string time_str = sprintf("%02d:%02d", hh, mm);
+
+  // 廣播時間變更
+  EVENT_D->publish("GameTimeTick", ([ "time_str": time_str, "minutes": game_time_minutes ]));
+
+  call_out("time_tick", 15 * REAL_SECONDS_PER_GAME_MINUTE);
+}
+
+void create() {
+  ::create();
+  set_entity_id("daemon:schedule");
+  set_entity_type("daemon");
+
+  // 初始時間設定為早上 08:00
+  game_time_minutes = 8 * 60;
+
+  call_out("time_tick", 15 * REAL_SECONDS_PER_GAME_MINUTE);
+}
+
+string query_game_time() {
+  int hh = game_time_minutes / 60;
+  int mm = game_time_minutes % 60;
+  return sprintf("%02d:%02d", hh, mm);
+}
+
+int query_game_time_minutes() {
+  return game_time_minutes;
+}
+
+// 輔助函式：檢查時間字串是否在指定區間 "HH:MM-HH:MM"
+int is_time_in_range(int current_minutes, string range_str) {
+  if (!range_str || range_str == "") return 0;
+  string start_str, end_str;
+  if (sscanf(range_str, "%s-%s", start_str, end_str) != 2) return 0;
+
+  int s_hh, s_mm, e_hh, e_mm;
+  sscanf(start_str, "%d:%d", s_hh, s_mm);
+  sscanf(end_str, "%d:%d", e_hh, e_mm);
+
+  int start_min = s_hh * 60 + s_mm;
+  int end_min = e_hh * 60 + e_mm;
+
+  if (start_min <= end_min) {
+    return current_minutes >= start_min && current_minutes < end_min;
+  } else {
+    // 跨日，例如 "22:00-06:00"
+    return current_minutes >= start_min || current_minutes < end_min;
+  }
+}

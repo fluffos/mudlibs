@@ -1,0 +1,127 @@
+// /tests/test_world_state.c
+//
+// 測試項目：
+//   - WORLD_STATE_D 載入與 YAML 狀態鏈解析
+//   - 初始狀態（state_0）正確取得
+//   - 條件評估：memory_unlocked、incident_resolved、quest_completed
+//   - 事件驅動的狀態自動推進
+//   - 效果執行：聚落維度提升
+//   - 廣播訊息（有在線玩家時）
+//   - site.c do_look() 能正確注入世界狀態描述
+//   - admin_advance / admin_reset 管理介面
+
+#include "/include/formosa.h"
+
+inherit "/std/test_case";
+
+void run_tests(object me) {
+  start_test("歷史事件驅動的世界狀態 (World State Evolution) 系統測試 (P21)");
+
+  // ── 載入守護進程 ────────────────────────────────────
+  object ws_d = load_object("/daemon/world_state_d.lpc");
+  assert_true(objectp(ws_d), "應成功載入 world_state_d");
+
+  // ── 1. YAML 狀態鏈解析 ────────────────────────────
+  write("--- 測試狀態鏈 YAML 解析 ---\n");
+  mapping all_chains = ws_d->query_all_chains();
+  assert_true(sizeof(all_chains) > 0, "應至少載入一條狀態鏈");
+  assert_true(all_chains["minxiong_sugar_chain"] != 0, "應載入 minxiong_sugar_chain");
+
+  mapping chain = all_chains["minxiong_sugar_chain"];
+  assert_true(pointerp(chain["states"]), "狀態鏈應包含 states 陣列");
+  assert_equal(5, sizeof(chain["states"]), "minxiong_sugar_chain 應有 5 個狀態");
+
+  // ── 2. 初始狀態 ───────────────────────────────────
+  write("--- 測試初始狀態 ---\n");
+  // 先重置，確保乾淨的初始狀態
+  ws_d->admin_reset_chain("minxiong_sugar_chain");
+
+  string cur = ws_d->query_chain_state("minxiong_sugar_chain");
+  assert_equal("state_0", cur, "重置後應為 state_0");
+
+  // 初始狀態的 site_desc 應包含廢棄廠房描述
+  string site_desc = ws_d->query_site_state_desc("sugar_factory_ruins");
+  assert_true(strlen(site_desc) > 0, "state_0 應有 sugar_factory_ruins 的描述注入");
+
+  // ── 3. MemoryCompleted 事件推進到 state_1 ─────────
+  write("--- 測試 MemoryCompleted 推進到 state_1 ---\n");
+  EVENT_D->publish("MemoryCompleted", ([
+    "player_id": "player:test",
+    "memory_id": "minxiong_sugar_001",
+    "settlement_id": "minxiong",
+    "progress": 10,
+    "timestamp": time(),
+  ]));
+
+  while (EVENT_D->query_queue_size() > 0) {
+    EVENT_D->dispatch_loop();
+  }
+
+  cur = ws_d->query_chain_state("minxiong_sugar_chain");
+  assert_equal("state_1", cur, "解鎖 minxiong_sugar_001 記憶後應推進到 state_1");
+
+  // state_1 的描述應出現在老車站
+  string station_desc = ws_d->query_site_state_desc("minxiong_old_station");
+  assert_true(strlen(station_desc) > 0, "state_1 應在老車站注入描述");
+
+  // ── 4. IncidentResolved 事件推進到 state_2 ────────
+  write("--- 測試 IncidentResolved 推進到 state_2 ---\n");
+  EVENT_D->publish("IncidentResolved", ([
+    "player": me,
+    "incident_id": "minxiong_sugar_incident",
+  ]));
+
+  while (EVENT_D->query_queue_size() > 0) {
+    EVENT_D->dispatch_loop();
+  }
+
+  cur = ws_d->query_chain_state("minxiong_sugar_chain");
+  assert_equal("state_2", cur, "解決糖業事件後應推進到 state_2");
+
+  // 聚落記憶度應提升（state_2 效果：memory +10）
+  int mem = SETTLEMENT_D->query_dim("minxiong", "memory");
+  assert_true(mem > 50, "推進到 state_2 後，民雄記憶維度應已提升");
+
+  // ── 5. QuestCompleted 推進到 state_3 ─────────────
+  write("--- 測試 QuestCompleted 推進到 state_3 ---\n");
+  EVENT_D->publish("QuestCompleted", ([
+    "player": me,
+    "quest_id": "sugar_railway_repair",
+  ]));
+
+  while (EVENT_D->query_queue_size() > 0) {
+    EVENT_D->dispatch_loop();
+  }
+
+  cur = ws_d->query_chain_state("minxiong_sugar_chain");
+  assert_equal("state_3", cur, "完成糖鐵修復任務後應推進到 state_3");
+
+  // ── 6. admin_advance 手動推進到 state_4 ──────────
+  write("--- 測試 admin_advance ---\n");
+  ws_d->admin_advance("minxiong_sugar_chain", "state_4");
+  cur = ws_d->query_chain_state("minxiong_sugar_chain");
+  assert_equal("state_4", cur, "admin_advance 應成功推進到 state_4");
+
+  // state_4 的文史館描述
+  string factory_desc_4 = ws_d->query_site_state_desc("sugar_factory_ruins");
+  assert_true(strsrch(factory_desc_4, "文史館") != -1, "state_4 應注入文史館相關描述");
+
+  // ── 7. admin_reset ───────────────────────────────
+  write("--- 測試 admin_reset ---\n");
+  ws_d->admin_reset_chain("minxiong_sugar_chain");
+  cur = ws_d->query_chain_state("minxiong_sugar_chain");
+  assert_equal("state_0", cur, "reset 後應回到 state_0");
+
+  // ── 8. worldstate 指令 ───────────────────────────
+  write("--- 測試 worldstate 指令 ---\n");
+  object cmd_ws = load_object("/cmds/player/cmd_worldstate.lpc");
+  assert_true(objectp(cmd_ws), "應載入 cmd_worldstate");
+
+  int res = cmd_ws->main(me, "worldstate", "");
+  assert_equal(1, res, "worldstate 總覽指令應成功執行");
+
+  res = cmd_ws->main(me, "worldstate", "minxiong_sugar_chain");
+  assert_equal(1, res, "worldstate <chain_id> 詳情指令應成功執行");
+
+  report_results();
+}

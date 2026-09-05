@@ -1,0 +1,120 @@
+// mudlib/cmds/cmd_ask.c
+// 詢問指令：ask <目標> about <話題>
+
+inherit "/std/object";
+
+#include "/include/ansi.h"
+#include "/include/formosa.h"
+
+int main(object me, string verb, string arg) {
+  if (!arg) {
+    write(select_lang(([
+      "en": "Ask who? Usage: ask <target> about <topic>\n",
+      "zh-TW": "詢問誰？用法：ask <目標> about <話題>\n",
+      "zh-CN": "询问谁？用法：ask <目标> about <话题>\n"
+    ])));
+    return 1;
+  }
+
+  string target_id, topic;
+
+  // 優先嘗試 "X about Y" 格式
+  // LPC sscanf 的 %s 是 non-greedy，遇到字面量 " about " 就停止第一個 %s
+  if (sscanf(arg, "%s about %s", target_id, topic) == 2 &&
+    target_id != "" && topic != "") {
+    // 解析成功
+  } else if (sscanf(arg, "%s %s", target_id, topic) == 2 &&
+    target_id != "" && topic != "") {
+    // 簡寫格式：ask <目標> <話題>
+  } else {
+    write(select_lang(([
+      "en": "Ask about what? Usage: ask <target> about <topic>\n",
+      "zh-TW": "詢問關於什麼？用法：ask <目標> about <話題>\n",
+      "zh-CN": "询问关于什么？用法：ask <目标> about <话题>\n"
+    ])));
+    return 1;
+  }
+
+  // 在目前房間尋找目標，present() 使用 id() 比對 id_list
+  object target = present(target_id, environment(me));
+  if (!target) {
+    write(select_lang(([
+      "en": "There is no one named '",
+      "zh-TW": "這裡沒有「",
+      "zh-CN": "这里没有「"
+    ])) + target_id + select_lang(([ "en": "' here.\n", "zh-TW": "」這個人。\n", "zh-CN": "」这个人。\n" ])));
+    return 1;
+  }
+
+  if (!living(target)) {
+    write(select_lang(([
+      "en": "Are you asking a statue something?\n",
+      "zh-TW": "你要問一尊雕像什麼嗎？\n",
+      "zh-CN": "你要问一尊雕像什么吗？\n"
+    ])));
+  }
+
+  string target_name = target->query_name();
+
+  // 用 tell_object 確保訊息送給正確的玩家
+  tell_object(
+    me,
+    select_lang(([
+      "en": "You ask ",
+      "zh-TW": "你向 ",
+      "zh-CN": "你向 "
+    ])) + target_name + select_lang(([
+      "en": " about '",
+      "zh-TW": " 詢問關於「",
+      "zh-CN": " 询问关于「"
+    ])) + topic + select_lang(([ "en": "'.\n", "zh-TW": "」的事。\n", "zh-CN": "」的事。\n" ]))
+  );
+  tell_room(
+    environment(me),
+    me->query_name() + select_lang(([
+      "en": " asks ",
+      "zh-TW": " 向 ",
+      "zh-CN": " 向 "
+    ])) + target_name + select_lang(([
+      "en": " about something.\n",
+      "zh-TW": " 詢問了一些事。\n",
+      "zh-CN": " 询问了一些事。\n"
+    ])),
+    ({ me })
+  );
+
+  // 呼叫 NPC 的 do_chat，傳入詢問者 me 方便 NPC 直接 tell_object
+  if (!target->do_chat(me, topic)) {
+    tell_object(
+      me,
+      target_name + select_lang(([
+        "en": " just looks at you and says nothing.\n",
+        "zh-TW": " 只是看了看你，什麼也沒說。\n",
+        "zh-CN": " 只是看了看你，什么也没说。\n"
+      ]))
+    );
+  } else {
+    // NPC 有回應，觸發事件調查線索 (若有設定 npc_ask)
+    // 注意：這裡假設 target 有 query_entity_id() 或是用 query("id") 取得唯一識別碼
+    string eid = target->query_entity_id() || "npc:" + target->query("id");
+    catch(INCIDENT_D->check_trigger(me, "npc_ask", eid, topic));
+  }
+
+  return 1;
+}
+
+string help() {
+  return select_lang(([
+    "en": "【Ask Command】\n  ask <target> about <topic>    Ask an NPC for specific information\n  ask <target> <topic>          Shorthand for asking\n\n  Example: ask master about job\n  Example: ask guildmaster about guild\n  Example: ask master topics     (view available topics)\n",
+    "zh-TW": "【詢問指令】\n  ask <目標> about <話題>    向 NPC 詢問特定的資訊\n  ask <目標> <話題>          詢問的簡寫方式\n\n  範例：ask master about job\n  範例：ask 會長 about 公會\n  範例：ask master topics     （查看可詢問的話題）\n",
+    "zh-CN": "【询问指令】\n  ask <目标> about <话题>    向 NPC 询问特定的资讯\n  ask <目标> <话题>          询问的简写方式\n\n  范例：ask master about job\n  范例：ask 会长 about 公会\n  范例：ask master topics     （查看可询问的话题）\n"
+  ]));
+}
+
+string *query_verbs() {
+  return ({ "ask" });
+}
+
+string query_category() {
+  return select_lang(([ "en": "Social", "zh-TW": "社交", "zh-CN": "社交" ]));
+}

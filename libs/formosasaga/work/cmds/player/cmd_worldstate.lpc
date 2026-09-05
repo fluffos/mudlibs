@@ -1,0 +1,131 @@
+// /cmds/player/cmd_worldstate.c
+//
+// 世界狀態查詢指令 (P21)
+//
+// 指令用法：
+//   worldstate                     查看所有已知的世界狀態鏈目前進度
+//   worldstate <chain_id>          查看特定狀態鏈的詳細資訊
+//   worldstate advance <chain> <state>   (管理員) 手動推進
+//   worldstate reset <chain>             (管理員) 重置狀態鏈
+
+#include "/include/ansi.h"
+#include "/include/formosa.h"
+
+inherit "/std/object";
+
+private string state_bar(int cur, int total) {
+  string out = "";
+  int i;
+  for (i = 0; i < total; i++) {
+    if (i < cur) out += C_GOOD + "●" + C_RESET;
+    else out += C_DIM + "○" + C_RESET;
+    if (i < total - 1) out += "─";
+  }
+  return out;
+}
+
+int main(object me, string verb, string arg) {
+  // 管理員指令
+  if (arg && sscanf(arg, "advance %s", arg) == 1) {
+    if (me->query_role() != "god" && me->query_role() != "wizard") {
+      write("你沒有權限執行此指令。\n");
+      return 1;
+    }
+    string chain_id, state_id;
+    if (sscanf(arg, "%s %s", chain_id, state_id) == 2) {
+      WORLD_STATE_D->admin_advance(chain_id, state_id);
+      write(C_GOOD + "已手動推進：" + chain_id + " -> " + state_id + C_RESET + "\n");
+    } else {
+      write("用法：worldstate advance <chain_id> <state_id>\n");
+    }
+    return 1;
+  }
+
+  if (arg && sscanf(arg, "reset %s", arg) == 1) {
+    if (me->query_role() != "god" && me->query_role() != "wizard") {
+      write("你沒有權限執行此指令。\n");
+      return 1;
+    }
+    WORLD_STATE_D->admin_reset_chain(arg);
+    write(C_WARN + "已重置狀態鏈：" + arg + C_RESET + "\n");
+    return 1;
+  }
+
+  mapping all_chains = WORLD_STATE_D->query_all_chains();
+  mapping all_progress = WORLD_STATE_D->query_all_chain_progress();
+
+  if (!sizeof(all_chains)) {
+    write("目前沒有任何世界狀態鏈。\n");
+    return 1;
+  }
+
+  // 顯示特定鏈詳細資訊
+  if (arg && arg != "") {
+    string chain_id = lower_case(trim(arg));
+    mapping chain = all_chains[chain_id];
+    if (!chain) {
+      write("找不到狀態鏈「" + arg + "」。\n");
+      return 1;
+    }
+
+    string cur_state = WORLD_STATE_D->query_chain_state(chain_id);
+    mixed *states = chain["states"] || ({});
+    int cur_idx = 0;
+    int i;
+    for (i = 0; i < sizeof(states); i++) {
+      if (states[i]["id"] == cur_state) { cur_idx = i; break; }
+    }
+
+    write("\n");
+    write(C_TITLE + "【世界狀態鏈】" + C_RESET + chain["name"] + "\n");
+    write(C_DIM + "  聚落：" + C_RESET + (chain["settlement"] || "—") + "\n");
+    write(C_DIM + "  描述：" + C_RESET + (chain["description"] || "") + "\n");
+    write("\n");
+    write("  進度：" + state_bar(cur_idx + 1, sizeof(states)) + "\n\n");
+
+    foreach (mapping st in states) {
+      string marker = (st["id"] == cur_state) ? C_GOOD + "▶ " + C_RESET : C_DIM + "  " + C_RESET;
+      write(marker + C_TITLE + st["name"] + C_RESET + " (" + st["id"] + ")\n");
+      if (st["description"]) {
+        write("    " + st["description"] + "\n");
+      }
+    }
+    write("\n");
+    return 1;
+  }
+
+  // 顯示所有鏈總覽
+  write("\n" + C_TITLE + "【世界演化狀態總覽】" + C_RESET + "\n");
+  write(C_DIM + "─────────────────────────────────────────\n" + C_RESET);
+
+  foreach (string chain_id, mapping prog in all_progress) {
+    mapping chain = all_chains[chain_id];
+    if (!chain) continue;
+    mixed *states = chain["states"] || ({});
+    int cur_idx = 0;
+    int i;
+    for (i = 0; i < sizeof(states); i++) {
+      if (states[i]["id"] == prog["current_state"]) { cur_idx = i; break; }
+    }
+
+    write(sprintf("  %-30s  %s  %s%s%s / %d\n",
+      chain["name"] || chain_id,
+      state_bar(cur_idx + 1, sizeof(states)),
+      C_DIM, prog["state_name"], C_RESET,
+      sizeof(states)));
+  }
+
+  write("\n" + C_DIM + "worldstate <chain_id> — 查看詳情\n" + C_RESET + "\n");
+  return 1;
+}
+
+string *query_verbs() { return ({ "worldstate", "世界狀態" }); }
+string query_category() { return "探索"; }
+string help() {
+  return "【世界狀態查詢】\n"
+    "  worldstate                     查看所有世界狀態鏈的目前進度。\n"
+    "  worldstate <chain_id>          查看特定狀態鏈的詳細資訊。\n"
+    "(管理員)\n"
+    "  worldstate advance <chain> <state>   手動推進到指定狀態。\n"
+    "  worldstate reset <chain>             重置狀態鏈為初始狀態。\n";
+}

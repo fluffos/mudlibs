@@ -1,0 +1,80 @@
+// /daemon/skill_d.c
+// 技能守護進程 (Skill Daemon)
+
+#include "/include/ansi.h"
+
+inherit "/std/object";
+mapping skill_list;
+
+
+void create() {
+  ::create();
+  skill_list = ([
+    "unarmed": ([ "name": "拳腳功夫", "type": "combat" ]),
+    "sword": ([ "name": "基本劍法", "type": "combat" ]),
+    "dodge": ([ "name": "基本閃避", "type": "combat" ]),
+    "parry": ([ "name": "基本招架", "type": "combat" ]),
+    "magic": ([ "name": "基本魔法", "type": "magic" ]),
+    "alchemy": ([ "name": "煉金術", "type": "craft" ]),
+    "forging": ([ "name": "鍛造術", "type": "craft" ]),
+    "taming": ([ "name": "馴獸術", "type": "special" ])
+  ]);
+}
+
+string query_skill_name(string sid) {
+  if (skill_list[sid]) return skill_list[sid]["name"];
+  return sid;
+}
+
+// 升級所需經驗值公式：(等級+1)^2 * 10
+int query_upgrade_exp(int level) {
+  return (level + 1) * (level + 1) * 10;
+}
+
+// 檢查是否升級
+void check_upgrade(object me, string sid) {
+  mapping skills = me->query_skills();
+  if (!skills || !skills[sid]) return;
+
+  int level = skills[sid]["level"];
+  int exp = skills[sid]["exp"];
+  int req = query_upgrade_exp(level);
+
+  while (exp >= req && level < 100) {
+    exp -= req;
+    level++;
+    req = query_upgrade_exp(level);
+
+    tell_object(me, "$HIY$✨ 你的『" + query_skill_name(sid) + "』進步了！現在是等級 " + level + "。\n$NOR$");
+    me->set_skill(sid, level);
+    me->update_quest_progress(sid, "exp", exp);  // 這裡需要一個更通用的 update 方式，先用 set_skill 搞定
+
+    // 更新 exp (set_skill 只有設 level，我們直接改 mapping 內部)
+    skills[sid]["exp"] = exp;
+  }
+}
+
+// 學習技能邏輯 (消耗潛能)
+int learn_skill(object me, string sid, int amount) {
+  if (!skill_list[sid]) {
+    write("沒有這種技能。\n");
+    return 0;
+  }
+
+  int pot = me->query_potential();
+  if (pot < amount) {
+    write("你的潛能不足 (需要 " + amount + ")。\n");
+    return 0;
+  }
+
+  // 學習效率受悟性 (int) 影響
+  int gain = amount * (10 + me->query_stat("int")) / 10;
+
+  me->gain_potential(-amount);
+  me->improve_skill(sid, gain);
+
+  write("你消耗了 " + amount + " 點潛能，對『" + query_skill_name(sid) + "』有了新的領悟。\n");
+  return 1;
+}
+
+mapping query_all_skills() { return skill_list; }

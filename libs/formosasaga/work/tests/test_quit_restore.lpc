@@ -1,0 +1,79 @@
+// /tests/test_quit_restore.c
+#include "/include/formosa.h"
+inherit "/std/test_case";
+
+string query_role() { return "god"; }
+
+void run_tests(object me) {
+  start_test("Player logout and login restore test");
+
+  // 1. Setup fake player
+  object player = clone_object("/std/user.lpc");
+  player->set_id("test_restore_wade");
+  player->set_role("user");
+  player->set_lang("zh-TW");
+  player->set_name("Restorer");
+
+  // 2. Load dashiye_temple
+  write("DEBUG_TEST: file size of YAML: " + file_size("/data/yaml/sites/minxiong/temple.yaml") + "\n");
+  write("DEBUG_TEST: file size of minxiong.c: " + file_size("/area/settlements/minxiong.lpc") + "\n");
+  write("DEBUG_TEST: file size of minxiong.c relative: " + file_size("area/settlements/minxiong.lpc") + "\n");
+  write("DEBUG_TEST: SITE_D load_site: " + sprintf(
+    "%O",
+    SITE_D->load_site("dashiye_temple")
+  ) + "\n");
+  object temple = SETTLEMENT_D->get_site_object("dashiye_temple");
+  write("DEBUG_TEST: get_site_object minxiong first: " + sprintf(
+    "%O",
+    SETTLEMENT_D->get_site_object("minxiong")
+  ) + "\n");
+  write("DEBUG_TEST: loading minxiong directly:\n");
+  object minx = load_object("/area/settlements/minxiong.lpc");
+  write("DEBUG_TEST: loaded minxiong: " + sprintf("%O", minx) + "\n");
+  write("DEBUG_TEST: get_site_object minxiong second: " + sprintf(
+    "%O",
+    SETTLEMENT_D->get_site_object("minxiong")
+  ) + "\n");
+  write("DEBUG_TEST: get_site_object: " + sprintf("%O", temple) + "\n");
+  assert_true(objectp(temple), "Should successfully load dashiye_temple site object");
+
+  if (temple) {
+    // 3. Move player to temple and save
+    player->move(temple);
+    assert_equal(temple, environment(player), "Player should be in temple");
+
+    int save_res = player->save();
+    assert_equal(1, save_res, "Player save should return 1");
+
+    // 4. Verify save file contents
+    string save_file = player->query_save_file();
+    assert_true(file_size(save_file + ".o") > 0, "Save file .o should exist");
+
+    // 5. Destruct and recreate player to simulate login
+    destruct(player);
+
+    object player2 = clone_object("/std/user.lpc");
+    player2->set_id("test_restore_wade");
+    int restore_res = player2->restore();
+    assert_equal(1, restore_res, "Player restore should return 1");
+    assert_equal(
+      "site:dashiye_temple",
+      player2->query_last_location(),
+      "Saved last_location should be site:dashiye_temple"
+    );
+
+    // 6. Run setup to trigger environment recovery
+    player2->setup();
+    assert_equal(
+      temple,
+      environment(player2),
+      "Player environment after setup should be restored to dashiye_temple"
+    );
+
+    // Cleanup
+    destruct(player2);
+    rm(save_file + ".o");
+  }
+
+  report_results();
+}

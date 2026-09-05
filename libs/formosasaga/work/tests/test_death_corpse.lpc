@@ -1,0 +1,53 @@
+// /tests/test_death_corpse.c
+inherit "/std/test_case";
+
+void run_tests(object me) {
+  start_test("死亡懲罰與跑屍系統驗證");
+
+  object me = clone_object("/std/user.lpc");
+  me->set_id("unlucky_hero");
+  me->set_name("不幸的冒險者");
+  me->set_role("user");
+  me->set_level(5);
+  me->gain_exp(200);  // 🚀 確保有非零經驗
+  me->gain_potential(1000);
+  me->add_money(500);
+
+  // 🚀 使用獨立測試房間
+  object room = clone_object("/std/room.lpc");
+  room->set_short("死亡測試間");
+  me->move_object(room);
+
+  // 1. 測試死亡懲罰
+  int old_exp = me->query_exp();
+  int old_pot = me->query_potential();
+
+  me->die();
+
+  assert_true(me->query_exp() < old_exp, "死亡後經驗值應減少");
+  assert_true(me->query_potential() < old_pot, "死亡後潛能應減少");
+  assert_equal(0, me->query_money(), "死亡後身上金錢應掉光");
+
+  // 2. 測試跑屍恢復
+  object corpse = present("corpse", room);
+  assert_true(objectp(corpse), "死亡現場應留下屍體");
+
+  if (corpse) {
+    me->move_object(room);
+    int current_exp = me->query_exp();
+
+    object cmd_inv = load_object("/cmds/player/cmd_inventory.lpc");
+    // 確保尋找錢袋
+    object bag = present("money bag", corpse);
+    if (bag) {
+      cmd_inv->main(me, "get", bag->query_key_id() + " from corpse");
+    }
+
+    assert_equal(500, me->query_money(), "撿起錢袋後金錢應恢復");
+    assert_true(me->query_exp() > current_exp, "從自己屍體撿回東西應恢復部分經驗");
+  }
+
+  report_results();
+  destruct(me);
+  if (room) destruct(room);
+}

@@ -1,0 +1,58 @@
+// /tests/test_file_mgmt.c
+inherit "/std/test_case";
+
+// 讓測試物件具備管理員權限
+string query_role() { return "god"; }
+
+void run_tests(object me) {
+  start_test("檔案管理與 CWD 權限驗證");
+
+  // 1. 建立測試目錄
+  mkdir("/a");
+  mkdir("/a/b");
+  mkdir("/x");
+  mkdir("/x/y");
+  mkdir("/area");
+
+  // 2. 建立測試巫師
+  object wizard = clone_object("/std/user.lpc");
+  wizard->set_id("test_wizard");
+  wizard->set_role("wizard");
+  wizard->enable_wizard();
+  wizard->add_write_path("/a/b");
+  wizard->add_write_path("/x/y");
+  wizard->set_cwd("/");
+
+  object cd_cmd = load_object("/cmds/admin/cmd_cd.lpc");
+
+  // 🚀 執行測試 A: cd /a/b (直接使用 wizard 對象呼叫，避開 this_player() 混淆)
+  wizard->set_cwd("/");
+  cd_cmd->main(wizard, "cd", "/a/b");
+  assert_equal("/a/b", wizard->query_cwd(), "cd /a/b (授權路徑) 應該成功");
+
+  // 🚀 執行測試 B: cd /a
+  wizard->set_cwd("/a/b");
+  cd_cmd->main(wizard, "cd", "/a");
+  assert_equal("/a/b", wizard->query_cwd(), "cd /a (未授權) 應該失敗");
+
+  // 🚀 執行測試 C: cd /x/y
+  cd_cmd->main(wizard, "cd", "/x/y");
+  assert_equal("/x/y", wizard->query_cwd(), "cd /x/y (授權路徑) 應該成功");
+
+  // 🚀 執行測試 D: cd ..
+  cd_cmd->main(wizard, "cd", "..");
+  assert_equal("/x/y", wizard->query_cwd(), "cd .. (跳向未授權) 應該失敗");
+
+  // 🚀 執行測試 E: cd /area
+  cd_cmd->main(wizard, "cd", "/area");
+  assert_equal("/area", wizard->query_cwd(), "cd /area (預設開放) 應該成功");
+
+  // 清理
+  rmdir("/x/y");
+  rmdir("/x");
+  rmdir("/a/b");
+  rmdir("/a");
+
+  destruct(wizard);
+  report_results();
+}

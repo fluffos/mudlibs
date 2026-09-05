@@ -1,0 +1,153 @@
+// /std/proxy/room.c
+// Proxy Room — 本地玩家跨服後的「虛擬終端機」
+//
+// 設計原則：
+//   - 玩家身體留在本機這個房間裡
+//   - 所有輸入轉發到遠端的 shadow_player 執行
+//   - 遠端執行結果（文字）透過 dist_d -> output RPC 傳回，直接 write 給玩家
+//   - 遠端的房間描述透過 sync_room RPC 傳回，更新本地 proxy room 狀態
+//   - 玩家看到的就是遠端世界，感知不到自己在 proxy room 裡
+
+#include "/include/config.h"
+#include "/include/ansi.h"
+
+inherit "/std/object";
+
+// ── 狀態 ─────────────────────────────────────────────────
+string remote_mud;       // 目標 mudlib_id
+string shadow_uuid;      // 遠端的 shadow_player UUID
+int connected;        // 是否已建立連線
+
+// 遠端房間的當前狀態（由 sync_room 更新）
+string r_short;          // 房間標題
+string r_long;           // 房間描述
+mapping r_exits;          // 出口
+mixed r_items;
+/* fluffos prototypes */
+void look_room(object viewer);
+// 房間內物件清單
+
+// ── 初始化 ───────────────────────────────────────────────
+void create() {
+  ::create();
+  connected = 0;
+  r_short = "連結中...";
+  r_long = "正在建立與遠端伺服器的連結，請稍候。\n";
+  r_exits = ([]);
+  r_items = ({});
+}
+
+void set_remote_mud(string mud) { remote_mud = mud; }
+void set_shadow_uuid(string uuid) {
+  shadow_uuid = uuid;
+  connected = 1;
+}
+
+string query_remote_mud() { return remote_mud; }
+string query_shadow_uuid() { return shadow_uuid; }
+int is_proxy_room() { return 1; }
+int query_is_connected() { return connected; }
+
+// ── 遠端狀態更新（由 dist_d::handle_sync_room 呼叫）──────
+void update_state(mapping data) {
+  if (data["short"]) r_short = data["short"];
+  if (data["long"]) r_long = data["long"];
+  if (data["exits"]) r_exits = data["exits"];
+  if (data["items"]) r_items = data["items"];
+
+  // 通知房間內的本地玩家刷新畫面
+  object *inv = all_inventory(this_object());
+  foreach (object ob in inv) {
+    if (ob && userp(ob) && interactive(ob)) {
+      look_room(ob);
+    }
+  }
+}
+
+// 更新背包（目前只在 look 時顯示，暫存用）
+mapping r_inventory;
+void update_inventory(mapping data) {
+  if (data["items"]) r_inventory = data;
+}
+
+// ── look_room：顯示遠端房間狀態 ──────────────────────────
+void look_room(object viewer) {
+  if (!connected) {
+    tell_object(viewer,
+      "$HIM$[Fantasy Space] $NOR$" + "正在連接 " + "$HIY$" + remote_mud + "$NOR$" + "...\n");
+    return;
+  }
+
+  // 標題
+  string out = "$HIW$【" + r_short + "】$NOR$" +
+    "$GRA$ @" + remote_mud + "$NOR$" + "\n";
+
+  // 描述
+  out += r_long;
+
+  // 出口
+  if (r_exits && sizeof(r_exits)) {
+    string *exit_list = keys(r_exits);
+    out += "出口：" + implode(exit_list, "  ") + "\n";
+  } else {
+    out += "$GRA$（沒有出口）\n$NOR$";
+  }
+
+  // 房間內的物件與其他玩家
+  if (r_items && sizeof(r_items)) {
+    out += "這裡有：\n";
+    foreach (mixed item in r_items) {
+      if (!mapp(item)) continue;
+      string iname = item["name"];
+      string ishort = item["short"];
+      int iliving = item["is_living"];
+      if (iliving) {
+        out += "  " + "$HIG$(生物) $NOR$" + iname;
+      } else {
+        out += "  " + iname;
+      }
+      if (ishort && ishort != "" && ishort != iname) {
+        out += " — " + ishort;
+      }
+      out += "\n";
+    }
+  }
+
+  tell_object(viewer, out);
+}
+
+// ── 指令攔截：把玩家輸入轉發給遠端 shadow ────────────────
+// 由 user.c 的 process_input 判斷 is_proxy_room() 後呼叫
+int do_proxy_cmd(string input) {
+  if (!connected || !shadow_uuid || shadow_uuid == "") {
+    write("$GRA$（尚未連線，請稍候...）\n$NOR$");
+    return 1;
+  }
+
+  // 特殊本機指令：fsleave 直接在本機執行
+  string verb = explode(input, " ")[0];
+  if (verb == "fsleave" || verb == "fsgoto") {
+    return 0;  // 交回 process_input 本機處理
+  }
+
+  object dist_d = find_object("/daemon/dist_d.lpc");
+  if (!dist_d) dist_d = load_object("/daemon/dist_d.lpc");
+  if (!dist_d) {
+    write("$RED$連線錯誤：無法找到 dist_d。\n$NOR$");
+    return 1;
+  }
+
+  dist_d->send_dist_msg(remote_mud, "cmd", ([
+    "uuid": shadow_uuid,
+    "cmd": input
+  ]));
+
+  return 1;  // 告知 process_input 已處理
+}
+
+// ── 提供給 do_go 的出口資訊 ──────────────────────────────
+mapping query_exits() { return r_exits; }
+
+// 覆寫 short/long 供系統使用
+string short() { return r_short + " @" + remote_mud; }
+string long() { return r_long; }

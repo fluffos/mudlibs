@@ -1,0 +1,82 @@
+// /cmds/admin/cmd_cd.c
+inherit "/std/object";
+
+int main(object me, string verb, string arg) {
+  if (!wizardp(me)) return 0;
+
+  if (!arg || arg == "") {
+    string *wp = me->query_write_paths();
+    if (wp && sizeof(wp) > 0) {
+      me->set_cwd(wp[0]);
+      write("~ " + wp[0] + "\n");
+    } else {
+      me->set_cwd("/");
+      write("/\n");
+    }
+    return 1;
+  }
+
+  string path = resolv_path(arg, me);
+
+  // 規範化路徑：確保不以 / 結尾 (除非是根目錄)
+  if (strlen(path) > 1 && path[strlen(path) - 1] == '/') {
+    path = substr(path, 0, strlen(path) - 1);
+  }
+
+  if (file_size(path) != -2) {
+    write("cd: no such directory: " + path + "\n");
+    return 1;
+  }
+
+  // 授權檢查 (God 不受限)
+  if (me->query_role() != "god") {
+    string *wp = me->query_write_paths();
+    int allowed = 0;
+
+    // 1. 檢查自定義授權路徑
+    if (wp) {
+      foreach (string p in wp) {
+        if (strsrch(path, p) == 0) {
+          allowed = 1;
+          break;
+        }
+      }
+    }
+
+    // 2. 檢查 Wizard 預設授權路徑 (與 valid.c 一致)
+    if (!allowed && me->query_role() == "wizard") {
+      string *default_paths = ({
+        "/area",
+        "/npc",
+        "/item",
+        "/cmds",
+        "/log",
+        "/open",
+        "/tests",
+        "/u"
+      });
+      foreach (string p in default_paths) {
+        if (strsrch(path, p) == 0) {
+          allowed = 1;
+          break;
+        }
+      }
+    }
+
+    if (!allowed) {
+      write("cd: permission denied: " + path + "\n");
+      return 1;
+    }
+  }
+
+  me->set_cwd(path);
+  write(path + "\n");
+  return 1;
+}
+
+string *query_verbs() { return ({ "cd" }); }
+string query_category() { return "Admin"; }
+
+string help() {
+  return "Usage: cd <directory>\nChanges current working directory.\n";
+}

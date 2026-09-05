@@ -1,0 +1,102 @@
+// mudlib/cmds/cmd_memory.c
+//
+// 記憶指令：讓玩家查看已解鎖的歷史記憶片段，以及世界時代進度。
+//
+// 指令：memory / 記憶
+
+#include "/include/ansi.h"
+#include "/include/formosa.h"
+
+inherit "/std/object";
+
+int main(object me, string verb, string arg) {
+  string *unlocked = me->query_unlocked_memories();
+  if (!unlocked) unlocked = ({});
+
+  int count = sizeof(unlocked);
+
+  // ── 時代進度 ──────────────────────────────────────
+  string era_id = TIMELINE_D->query_current_era();
+  int era_prog = TIMELINE_D->query_world_progress();
+  mapping era_data = TIMELINE_D->query_current_era_data();
+  string era_name = era_data ? (era_data["name"] || era_id) : era_id;
+  int era_thresh = era_data ? (era_data["min_progress"] || 100) : 100;
+
+  write("\n" + C_TITLE + "【歷史記憶與證據卷宗】" + NOR + "\n");
+  write(sprintf("  當前時代：%s%s%s（%s）\n", C_HISTORY, era_name, NOR, era_id));
+  write(sprintf("  世界進度：%s%d%s / %d\n\n", C_GOOD, era_prog, NOR, era_thresh));
+
+  if (count == 0) {
+    write(C_DIM + "  你尚未解鎖任何記憶片段或證據。\n" + NOR);
+    write(C_DIM + "  探索各地景點，觸發歷史記憶並收集證據。\n" + NOR);
+    write("\n");
+    return 1;
+  }
+
+  write(sprintf("  已獲取證據：%s%d%s 份\n\n", C_GOOD, count, NOR));
+
+  // ── 逐一列出記憶片段 ──────────────────────────────
+  if (arg == "list" || arg == "" || !arg) {
+    int idx = 1;
+    foreach (string mid in unlocked) {
+      mapping mem = MEMORY_D->load_memory(mid);
+      if (mem) {
+        string title = mem["title"] || mid;
+        string era = mem["era"] || "unknown";
+        string settle = mem["settlement"] || "";
+        string ev_type = mem["evidence_type"] ? mem["evidence_type"] : "無形記憶";
+        write(sprintf("  %s%2d.%s %s%-20s%s  [%s] %s (%s)\n",
+          C_DIM, idx, NOR,
+          C_TITLE, title, NOR,
+          era, settle, ev_type));
+      } else {
+        write(sprintf("  %s%2d.%s %s（資料缺失）\n", C_DIM, idx, NOR, mid));
+      }
+      idx++;
+    }
+    write("\n");
+    write(C_DIM + "  輸入 memory <編號> 可查看詳細內容。\n" + NOR);
+    write("\n");
+    return 1;
+  }
+
+  // ── 查看特定記憶詳細內容 ──────────────────────────
+  int num = to_int(arg);
+  if (num >= 1 && num <= count) {
+    string mid = unlocked[num - 1];
+    mapping mem = MEMORY_D->load_memory(mid);
+    if (mem) {
+      write("\n" + C_TITLE + "「" + (mem["title"] || mid) + "」" + NOR + "\n");
+      string ev_type = mem["evidence_type"] ? mem["evidence_type"] : "無形記憶";
+      write(sprintf(
+        "  形式：【%s】  時代：%s  聚落：%s\n",
+        ev_type,
+        mem["era"] || "unknown",
+        mem["settlement"] || "—"
+      ));
+      write("\n" + mem["description"] + "\n\n");
+    } else {
+      write(C_WARN + "  找不到此記憶的詳細資料。\n" + NOR);
+    }
+    return 1;
+  }
+
+  write(C_WARN + "  請輸入 memory 查看列表，或 memory <編號> 查看詳細內容。\n" + NOR);
+  return 1;
+}
+
+string *query_verbs() {
+  return ({ "memory", "記憶" });
+}
+
+string query_category() {
+  return select_lang(([ "en": "Explore", "zh-TW": "探索", "zh-CN": "探索" ]));
+}
+
+string help() {
+  return select_lang(([
+    "en": "【Memory Command】\n  memory         View your unlocked memory fragments and world era progress.\n  memory <num>   View the full text of a specific memory fragment.\n",
+    "zh-TW": "【記憶指令】\n  memory         查看你已解鎖的歷史記憶片段與世界時代進度。\n  memory <編號>  查看特定記憶片段的詳細內容。\n",
+    "zh-CN": "【记忆指令】\n  memory         查看你已解锁的历史记忆片段与世界时代进度。\n  memory <编号>  查看特定记忆片段的详细内容。\n"
+  ]));
+}

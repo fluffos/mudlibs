@@ -1,0 +1,82 @@
+// /daemon/completion_d.c
+//
+// 探索度守護進程。
+// 
+// 職責：
+//   - 計算單一地標的探索度 (0~100%)
+//   - 計算宏觀聚落的總探索度 (0~100%)
+//   - 供探索相關指令查詢
+
+#include "/include/formosa.h"
+
+inherit "/std/entity.lpc";
+
+void create() {
+  ::create();
+  set_entity_id("daemon:completion");
+  set_entity_type("daemon");
+}
+
+mapping get_site_completion(object player, string site_id) {
+  mapping site = SITE_D->load_site(site_id);
+  if (!site) return 0;
+
+  int total_items = 1;  // 基礎探索（進入該地點）
+  int completed_items = 0;
+
+  // 1. 檢查是否到訪過
+  mapping explored = player->query_explored_rooms();
+  // explored 記錄的是完整 entity id，例如 site:ghost_house
+  string full_site_id = "site:" + site_id;
+  if (explored && explored[full_site_id]) {
+    completed_items++;
+  }
+
+  // 2. 檢查記憶解鎖
+  mapping all_mems = MEMORY_D->query_all_memories();
+  if (all_mems) {
+    foreach (string mid, mapping mem in all_mems) {
+      if (mem["trigger_site"] == site_id) {
+        total_items++;
+        if (MEMORY_D->memory_completed(player, mid)) {
+          completed_items++;
+        }
+      }
+    }
+  }
+
+  int percentage = (completed_items * 100) / total_items;
+  if (percentage > 100) percentage = 100;
+
+  return ([
+    "total": total_items,
+    "completed": completed_items,
+    "percentage": percentage
+  ]);
+}
+
+mapping get_settlement_completion(object player, string s_id) {
+  mapping all_sites = SITE_D->query_all_sites();
+  if (!all_sites) return ([ "total_sites": 0, "percentage": 0 ]);
+
+  int total_sites = 0;
+  int completed_weight = 0;
+
+  foreach (string sid, mapping site in all_sites) {
+    if (site["settlement"] == s_id) {
+      mapping sc = get_site_completion(player, sid);
+      if (sc) {
+        total_sites++;
+        completed_weight += sc["percentage"];
+      }
+    }
+  }
+
+  int percentage = total_sites > 0 ? (completed_weight / total_sites) : 0;
+  if (percentage > 100) percentage = 100;
+
+  return ([
+    "total_sites": total_sites,
+    "percentage": percentage
+  ]);
+}

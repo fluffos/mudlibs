@@ -1,0 +1,161 @@
+// mudlib/cmds/cmd_commune.c
+//
+// 共鳴與危機指令。
+//
+// 指令：
+//   commune           — 發起共鳴儀式（在歷史地標中使用）
+//   commune status    — 查看全島記憶危機狀況
+//   resolve           — 解除當前地標的失源者
+
+#include "/include/ansi.h"
+#include "/include/formosa.h"
+
+inherit "/std/object";
+
+// ── commune 主指令 ────────────────────────────────────
+int do_commune(object me, string arg) {
+
+  // commune status：顯示全島危機摘要
+  if (arg == "status" || arg == "危機") {
+    write("\n" + C_TITLE + "【全島記憶危機狀況】" + NOR + "\n\n");
+
+    // 聚落記憶值一覽
+    string *all_settlements = ({});
+    string dir = YAML_SETTLEMENTS;
+    string *files = get_dir(dir);
+    if (files) {
+      foreach (string f in files) {
+        if (strlen(f) < 5) continue;
+        if (substr(f, strlen(f) - 5, 5) != ".yaml") continue;
+        all_settlements += ({ substr(f, 0, strlen(f) - 5) });
+      }
+    }
+
+    write(sprintf("  %-12s  %-10s  %-8s  %s\n",
+      "聚落", "記憶值", "失源者", "狀態"));
+    write("  " + "──────────────────────────────────────────────────" + "\n");
+
+    int any_crisis = 0;
+    foreach (string sid in all_settlements) {
+      mapping s = SETTLEMENT_D->load_settlement(sid);
+      if (!s) continue;
+      string name = s["canonical_name"] || sid;
+      int mem = SETTLEMENT_D->query_memory(sid);
+      mixed *specters = SETTLEMENT_D->query_active_specters(sid);
+      int sp_count = sizeof(specters || ({}));
+
+      string status_str;
+      string color;
+      if (mem <= OBLIVION_CRISIS) {
+        status_str = "！危機";
+        color = C_WARN;
+        any_crisis = 1;
+      } else if (mem <= OBLIVION_SPECTER) {
+        status_str = "▲ 失源者";
+        color = C_HISTORY;
+      } else if (mem <= OBLIVION_WARN) {
+        status_str = "△ 警示";
+        color = C_DIM;
+      } else {
+        status_str = "  安全";
+        color = C_GOOD;
+      }
+
+      write(sprintf("  %-12s  %s%3d%s/100     %-8d  %s%s%s\n",
+        name, color, mem, NOR, sp_count, color, status_str, NOR));
+    }
+
+    write("\n");
+    if (any_crisis) {
+      write(C_WARN + "  ⚠ 有聚落正在遭受遺忘危機！前往當地解除失源者。\n" + NOR);
+    } else {
+      write(C_GOOD + "  ✓ 全島目前沒有緊急危機。\n" + NOR);
+    }
+    write("\n");
+    return 1;
+  }
+
+  // commune（無參數）：在當前地標發起共鳴儀式
+  object env = environment(me);
+  if (!env || !env->query_is_site()) {
+    write(C_WARN + "  共鳴儀式只能在歷史地標中進行。\n" + NOR);
+    return 1;
+  }
+
+  write(C_REVEAL + "你閉上眼睛，試著感受這片土地的歷史呼吸...\n" + NOR);
+  RESONANCE_D->initiate_commune(me);
+  return 1;
+}
+
+// ── resolve 指令：解除失源者 ──────────────────────────
+int do_resolve(object me, string arg) {
+  object env = environment(me);
+  if (!env) {
+    write(C_WARN + "  你不在任何地方。\n" + NOR);
+    return 1;
+  }
+
+  // 找當前環境中的失源者
+  object *inv = all_inventory(env);
+  mixed *specters = ({});
+  foreach (object ob in inv) {
+    if (objectp(ob) && ob->query_is_specter()) specters += ({ ob });
+  }
+
+  if (!sizeof(specters)) {
+    write(C_DIM + "  這裡沒有失源者需要解除。\n" + NOR);
+    return 1;
+  }
+
+  if (sizeof(specters) == 1) {
+    // 只有一個，直接解除
+    specters[0]->resolve(me);
+    return 1;
+  }
+
+  // 多個失源者：依 arg 選擇
+  if (!arg || arg == "") {
+    write(C_TITLE + "  此地有多個失源者：\n" + NOR);
+    int i = 1;
+    foreach (object sp in specters) {
+      write(sprintf("  %d. %s\n", i, sp->query_display_name()));
+      i++;
+    }
+    write("  輸入 resolve <編號> 指定解除對象。\n");
+    return 1;
+  }
+
+  int num = to_int(arg);
+  if (num >= 1 && num <= sizeof(specters)) {
+    specters[num - 1]->resolve(me);
+  } else {
+    write(C_WARN + "  無效的編號。\n" + NOR);
+  }
+  return 1;
+}
+
+// ── 主入口 ────────────────────────────────────────────
+int main(object me, string verb, string arg) {
+  if (!arg) arg = "";
+  arg = trim(arg);
+
+  if (verb == "commune" || verb == "共鳴") return do_commune(me, arg);
+  if (verb == "resolve" || verb == "解除") return do_resolve(me, arg);
+  return 0;
+}
+
+string *query_verbs() {
+  return ({ "commune", "resolve", "共鳴", "解除" });
+}
+
+string query_category() {
+  return select_lang(([ "en": "Explore", "zh-TW": "探索", "zh-CN": "探索" ]));
+}
+
+string help() {
+  return select_lang(([
+    "en": "【Commune & Resolve Commands】\n  commune          Initiate a resonance ritual at your current historical site.\n  commune status   View the memory crisis status of all settlements.\n  resolve          Resolve a specter (lost soul) at your current location.\n",
+    "zh-TW": "【共鳴與解除指令】\n  commune          在當前歷史地標發起共鳴儀式（需文士等級 2 或農藝師等級 3）。\n  commune status   查看全島各聚落的記憶危機狀態。\n  resolve          解除當前地標的失源者（需滿足對應條件）。\n",
+    "zh-CN": "【共鸣与解除指令】\n  commune          在当前历史地标发起共鸣仪式。\n  commune status   查看全岛各聚落的记忆危机状态。\n  resolve          解除当前地标的失源者。\n"
+  ]));
+}

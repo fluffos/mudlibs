@@ -1,0 +1,69 @@
+// /std/shadow_player.c
+// Shadow Player: 遠端玩家在本機的代理實體
+
+#include "/include/config.h"
+#include "/include/ansi.h"
+
+inherit "/std/living";
+
+string remote_mud;
+string remote_uuid;
+string shadow_uuid;
+
+void create() {
+  ::create();
+  set_name("星際旅人");
+  enable_commands();
+}
+
+void set_remote_mud(string mud) { remote_mud = mud; }
+string query_remote_mud() { return remote_mud; }
+
+void set_remote_uuid(string uuid) { remote_uuid = uuid; }
+string query_remote_uuid() { return remote_uuid; }
+
+int is_shadow_player() { return 1; }
+
+// 當影子移動時，同步新房間資訊給遠端
+int move(mixed dest, string dir) {
+  int res = ::move(dest, dir);
+  if (res) {
+    object env = environment(this_object());
+    object dist_d = find_object("/daemon/dist_d.lpc");
+    if (env && dist_d) {
+      dist_d->sync_room_to_remote(remote_mud, env, remote_uuid);
+    }
+  }
+  return res;
+}
+
+// 攔截所有發送給此物件的訊息，並轉發回遠端
+void catch_tell(string msg) {
+  if (!msg || msg == "") return;
+
+  object dist_d = find_object("/daemon/dist_d.lpc");
+  if (dist_d) {
+    dist_d->send_dist_msg(remote_mud, "output", ([
+      "uuid": remote_uuid,  // 遠端玩家在本機的 UUID
+      "msg": msg
+    ]));
+  }
+}
+
+// 執行來自遠端的指令
+int do_remote_cmd(string cmd) {
+  int res = command(cmd);
+
+  // 如果可能是影響背包的指令，強制同步一次
+  string verb = explode(cmd, " ")[0];
+  if (verb == "get" || verb == "drop" || verb == "i" || verb == "inventory") {
+    object dist_d = find_object("/daemon/dist_d.lpc");
+    if (dist_d) {
+      dist_d->sync_inventory_to_remote(remote_mud, this_object(), remote_uuid);
+    }
+  }
+  return res;
+}
+
+// 影子玩家的「心跳」：確保它能同步自己的狀態？
+// 目前暫時不需要

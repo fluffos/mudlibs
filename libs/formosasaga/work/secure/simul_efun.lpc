@@ -1,0 +1,297 @@
+// /secure/simul_efun.c
+// 全域模擬內建函式 (SimulEfuns)
+
+#include <ansi.h>
+
+inherit "/secure/json";
+
+/* fluffos prototypes */
+void write(mixed msg);
+
+// ── Go MudOS-v22 efuns that FluffOS does not ship ──
+
+string object_name(object ob) {
+  if (!ob) return "";
+  return file_name(ob);
+}
+
+string to_string(mixed x) {
+  if (stringp(x)) return x;
+  if (intp(x) || floatp(x)) return "" + x;
+  if (objectp(x)) return file_name(x);
+  return sprintf("%O", x);
+}
+
+varargs string resolve_path(string path, string cwd) {
+  if (!stringp(path) || path == "")
+    return stringp(cwd) && cwd != "" ? cwd : "/";
+  if (path[0] == '/') return path;
+  if (!stringp(cwd) || cwd == "") cwd = "/";
+  if (cwd[<1] != '/') cwd += "/";
+  if (strlen(path) >= 2 && path[0..1] == "./")
+    path = path[2..];
+  return cwd + path;
+}
+
+varargs string substr(string str, int start, int length) {
+  int slen;
+  if (!stringp(str)) return "";
+  slen = strlen(str);
+  if (start < 0) start += slen;
+  if (start < 0) start = 0;
+  if (start >= slen) return "";
+  if (undefinedp(length)) return str[start..];
+  if (length <= 0) return "";
+  if (start + length >= slen) return str[start..];
+  return str[start..start + length - 1];
+}
+
+mixed yaml_decode(string s) {
+  if (!stringp(s) || s == "") return 0;
+  return json_decode(s);
+}
+
+string yaml_encode(mixed data) {
+  return json_encode(data);
+}
+
+int errorp(mixed x) { return 0; }
+
+string getenv(string var) { return 0; }
+
+void m_delete(mapping m, mixed key) {
+  if (mapp(m)) map_delete(m, key);
+}
+
+// LDMud/Go `member(mapping, key)` — truthy if the key exists.
+varargs int member(mixed coll, mixed key) {
+  if (mapp(coll))
+    return member_array(key, keys(coll)) != -1;
+  if (arrayp(coll))
+    return member_array(key, coll);
+  if (stringp(coll) && stringp(key))
+    return strsrch(coll, key);
+  return 0;
+}
+
+int is_web_client(object ob) { return 0; }
+
+varargs int is_interactive(object ob) {
+  if (!ob) ob = this_object();
+  return objectp(ob) && interactive(ob);
+}
+
+int nullp(mixed x) { return undefinedp(x) || x == 0; }
+
+varargs void p2p_broadcast(string msg, string dest) {}
+
+string query_uuid(object ob) {
+  if (!objectp(ob)) return "";
+  return file_name(ob);
+}
+
+object find_by_uuid(string id) {
+  if (!stringp(id) || id == "") return 0;
+  return find_object(id);
+}
+
+string md5(string s) {
+  if (!stringp(s)) s = "";
+  return hash("md5", s);
+}
+
+string generate_uuid() {
+  return sprintf("%d-%d-%d", time(), random(1000000), random(1000000));
+}
+
+string pad_str(string s, int width) {
+  if (!stringp(s)) s = "";
+  while (strlen(s) < width) s += " ";
+  return s;
+}
+
+void sleep(int ms) {}
+
+void write_raw(string msg) {
+  efun::write(msg);
+}
+
+varargs string crypt(string s, mixed seed) {
+  if (!stringp(s)) return 0;
+  if (undefinedp(seed) || seed == 0 || seed == "")
+    return efun::crypt(s, 0);
+  return efun::crypt(s, seed);
+}
+
+string process_dollar_ansi(string msg) {
+  if (!stringp(msg)) return "" + msg;
+  msg = replace_string(msg, "$NOR$", "\x1b[0m");
+  msg = replace_string(msg, "$BLK$", "\x1b[30m");
+  msg = replace_string(msg, "$RED$", "\x1b[31m");
+  msg = replace_string(msg, "$GRN$", "\x1b[32m");
+  msg = replace_string(msg, "$YEL$", "\x1b[33m");
+  msg = replace_string(msg, "$BLU$", "\x1b[34m");
+  msg = replace_string(msg, "$MAG$", "\x1b[35m");
+  msg = replace_string(msg, "$CYN$", "\x1b[36m");
+  msg = replace_string(msg, "$WHT$", "\x1b[37m");
+  msg = replace_string(msg, "$GRA$", "\x1b[90m");
+  msg = replace_string(msg, "$HIK$", "\x1b[1;30m");
+  msg = replace_string(msg, "$HIR$", "\x1b[1;31m");
+  msg = replace_string(msg, "$HIG$", "\x1b[1;32m");
+  msg = replace_string(msg, "$HIY$", "\x1b[1;33m");
+  msg = replace_string(msg, "$HIB$", "\x1b[1;34m");
+  msg = replace_string(msg, "$HIM$", "\x1b[1;35m");
+  msg = replace_string(msg, "$HIC$", "\x1b[1;36m");
+  msg = replace_string(msg, "$HIW$", "\x1b[1;37m");
+  return msg;
+}
+
+void write(mixed msg) {
+  efun::write(process_dollar_ansi("" + msg));
+}
+
+varargs void tell_object(object ob, string msg) {
+  if (!objectp(ob)) return;
+  efun::tell_object(ob, process_dollar_ansi(msg));
+}
+
+// 讓物件名稱更漂亮
+string get_name(object ob) {
+  if (!ob) return "無名物";
+
+  // 嘗試呼叫物件的 query_name() 或 query("name")
+  mixed name = ob->query_name();
+  if (!name) name = ob->query("name");
+
+  if (stringp(name)) return name;
+
+  // 或是 query_id()
+  mixed ids = ob->query_id();
+  if (stringp(ids)) return ids;
+  if (arrayp(ids) && sizeof(ids) > 0) return ids[0];
+
+  // 最後手段：使用檔名
+  string fname = object_name(ob);
+  int pos = strsrch(fname, "#");
+  if (pos != -1) fname = substr(fname, 0, pos);
+  string *parts = explode(fname, "/");
+  return sizeof(parts) > 0 ? parts[sizeof(parts) - 1] : fname;
+}
+
+// 根據指定語系選擇字串
+varargs string select_lang(mixed data, string lang) {
+  if (stringp(data)) return data;
+  if (!mapp(data)) return to_string(data);
+
+  if (!lang || lang == "0") {
+    object ob = previous_object();
+    // 優先從呼叫者取得語系 (適用於 ob->query_name() 這種呼叫)
+    if (ob) lang = ob->query_lang();
+
+    // 如果呼叫者沒語系，試試 this_player()
+    if (!lang || lang == "0") {
+      object tp = this_player();
+      if (tp) lang = tp->query_lang();
+    }
+  }
+
+  if (!lang || lang == "0") lang = "en";
+
+  if (data[lang]) return data[lang];
+  if (data["en"]) return data["en"];
+
+  mixed ks = keys(data);
+  if (sizeof(ks) > 0) return data[ks[0]];
+  return "None";
+}
+
+// === 陣列工具 ===
+mixed *shuffle(mixed *arr) {
+  if (!arrayp(arr)) return ({});
+  mixed *tmp = copy(arr);
+  int i = sizeof(tmp);
+  while (i > 0) {
+    int j = random(i);
+    i--;
+    mixed t = tmp[i];
+    tmp[i] = tmp[j];
+    tmp[j] = t;
+  }
+  return tmp;
+}
+
+mixed element_of(mixed *arr) {
+  if (!arrayp(arr) || sizeof(arr) == 0) return 0;
+  return arr[random(sizeof(arr))];
+}
+
+mixed random_element(mixed *arr) {
+  return element_of(arr);
+}
+
+// 翻譯輔助函式
+string _t(string key) {
+  string lang = "en";
+  object ob = previous_object();
+
+  if (ob) lang = ob->query_lang();
+
+  if (!lang || lang == "0") {
+    object tp = this_player();
+    if (tp) lang = tp->query_lang();
+  }
+
+  if (!lang || lang == "0") lang = "en";
+
+  return load_object("/daemon/language_d.lpc")->translate(key, lang);
+}
+
+// 取得中文化的時間 (範例)
+string chinese_time() {
+  return ctime(time());
+}
+
+// 訊息發送封裝
+varargs void message(string category, string msg, mixed target, mixed exclude) {
+  if (objectp(target)) {
+    tell_object(target, msg);
+  } else if (arrayp(target)) {
+    foreach (object ob in target) {
+      if (objectp(ob)) tell_object(ob, msg);
+    }
+  } else if (!target) {
+    // 預設發送給目前房間
+    object env = environment(this_player());
+    if (env) tell_room(env, msg, exclude);
+  }
+}
+
+// 🚀 強化版路徑解析 (可指定對象，否則預設為 this_player())
+varargs string resolv_path(string path, object user) {
+  if (!user) user = this_player();
+  if (!user) return path;  // 沒人就回傳原路徑
+
+  if (!path || path == "") {
+    string c = user->query_cwd();
+    return stringp(c) ? c : "/";
+  }
+  if (path[0] == '/') return path;
+
+  // 如果不以 . 開頭，補上 ./ 使其符合 efun resolve_path 的相對路徑格式
+  if (path[0] != '.') path = "./" + path;
+
+  string cwd = user->query_cwd();
+  if (!stringp(cwd) || cwd == "") cwd = "/";
+  if (cwd[strlen(cwd) - 1] != '/') cwd += "/";
+
+  return resolve_path(path, cwd);
+}
+
+// 寫入日誌檔案
+void log_file(string file, string message) {
+  if (!stringp(file) || !stringp(message)) return;
+  if (file_size("/log") != -2) {
+    mkdir("/log");
+  }
+  write_file("/log/" + file, message);
+}

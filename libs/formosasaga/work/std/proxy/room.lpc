@@ -1,0 +1,96 @@
+// /std/proxy/room.c
+// Proxy Room: 遠端房間在本地的代理
+
+#include "/include/config.h"
+#include "/include/ansi.h"
+
+inherit "/std/object";
+
+string remote_mud;
+string shadow_uuid;  // 我在遠端的影子的 UUID
+mapping room_data;
+mixed remote_inventory;
+
+/* fluffos prototypes */
+void look_room(object me);
+
+void create() {
+  ::create();
+  room_data = ([]);
+  remote_inventory = ({});
+}
+
+int is_proxy_room() { return 1; }
+
+void set_remote_mud(string mud) { remote_mud = mud; }
+void set_shadow_uuid(string uuid) { shadow_uuid = uuid; }
+
+// 更新房間狀態 (由 dist_d 呼叫)
+void update_state(mapping data) {
+  room_data = data;
+
+  // 如果有玩家在裡面，重新顯示描述
+  object *inv = all_inventory(this_object());
+  foreach (object ob in inv) {
+    if (ob && userp(ob)) {
+      look_room(ob);
+    }
+  }
+}
+
+// 更新影子玩家的背包
+void update_inventory(mapping data) {
+  remote_inventory = data["items"];
+}
+
+// 模擬 look_room
+void look_room(object me) {
+  if (!room_data || !room_data["short"]) {
+    tell_object(me, "$GRA$正在連線至星際空間...\n$NOR$");
+    return;
+  }
+
+  string output = "$HIW$" + room_data["short"] + " [跨服: " + remote_mud + "]\n$NOR$" + room_data["long"] + "\n";
+
+  // 顯示出口
+  mapping exits = room_data["exits"];
+  if (mapp(exits) && sizeof(exits) > 0) {
+    output += "$HIG$  明顯的出口有：$NOR$" + implode(keys(exits), ", ") + "\n";
+  } else {
+    output += "$HIG$  這裡沒有明顯的出口。\n$NOR$";
+  }
+
+  // 顯示物品與生物
+  mixed items = room_data["items"];
+  if (pointerp(items)) {
+    foreach (mapping item in items) {
+      output += "  " + (item["is_living"] ? "$HIY$" + item["name"] + "$NOR$" : item["name"]) + "\n";
+    }
+  }
+
+  tell_object(me, output);
+}
+
+// 提供標準的 query_exits 接口，防止本地指令出錯
+mapping query_exits() {
+  if (room_data && room_data["exits"]) return room_data["exits"];
+  return ([]);
+}
+
+// 攔截並轉發指令
+int do_proxy_cmd(string input) {
+  if (!shadow_uuid) {
+    write("$GRA$分散式連結尚未就緒，請稍候...\n$NOR$");
+    return 1;  // 攔截但不執行，防止本地出錯
+  }
+
+  object dist_d = find_object("/daemon/dist_d.lpc");
+  if (dist_d) {
+    dist_d->send_dist_msg(remote_mud, "cmd", ([
+      "uuid": shadow_uuid,
+      "cmd": input
+    ]));
+    return 1;
+  }
+  return 0;
+}

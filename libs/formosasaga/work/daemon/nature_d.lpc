@@ -1,0 +1,160 @@
+// /daemon/nature_d.c
+// 氣候與時間守護進程 (Nature Daemon)
+
+#include "/include/ansi.h"
+
+inherit "/std/object";
+
+// 遊戲時間與現實時間的比例
+// 預設 1 真實秒 = 1 遊戲分鐘 (1440 遊戲分 = 24 遊戲小時 = 24 真實分)
+#define TIME_RATIO 60
+
+// 變數定義
+int game_time;          // 遊戲總分鐘數
+string current_weather;  // 目前天氣
+int last_update;        // 上次更新天氣的時間
+
+// 天氣清單
+string *weather_types = ({ "clear", "cloudy", "rainy", "foggy", "snowy" });
+
+/* fluffos prototypes */
+void heart_beat();
+
+string query_save_file() { return "/data/nature"; }
+
+void create() {
+  ::create();
+  game_time = 0;
+  current_weather = "clear";
+  last_update = time();
+
+  // 嘗試載入舊有的時間狀態，增加錯誤檢查
+  // 確保只在 restore_object 可用時才呼叫
+  if (function_exists("restore_object", this_object()) && file_size(query_save_file() + ".o") > 0) {
+    restore_object(query_save_file());
+  }
+
+  set_heart_beat(1);
+}
+
+// ── 時間處理 ─────────────────────────────────────────────
+
+int query_game_time() { return game_time; }
+
+// 取得當前小時 (0-23)
+int query_hour() {
+  return (game_time / 60) % 24;
+}
+
+// 取得當前日期 (1-30)
+int query_day() {
+  return ((game_time / 1440) % 30) + 1;
+}
+
+// 取得當前月份 (1-12)
+int query_month() {
+  return ((game_time / 43200) % 12) + 1;
+}
+
+// 判斷是否為白天 (06:00 - 18:00)
+int is_day() {
+  int h = query_hour();
+  return (h >= 6 && h < 18);
+}
+
+// 取得當前季節
+string query_season() {
+  int m = query_month();
+  if (m >= 3 && m <= 5) return "spring";
+  if (m >= 6 && m <= 8) return "summer";
+  if (m >= 9 && m <= 11) return "autumn";
+  return "winter";
+}
+
+// ── 天氣處理 ─────────────────────────────────────────────
+
+string query_weather() { return current_weather; }
+
+void update_weather() {
+  string season = query_season();
+  string old_weather = current_weather;
+  int rand = random(100);
+
+  // 根據季節決定天氣機率
+  switch (season) {
+    case "spring":
+      if (rand < 50) current_weather = "clear";
+      else if (rand < 80) current_weather = "cloudy";
+      else current_weather = "rainy";
+      break;
+    case "summer":
+      if (rand < 60) current_weather = "clear";
+      else if (rand < 70) current_weather = "cloudy";
+      else current_weather = "rainy";  // 雷陣雨
+      break;
+    case "autumn":
+      if (rand < 70) current_weather = "clear";
+      else if (rand < 90) current_weather = "cloudy";
+      else current_weather = "foggy";
+      break;
+    case "winter":
+      if (rand < 40) current_weather = "clear";
+      else if (rand < 70) current_weather = "cloudy";
+      else current_weather = "snowy";
+      break;
+  }
+
+  if (old_weather != current_weather) {
+    object *users = users();
+    if (users) {
+      foreach (object user in users) {
+        object env = environment(user);
+        if (env && env->query_is_outdoor()) {
+          string lang = user->query_lang();
+          if (!lang) lang = "en";
+
+          string msg = load_object("/daemon/language_d.lpc")->translate(
+            "weather_" + current_weather,
+            lang
+          );
+          tell_object(user, "\n" + "$HIW$" + msg + "$NOR$" + "\n");
+        }
+      }
+    }
+  }
+}
+
+// ── 心跳邏輯 ─────────────────────────────────────────────
+
+void heart_beat() {
+  game_time = game_time + 1;  // 使用標準賦值以防 += 支援度問題
+
+  // 每 5 遊戲分鐘存檔一次
+  if (game_time % 5 == 0) {
+    save_object(query_save_file());
+  }
+
+  // 每 10 遊戲分鐘 (真實 20 秒) 更新一次天氣判定
+  if (game_time % 10 == 0) {
+    update_weather();
+  }
+}
+
+// 取得給予 Look 顯示的字串
+string query_weather_string() {
+  string time_desc = sprintf("%02d:%02d", query_hour(), game_time % 60);
+  string weather_desc = "";
+
+  switch (current_weather) {
+    case "clear": weather_desc = _t(is_day() ? "desc_clear_day" : "desc_clear_night"); break;
+    case "cloudy": weather_desc = _t("desc_cloudy"); break;
+    case "rainy": weather_desc = _t("desc_rainy"); break;
+    case "foggy": weather_desc = _t("desc_foggy"); break;
+    case "snowy": weather_desc = _t("desc_snowy"); break;
+  }
+
+  string fmt = _t("weather_time_format");
+  if (fmt == "weather_time_format") fmt = "[ %s / %s ]";
+
+  return sprintf(fmt, time_desc, weather_desc);
+}

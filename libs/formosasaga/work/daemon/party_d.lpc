@@ -1,0 +1,94 @@
+// /daemon/party_d.c
+// 組隊守護進程 (Party Daemon)
+
+#include "/include/ansi.h"
+
+inherit "/std/object";
+mapping invitations;  // ([ "invitee_id": "inviter_id" ])
+
+
+void create() {
+  ::create();
+  invitations = ([]);
+}
+
+int create_party(object me) {
+  if (me->query_leader()) {
+    write("你已經在一個隊伍中了。\n");
+    return 0;
+  }
+  me->set_leader(me);
+  me->add_follower(me);  // 隊長也把自己加入 followers 以便同步
+  write("$HIG$隊伍建立成功！你現在是隊長。\n$NOR$");
+  return 1;
+}
+
+int invite_player(object me, object target) {
+  if (me->query_leader() != me) {
+    write("只有隊長可以邀請隊員。\n");
+    return 0;
+  }
+  if (target->query_leader()) {
+    write(target->query_name() + " 已經在其他隊伍中了。\n");
+    return 0;
+  }
+
+  invitations[target->get_id()] = me->get_id();
+  write("$HIW$你邀請 " + target->query_name() + " 加入隊伍。\n$NOR$");
+  tell_object(
+    target,
+    "$HIW$" + me->query_name() + " 邀請你加入隊伍。輸入 'party join " + me->get_id() + "' 接受邀請。\n$NOR$"
+  );
+  return 1;
+}
+
+int join_party(object me, object leader) {
+  if (me->query_leader()) {
+    write("你已經在一個隊伍中了。\n");
+    return 0;
+  }
+
+  string lid = leader->get_id();
+  if (invitations[me->get_id()] != lid) {
+    write(leader->query_name() + " 並沒有邀請你。\n");
+    return 0;
+  }
+
+  m_delete(invitations, me->get_id());
+  me->set_leader(leader);
+  leader->add_follower(me);
+
+  write("$HIG$你加入了 " + leader->query_name() + " 的隊伍。\n$NOR$");
+  tell_object(leader, "$HIG$" + me->query_name() + " 加入了你的隊伍。\n$NOR$");
+  return 1;
+}
+
+int leave_party(object me) {
+  object leader = me->query_leader();
+  if (!leader) {
+    write("你不在隊伍中。\n");
+    return 0;
+  }
+
+  if (leader == me) {
+    // 隊長解散隊伍
+    object *members = me->query_followers();
+    foreach (object m in members) {
+      if (m == me) continue;
+      m->set_leader(0);
+      tell_object(m, "$HIR$隊長解散了隊伍。\n$NOR$");
+    }
+    // 重置隊長自己的 followers
+    for (int i = 0; i < sizeof(members); i++) {
+      me->remove_follower(members[i]);
+    }
+    me->set_leader(0);
+    write("$HIR$隊伍已解散。\n$NOR$");
+  } else {
+    leader->remove_follower(me);
+    me->set_leader(0);
+    write("$HIR$你離開了隊伍。\n$NOR$");
+    tell_object(leader, "$HIR$" + me->query_name() + " 離開了你的隊伍。\n$NOR$");
+  }
+  return 1;
+}

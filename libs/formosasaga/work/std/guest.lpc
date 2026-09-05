@@ -1,0 +1,69 @@
+#include "/include/config.h"
+#include "/include/ansi.h"
+
+// /std/guest.c
+// 遠端訪客 (Guest) 的虛擬實體
+
+inherit "/std/user";
+
+string remote_mudlib;
+string session_id;
+
+/* fluffos prototypes */
+void set_temp(string key, mixed val);
+
+void create() {
+  ::create();
+  set_name("未知訪客");
+  enable_commands();
+  // 設定為互動物件，這樣 write() efun 才會將輸出導向此物件
+  set_temp("is_interactive", 1);
+}
+
+void set_temp(string key, mixed val) {
+  ::set_temp(key, val);
+  if (key == "ssh_session_id") session_id = val;
+  if (key == "ssh_remote_mud") remote_mudlib = val;
+}
+
+// 攔截所有發送給此訪客的訊息，轉發回來源機器
+void catch_tell(string msg) {
+  if (!msg || msg == "") return;
+
+  // 除錯日誌：查看是否有訊息進入 catch_tell
+  printf("DEBUG [Guest]: Received msg: %s\n", msg);
+
+  if (!session_id || !remote_mudlib) return;
+
+  object ssh_d = find_object("/daemon/ssh_d.lpc");
+  if (ssh_d) {
+    ssh_d->server_send_output(remote_mudlib, session_id, msg);
+  }
+}
+
+// 覆寫存檔機制：訪客離開時不存檔
+int save() {
+  return 1;  // 假裝存檔成功
+}
+
+void quit() {
+  object ssh_d = find_object("/daemon/ssh_d.lpc");
+  if (ssh_d) {
+    ssh_d->server_send_disconnect(remote_mudlib, session_id, "Guest quit");
+  }
+
+  tell_room(environment(this_object()), query_name() + "化作一道光芒消失了。\n", ({ this_object() }));
+  destruct(this_object());
+}
+
+// 接收來自 ssh_d 的指令，使用 command() 確保觸發 LPC 內部正確的身分綁定
+void do_remote_cmd(string cmd) {
+  if (cmd == "look" || cmd == "l") {
+    object env = environment(this_object());
+    if (env) {
+      env->look_room(this_object());
+      return;
+    }
+  }
+  command(cmd);
+}

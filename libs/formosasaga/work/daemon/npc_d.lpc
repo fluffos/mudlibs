@@ -1,0 +1,126 @@
+// /daemon/npc_d.c
+// NPC 管理與生成守護進程 (NPC Daemon)
+
+#include "/include/formosa.h"
+
+inherit "/std/entity.lpc";
+
+private nosave mapping npc_configs;  // ([ npc_id: npc_data_mapping ])
+
+void scan_dir(string dir) {
+  string *files = get_dir(dir);
+  if (!files) return;
+
+  foreach (string file in files) {
+    if (file == "." || file == "..") continue;
+    string path = dir + file;
+    int sz = file_size(path);
+    if (sz == -2) {
+      scan_dir(path + "/");
+    } else if (strlen(file) >= 5 && substr(file, strlen(file) - 5, 5) == ".yaml") {
+      string content = read_file(path);
+      if (!content) continue;
+      mapping data = yaml_decode(content);
+      if (!data || !data["id"]) continue;
+
+      string id = data["id"];
+      npc_configs[id] = data;
+    }
+  }
+}
+
+void rehash() {
+  npc_configs = ([]);
+  // 掃描 /data/yaml/npcs/ 目錄
+  if (file_size("/data/yaml/npcs/") == -2) {
+    scan_dir("/data/yaml/npcs/");
+  }
+}
+
+void create() {
+  ::create();
+  set_entity_id("daemon:npc");
+  set_entity_type("daemon");
+  rehash();
+}
+
+mapping query_npc_config(string npc_id) {
+  if (!npc_configs) rehash();
+  return npc_configs[npc_id];
+}
+
+string query_npc_name(string npc_id) {
+  mapping config = query_npc_config(npc_id);
+  if (!config) return npc_id;
+
+  mixed name = config["name"];
+  if (mapp(name)) return select_lang(name);
+  if (stringp(name)) return name;
+  return npc_id;
+}
+
+string query_npc_hint(string npc_id) {
+  mapping config = query_npc_config(npc_id);
+  if (!config) return "";
+
+  mixed hint = config["hint"];
+  if (mapp(hint)) return select_lang(hint);
+  if (stringp(hint)) return hint;
+  return "";
+}
+
+// 根據 NPC ID 生成實體 NPC 物件
+object create_npc(string npc_id) {
+  mapping config = query_npc_config(npc_id);
+  if (!config) return 0;
+
+  object ob = clone_object("/std/npc.lpc");
+  if (!ob) return 0;
+
+  ob->set_entity_id("npc:" + npc_id);
+
+  // 設定名稱與 ID
+  mixed name = config["name"];
+  ob->set_name(name);
+
+  string display_name = query_npc_name(npc_id);
+  ob->set_short(display_name);
+
+  mixed hint = config["hint"];
+  if (hint) {
+    ob->set_long(display_name + " — " + query_npc_hint(npc_id) + "\n");
+  } else {
+    ob->set_long("這是一位" + display_name + "。\n");
+  }
+
+  // 設定別名/ID
+  string *ids = ({ npc_id });
+  // 自動將中文名稱與英文名稱加入別名清單，方便玩家 present("老站長") 找到
+  if (mapp(name)) {
+    foreach (string lang, string val in name) {
+      if (member_array(val, ids) == -1) ids += ({ val });
+    }
+  } else if (stringp(name)) {
+    if (member_array(name, ids) == -1) ids += ({ name });
+  }
+  ob->set_id(ids);
+
+  // 載入對話回應 (responses)
+  mapping resps = config["responses"];
+  if (mapp(resps)) {
+    foreach (string keyword, mixed resp in resps) {
+      ob->add_response(keyword, resp);
+    }
+  }
+
+  // 額外設定
+  if (config["level"]) ob->set_level(config["level"]);
+
+  // P14: 設定日程表
+  mapping sched = config["schedule"];
+  if (mapp(sched)) {
+    ob->set_schedule(sched["default_site"], sched["routines"], sched["overrides"]);
+  }
+
+  return ob;
+}

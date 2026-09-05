@@ -1,0 +1,178 @@
+// /daemon/codex_d.c
+//
+// 歷史百科圖鑑守護進程 (Codex Daemon) — P19
+//
+// 職責：
+//   - 監聽 MemoryCompleted / QuestCompleted / IncidentResolved 三大事件
+//   - 自動將新條目登錄至各玩家的個人圖鑑 (encyclopedia)
+//   - 提供圖鑑條目的查詢與格式化輸出
+//
+// 圖鑑儲存於 user 物件的 encyclopedia 欄位，格式：
+//   ([ "memory":   ([ mid:   ([ "title":..., "unlocked_at":... ]) ]),
+//      "quest":    ([ qid:   ([ "title":..., "unlocked_at":... ]) ]),
+//      "incident": ([ iid:   ([ "title":..., "unlocked_at":... ]) ]) ])
+//
+// Canon 參照：docs/TODO.md § P19
+
+#include "/include/ansi.h"
+#include "/include/formosa.h"
+
+inherit "/std/object";
+
+void create() {
+  ::create();
+  // 訂閱事件（延後 1 秒等其他 daemon 初始化完畢）
+  call_out("subscribe_events", 1);
+}
+
+void subscribe_events() {
+  EVENT_D->subscribe("MemoryCompleted", "on_memory_completed", this_object());
+  EVENT_D->subscribe("QuestCompleted", "on_quest_completed", this_object());
+  EVENT_D->subscribe("IncidentResolved", "on_incident_resolved", this_object());
+}
+
+// ── 內部輔助 ───────────────────────────────────────────
+
+// 取得並初始化玩家圖鑑 mapping（非持久化快取）
+private mapping get_player_codex(object player) {
+  if (!player) return ([]);
+  mapping enc = player->query("encyclopedia");
+  if (!enc) {
+    enc = ([ "memory": ([]), "quest": ([]), "incident": ([]) ]);
+    player->set("encyclopedia", enc);
+  }
+  if (!enc["memory"]) enc["memory"] = ([]);
+  if (!enc["quest"]) enc["quest"] = ([]);
+  if (!enc["incident"]) enc["incident"] = ([]);
+  return enc;
+}
+
+// 記錄一筆新條目
+int record_entry(object player, string category, string entry_id, string title, string summary) {
+  if (!player || !category || !entry_id) return 0;
+  mapping enc = get_player_codex(player);
+
+  if (enc[category][entry_id]) return 0;  // 已收錄，防重複
+
+  enc[category][entry_id] = ([
+    "title": title || entry_id,
+    "summary": summary || "",
+    "unlocked_at": time(),
+  ]);
+  player->set("encyclopedia", enc);
+  player->save();
+  return 1;
+}
+
+// ── 事件監聽 ──────────────────────────────────────────
+
+void on_memory_completed(mapping event) {
+  mapping data = event["data"];
+  if (!data) return;
+
+  string pid = data["player_id"];
+  string mid = data["memory_id"];
+  if (!pid || !mid) return;
+
+  // player_id 形如 "player:wade"，轉為實體物件
+  object player = 0;
+  string clean_pid = pid;
+  int colon = strsrch(pid, ":");
+  if (colon != -1) clean_pid = substr(pid, colon + 1, strlen(pid) - colon - 1);
+  player = find_player(clean_pid);
+  if (!player) return;
+
+  mapping mem = MEMORY_D->load_memory(mid);
+  string title = mem ? (mem["title"] || mid) : mid;
+  string summary = mem ? (mem["description"] || "") : "";
+  string ev_type = mem ? (mem["evidence_type"] || "記憶碎片") : "記憶碎片";
+
+  if (record_entry(player, "memory", mid, title, summary)) {
+    tell_object(player,
+      "\n" + C_CODEX + "【圖鑑更新】" + C_RESET +
+      "「" + title + "」已收錄至你的歷史圖鑑（" + ev_type + "）。" +
+      C_DIM + "輸入 codex memory 查閱。" + C_RESET + "\n");
+  }
+}
+
+void on_quest_completed(mapping event) {
+  mapping data = event["data"];
+  if (!data) return;
+
+  object player = data["player"];
+  string qid = data["quest_id"];
+  if (!player || !qid) return;
+
+  mapping qinfo = INCIDENT_D ? 0 : 0;  // 先嘗試從 quest_d 取得資訊
+  object qd = find_object("/daemon/quest_d.lpc");
+  if (!qd) qd = load_object("/daemon/quest_d.lpc");
+  if (qd) qinfo = qd->query_quest_info(qid);
+
+  string title = qinfo ? (qinfo["name"] || qid) : qid;
+  string summary = qinfo ? (qinfo["desc"] || "") : "";
+
+  if (record_entry(player, "quest", qid, title, summary)) {
+    tell_object(player,
+      "\n" + C_CODEX + "【圖鑑更新】" + C_RESET +
+      "任務「" + title + "」已收錄至你的歷史圖鑑。" +
+      C_DIM + "輸入 codex quest 查閱。" + C_RESET + "\n");
+  }
+}
+
+void on_incident_resolved(mapping event) {
+  mapping data = event["data"];
+  if (!data) return;
+
+  object player = data["player"];
+  string iid = data["incident_id"];
+  if (!player || !iid) return;
+
+  mapping inc = INCIDENT_D->query_incident(iid);
+  string title = inc ? (inc["name"] || iid) : iid;
+  string summary = inc ? (inc["truth"] || "") : "";
+
+  if (record_entry(player, "incident", iid, title, summary)) {
+    tell_object(player,
+      "\n" + C_CODEX + "【圖鑑更新】" + C_RESET +
+      "歷史事件「" + title + "」已收錄至你的歷史圖鑑。" +
+      C_DIM + "輸入 codex incident 查閱。" + C_RESET + "\n");
+  }
+}
+
+// ── 查詢 API ──────────────────────────────────────────
+
+// 取得玩家特定分類圖鑑條目 ([ entry_id: entry_mapping ])
+mapping query_codex_category(object player, string category) {
+  if (!player || !category) return ([]);
+  mapping enc = player->query("encyclopedia");
+  if (!enc || !enc[category]) return ([]);
+  return copy(enc[category]);
+}
+
+// 取得玩家全部圖鑑統計
+mapping query_codex_summary(object player) {
+  if (!player) return ([]);
+  mapping enc = player->query("encyclopedia");
+  if (!enc) return ([ "memory": 0, "quest": 0, "incident": 0 ]);
+  return ([
+    "memory": sizeof(enc["memory"] || ([])),
+    "quest": sizeof(enc["quest"] || ([])),
+    "incident": sizeof(enc["incident"] || ([])),
+  ]);
+}
+
+// 取得世界全部的記憶/任務/事件數量（作為分母用於完成率計算）
+mapping query_world_totals() {
+  int mem_total = sizeof(MEMORY_D->query_all_memories() || ([]));
+  int quest_total = 0;
+  object qd = find_object("/daemon/quest_d.lpc");
+  if (!qd) qd = load_object("/daemon/quest_d.lpc");
+  if (qd) quest_total = sizeof(qd->query_all_quests() || ([]));
+  int inc_total = sizeof(INCIDENT_D->query_incidents() || ([]));
+
+  return ([
+    "memory": mem_total,
+    "quest": quest_total,
+    "incident": inc_total,
+  ]);
+}

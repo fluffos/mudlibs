@@ -1,0 +1,88 @@
+// /cmds/admin/cmd_clone.c
+// 複製物件指令：clone <路徑>
+
+#include "/include/config.h"
+#include "/include/ansi.h"
+
+inherit "/std/object";
+
+int main(object me, string verb, string arg) {
+  if (me->query_role() != "god" && me->query_role() != "wizard") {
+    return 0;
+  }
+
+  if (!arg || arg == "") {
+    write("用法：clone <檔案路徑>\n");
+    return 1;
+  }
+
+  arg = resolv_path(arg);
+
+  // 授權檢查 (God 不受限)
+  if (me->query_role() != "god") {
+    string *wp = me->query_write_paths();
+    int allowed = 0;
+
+    // 1. 檢查自定義授權路徑
+    if (wp) {
+      foreach (string p in wp) {
+        if (strsrch(arg, p) == 0) {
+          allowed = 1;
+          break;
+        }
+      }
+    }
+
+    // 2. 檢查 Wizard 預設授權路徑
+    if (!allowed && me->query_role() == "wizard") {
+      string *default_paths = ({
+        "/area/",
+        "/npc/",
+        "/item/",
+        "/cmds/",
+        "/log/",
+        "/open/",
+        "/tests/",
+        "/u/"
+      });
+      foreach (string p in default_paths) {
+        if (strsrch(arg, p) == 0) {
+          allowed = 1;
+          break;
+        }
+      }
+    }
+
+    if (!allowed) {
+      write("clone: permission denied: " + arg + "\n");
+      return 1;
+    }
+  }
+
+  object ob = clone_object(arg);
+  if (!ob) {
+    write("$HIR$複製失敗：無法載入或編譯檔案 " + arg + "\n$NOR$");
+    return 1;
+  }
+
+  string msg = "$HIG$成功複製物件：$NOR$" + ob->query_short() + " (" + base_name(ob) + ")\n";
+
+  // 如果是物品，嘗試移入玩家背包
+  if (ob->move(me)) {
+    write(msg + "物件已放入你的背包。\n");
+  } else {
+    // 否則放入當前房間
+    ob->move(environment(me));
+    write(msg + "物件已放置在地面。\n");
+  }
+
+  return 1;
+}
+
+string *query_verbs() { return ({ "clone" }); }
+string query_category() { return "Admin"; }
+
+string help() {
+  return "【管理指令】\n" +
+    "  clone <路徑>    複製一個物件實體。如果是物品會試著放入背包，否則放在地上。\n";
+}

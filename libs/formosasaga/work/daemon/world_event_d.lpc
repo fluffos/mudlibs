@@ -1,0 +1,284 @@
+// /daemon/world_event_d.c
+// P15 — 動態全伺服器世界事件管理守護進程
+//
+// 職責：
+//   - 載入 /data/yaml/world_events/ 下的所有事件定義
+//   - 追蹤目前啟動中的事件（active_events）
+//   - 支援定時觸發（schedule）與隨機觸發（random_chance）
+//   - 發布 WorldEventStarted / WorldEventEnded 事件
+//   - 提供 route_d 封鎖路線的查詢介面
+//   - 提供 site.c 額外描述覆寫查詢介面
+//   - 提供 npc.c on_time_tick override 條件查詢
+//
+// YAML 格式 (world_events/{id}.yaml):
+//   id: typhoon_season
+//   name:
+//     zh-TW: "颱風警報"
+//   description:
+//     zh-TW: "強烈颱風來襲，風雨交加，道路難行。"
+//   trigger:
+//     type: "random"         # random | scheduled | manual
+//     chance_per_tick: 5     # 每次 tick 5% 機率觸發
+//     era: "modern"          # 只在指定時代觸發（可選）
+//     min_interval: 120      # 距上次觸發至少幾分鐘（遊戲時間）
+//   duration_minutes: 240    # 事件持續遊戲分鐘數
+//   effects:
+//     blocked_routes:        # 封鎖的路線 ID 或 site_id
+//       - "route_chiayi_tainan"
+//     blocked_sites:         # 禁止進入的 site（封鎖）
+//       - "minxiong_market"
+//     site_desc_override:    # 地標額外描述（附加在 base_description 後）
+//       minxiong_old_station: "風雨夾雜，月台上空無一人，鐵軌嗚嗚作響。"
+//       minxiong_market: "菜攤全收，市場一片空曠，偶有雨水拍打鐵皮聲。"
+//     npc_event_flag: "typhoon_active"  # 發布至 global_event 讓 NPC override 條件使用
+
+#include "/include/formosa.h"
+
+inherit "/std/entity.lpc";
+
+private nosave mapping event_defs;      // ([ event_id: def_mapping ])
+private nosave mapping active_events;   // ([ event_id: end_game_minutes ])
+private nosave mapping last_triggered;  // ([ event_id: game_minutes ])
+
+// ── 載入事件定義 ──────────────────────────────────────
+void scan_dir(string dir) {
+  mixed files = get_dir(dir);
+  if (!files) return;
+  foreach (string file in files) {
+    if (file == "." || file == "..") continue;
+    string path = dir + file;
+    int sz = file_size(path);
+    if (sz == -2) {
+      scan_dir(path + "/");
+    } else if (strlen(file) >= 5 && substr(file, strlen(file) - 5, 5) == ".yaml") {
+      string content = read_file(path);
+      if (!content) continue;
+      mapping data = yaml_decode(content);
+      if (!data || !data["id"]) continue;
+      event_defs[data["id"]] = data;
+    }
+  }
+}
+
+void rehash() {
+  event_defs = ([]);
+  active_events = ([]);
+  last_triggered = ([]);
+  if (file_size("/data/yaml/world_events/") == -2)
+    scan_dir("/data/yaml/world_events/");
+}
+
+// ── 啟動/結束事件 ──────────────────────────────────────
+void start_event(string event_id) {
+  mapping def = event_defs[event_id];
+  if (!def) return;
+  if (active_events[event_id]) return;  // 已在進行中
+
+  int cur = SCHEDULE_D->query_game_time_minutes();
+  int dur = def["duration_minutes"] || 60;
+  active_events[event_id] = cur + dur;
+  last_triggered[event_id] = cur;
+
+  string name = select_lang(def["name"]);
+  string desc = select_lang(def["description"]);
+
+  // 全伺服器廣播
+  object *players = users();
+  if (players) {
+    foreach (object p in players) {
+      tell_object(p,
+        "\n" + C_WARN +
+        "【世界事件】" + name + "\n" +
+        desc + "\n" +
+        C_RESET
+      );
+    }
+  }
+
+  // 設定 global_event flag，讓 NPC override / route_d 封鎖使用
+  mapping effects = def["effects"];
+  if (mapp(effects) && effects["npc_event_flag"]) {
+    TIMELINE_D->set_global_event(effects["npc_event_flag"], 1);
+  }
+
+  EVENT_D->publish("WorldEventStarted", ([
+    "event_id": event_id,
+    "name": name,
+    "effects": effects,
+  ]));
+
+  log_file("world_events",
+    sprintf("[%s] WorldEvent STARTED: %s (duration: %d game-mins)\n",
+      ctime(time()), event_id, dur));
+}
+
+void end_event(string event_id) {
+  if (!active_events[event_id]) return;
+  map_delete(active_events, event_id);
+
+  mapping def = event_defs[event_id];
+  if (!def) return;
+
+  string name = select_lang(def["name"]);
+
+  // 清除 global_event flag
+  mapping effects = def["effects"];
+  if (mapp(effects) && effects["npc_event_flag"]) {
+    TIMELINE_D->set_global_event(effects["npc_event_flag"], 0);
+  }
+
+  object *players = users();
+  if (players) {
+    foreach (object p in players) {
+      tell_object(p,
+        "\n" + C_GOOD +
+        "【世界事件結束】" + name + " 已結束。\n" +
+        C_RESET
+      );
+    }
+  }
+
+  EVENT_D->publish("WorldEventEnded", ([
+    "event_id": event_id,
+    "name": name,
+  ]));
+
+  log_file("world_events",
+    sprintf("[%s] WorldEvent ENDED: %s\n", ctime(time()), event_id));
+}
+
+// ── 定時 tick 處理 ────────────────────────────────────
+void on_time_tick(mapping data) {
+  int mins = data["minutes"];
+  string cur_era = TIMELINE_D->query_current_era();
+
+  // 1. 檢查結束中的事件
+  mixed keys_to_end = ({});
+  foreach (string eid, int end_min in active_events) {
+    // 跨日判斷
+    int remaining = end_min - mins;
+    if (remaining <= 0 || remaining > 1440) {
+      keys_to_end += ({ eid });
+    }
+  }
+  foreach (string eid in keys_to_end) {
+    end_event(eid);
+  }
+
+  // 2. 觸發新事件（每 tick = 每 15 遊戲分鐘嘗試一次）
+  foreach (string eid, mapping def in event_defs) {
+    if (active_events[eid]) continue;  // 已在進行
+
+    mapping trigger = def["trigger"];
+    if (!mapp(trigger)) continue;
+
+    // 時代限制
+    if (trigger["era"] && trigger["era"] != cur_era) continue;
+
+    string ttype = trigger["type"];
+
+    if (ttype == "random") {
+      int chance = trigger["chance_per_tick"] || 1;
+      int min_interval = trigger["min_interval"] || 0;
+      int last = last_triggered[eid] || 0;
+
+      // 冷卻時間判斷
+      int elapsed = mins - last;
+      if (elapsed < 0) elapsed += 1440;  // 跨日
+      if (elapsed < min_interval) continue;
+
+      if (random(100) < chance) {
+        start_event(eid);
+      }
+    } else if (ttype == "scheduled") {
+      // 定期觸發：檢查 schedule_time 是否符合
+      string sched_time = trigger["schedule_time"];
+      if (sched_time && SCHEDULE_D->is_time_in_range(mins, sched_time)) {
+        // 只觸發一次（不重複）
+        int last2 = last_triggered[eid] || -9999;
+        int el2 = mins - last2;
+        if (el2 < 0) el2 += 1440;
+        if (el2 > 30) {  // 超過 30 遊戲分鐘才重觸發
+          start_event(eid);
+        }
+      }
+    }
+    // "manual" 型別只能由程式呼叫 start_event() 觸發
+  }
+}
+
+// ── 提供給外部的查詢介面 ─────────────────────────────
+// 路線是否被事件封鎖？
+int is_route_blocked(string route_id_or_site_id) {
+  foreach (string eid, int end_min in active_events) {
+    mapping def = event_defs[eid];
+    if (!def) continue;
+    mapping eff = def["effects"];
+    if (!mapp(eff)) continue;
+
+    mixed blocked_routes = eff["blocked_routes"];
+    if (pointerp(blocked_routes) &&
+      member_array(route_id_or_site_id, blocked_routes) != -1) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+// Site 是否被封鎖（無法進入）？
+int is_site_blocked(string site_id) {
+  foreach (string eid, int end_min in active_events) {
+    mapping def = event_defs[eid];
+    if (!def) continue;
+    mapping eff = def["effects"];
+    if (!mapp(eff)) continue;
+    mixed blocked = eff["blocked_sites"];
+    if (pointerp(blocked) && member_array(site_id, blocked) != -1) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+// 取得某 Site 在當前所有活躍事件下的額外描述
+string query_site_event_desc(string site_id) {
+  string out = "";
+  foreach (string eid, int end_min in active_events) {
+    mapping def = event_defs[eid];
+    if (!def) continue;
+    mapping eff = def["effects"];
+    if (!mapp(eff)) continue;
+    mapping site_overrides = eff["site_desc_override"];
+    if (mapp(site_overrides) && site_overrides[site_id]) {
+      out += "\n" + C_WARN + select_lang(site_overrides[site_id]) + C_RESET + "\n";
+    }
+  }
+  return out;
+}
+
+// 取得目前所有活躍事件清單
+mapping query_active_events() {
+  return copy(active_events);
+}
+
+// 取得事件定義
+mapping query_event_def(string event_id) {
+  return event_defs[event_id];
+}
+
+// 取得所有事件定義
+mapping query_all_event_defs() {
+  return copy(event_defs);
+}
+
+// 管理員手動觸發 / 終止
+void admin_start_event(string event_id) { start_event(event_id); }
+void admin_end_event(string event_id) { end_event(event_id); }
+
+void create() {
+  ::create();
+  set_entity_id("daemon:world_event");
+  set_entity_type("daemon");
+  rehash();
+  EVENT_D->subscribe("GameTimeTick", "on_time_tick", this_object());
+}

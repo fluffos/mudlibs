@@ -1,0 +1,123 @@
+// /cmds/cmd_learn.c
+// 學習指令：向 NPC 學習技能
+
+#include "/include/ansi.h"
+
+inherit "/std/object";
+
+int main(object me, string verb, string arg) {
+  if (!arg || arg == "") {
+    write(select_lang(([
+      "en": "Usage: learn <skill ID> from <NPC ID> [amount]\n",
+      "zh-TW": "用法：learn <技能ID> from <NPC ID> [amount]\n",
+      "zh-CN": "用法：learn <技能ID> from <NPC ID> [amount]\n"
+    ])));
+    return 1;
+  }
+
+  string sid, target_id;
+  int amount = 10;  // 預設消耗 10 點潛能
+
+  // 解析參數: learn sword from thoracic 20
+  if (strsrch(arg, " from ") == -1) {
+    write(select_lang(([
+      "en": "Who do you want to learn from? Usage: learn <skill ID> from <NPC ID>\n",
+      "zh-TW": "你要向誰學習？用法：learn <技能ID> from <NPC ID>\n",
+      "zh-CN": "你要向谁学习？用法：learn <技能ID> from <NPC ID>\n"
+    ])));
+    return 1;
+  }
+
+  string *parts = explode(arg, " from ");
+  sid = trim(parts[0]);
+  string rest = trim(parts[1]);
+
+  int sp = strsrch(rest, " ");
+  if (sp == -1) {
+    target_id = rest;
+  } else {
+    target_id = substr(rest, 0, sp);
+    amount = to_int(substr(rest, sp + 1, strlen(rest) - sp - 1));
+  }
+
+  if (amount <= 0) amount = 10;
+
+  object here = environment(me);
+  object teacher = present(target_id, here);
+
+  if (!teacher) {
+    write(select_lang(([
+      "en": "There is no \"",
+      "zh-TW": "這裡沒有「",
+      "zh-CN": "这里没有「"
+    ])) + target_id + select_lang(([ "en": "\" here.\n", "zh-TW": "」。\n", "zh-CN": "」。\n" ])));
+    return 1;
+  }
+
+  if (!living(teacher) || userp(teacher)) {
+    write(teacher->query_name() + select_lang(([
+      "en": " cannot teach you anything.\n",
+      "zh-TW": " 無法教導你任何東西。\n",
+      "zh-CN": " 无法教导你任何东西。\n"
+    ])));
+    return 1;
+  }
+
+  mapping teachable = teacher->query_skills_to_teach();
+  if (!teachable || !teachable[sid]) {
+    write(teacher->query_name() + select_lang(([
+      "en": " shakes their head and says: I don't know this skill, find someone else.\n",
+      "zh-TW": " 搖搖頭說：我不會這門功夫，你找別人吧。\n",
+      "zh-CN": " 摇摇头说：我不会这门功夫，你找别人吧。\n"
+    ])));
+    return 1;
+  }
+
+  int my_lv = me->query_skill(sid);
+  int max_lv = teachable[sid];
+
+  if (my_lv >= max_lv) {
+    write(teacher->query_name() + select_lang(([
+      "en": " says: Your proficiency in '",
+      "zh-TW": " 說：你的『",
+      "zh-CN": " 说：你的『"
+    ])) + load_object("/daemon/skill_d.lpc")->query_skill_name(sid) + select_lang(([
+      "en": "' is no less than mine.\n",
+      "zh-TW": "』造詣已經不在我之下了。\n",
+      "zh-CN": "』造诣已经不在我之下了。\n"
+    ])));
+    return 1;
+  }
+
+  // 執行學習
+  if (load_object("/daemon/skill_d.lpc")->learn_skill(me, sid, amount)) {
+    say(me->query_name() + select_lang(([
+      "en": " asks ",
+      "zh-TW": " 向 ",
+      "zh-CN": " 向 "
+    ])) + teacher->query_name() + select_lang(([
+      "en": " for advice on the secrets of '",
+      "zh-TW": " 請教了一些關於『",
+      "zh-CN": " 请教了一些关于『"
+    ])) + sid + select_lang(([ "en": "'.\n", "zh-TW": "』的竅門。\n", "zh-CN": "』的窍门。\n" ])));
+    me->save();
+  }
+
+  return 1;
+}
+
+string help() {
+  return select_lang(([
+    "en": "【Command】\n  learn <skill> from <NPC> [amount]    Spend potential to learn a skill from an NPC.\n",
+    "zh-TW": "【指令】\n  learn <技能> from <NPC> [數量]    消耗潛能向 NPC 學習技能。\n",
+    "zh-CN": "【指令】\n  learn <技能> from <NPC> [数量]    消耗潜能向 NPC 学习技能。\n"
+  ]));
+}
+
+string *query_verbs() {
+  return ({ "learn" });
+}
+
+string query_category() {
+  return select_lang(([ "en": "Combat", "zh-TW": "戰鬥", "zh-CN": "战斗" ]));
+}

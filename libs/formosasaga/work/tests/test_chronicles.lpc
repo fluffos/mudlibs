@@ -1,0 +1,165 @@
+// /tests/test_chronicles.c
+//
+// 測試項目：
+//   - 歷史大事紀自動搜集功能 (解鎖記憶、解除失源者)
+//   - 文人發表地方誌，聚落記憶度回升與修練點取得
+//   - 列出聚落地方誌與閱讀文獻機制
+//   - 閱讀所帶來的獎勵與防重複領取限制
+
+#include "/include/formosa.h"
+
+inherit "/std/test_case";
+
+void run_tests(object me) {
+  start_test("歷史文獻記錄與傳言 (Rumor & Chronicles) 系統測試 (P8.2)");
+
+  object ch_d = load_object("/daemon/chronicle_d.lpc");
+  object set_d = load_object("/daemon/settlement_d.lpc");
+  object career_d = load_object("/daemon/career_d.lpc");
+
+  assert_true(objectp(ch_d), "應載入 chronicle_d");
+  assert_true(objectp(set_d), "應載入 settlement_d");
+  assert_true(objectp(career_d), "應載入 career_d");
+
+  // 建立一個文人角色
+  object scholar = clone_object("/std/user.lpc");
+  scholar->set_id("test_scholar");
+  scholar->set_name("測試史官");
+  scholar->set_role("god");
+  scholar->set_career_rank("scholar", 1);
+  scholar->setup();
+
+  // 模擬將其置於民雄車站
+  object site_ob = SETTLEMENT_D->get_site_object("minxiong_old_station");
+  assert_true(objectp(site_ob), "應成功載入地標");
+  scholar->move(site_ob);
+
+  // 清空歷史大事紀與地方誌的記憶體狀態以確保測試純淨
+  rm("/data/state/system/chronicle.o");
+  ch_d->restore_state();
+
+  string settlement_id = "minxiong";
+  SETTLEMENT_D->set_dim(settlement_id, DIM_MEMORY, 50);
+
+  // ── 1. 測試大事紀自動記錄 ────────────────────────────
+  write("--- 測試歷史大事紀自動記錄 ---\n");
+
+  // 模擬發送解除失源者事件
+  EVENT_D->publish("SpecterResolved", ([
+    "settlement_id": settlement_id,
+    "specter_id": "lost_name",
+    "resolver": "test_scholar",
+  ]));
+
+  // 等待事件分發
+  while (EVENT_D->query_queue_size() > 0) {
+    EVENT_D->dispatch_loop();
+  }
+
+  mapping *records = ch_d->query_historic_records(settlement_id);
+  assert_true(sizeof(records) > 0, "應自動將 SpecterResolved 記錄至大事紀");
+  if (sizeof(records) > 0) {
+    assert_equal("specter", records[0]["type"], "大事紀類型應為 specter");
+    assert_true(strsrch(records[0]["desc"], "lost_name") != -1, "描述應包含失源者ID");
+  }
+
+  // ── 2. 測試發表地方誌 ──────────────────────────────
+  write("--- 測試發表地方誌 ---\n");
+  int init_mem = SETTLEMENT_D->query_memory(settlement_id);
+  int init_points = career_d->query_career_points(scholar, "scholar");
+
+  // 藉由指令發表地方誌
+  object cmd_ob = load_object("/cmds/player/cmd_record.lpc");
+  assert_true(objectp(cmd_ob), "應載入 cmd_record 指令物件");
+
+  int res = cmd_ob->main(scholar, "record", "publish 民雄風情誌:這是一部詳細記錄民雄地方糖業與大士爺信仰的地方文獻，極具參考價值。");
+  assert_equal(1, res, "發表地方誌指令應執行成功");
+
+  // 驗證聚落記憶值回升 (publish 會加 3)
+  int post_pub_mem = SETTLEMENT_D->query_memory(settlement_id);
+  assert_equal(init_mem + 3, post_pub_mem, "發表地方誌後，聚落記憶度應增加 3 點");
+
+  // 驗證發表者獲得文人修練點獎勵 (主要為 10 點)
+  int post_pub_points = career_d->query_career_points(scholar, "scholar");
+  assert_true(post_pub_points > init_points, "發表地方誌後，著者應獲得文人修練點獎勵");
+
+  // ── 3. 測試地方誌查詢與研讀 ────────────────────────────
+  write("--- 測試地方誌研讀與獎勵機制 ---\n");
+  // 使用 list 查詢
+  int list_res = cmd_ob->main(scholar, "record", "list");
+  assert_equal(1, list_res, "檢視地方誌列表指令應成功");
+
+  // 再次取得新加入的地方誌列表
+  mapping *chronicles = ch_d->query_settlement_chronicles(settlement_id);
+  assert_equal(1, sizeof(chronicles), "民雄應只有 1 篇地方誌文獻");
+
+  if (sizeof(chronicles) > 0) {
+    string cid = chronicles[0]["id"];
+
+    // 模擬讀者閱讀
+    int cur_reads = chronicles[0]["reads"];
+    int prev_mem_before_read = SETTLEMENT_D->query_memory(settlement_id);
+    int points_before_read = career_d->query_career_points(scholar, "scholar");
+
+    int read_ok = ch_d->read_chronicle(scholar, cid);
+    assert_equal(1, read_ok, "應成功閱讀地方誌");
+
+    // 驗證點閱數 + 1
+    mapping updated_c = ch_d->query_chronicle(cid);
+    assert_equal(cur_reads + 1, updated_c["reads"], "點閱數應增加 1");
+
+    // 驗證讀者獲得修練點 (+2)
+    int points_after_read = career_d->query_career_points(scholar, "scholar");
+    assert_equal(points_before_read + 2, points_after_read, "首次研讀地方誌應獲得 2 點修練點");
+
+    // 驗證聚落記憶度因推廣增加 1 點
+    assert_equal(
+      prev_mem_before_read + 1,
+      SETTLEMENT_D->query_memory(settlement_id),
+      "研讀後，聚落記憶應回升 1 點"
+    );
+
+    // 再次研讀，應有防重複領取機制
+    int points_after_double_read = career_d->query_career_points(scholar, "scholar");
+    int read_ok_2 = ch_d->read_chronicle(scholar, cid);
+    int points_after_double_read_real = career_d->query_career_points(scholar, "scholar");
+    assert_equal(points_after_read, points_after_double_read_real, "重複研讀同本地方誌不應再次獲得修練點");
+  }
+
+  // ── 4. 異常與邊界條件測試 ────────────────────────────────────
+  write("--- 測試異常與邊界條件 ---\n");
+
+  // 4.1 非文人玩家執行指令
+  object peasant = clone_object("/std/user.lpc");
+  peasant->set_id("test_peasant");
+  peasant->set_name("測試農民");
+  peasant->set_career_rank("farmer", 1);
+  peasant->setup();
+  peasant->move(site_ob);
+
+  int peas_res = cmd_ob->main(peasant, "record", "");
+  assert_equal(1, peas_res, "非文人玩家執行應被阻擋並提示");
+  destruct(peasant);
+
+  // 4.2 標題過短或內容過短的發表嘗試
+  int bad_pub1 = cmd_ob->main(scholar, "record", "publish A:短內容");
+  assert_equal(1, bad_pub1, "短標題或短內容發表時應返回錯誤");
+
+  int bad_pub2 = cmd_ob->main(scholar, "record", "publish 正常標題:短");
+  assert_equal(1, bad_pub2, "短內容發表時應返回錯誤");
+
+  // 4.3 錯誤的 publish 格式
+  int bad_pub_format = cmd_ob->main(scholar, "record", "publish 無冒號內容");
+  assert_equal(1, bad_pub_format, "不符合 <標題>:<內容> 格式的輸入應失敗並提示");
+
+  // 4.4 讀取不存在的 index 地方誌
+  scholar->set_temp("reading_chronicles", chronicles);
+  int bad_read = cmd_ob->main(scholar, "record", "read 999");
+  assert_equal(1, bad_read, "讀取超出範圍的編號時應返回提示");
+
+  // 清理
+  destruct(scholar);
+  rm("/data/state/system/chronicle.o");
+
+  report_results();
+}

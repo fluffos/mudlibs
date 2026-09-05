@@ -1,0 +1,225 @@
+// std/combat.c - 戰鬥系統 mixin
+// 繼承此檔後可獲得完整的玩家戰鬥指令
+
+#include "/include/config.h"
+
+// ── 攻擊動作（一回合） ──────────────────────────────────────
+void do_combat_round() {
+  object me = this_object();
+  if (!in_combat || !combat_target) { return; }
+  if (is_dead) { return; }
+
+  object here = environment(me);
+  if (here && here->query_no_combat()) {
+    write("這裡禁止戰鬥！戰鬥中斷了。\n");
+    stop_combat();
+    return;
+  }
+
+  object target = combat_target;
+  // 🚀 檢查目標是否還在同一個房間
+  if (!target || environment(target) != here) {
+    write("對象不在這裡，戰鬥結束了。\n");
+    stop_combat();
+    return;
+  }
+
+  if (target->query_hp() <= 0) {
+    write("敵人已經死亡。\n");
+    stop_combat();
+    return;
+  }
+
+  // 命中判斷
+  int hit_roll = random(100);
+  int hit_chance = HIT_RATE_BASE + stat_dex - target->query_stat(STAT_DEX);
+  if (hit_roll > hit_chance) {
+    write("你的攻擊沒有打中 " + target->query_name() + "！\n");
+    say(query_name() + " 的攻擊打空了。\n");
+    return;
+  }
+
+  // 傷害計算
+  int raw = attack - target->query_defence();
+  if (raw < 1) { raw = 1; }
+  int variation = random(raw / 3 + 1);
+  raw = raw - variation / 2 + random(variation + 1);
+
+  // 暴擊判定
+  string crit_str = "";
+  if (random(100) < CRIT_RATE_BASE + stat_dex / 5) {
+    raw = raw * CRIT_MULTIPLIER;
+    crit_str = "【暴擊！】";
+  }
+
+  target->take_damage(raw);
+  write(crit_str + "你對 " + target->query_name() +
+    " 造成了 " + sprintf("%d", raw) + " 點傷害！" +
+    "（對方剩 " + sprintf("%d", target->query_hp()) + "/" +
+    sprintf("%d", target->query_max_hp()) + " HP）\n");
+  say(crit_str + query_name() + " 攻擊了 " + target->query_name() + "！\n");
+
+  target->attacked_by(this_object());
+
+  if (target->query_hp() <= 0) {
+    write("你擊敗了 " + target->query_name() + "！\n");
+    say(query_name() + " 擊敗了 " + target->query_name() + "！\n");
+
+    // 🚀 PK 判定
+    load_object("/daemon/pk_d.lpc")->check_kill_penalty(this_object(), target);
+
+    stop_combat();
+    target->die();
+  }
+}
+
+// ── 心跳觸發戰鬥回合 ────────────────────────────────────────
+void combat_heart_beat() {
+  if (in_combat && combat_target) {
+    do_combat_round();
+  }
+}
+
+// ── 指令：kill / attack ──────────────────────────────────────
+int do_kill(string arg) {
+  // 🚀 幻影模式攔截
+  if (this_object()->query_current_mudlib() != "") {
+    write("你目前處於幻影狀態，無法干涉這個世界的因果。\n");
+    return 1;
+  }
+  if (!arg) {
+    write("你要攻擊誰？用法：kill <對象>\n");
+    return 1;
+  }
+  if (is_dead) {
+    write("你已經死了，無法戰鬥。\n");
+    return 1;
+  }
+
+  object here = environment(this_object());
+  if (!here) { write("你不在任何地方。\n"); return 1; }
+
+  if (here->query_no_combat()) {
+    write("這裡禁止戰鬥！\n");
+    return 1;
+  }
+
+  // 在同一房間裡找到目標
+  object target = present(arg, here);
+  if (!target) {
+    write("這裡沒有叫「" + arg + "」的東西。\n");
+    return 1;
+  }
+  if (target == this_object()) {
+    write("你無法攻擊自己。\n");
+    return 1;
+  }
+  if (!living(target)) {
+    write(target->query_name() + " 不是活物，你無法攻擊它。\n");
+    return 1;
+  }
+  if (target->query_hp() <= 0) {
+    write(target->query_name() + " 已經死了。\n");
+    return 1;
+  }
+
+  in_combat = 1;
+  combat_target = target;
+
+  write("你向 " + target->query_name() + " 發起攻擊！\n");
+  say(query_name() + " 向 " + target->query_name() + " 發起攻擊！\n");
+
+  do_combat_round();
+  return 1;
+}
+
+// ── 指令：flee ───────────────────────────────────────────────
+int do_flee(string arg) {
+  if (!in_combat) {
+    write("你並不在戰鬥中。\n");
+    return 1;
+  }
+
+  // 50% 機率逃跑成功
+  if (random(100) < 50) {
+    stop_combat();
+    write("你驚慌逃跑！\n");
+    say(query_name() + " 落荒而逃！\n");
+    return 1;
+  }
+
+  write("你試圖逃跑，但沒有成功！\n");
+  return 1;
+}
+
+// ── 指令：skills ─────────────────────────────────────────────
+int do_skills(string arg) {
+  write("=== 可用技能 ===\n");
+  write("  fireball <目標> - 火球術（消耗 MP）\n");
+  write("  heal             - 治療自身\n");
+  write("  rage             - 狂暴（ATK+50%，持續 3 回合）\n");
+  return 1;
+}
+
+// ── 技能：fire ball ──────────────────────────────────────────
+int do_fireball(string arg) {
+  // 🚀 幻影模式攔截
+  if (this_object()->query_current_mudlib() != "") {
+    write("你目前處於幻影狀態，無法施展破壞性的法術。\n");
+    return 1;
+  }
+  int mp_cost = 20;
+  if (!arg) { write("用法：fireball <目標>\n"); return 1; }
+
+  object here = environment(this_object());
+  if (here && here->query_no_combat()) {
+    write("這裡禁止戰鬥，無法施放攻擊性法術！\n");
+    return 1;
+  }
+
+  if (!use_mp(mp_cost)) {
+    write("MP 不足，無法施放火球術！（需要 " + sprintf("%d", mp_cost) + " MP）\n");
+    return 1;
+  }
+
+  object target = present(arg, here);
+  if (!target || !living(target)) {
+    write("找不到目標：" + arg + "\n");
+    return 1;
+  }
+
+  int dmg = stat_int * 3 + random(20);
+  target->take_damage(dmg);
+  write("🔥 你向 " + target->query_name() + " 施放了火球術，造成 " +
+    sprintf("%d", dmg) + " 點魔法傷害！\n");
+  say(query_name() + " 施放了火球術！\n");
+  tell_object(target, "🔥 " + query_name() +
+    " 的火球術對你造成了 " + sprintf("%d", dmg) + " 點傷害！\n");
+
+  target->attacked_by(this_object());
+
+  if (target->query_hp() <= 0) {
+    write("火球術將 " + target->query_name() + " 化為灰燼！\n");
+    target->die();
+    stop_combat();
+  } else if (!in_combat) {
+    in_combat = 1;
+    combat_target = target;
+  }
+  return 1;
+}
+
+// ── 技能：heal ──────────────────────────────────────────────
+int do_heal(string arg) {
+  int mp_cost = 15;
+  if (!use_mp(mp_cost)) {
+    write("MP 不足，無法施放治療術！（需要 " + sprintf("%d", mp_cost) + " MP）\n");
+    return 1;
+  }
+  int heal_amount = stat_wis * 3 + random(15);
+  heal_hp(heal_amount);
+  write("✨ 你施放了治療術，恢復了 " + sprintf("%d", heal_amount) + " 點 HP！" +
+    "（HP: " + sprintf("%d", hp) + "/" + sprintf("%d", max_hp) + "）\n");
+  say(query_name() + " 散發出治療的光芒。\n");
+  return 1;
+}

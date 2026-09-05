@@ -1,0 +1,114 @@
+// /cmds/admin/cmd_ls.c
+// 列表檔案指令：ls <路徑>
+
+#include "/include/config.h"
+#include "/include/ansi.h"
+
+inherit "/std/object";
+
+int main(object me, string verb, string arg) {
+  if (me->query_role() != "god" && me->query_role() != "wizard") {
+    return 0;
+  }
+
+  string path = arg;
+  if (!path || path == "") {
+    path = me->query_cwd();
+  } else {
+    path = resolv_path(path);
+  }
+
+  // 授權檢查 (God 不受限)
+  if (me->query_role() != "god") {
+    string *wp = me->query_write_paths();
+    int allowed = 0;
+
+    // 1. 檢查自定義授權路徑
+    if (wp) {
+      foreach (string p in wp) {
+        if (strsrch(path, p) == 0) {
+          allowed = 1;
+          break;
+        }
+      }
+    }
+
+    // 2. 檢查 Wizard 預設授權路徑
+    if (!allowed && me->query_role() == "wizard") {
+      string *default_paths = ({
+        "/area/",
+        "/npc/",
+        "/item/",
+        "/cmds/",
+        "/log/",
+        "/open/",
+        "/tests/",
+        "/u/"
+      });
+      foreach (string p in default_paths) {
+        if (strsrch(path, p) == 0) {
+          allowed = 1;
+          break;
+        }
+      }
+    }
+
+    if (!allowed) {
+      write("ls: permission denied: " + path + "\n");
+      return 1;
+    }
+  }
+
+  string *files = get_dir(path);
+  if (!files || !sizeof(files)) {
+    write(select_lang(([
+      "en": "Cannot find directory or file: " + path + "\n",
+      "zh-TW": "找不到目錄或檔案：" + path + "\n",
+      "zh-CN": "找不到目录或档案：" + path + "\n"
+    ])));
+    return 1;
+  }
+
+  write("$HIW$" + select_lang(([
+    "en": "Directory Listing: ",
+    "zh-TW": "目錄清單：",
+    "zh-CN": "目录清单："
+  ])) + "$NOR$" + path + "\n");
+  write("--------------------------------------------------\n");
+
+  // 分列顯示，簡單排版
+  string output = "";
+  int count = 0;
+  foreach (string f in files) {
+    string display = f;
+    if (f[strlen(f) - 1] == '/') {
+      display = "$HIG$" + f + "$NOR$";  // 目錄顯示綠色
+    } else {
+      // 取得檔案大小
+      int size = file_size((path[strlen(path) - 1] == '/' ? path : path + "/") + f);
+      display = pad_str(f, 20) + " " + (size >= 0 ? sprintf("%d bytes", size) : "");
+    }
+    output += display + "\n";
+    count++;
+  }
+  write(output);
+  write("--------------------------------------------------\n");
+  write(select_lang(([
+    "en": "Total " + count + " items.\n",
+    "zh-TW": "共計 " + count + " 個項目。\n",
+    "zh-CN": "共计 " + count + " 个项目。\n"
+  ])));
+
+  return 1;
+}
+
+string *query_verbs() { return ({ "ls", "dir" }); }
+string query_category() { return "Admin"; }
+
+string help() {
+  return select_lang(([
+    "en": "【Admin Command】\n  ls <path>    List files and directories.\n  dir <path>   Same as ls.\n",
+    "zh-TW": "【管理指令】\n  ls <路徑>    列出指定路徑下的檔案與目錄。\n  dir <路徑>   同 ls。\n",
+    "zh-CN": "【管理指令】\n  ls <路径>    列出指定路径下的文件与目录。\n  dir <路径>   同 ls。\n"
+  ]));
+}
