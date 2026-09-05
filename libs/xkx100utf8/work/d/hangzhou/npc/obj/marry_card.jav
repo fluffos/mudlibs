@@ -1,0 +1,194 @@
+// marry_card.c
+#include <ansi.h>
+
+inherit ITEM;
+void create()
+{
+        set_name(RED"Լ"NOR, ({"marrycard"}) );
+        set_weight(10);
+        set("no_get",1);
+        set("no_steal",1);
+        set("no_drop","ĻԼܶ,ֻȥׯԼ\n");
+        if( clonep() )
+                set_default_object(__FILE__);
+        else
+        {
+                set("unit", "");
+                set("material", "paper");
+        }
+}
+
+void init()
+{
+        add_action("do_put","put");
+        add_action("do_coupletalk", "coupletalk");
+        add_action("do_coupletalk", "ct");
+        add_action("do_cemote", "ce" );
+}
+
+int do_put(string arg)
+{
+        object me = this_player();
+        if(arg!="marrycard in corpse") return 0;
+        else
+        {
+          tell_object(me,"ĶôԷŵǶȥ\n");
+          return 1;
+        }
+}
+
+int do_cemote(string arg)
+{
+        object *list, me;
+        object couple_ob;
+        string target, tmpstr1, tmpstr2,str1,str2;
+        string cardname;
+        int i;
+
+        me = this_player();
+        list = all_inventory(this_player());
+        i = sizeof(list);
+        while (i--)
+        {
+              if (((string)list[i]->query("id")) == "marrycard")
+                cardname = list[i]->query("name");
+        }
+
+        if (sscanf(cardname,"%sĻԼ" ,target)!=1)
+                return notify_fail("ûа.\n");
+
+        couple_ob = find_player(target);
+        if( !couple_ob )
+          return notify_fail("İ㣬Ѿ뿪Ϸˡ\n");
+        if ((string)couple_ob->query("gender") != "Ů")
+        {
+                tmpstr1 = ""; tmpstr2 = "Ϲ";
+                str1 = ""; str2 = "";
+        } else
+        {
+                tmpstr1 = "Ϲ"; tmpstr2 = "";
+                str1 = ""; str2 = "";
+        }
+
+        if (!arg)
+        {
+                write( MAG "İˡ\n" NOR);
+                tell_room(environment(me), CYN+(string)me->name()+
+                ""+str1+"İ"+ (string)couple_ob->name()+
+                "ˡ\n" +NOR, ({me, couple_ob}));
+                tell_object(couple_ob, sprintf(MAG "%s %s
+                \n"NOR, tmpstr1,me->name(1) ));
+                return 1;
+        }
+        if (environment(me) == environment(couple_ob ) )
+        {
+           if (arg == "kiss")
+           {
+              write( MAG "ӵסİ£һǣ......\n" NOR);
+              tell_room(environment(me), CYN+(string)me->name()+
+              "ӵס"+(string)couple_ob->name()+"һǡ\n"
+                +NOR, ({me, couple_ob}));
+                tell_object(couple_ob, sprintf(MAG "%s %s
+                ӵס㣬һǣ......\n"NOR,tmpstr1,me->name(1)));
+           }
+        }
+
+        return 1;
+}
+
+int do_coupletalk(string arg)
+{
+        object *list, me;
+        object couple_ob;
+        string target, tmpstr1, tmpstr2;
+        string cardname;
+        int i;
+
+        me = this_player();
+        list = all_inventory(this_player());
+        i = sizeof(list);
+        while (i--)
+        {
+              if (((string)list[i]->query("id")) == "marrycard")
+                cardname = list[i]->query("name");
+        }
+
+        if (sscanf(cardname,"%sĻԼ" ,target)!=1)
+                return notify_fail("ûа.\n");
+
+        couple_ob = find_player(target);
+        if( !couple_ob )
+           return notify_fail("İ㣬Ѿ뿪Ϸˡ\n");
+        if ((string)couple_ob->query("gender") != "Ů")
+        {
+                tmpstr1 = "";
+                tmpstr2 = "Ϲ";
+        } else
+        {
+                tmpstr1 = "Ϲ";
+                tmpstr2 = "";
+        }
+
+        write(sprintf(MAG"%s %s ˵%s\n"NOR,
+                tmpstr2,couple_ob->name(1), arg ));
+        tell_object(couple_ob, sprintf(MAG "%s %s ˵%s\n"NOR,
+               tmpstr1,me->name(1), arg ));
+
+        return 1;
+}
+
+void owner_is_killed()
+{
+        object me = this_player();
+        write(HIW"ʬеĻ鿨Ϊʧˡ\n"NOR);
+        destruct(this_object());
+}
+
+string query_autoload()
+{
+        object *list, me;
+        object couple_ob;
+        string target,cardname;
+        int i;
+
+        me = this_player();
+        list = all_inventory(this_player());
+        i = sizeof(list);
+        while (i--)
+        {
+              if (((string)list[i]->query("id")) == "marrycard")
+                cardname = list[i]->query("name");
+        }
+
+        sscanf(cardname,"%sĻԼ" ,target);
+        return target;
+}
+
+void autoload(string arg)
+{
+        int i;
+        object couple_ob;
+        object me;
+        string tmpstr, tmpstr1;
+
+//        me = this_player();
+        couple_ob = find_player(arg);
+        if (couple_ob)
+        {
+             if ((string)couple_ob->query("gender") != "Ů")
+             {
+                    tmpstr1 = "Ϲ";
+                    tmpstr = "";
+              } else
+              {
+                    tmpstr1 = "";
+                    tmpstr = "Ϲ";
+              }
+              write(sprintf( MAG "%sҲȥ...\n"NOR,tmpstr1));
+              tell_object(couple_ob ,
+              sprintf( MAG "%s,ȥ...\n" NOR, tmpstr));
+//me->name(1)+"("+me->query("id")+")",environment(me))->query("name") );
+        }
+        set("name",""+arg+"ĻԼ");
+}
+

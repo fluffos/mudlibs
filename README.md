@@ -289,6 +289,7 @@ classes it's found.
 | 108 | `xajh4gkb` | 笑傲江湖4公开版 | `笑傲江湖4公开版.rar` | 40154 | WASM playable |
 | 109 | `xhcii` | 笑红尘Ⅱ | `笑红尘Ⅱ .rar` | 40163 | WASM playable |
 | 110 | `xkx100` | 侠客行一百 | `侠客行一百.rar` | 40117 | WASM playable |
+| 110-1 | `xkx100utf8` | 侠客行一百 | `git clone https://github.com/fluffos/xkx100 (commit ee022c90aabbbed6413acc6e10254e5a00f511fd, cloned 2026-09-05); repo root is the mudlib -- already UTF-8 upstream. MudRen/xkx100 is the same tree with a MudCore wrap and was not converted separately` | 40275 | WASM playable |
 | 111 | `xkx2000zxb` | 侠客行2000最新版 | `侠客行2000最新版.rar` | 40140 | WASM playable |
 | 112 | `xkx2017` | 侠客行2017 | `侠客行2017（MUD）.rar` | 40145 | WASM playable |
 | 113 | `xkxc98sj` | 侠客新传98书剑 | `侠客新传98书剑.rar` | 40126 | WASM playable |

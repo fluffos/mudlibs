@@ -1,0 +1,81 @@
+// ownsword.c 
+#include <weapon.h>
+#include <ansi.h>
+
+inherit F_AUTOLOAD;
+inherit SWORD;
+
+void create()
+{
+        int i;
+        object me = this_player();
+        i=me->query_skill("sword", 1)/2+20;
+        if (i>=120)
+        i=120;
+        set_name("", ({ "ownsword" }));
+        set_weight(5000);
+        set("no_drop",",\n\n");
+        set("no_get",1);
+        if (clonep())
+                set_default_object(__FILE__);
+        else {
+                set("unit", "");
+                set("long", "һʦŷұΪı\n");
+                set("value", 1000);
+                set("material", "steel");
+                set("wield_msg", "$Nৡһһ$nС\n");
+                set("unwield_msg", "$Nе$nؽʡ\n");
+        }
+        init_sword(i);
+        setup();
+}
+
+void init()
+{
+        add_action("do_put","put");
+}
+
+int do_put(string arg)
+{
+        object me = this_player();
+        if(arg!="ownsword in corpse")
+        return 0;
+        else
+        {
+            tell_object(me,",㲻ˣ\n");
+       }
+}
+
+void owner_is_killed()
+{
+        object me = this_player();
+        write(HIY"ֻǰһ........\n"NOR);
+        write("ڽ,\n");
+        (int)me->query_temp("done_s");
+        me->delete_temp("done_s");
+        destruct(this_object());
+}
+
+string query_autoload()
+{
+        object *list, me;
+        string target,swordname;
+        int i;
+        list = all_inventory(this_player());
+        i = sizeof(list);
+        while (i--) {
+              if (((string)list[i]->query("id")) == "ownsword")
+                swordname = list[i]->query("name");
+        }
+
+//        sscanf(swordname,"%s",target);
+//        return target;
+        return swordname;
+}
+void autoload(string arg)
+{
+        object me = this_player();
+        (int)me->query_temp("done_s");
+        me->set_temp("done_s",1);
+        set("name",arg);
+}
