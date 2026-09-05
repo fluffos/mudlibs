@@ -719,3 +719,44 @@ absence in any other sandboxed/no-sockets deployment. After the
 `uptime()` fix, a full WASM session verified clean: registration
 (name, `s` confirm, password + confirm, gender `h`/`m`), landing in
 "Plano Inmaterial", `mirar` (look), `score`, and `salir` (quit).
+
+## 商店付费购买（2026-09-04 librarian shop slice）
+
+Round-two §10.7 (2026-08-27) only touched `std/tienda.lpc` for the
+`vender()` float/`to_int` fix. This pass exercised a live shop.
+
+Booted `~/src/fluffos/build-debug/src/driver config.fluffos` from
+`libs/ninetears/` on port **40241**. Do **not** send a blank warmup
+line -- `logon1("")` destructs the connection. Admin `fluffos` /
+`Mud@2026` logged in straight to `/room/raceroom` (Plano Inmaterial).
+No live clock on the prompt; `mudclient.py --idle 6` was only to wait
+out the shop clerk `call_out("add_dependiente", 5)`.
+
+`config.fluffos` still has `log directory : /log` (absolute). This
+boot's `debug.log` is dead, not clean -- rely on the live transcript.
+
+`fluffos` save had `rp 50` (`query_rp()/5` = 10, past the 0–2
+"No es bien recibido" refuse) and an empty purse. Wizard
+`call adjust_money(20,oro) me` returned 2000 and `i` showed
+`20 monedas de oro`.
+
+`goto /room/plaza/tienda_discordia` landed in Tano's shop. Night
+cycle was on: after five seconds, `El dependiente sale de la
+trastienda murmurando algo sobre los indeseables que le despiertan
+a estas horas.` `look` then showed `Tano esta aqui.`
+
+`listar` printed a live stock table (capa / armadura de cuero /
+brazaletes / guantes plus leftover persisted inventory). Two paid
+buys, both with a spoken receipt:
+
+- `comprar guantes` → `Tano dice: A ver... Me das 3 oro, 3 plata y
+  3 cobre, y esto para usted.` (list price "Tres oros" = 300 cobre;
+  night `*10/9` = 333 = 3 oro + 3 plata + 3 cobre)
+- `comprar cuero` → `Me das 1 platino, 1 estanyo y 5 cobre` (list
+  "Un platino" = 500; night = 555)
+
+`i` after both: `Cargando : Armadura de cuero y guantes.` Purse
+`11 monedas de oro, 1 moneda de plata y 2 monedas de cobre`
+(2000 − 333 − 555 = 1112). No programming bug on this path.
+`ajustar_precio` reputation refuse for a 0–2 rp newbie is design,
+not a bug -- measure `query_rp()` before inventing money.

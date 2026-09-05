@@ -71,14 +71,23 @@ live 回「你从店小二那里买下了一根烤鸡腿」。`i` 为九十九�
 二十文铜钱 + 烤鸡腿 + 零两黄金。扬州客店的 `list` 会先打到北丑（只卖
 消息），要用醉仙楼的店小二。
 
-### 拜师（未完成）
+### 拜师（2026-09-04 续：`command_hook` §8.3a）
 
-`goto /d/gaibang/inhole` 见到黎生（`li sheng`）。`bai li` / `bai li sheng`
-都只回玩家侧「你想要拜黎生为师」，黎生的 `command("nod")` /
-`command("say 我便收你为徒…")` / `command("recruit")` 没有任何输出，
-`score` 仍是「还没有拜师」。同一次游玩里花铁干 `init()` 的
-`command("grin")`/`command("say 阴险奸诈…")` 也是静默的，只有
-`check_leave` 里的 `message_vision` 可见。手足 `yanhuangwuhun` 同一份
-黎生代码 2026-09-03 是成功收徒的。本轮没有改 `command()`/`enable_player()`，
-也没有用 `call` 硬写 family。下一切片若继续，先查 NPC 是否 `living()`、
-`command()` efun 在嵌套玩家指令里是否直接回 0。
+同一次 wakeup 里先确认不是 `living()` 缺口：`call li->query_commands()`
+已经登记了 `command_hook`（`""`, flag 1）和 path `{/cmds/std/, /cmds/skill/}`，
+`bai li` 也确实进到了 `attempt_apprentice`。`f li to say` 却回「黎生无法执行你的命令」。
+手足 `yanhuangwuhun` 已经是 `nomask int command_hook`（没有 `private`）。
+
+根因是 AGENTS.md §8.3a：`feature/command.lpc` 的
+`private nomask int command_hook` 被 inherit 后降成 `DECL_HIDDEN`。玩家手打
+动词走 `ORIGIN_DRIVER`，NPC `command()` efun 走 `ORIGIN_EFUN`，apply 静默回 0。
+本树是 2026-09-04 进口的，corpus sweep 之后才进来，所以还带着 `private`。
+
+已改成 `nomask int command_hook`（只去掉 `private`）。重启后：
+
+- `f li to say 测试说话` → `黎生说道：测试说话`
+- `bai li` → nod + `我便收你为徒…` + `决定收你为弟子` + 磕头 +
+  `恭喜您成为丐帮的第二十代弟子`
+- `score` → `【 小叫花 】丐帮第二十代传人` / `师父是黎生`
+
+商店切片上一轮已经付费买过醉仙楼烤鸡腿，本轮没有重做。
