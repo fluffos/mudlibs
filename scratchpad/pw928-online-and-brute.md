@@ -44,3 +44,16 @@ Mask brute started in tmux `pw928-hashcat` via
 Unconstrained 5+ mixed-case alnum is days-to-weeks at this rate; not
 queued. Do not start a second hashcat. Do not commit hashes / pot /
 rockyou / recovered plaintext.
+
+## hkmud.com (user hint, 2026-09-05)
+
+Live **香港群俠傳** wiki + telnet (`hkmud.com:8888` UTF-8 / `:5555`
+BIG5 / `:6666` GBK). Admin vbman says the current mudlib is **泥潭6**,
+not the old 香港金庸群俠傳. Wiki **奪寶** is an in-game treasure-hint
+page (大刀, 正氣訣, …), not a source pack and not `duobao.7z`.
+
+Public code: `HKMUD/NT6` (`name : 笑傲江湖`) — same game as collection
+`nitan6`. Also `HKMUD/wiki_archive` (dokuwiki data) and a fluffos
+fork. `/download` `/src` `/mudlib` are empty wiki stubs. No 7z on the
+org. Site-name candidates (hkmud, hkmud.com, 香港群俠傳, vbman, NT6,
+奪寶, …) do **not** open 928/929/932. Do not onboard NT6 again.
