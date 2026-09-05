@@ -13,7 +13,16 @@ extract code, no forum “密码xxxx”.
 |---|---|---|
 | `duobao.7z` | leftover dump name; a live LPC toolkit (`serenez/lpc-server-update`) uses `C:/mud/duobao` as an example path only | no public mudlib tree |
 | `nitan.7z` | labeled 加密版; unrelated to already-open `nitan6` / `nitan7` / `nitan170911` | no |
-| `谁与争锋.7z` | also a 2000s LPC wizard nick (谁与争锋 / 叮当) and a 2023 mobile MUD (`com.syzf.mud`). Neither publishes this 7z. MudRen/zjmud is 指间争锋, a different game. | no |
+| `谁与争锋.7z` | **User 2026-09-05: this is hell4** (Doing/地狱 lineage; same family as collection `hell` / 076). Also a 2000s LPC wizard nick and a 2023 mobile MUD (`com.syzf.mud`). MudRen/zjmud is 指间争锋, a different game. 7z still locked. | no public pack; identity is hell4 |
+
+## Identity: 谁与争锋 = hell4 (2026-09-05)
+
+User: `syzf is hell4`. Catalog as a hell-family snapshot, not a new unique
+game. `7z t -phell4` (and Hell4/HELL4/hell-4/hell_4/`hell 4`/hell40/doing4/
+地狱4/syzf/SYZF/swzf/hell/doing) all fail — **hell4 is the game name, not
+the archive password**. `hell.7z` is 5.4 MiB and already onboarded; this
+file is 9.0 MiB and still header-encrypted, so not `duplicate_of` hell.
+When it opens, number it as `076-N`, do not give it a new 97x unique.
 
 They sit in the leftover RAR extract
 (`~/.claude/jobs/02c1e635/tmp/mudlib_rar_extract/mudlib/`) with no

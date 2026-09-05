@@ -330,3 +330,12 @@ silently, it doesn't throw). Incidental `data/newsd.o` and
 require driving a coin/material stack down to exactly zero via item
 commands) — fix rests on the identical fixed-in-place `eval_function`
 mechanism and the established `revive`/`demonangel` precedent.
+
+## Locked sibling: 谁与争锋 / SYZF is hell4 (2026-09-05)
+
+User identification: leftover archive `谁与争锋.7z` (catalog slug `swzf`,
+row 932) is **hell4**, a Doing/地狱 branded snapshot of this same family,
+not a new unique game. The 7z is still header-encrypted. `hell4` is the
+game name, not the extract password (`7z t -phell4` and related variants
+fail). File size differs from this lib's `hell.7z` (9.0 MiB vs 5.4 MiB),
+so it is not `duplicate_of`. When it opens, number it as `076-N`.
