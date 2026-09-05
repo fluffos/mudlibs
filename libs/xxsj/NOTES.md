@@ -72,5 +72,70 @@ First player is not auto-god.
 WASM not verified. `unique_games` stays counting numbers `< 900`; 970
 is still listed as a lib.
 
-Quest NPC spawn in the square is commented out upstream (“暂时禁用”).
-Left as-is.
+Quest NPC spawn in the square was commented out upstream
+(“暂时禁用”); §10.7 re-enabled `call_out("create_npc", 1)` and
+spawned the same 任务执事 in the 任务大厅. `look` still does not
+list the NPC under [这里有] unless `living()` sees it; `talk 执事`
+has a room-short fallback.
+
+## 深度功能测试（§10.7，2026-09-05）
+
+管理员/玩家 `秦风` / `Mud@2026`（冰灵根，凡人）和 `fluffos` /
+`Mud@2026`（金灵根）from onboard. Driver PID this boot **982456**
+(restart after the LPC edits; earlier this-turn PID 980052), cwd
+`libs/xxsj/work`, port **40279**. Live `debug.log` is
+`libs/xxsj/log/debug.log`（Boot Time Sat Sep 5 12:34:45 2026）—
+slug-level `log/` so the pre-chdir fopen succeeds. `work/log/` stayed
+empty. No new `error:` lines after login compiled the patched user
+object.
+
+This is a 12-room 修仙 lib. There is no `buy`/`list` and no
+`apprentice`/`bai` family. The organic stand-ins are `craft` at the
+武器坊, `learn` from the 藏经阁 白发长老, and `kill` on 后山 野狼.
+Help already advertised `kill`/`gather`/`craft`/`learn`-adjacent
+verbs; `process_input` only handled look/status/xiulian/go/quit and
+silently printed `>` for the rest.
+
+### 实测过程
+
+1. **Shop (武器坊 craft).** `go down` from 宗门广场. Room lists
+   木剑 (铁矿x2). First pass: `craft 木剑` was swallowed (`>` only).
+   After the verb was wired: gathered 铁矿 x2 on 后山, `craft 木剑`
+   → 「你锻造成功，获得「木剑」」 and attack 10→15. No copper
+   `buy`; this is a gather/craft stall, not a cash shop. Do not
+   invent a buy system.
+2. **拜师 (藏经阁).** 白发长老 and 《基础剑诀》/《御风术》/
+   《炼气心法》 are flavor in the room long. First pass: `talk
+   白发长老` / `learn 基础剑诀` swallowed. After the fix: `talk`
+   prompts `learn 基础剑诀`; `learn` → 「白发长老点头…传于你」,
+   attack 15→18. Second `learn 基础剑诀` after relogin: 「你已经
+   学过」. `bai` is an alias of `learn`.
+3. **Quest.** `quest list` / `accept 1` (采集灵药) / `status` work
+   from any room. Five `gather 灵芝` in 灵药园 then `quest complete`
+   paid 修为 +50 and 灵石 x1 (20→70). 灵芝 x5 removed from the pack.
+4. **Combat.** `kill 野狼` on 后山: 50 HP, six rounds, 秦风
+   100→85, 「你击败了「野狼」」, 修为 +20, 80% 兽皮 drop landed.
+   `go 后山` from 任务大厅 correctly refused (the old global
+   地名→north map would have walked into 修炼室 from the square).
+5. **Quit / persist.** Relogin in 藏经阁. 修为 70, 攻击 18, pack
+   兽皮/木剑/灵石, 无进行中任务, 基础剑诀 still learned. Password
+   hash survived (onboard fix still holds).
+
+### Bugs fixed this pass
+
+1. **`clone/xiuxian_user.lpc` `process_input` dead verbs.** Help
+   and room longs document `gather`/`kill`/`craft`/`hp`/`linggen`;
+   the switch ignored them. Wired those plus `talk`/`quest`/`learn`
+   (`bai` alias). Inventory helpers `add_item`/`count_item`/
+   `remove_item`. Persist `current_quest` / `learned_gongfa` /
+   `wolves_killed`.
+2. **`do_go` 地名 map.** Adjacent-room `query_short` match first;
+   the hardcoded 后山→north table now applies only when that
+   exit’s destination short is actually 后山.
+3. **Quest NPC spawn.** Square `create_npc` uncommented; 任务大厅
+   also `call_out("create_npc", 1)`. `quest_master` `enable_commands`
+   + `set_living_name`; `accept_quest` calls `me->do_quest(sprintf(
+   "accept %d", quest_id))`.
+
+LPC stays CRLF. Admin/player saves not committed. No new AGENTS.md
+class.

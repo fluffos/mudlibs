@@ -20,6 +20,9 @@ int xiulian_count;      // 修炼次数
 
 // 物品栏
 mapping *inventory_items;
+mapping current_quest;
+string *learned_gongfa;
+int wolves_killed;
 
 void create() {
   seteuid(getuid());
@@ -45,6 +48,9 @@ void save_me() {
   if (environment())
     user_data["location"] = file_name(environment());
   user_data["inventory"] = inventory_items;
+  user_data["current_quest"] = current_quest;
+  user_data["learned_gongfa"] = learned_gongfa;
+  user_data["wolves_killed"] = wolves_killed;
 
   login_ob = load_object("/single/login");
   if (login_ob) {
@@ -74,6 +80,9 @@ void load_me() {
   linggen = user_data["linggen"] || "无";
   xiulian_count = user_data["xiulian_count"] || 0;
   inventory_items = user_data["inventory"] || ({});
+  current_quest = user_data["current_quest"];
+  learned_gongfa = user_data["learned_gongfa"] || ({});
+  wolves_killed = user_data["wolves_killed"] || 0;
 
   // 恢复位置，如果位置无效则传送到广场
   if (user_data["location"]) {
@@ -353,7 +362,29 @@ void do_go(string dir) {
 
   dir = lower_case(dir);
 
-  // 方向简写转换
+  // 方向简写只动 ASCII；地名保持原样
+  if (dir == "n" || dir == "N") dir = "north";
+  if (dir == "s" || dir == "S") dir = "south";
+  if (dir == "e" || dir == "E") dir = "east";
+  if (dir == "w" || dir == "W") dir = "west";
+  if (dir == "u" || dir == "U") dir = "up";
+  if (dir == "d" || dir == "D") dir = "down";
+
+  // 先按邻房短名匹配，避免「后山」从广场误走 north
+  exit_dirs = keys(exits);
+  exit_paths = values(exits);
+  for (i = 0; i < sizeof(exit_paths); i++) {
+    object adj = load_object(exit_paths[i]);
+    if (adj && function_exists("query_short", adj)) {
+      string sn = adj->query_short();
+      if (sn == dir || strsrch(sn, dir) != -1 || strsrch(dir, sn) != -1) {
+        dir = exit_dirs[i];
+        break;
+      }
+    }
+  }
+
+  // 方向简写转换（保留下方地名表作次选）
   if (dir == "n") dir = "north";
   if (dir == "s") dir = "south";
   if (dir == "e") dir = "east";
@@ -379,30 +410,13 @@ void do_go(string dir) {
     "广场": "north",
   ]);
 
-  // 如果输入的是地名，尝试转换为方向
-  if (name_to_dir[dir]) {
-    // 检查这个方向是否存在
-    string target_dir = name_to_dir[dir];
-    if (exits[target_dir]) {
-      dir = target_dir;
-    } else {
-      // 如果当前房间没有这个方向，尝试匹配目标房间
-      exit_dirs = keys(exits);
-      exit_paths = values(exits);
-      for (i = 0; i < sizeof(exit_paths); i++) {
-        object target = load_object(exit_paths[i]);
-        if (target && function_exists("query_short", target)) {
-          string short_name = target->query_short();
-          if (short_name == dir ||
-            strsrch(short_name, dir) != -1 ||
-            strsrch(dir, short_name) != -1) {
-            dir = exit_dirs[i];
-            break;
-          }
-        }
-      }
-    }
+  // 地名表只在目标房间短名吻合时使用
+  if (name_to_dir[dir] && exits[name_to_dir[dir]]) {
+    object dest = load_object(exits[name_to_dir[dir]]);
+    if (dest && function_exists("query_short", dest) && dest->query_short() == dir)
+      dir = name_to_dir[dir];
   }
+
 
   // 检查方向是否存在
   if (!exits[dir]) {
@@ -720,6 +734,336 @@ void confirm_password(string pass2, string pass1) {
   }
 }
 
+
+int count_item(string iname) {
+  int i;
+  if (!inventory_items || !iname) return 0;
+  for (i = 0; i < sizeof(inventory_items); i++) {
+    if (inventory_items[i]["name"] == iname)
+      return inventory_items[i]["count"];
+  }
+  return 0;
+}
+
+int add_item(string iname, int count) {
+  int i;
+  if (!iname || count <= 0) return 0;
+  if (!inventory_items) inventory_items = ({});
+  for (i = 0; i < sizeof(inventory_items); i++) {
+    if (inventory_items[i]["name"] == iname) {
+      inventory_items[i]["count"] += count;
+      return 1;
+    }
+  }
+  inventory_items += ({ ([ "name": iname, "count": count ]) });
+  return 1;
+}
+
+int remove_item(string iname, int count) {
+  int i, have;
+  mapping *kept;
+  if (!inventory_items || !iname || count <= 0) return 0;
+  for (i = 0; i < sizeof(inventory_items); i++) {
+    if (inventory_items[i]["name"] == iname) {
+      have = inventory_items[i]["count"];
+      if (have < count) return 0;
+      kept = ({});
+      if (have > count) {
+        inventory_items[i]["count"] = have - count;
+        return 1;
+      }
+      if (i > 0) kept += inventory_items[0..i - 1];
+      if (i + 1 < sizeof(inventory_items)) kept += inventory_items[i + 1..];
+      inventory_items = kept;
+      return 1;
+    }
+  }
+  return 0;
+}
+
+void set_current_quest(mapping q) { current_quest = q; }
+mapping query_current_quest() { return current_quest; }
+int query_wolf_kills() { return wolves_killed; }
+
+void add_exp(int n) { exp += n; }
+
+void do_linggen() {
+  write("你的灵根是：" + linggen + "。\n");
+}
+
+void do_hp() {
+  write("生命 " + hp + "/" + max_hp + "  灵力 " + mp + "/" + max_mp + "\n");
+}
+
+void do_gather(string arg) {
+  object room;
+  mapping items;
+  room = environment();
+  if (!arg || arg == "") {
+    write("采集什么？用法：gather <材料>\n");
+    return;
+  }
+  if (!room || !function_exists("query_items", room)) {
+    write("这里没有可以采集的东西。\n");
+    return;
+  }
+  items = room->query_items();
+  if (!items || !items[arg]) {
+    write("这里没有「" + arg + "」。\n");
+    return;
+  }
+  add_item(arg, 1);
+  write("你采集了「" + arg + "」。\n");
+}
+
+void do_kill(string arg) {
+  object room, next;
+  mapping monsters, mon, drops;
+  mixed ks;
+  string k;
+  int mhp, dmg, mdmg;
+  room = environment();
+  if (!arg || arg == "") {
+    write("攻击谁？用法：kill <妖兽>\n");
+    return;
+  }
+  if (!room || !function_exists("query_monsters", room)) {
+    write("这里没有可以攻击的目标。\n");
+    return;
+  }
+  monsters = room->query_monsters();
+  if (!monsters || !monsters[arg]) {
+    write("这里没有「" + arg + "」。\n");
+    return;
+  }
+  mon = monsters[arg];
+  write("你向「" + arg + "」发起攻击！\n");
+  mhp = mon["hp"];
+  while (mhp > 0 && hp > 0) {
+    dmg = attack - 2;
+    if (dmg < 1) dmg = 1;
+    dmg += random(5);
+    mhp -= dmg;
+    write("你对 " + arg + " 造成了 " + dmg + " 点伤害！（对方剩 " +
+      (mhp > 0 ? mhp : 0) + "/" + mon["hp"] + " HP）\n");
+    if (mhp <= 0) break;
+    mdmg = mon["attack"] - defense;
+    if (mdmg < 1) mdmg = 1;
+    hp -= mdmg;
+    write(arg + " 对你造成了 " + mdmg + " 点伤害！（你剩 " + hp + "/" + max_hp + " HP）\n");
+  }
+  if (hp <= 0) {
+    hp = max_hp / 2;
+    write("你被击败了，逃回宗门广场休整。\n");
+    next = load_object("/room/xiuxian/square");
+    if (next) move_object(next);
+    do_look("");
+    return;
+  }
+  write("你击败了「" + arg + "」！\n");
+  exp += mon["exp"];
+  write("修为 +" + mon["exp"] + "\n");
+  if (arg == "野狼" || arg == "野狗") wolves_killed++;
+  drops = mon["drops"];
+  if (drops) {
+    ks = keys(drops);
+    foreach (k in ks) {
+      if (random(100) < drops[k]) {
+        add_item(k, 1);
+        write("获得「" + k + "」。\n");
+      }
+    }
+  }
+}
+
+void do_craft(string arg) {
+  object room;
+  mapping recipes, rec, mats;
+  mixed ks;
+  string k;
+  room = environment();
+  if (!arg || arg == "") {
+    write("合成什么？用法：craft <物品>\n");
+    return;
+  }
+  if (!room || !function_exists("query_recipes", room)) {
+    write("这里不能锻造。\n");
+    return;
+  }
+  recipes = room->query_recipes();
+  if (!recipes || !recipes[arg]) {
+    write("没有「" + arg + "」的配方。\n");
+    return;
+  }
+  rec = recipes[arg];
+  mats = rec["materials"];
+  ks = keys(mats);
+  foreach (k in ks) {
+    if (count_item(k) < mats[k]) {
+      write("材料不足：需要 " + k + " x" + mats[k] + "。\n");
+      return;
+    }
+  }
+  foreach (k in ks) remove_item(k, mats[k]);
+  add_item(arg, 1);
+  if (rec["type"] == "weapon" && rec["attack"]) attack += rec["attack"];
+  if (rec["type"] == "armor" && rec["defense"]) defense += rec["defense"];
+  write("你锻造成功，获得「" + arg + "」！\n");
+}
+
+void do_learn(string arg) {
+  object room;
+  room = environment();
+  if (!room || room->query_short() != "藏经阁") {
+    write("只有在藏经阁才能向白发长老请教。\n");
+    return;
+  }
+  if (!learned_gongfa) learned_gongfa = ({});
+  if (!arg || arg == "") {
+    write("白发长老说：「想学哪部？learn 基础剑诀 / 御风术 / 炼气心法」\n");
+    return;
+  }
+  arg = replace_string(arg, "《", "");
+  arg = replace_string(arg, "》", "");
+  if (member_array(arg, learned_gongfa) != -1) {
+    write("你已经学过「" + arg + "」了。\n");
+    return;
+  }
+  if (arg == "基础剑诀") {
+    attack += 3;
+  } else if (arg == "御风术") {
+    defense += 2;
+  } else if (arg == "炼气心法") {
+    max_mp += 10;
+    mp = max_mp;
+  } else {
+    write("藏经阁没有这部功法。\n");
+    return;
+  }
+  learned_gongfa += ({ arg });
+  write("白发长老点头：「好，我就将「" + arg + "」传于你。」\n");
+  write("你学会了「" + arg + "」！\n");
+}
+
+void do_talk(string arg) {
+  object room, npc, *obs;
+  int i;
+  string shortn;
+  room = environment();
+  if (!arg || arg == "") {
+    write("与谁交谈？用法：talk <对象>\n");
+    return;
+  }
+  if (room) {
+    obs = all_inventory(room);
+    for (i = 0; i < sizeof(obs); i++) {
+      npc = obs[i];
+      if (npc != this_object() && living(npc) &&
+        (npc->query_name() == arg || npc->query_short() == arg ||
+          npc->query_cap_name() == arg)) {
+        if (function_exists("do_talk", npc)) {
+          npc->do_talk(arg);
+          return;
+        }
+      }
+    }
+    shortn = room->query_short();
+    if (shortn == "藏经阁" && strsrch(arg, "长老") != -1) {
+      write("白发长老说：「想学功法就输入 learn 基础剑诀。」\n");
+      return;
+    }
+    if ((shortn == "任务大厅" || shortn == "宗门广场") && strsrch(arg, "执事") != -1) {
+      write("执事说：「输入 quest list 查看可用任务。」\n");
+      return;
+    }
+  }
+  write("这里没有「" + arg + "」。\n");
+}
+
+void do_quest(string arg) {
+  mapping q;
+  int qid;
+  if (!arg || arg == "" || arg == "list") {
+    write("\n可用任务：\n");
+    write("  1. 采集灵药 — 灵芝 x5，奖励修为 +50、灵石 x1\n");
+    write("  2. 清理妖兽 — 击杀野狼 x3，奖励修为 +100、兽皮 x2\n");
+    write("  3. 收集矿石 — 铁矿 x5、铜矿 x3，奖励修为 +150、灵石 x2\n");
+    write("用法：quest accept <编号> / quest status / quest complete\n");
+    return;
+  }
+  if (sscanf(arg, "accept %d", qid) == 1) {
+    if (current_quest && current_quest["id"]) {
+      write("你已有任务在身，先完成或放弃再接。\n");
+      return;
+    }
+    if (qid == 1)
+      current_quest = ([ "id": 1, "name": "采集灵药", "type": "item", "target": "灵芝", "need": 5 ]);
+    else if (qid == 2)
+      current_quest = ([ "id": 2, "name": "清理妖兽", "type": "kill", "target": "野狼", "need": 3 ]);
+    else if (qid == 3)
+      current_quest = ([ "id": 3, "name": "收集矿石", "type": "multi", "need": 1 ]);
+    else {
+      write("无效的任务编号。\n");
+      return;
+    }
+    if (qid == 2) wolves_killed = 0;
+    write("你接取了任务：「" + current_quest["name"] + "」。\n");
+    return;
+  }
+  if (arg == "status") {
+    if (!current_quest || !current_quest["id"]) {
+      write("暂无进行中的任务。\n");
+      return;
+    }
+    write("当前任务：" + current_quest["name"] + "\n");
+    if (current_quest["type"] == "item")
+      write("进度：" + count_item(current_quest["target"]) + " / " + current_quest["need"] + "\n");
+    else if (current_quest["type"] == "kill")
+      write("进度：" + wolves_killed + " / " + current_quest["need"] + "\n");
+    else
+      write("进度：铁矿 " + count_item("铁矿") + "/5，铜矿 " + count_item("铜矿") + "/3\n");
+    return;
+  }
+  if (arg == "complete") {
+    if (!current_quest || !current_quest["id"]) {
+      write("你没有进行中的任务。\n");
+      return;
+    }
+    q = current_quest;
+    if (q["type"] == "item") {
+      if (count_item(q["target"]) < q["need"]) {
+        write("材料还没凑齐。\n");
+        return;
+      }
+      remove_item(q["target"], q["need"]);
+      exp += 50;
+      add_item("灵石", 1);
+      write("任务完成！修为 +50，获得灵石 x1。\n");
+    } else if (q["type"] == "kill") {
+      if (wolves_killed < q["need"]) {
+        write("妖兽还没清理完。\n");
+        return;
+      }
+      exp += 100;
+      add_item("兽皮", 2);
+      write("任务完成！修为 +100，获得兽皮 x2。\n");
+    } else {
+      if (count_item("铁矿") < 5 || count_item("铜矿") < 3) {
+        write("矿石还没凑齐。\n");
+        return;
+      }
+      remove_item("铁矿", 5);
+      remove_item("铜矿", 3);
+      exp += 150;
+      add_item("灵石", 2);
+      write("任务完成！修为 +150，获得灵石 x2。\n");
+    }
+    current_quest = 0;
+    return;
+  }
+  write("用法：quest list / quest accept <编号> / quest status / quest complete\n");
+}
+
 // 处理输入
 int process_input(string str) {
   string verb, arg;
@@ -809,6 +1153,35 @@ int process_input(string str) {
     case "quit":
       do_quit();
       return 1;
+    case "linggen":
+      do_linggen();
+      break;
+    case "hp":
+      do_hp();
+      break;
+    case "gather":
+      do_gather(arg);
+      break;
+    case "kill":
+      do_kill(arg);
+      break;
+    case "craft":
+      do_craft(arg);
+      break;
+    case "learn":
+    case "bai":
+      do_learn(arg);
+      break;
+    case "talk":
+      do_talk(arg);
+      break;
+    case "quest":
+      do_quest(arg);
+      break;
+    default:
+      write("什么？
+");
+      break;
   }
 
   write("> ");
