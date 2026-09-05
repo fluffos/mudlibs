@@ -1,0 +1,10 @@
+#ifndef _SESSION_H
+#define _SESSION_H
+
+#define SESSION_STATE_UNKNOWN    0
+#define SESSION_STATE_NEW        1
+#define SESSION_STATE_RUNNING    2
+#define SESSION_STATE_SUSPENDED  3
+#define SESSION_STATE_DONE       4
+
+#endif  // _SESSION_H

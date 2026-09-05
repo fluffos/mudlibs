@@ -454,6 +454,7 @@ classes it's found.
 | 966 | `pkuxkx` | 北大侠客行 | `git clone https://github.com/ly19811105/pkuxkx-utf8 (commit 0eaf237c9970795a51aa4cc04b5b762003300cbd, cloned 2026-09-05); repo root is the mudlib -- already UTF-8 upstream` | 40274 | WASM playable |
 | 967 | `formosasaga` | 源流福爾摩沙 | `git clone https://github.com/wade-fs/FormosaSaga (commit a700cf5de8266868d574eb374e0b11da0b5877f5, cloned 2026-09-05); mudlib root is the repo's mudlib/ directory -- the Go MudOS-v22 driver was not converted` | 40276 | WASM playable |
 | 968 | `nirvlp312` | Nirvana | `git clone https://github.com/rumplemintz/Nirvlp312mudlib (commit 616cad7472279cc97c9693f893940f5336916ff8, cloned 2026-09-05); repo root is the mudlib` | 40277 | WASM playable |
+| 969 | `acme` | Acme | `git clone https://github.com/acmemud/acme-mudlib (commit 8bfa42587d1cb4a7606b73cdce760673582a924d) plus sibling repos acmemud/acme-platform (d210b03), acmemud/acme-flavor-basic (af56a1b), acmemud/acme-flavor-rpg (c2b2160); assembled 2026-09-05; repo root is the mudlib` | 40278 | WASM playable |
 <!-- END NUMBERING TABLE -->
 
 ## Repository layout
