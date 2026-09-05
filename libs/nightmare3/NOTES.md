@@ -559,3 +559,17 @@ uniq -c | awk '$1>1'`) printed nothing before committing. Test character
 `Brandmoor` and the admin's own throwaway test items were cleaned up
 before committing, keeping only the pre-existing seeded `fluffos` admin
 account.
+
+## §8.3a `cmd_hook` (2026-09-04 corpus re-sweep)
+
+The 2026-08-03 `private command_hook` sweep never saw this lib: Nightmare
+registers the catch-all as `cmd_hook`, not `command_hook`.
+`std/living.lpc` (inherited into every living) had
+`nomask  private  int cmd_hook` plus `add_action("cmd_hook", "", 1)`.
+Same DECL_HIDDEN demotion: player-typed verbs can still look fine
+(`ORIGIN_DRIVER`); NPC `command()` / `force_me()` is `ORIGIN_EFUN` and
+silently returns 0. Dropped `private`, kept `nomask`. Sibling
+`nightmare4` does not use this hook name. Post-fix live on port 40208:
+admin `fluffos` / `Mud2026Wiz`, `goto /domains/Praxis/supply`,
+`force horace to say testhook` → `Horace says: testhook` / `Ok.`;
+`force horace to smile` → `Horace smiles`.

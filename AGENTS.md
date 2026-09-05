@@ -853,7 +853,9 @@ grep -n "dns_master\|dns_d\|intermud" adm/etc/preload
 # chinese-detection (§8.1): read the lib's chinese.lpc/chinesed.lpc/named.lpc
 grep -rn "is_chinese\|check_legal_name\|PATH(" adm/ secure/ | head
 # command dispatch (§8.3):
-grep -rn "private.*command_hook\|nomask.*command_hook" .
+grep -rn "private.*command_hook\|nomask.*command_hook\|private.*cmd_hook" .
+# Prefer the uncommented-declaration regex in §8.3a (2026-09-04 re-sweep);
+# a bare private.*command_hook hits leftover comments on already-fixed files.
 grep -rn 'sscanf.*\.c[$"]' adm/daemons/                              # §8.3b
 # hardcoded ports/self-destructs (§5.3, §7.13):
 grep -rn "MUD_PORT\|PORTNO" include/ *.h 2>/dev/null
@@ -15544,6 +15546,47 @@ auto-look, an NPC's own recruit/attack/chat trigger) before concluding
 dispatch is fully healthy — verify by actually testing `look` after the
 fix, and keep hunting (§8.3b, §7.14)
 if commands are still dead.
+
+**Addendum (2026-09-04 re-sweep):** `wlqxcmudlib` (imported after the
+2026-08-03 batch) still shipped `private nomask int command_hook` —
+same silent NPC `command()` / 拜师 failure, fixed the same way. That
+prompted a second whole-corpus grep. Naive `private.*command_hook`
+matches are now mostly leftover `// private nomask int command_hook`
+comments sitting next to an already-fixed `nomask int command_hook`
+(the 2026-08-03 sweep left the old line commented in). Filter to
+**uncommented** declarations. After that filter, every remaining
+`private nomask int command_hook` was a dead variant (`commandhell`,
+`command2`, `command_new`, `command1`, `command喵`, `u/<wiz>/`, a
+`kungfu/skill/command.lpc` copy) — none of those are what `F_COMMAND`
+/`inherit F_COMMAND` actually loads (the live file is
+`/feature/command.lpc`, already `nomask`). Do **not** treat "grep
+`inherit \"/feature/command\"`" as the live/dead test: these libs
+inherit via the `F_COMMAND` macro in `include/globals.h`, so a
+literal-path inherit search returns zero hits on files that are
+absolutely live. The one still-live miss this pass was a **name
+variant**: `nightmare3`'s `std/living.lpc` `nomask private int
+cmd_hook` registered with `add_action("cmd_hook", "", 1)` and
+inherited into every living — same DECL_HIDDEN demotion, different
+identifier. Fixed identically (drop `private`, keep `nomask`).
+`openlib`'s `private int cmd_hook` is a prototype on the player
+object itself (not an inherited mixin) and was left alone.
+`static` is the old MudOS synonym for `private`; the only leftover
+uncommented `static ... cmd_hook` is `sunshadow`'s
+`adm/failsafe/living_failsafe.lpc` (login-time user-object fallback,
+not the live `std/living.lpc` inherit). Live `cmd_hook` there is
+`nomask protected` — a different visibility; many nitan/jhfy/
+shadowgate libs already ship `protected nomask int command_hook`
+and NPC `command()` works. Do not expand this sweep to `protected`
+without a live ORIGIN_EFUN failure. Detection grep going forward:
+
+```
+# uncommented decls only — comments are false positives
+# static = old MudOS private; skip protected unless ORIGIN_EFUN fails
+rg -n --glob '*.lpc' '^[ \t]*(nomask[ \t]+)?(private|static)[ \t]+(nomask[ \t]+)?int[ \t]+(command_hook|cmd_hook)\s*\('
+```
+
+Re-run that on every newly imported ES2/YH/Nightmare-family lib;
+do not assume the 2026-08-03 batch is complete.
 
 **Addendum: the same demotion breaks `call_out()`-dispatched functions
 too, not just `add_action`.** Found on `xuanjianlu`'s §10.7 deep
