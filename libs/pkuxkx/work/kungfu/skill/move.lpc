@@ -1,0 +1,3 @@
+// xie.c
+
+inherit SKILL;

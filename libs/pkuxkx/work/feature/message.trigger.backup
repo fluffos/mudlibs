@@ -1,0 +1,79 @@
+// message.c
+//
+// Modified by pretty 98/10/31
+
+#include <ansi.h>
+#include <dbase.h>
+
+#define MAX_MSG_BUFFER 500
+
+nosave string *msg_buffer = ({});
+
+void receive_message(string msgclass, string msg)
+{
+    string subclass, *ch;
+
+    if( !interactive(this_object()) ) {
+	this_object()->relay_message(msgclass, msg);
+	return;
+    }
+
+    if( sscanf(msgclass, "%s:%s", subclass, msgclass)==2 ) {
+	switch(subclass) {
+	case "channel":
+	    if( !pointerp(ch = query("channels"))
+	      ||	member_array(msgclass, ch)==-1 )
+		return;
+	    break;
+	case "outdoor":
+	    if( !environment() || !environment()->query("outdoors") )
+		return;
+	    break;
+//以下两行为trigger命令注释，如去掉trigger命令，则应恢复	  
+//	default:
+//	    error("Message: Invalid Subclass " + subclass + ".\n");
+	}
+    }
+
+    if( query_temp("block_msg/all") || query_temp("block_msg/" + msgclass) )
+	return;
+
+    if( stringp(msg) ) 
+    { 
+          //支持server-side trigger 
+          if( (this_object()->fire_trigger(msg)) == -999) return; 
+    } 
+    if( in_input(this_object()) || in_edit(this_object()) || this_object()->query("disable_type") == "<睡梦中>" )
+    {
+	if( sizeof(msg_buffer) < MAX_MSG_BUFFER )
+	    msg_buffer += ({ msg });
+    } else
+	receive( msg );
+}
+
+void write_prompt()
+{
+    if( !living(this_object()) ) return;
+    if( msg_buffer != ({}) ) {
+	receive(BOLD "[临时存储讯息]\n" NOR);
+	for(int i=0; i<sizeof(msg_buffer); i++)
+	    receive(msg_buffer[i]);
+	msg_buffer = ({});
+    }
+if ( wizardp(this_object()) && (query("env/prompt") == "path")  )
+    {
+	string prompt;
+	if ( !stringp(query("cwd")) ) prompt = "";
+	else prompt = (string)query("cwd")[0..<2];
+
+receive(prompt + "> ");
+    }
+    else
+	receive("> ");
+}
+
+void receive_snoop(string msg)
+{
+    receive("%" + msg);
+}
+

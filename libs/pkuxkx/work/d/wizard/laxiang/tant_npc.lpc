@@ -1,0 +1,55 @@
+#include <ansi.h>
+inherit NPC;
+void create()
+{
+	set_name("避世应劫",({"tant npc"}));
+	set("long",0);
+	set("title","无门无派，世外高人");
+	set("age",83);
+	set("str",34);
+	set("con",38);
+	set("int",21);
+	set("spi",7);
+	set("per",43);
+	set("job_title","[1;33m武学大宗师[2;37;0m");
+	set("nickname","[1;35m等等我嘛，[1;5m大师[2;37;0m[2;37;0m");
+	set("combat_exp",101745858);
+	set("max_qi",21058);
+	set("max_jing",20095);
+	set("gender","男性");
+	set("max_neili",14245);
+	set("max_jingli",10023);
+	set("jiali",0);
+	set("race","人类");
+	set("class",0);
+	set("repute",4889345);
+	set("score",0);
+	set("family/family_name",0);
+	set_skill("myingzhua-gong",540);
+	set_skill("jiuyang-shengong",918);
+	set_skill("dodge",676);
+	set_skill("force",918);
+	set_skill("feihua-shou",523);
+	set_skill("literate",300);
+	set_skill("qiankun-danuoyi",335);
+	set_skill("claw",376);
+	set_skill("fanwen",100);
+	set_skill("unarmed",2);
+	set_skill("datengnuo-bufa",676);
+	set_skill("throwing",176);
+	set_skill("shenghuo-lingfa",1000);
+	set_skill("lieyan-dao",958);
+	set_skill("parry",1000);
+	set_skill("sword",993);
+	set_skill("training",18);
+	set_skill("blade",759);
+	set_skill("hujia-daofa",997);
+	map_skill("dodge","datengnuo-bufa");
+	map_skill("force","jiuyang-shengong");
+	map_skill("claw","myingzhua-gong");
+	map_skill("throwing","feihua-shou");
+	map_skill("parry","qiankun-danuoyi");
+	map_skill("sword","shenghuo-lingfa");
+	map_skill("blade","lieyan-dao");
+	set("shen_type",1);set("score",500000);setup();
+}

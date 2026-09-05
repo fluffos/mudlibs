@@ -1,0 +1,145 @@
+// recruit.c
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+int main(object me, string arg)
+{
+        object ob,old_rec;
+        mapping family,menpai,my_menpai;
+        int i,t;
+        string st;
+        
+        if( !arg ) 
+                return notify_fail("指令格式：recruit|shou [cancel]|<对象>\n");
+        if( arg=="cancel" ) {
+                old_rec = me->query_temp("pending/recruit");
+                if( !objectp(old_rec) )
+                        return notify_fail("你现在并没有收录任何人为弟子的意思。\n");
+                write("你改变主意不想收" + old_rec->name() + "为弟子了。\n");
+                tell_object(old_rec, me->name() + "改变主意不想收你为弟子了。\n");
+                me->delete_temp("pending/recruit");
+                return 1;
+        }
+
+        if( !(ob = present(arg, environment(me))) )
+                return notify_fail("你想收谁作弟子？\n");
+
+        if( ob==me ) return notify_fail("收自己为弟子？好主意....不过没有用。\n");
+
+        if( ob->is_apprentice_of(me) ) {
+                message_vision("$N拍拍$n的头，说道：「好徒儿！」\n", me, ob);
+                return 1;
+        }
+        if ( ob->query("menpai/name") == me->query("menpai/name") && ob->query("menpai/gen") > me->query("menpai/gen") )
+        {
+                message_vision("$N拍拍$n的头，说道：「好徒儿！」\n", me, ob);
+                return 1;
+        }
+        if ( ob->query("menpai/name") == me->query("menpai/name") && ob->query("menpai/gen") <= me->query("menpai/gen") && userp(me))
+                return notify_fail("开什么玩笑？难道你想篡位不成！\n"); 
+        if (me->query("combat_exp") < 100000 && userp(me))
+                return notify_fail("你的经验不够,不能收徒.");
+//modified by aiai for selfcreate class
+//      if( !me->query("family") && me->query("menpai/gen")!= 1 )
+//              return notify_fail("你并不属于任何门派，你必须先加入一个门派，或自己创一个才能收徒。\n");
+        if ( userp(me) && me->query("menpai/gen")!= 1 )
+                return notify_fail("你想收徒弟，必须先自己创建个门派才行。\n");
+        else if ( ( t = sizeof(me->query("menpai/tudi") ) ) ==3 )
+                return notify_fail("你最多只能收三个徒弟了。千万记得宁缺勿滥的道理。\n");
+
+        // If the target is willing to apprentice us already, we do it.
+        if( (object)ob->query_temp("pending/apprentice") == me ) {
+
+                if( !living(ob) ) {
+                        message_vision(
+                                "$N决定收$n为弟子。\n\n"
+                                "不过看样子$n显然没有办法行拜师之礼。\n\n",
+                                me, ob);
+                        return 1;
+                }
+        // follow modified by elon 09-10-95 to fix a bug in 1st time recruit
+        
+                if ( ob->query("family") ) 
+                {
+                        message_vision(
+                                "$N决定背叛师门，改投入$n门下！！\n\n"
+                                "$N跪了下来向$n恭恭敬敬地磕了四个响头，叫道：「师父！」\n\n",
+                                ob, me);
+                        ob->delete("task_time");
+                        ob->delete("quest");
+                        ob->set("score", 0);
+                        if ( (string)me->query("family/family_name")!= "丐帮")
+                                ob->set("dai", 0);
+                        if ( ob->query("combat_exp") >= 5000 )
+                                 ob->add("betrayer", 1);
+                } else
+                        message_vision( "$N决定收$n为弟子。\n\n"
+                                "$n跪了下来向$N恭恭敬敬地磕了四个响头，叫道：「师父！」\n",
+                                me, ob);
+// by aiai for selfcreate class
+                if ( ! userp(me) )
+                {
+                        me->recruit_apprentice(ob);
+                        ob->delete_temp("pending/apprentice");
+
+                        write("恭喜你新收了一名弟子！\n");
+                        family = ob->query("family");
+                        tell_object( ob, sprintf("恭喜您成为%s的第%s代弟子。\n", family["family_name"],
+                        chinese_number(family["generation"]) ));
+
+                        return 1;
+                }
+/* aiai */      else {
+                        my_menpai = me->query("menpai");
+                        menpai = allocate_mapping(sizeof(my_menpai)+1);
+                        menpai["name"] = my_menpai["name"];
+                        menpai["place"] = my_menpai["place"];
+                        menpai["gen"] = 2;
+                        menpai["master_id"] = me->query("id");
+                        menpai["master_name"] = me->query("name");
+                        ob->set("menpai",menpai); 
+                        ob->delete_temp("pending/apprentice");
+                        if (ob->query("family") )
+                        {
+                                ob->set("old_family",ob->query("family") );
+                                ob->delete("family");
+                        }
+                        st = sprintf("tudi%d",t+1);
+                        me->set("menpai/tudi",me->query("menpai/tudi")+([st:ob->query("id")]) );
+                        write("恭喜你新收了一名弟子！\n");
+                        tell_object( ob, sprintf("恭喜您成为%s的第%s代弟子。\n", menpai["name"],chinese_number(menpai["gen"]) ));
+
+                        return 1;
+                }       
+        } else {
+
+                old_rec = me->query_temp("pending/recruit");
+                if( ob==old_rec )
+                        return notify_fail("你想收" + ob->name() + "为弟子，但是对方还没有答应。\n");
+                else if( objectp(old_rec) ) {
+                        write("你改变主意不想收" + old_rec->name() + "为弟子了。\n");
+                        tell_object(old_rec, me->name() + "改变主意不想收你为弟子了。\n");
+                }
+
+                me->set_temp("pending/recruit", ob );
+                message_vision("\n$N想要收$n为弟子。\n", me, ob);
+                tell_object(ob, YEL "如果你愿意拜" + me->name() + "为师父，用 apprentice 指令。\n" NOR);
+                return 1;
+        }
+}
+
+
+int help(object me)
+{
+        write(@HELP
+指令格式 : recruit|shou [cancel]|<对象>
+ 
+这个指令能让你收某人为弟子, 如果对方也答应要拜你为师的话.
+ 
+See Also:       apprentice
+HELP
+        );
+        return 1;
+}

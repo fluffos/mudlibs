@@ -1,0 +1,65 @@
+
+
+inherit NPC;
+//inherit F_VENDOR;
+inherit F_DEALER;
+
+void create()
+{
+	set_name("挑担的小贩", ({ "xiao fan", "waiter" }));
+	set("shen_type", 1);
+
+	set("str", 30);
+	set("gender", "男性");
+	set("age", 25);
+	
+	set("combat_exp", 500);
+	set("attitude", "friendly");
+	
+	
+	set("vendor_goods", ({
+		
+	    "/d/city/npc/obj/xafood1",
+        "/d/city/npc/obj/xafood2",
+            "/d/city/npc/obj/xafood3",
+            "/d/city/npc/obj/jiudai",
+//                __DIR__"obj/tairu", //不合武侠氛围
+	}));
+
+	setup();
+        carry_object("/d/city/obj/flower_shoe")->wear();
+
+        carry_object("/d/city/obj/pink_cloth")->wear();
+
+}
+
+void init()
+{
+	object ob;
+	
+	::init();
+	if (interactive(ob = this_player()) && !is_fighting()) {
+		remove_call_out("greeting");
+		call_out("greeting", 1, ob);
+	}
+        add_action("do_list", "list");
+        add_action("do_buy", "buy");
+       // add_action("do_sell","sell");
+}
+
+void greeting(object ob)
+{
+	if (!ob || environment(ob) != environment())
+		return;
+        if( !this_object()->visible(ob)) return;
+	switch(random(2)) {
+	case 0 :
+		say("伙计笑眯眯地说道：这位" + RANK_D->query_respect(ob) +
+			"，要不要尝尝长安的美食？\n");
+		break;
+	case 1 :
+		say("伙计说道：哟！这位" + RANK_D->query_respect(ob) + 
+			"走过路过，不要错过啊。\n");
+		break;
+	}
+}

@@ -1,0 +1,223 @@
+// kongkong.cg.c
+#include <ansi.h>
+#include <title.h>
+inherit NPC;
+inherit F_MASTER;
+inherit F_UNIQUE;
+void consider();
+void create()
+{
+        seteuid(getuid());
+        set_name("空空儿", ({ "kong kong","beggar","qi gai","kong" }) );
+        set("title", MAG "妙手神丐" NOR);
+        set("gender", "男性" );
+        set("age", 53);
+        set("long", "一个满脸风霜之色的老乞丐。\n");
+        set("attitude", "peaceful");
+        set("str", 25);
+        set("con", 25);
+        set("int", 25);
+        set("dex", 25);
+        set("max_qi", 1500);
+        set("max_jing", 100);
+        set("neili", 1200);
+        set("max_neili", 1200);
+        set("jiali", 110);
+        set("shen_type", 0);
+        set("startroom","/d/city/lichunyuan");
+        set("thief", 0);
+        set("combat_exp", 50000);
+        set_skill("force", 100);
+        set_skill("literate", 50);
+        set_skill("strike", 100);
+        set_skill("sword", 110);
+        set_skill("dodge", 110);
+        set_skill("parry", 110);
+        set_skill("stealing", 130);
+        set_skill("begging", 130);
+        set_skill("checking", 110);
+        set_skill("huntian-qigong", 70);
+        set_skill("xianglong-zhang", 70);
+        set_skill("xiaoyaoyou", 80);
+        map_skill("force", "huntian-qigong");
+        map_skill("strike", "xianglong-zhang");
+        map_skill("dodge", "xiaoyaoyou");
+        prepare_skill("strike", "xianglong-zhang");
+        create_family("丐帮", 19, "八袋长老");
+        set("chat_chance", 20);
+        set("chat_msg", ({
+                "空空儿说道: 好心的大爷哪～ 赏我要饭的几个铜板吧～\n",
+                "空空儿懒洋洋地打了个哈欠。\n",
+        "空空儿伸手捉住了身上的虱子，骂道: 老子身上没几两肉，全叫你们给咬糜了。 \n",
+                (: random_move :)
+        }) );
+        set("shen_type",-1);
+set("score",500);
+setup();
+        carry_object("/clone/food/jitui");
+        carry_object("/clone/food/jiudai");
+		carry_object("/d/gaibang/obj/cloth")->wear();
+        add_money("silver", 10);
+}
+void attempt_apprentice(object ob)
+{
+        mapping fam;
+        object obj;
+        string title1;
+        if ((string)ob->query("family/family_name")!="丐帮")
+        {
+            if(!ob->query("is_beggar"))
+            {
+              if(ob->query("combat_exp")<2000)
+              {
+        	      if ((string)ob->query("family/family_name") == "灵鹫宫" 
+		                 && ob->query("lingjiu/xiulian"))
+		            {
+       		        command("say "+RANK_D->query_respect(ob)+"，你现在拜我似乎会有很大损失，你能拿定主意吗？(answer)");
+		              return;		
+		            }
+              	command("say 好吧，希望" + RANK_D->query_respect(ob) +
+                "能好好学习本门武功，将来在江湖中闯出一番作为。");
+                command("recruit " + ob->query("id"));
+                ob->set("class", "beggar");
+                if(!present("budai", this_player()))
+                {
+                  obj=new("/d/gaibang/obj/gaibang-bag");
+                  this_player()->set("dai", 1);
+                  obj->move(ob);
+                }
+                if (this_player()->query("is_beggar"))
+                  this_player()->set("title",MAG "丐帮" NOR + WHT + "污衣派" + YEL +"一袋" NOR + MAG "弟子" NOR);
+                else    
+                	this_player()->set("title",MAG "丐帮" NOR + HIC + "净衣派" + YEL +"一袋" NOR + MAG "弟子" NOR);
+//title系统记录玩家title by seagate@pkuxkx
+	              ob->set_title(TITLE_RANK, ob->query("title"));
+                this_player()->set("is_beggar", 1);
+              }
+              else
+              {
+                command("say "+ RANK_D->query_respect(ob) + "既然有名师指点，又何必来拜我叫化子呢。");
+                return;
+              }
+            }
+            else
+            {
+              command("say "+ RANK_D->query_respect(ob) + "以前曾是丐帮弟子，既然判出本帮，何必又回来呢！");
+              return;
+            }
+        }
+        else
+        {
+                title1=this_player()->query("title");
+                command("say 好吧，希望" + RANK_D->query_respect(ob) +
+                "能好好学习本门武功，将来在江湖中闯出一番作为。");
+                command("recruit " + ob->query("id"));
+                this_player()->set("title", title1);
+        }
+}
+/*
+void do_answer(string arg)
+{
+	object me=this_player();
+	object ob = me;
+	object obj;
+	if (!arg || (arg != "是" && arg != "能" && arg != "yes"))
+        	command("say 你说的什么乱七八糟的，看来你是没有诚心，算了！");
+	else
+	{
+        	command("say 好吧，"+RANK_D->query_respect(me)+"，我就收下你了！");
+		me->set("mud_age",me->query("lingjiu/mud_age"));
+		me->set("age",14+me->query("mud_age")/3600/24);
+		me->delete("lingjiu/skill_status");
+		me->delete("lingjiu/qi");
+		me->delete("lingjiu/eff_qi");
+		me->delete("lingjiu/max_qi");
+		me->delete("lingjiu/jing");
+		me->delete("lingjiu/eff_jing");
+		me->delete("lingjiu/max_jing");
+		me->delete("lingjiu/jingli");
+		me->delete("lingjiu/neili");
+		me->delete("lingjiu/max_jingli");
+		me->delete("lingjiu/max_neili");
+		me->delete("lingjiu/combat_exp");
+		me->delete("lingjiu/need_xiulian");
+		me->delete("lingjiu/mud_age");
+		me->delete("lingjiu/xiulian");
+		me->delete("lingjiu/last_xiulian_time");
+              	command("say 好吧，希望" + RANK_D->query_respect(ob) +
+                "能好好学习本门武功，将来在江湖中闯出一番作为。");
+                command("recruit " + ob->query("id"));
+                ob->set("class", "beggar");
+                if(!present("budai", this_player()))
+                {
+                obj=new("/d/gaibang/obj/gaibang-bag");
+                this_player()->set("dai", 1);
+                obj->move(ob);
+        	}
+	        this_player()->set("title",MAG "丐帮" NOR + YEL +"一袋" NOR + MAG "弟子" NOR);
+                this_player()->set("is_beggar", 1);
+	}
+return;
+}
+
+*/
+void init()
+{
+        object ob;
+        ::init();
+        if( interactive(ob = this_player()) ) {
+                remove_call_out("stealing");
+                call_out("stealing", 1, ob);
+        }
+}
+void stealing(object ob)
+{
+        mapping fam;
+        if( !ob || environment(ob) != environment()
+                || ((fam = ob->query("family")) && fam["family_name"] == "丐帮")
+                || (int)ob->query_skill("taoism", 1) > 30
+                || ob->query_int() > 30
+          ) return;
+        switch( random(5) ) {
+                case 0:
+                       command("hehe " + ob->query("id"));
+                       command("beg coin from " + ob->query("id"));
+                       break;
+                case 1:
+                       command("grin " + ob->query("id"));
+                       command("steal silver from " + ob->query("id"));
+                       break;
+                case 2:
+                       command("hi " + ob->query("id"));
+                       command("steal gold from " + ob->query("id"));
+                       break;
+                case 3:
+                       command("pat " + ob->query("id"));
+                       command("beg jiudai from " + ob->query("id"));
+                       break;
+                case 4:
+                       command("walkby " + ob->query("id"));
+                       command("beg jitui from " + ob->query("id"));
+                       break;
+        }
+}
+int accept_object(object me, object obj)
+{
+        if (obj->query("money_id") && obj->value() >= 1) {
+                 command("smile");
+         command("say 多谢啦 ! 其实我还是有点钱的，这次只不过试试你罢了!");
+                 command("give 10 silver to " + me->query("id"));
+        }
+        else {
+                 command("shake");
+                 command("say 这种东西鬼才要 ! 滚一边去 !");
+                 command("give " + obj->query("id") + " to " + me->query("id"));
+//               obj->move(this_player());
+        }
+        return 1;
+}
+int accept_fight(object me)
+{
+        command("say " + RANK_D->query_respect(me) + "饶命！小的这就离开！\n");
+        return 0;
+}

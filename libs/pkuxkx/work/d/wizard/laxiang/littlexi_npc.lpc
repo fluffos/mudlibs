@@ -1,0 +1,61 @@
+#include <ansi.h>
+inherit NPC;
+void create()
+{
+	set_name("小希",({"littlexi npc"}));
+	set("long","[1;37m她以花为貌，以鸟为声；
+  [1;37m以月为神，以柳为态；
+  [1;37m以玉为骨，以雪为肤；
+  [1;37m以水为姿，以诗为心，以墨为香！
+[2;37;0m");
+	set("title","[1;37m追 雪 逐 霜[2;37;0m");
+	set("age",166);
+	set("str",28);
+	set("con",36);
+	set("int",40);
+	set("spi",8);
+	set("per",64);
+	set("job_title","[1;35m武学小宗妹[2;37;0m");
+	set("nickname","[1;5m[1;33m佛光[1;31m灭绝[1;37m☆[1;32m扶柳[1;35m回风[2;37;0m[2;37;0m");
+	set("combat_exp",105017680);
+	set("max_qi",10124);
+	set("max_jing",38017);
+	set("gender","女性");
+	set("max_neili",15270);
+	set("max_jingli",10979);
+	set("jiali",0);
+	set("race","人类");
+	set("class","bonze");
+	set("repute",3727624);
+	set("score",3019);
+	set("family/family_name","峨嵋派");
+	set_skill("medical-skill",1001);
+	set_skill("mahayana",1049);
+	set_skill("jieshou-jiushi",1001);
+	set_skill("forging",301);
+	set_skill("finger",1002);
+	set_skill("tiangang-zhi",1002);
+	set_skill("pili-dan",1002);
+	set_skill("parry",1003);
+	set_skill("linji-zhuang",974);
+	set_skill("fuliu-jian",1002);
+	set_skill("throwing",1002);
+	set_skill("iron-cloth",1001);
+	set_skill("sword",1001);
+	set_skill("zhutian",1001);
+	set_skill("hand",1001);
+	set_skill("hujia-daofa",1009);
+	set_skill("dodge",1002);
+	set_skill("blade",1002);
+	set_skill("literate",1001);
+	set_skill("force",1001);
+	map_skill("finger","tiangang-zhi");
+	map_skill("parry","fuliu-jian");
+	map_skill("throwing","pili-dan");
+	map_skill("sword","fuliu-jian");
+	map_skill("hand","jieshou-jiushi");
+	map_skill("dodge","zhutian");
+	map_skill("blade","hujia-daofa");
+	map_skill("force","linji-zhuang");
+	setup();
+}

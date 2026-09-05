@@ -1,0 +1,132 @@
+// dushen.c  毒神附体 2015/01/08 Zine@pkuxkx
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+int VerifyHidden(object me)
+{
+	if (!me->query("safari_skill/xx_dushen")||me->query("family/family_name")!="星宿派"||me->query("chushi")) return 0;
+	return 1;
+}
+void remove_antibusy(object me)
+{
+	if (me) 
+	{
+		me->delete_temp("apply/cant_all_busy");
+		me->delete_temp("active_force_buffer/xingxiu-duzhang.dushen1");        
+	}
+}
+void remove_immune(object me,string stage)
+{
+	int remain_time;
+	if (me) 
+	{
+		if (stage=="a")
+		{
+			me->add_temp("apply/week_injure",-50);
+			me->add_temp("apply/kf_def_wound",-50);
+			call_out("remove_immune", 20, me,"b");
+		}
+		if (stage=="b")
+		{
+			me->add_temp("apply/week_injure",-25);
+			me->add_temp("apply/kf_def_wound",-25);
+		}
+	}
+}
+void remove_enforce(object me,string stage,int pts)
+{
+	int remain_time;
+	if (me) 
+	{
+		me->add_temp("apply/attack", - pts);
+		me->add_temp("apply/damage", - pts);
+		me->delete_temp("active_force_buffer/xingxiu-duzhang.dushen2");
+		if (stage=="a")
+		{
+			me->add_temp("apply/attack", pts/3);
+			me->add_temp("apply/damage", pts/3);
+			remain_time=me->query("dushen/end_time")-time();
+			me->set_temp("active_force_buffer/xingxiu-duzhang.dushen2/name", "加力");
+			me->set_temp("active_force_buffer/xingxiu-duzhang.dushen2/last_time", time() + remain_time );                //持续时间
+			me->set_temp("active_force_buffer/xingxiu-duzhang.dushen2/effect1", "攻击命中+"+(pts/3)+"级");       //效果描述1   
+			me->set_temp("active_force_buffer/xingxiu-duzhang.dushen2/effect2", "攻击伤害+"+(pts/3)+"级");       //效果描述2
+			call_out("remove_enforce", remain_time, me,"b",pts/3);
+			message_vision(HIB"$N"+HIB+"运转毒神附体时间减长，攻击略略变慢一点。\n"+NOR,me);
+		}
+		if (stage=="b")
+		{
+			me->delete_temp("dushen");
+			me->delete_temp("apply/cant_all_busy");//in case
+			me->add_temp("apply/AllPoisonsImmune",-100);
+			me->add_temp("apply/kf_abs_def",-25);
+			me->add_temp("apply/abs_week_injure",-25);
+			F_POISON->depoison(me);
+			me->delete_temp("active_force_buffer/xingxiu-duzhang.dushen1");    							
+			message_vision(HIB"$N"+HIB+"散去附体的毒素。\n"+NOR,me);
+		}
+	}
+}
+int anti_damage(object me)
+{
+	if (!me->query_temp("dushen")) return 0;
+	if (time()-me->query("dushen/init_time")<20) return 100;
+	if (time()-me->query("dushen/init_time")<40) return 50;
+	return 25;
+}
+int perform(object me, object target)
+{
+        int skill,cd=360,dur_time;
+		if (!me->query("safari_skill/xx_dushen"))
+			return notify_fail("你并没有掌握毒神附体。\n");
+		if (me->query("family/family_name")!="星宿派")
+			return notify_fail("只有星宿派弟子才能使用毒神附体。\n");
+		if (me->query("chushi"))
+			return notify_fail("只有纯粹的星宿派弟子才能使用毒神附体。\n");
+        if( (int)me->query("neili") < 500  )
+                return notify_fail("你的内力不足以使用毒神附体。\n");
+        if( (int)me->query_temp("dushen") )
+                 return notify_fail("你已经在使用毒神附体中了。\n");
+        if ((int)me->query_skill("xingxiu-duzhang", 1) < 200)
+                return notify_fail("你的星宿毒掌等级太差，不能使用毒神附体。\n");
+		if (me->query("combat_exp")>100000000) cd=300;
+		if (me->query("combat_exp")>400000000) cd=240;
+		if (me->query("combat_exp")>800000000) cd=180;
+		if (time()-me->query("dushen/init_time")<cd)
+			return notify_fail("你刚刚使用过毒神附体，现在还没有完全恢复过来。\n");
+        skill = me->query_skill("force");
+		dur_time=(me->query_skill("poison",1)/10);
+		if (dur_time<60) dur_time=60;
+		if (dur_time>120) dur_time=120;
+		me->set("dushen/init_time",time());
+		me->set("dushen/end_time",time()+dur_time);
+        me->add("neili", -100);
+		message_vision(BLU "$N"+BLU+"轻轻吟诵着不知名的语句，全身渐渐升腾起一片诡异的蓝雾。\n" NOR, me);
+		call_out("remove_antibusy", 15, me);
+		me->set_temp("apply/cant_all_busy",1);
+		me->set_temp("active_force_buffer/xingxiu-duzhang.dushen1/name", "Busy免疫");
+		me->set_temp("active_force_buffer/xingxiu-duzhang.dushen1/last_time", time() + 15 );                //持续时间
+        me->set_temp("active_force_buffer/xingxiu-duzhang.dushen1/effect1", "所有Busy类攻击免疫");       //效果描述1  
+		me->add_temp("apply/attack", skill);
+        me->add_temp("apply/damage", skill);
+		me->set_temp("active_force_buffer/xingxiu-duzhang.dushen2/name", "加力");
+        me->set_temp("active_force_buffer/xingxiu-duzhang.dushen2/last_time", time() + 20 );                //持续时间
+        me->set_temp("active_force_buffer/xingxiu-duzhang.dushen2/effect1", "攻击命中+"+(skill)+"级");       //效果描述1   
+        me->set_temp("active_force_buffer/xingxiu-duzhang.dushen2/effect2", "攻击伤害+"+(skill)+"级");       //效果描述2
+		call_out("remove_enforce", 20, me,"a",skill);
+		me->set_temp("apply/AllPoisonsImmune",100);
+		F_POISON->empoison(me,"xx_poison",3);
+        me->set_temp("dushen", 1);
+		me->add_temp("apply/week_injure",75);
+		me->add_temp("apply/kf_def_wound",75);
+		me->add_temp("apply/kf_abs_def",25);
+		me->add_temp("apply/abs_week_injure",25);
+		call_out("remove_immune", 20, me,"a");
+
+        if( me->is_fighting() ) me->start_busy(2);
+
+        return 1;
+}
+
+
+

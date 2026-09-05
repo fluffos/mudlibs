@@ -1,0 +1,65 @@
+#include <ansi.h>
+inherit NPC;
+void create()
+{
+	set_name("大浩",({"hubo npc"}));
+	set("long","[1;37m有所为有所不为
+[2;37;0m");
+	set("title","[35m日月神教[2;37;0m[1;32m长老[2;37;0m");
+	set("age",162);
+	set("str",22);
+	set("con",30);
+	set("int",39);
+	set("spi",9);
+	set("per",41);
+	set("job_title","[1;33m武学大宗师[2;37;0m");
+	set("nickname",0);
+	set("combat_exp",114644513);
+	set("max_qi",16513);
+	set("max_jing",11665);
+	set("gender","无性");
+	set("max_neili",13390);
+	set("max_jingli",6506);
+	set("jiali",0);
+	set("race","人类");
+	set("class",0);
+	set("repute",1239556);
+	set("score",2958);
+	set("family/family_name","日月神教");
+	set_skill("dodge",1007);
+	set_skill("hujia-daofa",115);
+	set_skill("force",1008);
+	set_skill("feihua-shou",1006);
+	set_skill("taiji-zhao",608);
+	set_skill("tiyunzong",1007);
+	set_skill("medical-skill",1007);
+	set_skill("literate",1004);
+	set_skill("riyue-jian",1040);
+	set_skill("taiji-shengong",379);
+	set_skill("throwing",1005);
+	set_skill("xiake-quanjiao",859);
+	set_skill("jiuyang-shengong",628);
+	set_skill("cs-skill",14);
+	set_skill("xiake-daofa",701);
+	set_skill("pixie-jian",1007);
+	set_skill("riyue-shengong",86);
+	set_skill("xiake-strike",859);
+	set_skill("riyue-dao",1036);
+	set_skill("claw",1003);
+	set_skill("qiankun-danuoyi",323);
+	set_skill("xiake-jianfa",698);
+	set_skill("xiake-shengong",830);
+	set_skill("parry",1004);
+	set_skill("sword",1040);
+	set_skill("taoism",384);
+	set_skill("blade",1036);
+	set_skill("kuihua-shengong",415);
+	map_skill("dodge","tiyunzong");
+	map_skill("force","xiake-shengong");
+	map_skill("throwing","feihua-shou");
+	map_skill("claw","taiji-zhao");
+	map_skill("parry","qiankun-danuoyi");
+	map_skill("sword","riyue-jian");
+	map_skill("blade","riyue-dao");
+	set("shen_type",1);set("score",500000);setup();
+}

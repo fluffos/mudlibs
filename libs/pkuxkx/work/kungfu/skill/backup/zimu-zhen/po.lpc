@@ -1,0 +1,67 @@
+// poqizhen.c 破气针
+ 
+#include <ansi.h>
+ 
+inherit F_SSERVER;
+ 
+int perform(object me)
+{
+	string msg;
+	object weapon, target;
+	int skill, ap, dp, neili_wound, qi_wound;
+
+	me->clean_up_enemy();
+	target = me->select_opponent();
+
+	skill = me->query_skill("zimu-zhen",1);
+
+	if( !(me->is_fighting() ))
+		return notify_fail("「破气针」只能在战斗中用在对手身上。\n");
+ 
+	if (!objectp(weapon = me->query_temp("weapon"))
+	|| (string)weapon->query("skill_type") != "throwing")
+		return notify_fail("你使用的武器不对。\n");
+
+	if( skill < 80)
+		return notify_fail("你的子母针法不够纯熟, 不能使用「破气针」！\n");
+
+	if( me->query("neili") < 150 )
+		return notify_fail("你的内力不够，无法运用「破气针」！\n");
+ 
+	msg = HIY "$N并指入刀，指缝间夹着三枚暗器,潜运内力，一式「破气针」，直奔$n的上、中、下丹田打去。\n";
+	message_vision(msg, me, target);
+ 
+       ap = me->query_skill("throwing",1) + skill;
+       dp = me->query_skill("force");
+	if( dp < 1 )
+		dp = 1;
+	if( random(ap) > dp )
+	{
+		if(userp(me))
+                        me->add("neili",-1);
+		msg = "$N「破气针」正中目标, $n顿时觉得丹田上一阵刺痛，\n";
+		msg += "全身真气狂泄而出！\n" NOR;
+
+		neili_wound = 500 + random(skill);
+		if(neili_wound > target->query("neili"))
+			neili_wound = target->query("neili");
+
+                qi_wound = neili_wound / 2;
+		if(qi_wound > target->query("qi"))
+			qi_wound = target->query("qi");
+		if(qi_wound < 0) qi_wound = 0;
+
+		target->add("neili", -neili_wound);
+		target->receive_damage("qi", qi_wound, me);
+		target->receive_damage("qi", qi_wound, me);
+		}
+	else
+	{
+		if(userp(me))
+                        me->add("neili",-1);
+		msg = "可是$n瞬间反应过来，腾挪跳跃，躲过了这次重创。\n"NOR;
+	}
+	message_vision(msg, me, target);
+
+	return 1;
+}

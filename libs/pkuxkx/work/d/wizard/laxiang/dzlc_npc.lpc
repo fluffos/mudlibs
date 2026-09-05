@@ -1,0 +1,57 @@
+#include <ansi.h>
+inherit NPC;
+void create()
+{
+	set_name("地主老财",({"dzlc npc"}));
+	set("long",0);
+	set("title","[35m日月神教[2;37;0m[1;32m总管[2;37;0m");
+	set("age",73);
+	set("str",35);
+	set("con",15);
+	set("int",19);
+	set("spi",4);
+	set("per",42);
+	set("job_title",0);
+	set("nickname","[1;31m东方教主，[1;37m文成武德，[1;31m日月神教，[1;37m一统江湖[2;37;0m[2;37;0m");
+	set("combat_exp",129563357);
+	set("max_qi",6669);
+	set("max_jing",5149);
+	set("gender","无性");
+	set("max_neili",7139);
+	set("max_jingli",6720);
+	set("jiali",0);
+	set("race","人类");
+	set("class","eunach");
+	set("repute",1124011);
+	set("score",2808);
+	set("family/family_name","日月神教");
+	set_skill("riyue-dao",627);
+	set_skill("riyue-shengong",57);
+	set_skill("jiuyin-shengong",141);
+	set_skill("dodge",620);
+	set_skill("literate",500);
+	set_skill("strike",627);
+	set_skill("medical-skill",202);
+	set_skill("blade",627);
+	set_skill("feitian-shenfa",539);
+	set_skill("sword",628);
+	set_skill("kaishan-zhang",626);
+	set_skill("ryingzhua-gong",212);
+	set_skill("shenxing-baibian",151);
+	set_skill("cuff",48);
+	set_skill("riyue-jian",627);
+	set_skill("parry",628);
+	set_skill("force",448);
+	set_skill("hujia-daofa",7);
+	set_skill("claw",212);
+	set_skill("xuantie-jian",176);
+	set_skill("kuihua-shengong",447);
+	set_skill("pixie-jian",502);
+	set_skill("unarmed",47);
+	set_skill("flatter",535);
+	map_skill("dodge","pixie-jian");
+	map_skill("strike","kaishan-zhang");
+	map_skill("blade","riyue-dao");
+	map_skill("force","kuihua-shengong");
+	setup();
+}

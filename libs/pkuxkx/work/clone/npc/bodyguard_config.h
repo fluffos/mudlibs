@@ -1,0 +1,6 @@
+#define BG "/clone/npc/bodyguard_features/"
+#define BG_HIRE BG+"hire.lpc"
+#define BG_OBJECT BG+"object_handle.lpc"
+#define BG_SAVE BG+"save&load.lpc"
+#define BG_INIT BG+"init.lpc"
+#define BG_IMPROVE BG+"grow.lpc"

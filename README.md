@@ -450,6 +450,7 @@ classes it's found.
 | 963 | `brassring` | The Brass Ring | `gh repo clone LashMUD/TheBrassRing (cloned 2026-08-31)` | 40265 | WASM playable |
 | 964 | `dock9` | Dock 9 | `github.com/dyher/dock9 (git clone https://github.com/dyher/dock9)` | 40266 | WASM playable |
 | 965 | `mundoscuro` | Mundo Oscuro | `git clone https://github.com/gllort/mud (commit e2511b4fc189cfcdeeac44242d0700b5382c4680, cloned 2026-09-04); mudlib root is the repo's lib/ directory -- driver/ and lib.20040222.tar.gz were not part of the mudlib and were not converted` | 40273 | WASM limited |
+| 966 | `pkuxkx` | 北大侠客行 | `git clone https://github.com/ly19811105/pkuxkx-utf8 (commit 0eaf237c9970795a51aa4cc04b5b762003300cbd, cloned 2026-09-05); repo root is the mudlib -- already UTF-8 upstream` | 40274 | WASM playable |
 <!-- END NUMBERING TABLE -->
 
 ## Repository layout

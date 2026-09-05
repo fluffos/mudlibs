@@ -3169,6 +3169,14 @@ host" these traps were aimed at.
   flag is set synchronously before the failing call — read the code
   before chasing a single non-fatal boot-log line.
   (`yhyxs`.)
+- **Empty `users()` is truthy; `u[random(sizeof(u))]` then OOBs.**
+  `if (!(u = users())) return;` does not catch `({})`. LPC arrays are
+  true even at size 0, `random(0)` is 0, and `u[0]` throws `*Array
+  index out of bounds`. Hits any boot-time / no-player event that
+  picks a random interactive (meteor, lucky-star, etc.). Guard
+  `!sizeof(u)` before indexing. (`pkuxkx` `natured.lpc` `do_event1`–
+  `do_event6`, fired on first boot from a shipped-stale
+  `/adm/etc/meteoric` timestamp.)
 
 ### 7.15 The nitan `set`/`query`/`dbase` architecture bug (the deep one)
 

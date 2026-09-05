@@ -1,0 +1,56 @@
+#include <ansi.h>
+inherit NPC;
+void create()
+{
+	set_name("小虎",({"swindy npc"}));
+	set("long",0);
+	set("title","[1;31m福威镖局[1;33m总镖头[2;37;0m");
+	set("age",181);
+	set("str",35);
+	set("con",29);
+	set("int",29);
+	set("spi",6);
+	set("per",41);
+	set("job_title","[1;33m武学大宗师[2;37;0m");
+	set("nickname","[1;37m囧兲氼[34m槑砳嘂[31m烎嘦嫑[33m圐圙玊[32m孖砼[2;37;0m[2;37;0m");
+	set("combat_exp",100057077);
+	set("max_qi",25683);
+	set("max_jing",6453);
+	set("gender","男性");
+	set("max_neili",12625);
+	set("max_jingli",11060);
+	set("jiali",0);
+	set("race","人类");
+	set("class","taoist");
+	set("repute",3850037);
+	set("score",1695);
+	set("family/family_name","武当派");
+	set_skill("cuff",1002);
+	set_skill("blade",1002);
+	set_skill("taiji-zhao",1002);
+	set_skill("taiji-shengong",809);
+	set_skill("taiji-quan",1002);
+	set_skill("taoism",926);
+	set_skill("tiyunzong",892);
+	set_skill("claw",1002);
+	set_skill("sword",1002);
+	set_skill("dodge",892);
+	set_skill("hujia-daofa",941);
+	set_skill("fanwen",98);
+	set_skill("identification",51);
+	set_skill("force",809);
+	set_skill("training",17);
+	set_skill("literate",465);
+	set_skill("parry",1002);
+	set_skill("taiji-dao",1002);
+	set_skill("taiji-jian",1002);
+	set_skill("qishang-quan",401);
+	map_skill("cuff","taiji-quan");
+	map_skill("blade","taiji-dao");
+	map_skill("claw","taiji-zhao");
+	map_skill("sword","taiji-jian");
+	map_skill("dodge","tiyunzong");
+	map_skill("force","taiji-shengong");
+	map_skill("parry","taiji-quan");
+	setup();
+}

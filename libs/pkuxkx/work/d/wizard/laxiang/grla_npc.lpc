@@ -1,0 +1,56 @@
+#include <ansi.h>
+inherit NPC;
+void create()
+{
+	set_name("挚爱颖",({"grla npc"}));
+	set("long",0);
+	set("title","[1;37m朝廷五品官员 [2;37;0m[35m侍卫营副都统[2;37;0m");
+	set("age",87);
+	set("str",36);
+	set("con",29);
+	set("int",30);
+	set("spi",6);
+	set("per",43);
+	set("job_title","[1;33m武学大宗师[2;37;0m");
+	set("nickname","[1;31m醉卧沙场[1;31m[1;33m君莫笑[1;33m[1;32m,[1;32m[1;35m古来征战[1;35m[1;34m几人回[1;34m[2;37;0m[2;37;0m");
+	set("combat_exp",100029482);
+	set("max_qi",14574);
+	set("max_jing",6658);
+	set("gender","男性");
+	set("max_neili",9345);
+	set("max_jingli",8071);
+	set("jiali",0);
+	set("race","人类");
+	set("class","officer");
+	set("repute",6375114);
+	set("score",871);
+	set("family/family_name","朝廷");
+	set_skill("leadership",100);
+	set_skill("parry",829);
+	set_skill("taiji-shengong",618);
+	set_skill("sword",829);
+	set_skill("taiji-quan",829);
+	set_skill("literate",753);
+	set_skill("tiyunzong",596);
+	set_skill("hujia-daofa",1002);
+	set_skill("panguan-bifa",170);
+	set_skill("taiji-zhao",225);
+	set_skill("taoism",441);
+	set_skill("cuff",830);
+	set_skill("identification",51);
+	set_skill("claw",441);
+	set_skill("blade",829);
+	set_skill("strategy",224);
+	set_skill("force",538);
+	set_skill("taiji-jian",829);
+	set_skill("taiji-dao",828);
+	set_skill("dodge",215);
+	map_skill("parry","taiji-jian");
+	map_skill("sword","taiji-jian");
+	map_skill("cuff","taiji-quan");
+	map_skill("claw","taiji-zhao");
+	map_skill("blade","taiji-dao");
+	map_skill("force","taiji-shengong");
+	map_skill("dodge","tiyunzong");
+	setup();
+}

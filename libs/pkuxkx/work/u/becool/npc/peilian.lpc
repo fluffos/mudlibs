@@ -1,0 +1,44 @@
+inherit NPC;
+void create()
+{
+        set_name("美女陪练", ({ "pei lian", "peilian", "meinv"}) );
+        set("gender", "女性" );
+        set_weight(60000000);
+        set("age", 25);
+        set("long", "绝色美人，如果你想打她的主意，回家再练100年功吧。\n");
+        set("attitude", "peaceful");
+        set("no_get", 1);
+        set("str", 30);
+        set("con", 30);
+        set("dex", 30);
+        set("int", 30);
+        set("max_qi", 50000);
+        set("eff_qi", 50000);
+        set("qi", 30000);
+        set("max_jing", 20000);
+        set("jing", 20000);
+        set("neili", 20000);
+        set("max_neili", 20000);
+        set("jiali", 100);
+        set("shen_type", 0);
+        set("combat_exp", 90000000);
+        set_skill("force", 900); 
+        set_skill("dodge", 900);
+        set_skill("parry", 900);
+        set_skill("strike", 900);
+        set_skill("sword", 900);
+        set_skill("literate", 900);
+        set_skill("buddhism", 900);
+        set_skill("hamagong", 900);
+        set_skill("lingbo-weibu", 900);
+        set_skill("xiaohun-zhang", 900);
+        set_skill("dugu-jiujian", 900);
+        map_skill("force", "hamagong");
+        map_skill("dodge", "lingbo-weibu");
+        map_skill("parry", "dugu-jiujian");
+        map_skill("strike", "xiaohun-zhang");
+        map_skill("sword", "dugu-jiujian");
+        prepare_skill("strike", "xiaohun-zhang");
+        setup();
+        carry_object("/d/quanzhou/obj/xuantiejian")->wield();
+}

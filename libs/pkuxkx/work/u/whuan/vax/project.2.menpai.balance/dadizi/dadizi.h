@@ -1,0 +1,43 @@
+//classn[]
+mapping classn = ([
+"shaolin"	:	"少林派",
+"wudang"		:	"武当派",
+"gaibang"	:	"丐帮",
+"baituo"		:	"白驼山",
+"xingxiu"	:	"星宿派",
+"huashanq"	:	"华山气宗",
+"huashanj"	:	"华山剑宗",
+"emei"		:	"峨嵋派",
+"mingjiao"	:	"明教",
+"riyue"		:	"日月神教",
+"gumu"		:	"古墓派",
+"lingjiu"	:	"灵鹫宫",
+"quanzhen"	:	"全真派",
+"tianlong"	:	"天龙寺",
+"taohua"		:	"桃花岛",
+"murong"		:	"姑苏慕容",
+"tiandi"		:	"天地会",
+"shenlong"	:	"神龙教",
+]);
+
+//locaten[]
+mapping classn = ([
+"shaolin"	:	"/d/shaolin/guangchang1",
+"wudang"		:	"/d/wudang/sanqing",
+"gaibang"	:	"/d/city/gbxiaowu",
+"baituo"		:	"/d/baituo/dating",
+"xingxiu"	:	"/d/xingxiu/xxh2",
+"huashanq"	:	"/d/huashan/buwei1",
+"huashanj"	:	"/d/huashan/buwei1",
+"emei"		:	"/d/emei/dadian",
+"mingjiao"	:	"/d/mingjiao/dadian",
+"riyue"		:	"/d/riyuejiao/yading",
+"gumu"		:	"/d/gumu/dating",
+"lingjiu"	:	"/d/lingjiu/zhengting",
+"quanzhen"	:	"/d/quanzhen/gongmen",
+"tianlong"	:	"/d/dali/dadian",
+"taohua"		:	"/d/taohuadao/dating",
+"murong"		:	"/d/murong/yketing",
+"tiandi"		:	"/d/beijing/qingmutang",
+"shenlong"	:	"/d/city/duchang",
+]);

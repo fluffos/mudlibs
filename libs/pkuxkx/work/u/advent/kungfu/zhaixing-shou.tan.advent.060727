@@ -1,0 +1,88 @@
+//tan.c
+
+#include <ansi.h>
+
+inherit F_SSERVER;
+
+int perform(object me, object target)
+{       
+    int sp, dp;      
+    int skilllevel, damage;
+    object obj, *inv; 
+
+    if( !target ) target = offensive_target(me);
+    if( !target || !target->is_character() )
+        return notify_fail("暗器射敌只能对同地方的对手使用。\n");
+
+    if( skilllevel = (int)me->query_skill("zhaixing-shou", 1) < 50 )
+        return notify_fail("你的摘星手手不够娴熟，弹不出暗器。\n");
+
+    if( (int)me->query_skill("huagong-dafa", 1) < 50 )
+        return notify_fail("你的化功大法不够高，不能用内力发射暗器。\n");
+
+    if( (int)me->query("neili", 1) < 100 )
+        return notify_fail("你现在内力太弱，不能发射暗器。\n");
+
+	inv=all_inventory(me);
+	for(int i=0;i<sizeof(inv);i++)
+	{
+		if(inv[i]->query("skill_type")!="throwing") continue;
+		if(inv[i]==me->query_temp("weapon")) continue;//不要用手上拿的兵器
+		obj=inv[i];
+        break;//找到暗器，退出循环
+    }
+	if (!obj) return notify_fail("你身上没有暗器，怎能使出暗器绝技？\n");
+    
+    tell_object(me, HIG "你左手在袖底轻轻一扬，一蓬碧绿的闪光，向" + target->name() + "激射过去。！\n" NOR);
+    message("vision", HIG "你只见眼前一闪，似乎有什么东西向" + target->name() + "直射过去！\n" NOR, environment(me), ({ me }));
+    sp = me->query_skill("force") + me->query_skill("throwing");
+    dp = target->query_skill("dodge");
+
+    me->start_busy(2);
+    me->add("neili", -100);
+    if( random(sp) > random(dp) )
+    {
+        obj->move(target);
+        damage = (int)(me->query_skill("throwing") * 3/2);
+        damage += obj->query("weapon_prop/damage") * 5;
+        target->receive_damage("qi", damage, me);
+        target->receive_wound("qi", damage/3, me);
+        tell_object(me, obj->name() + HIR + "狠狠地扎在了" + target->name() + 
+                "身上，" + target->name() + "疼得嗷嗷直叫！！\n" NOR);
+        message("vision", HIR + target->name() + "忽然惨叫一声，似乎是中了什么暗器！\n" + NOR, environment(me), ({target,me}));
+        tell_object(target, HIR "\n你忽然觉得身上某处针扎一样的剧痛，不由惨叫一声，身子一歪，退后丈许！！\n" NOR);
+        if(obj->query("slumber"))
+        {
+            target->apply_condition("slumber_drug",skilllevel/6 + target->query_condition("slumber_drug"));
+            tell_object(target,HIR"\n你觉得痛处忽然一阵麻木，原来暗器是涂了蒙汗药的！\n" NOR);
+        }
+        if(obj->query("poison"))
+        {
+            target->apply_condition("xxx_poison",skilllevel/10 + target->query_condition("xxx_poison"));
+            tell_object(target,HIR"\n你觉得伤口一阵剧痛，原来暗器是涂了断肠散的！\n" NOR);
+        }
+        if(obj->query("id")=="bilin zhen")
+        {
+            target->apply_condition("xxx_poison",skilllevel/15 + target->query_condition("xxx_poison"));
+            tell_object(target, HIR"\n你仔细一看，竟然是星宿派绝门暗器" + HIG"碧磷针  !!\n" NOR);
+        }
+    }
+    else
+    {
+        destruct(obj);
+        me->start_busy(2);     
+        message_vision(MAG"$N"+MAG"眼疾手快，在暗器近身之前，已看准暗器来路，一个鹞子翻身躲开来袭的暗器!\n"NOR, target);
+    }                                    
+
+    if(random(me->query("combat_exp"))>(int)target->query("combat_exp")/2)
+    {  
+        tell_object(target, HIC "\n你没有发现暗器的来源！\n" NOR);
+    } 
+    else
+    {
+        tell_object(target, HIR "\n你发现了射暗器的人了！\n" NOR);
+        target->kill_ob(me);
+    }
+    return 1;
+}
+

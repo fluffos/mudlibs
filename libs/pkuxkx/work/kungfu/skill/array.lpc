@@ -1,0 +1,3 @@
+// array.c
+
+inherit SKILL;

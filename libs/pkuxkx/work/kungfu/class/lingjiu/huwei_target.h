@@ -1,0 +1,241 @@
+//huwei_target.h
+// 增加奖励by yhzzyahoo@2015.11.5
+
+string* names = ({
+"赵","钱","孙","李","周","吴","郑","王","冯","陈","褚","卫",
+"蒋","沈","韩","杨","朱","秦","尤","许","何","吕","施","张",
+"孔","曹","严","华","金","魏","陶","姜","戚","谢","邹","喻",
+"柏","水","窦","章","云","苏","潘","葛","奚","范","彭","郎",
+"鲁","韦","昌","马","苗","凤","花","方","傻","任","袁","柳",
+"邓","鲍","史","唐","费","廉","岑","薛","雷","贺","倪","汤",
+"藤","殷","罗","华","郝","邬","安","常","乐","呆","时","付",
+"皮","卞","齐","康","伍","余","元","卜","顾","盈","平","黄",
+"和","穆","肖","尹","姚","邵","湛","汪","祁","毛","禹","狄",
+"米","贝","明","藏","计","伏","成","戴","谈","宋","茅","庞",
+"熊","纪","舒","屈","项","祝","董","梁","樊","胡","凌","霍",
+"虞","万","支","柯","昝","管","卢","英","仇","候","岳","帅",
+"司马","上官","欧阳","夏候","诸葛","闻人","东方","赫连","皇甫",
+"尉迟","公羊","澹台","公治","宗政","濮阳","淳于","单于","太叔",
+"申屠","公孙","仲孙","辕轩","令狐","钟离","宇文","长孙","幕容",
+"司徒","师空","颛孔","端木","巫马","公西","漆雕","乐正","壤驷",
+"公良","拓趾","夹谷","宰父","谷梁","楚晋","阎法","汝鄢","涂钦",
+"段千","百里","东郭","南郭","呼延","归海","羊舌","微生","梁丘",
+"左丘","东门","西门","佰赏","南官",
+"缑","亢","况","后","有","琴","商","牟","佘","耳","墨","哈",
+"谯","年","爱","阳","佟","第","五","言","福","蒯","钟","宗",
+"林","石",
+});
+
+string* ids = ({
+"zhao","qian","sun","li","zhou","wu","zhen","wang","feng","chen","zhu","wei",
+"jiang","shen","han","yang","zhu","qing","you","xu","he","lu","shi","zhang",
+"kong","cao","yan","hua","jin","wei","tao","jiang","qie","xie","zhou","yu",
+"bo","shui","dou","zhang","yun","su","pan","ge","xi","fan","peng","lang",
+"lu","wei","chang","ma","miao","feng","hua","fang","sha","ren","yuan","liu",
+"deng","bao","shi","tang","fei","lian","chen","xue","lei","he","ni","tang",
+"teng","yin","luo","hua","hao","wu","an","chang","le","dai","shi","fu",
+"pi","bian","qi","kang","wu","yu","yuan","po","gu","ying","ping","huang",
+"he","mu","xiao","yin","yao","shao","zhan","wang","qi","mao","yu","di",
+"mi","bei","ming","zang","ji","fu","cheng","dai","tan","song","mao","pang",
+"xiong","ji","su","qu","xiang","zhu","dong","liang","fan","hu","ling","ho",
+"yu","wan","zhi","ke","jiu","guan","lu","ying","qiu","hou","yue","suai",
+"sima","shangguan","ouyang","xiahou","zhuge","wenren","dongfang","helian","huangpu",
+"weichi","gongyang","zhantai","gongye","zongzheng","puyang","chunyu","shanyu","taishu",
+"shentu","gongshun","zhongshun","xuanyuan","linghu","zhongli","yuwen","changshun","murong",
+"situ","shikong","zhuankong","duanmu","wuma","gongxi","qidiao","lezheng","xiangsi",
+"gongliang","tuozhi","jiagu","zaifu","guliang","chujing","yanfa","ruye","tuqin",
+"duanqian","baili","dongguo","nanguo","huyan","guihai","yangshe","weisheng","liangqiu",
+"zuoqiu","dongmen","ximen","baishang","nangong",
+"gou","kang","kuang","hou","you","qing","shang","mo","she","er","mo","ha",
+"qiao","nian","ai","yang","dong","di","wu","yan","fu","kai","zong","zong",
+"lin","shi",
+});
+//----以下欢迎添加，nm2需要一定的空字，以便产生出单名--------------
+string* nm2 = ({
+"忠","孝","礼","义","智","勇","仁","匡","宪","令","福","禄","大","小","晓",
+"高","可","阿","金","世","克","叔","之","公","夫","时","若","庆","文","武",
+"多","才","长","子","永","友","自","人","为","铁","","","","","","","","",
+"","","","","","","","","","","","","","",
+});
+
+string* nm2s = ({
+"zhong","xiao","li","yi","zhi","yong","ren","kuang","xian","ling","fu","lu","da","xiao","xiao",
+"gao","ke","a","jin","shi","ke","shu","zhi","gong","fu","shi","ruo","qing","wen","wu",
+"duo","cai","zhang","zi","yong","you","zi","ren","wei","tie","","","","","","","","",
+"","","","","","","","","","","","","","",
+});
+
+string* nm3 = ({
+"霸","白","班","斌","宾","昌","超","诚","川","鼎","定","斗",
+"法","飞","风","锋","钢","罡","贯","光","海","虎","华",
+"浩","宏","济","坚","健","剑","江","进","杰","俊","康",
+"良","麟","民","明","鸣","宁","培","启","强","荣","山",
+"泰","涛","挺","伟","熙","祥","雄","旭",
+"毅","瑜","羽","宇","岳","舟",
+});
+
+string* nm3s = ({
+"ba","bai","ban","bin","bin","chang","chao","cheng","chuan","ding","ding","dou",
+"fa","fei","feng","feng","gang","gang","guan","guang","hai","hu","hua",
+"hao","hong","ji","jian","jian","jian","jiang","jin","jie","jun","kang",
+"liang","lin","min","ming","ming","ning","pei","qi","qiang","rong","shan",
+"tai","tao","ting","wei","xi","xiang","xiong","xu",
+"yi","yu","yu","yu","yue","zhou",
+});
+
+
+int do_none(string arg)
+{
+    object me=this_player();
+    if (me->query("id")!=this_object()->query("userid"))
+    {
+        return 0;
+    }
+	if (!arg)
+		return 0;
+	tell_object(me,"临阵磨枪？来不及啦！\n");
+	return 1;
+}
+
+void init()
+{
+	object ob, me;
+	ob = this_object();
+	if (interactive(me = this_player()) && ob->query("userid")==me->query("id")) 
+	{
+		ob->kill_ob(me);
+        	command("follow " + me->query("id"));
+                remove_call_out("leave");
+        	call_out("leave",90);
+        }
+        set("no_use/qiankun-danuoyi",1);
+        set("no_use/iron-cloth",1);
+
+	add_action("do_none","jifa");
+	add_action("do_none","enable");
+}
+
+int do_copy(object me,int maxpot,int type)
+{
+        int i,ratio,j;
+        object ob;
+        mapping skills;
+        ob = this_object();
+
+
+	j = to_int(pow(me->query("combat_exp")/100,0.333)*10);
+	j = j*8/10;
+	
+	if(j < 10) j = 10;
+
+	skills = ob->query_skills();
+    for (i=0;i<sizeof(skills);i++)
+     	skills[keys(skills)[i]] = j;
+
+    ob->set("combat_exp", me->query("combat_exp")/10*8);
+	
+
+	ob->set("jing",me->query("max_jing"));
+	ob->set("eff_jing",me->query("max_jing"));
+	ob->set("max_jing",me->query("max_jing"));
+	ob->set("qi",me->query("max_qi")*3);
+	ob->set("eff_qi",me->query("max_qi")*3);
+	ob->set("max_qi",me->query("max_qi")*3);
+	ob->set("max_neili",me->query("max_neili"));
+	ob->set("neili",me->query("max_neili"));
+	//icer added to avoid short jing damage bug
+	if (ob->query("jing") < 2000)
+	{
+		ob->set("eff_jing",2000);
+		ob->set("max_jing",2000);
+		ob->set("jing",2000);
+	}
+
+       	ob->set("jiali", random(j/3));
+	ob->reincarnate(); //复活...将物件的 ghost 标记去掉. 身体的各项状态值设为上限.
+	return j; //返回最高级别
+}
+
+//死亡管理
+void die()
+{
+	int pot,exp,deactivity_rate,ratio,i;
+	object killer,ob;
+	ob = this_player(); 
+//          exp= random(3000) + 1000;
+          exp= random(1500) + 2000;//增加500K以前奖励 Zine Nov 10 2010
+          if(this_player()->query("combat_exp")>600000) {exp= random(1000) + 2000;} //降低500K以后奖励
+        //  if(this_player()->query("combat_exp")>1100000) {exp= random(800) + 2000;} //1M后奖励略高于500k，还是比之前低
+//          if(this_player()->query("combat_exp")>1600000) {exp= random(1000) + 1000;} 
+  //        if(this_player()->query("combat_exp")>2100000) {exp= random(1100) + 1100;} //逐步提高，配合cd时间，最高控制在25K/h接近同期慕容水平 by Zine Nov 11 2010
+        pot= exp/8;
+
+	//加入reward_d管理后，antirobot由reward负责
+	//antirobot
+//	if (ob->query("antirobot/deactivity") < 4) deactivity_rate = 100;
+//  	else deactivity_rate = 3200/ob->query("antirobot/deactivity")/ob->query("antirobot/deactivity")/ob->query("antirobot/deactivity");
+//		exp = exp * deactivity_rate / 100;
+//		pot = pot * deactivity_rate / 100;
+//		if (exp<1) exp = 1;
+//		if (pot<1) pot = 1;
+
+	
+	//如果找不到杀手，就暂时不死
+        killer = this_object()->get_damage_origin_object();
+        if(!killer || !objectp(killer))
+        // if(!objectp(killer = this_object()->get_damage_origin_object())) objectp()函数的参数不能为零的，不然会出错
+		return;
+
+	//杀手接了任务，并是对应本人的杀手，给奖励若干
+        if(objectp(killer)
+	&& killer->query_temp("ljhwjob")
+        && killer->query("family/family_name") == "灵鹫宫"
+	&& this_object()->query("userid")==killer->query("id"))
+       {
+
+		exp = REWARD_D->add_exp(killer,exp);
+                killer->add("exp/huwei",exp);
+		pot = REWARD_D->add_pot(killer,pot);
+                killer->add("pot/huwei",pot);
+
+        	message_vision(HIY+this_object()->name()+"说道：灵鹫宫果然名不虚传！\n            说罢转身一跃而去。\n"NOR,this_object());
+       		tell_object(killer,"你被奖励了\n"+chinese_number(exp)+"点实战经验,\n"
+			+chinese_number(pot)+"点潜能,\n");
+			killer->add_temp("lingjiuhuwei/killed_number",1);        //记录杀死次数
+	}
+      	else
+                if(objectp(killer)
+			&& killer->query_temp("ljhwjob")
+			&& this_object()->query("userid")==killer->query("id"))
+       {
+		exp = REWARD_D->add_exp(killer,exp);
+                killer->add("exp/huwei",exp);
+		pot = REWARD_D->add_pot(killer,pot);
+                killer->add("pot/huwei",pot);
+           	message_vision(HIY+this_object()->name()+"说道：君子报仇十年不晚，咱们走着瞧！\n            说罢转身一跃而去。\n"NOR,this_object());
+       		tell_object(killer,"你被奖励了\n"+chinese_number(exp)+"点实战经验,\n"
+			+chinese_number(pot)+"点潜能,\n");
+			killer->add_temp("lingjiuhuwei/killed_number",1);        //记录杀死次数
+	}
+//			killer->add_temp("lingjiuhuwei/killed_number",1);        //记录杀死次数
+	if (!killer->query("biography/jobs/huwei"))
+		{
+			killer->set("biography/jobs/huwei",time());//个人传记记录第一次完成任务时间ZINE
+		}
+        destruct(this_object());
+
+	return ;
+}
+
+//NPC时间长了，自动离开系统
+void leave()
+{
+        object ob = this_object();
+        if (!ob->is_fighting()) {
+                message_vision(this_object()->query("name") + "钻进路边的杂草，不见了。\n" NOR,this_object());
+                destruct(this_object());
+                }
+        else call_out("leave",30);
+}
+
+void unconcious() { die();}

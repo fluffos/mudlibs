@@ -1,0 +1,221 @@
+// standard s_weapon object
+// by Vast@pkuxkx
+// all comments added by Vast
+
+inherit S_WEAPON;
+
+#include <ansi.h>
+void gen_weapon(int seed);
+varargs void gen_sword(int min, int max);
+varargs void gen_blade(int min, int max);
+varargs void gen_axe(int min, int max);
+varargs void gen_staff(int min, int max);
+varargs void gen_club(int min, int max);
+varargs void gen_spear(int min, int max);
+varargs void gen_halberd(int min, int max);
+varargs void gen_hammer(int min, int max);
+varargs void gen_whip(int min, int max);
+varargs void gen_throwing(int min, int max);
+
+void create()
+{
+	//只能在专门的地方进行买卖
+	set("no_store",1);
+        set("no_sell",1);
+        set("no_pawn",1);
+        gen_weapon(1);
+        setup();
+}
+void gen_weapon(int seed)//axe,blade,sword,halberd,spear,staff,whip,club,hammer,....throwing
+{
+	int i;
+	if(!seed) i = 1 + random(10);
+	else
+	{
+		if(seed < 1 || seed > 10) return;
+		i = seed;
+	}
+	switch(i)
+	{
+		case 1:
+		set("skill_type", "sword");
+		gen_sword();
+		break;
+		case 2:
+		set("skill_type", "blade");
+		gen_blade();
+		break;
+		case 3:
+		set("skill_type", "axe");
+		gen_axe();
+		break;
+		case 4:
+		set("skill_type", "spear");
+		gen_spear();
+		break;
+		case 5:
+		set("skill_type", "staff");
+		gen_staff();
+		break;
+		case 6:
+		set("skill_type", "whip");
+		gen_whip();
+		break;
+		case 7:
+		set("skill_type", "hammer");
+		gen_hammer();
+		break;
+		case 8:
+		set("skill_type", "halberd");
+		gen_halberd();
+		break;
+		case 9:
+		set("skill_type", "club");
+		gen_club();
+		break;
+		case 10:
+		set("skill_type", "throwing");
+		gen_throwing();
+		break;
+	}
+}
+//先确定武器基本种类、属性，再生成武器的gem类公有属性
+varargs void gen_sword(int min, int max)
+{
+	//剑的基本类型 相当于diablo中的灰色物品
+	//青铜剑、铸铁剑、精钢剑、玉箫、薄刃、宽刃剑、双手剑、玄铁剑、寒冰剑（damage大，但是会融化）、（Unique的物品）
+	int i, type;
+	if(!min) min = 0;
+	if(!max) max = 10000;
+
+	if (min > max) return;
+	if (min < 0) return;
+	if (max > 10000) return;
+
+	i = min + random(max - min);
+
+	//此处还可做相应调整
+	if (i < 1900) type = 1;		//(19%)
+	else if (i < 3600) type = 2;	//(17%)
+	else if (i < 5100) type = 3;	//(15%)
+	else if (i < 6500) type = 4;	//(14%)
+	else if (i < 7700) type = 5;	//(12%)
+	else if (i < 8700) type = 6;	//(10%)
+	else if (i < 9500) type = 7;	//双手剑(8%)
+	else if (i < 9900) type = 8;	//玄铁剑(4%)
+	else type = 9;	//冰剑(1%)
+
+	switch(type)
+	{
+		case 1:
+        	set_name(YEL"铸铁剑"NOR, ({ "zhutie jian", "sword", "jian" }) );
+        	set("base_weight", 1000 + random(1500));
+        	set("weapon/long", "这是一柄普通的铸铁剑，一般的剑客都配带此剑。\n");
+        	set("material", "iron");
+        	set("rigidity", 50 + random(100));
+        	set("value", 30000);
+        	//set("wield_msg", "$N从陈旧的剑鞘中拔出一把$n握在手中。\n");
+        	//set("unwield_msg", "$N将手中的$n插入腰间的剑鞘。\n");
+        	set("weapon/min_dam", 30);
+        	set("weapon/max_dam", 75);
+		break;
+		case 2:
+        	set_name(HIY"青铜剑"NOR, ({ "qingtong sword", "sword", "jian" }) );
+        	set("base_weight", 2500 + random(1500));
+        	set("weapon/long", "这是一柄古旧的青铜剑，很受用剑高手的欢迎。\n");
+        	set("material", "copper");
+        	set("rigidity", 80 + random(100));
+        	set("value", 45000);
+        	//set("wield_msg", "$N从陈旧的剑鞘中拔出一把$n握在手中。\n");
+        	//set("unwield_msg", "$N将手中的$n插入腰间的剑鞘。\n");
+        	set("weapon/min_dam", 45);
+        	set("weapon/max_dam", 65);
+		break;
+		case 3:
+        	set_name(HIB"精钢剑"NOR, ({ "jinggang sword", "sword", "jian" }) );
+        	set("base_weight", 1500 + random(2000));
+        	set("weapon/long", "这是一把精钢铸就的利刃，官兵们经常随身携带此剑。\n");
+        	set("material", "steel");
+        	set("rigidity", 150 + random(50));
+        	set("value", 50000);
+        	//set("wield_msg", "$N从陈旧的剑鞘中拔出一把$n握在手中。\n");
+        	//set("unwield_msg", "$N将手中的$n插入腰间的剑鞘。\n");
+        	set("weapon/min_dam", 50);
+        	set("weapon/max_dam", 85);
+		break;
+		case 4:
+        	set_name(WHT"薄刃剑"NOR, ({ "baoren sword", "sword", "jian" }) );
+        	set("base_weight", 500 + random(1500));
+        	set("weapon/long", "这把剑剑刃极薄，看上去十分锋利。\n");
+        	set("material", "steel");
+        	set("rigidity", 20 + random(50));
+        	set("value", 80000);
+        	//set("wield_msg", "$N从陈旧的剑鞘中拔出一把$n握在手中。\n");
+        	//set("unwield_msg", "$N将手中的$n插入腰间的剑鞘。\n");
+        	set("weapon/min_dam", 40);
+        	set("weapon/max_dam", 120);
+		break;
+		case 5:
+        	set_name(GRN"玉萧"NOR, ({ "yu xiao", "sword", "jian", "xiao" }) );
+        	set("base_weight", 500 + random(1000));
+        	set("weapon/long", "表面上看来这是一把华丽的碧玉长箫，实际上它也是杀敌的利器。\n");
+        	set("material", "jade");
+        	set("rigidity", 50 + random(200));
+        	set("value", 70000);
+        	//set("wield_msg", "$N从陈旧的剑鞘中拔出一把$n握在手中。\n");
+        	//set("unwield_msg", "$N将手中的$n插入腰间的剑鞘。\n");
+        	set("weapon/min_dam", 70);
+        	set("weapon/max_dam", 110);
+		break;
+		case 6:
+        	set_name(HIW"宽刃剑"NOR, ({ "kuanren sword", "sword", "jian" }) );
+       		set("base_weight", 1200 + random(1800));
+       		set("weapon/long", "这把剑剑刃很宽，是一把攻防兼备的好剑。\n");
+        	set("material", "steel");
+        	set("rigidity", 250 + random(100));
+        	set("value", 80000);
+        	//set("wield_msg", "$N从陈旧的剑鞘中拔出一把$n握在手中。\n");
+        	//set("unwield_msg", "$N将手中的$n插入腰间的剑鞘。\n");
+        	set("weapon/min_dam", 80);
+        	set("weapon/max_dam", 130);
+		break;
+		case 7:
+        	set_name(HIC"双手剑"NOR, ({ "two-handed sword", "sword", "jian" }) );
+        	set("base_weight", 2000 + random(4000));
+        	set("weapon/long", "这剑剑身极沉，剑柄很长，需要双手并用才能有效的使用它。\n");
+        	set("material", "steel");
+        	set("rigidity", 500 + random(500));
+        	set("value", 150000);
+        	//set("wield_msg", "$N从陈旧的剑鞘中拔出一把$n握在手中。\n");
+        	//set("unwield_msg", "$N将手中的$n插入腰间的剑鞘。\n");
+        	set("weapon/min_dam", 150);
+        	set("weapon/max_dam", 280);
+		break;
+		case 8:
+        	set_name(HIG"玄铁剑"NOR, ({ "xuantie sword", "sword", "jian" }) );
+        	set("base_weight", 5000 + random(5000));
+        	set("weapon/long", "这是一把黑幽幽的长剑，不知道是什么材料制成。\n");
+        	set("material", "heavysteel");
+        	set("rigidity", 10000);
+        	set("value", 120000);
+        	set("wield_msg", "$N从陈旧的剑鞘中拔出一把$n握在手中。\n");
+        	set("unwield_msg", "$N将手中的$n插入腰间的剑鞘。\n");
+        	set("weapon/min_dam", 100);
+        	set("weapon/max_dam", 150);
+		break;
+		case 9:
+		//冰剑
+		break;
+	}
+	delete("weapon_prop/damage");
+	init_sockets();
+}
+varargs void gen_blade(int min, int max){}
+varargs void gen_axe(int min, int max){}
+varargs void gen_staff(int min, int max){}
+varargs void gen_club(int min, int max){}
+varargs void gen_spear(int min, int max){}
+varargs void gen_halberd(int min, int max){}
+varargs void gen_hammer(int min, int max){}
+varargs void gen_whip(int min, int max){}
+varargs void gen_throwing(int min, int max){}

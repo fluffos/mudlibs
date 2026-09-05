@@ -1,0 +1,805 @@
+// skill.c
+// From ES2
+// Modified by Xiang for XKX (12/15/95)
+//提供多层技能体系，比如music技能下辖music_theory（基本乐理）、gu_qin（古琴基础）、pipa（琵琶基础）、gu_zheng（古筝基础）、
+//shaw（箫基础）、flute（长笛基础）、harp（箜篌基础）等等，然后gu_qin下面可以下辖gaoshan_liushui（高山流水）、yangchun_baixue（阳春白雪）
+//music的等级和技能点数是由下辖技能的技能点数和等级来决定的，二级技能等级同样可以由更下级的技能等级来决定或者不存在更下级的技能等级的时候
+//本身技能等级也是有效的。
+//多级技能体系的父技能等级可以由根技能文件的improve_skill函数来定制父子技能的等级约定方式，
+//或者按照默认父技能等级=子技能等级最高者的等级+自身拥有的等级/2（自身拥有的等级仅第二层存在）。
+//子技能通过skill::son_skill::grdson_skill这样子的形式来标注
+//每个技能拥有以下属性level（技能等级）、learned（技能点数，根技能无意义），
+//        self_level（自身学习的技能等级，仅第二层子技能有效，原因是第二层子技能实际上相当于基础技能）
+//by seagate@pkuxkx 2012/06
+// 加入查询经验支持最高人物等级函数query_lv_limit by yhzzyahoo@2015.7.26
+
+#include <ansi.h>
+#include <dbase.h>
+
+mapping skills;
+mapping learned;
+mapping skill_map;
+mapping skill_prepare;
+mapping wprepare;
+
+protected mapping subskill_death_penalty(mapping subskills, string root_skill);
+protected mapping subskill_update_level(mapping subskills, string root_skill);
+protected void apply_buffer(object me, mapping buffer_map);
+
+mapping query_skills() { return skills; }
+mapping query_learned() { return learned; }
+
+void set_skill(string skill, int val)
+{
+    string *deep_ski;
+    mapping deep_skm;
+    int deeps=0;
+    
+    if( !find_object(SKILL_D(skill)) 
+      && file_size(SKILL_D(skill)+".c") < 0 
+      && !find_object(PLAYER_SKILL_D(skill)) 
+      && file_size(PLAYER_SKILL_D(skill)+".c") < 0 //自创武功
+      )
+    {
+        deep_ski=explode(skill,"::");
+        deeps=sizeof(deep_ski);
+        if ( deeps>3 )
+        	error("F_SKILL:根技能加上子技能最多只能拥有三级父子关系。\n");
+        
+        if ( deeps<=1 ||
+             ( !find_object(SKILL_D(deep_ski[0])) &&
+               file_size(SKILL_D(deep_ski[0])+".c")<0 ) )
+          error("F_SKILL: No such skill (" + skill + ")\n");
+    }
+    
+    if ( deeps<=1 )
+    {
+    	if ( mapp(skills) &&
+    		   mapp(skills[skill]) )
+    	  error("F_SKILL:拥有子技能的根技能不能直接给等级赋值。\n");
+    	
+      if( !mapp(skills) ) skills = ([ skill: val ]);
+      else skills[skill] = val;
+      if (!mapp(learned) ) learned = ([ skill : 0 ]);
+      else (int)learned[skill] = 0;
+    }
+    else
+    {
+      if ( !mapp(skills) )
+        skills=([ deep_ski[0]: ([ "level" : 0,"learned" : 0 ]) ]);
+      else if ( !mapp(skills[deep_ski[0]]) )
+      	skills[deep_ski[0]]=(["level":0, "learned":0 ]);
+      
+      deep_skm=skills[deep_ski[0]];
+      for(int lp=1;lp<deeps;lp++)
+      {
+      	if ( !deep_skm[deep_ski[lp]] ||
+      	     !mapp(deep_skm[deep_ski[lp]]) )
+      	  deep_skm[deep_ski[lp]]=(["level":0, "learned":0 ]);
+        deep_skm=deep_skm[deep_ski[lp]];
+//下探到最后一级以后开始修改技能等级
+        if ( lp==deeps-1 )
+        {
+        	deep_skm["learned"]=0;
+        	if ( lp==1 )
+        	  deep_skm["self_level"]=val;
+        	else
+        		deep_skm["level"]=val;
+//先执行根技能对应的技能提升函数，如果执行返回结果为0则执行默认的技能提升算法
+          skills[deep_ski[0]]=subskill_update_level(skills[deep_ski[0]], deep_ski[0]);
+        }
+      }
+    }
+}
+
+int delete_skill(string skill)
+{
+    string *deep_ski, fneili;
+    int deeps=0;
+    object ob=this_object();
+    
+    deep_ski=explode(skill,"::");
+    deeps=sizeof(deep_ski);
+    if( mapp(skills) && deeps<=1 ) {
+      if ( intp(skills[skill]) &&
+           skills[skill]>0 &&
+           SKILL_D(skill)->valid_enable("force") )
+      {
+        if ( !stringp(fneili=SKILL_D(skill)->translate(skill)) )
+          fneili=skill;
+        
+        if ( fneili==skill &&
+             ob->query("backup_neili/"+fneili+"/max_neili")>0 )
+          ob->delete("backup_neili/"+fneili);
+        
+        if ( fneili!=skill &&
+             ob->query("backup_neili/"+fneili+"/max_neili")>0 &&
+             ob->query("backup_neili/"+fneili+"/force")==skill )
+          ob->delete("backup_neili/"+fneili);
+      }
+      
+      map_delete(skills, skill);
+      if( mapp(learned) ) {
+        map_delete(learned, skill);
+        return undefinedp(learned[skill]);
+      }
+      return undefinedp(skills[skill]);
+    }
+    else if ( mapp(skills) )
+    {
+    	if ( deeps>3 )
+    	  error("F_SKILL:根技能加上子技能最多只能拥有三级父子关系。\n");
+    	
+    	if ( !mapp(skills[deep_ski[0]]) )
+    		return 0;
+    	
+    	if ( deeps==2 )
+    	{
+    	  map_delete(skills[deep_ski[0]], deep_ski[1]);
+    	  return undefinedp(skills[deep_ski[0]][deep_ski[1]]);
+    	}
+    	else
+    	{
+    		if ( !mapp(skills[deep_ski[0]][deep_ski[1]]) )
+    			return 0;
+    		
+    		map_delete(skills[deep_ski[0]][deep_ski[1]], deep_ski[2]);
+    		return undefinedp(skills[deep_ski[0]][deep_ski[1]][deep_ski[2]]);
+    	}
+    }
+    		
+    return 0;
+}
+
+//复制技能信息，支持子技能，建立纯粹的skill->val技能对，不关心其他信息
+// by seagate@pkuxkx
+int copy_skill(string skill, mixed val)
+{
+	if ( !intp(val) && !mapp(val) )
+		error("copy_skill函数仅支持技能对应值为int和map两种情况。");
+	
+  if( !find_object(SKILL_D(skill)) 
+    && file_size(SKILL_D(skill)+".c") < 0 
+    && !find_object(PLAYER_SKILL_D(skill)) 
+    && file_size(PLAYER_SKILL_D(skill)+".c") < 0 //自创武功
+    )
+    error("F_SKILL: No such skill (" + skill + ")\n");
+  
+  if( !mapp(skills) ) skills = ([ skill: val ]);
+    else skills[skill] = val;
+}
+
+// This function 'map' a skill <skill> to another skill <mapped_to>.
+// If 2nd argument not given, cancel the mapped skill <skill>.
+
+//增加对内功切换的特殊支持，当内功切换的时候，内力也进行同步切换
+//by seagate@pkuxkx 2013/11/28
+
+//增加对技能附加的被动状态加载的支持
+//在技能处提供两个接口设置供被动技能使用
+//buffer_applied(object me) 为加载状态
+//buffer_removed(object me) 为消除状态
+//被动状态加载和消除的效果显示也请在两个接口中自行实现
+//具体该状态是否支持跨门派叠加也请自行控制
+//by seagate@pkuxkx 2014/03/11
+varargs void map_skill(string skill, string mapped_to)
+{
+        string map_to;
+        object ob=this_object();
+        mapping bufmap;
+        if ( mapped_to && undefinedp(skills[mapped_to]) && query_temp("apply_skills/"+mapped_to) )
+			skills[mapped_to] = 0;
+        if( !mapped_to && mapp(skill_map) ) {
+                map_to=skill_map[skill];
+                //切换内功前备份当前数据
+                if ( userp(ob) && 
+                     skill=="force" && 
+                     stringp(map_to) )
+                  SKILL_D(map_to)->backup_neili(ob, map_to);
+                map_delete(skill_map, skill);
+                //删除map的时候消除该技能的被动状态加载
+                if ( stringp(map_to) &&
+                     mapp(bufmap=SKILL_D(map_to)->buffer_removed(ob)) )
+                  apply_buffer(ob, bufmap);
+
+                //切换内功后恢复历史数据
+                if ( userp(ob) && 
+                     skill=="force" && 
+                     stringp(map_to) )
+                  FORCE->restore_neili(ob, "force");
+                return;
+        }
+
+        if( (!find_object(SKILL_D(skill)) && file_size(SKILL_D(skill)+".c") < 0 )
+       && (!find_object(PLAYER_SKILL_D(skill)) && file_size(PLAYER_SKILL_D(skill)+".c") < 0 )//自创武功
+    )
+                error("F_SKILL: No such skill (" + skill + ")\n");
+
+        if( !mapp(skills) || undefinedp(skills[mapped_to]) )
+                return;
+
+        //切换内功前备份当前数据
+        if ( mapp(skill_map) )
+          map_to=skill_map[skill];
+        if ( userp(ob) && 
+             skill=="force" && 
+             mapp(skill_map) &&
+             stringp(map_to) )
+          SKILL_D(map_to)->backup_neili(ob, map_to);
+        else if ( userp(ob) && skill=="force" )
+          FORCE->backup_neili(ob, "force");
+        //切换前清除上一个技能被动状态
+        if ( stringp(map_to) &&
+             mapp(bufmap=SKILL_D(map_to)->buffer_removed(ob)) )
+          apply_buffer(ob, bufmap);
+        bufmap=([]);
+        
+        if( !mapp(skill_map) ) skill_map = ([ skill: mapped_to ]);
+        else skill_map[skill] = mapped_to;
+        //设置map的时候加载该技能的被动状态
+        if ( stringp(mapped_to) &&
+             mapp(bufmap=SKILL_D(mapped_to)->buffer_applied(ob)) )
+          apply_buffer(ob, bufmap);
+        //切换内功后恢复历史数据
+        if ( userp(ob) && 
+             skill=="force" && 
+             stringp(mapped_to) )
+          SKILL_D(mapped_to)->restore_neili(ob, mapped_to);
+}
+
+// This function 'prepare' a skill <skill> to another skill <mapped_to>.
+// If 2nd argument not given, cancel the prepared skill <skill>.
+varargs void prepare_skill(string skill, string mapped_to)
+{
+        if( !mapped_to && mapp(skill_prepare) ) {
+                map_delete(skill_prepare, skill);
+                return;
+        }
+		
+        if ( mapped_to && undefinedp(skills[mapped_to]) && query_temp("apply_skills/"+mapped_to) )
+			skills[mapped_to] = 0;
+
+        if( (!find_object(SKILL_D(skill)) && file_size(SKILL_D(skill)+".c") < 0 )
+       && (!find_object(PLAYER_SKILL_D(skill)) && file_size(PLAYER_SKILL_D(skill)+".c") < 0 )//自创武功
+    )
+                error("F_SKILL: No such skill (" + skill + ")\n");
+
+        if( !mapp(skills) || undefinedp(skills[mapped_to]) )
+                return;
+                
+        if( !mapp(skill_prepare) ) skill_prepare = ([ skill: mapped_to ]);
+        else skill_prepare[skill] = mapped_to;
+}
+
+varargs void prepare_wskill(string skill, string mapped_to)
+{
+        if( !mapped_to && mapp(wprepare) ) {
+                map_delete(wprepare, skill);
+                return;
+        }
+		
+        if ( mapped_to && undefinedp(skills[mapped_to]) && query_temp("apply_skills/"+mapped_to) )
+			skills[mapped_to] = 0;
+
+        if( (!find_object(SKILL_D(skill)) && file_size(SKILL_D(skill)+".c") < 0 )
+       && (!find_object(PLAYER_SKILL_D(skill)) && file_size(PLAYER_SKILL_D(skill)+".c") < 0 )//自创武功
+    )
+                error("F_SKILL: No such skill (" + skill + ")\n");
+
+        if( !mapp(skills) || undefinedp(skills[mapped_to]) )
+                return;
+                
+        if( !mapp(wprepare) ) wprepare = ([ skill: mapped_to ]);
+        else wprepare[skill] = mapped_to;
+}
+
+
+string query_skill_mapped(string skill)
+{
+        if( mapp(skill_map) && !undefinedp(skill_map[skill]) )
+                return skill_map[skill];
+        return 0;
+}
+
+string query_skill_prepared(string skill)
+{
+        if( mapp(skill_prepare) && !undefinedp(skill_prepare[skill]) )
+                return skill_prepare[skill];
+        return 0;
+}
+
+string query_wprepared(string skill)
+{
+        if( mapp(wprepare) && !undefinedp(wprepare[skill]) )
+                return wprepare[skill];
+        return 0;
+}
+
+//仅支持查询根技能的等级
+varargs int query_skill(string skill, mixed raw)
+{
+  int s, level, lvc, lp;
+  string esk;
+  int tskl, tskl_raw;
+  if ( skill && undefinedp(skills[skill]) && query_temp("apply_skills/"+skill) )
+	skills[skill] = 0;
+  if ( stringp(raw) && undefinedp(skills[raw]) && query_temp("apply_skills/"+raw) )
+	skills[raw] = 0;
+  tskl = query_temp("apply_skills/"+skill);
+  s = query_temp("apply/" + skill);
+  if ( !raw || stringp(raw) ) 
+  {
+    if ( mapp(skills) )
+    {
+      if ( mapp(skills[skill]) )
+        s += (tskl + skills[skill]["level"]) /2;
+      else
+        s += (tskl + skills[skill]) / 2;
+      if( mapp(skill_map) )
+      {
+        if ( stringp(raw) )
+          esk=raw;
+        else
+          esk=skill_map[skill];
+		tskl_raw = query_temp("apply_skills/"+esk);
+        if ( mapp(skills[esk]) )
+          s += tskl_raw + skills[esk]["level"];
+        else
+          s += tskl_raw + skills[esk];
+      }
+    }
+    if ( s > 0 ) 
+    {
+      level=query("level");
+      lvc=(level-100)/5;
+      s+= level; //add by whuan,level对enable的功夫有提高作用
+      if ( level>100 )
+      {
+        if ( lvc>0 )
+        {
+          for(lp=0;lp<lvc;lp++)
+            s+=20*(lp+1);
+        }
+        s+=(level-100-lvc*5)*4*(lvc+1);
+      }
+    }
+    if ( s <= 0 )
+      return 0;
+    else  
+      return s;  
+  }
+  else if ( intp(raw) && mapp(skills) ) 
+  {
+    if ( mapp(skills[skill]) )
+      return tskl + skills[skill]["level"];
+    else
+      return tskl + skills[skill];
+  }
+  return 0;
+}
+
+//支持查询子技能的等级,子技能的等级未作任何修饰
+varargs int query_sub_skill(string skill, int raw)
+{
+  string *deep_ski;
+  int deeps;
+  
+  deep_ski=explode(skill,"::");
+  deeps=sizeof(deep_ski);
+  
+  if ( deeps<=1 )
+    error("F_SKILL:只能查询子技能的技能等级。\n");
+  
+  if ( deeps>3 )
+  	error("F_SKILL:根技能加上子技能最多只能拥有三级父子关系。\n");
+  
+  if ( !mapp(skills) || !mapp(skills[deep_ski[0]]) || !mapp(skills[deep_ski[0]][deep_ski[1]]) )
+  	return 0;
+  
+  if ( deeps==2 )
+  {
+  	if ( !raw )
+  	  return skills[deep_ski[0]][deep_ski[1]]["level"];
+  	else
+  		return skills[deep_ski[0]][deep_ski[1]]["self_level"];
+  }
+  else if ( !mapp(skills[deep_ski[0]][deep_ski[1]][deep_ski[2]]) )
+  	return 0;
+  else
+  	return skills[deep_ski[0]][deep_ski[1]][deep_ski[2]]["level"];
+}
+
+mapping query_skill_map()
+{
+        return skill_map;
+}
+
+mapping query_skill_prepare()
+{
+        return skill_prepare;
+}
+
+//玩家所能达到的技能极限
+//和经验成的立方根成正比，和先天悟性成正比
+int query_skill_limit()
+{
+  object me=this_object();
+  int expr=me->query("combat_exp");
+  if ( !me->query("first_limit_time") || 
+       time() - me->query("first_limit_time") <= 24*60*60 ||
+       expr<=10000000 || 
+       me->query("age")<=30 )
+  {
+    if ( !me->query("first_limit_time") )
+      me->set("first_limit_time", time());
+    
+    if (expr<=200000000)
+      return to_int(ceil( pow( expr*10.0, 1.0/3) ));
+    else
+      return to_int(ceil( pow( expr/100.0, 1.0/3)*10 ));
+  }
+  
+  if ( expr<=200000000 )
+    return to_int(ceil( pow( expr*10.0, 1.0/3) ))*(me->query("int")+150)/180;
+  else
+    return to_int(ceil( pow( expr/100.0, 1.0/3)*10 ))*(me->query("int")+150)/180;
+}
+
+//查询玩家所能达到的人物等级
+int query_lv_limit()
+{
+  object me=this_object();
+  int id_exp=me->query("combat_exp");
+int lv_limit;
+
+if (id_exp>410000000)
+{
+	id_exp=(int)(id_exp/1000000);
+	lv_limit=to_int(ceil( sqrt( id_exp-410.0 )));
+	lv_limit += 100;
+}
+else
+{
+	id_exp=(int)(id_exp/400);
+	lv_limit=to_int(ceil( pow( id_exp, 1.0/3) ));
+}
+return lv_limit;
+
+}
+
+
+//查询该等级所能支持的经验
+int query_level_exp(int level)
+{
+  object me=this_object();
+  if ( !me->query("first_limit_time") || 
+       time() - me->query("first_limit_time") <= 24*60*60 ||
+       me->query("combat_exp")<=10000000 || 
+       me->query("age")<=30 )
+    return to_int(ceil(pow(level/10.0, 3)*100));
+  else
+    return to_int(ceil(pow(level*18.0/(me->query("int")+150) , 3 )*100));
+}
+
+mapping query_wprepare()
+{
+       return wprepare;  
+}
+
+int skill_death_penalty()
+{
+    string *sk;
+    int i,j;
+    string force_skill;
+
+    if( wizardp(this_object()) || !mapp(skills) ) 
+    	return 0;
+    
+    j = 0;
+    if( stringp(force_skill = this_object()->query_skill_mapped("force")) )
+      j = 1;
+    
+    sk = keys(skills);
+    if( !mapp(learned) )
+        for(i = 0; i<sizeof(sk); i++) {
+            if ( mapp( skills[sk[i]] ) )
+            	skills[sk[i]]=subskill_death_penalty(skills[sk[i]], sk[i]);
+            else
+            {
+              skills[sk[i]]--;
+              if( skills[sk[i]]<0 ) 
+            	  map_delete(skills, sk[i]);
+            }
+        }
+    else
+        for(i = 0; i<sizeof(sk); i++) {
+            if ( mapp( skills[sk[i]] ) )
+            	skills[sk[i]]=subskill_death_penalty(skills[sk[i]], sk[i]);
+            else
+            {
+                if( (int)learned[sk[i]] > (skills[sk[i]]+1) * (skills[sk[i]]+1) / 2 )
+                    map_delete(learned, sk[i]);
+                else {
+                    skills[sk[i]]--;
+                    if( skills[sk[i]]<0 ) map_delete(skills, sk[i]);
+                }
+            }
+        }
+    skill_map = 0;
+    skill_prepare = 0;
+    wprepare = 0;
+    if (j = 1)
+    {
+        this_object()->map_skill("force", force_skill);
+        this_object()->reset_action();
+    }
+    return 1;
+}
+
+varargs void improve_skill(string skill, int amount, int weak_mode, int type)
+{
+    int spi;
+    string *deep_ski;
+    int deeps;
+    mapping deep_skm;
+
+    if (!userp(this_object()))
+      return;
+    
+    if( (!find_object(SKILL_D(skill)) && 
+    	   file_size(SKILL_D(skill)+".c") < 0 ) && 
+    	  (!find_object(PLAYER_SKILL_D(skill)) && 
+    	   file_size(PLAYER_SKILL_D(skill)+".c") < 0 ) )//自创武功
+    {
+        deep_ski=explode(skill,"::");
+        deeps=sizeof(deep_ski);
+        if ( deeps>3 )
+        	error("F_SKILL:根技能加上子技能最多只能拥有三级父子关系。\n");
+        
+        if ( deeps<=1 ||
+             ( !find_object(SKILL_D(deep_ski[0])) &&
+               file_size(SKILL_D(deep_ski[0])+".c")<0 ) )
+          error("F_SKILL: No such skill (" + skill + ")\n");
+    }
+
+    if( !weak_mode || !userp(this_object()) ) {
+        if( !mapp(skills) ) 
+        	skills = ([]);
+        	
+        if( deeps<=1 && undefinedp(skills[skill]) ) 
+        	skills[skill] = 0;
+        
+        if( deeps>1 && undefinedp(skills[deep_ski[0]]) ) 
+        	skills[deep_ski[0]] = 0;
+    }
+
+    // Give learning penalty to those learning too much skills.
+    //whuan，更改这里的spi判断为query_spi
+    spi = 30; // set the default maximum to be 30 (CLEANSWORD CHANGED AT 5/27/96)
+    spi=spi+query("spi");
+    if( query("special_skill/spirituality") && query("age")>=18 )
+      spi += 10; //spirituality能让后天灵性增加10点
+    if( sizeof(skills) > spi )
+      amount /= sizeof(skills) - spi;
+
+    if( !amount ) amount = 1;
+    if( query("special_skill/spirituality") && query("age")>=18 ) 
+    	amount += amount/8;
+
+    if ( deeps<=1 && !mapp(learned) ) 
+    	learned = ([ skill : amount ]);
+    else if ( deeps<=1 )
+    	(int)learned[skill] += amount;
+    else if ( deeps==2 )
+    {
+    	if ( !skills[deep_ski[0]] )
+    		skills[deep_ski[0]]=([]);
+    	
+    	if ( !skills[deep_ski[0]][deep_ski[1]] )
+    		skills[deep_ski[0]][deep_ski[1]]=([]);
+    	
+    	skills[deep_ski[0]][deep_ski[1]]["learned"]+=amount;
+    }
+    else
+    {
+    	if ( !skills[deep_ski[0]][deep_ski[1]][deep_ski[2]] )
+    		skills[deep_ski[0]][deep_ski[1]][deep_ski[2]]=([]);
+    	skills[deep_ski[0]][deep_ski[1]][deep_ski[2]]["learned"]+=amount;
+    }
+
+    if( (!weak_mode || !userp(this_object())) )
+    {
+      if ( deeps<=1 && 
+      	   learned[skill] > (skills[skill] + 1) * (skills[skill] + 1) ) {
+        skills[skill]++;
+        learned[skill] = 0;
+        tell_object(this_object(), HIC "你的「" + to_chinese(skill) + "」进步了！\n" NOR);
+        if (type == 0)
+          SKILL_D(skill)->skill_improved(this_object());
+        else
+          PLAYER_SKILL_D(skill)->skill_improved(this_object());
+      }
+      else if ( deeps<=1 &&
+        learned[skill]<0 )
+      {
+        skills[skill]--;
+        learned[skill] =0;
+        tell_object(this_object(), HIC "你的「" + to_chinese(skill) + "」退步了！\n" NOR);
+        if ( skills[skill]<=0 )
+        {
+          map_delete(skills, skill);
+          map_delete(learned, skill);
+          tell_object(this_object(), HIR "你已经完全遗忘了技能「" + to_chinese(skill) + "」！\n" NOR);
+        }
+      }
+      else if ( deeps>=2 )
+      {
+      	if ( deeps==2 )
+      	{
+      		deep_skm=skills[deep_ski[0]][deep_ski[1]];
+      		if ( deep_skm["learned"]> ( deep_skm["self_level"]+1 ) * ( deep_skm["self_level"]+1 ) ) 
+      		{
+      			deep_skm["self_level"]++;
+      			deep_skm["learned"]=0;
+      			tell_object(this_object(), HIC "你的「" + SKILL_D(deep_ski[0])->skill_name(deep_ski[1]) + "」进步了！\n" NOR);
+      			SKILL_D(deep_ski[0])->subskill_improved(this_object(), deep_ski);
+      		}
+      	}
+      	else
+      	{
+      		deep_skm=skills[deep_ski[0]][deep_ski[1]][deep_ski[2]];
+      		if ( deep_skm["learned"]> ( deep_skm["level"]+1 ) * ( deep_skm["level"]+1 ) ) 
+      		{
+      			deep_skm["level"]++;
+      			deep_skm["learned"]=0;
+      			tell_object(this_object(), HIC "你的「" + SKILL_D(deep_ski[0])->skill_name(deep_ski[2]) + "」进步了！\n" NOR);
+      			SKILL_D(deep_ski[0])->subskill_improved(this_object(), deep_ski);
+      		}
+        }
+        
+        skills[deep_ski[0]]=subskill_update_level(skills[deep_ski[0]],deep_ski[0]);
+      }
+    }      	
+}
+
+//多层技能体系如果角色死亡的情况下，随机掉落根技能下辖所有子技能中之一的等级1级
+protected mapping subskill_death_penalty(mapping subskills, string root_skill)
+{
+  mapping result;
+  string *subkey,*delkey, randkey, rand2;
+  int learn, level;
+  
+  result=subskills;
+  subkey=keys(result);
+  delkey=({});
+  for(int lp=0;lp<sizeof(subkey);lp++)
+    if ( !mapp(result[subkey[lp]]) )
+    	delkey+=({subkey[lp]});
+  
+  subkey-=delkey;
+  if ( sizeof(subkey)>0 )
+  {
+  	randkey=subkey[random(sizeof(subkey))];
+  	subkey=keys(result[randkey]);
+  	delkey=({});
+  	for(int lp=0;lp<sizeof(subkey);lp++)
+      if ( !mapp(result[randkey][subkey[lp]]) )
+    	  delkey+=({subkey[lp]});
+    subkey-=delkey;
+    
+  	if ( (result[randkey]["self_level"] && 
+  	      random(10)<5)||
+  	     sizeof(subkey)<=0 )
+  	{
+  		learn=result[randkey]["learned"];
+  		level=result[randkey]["self_level"];
+  		if ( learn>(level+1)*(level+1)/2 )
+  			result[randkey]["learned"]=0;
+  		else
+  		  result[randkey]["self_level"]--;
+  		
+  		if ( result[randkey]["self_level"]<0 )
+  			map_delete(result, randkey);
+    }
+    else
+    {
+    	rand2=subkey[random(sizeof(subkey))];
+    	learn=result[randkey][rand2]["learned"];
+    	level=result[randkey][rand2]["level"];
+    	if ( learn>(level+1)*(level+1)/2 )
+    		result[randkey][rand2]["learned"]=0;
+    	else
+    		result[randkey][rand2]["level"]--;
+    	
+    	if ( result[randkey][rand2]["level"]<0 )
+    		map_delete(result[randkey], rand2);
+    }
+  }
+  
+  return subskill_update_level(result,root_skill);
+}
+
+//多重技能体系，技能等级变更以后调整父技能等级函数
+protected mapping subskill_update_level(mapping subskills, string root_skill)
+{
+	string *subkey,*delkey, *sub2key;
+	int sub_level;
+	mapping result;
+	
+	result=subskills;
+	delkey=({});
+//根技能自身定义的improve_skill函数执行返回值0则执行默认规则
+//默认规则是根技能=儿子技能中等级最高的，儿子技能=自身技能等级/2+孙子技能中等级最高的。
+  result=SKILL_D(root_skill)->improve_skill(this_object());  	
+	if ( !result )
+	{
+		subkey=keys(result);
+		for(int lp=0;lp<sizeof(subkey);lp++)
+      if ( !mapp(result[subkey[lp]]) )
+    	  delkey+=({subkey[lp]});
+	  subkey-=delkey;
+	  sub_level=0;
+	  if ( sizeof(subkey)>0 )
+	  {
+	  	for(int lp=0;lp<sizeof(subkey);lp++)
+	  	{
+	  		sub2key=keys(result[subkey[lp]]);
+	  		delkey=({});
+	  	  for(int p2=0;p2<sizeof(sub2key);p2++)
+          if ( !mapp(result[subkey[lp]][sub2key[p2]]) )
+    	      delkey+=({sub2key[p2]});
+	      sub2key-=delkey;
+	      if ( sizeof(sub2key)>0 )
+	      {
+	      	for(int p2=0;p2<sizeof(sub2key);p2++)
+	      	  if ( result[subkey[lp]]["sub_level"]<result[subkey[lp]][sub2key[p2]]["level"] )
+	      	  	result[subkey[lp]]["sub_level"]=result[subkey[lp]][sub2key[p2]]["level"];
+	      	
+	      	result[subkey[lp]]["level"]=result[subkey[lp]]["self_level"]/2+result[subkey[lp]]["sub_level"];
+	      }
+	      else
+	      	result[subkey[lp]]["level"]=result[subkey[lp]]["self_level"]/2;
+	      if ( sub_level<result[subkey[lp]]["level"] )
+	      	sub_level=result[subkey[lp]]["level"];
+	    }
+	    result["level"]=sub_level;
+	  }
+	  else
+	    result["level"]=0;
+	}
+	return result;
+}
+
+//玩家状态的被动加载
+protected void apply_buffer(object me, mapping buffer_map)
+{
+  string *apply=keys(buffer_map), *nbufs;
+  int lp, lp2;
+  
+  for(lp=0;lp<sizeof(apply);lp++)
+  {
+    if ( intp(buffer_map[apply[lp]]) )
+      me->add_temp("apply/"+apply[lp], buffer_map[apply[lp]]);
+    else if ( mapp(buffer_map[apply[lp]]) )
+    {
+      nbufs=keys(buffer_map[apply[lp]]);
+      for(lp2=0; lp2<sizeof(nbufs); lp++ )
+        me->add_temp("apply/"+apply[lp]+"/"+nbufs[lp2], buffer_map[apply[lp]][nbufs[lp2]]);
+    }
+    if ( userp(me) &&
+         apply[lp]=="max_qi" )
+    {
+      me->set("max_qi", me->query_max_qi() );
+      if ( me->query("eff_qi") > me->query("max_qi") )
+        me->set("eff_qi", me->query("max_qi") );
+    }
+      
+    if ( userp(me) &&
+         apply[lp]=="max_jing" )
+    {
+      me->set("max_jing", me->query_max_jing() );
+      if ( me->query("eff_jing") > me->query("max_jing") )
+        me->set("eff_jing", me->query("max_jing") );
+    }
+  }
+}

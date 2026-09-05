@@ -1,0 +1,4 @@
+
+// dagger.c
+
+inherit SKILL;

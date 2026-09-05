@@ -1,0 +1,57 @@
+#include <ansi.h>
+inherit NPC;
+void create()
+{
+	set_name("百草园",({"jlau npc"}));
+	set("long",0);
+	set("title","[1;36m朝廷一品官员 [2;37;0m[1;33m女元帅[2;37;0m");
+	set("age",95);
+	set("str",31);
+	set("con",26);
+	set("int",22);
+	set("spi",6);
+	set("per",16);
+	set("job_title","[1;33m武学大宗师[2;37;0m");
+	set("nickname",0);
+	set("combat_exp",101802661);
+	set("max_qi",9603);
+	set("max_jing",6099);
+	set("gender","男性");
+	set("max_neili",13555);
+	set("max_jingli",9769);
+	set("jiali",0);
+	set("race","人类");
+	set("class","officer");
+	set("repute",10127386);
+	set("score",1410);
+	set("family/family_name","朝廷");
+	set_skill("staff",912);
+	set_skill("leadership",200);
+	set_skill("huagu-mianzhang",912);
+	set_skill("unarmed",1);
+	set_skill("yixingbu",912);
+	set_skill("blade",912);
+	set_skill("strategy",200);
+	set_skill("dagger",912);
+	set_skill("juemen-gun",912);
+	set_skill("dodge",912);
+	set_skill("hujia-daofa",1007);
+	set_skill("strike",912);
+	set_skill("bixue-xinfa",311);
+	set_skill("force",912);
+	set_skill("literate",1035);
+	set_skill("whip",912);
+	set_skill("yangsheshu",210);
+	set_skill("shenlong-xinfa",909);
+	set_skill("parry",912);
+	set_skill("zhaosheshu",210);
+	set_skill("dulong-bi",912);
+	set_skill("shenlong-bian",912);
+	map_skill("staff","juemen-gun");
+	map_skill("blade","hujia-daofa");
+	map_skill("dagger","dulong-bi");
+	map_skill("strike","huagu-mianzhang");
+	map_skill("force","shenlong-xinfa");
+	map_skill("whip","shenlong-bian");
+	setup();
+}
