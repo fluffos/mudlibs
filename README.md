@@ -456,6 +456,7 @@ classes it's found.
 | 968 | `nirvlp312` | Nirvana | `git clone https://github.com/rumplemintz/Nirvlp312mudlib (commit 616cad7472279cc97c9693f893940f5336916ff8, cloned 2026-09-05); repo root is the mudlib` | 40277 | WASM playable |
 | 969 | `acme` | Acme | `git clone https://github.com/acmemud/acme-mudlib (commit 8bfa42587d1cb4a7606b73cdce760673582a924d) plus sibling repos acmemud/acme-platform (d210b03), acmemud/acme-flavor-basic (af56a1b), acmemud/acme-flavor-rpg (c2b2160); assembled 2026-09-05; repo root is the mudlib` | 40278 | WASM playable |
 | 970 | `xxsj` | 修仙世界 | `git clone https://github.com/Nuiio/fluffos-xiuxian-mud (commit d46eef2c8a5ef90d0b07216e59d6e3a52703d15e, cloned 2026-09-05); mudlib root is mymud/ — bundled fluffos/ driver was not converted` | 40279 | WASM playable |
+| 971 | `scratch` | Scratch | `git clone https://github.com/rmanis/scratch (commit 4ac1a4ed898d217a9bb02508709694bd51ecbc76, cloned 2026-09-05); repo root is the mudlib` | 40280 | WASM playable |
 <!-- END NUMBERING TABLE -->
 
 ## Repository layout
