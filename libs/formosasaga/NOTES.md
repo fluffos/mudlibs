@@ -107,11 +107,89 @@ No MySQL. Heartbeat/UI JSON is noise on telnet but not required.
 
 ## 5. Not done this pass
 
-No §10.7 travel/quest/combat dive. A handful of cmd files still fail
-to compile (`cmd_party` mid-block decls, `cmd_suicide` `strftime`
-arity, `cmd_record` missing `HMAG`); rehash skips them. Typed `look`
-after login prints 打貓社 (verified after the §9 format pass). No
-outbound I3.
+A handful of cmd files still fail to compile (`cmd_party` mid-block
+decls, `cmd_suicide` `strftime` arity, `cmd_record` missing `HMAG`);
+rehash skips them. No outbound I3. §10.7 travel/quest/combat is below.
+
+## 深度功能测试（§10.7，2026-09-05）
+
+管理员 `fluffos` / `Mud@2026` god，秦風，打貓社 / 民雄鄉。Telnet
+login `2` (zh-TW). Driver PID this boot 968057，cwd
+`libs/formosasaga/work`，port 40276。Live `debug.log` is
+`libs/formosasaga/log/debug.log`（Boot Time Sat Sep 5 12:15:02 2026）
+— slug-level `log/` so the pre-chdir fopen succeeds. Look dumps a
+huge Web-UI JSON map; heartbeat `cmd_info` is silent on telnet
+(empty verb). `--idle 3` after the first-login YAML load is enough.
+
+This is not a 武侠 family/shop lib. There is no `buy` / `list`
+verb and no `apprentice` / `bai`. The organic stand-ins are
+narrative shop sites, `guild join`, and `kill`.
+
+### 实测过程
+
+1. **Bank.** `bank` 冒險者銀行, cash 0 / deposit 0. After quest gold:
+   deposit 10000 銅幣 (1 金幣) → cash 89 金幣, bank 10000 銅幣.
+   `1 gold = 10000 copper`. Ledger math ok.
+2. **Shop.** 民雄公有市場 市場阿嬤 `ask … about 菜` → 「你要買否？」
+   but `buy` / `list` print `什麼？`. `travel pharmacy` from the
+   market reaches a stub site titled `【pharmacy】` with no 藥舖老闆
+   spawned. `travel pharmacy` from 打貓社 is not on that room's
+   route list (`找不到「pharmacy」`). Conversation-only shops;
+   do not invent a buy system.
+3. **Guild (拜师 stand-in).** Bare `guild` crashed
+   `*(s)printf(): Incorrect argument to type %s` because
+   `guilds/*.yaml` `name` is a `{en, zh-TW, zh-CN}` mapping.
+   After the fix: lists 魔法師集會 / 戰士盟約 / 冒險者公會.
+   `guild join adventurer` → 新手冒險者. `guild` then shows name /
+   rank / 貢獻. Daemon `join_guild()` existed; the player verb did
+   not.
+4. **Quest.** Bare `quest` crashed `*No program in object
+   '/daemon/quest_d'!` — `quest_d.lpc` failed to compile
+   (`FOOTPRINT_D` / `EVENT_D` used without `#include formosa.h`),
+   and `cmd_quest` loaded it *before* the empty-quest return.
+   After the fix: `quest accept old_station_master_wish` (老站長的
+   心願), travel 民雄公有市場 already held footprint
+   `sugar_railway_minxiong`, `quest complete` paid 150 exp + 80
+   金幣 + 公會貢獻 30. Reward YAML path is `.c`; tree is `.lpc`.
+   `ask 老站長 糖鐵` is narrative only (same canned line with or
+   without the footprint).
+5. **Combat.** `kill 行腳商人` at the market: 85 HP, three rounds,
+   秦風 135→127. Win printed `你擊敗了` then
+   `👻 你感覺到靈魂正在脫離肉體... 你死了` and `你在祈禱室緩緩睜開
+   雙眼` — `write()` in `living::die()` goes to `this_player()`.
+   Player HP/gold unchanged (not actually dead); NPC
+   `on_death()` rewards never ran. After `npc::die()` →
+   `on_death()`: cloned `/std/npc` 怪物, 85→0, `怪物 倒下了`,
+   +50 exp, +10 金幣 (80→90). No fake player-death line.
+6. **Quit / persist.** `quit` / relogin landed back in 民雄公有市場
+   then later pharmacy. 冒險者公會 / 新手冒險者 / 貢獻 30 /
+   已完成 老站長的心願 / 80 then 89 金幣 persisted. Reward ticket
+   id works (`乘車券`) but pre-fix clone still shows as 某個東西
+   in `i` (old object kept default short).
+
+### Bugs fixed this pass
+
+1. **`cmds/player/cmd_guild.lpc` sprintf / join.** `select_lang()`
+   on mapping `name`/`desc`. Added `guild join <id>` so
+   `join_guild()` is reachable. Help updated.
+2. **`daemon/quest_d.lpc` include + `.c` rewards.**
+   `#include "/include/formosa.h"` for `FOOTPRINT_D` / `EVENT_D`.
+   `clone_reward_item()` retries a `.c` path as `.lpc`.
+3. **`cmds/player/cmd_quest.lpc`.** Do not load `quest_d` on an
+   empty quest list; `catch(load_object)` if the daemon is dead;
+   `select_lang` on quest name/desc; `quest accept` / `quest
+   complete` verbs for the existing daemon API.
+4. **`std/npc.lpc` `die()`.** Override to `on_death()` so combat's
+   `target->die()` does not run the player prayer-room path on an
+   NPC (fake `write()` death + skipped kill rewards).
+5. **`std/object.lpc` `set_name`.** If `short_name` is still the
+   default 某個東西, copy the name so reward items that only
+   `set_name()` display. `item/old_station_ticket.lpc` also sets
+   `set_short`.
+
+Onboard leftover compile failures (`cmd_party`, `cmd_suicide`,
+`cmd_record`, `cmd_rm`, `cmd_yamllint`, `cmd_incident`) not in
+this pass. Admin save / `work/data/*.gojson` not committed.
 
 ## 6. Local run
 

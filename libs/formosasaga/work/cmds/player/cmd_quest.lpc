@@ -7,7 +7,62 @@ inherit "/std/object";
 
 int main(object me, string verb, string arg) {
   mapping quests = me->query_quests();
-  object quest_d = load_object("/daemon/quest_d.lpc");
+  object quest_d = 0;
+  mixed err;
+  string action;
+  string target;
+  mapping qdata;
+  mapping info;
+  mapping goal;
+  mixed ks;
+  string qid;
+  string status_str;
+  int current;
+
+  if (arg && sscanf(arg, "%s %s", action, target) == 2) {
+    err = catch(quest_d = load_object("/daemon/quest_d.lpc"));
+    if (err || !quest_d) {
+      write(select_lang(([
+        "en": "The quest system is unavailable.\n",
+        "zh-TW": "任務系統暫時無法使用。\n",
+        "zh-CN": "任务系统暂时无法使用。\n"
+      ])));
+      return 1;
+    }
+    if (action == "accept") {
+      if (!quest_d->query_quest_info(target)) {
+        write(select_lang(([
+          "en": "There is no such quest.\n",
+          "zh-TW": "沒有這個任務。\n",
+          "zh-CN": "没有这个任务。\n"
+        ])));
+        return 1;
+      }
+      quest_d->accept_quest(me, target);
+      return 1;
+    }
+    if (action == "complete") {
+      if (!quest_d->query_quest_info(target)) {
+        write(select_lang(([
+          "en": "There is no such quest.\n",
+          "zh-TW": "沒有這個任務。\n",
+          "zh-CN": "没有这个任务。\n"
+        ])));
+        return 1;
+      }
+      qdata = me->query_quest(target);
+      if (!qdata || qdata["status"] != "active") {
+        write(select_lang(([
+          "en": "You are not on that quest.\n",
+          "zh-TW": "你沒有進行這個任務。\n",
+          "zh-CN": "你没有进行这个任务。\n"
+        ])));
+        return 1;
+      }
+      quest_d->complete_quest(me, target);
+      return 1;
+    }
+  }
 
   if (!quests || sizeof(quests) == 0) {
     write(select_lang(([
@@ -18,17 +73,27 @@ int main(object me, string verb, string arg) {
     return 1;
   }
 
+  err = catch(quest_d = load_object("/daemon/quest_d.lpc"));
+  if (err || !quest_d) {
+    write(select_lang(([
+      "en": "The quest system is unavailable.\n",
+      "zh-TW": "任務系統暫時無法使用。\n",
+      "zh-CN": "任务系统暂时无法使用。\n"
+    ])));
+    return 1;
+  }
+
   write("$HIW$" + select_lang(([
     "en": "\n=== My Quest List ===\n",
     "zh-TW": "\n=== 我的任務清單 ===\n",
     "zh-CN": "\n=== 我的任务清单 ===\n"
   ])) + "$NOR$");
-  mixed ks = keys(quests);
-  foreach (string qid in ks) {
-    mapping qdata = quests[qid];
-    mapping info = quest_d->query_quest_info(qid);
+  ks = keys(quests);
+  foreach (qid in ks) {
+    qdata = quests[qid];
+    info = quest_d->query_quest_info(qid);
 
-    string status_str = (qdata["status"] == "active" ? "$HIG$" + select_lang(([
+    status_str = (qdata["status"] == "active" ? "$HIG$" + select_lang(([
       "en": "[Active]",
       "zh-TW": "[進行中]",
       "zh-CN": "[进行中]"
@@ -37,16 +102,18 @@ int main(object me, string verb, string arg) {
       "zh-TW": "[已完成]",
       "zh-CN": "[已完成]"
     ])) + "$NOR$");
-    write(status_str + " " + info["name"] + "\n");
-    write(select_lang(([
-      "en": "  Desc: ",
-      "zh-TW": "  描述：",
-      "zh-CN": "  描述："
-    ])) + info["desc"] + "\n");
+    write(status_str + " " + (info ? select_lang(info["name"]) : qid) + "\n");
+    if (info) {
+      write(select_lang(([
+        "en": "  Desc: ",
+        "zh-TW": "  描述：",
+        "zh-CN": "  描述："
+      ])) + select_lang(info["desc"]) + "\n");
+    }
 
-    if (qdata["status"] == "active" && info["goal"]) {
-      mapping goal = info["goal"];
-      int current = qdata["progress"]["count"];
+    if (info && qdata["status"] == "active" && info["goal"]) {
+      goal = info["goal"];
+      current = qdata["progress"]["count"];
       write(sprintf(
         select_lang(([
           "en": "  Progress: %d / %d\n",
@@ -65,8 +132,16 @@ int main(object me, string verb, string arg) {
 
 string help() {
   return select_lang(([
-    "en": "【Command】\n  quest    View current quest progress and completion records.\n",
-    "zh-TW": "【指令】\n  quest    查看當前任務進度與完成紀錄\n",
-    "zh-CN": "【指令】\n  quest    查看当前任务进度与完成纪录\n"
+    "en": "【Command】\n  quest                    View current quest progress and completion records.\n  quest accept <id>        Accept a quest.\n  quest complete <id>      Turn in a completed quest.\n",
+    "zh-TW": "【指令】\n  quest                    查看當前任務進度與完成紀錄\n  quest accept <id>        接受任務\n  quest complete <id>      回報完成任務\n",
+    "zh-CN": "【指令】\n  quest                    查看当前任务进度与完成纪录\n  quest accept <id>        接受任务\n  quest complete <id>      回报完成任务\n"
   ]));
+}
+
+string *query_verbs() {
+  return ({ "quest" });
+}
+
+string query_category() {
+  return select_lang(([ "en": "Other", "zh-TW": "其他", "zh-CN": "其他" ]));
 }
