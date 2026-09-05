@@ -1,0 +1,336 @@
+/*
+ *      File:                   /obj/player/secure/file_access.c
+ *      Function:               Controls read/write access
+ *      Author(s):              Earwax@Nirvana
+ *      Copyright:              Copyright (c) 2006 Earwax (David Halek)
+ *                                      All Rights Reserved.
+ *      Source:                 07/28/06
+ *      Notes:                  Valid_read/write() called by /secure/master.c
+ *      Change History:
+ */
+
+#include "/sys/security.h"
+#include "/sys/ansi.h"
+#include "/sys/logs.h"
+#include "/sys/file_access.h"
+
+/* 
+ * Function name:
+ * Description:
+ * Arguments:
+ * Returns:
+ */
+
+/* 
+ * Function name: valid_read
+ * Description:   Right now, it's a daemon, later will probably be inherited by
+ *                player.c  Doing it this way to avoid breaking the DR mud.
+ * Arguments:     Path to check access to - MUST BE absolute/normalized already
+ * Returns:       0 - disallow access
+ *                1 - use path (without modification)
+ *                string - path to use (with modification)
+ */
+
+#ifdef 0  
+mixed valid_read(string arg)
+{
+  string path;         /* A temporary path that can be manipulated          */
+  string junk;         /* Temporary sscanf() variable mainly                */
+  string name;         /* Name of this_player()                             */
+  string who;          /* Which player's directory path is in               */
+  int level;           /* Level of this_player()                            */
+  status flag_bin;     /* Means the call is from /bin/wiz/secure/ and safe  */
+  status flag_players; /* It's a file within /players                       */
+  object caller_ob;    /* The caller-object                                 */
+ 
+  if (!arg) /* this will be the other checks later, doing it piecemeal for now */
+    return 0;
+    
+  path = arg;
+  
+/* Yank later, this is so I can ensure only normalized paths are sent */
+  if (arg[0] != '/')
+  {
+    write_file("/log/LDMUD", ctime()+": "+arg+" ("+(callerob ? file_name(callerob) : "0")+"}\n");
+  }
+  
+  /* This ensures everything sent has been normalized, or is valid */  
+  if (arg[0] != '/' || strstr(arg, "//") || strstr(arg, ".") 
+  || strstr(arg, "~") || strstr(arg, "tar_castles"))
+    return 0;
+  
+  /* These are the files everyone can read */
+  if (sscanf(arg, "/players/%s/access.c", junk) == 1
+  ||  sscanf(arg, "/players/%s/PLAN", junk) == 1
+  ||  sscanf(arg, "/open%s", junk) == 1)
+    return arg;
+
+  if (this_player())
+  {    
+    level = (int)this_player()->query_level();
+    name = (string)this_player()->query_name();
+  }
+  
+  callername = object_name(callerob);
+
+  /*
+   * Caller is /bin/wiz/ so process based on wiz level
+   * Or if caller is a wiz, process on level regardless
+   */
+  if (callername && sscanf(callername, "bin/wiz/%s", junk) == 1)
+    flag_bin = 1;
+
+  if (flag_bin || level >= CREATE)
+  {  
+    if (level >= ELDER) return 1; /* Elder has read access to everything */
+    
+    flag_players = sscanf(arg, "/players/%s", junk);
+  
+    /* Secure or closed directory outside of /players */
+    if (!flag_players && (arg[0..6] == "/pfiles" 
+    ||  strstr(arg, "secure") > 0 || strstr(arg, "closed") > 0))
+      return 0;
+
+    /* PA-specific stuff */
+    if (arg[0..2] == "pa")
+      ; /* Verte can handle this shit */    
+    
+    if (level > SENIOR || !flag_players) /* Level > senior or a readable lib file */
+      return 1;
+
+    /* Ok, it's a file in /players, and it's a level 20-99 wiz
+     * If it's their own dir, allow them to read it.
+     * If they are less than 40 or it's in a closed dir return
+     * (int)"/players/who/access.c"->valid_read(path, name)
+     */    
+    if (sscanf(junk, "%s/%s", who, junk) != 2
+    &&  sscanf(junk, "%s/", who) != 1)
+      who = junk;
+    
+    if (who == name) return 1; /* It's in their own dir */
+    
+    /* Level > 39 and non-closed dir, so they can read */
+    if (level >= READ_OTHERS && strstr(arg, "closed") < 0) return 1;
+    
+    junk = sprintf("/players/%s/access.c");
+    
+    if (file_size(junk)) 
+      return (int)junk->valid_read(arg, name);
+  }
+
+  /* From here out, it's going to be a call to an efun, generally done via 
+   * an item or object.  So make sure the object has the permissions to read
+   * the file.  We're relying on previous_object() and ob prev to that, etc.
+   * 
+   * If it's a lib file granting the access allow it
+   * If it's a lib file to be read and it's not in secure or closed, allow it
+   
+   * Next case: it's a wiz file checking another wiz file - if it's in same dir,
+   * allow it
+   * 
+   */      
+
+  /* Nothing listed as the caller - I'm not so sure on this one, but I think this
+   * is probably not a good thing to allow.
+   */
+  if (!callername) 
+  {
+   
+   
+          
+  flag_players = sscanf(arg, "/players/%s", junk);   
+   
+    
+    
+  }
+  
+#endif
+
+void output(string arg) { 
+log_file("LD_WRITE", arg);
+if (find_player("earwax"))
+tell_object(find_player("earwax"), arg);
+}
+
+mixed report(mixed result, string arg)
+{
+  string send, verb;
+  
+  send  = HIC+"PL WRITE--> "+NORM;
+  if (verb = query_verb()) send += (verb+"--> ");
+  send += (result ? HIG+result+NORM : HIR+"FAILURE"+NORM);
+  send += " "+arg+"\n";
+  output(send);
+  return result;
+}
+
+
+mixed valid_write(string path)
+{
+  string  base_path, 
+          player_path,
+          log_path, 
+          junk, junk2,
+          junk3, junk4,
+          prev_ob_name,
+          caller_ob_name,
+          access_path;
+  int pos, i;
+  string *caller_stack_names;
+  
+/* comment this out for now, as it's daemonized til ldmud opens  
+  object prev_ob;
+*/
+  string name; int level; /* removes these after this can be inherited safely */
+  
+  /* 
+   * Make sure it's a valid path first 
+   */  
+  if (path && path[0] != '/') path = sprintf("/%s", path);
+  
+  if (this_player()) name = (string)this_player()->query_real_name();
+  if (this_player()) level = (int)this_player()->query_level();
+
+  /*
+   * If it's someone returning from ed, check their previously set rights
+   */
+  if (this_player() && !query_verb() && in_editor(this_player()))
+  {
+    if (query_reserved_ed_privileges(this_player(), path))
+    {
+/* Log the entry, it's ed, so log to MODIFY */
+return report(path, "ED: reserved_ed_privileges cleared it");
+    }
+    else
+return report(0, "ED: DENIED, no reserved_ed_privileges");
+  }
+  /* First, make sure it's a valid, normalized path, if not, return 0 */
+  if (!path || path[0] != '/' || instr(path, "//") || instr(path, "..") 
+  || instr(path, "/./") || instr(path, "~"))
+{
+return report(0, "Problem with the path");
+}
+  
+  /* 
+   * Next, figure out the base path
+   * Then figure out if it's a log or player path
+   */
+  if (path == "/")
+    base_path = "/";
+  else if ((pos = strstr(path, "/", 1)) > 1)
+    base_path = path[1..pos-1];
+  else
+    base_path = path[1..];
+    
+  if (sscanf(path, "/players/%s/%s", player_path, junk) != 2
+  &&  sscanf(path, "/players/%s/", player_path) != 1
+  &&  sscanf(path, "/players/%s", player_path)  != 1)
+    player_path = 0;
+      
+  if (sscanf(path, "/log/%s.%s", log_path, junk) !=2
+  &&  sscanf(path, "/log/%s-%s", log_path) != 1
+  &&  sscanf(path, "/log", log_path) != 1)
+    log_path = 0;
+
+  /* Everyone has access to open and their own dir and logfile*/
+  if (base_path == "open" || (name && (player_path == name || log_path == name)))
+return report(path, "open, or was player's dir or log");
+
+  if (sscanf(path, "/log/WR/%s_%s", junk, junk2) == 2 && junk == name)
+return report(path, "was player's workreport");
+
+  if (path == "/log/WORK_REPORT" 
+  && file_name(previous_object()) == "bin/wiz/_wlog")
+return report(path, "WORK_REPORT and coming from wlog command");
+
+  if (level < CREATE && base_path == "log")
+return report(path, "player, and it's access to /log");
+  /* 
+   * Get the caller_stack and names
+   */
+  caller_stack_names = map(caller_stack(), #'object_name);
+  
+i = pos = sizeof(caller_stack_names); 
+while(i--) junk+=sprintf("(%d)%s\t",i,caller_stack_names[i]);
+output(HIK+"PL WRITE CALLED: by "+name+"("+level+"): "+path+"...\n"+junk+"\n");
+
+  /* If it's in a wizard dir, it can affect other stuff in that dir */
+  if (base_path == "players" || base_path == "log")
+  {
+    for (i = 0; i < pos; i++)
+      if (sscanf(caller_stack_names[i], "players/%s/%s", junk, junk2) == 2
+      &&  (player_path == junk || log_path == junk))
+return report(path, "it's within a wizard's dir or one of their log files");
+  }
+
+
+  /* Easiest (but least efficient) to check from most access down 
+  /* I will recode this later for efficiency but I'm more concerned with  
+  /* getting a workable system in place right now, and testing it as I
+  /* go.  This is a nasty bit of work so I want to make sure there's no
+  /* logic flaws or anything I'm missing before I worry about efficiency.
+   */
+  if (level >= CREATE)
+  {
+    switch(base_path)
+    {
+      /*
+       * /players
+       * Wizards can have access granted by /players/blah/access.c
+       * Seniors have access to all dirs but tar_catles, inactive_saved, pre-reno
+       * Elders have access to all dirs
+       */
+      case "players" :
+        if (level >= ELDER) 
+return report(path, "players: elder");
+        if (!player_path) break;
+        if (level >= SENIOR 
+        && member(({ "tar_castles", "inactive_saved", "pre-reno"}), player_path) < 0) 
+return report(path, "players, senior not invalid player_path");
+        access_path = sprintf("/players/%s/access.c", player_path);
+        if (file_size(access_path) && (int)access_path->valid_write(name, path))
+return report(path, "players, wiz had access.c validation");
+        break;
+      /*
+       * /log
+       * Wizards have access to their own /log/blah
+       * Seniors have access to non-capitalized logs (non system)
+       * Elders have full access
+       */
+      case "log" :
+        if (level >= ELDER)
+return report(path, "log, elder");
+        if (level >= SENIOR && base_path == "log" 
+        && lower_case(log_path) == log_path && !instr(log_path, "/"))
+return report(path, "log, senior, base_path is log, not capitalized");
+        break;
+      case "ideas" : 
+return report(path, "ideas dir, full access"); 
+        break;
+      case "doc" : 
+        if (name && member(DOCUMENTARIAN, name) > -1)
+return report(path, "doc, member of doc_access");
+      default :      
+        if (level >= ELDER && check_password_given())
+return report(path, "other dir, elder with password");
+    }
+
+    /* See if it's a bin command, if so, kick out */
+    pos = sizeof(caller_stack_names);
+    
+    while(pos--)
+      if (caller_stack_names[pos][0..7] == "bin/wiz/") 
+return report(0, "Denied, it's a bin call and failed");
+  }    
+    
+  /* Okay, anything from here on out is going to be either a specialty bin call, 
+   * in which case it's handled by the bin function itself and the relevant sfuns
+   *
+   * -OR- it's a file trying to get access.  This is the hard part to work out.
+   * And it's also all that's left to do.  
+   * Going to try to figure out a consistent way to check caller_stack_depth
+   * and get the appropriate previous_object() to base shit off of.
+   *
+   */
+return report(path, "FALSE SUCCESS!");
+}

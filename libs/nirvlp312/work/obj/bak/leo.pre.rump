@@ -1,0 +1,225 @@
+#include "security.h"
+#include "living.h"
+/*
+ * This is the object wich tries to behave like Leo the archwizard.
+ * The purpose is to converse with players and give them portable castles.
+ */
+
+object requesting_wizard;
+object sponsor;
+string next_out;
+object next_dest;
+object give_him_castle;
+int delay;
+/* -rw-------   1 nirvana  nirvana      6012 Sep 28  1993 leo.c
+LDmud don't like redeclares of stuff in inherits... -Bp july 2006
+int level;               Restored from the player save file. */
+
+short() { return "Leo the Archwizard"; }
+
+get() { return 0; }
+
+long() {
+    write(short() + ".\n");
+}
+
+
+/* rumplemintz found this bug... i added it at his request. -miz 2007 nov 25 */
+query_name() { return name; }
+
+id(str) { return str == name; }
+
+reset(arg) {
+    if (arg) {
+	sponsor = 0;
+	requesting_wizard = 0;
+	return;
+    }
+    msgout = "leaves";
+    msgin = "enters";
+    name = "leo";
+    next_out = 0;
+    is_npc = 1;
+    level = 40;
+    alignment = 1000;
+    weapon_class = WEAPON_CLASS_OF_HANDS;
+    max_hp = 300;
+    hit_point = 300;
+    experience = 1000000;
+    enable_commands();
+    spell_points = 300;
+}
+
+catch_tell(str)
+{
+  object from;
+  string a;
+  string b;
+  string c;
+  from = this_player();
+  if (!from)
+    return;	/* Not from a real player. */
+    if (sscanf(str, "%s gives %s to Leo.", a, b) == 2) {
+	object ob;
+	ob = present(b, this_object());
+	if (!ob || !call_other(ob, "id", "orc slayer"))
+	    return;
+	next_out = "Leo says: Well done. You have fullfilled this quest.\n";
+	next_dest = from;
+	set_heart_beat(1);
+	call_other(from, "set_quest", "orc_slayer");
+	destruct(ob);
+	return;
+    }
+  if (sscanf(str, "%s hello%s", a, b) == 2 ||
+      sscanf(str, "%s Hello%s", a, b) == 2 ||
+      sscanf(str, "%s hi%s", a, b) == 2 ||
+      sscanf(str, "%s Hi%s", a, b) == 2) {
+	next_out = "Leo says: Welcome, " + 
+	  call_other(from, "query_name", 0) + ".\n";
+	if (call_other(from, "query_level", 0) == 20)
+	  next_out = next_out +
+	    "Now that you are a wizard, you can have a castle of your own.\n";
+        delay=2;
+	next_dest = from;
+	set_heart_beat(1);
+	return;
+  }
+  if (sscanf(str, "%sgive%scastle%s", a, b, c) == 3 ||
+      sscanf(str, "%slike%scastle%s", a, b, c) == 3 ||
+      sscanf(str, "%shave%scastle%s", a, b, c) == 3 ||
+      sscanf(str, "%swant%scastle%s", a, b, c) == 3)  {
+	if (call_other(from, "query_level", 0) == 20) {
+	  castle();
+	  return;
+	}
+	next_out = "Leo says: What ! Give a castle to you ?\n";
+	next_dest = from;
+	delay=2;
+	set_heart_beat(1);
+	return;
+  }
+  if (sscanf(str, "%syes%s", a, b) == 2 ||
+      sscanf(str, "%sYes%s", a, b) == 2) {
+	if (sponsor && from == sponsor) {
+	    he_said_yes();
+	    return;
+	}
+  }
+  if (sscanf(str, "%sno%s", a, b) == 2 ||
+      sscanf(str, "%sNo%s", a, b) == 2) {
+	if (sponsor && from == sponsor) {
+	  he_said_no();
+	  return;
+	}
+  }
+/*
+  log_file("LEO", str + "\n");
+*/
+}
+
+/*
+ * Always let the heart_beat do the talking, to simulate delay.
+ */
+
+heart_beat()
+{
+  if (attacker_ob)
+    fireball(attacker_ob);
+  attack();
+  already_fight=0;
+  if (random(40) == 1)
+    say("Leo smiles happily.\n");
+  if (delay>0) {
+    delay -= 1;
+    return;
+  }
+  if (next_out) {
+    tell_object(next_dest, next_out);
+    next_out = 0;
+  }
+  set_heart_beat(0);
+}
+
+castle() {
+  write(
+     "Leo says: You are now ready to take the step into true wizardhood.\n");
+  write("But, to do this, you must select one wizard that will take\n"+
+	"responsibility for you.  He must also back up your claim of being\n"+
+	"a wizard, not by cheating.\n" +
+	"If you have no name so far, come back here again.\n");
+  write("Leo says: Now give me the name: ");
+  input_to("castle2");
+}
+
+castle2(back_up_wiz) {
+  if (back_up_wiz == "") {
+    write("Leo says: You will be welcome back later.\n");
+    return;
+  }
+  back_up_wiz = lower_case(back_up_wiz);
+  sponsor = present(back_up_wiz,environment());
+  if (!sponsor) {
+    write("Leo says: I'm sorry, the wizard must be here to sponsor you.\n" +
+	  "You might leave them a note to meet you at a particular time here.\n");
+    return;
+  }
+  if (call_other(sponsor, "query_level", 0) < SENIOR) {
+    write("Leo says: The person must be an experienced level wizard.\n" +
+	  "That person is not.\n");
+    return;
+  }
+  tell_object(sponsor, "Leo says: " +call_other(this_player(),"query_name",0) +
+	      " wants you to sponsor him.\n" +
+	      "Please tell me 'yes' if you will, or 'no' if you won't.\n" +
+	      "Realize that you're expected to watch over this wizard and\n" +
+	      "be responsible for him, help him if he has trouble,\n" +
+	      "and basically do sponsor-type things.\n");
+  write("Leo says: I'm asking him if he'll accept the responsibility.\n"+
+	"Please wait.\n");
+  requesting_wizard = this_player();
+  return;
+}
+
+he_said_yes()
+{
+  string castle_name;
+  string player_name;
+  
+  castle_name = clone_object("room/port_castle");
+  /* We have to make sure we get the real name here! */
+  player_name = capitalize(call_other(requesting_wizard, 
+				      "query_real_name", 0));
+  call_other(castle_name, "set_owner", player_name);
+  move_object(castle_name, requesting_wizard);
+  log_file("SPONSOR", call_other(sponsor, "query_real_name", 0) + " : " +
+	   player_name + "\n");
+  tell_object(requesting_wizard,
+	      "\n" +
+	      "Leo says: Congratulations, you are now a complete wizard\n"+
+	      "with your own castle. But beware, you can only drop it once!\n"+
+	      "When it is dropped, it can never be moved again.\n" +
+	      "To get your wizard commands, type 'soul off' and then\n" +
+	      "'soul on'.\n\n");
+  tell_object(requesting_wizard,
+    "Also, make sure to read /doc/build/RULES before you build anything!\n" +
+    "If you don't know how, ask your sponsor!\n\n");
+  call_other(requesting_wizard, "set_level", 21);
+  call_other(requesting_wizard, "set_title", "the wizard");
+  call_other(requesting_wizard, "save_character");
+  requesting_wizard = 0;
+  sponsor = 0;
+  return 1;
+}
+
+he_said_no()
+{
+  if (!sponsor || !requesting_wizard) {
+    say("Leo says: You waited too long.  I forgot what was going on.\n");
+    return;
+    }
+  tell_object(requesting_wizard, "Leo says: Sorry, I'm afraid he declined.\n");
+  tell_object(sponsor, "Leo says: Probably a good choice on your part!\n");
+  requesting_wizard = 0;
+  sponsor = 0;
+}

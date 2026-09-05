@@ -1,0 +1,11 @@
+/* aliases */
+#define me     this_object()
+#define owner  environment(me)
+#define QRN    query_real_name()
+#define ENV    environment
+#define CAP    capitalize
+#define TO me
+#define FN file_name
+#define base_name basename
+#define TP this_player()
+#define CALLER caller()

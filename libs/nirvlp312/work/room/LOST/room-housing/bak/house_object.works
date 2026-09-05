@@ -1,0 +1,608 @@
+/* ***************************************************************************
+ * File:           /players/earwax/housing/house_object.c
+ * Function:       Player housing object.  It's the entrance.
+ * Author:         Earwax
+ * Copyright:      Copyright (c) 2004 Earwax.  All rights reserved.
+ * Source:         5/22/04
+ * Notes:          A text file will explain this.
+ * Change History:
+ * **************************************************************************/
+
+#include "defs.h"
+
+/* Global Variables */
+
+       string  FileName;    /* Used for restore/save                        */
+       string  Short;       /* Object Setup Stuffs                          */
+       string  LongDesc;    /* Long description of house                    */
+       string  Owner;       /* Object Setup Stuffs                          */
+       string *Owners;      /* List of 'owners' (for clans, privs)          */
+       int    *Privs;       /* Priveleges for Owners                        */
+       string  Entrance;    /* Room to go to when players enter house.      */
+       int     LotSize;     /* Object Setup Stuffs 3/9/-num                 */
+       int     HouseSize;   /* Object Setup Stuffs                          */
+       int     Cost;        /* Object Setup Stuffs                          */
+       int     LastRoom;    /* Last room number (or size)                   */
+       string  ShortDesc;   /* Object Setup Stuffs                          */
+       string *Ids;         /* Object Setup Stuffs                          */
+static object  Here;        /* Trade memory use to reduce function calls    */
+       status  IsClanhall;  /* If it's a clanhall                           */
+static string *Invited;     /* Players who are invited to enter the castle  */
+
+/* 
+ * For debugging.
+ */
+void
+twax(string msg)
+{
+  object wax;
+  
+  wax = find_player("earwax");
+  
+  if (wax)
+    tell_object(wax, HIG+"house_object: "+msg+NORM+NORM);
+  else
+    write_file("/players/earwax/housing/TWAX", 
+      (string)WAXFUNS->date_time()+": "+"house_object: "+msg);
+}
+/* ***************************************************************************
+ * Function Name: File save and restore functions 
+ * Description:   Called by room on room loading.
+ * Arguments:     Filename
+ * Returns:       void
+ * **************************************************************************/
+void save_info() { save_object(FileName); }
+
+void load_info(string filename) {
+  int i;
+
+  if (!filename || !strlen(filename))
+    return;
+  
+  if (filename[0] == '/')
+    filename = filename[1..(strlen(filename)-1)];
+
+  ShortDesc = Owner = Short = LongDesc = Entrance = "";
+  HouseSize = LastRoom = IsClanhall = 0;
+  LotSize = Cost = 0; Privs = ({ ({ }) });
+
+  if (environment(this_object()))
+    LotSize = (int)environment(this_object())->query_lot_size();
+  Ids = ({ HOUSING_OBJECT_ID });
+  
+  if (file_size("/"+filename+".o") < 0)
+  {
+    FileName = filename;
+    save_info();
+  }
+  else
+    restore_object(filename);
+
+  if (sizeof(Owners) && Owners[0][0..3] == "Clan")
+    Short = "Clanhall";
+   
+  else switch(HouseSize)
+  {
+    case 0    : Short = "Land"; ShortDesc = ""; break;
+    case 1    : Short = "Shack"; break;
+    case 2    : Short = "Hut"; break;
+    case 3    : Short = "Trailer"; break;
+    case 4..6 : Short = "House"; break;
+    case 7..9 : Short = "Mansion"; break;
+    default   : Short = "Palace"; break;
+  }
+  
+  if (!sizeof(Owners))
+  {
+    Owners = ({ Owner });
+    Privs = ({ ({ "all" }) });
+  }
+  
+  if (sizeof(Privs) != sizeof(Owners))
+  {
+    Privs = allocate(sizeof(Owners));
+    Privs[0] = ({ "all" });
+  }
+  
+  FileName = filename;
+}
+/* ***************************************************************************
+ * Function Name: check_owner 
+ * Description:   See if player is listed as an 'owner' 
+ * Arguments:     Name of player
+ * Returns:       status - 0 for no, 1 for yes
+ * **************************************************************************/
+status
+check_owner(string arg)
+{
+twax("CHECK-OWNER CALLED\n");
+twax((previous_object() ? "Previous_object() is: "+file_name(previous_object()) : "No Previous Object")+".\n");
+    
+  return (arg == Owner ||
+         (arg 
+          && sizeof(Owners) 
+          && member_array(arg, Owners) > -1));
+}
+
+status
+check_valid(string who, string what)
+{
+  int i, flag, cost;
+
+twax("Check_valid: "+who+"/"+what+"\n");
+  flag = 0;
+  Owner = lower_case(Owner);
+
+  if (member(Permissions, what))
+    what = Permissions[what];
+  
+  if (Short == "Clanhall")
+  {
+    flag = (int)present("clan_object", this_player())->clanhall_permissions(what);
+    
+    if (!flag)
+      return 0;
+  }
+
+  if (who == Owner)
+    flag = 1;
+  else
+  {    
+    i = member_array(who, Owners);
+  
+    if (i < 0)
+    {
+      notify_fail("You are not listed as an owner.\n");
+      return 0;
+    }
+  }
+
+twax("Flag is: "+flag+"\n");  
+  if (!flag)
+  {
+    if ((sizeof(Privs) > i) && sizeof(Privs[i]))
+    {
+      if (Privs[i] == ({ "all" }) || member_array("all", Privs[i]) > -1)
+        flag = 1;
+      else if (member_array(what, Privs[i]) >= 0)
+        flag = 1;
+    }
+  }
+    
+  if (!flag)
+  {
+    notify_fail("You do not have the priveleges set to do: "+what+"\n");
+    return 0;
+  }
+
+  cost = (int)HOUSED->query_cost(what);    
+  flag = (int)this_player()->query_bank_balance();  
+    
+  if (!cost) 
+  {
+    twax ("Returning from check_valid: "+cost+"\n");  
+    return 1;
+  }
+
+  if (cost > flag)
+  {
+    notify_fail("To do "+what+" costs "+cost+" coins.\nYou have "
+      +flag+" in the bank.\nTry again when you're not so poor.\n");
+    return 0;
+  }
+  
+  twax ("Returning from check_valid: "+cost+"\n");  
+  return cost;
+}
+
+/* ***************************************************************************
+ * Function Name: build_residence
+ * Description:   Puts a home on the land.
+ * Arguments:     string arg - type of building
+ * Returns:       status - 0 if it's not an id, 1 if it is
+ * **************************************************************************/
+status
+do_build(string arg)
+{
+  status flag;
+  
+  if (HouseSize)
+  {
+    notify_fail("This land has already has been built upon.\n");
+    return 0;
+  }
+  
+  if (!arg || !strlen(arg))
+  {
+    notify_fail("Build what?\n");
+    return 0;
+  }
+
+  if (!find_object(HOUSED))
+    HOUSED->reset(0);
+
+  i = member_array((string)this_player()->query_real_name(), Owners);
+  
+  if (i < 0 || Privs[i] < PRIVS_BUILD)
+  {
+    notify_fail("You are not the owner, nor do you have authorization by the owner to build here.\n");
+    return 0;
+  }
+  /*
+   * So init() retriggers for everyone in room (to allow entrance)
+   */      
+  flag = (status)HOUSED->build_house(lower_case(arg), this_object());  
+  
+  if (flag)
+    move_object(this_object(), environment(this_object()));
+    
+  return flag;
+}
+
+status
+do_enter(string arg)
+{
+  string name; int i;
+  
+  if (!id(arg))
+  {
+    notify_fail("You can't enter that.\nYou may enter the "+HIK+Short+NORM+NORM+".\n");
+    return 0;
+  }
+
+  name = (string)this_player()->query_real_name();
+  
+  if (!sizeof(Invited) || member_array(name, Invited) < 0)
+  {
+    i = member_array(name, Owners);
+    
+    if (i < 0)
+    {
+      notify_fail("You are not an owner of this property, nor have you been invited to enter.\n");
+      return 0;
+    }
+    
+    if (!Privs[i])
+    {
+      notify_fail("You are not allowed to enter this property.  Begone!\n");
+      return 0;
+    }
+  }
+      
+  this_player()->move_player("enters the "+arg+"#"+Entrance);
+  return 1;
+}
+/* ***************************************************************************
+ * Function Name: init
+ * Description:   Stuff to do when a player enters the environment
+ * Arguments:     none
+ * Returns:       Void
+ * **************************************************************************/
+void
+init()
+{
+  int i;
+  string *dir;
+ 
+  /*
+   * Make sure everything loads up properly.
+   */
+  if ((!Owner || Owner == "") && environment(this_object()))
+  {
+    Owner = capitalize((string)environment()->query_owner());
+    Cost = (int)environment()->query_cost();
+    LotSize = (int)environment()->query_lot_size();
+    twax("No owner check in init().\n");
+    return;
+  }
+  
+  if (!HouseSize)
+    add_action("do_build", "build");
+  else
+    add_action("do_enter", "enter");
+}
+/* ***************************************************************************
+ * Function Name: Various query/set funs for calling by outside objects
+ * Description:   Housing object setup
+ * Arguments:     Various
+ * Returns:       Various
+ * **************************************************************************/
+string query_house_filename() { return FileName; }
+string query_owner() { return Owner; }
+int query_cost() { return Cost; }
+int query_house_size() { return HouseSize; }
+string *query_owners_arr() { return Owners; }
+int query_lotsize() { return (LotSize ? LotSize : (int)environment(this_object())->query_lot_size()); }
+void set_long(string arg) { LongDesc = arg + NORM+NORM; }
+void set_entrance(string arg) { Entrance = arg; }
+void set_lastroom(int arg) { LastRoom = arg; }
+void set_short(string arg) { Short = arg; }
+void set_is_clanhall(int arg) { IsClanhall = (arg ? 1 : 0); }
+int query_lastroom() { return LastRoom; }
+void set_cost(int arg) { Cost = arg; }
+void set_house_size(int arg) { HouseSize = arg; }
+/* Add clanhall support */
+string get_inside_short() { return capitalize(Owner) + "'s "+Short; }
+/* ***************************************************************************
+ * Function Name: add_invited, remove_invited, query_invited
+ * Description:   Players can invite other players to enter their houses.
+ * Arguments:     Various
+ * Returns:       Various
+ * **************************************************************************/
+string *query_invited() { return Invited; }
+
+status 
+add_invited(string arg) 
+{ 
+  int i;
+  
+  if (!arg) 
+    return 0;
+
+  arg = lower_case(arg);  
+  i = member_array(arg, Owners);
+
+  if (i > 0)
+  {
+    if (!Privs[i]) /* They are banned from entry */
+    {
+      notify_fail("They are banned from here.  Reset their priveleges to allow entry.\n");
+      return 0;
+    }
+    
+    notify_fail("They already have priveleges set and don't need an invitation.\n");
+    return 0;
+  }
+  
+  if (member_array(arg, Invited) < 0)
+  {
+    notify_fail(capitalize(arg)+" is already on the list.\n");
+    return 0;
+  }
+    
+  Invited += ({ arg });
+  return 1;
+}
+
+status
+remove_invited(string arg)
+{
+  if (!arg)
+    return 0;
+    
+  arg = lower_case(arg);
+  
+  if (member_array(arg, Invited) < 0)
+  {
+    notify_fail("They are not on the list of invitees.\n");
+    return 0;
+  }
+    
+  Invited -= ({ arg });
+  return 1;
+}
+/* ***************************************************************************
+ * Function Name: Ownership/privelege funs
+ * Description:   Manipulate ownership/priveleges
+ * Arguments:     Various
+ * Returns:       Various
+ * **************************************************************************/
+void set_owner(string arg) { Owner = arg; }
+void clear_owners() { Owners = ({ Owner }); Privs = ({ "all" }); }
+string *query_owners() { return Owners; }
+mixed *query_all_privs() { return Privs; }
+mixed *query_shit() { return Owners + Privs; }
+ 
+void add_owner(string arg) 
+{ 
+  if (arg && sizeof(Owners) && member_array(arg, Owners) >= 0)
+  {
+    Owners += ({ lower_case(arg) }); 
+    Privs += ({ ({ "enter" }) });
+  } 
+}
+  
+void 
+remove_owner(string arg) 
+{
+  int i; i = -2;
+  
+  if (!arg || !strlen(arg) || !sizeof(Owners))
+    return;
+    
+  arg = lower_case(arg);  
+  i = member_array(arg, Owners);
+
+  if (i < 0) 
+    return;
+    
+  Owners -= ({ arg }); 
+  Privs -= ({ Privs[i] });
+}
+
+void 
+set_privs(string who, string what) 
+{ 
+  int i;
+  
+  i = member_array(who, Owners);
+  
+  if (i < 0)
+  {
+    Owners += ({ who });
+    Privs += ({ ({ what }) });
+    write("Added to owners: "+who+"\nPrivelege set: "+what+"\n");
+    return;
+  }
+  
+  Privs[i] += ({ what });
+  write("Privelege set for "+who+": "+what+"\n");
+}
+
+string *
+query_privs(string arg)
+{
+  int i;
+  
+  if (!arg || !strlen(arg) || !sizeof(Owners))
+    return 0;
+    
+  arg = lower_case(arg);
+  i = member_array(arg, Owners);
+  
+  if (i < 0)
+    return 0;
+    
+  return Privs[i];
+}
+
+
+/* ***************************************************************************
+ *                                                                           *
+ *           BASE OBJECT SETUP FUNS: long/short/id/reset                     *
+ *                                                                           *
+ * **************************************************************************/
+ 
+ 
+ 
+ 
+/* ***************************************************************************
+ * Function Name: id
+ * Description:   Returns whether a given arguement refers to this object
+ * Arguments:     string arg
+ * Returns:       status - 0 if it's not an id, 1 if it is
+ * **************************************************************************/
+status
+id(string arg)
+{
+  return (arg == lower_case(Short+"") ||
+         (sizeof(Ids) && member_array(arg, Ids) > -1));
+}
+/* ***************************************************************************
+ * Function Name: short
+ * Description:   Short description
+ * Arguments:     None
+ * Returns:       String
+ * **************************************************************************/
+string
+short()
+{
+  string t; t = HIY;
+  
+  if (!Short || !strlen(Short) || Short == 0 || Short == "")
+    switch(HouseSize)
+    {
+      case 0    : Short = "Land"; ShortDesc = ""; break;
+      case 1    : Short = "Shack"; break;
+      case 2    : Short = "Hut"; break;
+      case 3    : Short = "Trailer"; break;
+      case 4..6 : Short = "House"; break;
+      case 7..9 : Short = "Mansion"; break;
+      default   : Short = "Palace"; break;
+    }
+    
+  if (IsClanhall) 
+    Short = "Clanhall";
+          
+  t += capitalize(Owner)+"'s " + Short+NORM+NORM  
+    + (Cost ? ": For sale for "+Cost : (strlen(ShortDesc) ? ": "+ShortDesc : ""));
+  return t + NORM + NORM;
+}
+/* ***************************************************************************
+ * Function Name: long
+ * Description:   long description
+ * Arguments:     None
+ * Returns:       Void
+ * **************************************************************************/
+void
+long()
+{
+  string text, name, sht;
+  int flag; 
+
+  sht = lower_case(Short);
+  name = (string)this_player()->query_real_name();
+  flag = check_valid(name, "enter");
+  
+  if (!set_light(0) 
+    && (environment(this_player()) != environment(this_object()) 
+    || !present("dark_sight_object", this_player())))
+  {
+    write("It is too dark.\n");
+    return;
+  }
+  
+  write(short()+"\n");
+  
+  if (HouseSize)
+  {
+    if (Owner == name)
+    {
+      write("This is your "+sht+".  You may "+HIW+"enter"+NORM+NORM+" it.\n");
+      return;
+    }
+    else
+      write("This is a "+sht+" belonging to "+capitalize(Owner)+".\n");
+
+    if (flag)
+      write("You may "+HIW+"enter"+NORM+NORM+" the "+HIK+sht+NORM+NORM+".\n");
+    else
+      write("You can buy land at the realty in Earwax's area (4w, all n from green).\n");
+    
+    return;
+  }
+
+  flag = check_valid(name, "build");
+  
+  if (!flag)
+  {
+    write("This is undeveloped land belonging to "+capitalize(Owner)+".\n");
+    write("For information about land and buying land see the realty in Earwax's Area.\n");
+    return; 
+  }
+    
+  write("You may build on this land.  Following are the valid building types:\n");
+  write(HIR+"You can 'develop' this land to the following: \n"+NORM+NORM);
+  write(              "Type     Rooms  Level Req    Cost\n");
+  
+  if (stringp(LotSize))
+    sscanf(LotSize+"", ""+"%d", LotSize);
+
+  flag = (LotSize < 0 ? 10 : LotSize);
+
+  if (flag <= 3) 
+    write("Shack:     1      19        250,000\n");
+  if (flag <= 3 && flag > 1)
+    write("Hut:       2      19+10     500,000\n");
+  if (flag <= 3 && flag > 2)
+    write("Trailer:   3      19+20     750,000\n");
+  if (flag <= 9 && flag > 3)
+    write("House:    4-6     19+30   1,000,000\n");
+  if (flag <= 9 && flag > 6)
+    write("Mansion:  7-9     19+50   1,500,000\n");
+  if (flag > 9)
+    write((IsClanhall ? "Clanhall: 10+     -----   5" 
+    : "Palace:   10+     19+75   3")
+    + ",000,000\n");
+      
+  write("\nHouses start at 4 rooms, Mansions at 7, Palaces at 10.\n");
+  write("To have a residence built type: "+HIW+"build "+HIK+"<type>"+NORM+NORM+"\n");
+}
+/* ***************************************************************************
+ * Function Name: reset
+ * Description:   Called on creation, resets
+ * Arguments:     arg - 0 for creation, 1 for reset
+ * Returns:       Void
+ * **************************************************************************/
+void
+reset(status arg) 
+{
+  if (arg && FileName) 
+    save_info();
+ 
+  if (arg)
+    return;
+
+  Invited = ({ });
+  Ids = ({ HOUSING_OBJECT_ID });
+}  

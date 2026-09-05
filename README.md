@@ -453,6 +453,7 @@ classes it's found.
 | 965 | `mundoscuro` | Mundo Oscuro | `git clone https://github.com/gllort/mud (commit e2511b4fc189cfcdeeac44242d0700b5382c4680, cloned 2026-09-04); mudlib root is the repo's lib/ directory -- driver/ and lib.20040222.tar.gz were not part of the mudlib and were not converted` | 40273 | WASM limited |
 | 966 | `pkuxkx` | 北大侠客行 | `git clone https://github.com/ly19811105/pkuxkx-utf8 (commit 0eaf237c9970795a51aa4cc04b5b762003300cbd, cloned 2026-09-05); repo root is the mudlib -- already UTF-8 upstream` | 40274 | WASM playable |
 | 967 | `formosasaga` | 源流福爾摩沙 | `git clone https://github.com/wade-fs/FormosaSaga (commit a700cf5de8266868d574eb374e0b11da0b5877f5, cloned 2026-09-05); mudlib root is the repo's mudlib/ directory -- the Go MudOS-v22 driver was not converted` | 40276 | WASM playable |
+| 968 | `nirvlp312` | Nirvana | `git clone https://github.com/rumplemintz/Nirvlp312mudlib (commit 616cad7472279cc97c9693f893940f5336916ff8, cloned 2026-09-05); repo root is the mudlib` | 40277 | WASM playable |
 <!-- END NUMBERING TABLE -->
 
 ## Repository layout

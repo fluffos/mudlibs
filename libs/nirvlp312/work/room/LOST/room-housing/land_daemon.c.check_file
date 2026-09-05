@@ -1,0 +1,451 @@
+/* ***************************************************************************
+ * File:           /players/earwax/housing/land_daemon.c    
+ * Function:       Tracks all information to do with castles and land.
+ * Author:         Earwax
+ * Copyright:      Copyright (c) 2004 Earwax.  All rights reserved.
+ * Source:         5/22/04
+ * Notes:          I'll do a text file that explains how all this shit works.
+ * Change History:
+ * **************************************************************************/
+
+#include "defs.h"
+
+#pragma weak_types
+#pragma combine_strings
+
+/* Indices for the Info array. */
+
+#define LSHORT Info[index][0]
+#define LCREATOR Info[index][1]
+#define REALM Info[index][2]
+#define LOTSIZE Info[index][3]
+#define LOWNER Info[index][4]
+#define LCOST Info[index][5]
+#define ECONFLAG Info[index][6]
+#define AVAILABLE Info[index][7]
+#define OFFERTIME Info[index][8]
+#define DEVELOPED Info[index][9]
+
+#define LANDID LandIDs[index]
+#define LFNAME Filenames[index]
+#define INFOSIZE 10
+
+/* Global Variables */
+
+static mapping  Loaded;   /* ([ Room ob : ({ index }) ])                    */
+       int      NextId;   /* For generating unique IDs                      */
+       mixed   *Info;     /* This is a whole lotta stuff.                   */
+       string  *LandIDs;  /* For containing the Land IDs                    */
+       string  *Filenames;/* Contains the Land Filenames                    */
+/* ***************************************************************************
+ * Function Name: 
+ * Description:   
+ * Arguements:    
+ * Returns:       
+ * **************************************************************************/
+/* ***************************************************************************
+ * Function Name: load_info, save_info
+ * Description:   Load and save data functions.
+ * Arguements:    None
+ * Returns:       void
+ * **************************************************************************/
+void save_info() { save_object(LANDSAVE); }
+
+void
+load_info()
+{
+  NextId = 0;
+  Loaded = ([ ]);
+  cp(LANDBAK2, LANDBAK3);
+  cp(LANDBAK1, LANDBAK2); 
+  cp(LANDDATA, LANDBAK1);
+  restore_object(LANDRESTORE);
+}
+/* ***************************************************************************
+ * Function Name: register
+ * Description:   Add new land to listings, set existing land up, upon create
+ * Arguements:    object ob: the room object to setup or add to daemon
+ * Returns:       void
+ * **************************************************************************/
+void
+register(object ob)
+{
+  int index, siz;
+  string temp, junk, filename;
+
+  if (!ob)
+    return;
+
+  filename = "/" + file_name(ob);
+
+  if (filename + ".c" == LAND)
+    return;
+
+  index = ((!Filenames || !sizeof(Filenames)) ?  -2 : member_array(filename, Filenames));
+
+  if (index < 0)
+  {
+  /* Land isn't registered, attempt to register it now. */
+    int lotsize, cost, j;
+    string realmname, t, crtr;
+
+    cost = (int)ob->query_cost();
+    realmname = delete_colour((string)ob->query_realm_name());
+    lotsize = (int)ob->query_lot_size();
+
+    if (!cost || !lotsize || !strlen(realmname))
+    {
+      write_file(NOREGISTER, ctime()+": "+filename+"\n");
+      return;
+    }
+
+    /*
+     * Construct the information.
+     */
+    realmname = implode(explode(realmname, " "), "_");
+    crtr = creator(ob);
+    t = (strlen(crtr) ? capitalize(crtr) : "ROOT") +"_"
+      + realmname + "_"+NextId;
+    NextId++;
+
+    if (!sizeof(Info))
+    {
+      LandIDs = ({ "" }); Filenames = ({ "" }); Info = ({ ({ }) });
+      Info[0] = allocate(INFOSIZE);
+      index = 0;
+    }
+    else
+    {
+      index = sizeof(LandIDs);
+      LandIDs += ({ "" }); Filenames += ({ "" }); Info += ({ ({ }) });
+      Info[index] = allocate(INFOSIZE);
+    }
+
+    LFNAME = filename;
+    LANDID = t;
+    LSHORT = (string)ob->short();
+    REALM = (string)ob->query_realm_name();
+    LCREATOR = crtr;
+    LOTSIZE = lotsize;
+    LCOST = cost;
+    ECONFLAG = 0;
+    AVAILABLE = 1;
+    OFFERTIME = time();
+    LOWNER = crtr;
+    DEVELOPED = 0;
+    t = DATA+LCREATOR;
+
+    if (check_file(t) != -2)
+    {
+      status flag;
+
+      flag = mkdir(t);
+      write_file(DIRS,ctime()+": "+(flag ? "MADE: " : "FAILED: ")+t+"\n");
+
+      if (!flag)
+        return;
+    }
+    
+    t += "/room";
+
+    if (check_file(t) != -2)
+    {
+      flag = mkdir(t);
+      write_file(DIRS,ctime()+": "+(flag ? "MADE: " : "FAILED: ")+t+"\n");     
+    }
+
+    t = DATA+LCREATOR+"/"+realmname+"_"+(NextId - 1);
+    write_file(REGISTERED, ctime()+": "+LFNAME+" - "+LANDID+"\n");
+    save_info();
+  }
+      
+  ob->set_registered(1);
+  ob->set_lot_size(LOTSIZE);
+  ob->set_realm_name(REALM);
+  ob->set_cost((AVAILABLE ? LCOST : 0));
+  ob->set_owner(LOWNER);
+  ob->set_house_filename(DATA+LCREATOR+"/"+LANDID);
+  ob->set_house_size(DEVELOPED);
+}
+/* ***************************************************************************
+ * Function Name: reset
+ * Description:   Called when daemon first loads.
+ * Arguements:    status arg: 0 if it's creation, 1 if it's a reset
+ * Returns:       void
+ * **************************************************************************/
+
+void
+reset(status arg)
+{
+  if (arg)
+    return;
+
+  load_info();
+
+  if (!find_object(LAND))
+    LAND->reset(0);
+
+  if (!find_object(HOUSE_OB))
+    HOUSE_OB->reset(0);
+}  
+/* ***************************************************************************
+ * Function Name: Various query/set functions.
+ * Description:   Used by land daemon, housing system.
+ * Arguements:    Various
+ * Returns:       Various
+ * **************************************************************************/
+/* ***************************************************************************
+ * Function Name: Realty Functions
+ * Description:   Called by realties 
+ * Arguements:    
+ * Returns:       
+ * **************************************************************************/
+status
+dump_list(object ob, string arg)
+{
+  string *output;
+  int i, siz;
+
+  if (!arg || !strlen(arg))
+    arg = "all";
+    
+  output = (string *)MISCD->generate_output(query_verb(), Info, arg);
+  siz = sizeof(output);
+
+  if (!siz)
+    return 0;
+    
+  for (i = 0; i < siz; i++)
+    tell_object(ob, output[i]);
+
+  return sizeof(Info);
+}
+
+status
+view_land(object ob, string arg)
+{
+  int index, size;
+
+  if (!arg)
+    index = 0;
+  else if (sscanf(arg+"", ""+"%d", index) != 1) 
+  {
+    notify_fail("Syntax: view <index> Where index is the land index number to view.\n");
+    return 0;
+  }
+  else if (index < 0 || index > (sizeof(Info) - 1))
+  {
+    notify_fail("Invalid index number: "+index+"\n");
+    return 0;
+  }
+    
+  if (stringp(LOTSIZE))
+    sscanf(LOTSIZE+"", "%d"+"", size);
+  else
+    size = LOTSIZE;
+
+  
+  write(HIW+"==============================================================================\n"+NORM+NORM);
+  write(CYN+"Viewing land number:    "+NORM+NORM+index+"\n");
+  write(CYN+"Creator and realm name: "+NORM+NORM+capitalize(LCREATOR)+": "+REALM+"\n"); 
+  write(HIW+"==============================================================================\n"+NORM+NORM);
+  write(CYN+"Short description:      "+NORM+NORM+LSHORT+"\n");
+  write(HIW+"------------------------------------------------------------------------------\n"+NORM+NORM);
+  write(CYN+"Long description: \n"+NORM+NORM);LFNAME->long();
+  write(HIW+"------------------------------------------------------------------------------\n"+NORM+NORM);
+  write(CYN+"Cost:                   "+NORM+NORM+(string)UTILITYD->comma_number(LCOST)+"\n");
+  write(CYN+"Development:            "+NORM+NORM+DEVELOPED+"\n");
+  write(CYN+"Size:                   "+NORM+NORM+(size < 0 ? 999 : size)+"\n");
+  write(CYN+"Owned by:               "+NORM+NORM+capitalize(LOWNER)+"\n"+NORM+NORM);
+  write(HIW+"==============================================================================\n"+NORM+NORM);  
+  return 1;
+}
+
+status
+sell_land(object ob, string arg)
+{
+  int index, cost, flag;
+  object cas, loc;
+  string name;
+  
+  name = (string)this_player()->query_real_name();
+
+  if (!arg || (sscanf(arg, "%d %d %d", index, cost, flag) != 3))
+  {
+    notify_fail("Syntax: sell <index> <flag>\nIndex is the land index number to sell.\n"
+      + "Note: Flag is for the cost of land to adjust with economy (1), or not (0)\n");
+    return 0;
+  }
+  else if (index < 0 || index > (sizeof(Info) - 1))
+  {
+    notify_fail("Invalid index number: "+index+"\n");
+    return 0;
+  }
+  if (LOWNER != name)
+  {
+    notify_fail("That's not your land!\n");
+    return 0;
+  }
+  if (LOWNER == LCREATOR && AVAILABLE)
+  {
+    notify_fail("That's really lame.  It's not like you need money.\n"+
+      HIY+"The realtors whisper something about you being a hoser.\n"+NORM+NORM);
+    return 0;
+  }
+  
+  /*
+   * Required checks are done, now let's move on to the selling.
+   */
+  write_file(SELL, (string)WAXFUNS->date_time() +": "
+    + LANDID + " FOR SALE BY " +LOWNER+ " for " + cost
+    + (flag ? " ECON FLAG" : "NO ECON FLAG") + ".\n");
+    
+  if (!find_object(LFNAME))
+    LFNAME->reset(0);
+
+  AVAILABLE = 1;
+  OFFERTIME = time();
+  ECONFLAG = flag;  
+  LFNAME->set_cost(cost);
+  cas = (object)LFNAME->get_house_object();
+  cas->set_cost(cost);
+  cas->set_short(0);
+  cas->save_info("");
+  LCOST = cost;
+  save_info();
+  view_land(this_player(), ""+index);
+  write(HIY+"The realtors fnog with great might and power.\n"+NORM+NORM+"\n");
+  write("Lot number "+index+" is now up for sale.\n");  
+  return 1;
+}
+  
+status
+purchase_land(object ob, string arg)
+{
+  int index, size, cost;
+  string name;
+  object cas, loc;
+  
+  
+  if (!arg)
+    index = 0;
+  else if (sscanf(arg+"", ""+"%d", index) != 1) 
+  {
+    notify_fail("Syntax: purchase <index> Where index is the land index number to purchase.\n");
+    return 0;
+  }
+  else if (index < 0 || index > (sizeof(Info) - 1))
+  {
+    notify_fail("Invalid index number: "+index+"\n");
+    return 0;
+  }
+  if (!AVAILABLE)
+  {
+    notify_fail("That land is not up for sale at this time.\n");
+    return 0;
+  }
+
+  /* Having problems with LCOST not always being int */  
+  if (stringp(LCOST)) 
+    sscanf(LCOST, ""+"%d", cost);
+  else 
+    cost = LCOST;
+  
+  if ((int)this_player()->query_bank_balance() < cost)
+  {
+    notify_fail("You lack the fundage.\n");
+    return 0;
+  }
+  
+  /* 
+   * Land available, they have the fundage, so buy it!
+   */
+  name = (string)this_player()->query_real_name();
+  
+  /*
+   * Check if the land is being bought from another player.  If so go through
+   * the bank transfer process.  If not, take the money from them and transfer
+   * ownership to new player.
+  */
+  if (LCREATOR == LOWNER )
+  {  
+    write_file(BOUGHT, (string)WAXFUNS->date_time() +": "
+      + LANDID + " bought from "
+      + (LCREATOR == LOWNER ? "Creator" : capitalize(LOWNER))
+      + " by " + capitalize(name) + " for " +LCOST+" ("+(time() - OFFERTIME)+").\n");
+    this_player()->add_bank_balance(-cost);
+  }
+  else
+  {
+    if (!find_object(BANK))
+      BANK->reset(0);
+      
+    if (!((status)BANK->do_transfer(this_player(), LOWNER +" "+cost+" "+HIY+"House Sold to "
+      +NORM+NORM+name)));
+      write_file(BUG,(string)WAXFUNS->date_time()+": TRANSFER BUGGED: "
+        + name + " xfer " + cost + " to " + LOWNER+".\n");
+        
+    write_file(BOUGHT, (string)WAXFUNS->date_time()+": "
+      + LANDID + " bought from "
+      + (LCREATOR == LOWNER ? "Creator" : capitalize(LOWNER))
+      + " by " + capitalize(name) + " for " +LCOST+" ("+(time() - OFFERTIME)+").\n");
+  }
+          
+  if (!find_object(LFNAME))
+    LFNAME->reset(0);
+
+  /*
+   * CLAN CHANGES NECESSARY
+   *
+   * name = clanname
+   * cas->set_is_clanhall(1)
+   * cas->set_clanname(name);
+   * owner = clanname (land and castle and in realty)
+   */
+     
+  AVAILABLE = 0;
+  LOWNER = name;    
+
+  LFNAME->set_owner(name);
+  LFNAME->set_cost(0);
+  cas = (object)LFNAME->get_house_object();
+  cas->set_owner(name);
+  cas->set_cost(0);
+  cas->set_short(0);
+  cas->save_info();
+  LCOST = cost;
+  save_info();
+  view_land(this_player(), ""+index);
+  write("\n\n"+(string)WAXFUNS->line_wrap("You're taken into a "
+    +"small room for a minute, given a stack of paperwork to fill out.  "
+    +"After doing so you're brought back into the realty where...")+"\n\n"
+    +HIY+"The realtors erupt in cheers!\n"+NORM+NORM+"\n");
+  write("You buy lot number "+index+".\n");  
+  return 1;
+}
+  
+void 
+set_developed(string filename, int num)
+{
+  int index;
+
+  index = member_array(filename, Filenames);
+
+  if (index > -1)
+    DEVELOPED = num;
+
+  save_info();
+}
+
+void 
+set_last_logon(string filename)
+{
+  int index;
+    
+  index = member_array(filename, Filenames);
+  
+  if (index > -1)
+    OFFERTIME = time();
+    
+  save_info();
+}

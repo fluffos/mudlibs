@@ -1,0 +1,272 @@
+/* xls.c  - enhanced (possible replacement) ls.
+ *          Inspiration provided by despite less than total comprehension of
+ *          ls code by Earwax
+ */
+ 
+#include "/players/illarion/ansi.h"
+ 
+string *dirs;
+string *cfiles;
+string *hfiles;
+string *others;
+  
+void display_dir(string *files, int *widths, int maxwidth, int num_cols);
+void show_help();
+  
+status xls(string str) {
+  string cwd,path;
+  string opts;
+  string *files;
+  int s,x,num_files;
+  string temp,temp2;
+  string ansid,ansic,ansih,ansio;
+  int *widths;
+  int totalsize;
+  int maxwidth;
+  int show_size;
+  int num_cols;
+  int dir_count;
+  status no_sort;
+  status no_loaded;
+  status old;
+  dirs=({});
+  cfiles=({});
+  hfiles=({});
+  others=({});
+  totalsize=0;
+  maxwidth=80;
+  show_size=3;
+  num_cols=10;
+  cwd=(string)this_player()->get_path();
+  if(!str) {
+    str="";
+  /* Command line switches */
+  } else if(sscanf(str,"-%s %s",opts,temp) || sscanf(str,"-%s",opts)) {
+    if(!temp)
+      str="";
+    else
+      str=temp;
+    if(opts=="old") {
+      old=1;
+    } else {
+      if(sscanf(opts,"%sw%d%s",temp,maxwidth,temp2)) {
+        if(maxwidth<60)
+          maxwidth=60;
+        if(maxwidth>120)
+          maxwidth=120;
+        opts=(temp?temp:"")+(temp2?temp2:"");
+      }
+      if(sscanf(opts,"%sc%d%s",temp,num_cols,temp2)) {
+        if(num_cols<1)
+          num_cols=1;
+        if(num_cols>10)
+          num_cols=10;
+        opts=(temp?temp:"")+(temp2?temp2:"");
+      }
+      
+      s=strlen(opts);
+      while(s-- > 0)
+        switch(opts[s..s]) {
+          case "S": show_size=6; continue;
+          case "s": show_size=0; continue;
+          case "L": no_loaded=1; continue;
+          case "d": no_sort=1; continue;
+          case "h": case "?": show_help(); return 1;
+        }
+    }
+    
+   }
+
+  str=resolv_path(cwd,str);
+
+  files=get_dir(str);
+  if(sizeof(files)==1) /*If only one file found, see if it's a dir */
+    if(check_file(str)==-2) {
+      files=get_dir((str+="/")); /*If so, add a / and use the contents of that dir */
+    } else             
+      old=1;           /* If not, use the old ls behavior */
+
+  if(old)
+    return !(!ls(str));
+
+  write("LS: "+str+"\n");
+
+
+  num_files=sizeof(files);
+  if(!num_files) {
+    notify_fail("No files found.\n");
+    return 0;
+  }
+
+  s=strlen(str);
+  while(s>0 && str[--s..s]!="/");
+  if(s<0) {
+    notify_fail("Illarion fubarred somewhere.  Beat him up!\n");
+    return 0;
+  }
+  path=str[0..s];
+
+  ansid=(string)this_player()->get_ansi_pref("ls directory");
+  ansic=(string)this_player()->get_ansi_pref("ls .c");
+  ansih=(string)this_player()->get_ansi_pref("ls .h");
+  ansio=(string)this_player()->get_ansi_pref("ls otherFiles");
+  if(!ansid) ansid="";
+  if(!ansic) ansic="";
+  if(!ansih) ansih="";
+  if(!ansio) ansio="";
+
+  
+  widths=allocate(num_files);
+  s=num_files;
+  while(s--) {
+    if(files[s]=="." || files[s]==".." || (x=check_file(path+files[s]))==-2) {
+      temp=pad("   ",-show_size)+" "+files[s]+"/";
+      if(no_sort) {
+        dir_count++;
+        widths[s]=strlen(temp);
+        files[s]=temp[0..show_size]+ansid+temp[show_size+1..-1];
+      } else {
+        dirs+=({temp});
+      }
+    } else {
+      if(x==-1) {
+        if(no_sort) {
+          files[s]="no file will ever be named this";
+          files-=({files[s]});
+          widths[s]=10101;
+          widths-=({widths[s]});
+        }
+        num_files--;
+        continue;
+      }
+      if(x>0) {
+        totalsize+=x;
+        if(show_size==3) {
+          x=(x+512)/1024;
+          if(x==0)
+            x=1;
+        }
+      }
+      if(sscanf(files[s],"%s.c",temp)) {
+        temp=pad(""+x,-show_size)+(no_loaded?" ":(find_object(path+files[s])?"*":" "))+files[s];
+        if(no_sort) {
+          widths[s]=strlen(temp);
+          files[s]=temp[0..show_size]+ansic+temp[show_size+1..-1];
+        } else {
+          cfiles+=({temp});
+        }
+      } else if(sscanf(files[s],"%s.h",temp)) {
+        temp=pad(""+x,-show_size)+" "+files[s];
+        if(no_sort) {
+          widths[s]=strlen(temp);
+          files[s]=temp[0..show_size]+ansih+temp[show_size+1..-1];
+        } else {
+          hfiles+=({temp});
+        }
+      } else {
+        temp=pad(""+x,-show_size)+" "+files[s];
+        if(no_sort) {
+          widths[s]=strlen(temp);
+          files[s]=temp[0..show_size]+ansio+temp[show_size+1..-1];
+        } else {
+          others+=({temp});
+        }
+      }
+    }
+  }
+  if(!no_sort) {
+    files=allocate(num_files);
+    x=0;
+    s=sizeof(dirs);
+    dir_count=s;
+    while(s--) {
+      files[x]=dirs[s];
+      widths[x]=strlen(files[x]);
+      files[x]=files[x][0..show_size]+ansid+files[x][show_size+1..-1];
+      x++;
+    }
+    s=sizeof(hfiles);
+    while(s--) {
+      files[x]=hfiles[s];
+      widths[x]=strlen(files[x]);
+      files[x]=files[x][0..show_size]+ansih+files[x][show_size+1..-1];
+      x++;
+    }
+    s=sizeof(cfiles);
+    while(s--) {
+      files[x]=cfiles[s];
+      widths[x]=strlen(files[x]);
+      files[x]=files[x][0..show_size]+ansic+files[x][show_size+1..-1];
+      x++;
+    }
+    s=sizeof(others);
+    while(s--) {
+      files[x]=others[s];
+      widths[x]=strlen(files[x]);
+      files[x]=files[x][0..show_size]+ansio+files[x][show_size+1..-1];
+      x++;
+    }
+  }
+  display_dir(files, widths, maxwidth, num_cols);
+  write("       "+dir_count+" dirs, "
+       +(num_files-dir_count)+" files, "
+       +(totalsize/1024)+" KB\n");
+  return 1;
+}
+
+string get_spaces(int num) {
+  string spaces;
+  spaces="";
+  while(num--)
+    spaces+=" ";
+  return spaces;
+}
+
+void display_dir(string *files, int *widths, int maxwidth, int num_cols) {
+  int *cols;
+  int num_widths;
+  int num_rows;
+  int total_width;
+  int r,c;
+  num_widths=sizeof(files);
+  while(num_cols) {
+    cols=allocate(num_cols);
+    num_rows=1+num_widths/num_cols;
+    for(r=0;r<num_rows;r++)
+      for(c=0;c<num_cols,c*num_rows+r<num_widths;c++)
+        if(widths[c*num_rows+r]>cols[c])
+          cols[c]=widths[c*num_rows+r];
+ 
+    total_width=0;
+    for(c=0;c<num_cols;c++)
+      total_width+=cols[c];
+    total_width+=num_cols*2+1;
+    if(total_width<maxwidth)
+      break;
+    num_cols--;
+  }
+  for(r=0;r<num_rows;r++) {
+    write(" ");
+    for(c=0;c<num_cols,c*num_rows+r<num_widths;c++)
+       write(files[c*num_rows+r]+NORM+get_spaces(cols[c]-widths[c*num_rows+r])+"  ");
+    write("\n");
+  }
+}
+
+show_help() {
+  write("Syntax: ls [-<options>] [path]\n");
+  write("Path is relative unless it starts with a /\n");
+  write("Or a ~.  ~wizardname is supported.\n");
+  write("The * wildcard is supported but only in the filename.\n");
+  write("Using ls on an individual file will display its modify timestamp.\n");
+  write("The following options are available:\n");
+  write("h or ?         You're looking at it\n");
+  write("old            Use the original ls syntax\n");
+  write("These options can be combined with each other:\n");
+  write("w<#>           Specify your screen width (60-120)\n");
+  write("S(s)           Show full (or no) file sizes\n");
+  write("c<#>           Specify max number of colums (can still go lower)\n");
+  write("L              Don't check for loaded files\n");
+  write("d              Don't sort by file types\n");
+  write("\n");
+}

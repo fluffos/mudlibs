@@ -1,0 +1,100 @@
+#include <security.h>
+
+remote_snoop(key,reez)
+{
+    object ob;
+    int ob_level;
+    string str;
+    object soul;
+    
+    soul = (object)this_player()->query_soul();
+    
+    str = (string)soul->get_handshake(key);
+    
+    /* next line only accessible if someone used "exec" cmd or some
+       other outside means of snooping */
+
+    if((!reez && 
+      (int)this_player()->query_level() < 5000 && 
+      !("/pa/admin/pa-daemon"->query_name(
+        (string)this_player()->query_real_name()))) || !str || !key)
+    {
+      if(!key)
+      {
+        write("\
+Invalid command.\n\
+Please execute snoop in the normal method.\n");
+      }
+      else if(!str)
+      {
+        write("\
+No username given to snoop.\n\
+Clearing snoop...\n");
+#ifndef __LDMUD__ /* Rumplemintz */
+        snoop();
+#else
+        snoop(this_object());
+#endif
+      }
+      else if(!reez)
+      {
+        write("\
+No reason given.\n\
+Snoop not executed.\n");
+      }
+      return 1;
+    }
+#if 0 /* Rumplemintz */
+    ob = find_player(str, 1);
+#else
+    ob = find_player(str);
+#endif
+    
+    if (!ob)
+    {
+        write("No such user named \""+str+"\".\n");
+        return 1;
+    }
+    
+    ob_level = (int)ob->query_level();
+    
+    /* can't snoop higher levels */
+    if (ob_level >= (int)this_player()->query_level()
+        && (int)this_player()->query_level() < 5000)
+    {
+        write("You can't snoop a higher level developer.\n");
+        return 1;
+    }
+    
+    /* can't snoop PA */
+    if("/pa/admin/pa-daemon"->query_name((string)ob->query_real_name()))
+    {
+      if((int)this_player()->query_level() < ELDER)
+      {
+         write("\
+Only level 1000+ may snoop a Player Affairs developer.\n\
+If you suspect something, contact a 1000+ Administrator.\n");
+         return 1;
+       }
+    }
+    
+    if((int)this_player()->query_level() < 5000)
+    {
+      write_file("/pa/log/Snoop.txt",
+        "["+ctime()[4..15]+"] "+
+              capitalize(this_player()->query_real_name())+" Snooped "+
+      (string)ob->query_name()+".\n");
+      write_file("/pa/log/Snoop.txt",
+        pad("",15,' ')+"Reason: "+reez+"\n");
+    }
+    
+    write("Now snooping "+
+      capitalize((string)ob->query_real_name())+".\n");
+      
+#ifndef __LDMUD__ /* Rumplemintz */
+    snoop(ob);
+#else
+    efun::snoop(this_player(), ob);
+#endif
+    return 1;
+}

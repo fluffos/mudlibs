@@ -1,0 +1,19 @@
+#define tp         this_player()
+#define tpn        tp->query_name()
+#define tprn       tp->query_real_name()
+#define tpl        tp->query_level()
+#define tpxl       tp->query_extra_level()
+#define tpp        tp->query_possessive()
+#define ep         environment(this_object())
+#define epn        ep->query_real_name()
+#define MV         call_other(this_player(),"move_player" 
+#define tl         tp->query_level()
+#define tx         tp->query_extra_level()
+#define epl        ep->query_level()
+#define epx        ep->query_extra_level()
+#define egl        ep->query_guild_rank()
+#define tgl        tp->query_guild_rank()
+#define to         this_object()
+
+#define PATH       "/players/cobain/"
+#define PRIMUS     PATH+"/primus"

@@ -1,0 +1,896 @@
+/*
+ *
+ * Nirvana WizSoul XV
+ * Started: 8-26-2003
+ * A re-written version of Nirvana's original wizard soul
+ * Editor: Vertebraker@Nirvana <tmieczkowski@hotmail.com>
+ * Contributors have included Boltar and Shadowhawk...
+ *
+ */
+
+inherit "/bin/wiz/secure/ls";
+inherit "/bin/wiz/secure/echo_channel";
+
+#include <security.h>
+
+ /*******************************************************
+  * #include "/closed/handshake.h"
+  * The following is the code in handshake.h
+  *******************************************************/
+
+  string handshake_data;
+  int handshake;
+  /*
+  set_handshake(data) {
+    handshake_data = data;
+    handshake = random(100000000)+100;
+    return handshake;
+  }
+  */
+  get_handshake(confirm) {
+  if (version() != "3.01.02-DR") 
+  {
+    write("/closed/handshake.h GETHANDSHAKE CALLED!\n");
+    return confirm;
+  }
+    if (confirm == handshake && handshake) {
+        handshake = 0;
+	return handshake_data;
+    } else {
+        return 0;
+    }
+}
+
+#define SET_HANDSHAKE(data) \
+  handshake_data = data; \
+  handshake = random(100000000)+100
+
+/********************************************************
+ *              END OF HANDSHAKE.H                      *
+ ********************************************************/ 
+
+
+object myself, talkee;
+
+ /*******************************************************
+  * #include "/closed/verte/qt/soul_inc.h"
+  * The following is the code for soul_inc.h
+  *******************************************************/
+
+#define QTMASTER "/closed/verte/qt/qt_master"
+static int qtHooking, qt_status;
+static int loaded;
+
+#define LOG_DAEMON  "/pa/tools/loggers"
+#define IP_NUM_DIR  "/pa/log/ip_data/nums/"
+#define IP_NAME_DIR "/pa/log/ip_data/names/"
+#define IP_ALTS_DIR "/pa/log/ip_data/alts/"
+
+#define myIP query_ip_number(environment())
+#define myNAME (string)environment()->query_real_name()
+
+void
+check_alts()
+{
+  string ip;
+  string alt;
+  string nm;
+  
+  return; /* 05/16/06 Earwax */
+  ip = IP_NUM_DIR + myIP;
+  nm = IP_NAME_DIR + myNAME;
+  alt = IP_ALTS_DIR + myNAME;
+      
+/* driver crashy error thing 11/16/05 */
+  if(ip == "000.00.00.000") return;
+  if(read_file(ip) != (myNAME + "\n"))
+  {
+    string *alts, *ip_alts;
+    int    s;
+    
+    if(!text_contains(read_file(ip), myNAME+"\n"))
+    {
+      write_file(ip, myNAME+"\n");
+    }
+          
+    if(file_size(alt) == -1)
+    {
+      write_file(alt, myNAME+"\n");
+    }
+   
+    alts = explode(read_file(alt), "\n");
+    ip_alts = explode(read_file(ip), "\n");
+    s = sizeof(ip_alts);
+            
+    while(s--)
+    {
+      if(ip_alts[s] &&
+         member_array(ip_alts[s], alts) == -1)
+      {
+        alts += ({ ip_alts[s] });
+      }
+    }
+            
+    rm(alt);
+    write_file(alt, implode(ip_alts,"\n") + "\n");
+  }
+}
+
+void
+qt_actions()
+{
+  if(environment() && 
+     (string)environment()->query_real_name() == "guest")
+    return;
+    
+  /* 05/16/06 Earwax: commented this out. */
+  /*
+  if(!loaded && myIP != "000.00.00.000")
+  {
+    loaded=1;
+    if(file_size(IP_NAME_DIR + myNAME) != -1)
+    {
+      string ip;
+      string nm;
+      string alt;
+      
+      ip = IP_NUM_DIR + myIP;
+      nm = IP_NAME_DIR + myNAME;
+      alt = IP_ALTS_DIR + myNAME;
+      
+      if(file_size(ip) == -1)
+      {
+        write_file(ip, myNAME + "\n");
+      }
+      else
+      {
+        check_alts();
+      }
+      if(file_size(IP_NAME_DIR + myNAME) == -1 || 
+         !read_file(IP_NAME_DIR + myNAME) ||
+        !text_contains(read_file(IP_NAME_DIR + myNAME), myIP+"\n"))
+      {
+        write_file(IP_NAME_DIR + myNAME, myIP+"\n");
+      }
+    }
+    else
+    {
+      if(file_size(IP_NUM_DIR + myIP) != -1)
+      {
+        write_file(IP_NAME_DIR + myNAME, myIP+"\n");
+        check_alts();
+      }
+    }
+  }
+  */
+  add_action("qtHook"); add_xverb("");
+  add_action("cmd_perc"); add_xverb("%");
+  add_action("cmd_percperc", "%%");
+}
+
+string
+handle_def_query(string type, string arg)
+{
+     return ((string)call_other(environment(), "query_" + type
+               + "_definition", arg));
+}
+
+int
+process_hook(string cmd)
+{
+     int value_returned;
+     qtHooking = 1;
+     command(cmd, environment());
+     qtHooking = 0;
+  /* 05/16/06 Earwax: commented this out. */
+  /*
+     if(file_size(IP_NAME_DIR + myNAME) != -1)
+     {
+      write_file("/pa/log/"+myNAME+"_"+delete_spaces(ctime()[4..9])
+        +".txt",ctime()[11..15]+" "+cmd+"\n");
+     }
+  */
+     if(!qt_status && environment())
+     {
+       environment()->add_action_history(cmd);
+     }
+     return 1;
+}
+
+int
+qtHook(string arg)
+{
+     string cmd, a_arg, b_arg, cmd_to_do, x;
+     status  flag;
+     int     num, size;
+
+     if(environment()->query_afk_message() &&
+        !query_idle(environment()))
+     {
+        write("You return from being afk.\n");
+        say((string)this_player()->query_name()
+       +" returns from being afk.\n");
+        environment()->set_afk_message(0);
+     }
+     if(arg == "BflOgIt256z7d wlvl" ||
+        arg == "deathcheckme" ||
+        arg == "a_completely_ghetto_fix" ||
+        arg == "ThIs_iS_A_PaSs") return 0;
+
+     if(qtHooking || !arg)
+       return 0;
+
+     if(arg[0] == '!') arg=arg[1..strlen(arg)-1];
+
+     sscanf(arg, "%s %s", cmd, a_arg);
+     if(cmd == "alias" || cmd == "unalias" || cmd == "nickname" ||
+        cmd == "unnickname")
+       return 0;
+
+     if(sscanf(arg, "%s %s %s", cmd, a_arg, b_arg) == 3)
+     {
+       if(x = handle_def_query("alias", cmd))
+       {
+         cmd = x;     flag = 1;
+       }
+       if(x = handle_def_query("nick",  a_arg))
+       {
+         a_arg = x;   flag = 1;
+       }
+       if(x = handle_def_query("nick",  b_arg))
+       {
+         b_arg = x;   flag = 1;
+       }
+       if(flag)
+         return process_hook(cmd + " " + a_arg + " " + b_arg);
+     }
+
+     else if(sscanf(arg, "%s %s", cmd, a_arg) == 2)
+     {
+       if(x = handle_def_query("alias", cmd))
+       {
+         cmd = x;     flag = 1;
+       }
+       if(x = handle_def_query("nick",  a_arg))
+       {
+         a_arg = x;   flag = 1;
+       }
+       if(flag)
+         return process_hook(cmd + " " + a_arg);
+     }
+
+     else if(cmd = arg)
+       if(x = handle_def_query("alias", cmd))
+         return process_hook(x);
+
+     if(!qt_status) environment()->add_action_history(arg);
+  /* 05/16/06 Earwax: commented this out. */
+  /*
+    if(file_size(IP_NAME_DIR + myNAME) != -1)
+    {
+      write_file("/pa/log/"+myNAME+"_"+
+        delete_spaces(ctime()[4..9])+".txt", ctime()[11..15]
+        +" "+arg+"\n");
+    }
+  */
+    return 0;
+}
+
+void set_qt_status(int x) { qt_status = x; }
+
+int cmd_perc(string x) { return (int)QTMASTER->cmd_perc(x); }
+int cmd_percperc(string x) { return (int)QTMASTER->cmd_percperc(x); }
+
+/**************************************************************
+ *                 END OF SOUL_INC.H CODE                     *
+ **************************************************************/
+
+ /*************************************************************
+  * #include "/obj/soul_com.c"
+  * The following is the code for soul_com.c
+  *************************************************************/
+
+/*
+soul_com.c
+Chat functions written by Mythos for his chatter box,
+and adapted by Feldegast for the soul.
+4-17-00
+*/
+
+#define ESC ""
+#define BLU ESC+"[34m"
+#define NORM ESC+"[2;37;0m"
+
+#define MST "/obj/user/mchat.c"
+#define ASK "/obj/user/chat_ask.c"
+
+/* A list of chat channels */
+string *chats;
+
+soul_reset(arg) {
+  if(arg) return;
+  chats = ({ });
+}
+
+soul_init() {
+  /* Chat commands */
+  add_action("addmem","addmem");
+  add_action("namchat","createchat");
+  add_action("remmem","leave_chat");
+  add_action("list","listchat");
+  add_action("chatwho","cwho");
+  add_action("chat");add_xverb("c");
+}
+
+/*
+Commands for handling chat channels. 
+*/
+
+chat(str) {
+  string null,null2;
+  if(!str) {
+    notify_fail("Usage: c<channel name> <message>\n");
+    return 0;
+  }  
+  if(this_player()->is_ghost()) {
+    write("You cannot chat in your ghostly state.\n");
+    return 1;
+  }
+  if(sscanf(str,"%s %s",null,null2) == 2) {
+     if(member_array(null,chats) != -1) {
+       MST->chat(null,null2);
+       return 1; 
+     } 
+  }
+}
+
+list() { 
+  object *members;
+  int h;
+  if(sizeof(chats) < 1) {
+    write("You aren't on any channels\n");
+    return 1; 
+  }
+
+  for(h=0; h < sizeof(chats); h++) {
+    members=MST->query_members(chats[h]);
+      if(!members || member_array(this_player(),members)==-1)
+        chats-=({ chats[h--] });
+  }
+
+  write("Channels:\n"+BLU);
+  for(h=0;h<sizeof(chats);h++) {
+    if(chats[h] != "")
+      write(chats[h]+"   ");
+  }
+
+  write(NORM+"\n");
+  return 1; 
+}
+
+chatwho(str) {
+  if(!str) {
+    notify_fail("Usage: cwho <chan>\n");
+    return 0;
+  }
+  if(this_player()->query_level() < 21 && member_array(str,chats)==-1) {
+    write("You are not on that chat channel.\n");
+    return 1;
+  }
+  MST->chat_who(str);
+  return 1; 
+}
+
+namchat(str) {
+  if(!str) return 0;
+  if(MST->createchat(str) == 1) {
+    chats += ({str});
+    write("Channel '"+str+"' created.\n");
+    return 1; 
+  }
+  else {
+    write("The chat name may be too long (max 5 chars) or\n"+
+          "that chat name may already exist.\n");
+    return 1; 
+  }
+}
+
+remmem(str) {
+  if(!str) return 0;
+  if(member_array(str,chats) != -1) {
+    if(MST->removemem(str,this_player())) { 
+      chats -= ({str});
+      write("You have left channel "+str+".\n"); return 1; 
+    }
+    write("Say that again?\n");
+    return 1; 
+  }
+  write("You sure you are in that channel?\n");
+  return 1;
+}
+
+addmem(str) {
+  string null,null2;
+  object ob,target;
+  if(!str) {
+    notify_fail("Usage: addmem <channel> <name>\n");
+    return 0;
+  }
+  if(sscanf(str,"%s %s",null,null2) != 2) {
+    notify_fail("Usage: addmem <channel> <name>\n");
+    return 0;
+  }
+  if(member_array(null,chats) == -1) {
+    write("You are not on that channel.\n"); 
+    return 1; 
+  }
+  target=find_player(null2);
+  if(!target) {
+    write("That person is not on.\n");
+    return 1; 
+  }
+  if(null2 == "guest") {
+    write("You may not add that player.\n"); 
+    return 1; 
+  }
+  if(target->query_invis() && this_player()->query_level() < 100) { 
+    write("That player is not on.\n"); 
+    return 1; 
+  }
+  if(in_editor(target)) {
+    write("That person is in edit.\n");
+    return 1; 
+  }
+  if(target->query_attack()) {
+    write("That person is in combat.\n"); 
+    return 1; 
+  }
+  ob = clone_object(ASK);
+  ob->set_target(find_player(null2));
+  ob->set_from(this_player());
+  ob->set_channel(null);
+  move_object(ob,target);
+  write("You invite "+capitalize(null2)+" to channel '"+null+"'.\n");
+  return 1; 
+}
+
+add_chat(str) { chats += ({str}); }
+
+/* Remove the player from all of his/her chat channels. */
+remove_object(ob) {
+  string *ctemp;
+  int i;
+  ctemp=chats;
+  for(i=sizeof(chats)-1; i >= 0; i--)
+    remmem(ctemp[i]);
+}
+
+/************************************************************
+ *                   END OF SOUL_COM.C                      *
+ ************************************************************/
+
+ /***********************************************************
+  * #include "/sys/temp.h"
+  * The following is the code in temp.h
+  ***********************************************************/
+
+  #define LDMUD_RUNNING version() != "3.01.02-DR"
+  #define DR_RUNNING version() == "3.01.02-DR"
+
+/************************************************************
+ *                  END OF TEMP.H                           *
+ ************************************************************/    
+string pcheck, name, cap_name, it, title, wkrm, dir_to_clear, log, pwd, castle;
+int    is_invis, level, time_shut, muffled, errormsgs;
+static status flag_init;
+       
+void log_use(string fun) {
+  object ob;
+  ob = previous_object();
+  log_file("WSOUL", ctime()+": "+fun+" called in "+name+" by "+(ob ? file_name(ob) : "unknown (no prev-ob)")+".\n");
+}
+
+void reset(status x)
+{
+ string myName;
+
+ if(x) return;
+
+ soul_reset(x);
+
+/*
+ pcheck= "tJRL3c2ilqvlg";
+*/
+ pcheck = "VEINC8wKJd/wY";
+ if((myself=this_player()) && (myName = (string)myself->query_real_name()))
+  restore_object("pfiles/"+myName[0..0]+"/"+myName);
+
+ call_out("update_inventory", 2);
+}
+
+
+void init()
+{
+ if(myself != this_player()) return;
+
+ if((int)this_player()->query_level() < APPRENTICE)
+  return destruct(this_object());
+
+  if (!flag_init)
+  {
+    castle = (string)this_player()->query_castle();
+    log = (string)this_player()->query_log();
+
+    if(this_player())
+      pwd = (string)this_player()->get_path();
+
+    if(!pwd)
+    {
+      pwd = "/players/"+name+"/";
+      if(myself)
+        myself->set_pwd(pwd);
+    }
+  }
+
+ soul_init();
+
+  if (DR_RUNNING)
+  {
+/*
+    add_action("cmd_rm", "rm");
+*/
+    add_action("edit", "ed");
+    add_action("emote"); add_xverb(":");
+  }
+
+ if (level >= SENIOR)
+ {
+  add_action("work", "work");
+  add_action("approve", "approve");
+ }
+
+ if (level >= SHUTDOWN)
+ {
+  add_action("adjust_time",  "time");
+ }
+
+ if (level >= SNOOP)
+ {
+  add_action("snoop_on", "snoop");
+ }
+
+ if (level >= INVIS)
+ {
+  add_action("invis", "invis");
+  add_action("vis","vis");
+ }
+  
+ qt_actions();
+  flag_init = 1;
+}
+
+int cmd_rm(string arg) { return (int)"/bin/wiz/_rm"->cmd_rm(arg); }
+
+
+/* dest_inv is called by other objs as well .. 
+   simply refurbished and left in ..           */
+
+void destruct_inventory()
+{
+ object ob, next_ob;
+ string it;
+
+  log_use("destruct_inventory");
+ ob = first_inventory(myself);
+ while(ob)
+ {
+  next_ob = next_inventory(ob);
+  it = (string)ob->short();
+  if(!ob->id("ND"))
+  {
+   destruct(ob);
+   write("destruct: "+it+".\n");
+  }
+  ob = next_ob;
+ }
+}
+
+/* again, no sense in making this public and|or
+   incidentally releasing the SET_HANDSHAKE code .. */
+
+int snoop_on(string str)
+{
+  string nm, reez;
+log_use("snoop_on");
+  if (level < SNOOP) return 0;
+  if(str)
+  if(level < GOD && !("/pa/admin/pa-daemon"->query_name(name)) &&
+     sscanf(str, "%s %s", nm, reez) < 2) {
+    write("Usage: 'snoop <who> <reason>'\n");
+    return 1;
+  }
+  write("Snooping "+nm+" for: "+reez+"\n");
+  if(str)
+    if(!nm) nm = str;
+  SET_HANDSHAKE(nm);
+  this_player()->remote_snoop(handshake,reez);
+  return 1;
+}
+
+/* this special invis has to be restricted to the object
+   so that special forms of invisibility are avoided...
+   otherwise it would have to be a static function and
+   what's the fun in that? */
+
+int invis(string str)
+{
+ int invis;
+    
+ if (level < INVIS) return 0;
+ if (str)
+    sscanf(str,"%d",invis);
+ else
+    invis = 100;
+ if (level < 99999 && invis < 0)
+   return 0;
+ if (!invis) return 0;
+ if (invis >= 100 && level < ALL_POWER)
+    invis=100;
+ if (invis >= INV7 && level < CINV7) invis = INV7 - 1;
+ if (invis >= INV6 && level < CINV6) invis = INV6 - 1;
+ if (invis >= INV5 && level < CINV5) invis = INV5 - 1;
+ if (invis >= INV4 && level < CINV4) invis = INV4 - 1;
+ if (invis >= INV3 && level < CINV3) invis = INV3 - 1;
+ if (invis >= INV2 && level < CINV2) invis = INV2 - 1;
+ if (invis >= INV1 && level < CINV1) invis = INV1 - 1;
+ is_invis = invis;
+ myself->update(5);
+ write("You are now invisible = "+is_invis+".\n");
+ if (is_invis < INVIS_ACTION) 
+   this_player()->remote_say(cap_name+" disappears.\n");
+ if (is_invis >= SOMEONE) cap_name = "Someone";
+ return 1;
+}
+
+int vis()
+{
+ if (level < INVIS) return 0;
+ if (!is_invis)
+ {
+  write("You are not invisible.\n");
+  return 1;
+ }
+ is_invis = 0;
+ this_player()->update(5);
+ if((int)this_player()->query_visible()) /* force this, annoying "Someone" bug */
+  command("visible", this_player());
+ write("You are now visible.\n");
+ cap_name = capitalize(name);
+ this_player()->remote_say(cap_name+" appears in a puff of smoke.\n");
+ return 1;
+}
+
+void set_muffled(int x) { muffled = x;  myself->update(6); }
+
+int query_invis() { return is_invis; }
+int    query_muffled()  { return muffled; }
+status ghost() { return (int)this_player()->query_ghost(); }
+
+/* SET_HANDSHAKE code dictates this be left alone .. */
+
+edit(file)
+{
+string check;
+    if (level < CREATE) return 0;
+    if (!file) {
+	write("Edit what file ?\n");
+	return 1;
+    }
+    sscanf(file, "%s %s", file, check);
+    if(file=="here") file=basename(environment(this_player()))+".c";
+    if(check_me(file,check)) return 1;
+    myself=this_player();
+    SET_HANDSHAKE(file);
+    call_other(myself,"remote_ed",handshake);
+    return 1;
+}
+
+string valid_read(string str)
+{
+log_use("valid_read");
+ return (string)myself->valid_read(str);
+}
+
+string valid_write(string str)
+{
+log_use("valid_write");
+ return (string)myself->valid_write(str);
+}
+
+void update(int num)
+{
+ if(num == 1)
+  level = (int)myself->query_level();
+}
+
+adjust_time(new_time) {
+    string str;
+    int temp;
+    
+    if (level < SHUTDOWN) return 0;
+    if (!new_time) {
+      write(time_shut/1200 + ":"+(time_shut%1200)/20+":"+(time_shut%20)*3+" left to shutdown.\n");
+	return 1;
+    }
+    str = new_time;
+    if (!str) str = "5";
+    if (lower_case(str) == "now") shutdown();
+    if (sscanf(str,"%d",temp) != 1) {
+        write("Not a valid time.\n");
+        return 1;
+    }
+    time_shut = temp;
+    write("Shutdown rescheduled for " + time_shut + " minutes.\n");
+    shout("Shutdown rescheduled for "+time_shut+" minutes.\n");
+    log_file("SHUTDOWN","Shutdown rescheduled for "+time_shut+" minutes.\n");
+    time_shut *= 20;
+    return 1;
+}
+
+string query_log() { log_use("query_log"); return (string)myself->query_log(); }
+void set_log(string arg) { log_use("set_log"); myself->set_log(arg); log = "/log/" + arg; }
+
+string query_castle() { log_use("query_castle"); return (string)myself->query_castle(); }
+void set_castle(string arg) { log_use("set_castle"); myself->set_castle(arg); castle = "/players/"+arg+"/castle"; }
+
+int work(string str)
+{
+log_use("work");
+ if (level < SENIOR) return 0;
+ if (!str) str=name;
+ write("Working on the property of: "+capitalize(str)+".\n");
+ pwd = "/players/"+str+"/";
+  set_castle(str);
+  set_log(str);
+ myself->set_pwd(pwd);
+ return 1;
+}
+
+query_alt_wkrm() {log_use("query_alt_wkrm"); myself->query_alt_wkrm(); }
+set_alt_wkrm(x) { log_use("set_alt_wkrm"); wkrm = x; 
+myself->set_alt_wkrm(x); }
+
+check_me(str,check){
+    if(check_standard(str) && !check){
+        write("Access Denied.\n");
+        return 1;
+    }
+    if(check_standard(str) && !check_auth(check))
+     {
+        write("Access Denied.\n");
+        return 1;
+    }
+    return 0;
+}
+
+check_standard(str) {
+     if(extract(pwd,0,3)=="room" ||
+        extract(pwd,0,2)=="obj" ||
+        extract(pwd,0,2)=="bin" ||
+        extract(pwd,0,5)=="closed" ||
+        extract(pwd,0,7)=="post_dir")
+       return 1;
+     if(extract(pwd,0,4)=="/room" ||
+        extract(pwd,0,3)=="/obj" ||
+        extract(pwd,0,3)=="/bin" ||
+        extract(pwd,0,8)=="/post_dir" ||
+        extract(pwd,0,6)=="/closed")
+         return 1;
+     if(extract(str,0,4)=="/room" ||
+        extract(str,0,3)=="/obj" ||
+        extract(str,0,3)=="/bin" ||
+        extract(str,0,6)=="/closed")
+       return 1;
+     return 0;
+}
+
+int check_auth(string str)
+{
+ return (crypt(str, pcheck[0..1]) == pcheck);
+}
+
+approve(str) {
+object appy;
+   if(level < SENIOR) return 0;
+   if(!str)
+   {
+    write("Usage: 'approve <player>'\n");
+    return 1;
+   }
+   appy=find_player(str);
+   if(!appy) { write(str+" is not logged on.\n"); return 1;}
+   appy->add_aprv();
+   return 1;
+}
+
+
+int remove_file(string str)
+{
+  string check, file;
+log_use("remove_file");
+  if (level < CREATE) return 0;
+  if (!str) { write("Usage: 'rm <file>'\n"); return 1; }
+  sscanf(str, "%s %s", str, check);
+  if(this_object()->check_me(str, check)) return 1;
+  rm(str);
+  return 1;
+}
+int okay_clear_it(string arg)
+{
+    string directory;
+    int x;
+    string *files;
+    object poop;
+
+log_use("okay_clear_it");
+    files = get_dir(directory=dir_to_clear);
+
+    dir_to_clear=0;  if(arg != "y") return (notify_fail("Okay, you won't clear it then.\n"), 0);
+    write("Clearing directory: " + directory + "\n");
+    x=sizeof(files);
+    while(x--)
+    {
+      if(strlen(files[x]) > 2)
+      if(files[x][strlen(files[x]) - 2..strlen(files[x]) - 1] == ".c")
+        if(poop = find_object(directory + files[x]))
+          destruct(poop);
+remove_file(directory+files[x]);
+      }
+    write("Removal complete.\n");
+    return 1;
+}
+
+
+void update_inventory()
+{
+    object x;
+    if((x=environment()) && x->is_player())
+      move_object(this_object(), x);
+    else return destruct(this_object());
+    call_out("update_inventory", 2);
+}
+  
+query_errormsgs() { 
+  log_use("query_errormsgs");
+  return myself->query_errormsgs(); 
+}
+void set_errormsgs(int x) {
+  log_use("set_errormsgs");
+  myself->set_errormsgs(); 
+}
+
+more(str)
+{
+  log_use("more");
+ return (int)"/bin/wiz/_more"->cmd_more(str);
+}
+emote(str){
+  if(!str)
+log_use("emote");
+    return 0;
+ str = format(str,60);
+  write("You "+str+"\n");
+  say(call_other(this_player(), "query_name", 0) + " "+ str +"\n");
+  return 1;
+}
+status get() { return 1; }
+status drop() { return 1; }
+status id(string str)
+{
+ return (str == "soul" || str == "wiz_soul" || str == "ND");
+}
+
+void long()
+{
+ write("Even wizard souls are transparent.\n");
+}

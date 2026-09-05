@@ -1,0 +1,16 @@
+players/jareel/weapons/orlanth/fiona_sword
+players/vertebraker/swamp/OBJ/j_earring
+players/jenny/wings/items/sblocker
+players/khrell/armors/skaven/warparmor
+players/valen/area/catacombs/armors/d_belt
+players/maledicta/cont/rdragon/sbracers
+players/fakir/ways/ARM/tshield
+players/vertebraker/swamp/OBJ/j_robes
+players/khrell/armors/skaven/foulpendant
+players/vertebraker/swamp/OBJ/denim_shorts
+players/vertebraker/swamp/OBJ/denim_shorts
+players/jaraxle/closed/phoenix/mask
+players/jenny/wings/items/combinedrings
+players/cloud/Fayawyn/obj/dring
+players/jaraxle/3rd/alt/items/mana_orb
+players/forbin/realms/salam/OBJ/neruumsh

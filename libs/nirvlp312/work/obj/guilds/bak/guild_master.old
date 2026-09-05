@@ -1,0 +1,322 @@
+/*
+ * Guild Master
+ *  by Vertebraker@Nirvana
+ *
+ * Started: 5-12-04
+ * Finished: ???
+ *
+ * Description:
+ *  This object is primarily for usage in the "guild renewal" project
+ *  that is being undertaken by Vertebraker. It contains short and easy
+ *  ways of automating guild actions, functions, and so forth that are
+ *  generally mudwide. The way that it is coded is the way that Vertebraker
+ *  coded these rudiments, but not necessarily the "best" way to do
+ *  so. Learn all you want from it... but if you steal it liberally, at
+ *  least inherit it for Pete's sake.
+ */
+
+inherit "/obj/guilds/lib/masterData";
+
+#include "lib/master.h"
+#include "lib/aliases.h"
+#include "lib/varSecurity.h"
+#include "lib/varKeys.h"
+
+object  *slaves;      /* Guild objects registered to the daemon */
+string  *cmds;        /* List of cmds accessible by slaves */
+int     cmdSize;      /* Size of cmds .. */
+
+void reset(int arg)
+{
+  if(arg) return;
+  if(slaves) return;
+  ::reset(arg);
+  slaves = ({ });
+/*
+  Needs this_player().  We lose it.
+
+  call_out("autorehash", AUTOREHASH_TIME);
+*/
+  if(this_player()) this_object()->rehash_cmds();
+  call_out("autopurge",  AUTOPURGE_TIME);
+}
+
+#include "lib/varFuncs.h"
+
+/* Register a slave object to the master */
+void register_slave(object gob)
+{
+  if(!me->query_slave(gob))
+  {
+    slaves += ({ gob });
+    gob->restore_me(MAINSAVE);
+  }
+}
+
+/* Deregister a slave.. if they log out or quit the guild... */
+void deregister_slave(object gob)
+{
+  int     x;
+  if((x = member_array(gob, slaves)) > -1)
+    slaves -= ({ slaves[x] });
+}
+
+int query_slave(object gob)
+{
+  while(remove_call_out("autopurge") != -1);
+  this_object()->autopurge();
+  return (member_array(gob, slaves) > -1);
+}
+
+object * query_slaves()
+{
+  return slaves;
+}
+
+void renew_slave(object player)
+{
+  object ob;
+  if(ob=present("guild_object", player))
+  {
+    move_object(clone_object(OBJPATH), player);
+    destruct(ob);
+  }
+}
+
+/* Log important events. */
+void log_it(string file, string text)
+{
+  write_file(LOGDIR + file, "[" + ctime()[4..15] + "] " +
+   (TP ? CAP((string)TP->QRN) : "NoOne") + " : " +
+   FN(CALLER) + " : " + text);
+}
+
+/*
+ * Special personal logs that record key events of a character,
+ * such as joining, advancement, quitting, etc.
+ */
+void personal_log(string nm, string text)
+{
+  write_file(PERSONAL_LOGS + nm, "["+ctime()+"] " + text);
+}
+
+/* 
+ * Complicated variable access.
+ * Only the slave/master can manipulate their own variables,
+ * _EXCEPT_ for a guild wiztool, the guild wizards, and 
+ * objects that they define in the VALID_VAR_KEYS array.
+ */
+varargs status allow_varAccess(string nm, mixed val, object caller, object gob)
+{
+  return (caller == gob || caller == me || basename(caller) == WIZTOOL ||
+   (this_player() &&
+      member_array((string)this_player()->query_real_name(), GWIZ) > -1) ||
+    member_array(creator(previous_object()), GWIZ) > -1 ||
+     member_array(basename(caller), VALID_VAR_KEYS) > -1);
+}
+
+/*
+ * Gather a list of all cmds from the cmds directory.
+ */
+void rehash_cmds()
+{
+  int s;
+  string *myCmds;
+
+  cmdSize = 0;
+  cmds = ({ });
+
+  myCmds = files(CMDDIR);
+  s = sizeof(myCmds);
+  while(s--)
+    if(sscanf(myCmds[s], "_%s.c", myCmds[s]) && member_array(myCmds[s], cmds) == -1)
+    {
+      me->wiz_broadcast("add: " + myCmds[s]+"\n");
+      cmds += ({ myCmds[s] });
+      cmdSize ++;
+    }
+
+  me->wiz_broadcast("Rehash complete.\n");
+  me->wiz_broadcast(cmdSize + " commands indexed.\n");
+}
+
+int cmd_size()
+{
+  return cmdSize;
+}
+
+string *get_cmds()
+{
+  rehash_cmds();
+  return cmds;
+}
+
+/*
+ * Automatically rehash all guild cmds in case any new
+ * ones have been added in the past 4 hours.
+ */
+/*
+void autorehash()
+{
+  int time;
+
+  me->wiz_broadcast("AutoRehashing guild cmds...\n");
+  if(!cmds) rehash_cmds();
+  
+  time = AUTOREHASH_TIME;
+  me->wiz_broadcast("cmds will AutoRehash in " + time + " secs.\n");
+  call_out("autorehash", time);
+}
+
+int query_rehash_time()
+{
+  return find_call_out("autorehash");
+}
+*/
+
+/* Automatically purge the invalid slaves every once in a while. */
+void autopurge()
+{
+  int    s;
+  object ob, *newSlaves;
+
+  newSlaves = ({ });
+  s = sizeof(slaves);
+
+  while(s--)
+    if((ob = slaves[s]) && environment(ob))
+      newSlaves += ({ ob });
+
+  slaves = newSlaves;
+  call_out("autopurge", AUTOPURGE_TIME);
+}
+
+int query_purge_time()
+{
+  return find_call_out("autopurge");
+}
+
+/*
+ * Bring someone into the guild, do the basics..
+ */
+int induct_slave(object dood)
+{
+  object gob;
+  string doodName;
+  int    lev;
+
+  if(dood->query_guild_name() || dood->query_guild_exp())
+    return 0;
+
+  /* 
+   * We deduct extra experience from a character,
+   * so he can't bring any experience into the guild.
+   */
+
+  if((lev = (int)dood->query_level()) < 20)
+  {
+    int xp, exlv;
+    if(!(exlv = (int)dood->query_extra_level()))
+      xp = (int)"/room/adv_guild"->get_next_exp(lev-1);
+    else
+      xp = (int)"/room/exlv_guild"->get_next_exp(exlv-1);
+  }
+
+  tell_object(dood,
+    "\n\
+For entering the " + GUILDNAME + " guild, your experience has been\n\
+reduced to your level minimum of " + xp + " so that you may not\n\
+bring any experience into the guild.\n\n");
+
+  doodName = (string)dood->QRN;
+  log_it("JOIN", CAP(doodName) + ":" + (int)dood->query_exp() + "->" + xp +"\n");
+
+  dood->add_exp(-((int)dood->query_exp()));
+  dood->add_exp(xp);
+
+  gob = clone_object(OBJPATH);
+
+  move_object(gob, dood);
+  gob->set_var(V_INDUCT_TIME, ctime());
+
+  dood->add_guild_exp(1);
+  dood->set_guild_name(GUILDNAME);
+
+  gob->save_me(MAINSAVE);
+
+  personal_log(doodName, "Joined "+GUILDNAME+" Guild.\n");
+
+  command("save", dood);
+}
+
+/*
+ * Used for kicking someone out of the guild.
+ */
+int deduct_slave(object dood)
+{
+  object gob;
+  string doodName;
+  string file, *files, title;
+  int    s, l;
+
+  if(!dood->query_guild_name() || !dood->query_guild_exp())
+    return 0;
+
+  gob = present("guild_object", dood);
+  dood->set_guild_exp(0);
+  dood->set_guild_name(0);
+
+  doodName = (string)dood->QRN;
+
+  gob->set_var(V_QUIT_TIME, ctime());
+  gob->save_me(MAINSAVE);
+  destruct(gob);
+  rename("/"+MAINSAVE+doodName+".o", "/"+BACKUPDIR+doodName+".o");
+  log_it("QUIT", CAP(doodName) + ".\n");
+  personal_log(doodName, "Quit "+GUILDNAME+" Guild.\n");
+
+  tell_object(dood, "You have been removed from the " + GUILDNAME + " Guild.\n");
+
+  /* Reset title to mud title ... */
+
+  if(!(l=(int)dood->query_extra_level()))
+  {
+    l = (int)dood->query_level();
+    "/room/adv_guild"->set_player_ob(dood);  /* needed for gender titles */
+    title = (string)"/room/adv_guild"->get_new_title(l-1);
+  }
+  else
+    title = (string)"/room/exlv_guild"->get_new_title(l-1,dood);
+
+  dood->set_title(title);
+  command("save", dood);
+}
+
+/* Broadcast a msg to my homies. */
+void broadcast(string str)
+{
+  int s;
+  object ob;
+  s = sizeof(slaves);
+  while(s--)
+    if((ob = slaves[s]) && !ob->query_var(V_CHANNEL))
+    {
+     if(ob = environment(ob))
+      tell_object(ob, str + "\n");
+    }
+   "/obj/user/chistory"->add_history(GUILDNAME, str + "\n");
+}
+
+/* Announce important messages to guild wizards */
+void wiz_broadcast(string text)
+{
+  int s;
+  object x;
+  s = sizeof(GWIZ);
+  while(s--)
+    if(x=find_player(GWIZ[s]))
+      tell_object(x, "["+GUILDNAME+"]: " + text);
+}
+
+int query_prevent_shadow() { return 1; }
+

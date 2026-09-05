@@ -1,0 +1,142 @@
+/*
+ * Support selling from bags.
+ */
+ 
+status hooking;
+
+int tmp;
+
+int do_sell(object obj, string str, object bag, object env);
+
+int cmd_sell(string str)
+{
+  object obj, bag, env;
+  string what, location, bagLocation;
+  int    tmp;
+  
+  if(hooking)
+    return 0;
+  
+  if(!str || (sscanf(str, "%s in %s", what, location) < 2 &&
+               sscanf(str, "%s from %s", what, location) < 2))
+  {
+    notify_fail("Usage: 'sell <what> from <location>'\n");
+    return 0;
+  }
+  
+  if(!(bag = present(location, this_player())))
+  {
+    if(!(bag = present(location, (env = environment(this_player())))))
+    {
+      write("You aren't holding a container named "+what+".\n");
+      return 1;
+    }
+    else
+      bagLocation = location + " on the ground";
+  }
+  else
+  {
+    env = this_player();
+    bagLocation = location + " in your inventory";
+  }
+  
+  if(bag->queryKept())
+  {
+    write("You may not sell the contents of a container which \
+you are keeping.\n");
+    return 1;
+  }
+  
+  if(what == "all")
+  {
+    int i, j;
+    object *objs;
+    int nr_of_items;
+ 
+    objs = all_inventory(bag);
+    j = sizeof(objs);
+    
+    if(j)
+    {
+      if(!do_sell(objs[0],(string)objs[0]->short(),bag,env))
+      {
+        write("You cannot sell your items here - Try a shop.\n");
+        return 1;
+      }
+      
+      nr_of_items = 1;
+
+      if(j > 1)
+        for(i = 1; i < j; i++)
+        {
+          do_sell(objs[i],(string)objs[i]->short(),bag,env);
+          if(objs[i] && (environment(objs[i]) != bag))
+            nr_of_items ++;
+        }
+    }
+    else
+    {
+      write("There isn't anything in the "+bagLocation+".\n");
+      return 1;
+    }
+    
+    write("Number of items sold: "+nr_of_items+".\n");
+    return 1;
+  }
+  
+  if(!(obj = present(what, bag)))
+  {
+    write("There isn't a "+what+" in the "+bagLocation+".\n");
+    return 1;
+  }
+  
+  if(!do_sell(obj,what,bag,env))
+  {
+    write("You cannot sell here!\n");
+    return 1;
+  }
+  
+  if(!first_inventory(bag))
+    write("The "+bagLocation+" is now empty.\n");
+    
+  return 1;
+}
+  
+status do_sell(object obj, string objName, object bag, object env)
+{
+  int x;
+  object sh;
+  
+  command("unbag "+objName+"", this_player());
+  
+  sscanf(objName, "%s %d", objName, tmp); 
+  
+  hooking = 1;
+  
+  if(obj != present(objName, env))
+  {
+/*
+    sh = clone_object("/closed/wiz/unique_id");
+    objName = (string)obj->short();
+    sh->set_unique_id(obj, objName);
+*/
+  log_file("VERTE_SELL", basename(obj)+"\n");
+  write("You will have to take "+(string)obj->short()+" out of the container before selling it.\n");
+  return 1;
+  } 
+  
+  write("Selling "+objName+"... ");
+  x = command("sell "+objName, this_player());
+  
+/*
+  if(sh)
+    sh->remove_unique_id();
+*/
+  
+  hooking = 0;
+  
+  if(obj && environment(obj)==this_player())
+    move_object(obj, bag);
+  
+  return x;
+}

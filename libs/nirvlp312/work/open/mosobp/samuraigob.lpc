@@ -1,0 +1,560 @@
+#include "def.h"
+
+inherit "/players/vertebraker/dev/guild_object";
+
+object firstwep;
+object offwep;
+object meditate;
+nosave int beating;
+int frozen;
+int shame;
+string kamae;
+nosave status counterattacking;
+
+nosave int flag_focus, flag_kiai; /* Earwax */
+nosave int last_hp,last_sp;
+
+reset(arg){
+  ::reset(arg);
+  if(arg || root()) return;
+  set_id("Mark of the Samurai");
+  set_short("Mark of the "+HIW+"Samurai"+NORM);
+  set_long("\
+The mark of the ancient Samurai is upon you.\n"+
+RED+"  _______// //______\n"+NORM+"\n\
+Type <shelp> to see your guild's abilities.\n");
+  guild_file = basename(this_object());
+  guild_name = "samurai";
+  cmd_dir = BINDIR;
+  save_dir = SAVEDIR;
+  kamae = "chudan";
+  set_heart_beat(1);
+}
+
+string notweapon_msg;
+string notarmor_msg;
+
+id(string str)
+{
+  if(str=="death_check_object") return 1;
+  if (::id(str) || str =="mark" || str=="mark of the samurai" ||
+         str == "generic_wc_bonus" || str =="pro_object" ||
+         str == "no_spell" || str == "hp_regen_object" ||
+         str=="GI" ||
+         str == "sp_regen_object")
+    return 1;
+  if(str=="notweapon" && previous_object() &&
+     !previous_object()->id("sword") &&
+     !previous_object()->id("knife") &&
+     !previous_object()->id("dagger"))
+  {
+    notweapon_msg = "You may only wield swords or knives as a Samurai.\n";
+    return 1;
+  }
+  if(str=="notweapon" && query_verb() == "offwield"
+    && offwep && offwep->query_wielded_by() == this_player())
+  {
+    notweapon_msg = "You are already offwielding "+offwep->query_name()+".\n";
+    return 1;
+  }
+  if(str=="notarmor" && previous_object() && 
+     previous_object()->query_type()=="shield")
+  {
+    notarmor_msg = "You may not wear shields as a Samurai.\n";
+    return 1;
+  }
+  return str == GOBID;
+}
+
+display_notweapon_msg() {
+  write(notweapon_msg);
+  return 1;
+}
+
+display_notarmor_msg() {
+  write(notarmor_msg);
+  return 1;
+}
+
+init()
+{
+  if(!loaded && ENV())
+  {
+    ENV()->RegisterArmor(this_object(),
+      ({ "physical", 0, 0, "armor_special" }));
+    ENV()->set_whimpy(0);
+  }
+  add_action("counterattack_function","samurai_counterattack");
+  ::init();
+}
+
+
+armor_special(owner)
+{
+  int ret;
+  int kamae_modifier;
+  int rank;
+  /* the following calculations added by illarion on 6.15.2010 */
+  rank = ENV()->query_guild_rank();
+  ret = 0;
+  
+  if (kamae == "chudan") {
+    kamae_modifier = 1;
+    ret = rank - 15;
+  } else if (kamae == "jodan") {
+    kamae_modifier = 2;
+    ret = rank - 25;  /* The penalty for offensive mode makes sense, but mitigate by rank */
+  } else kamae_modifier = 0;  
+  
+  if(!ENV()->query_attack())
+    return 0;
+    /* A penalty in neutral mode makes no sense.
+       And no bonuses at all except in defensive mode also makes no sense.
+       Instead they should just be rarer  - ill 6.15.2010
+  if (kamae == "chudan") return -30;
+  if (kamae == "jodan") return -40;
+  else return -20;
+  */
+  /* 50% harder in neutral mode, 100% harder in offensive mode, with a slight mitigation for rank - ill [6.15.10] */
+  if(!shame && owner->query_attrib("dex") > random(60+ (30*kamae_modifier) - rank) )
+  {
+    string msg;
+    string dir;
+    switch(random(6))
+    {
+      case 0:
+      msg = "feinted";
+      break;
+      case 1:
+      msg = "armblocked";
+      break;
+      case 2:
+      msg = "legblocked";
+      break;
+      case 3:
+      msg = "rolled";
+      break;
+      case 4:
+      msg = "flipped";
+      break;
+      case 5:
+      msg = "parried";
+      break;
+    }
+    switch(random(4))
+    {
+      case 0:
+      dir = "to the left";
+      break;
+      case 1:
+      dir = "to the right";
+      break;
+      case 2:
+      dir = "forward";
+      break;
+      case 3:
+      dir = "backward";
+      break;
+    }
+    tell_object(owner,
+     BOLD+"You "+msg+" "+dir+"!\n"+NORM);
+    tell_room(environment(owner),
+      BOLD+owner->query_name()+" "+msg+" "+dir+"!\n"+NORM,
+      ({ owner }));
+    ret += 1 + random(owner->query_attrib("dex") / 10);
+    /* counterattacks happen more often based on rank and mode */
+    /* removing owner->query_attrib("dex") from this equation
+       gives it way to high of a chance for extra attacks.
+       Fred - [8.24.2011]
+    */
+    if(!shame && rank > random( 500 + ( 50 * kamae_modifier ) ))
+    {
+      tell_object(owner, HIR+"You counterattack!\n"+NORM);
+      tell_room(ENV(owner), HIR+owner->QN+" counterattacks!\n"+NORM,({ owner }));
+      counterattacking=1;
+      command("samurai_counterattack", owner);
+      counterattacking=0;
+    }
+  }
+  /* +4 in defensive mode, +2 in neutral, +0 in offensive */
+  ret += (flag_focus * (2-kamae_modifier) + flag_kiai * (2-kamae_modifier));
+  
+  ret -= shame * 5;
+  return ret;
+}
+
+int counterattack_function() {
+  object qwep;
+  if(!counterattacking) return 1;
+  /*
+  if(qwep=ENV()->query_weapon())
+  {
+    qwep->hit(ENV()->query_attack());
+  }
+  if(qwep=ENV()->query_second_weapon())
+  {
+    qwep->hit(ENV()->query_attack());
+  }
+  */
+  ENV()->toggle_already_fight(1);
+  ENV()->attack();
+  return 1;
+}
+
+query_combat_method() { return 3; }
+
+set_firstwep(ob){ firstwep=ob; }
+query_firstwep(){return firstwep; }
+remove_firstwep(){ firstwep = 0; }
+
+set_offwep(ob) { offwep = ob; }
+query_offwep() { return offwep; }
+remove_offwep(){ offwep = 0; }
+
+#define JAP_WEPS ({"katana","shurato","nodachi","wakizashi","tanto",\
+                   "backbiter","zantetsuken","demonslayer"})
+
+japanese_wep(ob)
+{
+  int s;
+  s = sizeof(JAP_WEPS);
+  while(s --)
+    if(ob->id(JAP_WEPS[s])) return 1;
+}
+
+gen_wc_bonus()
+{
+  int ret;
+  object atk;
+  string msg;
+  object wep;
+  
+  wep = TP->query_weapon();
+  
+  switch(random(6))
+  {
+    case 0:
+      msg = "You feel your ancestors' blood pulsing through your veins.\n";
+      break;
+    case 1:
+      msg = "You feel the power of the ancients.\n";
+      break;
+    case 2:
+      msg = "Your power is strengthened by the Old Ones.\n";
+      break;
+    case 3:
+      msg = "Your Bushido style moves in a blur!\n";
+      break;
+    case 4:
+      msg = "The thousand years of Samurai dominance enhances your technique!\n";
+      break;
+    case 5:
+      msg = "You strike fast with the Wudang sword style!\n";
+      break;
+  }
+  if(shame)
+  {
+    msg = BOLD+"You have brought shame to the Samurai community.\n"+NORM;
+  }
+  tell_object(ENV(), RED+msg+NORM);
+  if(!shame)
+  {
+    ret += ENV()->query_guild_rank() / 2;
+  }
+  if(!shame && offwep && offwep->query_wielded_by() == ENV())
+  {
+    if(japanese_wep(offwep))
+    {
+    ret += ENV()->query_guild_rank() / 2;
+    }
+  }
+  if(!shame && wep)
+  {
+    if(japanese_wep(wep))
+    {
+      ret += 1 + ENV()->query_guild_rank() / 2;
+    }
+  }
+  if(atk=ENV()->query_attack())
+  {
+    if(atk->query_hp() <= (atk->query_mhp() / 10) && ENV()->query_weapon()){
+      object head;
+      tell_object(ENV(), 
+      "\n\tA sound like wailing winter winds is heard as you behead "+
+       atk->query_name()+"!\n\n");
+      tell_room(ENV(ENV()),
+       "A sound like wailing winter winds is heard as "+
+       ENV()->query_name()+" beheads "+atk->query_name()+"!\n",
+       ({ENV()}));
+      head = clone_object("/obj/treasure");
+      head->set_id("head of "+atk->query_name());
+      head->set_alias("head");
+      head->set_value(1);
+      head->set_weight(0);
+      head->set_short("Head of "+atk->query_name());
+      head->set_long("The bloody, decapitated head of "+atk->query_name()+".\n");
+      head->move_object(resolve_ob(ENV(atk)));
+      /* I didn't intend this, but /players/illarion/high/obj/dkatana_new.c is almost tailored for this
+      guild, if the guild beheadings counted...  so now they do - ill [6.15.2010] */
+      if(offwep) offwep->add_deathblow(atk);
+      if(wep) wep->add_deathblow(atk);
+      atk->death();
+      {
+        object c;
+        if(c=present("corpse", ENV(ENV()))){
+          c->set_short("The decapitated corpse of "+c->QN);
+        }
+      }
+    }
+  }
+  if(kamae =="gedan")
+  {
+    /* changed from (5 + random(TP->query_guild_rank()))
+       Fred - [8.24.2011]
+    */ 
+    ret -= random(4);
+  }
+  else if(kamae == "jodan")
+  {
+    /* 07/17/07 Earwax: wtf, return value of 15??? i don't think so.*/
+    /* Changed from (5 + random(TP->query_guild_rank()))
+       Fred - [8.24.2011]
+    */ 
+    ret += random(4);
+    /* bonus for focus/kiai makes sense */
+    /* Removed random(TP->query_guild_rank() /2)
+       Why is there a rank bonus for focus and kiai flags?
+       Fred - [8.24.2011]
+    */
+    ret += (flag_focus * 2 + flag_kiai * 2);
+    /* Move the checks for kiai and focus in here, do calcs here */
+  } else if (kamae == "chudan")
+  {
+    /* slightly smaller bonus for focus/kiai in neutral mode */
+    ret += (flag_focus + flag_kiai);
+  }
+  /* Earwax: only bonuses come from having focus, kiai running */
+  /*         no bonus if they are in defensive mode */
+  
+  /* The following line completely ignores all the above code exccept the deathblow.
+  I'm not even sure this was inentional, given his additional nerf above - ill [6.15.2010]
+  ret = (kamae == "jodan" ? (flag_focus * 2 + flag_kiai * 2) : -10);
+  */
+  /* Why a penalty in neutral mode?
+  if (kamae == "chudan") ret -= 3;
+  */
+  ret -= shame * 3;
+  return ret;
+}
+
+heart_beat()
+{
+  beating = 0;
+  if(!ENV())
+  {
+    return;
+  }
+  
+  if(ENV()->query_attrib("ste") > 20) {
+    tell_object(ENV(), "You can only have a maximum of 20 stealth in this guild.\n");
+    ENV()->set_attrib("ste", 20);
+  }
+  if(ENV() && ENV(ENV()) && meditate)
+  {
+    if(meditate != ENV(ENV()) || ENV()->query_attack())
+    {
+      tell_object(ENV(), "Your meditation is interrupted!\n");
+      meditate = 0;
+    }
+  }
+  
+  
+  if(meditate)
+  {
+    if(ENV()->query_attrib("wil") > random(150))
+    {
+      int amt;
+      amt = 1 + random(ENV()->query_guild_rank() / 2);
+      if(ENV()->query_intoxination())
+        ENV()->drink_alcohol(-amt);
+      if(ENV()->query_soaked())
+        ENV()->drink_soft(-amt);
+      if(ENV()->query_stuffed())
+        ENV()->eat_food(-amt);
+    }
+    if(ENV()->query_hp() > last_hp || ENV()->query_sp() > last_sp)
+    {
+      last_hp = ENV()->query_hp();
+      last_sp = ENV()->query_sp();
+      ENV()->print_monitor();
+    }
+  }
+  
+  if(ENV() && ENV(ENV()) && ENV()->query_attack())
+  {
+    object atk, their_atk;
+    if((their_atk=(atk=ENV()->query_attack())->query_attack()) != ENV()
+      && their_atk)
+    {
+      if(their_atk->query_guild_name()=="samurai" &&
+         their_atk->query_guild_rank() <= ENV()->query_guild_rank())
+      {
+        return;
+      }
+      tell_object(ENV(),
+        BOLD+"You step to the lead of the battle.\n"+NORM);
+      tell_room(ENV(ENV()),
+        BOLD+ENV()->QN+" steps to the lead of the battle.\n"+NORM,
+        ({ENV()}));
+      atk->attack_object(ENV());
+    }
+  }
+}
+
+set_meditate(x){
+  meditate=x;
+  last_hp = ENV()->query_hp();
+  last_sp = ENV()->query_sp();
+}
+
+query_meditate(){
+  return meditate;
+}
+
+/* +1 to guild rank for regen amounts makes meditate actually DO something when it's avail at rank 2 
+ - ill [6.15.2010]
+*/
+
+query_hp_regen(){
+  return (meditate ? ((ENV()->query_guild_rank()+1) / 3) : 0);
+}
+
+query_sp_regen(){
+  return (meditate ? ((ENV()->query_guild_rank()+1) / 3) : 0);
+}
+
+guild_login(){
+
+  string *fs; int s;
+  (OBJDIR+"chatob")->resetchannel();
+  ENV()->set_home(ROOTDIR+"room/dojo_shomen");
+  tail(ROOTDIR+"doc/news");
+  if(TP->query_level() < 21)
+  command("id :entered the game.", TP);
+  set_kamae(kamae);
+  s = sizeof(fs = get_dir(ROOTDIR+"quotes/"));
+  write(HIW);
+  tail(ROOTDIR+"quotes/"+fs[random(s)]);
+  write("\n");
+  write(NORM);
+}
+
+set_beating(x) {
+  beating = x;
+}
+
+query_beating() {
+  return beating;
+}
+
+death_check(ob)
+{
+  object atk;
+  if((atk=ob->query_attack()) && ob->query_attrib("wil") > random(34))
+  {
+    int dmg;
+    dmg = (int)atk->query_mhp() / 2;
+    if(dmg > 100) dmg = 100;
+    tell_room(ENV(ob),
+      BOLD+"\n\t"+ob->QN+" rises with the power of the Ancients as "+subjective(ob)
+        +" dies!\n\n"+NORM);
+    atk->hit_player(dmg, "magical");
+  }
+}
+
+cmd_hook(str)
+{
+  if(frozen && query_verb() != "seppuku")
+  {
+    write("As you have brought dishonor and shame to the Samurai\n"+
+          "community, your commands have been frozen.\n\n"+
+          "Your only way out is <seppuku>.\n");
+    return 1;
+  }
+  else
+    return ::cmd_hook(str);
+}
+
+set_frozen(x){
+  frozen = x;
+}
+
+query_frozen(){
+  return frozen;
+}
+
+add_shame(x){
+  shame += x;
+}
+
+query_shame(){
+  return shame;
+}
+
+set_kamae(x){
+  int res;
+  int rank;
+  rank = (int)ENV()->query_guild_rank();
+  if(x == "gedan")
+    res = 10 + rank; /* added a rank modifier - ill [6.15.2010] */
+    /*res = 10; Changed from 20, Earwax */
+  else if(x == "jodan")
+    res = rank - 20; /* added a rank modifier - ill [6.15.2010] */
+  /* setparams call was incorrect.  samurai were getting no res bonuses at all - ill [6.15.2010] */
+  ENV()->RegisterArmor(this_object(), ({ "physical", 0, res, "armor_special"}));
+  kamae = x;
+}
+
+query_kamae(){
+  return kamae;
+}
+
+/* 07/19/07 Earwax: moved this stuff from objects to here */
+void set_kiai()
+{
+  flag_kiai = 1;
+  while(remove_call_out("end_kia") != -1)
+    ;
+  call_out("end_kiai", ((int)ENV()->query_guild_rank() * 8));
+}
+
+void end_kiai()
+{
+  tell_object(environment(), BOLD+"You feel less powerful.\n"+NORM);
+  tell_room(ENV(ENV()), ENV()->QN+" appears less powerful.\n", ({ ENV() }));
+  flag_kiai = 0;
+}
+
+void set_focus()
+{
+  flag_focus = 1;
+  while(remove_call_out("end_focus") != -1)
+    ;
+  call_out("end_focus", ((int)ENV()->query_guild_rank() * 8));
+}
+
+void end_focus()
+{
+  tell_object(environment(),"You lose your "+BOLD+"focus"+NORM+".\n");
+  flag_focus = 0;
+  tell_room(ENV(ENV()), ENV()->QN+" loses "+possessive(ENV())
+    +" focus"+NORM+".\n", ({ ENV() }));
+}
+
+query_focus(){
+  return flag_focus;
+}
+
+query_kiai(){
+  return flag_kiai;
+}

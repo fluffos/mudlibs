@@ -1,0 +1,561 @@
+/*
+ * Generic Channel Daemon
+ * Draganr@ Nirvana
+ *
+ * Updates:
+ *   1/7/2014: Rumplemintz - changed all member_array calls to member()
+ *                           changed keys() to m_indices()
+ *  1/10/2014: Rumplemintz - changed prefix stuff
+ *  1/31/2014: Gnar        - added broadcast_feelings and helper functions
+ *                           from std.c
+ *  2/21/2014: Gnar        - Updated to use STD_DAEMON.
+ */
+#pragma no_clone
+#pragma strict_types
+
+#include <ansi.h>
+#include <security.h>
+
+#pragma strict_types
+#pragma save_types
+
+#define DBUG(x) if(find_player("dragnar")) tell_object(find_player("dragnar"),x)
+#define STD_DAEMON "/bin/std_daemon.c"
+
+#define ADMIN_CHANNELS ({ "admin" })
+#define UNCENSORED_CHANNELS ({ "mage", "wiz", "admin", "risque", "jukebox",\
+                               "lpc", "annouce", "star", "Rogues", "pk", })
+#define FREE_CHANNELS ({ "gossip", "equip", "shout", "risque", "junk", "msg",\
+                         "babble", "newbie", "pk", "jukebox" })
+#define ALL_CHANNELS ({ "gossip", "equip", "shout", "risque", "junk", "msg",\
+                        "babble", "newbie", "pk", "jukebox", "wiz", "lpc",\
+                        "announce", "admin",})
+#define WIZ_CHANNELS ({ "wiz", "lpc", "announce" })
+
+mapping ChannelsMap;
+mapping ChannelHistoryMap;
+
+int   query_channel(string channel_name, object player);
+void  remove_channel(string channel_name, object player);
+void  add_channel(string channel_name, object player);
+int   channel_message(string channel, string msg, string prefix);
+void  transmit_message(string channel, string msg, object *exclude_objs );
+string build_msg(string channel, string msg, string prefix);
+string build_feeling_msg(string channel, string msg, string prefix);
+string build_emote_msg(string channel, string msg, string prefix);
+#ifdef __LDMUD__
+object * on_channel(string channel);
+#else
+array on_channel(string channel);
+#endif
+int   list_users(string channel);
+void  add_channel_history(string channel_name, string message);
+int   query_history(string channel_name);
+mixed *broadcast_feeling(string channel, string who, string *a, string prefix);
+string br_format_rets(string msg, string channel, string prefix);
+string br_format_ansiprefs(string msg, string channel, object play, string prefix);
+
+int
+query_channel(string channel_name, object player)
+{
+  object *ppl;
+  int i;
+  
+  ppl = on_channel( channel_name );
+  for( i=0; i < sizeof(ppl); i++ )
+    return member( on_channel( channel_name ), player ) >= 0;
+#ifdef __LDMUD__ /* Rumplemintz */
+  NO_WARN_MISSING_RETURN;
+#endif
+}
+
+void
+add_channel(string channel_name, object player)
+{
+  object *players;
+  int i;
+  if(ChannelsMap == 0) { ChannelsMap = ([ ]); }
+  if(!(players = ChannelsMap[channel_name]))
+  {
+    ChannelsMap[channel_name] = ({ player });
+  }
+  else
+  {
+    if(member(players, player) == -1)
+    {
+      if((i = member(players, 0)) == -1)
+      {
+        ChannelsMap[channel_name] += ({ player });
+/*         player->add_channel_name(channel_name); */
+        return;
+      }
+      else
+        ChannelsMap[channel_name][i] = player;
+    }
+    else
+      write("You are already on channel "+ channel_name +".\n" );
+      
+/*   player->set_channel_name(player->query_channel_names() += ({ channel_name })); */
+  }
+}
+
+void
+remove_channel(string channel_name, object player)
+{
+  object *players;
+  if(ChannelsMap == 0){ ChannelsMap = ([ ]); }
+  
+  if(players = ChannelsMap[channel_name])
+  {
+    if( member( players, player ) >= 0 ) 
+      ChannelsMap[channel_name] -= ({ player });
+    else
+      write("You are not on channel " +channel_name+".\n");
+/*     player->set_channel_name(player->query_channel_names() -= ({channel_name})); */
+  }
+  else
+  {
+    return;
+  }
+}
+
+int
+channel_message(string channel, string msg, string prefix)
+{
+  int i;
+  mixed *ret_vals;
+  object* exclude_ob;
+  
+  if(ChannelsMap == 0) ChannelsMap = ([]);
+  if(!ChannelsMap[channel]) ChannelsMap[channel] = ({ });
+  
+  if( !msg || !channel ) 
+    return 0;
+  
+  if (!this_player()->setup_broadcast(channel))
+    return 1;
+  
+  /* Filter message if required */
+  if( member( UNCENSORED_CHANNELS, channel ) < 0 )
+    msg = (string)"/obj/verte/text_sanitizer"->sanitize_text(msg);
+  
+  /* Channel Who */
+  if( msg == "list" || msg == "who" ) {
+    list_users(channel);
+    return 1;
+  }
+  
+  /* History */
+  if(msg == "history"){
+    query_history( channel );
+    write("\n");
+    return 1;
+  }
+  
+  /* Emoting broadcast */
+  if (msg[0] == ':')  { 
+    string feeling, targ;
+    feeling = msg[1..strlen(msg)-1];
+    sscanf(feeling, "%s %s", feeling, targ);
+    if(feeling) {
+      string aa, b;
+      while(sscanf(feeling,"%s.%s",aa,b)) {
+        if(!aa) aa = "";
+        if(!b) b = "";
+          feeling = (aa+b);
+      }
+    }
+/* New code for send feelings over channels here */
+  if(check_file("/bin/soul/_"+feeling+".c") > 1) {
+    string *a;
+    a = (string *) call_other("/bin/soul/_"+feeling, "query_junk", targ);
+    ret_vals = broadcast_feeling( channel, targ, a, prefix );
+    msg = ret_vals[0];
+    if( sizeof(ret_vals) > 1) exclude_ob = ret_vals[1];
+    if( msg == "" )
+      return 1;
+    msg = build_feeling_msg( channel, msg, prefix ); 
+  }
+  else
+    msg = build_emote_msg( channel, msg, prefix );  
+  }
+  else { /* Not an emote */
+    msg = build_msg( channel, msg, prefix );
+  }
+  transmit_message( channel, msg, exclude_ob );
+  return 1; /* Rumplemint z*/
+}  
+
+string
+build_msg(string channel, string msg, string prefix) {
+  if( member( WIZ_CHANNELS, channel ) < 0 || !this_player()->query_invis() ) {
+    if( prefix )
+#if 0 /* Rumplemintz - same here, use prefix if sent */
+      msg = prefix + " " + NORM + msg +"\n";
+#else
+      msg = prefix + msg + "\n";
+#endif
+    else
+      msg = this_player()->query_name() + " " + channel + "s: " + msg + "\n";
+  }
+  else {
+    if( prefix )
+#if 0 /* Rumplemintz - same here, use prefix if sent */
+      msg = prefix + " " + NORM + msg +"\n";
+#else
+      msg = prefix + msg + "\n";
+#endif
+    else
+      msg = "(Invis) " +
+            capitalize((string)this_player()->query_real_name()) + " " +
+            channel + "s: " + msg + "\n";
+  }
+  return msg;
+}
+
+string
+build_feeling_msg(string channel, string msg, string prefix) {
+  if( member( WIZ_CHANNELS, channel ) < 0 || !this_player()->query_invis() ) {
+    if( prefix )
+#if 0 /* Rumplemintz - If there's a prefix sent, use it intead of building
+       a new one... */
+
+      msg = prefix + " " +NORM+ msg;
+#else
+      msg = prefix + msg;
+#endif
+    else
+      msg = "(" + channel + ") " + msg;
+  }
+  else
+    if( prefix )
+#if 0 /* Rumplemintz - same here, use prefix if sent */
+      msg = prefix + " " +NORM+ "(invis) " +
+            msg;
+#else
+      msg = prefix + msg;
+#endif
+    else
+      msg = "(" + channel + ") " + "(invis) " +
+            msg;
+            
+  return msg;
+}
+
+string
+build_emote_msg(string channel, string msg, string prefix) {
+  if( member( WIZ_CHANNELS, channel ) < 0 || !this_player()->query_invis() ) {
+    if( prefix )
+#if 1 /* Rumplemintz - If there's a prefix sent, use it intead of building
+       a new one... */
+      msg = prefix + " " +NORM+ this_player()->query_name() + " " +
+            msg[1..strlen(msg)] + "\n";
+#else
+      msg = prefix + msg[1..strlen(msg)] + "\n";
+#endif
+    else
+      msg = "(" + channel + ") " + this_player()->query_name() + " " +
+            msg[1..strlen(msg)] + "\n";
+  }
+  else
+    if( prefix )
+#if 1 /* Rumplemintz - same here, use prefix if sent */
+      msg = prefix + " " +NORM+ "(invis) " +
+            capitalize((string)this_player()->query_real_name()) + " " + 
+             msg[1..strlen(msg)] + "\n";
+#else
+      msg = prefix + msg[1..strlen(msg)] + "\n";
+#endif
+    else
+      msg = "(" + channel + ") " + "(invis) " +
+            capitalize((string)this_player()->query_real_name()) + " " + 
+            msg[1..strlen(msg)] + "\n";
+            
+  return msg;
+}
+
+
+void
+transmit_message( string channel, string msg, object *exclude_objs ) {
+  object *targets;
+  int i;
+  string ansi;
+  
+  targets = ChannelsMap[channel];
+  for(i = 0; i < sizeof(targets); i++)
+  {
+    if(targets[i])
+    {
+      if(environment(targets[i]))
+      {
+        /* if( member(on_channel(channel), targets[i]) != -1 && (!exclude_ob || targets[i] != exclude_ob ) ) */
+        if( member(on_channel(channel), targets[i]) != -1 && (!exclude_objs || member(exclude_objs, targets[i]) == -1 ) )
+        {
+          if(environment(targets[i])->is_player())
+          {
+            if(!(ansi = (string) environment(targets[i])->get_ansi_pref(channel))) ansi = "";
+
+            tell_object(environment(targets[i]), format(ansi + msg + NORM, 75) );
+          }
+          else
+          {
+            if(!(ansi = (string) targets[i]->get_ansi_pref(channel))) ansi = "";
+            tell_object(targets[i], ansi + msg + NORM);
+          }
+        }
+      }
+      else
+        ChannelsMap[channel] -= ({targets[i]});
+    }
+    else
+      ChannelsMap[channel] -= ({targets[i]});
+  }
+  add_channel_history(channel,
+    "\[" +(ctime()[11..18]) + "\] " + ( ansi ? ansi : "") + msg + NORM);
+}
+
+mixed *broadcast_feeling(string channel, string who, string *a, string prefix)
+{
+  object fd, ob, play, *us;
+  string msg, msg2, msg3, junk, cprefix;
+  object *exclude_objs;
+  int    s;
+  
+  play = this_player();
+
+  if(who && who != "someone")
+  {
+#ifdef __LDMUD__
+    if(!(ob = find_player(who)) ||
+#else
+    if(!(ob = find_player(who,1)) ||
+#endif
+       ((int)ob->query_invis() >
+        (int)play->query_level()))
+    {
+      write("You don't see "+capitalize(who)+" on Nirvana.\n");
+      return ({ "" });
+    }
+    if(!query_channel( channel, ob ) )
+    {
+      write(capitalize(who)+" is not on the "+channel+" channel.\n");
+      return ({ "" });
+    }
+    if(ob->query_muffled())
+    {
+      write(capitalize(who)+" is muffling all channels.\n");
+      return ({ "" });
+    }
+  }
+  
+  else if(who)
+    if(!(ob = find_object("/bin/soul/someone_dummy")))
+      ob = (object)"/bin/soul/someone_dummy"->LoadMe();
+      
+  if(who)
+  {
+    if(stringp(junk=a[2]) && junk != "0\n" && junk != "0$N$\n")
+      msg = (string) STD_DAEMON->x(junk, ob);
+    if(stringp(junk=a[3]) && junk != "0\n" && junk != "0$N$\n")
+      msg2 = (string) STD_DAEMON->x(junk, ob);
+    if(stringp(junk=a[4]) && junk != "0\n" && junk != "0$N$\n")
+      msg3 = (string) STD_DAEMON->x(junk, ob);
+  }
+  else
+  {
+    if(stringp(junk=a[0]) && junk != "0\n" && junk != "0$N$\n")
+      msg = (string) STD_DAEMON->x(junk, ob);
+    if(stringp(junk=a[1]) && junk != "0\n" && junk != "0$N$\n")
+      msg2 = (string) STD_DAEMON->x(junk, ob);
+  }
+  
+  if(channel != "risque" && channel != "wiz" && channel != "admin" &&
+     channel != "pk" && channel != "announce")
+  {
+     if( member( UNCENSORED_CHANNELS, channel ) < 0 ) {
+      if(msg) msg = (string)"/obj/verte/text_sanitizer"->sanitize_text(msg);
+      if(msg2) msg2 = (string)"/obj/verte/text_sanitizer"->sanitize_text(msg2);
+      if(msg3) msg3 = (string)"/obj/verte/text_sanitizer"->sanitize_text(msg3);
+    }
+  }
+
+  if( prefix )
+    cprefix = prefix +NORM;
+  else
+    cprefix = "("+channel+")";
+    
+  if(msg)
+    msg  = br_format_rets(msg, channel, cprefix);
+  if(msg2) 
+    msg2 = br_format_rets(msg2, channel, cprefix);
+ if(msg3)
+   msg3 = br_format_rets(msg3, channel, cprefix);
+ 
+ if(msg) {
+  write( br_format_ansiprefs(msg,channel,play, cprefix));
+  exclude_objs = ({ this_player() });
+ }
+  
+  if(msg3) {
+    tell_object(ob, br_format_ansiprefs(msg3,channel,ob, cprefix));
+    exclude_objs += ({ ob });
+  }
+  
+  return ({ msg2, exclude_objs });
+}
+
+string br_format_rets(string msg, string channel, string prefix)
+{
+  string *arr;
+
+  arr = explode(msg, "\n");
+  if(sizeof(arr) > 1)
+    arr = arr[0..sizeof(arr)-2];
+  return (implode(arr, prefix)+"\n");
+}
+
+string br_format_ansiprefs(string msg, string channel, object play, string prefix)
+{
+  string ansi, heh, what;
+  heh = implode(explode(msg, prefix), ((
+     ansi=(string)play->get_ansi_pref(channel))?ansi:"")+
+     (prefix+NORM));
+  return ((ansi?ansi:"")+prefix+NORM+" "+heh);
+}
+
+#ifdef __LDMUD__
+object * 
+#else
+array
+#endif
+on_channel(string channel) { 
+   if(ChannelsMap == 0) { 
+     ChannelsMap = ([ ]); 
+   }
+   return ChannelsMap[channel] ? ChannelsMap[channel] : ({ }) ; 
+}
+
+int
+list_users(string channel) {
+  int index;
+  object *people;
+  string str;
+
+  str = "On channel " + channel + ": ";
+#ifdef __LDMUD__
+  people = on_channel(channel);
+#else
+  people = (object *) on_channel( channel );
+#endif
+
+  for (index = sizeof(people) - 1; index >= 0; index--) {
+    if( !people[index] ) {
+      remove_channel( channel, people[index] );
+    }
+    else {
+      if (!people[index]->query_invis() || this_player() && this_player()->query_level() > 999)
+        if(!people[index]->query_muffled())
+          str += people[index]->query_name() + (index ? ", " : " ");
+    }
+  }
+  write(format(str));
+  return 1;
+}
+
+void
+add_channel_history(string channel_name, string message)
+{
+  string *messages;
+  if(ChannelHistoryMap == 0){ ChannelHistoryMap = ([ ]); }
+  if(!(messages = ChannelHistoryMap[channel_name]))
+  {
+    ChannelHistoryMap[channel_name] = ({ message });
+  }
+  else {
+    messages = ChannelHistoryMap[channel_name];
+    if(sizeof(messages) >= 19)
+      messages -= ({ messages[0] });
+    messages += ({ message });
+    ChannelHistoryMap[channel_name] = messages;
+  }
+}
+  
+int
+query_history(string channel_name)
+{
+  string *messages;
+  int i;
+  if(ChannelHistoryMap == 0)
+    ChannelHistoryMap = ([]);
+  if(!ChannelHistoryMap[channel_name]) 
+    ChannelHistoryMap[channel_name] = ({ });
+  messages = ChannelHistoryMap[channel_name];
+  tell_object(this_player(), "Channel History: "+channel_name+"\n");
+  tell_object(this_player(), "----------------------------------------\n");
+  for(i=0; i<sizeof(messages); i++){
+     tell_object(this_player(), messages[i]);
+  }
+  tell_object(this_player(), "----------------------------------------\n");
+  return 1;
+}
+
+int
+query_player_channels( object target ) {
+  int i, size;
+  
+  size = sizeof(FREE_CHANNELS);
+  for( i=0; i < size; i++ ) {
+    write("    " + pad(FREE_CHANNELS[i],8) + " -- " + (member( on_channel( FREE_CHANNELS[i] ), target ) > -1 ? "ON" : "OFF") + "\n" );
+  }
+  if (this_player()->query_level() < EXPLORE)
+    return 1;
+  
+  size = sizeof(WIZ_CHANNELS);
+  for( i=0; i < size; i++ ) {
+    write("    " + pad(WIZ_CHANNELS[i],8) + " -- " + (member( on_channel( WIZ_CHANNELS[i] ), target ) > -1 ? "ON" : "OFF") + "\n" );
+  }
+  if(this_object()->query_level() < SENIOR) 
+    return 1;
+  
+  size = sizeof(ADMIN_CHANNELS);
+  for( i=0; i < size; i++ ) {
+    write("    " + pad(ADMIN_CHANNELS[i],8) + " -- " + (member( on_channel( ADMIN_CHANNELS[i] ), target ) > -1 ? "ON" : "OFF") + "\n" );
+  }
+  return 1;
+}
+
+int
+valid_channel(string channel) {
+  if (member(FREE_CHANNELS, channel) != -1)
+    return 1;
+  if (member(WIZ_CHANNELS, channel) != -1)
+    /* Only wizards have access to these channels. */
+    return (this_player()->query_level() >= EXPLORE );
+  if(channel == "admin") return (this_player()->query_level() > SENIOR );
+  return 0;
+}
+
+int
+debug()
+{
+  int i, j;
+  string *chans;
+  object *who;
+  
+  if (!ChannelsMap) {
+    write("No channels created.\n");
+	return 1;
+  }
+  
+  chans = m_indices(ChannelsMap);
+  for(i = 0; i < sizeof(chans); i++) {
+    write(chans[i]+": ");
+	who = ChannelsMap[chans[i]];
+	for( j=0; j < sizeof(who); j++) {
+	  if(who[j]) write(who[j]->query_name()+",");
+	  else write("GONE,");
+	}
+	write("\n");
+  }
+  return 1;
+}  

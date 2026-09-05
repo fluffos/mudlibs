@@ -1,0 +1,288 @@
+/*
+ *      File:                   /obj/player/secure/file_access.c
+ *      Function:               Controls read/write access
+ *      Author(s):              Earwax@Nirvana
+ *      Copyright:              Copyright (c) 2006 Earwax (David Halek)
+ *                                      All Rights Reserved.
+ *      Source:                 07/28/06
+ *      Notes:                  Valid_read/write() called by /secure/master.c
+ *      Change History:
+ */
+
+#include "/sys/security.h"
+#include "/sys/ansi.h"
+#include "/sys/logs.h"
+#include "/sys/jobs.h"
+
+/* 
+ * Function name:
+ * Description:
+ * Arguments:
+ * Returns:
+ */
+void output(string arg) { 
+  object wax;
+  
+  log_file("LD_WRITE", arg);
+  if ((wax = (find_player("earwax"))))
+    tell_object(wax, arg);
+}
+
+mixed report(mixed result, string arg)
+{
+  string send, verb;
+  
+  send  = HIC+"PL WRITE--> "+NORM;
+  if ((verb = query_verb())) 
+    send += (verb+"--> ");
+  send += (result ? HIG+result+NORM : HIR+"FAILURE"+NORM);
+  send += " "+arg+"\n";
+  output(send);
+  return result;
+}
+/* 
+ * Function name: valid_read
+ * Description:   Right now, it's a daemon, later will probably be inherited by
+ *                player.c  Doing it this way to avoid breaking the DR mud.
+ * Arguments:     Path to check access to - MUST BE absolute/normalized already
+ * Returns:       0 - disallow access
+ *                1 - use path (without modification)
+ *                string - path to use (with modification)
+ */
+
+nomask valid_read(string path)
+{
+  string *paths,
+         *caller_stack_names;
+  string  base_dir,
+          sub_dir,
+          junk, junk2,
+          pname,
+          access_path;
+  int     paths_size,
+          plevel;
+  int i;
+write("P/VR: PATH: "+path+"\n");  
+  if (query_override()) return path;
+  
+  if (this_player()) pname = (string)this_player()->query_real_name();
+  if (this_player()) plevel = (int)this_player()->query_level();
+                    
+  if (plevel >= ELDER || sscanf(path, "/players/%s/access.c", junk) || path == "/")
+    return path;
+    
+  /* 
+   * Make sure it's a valid path first 
+   */  
+  if (path && path[0] != '/') path = sprintf("/%s", path);
+  
+  if (!path || instr(path, "//") || instr(path, "..") 
+  || instr(path, "/./") || instr(path, "~"))
+    return 0;          
+    
+  /*
+   * Figure out the base_dir and sub_dir          
+   */
+          
+  paths_size = sizeof(paths = explode(path[1..], "/"));
+  
+  if (!paths_size) /* Path is / */
+    return path;  
+    
+  base_dir = paths[0]; 
+  sub_dir = (paths_size > 1 ? paths[1] : 0);        
+  if (base_dir != "players" && (instr(path, "closed") || instr(path, "secure")))
+    return 0;
+    
+  if (plevel >= SENIOR && base_dir != "post_dir") 
+    return path;
+    
+  switch(base_dir)
+  {
+    case "pa" :
+      return ((int)this_player()->query_position("pa") > 0 ? path : 0);
+    case "post_dir" :
+      return (sub_dir && sub_dir == pname ? path : 0);
+    case "pfiles" :
+      return (paths_size > 2 && paths[2][0..<3] == pname ? path : 0);
+    case "players" : 
+      if (!sub_dir || sub_dir == "tar_castles" || sub_dir == "pre-reno")
+        return 0;
+      if (sub_dir == pname)
+        return path;
+      if (sub_dir == sprintf("%s.o", pname))
+        return path;
+      if (sub_dir == "inactive_saved")   
+      {
+        if (plevel >= SENIOR || (paths_size > 2 && paths[2][0..<3] == pname))
+          return path;
+        else
+          return 0;
+      }
+      if (paths_size == 2)
+        return (paths[2][0..<3] == pname ? path : 0);
+      if (plevel >= READ_OTHERS && !instr(path, "closed") && !instr(path, "secure"))
+        return path;
+      access_path = sprintf("/players/%s/access.c", sub_dir);
+      if (file_size(access_path) > 0)
+        if ((int)access_path->valid_read(pname, path))
+          return path;
+      caller_stack_names = map(caller_stack(), #'object_name);
+      foreach(string temp : caller_stack_names)
+      {
+        if (sscanf(temp, "players/%s/%s", junk, junk2) == 2 && junk == sub_dir)
+          return path;
+      }
+      return 0;
+  }
+  
+  return path;
+}
+  
+nomask mixed valid_write(string path)
+{
+  string  base_dir, 
+          sub_dir,
+          junk, junk2,
+          what_to_log,
+          access_path;
+  int pos, pos2, i;
+  string *caller_stack_names;
+  
+/* comment this out for now, as it's daemonized til ldmud opens  
+  object prev_ob;
+*/  
+  string pname; int plevel; /* removes these after this can be inherited safely */
+  int inact2;
+  /* 
+   * Make sure it's a valid path first 
+   */  
+  if (path && path[0] != '/') path = sprintf("/%s", path);
+
+  if (this_player()) pname = (string)this_player()->query_real_name();
+  if (this_player()) plevel = (int)this_player()->query_level();
+  if (this_player()) inact2 = (int)this_player()->query_inacttwo();
+
+  if (plevel >= ELDER && check_password_given())
+return report(path, "elder with password");
+
+  /* Make sure it's a valid, normalized path, if not, return 0 */
+  if (!path || instr(path, "//") || instr(path, "..") 
+  || instr(path, "/./") || instr(path, "~"))
+{
+return report(0, "Problem with the path");
+}
+  /* Get the filenames of all the previous objects */
+  caller_stack_names = map(caller_stack(), #'object_name);
+  
+  /* 
+   * Next, figure out the base directory and sub directory
+   */
+  if (path == "/")
+    base_dir = "/";
+  else if ((pos = strstr(path, "/", 1)) > 1)
+  {
+    base_dir = path[1..pos-1];
+    
+    if (strlen(path) > pos) 
+    {
+      if ((pos2 = strstr(path, "/", pos+1)) > pos)
+        sub_dir = path[pos+1..pos2-1];
+      else
+        sub_dir = path[pos+1..];
+    }
+    else
+      sub_dir = 0;
+  }
+  else
+  {
+    base_dir = path[1..];
+    sub_dir = 0;
+  }
+    
+  switch(base_dir)
+  {
+    case "open":
+      return path; /* Everyone has access to open */
+    case "doc":
+      if (plevel >= ELDER || (pname && member(DOCUMENTARIANS, pname) >= 0))
+        return path;
+      break;
+    case "log":
+      if (plevel >= ED_LOG
+      || (pname && (sub_dir == pname 
+      || (sscanf(path, "/log/%s.%s", junk, junk2) == 2 && junk == pname)
+      || (sscanf(path, "/log/%s-%s", junk, junk2) == 2 && junk == pname)
+      || (sscanf(path, "/log/%s/%s", junk, junk2) == 2 && junk == pname)
+      || (sscanf(path, "/log/WR/%s_%s", junk, junk2) == 2 && junk == pname))))
+        return path;
+      if (caller_stack_names[2] == "bin/wiz/_rlog")
+        return path;
+      break;
+    case "pfiles":
+      if (sub_dir == "notes" 
+      && (sscanf(path, "/pfiles/notes/%s", junk) && pname == junk))
+        return path;
+      if (!inact2 && sscanf(path, "/pfiles/%s/%s.o", junk, junk2) == 2
+      && junk2 == pname)
+          return path;
+      break;
+    case "bin":
+      if (sub_dir == "soul" && caller_stack_names[0] == "bin/soul/editor")
+        return path;
+      break;
+    case "players":
+      if ((plevel >= CREATE && pname && pname == sub_dir)
+      || (plevel >= ELDER)
+      || (plevel >= SENIOR && !instr(path, "closed") && !instr(path, "secure")
+      &&  (!sub_dir
+      ||  member( ({ "inactive_saved", "tar_castles", "pre-reno" }), sub_dir) < 0)))
+        return path;
+      if (!sub_dir)
+        break;
+      if (!inact2 && pname && sub_dir == pname)
+        return path;
+      if (!inact2 && sub_dir == "inactive_saved"
+      && sscanf(path, "/players/inactive_saved/%s.o", junk) && junk == pname)
+        return path;
+      access_path = sprintf("/players/%s/access.c", sub_dir);
+      if (file_size(access_path) > 0)
+        if ((int)access_path->valid_write(pname, path))
+          return path;
+      for (i = 0; i < pos; i++)
+        if (sscanf(caller_stack_names[i], "players/%s/%s", junk, junk2) == 2
+        &&  sub_dir == junk)
+          return report(path, "it's within a wizard's dir");
+  }  
+        
+i = pos = sizeof(caller_stack_names); 
+while(i--) junk+=sprintf("(%d)%s\t",i,caller_stack_names[i]);
+output(HIK+"PL WRITE CALLED: by "+pname+"("+plevel+"): "+path+"...\n"+junk+"\n");
+
+  /*
+   * If it's someone returning from ed, check their previously set rights
+   */
+  if (this_player() && !query_verb() && in_editor(this_player()))
+  {
+    if (query_reserved_ed_privileges(this_player(), path))
+    {
+      what_to_log = sprintf("%s: %-11s (ED) %s\n", ctime()
+      , pname, path);
+      log_file(MODIFY, what_to_log);
+      log_file(ED, what_to_log);
+return report(path, "ED: reserved_ed_privileges cleared it");
+    }
+    else
+return report(0, "ED: DENIED, no reserved_ed_privileges");
+  }
+
+    /* See if it's a bin command, if so, kick out */
+    i = pos;
+    
+    while(i--)
+      if (caller_stack_names[i][0..7] == "bin/wiz/") 
+        return report(0, "Denied, it's a bin call and failed");
+    
+return report(0, "path: "+path);
+}
+

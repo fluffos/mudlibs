@@ -1,0 +1,2 @@
+inherit "obj/monster";
+

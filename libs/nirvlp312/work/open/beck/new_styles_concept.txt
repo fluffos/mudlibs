@@ -1,0 +1,130 @@
+Weapon styles and related hit_player changes
+
+I am proposing new changes to hit player to allow for different attack types to occur.
+These will allow a little more flexibility in the game.
+The concept is based on the fact not all attacks are the same.  Some
+are physical, while others are magical, and others are in their own
+category.  Also defenses are different too and can be broken up
+the same way.
+The new categories are:
+"physical" - should be used for martial arts and weapon attacks
+   and defense
+"magical" - should be used for general spell attacks and defense
+
+"other|<sub category>" - for any attack/defense that does not logically
+   fall within the other two categories.  The <sub category> can be
+   anything, but should have standard categories to provide that more
+   objects can be coded for it.  
+   A sub category attack will have no defense resistance from the 
+   target unless they have an object with defense to that EXACT
+   subcategory.  Therefore wizards should be careful with attack
+   damage used.
+
+The new format for a hit_player call will be:
+   target->hit_player(dam1, type1, dam2, type2)
+   dam1 - damage amount from the first attack
+   type1- style of the first attack ("physical", "magical", or 
+      "other|sub")
+   dam2 - damage from the second attack
+   type2 - style of the second attack
+
+   You can opt for up to two different styles for each hit_player call
+   with separate damage for each.  However the damage cap of 50 still
+   is in effect and takes into account the combined damage from both
+   attacks (dam1 + dam2 can not be above 50 when called from a player)
+
+   A wizard does not have to specify a style.  By default the style
+   will by "physical" is either no style is specified, or the correct
+   format for the hit_player is not used (spelling mistakes, etc.)
+   For examply a call like target->hit_player(25); still will work
+   as type "physical".  
+   A call like target->hit_player(25,0,15,0); would also work.  The
+   net affect of this would be to do 40 damage of type "physical".
+
+
+How defense works (the heart of the new hit_player changes):
+
+The theory of the code:
+   defense is now broken into the 3 categories as listed above.
+   furthermore there will be an option to specify a class for each
+   type and a resistance to each type (calculations for these will 
+   be explained below).
+
+   Each living object can have a set class and resistance(%) to each
+   pre defined.  
+   There will be specific funtions one can use to modify these.
+   By default armor_class will be used for type physical.  This will
+   allow all current code to still work properly.  
+   for physical and magical classes there will be global variables in
+   living.c that can be modified.
+   for all types in the "other" category there is a global array called
+   'specialprot'.  This can be modified by a wizard but MUST include in
+   this order: style, class, resistance.  An example of this would be
+   ({"other|fire",10,5}).
+   more than one type can be added into this array as defense will 
+   check the whole array for matches to the attack.
+   an example would be: ({"other|fire",10,2,"other|water",5,10})
+   
+   The main new idea I added is that individual objects can be used
+   to modify defense.  There is a global mapping in living.c where
+   a list of these objects can be registered.
+   the mapping is keyed by the objects.  An array is linked to each 
+   object with information for defense.  The array can be modified
+   by each wizard but they must be in this order:  style, class, 
+   resistance, 'special function'.
+   The special function is an optional parameter which is the string
+   of a named function from within the object.  This function will be
+   called each time a hit_player with that type of damage is used.
+   For example if you had a funtion called water() your string would
+   be "water".  The function allows a wizard to randomize defense each
+   round or to send special messages to a player.
+   A full array would be ({"physical",10,5,"water"}).  Like the
+   specialprot array this can have multiple types of defense defined.
+   The parameters in the array are added to the class and resistance
+   for that type of damage.  In the array above this would mean that 
+   for type "physical" the class would be increased by 10 and 
+   resistance by 5% and the function water() will be called.
+   The return from the special function will be added to class of that
+   type.  
+   Each object will modify defense for a type if that type is specified
+   in its array.  Normally the objects will be worn armor, but any 
+   object (even if not present on the user) can be registered.  The
+   code will only call to the actual object if the special function is 
+   defined.
+
+What the code does:
+   First the code checks the parameters of the hit_player function
+   It will check to see if dam1 or dam2 are greater than 0.
+   If they are it will check for valid types.  If a valid type
+      is not found then it will default the type to "physical".
+   if type1 and type2 are the same it combines the two damage amounts
+   into dam1 so that some code can be skipped for efficiency.
+
+   The next step is to set all the classes and resistances using the
+   global variables in living.c  including: armor_class, magic_class
+   armor_res and magic_res.  it also checks the specialprot array
+   if one of the types is "other".  It is this section that will 
+   account for all other 'old' code.  It should be clear that all
+   old code will still work including paladin, knight templar, and 
+   feldegasts special code.
+  
+   The next step is to check all the objects for modifications to the
+   base as specified above.
+
+   Next is a section to make sure that numbers are not outrageous.
+   There is a check to make sure resistance % is not greater than 100
+
+   The last section calculates the damage.
+   damage is calculated as follows for each type:
+    damage from attack is modified by the % resistance. (it is 
+      multiplied by 100-resistance%)
+    then the class is randomized and subtracted from damage.
+   finally if dam1 and dam2 exist they are added together.
+
+   After this point the normal hit player code executes including
+   the damage cap of 50 for attacks from players.
+
+   *Note  there are many checks to make sure code is only executed
+   for what damage exists.  if dam1 or dam2 is 0 entering the function
+   all code for that part is skipped.
+

@@ -1,0 +1,207 @@
+/* ls(string PathAndPattern)
+ *
+ * Earwax 5/20/04
+*/
+
+/* for now... */
+
+inherit "/players/earwax/resolve_path.c";
+
+#define DIVISOR 1000
+#define MAX_WIDTH 70
+
+/* Prototypes */
+status format_output(string path, string *temp, int columns);
+
+/* Global Variables */
+mapping Completed; /* ([ Path : columns ]) to make it a little faster */
+
+int
+cmd_ls(string path)
+{
+  string pattern, output;
+  int size, mod;
+  int i, siz, len, totalsize, ds, fs;
+  string *files;
+
+  if (!path)
+    path = (string)this_player()->query_pwd();
+
+  ds = fs = 0;
+  path = resolve_path(path);
+  pattern = "";
+  len = strlen(path) - 1;
+
+  if (path[len] == '/' && (text_contains(path,"*") || text_contains(path,".")))
+  {
+    for (i = len; i >= 0; i--)
+      if (path[i] == '/')
+      {
+        pattern = path[(i+1)..len];
+        path = path[0..i];
+        i = -1;
+      }
+  }
+
+  write("LS: "+path+pattern+"\n");
+  if (path == "/players/")
+  {
+    write("You cannot ls in /players.\n");
+    return 1;
+  }
+
+/*
+  if (!((int)this_player()->valid_read(path)))
+  {
+    write("Access to directory denied.\n");
+    return 1;
+  }
+*/
+
+  if (file_size(path) > -2)
+  {
+    write("Directory does not exist.\n");
+    return 1;
+  }
+
+
+  siz = sizeof(files = get_dir(path+pattern));
+  totalsize = 0;
+
+  for (i = 0; i < siz; i++)
+  {
+
+    len = file_size(path+files[i]);
+
+    if (len > -2)
+    {
+      fs++;
+      files[i] = (find_object(path+files[i]) ? "*" : " ") + files[i];
+      totalsize += len;
+      size = len / DIVISOR;
+      mod = len - (size * DIVISOR);
+      len = (mod >= 500 ? (size+1) : size);
+
+      if (len == 0)
+        len = 1;
+    }
+    else
+      files[i] = " "+files[i];
+
+
+    switch(len)
+    {
+      case -2 : files[i] = "   "+files[i]+"/"; ds++; break;
+      case 0..9 : files[i] =  "  "+len+files[i]; break;
+      case 10..99 : files[i] =  " "+len+files[i]; break;
+      case 100..999 : files[i] =  ""+len+files[i]; break;
+      default : files[i] = files[i]; break;
+    }
+
+    files[i] = " " + files[i] + " ";
+    
+  }
+
+  i = totalsize / DIVISOR;
+  totalsize = i + (totalsize - (i * DIVISOR) >= 500 ? 1 : 0);
+
+  if (!Completed)
+    Completed = ([ ]);
+
+  output = path+pattern;
+  i = (member(Completed, output) ? Completed[output][0] : 5);
+
+  if (!format_output(output, files, i))
+  {
+    output = "";
+    siz = sizeof(files);
+
+    for (i = 0; i < siz; i++)
+      output += files[i]+"\n";
+
+    write(output);
+  }
+
+  write("Size: "+totalsize+"   ("+fs+" Files, "+ds+" Directories)\n");
+  return 1;
+}
+
+
+int
+format_output(string path, string *temp, int columns)
+{
+  int *max_width;
+  int t, i, j, siz, rows, len, clen;
+  string output;
+  string *files;
+
+  files = temp;
+  output = "";
+  siz = sizeof(files);
+  rows = siz / columns;
+  rows += ((siz - (columns * rows)) ? 1 : 0);
+  max_width = allocate(6);
+
+  if (!member(Completed, path))
+  {
+
+    for (i = 0; i < rows; i++)
+    {
+      clen = 0;
+
+      for (j = 0; j < columns; j++)
+      {
+        t = j * rows + i;
+        if (t < siz)
+        {
+/*
+          if (!j) files[t] = " " + files[t];
+          if ((j + 1) < columns)
+            files[t] += "  ";
+*/
+
+          len = strlen(files[t]);
+          max_width[j] = (len > max_width[j] ? len : max_width[j]);
+          clen += len;
+
+          if (clen >= MAX_WIDTH)
+            return (columns > 2 ? format_output(path, temp, (columns - 1)) : 0);
+        }
+      }
+    }
+
+    Completed[path] = allocate(6);
+    Completed[path][0] = columns;
+
+    for (i = 0; i < 5; i++)
+      Completed[path][(i + 1)] = max_width[i];
+  }
+  else
+  {
+    columns = Completed[path][0];
+    max_width = Completed[path][1..5];
+  }
+
+  files = temp;
+
+  for (i = 0; i < rows; i++)
+  {
+    for (j = 0; j < columns; j++)
+    {
+      t = j * rows + i;
+
+      if (t < siz)
+      {
+/*
+        if (!j) files[t] = " " + files[t];
+        if ((j + 1) < columns) files[t] += "  ";
+*/
+        write(pad(files[t], max_width[j]));
+      }
+    }
+
+    write("\n");
+  }
+
+  return 1;
+}

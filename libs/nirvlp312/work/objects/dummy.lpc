@@ -1,0 +1,2 @@
+/* dummy object for doors */
+

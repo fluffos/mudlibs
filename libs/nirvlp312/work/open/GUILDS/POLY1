@@ -1,0 +1,604 @@
+GUILD OBJECT:             /players/mizan/closed/poly/gob.c
+MASTER DAEMON OBJECT:     /players/mizan/closed/poly/PDM.c
+GUILD OBJECT ID STRING:   "Mizan-guild-object"
+ADV_GUILD:                /players/mizan/etheriel/ROOMS/spuck.c
+                          /players/mizan/etheriel/beasties/spuck.c does the actual
+                          guild stat handling though...
+                          
+GUILD ROOM:               /players/mizan/etheriel/ROOMS/linna.c
+
+* goto /players/mizan/guildent.c will simply teleport you to above room.
+
+DESCRIPTION:
+------------
+
+The guild is named 'polymorphs', and players have the ability to assume different
+forms, one at a time, which allow them special powers but also certain limitations.
+The main features of the shapeshifting are attribute bonuses, like if a player
+assumes the example morph of a 'Mage' some changes are reflected as such:
+Hitpoints go down, SP go down, INT goes up, STE goes down.
+
+If a player morphs as a 'Warrior', HP would go up, SP drops to minimal, all combat
+
+related attributes improve, ability to cast magic degrades. Of course, i would not
+use such conventional forms, as the guild uses my entire castle as its base.
+
+The cost of polymorphing is obviously high, with some morph forms costing around
+700 sp. Charges for polymorphing are stored in the guild object, and savable.
+This energy can only be used exclusively to polymorph, not heal, or anything else.
+A player can store a maximum of 2300 charges.
+
+The player can only assume one morph at a time, but cannot save morphs over reboot.
+I have made the attribute adjusting code bulletproof, so abuse of attributes can
+only come from an outside source (wizard).
+
+THEME RESTRICTIONS:
+NO teleport spells.
+NO extrasensory abilites.
+
+NO pets.
+
+
+GUILD LEVELS:
+Guild levels do not require much experience relative to other guilds because
+the number of abilities are not as extensive, and this is not a 'power guild'.
+There may be only one morph form that can be considered controversial (tetrapod)
+but players have to pay through the nose to use these forms.
+
+There are 5 levels in the guild.
+(Taken from /players/mizan/etheriel/beasties/spuck.c)
+#define LEV_TWO_COST   20000
+#define LEV_THREE_COST 50000
+#define LEV_FOUR_COST  90000
+#define LEV_FIVE_COST 160000
+
+
+
+
+POLYMORPH FORMS:
+----------------
+
+This is ripped directly from the master daemon object code...
+(players/mizan/closed/poly/PDM.c)
+The following is the cost in charges (1 charge = 1 sp) to polymorph:
+
+
+#define POLY_GOLEM_COST  120
+#define POLY_TREE_COST   200
+#define POLY_WOMBAT_COST  50
+
+/* [3] */
+
+
+#define POLY_FUNGOID_COST 250
+#define POLY_SPONGE_COST 250
+#define POLY_BLOBEL_COST 330
+
+/* [4] */
+
+
+#define POLY_REPLICANT_COST 500
+#define POLY_PUFFBALL_COST 400
+#define POLY_SHOUTBOX_COST 440
+
+/* [5] */
+
+#define POLY_TETRAPOD_COST 700
+#define POLY_BOG_COST 550
+
+
+
+--------------------------------------------------------------------------
+The following chart displays how much the attributes are affected
+by each polymorph:
+
+MORPH FORM   d STA    INT    MAG    STR    STE    LUCK  COST(sp)  TIME LIM
+--------------------------------------------------------------------------
+GOLEM           +4     -8    -20     +4     -6      -2   120      2000 hb
+TREE            +2    -18    -18      0    -18      10   200      quick
+WOMBAT          -7    -18     -5     -1    -16      10    50
+FUNGOID         +2    -18    -18      2     -6      -3   250
+SPONGE    8+ran(10)   -18    -19      5    -16       1   250
+BLOBEL          -6     +3     +3    -10     -6       0   330
+REPLICANT       +3     +3     +3     +3     +3      +3   500      2000 hb
+
+PUFFBALL       -11     +3     +7    -13     +2      +2   400
+SHOUTBOX        -6     -7     +4     +9    -13     -10   440
+TETRAPOD        +4    -20    -20     +5     +5      -4   700      2000 hb
+BOGGLEMANCER    -3     -2     +6     -1     -1       8   550
+
+
+PIE and WIS are not affected as they are used by the guild to calculate
+spell fudging. Most offensive spells have a chance of failure.
+Attrib change will not go negative, minimum for attribs is 1.
+These are handled by functions:
+
+do_polymorph()
+undo_polymorph()
+
+record_attribs()
+
+in the master object.
+
+---------------------------------------------------------------------------------
+
+
+All of the guild powers and what they do are listed in the
+
+following format:
+
+[spell] (level 1 spell) (5 sp) PDM->spell();
+
+ ^          ^             ^        ^
+ |          |             |        Location of code.
+ |          |           Cost       PDM denotes ~/closed/poly/PDM.c 
+
+ |          |
+ |      Guild rank req.
+
+ |
+ Spell name as the player would type it in.
+
+-----------------------------------------------------------------
+All spells indicated as 'Single attack' use the common driver
+PDM->single_attack().
+Potential damage is illustrated as:
+
+  damage = ((sps * 60) / 100) + random(sps / 2);
+
+-----------------------------------------------------------------
+Area attack spells use the common driver PDM->area_attack().
+Potential damage is illustrated as:
+
+  damage = total damage / number of targets in room 
+  random(damage)
+-----------------------------------------------------------------
+
+PDM->guild_function()
+  Basic guild functions, guild tell, who, resign, etc.
+
+PDM->polymorph_function()
+  Polymorph handling routine.
+
+PDM->set_function()
+  Master control of all 'settable' attributes
+
+PDM->toggle_function()
+  Master control of all toggles.
+
+
+BASIC GUILD SPELLS:
+
+[charge] (level 1 spell) (-) PDM->charge_clay(int charges)
+
+
+  Diverts X sp into the guild object.
+  Charges cannot be used for any ability other than polymorphing
+  into different forms. Checks for query_dead() and negative amounts.
+  Penalizes player 500 exp for negative entries.
+
+[regain] (level 1 spell) (5 sp) PDM->regain_corpse()
+
+  Turns a corpse into energy or its worth in gold.
+  The energy is stored in player's guild object, and can ONLY be used
+  for polymorphing into other forms, no healing whatsoever. Energy can be
+  saved through reboots. Checks for query_dead() and certain morphs cannot use
+  this ability. Max energy stored is currently 2300.
+  Gold is forulated: ((player's willpower * corpse's heal_value) / 100) * 2
+  Charge is formulated: (player's willpower * corpse's heal_value) / 100
+
+[guild escape] (20 sps) PDM->guild_escape()
+
+  Limited range teleport back to /players/mizan/etheriel/ROOMS/linna.c
+
+  Only works in /room rooms and /players/mizan/etheriel/ROOMS rooms.
+  Checks for combat and query_dead().
+
+[helpme] (level 2 and under spell) (7 experience) PDM->helpme()
+
+  A strange spell, it broadcasts where the player is (environment->short()),
+  what the player is attacking, and how many enemies are present (attacking player).
+  It costs 7 experience instead of sps and is broadcast on the guild channel.
+
+[superwho] (level 2 spell) (FREE) PDM->superwho(string argument)
+
+  An enhanced who command, displays environment->short() of all players on the mud,
+  /a argument shows what each player on the mud is fighting (attacker->query_name())
+  /c argument shows physical condition of each player in moster format
+     i.e. good shape, somewhat hurt, mildly hurt, bad shape, etc.
+  /p argument shows phys_ats(f all players, height and weight.
+
+  Wizards are displayed as (unknown) in all argument switches.
+  Invis players are obviously left out, and not tallied in the total count.
+  Wizards get /s and /ip switches which show sitename and ip#.
+
+[ether <dest>] (level 3 spell) (20 sp) PDM->ether(string roomname)
+
+
+  A supermovement ability limited to my castle. 
+  Checks for query_dead(). Player can cast during combat.
+  Godlike movement in the castle, but the player must know what's going on.
+  (Not a combat spell)
+
+[survey] (level 2 spell) (10 sp) PDM->survey_area()
+
+
+  Shows inventory of all loaded rooms in the current room's query_dest_dir()
+  provided that the room supports /room/room.c (cost 10 sps)
+  Randomly will miscast if(room is NT && 1 = random(3 * guild rank))
+  Checks for query_dead().
+
+[atomize <object>] (level 3 spell) (15 sp) PDM->atomize_object()
+
+  Dests object ob and converts it into gold (like /room/shop) or healing
+  Heal formula:(value / 70 gold per hp/sp non intox heal - player's will power)
+  Gold formula: Object's value, if(value > 1500) return 1000 + random(500) gold
+
+[sc] (level 1) PDM->do_score()
+
+  Modified guild score function.
+
+------------------------------------------------------------------
+POLYMORPH SPELLS
+All polymorph spells are grouped here.
+Not all spells can be accessed at once by the player.
+The player must be in appropriate polymorph first.
+the first word of [spell] is the polymorph form.
+Do not type the form when casting the spell.
+e.g. [wombat sniff] type 'polymorph wombat', then 'sniff'
+This makes finding spells in the code easy, just giving
+a search command like '/wombat_' will bring you to the top of each
+wombat polymorph function.
+
+---------------------------------------------------------------------
+
+
+
+[GOLEM] Level [2] 120 charges (++sta, --int, --mag, +str, --ste, -luck)
+
+  The golem takes the form of a massive stone giant, losing the
+  ability to speak conventionally, and cursed with an annoying
+
+  clumsyness. However, they gain valuable constitution and enhanced
+  physical strength, allowing them the ability to wield two weapons,
+  one primary, one offhand.
+
+>>-------------------------------ABILITIES-------------------------------<<
+
+  Can wield a secondary weapon offhand. Similar to tetrapod.
+  Cannot speak or emote.
+
+
+
+
+
+
+[WOMBAT] Level [2] 50 charges (--sta, --int, --mag, --ste, ++luck)
+         (cannot wield weapons)
+
+
+  The wombat is an interesting individual. It is capable of digging
+  vast tunnel networks linking spread out areas of the mud, and dragging
+  other players around wherever it goes, among other things.
+
+>>-------------------------------ABILITIES-------------------------------<<
+
+[wombat sniff] (FREE) PDM->wombat_sniff()
+  A spell that displays a text approximation of a monster/player's alignment.
+
+
+[wombat chomp] (8 sp) PDM->wombat_chomp()
+
+  Single attack combat spell. Damage potential:8 +b
+
+
+[wombat burrow] (50 sp) Digs a burrow and moves the player to it.
+  Can be cast during combat with a probability of random(stealth) < 5 = failure.
+  
+
+[wombat dig] (20 sp) Digs the burrow but doesnt 'use' it.
+  Cannot be cast during combat.
+  
+[wombat drag] (FREE) Can drag a gettable object or a player around.
+  Basically a 'reverse follow'. Drag is broken when a combat starts.
+  (an active query_attack() if the 'dragee' is a player.
+
+
+
+
+
+
+[TREE] Level [2] 200 charges (++sta, --int, --mag, ++str, --ste, --luck)
+       (loss of total mobility, cannot retaliate in combat.)
+
+  As this polymorph, you can produce quantities of healing fruit,
+  and being a hybridized plant, a whole bunch of varieties as well.
+t do anything, except remain planted in one spot.
+  This polymorph can become extremely handy in team combat.
+
+
+A tree just basically stands there, creating fruits (food, heal 10, stuff 2)
+every random 40 seconds, with max fruit number = (stamina * 5) / 3
+
+
+
+
+
+
+[SPONGE] Level [3] 250 charges (++sta, --int, --mag, +str, -ste, +luck)
+         (no weapons, no armor, no retaliation in combat)
+
+  A sponge is an interesting individual. Unable to wield weapons or cast
+  any offensive spells, or even fight back, it is useful only in team
+  combat. Sponges can mean the difference between life and death for
+  a teammate, since they are gifted with a tremendous hit-point bonus.
+  Adventurers who party with the sponge will come to respect and revere
+  its abilities to absorb a tremendous amount of damage.
+
+>>-------------------------------ABILITIES-------------------------------<<
+
+[sponge sponge] (FREE) PDM->sponge_sponge(string attacker)
+  Begins taking hits from player X.
+  Forces attacker of player X to attack_object(this_player())
+  this_player() is incapable of fighting back, can only sit and take
+  hits, hence the name of the polymorph class.
+
+
+
+
+
+[BLOBEL] Level [3] 330 charges
+
+  The blobel is as close to an interdimensional magical being that
+  retains a normal physical form as you're going to get. Capable of
+  dealing with communications and vibrations from a mind-boggling
+  array of perspectives and dimensions, it takes a strong, anti-
+  schizophrenic mind to withstand being a blobel...
+
+>>-------------------------------ABILITIES-------------------------------<<
+
+[blobel confusion] (25 sp) PDM->blobel_confusion(string attacker)
+  Single attack combat spell. Damage potential: 25 +b
+
+[blobel unfrog] (85 sp) PDM->blobel_unfrog(string playername)
+  Attempts to null the frog curse cast on a player.
+
+
+
+
+
+
+[FUNGOID] Level [3] 250 charges (+sta, --int, --mag, +str, --ste, -luck)
+
+  The fungoid is a strange, solitary creature gifted with the ability
+  to see in the dark unassisted, and cast a variety of hurtful offensive
+  spells. Fungoids heal faster in the dark, and generally do not like
+  daylight that much.
+
+
+>>-------------------------------ABILITIES-------------------------------<<
+
+[fungoid gribble] (12 sp) PDM->fungoid_gribble(string attacker)
+  Single attack combat spell. Damage potential: 12 +b
+
+[fungoid puff] (15 sp) PDM->fungoid_puff(string attacker)
+  Single attack combat spell. Damage potential: 15 +b
+ 
+
+[fungoid spog] (18 sp) PDM->fungoid_spog(string attacker)
+  Single attack combat spell. Damage potential: 18 +b
+
+[fungoid spore <arg>] (var 2-60) PDM->fungoid_gribble(int damage)
+  Area attack combat spell. Damage potential: 2-60 hp
+
+Fungoids can see in the dark unassisted, that effect goes away
+with reversion to normal form.
+
+
+
+
+
+
+[REPLICANT] Level [4] 500 charges (+sta, +int, +mag, +str, +ste, +luck)
+            (limited lifespan)
+
+  Faster, stronger, more durable, and generally superior to humans
+  in any physical respect, replicants are a most powerful type indeed.
+  Almost impossible to distinguish from the general populace of the mud,
+  they would make a most fearsome enemy to the unknowing player-killer.
+  As for their intelligence, they have the potential to best humankind,
+  except a built in and supposedly irreversible feature of their
+  superbly enhanced physique is a drastically shortened lifetime.
+
+
+>> Replicants can use all of the basic guild powers.
+   They have no additional special powers.
+
+Basically a 'stock' player with all stats kicked up +3.
+
+
+
+
+
+
+
+
+[PUFFBALL] Level [4] 400 charges (--sta, ++int, ++mag, --str, +ste, +luck)
+           (cannot wear armors)
+
+
+  The puffball is a creature that exists in a near pure-energy state.
+  Able to cast a devastating array of offensive spells, and deal with
+
+  energy-matter reactions much easier and faster than a normal polymorph,
+  the puffball is most fearsome in combat. Its main drawbacks are
+  a severely weakened physical form, in terms of its crippled
+  constitution, and inability to carry almost anything.
+
+>>-------------------------------ABILITIES-------------------------------<<
+
+[puffball fry <arg>] (40 sp) PDM->puffball_fry(int damage)
+  Variable set single attack combat spell. Damage potential: 40 +b
+
+[puffball vaporize] (45 sp) PDM->puffball_vaporize(int damage)
+  Single attack combat spell. Damage potential: 45 +b
+
+[puffball nova <arg>] (2-200 var) PDM->puffball_nova(int damage)
+  Area attack combat spell. Damage potential: 2-200 hp
+
+[puffball gain] (-) PDM->puffball_gain(string hp/sp, int swap_amount)
+  Swaps SP for HP on a 1:1 ratio or vice versa.
+
+
+[puffball finish] (var) PDM->puffball_finish()
+  A modified single attack spell.
+  Can only be used against a monster that has been weakened to within
+  10% of max_hp. Damage cap is 65 hitpoints, and will critically hit monster
+  to 1 hp, not killing it. If monster is stronger, spell will abort.
+  Change of failure if 1 == random(player's willpower)
+
+Puffballs have a seriously harsh hitpoint penalty. They can cast
+stronger offensive spells and and duck hits easier but their lack of
+hitpoints is a gamesaving drawback.
+
+
+
+
+
+
+
+[SHOUTBOX] Level [4] 450 charges (-sta, -int, ++mag, ++str, --ste, --luck)
+           (cannot wear armors: too constricting on the lungs)
+
+  A shoutbox has the ability to produce a bewildering variety of sounds,
+  from a shrill whistle beyond the range of any animal's hearing, to
+  the potentially destructive, earthquake-like sub-bass.
+
+>>-------------------------------ABILITIES-------------------------------<<
+
+[shoutbox bellow <arg>] (var 2-100) PDM->shoutbox_bellow(int damage)
+  Area attack combat spell. Damage potential: 100 hp
+
+
+[shoutbox shrill] (25 sp) PDM->shoutbox_shrill(string attacker)
+  Single attack combat spell. Damage potential: 25 +b
+
+[shoutbox swear] (15) PDM->shoutbox_swear(string attacker)
+  Single attack combat spell. DAmage potential: 15 +b
+
+[shoutbox superblink] (15) PDM->shoutbox_superblink(string attacker)
+  Single attack combat spell. Damage potential: 15 +b
+
+[shoutbox holler] (18) PDM->shoutbox_holler(string monster)
+  Forces monster/player to run_away(). Chance of failure dependent on
+  1 == random(player's willpower)
+
+
+[shoutbox calm] (55) PDM->shoutbox_calm()
+  Attempts to stop all fighting in the room. Chance of failure dependent on
+  1 == random(player's willpower)
+
+
+
+
+
+
+
+
+[BOGGLEMANCER] Level [5] 500 charges (-sta, -int, ++mag, -str, -ste,++luck)
+
+  A highly powerful individual, bogglemancers are polymorph forms
+  that have broken the barriers of just self-body matter and energy
+  manipulation. By usage of a super/subconcious menation
+  technique, they can cast a wide array of devastatingly fearsome
+  offensive spells.
+
+>>-------------------------------ABILITIES-------------------------------<<
+
+[bogglemancer fling] (var) PDM->bogglemancer_fling(string object)
+  Damages a monster with any object in a player's inventory
+  for its worth in gold.
+  Checks for drop() and negative gold values.
+  Damage formula:
+  if(object value > 1000) object value = 1000;
+  dam = (ob_value * (this_player()->query_attrib("wil") * 5)) / 100;
+  dam = (dam/2) + random(dam / 2)
+  Failure chance is if(random(player's stealth) < 5)
+
+[bogglemancer speedball] (42 sp) PDM->bogglemancer_(string attacker)
+  Single attack combat spell. Damage potential: 42 +b
+
+[bogglemancer zokwave] (45 sp) PDM->bogglemancer_(string attacker)
+  Single attack combat spell. Damage potential: 45 +b
+
+
+
+[bogglemancer charbroil] (40 sp) PDM->bogglemancer_(string attacker)
+  Single attack combat spell. Damage potential: 40 +b
+
+[bogglemancer sandbag] (30 sp) PDM->bogglemancer_(string attacker)
+  Single attack combat spell. Damage potential: 30 +b
+
+[bogglemancer tree] (36 sp) PDM->bogglemancer_(string attacker)
+  Single attack combat spell. Damage potential: 36 +b
+
+[bogglemancer lint] (25 sp) PDM->bogglemancer_(string attacker)
+  Single attack combat spell. Damage potential: 25 +b
+
+[bogglemancer piano] (40 sp) PDM->bogglemancer_(string attacker)
+  Single attack combat spell. Damage potential: 40 +b
+
+
+[bogglemancer anvil] (32 sp) PDM->bogglemancer_(string attacker)
+  Single attack combat spell. Damage potential: 32 +b
+
+
+
+
+
+[TETRAPOD] Level [5] 700 charges (++sta, --int, --mag, -str, +ste, -luck)
+
+  Tetrapods are capable of wielding up to four weapons at once, and
+  complete multilimbed combat. They are ignorant of magic, and
+  utterly incapable of casting combat spells.
+
+>>-------------------------------ABILITIES-------------------------------<<
+
+[tetrapod blitz] (30 sp) PDM->tetrapod_blitz()
+  Allows player 2 times 4 guaranteed chances (provided the player
+  is wielding four weapons at once, as the morph form allows)
+  of attacking current query_attack().
+
+Tetrapods cannot wimpy, cannot make use of magic spells, (even missile,
+shock, fireball, and sonic) and have the
+legal damage cap enabled when they wield 4 weapons at once, which is
+50 hp dam per round.
+
+
+
+
+
+
+
+OPERATIONAL REQUESTS:
+-----------------------------------------------------------------
+
+
+The guild makes extensive use of set_attrib(string type),
+which is logged in /log/EXPERIENCE.
+This clutters up the file, and makes it hard to people to read it.
+If a line in /obj/player.c can be added to comment out logging of
+set_attrib() :
+  if(object_name(this_player()) == "/players/mizan/closed/poly/PDM.c") do not log_file()
+..then it would be solved.
+
+Attributes can only be advanced from the guild's adv_guild.
+A line added to /room/adv_guild in raise() :
+
+
+  if(this_player()->query_guild_name() == "polymorph") {
+    write("You must advance your attributes from Spuck.\n");
+    return 1;
+  }
+ 
+-----------------------------------------------------------------

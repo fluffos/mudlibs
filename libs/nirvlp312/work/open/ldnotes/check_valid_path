@@ -1,0 +1,70 @@
+/*-------------------------------------------------------------------------*/
+char *
+check_valid_path (char *path, object_t *caller, char* call_fun, Bool writeflg)
+
+/* Object <caller> will read resp. write (<writeflg>) the file <path>
+ * for the efun <call_fun>.
+ *
+ * Check the validity of the operation by calling master:valid_read() resp.
+ * valid_write().
+ *
+ * If the operation is valid, the path to use is returned (always without
+ * leading '/', the path "/" will be returned as "."). This path is either
+ * a pointer into the <path> argument, or a pointer to a static buffer in
+ * apply().
+ *
+ * If the operation is invalid, NULL is returned.
+ */
+
+{
+    svalue_t *v;
+    wiz_list_t *eff_user;
+
+    if (path)
+        push_string_malloced(path);
+    else
+        push_number(0);
+
+    if ( NULL != (eff_user = caller->eff_user) && NULL != eff_user->name)
+        push_shared_string(eff_user->name);
+    else
+        push_number(0);
+
+    push_volatile_string(call_fun);
+    push_valid_ob(caller);
+    if (writeflg)
+        v = apply_master(STR_VALID_WRITE, 4);
+    else
+        v = apply_master(STR_VALID_READ, 4);
+
+    if (!v || (v->type == T_NUMBER && v->u.number == 0))
+        return NULL;
+
+    if (v->type != T_STRING)
+    {
+        if (!path)
+        {
+            debug_message("%s master returned bogus filename\n", time_stamp());
+            return NULL;
+        }
+    }
+    else
+    {
+        path = v->u.string;
+    }
+
+    if (path[0] == '/')
+        path++;
+
+    /* The string "/" will be converted to "." */
+    if (path[0] == '\0')
+        path = ".";
+
+    if (legal_path(path))
+        return path;
+
+    errorf("Illegal path '%s' for %s() by %s\n", path, call_fun, caller->name);
+    return NULL;
+} /* check_valid_path() */
+
+/*-------------------------------------------------------------------------*/

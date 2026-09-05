@@ -1,0 +1,354 @@
+/* ***************************************************************************
+ * File:           /players/earwax/housing/land_daemon.c    
+ * Function:       Tracks all information to do with castles and land.
+ * Author:         Earwax
+ * Copyright:      Copyright (c) 2004 Earwax.  All rights reserved.
+ * Source:         5/22/04
+ * Notes:          I'll do a text file that explains how all this shit works.
+ * Change History:
+ * **************************************************************************/
+
+#include "defs.h"
+
+#pragma weak_types
+#pragma combine_strings
+
+/* Indices for the Info array. */
+
+#define LFNAME Info[index][0]
+#define LANDID Info[index][1]
+#define LSHORT Info[index][2]
+#define REALM Info[index][3]
+#define LCREATOR Info[index][4]
+#define LOTSIZE Info[index][5]
+#define LOWNER Info[index][6]
+#define LCOST Info[index][7]
+#define ECONFLAG Info[index][8]
+#define AVAILABLE Info[index][9]
+#define OFFERTIME Info[index][10]
+#define DEVELOPED Info[index][11]
+
+#define INFOSIZE 12
+
+/* Global Variables */
+
+static mapping  Loaded;   /* ([ Room ob : ({ index }) ])                    */
+static string   Sortlist; /* For the sort functions                         */
+       int      NextId;   /* For generating unique IDs                      */
+       mixed   *Info;     /* This is a whole lotta stuff.                   */
+
+/* ***************************************************************************
+ * Function Name: get_index  
+ * Description:   Find index of arg - 2d array so member_array() won't work
+ * Arguements:    string arg - argument to look for
+ * Returns:       Index of element, or -2 if not found
+ * **************************************************************************/
+int
+get_index(string arg)
+{
+  int index;
+
+  index = sizeof(Info);
+
+  while(index--)
+    if (Info[index][0] == arg)
+      return index;
+
+  return -2;
+}
+/* ***************************************************************************
+ * Function Name: load_info, save_info
+ * Description:   Load and save data functions.
+ * Arguements:    None
+ * Returns:       void
+ * **************************************************************************/
+void save_info() { save_object(LANDSAVE); }
+
+void
+load_info()
+{
+  NextId = 0;
+  Loaded = ([ ]);
+  cp(LANDBAK2, LANDBAK3);
+  cp(LANDBAK1, LANDBAK2); 
+  cp(LANDDATA, LANDBAK1);
+  restore_object(LANDRESTORE);
+}
+/* ***************************************************************************
+ * Function Name: register
+ * Description:   Add new land to listings, set existing land up, upon create
+ * Arguements:    object ob: the room object to setup or add to daemon
+ * Returns:       void
+ * **************************************************************************/
+void
+register(object ob)
+{
+  int index, siz;
+  string temp, junk, filename;
+
+  if (!ob)
+    return;
+
+  filename = "/" + file_name(ob);
+
+  if (filename + ".c" == LAND)
+    return;
+
+  index = get_index(filename);
+
+  if (index < 0)
+  {
+  /* Land isn't registered, attempt to register it now. */
+    int lotsize, cost;
+    string realmname, t, crtr;
+
+    cost = (int)ob->query_cost();
+    realmname = delete_colour((string)ob->query_realm_name());
+    lotsize = (int)ob->query_lot_size();
+
+    if (!cost || !lotsize || !strlen(realmname))
+    {
+      write_file(NOREGISTER, ctime()+": "+filename+"\n");
+      return;
+    }
+
+    /*
+     * Construct the information.
+     */
+    crtr = creator(ob);
+    t = (strlen(crtr) ? capitalize(crtr) : "ROOT") +"_"
+      + implode(explode(realmname, " "), "_") + "_"+NextId;
+    NextId++;
+
+    if (!sizeof(Info))
+    {
+      Info = ({ ({ }) });
+      Info[0] = allocate(INFOSIZE);
+      index = 0;
+    }
+    else
+    {
+      index = sizeof(Info);
+      Info += ({ ({ }) });
+      Info[index] = allocate(INFOSIZE);
+    }
+
+    LFNAME = filename;
+    LANDID = t;
+    LSHORT = (string)ob->short();
+    REALM = realmname;
+    LCREATOR = crtr;
+    LOTSIZE = lotsize;
+    LCOST = cost;
+    ECONFLAG = 0;
+    AVAILABLE = 1;
+    OFFERTIME = time();
+    LOWNER = crtr;
+    DEVELOPED = 0;
+
+    t = DATA+LCREATOR;
+
+    if (file_size(t) != -2)
+    {
+      status flag;
+
+      flag = mkdir(t);
+      write_file(DIRS,ctime()+": "+(flag ? "MADE: " : "FAILED: ")+t+"\n");
+
+      if (!flag)
+        return;
+
+      t += "/room";
+      flag = mkdir(t);
+      write_file(DIRS,ctime()+": "+(flag ? "MADE: " : "FAILED: ")+t+"\n");     
+    }
+
+    t = DATA+LCREATOR+"/"+LANDID;
+ 
+    write_file(REGISTERED, ctime()+": "+LFNAME+" - "+LANDID+"\n");
+    save_info();
+  }
+    
+  ob->set_registered(1);
+  ob->set_lot_size(LOTSIZE);
+  ob->set_realm_name(REALM);
+  ob->set_cost(LCOST);
+  ob->set_owner(LOWNER);
+  ob->set_house_filename(DATA+LCREATOR+"/"+LANDID);
+}
+/* ***************************************************************************
+ * Function Name: reset
+ * Description:   Called when daemon first loads.
+ * Arguements:    status arg: 0 if it's creation, 1 if it's a reset
+ * Returns:       void
+ * **************************************************************************/
+
+void
+reset(status arg)
+{
+  if (arg)
+    return;
+
+  load_info();
+
+  if (!find_object(LAND))
+    LAND->reset(0);
+
+  if (!find_object(HOUSE_OB))
+    HOUSE_OB->reset(0);
+}  
+/* ***************************************************************************
+ * Function Name: Various query/set functions.
+ * Description:   Used by land daemon, housing system.
+ * Arguements:    Various
+ * Returns:       Various
+ * **************************************************************************/
+/* ***************************************************************************
+ * Function Name: Sorting Functions
+ * Description:   Called by realties 
+ * Arguements:    String arg, player object (ob) to display results to
+ * Returns:       int
+ * **************************************************************************/
+string
+comma_number(string num)
+{
+  string temp;
+  int i, j;
+  
+  j = 0;
+  i = strlen(num);
+  temp = "";
+  
+  while(i--)
+  {
+    j++;
+
+    if (j == 3 && i)
+    {
+      temp = ","+num[i..i]+temp;
+      j = 0;
+    }
+    else
+      temp = num[i..i] + temp;
+  }
+  return temp;
+}
+
+status
+sort_cost_ascending(string x, string y)
+{
+  string xa, xb, ya, yb;
+  int x1, x2, y1, y2;
+  
+  sscanf(x, "%s|%s|%d", xa, xb, x1);
+  sscanf(y, "%s|%s|%d", ya, yb, y1);
+
+  if (xa != ya)
+    return xa < ya;
+    
+  x2 = strlen(xb); y2 = strlen(yb);
+  
+  if (x2 != y2)
+    return x2 < y2;
+  
+  return xb < yb;
+}
+
+/*
+status
+dump_list(object ob, string arg, string filter)
+{
+  string sortfun, v;
+  int *indices;
+  int i, siz;
+  
+  indices = allocate(i = sizeof(Info));
+  
+  while(i--)
+    indices[i] = i;
+    
+  indices = filter_array(indices, "filter_available");
+  v = query_verb();
+  sortfun = ((v == "list" || "alist") ? "sort_ascending" : "sort_descending");
+  SortList = ((arg && strlen(arg)) ? arg : "creator realm lotsize cost");
+  indices = sort_array(indices, sortfun);
+  
+  if (SortList == "creator realm" || sscanf(SortList, "creator realm%s", a) == 1)
+    dump_standard(ob, indices);
+  else
+    dump_custom(ob, indices);
+
+  tell_object(ob, HIY+"Total Land Displayed: "+sizeof(indices)+"\n");
+  return 1;
+}
+*/
+       
+status
+list_land(object ob, string arg)
+{
+  string creator, realm, temp, temp2, cost;
+  string *args, *output;
+  int i, j, index, intcost, siz, size, developed;
+
+  if (!arg || arg)
+  {
+    output = ({ });
+    tell_object(ob, "Constructing information...\n");
+    index = sizeof(Info);
+    while(index--)
+    {
+      intcost = LCOST; cost = intcost + "";
+      cost = comma_number(cost);
+      output += ({ capitalize(LCREATOR) + ": "+implode(explode(REALM, "_"), " ")+"|"+cost+"|"+index });
+    }
+
+    output = sort_array(output, "sort_cost_ascending");  
+    siz = sizeof(output);
+    temp = "";
+            
+    for (i = 0; i < siz; i++)
+    {
+      sscanf(output[i], "%s|%s|%d", realm, cost, index);
+      
+      if (realm != temp)
+      {
+        temp = realm;
+        tell_object(ob, "\n"+realm+"\n");
+      }
+
+      if (stringp(LOTSIZE))
+        sscanf(LOTSIZE+"", "%d"+"", size);
+      else
+        size = LOTSIZE;
+
+      LOTSIZE = size;
+      size = (LOTSIZE < 0 ? 999 : LOTSIZE);
+
+      tell_object(ob, pad(" "+index,4)
+        + (string)WAXFUNS->ralign(DEVELOPED, 4)
+        + "/"
+        + pad(size, 4)
+        + (string)WAXFUNS->ralign(cost+"  ", 13) 
+        + LSHORT
+        + "\n" );
+
+      
+    }
+  }
+ 
+  tell_object(ob, "SORT FINISHED.\n"); 
+  return 1;
+}
+    
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
