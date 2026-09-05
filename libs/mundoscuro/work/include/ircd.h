@@ -1,0 +1,2 @@
+
+#define IRC_ADDRESS "217.75.226.197 6667"

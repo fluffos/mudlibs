@@ -1,0 +1,8 @@
+
+#ifndef CONTENEDOR_H
+#define CONTENEDOR_H
+
+#define INFINITE_CAPACITY 90000000000
+
+#endif /* CONTENEDOR_H */
+

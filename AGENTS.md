@@ -1968,6 +1968,38 @@ across the whole tree, then manually filtering out plain-English
 prose/path-string false positives (comments, `"the status of..."`
 strings) from the real type-position hits.
 
+### 6.9 MudOS-v21 `ident?()` predicates and `MACRO -> meth(` parsed as class access
+
+Two dialect traps showed up together on `mundoscuro` (Spanish MudOS
+v21-era, Lima-derived parser). Neither is a Chinese-wuxia pattern; both
+are hard compile failures on this driver.
+
+1. **`?` is not legal in an identifier.** The archive used a predicate
+   naming convention (`nombre?()`, `inmortal?()`, `existe_salida?()`)
+   that MudOS v21 accepted. This driver's lexer treats `?` as the
+   ternary operator, so every such declaration/call is a syntax error.
+   Mechanical rename `foo?(` → `foo_q(` (and the same in
+   `"foo?"` `call_other` strings). **Do not run a naive
+   `s/\?(/_q(/g` across the whole file** — Spanish question prompts
+   like `"Salir de todos modos? (s/n): "` become `"...modos_q(s/n)"`.
+   Restrict the rewrite to identifier tokens (word character before
+   `?(`), then grep leftover `_q(` inside `write(`/`printf(` string
+   literals and restore the `?`.
+
+2. **`#define FOO "/path/obj"` then `FOO -> meth(args)`** is parsed as
+   class-member access (`Left argument of -> is not a class`) because
+   the left side is a string. Rewrite to
+   `efun::call_other(FOO, "meth", args)`. Empty-arg calls must become
+   `efun::call_other(FOO, "meth")` with **no trailing comma** —
+   `call_other(FOO, "meth", )` is itself a syntax error. This lib also
+   overrides `call_other` in a sefun (`call_other.lpc` routes non-local
+   origin through `CALLER->protected_call`), so shims that must hit the
+   real efun have to use the `efun::` prefix.
+
+**How to detect**: grep `[[:alnum:]_]\?( ` for the predicate style;
+grep `^[A-Z_]\+ *->` and `#define [A-Z_]\+ *"/` plus `->` uses of those
+macros for the string-path form.
+
 ---
 
 ## 7. Boot-time and runtime crash classes

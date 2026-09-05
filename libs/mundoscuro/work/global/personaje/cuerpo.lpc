@@ -1,0 +1,173 @@
+#include <dirs.h>
+#include <gennum.h>
+#include <mudlib.h>
+#include <mensajes.h>
+
+#define NOMBRE(x) x[0]
+#define ITEMS(x) x[1]
+#define GENERO(x) x[2]
+#define NUMERO(x) x[3]
+#define SUBPARTES(x) (sizeof(x) >= 5 ? x[4] : ({ }))
+
+class parte {
+  int items;
+  int genero;
+  int numero;
+  string *subpartes;
+  object *equipo;
+}
+
+/* Variables globales */
+private nosave object forma; /* Relacion con un objeto forma */ private nosave mapping partes_cuerpo = ([]); /* Formas del cuerpo mapeadas */ private nosave string *partes_cuerpo_ordenadas = ({}); /* Lista ordenada de partes */
+
+private nosave object *empunando = ({}); /* Armas que estamos empunyando */
+
+/* Prototipos */
+void definir_partes(mixed *);
+object *empunando_q();
+varargs object *vistiendo_q(string);
+
+void create() {; }
+
+/***********************************************
+ *		     FORMA 		       *
+ ***********************************************/
+
+nomask int cambiar_forma(string form) {
+  if (!find_file(DIR_FORMAS + "/" + form + ".lpc")) {
+    write("Esa forma no existe!\n");
+    return 0;
+  }
+  if (catch(forma = load_object(DIR_FORMAS + "/" + form + ".lpc"))) {
+    write("Error cargando la forma " + form + ".\n");
+    return 0;
+  }
+  definir_partes(forma->forma_cuerpo_q());
+  return 1;
+}
+
+void definir_partes(mixed *partes) {
+  partes_cuerpo = ([]);
+  partes_cuerpo_ordenadas = ({});
+  foreach (mixed *parte in partes) {
+    partes_cuerpo_ordenadas += ({ NOMBRE(parte) });
+    partes_cuerpo[NOMBRE(parte)] = new(class parte);
+    partes_cuerpo[NOMBRE(parte)]->items = ITEMS(parte);
+    partes_cuerpo[NOMBRE(parte)]->genero = GENERO(parte);
+    partes_cuerpo[NOMBRE(parte)]->numero = NUMERO(parte);
+    partes_cuerpo[NOMBRE(parte)]->subpartes = SUBPARTES(parte);
+    partes_cuerpo[NOMBRE(parte)]->equipo = ({});
+  }
+}
+
+string *forma_q() { return partes_cuerpo_ordenadas; }
+
+string nombre_forma_q() { return forma->nombre_forma_q(); }
+
+int items_sostenibles_q() { return forma->items_sostenibles_q(); }
+
+/***********************************************
+ *		     CUERPO		       *
+ ***********************************************/
+
+/* Empunya un arma */
+void empunar(object ob) {
+  if (!ob->raza_permitida_q(TP->nombre_raza_q())) {
+    write("Esta arma no esta disenyada para alguien de tu raza.\n");
+    return;
+  }
+  if (member_array(ob, empunando) != -1) {
+    write("Ya lo estas empuñando.\n");
+    return;
+  }
+  if ((sizeof(empunando) + ob->espacio_que_ocupa_q()) <= forma->items_sostenibles_q()) {
+    empunando += ({ ob });
+    write("Empuñas tu " + ob->nombre_q() + ".\n");
+  } else {
+    write("Te faltan manos para empunar la " + ob->nombre_q() + ".\n");
+  }
+}
+
+void envainar(object ob) {
+  if (member_array(ob, empunando) == -1) {
+    write("No lo estas empuñando.\n");
+    return;
+  }
+  empunando -= ({ ob });
+  write("Envainas tu " + ob->nombre_q() + ".\n");
+}
+
+object *empunando_q() { return empunando; }
+
+/* Viste un objeto */
+void vestir(object ob) {
+  string det;
+  string *ocupa;
+
+  if (member_array(ob, vistiendo_q()) != -1) {
+    write("Ya lo llevas puesto.\n");
+    return;
+  }
+  ocupa = ob->partes_que_ocupa_q();
+  foreach (string parte in ocupa) {
+    if (!((partes_cuerpo[parte]) && ((sizeof(partes_cuerpo[parte]->equipo) + 1) <= partes_cuerpo[parte]->items))) {
+      write("Ya llevas algo puesto en " + DETERMINANTE(
+        partes_cuerpo[parte]->genero,
+        partes_cuerpo[parte]->numero
+      ) + " " + parte + ".\n");
+      return;
+    }
+  }
+  foreach (string parte in ocupa) partes_cuerpo[parte]->equipo += ({ ob });
+  write("Te pones tu " + ob->nombre_q() + ".\n");
+}
+
+void quitar(object ob) {
+  string *ocupa;
+  object *equipo = ({});
+
+  equipo = vistiendo_q();
+  if (member_array(ob, equipo) == -1) {
+    write("No lo llevas puesto.\n");
+    return;
+  }
+  ocupa = ob->partes_que_ocupa_q();
+  foreach (string parte in ocupa) partes_cuerpo[parte]->equipo -= ({ ob });
+  write("Te quitas tu " + ob->nombre_q() + ".\n");
+}
+
+varargs object *vistiendo_q(string zona) {
+  object *equipo = ({});
+
+  if ((!zona) || (zona == ""))
+    foreach (class parte parte in values(partes_cuerpo)) equipo += parte->equipo;
+  else if (partes_cuerpo[zona]) return equipo = partes_cuerpo[zona]->equipo;
+  return equipo;
+}
+
+int ac_q() {
+  int ac;
+  object *equipo;
+
+  equipo = vistiendo_q();
+  foreach (object item in equipo) {
+    if (inherits(ARMADURA, item)) {
+      ac += item->ac_q();
+    }
+  }
+  return ac;
+}
+
+string zona_impacto_q() {
+  string *partes, parte;
+
+  partes = keys(partes_cuerpo);
+  parte = partes[random(sizeof(partes))];
+  return TO->determinante(partes_cuerpo[parte]->genero, partes_cuerpo[parte]->numero) + " " + parte;
+
+}
+
+
+class mensaje mensaje_combate_desarmado_q(int gravedad) {
+  return forma->random_msg_q(gravedad);
+}

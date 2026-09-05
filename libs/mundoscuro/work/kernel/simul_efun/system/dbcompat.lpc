@@ -1,0 +1,63 @@
+/* FluffOS PACKAGE_DB shims for MudOS-era db_error/db_errno/db_affected_rows
+ * /db_insert_id. On this driver db_exec() returns a string on failure
+ * instead of -1; the original daemons all test rows == -1 and then call
+ * db_error()/db_errno(). */
+
+private nosave string last_db_err = 0;
+private nosave int last_db_rows = 0;
+
+/* FluffOS db_connect() returns an error string on failure, not 0. */
+mixed db_connect(string host, string database, string user) {
+  mixed r;
+
+  r = efun::db_connect(host, database, user);
+  if (stringp(r)) {
+    last_db_err = r;
+    return 0;
+  }
+  return r;
+}
+
+mixed db_exec(int handle, string sql) {
+  mixed r;
+
+  last_db_err = 0;
+  last_db_rows = 0;
+  r = efun::db_exec(handle, sql);
+  if (stringp(r)) {
+    last_db_err = r;
+    last_db_rows = -1;
+    return -1;
+  }
+  last_db_rows = r;
+  return r;
+}
+
+string db_error(int handle) {
+  return last_db_err || "";
+}
+
+int db_errno(int handle) {
+  if (!last_db_err) return 0;
+  if (strsrch(last_db_err, "Duplicate") != -1 || strsrch(last_db_err, "1062") != -1)
+    return 1062;
+  if (strsrch(last_db_err, "1452") != -1 || strsrch(last_db_err, "1216") != -1)
+    return 1216;
+  if (strsrch(last_db_err, "Cannot add or update a child row") != -1)
+    return 1216;
+  return 1;
+}
+
+int db_affected_rows(int handle) {
+  return last_db_rows < 0 ? 0 : last_db_rows;
+}
+
+int db_insert_id(int handle) {
+  mixed r, row;
+
+  r = efun::db_exec(handle, "SELECT LAST_INSERT_ID()");
+  if (stringp(r) || r < 1) return 0;
+  row = efun::db_fetch(handle, 1);
+  if (!row) return 0;
+  return to_int(row[0]);
+}
