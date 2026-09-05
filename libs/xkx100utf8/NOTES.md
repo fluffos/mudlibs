@@ -80,8 +80,78 @@ stats 20/20/20/20 / 普通. `目前权限：(admin)` (天帝). `look` /
 
 ## 6. Not done
 
-No §10.7 shop/拜师/combat. No full §9 format of 12192 files. WASM
-status **playable** (no MySQL). Native play verified.
+No full §9 format of 12192 files. WASM status **playable** (no
+MySQL). Native play verified. §10.7 shop/拜师/combat done 2026-09-05
+(below).
+
+## 深度功能测试（§10.7，2026-09-05）
+
+管理员 `fluffos` / `Mud@2026`，秦风，苏州客店出生。登录横幅带活
+时钟，脚本 idle 0.45s。`LOGIN_TIMEOUT` 300s。Driver PID this boot
+960668，cwd `libs/xkx100utf8/work`，port 40275。Live `debug.log` is
+`libs/xkx100utf8/log/debug.log`（Boot Time Sat Sep 5 12:05:06 2026）
+— slug-level `log/` so the pre-chdir fopen succeeds; `work/log/
+debug.log` was not opened. `error_handler` returns traces to that
+driver log. Collection `xkx100` already had a 扬州醉仙楼 + 丐帮左全
+pass; this snapshot replayed the same destinations organically from
+苏州.
+
+### 实测过程
+
+1. **Login hp 0/0.** First look/score after onboard quit: 精气/气血
+   `0/0`. Save had `qi`/`jing` 0 and no `eff_qi`/`eff_jing`.
+   `chard.lpc` skips player vital init (comment: moved to
+   `updated.c`); `updated.c` then `if (wizardp(ob)) return;`
+   **before** the `eff_*` fill. Admin characters never get
+   `eff_qi`/`eff_jing`; the next `heal_up` caps current qi to 0.
+   `full` recovered 100/100. Collection `xkx100` still has the same
+   early return (not patched this pass).
+2. **苏州立春堂 shop.** Organic: 客店 west → 沧浪亭 → 东大街 →
+   药铺. `list` 金创药/养精丹 五十两白银, 朱睛冰蟾 四两黄金（无
+   pager）. `clone /clone/money/gold` then `buy yao` → 一包金创药 +
+   五十两白银找零（10000−5000）。`eat yao` hits `cmds/std/eat.lpc`
+   (`food_supply` gate: 「看清楚点，这东西能吃吗？」); medicine
+   verb is `fu`. Not a programming bug.
+3. **Combat.** 胡同 `/d/suzhou/hutong1` `fight liu`. Multi-round
+   spar, qi 100→43, auto-yield 「这场比试算我输了」. No crash.
+4. **苏州马厩 `rideyz`.** Age 14 rides free. Arrived 扬州马厩, but
+   arrival `tell_room(env, msg)` (no exclude) threw
+   `*Bad argument 4 to EFUN message() Expected: object, array, Got:
+   int(0)` from `adm/simul_efun/message.lpc` `tell_room` passing a
+   raw 0 exclude — AGENTS.md §7.12. Collection `xkx100` already had
+   `exclude || ({})`; this UTF-8 snapshot did not. Ride still
+   completed (error after `move`).
+5. **扬州醉仙楼 shop.** west/west/north/north/east. `list` paginates
+   (`== 未完继续 76% ==`); `q` then `buy jitui` 三十文铜板. Ledger
+   五十两白银 → 四十九两白银 + 七十文铜钱 (5000−30 = 4970).
+6. **拜师.** 中央广场 `enter dong` → 左全. `apprentice zuo` once:
+   丐帮第二十代弟子, 师父左全. `xue zuo force 10` 「今天太累了」
+   but `cha` shows 基本内功 0/0 (skill key created). Design /
+   mud_age, not a crash.
+7. **Quit / persist.** `save` then `quit`. Wall-clock gap, real
+   `enter_world` (not 重新连线) landed in 树洞. Family / 师傅 /
+   四十九两白银 + 七十文铜钱 persisted. 金创药 and 烤鸡腿 are not
+   autoload (design). `user.o` has
+   `family_name":"丐帮"` / `master_name":"左全"` / `generation":20`.
+
+### Bugs fixed this pass
+
+1. **`adm/simul_efun/message.lpc` `tell_room` §7.12.** 2-arg call
+   passed int 0 as `message()` exclude. Now: no-object return;
+   `efun::message` 4-arg only when `exclude` is truthy, else 3-arg
+   (AGENTS.md §7.12 zhyx self-call shape). Live: `update` the
+   simul_efun, `ridesz` 扬州→苏州 printed 「一路顺利到达苏州城」
+   with no new error.
+2. **`adm/daemons/updated.lpc` wizard vital skip.** Moved
+   `if (wizardp(ob)) return;` to **after** the `eff_qi`/`eff_jing`/
+   `neili` clamps so admin newbies get vitals; skill-vs-exp clamp
+   still skipped for wizards.
+3. **`adm/daemons/logind.lpc` `init_new_player`.** Also sets
+   `max_jing`/`max_qi`/`eff_jing`/`eff_qi` to 100 so the first
+   heartbeat cannot zero qi before `check_user` runs.
+
+Admin save not committed. No new AGENTS.md class (both shapes
+already cataloged).
 
 ## 7. Local run
 
