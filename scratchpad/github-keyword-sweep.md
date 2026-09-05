@@ -65,6 +65,15 @@ Discovery triage drops LDMud unless someone explicitly wants a `questmud`-style 
 - `age-of-elements/age-of-elements` — the GitHub tree for the `age-of-elements-master.zip` we do not have as an archive.
 - `seikichin/aoh` — Age of Heroes / One Step Beyond.
 
+## Follow-up: Spanish / Mundo Oscuro keywords (2026-09-05)
+
+Paged from the newly onboarded `mundoscuro` tree plus known Spanish LPC
+names (Calandria, Driade/FFICMUD, Simauria, Clib, …). **No new public
+LPC mudlib.** The only two Spanish MudOS dumps on GitHub are
+`gllort/mud` (already `mundoscuro`) and `unleashed/ninetears` (already
+`ninetears`). See `scratchpad/github-spanish-sweep.md`. Do not redo
+that sweep.
+
 ## On merge
 
 Done 2026-09-04. Queue is `scratchpad/librarian-next.txt`.
