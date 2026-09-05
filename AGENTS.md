@@ -17657,14 +17657,31 @@ see `libs/bxsj/NOTES.md` "深度功能测试" for the worked example):
    organic teacher-NPC route AND any direct sect-join shortcut (newbie
    gift, admin command, etc.), since they can be gated behind each
    other in ways that only show up when both are actually exercised.
-5. **`quit`, grep `debug.log`, THEN reconnect after a real wall-clock
-   gap and confirm state.** Do not skip the debug.log grep just
-   because the visible quit message looked normal — that's exactly
-   what hid the `bxsj` bug. Note the quit-retention lockout window and
+5. **`quit`, grep the live logs, THEN reconnect after a real wall-clock
+   gap and confirm state.** Do not skip the log grep just because the
+   visible quit message looked normal — that's exactly what hid the
+   `bxsj` bug. Note the quit-retention lockout window and
    silent-reconnect behavior (a fresh connection within the lockout
    window can skip the full login code path if the prior session
    didn't end in a real `quit`) before assuming a relogin exercised
-   what you think it exercised.
+   what you think it exercised. A playthrough is not clean until
+   **this boot's** logs are clean:
+   - Confirm the `debug.log` you grep is this process's live target
+     (`/proc/<pid>/fd` plus a boot-time/mtime match). §10.9's
+     pre-chdir `fopen` can leave `libs/<slug>/log/debug.log` as a
+     boot-banner-only handle while later `debug_message()` writes go
+     elsewhere, or nowhere.
+   - Also grep the mudlib's own `error_handler()` log (find the path
+     in master — typically `/log/catch`, `/log/log`, or
+     `/log/log_catch`). A `catch()`'d runtime error is invisible to
+     `debug.log` and to the player.
+   - Also grep the captured driver stdout (`log_error()`/`write()`,
+     and the §10.8 driver-fatal class).
+   - An empty/missing catch file is evidence of a clean run only after
+     you confirmed the handler would actually write (the directory
+     exists, or a deliberate one-shot trigger appeared there). Do not
+     declare a session clean from a boot-banner-only pre-chdir
+     `debug.log`.
 6. **Budget real time for shop/economy and death/respawn, or say so.**
    These two systems are the most likely to require genuine travel,
    gold, or being deliberately outmatched to reach — code review is an
@@ -18368,6 +18385,10 @@ always "check one level deeper before committing to the conclusion":
   an actual stall. A process idle in `epoll_pwait`/`ep_poll` is necessary
   but not sufficient evidence of a hang; it's also what correct
   once-a-second heartbeat idling looks like.
+- **A quiet `debug.log` is not a clean test.** Confirm the file belongs
+  to this boot (`/proc/<pid>/fd`, boot marker, mtime), then also read
+  the mudlib's own `error_handler()` log and the captured driver
+  stdout. See §10.7 item 5 and §10.9.
 
 ### 13.5 Working with subagents
 

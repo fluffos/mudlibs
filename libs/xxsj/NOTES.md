@@ -139,3 +139,30 @@ silently printed `>` for the rest.
 
 LPC stays CRLF. Admin/player saves not committed. No new AGENTS.md
 class.
+
+### Log re-check (2026-09-05, same afternoon)
+
+User follow-up: do not treat a boot-banner `debug.log` as a clean
+playthrough. Re-booted on port **40279**, driver PID **995489**, cwd
+`libs/xxsj/work`. Live `debug.log` confirmed via `/proc/995489/fd/3`
+→ `libs/xxsj/log/debug.log` (Boot Time Sat Sep 5 12:54:22 2026).
+`error_handler()` writes `/log/catch` (`work/log/catch`);
+`log_error()`/`write()` also land on captured driver stdout.
+
+Organic replay (秦风 / `Mud@2026`): look/score/i, 藏经阁→广场→灵药园
+`gather 灵芝`, 后山 `gather 铁矿` x2 + `kill 野狼` (修为 70→90), 武器坊
+`craft 木剑`, 藏经阁 `learn 基础剑诀` (「你已经学过」), `quest list` /
+`status` (无进行中任务), quit. After that session, before any probe:
+
+- live `debug.log` still 6098 bytes / unchanged mtime — boot banner,
+  `*Warning: unable to open stat file domain_stats/author_stats`,
+  `Accepting telnet…` only. No LPC `error:` / 运行时 traces.
+- `work/log/catch` did not exist.
+- driver stdout had no `编译错误` / `运行时错误` / `心跳错误`.
+
+Then a one-shot `error("log-liveness-probe")` (temporary `zerr` verb,
+reverted, not shipped) wrote the same 运行时 block to `work/log/catch`,
+driver stdout, **and** the live `debug.log` (6098→6335). So the
+handler path is alive; the empty catch after the organic path was a
+real clean run, not a dead log. Cosmetic only: config
+`external_port_1` vs `port number`, and the two stat-file warnings.
