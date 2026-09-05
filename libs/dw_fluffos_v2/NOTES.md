@@ -33,3 +33,33 @@ skipped_binary=504；2016 个 `.lpc`。lossy 同样是
 
 下一轮应直接开机 40272 做 pumpkin-menu 注册 + `commerce` `list` +
 `buy a lightable torch`（不要再从零挖 command() 阴影）。
+
+## 商店切片（2026-09-04）
+
+端口 **40272**。`command()` 阴影与 newbie_junk 先发钱已在树里，本轮
+不再重挖。冷启动后南瓜菜单 `N` 注册 `buylite` / `Play2026x`，条款
+约 30 秒后 `yes`，落到 foyer。`commerce` 立刻打出商店房间（无
+runtime error）。
+
+同一会话只发一条 `buy a lightable torch`，回执：
+`You buy a lightable torch for 50 Pumpkin pence coins.`
+
+### 发现并修复的 bug
+
+**档案从未附带 `/save/money_handler.o`。** handler 的 `create()`
+只内置 provincial `default`（brass/copper/silver/gold/platinum）。
+新手钱是 `Pumpkin dollar` / `Pumpkin pence`，商店 `place` 是
+`"Newbie Area"`，`query_value_in("Newbie Area")` 与
+`query_value_in("default")` 对这两种币都是 0。玩家有钱对象（所以
+不是 "You have no money"），但买任何标价物品都走
+`$I costs too much.`——上一轮 `shopvtwo` 已 live 打到这一句。
+`doc/concepts/currency` 写明 Newbie Area 用 Pumpkin 币；比值取自
+本树 `/d/dist/pumpkin/money_symboliser`（P$1 == 100，即 dollar=100、
+pence=1）。`create()` 在两处 place 表都缺失时补上这两行，并挂上
+同一 symboliser。8 dollar + 100 pence = 900，torch `set_value(50)`，
+成交 50 Pumpkin pence。
+
+本轮 `work/log/runtime` / `catch` / `error-log` mtime 对应当次开机
+（`debug.log` 仍因 `log directory : /log` 是死的）。没有
+`Undefined function called: command`。没有拜师（distribution 公会
+内容未随包）。

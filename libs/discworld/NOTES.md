@@ -606,7 +606,8 @@ archive 里根本不存在,`std/race.lpc:199` 的 `set_level()` 内部对它
 - **商店/经济**：进入了新手商店（`commerce` 出口）,房间描述与提示
   正常；`list` 命令测试未能在预算时间内确认真实商品列表输出（可能
   是这个 driver 上 shop soul 命令的排队显示时序问题,不是本轮方法论
-  重点,未继续深挖,如实标注为未完全验证）。
+  重点,未继续深挖,如实标注为未完全验证）。2026-09-04 已补完，见下
+  一节「商店切片」。
 - **死亡/复活**：未在本轮预算时间内触及,如实说明未验证。
 
 ### 管理员账号重新播种
@@ -620,3 +621,24 @@ archive 里根本不存在,`std/race.lpc:199` 的 `set_level()` 内部对它
 `save/players/f/fluffos.o.gz` 已生成且 `#/global/lord.lpc` 开头（确
 认是真正的 creator/lord 类实例，不是普通玩家），全程 `debug.log`/
 `log/runtime` 干净。
+
+## 商店切片（2026-09-04）
+
+补完 2026-08-27 §10.7 标成「list 时序、未完全验证」的商店。根因
+不是 soul 排队：是 `command()` efun 阴影（v1/v2 本轮已修；v3
+`living.lpc` 早已有 `#if !efun_defined(add_action)`）。本轮不再重挖
+那一处。
+
+端口 **40206**。`global/newbie_junk.lpc` 仍把 8 Pumpkin dollar /
+100 Pumpkin pence 放在未判空的 `request_item("bucket small")` 之后，
+已按 v1/v2 改成先发钱再对 armoury/clone 判空。`money_handler.lpc`
+同样缺档案里的 `/save/money_handler.o`，补了与 v2 相同的 Pumpkin /
+Newbie Area 币种表（比值来自本树 `money_symboliser`，P$1 == 100）。
+
+冷启动后南瓜菜单 `N` 注册 `shoplite` / `Play2026x`。`commerce` 立刻
+打出商店房间。同一会话只发一条 `buy a lightable torch`（中间出现
+`Queued command: buy a lightable torch`，约十余秒后刷出回执）：
+`You buy a lightable torch for 50 Pumpkin pence coins.`
+
+2026-08-27 的「list 时序」不再算未完成。没有拜师（distribution 公会
+内容未随包）。
