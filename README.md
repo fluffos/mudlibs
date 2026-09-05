@@ -458,6 +458,7 @@ classes it's found.
 | 970 | `xxsj` | 修仙世界 | `git clone https://github.com/Nuiio/fluffos-xiuxian-mud (commit d46eef2c8a5ef90d0b07216e59d6e3a52703d15e, cloned 2026-09-05); mudlib root is mymud/ — bundled fluffos/ driver was not converted` | 40279 | WASM playable |
 | 971 | `scratch` | Scratch | `git clone https://github.com/rmanis/scratch (commit 4ac1a4ed898d217a9bb02508709694bd51ecbc76, cloned 2026-09-05); repo root is the mudlib` | 40280 | WASM playable |
 | 972 | `paomud` | PaoMUD | `git clone https://github.com/dzpao/pao-mud (commit f855715a97caa5171f3e7cf5696f5f68ae1a9f94, cloned 2026-09-05); repo root is the mudlib` | 40281 | WASM playable |
+| 973 | `sagenwelt` | Sagenwelt | `git clone https://github.com/Shea690901/Sagenwelt-Lib (feature/player commit 77266da70c4103890effa3f20c0cadabbed388c3, cloned 2026-09-05); mudlib root is src/` | 40282 | WASM playable |
 <!-- END NUMBERING TABLE -->
 
 ## Repository layout

@@ -1,0 +1,344 @@
+/// @addtogroup sefun
+/// @{
+/// @file security
+/// @brief security related simul_efuns
+/// @author Gwenhwyvar
+/// @version 0.1.0
+/// @date 2016-01-24
+
+public void set_author(string arg)
+{
+    error("usage of efun::set_author is forbidden!");
+}
+
+// --------------------------------------------------------------------------
+/// @brief getgid
+///
+/// @Param who - defaults to this_object()
+/// @Returns real group id
+// --------------------------------------------------------------------------
+public string getgid(mixed who = 0)
+{
+    if(!who)
+        who = TO();
+
+    return explode(efun::getuid(who), ":")[1];
+}
+// --------------------------------------------------------------------------
+/// @brief getegid
+///
+/// @Param who - defaults to this_object()
+/// @Returns effective group id
+// --------------------------------------------------------------------------
+public string getegid(mixed who = 0)
+{
+    string ret;
+
+    if(!who)
+        who = TO();
+
+    ret = efun::geteuid(who);
+    if(!ret)
+        return UNKNOWN_DOMAIN;
+    else
+        return explode(ret, ":")[1];
+}
+// --------------------------------------------------------------------------
+/// @brief setegid
+///
+/// @Param gid
+/// @Returns 1 if successfully set, 0 otherwise
+// --------------------------------------------------------------------------
+public int setegid(string egid)
+{
+    object    who = TO();
+    function    f = bind( (: efun::seteuid :), who);
+    string    arg = geteuid(who) + ":" + egid;
+
+    return evalute(f, arg);
+}
+// --------------------------------------------------------------------------
+/// @brief getuid
+///
+/// @Param who - defaults to this_object()
+/// @Returns real user id
+// --------------------------------------------------------------------------
+public string getuid(mixed who = 0)
+{
+    if(!who)
+        who = TO();
+
+    return explode(efun::getuid(who), ":")[0];
+}
+// --------------------------------------------------------------------------
+/// @brief geteuid
+///
+/// @Param who - defaults to this_object()
+/// @Returns effective user id
+// --------------------------------------------------------------------------
+public string geteuid(mixed who = 0)
+{
+    string ret;
+
+    if(!who)
+        who = TO();
+
+    ret = efun::geteuid(who);
+    if(!ret)
+        return UNKNOWN_UID;
+    else
+        return explode(ret, ":")[0];
+}
+// --------------------------------------------------------------------------
+/// @brief seteuid
+///
+/// @Param euid
+/// @Returns 1 if successfully set, 0 otherwise
+// --------------------------------------------------------------------------
+public int seteuid(string euid)
+{
+    object    who = TO();
+    function    f = bind( (: efun::seteuid :), who);
+    string    arg = euid + ":" + getegid(who);;
+
+    return evalute(f, arg);
+}
+// --------------------------------------------------------------------------
+/// @brief init_eids
+///
+/// This function must be called within each object that wants to do any
+/// security relevant action (e.g. read/write files, clone other objects, ...)
+/// @Returns 1 if successfully set, 0 otherwise
+// --------------------------------------------------------------------------
+public int init_eteids(void)
+{
+    object   who = TO();
+    function   f = bind( (: efun::seteuid :), who);
+
+    return evalute(f, efun::getuid(who));
+}
+
+// --------------------------------------------------------------------------
+/// @brief cred_cmp
+///
+/// This function compares the credentials for the given objects
+/// @Param cred1 - string or object
+/// @Param cred2 - string or object
+/// @Returns -1 if first is greater than second
+///           0 if both are equal
+///           1 if second is greater than first
+// --------------------------------------------------------------------------
+public int cred_cmp(object cred1, object cred2)
+{
+    string  g1, a1
+            g2, a1;
+    int     ret;
+
+    if(cred1 == cred2)
+        return 0;           // obviously ;)
+
+    g1 = getegid(cred1);
+    a1 = author_of(cred1);
+    g2 = getegid(cred2);
+    a2 = author_of(cred2);
+
+    switch(g1)
+    {
+        case UNKNOWN_DOMAIN:            // smaller than everything except the same
+            return (t2 == UNKNOWN_DOMAIN) ? 0 : 1;
+        case NOBODY_DOMAIN:             // smaller than nearly everything
+            switch(t2)
+            {
+                case UNKNOWN_DOMAIN:    return -1;
+                case NOBODY_DOMAIN:     return  0;
+                default:                return  1;
+            }
+        case GUEST_DOMAIN:              // only slightly more rights than nobody
+            switch(t2)
+            {
+                case UNKNOWN_DOMAIN:
+                case NOBODY_DOMAIN:     return -1;
+                case GUEST_DOMAIN:      return  0;
+                default:                return  1;
+            }
+        // now it begins to get tricky
+        case PLAYER_DOMAIN:
+            switch(g2)
+            {
+                case UNKNOWN_DOMAIN:
+                case NOBODY_DOMAIN:
+                case GUEST_DOMAIN:      return -1;  // that was easy
+                case PLAYER_DOMAIN:                 // but not all players are the same!
+                    if(elderp(cred1) && !elderp(cred2))
+                        return -1;
+                    else if(!elderp(cred1) && elderp(cred2))
+                        return  1;
+                    else
+                        return  0;                  // although some are ;)
+                default:                return 1;   // oof, one down
+            }
+        case WIZARD_DOMAIN:                         // wizard, but not domain member!
+            switch(g2)
+            {
+                case UNKNOWN_DOMAIN:
+                case NOBODY_DOMAIN:
+                case GUEST_DOMAIN:
+                case PLAYER_DOMAIN:     return -1;
+                case WIZARD_DOMAIN:     return  0;
+                default:                return  1;  // <= yep, domain members rank higher!
+            }                                       // wow, another easy one...
+        case UPRIV_ADMIN:                           // <= yes, those get other credentials
+            if(g2 == UPRIV_ADMIN)
+                return 0;
+            else
+                return -1;                          // very easy...
+        case UPRIV_ARCH:                            // <= those too get other credentials
+            switch(g2)
+            {
+                case UPRIV_ADMIN:       return  1;  // admins of course, have more rights ;)
+                case UPRIV_ARCH:        return  0;
+                default:                return -1;  // but arches are higher than all that remains...
+            }                                       // that was also easy
+    }
+
+    // now it becomes really difficult...
+    if(Dlordp(cred1))                               // domain lord
+    {
+        if(g1 == g2)
+            return Dlordp(g2) ? 0 : -1;             // lord or member of same domain
+        else if(Dcreatorp(g2))
+            return  0;                              // member of other domains
+    }
+    else if(Dcreatorp(cred1))                       // ordinary domain member
+    {
+        if(g1 == g2)
+            return Dlordp(g2) ? 1 : 0;              // lord or member of same domain
+        else if(Dcreatorp(g2))
+            return  0;                              // member of other domains (even lords!!)
+    }
+
+    // all that's left ae some compares against backbone and related
+    if(a1 == ROOT_UID)                              // some daemon...
+        return (a2 == ROOT_UID) ? 0 : -1;           // those are higher than other backbone and even as domain members!!!
+    else if(a2 == ROOT_UID)
+        return 1;                                   // and the other way round...
+
+    // just to be sure we haven't forgotten something ;)
+    write_file("/var/log/cred_cmp", sprintf("cred_cmp(%O[%s], %O[%s]) == 0\n",
+                cred1, efun::geteuid(cred1),
+                cred2, efun::geteuid(cred2)), 0);
+    return 0;
+}
+
+// --------------------------------------------------------------------------
+/// @brief playerp
+///
+/// This function tests if the supplied object is a player
+/// @Returns TRUE/FALSE depending on result
+// --------------------------------------------------------------------------
+public int playerp(object ob)
+{
+    return ob == find_player(getuid(ob));
+}
+// --------------------------------------------------------------------------
+/// @brief elderp
+///
+/// This function tests if the supplied object has elder rights
+/// @Returns TRUE/FALSE depending on result
+// --------------------------------------------------------------------------
+public int elder(object ob)
+{
+    return playerp(ob) && (member_array(UPRIV_ELDER, (string)MUD_INFO_D->get_groups(getuid(ob))) != -1);
+}
+// --------------------------------------------------------------------------
+/// @brief creatorp
+///
+/// This function tests if the supplied object has creator rights (is wizard)
+/// @Returns TRUE/FALSE depending on result
+// --------------------------------------------------------------------------
+public int creatorp(object ob)
+{
+    return playerp(ob) && (member_array(UPRIV_WIZARD, (string)MUD_INFO_D->get_groups(getuid(ob))) != -1);
+}
+// --------------------------------------------------------------------------
+/// @brief Dcreatorp
+///
+/// This function tests if the supplied object has creator rights (is wizard)
+/// and is member of either the supplied or any domain
+/// @Returns TRUE/FALSE depending on result
+// --------------------------------------------------------------------------
+public int Dcreatorp(object ob, string domain = "@any@")
+{
+    string uid;
+
+    // only creators may be domain member
+    if(!creatorp(ob))
+        return FALSE;
+
+    uid = getuid(ob);
+    if(domain == "@any@")
+    {
+        // check every domain
+        foreach(domain in (string)MUD_INFO_D->get_domains())
+        {
+            if(member_array(uid, (string)MUD_INFO_D->get_domain_member(domain)) != -1)
+                return TRUE;
+        }
+        // not found...
+        return FALSE;
+    }
+    return member_array(uid, (string)MUD_INFO_D->get_domain_member(domain)) != -1;
+}
+// --------------------------------------------------------------------------
+/// @brief Dlordp
+///
+/// This function tests if the supplied object has creator rights (is wizard)
+/// and is domain lord of either the supplied or any domain
+/// @Returns TRUE/FALSE depending on result
+// --------------------------------------------------------------------------
+public int Dlordp(object ob, string domain = "@any@")
+{
+    string  uid;
+
+    // only creators may be domain lords (well domain members but that
+    // distinction doesn't matter down below)
+    if(!creatorp(ob))
+        return FALSE;
+
+    uid = getuid(ob);
+    if(domain == "@any@")
+    {
+        // check every domain
+        foreach(domain in (string)MUD_INFO_D->get_domains())
+        {
+            if(member_array(uid, (string)MUD_INFO_D->get_domain_lords(domain)) != -1)
+                return TRUE;
+        }
+        // not found...
+        return FALSE;
+    }
+
+    return member_array(uid, (string)MUD_INFO_D->get_domain_lords(domain)) != -1;
+}
+// --------------------------------------------------------------------------
+/// @brief archp
+///
+/// This function tests if the supplied object has archwiz rights
+/// @Returns TRUE/FALSE depending on result
+// --------------------------------------------------------------------------
+public int archp(object ob)
+{
+    return creatorp(ob) && (member_array(UPRIV_ARCH, (string)MUD_INFO_D->getgroups(geteuid(ob))) != -1);
+}
+// --------------------------------------------------------------------------
+/// @brief adminp
+///
+/// This function tests if the supplied object has admin rights
+/// @Returns TRUE/FALSE depending on result
+// --------------------------------------------------------------------------
+public int adminp(object ob)
+{
+    return creatorp(ob) && (member_array(UPRIV_ADMIN, (string)MUD_INFO_D->get_groups(getuid(ob))) != -1);
+}
+
+///  @}

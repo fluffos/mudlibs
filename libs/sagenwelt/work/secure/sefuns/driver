@@ -1,0 +1,140 @@
+/// @addtogroup sefun
+/// @{
+/// @file driver
+/// @brief driver internals related sefuns
+/// @author Gwenhwyvar
+/// @version 0.1.0
+/// @date 2016-01-26
+
+// --------------------------------------------------------------------------
+/// @brief reset_eval_cost 
+///
+/// security override for efun::reset_eval_cost 
+/// @Returns 
+// --------------------------------------------------------------------------
+public void reset_eval_cost(void)
+{
+    object who = TO();
+
+    if(author_of(file_name(who)) != ROOT_UID)
+    {
+        string euid = geteuid(who);
+        string egid = getegid(who);
+
+        _syslog(who, euid, egid, LOG_AUTH|LOG_ERR,
+                "illegal use of efun::reset_eval_cost() by %O[%s:%s]",
+                who, euid, egid);
+        error("illegal call to reset_eval_cost");
+        return;
+    }
+    efun::reset_eval_cost();
+}
+// --------------------------------------------------------------------------
+/// @brief set_eval_limit 
+///
+/// security override for efun::set_eval_limit 
+/// @Returns 
+// --------------------------------------------------------------------------
+public void set_eval_limit(int limit)
+{
+    object who = TO();
+
+    if(author_of(file_name(who)) != ROOT_UID)
+    {
+        string euid = geteuid(who);
+        string egid = getegid(who);
+
+        _syslog(who, euid, egid, LOG_AUTH|LOG_ERR,
+                "illegal use of efun::set_eval_limit(%d) by %O[%s:%s]",
+                limit, who, euid, egid);
+        error("illegal call to set_eval_limit");
+        return;
+    }
+    efun::set_eval_limit(limit);
+}
+// --------------------------------------------------------------------------
+/// @brief debug_info 
+///
+/// security override for efun::debug_info 
+/// @Returns 
+// --------------------------------------------------------------------------
+public varargs mixed debug_info(int req, mixed *args...)
+{
+    object who = TO();
+
+    if(author_of(file_name(who)) != ROOT_UID)
+    {
+        string euid = geteuid(who);
+        string egid = getegid(who);
+
+        _syslog(who, euid, egid, LOG_AUTH|LOG_ERR,
+                "illegal use of efun::debug_info(%d, ...) by %O[%s:%s]",
+                req, who, euid, egid);
+        error("illegal call to debug_info");
+        return 0;
+    }
+    return efun::debug_info(req, args...);
+}
+// --------------------------------------------------------------------------
+/// @brief shutdown 
+///
+/// extended security override for efun::shutdown
+/// @Param ret - return code of driver
+/// @Param msg - shutdown message
+/// @Returns 
+// --------------------------------------------------------------------------
+public void shutdown(int ret, string msg)
+{
+    object who = TO();
+    string euid,
+           egid;
+
+    if((who == master()) || (geteuid(who) == ROOT_UID))
+    {
+        object *obs;
+
+        seteuid(ROOT_UID);          // elevate privileges
+
+        debug_message(msg);
+
+        // logout players gracefully
+        reset_eval_cost();          // we might need to do a lot of calls...
+        event(users(), "shutdown");
+
+        // terminate daemons and other secure objects gracefully
+        reset_eval_cost();          // we might need to do a lot of calls...
+        event(objects( (: file_name($1)[0..8] == "/secure/" :) ), "shutdown");
+
+        efun::shutdown(ret);
+    }
+    else
+    {
+        _syslog(who, euid = geteuid(who), egid = getegid(who), LOG_AUTH|LOG_ERR,
+                "illegal call to shutdown(%d, \"%s\") by %O[%s:%s]",
+                ret, msg, euid, egid);
+        error("illegal call to shutdown");
+    }
+}
+// --------------------------------------------------------------------------
+/// @brief exec 
+///
+/// security override for efun::exec 
+/// @Returns 
+// --------------------------------------------------------------------------
+public int exec(object to, object from)
+{
+    object who = TO();
+    string euid = geteuid(who);
+
+    if(euid != ROOT_UID)
+    {
+        string egid = getegid(who);
+
+        _syslog(who, euid, egid, LOG_AUTH|LOG_ERR,
+                "illegal use of efun::exec(%O, %O) by %O[%s:%s]",
+                to, from, who, euid, egid);
+        error("illegal call to exec");
+    }
+    return efun::exec(to, from);
+}
+///  @}

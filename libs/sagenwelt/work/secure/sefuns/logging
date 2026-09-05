@@ -1,0 +1,147 @@
+/// @addtogroup sefun
+/// @{
+/// @file logging.c
+/// @brief miscalenious simul_efuns
+/// @author Gwenhwyvar
+/// @version 0.1.0
+/// @date 2015-12-13
+
+// --------------------------------------------------------------------------
+/// @brief _syslog 
+/// internal handler for sefun::syslog and sefun::m_syslog
+/// @Param caller - who calls?
+/// @Param uid - for which uid?
+/// @Param gid - for which gid?
+/// @Param priority
+/// @Param format
+/// @Param args...
+// --------------------------------------------------------------------------
+private varargs void _syslog(object caller, string uid, string gid, int priority, string format, mixed *args...)
+{
+    int     facility,   // the supplied facility
+            level;      // the supplied level
+    string *logger,     // who calls? (as path)
+            level_s,    // log level as text
+            msg;        // complete message to log
+
+    logger      = explode(file_name(caller), "/");
+    facility    = priority & LOG_FACILITY;
+    level       = (priority & LOG_LEVEL);
+
+    // set euid in case of internal error
+    efun::seteuid(uid + ":" + gid);
+
+    if(facility < LOG_USER)         // "privileged" facilities
+    {
+         switch(logger[1])
+         {
+             case "secure":
+             case "std":
+                 break;
+             default:               // but not "privileged" object/room
+                 error(sprintf("illegal argument to syslog: <facility>%d by %O", facility, caller));
+         }
+    }
+
+    switch(level)
+    {
+        case LOG_EMERG:
+            level_s = "emergency";
+            break;
+        case LOG_ALERT:
+            level_s = "alert";
+            break;
+        case LOG_CRIT:
+            level_s = "critical";
+            break;
+        case LOG_ERR:
+            level_s = "error";
+            break;
+        case LOG_WARNING:
+            level_s = "warning";
+            break;
+        case LOG_NOTICE:
+            level_s = "notice";
+            break;
+        case LOG_INFO:
+            level_s = "info";
+            break;
+        case LOG_DEBUG:
+            level_s = "debug";
+            break;
+        case LOG_USER1:
+            level_s = "user1";
+            break;
+        case LOG_USER2:
+            level_s = "user2";
+            break;
+        case LOG_USER3:
+            level_s = "user3";
+            break;
+        case LOG_USER4:
+            level_s = "user4";
+            break;
+        case LOG_USER5:
+            level_s = "user5";
+            break;
+        case LOG_USER6:
+            level_s = "user6";
+            break;
+        case LOG_USER7:
+            level_s = "user7";
+            break;
+        default:
+            level_s = "unknown";
+            break;
+    }
+    msg = sprintf("%s [%s]: '" + format + "'", ctime(time()), level_s, args...);
+    SYSLOGD->log(caller, uid, gid, facility, msg);
+}
+// --------------------------------------------------------------------------
+/// @brief syslog
+///
+/// Provides a standard interface to log messages analog to the one provided
+/// by the standard C-library
+/// The facility will select the log file and message channel used, while
+/// level will provide the urgency of the message.
+/// All messages will be prepended by date/time
+/// @Param priority - facility | level as defined in syslog.h
+/// @Param format - sprintf format string
+/// @Param args... - argumemts for the format string
+/// @Returns -
+// --------------------------------------------------------------------------
+public varargs void syslog(int priority, string format, mixed *args...)
+{
+    object  who;        // who calls? (as object)
+    string  uid,        // author of file calling syslog
+            gid;        // domain of file calling syslog
+
+    who  = TO();
+    uid = getuid(who);
+    gid = getgid(who);
+    _syslog(who, uid, gid, facility, format, args...);
+}
+// --------------------------------------------------------------------------
+/// @brief syslog
+///
+/// Provides the syslog interface for the master object
+/// @Param uid - uid of object with error
+/// @Param gid - gid of object with error
+/// @Param priority - facility | level as defined in syslog.h
+/// @Param format - sprintf format string
+/// @Param args... - argumemts for the format string
+/// @Returns -
+// --------------------------------------------------------------------------
+public varargs void m_syslog(string uid, string gid, int priority, string format, mixed *args...)
+{
+    object who = TO();
+
+    if(who == master())
+        _syslog(who, uid, gid, facility, format, args...);
+    else
+    {
+        _syslog(simul_efun(), ROOT_UID, BB_DOMAIN, LOG_AUTH|LOG_ERR, "illegal call to m_syslog(...) by %O", who);
+        error("illegal call to m_syslog");
+    }
+}
+///  @}

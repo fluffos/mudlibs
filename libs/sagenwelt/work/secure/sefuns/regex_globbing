@@ -1,0 +1,276 @@
+/// @addtogroup sefun
+/// @{
+/// @file regex_globbing
+/// @brief extended regular expressions and globbing
+///
+/// borrowed from lima
+/// @author Gwenhwyvar
+/// @version 0.0.0
+/// @date 2016-02-01
+
+private nosave mapping regex_glob_cache;
+
+private void initialize_regex_globbing(void)
+{
+    regex_glob_cache = ([]);
+}
+
+public int has_magic(string s)
+{
+    return sizeof(regexp(({ s }), "[\\[\\*\\]\\?]"));
+}
+
+// The flag toggles whether or not ^ and $ are valid.  1 means valid.
+public string reg_pat_translate(string pat, int flag = 0)
+{
+    int  i, j, n;
+    string res, stuff;
+
+    n = strlen(pat);
+    res = "";
+
+    for(i = 0; i < n; i++)
+    {
+        if(pat[i] == '\\' && (i + 1 != n))
+        {
+            res += pat[i..++i];
+            continue;
+        }
+        switch(pat[i])
+        {
+            case '^':
+            case '$':
+                if(flag)
+                {
+                    res += pat[i..i];
+                    continue;
+                }
+            case '.':
+                res += "\\" + pat[i..i];
+                continue;
+            case '*':
+                res += ".*";
+                continue;
+            case '?':
+                res += ".";
+                continue;
+            case '[':
+                // j = i;                      // ???? huh ????
+                j = i + 1;
+                if(j < n && pat[j] == '!') j++;
+                if(j < n && pat[j] == '^') j++;
+                if(j < n && pat[j] == ']') j++;
+                while(j < n && pat[j] != ']')
+                    j++;
+                if(j >= n)
+                    res += "\\[";
+                else
+                {
+                    stuff = pat[i+1..j];
+                    i = j;
+                    if(strlen(stuff) > 2 && stuff[0] == '!')
+                        stuff = "[^"+stuff[1..];
+                    else
+                        stuff = "[" + stuff;
+                    res += stuff;
+                }
+                continue;
+            default:
+                res += pat[i..i];
+                continue;
+        }
+    }
+    return res;
+}
+
+public int fnmatch(string name, string pattern)
+{
+    string  result;
+
+    if(undefinedp(regex_glob_cache[pattern]))
+    {
+        result = "^" + reg_pat_translate(pattern) + "$";
+        regex_glob_cache[pattern] = result;
+    }
+    return sizeof(regexp(({ name }), regex_glob_cache[pattern]));
+}
+
+private string* glob1(string dirname, string pattern)
+{
+    mixed* names, result;
+    string name;
+    int i,j;
+
+    names = get_dir(dirname+"/*");
+    result = ({ });
+    j = sizeof(names);
+    for(i = 0; i < j; i++)
+    {
+        name = names[i];
+        if((name != ".") && (name != "..") && (fnmatch(name, pattern)))
+            result += ({ name });
+    }
+    return result;
+}
+
+public string* glob(mixed pathname)
+{
+    string dirname, basename, name;
+    mixed* list, result, sublist;
+    int i;
+
+    if(!stringp(pathname))
+        return ({});
+    if(!has_magic(pathname))
+    {
+        if(path_exists(pathname))
+            return ({ pathname });
+        else
+            return ({});
+    }
+    pathname = split_path(pathname);
+    dirname  = pathname[0];
+    basename = pathname[1];
+    if(has_magic(dirname))
+        list = glob(dirname);
+    else
+        list = ({ dirname });
+    result = ({});
+    if(!has_magic(basename))
+    {
+        i = sizeof(list);
+        while(i--)
+        {
+            dirname = list[i];
+            if(basename || is_directory(dirname))
+            {
+            name = dirname+"/"+basename;
+            if(path_exists(name))
+            {
+            result += ({ name });
+            }
+            }
+        }
+    }
+    else
+    {
+        i = sizeof(list);
+        while(i--)
+        {
+            dirname = list[i];
+            if(!strlen(dirname))
+                continue;
+            if(dirname[<1] == '/')
+            {
+                if(strlen(dirname) == 1)
+                    dirname = "";
+                else
+                    dirname = dirname[0..<2];
+            }
+            sublist = glob1(dirname, basename);
+            sublist = map_array(sublist, (: $(dirname) + "/" + $1 :));
+
+            result += sublist;
+        }
+    }
+    return result;
+}
+
+public string *regexplode(string str, string pat)
+{
+    return reg_assoc(str, ({ pat }), ({ 1 }))[0];
+}
+
+public string* split(string str, string pattern)
+{
+    string *t   = regexplode(str, pattern);;
+    string *ret = ({});
+    int     sz  = sizeof(t);;
+
+    for(int i = 0; i < sz; i += 2)
+        ret += ({ t[i] });
+    return ret;
+}
+
+public int search(string s, string pat)
+{
+    string *m = regexplode(s, pat);
+
+    if(sizeof(m) == 1)
+        return -1;
+    return strlen(m[0]);
+}
+
+public int rsearch(string s, string pat)
+{
+    mixed m = regexplode(s, pat);
+
+    if(sizeof(m) == 1)
+        return -1;
+    return strlen(implode(m[0..<3], ""));
+}
+
+public string sub(string s, string pat, string repl)
+{
+    string *x = regexplode(s, pat);
+
+    if(sizeof(x) > 1)
+        x[1] = repl;
+
+    return implode(x, "");
+}
+
+public string gsub(string s, string pat, string repl)
+{
+    return implode(split(s, pat), repl);
+}
+
+public string insensitive_pattern(string pat = "")
+{
+    int i;
+    int bracket;
+    int patlen = strlen(pat);
+    string ret = "";
+
+    for(i = bracket = 0; i < patlen; i++)
+    {
+        if(pat[i] == '[')
+        {
+            bracket++;
+            ret += "[";
+        }
+        else if(pat[i] == ']')
+        {
+            bracket--;
+            ret += "]";
+        }
+        else if((pat[i] == '\\') && (i + 1 != patlen))
+        {
+            ret += pat[i..i+1];
+            i++;
+        }
+        else if(pat[i] >= 'a' && pat[i] <= 'z')
+        {
+            if(!bracket)
+                ret += sprintf("[%c%c]",pat[i], pat[i] - 32);
+            else
+                ret += sprintf("%c%c",pat[i], pat[i] - 32);
+        }
+        else if(pat[i] >= 'A' && pat[i] <= 'Z')
+        {
+            if(!bracket)
+                ret += sprintf("[%c%c]",pat[i]+32,pat[i]);
+            else
+                ret += sprintf("%c%c", pat[i]+32,pat[i]);
+        }
+        else
+            ret += pat[i..i];
+    }
+    return ret;
+}
+
+public string* insensitive_regexp(string* arr, string pat, int flag = 0)
+{
+    return regexp(arr, insensitive_pattern(pat), flag);
+}
+///  @}
