@@ -45,6 +45,13 @@ Unconstrained 5+ mixed-case alnum is days-to-weeks at this rate; not
 queued. Do not start a second hashcat. Do not commit hashes / pot /
 rockyou / recovered plaintext.
 
+## Status 2026-09-05 ~02:41 PT
+
+Still running. Session **pw928l** (tmux `pw928-hashcat`, one
+`hashcat.bin`). `pw928d` finished earlier (rc=1, digits 1–7). Now on
+mask `?l` length 5, queue 5/5, ~28% of that mask, recovered **0/3**,
+potfile 0 lines. ETA ~04:17 PT. GPU busy (not hung). Left running.
+
 ## hkmud.com (user hint, 2026-09-05)
 
 Live **香港群俠傳** wiki + telnet (`hkmud.com:8888` UTF-8 / `:5555`
