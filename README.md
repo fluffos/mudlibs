@@ -455,6 +455,7 @@ classes it's found.
 | 967 | `formosasaga` | 源流福爾摩沙 | `git clone https://github.com/wade-fs/FormosaSaga (commit a700cf5de8266868d574eb374e0b11da0b5877f5, cloned 2026-09-05); mudlib root is the repo's mudlib/ directory -- the Go MudOS-v22 driver was not converted` | 40276 | WASM playable |
 | 968 | `nirvlp312` | Nirvana | `git clone https://github.com/rumplemintz/Nirvlp312mudlib (commit 616cad7472279cc97c9693f893940f5336916ff8, cloned 2026-09-05); repo root is the mudlib` | 40277 | WASM playable |
 | 969 | `acme` | Acme | `git clone https://github.com/acmemud/acme-mudlib (commit 8bfa42587d1cb4a7606b73cdce760673582a924d) plus sibling repos acmemud/acme-platform (d210b03), acmemud/acme-flavor-basic (af56a1b), acmemud/acme-flavor-rpg (c2b2160); assembled 2026-09-05; repo root is the mudlib` | 40278 | WASM playable |
+| 970 | `xxsj` | 修仙世界 | `git clone https://github.com/Nuiio/fluffos-xiuxian-mud (commit d46eef2c8a5ef90d0b07216e59d6e3a52703d15e, cloned 2026-09-05); mudlib root is mymud/ — bundled fluffos/ driver was not converted` | 40279 | WASM playable |
 <!-- END NUMBERING TABLE -->
 
 ## Repository layout

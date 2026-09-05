@@ -1,0 +1,847 @@
+// xiuxian_user.c - 修仙玩家对象（无ANSI颜色版本）
+
+#include <globals.h>
+#include <xiuxian.h>
+
+string name;
+string cap_name;
+mapping user_data;
+int logged_in;
+
+// 修仙属性
+int realm;              // 境界等级
+int exp;                // 修为（经验）
+int hp, max_hp;         // 生命值
+int mp, max_mp;         // 灵力值
+int attack;             // 攻击力
+int defense;            // 防御力
+string linggen;         // 灵根
+int xiulian_count;      // 修炼次数
+
+// 物品栏
+mapping *inventory_items;
+
+void create() {
+  seteuid(getuid());
+  inventory_items = ({});
+}
+
+// 保存/加载
+void save_me() {
+  object login_ob;
+
+  if (!name || !user_data) return;
+
+  user_data["realm"] = realm;
+  user_data["exp"] = exp;
+  user_data["hp"] = hp;
+  user_data["max_hp"] = max_hp;
+  user_data["mp"] = mp;
+  user_data["max_mp"] = max_mp;
+  user_data["attack"] = attack;
+  user_data["defense"] = defense;
+  user_data["linggen"] = linggen;
+  user_data["xiulian_count"] = xiulian_count;
+  if (environment())
+    user_data["location"] = file_name(environment());
+  user_data["inventory"] = inventory_items;
+
+  login_ob = load_object("/single/login");
+  if (login_ob) {
+    login_ob->save_user(name, user_data);
+  }
+}
+
+void load_me() {
+  object login_ob, room;
+
+  if (!name) return;
+
+  login_ob = load_object("/single/login");
+  if (!login_ob) return;
+
+  user_data = login_ob->load_user(name);
+  if (!user_data) return;
+
+  realm = user_data["realm"] || 0;
+  exp = user_data["exp"] || 0;
+  hp = user_data["hp"] || 100;
+  max_hp = user_data["max_hp"] || 100;
+  mp = user_data["mp"] || 50;
+  max_mp = user_data["max_mp"] || 50;
+  attack = user_data["attack"] || 10;
+  defense = user_data["defense"] || 5;
+  linggen = user_data["linggen"] || "无";
+  xiulian_count = user_data["xiulian_count"] || 0;
+  inventory_items = user_data["inventory"] || ({});
+
+  // 恢复位置，如果位置无效则传送到广场
+  if (user_data["location"]) {
+    room = load_object(user_data["location"]);
+    // 检查房间是否有效（有出口）
+    if (room && function_exists("query_exits", room)) {
+      mapping exits = room->query_exits();
+      if (exits && sizeof(exits) > 0) {
+        move_object(room);
+        return;
+      }
+    }
+  }
+
+  // 如果位置无效，传送到广场
+  room = load_object("/room/xiuxian/square");
+  if (room) {
+    move_object(room);
+  }
+}
+
+// 获取境界名称
+string get_realm_name() {
+  string *realms = REALM_NAMES;
+  if (realm < 0 || realm >= sizeof(realms)) return "未知";
+  return realms[realm];
+}
+
+// 检查是否可以突破
+int check_breakthrough() {
+  int *realm_exp = REALM_EXP;
+  if (realm >= sizeof(realm_exp) - 1) return 0;
+  return exp >= realm_exp[realm + 1];
+}
+
+// 突破境界
+void breakthrough() {
+  if (!check_breakthrough()) {
+    write("修为不足，无法突破！\n");
+    return;
+  }
+
+  realm++;
+  max_hp += 50;
+  max_mp += 30;
+  attack += 10;
+  defense += 5;
+  hp = max_hp;
+  mp = max_mp;
+
+  write("\n==============================\n");
+  write("  恭喜！你突破到了 " + get_realm_name() + "！\n");
+  write("==============================\n");
+  write("生命值 +50  ");
+  write("灵力值 +30\n");
+  write("攻击力 +10  ");
+  write("防御力 +5\n\n");
+
+  save_me();
+
+  object room = environment();
+  if (room) {
+    tell_room(room, cap_name + " 突破到了 " + get_realm_name() + "！\n", ({ this_object() }));
+  }
+}
+
+// 命令：帮助
+void do_help() {
+  write("\n========================================\n");
+  write("|        修仙世界 - 命令帮助          |\n");
+  write("========================================\n");
+
+  write("\n[基础命令]\n");
+  write("  look/l      - 查看当前位置\n");
+  write("  map         - 查看世界地图\n");
+  write("  go <方向>  - 移动 (north/south/east/west/up/down)\n");
+  write("  go <地名>  - 移动 (修炼室/灵药园/后山等)\n");
+  write("  say <话>   - 说话\n");
+  write("  '<话>      - 说话快捷方式\n");
+
+  write("\n[修炼命令]\n");
+  write("  status/st/score - 查看个人状态\n");
+  write("  xiulian    - 打坐修炼\n");
+  write("  tupo       - 尝试突破境界\n");
+  write("  linggen    - 查看灵根\n");
+
+  write("\n[战斗命令]\n");
+  write("  kill <目标> - 攻击目标\n");
+  write("  hp          - 查看战斗状态\n");
+
+  write("\n[物品命令]\n");
+  write("  inventory/i - 查看背包\n");
+  write("  get <物品>  - 拾取物品\n");
+  write("  drop <物品> - 丢弃物品\n");
+  write("  use <物品>  - 使用物品\n");
+
+  write("\n[系统命令]\n");
+  write("  who         - 在线玩家\n");
+  write("  save        - 保存进度\n");
+  write("  quit        - 退出游戏\n");
+  write("\n");
+}
+
+// 命令：查看状态
+void do_status() {
+  write("\n========================================\n");
+  write("|            " + cap_name + " 的状态            |\n");
+  write("========================================\n");
+
+  write("\n[境界] " + get_realm_name());
+  if (check_breakthrough()) {
+    write(" (可突破！)");
+  }
+  write("\n");
+
+  write("[修为] " + exp + " / ");
+  int *realm_exp = REALM_EXP;
+  if (realm < sizeof(realm_exp) - 1) {
+    write(realm_exp[realm + 1] + "\n");
+  } else {
+    write("MAX\n");
+  }
+
+  write("[灵根] " + linggen + "\n");
+  write("[生命] " + hp + " / " + max_hp + "\n");
+  write("[灵力] " + mp + " / " + max_mp + "\n");
+  write("[攻击] " + attack + "\n");
+  write("[防御] " + defense + "\n");
+  write("[修炼] 已修炼 " + xiulian_count + " 次\n");
+  write("\n");
+}
+
+// 命令：修炼
+void do_xiulian() {
+  int gain;
+
+  if (mp < 10) {
+    write("灵力不足，无法修炼！\n");
+    return;
+  }
+
+  mp -= 10;
+  gain = 10 + random(20) + realm * 5;
+  exp += gain;
+  xiulian_count++;
+
+  write("你盘膝而坐，开始打坐修炼...\n");
+  write("修为 +" + gain + "  ");
+  write("灵力 -10\n");
+
+  if (check_breakthrough()) {
+    write("\n你感觉到了突破的契机！输入 'tupo' 尝试突破。\n");
+  }
+
+  save_me();
+}
+
+// 命令：查看地图
+void do_map() {
+  object room;
+  string room_name = "未知";
+
+  room = environment();
+  if (room && function_exists("query_short", room)) {
+    room_name = room->query_short();
+  }
+
+  write("\n========================================\n");
+  write("|          青云宗 - 世界地图          |\n");
+  write("========================================\n");
+
+  write("\n[当前位置] " + room_name + "\n\n");
+
+  write("                后山\n");
+  write("                 |\n");
+  write("    修炼室     灵药园\n");
+  write("       |         |\n");
+  write("藏经阁-宗门广场-炼丹房\n");
+  write("       |         |\n");
+  write("    任务厅     武器坊\n");
+  write("       |\n");
+  write("    山门外\n");
+  write("       |\n");
+  write("    野外-森林-洞穴\n");
+  write("\n");
+}
+
+// 命令：查看物品信息
+void do_iteminfo(string item_name) {
+  if (!item_name || item_name == "") {
+    write("查看什么物品？用法：iteminfo <物品名>\n");
+    return;
+  }
+
+  // 这里可以查询物品数据库
+  write("物品信息功能开发中...\n");
+}
+
+// 命令：查看背包
+void do_inventory() {
+  int i;
+
+  write("\n========================================\n");
+  write("|              背包物品              |\n");
+  write("========================================\n");
+
+  if (!inventory_items || sizeof(inventory_items) == 0) {
+    write("\n背包是空的。\n\n");
+    return;
+  }
+
+  write("\n");
+  for (i = 0; i < sizeof(inventory_items); i++) {
+    write("  " + (i + 1) + ". " + inventory_items[i]["name"]);
+    if (inventory_items[i]["count"] > 1) {
+      write(" x" + inventory_items[i]["count"]);
+    }
+    write("\n");
+  }
+  write("\n");
+}
+
+// 查看命令
+void do_look(string arg) {
+  object room, *obs;
+  int i;
+
+  room = environment();
+  if (!room) {
+    write("你在虚空中。\n");
+    return;
+  }
+
+  write(room->query_long());
+
+  // 显示房间内的其他玩家和NPC
+  obs = all_inventory(room);
+  if (sizeof(obs) > 1) {
+    write("\n[这里有]\n");
+    for (i = 0; i < sizeof(obs); i++) {
+      if (obs[i] != this_object() && living(obs[i])) {
+        write("  " + obs[i]->query_cap_name());
+        if (function_exists("query_realm", obs[i])) {
+          write(" [" + obs[i]->get_realm_name() + "]");
+        }
+        write("\n");
+      }
+    }
+    write("\n");
+  }
+}
+
+// 命令：移动
+void do_go(string dir) {
+  object room, next_room;
+  mapping exits;
+  string *exit_dirs, *exit_paths;
+  int i;
+
+  if (!dir || dir == "") {
+    write("你想去哪里？\n");
+    write("用法：go <方向> 或 go <地名>\n");
+    return;
+  }
+
+  room = environment();
+  if (!room) {
+    write("你无法移动。\n");
+    return;
+  }
+
+  exits = room->query_exits();
+  if (!exits || sizeof(exits) == 0) {
+    write("这里没有出口。\n");
+    return;
+  }
+
+  dir = lower_case(dir);
+
+  // 方向简写转换
+  if (dir == "n") dir = "north";
+  if (dir == "s") dir = "south";
+  if (dir == "e") dir = "east";
+  if (dir == "w") dir = "west";
+  if (dir == "u") dir = "up";
+  if (dir == "d") dir = "down";
+
+  // 地名到方向的映射
+  mapping name_to_dir = ([
+    "修炼室": "north",
+    "任务大厅": "south",
+    "任务厅": "south",
+    "藏经阁": "east",
+    "炼丹房": "west",
+    "灵药园": "up",
+    "武器坊": "down",
+    "后山": "north",
+    "山门外": "south",
+    "野外": "south",
+    "森林": "east",
+    "洞穴": "east",
+    "宗门广场": "north",
+    "广场": "north",
+  ]);
+
+  // 如果输入的是地名，尝试转换为方向
+  if (name_to_dir[dir]) {
+    // 检查这个方向是否存在
+    string target_dir = name_to_dir[dir];
+    if (exits[target_dir]) {
+      dir = target_dir;
+    } else {
+      // 如果当前房间没有这个方向，尝试匹配目标房间
+      exit_dirs = keys(exits);
+      exit_paths = values(exits);
+      for (i = 0; i < sizeof(exit_paths); i++) {
+        object target = load_object(exit_paths[i]);
+        if (target && function_exists("query_short", target)) {
+          string short_name = target->query_short();
+          if (short_name == dir ||
+            strsrch(short_name, dir) != -1 ||
+            strsrch(dir, short_name) != -1) {
+            dir = exit_dirs[i];
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  // 检查方向是否存在
+  if (!exits[dir]) {
+    write("那个方向没有路。\n");
+    write("可用的出口：");
+    exit_dirs = keys(exits);
+    for (i = 0; i < sizeof(exit_dirs); i++) {
+      write(exit_dirs[i]);
+      // 显示目标地点名称
+      next_room = load_object(exits[exit_dirs[i]]);
+      if (next_room && function_exists("query_short", next_room)) {
+        write(" (" + next_room->query_short() + ")");
+      }
+      if (i < sizeof(exit_dirs) - 1) {
+        write(", ");
+      }
+    }
+    write("\n");
+    return;
+  }
+
+  next_room = load_object(exits[dir]);
+  if (!next_room) {
+    write("无法前往那里。\n");
+    return;
+  }
+
+  // 显示离开消息
+  string dir_cn = dir;
+  if (dir == "north") dir_cn = "北方";
+  else if (dir == "south") dir_cn = "南方";
+  else if (dir == "east") dir_cn = "东方";
+  else if (dir == "west") dir_cn = "西方";
+  else if (dir == "up") dir_cn = "上方";
+  else if (dir == "down") dir_cn = "下方";
+
+  tell_room(room, cap_name + " 往" + dir_cn + "离开了。\n", ({ this_object() }));
+  move_object(next_room);
+  tell_room(next_room, cap_name + " 从" + dir_cn + "走了过来。\n", ({ this_object() }));
+
+  // 自动显示新位置
+  do_look("");
+}
+
+// 命令：说话
+void do_say(string arg) {
+  object room, *obs;
+  int i;
+
+  if (!arg || arg == "") {
+    write("你想说什么？\n");
+    return;
+  }
+
+  room = environment();
+  if (!room) {
+    write("没有人能听到你。\n");
+    return;
+  }
+
+  write("你说：" + arg + "\n");
+
+  obs = all_inventory(room);
+  for (i = 0; i < sizeof(obs); i++) {
+    if (obs[i] != this_object() && living(obs[i])) {
+      tell_object(obs[i], cap_name + " 说：" + arg + "\n");
+    }
+  }
+}
+
+// 命令：在线玩家
+void do_who() {
+  object *user_list;
+  int i;
+
+  user_list = users();
+
+  write("\n========================================\n");
+  write("|      在线玩家 (" + sizeof(user_list) + " 人)              |\n");
+  write("========================================\n");
+
+  write("\n");
+  for (i = 0; i < sizeof(user_list); i++) {
+    write("  " + user_list[i]->query_cap_name());
+    if (user_list[i] == this_object()) {
+      write(" (你)");
+    }
+    write(" [" + user_list[i]->get_realm_name() + "]\n");
+  }
+  write("\n");
+}
+
+// 命令：保存
+void do_save() {
+  save_me();
+  write("进度已保存。\n");
+}
+
+// 命令：退出
+void do_quit() {
+  object room = environment();
+
+  save_me();
+
+  if (room) {
+    tell_room(room, cap_name + " 离开了游戏。\n", ({ this_object() }));
+  }
+
+  write("\n再见！愿你早日飞升成仙！\n\n");
+  destruct(this_object());
+}
+
+// 登录流程
+void logon() {
+  write("\n========================================\n");
+  write("|        欢迎来到修仙世界！          |\n");
+  write("========================================\n");
+  write("\n请选择：\n");
+  write("  1. 登录\n");
+  write("  2. 注册\n");
+  write("\n请输入选项 (1/2): ");
+  input_to("get_choice");
+}
+
+void get_choice(string str) {
+  if (!str || str == "") {
+    write("请输入 1 或 2\n");
+    write("请输入选项 (1/2): ");
+    input_to("get_choice");
+    return;
+  }
+
+  str = trim(str);
+
+  if (str == "1") {
+    write("\n请输入道号: ");
+    input_to("get_login_name");
+  } else if (str == "2") {
+    write("\n请输入道号: ");
+    input_to("get_register_name");
+  } else {
+    write("无效选项，请输入 1 或 2\n");
+    write("请输入选项 (1/2): ");
+    input_to("get_choice");
+  }
+}
+
+void get_login_name(string str) {
+  object login_ob;
+
+  if (!str || str == "") {
+    write("道号不能为空！\n");
+    write("请输入道号: ");
+    input_to("get_login_name");
+    return;
+  }
+
+  name = lower_case(str);
+  cap_name = capitalize(name);
+
+  login_ob = load_object("/single/login");
+  if (!login_ob) {
+    write("登录系统错误！\n");
+    destruct(this_object());
+    return;
+  }
+
+  if (!login_ob->user_exists(name)) {
+    write("\n此道号不存在！\n");
+    write("请输入道号: ");
+    input_to("get_login_name");
+    return;
+  }
+
+  write("请输入密码: ");
+  input_to("get_password", 1);
+}
+
+void get_register_name(string str) {
+  object login_ob;
+
+  if (!str || str == "") {
+    write("道号不能为空！\n");
+    write("请输入道号: ");
+    input_to("get_register_name");
+    return;
+  }
+
+  name = lower_case(str);
+  cap_name = capitalize(name);
+
+  login_ob = load_object("/single/login");
+  if (!login_ob) {
+    write("登录系统错误！\n");
+    destruct(this_object());
+    return;
+  }
+
+  if (login_ob->user_exists(name)) {
+    write("\n此道号已被占用！\n");
+    write("请输入道号: ");
+    input_to("get_register_name");
+    return;
+  }
+
+  write("请设置密码（至少4位）: ");
+  input_to("create_password", 1);
+}
+
+void get_password(string pass) {
+  object login_ob, room;
+
+  login_ob = load_object("/single/login");
+
+  if (login_ob->verify_password(name, pass)) {
+    write("\n欢迎回来，" + cap_name + " 道友！\n\n");
+
+    load_me();
+    logged_in = 1;
+
+    // 确保玩家在有效位置
+    if (!environment()) {
+      room = load_object("/room/xiuxian/square");
+      if (room) {
+        move_object(room);
+      }
+    }
+
+    room = environment();
+    if (room) {
+      tell_room(room, cap_name + " 进入了游戏。\n", ({ this_object() }));
+      // 显示当前位置
+      do_look("");
+    }
+
+    write("\n输入 help 查看帮助，输入 map 查看地图\n");
+    write("> ");
+  } else {
+    write("\n密码错误！\n");
+    destruct(this_object());
+  }
+}
+
+void create_password(string pass) {
+  if (!pass || strlen(pass) < 4) {
+    write("\n密码至少需要4位！\n");
+    write("请设置密码: ");
+    input_to("create_password", 1);
+    return;
+  }
+
+  write("请再次输入密码: ");
+  input_to("confirm_password", 1, pass);
+}
+
+void confirm_password(string pass2, string pass1) {
+  object login_ob, room;
+  string *linggen_types;
+
+  if (pass1 != pass2) {
+    write("\n两次密码不一致！\n");
+    write("请设置密码: ");
+    input_to("create_password", 1);
+    return;
+  }
+
+  login_ob = load_object("/single/login");
+
+  if (login_ob->create_user(name, pass1)) {
+    // 随机灵根
+    linggen_types = LINGGEN_TYPES;
+    linggen = linggen_types[random(sizeof(linggen_types))];
+
+    realm = 0;
+    exp = 0;
+    hp = max_hp = 100;
+    mp = max_mp = 50;
+    attack = 10;
+    defense = 5;
+    xiulian_count = 0;
+
+    user_data = login_ob->load_user(name);
+    if (!user_data)
+      user_data = ([ "name": name ]);
+    user_data["realm"] = realm;
+    user_data["exp"] = exp;
+    user_data["hp"] = hp;
+    user_data["max_hp"] = max_hp;
+    user_data["mp"] = mp;
+    user_data["max_mp"] = max_mp;
+    user_data["attack"] = attack;
+    user_data["defense"] = defense;
+    user_data["linggen"] = linggen;
+    user_data["xiulian_count"] = 0;
+
+    logged_in = 1;
+
+    write("\n账号创建成功！\n");
+    write("你觉醒了 " + linggen + " 灵根！\n");
+    write("欢迎，" + cap_name + " 道友！\n\n");
+
+    room = load_object("/room/xiuxian/square");
+    if (room) {
+      move_object(room);
+      tell_room(room, cap_name + " 进入了游戏。\n", ({ this_object() }));
+      // 显示当前位置
+      do_look("");
+    }
+
+    write("\n输入 help 查看帮助，输入 map 查看地图\n");
+    write("> ");
+  } else {
+    write("\n创建账号失败！\n");
+    destruct(this_object());
+  }
+}
+
+// 处理输入
+int process_input(string str) {
+  string verb, arg;
+  int i;
+
+  if (!logged_in) {
+    return 1;
+  }
+
+  if (!str) str = "";
+
+  for (i = 0; i < strlen(str); i++) {
+    if (str[i] < 32 && str[i] != 10 && str[i] != 13) {
+      str = str[0..i - 1] + str[i + 1..];
+      i--;
+    }
+  }
+
+  str = trim(str);
+
+  if (str == "" || strlen(str) == 0) {
+    return 1;
+  }
+
+  // 快捷命令
+  if (str[0] == '\'') {
+    arg = str[1..];
+    if (arg && arg != "") {
+      do_say(arg);
+    } else {
+      write("你想说什么？\n");
+    }
+    write("> ");
+    return 1;
+  }
+
+  if (sscanf(str, "%s %s", verb, arg) != 2) {
+    verb = str;
+    arg = "";
+  }
+
+  verb = lower_case(verb);
+
+  // 命令处理
+  switch (verb) {
+    case "help":
+      do_help();
+      break;
+    case "map":
+      do_map();
+      break;
+    case "status":
+    case "st":
+    case "score":
+    case "sc":
+      do_status();
+      break;
+    case "xiulian":
+      do_xiulian();
+      break;
+    case "tupo":
+      breakthrough();
+      break;
+    case "inventory":
+    case "i":
+      do_inventory();
+      break;
+    case "iteminfo":
+      do_iteminfo(arg);
+      break;
+    case "look":
+    case "l":
+      do_look(arg);
+      break;
+    case "go":
+      do_go(arg);
+      break;
+    case "say":
+      do_say(arg);
+      break;
+    case "who":
+      do_who();
+      break;
+    case "save":
+      do_save();
+      break;
+    case "quit":
+      do_quit();
+      return 1;
+  }
+
+  write("> ");
+  return 1;
+}
+
+// 查询函数
+string query_name() { return name; }
+string query_cap_name() { return cap_name; }
+int query_realm() { return realm; }
+int query_exp() { return exp; }
+int query_hp() { return hp; }
+int query_max_hp() { return max_hp; }
+int query_mp() { return mp; }
+int query_max_mp() { return max_mp; }
+int query_attack() { return attack; }
+int query_defense() { return defense; }
+string query_linggen() { return linggen; }
+int is_living() { return 1; }
+string query_short() { return cap_name; }
+string query_long() { return cap_name + " [" + get_realm_name() + "] 正站在这里。\n"; }
+
+// 断线处理
+void net_dead() {
+  object room = environment();
+  if (room) {
+    tell_room(room, cap_name + " 断线了。\n", ({ this_object() }));
+  }
+
+  save_me();
+  call_out("do_remove", 60);
+}
+
+void do_remove() {
+  destruct(this_object());
+}

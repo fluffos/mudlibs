@@ -1,0 +1,133 @@
+// login.c - 登录管理对象
+// 处理用户登录、注册、密码验证
+
+#include <globals.h>
+
+// 用户数据保存目录
+#define SAVE_DIR "data/users/"
+
+// 检查用户是否存在
+int user_exists(string name) {
+  string file;
+
+  if (!name || name == "") return 0;
+
+  name = lower_case(name);
+  file = SAVE_DIR + name + ".o";
+
+  return file_size(file) > 0;
+}
+
+// 验证密码
+int verify_password(string name, string password) {
+  mapping data;
+  string file;
+
+  if (!name || !password) return 0;
+
+  name = lower_case(name);
+  file = SAVE_DIR + name + ".o";
+
+  if (file_size(file) <= 0) return 0;
+
+  data = restore_variable(read_file(file));
+
+  if (!data || !data["password"]) return 0;
+
+  // 简单的密码验证（实际应用中应该使用加密）
+  return data["password"] == crypt(password, data["password"]);
+}
+
+// 创建新用户
+int create_user(string name, string password) {
+  mapping data;
+  string file;
+
+  if (!name || !password) return 0;
+  if (strlen(password) < 4) return 0;  // 密码至少4位
+
+  name = lower_case(name);
+
+  if (user_exists(name)) return 0;
+
+  // 创建用户数据
+  data = ([
+    "name": name,
+    "password": crypt(password, 0),  // 加密密码
+    "created": time(),
+    "last_login": time(),
+    "level": 1,
+    "exp": 0,
+    "hp": 100,
+    "max_hp": 100,
+    "mp": 50,
+    "max_mp": 50,
+    "location": VOID_OB,
+  ]);
+
+  file = SAVE_DIR + name + ".o";
+
+  // 保存数据
+  return write_file(file, save_variable(data), 1);
+}
+
+// 加载用户数据
+mapping load_user(string name) {
+  mapping data;
+  string file;
+
+  if (!name) return 0;
+
+  name = lower_case(name);
+  file = SAVE_DIR + name + ".o";
+
+  if (file_size(file) <= 0) return 0;
+
+  data = restore_variable(read_file(file));
+
+  // 更新最后登录时间
+  if (data) {
+    data["last_login"] = time();
+  }
+
+  return data;
+}
+
+// 保存用户数据
+int save_user(string name, mapping data) {
+  string file;
+  mapping old;
+
+  if (!name || !data) return 0;
+
+  name = lower_case(name);
+  file = SAVE_DIR + name + ".o";
+
+  /* Quit/save used to rewrite the mapping without "password",
+     * so the next login always failed crypt() verify. Keep the
+     * existing hash when the in-memory copy omitted it. */
+  if ((!data["password"] || data["password"] == "") && file_size(file) > 0) {
+    old = restore_variable(read_file(file));
+    if (old && old["password"])
+      data["password"] = old["password"];
+  }
+
+  data["last_save"] = time();
+  rm(file);
+  return write_file(file, save_variable(data), 1);
+}
+
+// 修改密码
+int change_password(string name, string old_pass, string new_pass) {
+  mapping data;
+
+  if (!verify_password(name, old_pass)) return 0;
+  if (strlen(new_pass) < 4) return 0;
+
+  data = load_user(name);
+  if (!data) return 0;
+
+  data["password"] = crypt(new_pass, 0);
+
+  return save_user(name, data);
+}
