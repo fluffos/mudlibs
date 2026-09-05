@@ -795,3 +795,26 @@ bug。**
   历史遗留内容分支，并非 stock `fluffos/lima`/`limalib/lima` 现存的
   bug，不需要额外提交。spacemud 的 `NOTES.md` 未提及这三处 bug（其
   onboarding 没有触发到这几个调用路径），无新增交叉发现。
+
+## Shop (2026-09-04 librarian slice)
+
+Biff's General Store (`/domains/std/Shop`) is live. Seeded admin
+`fluffos` / `Mud@2026` (user menu `p` to enter; character already
+selected) started with empty pockets (`money` → "only lint").
+`eval this_body()->add_money("gold", 50.0)` credited 50 gold.
+`goto /domains/std/Shop`, `list` showed Biff's stock: amber ale
+and red apple at "no gold", dull sword at 1 platinum, red/blue
+sticks at 2 copper. `buy apple from biff` completed but is a
+zero-price food (`query_value()` from uneaten eats × heal, heal
+is 0). `buy sword from biff` was a real paid sale: "You buy a
+dull sword for 1 platinum. You give 10 gold to Biff the
+Shopkeeper." Inventory: dull sword + red apple. `money` 50→40
+gold (platinum factor 10). No programming bug.
+
+**拜师: N/A.** This is a FluffOS reference/demo lib, not a
+sect/family game. Live probes: `apprentice` / `become` / `拜师`
+→ "I don't know the verb"; `join` → parser "A valiant attempt";
+`help guild` has no player topic (only wizard `guild_d`).
+`GUILD_D` stock guilds are still not loaded (same as the
+2026-08-27 `guild_guard`/`sorcery` finding). School rooms are
+a wizard-coding tutorial, not an apprenticeship.

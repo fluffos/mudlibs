@@ -786,3 +786,41 @@ specifically for that shape: **not present**. This codebase's
 for MP — plain integer division, no `PERCENT_MP`/`PERCENT_HP` float
 `#define`s exist anywhere in this file. No fix needed; confirmed clean
 by reading the code (no live re-test required for a no-op finding).
+
+## Shop (2026-09-04 librarian slice)
+
+No `hobbled()` in this generation (older Dead Souls V / Nightmare-IV
+shape; `lib/body.lpc` heart_beat has no limb check). Creators inherit
+`LIB_INTERACTIVE` only — `AddCurrency()` is on `LIB_PLAYER`/`living`,
+so the seeded admin cannot hold a purse (`money` prints "coders don't
+get salaries here!").
+
+**Bug found and fixed (`compile_object` letter-dir mkdir):**
+`secure/daemon/master.lpc` created `DIR_PLAYERS` and
+`DIR_PLAYERS/<letter>/` with a chained `else if`. The first mortal
+on a tree that has no `players/` yet (this archive only shipped
+`creators/`) hits `mkdir(DIR_PLAYERS)` and then skips the letter
+bucket. `SetPassword()` saves immediately, before `Setup()`'s
+`create_save()`, so registration dies with `Could not open
+/secure/save/players/s/<name>.o.tmp for a save` and the connect
+object falls into a `>`/`What?` limbo. Later Dead Souls
+(`deadsouls_fluffos`) already uses independent `if`s. Changed the
+letter-dir line from `else if` to `if`. After reboot, mortal
+`shopdsj` / `Play2026x` registered cleanly.
+
+**Paid buy:** in-game day (`SEASONS_D->GetTimeOfDay()` = `"day"`),
+Max present in `/domains/Ylsrim/room/armoury`. Storage ships empty
+(intentional "vendors buy loot" design from §10.7). Admin cloned
+`/domains/Ylsrim/armour/artrell_armour` into `armoury_storage`, then
+`find_player("shopdsj")->AddCurrency("electrum", 40000)` and
+`eventMove`'d the mortal to the armoury. `ask max to browse` listed
+`001 a suit of leather armour`. `buy leather armour from max`:
+"Here is a suit of leather armour for 29943 electrum!", inventory
+the armour, purse 40000→10057 electrum (40000−29943). Integer
+`GetCost()` (value 150 × bargaining markup × electrum rate
+~68.83). No remaining programming bug on the buy path.
+
+**拜师 analogue:** `ask roshd to join fighters`, already verified
+in §10.7 (2026-08-27). Not re-run. Throwaway `shopdsj` save removed
+before commit; `shopdsi` never got a save file (failed on the
+mkdir bug).

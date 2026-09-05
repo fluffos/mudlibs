@@ -468,3 +468,12 @@ advanced by this session's repeated logins). The throwaway test
 character `Aldric` (`secure/save/creators/a/aldric.o`,
 `secure/save/postal/a/aldric/`) was deleted before committing, per
 this project's standing cleanup convention.
+
+## Shop + 拜师 (2026-09-04 librarian slice)
+
+Content-absent, same class as `foundation1`. Bare 1995 engine: no
+combat, no stats, no currency, no vendor objects, no apprentice
+verbs. Live on 40221 as seeded admin `fluffos` / `Mud@2026` in
+`/domains/Standard/center`: `buy`, `list`, `shop`, `apprentice`,
+`join`, `become`, and `拜师` all printed `What?`. `look`/`inventory`
+still work. Left as-is.

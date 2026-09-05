@@ -720,3 +720,31 @@ present**. All three heal-back calls here (`AddMagicPoints`,
 (`-(GetMaxMagicPoints()/2)` etc.) — no `PERCENT_MP`/`PERCENT_HP` float
 `#define`s exist anywhere in this file. No fix needed; confirmed clean
 by reading the code.
+
+## Shop (2026-09-04 librarian slice)
+
+Otik's general store (`/domains/town/room/shop`) is live. Seeded
+admin `fluffos` / `fluffwiz123` (76 silver already on the creator
+save) `goto`'d the store; `list` is a creator command here (prints
+the "help creator commands" hint), not the later-DS shop-stock
+verb — the room's own help still documents `ask otik to browse`.
+`buy wooden torch from otik` completed a paid sale: Otik said
+"Here is an old wooden torch for 60 silver!", inventory showed
+the torch, `money` 76→16 silver. Purse math is integer. Do not
+use bare `buy torch` — `/domains/town/obj/rayovac.lpc` still
+carries `"torch"` in its id list (10 silver flashlight), same
+trap as `deadsouls_fluffos`.
+
+**Bug found and fixed (heartbeat `hobbled(this_player())`):**
+same shape as `deadsouls_fluffos`/`brassring`. `lib/body.lpc`
+heart_beat called `hobbled(this_player())`; during heartbeat
+`this_player()` is 0, so `disable.lpc` did `0->GetMissingLimbs()`
+every 2s and `!stringp(0)` fired `eventFall()` on every idle
+beat. Changed to `hobbled(this_object())` and added
+`if(!objectp(ob)) return "No missing limbs.";` after the decls
+in `secure/sefun/disable.lpc`. After this boot, look/goto/buy
+worked (no mid-news `What?` collapse). 拜师 analogue is
+`ask herkimer to join` (quest-gated), already covered in §11
+(2026-08-27); not re-run. Same unfixed `this_player()` line
+still on `dsIII`/`dshakkard`/`riftsds` (dsI is an older
+generation and has no `hobbled()` at all).
