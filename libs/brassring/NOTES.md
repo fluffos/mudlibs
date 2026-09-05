@@ -508,3 +508,21 @@ through the news pager into the Temple of Midgaard
 (`/domains/diku-alfa/room/30.zon/rm_3001`), `hp: 430/430`, `quit`
 printed "Please come back another time!" / "Fluffos quits The Brass
 Ring." Shop/combat/death were not exercised this pass.
+
+## Shop (2026-09-04 librarian slice)
+
+The 2026-08-31 §10.7 pass already did the diku-alfa pet-shop `adopt`
+loop. This pass did a regular paid retail buy at the bundled Dead
+Souls town store (`/domains/town/room/shop`), which that pass never
+touched. Seeded creator `fluffos` / `Mud@2026`: `eval return
+this_player()->AddCurrency("silver", 80)` (purse was gold-only),
+`goto` the store, `list` (wooden torch 60 silver), `buy wooden torch
+from otik` → Otik "Here is an old wooden torch for 60 silver!",
+inventory has the torch, `money` 20 silver + 134 gold.
+
+Same heartbeat bug as `deadsouls_fluffos`: `lib/body.lpc` called
+`hobbled(this_player())` (0 during heart_beat). Fixed identically
+(`this_object()`, plus `!objectp` guard in `disable.lpc`). No new
+collapse/`call_other(0)` spam after the reboot used for this buy.
+Pet-shop adopt was not re-run. 拜师 analogue is Dead Souls class
+join / skill trainers, already covered 2026-08-31.

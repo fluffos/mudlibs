@@ -566,3 +566,13 @@ into Training Ground, `look` and `quit` both worked. `http_d.lpc`
 `socket_error` is a graceful preload skip (not on the login path).
 I3 still tries an outbound connect at boot — do not loop-reboot.
 Shop/combat/death were not exercised this pass.
+
+## Shop + 拜师 (2026-09-04 librarian slice)
+
+Content-absent, not a programming bug. LPUniversity/Sapidlib engine with
+only the small Trepi docks footprint — no vendor rooms, no `buy`/`list`
+player command, no apprentice/guild verbs (same as `lpuni`: no combat
+or stats). Live on 40266 as seeded admin `fluffos` / `MudAt2026` in
+Training Ground: `buy torch`, `list`, `shop`, and `apprentice` all
+printed `What?`; `help buy` is `Unable to find helpfile for: buy`.
+Left as-is.

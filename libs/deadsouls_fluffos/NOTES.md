@@ -409,3 +409,30 @@ same-named scratch files were untouched). Killed the test driver by
 exact PID when done.
 
 Confirmed present byte-identical in a fresh clone of `github.com/fluffos/dead-souls` (current `master`, commit `4ddbd3b`, i.e. still un-fixed after PRs #12-16): all six `lib/domains/Praxis/*_join.c` files call `SetClass()`, and `secure/include/compat.h` is missing the same three `query_name`/`query_cap_name`/`query_gender` mappings (confirmed these resolve via `global.h`'s `COMPAT_MODE`-gated auto-`#include <compat.h>` in every object, and that `GetName`/`GetCapName`/`GetGender` already exist as real accessors on `player.c`/`race.c`, so the mapping is a pure omission). Filed upstream as **PR https://github.com/fluffos/dead-souls/pull/17**.
+
+## Shop (2026-09-04 librarian slice)
+
+Otik's general store (`/domains/town/room/shop`) is live. AUTO_WIZ
+creator `shopdive` / `Mud@2026` (human, 68 starting silver from
+`eventCompleteChar`) `goto`'d the store, `list` showed the stock
+(wooden torch 60 silver, plastic flashlight 10, …). `buy torch from
+otik` matched the flashlight's extra `"torch"` id (rayovac) and
+completed a paid sale: Otik said "Here is a small plastic flashlight
+for 10 silver!", inventory two flashlights, `money` 48 silver
+(68−10−10). `buy wooden torch from otik` then correctly refused
+("You don't have enough silver") — purse math is integer, no
+§7.121 float leftover on this path.
+
+**Bug found and fixed (heartbeat `hobbled(this_player())`):**
+`lib/body.lpc`'s heart_beat called `hobbled(this_player())`. During
+heartbeat `this_player()` is 0, so `disable.lpc:7` did
+`0->GetMissingLimbs()` every 2s (`Bad argument 1 to EFUN call_other
+… Got: int(0)`). `hobbled()` then returned 0, `!stringp(0)` was
+true, and `eventCollapse()` fired on every idle beat. First login
+that died mid-news left shopdive with every verb printing `What?`
+until this was changed to `hobbled(this_object())` and `hobbled()`
+gained an `!objectp(ob)` guard. After reboot, look/goto/list/buy
+worked. Same `this_player()` line exists on `ds386`/`dsIII`/`dsII`/
+`dshakkard`/`riftsds`/`brassring` — not swept this pass except
+`brassring` (next in queue). 拜师 analogue is `become <class>` in
+the Praxis guild rooms, already covered 2026-09-01.

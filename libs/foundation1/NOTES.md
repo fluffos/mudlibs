@@ -512,3 +512,15 @@ otherwise). After that, `scripts/wasm_client.js` logged in as
 `fluffos` / `Mud@2026` into the Pool Room cavern, `look` showed lichen,
 `status` reported `hp: 1/10`, and `quit` printed "Please come back
 another time!" Shop/combat/death were not exercised this pass.
+
+## Shop + 拜师 (2026-09-04 librarian slice)
+
+Content-absent, not a programming bug. This is the 1995 "minimalist LPC
+Library" snapshot: no combat, no stats, no currency, no vendor objects,
+and no apprentice/guild verbs. `secure/etc/shops` is leftover Nightmare
+path list (`/d/standard/supply.c`, wizard cartesia/winona shops) — none
+of those rooms exist in this archive (zero `*shop*` / `*supply*` under
+`work/`, no `do_buy`/`cmd_buy`). Live on 40248 as seeded admin
+`fluffos` / `Mud@2026` into the Pool Room cavern: `buy torch`, `list`,
+`shop`, and `apprentice` all printed `What?`. Help's player-general
+topics are mail/prompt/terminal — no shop. Left as-is.
