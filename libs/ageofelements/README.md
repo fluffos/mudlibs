@@ -5,9 +5,9 @@ Slug `ageofelements`, number **975**, port **40284**.
 This collection’s copy is a snapshot, not a live mirror.
 
 Age of Elements, an English LPMud built from the classic 2.4.5 village
-(church, village green, shop, Harry, Adventurers' Guild) on the LDMud
-driver (historically telnet://ageofelements.org). LDMud → FluffOS
-conversion.
+(church, village green, shop, Harry, Adventurers' Guild, plains, mine,
+south forest) on the LDMud driver (historically telnet://ageofelements.org).
+LDMud → FluffOS conversion.
 
 ## Registration flow
 
@@ -22,7 +22,9 @@ Existing names prompt for password only.
   the first player.
 
 Verified live 2026-09-05: fluffos / Mud@2026 → church; shop buy torch;
-kill Harry; death; church pray; Adventurers' Guild `cost`; quit persist.
+kill Harry; death; church pray; Adventurers' Guild `cost`; hump stick/coins;
+yard knife; well; bank guard; Eastroad Inn `buy 1`; plains → mine entrance
+(sign + dark tunnels); south forest past the aggressive troll; quit persist.
 
 ## Local run
 

@@ -8,6 +8,7 @@
 
 #define ONE_EXIT(DEST, DIR, SH, LO, LIGHT)\
 void reset(int arg) { EXTRA_RESET if (arg) return; set_light(LIGHT); }\
+void create() { call_other(this_object(), "reset", 0); }\
 string short() {\
     if (set_light(0))\
 	return SH;\
@@ -37,6 +38,7 @@ void long(string str) {\
 
 #define TWO_EXIT(DEST1, DIR1, DEST2, DIR2, SH, LO, LIGHT)\
 void reset(int arg) { EXTRA_RESET if (arg) return; set_light(LIGHT); }\
+void create() { call_other(this_object(), "reset", 0); }\
 string short() {\
     if (set_light(0))\
 	return SH;\
@@ -73,6 +75,7 @@ void long(string str) {\
 
 #define THREE_EXIT(DEST1, DIR1, DEST2, DIR2, DEST3, DIR3, SH, LO, LIGHT)\
 void reset(int arg) { EXTRA_RESET if (arg) return; set_light(LIGHT); }\
+void create() { call_other(this_object(), "reset", 0); }\
 string short() {\
     if (set_light(0))\
 	return SH;\
@@ -117,6 +120,7 @@ void long(string str) {\
 
 #define FOUR_EXIT(DEST1, DIR1, DEST2, DIR2, DEST3, DIR3, DEST4, DIR4, SH, LO, LIGHT)\
 void reset(int arg) { EXTRA_RESET if (arg) return; set_light(LIGHT); }\
+void create() { call_other(this_object(), "reset", 0); }\
 string short() {\
     if (set_light(0))\
 	return SH;\

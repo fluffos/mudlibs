@@ -93,16 +93,43 @@ live `log/debug.log` (fd) + `work/log/catch` clean (older catch
 lines are from the compile-iterate earlier the same evening).
 
 Still later: real `/obj/player` telopt logon, remaining `#'` in
-`obj/player.lpc` / `obj/chest.lpc` / `obj/login/*`, mine/south
-forest depth. Do not treat the old Void/workshop §10.7 as a world
-pass.
+`obj/player.lpc` / `obj/chest.lpc` / `obj/login/*`. Do not treat the
+old Void/workshop §10.7 as a world pass.
+
+Mine / south-forest / remaining village (2026-09-05, same native
+40284, organic `fluffos` / `Mud@2026`):
+
+- Hump: `get stick`, `get coins`. Yard: knife + beggar. Narrow
+  alley well `down`/`up`. Bank: guard, counter closed for
+  reconstruction (original text). Eastroad Inn: `look at menu`,
+  `buy 1` commoner's meal (hp 10→14, gold 20→0).
+- Plains west of the green → mountain pass → `/room/mine/tunnel`
+  (lit entrance; `look at sign` / `look at pole` = mines closed
+  for falling rock). Inner `room.h` tunnels are dark (`LIGHT` 0)
+  but exits work.
+- South forest: clearing west past the aggressive forest troll
+  (level 9, original) → slope → deep forest → `sforst1`/`sforst2`
+  old-style `add_action` rooms. Look/move work.
+- Fix: FluffOS lazy `reset()` left `room.h` / `std.h` ONE/TWO/…
+  EXIT rooms dark and exit-less (`dest_dir` unset → `What?`).
+  `room/room.lpc` and the `std.h` macros now
+  `call_other(this_object(), "reset", 0)` from `create()` (§7.158
+  / §7.177 / §7.185). Catalog look falls back to `query_dest_dir()`
+  and `id()`/`long(str)` so old rooms show exits and the mine sign.
+- Catalog `drink_alcohol()` stub so inn beer does not throw.
+  Carried items still do not persist across quit (catalog
+  `save_object` only); real `/obj/player` later.
+
+This-boot live `log/debug.log` (fd) + driver stdout + `work/log/catch`
+(unchanged since 20:28; no new catch lines) clean of runtime errors.
+`/obj/monster.lpc` unused-local compile warning only.
 
 ## 4. What is not ported yet
 
-Real `/obj/player` telopt login, mine/south-forest depth, and any
-file that still uses `#'` (`obj/player.lpc`, `obj/chest.lpc`,
-`obj/login/*`). The 2.4.5 village itself (church → green → shop /
-Harry / Adventurers' Guild) is what catalog login loads.
+Real `/obj/player` telopt login and any file that still uses `#'`
+(`obj/player.lpc`, `obj/chest.lpc`, `obj/login/*`). Inventory does
+not persist across quit on the catalog body. The 2.4.5 village,
+plains, mine, and south forest are what catalog login loads.
 
 ## 5. WASM
 
