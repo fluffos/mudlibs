@@ -111,31 +111,33 @@ Live walk (native 40286, 2026-09-05, organic `fluffos` /
   `/lib/guild` uses `mixed guildInit`; `#'make_noise` is
   `call_out("make_noise", …)`.
 - QUEST_D (`ac61209dffb`): LDMud multi-value mappings rewritten
-  as mapping-of-arrays (original `questd_ldmud.lpc`). Organic
-  `quests` lists 14 unsolved (Beer to Bum, Maze Under Well,
-  Eat at Joe's, Orc Slayer, … Immortality). `quests 1` shows
-  the Barney hint. `qp_for_level` still returns 0 (upstream
-  Kieve stub), so advance is XP-only. Catalog body has no
-  completed-quest persist yet.
+  as mapping-of-arrays (original `questd_ldmud.lpc`). `quests`
+  lists the enabled set. `qp_for_level` still returns 0
+  (upstream Kieve stub), so advance is XP-only.
+- Eat at Joe's LIVE (`9316443fe04` + `aa89abf6bca`): church →
+  S7_6 → S6_6 south → Main Street → Dragon Street north →
+  Ladywell west → Joe's. Joe stays in the restaurant (no
+  city wander). After ~1s he swallows the player; stomach
+  awards QUEST_EAT_AT_JOES (`M6a`). `score` shows `Quests:
+  M6a`. Reconnect persists. Guild `quests` drops from 14 to
+  13 (Eat at Joe's gone). Stomach has no exits (upstream).
+  S7_7 (well square) still fails to compile (`#'`).
 
-This-boot live `libs/sticklib/log/debug.log` (fd, PID 1547636
-BOOT_MARKER10 sticklib-questd) + driver stdout: no questd
-compile errors. `work/log/catch` this walk: expected PEACE_D
-and `/std/obj/bboard` only — guild no longer CAUGHT on
-questd.
+This-boot live `libs/sticklib/log/debug.log` (fd, PID 1579678
+BOOT_MARKER13 sticklib-joes3): Joe + stomach compiled. Catch
+this walk: expected PEACE_D / bboard / guards; no questd or
+Joe errors.
 
 **Not published** (`wasm_status: partial`). Flip to `playable`
-only after combat + a real quest/advance path, not on
-guild-look + shop-buy + quest-list alone.
+only after combat + more than one quest/advance path, not on
+guild-look + shop-buy + a single swallow quest.
 
 ## 4. What is not ported yet
 
 Elevator, PEACE_D, NATURE_D. Trashcan toss (`foreach :`).
 Full LDMud living combat (HitFunc closures; thin living/npc
 stub `hit_player` / `attacked_by`). Bulletin board extra
-inherit. Completing a world quest (beer-to-bum / Joe's /
-well maze) and persisting it on the catalog body. Catalog
-inventory persists only as the catalog body's save_object
-fields plus whatever objects happen to be cloned next boot.
-Next slice: combat, or a live quest complete (bum / Joe's
-/ well).
+inherit. S7_7 well (`#'`). Beer-to-bum (give + pub). Well
+maze (needs S7_7). Joe's LDMud tell_here format tokens still
+print raw. Catalog inventory persist is still
+save fields only. Next slice: combat, or beer-to-bum / well.
