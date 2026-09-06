@@ -105,6 +105,21 @@ the successful create, reconnect, or cold-boot reconnect.
 WASM not verified. `unique_games` stays counting numbers `< 900`; 969
 is still listed as a lib.
 
+## 深度功能测试（§10.7, 2026-09-05）
+
+Catalog overlay only — the archive has no playable world. Organic
+`fluffos` / `Mud@2026` on native 40278: Void `look` / `score`
+(level 1, hp 20/20) / `inventory` (empty-handed) / `north`
+workshop / `south` back / `quit` persist. Reconnect same session:
+Void `look` / `score` / `quit`. Shop, combat, guild, death: **N/A**
+(original MessageLib / acme-rpg combat / XML cmds are not loaded).
+
+Logs this boot (PID started 20:07:44, live fd
+`libs/acme/log/debug.log`): driver stdout + debug.log had no LPC
+errors across the playthrough. `work/log/catch` handler proven live
+with a one-shot `catchprobe` (`CAUGHT /obj/player.lpc *catch-path-probe`)
+then reverted; play itself left no other catch lines.
+
 ## 3. What was not ported
 
 - Original `/platform/.obj/login` (closures + ConnectionTracker telnet

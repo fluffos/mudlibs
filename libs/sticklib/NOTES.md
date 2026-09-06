@@ -49,6 +49,20 @@ Create `fluffos` / `Mud@2026`. Lands in The Void; `look` / `score` /
 `north` (workshop) / `south` / `quit`. Reconnect after cold restart
 reloads `data/f/fluffos.o`.
 
+## 深度功能测试（§10.7, 2026-09-05）
+
+Catalog overlay only — the StickMUD LDMud 3.x world is not loaded.
+Organic `fluffos` / `Mud@2026` on native 40286: Void `look` / `score`
+(level 1, hp 20/20) / `inventory` / `north` workshop / `south` /
+`quit` persist. Reconnect: Void `look` / `score` / `quit`. Shop,
+combat, guild, death: **N/A** (needs a real LDMud driver).
+
+Logs this boot (PID started 20:09:19, live fd
+`libs/sticklib/log/debug.log`): stdout + debug.log clean.
+`work/log/catch` proven live with a one-shot `catchprobe`
+(`CAUGHT /catalog/player.lpc *catch-path-probe`) then reverted;
+play itself left no other catch lines.
+
 ## 4. What is not ported
 
 Full LDMud world, guilds, protocol stacks, and OSB/MG kernel daemons.
