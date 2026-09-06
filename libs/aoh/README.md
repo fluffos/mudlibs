@@ -23,9 +23,10 @@ The docks (Silvere harbour). Existing names prompt for password only.
   the first player.
 
 Verified live: fluffos / Mud@2026 → The docks; north shipyard;
-southwest quay #2; east through City Gate to the city-side
-harbour wall; south Seaman's Rest (`look at menu`); `score` /
-`quit`; reconnect lands on the docks again.
+southwest quay #2 west to the southern tower exterior; east
+through City Gate onto The Westway (Park Lane, healer street);
+south Seaman's Rest (`look at menu`); `score` / `quit`;
+reconnect lands on the docks again.
 
 ## Local run
 

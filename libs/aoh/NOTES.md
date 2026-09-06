@@ -67,9 +67,8 @@ play itself left no other catch lines.
 
 ## 4. What is not ported yet
 
-Full OSB/AOH world (Silvere westroad / city shops, southern
-tower, quay2_3, other domains), guilds, shop buy, combat,
-protocol stacks,
+Full OSB/AOH world (Silvere shop interiors, tower interiors,
+other domains), guilds, shop buy, combat, protocol stacks,
 OSB kernel daemons. 2681 `#'` in 1062 files — do not attempt a
 mechanical `/std` rewrite this slice. Newbie creation
 `/d/login/entrance` is not loaded; catalog login uses STARTROOM.
@@ -98,10 +97,17 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/harbour/shipyard` — north of the lobster-trap street
 - `/d/silvere/rooms/harbour/quay2_1` — southern quay (barrels)
 - `/d/silvere/rooms/harbour/quay2_2` — southern landing
+- `/d/silvere/rooms/harbour/quay2_3` — path to the southern tower
+- `/d/silvere/rooms/harbour/stower_enter` — Before a high tower
 - `/d/silvere/rooms/west/harbourgate` — city side of the harbour wall
+- `/d/silvere/rooms/west/westroad1` — The Westway
+- `/d/silvere/rooms/west/westroad2` — Westway shop fronts
+- `/d/silvere/rooms/west/cityinfo1` — Park Lane
+- `/d/silvere/rooms/west/whealer1` — Before the house of the healer
 
-quay2_3 / southern tower, westroad1 into the city, inn
-buy/drink, and the harbourmaster bell NPC are not loaded.
+inn buy/drink, harbourmaster bell NPC, tower interior,
+westroad3 / shop interiors, healer/elder interiors, and
+`ntower_enter` are not loaded.
 
 `/catalog/login` still handles name/password. `/catalog/player`
 `enter_world()` moves onto the docks (fallback Void if load fails).
@@ -151,10 +157,28 @@ This-boot live `libs/aoh/log/debug.log` (fd 3, PID 1806541
 BOOT_MARKER3 aoh-quay2-yard): no new lines after the marker.
 Catch this walk: empty after the marker.
 
+Harbour expansion 3 (native 40285, 2026-09-06, same `fluffos` /
+`Mud@2026`, do not redo docks, inn/office, shipyard, or
+quay2/city-gate look-ats):
+
+- West from the landing → path to the southern tower
+  (`look at bushes` / `trees`). West → Before a high tower
+  (`look at tower` / `chain`). East back.
+- East through City Gate → The Westway (`look at flagstones` /
+  `shops`). East → shop-front Westway (`look at signs`).
+- South → Park Lane (`look at sign`). North, north → healer
+  street (`look at herbs`).
+- `score` persist. Reconnect still lands on the docks.
+
+This-boot live `libs/aoh/log/debug.log` (fd 3, PID 1836787
+BOOT_MARKER4 aoh-westway): no new lines after the marker.
+Catch this walk: empty after the marker.
+
 **Not published** (`wasm_status: partial`). Do not flip to
 `playable` on this harbour walk. `look at menu` is flavour —
-buy/drink, combat, and westroad1 are not claimed. Next aoh
-slice: quay2_3 / towers / westroad1 if expanding.
+buy/drink, combat, tower interior, and shop interiors are
+not claimed. Next aoh slice: `ntower_enter` / westroad3
+shop fronts if expanding.
 
 ## 5. WASM
 
