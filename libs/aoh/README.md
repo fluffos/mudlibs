@@ -27,9 +27,11 @@ northern tower exterior; southwest quay #2 west to the
 southern tower; east through City Gate onto The Westway
 (Park Lane, healer street, Molly's Chandler candles,
 flowerbed, pigeon alley, post-office street, sell-only
-shop, fishmonger-front sign/nets, Counting House plaque,
-post-office cabins); south Seaman's Rest (`look at menu`);
-`score` / `quit`; reconnect lands on the docks again.
+shop, fishmonger-front, Feridwyn's tiles/vats/sign,
+Couture Celimarith, Counting House plaque, post-office
+cabins, bank panelling); south Seaman's Rest
+(`look at menu`); `score` / `quit`; reconnect lands on
+the docks again.
 
 ## Local run
 
