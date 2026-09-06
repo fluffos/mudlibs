@@ -40,8 +40,9 @@ Catalog overlay (questmud §7.158 cluster):
   `load_object`/`recompile_object`/`include`/`restore_object`,
   `valid_override` returns 1, `error_handler` → `/log/catch`
 - `/catalog/simul_efun.lpc` — thin `cat`/`log_file`/`exists`
-- `/catalog/login.lpc`, `/catalog/player.lpc` — name/password → Void
-- `/catalog/void.lpc`, `/catalog/workshop.lpc` — look/score/quit surface
+- `/catalog/login.lpc`, `/catalog/player.lpc` — name/password →
+  `/gilden/abenteurer` (Strategy A; Void fallback if load fails)
+- `/catalog/void.lpc`, `/catalog/workshop.lpc` — leftover overlay rooms
 
 ## 3. Live-verified (native, port 40283)
 
@@ -63,11 +64,56 @@ Logs this boot (PID started 20:08:07, live fd
 (`CAUGHT /catalog/player.lpc *catch-path-probe`) then reverted;
 play itself left no other catch lines.
 
-## 4. What is not ported
+## 4. What is not ported yet
 
-Full LDMud world, guilds, protocol stacks, and OSB/MG kernel daemons.
-Those remain in the tree for archaeology; booting them needs a real
-LDMud driver.
+Full LDMud world (`/d/ebene` Port Vain and other domains live in
+git submodules that are not in this snapshot), guild commands
+(`liste` / `kosten` / `lerne`), shop, combat, protocol stacks,
+OSB/MG kernel daemons. 840 `#'` in 180 files — do not attempt a
+mechanical `/std` rewrite this slice. `/room/church` is a leftover
+English 2.4.5 church, not the live German spawn.
+
+## 6. Full dialect port (Strategy A, 2026-09-06)
+
+Catalog Void/workshop is no longer the live start. Established
+players in the archive start at `/gilden/abenteurer` ("Die
+beruehmte Abenteurergilde"; `std/player/base.lpc` P_START_HOME).
+Newbies go to `/room/welcome/<name>` then a tutorial hut — that
+path is not loaded here.
+
+`/std/room` cannot load on FluffOS (LDMud inherit + `#'`).
+Strategy A keeps the authentic path and German text as thin
+FluffOS rooms; original guild object is
+`/gilden/abenteurer_ldmud.lpc`.
+
+- `/gilden/abenteurer` — guild hall (login)
+- `/d/ebene/room/PortVain/po_haf1` — Hafenstrasse (north). Domain
+  files.ebene is not in the snapshot; text reconstructed from the
+  guild's own Hafenstrasse / Port Vain details so the exit walks.
+- `/p/verein/room/buero` — Foerderverein office (up)
+
+`/catalog/login` still handles name/password. `/catalog/player`
+`enter_world()` moves into the guild (fallback Void if load fails).
+
+Live walk (native 40283, 2026-09-06, organic `fluffos` /
+`Mud@2026`):
+
+- Lands in Die beruehmte Abenteurergilde. `look at tuer` /
+  `dielen` / `uhr`.
+- North → Hafenstrasse von Port Vain. South back. Up → Buero
+  des Foerdervereins. Down back.
+- `score` level 1, hp 20/20. Quit persist. Reconnect lands in
+  the guild again.
+
+This-boot live `libs/morgengrauen/log/debug.log` (fd 3, PID
+1724270 BOOT_MARKER1 mg-abenteurer): start rooms compiled, no
+new lines after the marker. Catch this walk: empty after the
+marker (older `*catch-path-probe` line is from 2026-09-05).
+
+**Not published** (`wasm_status: partial`). Do not flip to
+`playable` on this guild-hall walk. Shop / combat / `liste` /
+`lerne` are not claimed. Next MG slice needs domain files that
+are not in the snapshot, or start aoh.
 
 ## 5. WASM
 
