@@ -39,6 +39,8 @@ lime trees / statue too far), West Palace Avenue
 (brownstone paving / gulls / statue gaurds),
 Avenue of the Palace (helmeted Rilana / yellow
 roses / Gaurdian inscription; flavour — no touch),
+The palace avenue (cassia cinnamon / gentleman's
+buttons / lime trees),
 library road (guild unfinished),
 wine-shop vines, Counting House plaque,
 post-office cabins, bank panelling); south Seaman's Rest
