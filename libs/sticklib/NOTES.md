@@ -104,26 +104,34 @@ Live walk (native 40286, 2026-09-05, organic `fluffos` /
   Nallihan). `list` shows torches and torches of darkness at
   82 gold. `buy torch` → inventory "A torch" / "A torch of
   darkness", gold 200→118→36.
-- Adventurers' Guild (east from physical S8_6) does not load:
-  `/lib/guild` `closure guildInit` plus `#'make_noise` in
-  `adv_guild.lpc`.
+- East from physical S8_6 → Adventurers' Guild loads
+  (`8a9558ad094` + `a6e16773d6a`). Sign lists cost/advance/
+  list. `cost`: "You still need 1014 experience points for
+  next level" (no player-visible ERROR). `quests`: "The
+  quest board is not available yet." User graph present.
+  `/lib/guild` uses `mixed guildInit`; `#'make_noise` is
+  `call_out("make_noise", …)`. QUEST_D (`/bin/daemons/questd`)
+  still fails to compile (LDMud multi-value mappings); `cost`
+  / `quests` catch that and keep the room usable.
 
-This-boot live `libs/sticklib/log/debug.log` (fd) + driver
-stdout: list/buy had no uncaught errors after the darktorch
-foreach fix. `work/log/catch` this boot: expected CAUGHT on
-`/bin/daemons/peaced`, `/std/obj/trashcan` (LDMud `foreach :`),
-some street NPCs (dog/leper inherit extra files). Older catch
-lines are from the compile iterate earlier the same evening.
+This-boot live `libs/sticklib/log/debug.log` (fd, PID 1519633
+BOOT_MARKER9 sticklib-guild2) + driver stdout: QUEST_D
+compile errors are expected. `work/log/catch` this walk:
+CAUGHT (not ERROR) on `guild.lpc:175` / `:493` questd, plus
+expected PEACE_D and `/std/obj/bboard`. Older catch lines
+are from earlier boots the same evening.
 
 **Not published** (`wasm_status: partial`). Flip to `playable`
-only after combat + guild actually work.
+only after combat + a real quest/advance path, not on
+guild-look + shop-buy alone.
 
 ## 4. What is not ported yet
 
-`/lib/guild` (`closure guildInit`) and `adv_guild.lpc`
-`#'make_noise`. Elevator, PEACE_D, NATURE_D. Trashcan toss
-(`foreach :`). Full LDMud living combat (HitFunc closures).
+QUEST_D wide-mapping rewrite (`key : a; b; c; d`). Elevator,
+PEACE_D, NATURE_D. Trashcan toss (`foreach :`). Full LDMud
+living combat (HitFunc closures; thin living/npc stub
+`hit_player` / `attacked_by`). Bulletin board extra inherit.
 Catalog inventory persists only as the catalog body's
 save_object fields plus whatever objects happen to be cloned
-next boot. Next slice: `/lib/guild` + Adventurers' Guild, then
-combat.
+next boot. Next slice: combat, or QUEST_D so `quests` /
+advance QP actually work.
