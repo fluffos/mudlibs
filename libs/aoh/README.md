@@ -37,6 +37,8 @@ palace-square approach (marble/gardens / square /
 murals), Central place west end (brownstone wall /
 lime trees / statue too far), West Palace Avenue
 (brownstone paving / gulls / statue gaurds),
+Avenue of the Palace (helmeted Rilana / yellow
+roses / Gaurdian inscription; flavour — no touch),
 library road (guild unfinished),
 wine-shop vines, Counting House plaque,
 post-office cabins, bank panelling); south Seaman's Rest
