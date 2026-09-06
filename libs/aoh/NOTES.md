@@ -110,12 +110,17 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/west/westshop2` — lane to the sell-only shop
 - `/d/silvere/rooms/west/westshop` — A little shop (look only)
 - `/d/silvere/rooms/west/westroad5` — Westway toward the post office
+- `/d/silvere/rooms/west/westroad6` — fishmonger-front Westway
+- `/d/silvere/rooms/west/wpostroad1` — lane to the post office
+- `/d/silvere/rooms/west/wpostroad2` — Counting House arch
+- `/d/silvere/rooms/west/wpostoffice` — post office (look only)
 - `/d/silvere/rooms/west/cityinfo1` — Park Lane
 - `/d/silvere/rooms/west/whealer1` — Before the house of the healer
 
 inn buy/drink, harbourmaster bell NPC, tower interiors,
-westroad6 / post office / Caves of Parch, shop buy, and
-healer/elder interiors are not loaded.
+westroad7 / fishmonger interior / bank / mail /
+Caves of Parch, shop buy, and healer/elder interiors
+are not loaded.
 
 `/catalog/login` still handles name/password. `/catalog/player`
 `enter_world()` moves onto the docks (fallback Void if load fails).
@@ -224,11 +229,28 @@ This-boot live `libs/aoh/log/debug.log` (fd 3, PID 1920162
 BOOT_MARKER7 aoh-wr5-sellshop): no new lines after the marker.
 Catch this walk: empty after the marker.
 
+Harbour expansion 7 (native 40285, 2026-09-06, same `fluffos` /
+`Mud@2026`, do not redo docks, inn/office, towers,
+Westway, chandler/flowerbed/alley, or westroad5/sell-shop
+look-ats):
+
+- East of westroad5 → fishmonger-front Westway
+  (`look at sign` / `nets`). West back.
+- North → post-office lane. North → Counting House
+  street (`look at plaque` / `arch`). West → post office
+  (`look at cabins`). Mail is not implemented.
+- `score` persist. Reconnect still lands on the docks.
+
+This-boot live `libs/aoh/log/debug.log` (fd 3, PID 1950215
+BOOT_MARKER8 aoh-wr6-post): no new lines after the marker.
+Catch this walk: empty after the marker.
+
 **Not published** (`wasm_status: partial`). Do not flip to
-`playable` on this harbour walk. `look at menu` and
-`look at candles` are flavour — buy/drink, combat, and
-tower interiors are not claimed. Next aoh slice: westroad6
-/ post office if expanding.
+`playable` on this harbour walk. `look at menu`,
+`look at candles`, and `look at cabins` are flavour —
+buy/drink, mail, combat, and tower interiors are not
+claimed. Next aoh slice: westroad7 / fishmonger interior
+/ bank if expanding.
 
 ## 5. WASM
 
