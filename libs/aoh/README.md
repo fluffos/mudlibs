@@ -25,9 +25,9 @@ The docks (Silvere harbour). Existing names prompt for password only.
 Verified live: fluffos / Mud@2026 → The docks; west to the
 northern tower exterior; southwest quay #2 west to the
 southern tower; east through City Gate onto The Westway
-(Park Lane, healer street, chandler-front sign); south
-Seaman's Rest (`look at menu`); `score` / `quit`;
-reconnect lands on the docks again.
+(Park Lane, healer street, Molly's Chandler candles,
+flowerbed, pigeon alley); south Seaman's Rest (`look at
+menu`); `score` / `quit`; reconnect lands on the docks again.
 
 ## Local run
 

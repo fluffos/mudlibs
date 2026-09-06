@@ -67,8 +67,8 @@ play itself left no other catch lines.
 
 ## 4. What is not ported yet
 
-Full OSB/AOH world (Silvere shop interiors, tower interiors,
-other domains), guilds, shop buy, combat, protocol stacks,
+Full OSB/AOH world (Silvere shop buy, remaining interiors,
+tower interiors, other domains), guilds, combat, protocol stacks,
 OSB kernel daemons. 2681 `#'` in 1062 files — do not attempt a
 mechanical `/std` rewrite this slice. Newbie creation
 `/d/login/entrance` is not loaded; catalog login uses STARTROOM.
@@ -104,11 +104,14 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/west/westroad1` — The Westway
 - `/d/silvere/rooms/west/westroad2` — Westway shop fronts
 - `/d/silvere/rooms/west/westroad3` — Westway chandler front
+- `/d/silvere/rooms/west/chandler` — Molly's Chandler (look only)
+- `/d/silvere/rooms/west/westroad4` — Westway flowerbed
+- `/d/silvere/rooms/west/westshop1` — south alley (SHOPPE THATT WAY)
 - `/d/silvere/rooms/west/cityinfo1` — Park Lane
 - `/d/silvere/rooms/west/whealer1` — Before the house of the healer
 
 inn buy/drink, harbourmaster bell NPC, tower interiors,
-westroad4 / shop interiors, and healer/elder interiors
+westroad5 / sell-shop buy, and healer/elder interiors
 are not loaded.
 
 `/catalog/login` still handles name/password. `/catalog/player`
@@ -190,11 +193,25 @@ This-boot live `libs/aoh/log/debug.log` (fd 3, PID 1863039
 BOOT_MARKER5 aoh-ntower-wr3): no new lines after the marker.
 Catch this walk: empty after the marker.
 
+Harbour expansion 5 (native 40285, 2026-09-06, same `fluffos` /
+`Mud@2026`, do not redo docks, inn/office, towers, or
+Westway look-ats):
+
+- North from the chandler front → Molly's Chandler
+  (`look at candles` / `sign`). South back.
+- East → Westway flowerbed (`look at flowerbed` / `fence`).
+  South → pigeon alley (`look at sign` / `pigeons`).
+- `score` persist. Reconnect still lands on the docks.
+
+This-boot live `libs/aoh/log/debug.log` (fd 3, PID 1892062
+BOOT_MARKER6 aoh-wr4-chandler): no new lines after the marker.
+Catch this walk: empty after the marker.
+
 **Not published** (`wasm_status: partial`). Do not flip to
-`playable` on this harbour walk. `look at menu` is flavour —
-buy/drink, combat, tower interiors, and shop interiors are
-not claimed. Next aoh slice: westroad4 / shop interiors
-if expanding.
+`playable` on this harbour walk. `look at menu` and
+`look at candles` are flavour — buy/drink, combat, and
+tower interiors are not claimed. Next aoh slice: westroad5
+/ sell-shop if expanding.
 
 ## 5. WASM
 
