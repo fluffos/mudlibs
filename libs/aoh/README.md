@@ -29,7 +29,9 @@ southern tower; east through City Gate onto The Westway
 flowerbed, pigeon alley, post-office street, sell-only
 shop, fishmonger-front, Feridwyn's tiles/vats/sign,
 Couture Celimarith cloth/dummy, Elrimand Road bakery
-pretzel, wine-shop vines, Counting House plaque,
+pretzel, Chez Brigan racks/sign, Eldranna shelves/
+chalkboard, Guild Street fork palace silhouette,
+wine-shop vines, Counting House plaque,
 post-office cabins, bank panelling); south Seaman's Rest
 (`look at menu`); `score` / `quit`; reconnect lands on
 the docks again.
