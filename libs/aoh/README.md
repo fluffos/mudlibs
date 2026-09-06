@@ -26,8 +26,9 @@ Verified live: fluffos / Mud@2026 → The docks; west to the
 northern tower exterior; southwest quay #2 west to the
 southern tower; east through City Gate onto The Westway
 (Park Lane, healer street, Molly's Chandler candles,
-flowerbed, pigeon alley); south Seaman's Rest (`look at
-menu`); `score` / `quit`; reconnect lands on the docks again.
+flowerbed, pigeon alley, post-office street, sell-only
+shop); south Seaman's Rest (`look at menu`); `score` /
+`quit`; reconnect lands on the docks again.
 
 ## Local run
 
