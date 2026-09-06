@@ -6,6 +6,7 @@
 #define THISO this_object()
 #define THISP this_player()
 #define status int
+#define closure mixed
 
 void _efun_move_to(mixed dest) {
   if (dest)
