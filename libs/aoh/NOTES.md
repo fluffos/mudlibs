@@ -117,6 +117,7 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/west/westroad10` — flower-shop-front Westway
 - `/d/silvere/rooms/west/westroad11` — palace-square approach Westway
 - `/d/silvere/rooms/center/westenter` — Central place, west end
+- `/d/silvere/rooms/center/outside1` — West Palace Avenue
 - `/d/silvere/rooms/west/flowershop` — Jehane's Flowers (look only)
 - `/d/silvere/rooms/west/libraryroad1` — Guild Street / library road
 - `/d/silvere/rooms/west/libraryroad2` — library road west (stub look-ats)
@@ -133,7 +134,7 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/west/whealer1` — Before the house of the healer
 
 inn buy/drink, harbourmaster bell NPC, tower interiors,
-further palace avenue (`/d/silvere/rooms/center/outside1`
+further palace avenue (`/d/silvere/rooms/center/outside2`
 is still the LDMud SILBASEROOM original), further council
 road / mail / bank deposit / Caves of Parch, shop buy,
 and healer/elder interiors are not loaded. The council
@@ -381,13 +382,33 @@ This-boot live `libs/aoh/log/debug.log` (fd 3, PID 2120738
 BOOT_MARKER14 aoh-westenter): no new lines after
 the marker. Catch this walk: empty after the marker.
 
+Harbour expansion 14 (native 40285, 2026-09-06, same
+`fluffos` / `Mud@2026`, do not redo docks, inn/office,
+towers, Westway, chandler/flowerbed/alley,
+westroad5/sell-shop, westroad6/post-office,
+westroad7/fishmonger/bank, westroad8/tailor/Elrimand,
+westroad9/wineshop/bakery, westroad10/Guild Street,
+westroad11/Jehane flower-shop, or westenter
+palace-square west-end look-ats):
+
+- East of westenter → West Palace Avenue
+  (`look at stone` brownstones / `gulls` / `avenue`
+  statue “gaurds”). Archive long keeps “roads leads”.
+  East Avenue of the Palace (`outside2`) is still
+  the LDMud original — not loaded.
+- `score` persist. Reconnect still lands on the docks.
+
+This-boot live `libs/aoh/log/debug.log` (fd 3, PID 2152533
+BOOT_MARKER15 aoh-outside1): no new lines after
+the marker. Catch this walk: empty after the marker.
+
 **Not published** (`wasm_status: partial`). Do not flip to
 `playable` on this harbour walk. `look at menu`,
 `look at candles`, `look at cabins`, `look at tiles`,
 and tailor/bakery/wine/flower `sign`s are flavour —
 buy/drink, mail, deposit, combat, and tower interiors
-are not claimed. Next aoh slice: West Palace Avenue
-(`/d/silvere/rooms/center/outside1`) if expanding.
+are not claimed. Next aoh slice: Avenue of the Palace
+(`/d/silvere/rooms/center/outside2`) if expanding.
 
 ## 5. WASM
 

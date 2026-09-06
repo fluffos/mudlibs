@@ -35,7 +35,9 @@ flower-shop iron rose, Jehane's Flowers (myriard /
 JEHANE'S FLOWERS / vases; flavour — no buy),
 palace-square approach (marble/gardens / square /
 murals), Central place west end (brownstone wall /
-lime trees / statue too far), library road (guild unfinished),
+lime trees / statue too far), West Palace Avenue
+(brownstone paving / gulls / statue gaurds),
+library road (guild unfinished),
 wine-shop vines, Counting House plaque,
 post-office cabins, bank panelling); south Seaman's Rest
 (`look at menu`); `score` / `quit`; reconnect lands on
