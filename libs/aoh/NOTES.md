@@ -40,8 +40,10 @@ Catalog overlay (questmud §7.158 cluster):
   `load_object`/`recompile_object`/`include`/`restore_object`,
   `valid_override` returns 1, `error_handler` → `/log/catch`
 - `/catalog/simul_efun.lpc` — thin `cat`/`log_file`/`exists`
-- `/catalog/login.lpc`, `/catalog/player.lpc` — name/password → Void
-- `/catalog/void.lpc`, `/catalog/workshop.lpc` — look/score/quit surface
+- `/catalog/login.lpc`, `/catalog/player.lpc` — name/password →
+  `/d/silvere/rooms/harbour/quay1_2` (Strategy A; Void fallback
+  if load fails)
+- `/catalog/void.lpc`, `/catalog/workshop.lpc` — leftover overlay rooms
 
 ## 3. Live-verified (native, port 40285)
 
@@ -63,11 +65,54 @@ Logs this boot (PID started 20:08:55, live fd
 (`CAUGHT /catalog/player.lpc *catch-path-probe`) then reverted;
 play itself left no other catch lines.
 
-## 4. What is not ported
+## 4. What is not ported yet
 
-Full LDMud world, guilds, protocol stacks, and OSB/MG kernel daemons.
-Those remain in the tree for archaeology; booting them needs a real
-LDMud driver.
+Full OSB/AOH world (Silvere city, inn, harbourmaster, shipyard,
+towers, other domains), guilds, shop, combat, protocol stacks,
+OSB kernel daemons. 2681 `#'` in 1062 files — do not attempt a
+mechanical `/std` rewrite this slice. Newbie creation
+`/d/login/entrance` is not loaded; catalog login uses STARTROOM.
+
+## 6. Full dialect port (Strategy A, 2026-09-06)
+
+Catalog Void/workshop is no longer the live start. Established
+players in the archive start at `/d/silvere/rooms/harbour/quay1_2`
+("The docks"; `sys/stdrooms.h` STARTROOM). Newbies go to
+`/d/login/entrance` — that creation path is not loaded here.
+
+`/std/room` and HARBOUR_BASEROOM cannot load on FluffOS (LDMud
+inherit + `#'` + nightday). Strategy A keeps the authentic paths
+and English harbour text as thin FluffOS rooms; originals are
+`quay1_*_ldmud.lpc`.
+
+- `/d/silvere/rooms/harbour/quay1_2` — The docks (login)
+- `/d/silvere/rooms/harbour/quay1_3` — The quay at Silvere (west)
+- `/d/silvere/rooms/harbour/quay1_1` — A street (east; lobster traps)
+
+North shipyard, southeast street3, and the defense tower are not
+loaded this slice.
+
+`/catalog/login` still handles name/password. `/catalog/player`
+`enter_world()` moves onto the docks (fallback Void if load fails).
+
+Live walk (native 40285, 2026-09-06, organic `fluffos` /
+`Mud@2026`):
+
+- Lands on The docks. `look at nets` / `gulls` / `pails`.
+- West → The quay at Silvere (`look at sails`). East back.
+  East → A street (`look at traps`). West back to the docks.
+- `score` level 1, hp 20/20. Quit persist. Reconnect lands on
+  the docks again.
+
+This-boot live `libs/aoh/log/debug.log` (fd 3, PID 1750409
+BOOT_MARKER1 aoh-docks): start rooms compiled, no new lines
+after the marker. Catch this walk: empty after the marker
+(older `*catch-path-probe` line is from 2026-09-05).
+
+**Not published** (`wasm_status: partial`). Do not flip to
+`playable` on this harbour walk. Shop / combat / inn / guild
+are not claimed. Next aoh slice: street3 / harbour inn /
+harbourmaster if we keep expanding Silvere.
 
 ## 5. WASM
 

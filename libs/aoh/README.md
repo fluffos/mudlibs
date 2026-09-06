@@ -4,16 +4,16 @@
 Slug `aoh`, number **976**, port **40285**.
 This collection’s copy is a snapshot, not a live mirror.
 
-Age of Heroes, an experimental English LDMud mudlib based on One Step Beyond (OSB). LDMud → FluffOS conversion: archive master uses closures and LDMud kernel applies; this collection boots a FluffOS catalog overlay (Void + workshop look/score/quit) while keeping the full OSB-derived source tree under /d, /lib, /std.
+Age of Heroes, an experimental English LDMud mudlib based on One Step Beyond (OSB). LDMud → FluffOS conversion: archive master uses closures and LDMud kernel applies; catalog login lands on the docks of Silvere harbour. Full OSB-derived source tree is preserved under /d, /lib, /std.
 
-Based on One Step Beyond (OSB). Full world code is preserved;
-interactive play here is the FluffOS catalog overlay. Not on the
-public play site until the real world is ported and deep-tested.
+Based on One Step Beyond (OSB). Interactive play is a Strategy A
+harbour start, not the full LDMud world. Not on the public play
+site until shop/combat/guild are deep-tested.
 
 ## Registration flow
 
-Name (2–16 letters) → new character: password (≥6, twice) → The Void.
-Existing names prompt for password only.
+Name (2–16 letters) → new character: password (≥6, twice) →
+The docks (Silvere harbour). Existing names prompt for password only.
 
 ## Admin / test account
 
@@ -22,8 +22,9 @@ Existing names prompt for password only.
 - **privilege**: seeded mortal (level 1). This overlay does not auto-god
   the first player.
 
-Verified live after onboard: create fluffos / Mud@2026 → The Void;
-`look` / `score` / `quit`; reconnect after quit.
+Verified live: fluffos / Mud@2026 → The docks; `look at nets` /
+west quay / east street / `score` / `quit`; reconnect lands on
+the docks again.
 
 ## Local run
 

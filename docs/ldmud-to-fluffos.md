@@ -14,7 +14,7 @@ and `meta.json` that it is an **LDMud → FluffOS conversion**.
 | Strategy | When | Examples |
 |---|---|---|
 | **A. Full dialect port** | Older LDMud / Amylaar-era lib; closures rare; you intend playable world content | `questmud` |
-| **B. Catalog overlay** | Stopgap only. Modern LDMud 3.x (`set_driver_hook`, `#'` / `unbound_lambda`, `virtual inherit`, MessageLib, XML cmds). **Does not load the real world.** User 2026-09-05: these games must become Strategy A (fully playable content), not stay as Void/workshop. Order: `ageofelements` first, then `sticklib`, `simud`, `morgengrauen` (guild hall live 2026-09-06), then `aoh`. `acme` has no world in the archive. | `acme` (framework only), and the 974–978 overlays until each is fully ported |
+| **B. Catalog overlay** | Stopgap only. Modern LDMud 3.x (`set_driver_hook`, `#'` / `unbound_lambda`, `virtual inherit`, MessageLib, XML cmds). **Does not load the real world.** User 2026-09-05: these games must become Strategy A (fully playable content), not stay as Void/workshop. Order: `ageofelements` first, then `sticklib`, `simud`, `morgengrauen` (guild hall live 2026-09-06), then `aoh` (Silvere docks live 2026-09-06). `acme` has no world in the archive. | `acme` (framework only), and the 974–978 overlays until each is fully ported |
 
 Both strategies still run the normal extract → `convert_lib.sh` →
 `config.fluffos` → numbering/`meta.json` pipeline from `AGENTS.md` §2.
