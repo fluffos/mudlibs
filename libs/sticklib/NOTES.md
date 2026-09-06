@@ -107,31 +107,35 @@ Live walk (native 40286, 2026-09-05, organic `fluffos` /
 - East from physical S8_6 → Adventurers' Guild loads
   (`8a9558ad094` + `a6e16773d6a`). Sign lists cost/advance/
   list. `cost`: "You still need 1014 experience points for
-  next level" (no player-visible ERROR). `quests`: "The
-  quest board is not available yet." User graph present.
+  next level" (no player-visible ERROR). User graph present.
   `/lib/guild` uses `mixed guildInit`; `#'make_noise` is
-  `call_out("make_noise", …)`. QUEST_D (`/bin/daemons/questd`)
-  still fails to compile (LDMud multi-value mappings); `cost`
-  / `quests` catch that and keep the room usable.
+  `call_out("make_noise", …)`.
+- QUEST_D (`ac61209dffb`): LDMud multi-value mappings rewritten
+  as mapping-of-arrays (original `questd_ldmud.lpc`). Organic
+  `quests` lists 14 unsolved (Beer to Bum, Maze Under Well,
+  Eat at Joe's, Orc Slayer, … Immortality). `quests 1` shows
+  the Barney hint. `qp_for_level` still returns 0 (upstream
+  Kieve stub), so advance is XP-only. Catalog body has no
+  completed-quest persist yet.
 
-This-boot live `libs/sticklib/log/debug.log` (fd, PID 1519633
-BOOT_MARKER9 sticklib-guild2) + driver stdout: QUEST_D
-compile errors are expected. `work/log/catch` this walk:
-CAUGHT (not ERROR) on `guild.lpc:175` / `:493` questd, plus
-expected PEACE_D and `/std/obj/bboard`. Older catch lines
-are from earlier boots the same evening.
+This-boot live `libs/sticklib/log/debug.log` (fd, PID 1547636
+BOOT_MARKER10 sticklib-questd) + driver stdout: no questd
+compile errors. `work/log/catch` this walk: expected PEACE_D
+and `/std/obj/bboard` only — guild no longer CAUGHT on
+questd.
 
 **Not published** (`wasm_status: partial`). Flip to `playable`
 only after combat + a real quest/advance path, not on
-guild-look + shop-buy alone.
+guild-look + shop-buy + quest-list alone.
 
 ## 4. What is not ported yet
 
-QUEST_D wide-mapping rewrite (`key : a; b; c; d`). Elevator,
-PEACE_D, NATURE_D. Trashcan toss (`foreach :`). Full LDMud
-living combat (HitFunc closures; thin living/npc stub
-`hit_player` / `attacked_by`). Bulletin board extra inherit.
-Catalog inventory persists only as the catalog body's
-save_object fields plus whatever objects happen to be cloned
-next boot. Next slice: combat, or QUEST_D so `quests` /
-advance QP actually work.
+Elevator, PEACE_D, NATURE_D. Trashcan toss (`foreach :`).
+Full LDMud living combat (HitFunc closures; thin living/npc
+stub `hit_player` / `attacked_by`). Bulletin board extra
+inherit. Completing a world quest (beer-to-bum / Joe's /
+well maze) and persisting it on the catalog body. Catalog
+inventory persists only as the catalog body's save_object
+fields plus whatever objects happen to be cloned next boot.
+Next slice: combat, or a live quest complete (bum / Joe's
+/ well).
