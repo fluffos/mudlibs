@@ -22,10 +22,10 @@ The docks (Silvere harbour). Existing names prompt for password only.
 - **privilege**: seeded mortal (level 1). This overlay does not auto-god
   the first player.
 
-Verified live: fluffos / Mud@2026 → The docks; east / southeast
-to City Gate; south Seaman's Rest (`look at menu`); north
-harbourmaster office; `score` / `quit`; reconnect lands on
-the docks again.
+Verified live: fluffos / Mud@2026 → The docks; north shipyard;
+southwest quay #2; east through City Gate to the city-side
+harbour wall; south Seaman's Rest (`look at menu`); `score` /
+`quit`; reconnect lands on the docks again.
 
 ## Local run
 

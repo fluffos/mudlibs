@@ -67,8 +67,8 @@ play itself left no other catch lines.
 
 ## 4. What is not ported yet
 
-Full OSB/AOH world (Silvere city east of the gate, shipyard,
-towers, quay #2, other domains), guilds, shop buy, combat,
+Full OSB/AOH world (Silvere westroad / city shops, southern
+tower, quay2_3, other domains), guilds, shop buy, combat,
 protocol stacks,
 OSB kernel daemons. 2681 `#'` in 1062 files — do not attempt a
 mechanical `/std` rewrite this slice. Newbie creation
@@ -95,8 +95,12 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/harbour/entrance` — City Gate
 - `/d/silvere/rooms/harbour/harbour_inn` — The Seaman's Rest
 - `/d/silvere/rooms/harbour/harbourmaster` — office
+- `/d/silvere/rooms/harbour/shipyard` — north of the lobster-trap street
+- `/d/silvere/rooms/harbour/quay2_1` — southern quay (barrels)
+- `/d/silvere/rooms/harbour/quay2_2` — southern landing
+- `/d/silvere/rooms/west/harbourgate` — city side of the harbour wall
 
-North shipyard, southwest quay #2, east into the city, inn
+quay2_3 / southern tower, westroad1 into the city, inn
 buy/drink, and the harbourmaster bell NPC are not loaded.
 
 `/catalog/login` still handles name/password. `/catalog/player`
@@ -131,10 +135,26 @@ This-boot live `libs/aoh/log/debug.log` (fd 3, PID 1778974
 BOOT_MARKER2 aoh-inn-hm): no new lines after the marker.
 Catch this walk: empty after the marker.
 
+Harbour expansion 2 (native 40285, 2026-09-06, same `fluffos` /
+`Mud@2026`, do not redo docks or inn/office look-ats):
+
+- East → lobster-trap street. North → The shipyard of Silvere
+  (`look at frames` / `tar` / `workers`). South back.
+- Southeast → crossing. Southwest → southern quay
+  (`look at barrels` / `crates`). West → landing
+  (`look at people`). East, northeast back.
+- East ×3 to City Gate. East → City gates (`look at gate` /
+  `portcullis`). West back.
+- `score` persist. Reconnect still lands on the docks.
+
+This-boot live `libs/aoh/log/debug.log` (fd 3, PID 1806541
+BOOT_MARKER3 aoh-quay2-yard): no new lines after the marker.
+Catch this walk: empty after the marker.
+
 **Not published** (`wasm_status: partial`). Do not flip to
 `playable` on this harbour walk. `look at menu` is flavour —
-buy/drink, combat, and city-east are not claimed. Next aoh
-slice: quay #2 / shipyard / city gate east if expanding.
+buy/drink, combat, and westroad1 are not claimed. Next aoh
+slice: quay2_3 / towers / westroad1 if expanding.
 
 ## 5. WASM
 
