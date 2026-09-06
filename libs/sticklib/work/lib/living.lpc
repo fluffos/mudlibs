@@ -169,24 +169,6 @@ void init_command(string s) {
 	command(s);
 }
 
-varargs int
-hit_player(int dam, mixed dtype, mixed hc, mixed enemy)
-{
-    if (dam > 0)
-	hit_point -= dam;
-    if (hit_point < 0)
-	hit_point = 0;
-    return dam;
-}
-
-varargs int
-attacked_by(object orig, int to_top, int flags)
-{
-    if (orig)
-	attack = orig;
-    return 1;
-}
-
 int run_away() { return 1; }
 
 int is_fighting(object x) {
@@ -195,6 +177,111 @@ int is_fighting(object x) {
     return attack == x;
 }
 
-varargs void attack_object(object x, int later) { attack = x; }
-
 void extra_attacked_by(object ob) { }
+
+void die(object killer);
+void attack();
+
+varargs int
+hit_player(int dam, mixed dtype, mixed hc, mixed enemy)
+{
+    if (!enemy)
+	enemy = this_player();
+    if (dam > 0)
+	hit_point -= dam;
+    if (hit_point < 0)
+	hit_point = 0;
+    if (enemy && enemy != this_object()) {
+	attack = enemy;
+	set_heart_beat(1);
+    }
+    if (hit_point < 1) {
+	die(enemy);
+	return dam;
+    }
+    return dam;
+}
+
+varargs int
+attacked_by(object orig, int to_top, int flags)
+{
+    if (orig)
+	attack = orig;
+    set_heart_beat(1);
+    return 1;
+}
+
+varargs void
+attack_object(object x, int later)
+{
+    if (!x || x == this_object())
+	return;
+    attack = x;
+    set_heart_beat(1);
+    if (!later)
+	attack();
+}
+
+void
+attack()
+{
+    int dam;
+    object env, victim;
+    string me, them;
+
+    victim = attack;
+    if (!victim)
+	return;
+    env = environment();
+    if (!env || environment(victim) != env) {
+	attack = 0;
+	return;
+    }
+    dam = wc + random(wc > 0 ? wc : 1);
+    if (dam < 1)
+	dam = 1;
+    me = query_name() || "Someone";
+    them = victim->query_name() || "someone";
+    env->tell_here(me + " hits " + them + ".");
+    victim->hit_player(dam, 0, 0, this_object());
+}
+
+void
+heart_beat()
+{
+    if (!attack) {
+	set_heart_beat(0);
+	return;
+    }
+    if (!objectp(attack) || environment(attack) != environment()) {
+	attack = 0;
+	set_heart_beat(0);
+	return;
+    }
+    attack();
+}
+
+void
+die(object killer)
+{
+    object env;
+    int xp;
+    string me;
+
+    me = query_name() || "Something";
+    env = environment();
+    if (env)
+	env->tell_here(me + " dies.");
+    if (killer) {
+	xp = ep;
+	if (xp < 1)
+	    xp = level * 20 + 10;
+	if (function_exists("add_exp", killer))
+	    killer->add_exp(xp);
+	if (function_exists("tell_me", killer))
+	    killer->tell_me("You killed " + me + ".");
+    }
+    if (dead_ob)
+	catch(dead_ob->monster_died(this_object(), killer, 0));
+    destruct(this_object());
+}

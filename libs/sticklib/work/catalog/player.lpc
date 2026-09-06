@@ -9,7 +9,9 @@ int hp;
 int max_hp;
 int ghost;
 int money;
+int ep;
 string quests;
+object fighting;
 
 int cmd_look(string arg);
 int cmd_score(string arg);
@@ -17,6 +19,8 @@ int cmd_inventory(string arg);
 int cmd_quit(string arg);
 int cmd_get(string arg);
 int cmd_give(string arg);
+int cmd_kill(string arg);
+void do_swing();
 varargs int tell_me(string s, mixed a, mixed b);
 varargs void move_player(string dir_dest, mixed dest_ob);
 void save_me();
@@ -37,7 +41,9 @@ int query_level() { return 1; }
 int query_ghost() { return ghost; }
 int query_money() { return money; }
 string query_race() { return 0; }
-int query_ep() { return 0; }
+int query_ep() { return ep; }
+int query_wc() { return 8; }
+object query_attack() { return fighting; }
 int query_qp() { return 0; }
 int query_gender() { return 1; }
 int query_stat(int s) { return 10; }
@@ -62,7 +68,7 @@ mixed query_keep_items() { return ({}); }
 int query(mixed x) { return 0; }
 
 void add_money(int x) { money += x; if (money < 0) money = 0; }
-void add_exp(int x) { }
+void add_exp(int x) { ep += x; if (ep < 0) ep = 0; save_me(); }
 void add_stat(int s, int n) { }
 void set_qp(int x) { }
 void
@@ -166,6 +172,8 @@ void wire_commands() {
   add_action("cmd_get", "get");
   add_action("cmd_get", "take");
   add_action("cmd_give", "give");
+  add_action("cmd_kill", "kill");
+  add_action("cmd_kill", "hit");
 }
 
 void enter_world() {
@@ -215,6 +223,10 @@ mixed process_input(string str) {
       return 1;
     case "give":
       cmd_give(rest);
+      return 1;
+    case "kill":
+    case "hit":
+      cmd_kill(rest);
       return 1;
   }
   /* Directions, pray, ring, shop buy/order — room command_driver. */
@@ -290,7 +302,8 @@ int cmd_look(string arg) {
 
 int cmd_score(string arg) {
   write(capitalize(name || "someone") + " (level " + query_level() + ")\n");
-  write("hp: " + hp + "/" + max_hp + "  gold: " + money + "\n");
+  write("hp: " + hp + "/" + max_hp + "  gold: " + money +
+    "  exp: " + ep + "\n");
   if (quests && quests != "")
     write("Quests: " + replace_string(quests, "#", ", ") + "\n");
   if (ghost)
@@ -369,6 +382,103 @@ cmd_give(string arg)
     (dest->query_name() || whom) + ".\n");
   if (function_exists("give_object_by", dest))
     dest->give_object_by(this_object(), item);
+  return 1;
+}
+
+varargs int
+hit_player(int dam, mixed dtype, mixed hc, mixed enemy)
+{
+  if (ghost)
+    return 0;
+  if (dam > 0)
+    hp -= dam;
+  if (hp < 0)
+    hp = 0;
+  tell_me("You take " + dam + " damage.");
+  if (hp < 1) {
+    ghost = 1;
+    hp = 0;
+    fighting = 0;
+    set_heart_beat(0);
+    tell_me("You die.");
+    save_me();
+  }
+  return dam;
+}
+
+void
+do_swing()
+{
+  int dam;
+  object env;
+  string them;
+
+  if (!fighting || !objectp(fighting)) {
+    fighting = 0;
+    set_heart_beat(0);
+    return;
+  }
+  env = environment();
+  if (!env || environment(fighting) != env) {
+    tell_me("Your opponent is gone.");
+    fighting = 0;
+    set_heart_beat(0);
+    return;
+  }
+  them = fighting->query_name() || "someone";
+  dam = 6 + random(6);
+  tell_me("You hit " + them + ".");
+  fighting->hit_player(dam, 0, 0, this_object());
+  if (!fighting || !objectp(fighting)) {
+    set_heart_beat(0);
+    return;
+  }
+}
+
+void
+heart_beat()
+{
+  if (ghost || !fighting) {
+    set_heart_beat(0);
+    return;
+  }
+  do_swing();
+}
+
+int
+cmd_kill(string arg)
+{
+  object vic;
+  int i;
+
+  if (!arg || arg == "") {
+    write("Kill whom?\n");
+    return 1;
+  }
+  if (ghost) {
+    write("You are dead. Go to the temple yard and pray.\n");
+    return 1;
+  }
+  vic = present(arg, environment());
+  if (!vic || !living(vic) || vic == this_object()) {
+    write("No one by that name here.\n");
+    return 1;
+  }
+  fighting = vic;
+  write("You attack " + (vic->query_name() || arg) + ".\n");
+  if (function_exists("attacked_by", vic))
+    vic->attacked_by(this_object());
+  for (i = 0; i < 12; i++) {
+    if (ghost || !fighting || !objectp(fighting))
+      break;
+    do_swing();
+    if (fighting && objectp(fighting) && function_exists("attack", fighting))
+      fighting->attack();
+  }
+  if (fighting && objectp(fighting) && !ghost)
+    set_heart_beat(1);
+  else
+    set_heart_beat(0);
   return 1;
 }
 
