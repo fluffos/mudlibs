@@ -15,6 +15,8 @@ int cmd_look(string arg);
 int cmd_score(string arg);
 int cmd_inventory(string arg);
 int cmd_quit(string arg);
+int cmd_get(string arg);
+int cmd_give(string arg);
 varargs int tell_me(string s, mixed a, mixed b);
 varargs void move_player(string dir_dest, mixed dest_ob);
 void save_me();
@@ -53,6 +55,9 @@ query_quests(string q)
   return member_array(q, explode(quests, "#")) != -1;
 }
 int query_crime_level() { return 0; }
+int query_invis() { return 0; }
+int drink_alcohol(int s) { return 1; }
+void heal_self(int x) { hp += x; if (hp > max_hp) hp = max_hp; }
 mixed query_keep_items() { return ({}); }
 int query(mixed x) { return 0; }
 
@@ -125,7 +130,7 @@ int restore_me(string n) {
     max_hp = 20;
   if (hp < 1)
     hp = max_hp;
-  if (money < 50)
+  if (money < 80)
     money = 200;
   return 1;
 }
@@ -158,6 +163,9 @@ void wire_commands() {
   add_action("cmd_quit", "quit");
   add_action("cmd_inventory", "inventory");
   add_action("cmd_inventory", "i");
+  add_action("cmd_get", "get");
+  add_action("cmd_get", "take");
+  add_action("cmd_give", "give");
 }
 
 void enter_world() {
@@ -201,8 +209,15 @@ mixed process_input(string str) {
     case "i":
       cmd_inventory(rest);
       return 1;
+    case "get":
+    case "take":
+      cmd_get(rest);
+      return 1;
+    case "give":
+      cmd_give(rest);
+      return 1;
   }
-  /* Directions, pray, ring, shop — room command_driver. */
+  /* Directions, pray, ring, shop buy/order — room command_driver. */
   return 0;
 }
 
@@ -226,6 +241,20 @@ int cmd_look(string arg) {
       if (item[<1] != '\n')
         write("\n");
       return 1;
+    }
+    item = present(arg, env);
+    if (!item)
+      item = present(arg, this_object());
+    if (item) {
+      desc = item->query_long();
+      if (!desc || desc == "")
+        desc = item->query_long(0, this_object());
+      if (stringp(desc) && desc != "") {
+        write(desc);
+        if (desc[<1] != '\n')
+          write("\n");
+        return 1;
+      }
     }
     write("You see nothing special.\n");
     return 1;
@@ -266,6 +295,80 @@ int cmd_score(string arg) {
     write("Quests: " + replace_string(quests, "#", ", ") + "\n");
   if (ghost)
     write("You are a ghost. Go to the temple yard and pray.\n");
+  return 1;
+}
+
+int
+cmd_get(string arg)
+{
+  object env, item;
+  string brief;
+
+  if (!arg || arg == "") {
+    write("Get what?\n");
+    return 1;
+  }
+  env = environment();
+  if (!env) {
+    write("You are nowhere.\n");
+    return 1;
+  }
+  item = present(arg, env);
+  if (!item) {
+    write("You don't see that here.\n");
+    return 1;
+  }
+  if (living(item)) {
+    write("You can't pick that up.\n");
+    return 1;
+  }
+  if (function_exists("get", item) && !item->get()) {
+    write("You can't take that.\n");
+    return 1;
+  }
+  move_object(item, this_object());
+  brief = item->query_name();
+  if (!brief || brief == "")
+    brief = arg;
+  write("You take " + brief + ".\n");
+  return 1;
+}
+
+int
+cmd_give(string arg)
+{
+  string what, whom, brief;
+  object item, dest;
+
+  if (!arg || arg == "") {
+    write("Give what to whom?\n");
+    return 1;
+  }
+  if (sscanf(arg, "%s to %s", what, whom) != 2 &&
+      sscanf(arg, "%s %s", what, whom) != 2) {
+    write("Give what to whom?\n");
+    return 1;
+  }
+  item = present(what, this_object());
+  if (!item) {
+    write("You don't have that.\n");
+    return 1;
+  }
+  dest = present(whom, environment());
+  if (!dest) {
+    write("There is no " + whom + " here.\n");
+    return 1;
+  }
+  move_object(item, dest);
+  brief = item->short();
+  if (!brief || brief == "")
+    brief = item->query_name();
+  if (!brief || brief == "")
+    brief = what;
+  write("You give " + brief + " to " +
+    (dest->query_name() || whom) + ".\n");
+  if (function_exists("give_object_by", dest))
+    dest->give_object_by(this_object(), item);
   return 1;
 }
 
