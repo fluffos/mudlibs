@@ -74,13 +74,14 @@ fork. `/download` `/src` `/mudlib` are empty wiki stubs. No 7z on the
 org. Site-name candidates (hkmud, hkmud.com, 香港群俠傳, vbman, NT6,
 奪寶, …) do **not** open 928/929/932. Do not onboard NT6 again.
 
-## Status 2026-09-05 ~18:17 PT
+## Status 2026-09-05 ~18:34 PT
 
 Mask pipeline so far (all rc=1, potfile still **0/3**): `pw928d`
 (digits 1–7), `pw928l` (lowercase 1–5), `pw928a4` (`?l?d` 1–4),
 `pw928a5` (`?l?d` exactly 5, finished 15:38), `pw928m4`
 (`?l?u?d` exactly 4, finished 18:16, rc=1). Now **pw928h**
-(`?h` increment 1–8, started 18:16). One GPU session in tmux
+(`?h` increment 1–8, started 18:16; hex length 5 exhausted at
+18:33, still 0/3, continuing 6–8). One GPU session in tmux
 `pw928-hashcat`. Do not start a second hashcat. After h:
 `?d` length 8.
 
@@ -94,14 +95,12 @@ the GPU brute):
 1. First pass: 308 candidates (`mud.ren` / `bbs.mud.ren` /
    `fluffos.info` / game hosts / `hkmud.com` / `pkuxkx.net` /
    `lpmud.*` / `muds.*` + www/UPPER/host-only). **0 hits.**
-2. Expanded pass (same day, after user asked again): 4455
-   generated stem×TLD plus known MUD hosts, `.ren` siblings
-   (`nitan.ren`, `duobao.ren`, `hell.ren`, …), and the nirvlp312
-   welcome-screen family `nirvana.beanos.com` /
-   `www.nirvana.beanos.com` / `beanos.com` (tested immediately;
-   also in the 4455 list). Still running at ~25 min / no
-   `domain_hits.txt` yet (script writes that file only at the
-   end). Leave the one CPU sweep running; do not start a second.
+2. Expanded pass (same day): 4455 generated stem×TLD plus
+   known MUD hosts, `.ren` siblings (`nitan.ren`, `duobao.ren`,
+   `hell.ren`, …), and the nirvlp312 welcome-screen family
+   `nirvana.beanos.com` / `www.nirvana.beanos.com` /
+   `beanos.com`. Finished ~18:29. `domain_hits.txt` is empty
+   (**0 hits**). Do not restart that sweep.
 
 Domain is the right *shape* (wlqxcmudlib opened with `mud.ren`);
 these three passwords are not those hosts.
