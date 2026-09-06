@@ -93,6 +93,10 @@ mixed member(mixed what, mixed elem) {
   return 0;
 }
 
+int mappingp(mixed x) {
+  return mapp(x);
+}
+
 int closurep(mixed x) {
   return 0;
 }
@@ -130,8 +134,12 @@ mixed deep_copy(mixed x) {
 varargs void move_object(mixed item, mixed dest) {
   object ob, d;
 
+  /* FluffOS efun is 1-arg and current_object inside a simul_efun is the
+   * simul object, not the caller — efun::move_object from here would
+   * move the wrong thing. Always ask the item to move itself. */
   if (undefinedp(dest)) {
-    efun::move_object(item);
+    if (previous_object())
+      call_other(previous_object(), "_efun_move_to", item);
     return;
   }
   if (objectp(item))
@@ -150,10 +158,6 @@ varargs void move_object(mixed item, mixed dest) {
   }
   if (!ob || !d)
     return;
-  if (ob == previous_object()) {
-    efun::move_object(d);
-    return;
-  }
   call_other(ob, "_efun_move_to", d);
 }
 
@@ -161,4 +165,61 @@ varargs void add_worth(int value, object ob) {
 }
 
 void set_modify_command(mixed ob) {
+}
+
+/* LDMud transfer(): move item to dest with drop/get/weight checks.
+ * 0 = ok; nonzero = why it failed. No set_this_object on FluffOS. */
+int transfer(object item, object dest) {
+  int weight;
+  object from;
+
+  if (!item || !dest)
+    return 3;
+  weight = item->query_weight();
+  if (!item)
+    return 3;
+  from = environment(item);
+  if (from) {
+    if (living(from)) {
+      if (item->drop() || !item)
+        return 2;
+    } else if (environment(from)) {
+      if (!from->can_put_and_get() || !from)
+        return 3;
+    }
+  }
+  if (environment(dest) && !living(dest)) {
+    if (item->prevent_insert())
+      return 4;
+    if (!dest->can_put_and_get() || !dest)
+      return 5;
+  }
+  if (living(dest)) {
+    if (!item->get() || !item)
+      return 6;
+  }
+  if (environment(dest) && weight) {
+    if (!dest->add_weight(weight) || !dest)
+      return 1;
+  }
+  if (from && environment(from) && weight)
+    from->add_weight(-weight);
+  move_object(item, dest);
+  return 0;
+}
+
+/* FluffOS has no creator() efun (MudOS getuid/author). Living combat
+ * logs call it when a weapon breaks. */
+string creator(object ob) {
+  string n;
+
+  if (!ob)
+    return 0;
+  n = geteuid(ob);
+  if (n && n != "")
+    return n;
+  n = getuid(ob);
+  if (n && n != "")
+    return n;
+  return file_name(ob);
 }

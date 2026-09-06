@@ -84,10 +84,18 @@ What loads now:
   `widthof`, `object_name`, 2-arg `move_object`, `process_mxp`,
   `deep_copy`. `auto.h` defines `status` and `_efun_move_to`.
 
-Still later: real `/obj/player` logon, remaining `#'` in
+Live village (native 40284, 2026-09-05, organic `fluffos` /
+`Mud@2026`): church look/score → south green → track → shop road
+(Harry present) → shop `list`/`buy torch`/`i` → Adventurers' Guild
+`cost` (1675 gold to level 2). Combat: `kill harry` → death → ghost
+→ church `pray` revive. Quit persist. This-boot driver stdout +
+live `log/debug.log` (fd) + `work/log/catch` clean (older catch
+lines are from the compile-iterate earlier the same evening).
+
+Still later: real `/obj/player` telopt logon, remaining `#'` in
 `obj/player.lpc` / `obj/chest.lpc` / `obj/login/*`, mine/south
-forest live §10.7. Do not treat the old Void/workshop §10.7 as a
-world pass.
+forest depth. Do not treat the old Void/workshop §10.7 as a world
+pass.
 
 ## 4. What is not ported yet
 
