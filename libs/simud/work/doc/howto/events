@@ -1,0 +1,146 @@
+Walraven Coder's Notes
+----------------------
+
+EVENTS
+
+----------------------
+
+Events are used to notify an object when certain things happen. When we
+designed the MUD, there were a lot of things that you *might* want to
+know about when they happened. For example, events are triggered every
+time you pick up an object, drop an object, insert one object into another,
+etc. etc. Having event functions allows you to add interesting behaviors
+to your object every time one of these things happens.
+
+This file contains a (hopefully complete) list of all the events which
+you may declare.
+
+-------------
+MUDlib events
+-------------
+
+These events are mainly related to the game.
+
+int on_drop(object player)
+
+Called whenever your object is dropped by the player who was holding it.
+player will often be equal to this_player(), but you shouldn't assume that
+(for example, a player might have a "force to drop" spell). The return
+value matters, and possible results are defined in const.h:
+
+0 - Do nothing special. The drop fails.
+MOVE_OK_FLAG - The drop succeeds. The object will drop.
+MOVE_SILENCE_FLAG - Do not mention that the object was dropped. This
+assumes that you printed your own specialized message (i.e. "The object
+dissolves into dust as you drop it.") and you don't want the default
+one to be printed.
+
+You can bitwise-OR flags (i.e. 'MOVE_OK_FLAG | MOVE_SILENCE_FLAG') to
+combine effects. item.c implements a default on_drop handler. This function
+is not called when a 'give' occurs (see on_give).
+
+int on_get(object player)
+
+Called when a player gets your item (i.e. picks it up off the ground).
+The return values and caveats are the same as on_drop. item.c implements
+a default event, which simply checks the 'gettable' flag. on_get is not
+called when a 'give' occurs.
+
+int on_give(object player, object receiver)
+
+See on_drop for a list of return values and caveats. This is called whenever
+player gives something to receiver. item.c implements a default handler,
+which simply checks to see that both the 'gettable' and 'droppable' flags
+are set.
+
+void on_insert(object ob)
+
+Called to inform you that ob has been inserted into this_object(). This
+function is called after the move has already taken place, and is intended
+for bonus or weight updates (or whatever).
+
+void on_move(object src)
+
+Called whenever this_object() is moved. src is the object from which it
+was moved, and is always an object pointer. The movement has already
+happened when this function is called. It is called before on_insert.
+
+void on_remove(object ob)
+
+Called to inform you that ob has been removed from this_object(). It is
+called after the object has already been moved, and is intended to allow
+you to recalculate weights/bonuses/etc.
+
+void on_restore()
+
+Called whenever the player who owns this item logs in. This is called after
+on_move(). Time-sensitive items (bombs, curses, whatever) should use this
+event to turn themselves back on.
+
+void on_suspend()
+
+Called whenever this item's owner logs off. Called after the on_move()
+event. Objects that decay with time (food, bombs, curses, corpses, etc.)
+that might be in a player's inventory should use this event to switch
+themselves off. The object will then sit in a holding bubble (look for
+the 'bank' area in the world object to see all the bubbles) until its
+owner logs back on, at which time on_restore will be called.
+
+void on_consume()
+
+Called whenever the object is consumed with an eat or a drink command.
+
+-------------
+System events
+-------------
+
+void create()
+
+The standard handler is in object.c, and MUST be called if you override
+this function. This is called right after the object is loaded, and
+is called in both the master copies of the object and all clones. It
+may be used to initialize default object settings.
+
+string destructor()
+
+Called just before the object is destructed. If the object should not
+be destructed, then return a string containing an error message. If the
+destruction should be allowed, return 0. This allows you to do cleanup
+work (for example, objects that use sockets must implement this to
+deallocate their sockets). The default handler is in object.c, and MUST
+be called.
+
+void init()
+
+Called right before on_insert(), but only when the inserted object is
+living (i.e. query_living() returns true). This is traditionally used
+to add_action() all of the verbs provided by an object, but may be
+used for other things (such as triggering a script event). The default
+handler is in object.c and MUST be called.
+
+void reset()
+
+Called "infrequently" by the driver -- about every 90 minutes is
+probable. This function is not particularly useful. The default
+handler is in object.c and MUST be called.
+
+----------------
+Component events
+----------------
+
+Sometimes you want events in a multiply-inheritable component (such as all
+the components in the /inherit directory); unfortunately, you have problems
+if multiple components both try to use the same event -- only one of the
+functions gets allowed.
+
+object.c has some default implementations for all of the system events, and
+using some black magic code it allows for what I call "component events". A
+component event is a function named after this form:
+
+_event_component() {
+}
+
+where 'event' is one of create, destructor, init, or reset, and component
+is the name of the component. A good example of this is _create_exits()
+in /inherit/exits.c, which initializes some critical variables used by
+exits.

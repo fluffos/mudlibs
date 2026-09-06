@@ -1,0 +1,383 @@
+Roundless Combat System Outline v0.9-gamma
+By Ammon Lauritzen (allaryin@yahoo.com)
+
+--- Variables ---
+
+In living.c, all players and mobs have the following values:
+
+strength - increases damage dealt in melee
+dexterity - increases melee hit% and all evade%'s
+constitution - determines max hp and decreases damage taken
+intelligence - affects action que length and decreases mental damage
+wisdom - affects only magical combat and tactical skills
+readiness - a value generally in the range of 0..1000 that determines when
+  a given combatant is ready to act
+speed - increases readiness improvement rate
+will power - increases readiness improvement rate dramatically
+skills - various proficiencies affect individual actions as well as hit%'s
+  and evade%'s
+opponent que - list of opponents in this fight, most actions will default
+  to affecting the mob/player on the top of the list unless otherwise
+  specified
+action que - list of actions to be taken in combat
+default action - this is the action performed when the action que is
+  empty, it defaults to hit the first person in your opponent que
+
+
+In guild objects and monster inherits, everybody gets the following
+values:
+
+hit %'s - melee, missile, and spell
+evade %'s - melee, missile, and spell
+
+
+Everybody also gets the following in living.c:
+
+armour class (ac) - array of base armour values versus the various damage
+  types
+weapon class (wc) - array of bare handed attack value (size == number of
+  damage types)
+
+ac and wc are adjusted or replaced by armour, weapons, and spells, of
+course.
+
+--- Combat ques ---
+
+When combat is initiated, the two parties involved add each other to their
+que of opponants. The attacker adds the defender to the top of his list,
+and the defender adds the attacker to the bottom of his list. Generally,
+most mobs and players will focus on the first one on their list, but that 
+doesn't have to be the case.
+
+Every time a player enters a command, if it is a combat type command, it
+will be added to the end of their command que. If at any time, they want
+to remove items that have not yet been resolved from the que, they can
+adjust it as they will. The que may not exceed (int/5)+5 items in length.
+
+PRO: Players may change their mind about something before they try to do
+       it.
+     Spells and actions that affect only enemies in the combat que are
+       possible.
+     'Hitting around' is simplified.
+
+CON: None I can think of, other than the possibility of overcomplicating
+       things for new players.
+
+--- Readiness ---
+
+Every heartbeat that a player or mob has less than 1000 readiness, their
+readiness is incremented by:
+  (speed * 1.3) + (will * 1.75)
+As long as readiness remains below 1000, most actions will not be
+possible. The only things that players can do while readiness is below
+zero are flap and check informative type commands. Every heartbeat, the
+player is shown a meter of their readiness:
+  Ready: =====--------------
+If the person in combat is a wizard or testchar, the actual numerical
+value is shown after the meter.
+
+Most actions reduce readiness by a given number. Typically, this number is
+close to 1000 if it is considered a major action (such as physically
+attacking or casting a spell). Minor actions are typically not directly
+related to combat, but have the potential to affect it in some way or
+another (such as manipulating inventory or using pushbutton type items).
+As such, minor actions generally never take more than 500 points from
+readiness, with 300 being the average cost. Some actions, such as movement
+and some non-combat spells have no readiness cost, but cannot be performed
+while readiness is not full.
+
+Whenever a player sustains damage, they lose that much readiness. Whenever
+an action they perform is unsuccessful, the readiness cost of that action
+is more than it would have been had the action succeeded.
+
+A slow or haste spell would temporarily affect the target's ready rate. A
+stun type spell would simply damage readiness (stunning somebody for 1500
+could be very mean). A hold type spell simply sets the victim's ready rate
+to zero for the duration of the spell. These types of spells need to be
+fairly standardized (ie, the spell_type flag on the object placed on the
+target needs to read "slow", "haste" or "hold") in the interest of
+countering them appropriately.
+
+Readiness is typically in the range of 0..1000, but that is not a hard 
+limit. Performing very time consuming or effort intense actions may drop
+readiness below 0. Certain magic may put readiness well over 1000, in
+which case, multiple actions may be performed in a heartbeat - or at least
+during successive heartbeats (i'm thinking potions of readiness and
+invigorate type spells). Once out of combat, readiness is reset to 1000.
+
+PRO: 'Rounds' of combat simply cease to exist, thus enhancing realism.
+     Players actions may be sped up or slowed down without also affecting
+       the rate of their physical attacks, and vice versa.
+     Different actions may take different ammounts of time to perform.
+
+CON: Exceptionally slow or gutless (low will power) people tend to get
+       whomped on fairly soundly.
+     Time-control type magic might be a bit overpowered.
+     It is a major break from standard mud combat (I've only seen two muds
+       who use a similar system), and might be a turn-off for people used
+       to mudding elsewhere.
+
+--- Physical attacks ---
+
+The 'hit' command is used to activate a melee attack. Without any
+argument, the default target is the first enemy on the opponent que. Other
+valid arguments are the name of a specific enemy on the que, the number of
+the enemy on the que, or 'around' or 'all'. If either around or all is
+specified, then melee attacks will be directed at random opponents. In
+melee, it is impossible to hit somebody not involved in the fight.
+
+The 'shoot' command is used with missile weapons. Without any argument,
+the default is to shoot the first opponent on the list. Valid arguments
+are anyone in the room or a number on your que. Missile attacks may target
+those not already involved in combat. Attacking somebody out of combat
+will bring them in. Missile attacks may not be directed at random targets,
+unless the weapon itself does that (such as an automatic rifle or triple
+crossbow or something), in which case, the weapon will handle any random
+firing after it is directed at a specific target.
+
+If in combat you attempt to hit someone with a missile weapon or shoot
+someone with a melee weapon, the hit or shoot command will catch the
+mistake and redirrect things to the other command.
+
+Typically, players will not use the hit or shoot commands at all. They
+will use 'attack' which simply redirects to the appropriate command (hit
+or shoot). The default action in combat is 'attack 1'. If attack receives
+an invalid argument, it will act as if it were passed 1 as an argument.
+
+If players enter any of these three commands out of combat, they will be
+interpreted to mean 'kill' and will initiate combat with the hit or shoot
+command at the top of the que.
+
+When an attack is actually being determined, the math is very simple.
+There is a 50% chance of an attack succeeding if the attacker's hit% and
+the defender's matching evade% are equal. But, of course, the hit% almost
+never matches the evade%, so the difference is applied to the actual
+attack roll.
+
+In other words, if Rob has a melee hit% of 25 and he is attacking Tim, who
+has a melee evade of 32%, Rob's attack rolls will be reduced by 7, and he
+needs to roll a 57 in order to barely scratch Tim with an adjusted attack
+of 50.
+
+DEF: successful attack - adjusted attack roll of 50 or above after all
+       bonuses and penalties are applied
+
+Based on the successfullness of the attack, the attacker's readiness will
+then be decreased by something in the neighborhood of 1100 to 825. More on
+that will be explained under weapons.
+
+--- Damage types ---
+
+There are 15 types of damage:
+  edged, piercing, blunt, fire/flame, ice/cold, elec/electricity, poison,
+  acid, mental, radiation/energy, holy, unholy, plasma, shadow, disease
+
+AC and WC are 15 element arrays where each value corresponds to the
+appropriate damage type. The following will be defined:
+
+#define	DAM_EDGED	0
+#define	DAM_PIERCING	1
+#define DAM_BLUNT	2
+#define DAM_FIRE	3
+#define DAM_ICE		4
+#define DAM_ELEC	5
+#define DAM_POISON	6
+#define DAM_ACID	7
+#define DAM_MENTAL	8
+#define DAM_RADIATION	9
+#define DAM_HOLY	10
+#define DAM_UNHOLY	11
+#define DAM_PLASMA	12
+#define DAM_SHADOW	13
+#define DAM_DISEASE	14
+
+int dam_type(string type) {
+  switch (type) {
+    case "edged":
+    case "wound":	return DAM_EDGED;
+    case "piercing":	return DAM_PIERCING;
+    case "blunt":	return DAM_BLUNT;
+    case "fire":
+    case "flame":	return DAM_FIRE;
+    case "ice":
+    case "cold":	return DAM_ICE;
+    case "elec":
+    case "electricity":	return DAM_ELEC;
+    case "poison bleeder":
+    case "poison":	return DAM_POISON;
+    case "acid bleeder":
+    case "acid":	return DAM_ACID;
+    case "mental":	return DAM_MENTAL;
+    case "rad":
+    case "radiation":
+    case "energy":	return DAM_RADIATION;
+    case "holy":	return DAM_HOLY;
+    case "unholy":	return DAM_UNHOLY;
+    case "plasma":	return DAM_PLASMA;
+    case "shadow":	return DAM_SHADOW;
+    case "disease":	return DAM_DISEASE;
+    default:		return DAM_EDGED;
+  }
+}
+
+For the sake of bleeders, we allow 'wound' and 'poison bleeder' as valid
+entries, and take care the differences where it matters.
+
+--- Damage calculations ---
+
+When an attack is successful, it calls vict->damage_living(ammount, type).
+In the case of physical attacks, the damage needs to be calculated first.
+If the attack involves multiple damage types, they need to be handled
+individually. We will use calc_damage() to convert weapon classes and
+appropriate numbers into an ammount of damage to inflict.
+
+int calc_damage(int wc, int str, int bonus, int roll) {
+  int damage = bonus;
+  
+  // handle weapon class
+  if (wc <= 5)
+    damage += dice(1,wc+3);		// 1..3 to 1..8
+  else if (wc <= 10)
+    damage += dice(2,(int)(wc/2)+2);	// 2..10 to 2..14
+  else if (wc <= 15)
+    damage += dice(3,(int)(wc/3)+1);	// 3..12 to 3..18
+  else if (wc <= 20)
+    damage += dice(4,(int)(wc/4));	// 4..16 to 4..20
+  else if (wc <= 25)
+    damage += dice(5,(int)(wc/5));	// 5..20 to 5..25
+  else
+    damage += dice(6,(int)(wc/6));	// 6..24 to 6..x
+
+  // handle strength
+  // note: this is tentative, if we can come up with a better way to
+  /        calculate this, by all means, let us use it
+  damage += dice((str/8),3)-(str/8);
+
+  // handle roll
+  damage += (roll-50)/10;
+
+  return damage;
+}
+
+A bare-handed attack by an unskilled player has a wc of 3. If the average
+strength is 20, we can expect successful bare-handed attacks to yield
+damage in the range of 1..10 on a low roll or 6..16 on a perfect attack
+roll.
+
+An attack with a shortsword (average wc of 8) by a player with 30 strength
+will yield damage in the range of 2..23. An attack with Mjollnir (wc
+around 22) by a player with 50 strength will return something from 5..40
+plus whatever the damage bonus of the weapon is.
+
+Of course, these formulae are rough. We will probably want to move the
+minimum damage up a bit for higher weapon classes.
+
+--- Actual damage ---
+
+damage_living() will accept the damage inflicted and will apply the
+appropriate filters before it is actually dealt to the victim. It returns
+the ammount actually inflicted for purposes of accurate messages (ie, your
+blow bounces off of his armour, etc...).
+
+adjust_damage() may be defined on any protect spell, piece of armour, or
+bit of string in the player's inventory. It needs to return the ammount
+the damage is reduced by.
+
+int damage_living(int ammount, string type) {
+  int damage = ammount, armour = ac[dam_type(type)], x;
+  object item;
+  
+  // adjust for armour
+  if (type == "poison bleeder" || type == "disease" || type == "wound")
+    ; // armour does not affect internal damage
+  else
+    damage -= (armour*1.2);
+  if (damage <= 0) return 0;	// bomb out early if damage is negated
+
+  // adjust for spells and special stuff
+  item = first_inventory(this_object());
+  while (item) {
+    damage -= item->adjust_damage(damage, type);
+    item = next_inventory(item);
+  }
+  if (damage <= 0) return 0;	// bomb out early if damage is negated
+
+  // adjust for constitution and intelligence
+  if (type == "mental")
+    damage -= inteligence/10;
+  else
+    damage -= constitution/8;
+  if (damage <= 0) return 0;	// bomb out early if damage is negated
+ 
+  hp -= damage;
+  if (hp <= 0)
+    ; // need to do something here
+  return damage;
+}
+
+--- Magic ---
+
+Magic spells of the offensive flavour can be of several types. Some have
+guaranteed affects, while others have chances of failure or missing. The
+code for the individual spell will handle most of this, but as a general
+guideline, the magic hit% and evade% should function basically the same as
+their physical counterparts.
+
+When a spell inflicts damage, there is often no weapon class to consider,
+just a pre-calculated ammount that is passed to the damage_living() 
+function on the victim.
+
+--- Bleeders ---
+
+Bleeders are fun. Especially when people may not act for several seconds
+at a time. We should probably code an inheritance for these things. Give
+them a type, damage per tick, length of tick, and duration. Valid types
+should be 'acid bleeder', 'poison bleeder', 'wound', and 'disease'.
+
+For example, if you get hit with the Axe of Wounding or something. A
+particular bleeder coded for that weapon will be cloned into your
+inventory with options something like this:
+  type = "wound";
+  damage = 10;
+  length = 10;   // ie, 10 seconds between ticks
+  duration = 10; // ie, 10 ticks before the bleeder disapates on its own
+
+We need to make these standard so priestly types can handle them
+appropriately. Set the duration to -1 to make a bleeder last until it is
+healed.
+
+--- Armour ---
+
+Ok, we'll be handling armour wearing and removing in a very... umm...
+passive manner. This is for sanity reasons and security in case eq gets
+dested by accident (or design). What will happen whenever armour is worn
+or removed, a function to query all eq for applicable bonuses is called.
+These bonuses will be added to the results returned when ac is queried.
+  Wearing calls a do_wear() function on the armour for any cool stuff to
+do, in addition to setting the worn flag and resetting the bonuses. This
+is where we check for requirements to wear it, such as appropriate body
+parts and all...
+  Armour has a distinct amount of hp. Whenever it absorbs damage, it
+takes damage. Repairing armour before it is entirely broken will heal it
+to up to 90% of its max hp. Only magic can repair it to full. Armour can
+have an unbreakable flag set that prevents it from taking damage in all
+but the most hideous of circumstances (which are yet to be determined if
+determinable at all :P).
+  We will probably have a material string in addition to the body part
+where it can be worn. Not only are there possibly stat and skill
+requirements to wearing armour, players and mobs need to have the right
+equipment to wear it on. I mean, Tim is human (well, metaphysically
+speaking he is) and simply is incapable of wearing prehensile tail plate.
+We also want to leave open the possibility for material restrictions
+(most likely for magic users). The material flag would also play into
+repairs.
+  Magic can be enchanted in a number of ways. However, for sanity's sake
+we will only allow one enchantment per armour. Once enchanted, the obj
+will be permanently altered and set to enchanted.
+
+--- Weapons ---
+
+Weapons will be handled a little bit differently. All points where it
+makes sense for them to be handled like armour, they will be. But when
+it comes to handling wc and all that... well, that's different, of
+course.

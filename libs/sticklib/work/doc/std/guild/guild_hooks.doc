@@ -1,0 +1,193 @@
+/****************************************************************
+*								*
+* Document:	guild_hooks.doc
+* Relates to:	- all guild objects -, /obj/living.c,		*
+*		/obj/player.c					*
+* Version:	Version 1.00					*
+* Last update:	Last update 12-feb-95 by Doomdark.		*
+* Description:	What are so-called guild hooks and how should	*
+*		guild coders use them in their advantage? This	*
+*		document should help guild coders in making	*
+*		their guild code work _realiably_ and		*
+*		_efficiently_, instead of making them use	*
+*		code that (with a good luck) works now, but	*
+*		has huge chance of becoming buggy anytime our	*
+*		mudlib changes at all...			*
+****************************************************************/
+
+
+	What are hooks?
+	===============
+
+Hooks (in programming) are generally ways to configure some system
+(operating system, in muds, mudlib) by making it call some code
+when an event happens. In practice, this often means setting
+some jump offset to a new value, so that some piece of code
+is executed, when, say, an interrupt occurs (in operating systems).
+Now, in muds (at least in Stickmud), hooks mean essentially
+some sort of a reference to functions; either pointers to functions
+(closures) or function names. The functions in question will then
+be called on some special event, for example, when a player dies,
+or moves.
+
+
+	What are guild hooks?
+	=====================
+
+Guild hooks are closures that get executed when there is some
+event happening to the member of the guild in question. Guild
+objects can set guild hooks with a specific function. Although
+guild hooks are closures, you don't have to be expert in LPC
+to understand basic guild hooks, namely so-called lfun-closures.
+Example of a lfun closure might be #'my_func; when executed
+this will just call function named 'my_func' in the object
+settting the hook. But more about this in examples...
+One more thing... Only the active guild object (ie. guild
+object of the guild the player belongs to) is allowed to
+modify the guild hooks. This isn't (yet?) enforced by
+the code; but if there's some abuse, it may have to
+be installed (ie. thief guild mark shouldn't set guild
+hooks of a ninja, to get informed when that sneaky bastard
+quits even though it might be neat to know that... *grin*)
+
+
+	How can I set, modify or remove guild hooks?
+	============================================
+
+By calling function 'set_guild_hook' in player object. There's
+only this function to be used. Reason not to have more than 1
+function is the efficiency. But how can I remove hook with
+'set_guild_hook'? Simple... set_guild_hook accepts 2 arguments;
+depending on their types, it does one of the following:
+
+- If 1st argument is a mapping, it sets _all_ guild hooks; for
+  example (description about available hooks is later on
+  this document):
+
+  plr->set_guild_hook(([ G_HOOK_QUIT : #'member_quitted,
+	G_HOOK_DEATH : #'member_died ]));
+
+  would set 2 guild hooks, and remove all the other previously
+  set hooks.
+
+- If 1st argument is a number and second a closure, it sets
+  the hook specified by 1st argument to closure specified
+  by 2nd argument. So:
+
+  plr->set_guild_hook(G_HOOK_QUIT, #'member_quitted);
+
+  would set hook G_HOOK_QUIT to closure #'member_quitted,
+  without affecting the other hooks.
+
+- If 1st argument is a number, and second 0, the hook
+  specified by 1st argument is removed. So:
+
+  plr->set_guild_hook(G_HOOK_QUIT, 0);
+
+  would remove the guild hook G_HOOK_QUIT without affecting
+  the other hooks.
+
+- If 1st argument is 0 (and 2nd whatever), all guild hooks
+  are removed. So:
+
+  plr->set_guild_hook(0);
+
+  would remove all guild hooks.
+
+
+	Which guild hooks guild objects can set?
+	========================================
+
+Currently we have following guild hooks. They are defined
+in the header file called guild.h; to use it, you need to use
+'#include <guild.h>' in your code.
+(Note that we _don't_ have anything like 'G_HOOK_ENTER' which would
+be applied when player enters the game. Reason is simple; first,
+function 'initialize_guild' will be called on the guild object
+at that time anyway, and also, guild hooks can only be set
+_after_ the player enters game...)
+
+G_HOOK_QUIT:
+
+	This hook is called when player is quitting. Guild object
+	might need to do some cleaning up; remove object pointer
+	from list of guild members in mud and so on. 
+	This closure gets one argument; player that is quitting.
+	Example of this closure might be:
+	'plr->set_guild_hook(G_HOOK_QUIT, #'member_quitting);'
+	Now, when the player quits, function "member_quitting"
+	will be called on the object that did this call (the guild
+	object presumably). It would be called with 1 argument,
+	like 'ob->member_quitted(plr_ob)'.
+
+G_HOOK_DEATH:
+
+	This hook is called when player has just died. Guild object
+	might want to do some checking. Perhaps ninja guild will need
+	a new sensei, if the killed guild member was sensei, and killer
+	was a ninja... Or whatever. Note that this is _the_ way to
+	get informed when a guild member dies; no more dirty kludges
+	that check 'if (plr->query_dead()) ...' every heart_beat...
+	This closure gets 2 arguments; the guild member dying, and
+	the killer. So, something like:
+	'plr->set_guild_hook(G_HOOK_DEATH, #'member_died);'
+	when a player dies, function gets called like:
+	'ob->member_died(plr_dying, killer_ob);'
+
+G_HOOK_GO_LD:
+
+	This hook is called when player has just went link-dead. Note
+	that when this happens not only depends on whether player has
+	a link; but also on ld delay (if there's a fight going on etc).
+	The closure gets one argument, the player that has gone ld.
+	Example: 'plr->set_guild_hook(G_HOOK_GO_LD, #'member_went_ld);'
+	this would be called like: 'ob->member_went_ld(plr_ob);'
+
+G_HOOK_RECOVER_FROM_LD:
+
+	This hook is called when player recovers from link-dead.
+	The closure gets one argument, the player that has recovered
+	from ld.
+	Example: 'plr->set_guild_hook(G_HOOK_GO_LD, #'member_went_ld);'
+	this would be called like: 'ob->member_went_ld(plr_ob);'
+
+G_HOOK_HIT_PLAYER:
+
+	This hook is called every time player is being hit (that is,
+	when hit_player is being called on the player object).
+	It gets 4 arguments; same as ones used when hit_player
+	itself is called (int damage, int damage_type, int hit_class,
+	object hitter); note that to know the player being hit,
+	you have to use previous_object() (or, if it's the guild object
+	that has set the hook, it should be obvious...). Reason for not
+	including player_ob as argument is compatibility with
+	'hit_player'; didn't want to add 5th argument...
+	Return value is important here; it's the amount of damage we
+	are to receive. Make sure that if you don't want to modify
+	the hit amount, you return 1st argument (ie. original amount).
+	Example: 'plr->set_guild_hook(G_HOOK_HIT_PLAYER, #'member_hit);'.
+	This would get called like: 'ob->member_hit(dmg, dtype, hc, hitter);'.
+
+G_HOOK_GO_MORT:
+
+	This hook is called when the player goes mortally wounded
+	(ie. hit points go below 0 but not yet under 'death-limit';
+	- (max_hp / 3)). The closure gets applied with 2 arguments;
+	the player in question, and the enemy that did the hit
+	causing us to go mort.
+	Example: 'plr->set_guild_hook(G_HOOK_GO_MORT, #'member_mort);'
+	Would get called like: 'ob->member_mort(player_ob, hitter);'.
+
+
+	Why should I use these odd guild hooks anyway?
+	==============================================
+
+If you don't need to get informed about events like quitting, dying
+etc. fine. You don't need to bother to learn about guild hooks...
+But most guilds actually are interested in these events. And, if you
+do want to get informed, you _should_ use hooks. They are efficient
+and compatible means to get informed... Unlike some specific
+kludges to check for a condition (like, guild member dying...
+ninja guild mark had horrible messy piece of code that checked
+at heart_beat whether owner of the mark was dead... *shiver*).
+So... In short, they're good and everyone should use them. 8-)

@@ -1,0 +1,650 @@
+This is a list of all the funcs in the master ob, stolen from a web page.
+It may yet come in handy...
+
+Die Kommandos des Master-Objekts
+compile_object
+SYNOPSIS
+object compile_object(string filename)
+DESCRIPTION
+This function is caled if the interpreter cannot find the file for an object
+to be loaded. The master object has now the opportunity to return an object
+that will then serve as if compiled from the given filename.
+If 0 is returned, the usual "Could not load descr for" error will occur.
+connect
+SYNOPSIS
+object connect(void)
+DESCRIPTION
+Return a login object that the requested connection should be bound to. Note
+that the connection is not bound yet.
+The lfun logon() will be applied to the login object after binding the
+connection to it. That lfun has to return != 0 to indicate success.
+SEE ALSO
+logon(A), disconnect(M), interactive(E), exec(E)
+creator_file
+SYNOPSIS
+string creator_file(mixed ob)
+DESCRIPTION
+Return the name of the creator of a newly created object, i.e. the name of
+the user that is responsible for the LPC source file the object was loaded
+from. If the function returns 0, the object can't be loaded and is
+destructed again immediately.
+In !compat mode, the returned string serves as the initial uid (`cuid'') of
+the object. Objects whose cuid is the backbone-id will then get the uid of
+the currently active user as their userid instead.
+Under compat mode this function is called as well.
+If this function is not provided by the master object, no other object can
+be loaded.
+HISTORY
+Dropped in 3.2.1
+SEE ALSO
+uids(C), creator(E)
+dangling_lfun_closure
+SYNOPSIS
+void dangling_lfun_closure()
+DESCRIPTION
+Handle a dangling lfun-closure.
+This is called when the gamedriver executes a closure using a vanished lfun.
+A proper handling is to raise a runtime error.
+Technical:
+Upon replacing programs (see efun replace_program() ), any existing lambda
+closures of the object are adjusted to the new environment. If a closure
+uses a lfun which vanished in the replacement process, the reference to this
+lfun is replaced by a reference to this function. The error will then occur
+when the execution of the adjusted lambda reaches the point of the lfun
+reference. There are two reasons for the delayed handling. First is that the
+program replacement and with it the closure adjustment happens at the end of
+a backend cycle, outside of any execution thread: noone would see the error
+at this time. Second, smart closures might know/recognize the program
+replacement and skip the call to the vanished lfun.
+SEE ALSO
+closures(LPC)
+define_include_dirs
+SYNOPSIS
+string *define_include_dirs(void)
+DESCRIPTION
+Return an array of string patterns giving the absolut paths where to search
+an include file. The patterns have to have a %s at the place where the name
+given in the #include statement has to be inserted.
+EXAMPLE
+define_include_dirs() { return ({ "sys/%s", "lib/%s" }); }
+HISTORY
+Dropped in 3.2.1.
+SEE ALSO
+master(M)
+disconnect
+SYNOPSIS
+void disconnect(object ob)
+DESCRIPTION
+Handle the loss of the IP connection for the (formerly) interactive object
+ob. The connection can be lost because the the underlying transport
+connection was lost ("netdead"), or because of a call to exec() or
+remove_interactive(). The connection will be unbound upon return from this
+call.
+SEE ALSO
+connect(M), remove_player(M), remove_interactive(E), exec(E), interactive(E)
+epilog
+SYNOPSIS
+void epilog(void) /* compat in 3.2 */
+string *epilog(int eflag) /* !compat or 3.2.1 */
+DESCRIPTION
+Perform final actions before opening the system to users. The semantics of
+this function differ for compat and !compat mode, and between 3.2 and 3.2.1.
+
+Compat in 3.2: the objects from the INIT_FILE (#defined to "room/init_file"
+at compile time in the parser) are already loaded at this time. Normally
+there is nothing left to do for this function.
+
+!Compat and 3.2.1: the argument is the number of -e options that were given
+to the parser on the commandline. Normally it is just 0 or 1. The function
+should return an array of strings, which traditionally denote the objects to
+be preloaded with master->preload(). Any other return value is interpreted
+as "no object to preload". The resulting strings will be passed one at a
+time as arguments to preload().
+SEE ALSO
+preload(M), master(M)
+external_master_reload
+SYNOPSIS
+void external_master_reload()
+DESCRIPTION
+Master was reloaded on external request by SIGUSR1. It will be called after
+inaugurate_master() of course. If you plan to do additional magic here,
+you're welcome.
+SEE ALSO
+inaugurate_master(M)
+flag
+SYNOPSIS
+void flag(string arg)
+DESCRIPTION
+Evaluate an argument given as option '-f' to the driver. If several '-f'
+options are given, this function will be called sequentially with all given
+arguments. This function can be used to pass the master commands via
+arguments to the driver. This is useful when building a new mudlib from
+scratch. It is called only when the system is started.
+EXAMPLE
+
+// The code given implements these commands://  '-fcall <ob> <fun> <arg>':
+call function <fun> in object <ob> with//
+argument <arg>.//  '-fshutdown': shutdown the system immediately.// Thus,
+starting the driver as//	 'parse "-fcall foo bar Yow!" -fshutdown'
+would// first do foo->bar("Yow!") and then shut down the system.{  string
+obj, fun, rest;  if (arg == "shutdown")  {    shutdown();    return;  }  if
+(sscanf(arg, "call %s %s %s", obj, fun, rest) >= 2)  {
+write(obj+"->"+fun+"(\""+rest+"\") = ");    write(call_other(obj, fun,
+rest));    write("\n");    return;  }  write("master: Unknown flag
+"+arg+"\n");}SEE ALSO
+master(M)
+string get_bb_uid
+SYNOPSIS
+string get_bb_uid(void)
+DESCRIPTION
+Is called to get the "backbone id". Objects whose creator is the backbone id
+are `trusted'', and will automagically get the uid and euid of the object
+that caused to load or clone them.
+The backbone id is also temporary given to objects while being called via
+process_string().
+HISTORY
+Since 3.2.1, get_bb_uid() is needed just for process_string() if no
+this_object() is present.
+SEE ALSO
+uids(C), creator_file(M), creator(E), get_root_id(M)
+get_ed_buffer_save_file_name
+SYNOPSIS
+string get_ed_buffer_save_file_name(string edited_file)
+DESCRIPTION
+This function is called when an interactive user object is destructed or
+looses connection through remove_interactive() while editing with ed() the
+file edite_file (emergency save).
+this_player() is set to the object that loosing connection. The function
+should return a file name for the emergency save file.
+EXAMPLE
+
+string get_ed_buffer_save_file_name(string file) {  return
+"/players/"+getuid(this_player())+"/.dead_ed_files/"	 + explode(file,
+"/")[<1];}This breaks up file into its components and stores it in the
+user's emergency save directory under the file's basename.
+SEE ALSO
+ed(E), destruct(E), remove_interactive(E), valid_write(M)
+get_master_uid
+SYNOPSIS
+string get_master_uid(void)
+DESCRIPTION
+Return the string to be used as root-uid. Under !native, the function is
+expendable.
+HISTORY
+Introduced in 3.2.1@40 replacing get_root_uid().
+SEE ALSO
+get_bb_uid(M), get_master_uid(M), uids(C), creator_file(M), creator(E)
+get_simul_efun
+SYNOPSIS
+mixed get_simul_efun(void) // 3.2
+string|string* get_simul_efun(void) // 3.2.1
+DESCRIPTION
+Load the simul_efun object(s) and return one or more paths of it.
+
+Note that the object(s) must be loaded by this function!
+
+When you return an array of strings, the first string is taken as path to
+the simul_efun object, and all other paths are used for backup simul_efun
+objects to call simul_efuns that are not present in themain simul_efun
+object. This allows to remove simul_efuns at runtime without getting errors
+from old compiled programs that still use the obsolete simul_efuns. A side
+use of this mechanism is to provide a 'spare' simul_efun object in case the
+normal one fails to load.
+
+Should return either the file_name of the simul_efun object as a string, or
+an array containing as first element a string with the file name of the
+simul_efun object and the following elements strings with file names of
+alternate simul_efun objects that will be used if the first one cannot be
+loaded.
+SEE ALSO
+simul_efun(C)
+get_wiz_name
+SYNOPSIS
+string get_wiz_name(string file)
+DESCRIPTIONArgument is a file name, which we want to get the owner of. This
+used for the wizlist, to determine who gets the score for the file being
+used.
+For 3.2.1, it is used only to score errors to the right wizard.
+SEE ALSO
+wizlist(E), get_wiz_info(E), query_real_name(A), query_creator(M), getuid(E)
+heart_beat_error
+SYNOPSIS
+mixed heart_beat_error(object culprit, string err, string prg, string
+curobj, int line)
+DESCRIPTION
+This function is called when a runtime error occurs while executing the
+heart_beat() function of the object culprit. prg is program where the actual
+error happened, in object curobj at the given line.
+At time of call, the heart_beat has been turned off. Return anything != 0 to
+restart the heart_beat in culprit.
+If culprit is a user, it should at least get the message "You have no
+heartbeat". A more advanced handling would destruct the offending object
+curobj and and allow the heartbeat to restart.
+Note that prg denotes the program actually executed (which might be an
+inherited one) whereas curobj is just the offending object.
+SEE ALSO
+set_heart_beat(E), heart_beat(A), runtime_error(M)
+inaugurate_master
+SYNOPSIS
+void inaugurate_master(int arg)
+DESCRIPTION This function is called in the master object after it has been
+created and is fully functional. Note that the create() function is of
+little use in the master object, because at the time it is called there is
+no simul_efun object yet, and the interpreter does not know anything about
+the user-ids and access permissions.
+The argument <arg> denotes why this function is called:
+arg = 0 the mud just started, this is the first master of all.
+1 the master was destructed and then reactivated (because a new one couldn't
+be loaded).
+2 the master was destructed and then reactivated, but additionally lost all
+variable contents.
+3 this is a reloaded master.
+This function has at least to set up the driverhooks to use (in 3.2.1).
+Also, any mudwho or wizlist handling has to be initialized here.
+Besides that, do whatever you feel you need to do, e.g.
+set_auto_include_string(), or give the master a decent euid.
+SEE ALSO
+initialisation(M), create(M), simul_efun(C), get_bb_uid(M), get_root_id(M),
+get_master_uid(M), flag(M), reactivate_destructed_master(M)
+Initialization of the master object (since 3.2.1).
+As since 3.2.1 the lfuns which are called to initialize objects after a load
+are defined through driver hooks, and these hooks are cleared prior to a
+master (re)load, the first function called is inaugurate_master(). Anyway
+it's not very sensible to do anything earlier as the master is not
+recognized as such at that time, and so a number of (important) things would
+not work. Which lfun is called during runtime to reset the master is also
+depending on the driverhook settings. Arbitrary actions may be done on a
+reset.
+
+SEE ALSO
+inaugurate_master(M)
+log_error
+SYNOPSIS
+void log_error(string file, string err)
+DESCRIPTION
+Announce a compiler-time error in the named file. Whenever the LPC compiler
+detects an error, this function is called. It should at least log the error
+in a file, and also announce it to the active user.
+SEE ALSO
+runtime_error(M)
+logon
+SYNOPSIS
+int logon(void)
+DESCRIPTION When the parser accepts a new connection, it first calls
+connect() in the master object and then applies logon() to the object that
+is returned by the master. That will usually be a special login object, that
+is expected to clone and get going a user shell or user object.
+Should return 0 on failure, everything else means success.
+SEE ALSO
+connect(M), exec(E)
+make_path_absolute
+SYNOPSIS
+string make_path_absolute(string str)
+DESCRIPTION
+Absolutize a relative filename str given to the editor. Should return the
+full pathname of the file to use. Any non-string result will act as "bad
+file name".
+SEE ALSO
+ed(E), valid_write(M)
+notify_shutdown
+SYNOPSIS
+void notify_shutdown (void)
+DESCRIPTION
+Notify the master about an immediate shutdown.
+If the gamedriver shuts down, this is the last function called before the
+mud shuts down the udp connections and the accepting socket for new players.
+The function has the opportunity to perform any cleanup operation, like
+informing the mudwho server that the mud is down. This can not be done when
+remove_player() is called because the udp connectivity is already gone then.
+SEE ALSO
+slow_shut_down(M), remove_player(M)
+object_name
+SYNOPSIS
+string object_name(object ob)
+DESCRIPTION
+Return a printable name for an object. This function is called by sprintf()
+to print a meaningful name in addition to the normal file_name().
+SEE ALSO
+sprintf(E), file_name(E)
+parse_command_all_word
+SYNOPSIS
+string *parse_command_all_word(void)
+DESCRIPTION
+Used by parse_command(). Return the word for "all" in the installations
+native language.
+SEE ALSO
+parse_command(E)
+parse_command_prepos_list
+SYNOPSIS
+string *parse_command_prepos_list(void)
+DESCRIPTION
+Used by parse_command(). Return an array of common prepositions in the
+installations native language.
+SEE ALSO
+parse_command(E)
+preload
+SYNOPSIS
+void preload(string file)
+DESCRIPTION
+Load the object with the given file name, that was returned by epilog(). It
+is task of the epilog()/preload() pair to ensure the validity of the given
+strings (e.g. filtering out comments and blank lines). For preload itself a
+call_other(file, "???") s sufficient, but it should be guarded by a catch()
+to avoid premature blockings. Also it is wise to change the master's euid
+from root_uid to something less privileged for the time of the preload.
+You can of course do anything else with the passed strings - preloading is
+just the traditional task.
+SEE ALSO
+epilog(M), master(M)
+prepare_destruct
+SYNOPSIS
+mixed prepare_destruct(object obj)
+DESCRIPTION
+Prepare the destruction of the object obj. Return 0 if the object is ready
+for destruction, any other value will abort the attempt. If a string is
+returned, an error with the string as message will be issued.
+The interpreter calls this function whenever an object shall be destructed.
+It expects, that this function cleans the inventory of the object, or the
+destruct will fail.
+Furthermore, the function could notify the former inventory objects that
+their holder is under destruction (useful to move users out of rooms which
+re updated); and it could announce systemwide the destruction(quitting) of
+users.
+Strange things will happen if the mastor object does not provide this
+function.
+SEE ALSO
+remove_player(M), destruct(E)
+privilege_violation
+SYNOPSIS
+int privilege_violation(string op, mixed who, mixed arg3, mixed arg4)
+DESCRIPTION
+Validate the execution of a privileged operation. op denotes the requested
+operation, who is the object requesting the operation (file_name or object
+pointer), arg3 and arg4 are additional arguments, depending on the
+operation.
+The function should return >0 to grant the privilege, 0 to indicate that the
+caller was probably misleaded and the error might be fixed, and anything
+else to indicate a real violation, that will be handled as run time error.
+The privileged operations are:
+attach_erq_demon Attach the erq demon to object <arg> with flag <args>.
+bind_lambda Bind a lambda-closure to object arg3.
+call_out_info Return an array with all call_out informations.
+erq A the request <arg4> is to be send to the erq-demon by the object <who>.
+input_to Object <who> redirects the next input from commandgiver <arg3>,
+using <arg4> as value for the flags. This is used for flag values including
+the 'no bang' option.
+nomask simul_efun Attempt to get an efun <arg> via efun: when it is shadowed
+by a nomask type simul_efun.
+rename_object The object <who> tries to rename the object <arg3> to the name
+<arg4>.
+send_imp Send UDP-data to host arg3.
+set_auto_include_string Set the string automatically included by the
+compiler into every object.
+get_extra_wizinfo Get the additional wiz-list info for user arg3.
+set_extra_wizinfo Set the additional wiz-list info for use arg3.
+set_extra_wizinfo_size Set the size of the additional user info in the
+wiz-list to arg3.
+set_driver_hook Set hook <arg> to <arg2>.
+set_this_object Set this_object() to arg3.
+shadow_add_action Add an action to function arg4 that is shadowed by the
+object arg3.
+symbol_variable Attempt to make a symbol from a hidden inherited variable.
+arg3 is the object in question, arg4 the number of the variable in the
+variable table.
+wizlist_info Return an array with all wiz-list information.
+
+call_out_info() can return the arguments to functions and lambda closures to
+be called by call_out(); you should consider that read access to closures,
+mappings and arrays means write access and/or other privileges.
+wizlist_info() will return an array which holds, among others, the extra
+wizlist field. While a toplevel array, if found, will be copied, this does
+not apply to nested arrays or to any mappings. You might also have some
+sensitive closures there. send_imp() should be watched as it could be abused
+to mess up the IMP.
+The xxx_extra_wizinfo operations are necessary for a proper wizlist and
+should therefore be restricted to admins. All other operations are potential
+sources for direct security breaches - any use of them should be scrutinized
+closely.
+SEE ALSO
+simul_efun(C), call_out_info(E), shadow(E), add_action(E), wizlist(E),
+send_erq(E), set_this_object(E), rename_object(E), bind_lambda(E),
+send_imp(E), set_auto_include_string(E), input_to(E)
+query_allow_shadow
+SYNOPSIS
+int query_allow_shadow(object victim)
+DESCRIPTION
+Return 1 if previous_object() is allowed to use efun shadow() on object
+victim, 0 if it is not.
+The function should deny shadowing on all root objects, else it might query
+the victim for clearance. Most installations seem to use
+victim->prevent_shadow(previous_object()) to check if the victim denies
+being shadowed.
+SEE ALSO
+shadow(E)
+query_player_level
+SYNOPSIS
+int query_player_level(string what)
+DESCRIPTION
+Check if the user is of high enough level for several things.
+The argument denotes the action for which permission is to be checked:
+
+"trace" Is the user allowed to use tracing?
+"inspect memory" Is the user allowed to issue the special command
+"showsmallnewmalloced"?
+SEE ALSO
+trace(E), showsmallnewmalloced(D), malloc(D), status(D), memory(C)
+quota_demon
+SYNOPSIS
+void quota_demon(void)
+DESCRIPTION
+Handle quotas in times of memory shortage.
+This function is called during the final phase of a garbage collection if
+the reserved user area couldn't be reallocated. This function (or a called
+demon) has now the opportunity to remove some (still active) objects from
+the system. If this does not free enough memory to reallocate the user
+reserve, slow_shut_down() will be called to start Armageddon.
+Up to now, the wizlist lacks various informations needed to detect the
+memory-hungriest users.
+SEE ALSO
+slow_shut_down(M), wizlist(E)
+reactivate_destructed_master
+SYNOPSIS
+void reactivate_destructed_master(int flag)
+DESCRIPTION
+This function is called in an already destructed master object if no new
+master object could be loaded. flag will be 1 if the old master object could
+be reclaimed form the list of objects that were marked for destruction but
+not yet terminated. If flag is 0, all variables of the object have been set
+to 0 and must be re-initialized.
+After this function, inaugurate_master() will be applied again.
+SEE ALSO
+destruct(E), inaugurate_master(M), master(M)
+receive_imp
+SYNOPSIS
+void receive_imp(string host, string msg, int hostport)
+DESCRIPTION
+Handle a received IMP message.
+This function is called for every message received on the IMP port. Usually
+it is passed on to some object that handles inter mud communications.
+HISTORY
+The 'hostport' argument was added in 3.2.1.
+SEE ALSO
+send_imp(E), query_imp_port(E)
+remove_player
+SYNOPSIS
+void remove_player(object ob)
+DESCRIPTIONRemove an interactive user object ob from the system. This
+function is called by the interpreter to expell remaining users from the
+system on shutdown in a polite way. If this functions fails to quit/destruct
+the user, he will be destructed the hard way by the interpreter.
+This function must not cause runtime errors.
+SEE ALSO
+remove_interactive(E), slow_shut_down(M)
+retrieve_ed_setup
+SYNOPSIS
+int retrieve_ed_setup(object command_giver)
+DESCRIPTION
+Should return an integer that gives the ed setup flags for the user that is
+denoted by command_giver.
+SEE ALSO
+save_ed_setup(M)
+runtime_error
+SYNOPSIS
+void runtime_error(string err, string prg, string curobj, int line)
+DESCRIPTION
+This function has to announce a runtime error to the active user. If the
+user has enough privileges, it might give him the full error message
+together with the source line. Else it should issue a decent message ("Your
+sensitive mind notices a wrongness in the fabric of space").
+Note that prg denotes the program actually executed (which might be an
+inherited one) whereas curobj is just the offending object.
+SEE ALSO
+log_error(M), heart_beat_error(M), raise_error(E), expand_define(E)
+save_ed_setup
+SYNOPSIS
+int save_ed_setup(object who, int code)
+DESCRIPTION
+Save individual option settings of the builtin ed, encoded into code, for
+the user denoted by who. These functions are located in the master object so
+that the local gods can decide what strategy they want to use. suggestions:
+
+
+advantages disadvantage
+A setup file for every user. transparent to the user independent of user
+count extra file access at ed invocation
+An array in the master object, users are searched by member_array easy to
+implement performance degradation with high user counts
+An AVL-tree to access users by name can fit any need hard to implement, will
+need more overhead on small and medium installations than it can ever make
+good by lg(usercount) complexity
+Dedicated flags in every user object easy to implement independent of user
+count Will also work for nusers w/o file access privileges. care has to be
+taken to avoid collision with other uses of the flags in the user object
+
+SEE ALSO
+ed(E), retrieve_ed_setup(M), valid_write(M), get_ed_buffer_save_file_name(M)
+slow_shut_down
+SYNOPSIS
+void slow_shut_down(int minutes)
+DESCRIPTION
+Schedule a shutdown for the near future. minutes is the desired time in
+minutes till the shutdown: six, if just the user reserve has been put into
+use. one, if the (smaller) master reserve has been put into use as well.
+The interpreter calls this function when it runs low on memory. At this
+time, it has freed its reserve, but since it won't last long, the
+interpreter needs to be shut down. The delay is to give the users the
+opportunity to finish their current tasks, but don't take the 'minutes' for
+granted, just deduce the urgency from it.
+It is possible that the driver may reallocate some memory after the function
+has been called, and then run again into a low memory situation, calling
+this function again. This function might load an 'Armageddon' object and
+tell it what to do. It is the Armageddon object then which performs the
+shutdown.
+Technical: The memory handling of the interpreter includes three reserved
+areas: user, system and master. All three are there to insure that the
+system shuts down gracefully when the memory runs out: the user area to give
+the users time to quit normally, the others to enable emergency-logouts when
+the user reserve is used up as well. The areas are allocated at start of the
+interpreter, and released when no more memory could be obtained from the
+host. In such a case, one of the remaining areas is freed (so the operation
+can continue a short while) and a garbage collection is initiated. If the
+garbage collection recycles enough memory (either true garbage or by the aid
+of the quota_demon) to reallocate the areas, all is fine, else the system
+shut down is invoked by a call to this function.
+SEE ALSO
+quota_demon(M), notify_shutdown(M), shutdown(E), malloc(D), memory(C)
+stale_erq
+SYNOPSIS
+void stale_erq (closure callback)
+DESCRIPTION
+Notify the loss of the erq demon. Argument is the callback closure set for
+an erq request.
+If the erq connection dies prematurely, the driver will call this lfun for
+every pending request with set callback. This function should notify the
+originating object that the answer will never arrive.
+HISTORY
+Introduced in 3.2.1@61.
+SEE ALSO
+erq(C)
+valid_exec
+SYNOPSIS
+int valid_exec(string name, object ob, object obfrom)
+DESCRIPTION
+Validate the rebinding of an IP connection by usage of efun exec().
+Arguments are the of the _program_ attempting to rebind the connection, the
+object <ob> to receive the connection, and the object <obfrom> giving the
+connection. Note that the program name is not the file_name() of the object,
+and has no leading slash.
+Return 0 to disallow the action, any other value to allow it. SEE ALSO
+exec(E)
+valid_query_snoop
+SYNOPSIS
+valid_query_snoop(object ob)
+DESCRIPTION
+Should return 1 if previous_object() (the one that called the efun
+query_snoop()) is allowed to query wether ob is being snooped, 0 if not.
+The master object is always allowed to use query_snoop().
+SEE ALSO
+valid_snoop(M), query_snoop(E), snoop(E)
+valid_read
+SYNOPSIS
+string valid_read(string path, string uid, string func, object ob)
+DESCRIPTION
+This function is called to check if the object ob with the user-id uid has
+read permissions for the file given by path for the operation named by func.
+It should return 0 if permission is denied, or the normalized path if
+permission is granted. You can also return 1 to indicate that the path can
+be used unchanged.
+The returned pathname must not contain "..", a leading / will be stripped by
+the interpreter.
+Func denotes the efun call or other operation that caused valid_read() to be
+called:
+ed_start (check if the file to be edited is readable),
+file_size,
+get_dir,
+print_file (efun cat()),
+read_bytes,
+read_file,
+restore_object,
+tail. Note that this function is called in compat mode as well. If you need
+to be compatible with the old 2.4.5-mudlib, redirect these calls to the
+valid_read/valid_write in the user object.
+SEE ALSO
+valid_write(M), make_path_absolute(M)
+valid_seteuid
+SYNOPSIS
+int valid_seteuid(object ob, string newid)
+DESCRIPTION
+Should return 1 if ob is allowed to set its euid to newid. Objects are
+always allowed to set their euid to 0.
+SEE ALSO
+seteuid(E), uids(C)
+valid_snoop
+SYNOPSIS
+int valid_snoop(object me, object you)
+DESCRIPTION
+Should return 1 if me is allowed to snoop you, 0 if not.
+SEE ALSO
+snoop(E), query_snoop(E), valid_query_snoop(M)
+valid_write
+SYNOPSIS
+string valid_write(string path, string uid, string func, object ob)
+DESCRIPTION
+This function is called to check if the object ob with the user-id uid has
+write permissions to the file given by path for the operation named by func.
+It should return 0 if permission is denied, or the normalized path if
+permission is granted. You can also return 1 to indicate that the path can
+be used unchanged.
+The returned pathname must not contain "..", a leading / will be stripped by
+the interpreter.
+Func denotes the efun call or other operation that caused valid_write() to
+be called:
+
+cindent,	do_rename (efun rename(), for the old and then for the new
+name),	ed_start (whenever the builtin ed tries to write to a file),
+mkdir,	remove_file (efun rm()),	rmdir,	save_object,	write_bytes,
+write_file.Note that this function is called in compat mode as well. If you
+need to be compatible with the old 2.4.5-mudlib, redirect these calls to the
+valid_read/valid_write in the user object.
+SEE ALSO
+valid_read(M), make_path_absolute(M)

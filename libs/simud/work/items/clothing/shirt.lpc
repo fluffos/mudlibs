@@ -1,0 +1,15 @@
+inherit "/items/clothing/clothing";
+
+NAME( "linen shirt" )
+FLEXIBLE( 1 )
+GETTABLE( 1 )
+DROPPABLE( 1 )
+SPECIFIC( "the linen shirt" )
+DISTANT( "a linen shirt" )
+LOOK( "A coarsely-sewn linen shirt with short sleeves. Since this is a shirt, not a tunic, it is cut off at the mid-waist. Smooth wooden pegs are sewn into the front, and the shirt is held closed by pushing these through loops on the other half." )
+ALT_NAME( ({ "shirt", "clothing" }) )
+PLURAL( "linen shirts" )
+ALT_PLURAL( ({ "shirts", "clothing" }) )
+SIZE( 20 )
+BODY_PARTS( BP_SHIRT )
+WEIGHT( 200 )

@@ -1,0 +1,219 @@
+/****************************************************************
+*								*
+* Document:	How to be build a room.				*
+* Relates to:	/lib/room.c; used by #include <room.h>		*
+* Version:	Version 2.00					*
+* Last update:	Last update 17-Jul-96 by Graah.			*
+* Description:	Describes how rooms can be built. For more	*
+*		specific descriptions of functions used,	*
+*		check out "room_modify_funs.doc".		*
+*								*
+****************************************************************/
+
+-------------------------------------------------------------------
+Important functions coders can define:
+
+        o create_room()
+        o reset_room()
+        o init_room()
+
+===================================================================
+void create_room()
+
+DESCRIPTION:
+	This function is called when the room is created. Usually
+	room will be set up through this function. Set descriptions,
+	light levels, outdoor levels from create_room(). It's also
+	recommendable to load room resident objects from here,
+	but remember to use  functions add_monster() and add_object()
+	whenever possible. create_room() is called only once so
+	your objects won't load in the  next reset otherwise.
+	Commands may also be added by set_commands/add_command
+	from create_room. Alternative is to use add_action
+	from init_room (explained later on). All these functions
+	are explained thoroughly in document "room_modify_funs.doc"!
+
+NOTE:	Don't use Game Driver predefined function 'create()'!
+	At the moment you can still mask over it and it could cause 
+	unwanted situations if you don't know what you are doing.
+	Create() is reserved for generic level settings and
+	create_room() is called from it.
+-------------------------------------------------------------------
+void reset_room()
+
+DESCRIPTION:
+	This function is called when the room resets after random
+	intervals (usually something like 30 mins). Use this function
+	to set values in reset intervals if necessary (quite seldom,
+	that is). You need not to re-load your  objects here if you
+	did it the way told above (via add_object/monster).
+
+NOTE:	Don't use Game Driver predefined function 'reset()'! The
+	reasons are like explained above with "create"; in addition,
+	using 'reset' will prevent 'create_room' being called because
+	of the way our current gamedriver works!
+------------------------------------------------------------------
+void init_room()
+
+DESCRIPTION:
+	This function is called every time a 'living'  object enters
+	the room (objects that have called function enable_commands(), 
+	players and monsters usually).
+	This function is a good place some operations to be done
+	when a  player enters the room. You may add functions with
+	"add_action" efun, but better way is to use "add_command".
+	Add_command should be used in create_room, unlike "add_action".
+
+NOTE:	Don't use Game Driver predefined function 'init()'.
+	Note also that arrive message for player gets printed
+	after_ init_room is called. This means that you usually
+	should use some delay (call_out) if you want to give some
+	message when a player or monster arrives. Also note that
+	some objects are living as well; you can't count on
+	this_player() being actually a player or monster! :-(
+------------------------------------------------------------------
+status search_cmd(string str)
+status listen_cmd(string str)
+status smell_cmd(string str)
+
+	These functions are called by room built-in commands:
+	search, listen, hear and smell. Redefine these functions
+	to add more flavour to your rooms. //Graah
+------------------------------------------------------------------
+
+ Some noticeable points:
+
+ create_room() and init_room() get called interactively by
+ a player or a monster (usually) and therefore these functions
+ can catch the initiator with this_player(). Reset_room does _not_
+ have this_player() set correctly as it's initiated by Game driver
+ originally, not by a living object. Several functions like 'write()'
+ need this_player() to redirect messages to right players, so therefore
+ some rooms in the game won't load because this_player() is not provided.
+ So as a general rule;
+ Don't load rooms without player's interaction (heart_beat()
+ won't keep this_player() for example) and don't build rooms
+ which would not load without this_player(). You might have seen
+ rooms with no exits with players trapped inside *WINK*.
+------------------------------------------------------------------
+
+ Putting it all together:
+
+==================================================================
+
+ Let's examine an example of a simple room. See other documentation 
+ for function descriptions in case it's not explained here.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+/*******************************************
+
+ NAME:    example_room.c
+
+ PURPOSE: Example for newbie coders.
+
+ AUTHOR:  Tron. (Modified by Doomdark)
+
+ *******************************************/
+
+#include <room.h>
+// We have to include this file; it inherits /lib/room.c and defines some
+// important values (light levels, outdoor info...)
+
+void
+create_room()
+{
+	set_short("A room");
+//Set short description. Shown when in brief mode.
+
+	set_long("This is an example room. Don't use linefeeds in\
+ this description. Note how lines can be concatenated!");
+
+	set_light_level(LT_LIGHTS);	// So that this won't be a dark room
+	set(ROOM_WD, WD_OUTDOORS);	// Let's suppose this is outdoors.
+					// value WD_INDOORS would be for indoor
+					// rooms
+
+// Add command 'jump' so players can use it in this room.
+	add_command("jump", "jump_cmd");
+
+// Message shown when you do 'examine room'     
+	add_item("room", "Yes, this really is an example room.");
+
+// Add one monster in the room which resets if killed.   
+	add_monster("/players/tron/monster",
+		"Monster appears from the shadows.",
+// No linefeeds in this message either!
+  1);
+// 1 means that this will come back in reset if killed.
+   
+	add_exit("north", "/players/tron/example_room2");
+}
+
+void
+reset_room()
+{   
+// Sends a message to the room when it's reseted...
+// just for an example :)
+
+	tell_here("The reset!!!");	// No linefeed...
+}
+
+// We'll simply tell player/monster a short message...
+void
+init_room()
+{
+	if (this_player()->query_coder_level())
+		this_player()->tell_me("You hear a voice saying: Hello, immortal.");
+	else
+		this_player()->tell_me("You hear a voice saying: Hello, mortal.");
+
+}
+
+//Code for command 'jump'
+status
+jump_cmd(string s)
+{
+	if (s && s != "high") {
+		notify_fail("Jump where?\n");
+// Note; the only place where we still use linefeeds ("\n")!!!
+		return 0;
+	}
+// As we return 0, we allow processing of this input continue; there might be
+// some 'other' jump-command that accepts this input. If player enters
+// "jump" or "jump high", we'll accept it, and proceed; otherwise, we
+// suppose this was some other command beginning with verb "jump".
+// (sounds confusing? if so, ask furrther info from (co)admins!)
+
+	this_player()->tell_me("You jump high!");
+	tell_here((string)this_player()->query_name()+" jumps high!",
+		this_player());
+
+// Note that optional 2nd argument was used; we don't want player who entered
+// the command (== this_player()) to get 2 messages.
+
+	return 1; // Always return 1 for a successful command.
+}
+
+// Add some smell. The command is already built-in to /lib/room.c.
+status
+smell_cmd(string str)
+{
+  if (str) return 0; // Smelling an item, not the room. We could
+		     // test here for smellig room features if
+		     // we wanted to.
+  this_player()->tell_me(
+"Your sensitive nose detects a strong smell of sweat. Perhaps \
+it is you?");
+  return 1;
+}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+Good to know:
+
+There are standard rooms for shops available in /lib directory.
+Standard doors are available. Check out file /obj/door.c. 
+Virtual rooms are also usable. Read documentation in 
+/doc/virtual directory.
+
+------------------------------------------------------------------

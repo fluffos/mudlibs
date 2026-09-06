@@ -1,0 +1,212 @@
+How does combat work?
+
+Combat begins when one party or the other uses the 'kill verb'. There may be
+other ways to start combat, such as adding a target directly, but using the
+kill verb is the most kosher. The kill verb is defined in /bin/kill.c
+
+The kill verb does the following:
+  * Checks to make sure that the target is valid (i.e. not yourself, and
+present in the room)
+  * Checks that your readiness is >= 1000.
+  * If the above are valid, it calls start_combat in this_player(), passing
+it a pointer to the object to be killed and the integer '1'. It also prints
+the message "~Name ~verbattack ~targ!"
+
+---
+
+start_combat() takes two parameters: A pointer to the enemy ('enemy'), and
+an 'initiative' value. The initiative parameter is unused.
+
+start_combat() clamps readiness into the range RMIN_READINESS through
+RMAX_READINESS[1]. It then adds 'enemy' to the front of the target stack[2].
+Note that it does not currently notify the target that it has been attacked.
+Finally, it turns on heart_beat for living.c.
+
+---
+
+heart_beat() is one of the most complex functions in combat. It is called
+every 2 seconds (on a lag-free server; it can be slower if server lag is
+high). The heart_beat function generally affects the creature in whom it is
+beating. It does the following, in this order:
+
+* If the creature is dead, it sets the 'is_corpse' flag to true, and the
+'doing' message to 0 (default). This is done in the heart beat, rather than
+at the moment they die, so that you don't get 'the corpse of ...' messages
+prematurely in combat messages.
+
+* If the 'doing' flag is not 0, Then it decrements a doing_delay counter.
+When the counter reaches zero, the 'doing' message is set to 0. This is so
+that actions expire.
+
+* If (hp < maxhp) and the creature is not dead, it increments 'heal_count'.
+Once (heal_count >= heal_delay), the creatuer gains a single hit point. This
+is how regeneration works.
+
+* The same regeneration is done for mana using mana_heal_count, mana, and
+maxmana.
+
+* The same regeneration is done for endurance using end_heal_count,
+endurance, and maxend.
+
+* drop_invalid_targets() is called (see below for description).
+
+* If the creature is not held ('held' variable is false) and not busy
+('busy' variable is false), and if the creature's current readiness score is
+below MAX_READINESS, then their readiness is increased[3]. The function
+show_ready() is called (see below).
+
+- If the readiness requirement of the first item on the creature's action
+queue is above MAX_READINESS, then the character's readiness will continue
+to be incremented, even though it exceeds the normal maximum.
+
+* If the creature is held (held > 0), then the 'held' time is decremented.
+
+* If the creature is busy (busy > 0), and NOT currently held (held == 0),
+then the 'busy' time is decremented.
+
+---
+
+drop_invalid_targets() scans through the list of the creature's targets, and
+removes any from the list that are no longer valid combat targets. It is
+determined as follows:
+
+* If any of the targets are 'false' (i.e., they have been destructed), they
+are dropped.
+* Any target that returns true on 'query_dead' is dropped.
+* If the target array is ({ }) by the end of the function call, then it is
+set to 0.
+* If the current target has left the room, it is moved to the end of the
+target list. This is not done in a loop. If every target in the array has
+left the room, the list will simply spin around, one rotation per call to
+this function.
+
+---
+
+show_ready()
+
+If this_object()->query_autoready() returns true, then this function writes
+out a 'readiness meter', which is a colorful display of the creature's
+current readiness (on a scale from 0-1000) and the next action on its combat
+queue. If query_autoready() is false, this function does nothing.
+
+---
+
+get_battle_action()
+
+Returns the battle action on the front of the combat queue *without* popping
+it off. If there is none, it returns query_default_action().
+
+---
+
+Footnotes: Minor technical gotchas that seemed too confusing or detailed to
+be useful to most people.
+
+(1) RMIN_READINESS is defined as -MAX_READINESS, and RMAX_READINESS is
+defined as 2*MAX_READINESS. MAX_READINESS is currently equal to 1000. These
+constants are in const/battconst.h (that is, /include/const/battconst.h --
+since the include directory could be moved, it is conventional to leave it
+off).
+
+(2) A list of current targets, stored as an array. It is allowed for it to
+be 0 if it is empty, so anything that modifies it should first check that it
+holds an array.
+
+(3) Using the formula ((speed+speed_bonus)*3)d4 + ((will+will_bonus)*3)d6
+... the 'd#' is the D&D dice roll notation. Accurate dice probabilities are
+used.
+
+--------PART TWO-------
+
+The forms directory:
+
+FORMS_DIR "/battle/forms/"
+
+The basic form is "form.c". It is found in /battle/forms/form.c, and has an
+associated include file (#include <form.h>). All forms should include it to
+provide them with a basic form implementation for the wizard to modify. This
+also ensures that if we later add extra features to form, their legacy forms
+will automatically have those features included as well.
+
+Forms should be non-clonable objects.
+
+#pragma no_clone
+
+will appear in the form.h file.
+
+The basic attributes of a form are as follows:
+
+* Returns the message to be given to the listener to indicate that someone's
+form has changed. The person changing form is this_player(). The reason for
+the listener is so that this function may decide whether to give a different
+message to someone who recognizes the form.
+string query_change_message( object listener )
+
+* Allowed actions within the form
+mixed *query_allowed_actions()
+-- An array of action structures (see below)
+
+* Allowed reactions within the form
+string *query_allowed_reactions()
+-- An array of file names for objects
+
+* Maximum allowed allocation for attitude points
+int *query_attitudes()
+-- An array of four integers
+
+* The minimum scores for each attitude category. These act as 'bonus'
+attitude points, since none have to be allocated. This is good for forms
+that, i.e., always have a very high dodging bonus.
+int *query_attitudes_bonus()
+-- An array of four integers
+
+* Names of the attitude point allocations
+string *query_attitude_names()
+-- An array of four constant strings
+
+* Name of the form
+string query_name()
+
+Combat actions should be implemented as bin/ verbs. Combat reactions will go
+in
+
+REACTIONS_DIR "/battle/reactions/"
+
+Combat actions should #include <battle.h>. This gives the coder access to
+lots of useful constants and calculation functions that should make coding a
+typical action easier. It may also provide some default functions that can
+be queried by objects that use actions.
+
+The combat action consists of two parts: the main() function, which is
+primarily concerned with parsing the typed command (if there was one), and
+the do_action() function, which actually performs the action.
+
+The main() function must, minimally, makes a call to
+this_player()->push_action(). The value passed into push_action() is a
+specially assembled array that contains information necessary for performing
+the action.
+
+({
+   The readiness/poise requirement (not including stance & form change) -- 1000 is typical,
+   The file name of the bin verb (could be an object pointer),
+   The name of the do_action() function (omit the "do_", it is implied),
+   The action's target -- an object pointer, or -1 for "current target",
+   Bitwise OR'd flags for the required action stance. See the ST_XXXX constants in const/battconst.h,
+   Parameter -- a single value that will be passed to the do_action function.
+})
+
+Note that you should use the "parameter" to store any and all information
+regarding the action. Do NOT use global variables inside of your verb, since
+multiple people may have active action records for that verb at the same
+time! There is almost never a reason to have a global variable declaration
+in combat verbs.
+
+Note that forms will usually build these structures directly, without
+calling the main() function to push it on the player's action queue. Thus,
+you shouldn't count on every action performed by the verb passing through
+the main() function first.
+
+The do_action is responsible for all of its own messaging. Several standard
+functions ought to be written to make it easier to use stance-, form-, and
+counterattack- based messaging, but these should not be imposed as a
+requirement. Additionally, it is not strictly required that an action force
+a reaction -- it must be specified in the do_action() code.

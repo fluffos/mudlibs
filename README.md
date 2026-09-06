@@ -462,6 +462,8 @@ classes it's found.
 | 974 | `morgengrauen` | MorgenGrauen | `git clone https://github.com/MorgenGrauen/mg-mudlib (commit a178b88a9cac64480a9475f72a96cd4c183e64c7, cloned 2026-09-05); repo root is the mudlib` | 40283 | WASM playable |
 | 975 | `ageofelements` | Age of Elements | `git clone https://github.com/age-of-elements/age-of-elements (commit 4e5cae45d0804f23a1cecbef577b5bcdee5a53cf, cloned 2026-09-05); repo root is the mudlib` | 40284 | WASM playable |
 | 976 | `aoh` | Age of Heroes | `git clone https://github.com/seikichin/aoh (commit 6ab8f3679d560a3726ae98b671d7ded7be6fb75d, cloned 2026-09-05); repo root is the mudlib` | 40285 | WASM playable |
+| 977 | `sticklib` | StickLib | `git clone https://github.com/StickMUD/StickLib (commit a0750273104c49d7d506d92f232b221b64577853, cloned 2026-09-05); repo root is the mudlib` | 40286 | WASM playable |
+| 978 | `simud` | SIMud | `git clone https://github.com/shentino/simud (commit 644b7d4f56bf8d4695442b8efcfd56e0a561fe21, cloned 2026-09-05); mudlib root is mud/` | 40287 | WASM playable |
 <!-- END NUMBERING TABLE -->
 
 ## Repository layout

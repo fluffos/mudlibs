@@ -1,0 +1,540 @@
+/****************************************************************
+*								*
+* Document:	SSF.doc						*
+* Relates to:	/obj/living.c,/lib/room.c (<room.h>		*
+* Version:	Version 1.0a					*
+* Updates:      Updated 03-sep-96 by Doomdark			*
+* Description:	Describes how messages are to be given to living*
+*		objects; messages of events in the world and so	*
+*		forth. Some of the functions are defined in	*
+*		/lib/room.c (tell_here), some in /obj/player.c	*
+*		or /lib/npc.c (tell_me); the documentation	*
+*		is however here (there are pointers from other	*
+*		documents to this doc).				*
+* NEW:								*
+*								*
+*	-							*
+*								*
+****************************************************************/
+
+-------------------------------------------------------------------
+
+
+		GENERAL
+		-------
+
+	In many muds, it's sufficient just to use some efuns
+like "write", "tell_object", "say", "tell_room"; add linefeeds
+and there we go. For example, one could use something like
+'write("You hear "+mon_ob->query_name()+" say: Duh!\n");'
+to print a message in XXXXmud. (in StickMud you should
+_never_ use "write", "tell_object", "say", "tell_room", btw!)
+
+	There are _lots_ of things missing from the system explained
+above. There is no information whatsoever regarding to things like:
+
+- What kind of a message this is? (is it message about combat;
+  info-message about players leaving; perhaps a guild-message...)
+- If player wants to have longer/shorter text-lines, what should we
+  do? Coder has decided that lines are 60 chars long, as he/she
+  likes it... What can player do if he/she wants lines of 100 char?
+  Answer here is most probably "nothing"... =)
+- Actually, if player is deaf at the moment, he/she shouldn't really
+  even get _that_ message, right? But what message he/she _should_
+  have instead, if any?
+- Now, supposing that player actually is blind, but can hear,
+  what message to use then? And furthermore, if there are more than
+  one player in the same room, they obviously need _different_
+  messages altogether? How should _that_ be done... Lots of work,
+  right? (not necessarily, as we'll see... at least not in StickMud!)
+- Also, supposing that player A happens to know _what monster that
+  really is_ while player B does not. Different messages here as
+  well, if we want to make it correct.
+
+
+	Doesn't look too good, does it? Does this mean that coders
+have to use loops, where they check all the time whether recipients
+are able to see, hear, smell etc., and whether it's too dark and
+all that? Nope. Not necessarily. There is a way to do it so that
+mudlib helps coders...
+
+	So. Wouldn't it be nice to have some abstract string format,
+where you only describe generally what should the message look like;
+and give certain arguments, and then let mudlib take care of the
+dirty work? One possible solution is:
+
+SSF = Stickmud String Format
+////////////////////////////
+
+	SSF is simply a specially formatted string that can be used
+when passing messages to players/NPCs. But before going into details,
+let's see what a typical SSF looks like:
+
+":%<me.capname>% points %<me.possessive>% %<it.name>% at %<him.name>%."
+
+Looks cryptic? Possibly. However, it's pretty simple. When used,
+the message that player gets, might look something like:
+
+"Doomdark points his long sword at Graah.", or
+"Foobar points his red herring at Frobozz.".
+
+Important point is that while the SSF is the same, the resulting
+messages don't have to be same for all the receivers.
+So, this is the way how we can get different
+players to get different-_looking_ messages; obviously they
+are similar messages, but not identical (that is; player a
+may get "It is a red jewel." while player b might get
+"It is a ruby."; should player b have better knowledge etc.
+etc. etc.)
+
+However, this is just one part of the solution... We still have to
+think about how to prevent people getting messages when they are
+not able to (ie. blind persons get "You see xxx doing yyy."
+messages etc.); but before discussing that, few other things
+worth noting:
+
+The SSF has obviously to be parsed somehow; just printing SSF to a
+player is no good. In StickMud, somewhat similar string format, SSF,
+is used. But there it has to be manually parsed (with function
+"make_format_string"), and later the 'real' message has to be
+made somehow (with function "format_string"). In StickMud, one
+can use SSF straight away... How? Well, let's introduce two
+(hopefully) familiar functions, which are _almost_ like their
+counterparts at Stickmud:
+
+tell_me(...):
+	This function is defined by living.c. It is used to give
+	a message to a living. Used like:
+	liv_ob -> tell_me(...).
+	So, it replaces efuns "write" and "tell_object" (which
+	shouldn't be used in StickMud, remember... =) ).
+tell_here(...):
+	This function is defined by room.c. It is used to give
+	a message to all livings in a room. Usage is:
+	room -> tell_here(...).
+	So, tell_here replaces "say" and "tell_room", like
+	tell_me did replace "write" & "tell_object".
+
+(More about precise syntax of these 2 functions later on).
+
+So, you can simply pass a SSF-string to tell_me or tell_here,
+and the message will look ok to player(s) (for purposes of
+optimization, there are few interesting ways to do it bit
+differently, but let's not yet worry about efficiency).
+
+Now, back to the problem of preventing people get messages
+when they shouldn't. Usually, things are sensed by more than
+one sense. For example, you usually can see, hear and feel
+an explosion. However, usually one of the senses is 'most
+important', and thus message like
+"The monster suddenly explodes!"
+might be the best message for players that can see.
+However, if they can't see, but can hear, they should
+probably get message like:
+"You hear an explosion!".
+And, if they're both blind & deaf, perhaps they should get
+message like
+"You feel the pressure of air around you."
+(sorry, a lousy message, but hope you get the picture!).
+
+After all, this doesn't look too bad, does it? You will just
+make more than one message, and which one to be used depends
+on senses player can use. The choice probably can be made so
+that senses are checked in the order messages are given.
+
+And --surprise surprise-- this is how it is done in StickMud.
+You will use something like:
+
+room->tell_here(({
+	"%<me.capname>% suddenly explodes!",
+	"You hear an explosion!",
+	"You feel the pressure of air around you."
+}), ({
+	SENSE_SEE,
+	SENSE_HEAR,
+	SENSE_FEEL
+}),
+0,
+exploding_monster,
+exploding_monster,
+0,
+0);
+
+*****************************************
+NOTE! This is _NOT_ implemented _YET_!!!!
+*****************************************
+
+(the exact meaning of the arguments explained later on, under
+explanation of functions tell_me and tell_here).
+
+The most interesting arguments now are first two; the first
+one is an array of SSF-strings, and the second is an array of
+senses that are 'needed' for the player to get this message.
+Messages are checked in the order given, so that if he/she
+can see, 1st message is used, if can't see but can hear, 2nd,
+and if can't either see or hear, but can feel, 3rd. If can't
+see, hear or feel, no message is given.
+Note also that you can require more than one sense to be
+'available', simply by using 'SENSE_SEE | SENSE_HEAR'
+(so, you just 'add' two restrictions together).
+
+Now, having (poorly) explained the ideas, let's now look closely
+at SSF:
+
+===================================================================
+
+	Stickmud String Format - format
+	----------------------------------
+
+SSF is a string that consists of a leading ":" (first character),
+normal text, and elements of form "%<object.attribute>%". These
+elements are replaced by real strings when SSF is used.
+
+Actually, elements are of form (in format similar to one used by
+Bison/yacc and most computer language books) (ie. this is an
+abstract symbolic presentation):
+
+element ->
+	%<element2>%
+
+element2 ->
+	func(element2) |
+	object.attr |
+	number
+	;
+func ->
+	cap |
+	lower |
+	upper |
+	;
+object ->
+	me |
+	it |
+	him
+	;
+attr ->
+	name |
+	capname |
+	real_name |
+	short_desc |
+	long_desc |
+	pronoun |
+	objective |
+	possessive |
+	gen_possessive |
+	ending_s |
+	ending_es |
+	ending_ies |
+	race |
+	guild
+	;
+
+number ->
+	1 |
+	2 |
+	3 |
+	...
+	9;
+
+
+For those to whom that didn't make any sense, short explanation:
+
+- Basic form of the element is (in practice):
+	%<object.attribute>%,
+  in practice being something like "%<me.name>%". And that means
+  that it's 'name' of object 'me'. Three objects can be used,
+  "me", "him" and "it". Which objects they refer to depends on
+  arguments used with 'tell_me' and 'tell_here'.
+  So... Output of "%<me.name>%" would probably be something like
+  "Doomdark", "Foobar", "big furry animal" and so forth. 
+  Attributes were listed above; they should be pretty logical ones;
+  they are explained in detail later on.
+
+NEW:
+---
+  Another type of element is: %<number>%, ie. something like %<1>% or
+  %<6>%. These are special elements; and their semantics are explained
+  later on this document.
+
+- One can use functions to alter the output of the element;
+  for example: %<cap(me.possessive)>% would mean that the output of
+  "me.possessive" should be capitalized.
+
+Now; let's explaine 'objects', 'functions' and 'attributes'
+available:
+
+objects:
+--------
+
+me: Object that is 1st of 3 objects given to tell_me/tell_here
+him: - "" -        2nd - "" -
+it:  - "" -        3rd - "" -
+
+Note that you should always use these so that me & him refer to
+living objects (or are NULLs), and it refers to a non-living object
+(or NULL). You don't need to specify all the objects; if your
+SSF only contains references to "me", you can set him & it to
+NULL and so on.
+
+functions:
+----------
+
+cap:	Make the first letter of the element capital letter.
+lower:	Make the whole element consist of lower case letters.
+upper:	Make the whole element consist of upper case letters.
+
+attributes:
+-----------
+
+name:	Name of the object in question, as queried by query_name()
+	("Doomdark", "sword", "werewolf", "Foobar"); can also be
+	"someone" if the object is invisible (and can't be seen by receiver;
+	ie. not enough see_invis_level); or some hallucinatory name if
+	receiver is hallucinating ("pink elephant", "marshmallow man" etc.)
+capname: Capitalized name, like above, but always beginning with a capital
+	letter ("Doomdark", "Sword", "Werewolf", "Foobar"). (Can be "Someone"
+	or some hallucinatory name as well, but always capitalized).
+real_name: Real name of the object, as queried by query_real_name().
+	Usually same as 'name' except that won't be replaced by "someone"
+	even if object is invisible; nor it will be a halluc. name,
+	even if receiver is hallucinating.
+short_desc: Short description, as queried by query_short()
+	("Admin Doomdark is here.", "a sword", "Werewolf.", "Foobar.")
+long_desc: Long description, as queried by query_long()
+pronoun: Pronoun, queried with "Pronoun()"; for non-livings
+	returns "it", for livings either "he", "she" or "it".
+objective: Objective, "Objective(); for non-livings
+	returns "it", for livings "him", "her", "it".
+possessive: Possessive pronoun; Possessive(),
+	for non-livings returns "its", for livings "his", "her", "its".
+gen_posssessive: General pronoun; returns something
+	like "Doomdark's" or "Minx'"; sometimes may give 'incorrect' results;
+	if so, inform (co)admins so we can enhance the code that tries to
+	guess the appropriate possessive. .. :-/
+ending_s: This equals to either "s" or "" (empty string). Main use is for
+	messages that are to be seen by living who does the action as well as
+	others. For example, simple message like "Foobar takes sword." has to
+	look "You take sword." for Foobar. So, the SSF to use would be like:
+	":%<me.capname>% take%<me.ending_s>% %<it.name>%". Formal definition
+	might be something like "equals to 's' if object receiving SSF is
+	the same as object specified before the element, otherwise equals
+	to ''", but I doubt that is clear enough.. =)
+ending_es: Almost identical to previous one, except that now it equals either
+	to "es" or "". So, it's useful for strings like
+	":%<me.capname>% do%<me.ending_es>% something silly."
+	This will look like "Foobar does something silly." or
+	"You do something silly"...
+ending_ies: This is quite similar to 2 previous elements; will equal to
+	"ies" or "y". Useful for SSFs like
+	":%<me.capname>% tr%<me.ending_ies>% to smile."
+	So, this will look either like "Foobar tries to smile." or
+	"You try to smile"...
+race: Race, query_liv_attr(ATTR_LIV_RACE) (ie. "human", "gargoyle",
+	"vampire" etc)
+
+NEW:
+----
+
+	Note that if the receiver object is same object as the object
+being used in desc (ie. me == plr, we use "me.name" and text is being
+given to plr with plr->tell_me(...) or something like that), attributes
+are replaced as follows:
+
+name:
+	"you" is used instead.
+capname:
+	"You" - "" -
+real_name:
+	- Not replaced -
+	Name queried as it should (perhaps we should replace it with "you"
+	anyway? comments?)
+short_desc:
+	- Not replaced -
+long_desc:
+	- Not replaced -
+pronoun:
+	"you" is used instead.
+objective:
+	"you" is used instead.
+possessive:
+	"your" is used instead.
+gen_posssessive:
+	"your" is used instead.
+ending_s:
+	"" is used ('normally', "s" is used)...
+ending_es:
+	"" is used (- "" - "es" - "" -)...
+ending_ies:
+	"y" is used ( - "" - "ies" - "" -)...
+race:
+	- Not replaced -
+
+NEW:
+----
+
+Now. The special elements of the form %<number>% (%<1>% etc.)
+are quite special indeed. They are used to pass varying constant
+strings (oxymoron?). So, we may have a SSF-string, say,
+":%<me.name>% smiles %<1>%.". Now; when we use this SSF for
+tell_me/tell_here, we can specify that %<1>% should be replaced
+with "happily". Hmmh. Why not just use SSF-string
+":%<me.name>% smiles happily." straight away???
+In some cases, we want to have just one SSF-string, which will
+be parsed just once; but we still need to be able to modify
+the SSF-string in question. These special elements allow us to
+modify it when using them, without having to form new SSF-string,
+parse it (with make_format_string). Still, you probably won't
+be needing these special elements very often... How you define
+the actual 'contents' of these special elements is explained
+along with explanation of 'tell_me'-function's arguments.
+
+And finally some example SSF-strings:
+
+":%<it.capname>% explodes!"
+":%<me.capname>% wave%<me.ending_s>% %<me.possessive>% hand at %<him.name>%."
+":There is a loud THUMB, as %<me.name>% hit%<me.ending_s>% %<him.name>%."
+":%<me.capname>% bounce%<me.ending_s>%. %<cap(me.pronoun)>%\
+ smile%<me.ending_s>% happily."
+":%<me.capname>% smile%<me.ending_s>% %<1>%."
+
+(doesn't look too complex now, does it?)
+
+===================================================================
+===================================================================
+
+So. Then the important functions:
+
+===================================================================
+
+int tell_me(mixed msg_or_msgs, int *sense_list, int flags,
+	object me, object him, object it)
+
+ARGUMENTS:
+ 1st: (string, array of strings)
+	SSF-string or array of SSF-strings (either parsed or non-parsed;
+	more about this later!). Can also be a 'normal' string
+	(or an array consisting of normal and/or SSF-strings, any
+	combination!). Note that parsed SSF-strings are actually
+	arrays of 2 arrays... =)
+	...
+ 2nd: (array of integer or NULL)
+	If the first argument was an array, this array is considered
+	to be list of senses that need to be 'available', for the
+	string in 1st array to get used. So. Supposing this array
+	is ({ SENSE_SEE, SENSE_HEAR }), 1st string of the 1st array
+	(the array that is 1st argument to tell_me) will be used
+	if the receiver can see, 2nd if he/she/it can hear, or none
+	if he/she/it can neither see nor hear.
+ 3rd: (integer or NULL or an array of mixed elements)
+	Special flags that determine type of the message. For messages
+	without clear type, use NULL (0). Message types are defined in
+	<tell_me.h>. They also define ANSI-codes to be used; so players
+	can, for example, define that they want combat-hit-messages to
+	be printed in red, and guild-messages in blue.
+    NEW:
+	This can also be an array, of which first element is the
+	integer containing flags and the rest are the contents
+	of special elements (explained earlier on; elements like
+	%<1>%, %<2>% and so on) the SSF-string uses. So, for example,
+	if we have a SSF-string ":%<me.capname>% smiles %<1>%.",
+	we need to have an array as 3rd argument for tell_me.
+	Supposing we use array ({ 0, "happily" }), the element
+	%<1>% would be replaced with "happily" (0th element of the
+	array is the flags-integer; 1st element string "happily"!);
+	resulting string to be used might then be something like
+	"Doomdark smiles happily.".
+	Note that you probably won't often need these special
+	elements; however, you may occasionally notice them
+	in mudlib-code.
+ 4th: (object)
+	"Me"-object. Often, this_player() is being used; however, if
+	you're not using object "me" in any element of the SSF
+	(or the 1st argument isn't even a SSF-string), you can use
+	0 here.
+ 5th: (object):
+	"Him"-object. Used much like 4th argument...
+ 6th: (object)
+	"It"-object. - "" -
+RETURN VALUE:
+  (integer)
+	Which message was used, if any. If no messages were printed
+	(due to blindness and other conditions), -1 is returned;
+	otherwise index to the message in question (if only 1
+	string, 0 is returned).
+	For example, if you used had 2 messages, 1st used when
+	player can see, and 2nd when he can hear, you could get
+	return value of either:
+	  -1:	Player could neither see nor hear
+	   0:	Player could see, thus 1st message was used
+	   1:	Player couldn't see, but could hear, thus 2nd
+		message was used.
+DESCRIPTION:
+	This function should be used when you want to give a message
+	to some living object (player, NPC). It's the _only_ function
+	to be used (replaces "write" and "say").
+EXAMPLE OF USAGE:
+	plr_ob -> tell_me(({ ":%<me.capname>% bounces.",
+		"You hear someone bounce.",
+		"You feel the earth move! Is it an earthquake?!?"
+		}), ({
+		SENSE_SEE, SENSE_HEAR, SENSE_FEEL
+		}), 0, bouncer_ob, 0, 0);
+NOTE:
+	-
+===================================================================
+
+int tell_here(mixed msg_or_msgs, int *sense_list, int flags,
+mixed excl_livings, object me, object him, object it)
+
+ARGUMENTS:
+ 1st: (string, array of strings)
+	- Same as with 'tell_me' -
+ 2nd: (array of integer or NULL)
+	- Same as with 'tell_me' -
+ 3rd: (integer or NULL or an array)
+	- Same as with 'tell_me' -
+ 4th: (object or an array of object or NULL)
+	List of livings / living object that should _not_ get
+	this message. So, can be a single object, an array of
+	objects, or NULL (in which case all the living objects in
+	the room will get the message, if they're able to).
+ 5th: (object)
+	"Me"-object. Often, this_player() is being used; however, if
+	you're not using object "me" in any element of the SSF
+	(or the 1st argument isn't even a SSF-string), you can use
+	0 here.
+ 6th: (object):
+	"Him"-object. Used much like 4th argument...
+ 7th: (object)
+	"It"-object. - "" -
+RETURN VALUE:
+  (integer)
+	How many living objects received the message (that is, how many
+	really got it, excluding those that were there but unable to
+	get it because of blindness etc.)
+DESCRIPTION:
+	This function should be used when you want to give a message
+	to all (or some) living objects in a room. So, it replaces
+	efuns "tell_room" and "say".
+EXAMPLE OF USAGE:
+	room_ob -> tell_here(({ ":%<me.capname>% bounces.",
+		"You hear someone bounce.",
+		"You feel the earth move! Is it an earthquake?!?"
+		}), ({
+		SENSE_SEE, SENSE_HEAR, SENSE_FEEL
+		}), 0, bouncer_ob, bouncer_ob, 0, 0);
+	(message is to be printed to all the other living objects
+	except for the living that did bounce... =) )
+	(he/she/it should probably be given a message of his/her/its
+	own, with tell_me)
+NOTE:
+	-
+===================================================================
+
+
+	Optimizations
+	-------------
+
+Now to somewhat advanced topic; optimizating use of SSFs.
+
+- Not written yet - :-(

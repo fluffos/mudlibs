@@ -4,7 +4,7 @@ This collection targets [FluffOS](https://github.com/fluffos/fluffos).
 Most archives are MudOS-lineage; **LDMud** is a different driver family.
 Discovery triage usually drops LDMud unless someone explicitly wants a
 port (see `AGENTS.md` §7.158 and the `questmud` / `acme` /
-`morgengrauen` / `ageofelements` / `aoh` onboards).
+`morgengrauen` / `ageofelements` / `aoh` / `sticklib` / `simud` onboards).
 
 Every onboarded LDMud lib must say clearly in `README.md`, `NOTES.md`,
 and `meta.json` that it is an **LDMud → FluffOS conversion**.
@@ -14,7 +14,7 @@ and `meta.json` that it is an **LDMud → FluffOS conversion**.
 | Strategy | When | Examples |
 |---|---|---|
 | **A. Full dialect port** | Older LDMud / Amylaar-era lib; closures rare; you intend playable world content | `questmud` |
-| **B. Catalog overlay** | Modern LDMud 3.x (`set_driver_hook`, `#'` / `unbound_lambda`, `virtual inherit`, MessageLib, XML cmds) — mechanical rewrite of the whole tree is not realistic | `acme`, `morgengrauen`, `ageofelements`, `aoh` |
+| **B. Catalog overlay** | Modern LDMud 3.x (`set_driver_hook`, `#'` / `unbound_lambda`, `virtual inherit`, MessageLib, XML cmds) — mechanical rewrite of the whole tree is not realistic | `acme`, `morgengrauen`, `ageofelements`, `aoh`, `sticklib`, `simud`, `sticklib`, `simud` |
 
 Both strategies still run the normal extract → `convert_lib.sh` →
 `config.fluffos` → numbering/`meta.json` pipeline from `AGENTS.md` §2.
@@ -73,7 +73,7 @@ Use when the archive master is built on `set_driver_hook()`,
 `inaugurate_master()`, closures, and/or a multi-file simul_efun tree.
 FluffOS has no `set_driver_hook` / `unbound_lambda` / `#'` closures.
 
-Pattern used by `acme` and the 974–976 onboards:
+Pattern used by `acme` and the 974–978 onboards:
 
 1. After `convert_lib.sh`, rename the LDMud master (and simul entry if a
    single file) to `*_ldmud.lpc` so it is preserved but not loaded.

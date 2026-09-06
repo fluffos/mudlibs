@@ -1,0 +1,233 @@
+/****************************************************************
+*								*
+* Document:	How to code interaction between players and	*
+*		NPCs by using standard functions defined by	*
+*		standard NPCs & commands.			*
+* Relates to:	/lib/npc.c; used by #include <npc.h> as well as	*
+*		few commands found in /bin/pub like 'ask',	*
+*		'give' etc.					*
+* Version:	Version 1.00					*
+* Last update:	Last update 16-aug-95 by Doomdark.		*
+* Description:	Describes how to code interaction between	*
+*		players and NPCs.				*
+*								*
+****************************************************************/
+
+-------------------------------------------------------------------
+Important functions coders can define for their NPCs (or, perhaps,
+so called 'shadow'-objects!)
+
+        o catch_ask()
+	o catch_show()
+        o give_object_by()
+        o catch_feeling()
+
+===================================================================
+status catch_ask(object who_asked, string what_asked)
+
+DESCRIPTION:
+	Is called when a player (or NPC) asks this NPC about
+	something. If this function returns other value than 0,
+	no message "XXXX doesn't seem to answer." gets printed.
+	1st argument is object that asked the question (ie.
+	player or NPC), and 2nd argument is the string used
+	as argument for "ask"-command, without leading "about"
+	(ie. if player entered "ask foobar about silver sword",
+	2nd argument would be "silver sword").
+NOTE:
+	You may want to use call_out to cause suitable delay,
+	if you wish. You don't need to, however. If you do,
+	however, remember to return 1 from this function to
+	prevent message to get printed.
+-------------------------------------------------------------------
+status catch_show(object who_showed, object what_showed)
+
+DESCRIPTION:
+	Is called when a player (or NPC) shows an item to a NPC.
+	If this function returns something other than 0, no
+	message "... but <XXX> doesn't seem too interested in it"
+	gets printed.
+	1st argument is object pointer of living object that
+	showed us the item, and 2nd argument object pointer of
+	the item in question.
+NOTE:
+	Like with catch_ask, you may sometimes want to use call_out
+	to add small delay between show and response.
+------------------------------------------------------------------
+void catch_feeling(object who_did, string what_did,
+	object to_whom_did)
+
+DESCRIPTION:
+	This function is called when another living object does
+	some action, commonly referred to as "feeling"; smiles
+	to us, kicks us, kisses us...
+	1st argument is the object doing the action, 2nd
+	argument action in question ("smile", "kick", "kiss" etc.)
+	and 3rd argument either 0 if it's general (ie. player
+	smiles in general, not to anyone specifically), or
+	object action is directed to; this may be this_object()
+	(ie. player kicked us), or some other living object in
+	same room (kicked the other troll in this room).
+NOTE:
+	Currently, not all feelings get this function called.
+	This will change, so please tell (co)admins, if you
+	want this function called on some feeling (and is not
+	currently).
+------------------------------------------------------------------
+void give_object_by(object who_gave, mixed what_gave)
+
+DESCRIPTION:
+	This function gets called when someone gives us something;
+	either an item or money. We can react to this; no return
+	value is needed though.
+	1st argument is the object that gave us the item or money
+	(player or NPC) and 2nd argument is either item we were
+	given or amount of money we were given.
+NOTE:
+	Remember to check whether 2nd argument is integer
+	(we were given money), or object (we were given an item)!
+	Notice also that often we want to have some delay between
+	giving item/money, and responding to that. This can be
+	done with call_out.
+------------------------------------------------------------------
+
+ Some noticeable points:
+
+- Please do use these functions; do _NOT_ override standard
+  "ask", "give", "show", or feeling-commands! This makes your code
+  much easier to be kept up-to-date, and also shorten your code.
+
+------------------------------------------------------------------
+
+ Putting it all together:
+
+==================================================================
+
+ Let's examine an example of a simple NPC that responds to various
+ actions player does. See other documentation for function
+ descriptions in case it's not explained here.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+/*******************************************
+
+ NAME:    interactive_npc.c
+
+ PURPOSE: Example for newbie coders.
+
+ AUTHOR:  Doomdark
+
+ *******************************************/
+
+#include <npc.h>
+// We have to include this file; it inherits /lib/npc.c and defines some
+// important constant values (gender, alignment levels etc.)
+
+void
+create_monster()
+{
+	set_name("big troll");
+	set_level(10);
+	set_race("troll");
+	set_gender(G_NEUTER);
+	set_alignment(AL_NASTY);
+	set_short("a big troll");
+	set_long("It is a big troll. It eyes your belongings greedily.\
+ Somehow, looks just like it was looking for some special item.\
+ Maybe you should ask it about the item it is looking for?");
+	set_money(200);
+// Let's add some money so we can pay too!
+}
+
+// We want an "elf head"! (Wonder if there exists such a thing?)
+status
+catch_ask(object who, string what)
+{
+	if (what != "item" && what != "item it is looking for"
+	  && what != "special item") {
+// Let's try to catch different words; players tend to use various
+// different phrases... It is up to coder to make things work!
+		environment()->tell_here(
+"Big troll grunts: Me know nothing about dat!", this_object());
+	} else {
+		environment()->tell_here(
+"Big troll grunts: Me want elf head! Elf Bad! Me kill Elf!");
+	}
+	return 1;
+}
+
+void
+catch_feeling(object who, string feeling, object obj)
+{
+	if (obj != this_object()) return;
+// Let's only react to feelings directed at us.
+	if (feeling == "kick") {
+// My my... they dare to kick us!
+		environment()->tell_here(
+"Oh my. Big troll looks rather pissed now!\n\
+Big troll says: You elf-lover you! Me gonna kill you now!",
+this_object());
+		call_out("attack_object", 2, who);
+// Let's attack him/her, but after delay of 2 seconds.
+		return;
+	}
+// We could add other feelings easily... But not in this example. :-)
+}
+
+status
+catch_show(object who, object what)
+{
+// Not necessarily a good check, but...
+	if (!what -> id("elf head")) {
+		environment()->tell_here(
+"Big troll says: No, me no want that. Me want Elf Head! With No Elf\
+ attached to it!", this_object());
+	} else {
+		environment()->tell_here(
+"Big troll says: YA! YA! That me want! Me can pay you much!",
+this_object());
+	}
+	return 1;
+}
+
+void
+give_object_by(object who, mixed what)
+{
+string s;
+int i;
+// Did he/she/it give money?
+	if (intp(what)) {
+		environment()->tell_here(
+"Big troll says: Blah! Me no beggar!", this_object());
+	} else {
+// Is it the item we are interested in?
+		if (!what->id("elf head")) {
+			s = (string) what->query_name();
+			who->tell_me(sprintf(
+"Big troll says: Hmmh. Me no need this!\n\
+Big troll gives %s back to you.", s));
+			environment()->tell_here(sprintf(
+"Big troll says: Hmmh. Me no need this!\n\
+Big troll gives %s back to %s.", s, (string)who->query_name()));
+			move_object(what, who);
+			who->recount_weight();
+// Let's be sure carry rates are adjusted etc.
+		} else {
+			i = query_money();
+			i /= 2;
+// Let's only give half of what we have...
+// Note that we should check whether we still do have money left,
+// but let's try to keep this short.
+			who->tell_me(sprintf(
+"Big troll grunts VERY happily and kicks the elf head around.\n\
+Big troll gives you %d gold pieces as a reward.", i));
+			environment()->tell_here(sprintf(
+"Big troll grunts VERY happily and kicks the elf head around.\n\
+Big troll gives %s %d gold pieces as a reward.", i, (string)who->query_name()));
+			who->add_money(i);
+		}
+	}
+}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

@@ -1,0 +1,230 @@
+/****************************************************************
+*								*
+* Document:	moving.doc.					*
+* Relates to:	/lib/npc.c; used by #include <npc.h>		*
+* Version:	Version 1.00					*
+* Last update:	Last update 23-feb-96 by Doomdark.		*
+* Description:	Describes how to code NPCs that move either	*
+*		in random and/or follow their enemies.		*
+*								*
+****************************************************************/
+
+-------------------------------------------------------------------
+
+		Why Moving NPCs?
+		----------------
+
+Well. Everyone and their dog agrees in that dumb non-moving NPCs,
+that just stand there when you hit them, wait for you to heal at
+the next room when you flee and come back to finish the fight,
+are dull. I mean _really_ dull. While adding interaction by giving
+NPCs snappy chats, and making them respond to some keywords helps
+in making them bit more interesting, moving is definitely one way
+to easily add to atmosphere. Of course, this possibility should be
+used with care; not all NPCs have to move, nor should they (at least,
+shouldn't all follow you around...).
+
+There are basically two ways to make an NPC move automatically,
+without defining specific move paths. Namely; 'wandering'
+and 'following'. First one means that when NPC isn't engaged in
+combat, it can wander around to new rooms, and perhaps even find
+some unsuspecting poor adventurer to kill; the latter means that
+the NPC may follow its enemies when they flee.
+
+Both of these are easy to be added, without knowing much about
+coding things in general. There are 2 functions "set_wander"
+and "set_follow" (surprise, surprise...), in npc.c, that are
+used to make them happen. Also, unlike other ways with which
+they could be implemented (there are literally dozens of ways to
+do that, after all), when using these functions, you can be sure
+they will work after mudlib changes, and if not, it's the duty
+of mudlib coders to make sure they get ok again, not you... =)
+
+Also, one important restriction should be easy to be added;
+area(s) where NPC should be able to wander and/or follow its
+enemies. As you might have guessed, there is a function for this
+too: 'set(NPC_MOVE_AREA, ...)'. More about it later on...
+
+So. Let's take a look at these 3 functions along with few
+other functions often used in association with these ones:
+===================================================================
+void set_follow(int on_off, int f_delay, int f_count_max,
+int f_max_distance)
+
+DESCRIPTION:
+	When you want that a NPC follows its primary attacker
+	(ie. player that attacked it first!), when he/she flees,
+	this is the function to use. You define with it how
+	fast & how far NPC will follow the enemy.
+ARGUMENTS:
+	int on_off:
+		Whether to turn following on (1) or off
+		(0). So, usually you will use 1 here.
+	int f_delay:
+		Delay (in seconds) between enemy fleeing
+		and NPC following. This delay is used between
+		all the moves after the first one as well, so that
+		most of the time player has a chance to run away
+		faster than the NPC. Note also that even if you
+		use value 0, there is still a slight delay due to
+		behaviour of call_out()-efun. Default-delay is
+		1 second.
+	int f_count_max:
+		Maximum amount of rooms through which
+		the NPC follows; meaning that it will do max.
+		f_count_max moves when following single player.
+		Note that if the NPC catches the player, counter
+		is cleared, so that it will start from 0 if player
+		flees again.
+	inf f_max_distance:
+		Max. amount of rooms between followed
+		player and follower that is allowed before follower
+		"loses tracks". This value should generally be
+		smaller than f_count_max; perhaps something like
+		1 - 5 (to 'realistically' model hunting(?) ).
+NOTE:
+	The old way of doing set(NPC_FOLLOW_ATTACKER) actually
+	equals to calling 'set_follow(1, 1, 1, 1)'.
+	Also, note that following doesn't use heart_beat()-function,
+	unlike wandring (explained below).
+-------------------------------------------------------------------
+varargs void set_wander(int chance [, string *dirs])
+
+DESCRIPTION:
+	With this function, you can make the NPC wander around
+	when it's not engaged in combat.
+ARGUMENTS:
+	int chance:
+		Percentage chance of trying to move to a
+		neighbouring room at heart_beat (which happens
+		every 2 seconds).
+	[optional] string *dirs:
+		You can also define which exit directions you want
+		NPC to try when moving. If these are not specified,
+		all normal exits may be used. This argument can be
+		used, for example, to prevent NPC to use some
+		rarely occuring directions; ({ "east", "south",
+		"west", "north" }) would prevent NPC from going
+		"up" or "down", for example, even if there was
+		such an exit in the room NPC is in. Usually, though
+		it's better use function "set(NPC_MOVE_AREA, ...)"
+		when defining where monster should be allowed to
+		wander in.
+NOTE:
+	Wandering happens on heart_beat()-function. Now; when last
+	player leaves the room NPC is in, its heart_beat will
+	be stopped (sooner or later), and restarted when a player
+	arrives in the room. This effectively prevents NPCs from
+	wandering far when there are no players present. However,
+	as this isn't normally too good a thing, it's often useful
+	to use function "set_keep_hb" explained later on.
+-------------------------------------------------------------------
+void set_keep_hb(int value)
+
+DESCRIPTION:
+	With this function you can define that the NPC should
+	keep its heart_beat function running for some time
+	after the last player leaves the room.
+ARGUMENTS:
+	int value:
+		Defines whether heart_beat should be kept longer
+		(!= 0), or stopped (0) when last player leaves.
+		Note that you should always use values < 0, as this
+		indicates that heart_beat will only continue for
+		specified amount of heart_beats. Value 1 means
+		it will stay on always; but this is usually just
+		wasting CPU-time, as most of the time NPC doesn't
+		need the heart_beat but for a short period after
+		the last player leaves.
+		So; in practice, values you will be using are
+		in range of 0 ("normal" behaviour; should usually
+		be ok) and -300 (heart_beat will run for 10 minutes
+		after the last player leaves the room)
+NOTE:
+	Do not use this function unless you really have to. And if
+	you do use, use relatively small numbers; usually it's
+	enough to use value like -30 (hb 1 minute after etc.), to
+	allow it to move few rooms away so that it won't stay
+	at the same place player left it to (supposing it is a
+	wandering monster).
+	Also note that following is _not_ done with heart_beat;
+	thus, you don't need to use this function, if you simply
+	want your NPC to follow attacker(s).
+-------------------------------------------------------------------
+void set(int attribute, mixed value)
+[In this context:]
+void set(NPC_MOVE_AREA, string/string * allowed_area)
+
+DESCRIPTION:
+	set()-function is a general way to set wide range of
+	attributes. The interesting attribute here is the
+	NPC_MOVE_AREA, which defines "allowed" areas where the
+	monster can wander/follow enemies.
+ARGUMENTS:
+	string / string *allowed_area:
+		This can be either a string or an array of strings.
+		The string(s) describe filenames of the rooms this
+		NPC is allowed to move to. So, something like
+		"/areas/zoo" and "/areas/orctown/lvl1". When NPC
+		is about to move to another room, the filename of
+		the new room is checked against the "allowed move
+		area" (if one is set!); if matching directory is
+		found, move is ok, otherwise move won't be done.
+NOTE:
+	It's often good practice to prevent your NPCs from wandering
+	to places outside your area; especially from wandering to
+	Market Square of the main town... (poor newbies!).
+-------------------------------------------------------------------
+
+ Putting it all together:
+
+==================================================================
+
+ Let's examine an example of a simple NPC that both wanders around
+ (searching for enemies), and follows its enemies. Also, it's
+ restricted to move inside the area located in directory
+ /areas/example/ (and its subdirectories):
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+/*******************************************
+
+ NAME:    moving_npc.c
+
+ PURPOSE: Example for newbie coders.
+
+ AUTHOR:  Doomdark
+
+ *******************************************/
+
+#include <npc.h>
+// We have to include this file; it inherits /lib/npc.c and defines some
+// important constant values (gender, alignment levels etc.)
+
+void
+create_monster()
+{
+	set_name("big troll");
+	set_level(20);
+	set_race("troll");
+	set_gender(G_NEUTER);
+	set_alignment(AL_NASTY);
+	set_short("a big troll");
+	set_long("It is a big troll. Somehow it looks rather aggressive\
+ towards you... and apparently any other living being as well.");
+	set(NPC_AGGRESSIVE);	// Is aggressive towards all enemies!
+	set(NPC_MONS_AGGRESSIVE); // ... including other NPCs... *grin*
+	load_a_chat(10, ({
+"%<me.name>% says: Me hate Elfes!"
+	}));
+	set_wander(20);		// It will wander every 5th heart_beat
+				// (once every 10 seconds in average).
+	set_follow(1, 1, 20, 4);
+// It will follow enemies through at maximum 20 rooms, but it will
+// lose the tracks after 4 rooms if player is fast enough.
+	set_keep_hb(-150);
+// Will stay active for 5 mins after the player leaves the room it's in.
+	set(NPC_MOVE_AREA, "/areas/example");
+}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

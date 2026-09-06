@@ -1,0 +1,2 @@
+#include<emote.h>
+EMOTE( "~Name ~verbconcentrate on ~poss training and ~verbdecide on 'Two-Fisted Monkey Style Attack'!@@making like Fighter","~Name ~verbgrab ~targ and ~verbuse ~objt as a FIGHTERDOKEN!@@chucking ~targ at ~poss enemies")

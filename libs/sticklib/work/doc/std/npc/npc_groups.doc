@@ -1,0 +1,198 @@
+/****************************************************************
+*								*
+* Document:	npc_groups.doc					*
+* Relates to:	/lib/group_npc.c; used by			*
+*		#include <group_npc.h>. Also, relates to group	*
+*		daemon, /bin/daemons/groupd.c.			*
+* Version:	Version 1.1					*
+* Last update:	Last update 04-jan-96 by Doomdark.		*
+* Description:	Describes how you can code NPCs that fight as	*
+*		a group. No need to make your own kludgy	*
+*		solutions since our system can provide you	*
+*		simple (but very versatile) system to define	*
+*		such NPCs with little effort. :-)		*
+*								*
+****************************************************************/
+
+Sometimes, you probably want your NPCs to fight as a group; ie.
+if one is attacked, others will help. If your NPCs are aggressive,
+that's not problem, but if not, it will be. To help you create
+these "group npc"s, there is specialized npc; group_npc.c. You
+can use this either by including <group_npc.h> in your NPC-file
+(if it has a file), or cloning GROUP_NPC_FILE; this constant
+is defined in <npc_defs.h>.
+
+To form a group of NPCs is really easy. Simply call function
+"set_group" in the NPCs in question, with 1 argument; group name.
+Name should be unique; you can use group names like "doomdark_orcs",
+"asahi_guards" and so on. It doesn't really matter that much,
+the important thing is that each NPC belongs to the same group,
+and that's determined with group name.
+
+After you have set group in which the NPC is to belong to, you
+can customize messages your NPC will use when it's being attacked
+and calls for help, if they can't help other NPCs of the group,
+when asked, or can help. If you do not specify these, standard
+messages are used.
+
+Usually, only NPCs in the same room help in fight. However, if you
+want more control over how your NPCs should react, you can override
+function "group_attacked" in the group_npc.c. This is called
+when:
+
+a) NPC has been attacked; in this case, 1st argument == this NPC.
+   Normally, help is called now (ie. message is printed).
+   Return value defines further actions to be done; return value of 0
+   means no further calls are done to other members' group_attacked();
+   any other value means they will be called, after delay of approximately
+   2 seconds.
+b) Some NPC of the group has been attacked, and has called for
+   help. After short delay (1 heart beat ~= 2 seconds), other NPCs
+   of the group get their "group_attacked" called. It then normally
+   checks that we are in same room as the original attacked NPC; if not,
+   no further actions for this NPC are done. Otherwise, we will attack
+   the original attacker.
+
+By overriding this one function, you can create more complex
+strategies etc. For further information about how groups are handled
+(technically), check out group daemon, /bin/deamons/groupd.c. It
+keeps track of all npc groups in the game, and calling functions
+in other NPCs of the group etc.
+
+And then, the functions defined in group_npc.c,  along with their
+descriptions:
+
+===================================================================
+void
+set_group(string group_name)
+
+DESCRIPTION:
+	Defines to which NPC group this NPC belongs to. This in
+	turn defines which NPCs should be informed if this NPC
+	is being attacked (or, which NPCs will inform this NPC
+	if they're being attacked).
+	Argument is the name of the group we will belong to.
+	Please use some suitable unique group name; usually
+	combination of your coder name and some prefix/postfix;
+	something like "foobars_npcs" and so on.
+NOTE:
+	Remember to set same group name for all NPCs that you want
+	to belong to the group!
+-------------------------------------------------------------------
+void
+set_group_message(string msg_to_be_changed,
+ string new_msg1, new_msg2)
+
+DESCRIPTION:
+	With this function you can customize messages this NPC
+	prints when it's being attacked, or it should help other
+	NPC of the group in fight.
+	Arguments:
+	1st: Which message to change. Currently we have following
+	    messages in use:
+	- "ask_help_msg": String that will get printed when this
+			  NPC is being attacked. Check out example
+			  code!
+	- "cant_help_msg": String that will get printed if this
+			  NPC is being asked to help, but is
+			  already fighting.
+	- "can_help_msg": String that will get printed when we
+			  can help the NPC that asked for it.
+	2nd: Message to be printed to the attacker; can (and should)
+	    be a SSF-string (Stickmud String Format). For example:
+	    "%<me.name>% points at you and yells: Help!".
+	3rd: Message to be printed to the other players and monsters
+	    in the room; if this argument isn't used, 2nd argument is
+	    used for both. This can be an SSF-string too, like:
+	    "%<me.name>% points at %<him.name>% and yells: Help!"
+
+NOTE:
+	If you don't specify messages, default messages will
+	be used. You can check out, what these messages currently
+	are, from equipped_npc.c (currently, /lib/equipped_npc.c)
+-------------------------------------------------------------------
+
+ Putting it all together:
+
+==================================================================
+
+ Let's examine an example of a simple group NPC. See other
+ documentation (npc_modify_funs.doc etc.) for function descriptions
+ in case it's not explained here.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+/*******************************************
+
+ NAME:    example_group_npc.c
+
+ PURPOSE: Example for newbie coders.
+
+ AUTHOR:  Doomdark
+
+ *******************************************/
+
+#include <group_npc.h>
+// We have to include this file; it inherits /lib/group_npc.c and
+// defines some important values (alignment levels, gender types,
+// attack types...)
+
+void
+create_monster()
+{
+	set_name("dwarf guard");
+	set_race("dwarf");
+	set_id(({ "guard" }));
+	set_short("A big orc");
+	set_long("It is a short dwarf guard. It seems to guard this place\
+ with the other guards.");
+	set_level(15);
+	set_hp(300);
+	set_alignment(AL_NEUTRAL);
+	set_gender(G_NEUTER);
+	load_chat(8, ({
+"Dwarf guard stares at you like trying to estimate your tallness.",
+"Dwarf guard says: So, you are longer than me... So what?",
+"Dwarf guard says: Hmmm. Though I'm short, I can kill giants no problem!"
+	}));
+	load_a_chat(10, ({
+"Dwarf says: Taste this, you puffy over-sized weirdo!"
+	}));
+	set_group("example_dwarfs");
+	set_group_message("ask_help_msg",
+"Dwarf guard yells: Help me, fellas! This stupid %<him.race>% tries to\
+ kick my ass!\n\
+Dwarf guard points at you.",
+"Dwarf guard yells: Help me, fellas! This stupid %<him.race>% tries to\
+ kick my ass!\n\
+Dwarf guard points at %<him.name>%.");
+
+	set_group_message("cant_help_msg",
+"Dwarf guard glances briefly at you.\n\
+Dwarf guard yells: Hold on, brother, I'll first finish my first enemy;\
+ then we'll rip %<him.possessive>% guts!",
+"Dwarf guard glances briefly at %<him.name>%.\n\
+Dwarf guard yells: Hold on, brother, I'll first finish my first enemy;\
+ then we'll rip %<him.possessive>% guts!");
+
+	set_group_message("can_help_msg",
+"Dwarf guard says: Right on, let's show some manners to this pitiful
+creature!\n\
+Dwarf guard grins at you!",
+"Dwarf guard says: Right on, let's show some manners to this pitiful
+creature!\n\
+Dwarf guard grins at %<him.name>%!");
+}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+Good to know:
+
+If you need to use an _equipped_ group npc; ie. group_npc that uses
+some equipment; weapon, armour(s), item(s), there's also file
+named "equipped_group_npc.c" which you can use.
+Constant EQUIPPED_GROUP_NPC_FILE is defined by npc_defs.h,
+and to include the file as base object for your npc you can use
+'#include <equipped_group_npc.h>'. More info about equipping NPCs
+can be found from document file "equipping.doc" in same directory
+as this doc.
+------------------------------------------------------------------

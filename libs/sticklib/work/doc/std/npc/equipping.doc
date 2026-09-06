@@ -1,0 +1,260 @@
+/****************************************************************
+*                                                              *
+* Document:    equipping.doc                                   *
+* Relates to:  /lib/equipped_npc.c; used by                    *
+*              #include <equipped_npc.h>                       *
+* Version:     Version 1.00                                    *
+* Last update: Last update 23-aug-95 by Doomdark.              *
+* Description: Describes how NPCs that have equipment can (and *
+*              should) be coded. For more specific descriptions*
+*               of functions used, check out                   *
+*              "monster_modify_funs.doc".                      *
+*                                                              *
+****************************************************************/
+
+When you want to add some equipment for your NPC, there are lots
+of possibilities as to how to do it. However, the best method we
+currently have, is to use "equipped_npc". This will allow both
+adding equipment, and also picking up equipment that previous
+instance of this same npc has left here (when player has killed
+it etc.)
+
+Equipped_npc.c defines only 3 new functions for you to use,
+and these 3 all have common syntax. Functions are:
+
+       o add_weapon
+    o add_armour
+    o add_object
+
+With add_weapon you can add weapon that your NPC will wield,
+with add_armour armour(s) will wear, and with add_object some
+other miscellaneous item(s) it will have.
+
+With each you can either clone a standard object of the type
+(/lib/weapon.c with add_weapon, /lib/armour.c with add_armour
+and /obj/treasure.c with add_object, currently) and set it up,
+clone a standard weapon/armour provided by global weapon_/
+armour_server (no treasure_server, yet?), or clone the item you
+have coded in a dedicated file (ie. "/players/foobar/weapons/my_sword"
+etc.). Cloning standard objects as base and then setting them and
+using weapons/armours provided by servers are the preferred way, as
+they use less memory, but sometimes customized items are needed
+(ie. ones with their own file). This is true if you have to add
+special hits (weapons), wield/wear restrictions (weapons, armours),
+special commands player can use with the object and so on. 
+
+Note that in case you want equipped_npc.c to be cloned (from a
+room, for example), you can (and should) use constant
+EUIPPED_NPC_C defined by <npc_defs.h>. Note that there is _NOT_
+a header file called <equipped_npc_defs.h>, because this constant
+would be the only new constant to be defined in that file.
+Also note, that you usually need to include <weapon_defs.h>,
+<armour_defs.h> or <treasure_defs.h>, depending on with which items
+you want to equip your NPC with.
+
+And then, the functions along with their descriptions:
+
+===================================================================
+void add_weapon(string filename, string name, mixed *fcalls,
+   int pick_delay, string */ string pick_msg)
+
+DESCRIPTION:
+        With this functions you can equip your NPC with a weapon.
+        The function clones the weapon, sets it up with optional
+        function calls specified by argument 3, pust NPC to wield
+        the weapon, and then do call_out to check whether there
+        exists weapon like this in this room. When call_out is
+        executed, it'll check whether there is a such weapon
+        in the room (actually, any object of which id matches
+        argument 2 will do!), and if so, NPC takes it, prints
+        message specified as argument 5, and destructs the weapon.
+        Usually you will use message like "<My_NPC> takes the
+        <weapon_name> and wields it.", or something more imaginative.
+
+ARGUMENTS:
+        1st: string filename;
+          Specifies which item to clone. There are 3 possibilities:
+          - If arg. is 0, standard weapon object is cloned
+            (currently, /lib/weapon.c; WEAPON_FILE defined by
+            <weapon_defs.h>).
+          - If arg. is a string that _BEGINS WITH A SLASH_,
+            ("/players/xxx/weapons/sword" and alike), it will
+            clone the object with this filename).
+          - Otherwise, if it's a string, we'll call standard
+            weapon server (currently, /lib/weapon_server;
+            WEAPON_SERVER defined by <weapon_defs.h>), and
+            ask it to create weapon named of type 'arg'.
+            This is done by calling function "make_weapon"
+            in the server. Check out which standard weapons
+            are available from /lib/weapon_server.c's sources...
+        2nd: string name;
+          Specifies which item is considered same as the item
+          we will clone; this is to be able to pick up the item(s)
+          left in the room by 'previous' NPC of this type; usually
+          it was the NPC player(s) killed, and that is now being
+          reset. This should be unique enough name to prevent
+          picking other items. Usually name that you use with
+          function "set_name" in weapon's code is enough, but
+          any other id works as well. If you set this to 0,
+          this NPC won't try to pick up any item(s)
+        3rd: mixed *fcalls;
+          This is either 0, or array containing function calls
+          you use to set up this weapon. The array is of form:
+          ({ ({ "func_name1" [, "func_arg1", "func_arg2", ...
+            "func_argN" }),
+             ({ "func_name2" ... }),
+             ({ "func_nameN" ... })
+          })
+          So, every function call is defined by 1 array, and
+          1st element is the name of the function to be called.
+          Other elements are optional; if they are used, they
+          will be used as arguments to the function in question.
+          If this sounds confusing, don't worry... Examples at
+          the end of this document should make things quite a bit
+          clearer.
+        4th: int pick_delay;
+          Amount of delay (in seconds) there should be between
+          creating this NPC, and time NPC checks if this item
+          exists in the room it is in. You should usually use
+          quite small values, preferably something like 2 - 10
+          seconds. Note that only one item is checked at a time,
+          and first item added with any of these 3 functions
+          is first to be checked (2nd next and so on...).
+          If you specify 0 as delay, no check for existence
+          is done (same as if you specify name as 0!)
+        5th: string */string pick_msg;
+          Message to be printed if there is item like this
+          (specified by name, arg. 2) in this room when we
+          check this; usually something like:
+          "<Monster_name> notices <item_name> on the ground
+           and takes it.". If you have good imagination, please
+          try to think of something more imaginative, though... :-)
+
+NOTE:
+        Please use this function instead of just cloning item
+        manually. This is more efficient, and makes picking
+        up 'previous' items possible without any new coding.
+        This in turn helps make system more efficient.
+        Also, note that you usually have to set weapon class
+        of the NPC after adding weapon. This is because usually
+        NPCs have much higher weapon class than that of their
+        weapons have...
+-------------------------------------------------------------------
+void add_armour(string filename, string name, mixed *fcalls,
+    int pick_delay, string pick_msg)
+
+DESCRIPTION:
+        Same as above (add_weapon), except that instead of
+        weapon_server, armour_server is used, and that the armour
+        is naturally worn instead of wielded...
+NOTE:
+        Like with weapons, please do use this functions instead
+        of manually cloning (for same reasons than with weapons).
+        Also note that (exactly as with weapons) you usually
+        have to set armour class after adding armour(s).
+-------------------------------------------------------------------
+void add_object(string filename, string name, mixed *fcalls,
+  int pick_delay, string pick_msg)
+
+DESCRIPTION:
+        Same as with add_weapon except for that there is no
+        'treasure_server' so you have to either use standard
+        treasure object, or clone dedicated file-based object.
+NOTE:
+        Like with weapons & armours, please do use this function
+        for exactly same reasons.
+-------------------------------------------------------------------
+
+Now, let's take a look at an example equipped_npc that uses
+all these functions in different forms (standard object cloned,
+server-created object used, dedicated file-based object cloned):
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+/*******************************************
+
+ NAME:    example_equipped_npc.c
+
+ PURPOSE: Example for newbie coders.
+
+ AUTHOR:  Doomdark
+
+ *******************************************/
+
+#include <equipped_npc.h>
+// We have to include this file; it inherits /lib/npc.c and defines some
+// important values (alignment levels, gender types, attack types...)
+
+#include <weapon_defs.h>
+#include <armour_defs.h>
+// We have to include these to be able to set up equipment correctly.
+
+void
+create_monster()
+{
+   set_name("guardian elf");
+        set_id(({ "guardian" }));
+// Note: race is used as an id as well. No need to include it in id-list!
+     set_race("elf");
+        set_short("A guardian elf");
+    set_long("He is a big guardian elf guarding this place. He seems to\
+ be heavily equipped. He eyes you rather suspiciously.");
+   set_level(25);
+  set_hp(500);
+    set_alignment(AL_NEUTRAL);
+      set_gender(G_MALE);
+     load_chat(8, ({
+"Guardian elf stares at distance.",
+"Guardian elf says: Those Orcs are really ugly... Have killed quite a few!",
+  }));
+    load_a_chat(10, ({
+"Guardian elf shouts: Intruder! Orc invasion! Reinforcements!",
+"Guardian elf yells: Surrender, you fool!"
+     }));
+
+// Now... Let's equip this NPC! Let's first add standard weapon,
+// and set it up with function calls.
+
+        add_weapon(0, "bastard sword", ({
+            ({ "set_name", "bastard sword" }),
+            ({ "set_id", ({ "sword" }) }),
+            ({ "set_short", "a bastard sword" }),
+            ({ "set_long", "It's a long bastard sword, typically used by\
+ guards." }),
+            ({ "set", WP_TWO_HANDED }),
+            ({ "set_weight", 5 }),
+            ({ "set_wc", 16 })
+        }), 4, "Guardian elf notices a bastard sword on the ground,\
+ takes it, and swings it a while above his head.\n\
+Guardian elf says: C'mon Orc wimps! Make my Day!\n\
+Guardian elf grins evilly.");
+
+// Also, let's add one armour... let's say... scale mail.
+// For this, let's use centralized armour serve!
+
+	add_armour("scale mail jacket", "scale mail jacket", 0,
+// No need to customize.
+            5, "Guardian elf takes the scale mail.");
+
+// Finally, let's add a valuable item. Note that by default
+// add_object uses standard treasure object.
+
+        add_object(0, "red jewel", ({
+            ({ "set_name", "red jewel" }),
+            ({ "set_id", ({ "jewel" }) }),
+            ({ "set_short", "a red jewel" }),
+            ({ "set_long", "It's a small, precious-looking red jewel." }),
+            ({ "set_value", 400 }),
+            ({ "set_weight", 1 })
+        }), 6, "Guard notices the red jewel on the ground, and quickly\
+ picks it up.");
+}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+Good to know:
+
+You can use weapon and armour servers in other places too. Also,
+it's useful to check out documents describing creating weapons,
+armours, and other miscellaneous items.
+------------------------------------------------------------------

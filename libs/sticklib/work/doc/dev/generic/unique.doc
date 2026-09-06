@@ -1,0 +1,272 @@
+/****************************************************************
+*								*
+* Document:	unique_items.doc.				*
+* Relates to:	/bin/daemons/uniqued.c, /include/unique.h,      *
+*             /include/unique_weapon.h, /include/unique_armour.h*
+* Version:	Version 1.00					*
+* Last update:  Last update 03-jan-96 by Doomdark.		*
+* Description:  Describes how you can make items unique or      *
+*               pseudo-unique.                                  *
+*								*
+****************************************************************/
+
+                GENERAL
+                =======
+
+What Does (pseudo-)Uniqueness Mean?
+-----------------------------------
+
+It means that there will either be only 1 item of an item class
+(fully unique items), or at most a fixed amount of items (pseudo-
+unique items) in mud at any given time.
+
+Why Make Items (pseudo-)Unique?
+-------------------------------
+
+In mud, we constantly see how there's 'power inflation'; weapons,
+armour, monsters that once were hot are becoming less and
+less interesting. Main reason for this is 'power hungriness' of
+coders. It's understandable that we want to create new and
+interesting things; better items, nastier monsters... But we should
+take care that these do not endanger game balance. One way to
+address this problem is using unique/pseudo-unique items. So,
+you _can_ make new powerful items, if they are very rare.
+Note that there still are some fixed max. stat. limits,
+and restrictions (ie. that max. damage for weapon is only
+against certain types of NPCs or something like that).
+These restrictions are described in detail in other
+doc-files (or if not yet, will be =) )
+
+How Can I Code a (pseudo-)Unique Item?
+--------------------------------------
+
+To make your life easier, we have coded a daemon to handle everything
+that has to do with unique items; keeping track of different uniqueness
+classes, keeping track of amount of unique items of each item class
+currently in game and so on.
+There are many ways you can use the unique daemon (/bin/daemons/uniqued.c).
+We have defined two specialized unique items; unique_weapon.h and
+unique_armour.h to make coding unique weapons and armours as easy as
+possible. Another way is to use unique daemon directly. Let's look
+at both ways:
+
+----------------------------------------------------------------------
+
+
+If you choose to use unique daemon directly, you do as follows:
+
+1. You decide where you want to check if we can have another item
+   of the (pseudo-)unique item class. It's usually done either in
+   code that clones the item in question (in room code, in monster
+   code), or create_-function of the item to be cloned.
+   (unique_armour.h/weapon.h use the latter method, by the way)
+2. You create the unique class with a distinct name. Don't worry
+   about creating it multiple times; unique daemon takes care only
+   first time is meaningful (meaning you can call create-function
+   every time; makes life easier).
+   Call will be something like:
+
+   UNIQUE_D->create_unique("doomdarks_super_sword", 4);
+
+    This call would create a unique class named
+    "doomdarks_super_sword" with 4 available slots; if such
+    unique class already exists, daemon does nothing.
+
+    Usually, it's good practice though, to use filename of
+    the object as name of the unique class. Note that if the
+    filename has clone number at end of it, it's discarded
+    (ie. you don't have to remove it yourself).
+    So, another (perhaps better) way to define a unique
+    class for your item would be:
+
+    UNIQUED->create_unique(object_name(this_object()), 4);
+
+    (if called from inside item's code; otherwise argument for
+    object_name would be something else)
+
+    Whatever the name you choose for the unique class,
+    it doesn't matter much; important thing is that name should
+    be distinct so that your weapons wouldn't "use" slots of
+    other coders' unique items (and if this sounds confusing,
+    don't worry... using unique items is easy enough even without
+    understanding all the text in this document!).
+
+2. Now, check if there's still "available slots" for this item
+   in the unique class this item is to belong to. This is done
+   for example like this:
+
+   if (UNIQUE_D->query_unique("doomdarks_super_sword")) { .. }
+
+   If the query returns true (1), there is at least one free slot
+   in the unique class in question, otherwise not. The name of the  
+   class needs to be the same as in the call to create_unique().
+
+3. Depending on the answer, you proceed as follows:
+ I: Was a free slot left:
+  a) If you checked this at create_xx of the item itself, set up item
+    as "the genuine", (pseudo)unique one.
+  b) If you checked it at place where the item would be cloned,
+    you clone the unique item.
+ II: No free slot:
+  a) If you checked this at create_xx of the item itself, set up the
+     the item as "inferion one"; the item that has poorer stats.
+     Usually this means a weapon with lower wc, armour without
+     stat boosts and so on.
+  b) If you checked it at place where the item would be cloned,
+     you can skip cloning, or perhaps clone something completely
+     different (or just clone an inferior one, like in previous
+     alternative).
+
+4. If you did get to clone/create a (pseudo)unique item, you now
+   have to inform the unique daemon that it should reserve a slot
+   for it. Call might look something like this:
+
+   UNIQUE_D->add_unique("doomdarks_super_weapon", this_object());
+
+   if called from the object that was set unique, or:
+
+   UNIQUE_D->add_unique("doomdarks_super_weapon", ob);
+
+   if called from, say room, that cloned the unique object.
+
+5. Voila. There you go... Unique daemon now keeps track of all the
+   unique items in the class, and when one is destructed, will
+   remove it from the list, thus freeing a slot for new one.
+
+----------------------------------------------------------------------
+Now... If you want an easier way for a (pseudo)unique weapon or
+armour, you probably should use <uniquer_weapon.h> or <unique_armour.h>.
+Let's take a look at how these can be used;
+
+1. In create_weapon (when using unique_weapon.h) or create_armour
+   (when using unique_armour.h), you call "set_unique" with 4
+   arguments to check if there's a free slot for this item,
+   and also randomizes result, so that it won't _always_ be a
+   unique one, even if there was a free slot for it.
+   Call looks something like this:
+
+   if (set_unique(object_name(this_object()), UNIQUENESS_PARTIAL, 4, 1)) {
+    ....
+   }
+
+   if "set_unique()" returns true (not 0), there was a free slot,
+   which now is reserved for this item; if 0, there either was no
+   free slot available, or, unique_weapon/armour.h randomly decided
+   not to use the free slot. The returned value (if != 0) is
+   amount of free slots before reserving one for new item.
+
+   Arguments are:
+   1st argument: string; name of the unique class.
+   2nd argument: a constant; used for defining whether this is a
+    fully unique (UNIQUENESS_FULL) or pseudounique (UNIQUENESS_PARTIAL)
+    item.
+   3rd argument: number; max. amount of unique items this class can have.
+   4th argument: number; number of items that will _always_ be unique;
+    after this, there's random chance of _not_ using a free slot, even
+    if there was one. In this example, 1 means that the first item will
+    always be a unique one, after that 25% chance next one won't be
+    unique one, after 2nd unique one 50% chance next one won't be
+    unique one, and so on. This is to make things more interesting;
+    first ones aren't _always_ unique ones. Also... players can't be
+    sure whether 'last' unique one has already been got.
+
+2. Depending on return value of set_unique, you now set up the item
+   either as a (pseudo)unique (superior) one, or 'normal' (inferior)
+   one.
+
+And there it was... :-) 
+----------------------------------------------------------------------
+
+Now let's look at
+examples of these two methods (using daemon directly, or through
+unique_weapon/armour.h) (first the latter one as it's shorter):
+
+----------------------------------------------------------------------
+// Example of using <unique_weapon.h>; one using <unique_armour.h>
+// would look quite the same
+
+#include <unique_weapon.h>
+
+// The weapon creation is minimal; do use better descs and other things
+// folks... 8-)
+
+void
+create_weapon()
+{
+	if (set_unique(object_name(this_object()), UNIQUENESS_PARTIAL, 5, 1) {
+		set_name("gigantic silver sword");
+		set_id(({ "silver sword", "sword" }));
+		set_long("It looks deadly!");
+		set_wc(20);
+		set_weight(4);
+		set(WP_TWO_HANDED);
+	} else {
+		set_name("small silver sword");
+		set_id(({ "silver sword", "sword" }));
+		set_long("It looks quite deadly.");
+		set_wc(13);
+		set_weight(2);
+		set(WP_ONE_HANDED);
+	}
+}
+
+----------------------------------------------------------------------
+// Now example of doing the very same weapon directly from the room
+// code (and no; no way anyone should add items like this anywhere
+// at reset_room!)
+
+#include <room.h>
+#include <unique.h>
+#include <weapon_defs.h>
+
+object sword;
+
+void
+reset_room()
+{
+// If sword is here, won't clone a new one. Btw, usually, you would
+// naturally use add_object() but this is just an example... :-)
+
+    if (sword_here && present(sword, this_object())) return;
+    sword = clone_object(WEAPON_FILE);
+
+// Can't use filename as we clone the standard weapon object!
+
+    UNIQUE_D->create_unique("doomys_cool_sword", 4);
+
+// Note that we'd need to add some randomizationh here, probably, as now
+// first 4 swords will always be the superior, unique ones.
+
+    if (UNIQUE_D->query_unique("doomys_cool_sword")) {
+        UNIQUE_D->add_unique("doomys_cool_sword", sword);
+	sword->set_name("gigantic silver sword");
+	sword->set_id(({ "silver sword", "sword" }));
+	sword->set_long("It looks deadly!");
+	sword->set_wc(20);
+	sword->set_weight(4);
+	sword->set(WP_TWO_HANDED);
+    } else {
+	sword->set_name("small silver sword");
+	sword->set_id(({ "silver sword", "sword" }));
+	sword->set_long("It looks quite deadly.");
+	sword->set_wc(13);
+	sword->set_weight(2);
+	sword->set(WP_ONE_HANDED);
+    }
+
+    move_object(sword, this_object());
+    tell_here("You notice a sword on the ground!");
+// Always remember to notify players!!!
+}
+
+void
+create_room()
+{
+    set_short("An example room");
+    set_long("This is an odd example room, coded by Doomdark the Strange.");
+    set_light_level(LT_LIGHTS);
+    set(ROOM_WD, WD_OUTDOORS);
+    reset_room();
+}
+
+----------------------------------------------------------------------

@@ -1,0 +1,105 @@
+All requests include a name & and id. These will be passed into your java applet as it starts (I don't know how to do this, btw!).
+
+When you send a request, it will be formatted something like this:
+
+<----- Server Path (same each time) -----><---- Parameters (vary) ----->
+http://204.17.51.174/active/mapserver.cgi?name=acius&id=12344&comm=version
+
+Every request is formatted like this. If we find a good way to set up the applet, then the first part (the Server Path) might be passed into the applet from the web page that launches it. If we don't find a good way to do that, then it'll be configurable from within the program.
+
+The second part (after the ?) are the parameters that you pass into the map server. Don't forget to do URL hashing on them before passing them. The name and id will also be static for the session (btw, logins time out after some amount of time, about fifteen minutes? -- if their is no activity for 10 minutes, it might be a good idea to send a dummy command to the server so that the login will remain current).
+
+The only field to vary, then, is the comm field. This is the command you send to map server, and it will answer in XML with a result. BTW, I don't know if there are any obligatory opening/closing/etc. tags for XML.
+
+All of the commands can potentially return error values. The errors are of the form
+
+<Error message="A description of the error"/>
+
+-- you should always check to see if this is what you received back.
+
+COMMANDS
+--------
+
+comm=version
+Returns a string of the form
+
+<version name="map server version 1.0"/>
+
+comm=contents(objref)
+where objref is an object reference (such as world;reality;coco;north;beach1 -- btw, the 'world;' may be shortened to a simple ';' prefix). Returns all the areas inside of the object referenced recursively (although at least for the moment it will *not* find areas inside of rooms, i.e. buildings). For comm=contents(world) it might look like:
+
+<Area name="world">
+  <Area name="reality">
+     <Area name="coco" />
+  </Area>
+  <Area name="start" />
+</Area>
+
+comm=roominfo(arearef)
+Fetches information on the area and the rooms in arearef. Coordinates are relative to the area, so to get world coordinates add the x, y, z of the area.
+
+For example, 
+
+roominfo(world;reality;coco)
+
+might return:
+
+<Area ref="world;reality;coco;north" x="4090" y="4080" z="32" xlen="10" ylen="12" zlen="1">
+   <Room name="beach1" short="The Beach" long="You stand on the shores of the sun-glazed bleach, etc. Can we do \"quotes\" in the description like this? How about\n\nnew lines?">
+      <Exit dir="north" dest="env;beach2" type="walk"/>
+      <Exit dir="south" dest="env;sebeach5" type="walk"/>
+      <Cell x="12" y="13" z="0" />
+      <Cell x="12" y="14" z="0" />
+      <Cell x="13" y="13" z="0" />
+   </Room>
+   <Room name="beach2" short="The Beach" long="The beach stretches over the ocean's waves">
+      <Exit dir="north" dest="env;beach3" type="walk"/>
+      <Exit dir="south" dest="env;beach1" type="walk"/>
+      <Cell x="12" y="12" z="0" />
+   </Room>
+</Rooms>
+
+The <Cell> tag was added as a quick way for you to figure out which cells on the map are occupied by a single room.
+
+Some things to pay attention to: You'll notice that some of the "worldwide" areas are absolutely enormous. You can tell that these are not "real" areas because they have a zlen of 0, and an 8192x8192x0 grid still has zero cells in it. These areas do have a height, but I haven't included it here because it is not filled with a grid and not important for you. In a nutshell: Areas which have a zlen of 0 are only important for organizing other areas into groups (like folders). They will not contain rooms.
+
+comm=intersect(arearef)
+Returns a list of all cell coordinates for which the cell is owned by another area. Coordinates are relative to the area.
+
+---- Everything above this line is implemented, everything below it is not. ------
+
+<Intersections>
+   <I x=10 y=10 z=0 />
+   <I x=11 y=10 z=0 />
+   <I x=10 y=11 z=0 />
+   <I x=11 y=14 z=1 />
+</Intersections>
+
+The remainder of the commands are used for writing data back to the MUD. They will return either
+
+<ok/>
+
+or an error, as defined above.
+
+comm=setroom
+area=world;reality;coco
+(optional) newname=deepcave
+roomname=cave
+short=A dark cave.
+long=This is a really dark cave.  You can tell because you can't see jack.
+exits=east,env;spring,walk|west,env;cave2,walk
+cells=5,5,0|4,5,0
+name=bob
+id=abc123
+
+-- Used to change the values for an exisiting room, or create a new room.
+
+comm=deleteroom
+area=world;reality;coco
+roomname=deepcave
+name=bob
+id=abc123
+
+-- Used to delete a room from the area.
+
+It is expected that you will usually send these incrementally. There is no "save" button, as such. Pehaps we can add one later, but the MUD might not be able to load it :-P.

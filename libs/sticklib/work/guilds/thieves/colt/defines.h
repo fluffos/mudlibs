@@ -1,0 +1,8 @@
+#define TP this_player()
+#define TO this_object()
+#define QRN query_real_name()
+#define QN query_name()
+#define QLEV query_level()
+#define QSTR query_stat(ST_STR)
+#define QDEX query_stat(ST_DEX)
+#define QTTH query_sk_throw()

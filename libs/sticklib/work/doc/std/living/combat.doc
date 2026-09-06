@@ -1,0 +1,383 @@
+/****************************************************************
+*								*
+* Document:	combat.doc.				        *
+* Relates to:	/obj/living.c. Used by standard npc (Non-Player	*
+		Character) and player objects (inheritted by).	*
+* Version:	Version 1.0					*
+* Last update:	03-jan-96 by Doomdark.				*
+* Description:	Describes functions used when handling combat;  *
+*               those that are common for NPCs and players.     *
+*								*
+****************************************************************/
+
+There are a few functions to be used when doing things related to
+combat; inflicting damage on a living object; making a living
+attack another object, or stopping a fight. None of these things
+should be done by altering variables found from living.c; instead,
+these should be done by using functions described in this document.
+
+
+
+			GENERAL:
+			--------
+
+There are only 3 variables used in living.c to contain info about our
+figting status now:
+
+static int attackers;       // Amount of attackers we really have now.
+static object *attacker;    // Array of attackers; sizeof(attacker) may
+                            // be bigger than attackers because we aim for
+			    // efficiency; shrinking & expanding arrays
+			    // is quite costy. Thus, minimum size for
+			    // attacker array is kept as 4, after first
+			    // attack. Before that, the array is empty
+			    // (-> size == 0).
+static object *hunted;      // Living objects we are hunting; those living
+                            // objects we have either attacked, or been
+			    // attacked by, but which are either fled, or
+			    // from which we are fled. This array is used
+			    // so that we'll be aggressive towards these
+			    // enemies if/when we meet them next time.
+
+Earlier, two objects were used instead of an array;
+attacker_ob and alt_attacker_ob. Some old code still relies on these being
+ok; however, they're not used. They will _always_ be 0. Reason they are not
+removed from living.c altogether (yet) is compatibility. Some code would
+break if they were removed; later we will remove them though...
+
+When there is a combat going on, hitting is done from the heart_beat()-
+functions of the combatants, as long as there are enemies in the same
+room and living is not dead.
+Function that is called from heart_beat is attack(); attack returns 1
+if there is still a fight going on, 0 otherwise.
+
+And now the functions in alphabetical order:
+----------------------------------------------------------------------------
+int
+add_hp(int amount, int mode)
+
+DESCRIPTION:
+    Is used to add/reduce hit points a living has.
+ARGUMENTS:
+    int mode: If this is 0, living object in which this is called can't die
+        or go mortally wounded; otherwise it can.
+RETURNS:
+    Amount of hit points living has left. May be negative, if living
+    object in question is a player, and has gone mortally wounded.
+NOTE:
+    Reason for mode flag is that originally, intention was that one
+    could only kill living objects with hit_player. However, sometimes
+    we don't want (or can't) initiate the attack; for example, if we
+    have some death traps, and alike.
+EXAMPLES:
+    To reduce hit points, say, when player falls down from the rood:
+
+    this_player()->add_hp(-20, 1);      // Player fell down from the roof.
+
+    If you just want to reduce hit points, without wanting to kill him/her/it:
+
+    this_player()->add_hp(-10, 0);
+    this_player()->tell_me("Your head aches from terrible hangover!");
+----------------------------------------------------------------------------
+int
+attacked_by(object attacker, int flags [, living_flags])
+
+DESCRIPTION:
+    Notifies a living object that it's being attacked by another
+    living object, OR tests whether such attack is possible
+    (for example, to prevent PK when not allowed).
+    If it's a 'real' attack, can either add attacker object as
+    the last or first element of the attacker array of the
+    attacked living object.
+ARGUMENTS:
+    object attacker:
+        Living object that tries to attack, or the one that tests
+	if it could attack.
+    int flags:
+        Three possible value ranges;
+	0 -> Initiate the attack; add 'attacker' to the end of
+             attacker list of attackee, if it's not already in
+	     there.
+	1 (any value over 0 actually) -> Initiate the attack;
+	     add 'attacker' to the beginning of the attack list of
+             attackee, if it's not already in there. If it is, move
+             it as the first object; meaning that it will be the
+	     primary opponent when fighting
+	-1 (any value below 0 actually) -> Test if the attack
+	     would succeed. Does NOT initiate the attack. Is used,
+	     at the moment, to check if it's ok for a player to
+	     attack another player, but may later be used to test
+	     attacking in general (if you are unable to attack
+	     certain NPCs and such).
+    int living_flags:
+        Internal living flags attacker has; not used by other
+	objects than the mudlib standard objects (living.c, npc.c,
+	player.c). If you mask this function, you should pass them
+	to the masked function, however. Is used for efficiency;
+	one call_other less needed when initiating attack.
+RETURNS:
+    True (1) if attack either succeeded (flags >= 0), or would succeed
+    (flags < 0).
+NOTE:
+    If 'attacker' isn't already fighting the living in which this
+    function is called (and attack succeeds), the attacked living
+    object gets the first hit; this is because attacked object isn't
+    added to attacker's attacker list! If you want attacker to get
+    first hit, you should either use attack_object, or call attacked_by
+    on both attacker and attackee. Prefered method is usually
+    attack_object.
+    Also; group_npc.c masks attacked_by, and calls for help when it
+    gets attacked. Thus, if you choose to call attacked_by in both
+    objects, it might give 'false' alarms. Idea is that attacked_by
+    should only be called in attacked_object.
+EXAMPLE:
+    To attack an enemy (note that it can fail too!):
+
+    if (enemy->attacked_by(this_player(), 0)) {
+        enemy->tell_me(sprintf("%s attacks you!",
+	    (string) this_player()->query_name()));
+        this_player()->tell_me("Ok!");
+    } else {
+        this_player()->tell_me(sprintf("Can't attack %s!",
+	    (string) enemy->Objective()));
+    }
+
+    To test if we could attack an enemy:
+
+    if (enemy->attacked_by(this_player(), -1)) {
+        this_player()->tell_me("Could attack!");
+    } else {
+        this_player()->tell_me("Couldn't attack!");
+    }
+----------------------------------------------------------------------
+int
+attack_object(object attackee, int flags)
+
+DESCRIPTION:
+    Initiates a fight between the living in which this functions is
+    called (from now on referred to as attacker), and attackee given
+    as 1st argument. Depending on 2nd argument, may also do the first
+    hit.
+ARGUMENTS:
+    object attackee:
+        Object attacker should attack.
+    int flags:
+        Currently only one flag, bit 0; if it's 0, attacker will also
+	hit attackee (attack() gets called); if it's 1, no attack is
+	done. Reason for this is that formerly, attacker _always_
+	hit attackee when this function was called. Thus, for compatibility,
+        we chose to use value 1 to mean _not_ to hit.
+RETURNS:
+    True (1) if attack was succesful (or if attacker was already
+    figting with attackee); 0 if attack couldn't be done (for example,
+    both attacker and attackee were players without PK-stamp, and
+    the room is a NO-PK room).
+NOTE:
+    This function sets up both attacker's and attackee's attacker lists
+    so that each one 'is fighting'. This is unlike with attacked_by,
+    which only sets _attackee's_ attacker array!
+    If you call attack_object with 2nd argument 1, it's not sure which
+    object (attackee or attacker) gets the first hit; this depends on
+    order in which heart_beats are called, and can be considered as
+    being close to random... :-).
+    Note that when you do want to initiate a combat, say, after player
+    casts a spell, _DO_ use 2nd argument 1. There's no need to give
+    player an extra hit when they're casting (actually, should perhaps
+    _prevent_ next 'normal' hit but...).
+EXAMPLES:
+    To initiate the combat when casting a spell or using a combat skill
+    (along with testing if we can initiate the combat!),
+    you could do something like:
+
+    if (this_player()->attack_object(enemy, 1)) {
+// Do the attack skill/spell and print appropriate messages
+        ...
+    } else {
+        this_player()->tell_me("Couldn't attack!");
+    }
+----------------------------------------------------------------------
+object
+is_fighting([object enemy])
+
+DESCRIPTION:
+    Is used to either check if we're fighting with a specific living
+    object, or in general.
+ARGUMENTS:
+    object enemy: Optional argument; if used, is the living object
+        we're checking. Ie. If it's != 0, we will check if this living
+	is fighting the object given as argument. Otherwise we check
+	if this living is fighting _any_ living object. Note that
+	this function does test that enemy(enemies) in question
+	is(are) in the same room as this living; no need for further
+	checks.
+RETURNS:
+    If argument == 0:
+        Object that is our primary enemy, if any; otherwise 0.
+    If argument != 0:
+        Object given as argument, if we're fighting that object,
+	otherwise 0.
+NOTE:
+    It's almost always better to use is_fighting() than query_attack()
+    or query(LIV_ATTACKERS), if you simply want to know if we are
+    fighting someone (or anyone).
+EXAMPLES:
+    To test if we can do something that's impossible during a fight,
+    we could do:
+
+    if (this_player()->is_fighting()) {
+        this_player()->tell_me("Not now, you are fighting!");
+        return 1;
+    }
+    ... Do what we're supposed to, when not fighting...
+
+    Or, to check if we're fighting a customer, from the code of
+    the seller, we could use:
+
+// Need to have add_action, if this is in the code of the seller:
+int
+buy_cmd(string s)
+{
+    if (is_fighting(this_player())) {
+        this_player()->tell_me("Seller growls at you...\
+ So much for buying anything!");
+        return 1;
+    }
+    ... Otherwise check the command...
+}
+
+----------------------------------------------------------------------
+int
+hit_player(int damage, int damage_type, int hit_class, object hitter)
+
+DESCRIPTION:
+    Is used to cause damage to a living object. May kill the object
+    in question or put it mortally wounded.
+ARGUMENTS:
+    int damage:
+        Amount of damage we want to inflict, in hit points.
+    int damage_type:
+        Type of damage we are doing. HAS TO BE USED. We will some
+	day have rings of fire resistance, spells of protection
+	against certain damage type(s) and such. Some creatures
+	might also have intrinsic protection against certain
+	damage types.
+    int hit_class:
+        How accurate hit is; value should be in range of
+	10 (very accurate) and -10 (rather inaccurate). Won't affect
+	the damage, but will affect the fact if we hit the enemy.
+	Will be used more in the future (daggers will hit more easily,
+	for example, while not doing any more damage and so on?)
+    object hitter:
+        Living object doing the hitting. SHOULD BE USED! If this is
+	0, this_player() is used (which often is the 'correct' one;
+	however, it's better to define which object it is for sure!).
+RETURNS:
+    Amount of damage done, in hit points.
+NOTE:
+    If 'hitter' isn't yet in the attacker list, it will be added there
+    and combat is initiated. This means that even if attacked_by
+    (or attack_object()) wasn't called, there will be a fight when
+    we're first attacked by another living (some stupid guild coder
+    has forgot to initiate_combat, just does damage, and such...).
+EXAMPLES:
+    A dragon breathing fire might do something like
+    (code is part of the dragon's attack code):
+
+// Damage between 40 and 70 before modifications (AC, tumbling...)
+// and damage type FIRE. Hit class quite good; bound to hit.
+    enemy->hit_player(40 + random(31), DT_FIRE, 5, this_object());
+----------------------------------------------------------------------
+mixed
+query(int attribute)
+
+DESCRIPTION:
+    General query-function; explained more thoroughly in
+    living_query_funs.doc. However, here are explained attributes we do
+    need when handling combat.
+ARGUMENTS:
+    int attribute: Lots of choices... Ones we are interested in here are:
+
+    LIV_ATTACKERS:
+        Returns the array of attackers living has. May contain NULL
+	objects as well as some objects that have fled.
+	To get 'cleaner' array, do use next attribute:
+    LIV_REAL_ATTACKERS:
+        Returns the array of attackers living really has; meaning
+	that all destructed objects, and the ones that are no longer
+	in same room, are removed from the array. Returned array
+	contains only as many elements as living has enemies.
+
+RETURNS:
+    - Depends on arguments; explained along with them -
+NOTE:
+    You quite seldom need the attacker list... Usually it's enough
+    to use is_fighting() or perhaps query_attack(). However, for
+    some odd spells (an area spell, perhaps?), these may be needed.
+    Also, for debugging purposes these are handy. :-)
+EXAMPLES:
+    -
+----------------------------------------------------------------------
+object
+query_attack()
+
+DESCRIPTION:
+    Returns the primary enemy; living object we are currently fighting,
+    if any. Note that this function does check that the object does exist
+    (ie. != 0) and is present in the environment() of living this function
+    is called in.
+ARGUMENTS:
+    - None -
+RETURNS:
+    Living object that is our primary enemy, or 0 if we are not fighting.
+NOTE:
+    Usually, is_fighting() is the natural choice... Without arguments,
+    it actually returns the same object as this function!
+EXAMPLES:
+    enemy_ob = (object) this_player()->query_attack();
+----------------------------------------------------------------------
+void
+stop_fight(object ob [, int flags])
+
+DESCRIPTION:
+    Makes the living object to stop fighting the object specified by
+    the argument. Note that you need to call stop_fight in both
+    living objects, if you want to stop the fight; otherwise the other
+    one will keep hitting, making first one aggressive again.
+ARGUMENTS:
+    object ob:
+        Object with which combat is to stop. Earlier was optional; now it
+	should always be used. If no argument specified, will stop fighting
+	the primary enemy.
+    int flags:
+        Optional flags specifying how we should stop fight. If it's 0,
+	object ob is removed from the attacker list of this living object
+	and the list of hunted living objects.
+	If flag is 1, we won't actually stop the fight, but instead,
+	move the object ob to the end of the attacker list. This is done,
+	for example, when a player goes mortally wounded. His/her enemies
+	will then turn attack other enemies, if there are any, and will
+	return hitting the poor mortally wounded one after others flee
+	(or are killed).
+RETURNS:
+    - Nothing -
+NOTE:
+    Usually, you need to call stop fight in both objects to stop the
+    fight. However, sometimes it's enough to make one stop the fight;
+    when the other one dies and such. Also, for players' "stop"-command
+    (that only works for other players), stop_fight is only called
+    on the player that wants to stop PK fight. This allows the other
+    player to continue the fight.
+EXAMPLES:
+    To stop the fight on some condition (in some monster's code):
+
+    if (... test for ending the fight ... ) {
+        stop_fight(enemy);
+	enemy->stop_fight(this_object());
+    }
+----------------------------------------------------------------------
+
+/****************************************************************
+*								*
+*			That's all folks!!!			*
+*								*
+****************************************************************/

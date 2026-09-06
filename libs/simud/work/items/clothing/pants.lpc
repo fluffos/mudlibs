@@ -1,0 +1,15 @@
+inherit "/items/clothing/clothing";
+
+NAME( "linen pants" )
+FLEXIBLE( 1 )
+GETTABLE( 1 )
+DROPPABLE( 1 )
+SPECIFIC( "the pair of linen pants" )
+DISTANT( "a pair of linen pants" )
+LOOK( "A coarsely-sewn pair of linen pants. They cover the essentials and can somewhat keep out the cold. One would hardly call them fashionable, however." )
+ALT_NAME( ({ "pants", "clothing" }) )
+PLURAL( "pairs of linen pants" )
+ALT_PLURAL( ({ "pairs", "pairs of pants" }) )
+SIZE( 20 )
+BODY_PARTS( BP_PANTS )
+WEIGHT( 200 )

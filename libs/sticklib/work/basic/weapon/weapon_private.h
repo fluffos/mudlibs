@@ -1,0 +1,15 @@
+#ifndef _WEAPON_PRIVATE_H
+#define _WEAPON_PRIVATE_H
+
+#define	F_WP_RESET_USED		1
+#define	F_WP_IS_ORIGINAL	4
+#define	F_WP_NOT_CREATED_YET	8
+#define	F_WP_TWO_HANDED		16
+#define	F_WP_BLUNT		32
+#define	F_WP_TROLL_WEAPON	64
+#define	F_WP_POISONED		128
+#define	F_WP_STAYS_SHARP	256
+#define	F_WP_TROLL_1H		512
+#define	F_WP_LEFT_WIELDED	1024
+
+#endif
