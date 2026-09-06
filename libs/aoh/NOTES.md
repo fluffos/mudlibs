@@ -67,8 +67,9 @@ play itself left no other catch lines.
 
 ## 4. What is not ported yet
 
-Full OSB/AOH world (Silvere city, inn, harbourmaster, shipyard,
-towers, other domains), guilds, shop, combat, protocol stacks,
+Full OSB/AOH world (Silvere city east of the gate, shipyard,
+towers, quay #2, other domains), guilds, shop buy, combat,
+protocol stacks,
 OSB kernel daemons. 2681 `#'` in 1062 files — do not attempt a
 mechanical `/std` rewrite this slice. Newbie creation
 `/d/login/entrance` is not loaded; catalog login uses STARTROOM.
@@ -88,9 +89,15 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/harbour/quay1_2` — The docks (login)
 - `/d/silvere/rooms/harbour/quay1_3` — The quay at Silvere (west)
 - `/d/silvere/rooms/harbour/quay1_1` — A street (east; lobster traps)
+- `/d/silvere/rooms/harbour/street3` — harbour crossing (southeast)
+- `/d/silvere/rooms/harbour/street2` — paved road up the hill
+- `/d/silvere/rooms/harbour/street1` — sun clock
+- `/d/silvere/rooms/harbour/entrance` — City Gate
+- `/d/silvere/rooms/harbour/harbour_inn` — The Seaman's Rest
+- `/d/silvere/rooms/harbour/harbourmaster` — office
 
-North shipyard, southeast street3, and the defense tower are not
-loaded this slice.
+North shipyard, southwest quay #2, east into the city, inn
+buy/drink, and the harbourmaster bell NPC are not loaded.
 
 `/catalog/login` still handles name/password. `/catalog/player`
 `enter_world()` moves onto the docks (fallback Void if load fails).
@@ -109,10 +116,25 @@ BOOT_MARKER1 aoh-docks): start rooms compiled, no new lines
 after the marker. Catch this walk: empty after the marker
 (older `*catch-path-probe` line is from 2026-09-05).
 
+Harbour expansion (native 40285, 2026-09-06, same `fluffos` /
+`Mud@2026`, do not redo the docks look-ats):
+
+- East → lobster-trap street. Southeast → harbour crossing
+  (`look at road`). East ×2 past the sun clock (`look at clock`)
+  to City Gate (`look at ivy`).
+- South → The Seaman's Rest (`look at sailors` / `menu`).
+  North back. North → Office of the Harbourmaster
+  (`look at desk` / `bell`). South back.
+- `score` persist. Reconnect still lands on the docks.
+
+This-boot live `libs/aoh/log/debug.log` (fd 3, PID 1778974
+BOOT_MARKER2 aoh-inn-hm): no new lines after the marker.
+Catch this walk: empty after the marker.
+
 **Not published** (`wasm_status: partial`). Do not flip to
-`playable` on this harbour walk. Shop / combat / inn / guild
-are not claimed. Next aoh slice: street3 / harbour inn /
-harbourmaster if we keep expanding Silvere.
+`playable` on this harbour walk. `look at menu` is flavour —
+buy/drink, combat, and city-east are not claimed. Next aoh
+slice: quay #2 / shipyard / city gate east if expanding.
 
 ## 5. WASM
 
