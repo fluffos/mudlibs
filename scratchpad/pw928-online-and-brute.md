@@ -73,3 +73,25 @@ Public code: `HKMUD/NT6` (`name : 笑傲江湖`) — same game as collection
 fork. `/download` `/src` `/mudlib` are empty wiki stubs. No 7z on the
 org. Site-name candidates (hkmud, hkmud.com, 香港群俠傳, vbman, NT6,
 奪寶, …) do **not** open 928/929/932. Do not onboard NT6 again.
+
+## Status 2026-09-05 ~17:45 PT
+
+Mask pipeline so far (all rc=1, potfile still **0/3**): `pw928d`
+(digits 1–7), `pw928l` (lowercase 1–5), `pw928a4` (`?l?d` 1–4),
+`pw928a5` (`?l?d` exactly 5, finished 15:38), now **pw928m4**
+(`?l?u?d` exactly 4, ~88% @ ~5100 H/s, ETA ~18:04). One GPU
+session in tmux `pw928-hashcat`. Do not start a second hashcat.
+
+## Domain sweep (user 2026-09-05: “usually is a domain”)
+
+The one printed unlock in this leftover RAR batch was
+`武林群侠传MUDLIB.7z` → `mud.ren`. User asked to treat domain
+names as the likely class. CPU `7z t` (does not touch the GPU
+brute) against all three locked files, 308 candidates: `mud.ren` /
+`bbs.mud.ren` / `fluffos.info` / `mudlibs.fluffos.info`, nitan /
+hell / doing / syzf / swzf hosts, `duobao.*` / `ntjc.net` /
+`dbzh.cc` / `kongzhong.com`, `hkmud.com`, `pkuxkx.net`,
+`lpmud.{org,net,com}`, `muds.{cn,com}`, plus www/UPPER/host-only
+variants. **0 hits.** Same class as the earlier `mud.ren` /
+`hkmud.com` misses — domain is the right *shape*, not these
+three passwords. Next brute stage after m4 is still `?h` 1–8.
