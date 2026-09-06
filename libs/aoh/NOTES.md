@@ -98,16 +98,18 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/harbour/quay2_1` — southern quay (barrels)
 - `/d/silvere/rooms/harbour/quay2_2` — southern landing
 - `/d/silvere/rooms/harbour/quay2_3` — path to the southern tower
-- `/d/silvere/rooms/harbour/stower_enter` — Before a high tower
+- `/d/silvere/rooms/harbour/stower_enter` — Before a high tower (south)
+- `/d/silvere/rooms/harbour/ntower_enter` — Before a high tower (north)
 - `/d/silvere/rooms/west/harbourgate` — city side of the harbour wall
 - `/d/silvere/rooms/west/westroad1` — The Westway
 - `/d/silvere/rooms/west/westroad2` — Westway shop fronts
+- `/d/silvere/rooms/west/westroad3` — Westway chandler front
 - `/d/silvere/rooms/west/cityinfo1` — Park Lane
 - `/d/silvere/rooms/west/whealer1` — Before the house of the healer
 
-inn buy/drink, harbourmaster bell NPC, tower interior,
-westroad3 / shop interiors, healer/elder interiors, and
-`ntower_enter` are not loaded.
+inn buy/drink, harbourmaster bell NPC, tower interiors,
+westroad4 / shop interiors, and healer/elder interiors
+are not loaded.
 
 `/catalog/login` still handles name/password. `/catalog/player`
 `enter_world()` moves onto the docks (fallback Void if load fails).
@@ -174,11 +176,25 @@ This-boot live `libs/aoh/log/debug.log` (fd 3, PID 1836787
 BOOT_MARKER4 aoh-westway): no new lines after the marker.
 Catch this walk: empty after the marker.
 
+Harbour expansion 4 (native 40285, 2026-09-06, same `fluffos` /
+`Mud@2026`, do not redo docks, inn/office, shipyard,
+southern-tower, or Westway look-ats):
+
+- West ×2 from the docks → northern tower exterior
+  (`look at tower` / `chain`). East back.
+- East through City Gate and The Westway → chandler-front
+  Westway (`look at sign` / `shop`).
+- `score` persist. Reconnect still lands on the docks.
+
+This-boot live `libs/aoh/log/debug.log` (fd 3, PID 1863039
+BOOT_MARKER5 aoh-ntower-wr3): no new lines after the marker.
+Catch this walk: empty after the marker.
+
 **Not published** (`wasm_status: partial`). Do not flip to
 `playable` on this harbour walk. `look at menu` is flavour —
-buy/drink, combat, tower interior, and shop interiors are
-not claimed. Next aoh slice: `ntower_enter` / westroad3
-shop fronts if expanding.
+buy/drink, combat, tower interiors, and shop interiors are
+not claimed. Next aoh slice: westroad4 / shop interiors
+if expanding.
 
 ## 5. WASM
 

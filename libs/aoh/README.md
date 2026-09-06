@@ -22,10 +22,11 @@ The docks (Silvere harbour). Existing names prompt for password only.
 - **privilege**: seeded mortal (level 1). This overlay does not auto-god
   the first player.
 
-Verified live: fluffos / Mud@2026 → The docks; north shipyard;
-southwest quay #2 west to the southern tower exterior; east
-through City Gate onto The Westway (Park Lane, healer street);
-south Seaman's Rest (`look at menu`); `score` / `quit`;
+Verified live: fluffos / Mud@2026 → The docks; west to the
+northern tower exterior; southwest quay #2 west to the
+southern tower; east through City Gate onto The Westway
+(Park Lane, healer street, chandler-front sign); south
+Seaman's Rest (`look at menu`); `score` / `quit`;
 reconnect lands on the docks again.
 
 ## Local run
