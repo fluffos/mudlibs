@@ -140,21 +140,28 @@ Live walk (native 40286, 2026-09-05, organic `fluffos` /
   empty `reset_pub()`; nature-null pub hours; catalog
   get/give. City guards still fail to compile (private
   `gender` / `Pronoun` / `set_keep_hb`) — catch-wrapped.
+- Combat LIVE (`3235caa3a99`): church → S7_6 south → well
+  square (did **not** go down the well). `kill harry` —
+  player hits, Harry hits back (5+3 dmg), Harry dies, 70
+  XP. `score` hp 12/20 exp 70. Look: Harry gone. Reconnect
+  persist hp + exp. Thin `/lib/living` attack/die/heart_beat
+  (original still `living_ldmud.lpc` with HitFunc closures).
+  Catalog `kill`/`hit` resolves a short fight. Stray dogs
+  are a 10% street wander; S6_7 had none this boot.
 
-This-boot live `libs/sticklib/log/debug.log` (fd, PID 1635411
-BOOT_MARKER15 sticklib-beer): pub2 + drink + bum compiled.
-Catch this walk: expected PEACE_D / bboard / nature_d /
-trashcan / bench / leper / guard.
+This-boot live `libs/sticklib/log/debug.log` (fd, PID 1662870
+BOOT_MARKER16 sticklib-combat): living + catalog player
+compiled. Catch this walk: expected PEACE_D only.
 
 **Not published** (`wasm_status: partial`). Flip to `playable`
-only after combat + a real advance path, not on three solved
-quests + shop-buy alone.
+only after a real advance path (cost still wants 1014 XP;
+qp_for_level is 0), not on three quests + one kill.
 
 ## 4. What is not ported yet
 
 Elevator, PEACE_D, NATURE_D. Trashcan toss (`foreach :`).
-Full LDMud living combat (HitFunc closures; thin living/npc
-stub `hit_player` / `attacked_by`). Bulletin board extra
-inherit. City guards. Joe's LDMud tell_here format tokens
-still print raw. Catalog inventory persist is still save
-fields only. Next slice: combat (HitFunc).
+Full LDMud HitFunc / weapon closures (thin living is enough
+to kill). Bulletin board extra inherit. City guards. Joe's
+LDMud tell_here format tokens still print raw. Catalog
+inventory persist is still save fields only. Next sticklib
+slice: guild advance (need ~1014 XP) — or start simud.
