@@ -63,13 +63,44 @@ Logs this boot (PID started 20:09:43, live fd
 (`CAUGHT /catalog/player.lpc *catch-path-probe`) then reverted;
 play itself left no other catch lines.
 
-## 4. What is not ported
+## 6. Full dialect port (Strategy A, 2026-09-06)
 
-Full LDMud world, guilds, protocol stacks, and OSB/MG kernel daemons.
-Those remain in the tree for archaeology; booting them needs a real
-LDMud driver.
+Catalog Void/workshop is no longer the live start. User asked for
+the real SIMud spawn, not a demo skeleton.
 
-**Not published** on mudlibs.fluffos.info (`wasm_status: partial`).
-Catalog overlay Void/workshop is not a world §10.7. Flip to
-`playable` only after a Strategy A port of the SIMud world
-and a shop/combat/guild deep-test.
+The archive spawn is `;ch;oldtown;temple;temple2` ("Temple of All
+Gods"). SIMud's world is a saved object tree (`/world/world.obj`);
+that dump is **not** in the git snapshot. Strategy A reconstructs
+the spawn path as FluffOS rooms under `/world/start/`:
+
+- `/world/start/temple2` — inner shrine (login)
+- `/world/start/temple` — public hall
+- `/world/start/oldtown` — street outside
+
+`/catalog/login` still handles name/password. `/catalog/player`
+`enter_world()` moves into `temple2` (fallback Void if load fails).
+
+Live walk (native 40287, 2026-09-06, organic `fluffos` /
+`Mud@2026`):
+
+- Lands in Temple of All Gods. `look at altar`.
+- North → temple hall. North → Oldtown street (further streets
+  closed). South ×2 back to the shrine.
+- `score` level 1, hp 20/20. Quit persist. Reconnect lands in
+  the shrine again.
+
+This-boot live `libs/simud/log/debug.log` (fd, PID 1693124
+BOOT_MARKER1 simud-temple): start rooms compiled. Catch this
+walk: empty after the marker.
+
+**Not published** (`wasm_status: partial`). Flip to `playable`
+only after a shop/combat/guild deep-test. The rest of Oldtown
+cannot be loaded from archive files — it lived in world.obj.
+
+## 4. What is not ported yet
+
+Full LDMud world object tree (no `world.obj` in the snapshot),
+guilds, protocol stacks, OSB/MG kernel daemons, shop, combat.
+Original `/world/room` uses LDMud closures (`(: $1->… :)`).
+Next simud slice: more Oldtown if we can reconstruct it, or
+start morgengrauen Strategy A.
