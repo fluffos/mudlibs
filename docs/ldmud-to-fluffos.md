@@ -33,6 +33,15 @@ Both strategies still run the normal extract → `convert_lib.sh` →
 6. Verify native `look` / `score` / `quit`, reconnect after quit, and
    WASM via `scripts/wasm_client.js` before calling it playable.
 
+**Do not publish a catalog overlay.** `wasm_status` stays `partial`
+(excluded from mudlibs.fluffos.info) until Strategy A loads the real
+world and a §10.7 pass covers shop/combat/guild/death (or documents
+why those do not exist). Overlay Void/workshop is not that pass.
+`questmud` is the published exception (full port, §10.7 2026-08-31).
+`ageofelements` is listed only after the 2.4.5 village itself was
+live-tested (2026-09-05). Overlay-only: `acme`, `morgengrauen`,
+`aoh`, `sticklib`, `simud`.
+
 ## Architecture checklist (do this before trusting a clean compile)
 
 LDMud and FluffOS share LPC surface syntax but diverge in master /
@@ -111,7 +120,8 @@ Pattern used by `acme` and the 974–978 onboards:
 ## Registration / site
 
 - `libs/<slug>/meta.json` with `wasm_status`, `port`, English description
-  that mentions LDMud → FluffOS.
+  that mentions LDMud → FluffOS. Catalog overlays use `partial` (off
+  the public site). Only a Strategy A world + §10.7 may be `playable`.
 - `scripts/assemble_numbering.py` + `gen_readme_table.py`.
 - Site pack happens in CI / `scripts/build_site.sh` from `meta.json`.
 

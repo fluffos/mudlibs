@@ -105,6 +105,11 @@ the successful create, reconnect, or cold-boot reconnect.
 WASM not verified. `unique_games` stays counting numbers `< 900`; 969
 is still listed as a lib.
 
+**Not published** on mudlibs.fluffos.info (`wasm_status: partial`).
+Catalog overlay is not a world §10.7. This archive has no game world
+to port. Do not mark `playable` unless a real world exists and is
+deep-tested.
+
 ## 深度功能测试（§10.7, 2026-09-05）
 
 Catalog overlay only — the archive has no playable world. Organic

@@ -8,6 +8,8 @@ SIMud, an Apache-2.0 English LDMud-style mudlib by Allaryin, Acius, Venger, and 
 
 Authors: Allaryin, Acius, Venger, Malap (Apache 2.0). Full mud/
 tree preserved; interactive play here is the FluffOS catalog overlay.
+Not on the public play site until the real world is ported and
+deep-tested.
 
 ## Registration flow
 

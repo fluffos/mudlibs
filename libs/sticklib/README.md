@@ -8,6 +8,8 @@ StickLib, a legacy public dump of StickMUD (turn-of-century LPMud 2.4.5 lineage 
 
 Upstream StickMUD: telnet://stickmud.com:7680. This snapshot is
 LDMud → FluffOS catalog play, not the full live StickMUD world.
+Not on the public play site until the real world is ported and
+deep-tested.
 
 ## Registration flow
 

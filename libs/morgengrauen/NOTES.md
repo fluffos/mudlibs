@@ -72,3 +72,8 @@ LDMud driver.
 ## 5. WASM
 
 Verified 2026-09-05 via `scripts/wasm_client.js`: register/reconnect fluffos, look/score/quit.
+
+**Not published** on mudlibs.fluffos.info (`wasm_status: partial`).
+Catalog overlay Void/workshop is not a world §10.7. Flip to
+`playable` only after a Strategy A port of the MorgenGrauen world
+and a shop/combat/guild deep-test.

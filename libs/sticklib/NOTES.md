@@ -68,3 +68,8 @@ play itself left no other catch lines.
 Full LDMud world, guilds, protocol stacks, and OSB/MG kernel daemons.
 Those remain in the tree for archaeology; booting them needs a real
 LDMud driver.
+
+**Not published** on mudlibs.fluffos.info (`wasm_status: partial`).
+Catalog overlay Void/workshop is not a world §10.7. Flip to
+`playable` only after a Strategy A port of StickMUD and a
+shop/combat/guild deep-test.

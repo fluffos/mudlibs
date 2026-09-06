@@ -7,7 +7,8 @@ This collection’s copy is a snapshot, not a live mirror.
 Official public MorgenGrauen mudlib (German LPMud, LDMud 3.x). LDMud → FluffOS conversion: archive master uses set_driver_hook/closures; this collection boots a FluffOS catalog overlay (login/look/score/quit in The Void) while preserving the full LDMud source tree. Not Shea690901/Sagenwelt-Lib (collection sagenwelt).
 
 German LDMud sources are preserved for study; interactive play
-here is the FluffOS catalog overlay only.
+here is the FluffOS catalog overlay only. Not on the public play
+site until the real world is ported and deep-tested.
 
 ## Registration flow
 

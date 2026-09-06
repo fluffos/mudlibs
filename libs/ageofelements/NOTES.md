@@ -106,4 +106,10 @@ Harry / Adventurers' Guild) is what catalog login loads.
 
 ## 5. WASM
 
-Verified 2026-09-05 via `scripts/wasm_client.js`: register/reconnect fluffos, look/score/quit.
+Overlay login was verified 2026-09-05 via `scripts/wasm_client.js`
+(register/reconnect fluffos, look/score/quit). Same catalog login now
+lands in the village church; WASM village not re-run this evening.
+
+Listed `playable` only after the native village §10.7-shaped pass
+(shop / Harry / pray / guild). Overlay-only LDMud siblings stay
+`partial` and off the public site.

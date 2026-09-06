@@ -7,7 +7,8 @@ This collection’s copy is a snapshot, not a live mirror.
 Age of Heroes, an experimental English LDMud mudlib based on One Step Beyond (OSB). LDMud → FluffOS conversion: archive master uses closures and LDMud kernel applies; this collection boots a FluffOS catalog overlay (Void + workshop look/score/quit) while keeping the full OSB-derived source tree under /d, /lib, /std.
 
 Based on One Step Beyond (OSB). Full world code is preserved;
-interactive play here is the FluffOS catalog overlay.
+interactive play here is the FluffOS catalog overlay. Not on the
+public play site until the real world is ported and deep-tested.
 
 ## Registration flow
 
