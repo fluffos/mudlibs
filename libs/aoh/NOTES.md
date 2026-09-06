@@ -112,6 +112,9 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/west/westroad5` — Westway toward the post office
 - `/d/silvere/rooms/west/westroad6` — fishmonger-front Westway
 - `/d/silvere/rooms/west/westroad7` — tailor-front Westway / Elrimand Road
+- `/d/silvere/rooms/west/westroad8` — wine-shop-front Westway
+- `/d/silvere/rooms/west/tailor` — Couture Celimarith (look only)
+- `/d/silvere/rooms/west/councilroad1` — Elrimand Road (bakery look-at)
 - `/d/silvere/rooms/west/fishmonger` — Feridwyn's Seafood (look only)
 - `/d/silvere/rooms/west/wpostroad1` — lane to the post office
 - `/d/silvere/rooms/west/wpostroad2` — Counting House arch
@@ -121,9 +124,10 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/west/whealer1` — Before the house of the healer
 
 inn buy/drink, harbourmaster bell NPC, tower interiors,
-westroad8 / tailor interior / council hall / mail /
-bank deposit / Caves of Parch, shop buy, and
-healer/elder interiors are not loaded.
+westroad9 / wineshop / bakery / further council road /
+mail / bank deposit / Caves of Parch, shop buy, and
+healer/elder interiors are not loaded. The council hall
+entrance is an archive stub (no details).
 
 `/catalog/login` still handles name/password. `/catalog/player`
 `enter_world()` moves onto the docks (fallback Void if load fails).
@@ -267,13 +271,32 @@ This-boot live `libs/aoh/log/debug.log` (fd 3, PID 1977309
 BOOT_MARKER9 aoh-wr7-fish-bank): no new lines after the marker.
 Catch this walk: empty after the marker.
 
+Harbour expansion 9 (native 40285, 2026-09-06, same `fluffos` /
+`Mud@2026`, do not redo docks, inn/office, towers,
+Westway, chandler/flowerbed/alley, westroad5/sell-shop,
+westroad6/post-office, or westroad7/fishmonger/bank
+look-ats):
+
+- South of westroad7 → a tailor shop
+  (`look at cloth` / `dummy` / `sign`). North back.
+- North → Elrimand Road
+  (`look at sign` Eldranna's Bake Shoppe / `bakery`).
+  South back.
+- East → wine-shop-front Westway
+  (`look at sign` wine glass / `vines`).
+- `score` persist. Reconnect still lands on the docks.
+
+This-boot live `libs/aoh/log/debug.log` (fd 3, PID 2014609
+BOOT_MARKER10 aoh-wr8-tailor-elrimand): no new lines after
+the marker. Catch this walk: empty after the marker.
+
 **Not published** (`wasm_status: partial`). Do not flip to
 `playable` on this harbour walk. `look at menu`,
-`look at candles`, `look at cabins`, and
-`look at tiles` / bank `sign` are flavour — buy/drink,
+`look at candles`, `look at cabins`, `look at tiles`,
+and tailor/bakery/wine `sign`s are flavour — buy/drink,
 mail, deposit, combat, and tower interiors are not
-claimed. Next aoh slice: westroad8 / tailor interior /
-council hall if expanding.
+claimed. Next aoh slice: westroad9 / wineshop / bakery
+if expanding.
 
 ## 5. WASM
 

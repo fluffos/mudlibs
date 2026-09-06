@@ -28,8 +28,9 @@ southern tower; east through City Gate onto The Westway
 (Park Lane, healer street, Molly's Chandler candles,
 flowerbed, pigeon alley, post-office street, sell-only
 shop, fishmonger-front, Feridwyn's tiles/vats/sign,
-Couture Celimarith, Counting House plaque, post-office
-cabins, bank panelling); south Seaman's Rest
+Couture Celimarith cloth/dummy, Elrimand Road bakery
+pretzel, wine-shop vines, Counting House plaque,
+post-office cabins, bank panelling); south Seaman's Rest
 (`look at menu`); `score` / `quit`; reconnect lands on
 the docks again.
 
