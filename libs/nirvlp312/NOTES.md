@@ -139,9 +139,13 @@ WASM not verified this pass.
 
 ## 4. Catch-log reset spam (2026-09-05)
 
-Not a full §10.7. Leftover onboard driver PID 579874 is still on
-**40277** (started 02:21; do not kill — not this-turn). Its
-`error_handler` (`/log/catch` vs `/log/runtime`) recorded a
+Not a full §10.7. The onboard driver (PID 579874, started 02:21)
+was left running after look/score/quit — we forgot to kill it,
+then later timer turns treated “not this-turn” as a hard
+do-not-kill. User 2026-09-05: that leftover was our own abandoned
+boot, not a concurrent session. Killed; 40277 freed.
+
+Its `error_handler` (`/log/catch` vs `/log/runtime`) recorded a
 caught `*Bad argument 1 to EFUN call_other() ... Got: int(0)`
 on `/room/vill_green.lpc:31` every ~10 minutes for the whole
 sit. `clone_object("players/snow/ITEMS/notice")->move_object(...)`
@@ -157,13 +161,69 @@ from `adv_guild` extra_reset. Function was still named `new(hd)`
 like the onboard `adv_guild`/`post.lpc` reserved-word pass.
 Player verb stays `note`.
 
-Live silence of the 10-minute spam is **unverified** — the
-already-loaded room still runs the old program until the next
-cold boot. Full §10.7 (shop / Hall of Apprentices / combat)
-waits until 40277 is free. `score` stub still the next
-`_score.lpc` compile fix.
+Cold boot 2026-09-05 17:52 confirmed the 10-minute vill_green
+spam is gone.
 
-## 5. Do not redo
+## 5. 深度功能测试（§10.7, 2026-09-05）
+
+Native port 40277. Driver PID this pass ended 1195821. Live
+`debug.log` via `/proc/<pid>/fd/3` → `libs/nirvlp312/log/debug.log`
+(Boot Time Sat Sep 5 18:00:29). `error_handler` → `/log/catch`
+and `/log/runtime`. Organic `fluffos` / `Mud@2026`.
+
+Path: Village Green → `enter hall` → east Armory (`browse` /
+`grab sword` / `wield sword`) → out → east/east/east vill_road2
+→ north shop (`look at sign`, `list` empty) → south Adventurer's
+guild (`cost`: must be closer to next level; `advance`: not
+enough gold) → `kill harry` (multi-round; Harry hits; we die:
+corpse, tombstone, tunnel of white light) → reconnect ghost →
+church `pray` / `y` → “more solid form”, score HP 10/26 → quit
+persist (`ghost` cleared, `pfiles/f/fluffos.o`).
+
+Fixes this pass:
+
+- `/room/room.lpc` `query_numbers()`: FluffOS `file_name()` is
+  `/room/room`, so the `"room/room"` equality failed and every
+  inheritor called `"/room/room"->query_numbers()` → too-deep
+  recursion on village-road `look`. Same leading-slash class as
+  onboard `is_real_player_ob()`.
+- `/room/store.lpc`: `int new` → `idx` (`L_NEW`). Shop
+  `call_other("/room/store")` had been aborting reset, so north
+  from the road silently failed.
+- `/obj/soul_com.lpc`: FluffOS flag 1 is `V_SHORT` (abbrev), not
+  Amylaar xverb. `cost` was matching `c` and overwriting the
+  guild `notify_fail`. Now flag 3 (`V_NOSPACE`) and `chat()`
+  returns 0 when the remainder is not `channel message`.
+- `/obj/user/testchar-d.lpc`: `read_file` of a missing
+  `/log/user/testChars.txt` returned 0; `sscanf` threw on every
+  login. Guard empty text.
+- `/obj/monster.lpc`, `/obj/weapon.lpc`, `/room/prison.lpc`:
+  FluffOS `create()` never called `reset(0)`, so monsters were
+  not `living()` (Harry: “is not alive”), newbie swords had no
+  `set_name` (inventory empty after `grab`), and `prisoners` stayed
+  0 (`member_array` on login). Same hook as onboard `player.lpc`.
+- Hall of Apprentices: copied only
+  `players/softly/{closed/ansi.h,nhall/{notice,rooms/n1-n4,obj/*}}`
+  and `players/maledicta/ansi.h` from upstream 616cad7. `notice`
+  `new` → `new_note`. Still do not rsync the 115k `players/` tree.
+  North school / south blacksmith / mokri farseer / newbie bag
+  still uncopied — those exits/items fail, documented.
+- `/daemons/combat.lpc` and `/bin/wiz/_combat.lpc` inherited
+  missing `/players/earwax/lib/waxfuns`. Pointed at the already-
+  ported `/obj/simul_efun/waxfuns.lpc`.
+- `/obj/simul_efun/destruct.lpc`: no-op when `ob` is 0 (sword
+  `drop()` already `destruct`s itself).
+
+Final cold boot catch/runtime/debug.log/stdout: no new lines
+across hall / shop / guild / Harry fight / death / pray / quit.
+(Older leftover catch/runtime lines from the abandoned onboard
+sit remain in those files.)
+
+`score` via `/bin/play/_score.lpc` works for a living player;
+ghosts get “immaterial state with no scores” (design).
+
+## 6. Do not redo
 
 Do not re-clone rumplemintz/Nirvlp312mudlib. Do not rsync
-`players/`. 928/929/932 stay header-encrypted. Skip nitan.zip.
+`players/`. Do not redo nirvlp312 §10.7. 928/929/932 stay
+header-encrypted. Skip nitan.zip.

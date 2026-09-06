@@ -86,12 +86,20 @@ session in tmux `pw928-hashcat`. Do not start a second hashcat.
 
 The one printed unlock in this leftover RAR batch was
 `武林群侠传MUDLIB.7z` → `mud.ren`. User asked to treat domain
-names as the likely class. CPU `7z t` (does not touch the GPU
-brute) against all three locked files, 308 candidates: `mud.ren` /
-`bbs.mud.ren` / `fluffos.info` / `mudlibs.fluffos.info`, nitan /
-hell / doing / syzf / swzf hosts, `duobao.*` / `ntjc.net` /
-`dbzh.cc` / `kongzhong.com`, `hkmud.com`, `pkuxkx.net`,
-`lpmud.{org,net,com}`, `muds.{cn,com}`, plus www/UPPER/host-only
-variants. **0 hits.** Same class as the earlier `mud.ren` /
-`hkmud.com` misses — domain is the right *shape*, not these
-three passwords. Next brute stage after m4 is still `?h` 1–8.
+names as the likely class. Two CPU `7z t` passes (do not touch
+the GPU brute):
+
+1. First pass: 308 candidates (`mud.ren` / `bbs.mud.ren` /
+   `fluffos.info` / game hosts / `hkmud.com` / `pkuxkx.net` /
+   `lpmud.*` / `muds.*` + www/UPPER/host-only). **0 hits.**
+2. Expanded pass (same day, after user asked again): 4455
+   generated stem×TLD plus known MUD hosts, `.ren` siblings
+   (`nitan.ren`, `duobao.ren`, `hell.ren`, …), and the nirvlp312
+   welcome-screen family `nirvana.beanos.com` /
+   `www.nirvana.beanos.com` / `beanos.com` (tested immediately;
+   also in the 4455 list). Still **0 hits** through 800+ of
+   4455 when last checked; sweep left running on CPU.
+
+Domain is the right *shape* (wlqxcmudlib opened with `mud.ren`);
+these three passwords are not those hosts. Next hashcat stage
+after m4 is still `?h` 1–8.

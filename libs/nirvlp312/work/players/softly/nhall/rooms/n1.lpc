@@ -1,0 +1,139 @@
+/*  Changed so only guildless could use the 
+    Newb Hall due to people exploiting it that
+    were in guilds.  Fred [1/09/06]
+*/
+
+#include "/players/softly/closed/ansi.h"
+#define tp this_player()
+#define tpn this_player()->query_name()
+#define tpp this_player()->query_possessive()
+#define DEBUG 0
+inherit "room/room";
+
+int peeps;
+reset(arg) {
+  object notice;
+if(!present("announce_board", this_object())){
+  notice = clone_object("/players/softly/nhall/notice.lpc");
+  if (notice)
+    notice->move_object(this_object());
+}
+if(arg) return;
+        
+  set_light(1);
+
+  short_desc = "Hall of Apprentices [Main]";
+  long_desc =
+    "  You stand within the main Hall of the Apprentices. The walls here\n"+
+    "are made of a white stone, each block carefully laid and set in a\n"+
+    "silver mortar. The marble floor is polished to a high shine, and\n"+
+    "large banners hang from the ceiling.  To the west is the healer of\n"+
+    "the apprentices, and to the east is the halls armory.  A long spiral\n"+
+    "staircase leads up to the halls portal chamber. To the north lies the\n"+
+    "entry to the "+HIR+"School of the Apprentices"+NORM+".  A large door leads out to the\n"+
+    "main road.\n"+
+    HIG+"A healing aura surrounds this place... If you aren't in a guild\n"+
+    "you will regenerate your wounds faster.\n"+NORM;
+
+  items = ({
+    "walls",
+    "Polished white rock which is carefully laid in a silver mortar",
+    "stone",
+    "A heavy strong stone that is nearly unbreakable",
+    "mortar",
+    "An enchanted mortar that holds the hall together",
+    "floor",
+    "A polished marble floor that you can even see your reflection in",
+    "banners",
+    "Heavy cloth banners with the symbols of powerful lords imprinted in gold upon\n"+
+    "their surface",
+    "ceiling",
+    "A high ceiling made of stone.  A spiral staircase disappears into its\n"+
+    "center",
+    "staircase",
+    "A long marble staircase leading up to the portal chamber"
+  });
+
+  dest_dir = ({
+    "/players/softly/newbie/rooms/ns1.lpc","north",
+    "/players/softly/nhall/rooms/n2.lpc","west",
+    "/players/softly/nhall/rooms/n3.lpc","east",
+    "/players/softly/nhall/rooms/n4.lpc","up",
+     "/players/vertebraker/misc/nhall/blacksmith.lpc","south",
+    "/room/vill_green.lpc","out"
+  });
+
+}
+init(){
+  ::init();
+  if(this_player()) /* added by Vertebraker [5.30.01] */
+  if(this_player()->query_level() > 7 && this_player()->query_level() < 20)
+  {
+    write("You don't belong here!\n");
+    this_player()->move_object(resolve_ob("/room/vill_green.lpc"));
+    tell_room(environment(tp), tpn+" arrives suddenly.\n", ({tp}));
+    return 1;
+  }
+  peeps ++; 
+  if( find_call_out("heal_em") == -1)
+    call_out("heal_em", 2);
+}
+
+int room_targets(object ob) {
+  return (int)(ob->is_player() && ob->query_level() < 8 &&
+              (ob->query_hp() < ob->query_mhp() || 
+               ob->query_sp() < ob->query_msp())
+              );
+}
+
+heal_em() {
+  int i,tsp,thp;
+  object *targets;
+
+#ifndef __LDMUD__
+  targets = filter_array(all_inventory(this_object()),"room_targets",this_object());
+#else
+  targets = filter(all_inventory(this_object()), "room_targets", this_object());
+#endif
+
+#if DEBUG
+  tell_room( this_object(), "\theal_em : "+sizeof(targets)+"\n");
+#endif
+
+  if( !targets || !sizeof(targets) ) {
+#if DEBUG
+  tell_room( this_object(), "No Targets, removing call_out\n");
+#endif
+    while(remove_call_out("heal_em") != -1);
+    return;
+  }
+ 
+  for( i=0; i < sizeof(targets); i++) { 
+#if DEBUG
+  tell_room( this_object(), "targets["+i+"]: "+targets[i]->query_name()+"\n");
+#endif
+    if(targets[i]->query_guild_name()) continue;
+    thp = targets[i]->query_mhp() - targets[i]->query_hp();
+    tsp = targets[i]->query_msp() - targets[i]->query_sp();
+    targets[i]->heal_self(3 + random(3));
+#if DEBUG
+  tell_room( this_object(), "tsp: "+tsp+" sp: " +targets[i]->query_sp()+"/"+targets[i]->query_msp()+"\n");
+#endif
+    if(targets[i]->query_hp() >= targets[i]->query_mhp() && thp) {
+      tell_object(targets[i], "Your wounds have been fully healed.\n");
+    }
+    if(targets[i]->query_sp() >= targets[i]->query_msp() && tsp) {
+      tell_object(targets[i], "Your mana has been fully restored.\n");
+    }
+  }
+  call_out("heal_em", 2);
+}
+
+exit(ob) {
+  if(ob->is_player()) {
+    peeps--;
+    if(peeps <= 0) 
+      while(remove_call_out("heal_em") != -1);
+  }
+  return ::exit(ob);
+}
