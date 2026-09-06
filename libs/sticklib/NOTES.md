@@ -85,7 +85,12 @@ What loads now:
   parsed `(int)AREA+"rooms/elevator"->fn` as `'rooms/elevator'`).
 - `mud_name.h` no longer redefines FluffOS's predefined `MUD_NAME`.
   Simul shims: `member`/`m_delete`/`m_indices`/3-arg `implode`/
-  2-arg `move_object`/`nature()`/`notify_fail` returns 0.
+  2-arg `move_object`/`nature()`/`notify_fail` returns 0 /
+  `symbol_function` / `funcall` leaves literal strings alone.
+- `/lib/living`, `/lib/npc`, `/lib/group_npc` are FluffOS subsets
+  (originals `*_ldmud.lpc`). `/lib/treasure` keeps its source with
+  `closure` → `mixed`. Room `create()` calls `reset_room()` so
+  FluffOS lazy reset still stocks shops.
 
 Live walk (native 40286, 2026-09-05, organic `fluffos` /
 `Mud@2026`):
@@ -95,29 +100,30 @@ Live walk (native 40286, 2026-09-05, organic `fluffos` /
   praying unless you're dead.").
 - East → Hall of Races (sign look). West back to the yard.
 - South → virtual Market Square (S7_6). West → S6_6. West →
-  Common Shop. `read writing` shows buy/sell/list/value. `list`
-  is "Shop doesn't seem to be open" (shopkeeper is `/lib/npc` →
-  `/lib/living` `closure HitFunc`, does not compile).
+  Common Shop. Named shopkeeper present (Culdaff / Falo /
+  Nallihan). `list` shows torches and torches of darkness at
+  82 gold. `buy torch` → inventory "A torch" / "A torch of
+  darkness", gold 200→118→36.
 - Adventurers' Guild (east from physical S8_6) does not load:
   `/lib/guild` `closure guildInit` plus `#'make_noise` in
   `adv_guild.lpc`.
 
 This-boot live `libs/sticklib/log/debug.log` (fd) + driver
-stdout clean of uncaught play errors after the elevator-path
-fix. `work/log/catch` this boot: expected CAUGHT on
-`/lib/treasure` (saint/finger), `/lib/living` (shopkeeper /
-street NPCs), `/bin/daemons/peaced`, `/bin/daemons/nature_d`,
-elevator. Older catch lines above those are from the compile
-iterate earlier the same evening.
+stdout: list/buy had no uncaught errors after the darktorch
+foreach fix. `work/log/catch` this boot: expected CAUGHT on
+`/bin/daemons/peaced`, `/std/obj/trashcan` (LDMud `foreach :`),
+some street NPCs (dog/leper inherit extra files). Older catch
+lines are from the compile iterate earlier the same evening.
 
 **Not published** (`wasm_status: partial`). Flip to `playable`
-only after shop buy + combat + guild actually work.
+only after combat + guild actually work.
 
 ## 4. What is not ported yet
 
-`/lib/living`, `/lib/npc`, `/lib/guild`, `/lib/treasure` still
-use the `closure` type. Elevator, PEACE_D, NATURE_D, and
-`#'make_noise` in the Adventurers' Guild. Catalog body: inventory
-does not persist usefully; gold on the saved `fluffos` account
-is 0 from the old Void overlay. Next slice: living/npc so the
-shopkeeper clones and `list`/`buy` work, then guild + combat.
+`/lib/guild` (`closure guildInit`) and `adv_guild.lpc`
+`#'make_noise`. Elevator, PEACE_D, NATURE_D. Trashcan toss
+(`foreach :`). Full LDMud living combat (HitFunc closures).
+Catalog inventory persists only as the catalog body's
+save_object fields plus whatever objects happen to be cloned
+next boot. Next slice: `/lib/guild` + Adventurers' Guild, then
+combat.
