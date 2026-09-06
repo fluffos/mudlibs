@@ -115,6 +115,8 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/west/westroad8` — wine-shop-front Westway
 - `/d/silvere/rooms/west/westroad9` — Guild Street fork
 - `/d/silvere/rooms/west/westroad10` — flower-shop-front Westway
+- `/d/silvere/rooms/west/westroad11` — palace-square approach Westway
+- `/d/silvere/rooms/west/flowershop` — Jehane's Flowers (look only)
 - `/d/silvere/rooms/west/libraryroad1` — Guild Street / library road
 - `/d/silvere/rooms/west/libraryroad2` — library road west (stub look-ats)
 - `/d/silvere/rooms/west/wineshop` — Chez Brigan (look only)
@@ -130,11 +132,12 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/west/whealer1` — Before the house of the healer
 
 inn buy/drink, harbourmaster bell NPC, tower interiors,
-westroad11 / flower shop / further council road /
-mail / bank deposit / Caves of Parch, shop buy, and
-healer/elder interiors are not loaded. The council hall,
-library, and adventurers guild interiors are archive
-stubs (no details).
+palace square (`/d/silvere/rooms/center/westenter` is
+still the LDMud SILBASEROOM original), further council
+road / mail / bank deposit / Caves of Parch, shop buy,
+and healer/elder interiors are not loaded. The council
+hall, library, and adventurers guild interiors are
+archive stubs (no details).
 
 `/catalog/login` still handles name/password. `/catalog/player`
 `enter_world()` moves onto the docks (fallback Void if load fails).
@@ -336,13 +339,35 @@ This-boot live `libs/aoh/log/debug.log` (fd 3, PID 2061268
 BOOT_MARKER12 aoh-wr10-guildstreet): no new lines after
 the marker. Catch this walk: empty after the marker.
 
+Harbour expansion 12 (native 40285, 2026-09-06, same
+`fluffos` / `Mud@2026`, do not redo docks, inn/office,
+towers, Westway, chandler/flowerbed/alley,
+westroad5/sell-shop, westroad6/post-office,
+westroad7/fishmonger/bank, westroad8/tailor/Elrimand,
+westroad9/wineshop/bakery, or westroad10/Guild Street
+look-ats):
+
+- South of westroad10 → a flower shop
+  (`look at flowers` / `sign` JEHANE'S FLOWERS /
+  `vases`). Archive long keeps the typo “myriard”.
+  Buy is not implemented. North back.
+- East → palace-square approach Westway
+  (`look at palace` white marble/gardens / `square` /
+  `murals`). East palace square (`westenter`) is
+  still the LDMud original — not loaded.
+- `score` persist. Reconnect still lands on the docks.
+
+This-boot live `libs/aoh/log/debug.log` (fd 3, PID 2090614
+BOOT_MARKER13 aoh-wr11-flowershop): no new lines after
+the marker. Catch this walk: empty after the marker.
+
 **Not published** (`wasm_status: partial`). Do not flip to
 `playable` on this harbour walk. `look at menu`,
 `look at candles`, `look at cabins`, `look at tiles`,
-and tailor/bakery/wine `sign`s are flavour — buy/drink,
-mail, deposit, combat, and tower interiors are not
-claimed. Next aoh slice: westroad11 / flower shop if
-expanding.
+and tailor/bakery/wine/flower `sign`s are flavour —
+buy/drink, mail, deposit, combat, and tower interiors
+are not claimed. Next aoh slice: palace square
+(`/d/silvere/rooms/center/westenter`) if expanding.
 
 ## 5. WASM
 

@@ -31,7 +31,10 @@ shop, fishmonger-front, Feridwyn's tiles/vats/sign,
 Couture Celimarith cloth/dummy, Elrimand Road bakery
 pretzel, Chez Brigan racks/sign, Eldranna shelves/
 chalkboard, Guild Street fork palace silhouette,
-flower-shop iron rose, library road (guild unfinished),
+flower-shop iron rose, Jehane's Flowers (myriard /
+JEHANE'S FLOWERS / vases; flavour — no buy),
+palace-square approach (marble/gardens / square /
+murals), library road (guild unfinished),
 wine-shop vines, Counting House plaque,
 post-office cabins, bank panelling); south Seaman's Rest
 (`look at menu`); `score` / `quit`; reconnect lands on
