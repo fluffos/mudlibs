@@ -74,13 +74,15 @@ fork. `/download` `/src` `/mudlib` are empty wiki stubs. No 7z on the
 org. Site-name candidates (hkmud, hkmud.com, 香港群俠傳, vbman, NT6,
 奪寶, …) do **not** open 928/929/932. Do not onboard NT6 again.
 
-## Status 2026-09-05 ~17:45 PT
+## Status 2026-09-05 ~18:17 PT
 
 Mask pipeline so far (all rc=1, potfile still **0/3**): `pw928d`
 (digits 1–7), `pw928l` (lowercase 1–5), `pw928a4` (`?l?d` 1–4),
-`pw928a5` (`?l?d` exactly 5, finished 15:38), now **pw928m4**
-(`?l?u?d` exactly 4, ~88% @ ~5100 H/s, ETA ~18:04). One GPU
-session in tmux `pw928-hashcat`. Do not start a second hashcat.
+`pw928a5` (`?l?d` exactly 5, finished 15:38), `pw928m4`
+(`?l?u?d` exactly 4, finished 18:16, rc=1). Now **pw928h**
+(`?h` increment 1–8, started 18:16). One GPU session in tmux
+`pw928-hashcat`. Do not start a second hashcat. After h:
+`?d` length 8.
 
 ## Domain sweep (user 2026-09-05: “usually is a domain”)
 
@@ -97,9 +99,9 @@ the GPU brute):
    (`nitan.ren`, `duobao.ren`, `hell.ren`, …), and the nirvlp312
    welcome-screen family `nirvana.beanos.com` /
    `www.nirvana.beanos.com` / `beanos.com` (tested immediately;
-   also in the 4455 list). Still **0 hits** through 800+ of
-   4455 when last checked; sweep left running on CPU.
+   also in the 4455 list). Still running at ~25 min / no
+   `domain_hits.txt` yet (script writes that file only at the
+   end). Leave the one CPU sweep running; do not start a second.
 
 Domain is the right *shape* (wlqxcmudlib opened with `mud.ren`);
-these three passwords are not those hosts. Next hashcat stage
-after m4 is still `?h` 1–8.
+these three passwords are not those hosts.
