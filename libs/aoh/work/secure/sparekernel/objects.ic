@@ -1,0 +1,435 @@
+/*--------------------------------------------------------------------------
+ * /secure/kernel/objects.ic -- Object oriented sefuns.
+ *
+ * Copyright (C) 1997-1998 by One Step Beyond.
+ * All Rights Reserved.
+ * Permission granted for non-commercial use.
+ *--------------------------------------------------------------------------
+ * This file is included(!) from /secure/kernel.c to form the kernel.
+ * Implemented here are:
+ *   set_living_name(), find_living(), find_player()
+ *     These need a regular call to clean_name_living_m().
+ *   query_user_level(), query_user_tag()
+ *   is_clone(), blueprint(), load_object(), is_netdead()
+ *   find_clones(), all_environments()
+ *   deep_present(), present_clone()
+ *   fold_objlist()
+ *--------------------------------------------------------------------------
+ */
+
+#include <driver/object_info.h>
+nosave mapping living_name_m, name_living_m;
+
+/*-------------------------------------------------------------------------*/
+static void clean_name_living_m(string *keys, int left) 
+
+/* Clean the name/living mappings from destructed objects.
+ */
+
+{
+  int i, j;
+  mixed a;
+
+  if (left) 
+  {
+    if (pointerp(a = name_living_m[keys[--left]]) && member(a, 0) >= 0) 
+    {
+      i = sizeof(a);
+      do {
+        if (a[--i])
+          a[<++j] = a[i];
+      } while (i);
+      name_living_m[keys[left]] = a = j > 1 ? a[<j..] : a[<1];
+    }
+    if (!a)
+      m_delete(name_living_m, keys[left]);
+    efun::call_out("clean_name_living_m", 1, keys, left);
+  }
+}
+
+/*-------------------------------------------------------------------------*/
+void set_living_name(string name) 
+
+/* Set the name of the living <previous_object()> to <name> and record
+ * it in the global mappings.
+ */
+
+{
+  string old;
+  mixed a;
+  int i;
+
+  if (old = living_name_m[previous_object()]) 
+  {
+    if (pointerp(a = name_living_m[old])) 
+    {
+      a[member(a, previous_object())] = 0;
+    } 
+    else 
+    {
+      m_delete(name_living_m, old);
+    }
+  }
+  living_name_m[previous_object()] = name;
+  if (a = name_living_m[name]) 
+  {
+    if (!pointerp(a)) 
+    {
+      name_living_m[name] = ({a, previous_object()});
+      return;
+    }
+    /* Try to reallocate entry from destructed object */
+    if ((i = member(a, 0)) >= 0) 
+    {
+      a[i] = previous_object();
+      return;
+    }
+    name_living_m[name] = a + ({previous_object()});
+    return;
+  }
+  name_living_m[name] = previous_object();
+}
+
+/*-------------------------------------------------------------------------*/
+object find_living(string name) 
+
+/* Find the living with <name> and return its object. If not found,
+ * return 0.
+ * The living is searched first in the name/living mappings, then
+ * among the interactive users using the id() lfun.
+ */
+
+{
+  object *pls;
+  mixed *a, r;
+  int i;
+
+  if (pointerp(r = name_living_m[name])) 
+  {
+    if ( !living(r = (a = r)[0])) 
+    {
+      for (i = sizeof(a); --i;) 
+      {
+        if (living(a[<i])) 
+        {
+          r = a[<i];
+          a[<i] = a[0];
+          return a[0] = r;
+        }
+      }
+    }
+    return r;
+  }
+  if (living(r) && r)
+    return r;
+  if(sizeof(pls = filter_objects(users(), "id", name)))
+    return pls[0];
+}
+
+/*-------------------------------------------------------------------------*/
+object find_player(string name) 
+
+/* Find the interactive user <name> and return its object. If not found,
+ * return 0.
+ * The living is searched first in the name/living mappings, then
+ * among the interactive users using the id() lfun.
+ */
+
+{
+  object *pls;
+  mixed *a, r;
+  int i;
+
+  if (pointerp(r = name_living_m[name])) 
+  {
+    if ( !(r = (a = r)[0]) || !efun::object_info(r, OI_ONCE_INTERACTIVE)) 
+    {
+      for (i = sizeof(a); --i;) 
+      {
+        if (a[<i] && efun::object_info(a[<i], OI_ONCE_INTERACTIVE)) 
+        {
+          r = a[<i];
+          a[<i] = a[0];
+          return a[0] = r;
+        }
+      }
+    }
+    return r;
+  }
+  if (r && efun::object_info(r, OI_ONCE_INTERACTIVE))
+    return r;
+  if(sizeof(pls = filter_objects(users(), "id", name)))
+    return pls[0];
+}
+
+/*-------------------------------------------------------------------------*/
+public int query_user_level(mixed player) 
+
+/* Return the user level of string/object <player> or the wizard who
+ * made object <player>.
+ */
+
+{
+  FAKE_OBJECT;
+  return (int)MASTER->query_user_level(player);
+}
+
+/*-------------------------------------------------------------------------*/
+public varargs string query_user_tag (mixed player, int flags) 
+
+/* Return a descriptional string for string/object <player> resp.
+ * the for the wizard who made object <player>.
+ * If <flag> is non-zero, the abbreviations are returned.
+ */
+
+{
+  int lvl;
+  FAKE_OBJECT; 
+  if (!intp(player))
+    lvl = (int)MASTER->query_user_level(player);
+  else
+  {
+    if (player <= LVL_PLAYER)
+      lvl = LVL_PLAYER;
+    else if (player >= LVL_WIZARD)
+      lvl = LVL_WIZARD;
+    else
+      lvl = player;
+  }
+
+  switch (lvl)
+  {
+  case LVL_PLAYER: return (flags & 1) ? PLAYER_L : PLAYER_S;
+  case LVL_ANCIENT: return (flags & 1) ? ANCIENT_L : ANCIENT_S;
+  case LVL_WIZARD: return (flags & 1) ? WIZARD_L : WIZARD_S;
+  }
+  return 0;
+}
+
+/*-------------------------------------------------------------------------*/
+public varargs int is_clone(object obj) 
+
+/* Return true if <obj> is a clone, 0 if not.
+ */
+
+{
+  mixed m;
+
+  if (!(obj || (obj = previous_object())))
+    return 0;
+  m = (mixed)obj->Query("Cloned");
+  if (intp(m) && m)
+    return m > 0;
+  return efun::clonep(obj);
+  //return member(object_name(obj), '#') >= 0;
+}
+
+/*-------------------------------------------------------------------------*/
+public deprecated varargs string blueprint(mixed obj) 
+
+/* Return the name of the blueprint of object/filename <obj>.
+ */
+
+{
+  if(stringp(obj))
+    return efun::load_name(obj);
+  else if(objectp(obj) || obj = previous_object())
+    return efun::load_name(obj);
+
+#if 0
+  int p;
+
+  if(stringp(obj))
+    return (p = member(obj, '#')) < 0 ? obj : obj[0..p-1];
+  else if(objectp(obj) || obj = previous_object())
+    return (p = member(obj = object_name(obj), '#')) < 0 ? obj : obj[0..p-1];
+  else return 0;
+#endif
+}
+
+/*-------------------------------------------------------------------------*/
+public varargs object load_object(string file, string creator) 
+
+/* Load the object <file> (w/o ".c" at the end!).
+ * If it does not exist and creator is given, call
+ * creator->compile_object(<file>) and use the returned object as
+ * _the_ object <file>. This is a small extension to the normal
+ * virtual objects handling.
+ */
+
+{
+  object obj;
+  if (!find_object(file) && file_size(file+".c") > 0)
+  {
+    FAKE_OBJECT;
+    call_other(file, "???");
+  }
+  obj = find_object(file);
+  if (!obj && creator)
+  {
+    obj = (object)creator->compile_object(file);
+    if (!obj)
+      obj = (object)creator->compile_object(file+".c");
+    rename_object(obj, file);
+  }
+  return obj;
+}
+
+/*-------------------------------------------------------------------------*/
+public object * find_clones(string|object file) 
+
+/* Find all objects which are clones from <file> and return an array
+ * (possibly empty) of them.
+ * WARNING: This function is expensive!
+ */
+
+{
+  return efun::clones(file, 2);
+#if 0
+  int p;
+  object *rc, ob;
+  string s;
+
+  if (objectp(file))
+    file = to_string(file);
+  if (0 <= (p = member(file, '#')))
+    file = file[0..p-1];
+  rc = ({});
+  for (ob = debug_info(2); ob; ob = debug_info(2,ob)) {
+    if (0 <= (p = member(s = to_string(ob), '#')) && s[0..p-1] == file)
+      rc += ({ ob });
+  }
+  return rc;
+#endif
+}
+
+/*-------------------------------------------------------------------------*/
+public varargs object * all_environments (object obj)
+
+/* Return an array (possibly empty) of all environments of <obj>.
+ * The array starts with the innermost environment having index 0.
+ */
+
+{
+  object * rc;
+
+  rc = ({});
+  if (!obj)
+    obj = previous_object();
+  while (environment(obj))
+  {
+    obj = environment(obj);
+    rc += ({ obj });
+  }
+  return rc;
+}
+
+/*-------------------------------------------------------------------------*/
+public varargs int is_netdead (object obj) 
+
+/* Return true if <obj> is a netdead user.
+ */
+
+{
+  return obj || (obj = this_player()) ?
+    !interactive(obj) && efun::object_info(obj, OI_ONCE_INTERACTIVE) : 0;
+}
+
+/*-------------------------------------------------------------------------*/
+public varargs object deep_present(mixed what, object where)
+
+/* Like present(), search for <what> in <where> (default is the
+ * calling object), but recurse through all directories.
+ * Return the object found, or 0.
+ */
+ 
+{
+  object rc, *objs;
+  int i;
+
+  rc = present(what, where || PRE);
+  if (!rc)
+  {
+    objs = deep_inventory(where||PRE);
+    if (objectp(what))
+      objs = objs & ({ what });
+    else
+    {
+      for (i = 0; i < sizeof(objs); i++)
+        if (objs[i]->id(what))
+          break;
+      objs = objs[i..];
+    }
+    rc = sizeof(objs) ? objs[0] : 0;
+  }
+  return rc;
+}
+
+/*-------------------------------------------------------------------------*/
+public varargs object present_clone(mixed what, mixed where, int deep)
+
+/* Like present(), search for <what> in <where> (default is the
+ * calling object), but look for clones of <what>. If <deep> is
+ * non-zero, the search recurses through all inventories.
+ * Return the object found, or 0.
+ */
+ 
+{
+  string name;
+  object *objs;
+  int i;
+
+  if (intp(where))
+  {
+    deep = where; where = 0;
+  }
+
+  objs = deep ? deep_inventory(where||PRE)
+              : all_inventory(where||PRE);
+  name = blueprint(what);
+  for (i = 0; i < sizeof(objs); i++)
+    if (is_clone(objs[i]) && blueprint(objs[i]) == name)
+      return objs[i];
+  return 0;
+}
+
+//--------------------------------------------------------------------------
+public varargs mixed fold_objlist (mixed * what, int impl) 
+
+/* Sort the objects in <what> by their InvShort() and return an array
+ * of their Short()s, in which matching descriptions are collated as
+ * '<short>(<count>)'.
+ * If <impl> is non-zero, the functions passes the array through
+ * implode_list() and returns the string "<item>, <item>,... and
+ * <item>.\n".
+ */
+
+{
+  string msg, sh;
+  int    i, size;
+
+  what = unique_array(what, "InvShort");
+  for (i = sizeof(what); i-- > 0; ) {
+    what[i] -= ({ 0 });
+    if (   !(size = sizeof(what[i]))
+        || !(sh = (string)what[i][0]->Short())
+        || sh == ""
+       ) {
+      what[i] = 0;
+      continue;
+    }
+    what[i] = sh+(size > 1 ? "["+to_string(size)+"]" : "");
+  }
+  what -= ({ 0 });
+  if (!impl)
+    return what;
+  if (sizeof(what) > 1)
+    msg = implode(what[0..<2], ", ")+" and "+what[<1];
+  else if (sizeof(what))
+    msg = what[0];
+  else
+    msg = "";
+  return msg;
+}
+
+/***************************************************************************/

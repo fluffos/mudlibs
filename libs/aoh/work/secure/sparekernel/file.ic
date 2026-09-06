@@ -1,0 +1,195 @@
+/*--------------------------------------------------------------------------
+ * /secure/kernel/file.ic -- File related sefuns.
+ *
+ * Copyright (C) 1997 by One Step Beyond.
+ * All Rights Reserved.
+ * Permission granted for non-commercial use.
+ *--------------------------------------------------------------------------
+ * This file is included(!) from /secure/kernel.c to form the kernel.
+ * Implemented sefuns are:
+ *   file_date(), get_dir_ext()
+ *   resolve_file()
+ *   find_savefile()
+ *--------------------------------------------------------------------------
+ */
+
+/* Flags for get_dir(), see <dirent.h> */
+#include <driver/files.h>
+
+#define FILE_NAME GETDIR_NAMES
+#define FILE_SIZE GETDIR_SIZES
+#define FILE_DATE GETDIR_DATES
+#define CAT_MAX_LINES 50
+#define TAIL_MAX_BYTES 1000
+
+/*-------------------------------------------------------------------------*/
+varargs int tail(string file)
+{
+    if (extern_call())
+        set_this_object(previous_object());
+
+    if (!stringp(file) || !this_player())
+        return 0;
+    string txt = read_bytes(file, -(TAIL_MAX_BYTES + 80), (TAIL_MAX_BYTES + 80));
+    if (!stringp(txt))
+        return 0;
+
+    // cut off first (incomplete) line
+    int index = strstr(txt, "\n");
+    if (index > -1)
+    {
+        if (index + 1 < sizeof(txt))
+            txt = txt[index+1..];
+        else
+            txt = "";
+    }
+
+    tell_object(this_player(), txt);
+
+    return 1;
+}
+
+/*-------------------------------------------------------------------------*/
+varargs int cat(string file, int start, int num)
+{
+    if (extern_call())
+        efun::set_this_object(efun::previous_object());
+
+    int more;
+
+    if (num < 0 || !efun::this_player())
+        return 0;
+
+    if (!start)
+        start = 1;
+
+    if (!num || num > CAT_MAX_LINES) {
+        num = CAT_MAX_LINES;
+        more = efun::sizeof(efun::read_file(file, start+num, 1));
+    }
+
+    string txt = efun::read_file(file, start, num);
+    if (!txt)
+        return 0;
+
+    efun::tell_object(efun::this_player(), txt);
+
+    if (more)
+        efun::tell_object(efun::this_player(), "*****TRUNCATED****\n");
+
+    return efun::sizeof(txt & "\n");
+}
+
+/*-------------------------------------------------------------------------*/
+public int file_date(string file) 
+
+/* Return the time() of last write of <file>.
+ */
+
+{
+  mixed *data;
+
+  return sizeof(data = get_dir(file, FILE_DATE)) ? data[0] : 0;
+}
+
+
+/*-------------------------------------------------------------------------*/
+string *get_dir_ext(string path) 
+
+/* Return the content of a directory like the efun get_dir() does but also
+ * extend the filenames with some special identification characters:
+ * a "/" will be appended to directories and
+ * a "*" will be appended to files which have been loaded or inherited
+ */
+
+{
+  string *strs, file;
+  mixed *finfo;
+  int i, s;
+
+  finfo = get_dir(path, FILE_NAME | FILE_SIZE);
+  if(finfo && (s = sizeof(finfo))) {
+    strs = (string*)MASTER->full_path_array(path, TP ? getuid(TP) : 0);
+    path = sizeof(strs) ? "/" + implode(strs[0..<2], "/") + "/" : "/";
+    strs = ({});
+    while(s--, s-- > 0) {
+      file = finfo[i++];
+      switch(finfo[i++]) {
+      case -2:
+        file += "/";
+        break;
+      case -1:
+        file += "@";
+        break;
+      default:
+        if(find_object(path + file))
+          file += "*";
+      }
+      strs += ({ file });
+    }
+  }
+  return strs;
+}
+
+/*-------------------------------------------------------------------------*/
+public varargs string resolve_file(string file, mixed anchor) 
+
+/* Resolve the (relative) pathname <file> in relation to object
+ * <anchor> (default is the calling object).
+ */
+
+{
+  string *tmp, anchorpath;
+
+  if (objectp(anchor))
+    anchorpath = object_name(anchor);
+  else if (stringp(anchor))
+  {
+    anchorpath = anchor;
+    if (-1 == member("/+&~", anchorpath[0]))
+      anchorpath = "/"+anchorpath;
+    if ('/' != anchorpath[<1])
+      anchorpath += "/";
+    anchor = PRE;
+  }
+  else
+  {
+    anchorpath = object_name(PRE)+"/../";
+    anchor = PRE;
+  }
+  
+  switch (file[0]) {
+  case '/':
+  case '+':
+  case '&':
+  case '~':
+    tmp = (string *)"/secure/master"->full_path_array(file, getuid(anchor));
+    break;
+  case '.':
+  default:
+    tmp = (string *)"/secure/master"->full_path_array(anchorpath+file, 0);
+  }
+  return "/" + implode(tmp, "/");
+}
+
+/*-------------------------------------------------------------------------*/
+public string find_savefile(mixed pl)
+
+/* Return the savefilename of <pl> resp. of the wizard who made object
+ * <player>.
+ * Return 0 if there is no such savefile, or if it is empty.
+ */
+
+{
+  if (objectp(pl))
+    pl = geteuid(pl);
+  if (!stringp(pl))
+    return 0;
+  pl = lower_case(pl);
+  pl = "/"+SAVEPATH+pl[0..0]+"/"+pl;
+  if (file_size(pl+".o") < 0)
+    return 0;
+  return pl;
+}
+
+/***************************************************************************/

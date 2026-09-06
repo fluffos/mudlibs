@@ -1,0 +1,685 @@
+/*-------------------------------------------------------------------------
+ * /secure/kernel/override.ic -- Redefined true efuns.             
+ *
+ * Copyright (C) 1997 by One Step Beyond.
+ * All Rights Reserved.
+ * Permission granted for non-commercial use.
+ *--------------------------------------------------------------------------
+ * This file is included(!) from /secure/kernel.c to form the kernel.
+ * The efuns overridden were:
+ *   for bug fixes:
+ *     time(), ctime(): time correction on leander
+ *   for extension/restriction of lib related features:
+ *     call_out():               emergency break on too many call_outs.
+ *     log_file():               restriction of logfile size.
+ *     command(), notify_fail(): Support for the command system.
+ *     snoop(), query_snoop():   Transparent snooping.
+ *     tell_object(), tell_room(), say(), write(), set_prompt():
+ *       to implement the automatic wordwrapping.
+ *   for security checks:
+ *     input_to()
+ *     set_this_player()
+ *     efun308()
+ *     remove_interactive()
+ *     shutdown()
+ *--------------------------------------------------------------------------
+ */
+
+#include <driver/lpctypes.h>
+
+public varargs object load_object(string file, string creator); // forward
+
+/* --- call_out() --- */
+
+#define CALL_OUT_WARN  1000  // lower limit for re-enabling of stopped c_os.
+#define CALL_OUT_MAX   1200  // upper limit of call_out()s.
+
+/* --- misc --- */
+#define MAX_LOG_SIZE  50000  // 50kBytes plus one backup should be enough.
+
+#if defined(TIME_DELTA)
+#if TIME_DELTA != 0
+
+/*-------------------------------------------------------------------------*/
+/* Host machine's clock doesn't run in time.
+ */
+
+public nomask int time() 
+{ 
+  return efun::time() + TIME_DELTA;
+}
+public varargs nomask string ctime(int t) 
+{ 
+  return t ? efun::ctime(t) : efun::ctime(efun::time()+TIME_DELTA);
+}
+
+#endif
+#endif
+
+/* --------------------------------------------------------------------------
+ * send_erq
+ * --------------------------------------------------------------------------
+ */
+
+public int send_erq( int request, mixed * data, closure callback ) {
+  return (int)MASTER->erq_send( request, data, callback );
+}
+
+/*-------------------------------------------------------------------------*/
+public int log_file(string file, string txt) 
+
+/* Append <txt> to the file /log/<file>. If the size of the logfile
+ * exceeds MAX_LOG_SIZE before the write, /log/<file> is renamed to
+ * /log/<file>.old and a new logfile is started.
+ * Any older backup of course will be lost.
+ */
+
+{
+  FAKE_OBJECT;
+  file = (string)MASTER->full_path("/log/"+file);
+  if(file_size(file) > MAX_LOG_SIZE)
+    catch(rename(file, file + ".old"));
+  return write_file(file, txt);
+}
+
+
+/*-------------------------------------------------------------------------*/
+public varargs nomask int command (string str, object ob) 
+
+/* Wrap the command() into the handling of CmdData() in the player.
+ * Amylaar hits you hard.
+ */
+
+{
+  int rc;
+  FAKE_OBJECT;
+  if (ob && ob != TO) return (int)ob->command_me(str);
+  TO->SetCmdData("ThisPlayer", TP);
+  // The 'TP->PushNotifyFail()' is done by the modify_command-hook.
+  if ((rc = efun::command(str)) && TP)
+  {
+    TP->PopCmdData(); // No failure, else the driver hook already popped it.
+    TP->FlushReceive();
+  }
+  return rc;
+}
+
+/*-------------------------------------------------------------------------*/
+public varargs nomask void notify_fail(mixed msg, int pri) 
+
+/* Wrap the notify_fail() into the handling of CmdData() in the player.
+ * Amylaar hits you hard.
+ */
+
+{
+  if (TP)
+  {
+    FAKE_OBJECT;
+    TP->NotifyFail(msg, pri);
+  }
+}
+
+/*-------------------------------------------------------------------------*/
+public varargs nomask void input_to (mixed fun, int flag, varargs mixed *args)
+
+/* Forbid the 'ignore bang' flag except for root objects.
+ */
+
+{
+  if (!PRE || getuid(PRE) != ROOTID)
+    flag = flag & ~(128);
+  if (!this_player() && interactive(previous_object()))
+    efun::set_this_player(previous_object());
+  FAKE_OBJECT;
+  if (sizeof(args))
+    apply(#'efun::input_to, fun, flag, args);
+  else
+    efun::input_to(fun, flag);
+}
+
+/*-------------------------------------------------------------------------*/
+public nomask void set_this_player (object obj) 
+
+/* Only root objects can change this_player().
+ */
+
+{
+  if (!PRE || (obj != PRE && to_string(PRE)[0..6] != "/secure")) {
+    raise_error("Illegal attempt to change this_player().\n");
+    return;
+  }
+  FAKE_OBJECT;
+  efun::set_this_player(obj);
+}
+
+/*-------------------------------------------------------------------------*/
+public nomask void set_environment (object item, object dest) 
+
+/* Only root objects can use set_environment().
+ */
+
+{
+  if (!PRE || to_string(PRE)[0..6] != "/secure") {
+    raise_error("Illegal attempt to use set_environment().\n");
+    return;
+  }
+  FAKE_OBJECT;
+  efun::set_environment(item, dest);
+}
+
+/*-------------------------------------------------------------------------*/
+public nomask mixed remove_interactive (object victim) 
+
+/* Too many wizards played with remove_interactive(), so only arches
+ * and root objects can do this.
+ */
+
+{
+  if (!victim || !interactive(victim))
+    return 0;
+  if (   (PRE && getuid(PRE) == ROOTID)
+      || (TI && LEVEL(TI) >= LVL_WIZARD)
+      || (TI && victim == TI && TP == TI)
+     )
+    return efun::remove_interactive(victim);
+
+  catch(log_file("DESTRUCT", ctime()+": "+capitalize((string)victim->QueryRealName())
++"\n    remove_interactive() by "
++(PRE ? (object_name(PRE)+" ["+getuid(PRE)+"]") : "???")
++"\n"));
+  return 0;
+}
+
+#if ! __EFUN_DEFINED__(query_snoop)
+#ifndef __QUERY_SNOOP__
+#define __QUERY_SNOOP__
+
+#include <driver/interactive_info.h>
+
+object query_snoop(object ob)
+{
+    if(!efun::interactive(ob))
+        return 0;
+
+    object prev = efun::previous_object();
+    efun::set_this_object(prev);
+
+    return efun::interactive_info(ob, II_SNOOP_NEXT);
+}
+#endif /* __QUERY_SNOOP__ */
+#endif
+
+/*-------------------------------------------------------------------------*/
+private object what_snoopee(object try, object snooper)
+
+/* Auxiliary function: return <try> if <try> is snooped by <snooper>
+ * else return 0.
+ */
+
+{
+  if (query_snoop(try) == snooper)
+    return try;
+  else
+    return 0;
+}
+
+/*-------------------------------------------------------------------------*/
+public nomask varargs int snoop(object me, object you) 
+
+/* Start a snoop from <me> on <you>, including all notifications and logs.
+ * The snoop is denied if <me> is not the interactive player.
+ * If <you> is omitted or 0, any snoop active from <me> is stopped.
+ * TODO:  Put the snoop handling completely into the mudlib once the input/
+ * TODO:: command handling has been taken over.
+ * TODO:  Add flag for players to inhibit unnotified snoops.
+ */
+
+{
+  int ret;
+  object *former;
+
+  ret = 0;
+
+  /* Set 'former' the object currently snooped by <me> and stop
+   * the snooping by <me>.
+   * If <you> is valid, start a snoop from <me> on <you>, with
+   * 'ret' receiving the returncode.
+   */
+  if (me && TI) 
+  {
+    former = map(users(), #'what_snoopee, me) - ({ 0 });
+    if (you) 
+    {
+      /* Start new snoop */
+      if (me != you && you != TI && !query_snoop(you)) 
+      {
+        ret = efun::snoop(me, you);
+        if (ret == 1)
+          tell_object(you, "*** "+NAME(me) + " snoops you!\n");
+      }
+    }
+    else if (me == TI)
+    {
+      /* Simply stop old snoop */
+      former = map(users(), #'what_snoopee, me) - ({ 0 });
+      ret = efun::snoop(me);
+    }
+  }
+
+  /* New snoop or not, at this point 'former' holds the former
+   * snoop target, if any.
+   */
+  if ( sizeof(former) && former[0] && ret == 1 )
+    tell_object(former[0], "*** "+NAME(me) + " stopped snooping you.\n");
+
+  return ret;
+}
+
+/*-------------------------------------------------------------------------*/
+#if 0
+public nomask object query_snoop (object victim) 
+
+/* Return the user which is currently snooping <victim>, or 0 if there
+ * is none.
+ */
+
+{
+  object snooper;
+
+  snooper = 0;
+  if (victim)
+    snooper = query_snoop(victim);
+  return snooper;
+}
+#endif
+/*-------------------------------------------------------------------------*/
+public nomask void shutdown() 
+
+/* Log shutdowns in /log/GAME_LOG to box ears...
+ */
+
+{
+  if(TP && PRE) {
+    catch(log_file("GAME_LOG", ctime(time()) + " shutdown() on "
+                         +query_host_name()+"\n" +
+             " previous:    " + object_name(PRE) + " [" + getuid(PRE) + "]\n" +
+             " player:      " + object_name(TP)  + " [" + getuid(TP)  + "]\n" +
+             " interactive: " + (TI ? getuid(TI) : "(none)") + "\n"));
+    efun::shutdown();
+  }
+}
+
+
+/*-------------------------------------------------------------------------*/
+private mixed process_value (string func) 
+
+/* Auxiliary function for process_string(). */
+
+{
+  int num;
+  mixed tmp;
+  string arg;
+  object obj;
+
+  if (!func || !stringp(func))
+    return 0;
+
+  if ((tmp = member(func, '|')) != -1) {
+    arg = func[tmp+1..];
+    func = func[0..tmp-1];
+  }
+  if ((tmp = member(func, ':')) != -1) {
+    obj = find_object(func[tmp+1..]);
+    func = func[0..tmp-1];
+  } else {
+    obj = previous_object();
+  }
+  if (!obj)
+    return 0;
+  if (!arg)
+    arg = "";
+    
+  if (!symbol_function(func, obj))
+    raise_error(sprintf("Can't find %O in %O to call.\n", func, obj));
+
+  // Again, hack around the GD bug.
+  // return apply( symbol_function( func, obj ), explode(arg, "|") );
+  tmp = explode(arg, "|");
+  if (!sizeof(tmp))
+    return call_other(obj, func);
+  num = sizeof(tmp);
+  if (num > 8)
+  {
+    raise_error("Too many arguments ("+num+") in '"+func+":"+arg+"'.\n");
+    return 0;
+  }
+  if (num != 8)
+    tmp = tmp + allocate(8-num);
+  return call_other(obj, func, tmp[0], tmp[1], tmp[2], tmp[3]
+                             , tmp[4], tmp[5], tmp[6], tmp[7]
+                   );
+}
+
+/*-------------------------------------------------------------------------*/
+public string process_string(string str) 
+
+/* Bugfix for process_string() so that it can handle spaces in
+ * arguments. Actually taken from Lima/MudOS.
+ */
+ 
+{
+  int il;
+  string * parts;
+  string tmp;
+
+  parts = explode(str, "@@");
+    
+  for ( il = 1; il < sizeof(parts); il += 2) {
+    tmp = process_value(parts[il]);
+    if (stringp(tmp))
+      parts[il] = tmp;
+  }
+
+  return implode(parts, "");
+}
+
+/*-------------------------------------------------------------------------*/
+/* Implement an emergency break on call_outs().
+ * If the number of active call_outs() raises over CALL_OUT_MAX, all further
+ * call_out()s are ignored, until the number falls under CALL_OUT_WARN
+ * again. The happening is logged in /log/CALLOUT.
+ * Also, print warnings on the error channel should the number of call_outs
+ * raise suspiciously high.
+ *
+ * Due to a bug in the Gamedriver, apply(function...) is dangerours:
+ * the driver crashes if function causes a runtime error. Therefore
+ * we have to hack around this a little.
+ */
+
+static int CallOutStopped = 0;
+static int CallOutCount = 0;
+static int CountMessages = 0;
+static int CountMessagesTotal = 0;
+static string LastMessage;
+
+public varargs nomask void 
+call_out (mixed what, int delay, varargs mixed *args )
+
+{
+  object tmp;
+  int num;
+  string message;
+
+  if (sizeof(args))
+  {
+    num = sizeof(args);
+    if (num > 8)
+    {
+      raise_error("Too many arguments ("+num+") to call_out().\n");
+      return;
+    }
+    if (num != 8)
+      args = args + allocate(8-num);
+  }
+
+  if (!previous_object() || to_string(previous_object())[0..6] == "/secure")
+  {
+    tmp = this_object();
+    if (previous_object())
+      FAKE_OBJECT;
+    if (sizeof(args))
+      // apply(#'efun::call_out, what, delay, args);
+      efun::call_out(what, delay, args[0], args[1], args[2], args[3]
+                                , args[4], args[5], args[6], args[7]
+                    );
+    else
+      efun::call_out(what, delay);
+    set_this_object(tmp);
+    return;
+  }
+  
+  if (CallOutStopped) {
+    num = sizeof(call_out_info());
+    if (num < CALL_OUT_MAX/4) {
+      message = "NOTE: call_outs reactivated, "+num+" pending.\n";
+      catch(load_object(CHANNEL_D)->SendTell("error", "KERNEL", message));
+      catch(write_file("/log/CALLOUT",ctime()+" call_outs reactivated.\n"));
+      CallOutStopped = 0;
+      CountMessagesTotal = 0;
+    }
+  }
+  if (CallOutStopped) {
+    if (CountMessagesTotal > 30)
+      return; /* Don't blow up the log */
+    if (sizeof(args))
+      message=sprintf("%O %O %O args %O\n"
+                     , previous_object(), what, delay, args);
+    else
+      message=sprintf("%O %O %O\n", previous_object(), what, delay);
+    if (LastMessage == message)
+      CountMessages++;
+    else {
+      if (CountMessages) {
+        catch(write_file("/log/CALLOUT"
+                  , sprintf("Last message repeated %d times.\n",CountMessages)
+                  ));
+        CountMessages=0;
+      }
+      CountMessagesTotal++;
+      if (CountMessagesTotal > 30)
+	message += "...\n";
+      catch(write_file("/log/CALLOUT",message));
+      LastMessage=message;
+    }
+    return;
+  }
+
+  if (!(++CallOutCount%50)) {
+    CallOutCount = 0;
+    num = sizeof(call_out_info());
+
+    if (num > CALL_OUT_MAX) {
+      message = "ERROR: Max number of call_outs exceeded. call_outs stopped.\n";
+      catch(load_object(CHANNEL_D)->SendTell("error", "KERNEL", message));
+
+      catch(write_file("/log/CALLOUT",ctime()+" *** EMERGENCY BREAK: "
+                                +num+" call_outs ***\n"));
+      CallOutStopped = 1;
+      CountMessagesTotal = 0;
+      return;
+    }
+
+    if (num > CALL_OUT_WARN) {
+      message = sprintf( "WARNING: %d call_outs pending, upper limit is %d.\n"
+                       , num, CALL_OUT_MAX);
+      catch(load_object(CHANNEL_D)->SendTell("error", "KERNEL", message));
+    }
+  }
+  tmp = this_object();
+  FAKE_OBJECT;
+  if (sizeof(args))
+    // apply(#'efun::call_out, what, delay, args);
+    efun::call_out(what, delay, args[0], args[1], args[2], args[3]
+                              , args[4], args[5], args[6], args[7]
+                  );
+  else
+    efun::call_out(what, delay);
+  set_this_object(tmp);
+  return;
+}
+
+/*-------------------------------------------------------------------------*/
+#if __EFUN_DEFINED__(set_prompt)
+public varargs mixed set_prompt (mixed prompt, object ob)
+{
+  mixed oldvalue;
+  
+  if (!ob)
+    ob = this_player();
+#if !__EFUN_DEFINED__(query_once_interactive)
+  if (!efun::object_info(ob, OI_ONCE_INTERACTIVE))
+#else
+  if (query_once_interactive(ob))
+#endif
+    return efun::set_prompt(prompt, ob);
+//  if (!living(ob))
+//    raise_error(sprintf("Bad argument 2 to set_prompt(): %O\n", ob));
+  if (!stringp(prompt) && !closurep(prompt))
+    raise_error(sprintf("Bad argument 1 to set_prompt(): %O\n", prompt));
+  oldvalue = (mixed)ob->Query("Prompt");
+  ob->Set("Prompt", prompt);
+  return oldvalue;
+}
+#endif
+/*-------------------------------------------------------------------------*/
+public void tell_object (object ob, string str)
+{
+  mixed rc;
+  
+  if (!objectp(ob))
+    raise_error(sprintf("Bad argument 1 to tell_object: %O\n", ob));
+
+  FAKE_OBJECT;
+  if (!interactive(ob) || !call_resolved(&rc, ob, "Receive", str))
+    efun::tell_object(ob, str);
+}
+
+/*-------------------------------------------------------------------------*/
+public varargs void tell_room (mixed room, mixed msg, object * exclude)
+{
+  object * u;
+  mixed rc;
+  int i;
+  
+  FAKE_OBJECT;
+  if (stringp(room))
+  {
+    rc = find_object(room);
+    if (!rc)
+      call_other(room, "???");
+    rc = find_object(room);
+    if (rc)
+      room = rc;
+  }
+  
+  if (!objectp(room))
+    raise_error(sprintf("Bad argument 1 to tell_room: %O\n", room));
+
+  if (!stringp(msg))
+  {
+    efun::tell_room(room, msg, exclude);
+    return;
+  }
+  
+  /* Tell the message to all interactives with a Receive lfun
+   * and add those to the exlude array.
+   */
+  u = filter(all_inventory(room), #'interactive);
+  if (pointerp(exclude))
+    u -= exclude;
+  for (i = sizeof(u); i--; )
+    if (!call_resolved(&rc, u[i], "Receive", msg))
+      u[i] = 0;
+  u -= ({ 0 });
+  if (pointerp(exclude))
+    exclude += u;
+  else if (sizeof(u))
+    exclude = u;
+  
+  /* Now also tell the others */
+  if (sizeof(exclude))
+    efun::tell_room(room, msg, exclude);
+  else
+    efun::tell_room(room, msg);
+}
+
+/*-------------------------------------------------------------------------*/
+public void write (mixed msg)
+{
+  mixed rc;
+  
+  switch (typeof(msg))
+  {
+    case T_NUMBER:
+    case T_FLOAT:
+      msg = sprintf("%O", msg);
+      break;
+    case T_STRING:
+      break;
+    case T_OBJECT:
+      msg = "OBJ("+object_name(msg)+")";
+      break;
+    case T_POINTER:
+      msg = "<ARRAY>";
+      break;
+    case T_MAPPING:
+      msg = "<MAPPING>";
+      break;
+    default:
+      msg = "<UNKNOWN>";
+      break;
+  }
+
+  if (this_player())
+    set_this_object(this_player());
+  else if (previous_object() && living(previous_object()))
+    FAKE_OBJECT;
+
+  if (!interactive(this_object()) || !call_resolved(&rc, this_object(), "Receive", msg))
+    efun::tell_object(this_object(), msg);
+}
+
+/*-------------------------------------------------------------------------*/
+public varargs void say (mixed msg, mixed exclude)
+{
+  object origin;
+  mixed recs;
+  int i;
+  mixed rc;
+
+  if (previous_object() && living(previous_object()))
+    origin = previous_object();
+  else
+    origin = this_player() || previous_object();
+  
+  FAKE_OBJECT;
+  if (!stringp(msg))
+  {
+    if (sizeof(exclude))
+      efun::say(msg, exclude);
+    else
+      efun::say(msg);
+    return;
+  }
+  if (objectp(exclude))
+    exclude = ({ exclude, origin });
+  else if (pointerp(exclude))
+    exclude += ({ origin });
+  else
+    exclude = ({ origin });
+  exclude -= ({ 0 });
+  
+  /* Due to the FAKE_OBJECT we cant call tell_room() here.
+   * Instead we call all interactives by hand, add them to exclude
+   * and then call the efun.
+   */
+  if (environment(origin))
+    recs = all_inventory(environment(origin));
+  else
+    recs = ({});
+  recs += all_inventory(origin);
+  recs -= exclude;
+  for (i = sizeof(recs); i--; )
+    if (!interactive(recs[i]) 
+     || !call_resolved(&rc, recs[i], "Receive", msg)
+       )
+      recs[i] = 0;
+  recs -= ({ 0 });
+  exclude += recs;
+  if (sizeof(exclude))
+    efun::say(msg, exclude);
+  else
+    efun::say(msg);
+}
+
+/***************************************************************************/

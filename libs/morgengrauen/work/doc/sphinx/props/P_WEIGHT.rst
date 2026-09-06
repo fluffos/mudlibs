@@ -1,0 +1,53 @@
+P_WEIGHT
+========
+
+NAME
+----
+
+    P_WEIGHT                      "weight"
+
+DEFINIERT IN
+------------
+
+    /sys/thing/restrictions.h
+
+BESCHREIBUNG
+------------
+
+  - Objekte: das Gewicht eines Objektes in Gramm
+  - Speisen: Gewicht einer Portion der Speise
+  - Container: das Gewicht des Containers ohne Inhalt
+  - Lebewesen: das Gewicht des Lebewesens ohne Inhalt
+
+BEMERKUNGEN
+-----------
+
+  Das Gewicht eines Objektes (in Gramm).
+  Bei normalen Objekten ist es das Gesamtgewicht dieses Objektes.
+  Bei Containern (und Lebewesen) ist es das Gewicht des Containers ohne
+  etwaigen Inhalt.
+
+  In tragbaren Speisen (welche von von /std/food erben) setzt man mit
+  SetProp das Gewicht _einer_ Portion. Per QueryProp erhaelt man aber das
+  Gesamtgewicht der Speise inclusive des eventuell vorhandenen Behaelters.
+  Das Gewicht des Behaelters wird dabei aus P_EMPTY_PROPS[P_WEIGHT]
+  gelesen.
+
+  Wichtig fuer Gegenstaende, die von Spielern mitgenommen werden koennen:
+  Gibt man das Gewicht eines solchen Gegenstandes ausschliesslich per
+  Querymethode auf P_WEIGHT zurueck, ergibt sich eine Diskrepanz zwischen
+  P_WEIGHT und P_TOTAL_WEIGHT, da letzerer Wert nur beim Setzen von P_WEIGHT
+  per SetProp() mit eingestellt wird. Daher ist bei diesen Objekten darauf
+  zu achten, dass zusaetzlich eine Querymethode auf P_TOTAL_WEIGHT gesetzt
+  wird, die denselben Wert zurueckgibt.
+
+SIEHE AUCH
+----------
+
+  Properties: :doc:`../props/P_TOTAL_WEIGHT`, :doc:`../props/P_EMPTY_PROPS`, 
+  :doc:`../props/P_WEIGHT_PERCENT`, :doc:`../props/P_WEIGHT_PER_UNIT`
+  
+  zu Speisen: wiz/food
+
+Last modified: 2021-01-22, Arathorn
+

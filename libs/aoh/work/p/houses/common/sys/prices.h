@@ -1,0 +1,3 @@
+#define ROOM_PRICE   20000
+#define GROUND_PRICE 15000
+#define HOUSE_PRICE  25000

@@ -1,0 +1,200 @@
+/*
+ * Catalog player body for morgengrauen (LDMud → FluffOS conversion).
+ */
+
+string name;
+string password;
+int hp;
+int max_hp;
+
+int cmd_look(string arg);
+int cmd_score(string arg);
+int cmd_inventory(string arg);
+int cmd_go(string dir);
+int cmd_quit(string arg);
+
+void create() {
+  seteuid(getuid());
+  hp = 20;
+  max_hp = 20;
+}
+
+string query_name() { return name; }
+string query_password() { return password; }
+int query_hp() { return hp; }
+int query_mhp() { return max_hp; }
+int query_level() { return 1; }
+
+string save_path() {
+  if (!name || name == "")
+    return 0;
+  return sprintf("/data/%c/%s", name[0], name);
+}
+
+void ensure_letter_dir() {
+  string d;
+
+  if (!name)
+    return;
+  d = sprintf("/data/%c", name[0]);
+  if (file_size("/data") != -2)
+    mkdir("/data");
+  if (file_size(d) != -2)
+    mkdir(d);
+}
+
+int restore_me(string n) {
+  name = n;
+  return restore_object(save_path());
+}
+
+void setup_new(string n, string pw) {
+  name = n;
+  password = pw;
+  hp = 20;
+  max_hp = 20;
+}
+
+void save_me() {
+  string p;
+
+  p = save_path();
+  if (!p)
+    return;
+  ensure_letter_dir();
+  save_object(p);
+}
+
+void wire_commands() {
+  enable_commands();
+  add_action("cmd_look", "look");
+  add_action("cmd_look", "l");
+  add_action("cmd_score", "score");
+  add_action("cmd_score", "sc");
+  add_action("cmd_quit", "quit");
+  add_action("cmd_inventory", "inventory");
+  add_action("cmd_inventory", "i");
+  add_action("cmd_go", "north");
+  add_action("cmd_go", "south");
+  add_action("cmd_go", "east");
+  add_action("cmd_go", "west");
+  add_action("cmd_go", "up");
+  add_action("cmd_go", "down");
+}
+
+void enter_world() {
+  set_living_name(name);
+  wire_commands();
+  move_object("/catalog/void");
+  write("\n");
+  command("look");
+  save_me();
+}
+
+mixed process_input(string str) {
+  string verb, rest;
+
+  if (!str)
+    return 0;
+  if (sscanf(str, "%s %s", verb, rest) != 2) {
+    verb = str;
+    rest = 0;
+  }
+  switch (verb) {
+    case "look":
+    case "l":
+      cmd_look(rest);
+      return 1;
+    case "score":
+    case "sc":
+      cmd_score(rest);
+      return 1;
+    case "quit":
+      cmd_quit(rest);
+      return 1;
+    case "inventory":
+    case "i":
+      cmd_inventory(rest);
+      return 1;
+    case "north":
+    case "south":
+    case "east":
+    case "west":
+    case "up":
+    case "down":
+      cmd_go(verb);
+      return 1;
+  }
+  return 0;
+}
+
+int cmd_look(string arg) {
+  object env, *inv;
+  string out;
+  int i;
+
+  env = environment();
+  if (!env) {
+    write("You are nowhere.\n");
+    return 1;
+  }
+  out = env->query_long();
+  if (!out || out == "")
+    out = env->long();
+  if (!out || out == "")
+    out = "You see nothing special.";
+  write(out);
+  if (out[<1] != '\n')
+    write("\n");
+  write(env->query_exit_string());
+  inv = all_inventory(env);
+  for (i = 0; i < sizeof(inv); i++) {
+    if (inv[i] != this_object() && inv[i]->query_name())
+      write(capitalize(inv[i]->query_name()) + " is here.\n");
+  }
+  return 1;
+}
+
+int cmd_score(string arg) {
+  write(capitalize(name || "someone") + " (level " + query_level() + ")\n");
+  write("hp: " + hp + "/" + max_hp + "\n");
+  return 1;
+}
+
+int cmd_inventory(string arg) {
+  write("You are empty-handed.\n");
+  return 1;
+}
+
+int cmd_go(string dir) {
+  object env, dest;
+  string path;
+
+  if (!dir)
+    dir = query_verb();
+  env = environment();
+  if (!env) {
+    write("You are nowhere.\n");
+    return 1;
+  }
+  path = env->query_exit(dir);
+  if (!path) {
+    write("You cannot go that way.\n");
+    return 1;
+  }
+  dest = load_object(path);
+  if (!dest) {
+    write("That exit leads nowhere.\n");
+    return 1;
+  }
+  move_object(dest);
+  command("look");
+  return 1;
+}
+
+int cmd_quit(string arg) {
+  write("Saving " + capitalize(name || "someone") + ".\n");
+  save_me();
+  destruct(this_object());
+  return 1;
+}

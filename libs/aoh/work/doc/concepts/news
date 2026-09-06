@@ -1,0 +1,391 @@
+CONCEPT
+	news
+
+UPDATE
+	Mateese, 29-Jun-1997, 23:45 MET
+
+DESCRIPTION
+	This document describes the news system used in this mud.
+	News is intended to provide a general system for bulletin
+	boards and similar objects. It is similar to the Usenet
+	news system. Articles are stored in a central area, /news.
+	Articles (Messages) are stored as files within this
+	directory. Only the news demon object is allowed to write
+	and read in the /news directory. Interfaceing to the
+	news demon is done via interface functions in the news
+	demon.
+	
+	Typically news are read and written by a bulletin
+	board object or by a newsreader. Player buletin boards
+	should of course be limited to specific news groups.
+	A newsreader might be intelligent in that it autmatically
+	shows new messages. Groups may be moderated, then only the
+	moderator can write there.
+
+	Posting of one note in multiple groups is possible.
+
+        The news are written into files in /news, whereas the
+	group 'foo.bar.quux' would be saved in '/news/foo/bar/quux.o'.
+	Another tree expands down from /log/news where the 
+	logged notes are written by default. The logfile for 
+	'foo.bar.quux' is of course '/log/news/foo/bar/quux.log'.
+
+	Every group may (but needn't) restrict the max number of notes 
+	it may contain. If a group is full, it can either reject 
+	new notes, or remove the oldest 'expired' ones itself.
+
+	Every group may be 'logged'. This means that notes are logged
+	either when they come in (even if their board is full), or when 
+	they are removed for expiration.
+	By default the notes are written in the standard logfile (see
+	above). Alternatively it is possible to define a 'logger'-object
+	by name for a group: then each note is given as argument to the
+	lfun 'log_note (mixed *note, int mode)' in the logger, with
+	'note' being the note and 'mode' being the reason for logging
+	(N_LOG_NEW or M_LOG_EXP). If the logger can't be accessed, 
+	the notes are logged into the logfiles.
+
+        There is a special "trash" group: it collects all notes removed
+	from other groups for failsafeness. It can only be read, and
+	can't overflow. It's name is defined by TRASH.
+
+	Security is checked for each of the actions 'read note',
+        'write note', 'delete note', 'create/remove subgroup'.
+	Each of this is specified by a special 'rights'-datastructure.
+	An additional 'rights'-structure defines the 'owner' of a group.
+	The 'rights'-structure consists of one integer and several
+	strings (the strings are optional).
+	The integer specifies the minimal wiz_level to gain the right.
+	Each string defines either the name of a permitted user or
+	the rights for members of specific domain. 
+	Accepted are:
+	 - '<name>'  : user <name> is permitted.
+	 - '$<name>' : every member of domain <name> are permitted.
+	 - '+<name>' : the (vice)lords of domain <name> are permitted.
+         - '*<name>' : the lords of domain <name> are permitted.
+	 - '@<name>' : the function CheckRights(string euid) in
+	               object <name> is called with the euid of the
+	               current interactive player as argument. It has
+	               to return non-zero to grant the right.
+        A right is permitted, if one of the above criterias (level or
+	name) is matched.
+	The three flavours of domain-specification may be specified
+	in parallel.
+        Arches (wiz_level >= 40) may do everything.
+	
+	All actions are done with respect to the interactive player
+        (i.e. this_player(1)).
+
+
+DATASTRUCTURES
+	A note is of size M_SIZE:
+
+	  mixed *note = struct ({
+	    string M_WRITER;  // The capitalized writer's name.
+	    mixed  M_LEVEL;   // It's (wiz_)level
+	    string M_ID;      // An id-string
+	    int    M_TIME;    // The time() the note was written.
+	    string *M_GROUPS; // The groups where it was posted to.
+	    string M_TITLE;   // The title line.
+	    string M_TEXT;    // The note's text.
+          }}
+
+	The M_LEVEL is either a single integer denominating the
+	wiz_level, or an integer array ({ guild_level, xp_level })
+	with guild_level being the player's level as set as property
+	and the xp_level it's level derived from it's experience.
+
+	The id-string is of format '<MUDNAME>:<id-no>', where the
+	MUDNAME is defined in /sys/config.h and <id-no> a guaranteed-
+	to-be-unique decimal number (which is derived from the 
+	actual time() ).
+
+	A savefile for one board is just an ordered array of notes.
+	Its written on every change.
+
+
+	A group-descriptor is of size G_SIZE:
+
+	  mixed *gdsc = struct ({
+	    string G_NAME;      // The name of the group.
+	    mixed  *G_OWNER;    // The group-owner in rights-notation.
+	    mixed  *G_READ;     // The rights for reading notes.
+	    mixed  *G_WRITE;    // The rights for writing notes.
+	    mixed  *G_DELETE;   // The rights for deleting notes.
+	    mixed  *G_SUBGROUP; // The rights for subgroup creation/removal.
+	    int    G_MAXMSG;    // Max. no of notes in this group.
+	    int    G_LOGMODE;   // The logging mode.
+	    string G_LOGGER;    // The optional logger object.
+            int    G_ACTMSG;    // Current no of notes in this group
+            int    G_LASTID;    // Id of the last note or 0.
+          })
+
+	G_MAXMSG is interpreted as:
+	  G_MAXMSG > 0: max that many notes, no expiration.
+	  G_MAXMSG = 0: unlimited no. of notes.
+	  G_MAXMSG < 0: max that many notes (value negated), 
+	                extraneous notes expire.
+
+        G_LOGMODE can define:
+	  G_LOGMODE = N_NOLOG   : No logging is done.
+	  G_LOGMODE = N_LOG_NEW : New & accepted notes are logged.
+	  G_LOGMODE = N_LOG_EXP : Expiring notes are logged.
+
+
+	The rights are stored as an array. The first entry is
+	the level-entry, the rest the optional strings.
+
+
+	The data is internally stored in two alists with the groupnames
+	as keys: 
+	 - 'grouplist', containing the groupdescriptors.
+	 - 'groups', containing the notes of each group.
+	
+	'grouplist' is saved on every change into /news/GroupList.o
+
+	'groups' serves as a cache: if a group hasn't been touched
+	at least NEWS_MIN_TOUCHES (actual value: 1) during the last 
+	NEWS_TIME_TO_SAVE seconds (actual 30 min), its data is removed 
+	from main memory.
+
+	Every deposit/removal of a note also changes G_LASTID and
+	G_MAXMSG in the current groupdescriptor. Since saving this
+	requires the whole grouplist to be saved, the save is delayed
+	for NEWS_DSAVE_TIME seconds (actual 10 min) to reduce io-load.
+	This can create inconsistencies in case of crashes, but they
+	are neglectible since only GetStatus() would be affected.
+	The internal data is updated every time a group enters the
+	cache.
+
+
+FUNCTIONS
+	Note: Some funs return NEWS_ILLPARM for illegal parameters.
+	      But don't rely on this, since only gross errors are
+	      detected.
+
+
+	int CheckRights (mixed *rights)
+	  Checks this_player(1) against the given <rights>.
+	  Return 1 for permission and 0 for failure.
+
+
+	int SetGroup (mixed *dsc)
+	  Set the descriptor <dsc> for the group <dsc>[G_NAME].
+	  For TRASH only G_MAXMSG can be modified.
+          G_ACTMSG and G_LASTID can't be modified.
+	  Permitted are Arches and Owner.
+
+	  Result:
+	    NEWS_OK      : Success.
+	    NEWS_ILLPARM : Illegal parameters.
+	    NEWS_ILLGROUP: Non-existing group specified.
+	    NEWS_NORIGHT : No permission.
+
+
+	mixed *GetGroup (string name)
+	  Return the descriptor of group <name>.
+
+	  Result:
+	    struct *dsc  : Success.
+	    NEWS_ILLPARM : Illegal parameters.
+	    NEWS_ILLGROUP: Non-existing group specified.
+
+
+	int SetRights (string name, int which, mixed *data)
+	  Set the rights <which> of group <name> to <data>.
+	  <which> may be G_OWNER, G_READ, G_WRITE, G_DELETE or G_SUBGROUP.
+	  Permitted are Arches and Owner.
+
+	  Result:
+	    NEWS_OK      : Success.
+	    NEWS_ILLPARM : Illegal parameters.
+	    NEWS_ILLGROUP: Non-existing group specified.
+	    NEWS_NORIGHT : No permission.
+
+
+	mixed GetRights (string name, int which)
+	  Return the rights <which> of group <name>.
+	  <which> may be G_OWNER, G_READ, G_WRITE, G_DELETE or G_SUBGROUP.
+
+	  Result:
+            mixed *rights: Success.
+	    NEWS_ILLPARM : Illegal parameters.
+	    NEWS_ILLGROUP: Non-existing group specified.
+
+
+	int AddRights (string name, int which, mixed data)
+	  Adds the contents of <data> to the rights <which> of group <name>.
+	  <which> may be G_OWNER, G_READ, G_WRITE, G_DELETE or G_SUBGROUP.
+	  <data> may be an int, a string or an array of these. 
+	    Ints are considered as new level-criteria and set.
+	    Strings are added if not already existing. 
+	  <data>[0] must be the overall level. If it is set to a
+	    negative number, it is considered 'unspecified' and causes
+	    no change.
+	  It's not possible to modify the TRASH group.
+	  Permitted are Arches and Owner.
+
+	  Result:
+	    NEWS_OK      : Success.
+	    NEWS_ILLPARM : Illegal parameters.
+	    NEWS_ILLGROUP: Non-existing group specified.
+	    NEWS_NORIGHT : No permission.
+
+
+	int RemoveRights (string name, int which, mixed data)
+	  Removes the contents of <data> from the rights <which> 
+	  of group <name>.
+	  <which> may be G_OWNER, G_READ, G_WRITE, G_DELETE or G_SUBGROUP.
+	  <data> may be an int, a string or an array of these. 
+	    Ints are considered as new level-criteria and set. 
+	    Strings are removed if existing. 
+	  <data>[0] must be the overall level. If it is set to a
+	    negative number, it is considered 'unspecified' and causes
+	    no change.
+	  It's not possible to modify the TRASH group.
+	  Permitted are Arches and Owner.
+
+	  Result:
+	    NEWS_OK      : Success.
+	    NEWS_ILLPARM : Illegal parameters.
+	    NEWS_ILLGROUP: Non-existing group specified.
+	    NEWS_NORIGHT : No permission.
+
+
+	int AddGroup (string name, void|mixed *owner, void|mixed *newdsc)
+	  Create a new group <name> and all its directories.
+	  If possible, inherit the descriptor from the lowest parentgroup.
+	  Else following defaults are set:
+	    Owner    : level 40  (Arches only)
+	    Read     : level  0  (all users)
+	    Write    : level  1  (all wizards)
+	    Delete   : level  1  (all wizards)
+	    SubGroup : level 40  (Arches only)
+	    30 Notes, no expiration.
+	  If <owner> is specified, call 'AddRights(<name>,G_OWNER,<owner>)'.
+          If the creating player is not arch, set it as owner as well.
+	  If <newdsc> is specified, call 'SetGroup(<newdsc>)'.
+          It is not possible to create subgroups of TRASH.
+	  Permitted are Arches, or any Owner/SubGroup of the lowest
+	  parentgroup if existing.
+
+	  Result:
+	    NEWS_OK      : Success.
+	    NEWS_ILLPARM : Illegal parameters.
+	    NEWS_ILLGROUP: Existing group specified.
+	    NEWS_NORIGHT : No permission.
+	    NEWS_ILLFILE : Success, but group-savefile already existed
+			   and was reloaded.
+
+
+	int RemoveGroup (string name)
+	  Remove group <name>, and its files and directoriess as possible.
+          It is not possible to remove the TRASH group.
+	  Permitted are Arches, Owner, or any Owner/SubGroup of the lowest 
+	  parentgroup if existing.
+
+	  Result:
+	    NEWS_OK      : Success.
+	    NEWS_ILLPARM : Illegal parameters.
+	    NEWS_ILLGROUP: Non-existing group specified.
+	    NEWS_NORIGHT : No permission.
+
+
+	mixed StoreNote (string title, string text, mixed dest, [object ipl])
+	  Stores <text> under <title> into the approbiate group <dest>.
+	  <dest> may be a single groupname, or an array of groupnames.
+	  If <ipl> is given, it is used as the author of the note,
+	  else the interactive user.
+	  Permitted are Arches, Owner and Writer.
+
+	  Result:
+	    NEWS_ILLPARM  : Illegal parameters.
+            mixed *rc: 
+              rc[0]   : The ID used for the note.
+              rc[1..n]: Strings describing errors in posting:
+	                  'No such group: <name>'
+	                  'No permission: <name>'
+	                  'Group full: <name>'
+	
+
+	int RemoveNote (string name, string|int nr)
+	  Removes a note from group <name>.
+	  If <nr> is an int, the <nr>th note is removed.
+	  If <nr> is a string, the note with M_ID <nr> will be removed.
+	    The '<MUDNAME>:' may be omitted.
+	  Permitted are Arches, Owner, Delete, and the note's writer.
+	  Deleter may remove a note only if their wiz_level is higher
+	  than the writer's one.
+
+	  Result:
+	    NEWS_OK      : Success.
+	    NEWS_ILLPARM : Illegal parameters.
+	    NEWS_ILLGROUP: Non-existing group specified.
+	    NEWS_NORIGHT : No permission.
+	    NEWS_ILLNOTE : Note not found, or <nr> too big.
+
+
+	mixed GetHeaders (string name, void|int nr)
+	  Returns the header of the <nr>th note in group <name>.
+	  If <nr> <= 0, an array of all headers is returned.
+	  Each header is a 'struct *note' shortened of M_TEXT-part.
+	  Permitted are Arches, Owner and Reader.
+
+	  Result:
+	    mixed *header(s): Success.
+	    NEWS_ILLPARM    : Illegal parameters.
+	    NEWS_ILLGROUP   : Non-existing group specified.
+	    NEWS_NORIGHT    : No permission.
+	    NEWS_ILLNOTE    : <nr> too big.
+
+
+	mixed GetNote (string name, void|int|string nr)
+	  Returns a note of group <name>.
+	  If <nr> is an int <= 0, an array of all notes is returned.
+	  If <nr> is an int, the <nr>th note is returned.
+	  If <nr> is a string, the note with M_ID <nr> is returned.
+	    The '<MUDNAME>:' may be omitted.
+	  Permitted are Arches, Owner and Reader.
+
+	  Result:
+	    mixed *note(s): Success.
+	    NEWS_ILLPARM  : Illegal parameters.
+	    NEWS_ILLGROUP : Non-existing group specified.
+	    NEWS_NORIGHT  : No permission.
+	    NEWS_ILLNOTE  : Note not found, or <nr> too big.
+
+
+	mixed GetStatus (void|string name)
+	  Returns an array of all group descriptors, or just of
+ 	  group <name> if specified.
+	  Each descriptor is expanded by an additional entry G_USAGE,
+	  with the interpretation:
+	    G_USAGE <  0: Group not in cache.
+	            >= 0: The amount of accesses since last cache-clear.
+
+	  Result:
+	    mixed *dsc(s) : Success.
+	    NEWS_ILLPARM  : Group not found.
+
+
+	string *GetNames (void|string *pattern)
+	  Returns an array of groupnames: either of all groups, or of the
+	  groups which name matches one of the regular patterns in <pattern>.
+	  <pattern> may be a single pattern or an array.
+
+          Result:
+	    string *names: A (possible empty) array of found groupnames.
+
+
+	mixed *GetInterna()
+	  Returns an array of information about the demon:
+	    string NEWS_IVERSION;    Version of the demon.
+	    int    NEWS_ICNTGRPS;    No. of groups known.
+	    int    NEWS_ICNTCACHE;   No. of groups currently cached.
+	    int    NEWS_ITIMEINT;    time between two cache-flushs.
+	    int    NEWS_IMINTOUCH;   min. touches a group needs for non-flush.
+	    int    NEWS_ILASTFLUSH;  time() of the last cache flush.
+            int    NEWS_IDSAVEINT;   Delay for delayed saves.
+            int    NEWS_IDSAVEPEND;  time till next delayed save, or -1.
+
+SEE ALSO

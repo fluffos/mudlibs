@@ -1,0 +1,236 @@
+OBJECT
+	/std/unit
+
+
+LAST UPDATE
+	Mateese, 12-Apr-98
+
+
+SYNOPSIS
+	#include <properties.h>
+
+	inherit "/std/unit";
+
+
+DESCRIPTION
+	The standard unit is an extension of the standard thing(S).
+	Whereas the thing is an indivisable object, the unit consists
+	of several equal parts which need to be treated as a whole now
+	and separate then (e.g. gold coins).
+
+	To achieve this, the unit reinterpretes the thing's properties
+	weight, light, value and bright as being the heap's total
+	values, while describing the single unit element on a per-unit
+	base.
+	
+	The unit implements these new builtin properties:
+
+	  int P_AMOUNT            "Amount"
+	    The number of unit elements represented by this unit
+	    object. To update this, you may use ReduceAmount(int amount)
+	    which will try to decrease the amount. If it is not possible
+	    0 is returned else 1. If the amount is 0 afterwards the unit
+	    gets destructed.
+
+	  int P_LAST_AMOUNT       "LastAmount"
+	    The amount parsed from the last command.
+
+	  int P_VALUE_PER_UNIT    "ValuePerUnit"
+	    The value of one unit element.
+
+	  int P_BRIGHT_PER_UNIT   "BrightPerUnit"
+	    The brightness of one unit element.
+
+	  int P_WEIGHT_PER_UNIT   "WeightPerUnit"
+	    The weight of one unit element.
+
+	Any change of these properties will affect all derived values
+	(e.g. increasing the WeightPerUnit will automatically increase
+	the total Weight).
+
+	  string * P_PLURAL_IDS   "PluralIds"
+	    The identification string(s) for the thing, in plural
+	    case. As for their singular counterpart P_IDS, two
+	    auxiliary functions exist:
+
+	    void AddPluralId    (string *|string plural_ids);
+	    void RemovePluralId (string *|string plural_ids);
+
+
+	  string P_PLURAL_SHORT   "PluralShort"
+	    The plural short description of the unit elements.
+	    If it is not set, the singular P_SHORT will be used and
+	    extended by a trailing 's'.
+
+	The nature of a unit object has its most important effect on
+	its Short() description:
+
+	  string Short (void | mixed what)
+	    If <what> is non-zero, just ::Short(what) is returned.
+	    Else the amount to describe is determined: if the current
+	    verb is equal to P_LAST_VERB, the amount denoted by
+	    P_LAST_AMOUNT is used, else the current amount (which is
+	    then set as new P_LAST_AMOUNT).
+	    If the amount is 1, the string "One "+::Short() is
+	    returned, else the string returned by
+	    PluralShort(<amount>).
+
+	  string PluralShort (mixed what, int amount)
+	    Returns the short descriptional string for an <amount>
+	    object instance. The function must not be called for
+	    invisible objects. <what> is as usual the argument given
+	    to Short().
+	    Default is "<amount> "+P_PLURAL_SHORT, with the feature
+	    that <amounts> < 10 are written as word.
+
+	The nature of a unit object has also effects on the behaviour
+	of some 'normal' properties:
+
+	  string P_SHORT   "Short"
+	    This is (as usual) set to the singular short description
+	    of one unit element.
+	    When queried, it returns the short description modified to
+	    reflect the number of units in this object.
+	    If set, the P_PLURAL_SHORT is used, else a simple
+	    pluralization of the set P_SHORT.
+	    Also, if a the current verb is equal to the P_LAST_VERB
+	    (see below), just the amount denoted by P_LAST_AMOUNT is
+	    returned. Else, P_LAST_VERB and P_LAST_AMOUNT are set to
+	    the current verb resp. the current P_AMOUNT.
+
+	Affected standard properties are:
+
+	  int P_LIGHT    "Light"
+	  int P_BRIGHT   "Bright"
+	  int P_WEIGHT   "Weight"
+	    If any of these 'totalized' values is set, the given value
+	    is remapped onto the P_xxx_PER_VALUE properties.
+
+	To compare two unit objects, use this builtin functions:
+
+	  int IsEqualUnit ( int    value_per_unit
+                          , int    bright_per_unit
+	                  , int    weight_per_unit
+	                  , string plural_short
+	                  , string short
+                          )
+	    This functions compares the units properties with the
+	    values given and returns non-zero if they are all
+	    identical.
+
+	  int IsEqualTo (object ob)
+	    As with IsEqualUnit(), the key properties of this object
+	    and <ob> are compared, and non-zero is returned if they
+	    match.
+
+	The complex part of units is the parsing of the amount the
+	player wants to deal with, and the moving.
+
+	This parsing is primarily done in the lfun
+
+	  int id (string str)
+
+	since this is called during the preparation of each command.
+        Unit's id() uses an additional regexp pattern to match the
+	plural ids and adjectives. The handling is similar to that of
+	/std/thing, i.e. transparent for any user of /std/unit. The
+	additional pattern itself is available for debugging purposes
+	under its own property:
+
+	  string P_PLURAL_PATTERN  "PluralPattern"
+	    The regexp pattern to match the plural ids and adjectives.
+	    When 0, it is recreated with the next call to id().
+
+	If this function is given a correct id <str>ing, it derives
+	the meant amount from it and stores it into the read-only
+	builtin property
+
+	  int P_LAST_AMOUNT   "LastAmount"
+
+	The unit's id() accepts two possible strings as correct ID:
+
+	  "<unit_base_element_id>"
+	  "<count> <unit_base_element_id>" with 1 <= <count> <= P_AMOUNT.
+
+ 	In the first case, P_LAST_AMOUNT is set to P_AMOUNT, in the
+ 	second P_LAST_AMOUNT is set to <count>.
+
+	Note that the <unit_base_element_id> is one of the IDs set as
+	P_IDS, combined with P_ADS. These therefore must contain the
+	both the singular and plural forms.
+
+
+	To move a whole or partial unit object, the lfun
+
+	  int move (mixed destination, void|int method, void|mixed extra)
+
+	has been extended:
+	 - With method M_NOCHECK, the whole object has to be moved.
+	 - If the current verb is unequal to P_LAST_VERB, the whole
+	   object has to be moved. Also, P_LAST_VERB and P_LAST_AMOUNT
+	   need to be set to the current verb resp. P_AMOUNT.
+	 - If P_LAST_AMOUNT is equal to P_AMOUNT, the whole object has
+	   to be moved.
+	 - Else, only a part (P_LAST_AMOUNT) of the object needs to be
+	   moved. This is done by cloning a second object of this unit
+	   object, setting its properties from this unit's properties,
+	   and setting its P_AMOUNT to P_AMOUNT-P_LAST_AMOUNT.
+           If the move of this object was successfull, the second
+           object is moved into the old environment to represent the
+           remainders.
+	Upon arrival in the new environment, eventually existing unit
+	objects of the same kind are merged with this object.
+
+
+	Two functions help dealing with partial unit objects:
+
+	  object SplitOff (int amount)
+	    Clones an unit object of the same kind as the called
+	    object, but of just <amount> units.
+	    The number of units in this object is reduced by the same
+	    <amount>.
+	    Result is the split off object (which may be the called
+	    object itself), or 0 if <amount> is out of the range 
+	    of 1..P_AMOUNT.
+
+	  int JoinWith (object ob)
+	    The unit object is joined with object <ob> if they are of
+	    the same kind (according to IsEqualTo()).
+	    If they are, the amount from <ob> is transferred to this
+	    object, then <ob> is removed and non-zero is returned.
+	    If the objects couldn't be joined, 0 is returned.
+
+
+	The standard lfun
+
+	  void create()
+
+	has been extended to set the euid of the unit object.
+
+
+UNEXPECTED FEATURE
+	The way id() parses its argument has this side effect:
+
+	  "coin"    would be parsed as "coins"
+	  "1 coins" would be parsed as "1 coin"
+	  "2 coin"  would be parsed as "2 coins"
+
+	Maybe this is a feature, maybe this is a bug...
+
+
+CREDITS
+	Puck and Pepel wrote the improved move() function, originally
+	part of Puck's 'foodunit' object.
+
+
+INHERITANCE TREE
+	std/unit
+          `-std/thing
+	      |-std/thing/moving
+	      |-std/thing/restrictions
+	      |-std/thing/description
+              `-std/base
+
+
+SEE ALSO
+	thing(S)

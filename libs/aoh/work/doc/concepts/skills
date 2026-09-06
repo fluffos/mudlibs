@@ -1,0 +1,215 @@
+CONCEPT
+	stats and skills
+
+UPDATE
+	Mateese, 07-Jun-94 20:30 MET
+
+DESCRIPTION
+	This document describe the modelling of livings abilities,
+	expressed in 'stats' and 'skills'.
+	Non-player livings implement just a static version of the
+	model, true players get the full model which features
+	automatic raise of the key values by simple usage.
+	Therefore most of the things discussed below apply to players
+	only.
+
+	Also discussed are the basic usage of the stats and skills,
+	and how the data is organized in the servers.
+
+	To keep the compatibility with old code, stats (and
+	weapon/armour classes) are ranged 0..20, while skill values
+	and computations are ranged 0..100.
+
+IMPORTANT
+	As of yet, Cha is not implemented.
+	Also, the increase-by-usage is not activated.
+
+
+DESCRIPTION - stats
+	Stats are basic attributes of livings, stored as attributes.
+	The stats describe the racial restrictions of a living when
+	applying skills.
+	There are NUMBER_STATS (<living.h>) stats implemented:
+
+          int A_STR  "Str"
+            The strength of the living.
+
+          int A_INT  "Int"
+            The intelligence of the living.
+
+          int A_CON  "Con"
+            The constitution of the living.
+
+          int A_DEX  "Dex"
+            The dexterity of the living.
+
+          int A_CHA  "Cha"
+            The charisma of the living (not yet implemented).
+
+	Str, Int and Con have a direct impact on the livings
+	behaviour: Str determines the max load a living can carry, Con
+	determines the MaxHP and Int the MaxSP attribute.
+
+	The value of a stat varies from 0..20. It is computed using
+	an experience dependend 'nominal value', which is then
+	modified according to the usage of that stat, and external
+	influences.
+
+	  nominal = 5 + (A_XP / 2 Meg) * 20.
+
+	This yields a value from 5..15.
+
+	  stat = nominal * usage factor * (1 + bonus)
+
+	'usage factor' is the number of uses of the computed stat in
+	relation the sum of all stat uses (of course divided by the
+	number of stats).
+	'bonus' is an attribute of the living to allow e.g. race
+	dependant modifications of the stat.
+
+	Each use of a stat increments its usage counter by one.
+	Every now and then (currently with every save of the player)
+	the stats are recomputed according to the updated usage
+	counters.
+	For non-players, the final value is just set, not computed.
+
+	The usage counters and the boni are stored as the attribute
+
+	  mapping A_STAT_DATA  "StatData"
+
+	indexed by the stat name.
+
+	Each entry contains the values
+	
+	  int STDATA_USAGE: the usage counter
+	  int STDATA_BONUS: the stat bonus in %
+
+
+DESCRIPTION - skills
+	Skills are learned abilities of livings. When applied, the
+	success is determined not only by the level of the skill
+	itself, but also by the level of the stats needed to apply the
+	skill.
+
+	Example: 
+	  For a thief it is not enough to know how to pick a lock, she
+	  must also be dextruous enough to do it.
+
+	The learned level of a skill is stored as attribute with the
+	skills name.
+
+	When a skill is applied, the effective value is computed as
+
+	  effective =   learned * learned_factor
+	              + stat1 * stat1_factor
+	              + stat2 * stat2_factor
+
+	'learned' is the learned level of the skill, which is also
+	stored as attribute to the player. It is in a range of 0..100.
+	'stat1' and 'stat2' are the values of the underlying stats
+	(scaled to a 0..100 range) the three '..._factor's are %
+	values so that the final result is still in the range of 0..100.
+	Each of the 'factor' values can be specified for each guild
+	separately, thus allowing subtle differences between the
+	guilds (race differences are modeled through the stat factors).
+
+	This effective value can be queried in the living using the lfun
+
+	  int EffectiveSkill (string name)
+	
+	with 'name' being the skill name.
+
+	Using (applying) a skill not only uses the underlying stats
+	(thus incrementing their counters), but also improves the
+	skill. This learning curve is modeled by two parameters:
+
+	  max value   : the max. value which can be learned
+	  learn factor: determines the decelleration of the curves
+	                increase as it approaches 'max value'.
+
+	The formula used is that of LearnAttr(), with each use being
+	one step. The recomputation takes place with the recomputation
+	of the stats.
+	For non-players, the attribute contains the effective skill
+	value and must be set directly.
+
+	It should be mentioned explicitely that the various weapon
+	types are skills in themselves, so players can train for their
+	weapons.
+
+
+DESCRIPTION - usage
+	Whenever a stat or skill is used, there is a certain
+	difficulty of the task to be mastered. Also, the level of
+	success of the task varies each time, and even master of a
+	certain skill can produce just garbage. On the other hand,
+	even an unskilled being can by chance succeed.
+
+	So to use a stat or skill, these functions must be called:
+
+          int ApplyStat (string name, void|int diff)
+          int UseStat (string name, void|int diff)
+            Try to use the stat <name> against the difficulty <diff>.
+            Result is the success (0..100) or failure (-100..0).
+
+          int ApplySkill (string name, void|int diff)
+          int UseSkill (string name, void|int diff)
+            Try to use the skill <name> against the difficulty <diff>.
+            Result is the success (0..100) or failure (-100..0).
+
+	A result of '0' means 'failure', '100' means 'full success', 
+        and '-100' means 'total failure'.
+	Higher results are possible, but discouraged.
+	The 'difficulty' is a value in the range (-100..100), with
+	-100 for 'very easy', 0 for 'normal', and 100 for 'very
+	difficult'.
+
+	Each use of the Skill or Stat is counted (the Apply...() call
+	is used) to allow auto-raising stats/skills.
+
+DESCRIPTION - server
+	One can imagine lots of skills to be involved in the game.
+	Since this means a lot of data, this data is concentrated in
+	several servers.
+	Queried is always the central SKILLMASTER, which dispatches
+	queries for non-general skills (mostly the guild-dependent
+	ones) to the appropriate server, which has to be approved.
+	Temporary skills and servers may be added at runtime.
+	The general skills (read: guild-independent) are managed by
+	SKILLMASTER (defined in <config.h>), but guilds and domains
+	are free to add skills via own skill servers.
+
+	The server store for each skill this data: the names of up to
+	two stats, the three factors, and the learning parameters.
+
+	However, the factors are special: they may be simple integers,
+	but can also be mappings indexed by guild names, thus
+	implementing guild differences in applying the skills.
+	It is not necessary to mention _all_ guilds in such a mapping:
+	if for a given guild no entry is found, the integer stored for
+	the 'guild' "other" is used as default, if this doesn't exist
+	either, the factor 100% is used.
+
+
+DESCRIPTION - new skills
+	To add a skills (assuming approval by the responsible
+	Archwizard), the data for the skill has to be hardcoded into a
+	skillserver - either the generic SKILLMASTER or a separate
+	skillserver.
+
+	If a separate skillserver is used, the SKILLMASTER has to be
+	informed about its existance, either by hardcoding the name
+	into the SKILLMASTER (as the AW of Guilds does for approved
+	guilds), or by informing the SKILLMASTER at runtime (this is
+	for development purposes only).
+	Every skill related call, which is can not be handled by the
+	SKILLMASTER itself is then forwarded to the implementing
+	skillserver as if that server is called first hand.
+
+
+CREDIT
+	This system is an idea of Dagobert.
+
+
+SEE ALSO
+	attributes(C), living(S), player(S), skillmaster(S), skillmaster(O).

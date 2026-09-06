@@ -1,0 +1,374 @@
+/*---------------------------------------------------------------------------
+** std/living/combat
+**
+** Basic combat handling.
+**
+** 21-Jan-1994  [Mateese]
+**---------------------------------------------------------------------------
+*/
+
+#include "/neu/sys/properties.h"
+#include "/neu/sys/combat.h"
+#include "/neu/sys/living.h"
+#include <messages.h>
+
+#define THIS this_object()
+#define TP   this_player()
+#define ENV  environment
+#define PREV previous_object()
+
+inherit "/neu/std/living/hands";
+
+//---------------------------------------------------------------------------
+
+public int QueryHP();                       // std/living/body
+public int QueryMaxHP();                    // std/living/body
+public int DoDamage(int damage);            // std/living/body
+public int AddXP(int xp);                   // std/living/body
+public int QueryLoad();                     // std/living/restrictions
+public int UseSkill(string name, int diff); // std/living/stats
+
+//---------------------------------------------------------------------------
+
+protected mapping aDefenses;
+protected static mapping pWeapons, pArmours;
+protected static int damageMalus;
+protected static int degradeHand;
+
+//---------------------------------------------------------------------------
+
+public mapping QueryDefense ()        { return aDefenses; }
+public mapping SetDefense (mapping m) { return aDefenses = m; }
+
+public void AddDefense (int dtype, int value)
+{
+  if (!aDefenses)
+    aDefenses = m_allocate(0,1);
+  aDefenses[dtype] = value;
+}
+
+public int QueryArmourType() { return AT_SKIN; }
+
+public mapping Defense (mapping damage, object weapon, int success, int target)
+{
+  int *ind;
+  int i, dt, d;
+  mapping soaked;
+
+  if (!aDefenses)
+    return damage;
+
+  ind = m_indices(aDefenses);
+  soaked = ([]);
+  for (i = sizeof(ind); i--;)
+  {
+    dt = ind[i];
+    d = aDefenses[dt];
+    soaked["TOTAL"] += d;
+    soaked[dt] += d;
+    damage[dt] -= d;
+  }
+  weapon->DegradeWeapon(soaked, damage, success, target);
+  return damage;
+}
+
+public void DegradeWeapon ( mapping soaked, mapping damage, int success
+                          , int target)
+{
+  degradeHand += soaked["TOTAL"] / 10;
+}
+
+//---------------------------------------------------------------------------
+
+public int AddArmour (object armour)
+{
+  int at;
+
+  if (armour->QueryProp(P_NOWEAR))
+    return 0;
+
+  if (!pArmours)
+    pArmours = m_allocate(0,ARMOUR_SIZE);
+
+  at = armour->QueryProp(P_ARMOUR_TYPE);
+  if (!at)
+    return 0;
+
+  if (pArmours[at, ARMOUR_OBJ])
+    pArmours[at]->Unwear();
+
+  pArmours[at, ARMOUR_OBJ] = armour;
+  pArmours[at, ARMOUR_MSG] = !!function_exists("NotifyDefense", armour);
+  armour->SetProp(P_WORN, THIS);
+  return 1;
+}
+
+public void RemoveArmour (object armour)
+{
+  int at;
+
+  at = armour->QueryProp(P_ARMOUR_TYPE);
+  if (!pArmours || !at || pArmours[at, ARMOUR_OBJ] != armour)
+    return;
+  pArmours = m_delete(pArmours, at);
+  if (PREV != armour) // Prevent recursion
+    armour->Unwear();
+  armour->SetProp(P_WORN, 0);
+}
+
+public mapping QueryArmours () {
+  return pArmours;
+}
+
+public mapping SetArmours (mapping m) {
+  pArmours = m;
+  return pArmours;
+}
+
+//---------------------------------------------------------------------------
+
+public int AddWeapon (object weapon)
+{
+  if (weapon->QueryProp(P_NOWIELD))
+    return 0;
+
+  if (!pWeapons)
+    pWeapons = m_allocate(0,WEAPON_SIZE);
+
+  if (!pWeapons[weapon])
+  {
+    pWeapons[weapon, WEAPON_TYPE] = weapon->QueryProp(P_WEAPON_TYPE);
+    pWeapons[weapon, WEAPON_MOD] = !!function_exists("ModifyAttack", weapon);
+    weapon->SetProp(P_WIELDED, THIS);
+  }
+  return 1;
+}
+
+public void RemoveWeapon (object weapon)
+{
+  if (!pWeapons || !pWeapons[weapon])
+    return;
+  pWeapons = m_delete(pWeapons, weapon);
+  if (PREV != weapon) // Prevent recursion
+    weapon->Unwield();
+  weapon->SetProp(P_WIELDED, 0);
+}
+
+public mapping QueryWeapons () { return pWeapons; }
+public mapping SetWeapons (mapping m) { return pWeapons = m; }
+
+//---------------------------------------------------------------------------
+public int Hit (object victim, mixed weapon)
+
+// Hit a victim with the weapon.
+
+{
+  int success;
+  int rc;
+  mapping damage;
+  string *msgs;
+
+  success = 100-QueryLoad();
+
+  if (objectp(weapon))
+  {
+    success += UseSkill(pWeapons[weapon, WEAPON_TYPE], 0);
+    if (pWeapons[weapon, WEAPON_MOD])
+      success = weapon->ModifyAttack(victim, success);
+    damage = 0;
+    usedHand = 0;
+  }
+  else
+  {
+    success += UseSkill(CS_HAND, 0);
+    damage = aHands[weapon, HAND_DAM];
+    usedHand = weapon;
+  }
+
+  success -= victim->Dodge(weapon, success);
+
+  if (success > 0) // We did hit the victim
+  {
+    if (objectp(weapon))
+      damage = weapon->Damage(victim, success);
+    else
+    {
+      if (intp(damage))
+        damage = ([ DT_BLUDGEON:damage ]);
+      else if (closurep(damage))
+        damage = funcall(damage, weapon, victim, success);
+      weapon = THIS;
+    }
+    rc = victim->Defend(weapon, success, damage);
+    AddXP(rc);
+  }
+  else // We missed the victim
+  {
+    say(({ MSG_MISS, victim, weapon }));
+    if (objectp(weapon))
+      msgs = weapon->NotifyHit(TP, victim, damage, success, 0);
+    else
+      msgs = NotifyHit(TP, victim, damage, success, 0);
+
+    if (msgs)
+    {
+      tell_object(TP, msgs[0]);
+      tell_object(victim, msgs[1]);
+      show_room(ENV(TP), msgs[2], ({ TP, victim }) );
+    }
+    rc = success;
+  }
+  if (degradeHand) {
+    tell_object(TP, "  You hurt yourself.\n");
+    damageMalus += degradeHand;
+    if (damageMalus > 50)
+      damageMalus = 50;
+    if (degradeHand >= QueryHP())
+      degradeHand = QueryHP()-5;
+    if (degradeHand > 0)
+      DoDamage(degradeHand);
+    degradeHand = 0;
+  }
+  return rc;
+}
+
+//---------------------------------------------------------------------------
+public int Dodge(mixed weapon, int success)
+
+// Return the value by which the attacker's success is to be
+// decreased due to a successful dodge.
+
+{
+  int rc;
+
+  rc = UseSkill(CS_DODGE, damageMalus+QueryLoad());
+  damageMalus = 0;
+  return rc >= 0 ? rc : 0;
+}
+
+//---------------------------------------------------------------------------
+public mapping CalcDefense ( mapping damage, mixed weapon
+                           , int success, int target )
+
+// Defend a hit by 'weapon' of max. 'damage' at zone 'target',
+// returning the remaining damage.
+
+{
+  mixed *ind;
+  int i, at;
+  mapping defense;
+
+  if (pArmours)
+  {
+    ind = m_indices(pArmours);
+    for (i = sizeof(ind); i--;)
+    {
+      at = ind[i];
+      damage = pArmours[at, ARMOUR_OBJ]->Defense(damage,weapon,success,target);
+    }
+  }
+
+  return Defense(damage, weapon, success, target);
+}
+
+//---------------------------------------------------------------------------
+public int Defend(object weapon, int success, mapping damage)
+
+// Defend a hit by 'weapon', done with given 'success' causing 'damage'
+
+{
+  int lasthp, damhp;
+  string *msgs;
+  int target, factor;
+
+  damhp = 0;
+  if (success > 0)  // Compute damage done
+  {
+    mixed *ind;
+    int i, j, dt;
+
+    damage = copy(damage);
+
+    // Expected median factor is 7.1
+    switch(random(22))
+    {
+    case    0:
+      target = AT_BOOTS;    factor =  5;
+      break;
+    case 1..3:
+      target = AT_CLOAK;    factor =  3;
+      break;
+    case    4:
+      target = AT_GLOVES;   factor =  5;
+      break;
+    case 5..6:
+      target = AT_HELMET;   factor = 10;
+      break;
+    case 7..13:
+      target = AT_MAIL;     factor =  9;
+      break;
+    case 14..17:
+      target = AT_SHIELD;   factor =  7;
+      break;
+    case 18..21:
+      target = AT_TROUSERS; factor =  7;
+      break;
+    }
+
+    ind = m_indices(damage);
+    for (i = sizeof(ind); i--;)
+    {
+      dt = ind[i];
+      if (!(damage[dt] = (damage[dt] * (success+100)) / 300))
+        damage[dt] = 1;
+    }
+
+    damage = CalcDefense(damage, weapon, success, target);
+
+    ind = m_indices(damage);
+    for (i = sizeof(ind); i--;)
+    {
+      dt = ind[i];
+      j = damage[dt];
+      if (dt >= 0)
+        j = (j * factor) / 10;
+      if (j > 0)
+        damhp += j;
+    }
+    if (damhp < 1)
+      damhp = 1;
+  }
+
+  lasthp = QueryHP() || 1;
+
+  say(({ MSG_HIT, TP, THIS, weapon, success, damage, (damhp*100)/lasthp }));
+  msgs = weapon->NotifyHit(TP, THIS, damage, success, (damhp*100) / lasthp);
+
+  if (msgs)
+  {
+    tell_object(TP, msgs[0]);
+    tell_object(THIS, msgs[1]);
+    show_room(ENV(TP), msgs[2], ({ TP, THIS }) );
+  }
+
+  if (   success > 0 && pArmours && target > 0
+      && pArmours[target, ARMOUR_MSG] && pArmours[target, ARMOUR_OBJ]
+     )
+  {
+    msgs = pArmours[target, ARMOUR_OBJ]->NotifyDefense( weapon, damage, success
+                                                      , (damhp*100) / lasthp);
+    if (msgs)
+    {
+      tell_object(TP, msgs[0]);
+      tell_object(THIS, msgs[1]);
+      show_room(ENV(TP), msgs[2], ({ TP, THIS }) );
+    }
+  }
+
+  damageMalus = (damhp * 100) / QueryMaxHP();
+  if (damageMalus > 50)
+    damageMalus = 50;
+  return DoDamage(damhp);
+}
+
+/***************************************************************************/

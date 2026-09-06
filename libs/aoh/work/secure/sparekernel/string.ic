@@ -1,0 +1,566 @@
+/*--------------------------------------------------------------------------
+ * /secure/kernel/string.ic -- String sefuns.
+ *
+ * Copyright (C) 1997 by One Step Beyond.
+ * All Rights Reserved.
+ * Permission granted for non-commercial use.
+ *--------------------------------------------------------------------------
+ * This file is included(!) from /secure/kernel.c to form the kernel.
+ * Implemented sefuns are:
+ *   chr(), ord(), swap_case(), upper_case()
+ *   strip_a(), strip_article(), strip_gen()
+ *   add_a(), add_gen()
+ *   norm_id(), gen_id_pattern(), match_id()
+ *   implode_list()
+ *   itoa(), otoa(), atoi(), atoo()
+ *   old_explode()
+ *--------------------------------------------------------------------------
+ */
+
+public string chr( int i );  // forward
+
+nosave private string ascii = "";
+nosave private string whitespace = " \t\n\r";
+nosave private string lowercase = "abcdefghijklmnopqrstuvwxyz";
+nosave private string uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+nosave private string _lower, _upper, _swapcase;
+
+/*-------------------------------------------------------------------------*/
+private void setup_string()
+
+/* Set up the local variables
+ */
+
+{
+  int i;
+
+  for(i=0; i < 256; i++){
+     if(i==0)ascii+=" ";
+	ascii += chr(i);
+  }
+
+  _lower = ascii[0..('A'-1)] + lowercase + ascii[('Z'+1)..]; 
+  _upper = ascii[0..('a'-1)] + uppercase + ascii[('z'+1)..];
+  _swapcase = _upper[0..'A'-1] + lowercase + _upper['Z'+1..];
+}
+
+/*-------------------------------------------------------------------------*/
+public nomask deprecated int strlen( string s )
+{
+  return sizeof(s);
+}
+
+/*-------------------------------------------------------------------------*/
+public string chr( int i )
+
+/* Return a one-character-string with the character of ascii value <i>. */
+{
+  return sprintf("%c",i);
+}
+
+/*-------------------------------------------------------------------------*/
+public int ord( string x )
+
+/* Return the ascii value of the first (and only) character of <x>. */
+
+{
+  if ( sizeof( x ) != 1 )
+    raise_error("bad type arg to simul_efun ord()");
+  return x[0];
+}
+
+/*-------------------------------------------------------------------------*/
+public string swap_case ( string s )
+
+/* Switch the case of every character in <s> */
+
+{
+  int i;
+  for (i = sizeof(s); i--; )
+  {
+    s[i] = _swapcase[s[i]];
+  }
+  return s;
+}
+
+/*-------------------------------------------------------------------------*/
+public string upper_case ( string s )
+
+/* Switch the case of every character in <s> to upper */
+
+{
+  int i;
+  for (i = sizeof(s); i--; )
+  {
+    s[i] = _upper[s[i]];
+  }
+  return s;
+}
+
+/*-------------------------------------------------------------------------*/
+public string *old_explode(string str, string del) 
+
+/* Simulate the old behaviour of explode().
+ */
+
+{
+  int s, t;
+  string *strs;
+
+  if(del == "") return ({ str });
+  strs = efun::explode(str, del);
+  t = sizeof(strs) - 1;
+  while(s <= t && strs[s++] == ""); s--;
+  while(t >= 0 && strs[t--] == ""); t++;
+  if(s <= t) return strs[s..t];
+  return 0;
+}
+
+/*-------------------------------------------------------------------------*/
+public string strip_a (string str) 
+
+/* Strip the article 'a ' or 'an ' from <str> and return the remainder.
+ * If there is no article, <str> is returned unchanged.
+ */
+
+{
+  if (!stringp(str))
+    raise_error(sprintf("Illegal argument to strip_a(): %O\n", str));
+  if (str[0] != 'a' && str[0] != 'A')
+    return str;
+  if (str[1..2] == "n" || str[1..2] == "n ") 
+    str = str[3..];
+  else if (!str[1] || str[1] == ' ')
+    str = str[2..];
+  return str;
+}
+
+/*-------------------------------------------------------------------------*/
+public string strip_article (string str) 
+
+/* Strip the article 'a ', 'an ' or 'the ' from <str> and return the
+ * remainder. If there is no article, <str> is returned unchanged.
+ */
+
+{
+  if (!stringp(str))
+    raise_error(sprintf("Illegal argument to strip_article(): %O\n", str));
+  if ("the " == lower_case(str[0..3]))
+    return str[4..];
+  return strip_a(str);
+}
+
+/*-------------------------------------------------------------------------*/
+public string add_a (string str) 
+
+/* Add the article 'a ' resp. 'an ' to <str> and return the result.
+ */
+
+{
+  string tmp;
+  if (!stringp(str))
+    raise_error(sprintf("Illegal argument to add_a(): %O\n", str));
+  tmp = lower_case(str);
+  if (tmp[0..1] == "a " || tmp[0..2] == "an ")
+    return str;
+  if (member("aeiou", tmp[0]) == -1)
+    return "a "+str;
+  return "an "+str;
+}
+
+/*-------------------------------------------------------------------------*/
+public string add_gen (string str)
+
+/* Add the proper genitive ending to <str> return the result.
+ */
+
+{
+  if (!stringp(str))
+    raise_error(sprintf("Illegal argument to add_gen(): %O\n", str));
+  return str + ((member("sxy",str[<1]) != -1)?"'":"'s");
+}
+
+/*-------------------------------------------------------------------------*/
+public string strip_gen (string str)
+
+/* Remove the genitive ending from <str> and return the result.
+ * If there is no ending, <str> is returned unchanged.
+ */
+
+{
+  if (!stringp(str))
+    raise_error(sprintf("Illegal argument to strip_gen(): %O\n", str));
+  if (str[<2..<1] == "'s")
+    return str[0..<3];
+  if (str[<1] == '\'')
+    return str[0..<2];
+  return str;
+}
+
+/*-------------------------------------------------------------------------*/
+public varargs mixed norm_id (string str, int noimplode) 
+
+/* Normalize <str> my making it lowercase, remove leading and trailing
+ * spaces, and collapse sequences of spaces into just one space.
+ * If <noimplode> is non-zero, instead of the normalized string an
+ * array with the string exploded by the spaces is returned.
+ */
+
+{
+  if (!stringp(str))
+    raise_error(sprintf("Illegal argument to norm_id(): %O\n", str));
+  if (noimplode)
+    return explode(lower_case(str), " ") - ({ "" });
+  return implode(explode(lower_case(str), " ") - ({ "" }), " ");
+}
+
+/*-------------------------------------------------------------------------*/
+public string gen_id_pattern (string * ids, string * ads) 
+
+/* Take the adjectives <ads> and ids <ids> and construct a suitable
+ * regexp pattern for id-matching. The pattern will accept any number
+ * of adjectives, but exactly one id. Any single adjective or id may
+ * have embedded spaces.
+ * Return the pattern.
+ */
+
+{
+  string rc;
+  int i;
+
+  rc = "^";
+
+  // First, handle adjectives.
+  // It is a pattern of the sort
+  //   HS: ([ ]*\<(<adj1>|<adj2>|..|<adjn>)\>[ ])*
+  //   PCRE: ([ ]*\b(<adj1>|<adj2>|..|<adjn>)\b[ ])*
+  if (sizeof(ads))
+  {
+    ads = ads+({}); // Need a copy of ads.
+    for (i = sizeof(ads); i--;)
+      ads[i] = implode(norm_id(ads[i],1), " [ ]*");
+#ifdef __PCRE__
+    rc += "([ ]*\\b("
+        + implode(ads, "|")
+        + ")\\b[ ])*"
+       ;
+#else
+    rc += "([ ]*\\<("
+        + implode(ads, "|")
+        + ")\\>[ ])*"
+       ;
+#endif
+  } // if (sizeof(ads))
+
+  // Second, do the ids.
+  // This pattern looks like
+  //   HS: [ ]*\<(<id1>|<id2>|..|<idn>)\>
+  //   PCRE: [ ]*\b(<id1>|<id2>|..|<idn>)\b
+  ids = ids+({}); // Need a copy of ids.
+  for (i = sizeof(ids); i--;)
+    ids[i] = implode(norm_id(ids[i],1), " [ ]*");
+#ifdef __PCRE__
+  rc += "[ ]*\\b("
+      + implode(ids, "|")
+      + ")\\b"
+     ;
+#else
+  rc += "[ ]*\\<("
+      + implode(ids, "|")
+      + ")\\>"
+     ;
+#endif
+
+  // Optional trailing whitespace
+  rc += "[ ]*$";
+
+  return rc;
+}
+
+/*-------------------------------------------------------------------------*/
+public int match_id (string given, mixed ids, string * ads)
+
+/* Match the <given> string against the id defined by <ids> and <ads>
+ * and return 1 on match, and 0 on mismatch.
+ * The id can be defined by a regexp pattern: ids is the pattern string
+ * then and ads is ignored.
+ * Alternatively, the id can be defined by two arrays <ids> and <ads>
+ * of strings.
+ */
+
+{
+  string *rc;
+  if (!stringp(ids))
+    ids = gen_id_pattern(ids, ads);
+  rc = regexplode(lower_case(given), ids);
+  return sizeof(rc) == 3 && !sizeof(rc[0]) && !sizeof(rc[2]);
+}
+
+//--------------------------------------------------------------------------
+public varargs string implode_list ( mixed * list
+                                   , string pre
+                                   , string post
+                                   , string conj)
+
+/* Take the <list>, which may be an array of strings and/or objects, and
+ * collapse it into a nice list of the form '<a>, <b>,... <y> and <z>.\n"
+ * This is also wordwrapped nicely and then returned.
+ * Strings in the list are taken as them, of objects either the Name,
+ * the Short or "Someone"/"Something" is used to make the result
+ * string.
+ * The string is actually build using <pre>, <post> and <conj>, which
+ * default to "", "." and " and". The format is:
+ *  "<pre>a, b, c<conj>d<post>".
+ */
+
+{
+  int i;
+  string msg;
+
+  if (!sizeof(list))
+    return "";
+  list -= ({ 0 });
+  for (i = sizeof(list); i--; )
+  {
+    if (stringp(list[i]))
+      continue;
+    if (living(list[i]))
+      list[i] = list[i]->QueryName() || list[i]->Short() || "Someone";
+    else
+      list[i] = list[i]->Short() || list[i]->QueryName() || "Something";
+  }
+  list -= ({ "", 0 });
+  if (i = sizeof(list))
+  {
+    if (i == 1)
+      msg = list[0];
+    else
+      msg = implode(list[0..<2], ", ")+(conj||" and")+" "+list[<1];
+    msg = (pre||"")+msg+(post||".");
+    msg = msg[0..1]+sprintf("%2s%-73=s", "", msg[2..])[2..]+"\n";
+  }
+  return msg || "";
+}
+
+//--------------------------------------------------------------------------
+public string itoa (int num)
+
+/* Convert the number <num> into a string, using words for the numerals 0..20.
+ */
+
+{
+  if (!intp(num))
+    raise_error(sprintf("Illegal argument to itoa(): %O\n", num));
+  switch (num) {
+    case  0: return "zero";      break;
+    case  1: return "one";       break;
+    case  2: return "two";       break;
+    case  3: return "three";     break;
+    case  4: return "four";      break;
+    case  5: return "five";      break;
+    case  6: return "six";       break;
+    case  7: return "seven";     break;
+    case  8: return "eight";     break;
+    case  9: return "nine";      break;
+    case 10: return "ten";       break;
+    case 11: return "eleven";    break;
+    case 12: return "twelve";    break;
+    case 13: return "thirteen";  break;
+    case 14: return "fourteen";  break;
+    case 15: return "fifteen";   break;
+    case 16: return "sixteen";   break;
+    case 17: return "seventeen"; break;
+    case 18: return "eighteen";  break;
+    case 19: return "nineteen";  break;
+    case 20: return "twenty";    break;
+  }
+  return to_string(num);
+}
+
+//--------------------------------------------------------------------------
+public varargs string otoa (int num, int mode)
+
+/* Convert the ordinal <num> into a string, using words for the
+ * ordinals 0th..20th .
+ */
+
+{
+
+  if (!intp(num))
+    raise_error(sprintf("Illegal argument 1 to otoa(): %O\n", num));
+  if (!intp(mode))
+    raise_error(sprintf("Illegal argument 2 to otoa(): %O\n", mode));
+
+  if (2 == mode)
+    return to_string(num)+".";
+
+  if (1 == mode || num > 20 || num < 0)
+  {
+    int tmp;
+
+    tmp = num % 100;
+    if (tmp >= 10 && tmp < 20)
+      return to_string(num)+"th";
+
+    switch(tmp % 10) {
+      case 1: return to_string(num)+"st"; break;
+      case 2: return to_string(num)+"nd"; break;
+      case 3: return to_string(num)+"rd"; break;
+    }
+    return to_string(num)+"th";
+  }
+
+  switch (num) {
+    case  0: return "zeroth";      break;
+    case  1: return "first";       break;
+    case  2: return "second";      break;
+    case  3: return "third";       break;
+    case  4: return "fourth";      break;
+    case  5: return "fifth";       break;
+    case  6: return "sixth";       break;
+    case  7: return "seventh";     break;
+    case  8: return "eighth";      break;
+    case  9: return "nineth";      break;
+    case 10: return "tenth";       break;
+    case 11: return "eleventh";    break;
+    case 12: return "twelveth";    break;
+    case 13: return "thirteenth";  break;
+    case 14: return "fourteenth";  break;
+    case 15: return "fifteenth";   break;
+    case 16: return "sixteenth";   break;
+    case 17: return "seventeenth"; break;
+    case 18: return "eighteenth";  break;
+    case 19: return "nineteenth";  break;
+    case 20: return "twentieth";   break;
+  }
+  raise_error("otoa() failed to convert "+num+".\n");
+}
+
+//--------------------------------------------------------------------------
+public mixed atoi (string word)
+
+/* Convert the numeral <word> into a proper number and return it.
+ * The function understands words for the numerals 0..20.
+ * The <word> can't be converted, the string "<not a number>" is
+ * returned, which guarantees to cause an error in any further number
+ * crunching.
+ */
+
+{
+  int num, f, l;
+
+  if (!stringp(word))
+    raise_error(sprintf("Illegal argument to atoi(): %O\n", word));
+
+  // Strip leading spaces if there are any.
+  // 'f' is the first spaces, 'l' the first non-space.
+  f = 0;
+  for (l = f; l < sizeof(word) && word[l] == ' '; l++) /* empty */;
+  if (l == sizeof(word))
+    l--;
+  if (l > f)
+    word[f..l-1] = "";
+
+  // Strip leading zeroes from the number in word.
+  // If there are leading zeroes, of course.
+  // 'f' is the first zero, 'l' the first valid digit.
+  f = 0;
+  if (word[0] == '-' || word[0] == '+')
+    f = 1;
+  for (l = f; l < sizeof(word) && word[l] == '0'; l++) /* empty */;
+  if (l == sizeof(word))
+    l--;
+  if (l > f)
+    word[f..l-1] = "";
+
+  word = lower_case(word);
+  num = to_int(word);
+  if (word == to_string(num))
+    return num;
+
+  switch (word) {
+    case "naught":
+    case "zero"     : num =  0; break;
+    case "one"      : num =  1; break;
+    case "two"      : num =  2; break;
+    case "three"    : num =  3; break;
+    case "four"     : num =  4; break;
+    case "five"     : num =  5; break;
+    case "six"      : num =  6; break;
+    case "seven"    : num =  7; break;
+    case "eight"    : num =  8; break;
+    case "nine"     : num =  9; break;
+    case "ten"      : num = 10; break;
+    case "eleven"   : num = 11; break;
+    case "twelve"   : num = 12; break;
+    case "thirteen" : num = 13; break;
+    case "fourteen" : num = 14; break;
+    case "fifteen"  : num = 15; break;
+    case "sixteen"  : num = 16; break;
+    case "seventeen": num = 17; break;
+    case "eighteen" : num = 18; break;
+    case "nineteen" : num = 19; break;
+    case "twenty"   : num = 20; break;
+    default: return "<not a number>";
+  }
+  return num;
+}
+
+//--------------------------------------------------------------------------
+public mixed atoo (string word)
+
+/* Convert the ordinal <word> into a proper number and return it.
+ * The function understands words for the ordinals 0th..20th.
+ * The <word> can't be converted, the string "<not an ordinal>" is returned.
+ */
+
+{
+  mixed  ord;
+  string rest;
+
+  if (!stringp(word))
+    raise_error(sprintf("Illegal argument to atoo(): %O\n", word));
+
+  word = lower_case(word);
+  if (2 == sscanf(word, "%d%s", ord, rest))
+  {
+    if (    rest == "."
+        || (1 == ord && rest == "st")
+        || (2 == ord && rest == "nd")
+        || (3 == ord && rest == "rd")
+        || (4 <= ord && -1 != member(({"st", "nd", "rd", "th"}), rest))
+       )
+      return ord;
+    return "<not an ordinal>";
+  }
+  switch (word)
+  {
+    case "zeroeth"    :
+    case "zeroth"     : ord =  0; break;
+    case "first"      : ord =  1; break;
+    case "second"     : ord =  2; break;
+    case "third"      : ord =  3; break;
+    case "fourth"     : ord =  4; break;
+    case "fifth"      : ord =  5; break;
+    case "sixth"      : ord =  6; break;
+    case "seventh"    : ord =  7; break;
+    case "eighth"     : ord =  8; break;
+    case "nineth"     : ord =  9; break;
+    case "tenth"      : ord = 10; break;
+    case "eleventh"   : ord = 11; break;
+    case "twelveth"   : ord = 12; break;
+    case "thirteenth" : ord = 13; break;
+    case "fourteenth" : ord = 14; break;
+    case "fifteenth"  : ord = 15; break;
+    case "sixteenth"  : ord = 16; break;
+    case "seventeenth": ord = 17; break;
+    case "eighteenth" : ord = 18; break;
+    case "nineteenth" : ord = 19; break;
+    case "twentieth"  : ord = 20; break;
+    default: ord = "<not an ordinal>";
+  }
+  return ord;
+}
+
+/***************************************************************************/

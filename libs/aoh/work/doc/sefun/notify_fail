@@ -1,0 +1,102 @@
+SYNOPSIS
+	void notify_fail(string str, int priority)
+	void notify_fail(closure cl, int priority)
+
+DESCRIPTION
+	Store str as the error message given instead of the default
+	message ``What ?''.
+	
+	If a closure is given, it is executed to return the error
+	message string, but not before all attempts to execute the
+	commandline failed (read: not at the time of the call to
+	notify_fail()).
+
+	However the message string is generated, it is word-wrapped to
+	78 characters per line before printing.
+	
+	If notify_fail() is called more than once, only the last call
+	will be used.
+	
+	The idea of this function is to give better error messages
+	instead of simply 'What ?'.
+	
+	It is also better to use
+		notify_fail(message); return 0;
+	instead of
+		write(message); return 1;
+	
+	Other objects will get the chance to evaluate the verb.
+
+	The 'priority' is an OSB-specific invention, it allows
+	you to define how badly the command failed. Recognized are are
+	the priorities defined in /sys/config.h:
+	  NOTIFY_NOT_CMD (-1): 
+            The object does not support the command at all.
+	  NOTIFY_NOT_OBJ ( 0): 
+            The object supports the command in general, but is not the
+            one meant in the actual command.
+	  NOTIFY_ILL_ARG ( 1): 
+            The object supports the command in general, but is either
+            not the one meant with the actual command, or is given an
+            invalid command (this is needed for commands which do not
+            specifiy the object unambiguously).
+	  NOTIFY_NOT_VALID ( 2):
+	    The object supports the command and _is_ the one meant in
+	    the actual command, but can't complete its task due to
+	    some internal reason (like syntax errors in the command
+	    arguments).
+	  NOTIFY_DO_ALL (max int):
+	    Not a real failure message, this one allows the repeated
+	    execution of the same command for other objects (e.g. for
+	    a 'wear all').
+
+EXAMPLE
+	To implement is a command 'foo <object> to <object>', which is
+	available for wizards only, and may also be shortened to 'foo
+	to <object>'.
+
+	#define TP this_player()
+
+	int foo(string arg) {
+	  string str1, str2;
+	  object obj1, obj2;
+
+	  if (IS_PLAYER(TP)) {
+	    notify_fail("Nothing happens.\n", NOTIFY_NOT_CMD);
+	    return 0;
+	  }
+	  // First check for the short form.
+	  // Note the _ILL_ARG in case the specified object is not found.
+	  if (1 == sscanf(arg, "to %s", str2)) { // Handle short form
+	    if (!(obj2 = TP->Search(str2, SEARCH_ENV, SEARCH_OBJECT))) {
+	      notify_fail("Foo to what?\n", NOTIFY_ILL_ARG);
+	      return 0;
+	    }
+	    obj1 = this_object();
+	  }
+	  else { 
+	    // Check the long form.
+	    if (   2 != sscanf(arg, "%s to %s", str1, str2)
+	        || !(obj1 = TP->Search(str1, SEARCH_ENV, SEARCH_OBJECT))
+	        || obj1 != this_object()
+               ) {
+	      notify_fail("Foo what?\n", NOTIFY_NOT_OBJ);
+	      return 0;
+	    }
+	    if (!(obj2 = TP->Search(str2, SEARCH_ENV, SEARCH_OBJECT))) {
+	      notify_fail("Foo to what?\n", NOTIFY_NOT_VALID);
+	      return 0;
+	    }
+	  }
+	  if (obj2->QueryWeight() > 3000) {
+	    notify_fail( "You need a lighter object to foo to.\n"
+	               , NOTIFY_NOT_VALID);
+	    return 0;
+	  }
+	  obj2->SetProp("FooedBy", this_object());
+	  write("Well, you asked for it, you got it.\n");
+	  return 1;
+	}
+
+SEE ALSO
+	add_action(E), query_verb(E)

@@ -1,0 +1,470 @@
+CONCEPT
+        money - The money system 
+
+OBJECTS
+        /obj/money.c, /obj/money_demon.c, /lib/money.c
+
+AUTHOR
+        Sique, Dec 20 1996
+
+DESCRIPTION
+        This is meant as a collection of hints, how to deal with the money
+        system.
+        Though the money system does not lack a certain complexity, I tried
+        to design the programming interface as simple as possible to hide
+        all internal functionality before the programming wizard.
+
+        I'll try to describe with some very common examples, how to handle
+        the different aspects of payment, creating, moving and removing
+        money.
+
+
+        MOVING, REMOVING of money
+
+        The simpliest thing first: moving and removing of money.
+        The money object tries to look at good as possible like any other
+        object in the mud for normal thing handling (getting, dropping,
+        giving, looking at, putting into containers).
+        So you should handle it like every other object.
+
+        Example: A well you can throw money into.
+
+        #include <money.h>
+        #include <search.h>
+
+        init()
+        {
+          ::init();
+          .
+          .
+          .
+          /* doing other initialisations */
+
+          add_action("f_throw","throw");
+          /* Bind a command "throw" to the function f_throw() */
+        }
+
+        f_throw(string arg)
+        {
+          int    vision
+          string what;
+          object ob;
+
+          vision = this_player()->CantSee();
+
+          if(vision > 0)
+          {
+            notify_fail("It's far to bright for you to throw anything.\n");
+            return 0;
+          } else if(vision < 0)
+          {
+            notify_fail("It's too dark for you to throw anything.\n");
+            return 0;
+          } /* Light and Vision handling */
+
+          if(!arg)
+          {
+            notify_fail("What do you want to throw into the well?\n");
+            return 0;
+          } /* The player just entered "throw" without argument */
+
+          if(1 != sscanf(arg,"%s into well",what))
+          {
+            notify_fail("Where do you want to throw something?\n\
+       Try 'throw <amount of money> into well'!\n");
+            return 0;
+          } /* The argument the player gave to "throw" does not match the
+             * expected form: "throw <something> into well" */
+
+          if(!(ob = this_player()->Search(what,SM_OBJECT|SEARCH_INV))
+          {
+            notify_fail("You don't have that to throw it into the well.\n");
+            return 0;
+          } /* The player tries to throw something he isn't carrying into
+             * the well. */
+
+          if(!ob->id(MONEY_ID))
+          {
+            notify_fail("I wouldn't throw that into the well!\n");
+            return 0;
+          } /* MONEY_ID is the unique ID of money.c. So you can detect, if
+             * it's really money the player wants to throw into the well */
+
+          printf("You throw %s into the well.\n",ob->Short()));
+          say(sprintf("%s throws some money into the well.\n",ob->CapName()));
+          ob->remove();
+          if(ob)
+            destruct(ob);
+          return 1;
+        } /* We now know that it is a money object the player wants to throw
+           * into the well, so we take it from the player and remove it. */
+
+        Note, that in the above example the player may have thrown into the
+        well only a part of the whole money he was carrying. The money object
+        itself controles, which part of it is meant and splits itself into
+        it and the remaining. So you should never have to take care about it.
+
+        Note also, that the finding of the money object is done like it
+        has to be done for every other object. Similar you would have to
+        use it for giving it away, dropping it, taking it from containers
+        and in all other handling circumstances.
+
+
+        CREATING money
+
+        There are two different situations where you can create money:
+        1.) Adding it as an item to any environment.
+        2.) Giving it to a player for a specified reason.
+
+        1.) Money is added as an item to an environment like every other
+            object, with one exception: The kind and number of coins it
+            shall contain has to be set. Therefore you have to set the
+            Property P_MONEY accordingly.
+            This has to be a mapping, where the coin types are the indices
+            and the numbers the values.
+
+        Example:
+
+        #include <properties.h>
+        #include <money.h>
+        #include <rooms.h>
+
+        AddItem(MONEY, REFRESH_REMOVE, ([ P_MONEY : ([ "copper" : 22,
+                                                       "gold"   : 7,
+                                                       "pebble" : 15
+                                                      ])
+                                         ])
+                );
+
+        where MONEY is the filename of the money object, predefined in
+        <money.h>.
+
+        Often you just want to add money with a specified value, and you
+        do not dare, how the value is spread onto the different types of
+        money. Then you may delegate the creating of the money mapping
+        to either MONEY_LIB or MONEY_DEMON. Using MONEY_LIB is only senseful
+        if you inherit it anyway for other purposes, because the
+        MONEY_LIB->CreateMoneyFromValue() just calls itself the MONEY_DEMON,
+        so MONEY_DEMON->CreateMoney() does exactly the same and has one
+        call_other() less than the call to MONEY_LIB.
+
+        Example:
+
+        #include <properties.h>
+        #include <money.h>
+        #include <rooms.h>
+
+        AddItem(MONEY, REFRESH_REMOVE,
+                       MONEY_DEMON->CreateMoney(20 + random(50),
+                                                ({"copper", "silver"})
+                                                )
+                );
+
+        Or:
+
+        #include <properties.h>
+        #include <money.h>
+        #include <rooms.h>
+
+        inherit MONEY_LIB;
+
+        AddItem(MONEY, REFRESH_REMOVE,
+                       CreateMoneyFromValue(20 + random(50),
+                                            ({"copper","silver"})
+                                            )
+                );
+
+        2.) Giving money to players is done by the MONEY_LIB->AdjustMoney()
+            function. There are two ways to call it: Either you give amount
+            and sort of money with the second and the third argument:
+
+        AdjustMoney(this_player(), 100, "copper");
+
+            or you give a money mapping as described above as second
+            argument:
+
+        AdjustMoney(this_player(), CreateMoneyFromValue(100, ({"copper"}) );
+
+            There is still the way giving money to the player by cloning
+            a money object, setting its P_MONEY and giving this to the
+            player. From inside NPCs this may have advantages, because
+            NPC->Give() creates the correct messages itself.
+
+            In some circumstances it may be needed to parse a given string,
+            if it is a senseful money description and to create an according
+            money mapping. This may be needed if a player wants to take
+            some money, which still does not exist as object, like it may
+            happen at the banking tellers in the bank offices.
+            For this purpose MONEY_LIB->CreateMoneyFromString() returns
+            an according money mapping, if the string given has had any sense
+            to it (Zero otherwise).
+
+            Note, that dies way must not be gone if the asked money is part
+            or a whole money object which already exist! In this case you
+            should rather use the locate()/search()-functionality in the
+            environment of this object, as described above (See search(C)).
+
+        Example: A money exchanger, giving you a specified amount of money.
+
+        #include <money.h>
+
+        inherit MONEY_LIB;
+
+        init()
+        {
+          ::init();
+          .
+          .
+          .
+          add_action("f_get", "get");
+        }
+
+        f_get(string arg)
+        {
+          int     value;
+          mapping money;
+          string  types;
+
+          if(!arg)
+          {
+            notify_fail("How much money you want to get?\n");
+            return 0;
+          } /* No argument was given */
+
+          if(!(money = CreateMoneyFromString(arg)))
+          {
+            notify_fail("Sorry, but you can only get money in several\n\
+        different currencies from me.\n");
+            return 0;
+          } /* CreateMoneyFromString() wasn't able to parse the given
+             * argument. */
+
+          /* Now it's getting tricky. We have to look, if the player has enough
+           * of the other coin types to pay for the created money mapping.
+           * (Paying with the same coin types for the money is somewhat silly!)
+           * So we have first to get its value: */
+
+          value = MONEY_DEMON->QueryMoneyValue(money);
+
+          /* Now we have to compare it with the value of the cointypes not
+           * in this money mapping, but carried by the player */
+
+          if(QuerySomeonesValue(this_player(),
+                                types = 
+                                /* A side effect: We store the result in a
+                                 * variable, the same value is given as
+                                 * argument to the function. */
+
+                                m_indices(QueryMoney(this_player())) -
+                                /* gives the list of all cointypes the player
+                                 * is carrying */
+
+                                m_indices(money)
+                                /* gives the list of the cointypes in the
+                                 * desired money mapping */
+
+                                ) < value + fee ) // However fee is calculated
+          {
+            notify_fail("You don't have enough other money to pay for\n\
+        the exchange.\n");
+            return 0;
+          } /* The money exchanger sighs deeply... */
+
+          /* So, now we can do the paying. For this special case we have no
+           * prepared function, so we have to simulate it using the money
+           * demon directly. */
+
+          change = MONEY_DEMON->PayValue(value + fee,
+                                         QueryMoney(this_player()),
+                                         types // We still know them from above
+                                         );
+
+          if(!change)
+          {
+            notify_fail("Excuse me, but something went totally wrong.\n");
+            return 0;
+          } /* This should never happen. It's more a security fallback. */
+
+          SetMoney(this_player(), change[0] + money);
+          /* We give him his remaining money AND the money he has exchanged.
+           * This is the reason why we hadn't used a prepared function. */
+
+          printf("You bought %s for %s%s.\n",
+                 MONEY_DEMON->CreateMoneyString(money),
+                 MONEY_DEMON->CreateMoneyString(change[1]),
+                 change[2]? /* this part is only to be created, if we get any
+                             * change */
+                   sprintf(" and get %s of change",
+                          MONEY_DEMON->CreateMoneyString(change[2]):
+                   ""
+                 );
+          /* We create a message, that tells the player what has happened. */
+
+          say(sprintf("%s exchanged some money.\n", this_player()->CapName()));
+          /* We inform the environment */
+
+           return 1; /* Success! */
+        }
+
+            Ok, this example is very sophisticated. Normally you do not have
+            to create such complex code to deal with the money object.
+
+
+        PAYMENT programming
+
+        The main purpose of money is to make the player able to trade with
+        goods and buy services.
+        So the MONEY_LIB tries to make this part of programming with money
+        as simple as possible. Mainly you need only one function, that does
+        the whole work: MONEY_LIB->PayValueString().
+        It is highly recommended to look at its properties first if you want
+        to program any payment.
+        In the most cases a piece of code like the one below will fit for your
+        purposes:
+
+          .
+          .
+          .
+          res = PayValueString(this_player(),   // Or whoever has to pay!
+                               value,           // Everything has its value
+                               0,               // Because no specified money
+                                                // types are given, it will
+                                                // fall back to the standard
+                                                // ones for your domain.
+                               "for a service", // Gives the reason for the
+                                                // payment
+                               0 );             // take the standard size of
+                                                // the user's terminal.
+          /* The last three arguments can be omitted */
+          if(!res)
+            return 0;
+            /* The correct notify_fail()-call is already done by the function
+             * call */
+
+          write(res); /* Inform the player */
+          say(sprintf("%s paid for a service.\n",this_player()->CapName()));
+          .           /* And her environment */
+          .
+          .
+
+        In some special cases you may like to have your own notify_fail()-
+        messages. In this case you may rather use PayValue2(). A piece of
+        code like this should fit your desires:
+
+        res = PayValue2(this_player(), value, ({"copper","silver"}) );
+        if(intp(res)) // if res is an integer, it's an error message.
+        {
+          switch(res) {
+          case MONEY_NEGATIVE:
+            notify_fail("Strange.\n\
+        Someone tried to force you a negative value!\n");
+            break;
+          case MONEY_NO_MONEY:
+            notify_fail("Trying to get something for nothing, hey?\n");
+            break;
+          case MONEY_NOT_ENOUGH:
+            notify_fail("Poor player, you should earn more money first!\n");
+            break;
+          case MONEY_CANT_PAY:
+            notify_fail("Coming from far away, stranger?\n\
+        I do not accept your money.\n");
+            break;
+          case MONEY_WRONG_RESULT:
+            notify_fail("Don't know, what happened.\n\
+        An non recoverable error occured.\n");
+            break;
+          default:
+            notify_fail("Strange. I even don't know which error occured.\n");
+          }
+          return 0;
+        }
+        /* Now we for sure know, that we got an array of two elements. */
+        if(!res[0]) {
+          if(!res[1]) {
+            notify_fail("Nothing happened.\n");
+            return 0;
+          } // There is neither money given away nor any change came back */
+          printf("Lucky you! You got %s without paying anything!\n", res[1]));
+          say(sprintf("Strange. %s get some change without having anything\n\
+        paid.\n", this_player()->CapName()));
+          return 1;
+        }
+        printf("You paid %s for a service%s.\n",
+               res[0],
+               res[1]?sprintf(" and got %s back",res[1]):""
+               );
+        say(sprintf("%s has to pay something.\n", this_player()->CapName()));
+          .
+          .
+          .
+
+        For a short and silent payment you may still use PayMoney().
+        But then you have to do all the checks and generating messages
+        yourself.
+
+
+        DETECTING special coin types
+
+        For implementing machines you can only start by inserting a specified
+        amount of a given coin you have to detect if a player is really trying
+        to use the right number of the right coins.
+
+        Lets look at an example:
+
+        #include <money.h>
+
+        inherit MONEY_LIB;
+
+        init()
+        {
+          ::init();
+          .
+          .
+          .
+          add_action("f_insert","insert");
+        }
+
+        f_insert(string arg)
+       {
+          int    amount;
+          string coins;
+
+          if(!arg)
+          {
+            notify_fail("What do you want to insert?\n")
+            return 0; /* The old game: No argument */
+          }
+
+          if(2 != sscanf(arg, "%d %s", amount, coins))
+          {
+            notify_fail("Insert <amount> <cointype>.\n");
+            return 0; 
+          } /* Send the correct format as error message. */
+
+          if("copper" != MONEY_DEMON->PresentMoney(coins,
+                                                   QueryMoney(this_player()))
+          {
+            notify_fail("Sorry, this machine takes only copper coins.\n");
+            return 0;
+          } /* PresentMoney() tries to find the cointype in the given
+             * money mapping and returns its internal, unique name. */
+
+          if(amount != 100)
+          {
+            notify_fail("The correct price is 100 copper coins.\n");
+            return 0;
+          }
+
+          if(!PayValue(this_player(), 100 ({"copper"}) )
+          {
+            notify_fail("You do not own 100 copper coins.\n");
+            return 0;
+          } /* The payment was unsuccessful */
+
+          /* put some special effects here */
+
+          return 1;
+        }
+
+SEE ALSO
+        money_concept(C), money(S)

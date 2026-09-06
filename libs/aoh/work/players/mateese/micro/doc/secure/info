@@ -1,0 +1,405 @@
+OBJECT
+  /secure/info
+
+
+LAST UPDATE
+  Mateese, 14-Jul-1996, 01:40 MET
+
+
+SYNOPSIS
+  #include "/secure/config.h"
+  #include "/secure/info.h"
+
+  SECUREINFO->...
+
+
+DESCRIPTION
+  The secure/info object stores the administrational information of
+  each player, namely the password and the security level.
+  The data is stored in /secure/save as .o files named after the
+  player whose data is contained. To speed up access, the files
+  are subdivided in subdirectories named after the first character
+  in the player names. E.g. the data for player 'Mateese' would
+  be stored in the file '/secure/save/m/mateese.o', where the
+  subdirectories '/secure/save' and '/secure/save/m' would be created
+  if not existing.
+
+  Player names must be all alpha, and mustn't start with '!' (which
+  denotes internal names). The case is irrelevant.
+
+  For informational purposes, extra 'dummy players' are used for storing
+  the data of a domain and for the lists of arches, admins, banished
+  and reserved names.
+
+  The secure/info is the only object to read and write these
+  data files. Especially the password info is not to leave this
+  area.
+
+  For each player, the following data is stored in the file:
+
+    int       level
+      The wizlevel of this player. Special leves are
+        SILEVEL_ILLEGAL  (-1): name is illegal
+        SILEVEL_DOMAIN   (-2): the file describes a domain.
+        SILEVEL_RESERVED (-3): the name is reserved.
+    string    password
+      The encrypted password.
+
+    mapping   domain
+      The domain memberships: the mapping is indexed by the domain
+      name and stores the domainlevel.
+      No domainlevel may exceed the range [MEMBER_LVL..LORD_LVL]
+
+    string    banish
+      If the player is banished, this string describes the reason.
+      Else it is 0.
+
+    int       flags
+      Various boolean bitflags:
+        SIFLAG_LORD (1): set if player is lord of at least one domain.
+
+    mixed   * promo
+      Data describing the career of the player. Following fields
+      are defined so far:
+        int    SIPROMO_LTIME (0): date of promotion to learnerhood
+        string SIPROMO_LNAME (1): Name of learnerhood sponsor
+        int    SIPROMO_WTIME (2): date of promotion to wizardhood
+        string SIPROMO_WNAME (3): Name of wizardhood sponsor
+      Unused entries needn't exist.
+
+    string  * honors
+      An array of strings denoting honorifics gained by the player.
+
+
+  The domain 'pseudo players' use just the level and domain entries.
+  The domain entry uses the names of the members/lords as indices
+  and stores for each name the domainlevel.
+  The special 'pseudo player' SIDOM_SYSTEM ("system"), also marked
+  by SILEVEL_DOMAIN, uses the domain entry to store several arrays
+  of strings:
+    SIDOM_ARCH     "arch"    : list of names of archwizards
+    SIDOM_ADMIN    "admin"   : list of names of admins
+    SIDOM_BANISH   "banish"  : list of banished names
+    SIDOM_RESERVED "reserved": list of reserved names
+  All the pseudo players are kept in parallel to the player information.
+  In case of inconsistencies the per-player information has precedence.
+
+  The secure/info stores the most recently used data in a mapping for
+  faster access. This mapping is indexed by name and contains the above
+  data structured as this:
+
+    info = RECORD
+      int     SINFO_LEVEL    level
+      mapping SINFO_DOMAIN   domain
+      string* SINFO_HONORS   honors
+      string  SINFO_BANISH   banish
+      int     SINFO_FLAGS    flags
+      mixed*  SINFO_PROMO    promo
+      string  SINFO_PASSWORD password  // internal only
+      int     SINFO_STAMP              // internal only
+    END
+
+
+  Following functions are implemented:
+
+    nomask void create()
+      The server is set up, the internal cache is initialized.
+
+    nomask int prevent_shadow (object shadow)
+      Returns always non-zero to prevent shadowing.
+
+    void reset ()
+      All entries of non-interactives which are unused for more than
+      half an hour are removed from the internal cache.
+
+    int isValid (string name)
+      Return True if for the given name valid info exists.
+
+    varargs int Wizlevel (mixed arg, string domain)
+      Return the wizlevel for one name, optionally the domainlevel.
+
+    varargs string Permission (string arg, string domain)
+      Return the permission for a user, optionally the domain
+      permissions.
+
+    int CheckPassword (string name, string pw)
+      Compare the password for a valid info entry with a given one.
+
+    mixed * Info (string name)
+      Return the info data for a given name.
+
+    int NewPlayer (string name, string pw)
+      Add a new player to the info database.
+
+    int NewDomain (string name)
+      Add a new domain to the info database.
+
+    varargs int SetLevel (string name, int lvl, string domain)
+      Set a new (domain) wizlevel for a valid info entry.
+
+    int SetPassword (string name, string pw)
+      Set a new password for a valid info entry.
+
+    int ChangeFlags (string name, int mask, int val)
+      Change the flag settings.
+
+    int Delete (string name)
+      Delete a valid entry from the info database.
+
+    int Rename (string name, string newname)
+      Rename a valid info entry.
+
+    int Reserve (string name)
+      Reserve a name for game use.
+
+    int Unreserve (string name)
+      Return a reserved name for free use.
+
+    int Banish (string name, string reason)
+      Banish a player from the game.
+
+    int Unbanish (string name, string reason)
+      Unbanish a player from the game.
+
+    int SetHonors (string name, string *hons)
+      Set the honorifics for a name.
+
+    int AddHonor (string name, string hon)
+      Add one honorific to a name.
+
+
+  These functions are of internal use
+
+    static int check (int arch, string name)
+      Check if the current caller has admin (or arch) rights,
+      or is <name> itself.
+
+    static void loadSystemInfo ()
+      Load the system info into the cache.
+
+    static int loadInfo (string name)
+      Load the info for a name into the cache.
+
+    static void saveInfo (string name)
+      Write the info for a name from the cache.
+
+
+FUNCTION DESCRIPTION
+    nomask void create()
+      The server is set up, the internal cache is initialized.
+      If the server is not normally loaded, e.g. cloned or inherited,
+      an error is caused and the object self destructs.
+
+
+    nomask int prevent_shadow (object shadow)
+      Returns always non-zero to prevent shadowing.
+
+
+    void reset ()
+      All entries of non-interactives which are unused for more than
+      half an hour are removed from the internal cache.
+
+    int isValid (string name)
+      Return true if for the given <name> valid info exists.
+      This also loads the data into the cache.
+
+
+    varargs int Wizlevel (mixed arg, string domain)
+      Return the wizlevel for one name, optionally the domainlevel.
+        arg   : the object/name of interest.
+        domain: a domain affected or 0.
+      Result: The wizlevel for this name, at least 0.
+        If 'domain' is given, the wizlevel is returned in respect to
+        that domain.
+      If a non-existing domain is given, it is deleted from the players
+      info record.
+
+
+    varargs string Permission (string arg, string domain)
+      Return the permission for a user, optionally the domain
+      permissions.
+        arg   : the object/name of interest.
+        domain: a domain affected or 0.
+      Result: The permission for this name, at least 0.
+        If 'domain' is given, the permission is returned in respect to
+        that domain.
+      If a non-existing domain is given, it is delete from the players
+      info record.
+
+
+    int CheckPassword (string name, string pw)
+      Compare the password for a valid info entry with a given one.
+        name: the name to add
+        pw  : the password to check against.
+      Result:
+        -1: if no password was set.
+         0: if the passwords don't match.
+         1: if the passwords match.
+
+
+    mixed * Info (string name)
+      Return the info data for a given name.
+        name: the name of interest.
+      Result: An array with the public info for the name, or 0 if the name is
+        not valid.
+
+
+    int NewPlayer (string name, string pw)
+      Add a new player to the info database.
+        name: the name to add
+        pw  : the password to use
+      Result: True on success.
+      The name mustn't exist yet nor be illegal or reserved, and the
+      call has to be done by an admin.
+
+    int NewDomain (string name)
+      Add a new domain to the info database.
+        name: the domain to add
+      Result: True on success.
+      The name mustn't exist yet nor be illegal or reserved, and the
+      call has to be done by an admin.
+
+
+    varargs int SetLevel (string name, int lvl, string domain)
+      Set a new (domain) wizlevel for a valid info entry.
+        name  : the name to add
+        lvl   : the new level
+        domain: the domain affected, or 0 for the general level.
+      Result: True on success.
+      This function does an abundance of checks.
+      If the name doesn't exist yet or is illegal or reserved, or if
+      the given domain doesn't exist, the call fails.
+      Normal non-domain level settings follow these rules:
+        - Root or adminobjects may do everything.
+        - Archobjects may promote up to or demote wizards.
+        - Wizards may promote players.
+        - Everybody may demote itself.
+        - Everything else is forbidden.
+        Promotions here are note in the promo array.
+      For domain level changes, a different set of rules apply:
+        - The new level must be in the allowed range.
+        - Arches and lords may do everything.
+        - Everybody may demote itself.
+        - Everything else is forbidden.
+        If the domain level is set to something < MEMBER_LVL, the
+        membership is erased.
+
+
+    int SetPassword (string name, string pw)
+      Set a new password for a valid info entry.
+        name: the name to add
+        pw  : the new password
+      Result: True on success.
+      Only admins and <name> may do this.
+
+
+    int ChangeFlags (string name, int mask, int val)
+      Change the flag settings.
+        name: the name to add
+        mask: the bit mask of flags to change.
+        val : the bit mask of new flag values
+      Result: True on success.
+      The operation performed is
+        new_value = (old_value & ~mask) | (val & mask)
+      Only admins and <name> may do this.
+
+
+    int Delete (string name)
+      Delete a valid entry from the info database.
+        name : the name of the entry to delete.
+      Result: True on success.
+      On success, the associated file is deleted as well.
+      Only admins, arches and <name> may do this.
+
+
+    int Rename (string name, string newname)
+      Rename a valid info entry.
+        name    : the name to change.
+        newname : the new name.
+      Result: True on success.
+      Only admins, arches and <name> may do this.
+      The old name must be valid, the new name yet unused
+      to succeed.
+
+
+    int Reserve (string name)
+      Reserve a name for game use.
+        name : the name to reserve.
+      Result: True on success.
+      The name mustn't be in use already.
+
+
+    int Unreserve (string name)
+      Return a reserved name for free use.
+        name : the name to unreserve.
+      Result: True on success.
+      The name must be reserved to succeed.
+
+
+    int Banish (string name, string reason)
+      Banish a player from the game.
+      Argument:
+        name  : the name to banish.
+        reason: the reason for the banishment.
+      Result:
+        True on success.
+      Only arches, admins and <name> may do this.
+      The name must be a player name.
+
+
+    int Unbanish (string name, string reason)
+      Unbanish a player from the game.
+        name  : the name to unbanish.
+      Result: True on success.
+      Only arches and admins may do this.
+      The name must be a player name.
+
+
+    int SetHonors (string name, string *hons)
+      Set the honorifics for a nane.
+        name : the name to set the honorifics to
+        hons : the honorifics to set
+      Result: True on success.
+      Only admins or <name> may do this.
+
+
+    int AddHonor (string name, string hon)
+      Add one honorific to a nane.
+        name : the name to add the honorific to.
+        hon  : the honorific to add.
+      Result: True on success.
+      Only admins and <name> may do this.
+
+
+  These functions are of internal use
+
+    static int check (int arch, string name)
+      Check if the current caller has admin (or arch) rights,
+      or is <name> itself.
+        arch: flag if arches shall pass as well.
+        name: name to accept.
+      Result:
+        0: operation denied.
+        1: caller has admin (or arch) rights.
+        2: this_player() is <name>
+
+
+    static int loadInfo (string name)
+      Load the info for a name into the cache.
+        name: the name to load
+      Result: True if info for the name exists; false, if the name
+        is not in use.
+      If the info for the name is already loaded, just the existance is
+      returned.
+      If there is no info to load, a dummy-entry is made and tagged as
+      such, then false is returned.
+
+
+    static void saveInfo (string name)
+      Write the info for a name from the cache.
+        name: the name to save
+      If the info for name is real, it is saved.
+
+
+SEE ALSO
+    security(basics), levels(basics)

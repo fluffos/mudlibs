@@ -1,0 +1,707 @@
+OBJECT
+	/std/shop
+
+
+SYNOPSIS
+	inherit "/std/shop";
+
+	#include <properties.h>
+	#include <rooms.h>
+
+
+LAST UPDATE
+	Thragor, 22-Jan-97, 21:45 MET
+
+
+DESCRIPTION
+	The shop handles the trading of the players. They may buy or
+	sell items in here or get an information about the items.
+	The shop may be defined as 'market', too. In this case the
+	player won't get the money from the shopkeeper but from other
+	players who buy the items anotherone sold. If the shop gets
+	destructed and noone had the chance to buy the item of another
+	player the player who sold the item will get a certain
+	insurance sum. This, as well as the money (s)he would normally
+	get, will be transferred to her/his bankaccount.
+	The shop offers the following commands:
+	'list [<what>]' will list all or all specified items in the
+	                store but will not list objects which return a
+	                value different from zero on QueryPlayer() and
+	                no objects which return a value !=0 when
+	                querying the property P_NOSELL.
+	                One feature of this is, that if you want to
+	                have a cupboard in your store as object, you
+	                don't just have to set P_NOSELL for it, and it
+	                won't appear in the lost and it can't be sold.
+	'sell <what>' will sell the specified items. Items which have
+	              a P_NODROP, P_AUTOOBJECT or P_NOBUY set will not
+	              be bought.
+	              Items which have the property P_NOSELL set,
+	              won't be sold again (instead they will be
+	              destructed immediately).
+	'sell <what> for <price>' is only used for the shop if defined
+	                          as market. In this case the player
+	                          can sell an item for a certain
+	                          amount of money.
+	'show <what>' the player might want to see what (s)he
+	              buys. 'show' will print the Long() to the
+	              player.
+	'appraise <what>' will tell the player what (s)he'll get for
+	                  the specified item.
+	'identify <what>' will tell the P_INFO to a player, but only
+	                  if P_MAGIC is != 0, because the shopkeeper
+	                  can't identify magic items. Instead he will
+	                  just tell, that this item is magic.
+	                  Furtermore the player will be informed about
+	                  the size of the item if it is an equipment.
+	'toss <what>' will destroy an item in the inventory of the
+	              player if it is droppable.
+	'shop <command>' offers the different commands for wizards to
+	                 check the shop, etc.
+
+	If there's the word 'protected' below the function-name, this means
+	that the function can only be called by the shops which inherit
+	/std/shop. They can't be accessed via call_other.
+
+	The functions of the shop:
+
+	--- /lib/money ---
+
+	  string* P_VALUTA	"Valuta"
+	    This will set the coins which may be used to trade in this
+	    shop. By default it is set to the coins of the domain the
+	    shop is in (see money(S)).
+
+	  string* AddValuta(string coin)
+	    Add <coin> to the valuta-array.
+
+	--- /std/shop ---
+
+	  status CheckTrade(object ob)
+	    Will be called to check if the shop trades with the object
+	    ob. By default it returns 1 for every object, but you may
+	    modify this function.
+
+	  int ModifyPrice(object ob,int price,string verb)
+	    This should return the price for an item. The verbs might
+	    be 'sell', 'buy', or 'appraise'. You may e. g. give a
+	    discount for dwarves :-)
+
+	  int GetMaxPrice(object ob)
+	    This returns the maximal price you'll get for an item in
+	    this shop. By default this value is set to 5000.
+
+	  int GetCutPrice(object ob)
+	    This calls GetMaxPrice(). It calculates the value a player
+	    will at maximum get for a certain item. It contains a
+	    magic formula which slowly increases the value between
+	    2000 and 8000 until it reaches 5000.
+
+	  object LoadRegister()
+	    protected
+	    Loads the register where all shops are registered and
+	    returns the objectpointer to it.
+
+	  status CheckLivingTrade(object ob)
+	    protected
+	    Returns 1 if it is allowed to trade with livings, or if
+	    the object is no living and otherwise 0.
+
+	  status P_SECURITY	"Security"
+	    This sets the security-function of the shop, i. e. if set
+	    and the shopkeeper is killed, noone can enter the store
+	    (except wizards of course).
+
+	  string P_SIGN_DESC	"SignDesc"
+	    This will set the description of the sign. Mind that the
+	    default setting, explaining the commands of the shop to
+	    the player will be lost.
+
+	To configure the commands which may be used in the shop, there
+	are the following commands. They all have the same meaning:
+	   SetXXX(string verb)
+	     will either set the verb for the given action, the
+	     default verb is 'XXX', or disallow the usage of this
+	     command in this shop by setting verb to zero.
+	   QueryXXX()
+	     reveals the verb which is set or 0 if the command is
+	     disabled.
+	If a player uses a disabled verb (the verb is still enabled
+	with add_action() and the default verb) (s)he'll just get a
+	notify_fail()-message.
+	Here are the commands (given as properties):
+	  string P_LIST		"List"
+	  string P_IDENTIFY	"Identify"
+	  string P_APPRAISE	"Appraise"
+	  string P_SHOW		"Show"
+	  string P_SELL		"Sell"
+	  string P_BUY		"Buy"
+
+	By default, a shop doesn't trade with livings. You may change
+	this calling this function in create():
+
+	  int P_LIVING_TRADE	"LivingTrade"
+	    Set to 0 (default) no livings will be traded. Set to !=0
+	    livings will be traded.
+
+	  string P_MARKET	"Market"
+	    As described above the shop might be a market. By default
+	    it is not (P_MARKET = 0). To activate the market, just set
+	    P_MARKET to 1. In this case, the shop will calculate the
+	    actual path of the shop and will this set as P_MARKET, to
+	    know where to write the insurance-file. If your shop is
+	    not in the common-dir in a domain you need to specify
+	    P_MARKET as filename where the insurance-savefile shall be
+	    written.
+
+	  void ForbidShopkeeper()
+	  void AllowShopkeeper()	(*)
+	  int QueryNoShopkeeper()
+	    A shop doesn't need the shopkeeper. If the shopkeeper has
+	    no real special function, the shopkeeper should be
+	    forbidden to save memory. Of course this way the player
+	    never has a chance to enter the store, because (s)he can't
+	    kill the shopkeeper to pass behind him.
+
+	The following functions handle some details of the store:
+
+	  string detail_shopkeeper()
+	    This function will be called, when the player examines the
+	    shopkeeper, but there's no shopkeeper in the shop, i. e.
+	    either the shopkeeper is dead or the shopkeeper is
+	    forbidden, i. e. he's virtually present.
+	    So this function will handle the description of the
+	    virtually shopkeeper.
+
+	  string detail_sign()
+	    Returns the description of the sign, by default describing
+	    the available commands.
+
+	The store, which is placed as invis object into the shop, may
+	be entered by players, if there's no shopkeeper present and
+	the store is not secured. If a player (not a wizard) enters
+	the store, some objects in it will be destructed by random.
+
+	  int go_store()
+	    Handles the exit 'store' with checks, if someone might
+	    enter the store. If all checks are valid PutInStore() is
+	    called (see below).
+
+	The commands of the shop call the following functions:
+
+	  object * do_buy(string str)
+	    Calling 'do_buy' will do certain checks if the player can
+	    buy the specified item (in <str>). The player either has
+	    to specify the id of the object (i. e. something which
+	    identifies the item to the locate()-efun) or with a number
+	    from the list.
+
+	  int do_sell(string str)
+	    Sell one or more items from the inventory of
+	    this_player().
+
+	  int do_appraise(string str)
+	    The 'appraise'-command.
+
+	  int do_identify(string str)
+	    The 'identify'-command.
+
+	  int do_list(string str)
+	    The 'list'-command.
+
+	  int do_show(string str)
+	    The 'show'-command.
+
+	  int do_toss(string str)
+	    The 'toss'-command.
+
+	  int wiz_funcs(string str)
+	    This will be called when a wizard types 'shop [<str>]' in
+	    the shop. It offers several functions to the wizard to
+	    deal with the whole shops in OSB.
+
+	Functions modified by the /std/shop:
+
+	  string QueryIntLong(string arg)
+	    The shop will append 'A sign is placed on the counter.\n'
+	    to the IntLong of the room. This is the sign players might
+	    get infos from.
+
+	  void reset()
+	    Resets the whole room, the store, and the cash of the shop.
+
+	  void create()
+	    Makes some default settings, e. g. the shop is indoors,
+	    has a detail 'counter', 'sign' and 'shopkeeper' and so on.
+	    For markets a check is started, if there's an insurance
+	    file and if so the insurances will be paid (see
+	    /std/shop/trading).
+
+	  void init()
+	    If this_player() is a wizard, the wizard-functions will be
+	    added.
+
+	  int allow_enter(int method, mixed extra)
+	    It isn't possible to enter the /std/shop.
+
+	  void notify_leave(mixed to, int method, mixed extra)
+	    The 'list'-command sets a property in the player which is
+	    deleted in here.
+
+	--- /std/shop/articles ---
+
+	Different to the old shop, all articles are handled as items
+	in the store. So AddArticle and other functions are a direct
+	call to AddItem in the store.
+
+	  object GetStore()
+	    Returns the object which identifies itself as store inside
+	    the shop.
+
+	  int PutInStore(object ob)
+	    This function moves an object into the store (move-method:
+	    M_SILENT or M_SPECIAL for players).
+
+	  void RemoveStore()
+	    Remove the store.
+
+	  void SetStore(void|string file,void|mapping prop)
+	    Sets the <file> from where to clone the store and the
+	    properties <prop> which should be set in the store.
+	    <prop> is a mapping and looks like the properties which
+	    you may give to AddItem() (see /std/room).
+	    If there's already a store and there are items in it, all
+	    items will automatically move into the new store.
+
+	  mixed* P_ARTICLES	"Articles"
+	    Sets the articles of the shop. It looks like the
+	    items-array from P_ITEMS.
+
+	  mixed* P_ARTICLES_REFRESH	"ArticlesRefresh"
+	    Sets the articles just like P_ITEMS_REFRESH.
+
+	  object* AddArticle(string|string* file
+			     ,void|int refresh
+			     ,void|mapping|mapping* prop
+			     ,void|int n
+			     ,void|string|closure fun)
+	  object* AddArticle(closure|closure* cfun
+			     ,void|int refresh
+			     ,void|mapping prop
+			     ,void|int n
+			     ,void|string|closure fun)
+	  void RemoveArticle(string *|string file)
+	    All these functions just work like the 'Item'-functions in
+	    /std/room, except that the functions are called in the
+	    shop and the AddItem is called in the store afterwards.
+
+	--- /std/shop/comm ---
+
+	To communicate with the player, to tell her/him and her/his
+	environment what happens, the shop offers some functions.
+
+	  object QueryShopkeeper()
+	    Returns the objectpointer to the shopkeeper, if present.
+
+	  void RemoveShopkeeper()
+	    Remove the shopkeeper entirely, i. e. he won't reset.
+	    This should not be used to 'forbid' the shopkeeper. It is
+	    only meant for internal use. To forbid the shopkeeper, use
+	    ForbidShopkeeper().
+
+	  void SetShopkeeper(void|string file,void|mapping properties)
+	    This adds a shopkeeper to the shop. By default this is a
+	    /std/npc with some properties set.
+	    You may either write an entire file for a new shopkeeper,
+	    or you may just give some properties for the /std/npc. The
+	    properties you set will override the default-properties.
+	    Examples:
+	      SetShopkeeper();
+	        Doesn't need to be called, because this is done by the
+	        shop automatically. This will add the normal
+	        shopkeeper (/std/npc) with the default settings for
+	        P_LONG, etc.
+	      SetShopkeeper("/d/domain/common/npc/shopkeeper");
+	        Will tell the shop to clone the specified shopkeeper
+	        instead of the /std/npc. All settings have to be done
+	        in the shopkeeper-file.
+	      SetShopkeeper(0,([P_SHORT:"an old shopkeeper"]));
+	        Will add the normal shopkeeper with just a different
+	        short-description.
+	      SetShopkeeper("/std/npc",([P_SHORT:"an old shopkeeper"]));
+	        Attention: This is not the same as the example before.
+	        If you specify a file, no default settings will be
+	        done!
+
+	  object QueryDustbin()
+	    Returns the objectpointer to the dustbin, if present.
+
+	  void RemoveDustbin()
+	    Remove the dustbin entirely, i. e. it won't reset. If you
+	    don't want your shop to have a dustbin, use this.
+
+	  void SetDustbin(void|string file,void|mapping properties)
+	    This may be used just like SetShopkeeper().
+
+	  string CustomerName(void|int cap)
+	    This returns the name of this_player(), if cap!=0 it will
+	    be capitalized.
+
+	  status sk_in_shop(int silent)
+	    protected
+	    Returns 1, if a shopkeeper is present (virtually or
+	    really) and else 0. If silent is !=0 an appropriate
+	    notify_fail() will be set.
+
+	  void Say(string|string* str,
+	           void|object* exclude,
+	           void|status ignlight);
+	    This works just like tell(show)_room but it does some
+	    additional checks and combines both.
+	    The additional check is, that if this_player() is an invis
+	    wizard, no message will be printed to the whole
+	    environment, only to this_player() if this_player() isn't
+	    excluded. Furthormore the message will be wrapped.
+	    If ignlight is set, say works like tell_room, if ignlight
+	    is not set show_room is called. If str is an array the
+	    second entry will be printed to all those, who can't see.
+	    If the second entry is not given, all blind players will
+	    just get 'Something happens.\n'.
+
+	  void Write(string|string* str,void|status ignlight)
+	    This works just like Say(), except that the message is
+	    only printed to one player (i. e. this_player()).
+
+	  string SkShort(void|int cap)
+	    Returns the shortdescription of the shopkeeper. If the
+	    shopkeeper is forbidden, then "the shopkeeper" will be
+	    returned. Else if the shopkeeper is not present, the
+	    function returns 0!
+	    If <cap> is set the result will be capitalized.
+
+	  int SkSay(string str)
+	    Let's the shopkeeper say something. The message will be
+	    wrapped. If this_player() is an invis wizard, it will just
+	    be told to the wizard and not to the environment.
+	    The message will look like this:
+	      <shopkeeper_short> says: <str>
+	    On success (i. e. the shopkeeper is present) 1 is
+	    returned, else 0.
+
+	  int SkWrite(string str)
+	    If only this_player() should get a message, you should use
+	    this. The message the player will get is:
+	      <shopkeeper_short> says to you: <str>
+	    All other functions are just like SkSay.
+
+	  int SkEmote(string|string* str)
+	    This forces the shopkeeper to emote, i. e.
+	      <shopkeeper_short>+" "+str
+	    is the string printed to the player.
+	    Normally only this_player() will get the emote. If an
+	    array is given, the second entry will be told to the
+	    environment of this_player().
+
+	--- /std/shop/trading ---
+
+	Somehow this is the main-part of the shop, as no shop would
+	work without trading. This part handles selling, buying and
+	the different currencies (valuta).
+
+	  string ValueString(int x)
+	    protected
+	    Returns the description of the value in coins, fitting to
+	    the set valuta.
+
+	  string get_min_coin()
+	    protected
+	    Referring to QueryValuta() this returns the coin with the
+	    minimal value in a shop. This is needed to print the list
+	    and calculate the costs.
+
+	  int convert_value(int copper)
+	    protected
+	    This returns the amount of min_coins, the amount of copper
+	    is equal to. The amount will be rounded up.
+
+	  int round_value(int copper)
+	    protected
+	    This returns the amount of copper coins after rounding to
+	    the minimal coins, i. e. if the minimal coins are silver
+	    and <copper> is 9, 10 is returned.
+
+	  int modify_on_amount(object ob,int price)
+	    protected
+	    As a player will get less for an object if there are
+	    already many items of the same kind in the store, this
+	    function is needed to calculate the actual price.
+	    If there are more than six items of the same kind in the
+	    store, it won't be reduced any further.
+
+	  int GetPrice(object ob,void|int price,void|status force)
+	    protected
+	    Returns the price for an object depending on the command.
+	    Modifications are done in here, i. e. first ModifyPrice() is
+	    called and then modify_on_amount() and finally the amount
+	    will be rounded with round_value().
+	    The handling for market-items is different. If someone
+	    wants to sell something the price has to be given in
+	    <price>, if not the price will be set to the value of the
+	    item. <force> is needed to calculate the insurance when an
+	    item is sold, because then modifications like ModifyPrice
+	    and modify_on_amount must be done.
+	    If the player wants to buy something, GetPrice() will
+	    return the price set by the player who sold the item.
+
+	  mapping SetOwnerList(mapping owner)
+	  mapping QueryOwnerList()
+	    Sets the mapping with insurances: ([<uid>:<amount>]).
+
+	  mapping AddInsurance(object ob)
+	    Called when an item in the market is sold. GetPrice() is
+	    called to get the normal value of the item which will be
+	    added.
+
+	  mapping RemoveInsurance(object ob)
+	    Called when someone buys an item at the market to adjust
+	    the players insurance. In addition the amount of money the
+	    player earned is added to her/his account.
+
+	  void PayInsurances()
+	    Called on creation of the shop to pay all who had items in
+	    the store which hadn't been sold.
+	    The savefile will be removed afterwards.
+
+	  int TestSell(object ob,void|int price)
+	    protected
+	    Tests if the object <ob> might be sold. The returned
+	    values are:
+	      the amount of money a player will get for the item
+	      -1: the shop is out of money
+	      -2: the shop won't buy such items, i. e. the item has
+	          either P_NOBUY or P_AUTOOBJECT set
+	      -3: the shop doesn't trade with such items, i. e.
+	          CheckTrade() or CheckLivingTrade() returns 0.
+	      -4: the object won't move, i. e. P_NODROP or P_NOGIVE is
+	          set.
+	    <price> will only be set in a market.
+
+	  int check_sell(object ob,void|int price)
+	    protected
+	    This returns 1, if the object might be sold else it
+	    returns 0 and sets the appropriate notify_fail-message.
+	    <price> is needed here to in a market.
+
+	  int sell_items(object *items,void|int price)
+	    protected
+	    This function returns 0 if no items could be sold and 1,
+	    if at least one item could be sold. Then it calls (via
+	    call_out with one second delay) continue_sell() (see
+	    below).
+	    <price> contains the price in a market a player wants to
+	    get for the item.
+
+	  void continue_sell(object *items,object env,void|int price)
+	    protected
+	    This really sells the items, and gives the money to the
+	    player. The function collects all errors while selling and
+	    prints them at the end as well as the successful sold
+	    items.
+	    <price> is needed as well here in a market, if the player
+	    gave a certain value for the item.
+
+	  string print_list(object*|string* short)
+	    protected
+	    Returns a list of all short-descriptions, either given as
+	    string- or as object-list. In this case, the objects will
+	    be mapped through map_objects to get their
+	    short-descriptions.
+	    The list will look like this:
+	      <short1>, <short2> and <short3>
+
+	  int check_money(int amount,void|int no_action)
+	    protected
+	    Checks the player for the amount of money and reduces the
+	    money, if enough is present. Otherwise an error-message
+	    will be set (notify_fail). If the paying was successful, 1
+	    is returned else 0. If no_action is set, the function will
+	    just test and not reduce the money.
+
+	  int buy_routine(object ob,void|status force)
+	    protected
+	    In this function the player will receive the object (s)he
+	    wanted to buy, if (s)he can afford and carry it.
+	    If <force> is set, the coins of the player don't need to
+	    fit to the coins the shop trades with.
+
+	  object *buy_string(string str,void|status force)
+	    protected
+	    Buy items referring to their id. If no item could be
+	    bought, 0 is returned, else the array of objects which had
+	    been bought.
+	    <force> again is set, to tell the shop not to check for
+	    the valuta.
+
+	  object *buy_number(int number,void|status force)
+	    protected
+	    Same as buy_string, except that the customer refers to a
+	    number on the list (s)he saw. Remark that this is really
+	    the list (s)he saw last and not the actual one, because
+	    the list will be saved in the player.
+
+	  mapping get_list(string str)
+	    protected
+	    Returns the list of items in the store. The index is the
+	    number in the list which will be printed to the player.
+	    The index is followed by an array of items which are all
+	    equal (or look equal to the shop).
+	    The mapping looks like this:
+	      ([<number>:({<objectp>})])
+	    This is the list which will be saved in the player.
+
+	  int P_BUY_FACTOR	"BuyFactor"
+	    Percentage how much more you have to pay for an item you
+	    sold in here. Default value is 300, minimal value is 250.
+	    A luxury shop should take at least 500% :-)
+
+	  int P_DYNAMIC		"Dynamic"
+	    This handles how fast the cash will be restored in the
+	    shop. The value has to be between 0 and 100.
+	    0 means, that the money won't be restored and
+	    100 means, that as soon as the cash is below the min_cash
+	    the full min_cash amount will be added to the actual cash.
+	    The sense is that not only players are customers, and so
+	    the cash will increase even if noone buys something in
+	    here.
+
+	  int P_MIN_CASH	"MinCash"
+	    First this is the value to check, if the cash should be
+	    restored, i. e. if the cash is below this value, it will
+	    be restored (check is done every reset).
+	    The amount added to the cash is calculated this way:
+	      min_cash * dynamic/100.
+
+	  void reset_cash()
+	    Called on every reset to check if the amount of money
+	    should be reset.
+
+	--- /std/store ---
+
+	As described above the store now handles much more things.
+	Each store, even if you write your own one, has to inherit the
+	/std/store.
+	No shop needs to have a store-file on its own. The stores will
+	be cloned and therefore most shops work fine with clones of
+	/std/store. Only if you really need some very special things
+	in the store, you should write your own one.
+
+	  void create()
+	    The default IntShort, IntLong and Transparency is set and
+	    an exit to the shop is added.
+
+	  void notify_enter(string|object from,
+	                    int method,void|string|string* extra)
+	    If a player enters the store (not a wizard) some of the
+	    items will be destroyed at random.
+	    In addition the shop will recognize new articles it has in
+	    notify_enter(). So never move articles into the store with
+	    M_NOCHECK.
+	    If there are more than 6 equal items in the store, the
+	    following items of that kind will be destructed in here.
+	    Every item, which wasn't added by the shop, will get a
+	    timestamp in here. If an item is 24 hours in the store and
+	    hadn't been sold, the item will be destructed.
+
+	  void notify_leave(string|object to,
+	                    int method,void|string|string* extra)
+	    If an article leaves the store it will be recognized in
+	    here and the data of articles will be updated.
+
+	  void reset()
+	    The store won't reset if a player (not a wizard) is in the
+	    store. In here the check is done if an item in the store
+	    is too old.
+
+	  string Short()
+	  string Long()
+	    As the store should not be visible in the shop, both
+	    functions return "".
+
+	  int leave_store(string str)
+	    This is the function called, when a player wants to leave
+	    the store. Normally this would move the player into the
+	    environment of the store, i. e. into the shop.
+	    If the environment is not present, the player will be
+	    moved into the /std/void to avoid traps.
+
+	  object *SearchObjects(string pattern)
+	    Returns a list of objects in the store fitting to the
+	    pattern.
+
+	  int CheckList(object ob)
+	    Checks if <ob> should occur in the list, i. e.
+	    QueryPlayer() has to return 0, the object has to have a
+	    short-description, and it should be allowed to sell this
+	    item (P_NOSELL==0).
+
+	  int CheckId(object ob,string pattern)
+	    Checks if the given objects identifies to the given
+	    pattern, i. e. the pattern is either "small", "normal",
+	    "medium", "large" or "generic" and only the size will be
+	    checked or the object will be checked via Locate().
+
+	  string build_short(object ob)
+	    To be able to differ between different items, they need a
+	    special short for the store. The short which will be build
+	    in here contains the normal short (without article), the
+	    value (or the price in a market) and the size.
+
+	  mapping AddInventory(object ob)
+	    Adds an object to the inventory list, which keeps all
+	    articles in the store. This is called by notify_enter().
+
+	  mapping RemoveInventory(object ob)
+	    Removes an object from the inventory list. This is called
+	    in the notify_leave().
+
+	  mapping QueryInventory()
+	    Returns the stored inventory.
+
+	  mapping GroupInventory(object *obs)
+	    Returns a mapping looking like this:
+	      (["<short>#<value>#<size>":({<objectp>})]),
+	    i. e., you can easily group objects which are the same.
+	    Objects are the same in the shop, if their short, their
+	    value and their size are equal.
+	    If you want to group all objects in the store, better call
+	    QueryInventory() which does the same for the whole
+	    inventory of the store but much faster.
+
+	  object *GetEqual(object ob)
+	    Returns all objects which are equal to the given one. This
+	    is needed for modify_on_amount().
+
+	  status id_store()
+	    Returns 1, so the store identifies itself.
+
+	  int id(string str)
+	    If this_player() is a learner the store identifies itself
+	    as 'store', i. e. you may e. g. 'xlook store' or call
+	    'xprops store' when you are in the shop.
+
+
+INHERITANCE TREE
+	std/shop
+	  |-std/room
+          |-std/shop/articles
+	  |-std/shop/comm
+	  `-std/shop/trading
+	      `-/lib/money
+
+	std/store
+	  |-std/container/restrictions
+	  |-std/room
+	  `-std/thing/moving
+
+SEE ALSO
+	money_concepts(C), money(S)

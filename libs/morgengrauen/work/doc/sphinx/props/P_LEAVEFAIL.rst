@@ -1,0 +1,68 @@
+P_LEAVEFAIL
+===========
+
+NAME
+----
+::
+
+    P_LEAVEFAIL                   "leavefail"                   
+
+DEFINIERT IN
+------------
+::
+
+    /sys/transport.h
+
+BESCHREIBUNG
+------------
+::
+
+     Meldung an den Spieler, wenn er ausserhalb der Anlegezeiten einen 
+     Transporter verlassen will.
+     
+     Die Property kann verschiedene Arten von Daten enthalten:
+
+     - Array aus Strings (1 oder 2 Elemente):
+     Das erste Element wird als Meldung an den Spieler ausgegeben. Sofern
+     das zweite vorhanden ist, wird es als Meldung an den Transporter 
+     ausgegeben. Der Meldung an den Transporter wird Name(WER,2) des 
+     Spielers vorangestellt. An beide Meldungen wird "\n." angehaengt.
+
+     - String:
+     Wird als Meldung an den Spieler ausgegeben, "\n." wird angehaengt.
+
+     - Closure:
+     Die Closure wird gerufen; die Funktion muss sich um die Ausgabe von
+     Meldungen selbst kuemmern. 
+     Hinweis: Eine Closure als Wert zu setzen ist nicht dasselbe wie eine
+     Querymethode auf dieser Property.
+
+BEISPIEL
+--------
+::
+
+     SetProp(P_LEAVEFAIL, "Die Wildgaense fliegen viel zu hoch" );
+
+     SetProp(P_LEAVEFAIL, ({ "Die Wildgaense fliegen viel zu hoch",
+                             "versucht, vom Ruecken der Wildgans zu "
+                            +"klettern und besinnt sich dann doch" }) );
+
+HINWEIS
+-------
+::
+
+    Wenn die Property nicht gesetzt wird, ist die Defaultmeldung 
+    "Das ist momentan viel zu gefaehrlich".
+
+SIEHE AUCH
+----------
+::
+
+     P_LEAVEMSG, P_ENTERMSG, P_ENTERFAIL, transporter
+
+LETZTE AENDERUNG
+----------------
+::
+
+    Don, 24.01.2002, 10:15:07h von Tilly
+

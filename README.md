@@ -459,6 +459,9 @@ classes it's found.
 | 971 | `scratch` | Scratch | `git clone https://github.com/rmanis/scratch (commit 4ac1a4ed898d217a9bb02508709694bd51ecbc76, cloned 2026-09-05); repo root is the mudlib` | 40280 | WASM playable |
 | 972 | `paomud` | PaoMUD | `git clone https://github.com/dzpao/pao-mud (commit f855715a97caa5171f3e7cf5696f5f68ae1a9f94, cloned 2026-09-05); repo root is the mudlib` | 40281 | WASM playable |
 | 973 | `sagenwelt` | Sagenwelt | `git clone https://github.com/Shea690901/Sagenwelt-Lib (feature/player commit 77266da70c4103890effa3f20c0cadabbed388c3, cloned 2026-09-05); mudlib root is src/` | 40282 | WASM playable |
+| 974 | `morgengrauen` | MorgenGrauen | `git clone https://github.com/MorgenGrauen/mg-mudlib (commit a178b88a9cac64480a9475f72a96cd4c183e64c7, cloned 2026-09-05); repo root is the mudlib` | 40283 | WASM playable |
+| 975 | `ageofelements` | Age of Elements | `git clone https://github.com/age-of-elements/age-of-elements (commit 4e5cae45d0804f23a1cecbef577b5bcdee5a53cf, cloned 2026-09-05); repo root is the mudlib` | 40284 | WASM playable |
+| 976 | `aoh` | Age of Heroes | `git clone https://github.com/seikichin/aoh (commit 6ab8f3679d560a3726ae98b671d7ded7be6fb75d, cloned 2026-09-05); repo root is the mudlib` | 40285 | WASM playable |
 <!-- END NUMBERING TABLE -->
 
 ## Repository layout

@@ -1,0 +1,315 @@
+OBJECT
+        DAEMONPATH channel_d
+
+LAST UPDATE
+        Mica@OSB, 07/02/98
+
+SYNOPSIS
+        #include <channel.h>
+
+        CHANNEL_D->lfun();
+
+DESCRIPTION
+        The CHANNEL_D is the official channel handling daemon. It handles
+        all communication that is done over channels, including intermud.
+        It provides functions to Add/Remove/Ban/Unban users from channels,
+        handles channel operators, dynamic channel adding/removal and
+        channel history. It is the only object that should send CMSG_CHANNEL
+        messages to livings.
+
+        The CHANNEL_D has an internal list of users (and objects) that listen
+        to a channel, because of that it is neccessary to register and to
+        unregister users and livings to get access to a channel. That does
+        not mean that an object has to register to a channel to send an error
+        or news message (see the override flag for the Send-Functions), but
+        no object will receive messages without beeing registered.
+
+        In general there are three kind of different channels, local channels,
+        intermud channels and intermud-3 channels. That value is represented
+        by the CHANNEL_TYPE field of the channel data, possible values are
+        CHANNEL_TYPE_LOCAL, CHANNEL_TYPE_IMUD and CHANNEL_TYPE_IMUD3. The
+        intermud channels can only be created by the intermud daemons.
+
+        Each channel may have access restrictions, that is found at the
+        CHANNEL_FLAGS field of the channel-data. The following flags are
+        available:
+
+          CHANNEL_FLAG_HLP           : only high level players allowed
+          CHANNEL_FLAG_WIZ           : only wizards allowed
+          CHANNEL_FLAG_ADMIN         : only admins allowed (unused currently)
+
+          CHANNEL_FLAG_RESTRICTED    : everybody is allowed on that channel,
+                                       but only the channel operator(object)
+                                       can register the listeners.
+          CHANNEL_FLAG_MASTERED      : the creator(object) of the channel
+                                       controls who is allowed to see and
+                                       use the channel (described below).
+
+        The CHANNEL_FLAGS field can have these other flags too:
+
+          CHANNEL_FLAG_ANONYMOUS     : anonymous channel, no username is 
+                                       written (like the sex channel).
+          CHANNEL_FLAG_PERMANENT     : permanent channel. Mean that the
+                                       channel is always there. It is not
+                                       possible to create permanent channels
+                                       with AddChannel, only the CHANNEL_D
+                                       itself can do that.
+          CHANNEL_FLAG_READONLY      : read-only channel, no sending of
+                                       messages is possible without setting
+                                       the override-flag for the Send-
+                                       Functions.
+
+        All CHANNEL_FLAG-defines need to be |'d if more than one should be 
+        set.
+
+        Furthermore the channel-data has the following fields:
+
+          CHANNEL_LISTENERS          : array of objects that listen to the
+                                       channel. May be 0 and may contain
+                                       invalid 0 entries.
+          CHANNEL_EXTRA              : extra data for the channel, currently
+                                       unused. For example the guild for 
+                                       guild channels maybe stored here.
+          CHANNEL_HISTORY            : an array of messages for the channel-
+                                       history. Never access directly, use
+                                       SendChannelHistory() instead.
+          CHANNEL_CREATOR            : filename of the object that created
+                                       the channel. Only the creator can
+                                       remove the channel. If the field is
+                                       set to 0, the CHANNEL_D itself created
+                                       the channel.
+                                  
+        A channel may have operators, these operators are allowed to ban and
+        unban users from that channel. Operators can be set and removed with
+        the AddOp() and RemoveOp() functions describes later. Some restric-
+        tions apply to operators. Non-HLPs cannot be operators of hlp-
+        channels, wizards are always operators for player and hlp channels,
+        wizards cannot be operators of admin channels. For adding operators
+        the following restrictions apply: Only wizards may add operators for
+        player and hlp channels. Only admins may add operators for wizard
+        channels. The operator data is saved and restored by the CHANNEL_D.
+        
+        Users can be banned/unbanned from channels by operators using the
+        DenyChannel() and PermitChannel() functions. It is possible to ban
+        a user forever or with a timer, then the user will be granted access
+        automatically after the banning-time is over. The banning data is
+        saved and restored by the CHANNEL_D.
+
+DESCRIPTION -- Mastered channels
+
+        The CHANNEL_D has the ability to handle 'mastered' channels. Those
+        channels are access-controlled by the creator of the channel itself.
+        Therefor the channel needs to be created with CHANNEL_FLAG_MASTERED
+        turned on. This implies CHANNEL_FLAG_PERMANENT. The mastered channel
+        will survive the reload of the daemon that way, including the creator
+        which is stored too. Important is that only non-clones are allowed to
+        create mastered channels, for example guilds, but _not_ guildobjects
+        (Reason is that it has to be insured that the mastering object can be
+        reloaded by the CHANNEL_D). Interactive objects are not allowed to 
+        create such channels.
+        The CHANNEL_D calls the function
+
+                int QueryChannelPermission( string name, object user );
+
+        inside the creator/master object. If it returns 1 the user-object 
+        (which can also be a non-interactive object, depends on the function
+        inside the mastering object) is allowed to see and register that
+        channel. 0 means it is not allowed.
+        Currently this is primitive, an object is allowed to read and write to
+        a channel or it is not. This might be improved in future, so please
+        only use 1 or 0 as return values right now.
+ 
+
+FUNCTIONS        
+
+        varargs void SendEmote( string channel, string name, 
+                                string msg, int flag );
+         
+         Send an emote on the given channel. name contains the name of the
+         user, already in right format, i.e. first upcase. msg contains
+         the string message to be written. The flag parameter is optional
+         and needs to be set to 1 to send emotes on read-only channels
+         like error, news or title. The name argument can be set to "" for
+         free-form emotes.
+
+        varargs void SendTell( string channel, string name, 
+                               string msg, int flag );
+
+         Send a tell on the given channel. name contains the name of the
+         user, already in right format, i.e. first upcase. msg contains
+         the string message to be written. The flag parameter is optional
+         and needs to be set to 1 to send tells on read-only channels
+         like error, news or title.
+
+        varargs void SendStr( string channel, string msg, int flag );
+
+         Send a message without sender name on the given channel. Flag needs
+         to be set for read-only messages.
+
+        varargs int SendChannelHistory( string channel, object ob, int num );
+
+         Send the last num lines of the given channels history to the user
+         object ob. The num parameter is optional, if omited, the whole 
+         history (max. 20 lines) will be sent.
+
+        mapping QueryChannels();
+
+         Returns the complete channel-data mapping. The channel-names are the
+         keys of the mapping, the channel-data the values.
+
+        string * QueryChannelNames();
+
+         Returns an array of the channel names.
+
+        mapping QueryUserChannels( object user );
+
+         Returns a channel-data mapping (except CHANNEL_HISTORY which is 0ed).
+         Only the channels the given user (if omited this_player() is used) has
+         access too are listed within the mapping.
+         The channel-names are the keys of the mapping, the channel-data the
+         values.
+        
+        mapping QueryBanned();
+
+         Returns the current mapping of banned users. The user realnames are
+         they of the mapping, the values are mapping themselves, containing
+         the channel-names as keys and the banning-expire-time as values.
+         Banning-expire-times are always in time() format, -1 means that the
+         user is banned forever.
+
+        mapping QueryOps();     
+         
+         Returns the current mapping of channel operators. The keys are the
+         channel-names and the values are arrays of user realnames.
+
+
+        object * ChannelListeners( string channel );
+
+         Returns an array of objects/users that listen on that channel. This
+         is the value of the CHANNEL_LISTENERS field of the channel-data. 
+         The function may return 0 and it is possible that there are 0 
+         entries inside the array.
+
+        mixed * ChannelData( string channel );
+        
+         Returns the complete channel data for the given channel, which is
+         described at the DESCRIPTION part.
+
+        int AddOp( string channel, object ob );
+
+         Add the object ob as operator to the given channel. Restriction-
+         checks are done for this_player(), a return value of 1 means 
+         success, 0 error.
+
+        int RemoveOp( string channel, object ob );
+
+         Remove the object ob from the operatorlist of the given channel.
+         Restriction-checks are done for this_player(), a return value of 1
+         means success, 0 error.
+
+        int IsOp( string channel, object ob );
+
+         Returns 1 if the object ob is operator of the given channel, 0 if
+         not.
+
+        varargs int DenyChannel( string channel, object ob, int btime );
+
+         Bans the object/user ob from the given channel. If btime is omited,
+         one hour is assumed. btime is in time() format and has to contain
+         the absolute time the user should be unbanned again automatically.
+         If btime is set to -1, the user is banned forever. Only Operators
+         can ban users, checks are done for this_player().
+
+        varargs int PermitChannel( string channel, object ob );
+
+         Unbans the object/user ob from the given channel. Only operators
+         can unban users, checks are done for this_player().
+
+        int IsBanned( string channel, object ob );
+
+         Returns 1 if the object/user ob is banned from the given channel, 0
+         if not.
+
+        varargs int RegisterChannel( string channel, object ob, 
+                                     int testflag );
+
+         Register user/object ob on the given channel. Testflag is optional,
+         if given the user is not registered but 1 returned if the user may
+         register on this channel and 0 if he may not. Without testflag 1
+         is returned on success and 0 on failure.
+
+        varargs void RegisterUser( object ob, string * names );
+        
+         Register the user/object ob for all channels given in the names
+         array. The names parameter is optional, if not given the value
+         of ob->Query(P_CHANNELS) is used.
+
+        void UnregisterChannel( string name, object ob );
+
+         Unregister the user/object ob from the given channel.
+
+        void UnregisterUser( object ob );
+
+         Unregister the user/object ob from all its channels.
+
+        int AddChannel( string channel, int flags, object ob );
+        int AddChannel( string channel, mapping data, object ob );
+        int AddChannel( string channel, mixed * data, object ob );
+
+         Add the given channel to the channel-daemon. Four different methods
+         to call that function:
+         - second parameter is an int, then it will be used as CHANNEL_FLAGS
+         - second parameter is a mapping, then the keys of the mapping are
+           CHANNEL_LISTENERS, CHANNEL_FLAGS, ... and the values the values to
+           be set
+         - second parameter is an array, then something like ChannelData()
+           returns is expected, better don't use it, it's internal stuff.
+         - second parameter is 0, defaults will be used, i.e. no flags and
+           CHANNEL_TYPE_LOCAL.
+
+         The object ob is the object that wants to create the channel and
+         that is set in the CHANNEL_CREATOR field. Note that this function
+         is not varargs, you need to call with all three arguments.
+
+        void AddChannels( mixed channels, object ob );
+
+         Add all channels listed in the channels argument. Object ob is the 
+         channel-creator. channels can be an array of channel names or a
+         mapping with the channels names as keys and channel data arrays as
+         values.
+
+        void RemoveChannel( string channel, object ob );
+
+         Remove the given channel from the CHANNEL_D. Object ob is the object
+         that requests the removal and has to be the creator.
+
+        void RemoveChannels( mixed channels, object ob );  
+
+         Remove all given channels from the CHANNEL_D. Object ob is the object
+         that requests the removal and has to be the creator. channels can be
+         an array of channel-names or a mapping, then all channels that can
+         be found inside the keys of the mapping are removed.
+
+        CHANNEL_D->update_permchan( 1 );       
+
+         This function needs to be called if there have been permanent
+         channels added to the internal list of the CHANNEL_D by editing
+         the file. After reloading the CHANNEL_D it still has the old channel
+         which have been read from the save-file. A call to this function 
+         forces the CHANNEL_D to update the savefile.
+
+FILES
+        DAEMONPATH channel_d.c
+        /save/daemons/channel.o
+
+INHERITANCE TREE
+
+       DAEMONPATH channel_d
+         `-/obj/lib/daemon_data
+
+AUTHOR
+        Mica@OSB
+
+SEE ALSO
+        messages(C)
+

@@ -1,0 +1,229 @@
+Skills in OSB   v1.0				Softbyte 08sep97
+-----------------------------------------------------
+
+1. Skills are divided into skillclasses
+
+Example:
+    class:   fighting | body     | woodcrafting |
+    ----------------------------------------
+    skills:  sword    | swimming | trail finding|
+             axe      | climbing | ...
+             ...
+
+  All skillclasses are known by any player, but skills inside
+  a class skills might not be available for a character, i.e.
+  secret or guild skills.
+
+2. Skill values range from 0...1000  (0..100%)
+   Class values represent the average value of their subskills
+
+3. All skills shall be implemented into /p/skills, maybe in
+   subdirectories indicating the class, i.e. /p/skills/classes/body/*
+
+4. Skill functions shall be easy to use so that everybody can implement
+   skills in their rooms.
+
+   - Suggested use functions provided by a standard inheritable skill file:
+   
++  POSSIBILTY ONE for using a skill:
+   Make a skill check for a specific skill and player
+   * int UseSkill(string skill,int difficulty,[object player],[int learnrate]);
+     skill:      The name of the skill you want to check. The skills are
+	             defined in /sys/skills.h like
+				 #define SK_CLIMBING "climbing"
+				 and shall be used in the appropriate skill check
+	 difficulty: The 1/10 percent of how diffculty the skill is to use
+	             at this particular occasion. E.g. a small tree might
+				 has 10%=100 and a rock wall 90%=900
+     player:     An optional argument whose skill is to be checked, 
+	             default value is this_player()
+     learnrate:  An optional argument how much the skill will be learned
+	             when using this function. Default value depends on the
+				 skill.
+     return value: -1000...1000 indicating the success of the skill test.
+	             1000 means you passes the test very good.
+
+   Example:
+     // Skill check for a player climbing a medium tree => difficulty 50% (500)
+	 // For climbing we need SK_CLIMBING logically 
+	 // The difficulty we said is 50% => 500
+	 // We use the optinal arument as we check for this_player() and rely on
+	 // the standard learing rate
+     result=UseSkill(SK_CLIMBING,500);
+	 if (result>500) ... // success: We perform some action like moving the
+	                     //          player in another room
+	 else if (result>0) ... // half success: E.g. the player nearly reaches
+	                        // the top of the tree but falls down again
+	 else ... // failure: Oouch..That hurt
+
++  POSSIBILTY TWO for using a skill:
+   Apply a skill for a specifiy skill and player
+   * void ApplySkill(string skill,int difficulty,mapping props,
+                   [object player],[int leanrrate]);
+     skill:      The name of the skill you want to check. The skills are
+	             defined in /sys/skills.h like
+				 #define SK_CLIMBING "climbing"
+				 and shall be used in the appropriate skill check
+	 difficulty: The 1/10 percent of how diffculty the skill is to use
+	             at this particular occasion. E.g. a small tree might
+				 has 10%=100 and a rock wall 90%=900
+     props:      An mapping (try "man mapping") which contains some
+	             configuration paramters for the use of this skill.
+                 These parameters are highly dependent on the skill and
+                 you need to check the man pages for each skill.
+     player:     An optional argument whose skill is to be checked, 
+	             default value is this_player()
+     learnrate:  An optional argument how much the skill will be learned
+	             when using this function. Default value depends on the
+				 skill.
+
+   If you do not want to create the property mapping you can as well
+   overwrite the following functions. Depending on the skill check
+   the following notify functions will be called (I guess there might
+   be more NotifyFunctions later on):
+     int NotifySkillFail(string skill,int value,object player)
+	 int NotifySkillSuccess(string skill,int value,object player)
+     skill:      The name of the skill you want to check.
+     value:      The return value of the UseSkill function, i.e.
+	             -1000...1000 depending how well you succeeded/failed.
+     player:     On whom does the skill act, is the same as the 
+	             argument of ApplySkill(...)
+
+   The first one will be called when the skill check failed and the
+   second one if the skill check succeeds. 
+
+   The property mapping props is skill dependent and contains configuration
+   paramerters for the skill.
+
+   Example:
+   // We want to apply the climbing skill to a player who intends to
+   // climb a medium sized tree. We want its difficulty to be 40% (=400)
+   // print out some text if the player succeeds or fails and the move him/
+   // her to another room or let him/her fall down to the ground
+   // First we set up the properties which are defined in the man page
+   // for the climbing skill, which might be
+   // SK_MSG_FAIL: The message a player will be told when he/she fails to
+   //              climb the tree
+   // SK_MSG_PASS: The message the player sees when he/she climbs the tree
+   // SK_HP_FAIL:  How many HP will the player loose on fail
+   // SK_ROOM_PASS:Where to will the player be moved when he/she succeeds in
+   //              climbing the tree
+   // [more properties to be configured later]
+   // somewhere in create
+       AddRoomCmd("climb","climb");
+   // later on you write...this function wil be executed when the player
+   // typed "climb tree"
+   int climb(string str)
+   {
+     mapping map;
+	 if (str!="tree") return 0; // in the real file we make of course a
+	                            // more professional argument check
+     map=([  SK_MSG_FAIL: "You fall down to the ground and hurt yourself.\n",
+             SK_MSG_PASS: "You climb the tree and reach the clouds.\n",
+		     SK_HP_FAIL: 10,  // loose 10 HP for failing
+		     SK_ROOM_PASS: "/d/beyond/cloudroom",  // end up in the clouds
+	  	  ]);
+     ApplySkill(SK_CLIMBING,500,map);
+     return 1; 
+   }
+
+// Now we do the same with using the Notify functions
+   // somewhere in create
+       AddRoomCmd("climb","climb");
+   // later on you write
+   int climb(string str)
+   {
+	 if (str!="tree") return 0;
+     ApplySkill(SK_CLIMBING,500);
+     return 1; 
+   }
+  int NotifySkillPass(string skill,int value,object player)
+  {
+    if (skill==SK_CLIMBING) // is this function called for climbing ?
+                            // or for any other skill ?
+	{
+	  // Move the player and check whether it succeeded
+	  if (ME_OK==player->move("/d/beyond/cloudroom",M_GO))
+	  {
+	    write("You climb the trees and reach the clouds.\n");
+	  }
+	  else
+	  {
+	    write("ERROR: You cannot be moved..should never happen.\n");
+	  }
+      return 1;   // We did the skill processing ourselves
+    }
+	return 0;     // all other skills wil be handled by the lib
+  }
+  int NotifySkillSuccess(string skill,int value,object player)
+  {
+    if (skill==SK_CLIMBING) // is this the skill check for climbing ?
+	{
+	  write("Ouch you fall to the ground and you are hurt.\n");
+	  player->ReduceHP(10); // substract 10 HP
+      return 1;   // We did the skill processing ourselves
+    }
+	return 0;     // all other skills wil be handled by the lib
+  }
+
+5. Example skill classes
+
+    Here are some example skill classes, please suggest more if you
+	have any ideas. Or suggest skills for them
+
+    fighting  (sword,axe,knife,weaponless,shooting)
+	body      (climbing,swimming,throwing,jumping,eating)
+	languages (common,elvish)
+	woodcraft (herbalism,taming,trail finding,hiding)
+	indoors   (hiding)
+	thieving  (pick pocketing, lock picking)
+	magic     (fire,water,air,spirit,earth | good source,bad source,...)
+	music     (singing,dancing)
+	healing   (heal poison, heal wounds, heal illness)
+
+   
+==============================================================================
+WARNING: The following stuff is highly internal and should only be
+         read by interested persons who intend to WRITE their own skills.
+		 Further documentation will follow when I have implemented the 
+		 code as the concept is still subject to changes.
+==============================================================================
+6. Class configuration
+   Class configuration is done by a class configuraton file "classes.cfg"
+
+   Example: /p/skills/classes/classes.cfg
+   [body]
+     skill=swimming
+     skill=climbing
+	 ...
+	 info=These skills describe your body abilities
+
+   [fighting]
+     skill=axe
+	 skill=sword
+	 ...
+	 info=...
+
+7. Skill configuration
+   Skill configuration is done by skill configuration files "<skill>.cfg"
+   Example: /p/skills/classes/body/climbing.cfg
+   [general]          // all players can use general skills
+   strenght=500       // 50% of maximum
+   teachable=0        // can not be taught 
+   stats=skill:500,int:300,dex:200  // skill check depends on 50% on the skill
+                                    // 30% int and 20% dex
+   level=0-10:0, 11-15:500,16-99:750// level 11-15 player can learn the skill
+                                       up to 50%
+   learn-teach=600     // 60% can a skill be learned by doing 40% by teaching
+   unlearn=0
+   info=Climbing is your ability to climb trees, rocks,...
+
+   [ranger]           // rangers can use the skill better
+   strenght=900       // 90% of maximum
+   teachable=300      // ranger can teach this skill 30%
+   stats=default      // stats are like general stats
+   level=0-10:300, 11-15:700,16-99:950// level 11-15 player can learn the skill
+                                         up to 70%
+   unlearn=900        // upon leaving the guild the skill will go back to
+                         10% 
+

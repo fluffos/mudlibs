@@ -1,0 +1,960 @@
+/*--------------------------------------------------------------------------
+ * /secure/kernel/search.ic -- The search and parsing sefuns.
+ *
+ * Copyright (C) 1997 by One Step Beyond.
+ * All Rights Reserved.
+ * Permission granted for non-commercial use.
+ *--------------------------------------------------------------------------
+ * This file is included(!) from /secure/kernel.c to form the kernel.
+ * Implemented sefuns are:
+ *   search(), searchm(), locate()
+ *   foundp()
+ *   sort_f_default(), sort_f_std(), sort_f_prop(), sort_f_nprop()
+ *   sort_findings()
+ * See /doc/concepts/search and the doc/sefun/... for documentation.
+ *--------------------------------------------------------------------------
+ */
+
+#include <search.h>
+
+#define P_BLIND "Blind"
+
+/*-------------------------------------------------------------------------*/
+private nomask mapping add_findings (mapping rc, mixed data)
+{
+  mixed tmp;
+
+  if (!data)
+    return rc;
+
+  if (objectp(data))
+    rc[FOUND_SINGLE] = (rc[FOUND_SINGLE]||({}))+({ data });
+  else if (pointerp(data)) {
+    if ((tmp = sizeof(data)) == 1)
+      rc[FOUND_SINGLE] = (rc[FOUND_SINGLE]||({}))+data;
+    else if (tmp > 1)
+      rc[FOUND_CLASS] = (rc[FOUND_CLASS]||({}))+data;
+  }
+  else {
+    if (m_contains(&tmp, data, FOUND_SINGLE) && pointerp(tmp))
+      rc[FOUND_SINGLE] = (rc[FOUND_SINGLE]||({}))+tmp;
+    if (m_contains(&tmp, data, FOUND_CLASS) && pointerp(tmp))
+      rc[FOUND_CLASS] = (rc[FOUND_CLASS]||({}))+tmp;
+    if (m_contains(&tmp, data, FOUND_MULTI) && pointerp(tmp))
+      rc[FOUND_MULTI] = (rc[FOUND_MULTI]||({}))+tmp;
+    if (m_contains(&tmp, data, FOUND_NUMBER) && tmp > 0)
+      rc[FOUND_NUMBER] = tmp;
+  }
+  return rc;
+}
+
+/*--------------------------------------------------------------------------*/
+public varargs mixed search (object this, mixed what, int mode)
+
+/* Search an item in the environment and the inventory with respect to the
+ * visibility.
+ */
+
+{
+  mixed objs, cont, tmp, rc;
+  object obj, env;
+  mixed *locs;
+  string *subwords, *allwords;
+  int i, j, nlocs, where, nosub;
+
+  subwords = 0;
+  where = mode & SEARCH_WHERE;
+  env = (mode & SM_LOCATE) ? this : environment(this);
+  allwords = 0;
+
+  if (stringp(what) || pointerp(what)) {
+
+    if (stringp(what))
+      what = explode(what, " ") - ({ "" });
+
+    if (!(mode & SM_LOCATE)) {
+      if (where == SEARCH_ENV_INV || where == SEARCH_INV_ENV) {
+        if ((i = member(what, "my")) >= 0 && i < sizeof(what)-1) {
+          where = SEARCH_INV;
+          what[i..i] = ({});
+        }
+        else if ((i = member(what, "here")) > 0) {
+          where = SEARCH_ENV;
+          what[i..i] = ({});
+        }
+      }
+      else if (   where == SEARCH_INV
+               && (i = member(what, "my")) >= 0 && i < sizeof(what)-1)
+        what[i..i] = ({});
+      else if (where == SEARCH_ENV && (i = member(what, "here")) > 0)
+        what[i..i] = ({});
+    }
+
+    if (sizeof(what) == 1 && what[0] == "outside") {
+      obj = ({object})env->Query("Outside") || environment(env);
+      if (!obj || ({int})env->QueryTransparency() < SEARCH_MIN_TRANSP)
+        return (mode & SM_OBJECT) ? 0 : ({});
+      if (mode & SM_OBJECT) // damn type checking
+        return obj;
+      if (mode & SM_MULTI) // damn type checking
+        return ({ ({ obj }), ({}), ({}), 0 });
+      return ({ obj });
+    }
+
+    if (   ((i = member(what, "in")) > 0 && i < sizeof(what)-1)
+        || ((i = member(what, "from")) > 0 && i < sizeof(what)-1)
+        || ((i = member(what, "on")) > 0 && i < sizeof(what)-1)
+        || ((i = member(what, "of")) > 0 && i < sizeof(what)-1)
+       ) {
+      allwords = what;
+      subwords = what[0..i-1];
+      what = what[i+1..];
+    }
+
+    if ((i = member(what, "outside")) > 0 && i == sizeof(what)-1) {
+      obj = ({object})env->Query("Outside") || environment(env);
+      if (   !obj
+          || ({int})env->QueryTransparency() < SEARCH_MIN_TRANSP
+          || where == SEARCH_ENV
+         )
+        return (mode & SM_OBJECT) ? 0 : ({});
+      env = obj;
+      what = what[0..i-1];
+      if (allwords)
+        allwords = allwords[0..<2];
+      where = SEARCH_ENV;
+    }
+  }
+
+  //  ---------- Determine where to search ----------
+  locs = ({ 0, 0, 0, mode, mode, mode }); /* Three locs, three modes */
+  if (mode & SM_LOCATE)
+    locs[0] = env;
+  else {
+    i = (mode & SM_IGNLIGHT)
+        || (({int})this->CanSee(env) && !({int})this->Query(P_BLIND));
+
+    if (i && (where == SEARCH_ENV_INV || where == SEARCH_ENV))
+      locs[0] = env;
+
+    if (   env == environment(this)
+        && (   where == SEARCH_ENV_INV || where == SEARCH_INV
+             || where == SEARCH_INV_ENV)
+       )
+    {
+      locs[1] = this;
+      locs[1+3] = mode | SM_IGNLIGHT;
+    }
+
+    if (i && (where == SEARCH_INV_ENV))
+      locs[2] = env;
+  }
+  nlocs = sizeof(locs)/2;
+
+  //  ---------- Search for a single object ----------
+  if (mode & SM_OBJECT)
+  {
+    obj = 0;
+    for (i = 0; !obj && i < nlocs; i++)
+    {
+      if (!locs[i])
+        continue;
+      if (subwords)
+      {
+        if (allwords)
+          obj = ({object})locs[i]->Locate(allwords, locs[i+nlocs]);
+        if (!obj)
+        {
+          obj = ({object})locs[i]->Locate(what, locs[i+nlocs]);
+          if (subwords && obj)
+            obj = ({object})obj->Locate(subwords, locs[i+nlocs] | SM_IGNLIGHT);
+        }
+      }
+      else
+        obj = ({object})locs[i]->Locate(what, locs[i+nlocs]);
+    }
+    return obj;
+  }
+
+  //  ---------- Search for multiple objects ----------
+  if (mode & SM_MULTI)
+  {
+
+    objs = ([]);
+    for (i = 0; i < nlocs; i++)
+    {
+      if (!locs[i])
+        continue;
+      nosub= 1;
+      cont = 0;
+      if (allwords)
+        cont = ({mixed})locs[i]->Locate(allwords, locs[i+nlocs]);
+      if (!cont)
+      {
+        nosub = 0;
+        cont = ({mixed})locs[i]->Locate(what, locs[i+nlocs]);
+      }
+      if (!cont)
+        continue;
+      if (!subwords || nosub)
+        objs = add_findings(objs,cont);
+      else {
+        if (mappingp(cont)) {
+          rc = cont[FOUND_NUMBER];
+          cont = (cont[FOUND_CLASS]||({}))+(cont[FOUND_MULTI]||({}));
+          if (!rc)
+            rc = sizeof(cont);
+        }
+        else
+          rc = sizeof(cont);
+        for (j = (rc > sizeof(cont) ? sizeof(cont) : rc); j--; ) {
+          rc = ({mixed})cont[j]->Locate(subwords, locs[i+nlocs] | SM_IGNLIGHT);
+          objs = add_findings(objs,rc);
+        }
+      }
+    }
+
+    if (!sizeof(objs))
+      return 0;
+    if (sizeof(objs[FOUND_MULTI]) || (i = sizeof(tmp = objs[FOUND_SINGLE])) > 1)
+      return objs;
+    if (i && sizeof(objs[FOUND_CLASS]))
+      return objs;
+    if (i || sizeof(tmp = objs[FOUND_CLASS]))
+      return tmp;
+    return 0;
+  }
+
+  //  ---------- Search for a several similar objects ----------
+  objs = ({});
+  for (i = 0; i < nlocs; i++)
+  {
+    if (!locs[i])
+      continue;
+    nosub = 1;
+    cont = 0;
+    if (allwords)
+      cont = ({mixed})locs[i]->Locate(allwords, locs[i+nlocs]);
+    if (!cont)
+    {
+      nosub = 0;
+      cont = ({mixed})locs[i]->Locate(what, locs[i+nlocs]);
+    }
+    if (!cont)
+      continue;
+    if (!subwords || nosub)
+      objs += cont;
+    else
+      for (j = sizeof(cont); j--; )
+        objs += ({mixed})cont[j]->Locate(subwords, locs[i+nlocs] | SM_IGNLIGHT) || ({});
+  }
+  if (!sizeof(objs))
+    return 0;
+  return objs;
+}
+
+/*-------------------------------------------------------------------------*/
+public varargs mixed * searchm ( object this, mixed what, int mode
+                               , closure pred)
+{
+  string *args;
+  object *single, *multi;
+  mixed rc, trc, tmp, merk, *class;
+  int i, j, count, specs;
+
+  if (!what)
+    return (mode & SM_OBJECT) ? 0 : ({});
+  if (objectp(what))
+    return search(this, what, mode);
+
+  // Parse the "<thing>,<thing> and <thing>" forms into trc.
+  if (stringp(what))
+    what = ({ what });
+  trc = ({});
+  for (i = sizeof(what); i--; ) {
+    tmp = explode(what[i], " and ") - ({ "" });
+    for (j = sizeof(tmp); j--; )
+      trc += explode(tmp[j], ",");
+  }
+
+  // Explode the trc[] by their spaces and put them into what.
+  for (i = sizeof(trc); i--; )
+    trc[i] = explode(trc[i], " ") - ({ "" });
+  what = trc;
+  specs = sizeof(what);
+
+  // Call Search() for each entry in trc and simply collect the results.
+  rc = allocate(sizeof(what));
+  for (i = 0; i < sizeof(what); i++) {
+    tmp = implode(what[i], " ");
+    rc[i] = search(this, what[i], mode&(~SM_OBJECT)) || tmp;
+    while (pred) {
+      if (objectp(rc[i])) {
+        if (!funcall(pred, rc[i]))
+          rc[i] = tmp;
+        break;
+      }
+      if (pointerp(rc[i])) {
+        rc[i] = filter(rc[i], pred);
+        if (!sizeof(rc[i]))
+          rc[i] = tmp;
+        break;
+      }
+      if (mappingp(trc = rc[i])) {
+        count = 0;
+        for (j = FOUND_SINGLE; j <= FOUND_MULTI; j++) {
+          if (sizeof(merk = trc[j])) {
+            merk = filter(merk, pred);
+            if (!sizeof(merk))
+              trc[j] = 0;
+            else
+              trc[j] = merk;
+            count += sizeof(merk);
+          }
+        }
+        rc[i] = count ? trc : tmp;
+      }
+      break;
+    }
+
+    if ((j = member(rc, rc[i])) >= 0 && j < i)
+      rc[i] = 0;
+  }
+  rc -= ({ 0 });
+
+  if (mode & SM_OBJECT) {
+    trc = ({});
+    for (i = 0; i < sizeof(rc); i++) {
+      if (stringp(rc[i]))
+        continue;
+      tmp = rc[i]-trc;
+      if (sizeof(tmp))
+        trc += tmp[0..0];
+    }
+    return trc+filter(rc, #'stringp);
+  }
+
+  // Resolve the result into messages, single, class and multi matches.
+  // First, the initial settings.
+  args = filter(rc, #'stringp);
+  single = filter(rc, #'objectp); // Just in case.
+  class = filter(rc, #'pointerp);
+  merk = single;
+  multi = ({});
+  rc = filter(rc, #'mappingp);
+  for (i = sizeof(rc); i--; ) {
+    if (pointerp(tmp = rc[i][FOUND_SINGLE]) && sizeof(tmp))
+      single += tmp;
+    if (pointerp(tmp = rc[i][FOUND_CLASS]) && sizeof(tmp))
+      class += ({ tmp });
+    if ((tmp = rc[i][FOUND_MULTI]) || rc[i][FOUND_NUMBER])
+      multi += rc[i][FOUND_NUMBER] + ({ (tmp||({})) });
+//      multi += ({ ({ rc[i][FOUND_NUMBER] })+(tmp||({})) });
+  }
+  tmp = single - merk;
+  if (sizeof(tmp) > 1) {
+    single = merk;
+    class = allocate(sizeof(tmp)) + class;
+    for (i = 0; i < sizeof(tmp); i++)
+      class[i] = ({ tmp[i] });
+  }
+
+  // Loop over the 'class' and 'multi' entries until all inherently single
+  // objects have been detected and moved over to 'single'.
+  // Meanwhile, remove the empty entries from 'class' and 'multi'.
+  // 'merk' holds the single elements added the last run.
+  do {
+    count = 0;
+
+    // Check the class entries.
+    for (i = 0; i < sizeof(class); i++) {
+      if (!(tmp = class[i]))
+        continue;
+      tmp -= merk;
+      if (!(j = sizeof(tmp))) {
+        class[i] = 0;
+        continue;
+      }
+      if (1 == j) {
+        single += tmp[0..0];
+        class[i] = 0;
+        count++;
+        continue;
+      }
+      class[i] = tmp;
+    }
+
+    // Check the multi entries.
+    for (i = 0; i < sizeof(multi); i++) {
+      if (!(tmp = multi[i]))
+        continue;
+      tmp -= merk;
+      if (tmp[0]) { // Don't flatten counted plurals.
+        multi[i] = tmp;
+        continue;
+      }
+      if (1 == (j = sizeof(tmp))) {
+        multi[i] = 0;
+        continue;
+      }
+      if (2 == j) {
+        single += tmp[1..1];
+        multi[i] = 0;
+        count++;
+        continue;
+      }
+      multi[i] = tmp;
+    }
+
+    // Determine new single objects.
+    merk = single[<count..<1];
+  } while (count);
+
+  class -= ({ 0 });
+  multi -= ({ 0 });
+
+  // And now: the result!
+  return ({ sizeof(args) && args
+          , sizeof(single) && single
+          , sizeof(class) && class
+          , sizeof(multi) && multi
+          , specs-sizeof(args)
+          });
+}
+
+/*-------------------------------------------------------------------------*/
+public varargs int foundp (object obj, mixed data, int removeit)
+{
+  mixed tmp;
+  int   rc, pos;
+
+  if (removeit && !referencep(&data))
+    raise_error("Illegal arg 2 'data' to foundp(): must be a reference\n");
+
+  if (!data)
+    return 0;
+  if (objectp(data))
+    return data == obj;
+  if (pointerp(data))
+  {
+    if ((rc = -1 != (pos = member(data, obj))) && removeit)
+      data[pos..pos] = ({});
+    return rc;
+  }
+
+  // Locate the 'obj' in the arrays.
+  if (sizeof(tmp = data[FOUND_SINGLE]) && -1 != member(tmp, obj))
+    rc = FOUND_SINGLE;
+  if (!rc && sizeof(tmp = data[FOUND_CLASS])) {
+    for (pos = 0; pos < sizeof(tmp); pos++)
+      if (-1 != member(tmp[pos], obj)) {
+        rc = FOUND_CLASS;
+        break;
+      }
+  }
+  if (!rc && sizeof(tmp = data[FOUND_MULTI])) {
+    for (pos = 0; pos < sizeof(tmp); pos++)
+      if (-1 != member(tmp[pos], obj)) {
+        rc = FOUND_MULTI;
+        break;
+      }
+  }
+
+  if (!rc || !removeit)
+    return rc;
+
+  // Remove the found object from the arrays
+  if (sizeof(tmp = data[FOUND_SINGLE])) {
+    tmp -= ({ obj });
+    data[FOUND_SINGLE] = sizeof(tmp) ? tmp : 0;
+  }
+  if (sizeof(tmp = data[FOUND_CLASS])) {
+    if (FOUND_CLASS == rc)
+      tmp[pos..pos] = ({});
+    for (pos = 0; pos < sizeof(tmp); pos++)
+      if (!sizeof(tmp[pos] -= ({ obj })))
+        tmp[pos] = 0;
+    tmp -= ({ 0 });
+    data[FOUND_CLASS] = sizeof(tmp) ? tmp : 0;
+  }
+  if (sizeof(tmp = data[FOUND_MULTI])) {
+    if (FOUND_MULTI == rc && tmp[pos][0]) {
+      tmp[pos][0]--;
+      if (!tmp[pos][0])
+        tmp[pos..pos] = ({});
+    }
+    for (pos = 0; pos < sizeof(tmp); pos++)
+      if (1 == sizeof(tmp[pos] -= ({ obj })) && !tmp[pos][0])
+        tmp[pos] = 0;
+    tmp -= ({ 0 });
+    data[FOUND_MULTI] = sizeof(tmp) ? tmp : 0;
+  }
+
+  return rc;
+}
+
+/*-------------------------------------------------------------------------*/
+public varargs int sort_f_default ( object obj, int type, int left, int count)
+{
+  return (type != FOUND_CLASS || !count);
+}
+
+public varargs int sort_f_std ( object obj, int type, int left, int count
+                              , closure pred)
+{
+  mixed tmp;
+
+  tmp = funcall(pred, obj);
+  if (closurep(tmp))
+    tmp = funcall(tmp, obj);
+  if (type != FOUND_CLASS || (!count && (!left || !tmp)))
+    return tmp ? FOUND_NOTHANDLE : FOUND_SINGLE;
+  return 0;
+}
+
+public varargs closure sort_f_prop (string prop) {
+  mixed tmp;
+  if (!stringp(prop))
+    tmp = 0;
+  else
+    tmp = lambda(({'o}), ({#'call_other, 'o, "QueryProp", prop}));
+  return lambda( ({'o, 't, 'l, 'c}), ({#'sort_f_std, 'o, 't, 'l, 'c, tmp }));
+}
+
+public varargs closure sort_f_nprop (string prop) {
+  mixed tmp;
+  if (!stringp(prop))
+    tmp = 0;
+  else
+    tmp = lambda(({'o}), ({#'!, ({#'call_other, 'o, "QueryProp", prop})}));
+  return lambda( ({'o, 't, 'l, 'c}), ({#'sort_f_std, 'o, 't, 'l, 'c, tmp }));
+}
+
+/*-------------------------------------------------------------------------*/
+public varargs mapping sort_findings ( mixed data, closure pred )
+{
+  mapping rc;
+  int     i, j, notenough, count, specs, len;
+  mixed   val, list, list2, collect, tmp, tmp2;
+  object  obj;
+
+  if (!sizeof(data))
+    return ([]);
+  rc = ([ FOUND_NUMBER: data[FOUND_NUMBER] ]);
+  collect = ({});
+  if (!pred || (!closurep(pred) && !intp(pred)))
+    pred = #'sort_f_default;
+
+  // Sort out the 'single' founds
+  if (sizeof(list = data[FOUND_SINGLE])) {
+    for (i = 0; i < sizeof(list); i++) {
+      if (-1 != member(collect, obj=list[i]))
+        continue;
+      if (val = funcall(pred, obj, FOUND_SINGLE)) {
+        if (val < 0) val = -val;
+        if (val == 1)
+          collect += ({ obj });
+        else if (!(tmp = rc[val]))
+          rc[val] = ({ obj });
+        else
+          rc[val] = tmp+({ obj });
+      }
+    }
+  }
+
+  // Sort out the 'class' founds
+  if (sizeof(list2 = data[FOUND_CLASS])) {
+    for (i = 0; i < sizeof(list2); i++) {
+      list = list2[i] - collect;
+      count = 0;
+      for (j = 0; j < sizeof(list); j++) {
+        obj = list[j];
+        if (val = funcall(pred, obj, FOUND_CLASS, sizeof(list)-j-1, count))
+        {
+          count++;
+          if (val < 0) val = -val;
+          if (val == 1)
+            collect += ({ obj });
+          else if (!(tmp = rc[val]))
+            rc[val] = ({ obj });
+          else
+            rc[val] = tmp+({ obj });
+        }
+      }
+    }
+  }
+
+  len = sizeof(collect);
+  specs = 0;
+
+  // Sort out the 'multi' founds
+  if (sizeof(list2 = data[FOUND_MULTI])) {
+    for (i = 0; i < sizeof(list2); i++) {
+      list = list2[i] - collect;
+      count = list[0] || sizeof(list)-1;
+      if (count > sizeof(list)-1)
+        notenough = 1;
+      // When counting is enabled, do a prepass to sort
+      // out the 'ok' and 'ignore' ones only.
+      if (list[0]) {
+        tmp2 = ({});
+        for (j = 1; j < sizeof(list) && count > 0; j++) {
+          if (j == 1)
+            data[FOUND_SPECS]--; // Compensate the 'n' ++'s later.
+          obj = list[j];
+          if (!(val = funcall(pred, obj, FOUND_MULTI)))
+            tmp2 += ({ obj });
+          else if (val == 1 || val == -1) {
+            collect += ({ obj });
+            tmp2 += ({ obj });
+            if (val == 1)
+              count--;
+            specs++;
+            data[FOUND_SPECS]++;
+          }
+        }
+        list -= tmp2;
+      }
+
+      // This pass just handles 'count' elements.
+      for (j = 1; j < sizeof(list) && count > 0; j++) {
+        if (j == 1)
+          data[FOUND_SPECS]--; // Compensate the 'n' ++'s later.
+        obj = list[j];
+        if (val = funcall(pred, obj, FOUND_MULTI)) {
+          if (val < 0)
+            val = -val;
+          else
+            count--;
+          if (val == 1) {
+            collect += ({ obj });
+            specs++;
+            data[FOUND_SPECS]++;
+          }
+          else if (!(tmp = rc[val]))
+            rc[val] = ({ obj });
+          else
+            rc[val] = tmp+({ obj });
+        }
+      }
+    } // for (all data[_MULTI][...]
+  } // if data[_MULTI] not empty
+
+  if (specs+len > (i = data[FOUND_SPECS]))
+    collect[i-specs..<specs+1] = ({});
+
+  rc[FOUND_SINGLE] = sizeof(collect) ? collect : 0;
+  rc[-FOUND_SINGLE] = notenough;
+
+  return rc;
+}
+
+/*-------------------------------------------------------------------------*/
+private varargs mixed locate_simple ( object cont
+                                    , mixed  what
+                                    , int    mode
+                                    , mixed  foundid
+                                    , mixed  also)
+{
+  object *inv, *single;
+  string *words, fwhat, pwhat;
+  int    really, art;
+  mixed  multi, ord;
+  mapping rc;
+
+#define ARTICLE_NONE 0
+#define ARTICLE_A    1
+#define ARTICLE_THE  2
+#define RETURN_SINGLE(s) if (mode & SM_OBJECT) return s[0]; else return s
+
+  if (pointerp(foundid))
+    also = foundid;
+  else if (!pointerp(also))
+    also = ({});
+
+  foundid = 0;
+  words = what;
+
+  // If multiples objects should be found:
+  // consider the worn/wielded things as well?
+  if (sizeof(words) && "really" == words[0]) {
+    really = 1;
+    words[0..0] = ({});
+  }
+  else
+    really = !(mode & SM_REALLY);
+
+  // Check (and ignore) the articles.
+  if (sizeof(words))
+  {
+    if (member(({"a", "an"}), words[0]) != -1)
+      art = ARTICLE_A;
+    else if ("the" == words[0])
+      art = ARTICLE_THE;
+    if (art)
+      words[0..0] = ({});
+  }
+
+  // Get the inventory to work on.
+  inv = all_inventory(cont)+also;
+  if (({int})MASTER->get_wiz_level(this_player()) < LVL_WIZARD) {
+    for (ord = sizeof(inv); ord--; )
+      if ((({string})inv[ord]->Short()||"") == "")
+        inv[ord] = 0;
+    inv -= ({ 0 });
+  }
+  if (!really)
+    inv = ({object *})cont->filterWornWielded(inv);
+
+  // Check if everything is wanted.
+  if (!art
+      && (   !sizeof(words)
+          || (    1 == sizeof(words)
+              && -1 != member(({"all", "everything"}), words[0]))
+         )
+     )
+  {
+    foundid = sizeof(words) ? words[0] : 0;
+    if (mode & SM_MULTI)
+      return ([ FOUND_MULTI: inv ]);
+    if (!sizeof(inv))
+      return 0;
+    RETURN_SINGLE(inv);
+  }
+
+  // If the article was not inspecific, try to parse for an ordinal.
+  ord = 0;
+  fwhat = implode(words, " ");
+  while (ARTICLE_A != art && sizeof(words) > 1) {
+    if (0 < (ord = to_int(words[<1]))) {
+      words[<1..<1] = ({});
+      break;
+    }
+    if ( ( ord = atoo(words[0])) && ( intp(ord) ) )
+      words[0..0] = ({});
+    else
+      ord = 0;
+    break;
+  }
+
+  // If the article was not inspecific, and the search mode is _MULTI|_COUNT,
+  // try to parse for a count.
+  if (   (mode & SM_MULTI) && (mode & SM_COUNT)
+      && ord < 1 && art != ARTICLE_A && sizeof(words) > 1
+     )
+  {
+    if (intp(ord = atoi(words[0])) && ord > 0) {
+      ord = -ord;
+      words[0..0] = ({});
+    }
+    else
+      ord = 0;
+  }
+  what = implode(words, " ");
+  foundid = what;
+
+  // For a while, 'multi' will contain the allowed words for the floor.
+  if (ARTICLE_A != art && !living(cont))
+    multi = ({mixed})cont->QueryIndoors() ? ({ "floor", "ground", "here" })
+                                 : ({ "ground", "here" });
+  else
+    multi = ({});
+
+  // If a count/ordinal was given, match first with the original string
+  // to catch special objects. On success, return the found objects
+  // according to the search mode.
+  single = ({});
+  if (ord) {
+    single = filter_objects(inv, "id", fwhat);
+    if (-1 != member(multi, fwhat))
+      single += ({ cont });
+    inv -= single;
+    if (sizeof(single))
+    {
+      foundid = fwhat;
+      RETURN_SINGLE(single);
+    }
+  }
+
+  // Search for all objects of a class.
+  single = filter_objects(inv, "id", what);
+  if (-1 != member(multi, what))
+    single += ({ cont });
+  inv -= single;
+
+  // If an ordinal was given, return the specified object.
+  if (ord > 0) {
+    if (sizeof(single) < ord)
+      return 0;
+    if (mode & SM_OBJECT)
+      return single[ord-1];
+    return single[ord-1..ord-1];
+  }
+
+  // If a single object is searched (either by mode or by count '1')
+  // and we come to this point, we found nothing appropriate.
+  if ((mode & SM_OBJECT) || ord == -1) {
+    if (!sizeof(single))
+      return 0;
+    if (mode & SM_OBJECT)
+      return single[0];
+    if (ord == -1)
+      return single[0..0];
+    return single;
+  }
+
+  // If the searchmode is not 'multi', or if an inspecific article was given,
+  // no plural parsing or counts are necessary/allowed, so return the class
+  // of objects.
+  if (!(mode & SM_MULTI) || art == ARTICLE_A) {
+    if (!sizeof(single) || ord)
+      return 0;
+    RETURN_SINGLE(single);
+  }
+
+  // 'single' is at this place the list of objects found by singular class.
+  // Try to depluralize the id into pwhat.
+  pwhat = 0;
+  if (!art && !ord && what[0..3] == "all ") { // 'all [the] thingies'
+    pwhat = what[4..];
+    if (pwhat[0..3] == "the ")
+      pwhat = pwhat[4..];
+    if (pwhat[<2..<1] == "es" && -1 == member("aeiou", pwhat[<3]))
+      pwhat = pwhat[0..<3];
+    else if (pwhat[<1] == 's')
+      pwhat = pwhat[0..<2];
+  }
+  else if (!art && !ord && what[0..5] == "every ") // 'every thing'
+    pwhat = what[6..];
+  else if (!art && !ord && what == "everything") // 'everything'
+    pwhat = what[5..];
+  else if (what[<2..<1] == "es" && -1 == member("aeiou", what[<3])
+           && !sizeof(single)) // 'things'
+      pwhat = what[0..<3];
+  else if (art != 1 && what[<1] == 's' && !sizeof(single))
+    pwhat = what[0..<2];
+
+  // If the id could be depluralized, search matching objects.
+  // Store the count in 'art'.
+  multi = pwhat ? filter_objects (inv, "id", pwhat) : ({});
+  art = sizeof(multi);
+
+  // Objects which react both on the plural and depluralized id
+  // are special, just the plural id match is used.
+  multi -= (single & multi);
+
+  // If not depluralized object could be found, return the class objects.
+  // No count must be given now.
+  if (!sizeof(multi)) {
+    if (!sizeof(single) || ord || art)
+      return 0;
+    return single;
+  }
+
+  // Construct the return mapping.
+  rc = ([ FOUND_MULTI: multi ]);
+  if (sizeof(single))
+    rc[FOUND_CLASS] = single;
+  if (ord)
+    rc[FOUND_NUMBER] = -ord;
+  foundid = pwhat;
+  return rc;
+}
+
+/*-------------------------------------------------------------------------*/
+public varargs mixed locate (object cont, mixed what, mixed mode, mixed also)
+{
+  string *words, foundid;
+  mixed  rc, rc2;
+  object *tmp;
+  int i, j;
+
+  // Can the player see here anything?
+  if (!(mode & SM_LOCATE)
+   && !(mode & SM_IGNLIGHT)
+   && this_player()
+   && this_player() != cont
+   && (({int})this_player()->CantSee(cont) || ({int})this_player()->Query("Blind")))
+    return 0;
+
+  if (objectp(what))
+    return present(what, cont);
+
+  if (!pointerp(what))
+    words = explode(what||"", " ") - ({ "" });
+  else
+    words = what - ({ "" });
+
+  if (   -1 != member(({-1, 0, sizeof(words)-1}), i = member(words, "except"))
+      && -1 != member(({-1, 0, sizeof(words)-1}), i = member(words, "but"))
+     )
+  {
+    return locate_simple(cont, words, mode, also);
+  }
+
+  rc = locate_simple(cont, words[0..i-1], mode|SM_CMULTI, &foundid, also);
+
+  if (!sizeof(rc) || (pointerp(rc) && sizeof(rc) < 2))
+    return 0;
+  if (pointerp(rc))
+    rc = ([ FOUND_SINGLE: rc ]);
+
+  if (words[<1] == "one" || words[<1] == "ones") {
+    words[<1] = foundid;
+    foundid = 0;
+  }
+
+  rc2 = locate_simple(cont, words[i+1..], mode|SM_CMULTI, also);
+  if (!sizeof(rc2) && foundid)
+    rc2 = locate_simple(cont,words[i+1..]+({ foundid }), mode|SM_CMULTI, also);
+  if (!sizeof(rc2))
+    return rc;
+  if (pointerp(rc2))
+    rc2 = ([ FOUND_SINGLE: rc2 ]);
+
+  for (i = FOUND_SINGLE; i <= FOUND_MULTI; i++) {
+    if (!sizeof(tmp = rc[i]))
+      continue;
+    for (j = FOUND_SINGLE; j <= FOUND_MULTI; j++) {
+      if (!sizeof(rc2[j]))
+        continue;
+      tmp -= rc2[j];
+    }
+    rc[i] = sizeof(tmp) ? tmp : 0;
+  }
+  tmp = rc[FOUND_SINGLE] || ({});
+  if (sizeof(rc[FOUND_CLASS]) == 1) {
+    tmp += rc[FOUND_CLASS];
+    rc[FOUND_CLASS] = 0;
+  }
+  if (sizeof(rc[FOUND_MULTI]) == 1) {
+    tmp += rc[FOUND_MULTI];
+    rc[FOUND_MULTI] = 0;
+  }
+  rc[FOUND_SINGLE] = sizeof(tmp) ? tmp : 0;
+
+  if (mode & SM_OBJECT) {
+    if (   sizeof(tmp)
+        || sizeof(tmp = rc[FOUND_CLASS])
+        || sizeof(tmp = rc[FOUND_MULTI])
+       )
+      return tmp[0];
+    return 0;
+  }
+  if (mode & SM_MULTI) {
+    if (sizeof(rc[FOUND_MULTI]) || sizeof(rc[FOUND_IDS]))
+      return rc;
+    if (sizeof(tmp) == 1 && !sizeof(rc[FOUND_CLASS]))
+      return tmp;
+    if (!sizeof(tmp) && sizeof(rc[FOUND_CLASS]))
+      return rc[FOUND_CLASS];
+    return rc;
+  }
+
+  if (sizeof(tmp) == 1 && !sizeof(rc[FOUND_CLASS]))
+    return tmp[0];
+  tmp += rc[FOUND_CLASS] || ({});
+  return sizeof(tmp) ? tmp : 0;
+}
+
+/***************************************************************************/

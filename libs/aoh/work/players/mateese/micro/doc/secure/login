@@ -1,0 +1,164 @@
+OBJECT
+  /secure/login
+
+LAST UPDATE
+  Mateese, 21-February-1995, 04:00 MET
+
+
+DESCRIPTION
+  The login object is the first object a player has contact with.
+  It prints the welcome screen (or 'closed' messages), prompts
+  for name and password, and starts the player object.
+  The features in detail are:
+    - usernames must be all ASCII (esp. they mustn't start with '!'
+      as this is the marker for internal names), and are mapped
+      to lowercase.
+    - if the username is preceeded with '%', any old player object
+      (e.g. a residue from a netdeath) is removed to allow the
+      usage of a fresh player object.
+    - players get a different player object than wizards.
+    - if a shutdown is impending, the shutdown is queried for time
+      and reason, and diagnostics are printed. If less than one
+      minute is left, logins are rejected.
+    - the welcome screen is printed with a delay, so it can be
+      bypassed by pretyping once username. Users with slow lines
+      like this :-)
+    - up to five guest players are managed. If a sixth guest logs
+      on, the oldest guest is removed.
+  The welcome screen is read from the file /etc/WELCOME.
+  To close the game, it is sufficient to create a specially named
+  file in /adm/etc/closed: ADMIN to allow just admins, ARCH to
+  allow admins and arches, WIZARD to allow all but learners and
+  players, and LEARNER to allow all but players.
+  The content of the file is printed as 'closed' notice for
+  rejected logins.
+
+  The player objects are /std/player for players, and /std/wizard
+  for wizards.
+
+  The login object cannot be inherited or shadowed.
+  The various decisions, player object, guest number, enforcement
+  of a new player object, are stored in global variables.
+  The max number of guests is defined as MAX_GUESTS, guests are
+  identified by a number in the range 1..MAX_GUESTS (players have
+  the guest number 0).
+
+
+  On login, the gamedriver calls the function logon().
+
+    static nomask logon ()
+      Logon a new player.
+      This function is called by the gamedriver to log on a new player.
+      It should return 1 to confirm that the function executed properly.
+      As this function is called from within the poll for incoming messages,
+      it shouldn't do much in order to to allow quick responses.
+
+  For micro, logon() sets the input focus to logon2(), starts the
+  callout to PrintWelcome() (3 seconds) and TimeOut() (4 minutes).
+
+    static void TimeOut ()
+      Login timed out - destruct login object.
+      If the login object is still interactive, notify the other
+      end.
+
+    static void PrintWelcome ()
+      Prints the gamedriver and mudlib verseion, then the welcome
+      screen from file /etc/WELCOME.
+      At last, the user is prompted for its name.
+      However, if CheckShut() returns true, the login object
+      is destructed, thus rejecting the login.
+
+  In case of an impending shutdown of the mud, logins should be
+  denied during the last minutes.
+
+    static int CheckShut ()
+      The function checks the shutdown object SHUTNAME if existing
+      for time and reason of a shutdown.
+      If a shutdown is impending, appropriate diagnostics are
+      printed.
+      The function has to return non-zero if the login may
+      succeed.
+      Multiple calls to the function are caught: all subsequent
+      calls do nothing but returning non-zero.
+
+  The first entry from the player, its name, is sent as argument
+  to the function logon2().
+
+    static nomask logon2 (string str)
+      User wants to enter the name.
+      Check for validity and ask for password.
+
+  logon2() flags if the user entered '%'as first character.
+  Empty inputs lead to the destruction of the login object. If the
+  callout to PrintWelcome() is still pending, it is removed, and
+  CheckShut() is called manually.
+  If the name is not valid, reserved or banished, the first
+  input prompt is repeated, and the input focus is reset to logon2(),
+  For valid names, it is checked if the game is closed for this
+  character.
+  If the entered name is 'guest', the special guest handler
+  load_guest() is called, then this function terminated.
+  If the name is new to the game, the new player is prompted for its
+  password, and the input focus is set to logon?new().
+  Existing characters are prompted for their password, and the input
+  focus is set to logon_old(). However, if a character has no
+  password set, it is notified about this, and input focus is
+  set directly to load_player().
+
+    static nomask validName (string name)
+      Check that a name is valid, return non-zero then.
+      Currently only lowercase letters are allowed, and the name
+      has to be less than 12 characters long.
+
+    static nomask logon_old (string str)
+      Called to verify the password of an existing player.
+      Argument is the entered password to verify.
+      If the verification, done by SECUREINFO, fails, the login
+      object destructs after notifying the player,
+      else the player is loaded using load_player().
+
+    static nomask logon_new (string str)
+      Called with the password of a new player.
+      If the given password is blatantly insecure (less than 6
+      characters long, equal to the username or the reversed
+      username), the player is prompted to choose an other
+      password.
+      If the password is empty, logon_again() is directly
+      called, else the player is prompted to reenter its
+      password, and input focus is set to logon_again().
+
+    static nomask logon_again (string str)
+      Called with the reentry of the password of a new player.
+      If the reentry doesn't match the password, the login
+      object destruct after notifying the player.
+      Else SECUREINFO is called to add the new player, and
+      load_player() is called.
+
+    static nomask load_guest ()
+      Player requested a guest character.
+      The object counts the number of currently active guests,
+      and determines the oldest one. If there are MAX_GUESTS
+      (currently 5) guest already online, the oldest one
+      is removed after a friendly message.
+      The player is then assigned a free guest number, then
+      load_player() is called.
+
+  The player object is loaded finally in the load_player()
+  function.
+
+    static nomask load_player ()
+      Finally, load the player.
+
+  If an object for this player name is already existing, it
+  is normally reactivated by exec()ing the netconnection to
+  it, and then calling ->Netdead() in it. Else, if a fresh
+  object is requested, the old object is destructed.
+  The player object is cloned from the appropriate file (after
+  some checks that the blueprint has not been moved), the
+  net connection is exec()ed to it, and the player is started
+  by calling ->StartPlayer(<name>, <guestno>).
+  The login object is then destructed.
+
+
+SEE ALSO
+  info(secure)

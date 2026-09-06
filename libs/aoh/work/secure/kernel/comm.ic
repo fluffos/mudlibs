@@ -1,0 +1,319 @@
+/* -*-C-*-
+ *--------------------------------------------------------------------------
+ * /secure/kernel/comm.ic -- Communication and message sefuns.
+ *
+ * Copyright (C) 1997-1998 by One Step Beyond.
+ * All Rights Reserved.
+ * Permission granted for non-commercial use.
+ *--------------------------------------------------------------------------
+ * This file is included(!) from /secure/kernel.c to form the kernel.
+ * Implemented sefuns are (with old equivalences):
+ *   msg_object()      <-> tell_object()
+ *   msg_room()        <-> tell_room()
+ *   msg_write()       <-> write()
+ *   msg_say()         <-> say()
+ *   msg_shout()       <-> shout()
+ *   msg_pshout()      <-> pshout()
+ *   msg_wshout()
+ *
+ * For compatibility reasons are still there:
+ *   shout(), pshout()
+ *   see(), show(), show_object(), show_room()
+ *     These sefuns handle the imulation of light and viewing.
+ *       see()         <-> write()
+ *       show()        <-> say()
+ *       show_object() <-> tell_object()
+ *       show_room()   <-> tell_room()
+ *--------------------------------------------------------------------------
+ */
+
+#include "/sys/msgclass.h"
+
+/* ---------------------------------------------------------------------- */
+
+public void msg_write( int class, mixed msg ) {
+  /* sends the 'msg' with class 'class' to this_player()
+   */
+
+  if ( ! this_player() )
+    raise_error( "Invalid call to msg_write: this_player() is 0.\n" );
+
+  this_player()->receive_msg( class, this_player(), msg );
+}
+
+/* ---------------------------------------------------------------------- */
+
+#if __VERSION__ > "3.5.0"
+public varargs void msg_say( int class, mixed msg, object *|object excl ) {
+#else
+public varargs void msg_say( int class, mixed msg, object * excl ) {
+#endif
+  /* sends the 'msg' to all objects in the environment of this_player()
+   * with class 'class', excluding all objects in 'excl' and this_player().
+   */
+
+  object * u, room, origin;
+
+  if (previous_object() && living(previous_object()))
+    origin = previous_object();
+  else
+    origin = this_player() || previous_object();
+
+  if ( ! origin )
+    raise_error( "Invalid call to msg_say: originator is undefined.\n" );
+
+  if ( ! ( room = environment( origin ) ) )
+    raise_error("Invalid call to msg_say: originator has no environment.\n" );
+
+  if ( ! excl )
+    excl = ({ });
+
+  else if ( objectp( excl ) )
+    excl = ({ excl });
+
+  u = filter( all_inventory( room ), #'living /*'*/ );
+  u -= excl;
+  u -= ({ this_player() });
+
+  filter_objects( u, "receive_msg", class, this_player(), msg );
+}
+
+/* ---------------------------------------------------------------------- */
+
+public void msg_object( object ob, int class, mixed msg ) {
+  /* sends the 'msg' to object 'ob' with class 'class'.
+   */
+
+  if ( ! objectp( ob ) )
+    raise_error( sprintf( "Bad argument 1 to msg_object: %O\n", ob ) );
+
+  ob->receive_msg( class, this_player()||previous_object(), msg );
+}
+
+/* ---------------------------------------------------------------------- */
+
+#if __VERSION__ > "3.5.0"
+public varargs void msg_room(mixed room,int class,mixed msg,object *|object excl) {
+#else
+public varargs void msg_room(mixed room,int class,mixed msg,object * excl) {
+#endif
+  /* sends the 'msg' to all objects in (room)object 'room' with class
+   * 'class', excluding all objects in 'excl'.
+   */
+
+  object * u, tu;
+
+  if ( stringp( room ) )
+    room = load_object( room );
+  else if ( ! objectp ( room ) )
+    raise_error( sprintf("Bad argument 1 to message_room: %O\n", room ) );
+
+  if ( ! excl )
+    excl = ({ });
+
+  else if ( objectp( excl ) )
+    excl = ({ excl });
+
+  u = filter( all_inventory( room ), #'living /*'*/ );
+  u -= excl;
+
+  tu = this_player()||previous_object();
+
+  filter_objects( u, "receive_msg", class, tu, msg );
+}
+
+/* ---------------------------------------------------------------------- */
+
+#if __VERSION__ > "3.5.0"
+public varargs void msg_shout( int class, mixed msg, object *|object excl ) {
+#else
+public varargs void msg_shout( int class, mixed msg, object * excl ) {
+#endif
+  /* sends the 'msg' with class 'class' to all users except this_player()
+   * and the objects listed in 'excl'.
+   */
+
+  object * u, tu;
+
+  if ( ! excl )
+    excl = ({ });
+
+  else if ( objectp( excl ) )
+    excl = ({ excl });
+
+  u = users() - ({ this_player() });
+  u -= excl;
+
+  tu = this_player()||previous_object();
+
+  filter_objects( u, "receive_msg", class, tu, msg );
+}
+
+/* ---------------------------------------------------------------------- */
+
+#if __VERSION__ > "3.5.0"
+public varargs void msg_pshout( int class, mixed msg, object *|object excl ) {
+#else
+public varargs void msg_pshout( int class, mixed msg, object * excl ) {
+#endif
+  /* sends the 'msg' with class 'class' to all players except this_player()
+   * and the objects listed in 'excl'.
+   */
+
+  object * u, tu;
+
+  if ( ! excl )
+    excl = ({ });
+
+  else if ( objectp( excl ) )
+    excl = ({ excl });
+
+  u = users() - ({ this_player() });
+  u -= excl;
+  u = filter( u,
+		    lambda( ({ 'x /*'*/ }),
+			    ({ #'!, /*'*/
+				  ({ #'call_other, /*'*/
+				     MASTER,
+				     "query_user-level",
+				     'x /*'*/
+				  })
+			     }) ) );
+
+  tu = this_player()||previous_object();
+
+  filter_objects( u, "receive_msg", class, tu, msg );
+}
+
+/* ---------------------------------------------------------------------- */
+
+#if __VERSION__ > "3.5.0"
+public varargs void msg_wshout( int class, mixed msg, object *|object excl ) {
+#else
+public varargs void msg_wshout( int class, mixed msg, object * excl ) {
+#endif
+  /* sends the 'msg' with class 'class' to all wizards except this_player()
+   * and the objects listed in 'excl'.
+   */
+
+  object * u, tu;
+
+  if ( ! excl )
+    excl = ({ });
+
+  else if ( objectp( excl ) )
+    excl = ({ excl });
+
+  u = users() - ({ this_player() });
+  u -= excl;
+  u = filter( u,
+		    lambda( ({ 'x /*'*/ }),
+			    ({ #'call_other /*'*/,
+			       MASTER,
+			       "query_user_level",
+			       'x /*'*/
+			    }) ) );
+
+
+  tu = this_player()||previous_object();
+
+  filter_objects( u, "receive_msg", class, tu, msg );
+}
+
+/* ---------------------------------------------------------------------- */
+
+void shout(string s) {
+  /* Shout a string to all users except this_player().
+   * TODO: compat function shout uses CMSG_GENERIC.
+   */
+
+  msg_shout( CMSG_GENERIC, s );
+}
+
+/* ---------------------------------------------------------------------- */
+
+void pshout(string s) {
+  /* Shout a string to all players except this_player().
+   * TODO: compat function pshout uses CMSG_GENERIC.
+   */
+
+  msg_pshout( CMSG_GENERIC, s );
+}
+
+/* ---------------------------------------------------------------------- */
+
+public varargs int see( mixed can, string cant) {
+  /* write a string to this_player() depending on the light
+   * TODO: compat function see uses CMSG_GENERIC.
+   */
+
+  if ( ! this_player() )
+    raise_error( "Invalid call to see: this_player() is 0.\n" );
+
+  if (pointerp(can))
+    msg_write( CMSG_GENERIC|MMSG_SEE, can );
+  else
+    msg_write( CMSG_GENERIC|MMSG_SEE, ({ can, cant }) );
+
+  return ({int})this_player()->CanSee();
+}
+
+/* ---------------------------------------------------------------------- */
+
+public varargs int show_object(object obj, mixed can, string cant) {
+  /*
+   * TODO: compat function show_object uses CMSG_GENERIC.
+   */
+
+  if ( ! objectp( obj ) )
+    raise_error( sprintf( "Bad argument 1 to show_object: %O\n", obj ) );
+
+  if (pointerp(can))
+    msg_object( obj, CMSG_GENERIC|MMSG_SEE, can );
+  else
+    msg_object( obj, CMSG_GENERIC|MMSG_SEE, ({ can, cant }) );
+
+  return ({int})obj->CanSee();
+}
+
+/* ---------------------------------------------------------------------- */
+
+public varargs object * show(mixed can, mixed ce, mixed excl) {
+  /*
+   * TODO: compat function show uses CMSG_GENERIC.
+   */
+
+  object env;
+  FAKE_OBJECT;
+  if (!(env = environment(TP||TO)))
+    return ({});
+  if(objectp(ce) || pointerp(ce))
+    return ({object *})env->display(can, objectp(ce) ? ({ TP, ce}) : ce+({ TP }));
+  if(pointerp(excl))
+    return ({object *})env->display(({can, ce}), excl+({ TP }));
+  if (pointerp(can))
+    return ({object *})env->display(can, ({ TP }));
+  return ({object *})env->display(({can, ce}), ({ TP }));
+}
+
+/* ---------------------------------------------------------------------- */
+
+public varargs object * show_room(mixed room, mixed can,
+				  mixed ce, mixed excl ) {
+  /*
+   * TODO: compat function show_room uses CMSG_GENERIC.
+   */
+
+  if (!room)
+    return ({});
+  FAKE_OBJECT;
+  if(pointerp(ce))
+    return ({object *})room->display(can, ce);
+  if(pointerp(excl))
+    return ({object *})room->display(({can, ce}), excl);
+  if (pointerp(can))
+    return ({object *})room->display(can);
+  return ({object *})room->display(({can, ce}));
+}
+
+/* *********************************************************************** */

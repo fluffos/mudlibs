@@ -1,0 +1,69 @@
+P_ENTERFAIL
+===========
+
+NAME
+----
+::
+
+    P_ENTERFAIL                   "enterfail"                   
+
+DEFINIERT IN
+------------
+::
+
+    /sys/transport.h
+
+BESCHREIBUNG
+------------
+::
+
+     Meldung an den Spieler, wenn er einen vollen Transporter betreten 
+     will.
+     
+     Die Property kann verschiedene Arten von Daten enthalten:
+
+     - Array aus Strings (1 oder 2 Elemente):
+     Das erste Element wird als Meldung an den Spieler ausgegeben. Sofern
+     das zweite vorhanden ist, wird es als Meldung an den Transporter 
+     ausgegeben. Der Meldung an den Transporter wird Name(WER,2) des 
+     Spielers vorangestellt. An beide Meldungen wird "\n." angehaengt.
+
+     - String:
+     Wird als Meldung an den Spieler ausgegeben, "\n." wird angehaengt.
+
+     - Closure:
+     Die Closure wird gerufen; die Funktion muss sich um die Ausgabe von
+     Meldungen selbst kuemmern. 
+     Hinweis: Eine Closure als Wert zu setzen ist nicht dasselbe wie eine
+     Querymethode auf dieser Property.
+
+
+BEISPIEL
+--------
+::
+
+     SetProp(P_ENTERFAIL,"Dort ist wirklich kein Platz mehr fuer Dich");
+
+     SetProp(P_ENTERFAIL, ({ "Dort ist wirklich kein Platz mehr fuer Dich",
+                             "versucht, auf die Kutsche zu klettern, wird "
+                            +"aber wieder heruntergeschickt" }) );
+
+HINWEIS
+-------
+::
+
+    Wenn die Property nicht gesetzt wird, ist die Defaultmeldung 
+    "Dort ist kein Platz mehr fuer Dich".
+
+SIEHE AUCH
+----------
+::
+
+     P_ENTERMSG, P_LEAVEFAIL, P_LEAVEMSG, transporter
+
+LETZTE AENDERUNG
+----------------
+::
+
+    2020-09-01 Arathorn
+

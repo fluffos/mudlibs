@@ -1,0 +1,382 @@
+/* std/living/compat
+**
+**  Here are the compatibility functions to convert old savefiles,
+**  adapt for new functions and all that.
+**
+**  16-May-95 [Mateese] /std/living/attributes considered.
+**  19-May-95 [Mateese] /std/living/chat considered.
+**  16-Jun-95 [Mateese] /std/living/life,description,restrictions considered.
+**  31-Jul-96 [Mateese] Some LOGs changed to ERRors.
+*/
+
+#include <attributes.h>
+#include <living.h>
+
+#define THIS this_object()
+#define TP   this_player()
+#define ENV  environment
+#define PREV previous_object()
+#define PRE(n) previous_object(n)
+
+#define NETDEAD  (!interactive() && query_once_interactive(THIS))
+
+/*--------------------------------------------------------------------------*/
+
+public varargs mixed Set(string pn, mixed arg, int sc);
+                                 // std/base
+
+// std/living/attributes
+public mapping QueryAttrs();
+public mapping SetAttrs(mapping attrs);
+public mapping QueryAttributes();
+public mapping SetAttributes(mixed attrs);
+public varargs mixed QueryAttr(string aname, int sc);
+public varargs mixed SetAttr(string aname, mixed value, int sc);
+
+// std/living/chat
+public void InitAChats (int chance, mixed *strs);
+public void InitChats (int chance, mixed *strs);
+public varargs void InitMatch ( mixed *fun, string *type, string *match
+                              , int    *delay, mixed  ob);
+public mixed TestMatch (string str);
+
+// std/living/moving
+public void Wimpy ();
+
+// std/living/body
+public varargs int DoDamage (int damage, int gentle);
+public void Die ();
+public void Heal(int amount);
+public int HealSP(int amount);
+public varargs int ReduceHP (int amount, int min, int check_ko);
+public int AddXP(int xp);
+
+// std/living/description
+public int SetGender (int i);
+public int QueryGender ();
+public int QueryAlign ();
+public int UpdateAlign (int up);
+public int QueryIsPlayer();
+public int QueryIsNPC();
+public int SetGhost(int i);
+public int SetFrog(int i);
+string *_armours();
+string *_weapons();
+
+/*--------------------------------------------------------------------------*/
+
+#define LOG(fun) log_file("COMPAT", sprintf("%O: %O->%s\n", THIS, PREV, fun))
+#define CLOG(fun) if (PREV!=THIS) log_file("COMPAT", sprintf("%O: %O->%s\n", THIS, PREV, fun))
+#define LOGO(fun,file) log_file("COMPAT", sprintf("%O: %s overloaded in %s\n", THIS, fun, file))
+#define ERRO(fun,fun2,file) do { log_file("COMPAT", sprintf("%O: %s overloaded in %s\n", THIS, fun, file)); raise_error("Function '"+fun+"' has been replaced by '"+fun2"'.\n"); } while(0)
+#define ERR(fun,txt) do { log_file("COMPAT", sprintf("%O: %O->%s\n", THIS, PREV, fun)); raise_error(txt); } while(0)
+#define EFUN(fun) do { log_file("COMPAT", sprintf("%O: %O->%s\n", THIS, PREV, fun)); raise_error("Unsupported function '"+fun+"'.\n"); } while(0)
+#define OFUN(fun) do { log_file("COMPAT", sprintf("%O: %O->%s\n", THIS, PREV, fun)); raise_error("Outdated function '"+fun+"'.\n"); } while(0)
+
+/*--------------------------------------------------------------------------*/
+
+int check_prev()
+{
+  int i;
+  object p;
+
+  for (i = 0; p = previous_object(i); i++)
+  {
+    if (blueprint(p) == "/obj/tool/xtool")
+      return 0;
+    if (to_string(p) == "/obj/player_dummy")
+      return 0;
+    if (to_string(p) == "/std/player/saver")
+      return 0;
+    if (({int})p->Query("IsTool"))
+      return 0;
+  }
+  return 1;
+}
+
+/* ====================== /std/living/attributes ========================== */
+
+mixed _search_abil (string arg, int type) {
+  mapping attr;
+  mixed *ind;
+  string *args;
+  int i, ix;
+
+  attr = QueryAttributes();
+  ind = m_indices(attr);
+  args = explode(arg, " ");
+  for (i = 0; i < sizeof(args); i++)
+    if ((ix = member(ind, implode(args[0..i], " "))) != -1
+        && pointerp(attr[ind[ix]]) && attr[ind[ix]][AD_TYPE] == type)
+      return ind[ix];
+
+  return -1;
+}
+
+int CheckAbility (string name, int chance) {
+  EFUN("CheckAbility()");
+}
+
+int UseAbility (string name, int chance) {
+  EFUN("UseAbility()");
+}
+
+mixed *DoLearn (mixed *data, string name) {
+  mapping attr;
+  int rc;
+  mixed idx;
+
+//  LOG("DoLearn()");
+  attr = QueryAttributes();
+  if (name) {
+    if ((idx = _search_abil(name, ADT_SPELL)) != -1) {
+      if (attr[idx][AD_LEVEL] > data[AD_LEVEL]) {
+	data[AD_LEVEL] = attr[idx][AD_LEVEL];
+      }
+      if (!data[AD_OBJECT]) {
+	data[AD_OBJECT] = attr[idx][AD_OBJECT];
+      }
+    }
+  }
+  data[AD_LEVEL] = data[AD_LEVEL] +
+    (data[AD_MAX] - data[AD_LEVEL]) * data[AD_LEARN] / 1000;
+  if (name)
+    SetAttr(name, data);
+  return data;
+}
+
+mixed *DoUnlearn (mixed *data, string name) {
+  int rc;
+
+//  LOG("DoUnlearn()");
+  rc = data[AD_LEVEL];
+  data[AD_LEVEL] = rc - ((rc - data[AD_MIN]) * data[AD_UNLEARN]) / 1000;
+  if (data[AD_LEVEL] < data[AD_MIN])
+    data[AD_LEVEL] = data[AD_MIN];
+  if (name)
+    SetAttr(name, data);
+  return data;
+}
+
+mixed *UndoLearn (mixed *data, string name) {
+  int rc;
+
+//  LOG("UndoLearn()");
+  rc = data[AD_LEVEL];
+  data[AD_LEVEL] = (1000 * rc - data[AD_LEARN]*data[AD_MAX])
+                     / (1000 - data[AD_LEARN]);
+  if (data[AD_LEVEL] < data[AD_MIN])
+    data[AD_LEVEL] = data[AD_MIN];
+  if (name)
+    SetAttr(name, data);
+  return data;
+}
+
+mixed *UndoUnlearn (mixed *data, string name) {
+  int rc;
+
+//  LOG("UndoUnlearn()");
+  rc = data[AD_LEVEL];
+  data[AD_LEVEL] = (1000 * rc - data[AD_UNLEARN]*data[AD_MIN])
+    / (1000 - data[AD_UNLEARN]);
+  if (data[AD_LEVEL] > data[AD_MAX])
+    data[AD_LEVEL] = data[AD_MAX];
+  if (name)
+    SetAttr(name, data);
+  return data;
+}
+
+_m_attr (mixed key, mixed val) {
+  LOG("_m_attr()");
+  SetAttribute(key, val);
+}
+
+static mixed _f_attra (mixed key, mixed data) {
+  if (    pointerp(data)
+       && sizeof(data) > AD_TYPE
+       && member(({ ADT_ABIL, ADT_SPELL }), data[AD_TYPE]) != -1
+     ) data = DoUnlearn(data, 0);
+  return data;
+}
+
+public void attributes_reset() {
+  mapping attr;
+  attr = QueryAttributes();
+  if (attr)
+  {
+    walk_mapping(attr, #'_f_attra);
+    SetAttributes(attr);
+  }
+}
+
+/* ========================= /std/living/chat ============================= */
+
+public int QueryToldFromCMsg() {
+  if (check_prev())
+    CLOG("QueryToldFromCMsg()");
+  return THIS->QueryByCMsg();
+}
+public void SetMatch( object ob, string *func, string *type
+                    , string *match, int *delay)
+{
+  OFUN("SetMatch()");
+  InitMatch(func, type, match, delay, ob);
+}
+
+public void _test_match(string str) {
+  OFUN("_test_match()");
+  TestMatch(str);
+}
+
+/* ======================= /std/living/description ======================== */
+
+public int QueryMagicDefense ()     {
+  if (check_prev())
+    OFUN("QueryMagicDefense");
+  return QueryAttr(A_MAGIC_DEFENCE);
+}
+public int SetMagicDefense (int i)  {
+  if (check_prev())
+    OFUN("SetMagicDefense");
+  return SetAttr(A_MAGIC_DEFENCE);
+}
+
+/* ======================= /std/living/life =============================== */
+
+transfer_all_to() {
+  OFUN("transfer_all_to()");
+}
+
+update_alignment(int up) {
+  OFUN("update_alignment");
+  return UpdateAlign(up);
+}
+
+QueryAlignment() {
+  if (check_prev())
+    OFUN("QueryAlignment");
+  return QueryAlign();
+}
+
+int QueryNeuter() {
+  if (check_prev())
+    OFUN("QueryNeuter");
+  return QueryGender() == GENDER_OTHER;
+}
+int QueryMale()   {
+  if (check_prev())
+    OFUN("QueryMale");
+  return QueryGender() == GENDER_MALE;
+}
+int QueryFemale() {
+  if (check_prev())
+    OFUN("QueryFemale");
+  return QueryGender() == GENDER_FEMALE;
+}
+
+int SetNeuter() { OFUN("SetNeuter"); return SetGender(GENDER_OTHER); }
+int SetMale()   { OFUN("SetMale");   return SetGender(GENDER_MALE); }
+int SetFemale() { OFUN("SetFemale"); return SetGender(GENDER_FEMALE); }
+
+_valid_gender() {
+  EFUN("_valid_gender()");
+}
+
+public mapping SetResistance (mixed value)
+{
+  if (value && !mappingp(value))
+    log_file("COMPAT.res", sprintf("%O: %O->Set(... %O)\n", THIS, PREV, value));
+
+  if ((value && intp(value)) || stringp(value))
+    value = ([value:100]);
+  else if (pointerp(value))
+    value = mkmapping(value, map(value, lambda(0, ({ #'return, 100 }))));
+  return Set(P_RESISTANCE, value, 1);
+}
+
+add_exp(e) {
+  OFUN("add_exp");
+  return AddXP(e);
+}
+
+public int SetIsPlayer(int i) {
+  OFUN("SetIsPlayer");
+  return THIS->QueryIsPlayer();
+}
+
+public int SetIsNpc(int i) {
+  OFUN("SetIsNpc");
+  return QueryIsNPC();
+}
+
+public int QueryPlayer() {
+  if (check_prev())
+    OFUN("QueryPlayer");
+  return THIS->QueryIsPlayer();
+}
+
+public int UnsetGhost() {
+  OFUN("UnsetGhost");
+  return SetGhost(0);
+}
+
+frog_curse(f) {
+  OFUN("frog_curse");
+  return SetFrog(f);
+}
+
+/* ======================= /std/living/description ======================== */
+
+#if 0
+string * _list_armours() {
+  LOG("_list_armours");
+  return _armours();
+}
+
+string * _list_weapons() {
+  LOG("_list_weapons");
+  return _weapons();
+}
+#endif
+
+/* ======================= /std/living/moving ============================= */
+
+run_away () {
+  OFUN("run_away");
+  Wimpy();
+}
+
+/* ======================================================================== */
+
+void check_overloads()
+{
+  string file;
+
+  // std/living/chat
+  if (   (file = function_exists("_test_match", THIS))
+      && file != "/std/living/compat")
+    ERRO("_test_match", "TestMatch", file);
+  // std/living/description
+  if (   (file = function_exists("QueryMagicDefense", THIS))
+      && file != "/std/living/compat")
+    ERRO("QueryMagicDefense", "QueryAttr(A_MAGIC_DEFENCE)", file);
+  if (   (file = function_exists("SetMagicDefense", THIS))
+      && file != "/std/living/compat")
+    ERRO("SetMagicDefense", "SetAttr(A_MAGIC_DEFENCE)", file);
+  // std/living/moving
+  if (   (file = function_exists("run_away", THIS))
+      && file != "/std/living/compat")
+    ERRO("run_away", "Wimpy", file);
+  // std/living/life
+  if (   (file = function_exists("die", THIS))
+      && file != "/std/living/compat")
+    ERRO("die", "Die", file);
+  if (   (file = function_exists("add_exp", THIS))
+      && file != "/std/living/compat")
+    ERRO("add_exp", "AddXP", file);
+  if (   (file = function_exists("QueryPlayer", THIS))
+      && file != "/std/living/compat")
+    ERRO("QueryPlayer", "QueryIsPlayer", file);
+}
+
+/****************************************************************************/

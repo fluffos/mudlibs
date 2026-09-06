@@ -1,0 +1,278 @@
+BASE
+  base
+
+
+FILES
+  <b/base.h>    Include: Definitions
+  "/b/base.d"   Include: Prototypes
+  /b/base       Inherit: Code
+
+
+LAST UPDATE
+  Mateese, 14-Jul-1996
+
+
+DESCRIPTION
+  The /b/base is the core of all objects. It contains the property handling
+  along with some administrational functions.
+  As the property handling is a fundamental of micro, b/base must always be
+  inherited.
+
+
+    mapping P_Props
+      A two-valued mapping of all properties the objects contains (except
+      those whose value and mode are 0):
+        mixed P_Props[<name>, F_VALUE] is the base value of a property
+        int   P_Props[<name>, F_MODE]  is the mode of a property
+      The mode is a binary-Or of these values:
+        PM_FIXED     : Property is fixed.
+        PM_NOSAVE    : Property is not saved.
+        PM_PROTECTED : Property is protected.
+        PM_PERM_HOOK : Property will never take closures as them
+        PM_HOOK      : Property doesn't take closures as them
+        PM_STRING    : Property is a dynamic string.
+      It is not possible change protected properties from outside, or
+      fixed properties at all.
+
+    int P_Cleanup (int ref)
+      This property influences the handling of the object on cleanup:
+        ref: the ref-parameter passed to clean_up()
+      Result:
+        <= 0: object may selfdestruct if it has no environment (default).
+         = 1: object shall never clean up.
+         > 1: object might clean up later.
+
+    string P_Creator
+    string P_ICreator
+      The name of the object resp. of the interactive player which created
+      this object. This is mostly useful for debugging purposes.
+
+    int P_Cloned
+      Zero if the object is a blueprint with no clones, negative if the
+      object is a blueprint which has been cloned at least once.
+      Positive if the object is a clone.
+
+    int P_Inherited
+      Zero if the object was normally loaded or cloned, non-zero if the object
+      was loaded by inheritance.
+
+    int P_CreaTime
+      The time when this object instance was created.
+      This is mostly useful for debugging purposes.
+
+    int P_LastReset
+      The time when the object was last reset.
+
+    mixed P_Autodata
+      If an object is to be autoloading, this property has to return a
+      non-zero value. This value will be set as P_Autodata on recreation to
+      let the object re-initialize itself.
+      Implementation is by using filterfunctions (Set- and Querydata()).
+      Default is to return P_Props (unless P_NoAutoload is set) resp. to
+      set P_Props.
+
+    mixed P_NoAutoload
+      Setting this property to a non-zero value makes the holding object
+      non-autoloading, by forcing P_Autodata to return 0.
+      Note that this property can just inhibit the autoloading of an object,
+      not vice versa. Nor is it an indicator for the autoloading behaviour
+      of an object.
+
+    int P_ResetInterval
+      If non-zero, it is the time to elapse at least between to reset()s,
+      resp. the time to elapse between the creation and the first reset().
+      If zero, the default interval computed from TIME_TO_RESET is used.
+
+    object|string P_VMaster
+      Set to the object (resp. it's name) of that object which the gamedriver
+      has to call if it can't load an object. The function called is
+        object compile_object(string filename_to_load)
+      and has either to load and return the object, or to return 0 if the
+      name is invalid.
+      P_VMaster is queried in the object causing the load and, if this fails,
+      in the environment of the loading object.
+      If P_VMaster is not set, the lfun compiler_object() is called in the
+      objects themselves instead.
+
+
+  Autoloading is implemented by filtering P_AutoObject:
+
+    mixed QueryAutodata ()
+      Return the data needed for autoloading.
+
+    mixed SetAutodata (mixed p)
+      Restore the data saved over autoloading.
+      Filterfunction for Set(P_AutoObject).
+
+
+  Saving and restoring of an objects variables and properties is done by
+
+    void save (string file)
+      Save the object into <file>.o.
+        file: the name of the savefile.
+      This is in fact a save_object(), but takes care of saving the saveable
+      properties. Fixed properties aren't saved.
+
+    int restore (string file)
+      Restore the object from <file>.o.
+        file: the name of the savefile.
+      Result:
+        True on success.
+      This is in fact a restore_object(), but takes care of restoring of saved
+      and unfixed properties.
+
+
+  Other important functions:
+
+    int remove()
+      Selfdestruct the object.
+      Use of this function ensures that the environment is updated correctly.
+
+    int clean_up (int ref)
+      Allow the object to clean up itself.
+        ref < 0: the environment calls the object to clean up.
+            = 0: object is a clone, or a blueprint with replaced program.
+            = 1: object is swapped and/or unreferenced blueprint.
+            > 1: object has <ref> references.
+      Result:
+        0: object will never clean up (or did selfdestruct with this call).
+        1: object does not clean up now, but wants to be asked again later.
+      The function calls Query(P_Cleanup, ref) and analyzes the result:
+        <= 0: object selfdestructs if it has no environment.
+         = 1: object will never clean up.
+         > 1: object might clean up later.
+
+    string replace_pgm (void|string *except, ...)
+      Replace this objects program by one parents program.
+        except: one string/an array of strings denoting the names of functions
+                which may be ignored during the checks.
+      Result:
+        The file_name() of the object providing the replace program, or 0 if
+        no replace was possible.
+      The function checks if this object is able to replace its program (it
+      mustn't be a clone, and mustn't contain other functions than create()
+      and those given in 'except'.
+
+    void create ()
+      Initialise the object and set some initial properties.
+      This function is called first whenever an object is loaded is cloned.
+      It is _not_ called for objects which are loaded-by-inheritance!
+      In fact, create() is just the fallback function - when an object is
+      created, these functions are searched first:
+        create_inh()  : for inherited blueprints.
+        create_clone(): for cloned objects.
+        create_obj()  : for loaded objects.
+
+    void create_inh ()
+    void create_clone ()
+    void create_obj ()
+      The initialisation function for inherited/cloned/loaded objects.
+      They set up P_Cloned and P_Inherited and then call create().
+
+    int prevent_shadow (object shadow)
+      This object shall be shadowed by object <shadow>.
+      Result:  0: allows the shadowing
+              !0: forbids it.
+      Default behavious is to forbid shadows on objects from
+      /b, /adm, /g, /std, and /secure.
+
+
+  For a detailed discussion of properties and their handling functions see
+  properties(basics), the following list just explains the functions shortly:
+
+    mixed Query ( string name, mixed arg1 ... mixed arg8)
+      Default function to query properties.
+        fun       : the name of the property to query.
+        arg1..arg8: the arguments given to the call.
+      Result:
+        Whatever it should be, default is 0.
+      The function is called by other object to query a property.
+      The basic value is retrieved from the property mapping, but may be
+      modified by a lfun Query<name>(<value>, <arg1>..<arg8>). If it exists,
+      its result value is returned instead of the basic value.
+
+    mixed Set ( string name, mixed arg1 ... mixed arg8)
+    mixed SetHook ( string name, mixed arg1 ... mixed arg8)
+      Default function to set properties.
+        fun       : the name of the property to set.
+        arg1      : the value to set, normally.
+        arg2..arg8: other arguments given to the call.
+      Result:
+        Whatever it should be, default is 0.
+      The function is called by other object to set a property. Basically
+      it sets the value into the property mapping, but before it may be
+      filtered through a lfun Set<name>(&<arg1>, <arg2>..<arg8>). This function
+      has to modify <arg1> into the value to set in the mapping. The
+      result from the Set()-call is then the return value.
+      SetHook() differs from Set() in that the PM_HOOK mode is set if <arg1> is
+      a closure.
+
+    mixed Get ( string name, mixed arg1 ... mixed arg8)
+      Dispatch function to query the effective value of a property.
+        fun       : the name of the property to query.
+        arg1..arg8: the arguments given to the call.
+      Result:
+        Whatever it should be, default is 0.
+      The function is called by other object to query a property. It recognizes
+      the existance of <name>() or Query<name>() functions and filters the value
+      from the property mapping through them.
+
+    int QueryMode (string name, ...)
+      Return the mode of the named property.
+        name : the name of the property to query the mode.
+      Result:
+        An integer build from the combination of the flags PM_FIXED,
+        PM_PROTECTED, PM_NOSAVE, PM_PERM_HOOK and PM_EXIST as approbiate
+        (so 0 means "prop doesn't exist").
+
+    int SetMode (string name, int new, ...)
+      Set the mode of the named property.
+        name : the name of the property to set the mode.
+        new  : the new mode to set (e.g. a combination of PM_PROTECTED and PM_NOSAVE).
+      Result:
+        The mode now in use for that property.
+      It is illegal to change the mode of an already protected property.
+
+    mixed query (string name, ...)
+      Query a mapped property.
+        name : the name of the property to query.
+      Result:
+        The value queried.
+
+  The properties as a whole are dealt with by:
+
+    mixed SetProps (mapping new)
+      Set all mapped properties and their modes at once.
+        new: the new property mapping with two elements per entry:
+             F_VALUE: the value itself
+             F_MODE : its mode
+      Result:
+        The newly set property mapping, as returned by QueryProps().
+      It is not possible to change protected properties from outside, or
+      fixed properties at all.
+      Filterfunction for Set(P_Props).
+
+    nomask mapping QueryProps ()
+      Return the complete property mapping including modes (a copy of it!).
+      For each name, the subindex F_VALUE holds the value, and F_MODE its mode.
+      Filterfunction for Query(P_Props).
+
+    mapping getProps ()
+      Return the saveable(!) properties as one mapping, with F_VALUE holding
+      the value, and F_MODE holding the mode.
+      Fixed properties are not saveable per definition.
+      Auxiliary function for save().
+
+    void putProps (mapping p)
+      Restore the given properties.
+      Fixed properties can't be restored, protected ones not from outside.
+      Auxiliary function for restore().
+
+
+BUGS
+  TODO: Recursive save()/restore() for object-containing objects.
+  TODO: Dynamic strings are not implemented yet.
+
+
+SEE ALSO
+  autoloading(basics), properties(basics), virtual(basics)

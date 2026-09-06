@@ -1,0 +1,214 @@
+CONCEPT
+  properties
+
+
+LAST UPDATE
+  Mateese, 07-Nov-1994, 05:00 MET
+
+
+INTRODUCTION
+  Properties are sort of generalized variables, which can be read and
+  most times even changed by other objects. Each objects defines a set of
+  properties with predefined names (symbolically stored in the objects
+  include file), but new properties may be added for single objects at
+  runtime.
+
+  micro implements a fairly elaborate property system: properties may
+  be queried and set as a whole, and even are saved to/restored from
+  files automatically. The usage requires a certain programming
+  discipline, but is beneficious: e.g. since all important information of
+  an arbitrary object is always available, every object can be made
+  autoloading.
+
+  Properties are accessed through just four lfuns, thus preventing the
+  source (and the system's memory) from being cluttered up with
+  query_xxx() and set_xxx() functions.
+  Disadvantage is that every wizard has to adhere to this scheme.
+
+
+DESCRIPTION
+  A property is a triplet consisting of the name, the value, and the mode.
+  The name is always a string, the value may be of any type.
+  The mode is an integer holding several bitflags:
+    PM_FIXED:
+      The value of the property may not be changed after
+      initialisation.
+    PM_NOSAVE:
+      The value of the property is not written to savefiles.
+    PM_PROTECTED:
+      The property may not be changed from outside.
+    PM_PERM_HOOK:
+      The property will always consider closures as hooks.
+    PM_HOOK:
+      The property has been set to a closure functioning as hook.
+      The 'effective value' will be computed by executing the closure.
+      This flag can be set just indirectly through using SetHook()
+      instead of Set().
+    PM_STRING:
+      The property has been set to a dynamic string. Querying the
+      'effective value' will evaluate the string, querying the
+      'real value' will return the base string (internally a precompiled
+      is stored).
+    PM_EXISTS
+      This mode is used for results QueryMode() only.
+
+  The various modes are grouped into fields as:
+    PMF_MODE   = (PM_FIXED|PM_NOSAVE|PM_PROTECTED|PM_PERM_HOOK)
+    PMF_TYPE   = (PM_HOOK|PM_STRING)
+    PMF_XTYPE  = (PM_PERM_HOOK|PMF_TYPE)
+
+
+  The value of a property is queried twofold: as the 'real' and as the
+  'effective' value. The 'real' value is the value stored in the object, the
+  'effective' value is the real value, modified by the effects of the other
+  property settings if necessary. As an example imagine a monster being made
+  invisible. Normally, only the effective values are queried and set, access
+  to the real values is needed almost solely by the object itself.
+
+  Experience showed that in quite a lot cases the mere act of setting
+  or querying a property has to trigger further actions, so the
+  property system is able to call appropriate functions for the
+  three actions on properties, acting as filter on the value set or queried.
+
+  In a nutshell, following conventions and functions are used:
+
+    Standard properties have their 'Name' defined as preprocessor
+      macro P_Name.
+    Properties with value 0 and mode 0 are not stored at all.
+
+    nomask mixed query (string name)
+      The value set for the property <name> is returned.
+
+    static nomask mixed set (string name, mixed value)
+      This sets the real value of the property <name> to <value>.
+      Result is the value set.
+      Illegal accesses to protected or fixed properties are
+      caught with a raise_error().
+
+    mixed Set (string name, mixed value, mixed args...)
+      The effective <value> of the property <name> is set, by filtering
+      the value through Set<name>() and then setting it by set(<name>, value).
+      Result is <value> resp. the value returned from Set<name>().
+
+    mixed SetHook (string name, mixed value, mixed args...)
+      As Set(), but using a closure as <value> will result in PM_HOOK being
+      set.
+
+    mixed Query (string name, mixed args...)
+      The real value of the property <name> is returned.
+      It is the basic value query(<name>), filtered through Query<name>().
+      Hook value closures are returned as them, dynamic string values as
+      their base string.
+
+    mixed Get (string name, mixed args...)
+      Return the effective value of the property <name>. It is the basic
+      value query(<name>), filtered either through <name>() or through
+      Query<name>().
+      Hook value closures are executed before filtering, as are dynamic
+      string values.
+
+
+  As mentioned above, the values queried and set are filtered through
+  lfuns, if they exist of course.
+
+    varargs mixed Set<Name> (mixed & value, mixed args...)
+      The function gets passed as first parameter the <value> which was
+      passed to Set(), and has to modify it to the value which is to
+      be stored in the property mapping. The other <args> have been passed
+      through from Set() and may be interpreted freely.
+      The result from the function has to be 'the value set' and will
+      be returned from Set().
+
+    varargs mixed Query<Name> (mixed value, mixed args...)
+      The function is passed the <value> taken from the property mapping
+      and has to return the 'real value' to be returned from Query().
+      The other <args> have been passed through from Query() and may be
+      interpreted freely.
+
+    mixed <Name> (mixed value, mixed args...)
+      As Query<Name>(), but this function has to return the 'effective
+      value' for property <Name>.
+
+
+  The modes of a property are accessed by these functions:
+
+    nomask int SetMode (string name, void|int new)
+      Set the mode of property <name> to <new>. Result is the mode
+      newly set.
+      For the new mode only combinations of PM_PROTECTED, PM_FIXED,
+      PM_NOSAVE and PM_PERM_HOOK are considered. It is illegal to
+      change the mode of a fixed property.
+
+    nomask int QueryMode (string name)
+      Returns the mode of the property <name>.
+      If the property doesn't exist, 0 is returned, else their
+      mode ored with PM_EXISTS.
+
+  The properties may be handled as a whole:
+
+    nomask mixed SetProps (mapping new)
+      The function sets all properties from the mapping <new>.
+      The mapping is indexed by the property names, and holds
+      two values per property entry: F_VALUE (0) is the value,
+      and F_MODE (1) its mode.
+      Result are the set properties, are returned by QueryProps().
+      It is not possible to change protected properties from
+      outside, or fixed properties at all.
+
+    nomask mapping QueryProps ()
+      Returns the a mapping of all properties with both the value and
+      mode stored for each property name.
+
+    void save (string file)
+      Write the saveable properties of the object into <file>.o.
+      Fixed properties aren't saved.
+      This function is also called by the redefined efun save_object().
+
+    int restore (string file)
+      Restore the properties of the object from <file>.o.
+      Only unfixed properties are restored.
+      This function is also called by the redefined efun
+      restore_object().
+
+
+  To use the properties of an existing object, just call the functions Set()
+  and Get() to deal with the effective values. The function Query() should be
+  used only if you really mean the real value of a property.
+  Don't hesitate to store own values in new properties if it is useful. For
+  example an object changing the description of a living could store the
+  original description in a 'save' property created on the fly (this is also
+  an example where the 'real' value is needed). Just take care that your
+  private property gets an unique name.
+
+  Programming own, private properties is as simple: again use Set(), Get()
+  and Query() as needed.
+  It is tempting to store the value of a property in separate variables,
+  abusing the filter functions as set/query-functions, but that would not
+  only break the mudlibs consistency, but also be contraproductive in terms
+  of speed, size, and maintanability. Similar, direct use of set() and
+  query() is almost never necessary.
+
+  Inventing new properties for standard objects is no easy task, and you
+  should at least talk to some other wizards before presenting ideas of yours
+  to the public. "Official" properties are always listed in the objects
+  include files.
+
+
+CREDITS
+  The property handling is an improvement of the properties originally
+  developed in Nightfall, which themselves are based upon an idea from
+  Genesis.
+  The 'Normalized Properties', developed by Hate for MorgenGrauen, were
+  an important stepstone, teaching Mateese how she doesn't like to do it.
+
+
+TODO
+  Dynamic strings still lack implementation.
+
+
+IMPORTANT
+  Refer to perception(C).
+
+
+SEE ALSO
+  perception(basics), base(b)

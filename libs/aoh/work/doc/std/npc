@@ -1,0 +1,812 @@
+PRELIMINARY 
+OBJECT
+	/std/npc
+
+
+LAST UPDATE
+	Mateese, 06-Aug-96 21:00 MET
+
+
+SYNOPSIS
+	#include <npc.h>
+	#include <search.h>
+	inherit "/std/npc";
+
+	    OR
+
+	clone_object("/std/npc");
+
+DESCRIPTION
+
+	The several modules are:
+	  /std/npc/body     : Health and death.
+	  /std/npc/chat     : Question, Answers and Mumbles.
+	  /std/npc/cmds     : Miscellanous commands.
+	  /std/npc/putget   : Handling of things.
+	  /std/npc/view     : Sensing of things.
+
+
+DESCRIPTION - /std/npc/body
+	This module implements the extended health functions and
+	attributes of NPCs. Most of all, it adds alcohol, food and
+	drink to the body.
+
+	If the NPC is drunk, it heals faster. On the other hand, if
+	it's hungry or thirsty, it heals slower. If it's nearly
+	starving or drying out, it's HP are continually reduced, down
+	to a minimum value of 10.
+
+
+	Following attributes and properties are builtin:
+
+	  int A_MAX_ALCOHOL  "MaxAlcohol"
+	  int A_MAX_DRINK    "MaxDrink"
+	  int A_MAX_FOOD     "MaxFood"
+	    The max amount of alcohol, food or drinks the npc may
+	    have.
+
+	  int A_ALCOHOL      "Alcohol"
+	  int A_DRINK        "Drink"
+	  int A_FOOD         "Food"
+	    The current amount of alcohol, food or drinks the npc
+	    currently had.
+	    Food and drink may go negative, where they hinder any
+	    healing process.
+
+	  int A_DEG_ALCOHOL  "DegAlcohol"
+	  int A_DEG_DRINK    "DegDrink"
+	  int A_DEG_FOOD     "DegFood"
+	    The degeneration rate of A_ALCOHOL, A_DRINK and A_FOOD,
+	    measured in 1/100 points per heartbeat.
+	    These are initialized to ALCOHOL_DEG, DRINK_DEG and
+	    DEG_FOOD from /sys/health.h .
+
+	  int A_RATE_ALCOHOL  "RateAlcohol"
+	    The added regeneration rate the NPC has when being drunk.
+	    This value is added to its intrinsig A_RATE_HP/A_RATE_SP.
+	    It is initialized to ALCOHOL_RATE from /sys/health.h .
+
+	  int AddAlcohol (int strength)
+	  int AddDrink   (int strength)
+	  int AddFood    (int strength)
+	    Change the amount of A_ALCOHOL, A_DRINK and A_FOOD by
+	    <strength>. Result is the value by which the amount was
+	    actually changed. So if the intended change would exceed
+	    the MAX_-value, nothing is changed and 0 is returned.
+
+	  void DoDigest ()
+	    To be called from heartbeat, this function changes A_FOOD
+	    and A_DRINK accordings to its A_DEG-rates, and also deals
+	    with the HP reduction for starving or drying-out livings.
+	    If the attribute values fall below 0, suitable messages
+	    are printed.
+	    For interactive livings, the HEART_HEAL heartbeat is
+	    started.
+	    The function has no effect when called for a wizard or a
+	    ghost.
+
+
+	These functions are redefined:
+
+	  int QueryRegHP()  A_REG_HP
+	  int QueryRegSP()  A_REG_SP
+	    According to the levels of A_ALCOHOL, A_DRINK and A_FOOD,
+	    the actual A_REG-rate is modified.
+	    If the lifing is drunk, A_RATE_ALCOHOL is added.
+	    If the lifing is hungry or thirsty, A_RATE_HP resp.
+	    A_RATE_SP is subtracted.
+	    The modified rate is then returned.
+
+	  void Death()
+	    Called in the moment of death, this function calls the
+	    lfun second_life() in the NPC. If this function does not
+	    exist or returns 0, the inherited Death() is called which
+	    will destruct the NPC.
+
+	  void heart_beat()
+	    The heart_beat function extends the normal inherited
+	    heart_beat() by the alcohol handling.
+	    If the NPC is drunk, messages are written on occasion, and
+	    the degeneration of A_ALCOHOL is handled.
+	    For interactive beings, DoDigest() is called.
+	    Note: for non-interactive beings, you have to call
+	    DoDigest() yourself.
+
+
+	The module is initialised in
+
+	  void create ()
+
+
+	These functions are assumed as being available in other
+	modules:
+	  std/living/heart	 : DropHeart(), GetHeart(), CheckHeart()
+
+
+DESCRIPTION - /std/npc/chat
+	One important thing about livings is the ability to chat and
+	to answer question.
+
+	  int P_CHAT_CHANCE  "ChatChance"
+	    A value in 0..100 giving the chance per heartbeat that
+	    the living will say something.
+	    Setting the value to something non-zero will (re)start the
+	    call_outs to OneChat().
+
+	  int P_ACHAT_CHANCE  "AChatChance"
+	    A value in 0..100 giving the chance per combat round that
+	    the living will say something.
+
+	  mixed * P_CHATS  "Chats"
+	    The collections of chats to be said over the time.
+	    Each chat can be a string, which is just said, or a
+	    closure, which is called to return the string to say (or 0
+	    to be silent).
+
+	  mixed * P_ACHATS  "AChats"
+	    The collections of chats to be said during combat.
+	    Each chat can be a string, which is just said, or a
+	    closure, which is called with the current enemy as
+	    argument to return the string to say (or 0 to be silent).
+
+	The chatting is done using self-initiated call_outs to this
+	function:
+
+	  void DoChat ()
+	    This function does one chat by selecting randomingly one
+	    from P_CHATS and saying it.
+
+	  void OneChat (int justSched)
+	    If <justSched> is zero, one call to DoChat() is made.
+	    In all cases, a call_out with an delay approbiate to
+	    P_CHAT_CHANCE is scheduled to OneChat() to continue
+	    chatting IF there is a living around to hear it.
+	    If P_CHAT_CHANCE is zero, nothing is scheduled.
+
+	  void DoAttackChat (object enemy)
+	    This function issues an randomingly selected attack chat
+	    from P_ACHATS to the room, if the P_ACHAT_CHANCE permits.
+	    It is called directly by the combat heartbeat.
+
+	These functions ease the initialization of the chats:
+
+	  void InitChats (int chance, mixed *strs)
+	    Sets P_CHAT_CHANCE to <chance> and P_CHATS to <strs>.
+
+	  void InitAChats (int chance, mixed *strs)
+	    Sets P_ACHAT_CHANCE to <chance> and P_ACHATS to <strs>.
+
+
+	The living is also able to react on things it hears using 'talks'.
+	Everything it hears is parsed to be one of this forms:
+
+	  '<who> <type><match> <what>'
+	  '<who> <type><match><what>'
+	  '<who> <type><match>'
+	  '<who> <type> <match> <what>'
+	  '<who> <type> <match><what>'
+	  '<who> <type> <match>'
+
+	<type> and <match> are predefined (default is the empty string ""),
+	<who> and <what> are parsed from the message heard.
+
+	So every talk is described by <type> and <match>, and if a
+	parse was successful, the <who> (and possible <what>) are
+	given to an 'talkfun'ction in a 'talkobject' to process.
+
+	  string P_TALK_MATCH  "TalkMatch"
+	    An array of <match> strings.
+
+	  string P_TALK_TYPE   "TalkType"
+	    An array of <type> strings.
+
+	  mixed  P_TALK_FUN    "TalkFun"
+	    An array of function designations.
+	    Each can be the string with a function name, or a closure.
+
+	  int	 P_TALK_DELAY  "TalkDelay"
+	    An array of integers defining the delay between the match
+	    of a talk and the call to its function. 0 means no delay.
+
+	  mixed  P_TALK_OBJ    "TalkObject"
+	    The talk object to call the talk function in.
+	    It can be given as string with the object name, or as
+	    actual object.
+	    Talks for which a closure is set as function, ignore the
+	    talkobject.
+
+	  void void InitMatch ( mixed  *fun  , string *type
+			      , string *match, object ob   )
+	    Sets P_TALK_FUN from <fun>, P_TALK_TYPE from <type>,
+	    P_TALK_MATCH from <match> and P_TALK_OBJ from <obj>.
+
+	  mixed TestMatch (string str)
+	    Match the given <str> against all set talks and return the
+	    result of the talkfunction call (or 0).
+
+
+	Finally, the living can react on questions.
+	This is implemented as a command 'ask' bound to the function
+	fask().
+	The answers (and the default 'shrug message') can be set as
+	strings or as closures. In the latter case, the closure is
+	evaluated when needed with the questioned keyword as argument
+	and has to return the actual answer.
+	A third possibility is to set the answer/shrugmessage to an
+	array of two strings - the first is sent to the player asking,
+	the second the the environment. As 0 or "" entries are
+	ignored, 'silent' asking is possible (only the asking player
+	hears the answer).
+
+	  mapping P_QUESTIONS  "Questions"
+	    A mapping containing the answers, indexed by the key
+	    strings in a question.
+	    To ease initialisation, the property may be _set_ using a
+	    flat array of: ({ <question>, <answer>, <question>,
+	    <answer>... }), whereas each <question> may be a single
+	    string, or an array of strings which then all get the same
+	    answer.
+
+	  void AddQuestion (string q, mixed a, void|int silent)
+	    Add an answer <a> for the question <q>.
+	    Setting <silent> to non-zero is an easy way to specify
+	    'silent' answers:
+	       AddQuestion("foo", "bar", 1)
+	    is equivalent to
+	       AddQuestion("foo", ({ "bar", 0 }))
+
+	  mixed P_SHRUG_MSG   "ShrugMsg"
+	    The default answer given if a living does not know the
+	    answer to a question. As the answers, this may be a string
+	    or a closure. If not set, "<name> shrugs helplessly." is
+	    used as default.
+
+	Each question must be unique!
+	The function called for a question 'asked', is
+
+	  int fask (string str, void|int inh)
+	    Accept a question of type 'ask <living name> about <q>'
+	    and write the answer if <q> is one of the set questions in
+	    P_QUESTIONS.
+	    <living name> must be of course the asked living.
+	    If the command fails, a decent failure message is set
+	    using notify_fail().
+	    If <inh> is non-zero, the function returns a special
+	    code on failures instead of the normal 0:
+	      ASK_OK	    : question understood and answered
+	      ASK_NO_ARG    : <str> is missing
+	      ASK_CANT_PARSE: <str> is not of the required format,
+			      or <living name> does not denote this
+			      living
+	      ASK_SHRUG     : question understood, but no answer was
+			      provided.
+	    By overloading fask() and using these codes more complicated
+	    questions can be added.
+
+	The following standard functions are used to implement talks
+	and questions:
+
+	  void catch_tell (string str)
+	    This will get all the messages from outside.
+	    If no talk object is set, or the living hears itself,
+	    nothing is done.
+	    Else the <str> heard is passed to TestMatch().
+	    Recursion is prevented using a semaphore scheme and a
+	    buffer.
+
+	  void ResetSema ()
+	    Reset semaphore and buffer of catch_tell().
+	    Use this in emergencies only!
+
+	  void init ()
+	    If questions are set, the command 'ask' is bound to
+	    fask().
+
+	These functions are assumed as being available in other
+	modules:
+	  /std/thing/description : norm_id()
+	  /std/living/description: QueryName()
+
+
+DESCRIPTION - /std/npc/cmds
+	This module implements several miscellaneous commands: vis,
+	invis.
+
+	Where necessary, a separate 'action' function is available
+	beside the normal command function bound to the verb.
+
+	The command functions, which are called from player/NPC
+	commands parse the arguments, are:
+
+	  int finvis (string arg)
+	    Implements 'invis'.
+
+	  int fvis (string arg)
+	    Implements 'invis'.
+
+
+	The command functions are bound to the actions in this
+	function, which has to be called during create():
+
+	  void add_npc_cmds()
+
+
+	These functions are assumed as being available in other
+	modules:
+	  /std/living/attributes: QueryAttr(), SetAttr().
+
+
+DESCRIPTION - /std/npc/putget
+	This module implements the take/get, put, drop and give
+	commands. Available are both the simple command functions as
+	well as the 'real' action functions.
+
+	  mixed * DropTake (string verb, mixed what, int mode)
+	    Drop (<verb> == "drop") or take (<verb> == "take") the
+	    objects <what> using <mode>.
+	    The NPC can drop just those things carried somewhere, and
+	    take just those things not carried on top-level.
+	    <what> may be a single id-string, an object, or an array of
+	    objects and id-strings. The objects for the id-strings are
+	    Search()ed using SEARCH_MULTI. If the bitflag
+	    PUTGET_REALLY is set in <mode>, wielded/worn equipment
+	    items are handled automatically.
+	    If the bitflag PUTGET_SILENT is not set in <mode>, the
+	    function issues appropriate messages.
+	    Result is 0 if the things to move haven't been found
+	    (notify_fail() is set then), or on success either a simple
+	    (but possibly empty) array of the things moved.
+	    If the bitflag PUTGET_FULL is set in <mode>, the success
+	    result is an array of five sub-arrays:
+	      object * res[PUTGET_OK]:
+	        The objects moved.
+	      object * rec[PUTGET_NODROP]: 
+	        The objects unmoved because of a P_NODROP/P_NOGET setting.
+	      object * rec[PUTGET_NOMOVE]:
+	        The objects unmoved because of a missing move() lfun.
+	      object * rec[PUTGET_NOLEAVE]:
+	        The objects unmoved because they couldn't leave their
+	        environment.
+	      object * rec[PUTGET_TOOHEAVY]:
+	        The objects unmoved because they didn't fit into their
+	        destination.
+
+
+	  mixed * GivePut (string verb, mixed what, mixed to, int mode)
+	    Give (<verb> == "give") the objects <what> to the living
+	    <to> or put (<verb> == "put") the objects into the thing
+	    <to>, using <mode>.
+	    The NPC can give/put the things it carries somewhere, but
+	    also the things lying in the room around him.
+	    Though, the latter are taken first (after giving the
+	    carried items away) using DropTake("take",...), and are
+	    then given away by a scheduled call_out() to GivePut().
+	    <what> may be a single id-string, an object, or an array of
+	    objects and id-strings. The objects for the id-strings are
+	    Search()ed using SEARCH_MULTI. If the bitflag
+	    PUTGET_REALLY is set in <mode>, wielded/worn equipment
+	    items are handled automatically.
+	    <to> can be an object or an id-string, the latter being
+	    searched as a single object.
+	    <mode> and result are like DropTake(), except that objects
+	    which were taken first are already included as
+	    '_OK'-objects.
+
+
+	  mixed * EquipLayoff (string verb, mixed what, int mode)
+	    Equip (<verb> == "equip") or unequip (<verb> == "layoff")
+	    the living with/of the objects <what> using <mode>.
+	    The NPC can equip itself just with those things carried on
+	    skin, but unequip of any object in the vicinity.
+	    <what> may be a single id-string, an object, or an array of
+	    objects and id-strings. The objects for the id-strings are
+	    Search()ed using SEARCH_MULTI. If the bitflag
+	    PUTGET_REALLY is set in <mode>, wielded/worn equipment
+	    items are handled automatically.
+	    If the bitflag PUTGET_SILENT is not set in <mode>, the
+	    function issues appropriate messages.
+	    Result is 0 if the things to move haven't been found
+	    (notify_fail() is set then), or on success either a simple
+	    (but possibly empty) array of the things moved.
+	    If the bitflag PUTGET_FULL is set in <mode>, the success
+	    result is an array of five sub-arrays:
+	      object * res[EQUIP_OK]:
+	        The objects handled.
+	      object * rec[EQUIP_NOEQUIP]: 
+	        The objects not handled because they already were
+	        equipment, or aren't the NPCs equipment.
+	      object * rec[EQUIP_FAIL]:
+	        The objects which ignored the setting of P_EQUIPPED.
+
+
+	Access to these functions is made easy using the following
+	following functions, which are also recommended for everyday
+	use.
+
+	  mixed * Drop (mixed what, int mode)
+	  mixed * Take (mixed what, int mode)
+	  mixed * Give (mixed what, mixed to, int mode)
+	  mixed * Put (mixed what, mixed to, int mode)
+	    Parameters and result see DropTake() and GivePut().
+
+	  mixed * Equip (mixed what, int mode)
+	  mixed * Layoff (mixed what, int mode)
+	    Parameters and result see EquipLayoff().
+
+
+	The action functions are bound to a set of command functions,
+	which are called from player/NPC commands and parse the
+	arguments.
+	Each of the functions allows the specification of a list of
+	objects (e.b. "torch, beer from bag and car") for the objects
+	being moved. As usual, they return non-zero on success.
+
+	  int fdrop (string arg)
+	    Implements 'drop <thing(s)>'
+
+	  int ftake (string arg)
+	    Implements 'take <thing(s)>', which is also aliased to
+	    'get <thing(s)>'.
+
+	  int fgive (string arg)
+	    Implements 'give <thing(s)> to <someone>'.
+
+	  int fput (string arg)
+	    Implements 'put <thing(s)> into <something>'.
+
+	  int fequip (string arg)
+	    Implements 'equip [with] <thing(s)>'.
+
+	  int flayoff (string arg)
+	    Implements 'lay [aside|down] <thing(s)>'.
+
+	The command functions are bound to the actions in this
+	function, which has to be called during create():
+
+	  void add_putget_cmds()
+
+
+	The module features several auxiliary functions which help in
+	constructing the messages or parsing the data.
+	
+	This auxiliary function is quite helpful when constructing the
+	messages, but its a bit complex to understand:
+
+	  mapping sortObjsByEnv (object * what, object me, object * &envs)
+	    This function is given the list <what> of objects which
+	    are to moved around, the 'default environment' <me>, and a
+	    references to variable <envs> to store computed data.
+	    The function sorts the given objects by their environments
+	    and returns the result: keys are the various environments,
+	    data for each key is an array of the objects from this
+	    environment. 
+	    <envs> is then the list of environments, starting with
+	    <me> (given that <me> contains one of the objects as well).
+
+	  string makeFromMsg ( object        me
+                             , mapping       bags
+                             , object      * envs
+	                     , void|object * what
+                             )
+	    This function is given a sorted-by-environmens list of
+	    objects in <bags> and <envs> (as computed by
+	    sortObjsByEnv()) and the 'default environment' <me>.
+	    Result is a string describing the objects, being
+	    of the form "(from <env1>) <thing1>, <thing2> and
+	    <thing3>, (from <env2>) <thing4>, <thing5> and
+	    <thing6>...". The contents of <me> come first and are not
+	    prepended with '(from ...)'. If several things have a
+	    matching short description, they are abbreviated to
+	    '<thing>(<count>)'. The string does not end with a
+	    newline.
+	    The optional argument <what> may be used to restrict the
+	    output data to those objects of <bags> which are also
+	    given in <what>.
+
+
+	The following auxiliary function implements the 'take before
+	give away' functionality:
+
+	  private mixed * takeBefore ( closure action
+                                     , string verb, mixed what, mixed to
+                                     , int mode) 
+	    The function calles Take() with <what> and <mode> as
+	    arguments and returns its result.
+	    Additionally, if at least one of the given things <what>
+	    had been taken, a call_out() is scheduled for <action>
+	    with <verb>, the list of taken things, <to> and <mode> as
+	    arguments, delay is 1 second.
+
+
+	These functions are assumed as being available in other
+	modules:
+	  /std/living/description: Search(), QueryName()
+
+
+DESCRIPTION - /std/living/skills.
+	The plain standard living implements a very static version of
+	skill system, the npc is a bit more advanced as it is able to
+	recompute its skills on demand. However, the number of uses is
+	still irrelevant.
+
+	The skills are initialized using the function
+
+	  int SetSkill (string name, int value)
+	    Set the attribute <name> to <value> and mark this skill
+	    <name> for recomputation.
+
+	The effective values of skills are queried using
+	
+	  int EffectiveSkill (string name)
+	    Return the effective value of the skill <name>.
+
+	EffectiveSkill() uses the value set by SetSkill() (or assumes
+	0 as default) and computes the true effective value from it.
+	The result is also internally stored to speed up further
+	requests.
+
+	Recomputations may be enforced by a call to
+
+	  void RecomputeStats()
+	    Mark all skills for recomputation (as if their stats have
+	    changed).
+
+	Further calls to EffectiveSkill() will then recompute the
+	effective values from the attribute setting.
+
+	The other functions
+
+	  int UseStat (string name, void|int diff)
+	  int UseSkill (string name, void|int diff)
+	  int ApplyStat (string name, void|int diff)
+	  int ApplySkill (string name, void|int diff)
+
+	are those of /std/living/stats.
+
+
+	Automatic recomputation is performed by
+
+	  void reset()
+	    Call RecomputeSkills().
+
+
+	These functions are assumed as being available in other
+	modules:
+	  /std/living/attributes: QueryAttr(), SetAttr()
+
+
+DESCRIPTION - /std/npc/view
+	This module implements the commands which provide the living
+	with informations about its environment, namely look, examine,
+	smell, listen, and the (matrix) inventory.
+	Available are both the simple command functions as well as the
+	'real' action functions.
+
+
+	For the display of rooms, two properties are used:
+
+	  int P_BRIEF   "Brief"
+	    If non-zero, the living will see just the room's short
+	    description upon entrance.
+
+	  int P_OBVIOUS   "Obvious"
+	    If non-zero, the living will see the list of obvious
+	    exits.
+
+	The basic functions are
+
+	  mixed LookFor (mixed what, void|int impl)
+	    This function searches the inventory and environment for
+	    all objects matching <what>, which may be a string or an
+	    array of strings.
+	    Result is an array of strings, with the first string being
+	    the message for <what>-specifications which match no
+	    object. This first string may be empty or 0.
+	    The following elements of the result (if any) describe the
+	    various locations where which <what>s have been found.
+	    All strings are wordwrapped and may contain several lines.
+	    If <impl> is non-zero, the result is not the array but
+	    instead the concatenation of all result strings.
+
+
+	  string LookRoom ( void|int flags
+	                  , void|object startroom
+			  , void|string type)
+	    Look at the surrounding room (or rooms if they are
+	    transparent enough) and contents, and return the
+	    description as string.
+	    If <flags> contains the SENSE_MOVE flag, the function
+	    assumes being called from the completion of a move and
+	    checks the P_BRIEF before displaying the rooms long description.
+	    If <startroom> is an object, it is the first room whose
+	    description will be shown (if its one of the visibly
+	    surrounding rooms of the living at all).
+	    If <flags> contains the SENSE_SILENT flag, no message will
+	    be issued to the livings surroundings.
+	    <type> is the type of the look, either "look" (or 0) or
+	    "examine".
+
+	  void LookAfterMove (int method, void|mixed extra)
+	    Take a look at the current room and tell it the living.
+	    For learners and upwards, the description is preceeded by
+	    the filename of the room.
+	    This function is to be called after a move with <method>
+	    and data <extra>. For the move methods M_GO, M_TELEPORT
+	    and M_SPECIAL it is automatically called by move().
+
+	  string SenseRoom (string type, void|object room)
+	    Sense the surrounding room as <type> defines: "look",
+	    "examine", "smell" or "hear". For the first two,
+	    LookRoom() is called with <room> as <startroom>.
+	    For the latter two, <room> (or the current environment) is
+	    queried for the wanted information.
+	    Result is the queried information (or a default string if
+	    there is nothing to sense).
+
+	  int Sense (mixed what, string type, int flags)
+	    This function searches the inventory and environment for
+	    all objects matching <what>, which may be a string or an
+	    array of strings, and queries the information which <type>
+	    specifies ("look", "examine", "smell", "hear", or "read").
+	    If one singular <what> specification matches several
+	    objects, just the first is queried.
+	    The function is aware of details of the surrounding room.
+	    Result is an array of strings, with the first string being
+	    the message for <what>-specifications which match no
+	    object. This first string may be empty or 0.
+	    The following elements of the result (if any) contain the
+	    various descriptions queried from the objects. If several
+	    objects at the same place return the same description,
+	    just one annotated description will appear in the result
+	    array.
+	    All strings are wordwrapped and may contain several lines.
+	    If <flags> contains the SENSE_IMPL flag, the result is not
+	    the array but instead the concatenation of all result
+	    strings.
+	    If <flags> contains the SENSE_SILENT flag, the act of
+	    sensing will not be announced to the surrounding/looked at
+	    livings.
+
+
+	  string Inventory (int mode)
+	    Return a single string with the inventory of the living.
+	    If it doesn't have anything, "" is returned.
+	    Each item's description starts with a leading "- " and may
+	    be wordwrapped over several lines.
+	    <mode> is a set of bitflags controlling how the result
+	    looks like:
+	      INV_FLAT: when set, just to top inventory items are
+	        returned. Default is to return the items of carried
+	        bags as well (with proper indentation).
+	      INV_LONG: when set, each item is listed separately.
+	        Default is to fold items of equal short description
+	        into just one entry with a "[<count>]" following.
+	      INV_NARROW: when set, the returned string is formatted
+	        for a linelength of 38 characters. Default is a line
+	        length of 78 characters.
+
+	
+	The action functions are bound to a set of command functions,
+	which are called from player/NPC commands and parse the
+	arguments.
+	Each of the functions allows the specification of a list of
+	objects (e.b. "torch, beer from bag and car") for the objects
+	being moved. As usual, they return non-zero on success.
+
+	  int fexamine (string arg)
+	  int fexaminea (string arg)
+	    Implements 'examine' and 'examine <thing(s)>'.
+	    fexaminea() also checks the actual command verb for being
+	    a correct substring of 'examine'.
+
+	  int flook (string arg)
+	  int flooka (string arg)
+	    Implements 'look', 'look for <thing(s)>' 
+	    and 'look [at] <thing(s)>'.
+	    flooka() also checks the actual command verb for being
+	    a correct substring of 'look'.
+
+	  int flisten (string arg)
+	    Implements 'listen' and 'listen [to] <thing(s)>'.
+
+	  int fsmell (string arg)
+	    Implements 'smell' and 'smell [at] <thing(s)>'.
+
+	  int freadl (string arg)
+	    Implements 'read <thing(s)>'.
+
+	  int finventory (string arg)
+	    Implements 'inventory [flat] [long] [list]'.
+
+	The command functions are bound to the actions in this
+	function, which has to be called during create():
+
+	  void add_view_cmds()
+
+
+	The module features a few auxiliary functions.
+	
+	This auxiliary function is quite helpful when checking
+	light levels from commands:
+
+	  int CheckLight ()
+	    Check if the living can _not_ see in the <env>ironment (default
+	    is the current environment), regarding a possible P_BLIND
+	    setting.
+	    Results:
+	      < 0: it is too dark, result is the difference to A_IVISION.
+	           If (1<<31) is returned, the living is blind.
+	      = 0: the living can see.
+	      > 0: it is too bright, result is the difference to A_UVISION.
+	    Additionally, if the living can't see, an appropriate
+	    notify_fail(..., NOTIFY_NOT_VALID) has been set.
+
+
+	Another function is used to describe environments relative to
+	the living (you will rarely need it):
+
+	  mapping describeEnvs (object * envs, void|int str_by_obj)
+	    <envs> is an array of environments to describe.
+	    For each environment a description like 'carried in a bag'
+	    or 'in a safe here' is computed.
+	    If <str_by_obj> is zero, the result is a mapping, indexed
+	      by the generated descriptions, with two entries per
+	      description: first an array of objects which hold this
+	      description, second an integer which is non-zero if this
+	      described environment(s) are within the living.
+	    If <str_by_obj> is non-zero, the returned mapping is
+	     indexed by the environments, and the first indexed value
+	     is the environments description. The second is again a
+	     flag whether the described environment is been carried or
+	     not.
+
+
+	These functions are assumed as being available in other
+	modules:
+	  /std/living/description: CanSee(), CantSee(), Search(), SearchM()
+	                           QueryName()
+	  /std/npc/putget        : sortObjsByEnv()
+
+
+CREDITS
+	The matrix inventory in /std/npc/view was invented by Yaro
+	(TubMud), the code was written 19-Mar-93..30-Aug-94 by Taube.
+
+
+BUGS/TODO
+	/std/npc/putget:
+	  The extra 'Take' actions should be implemented using
+	    Actions.
+
+
+INHERITANCE TREE
+	std/npc
+	  |- std/npc/compat
+	  |    `- std/living/compat
+	  |- std/living/attributes
+	  |- std/npc/body
+	  |    `- std/living/body
+	  |- std/living/chat
+	  |- std/living/cmds
+	  |- std/living/combat (old)
+	  |- std/living/commands
+	  |- std/living/description
+	  |    |- std/thing/description
+	  |    `- std/room/description
+	  |- std/living/heart
+	  |- std/living/moving
+	  |- std/npc/putget
+	  |- std/living/restrictions
+	  |    `- std/container/restrictions
+	  |	    |- std/thing/restrictions
+	  |	    `- std/room/restrictions
+	  |- std/npc/skills
+          |    `- std/living/stats
+	  |- std/npc/view
+	  |- std/room/items
+	  `- std/base
+
+
+SEE ALSO
+	attributes(C), combat(C), health(C), perception(C), search(C),
+	skills(C), base(S), combat(S), thing(S), equipment(S), living(S)

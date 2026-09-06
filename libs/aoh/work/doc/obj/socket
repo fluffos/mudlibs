@@ -1,0 +1,254 @@
+OBJECT                                                    /* ts:2 */
+        /obj/socket
+
+SYNOPSIS
+        include <socket.h>
+        
+        skt = clone_object( SOCKET );
+
+AUTHOR
+        Mica@OSB
+
+LAST UPDATE
+        25Jul97, Mica@OSB
+
+DESCRIPTION
+        The socket object is a generic interface to the socket features
+        provides by the extended external request daemon, x-erq. Additional
+        to the erq functions it provides MUD-mode sockets which are 
+        compatible to those provided by the MudOS-driver and able to send
+        and receive lpc datatypes direclty.
+
+        The object provides outgoing and listen style sockets for tcp and
+        udp. Each object handles only one socket/connect and will self-
+        destruct with the socket going down.
+
+        Each socket needs to be cloned first and send connected to a remote
+        site and a local port with a call to skt->open(...). The paramters
+        to open depend of the socket style used, but for all open-calls you
+        need to provide so called callbacks. These are closures which get
+        called upon certain actions by the socket. There are three kinds of
+        callback, the ready-callback, the read-callback and the close-
+        callback. 
+
+        The ready-callback gets called only once at the time the socket is
+        ready, what means it is connected to the remote site now or listening
+        to a local port. If the socket that calls the ready-callback has been
+        automatically created by a listening socket to accept a connection,
+        it gets called with host and port of the remote site as paramters. 
+      
+        The read-callback is called every time the socket receives data. The
+        data it gets depend on SKT_STYLE_BINARY, for binary sockets an
+        array of integers, for non-binary sockets it is a string. For 
+        mud-mode sockets the data is of real mixed type, because there lpc-
+        datatypes are directly received. With udp sockets the read_callback
+        gets called with host and port of the remote site in addition to the
+        received data. 
+
+        The close-callback is called just before the socket is beeing removed,
+        which means the connection got terminated by yourself, the remote
+        site or by a fatal error. If an error occured the close-callback gets
+        called with a (string) destription of the error occured as second
+        parameter, otherwise that one is 0.
+
+        All callbacks get as first argument the socket object which called it,
+        this enables you to handle multiple sockets with one set of callbacks
+        and it is needed to handle connections for listening sockets. 
+
+        For connections to remote sites you can use either the ip-number in
+        string form or the ip-name, which will be looked up then.
+
+        A socket can be opened in binary or text-mode, this only affects the
+        data received. skt->send() can be still used with strings. To open
+        a socket in binary mode, you need to | the socket-style with
+        SKT_STYLE_BINARY. For mud-mode style sockets SKT_STYLE_BINARY is 
+        ignored.
+
+        The socket provides some read-only properties (Queries described
+        below) and a Status function.
+
+FUNCTIONS
+        The sockets provides these three functions for external usage:
+
+          varargs mixed open( int style, ... );
+          void close();
+          varargs void send( mixed msg, ... );
+
+        Sockets can be connected by using the open() call as following:
+
+          varargs mixed open( SKT_STYLE_CONNECT_STREAM,
+                              (string) host,
+                              (int) port,
+                              (closure) read_callback,
+                              (closure) ready_callback,
+                              (closure) close_callback );
+            
+            This will connect a newly created socket to the given host
+            and port using a tcp-stream connection. 
+         
+            The callbacks need to be defined as following:
+
+              void read_callback( object skt, mixed data );
+              void ready_callback( object skt );
+              void close_callback( object skt, string error );
+
+          varargs mixed open( SKT_STYLE_CONNECT_MUD,
+                              (string) host,
+                              (int) port,
+                              (closure) read_callback,
+                              (closure) ready_callback,
+                              (closure) close_callback );
+            
+            This will connect a newly created socket to the given host
+            and port using a tcp-stream connection and mud-mode.
+
+            The callbacks need to be defined as following:
+
+              void read_callback( object skt, mixed data );
+              void ready_callback( object skt );
+              void close_callback( object skt, string error );
+
+          varargs mixed open( SKT_STYLE_DATAGRAM,
+                              (int) port,
+                              (closure) read_callback,
+                              (closure) ready_callback,
+                              (closure) close_callback );
+            
+            This will connect a newly created socket to the local port
+            'port' and set it to datagram mode (udp). The socket will
+            listen to that port, but you also need to open a socket that
+            way if you only want to send datagrams.
+
+            The callbacks need to be defined as following:
+
+              void read_callback( object skt, mixed data, 
+                                  string host, int port );
+              void ready_callback( object skt );
+              void close_callback( object skt, string error );
+
+          varargs mixed open( SKT_STYLE_LISTEN_STREAM,
+                              (int) port,
+                              (closure) read_callback,
+                              (closure) ready_callback,
+                              (closure) close_callback );
+
+            This will connect a newly created socket to the local port
+            'port' and set it to listen/accept mode for tcp-streams.
+            Once the socket gets a connection request, it automatically
+            clones a new socket with the same sets of callbacks. After
+            the connection has been established, the ready_callback gets
+            called with host and port of the remote site (note that the
+            ready_callback is called once after the socket is bound to the
+            given port, for that call host and ip are set to 0).
+
+            The callbacks need to be defined as following:
+
+              void read_callback( object skt, mixed data ) 
+              void ready_callback( object skt, string host, int port );
+              void close_callback( object skt, string error );
+
+          varargs mixed open( SKT_STYLE_LISTEN_MUD,
+                              (int) port,
+                              (closure) read_callback,
+                              (closure) ready_callback,
+                              (closure) close_callback );
+          
+            This does the same as the above, but the socket will be set to
+            mud-mode.
+
+        There is an additional type of socket-style, SKT_INT_ACQUIRE, that 
+        is for internal use only and must not be used.
+
+        Sockets can be closed by calling skt->close(). close() has no
+        paramters and does not return anything. Note that the socket object
+        will self-destruct after calling close(), but not immediatly because
+        it needs to do internal cleanups.
+
+        Sending data over an open socket, which is only possible after the
+        ready_callback got called for that socket-object, is done by calling
+        skt->send(). Trying to send data over a socket which has not called
+        the ready-callback will result in an error.
+
+        For tcp-stream and mud-mode sockets, send has to be called with the
+        data that should be send as parameter. Possible are strings and
+        integer-arrays for normal stream sockets, mixed lpc datatypes for
+        mud-mode. Note that mud-mode currently only supports sending of
+        integers, strings, arrays and mappings.
+
+          skt->send( (mixed) data );
+
+        For datagram(udp) sockets send needs to be called with the target
+        host and port additional to the data. Note that there is no mud-mode
+        for datagram sockets, only strings and integer arrays are valid data
+        to send.
+
+          skt->send( (mixed) data, (string) host, (int) port );  
+
+        The socket provides the following, builtin, read-only Query()-  
+        Functions resp. properties (QueryProperties() is supported too
+        as we inherit std/base):
+
+         int QueryMode();
+          Returns the internal socket mode, see SKT_MODE_-defines and the
+          comments at socket.h.        
+
+         int QueryState();
+          Returns the internal socket state, see SKT_STATE_-defines and the
+          comments at socket.h.   
+
+         string QueryAddr();
+          Returns a string containing the address the socket is connected to
+          or expects to be connected to. The string contains address and port
+         space-seperated.
+
+         closure QueryReadCallback();
+          Returns the read-callback closure for the socket.
+  
+         closure QueryReadyCallback();
+          Returns the ready-callback closure for the socket.
+
+         closure QueryCloseCallback();
+          Returns the close-callback closure for the socket.
+
+         int * QueryTicket();
+          Returns the 'ticket' received from the erq.
+
+        The following calls are valid if DEBUG_READWRITE is defined at 
+        socket.h:
+
+         int QueryLastRead();
+          Returns the last time the socket received data (time() format).
+
+         int QueryLastWrite();
+          Returns the last time the socket sent data (time() format).
+
+         int QueryAmountRead();
+          Returns the amount of bytes the socket has received. Overruns are
+          possible if vast amounts of data are received, it may get negative
+          because of that.
+
+         int QueryAmountWrite();
+          Returns the amount of bytes the socket has sent. Overruns are
+          possible if vast amounts of data are received, it may get negative
+          because of that.
+
+        The socket also provides the Status-function:
+
+         string Status();
+          A call to Status() returns a string containing information about
+          socket. The Status()-information varies depending on definition of
+          DEBUG_READWRITE at socket.h, see description of the Query() calls
+          above.
+
+INHERITANCE TREE
+        /obj/socket
+          `- /obj/lib/datastring
+          `- /std/base
+
+RELATED FILES
+        /obj/socket.c
+        /sys/socket.h
+
+SEE ALSO
+        datastring(O), erq(C)
+

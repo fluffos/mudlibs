@@ -1,0 +1,141 @@
+/*--------------------------------------------------------------------------
+ * /secure/kernel/misc.ic -- Miscellaneous sefuns.
+ *
+ * Copyright (C) 1997 by One Step Beyond.
+ * All Rights Reserved.
+ * Permission granted for non-commercial use.
+ *--------------------------------------------------------------------------
+ * This file is included(!) from /secure/kernel.c to form the kernel.
+ * Implemented sefuns are:
+ *   query_boot_time()
+ *   remove_alist()
+ *   random_select()
+ *   grandom()
+ *   dtell()
+ *--------------------------------------------------------------------------
+ */
+
+/*-------------------------------------------------------------------------*/
+public int query_boot_time() 
+
+/* Return the time() the game was booted.
+ */
+
+{
+  mixed *info;
+  if ( !(info = get_extra_wizinfo(0)) || sizeof(info) <= WI_BOOTTIME)
+    return 0;
+  return info[WI_BOOTTIME];
+}
+
+/*-------------------------------------------------------------------------*/
+#ifdef __ALISTS__
+public mixed *remove_alist(mixed key, mixed *alist)
+
+/* Remove the data for <key> from the associative list <alist>, return
+ * the modified alist.
+ */
+
+{
+  int s, p;
+
+  if((p = assoc(key, alist[0])) >= 0)
+    for(s = sizeof(alist); s--; alist[s] = alist[s][0..p-1] + alist[s][p+1..]);
+  return alist;
+}
+#endif
+/*-------------------------------------------------------------------------*/
+public mixed random_select (mixed list)
+
+/* With <list> being an array, mapping or string, the function returns
+ * one randomly selected element of it (for strings that is a
+ * one-character string, not an integer).
+ */
+
+{
+  if (pointerp(list))
+    return list[random(sizeof(list))];
+
+  if (stringp(list))
+  {
+    int ix;
+    ix = random(sizeof(list));
+    return list[ix..ix];
+  }
+
+  if (mappingp(list))
+  {
+    mixed * indices;
+
+    indices = m_indices(list);
+    return list[indices[random(sizeof(indices))]];
+  }
+
+  raise_error(sprintf("Illegal argument '%O'.\n", list));
+  return 0;
+}
+
+/*-------------------------------------------------------------------------*/
+public void dtell(string whom, string what)
+{
+  object ob;
+  if (ob = find_player(whom))
+    efun::tell_object(ob, what);
+}
+
+/*-------------------------------------------------------------------------*/
+public varargs int grandom(int nrdice)
+
+// Return a random number with approx. gaussian distribution.
+//
+// Arguments:
+//   nrdice: the number of 'dice' to use to generate the number,
+//           default is 3
+// Result:
+//   A random number in the range 0..1000 (inclusive!) with
+//   approximately gaussian distribution.
+//
+// The higher <nrdice> is chosen, the more often the numbers around 500
+// are returned instead of the extrem numbers at the end of the range.
+// For <nrdice> == 1, the linear distribution of random(1001) is returned.
+//
+// As table: horizontal the number of dice used, vertically selected random
+// numbers. Each entry shows how often the random number was returned in
+// 1000000 tries for the associated number of dice:
+//
+//      |   1  |   2  |   3  |   5  |
+//  ----+------+------+------+------+
+//     0: 1002 :    5 :    0 :    0 :
+//   100: 1014 :  382 :  139 :   21 :
+//   250:  969 : 1043 :  852 :  558 :
+//   400:  963 : 1528 : 1961 : 2301 :
+//   500: 1020 : 2004 : 2175 : 2926 :
+//   600: 1020 : 2004 : 2175 : 2926 :
+//   750:  978 : 1066 :  796 :  489 :
+//   900:  987 :  382 :  147 :    8 :
+//  1000: 1044 :    0 :    0 :    0 :
+
+{
+  int dicerange, lastextra;
+  int rc, i;
+
+  if (!nrdice)
+    nrdice = 3;
+
+  if (nrdice < 0)
+  {
+    raise_error("Illegal argument "+nrdice+" to grandom().\n");
+    return 0;
+  }
+
+  dicerange = 1001/nrdice;
+  lastextra = 1001 - (nrdice * dicerange);
+
+  rc = random(dicerange + lastextra);
+  for (i = 1; i < nrdice; i++)
+    rc += random(dicerange);
+
+  return rc;
+}
+
+/***************************************************************************/

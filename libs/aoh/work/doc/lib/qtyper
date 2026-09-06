@@ -1,0 +1,417 @@
+SYNOPSIS
+
+  #include "/obj/lib/qtyper.h"
+  inherit "/obj/lib/qtyper";
+
+
+CONCEPT
+
+  This lib implements the basic quicktyper functions, thus making it
+  possible to add them easily to own objects.
+
+  For proper function, a quicktyper needs to be at the first position of
+  the local commandlist. This implies the first position in the player's
+  inventory.
+  Unfortunately most wizard tools also apply for the pole position, either
+  in the commandlist, or at least in the inventory.
+  This normally leads to a constant battle for the pole position between
+  the tool and the quicktyper.
+  Thus implementing the quicktyper functions via the lib in the tool(s)
+  themselves can make life easier.
+
+  Since the pole-position check implies several checks of the environment
+  performed during every heart_beat, these may be employed also by the
+  inheriting tool. Similar, other actions of the qtyper also run over
+  hooks to let the tool get in.
+
+  The qtyper is quite customizable, and stores these values along with the
+  defined aliases as arguments for autoloading (this happens at every
+  save of the player object).
+  During normal operation, the values and aliases are stored as properties
+  in the player object - this way it is possible to update quicktyping
+  tools w/o loosing the valuable information.
+  For privacy reasons, the command history is stored in the qtyper, and
+  therefore highly volatile.
+
+  You will notize that not all functions define their return value, and
+  thus won't be part of typechecking during compile. This was accepted
+  for those funs which are likely to be overloaded with something of
+  extended type.
+
+OPERATION
+
+  The special operations are controlled by three magic characters:
+  '%' for history functions, '!' for command arguments, and '^' for
+  history string-replacement. These characters may be changed.
+
+  When a command is given, the qtyper first checks if any old command shall
+  be repeated. For this it remembers a certain amount (default is 25) of
+  previous commands. If the check succeeds, the retrieved command plus
+  the remainder of the given command form the new command.
+
+    '%%'            executes the last command again.
+    '^<old>^<new>'  executes the last command, with all occurences of <old>
+                     replaced by <new>, again.
+    '%<num>'        executes the <num>th previous command again.
+    '%<string>'     executes the latest command which started with <string>
+
+  For alias subsitution, the (possibly retrieved) command is then broken
+  at every space in a list of 'args', with the command verb being arg #0.
+  If an alias is defined for the verb, the args are substituted in the
+  alias' template. This process recurses until no further alias is found,
+  or an upper limit (default 6) of recursions is exceeded.
+
+  The outfilled template is then the command being excecuted.
+
+  An alias-template is just a string, with special patterns at that places
+  where the args shall be substituted. The recognized patterns and their
+  meanings are:
+
+    '!*'      : the complete commandline w/o the verb.
+    '!<num>'  : the <num>th arg.
+    '!<num>*' : the commandline starting from and including the <num>th arg.
+
+  Any non-used arg from the original command is appended to the outfilled
+  template.
+
+  The commands defined by the qtyper are:
+
+    'alias'
+      Prints the list of all current aliases and their templates.
+
+    'alias <name>'
+      Prints the setting of alias <name>.
+
+    'alias <name> <template>'
+      Sets the template of alias <name>.
+
+    'unalias <name>'
+      Removes the alias <name>.
+
+    'history'
+      Shows the current history buffer.
+
+    'do [<num>#]<command> [;[<num>#]<command>] ...'
+      Executes sequentially the given commands.
+      If for a command '<num>#' is given the command is execute <num> times.
+
+    'for <filepattern> <command>'
+      Execute <command> for all files matching <filepattern>.
+      The <command> string can contain replacement marks where the filename
+      shall be inserted:
+        - '!!' : the full file name
+        - '!e' : the extension of the file name
+        - '!f' : the file name without extension and directory name
+        - '!h' : the full directory name of the file
+        - '!r' : the full file name without file extension
+        - '!t' : the file name without the directory name
+      This command is available only to wizards.
+
+    'sh <filename>'
+      Read in the file <filename> and execute each line of it
+      as if it was typed on the keyboard.
+      This command is available only to wizards.
+
+    'qmode'
+      Prints out the current operation mode.
+
+    'qmode <option>...'
+      Sets one or more options of the qtyper.
+      <option> may be:
+        'active  on | off'  (de)activates the alias und history functions.
+        'heart   on | off'  (de)activate the quicktypers heartbeat.
+        'first   on | off'  (de)activates reestablishing of the quicktyper's
+                            pole position on every init() and every heart_beat.
+        'echo    on | off'  (de)activates echoing of executed commands.
+        'noforce on | off'  (de)activates the force protection.
+        'maxhist  <nr>'     set the history size to <nr> lines.
+        'maxrecur <nr>'     the substitution of aliases recurses
+                             max. <nr> times.
+        'chars    <str>'    the magic chars for history, arguments and
+                             replacement are set in this order from the three
+                             characters of <str>.
+      Non-Wizards can only see/set the options 'echo' 'history' and 'chars'.
+      Since this command may change the magic chars it is execute w/o any
+      history or alias substitution.
+
+
+MACROS
+
+ The used properties during operation, stored in the playerobject:
+   P_ALIASES      "qtyper_aliases"
+   P_MAXRECUR     "qtyper_maxrecur"
+   P_MAXHIST      "qtyper_maxhist"
+   P_HISTCHARS    "qtyper_histchars"
+
+ The indices of the single magic chars within the histchars-strings:
+   CHAR_HIST      (0)
+   CHAR_ARG       (1)
+   CHAR_REPL      (2)
+
+ The bitmasks of the operation modes:
+   QMODE_ACTIVE   (1)
+   QMODE_HEART    (2)
+   QMODE_FIRST    (4)
+   QMODE_ECHO     (8)
+   QMODE_NOFORCE  (16)
+
+
+VARIABLES
+
+  All variables are static.
+
+  int qmode
+    The operation modes, saved as bitflags.
+
+  int didparse
+     Flag if the actual command has been parsed already.
+     It is set after history and alias substitution to prevent reparsing,
+     and reset after execution of the command.
+     Since on runtime errors could break this scheme, the flag is also
+     reset every heart_beat.
+
+  string *history
+    The history buffer, locally realised for privacy.
+
+  string *scriptline
+    The buffer for the scriptfile of the sh-command.
+
+  int scriptsize
+    The size of scriptline.
+
+  object lastenv
+    The last env the qtype has been in.
+
+  object lastroom
+    The last room the qtyper's env has been in.
+
+  object *lastinv
+    The last inventory of the qtyper's environment.
+
+  object *lasteinv
+    The last inventory of the environment of the qtyper's environment.
+
+  object lastowner
+    The last owner of the qtyper.
+
+
+  The following variables are temporarily set for quicker history and
+  alias substitution.
+
+  string *aliases
+    The aliases-alist.
+
+  int maxhist
+    The max size of the history buffer.
+
+  int maxrecur
+    The max recursions allowed for alias-substitution.
+
+  string chist
+    The magic history char, "%" by default.
+
+  string carg
+    The magic argument char, "!" by default.
+
+  string crepl
+    The magic replace char, "^" by default.
+
+  string histrep
+    The magic repeat-command string, "%%" by default.
+
+
+FUNCTIONS
+
+  void create()
+    Initialize the qtyper if it's not the blueprint:
+     - set all qmodes on
+     - initialize history, lastinv, lasteinv
+     - start heart_beat
+
+  void AddActions (void|int parseonly)
+    Add the qtyper commands (unless parseonly is nonzero) and the
+    "catch all" to the command parser.
+
+  /* void */ init()
+    Do nothing if it's the blueprint.
+    If 'first'-qmode is set, move the object on the first position of
+      the inventory if necessary.
+    Call AddActions() to add the object commands.
+
+  If you want an inheriting object define additional commands, put
+  the add_actions() into an overlaying fun AddActions(), and put
+  the necessary 'qtyper::AddActions()' AT THE END.
+  Also let 'qtpyer::init();' be the last command in the overloading init().
+  Else the commandparser won't get the commands first.
+
+  DoHeartBeat ( object lroom, object lowner, object* linv, object *lrinv
+              , object room, object owner, object *inv, object *rinv
+              )
+    This fun does nothing, but is meant for overloading. It is called
+    every heart_beat and gets the last room, the last owner, and their
+    inventories, as well as the current room, owner, inventories.
+    You may overload your regular toy checks here...
+
+  void PlayerNetdeat(int arg)
+    This function is called by the carrying player to inform this
+    object about the players netdeath status.
+    It is used to stop the heart beat of qtypers carried by netdead
+    players.
+
+  /* void */ heart_beat()
+    Return immediately if there's no environment.
+    Update lastinv, lasteinv, lastroom.
+    In qmode 'first', move the object on top of the inventory, if
+     either lastinv, lasteinv or lastroom changed.
+    Also call DoHeartBeat().
+    Reset didparse.
+
+  mixed QueryAutoObject ()
+    If qmode 'actve' is set, return the autoload-args:
+      ({ VERSION, qmode, aliases, max recursion, history size, magic chars })
+    else 0.
+
+  int SetAutoObject (mixed *args)
+    Set the internal variables and player-properties from the autoload-args.
+    Return FALSE if there are to few data given, else TRUE.
+    If this_player() is a wizard, notify it about new versions or arg errors.
+
+  /* object */ _get_owner()
+    Return the current owner, alias the player carrying us, else 0.
+    Also sets lastowner to it.
+    If we have an owner != 0 and a different lastowner != 0, then clear
+     the history buffer.
+
+  /* int */ ForMe ()
+    Return if the object shall react on a command.
+    This is true if this_player() is valid and equal to _get_owner().
+    This is called from every qtyper command, and the commandparser.
+
+  /* int */ Allowed ()
+    Return if this_player() is allowed to give us a command.
+    This is true if this_player() is not a wiz, or qmode 'noforce' is not
+    set. Else for wiz-players with 'noforce' set, this_player() must be
+    equal to the interactive this_player(1).
+    This is called from every qtyper command, and the commandparser.
+
+  /* void */ Write (string str)
+    This is just a write() for all outputs of qtyper.
+    You might overload this to make sure that only allowed persons get
+    the outputs.
+
+  /* int */ Command (string str)
+    Command this_player() the given string.
+    If qmode 'echo', echo it first.
+
+  mixed *get_aliases ()
+    Get the aliases-alist from P_ALIASES in the player.
+    If not existing, return an empty list.
+
+  void set_aliases (mixed al)
+    Set the P_ALIASES in the player with the given aliases-alist.
+
+  string get_histchars ()
+    Get the magic chars from P_HISTCHARS in the player.
+    If not existing, return the default "%!^".
+
+  void set_histchars (string str)
+    Set the P_HISTCHARS in the player with the given string,
+    but only if it's three characters long.
+
+  int get_maxhist ()
+    Get the history size from P_MAXHIST in the player.
+    If not existing, return the default 25.
+
+  void set_maxhist (int i)
+    Set the P_MAXHIST in the player to the given number if it's >= 1.
+
+  int get_maxrecur ()
+    Get the max. recursion depth from P_MAXRECUR in the player.
+    If not existing, return the default 6.
+
+  void set_maxrecur (int i)
+    Set the P_MAXRECUR in the player to the given number if it's >= 1.
+
+  void get_data()
+    Get all our data from the player, and also derive chist, carg, crepl,
+    and histrep from it.
+    This eliminates several get_xxx()s during the command parsing.
+    As long as we parse, they won't change.
+
+  void qmode_on (int mode)
+    Set the qmode(s) given as bit-masks.
+    If qmode 'heart' is set, also start the heart_beat.
+
+  void qmode_off (int mode)
+    Reset the qmode(s) given as bit-masks.
+    If qmode 'heart' is reset, also stop the heart_beat.
+
+  int qmode (int mode)
+    Return (qmode & mode).
+
+  static string DoHistory (string line)
+    Replace any history commands in the given string, and return the result.
+    On error, return 0.
+
+  static string DoAlias (string line)
+    Replace any aliases in the given string, and return the result.
+    On error, return 0.
+
+  /* void */ NotifyForce (string command)
+    Called in case of a caught force, this is called with the complete
+    command as argument.
+    It notifies the player as well as the forcer of the catch.
+
+  int CommandScan (string arg, void|int isline)
+    If the qmode 'active' is not set, or didparse is set, do nothing
+      and return 0.
+    If the commander is not Allowed(), forcing us (this_player() unequal
+      to this_player(1)), and qmode 'noforce' set, call NotifyForce with
+      the complete commandstring as arg and return 1.
+    If the command is legal, apply DoHistory() and DoAlias() on it.
+      If the resulting command differs from the original one, it is
+      Command()ed to the player (enclosed by setting of didparse),
+      else the fun returns FALSE.
+      If the Command() was called, its result is returned.
+    If isline is not zero, arg is the complete command given, including
+      the verb.
+
+  int q_alias (string arg)
+    Implements the 'alias' command.
+
+  int q_unalias (string str)
+    Implements the 'unalias' command.
+
+  int q_history (string str)
+    Implements the 'history' command.
+
+  int q_do (string str)
+    Implements the 'do' command.
+
+  string *long_get_dir (string pat, int all)
+    Return an array with the complete pathnames of all files with names
+    matching <pat>. If <all> is zero, only true files are returned, else
+    also directories.
+
+  int q_for (string str)
+    Implements the 'for' command.
+    The pattern are matched with long_get_dir(pattern, FALSE).
+
+  void _qexecfile (int line)
+    Execute the next bunch (10) of lines out of scriptline, starting
+    with <line>, as typed commands.
+    If then lines are left, schedule a call_out() for the next bunch,
+    else delete scriptline.
+
+  int q_sh (string str)
+    Implements the 'sh' command.
+    The scriptfile is read (max. 1000 lines) and then _qexecfile() is called.
+
+  int q_mode (string str)
+    Implements the 'qmode' command.
+
+
+INHERITANCE TREE
+
+  /obj/lib/qtyper
+    `/obj/lib/string

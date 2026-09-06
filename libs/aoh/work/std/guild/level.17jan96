@@ -1,0 +1,146 @@
+/*
+** /std/guild/level
+** The handling of the level
+**
+**   10feb95 [t] Creation
+**   17jan96 [t] GuildLeveltoTitle changed, so that if a title for a level
+**               is empty the next defined one below is taken
+**               AnnounceNewLevel now uses SendEmote instead of SendStr
+**
+** [t] Thragor
+*/
+
+#include <config.h> // QUESTMASTER
+#include <living.h>    // NEUTER, MALE, FEMALE
+#include <guild.h>
+
+#define MAX_LEVEL 50
+#define CHMASTER "/obj/chmaster"    // the channel-master (news:)
+#define TP this_player()
+#define ME this_object()
+
+private static mapping leveltitles; // leveltitel = ([lvl:Neuter;Male;Female])
+
+/*
+* Level related help-functions
+* ============================
+*/
+
+public void AnnounceNewLevel()
+// Announce a new level of a player
+// if the player is invis, don't spread the message on the channel
+{
+  int lvl;
+  lvl = TP->QueryLevel();
+  write("You are now level "+to_string(lvl)+".\n");
+  if (!TP->QueryInvis())
+    CHMASTER->SendEmote("news",capitalize(getuid(TP))+
+                      " is now level "+to_string(lvl));
+}
+
+public int QPtoLevel(int qp)
+// return the level you might get with your current QP
+{
+  int lvl;
+  while(QUESTMASTER->QPointLevel(++lvl)<=qp);
+  return --lvl;
+}
+
+public string GuildLeveltoTitle(int lvl,int gender)
+// evaluate the title
+{
+  string rc;
+  rc=(ME->QueryGuildclass()?"the "+ME->QueryGuildclass():"\b");
+  while( leveltitles && !leveltitles[lvl,gender] && --lvl);
+  return (leveltitles||allocate_mapping(0,3))[lvl,gender]||rc;
+}
+
+/*
+* ----------------------------------------------------------------------
+* Queries, Settings, Adds
+* ----------------------------------------------------------------------
+*/
+
+public mapping QueryLevelCosts()
+// Return a mapping ([lvl:xp-cost]) with the XP you need to
+// advance to a certain level
+{
+  return G_COSTS;
+}
+
+public int QueryLevelCost(int lvl)
+// Return the XP-costs you need for level <lvl>
+{
+  return G_COSTS[lvl];
+}
+
+public mapping SetLevelTitles(mapping t)
+// set all titles: ([lvl:neuter;male;female])
+{
+  if (!t) return leveltitles||([]);
+  return leveltitles = t;
+}
+
+public mapping QueryLevelTitles()
+{
+  return leveltitles||([]);
+}
+
+public mapping AddLevelTitle(int lvl,int gen,string title)
+// Add a title for a certain gender, e. g.
+// AddLevelTitel(1,NEUTER,"the utter creature");
+{
+  if (lvl<0) return leveltitles||([]);
+  if (!leveltitles) leveltitles = allocate_mapping(0,3);
+  leveltitles[lvl,gen]=title;
+  return leveltitles;
+}
+
+public mapping AddNeuterTitle(int lvl,string title)
+// Add a title for a neuter player
+{
+  return AddLevelTitle(lvl,NEUTER,title);
+}
+
+public mapping AddMaleTitle(int lvl,string title)
+// Add a title for a male player
+{
+  return AddLevelTitle(lvl,MALE,title);
+}
+
+public mapping AddFemaleTitle(int lvl,string title)
+// Add a title for a female player
+{
+  return AddLevelTitle(lvl,FEMALE,title);
+}
+
+public varargs mapping AddLevelTitles(int lvl,mixed arg1,string m,string f)
+// Add titles for a certain level. This may be done in two ways:
+// AddLevelTitles(1,({"neuter title","male title","female title"})) or
+// AddLevelTitles(1,"neuter title","male title","female title")
+// You may also just give one title for all genders. Example:
+// AddLevelTitles(1,"all title")
+{
+  string n;
+  if (lvl<0) return leveltitles||([]);
+  if (!leveltitles) leveltitles = allocate_mapping(0,3);
+  if (pointerp(arg1))
+    if (sizeof(arg1)!=3)
+      return leveltitles||([]);
+    else
+      n = arg1[NEUTER],
+      m = arg1[MALE]||n,
+      f = arg1[FEMALE]||n;
+  else
+    if (stringp(arg1))
+      {
+	n = arg1;
+	m = m||n;
+	f = f||n;
+      }
+    else return leveltitles||([]);
+  AddLevelTitle(lvl,NEUTER,n);
+  AddLevelTitle(lvl,MALE,m);
+  AddLevelTitle(lvl,FEMALE,f);
+  return leveltitles;
+}

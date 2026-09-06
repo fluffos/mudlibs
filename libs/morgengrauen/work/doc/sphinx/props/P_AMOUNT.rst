@@ -1,0 +1,27 @@
+P_AMOUNT
+========
+
+NAME
+----
+::
+
+    P_AMOUNT                      "amount"                      
+
+DEFINIERT IN
+------------
+::
+
+    /sys/properties.h
+
+BESCHREIBUNG
+------------
+::
+
+     Anzahl der Objekte, fuer die das Objekt steht.
+
+Siehe auch
+----------
+::
+
+     /std/unit
+     :doc:`../lfun/AddAmount`

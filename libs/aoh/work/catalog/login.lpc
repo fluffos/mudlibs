@@ -1,0 +1,135 @@
+/*
+ * FluffOS catalog login for aoh (LDMud → FluffOS conversion).
+ * The archive login stack depends on LDMud closures / driver hooks
+ * and is not loaded here.
+ */
+
+string name;
+string password;
+int tries;
+
+void create() {
+  seteuid(getuid());
+}
+
+void logon() {
+  write("\nWelcome to Age of Heroes / One Step Beyond (LDMud → FluffOS catalog overlay).\nExperimental OSB-based LDMud mudlib; FluffOS play is the catalog layer.\n");
+  write("Name: ");
+  input_to("get_name", 0);
+}
+
+int valid_name(string str) {
+  int i, n;
+
+  if (!stringp(str))
+    return 0;
+  n = strlen(str);
+  if (n < 2 || n > 16)
+    return 0;
+  for (i = 0; i < n; i++) {
+    if (str[i] < 'a' || str[i] > 'z')
+      return 0;
+  }
+  return 1;
+}
+
+string save_path(string n) {
+  return sprintf("/data/%c/%s", n[0], n);
+}
+
+void get_name(string str) {
+  if (!str)
+    str = "";
+  str = lower_case(str);
+  while (strlen(str) && (str[0] == ' ' || str[<1] == ' ')) {
+    if (str[0] == ' ')
+      str = str[1..];
+    else
+      str = str[0..<2];
+  }
+  if (!valid_name(str)) {
+    write("Name must be 2-16 letters (a-z).\nName: ");
+    input_to("get_name", 0);
+    return;
+  }
+  name = str;
+  if (file_size(save_path(name) + ".o") > 0) {
+    write("Password: ");
+    input_to("get_password", 1);
+    return;
+  }
+  write("New character.\nPassword (6+ chars): ");
+  input_to("new_password", 1);
+}
+
+void get_password(string str) {
+  object p;
+  string stored, err;
+
+  if (!str || strlen(str) < 1) {
+    write("Password: ");
+    input_to("get_password", 1);
+    return;
+  }
+  p = clone_object("/catalog/player");
+  if (!p || !p->restore_me(name)) {
+    write("Could not load that character.\n");
+    destruct(this_object());
+    return;
+  }
+  stored = p->query_password();
+  if (crypt(str, stored) != stored && crypt(str, 0) != stored) {
+    tries++;
+    destruct(p);
+    if (tries >= 3) {
+      write("Too many tries.\n");
+      destruct(this_object());
+      return;
+    }
+    write("Wrong password.\nPassword: ");
+    input_to("get_password", 1);
+    return;
+  }
+  err = catch(exec(p, this_object()));
+  if (err) {
+    write("exec failed: " + err + "\n");
+    destruct(p);
+    destruct(this_object());
+    return;
+  }
+  p->enter_world();
+  destruct(this_object());
+}
+
+void new_password(string str) {
+  if (!str || strlen(str) < 6) {
+    write("Password must be at least 6 characters.\nPassword: ");
+    input_to("new_password", 1);
+    return;
+  }
+  password = str;
+  write("Confirm password: ");
+  input_to("confirm_password", 1);
+}
+
+void confirm_password(string str) {
+  object p;
+  string err;
+
+  if (str != password) {
+    write("Passwords did not match.\nPassword: ");
+    input_to("new_password", 1);
+    return;
+  }
+  p = clone_object("/catalog/player");
+  p->setup_new(name, crypt(password, 0));
+  err = catch(exec(p, this_object()));
+  if (err) {
+    write("exec failed: " + err + "\n");
+    destruct(p);
+    destruct(this_object());
+    return;
+  }
+  p->enter_world();
+  destruct(this_object());
+}

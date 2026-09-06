@@ -1,0 +1,264 @@
+----------------------------------------------------------------------------
+
+                                 PROPERTIES
+
+----------------------------------------------------------------------------
+
+What are properties?
+
+Properties are one of the most commonly used yet misunderstood concepts in
+OSB.
+
+Simply put, properties are "surface level" differences in otherwise
+identical objects. Consider buying a new car. The base model of the car is
+the equivalent to /std/thing. All new cars of this model have the same
+engine, same frame, etc. However, you order a car with:
+
+     color: red
+     power steering: yes
+     air conditioning: no
+     radio: yes
+     electric windows: yes
+
+These specifications, or the combination of them, are individual to each car
+which Company XYZ delivers. It is the same with properties. The base
+(/std/<whatever>) is always the same. The specifications that you lay on top
+of this base, however, change from file to file. These specifications are
+most easily set using properties in lpc.
+
+Some examples of commonly-used properties for livings include: Name, Level,
+Race, HP, MaxHP, SP, MaxSP, XP, Whimpy, Gender, Ghost...
+
+Some examples of commonly-used properties for things include: Ids, Long,
+Value, Weight, Short...
+
+There are many, many "standard" properties already defined and which you can
+use in your own objects. You can also define your own properties in the
+files you write.
+
+-------------------------
+
+Why use properties?
+
+There are several good reasons why using properties is better than simply
+using variables in a file.
+
+It is sometimes necessary to set a value in an object which you might need
+to later query. You could set this value by either by using a variable or by
+setting a property. However, the property has the advantage in that you can
+access this value externally from other objects quite easily.
+
+For example, imagine a magical spell which has two modes: active and not
+active. When it is not active and a player tries to cast it, s/he should get
+the message "You cast this magic spell". Now the spell is active. If the
+player tries to cast it again while it is still active, they should get the
+message "That spell is already active".
+
+The trick comes in recording whether the spell is active or not active.
+There are several possible options for doing this. You can't really use a
+local variable here, since it is destroyed as soon as the function exits.
+The other two choices would be to use a global variable in the file or to
+set a property.
+
+The most obvious option is probably the global variable. In the cast_spell()
+function, you could use an int variable is_active:
+
+   inherit "/std/thing";
+
+   int is_active;
+
+   create()
+   {
+      ::create();
+      ...
+      is_active = 0;
+   }
+
+   cast_spell()
+   {
+      if ( is_active )
+      {
+         notify_fail("Sorry, your nifty spell is already active!\n");
+         return 0;
+      }
+      write("You cast your nifty spell. Zap!\n");
+      is_active = 1;
+      call_out("spell_end", 50);
+      return 1;
+   }
+
+  end_spell()
+  {
+     write("Your nifty spell is no longer active.\n");
+     is_active = 0;
+  }
+
+Ok, fine and dandy. Your file works and it was easy to code. Why bother with
+properties at all then?
+
+Let's expand the example a bit. Say, for example, you have many spells, and
+that a player can only use one spell at a time. All your spells are stored
+in separate files. You don't want to use a master "spell controller item"
+for whatever reason. In this scenario, global variables become a problem.
+How do you determine whether a spell is currently active or not since it is
+impossible to query a variable from outside of an object?
+
+This is one case where properties are much more practical than variables.
+Although a property takes up a bit more memory than a global variable, you
+can query a property from outside the object. This is impossible with normal
+variables!
+
+Try this (from inside OSB):
+
+       xprops $m
+
+You should get a nice long list of all the properties which are set in your
+player object. It is only possible to check these values since they are
+saved as properties and not normal variables!
+
+The second reason to use variables instead of properties is related to
+reason number one: you can not only query properties from outside the
+object, you can also set or add new properties to an object without needing
+to change the file. This is even possible for objects whose files you can't
+edit.
+
+Take for example the Restaurant at the End of the Universe. This one room is
+accessable from many different pubs throughout the game. However, when
+players leave the Restaurant at the End of the Universe, they need to be
+deposited back into the pub they came from. Their "point-of-return" is
+stored in the player as a property. The property is added to the player when
+they enter the Restaurant, and queried when they leave. Neat, eh?
+
+-------------------------
+
+How to use properties
+
+Properties in OSB come in several flavors. Or, to be more exact, there
+are several ways to add, set or query properties, though the value of the
+property itself is always the same.
+
+You set the value of a property with
+
+       Set(<property name>, <value>);
+
+Using the spell example from above, I could set it in my object like this:
+
+       Set("is_active", 1);
+
+Likewise, you can get the value of any existing property with:
+
+       Query(<property name>);
+
+So, in the function which checks whether a spell is already active or not,
+you could write:
+
+       if ( Query("is_active") )  { fail message }
+
+Whenever you use standard properties, you need to include this line at the
+top of your file:
+
+       #include <properties.h>
+
+This is only necessary when you want to use properties which have already
+been defined. If you want to write your own properties, you don't need to
+include <properties.h>.
+
+So, to show you what it looks like, we'll rewrite the code snippet from
+above, this time using properties instead of global variables:
+
+   inherit "/std/thing";
+   #include <properties.h>  /* only necessary for standard properties */
+
+   create()
+   {
+      ::create();
+      ...
+      Set("is_active", 0);
+   }
+
+   cast_spell()
+   {
+      if ( Query( "is_active" ) )
+      {
+         notify_fail("Sorry, your nifty spell is already active!\n");
+         return 0;
+      }
+      write("You cast your nifty spell. Zap!\n");
+      Set( "is_active", 1 );
+      call_out("spell_end", 50);
+      return 1;
+   }
+
+   spell_end()
+   {
+      write("Your nifty spell is no longer active.\n");
+      Set( "is_active", 0 );
+   }
+
+-------------------------
+
+DON'T USE SetProp( ) or QueryProp( ) anymore!
+These functions are outdated!
+
+-------------------------
+
+The nitty-gritty
+
+If you read the docs, you'll notice that properties are often described as
+being either "hard" or "soft". Hard properties are properties which are set
+by calling a function. Soft properties are not set by calling functions.
+Unless you are trying to modify the behaviour of a property, this is
+probably of no further interest to you and you can safely ignore whether
+it's hard or soft.
+
+The next point of confusion arrives when reading a doc, and you're presented
+with a paragraph such as this:
+
+     mixed P_AUTOOBJECT   "AutoObject"
+       If the thing should be autoloading, the property has to be
+       set to a non-zero value. The value itself is stored over
+       logout and restored then again.
+
+Why two different formats? And which one should you choose, P_AUTOOBJECT or
+"AutoObject"?
+
+There is a small advantage to using the P_AUTOOBJECT format when you are
+dealing with standardized properties. All of these standard properties are
+defined in /sys/properties.h. The pre-processor basically takes the define,
+P_AUTOOBJECT, and expands it to "AutoObject". So what, you ask? Why have
+defines like that when I can write "AutoObject" well enough on my own?
+
+The advantage lies in debugging files. Say, for example, I write this in my
+file:
+
+       Set(P_AUTOOOBJECTT, 1);
+
+I get an error when I try to load this file, since P_AUTOOOBJECTT does not
+exist in /sys/properties.h. Had I used the other format instead,
+
+       Set("AutooObjectt", 1);
+
+the pre-processor would have assumed that "AutooObjectt" was my own
+property, therefore generating no error when the object was loaded. I would
+only notice a problem when I logged in again and noticed that my object was
+indeed not autoloading.
+
+You can always use the xprops command in the xtool to check the values of
+any properties in any object. This can come in handy when you're debugging
+an object that is being obstinate.
+
+There are also some properties which can be set by calling a function. For
+example, you can set the long description of a room in two ways:
+
+       Set(P_INT_LONG, "This is a really interesting room.\n");
+
+or:
+
+       SetIntLong("This is a really interesting room.\n");
+
+Both of these formats end up setting the same property. Using a function is
+easier since you don't have to type all caps and you don't have to worry
+about including <properties.h>, but the functions require more memory.
+
+----------------------------------------------------------------------------
+

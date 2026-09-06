@@ -1,0 +1,198 @@
+It seems strange: OSB and its predecessors exist now for several
+years, but I am still haunted by the dreaded properties. I collected
+my thoughts about the hows and whys below, and if you're technically
+inclined, of other opinion, or just curious: be my guest :-) Any
+comment is welcome.
+
+Since the text is a bit long to be read online, you can copy it
+from ~mateese/txt/proprant.txt .
+
+
+Some Basics
+-----------
+First allow me to recap what properties are (this may also help
+reducing misunderstandings). In the real world, every thing has some
+properties: tangible ones like height, weight, strength, smell or
+appearance, or intangible ones like hunger, intelligence or pet peeve.
+Muds, in their task to mimick the real world to a certain extent,
+select a few 'essential' properties and use these to describe the
+mud objects. In addition to the 'real world' properties, muds also
+add some unique properties on their own (e.g. when an object was
+created) and treat them like the real ones.
+
+On technical level this means, that objects 'know' a set of properties
+by name and offer the capability to store and retrieve the associated
+information. Not every object has to offer every property. For example,
+while the 'Weight' property is universal, it is not very useful to
+put the 'Intelligence' property into inanimate objects. Or in other
+words, every object "has" the Weight property, but inanimate objects
+"don't have" the Intelligence property. However, to make life easier,
+properties are for the most part defined in a way that not having
+a property or having it with a value of 0 has the same effects.
+For example it is possible to query even inanimate objects for their
+Intelligence: the result will be '0' then which is an appropriate
+description of their intelligence.
+
+Properties come in two different flavours (read: they can be grouped
+in two ways): "standard" vs. "custom", and "builtin" vs. "soft".
+
+"Standard" properties are known mud-wide. Not every object has to have
+them, but if they have them, then in just one way. For example, not
+every object has to be intelligent, but if it is, the property used
+is always 'Intelligence', never 'Cleverness'. "Custom" properties in
+contrast are specific for the objects which use them, and are useful
+only for them.
+
+"Builtin" properties (also called "hard properties") are built into
+the objects by means of explicit functions: even if you want to,
+you can't take them away. "Soft" properties on the other hand are just
+collections of data and can be added and removed whenever.
+Standard properties are usually builtin, but they can just as well
+be soft properties.
+
+Example: Imagine a guy object. This guy object has a few standard 
+properties like weight or strength, which OSB chose to implement
+as builtin properties. You now tag the guy object unbeknownst to him
+with a note, e.g. sporting the number 42. You do this by giving the guy
+object a new property ('TagNumber') and set its value to 42. The guy
+object now has this new property which he didn't have before, therefore
+it's a soft property. Additionally, it is a property which only
+the tagger (you) can make sense of, therefore it is also a custom
+property.
+
+Let's assume the tag was given out by an npc which intends to insult
+every player in the mud, but just once. Giving victims this TagNumber
+property is an easy way to distinguish former victims (have the property)
+from future victims (don't have it). The npc might want to count
+the number of victims it got so far, so the creator can check on it
+later. This would give the npc the custom property 'NumberOfVictims',
+which can be implemented as a builtin or soft property.
+
+
+One Complication
+----------------
+Over the time it became clear that properties have to distinguish between
+the "basic" and the "effective" value. For example the basic weight of a
+container is determined by the construction of the container, and thus
+always the same. However, the effective weight also has to take into
+account the weight of the things stored in the container and therefore
+changes over the time. 
+
+There are basically two approaches to care for this difference. One is
+to qualify every reference to a property (e.g. "effective Weight",
+"basic Smell"), the other to treat them as two different properties
+("OwnWeight" vs. "TotalWeight").
+
+
+Implementation
+--------------
+There are many ways to implement properties, and none of it is without
+flaw. I will introduce the most important methods below.
+
+In the beginning of LPMud, properties weren't understood at all and thus
+implemented in a haphazard way. The resulting mess made clear that
+properties are useful only if there is an easy, standardized way to
+access them.
+
+Direct Functions:
+  The obvious way to implement to implement properties using functions
+  and variables, like this:
+
+    int pWeight;
+    int QueryWeight()      { return pWeight; }
+    int SetWeight(int new) { return pWeight = new; }
+
+  This is the fastest implementation of properties, but is has a few
+  disadvantages:
+    - it is a lot to type for little effect.
+    - it is even more to type when distinguishing between basic
+      and effective property values.
+    - lots of replicant code.
+    - it is very difficult to gather a collection of _all_ property
+      values automatically in one array (needed for full auto-loading).
+    - no soft properties.
+    - hooks are difficult to implement.
+
+Mapped Properties:
+  Full soft properties put all properties into one mapping. That means
+  that one commonly inherited object features this code:
+
+    mapping pSoftProps;
+    mixed Query(string name)          { return pSoftProps[name]; }
+    mixed Set(string name, mixed new) { return pSoftProps[name] = new; }
+
+  New properties are introduced by simply Set()ing them.
+  This solution offers the least amount of replicant code and source, and
+  retrieval of all properties at once is no problem.
+  It's disadvantages are:
+    - it is slower than the direct function solution (by 50%).
+    - it is not type-safe in respect to the set values.
+    - distinguishing basic and effective property values is very
+      complicated: it involves either overloading Set() and using the name
+      for a big switch() statement or the introduction of filter functions.
+      The switch() solution leads to messy code (lots of unrelated
+      functionality collected in just one function), the filter solution
+      is slow (by 300%) and adds lots of bureaucrazy.
+
+Simple Hybrid Properties:
+  In this approach, both direct functions and mapped properties are used
+  in parallel. This allows to specialize the soft properties on those cases
+  where basic and effectives values are the same.
+  The disadvantages are:
+    - inconsistent interface: depending on the property one has to
+      use QueryFoo() or Query("Foo")
+    - it is still a lot to type for little effect when distinguishing
+      between basic and effective property values.
+    - lots of replicant code (though potentially less than with direct
+      functions alone).
+    - it is very difficult to gather a collection of _all_ property
+      values automatically in one array (needed for full auto-loading).
+    - hooks are difficult to implement.
+
+Mapped Hybrid Properties:
+  Here, as with the simple hybrid approach, both builtin and soft properties
+  are used in parallel. However, the builtin properties do not use variables
+  on their own, but instead store the values in the mapping together with
+  the soft properties:
+
+    int QueryWeight()       { return pSoftProps["Weight"]; }
+    int SetWeight(int new)  { return pSoftProps["Weight"] = new; }
+
+  This approach has a few unique advantages: it is only slightly slower than
+  the direct functions, it allows a straightforward implementation of
+  basic and effective values (basic values are always used via Set()/Query(),
+  effective values by SetName()/QueryName() instead), and it is possible
+  to get an array of all (basic) property values at once.
+  The disadvantages are:
+    - inconsistent interface for effective property values: one has to know
+      if it's QueryFoo() or Query("Foo").
+    - still lots of replicant code.
+    - hooks are difficult to implement.
+
+  The first two disadvantages could be solved by patching the gamedriver
+  that a call to QueryFoo() is automatically changed into Query("Foo") if
+  there is no function "QueryFoo()" in the object. But this is just an idea
+  and has not been implemented nor tested.
+
+Unified Hybrid Properties:
+  This approach, used currently in OSB and Nightfall, also uses direct
+  function and mapped properties in parallel. The properties are presented
+  as fully mapped properties (i.e. all accessible using Set()/Query());
+  internally the Set() and Query() functions check if the requested
+  property is actually builtin, and call the associated function if it
+  is. For example, a call to Set("Weight") will be forwarded into a call
+  of SetWeight(), whereas Set("Potrzebie") will modify the properties
+  mapping.
+
+  This approach is the worst of all, the only good thing is that it offers
+  a consistent interface. It's slowness (by 400%) makes it quite unusable.
+  In fact it was meant as a temporary measure only, to smoothen the transition
+  in Nightfall from direct function to fully mapped properties.
+
+
+Conclusion
+----------
+  None of the approaches to implement properties is flawless, but the mapped
+  hybrid approach looks promising. I intend to do some more experiments, also
+  with gamedriver modifications, and eventually would like to migrate fully to
+  that technique. Unless of course there are valid objections :-)
