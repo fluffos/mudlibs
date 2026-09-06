@@ -63,11 +63,38 @@ Logs this boot (PID started 20:08:32, live fd
 (`CAUGHT /catalog/player.lpc *catch-path-probe`) then reverted;
 play itself left no other catch lines.
 
-## 4. What is not ported
+## 6. Full dialect port (Strategy A, 2026-09-05)
 
-Full LDMud world, guilds, protocol stacks, and OSB/MG kernel daemons.
-Those remain in the tree for archaeology; booting them needs a real
-LDMud driver.
+Catalog Void/workshop is no longer the live world. User asked for
+the real game, not a demo skeleton.
+
+What loads now:
+
+- `/catalog/login` still handles name/password (real `/obj/player`
+  telopt/`INPUT_PROMPT`/`#'gmcp_test` is a later slice).
+- `/catalog/player` inherits `/obj/living` and `enter_world()` moves
+  into `/room/church`.
+- `/lib/room` rewritten for FluffOS: no `#'` / `symbol_function` /
+  `funcall` / LDMud `foreach (:)`. Exits and room verbs go through
+  `command_driver` → `call_other`.
+- Village rooms that stored closures (`church`, `well`, `wiz_hall`,
+  `attic`, `elevator`, `bank`, `bankroom`, `inn`) now store function
+  name strings.
+- `/catalog/simul_efun` shims `member`, `m_delete`, `m_indices`,
+  `widthof`, `object_name`, 2-arg `move_object`, `process_mxp`,
+  `deep_copy`. `auto.h` defines `status` and `_efun_move_to`.
+
+Still later: real `/obj/player` logon, remaining `#'` in
+`obj/player.lpc` / `obj/chest.lpc` / `obj/login/*`, mine/south
+forest live §10.7. Do not treat the old Void/workshop §10.7 as a
+world pass.
+
+## 4. What is not ported yet
+
+Real `/obj/player` telopt login, mine/south-forest depth, and any
+file that still uses `#'` (`obj/player.lpc`, `obj/chest.lpc`,
+`obj/login/*`). The 2.4.5 village itself (church → green → shop /
+Harry / Adventurers' Guild) is what catalog login loads.
 
 ## 5. WASM
 

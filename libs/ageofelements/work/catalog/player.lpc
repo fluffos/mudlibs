@@ -1,29 +1,55 @@
 /*
  * Catalog player body for ageofelements (LDMud → FluffOS conversion).
+ * Inherits the 2.4.5 living so the real village (church, shop, Harry,
+ * guild) can move / fight / buy. Login is still /catalog/login.
  */
 
-string name;
+inherit "/obj/living";
+
 string password;
-int hp;
-int max_hp;
 
 int cmd_look(string arg);
 int cmd_score(string arg);
 int cmd_inventory(string arg);
-int cmd_go(string dir);
+int cmd_get(string arg);
+int cmd_drop(string arg);
+int cmd_kill(string arg);
+int cmd_say(string arg);
 int cmd_quit(string arg);
+int cmd_wield(string arg);
 
 void create() {
   seteuid(getuid());
-  hp = 20;
+  level = 1;
+  hit_point = 20;
   max_hp = 20;
+  max_sp = 20;
+  spell_points = 20;
+  Str = 10;
+  Int = 10;
+  Con = 10;
+  Dex = 10;
+  money = 50;
+  msgin = "arrives";
+  msgout = "leaves";
+  mmsgin = "arrives in a puff of smoke";
+  mmsgout = "disappears in a puff of smoke";
+  gender = 1;
+  is_npc = 0;
 }
 
-string query_name() { return name; }
 string query_password() { return password; }
-int query_hp() { return hp; }
 int query_mhp() { return max_hp; }
-int query_level() { return 1; }
+string query_real_name() { return name; }
+
+void catch_tell(string s) {
+  if (s)
+    write(s);
+}
+
+int does_mxp() {
+  return 0;
+}
 
 string save_path() {
   if (!name || name == "")
@@ -45,14 +71,52 @@ void ensure_letter_dir() {
 
 int restore_me(string n) {
   name = n;
-  return restore_object(save_path());
+  if (!restore_object(save_path()))
+    return 0;
+  if (!cap_name || cap_name == "")
+    cap_name = capitalize(name);
+  if (max_hp < 1)
+    max_hp = 20;
+  if (hit_point < 1)
+    hit_point = max_hp;
+  if (level < 1)
+    level = 1;
+  if (Str < 1) {
+    Str = 10;
+    Int = 10;
+    Con = 10;
+    Dex = 10;
+  }
+  if (!msgin)
+    msgin = "arrives";
+  if (!msgout)
+    msgout = "leaves";
+  is_npc = 0;
+  return 1;
 }
 
 void setup_new(string n, string pw) {
   name = n;
+  cap_name = capitalize(n);
   password = pw;
-  hp = 20;
+  level = 1;
+  hit_point = 20;
   max_hp = 20;
+  max_sp = 20;
+  spell_points = 20;
+  money = 50;
+  Str = 10;
+  Int = 10;
+  Con = 10;
+  Dex = 10;
+  msgin = "arrives";
+  msgout = "leaves";
+  mmsgin = "arrives in a puff of smoke";
+  mmsgout = "disappears in a puff of smoke";
+  gender = 1;
+  is_npc = 0;
+  ghost = 0;
+  dead = 0;
 }
 
 void save_me() {
@@ -74,18 +138,26 @@ void wire_commands() {
   add_action("cmd_quit", "quit");
   add_action("cmd_inventory", "inventory");
   add_action("cmd_inventory", "i");
-  add_action("cmd_go", "north");
-  add_action("cmd_go", "south");
-  add_action("cmd_go", "east");
-  add_action("cmd_go", "west");
-  add_action("cmd_go", "up");
-  add_action("cmd_go", "down");
+  add_action("cmd_get", "get");
+  add_action("cmd_get", "take");
+  add_action("cmd_drop", "drop");
+  add_action("cmd_kill", "kill");
+  add_action("cmd_say", "say");
+  add_action("cmd_wield", "wield");
 }
 
 void enter_world() {
+  object dest;
+
+  if (!cap_name || cap_name == "")
+    cap_name = capitalize(name || "someone");
   set_living_name(name);
   wire_commands();
-  move_object("/catalog/void");
+  dest = load_object("/room/church");
+  if (dest)
+    efun::move_object(dest);
+  else
+    efun::move_object("/catalog/void");
   write("\n");
   command("look");
   save_me();
@@ -116,21 +188,31 @@ mixed process_input(string str) {
     case "i":
       cmd_inventory(rest);
       return 1;
-    case "north":
-    case "south":
-    case "east":
-    case "west":
-    case "up":
-    case "down":
-      cmd_go(verb);
+    case "get":
+    case "take":
+      cmd_get(rest);
+      return 1;
+    case "drop":
+      cmd_drop(rest);
+      return 1;
+    case "kill":
+      cmd_kill(rest);
+      return 1;
+    case "say":
+      cmd_say(rest);
+      return 1;
+    case "wield":
+      cmd_wield(rest);
       return 1;
   }
+  /* Directions, shop, pray, guild — room command_driver. */
   return 0;
 }
 
 int cmd_look(string arg) {
-  object env, *inv;
-  string out;
+  object env, *inv, ob;
+  mixed desc, item;
+  string brief, out;
   int i;
 
   env = environment();
@@ -138,58 +220,240 @@ int cmd_look(string arg) {
     write("You are nowhere.\n");
     return 1;
   }
-  out = env->query_long();
-  if (!out || out == "")
-    out = env->long();
-  if (!out || out == "")
-    out = "You see nothing special.";
-  write(out);
-  if (out[<1] != '\n')
-    write("\n");
-  write(env->query_exit_string());
+  if (arg && sscanf(arg, "at %s", arg) == 1)
+    ;
+  if (arg && arg != "") {
+    item = env->query_item(arg);
+    if (stringp(item) && item != "") {
+      write(item);
+      if (item[<1] != '\n')
+        write("\n");
+      return 1;
+    }
+    ob = present(arg, env);
+    if (!ob)
+      ob = present(arg, this_object());
+    if (ob) {
+      if (function_exists("long", ob))
+        ob->long();
+      else if (ob->short())
+        write(ob->short() + ".\n");
+      else
+        write("You see nothing special.\n");
+      return 1;
+    }
+    write("You see nothing special.\n");
+    return 1;
+  }
+  brief = env->query_brief();
+  if (!brief || brief == "")
+    brief = env->short();
+  if (brief && brief != "")
+    write(brief + "\n");
+  desc = env->query_description();
+  if (!desc || desc == "")
+    desc = env->query_long();
+  if (!desc || desc == "")
+    desc = env->long();
+  if (stringp(desc) && desc != "") {
+    write(desc);
+    if (desc[<1] != '\n')
+      write("\n");
+  }
+  out = env->query_exit_string();
+  if (stringp(out) && out != "")
+    write(out);
   inv = all_inventory(env);
   for (i = 0; i < sizeof(inv); i++) {
-    if (inv[i] != this_object() && inv[i]->query_name())
-      write(capitalize(inv[i]->query_name()) + " is here.\n");
+    if (inv[i] == this_object())
+      continue;
+    brief = inv[i]->short();
+    if (!brief || brief == "")
+      brief = inv[i]->query_name();
+    if (brief && brief != "")
+      write(brief + " is here.\n");
   }
   return 1;
 }
 
 int cmd_score(string arg) {
   write(capitalize(name || "someone") + " (level " + query_level() + ")\n");
-  write("hp: " + hp + "/" + max_hp + "\n");
+  write("hp: " + hit_point + "/" + max_hp + "  gold: " + money + "\n");
+  if (ghost)
+    write("You are a ghost. Go to the church and pray.\n");
   return 1;
 }
 
 int cmd_inventory(string arg) {
-  write("You are empty-handed.\n");
+  object ob;
+  string s;
+  int n;
+
+  ob = first_inventory(this_object());
+  if (!ob) {
+    write("You are empty-handed.\n");
+    return 1;
+  }
+  write("You are carrying:\n");
+  while (ob) {
+    s = ob->short();
+    if (s)
+      write("  " + s + ".\n");
+    n++;
+    ob = next_inventory(ob);
+  }
+  if (!n)
+    write("You are empty-handed.\n");
   return 1;
 }
 
-int cmd_go(string dir) {
-  object env, dest;
-  string path;
+int cmd_get(string arg) {
+  object ob;
 
-  if (!dir)
-    dir = query_verb();
-  env = environment();
-  if (!env) {
-    write("You are nowhere.\n");
+  if (!arg) {
+    write("Get what?\n");
     return 1;
   }
-  path = env->query_exit(dir);
-  if (!path) {
-    write("You cannot go that way.\n");
+  ob = present(arg, environment());
+  if (!ob) {
+    write("No " + arg + " here.\n");
     return 1;
   }
-  dest = load_object(path);
-  if (!dest) {
-    write("That exit leads nowhere.\n");
+  if (living(ob) && !ob->get()) {
+    write("You cannot take that.\n");
     return 1;
   }
-  move_object(dest);
-  command("look");
+  if (!ob->get()) {
+    write("You cannot take that.\n");
+    return 1;
+  }
+  if (!add_weight(ob->query_weight())) {
+    write("It is too heavy.\n");
+    return 1;
+  }
+  move_object(ob, this_object());
+  write("Ok.\n");
+  say(cap_name + " takes " + (ob->short() || arg) + ".\n");
   return 1;
+}
+
+int cmd_drop(string arg) {
+  object ob;
+
+  if (!arg) {
+    write("Drop what?\n");
+    return 1;
+  }
+  ob = present(arg, this_object());
+  if (!ob) {
+    write("You do not have that.\n");
+    return 1;
+  }
+  if (ob->drop())
+    return 1;
+  add_weight(-ob->query_weight());
+  move_object(ob, environment());
+  write("Ok.\n");
+  say(cap_name + " drops " + (ob->short() || arg) + ".\n");
+  return 1;
+}
+
+int cmd_kill(string arg) {
+  object ob;
+
+  if (!arg) {
+    write("Kill whom?\n");
+    return 1;
+  }
+  if (ghost) {
+    write("Your hands pass through everything.\n");
+    return 1;
+  }
+  ob = present(arg, environment());
+  if (!ob) {
+    write("No " + arg + " here!\n");
+    return 1;
+  }
+  if (!living(ob)) {
+    write(arg + " is not a living thing!\n");
+    return 1;
+  }
+  if (ob == this_object()) {
+    write("What? Attack yourself?\n");
+    return 1;
+  }
+  write("You attack " + (ob->query_name() || arg) + ".\n");
+  attack_object(ob);
+  return 1;
+}
+
+int cmd_say(string arg) {
+  if (!arg)
+    arg = "";
+  write("You say: " + arg + "\n");
+  say(cap_name + " says: " + arg + "\n");
+  return 1;
+}
+
+int cmd_wield(string arg) {
+  object ob;
+
+  if (!arg) {
+    write("Wield what?\n");
+    return 1;
+  }
+  ob = present(arg, this_object());
+  if (!ob) {
+    write("You do not have that.\n");
+    return 1;
+  }
+  return ob->wield(arg);
+}
+
+int remove_ghost() {
+  if (!ghost)
+    return 0;
+  write("You feel a very strong force.\n");
+  write("You are sucked away...\n");
+  write("You reappear in a more solid form.\n");
+  say("Some mist disappears.\n");
+  say(cap_name + " appears in a solid form.\n");
+  ghost = 0;
+  dead = 0;
+  msgin = "arrives";
+  msgout = "leaves";
+  if (hit_point < 10)
+    hit_point = 10;
+  save_me();
+  return 1;
+}
+
+int second_life() {
+  ghost = 1;
+  dead = 0;
+  msgin = "drifts around";
+  msgout = "blows";
+  attacker_ob = 0;
+  alt_attacker_ob = 0;
+  hunter = 0;
+  hunted = 0;
+  tell_object(this_object(),
+    "\nYou die.\nYou have a strange feeling.\n"
+    "You can see your own dead body from above.\n\n");
+  return 1;
+}
+
+void heart_beat() {
+  if (ghost)
+    return;
+  age += 1;
+  if (attacker_ob)
+    attack();
+  if (hit_point < max_hp && age % 10 == 0) {
+    hit_point += 1;
+    if (hit_point > max_hp)
+      hit_point = max_hp;
+  }
 }
 
 int cmd_quit(string arg) {

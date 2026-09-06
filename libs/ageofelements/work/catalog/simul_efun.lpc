@@ -1,15 +1,34 @@
 /*
- * FluffOS simul_efun for the ageofelements LDMud → FluffOS catalog overlay.
- * Original LDMud simul_efun tree is preserved under the archive paths
- * and is not loaded by config.fluffos.
+ * FluffOS simul_efun for the ageofelements LDMud → FluffOS port.
+ * Shims for LDMud efuns the 2.4.5 village (rooms, living, shop, Harry)
+ * actually calls. Original LDMud simul tree is not loaded.
  */
 
-void cat(string file) {
-  string s;
+inherit "/secure/simul_efun/process_mxp";
 
-  s = read_file(file);
-  if (s)
-    write(s);
+varargs int cat(string file, int start, int num) {
+  string content, *lines;
+  int total, from, to;
+
+  if (!file)
+    return 0;
+  content = read_file(file);
+  if (!content)
+    return 0;
+  if (strlen(content) && content[strlen(content) - 1] == '\n')
+    content = content[0..<2];
+  lines = explode(content, "\n");
+  total = sizeof(lines);
+  from = start ? start : 1;
+  if (from < 1)
+    from = 1;
+  if (from > total)
+    return 0;
+  to = num ? from + num - 1 : total;
+  if (to > total)
+    to = total;
+  write(implode(lines[from - 1..to - 1], "\n") + "\n");
+  return to - from + 1;
 }
 
 void log_file(string file, string str) {
@@ -20,4 +39,126 @@ void log_file(string file, string str) {
 
 int exists(string path) {
   return file_size(path) != -1;
+}
+
+string object_name(object ob) {
+  if (!ob)
+    return 0;
+  return efun::file_name(ob);
+}
+
+string to_string(mixed x) {
+  return "" + x;
+}
+
+mixed *m_indices(mapping m) {
+  if (!mapp(m))
+    return ({});
+  return keys(m);
+}
+
+int widthof(mixed m) {
+  if (!m)
+    return 0;
+  if (mapp(m))
+    return sizeof(m) ? 1 : 0;
+  return sizeof(m);
+}
+
+mapping m_delete(mapping m, mixed key) {
+  mapping copy;
+
+  if (!mapp(m))
+    return m;
+  copy = m + ([]);
+  efun::map_delete(copy, key);
+  return copy;
+}
+
+mixed member(mixed what, mixed elem) {
+  mixed *k;
+  int i;
+
+  if (mapp(what)) {
+    k = keys(what);
+    for (i = 0; i < sizeof(k); i++)
+      if (k[i] == elem)
+        return 1;
+    return 0;
+  }
+  if (pointerp(what))
+    return efun::member_array(elem, what);
+  if (stringp(what))
+    return strsrch(what, elem);
+  return 0;
+}
+
+int closurep(mixed x) {
+  return 0;
+}
+
+varargs mixed funcall(mixed f, mixed a, mixed b, mixed c) {
+  if (stringp(f))
+    return call_other(this_object(), f, a, b, c);
+  return 0;
+}
+
+mixed deep_copy(mixed x) {
+  mapping out;
+  mixed *k, *arr;
+  int i;
+
+  if (mapp(x)) {
+    out = ([]);
+    k = keys(x);
+    for (i = 0; i < sizeof(k); i++)
+      out[k[i]] = deep_copy(x[k[i]]);
+    return out;
+  }
+  if (pointerp(x)) {
+    arr = allocate(sizeof(x));
+    for (i = 0; i < sizeof(x); i++)
+      arr[i] = deep_copy(x[i]);
+    return arr;
+  }
+  return x;
+}
+
+/* FluffOS efun move_object is 1-arg (moves current_object). LDMud
+ * rooms/livings call move_object(item, dest). When item is the caller,
+ * delegate to the efun; otherwise ask the item to move itself. */
+varargs void move_object(mixed item, mixed dest) {
+  object ob, d;
+
+  if (undefinedp(dest)) {
+    efun::move_object(item);
+    return;
+  }
+  if (objectp(item))
+    ob = item;
+  else if (stringp(item)) {
+    ob = find_object(item);
+    if (!ob)
+      catch(ob = load_object(item));
+  }
+  if (objectp(dest))
+    d = dest;
+  else if (stringp(dest)) {
+    d = find_object(dest);
+    if (!d)
+      catch(d = load_object(dest));
+  }
+  if (!ob || !d)
+    return;
+  if (ob == previous_object()) {
+    efun::move_object(d);
+    return;
+  }
+  call_other(ob, "_efun_move_to", d);
+}
+
+varargs void add_worth(int value, object ob) {
+}
+
+void set_modify_command(mixed ob) {
 }

@@ -12,6 +12,8 @@ private nosave object *permanent_objects;
 private nosave string *permanent_names;
 private nosave mixed *transient_objects;
 
+void _apply_calls(object ob, mixed *spec);
+
 int
 query_lumens()
 {
@@ -27,17 +29,13 @@ set_lumens(int arg)
 string
 query_brief()
 {
-    if (closurep(brief)) {
-	return funcall(brief);
-    }
-
     return brief;
 }
 
 void
 set_brief(mixed arg)
 {
-    if (!stringp(arg) && !closurep(arg)) {
+    if (!stringp(arg)) {
 	return;
     }
 
@@ -47,21 +45,56 @@ set_brief(mixed arg)
 string
 query_description()
 {
-    if (closurep(description)) {
-	return funcall(description);
-    }
-
     return description;
 }
 
 void
 set_description(mixed arg)
 {
-    if (!stringp(arg) && !closurep(arg)) {
+    if (!stringp(arg)) {
 	return;
     }
 
     description = arg;
+}
+
+string
+query_long()
+{
+    return query_description();
+}
+
+string
+long()
+{
+    return query_description();
+}
+
+string
+query_exit_string()
+{
+    string *dirs;
+    string out;
+    int i, n;
+
+    if (!exits || !sizeof(exits)) {
+	return "There are no obvious exits.\n";
+    }
+    dirs = keys(exits);
+    n = sizeof(dirs);
+    if (n == 1) {
+	return "The only obvious exit is " + dirs[0] + ".\n";
+    }
+    out = "The obvious exits are ";
+    for (i = 0; i < n; i++) {
+	if (i == n - 1)
+	    out += " and " + dirs[i];
+	else if (i)
+	    out += ", " + dirs[i];
+	else
+	    out += dirs[i];
+    }
+    return out + ".\n";
 }
 
 mapping
@@ -99,7 +132,7 @@ query_exit(string arg)
 void
 add_exit(string dir, mixed room)
 {
-    if (!stringp(dir) || (!stringp(room) && !closurep(room))) {
+    if (!stringp(dir) || !stringp(room)) {
 	return;
     }
 
@@ -130,7 +163,7 @@ query_items()
     if (ret && mappingp(ret) && sizeof(ret)) {
 	string synonym;
 
-	foreach (string key, string val : ret) {
+	foreach (string key, string val in ret) {
 	    if (sscanf(val, "=%s", synonym) == 1 && member(ret, synonym)) {
 		ret[key] = ret[synonym];
 	    }
@@ -143,6 +176,10 @@ query_items()
 void
 set_items(mapping arg)
 {
+    mixed item;
+    mixed *ks;
+    int i;
+
     if (!arg) {
 	items = 0;
 
@@ -155,11 +192,16 @@ set_items(mapping arg)
 
     items = deep_copy(arg);
 
-    foreach (mixed item : m_indices(arg)) {
+    ks = m_indices(arg);
+    for (i = 0; i < sizeof(ks); i++) {
+	item = ks[i];
 	if (pointerp(item) && sizeof(item)) {
 	    string synonym;
+	    mixed element;
+	    int j;
 
-	    foreach (mixed element : item) {
+	    for (j = 0; j < sizeof(item); j++) {
+		element = item[j];
 		if (stringp(element)) {
 		    if (!synonym) {
 			synonym = element;
@@ -170,7 +212,7 @@ set_items(mapping arg)
 		}
 	    }
 
-	    m_delete(items, item);
+	    items = m_delete(items, item);
 	}
     }
 }
@@ -179,6 +221,7 @@ mixed
 query_item(string arg)
 {
     string synonym;
+    mixed val;
 
     if (!arg || !items || !sizeof(items)) {
 	return 0;
@@ -187,16 +230,23 @@ query_item(string arg)
     if (stringp(items[arg])
 	&& sscanf(items[arg], "=%s", synonym) == 1
 	&& member(items, synonym)) {
-	return items[synonym];
+	val = items[synonym];
+    } else {
+	val = items[arg];
     }
 
-    return items[arg];
+    if (stringp(val) && strsrch(val, " ") == -1
+	&& function_exists(val, this_object())) {
+	return call_other(this_object(), val);
+    }
+
+    return val;
 }
 
 void
 add_item(mixed item, mixed desc)
 {
-    if (!stringp(desc) && !closurep(desc)) {
+    if (!stringp(desc)) {
 	return;
     }
 
@@ -208,34 +258,45 @@ add_item(mixed item, mixed desc)
 
     if (pointerp(item) && sizeof(item)) {
 	string synonym;
+	mixed element;
+	int j;
 
-	foreach (mixed element : item) {
+	for (j = 0; j < sizeof(item); j++) {
+	    element = item[j];
 	    if (stringp(element)) {
 		if (!synonym) {
 		    synonym = element;
-		    items[element] = item[element];
+		    items[element] = desc;
 		} else {
 		    items[element] = sprintf("=%s", synonym);
 		}
 	    }
 	}
 
-	m_delete(items, item);
+	items = m_delete(items, item);
     }
 }
 
 void
 remove_item(string arg)
 {
+    string synonym;
+    mixed *ks;
+    int i;
+
     if (items && mappingp(items)) {
-	m_delete(items, arg);
+	items = m_delete(items, arg);
     }
 
-    string synonym = sprintf("=%s", arg);
+    if (!items) {
+	return;
+    }
 
-    foreach (string key, mixed val : items) {
-	if (stringp(val) && val == synonym) {
-	    m_delete(items, key);
+    synonym = sprintf("=%s", arg);
+    ks = keys(items);
+    for (i = 0; i < sizeof(ks); i++) {
+	if (stringp(items[ks[i]]) && items[ks[i]] == synonym) {
+	    items = m_delete(items, ks[i]);
 	}
     }
 
@@ -255,6 +316,7 @@ set_commands(mapping arg)
 {
     if (!arg) {
 	commands = 0;
+	return;
     }
 
     if (!mappingp(arg) || !sizeof(m_indices(arg))) {
@@ -277,7 +339,7 @@ query_command(string arg)
 void
 add_command(string cmd, mixed func)
 {
-    if (!stringp(cmd) || (!stringp(func) && !closurep(func))) {
+    if (!stringp(cmd) || !stringp(func)) {
 	return;
     }
 
@@ -301,8 +363,38 @@ remove_command(string arg)
 }
 
 void
+_apply_calls(object ob, mixed *spec)
+{
+    int i, n, s;
+    mixed *a;
+
+    n = sizeof(spec);
+    for (i = 1; i < n; i++) {
+	if (!pointerp(spec[i])) {
+	    continue;
+	}
+	a = spec[i];
+	s = sizeof(a);
+	if (s < 1) {
+	    continue;
+	}
+	if (s == 1) {
+	    call_other(ob, a[0]);
+	} else if (s == 2) {
+	    call_other(ob, a[0], a[1]);
+	} else if (s == 3) {
+	    call_other(ob, a[0], a[1], a[2]);
+	} else {
+	    call_other(ob, a[0], a[1], a[2], a[3]);
+	}
+    }
+}
+
+void
 add_permanent_object(string arg)
 {
+    object ob;
+
     if (!stringp(arg)) {
 	return;
     }
@@ -312,7 +404,7 @@ add_permanent_object(string arg)
 	permanent_names = ({});
     }
 
-    object ob = clone_object(arg);
+    ob = clone_object(arg);
     move_object(ob, this_object());
 
     permanent_objects += ({ ob });
@@ -355,38 +447,25 @@ add_transient_object(mixed arg, string appearmsg, int reset_chance)
 	return;
     }
 
-    // Accept add_transient_object(object) and optionally write the appearmsg
-    // and calculation to determine if it is moved to the room, however the
-    // this room inheritable will *not* manage their resets.
     if (objectp(arg)) {
 	ob = arg;
     }
 
     if (reset_chance && reset_chance < random(101)) {
-	; // Do nothing
+	;
     } else {
-	if (stringp(arg)) { // A simple file name
+	if (stringp(arg)) {
 	    catch (ob = clone_object(arg));
-	} else if (pointerp(arg)) { // A more complex array
-	    catch (ob = clone_object(arg[0])); // First element must be the file name
+	} else if (pointerp(arg)) {
+	    catch (ob = clone_object(arg[0]));
 	}
 
 	if (!ob) {
-	    return; // Cloning failed?
+	    return;
 	}
 
-	if (pointerp(arg)) { // Process call_other's
-	    for (int i = 1, int s = sizeof(arg); i < s; i++) {
-		if (!pointerp(arg[i])) {
-		    continue;
-		}
-
-		if (sizeof(arg[i]) < 2) {
-		    call_other(ob, arg[i][0]);
-		} else {
-		    apply(#'call_other, ob, arg[i][0], arg[i][1..<1]);
-		}
-	    }
+	if (pointerp(arg)) {
+	    _apply_calls(ob, arg);
 	}
 
 	if (!transient_objects) {
@@ -400,7 +479,7 @@ add_transient_object(mixed arg, string appearmsg, int reset_chance)
 	move_object(ob, this_object());
     }
 
-    if (ob && appearmsg) { // Sometimes init() can destroy objects
+    if (ob && appearmsg) {
 	say(sprintf("%s\n", appearmsg), ob);
     }
 }
@@ -408,32 +487,44 @@ add_transient_object(mixed arg, string appearmsg, int reset_chance)
 void
 reset_transient_objects()
 {
-    foreach (mixed transient_data : transient_objects) {
+    int i, n;
+    mixed transient_data;
+    object ob;
+    mixed object_info;
+    string appearmsg;
+    int reset_chance;
+    int new_clone;
+
+    if (!pointerp(transient_objects)) {
+	return;
+    }
+
+    n = sizeof(transient_objects);
+    for (i = 0; i < n; i++) {
+	transient_data = transient_objects[i];
 	if (!pointerp(transient_data)) {
 	    continue;
 	}
 
-	object ob = transient_data[0];
-	mixed object_info = transient_data[1];
-	string appearmsg = transient_data[2];
-	int reset_chance = transient_data[3];
+	ob = transient_data[0];
+	object_info = transient_data[1];
+	appearmsg = transient_data[2];
+	reset_chance = transient_data[3];
 
 	if (!object_info || (!stringp(object_info) && !pointerp(object_info))) {
-	    transient_data = 0;
+	    transient_objects[i] = 0;
 	    continue;
 	}
 
-	// Check if the object is resettable (in this reset)
 	if (reset_chance && reset_chance < random(101)) {
-	    continue; // Do nothing
+	    continue;
 	}
 
-	// If the object is here, do nothing
 	if (ob && environment(ob) == this_object()) {
 	    continue;
 	}
 
-	int new_clone;
+	new_clone = 0;
 
 	if (!ob || !ob->is_npc()) {
 	    new_clone = 1;
@@ -446,22 +537,12 @@ reset_transient_objects()
 	}
 
 	if (!ob) {
-	    continue; // Cloning failed?
+	    continue;
 	}
 
 	if (new_clone) {
-	    if (pointerp(object_info)) { // Process call_other's
-		for (int i = 1, int s = sizeof(object_info); i < s; i++) {
-		    if (!pointerp(object_info[i])) {
-			continue;
-		    }
-
-		    if (sizeof(object_info[i]) < 2) {
-			call_other(ob, object_info[i][0]);
-		    } else {
-			apply(#'call_other, ob, object_info[i][0], object_info[i][1..<1]);
-		    }
-		}
+	    if (pointerp(object_info)) {
+		_apply_calls(ob, object_info);
 	    }
 
 	    transient_data[0] = ob;
@@ -472,10 +553,9 @@ reset_transient_objects()
 	    continue;
 	}
 
-	// Return to this room.
 	move_object(ob, this_object());
 
-	if (ob && appearmsg) { // Sometimes init() can destroy objects
+	if (ob && appearmsg) {
 	    say(sprintf("%s\n", appearmsg), ob);
 	}
     }
@@ -498,7 +578,11 @@ move(string dir, string room)
 	return 0;
     }
 
-    this_player()->move_player(dir, room);
+    if (stringp(room)) {
+	this_player()->move_player(dir + "#" + room);
+    } else {
+	this_player()->move_player(dir, room);
+    }
     return 1;
 }
 
@@ -533,17 +617,14 @@ reset()
 	this_object()->reset_room();
     }
 
-    // reset_room() may call destruct()
     if (!this_object()) {
        return;
     }
 
-    // Clone and replace missing permanent objects
     if (pointerp(permanent_names)) {
 	reset_permanent_objects();
     }
 
-    // Reset transient objects
     if (pointerp(transient_objects)) {
 	reset_transient_objects();
     }
@@ -604,14 +685,10 @@ command_driver(string arg)
 
     verb = query_verb();
 
-    if (commands && widthof(commands) && (func = commands[verb])) {
-	// Convert to a closure if not already done so.
+    if (commands && sizeof(commands) && (func = commands[verb])) {
 	if (stringp(func)) {
-	    func = symbol_function(func, this_object());
-	    commands[verb] = func;
+	    ret = call_other(this_object(), func, arg);
 	}
-
-	ret = funcall(func, arg, this_player());
 
 	if (ret) {
 	    return ret;
@@ -619,15 +696,9 @@ command_driver(string arg)
     }
 
     if (exits && (func = exits[verb])) {
-	if (closurep(func)) {
-	    func = funcall(func, arg, this_player());
-
-	    if (!stringp(func) && !objectp(func)) {
-		return func;
-	    }
+	if (stringp(func) || objectp(func)) {
+	    ret = move(verb, func);
 	}
-
-	ret = move(verb, func);
 
 	if (ret) {
 	    return ret;
@@ -646,9 +717,8 @@ command_driver(string arg)
 	return smell_cmd(arg);
     }
 
-    if (this_player()->is_npc()) {
-	func = symbol_function("command_driver", this_player());
-	ret = funcall(func, arg, this_player());
+    if (this_player() && this_player()->is_npc()) {
+	ret = this_player()->command_driver(arg);
 
 	if (ret) {
 	    return ret;
