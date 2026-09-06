@@ -121,23 +121,27 @@ Live walk (native 40286, 2026-09-05, organic `fluffos` /
   awards QUEST_EAT_AT_JOES (`M6a`). `score` shows `Quests:
   M6a`. Reconnect persists. Guild `quests` drops from 14 to
   13 (Eat at Joe's gone). Stomach has no exits (upstream).
-  S7_7 (well square) still fails to compile (`#'`).
+- Well maze LIVE (`6bbecdc51dd`): S7_7 `#'read_file` map
+  lambda → `map_text()`. Harry boot wrapped in catch (he
+  actually spawned). Maze `exit_num` fixed to 0 so north
+  advances. Church → S7_6 south → well square → down →
+  north ×4 → End of maze awards QUEST_M3. `score` `Quests:
+  M6a, M3`. Reconnect persist. Guild list 12 (Maze Under
+  Well gone). Leather armour cloned at the end.
 
-This-boot live `libs/sticklib/log/debug.log` (fd, PID 1579678
-BOOT_MARKER13 sticklib-joes3): Joe + stomach compiled. Catch
-this walk: expected PEACE_D / bboard / guards; no questd or
-Joe errors.
+This-boot live `libs/sticklib/log/debug.log` (fd, PID 1605006
+BOOT_MARKER14 sticklib-well): S7_7 + well + maze compiled.
+Catch this walk: expected PEACE_D / bboard only.
 
 **Not published** (`wasm_status: partial`). Flip to `playable`
-only after combat + more than one quest/advance path, not on
-guild-look + shop-buy + a single swallow quest.
+only after combat + a real advance path, not on two solved
+quests + shop-buy alone.
 
 ## 4. What is not ported yet
 
 Elevator, PEACE_D, NATURE_D. Trashcan toss (`foreach :`).
 Full LDMud living combat (HitFunc closures; thin living/npc
 stub `hit_player` / `attacked_by`). Bulletin board extra
-inherit. S7_7 well (`#'`). Beer-to-bum (give + pub). Well
-maze (needs S7_7). Joe's LDMud tell_here format tokens still
-print raw. Catalog inventory persist is still
-save fields only. Next slice: combat, or beer-to-bum / well.
+inherit. Beer-to-bum (give + pub). Joe's LDMud tell_here
+format tokens still print raw. Catalog inventory persist is
+still save fields only. Next slice: combat, or beer-to-bum.
