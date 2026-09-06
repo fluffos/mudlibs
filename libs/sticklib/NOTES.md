@@ -128,13 +128,26 @@ Live walk (native 40286, 2026-09-05, organic `fluffos` /
   north ×4 → End of maze awards QUEST_M3. `score` `Quests:
   M6a, M3`. Reconnect persist. Guild list 12 (Maze Under
   Well gone). Leather armour cloned at the end.
+- Beer to Bum LIVE (`f725c02fc45`): church → S7_6 south ×3
+  → S7_9 west Potato-Nosed Ogre. Bartender present. `buy
+  beer` (48 gold) → inventory "Bottle of Ogre IV beer".
+  East, north ×2 to well square, west ×7 to West Gate.
+  Bum spawned (archive never placed him; Strategy A puts
+  him at `gate_west`). `give beer to bum` awards QUEST_M2.
+  `score` `Quests: M6a, M3, M2`. Gold 200→152. Reconnect
+  persist. Guild `quests` 11 (Beer to Bum gone). Thin
+  `/lib/drink` (original `drink_ldmud.lpc`); `/lib/pub`
+  empty `reset_pub()`; nature-null pub hours; catalog
+  get/give. City guards still fail to compile (private
+  `gender` / `Pronoun` / `set_keep_hb`) — catch-wrapped.
 
-This-boot live `libs/sticklib/log/debug.log` (fd, PID 1605006
-BOOT_MARKER14 sticklib-well): S7_7 + well + maze compiled.
-Catch this walk: expected PEACE_D / bboard only.
+This-boot live `libs/sticklib/log/debug.log` (fd, PID 1635411
+BOOT_MARKER15 sticklib-beer): pub2 + drink + bum compiled.
+Catch this walk: expected PEACE_D / bboard / nature_d /
+trashcan / bench / leper / guard.
 
 **Not published** (`wasm_status: partial`). Flip to `playable`
-only after combat + a real advance path, not on two solved
+only after combat + a real advance path, not on three solved
 quests + shop-buy alone.
 
 ## 4. What is not ported yet
@@ -142,6 +155,6 @@ quests + shop-buy alone.
 Elevator, PEACE_D, NATURE_D. Trashcan toss (`foreach :`).
 Full LDMud living combat (HitFunc closures; thin living/npc
 stub `hit_player` / `attacked_by`). Bulletin board extra
-inherit. Beer-to-bum (give + pub). Joe's LDMud tell_here
-format tokens still print raw. Catalog inventory persist is
-still save fields only. Next slice: combat, or beer-to-bum.
+inherit. City guards. Joe's LDMud tell_here format tokens
+still print raw. Catalog inventory persist is still save
+fields only. Next slice: combat (HitFunc).
