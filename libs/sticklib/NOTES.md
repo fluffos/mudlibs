@@ -63,13 +63,61 @@ Logs this boot (PID started 20:09:19, live fd
 (`CAUGHT /catalog/player.lpc *catch-path-probe`) then reverted;
 play itself left no other catch lines.
 
-## 4. What is not ported
+## 6. Full dialect port (Strategy A, 2026-09-05)
 
-Full LDMud world, guilds, protocol stacks, and OSB/MG kernel daemons.
-Those remain in the tree for archaeology; booting them needs a real
-LDMud driver.
+Catalog Void/workshop is no longer the live world. User asked for
+the real StickMUD, not a demo skeleton.
 
-**Not published** on mudlibs.fluffos.info (`wasm_status: partial`).
-Catalog overlay Void/workshop is not a world §10.7. Flip to
-`playable` only after a Strategy A port of StickMUD and a
-shop/combat/guild deep-test.
+What loads now:
+
+- `/catalog/login` still handles name/password. `/catalog/player`
+  `enter_world()` moves into `/room/church` (Temple yard, Newbie
+  York).
+- `/lib/room` rewritten as a FluffOS Stick-API subset: 1-arg
+  `set(NO_PK)`, `add_exit`/`add_item`/`add_permanent`,
+  `command_driver` → `call_other`. Original LDMud room (closures,
+  3-arg implode, PEACE_D/PARTY_D) is `/lib/room_ldmud.lpc`.
+- `/catalog/master` `compile_object` delegates to
+  `/areas/tristeza/virtual/server` so `S7_6` etc. clone
+  `tristeza_room` (FluffOS renames the clone to the virtual path).
+- Church `#'query_door_desc` / clock closures → function-name
+  strings. Elevator `call_other` uses an explicit path (FluffOS
+  parsed `(int)AREA+"rooms/elevator"->fn` as `'rooms/elevator'`).
+- `mud_name.h` no longer redefines FluffOS's predefined `MUD_NAME`.
+  Simul shims: `member`/`m_delete`/`m_indices`/3-arg `implode`/
+  2-arg `move_object`/`nature()`/`notify_fail` returns 0.
+
+Live walk (native 40286, 2026-09-05, organic `fluffos` /
+`Mud@2026`):
+
+- Temple yard look; `look at pit` / `look at door` (closed) /
+  `look at clock` (midday fallback); `score`; `pray` ("No sense
+  praying unless you're dead.").
+- East → Hall of Races (sign look). West back to the yard.
+- South → virtual Market Square (S7_6). West → S6_6. West →
+  Common Shop. `read writing` shows buy/sell/list/value. `list`
+  is "Shop doesn't seem to be open" (shopkeeper is `/lib/npc` →
+  `/lib/living` `closure HitFunc`, does not compile).
+- Adventurers' Guild (east from physical S8_6) does not load:
+  `/lib/guild` `closure guildInit` plus `#'make_noise` in
+  `adv_guild.lpc`.
+
+This-boot live `libs/sticklib/log/debug.log` (fd) + driver
+stdout clean of uncaught play errors after the elevator-path
+fix. `work/log/catch` this boot: expected CAUGHT on
+`/lib/treasure` (saint/finger), `/lib/living` (shopkeeper /
+street NPCs), `/bin/daemons/peaced`, `/bin/daemons/nature_d`,
+elevator. Older catch lines above those are from the compile
+iterate earlier the same evening.
+
+**Not published** (`wasm_status: partial`). Flip to `playable`
+only after shop buy + combat + guild actually work.
+
+## 4. What is not ported yet
+
+`/lib/living`, `/lib/npc`, `/lib/guild`, `/lib/treasure` still
+use the `closure` type. Elevator, PEACE_D, NATURE_D, and
+`#'make_noise` in the Adventurers' Guild. Catalog body: inventory
+does not persist usefully; gold on the saved `fluffos` account
+is 0 from the old Void overlay. Next slice: living/npc so the
+shopkeeper clones and `list`/`buy` work, then guild + combat.
