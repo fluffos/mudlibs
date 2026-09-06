@@ -12935,6 +12935,8 @@ same nominally-shared variable from yet another file remains at risk
 and needs its own case-by-case check or the same file-colocation
 treatment.
 
+Practical how-to for the next LDMud onboard (catalog overlay vs full port, checklist, examples `acme` / `morgengrauen` / `ageofelements` / `aoh`): see `docs/ldmud-to-fluffos.md`.
+
 ### 7.158 First LDMud-lineage lib onboarded (`questmud`) — a whole cluster of architecture-level gaps, not just dialect differences; the worst one (`X->move_object(Y)` silently no-ops) fails with NO error at all
 
 Every classic-LPMud lib onboarded before this one was MudOS-lineage,

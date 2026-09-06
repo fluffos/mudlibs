@@ -54,3 +54,7 @@ reloads `data/f/fluffos.o`.
 Full LDMud world, guilds, protocol stacks, and OSB/MG kernel daemons.
 Those remain in the tree for archaeology; booting them needs a real
 LDMud driver.
+
+## 5. WASM
+
+Verified 2026-09-05 via `scripts/wasm_client.js`: register/reconnect fluffos, look/score/quit.
