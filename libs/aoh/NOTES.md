@@ -141,7 +141,10 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/center/outside14` — The palace avenue, Lady flowers (look only)
 - `/d/silvere/rooms/center/outside15` — The palace avenue, Arabellas (look only)
 - `/d/silvere/rooms/center/outside16` — The palace avenue, venus poppys (look only)
-- `/d/silvere/rooms/center/outside17` — Avenue of the Palace, Tali statue (look only)
+- `/d/silvere/rooms/center/outside17` — Avenue of the Palace, Tali statue (look only; east eastroad1 loaded)
+- `/d/silvere/rooms/center/eastroad1` — Mainroad leading east (archive stub)
+- `/d/silvere/rooms/center/eastroad2` — Mainroad leading east (archive stub)
+- `/d/silvere/rooms/east/mainroad1` — On a road at Silvere (foggy; Joan and Mistral house mentioned, not loaded)
 - `/d/silvere/rooms/center/outside18` — The palace avenue, Morning Stars (look only)
 - `/d/silvere/rooms/center/outside19` — The palace avenue, pomegranate grove (look only)
 - `/d/silvere/rooms/center/outside20` — The palace avenue, turns west (look only)
@@ -174,7 +177,7 @@ and English harbour text as thin FluffOS rooms; originals are
 
 inn buy/drink, harbourmaster bell NPC, tower interiors,
 palace enter (`palenter` / `enter palace` not wired),
-garden1–4, eastroad1, northroad, further south-town
+garden1–4, northroad, further south-town
 (`/d/silvere/rooms/south/mainroad2` is still the LDMud
 SILBASEROOM original), statue touch/helmet, further
 council road / mail / bank deposit / Caves of Parch,
@@ -1029,14 +1032,39 @@ This-boot live `libs/aoh/log/debug.log` (fd 3, PID 2820105
 BOOT_MARKER39 aoh-outside28-32): no new lines after the
 marker. Catch this walk: empty after the marker.
 
+Harbour expansion 39 (native 40285, 2026-09-07, same
+`fluffos` / `Mud@2026`, do not redo docks, inn/office,
+towers, Westway, westenter, outside1–outside32,
+palplace1–palplace6, mainsouth1 Sarykan,
+south/mainroad1, Tali/Kyrie statues, or palace-avenue
+look-ats):
+
+- East of Tali / outside17 → Mainroad leading east
+  (palace west / eastern district east; archive stub,
+  no AddDetail; `look at road` “You see nothing
+  special.”).
+- East → Mainroad leading east (same stub long).
+- East → On a road at Silvere (foggy buildings archive
+  “seems to be”; house of Joan and Mistral south).
+  `look at buildings` “You see nothing special.”
+  South `mistralhouse/garden1` not wired (`You cannot
+  go that way.`). East citygate unfinished (`You
+  cannot go that way.`). West×3 returns to Tali.
+- `score` persist. Reconnect still lands on the docks.
+
+This-boot live `libs/aoh/log/debug.log` (fd 3, PID 2825393
+BOOT_MARKER40 aoh-eastroad): no new lines after the
+marker. Catch this walk: empty after the marker.
+
 **Not published** (`wasm_status: partial`). Do not flip to
 `playable` on this harbour walk. `look at menu`,
 `look at candles`, `look at cabins`, `look at tiles`,
 and tailor/bakery/wine/flower `sign`s are flavour —
 buy/drink, mail, deposit, combat, `enter palace`,
 `touch statue`, and tower interiors are not claimed.
-Next aoh slice: east of Tali (`/d/silvere/rooms/center/eastroad1`)
-or a fig garden if expanding.
+Next aoh slice: fig gardens `garden1`–`garden4`
+(look-ats only; do not wire pick/sit/meditate/search)
+or south `mainroad2`.
 
 ## 5. WASM
 
