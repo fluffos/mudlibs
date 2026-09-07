@@ -89,6 +89,12 @@ Avenue of the Palace bay/lavender/orange astra
 liliums (look only; archive lavendar),
 Avenue at the palace ginger/parsley/yellow star
 liliums (look only),
+Avenue at the palace fig grove / elven leaf hedges
+(perferred; look only),
+The palace avenue west corner then south (fig
+grove; look only),
+palace avenue (archive short; jasmine / cinnamon;
+look only — south closes the loop on outside2),
 library road (guild unfinished),
 wine-shop vines, Counting House plaque,
 post-office cabins, bank panelling); south Seaman's Rest

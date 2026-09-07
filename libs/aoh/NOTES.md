@@ -152,6 +152,11 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/center/outside25` — Avenue of the Palace, Kyrie statue (look only)
 - `/d/silvere/rooms/center/outside26` — Avenue of the Palace, bay/lavender (look only)
 - `/d/silvere/rooms/center/outside27` — Avenue at the palace, ginger/parsley (look only)
+- `/d/silvere/rooms/center/outside28` — Avenue at the palace, fig grove (look only)
+- `/d/silvere/rooms/center/outside29` — Avenue at the palace, fig grove west (look only)
+- `/d/silvere/rooms/center/outside30` — The palace avenue, west corner (look only)
+- `/d/silvere/rooms/center/outside31` — The palace avenue, west wing south (look only)
+- `/d/silvere/rooms/center/outside32` — palace avenue (archive short; jasmine; look only)
 - `/d/silvere/rooms/west/flowershop` — Jehane's Flowers (look only)
 - `/d/silvere/rooms/west/libraryroad1` — Guild Street / library road
 - `/d/silvere/rooms/west/libraryroad2` — library road west (stub look-ats)
@@ -169,7 +174,7 @@ and English harbour text as thin FluffOS rooms; originals are
 
 inn buy/drink, harbourmaster bell NPC, tower interiors,
 palace enter (`palenter` / `enter palace` not wired),
-outside28, garden4, eastroad1, northroad, further south-town
+garden1–4, eastroad1, northroad, further south-town
 (`/d/silvere/rooms/south/mainroad2` is still the LDMud
 SILBASEROOM original), statue touch/helmet, further
 council road / mail / bank deposit / Caves of Parch,
@@ -995,14 +1000,43 @@ This-boot live `libs/aoh/log/debug.log` (fd 3, PID 2789264
 BOOT_MARKER38 aoh-outside24-27): no new lines after the
 marker. Catch this walk: empty after the marker.
 
+Harbour expansion 38 (native 40285, 2026-09-07, same
+`fluffos` / `Mud@2026`, do not redo docks, inn/office,
+towers, Westway, westenter, outside1–outside27,
+palplace1–palplace6, mainsouth1 Sarykan,
+south/mainroad1, Tali/Kyrie statues, or herb-bed
+look-ats):
+
+- West of outside27 → Avenue at the palace
+  (fig grove / `look at hedge` archive “perferred”
+  / `figs` “You can't see them from here.” /
+  `doves` archive “trees..”). South `garden2`
+  still LDMud.
+- West → Avenue at the palace (fig grove / hedge
+  “perferred”). South `garden1` still LDMud.
+- West → The palace avenue (turns south; fig grove
+  southeast). Southeast `garden1` still LDMud.
+- South → The palace avenue (fig grove east).
+  East `garden1` still LDMud.
+- South → palace avenue (archive short omits
+  “The”; `look at jasmine` / `cinnamon` “the the
+  brownstone”). South closes the loop onto
+  already-live Avenue of the Palace (outside2 /
+  Rilana statue; no new look-ats).
+- `score` persist. Reconnect still lands on the docks.
+
+This-boot live `libs/aoh/log/debug.log` (fd 3, PID 2820105
+BOOT_MARKER39 aoh-outside28-32): no new lines after the
+marker. Catch this walk: empty after the marker.
+
 **Not published** (`wasm_status: partial`). Do not flip to
 `playable` on this harbour walk. `look at menu`,
 `look at candles`, `look at cabins`, `look at tiles`,
 and tailor/bakery/wine/flower `sign`s are flavour —
 buy/drink, mail, deposit, combat, `enter palace`,
 `touch statue`, and tower interiors are not claimed.
-Next aoh slice: Avenue of the Palace west of outside27
-(`/d/silvere/rooms/center/outside28`) if expanding.
+Next aoh slice: east of Tali (`/d/silvere/rooms/center/eastroad1`)
+or a fig garden if expanding.
 
 ## 5. WASM
 
