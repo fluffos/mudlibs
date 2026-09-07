@@ -167,7 +167,10 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/south/mainroad3` — On a road at Silvere (foggy stub)
 - `/d/silvere/rooms/south/mainroad4` — On a road at Silvere (foggy stub)
 - `/d/silvere/rooms/south/mainroad5` — On a road at Silvere (foggy stub)
-- `/d/silvere/rooms/south/mainroad6` — On a road at Silvere (foggy stub; south mainroad7 not loaded)
+- `/d/silvere/rooms/south/mainroad6` — On a road at Silvere (foggy stub; south mainroad7 loaded)
+- `/d/silvere/rooms/south/mainroad7` — On a road at Silvere (foggy stub)
+- `/d/silvere/rooms/south/mainroad8` — On a road at Silvere (foggy stub)
+- `/d/silvere/rooms/south/mainroad9` — On a road at Silvere (foggy stub; south mainroad10 not loaded)
 - `/d/silvere/rooms/center/outside32` — palace avenue (archive short; jasmine; look only)
 - `/d/silvere/rooms/west/flowershop` — Jehane's Flowers (look only)
 - `/d/silvere/rooms/west/libraryroad1` — Guild Street / library road
@@ -187,8 +190,9 @@ and English harbour text as thin FluffOS rooms; originals are
 inn buy/drink, harbourmaster bell NPC, tower interiors,
 palace enter (`palenter` / `enter palace` not wired),
 northroad, further south-town
-(`/d/silvere/rooms/south/mainroad7` is still the LDMud
-SILBASEROOM original), statue touch/helmet, further
+(`/d/silvere/rooms/south/mainroad10` is still the LDMud
+SILBASEROOM original; west parkroad1 / southgate not
+loaded), statue touch/helmet, further
 council road / mail / bank deposit / Caves of Parch,
 shop buy, and healer/elder interiors are not loaded.
 The council hall, library, and adventurers guild
@@ -1140,10 +1144,40 @@ marker. Catch this walk: empty after the marker.
 and tailor/bakery/wine/flower `sign`s are flavour —
 buy/drink, mail, deposit, combat, `enter palace`,
 `touch statue`, and tower interiors are not claimed.
-Next aoh slice: south `mainroad7`–`9` (more foggy
-stubs) or `northroad`. Do not load parkroad1 or
-southgate this next leftover unless that is the
-assigned batch.
+
+<!-- librarian-expansion:43 -->
+
+Harbour expansion 43 (native 40285, 2026-09-07, same
+`fluffos` / `Mud@2026`, do not redo docks, inn/office,
+towers, Westway, westenter, outside1–outside32,
+palplace1–palplace6, mainsouth1 Sarykan,
+south/mainroad1–6, Tali/Kyrie statues, eastroad stubs,
+garden1–4 look-ats, or palace-avenue look-ats):
+
+- South of mainroad6 → On a road at Silvere (foggy
+  buildings archive “seems to be”; citygate south /
+  palace north; `look at buildings` “You see nothing
+  special.”).
+- South ×2 through the same stub long to mainroad9
+  (north-only). South `mainroad10` still LDMud (`You
+  cannot go that way.`).
+- `score` persist. Reconnect still lands on the docks.
+
+This-boot live `libs/aoh/log/debug.log` (fd 3, PID 2909848
+BOOT_MARKER44 aoh-mainroad7-9): no new lines after the
+marker. Catch this walk: empty after the marker.
+
+**Not published** (`wasm_status: partial`). Do not flip to
+`playable` on this harbour walk. `look at menu`,
+`look at candles`, `look at cabins`, `look at tiles`,
+and tailor/bakery/wine/flower `sign`s are flavour —
+buy/drink, mail, deposit, combat, `enter palace`,
+`touch statue`, and tower interiors are not claimed.
+Next aoh slice: south `mainroad10` (foggy stub plus
+west citypark mention; look-ats only) then `mainroad11`
+if it is also a stub with no shop/combat. Do not load
+`parkroad1` or `southgate` interiors this next leftover
+unless that is the assigned batch. Or `northroad`.
 
 ## 5. WASM
 
