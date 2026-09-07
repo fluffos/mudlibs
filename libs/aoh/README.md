@@ -75,6 +75,12 @@ Avenue of the Palace (Tali statue / Gaurdian
 inscription; look only — no touch),
 The palace avenue further north (Morning Stars /
 pomegranate grove; look only),
+The palace avenue turns west (grove os sweet;
+look only),
+Avenue at the palace rear wall (stones brownstones /
+doves trees..; look only),
+Avenue of the Palace angelica/sorrel/astra liliums
+(look only),
 library road (guild unfinished),
 wine-shop vines, Counting House plaque,
 post-office cabins, bank panelling); south Seaman's Rest
