@@ -131,6 +131,7 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/center/palplace5` — At the entrance into the palace (look only)
 - `/d/silvere/rooms/center/palplace2` — The palace square fountain (look only)
 - `/d/silvere/rooms/center/mainsouth1` — Avenue of the Palace, Sarykan statue (look only)
+- `/d/silvere/rooms/south/mainroad1` — On a road at Silvere (archive stub)
 - `/d/silvere/rooms/west/flowershop` — Jehane's Flowers (look only)
 - `/d/silvere/rooms/west/libraryroad1` — Guild Street / library road
 - `/d/silvere/rooms/west/libraryroad2` — library road west (stub look-ats)
@@ -148,13 +149,13 @@ and English harbour text as thin FluffOS rooms; originals are
 
 inn buy/drink, harbourmaster bell NPC, tower interiors,
 palace enter (`palenter` / `enter palace` not wired),
-palplace3 / palplace6, south-town (`/d/silvere/rooms/south/mainroad1`
-“On a road at Silvere” is still the LDMud SILBASEROOM
-original), statue touch/helmet, further council road /
-mail / bank deposit / Caves of Parch, shop buy, and
-healer/elder interiors are not loaded. The council
-hall, library, and adventurers guild interiors are
-archive stubs (no details).
+palplace3 / palplace6, further south-town
+(`/d/silvere/rooms/south/mainroad2` is still the LDMud
+SILBASEROOM original), statue touch/helmet, further
+council road / mail / bank deposit / Caves of Parch,
+shop buy, and healer/elder interiors are not loaded.
+The council hall, library, and adventurers guild
+interiors are archive stubs (no details).
 
 `/catalog/login` still handles name/password. `/catalog/player`
 `enter_world()` moves onto the docks (fallback Void if load fails).
@@ -731,14 +732,33 @@ This-boot live `libs/aoh/log/debug.log` (fd 3, PID 2529898
 BOOT_MARKER28 aoh-mainsouth1): no new lines after the
 marker. Catch this walk: empty after the marker.
 
+Harbour expansion 28 (native 40285, 2026-09-07, same
+`fluffos` / `Mud@2026`, do not redo docks, inn/office,
+towers, Westway, chandler/flowerbed/alley,
+westroad5–westroad11, westenter, outside1–outside9,
+palplace1–palplace5, palplace2 fountain, or
+mainsouth1 Sarykan look-ats):
+
+- South of mainsouth1 → On a road at Silvere
+  (long palace north / city gates south / buildings
+  somewhat foggy, archive typo “seems”; archive stub —
+  `look at buildings` / `road` / `palace` / `gates`
+  nothing special). South `mainroad2` is still the
+  LDMud original — not loaded.
+- `score` persist. Reconnect still lands on the docks.
+
+This-boot live `libs/aoh/log/debug.log` (fd 3, PID 2558804
+BOOT_MARKER29 aoh-mainroad1): no new lines after the
+marker. Catch this walk: empty after the marker.
+
 **Not published** (`wasm_status: partial`). Do not flip to
 `playable` on this harbour walk. `look at menu`,
 `look at candles`, `look at cabins`, `look at tiles`,
 and tailor/bakery/wine/flower `sign`s are flavour —
 buy/drink, mail, deposit, combat, `enter palace`,
 `touch statue`, and tower interiors are not claimed.
-Next aoh slice: On a road at Silvere
-(`/d/silvere/rooms/south/mainroad1`) if expanding.
+Next aoh slice: The place before the palace east wing
+(`/d/silvere/rooms/center/palplace3`) if expanding.
 
 ## 5. WASM
 

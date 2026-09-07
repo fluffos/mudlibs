@@ -56,6 +56,7 @@ The palace square fountain (pearly griffin fountain /
 sunburst paving; look only — no drink),
 Avenue of the Palace (Sarykan statue / Gaurdian
 inscription; look only — no touch),
+On a road at Silvere (foggy buildings; archive stub),
 library road (guild unfinished),
 wine-shop vines, Counting House plaque,
 post-office cabins, bank panelling); south Seaman's Rest
