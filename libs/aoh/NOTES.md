@@ -125,12 +125,12 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/center/outside6` — Road at the palace (look only)
 - `/d/silvere/rooms/center/outside7` — Road at the palace, further east (look only)
 - `/d/silvere/rooms/center/outside8` — Road at the palace, further east (look only)
-- `/d/silvere/rooms/center/outside9` — Avenue of the Palace, entrance fork (look only)
+- `/d/silvere/rooms/center/outside9` — Avenue of the Palace, entrance fork (look only; east mainsouth1 loaded)
 - `/d/silvere/rooms/center/palplace1` — The palace square, west side (look only)
 - `/d/silvere/rooms/center/palplace4` — The place before the palace (look only)
 - `/d/silvere/rooms/center/palplace5` — At the entrance into the palace (look only)
 - `/d/silvere/rooms/center/palplace2` — The palace square fountain (look only)
-- `/d/silvere/rooms/center/mainsouth1` — Avenue of the Palace, Sarykan statue (look only)
+- `/d/silvere/rooms/center/mainsouth1` — Avenue of the Palace, Sarykan statue (look only; west outside9 loaded)
 - `/d/silvere/rooms/south/mainroad1` — On a road at Silvere (archive stub)
 - `/d/silvere/rooms/center/palplace3` — The place before the palace, east wing (look only)
 - `/d/silvere/rooms/center/palplace6` — The place before the palace, east-wing walls (look only)
@@ -152,7 +152,8 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/center/outside22` — Avenue at the palace, doves (look only)
 - `/d/silvere/rooms/center/outside23` — Avenue of the Palace, angelica/sorrel (look only)
 - `/d/silvere/rooms/center/outside24` — Avenue of the Palace, sage/mint (look only)
-- `/d/silvere/rooms/center/outside25` — Avenue of the Palace, Kyrie statue (look only)
+- `/d/silvere/rooms/center/outside25` — Avenue of the Palace, Kyrie statue (look only; north northroad loaded)
+- `/d/silvere/rooms/center/northroad` — On a road at Silvere (foggy stub; north unwired)
 - `/d/silvere/rooms/center/outside26` — Avenue of the Palace, bay/lavender (look only)
 - `/d/silvere/rooms/center/outside27` — Avenue at the palace, ginger/parsley (look only)
 - `/d/silvere/rooms/center/outside28` — Avenue at the palace, fig grove (look only; south garden2 loaded)
@@ -198,10 +199,11 @@ and English harbour text as thin FluffOS rooms; originals are
 
 inn buy/drink, harbourmaster bell NPC, tower interiors,
 palace enter (`palenter` / `enter palace` not wired),
-northroad, further south-town
-(`/d/silvere/rooms/center/northroad` and `southgate` are
-still the LDMud SILBASEROOM originals; north of
-outside25 / south of mainroad11 not loaded), statue
+further south-town
+(`/d/silvere/rooms/south/southgate` is still the LDMud
+SILBASEROOM original; south of mainroad11 not loaded),
+north of northroad is unwired (no `prevent_void`
+message), statue
 touch/helmet, further
 council road / mail / bank deposit / Caves of Parch,
 shop buy, and healer/elder interiors are not loaded.
@@ -1309,6 +1311,45 @@ outside25; foggy stub; `prevent_void` north; look-ats
 only). Do not load `southgate` interiors or park
 interiors this next leftover unless that is the assigned
 batch.
+
+<!-- librarian-expansion:48 -->
+
+Harbour expansion 48 (native 40285, 2026-09-07, same
+`fluffos` / `Mud@2026`, do not redo docks, inn/office,
+towers, Westway, westenter, outside1–outside32,
+palplace1–palplace6, mainsouth1 Sarykan look-ats,
+south/mainroad1–11, parkroad1–6, parkenter,
+Tali/Kyrie statues, eastroad stubs, garden1–4
+look-ats, or palace-avenue look-ats):
+
+- North of outside25 (Kyrie) → On a road at Silvere
+  (broad road backside of the palace; archive “seems
+  to be”; south-only; `look at buildings` “You see
+  nothing special.”). North still unwired (`You
+  cannot go that way.`; no LDMud `prevent_void`
+  message).
+- West of mainsouth1 → already-live outside9
+  (Avenue of the Palace; exits west, north and east).
+  East back to mainsouth1 works.
+- `score` persist. Reconnect still lands on the docks.
+
+This-boot live `libs/aoh/log/debug.log` (fd 3, PID 3050915
+BOOT_MARKER49 aoh-northroad-mainsouth1-west): no new
+lines after the marker. Catch this walk: empty after
+the marker.
+
+**Not published** (`wasm_status: partial`). Do not flip to
+`playable` on this harbour walk. `look at menu`,
+`look at candles`, `look at cabins`, `look at tiles`,
+and tailor/bakery/wine/flower `sign`s are flavour —
+buy/drink, mail, deposit, combat, `enter palace`,
+`touch statue`, and tower interiors are not claimed.
+Next aoh slice: further council road (`councilroad2+`
+east of already-live Elrimand / `councilroad1`) if
+those are look-at stubs with no shop/combat. Do not
+load `southgate` interiors, park interiors (`SIL_PARK`),
+`palenter`, or mistralhouse this next leftover unless
+that is the assigned batch.
 
 ## 5. WASM
 
