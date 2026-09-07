@@ -184,7 +184,8 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/center/outside32` — palace avenue (archive short; jasmine; look only)
 - `/d/silvere/rooms/west/flowershop` — Jehane's Flowers (look only)
 - `/d/silvere/rooms/west/libraryroad1` — Guild Street / library road
-- `/d/silvere/rooms/west/libraryroad2` — library road west (stub look-ats)
+- `/d/silvere/rooms/west/libraryroad2` — library road west (stub look-ats; west libraryenter loaded)
+- `/d/silvere/rooms/west/libraryenter` — The Adventurers Guild / library entrance stub
 - `/d/silvere/rooms/west/wineshop` — Chez Brigan (look only)
 - `/d/silvere/rooms/west/bakery` — Eldranna's Bake Shoppe (look only)
 - `/d/silvere/rooms/west/tailor` — Couture Celimarith (look only)
@@ -204,6 +205,8 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/west/templeroad2` — Templeroad (archive stub)
 - `/d/silvere/rooms/west/templeroad3` — Templeroad, outside the temple (look only; enter temple not wired)
 - `/d/silvere/rooms/west/cparch` — Caves of Parch entrance (blocked stub)
+- `/d/silvere/rooms/west/wsmithroad1` — small road toward the weaponsmith (stub)
+- `/d/silvere/rooms/west/wsmithroad2` — small road before the weaponsmith (stub; shop not loaded)
 
 inn buy/drink, harbourmaster bell NPC, tower interiors,
 palace enter (`palenter` / `enter palace` not wired),
@@ -215,8 +218,9 @@ message), statue
 touch/helmet, `enter hall`,
 mail / bank deposit,
 shop buy, and healer/elder interiors are not loaded.
-The council hall, library, and adventurers guild
-interiors are archive stubs (no details).
+The council hall and library entrance stubs are
+loaded (look only). The adventurers guild interior
+is still an archive stub (no details).
 
 `/catalog/login` still handles name/password. `/catalog/player`
 `enter_world()` moves onto the docks (fallback Void if load fails).
@@ -1452,6 +1456,49 @@ weaponsmith shop). Do not load `southgate`
 interiors, park interiors (`SIL_PARK`), `palenter`,
 `xal_temple`, or mistralhouse this next leftover
 unless that is the assigned batch.
+
+<!-- librarian-expansion:51 -->
+
+Harbour expansion 51 (native 40285, 2026-09-07, same
+`fluffos` / `Mud@2026`, do not redo docks, inn/office,
+towers, Westway look-ats, westenter, outside1–32,
+palplace1–6, mainsouth1 Sarykan, south/mainroad1–11,
+parkroad1–6, parkenter, Tali/Kyrie, eastroad stubs,
+garden1–4, northroad, mainsouth1↔outside9,
+councilroad2–4 + councilenter, templeroad1–3 +
+cparch, bakery, or flower-shop look-ats):
+
+- West of libraryroad2 → The Adventurers Guild
+  (archive short on a library-entrance long; `look
+  at library` “You see nothing special.”). `leave
+  library` not wired (`What?`). East back works.
+- East of already-live westshop1 → small road
+  (shop mentioned; `look at shop` “You see nothing
+  special.”).
+- East → small road before a shop (archive “Then
+  entrance”). `enter shop` not wired (`What?`).
+  South still refuses (`You cannot go that way.`;
+  no weaponsmith).
+- `score` persist. Reconnect still lands on the docks.
+
+This-boot live `libs/aoh/log/debug.log` (fd 3, PID 3133101
+BOOT_MARKER52 aoh-libraryenter-wsmith): no new lines
+after the marker. Catch this walk: empty after the
+marker.
+
+**Not published** (`wasm_status: partial`). Do not flip to
+`playable` on this harbour walk. `look at menu`,
+`look at candles`, `look at cabins`, `look at tiles`,
+and tailor/bakery/wine/flower `sign`s are flavour —
+buy/drink, mail, deposit, combat, `enter palace`,
+`enter hall`, `enter temple`, `enter shop`,
+`touch statue`, and tower interiors are not claimed.
+Next aoh slice: adventurerguild stub (east of
+already-live `libraryroad1`) if it is a look-at
+archive stub. Do not load `southgate` interiors,
+park interiors (`SIL_PARK`), `palenter`,
+`xal_temple`, weaponsmith, or mistralhouse this
+next leftover unless that is the assigned batch.
 
 ## 5. WASM
 
