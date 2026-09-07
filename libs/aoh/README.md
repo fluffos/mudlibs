@@ -61,6 +61,8 @@ The place before the palace east wing (exotic flowers /
 gravel seashells / alabaster lanterns / roses; look only),
 The place before the palace east-wing walls (latticed
 windows / enrance typo / white marble bench; look only),
+Road at the palace south of the east wing (brownstones /
+pink-white roses; look only),
 library road (guild unfinished),
 wine-shop vines, Counting House plaque,
 post-office cabins, bank panelling); south Seaman's Rest

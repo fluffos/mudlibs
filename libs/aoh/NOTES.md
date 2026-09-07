@@ -134,6 +134,7 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/south/mainroad1` — On a road at Silvere (archive stub)
 - `/d/silvere/rooms/center/palplace3` — The place before the palace, east wing (look only)
 - `/d/silvere/rooms/center/palplace6` — The place before the palace, east-wing walls (look only)
+- `/d/silvere/rooms/center/outside10` — Road at the palace, south of east wing (look only)
 - `/d/silvere/rooms/west/flowershop` — Jehane's Flowers (look only)
 - `/d/silvere/rooms/west/libraryroad1` — Guild Street / library road
 - `/d/silvere/rooms/west/libraryroad2` — library road west (stub look-ats)
@@ -151,7 +152,7 @@ and English harbour text as thin FluffOS rooms; originals are
 
 inn buy/drink, harbourmaster bell NPC, tower interiors,
 palace enter (`palenter` / `enter palace` not wired),
-outside10, further south-town
+outside11, further south-town
 (`/d/silvere/rooms/south/mainroad2` is still the LDMud
 SILBASEROOM original), statue touch/helmet, further
 council road / mail / bank deposit / Caves of Parch,
@@ -800,15 +801,38 @@ This-boot live `libs/aoh/log/debug.log` (fd 3, PID 2618069
 BOOT_MARKER31 aoh-palplace6): no new lines after the
 marker. Catch this walk: empty after the marker.
 
+Harbour expansion 31 (native 40285, 2026-09-07, same
+`fluffos` / `Mud@2026`, do not redo docks, inn/office,
+towers, Westway, chandler/flowerbed/alley,
+westroad5–westroad11, westenter, outside1–outside9,
+palplace1–palplace6, palplace2 fountain,
+mainsouth1 Sarykan, south/mainroad1 foggy-road, or
+palplace3 east-wing look-ats):
+
+- South of palplace3 → Road at the palace
+  (long tree-lined avenue / north to palace entrance /
+  pink and white shrub roses; `look at avenue` /
+  `road` northern approach / `stones` / `brownstones`
+  archive “The stones brownstones” / `palace` brown
+  stone / `roses` / `gulls` / `doves`). East
+  `outside11` is still the LDMud original — not
+  loaded (`You cannot go that way.`). West back to
+  mainsouth1 works.
+- `score` persist. Reconnect still lands on the docks.
+
+This-boot live `libs/aoh/log/debug.log` (fd 3, PID 2646658
+BOOT_MARKER32 aoh-outside10): no new lines after the
+marker. Catch this walk: empty after the marker.
+
 **Not published** (`wasm_status: partial`). Do not flip to
 `playable` on this harbour walk. `look at menu`,
 `look at candles`, `look at cabins`, `look at tiles`,
 and tailor/bakery/wine/flower `sign`s are flavour —
 buy/drink, mail, deposit, combat, `enter palace`,
 `touch statue`, and tower interiors are not claimed.
-Next aoh slice: Road at the palace south of the
-east wing (`/d/silvere/rooms/center/outside10`) if
-expanding.
+Next aoh slice: Avenue the palace east of outside10
+(`/d/silvere/rooms/center/outside11`; archive short
+typo missing “of”) if expanding.
 
 ## 5. WASM
 
