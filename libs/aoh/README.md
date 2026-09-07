@@ -81,6 +81,14 @@ Avenue at the palace rear wall (stones brownstones /
 doves trees..; look only),
 Avenue of the Palace angelica/sorrel/astra liliums
 (look only),
+Avenue of the Palace sage/mint/orange star liliums
+(look only),
+Avenue of the Palace (Kyrie statue / Gaurdian
+wind; look only — no touch),
+Avenue of the Palace bay/lavender/orange astra
+liliums (look only; archive lavendar),
+Avenue at the palace ginger/parsley/yellow star
+liliums (look only),
 library road (guild unfinished),
 wine-shop vines, Counting House plaque,
 post-office cabins, bank panelling); south Seaman's Rest
