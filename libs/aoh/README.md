@@ -44,7 +44,7 @@ buttons / lime trees; then pink saliums / brownstone /
 jays; then east corner bonnie bells),
 Road at the palace (pink/white shrub roses /
 brownstone front wall; archive “stones brownstones”;
-then further east same rose stretch),
+then further east same rose stretch twice),
 library road (guild unfinished),
 wine-shop vines, Counting House plaque,
 post-office cabins, bank panelling); south Seaman's Rest

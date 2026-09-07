@@ -124,6 +124,7 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/center/outside5` — The palace avenue, east corner
 - `/d/silvere/rooms/center/outside6` — Road at the palace (look only)
 - `/d/silvere/rooms/center/outside7` — Road at the palace, further east (look only)
+- `/d/silvere/rooms/center/outside8` — Road at the palace, further east (look only)
 - `/d/silvere/rooms/west/flowershop` — Jehane's Flowers (look only)
 - `/d/silvere/rooms/west/libraryroad1` — Guild Street / library road
 - `/d/silvere/rooms/west/libraryroad2` — library road west (stub look-ats)
@@ -140,8 +141,9 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/west/whealer1` — Before the house of the healer
 
 inn buy/drink, harbourmaster bell NPC, tower interiors,
-further palace road (`/d/silvere/rooms/center/outside8`
-is still the LDMud SILBASEROOM original), statue
+further palace road (`/d/silvere/rooms/center/outside9`
+“Avenue of the Palace” is still the LDMud SILBASEROOM
+original; north palace entrance / east south town), statue
 touch/helmet, further council road /
 mail / bank deposit / Caves of Parch, shop buy, and
 healer/elder interiors are not loaded. The council
@@ -538,12 +540,38 @@ or outside6 rose/palace look-ats):
   (`look at gulls` / `shrubs` pink and creamy white /
   `wall` front palace / `path` northern approach).
   Same Joan front-wall rose stretch as outside6.
-  East `outside8` is still the LDMud original — not
-  loaded.
+  East `outside8` — see Harbour expansion 21.
 - `score` persist. Reconnect still lands on the docks.
 
 This-boot live `libs/aoh/log/debug.log` (fd 3, PID 2322674
 BOOT_MARKER21 aoh-outside7): no new lines after the
+marker. Catch this walk: empty after the marker.
+
+Harbour expansion 21 (native 40285, 2026-09-06, same
+`fluffos` / `Mud@2026`, do not redo docks, inn/office,
+towers, Westway, chandler/flowerbed/alley,
+westroad5/sell-shop, westroad6/post-office,
+westroad7/fishmonger/bank, westroad8/tailor/Elrimand,
+westroad9/wineshop/bakery, westroad10/Guild Street,
+westroad11/Jehane flower-shop, westenter
+palace-square west-end, outside1 West Palace Avenue,
+outside2 Avenue of the Palace, outside3
+cinnamon/gentleman's-buttons, outside4
+salium-bed, outside5 east-corner bonnie-bell,
+outside6 rose/palace, or outside7
+gulls/shrubs/wall look-ats):
+
+- East of outside7 → Road at the palace
+  (`look at brownstones` “The stones brownstones” /
+  `seagulls` / `rose` pink and creamy white / `road`
+  northern approach). Same Joan front-wall rose
+  stretch as outside6/outside7. East `outside9`
+  (Avenue of the Palace; north palace entrance) is
+  still the LDMud original — not loaded.
+- `score` persist. Reconnect still lands on the docks.
+
+This-boot live `libs/aoh/log/debug.log` (fd 3, PID 2351704
+BOOT_MARKER22 aoh-outside8): no new lines after the
 marker. Catch this walk: empty after the marker.
 
 **Not published** (`wasm_status: partial`). Do not flip to
@@ -551,8 +579,8 @@ marker. Catch this walk: empty after the marker.
 `look at candles`, `look at cabins`, `look at tiles`,
 and tailor/bakery/wine/flower `sign`s are flavour —
 buy/drink, mail, deposit, combat, and tower interiors
-are not claimed. Next aoh slice: further Road at the
-palace (`/d/silvere/rooms/center/outside8`) if expanding.
+are not claimed. Next aoh slice: Avenue of the Palace
+(`/d/silvere/rooms/center/outside9`) if expanding.
 
 ## 5. WASM
 
