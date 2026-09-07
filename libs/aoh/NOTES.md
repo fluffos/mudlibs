@@ -128,6 +128,7 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/center/outside9` — Avenue of the Palace, entrance fork (look only)
 - `/d/silvere/rooms/center/palplace1` — The palace square, west side (look only)
 - `/d/silvere/rooms/center/palplace4` — The place before the palace (look only)
+- `/d/silvere/rooms/center/palplace5` — At the entrance into the palace (look only)
 - `/d/silvere/rooms/west/flowershop` — Jehane's Flowers (look only)
 - `/d/silvere/rooms/west/libraryroad1` — Guild Street / library road
 - `/d/silvere/rooms/west/libraryroad2` — library road west (stub look-ats)
@@ -144,14 +145,14 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/west/whealer1` — Before the house of the healer
 
 inn buy/drink, harbourmaster bell NPC, tower interiors,
-palace entrance (`/d/silvere/rooms/center/palplace5`
-“At the entrance into the palace” is still the LDMud
-SILBASEROOM original), palplace2, south-town
-(`mainsouth1`), statue touch/helmet, further council road /
-mail / bank deposit / Caves of Parch, shop buy, and
-healer/elder interiors are not loaded. The council
-hall, library, and adventurers guild interiors are
-archive stubs (no details).
+palace enter (`palenter` / `enter palace` not wired),
+further palace square (`/d/silvere/rooms/center/palplace2`
+fountain square is still the LDMud SILBASEROOM original),
+palplace6, south-town (`mainsouth1`), statue touch/helmet,
+further council road / mail / bank deposit / Caves of
+Parch, shop buy, and healer/elder interiors are not
+loaded. The council hall, library, and adventurers guild
+interiors are archive stubs (no details).
 
 `/catalog/login` still handles name/password. `/catalog/player`
 `enter_world()` moves onto the docks (fallback Void if load fails).
@@ -650,14 +651,38 @@ This-boot live `libs/aoh/log/debug.log` (fd 3, PID 2443689
 BOOT_MARKER25 aoh-palplace4): no new lines after the
 marker. Catch this walk: empty after the marker.
 
+Harbour expansion 25 (native 40285, 2026-09-06, same
+`fluffos` / `Mud@2026`, do not redo docks, inn/office,
+towers, Westway, chandler/flowerbed/alley,
+westroad5/sell-shop, westroad6/post-office,
+westroad7/fishmonger/bank, westroad8/tailor/Elrimand,
+westroad9/wineshop/bakery, westroad10/Guild Street,
+westroad11/Jehane flower-shop, westenter
+palace-square west-end, outside1–outside9,
+palplace1 palace-square west-side, or palplace4
+place-before-the-palace look-ats):
+
+- East of palplace4 → At the entrance into the palace
+  (long brownstone entry way / hieroglyphics / citygates;
+  `look at hieroglyphics` founding of Silvere /
+  `palace` brown stone / `roses` / `flowers` pink
+  saliums). North `enter palace` / `palenter`, south
+  `palplace2` (fountain square), and east `palplace6`
+  are still the LDMud originals — not loaded.
+- `score` persist. Reconnect still lands on the docks.
+
+This-boot live `libs/aoh/log/debug.log` (fd 3, PID 2472361
+BOOT_MARKER26 aoh-palplace5): no new lines after the
+marker. Catch this walk: empty after the marker.
+
 **Not published** (`wasm_status: partial`). Do not flip to
 `playable` on this harbour walk. `look at menu`,
 `look at candles`, `look at cabins`, `look at tiles`,
 and tailor/bakery/wine/flower `sign`s are flavour —
-buy/drink, mail, deposit, combat, and tower interiors
-are not claimed. Next aoh slice: At the entrance into
-the palace (`/d/silvere/rooms/center/palplace5`) if
-expanding.
+buy/drink, mail, deposit, combat, `enter palace`, and
+tower interiors are not claimed. Next aoh slice: The
+palace square fountain (`/d/silvere/rooms/center/palplace2`)
+if expanding.
 
 ## 5. WASM
 

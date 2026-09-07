@@ -50,6 +50,8 @@ entrance), The palace square (exotic flowers /
 gravel seashells / alabaster lanterns; look only),
 The place before the palace (latticed windows /
 white marble bench / aranged flower beds; look only),
+At the entrance into the palace (hieroglyphics /
+brownstone entry way; look only — no enter),
 library road (guild unfinished),
 wine-shop vines, Counting House plaque,
 post-office cabins, bank panelling); south Seaman's Rest
