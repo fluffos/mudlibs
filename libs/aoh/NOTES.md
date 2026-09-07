@@ -161,7 +161,9 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/center/outside31` — The palace avenue, west wing south (look only; east garden1 loaded)
 - `/d/silvere/rooms/center/garden1` — Palace Fig Garden (look only)
 - `/d/silvere/rooms/center/garden2` — Palace Fig Garden, east (look only)
-- `/d/silvere/rooms/center/garden3` — Palace pomegranate Garden (look only)
+- `/d/silvere/rooms/center/garden3` — Palace pomegranate Garden (look only; east garden4 loaded)
+- `/d/silvere/rooms/center/garden4` — Palace pomegranate Garden, east (look only)
+- `/d/silvere/rooms/south/mainroad2` — On a road at Silvere (foggy south-gate stub)
 - `/d/silvere/rooms/center/outside32` — palace avenue (archive short; jasmine; look only)
 - `/d/silvere/rooms/west/flowershop` — Jehane's Flowers (look only)
 - `/d/silvere/rooms/west/libraryroad1` — Guild Street / library road
@@ -180,8 +182,8 @@ and English harbour text as thin FluffOS rooms; originals are
 
 inn buy/drink, harbourmaster bell NPC, tower interiors,
 palace enter (`palenter` / `enter palace` not wired),
-garden4, northroad, further south-town
-(`/d/silvere/rooms/south/mainroad2` is still the LDMud
+northroad, further south-town
+(`/d/silvere/rooms/south/mainroad3` is still the LDMud
 SILBASEROOM original), statue touch/helmet, further
 council road / mail / bank deposit / Caves of Parch,
 shop buy, and healer/elder interiors are not loaded.
@@ -1084,14 +1086,36 @@ This-boot live `libs/aoh/log/debug.log` (fd 3, PID 2850585
 BOOT_MARKER41 aoh-gardens): no new lines after the
 marker. Catch this walk: empty after the marker.
 
+Harbour expansion 41 (native 40285, 2026-09-07, same
+`fluffos` / `Mud@2026`, do not redo docks, inn/office,
+towers, Westway, westenter, outside1–outside32,
+palplace1–palplace6, mainsouth1 Sarykan,
+south/mainroad1, Tali/Kyrie statues, eastroad stubs,
+garden1–3 look-ats, or palace-avenue look-ats):
+
+- East of garden3 → Palace pomegranate Garden
+  (`look at grove` / `ripe pomegranates` / `hedge`
+  archive “perferred” / `tree` “pomegranates..”).
+  `pick` not wired (`What?`). East to outside19 works.
+- South of mainroad1 → On a road at Silvere (foggy
+  buildings archive “seems to be”; citygate south /
+  palace north). `look at buildings` “You see nothing
+  special.” South `mainroad3` still LDMud (`You cannot
+  go that way.`).
+- `score` persist. Reconnect still lands on the docks.
+
+This-boot live `libs/aoh/log/debug.log` (fd 3, PID 2878703
+BOOT_MARKER42 aoh-garden4-mainroad2): no new lines after
+the marker. Catch this walk: empty after the marker.
+
 **Not published** (`wasm_status: partial`). Do not flip to
 `playable` on this harbour walk. `look at menu`,
 `look at candles`, `look at cabins`, `look at tiles`,
 and tailor/bakery/wine/flower `sign`s are flavour —
 buy/drink, mail, deposit, combat, `enter palace`,
 `touch statue`, and tower interiors are not claimed.
-Next aoh slice: pomegranate `garden4` (look-ats only;
-do not wire pick) or south `mainroad2`.
+Next aoh slice: south `mainroad3` (foggy stub toward
+the south gate) or `northroad`.
 
 ## 5. WASM
 
