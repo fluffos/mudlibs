@@ -188,7 +188,11 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/west/wineshop` — Chez Brigan (look only)
 - `/d/silvere/rooms/west/bakery` — Eldranna's Bake Shoppe (look only)
 - `/d/silvere/rooms/west/tailor` — Couture Celimarith (look only)
-- `/d/silvere/rooms/west/councilroad1` — Elrimand Road (bakery look-at)
+- `/d/silvere/rooms/west/councilroad1` — Elrimand Road (bakery look-at; north councilroad2 loaded)
+- `/d/silvere/rooms/west/councilroad2` — Elrimand Road (houses / coat of arms look-ats)
+- `/d/silvere/rooms/west/councilroad3` — Elrimand Road, Elrimand statue (look only)
+- `/d/silvere/rooms/west/councilroad4` — Elrimand Road, outside the council hall (look only; enter hall not wired)
+- `/d/silvere/rooms/west/councilenter` — Council Hall Entrance (archive stub)
 - `/d/silvere/rooms/west/fishmonger` — Feridwyn's Seafood (look only)
 - `/d/silvere/rooms/west/wpostroad1` — lane to the post office
 - `/d/silvere/rooms/west/wpostroad2` — Counting House arch
@@ -204,8 +208,8 @@ further south-town
 SILBASEROOM original; south of mainroad11 not loaded),
 north of northroad is unwired (no `prevent_void`
 message), statue
-touch/helmet, further
-council road / mail / bank deposit / Caves of Parch,
+touch/helmet, `enter hall`,
+mail / bank deposit / Caves of Parch,
 shop buy, and healer/elder interiors are not loaded.
 The council hall, library, and adventurers guild
 interiors are archive stubs (no details).
@@ -1350,6 +1354,55 @@ those are look-at stubs with no shop/combat. Do not
 load `southgate` interiors, park interiors (`SIL_PARK`),
 `palenter`, or mistralhouse this next leftover unless
 that is the assigned batch.
+
+<!-- librarian-expansion:49 -->
+
+Harbour expansion 49 (native 40285, 2026-09-07, same
+`fluffos` / `Mud@2026`, do not redo docks, inn/office,
+towers, Westway, westenter, outside1–outside32,
+palplace1–palplace6, mainsouth1 Sarykan look-ats,
+south/mainroad1–11, parkroad1–6, parkenter,
+Tali/Kyrie statues, eastroad stubs, garden1–4,
+northroad, mainsouth1↔outside9, bakery look-ats,
+or palace-avenue look-ats):
+
+- North of councilroad1 → Elrimand Road (`look at
+  houses` / `guards` / `flagstones` / `coat of
+  arms`).
+- East → Elrimand Road. A statue is standing here
+  (`look at statue` archive “semingly”; `look at
+  cloak` archive “statue4s”; `look at sign` “You
+  may read it.”; `look at inscription` “Elrimand,
+  founder of Silvere.”; `look at hedge`).
+- East → Elrimand Road, just outside the council
+  hall (`look at tree` / summer `branches` /
+  heart-shaped `leaves` / `trunk` / `doors` /
+  `marble`). `enter hall` not wired (`What?`).
+- East → Council Hall Entrance (archive stub
+  “nothing here nothing can be seen”; `look at
+  clocktower` “You see nothing special.”). West
+  back works.
+- `score` persist. Reconnect still lands on the docks.
+
+This-boot live `libs/aoh/log/debug.log` (fd 3, PID 3077782
+BOOT_MARKER50 aoh-councilroad2-enter): no new lines
+after the marker. Catch this walk: empty after the
+marker.
+
+**Not published** (`wasm_status: partial`). Do not flip to
+`playable` on this harbour walk. `look at menu`,
+`look at candles`, `look at cabins`, `look at tiles`,
+and tailor/bakery/wine/flower `sign`s are flavour —
+buy/drink, mail, deposit, combat, `enter palace`,
+`enter hall`, `touch statue`, and tower interiors
+are not claimed.
+Next aoh slice: templeroad look-ats
+(`/d/silvere/rooms/west/templeroad1+` north of
+already-live westroad2) if those are look-at rooms
+with no shop/combat. Do not load `southgate`
+interiors, park interiors (`SIL_PARK`), `palenter`,
+or mistralhouse this next leftover unless that is
+the assigned batch.
 
 ## 5. WASM
 
