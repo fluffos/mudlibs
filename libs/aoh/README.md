@@ -41,7 +41,7 @@ Avenue of the Palace (helmeted Rilana / yellow
 roses / Gaurdian inscription; flavour — no touch),
 The palace avenue (cassia cinnamon / gentleman's
 buttons / lime trees; then pink saliums / brownstone /
-jays),
+jays; then east corner bonnie bells),
 library road (guild unfinished),
 wine-shop vines, Counting House plaque,
 post-office cabins, bank panelling); south Seaman's Rest
