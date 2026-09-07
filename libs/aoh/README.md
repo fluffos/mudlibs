@@ -48,6 +48,8 @@ then further east same rose stretch twice),
 Avenue of the Palace (broad road north to palace
 entrance), The palace square (exotic flowers /
 gravel seashells / alabaster lanterns; look only),
+The place before the palace (latticed windows /
+white marble bench / aranged flower beds; look only),
 library road (guild unfinished),
 wine-shop vines, Counting House plaque,
 post-office cabins, bank panelling); south Seaman's Rest
