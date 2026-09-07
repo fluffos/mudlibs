@@ -52,6 +52,8 @@ The place before the palace (latticed windows /
 white marble bench / aranged flower beds; look only),
 At the entrance into the palace (hieroglyphics /
 brownstone entry way; look only — no enter),
+The palace square fountain (pearly griffin fountain /
+sunburst paving; look only — no drink),
 library road (guild unfinished),
 wine-shop vines, Counting House plaque,
 post-office cabins, bank panelling); south Seaman's Rest
