@@ -200,6 +200,10 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/west/wbank` — Counting House foyer (look only)
 - `/d/silvere/rooms/west/cityinfo1` — Park Lane
 - `/d/silvere/rooms/west/whealer1` — Before the house of the healer
+- `/d/silvere/rooms/west/templeroad1` — Templeroad (Xalandre approach)
+- `/d/silvere/rooms/west/templeroad2` — Templeroad (archive stub)
+- `/d/silvere/rooms/west/templeroad3` — Templeroad, outside the temple (look only; enter temple not wired)
+- `/d/silvere/rooms/west/cparch` — Caves of Parch entrance (blocked stub)
 
 inn buy/drink, harbourmaster bell NPC, tower interiors,
 palace enter (`palenter` / `enter palace` not wired),
@@ -209,7 +213,7 @@ SILBASEROOM original; south of mainroad11 not loaded),
 north of northroad is unwired (no `prevent_void`
 message), statue
 touch/helmet, `enter hall`,
-mail / bank deposit / Caves of Parch,
+mail / bank deposit,
 shop buy, and healer/elder interiors are not loaded.
 The council hall, library, and adventurers guild
 interiors are archive stubs (no details).
@@ -1403,6 +1407,51 @@ with no shop/combat. Do not load `southgate`
 interiors, park interiors (`SIL_PARK`), `palenter`,
 or mistralhouse this next leftover unless that is
 the assigned batch.
+
+<!-- librarian-expansion:50 -->
+
+Harbour expansion 50 (native 40285, 2026-09-07, same
+`fluffos` / `Mud@2026`, do not redo docks, inn/office,
+towers, Westway look-ats, westenter, outside1–32,
+palplace1–6, mainsouth1 Sarykan, south/mainroad1–11,
+parkroad1–6, parkenter, Tali/Kyrie, eastroad stubs,
+garden1–4, northroad, mainsouth1↔outside9,
+councilroad2–4 + councilenter, or bakery look-ats):
+
+- North of westroad2 → Templeroad (`look at path`
+  worn smooth; Xalandre sea-goddess long).
+- North → Templeroad (leads in from the south;
+  `look at road` “You see nothing special.”).
+- East → Templeroad at the temple (`look at temple`
+  / `grass` / `palms` / `ocean` / `wall`). `enter
+  temple` not wired (`What?`). East still refuses
+  (`You cannot go that way.`; no `xal_temple` /
+  pray).
+- West of already-live westshop2 → Caves of Parch
+  (blocked entrance stub; `look at caves` “You see
+  nothing special.”). East back works.
+- `score` persist. Reconnect still lands on the docks.
+
+This-boot live `libs/aoh/log/debug.log` (fd 3, PID 3105174
+BOOT_MARKER51 aoh-templeroad-cparch): no new lines
+after the marker. Catch this walk: empty after the
+marker.
+
+**Not published** (`wasm_status: partial`). Do not flip to
+`playable` on this harbour walk. `look at menu`,
+`look at candles`, `look at cabins`, `look at tiles`,
+and tailor/bakery/wine/flower `sign`s are flavour —
+buy/drink, mail, deposit, combat, `enter palace`,
+`enter hall`, `enter temple`, `touch statue`, and
+tower interiors are not claimed.
+Next aoh slice: libraryenter stub (west of
+already-live `libraryroad2`) if it is a look-at
+archive stub. If that is only one room, continue
+with `wsmithroad1+` look-ats (do not load the
+weaponsmith shop). Do not load `southgate`
+interiors, park interiors (`SIL_PARK`), `palenter`,
+`xal_temple`, or mistralhouse this next leftover
+unless that is the assigned batch.
 
 ## 5. WASM
 
