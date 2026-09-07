@@ -57,6 +57,8 @@ sunburst paving; look only — no drink),
 Avenue of the Palace (Sarykan statue / Gaurdian
 inscription; look only — no touch),
 On a road at Silvere (foggy buildings; archive stub),
+The place before the palace east wing (exotic flowers /
+gravel seashells / alabaster lanterns / roses; look only),
 library road (guild unfinished),
 wine-shop vines, Counting House plaque,
 post-office cabins, bank panelling); south Seaman's Rest
