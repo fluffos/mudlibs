@@ -3396,6 +3396,68 @@ the assigned batch. West fields / south bridge
 are not in the snapshot. Stonecutter and butcher
 remain archive orphans.
 
+<!-- librarian-expansion:86 -->
+
+Harbour expansion 86 (native 40285, 2026-09-08, same
+`fluffos` / `Mud@2026`, do not redo docks, quay,
+`ntower1`–`ntower12` look-ats, inn/office, Westway,
+westenter, outside1–32, palplace1–6, mainsouth1,
+south/mainroad1–11, parkroad1–6, south/parkenter,
+Tali/Kyrie, eastroad stubs, palace garden1–4,
+northroad, council, temple, library, smith, guild,
+cityinfo, citypark, cityenter, southgate, palenter,
+palace wings, palnorth1–5, whealer, loft, SIL_PARK,
+forest_south10, smugglers1–3, xal_temple/chapel,
+weaponsmith, mistralhouse garden1–8, quay2_1–3,
+`stower_enter`, or `stower1`–`stower5` look-ats):
+
+- North from already-live `stower5` → in the
+  tower waiting room (archive `Maybe do a
+  card game`; no AddDetail). `look at room` /
+  `card` nothing special. West closes onto
+  the platform.
+- West from already-live `stower5` → ammo
+  store (archive `way to heavy to taken` /
+  `toward a platform` / `To the stair, which
+  are leading`; no AddDetail). `look at
+  boulders` / `stones` nothing special.
+- West from the waiting room / north from
+  the ammo store → platform (archive wiz-exit
+  lines; no AddDetail). `up` refuses (no
+  stower9). `climb` What? East/south close
+  the second-floor ring 5–6–7–8.
+- Down / north / east×4 / northeast /
+  northwest / west back to the docks.
+  `score` persist. Reconnect still lands
+  on the docks.
+
+This-boot live `libs/aoh/log/debug.log` (fd 3, PID 3995010
+BOOT_MARKER86 aoh-stower6): no new lines after
+the marker. Catch this walk: empty after the marker.
+
+**Not published** (`wasm_status: partial`). Do not flip to
+`playable` on this harbour walk. `look at menu`,
+`look at candles`, `look at cabins`, `look at tiles`,
+and tailor/bakery/wine/flower `sign`s are flavour —
+buy/drink, mail, deposit, combat, `enter palace`,
+`enter hall`, `enter temple`, `enter shop`,
+`enter park`, `climb ivy`, `touch statue`,
+`drink soup`, `look through` telescope, leave
+tower, climb stairs, raise/lower platform,
+pull/push handle, catapult load/aim/fire, jump/shove,
+and remaining stower interiors are not claimed.
+Next aoh slice: harbour `stower9` rooftop
+look-ats up from already-live `stower7` (and
+`stower10` / `stower12` if the batch fits;
+look-ats only; no chain / raise/lower /
+climb / jump). Do not load house interiors,
+throneroom / private rooms / paleast5 conference
+/ palwest11 armoury, forest_south9 encounters,
+or snake pit this next leftover unless that is
+the assigned batch. West fields / south bridge
+are not in the snapshot. Stonecutter and butcher
+remain archive orphans.
+
 ## 5. WASM
 
 Verified 2026-09-05 via `scripts/wasm_client.js`: register/reconnect fluffos, look/score/quit.
