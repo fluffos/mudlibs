@@ -128,7 +128,8 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/center/outside9` — Avenue of the Palace, entrance fork (look only; east mainsouth1 loaded)
 - `/d/silvere/rooms/center/palplace1` — The palace square, west side (look only)
 - `/d/silvere/rooms/center/palplace4` — The place before the palace (look only)
-- `/d/silvere/rooms/center/palplace5` — At the entrance into the palace (look only)
+- `/d/silvere/rooms/center/palplace5` — At the entrance into the palace (look only; north palenter loaded)
+- `/d/silvere/rooms/palace/palenter` — A hall in the palace (archive stub; enter throneroom / wings not wired)
 - `/d/silvere/rooms/center/palplace2` — The palace square fountain (look only)
 - `/d/silvere/rooms/center/mainsouth1` — Avenue of the Palace, Sarykan statue (look only; west outside9 loaded)
 - `/d/silvere/rooms/south/mainroad1` — On a road at Silvere (archive stub)
@@ -210,7 +211,8 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/west/citypark1` — Park Lane (uneaven cobbles; south citypark2 loaded)
 - `/d/silvere/rooms/west/citypark2` — Park Lane (thebare bricks; south cityenter loaded)
 - `/d/silvere/rooms/west/cityenter` — Citypark entrance (look only; enter park / SIL_PARK not wired)
-- `/d/silvere/rooms/west/whealer1` — Before the house of the healer
+- `/d/silvere/rooms/west/whealer1` — Before the house of the healer (north whealer loaded)
+- `/d/silvere/rooms/west/whealer` — The house of the healer (look only; drink / treat not wired)
 - `/d/silvere/rooms/west/templeroad1` — Templeroad (Xalandre approach)
 - `/d/silvere/rooms/west/templeroad2` — Templeroad (archive stub)
 - `/d/silvere/rooms/west/templeroad3` — Templeroad, outside the temple (look only; enter temple not wired)
@@ -219,7 +221,8 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/west/wsmithroad2` — small road before the weaponsmith (stub; shop not loaded)
 
 inn buy/drink, harbourmaster bell NPC, tower interiors,
-palace enter (`palenter` / `enter palace` not wired),
+palace hall look-ats (`palenter`) are loaded
+(`enter throneroom` / wings not wired),
 further south-town
 (`/d/silvere/rooms/south/southgate` look-ats are
 loaded; `climb ivy` not wired; west fields and the
@@ -228,7 +231,8 @@ north of northroad is unwired (no `prevent_void`
 message), statue
 touch/helmet, `enter hall`,
 mail / bank deposit,
-shop buy, and healer interiors are not loaded.
+shop buy, and healer treat/drink are not loaded
+(healer-house look-ats are loaded).
 The council hall, library entrance, and adventurers
 guild stubs are loaded (look only). The City Elder
 office look-ats are loaded (`leave office` / `sit`
@@ -1686,13 +1690,65 @@ buy/drink, mail, deposit, combat, `enter palace`,
 `enter hall`, `enter temple`, `enter shop`,
 `enter park`, `climb ivy`, `touch statue`, and
 tower interiors are not claimed.
-Next aoh slice: `palenter` look-ats (do not wire
-`enter palace` / throneroom). Do not load
-`SIL_PARK` interiors, `xal_temple`, weaponsmith,
-or mistralhouse this next leftover unless that is
-the assigned batch. West fields / south bridge are
-not in the snapshot. Stonecutter remains an archive
-orphan.
+Next aoh slice: `paleast1` + `palwest1` hall stubs
+east/west of already-live `palenter` (look-ats
+only; do not load throneroom or pal*2+). Do not
+load `SIL_PARK` interiors, `xal_temple`,
+weaponsmith, or mistralhouse this next leftover
+unless that is the assigned batch. West fields /
+south bridge are not in the snapshot. Stonecutter
+remains an archive orphan.
+
+<!-- librarian-expansion:56 -->
+
+Harbour expansion 56 (native 40285, 2026-09-07, same
+`fluffos` / `Mud@2026`, do not redo docks, inn/office,
+towers, Westway look-ats, westenter, outside1–32,
+palplace1–6, mainsouth1 Sarykan, south/mainroad1–11,
+parkroad1–6, parkenter, Tali/Kyrie, eastroad stubs,
+garden1–4, northroad, mainsouth1↔outside9,
+councilroad2–4 + councilenter, templeroad1–3 +
+cparch, libraryenter, wsmithroad1–2, adventurerguild,
+cityinfo office, citypark1–2, cityenter, southgate
+chain, bakery, or flower-shop look-ats):
+
+- North of already-live palplace5 → A hall in the
+  palace (archive stub; no AddDetail). `look at hall`
+  / `doors` / `archways` / `throneroom` / `wings`
+  nothing special. `enter throneroom` / `leave palace`
+  not wired (`What?`). `north` / `east` / `west`
+  refuse (`You cannot go that way.`). South back
+  works.
+- North of already-live whealer1 → The house of the
+  healer (`cannisters` / `linaments` / `contruction`
+  / missing space before `crush`). `look at herbs` /
+  `roots` / `labels` / `table` / `pestle` / `mortar` /
+  `shelves` / `trivet` / `hearth` / `soup` / `sign`
+  (100/300/500 copper day-default). `drink soup` /
+  `taste brew` / `leave healer` not wired (`What?`).
+  `north` refuses. South back works.
+- `score` persist. Reconnect still lands on the docks.
+
+This-boot live `libs/aoh/log/debug.log` (fd 3, PID 3276642
+BOOT_MARKER57 aoh-palenter-whealer): no new lines after
+the marker. Catch this walk: empty after the marker.
+
+**Not published** (`wasm_status: partial`). Do not flip to
+`playable` on this harbour walk. `look at menu`,
+`look at candles`, `look at cabins`, `look at tiles`,
+and tailor/bakery/wine/flower `sign`s are flavour —
+buy/drink, mail, deposit, combat, `enter palace`,
+`enter hall`, `enter temple`, `enter shop`,
+`enter park`, `climb ivy`, `touch statue`,
+`drink soup`, and tower interiors are not claimed.
+Next aoh slice: `paleast1` + `palwest1` hall stubs
+east/west of already-live `palenter` (look-ats
+only; do not load throneroom or pal*2+). Do not
+load `SIL_PARK` interiors, `xal_temple`,
+weaponsmith, or mistralhouse this next leftover
+unless that is the assigned batch. West fields /
+south bridge are not in the snapshot. Stonecutter
+remains an archive orphan.
 
 ## 5. WASM
 
