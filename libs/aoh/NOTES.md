@@ -180,7 +180,12 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/south/parkroad5` — On a road at Silvere (foggy citypark stub; west parkroad6 loaded)
 - `/d/silvere/rooms/south/parkroad6` — On a road at Silvere (foggy wall+trees stub)
 - `/d/silvere/rooms/south/parkenter` — On a road at Silvere (foggy park-entrance stub; west park interiors not loaded)
-- `/d/silvere/rooms/south/mainroad11` — On a road at Silvere (citygates south; southgate not loaded)
+- `/d/silvere/rooms/south/mainroad11` — On a road at Silvere (citygates south; south southgate loaded)
+- `/d/silvere/rooms/south/southgate` — southern gates (This are; ivy look-at; climb not wired)
+- `/d/silvere/rooms/south/wilderness1` — road south of the gates (layout stub)
+- `/d/silvere/rooms/south/wilderness2` — road toward the river (layout stub)
+- `/d/silvere/rooms/south/wilderness3` — road with windmill mention (west fields not wired)
+- `/d/silvere/rooms/south/rivershore1` — On a road south (layouted stub; south bridge not wired)
 - `/d/silvere/rooms/center/outside32` — palace avenue (archive short; jasmine; look only)
 - `/d/silvere/rooms/west/flowershop` — Jehane's Flowers (look only)
 - `/d/silvere/rooms/west/libraryroad1` — Guild Street / library road (east adventurerguild loaded)
@@ -216,8 +221,9 @@ and English harbour text as thin FluffOS rooms; originals are
 inn buy/drink, harbourmaster bell NPC, tower interiors,
 palace enter (`palenter` / `enter palace` not wired),
 further south-town
-(`/d/silvere/rooms/south/southgate` is still the LDMud
-SILBASEROOM original; south of mainroad11 not loaded),
+(`/d/silvere/rooms/south/southgate` look-ats are
+loaded; `climb ivy` not wired; west fields and the
+south bridge stay unwired),
 north of northroad is unwired (no `prevent_void`
 message), statue
 touch/helmet, `enter hall`,
@@ -1632,12 +1638,60 @@ buy/drink, mail, deposit, combat, `enter palace`,
 `enter hall`, `enter temple`, `enter shop`,
 `enter park`, `touch statue`, and tower interiors
 are not claimed.
-Next aoh slice: `southgate` look-ats south of
-already-live `mainroad11` (do not implement ivy
-climb / weapons). Do not load `SIL_PARK`
-interiors, `palenter`, `xal_temple`, weaponsmith,
+Next aoh slice: `palenter` look-ats (do not wire
+`enter palace` / throneroom). Do not load
+`SIL_PARK` interiors, `xal_temple`, weaponsmith,
 or mistralhouse this next leftover unless that is
-the assigned batch. Stonecutter remains an archive
+the assigned batch. West fields / south bridge are
+not in the snapshot. Stonecutter remains an archive
+orphan.
+
+<!-- librarian-expansion:55 -->
+
+Harbour expansion 55 (native 40285, 2026-09-07, same
+`fluffos` / `Mud@2026`, do not redo docks, inn/office,
+towers, Westway look-ats, westenter, outside1–32,
+palplace1–6, mainsouth1 Sarykan, south/mainroad1–11,
+parkroad1–6, parkenter, Tali/Kyrie, eastroad stubs,
+garden1–4, northroad, mainsouth1↔outside9,
+councilroad2–4 + councilenter, templeroad1–3 +
+cparch, libraryenter, wsmithroad1–2, adventurerguild,
+cityinfo office, citypark1–2, cityenter, bakery, or
+flower-shop look-ats):
+
+- South of already-live mainroad11 → southern gates
+  (archive `This are`; ivy / city wall / citywall
+  look-ats). `climb ivy` / `climb wall` not wired
+  (`What?`).
+- South → road toward the river (layout stub).
+- South → road before the bridge (layout stub).
+- South → road with windmill mention. `west` refuses
+  (unfinished fields). `look at windmill` nothing
+  special.
+- South → On a road south (archive `*No details yet,
+  room only layouted.`). `south` refuses (no bridge
+  / forest). North back works.
+- `score` persist. Reconnect still lands on the docks.
+
+This-boot live `libs/aoh/log/debug.log` (fd 3, PID 3245111
+BOOT_MARKER56 aoh-southgate-wilderness): no new lines
+after the marker. Catch this walk: empty after the
+marker.
+
+**Not published** (`wasm_status: partial`). Do not flip to
+`playable` on this harbour walk. `look at menu`,
+`look at candles`, `look at cabins`, `look at tiles`,
+and tailor/bakery/wine/flower `sign`s are flavour —
+buy/drink, mail, deposit, combat, `enter palace`,
+`enter hall`, `enter temple`, `enter shop`,
+`enter park`, `climb ivy`, `touch statue`, and
+tower interiors are not claimed.
+Next aoh slice: `palenter` look-ats (do not wire
+`enter palace` / throneroom). Do not load
+`SIL_PARK` interiors, `xal_temple`, weaponsmith,
+or mistralhouse this next leftover unless that is
+the assigned batch. West fields / south bridge are
+not in the snapshot. Stonecutter remains an archive
 orphan.
 
 ## 5. WASM
