@@ -131,8 +131,10 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/center/palplace4` — The place before the palace (look only)
 - `/d/silvere/rooms/center/palplace5` — At the entrance into the palace (look only; north palenter loaded)
 - `/d/silvere/rooms/palace/palenter` — A hall in the palace (archive stub; east paleast1 / west palwest1 loaded; enter throneroom not wired)
-- `/d/silvere/rooms/palace/paleast1` — east-wing hall stub (seems to glance / you.The walls / podestal; east pal*2+ not wired)
-- `/d/silvere/rooms/palace/palwest1` — west-wing hall stub (seems to glance / podestal; west pal*2+ not wired)
+- `/d/silvere/rooms/palace/paleast1` — east-wing hall stub (seems to glance / you.The walls / podestal; east paleast2 loaded)
+- `/d/silvere/rooms/palace/paleast2` — east-wing crossing stub (glance  at you.The walls / podestal; n/s pal*3+ not wired)
+- `/d/silvere/rooms/palace/palwest1` — west-wing hall stub (seems to glance / podestal; west palwest2 loaded)
+- `/d/silvere/rooms/palace/palwest2` — west-wing crossing stub (glance at you.The walls / podestal; n/s pal*3+ not wired)
 - `/d/silvere/rooms/center/palplace2` — The palace square fountain (look only)
 - `/d/silvere/rooms/center/mainsouth1` — Avenue of the Palace, Sarykan statue (look only; west outside9 loaded)
 - `/d/silvere/rooms/south/mainroad1` — On a road at Silvere (archive stub)
@@ -229,8 +231,9 @@ and English harbour text as thin FluffOS rooms; originals are
 
 inn buy/drink, harbourmaster bell NPC, tower interiors,
 palace hall look-ats (`palenter`) plus east/west wing
-stubs (`paleast1` / `palwest1`) are loaded
-(`enter throneroom` / pal*2+ not wired),
+stubs (`paleast1` / `palwest1` / `paleast2` /
+`palwest2`) are loaded
+(`enter throneroom` / pal*3+ not wired),
 harbourmaster loft telescope look-ats are loaded
 (`look through` not wired),
 further south-town
@@ -1912,6 +1915,58 @@ Next aoh slice: `paleast2` + `palwest2` hall look-ats
 east/west of already-live `paleast1` / `palwest1`
 (look-ats only; no throneroom / pal*3+). Do not
 load `xal_temple`, weaponsmith, mistralhouse,
+forest_south9 encounters, or snake pit this next
+leftover unless that is the assigned batch. West
+fields / south bridge are not in the snapshot.
+Stonecutter remains an archive orphan.
+
+<!-- librarian-expansion:60 -->
+
+Harbour expansion 60 (native 40285, 2026-09-07, same
+`fluffos` / `Mud@2026`, do not redo docks, inn/office
+look-ats, towers, Westway look-ats, westenter,
+outside1–32, palplace1–6, mainsouth1 Sarykan,
+south/mainroad1–11, parkroad1–6, south/parkenter,
+Tali/Kyrie, eastroad stubs, garden1–4, northroad,
+mainsouth1↔outside9, councilroad2–4 + councilenter,
+templeroad1–3 + cparch, libraryenter, wsmithroad1–2,
+adventurerguild, cityinfo office, citypark1–2,
+cityenter look-ats, southgate chain, palenter,
+paleast1, palwest1, whealer, harbourmaster loft,
+SIL_PARK parkenter, forest_enter, southentrance,
+forest_south10, bakery, or flower-shop look-ats):
+
+- East of already-live paleast1 → east-wing crossing
+  (archive `leads in from the west` / `glance  at
+  you.The walls` / `podestal`). `look at guards` /
+  `tapestries` / `podestal` / `walls` nothing
+  special. `north` / `south` refuse (no pal*3+).
+  West back works.
+- West of already-live palwest1 → west-wing crossing
+  (archive `leads in from the east` / `glance at
+  you.The walls` / `podestal`). `look at guards` /
+  `tapestries` / `podestal` nothing special.
+  `north` / `south` refuse (no pal*3+). East back
+  works.
+- `score` persist. Reconnect still lands on the docks.
+
+This-boot live `libs/aoh/log/debug.log` (fd 3, PID 3360183
+BOOT_MARKER60 aoh-southentrance): no new lines after
+the marker. Catch this walk: empty after the marker.
+
+**Not published** (`wasm_status: partial`). Do not flip to
+`playable` on this harbour walk. `look at menu`,
+`look at candles`, `look at cabins`, `look at tiles`,
+and tailor/bakery/wine/flower `sign`s are flavour —
+buy/drink, mail, deposit, combat, `enter palace`,
+`enter hall`, `enter temple`, `enter shop`,
+`enter park`, `climb ivy`, `touch statue`,
+`drink soup`, `look through` telescope, and tower
+interiors are not claimed.
+Next aoh slice: `paleast3` + `palwest3` hall look-ats
+north of already-live `paleast2` / `palwest2`
+(look-ats only; no palnorth / pal*4+ / throneroom).
+Do not load `xal_temple`, weaponsmith, mistralhouse,
 forest_south9 encounters, or snake pit this next
 leftover unless that is the assigned batch. West
 fields / south bridge are not in the snapshot.
