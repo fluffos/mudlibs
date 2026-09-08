@@ -2546,6 +2546,59 @@ leftover unless that is the assigned batch. West
 fields / south bridge are not in the snapshot.
 Stonecutter and butcher remain archive orphans.
 
+<!-- librarian-expansion:71 -->
+
+Harbour expansion 71 (native 40285, 2026-09-08, same
+`fluffos` / `Mud@2026`, do not redo docks, inn/office
+look-ats, towers, Westway look-ats, westenter,
+outside1–32, palplace1–6, mainsouth1 Sarykan,
+south/mainroad1–11, parkroad1–6, south/parkenter,
+Tali/Kyrie, eastroad stubs, palace garden1–4,
+northroad, mainsouth1↔outside9, councilroad2–4 +
+councilenter, templeroad1–3 + cparch, libraryenter,
+wsmithroad1–2, adventurerguild, cityinfo office,
+citypark1–2, cityenter look-ats, southgate chain,
+palenter, paleast1–4, palwest1–4, paleast6–11,
+palwest6–10, paleast12–13, palwest12–13,
+palnorth1–5, whealer, harbourmaster loft, SIL_PARK
+parkenter, forest_enter, southentrance,
+forest_south10, smugglers1–3, xal_temple/chapel,
+weaponsmith, bakery, or flower-shop look-ats):
+
+- South of already-live east/mainroad1 → Joan and
+  Mistral garden (archive `search for herbs`).
+  `search` / `search herbs` What? `south` refuses
+  (no house 011).
+- West → garden2 (archive short trailing period /
+  `though the trees`). `look at trees` / `wind` /
+  `flowers`. `south` refuses (no garden3).
+- East of garden1 → garden8 stub. `south` refuses
+  (no garden7). West and north back work.
+- `score` persist. Reconnect still lands on the docks.
+
+This-boot live `libs/aoh/log/debug.log` (fd 3, PID 3594632
+BOOT_MARKER71 aoh-mistral-garden): no new lines after
+the marker. Catch this walk: empty after the marker.
+
+**Not published** (`wasm_status: partial`). Do not flip to
+`playable` on this harbour walk. `look at menu`,
+`look at candles`, `look at cabins`, `look at tiles`,
+and tailor/bakery/wine/flower `sign`s are flavour —
+buy/drink, mail, deposit, combat, `enter palace`,
+`enter hall`, `enter temple`, `enter shop`,
+`enter park`, `climb ivy`, `touch statue`,
+`drink soup`, `look through` telescope, and tower
+interiors are not claimed.
+Next aoh slice: `mistralhouse/garden3` + `garden7`
+look-ats (no search herbs / house interiors /
+garden4–6). Do not load tower interiors,
+throneroom / private rooms / paleast5 conference /
+palwest11 armoury, forest_south9 encounters, or
+snake pit this next leftover unless that is the
+assigned batch. West fields / south bridge are not
+in the snapshot. Stonecutter and butcher remain
+archive orphans.
+
 ## 5. WASM
 
 Verified 2026-09-05 via `scripts/wasm_client.js`: register/reconnect fluffos, look/score/quit.
