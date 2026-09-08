@@ -2819,6 +2819,58 @@ that is the assigned batch. West fields / south
 bridge are not in the snapshot. Stonecutter and
 butcher remain archive orphans.
 
+<!-- librarian-expansion:76 -->
+
+Harbour expansion 76 (native 40285, 2026-09-08, same
+`fluffos` / `Mud@2026`, do not redo docks, quay,
+`ntower_enter` / `ntower1` / `ntower2` / `ntower3`
+look-ats, inn/office, Westway, westenter,
+outside1–32, palplace1–6, mainsouth1,
+south/mainroad1–11, parkroad1–6, south/parkenter,
+Tali/Kyrie, eastroad stubs, palace garden1–4,
+northroad, council, temple, library, smith, guild,
+cityinfo, citypark, cityenter, southgate, palenter,
+palace wings, palnorth1–5, whealer, loft, SIL_PARK,
+forest_south10, smugglers1–3, xal_temple/chapel,
+weaponsmith, or mistralhouse garden1–8):
+
+- North of already-live `ntower2` → Tower basement,
+  northern end (archive same short as ntower3 /
+  empty wheel / `Thereis` on box). `look at
+  wheel` (empty) / `globe` / `box` / `chain` /
+  `opening` (day) / `stairway` / `machine` /
+  `handle`. `up` refuses. `climb` / `climb
+  stairs` / `pull` / `push` What?
+- East closes onto already-live ntower3. South
+  closes onto ntower2. Northern-tower basement
+  look-at ring is closed.
+- `score` persist. Reconnect still lands on the docks.
+
+This-boot live `libs/aoh/log/debug.log` (fd 3, PID 3740528
+BOOT_MARKER76 aoh-ntower4): no new lines after
+the marker. Catch this walk: empty after the marker.
+
+**Not published** (`wasm_status: partial`). Do not flip to
+`playable` on this harbour walk. `look at menu`,
+`look at candles`, `look at cabins`, `look at tiles`,
+and tailor/bakery/wine/flower `sign`s are flavour —
+buy/drink, mail, deposit, combat, `enter palace`,
+`enter hall`, `enter temple`, `enter shop`,
+`enter park`, `climb ivy`, `touch statue`,
+`drink soup`, `look through` telescope, leave
+tower, climb stairs, pull/push handle, and
+upper-level / stower interiors are not claimed.
+Northern-tower basement look-ats are closed.
+Next aoh slice: harbour `ntower5` look-ats up from
+already-live `ntower3` (look-ats only; no climb /
+handle / chain verbs). Do not load stower
+interiors, house interiors, throneroom / private
+rooms / paleast5 conference / palwest11 armoury,
+forest_south9 encounters, or snake pit this next
+leftover unless that is the assigned batch. West
+fields / south bridge are not in the snapshot.
+Stonecutter and butcher remain archive orphans.
+
 ## 5. WASM
 
 Verified 2026-09-05 via `scripts/wasm_client.js`: register/reconnect fluffos, look/score/quit.
