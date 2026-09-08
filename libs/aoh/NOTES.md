@@ -3519,6 +3519,56 @@ assigned. West fields / south bridge are
 not in the snapshot. Stonecutter and butcher
 remain archive orphans.
 
+<!-- librarian-expansion:88 -->
+
+Harbour expansion 88 (scan only, 2026-09-08,
+no boot — leftover 5d4). Walkable Silvere
+snapshot CLOSED. 205 thin rooms; every
+`query_exit` destination is already a thin
+room. No unused connected non-skip room
+remains from the live docks graph.
+
+Leftover originals that still inherit
+BASEROOM / FORESTROOM / SILBASEROOM are
+either skip-list, only reachable through
+a skip room, archive orphans, or
+disconnected snapshot fragments:
+
+- Skip (do not load unless assigned):
+  house interiors 001/002/011/012/021/
+  022/111/112/121/122/rcellar;
+  throneroom / private1 / private2;
+  paleast5 / palwest5 conference;
+  palwest11 armoury + palwesttow1/2 /
+  palfall1 behind it; forest_south9;
+  snake_pit1/2; forest_room1;
+  harbour/bigjump; harbour/timeroom.
+- Only behind skip rooms: newbiepark
+  forest_south1–8, forest_north1–5,
+  forest_room2–9.
+- Archive orphans (no parent wiring):
+  west/stonecutter, west/butcher.
+- Not in the snapshot: west fields
+  (`wilderness3` west commented),
+  south bridge (`rivershore1` south
+  commented).
+- Disconnected fragments (no live
+  Silvere exit): `forest/` (FORESTROOM
+  cluster), `fortress/` (no
+  `fortress/enter`; towers point at
+  missing webat/nobat rooms), `corn/a1`
+  (no exits). `/d/sykorath` and
+  `/d/archwiz` exist in the archive
+  but are not wired from live docks
+  (`silpath1` still TODOs west).
+
+Do not invent those fragments as
+connected. Do not redo already-walked
+rooms. Do not flip to playable (no shop
+buy/combat). Next aoh leftover needs an
+assignment to load a skip-list room or
+a disconnected domain; stay on aoh.
+
 ## 5. WASM
 
 Verified 2026-09-05 via `scripts/wasm_client.js`: register/reconnect fluffos, look/score/quit.
