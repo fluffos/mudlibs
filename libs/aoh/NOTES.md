@@ -2871,6 +2871,66 @@ leftover unless that is the assigned batch. West
 fields / south bridge are not in the snapshot.
 Stonecutter and butcher remain archive orphans.
 
+<!-- librarian-expansion:77 -->
+
+Harbour expansion 77 (native 40285, 2026-09-08, same
+`fluffos` / `Mud@2026`, do not redo docks, quay,
+`ntower_enter` / `ntower1` / `ntower2` / `ntower3`
+/ `ntower4` look-ats, inn/office, Westway,
+westenter, outside1–32, palplace1–6, mainsouth1,
+south/mainroad1–11, parkroad1–6, south/parkenter,
+Tali/Kyrie, eastroad stubs, palace garden1–4,
+northroad, council, temple, library, smith, guild,
+cityinfo, citypark, cityenter, southgate, palenter,
+palace wings, palnorth1–5, whealer, loft, SIL_PARK,
+forest_south10, smugglers1–3, xal_temple/chapel,
+weaponsmith, or mistralhouse garden1–8):
+
+- Up from already-live `ntower3` → At a stairway
+  (archive `Thereis` / `unusualy` / `themself` /
+  `totaly` / `frequently is walking`). `look at
+  globe` / `box` / `stairway` / `door` /
+  `footprints` / `cedar` / `stones` / `east wall`
+  / `north wall`. `climb` / `climb stairs` What?
+  `up` / `west` refuse (no upper flight / no
+  west from the landing).
+- South → Guardroom (cards on table, chairs
+  empty, locker closed and locked, unused bed
+  needs cleanup, sleeping guard). `look at table`
+  / `cards` / `chairs` / `bed` / `guard` /
+  `locker` / `rack` / `walls`. `take` / `take
+  cards` / `sit` / `sit chair` / `clean bed` /
+  `open locker` What? `west` refuses (no
+  ntower7). North closes onto the stairway.
+  Down from the stairway closes onto ntower3.
+  East×3 from ntower1 back to docks work.
+- `score` persist. Reconnect still lands on the docks.
+
+This-boot live `libs/aoh/log/debug.log` (fd 3, PID 3746388
+BOOT_MARKER77 aoh-ntower5-6): no new lines after
+the marker. Catch this walk: empty after the marker.
+
+**Not published** (`wasm_status: partial`). Do not flip to
+`playable` on this harbour walk. `look at menu`,
+`look at candles`, `look at cabins`, `look at tiles`,
+and tailor/bakery/wine/flower `sign`s are flavour —
+buy/drink, mail, deposit, combat, `enter palace`,
+`enter hall`, `enter temple`, `enter shop`,
+`enter park`, `climb ivy`, `touch statue`,
+`drink soup`, `look through` telescope, leave
+tower, climb stairs, take/sit/clean/lock, and
+platform / stower interiors are not claimed.
+Next aoh slice: harbour `ntower7` look-ats west of
+already-live `ntower6` (look-ats only; no
+raise/lower platform / climb / handle / chain
+verbs). Do not load stower interiors, house
+interiors, throneroom / private rooms / paleast5
+conference / palwest11 armoury, forest_south9
+encounters, or snake pit this next leftover unless
+that is the assigned batch. West fields / south
+bridge are not in the snapshot. Stonecutter and
+butcher remain archive orphans.
+
 ## 5. WASM
 
 Verified 2026-09-05 via `scripts/wasm_client.js`: register/reconnect fluffos, look/score/quit.
