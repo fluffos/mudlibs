@@ -183,7 +183,8 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/south/mainroad11` — On a road at Silvere (citygates south; southgate not loaded)
 - `/d/silvere/rooms/center/outside32` — palace avenue (archive short; jasmine; look only)
 - `/d/silvere/rooms/west/flowershop` — Jehane's Flowers (look only)
-- `/d/silvere/rooms/west/libraryroad1` — Guild Street / library road
+- `/d/silvere/rooms/west/libraryroad1` — Guild Street / library road (east adventurerguild loaded)
+- `/d/silvere/rooms/west/adventurerguild` — The Adventurers Guild (archive stub; leave guild not wired)
 - `/d/silvere/rooms/west/libraryroad2` — library road west (stub look-ats; west libraryenter loaded)
 - `/d/silvere/rooms/west/libraryenter` — The Adventurers Guild / library entrance stub
 - `/d/silvere/rooms/west/wineshop` — Chez Brigan (look only)
@@ -199,7 +200,8 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/west/wpostroad2` — Counting House arch
 - `/d/silvere/rooms/west/wpostoffice` — post office (look only)
 - `/d/silvere/rooms/west/wbank` — Counting House foyer (look only)
-- `/d/silvere/rooms/west/cityinfo1` — Park Lane
+- `/d/silvere/rooms/west/cityinfo1` — Park Lane (east cityinfo loaded)
+- `/d/silvere/rooms/west/cityinfo` — Elder office (look only; leave/sit/elder NPC not wired)
 - `/d/silvere/rooms/west/whealer1` — Before the house of the healer
 - `/d/silvere/rooms/west/templeroad1` — Templeroad (Xalandre approach)
 - `/d/silvere/rooms/west/templeroad2` — Templeroad (archive stub)
@@ -217,10 +219,11 @@ north of northroad is unwired (no `prevent_void`
 message), statue
 touch/helmet, `enter hall`,
 mail / bank deposit,
-shop buy, and healer/elder interiors are not loaded.
-The council hall and library entrance stubs are
-loaded (look only). The adventurers guild interior
-is still an archive stub (no details).
+shop buy, and healer interiors are not loaded.
+The council hall, library entrance, and adventurers
+guild stubs are loaded (look only). The City Elder
+office look-ats are loaded (`leave office` / `sit`
+/ elder NPC not wired).
 
 `/catalog/login` still handles name/password. `/catalog/player`
 `enter_world()` moves onto the docks (fallback Void if load fails).
@@ -1493,12 +1496,61 @@ and tailor/bakery/wine/flower `sign`s are flavour —
 buy/drink, mail, deposit, combat, `enter palace`,
 `enter hall`, `enter temple`, `enter shop`,
 `touch statue`, and tower interiors are not claimed.
-Next aoh slice: adventurerguild stub (east of
-already-live `libraryroad1`) if it is a look-at
-archive stub. Do not load `southgate` interiors,
-park interiors (`SIL_PARK`), `palenter`,
-`xal_temple`, weaponsmith, or mistralhouse this
-next leftover unless that is the assigned batch.
+Next aoh slice: Park Lane south of already-live
+`cityinfo1` (`citypark1+` look-ats; do not load
+`SIL_PARK` / `cityenter` enter-park). Or the
+stonecutter workshop look-ats. Do not load
+`southgate` interiors, park interiors (`SIL_PARK`),
+`palenter`, `xal_temple`, weaponsmith, or
+mistralhouse this next leftover unless that is
+the assigned batch.
+
+<!-- librarian-expansion:52 -->
+
+Harbour expansion 52 (native 40285, 2026-09-07, same
+`fluffos` / `Mud@2026`, do not redo docks, inn/office,
+towers, Westway look-ats, westenter, outside1–32,
+palplace1–6, mainsouth1 Sarykan, south/mainroad1–11,
+parkroad1–6, parkenter, Tali/Kyrie, eastroad stubs,
+garden1–4, northroad, mainsouth1↔outside9,
+councilroad2–4 + councilenter, templeroad1–3 +
+cparch, libraryenter, wsmithroad1–2, bakery, or
+flower-shop look-ats):
+
+- East of already-live libraryroad1 → The Adventurers
+  Guild (archive stub; `look at guild` “You see
+  nothing special.”). `leave guild` not wired
+  (`What?`). North refuses. West back works.
+- East of already-live cityinfo1 → Elder office
+  (archive `Ciraran` in the long). Desk / oak /
+  papers / quills / window / curtains / floral
+  design / rosebush / chairs / rug / painting /
+  harbour-is-a-picture / blue door look-ats.
+  `sit`, `leave office`, `enter office` not wired
+  (`What?`). `look at elder` “You see nothing
+  special.” (NPC not loaded). West back works.
+- `score` persist. Reconnect still lands on the docks.
+
+This-boot live `libs/aoh/log/debug.log` (fd 3, PID 3162172
+BOOT_MARKER53 aoh-adventurerguild-cityinfo): no new lines
+after the marker. Catch this walk: empty after the
+marker.
+
+**Not published** (`wasm_status: partial`). Do not flip to
+`playable` on this harbour walk. `look at menu`,
+`look at candles`, `look at cabins`, `look at tiles`,
+and tailor/bakery/wine/flower `sign`s are flavour —
+buy/drink, mail, deposit, combat, `enter palace`,
+`enter hall`, `enter temple`, `enter shop`,
+`touch statue`, and tower interiors are not claimed.
+Next aoh slice: Park Lane south of already-live
+`cityinfo1` (`citypark1+` look-ats; do not load
+`SIL_PARK` / `cityenter` enter-park). Or the
+stonecutter workshop look-ats. Do not load
+`southgate` interiors, park interiors (`SIL_PARK`),
+`palenter`, `xal_temple`, weaponsmith, or
+mistralhouse this next leftover unless that is
+the assigned batch.
 
 ## 5. WASM
 
