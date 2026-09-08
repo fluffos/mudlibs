@@ -183,7 +183,7 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/south/parkroad4` — On a road at Silvere (foggy citypark stub)
 - `/d/silvere/rooms/south/parkroad5` — On a road at Silvere (foggy citypark stub; west parkroad6 loaded)
 - `/d/silvere/rooms/south/parkroad6` — On a road at Silvere (foggy wall+trees stub)
-- `/d/silvere/rooms/south/parkenter` — On a road at Silvere (foggy park-entrance stub; west park interiors not loaded)
+- `/d/silvere/rooms/south/parkenter` — On a road at Silvere (foggy park-entrance stub; west SIL_PARK southentrance loaded)
 - `/d/silvere/rooms/south/mainroad11` — On a road at Silvere (citygates south; south southgate loaded)
 - `/d/silvere/rooms/south/southgate` — southern gates (This are; ivy look-at; climb not wired)
 - `/d/silvere/rooms/south/wilderness1` — road south of the gates (layout stub)
@@ -216,6 +216,8 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/west/cityenter` — Citypark entrance (look only; south SIL_PARK parkenter loaded; enter park verb not wired)
 - `/d/silvere/rooms/newbiepark/parkenter` — Citypark entrance (sign / it's wooden surface; leave/search not wired)
 - `/d/silvere/rooms/newbiepark/forest_enter` — Before a small forest (archive stub; east forest_room1 not wired)
+- `/d/silvere/rooms/newbiepark/southentrance` — Citypark entrance (sign / its wooden surface; leave/search not wired)
+- `/d/silvere/rooms/newbiepark/forest_south10` — Border of the forest (archive stub; north/west not wired)
 - `/d/silvere/rooms/west/whealer1` — Before the house of the healer (north whealer loaded)
 - `/d/silvere/rooms/west/whealer` — The house of the healer (look only; drink / treat not wired)
 - `/d/silvere/rooms/west/templeroad1` — Templeroad (Xalandre approach)
@@ -246,7 +248,8 @@ guild stubs are loaded (look only). The City Elder
 office look-ats are loaded (`leave office` / `sit`
 / elder NPC not wired). Park Lane continues south
 through citypark1–2 to the cityenter gate and
-SIL_PARK `parkenter` / `forest_enter` look-ats
+SIL_PARK `parkenter` / `forest_enter` /
+`southentrance` / `forest_south10` look-ats
 (`leave park` / `search` / forest combat not wired).
 
 `/catalog/login` still handles name/password. `/catalog/player`
@@ -1864,6 +1867,55 @@ throneroom, or pal*2+ this next leftover unless
 that is the assigned batch. West fields / south
 bridge are not in the snapshot. Stonecutter remains
 an archive orphan.
+
+<!-- librarian-expansion:59 -->
+
+Harbour expansion 59 (native 40285, 2026-09-07, same
+`fluffos` / `Mud@2026`, do not redo docks, inn/office
+look-ats, towers, Westway look-ats, westenter,
+outside1–32, palplace1–6, mainsouth1 Sarykan,
+south/mainroad1–11, parkroad1–6, south/parkenter,
+Tali/Kyrie, eastroad stubs, garden1–4, northroad,
+mainsouth1↔outside9, councilroad2–4 + councilenter,
+templeroad1–3 + cparch, libraryenter, wsmithroad1–2,
+adventurerguild, cityinfo office, citypark1–2,
+cityenter look-ats, southgate chain, palenter,
+paleast1, palwest1, whealer, harbourmaster loft,
+SIL_PARK parkenter, forest_enter, bakery, or
+flower-shop look-ats):
+
+- West of already-live south/`parkenter` → Citypark
+  entrance (forestal border; archive `its wooden
+  surface` / `That is, if you set`). `look at sign`
+  / `important sign` / `words` / `text` show the
+  wimpy/kill-rabbit inscription. `leave park` /
+  `search ground` not wired (`What?`).
+- West → Border of the forest (archive stub).
+  `north` / `west` refuse (no forest_south9
+  encounters / snake pit). East back works.
+- `score` persist. Reconnect still lands on the docks.
+
+This-boot live `libs/aoh/log/debug.log` (fd 3, PID 3360183
+BOOT_MARKER60 aoh-southentrance): no new lines after
+the marker. Catch this walk: empty after the marker.
+
+**Not published** (`wasm_status: partial`). Do not flip to
+`playable` on this harbour walk. `look at menu`,
+`look at candles`, `look at cabins`, `look at tiles`,
+and tailor/bakery/wine/flower `sign`s are flavour —
+buy/drink, mail, deposit, combat, `enter palace`,
+`enter hall`, `enter temple`, `enter shop`,
+`enter park`, `climb ivy`, `touch statue`,
+`drink soup`, `look through` telescope, and tower
+interiors are not claimed.
+Next aoh slice: `paleast2` + `palwest2` hall look-ats
+east/west of already-live `paleast1` / `palwest1`
+(look-ats only; no throneroom / pal*3+). Do not
+load `xal_temple`, weaponsmith, mistralhouse,
+forest_south9 encounters, or snake pit this next
+leftover unless that is the assigned batch. West
+fields / south bridge are not in the snapshot.
+Stonecutter remains an archive orphan.
 
 ## 5. WASM
 
