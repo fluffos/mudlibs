@@ -136,21 +136,24 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/palace/paleast3` — east-wing fork stub (another way to the east / glance  at you.The; east paleast4 loaded; n palnorth not wired)
 - `/d/silvere/rooms/palace/paleast4` — east-wing south-door hall (southern wall / large room / you.The walls; east paleast6 loaded; s paleast5 not wired)
 - `/d/silvere/rooms/palace/paleast6` — east-wing south-turn (from south to west; south paleast7 loaded)
-- `/d/silvere/rooms/palace/paleast7` — east-wing north-south hall (through this part of the palace; south paleast8 not wired)
+- `/d/silvere/rooms/palace/paleast7` — east-wing north-south hall (through this part of the palace; south paleast8 loaded)
 - `/d/silvere/rooms/palace/paleast13` — east-wing south hall stub (crossing from the west / glance at you. The walls; south paleast12 loaded)
 - `/d/silvere/rooms/palace/paleast12` — east-wing south corner (continues east; east paleast10 loaded)
-- `/d/silvere/rooms/palace/paleast10` — east-wing mid-south hall (leads here from east to west; east paleast9 loaded; n paleast11 not wired)
-- `/d/silvere/rooms/palace/paleast9` — east-wing southeast corner (continues to the west / Some ceremonial; n paleast8 not wired)
+- `/d/silvere/rooms/palace/paleast8` — east-wing north-south hall (through this part of the palace; n paleast7 / s paleast9 loaded)
+- `/d/silvere/rooms/palace/paleast10` — east-wing mid-south hall (leads here from east to west; east paleast9 / north paleast11 loaded)
+- `/d/silvere/rooms/palace/paleast11` — east-wing undecided stub (stairway up to a tower; south paleast10 loaded)
+- `/d/silvere/rooms/palace/paleast9` — east-wing southeast corner (continues to the west / Some ceremonial; n paleast8 loaded)
 - `/d/silvere/rooms/palace/palwest1` — west-wing hall stub (seems to glance / podestal; west palwest2 loaded)
 - `/d/silvere/rooms/palace/palwest2` — west-wing crossing stub (glance at you.The walls / podestal; north palwest3 / south palwest13 loaded)
 - `/d/silvere/rooms/palace/palwest3` — west-wing fork stub (glare at you / pedestal; west palwest4 loaded; n palnorth not wired)
 - `/d/silvere/rooms/palace/palwest4` — west-wing south-door hall (southern wall / large room / you.The walls; west palwest6 loaded; s palwest5 not wired)
 - `/d/silvere/rooms/palace/palwest6` — west-wing south-turn (from south to east; south palwest7 loaded)
-- `/d/silvere/rooms/palace/palwest7` — west-wing north-south hall (through this part of the palace; south palwest8 not wired)
+- `/d/silvere/rooms/palace/palwest7` — west-wing north-south hall (through this part of the palace; south palwest8 loaded)
 - `/d/silvere/rooms/palace/palwest13` — west-wing south hall stub (crossing from the east / glance at you. The walls; south palwest12 loaded)
 - `/d/silvere/rooms/palace/palwest12` — west-wing south corner (continues west; west palwest10 loaded)
+- `/d/silvere/rooms/palace/palwest8` — west-wing north-south hall (through this part of the palace; n palwest7 / s palwest9 loaded)
 - `/d/silvere/rooms/palace/palwest10` — west-wing mid-south hall (leads here from east to west; west palwest9 loaded; n palwest11 not wired)
-- `/d/silvere/rooms/palace/palwest9` — west-wing southwest corner (continues to the east / Some ceremonial; n palwest8 not wired)
+- `/d/silvere/rooms/palace/palwest9` — west-wing southwest corner (continues to the east / Some ceremonial; n palwest8 loaded)
 - `/d/silvere/rooms/center/palplace2` — The palace square fountain (look only)
 - `/d/silvere/rooms/center/mainsouth1` — Avenue of the Palace, Sarykan statue (look only; west outside9 loaded)
 - `/d/silvere/rooms/south/mainroad1` — On a road at Silvere (archive stub)
@@ -2225,6 +2228,66 @@ south of already-live `paleast7` / `palwest7` (or
 north of `paleast9` / `palwest9`) to close the wing
 loop (look-ats only; no palnorth / paleast5
 conference / pal*11+ / throneroom). Do not load
+`xal_temple`, weaponsmith, mistralhouse,
+forest_south9 encounters, or snake pit this next
+leftover unless that is the assigned batch. West
+fields / south bridge are not in the snapshot.
+Stonecutter remains an archive orphan.
+
+<!-- librarian-expansion:65 -->
+
+Harbour expansion 65 (native 40285, 2026-09-08, same
+`fluffos` / `Mud@2026`, do not redo docks, inn/office
+look-ats, towers, Westway look-ats, westenter,
+outside1–32, palplace1–6, mainsouth1 Sarykan,
+south/mainroad1–11, parkroad1–6, south/parkenter,
+Tali/Kyrie, eastroad stubs, garden1–4, northroad,
+mainsouth1↔outside9, councilroad2–4 + councilenter,
+templeroad1–3 + cparch, libraryenter, wsmithroad1–2,
+adventurerguild, cityinfo office, citypark1–2,
+cityenter look-ats, southgate chain, palenter,
+paleast1–4, palwest1–4, paleast6–7, palwest6–7,
+paleast9–10, palwest9–10, paleast12–13, palwest12–13,
+whealer, harbourmaster loft, SIL_PARK parkenter,
+forest_enter, southentrance, forest_south10,
+bakery, or flower-shop look-ats):
+
+- South of already-live paleast7 → north-south hall
+  (archive `from north to south through this part
+  of the palace` / `glance at you. The walls` /
+  `podestal`). `look at guards` / `podestal`
+  nothing special. `east` / `west` refuse. South
+  closes the loop onto already-live paleast9
+  (`continues to the west` / `Some ceremonial`).
+  North back works.
+- North of already-live paleast10 → undecided stub
+  (archive `This room is undecided` / `stairway up
+  to a tower`). `north` / `east` / `west` refuse.
+  South back works.
+- South of already-live palwest7 → north-south hall
+  (same through-this-part long). `east` / `west`
+  refuse. South closes the loop onto already-live
+  palwest9 (`continues to the east` / `Some
+  ceremonial`). North back works.
+- `score` persist. Reconnect still lands on the docks.
+
+This-boot live `libs/aoh/log/debug.log` (fd 3, PID 3481178
+BOOT_MARKER65 aoh-paleast8-palwest8): no new lines after
+the marker. Catch this walk: empty after the marker.
+
+**Not published** (`wasm_status: partial`). Do not flip to
+`playable` on this harbour walk. `look at menu`,
+`look at candles`, `look at cabins`, `look at tiles`,
+and tailor/bakery/wine/flower `sign`s are flavour —
+buy/drink, mail, deposit, combat, `enter palace`,
+`enter hall`, `enter temple`, `enter shop`,
+`enter park`, `climb ivy`, `touch statue`,
+`drink soup`, `look through` telescope, and tower
+interiors are not claimed.
+Next aoh slice: `palnorth1` + `palnorth2` hall look-ats
+north of already-live `paleast3` (look-ats only; no
+throneroom / private rooms / paleast5 conference /
+palwest11 armoury / tower interiors). Do not load
 `xal_temple`, weaponsmith, mistralhouse,
 forest_south9 encounters, or snake pit this next
 leftover unless that is the assigned batch. West
