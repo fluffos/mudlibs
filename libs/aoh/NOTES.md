@@ -203,7 +203,8 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/west/cityinfo1` — Park Lane (east cityinfo loaded; south citypark1 loaded)
 - `/d/silvere/rooms/west/cityinfo` — Elder office (look only; leave/sit/elder NPC not wired)
 - `/d/silvere/rooms/west/citypark1` — Park Lane (uneaven cobbles; south citypark2 loaded)
-- `/d/silvere/rooms/west/citypark2` — Park Lane (thebare bricks; cityenter / SIL_PARK not wired)
+- `/d/silvere/rooms/west/citypark2` — Park Lane (thebare bricks; south cityenter loaded)
+- `/d/silvere/rooms/west/cityenter` — Citypark entrance (look only; enter park / SIL_PARK not wired)
 - `/d/silvere/rooms/west/whealer1` — Before the house of the healer
 - `/d/silvere/rooms/west/templeroad1` — Templeroad (Xalandre approach)
 - `/d/silvere/rooms/west/templeroad2` — Templeroad (archive stub)
@@ -226,8 +227,8 @@ The council hall, library entrance, and adventurers
 guild stubs are loaded (look only). The City Elder
 office look-ats are loaded (`leave office` / `sit`
 / elder NPC not wired). Park Lane continues south
-through citypark1–2 (look only; `cityenter` /
-`SIL_PARK` not wired).
+through citypark1–2 to the cityenter gate stub
+(look only; `enter park` / `SIL_PARK` not wired).
 
 `/catalog/login` still handles name/password. `/catalog/player`
 `enter_world()` moves onto the docks (fallback Void if load fails).
@@ -1589,14 +1590,55 @@ buy/drink, mail, deposit, combat, `enter palace`,
 `enter hall`, `enter temple`, `enter shop`,
 `enter park`, `touch statue`, and tower interiors
 are not claimed.
-Next aoh slice: `cityenter` look-at stub south of
-already-live `citypark2` (do not wire `enter park`
-/ `SIL_PARK`). The stonecutter workshop is an
-archive orphan (no inbound from westroad3). Do not
-load `southgate` interiors, park interiors
-(`SIL_PARK`), `palenter`, `xal_temple`,
-weaponsmith, or mistralhouse this next leftover
-unless that is the assigned batch.
+Next aoh slice: `southgate` look-ats south of
+already-live `mainroad11` (do not implement ivy
+climb / weapons). Do not load `SIL_PARK`
+interiors, `palenter`, `xal_temple`, weaponsmith,
+or mistralhouse this next leftover unless that is
+the assigned batch. Stonecutter remains an archive
+orphan.
+
+<!-- librarian-expansion:54 -->
+
+Harbour expansion 54 (native 40285, 2026-09-07, same
+`fluffos` / `Mud@2026`, do not redo docks, inn/office,
+towers, Westway look-ats, westenter, outside1–32,
+palplace1–6, mainsouth1 Sarykan, south/mainroad1–11,
+parkroad1–6, parkenter, Tali/Kyrie, eastroad stubs,
+garden1–4, northroad, mainsouth1↔outside9,
+councilroad2–4 + councilenter, templeroad1–3 +
+cparch, libraryenter, wsmithroad1–2, adventurerguild,
+cityinfo office, citypark1–2, bakery, or
+flower-shop look-ats):
+
+- South of already-live citypark2 → Citypark
+  entrance (sandstone gate / reliefs / rusty
+  hinges / neglected houses / cloth-covered
+  windows). Archive `which quite surprising` on
+  birds. `south` refuses (`You cannot go that
+  way.`; no SIL_PARK). `enter park` / `leave city`
+  not wired (`What?`). North back works.
+- `score` persist. Reconnect still lands on the docks.
+
+This-boot live `libs/aoh/log/debug.log` (fd 3, PID 3217409
+BOOT_MARKER55 aoh-cityenter): no new lines after the
+marker. Catch this walk: empty after the marker.
+
+**Not published** (`wasm_status: partial`). Do not flip to
+`playable` on this harbour walk. `look at menu`,
+`look at candles`, `look at cabins`, `look at tiles`,
+and tailor/bakery/wine/flower `sign`s are flavour —
+buy/drink, mail, deposit, combat, `enter palace`,
+`enter hall`, `enter temple`, `enter shop`,
+`enter park`, `touch statue`, and tower interiors
+are not claimed.
+Next aoh slice: `southgate` look-ats south of
+already-live `mainroad11` (do not implement ivy
+climb / weapons). Do not load `SIL_PARK`
+interiors, `palenter`, `xal_temple`, weaponsmith,
+or mistralhouse this next leftover unless that is
+the assigned batch. Stonecutter remains an archive
+orphan.
 
 ## 5. WASM
 
