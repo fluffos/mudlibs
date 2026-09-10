@@ -77,3 +77,27 @@ that sweep.
 ## On merge
 
 Done 2026-09-04. Queue is `scratchpad/librarian-next.txt`.
+
+## Weekly re-sweep 2026-09-10
+
+Bounded `gh search repos --created=>2026-09-03` on durable
+keywords only (fluffos, mudlib, lpmud, mudos, "lpc mudlib").
+No keyword-rotation grind. No 429.
+
+| Query | hits after 2026-09-03 |
+|---|---|
+| fluffos | 1 (`zayarocks/zayaville`) |
+| mudlib | 0 |
+| lpmud | 0 |
+| mudos | 1 (`alepergar21-oss/legendary-octo-doodle`) |
+| lpc mudlib | 0 |
+
+Classification (do not onboard):
+
+- `zayarocks/zayaville` — LIMA tutorial domain (`lib/domain/zayaville`);
+  LPC for Dummies book exercises restated. Collection already has lima.
+  Not a unique game.
+- `alepergar21-oss/legendary-octo-doodle` — Spanish "mudo" false
+  positive, not MudOS.
+
+Next weekly ~2026-09-17 (`--created=>2026-09-10`).

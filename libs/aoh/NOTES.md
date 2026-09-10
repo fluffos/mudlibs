@@ -4291,6 +4291,26 @@ corn or sykorath/archwiz as connected.
 Do not flip to playable. Next leftover
 still needs that assignment.
 
+<!-- librarian-expansion:134 -->
+
+Harbour expansion 134 (persist only,
+2026-09-10, leftover 602). No skip-list
+or disconnected-domain assignment.
+Cheap reconfirm of 5d4–601
+(`cff60578488` … `4ff04aed7be`): still
+205 thin rooms, 0 live exits to an
+original or missing file, ports
+40283/40285/40286/40287 free. No boot,
+no room port. Walkable Silvere stays
+CLOSED. Weekly gh search DONE
+2026-09-10: 2 hits, neither a unique
+onboard (`zayaville` = LIMA tutorial;
+`legendary-octo-doodle` = Spanish
+"mudo"). Do not invent forest/fortress/
+corn or sykorath/archwiz as connected.
+Do not flip to playable. Next leftover
+still needs that assignment.
+
 ## 5. WASM
 
 Verified 2026-09-05 via `scripts/wasm_client.js`: register/reconnect fluffos, look/score/quit.
