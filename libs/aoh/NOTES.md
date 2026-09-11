@@ -222,7 +222,7 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/west/adventurerguild` — The Adventurers Guild (archive stub; leave guild not wired)
 - `/d/silvere/rooms/west/libraryroad2` — library road west (stub look-ats; west libraryenter loaded)
 - `/d/silvere/rooms/west/libraryenter` — The Adventurers Guild / library entrance stub
-- `/d/silvere/rooms/west/wineshop` — Chez Brigan (look only)
+- `/d/silvere/rooms/west/wineshop` — Chez Brigan (list/buy)
 - `/d/silvere/rooms/west/bakery` — Eldranna's Bake Shoppe (look only)
 - `/d/silvere/rooms/west/tailor` — Couture Celimarith (look only)
 - `/d/silvere/rooms/west/councilroad1` — Elrimand Road (bakery look-at; north councilroad2 loaded)
@@ -274,7 +274,8 @@ north of northroad is unwired (no `prevent_void`
 message), statue
 touch/helmet, `enter hall`,
 mail / bank deposit,
-shop buy (except Molly's Chandler list/buy),
+shop buy (except Molly's Chandler and
+Chez Brigan list/buy),
 and healer treat/drink are not loaded
 (healer-house look-ats are loaded).
 The council hall, library entrance, and adventurers
@@ -4770,6 +4771,22 @@ wasm_status stays partial until WASM
 §10.7 of shop/combat. Do not invent
 forest/fortress/corn. Do not flip
 to playable.
+
+<!-- librarian-expansion:162 -->
+
+Harbour expansion 162 (leftover 631,
+2026-09-10): Chez Brigan shop list/buy
+in the already-walked
+`/d/silvere/rooms/west/wineshop`.
+Archive articles
+`/d/silvere/obj/wine/wineglass` (2
+copper), `chamglass` (50), `elfwine`
+(400), `champagne` (500); originals
+`*_ldmud.lpc`. Drink/sip not wired.
+Do not redo chandler buy. No new
+rooms. wasm_status stays partial.
+Live native 40285 verify follows
+this commit.
 
 ## 5. WASM
 
