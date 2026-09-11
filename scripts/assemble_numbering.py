@@ -25,6 +25,13 @@ OUT = os.path.join(MUDLIB_ROOT, "scripts", "lib_numbering.json")
 SCHEME = ("NNN = one unique game/codebase; NNN-M = confirmed derivative/variant "
           "of the same codebase (lineage confirmed via scripts/lib_similarity_cluster.py "
           "and/or manual master.c/chinese.c/etc diffing per AGENTS.md §2.1). "
+          "English version stacks use the same NNN-M rule as Chinese ones "
+          "(Dead Souls I/II/III/3.8.6/fluffos = 006; Nightmare 3/4 = 160; "
+          "Foundation I/II = 174; Discworld v1/v2/v3 = 901; stock LPMud 1.4.1/2.4.5 = 941). "
+          "Different games that only share an engine keep their own numbers "
+          "(Lima vs swmud/spacemud; Dead Souls vs dshakkard/riftsds/brassring; "
+          "LPMud 2.4.5 vs ageofelements/sticklib; TMI-2 vs mortremains; "
+          "Nightmare vs residuum; Majik 3 vs Majik 4). "
           "9xx = non-LPC / not-convertible / deprioritized-English archives. "
           "Byte-identical duplicate archive files share their sibling's number "
           "(duplicate_of set).")

@@ -150,6 +150,10 @@ classes it's found.
 | 004-2 | `jinyongwenzi` | 金庸文字版 | `金庸文字版 (1).exe` | 40083 | WASM playable |
 | 005 | `chidi` | 江湖 I (Jianghu I) | `chidi.rar` | 40006 | WASM playable |
 | 006 | `ds386` | Dead Souls 3.8.6 | `006_ds386_ds3.8.6.zip` | 40205 | WASM playable |
+| 006-1 | `dsI` | Dead Souls I | `lpmuds.net/files/deadsouls/dsI.zip, recovered via Wayback Machine 2026-08-26 (https://web.archive.org/web/20160306035507id_/http://lpmuds.net/files/deadsouls/dsI.zip; original site down)` | 40225 | WASM playable |
+| 006-2 | `dsII` | Dead Souls II | `mudbytes.net/files/download/843/, recovered via Wayback Machine 2026-08-26 (https://web.archive.org/web/20190802021627id_/http://mudbytes.net/files/download/843/; original site down)` | 40228 | WASM playable |
+| 006-3 | `dsIII` | Dead Souls 3.0 | `mudbytes.net/files/download/2733/, recovered via Wayback Machine 2026-08-26 (https://web.archive.org/web/20190802014424id_/http://mudbytes.net/files/download/2733/; original site down)` | 40229 | WASM playable |
+| 006-4 | `deadsouls_fluffos` | DeadSouls-FluffOS2019 | `git clone https://github.com/fluffos/dead-souls (commit 7c88ffba42fe782bf8c2c4787dbada51e28bfda2, cloned 2026-08-24)` | 40207 | WASM playable |
 | 007 | `dtsl` | DTSL | `DTSL.7z` | 40008 | WASM playable |
 | 007-1 | `dtslmud` | 大唐双龙传（LLMUD） | `LLMUD(大唐双龙)v_0.11版.rar` | 40015 | WASM playable |
 | 007-2 | `dtsl2` | 大唐双龙 (DaTangShuangLong) | `大唐双龙.rar` | 40043 | WASM playable |
@@ -340,8 +344,8 @@ classes it's found.
 | 156-1 | `xyj42dup` | 西游记4.2 (dup) | `西游记4.2.rar` | — | not-mudlib |
 | 157 | `shujian3` | 书剑3 | `最新独立安卓客户端和书剑源码一键架站.zip` | 40200 | WASM playable |
 | 158 | `zjmudhell` | 指尖MUD | `指尖后端.7z` | 40204 | WASM playable |
-| 159 | `deadsouls_fluffos` | DeadSouls-FluffOS2019 | `git clone https://github.com/fluffos/dead-souls (commit 7c88ffba42fe782bf8c2c4787dbada51e28bfda2, cloned 2026-08-24)` | 40207 | WASM playable |
 | 160 | `nightmare3` | Nightmare 3 | `git clone https://github.com/fluffos/nightmare3 (not a traditional archive file — a maintained, already FluffOS-adapted fork; mudlib root is the repo's lib/ directory)` | 40208 | WASM playable |
+| 160-1 | `nightmare4` | Nightmare 4 | `git clone https://github.com/MudRen/nightmare4 (a MudRen bundle of "Nightmare IV"/"Nightmare V" -- the repo's own description: "An influential early lib family. Newly revamped: Unix and Windows driver included together."; only the mudlib root, the repo's lib/ directory, was used -- the bundled fluffos-2.9-ds2.14 driver source tree and win32/driver.exe were ignored, this project uses its own driver build)` | 40234 | WASM playable |
 | 161 | `imud` | IMUD@FluffOS.v2019 | `git clone https://github.com/fluffos/imud (commit 6b232d4, cloned 2026-08-24)` | 40209 | WASM playable |
 | 162 | `sanguozhi` | 三国志 | `git clone https://github.com/fluffos/sanguozhi` | 40210 | WASM playable |
 | 163 | `nt7` | 王者归来 | `git clone https://github.com/fluffos/nt7 (王者归来, "泥潭7" — already a UTF-8/FluffOS-v2019-adapted community fork, not a raw legacy archive)` | 40211 | WASM playable |
@@ -356,14 +360,12 @@ classes it's found.
 | 172 | `jy` | 金庸群侠传 | `git clone https://github.com/mudchina/jy (commit bc60c5c, cloned 2026-08-25)` | — | pending |
 | 173 | `tmi2` | TMI-2 | `lpmuds.net/files/tmi2_fluffos_v3.zip, recovered via Wayback Machine 2026-08-25 (original site down)` | 40220 | WASM playable |
 | 174 | `foundation2` | Foundation II | `lpmuds.net/files/foundation/foundation2_fluffos_v1.zip, recovered via Wayback Machine 2026-08-25 (original site down)` | 40221 | WASM playable |
+| 174-1 | `foundation1` | Foundation I | `mudbytes.net File Repository, file #1043, recovered via Wayback Machine snapshot 20190802021701 (original download endpoint down)` | 40248 | WASM playable |
 | 175 | `skylib` | Skylib | `lpmuds.net/files/skylib_fluffos_v3.zip, recovered via Wayback Machine 2026-08-25 (original site down)` | 40222 | WASM playable |
 | 176 | `merentha` | Merentha | `lpmuds.net/files/merentha_fluffos_v2.zip, recovered via Wayback Machine 2026-08-25 (original site down)` | 40223 | WASM playable |
 | 177 | `lpuni` | LPUniversity | `lpmuds.net/files/lpuni_fluffos_v1.zip, recovered via Wayback Machine 2026-08-25 (original site down)` | 40224 | WASM playable |
-| 178 | `dsI` | Dead Souls I | `lpmuds.net/files/deadsouls/dsI.zip, recovered via Wayback Machine 2026-08-26 (https://web.archive.org/web/20160306035507id_/http://lpmuds.net/files/deadsouls/dsI.zip; original site down)` | 40225 | WASM playable |
 | 179 | `lil` | Lil | `lpmuds.net/files/lil_0.3.zip, recovered via Wayback Machine 2026-08-25 (original site down)` | 40226 | WASM playable |
 | 180 | `swmud` | Star Wars Mud | `git clone https://github.com/coupdeforce/swmud (commit cf33a51, cloned 2026-08-26)` | 40227 | WASM playable |
-| 181 | `dsII` | Dead Souls II | `mudbytes.net/files/download/843/, recovered via Wayback Machine 2026-08-26 (https://web.archive.org/web/20190802021627id_/http://mudbytes.net/files/download/843/; original site down)` | 40228 | WASM playable |
-| 182 | `dsIII` | Dead Souls 3.0 | `mudbytes.net/files/download/2733/, recovered via Wayback Machine 2026-08-26 (https://web.archive.org/web/20190802014424id_/http://mudbytes.net/files/download/2733/; original site down)` | 40229 | WASM playable |
 | 183 | `hylib` | 海洋II MUD | `git clone https://github.com/MudRen/HYLib (commit dd7832c, cloned 2026-08-26)` | — | pending |
 | 184 | `dtxy` | 大唐西游 | `git clone https://github.com/MudRen/dtxy (commit 6d3c609, cloned 2026-08-26)` | — | pending |
 | 185 | `dshakkard` | ds-hakkard | `git clone https://github.com/hakkard-dev-team/ds-hakkard (commit 06cb87d3cf026ec393cb40969ab14e2426df7f7b, cloned 2026-08-26)` | 40230 | WASM playable |
@@ -401,37 +403,25 @@ classes it's found.
 | 925 | `zjhd` | 指尖后端 | `指尖后端.7z` | — | not-mudlib |
 | 926 | `zjwygjb` | 指尖网页改进版 | `指尖网页改进版（需要v2019驱动）.rar` | — | not-mudlib |
 | 927 | `zxmudkhd` | 最新mud客户端 | `最新mud客户端.rar` | — | not-mudlib |
-| 928 | `demonangel` | 恶魔天使 | `git clone https://github.com/MudRen/DemonAngel (commit 9487693, cloned 2026-08-26)` | 40218 | WASM playable |
 | 928 | `duobao` | duobao | `duobao.7z` | — | password-protected |
-| 929 | `mortremains` | Mortal Remains | `git clone https://github.com/clockworksoul/MortalRemains (commit 3e9c6a98f9f78629d6e693570f698a043be634d2, cloned 2026-08-26)` | 40231 | WASM playable |
 | 929 | `nitanpw` | nitan (加密版) | `nitan.7z` | — | password-protected |
-| 930 | `dtxyzjb` | 大唐西游指间版 | `大唐西游指间版.rar` | 40267 | native-boot verified, WASM pending |
 | 930 | `sunshadow` | Sundering Shadows | `git clone https://github.com/MudRen/SunderingShadows (fork of SuS-Tsera/SunderingShadows, commit 0fb3102f9058f7d756be6c81f88a6bee04a5c8ff, cloned 2026-08-26)` | 40232 | WASM playable |
-| 931 | `wlqxcmudlib` | 武林群侠传 MUDLIB | `武林群侠传MUDLIB.7z` | 40268 | native-boot verified, WASM pending |
 | 931 | `zhyx` | 中华英雄 | `git clone https://github.com/MudRen/zhyx (commit 762908319b23b4ae910718daf524f91c70bf5817, cloned 2026-08-26)` | 40233 | WASM playable |
-| 932 | `nightmare4` | Nightmare 4 | `git clone https://github.com/MudRen/nightmare4 (a MudRen bundle of "Nightmare IV"/"Nightmare V" -- the repo's own description: "An influential early lib family. Newly revamped: Unix and Windows driver included together."; only the mudlib root, the repo's lib/ directory, was used -- the bundled fluffos-2.9-ds2.14 driver source tree and win32/driver.exe were ignored, this project uses its own driver build)` | 40234 | WASM playable |
 | 932 | `swzf` | 谁与争锋 | `谁与争锋.7z` | — | password-protected |
 | 933 | `naruto` | 獵火影忍者人 | `git clone https://github.com/MudRen/mudos-game-naruto (commit 000f286645e810e1cd786130c52d7b9c1747cae8, cloned 2026-08-26)` | 40235 | WASM playable |
-| 933 | `xyzxwww0707` | 夕阳再现 WWW安装客户端 (20100707) | `夕阳再现WWW安装客户端Setup20100707.rar` | — | not-mudlib |
 | 934 | `revive` | 终极地狱-轩辕传说 | `git clone https://github.com/MudRen/revive (commit 240ea5c4c7cd8cf2d854781648a16398e6df3b16, cloned 2026-08-26)` | 40236 | WASM playable |
-| 934 | `xyzxwww0718` | 夕阳再现 WWW安装客户端 (20100718) | `夕阳再现WWW安装客户端Setup20100718.rar` | — | not-mudlib |
 | 935 | `residuum` | Nightmare Residuum | `git clone https://github.com/michaelprograms/nightmare-residuum (commit d9336dbcad231b34ac751e9e41946b52efbbd309, cloned 2026-08-26); only the repo's lib/ directory was used as the mudlib root -- the bundled fluffos git submodule (driver/, tracking fluffos/fluffos), the native/ Rust noise-generation addon, and tools/planet-render were ignored, this project uses its own driver build` | 40237 | WASM playable |
-| 935 | `zjmudv13` | 指间MUD V1.3 | `指间MUDV1.3.rar` | — | not-mudlib |
 | 936 | `revivalworld` | 重生的世界 | `git clone https://github.com/MudRen/RevivalWorld (commit 71dcacb26b9db4a0813543761e2c610a2d4c04df, cloned 2026-08-26)` | 40238 | WASM playable |
-| 936 | `ptjnbxq` | 普通技能编写器 | `普通技能编写器.rar` | — | not-mudlib |
 | 937 | `es1` | 东方故事(蓝天) | `git clone https://github.com/MudRen/es (commit 4c2177e513c9f2e57fbcca3a9239e6a5096a6b7d, cloned 2026-08-26)` | 40239 | WASM playable |
-| 937 | `xlwebmud` | 西陆WEBMUD 仗剑江湖 | `西陆WEBMUD仗剑江湖.rar` | — | not-mudlib |
 | 938 | `dreamofseven` | 夢幻七域 | `git clone https://github.com/MudRen/mudos-game-ds (commit 07ea84ebdff5ee49cb482a520bdf1aaeda886cd0, cloned 2026-08-26)` | 40240 | WASM playable |
-| 938 | `njhhdxfhzxth` | es2/xkx（南京河海大学，含纵横天下） | `南京河海大学的es2和xkx《包含纵横天下》.gz` | — | not-convertible |
 | 939 | `ninetears` | Ninetears | `git clone https://github.com/unleashed/ninetears (commit 4edd22c75e3fa99be4b5820300491c6b62e06085, cloned 2026-08-26)` | 40241 | WASM playable |
-| 939 | `zjmudouter` | zjmud (outer container) | `zjmud.7z` | — | not-mudlib |
 | 940 | `immaster` | 菜鸟飞天传 | `git clone https://github.com/flyinrookie/immaster (commit 43382dc, cloned 2026-08-26), plus its pinned git submodule dependency git clone https://github.com/oiuv/mudcore.git checked out at commit 88d5d3a (the exact commit immaster's own .gitmodules/tree records) -- immaster is a thin content/game layer built on top of the mudcore engine and cannot compile or boot without it` | 40242 | WASM playable |
 | 941 | `lpmud141` | LPmud 1.4.1-A | `mudmagic.com/codes/dl/2154/lpmud-1.4.1-A-r10.tar.gz, recovered via Wayback Machine 2026-08-26 (original site down; two working snapshots found, 2006-11-07 and 2006-12-09, identical digest)` | 40243 | WASM playable |
+| 941-1 | `lpmud245` | LPmud 2.4.5 | `ftp.lysator.liu.se/pub/lpmud/mudlibs/other/2.4.5.tar.gz (still live, recovered directly 2026-08-31)` | 40262 | WASM playable |
 | 942 | `arkadia` | Arkadia | `git clone https://github.com/84rn/lpmud (commit 4be73fa8167a17c246c6bf22a4f528a4b45edd40, cloned 2026-08-26)` | 40244 | WASM playable |
 | 943 | `openlib` | OpenLib | `git clone https://github.com/tmcintos/OpenLib (commit 044c60a5266e40f9b469503cf73fa06534d67df7, cloned 2026-08-27); only the repo's mudlib/ directory was used as the mudlib root -- LICENSE and README.md at the repo top level were ignored, this project uses its own driver build` | 40245 | WASM playable |
 | 944 | `shadowgate` | ShadowGate | `git clone https://github.com/openshadowgate/shadowgate (cloned 2026-08-28)` | 40246 | WASM playable |
 | 945 | `questmud` | QuestMud | `git clone https://github.com/vlehtola/questmud (cloned 2026-08-28)` | 40247 | WASM playable |
-| 946 | `foundation1` | Foundation I | `mudbytes.net File Repository, file #1043, recovered via Wayback Machine snapshot 20190802021701 (original download endpoint down)` | 40248 | WASM playable |
 | 947 | `havenmud` | Haven | `git clone https://github.com/brainface/havenmud (single-commit snapshot, cloned 2026-08-28)` | 40249 | WASM playable |
 | 948 | `sluggymud` | SluggyMUD | `git clone https://github.com/Sluggy/SluggyMUD (commit bad0123cd9dc32e0576e6a9c992c003702a64449, cloned 2026-08-28)` | 40250 | WASM playable |
 | 949 | `wilderness` | Wilderness | `https://www.cs.hmc.edu/~jhsu/wilderness/wlib051100.tar.gz (dated May 2000, "compatible with MudOS driver v22.2a21")` | 40251 | WASM playable |
@@ -445,7 +435,6 @@ classes it's found.
 | 957 | `spacemud` | Spacemud | `gh repo clone limalib/spacemud (HEAD f4428ee, cloned 2026-08-30); mudlib root is the repo's lib/ directory -- adm/, bin/, resources/, CODE_OF_CONDUCT.md, LICENSE, README.md, and SECURITY.md at the repo top level were not part of the mudlib and were not converted` | 40259 | WASM playable |
 | 958 | `holymission` | Holy Mission | `github.com/speedbunny/holymission-mud, cloned 2026-08-31` | 40260 | WASM playable |
 | 959 | `basis` | Basis | `ftp.lysator.liu.se/pub/lpmud/mudlibs/MudOS/basis-20.tar.gz (still live, recovered directly 2026-08-31)` | 40261 | WASM playable |
-| 960 | `lpmud245` | LPmud 2.4.5 | `ftp.lysator.liu.se/pub/lpmud/mudlibs/other/2.4.5.tar.gz (still live, recovered directly 2026-08-31)` | 40262 | WASM playable |
 | 961 | `lplib8` | LPlib8 | `ibiblio.org/pub/Linux/games/muds/lplib8.tar.z (still live, recovered directly 2026-08-31)` | 40263 | WASM playable |
 | 962 | `amylaarmini` | MiniMud | `ftp.lysator.liu.se/pub/lpmud/mudlibs/Amylaar/minilib (still live, recovered directly 2026-08-31)` | 40264 | WASM playable |
 | 963 | `brassring` | The Brass Ring | `gh repo clone LashMUD/TheBrassRing (cloned 2026-08-31)` | 40265 | WASM playable |
@@ -464,6 +453,17 @@ classes it's found.
 | 976 | `aoh` | Age of Heroes | `git clone https://github.com/seikichin/aoh (commit 6ab8f3679d560a3726ae98b671d7ded7be6fb75d, cloned 2026-09-05); repo root is the mudlib` | 40285 | WASM playable |
 | 977 | `sticklib` | StickLib | `git clone https://github.com/StickMUD/StickLib (commit a0750273104c49d7d506d92f232b221b64577853, cloned 2026-09-05); repo root is the mudlib` | 40286 | WASM playable |
 | 978 | `simud` | SIMud | `git clone https://github.com/shentino/simud (commit 644b7d4f56bf8d4695442b8efcfd56e0a561fe21, cloned 2026-09-05); mudlib root is mud/` | 40287 | WASM playable |
+| 979 | `demonangel` | 恶魔天使 | `git clone https://github.com/MudRen/DemonAngel (commit 9487693, cloned 2026-08-26)` | 40218 | WASM playable |
+| 980 | `mortremains` | Mortal Remains | `git clone https://github.com/clockworksoul/MortalRemains (commit 3e9c6a98f9f78629d6e693570f698a043be634d2, cloned 2026-08-26)` | 40231 | WASM playable |
+| 981 | `dtxyzjb` | 大唐西游指间版 | `大唐西游指间版.rar` | 40267 | native-boot verified, WASM pending |
+| 982 | `wlqxcmudlib` | 武林群侠传 MUDLIB | `武林群侠传MUDLIB.7z` | 40268 | native-boot verified, WASM pending |
+| 983 | `xyzxwww0707` | 夕阳再现 WWW安装客户端 (20100707) | `夕阳再现WWW安装客户端Setup20100707.rar` | — | not-mudlib |
+| 984 | `xyzxwww0718` | 夕阳再现 WWW安装客户端 (20100718) | `夕阳再现WWW安装客户端Setup20100718.rar` | — | not-mudlib |
+| 985 | `zjmudv13` | 指间MUD V1.3 | `指间MUDV1.3.rar` | — | not-mudlib |
+| 986 | `ptjnbxq` | 普通技能编写器 | `普通技能编写器.rar` | — | not-mudlib |
+| 987 | `xlwebmud` | 西陆WEBMUD 仗剑江湖 | `西陆WEBMUD仗剑江湖.rar` | — | not-mudlib |
+| 988 | `njhhdxfhzxth` | es2/xkx（南京河海大学，含纵横天下） | `南京河海大学的es2和xkx《包含纵横天下》.gz` | — | not-convertible |
+| 989 | `zjmudouter` | zjmud (outer container) | `zjmud.7z` | — | not-mudlib |
 <!-- END NUMBERING TABLE -->
 
 ## Repository layout

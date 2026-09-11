@@ -61,7 +61,16 @@ lineage for the same patterns before assuming a fresh find is isolated.
 Every lib has a number: `NNN` per unique game, `NNN-M` for confirmed
 derivatives of the same codebase, `9xx` for non-LPC archives (one,
 `033-3`, is a cataloged binary-only release that was never convertible
-and has no `libs/` dir). This file refers to libs by **slug**
+and has no `libs/` dir). English version stacks use that same `NNN-M`
+rule (Dead Souls I/II/III/3.8.6/fluffos = `006`; Nightmare 3/4 = `160`;
+Foundation I/II = `174`; Discworld v1/v2/v3 = `901`; stock LPMud
+1.4.1/2.4.5 = `941`). Different games that only share an engine keep
+their own numbers — do not fold `dshakkard`/`riftsds`/`brassring` into
+Dead Souls, `swmud`/`spacemud` into Lima, `ageofelements`/`sticklib`
+into LPMud 2.4.5, `mortremains` into TMI-2, `residuum` into Nightmare,
+or Majik 3 into Majik 4. Ports stay in `meta.json` `port` when
+renumbering; the site groups by catalog-number prefix, not slug.
+This file refers to libs by **slug**
 (`libs/<slug>/`) and number, never by "archive #N" (a retired
 convention) or by any machine-local path.
 
