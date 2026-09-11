@@ -217,3 +217,10 @@ Leftover 645 (2026-09-11, persist only, no boot).
 Already playable (`546d780ee87`). Same tree: only
 void and workshop. Do not invent rooms. Do not
 flip again.
+
+<!-- librarian-leftover:646 -->
+
+Leftover 646 (2026-09-11, persist only, no boot).
+Already playable (`546d780ee87`). Same tree as
+leftover 645 (`bfcd764dde2`). Do not invent rooms.
+Do not flip again.
