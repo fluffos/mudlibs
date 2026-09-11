@@ -33,16 +33,15 @@ Both strategies still run the normal extract → `convert_lib.sh` →
 6. Verify native `look` / `score` / `quit`, reconnect after quit, and
    WASM via `scripts/wasm_client.js` before calling it playable.
 
-**Do not publish a catalog overlay.** `wasm_status` stays `partial`
-(excluded from mudlibs.fluffos.info) until Strategy A loads the real
-world and a §10.7 pass covers shop/combat/guild/death (or documents
-why those do not exist). Overlay Void/workshop is not that pass.
-`questmud` is the published exception (full port, §10.7 2026-08-31).
-`ageofelements` is listed only after the 2.4.5 village itself was
+User 2026-09-11: remaining start-hall ports may be published as
+`playable`. `questmud` is a full dialect port (§10.7 2026-08-31).
+`ageofelements` is listed after the 2.4.5 village itself was
 live-tested (2026-09-05). `sticklib` is listed after WASM §10.7 of
 shop/combat/guild (2026-09-10). `aoh` is listed after WASM §10.7 of
 shop/combat (2026-09-10; Adventurers Guild is an archive stub).
-Overlay-only: `acme`, `morgengrauen`, `simud`.
+`acme` / `morgengrauen` / `simud` are listed on existing catalog /
+start-hall evidence (Void/workshop; Abenteurergilde/Hafenstrasse/buero;
+Temple of All Gods/Oldtown). Do not invent missing rooms.
 
 ## Architecture checklist (do this before trusting a clean compile)
 

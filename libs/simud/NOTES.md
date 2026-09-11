@@ -93,9 +93,11 @@ This-boot live `libs/simud/log/debug.log` (fd, PID 1693124
 BOOT_MARKER1 simud-temple): start rooms compiled. Catch this
 walk: empty after the marker.
 
-**Not published** (`wasm_status: partial`). Flip to `playable`
-only after a shop/combat/guild deep-test. The rest of Oldtown
-cannot be loaded from archive files — it lived in world.obj.
+**Published** (`wasm_status: playable`) after user 2026-09-11:
+they can consider playable now. Temple / hall / Oldtown street
+is the snapshot start. The rest of Oldtown still lived in
+`world.obj` — do not invent streets. Shop / combat / guild are
+not in those rooms.
 
 ## 4. What is not ported yet
 
@@ -103,7 +105,8 @@ Full LDMud world object tree (no `world.obj` in the snapshot),
 guilds, protocol stacks, OSB/MG kernel daemons, shop, combat.
 Original `/world/room` uses LDMud closures (`(: $1->… :)`).
 Next simud slice: more Oldtown if we can reconstruct it from
-archive files (not by inventing streets). Do not flip.
+archive files (not by inventing streets). Published as playable
+on the existing start.
 
 <!-- librarian-leftover:634 -->
 
@@ -169,3 +172,10 @@ Same tree as leftover 641 (`25e2370fa27`): no
 Leftover 643 (2026-09-11, persist only, no boot).
 Same tree as leftover 642 (`7860bad89b1`): no
 `world.obj`. Do not invent Oldtown. Do not flip.
+
+<!-- librarian-leftover:644 -->
+
+Leftover 644 (2026-09-11). User: they can consider
+playable now. Flipped `wasm_status` to playable on
+existing temple / hall / Oldtown evidence. Do not
+invent Oldtown. `world.obj` is still missing.

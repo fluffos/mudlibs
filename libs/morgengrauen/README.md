@@ -7,8 +7,8 @@ This collection’s copy is a snapshot, not a live mirror.
 Official public MorgenGrauen mudlib (German LPMud, LDMud 3.x). LDMud → FluffOS conversion: archive master uses set_driver_hook/closures; catalog login lands in Die beruehmte Abenteurergilde (Port Vain). Full LDMud source tree is preserved. Not Shea690901/Sagenwelt-Lib (collection sagenwelt).
 
 German LDMud sources are preserved for study. Interactive play
-is a Strategy A start hall, not the full LDMud world. Not on the
-public play site until shop/combat/guild commands are deep-tested.
+is a Strategy A start hall (guild / Hafenstrasse / buero), not the
+full LDMud world. Published as playable on that start.
 
 ## Registration flow
 

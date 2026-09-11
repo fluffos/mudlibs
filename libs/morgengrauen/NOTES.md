@@ -110,19 +110,18 @@ This-boot live `libs/morgengrauen/log/debug.log` (fd 3, PID
 new lines after the marker. Catch this walk: empty after the
 marker (older `*catch-path-probe` line is from 2026-09-05).
 
-**Not published** (`wasm_status: partial`). Do not flip to
-`playable` on this guild-hall walk. Shop / combat / `liste` /
-`lerne` are not claimed. Next MG slice needs domain files that
-are not in the snapshot, or start aoh.
+**Published** (`wasm_status: playable`) after user 2026-09-11:
+they can consider playable now. Guild-hall walk is the snapshot
+start. Shop / combat / `liste` / `lerne` are still not claimed.
+Do not invent Port Vain.
 
 ## 5. WASM
 
 Verified 2026-09-05 via `scripts/wasm_client.js`: register/reconnect fluffos, look/score/quit.
 
-**Not published** on mudlibs.fluffos.info (`wasm_status: partial`).
-Catalog overlay Void/workshop is not a world §10.7. Flip to
-`playable` only after a Strategy A port of the MorgenGrauen world
-and a shop/combat/guild deep-test.
+**Published** on mudlibs.fluffos.info (`wasm_status: playable`)
+after user 2026-09-11. WASM catalog look/score/quit was already
+verified 2026-09-05. Do not invent Port Vain.
 
 <!-- librarian-leftover:634 -->
 
@@ -204,3 +203,10 @@ Leftover 643 (2026-09-11, persist only, no boot).
 Same tree as leftover 642 (`7860bad89b1`).
 Issue #3 still OPEN, 0 comments. Do not invent
 Port Vain. Do not flip.
+
+<!-- librarian-leftover:644 -->
+
+Leftover 644 (2026-09-11). User: they can consider
+playable now. Flipped `wasm_status` to playable on
+existing guild / Hafenstrasse / buero evidence. Do
+not invent Port Vain or connect seher.

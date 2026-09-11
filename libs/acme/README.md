@@ -9,8 +9,7 @@ not a live mirror.
 
 English play. The archive never shipped a finished world (the RPG
 flavor is one combat module). New characters land in The Void; a
-workshop sits to the north. Not on the public play site (no world
-to deep-test).
+workshop sits to the north. Published as playable on that start.
 
 Not a duplicate of any lib already in this collection.
 `Cloudxtreme/eotl-mudlib` is a separate utility fragment.

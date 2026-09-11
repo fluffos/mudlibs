@@ -105,10 +105,9 @@ the successful create, reconnect, or cold-boot reconnect.
 WASM not verified. `unique_games` stays counting numbers `< 900`; 969
 is still listed as a lib.
 
-**Not published** on mudlibs.fluffos.info (`wasm_status: partial`).
-Catalog overlay is not a world §10.7. This archive has no game world
-to port. Do not mark `playable` unless a real world exists and is
-deep-tested.
+**Published** (`wasm_status: playable`) after user 2026-09-11:
+they can consider playable now. Catalog overlay is the archive's
+actual start (Void / workshop). Shop / combat / guild: **N/A**.
 
 ## 深度功能测试（§10.7, 2026-09-05）
 
@@ -204,3 +203,17 @@ Leftover 643 (2026-09-11, persist only, no boot).
 Same tree as leftover 642 (`7860bad89b1`): only
 void and workshop. Do not invent rooms. Do not
 flip.
+
+<!-- librarian-leftover:644 -->
+
+Leftover 644 (2026-09-11). User: they can consider
+playable now. Flipped `wasm_status` to playable on
+existing Void/workshop catalog evidence. Do not
+invent rooms. Shop / combat / guild stay N/A.
+
+<!-- librarian-leftover:644 -->
+
+Leftover 644 (2026-09-11). User: they can consider
+playable now. Flipped `wasm_status` to playable on
+existing Void/workshop catalog evidence. Do not
+invent rooms. Shop / combat / guild stay N/A.
