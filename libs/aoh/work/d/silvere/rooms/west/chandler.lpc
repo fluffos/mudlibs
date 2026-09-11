@@ -2,12 +2,22 @@
  * Molly's Chandler — north of westroad3.
  *
  * Strategy A FluffOS room. Original /std/shop (candles, trade)
- * is chandler_ldmud.lpc. Look at candles/sign is flavour;
- * buy is not implemented this slice.
+ * is chandler_ldmud.lpc. Archive AddArticle stock:
+ *   /d/silvere/obj/chandler/tallow  REFRESH_RESET 6  (10 copper)
+ *   /d/silvere/obj/chandler/wax     REFRESH_RESET 8  (18 copper)
+ * CheckTrade is light sources only; this slice sells those
+ * two articles (no player-sell).
  */
 
 mapping exits;
 mapping extras;
+int tallow_left;
+int wax_left;
+
+void restock();
+string strip_buy(string str);
+int match_tallow(string str);
+int match_wax(string str);
 
 void create() {
   exits = ([
@@ -30,7 +40,21 @@ void create() {
       "Stacks of candles crowd every shelf.\n",
     "wax":
       "Fragrant fresh wax and other scents.\n",
+    "list":
+      "Molly keeps a list of what is for sale. Type 'list'.\n",
+    "wares":
+      "Molly keeps a list of what is for sale. Type 'list'.\n",
   ]);
+  restock();
+}
+
+void restock() {
+  tallow_left = 6;
+  wax_left = 8;
+}
+
+void reset() {
+  restock();
 }
 
 string query_short() { return "Molly's Chandler"; }
@@ -62,3 +86,107 @@ string query_item(string s) {
 }
 
 int id(string str) { return str == "shop" || str == "chandler" || str == "here"; }
+
+int is_shop() { return 1; }
+
+int shop_list(string arg) {
+  write("Molly shows a list to you.\n");
+  if (tallow_left > 0)
+    write("  a cheap tallow candle     10 copper\n");
+  if (wax_left > 0)
+    write("  a beeswax candle          18 copper\n");
+  if (tallow_left < 1 && wax_left < 1)
+    write("Sorry, I have no item in the store.\n");
+  return 1;
+}
+
+string strip_buy(string str) {
+  if (!str)
+    return "";
+  str = lower_case(str);
+  while (strlen(str) && (str[0] == ' ' || str[<1] == ' ')) {
+    if (str[0] == ' ')
+      str = str[1..];
+    else
+      str = str[0..<2];
+  }
+  if (strlen(str) > 2 && str[0..1] == "a ")
+    str = str[2..];
+  else if (strlen(str) > 3 && str[0..2] == "an ")
+    str = str[3..];
+  else if (strlen(str) > 4 && str[0..3] == "the ")
+    str = str[4..];
+  return str;
+}
+
+int match_tallow(string str) {
+  return str == "tallow" || str == "taper" ||
+    str == "tallow candle" || str == "cheap tallow candle" ||
+    str == "cheap candle";
+}
+
+int match_wax(string str) {
+  return str == "wax" || str == "beeswax" ||
+    str == "beeswax candle" || str == "wax candle" ||
+    str == "white candle";
+}
+
+int shop_buy(object who, string str) {
+  string path, brief;
+  int price, *left;
+  object ob;
+
+  if (!who)
+    return 1;
+  str = strip_buy(str);
+  if (str == "") {
+    write("Buy what?\n");
+    return 1;
+  }
+  path = 0;
+  if (match_tallow(str) ||
+      (str == "candle" && tallow_left > 0) ||
+      (str == "light" && tallow_left > 0)) {
+    path = "/d/silvere/obj/chandler/tallow";
+    price = 10;
+    left = ({ tallow_left });
+  } else if (match_wax(str) || str == "candle" || str == "light") {
+    path = "/d/silvere/obj/chandler/wax";
+    price = 18;
+    left = ({ wax_left });
+  }
+  if (!path) {
+    write("Molly says: I have no item called '" + str + "'.\n");
+    return 1;
+  }
+  if (left[0] < 1) {
+    write("Molly says: Sorry " +
+      capitalize(who->query_name() || "someone") +
+      ", but I don't have that item anymore.\n");
+    return 1;
+  }
+  if (who->query_money() < price) {
+    write("Molly says: Sorry " +
+      capitalize(who->query_name() || "someone") +
+      ", but you don't have enough money!\n");
+    return 1;
+  }
+  who->add_money(-price);
+  if (path[<6..] == "tallow")
+    tallow_left--;
+  else
+    wax_left--;
+  if (function_exists("receive_shop_item", who))
+    who->receive_shop_item(path);
+  else {
+    ob = 0;
+    catch(ob = clone_object(path));
+    if (ob)
+      ob->move(who);
+  }
+  brief = path[<6..] == "tallow" ?
+    "a cheap tallow candle" : "a beeswax candle";
+  write("You pay " + price + " copper coins.\n");
+  write("Molly gives you " + brief + ".\n");
+  return 1;
+}

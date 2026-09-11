@@ -67,7 +67,7 @@ play itself left no other catch lines.
 
 ## 4. What is not ported yet
 
-Full OSB/AOH world (Silvere shop buy, remaining interiors,
+Full OSB/AOH world (other Silvere shop buy, remaining interiors,
 tower interiors, other domains), guilds, combat, protocol stacks,
 OSB kernel daemons. 2681 `#'` in 1062 files — do not attempt a
 mechanical `/std` rewrite this slice. Newbie creation
@@ -105,7 +105,7 @@ and English harbour text as thin FluffOS rooms; originals are
 - `/d/silvere/rooms/west/westroad1` — The Westway
 - `/d/silvere/rooms/west/westroad2` — Westway shop fronts
 - `/d/silvere/rooms/west/westroad3` — Westway chandler front
-- `/d/silvere/rooms/west/chandler` — Molly's Chandler (look only)
+- `/d/silvere/rooms/west/chandler` — Molly's Chandler (list/buy)
 - `/d/silvere/rooms/west/westroad4` — Westway flowerbed
 - `/d/silvere/rooms/west/westshop1` — south alley (SHOPPE THATT WAY)
 - `/d/silvere/rooms/west/westshop2` — lane to the sell-only shop
@@ -274,7 +274,8 @@ north of northroad is unwired (no `prevent_void`
 message), statue
 touch/helmet, `enter hall`,
 mail / bank deposit,
-shop buy, and healer treat/drink are not loaded
+shop buy (except Molly's Chandler list/buy),
+and healer treat/drink are not loaded
 (healer-house look-ats are loaded).
 The council hall, library entrance, and adventurers
 guild stubs are loaded (look only). The City Elder
@@ -4726,6 +4727,28 @@ CLOSED. Do not invent forest/fortress/
 corn or sykorath/archwiz as connected.
 Do not flip to playable. Next leftover
 still needs that assignment.
+
+<!-- librarian-expansion:161 -->
+
+Harbour expansion 161 (leftover 630,
+2026-09-10): Molly's Chandler shop
+list/buy in the already-walked
+`/d/silvere/rooms/west/chandler`.
+Catalog player now keeps a copper
+purse (200 on new / on restore if
+< 50; OSB newbie tutorial is 15)
+copper + 2 gold) and a cloned
+inventory. Archive articles
+`/d/silvere/obj/chandler/tallow`
+(10 copper, 6 in stock) and
+`wax` (18 copper, 8 in stock);
+originals `*_ldmud.lpc`. Other
+walked shops stay look-only. No
+new rooms. wasm_status stays
+partial until WASM §10.7 of
+shop/combat. Do not invent
+forest/fortress/corn. Live native
+40285 verify follows this commit.
 
 ## 5. WASM
 

@@ -8,17 +8,26 @@ string name;
 string password;
 int hp;
 int max_hp;
+int money;
+string *carrying;
 
 int cmd_look(string arg);
 int cmd_score(string arg);
 int cmd_inventory(string arg);
 int cmd_go(string dir);
 int cmd_quit(string arg);
+int cmd_list(string arg);
+int cmd_buy(string arg);
+void load_carrying();
+void receive_shop_item(string path);
+void save_me();
 
 void create() {
   seteuid(getuid());
   hp = 20;
   max_hp = 20;
+  money = 200;
+  carrying = ({});
 }
 
 string query_name() { return name; }
@@ -26,6 +35,13 @@ string query_password() { return password; }
 int query_hp() { return hp; }
 int query_mhp() { return max_hp; }
 int query_level() { return 1; }
+int query_money() { return money; }
+
+void add_money(int x) {
+  money += x;
+  if (money < 0)
+    money = 0;
+}
 
 string save_path() {
   if (!name || name == "")
@@ -47,7 +63,18 @@ void ensure_letter_dir() {
 
 int restore_me(string n) {
   name = n;
-  return restore_object(save_path());
+  if (!restore_object(save_path()))
+    return 0;
+  if (max_hp < 1)
+    max_hp = 20;
+  if (hp < 1)
+    hp = max_hp;
+  /* OSB newbie tutorial purse is 15 copper + 2 gold (215 copper). */
+  if (money < 50)
+    money = 200;
+  if (!carrying)
+    carrying = ({});
+  return 1;
 }
 
 void setup_new(string n, string pw) {
@@ -55,6 +82,39 @@ void setup_new(string n, string pw) {
   password = pw;
   hp = 20;
   max_hp = 20;
+  money = 200;
+  carrying = ({});
+}
+
+void load_carrying() {
+  int i;
+  object ob;
+
+  if (!carrying)
+    carrying = ({});
+  for (i = 0; i < sizeof(carrying); i++) {
+    if (!stringp(carrying[i]) || carrying[i] == "")
+      continue;
+    ob = 0;
+    catch(ob = clone_object(carrying[i]));
+    if (ob)
+      ob->move(this_object());
+  }
+}
+
+void receive_shop_item(string path) {
+  object ob;
+
+  if (!path || path == "")
+    return;
+  if (!carrying)
+    carrying = ({});
+  carrying += ({ path });
+  ob = 0;
+  catch(ob = clone_object(path));
+  if (ob)
+    ob->move(this_object());
+  save_me();
 }
 
 void save_me() {
@@ -76,6 +136,8 @@ void wire_commands() {
   add_action("cmd_quit", "quit");
   add_action("cmd_inventory", "inventory");
   add_action("cmd_inventory", "i");
+  add_action("cmd_list", "list");
+  add_action("cmd_buy", "buy");
   add_action("cmd_go", "north");
   add_action("cmd_go", "south");
   add_action("cmd_go", "east");
@@ -108,6 +170,7 @@ void enter_world() {
     efun::move_object(dest);
   else
     efun::move_object("/catalog/void");
+  load_carrying();
   write("\n");
   command("look");
   save_me();
@@ -138,6 +201,12 @@ mixed process_input(string str) {
     case "i":
       cmd_inventory(rest);
       return 1;
+    case "list":
+      cmd_list(rest);
+      return 1;
+    case "buy":
+      cmd_buy(rest);
+      return 1;
     case "north":
     case "south":
     case "east":
@@ -164,7 +233,7 @@ mixed process_input(string str) {
 }
 
 int cmd_look(string arg) {
-  object env, *inv;
+  object env, *inv, held;
   string out, brief, item;
   int i;
 
@@ -180,6 +249,16 @@ int cmd_look(string arg) {
     if (stringp(item) && item != "") {
       write(item);
       return 1;
+    }
+    held = present(arg, this_object());
+    if (!held)
+      held = present(arg, env);
+    if (held) {
+      item = held->query_long();
+      if (stringp(item) && item != "") {
+        write(item);
+        return 1;
+      }
     }
     write("You see nothing special.\n");
     return 1;
@@ -206,12 +285,49 @@ int cmd_look(string arg) {
 
 int cmd_score(string arg) {
   write(capitalize(name || "someone") + " (level " + query_level() + ")\n");
-  write("hp: " + hp + "/" + max_hp + "\n");
+  write("hp: " + hp + "/" + max_hp + "  copper: " + money + "\n");
   return 1;
 }
 
 int cmd_inventory(string arg) {
-  write("You are empty-handed.\n");
+  object *inv;
+  string brief;
+  int i, n;
+
+  inv = all_inventory(this_object());
+  n = sizeof(inv);
+  if (!n) {
+    write("You are empty-handed.\n");
+    return 1;
+  }
+  write("You are carrying:\n");
+  for (i = 0; i < n; i++) {
+    brief = inv[i]->query_short();
+    if (!brief || brief == "")
+      brief = inv[i]->query_name();
+    if (brief && brief != "")
+      write("  " + brief + "\n");
+  }
+  return 1;
+}
+
+int cmd_list(string arg) {
+  object env;
+
+  env = environment();
+  if (env && function_exists("shop_list", env))
+    return env->shop_list(arg);
+  write("There is nothing for sale here.\n");
+  return 1;
+}
+
+int cmd_buy(string arg) {
+  object env;
+
+  env = environment();
+  if (env && function_exists("shop_buy", env))
+    return env->shop_buy(this_object(), arg);
+  write("You cannot buy that here.\n");
   return 1;
 }
 
