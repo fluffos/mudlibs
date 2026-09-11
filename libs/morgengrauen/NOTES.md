@@ -233,6 +233,10 @@ content is loadable it is done; fix trivial load
 failures; do not invent. Archive
 `/gilden/abenteurer` already `AddItem`s
 `/obj/zeitungsautomat`. Thin stand + newspaper
-copy (originals `*_ldmud.lpc`). Full MPA news
-reader is not trivial. `liste`/`lerne` still need
-`/std/gilde` + `#'`. Do not invent Port Vain.
+copy (originals `*_ldmud.lpc`). Live native 40283
+organic `fluffos`: look Zeitung is here; look at
+zeitung archive long; nimm archive get message;
+inventory Die Zeitung; second nimm already-have.
+Full MPA news reader is not trivial.
+`liste`/`lerne` still need `/std/gilde` + `#'`.
+Do not invent Port Vain.
