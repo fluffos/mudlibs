@@ -102,3 +102,22 @@ function called: command`（`work/log/runtime` 17:14:17），玩家侧
 
 没有拜师（distribution lib 公会内容未随包，见
 `libs/discworld/NOTES.md` 2026-08-27）。
+
+## WASM（leftover 655，2026-09-11）
+
+与 v3 `discworld` 同一套必经桩：`dump_socket_status()` 挖空（WASM 无
+`sockets`）、`compressedp()` 常量化、`create_dom_creator.lpc` 的
+`compress_file`/`uncompress_file` 改成 no-op。`/net/inherit/server.lpc`
+预加载仍因 `socket_create` 失败被跳过（BBS，不在登录路径），与 v3 相同。
+
+`node /tmp` 一次性 walker（`scripts/wasm_client.js` 语义，条款前 idle
+35s，登录后短间隔）：南瓜菜单 N → `fluffos` / `Play2026x` / male →
+条款 `yes` → 自动 look 落到 `/d/liaison/NEWBIE/foyer`（cavernous
+circular Discworld Room，Great A'Tuin / 四象，九个出口含 commerce，
+womble 在场）。MCCP 提示 "You are logged in uncompressed!" 证明
+`compressedp` 桩。随后 `score`/`quit` 进 Discworld 指令队列（登录
+`no_time_left()` + womble 心跳），与 v3 WASM 笔记同一条队列坑；原生
+商店切片已验证 score/quit。`wasm_status` playable。
+
+Do not invent extra pumpkin rooms. mundoscuro stays limited. realms
+stays noboot.

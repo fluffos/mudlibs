@@ -63,3 +63,12 @@ pence=1）。`create()` 在两处 place 表都缺失时补上这两行，并挂�
 （`debug.log` 仍因 `log directory : /log` 是死的）。没有
 `Undefined function called: command`。没有拜师（distribution 公会
 内容未随包）。
+
+## WASM（leftover 655，2026-09-11）
+
+与 v1 / v3 同一套 socket/compress 桩。WASM 南瓜菜单 + 条款 `yes` +
+自动 look 落到同一间 circular Discworld Room（womble；MCCP
+"Discworld FluffOS v2 system" uncompressed）。`score`/`quit` 同样进
+登录队列，不挡 playable。`wasm_status` playable。
+
+Do not invent extra pumpkin rooms.

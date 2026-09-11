@@ -5,3 +5,7 @@ Cratylus Discworld FluffOS bundle 的中间快照。与 v1 / v3 同系，单独
 
 新角色落在 Ankh-Morpork 卷心菜仓库客栈的圆形 Discworld Room。登录
 是英文名 + 密码。
+
+WASM status: **playable**. Pumpkin menu + terms + landing in the
+circular Discworld Room is verified under the shared WASM driver
+(`NOTES.md` WASM section). Play: https://mudlibs.fluffos.info/dw_fluffos_v2/
