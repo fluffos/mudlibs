@@ -4775,18 +4775,42 @@ to playable.
 <!-- librarian-expansion:162 -->
 
 Harbour expansion 162 (leftover 631,
-2026-09-10): Chez Brigan shop list/buy
-in the already-walked
+native 40285, 2026-09-10, organic
+`fluffos` / `Mud@2026`): Chez Brigan
+shop list/buy in the already-walked
 `/d/silvere/rooms/west/wineshop`.
 Archive articles
 `/d/silvere/obj/wine/wineglass` (2
 copper), `chamglass` (50), `elfwine`
 (400), `champagne` (500); originals
 `*_ldmud.lpc`. Drink/sip not wired.
-Do not redo chandler buy. No new
+
+Live walk (do not redo docks /
+Westway / chandler buy):
+- Start copper 172 (chandler leftover).
+- East, se, east ×12, north → Chez
+  Brigan. `look at sign` CHEZ BRIGAN.
+  `list` wineglass 2 / chamglass 50 /
+  elfwine 400 / champagne 500.
+- `buy wine` → glass of elvish white
+  wine, copper 170.
+- `buy champagne` → champagne glass,
+  `look at wine` / `champagne` archive
+  longs.
+- `buy bottle of champagne` refused
+  (not enough money).
+- Quit / reconnect: copper 120, both
+  glasses plus leftover candles persist.
+
+This-boot live `libs/aoh/log/debug.log`
+(fd 3, PID 1817633 BOOT_MARKER89
+aoh-wineshop-buy): no new lines after
+the marker. Catch this walk: empty
+after the marker. Bakery / flowershop /
+fishmonger stay look-only. No new
 rooms. wasm_status stays partial.
-Live native 40285 verify follows
-this commit.
+Do not invent forest/fortress/corn.
+Do not flip to playable.
 
 ## 5. WASM
 
