@@ -138,3 +138,13 @@ in `/std/gilde` + `#'` and are not wired. `/d/seher`
 Hafenstrasse / buero. Do not invent Port Vain
 streets or connect seher. Do not flip. aoh is
 already playable (`29d73abf400`).
+
+<!-- librarian-leftover:635 -->
+
+Leftover 635 (2026-09-10, persist only, no boot).
+Same tree as leftover 634 (`f0975b36b09`):
+`work/d/` still `ebene` + `seher`; PortVain still
+only `po_haf1.lpc`; `/d/anfaenger` still missing.
+Issue #3 still OPEN, 0 comments
+(`updatedAt` 2026-09-03). Do not invent Port Vain.
+Do not flip.

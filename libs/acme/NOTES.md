@@ -141,3 +141,10 @@ Shipped rooms are still only `/room/void` and
 `/room/workshop`. `acme-rpg` is one unfinished
 combat module, not a world. Do not invent rooms.
 Do not flip.
+
+<!-- librarian-leftover:635 -->
+
+Leftover 635 (2026-09-10, persist only, no boot).
+Same tree as leftover 634 (`f0975b36b09`): only
+`/room/void` and `/room/workshop`. Do not invent
+rooms. Do not flip.
