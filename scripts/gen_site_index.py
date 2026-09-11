@@ -274,6 +274,7 @@ UI = {
         "lang_switch_label": "English", "lang_switch_href": f"{SITE_URL}/en/",
         "untranslated_suffix": "",
         "self_url": f"{SITE_URL}/",
+        "lineage_label": "同源 · {n} 个快照",
     },
     "en": {
         "html_lang": "en", "og_locale": "en_US",
@@ -297,6 +298,7 @@ UI = {
         "lang_switch_label": "中文", "lang_switch_href": f"{SITE_URL}/",
         "untranslated_suffix": " (untranslated — showing original Chinese)",
         "self_url": f"{SITE_URL}/en/",
+        "lineage_label": "Same lineage · {n} snapshots",
     },
 }
 
@@ -587,6 +589,37 @@ def _is_cjk_name(name):
     shouldn't have to scroll past ~190 Chinese-titled cards first). The zh
     page's own order is untouched; this only ever affects lang="en"."""
     return any("一" <= ch <= "鿿" for ch in name)
+
+
+def _lineage_clusters(entries, numbers, lang):
+    """Group catalog siblings that share a base number (NNN / NNN-M).
+
+    `entries` is already sorted by catalog number so members of one
+    lineage are consecutive. Clusters of size 1 stay unwrapped; clusters
+    of 2+ become a visible lineage group on the index.
+
+    On the English page, clusters whose members are all CJK-named sort
+    after clusters that include an English-original title -- same
+    English-first boost as before, without splitting a lineage across
+    that boundary."""
+    clusters = []
+    current = []
+    current_base = None
+    for slug, info in entries:
+        base = numbers.get(slug, (9999, 0))[0]
+        if current and base != current_base:
+            clusters.append((current_base, current))
+            current = []
+        current.append((slug, info))
+        current_base = base
+    if current:
+        clusters.append((current_base, current))
+    if lang == "en":
+        clusters.sort(key=lambda c: (
+            all(_is_cjk_name(info["name"]) for _, info in c[1]),
+            c[0],
+        ))
+    return clusters
 
 
 def _escape_md_html(s):
@@ -989,28 +1022,22 @@ def render_index(status, commits, lang="zh", canonical_url=None, stars=None):
     # back at canonical_url while hreflang still references the real zh/en
     # canonical pair, so crawlers consolidate signal onto one URL per lang.
     canonical_url = canonical_url or ui["self_url"]
-    if lang == "en":
-        # English-original libs (native name has no CJK) first, each group
-        # keeping the existing catalog-number order within itself.
-        entries = sorted(
-            libs.items(),
-            key=lambda kv: (
-                _is_cjk_name(kv[1]["name"]),
-                numbers.get(kv[0], (9999, 0)),
-                kv[0],
-            ))
-    else:
-        entries = sorted(
-            libs.items(),
-            key=lambda kv: (numbers.get(kv[0], (9999, 0)), kv[0]))
+    # Always sort by catalog number first so NNN / NNN-M siblings are
+    # consecutive, then cluster. The /en/ English-first boost is applied
+    # to whole lineages (see _lineage_clusters), not individual cards --
+    # otherwise a CJK-titled snapshot would split away from its English-
+    # titled sibling.
+    entries = sorted(
+        libs.items(),
+        key=lambda kv: (numbers.get(kv[0], (9999, 0)), kv[0]))
+    clusters = _lineage_clusters(entries, numbers, lang)
 
     # Cards contain inner links (commit / source / play), so they cannot be
     # <a> elements themselves (nested anchors are invalid HTML and browsers
     # split them apart).  Instead every card is a <div>; on linked cards the
     # title <a class="play"> is stretched over the whole card via ::after,
     # and the meta links sit above it with a higher z-index.
-    cards = []
-    for slug, info in entries:
+    def render_card(slug, info):
         st = info["status"]
         icon = BADGE[st][0]
         label = ui["badge"][st]
@@ -1046,8 +1073,7 @@ def render_index(status, commits, lang="zh", canonical_url=None, stars=None):
             admin_id or "",
         ]
         search_corpus = html.escape(" ".join(b for b in search_bits if b).lower())
-
-        cards.append(f"""<div class="card {st}{' linked' if linked else ''}" data-search="{search_corpus}">
+        return f"""<div class="card {st}{' linked' if linked else ''}" data-search="{search_corpus}">
   <div class="card-head">
     <h2>{title_html}</h2>
     <span class="badge {st}">{icon} {label}</span>
@@ -1055,13 +1081,39 @@ def render_index(status, commits, lang="zh", canonical_url=None, stars=None):
   <p class="slug">{html.escape(slug)}</p>
   <p class="desc">{desc}</p>
   {meta_html}
-</div>""")
+</div>"""
+
+    blocks = []
+    for base, members in clusters:
+        member_html = [render_card(slug, info) for slug, info in members]
+        if len(members) == 1:
+            blocks.extend(member_html)
+            continue
+        # Title the group after the canonical (lowest-variant) member so
+        # a later snapshot's branding doesn't hide the family's name.
+        canon_slug, canon_info = members[0]
+        if lang == "en":
+            canon_name = canon_info.get("english_name") or canon_info["name"]
+        else:
+            canon_name = canon_info["name"]
+        num_label = f"{base:03d}" if base < 9999 else "?"
+        blocks.append(
+            f'<section class="lineage" data-lineage="{html.escape(num_label)}">\n'
+            f'  <header class="lineage-head">'
+            f'<span class="lineage-num">#{html.escape(num_label)}</span>'
+            f'<span class="lineage-name">{html.escape(canon_name)}</span>'
+            f'<span class="lineage-count">'
+            f'{html.escape(ui["lineage_label"].format(n=len(members)))}'
+            f'</span></header>\n'
+            f'  <div class="lineage-grid">\n    '
+            + "\n    ".join(member_html)
+            + "\n  </div>\n</section>")
 
     n_total = len(libs)
     n_play = counts.get("playable", 0)
     n_lim = counts.get("limited", 0)
     n_no = counts.get("noboot", 0)
-    cards_html = "\n".join(cards)
+    cards_html = "\n".join(blocks)
 
     page_title = ui["page_title"]
     if lang == "en":
@@ -1168,6 +1220,27 @@ def render_index(status, commits, lang="zh", canonical_url=None, stars=None):
     display: grid; gap: 14px;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   }}
+  .lineage {{
+    grid-column: 1 / -1;
+    border: 1px solid var(--pico-muted-border-color);
+    border-radius: 12px;
+    padding: 12px 14px 14px;
+    background: color-mix(in srgb, var(--pico-card-background-color) 70%, transparent);
+  }}
+  .lineage-head {{
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px;
+    margin: 0 0 12px;
+  }}
+  .lineage-num {{
+    font-family: var(--pico-font-family-monospace); font-size: 13px;
+    font-weight: 600; color: var(--pico-primary);
+  }}
+  .lineage-name {{ font-size: 14px; font-weight: 600; color: var(--pico-color); }}
+  .lineage-count {{ font-size: 12px; color: var(--pico-muted-color); }}
+  .lineage-grid {{
+    display: grid; gap: 14px;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  }}
   .card {{
     position: relative; display: block; background: var(--pico-card-background-color);
     border: 1px solid var(--pico-muted-border-color); border-radius: 10px;
@@ -1247,6 +1320,8 @@ def render_index(status, commits, lang="zh", canonical_url=None, stars=None):
       document.querySelectorAll('#grid .card'));
   var btns = Array.prototype.slice.call(document.querySelectorAll('.fbtn'));
   var filter = 'all';
+  var groups = Array.prototype.slice.call(
+      document.querySelectorAll('#grid .lineage'));
   function apply() {{
     var needle = q.value.trim().toLowerCase();
     cards.forEach(function (c) {{
@@ -1254,6 +1329,14 @@ def render_index(status, commits, lang="zh", canonical_url=None, stars=None):
       var hay = c.dataset.search || c.textContent.toLowerCase();
       var okText = !needle || hay.indexOf(needle) >= 0;
       c.style.display = okStatus && okText ? '' : 'none';
+    }});
+    groups.forEach(function (g) {{
+      var any = g.querySelectorAll('.card');
+      var visible = 0;
+      for (var i = 0; i < any.length; i++) {{
+        if (any[i].style.display !== 'none') visible++;
+      }}
+      g.style.display = visible ? '' : 'none';
     }});
   }}
   q.addEventListener('input', apply);
@@ -1287,6 +1370,8 @@ def render_games_json(status, commits):
     for slug, info in entries:
         admin_id, admin_pw = parse_admin(slug)
         entry = commits.get(slug)
+        num = info.get("archive_num") or ""
+        lineage = num.split("-")[0] if num else None
         games.append({
             "slug": slug,
             "name": info["name"],
@@ -1294,6 +1379,8 @@ def render_games_json(status, commits):
             "description": info["description"],
             "english_description": info.get("english_description") or None,
             "status": info["status"],
+            "lineage": lineage,
+            "number": num or None,
             "url": f"{SITE_URL}/{slug}/",
             "source_url": f"{REPO_URL}/tree/main/libs/{slug}",
             "source_zip_url": f"{SITE_URL}/{slug}/{slug}.zip",
