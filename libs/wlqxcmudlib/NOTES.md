@@ -91,3 +91,18 @@ live 回「你从店小二那里买下了一根烤鸡腿」。`i` 为九十九�
 - `score` → `【 小叫花 】丐帮第二十代传人` / `师父是黎生`
 
 商店切片上一轮已经付费买过醉仙楼烤鸡腿，本轮没有重做。
+
+## WASM (2026-09-11 leftover 653)
+
+`versiond.lpc` 直接调用 `socket_create`/`socket_bind`/`socket_listen`，
+WASM 没有 sockets 包，daemon 编成 `*No program`。`logind.lpc` 两处
+`VERSION_D->is_version_ok()` 和 `closed.lpc` 的 `heart_beat` 没
+`find_object` 守卫，登录在 id 提示前就断、心跳反复重编。已按
+`yhwhckdm` 同形加上守卫（`punishd`/`storyd` 的同步闸也加了）。
+`ftpd`/`dns_master` 同样编不过，preload `catch` 掉，不挡登录。
+
+提交了管理员 `fluffos` 存档（登录 `Play2026x`，管理 `Mud@2026`，
+中文名云游）。`wasm_client.js`：`fluffos` / `Play2026x` → 扬州客店
+`/d/city/kedian`（北丑、店小二），`look` 同文，`score`「普通百姓
+云游」，`quit`「欢迎下次再来」。`wasm_status` 改为 `playable`。
+提示仍是每秒时钟，`--idle 0.5`。

@@ -456,7 +456,7 @@ classes it's found.
 | 979 | `demonangel` | 恶魔天使 | `git clone https://github.com/MudRen/DemonAngel (commit 9487693, cloned 2026-08-26)` | 40218 | WASM playable |
 | 980 | `mortremains` | Mortal Remains | `git clone https://github.com/clockworksoul/MortalRemains (commit 3e9c6a98f9f78629d6e693570f698a043be634d2, cloned 2026-08-26)` | 40231 | WASM playable |
 | 981 | `dtxyzjb` | 大唐西游指间版 | `大唐西游指间版.rar` | 40267 | native-boot verified, WASM pending |
-| 982 | `wlqxcmudlib` | 武林群侠传 MUDLIB | `武林群侠传MUDLIB.7z` | 40268 | native-boot verified, WASM pending |
+| 982 | `wlqxcmudlib` | 武林群侠传 MUDLIB | `武林群侠传MUDLIB.7z` | 40268 | WASM playable |
 | 983 | `xyzxwww0707` | 夕阳再现 WWW安装客户端 (20100707) | `夕阳再现WWW安装客户端Setup20100707.rar` | — | not-mudlib |
 | 984 | `xyzxwww0718` | 夕阳再现 WWW安装客户端 (20100718) | `夕阳再现WWW安装客户端Setup20100718.rar` | — | not-mudlib |
 | 985 | `zjmudv13` | 指间MUD V1.3 | `指间MUDV1.3.rar` | — | not-mudlib |
