@@ -341,6 +341,23 @@ gallery player does not speak), not a missing sockets stub.
 WASM-side MCP client shim would be needed before this can be
 `playable`. Shop/combat/death were not exercised this pass.
 
+## WASM text terminal (2026-09-11 leftover 652)
+
+The graphical MCP client path is unchanged. Login and the player object
+now also accept plain lines: first line is the name, second is the
+password; `look` / `score` / `quit` / `race <name>` work without
+frames. `write_client()` prints message payloads and swallows map/object
+frames when `query_text_mode()` is set. New characters still land in
+the archive Hilltop Village central square (same `2627,5527` spawn the
+MCP `CMD_START` path uses) — not an invented void.
+
+WASM `wasm_client.js` (wasmtxt2 / Play2026x / `race human`): look
+prints the Hilltop intersection long description (inn east, post office
+north, hill west); score `Name: wasmtxt2` / `Race: human` / gold; quit
+`Goodbye.` / `Normal exit.` Native `mudclient.py` on 40253 repeated the
+same new-character walk. `wasm_status` is `playable`. MCP clients keep
+working; they ignore the extra "Name:" banner.
+
 ## 深度功能测试 / §10.7 deep functional test (2026-08-31)
 
 Full round-two pass on the native driver, driven entirely through a

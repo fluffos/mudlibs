@@ -38,7 +38,10 @@ User 2026-09-11: remaining start-hall ports may be published as
 exists in the archive source is loadable and playable. Do not invent
 missing worlds, rooms, NPCs, shops, or commands. Fix trivial load
 failures of existing archive objects (inherit / `#'` / missing catalog
-verb). Do not reinvent content.
+verb). Do not reinvent content. Exception (user 2026-09-11): a
+skeleton framework with **no shipped rooms** may add one void/example
+room so it can still come online. Do not add a void that hides a real
+existing world. Leftover 652 found no leftover archive that qualifies.
 
 `questmud` is a full dialect port (§10.7 2026-08-31).
 `ageofelements` is listed after the 2.4.5 village itself was

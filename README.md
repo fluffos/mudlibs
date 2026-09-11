@@ -382,7 +382,7 @@ classes it's found.
 | 905-3 | `zcjh` | 重出江湖 | `重出江湖.rar` | — | not-mudlib |
 | 905-4 | `zcjh271yb` | 重出江湖 2.71原版 | `重出江湖_2.71原版.rar` | — | not-mudlib |
 | 906 | `mofaleidemuba` | 魔法类的泥巴 (EmberMUD) | `魔法类的泥巴.rar` | — | not-mudlib |
-| 907 | `tianlongbabu` | 天龙八部 | `天龙八部.tgz` | 40269 | native-boot verified, WASM pending |
+| 907 | `tianlongbabu` | 天龙八部 | `天龙八部.tgz` | 40269 | WASM playable |
 | 908 | `xianwukungfu` | 仙武kungfu (content module, not a mudlib) | `仙武kungfu.rar` | — | not-mudlib |
 | 909 | `fsxy13` | 浮世侠影1.3 | `浮世侠影1.3.rar` | — | not-mudlib |
 | 910 | `glhj` | 攻略合集 | `攻略合集.rar` | — | not-mudlib |
@@ -398,7 +398,7 @@ classes it's found.
 | 920 | `xky2` | 侠客游2 | `侠客游2.rar` | — | not-mudlib |
 | 921 | `xyj` | 西游记(三国群英传2mod) | `西游记(三国群英传2mod).rar` | — | not-mudlib |
 | 922 | `xyjjqzl` | 西游记机器资料 | `西游记机器资料.rar` | — | not-mudlib |
-| 923 | `yhwhckdm` | 炎黄武魂参考代码 | `炎黄武魂参考代码（d,kungfu,clone）.rar` | 40270 | native-boot verified, WASM pending |
+| 923 | `yhwhckdm` | 炎黄武魂参考代码 | `炎黄武魂参考代码（d,kungfu,clone）.rar` | 40270 | WASM playable |
 | 924 | `yy` | 异域 | `异域.rar` | — | not-mudlib |
 | 925 | `zjhd` | 指尖后端 | `指尖后端.7z` | — | not-mudlib |
 | 926 | `zjwygjb` | 指尖网页改进版 | `指尖网页改进版（需要v2019驱动）.rar` | — | not-mudlib |
@@ -426,7 +426,7 @@ classes it's found.
 | 948 | `sluggymud` | SluggyMUD | `git clone https://github.com/Sluggy/SluggyMUD (commit bad0123cd9dc32e0576e6a9c992c003702a64449, cloned 2026-08-28)` | 40250 | WASM playable |
 | 949 | `wilderness` | Wilderness | `https://www.cs.hmc.edu/~jhsu/wilderness/wlib051100.tar.gz (dated May 2000, "compatible with MudOS driver v22.2a21")` | 40251 | WASM playable |
 | 950 | `majik3` | Majik 3 | `git clone https://github.com/tleino/majik3 (commit 3e8b11711b91ea9c8249f738d1038703c8452019, cloned 2026-08-28); mudlib root is the repo's lib/ directory -- COPYING, README.1st, bin/, and webclient/ at the repo top level were not part of the mudlib and were not converted` | 40252 | WASM playable |
-| 951 | `majik4` | Majik 4 | `git clone https://github.com/tleino/majik4 (commit b24efafe0b53c5b3433f421751e29442cee1262b, cloned 2026-08-28); mudlib root is the repo's lib/ directory -- bin/, COPYING, doc/, README.1st, TODO, and template/ at the repo top level were not part of the mudlib and were not converted` | 40253 | WASM limited |
+| 951 | `majik4` | Majik 4 | `git clone https://github.com/tleino/majik4 (commit b24efafe0b53c5b3433f421751e29442cee1262b, cloned 2026-08-28); mudlib root is the repo's lib/ directory -- bin/, COPYING, doc/, README.1st, TODO, and template/ at the repo top level were not part of the mudlib and were not converted` | 40253 | WASM playable |
 | 952 | `pd` | Primal Darkness-II | `gh repo clone ehershey/pd (cloned 2026-08-28); mudlib root at libraries/beta-ii/, FMud (Flash client) and bin/ (driver binaries/scripts) excluded` | 40254 | WASM playable |
 | 953 | `rifts2` | RiftsMUD2 | `git clone https://github.com/tsathoqqua/RiftsMUD2 (cloned 2026-08-28); mudlib root is the repo's mudlib/ directory -- build/, docker-compose.yml, Dockerfile, local_options/local_options.h, and mud.sh at the repo top level were not part of the mudlib and were not converted` | 40255 | WASM playable |
 | 954 | `oxidus` | Oxidus | `gh repo clone gesslar/oxidus-mudlib (cloned 2026-08-28/30, actively-developed HEAD as of cloning)` | 40256 | WASM playable |

@@ -19,12 +19,26 @@
 #include <mcp.h>
 
 string name, password;
+int text_mode;
+
+int
+query_text_mode ()
+{
+   return text_mode;
+}
+
+int
+set_text_mode (int i)
+{
+   return text_mode = i;
+}
 
 void
 logon ()
 {
    write_client (THOB, CMD_START, "$Revision: 1.19 $");
    write_client (THOB, CMD_ASK_NAME, 0);
+   write ("Majik 4 text terminal. Type a name to log in (graphical MCP clients ignore this line).\nName: ");
 }
 
 string
@@ -33,7 +47,7 @@ write_prompt ()
    return "";
 }
 
-string
+mixed
 process_input (string str)
 {
    int command, datalen;
@@ -57,6 +71,16 @@ process_input (string str)
 			 write_client (THOB, CMD_MSG, "CMD_COMMAND is not available until you're logged in.");
 			 break;
 		  }
+	 }
+   else if (str && str != "")
+	 {
+		/* Plain telnet / WASM terminal: first line is the name, second is the password. */
+		text_mode = 1;
+		str = replace_string (str, "\r", "");
+		if (!name || name == "")
+		  name = strlen(str) ? lower_case(str) : str;
+		else
+		  pass = str;
 	 }
    
    if (!name || name == "")
@@ -132,7 +156,8 @@ process_input (string str)
 			 o->save_me ();
 		  }
 		
-		write_client (THOB, CMD_START, "$Revision: 1.19 $");
+		if (!text_mode)
+		  write_client (THOB, CMD_START, "$Revision: 1.19 $");
 		
 		OFFLINE_D->remove_offline (name);
 		
@@ -144,18 +169,35 @@ process_input (string str)
 		  {
 			 write_client (THOB, CMD_QUIT, "This character has been killed. Select another.");
 			 destruct (o);
-			 return "";
+			 if (text_mode)
+			   return 1;
+			 return 0;
 		  }
 			 
 		o->setup (name);
 		o->set_offline (0);
+		if (text_mode)
+		  o->set_text_mode (1);
 				
 		if (o)
 		  {
 			 exec (o, THOB); /* switch from login to player object */
-			 destruct (THOB);
+			 if (text_mode)
+			   o->text_enter_world ();
+			 /* Do not destruct() here: a mid-apply destroy makes the
+			  * driver treat process_input as unhandled and parse the
+			  * password as a player command. */
+			 call_out ("remove_login", 0);
 		  }
 	 }
    
+   if (text_mode)
+	 return 1;
    return str;
+}
+
+void
+remove_login ()
+{
+   destruct (this_object());
 }

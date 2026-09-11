@@ -34,3 +34,9 @@
 银钱都在；烤鸡腿是食物，不进档（手足 yh 已知）。
 
 管理员存档未提交。
+
+## WASM (2026-09-11 leftover 652)
+
+`wasm_client.js`：`fluffos` / `Mud@2026` → 扬州客店 `/d/city/kedian`
+（戚长发、北丑、店小二），`look` 同文，`score`「丐帮第二十代传人
+浮浮」，`quit`「欢迎下次再来」。`wasm_status` 改为 `playable`。

@@ -63,3 +63,11 @@ directory : /log` 绝对路径，`/log` 不存在）。
 「你的师父是易大彪」。`save` / 退出 / 再登：门派和七十文都在。
 
 管理员存档未提交。
+
+## WASM (2026-09-11 leftover 652)
+
+`wasm_client.js`：`fluffos` / `Mud@2026` → 饮风客栈 `/d/snow/inn`
+（es2 旧号落地，不是 TLBB `/t/tutor/start`），`look` 同文，`score`
+「普通百姓 秦风」，`quit`「欢迎下次再来」。preload 里 `ftpd` 因
+WASM 无 sockets 编不过，被 master `catch` 跳过，不挡登录。
+`wasm_status` 改为 `playable`。

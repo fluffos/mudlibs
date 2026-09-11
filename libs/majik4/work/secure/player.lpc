@@ -36,6 +36,7 @@ inherit CHANNEL;
 string    password;				/* character's password */
 int		  security;				/* 0 = mortal */
 int       offline;              /* boolean */
+int       text_mode;            /* 1 = plain telnet / WASM, not MCP frames */
 string    start;                /* starting location */
 mapping   inventory;            
 nosave string fail_message;
@@ -65,6 +66,81 @@ int
 query_offline ()
 {
    return offline;
+}
+
+int
+query_text_mode ()
+{
+   return text_mode;
+}
+
+int
+set_text_mode (int i)
+{
+   return text_mode = i;
+}
+
+void
+text_look ()
+{
+   object env;
+   string desc;
+   int lx, ly;
+
+   env = ENV(THOB);
+   if (!env)
+	 {
+		write ("You are nowhere.\n");
+		return;
+	 }
+   /* query_description() wants the area-local tile, not world coords. */
+   lx = THOB->query_gridx() - THOB->query_gridx() / 100 * 100;
+   ly = THOB->query_gridy() - THOB->query_gridy() / 100 * 100;
+   desc = env->query_description (lx, ly, 0);
+   if (!desc || desc == "")
+	 desc = "You look around the Majik 4 grid.";
+   write (desc + "\n");
+}
+
+void
+text_score ()
+{
+   write (sprintf ("Name: %s\nRace: %s\nGold: %d\n",
+				   THOB->query_true_name() ? THOB->query_true_name() : "unknown",
+				   THOB->query_race() ? THOB->query_race() : "none",
+				   THOB->query_money()));
+}
+
+void
+text_enter_world ()
+{
+   object env;
+   int *dxy;
+
+   if (!THOB->query_race())
+	 {
+		write ("New character. Type: race human   (or elf, orc, troll, dwarf)\n");
+		return;
+	 }
+   if (!start || start == "" || file_size(start + ".lpc") < 0)
+	 start = "/world/worldmap";
+   if (!grid_x && !grid_y)
+	 {
+		grid_x = 2627;
+		grid_y = 5527;
+	 }
+   env = find_object(start) ? find_object(start) : load_object(start);
+   if (env)
+	 {
+		dxy = env->get_near_location(grid_x, grid_y, 5);
+		if (dxy && sizeof(dxy) >= 2)
+		  move (start, dxy[0], dxy[1]);
+		else
+		  move (start, grid_x, grid_y);
+	 }
+   else
+	 move (start, grid_x, grid_y);
+   text_look ();
 }
 
 void
@@ -370,7 +446,7 @@ write_prompt ()
 	return "";
 }
 
-string
+mixed
 process_input (string str)
 {
    int command, datalen, *dxy;
@@ -378,7 +454,47 @@ process_input (string str)
    mixed data, log_data;
    string *file;
    object env;
+   string verb, arg;
    write_file("/log/log", str+"\n");
+   if (str && sscanf (str, "%d:%d:%s", command, datalen, data) != 3)
+	 {
+		text_mode = 1;
+		str = replace_string (str || "", "\r", "");
+		if (sscanf (str, "%s %s", verb, arg) != 2)
+		  {
+			 verb = str;
+			 arg = 0;
+		  }
+		verb = lower_case (verb);
+		if (verb == "look")
+		  text_look ();
+		else if (verb == "score")
+		  text_score ();
+		else if (verb == "quit")
+		  {
+			 if (!arg || arg == "" || arg == "y")
+			   {
+				  write ("Goodbye.\n");
+				  THOB->quit ("Normal exit.");
+			   }
+		  }
+		else if (verb == "race")
+		  {
+			 call_other ("/command/mortal/race", "main", arg);
+			 if (THOB->query_race())
+			   text_look ();
+		  }
+		else if (verb == "i" || verb == "blook" || verb == "vlook")
+		  THOB->force_us (str);
+		else if (str && str != "")
+		  {
+			 if (command_buffer)
+			   command_buffer += ({ str });
+			 else
+			   command_buffer = ({ str });
+		  }
+		return 1;
+	 }
    if (str && sscanf (str, "%d:%d:%s", command, datalen, data) == 3)
 	 { 
 		switch (command)

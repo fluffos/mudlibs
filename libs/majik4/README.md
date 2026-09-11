@@ -35,12 +35,11 @@ originally built.
 
 ## Play online
 
-WASM status: **limited**. The shared WASM driver boots and speaks this
-lib's MCP frame protocol (`<code>:<len>:<data>`), but the site's
-browser terminal cannot complete login — same class as `zjdyzj`, a
-real client protocol the gallery player does not speak. Native play is
-fully verified; a future WASM-side client shim would be needed before
-this can be `playable`. See `NOTES.md`.
+WASM status: **playable**. The graphical MCP client path is unchanged.
+The browser terminal now uses a parallel plain-text login (name, then
+password, then `race human` for a new character) and lands in the
+archive Hilltop Village central square. Commands: `look`, `score`,
+`quit`. See `NOTES.md`.
 
 ## Admin account
 
