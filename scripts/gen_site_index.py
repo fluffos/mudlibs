@@ -275,6 +275,16 @@ UI = {
         "untranslated_suffix": "",
         "self_url": f"{SITE_URL}/",
         "lineage_label": "同源 · {n} 个快照",
+        "upstream_label": "上游",
+        "upstream_title": "本馆快照所克隆的上游仓库（不是实时镜像）",
+        "upstream_behind": "落后 {n} 提交",
+        "upstream_current": "已同步",
+        "upstream_unknown": "未钉选提交",
+        "upstream_box_title": "上游仓库",
+        "upstream_pin": "本馆快照",
+        "upstream_head": "上游 HEAD",
+        "upstream_compare": "查看差异",
+        "upstream_note": "本馆副本含本地驱动兼容修复，不是实时镜像。落后时需要评估是否 rebase/cherry-pick，不能直接快进。",
     },
     "en": {
         "html_lang": "en", "og_locale": "en_US",
@@ -299,8 +309,40 @@ UI = {
         "untranslated_suffix": " (untranslated — showing original Chinese)",
         "self_url": f"{SITE_URL}/en/",
         "lineage_label": "Same lineage · {n} snapshots",
+        "upstream_label": "Upstream",
+        "upstream_title": "GitHub repo this snapshot was cloned from (not a live mirror)",
+        "upstream_behind": "{n} behind",
+        "upstream_current": "up to date",
+        "upstream_unknown": "pin unknown",
+        "upstream_box_title": "Upstream",
+        "upstream_pin": "This snapshot",
+        "upstream_head": "Upstream HEAD",
+        "upstream_compare": "Compare",
+        "upstream_note": "This copy includes local driver-compat fixes and is not a live mirror. A behind count means rebase/cherry-pick needs review — do not fast-forward blindly.",
     },
 }
+
+
+_UPSTREAM_CACHE = None
+
+
+def load_upstreams():
+    """slug -> upstream status from scripts/upstream_status.json
+    (written by scripts/check_upstream_rebase.py). Missing file is
+    fine -- cards then omit the upstream line."""
+    global _UPSTREAM_CACHE
+    if _UPSTREAM_CACHE is not None:
+        return _UPSTREAM_CACHE
+    path = REPO / "scripts" / "upstream_status.json"
+    if not path.is_file():
+        _UPSTREAM_CACHE = {}
+        return _UPSTREAM_CACHE
+    try:
+        _UPSTREAM_CACHE = json.loads(
+            path.read_text(encoding="utf-8")).get("libs", {})
+    except (OSError, json.JSONDecodeError):
+        _UPSTREAM_CACHE = {}
+    return _UPSTREAM_CACHE
 
 
 def load_numbers():
@@ -747,7 +789,65 @@ def build_meta_bits(slug, info, ui, commits, linked):
         meta_bits.append(
             f'<a href="{html.escape(slug)}.zip" '
             f'title="{ui["download_title"]}">{ui["download_label"]}</a>')
+    up = load_upstreams().get(slug)
+    if up and up.get("url") and up.get("repo"):
+        st = up.get("status") or ""
+        extra = ""
+        if st == "behind" and up.get("ahead_by"):
+            extra = (
+                f' <span class="upstream-behind">'
+                f'{html.escape(ui["upstream_behind"].format(n=up["ahead_by"]))}'
+                f'</span>')
+        href = up.get("compare_url") or up["url"]
+        meta_bits.append(
+            f'<a class="upstream" href="{html.escape(href)}" '
+            f'title="{html.escape(ui["upstream_title"])}" '
+            f'rel="noopener">{ui["upstream_label"]} '
+            f'{html.escape(up["repo"])}</a>{extra}')
     return meta_bits, admin_id
+
+
+def render_upstream_box(slug, ui):
+    """Visible upstream block for the per-lib landing page."""
+    up = load_upstreams().get(slug)
+    if not up or not up.get("url") or not up.get("repo"):
+        return ""
+    pin = html.escape((up.get("pinned") or "")[:12] or "—")
+    head = html.escape((up.get("head") or "")[:12] or "—")
+    st = up.get("status") or ""
+    if st == "behind" and up.get("ahead_by"):
+        status_html = (
+            f'<span class="upstream-behind">'
+            f'{html.escape(ui["upstream_behind"].format(n=up["ahead_by"]))}'
+            f'</span>')
+    elif st == "current":
+        status_html = (
+            f'<span class="upstream-current">'
+            f'{html.escape(ui["upstream_current"])}</span>')
+    elif st == "unknown_pin":
+        status_html = html.escape(ui["upstream_unknown"])
+    else:
+        status_html = html.escape(st or "")
+    extras = ""
+    for extra in up.get("extra_repos") or []:
+        extras += (
+            f'<li><a href="{html.escape(extra.get("url") or "")}" '
+            f'rel="noopener">{html.escape(extra.get("repo") or "")}</a></li>')
+    extra_html = f'<ul class="upstream-extras">{extras}</ul>' if extras else ""
+    compare = up.get("compare_url") or up["url"]
+    return (
+        f'<aside class="upstream-box">\n'
+        f'  <h2>{html.escape(ui["upstream_box_title"])}</h2>\n'
+        f'  <p><a href="{html.escape(up["url"])}" rel="noopener">'
+        f'{html.escape(up["repo"])}</a> · {status_html}</p>\n'
+        f'  <p>{html.escape(ui["upstream_pin"])} <code>{pin}</code>'
+        f' · {html.escape(ui["upstream_head"])} <code>{head}</code>'
+        f' · <a href="{html.escape(compare)}" rel="noopener">'
+        f'{html.escape(ui["upstream_compare"])}</a></p>\n'
+        f'  <p class="upstream-note">{html.escape(ui["upstream_note"])}</p>\n'
+        f'  {extra_html}\n'
+        f'</aside>'
+    )
 
 
 def render_lib_page(slug, info, commits, stars=None):
@@ -768,6 +868,7 @@ def render_lib_page(slug, info, commits, stars=None):
     ui_zh = UI["zh"]
     meta_bits, _ = build_meta_bits(slug, info, ui_zh, commits, True)
     meta_html = '<p class="meta">' + "\n    ".join(meta_bits) + '</p>'
+    upstream_html = render_upstream_box(slug, ui_zh)
 
     name = html.escape(info["name"])
     name_en = info.get("english_name") or ""
@@ -941,6 +1042,16 @@ def render_lib_page(slug, info, commits, stars=None):
   .meta {{ margin: 0 0 24px; font-size: 13px; color: var(--pico-muted-color);
           line-height: 1.9; display: flex; flex-wrap: wrap; gap: 4px 16px; }}
   .meta .admin {{ font-family: var(--pico-font-family-monospace); }}
+  .upstream-behind {{ color: var(--warn); font-weight: 600; }}
+  .upstream-current {{ color: var(--ok); }}
+  .upstream-box {{
+    margin: 0 0 24px; padding: 12px 14px; border-radius: 10px;
+    border: 1px solid var(--pico-muted-border-color);
+    background: var(--pico-card-background-color); font-size: 14px;
+  }}
+  .upstream-box h2 {{ font-size: 15px; margin: 0 0 8px; }}
+  .upstream-box p {{ margin: 0 0 6px; }}
+  .upstream-note {{ color: var(--pico-muted-color); font-size: 13px; }}
   .play-cta {{ margin: 0 0 28px; }}
   .play-btn {{
     display: inline-block; background: var(--pico-primary); color: #0b0e14;
@@ -997,6 +1108,7 @@ def render_lib_page(slug, info, commits, stars=None):
   </div>
   <p class="slug">{html.escape(slug)}</p>
   {meta_html}
+  {upstream_html}
 </header>
 <main>
   <p class="play-cta"><a role="button" class="play-btn" href="play.html">▶ 开始游玩 · Play Now</a></p>
@@ -1071,6 +1183,7 @@ def render_index(status, commits, lang="zh", canonical_url=None, stars=None):
             info.get("english_name", ""), info.get("english_description", ""),
             info.get("archive", ""), info.get("archive_num", ""),
             admin_id or "",
+            (load_upstreams().get(slug) or {}).get("repo") or "",
         ]
         search_corpus = html.escape(" ".join(b for b in search_bits if b).lower())
         return f"""<div class="card {st}{' linked' if linked else ''}" data-search="{search_corpus}">
@@ -1279,6 +1392,7 @@ def render_index(status, commits, lang="zh", canonical_url=None, stars=None):
   .meta .admin {{ font-family: var(--pico-font-family-monospace); }}
   /* meta links must stay clickable above the stretched .play overlay */
   .meta a {{ position: relative; z-index: 1; }}
+  .upstream-behind {{ position: relative; z-index: 1; color: var(--warn); font-weight: 600; }}
   body > footer {{ margin-top: 36px; color: var(--pico-muted-color); font-size: 12px; }}
 {THEME_STYLE_BLOCK}
 </style>
@@ -1372,6 +1486,7 @@ def render_games_json(status, commits):
         entry = commits.get(slug)
         num = info.get("archive_num") or ""
         lineage = num.split("-")[0] if num else None
+        up = load_upstreams().get(slug)
         games.append({
             "slug": slug,
             "name": info["name"],
@@ -1388,6 +1503,14 @@ def render_games_json(status, commits):
             "admin_password": admin_pw,
             "last_changed_commit": entry.get("sha") if entry else None,
             "last_changed_date": entry.get("date") if entry else None,
+            "upstream": ({
+                "url": up.get("url"),
+                "repo": up.get("repo"),
+                "pinned": up.get("pinned"),
+                "ahead_by": up.get("ahead_by"),
+                "status": up.get("status"),
+                "compare_url": up.get("compare_url"),
+            } if up else None),
         })
     doc = {
         "generated_from": "libs/*/meta.json + libs/*/README.md",

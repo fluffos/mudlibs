@@ -237,6 +237,10 @@ PYEOF
 python3 "$SELF_DIR/update_lib_commits.py" \
     --mapping "$CACHE_DIR/lib-commits.json" \
     --head "$(git -C "$REPO" rev-parse HEAD)"
+# Refresh upstream rebase status (cosmetic; never fail the deploy).
+# The committed scripts/upstream_status.json is the fallback if this
+# network pass cannot run.
+python3 "$SELF_DIR/check_upstream_rebase.py" || true
 python3 "$SELF_DIR/gen_site_index.py" --out "$CACHE_DIR/index-staging" \
     --commits "$CACHE_DIR/lib-commits.json"
 
