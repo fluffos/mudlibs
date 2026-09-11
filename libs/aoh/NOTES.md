@@ -68,10 +68,12 @@ play itself left no other catch lines.
 ## 4. What is not ported yet
 
 Full OSB/AOH world (other Silvere shop buy, remaining interiors,
-tower interiors, other domains), guilds, combat, protocol stacks,
-OSB kernel daemons. 2681 `#'` in 1062 files — do not attempt a
-mechanical `/std` rewrite this slice. Newbie creation
-`/d/login/entrance` is not loaded; catalog login uses STARTROOM.
+tower interiors, other domains), protocol stacks,
+OSB kernel daemons. Adventurers guild is an archive
+entrance stub (no join / cost / advance). 2681 `#'`
+in 1062 files — do not attempt a mechanical `/std`
+rewrite this slice. Newbie creation `/d/login/entrance`
+is not loaded; catalog login uses STARTROOM.
 
 ## 6. Full dialect port (Strategy A, 2026-09-06)
 
@@ -4812,11 +4814,65 @@ rooms. wasm_status stays partial.
 Do not invent forest/fortress/corn.
 Do not flip to playable.
 
+<!-- librarian-expansion:163 -->
+
+Harbour expansion 163 (leftover 633,
+native 40285, 2026-09-10, organic
+`fluffos` / `Mud@2026`): catalog
+`kill`/`hit` plus thin Rednose
+Seastorm on the already-walked
+`/d/silvere/rooms/harbour/quay2_1`.
+Original NPC is
+`drunken_sailor_ldmud.lpc` (inherit
+`/std/npc`, level 10, night-only
+clone). Strategy A keeps him on the
+quay so combat works in daylight.
+Player 6+random(6); sailor 18 hp,
+2+random(3) bottle swing. Docks
+`harbour_rest` restores HP.
+
+Live walk (do not redo docks /
+Westway / chandler / wineshop buy):
+- Docks `score` hp 20/20 copper 120
+  (shop leftover).
+- East, se, sw → quay #2. Rednose
+  Seastorm is here. `look at sailor`
+  archive long.
+- `kill sailor`: two hits, sailor
+  death whisper (archive `Die()`),
+  hp 17/20. Look: sailor gone.
+- Leave / re-enter: Rednose
+  respawns (`ensure_npcs`).
+- Back to docks: "The salt air of
+  the docks steadies you." hp 20/20.
+- Reconnect: copper 120, leftover
+  candles + wine glasses persist.
+- East, se, east ×13, south, east
+  → The Adventurers Guild. Archive
+  stub long only. Library road
+  `look at guild`: "as soon as it
+  is finished." No join / cost /
+  advance in the snapshot (Sonic
+  1997 entrance with a comment to
+  add details later). Guild §10.7
+  is that documented gap, not a
+  missing room.
+
+This-boot live `libs/aoh/log/debug.log`
+(fd 3, PID 1837084 BOOT_MARKER90
+aoh-sailor-combat): no new lines after
+the marker. Catch this walk: empty
+after the marker. No new rooms.
+wasm_status stays partial until WASM
+§10.7 of shop/combat. Do not invent
+forest/fortress/corn. Do not flip
+to playable.
+
 ## 5. WASM
 
 Verified 2026-09-05 via `scripts/wasm_client.js`: register/reconnect fluffos, look/score/quit.
 
-**Not published** on mudlibs.fluffos.info (`wasm_status: partial`).
-Catalog overlay Void/workshop is not a world §10.7. Flip to
-`playable` only after a Strategy A port of the OSB/AOH world
-and a shop/combat/guild deep-test.
+**Not published** on mudlibs.fluffos.info (`wasm_status: partial`)
+until WASM §10.7 of shop + combat. Native shop (chandler /
+wineshop) and harbour combat (Rednose) are live. Adventurers
+guild is an archive entrance stub (no join / cost / advance).

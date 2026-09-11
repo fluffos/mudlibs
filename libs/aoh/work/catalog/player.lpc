@@ -18,9 +18,14 @@ int cmd_go(string dir);
 int cmd_quit(string arg);
 int cmd_list(string arg);
 int cmd_buy(string arg);
+int cmd_kill(string arg);
+void do_swing();
 void load_carrying();
 void receive_shop_item(string path);
 void save_me();
+void heal_self(int x);
+
+object fighting;
 
 void create() {
   seteuid(getuid());
@@ -41,6 +46,14 @@ void add_money(int x) {
   money += x;
   if (money < 0)
     money = 0;
+}
+
+void heal_self(int x) {
+  hp += x;
+  if (hp > max_hp)
+    hp = max_hp;
+  if (hp < 0)
+    hp = 0;
 }
 
 string save_path() {
@@ -138,6 +151,8 @@ void wire_commands() {
   add_action("cmd_inventory", "i");
   add_action("cmd_list", "list");
   add_action("cmd_buy", "buy");
+  add_action("cmd_kill", "kill");
+  add_action("cmd_kill", "hit");
   add_action("cmd_go", "north");
   add_action("cmd_go", "south");
   add_action("cmd_go", "east");
@@ -207,6 +222,10 @@ mixed process_input(string str) {
     case "buy":
       cmd_buy(rest);
       return 1;
+    case "kill":
+    case "hit":
+      cmd_kill(rest);
+      return 1;
     case "north":
     case "south":
     case "east":
@@ -263,6 +282,8 @@ int cmd_look(string arg) {
     write("You see nothing special.\n");
     return 1;
   }
+  if (function_exists("harbour_rest", env))
+    env->harbour_rest(this_object());
   brief = env->query_short();
   if (brief && brief != "")
     write(brief + "\n");
@@ -354,7 +375,79 @@ int cmd_go(string dir) {
     return 1;
   }
   efun::move_object(dest);
+  if (function_exists("ensure_npcs", dest))
+    dest->ensure_npcs();
   command("look");
+  return 1;
+}
+
+varargs int hit_player(int dam, mixed dtype, mixed hc, mixed enemy) {
+  if (dam > 0)
+    hp -= dam;
+  if (hp < 0)
+    hp = 0;
+  write("You take " + dam + " damage.\n");
+  if (hp < 1) {
+    hp = 0;
+    fighting = 0;
+    write("You die.\n");
+    save_me();
+  }
+  return dam;
+}
+
+void do_swing() {
+  int dam;
+  object env;
+  string them;
+
+  if (!fighting || !objectp(fighting)) {
+    fighting = 0;
+    return;
+  }
+  env = environment();
+  if (!env || environment(fighting) != env) {
+    write("Your opponent is gone.\n");
+    fighting = 0;
+    return;
+  }
+  them = fighting->query_name() || "someone";
+  dam = 6 + random(6);
+  write("You hit " + them + ".\n");
+  fighting->hit_player(dam, 0, 0, this_object());
+  if (!fighting || !objectp(fighting))
+    fighting = 0;
+}
+
+int cmd_kill(string arg) {
+  object vic;
+  int i;
+
+  if (!arg || arg == "") {
+    write("Kill whom?\n");
+    return 1;
+  }
+  if (hp < 1) {
+    write("You are too hurt to fight. Return to the docks.\n");
+    return 1;
+  }
+  vic = present(arg, environment());
+  if (!vic || !living(vic) || vic == this_object()) {
+    write("No one by that name here.\n");
+    return 1;
+  }
+  fighting = vic;
+  write("You attack " + (vic->query_name() || arg) + ".\n");
+  if (function_exists("attacked_by", vic))
+    vic->attacked_by(this_object());
+  for (i = 0; i < 12; i++) {
+    if (hp < 1 || !fighting || !objectp(fighting))
+      break;
+    do_swing();
+    if (fighting && objectp(fighting) && function_exists("attack", fighting))
+      fighting->attack();
+  }
+  save_me();
   return 1;
 }
 
