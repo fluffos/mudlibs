@@ -197,3 +197,10 @@ Leftover 642 (2026-09-11, persist only, no boot).
 Same tree as leftover 641 (`25e2370fa27`).
 Issue #3 still OPEN, 0 comments. Do not invent
 Port Vain. Do not flip.
+
+<!-- librarian-leftover:643 -->
+
+Leftover 643 (2026-09-11, persist only, no boot).
+Same tree as leftover 642 (`7860bad89b1`).
+Issue #3 still OPEN, 0 comments. Do not invent
+Port Vain. Do not flip.
