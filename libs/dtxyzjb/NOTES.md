@@ -76,3 +76,15 @@ time），`mudclient.py` 用 `--idle 0.5`。巫师再登会要「巫师专用
 `log_error()` 把 `Unknown #pragma` / unused-variable 警告写给还没
 进世界的连线物件）。物件编过之后再登就安静了，不是本轮要改的
 功能缺口。管理员存档未提交。
+
+## WASM (2026-09-11 leftover 653)
+
+指间 `logon()` 仍写 `ver1.0,<crypt>`，手机客户端走 `crypt(ZJKEY,str[2..3])`
+分支。浏览器/WASM 没有指间客户端：原先非网关第一行被丢掉，再
+`input_to(get_id)`，访客得先发一个废行。已改成非网关第一行直接当
+英文 id。`wasm_client.js`：`fluffos` / `Play2026x` / `Wiz@2026x` →
+南城客栈 `/d/city/kezhan`，`look` 有客栈长描（夹指间 `$zj#` 标记，
+这是档里原有的指间输出，不是新造房间），`score`「将军府第四代弟子
+云游」「师承秦平」，`quit` 大唐西游告别。已提交管理员存档。
+`wasm_status` 改为 `playable`。提示仍是每秒时钟，`--idle 0.5`。
+不要把 `zjdyzj` 翻回 limited。
