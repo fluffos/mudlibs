@@ -151,3 +151,9 @@ Same tree as leftover 638 (`b7106c81e28`): no
 Leftover 640 (2026-09-11, persist only, no boot).
 Same tree as leftover 639 (`16876edf6d8`): no
 `world.obj`. Do not invent Oldtown. Do not flip.
+
+<!-- librarian-leftover:641 -->
+
+Leftover 641 (2026-09-11, persist only, no boot).
+Same tree as leftover 640 (`f89c13266ea`): no
+`world.obj`. Do not invent Oldtown. Do not flip.
