@@ -127,3 +127,9 @@ oldtown. Do not invent Oldtown. Do not flip.
 Leftover 636 (2026-09-11, persist only, no boot).
 Same tree as leftover 635 (`1ddf6f10123`): no
 `world.obj`. Do not invent Oldtown. Do not flip.
+
+<!-- librarian-leftover:637 -->
+
+Leftover 637 (2026-09-11, persist only, no boot).
+Same tree as leftover 636 (`d60cd9919c7`): no
+`world.obj`. Do not invent Oldtown. Do not flip.

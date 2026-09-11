@@ -155,3 +155,10 @@ Leftover 636 (2026-09-11, persist only, no boot).
 Same tree as leftover 635 (`1ddf6f10123`): only
 void and workshop. Do not invent rooms. Do not
 flip.
+
+<!-- librarian-leftover:637 -->
+
+Leftover 637 (2026-09-11, persist only, no boot).
+Same tree as leftover 636 (`d60cd9919c7`): only
+void and workshop. Do not invent rooms. Do not
+flip.
