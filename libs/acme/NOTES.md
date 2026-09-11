@@ -190,3 +190,10 @@ Leftover 641 (2026-09-11, persist only, no boot).
 Same tree as leftover 640 (`f89c13266ea`): only
 void and workshop. Do not invent rooms. Do not
 flip.
+
+<!-- librarian-leftover:642 -->
+
+Leftover 642 (2026-09-11, persist only, no boot).
+Same tree as leftover 641 (`25e2370fa27`): only
+void and workshop. Do not invent rooms. Do not
+flip.
