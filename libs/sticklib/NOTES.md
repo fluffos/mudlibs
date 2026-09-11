@@ -153,9 +153,22 @@ This-boot live `libs/sticklib/log/debug.log` (fd, PID 1662870
 BOOT_MARKER16 sticklib-combat): living + catalog player
 compiled. Catch this walk: expected PEACE_D only.
 
-**Not published** (`wasm_status: partial`). Flip to `playable`
-only after a real advance path (cost still wants 1014 XP;
-qp_for_level is 0), not on three quests + one kill.
+Guild advance LIVE (`0cf82e040d1` + `fc60c6c304d` +
+`38d9b3c591c`, native 40286, 2026-09-10): catalog
+`set_level`/`set_title` persist (they were no-ops;
+`query_level` always returned 1). Harry respawns on
+re-enter of S7_7. Temple yard restores HP and unghosts
+(login compile needed a `remove_ghost` prototype).
+Organic `fluffos`: 13× `kill harry` with church rest
+between fights (70 XP each; start 210 → 1120). Guild
+`cost`: "enough experience to advance a level".
+`advance level` fanfare; score `Fluffos the Mostly
+Harmless (level 2)` exp 1120. Reconnect persist.
+`qp_for_level` is still 0 (XP-only).
+
+**Not published** (`wasm_status: partial`). Native
+shop/combat/quests/guild-advance are live. Flip to
+`playable` after a WASM §10.7 of the same path.
 
 ## 4. What is not ported yet
 
@@ -164,4 +177,8 @@ Full LDMud HitFunc / weapon closures (thin living is enough
 to kill). Bulletin board extra inherit. City guards. Joe's
 LDMud tell_here format tokens still print raw. Catalog
 inventory persist is still save fields only. Next sticklib
-slice: guild advance (need ~1014 XP) — or start simud.
+slice: WASM §10.7 of shop/combat/guild-advance, then
+consider `playable`. Remaining partials: aoh shop buy /
+combat (walkable Silvere closed — do not invent rooms),
+simud (no `world.obj`), morgengrauen (no `/d/ebene`),
+acme (no world).
