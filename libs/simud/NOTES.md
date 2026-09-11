@@ -179,3 +179,10 @@ Leftover 644 (2026-09-11). User: they can consider
 playable now. Flipped `wasm_status` to playable on
 existing temple / hall / Oldtown evidence. Do not
 invent Oldtown. `world.obj` is still missing.
+
+<!-- librarian-leftover:645 -->
+
+Leftover 645 (2026-09-11, persist only, no boot).
+Already playable (`546d780ee87`). Same tree: no
+`world.obj`. Do not invent Oldtown. Do not flip
+again.

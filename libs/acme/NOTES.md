@@ -211,9 +211,9 @@ playable now. Flipped `wasm_status` to playable on
 existing Void/workshop catalog evidence. Do not
 invent rooms. Shop / combat / guild stay N/A.
 
-<!-- librarian-leftover:644 -->
+<!-- librarian-leftover:645 -->
 
-Leftover 644 (2026-09-11). User: they can consider
-playable now. Flipped `wasm_status` to playable on
-existing Void/workshop catalog evidence. Do not
-invent rooms. Shop / combat / guild stay N/A.
+Leftover 645 (2026-09-11, persist only, no boot).
+Already playable (`546d780ee87`). Same tree: only
+void and workshop. Do not invent rooms. Do not
+flip again.

@@ -210,3 +210,10 @@ Leftover 644 (2026-09-11). User: they can consider
 playable now. Flipped `wasm_status` to playable on
 existing guild / Hafenstrasse / buero evidence. Do
 not invent Port Vain or connect seher.
+
+<!-- librarian-leftover:645 -->
+
+Leftover 645 (2026-09-11, persist only, no boot).
+Already playable (`546d780ee87`). Same tree. Issue
+#3 still OPEN, 0 comments. Do not invent Port Vain.
+Do not flip again.
