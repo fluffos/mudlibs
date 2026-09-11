@@ -1,6 +1,6 @@
 # 三国志MUD
 
-2000 年前后的 Lima mudlib 三国志游戏，来源是档案 `145_sgzmudsgz_三国志MUDsgz.tar.gz` 里的 `sgz/lib` 树（同档还有 `sgz_old` / `sgzmud`，本馆只用这一份）。和馆里已经 playable 的 `sanguozhi`（162，GitHub `fluffos/sanguozhi`）是同一家族的**不同快照**：145 仍是当年 `ARRAY_RESERVED_WORD` 打开的 Lima 1.0a2 中文版，必须用 `~/src/fluffos-wilderness`，不能拿默认 FluffOS 或 `fluffos-lima` 启动。
+2000 年前后的 Lima mudlib 三国志游戏，来源是档案 `145_sgzmudsgz_三国志MUDsgz.tar.gz` 里的 `sgz/lib` 树（同档还有 `sgz_old` / `sgzmud`，本馆只用这一份）。和馆里已经 playable 的 `sanguozhi`（162，GitHub `fluffos/sanguozhi`）是同一家族的**不同快照**。145 已改到共享默认 FluffOS（不再需要 `ARRAY_RESERVED_WORD` / `fluffos-wilderness`）。
 
 新玩家在华阴**草庐**（`/a/huayin/vhall`）落地：水镜先生、大砍刀、草庐留言板；西边是小村中心。中文名不能用三国人物真名（刘备、赵云会被拒）。`AUTO_WIZ` 在这份存档里是关掉的；Admin 域里已经有 2011 年线上巫师，所以新号是凡人，直接进档案世界，不必先走巫师大厅的轮回台。
 
@@ -27,7 +27,7 @@ https://mudlibs.fluffos.info/sgzmudsgz/
 
 ```
 cd libs/sgzmudsgz
-~/src/fluffos-wilderness/build-debug/src/driver config.fluffos
+~/src/fluffos/build-debug/src/driver config.fluffos
 ```
 
-游戏端口：**40196**。不要用默认 `~/src/fluffos` 或 `fluffos-lima`——`check_config.lpc` 会拒绝。
+游戏端口：**40196**。走共享默认 FluffOS，不要用捆绑的 32 位 ELF，也不要再用 `~/src/fluffos-wilderness`。

@@ -10,12 +10,21 @@ FluffOS 的后来快照，**不能**拿 162 顶替 145。
 
 ## 驱动
 
-`check_config.lpc` 要 `#define ARRAY_RESERVED_WORD`，并且
-`NO_LIGHT` / `NO_ADD_ACTION` / `NO_WIZARDS`、`#undef OLD_ED` /
-`PACKAGE_UIDS`。和 `libs/wilderness` 同一套，复用
-`~/src/fluffos-wilderness`。站点 WASM 走
-`scripts/custom_drivers/wilderness/`（`build_site.sh` 已把
-`sgzmudsgz` 加进这个 case）。
+不再需要 `#define ARRAY_RESERVED_WORD` / `~/src/fluffos-wilderness`。
+Lima `array` 类型已改成 `mixed *` / `string *`（leftover 656），
+`check_config.lpc` 的 `create()` 已掏空，`master.lpc` 补了 UID
+applies。`set_this_player()` 按 sanguozhi 全部 no-op（默认驱动只在
+`NO_ADD_ACTION` 分支暴露这个 efun）。
+
+走共享默认驱动：
+
+```
+cd libs/sgzmudsgz
+~/src/fluffos/build-debug/src/driver config.fluffos
+```
+
+站点 WASM 也走共享 `~/src/fluffos/build-wasm/src`，不再进
+`scripts/custom_drivers/wilderness/`。`wilderness` 自己仍要那份二进制。
 
 `config.fluffos`：`mudlib directory` 指 `work/`，`log directory : /log`
 相对启动 CWD（必须 `cd libs/sgzmudsgz` 再跑 driver），
@@ -53,18 +62,23 @@ already_utf8=2214 converted=5461 lossy=74 skipped_binary=78，约 3546
 
 `doc_d.lpc` 后半段 `get_dir` 类型仍编不过（preload `catch`，不挡登录）。
 
-## 实测（本机 wilderness 驱动，端口 40196）
+机械去掉 `array` 关键字时，Lima `string array a, b` 里的标量 `b`
+曾被误加成 `string *`。`char_obj` 因此编不过，登录会被送去极乐世界。
+已按 sanguozhi 把混写声明改回（`char_obj` / `check` / `country_d` 等）。
 
-`new` → `fluffos` → 云游 → `Play2026x`。Admin 域已有历史成员，
-新号是凡人，进档案 `START` `/a/huayin/vhall` **草庐**：水镜先生、
+## 实测（本机默认 FluffOS，端口 40196）
+
+`fluffos` / `Play2026x` / 云游。Admin 域已有历史成员，
+号是凡人，进档案 `START` `/a/huayin/vhall` **草庐**：水镜先生、
 大砍刀、草庐留言板。`look` / `west`（小村中心）/ `score`（云游 /
 fluffos / 汉末 / 白身）/ `quit` 都通。
 
-不要用捆绑的 `etc/driver` 32 位 ELF。
+不要用捆绑的 `etc/driver` 32 位 ELF。不要用
+`~/src/fluffos-wilderness`。
 
-## WASM（2026-09-11 leftover 654）
+## WASM（2026-09-11 leftover 656）
 
-`scripts/custom_drivers/wilderness/` 定制驱动：`fluffos` / `Play2026x`
+共享默认 `~/src/fluffos/build-wasm/src`：`fluffos` / `Play2026x`
 进草庐，`look` / `score`（云游）/ `quit` 通过。`socket.lpc` 在 WASM
 下没有 socket efun（I3/HTTP），不挡登录。`doc_d` 仍编不过，preload
 `catch`。
