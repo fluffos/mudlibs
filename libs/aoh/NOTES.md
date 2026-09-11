@@ -4863,16 +4863,40 @@ This-boot live `libs/aoh/log/debug.log`
 aoh-sailor-combat): no new lines after
 the marker. Catch this walk: empty
 after the marker. No new rooms.
-wasm_status stays partial until WASM
-§10.7 of shop/combat. Do not invent
-forest/fortress/corn. Do not flip
-to playable.
+
+**Published** (`wasm_status: playable`) after WASM
+§10.7 of shop / combat (leftover 633,
+2026-09-10). Guild is the archive stub.
 
 ## 5. WASM
 
 Verified 2026-09-05 via `scripts/wasm_client.js`: register/reconnect fluffos, look/score/quit.
 
-**Not published** on mudlibs.fluffos.info (`wasm_status: partial`)
-until WASM §10.7 of shop + combat. Native shop (chandler /
-wineshop) and harbour combat (Rednose) are live. Adventurers
-guild is an archive entrance stub (no join / cost / advance).
+## WASM §10.7 (2026-09-10, leftover 633)
+
+`scripts/wasm_client.js` against `build-wasm`
+(`fluffos 20260830`), organic `fluffos` / `Mud@2026`
+(native leftover 631 save: copper 120, tallow/wax/
+wineglass/chamglass):
+
+- Docks look / score hp 20/20 copper 120.
+- East, se, east ×7, north → Molly's Chandler.
+  `list` tallow 10 / beeswax 18. `buy tallow`
+  copper 120→110; inventory two tallow candles
+  plus leftover glasses.
+- South, west ×7, sw → quay #2. `kill sailor`:
+  Rednose dies (archive whisper), hp 14/20.
+  Look: sailor gone.
+- Northeast, east ×13, south, east → The
+  Adventurers Guild. Archive stub long only.
+  Library road `look at guild`: "as soon as it
+  is finished." No join / cost / advance.
+- Quit / WASM reconnect: salt air heals,
+  copper 110 persist, both tallows + leftover
+  glasses persist.
+
+Do not redo native chandler/wineshop buy or
+sailor combat. Remaining partials: simud (no
+`world.obj`), morgengrauen (`/d/ebene` domain
+not in snapshot; only reconstructed
+`po_haf1`), acme (no world).

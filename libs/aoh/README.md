@@ -7,8 +7,9 @@ This collection’s copy is a snapshot, not a live mirror.
 Age of Heroes, an experimental English LDMud mudlib based on One Step Beyond (OSB). LDMud → FluffOS conversion: archive master uses closures and LDMud kernel applies; catalog login lands on the docks of Silvere harbour. Full OSB-derived source tree is preserved under /d, /lib, /std.
 
 Based on One Step Beyond (OSB). Interactive play is a Strategy A
-harbour start, not the full LDMud world. Not on the public play
-site until shop/combat/guild are deep-tested.
+harbour start (docks, Westway shops, Rednose combat). The
+Adventurers Guild is an unfinished archive entrance. WASM §10.7
+2026-09-10.
 
 ## Registration flow
 

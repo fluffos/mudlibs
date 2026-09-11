@@ -40,8 +40,9 @@ why those do not exist). Overlay Void/workshop is not that pass.
 `questmud` is the published exception (full port, §10.7 2026-08-31).
 `ageofelements` is listed only after the 2.4.5 village itself was
 live-tested (2026-09-05). `sticklib` is listed after WASM §10.7 of
-shop/combat/guild (2026-09-10). Overlay-only: `acme`, `morgengrauen`,
-`aoh`, `simud`.
+shop/combat/guild (2026-09-10). `aoh` is listed after WASM §10.7 of
+shop/combat (2026-09-10; Adventurers Guild is an archive stub).
+Overlay-only: `acme`, `morgengrauen`, `simud`.
 
 ## Architecture checklist (do this before trusting a clean compile)
 
