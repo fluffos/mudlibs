@@ -1,0 +1,81 @@
+// Updated by stefan on 10 Jan 1997
+/* Do not remove the headers from this file! see /USAGE for more info. */
+
+/*
+** who.c -- intermud who
+**
+** 95-May-15.  Deathblade.  Created.
+*/
+#include <log.h>
+
+#define CMD_WHO_OBJ "/cmds/player/who.c"
+mapping query_mudlist();
+void send_to_mud(string type, string mudname, mixed * message);
+void send_to_user(string type, string mudname, string username,
+                  mixed * message);
+void return_error(string mudname, string username,
+                  string errcode, string errmsg);
+string canon_mudname(string mudname);
+
+nomask void do_who(string mudname, string arg)
+{
+    send_to_mud("who-req", canon_mudname(mudname), ({ arg }));
+}
+
+static nomask void rcv_who_req(string orig_mud, string orig_user,
+                               string targ_user, mixed * message)
+{
+    string ret;
+
+    ret = implode(message, "");
+
+    if ( !ret||ret=="" ) 
+    	ret = load_object(CMD_WHO_OBJ)->get_who_string(0);
+    else 
+	ret = load_object(CMD_WHO_OBJ)->get_who_string(ret);
+
+    send_to_user("who-reply", orig_mud, orig_user, ({ ret }));
+}
+
+static nomask void rcv_who_reply(string orig_mud, string orig_user,
+                                 string targ_user, mixed * message)
+{
+    object p;
+
+    p = find_user(targ_user);
+    if ( !p || (targ_user == "stefan" ))
+    {
+    	string t1, t2;
+    	int num;
+    	if (stringp(message[0])) {
+    	    if (p) tell(p, message[0]);
+    	    if (sscanf(message[0], "%s目前总人数：%d人%s", t1, num, t2) == 3)
+    	    LOG_D->log(LOG_I3, sprintf("%d\t%s\t%d\n", time(), 
+    	    	orig_mud, num));
+    	}
+        else return_error(orig_mud, orig_user, "unk-user",
+                     sprintf("Returned who-reply to unknown user '%s'",
+                             targ_user));
+    }
+    else if ( !sizeof(message)||!message[0]||!stringp(message[0]) )
+    {
+	tell(p, "no infomation availble!\n");
+    }
+    else {
+        tell(p, message[0]+"\n");
+    }
+}
+
+nomask void count_users() {
+    mapping mudlist;
+    remove_call_out("count_users");
+    mudlist = query_mudlist();
+    if (mapp(mudlist)) {
+    	string mud;
+    	array muds = keys(mudlist);
+    	foreach (mud in muds) {
+    		if (stringp(mud)) do_who(mud, "");
+    	}
+    }
+    call_out("count_users", 600);
+}

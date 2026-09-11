@@ -12,11 +12,14 @@ handshake WASM terminals can't compute, native play fully verified —
 the rest `not-mudlib`/`password-protected`/`not-convertible`/
 `deprioritized`), all fully WASM-playable end to end and through the
 long-sit boot-log sweep (§10.0) — the WASM-conversion phase is done.
-`dfgsitlzjwin`/`ds386`/`hellxg`/`hy2`/`sgzmudsgz` were purged as
+`dfgsitlzjwin`/`ds386`/`hellxg`/`hy2` were purged as
 permanently out of scope (duplicates, no standalone master object,
 wrong driver requirement, deprioritized English lib — see the git
 history around 2026-08-07 for the purge commit); their raw archives
-are preserved in `archives/`, not `libs/`. The corpus keeps growing as
+are preserved in `archives/`, not `libs/`. `sgzmudsgz` (145) was
+in that purge for the bundled 32-bit ELF; it is back on
+`~/src/fluffos-wilderness` (same `ARRAY_RESERVED_WORD` build as
+`wilderness`). The corpus keeps growing as
 new archives get dropped in; `README.md`'s table and
 `lib_numbering.json` are the current source of truth for the exact
 count, not the numbers above.
@@ -4667,8 +4670,9 @@ refuses to boot unless the driver was compiled with a specific flag set
 depending on the specific LIMA snapshot — see below) — incompatible with
 every other mudlib in this collection, which need the opposite. This was
 originally judged "not fixable at the mudlib-source level... out of
-scope for now" (case: `sgzmudsgz`, 三国志MUD, since purged as permanently
-out of scope for unrelated reasons) — **that verdict is stale.** A
+scope for now" (case: `sgzmudsgz`, 三国志MUD, briefly purged, then
+brought back on this same wilderness binary in 2026-09-11) — **that
+verdict is stale.** A
 second, separately-compiled driver binary is exactly the fix, and it's
 cheap: a `git worktree add` off the same `~/src/fluffos` source tree
 (shares the object database, independent working files/build dir), a
@@ -4693,13 +4697,16 @@ codebase) requires it `#define`d — confirmed by diffing both
 difference in the whole flag list. These two requirements are mutually
 exclusive on one binary, so `libs/lima`'s existing `~/src/fluffos-lima`
 worktree could not be reused for `libs/wilderness` — a second, separate
-worktree was needed. If a THIRD LIMA-lineage archive ever shows up,
-check its own `check_config.lpc`'s `ARRAY_RESERVED_WORD` direction
-before assuming either existing worktree fits; reuse whichever one
-matches, or clone a third if neither does. On the site, `lima` /
-`swmud` / `spacemud` share `scripts/custom_drivers/lima_swmud/`;
-`wilderness` uses `scripts/custom_drivers/wilderness/` (same LIMA
-flags plus `#define ARRAY_RESERVED_WORD`).
+worktree was needed. A third LIMA-lineage archive did show up: `sgzmudsgz` (145, year-2000
+`sgz/lib` snapshot) matches `wilderness` (`#define ARRAY_RESERVED_WORD`)
+and reuses `~/src/fluffos-wilderness` plus
+`scripts/custom_drivers/wilderness/`. It is **not** a duplicate of
+`sanguozhi` (162), which already runs on the shared default driver.
+If another LIMA archive appears, still check `check_config.lpc` before
+assuming either worktree fits. On the site, `lima` / `swmud` /
+`spacemud` share `scripts/custom_drivers/lima_swmud/`;
+`wilderness` and `sgzmudsgz` share `scripts/custom_drivers/wilderness/`
+(same LIMA flags plus `#define ARRAY_RESERVED_WORD`).
 
 ### 7.47 `origin()` returns a STRING on this driver, not the old int bitmask
 
@@ -12952,7 +12959,7 @@ same nominally-shared variable from yet another file remains at risk
 and needs its own case-by-case check or the same file-colocation
 treatment.
 
-Practical how-to for the next LDMud onboard (catalog overlay vs full port, checklist, examples `acme` / `morgengrauen` / `ageofelements` / `aoh`): see `docs/ldmud-to-fluffos.md`. User 2026-09-11: remaining start-hall ports (`acme`, `morgengrauen`, `simud`) may be published as `playable` on existing catalog / guild-temple evidence. A port is done when every archive-source room/object/command is loadable and playable. Fix trivial load failures of existing objects. Do not invent or reinvent missing content. User 2026-09-11 (later): a lib that cannot boot because it is only a skeleton framework (no shipped rooms) may add **one** void/example room so the catalog can come online. Do not invent a void that hides a real existing world. Leftover 652: leftover `archives/` has no remaining skeleton of that kind — `069` 屠龙战记 WIN98 is a full ES1 tree already onboarded as `esI`; `145` sgzmudsgz is a full Lima+SGZ world that needs its own old driver, not a void. Leftover 653: `wlqxcmudlib` WASM `playable` after `find_object(VERSION_D)` guards (same shape as `yhwhckdm`); admin `fluffos` lands in archive 扬州客店. `dtxyzjb` WASM `playable`: first non-gateway line is the English id; admin lands in archive 南城客栈. Do not flip `zjdyzj` back.
+Practical how-to for the next LDMud onboard (catalog overlay vs full port, checklist, examples `acme` / `morgengrauen` / `ageofelements` / `aoh`): see `docs/ldmud-to-fluffos.md`. User 2026-09-11: remaining start-hall ports (`acme`, `morgengrauen`, `simud`) may be published as `playable` on existing catalog / guild-temple evidence. A port is done when every archive-source room/object/command is loadable and playable. Fix trivial load failures of existing objects. Do not invent or reinvent missing content. User 2026-09-11 (later): a lib that cannot boot because it is only a skeleton framework (no shipped rooms) may add **one** void/example room so the catalog can come online. Do not invent a void that hides a real existing world. Leftover 652: leftover `archives/` has no remaining skeleton of that kind — `069` 屠龙战记 WIN98 is a full ES1 tree already onboarded as `esI`; `145` sgzmudsgz is a full Lima+SGZ world (not a void). Leftover 653: `wlqxcmudlib` WASM `playable` after `find_object(VERSION_D)` guards (same shape as `yhwhckdm`); admin `fluffos` lands in archive 扬州客店. `dtxyzjb` WASM `playable`: first non-gateway line is the English id; admin lands in archive 南城客栈. Do not flip `zjdyzj` back. Leftover 654: `sgzmudsgz` (145) `playable` on current `fluffos-wilderness` (`ARRAY_RESERVED_WORD`); mortal `fluffos`/`Play2026x`/云游 lands in archive 华阴草庐 `/a/huayin/vhall`; native + wilderness-WASM look/score/quit. Do not use the bundled 32-bit ELF. Do not treat `sanguozhi` (162) as this archive.
 
 ### 7.158 First LDMud-lineage lib onboarded (`questmud`) — a whole cluster of architecture-level gaps, not just dialect differences; the worst one (`X->move_object(Y)` silently no-ops) fails with NO error at all
 

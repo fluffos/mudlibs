@@ -1,4 +1,4 @@
-Prebuilt custom WASM driver for `wilderness`.
+Prebuilt custom WASM driver for `wilderness` and `sgzmudsgz`.
 
 This 2000-era LIMA snapshot needs the same compile-time options as
 `lima`/`swmud`/`spacemud` (`NO_ADD_ACTION`, `NO_WIZARDS`, `NO_LIGHT`

@@ -329,6 +329,7 @@ classes it's found.
 | 142-1 | `nt6nitan6win` | 泥潭6 (win_nodb版) | `泥潭6nitan6-win_nodb.rar` | 40187 | WASM playable |
 | 143 | `yszz` | 妖神之争 | `妖神之争.rar` | 40192 | WASM playable |
 | 144 | `njhhdxdes2hx` | es2/侠客行（南京河海大学校内版1.01） | `南京河海大学的es2和xkx《校内_1.01版》.tar.gz` | 40194 | WASM playable |
+| 145 | `sgzmudsgz` | 三国志MUD | `145_sgzmudsgz_三国志MUDsgz.tar.gz` | 40196 | WASM playable |
 | 146 | `hy` | 海洋（基础版） | `海洋（由千堆雪上传）.rar` | 40182 | WASM playable |
 | 146-1 | `hy5` | 海洋5 | `海洋5.7z` | 40183 | WASM playable |
 | 147 | `jym` | 金庸梦 | `金庸梦.rar` | 40184 | WASM playable |
