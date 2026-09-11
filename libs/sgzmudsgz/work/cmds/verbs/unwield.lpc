@@ -7,7 +7,7 @@ void do_unwield()
     this_body()->unwield();
 }
  
-array query_verb_info ()
+mixed * query_verb_info ()
 {
     return ({ ({ "" }) });
 }

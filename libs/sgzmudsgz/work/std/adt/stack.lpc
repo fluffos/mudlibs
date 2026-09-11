@@ -3,7 +3,7 @@
 
 class stack {
     int which;
-    array elems;
+    mixed * elems;
 }
 
 class stack stack_new(int size) {

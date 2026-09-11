@@ -260,13 +260,14 @@ cp "$SELF_DIR/web_shell_override"/{persist,save-export,zip-loader,zip-worker,tab
 # site driver doesn't have -- see scripts/custom_drivers/lima_swmud/
 # README.md and libs/lima/NOTES.md for the full story. Both currently
 # share one prebuilt driver (`lima`/`swmud`/`spacemud` all match).
-# `wilderness` / `sgzmudsgz` need a second binary (`#define ARRAY_RESERVED_WORD`).
+# `wilderness` still needs a second binary (`#define ARRAY_RESERVED_WORD`).
+# `sgzmudsgz` no longer does — leftover 656 rewrote `array` types to `mixed *`.
 CUSTOM_DRIVER_LIMA_SWMUD="$SELF_DIR/custom_drivers/lima_swmud"
 CUSTOM_DRIVER_WILDERNESS="$SELF_DIR/custom_drivers/wilderness"
 custom_driver_dir_for() {
   case "$1" in
     lima|swmud|spacemud) echo "$CUSTOM_DRIVER_LIMA_SWMUD" ;;
-    wilderness|sgzmudsgz) echo "$CUSTOM_DRIVER_WILDERNESS" ;;
+    wilderness) echo "$CUSTOM_DRIVER_WILDERNESS" ;;
     *) echo "" ;;
   esac
 }

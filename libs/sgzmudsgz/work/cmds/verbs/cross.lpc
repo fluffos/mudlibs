@@ -23,7 +23,7 @@ int direct_cross_obj(object ob)
     return 1;
 }
   
-array query_verb_info()
+mixed * query_verb_info()
 {
     return ({ ({ "OBJ" }) });
 }

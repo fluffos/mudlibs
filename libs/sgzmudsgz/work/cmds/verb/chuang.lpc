@@ -12,7 +12,7 @@ mixed do_chuang_obj(object ob)
     ob->chuang();
 }
 
-array query_verb_info()
+mixed * query_verb_info()
 {
   return ({ ({ "OBJ", "OBJ with OBJ" }) });
 }

@@ -4,7 +4,7 @@
 private mixed handle_blocks(string str);
 private void we_moved();
 
-string array current_blocks = ({});
+string * current_blocks = ({});
 function hook = (: handle_blocks :);
 function move_hook = (: we_moved :);
 object env;
@@ -38,7 +38,7 @@ private void we_moved() {
 //:FUNC add_block
 //Adds the exits specified to the list of exits this object is blocking
 //'all' can be used to block all exits
-void add_block(string array exits...) {
+void add_block(string * exits...) {
     current_blocks += exits;
     if (env)
         foreach (string dir in exits)
@@ -52,7 +52,7 @@ void add_block(string array exits...) {
 
 //:FUNC remove_block
 //Removes the exits specified to the list of exits this object is blocking
-void remove_block(string array exits...) {
+void remove_block(string * exits...) {
     current_blocks -= exits;
     if (env)
         foreach (string dir in exits)

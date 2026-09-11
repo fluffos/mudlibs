@@ -6,7 +6,7 @@
 class lqueue {
     int size;
     int index;
-    array elems;
+    mixed * elems;
 }
 
 class lqueue lqueue_new(int size) {
@@ -29,6 +29,6 @@ void lqueue_member(class lqueue q, int ind) {
     return q->elems[which];
 }
 
-array lqueue_list(class lqueue q) {
+mixed * lqueue_list(class lqueue q) {
     return q->elems[q->index..] + q->elems[0..q->index-1];
 }

@@ -23,7 +23,7 @@ int environment_can_hear()
 //Handle a message received from inside us (which should never happen, but...)
 //Inside messages propogate upward and downward, but we have no downward
 varargs void
-receive_inside_msg(string msg, object array exclude, int message_type, 
+receive_inside_msg(string msg, object * exclude, int message_type, 
                         mixed other)
 {
   object env;
@@ -44,7 +44,7 @@ receive_inside_msg(string msg, object array exclude, int message_type,
 //Receive a message from outside of us.
 //Outside messages propogate downward, so just receive
 varargs void
-receive_outside_msg(string msg, object array exclude, int message_type,
+receive_outside_msg(string msg, object * exclude, int message_type,
                          mixed other)
 {
     receive(msg);
@@ -53,7 +53,7 @@ receive_outside_msg(string msg, object array exclude, int message_type,
 //### Where is this used?  Is it needed?  What is it's purpose?
 //Remote messages propogate just like an inside message by default
 varargs void
-receive_remote_msg(string msg, object array exclude, int message_type,
+receive_remote_msg(string msg, object * exclude, int message_type,
                         mixed other)
 {
     receive_inside_msg(msg, exclude, message_type, other);

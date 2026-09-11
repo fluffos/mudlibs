@@ -7,6 +7,6 @@ void do_ring_obj(object ob) {
     ob->ring();
 }
 
-array query_verb_info() {
+mixed * query_verb_info() {
     return ({ ({ "OBJ" }) });
 }

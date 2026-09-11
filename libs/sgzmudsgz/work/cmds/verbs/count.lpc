@@ -9,7 +9,7 @@ void do_count_obj( object ob ) {
     ob->do_count();
 }
 
-array query_verb_info()
+mixed * query_verb_info()
 {
     return ({ ({ "OBJ" }) });
 }

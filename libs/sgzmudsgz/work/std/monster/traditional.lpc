@@ -57,7 +57,7 @@ int damage_bonus() {
     return 0;
 }
 
-class combat_result array take_a_swing(object target)
+class combat_result * take_a_swing(object target)
 {
     int them, us, chance, roll;
     class combat_result res;

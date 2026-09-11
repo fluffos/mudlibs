@@ -8,7 +8,7 @@ void do_rideone_obj(object what)
     what->rideone();
 }
 
-array query_verb_info()
+mixed * query_verb_info()
 {
       return ({({"OBJ"}),({ })});
 }

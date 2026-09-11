@@ -18,7 +18,7 @@ void create()
 
 void add_annotation(mixed o, class annotation a)
 {
-  class annotation array arrs;
+  class annotation * arrs;
 
   a->date = ctime(time());
   //## Add code for owner of an annotation... check against WIZ_DIR
@@ -36,14 +36,14 @@ void add_annotation(mixed o, class annotation a)
   unguarded(1, (: save_object(SAVE_FILE) :));
 }
 
-class annotation array retrieve_annotations(mixed o)
+class annotation * retrieve_annotations(mixed o)
 {
   return copy(annotations[(objectp(o) ? base_name(o) : o)]);
 }
 
 int remove_annotation(mixed o, int index)
 {
-  class annotation array arr = annotations[(objectp(o) ? base_name(o) : o)];
+  class annotation * arr = annotations[(objectp(o) ? base_name(o) : o)];
   class annotation a;
   string thisguy;
 

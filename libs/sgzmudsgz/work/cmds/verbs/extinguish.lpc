@@ -7,6 +7,6 @@ void do_extinguish_obj(object ob) {
     ob->do_extinguish();
 }
 
-array query_verb_info() {
+mixed * query_verb_info() {
     return ({ ({ "OBJ" }) });
 }

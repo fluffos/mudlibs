@@ -7,7 +7,7 @@ inherit CMD;
 
 private void main(string str) {
     mixed* lines = socket_status();
-    string array linea;
+    string * linea;
     string line;
     
     foreach (linea in lines) {

@@ -4,7 +4,7 @@
 #include <hooks.h>
 void add_hook(string tag, function hook);
 void remove_hook(string tag, function hook);
-private array greeters=({});
+private mixed * greeters=({});
 private int can_have_meet=0;
 void obj_arrive(object o) {
 	if(o->is_greeter()) {

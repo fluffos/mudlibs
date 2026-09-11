@@ -36,7 +36,7 @@ int attackable()
 
 //:FUNCTION adjust_my_result
 //modify a combat result we inflict
-class combat_result array adjust_my_result(class combat_result array res)
+class combat_result * adjust_my_result(class combat_result * res)
 {
     return res;
 }
@@ -98,7 +98,7 @@ void commit_suicide()
  */
 //:FUNCTION hit_living
 //Do some damage to a monster.  The monster then attacks previous_object()
-void hit_living(class combat_result array res)
+void hit_living(class combat_result * res)
 {
     do_damage(res);
     attacked_by(previous_object());

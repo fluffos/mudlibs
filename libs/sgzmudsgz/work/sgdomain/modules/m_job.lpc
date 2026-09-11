@@ -83,7 +83,7 @@ mixed finish_job(string j_id)
 {
    int p_time=time();
    int p_count;
-   array p_lasttimes;
+   mixed * p_lasttimes;
    int p_beg_time;
    p_beg_time=query_job(j_id,"beg_time");
    if(!p_beg_time)
@@ -103,8 +103,8 @@ mixed finish_job(string j_id)
 int count_lasttimes(string j_id)
 {
    int p_time=time();
-   array p_lasttimes;
-   array n_lasttimes;
+   mixed * p_lasttimes;
+   mixed * n_lasttimes;
 	p_lasttimes=jobs[j_id]["lasttimes"];
 //   p_lasttimes=query_job(j_id,"lasttimes");
    if(!p_lasttimes)

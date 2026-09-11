@@ -51,7 +51,7 @@ void do_flip_obj(object ob) {
     ob->flip();
 }
 
-array query_verb_info()
+mixed * query_verb_info()
 {
     return ({ ({ "OBJ", "OBJ for OBJ","OBJ to OBJ","off OBJ","on OBJ with OBJ","OBJ off","OBJ with OBJ","OBJ on","on OBJ" }), ({ "turn" }) });
 }

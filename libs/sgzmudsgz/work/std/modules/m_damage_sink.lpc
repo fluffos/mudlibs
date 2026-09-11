@@ -30,8 +30,8 @@ int query_armor_class() {
 }
 #endif
 
-class combat_result array
-adjust_result(class combat_result array res) {
+class combat_result *
+adjust_result(class combat_result * res) {
     foreach (class combat_result result in res) {
 	int ac = (result->special & RES_NONPHYSICAL) ? 0 : armor_class;
 	if (resist_type == result->kind)

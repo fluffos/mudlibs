@@ -8,7 +8,7 @@ object king;
 
 private void
 find_a_king() {
-    array bods;
+    mixed * bods;
     
     // Randomly pick someone logged on.  If king == 0, then either we
     // haven't done this yet, or the person we picked logged out.

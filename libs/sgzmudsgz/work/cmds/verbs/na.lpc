@@ -19,7 +19,7 @@ void do_na()
 	do_na_str("");
 }
 
-array query_verb_info()
+mixed * query_verb_info()
 {
     return ({ ({ "", "STR" }) });
 }

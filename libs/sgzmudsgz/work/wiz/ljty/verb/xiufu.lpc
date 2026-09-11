@@ -12,7 +12,7 @@ mixed do_xiufu_obj(object ob)
     ob->xiufu();
 }
 
-array query_verb_info()
+mixed * query_verb_info()
 {
   return ({ ({ "OBJ", "OBJ with OBJ" }) });
 }

@@ -180,7 +180,7 @@ int query_banned_guild( string name )
 }
 
 
-string array guilds_belong()
+string * guilds_belong()
 {
     return keys(filter_mapping(guilds,
         (: ((class guild_info)$2)->member_level :)));

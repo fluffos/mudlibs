@@ -18,8 +18,8 @@
 varargs string quote_box(string quote, int width, string author,
                          string frame, string sframe, string corner)
 {
-  string array lines;
-  string array author_lines;
+  string * lines;
+  string * author_lines;
   string s;
   if(!frame)  frame  = "-";
   if(!sframe) sframe = "|";
@@ -50,7 +50,7 @@ varargs string quote_box(string quote, int width, string author,
 varargs string box(string text, int width,
                    string frame, string sframe, string corner)
 {
-  string array lines;
+  string * lines;
   string s;
   if(!frame)  frame  = "-";
   if(!sframe) sframe = "|";

@@ -9,7 +9,7 @@ inherit ARMOR;
 void set_slot(string);
 
 
-class combat_result array 
+class combat_result * 
 adjust_result(mixed result) {
     foreach (class combat_result res in result) {
         if (!(res->special & RES_NONPHYSICAL) && random(5)) {

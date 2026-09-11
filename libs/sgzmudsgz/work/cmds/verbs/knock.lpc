@@ -13,7 +13,7 @@ void do_knock_at_obj(object o, string s)
   o->knock_knock(s);
 }
 
-array query_verb_info() {
+mixed * query_verb_info() {
     return ({ ({ "on OBJ", "at OBJ" }), ({ "rap" }) });
 }
 

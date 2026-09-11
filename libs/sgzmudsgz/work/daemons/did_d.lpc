@@ -13,7 +13,7 @@ inherit M_GLOB;
 mixed *did = ({ });
 
 int someone_did(string str) {
-    object array who;
+    object * who;
 
     if( !is_directory( wiz_dir( this_body())))
     {

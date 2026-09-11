@@ -11,7 +11,7 @@ void do_move_obj(object ob)
     ob->disturb();
 }
 
-array query_verb_info()
+mixed * query_verb_info()
 {
     return ({ ({ "OBJ" }) });
 }

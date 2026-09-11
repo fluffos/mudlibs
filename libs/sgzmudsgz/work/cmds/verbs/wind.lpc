@@ -14,7 +14,7 @@ void do_wind_obj_with_obj(object ob1, object ob2) {
     ob2->use("wind", ob1);
 }
  
-array query_verb_info()
+mixed * query_verb_info()
 {
   return ({ ({ "OBJ", "OBJ with OBJ" }) });
 }

@@ -1,7 +1,7 @@
 /* Do not remove the headers from this file! see /USAGE for more info. */
 
-string array known = ({ "Performing memory tests ..." });
-string array last_post_array = ({});
+string * known = ({ "Performing memory tests ..." });
+string * last_post_array = ({});
 int last_post;
 
 void create() {
@@ -9,7 +9,7 @@ void create() {
     destruct(this_object());
 #else
     function f = function(function f) {
-        string array s = explode(check_memory(), "\n") - known;
+        string * s = explode(check_memory(), "\n") - known;
 
         if (sizeof(s - last_post_array) || sizeof(last_post_array - s)) {
             if (last_post)
