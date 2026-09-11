@@ -169,3 +169,10 @@ Leftover 638 (2026-09-11, persist only, no boot).
 Same tree as leftover 637 (`3dcd14f5af3`): only
 void and workshop. Do not invent rooms. Do not
 flip.
+
+<!-- librarian-leftover:639 -->
+
+Leftover 639 (2026-09-11, persist only, no boot).
+Same tree as leftover 638 (`b7106c81e28`): only
+void and workshop. Do not invent rooms. Do not
+flip.

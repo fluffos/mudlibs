@@ -169,3 +169,10 @@ Leftover 638 (2026-09-11, persist only, no boot).
 Same tree as leftover 637 (`3dcd14f5af3`).
 Issue #3 still OPEN, 0 comments. Do not invent
 Port Vain. Do not flip.
+
+<!-- librarian-leftover:639 -->
+
+Leftover 639 (2026-09-11, persist only, no boot).
+Same tree as leftover 638 (`b7106c81e28`).
+Issue #3 still OPEN, 0 comments. Do not invent
+Port Vain. Do not flip.
