@@ -102,5 +102,15 @@ cannot be loaded from archive files — it lived in world.obj.
 Full LDMud world object tree (no `world.obj` in the snapshot),
 guilds, protocol stacks, OSB/MG kernel daemons, shop, combat.
 Original `/world/room` uses LDMud closures (`(: $1->… :)`).
-Next simud slice: more Oldtown if we can reconstruct it, or
-start morgengrauen Strategy A.
+Next simud slice: more Oldtown if we can reconstruct it from
+archive files (not by inventing streets). Do not flip.
+
+<!-- librarian-leftover:634 -->
+
+Leftover 634 (2026-09-10, cheap reconfirm, no boot).
+`find` still has no `world.obj`. Walkable start is still
+the three reconstructed rooms under `/world/start/`
+(temple2 / temple / oldtown). Oldtown is south-only
+(“further streets are closed”). Shop / combat / guild
+are not in those rooms. Do not invent Oldtown. Do not
+flip. aoh is already playable (`29d73abf400`).

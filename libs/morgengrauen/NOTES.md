@@ -123,3 +123,18 @@ Verified 2026-09-05 via `scripts/wasm_client.js`: register/reconnect fluffos, lo
 Catalog overlay Void/workshop is not a world §10.7. Flip to
 `playable` only after a Strategy A port of the MorgenGrauen world
 and a shop/combat/guild deep-test.
+
+<!-- librarian-leftover:634 -->
+
+Leftover 634 (2026-09-10, cheap reconfirm, no boot).
+`work/d/` is only `ebene` + `seher`. PortVain still
+has the one reconstructed `po_haf1.lpc`. `/d/anfaenger`
+(archive mantisbee combat, host-only `#if MUDHOST`)
+is not in the snapshot. `zeitungsautomat.lpc` exists
+but inherits LDMud `/std/thing` (free newspaper, not
+a shop). Guild `liste`/`kosten`/`lerne` still live
+in `/std/gilde` + `#'` and are not wired. `/d/seher`
+(47 files) has no exit from the walked guild /
+Hafenstrasse / buero. Do not invent Port Vain
+streets or connect seher. Do not flip. aoh is
+already playable (`29d73abf400`).

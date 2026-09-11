@@ -133,3 +133,11 @@ then reverted; play itself left no other catch lines.
 - `acme-basic` look/say/walk (those commands call `write()`, which the
   original simul raises on)
 - `acme-rpg` combat (one unfinished file)
+
+<!-- librarian-leftover:634 -->
+
+Leftover 634 (2026-09-10, cheap reconfirm, no boot).
+Shipped rooms are still only `/room/void` and
+`/room/workshop`. `acme-rpg` is one unfinished
+combat module, not a world. Do not invent rooms.
+Do not flip.
