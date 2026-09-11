@@ -4731,24 +4731,45 @@ still needs that assignment.
 <!-- librarian-expansion:161 -->
 
 Harbour expansion 161 (leftover 630,
-2026-09-10): Molly's Chandler shop
-list/buy in the already-walked
+native 40285, 2026-09-10, organic
+`fluffos` / `Mud@2026`): Molly's
+Chandler shop list/buy in the
+already-walked
 `/d/silvere/rooms/west/chandler`.
-Catalog player now keeps a copper
-purse (200 on new / on restore if
-< 50; OSB newbie tutorial is 15)
-copper + 2 gold) and a cloned
-inventory. Archive articles
+Catalog player keeps a copper purse
+(200 on new / on restore if < 50;
+OSB newbie tutorial is 15 copper +
+2 gold) and cloned inventory.
+Archive articles
 `/d/silvere/obj/chandler/tallow`
-(10 copper, 6 in stock) and
-`wax` (18 copper, 8 in stock);
-originals `*_ldmud.lpc`. Other
-walked shops stay look-only. No
-new rooms. wasm_status stays
-partial until WASM §10.7 of
-shop/combat. Do not invent
-forest/fortress/corn. Live native
-40285 verify follows this commit.
+(10 copper) and `wax` (18 copper);
+originals `*_ldmud.lpc`.
+
+Live walk (do not redo docks /
+Westway / chandler look-ats):
+- Docks `score` copper 200; `list`
+  "There is nothing for sale here."
+- East, se, east ×7, north → Molly's
+  Chandler. `look at sign` archive
+  text. `list` tallow 10 / beeswax 18.
+- `buy tallow` → inventory "a cheap
+  tallow candle", copper 190.
+- `buy beeswax` → both candles,
+  `look at tallow` / `beeswax` archive
+  longs.
+- Quit / reconnect: copper 172,
+  both candles persist.
+
+This-boot live `libs/aoh/log/debug.log`
+(fd 3, PID 1795215 BOOT_MARKER88
+aoh-chandler-buy): no new lines after
+the marker. Catch this walk: empty
+after the marker. Other walked shops
+stay look-only. No new rooms.
+wasm_status stays partial until WASM
+§10.7 of shop/combat. Do not invent
+forest/fortress/corn. Do not flip
+to playable.
 
 ## 5. WASM
 
