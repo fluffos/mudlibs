@@ -166,9 +166,9 @@ between fights (70 XP each; start 210 → 1120). Guild
 Harmless (level 2)` exp 1120. Reconnect persist.
 `qp_for_level` is still 0 (XP-only).
 
-**Not published** (`wasm_status: partial`). Native
-shop/combat/quests/guild-advance are live. Flip to
-`playable` after a WASM §10.7 of the same path.
+**Published** (`wasm_status: playable`) after WASM
+§10.7 of shop / combat / guild (leftover 632,
+2026-09-10).
 
 ## 4. What is not ported yet
 
@@ -176,9 +176,32 @@ Elevator, PEACE_D, NATURE_D. Trashcan toss (`foreach :`).
 Full LDMud HitFunc / weapon closures (thin living is enough
 to kill). Bulletin board extra inherit. City guards. Joe's
 LDMud tell_here format tokens still print raw. Catalog
-inventory persist is still save fields only. Next sticklib
-slice: WASM §10.7 of shop/combat/guild-advance, then
-consider `playable`. Remaining partials: aoh shop buy /
-combat (walkable Silvere closed — do not invent rooms),
-simud (no `world.obj`), morgengrauen (no `/d/ebene`),
-acme (no world).
+inventory persist is still save fields only.
+
+## WASM §10.7 (2026-09-10, leftover 632)
+
+`scripts/wasm_client.js` against `build-wasm`
+(`fluffos 20260830`), organic `fluffos` / `Mud@2026`
+(native leftover 629 save: level 2 Mostly Harmless,
+exp 1120, gold 152, quests M6a/M3/M2):
+
+- Temple yard look / score.
+- South → S7_6 west ×2 Common Shop. `list` / `buy
+  torch` (gold 152→70).
+- East ×2 south → S7_7. `kill harry`: Harry dies,
+  exp 1190, hp 11/20.
+- East ×2 Adventurers' Guild. `cost`: "You still
+  need 332 experience points for next level."
+- North to the yard: "The temple yard's peace
+  restores you."
+- Quit / WASM reconnect: level 2, exp 1190 persist.
+  Gold 200 (catalog bump when purse < 80). Inventory
+  empty (catalog save fields only — same as native).
+
+Expected compile noise (already documented, not
+player-visible): PEACE_D `filter_objects`, trashcan
+`foreach :`, bboard `#'`. Do not redo native harry
+farm or WASM shop/combat/guild. Remaining partials:
+aoh shop/combat (do not invent rooms), simud (no
+`world.obj`), morgengrauen (no `/d/ebene`), acme
+(no world).

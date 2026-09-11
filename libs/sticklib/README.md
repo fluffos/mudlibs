@@ -7,24 +7,25 @@ This collection’s copy is a snapshot, not a live mirror.
 StickLib, a legacy public dump of StickMUD (turn-of-century LPMud 2.4.5 lineage on the LDMud driver, with later GMCP/MSSP/MXP/MSP/MCMP protocol work). LDMud → FluffOS conversion: catalog overlay for login/look/score/quit; original /secure/master_ldmud.lpc keeps set_driver_hook and closures. Live StickMUD historically at stickmud.com. Not collection ageofelements (different 2.4.5 fork).
 
 Upstream StickMUD: telnet://stickmud.com:7680. This snapshot is
-LDMud → FluffOS catalog play, not the full live StickMUD world.
-Not on the public play site until the real world is ported and
-deep-tested.
+an LDMud → FluffOS Strategy A start (temple yard, market shop,
+Harry combat, Adventurers' Guild). WASM §10.7 2026-09-10.
 
 ## Registration flow
 
-Name (2–16 letters) → new character: password (≥6, twice) → The Void.
-Existing names prompt for password only.
+Name (2–16 letters) → new character: password (≥6, twice) →
+the temple yard. Existing names prompt for password only.
 
 ## Admin / test account
 
 - **name**: `fluffos`
 - **password**: `Mud@2026`
-- **privilege**: seeded mortal (level 1). This overlay does not auto-god
-  the first player.
+- **privilege**: seeded mortal (level 2 Mostly Harmless after
+  native guild advance). This overlay does not auto-god the
+  first player.
 
-Verified live after onboard: create fluffos / Mud@2026 → The Void;
-`look` / `score` / `quit`; reconnect after quit.
+Verified live: fluffos / Mud@2026 → temple yard; shop `buy
+torch`; `kill harry`; guild `cost`; WASM §10.7 reconnect
+persist (level 2, exp 1190).
 
 ## Local run
 
