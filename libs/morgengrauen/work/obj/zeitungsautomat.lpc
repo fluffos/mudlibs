@@ -1,69 +1,52 @@
-// MorgenGrauen MUDlib
-// 
-// zeitungsautomat.c -- Zeitungsautomat in der Abenteurergilde
-// 
-// $Id:	zeitungsautomat.c 6437 2007-08-18 22:58:58Z Zesstra $
-// 
+/*
+ * Newspaper stand in the Abenteurergilde.
+ *
+ * Strategy A FluffOS object. Original inherit /std/thing is
+ * zeitungsautomat_ldmud.lpc. Archive AddItem in
+ * /gilden/abenteurer; get clones /obj/mpa and leaves the stand.
+ */
 
-inherit "/std/thing";
+int query_dispenser() { return 1; }
 
-#include <properties.h>
-#include <language.h>
-#include <moving.h>
-#include <defines.h>
-#include <www.h>
-
-#define ZEITUNG "/obj/mpa"
-
-void create()
-{
-  if (!clonep(this_object())) return;
-  ::create();
-  SetProp(P_SHORT,"Eine Zeitung");
-  SetProp(P_LONG, 
-    "Hier stehen immer die neuesten Nachrichten und Geruechte drin.\n");
-  SetProp(P_NAME,"Zeitung");
-  AddId(({"zeitung","mpa","servicepaket"}));
-  SetProp(P_GENDER,FEMALE);
-  SetProp(P_NOGET,1);
-  SetProp(P_PICK_MSG, NO_PNG_MSG);
-  SetProp(P_ARTICLE,1);
-  SetProp(P_WWWINFO, "Man kann die MPA auch <A HREF=\"http://"
-      +SERVER+MUDWWW + "?" +REQ + "=" + R_NEWS + "\">lesen</A>");
+void create() {
+  seteuid(getuid());
 }
 
-int get(object targ) {
-  int res;
+string query_name() { return "Zeitung"; }
+string query_short() { return "Eine Zeitung"; }
+string short() { return query_short(); }
+string query_long() {
+  return "Hier stehen immer die neuesten Nachrichten und Geruechte drin.\n";
+}
+string long() { return query_long(); }
 
-  if (!objectp(targ) || !interactive(targ))
-    return ME_CANT_BE_TAKEN;
-  
-  if (present_clone(ZEITUNG, targ)) {
-    tell_object(targ, "Du hast doch bereits eine Zeitung.\n");
-    return ME_CANT_BE_TAKEN;
+int id(string str) {
+  return str == "zeitung" || str == "mpa" || str == "servicepaket";
+}
+
+int dispense(object targ) {
+  object *inv;
+  object paper;
+  int i;
+
+  if (!objectp(targ))
+    return 1;
+  inv = all_inventory(targ);
+  for (i = 0; i < sizeof(inv); i++) {
+    if (inv[i]->id("mpa") && !inv[i]->query_dispenser()) {
+      tell_object(targ, "Du hast doch bereits eine Zeitung.\n");
+      return 1;
+    }
   }
-  
-  object zeitung=clone_object("/obj/mpa");
-  if ((res=zeitung->move(targ,M_GET)) == MOVE_OK) {
-    tell_object(targ, "Du nimmst die Zeitung. Sofort erscheint auf "
-	"unerklaerliche Weise eine neue.\n");
-    tell_room(environment(targ), break_string(
-	targ->name(WER) + " nimmt die Zeitung. Sofort erscheint auf "
-	"unerklaerliche Weise eine neue.\n",78),({targ}));
-  }
-  else {
+  paper = 0;
+  catch(paper = clone_object("/obj/mpa"));
+  if (!paper) {
     tell_object(targ, "Du kannst die Zeitung leider nicht mehr tragen.\n");
-    zeitung->remove(1);
+    return 1;
   }
-  
-  return res;
+  efun::move_object(paper, targ);
+  tell_object(targ,
+    "Du nimmst die Zeitung. Sofort erscheint auf "
+    "unerklaerliche Weise eine neue.\n");
+  return 1;
 }
-
-varargs int move(object target, mixed method)
-{
-  if (method&M_GET && living(target))
-    return get(target);
-  
-  return ::move(target,method);
-}
-

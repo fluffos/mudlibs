@@ -11,6 +11,7 @@ int max_hp;
 int cmd_look(string arg);
 int cmd_score(string arg);
 int cmd_inventory(string arg);
+int cmd_get(string arg);
 int cmd_go(string dir);
 int cmd_quit(string arg);
 
@@ -75,6 +76,9 @@ void wire_commands() {
   add_action("cmd_quit", "quit");
   add_action("cmd_inventory", "inventory");
   add_action("cmd_inventory", "i");
+  add_action("cmd_get", "get");
+  add_action("cmd_get", "take");
+  add_action("cmd_get", "nimm");
   add_action("cmd_go", "north");
   add_action("cmd_go", "south");
   add_action("cmd_go", "east");
@@ -132,6 +136,11 @@ mixed process_input(string str) {
     case "i":
       cmd_inventory(rest);
       return 1;
+    case "get":
+    case "take":
+    case "nimm":
+      cmd_get(rest);
+      return 1;
     case "north":
     case "south":
     case "east":
@@ -165,6 +174,18 @@ int cmd_look(string arg) {
   if (arg && sscanf(arg, "at %s", arg) == 1)
     ;
   if (arg && arg != "") {
+    object ob;
+
+    ob = present(arg, env);
+    if (!ob)
+      ob = present(arg, this_object());
+    if (ob && function_exists("query_long", ob)) {
+      item = ob->query_long();
+      if (stringp(item) && item != "") {
+        write(item);
+        return 1;
+      }
+    }
     item = env->query_item(arg);
     if (stringp(item) && item != "") {
       write(item);
@@ -200,7 +221,52 @@ int cmd_score(string arg) {
 }
 
 int cmd_inventory(string arg) {
-  write("You are empty-handed.\n");
+  object *inv;
+  string brief;
+  int i, n;
+
+  inv = all_inventory(this_object());
+  n = sizeof(inv);
+  if (!n) {
+    write("You are empty-handed.\n");
+    return 1;
+  }
+  write("You are carrying:\n");
+  for (i = 0; i < n; i++) {
+    brief = inv[i]->query_short();
+    if (!brief || brief == "")
+      brief = inv[i]->query_name();
+    if (brief && brief != "")
+      write("  " + brief + "\n");
+  }
+  return 1;
+}
+
+int cmd_get(string arg) {
+  object env, item;
+
+  if (!arg || arg == "") {
+    write("Get what?\n");
+    return 1;
+  }
+  env = environment();
+  if (!env) {
+    write("You are nowhere.\n");
+    return 1;
+  }
+  item = present(arg, env);
+  if (!item) {
+    write("You don't see that here.\n");
+    return 1;
+  }
+  if (function_exists("dispense", item))
+    return item->dispense(this_object());
+  if (living(item)) {
+    write("You can't pick that up.\n");
+    return 1;
+  }
+  efun::move_object(item, this_object());
+  write("You take " + (item->query_name() || arg) + ".\n");
   return 1;
 }
 
@@ -227,6 +293,8 @@ int cmd_go(string dir) {
     return 1;
   }
   efun::move_object(dest);
+  if (function_exists("ensure_paper", dest))
+    dest->ensure_paper();
   command("look");
   return 1;
 }

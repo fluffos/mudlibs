@@ -224,3 +224,10 @@ Leftover 646 (2026-09-11, persist only, no boot).
 Already playable (`546d780ee87`). Same tree as
 leftover 645 (`bfcd764dde2`). Do not invent rooms.
 Do not flip again.
+
+<!-- librarian-leftover:647 -->
+
+Leftover 647 (2026-09-11). User: source-complete
+is done; do not invent. Shipped rooms still only
+void and workshop. No extra archive AddItem to
+load. Do not invent rooms.

@@ -34,14 +34,22 @@ Both strategies still run the normal extract → `convert_lib.sh` →
    WASM via `scripts/wasm_client.js` before calling it playable.
 
 User 2026-09-11: remaining start-hall ports may be published as
-`playable`. `questmud` is a full dialect port (§10.7 2026-08-31).
+`playable`. A port is **done** when every room/object/command that
+exists in the archive source is loadable and playable. Do not invent
+missing worlds, rooms, NPCs, shops, or commands. Fix trivial load
+failures of existing archive objects (inherit / `#'` / missing catalog
+verb). Do not reinvent content.
+
+`questmud` is a full dialect port (§10.7 2026-08-31).
 `ageofelements` is listed after the 2.4.5 village itself was
 live-tested (2026-09-05). `sticklib` is listed after WASM §10.7 of
 shop/combat/guild (2026-09-10). `aoh` is listed after WASM §10.7 of
 shop/combat (2026-09-10; Adventurers Guild is an archive stub).
 `acme` / `morgengrauen` / `simud` are listed on existing catalog /
 start-hall evidence (Void/workshop; Abenteurergilde/Hafenstrasse/buero;
-Temple of All Gods/Oldtown). Do not invent missing rooms.
+Temple of All Gods/Oldtown). Leftover 647 loads the guild
+`zeitungsautomat` already `AddItem`'d in `/gilden/abenteurer`. The
+MPA news reader (`mpa_ldmud.lpc`) is not trivial.
 
 ## Architecture checklist (do this before trusting a clean compile)
 

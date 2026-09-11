@@ -225,3 +225,14 @@ Already playable (`546d780ee87`). Same tree as
 leftover 645 (`bfcd764dde2`). Issue #3 still OPEN,
 0 comments. Do not invent Port Vain. Do not flip
 again.
+
+<!-- librarian-leftover:647 -->
+
+Leftover 647 (2026-09-11). User: if all source
+content is loadable it is done; fix trivial load
+failures; do not invent. Archive
+`/gilden/abenteurer` already `AddItem`s
+`/obj/zeitungsautomat`. Thin stand + newspaper
+copy (originals `*_ldmud.lpc`). Full MPA news
+reader is not trivial. `liste`/`lerne` still need
+`/std/gilde` + `#'`. Do not invent Port Vain.

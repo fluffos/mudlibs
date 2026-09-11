@@ -193,3 +193,10 @@ Leftover 646 (2026-09-11, persist only, no boot).
 Already playable (`546d780ee87`). Same tree as
 leftover 645 (`bfcd764dde2`): no `world.obj`. Do
 not invent Oldtown. Do not flip again.
+
+<!-- librarian-leftover:647 -->
+
+Leftover 647 (2026-09-11). User: source-complete
+is done; do not invent. Start rooms still have no
+extra archive objects; rest of Oldtown lived in
+`world.obj`. Do not invent streets.
