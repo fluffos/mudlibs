@@ -100,6 +100,11 @@ renamed=$(find "$WORK" -name "*.lpc" | wc -l)
 echo "  now $renamed .lpc files"
 
 echo "== fixing literal .c\" references (.lpc + .h)"
+# Syntax-blind: this also rewrites deliberate dual-extension guards
+# (chop(..., ".c") / ends_with(..., ".c") fallbacks) into duplicated
+# .lpc checks. After convert, grep for chop(chop(..., ".lpc"), ".lpc")
+# or ends_with(..., ".lpc") || ends_with(..., ".lpc") and restore the
+# .c arm by hand (see fluffos/mudlibs#3 / libs/oxidus).
 before=$(grep -rn '\.c"' "$WORK" --include="*.lpc" --include="*.h" 2>/dev/null | wc -l)
 grep -rlZ '\.c"' "$WORK" --include="*.lpc" --include="*.h" 2>/dev/null | xargs -0 -r sed -i 's/\.c"/\.lpc"/g'
 after=$(grep -rn '\.c"' "$WORK" --include="*.lpc" --include="*.h" 2>/dev/null | wc -l)
@@ -135,6 +140,9 @@ done < <(find "$WORK" -type f \( -name "*.lpc" -o -name "*.h" \) -print0)
 echo "  converted $local_inc_fixed local angle-bracket includes to quotes"
 
 echo "== static -> nosave (.lpc + .h)"
+# Word-boundary replace: also rewrites English prose ("static values")
+# and comments. Review those hits; LPC `static` the modifier is the
+# only intended target (see fluffos/mudlibs#3 / libs/oxidus mssp.lpc).
 # NUL-delimited throughout -- a plain newline-delimited pipe into xargs
 # word-splits any filename containing a space (seen: "char - 副本.lpc",
 # a backup-copy file with a literal space in its Chinese-annotated name).

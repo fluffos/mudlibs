@@ -15,9 +15,12 @@ test suite under `tests/` (STD_TEST framework), and targets a specific,
 current FluffOS build via its own `adm/dist/rebuild` pipeline (clones
 fluffos/fluffos as a submodule and builds it from source with a custom
 `local_options`). Ran `scripts/convert_lib.sh` per §2.3 convention
-(cheap and safe even though 0 lossy conversions were needed) — it fixed
-20 literal-`.c`-reference stragglers and converted 46 local
-angle-bracket includes to quotes.
+(cheap and safe even though 0 lossy conversions were needed) — it also
+mechanically rewrote dual-extension `.c` compatibility guards and
+English “static” in MSSP comments (fixed 2026-09-10, issue #3). The
+46 local angle-bracket includes converted to quotes stay: the shared
+driver include path does not search the including file's directory
+(`scripts/convert_lib.sh`).
 
 8 authored content areas confirmed real (not stock/copied): a village
 (Olum) with a bakery, tailor, financier, manor interior, an arcanist
@@ -147,7 +150,9 @@ real, generalizable classes other modern-lib onboardings could hit:
   skip) when the config key genuinely doesn't exist, while keeping the
   strict `error()` for a config that DOES exist but names a label the
   caller passed that isn't in its `types` list (a genuine caller bug,
-  should stay loud).
+  should stay loud). Issue #3: a caught Oxidus `error()` is still
+  logged and announced, so 2026-09-10 replaced the `catch()` with a
+  `CONFIG_D->get_all_config()` presence check (no throw).
 - `std/object/include/object.h` had a stale duplicate/conflicting
   `void set_real_name(string str);` prototype (a second, correct
   `string set_real_name(...)` prototype already existed 4 lines later)
@@ -248,6 +253,25 @@ committing (test-session cruft, not shipped content). Worth a closer
 look in a future pass if it turns out to recur for every ordinary
 character too, rather than just the admin/dev promotion paths tested
 here.
+
+## Issue #3 — conversion corrupted compatibility guards (2026-09-10)
+
+`scripts/convert_lib.sh` treated every `".c"` and every `static` as a
+migration token. Restored upstream Oxidus meaning (gesslar/oxidus-mudlib
+`main`):
+
+- Dual-extension guards / `.c` fallback: `source_file()` in
+  `adm/simul_efun/file.lpc`, plus `vnum.lpc`, `master.lpc`,
+  `travel.lpc`, `showtree.lpc`, `trace.lpc` `strip_ext()`,
+  `error_tester.lpc`, `std/cmd/cmd.lpc`.
+- MSSP English “static values” (not the LPC modifier): `mssp.lpc`.
+- Optional reporter: `get_all_config()` lookup instead of
+  `catch(mud_config("GITHUB_REPORTER"))`.
+- `tests/.../string.safe.test.lpc` “keeps interior dots” back to
+  `a.b.c`.
+
+Quoted includes and collection-driver comments are left as shared-build
+adaptations (documented above), not reverted.
 
 ## WASM
 
