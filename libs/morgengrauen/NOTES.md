@@ -148,3 +148,10 @@ only `po_haf1.lpc`; `/d/anfaenger` still missing.
 Issue #3 still OPEN, 0 comments
 (`updatedAt` 2026-09-03). Do not invent Port Vain.
 Do not flip.
+
+<!-- librarian-leftover:636 -->
+
+Leftover 636 (2026-09-11, persist only, no boot).
+Same tree as leftover 635 (`1ddf6f10123`).
+Issue #3 still OPEN, 0 comments. Do not invent
+Port Vain. Do not flip.

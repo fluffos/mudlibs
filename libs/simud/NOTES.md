@@ -121,3 +121,9 @@ Leftover 635 (2026-09-10, persist only, no boot).
 Same tree as leftover 634 (`f0975b36b09`): no
 `world.obj`; start still temple2 / temple /
 oldtown. Do not invent Oldtown. Do not flip.
+
+<!-- librarian-leftover:636 -->
+
+Leftover 636 (2026-09-11, persist only, no boot).
+Same tree as leftover 635 (`1ddf6f10123`): no
+`world.obj`. Do not invent Oldtown. Do not flip.
