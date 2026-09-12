@@ -4,9 +4,10 @@
 A lib has an upstream when meta.json's `archive` (or optional `upstream`
 object) names a GitHub repo this collection was cloned from. See
 AGENTS.md §2.3: fluffos-org hosted mudlibs (`hosting: fluffos-upstream`)
-keep notes and build scripts only -- LPC fixes belong on that repo.
-Other remotes may still carry local FluffOS-compat patches; those are
-not a live mirror. This script only *reports* whether upstream has
+keep notes and build scripts only -- LPC fixes belong on that repo
+and work/ is a git submodule. Other active remotes are
+`submodule-patch` (submodule + patches/). Vendored libs have no
+active git upstream. This script only *reports* whether upstream has
 moved past the pinned clone commit. It never rebases.
 
 Writes scripts/upstream_status.json for gen_site_index.py (cards +
