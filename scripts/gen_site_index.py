@@ -285,6 +285,8 @@ UI = {
         "upstream_head": "上游 HEAD",
         "upstream_compare": "查看差异",
         "upstream_note": "本馆副本含本地驱动兼容修复，不是实时镜像。落后时需要评估是否 rebase/cherry-pick，不能直接快进。",
+        "upstream_title_fluffos": "FluffOS 官方托管的上游仓库（本馆只保留说明和启动脚本）",
+        "upstream_note_fluffos": "FluffOS 官方托管。本馆只保留说明和启动脚本；修复请提交到上游仓库，不要在两边各改一份。",
     },
     "en": {
         "html_lang": "en", "og_locale": "en_US",
@@ -319,11 +321,26 @@ UI = {
         "upstream_head": "Upstream HEAD",
         "upstream_compare": "Compare",
         "upstream_note": "This copy includes local driver-compat fixes and is not a live mirror. A behind count means rebase/cherry-pick needs review — do not fast-forward blindly.",
+        "upstream_title_fluffos": "FluffOS-hosted upstream (this catalog keeps notes and build scripts only)",
+        "upstream_note_fluffos": "Hosted by the FluffOS org. This catalog keeps notes and build scripts only — land fixes on the upstream repo, not in a second copy here.",
     },
 }
 
 
 _UPSTREAM_CACHE = None
+
+
+def is_fluffos_hosted(up):
+    """Canonical LPC lives in github.com/fluffos/<repo> (AGENTS.md §2.3)."""
+    if not up:
+        return False
+    if up.get("hosting") == "fluffos-upstream":
+        return True
+    if (up.get("owner") or "").lower() == "fluffos":
+        return True
+    repo = (up.get("repo") or "").lower()
+    return repo.startswith("fluffos/") and repo not in (
+        "fluffos/mudlibs", "fluffos/fluffos")
 
 
 def load_upstreams():
@@ -799,9 +816,11 @@ def build_meta_bits(slug, info, ui, commits, linked):
                 f'{html.escape(ui["upstream_behind"].format(n=up["ahead_by"]))}'
                 f'</span>')
         href = up.get("compare_url") or up["url"]
+        title_key = ("upstream_title_fluffos" if is_fluffos_hosted(up)
+                     else "upstream_title")
         meta_bits.append(
             f'<a class="upstream" href="{html.escape(href)}" '
-            f'title="{html.escape(ui["upstream_title"])}" '
+            f'title="{html.escape(ui[title_key])}" '
             f'rel="noopener">{ui["upstream_label"]} '
             f'{html.escape(up["repo"])}</a>{extra}')
     return meta_bits, admin_id
@@ -835,6 +854,8 @@ def render_upstream_box(slug, ui):
             f'rel="noopener">{html.escape(extra.get("repo") or "")}</a></li>')
     extra_html = f'<ul class="upstream-extras">{extras}</ul>' if extras else ""
     compare = up.get("compare_url") or up["url"]
+    note_key = ("upstream_note_fluffos" if is_fluffos_hosted(up)
+                else "upstream_note")
     return (
         f'<aside class="upstream-box">\n'
         f'  <h2>{html.escape(ui["upstream_box_title"])}</h2>\n'
@@ -844,7 +865,7 @@ def render_upstream_box(slug, ui):
         f' · {html.escape(ui["upstream_head"])} <code>{head}</code>'
         f' · <a href="{html.escape(compare)}" rel="noopener">'
         f'{html.escape(ui["upstream_compare"])}</a></p>\n'
-        f'  <p class="upstream-note">{html.escape(ui["upstream_note"])}</p>\n'
+        f'  <p class="upstream-note">{html.escape(ui[note_key])}</p>\n'
         f'  {extra_html}\n'
         f'</aside>'
     )

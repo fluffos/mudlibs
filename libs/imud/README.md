@@ -2,6 +2,8 @@
 
 FluffOS 项目自己的官方演示（源码：<https://github.com/fluffos/imud>，线上地址 <https://imud.fluffos.info>）。这不是一款游戏——没有角色注册、 没有存档、没有房间地图，只是一个从零开始的最小 FluffOS mudlib 范例，用来演示驱动自带的 Intermud-3（跨 MUD 聊天/名录协议）支持。
 
+**本馆只保留说明和启动脚本。** LPC 以 `github.com/fluffos/imud` 为准；修复请提交到那个仓库，不要在本馆再改一份。
+
 ## 内容说明
 
 - 连接后**没有登录/注册流程**：直接把你放进一个匿名会话对象

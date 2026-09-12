@@ -2,6 +2,8 @@
 
 FluffOS 驱动项目自己维护的官方参考 mudlib（源码： <https://github.com/fluffos/lima>，官网 <https://limalib.dev>）。这不是一款武侠/仙侠游戏——和本项目收录的其它中文 mudlib 不是同一个宗谱，是一个独立的、英文的、面向开发者的现代 LPC 框架，收录进本项目是作为 "当代 FluffOS mudlib 长什么样"的参照样本。
 
+**本馆只保留说明和启动脚本。** LPC 以 `github.com/fluffos/lima` 为准；修复请提交到那个仓库，不要在本馆再改一份。
+
 ## 架构说明
 
 Lima 在几乎每个层面都和本项目里的经典 LPMud 系 mudlib 不同：

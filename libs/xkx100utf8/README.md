@@ -1,9 +1,9 @@
 # 侠客行一百 UTF-8 (xkx100utf8)
 
-A UTF-8 FluffOS snapshot of 侠客行一百, cloned from
-`https://github.com/fluffos/xkx100` (commit `ee022c9`, 2026-07-29).
-This collection’s copy is a snapshot as of 2026-09-05, not a live
-mirror. Slug `xkx100utf8`, number **110-1**, port 40275.
+A UTF-8 FluffOS snapshot of 侠客行一百, from
+`https://github.com/fluffos/xkx100`. **This catalog keeps notes and
+build scripts only** — land LPC fixes on that repo, not in a second
+copy here. Slug `xkx100utf8`, number **110-1**, port 40275.
 
 Same game as collection `xkx100` (Coollizard `侠客行一百.rar`, number
 110) — not a byte-identical archive. The login banner still reads

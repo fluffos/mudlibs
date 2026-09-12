@@ -2,9 +2,11 @@
 """Discover git-hosted upstreams and see whether a rebase/pull is needed.
 
 A lib has an upstream when meta.json's `archive` (or optional `upstream`
-object) names a GitHub repo this collection was cloned from. The live
-copy here is a snapshot plus local FluffOS fixes -- it is not a mirror
-(see AGENTS.md §2.3). This script only *reports* whether upstream has
+object) names a GitHub repo this collection was cloned from. See
+AGENTS.md §2.3: fluffos-org hosted mudlibs (`hosting: fluffos-upstream`)
+keep notes and build scripts only -- LPC fixes belong on that repo.
+Other remotes may still carry local FluffOS-compat patches; those are
+not a live mirror. This script only *reports* whether upstream has
 moved past the pinned clone commit. It never rebases.
 
 Writes scripts/upstream_status.json for gen_site_index.py (cards +
@@ -205,6 +207,11 @@ def main():
                 "pinned": extra.get("pinned"),
             })
         checked["extra_repos"] = extras
+        checked["owner"] = primary["owner"]
+        hosting = entry.get("hosting")
+        if not hosting and primary["owner"].lower() == "fluffos":
+            hosting = "fluffos-upstream"
+        checked["hosting"] = hosting
         libs[slug] = checked
         if checked["status"] == "behind":
             n_behind += 1
