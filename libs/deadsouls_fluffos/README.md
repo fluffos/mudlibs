@@ -2,7 +2,7 @@
 
 `fluffos` GitHub 组织自己维护的 Dead Souls 3.8.6 fork （<https://github.com/fluffos/dead-souls>），已经预先适配现代 FluffOS （`v2019` 驱动分支）——不是从老式压缩包提取的传统档案，是这批语料库里少数几个"英文原版、本身就来自 FluffOS 生态"的收录对象之一。
 
-**本馆只保留说明和启动脚本。** LPC 以 `github.com/fluffos/dead-souls` 为准；修复请提交到那个仓库，不要在本馆再改一份。
+**本馆只保留说明和启动脚本。** `work/` 是 `fluffos/dead-souls` submodule（mudlib 根目录 `work/lib`）。LPC 在那个仓库里是 `.lpc` + §9 格式化——修复请提交到那个仓库，不要在本馆再改一份。OLD_ED 驱动兼容 shim（`ed_compat.lpc`）和管理员试玩号在 `overlay/`。
 
 ## 和 `ds386` 的关系
 
@@ -50,8 +50,8 @@
 
 ## 管理员 / creator 账号
 
-这份 lib 没有预先播种的固定管理员账号——Dead Souls 的惯例是通过两条
-路径任选其一获得建造权限：
+`overlay/` 带了一个试玩创造者号：`shopdive` / `Mud@2026`。Dead Souls
+本身没有「第一管理员」引导，建造权限仍可通过两条路径获得：
 
 1. **AUTO_WIZ（推荐）**：注册新角色时，选定种族后会被问到
    "作为玩家还是创造者加入"，直接输入 `creator` 即可在登录后不久自动

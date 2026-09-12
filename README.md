@@ -153,7 +153,7 @@ classes it's found.
 | 006-1 | `dsI` | Dead Souls I | `lpmuds.net/files/deadsouls/dsI.zip, recovered via Wayback Machine 2026-08-26 (https://web.archive.org/web/20160306035507id_/http://lpmuds.net/files/deadsouls/dsI.zip; original site down)` | 40225 | WASM playable |
 | 006-2 | `dsII` | Dead Souls II | `mudbytes.net/files/download/843/, recovered via Wayback Machine 2026-08-26 (https://web.archive.org/web/20190802021627id_/http://mudbytes.net/files/download/843/; original site down)` | 40228 | WASM playable |
 | 006-3 | `dsIII` | Dead Souls 3.0 | `mudbytes.net/files/download/2733/, recovered via Wayback Machine 2026-08-26 (https://web.archive.org/web/20190802014424id_/http://mudbytes.net/files/download/2733/; original site down)` | 40229 | WASM playable |
-| 006-4 | `deadsouls_fluffos` | DeadSouls-FluffOS2019 | `git clone https://github.com/fluffos/dead-souls (commit 4ddbd3b964586eed7f44c5c54e5f5b2154ff4ab4, cloned 2026-08-24; pin advanced 2026-09-12 after PRs #12-#16 landed upstream — already in this tree)` | 40207 | WASM playable |
+| 006-4 | `deadsouls_fluffos` | DeadSouls-FluffOS2019 | `git clone https://github.com/fluffos/dead-souls (HEAD 4e07e92, 2026-09-12; mudlib root is the repo's lib/ directory; .lpc + §9 formatted on the fluffos-org repo)` | 40207 | WASM playable |
 | 007 | `dtsl` | DTSL | `DTSL.7z` | 40008 | WASM playable |
 | 007-1 | `dtslmud` | 大唐双龙传（LLMUD） | `LLMUD(大唐双龙)v_0.11版.rar` | 40015 | WASM playable |
 | 007-2 | `dtsl2` | 大唐双龙 (DaTangShuangLong) | `大唐双龙.rar` | 40043 | WASM playable |

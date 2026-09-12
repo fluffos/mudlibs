@@ -1,9 +1,31 @@
 # deadsouls_fluffos — Dead Souls 3.8.6 (fluffos/dead-souls fork)
 
-来源：`git clone https://github.com/fluffos/dead-souls`（commit
-`7c88ffba42fe782bf8c2c4787dbada51e28bfda2`，clone 于 2026-08-24）。
+来源：`fluffos/dead-souls` submodule at `4e07e92`（leftover 686：
+`.lpc` + §9 formatted on that repo；mudlib root `work/lib`；
+command-cache / `last()`/`truncate()` slice widened for `.lpc`）。
+OLD_ED shim and the `shopdive` playtest seed are in `overlay/`。
 端口 **40207**。状态：**done**（干净开机，注册流程全通，
 `look`/`score`/`quit` 均验证通过）。
+
+## leftover 686: work/ is the fluffos/dead-souls submodule
+
+`hosting` is `fluffos-upstream`。`work/` 现在是 `fluffos/dead-souls`
+gitlink（pin `4e07e921a7a9d841faeb81e3ccbc49612215d537`），不再是
+本馆第二份格式化树。`config.fluffos` mudlib directory 指向
+`work/lib`。`patches/` 保持为空——改名、§9 format、以及 NOTES
+item 1 的 `.lpc` 定宽切片（`file[0..<3]` → `[0..<5]`、
+`last(X,2) == ".lpc"` → `last(X,4)`）都在那个 fluffos-org 仓库上。
+Catalog-only overlay：
+
+- `overlay/lib/secure/sefun/ed_compat.lpc` + 带该 include 的
+  `sefun.lpc`（本馆共享驱动是 `OLD_ED`，没有
+  `ed_start()`/`ed_cmd()`/`query_ed_mode()`）
+- `overlay/lib/secure/save/creators/s/shopdive.o`（`shopdive` /
+  `Mud@2026`）
+
+Item 1 里「切片宽度是本馆改名副作用、不必上游」的旧判断已经过时：
+leftover 686 把 `fluffos/dead-souls` 本身改成了 `.lpc`，所以那边的
+切片也必须是 4 / `[0..<5]`。
 
 ## 这是哪一份 Dead Souls
 
