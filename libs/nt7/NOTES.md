@@ -1,5 +1,37 @@
 # `git clone https://github.com/fluffos/nt7` → `nt7`
 
+Source: `fluffos/nt7` submodule at `04a1a75e` (leftover 689:
+`.lpc` + §9 formatted on that repo; mudlib root is the repo root;
+filename-extension slices widened for `.lpc`). In-game name `王者归来`
+/ NTLIB V7. Slug `nt7`, number **163**, port 40211.
+
+## leftover 689: work/ is the fluffos/nt7 submodule
+
+`hosting` is `fluffos-upstream`. `work/` is now the `fluffos/nt7`
+gitlink (pin `04a1a75e8f137138a1da21aae7c204572d872339`), not a
+second formatted fork. `config.fluffos` mudlib directory still points
+at `work/` (this repo's root *is* the mudlib). `patches/` stays empty
+— the rename, §9 format, `.lpc` slices, and `static`→`nosave`
+keywords live on that fluffos-org repo. `log_file("static/...")` path
+literals were **not** rewritten (convert_lib's `\bstatic\b` also hits
+those; they stay `"static/"`). The catalog-only dead
+`#ifndef __SENSIBLE_MODIFIERS__` shim in `include/globals.h` was
+**not** landed upstream. `help/ntbook` encoding sidecar stayed
+upstream-as-shipped. Three pre-existing lexerrors were left
+untouched: `quest/skybook/update.lpc`, `inherit/condition/damo.lpc`,
+`d/dragon/outlet.lpc`. PRs #3/#4/#5 were already on `53dce3a1`
+before this rename. Catalog-only overlay: `data/login|user` for
+`fluffos` / `Mud@2026wiz` (regular) + `Mud@2026` (admin/recovery),
+including `fluffos.package.o`. Leftover 689 playtest bar is wizard-
+room `look`/`score`/`quit` — `score` saying 还没有出生呐 is by
+design (wizard skips the birth ceremony). Full `choose`/`washto`/古村
+registration was already verified at onboard.
+
+## earlier snapshot note (superseded)
+
+Onboard convert was from `53dce3a1`. Leftover 689 landed the catalog
+LPC delta on `fluffos/nt7` and pinned that SHA.
+
 - Source: `git clone https://github.com/fluffos/nt7` (王者归来, "泥潭7").
   Adapted per AGENTS.md §2.3 (already-git-hosted, already-FluffOS-
   adapted source), not a raw archive extraction — mudlib root IS the

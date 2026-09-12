@@ -988,11 +988,9 @@ the next one of these:
      in `patches/` plus admin seed in `overlay/`). `fluffos/mudlibs`
      and `fluffos/fluffos` are this catalog and the driver, not
      mudlib upstreams.      fluffos-upstream cutovers so far: `imud`,
-     `sanguozhi`, and `xkx100utf8` (repo root), `nightmare3`
-     (`work/lib`), and `deadsouls_fluffos` (`work/lib`). `nt7`
-     still has a vendored `work/` until its local-vs-upstream
-     delta (including `static`→`nosave`) is landed upstream
-     as `.lpc`.
+     `sanguozhi`, `xkx100utf8`, and `nt7` (repo root),
+     `nightmare3` (`work/lib`), and `deadsouls_fluffos`
+     (`work/lib`). No remaining vendored fluffos-org remote.
 
 ---
 
