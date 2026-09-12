@@ -79,6 +79,13 @@ for slug in $SLUGS; do
     mkdir -p "$STAGE/$slug/patches"
     cp "$lib/patches/"*.patch "$STAGE/$slug/patches/"
   fi
+  # Catalog-only seed/data overlay (admin accounts, etc.) — not LPC.
+  # Mirrors work/ so a submodule-patch zip stays playable.
+  if [ -d "$lib/overlay" ]; then
+    rsync -a "$lib/overlay/" "$STAGE/$slug/work/"
+    mkdir -p "$STAGE/$slug/overlay"
+    rsync -a "$lib/overlay/" "$STAGE/$slug/overlay/"
+  fi
   cp "$lib/config.fluffos" "$STAGE/$slug/"
   for extra in README.md NOTES.md meta.json; do
     [ -f "$lib/$extra" ] && cp "$lib/$extra" "$STAGE/$slug/"

@@ -6,17 +6,34 @@
 2026-08-24）。编号 164，端口 40212。状态：**done**（干净启动，真实注册
 流程 + 角色创建 + `look`/`score`/`inventory`/`who`/`quit` 全部验证可用；
 管理员账号 `fluffos` 已播种并验证 `update`/`admtool` 等高权限指令）。
-`hosting` 为 `submodule-patch`（leftover 683）：GitHub 归档的
-`fluffos/lima` 不是活跃上游，不再标 `fluffos-upstream`。
+`hosting` 为 `submodule-patch`。leftover 684：`work/` 已切成
+`limalib/lima` submodule（pin `ffed9c588ee5`），`config.fluffos` 的
+mudlib directory 指向 `work/lib`。
+
+## leftover 684：lima work/ 切到 limalib/lima submodule
+
+按 leftover 682/683：非 fluffos 活跃上游保持他们的 `.c`，本馆兼容进
+`patches/`。`work/` 现在是 `limalib/lima` 的 gitlink，不再是本馆
+`.lpc` 格式化树。catalog-only 补丁：
+
+- `patches/0001-spell-d-move-ENSURE-comment-outside-macro.patch` —
+  驱动预处理器吃不了 `ENSURE(x /* c */)`（NOTES bug #4）
+- `patches/0002-troll-split-heredoc-start-marker.patch` —
+  驱动词法吃不了 `@LONG text` 同行正文（NOTES bug #5 的 troll 处）
+- `overlay/lib/data/` — `fluffos` / `Mud@2026` Admin 播种
+  （`access.o` + `links/f/fluffos.o` + `players/f/fluffos.o`）
+
+站点 zip 在 staging 上 apply patches + rsync overlay，所以下载仍是
+可玩、可复现的源码树。`autodoc.c` 的行内 END 标记仍不编译，http_d
+未 preload，不影响游玩。
 
 ## leftover 683：归档的 fluffos/lima 不是 hosting 目标
 
 `fluffos/lima` 2024-10-08 已 archived。按 leftover 682 的规则，归档 =
 不再活跃，不能当 `fluffos-upstream`。活跃上游是同一 LIMA 社区的
 `limalib/lima`（本馆 PR #49/#50/#51 已于 2026-09-03 合入）。`meta.json`
-改为 `hosting: submodule-patch`，pin `ffed9c588ee5`。`work/` 仍是本馆
-已转换的可玩树（`.lpc`），submodule 切到 `limalib/lima` 的 `lib/` 尚未
-做——切过去之后上游保持 `.c`，`.c`→`.lpc` 切片等转换产物进 `patches/`。
+改为 `hosting: submodule-patch`，pin `ffed9c588ee5`。leftover 684 已把
+`work/` 切成该 submodule（见上一节）。
 
 ## 这个 lib 的架构，写给不熟悉 Lima 的读者
 

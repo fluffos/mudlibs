@@ -14,7 +14,9 @@ Usage: python3 scripts/apply_lib_patches.py <slug>
 
 --work DIR applies libs/<slug>/patches onto DIR instead of
 libs/<slug>/work (used by make_source_zips.sh so the live
-submodule stays clean).
+submodule stays clean). Catalog-only seed/data lives in
+libs/<slug>/overlay/ and is rsync'd onto the zip staging copy
+by make_source_zips.sh, not by this script.
 """
 import argparse
 import subprocess

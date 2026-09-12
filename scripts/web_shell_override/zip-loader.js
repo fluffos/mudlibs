@@ -141,7 +141,9 @@ Module.preRun.push(function () {
       ensureDir(f.vpath.slice(0, slash));
       if (f.vpath === MOUNT + '/config.fluffos') {
         let text = decoder.decode(data);
-        text = text.replace(/^(\s*mudlib directory\s*:\s*).*$/m, '$1' + MOUNT + '/work');
+        let sub = (CFG.mudlibSubdir || '').replace(/^\/+|\/+$/g, '');
+        let mudlib = MOUNT + '/work' + (sub ? '/' + sub : '');
+        text = text.replace(/^(\s*mudlib directory\s*:\s*).*$/m, '$1' + mudlib);
         data = new TextEncoder().encode(text);
       }
       Module.FS.writeFile(f.vpath, data);

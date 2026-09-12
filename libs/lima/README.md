@@ -2,7 +2,7 @@
 
 LIMA 社区仍在维护的参考 mudlib（源码： <https://github.com/limalib/lima>，官网 <https://www.limamudlib.dev/>）。这不是一款武侠/仙侠游戏——和本项目收录的其它中文 mudlib 不是同一个宗谱，是一个独立的、英文的、面向开发者的现代 LPC 框架，收录进本项目是作为 "当代 FluffOS mudlib 长什么样"的参照样本。
 
-`github.com/fluffos/lima` 已于 2024-10-08 **归档**，不再是活跃上游。本馆按 `submodule-patch` 跟踪 `limalib/lima`：上游保持他们自己的 `.c` 约定，本馆 FluffOS 兼容放在 `patches/`。真源码 bug 往 `limalib/lima` 提（本馆已合入的 [#49](https://github.com/limalib/lima/pull/49) / [#50](https://github.com/limalib/lima/pull/50) / [#51](https://github.com/limalib/lima/pull/51) 在上游 2026-09-03 HEAD `ffed9c588ee5`）。
+`github.com/fluffos/lima` 已于 2024-10-08 **归档**，不再是活跃上游。本馆按 `submodule-patch` 跟踪 `limalib/lima`：`work/` 是该仓库的 submodule（mudlib 根目录是 `work/lib`，上游保持 `.c`），本馆 FluffOS 兼容在 `patches/`，管理员播种在 `overlay/`。真源码 bug 往 `limalib/lima` 提（本馆已合入的 [#49](https://github.com/limalib/lima/pull/49) / [#50](https://github.com/limalib/lima/pull/50) / [#51](https://github.com/limalib/lima/pull/51) 在上游 2026-09-03 HEAD `ffed9c588ee5`）。
 
 ## 架构说明
 

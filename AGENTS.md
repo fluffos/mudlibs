@@ -983,10 +983,11 @@ the next one of these:
      target** — archive means the remote is no longer active.
      Find the live upstream (`submodule-patch`) or vendor.
      `fluffos/lima` was archived 2024-10-08; `lima` tracks
-     `limalib/lima` as `submodule-patch` (their `.c` conventions,
-     catalog FluffOS-compat in `patches/`). `fluffos/mudlibs` and
-     `fluffos/fluffos` are this catalog and the driver, not mudlib
-     upstreams. First fluffos-upstream cutover: `imud`
+     `limalib/lima` as `submodule-patch` (`libs/lima/work` is that
+     submodule; mudlib root is `work/lib`; catalog FluffOS-compat
+     in `patches/` plus admin seed in `overlay/`). `fluffos/mudlibs`
+     and `fluffos/fluffos` are this catalog and the driver, not
+     mudlib upstreams. First fluffos-upstream cutover: `imud`
      (`libs/imud/work` is the `fluffos/imud` submodule). The other
      five still have a vendored `work/` until their
      local-vs-upstream delta is landed upstream as `.lpc` (or, for

@@ -36,8 +36,9 @@
 // both config.fluffos and work/, matching this project's native-driver
 // convention (`cd work && driver ../config.fluffos`). config.fluffos's
 // `mudlib directory : <absolute host path>` line is rewritten to the
-// MEMFS-internal path (/mudlib/work) before boot -- the host's absolute
-// path is meaningless inside the wasm instance's virtual filesystem.
+// MEMFS-internal path (/mudlib/work, or /mudlib/work/<mudlib_subdir>
+// when meta.json sets upstream.mudlib_subdir) before boot -- the host's
+// absolute path is meaningless inside the wasm instance's virtual filesystem.
 //
 // Example:
 //   node scripts/wasm_client.js ~/src/fluffos/build-wasm/src libs/bxsj \
@@ -143,9 +144,15 @@ function copyDir(Module, src, dst) {
   const hostConfigPath = path.join(libRoot, 'config.fluffos');
   const createFluffOS = require(path.join(buildDir, 'fluffos.js'));
 
+  let mudlibSubdir = '';
+  try {
+    const meta = JSON.parse(fs.readFileSync(path.join(libRoot, 'meta.json'), 'utf-8'));
+    mudlibSubdir = String((meta.upstream && meta.upstream.mudlib_subdir) || '').replace(/^\/+|\/+$/g, '');
+  } catch (e) { /* no meta or unreadable */ }
+  const memfsMudlib = '/mudlib/work' + (mudlibSubdir ? '/' + mudlibSubdir : '');
   let configText = fs.readFileSync(hostConfigPath, 'utf-8');
   configText = configText.replace(
-    /^(\s*mudlib directory\s*:\s*).*$/m, '$1/mudlib/work');
+    /^(\s*mudlib directory\s*:\s*).*$/m, '$1' + memfsMudlib);
 
   let lastOutputAt = Date.now();
   let gotAny = false;
