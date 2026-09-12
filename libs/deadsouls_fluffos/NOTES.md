@@ -436,3 +436,10 @@ worked. Same `this_player()` line exists on `ds386`/`dsIII`/`dsII`/
 `dshakkard`/`riftsds`/`brassring` — not swept this pass except
 `brassring` (next in queue). 拜师 analogue is `become <class>` in
 the Praxis guild rooms, already covered 2026-09-01.
+
+## Leftover 678 (2026-09-12) — upstream pin
+
+`fluffos/dead-souls` PRs #12–#16 are the in-tree float/currency,
+`/open/`, beggar map, `supply2`, and `replace_program()` fixes.
+Pin advanced to `4ddbd3b964`. No new rooms. Do not rebase the local
+FluffOS tree over those commits.

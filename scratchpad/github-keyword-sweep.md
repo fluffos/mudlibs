@@ -101,3 +101,15 @@ Classification (do not onboard):
   positive, not MudOS.
 
 Next weekly ~2026-09-17 (`--created=>2026-09-10`).
+
+## Weekly re-sweep 2026-09-12
+
+User asked for another discovery round plus upstream content
+backport. Bounded `gh search repos --created=>2026-09-10` on the
+same durable keywords (fluffos, mudlib, lpmud, mudos, "lpc mudlib")
+plus topic:fluffos / topic:mudlib / topic:lpmud. No keyword-rotation
+grind. No 429. **0 hits.**
+
+Do not onboard `zayarocks/zayaville` (already classified 2026-09-10).
+
+Next weekly ~2026-09-19 (`--created=>2026-09-12`).

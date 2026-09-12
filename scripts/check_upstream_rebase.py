@@ -72,6 +72,7 @@ def parse_upstreams(entry):
                 "repo": repo,
                 "url": f"https://github.com/{owner}/{repo}",
                 "pinned": (explicit.get("commit") or "").strip() or None,
+                "branch": (explicit.get("branch") or "").strip() or None,
             })
     for owner, repo in GITHUB_RE.findall(archive):
         if (owner.lower(), repo.lower()) in SKIP_REPOS:
@@ -124,7 +125,7 @@ def check_one(item, token):
         out["status"] = "error"
         out["error"] = str(e)
         return out
-    branch = info.get("default_branch") or "master"
+    branch = item.get("branch") or info.get("default_branch") or "master"
     out["default_branch"] = branch
     try:
         head = github_get(f"/repos/{owner}/{repo}/commits/{branch}", token)

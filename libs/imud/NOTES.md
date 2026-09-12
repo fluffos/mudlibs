@@ -257,3 +257,9 @@ lpcc 编译扫查的 8 个 FAIL、WASM 实测差异），全部是本仓库自�
 ## 管理员账号
 
 不适用，见 README「管理员账号」小节——没有账号系统，无法播种。
+
+## Leftover 678 (2026-09-12) — upstream pin
+
+`fluffos/imud` PR #1 is the in-tree `handle_router_read()` missing
+`return`. Pin advanced to `3f303add53`. Do not high-frequency reboot
+this lib (live I3).

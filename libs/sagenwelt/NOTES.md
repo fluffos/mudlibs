@@ -66,3 +66,12 @@ No accounts. Connect → catalog landing; `look` / `score` / `quit`
 
 WASM not verified. `unique_games` stays counting numbers `< 900`; 973
 is still listed as a lib.
+
+## Leftover 678 (2026-09-12) — develop vs feature/player
+
+GitHub default branch `develop` is +2 (Zappr CI + README) and **40
+commits behind** `feature/player`. Those two commits are not game
+content and are not on the playable snapshot. Pin stays `77266da`.
+`meta.json` now has `"upstream": {"branch": "feature/player"}` so
+`check_upstream_rebase.py` compares that branch, not `develop`. Do
+not invent Domains rooms.

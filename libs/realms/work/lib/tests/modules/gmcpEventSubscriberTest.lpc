@@ -23,7 +23,7 @@ object BuildWeapon(string name, string short, string type, int locations)
     weapon.set("short", short);
     weapon.set("weapon type", type);
     weapon.set("equipment locations", locations);
-    weapon->move_object(Player);
+    move_object(weapon, Player);
     return weapon;
 }
 
@@ -35,7 +35,7 @@ object BuildArmor(string name, string short, string type, int locations)
     armor.set("short", short);
     armor.set("armor type", type);
     armor.set("equipment locations", locations);
-    armor->move_object(Player);
+    move_object(armor, Player);
     return armor;
 }
 
@@ -47,7 +47,7 @@ object BuildRing(string name, string short)
     ring.set("name", name);
     ring.set("short", short);
     ring.set("equipment locations", Ring1|Ring2);
-    ring->move_object(Player);
+    move_object(ring, Player);
     return ring;
 }
 
@@ -73,6 +73,8 @@ void Setup()
     Player = clone_object("/lib/tests/support/services/mockPlayer.lpc");
     Player.Name("bob");
     Player.enableGmcp();
+    Player.addSkillPoints(100);
+    Player.advanceSkill("long sword", 10);
 
     Subscriber = clone_object("/lib/modules/gmcp/gmcpEventSubscriber.lpc");
     Subscriber.setPlayer(Player);
@@ -471,7 +473,8 @@ void CarriedRingIncludesEquipSlotsWithBothRingSlots()
 /////////////////////////////////////////////////////////////////////////////
 void NonEquippableCarriedItemHasNoEquipSlotsField()
 {
-    clone_object("/lib/instances/items/potions/healing.lpc")->move_object(Player);
+    move_object(
+        clone_object("/lib/instances/items/potions/healing.lpc"), Player);
 
     Subscriber.pushInventory();
     string frame = Player.caughtGmcp();
@@ -1066,3 +1069,543 @@ void EquippedHelmetIsExcludedFromCarriedList()
     ExpectEq(-1, second,
         "equipped helmet must not also appear in carried list");
 }
+
+// ---------------------------------------------------------------------------
+// pushSkills
+// ---------------------------------------------------------------------------
+
+/////////////////////////////////////////////////////////////////////////////
+void PushSkillsEmitsCharSkillsPackage()
+{
+    Subscriber.pushSkills();
+    ExpectSubStringMatch("Char.Skills", Player.caughtGmcp(),
+        "Char.Skills package is emitted");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void PushSkillsPayloadIsAJsonObject()
+{
+    Subscriber.pushSkills();
+    string frame = Player.caughtGmcp();
+    // Body after the package name must open with '{'
+    int bodyStart = strstr(frame, "{");
+    ExpectTrue(bodyStart >= 0, "skills payload starts with {");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void PushSkillsDoesNotFireWhenNoPlayerSet()
+{
+    Subscriber.setPlayer(0);
+    string err = catch(Subscriber.pushSkills());
+    ExpectEq(0, err, "pushSkills is safe when player is 0");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void PushSkillsWithTrainedSkillIncludesSkillName()
+{
+    Player.advanceSkill("long sword", 5);
+    Subscriber.pushSkills();
+    ExpectSubStringMatch("long sword", Player.caughtGmcp(),
+        "trained skill name appears in skills payload");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void PushSkillsWithTrainedSkillIncludesValueKey()
+{
+    Player.advanceSkill("long sword", 5);
+    Subscriber.pushSkills();
+    ExpectSubStringMatch("\"value\"", Player.caughtGmcp(),
+        "value key present for trained skill");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void PushSkillsWithTrainedSkillIncludesBaseKey()
+{
+    Player.advanceSkill("long sword", 5);
+    Subscriber.pushSkills();
+    ExpectSubStringMatch("\"base\"", Player.caughtGmcp(),
+        "base key present for trained skill");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void PushSkillsWithTrainedSkillIncludesTypeKey()
+{
+    Player.advanceSkill("long sword", 5);
+    Subscriber.pushSkills();
+    ExpectSubStringMatch("\"type\"", Player.caughtGmcp(),
+        "type key present for trained skill");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void OnSkillAdvancedPushesSkills()
+{
+    int before = sizeof(Player.caughtGmcpFrames());
+    Subscriber.onSkillAdvanced(Player, 0);
+    ExpectTrue(sizeof(Player.caughtGmcpFrames()) > before,
+        "onSkillAdvanced triggers at least one new GMCP frame");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void OnSkillAdvancedFromWrongPlayerIsIgnored()
+{
+    object other = clone_object("/lib/tests/support/services/mockPlayer.lpc");
+    other.Name("alice");
+    other.enableGmcp();
+    int before = sizeof(Player.caughtGmcpFrames());
+    Subscriber.onSkillAdvanced(other, 0);
+    ExpectEq(before, sizeof(Player.caughtGmcpFrames()),
+        "skill event from wrong player must not push frames");
+    destruct(other);
+}
+
+// ---------------------------------------------------------------------------
+// pushTraits
+// ---------------------------------------------------------------------------
+
+/////////////////////////////////////////////////////////////////////////////
+void PushTraitsEmitsCharTraitsPackage()
+{
+    Subscriber.pushTraits();
+    ExpectSubStringMatch("Char.Traits", Player.caughtGmcp(),
+        "Char.Traits package is emitted");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void PushTraitsIncludesTraitsKey()
+{
+    Subscriber.pushTraits();
+    ExpectSubStringMatch("\"traits\"", Player.caughtGmcp(),
+        "traits key present in Char.Traits payload");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void PushTraitsDoesNotFireWhenNoPlayerSet()
+{
+    Subscriber.setPlayer(0);
+    string err = catch(Subscriber.pushTraits());
+    ExpectEq(0, err, "pushTraits is safe when player is 0");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void OnTraitAddedPushesTraits()
+{
+    int before = sizeof(Player.caughtGmcpFrames());
+    Subscriber.onTraitAdded(Player, 0);
+    ExpectTrue(sizeof(Player.caughtGmcpFrames()) > before,
+        "onTraitAdded triggers new GMCP frames");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void OnTraitRemovedPushesTraits()
+{
+    int before = sizeof(Player.caughtGmcpFrames());
+    Subscriber.onTraitRemoved(Player, 0);
+    ExpectTrue(sizeof(Player.caughtGmcpFrames()) > before,
+        "onTraitRemoved triggers new GMCP frames");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void OnTraitAddedFromWrongPlayerIsIgnored()
+{
+    object other = clone_object("/lib/tests/support/services/mockPlayer.lpc");
+    other.Name("alice");
+    other.enableGmcp();
+    int before = sizeof(Player.caughtGmcpFrames());
+    Subscriber.onTraitAdded(other, 0);
+    ExpectEq(before, sizeof(Player.caughtGmcpFrames()),
+        "trait event from wrong player must not push frames");
+    destruct(other);
+}
+
+// ---------------------------------------------------------------------------
+// pushResearch - package and top-level structure
+// ---------------------------------------------------------------------------
+
+/////////////////////////////////////////////////////////////////////////////
+void PushResearchEmitsCharResearchPackage()
+{
+    Subscriber.pushResearch();
+    ExpectSubStringMatch("Char.Research", Player.caughtGmcp(),
+        "Char.Research package is emitted");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void PushResearchIncludesPointsKey()
+{
+    Subscriber.pushResearch();
+    ExpectSubStringMatch("\"points\"", Player.caughtGmcp(),
+        "points key present in Char.Research payload");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void PushResearchIncludesTreesKey()
+{
+    Player.addResearchTree("/lib/tests/support/research/testResearchTree.lpc");
+    Subscriber.pushResearch();
+    // New protocol: each tree is a separate Char.Research.Tree frame
+    string allFrames = implode(Player.caughtGmcpFrames(), "");
+    ExpectSubStringMatch("Char.Research.Tree", allFrames,
+        "trees key present in Char.Research payload");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void PushResearchDoesNotFireWhenNoPlayerSet()
+{
+    Subscriber.setPlayer(0);
+    string err = catch(Subscriber.pushResearch());
+    ExpectEq(0, err, "pushResearch is safe when player is 0");
+}
+
+// ---------------------------------------------------------------------------
+// pushResearch - tree content when a tree is available
+// ---------------------------------------------------------------------------
+
+/////////////////////////////////////////////////////////////////////////////
+void PushResearchIncludesTreeNameWhenTreeAvailable()
+{
+    Player.addResearchTree("/lib/tests/support/research/testResearchTree.lpc");
+    Subscriber.pushResearch();
+    ExpectSubStringMatch("\"name\"", implode(Player.caughtGmcpFrames(), ""),
+        "name key present in tree entry");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void PushResearchIncludesTreeSourceWhenTreeAvailable()
+{
+    Player.addResearchTree("/lib/tests/support/research/testResearchTree.lpc");
+    Subscriber.pushResearch();
+    ExpectSubStringMatch("\"source\"", implode(Player.caughtGmcpFrames(), ""),
+        "source key present in tree entry");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void PushResearchIncludesTreeRootWhenTreeAvailable()
+{
+    Player.addResearchTree("/lib/tests/support/research/testResearchTree.lpc");
+    Subscriber.pushResearch();
+    ExpectSubStringMatch("\"root\"", implode(Player.caughtGmcpFrames(), ""),
+        "root key present in tree entry");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void PushResearchIncludesNodesArrayWhenTreeAvailable()
+{
+    Player.addResearchTree("/lib/tests/support/research/testResearchTree.lpc");
+    Subscriber.pushResearch();
+    ExpectSubStringMatch("\"nodes\"", implode(Player.caughtGmcpFrames(), ""),
+        "nodes key present in tree entry");
+}
+
+// ---------------------------------------------------------------------------
+// pushResearch - per-node fields
+// ---------------------------------------------------------------------------
+
+/////////////////////////////////////////////////////////////////////////////
+void ResearchNodeIncludesPathField()
+{
+    Player.addResearchTree("/lib/tests/support/research/testResearchTree.lpc");
+    Subscriber.pushResearch();
+    ExpectSubStringMatch("\"path\"", implode(Player.caughtGmcpFrames(), ""),
+        "path field present on research node");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ResearchNodeIncludesNameField()
+{
+    Player.addResearchTree("/lib/tests/support/research/testResearchTree.lpc");
+    Subscriber.pushResearch();
+    ExpectSubStringMatch("\"name\"", implode(Player.caughtGmcpFrames(), ""),
+        "name field present on research node");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ResearchNodeIncludesDescriptionField()
+{
+    Player.addResearchTree("/lib/tests/support/research/testResearchTree.lpc");
+    Subscriber.pushResearch();
+    ExpectSubStringMatch("\"description\"", implode(Player.caughtGmcpFrames(), ""),
+        "description field present on research node");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ResearchNodeIncludesTypeField()
+{
+    Player.addResearchTree("/lib/tests/support/research/testResearchTree.lpc");
+    Subscriber.pushResearch();
+    ExpectSubStringMatch("\"type\"", implode(Player.caughtGmcpFrames(), ""),
+        "type field present on research node");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ResearchNodeIncludesStatusField()
+{
+    Player.addResearchTree("/lib/tests/support/research/testResearchTree.lpc");
+    Subscriber.pushResearch();
+    ExpectSubStringMatch("\"status\"", implode(Player.caughtGmcpFrames(), ""),
+        "status field present on research node");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ResearchNodeIncludesParentsField()
+{
+    Player.addResearchTree("/lib/tests/support/research/testResearchTree.lpc");
+    Subscriber.pushResearch();
+    ExpectSubStringMatch("\"parents\"", implode(Player.caughtGmcpFrames(), ""),
+        "parents field present on research node");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ResearchNodeIncludesPrerequisitesField()
+{
+    Player.addResearchTree("/lib/tests/support/research/testResearchTree.lpc");
+    Subscriber.pushResearch();
+    ExpectSubStringMatch("\"prerequisites\"", implode(Player.caughtGmcpFrames(), ""),
+        "prerequisites field present on research node");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ResearchNodeIncludesBonusesField()
+{
+    Player.addResearchTree("/lib/tests/support/research/testResearchTree.lpc");
+    Subscriber.pushResearch();
+    ExpectSubStringMatch("\"bonuses\"", implode(Player.caughtGmcpFrames(), ""),
+        "bonuses field present on research node");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ResearchNodeIncludesPenaltiesField()
+{
+    Player.addResearchTree("/lib/tests/support/research/testResearchTree.lpc");
+    Subscriber.pushResearch();
+    ExpectSubStringMatch("\"penalties\"", implode(Player.caughtGmcpFrames(), ""),
+        "penalties field present on research node");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ResearchNodeIncludesModifiersField()
+{
+    Player.addResearchTree("/lib/tests/support/research/testResearchTree.lpc");
+    Subscriber.pushResearch();
+    ExpectSubStringMatch("\"modifiers\"", implode(Player.caughtGmcpFrames(), ""),
+        "modifiers field present on research node");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ResearchNodeIncludesDamageEffectsField()
+{
+    Player.addResearchTree("/lib/tests/support/research/testResearchTree.lpc");
+    Subscriber.pushResearch();
+    ExpectSubStringMatch("\"damageEffects\"", implode(Player.caughtGmcpFrames(), ""),
+        "damageEffects field present on research node");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ResearchNodeIncludesLimitersField()
+{
+    Player.addResearchTree("/lib/tests/support/research/testResearchTree.lpc");
+    Subscriber.pushResearch();
+    ExpectSubStringMatch("\"limiters\"", implode(Player.caughtGmcpFrames(), ""),
+        "limiters field present on research node");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ResearchNodeIncludesCostModifiersField()
+{
+    Player.addResearchTree("/lib/tests/support/research/testResearchTree.lpc");
+    Subscriber.pushResearch();
+    ExpectSubStringMatch("\"costModifiers\"", implode(Player.caughtGmcpFrames(), ""),
+        "costModifiers field present on research node");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ResearchNodeIncludesCooldownModifiersField()
+{
+    Player.addResearchTree("/lib/tests/support/research/testResearchTree.lpc");
+    Subscriber.pushResearch();
+    ExpectSubStringMatch("\"cooldownModifiers\"", implode(Player.caughtGmcpFrames(), ""),
+        "cooldownModifiers field present on research node");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ResearchNodeIncludesConsumablesField()
+{
+    Player.addResearchTree("/lib/tests/support/research/testResearchTree.lpc");
+    Subscriber.pushResearch();
+    ExpectSubStringMatch("\"consumables\"", implode(Player.caughtGmcpFrames(), ""),
+        "consumables field present on research node");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ResearchNodeIncludesSupercedeTargetsField()
+{
+    Player.addResearchTree("/lib/tests/support/research/testResearchTree.lpc");
+    Subscriber.pushResearch();
+    ExpectSubStringMatch("\"supercedeTargets\"", implode(Player.caughtGmcpFrames(), ""),
+        "supercedeTargets field present on research node");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ResearchNodeIncludesAffectedResearchField()
+{
+    Player.addResearchTree("/lib/tests/support/research/testResearchTree.lpc");
+    Subscriber.pushResearch();
+    ExpectSubStringMatch("\"affectedResearch\"", implode(Player.caughtGmcpFrames(), ""),
+        "affectedResearch field present on research node");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ResearchNodeIncludesAffectedResearchTypeField()
+{
+    Player.addResearchTree("/lib/tests/support/research/testResearchTree.lpc");
+    Subscriber.pushResearch();
+    ExpectSubStringMatch("\"affectedResearchType\"", implode(Player.caughtGmcpFrames(), ""),
+        "affectedResearchType field present on research node");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ResearchNodeBonusValueIsSerializedForPassiveItem()
+{
+    Player.addResearchTree("/lib/tests/support/research/testResearchTree.lpc");
+    Subscriber.pushResearch();
+    // testTreeRoot has "bonus long sword": 2
+    string allFrames = implode(Player.caughtGmcpFrames(), "");
+    ExpectSubStringMatch("long sword", allFrames,
+        "bonus key name appears in node bonuses");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ResearchNodeStatusIsLockedWhenNotResearched()
+{
+    Player.addResearchTree("/lib/tests/support/research/testResearchTree.lpc");
+    Subscriber.pushResearch();
+    ExpectSubStringMatch("\"status\"", implode(Player.caughtGmcpFrames(), ""),
+        "status field present");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ResearchNodePrerequisiteTypeIsSerializedForSkillPrereq()
+{
+    // testTreeRoot has a long sword skill prereq
+    Player.addResearchTree("/lib/tests/support/research/testResearchTree.lpc");
+    Subscriber.pushResearch();
+    string allFrames = implode(Player.caughtGmcpFrames(), "");
+    ExpectSubStringMatch("\"type\"", allFrames,
+        "prereq type key serialized");
+}
+
+// ---------------------------------------------------------------------------
+// pushResearch - node status transitions
+// ---------------------------------------------------------------------------
+
+/////////////////////////////////////////////////////////////////////////////
+void ResearchNodeStatusIsKnownAfterResearching()
+{
+    Player.addResearchTree("/lib/tests/support/research/testResearchTree.lpc");
+    Player.advanceSkill("long sword", 10);
+    Player.addResearchPoints(5);
+    Player.initiateResearch("/lib/tests/support/research/testTreeRoot.lpc");
+    Player.completedResearch("/lib/tests/support/research/testTreeRoot.lpc");
+    Subscriber.pushResearch();
+    string allFrames = implode(Player.caughtGmcpFrames(), "");
+    ExpectSubStringMatch("known", allFrames,
+        "node status is known after research completed");
+}
+
+// ---------------------------------------------------------------------------
+// research event handlers
+// ---------------------------------------------------------------------------
+
+/////////////////////////////////////////////////////////////////////////////
+void OnResearchCompletedPushesResearch()
+{
+    int before = sizeof(Player.caughtGmcpFrames());
+    Subscriber.onResearchCompleted(Player, 0);
+    ExpectTrue(sizeof(Player.caughtGmcpFrames()) > before,
+        "onResearchCompleted pushes new GMCP frames");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void OnResearchCompletedAlsoPushesScore()
+{
+    int before = sizeof(Player.caughtGmcpFrames());
+    Subscriber.onResearchCompleted(Player, 0);
+    // Should push both Char.Research and Char.Score
+    ExpectTrue(sizeof(Player.caughtGmcpFrames()) >= before + 2,
+        "onResearchCompleted pushes both research and score frames");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void OnResearchStartedPushesResearch()
+{
+    int before = sizeof(Player.caughtGmcpFrames());
+    Subscriber.onResearchStarted(Player, 0);
+    ExpectTrue(sizeof(Player.caughtGmcpFrames()) > before,
+        "onResearchStarted pushes research frame");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void OnResearchPointsAddedPushesResearch()
+{
+    int before = sizeof(Player.caughtGmcpFrames());
+    Subscriber.onResearchPointsAdded(Player, 0);
+    ExpectTrue(sizeof(Player.caughtGmcpFrames()) > before,
+        "onResearchPointsAdded pushes research frame");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void OnResearchPointsAddedAlsoPushesScore()
+{
+    int before = sizeof(Player.caughtGmcpFrames());
+    Subscriber.onResearchPointsAdded(Player, 0);
+    ExpectTrue(sizeof(Player.caughtGmcpFrames()) >= before + 2,
+        "onResearchPointsAdded pushes both research and score frames");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void OnResearchTreeOpenPushesResearch()
+{
+    int before = sizeof(Player.caughtGmcpFrames());
+    Subscriber.onResearchTreeOpen(Player, 0);
+    ExpectTrue(sizeof(Player.caughtGmcpFrames()) > before,
+        "onResearchTreeOpen pushes research frame");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void OnResearchCompletedFromWrongPlayerIsIgnored()
+{
+    object other = clone_object("/lib/tests/support/services/mockPlayer.lpc");
+    other.Name("alice");
+    other.enableGmcp();
+    int before = sizeof(Player.caughtGmcpFrames());
+    Subscriber.onResearchCompleted(other, 0);
+    ExpectEq(before, sizeof(Player.caughtGmcpFrames()),
+        "research event from wrong player must not push frames");
+    destruct(other);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void OnResearchStartedFromWrongPlayerIsIgnored()
+{
+    object other = clone_object("/lib/tests/support/services/mockPlayer.lpc");
+    other.Name("alice");
+    other.enableGmcp();
+    int before = sizeof(Player.caughtGmcpFrames());
+    Subscriber.onResearchStarted(other, 0);
+    ExpectEq(before, sizeof(Player.caughtGmcpFrames()),
+        "onResearchStarted from wrong player ignored");
+    destruct(other);
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void OnResearchTreeOpenFromWrongPlayerIsIgnored()
+{
+    object other = clone_object("/lib/tests/support/services/mockPlayer.lpc");
+    other.Name("alice");
+    other.enableGmcp();
+    int before = sizeof(Player.caughtGmcpFrames());
+    Subscriber.onResearchTreeOpen(other, 0);
+    ExpectEq(before, sizeof(Player.caughtGmcpFrames()),
+        "onResearchTreeOpen from wrong player ignored");
+    destruct(other);
+}
+

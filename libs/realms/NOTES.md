@@ -893,3 +893,13 @@ with no database backend" -- no observable difference in playability, and
 this note documents the reasoning for any future session that
 re-investigates. Native play (with a real local MySQL 8.0+ instance) is
 unaffected by any of this and remains fully verified per \S14 above.
+
+## Leftover 678 (2026-09-12) — GMCP research backport
+
+Upstream `#1119` (`49fdc2d` / `bdc812a`): client.research /
+client.request handlers plus Char.Research / skills / traits GMCP
+pushes. Ported into the existing FluffOS `send_gmcp()` / `has_gmcp()`
+`gmcp.lpc` (did not restore LDMud `binary_message` framing).
+`mappingp`/`m_indices` in the new subscriber code converted to
+`mapp`/`keys`. `wasm_status` stays `noboot` (MySQL). Do not invent
+rooms.

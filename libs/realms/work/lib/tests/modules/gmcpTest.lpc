@@ -216,3 +216,215 @@ void SubnegotiationBodyIsAcceptedWithoutError()
     ExpectEq(0, err,
         "SB subnegotiation body is processed without throwing");
 }
+
+// ---------------------------------------------------------------------------
+// receiveGmcp - Client.Research routing
+// ---------------------------------------------------------------------------
+
+/////////////////////////////////////////////////////////////////////////////
+void ReceiveGmcpIgnoresEmptyBody()
+{
+    Player.enableGmcp();
+    string err = catch(Player.telnetNegotiation(SB, TELOPT_GMCP,
+        to_array("")));
+    ExpectEq(0, err, "empty GMCP body does not throw");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ReceiveGmcpIgnoresUnknownPackage()
+{
+    Player.enableGmcp();
+    string err = catch(Player.telnetNegotiation(SB, TELOPT_GMCP,
+        to_array("Unknown.Package {}")));
+    ExpectEq(0, err, "unknown GMCP package does not throw");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ReceiveGmcpClientResearchCallsInitiateResearchWithPath()
+{
+    Player.enableGmcp();
+    // initiateResearch will fail gracefully on an invalid path; we just
+    // verify the call does not throw and the package is dispatched.
+    string err = catch(Player.telnetNegotiation(SB, TELOPT_GMCP,
+        to_array("Client.Research {\"path\":\"/lib/tests/support/research/testTreeRoot.c\"}")));
+    ExpectEq(0, err,
+        "Client.Research with valid path JSON does not throw");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ReceiveGmcpClientResearchCaseInsensitivePackageName()
+{
+    Player.enableGmcp();
+    string err = catch(Player.telnetNegotiation(SB, TELOPT_GMCP,
+        to_array("client.research {\"path\":\"/some/path.c\"}")));
+    ExpectEq(0, err,
+        "lower-case client.research package is accepted without throw");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ReceiveGmcpClientResearchIgnoresMissingPathKey()
+{
+    Player.enableGmcp();
+    // JSON without a "path" key -- should not call initiateResearch
+    string err = catch(Player.telnetNegotiation(SB, TELOPT_GMCP,
+        to_array("Client.Research {\"action\":\"learn\"}")));
+    ExpectEq(0, err,
+        "Client.Research without path key does not throw");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ReceiveGmcpClientResearchIgnoresEmptyPayload()
+{
+    Player.enableGmcp();
+    // Package name only, no JSON body
+    string err = catch(Player.telnetNegotiation(SB, TELOPT_GMCP,
+        to_array("Client.Research")));
+    ExpectEq(0, err,
+        "Client.Research with no payload does not throw");
+}
+
+// ---------------------------------------------------------------------------
+// enableGmcpSubscriber - initial snapshot push completeness
+// ---------------------------------------------------------------------------
+
+/////////////////////////////////////////////////////////////////////////////
+void EnableGmcpPushesCharScorePackage()
+{
+    Player.telnetNegotiation(DO, TELOPT_GMCP, 0);
+    string allFrames = implode(Player.caughtGmcpFrames(), " ");
+    ExpectSubStringMatch("Char.Score", allFrames,
+        "Char.Score pushed on GMCP enable");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void EnableGmcpPushesCharVitalsPackage()
+{
+    Player.telnetNegotiation(DO, TELOPT_GMCP, 0);
+    string allFrames = implode(Player.caughtGmcpFrames(), " ");
+    ExpectSubStringMatch("Char.Vitals", allFrames,
+        "Char.Vitals pushed on GMCP enable");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void EnableGmcpPushesCharInventoryPackage()
+{
+    Player.telnetNegotiation(DO, TELOPT_GMCP, 0);
+    string allFrames = implode(Player.caughtGmcpFrames(), " ");
+    ExpectSubStringMatch("Char.Inventory", allFrames,
+        "Char.Inventory pushed on GMCP enable");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void EnableGmcpPushesCharSkillsPackage()
+{
+    Player.telnetNegotiation(DO, TELOPT_GMCP, 0);
+    string allFrames = implode(Player.caughtGmcpFrames(), " ");
+    ExpectSubStringMatch("Char.Skills", allFrames,
+        "Char.Skills pushed on GMCP enable");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void EnableGmcpPushesCharTraitsPackage()
+{
+    Player.telnetNegotiation(DO, TELOPT_GMCP, 0);
+    string allFrames = implode(Player.caughtGmcpFrames(), " ");
+    ExpectSubStringMatch("Char.Traits", allFrames,
+        "Char.Traits pushed on GMCP enable");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void EnableGmcpPushesCharResearchPackage()
+{
+    Player.telnetNegotiation(DO, TELOPT_GMCP, 0);
+    string allFrames = implode(Player.caughtGmcpFrames(), " ");
+    ExpectSubStringMatch("Char.Research", allFrames,
+        "Char.Research pushed on GMCP enable");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void EnableGmcpPushesSixDistinctPackages()
+{
+    Player.telnetNegotiation(DO, TELOPT_GMCP, 0);
+    // Score, Vitals, Inventory, Skills, Traits, Research = 6 frames minimum
+    ExpectTrue(sizeof(Player.caughtGmcpFrames()) >= 6,
+        "at least 6 frames pushed on GMCP enable (one per package)");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ClientRequestResearchSendsCharResearchPackage()
+{
+    Player.telnetNegotiation(DO, TELOPT_GMCP, 0);
+    Player.clearCaughtGmcp();
+    Player.telnetNegotiation(SB, TELOPT_GMCP,
+        to_array("Client.Request {\"what\":\"research\"}"));
+    string allFrames = implode(Player.caughtGmcpFrames(), " ");
+    ExpectSubStringMatch("Char.Research", allFrames,
+        "Client.Request research triggers Char.Research push");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ClientRequestInventorySendsCharInventoryPackage()
+{
+    Player.telnetNegotiation(DO, TELOPT_GMCP, 0);
+    Player.clearCaughtGmcp();
+    Player.telnetNegotiation(SB, TELOPT_GMCP,
+        to_array("Client.Request {\"what\":\"inventory\"}"));
+    string allFrames = implode(Player.caughtGmcpFrames(), " ");
+    ExpectSubStringMatch("Char.Inventory", allFrames,
+        "Client.Request inventory triggers Char.Inventory push");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ClientRequestSkillsSendsCharSkillsPackage()
+{
+    Player.telnetNegotiation(DO, TELOPT_GMCP, 0);
+    Player.clearCaughtGmcp();
+    Player.telnetNegotiation(SB, TELOPT_GMCP,
+        to_array("Client.Request {\"what\":\"skills\"}"));
+    string allFrames = implode(Player.caughtGmcpFrames(), " ");
+    ExpectSubStringMatch("Char.Skills", allFrames,
+        "Client.Request skills triggers Char.Skills push");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ClientRequestTraitsSendsCharTraitsPackage()
+{
+    Player.telnetNegotiation(DO, TELOPT_GMCP, 0);
+    Player.clearCaughtGmcp();
+    Player.telnetNegotiation(SB, TELOPT_GMCP,
+        to_array("Client.Request {\"what\":\"traits\"}"));
+    string allFrames = implode(Player.caughtGmcpFrames(), " ");
+    ExpectSubStringMatch("Char.Traits", allFrames,
+        "Client.Request traits triggers Char.Traits push");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ClientRequestAllSendsAllPackages()
+{
+    Player.telnetNegotiation(DO, TELOPT_GMCP, 0);
+    Player.clearCaughtGmcp();
+    Player.telnetNegotiation(SB, TELOPT_GMCP,
+        to_array("Client.Request {\"what\":\"all\"}"));
+    string allFrames = implode(Player.caughtGmcpFrames(), " ");
+    ExpectSubStringMatch("Char.Score", allFrames,
+        "Client.Request all includes Char.Score");
+    ExpectSubStringMatch("Char.Inventory", allFrames,
+        "Client.Request all includes Char.Inventory");
+    ExpectSubStringMatch("Char.Skills", allFrames,
+        "Client.Request all includes Char.Skills");
+    ExpectSubStringMatch("Char.Traits", allFrames,
+        "Client.Request all includes Char.Traits");
+    ExpectSubStringMatch("Char.Research", allFrames,
+        "Client.Request all includes Char.Research");
+}
+
+/////////////////////////////////////////////////////////////////////////////
+void ClientRequestWhenGmcpDisabledDoesNothing()
+{
+    Player.clearCaughtGmcp();
+    Player.telnetNegotiation(SB, TELOPT_GMCP,
+        to_array("Client.Request {\"what\":\"research\"}"));
+    ExpectTrue(sizeof(Player.caughtGmcpFrames()) == 0,
+        "Client.Request before GMCP enable produces no frames");
+}
+
