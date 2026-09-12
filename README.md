@@ -345,7 +345,7 @@ classes it's found.
 | 156-1 | `xyj42dup` | 西游记4.2 (dup) | `西游记4.2.rar` | — | not-mudlib |
 | 157 | `shujian3` | 书剑3 | `最新独立安卓客户端和书剑源码一键架站.zip` | 40200 | WASM playable |
 | 158 | `zjmudhell` | 指尖MUD | `指尖后端.7z` | 40204 | WASM playable |
-| 160 | `nightmare3` | Nightmare 3 | `git clone https://github.com/fluffos/nightmare3 (not a traditional archive file — a maintained, already FluffOS-adapted fork; mudlib root is the repo's lib/ directory)` | 40208 | WASM playable |
+| 160 | `nightmare3` | Nightmare 3 | `git clone https://github.com/fluffos/nightmare3 (HEAD 3686be7, 2026-09-12; mudlib root is the repo's lib/ directory; .lpc + §9 formatted on the fluffos-org repo)` | 40208 | WASM playable |
 | 160-1 | `nightmare4` | Nightmare 4 | `git clone https://github.com/MudRen/nightmare4 (a MudRen bundle of "Nightmare IV"/"Nightmare V" -- the repo's own description: "An influential early lib family. Newly revamped: Unix and Windows driver included together."; only the mudlib root, the repo's lib/ directory, was used -- the bundled fluffos-2.9-ds2.14 driver source tree and win32/driver.exe were ignored, this project uses its own driver build)` | 40234 | WASM playable |
 | 161 | `imud` | IMUD@FluffOS.v2019 | `git clone https://github.com/fluffos/imud (commit 02830c2371aee5d5a8fa2ebfc7b12f8ded9c1742, cloned 2026-08-24; pin advanced 2026-09-12 after .lpc + formatter landed upstream)` | 40209 | WASM playable |
 | 162 | `sanguozhi` | 三国志 | `git clone https://github.com/fluffos/sanguozhi` | 40210 | WASM playable |

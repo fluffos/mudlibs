@@ -2,7 +2,7 @@
 
 One of the oldest and most historically influential LPMud mudlib families — an ancestor of the TMI-2 lineage that many later mudlibs (including several Chinese-MUD codebases elsewhere in this collection) ultimately trace back to. This is the `fluffos/nightmare3` fork, already updated for modern FluffOS. Unlike the rest of this "Chinese MUD Museum" collection, this lib's content is in English — included here deliberately for its historical significance to the wider LPMud family tree.
 
-**This catalog keeps notes and build scripts only.** LPC lives in `github.com/fluffos/nightmare3` — land fixes there, not in a second copy here.
+**This catalog keeps notes and build scripts only.** `work/` is the `fluffos/nightmare3` submodule (mudlib root `work/lib`). LPC lives there as `.lpc` + §9 formatted — land fixes on that repo, not in a second copy here. Admin seed is in `overlay/`.
 
 ## Highlights
 

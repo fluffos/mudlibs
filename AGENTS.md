@@ -987,12 +987,12 @@ the next one of these:
      submodule; mudlib root is `work/lib`; catalog FluffOS-compat
      in `patches/` plus admin seed in `overlay/`). `fluffos/mudlibs`
      and `fluffos/fluffos` are this catalog and the driver, not
-     mudlib upstreams. First fluffos-upstream cutover: `imud`
-     (`libs/imud/work` is the `fluffos/imud` submodule). The other
-     five still have a vendored `work/` until their
-     local-vs-upstream delta is landed upstream as `.lpc` (or, for
-     `dead-souls` / `nightmare3`, the `lib/` subdir is wired in
-     `config.fluffos`).
+     mudlib upstreams. fluffos-upstream cutovers so far: `imud`
+     (repo root) and `nightmare3` (`work/lib`). The other four
+     (`deadsouls_fluffos`, `nt7`, `sanguozhi`, `xkx100utf8`) still
+     have a vendored `work/` until their local-vs-upstream delta is
+     landed upstream as `.lpc` (or, for `dead-souls`, the `lib/`
+     subdir is wired in `config.fluffos`).
 
 ---
 

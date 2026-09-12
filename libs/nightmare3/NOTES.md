@@ -1,17 +1,33 @@
 # nightmare3 (git clone of `fluffos/nightmare3`)
 
-- Source: `git clone https://github.com/fluffos/nightmare3` (not a
-  traditional archive file — a maintained fork already adapted for
-  FluffOS v2019, per its own README "Nightmare 3 on fluffos v2019").
-  Mudlib root is the repo's `lib/` directory; the repo also bundles a
-  `driver` git submodule (a FluffOS checkout) which was ignored — this
-  project uses its own driver at `~/src/fluffos`.
+- Source: `fluffos/nightmare3` submodule at `3686be7` (leftover 685:
+  `.lpc` + §9 formatted on that repo; mudlib root `work/lib`;
+  command-cache slice widened for `.lpc`). Admin seed is
+  `overlay/lib/secure/save/` plus `overlay/lib/secure/cfg/groups.cfg`.
+  The repo also bundles a `driver` git submodule which was ignored —
+  this project uses `~/src/fluffos`.
 - Port: **40208**. Slug: `nightmare3`. Number: `160`.
 - Nightmare is one of the oldest, most historically influential LPMud
   mudlib families (an ancestor of the TMI-2 lineage). This lib is
   English-language content, unlike the rest of this "Chinese MUD
   Museum" collection — included deliberately for its historical
   significance.
+
+## leftover 685: work/ is the fluffos/nightmare3 submodule
+
+`hosting` is `fluffos-upstream`. `work/` is now the `fluffos/nightmare3`
+gitlink (pin `3686be7c11bb9ae63bf0f49576acc4e3ce96c504`), not a
+second formatted fork. `config.fluffos` mudlib directory points at
+`work/lib`. `patches/` stays empty — the rename, §9 format, and the
+`daemon/command.lpc` `_*.lpc` cache-key slice (`-3` → `-5`, NOTES
+item 13) live on that fluffos-org repo. Catalog-only overlay:
+
+- `overlay/lib/secure/save/users/f/fluffos.o` + postalrc
+- `overlay/lib/secure/cfg/groups.cfg` (`SECURE`/`ASSIST` for `fluffos`)
+
+Item 13's earlier "out of scope for upstream, they still ship `.c`"
+note is superseded: leftover 685 renamed that repo to `.lpc`, so the
+slice has to be `-5` there too (`3686be7`).
 
 ## Status: DONE — boots clean, fully playable over telnet
 
