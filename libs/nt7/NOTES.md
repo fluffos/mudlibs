@@ -22,10 +22,15 @@ untouched: `quest/skybook/update.lpc`, `inherit/condition/damo.lpc`,
 `d/dragon/outlet.lpc`. PRs #3/#4/#5 were already on `53dce3a1`
 before this rename. Catalog-only overlay: `data/login|user` for
 `fluffos` / `Mud@2026wiz` (regular) + `Mud@2026` (admin/recovery),
-including `fluffos.package.o`. Leftover 689 playtest bar is wizard-
-room `look`/`score`/`quit` — `score` saying 还没有出生呐 is by
-design (wizard skips the birth ceremony). Full `choose`/`washto`/古村
-registration was already verified at onboard.
+including `fluffos.package.o`. Native 巫师休息室 (`/d/wizard/
+wizard_room`) `look`/`score`/`quit` on `fluffos` / `Mud@2026wiz`
+(浮云, `(boss)`). `score` said 还没有出生呐 — by design (wizard
+skips the birth ceremony). Driver `debug.log` and `work/log/
+log_error` were this boot (2026-09-12 08:17); unused-local compile
+warnings only. `error_handler` was not written (no caught runtime
+error). Zip pack: 29918 `.lpc`, overlay seed, no `.git/` store.
+Full `choose`/`washto`/古村 registration was already verified at
+onboard.
 
 ## earlier snapshot note (superseded)
 
