@@ -2,8 +2,11 @@
 
 A UTF-8 FluffOS snapshot of 侠客行一百, from
 `https://github.com/fluffos/xkx100`. **This catalog keeps notes and
-build scripts only** — land LPC fixes on that repo, not in a second
-copy here. Slug `xkx100utf8`, number **110-1**, port 40275.
+build scripts only.** `work/` is the `fluffos/xkx100` submodule
+(mudlib root is the repo root). LPC on that repo is `.lpc` + §9
+formatted — land fixes there, not in a second copy here. Admin
+playtest seed is `overlay/`. Slug `xkx100utf8`, number **110-1**,
+port 40275.
 
 Same game as collection `xkx100` (Coollizard `侠客行一百.rar`, number
 110) — not a byte-identical archive. The login banner still reads

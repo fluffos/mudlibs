@@ -1,16 +1,28 @@
 # 侠客行一百 UTF-8 (xkx100utf8) — porting notes
 
-Source: `git clone https://github.com/fluffos/xkx100` (commit
-`ee022c90aabbbed6413acc6e10254e5a00f511fd`, “Add WASM pack script +
-GitHub Pages deploy workflow”, 2026-07-29; converted 2026-09-05).
-In-game name `侠客行` / banner `侠客行一百`. Slug `xkx100utf8`,
-number **110-1**, port 40275.
+Source: `fluffos/xkx100` submodule at `51396a26` (leftover 688:
+`.lpc` + §9 formatted on that repo; mudlib root is the repo root;
+filename-extension slices widened for `.lpc`). In-game name `侠客行`
+/ banner `侠客行一百`. Slug `xkx100utf8`, number **110-1**, port
+40275.
 
-This collection’s copy is a snapshot, not a live mirror. Local
-login-encoding and preload patches mean it has diverged from
-upstream. Upstream is `github.com/fluffos/xkx100` (fluffos org) —
-genuine driver-compat fixes found later belong in an upstream PR as
-well as here (AGENTS.md §2.3).
+## leftover 688: work/ is the fluffos/xkx100 submodule
+
+`hosting` is `fluffos-upstream`. `work/` is now the `fluffos/xkx100`
+gitlink (pin `51396a26afaa0123bbed5fe61a1ae5191f060b70`), not a
+second formatted fork. `config.fluffos` mudlib directory still points
+at `work/` (this repo's root *is* the mudlib). `patches/` stays empty
+— the rename, §9 format, `.lpc` slices, always-UTF-8 login,
+`log_error` filter, visitor/card guards, wizard vitals, `tell_room`
+exclude, and commented I3 preload live on that fluffos-org repo.
+`doc/board` and other convert-lib encoding sidecars were **not**
+copied upstream (lossy GBK noise). Catalog-only overlay:
+`data/login|user` for `fluffos` / `Mud@2026`.
+
+## earlier snapshot note (superseded)
+
+Onboard convert was 2026-09-05 from `ee022c90`. Leftover 688 landed
+the catalog LPC delta on `fluffos/xkx100` and pinned that SHA.
 
 `MudRen/xkx100` is the same tree with a MudCore wrap. Do not onboard
 it again.
