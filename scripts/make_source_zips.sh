@@ -9,7 +9,9 @@
 # into the driver's in-memory filesystem at play time (see
 # scripts/pack_lib_zip.sh, AGENTS.md §1.6). Kept on purpose: .lpc/.h
 # source, in-game help/doc text, data/*.o saves (including the pre-seeded
-# admin account every README documents).
+# admin account every README documents). For submodule-patch libs the
+# zip is the playable tree (work/ + patches/ applied onto a copy) plus
+# the patches/ themselves so a download is reproducible.
 #
 # Usage: scripts/make_source_zips.sh <out_dir> [slug ...]
 #   <out_dir>  directory to write <slug>.zip into
@@ -48,6 +50,7 @@ fi
 # this file's header) -- there is no separate WASM-side ruleset any more.
 EXCLUDES=(
   --exclude='/log/'
+  --exclude='/.git/' --exclude='/.git'
   --exclude='/www/' --exclude='/temp/' --exclude='/backup/'
   --exclude='fluffos64/'
   --exclude='*.bak' --exclude='*.b'
@@ -69,6 +72,13 @@ for slug in $SLUGS; do
   rm -rf "$STAGE/$slug"
   mkdir -p "$STAGE/$slug"
   rsync -a "${EXCLUDES[@]}" "$lib/work/" "$STAGE/$slug/work/"
+  # Apply catalog patches onto the staged copy so the zip is playable
+  # without dirtying a live submodule checkout.
+  if [ -d "$lib/patches" ] && compgen -G "$lib/patches/*.patch" > /dev/null; then
+    python3 "$SELF_DIR/apply_lib_patches.py" "$slug" --work "$STAGE/$slug/work"
+    mkdir -p "$STAGE/$slug/patches"
+    cp "$lib/patches/"*.patch "$STAGE/$slug/patches/"
+  fi
   cp "$lib/config.fluffos" "$STAGE/$slug/"
   for extra in README.md NOTES.md meta.json; do
     [ -f "$lib/$extra" ] && cp "$lib/$extra" "$STAGE/$slug/"
