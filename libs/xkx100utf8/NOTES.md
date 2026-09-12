@@ -17,7 +17,9 @@ at `work/` (this repo's root *is* the mudlib). `patches/` stays empty
 exclude, and commented I3 preload live on that fluffos-org repo.
 `doc/board` and other convert-lib encoding sidecars were **not**
 copied upstream (lossy GBK noise). Catalog-only overlay:
-`data/login|user` for `fluffos` / `Mud@2026`.
+`data/login|user` for `fluffos` / `Mud@2026`. Native 苏州客店
+`look`/`score`/`quit` on `fluffos` / `Mud@2026` (秦风, 目前权限：(admin)).
+Zip pack: `.lpc` + overlay seed, no `.git/` store.
 
 ## earlier snapshot note (superseded)
 
