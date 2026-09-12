@@ -3,8 +3,10 @@
 
 For hosting=submodule-patch, work/ is an upstream git submodule and
 catalog-only FluffOS-compat lives in patches/ (NNNN-name.patch, git
-apply -p1 from work/). fluffos-upstream libs should have an empty
-patches/ — those fixes belong on github.com/fluffos/<repo>.
+apply -p1 from work/). fluffos-upstream libs (active fluffos-org
+remotes only) should have an empty patches/ — those fixes belong
+on github.com/fluffos/<repo>. An archived fluffos remote is not
+fluffos-upstream (lima → limalib/lima).
 
 Usage: python3 scripts/apply_lib_patches.py <slug>
        python3 scripts/apply_lib_patches.py <slug> --work DIR

@@ -331,16 +331,9 @@ _UPSTREAM_CACHE = None
 
 
 def is_fluffos_hosted(up):
-    """Canonical LPC lives in github.com/fluffos/<repo> (AGENTS.md §2.3)."""
-    if not up:
-        return False
-    if up.get("hosting") == "fluffos-upstream":
-        return True
-    if (up.get("owner") or "").lower() == "fluffos":
-        return True
-    repo = (up.get("repo") or "").lower()
-    return repo.startswith("fluffos/") and repo not in (
-        "fluffos/mudlibs", "fluffos/fluffos")
+    """Active fluffos-org mudlib (AGENTS.md §2.3). Archived fluffos
+    remotes are not hosting targets — trust meta hosting only."""
+    return bool(up) and up.get("hosting") == "fluffos-upstream"
 
 
 def load_upstreams():

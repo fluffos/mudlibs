@@ -1,12 +1,22 @@
 # lima — Lima Mudlib
 
-来源：`git clone https://github.com/fluffos/lima`（克隆时 HEAD 为
-`dbcef2a Update fluffos/lima to 1.1a2 (#33)`，2026-08-24 克隆）。编号
-164，端口 40212。状态：**done**（干净启动，真实注册流程 + 角色创建 +
-`look`/`score`/`inventory`/`who`/`quit` 全部验证可用；管理员账号
-`fluffos` 已播种并验证 `update`/`admtool` 等高权限指令）。按
-AGENTS.md §2.3（"已经是 git 仓库、已经针对 FluffOS 适配的源"）流程处理，
-而非常规的原始压缩包转换流程。
+来源：活跃上游是 `limalib/lima`（HEAD `ffed9c588ee5`，2026-09-03；
+官网 <https://www.limamudlib.dev/>）。本馆可玩树最初从已归档的
+`fluffos/lima` 克隆（`dbcef2a Update fluffos/lima to 1.1a2 (#33)`，
+2026-08-24）。编号 164，端口 40212。状态：**done**（干净启动，真实注册
+流程 + 角色创建 + `look`/`score`/`inventory`/`who`/`quit` 全部验证可用；
+管理员账号 `fluffos` 已播种并验证 `update`/`admtool` 等高权限指令）。
+`hosting` 为 `submodule-patch`（leftover 683）：GitHub 归档的
+`fluffos/lima` 不是活跃上游，不再标 `fluffos-upstream`。
+
+## leftover 683：归档的 fluffos/lima 不是 hosting 目标
+
+`fluffos/lima` 2024-10-08 已 archived。按 leftover 682 的规则，归档 =
+不再活跃，不能当 `fluffos-upstream`。活跃上游是同一 LIMA 社区的
+`limalib/lima`（本馆 PR #49/#50/#51 已于 2026-09-03 合入）。`meta.json`
+改为 `hosting: submodule-patch`，pin `ffed9c588ee5`。`work/` 仍是本馆
+已转换的可玩树（`.lpc`），submodule 切到 `limalib/lima` 的 `lib/` 尚未
+做——切过去之后上游保持 `.c`，`.c`→`.lpc` 切片等转换产物进 `patches/`。
 
 ## 这个 lib 的架构，写给不熟悉 Lima 的读者
 

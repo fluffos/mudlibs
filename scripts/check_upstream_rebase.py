@@ -5,10 +5,13 @@ A lib has an upstream when meta.json's `archive` (or optional `upstream`
 object) names a GitHub repo this collection was cloned from. See
 AGENTS.md §2.3: fluffos-org hosted mudlibs (`hosting: fluffos-upstream`)
 keep notes and build scripts only -- LPC fixes belong on that repo
-and work/ is a git submodule. Other active remotes are
-`submodule-patch` (submodule + patches/). Vendored libs have no
-active git upstream. This script only *reports* whether upstream has
-moved past the pinned clone commit. It never rebases.
+and work/ is a git submodule. fluffos-upstream is only for an
+*active* fluffos-org remote; a GitHub-archived fluffos repo is not
+a hosting target (lima tracks limalib/lima as submodule-patch).
+Other active remotes are `submodule-patch` (submodule + patches/).
+Vendored libs have no active git upstream. This script only
+*reports* whether upstream has moved past the pinned clone commit.
+It never rebases.
 
 Writes scripts/upstream_status.json for gen_site_index.py (cards +
 landing pages) and for the librarian loop.
@@ -210,8 +213,8 @@ def main():
         checked["extra_repos"] = extras
         checked["owner"] = primary["owner"]
         hosting = entry.get("hosting")
-        if not hosting and primary["owner"].lower() == "fluffos":
-            hosting = "fluffos-upstream"
+        # Do not infer fluffos-upstream from owner==fluffos: an
+        # archived fluffos remote is not a hosting target (§2.3).
         checked["hosting"] = hosting
         libs[slug] = checked
         if checked["status"] == "behind":

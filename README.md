@@ -153,7 +153,7 @@ classes it's found.
 | 006-1 | `dsI` | Dead Souls I | `lpmuds.net/files/deadsouls/dsI.zip, recovered via Wayback Machine 2026-08-26 (https://web.archive.org/web/20160306035507id_/http://lpmuds.net/files/deadsouls/dsI.zip; original site down)` | 40225 | WASM playable |
 | 006-2 | `dsII` | Dead Souls II | `mudbytes.net/files/download/843/, recovered via Wayback Machine 2026-08-26 (https://web.archive.org/web/20190802021627id_/http://mudbytes.net/files/download/843/; original site down)` | 40228 | WASM playable |
 | 006-3 | `dsIII` | Dead Souls 3.0 | `mudbytes.net/files/download/2733/, recovered via Wayback Machine 2026-08-26 (https://web.archive.org/web/20190802014424id_/http://mudbytes.net/files/download/2733/; original site down)` | 40229 | WASM playable |
-| 006-4 | `deadsouls_fluffos` | DeadSouls-FluffOS2019 | `git clone https://github.com/fluffos/dead-souls (commit 7c88ffba42fe782bf8c2c4787dbada51e28bfda2, cloned 2026-08-24)` | 40207 | WASM playable |
+| 006-4 | `deadsouls_fluffos` | DeadSouls-FluffOS2019 | `git clone https://github.com/fluffos/dead-souls (commit 4ddbd3b964586eed7f44c5c54e5f5b2154ff4ab4, cloned 2026-08-24; pin advanced 2026-09-12 after PRs #12-#16 landed upstream — already in this tree)` | 40207 | WASM playable |
 | 007 | `dtsl` | DTSL | `DTSL.7z` | 40008 | WASM playable |
 | 007-1 | `dtslmud` | 大唐双龙传（LLMUD） | `LLMUD(大唐双龙)v_0.11版.rar` | 40015 | WASM playable |
 | 007-2 | `dtsl2` | 大唐双龙 (DaTangShuangLong) | `大唐双龙.rar` | 40043 | WASM playable |
@@ -347,13 +347,13 @@ classes it's found.
 | 158 | `zjmudhell` | 指尖MUD | `指尖后端.7z` | 40204 | WASM playable |
 | 160 | `nightmare3` | Nightmare 3 | `git clone https://github.com/fluffos/nightmare3 (not a traditional archive file — a maintained, already FluffOS-adapted fork; mudlib root is the repo's lib/ directory)` | 40208 | WASM playable |
 | 160-1 | `nightmare4` | Nightmare 4 | `git clone https://github.com/MudRen/nightmare4 (a MudRen bundle of "Nightmare IV"/"Nightmare V" -- the repo's own description: "An influential early lib family. Newly revamped: Unix and Windows driver included together."; only the mudlib root, the repo's lib/ directory, was used -- the bundled fluffos-2.9-ds2.14 driver source tree and win32/driver.exe were ignored, this project uses its own driver build)` | 40234 | WASM playable |
-| 161 | `imud` | IMUD@FluffOS.v2019 | `git clone https://github.com/fluffos/imud (commit 6b232d4, cloned 2026-08-24)` | 40209 | WASM playable |
+| 161 | `imud` | IMUD@FluffOS.v2019 | `git clone https://github.com/fluffos/imud (commit 02830c2371aee5d5a8fa2ebfc7b12f8ded9c1742, cloned 2026-08-24; pin advanced 2026-09-12 after .lpc + formatter landed upstream)` | 40209 | WASM playable |
 | 162 | `sanguozhi` | 三国志 | `git clone https://github.com/fluffos/sanguozhi` | 40210 | WASM playable |
 | 163 | `nt7` | 王者归来 | `git clone https://github.com/fluffos/nt7 (王者归来, "泥潭7" — already a UTF-8/FluffOS-v2019-adapted community fork, not a raw legacy archive)` | 40211 | WASM playable |
-| 164 | `lima` | Lima | `git clone https://github.com/fluffos/lima (HEAD dbcef2a, 2026-08-24)` | 40212 | WASM playable |
+| 164 | `lima` | Lima | `gh repo clone limalib/lima (HEAD ffed9c588ee5, 2026-09-03); mudlib root is the repo's lib/ directory. Catalog playable tree was first cloned from archived fluffos/lima dbcef2a (2026-08-24).` | 40212 | WASM playable |
 | 165 | `es2` | 东方故事Ⅱ | `git clone https://github.com/mudchina/es2 (commit ae8adf6, cloned 2026-08-25)` | 40214 | WASM playable |
 | 166 | `genesis` | Genesis | `git clone https://github.com/genesismud/mudlib (commit 92ce6844, cloned 2026-08-25)` | 40213 | WASM playable |
-| 167 | `realms` | RealmsMUD core-lib | `git clone https://github.com/realms-mud/core-lib (commit 4e5729e, cloned 2026-08-25)` | 40215 | noboot |
+| 167 | `realms` | RealmsMUD core-lib | `git clone https://github.com/realms-mud/core-lib (commit bdc812a4b2b417e8c0c527c9e30a1e6224506faa, cloned 2026-08-25; GMCP research/skills/traits messages backported 2026-09-12)` | 40215 | noboot |
 | 168 | `finalrealms` | Final Realms | `git clone https://github.com/quixadhal/fr (commit 16308bd, cloned 2026-08-25)` | 40216 | WASM playable |
 | 169 | `nitan3` | 泥潭三 / 《終極魔界》 (nitan3) | `git clone https://github.com/mudchina/nitan3 (commit 6f6d92f, cloned 2026-08-25)` | 40217 | WASM playable |
 | 170 | `mhxy2002` | 梦幻西游2002版 | `git clone https://github.com/mudchina/mhxy2002 (commit 3be0856, cloned 2026-08-25)` | — | pending |
@@ -411,7 +411,7 @@ classes it's found.
 | 932 | `swzf` | 谁与争锋 | `谁与争锋.7z` | — | password-protected |
 | 933 | `naruto` | 獵火影忍者人 | `git clone https://github.com/MudRen/mudos-game-naruto (commit 000f286645e810e1cd786130c52d7b9c1747cae8, cloned 2026-08-26)` | 40235 | WASM playable |
 | 934 | `revive` | 终极地狱-轩辕传说 | `git clone https://github.com/MudRen/revive (commit 240ea5c4c7cd8cf2d854781648a16398e6df3b16, cloned 2026-08-26)` | 40236 | WASM playable |
-| 935 | `residuum` | Nightmare Residuum | `git clone https://github.com/michaelprograms/nightmare-residuum (commit d9336dbcad231b34ac751e9e41946b52efbbd309, cloned 2026-08-26); only the repo's lib/ directory was used as the mudlib root -- the bundled fluffos git submodule (driver/, tracking fluffos/fluffos), the native/ Rust noise-generation addon, and tools/planet-render were ignored, this project uses its own driver build` | 40237 | WASM playable |
+| 935 | `residuum` | Nightmare Residuum | `git clone https://github.com/michaelprograms/nightmare-residuum (commit abb51fa5c1b79a71f64a72d7bb50ed749a23082c, cloned 2026-08-26; lib/ tests+harvestable backported 2026-09-12); only the repo's lib/ directory was used as the mudlib root -- the bundled fluffos git submodule (driver/, tracking fluffos/fluffos), the native/ Rust noise-generation addon, and tools/planet-render were ignored, this project uses its own driver build` | 40237 | WASM playable |
 | 936 | `revivalworld` | 重生的世界 | `git clone https://github.com/MudRen/RevivalWorld (commit 71dcacb26b9db4a0813543761e2c610a2d4c04df, cloned 2026-08-26)` | 40238 | WASM playable |
 | 937 | `es1` | 东方故事(蓝天) | `git clone https://github.com/MudRen/es (commit 4c2177e513c9f2e57fbcca3a9239e6a5096a6b7d, cloned 2026-08-26)` | 40239 | WASM playable |
 | 938 | `dreamofseven` | 夢幻七域 | `git clone https://github.com/MudRen/mudos-game-ds (commit 07ea84ebdff5ee49cb482a520bdf1aaeda886cd0, cloned 2026-08-26)` | 40240 | WASM playable |
