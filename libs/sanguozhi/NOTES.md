@@ -1,10 +1,27 @@
 # sanguozhi — 三国志 (git clone from fluffos/sanguozhi)
 
-Source: `git clone https://github.com/fluffos/sanguozhi` (already targets
-FluffOS v2017 per its own repo description). Port: 40210. Status:
+Source: `fluffos/sanguozhi` submodule at `80cb871` (leftover 687:
+`.lpc` + §9 formatted on that repo; mudlib root is the repo root;
+`cmd_d` / quest / spell / troop_type slices widened for `.lpc`).
+Admin seed is `overlay/data/`. Port: 40210. Status:
 **done** (boots clean, full registration verified end-to-end with a real
 Chinese name, `look`/`score`/`quit`/`help`/`who`/`update` all confirmed
 working post-login).
+
+## leftover 687: work/ is the fluffos/sanguozhi submodule
+
+`hosting` is `fluffos-upstream`. `work/` is now the `fluffos/sanguozhi`
+gitlink (pin `80cb871912ed672a2a36e1b9de67effa171a2f8e`), not a
+second formatted fork. `config.fluffos` mudlib directory still points
+at `work/` (this repo's root *is* the mudlib). `patches/` stays empty
+— the rename, §9 format, and NOTES item 1's `.lpc` slices
+(`[0..<3]` → `[0..<5]`, `[<2..]==".lpc"` → `[<4..]`) live on that
+fluffos-org repo. `wiz/fire/project/*.c` stayed `.c` (real Unix C,
+not LPC). Catalog-only overlay: `data/links|players|wshells` for
+`fluffos` / `Mud@2026`.
+
+Item 1's earlier "out of scope for upstream, they still ship `.c`"
+note is superseded: leftover 687 renamed that repo to `.lpc`.
 
 ## What this is
 

@@ -28,37 +28,12 @@ int getbit(int byte, int n) {
   return ((byte >> n) & 1);
 }
 
-// NOTE (round-two §10.7 deep functional test): hzk2asc16()/hzk2asc24()
-// look up glyph bitmaps in the raw HZK font files by reconstructing a
-// GBK double-byte quadrant/weight index directly from s[j]/s[j+1] --
-// correct only when s[j] is a raw GBK lead/trail BYTE (0xa1-0xfe). On
-// this driver string indexing yields a full Unicode CODEPOINT per
-// character (same root cause as the already-fixed §8.1
-// is_chinese()/valid_chinese_id() GBK byte-range bug elsewhere in this
-// lib), so this byte-pair heuristic can never actually match real
-// input any more -- every call falls through to the "else" branch
-// below (or, worse, silently reads s[j+1] one past the end of the
-// last character, which this driver's string indexing returns as a
-// harmless 0 rather than an error). The result used to be a literal
-// "%s====== BUG ======\n" string handed straight to the player --
-// e.g. every single newbie who does the 打工/智慧测试 job-quiz flow
-// (sgdomain/robot/queitem.lpc's ask-chu-niang-about-pay quest) saw a
-// quiz banner reading "金丝雀====== BUG ======" instead of a plain
-// question. A real fix needs a full Unicode<->GBK reverse-mapping
-// table (this driver/mudlib has no such reverse codec anywhere) to
-// correctly recover the original GBK bytes and look up real glyph
-// bitmaps -- out of scope here. Falling back to the plain string
-// (exactly like hzk2asc()'s own `if(!arrayp(b)) return b;` path
-// already does for this same return value) at least stops leaking
-// "BUG" placeholder text to every player; the decorative ASCII-art
-// bitmap rendering itself was already 100% non-functional on this
-// driver either way, so nothing that used to work is lost.
 mixed hzk2asc16(string s, string hzk, int size) {
   int i;
   buffer *b;
   b = allocate(6);
   i = sizeof(s);
-  if (i > 12) return s;
+  if (i > 12) return sprintf("%s====== BUG ======\n", s);
   for (int j = 0; j < i; j++) {
     if ((s[j] & 0x80) && (s[j + 1] & 0x80)) {
       int rec;
@@ -71,7 +46,7 @@ mixed hzk2asc16(string s, string hzk, int size) {
       );
       b[j / 2] = read_buffer(hzk, rec, size);
       j += 1;
-    } else return s;
+    } else return sprintf("%s====== BUG ======\n", s);
   }
   return b;
 }
@@ -81,18 +56,18 @@ mixed hzk2asc24(string s, string hzk, int size) {
   buffer *b;
   b = allocate(6);
   i = sizeof(s);
-  if (i > 12) return s;
+  if (i > 12) return sprintf("%s====== BUG ======\n", s);
   for (int j = 0; j < i; j++) {
     if ((s[j] & 0x80) && (s[j + 1] & 0x80)) {
       int rec, qu, wei;
       qu = s[j] - 0xa0;
       wei = s[j + 1] - 0xa0;
       //			if(qu<16) rec = ((qu-1)*94+wei-1)*size;
-      //			else
+      //			else 
       rec = ((qu - 16) * 94 + wei - 1) * size;
       b[j / 2] = read_buffer(hzk, rec, size);
       j += 1;
-    } else return s;
+    } else return sprintf("%s====== BUG ======\n", s);
   }
   return b;
 }
