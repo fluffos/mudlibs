@@ -562,6 +562,13 @@ Site UX / LLM-doc learnings (2026-09-13):
   the landing page, listed in `sitemap.xml`, and referenced from root
   `llms.txt` / `games.json` (`llms_txt_url`, `play_url`, `port`,
   `display_name`). Prefer that file when helping someone run one lib.
+  `build_site.sh` must copy that file from index-staging into the
+  published `site/<slug>/` dir (alongside `index.html`); generating it
+  alone is not enough — a 2026-09-13 bug left every per-lib `llms.txt`
+  as a live 404 while the root `/llms.txt` worked. Each landing also
+  publishes an SEO alias at `/<slug>.html` (same HTML, canonical still
+  `/<slug>/`) and a visible Home → lib breadcrumb with BreadcrumbList
+  JSON-LD.
 
 - **English is the site default** (2026-09-13): `/` and `hreflang
   x-default` are English; Chinese lives at `/zh/` (`/en/` and `/cn/`

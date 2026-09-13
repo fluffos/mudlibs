@@ -287,7 +287,19 @@ for slug in $SLUGS; do
   # render_lib_page. This, not the WASM page, is what /{slug}/ serves;
   # it's what makes the game's description/notes crawlable and defers
   # the actual driver/data download until the visitor clicks Play.
+  #
+  # Also copy the per-lib llms.txt runbook -- gen_site_index.py writes it
+  # into index-staging and the landing page / sitemap link to it, but a
+  # prior omission here left every /{slug}/llms.txt as a live 404 while
+  # the root /llms.txt (copied in the loop below) worked fine.
+  #
+  # /{slug}.html is an SEO alias of the same landing HTML: some crawlers
+  # and typed URLs still expect a .html leaf (e.g. /tmi2.html). Canonical
+  # on the page itself stays /{slug}/, so the alias consolidates ranking
+  # onto the directory URL rather than competing with it.
   cp "$CACHE_DIR/index-staging/$slug/index.html" "$SITE_DIR/$slug/index.html"
+  cp "$CACHE_DIR/index-staging/$slug/llms.txt" "$SITE_DIR/$slug/llms.txt"
+  cp "$CACHE_DIR/index-staging/$slug/index.html" "$SITE_DIR/$slug.html"
 done
 for f in index.html robots.txt sitemap.xml llms.txt llm.txt llms-full.txt games.json; do
   cp "$CACHE_DIR/index-staging/$f" "$SITE_DIR/$f"

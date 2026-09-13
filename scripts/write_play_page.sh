@@ -182,9 +182,16 @@ for old, new in required:
 cosmetic = [
     ('<title>FluffOS — WebAssembly driver</title>',
      '<title>%s — FluffOS WASM</title>' % name),
+    # Breadcrumb trail above the play H1: Home / <lib> / Play. Keeps the
+    # WASM shell oriented in the museum hierarchy (and gives crawlers /
+    # users a way back) without the old «-in-H1 hack.
     ('<h1>FluffOS / WebAssembly</h1>',
-     '<h1><a href="./" style="color:inherit;text-decoration:none" '
-     'title="返回介绍页">«</a> %s</h1>' % name),
+     '<nav class="crumbs" aria-label="Breadcrumb" '
+     'style="font-size:12px;opacity:.75;margin:0 0 4px">'
+     '<a href="../" style="color:inherit">Home</a>'
+     ' / <a href="./" style="color:inherit">%s</a>'
+     ' / <span aria-current="page">Play</span></nav>'
+     '<h1>%s</h1>' % (name, name)),
 ]
 for old, new in cosmetic:
     if html.count(old) == 1:

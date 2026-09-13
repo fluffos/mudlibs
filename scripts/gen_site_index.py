@@ -241,6 +241,56 @@ def page_title_parts(slug, info):
     return primary, en
 
 
+
+def render_breadcrumbs(items, aria_label="Breadcrumb"):
+    """Build a visible breadcrumb trail + schema.org BreadcrumbList.
+
+    items: ordered (name, url_or_None) pairs. The last entry is the
+    current page (url may be None or the canonical URL; either way it
+    is rendered as plain text with aria-current="page", not a link).
+    Returns (nav_html, jsonld_dict) so callers can drop the nav in the
+    body and merge the dict into the page's JSON-LD @graph.
+    """
+    if not items:
+        return "", None
+    lis = []
+    list_elements = []
+    for i, (name, url) in enumerate(items, start=1):
+        safe_name = html.escape(name)
+        is_last = i == len(items)
+        if is_last or not url:
+            lis.append(
+                f'<li class="crumb current" aria-current="page">'
+                f'<span>{safe_name}</span></li>')
+            entry = {
+                "@type": "ListItem",
+                "position": i,
+                "name": name,
+            }
+            if url:
+                entry["item"] = url
+            list_elements.append(entry)
+        else:
+            lis.append(
+                f'<li class="crumb"><a href="{html.escape(url)}">'
+                f'{safe_name}</a></li>')
+            list_elements.append({
+                "@type": "ListItem",
+                "position": i,
+                "name": name,
+                "item": url,
+            })
+    nav = (
+        f'<nav class="breadcrumbs" aria-label="{html.escape(aria_label)}">'
+        f'<ol>{"".join(lis)}</ol></nav>'
+    )
+    jsonld = {
+        "@type": "BreadcrumbList",
+        "itemListElement": list_elements,
+    }
+    return nav, jsonld
+
+
 def read_port(slug, info):
     """Prefer meta.json port; fall back to config.fluffos `port number`."""
     port = str(info.get('port') or '').strip()
@@ -551,6 +601,7 @@ THEME_STYLE_BLOCK = f"""
     color: var(--fg);
   }}
   .theme-toggle:hover {{ border-color: var(--pico-primary); }}
+
 """
 
 # Sets data-theme from a saved visitor choice as early as possible (a
@@ -1061,6 +1112,22 @@ def render_lib_page(slug, info, commits, stars=None):
         },
     }
     jsonld_doc = {k: v for k, v in jsonld_doc.items() if v is not None}
+
+    # Visible trail + BreadcrumbList JSON-LD. Current crumb uses the same
+    # English-first title as <h1> so the trail matches what the visitor sees.
+    crumb_label = info.get("english_name") or primary_title
+    crumb_html, crumb_ld = render_breadcrumbs([
+        ("Home", f"{SITE_URL}/"),
+        (crumb_label, None),
+    ])
+    if crumb_ld:
+        # Promote the single VideoGame node into an @graph so the
+        # BreadcrumbList rides alongside without a second <script> tag.
+        game_node = {k: v for k, v in jsonld_doc.items() if k != "@context"}
+        jsonld_doc = {
+            "@context": "https://schema.org",
+            "@graph": [game_node, crumb_ld],
+        }
     jsonld = json.dumps(jsonld_doc, ensure_ascii=False).replace("</", "<\\/")
 
     site_name = html.escape(ui_zh["site_name"])
@@ -1118,7 +1185,18 @@ def render_lib_page(slug, info, commits, stars=None):
   }}
   body > header, body > main, body > footer {{ max-width: 760px; }}
   body > header {{ padding-bottom: 0; }}
-  .back {{ font-size: 13px; margin-bottom: 0; }}
+  .breadcrumbs {{ font-size: 13px; margin: 0 0 4px; }}
+  .breadcrumbs ol {{
+    list-style: none; display: flex; flex-wrap: wrap; align-items: center;
+    gap: 0; padding: 0; margin: 0; color: var(--pico-muted-color);
+  }}
+  .breadcrumbs li {{ display: inline-flex; align-items: center; }}
+  .breadcrumbs li:not(:last-child)::after {{
+    content: "/"; margin: 0 8px; opacity: .55; speak: never;
+  }}
+  .breadcrumbs a {{ color: var(--pico-muted-color); text-decoration: none; }}
+  .breadcrumbs a:hover {{ color: var(--pico-primary); }}
+  .breadcrumbs .current span {{ color: var(--fg); font-weight: 600; }}
   .head {{ display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
            margin: 18px 0 0; }}
   h1 {{ font-size: 30px; margin: 0; font-weight: 700; letter-spacing: -.01em; }}
@@ -1192,7 +1270,7 @@ def render_lib_page(slug, info, commits, stars=None):
 <body>
 <header>
   <div class="topbar">
-    <p class="back"><a href="/">← {site_name} / LPC MUD Museum</a></p>
+    {crumb_html}
     {render_engage_badges("zh", stars)}
   </div>
   <div class="head">
@@ -1346,6 +1424,31 @@ def render_index(status, commits, lang="zh", canonical_url=None, stars=None):
     other = "en" if lang == "zh" else "zh"
     jsonld = build_jsonld(status, lang, ui, numbers, canonical_url=canonical_url)
 
+    # Chinese index sits under /zh/; give it a Home → 中文 trail. English
+    # root is already the site home, so a lone "Home" crumb adds noise —
+    # skip it there.
+    if lang == "zh":
+        index_crumb_html, index_crumb_ld = render_breadcrumbs([
+            ("Home", f"{SITE_URL}/"),
+            ("中文", None),
+        ])
+        if index_crumb_ld:
+            import json as _json
+            try:
+                graph = _json.loads(jsonld)
+            except Exception:
+                graph = {"@context": "https://schema.org", "@graph": []}
+            if "@graph" in graph:
+                graph["@graph"].append(index_crumb_ld)
+            else:
+                node = {k: v for k, v in graph.items() if k != "@context"}
+                graph = {"@context": graph.get("@context", "https://schema.org"),
+                         "@graph": [node, index_crumb_ld]}
+            jsonld = _json.dumps(graph, ensure_ascii=False).replace("</", "<\\/")
+    else:
+        index_crumb_html, index_crumb_ld = "", None
+
+
     return f"""<!doctype html>
 <html lang="{ui['html_lang']}">
 <head>
@@ -1496,7 +1599,10 @@ def render_index(status, commits, lang="zh", canonical_url=None, stars=None):
 <body>
 <header>
   <div class="topbar">
-    <p class="lang-switch"><a href="{ui['lang_switch_href']}">{html.escape(ui['lang_switch_label'])}</a></p>
+    <div>
+      {index_crumb_html}
+      <p class="lang-switch"><a href="{ui['lang_switch_href']}">{html.escape(ui['lang_switch_label'])}</a></p>
+    </div>
     {render_engage_badges(lang, stars)}
   </div>
   <h1>{html.escape(ui['h1'])}</h1>
