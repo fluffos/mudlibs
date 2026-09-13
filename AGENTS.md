@@ -575,7 +575,7 @@ Site UX / LLM-doc learnings (2026-09-13):
   `/<slug>/`.
 
 - **English is the site default** (2026-09-13): `/` and `hreflang
-  x-default` are English; Chinese lives at `/zh/` (`/en/` and `/cn/`
+  x-default` are English; Chinese lives at `/zh/` — `build_site.sh` must copy `index-staging/zh/` into the published site (a 2026-09-13 bug shipped `/en/`+`/cn/` aliases but omitted `/zh/`, so the lang-switch target 404'd). (`/en/` and `/cn/`
   are aliases that canonicalise to `/` and `/zh/`). Root title/intro
   explicitly say "LPMud / LPC MUD". Per-lib landings use `lang=en`,
   English-first `<title>`/`<h1>` when `english_name` exists, and a

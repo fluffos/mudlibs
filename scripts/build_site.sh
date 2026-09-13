@@ -309,7 +309,13 @@ done
 # /assets/pico.min.css -- see gen_site_index.py's main() for why it's
 # self-hosted rather than loaded from a CDN.
 cp -r "$CACHE_DIR/index-staging/assets" "$SITE_DIR/assets"
-mkdir -p "$SITE_DIR/en" "$SITE_DIR/cn"
+# Language indexes: English default is site root (copied above). Chinese
+# canonical lives at /zh/; /en/ and /cn/ are aliases that canonicalise
+# back to / and /zh/. gen_site_index.py writes all three under
+# index-staging -- skipping /zh/ here is what made mudlibs.fluffos.info/zh/
+# a live 404 while the EN→中文 switch (and sitemap) still pointed at it.
+mkdir -p "$SITE_DIR/zh" "$SITE_DIR/en" "$SITE_DIR/cn"
+cp "$CACHE_DIR/index-staging/zh/index.html" "$SITE_DIR/zh/index.html"
 cp "$CACHE_DIR/index-staging/en/index.html" "$SITE_DIR/en/index.html"
 cp "$CACHE_DIR/index-staging/cn/index.html" "$SITE_DIR/cn/index.html"
 touch "$SITE_DIR/.nojekyll"
