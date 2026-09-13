@@ -562,20 +562,26 @@ Site UX / LLM-doc learnings (2026-09-13):
   the landing page, listed in `sitemap.xml`, and referenced from root
   `llms.txt` / `games.json` (`llms_txt_url`, `play_url`, `port`,
   `display_name`). Prefer that file when helping someone run one lib.
-  `build_site.sh` must copy that file from index-staging into the
-  published `site/<slug>/` dir (alongside `index.html`); generating it
-  alone is not enough — a 2026-09-13 bug left every per-lib `llms.txt`
-  as a live 404 while the root `/llms.txt` worked. Each landing also
-  publishes an SEO alias at `/<slug>.html` (same HTML, canonical still
-  `/<slug>/`) and a visible Home → lib breadcrumb with BreadcrumbList
-  JSON-LD. The playable WASM shell lives at `/<slug>/play.html` and the static
-  description/README page at `/<slug>/info.html`, each with its **own**
-  `rel=canonical` (and sitemap entries) so Google treats play/info as
-  stable static URLs, not JS-only side effects of the landing hub at
-  `/<slug>/`.
+  Each landing also publishes an SEO alias at `/<slug>.html` (same HTML,
+  canonical still `/<slug>/`) and a visible Home → lib breadcrumb with
+  BreadcrumbList JSON-LD. The playable WASM shell lives at
+  `/<slug>/play.html` and the static description/README page at
+  `/<slug>/info.html`, each with its **own** `rel=canonical` (and
+  sitemap entries) so Google treats play/info as stable static URLs,
+  not JS-only side effects of the landing hub at `/<slug>/`.
+- **Publish invariant (do not regress):** `gen_site_index.py` writes the
+  full HTML/txt/json/assets tree into `index-staging/`. `build_site.sh`
+  overlays **every** staging file onto `site/` (never a hand-picked
+  filename list — that is how `/zh/` and `/<slug>/llms.txt` shipped as
+  live 404s while sitemap/lang-switch still linked them). After assemble,
+  `scripts/verify_site_publish.py <staging> <site>` must pass: staging
+  mirror, every sitemap `<loc>`, every packable `play.html` +
+  `/<slug>.html` alias, and `/zh|/en|/cn` indexes. A verifier failure
+  blocks the deploy; extend the verifier when adding new published URLs,
+  do not delete it.
 
 - **English is the site default** (2026-09-13): `/` and `hreflang
-  x-default` are English; Chinese lives at `/zh/` — `build_site.sh` must copy `index-staging/zh/` into the published site (a 2026-09-13 bug shipped `/en/`+`/cn/` aliases but omitted `/zh/`, so the lang-switch target 404'd). (`/en/` and `/cn/`
+  x-default` are English; Chinese lives at `/zh/` (`/en/` and `/cn/`
   are aliases that canonicalise to `/` and `/zh/`). Root title/intro
   explicitly say "LPMud / LPC MUD". Per-lib landings use `lang=en`,
   English-first `<title>`/`<h1>` when `english_name` exists, and a

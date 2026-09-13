@@ -282,43 +282,35 @@ for slug in $SLUGS; do
   # write_play_page.sh's own header for why.
   "$SELF_DIR/write_play_page.sh" "$slug" "$RELEASE_DIR" "$RELEASE_DIR" \
       "$SITE_DIR/$slug" "$(custom_driver_dir_for "$slug")"
-  # Server-rendered landing page (full description + README/NOTES.md,
-  # "Play Now" link to play.html) -- see gen_site_index.py's
-  # render_lib_page. This, not the WASM page, is what /{slug}/ serves;
-  # it's what makes the game's description/notes crawlable and defers
-  # the actual driver/data download until the visitor clicks Play.
-  #
-  # Also copy the per-lib llms.txt runbook -- gen_site_index.py writes it
-  # into index-staging and the landing page / sitemap link to it, but a
-  # prior omission here left every /{slug}/llms.txt as a live 404 while
-  # the root /llms.txt (copied in the loop below) worked fine.
-  #
-  # /{slug}.html is an SEO alias of the same landing HTML: some crawlers
-  # and typed URLs still expect a .html leaf (e.g. /tmi2.html). Canonical
-  # on the page itself stays /{slug}/, so the alias consolidates ranking
-  # onto the directory URL rather than competing with it.
-  cp "$CACHE_DIR/index-staging/$slug/index.html" "$SITE_DIR/$slug/index.html"
-  cp "$CACHE_DIR/index-staging/$slug/info.html" "$SITE_DIR/$slug/info.html"
-  cp "$CACHE_DIR/index-staging/$slug/llms.txt" "$SITE_DIR/$slug/llms.txt"
-  cp "$CACHE_DIR/index-staging/$slug/index.html" "$SITE_DIR/$slug.html"
 done
-for f in index.html robots.txt sitemap.xml llms.txt llm.txt llms-full.txt games.json; do
-  cp "$CACHE_DIR/index-staging/$f" "$SITE_DIR/$f"
+
+# --- 8b. overlay EVERY index-staging artifact onto site/ -------------------
+# gen_site_index.py is the source of truth for HTML/txt/json/assets
+# (root index, /zh|/en|/cn, per-lib index.html+info.html+llms.txt,
+# robots/sitemap/llms*/games.json, assets/). Hand-maintained `cp`
+# lists here previously shipped live 404s for paths the generator and
+# sitemap already advertised (/zh/, /<slug>/llms.txt). Mirror the whole
+# staging tree instead: staging never contains play.html or .zip, so
+# those site-only files survive the overlay.
+#
+# /<slug>.html SEO aliases are derived after the overlay (same bytes as
+# /<slug>/index.html; canonical on the page stays /<slug>/).
+while IFS= read -r -d '' src; do
+  rel=${src#"$CACHE_DIR/index-staging/"}
+  dest="$SITE_DIR/$rel"
+  mkdir -p "$(dirname "$dest")"
+  cp -a "$src" "$dest"
+done < <(find "$CACHE_DIR/index-staging" -type f -print0)
+
+for slug in $SLUGS; do
+  cp "$SITE_DIR/$slug/index.html" "$SITE_DIR/$slug.html"
 done
-# Vendored (not CDN) classless CSS framework every page links as
-# /assets/pico.min.css -- see gen_site_index.py's main() for why it's
-# self-hosted rather than loaded from a CDN.
-cp -r "$CACHE_DIR/index-staging/assets" "$SITE_DIR/assets"
-# Language indexes: English default is site root (copied above). Chinese
-# canonical lives at /zh/; /en/ and /cn/ are aliases that canonicalise
-# back to / and /zh/. gen_site_index.py writes all three under
-# index-staging -- skipping /zh/ here is what made mudlibs.fluffos.info/zh/
-# a live 404 while the EN→中文 switch (and sitemap) still pointed at it.
-mkdir -p "$SITE_DIR/zh" "$SITE_DIR/en" "$SITE_DIR/cn"
-cp "$CACHE_DIR/index-staging/zh/index.html" "$SITE_DIR/zh/index.html"
-cp "$CACHE_DIR/index-staging/en/index.html" "$SITE_DIR/en/index.html"
-cp "$CACHE_DIR/index-staging/cn/index.html" "$SITE_DIR/cn/index.html"
 touch "$SITE_DIR/.nojekyll"
+
+# Fail the build if staging/sitemap/lang-switch still point at anything
+# the assemble step didn't actually publish. See verify_site_publish.py.
+python3 "$SELF_DIR/verify_site_publish.py" \
+    "$CACHE_DIR/index-staging" "$SITE_DIR"
 
 # --- 9. summary --------------------------------------------------------------
 echo
