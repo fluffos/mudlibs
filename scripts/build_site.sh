@@ -298,6 +298,7 @@ for slug in $SLUGS; do
   # on the page itself stays /{slug}/, so the alias consolidates ranking
   # onto the directory URL rather than competing with it.
   cp "$CACHE_DIR/index-staging/$slug/index.html" "$SITE_DIR/$slug/index.html"
+  cp "$CACHE_DIR/index-staging/$slug/info.html" "$SITE_DIR/$slug/info.html"
   cp "$CACHE_DIR/index-staging/$slug/llms.txt" "$SITE_DIR/$slug/llms.txt"
   cp "$CACHE_DIR/index-staging/$slug/index.html" "$SITE_DIR/$slug.html"
 done

@@ -966,7 +966,7 @@ def render_upstream_box(slug, ui):
     )
 
 
-def render_lib_page(slug, info, commits, stars=None):
+def render_lib_page(slug, info, commits, stars=None, page="landing"):
     """Full, server-side-rendered, crawlable landing page for one lib,
     served at /{slug}/ (see build_site.sh's assembly step). This is what
     fixes the site's core SEO problem: /{slug}/ used to serve straight
@@ -1077,7 +1077,15 @@ def render_lib_page(slug, info, commits, stars=None):
                 f'{render_markdown_html(text)}</details>')
     docs_html = "\n".join(doc_sections)
 
-    canonical_url = f"{SITE_URL}/{slug}/"
+    # page="landing" -> /<slug>/ (hub). page="info" -> /<slug>/info.html,
+    # a stable static URL for the same description/README content so
+    # Google can treat "info" the way /play.html is the stable play URL.
+    if page not in ("landing", "info"):
+        raise ValueError(f"unknown lib page kind: {page!r}")
+    landing_url = f"{SITE_URL}/{slug}/"
+    info_url = f"{SITE_URL}/{slug}/info.html"
+    play_url = f"{SITE_URL}/{slug}/play.html"
+    canonical_url = info_url if page == "info" else landing_url
     # Prefer English description for the global meta (English is the
     # site default); fall back to Chinese. Prefix with LPMud keywords so
     # game pages can rank for the same queries as the index.
@@ -1087,14 +1095,15 @@ def render_lib_page(slug, info, commits, stars=None):
     meta_desc_attr = html.escape(_desc_for_meta[:300])
 
     zip_url = f"{SITE_URL}/{slug}/{slug}.zip"
-    play_url = f"{SITE_URL}/{slug}/play.html"
+    # VideoGame entity always points at the landing hub; info.html is a
+    # WebPage/alias for the same description, not a second game entity.
     jsonld_doc = {
         "@context": "https://schema.org",
         "@type": "VideoGame",
         "name": info.get("english_name") or primary_title,
         "alternateName": primary_title if info.get("english_name") else None,
         "description": primary_desc or desc_en,
-        "url": canonical_url,
+        "url": landing_url,
         "genre": ["MUD", "Text Adventure", "RPG"],
         "gamePlatform": ["Web browser (WebAssembly)", "FluffOS (native)"],
         "playMode": "MultiPlayer",
@@ -1113,13 +1122,23 @@ def render_lib_page(slug, info, commits, stars=None):
     }
     jsonld_doc = {k: v for k, v in jsonld_doc.items() if v is not None}
 
-    # Visible trail + BreadcrumbList JSON-LD. Current crumb uses the same
-    # English-first title as <h1> so the trail matches what the visitor sees.
+    # Visible trail + BreadcrumbList JSON-LD. Landing: Home → Name.
+    # Info: Home → Name → Info (Name links back to the hub).
     crumb_label = info.get("english_name") or primary_title
-    crumb_html, crumb_ld = render_breadcrumbs([
-        ("Home", f"{SITE_URL}/"),
-        (crumb_label, None),
-    ])
+    if page == "info":
+        crumb_items = [
+            ("Home", f"{SITE_URL}/"),
+            (crumb_label, landing_url),
+            ("Info", None),
+        ]
+        page_title_suffix = "Info — LPMud Museum"
+    else:
+        crumb_items = [
+            ("Home", f"{SITE_URL}/"),
+            (crumb_label, None),
+        ]
+        page_title_suffix = "LPMud Museum"
+    crumb_html, crumb_ld = render_breadcrumbs(crumb_items)
     if crumb_ld:
         # Promote the single VideoGame node into an @graph so the
         # BreadcrumbList rides alongside without a second <script> tag.
@@ -1136,7 +1155,7 @@ def render_lib_page(slug, info, commits, stars=None):
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{title_bits} — LPMud Museum</title>
+<title>{title_bits} — {page_title_suffix}</title>
 <meta name="description" content="{meta_desc_attr}">
 <meta name="keywords" content="LPMud, LPC MUD, mudlib, FluffOS, play MUD online, WebAssembly, text MUD">
 <meta name="robots" content="index, follow">
@@ -1284,7 +1303,9 @@ def render_lib_page(slug, info, commits, stars=None):
 </header>
 <main>
   <p class="play-cta"><a role="button" class="play-btn" href="play.html">▶ 开始游玩 · Play Now</a></p>
-  <p class="run-links"><a href="llms.txt" title="LLM-oriented download &amp; native-run instructions">llms.txt · 下载与本地运行</a>
+  <p class="run-links"><a href="info.html" title="Static info page (description, README, NOTES)">info.html · 介绍</a>
+    · <a href="play.html" title="Play in browser via WebAssembly">play.html · 游玩</a>
+    · <a href="llms.txt" title="LLM-oriented download &amp; native-run instructions">llms.txt · 下载与本地运行</a>
     · <a href="{SITE_URL}/{slug}/{slug}.zip">ZIP</a>
     · <a href="{REPO_URL}/tree/main/libs/{slug}">GitHub</a></p>
   {desc_html}
@@ -1702,6 +1723,7 @@ def render_games_json(status, commits):
             "port": read_port(slug, info) or None,
             "url": f"{SITE_URL}/{slug}/",
             "play_url": f"{SITE_URL}/{slug}/play.html",
+            "info_url": f"{SITE_URL}/{slug}/info.html",
             "llms_txt_url": f"{SITE_URL}/{slug}/llms.txt",
             "source_url": f"{REPO_URL}/tree/main/libs/{slug}",
             "source_zip_url": f"{SITE_URL}/{slug}/{slug}.zip",
@@ -1759,9 +1781,11 @@ def render_sitemap_xml(status):
         urls.append(
             f"  <url><loc>{SITE_URL}/{html.escape(slug)}/</loc>"
             "<changefreq>monthly</changefreq></url>")
-        # play.html is the stable static playable URL (own canonical);
-        # list it explicitly so Google treats /<slug>/play.html as an
-        # indexable page, not just a JS-only side effect of the landing.
+        # info.html / play.html are the stable static URLs for "read about
+        # this lib" and "play this lib"; each has its own rel=canonical.
+        urls.append(
+            f"  <url><loc>{SITE_URL}/{html.escape(slug)}/info.html</loc>"
+            "<changefreq>monthly</changefreq></url>")
         urls.append(
             f"  <url><loc>{SITE_URL}/{html.escape(slug)}/play.html</loc>"
             "<changefreq>monthly</changefreq></url>")
@@ -2015,7 +2039,11 @@ def main():
         lib_dir = out_dir / slug
         lib_dir.mkdir(parents=True, exist_ok=True)
         (lib_dir / "index.html").write_text(
-            render_lib_page(slug, info, commits, stars=stars), encoding="utf-8")
+            render_lib_page(slug, info, commits, stars=stars, page="landing"),
+            encoding="utf-8")
+        (lib_dir / "info.html").write_text(
+            render_lib_page(slug, info, commits, stars=stars, page="info"),
+            encoding="utf-8")
         (lib_dir / "llms.txt").write_text(
             render_lib_llms_txt(slug, info), encoding="utf-8")
         n_landing += 1

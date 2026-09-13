@@ -205,7 +205,7 @@ cosmetic = [
                 {"@type": "ListItem", "position": 1, "name": "Home",
                  "item": site_url + "/"},
                 {"@type": "ListItem", "position": 2, "name": name,
-                 "item": "%s/%s/" % (site_url, slug)},
+                 "item": "%s/%s/info.html" % (site_url, slug)},
                 {"@type": "ListItem", "position": 3, "name": "Play",
                  "item": "%s/%s/play.html" % (site_url, slug)},
             ],
@@ -217,7 +217,7 @@ cosmetic = [
      '<nav class="crumbs" aria-label="Breadcrumb" '
      'style="font-size:12px;opacity:.75;margin:0 0 4px">'
      '<a href="../" style="color:inherit">Home</a>'
-     ' / <a href="./" style="color:inherit">%s</a>'
+     ' / <a href="info.html" style="color:inherit">%s</a>'
      ' / <span aria-current="page">Play</span></nav>'
      '<h1>%s</h1>' % (name, name)),
 ]
