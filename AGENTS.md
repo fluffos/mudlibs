@@ -568,7 +568,10 @@ Site UX / LLM-doc learnings (2026-09-13):
   as a live 404 while the root `/llms.txt` worked. Each landing also
   publishes an SEO alias at `/<slug>.html` (same HTML, canonical still
   `/<slug>/`) and a visible Home → lib breadcrumb with BreadcrumbList
-  JSON-LD.
+  JSON-LD. The playable WASM shell lives at `/<slug>/play.html` with
+  its **own** `rel=canonical` (and a sitemap entry) so Google treats
+  the play link as a stable static URL, not a JS-only side effect of
+  the landing page.
 
 - **English is the site default** (2026-09-13): `/` and `hreflang
   x-default` are English; Chinese lives at `/zh/` (`/en/` and `/cn/`

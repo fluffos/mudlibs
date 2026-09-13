@@ -149,6 +149,8 @@ src, dst = sys.argv[1], sys.argv[2]
 html = open(src, encoding='utf-8').read()
 slug = os.environ['SLUG']
 name = os.environ['GAME_NAME']
+site_url = 'https://mudlibs.fluffos.info'
+import json
 has_custom_driver = bool(os.environ['CUSTOM_DRIVER_DIR'])
 
 # A lib with its own driver (fluffos.js/.wasm copied into this lib's own
@@ -180,8 +182,34 @@ for old, new in required:
     html = html.replace(old, new)
 
 cosmetic = [
+    # Stable static URL for Google: /<slug>/play.html is the playable
+    # page's own canonical (not /<slug>/). Without this, crawlers see a
+    # JS shell with no self-URL and often skip indexing the play link.
     ('<title>FluffOS — WebAssembly driver</title>',
-     '<title>%s — FluffOS WASM</title>' % name),
+     '<title>%s — Play in Browser | FluffOS WASM</title>\n'
+     '<link rel="canonical" href="%s/%s/play.html">\n'
+     '<meta name="robots" content="index, follow">\n'
+     '<meta name="description" content="Play %s in your browser via '
+     'FluffOS WebAssembly. No install required.">\n'
+     '<meta property="og:type" content="website">\n'
+     '<meta property="og:url" content="%s/%s/play.html">\n'
+     '<meta property="og:title" content="%s — Play in Browser">\n'
+     '<meta property="og:description" content="Play %s in your browser '
+     'via FluffOS WebAssembly.">\n'
+     '<script type="application/ld+json">%s</script>'
+     % (name, site_url, slug, name, site_url, slug, name, name,
+        json.dumps({
+            "@context": "https://schema.org",
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+                {"@type": "ListItem", "position": 1, "name": "Home",
+                 "item": site_url + "/"},
+                {"@type": "ListItem", "position": 2, "name": name,
+                 "item": "%s/%s/" % (site_url, slug)},
+                {"@type": "ListItem", "position": 3, "name": "Play",
+                 "item": "%s/%s/play.html" % (site_url, slug)},
+            ],
+        }, ensure_ascii=False))),
     # Breadcrumb trail above the play H1: Home / <lib> / Play. Keeps the
     # WASM shell oriented in the museum hierarchy (and gives crawlers /
     # users a way back) without the old «-in-H1 hack.

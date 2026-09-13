@@ -1759,6 +1759,12 @@ def render_sitemap_xml(status):
         urls.append(
             f"  <url><loc>{SITE_URL}/{html.escape(slug)}/</loc>"
             "<changefreq>monthly</changefreq></url>")
+        # play.html is the stable static playable URL (own canonical);
+        # list it explicitly so Google treats /<slug>/play.html as an
+        # indexable page, not just a JS-only side effect of the landing.
+        urls.append(
+            f"  <url><loc>{SITE_URL}/{html.escape(slug)}/play.html</loc>"
+            "<changefreq>monthly</changefreq></url>")
         urls.append(
             f"  <url><loc>{SITE_URL}/{html.escape(slug)}/llms.txt</loc>"
             "<changefreq>monthly</changefreq></url>")
