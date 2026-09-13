@@ -575,7 +575,7 @@ THEME_STYLE_BLOCK = f"""
   .topbar {{ display: flex; align-items: center; justify-content: space-between;
             gap: 10px; flex-wrap: wrap; }}
   .topbar p {{ margin: 0; font-size: 13px; }}
-  .engage {{ display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }}
+  .engage {{ display: flex; align-items: center; gap: 8px; flex-wrap: wrap; line-height: 1; }}
   /* Hand-built chrome below (badge/toggle chips) deliberately uses the
      plain --fg var, NOT --pico-color: Pico's own CSS locally redefines
      --pico-color on <button>/<a> elements to its own component colors
@@ -586,21 +586,34 @@ THEME_STYLE_BLOCK = f"""
      a name Pico's CSS has no rule for, so it can't be shadowed the
      same way -- this is what made these chips render as invisible
      white-on-near-white text in light mode before this was caught. */
-  .badge-link {{
-    display: inline-flex; align-items: center; gap: 5px;
-    font-size: 12.5px; font-weight: 600; text-decoration: none;
+  /* Badge chips + theme toggle share ONE chip recipe. Pico's own
+     `button` / `[type=button]` rules inject a large form-control
+     padding and `margin-bottom: var(--pico-spacing)`, which made the
+     🌓 toggle sit a few pixels above the ⭐/Sponsor pills (same flex
+     row, different outer box). Reset those and size every chip with
+     the same inline-flex / height / padding so they share a baseline. */
+  .badge-link,
+  button.theme-toggle {{
+    display: inline-flex; align-items: center; justify-content: center;
+    gap: 5px; box-sizing: border-box; height: 32px; margin: 0;
+    font: 600 12.5px/1 var(--pico-font-family);
     color: var(--fg); background: var(--pico-card-background-color);
     border: 1px solid var(--pico-card-border-color); border-radius: 999px;
-    padding: 5px 12px; transition: border-color .12s, color .12s;
+    padding: 0 12px; text-decoration: none;
+    transition: border-color .12s, color .12s;
   }}
-  .badge-link:hover {{ border-color: var(--pico-primary); color: var(--pico-primary); }}
-  .theme-toggle {{
-    font-size: 15px; line-height: 1; cursor: pointer; padding: 6px 9px;
-    background: var(--pico-card-background-color);
-    border: 1px solid var(--pico-card-border-color); border-radius: 999px;
-    color: var(--fg);
+  .badge-link:hover,
+  button.theme-toggle:hover {{
+    border-color: var(--pico-primary); color: var(--pico-primary);
   }}
-  .theme-toggle:hover {{ border-color: var(--pico-primary); }}
+  button.theme-toggle {{
+    width: 32px; padding: 0; font-size: 15px; cursor: pointer;
+    /* Kill Pico's primary-button fill that would otherwise paint this
+       chip blue behind the emoji (same specificity race as --fg).
+       `button.theme-toggle` beats Pico's `[type=button]` so we don't
+       need !important. */
+    background-color: var(--pico-card-background-color);
+  }}
 
 """
 
