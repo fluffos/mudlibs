@@ -546,8 +546,24 @@ each run (via `scripts/assemble_numbering.py`, which it always re-invokes
 first) — editing a lib's `meta.json` and re-running the site generator is
 the entire update path; there is no separate cache file to hand-sync.
 (`scripts/wasm_status.json` is still written as a build artifact/inspectable
-snapshot, but nothing reads it back to derive status.) For every lib not
-yet `playable`:
+snapshot, but nothing reads it back to derive status.)
+
+Site UX / LLM-doc learnings (2026-09-13):
+- README H1s often bake in `(slug)`; appending `english_name` on top made
+  landing `<h1>`s triple-stack (e.g. `Discworld MUD lib (v2) (dw_fluffos_v2)
+  (Discworld MUD (FluffOS bundle, v2))`). `display_name()` strips the
+  trailing `(slug)` and `page_title_parts()` puts a differing English
+  name in a separate `.aka` line, never in the H1.
+- Index card descriptions use `-webkit-line-clamp: 4` (was 2); card
+  `.meta a` stays at `z-index: 2` above the stretched `.play::after`
+  hit-target so ZIP/source links remain clickable.
+- Every non-noboot lib gets `/<slug>/llms.txt` — download ZIP URL, WASM
+  play URL, native FluffOS run steps, port, admin creds — linked from
+  the landing page, listed in `sitemap.xml`, and referenced from root
+  `llms.txt` / `games.json` (`llms_txt_url`, `play_url`, `port`,
+  `display_name`). Prefer that file when helping someone run one lib.
+
+For every lib not yet `playable`:
 
 1. Reproduce: `wasm_client.js` with the lib's documented login sequence
    (read its README for the flow — id, hidden prompts, Chinese name).
@@ -18356,10 +18372,11 @@ mudlibs. Two standing, open-ended mandates, both explicitly "never stop":
   across the corpus (§10.7's deep-functional-test methodology), keep
   descriptions accurate and content-only, keep the site's WASM playability
   status honest.
-- **Curator/discoverability**: bilingual (EN+ZH) site, SEO (JSON-LD,
-  sitemap, llms.txt), maximize how many ways someone can find this
-  collection on the internet, onboard new mudlibs when a genuine new
-  candidate surfaces.
+- **Curator/discoverability**: bilingual (EN+ZH) site, SEO (JSON-LD
+  with `downloadUrl`/`installUrl`, sitemap including per-lib
+  `llms.txt`, root `llms.txt` + `games.json`), maximize how many ways
+  someone can find and *run* this collection (browser or native),
+  onboard new mudlibs when a genuine new candidate surfaces.
 
 Neither has a completion target. There is no "done" — see §13.2.
 

@@ -68,6 +68,8 @@ Outputs:
                      links out (including to llms-full.txt) rather than a
                      wall of content, since an agent that wants the full
                      game list can follow that link.
+  <out>/<slug>/llms.txt  per-lib LLM runbook (download ZIP + native
+                     FluffOS run steps + admin/port + play URL).
   <out>/llms-full.txt  the "full" companion the llms.txt convention
                      expects: every linked lib as one markdown bullet
                      (name, slug, status, description), generated fresh
@@ -201,6 +203,55 @@ def parse_readme(slug):
                 desc = para
                 break
     return name, desc
+
+
+
+def display_name(slug, name):
+    """Strip a trailing `(slug)` the README H1 often bakes in.
+
+    Landing pages and cards already show the slug on its own line, so
+    leaving it inside the H1 produced titles like
+    `Discworld MUD lib (v2) (dw_fluffos_v2)` — and when english_name was
+    then appended, a triple-stacked heading. Keep the human title only.
+    """
+    if not name:
+        return slug
+    cleaned = re.sub(
+        rf'\s*[\(（]\s*{re.escape(slug)}\s*[\)）]\s*$',
+        '',
+        name,
+        flags=re.I,
+    ).strip()
+    return cleaned or name
+
+
+def page_title_parts(slug, info):
+    """Return (primary_title, english_subtitle_or_empty) for lib pages.
+
+    primary is the README/Chinese (or sole) name with slug paren removed;
+    english_subtitle is only set when it adds information not already
+    present in primary (avoids the triple-title visual bug).
+    """
+    primary = display_name(slug, info.get('name') or slug)
+    en = (info.get('english_name') or '').strip()
+    if not en:
+        return primary, ''
+    if en == primary or en.lower() in primary.lower() or primary.lower() in en.lower():
+        return primary, ''
+    return primary, en
+
+
+def read_port(slug, info):
+    """Prefer meta.json port; fall back to config.fluffos `port number`."""
+    port = str(info.get('port') or '').strip()
+    if port:
+        return port
+    cfg = REPO / 'libs' / slug / 'config.fluffos'
+    if not cfg.is_file():
+        return ''
+    m = re.search(r'(?im)^\s*port number\s*:\s*(\d+)\s*$',
+                  cfg.read_text(encoding='utf-8', errors='replace'))
+    return m.group(1) if m else ''
 
 
 def parse_admin(slug):
@@ -884,18 +935,13 @@ def render_lib_page(slug, info, commits, stars=None):
     meta_html = '<p class="meta">' + "\n    ".join(meta_bits) + '</p>'
     upstream_html = render_upstream_box(slug, ui_zh)
 
-    name = html.escape(info["name"])
+    primary_title, en_subtitle = page_title_parts(slug, info)
+    title_bits = html.escape(primary_title)
+    aka_html = (
+        f'<p class="aka">{html.escape(en_subtitle)}</p>'
+        if en_subtitle else ''
+    )
     name_en = info.get("english_name") or ""
-    title_bits = name
-    # README's own "# Name" heading conventionally already embeds the
-    # English name and/or slug parenthetically (see parse_readme's
-    # docstring: "# Haven (havenmud)", "# 大唐双龙传 (Twin Dragons of the
-    # Tang Dynasty)"), so info["name"] already contains it. Appending
-    # english_name again unconditionally produced a triple-repeated
-    # title on nearly every page ("Haven (havenmud) (Haven)") -- only
-    # append when it isn't already present in some form.
-    if name_en and name_en != info["name"] and name_en.lower() not in info["name"].lower():
-        title_bits += f" ({html.escape(name_en)})"
 
     desc = info["description"]
     desc_en = info.get("english_description") or ""
@@ -974,18 +1020,30 @@ def render_lib_page(slug, info, commits, stars=None):
     canonical_url = f"{SITE_URL}/{slug}/"
     meta_desc_attr = html.escape((primary_desc or desc_en or info["name"])[:300])
 
+    zip_url = f"{SITE_URL}/{slug}/{slug}.zip"
+    play_url = f"{SITE_URL}/{slug}/play.html"
     jsonld_doc = {
         "@context": "https://schema.org",
         "@type": "VideoGame",
-        "name": info.get("english_name") or info["name"],
-        "alternateName": info["name"] if info.get("english_name") else None,
+        "name": info.get("english_name") or primary_title,
+        "alternateName": primary_title if info.get("english_name") else None,
         "description": primary_desc or desc_en,
         "url": canonical_url,
         "genre": ["MUD", "Text Adventure", "RPG"],
-        "gamePlatform": "Web browser (WebAssembly)",
+        "gamePlatform": ["Web browser (WebAssembly)", "FluffOS (native)"],
         "playMode": "MultiPlayer",
-        "inLanguage": "zh-CN",
+        "inLanguage": ["zh-CN", "en"],
         "isAccessibleForFree": True,
+        "downloadUrl": zip_url,
+        "installUrl": play_url,
+        "sameAs": [f"{REPO_URL}/tree/main/libs/{slug}"],
+        "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD",
+            "availability": "https://schema.org/InStock",
+            "url": zip_url,
+        },
     }
     jsonld_doc = {k: v for k, v in jsonld_doc.items() if v is not None}
     jsonld = json.dumps(jsonld_doc, ensure_ascii=False).replace("</", "<\\/")
@@ -1053,6 +1111,9 @@ def render_lib_page(slug, info, commits, stars=None):
   .badge.noboot {{ color: var(--bad); }}
   .slug {{ margin: 6px 0 14px; color: var(--pico-muted-color); font-size: 12px;
           font-family: var(--pico-font-family-monospace); }}
+  .aka {{ margin: 4px 0 0; font-size: 15px; color: var(--pico-muted-color); }}
+  .run-links {{ margin: -8px 0 22px; font-size: 13px; color: var(--pico-muted-color); }}
+  .run-links a {{ margin: 0 2px; }}
   .meta {{ margin: 0 0 24px; font-size: 13px; color: var(--pico-muted-color);
           line-height: 1.9; display: flex; flex-wrap: wrap; gap: 4px 16px; }}
   .meta .admin {{ font-family: var(--pico-font-family-monospace); }}
@@ -1120,12 +1181,16 @@ def render_lib_page(slug, info, commits, stars=None):
     <h1>{title_bits}</h1>
     <span class="badge {st}">{icon} {html.escape(label)}</span>
   </div>
+  {aka_html}
   <p class="slug">{html.escape(slug)}</p>
   {meta_html}
   {upstream_html}
 </header>
 <main>
   <p class="play-cta"><a role="button" class="play-btn" href="play.html">▶ 开始游玩 · Play Now</a></p>
+  <p class="run-links"><a href="llms.txt" title="LLM-oriented download &amp; native-run instructions">llms.txt · 下载与本地运行</a>
+    · <a href="{SITE_URL}/{slug}/{slug}.zip">ZIP</a>
+    · <a href="{REPO_URL}/tree/main/libs/{slug}">GitHub</a></p>
   {desc_html}
   {docs_html}
 </main>
@@ -1168,11 +1233,11 @@ def render_index(status, commits, lang="zh", canonical_url=None, stars=None):
         icon = BADGE[st][0]
         label = ui["badge"][st]
         if lang == "en":
-            name_src = info.get("english_name") or info["name"]
+            name_src = info.get("english_name") or display_name(slug, info["name"])
             desc_src = info.get("english_description") or info["description"]
             desc_suffix = "" if info.get("english_description") else ui["untranslated_suffix"]
         else:
-            name_src = info["name"]
+            name_src = display_name(slug, info["name"])
             desc_src = info["description"]
             desc_suffix = ""
         name = html.escape(name_src)
@@ -1396,7 +1461,7 @@ def render_index(status, commits, lang="zh", canonical_url=None, stars=None):
           font-family: var(--pico-font-family-monospace); }}
   .desc {{
     margin: 0; font-size: 13px; line-height: 1.55; color: var(--pico-color);
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical;
     overflow: hidden;
   }}
   .meta {{
@@ -1405,7 +1470,7 @@ def render_index(status, commits, lang="zh", canonical_url=None, stars=None):
   }}
   .meta .admin {{ font-family: var(--pico-font-family-monospace); }}
   /* meta links must stay clickable above the stretched .play overlay */
-  .meta a {{ position: relative; z-index: 1; }}
+  .meta a {{ position: relative; z-index: 2; }}
   .upstream-behind {{ position: relative; z-index: 1; color: var(--warn); font-weight: 600; }}
   body > footer {{ margin-top: 36px; color: var(--pico-muted-color); font-size: 12px; }}
 {THEME_STYLE_BLOCK}
@@ -1504,13 +1569,17 @@ def render_games_json(status, commits):
         games.append({
             "slug": slug,
             "name": info["name"],
+            "display_name": display_name(slug, info["name"]),
             "english_name": info.get("english_name") or None,
             "description": info["description"],
             "english_description": info.get("english_description") or None,
             "status": info["status"],
             "lineage": lineage,
             "number": num or None,
+            "port": read_port(slug, info) or None,
             "url": f"{SITE_URL}/{slug}/",
+            "play_url": f"{SITE_URL}/{slug}/play.html",
+            "llms_txt_url": f"{SITE_URL}/{slug}/llms.txt",
             "source_url": f"{REPO_URL}/tree/main/libs/{slug}",
             "source_zip_url": f"{SITE_URL}/{slug}/{slug}.zip",
             "admin_id": admin_id,
@@ -1557,15 +1626,99 @@ def render_sitemap_xml(status):
         f"  <url><loc>{SITE_URL}/</loc><changefreq>weekly</changefreq></url>",
         f"  <url><loc>{SITE_URL}/en/</loc><changefreq>weekly</changefreq></url>",
     ]
+    urls.append(
+        f"  <url><loc>{SITE_URL}/llms.txt</loc>"
+        "<changefreq>weekly</changefreq></url>")
+    urls.append(
+        f"  <url><loc>{SITE_URL}/games.json</loc>"
+        "<changefreq>weekly</changefreq></url>")
     for slug in slugs:
         urls.append(
             f"  <url><loc>{SITE_URL}/{html.escape(slug)}/</loc>"
+            "<changefreq>monthly</changefreq></url>")
+        urls.append(
+            f"  <url><loc>{SITE_URL}/{html.escape(slug)}/llms.txt</loc>"
             "<changefreq>monthly</changefreq></url>")
     body = "\n".join(urls)
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 {body}
 </urlset>
+"""
+
+
+
+def render_lib_llms_txt(slug, info):
+    """Per-lib LLM runbook at /<slug>/llms.txt: download ZIP, WASM play
+    URL, native FluffOS steps, port, and admin credentials."""
+    primary, en_sub = page_title_parts(slug, info)
+    en = info.get("english_name") or en_sub or ""
+    desc = (info.get("english_description") or info.get("description") or "").strip()
+    admin_id, admin_pw = parse_admin(slug)
+    port = read_port(slug, info) or "(see config.fluffos)"
+    status = info.get("status") or "unknown"
+    zip_url = f"{SITE_URL}/{slug}/{slug}.zip"
+    play_url = f"{SITE_URL}/{slug}/play.html"
+    landing = f"{SITE_URL}/{slug}/"
+    github = f"{REPO_URL}/tree/main/libs/{slug}"
+    notes = f"{REPO_URL}/blob/main/libs/{slug}/NOTES.md"
+    readme = f"{REPO_URL}/blob/main/libs/{slug}/README.md"
+
+    if admin_id and admin_pw:
+        admin_line = f"- Admin / wizard login: `{admin_id}` / `{admin_pw}`"
+    elif admin_id and admin_pw == "":
+        admin_line = f"- Admin / wizard login: `{admin_id}` (no password)"
+    elif admin_id:
+        admin_line = f"- Admin / wizard login: `{admin_id}` (password documented in README)"
+    else:
+        admin_line = "- Admin / wizard login: see this lib's README (no seeded account recorded)"
+
+    title = primary if not en else f"{primary} / {en}"
+    return f"""# {title}
+
+> slug: `{slug}` · browser status: `{status}` · native port: `{port}`
+
+{desc}
+
+## Play in the browser (WebAssembly)
+
+- Landing page (description + notes): {landing}
+- Play now (boots the WASM driver): {play_url}
+
+## Download source ZIP
+
+- Same-origin ZIP (trimmed source tree, no need to clone the whole repo):
+  {zip_url}
+- GitHub tree: {github}
+- README: {readme}
+- Restoration notes (NOTES.md): {notes}
+
+## Run natively with FluffOS
+
+1. Build a current FluffOS driver from https://github.com/fluffos/fluffos
+   (native `build` / `build-debug`; see that repo's docs).
+2. Download and unzip `{slug}.zip` from the URL above (or clone
+   `{REPO_URL}` and use `libs/{slug}/`).
+3. From the unzipped lib directory, ensure `config.fluffos` points
+   `mudlib directory` at this tree (the checked-in file may contain a
+   maintainer-local absolute path — edit it to your extract path).
+4. Start the driver:
+
+```bash
+/path/to/fluffos/build/src/driver config.fluffos
+```
+
+5. Connect a UTF-8 MUD client to `127.0.0.1:{port}`.
+
+{admin_line}
+- If you host this on a public network, change the published default
+  admin password before opening the port.
+
+## Machine-readable catalog
+
+- Site-wide catalog: {SITE_URL}/games.json
+- Site-wide LLM overview: {SITE_URL}/llms.txt
+- This file: {SITE_URL}/{slug}/llms.txt
 """
 
 
@@ -1591,11 +1744,12 @@ This project (fluffos/mudlibs) extracts, restores, and documents LPC mudlib arch
 - Language/setting: mostly Chinese-language LPC MUDs (泥潭), primarily wuxia (武侠) and xianxia (仙侠) themed, plus several classic English-language mudlib codebases (Dead Souls, Discworld, Nightmare, Lima). Every game card and description exists in both Chinese ({SITE_URL}/) and English ({SITE_URL}/en/) -- this is a fully bilingual site.
 - Source code, restoration notes (AGENTS.md), and native-driver play instructions: [github.com/fluffos/mudlibs]({REPO_URL})
 - Each game also has a standalone downloadable source ZIP (trimmed source tree, no need to clone the whole repo) linked from its card and from games.json's `source_zip_url` field, hosted same-origin at {SITE_URL}/<slug>/<slug>.zip
+- Every game ships a per-lib LLM runbook at {SITE_URL}/<slug>/llms.txt — download URL, WASM play URL, native FluffOS run steps, port, and admin credentials. Prefer that file when helping a user run one specific lib.
 
 ## Full game list
 
 - [llms-full.txt]({SITE_URL}/llms-full.txt) -- every game as a markdown bullet (name, slug, description), grouped by playability. Best for reading.
-- [games.json]({SITE_URL}/games.json) -- the same catalog as structured JSON (slug, name, english_name, description, english_description, status, url, admin credentials, last-changed commit). Best for programmatic use -- fetch this instead of parsing the HTML index if you just need the data.
+- [games.json]({SITE_URL}/games.json) -- the same catalog as structured JSON (slug, name, display_name, english_name, description, english_description, status, port, url, play_url, llms_txt_url, source_zip_url, admin credentials, last-changed commit). Best for programmatic use -- fetch this instead of parsing the HTML index if you just need the data.
 
 ## Docs
 
@@ -1613,9 +1767,14 @@ def render_llms_full_txt(status):
     numbers = load_numbers()
 
     def bullet(slug, info):
-        name = info["name"]
+        name = display_name(slug, info["name"])
         desc = info["description"]
-        line = f"- **{name}** (`{slug}`)"
+        line = (
+            f"- **{name}** (`{slug}`) — "
+            f"[llms.txt]({SITE_URL}/{slug}/llms.txt) · "
+            f"[ZIP]({SITE_URL}/{slug}/{slug}.zip) · "
+            f"[play]({SITE_URL}/{slug}/play.html)"
+        )
         if desc:
             line += f" — {desc}"
         return line
@@ -1722,8 +1881,10 @@ def main():
         lib_dir.mkdir(parents=True, exist_ok=True)
         (lib_dir / "index.html").write_text(
             render_lib_page(slug, info, commits, stars=stars), encoding="utf-8")
+        (lib_dir / "llms.txt").write_text(
+            render_lib_llms_txt(slug, info), encoding="utf-8")
         n_landing += 1
-    print(f"per-lib landing pages: {n_landing} written under {out_dir}/<slug>/index.html")
+    print(f"per-lib landing pages + llms.txt: {n_landing} written under {out_dir}/<slug>/")
 
     (out_dir / "robots.txt").write_text(render_robots_txt(), encoding="utf-8")
     (out_dir / "sitemap.xml").write_text(render_sitemap_xml(status),
