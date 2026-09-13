@@ -72,3 +72,48 @@ pence=1）。`create()` 在两处 place 表都缺失时补上这两行，并挂�
 登录队列，不挡 playable。`wasm_status` playable。
 
 Do not invent extra pumpkin rooms.
+
+## 深度功能测试（§10.7，2026-09-13）
+
+Native FluffOS boot (`~/src/fluffos/build-debug/src/driver config.fluffos`
+from `libs/dw_fluffos_v2`, port **40272**). Fresh pass today; prior
+2026-09-04 shop slice + Pumpkin money_handler fix remain in tree.
+Account **sectqinv** / `Play2026x` (pumpkin `N` → terms `yes` → foyer).
+Driver PID for the play boot was **4037845** (cwd
+`libs/dw_fluffos_v2/work`; later auto-rebooted off).
+
+### Playthrough evidence
+
+- **look / score**: foyer look after ~45s queue drain; score `504` hp,
+  Adventurers' Guild level 0, starter age.
+- **Shop**: `commerce` → shopkeeper. `list` drains with purse visible
+  (`8 Pumpkin dollar … and 100 Pumpkin pence`). `buy a lightable torch`
+  → **`You buy a lightable torch for 50 Pumpkin pence coins.`** Follow-up
+  money: `8 Pumpkin dollar coins and 50 Pumpkin pence coins`.
+  (Earlier today, logging in prior account `buylite` showed flat broke —
+  that char already spent starter cash on 2026-09-04; not a regression.)
+- **Explore / combat**: foyer ↔ combat training room OK. `say can I
+  practise please` reached Greg only after queue delay; this session
+  never got escorted into a dummy bay before further cmds, so
+  `kill dummy` → `Cannot find "dummy", no match` while still in the
+  Greg lobby (honest miss — content exists, escort timing vs queue).
+- **Guild**: same distribution gap — no guild beyond newbie liaison;
+  not invented.
+- **quit + reconnect**: first session quit HB-stalled (`stop`/`restart`
+  loop). Character save `save/players/s/sectqinv.o.gz` still written.
+  Reconnect: login OK, look lands in combat training room (last
+  location), score OK (`logged in` again). Inventory on that reconnect
+  showed empty hands / "purse contains only moths" — newbie "<30 minutes
+  for character to be saved" warning is real for full inv/money persist;
+  room + stats came back.
+
+### Logs this boot
+
+- `debug.log` dead (`log directory : /log`; mtime still Sep 4). Trust
+  `work/log/runtime` / `catch` / `error-log` (mtimes 2026-09-13).
+- No `command` undefined. Same preload/map noise as v1 (demonic race,
+  inv_check restore, twiki explode, MySQL `db_exec`, missing
+  `/std/outside`). Catch also saw `Inherited file '/std/outside' does
+  not exist!` during wander.
+- Same Discworld queue / net-dead pacing rules as v1.
+

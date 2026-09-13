@@ -121,3 +121,58 @@ womble 在场）。MCCP 提示 "You are logged in uncompressed!" 证明
 
 Do not invent extra pumpkin rooms. mundoscuro stays limited. realms
 stays noboot.
+
+## 深度功能测试（§10.7，2026-09-13）
+
+Native FluffOS boot (`~/src/fluffos/build-debug/src/driver config.fluffos`
+from `libs/dw_fluffos_v1`, port **40271**). Fresh pass today after the
+2026-09-04 shop slice. Account **sectestg** / `Play2026x` (pumpkin menu
+`N` register → terms `yes` → foyer). Later reconnect after driver
+restart: PID **4074608**, cwd `libs/dw_fluffos_v1/work`.
+
+### Playthrough evidence
+
+- **look / score**: cavernous Discworld foyer (Great A'Tuin / nine exits
+  incl. commerce, combat); score shows hit points / Adventurers' Guild
+  level 0 / starter age.
+- **Shop**: `commerce` → shopkeeper room. `list` → `You find on offer:
+  Our very last small bucket. Three lightable torches. Two large
+  buckets.` `buy a lightable torch` → `You buy a lightable torch for 50
+  Pumpkin pence coins.` Purse after: `8 Pumpkin dollar coins and 50
+  Pumpkin pence coins` (was 100 pence). Requires the in-tree Pumpkin /
+  Newbie Area money_handler seed (committed with this pass for v1; was
+  already live in the working tree before today's boots).
+- **Explore / combat**: foyer → combat training room (Greg present; net
+  dead statue of prior test char Sectestd also present — HB stall
+  hazard). After Greg escort into a training bay, `kill dummy` works:
+  tickles/blocks on the training dummy; Xrazzicaz rates unarmed combat
+  ("more or less mastered"). Runtime catch during judge callback:
+  `Bad argument 1 to EFUN call_other()` in
+  `/cmds/guild-race/other/judge` (caught; fight still completes).
+- **Guild**: distribution archive has no real guild content beyond the
+  newbie liaison rooms (same as 2026-09-04 / discworld notes) — no
+  inventing guild content.
+- **quit + reconnect**: Departure Gecko quit path (`Greco the Departure
+  Gecko` / chimera / "Do come again!"). Save `save/players/s/sectestg.o.gz`.
+  Reconnect after reboot: login + score in combat training room (quit
+  location persisted); mid-reconnect socket was dropped by another
+  localhost session ("Disconnected by someone from localhost") so
+  inventory line was not re-captured — character + room persist are
+  enough.
+
+### Logs this boot
+
+- Driver `debug.log` is **dead** for this launch convention
+  (`log directory : /log` absolute; no log fd on the driver). Do not
+  treat empty/stale `work/log/debug.log` (mtime Sep 4) as clean.
+- Mudlib logs live: `work/log/runtime`, `work/log/catch`,
+  `work/log/error-log` (mtimes match today's boots). No
+  `Undefined function called: command` today (Sep 4 only). Recurring
+  noise: MySQL `db_exec` (no local mysqld), missing `/std/outside` and
+  `/std/races/demonic` on map/race preload, `restore_object` denied on
+  missing `error_handler.o` / `inv_check.o`. Combat judge
+  `call_other(0)` during dummy spar as above.
+- Discworld quirks confirmed: login `no_time_left()` queues commands
+  (pace / long waits; do **not** `stop` between shop cmds or the buy
+  is cancelled); net-dead statues stall heartbeats.
+
