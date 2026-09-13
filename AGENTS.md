@@ -79,6 +79,13 @@ convention) or by any machine-local path.
 
 Conventions used throughout:
 
+- **Git: push straight to `main`. No feature branches for agent work.**
+  Commit on `main` and `git push origin main`. Do not open
+  `cursor/…` (or other) topic branches, and do not route routine museum
+  work through a PR just to land it — the owner merges by pushing to
+  `main` directly. (People sometimes say "master"; this repo's default
+  branch is `main`.) External contributors may still send PRs; that does
+  not change the agent workflow.
 - `~/src/fluffos` = the FluffOS checkout this project builds its drivers
   from (native `build-debug/`, `build/`, and `build-wasm/`). Adjust to
   wherever your checkout lives; the *relationship* (one source tree, three
