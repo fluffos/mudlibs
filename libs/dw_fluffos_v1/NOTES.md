@@ -142,23 +142,26 @@ restart: PID **4074608**, cwd `libs/dw_fluffos_v1/work`.
   Pumpkin pence coins` (was 100 pence). Requires the in-tree Pumpkin /
   Newbie Area money_handler seed (committed with this pass for v1; was
   already live in the working tree before today's boots).
-- **Explore / combat**: foyer → combat training room (Greg present; net
-  dead statue of prior test char Sectestd also present — HB stall
-  hazard). After Greg escort into a training bay, `kill dummy` works:
-  tickles/blocks on the training dummy; Xrazzicaz rates unarmed combat
-  ("more or less mastered"). Runtime catch during judge callback:
+- **Explore / combat**: foyer → combat training room (Greg). `say yes`
+  after his greeting → `Ok Sectestg, you can use room one.` / `Greg
+  leads you into room one.` Training bay has the dummy + Xrazzicaz
+  ("Welcome to Combat Boot Camp"). Entering the bay no longer dies on
+  missing armoury clothing: null-guarded
+  `ARMOURY->request_item(...)` in `d/liaison/NEWBIE/dummy.lpc` and
+  `trainer.lpc` (same pattern as discworld v3 / §7.147). Spar path
+  reaches the dummy; judge callback still logs caught
   `Bad argument 1 to EFUN call_other()` in
-  `/cmds/guild-race/other/judge` (caught; fight still completes).
+  `/cmds/guild-race/other/judge` (fight continues).
 - **Guild**: distribution archive has no real guild content beyond the
   newbie liaison rooms (same as 2026-09-04 / discworld notes) — no
   inventing guild content.
 - **quit + reconnect**: Departure Gecko quit path (`Greco the Departure
-  Gecko` / chimera / "Do come again!"). Save `save/players/s/sectestg.o.gz`.
-  Reconnect after reboot: login + score in combat training room (quit
-  location persisted); mid-reconnect socket was dropped by another
-  localhost session ("Disconnected by someone from localhost") so
-  inventory line was not re-captured — character + room persist are
-  enough.
+  Gecko`). Save `save/players/s/sectestg.o.gz`. After driver restart
+  (PID **4074608**), reconnect with password + `y` to displace ghost
+  copy → combat training room look; score
+  `logged in 2 times`, xp continued (~3087), hp 501. Full inv/money
+  persist still gated by newbie 30‑minute save warning when quit is
+  HB-racy; room + stats + login count confirmed.
 
 ### Logs this boot
 

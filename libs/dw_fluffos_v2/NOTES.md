@@ -97,6 +97,9 @@ Driver PID for the play boot was **4037845** (cwd
   never got escorted into a dummy bay before further cmds, so
   `kill dummy` → `Cannot find "dummy", no match` while still in the
   Greg lobby (honest miss — content exists, escort timing vs queue).
+  Same armoury null-guards as v1 applied to `dummy.lpc` /
+  `trainer.lpc` so a successful Greg escort would not crash on missing
+  `dirty rags` / leather kit (verified live on v1).
 - **Guild**: same distribution gap — no guild beyond newbie liaison;
   not invented.
 - **quit + reconnect**: first session quit HB-stalled (`stop`/`restart`
