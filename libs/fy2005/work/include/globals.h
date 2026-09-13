@@ -25,7 +25,6 @@
 #define	COMBAT_D				"/adm/daemons/combatd"
 #define	COMMAND_D				"/adm/daemons/cmd_d"
 #define	EMOTE_D					"/adm/daemons/emoted"
-#define	ENCODE_D				"/adm/daemons/encoded"
 #define	EVENT_D					"/adm/daemons/eventd"
 #define	FINGER_D				"/adm/daemons/fingerd"
 #define	INQUIRY_D				"/adm/daemons/inquiryd"
@@ -61,6 +60,12 @@
 
 //added by annie for buff/debuff control
 #define ANNIE_D					"/adm/daemons/annied"
+//MXP (MUD eXtension Protocol) 支持
+#define MXP_D					"/adm/daemons/mxpd"
+//GMCP (Generic Mud Communication Protocol) 支持
+#define GMCP_D                 "/adm/daemons/gmcpd"
+//Mudlet 地图房间号/区域/坐标(离线导出, 供 GMCP Room.Info)
+#define MAP_D                  "/adm/daemons/mapd"
 
 //added by annie. 
 //0:Local 1:Develop 2:Test 3:Live
@@ -180,6 +185,7 @@
 #define F_FLOWERSELLER				"/feature/flowerseller.lpc"
 #define	F_MASTER				"/std/char/master.lpc"
 #define F_VO					"/feature/vo.lpc"
+#define F_GMCP                 "/feature/gmcp.lpc"
 
 #define	F_ANNIE					"/feature/annie.lpc"
 #define F_LEVEL					"/feature/exp_level.lpc"

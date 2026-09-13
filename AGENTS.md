@@ -1055,6 +1055,9 @@ the next one of these:
      `sanguozhi`, `xkx100utf8`, and `nt7` (repo root),
      `nightmare3` (`work/lib`), and `deadsouls_fluffos`
      (`work/lib`). No remaining vendored fluffos-org remote.
+     `fy2005` tracks `seikichin/-mud` as `submodule-patch`
+     (pin in `meta.json`; GMCP needs catalog
+     `patches/0001-simul-efun-include-software-json.patch`).
 
 ---
 

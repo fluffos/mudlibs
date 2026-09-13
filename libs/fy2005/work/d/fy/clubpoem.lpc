@@ -8,6 +8,7 @@ int POEMS = 2;
 string author, title, *poem;
 string author1, title1, *poem1;
 string current, last;
+string current_show, last_show;
 string curr_show;
 int length, length1, running;
 int index, chance;
@@ -20,6 +21,8 @@ void poem_reward(object me, string arg);
 void poem_reward1(object me);
 void poem_penalty(object me);
 int find_newline();
+string mixup_half(string str);
+string _poem_shuffle(string s);
 string mixup(string str);
 string enscript(string arg);
 
@@ -74,6 +77,7 @@ void do_init(object me)
 }*/
 int do_answer(string arg) {
   object me = this_player(), ob;
+  string argn;
   if (!arg) return notify_fail("你想回答什么？\n");
   if (me->is_busy())
     return notify_fail("你还是先把手头的事儿忙完吧。\n");
@@ -98,8 +102,16 @@ int do_answer(string arg) {
       case 1: message_vision("$N答道：" + arg + "？\n", me);
       break;
     }
+    // 归一化玩家输入：去空白与中英文标点后再比较（带不带标点均可作答）
+    argn = replace_string(arg, " ", "");
+    argn = replace_string(argn, "，", "");
+    argn = replace_string(argn, ",", "");
+    argn = replace_string(argn, "。", "");
+    argn = replace_string(argn, "！", "");
+    argn = replace_string(argn, "？", "");
+
     // check cheat here..grin
-    if (strlen(arg) < strlen(current) - 2 || strlen(arg) > strlen(current) + 2) {
+    if (strlen(argn) < strlen(current) - 2 || strlen(argn) > strlen(current) + 2) {
       me->add_temp("poem/wrong", 10);
       if (me->query_temp("poem/wrong") > 20)
         poem_penalty(me);
@@ -111,7 +123,7 @@ int do_answer(string arg) {
 
 
 
-    if (arg == current && strlen(current) > 2) {
+    if (argn == current && strlen(current) > 2) {
       if (ans_curr == 1) {
         write("别人已经回答过这句诗了。\n");
         return 1;
@@ -122,27 +134,13 @@ int do_answer(string arg) {
       index = length - 1;
       me->set_temp("poem/index", poem_index);
 
-      current = replace_string(current, " ", "");
-      current = replace_string(current, ",", "");
-      current = replace_string(current, "，", "");
-      current = replace_string(current, "。", "");
-      current = replace_string(current, "！", "");
-      current = replace_string(current, "？", "");
-
       poem_reward(me, current);
-    } else if (arg == last && strlen(last) > 2) {
+    } else if (argn == last && strlen(last) > 2) {
       if (ans_last == 1) {
         write("别人已经回答过这句诗了。\n");
         return 1;
       }
       ans_last = 1;
-
-      last = replace_string(last, " ", "");
-      last = replace_string(last, ",", "");
-      last = replace_string(last, "，", "");
-      last = replace_string(last, "。", "");
-      last = replace_string(last, "！", "");
-      last = replace_string(last, "？", "");
 
       poem_reward(me, last);
     } else {
@@ -179,7 +177,7 @@ void poem_reward(object me, string arg) {
   poem_reward1(me);
 }
 void poem_reward1(object me) {
-  int dx, pot, lite;
+  int lite;
 
   if (!me->query_skill("literate", 1))
     me->set_skill("literate", 1);
@@ -204,12 +202,13 @@ void do_test() {
   int newt;
   object ob;
   //    string first,second,quest;
-  string *poemstr, quest, first, second;
+  string *poemstr, *poemstr2, quest;
   int ann1, ann2, ann3;
   if (objectp(ob = present("suan xiucai", this_object()))
     && living(ob)) {
     if (strlen(current) > 2 && ans_curr == 0) {
       last = current;
+      last_show = current_show;
       //	    last_all=current_all;
       ans_last = 0;
     }
@@ -227,7 +226,7 @@ void do_test() {
       while (ann1 > 0) {
         ann3++;
         poemstr += ({ poem[index][ann2..ann1 - 1] + "，" });
-        poem[index] = poem[index][ann1 + 2..];
+        poem[index] = poem[index][ann1 + 1..];
         ann1 = strsrch(poem[index], "，");
       }
 
@@ -261,24 +260,99 @@ void do_test() {
     }
     //	current_all=first+"  "+second;
     ans_curr = 0;
-    ann1 = random(sizeof(poemstr));
-    quest = poemstr[ann1];
-    if (strlen(quest) < 13 && ann1 > 0)
-      quest = poemstr[ann1 - 1] + quest;
+    // 只选取恰好两句的标准一联（另半句原样显示供玩家对照），最多重试 100 次
+    quest = "";
+    for (newt = 0; newt < 100; newt++) {
+      ann1 = random(sizeof(poemstr));
+      quest = poemstr[ann1];
+      poemstr2 = explode(quest, "，");
+      if (sizeof(poemstr2) == 2 && strlen(poemstr2[0]) >= 2 && strlen(poemstr2[1]) >= 2)
+        break;
+      quest = "";
+    }
+    if (quest == "") {
+      // 找不到标准一联，本轮不出题（保持事件链）
+      if (sizeof(filter(all_inventory(this_object()), (: userp :))))
+        call_out("do_test1", 55);
+      else
+        running = 0;
+      return;
+    }
 
-    //	current=replace_string(quest,"，","");  // the answer
-    current = quest;  // 要求标号位置正确
-    quest = mixup(quest);   // the question
-    quest = mixup(quest);   // the question
+    // 保留原始标点版本用于查看（wizard 显示），比对用去标点的 current
+    current_show = quest;
+    current = replace_string(quest, "，", "");
+    current = replace_string(current, "。", "");
+    current = replace_string(current, "？", "");
+    current = replace_string(current, "！", "");
+    current = replace_string(current, ",", "");
+    current = replace_string(current, " ", "");
+
+    // 只打乱其中半句（前半句或后半句随机），另半句保持原样供玩家对照
+    quest = mixup_half(quest);
     curr_show = quest;
     tell_room(this_object(), enscript("酸秀才提笔在墙上写道：" + quest) + "\n");
   }
-  if (sizeof(filter_array(all_inventory(this_object()), (: userp :))))
+  if (sizeof(filter(all_inventory(this_object()), (: userp :))))
     call_out("do_test1", 55);
   else
     running = 0;
   return;
 }
+// 打乱字符串的字符顺序（Fisher-Yates 洗牌，按字符计数）
+string _poem_shuffle(string s) {
+  string *ch, c;
+  int i, sz, a;
+
+  sz = sizeof(s);
+  if (sz < 2) return s;
+  ch = allocate(sz);
+  for (i = 0; i < sz; i++) ch[i] = s[i..i];
+  for (i = sz - 1; i > 0; i--) {
+    a = random(i + 1);
+    c = ch[i]; ch[i] = ch[a]; ch[a] = c;
+  }
+  return implode(ch, "");
+}
+
+// 出题打乱：一联两句（"上句，下句。"），随机打乱其中半句的字符顺序，
+// 另半句保持原样，玩家可凭未乱的半句对照猜出整句。
+string mixup_half(string str) {
+  string *segs, first, second, tail, punct, c, tmp;
+  int sz;
+
+  segs = explode(str, "，");
+  if (sizeof(segs) != 2) return str;
+  first = segs[0];
+  second = segs[1];
+
+  // 下句尾部的句读剥离出来，不参与打乱（句号保持在末尾）
+  tail = second;
+  punct = "";
+  sz = sizeof(tail);
+  if (sz > 0) {
+    c = tail[sz - 1..sz - 1];
+    if (c == "。" || c == "？" || c == "！") {
+      punct = c;
+      tail = tail[0..sz - 2];
+    }
+  }
+
+  if (sizeof(first) < 2 && sizeof(tail) < 2) return str;
+
+  if (random(2) == 0) {
+    tmp = _poem_shuffle(first);
+    // 洗回原句则轮转一位（防止墙上直接显示答案）
+    if (tmp == first && sizeof(first) > 1)
+      tmp = first[1..sizeof(first) - 1] + first[0..0];
+    return tmp + "，" + second;
+  }
+  tmp = _poem_shuffle(tail);
+  if (tmp == tail && sizeof(tail) > 1)
+    tmp = tail[1..sizeof(tail) - 1] + tail[0..0];
+  return first + "，" + tmp + punct;
+}
+
 string mixup(string str) {
   int len = strlen(str) / 2, i, j, k, l;
   string ans;
@@ -305,11 +379,10 @@ string mixup(string str) {
   return str;
 }
 int do_look(string arg) {
-  int i;
   if (!arg) return 0;
   if (arg == "wall") {
     if (wizardp(this_player()))
-      write(CYN "当前的答案是：" + current + "\n" NOR);
+      write(CYN "当前的答案是：" + (strlen(current_show) > 2 ? current_show : current) + "\n" NOR);
     //	for (i=0;i<length1;i++)	    write("    "+poem1[i]+"\n");
     write("\n\n");
     write(WHT "当前题目：　　　" + curr_show + "\n" NOR);
@@ -348,7 +421,7 @@ void copy_to_old() {
   return;
 }
 void new_poem() {
-  string filename, buf;
+  string filename;
   int i, j, k;
 
   string *line, lines;

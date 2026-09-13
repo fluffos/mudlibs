@@ -3,7 +3,6 @@ int alternative_die (object me)
 {
   object ob;
   int i;
-  string dir;
 
   
   if (!userp(me)) return 0;

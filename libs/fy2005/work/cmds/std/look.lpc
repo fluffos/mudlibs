@@ -17,6 +17,8 @@
 #include <weapon.h>
 
 #define MAX_ITEM 25;
+#define MAP_CELL 12
+
 
 inherit F_ANNIE;
 
@@ -32,6 +34,20 @@ string getper(object me, object obj);
 string tough_level(int power);
 string gettof(object me, object obj);
 string getdam(object me, object obj);
+
+// 实时地图(realtime_map) —— 排版宽度统一用 F_ANNIE(/feature/annie.lpc) 的
+// ngstr_cols / ngstr_fit / ngstr_pad(非 ASCII 字形占 2 列, utf-8 与 gbk 一致)
+string map_spaces(int n);
+string map_pad(string name, int width);
+string map_arrow(string ch);
+string map_arrow_row(string a1, string a2, string a3);
+string map_room_short(object room);
+object map_exit_room(string file);
+string realtime_map(object me, object env);
+
+
+
+
 string *tough_level_desc = ({
   BLU "不堪一击" NOR,
   BLU "毫不足虑" NOR,
@@ -134,25 +150,194 @@ int main(object me, string arg) {
 }
 
 
+// ====== 实时地图 (realtime_map) ======
+// 由 fymud(DGD) 版 cmds/std/look.c 移植并适配 FluffOS:
+//   - 按显示列宽对齐(CJK 占 2 列), 颜色码不计入宽度, 过长房间名按列宽截断
+//   - 支持 22 个出口方向(north/south/east/west 及其 up/down/斜向变体,
+//     以及 up/down/enter/out/left/right)
+//   - 中心为当前房间, 关闭的门不显示
+// 用 set show_way 1 打开, unset show_way 关闭。
+
+// 生成 n 个空格
+string map_spaces(int n) {
+  string str;
+  int i;
+
+  str = "";
+  for (i = 0; i < n; i++) str += " ";
+  return str;
+}
+
+// 居中排版到指定显示列宽(颜色码不计入宽度); 超过宽度则按列宽截断
+// 列宽用 F_ANNIE 的 ngstr_cols/ngstr_fit: 非 ASCII 字形占 2 列, 与 utf-8/gbk 无关
+string map_pad(string name, int width) {
+  int w, l, r;
+
+  if (!stringp(name)) name = "";
+  w = ngstr_cols(name);
+  if (w > width) {
+    name = name[0..ngstr_fit(name, width) - 1];
+    w = ngstr_cols(name);
+  }
+  l = (width - w) / 2;
+  r = width - w - l;
+  return map_spaces(l) + name + map_spaces(r);
+}
+
+
+// 方向标记: 全角字形占用 2 显示列(不依赖 strwidth 对 ambiguous 字形的判定)
+string map_arrow(string ch) {
+  if (!stringp(ch) || ch == "") return "  ";
+  return ch;
+}
+
+// 罗盘行的方向标记: ▲▼↖↗↙↘ 属 East Asian Ambiguous, 多数客户端按 1 显示列渲染.
+// 这里统一补 1 个空格凑成 2 显示列, 才能与主行的 ＜ / ＞ 等宽,
+// 否则上下箭头会比斜箭头多占 1 列, 导致同一张图里 ↘ 与 ↗ 不对齐.
+// (〓 / 入 / 出 本身就是 2 列的全角字形, 不需要补)
+string map_arrow_cell(string ch) {
+  if (!stringp(ch) || ch == "") return "  ";
+  if (ch == "▲" || ch == "▼" || ch == "↖" || ch == "↗" || ch == "↙" || ch == "↘")
+    return ch + " ";
+  return ch;
+}
+
+// 罗盘指示行: 左格从第 13 列开始, 中格第 21 列, 右格第 29 列, 全行 42 列
+string map_arrow_row(string a1, string a2, string a3) {
+  return map_spaces(MAP_CELL) + map_arrow_cell(a1) + map_spaces(6) +
+    map_arrow_cell(a2) + map_spaces(6) + map_arrow_cell(a3) +
+    map_spaces(MAP_CELL) + "\n";
+}
+
+// 取出口指向的房间(载入失败返回 0, 不影响 look)
+object map_exit_room(string file) {
+  object room;
+
+  if (!stringp(file)) return 0;
+  catch(room = find_object(file));
+  if (!objectp(room)) catch(room = load_object(file));
+  if (!objectp(room)) return 0;
+  return room;
+}
+
+// 取房间简称
+string map_room_short(object room) {
+  string name;
+
+  if (!objectp(room)) return "";
+  name = room->query("short");
+  if (!stringp(name)) name = room->query("name");
+  if (!stringp(name)) name = "";
+  return name;
+}
+
+// 生成实时小地图(无法绘制时返回 "")
+string realtime_map(object me, object env) {
+  mapping exits, rooms;
+  string *dirs;
+  int i;
+  string file, str, here;
+  string cw, cn, ce, cs, cnw, cne, csw, cse;
+  string aw, ae, anw, an, ane, asw, as, ase;
+  object room;
+
+  if (!objectp(env)) return "";
+
+  exits = env->query("exits");
+  if (!mapp(exits) || !sizeof(exits)) return "";
+
+  // 收集各个出口房间的简称(关闭的门不显示)
+  rooms = ([ ]);
+  dirs = keys(exits);
+  for (i = 0; i < sizeof(dirs); i++) {
+    if ((int)env->query_door(dirs[i], "status") & DOOR_CLOSED) continue;
+    file = exits[dirs[i]];
+    room = map_exit_room(file);
+    str = map_room_short(room);
+    if (str != "") rooms[dirs[i]] = str;
+  }
+
+  cnw = cn = cne = cw = ce = csw = cs = cse = "";
+  anw = an = ane = aw = ae = asw = as = ase = "";
+
+  // 北向(覆盖式优先级: enter < up < northdown < northup < north)
+  if (stringp(rooms["enter"])) { cn = rooms["enter"]; an = "入"; }
+  if (stringp(rooms["up"])) { cn = rooms["up"]; an = "〓"; }
+  if (stringp(rooms["northdown"])) { cn = rooms["northdown"]; an = "▲"; }
+  if (stringp(rooms["northup"])) { cn = rooms["northup"]; an = "▲"; }
+  if (stringp(rooms["north"])) { cn = rooms["north"]; an = "▲"; }
+
+  // 南向(覆盖式优先级: out < down < southdown < southup < south)
+  if (stringp(rooms["out"])) { cs = rooms["out"]; as = "出"; }
+  if (stringp(rooms["down"])) { cs = rooms["down"]; as = "〓"; }
+  if (stringp(rooms["southdown"])) { cs = rooms["southdown"]; as = "▼"; }
+  if (stringp(rooms["southup"])) { cs = rooms["southup"]; as = "▼"; }
+  if (stringp(rooms["south"])) { cs = rooms["south"]; as = "▼"; }
+
+  // 西向(优先级: left > westup > westdown > west)
+  if (stringp(rooms["left"])) { cw = rooms["left"]; aw = "＜"; }
+  else if (stringp(rooms["westup"])) { cw = rooms["westup"]; aw = "＜"; }
+  else if (stringp(rooms["westdown"])) { cw = rooms["westdown"]; aw = "＜"; }
+  else if (stringp(rooms["west"])) { cw = rooms["west"]; aw = "＜"; }
+
+  // 东向(优先级: right > eastup > eastdown > east)
+  if (stringp(rooms["right"])) { ce = rooms["right"]; ae = "＞"; }
+  else if (stringp(rooms["eastup"])) { ce = rooms["eastup"]; ae = "＞"; }
+  else if (stringp(rooms["eastdown"])) { ce = rooms["eastdown"]; ae = "＞"; }
+  else if (stringp(rooms["east"])) { ce = rooms["east"]; ae = "＞"; }
+
+  // 斜向
+  if (stringp(rooms["northwest"])) { cnw = rooms["northwest"]; anw = "↖"; }
+  if (stringp(rooms["northeast"])) { cne = rooms["northeast"]; ane = "↗"; }
+  if (stringp(rooms["southwest"])) { csw = rooms["southwest"]; asw = "↙"; }
+  if (stringp(rooms["southeast"])) { cse = rooms["southeast"]; ase = "↘"; }
+
+  here = env->query("short");
+  if (!stringp(here) || here == "") here = "----------";
+
+  str = "\n|-----------------" + HIY "当前地图" NOR + "-----------------|\n\n";
+  str += map_pad(cnw, MAP_CELL) + "   " + map_pad(cn, MAP_CELL) + "   " +
+    map_pad(cne, MAP_CELL) + "\n";
+  str += map_arrow_row(anw, an, ane);
+  str += map_pad(cw, MAP_CELL) + map_arrow(aw) + "[" + HIW + map_pad(here, MAP_CELL) +
+    NOR + "]" + map_arrow(ae) + map_pad(ce, MAP_CELL) + "\n";
+  str += map_arrow_row(asw, as, ase);
+  str += map_pad(csw, MAP_CELL) + "   " + map_pad(cs, MAP_CELL) + "   " +
+    map_pad(cse, MAP_CELL) + "\n";
+  str += "\n|------------------------------------------|\n\n";
+
+  return str;
+}
+
 // give out room description.
 int look_room(object me, object env) {
-  int i;
+  int i, mxp;
   object *inv;
   mapping exits;
-  string roomdesc, str, *dirs;
+  string str, *dirs, *links;
 
   if (!env) {
     write("你的四周灰蒙蒙地一片，什麽也没有。\n");
     return 1;
   }
 
+  // MXP: 客户端协商了 MXP 时给出可点击的出口/物品链接
+  mxp = MXP_D->init(me);
+
   // room descriptions.
-  str = sprintf("%s - %s\n    %s%s",
-    env->query("short"),
+  str = sprintf("%s - %s\n",
+    mxp ? MXP_D->rshort(me, env->query("short")) : env->query("short"),
     wizardp(me) ? file_name(env) + sprintf(" - (%d,%d,%d)", env->query("coor/x"),
-      env->query("coor/y"), env->query("coor/z")) : "",
-    env->long(),
+      env->query("coor/y"), env->query("coor/z")) : "");
+
+  // 实时小地图(可选, 用 set show_way 1 打开)
+  if (me->query("env/show_way") && !me->query("env/brief"))
+    str += realtime_map(me, env);
+
+  str += sprintf("    %s%s",
+    mxp ? MXP_D->rdesc(me, MXP_D->escape(env->long())) : env->long(),
     env->query("outdoors") ? NATURE_D->outdoor_room_description() : "");
+
 
   // exits.
   if (mapp(exits = env->query("exits"))) {
@@ -165,6 +350,13 @@ int look_room(object me, object env) {
     dirs -= ({ 0 });
     if (sizeof(dirs) == 0) {
       str += "    这里没有任何明显的出路。\n";
+    } else if (mxp) {
+      // MXP: 每个出口都是可点击的命令链接
+      links = ({ });
+      for (i = 0; i < sizeof(dirs); i++)
+        links += ({ MXP_D->cmd(me, dirs[i], BOLD + dirs[i] + NOR) });
+      str += MXP_D->rexits(me,
+        "    这里明显的出口是 " + implode(links, "、") + "。") + "\n";
     } else if (sizeof(dirs) == 1) {
       str += "    这里唯一的出口是 " + BOLD + dirs[0] + NOR + "。\n";
     } else {
@@ -184,7 +376,14 @@ int look_room(object me, object env) {
       if (inv[i] == me || inv[i]->query("no_shown") || !me->visible(inv[i])) {
         continue;
       }
-      if (inv[i]->query_temp("team_name"))
+      if (mxp) {
+        // MXP: 物品/人物名可点击(文本已转义, 避免标签注入)
+        str += "  " + MXP_D->cmd(me, MXP_D->look_cmd(inv[i]),
+          MXP_D->escape(inv[i]->short()));
+        if (inv[i]->query_temp("team_name"))
+          str += WHT " < " + inv[i]->query_temp("team_name") + " >" NOR;
+        str += "\n";
+      } else if (inv[i]->query_temp("team_name"))
         str += "  " + inv[i]->short() + WHT " < " + inv[i]->query_temp("team_name") + " >\n" NOR;
       else
         str += "  " + inv[i]->short() + "\n";
@@ -192,12 +391,16 @@ int look_room(object me, object env) {
     }
 
   write(str);
+
+  // GMCP: 客户端可用时同步房间信息(Room.Info)
+  GMCP_D->send_room(me);
+
   return 1;
 }
 
 
 
-// give out item description.
+// ====== look_item 排版宽度修正 ======// give out item description.
 int look_item(object me, object obj) {
 
   mixed *inv;
@@ -222,7 +425,6 @@ int look_item(object me, object obj) {
   string *c_att = ({ "才智", "力量", "定力", "运气", "速度", "体质", "精力", "气血", "心神", "闪躲", "招架" });
   int container_size;
 
-  int strl, stre;
   string strx;
 
   if (!present(obj, me) && !me->query_temp("checking_goods"))
@@ -693,7 +895,7 @@ string getper(object me, object obj) {
 
 // use skill_power function to calculate the diff between 2 players.
 string gettof(object me, object ob) {
-  int melevel, oblevel;
+  int oblevel;
   //  melevel = COMBAT_D->skill_power(me, SKILL_USAGE_ATTACK) +
   //          COMBAT_D->skill_power(me, SKILL_USAGE_PARRY) + 
   //          COMBAT_D->skill_power(me, SKILL_USAGE_DODGE);
@@ -708,7 +910,7 @@ string gettof(object me, object ob) {
 
 // give out character description.
 int look_living(object me, object obj) {
-  string str, limb_status, pro;
+  string str, pro;
   mixed *inv;
   mapping my_fam, fam;
 
@@ -821,9 +1023,8 @@ int look_living(object me, object obj) {
 
 // give out corpse description.
 int look_corpse(object me, object obj) {
-  string str, limb_status, pro;
+  string str, pro;
   mixed *inv;
-  mapping my_fam, fam;
 
   if (me != obj) {
     message("vision", me->name() + "正盯著你看，不知道打些什麽主意。\n", obj);

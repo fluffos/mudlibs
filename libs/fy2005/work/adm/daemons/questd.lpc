@@ -4,7 +4,7 @@
 // the written permission from authors.
 // 
 
-#pragma optimize all
+#pragma optimize
 inherit F_ANNIE;
 #include <ansi.h>
 
@@ -21,6 +21,12 @@ void create() {
   seteuid(ROOT_UID);
 }
 
+// no_maze: 玩家用 set no_maze 1 选择不做垂笠老僧任务 (对应 env/no_maze 环境变数)
+int no_maze(object who) {
+  if (!objectp(who)) return 0;
+  return who->query("env/no_maze") ? 1 : 0;
+}
+
 
 int query_holiday() {
   return holiday_bonus;
@@ -35,7 +41,7 @@ int set_holiday(int bonus) {
 //  The difference between "寻" and "杀" is
 //  "杀" checks and gives credit to each teammate, "寻" searches for one then ends loop.
 int accept_quest_object(object who, mixed ob, object me) {
-  int val, delay, i, gr;
+  int i;
   string name;
   object *mem;
   mapping quest;
@@ -70,7 +76,7 @@ int accept_quest_object(object who, mixed ob, object me) {
 
 int give_quest(object who, mapping me) {
   mapping quest, qmirror, qex;
-  int i, num, combatexp, max_exp, num_file, n1, n2, time;
+  int i, combatexp, max_exp, num_file, n1, time;
   string tag = "_default";
   string qstr;
   object *mem;
@@ -139,6 +145,18 @@ int give_quest(object who, mapping me) {
   }
   // DEBUG LINE END
 
+  // no_maze: 不做垂笠老僧任务，重新抽取
+  if (no_maze(who) && quest && quest["quest"] == "探访垂笠老僧") {
+    for (i = 0; i < 5; i++) {
+      if (sizeof(mem) > 1)
+        quest = QUEST_D("_repeat")->query_quest(combatexp / 1000);
+      else
+        quest = QUEST_D("_repeat_solo")->query_quest(combatexp / 1000);
+      if (!quest || quest["quest"] != "探访垂笠老僧") break;
+    }
+    if (quest && quest["quest"] == "探访垂笠老僧") quest = 0;
+  }
+
   if (!sizeof(quest) || !quest) {
     if (!random(30)) {
       tag = "_special";
@@ -189,6 +207,7 @@ int give_quest(object who, mapping me) {
 
   //	I don't like 寻 at higher level (>=90), 强制性转换
   if (F_LEVEL->get_level(combatexp) >= level_chance && quest["quest_type"] == "寻"
+    && !no_maze(who)
     && (random(100) < chance || who->query("chuili_unfinished"))) {
     tag = "_repeat";
     quest = ([
@@ -256,7 +275,6 @@ int give_quest(object who, mapping me) {
 
 void give_reward(object who, object accomplisher, mapping quest) {
   int team_size, i, level, base, d_bonus, team_bonus, combat_exp, silver, money, q_bonus, half;
-  int h_bonus;
   string reward_msg;
   object ob;
   object *mem;
@@ -416,7 +434,7 @@ string wait_period(int timep) {
 //	送花的奖励
 int flower_delivery_reward(object me, object who, object flower) {
   mapping delivery;
-  int exp, pot, success_time, amount;
+  int success_time, amount;
   object coin;
 
   if (!mapp(delivery = flower->query("delivery"))) return 0;
@@ -538,7 +556,6 @@ mapping return_quest(object me, string qname) {
 int special_reward(object me, string qname) {
 
   mapping quest;
-  int i;
 
   if (mapp(quest = me->query("quest")) && me->query("quest/quest") == qname) {
     if (time() - me->query("quest_time") < quest["duration"]) {
@@ -556,13 +573,13 @@ int special_reward(object me, string qname) {
 
 int give_quest_list(object who, mapping me) {
   mapping qmirror, qex;
-  int i, num, combatexp, max_exp, num_file, n1, n2, time;
+  int i, combatexp, max_exp, num_file, time;
   string tag = "_default";
   string qstr;
   object *mem;
   mapping quest;
 
-  int j, k, count, s;
+  int j, k, s;
   mapping *quest_list = ({});
 
   quest_list = allocate(3);
@@ -675,9 +692,8 @@ int give_quest_list(object who, mapping me) {
 
 
 int dungeon_reward(object quester, string name, object *rewardee, int d_bonus) {
-  int team_size, i, level, base, n, combat_exp, silver, money, q_bonus, half;
+  int team_size, i, level, base, combat_exp, silver, money, half;
   string reward_msg;
-  object ob;
   object *mem;
 
   if (name == "垂笠老僧的任务") {

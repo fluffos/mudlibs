@@ -64,7 +64,6 @@ void init(){
 
 int do_go(string arg){
 	int lsteps,tsteps;
-	int brief, brief2, brief3;
 	string mout;
 	object room,me;
 	me = this_player();
@@ -105,7 +104,6 @@ int do_go(string arg){
 int check_dirs(object me, string dir)
 {
 	string attrib_old,attrib_new;
-	int stag;
 	object room;
 	mapping dirs;
 	dirs=query("exits");

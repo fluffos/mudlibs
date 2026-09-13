@@ -4,11 +4,30 @@
 
 inherit F_DBASE;
 inherit F_SAVE;
+inherit F_GMCP;
+
+// ===== MXP (MUD eXtension Protocol) =====
+// 驱动在客户端完成 MXP 协商(回 IAC WILL 91)时调用。
+void mxp_enable() {
+  // 驱动确认本连线 MXP 已启用(客户端回了 IAC WILL 91)。
+  // 记录在连线对象上, 供 MXPD 判定与排错。
+  set_temp("mxp/enabled", 1);
+}
+
+void gmcp_enable() {
+   set_temp("gmcp/buffer", 1);
+}
 
 void logon() {
+  // GMCP: 登录期先把客户端发来的 GMCP 消息缓冲在连线对象上,
+  //        exec 进入玩家后由 LOGIN_D 调 GMCP_D->activate(user) 回放。
+
+
   call_out("time_out", LOGIN_TIMEOUT);
+
   LOGIN_D->logon(this_object());
 }
+
 
 // Don't destruct(this_object()) in the net_dead() interactive apply or
 // there'll be error message: Double call to remove_interactive()
@@ -35,14 +54,18 @@ string query_save_file() {
 
 void receive_message(string type, string str) {
   if (type != "write") return;
-  if (this_object()->query_temp("char_encoding") == "big5") {
-    str = ENCODE_D->gbTobig5(str);
-  }
   receive(str);
 }
 
 void terminal_type(string term_type) {
   set_temp("terminal_type", term_type);
+
+  // MXP: 记录本次连线收到的【第一个】TTYPE 值。
+  // 部分客户端(如 Mudlet)会依次上报 "MUDLET" / "ANSI-TRUECOLOR" / "MTTS <n>"，
+  // 只看最后一个会丢掉客户端身份。mudlib 用这个值识别 Mudlet 等
+  // "能解析 MXP 但可能没完成 telnet 协商"的客户端。
+  if (!stringp(query_temp("mxp/ttype")))
+    set_temp("mxp/ttype", term_type);
 }
 
 // Protect login object's data against hackers.

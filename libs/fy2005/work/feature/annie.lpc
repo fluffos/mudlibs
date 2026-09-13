@@ -62,121 +62,165 @@ void set_items(mapping t_items) {  // this function is for transfering
 
 // -------------------------
 
-string ngstr(string str, int lng) {
-  int i, i2;
-  string strc;
-  strc = str;
-  // filter color-code
-  // annie 10.7.2004
-  str = replace_string(str, CSI, "");
+// ====== 显示列宽排版工具 (utf-8 / gbk 通用) ======
+// FluffOS 的 strlen() 返回"字符个数", strwidth() 又把 East Asian Ambiguous
+// 字形(║│─═◆◎·…)当成窄(1 列), 都不能直接用于这套框线排版;
+// 这里统一用"非 ASCII 字形 = 2 列, ASCII = 1 列"的列宽(等价于原 GBK 版的
+// 字节数)。输出的字符在 utf-8 与 gbk 两种内码下完全相同, 因此排版一致。
 
-  str = replace_string(str, "2;37;0m", "");
+// 去掉 ANSI 转义序列(只用于测量显示宽度, 不改变输出内容)
+string ngstr_uncolor(string str) {
+  string out, ch;
+  int i, len, esc, skip;
 
-  str = replace_string(str, "41;", "");
-  str = replace_string(str, "42;", "");
-  str = replace_string(str, "43;", "");
-  str = replace_string(str, "44;", "");
-  str = replace_string(str, "45;", "");
-  str = replace_string(str, "46;", "");
-  str = replace_string(str, "47;", "");
-  str = replace_string(str, "1;", "");
-  str = replace_string(str, "30m", "");
-  str = replace_string(str, "31m", "");
-  str = replace_string(str, "32m", "");
-  str = replace_string(str, "33m", "");
-  str = replace_string(str, "34m", "");
-  str = replace_string(str, "35m", "");
-  str = replace_string(str, "36m", "");
-  str = replace_string(str, "37m", "");
-  str = replace_string(str, "38m", "");
-  str = replace_string(str, "40m", "");
-  str = replace_string(str, "41m", "");
-  str = replace_string(str, "42m", "");
-  str = replace_string(str, "43m", "");
-  str = replace_string(str, "44m", "");
-  str = replace_string(str, "45m", "");
-  str = replace_string(str, "46m", "");
-  str = replace_string(str, "47m", "");
-  str = replace_string(str, "1m", "");
-
-
-  // fill with space char
-
-
-  i2 = lng - strlen(str);
-  for (i = 0; i < i2 / 2; i++) {
-    strc = strc + "　";
-  }
-  if (i2 % 2)
-    strc = strc + " ";
-  // return
-  return strc;
-
-}
-
-
-string nrstr(string str, int lng, string prefix, string surfix, int ns) {
-  // 重新断行函式
-  // 先去除所有断行，之后到达一定长度自动断行
-  // annie 11.11.2004
-
-  int i, i2, i3, i4 = 0;
-  string strc, std;
-
-
-  if (!ns) {
-    strc = replace_string(str, "\n", "");
-
-    i3 = strlen(strc);
-    i2 = lng - strlen(prefix) - strlen(surfix);
-    // 实际上允许的每行长度
-
-    str = "";
-    if (i4 < i3 - i2) {
-      do {
-        str += prefix + strc[i4..i4 + i2] + surfix;
-        i4 += i2 + 1;
-      } while (i4 < i3 - i2);
+  if (!stringp(str)) return "";
+  out = "";
+  esc = 0;
+  skip = 0;
+  len = strlen(str);
+  for (i = 0; i < len; i++) {
+    ch = str[i..i];
+    if (esc) {
+      skip++;
+      // 以字母或 '~' 结束; 超过 16 字符的非法序列立即放弃跳过
+      if (strsrch("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ~", ch) != -1 || skip > 16)
+        esc = 0;
+      continue;
     }
-
-    str += prefix;
-    str += ngstr(strc[i4..i4 + i2], i2 + 1);
-    str += surfix;
-  } else {
-    std = str;
-    i4 = 0;
-    strc = "";
-    str = "";
-    i3 = strlen(strc);
-    i2 = lng - strlen(prefix) - strlen(surfix);
-    do {
-      i = strsrch(std, "\n");
-      strc = std[0..i - 1];
-
-      str += prefix;
-      str += ngstr(strc, i2 + 1);
-      str += surfix;
-
-      std = std[i + 1..];
-    } while (strsrch(std, "\n") != -1);
-
-    str += prefix;
-    str += ngstr(std, i2 + 1);
-    str += surfix;
-
+    if (ch == ESC) {
+      esc = 1;
+      skip = 0;
+      continue;
+    }
+    out += ch;
   }
-
-  return str;
-
+  return out;
 }
+
+// 单个字符的显示列宽
+int ngstr_chcol(string ch) {
+  if (!stringp(ch) || ch == "") return 0;
+  if (ch == "\n" || ch == "\r" || ch == "\t") return 0;
+  if (ch[0] < 128) return 1;
+  return 2;
+}
+
+// 字符串的显示列宽(颜色码不计入)
+int ngstr_cols(string str) {
+  int i, len, n;
+
+  if (!stringp(str)) return 0;
+  str = ngstr_uncolor(str);
+  n = 0;
+  len = strlen(str);
+  for (i = 0; i < len; i++) n += ngstr_chcol(str[i..i]);
+  return n;
+}
+
+// 右侧填充到 width 显示列(用全角空格补齐, 保证双宽字形对齐)
+string ngstr_pad(string str, int width) {
+  int w;
+
+  if (!stringp(str)) str = "";
+  w = width - ngstr_cols(str);
+  while (w >= 2) {
+    str += "　";
+    w -= 2;
+  }
+  if (w == 1) str += " ";
+  return str;
+}
+
+// 能放进 width 显示列的最长前缀的字符数(至少 1 个字符); 转义序列不计宽度
+int ngstr_fit(string str, int width) {
+  int i, len, n, w, esc;
+  string ch;
+
+  len = strlen(str);
+  n = 0;
+  w = 0;
+  esc = 0;
+  for (i = 0; i < len; i++) {
+    ch = str[i..i];
+    if (esc) {
+      if (strsrch("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ~", ch) != -1)
+        esc = 0;
+      n++;
+      continue;
+    }
+    if (ch == ESC) {
+      esc = 1;
+      n++;
+      continue;
+    }
+    w += ngstr_chcol(ch);
+    if (w > width) break;
+    n++;
+  }
+  if (n < 1) n = 1;
+  return n;
+}
+
+// 右侧补齐到 lng 显示列
+string ngstr(string str, int lng) {
+  return ngstr_pad(str, lng);
+}
+
+// 按显示列宽断行(参照 DGD 版 feature/annie.c 的 nrstr)
+// ns 非 0 时保留原有换行, 否则先去掉所有换行再按宽度断行
+string nrstr(string str, int lng, string prefix, string surfix, int ns) {
+  string out, rest, line;
+  int width, i, len, n;
+
+  if (!stringp(str) || strlen(str) < 1) return prefix + surfix;
+
+  width = lng - ngstr_cols(prefix) - ngstr_cols(surfix);
+  if (width < 1) width = 1;
+
+  out = "";
+  if (!ns) {
+    rest = replace_string(str, "\n", "");
+    while (strlen(rest) > 0) {
+      n = ngstr_fit(rest, width);
+      line = rest[0..n - 1];
+      len = strlen(rest);
+      if (n >= len) rest = "";
+      else rest = rest[n..];
+      out += prefix + ngstr_pad(line, width) + surfix;
+    }
+  } else {
+    rest = str;
+    while (strlen(rest) > 0) {
+      i = strsrch(rest, "\n");
+      if (i < 0) {
+        line = rest;
+        rest = "";
+      } else if (i == 0) {
+        line = "";
+        rest = rest[1..];
+      } else {
+        line = rest[0..i - 1];
+        len = strlen(rest);
+        if (i + 1 >= len) rest = "";
+        else rest = rest[i + 1..];
+      }
+      if (strlen(line) > 0) {
+        n = ngstr_fit(line, width);
+        line = line[0..n - 1];
+      }
+      out += prefix + ngstr_pad(line, width) + surfix;
+    }
+  }
+  return out;
+}
+
 
 
 string annie_mimic(object ob, object ob1) {
   mapping list, tlist;
   mixed *klist, *tlist2;
-  string text, *tmp, id, spec;
+  string text;
   int loop;
-  string tmp1, tmp2;
   int flag;
   mapping skl, map;
   string *sname, *mapped;
@@ -244,12 +288,9 @@ string annie_mimic(object ob, object ob1) {
 
 string annie_itemmimic(object ob1, mapping list, mapping tlist) {
   mixed *klist, *tlist2;
-  string text, *tmp, id, spec;
+  string text;
   int loop;
-  string tmp1, tmp2;
   int flag;
-  mapping skl, map;
-  string *sname, *mapped;
 
   flag = 1;  // 是否复制临时映射？1:复制 0:不复制
 
@@ -288,12 +329,8 @@ string annie_itemmimic(object ob1, mapping list, mapping tlist) {
 }
 
 string annie_skillcp(object ob, object ob1) {
-  mapping list, tlist;
-  mixed *klist, *tlist2;
-  string text, *tmp, id, spec;
+  string text;
   int loop;
-  string tmp1, tmp2;
-  int flag;
   mapping skl, map;
   string *sname, *mapped;
 
@@ -376,7 +413,6 @@ int mutant()  // 使gold robot的对象异变
 {
   int rate;
   int seed = random(7) + 1;
-  mapping buff;
 
   rate = query("mutant_rate");
 
@@ -447,7 +483,6 @@ int mutant()  // 使gold robot的对象异变
 void tell_team(object who, string what) {
   object *team;
   int i;
-  object ob, me = who;
   team = pointerp(who->query_team()) ? who->query_team() : ({ who });
   if (team) {
     for (i = 0; i < sizeof(team); i++) {
@@ -462,7 +497,7 @@ void tell_team(object who, string what) {
 object team_check(object who, string what, int flag, mixed dat) {
   object *team;
   int i;
-  object ob, me = who;
+  object me = who;
 
   // flag = 0: 只作用于同环境与可见team mate，含自身
   // flag = 1: 作用于所有teammate，含自身
@@ -506,7 +541,7 @@ mapping mapping_copy(mapping map) {
 
 int get_highest_skill_level(object me, int i) {
   int loop;
-  int flag, lv = 0;
+  int lv = 0;
   mapping skl, map;
   string *sname, *mapped;
 
@@ -526,7 +561,6 @@ int get_highest_skill_level(object me, int i) {
 }
 
 int block_account(object me) {
-  object ob;
   tell_object(me, HIW "你的帐号数据异常，将被系统暂时禁止使用。\n请联系Silencer@Fengyun.com予以解决。\n" NOR);
   "/cmds/adm/block"->main(this_object(), me->query("id"));
 

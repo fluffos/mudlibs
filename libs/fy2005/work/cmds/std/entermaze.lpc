@@ -2,9 +2,8 @@
 inherit F_CLEAN_UP;
 
 int main(object me, string arg) {
-  object room, room2, who, *mem;
-  int pwd, i, j, mm, count, max_exp, combatexp;
-  string name;
+  object room2, who, *mem;
+  int i, j, mm, count, max_exp, combatexp;
   object *dungeon_list;
 
   seteuid(getuid());
@@ -47,7 +46,8 @@ int main(object me, string arg) {
       if (!room2)
         return notify_fail("Oops.Please report to wizards. \n");
 
-      me->set("private_maze/create", 0);  // 因为在销毁ｍａｚｅ时我们允许owner退出，所以必须限制create的次数．
+      // 注意: private_maze/create 不在此处清除。改为在下面"所有检查通过、玩家真正移动前"才清除,
+      // 否则一旦后续检查失败(人数已满/等级不符/忙乱等), 玩家将无法用 ask ... about lost 更换地点。
 
       // Maze_exp 决定于队伍中最高的经验值，这样队伍中的人肯定能帮忙
       mem = pointerp(me->query_team()) ? me->query_team() : ({ me });
@@ -59,6 +59,8 @@ int main(object me, string arg) {
           combatexp = (max_exp > combatexp) ? max_exp : combatexp;
         }
       }
+      // 兜底: 极端情况(队内 combat_exp 全为 0)下避免 maze/exp=0 令 NPC invocation(0) 生成异常强敌
+      if (combatexp <= 0) combatexp = 100000;
       room2->set("maze/exp", combatexp);
 
       room2->set("maze/type", me->query("private_maze/type"));
@@ -66,7 +68,7 @@ int main(object me, string arg) {
       room2->set("maze/name", me->query("private_maze/orig_name"));
       room2->set("maze/sig", me->query("private_maze/maze"));
       room2->set("maze/npc_killed", me->query("private_maze/carried_npc"));
-      me->delete("private_maze/carried_npc");
+      // carried_npc 同样延后到真正进入时再清除(见下方)
 
       room2->query("maze/sig")->set_link_exit_room(room2->query("maze/exit"));
       room2->query("maze/sig")->set_link_entry_room(room2->query("maze/exit"));
@@ -83,7 +85,7 @@ int main(object me, string arg) {
     }
 
     room2 = find_object("/obj/dungeon/standardmaze/" + me->query("id") + "/entry");
-    if (!room2 && !me->query("private_maze/create"))
+    if (!room2)  // 原条件里的 !private_maze/create 在此处恒真, 去掉后语义不变, 也不再依赖 create 的清除时机
       return notify_fail("你的任务已经结束或者过时，无法再进入／创建新地区。\n");
 
     if (F_LEVEL->get_level(who->query("combat_exp")) > F_LEVEL->get_level(room2->query("maze/exp")) + 5)
@@ -97,6 +99,10 @@ int main(object me, string arg) {
 
     if (who->is_busy() || who->is_fighting())
       return notify_fail("此人正处在忙乱中，无法移动。\n");
+
+    // 所有检查都已通过, 此时才清除 create 标志与暂存数据
+    me->set("private_maze/create", 0);
+    me->delete("private_maze/carried_npc");
 
     who->move(room2);
     tell_object(

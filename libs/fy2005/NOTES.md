@@ -4,6 +4,28 @@
   as archive #14 (fengyun434), a later/bigger snapshot). Mudlib root at
   `fy2005/fy4/`, config at `fy2005/bin/config.fy4`.
 - Port: **40013**.
+- **Hosting (2026-09-13)**: `submodule-patch` →
+  [`https://github.com/seikichin/-mud`](https://github.com/seikichin/-mud)
+  pin `32803f797c5554b0f72852638107449c658f050f` (`main`). Repo root is
+  the mudlib. Upstream is a FluffOS fy2005 tree with MXP/GMCP work; the
+  catalog previously vendored the same lineage from `fy2005.rar`. Admin
+  seed lives in `overlay/` (upstream `.gitignore`s `data/login/` and
+  `data/user/`). Catalog patch
+  `patches/0001-simul-efun-include-software-json.patch` flips
+  `adm/obj/simul_efun.lpc` to `#ifndef __PACKAGE_JSON_EXTENSION__` so
+  the shipped `json.lpc` provides `json_encode` for `feature/gmcp.lpc`
+  on catalog FluffOS builds (no PACKAGE_JSON). Apply with
+  `python3 scripts/apply_lib_patches.py fy2005` after checkout; source
+  zips apply it automatically. Do not auto-rebase; refresh the pin after
+  reviewing upstream commits.
+
+## Upstream cutover smoke (2026-09-13)
+
+- Submodule pin `32803f7` boots clean (preload includes upstream
+  `mapd` / `festivald`).
+- Without the json patch, `connect()` fails: `feature/gmcp.lpc` →
+  `Undefined function json_encode` → peer hangup.
+- With the patch applied: banner + GBK/UTF-8 encoding prompt OK.
 
 ## Status: DONE — boots clean; has an intentional 5-minute startup grace period
 

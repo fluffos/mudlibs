@@ -25,7 +25,6 @@
 #define	COMBAT_D				"/adm/daemons/combatd"
 #define	COMMAND_D				"/adm/daemons/cmd_d"
 #define	EMOTE_D					"/adm/daemons/emoted"
-#define	ENCODE_D				"/adm/daemons/encoded"
 #define	EVENT_D					"/adm/daemons/eventd"
 #define	FINGER_D				"/adm/daemons/fingerd"
 #define	INQUIRY_D				"/adm/daemons/inquiryd"

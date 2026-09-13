@@ -2,14 +2,14 @@
 // Copyright (C) 1995 - 2001, by FengYun Workshop. All rights reserved.
 // This software can not be used, copied, or modified in any form without
 // the written permission from authors.
-// 
+//
 /* Last modification:
 //		- 07/22/2001 by Daniel Q. Yu.
 //			* Move some code in move function here.
 //		- 08/16/2001 by Daniel Q. Yu.
 //			* Add autosave for each user.
 //		- 12/30/2001 by Justdoit
-//			*Try to fix the connection error when player login. 
+//			*Try to fix the connection error when player login.
 		- 07/06/2004 by Silencer
 			*Remove +potential and -thief in reset()
 			*Add a mark when forcing player quit.. (<3K player data will be erased)
@@ -17,18 +17,20 @@
 			* Add a dummy command "nothing" in "move" to fix a mudos problem.
 			"illegal to move or destruct an object when return = 0"
 			This problem only occus when there is an init() in npcs in current room.
-			It is fixed in newer MUDOS but not in current fengyun. 
+			It is fixed in newer MUDOS but not in current fengyun.
 */
 
 #include <origin.h>
 #include <user.h>
 #include <room.h>
 #include <ansi.h>
+#include <mxp.h>
 
 inherit CHARACTER;
 inherit F_MASTER;
 inherit F_AUTOLOAD;
 inherit F_SAVE;
+inherit F_GMCP;
 
 nosave int last_age_set;
 
@@ -42,6 +44,49 @@ void create() {
 void terminal_type(string term_type) {
   set_temp("terminal_type", term_type);
   message("system", "终端机型态设定为 " + term_type + "。\n", this_object());
+}
+
+// ===== MXP (MUD eXtension Protocol) =====
+// 驱动在客户端完成 MXP 协商(回 IAC WILL 91)时调用。
+void mxp_enable() {
+  // 驱动确认本连线 MXP 已启用(客户端回了 IAC WILL 91)。
+  // 玩家可能在连线中途才打开 MXP 开关, 因此清掉「定义已下发」标记,
+  // 让下一次房间显示重新下发元素定义。
+  set_temp("mxp/enabled", 1);
+  set_temp("mxp/definitions_sent", 0);
+}
+
+// 驱动收到客户端安全模式发来的 MXP 标签时调用。
+// 注意: 驱动会把输入行里的 ESC(0x1b) 替换成空格, 所以形如 " [4z<命令>"。
+// 返回 1 表示已处理并拦截该行; 返回 0 则交回普通指令解析。
+int mxp_tag(string tag) {
+  string cmd, err;
+
+  if (!stringp(tag) || strlen(tag) < 4) return 0;
+  if (tag[0] != ' ' || tag[1] != '[' || tag[3] != 'z') return 0;
+
+  cmd = strlen(tag) > 4 ? tag[4..strlen(tag) - 1] : "";
+  if (!strlen(cmd)) return 1;
+
+  // 客户端回送的 MXP 协议应答(<VERSION ...> / <SUPPORTS ...>): 忽略
+  if (cmd[0] == '<') return 1;
+
+  // 其余视为点击链接发来的命令(由我们自行执行, 因此返回 1 拦截原输入)
+  if (this_object() == this_player()) {
+    err = catch(command(cmd));
+    if (err) log_file("mxp_tag", sprintf("%s ERR: %s\n", ctime(time()), err));
+  }
+  return 1;
+}
+
+// ===== GMCP (Generic Mud Communication Protocol) =====
+// 驱动的 gmcp_enable()/gmcp() 两个 apply 与唯一的 send_gmcp 出口都在
+// F_GMCP(feature/gmcp.lpc) 里, 这里只补两处游戏逻辑钩子。
+
+// 心跳: 增量推送命脉(GMCP_D->tick 内部已做去重, 没变化时几乎零开销)
+void heart_beat() {
+  ::heart_beat();
+  GMCP_D->tick(this_object());
 }
 
 void reset() {}
@@ -99,7 +144,7 @@ private void user_dump(int type) {
 
       set_temp("nosave_warning", 1);  // This is to ensure it passes Quit check
       command("quit");
-      command("quit");  //add by ldb 一个quit不起作用好象 
+      command("quit");  //add by ldb 一个quit不起作用好象
       if (this_object()) {
         // command quit failed.
         seteuid(getuid());
@@ -230,21 +275,16 @@ varargs int move(mixed dest, int silently) {
       command("look");
     }
   }
+  // GMCP: 移动成功后同步房间信息(Room.Info)
+  if (result) GMCP_D->send_room(this_object());
+
   return result;
 }
 
-void receive_message(string cl, string msg) {
-  if (this_object()->query_temp("char_encoding") == "big5") {
-    msg = ENCODE_D->gbTobig5(msg);
-  }
-  ::receive_message(cl, msg);
-}
+
 
 string process_input(string str) {
   string filename, roomname;
-  if (this_object()->query_temp("char_encoding") == "big5") {
-    str = ENCODE_D->big5Togb(str);
-  }
   if (query("MONITORING") >= 5)
     if (str != "west" && str != "east"
       && str != "south" && str != "north"
