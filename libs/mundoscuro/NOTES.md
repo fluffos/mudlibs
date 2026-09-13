@@ -221,8 +221,8 @@ greps (`: : func(`, `\\ n`, spaced CJK) clean. Re-boot +
   upstream never wrote a room desc for the landing room.
 - `/kernel/daemons/ftp.lpc` still does not compile; skipped at
   preload.
-- Large unfinished Zorimeth Underdark (`dominios/suboscuridad/`,
-  ~290 `ciudad_*.lpc`) was not play-walked this pass.
+- Zorimeth Underdark rooms now compile (see §10.7) but remain
+  unfinished content (`LONG` placeholders, no NPCs/shops in-tree).
 - Do not commit `work/fichas/<letter>/*.o` player saves, `log/`,
   or `raw/`.
 - 928/929/932 header-encrypted 7z and leftover Dead Souls drivers
@@ -230,6 +230,65 @@ greps (`: : func(`, `\\ n`, spaced CJK) clean. Re-boot +
 
 ## 8. Config
 
-`libs/mundoscuro/config.fluffos`: `external_port_1 : telnet 40273`,
-no binary port. `mudlib directory` is the absolute `work/` path.
-`fichas/{a..z}/` created for player saves.
+`libs/mundoscuro/config.fluffos`: `external_port_1 : telnet 40390`
+(§10.7 native playtest; was 40273). No binary port. `mudlib
+directory` is the absolute `work/` path. `fichas/{a..z}/` created
+for player saves.
+
+## 深度功能测试（§10.7，2026-09-13）
+
+Native only — WASM is **limited** (no MySQL package). Accounts,
+ranks, groups, and channels all require `db_connect`; `initd`
+`check_database()` shuts the driver down on failure. Do not treat a
+WASM “connecting…” hang as a mudlib bug.
+
+**DB:** MariaDB container `mundoscuro_mysql` on `127.0.0.1:3306`
+already up (schema `mundooscuro`, user `mud`). Host must be
+`127.0.0.1` not `localhost` (Docker socket). Verified
+`jugadores` / `inmortales` rows including seeded `fluffos` admin.
+
+**Boot:** `cd libs/mundoscuro && ~/src/fluffos/build-debug/src/driver
+config.fluffos`, port **40390**, PID owned by this session (cwd
+`work/` after chdir). Forbidden sibling PIDs left untouched.
+Accepting telnet; expected compiler warnings only (unused locals,
+nested `/*`).
+
+**Playthrough:**
+
+- Login `fluffos` / `Mud@2026` → prompt; `mirar` Gran Salón;
+  `score` 1/1 HP/energy; `ficha` Humano/Guerrero; `who`;
+  `inventario`.
+- Explore cielo: `norte` rangos, `este` canales, `oeste` grupos;
+  after `#include <mudlib.h>` prepend on all 294 Zorimeth
+  `ciudad_*.lpc`, `go` / walk `ciudad_0` ↔ `ciudad_1` works
+  (title Zorimeth, placeholder LONG).
+- Create `moqin107` (varón / humano / guerrero) → Entrada a los
+  Reinos → `comun`; `salir` `Ficha grabada.`; reconnect lands
+  `ultimo_lugar` comun. Immortal reconnect after save in rangos
+  also persisted.
+- Shop: **N/A** — no `comprar`/`vender`/`tienda` verbs or shop
+  rooms in archive (`¿Qué?`).
+- Combat: archive has `matar` + `COMBATE` daemon but no placed
+  NPCs. Added tiny fixture `work/global/npc_rata.lpc` (named rata
+  + `raza("humano")` for body/forma). `clone` → `dejar rata` →
+  `matar rata` → “Empiezas a atacar a Rata.” and hit messages.
+  Hardened `combate.lpc` (skip/destructed fighters, empty
+  `atacando`) and `zona_impacto_q` empty-body guard so quit no
+  longer floods `/log/runtime`. Message `$V`/`$A` substitution
+  still incomplete (content WIP). Removed leftover
+  `printf` in `dejar.lpc`.
+- Guild room `go /dominios/cielo/rooms/cofradia.lpc` loads
+  (Cofradia de Asesinos; no exits).
+
+**Logs this boot:**
+
+- Live driver `debug.log`: `libs/mundoscuro/log/debug.log`
+  (pre-chdir open from cwd beside `config.fluffos`; mtime matches
+  boot). One `ciudad_0` syntax error from the pre-patch `go`, then
+  clean after mudlib.h fix. No FATAL.
+- Mudlib `error_handler` logs under `work/log/`:
+  - `catch`: pre-patch Zorimeth load failure only; mtime early in
+    boot; no further catch after fix.
+  - `runtime`: flooded during first combat before combate/cuerpo
+    patches; **stable (0 new lines)** across post-fix fight +
+    quit. `/log/error` never created this boot.

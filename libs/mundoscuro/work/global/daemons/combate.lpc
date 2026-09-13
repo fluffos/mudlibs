@@ -14,6 +14,7 @@ void ejecutar_ataque(object);
 void unir_pendientes_a_lucha();
 void start_fight(object, object);
 int calcular_iniciativa(object);
+private void limpiar_combatientes();
 
 void start() {
   set_heart_beat(1);
@@ -21,9 +22,38 @@ void start() {
 
 void stop() {; }
 
+private void limpiar_combatientes() {
+  object *vivos;
+  mapping nuevas;
+  int iniciativa;
+
+  vivos = ({});
+  foreach (object luchador in en_lucha) {
+    if (objectp(luchador)) vivos += ({ luchador });
+  }
+  en_lucha = vivos;
+
+  vivos = ({});
+  foreach (object p in pendientes) {
+    if (objectp(p)) vivos += ({ p });
+  }
+  pendientes = vivos;
+
+  nuevas = ([]);
+  foreach (iniciativa in keys(iniciativas)) {
+    vivos = ({});
+    foreach (object a in iniciativas[iniciativa]) {
+      if (objectp(a)) vivos += ({ a });
+    }
+    if (sizeof(vivos)) nuevas[iniciativa] = vivos;
+  }
+  iniciativas = nuevas;
+}
 
 void heart_beat() {
   int *lista_iniciativas;
+
+  limpiar_combatientes();
 
   /* Unimos a la lucha a los combatientes pendientes */
   if (sizeof(pendientes) != 0) {
@@ -33,11 +63,11 @@ void heart_beat() {
   lista_iniciativas = sort_array(lista_iniciativas, -1);
   foreach (int iniciativa in lista_iniciativas) {
     foreach (object atacante in iniciativas[iniciativa]) {
-      ejecutar_ataque(atacante);
+      if (objectp(atacante)) ejecutar_ataque(atacante);
     }
   }
   foreach (object luchador in en_lucha) {
-    tell_object(luchador, "\n");
+    if (objectp(luchador)) tell_object(luchador, "\n");
   }
 }
 
@@ -50,10 +80,11 @@ void start_fight(object atacante, object victima) {
   /* Los nuevos combatientes entraran en lucha en el proximo heart beat,
      * para no interferir en el transcurso del turno actual.
      */
+  if (!objectp(atacante) || !objectp(victima)) return;
   if ((member_array(atacante, en_lucha) == -1) && (member_array(atacante, pendientes) == -1)) {
     pendientes += ({ atacante });
   }
-  if (member_array(victima, en_lucha) == -1) {
+  if ((member_array(victima, en_lucha) == -1) && (member_array(victima, pendientes) == -1)) {
     pendientes += ({ victima });
   }
 }
@@ -62,6 +93,7 @@ void unir_pendientes_a_lucha() {
   int iniciativa;
 
   foreach (object atacante in pendientes) {
+    if (!objectp(atacante)) continue;
     en_lucha += ({ atacante });
     iniciativa = calcular_iniciativa(atacante);
 
@@ -81,9 +113,23 @@ void ejecutar_ataque(object atacante) {
   object victima, *candidatos, *armas, arma;
   class mensaje msg;
 
+  if (!objectp(atacante)) return;
+
   /* Escogemos la victima del ataque */
   candidatos = atacante->atacando_q();
+  if (!pointerp(candidatos)) return;
+  candidatos = filter(candidatos, (: objectp($1) :));
+  if (!sizeof(candidatos)) {
+    /* Sin blancos validos: salir de la lucha */
+    en_lucha -= ({ atacante });
+    foreach (int ini in keys(iniciativas)) {
+      iniciativas[ini] -= ({ atacante });
+      if (!sizeof(iniciativas[ini])) map_delete(iniciativas, ini);
+    }
+    return;
+  }
   victima = candidatos[random(sizeof(candidatos))];
+  if (!objectp(victima)) return;
 
   /* Recuperamos las armas que estamos empuñando */
   armado = sizeof(armas = atacante->empunando_q());
@@ -93,8 +139,6 @@ void ejecutar_ataque(object atacante) {
   ac = 10 + min(victima->mod_des_q(), victima->max_mod_des_q()) + victima->ac_q();
 
   foreach (int ataque in ataques) {
-    write("<att " + ataque + " vs ac " + ac + "\n");
-
     if (ataque >= ac) {
       /* El atacante impacta */
       if (!armado) {
@@ -107,55 +151,11 @@ void ejecutar_ataque(object atacante) {
         tipo_dano = arma->tipo_dano_q();
       }
 
-      tell_object(atacante, replace_string(msg->texto_yo, "$Z", victima->zona_impacto_q()) + ".\n");
-      tell_object(victima, msg->texto_el + ".\n");
-      tell_room(ENV(atacante), msg->texto_otros + ".\n", ({ atacante, victima }));
-    } else {
-      /* La victima esquiva el ataque */
-
+      if (msg) {
+        tell_object(atacante, replace_string(msg->texto_yo, "$Z", victima->zona_impacto_q()) + ".\n");
+        tell_object(victima, msg->texto_el + ".\n");
+        tell_room(ENV(atacante), msg->texto_otros + ".\n", ({ atacante, victima }));
+      }
     }
   }
 }
-
-
-/*
-    
-    
-    if (!armado) {
-	/* Ataque desarmado 
-        tell_object(atacante, "Atacas a "+victimas[random(sizeof(victimas))]->nombre_q()+"\n");
-	tell_object(victima, atacante->nombre_q()+" te ataca.\n");
-    }
-    else {
-	/* Escogemos una de las armas para realizar el ataque 
-    	arma = armas[random(armado)];
-
-
-
-
-
-/*
-	tipo_daño = arma -> tipo_daño?();
-	causa = tipo_daño[0]; 
-
-	msgs = efun::call_other(TABLA_DAÑOS, "mensajes_combate", causa);
-	rd = random(sizeof(msgs));
-    
-	msg_atacante = msgs[rd][1];
-	msg_victima  = msgs[rd][2];
-
-	msg_atacante = replace_string(msg_atacante, "$atacante$", capitalize(atacante->nombre_q()));
-	msg_atacante = replace_string(msg_atacante, "$victima$", capitalize(victima->nombre_q()));
-	msg_atacante = replace_string(msg_atacante, "$arma$", arma->nombre_q());
-	msg_atacante = replace_string(msg_atacante, "$detarma$", arma->determinante_q()+" "+arma->nombre_q());
-	msg_atacante = replace_string(msg_atacante, "$detzona$", victima->impactar_parte(msgs[rd][0]));
-
-	msg_victima = replace_string(msg_victima, "$atacante$", capitalize(atacante->nombre_q()));
-	msg_victima = replace_string(msg_victima, "$victima$", capitalize(victima->nombre_q()));
-	msg_victima = replace_string(msg_victima, "$arma$", arma->nombre_q());
-	msg_victima = replace_string(msg_victima, "$detarma$", arma->determinante_q()+" "+arma->nombre_q());
-	msg_atacante = replace_string(msg_victima, "$detzona$", victima->impactar_parte(msgs[rd][0]));
-	
-	tell_object(atacante, msg_atacante+"\n");
-	tell_object(victima, msg_victima+"\n");
-*/
