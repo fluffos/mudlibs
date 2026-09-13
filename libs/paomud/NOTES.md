@@ -65,3 +65,36 @@ after the `fb` fix still works.
 
 WASM not verified. `unique_games` stays counting numbers `< 900`; 972
 is still listed as a lib.
+
+## 深度功能测试（§10.7，2026-09-13）
+
+Practice yard only — the archive has no playable world (no rooms,
+accounts, shop, or combat). Do not invent rooms. Source-complete bar
+for a five-file learning lib.
+
+Native boot (`~/src/fluffos/build-debug/src/driver config.fluffos`
+from `libs/paomud`, port **40281**, PID owned by this session):
+
+- Connect → `欢迎！`; `look` / `l` → 练习场; `score` / `sc` →
+  访客（PaoMUD）, no stats; `hello` → HELLO/WORLD;
+  `test` → `/command/test` compiles, ANSI table + `hello world [10]`,
+  then `call_out` `hello world [20]` after ~3s;
+  `fb` with nothing on `127.0.0.1:8000` → `正在连接副本……` then
+  `已经离开副本。` (prior onboarding fix still correct);
+  `quit`/`exit` → `再见！`; driver stayed up.
+- Fresh reconnect → same `look` / `sc` / `quit` (no accounts /
+  no persist).
+- Shop / combat / guild / death: **N/A** (not in archive).
+
+Logs this boot:
+
+- Driver stdout: `Unable to open log file: "log/debug.log"` before
+  chdir into `work/` (same §10.9 launch limitation as siblings); no
+  LPC errors across play or quit. Expected boot warnings only
+  (`domain_stats` / `author_stats`). `debug_message("CMD: test")`
+  appeared on stdout.
+- `/log/catch` (`work/log/catch`): empty across the clean
+  playthrough; mtime matches this boot. Handler proven live with a
+  one-shot `catch(error("catch-path-probe"))` in `hello` →
+  `CAUGHT /clone/user.lpc:… *catch-path-probe`, then reverted. No
+  code fixes this pass.

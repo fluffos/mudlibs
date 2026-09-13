@@ -75,3 +75,33 @@ content and are not on the playable snapshot. Pin stays `77266da`.
 `meta.json` now has `"upstream": {"branch": "feature/player"}` so
 `check_upstream_rebase.py` compares that branch, not `develop`. Do
 not invent Domains rooms.
+
+## 深度功能测试（§10.7，2026-09-13）
+
+Catalog Void landing only — the archive has no playable world
+(`Domains/` ships only a README; archive login/player never shipped a
+room; no shop or combat). Do not invent Domains rooms. Source-
+complete bar for this unfinished skeleton.
+
+Native boot (`~/src/fluffos/build-debug/src/driver config.fluffos`
+from `libs/sagenwelt`, port **40282**, PID owned by this session):
+
+- Connect → catalog landing banner; `look` / `l` → The Void;
+  `score` / `sc` → Guest (Sagenwelt guest), no stats; unknown
+  `xyzzy` → `What?`; `quit` → “Goodbye.”; driver stayed up.
+- Fresh reconnect → same `look` / `score` / `quit` (no accounts /
+  no persist).
+- Shop / combat / guild / death: **N/A** (not in archive).
+
+Logs this boot:
+
+- Live driver `debug.log` fd:
+  `libs/sagenwelt/var/log/debug.log` (pre-chdir open succeeds because
+  `var/log/` exists beside `config.fluffos`). Boot banner + config
+  dump only; no LPC `error:` / FATAL across play or quit (mtime
+  matches this boot).
+- `/var/log/catch` (`work/var/log/catch`): empty across the clean
+  playthrough; mtime matches this boot. Handler proven live with a
+  one-shot `catch(error("catch-path-probe"))` in `cmd_score` →
+  `CAUGHT /secure/obj/catalog_user.lpc:… *catch-path-probe`, then
+  reverted. No code fixes this pass.
