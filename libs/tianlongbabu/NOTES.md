@@ -12,7 +12,7 @@
 `work/include/login.h`。es2 的 `globals.h` 补了 TLBB 要的 `MAPDATA`、
 `REGISTER_D`、`TOPTEN_D`，否则 overlay 上来的 `securityd.lpc` 编不过。
 
-端口 **40269**。这是骨架嫁接，不是完整原站。已有 es2 管理员
+端口 **40320**（原 40269；§10.7 改到空闲段）。这是骨架嫁接，不是完整原站。已有 es2 管理员
 `fluffos`/`Mud@2026` 可登录；`goto /t/tutor/start` 再 `east` 进开封
 城隍庙（`/t/kaifeng/temple`，庙祝在场）。旧号落地仍是 es2 的
 `/d/snow/inn`（存档位置），新号走 TLBB 起点。
@@ -71,3 +71,50 @@ directory : /log` 绝对路径，`/log` 不存在）。
 「普通百姓 秦风」，`quit`「欢迎下次再来」。preload 里 `ftpd` 因
 WASM 无 sockets 编不过，被 master `catch` 跳过，不挡登录。
 `wasm_status` 改为 `playable`。
+
+## 深度功能测试（§10.7，2026-09-13）
+
+原生 driver 端口 **40320**（原笔记 40269；本轮改到 §10.7 惯用
+40320–40380 空闲段），`fluffos` / `Mud@2026`。从 slug 目录启动：
+`~/src/fluffos/build-debug/src/driver config.fluffos`，stdout →
+`/tmp/tlbb-driver.out`。slug `libs/tianlongbabu/log/debug.log`（`log
+directory : /log` 相对启动 cwd）与 mudlib `work/log/log`
+（`master->log_error()`）都按本轮 mtime 查了。
+
+这是 **es2 骨架 + TLBB 残档叠层**，不是完整原站：缺档地域
+（如 `/t/yunzhou/...`）仍不存在，不虚构房间。
+
+### 游玩证据
+
+- **新号** `qinlongce` / `Play2026x`（中文名秦龙测）：落地
+  `天龙八部起点`（临时驿站，出口 east）；`east` →
+  `/t/kaifeng/temple` 城隍庙，庙祝在场。
+- **旧号** `fluffos`：仍落 es2 `/d/snow/inn` 饮风客栈（存档位置）；
+  `goto /t/tutor/start` → `east` 同文城隍庙。
+- 商店：`goto /t/kaifeng/inn` 龙门客栈，伙计 `list` 出鸡腿等；
+  `clone /obj/money/coin` + `set_amount(100)` 后
+  `buy 鸡腿 from waiter` →「你向伙计买下一根烤鸡腿。」
+- 拜师：`goto /t/ly/square`，`apprentice yi dabiao` →「我便收你为
+  弟子」/「恭喜您成为丐帮的第十六代弟子」；`score`
+  「丐帮一袋弟子 秦风」。`ask … about quest` → 桩回复
+  「眼下帮里没有适合你的差事」（残档无真任务）。
+- 战斗：洛阳木人 `/t/ly/obj/muren` 是练刀 **ITEM**（`hack`），不是
+  可 `fight` 的 NPC。巫师 `clone /obj/npc/zombie` 进饮风客栈后
+  `fight zombie` 互出拳脚，僵尸倒地化血；`surrender` 在战后无目标
+  时提示「现在没有人在打你」。
+- `save` / `quit`「欢迎下次再来」；重连后门派仍在。烤鸡腿为食物，
+  不随档（手足 es2 常见）。
+
+### 日志
+
+本轮 boot + 游玩：slug `debug.log` **无** `执行时段错误` /
+`Bad argument` / `Too long evaluation`。`work/log/log` 本轮增量主要是
+冷编译 `warning:`（unused-variable、Unknown escape/`#pragma`），无同形
+功能缺口。
+
+### 未改 / 剩余缺口
+
+- 管理员与测试号运行时存档未提交。
+- 嫁接上限：TLBB 地域不完整；易大彪 `give_quest` 仍是桩；无原生
+  可练战斗木人 NPC（只有练刀木人道具）。
+- 端口配置已改为 40320（本轮空闲优先），未改回 40269。
