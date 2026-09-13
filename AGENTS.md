@@ -86,6 +86,17 @@ Conventions used throughout:
   `main` directly. (People sometimes say "master"; this repo's default
   branch is `main`.) External contributors may still send PRs; that does
   not change the agent workflow.
+- **Keep `AGENTS.md` (and the live plan queues it points at) current as
+  you go — learnings *and* plans, not a cleanup pass at the end.** When
+  you discover a reusable trap, a standing policy, a scope decision, or
+  a next-step queue change, write it here (catalog style) and/or into
+  `scratchpad/librarian-next.txt` / the relevant lib `NOTES.md` in the
+  same turn you learned it. Do not leave "we'll document later" debt:
+  the next session (human or agent) only sees what is in the tree.
+  Plans that are still in flight belong in `scratchpad/librarian-next.txt`
+  as a dated leftover; when they finish, update that leftover so it does
+  not get re-queued. Same bar as boot-testing and the §9 formatter —
+  finishing the code without updating these files is not done.
 - `~/src/fluffos` = the FluffOS checkout this project builds its drivers
   from (native `build-debug/`, `build/`, and `build-wasm/`). Adjust to
   wherever your checkout lives; the *relationship* (one source tree, three
@@ -102,10 +113,12 @@ Conventions used throughout:
   assigned port before picking one for a new archive — it keeps climbing
   as new archives arrive (past 40100 as of this writing).
 - Update this file whenever you learn something that saves time on the
-  *next* lib. Keep entries in the catalog style: symptom → root cause →
-  fix (with code) → how to detect → which lineages it affects. Do this
-  proactively, as part of finishing the lib — don't wait to be asked,
-  and don't batch it up for "later".
+  *next* lib, **and** whenever the standing plan / leftover queue
+  changes. Keep technical entries in the catalog style: symptom → root
+  cause → fix (with code) → how to detect → which lineages it affects.
+  Keep process/plan entries dated and actionable (what is done, what is
+  still open, what must not be re-done). Do this proactively in the same
+  turn — don't wait to be asked, and don't batch it up for "later".
 - **Run the §9 LPC formatter on every lib whose `.lpc`/`.h` files you
   edited, before considering the lib done** — not just when reminded.
   It's a required step of the workflow, same tier as boot-testing, not
@@ -15458,6 +15471,19 @@ text via a raw `HZK16`/`HZK24`-style font bitmap file" feature — the
 byte-vs-codepoint mismatch is the same as every other §8.1 instance,
 just applied to font-glyph lookup instead of name validation.
 
+**Museum catch-up shape, `sgzmudsgz` §10.7 (2026-09-13).** Same HZK
+family, different symptom: after the lib's GBK→UTF-8 conversion,
+`daemons/hzk2asc_d.lpc` (and the kitchen 砍柴 robot quiz in
+`sgdomain/robot/queitem.lpc` / `zi.lpc`) rendered `====== BUG ======`
+instead of a readable question, so a wrong answer flagged the player
+`is_robot` and paid **纸钱** instead of silver — shop `buy` then
+failed. Fix: when HZK conversion fails, return the plain UTF-8 string;
+drop HZK wrapping in the quiz items and keep `、` separators so
+odd-one-out stays answerable. Digsoil job objects still live only under
+the old unwired `wiz/emperor/huayin` virtual map — document as a known
+gap; **do not invent rooms** to complete the economy path (砍柴 is
+enough for §10.7).
+
 **Yet another shape, this time in the word-wrap/line-reflow plumbing
 itself, not a validation gate or lookup table: `xyxyutf8`'s §10.7
 round-two deep-test (2026-08-27)**. `adm/simul_efun/message.lpc`'s
@@ -17769,6 +17795,32 @@ see `libs/bxsj/NOTES.md` "深度功能测试" for the worked example):
    recur in sibling or unrelated libs. Check documented siblings
    (§11) for the same pattern before moving on — a bug found this way
    in one lib has repeatedly turned out to be copy-pasted into others.
+   Same turn as the fix: if the pattern is reusable, update this file;
+   always leave a dated `## 深度功能测试（§10.7，YYYY-MM-DD）` in that
+   lib's NOTES.md. A playtest without that NOTES section is incomplete
+   (see conventions / §13.2).
+
+**2026-09-13 catch-up batch (user: no more deprioritization — do all
+remaining §10.7).** Landed on `main`: `scratch` / `paomud` /
+`sagenwelt` (max playable; no invented rooms), `dtxyzjb` +
+`wlqxcmudlib`, `tianlongbabu` + `yhwhckdm` (grafted), `mundoscuro`
+native (MySQL; WASM stays limited), `sgzmudsgz` (HZK UTF-8 robot-quiz
+fallback; digsoil unwired — do not invent rooms), `dw_fluffos_v1` +
+`dw_fluffos_v2` (Pumpkin `money_handler` seed; paid torch; spar;
+reconnect). Standing reminders from that pass:
+
+- **Empty `lib_numbering.json` / pending rows with no `libs/<slug>/`
+  are confirmed duplicates**, not conversion work — do not invent a
+  mudlib to fill the number.
+- **Checked-in `scripts/wasm_status.json` can lag the live site.**
+  Before claiming "cards missing on the site", re-fetch live
+  `meta.json` / Pages; refresh the committed artifact when it is
+  stale (leftover 713).
+- **Never kill a driver you did not start** (§13.3). Concurrent
+  §10.7 agents share the host; reuse an already-up port only after
+  confirming `/proc/<pid>/cwd`.
+- **Incomplete / grafted / catalog-only libs: document the ceiling.**
+  Do not invent rooms, quests, or shops to force a "full" playthrough.
 
 ### 10.8 Long-sit soak testing can surface driver-fatal crashes invisible to `debug.log` entirely
 
@@ -18321,7 +18373,15 @@ applying a well-justified fix or sweep, and — for the curator workstream —
 deciding what to onboard next.
 
 - Commit and **push to `origin/main` routinely**, not just leaving commits
-  local. Don't ask permission for a routine push.
+  local. Don't ask permission for a routine push. **No feature branches
+  for agent work on this repo** — see the Git convention at the top of
+  this file.
+- **Document as you decide.** Every durable learning, scope call, or plan
+  change lands in `AGENTS.md` and/or `scratchpad/librarian-next.txt` /
+  lib `NOTES.md` before you move on. A finished playtest without a dated
+  `## 深度功能测试（§10.7，…）` NOTES section is incomplete; a finished
+  leftover without updating `librarian-next.txt` will be re-queued by the
+  next librarian cycle.
 - No stopping condition: when a workstream's obvious todo list runs dry,
   pick the next reasonable thing (see §13.6) rather than declaring victory
   and stopping — but also don't manufacture busywork. If a discovery channel
