@@ -27,6 +27,53 @@
   `Undefined function json_encode` → peer hangup.
 - With the patch applied: banner + GBK/UTF-8 encoding prompt OK.
 
+## 深度功能测试（2026-09-13，upstream cutover 后第二轮）
+
+Native FluffOS `build-debug` driver, port **40013**, catalog patch +
+`overlay/` admin seed applied. `work/log/debug.log` stayed free of
+`Error` / `Bad argument` / `undefined function` lines across the whole
+session.
+
+### Covered end-to-end
+
+- **Admin**: `fluffos` / `Mud@2026` logs into `/d/wiz/hall`; `goto
+  /d/fy/fysquare` lands on 风云天下 with west/east/up/north/south exits
+  and the 盘龙摩天柱 board.
+- **Registration**: UTF-8 encoding → new id → CAPTCHA (`feature/nada.lpc`
+  `my_number()`, solved via a temporary `DEBUG-CAPTCHA` write that was
+  **reverted before commit**) → Chinese name → password → email →
+  gender → enter 风云台 with starter bag/food/drink/cloth.
+- **Onboarding funnel** (still intact post-cutover):
+  `down` → 十戒碑 (`agree` exit; do **not** leave `help rules` in its
+  interactive submenu or it eats the next line) → 故乡之路
+  (`setrace 汉族`) → 灵池 (`distribute` 10 attr points) → 风云道
+  (`newbie` / `veteran`) → `newbie` → 凤求凰客栈 + riddle
+  「新手入门」(`riddle` lists it in progress).
+- **Shop**: at 凤求凰客栈, `list` on 店小二 shows wineskin / dumpling /
+  fried chicken leg with prices and stock.
+- **Commands**: `look` / `score` / `i` / `hp` / `map` (南城环云道 ASCII
+  map with 凤求凰客栈 / 祭剑亭 / 南门 etc.) / `eat` / `drink` /
+  `read letter` (points to 天机老人 + `quest`) / `help newbie` tree /
+  `help cmds` tree / low-level double-`quit` retention warning (L2 /
+  40% XP gate) all behave.
+- **Loopback startup grace**: `uptime() < 300` gate still exempts
+  `127.0.0.1` / `::1` (catalog-era bypass still present in upstream
+  snapshot), so local tests need not wait 5 minutes.
+
+### Not covered this pass (honest gaps)
+
+- **Live combat**: city streets are no-aggro by design (“这里不准战斗”
+  / no hostile NPCs on 环云道 during the walk). Did not leave the city
+  to find a practice target. Admin `goto` square was verified; outdoor
+  PvE left for a later pass.
+- **Paid shop purchase**: `list` OK; a `buy … from waiter` attempt used
+  the wrong object id/name and did not complete a cash transaction.
+- **WASM**: not re-run this session (native-only round-two after the
+  submodule cutover).
+
+No new LPC fixes required beyond the existing software-`json.lpc`
+simul_efun patch.
+
 ## Status: DONE — boots clean; has an intentional 5-minute startup grace period
 
 Booted with zero fixes needed (same clean lineage as fengyun434/fy2).
