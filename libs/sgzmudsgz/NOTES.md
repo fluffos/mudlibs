@@ -82,3 +82,42 @@ fluffos / 汉末 / 白身）/ `quit` 都通。
 进草庐，`look` / `score`（云游）/ `quit` 通过。`socket.lpc` 在 WASM
 下没有 socket efun（I3/HTTP），不挡登录。`doc_d` 仍编不过，preload
 `catch`。
+
+## 深度功能测试（§10.7，2026-09-13）
+
+本轮在共享 mudlib 上另开驱动端口 **41196**（PID 4010321，本会话
+拉起；**未动** 既有 40196/PID 2421649）。账号 **sgzptac** /
+`Play26aa` / 测辛。
+
+### 发现并修复
+
+1. **`HZK2ASC_D` 在 UTF-8 库上整题崩成 `====== BUG ======`。**
+   HZK16/24 点阵按 GBK 索引；转码后 `hzk2asc16/24` 失败。
+   `work/daemons/hzk2asc_d.lpc`：转换失败时回退明文 `s`。
+2. **厨娘砍柴交工的机器人题依赖 HZK，UTF-8 下不可答。**
+   `work/sgdomain/robot/queitem.lpc`：改为明文分类题，并在
+   四选一串里加 `、` 分隔。`zi.lpc`：字号题同样去掉 HZK 包装。
+3. **挖地（digsoil）对象仍挂在旧 `wiz/emperor/huayin` 虚图，未接进
+   已转码的 `a/huayin/*`。** 新手「ask money」也指去 digsoil——
+   本轮不造房，记为已知缺口；经济切片改走砍柴。
+
+### 游玩证据
+
+- 登录 → 草庐 → `west`/`south`/`east`/`east`/`south` 到厨房；
+  `ask chu niang about job` 领砍柴刀。
+- 村西树林 `chop woods with kanchai dao`：累了会「你太累了，休息
+  一会儿吧。」，歇够再砍；`i` 收到 **二十根柴火**。
+- `ask chu niang about pay` → 可读机器人题 → 答对 → **十两银子**
+  （答错会只给纸钱；本轮答对拿到银子）。
+- 小店 `list` / `buy skin` / `buy mantou` / `eat mantou` 成交。
+- `quit` 后重连：仍在草庐，身上银子/帖子等仍在。
+
+### 日志
+
+- 本轮 `work/log/catch` mtime 仍是 2026-09-11（无新 catch）。
+- `work/log/runtime` / `log` / `logins` mtime 对应该驱动开机与本轮
+  登录（2026-09-13）。`debug.log`/`execute` 按 §10.9 启动 CWD 约定，
+  不把空 debug 当成干净。
+
+Do not invent digsoil rooms. Empty numbering rows (mhxy2002/fy4/jy/
+hylib/dtxy) stay confirmed duplicates.
