@@ -88,3 +88,54 @@ time），`mudclient.py` 用 `--idle 0.5`。巫师再登会要「巫师专用
 云游」「师承秦平」，`quit` 大唐西游告别。已提交管理员存档。
 `wasm_status` 改为 `playable`。提示仍是每秒时钟，`--idle 0.5`。
 不要把 `zjdyzj` 翻回 limited。
+
+## 深度功能测试（§10.7，2026-09-13）
+
+原生 driver 端口 40267，`fluffos` / `Play2026x` / `Wiz@2026x`。stdout
+tee 到 `/tmp/dtxyzjb-driver.out`。`log directory : /log` 在 slug 目录
+启动时先开 `libs/dtxyzjb/log/debug.log`（§10.9：建了 slug 级 `log/`）；
+mudlib 自己的编译/运行时诊断在 `work/log/log`（`master->log_error()`）。
+`work/log/debug.log` 仍是 09-04 残档，不当作本轮证据。
+
+### 发现并修复
+
+1. **§7.90 `maximum evaluation cost : 600000` 过低。** 冷登录走
+   `get_passwd_wiz` 时懒编译客栈 NPC（`d/city/npc/bai`）触发
+   `Eval interrupted … limit: 600000 usec` / `*Too long evaluation`，
+   `enter_world` 半截中止，身体落在 void（`look` →「四周灰蒙蒙」），
+   店小二等房间物件也不在。手足 `dtxywzxzb` 已是 `5000000`。已把
+   `config.fluffos` 提到 `5000000`。重启后首次登录直接落在
+   `/d/city/kezhan`，`look` 可见店小二/地狱使者/千里眼/唐三藏/门派
+   使者。
+
+2. **`file_owner()` 把 `/u/<wiz>/…` 误解析成中间目录名。** 本树巫师
+   家是扁平 `/u/lying/…`（`user_path()` 亦然），旧
+   `sscanf("/u/%s/%s/%s")` 把 `/u/lying/npc/angel.lpc` 当成 owner
+   `"npc"`，`log_error` 写 `/u/npc/log` → `Wrong permissions … No such
+   file`。已改成 `sscanf("/u/%s/%*s", name)`，返回第一段巫师名。
+
+### 游玩证据
+
+- `help newbie`：南城客栈起步、`buy`/`list`/`拜师`/`learn` 说明可读。
+- 商店：`list` 出花生豆二十文 / 炸鸡腿八十文；有机 `buy 1 jitui` →
+  「你从店小二那里买下了一根炸鸡腿。」（指间 `do_buy` 数量前缀，不是
+  `buy … from …`）。
+- 拜师/学艺（切片已拜秦平）：`goto /d/jjf/jjf_bingqi`，
+  `learn unarmed from qin ping`，潜能 99→98/97；`score`「将军府第四
+  代弟子 / 师承秦平」。
+- 战斗：`clone /d/city/npc/obj/muren`，`fight mu ren` 互出拳脚，
+  `surrender` 干净结束（客栈 `no_fight`，木人是巫师 clone 进场）。
+- `quit` → 大唐西游告别文；隔约一分钟重连（退出锁），`i` 仍有
+  20 文钱 + 98 两银子 + 两根炸鸡腿 + 花生豆，门派/师承在。
+
+### 日志
+
+本轮修复后的 boot：`work/log/log` / slug `log/debug.log` / driver
+stdout 无 `cost limit` / `Too long` / `Wrong permissions` / `/u/npc`。
+编译期 `Unknown #pragma` / unused-variable 警告仍会刷给巫师屏，不是
+本轮功能缺口。
+
+### 未改
+
+管理员运行时存档未提交（与仓库惯例一致）。`oo.lpc` 里有一份未
+`#include` 的旧 `file_owner` 副本，未动。

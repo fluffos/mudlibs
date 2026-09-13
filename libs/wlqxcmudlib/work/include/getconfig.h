@@ -7,6 +7,7 @@
 
 #define RELEASE_SERVER()        ((string) CONFIG_D->query_string("release server"))
 #define LOCAL_MUD_NAME()        ((string) get_config(__MUD_NAME__))
-#define LOCAL_PORT()            ((int) get_config(__MUD_PORT__))
+/* (int) does not coerce FluffOS get_config() strings; use to_int. */
+#define LOCAL_PORT()            (to_int(get_config(__MUD_PORT__)))
 
 #endif

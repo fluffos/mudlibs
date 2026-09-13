@@ -106,3 +106,57 @@ WASM 没有 sockets 包，daemon 编成 `*No program`。`logind.lpc` 两处
 `/d/city/kedian`（北丑、店小二），`look` 同文，`score`「普通百姓
 云游」，`quit`「欢迎下次再来」。`wasm_status` 改为 `playable`。
 提示仍是每秒时钟，`--idle 0.5`。
+
+## 深度功能测试（§10.7，2026-09-13）
+
+原生 driver 端口 40268，`fluffos` / `Play2026x`。stdout →
+`/tmp/wlqxc-driver.out`。slug `libs/wlqxcmudlib/log/debug.log`（§10.9）
+与 mudlib `work/log/log`（`master->log_error()`）都查了。
+
+### 发现并修复
+
+1. **`LOCAL_PORT()` 仍用 `(int) get_config(__MUD_PORT__)`，FluffOS 上
+   不强制转换。** `dns_master` 的 `my_port = SRVC_PORT_UDP(mud_port())`
+   变成字符串 `"4"`，preload 时 `socket_bind` 报
+   `Expected: int Got: "4"`。商店切片已修过 `messaged`/`versiond` 的
+   `to_int`，宏本身漏了。已改
+   `include/getconfig.h`：`LOCAL_PORT()` → `to_int(get_config(...))`。
+
+2. **`inherit/misc/quest.lpc` 的 `set_information(string key, string
+   info)` 过窄（AGENTS.md 已归档形状）。** ambient quest daemon 冷编
+   `clone/quest/{deliver,judge,…}` 时 `Bad type for argument 2
+   (string vs function)`，物件 `*No program`，`heart_beat` 反复刷错。
+   已改成 `mixed info`。手足 `yanhuangwuhun` 同修。
+
+3. **§4.1 扩展名缺失的 GBK 文本：** `help/rules`、
+   `clone/game/{8,21}_hlp` 仍是生 GB18030（NOTES 商店切片已点名
+   `help/rules`）。`iconv -f GB18030 -t UTF-8` 转完；`help rules` 现场
+   可读「【游戏规则】」。全树 UTF-8 扫描剩余命中只有字体二进制
+   （`adm/etc/font/*`、`kungfu/skill/huashan-quan/MFM1992`），不是文本。
+
+### 游玩证据
+
+- 登录落地扬州客店 `/d/city/kedian`；`help newbie` 桃源/方向说明可读。
+- 商店：`goto /d/city/zuixianlou`，`list` 烤鸡腿八十文；
+  `clone /clone/money/gold` 后有机 `buy jitui` →
+  「你从店小二那里买下了一根烤鸡腿。」找零成 1 金 + 98 银 + 40 铜 +
+  烤鸡腿。
+- 拜师：`goto /d/gaibang/inhole`，`bai li`（黎生）→ 点头 /「我便收你
+  为徒」/「恭喜您成为丐帮的第二十代弟子」；`score`
+  「【 小叫花 】丐帮第二十代传人 / 师父是黎生」。
+- 战斗：新手 `fight mu ren` 被拒「这点身手还不足以和木人练功」
+  （木人门槛，设计如此）。巫师 `call` 把 unarmed/dodge/parry 提到 50、
+  `combat_exp` 5 万后，`clone /clone/npc/mu-ren` + `fight mu ren` 互出
+  拳脚，`surrender` 干净。
+- `quit`「欢迎下次再来」；重连后门派/师父/银钱仍在。烤鸡腿未随档
+  （食物常见 `no_save`，与手足 `yanhuangwuhun` 相同，不当 bug）。
+
+### 日志
+
+修完重启后：boot + 约半分钟 ambient quest 心跳，slug `debug.log` /
+stdout **无** `socket_bind` Bad argument、**无** quest `Bad type` /
+`*No program`。`work/log/log` 本轮尾部无同类命中。
+
+### 未改
+
+管理员运行时存档未提交。木人对新手的经验门槛未动（设计）。
