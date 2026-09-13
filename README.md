@@ -1,6 +1,6 @@
 # mudlibs — 199 restored classic Chinese LPC mudlibs (158 unique games), runnable natively and most in the browser
 
-**▶ Play now, no install: https://mudlibs.fluffos.info/**
+**▶ Play now, no install: https://mudlibs.fluffos.info/** (English default; Chinese UI at https://mudlibs.fluffos.info/zh/)
 
 ![Screenshot of the mudlibs.fluffos.info game gallery](docs/site-preview.png)
 

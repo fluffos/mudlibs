@@ -563,6 +563,17 @@ Site UX / LLM-doc learnings (2026-09-13):
   `llms.txt` / `games.json` (`llms_txt_url`, `play_url`, `port`,
   `display_name`). Prefer that file when helping someone run one lib.
 
+- **English is the site default** (2026-09-13): `/` and `hreflang
+  x-default` are English; Chinese lives at `/zh/` (`/en/` and `/cn/`
+  are aliases that canonicalise to `/` and `/zh/`). Root title/intro
+  explicitly say "LPMud / LPC MUD". Per-lib landings use `lang=en`,
+  English-first `<title>`/`<h1>` when `english_name` exists, and a
+  keywords meta including LPMud. Ranking for generic English queries
+  like `lpmud` still needs Google Search Console ownership + sitemap
+  submit + inbound links — a language flip alone does not create an
+  index overnight; `site:mudlibs.fluffos.info` was empty before this
+  change.
+
 For every lib not yet `playable`:
 
 1. Reproduce: `wasm_client.js` with the lib's documented login sequence
@@ -18372,11 +18383,15 @@ mudlibs. Two standing, open-ended mandates, both explicitly "never stop":
   across the corpus (§10.7's deep-functional-test methodology), keep
   descriptions accurate and content-only, keep the site's WASM playability
   status honest.
-- **Curator/discoverability**: bilingual (EN+ZH) site, SEO (JSON-LD
-  with `downloadUrl`/`installUrl`, sitemap including per-lib
-  `llms.txt`, root `llms.txt` + `games.json`), maximize how many ways
-  someone can find and *run* this collection (browser or native),
-  onboard new mudlibs when a genuine new candidate surfaces.
+- **Curator/discoverability**: bilingual site with **English as
+  default** (`/` + `x-default`; Chinese at `/zh/`), SEO (JSON-LD with
+  `downloadUrl`/`installUrl`, sitemap including per-lib `llms.txt`,
+  root `llms.txt` + `games.json`, LPMud keywords in titles/meta),
+  maximize how many ways someone can find and *run* this collection
+  (browser or native), onboard new mudlibs when a genuine new
+  candidate surfaces. After site SEO changes, submit the sitemap in
+  Google Search Console / Bing Webmaster — crawlers do not guarantee
+  indexing from `robots.txt` alone.
 
 Neither has a completion target. There is no "done" — see §13.2.
 

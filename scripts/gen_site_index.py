@@ -309,7 +309,7 @@ BADGE = {
 UI = {
     "zh": {
         "html_lang": "zh-CN", "og_locale": "zh_CN",
-        "page_title": "LPC MUD 博物馆 — 浏览器直接游玩",
+        "page_title": "LPC MUD / LPMud 博物馆 — 浏览器直接游玩",
         "site_name": "LPC MUD 博物馆", "h1": "LPC MUD 博物馆",
         "search_placeholder": "搜索游戏名 / 简介 / slug / 原始文件名 ……",
         "filter_all": "全部", "filter_playable": "✅ 可玩",
@@ -322,9 +322,9 @@ UI = {
         "download_label": "下载 ZIP", "download_title": "下载这个游戏库的独立源码压缩包（无需克隆整个仓库）",
         "footer_source": "源代码与修复记录", "footer_driver": "驱动",
         "footer_copyright": "游戏内容版权归原作者所有,仅作历史保存用途。",
-        "lang_switch_label": "English", "lang_switch_href": f"{SITE_URL}/en/",
+        "lang_switch_label": "English", "lang_switch_href": f"{SITE_URL}/",
         "untranslated_suffix": "",
-        "self_url": f"{SITE_URL}/",
+        "self_url": f"{SITE_URL}/zh/",
         "lineage_label": "同源 · {n} 个快照",
         "upstream_label": "上游",
         "upstream_title": "本馆快照所克隆的上游仓库（不是实时镜像）",
@@ -341,7 +341,7 @@ UI = {
     },
     "en": {
         "html_lang": "en", "og_locale": "en_US",
-        "page_title": "LPC MUD Museum — Play Instantly in Your Browser",
+        "page_title": "LPMud / LPC MUD Museum — Play Classic Mudlibs in Your Browser",
         "site_name": "LPC MUD Museum", "h1": "LPC MUD Museum",
         "search_placeholder": "Search by name / description / slug / archive filename…",
         "filter_all": "All", "filter_playable": "✅ Playable",
@@ -358,9 +358,9 @@ UI = {
         "footer_source": "Source & restoration notes", "footer_driver": "Driver",
         "footer_copyright": "Game content copyright belongs to the original "
                              "authors; preserved here for historical purposes only.",
-        "lang_switch_label": "中文", "lang_switch_href": f"{SITE_URL}/",
+        "lang_switch_label": "中文", "lang_switch_href": f"{SITE_URL}/zh/",
         "untranslated_suffix": " (untranslated — showing original Chinese)",
-        "self_url": f"{SITE_URL}/en/",
+        "self_url": f"{SITE_URL}/",
         "lineage_label": "Same lineage · {n} snapshots",
         "upstream_label": "Upstream",
         "upstream_title": "GitHub repo this snapshot was cloned from (not a live mirror)",
@@ -440,16 +440,16 @@ INTRO = {
         "    (🔑)——用它登录即可获得巫师权限,自由探索游戏世界与代码。"
     ),
     "en": (
-        "    This is an archive of {n_total} classic LPC MUD (mudlib) games dating\n"
-        "    back to the 1990s — mostly Chinese-language wuxia/xianxia titles, plus a\n"
-        "    handful of landmark English-language mudlibs like Dead Souls and\n"
-        '    Discworld — restored and running on the\n'
+        "    A free, browser-playable <b>LPMud / LPC MUD museum</b>: {n_total} restored\n"
+        "    classic mudlibs from the 1990s onward — mostly Chinese-language\n"
+        "    wuxia/xianxia titles, plus landmark English mudlibs like Dead Souls and\n"
+        '    Discworld — running on the\n'
         '    <a href="https://github.com/fluffos/fluffos" style="color:var(--pico-primary)">FluffOS</a>\n'
-        "    driver. The whole driver runs in your browser via WebAssembly — click any\n"
-        "    game and register, log in, and explore the world exactly as players did\n"
-        "    over telnet decades ago. No install, no server. Every card lists a\n"
-        "    pre-seeded admin account (🔑) for immediate wizard-level access to the\n"
-        "    game world and its source."
+        "    LPMud driver compiled to WebAssembly. Click any game to register, log in,\n"
+        "    and explore exactly as players did over telnet decades ago. No install, no\n"
+        "    server. Every card lists a pre-seeded admin account (🔑) for immediate\n"
+        "    wizard-level access to the game world and its source. Chinese UI at\n"
+        "    <a href=\"/zh/\" style=\"color:var(--pico-primary)\">/zh/</a>."
     ),
 }
 STATS = {
@@ -936,12 +936,21 @@ def render_lib_page(slug, info, commits, stars=None):
     upstream_html = render_upstream_box(slug, ui_zh)
 
     primary_title, en_subtitle = page_title_parts(slug, info)
-    title_bits = html.escape(primary_title)
-    aka_html = (
-        f'<p class="aka">{html.escape(en_subtitle)}</p>'
-        if en_subtitle else ''
-    )
-    name_en = info.get("english_name") or ""
+    name_en = (info.get("english_name") or en_subtitle or "").strip()
+    # English-default SEO: when we have an English name, put it in the
+    # <h1>/<title> and demote the Chinese/README name to .aka. English
+    # queries like "lpmud" / game-name searches otherwise only saw a
+    # zh-CN document whose H1 never mentioned the English title.
+    if name_en and name_en != primary_title:
+        h1_title = name_en
+        aka_html = f'<p class="aka">{html.escape(primary_title)}</p>'
+    else:
+        h1_title = primary_title
+        aka_html = (
+            f'<p class="aka">{html.escape(en_subtitle)}</p>'
+            if en_subtitle and en_subtitle != primary_title else ''
+        )
+    title_bits = html.escape(h1_title)
 
     desc = info["description"]
     desc_en = info.get("english_description") or ""
@@ -1018,7 +1027,13 @@ def render_lib_page(slug, info, commits, stars=None):
     docs_html = "\n".join(doc_sections)
 
     canonical_url = f"{SITE_URL}/{slug}/"
-    meta_desc_attr = html.escape((primary_desc or desc_en or info["name"])[:300])
+    # Prefer English description for the global meta (English is the
+    # site default); fall back to Chinese. Prefix with LPMud keywords so
+    # game pages can rank for the same queries as the index.
+    _desc_for_meta = (desc_en or primary_desc or info["name"]).strip()
+    if not _desc_for_meta.lower().startswith(("lpmud", "lpc mud", "mudlib")):
+        _desc_for_meta = f"LPMud mudlib — {_desc_for_meta}"
+    meta_desc_attr = html.escape(_desc_for_meta[:300])
 
     zip_url = f"{SITE_URL}/{slug}/{slug}.zip"
     play_url = f"{SITE_URL}/{slug}/play.html"
@@ -1050,14 +1065,17 @@ def render_lib_page(slug, info, commits, stars=None):
 
     site_name = html.escape(ui_zh["site_name"])
     return f"""<!doctype html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{title_bits} — {site_name}</title>
+<title>{title_bits} — LPMud Museum</title>
 <meta name="description" content="{meta_desc_attr}">
+<meta name="keywords" content="LPMud, LPC MUD, mudlib, FluffOS, play MUD online, WebAssembly, text MUD">
 <meta name="robots" content="index, follow">
 <link rel="canonical" href="{canonical_url}">
+<link rel="alternate" hreflang="en" href="{canonical_url}">
+<link rel="alternate" hreflang="x-default" href="{canonical_url}">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="{site_name}">
 <meta property="og:title" content="{title_bits}">
@@ -1310,12 +1328,11 @@ def render_index(status, commits, lang="zh", canonical_url=None, stars=None):
     page_title = ui["page_title"]
     if lang == "en":
         meta_desc = (
-            f"A browser-playable archive of {n_total} restored classic "
-            f"LPC MUD (mudlib) games from the 1990s onward -- mostly "
-            f"Chinese-language, plus landmark English mudlibs like Dead "
-            f"Souls and Discworld -- {n_play} of them fully playable via "
-            "WebAssembly -- no install, no server. Every game lists a "
-            "pre-seeded admin account for instant wizard access.")
+            f"Play {n_play}+ classic LPMud / LPC mudlibs in your browser — "
+            f"a free FluffOS WebAssembly museum of {n_total} restored games "
+            f"from the 1990s onward (Chinese wuxia/xianxia plus English "
+            f"mudlibs like Dead Souls and Discworld). No install, no server. "
+            "Pre-seeded admin/wizard accounts on every card.")
     else:
         meta_desc = (
             f"收藏了 {n_total} 个上世纪九十年代至今的 LPC MUD(泥潭)游戏库,"
@@ -1338,9 +1355,9 @@ def render_index(status, commits, lang="zh", canonical_url=None, stars=None):
 <meta name="description" content="{meta_desc_attr}">
 <meta name="robots" content="index, follow">
 <link rel="canonical" href="{canonical_url}">
-<link rel="alternate" hreflang="zh-CN" href="{UI['zh']['self_url']}">
 <link rel="alternate" hreflang="en" href="{UI['en']['self_url']}">
-<link rel="alternate" hreflang="x-default" href="{UI['zh']['self_url']}">
+<link rel="alternate" hreflang="zh-CN" href="{UI['zh']['self_url']}">
+<link rel="alternate" hreflang="x-default" href="{UI['en']['self_url']}">
 <link rel="alternate" type="text/plain" title="llms.txt" href="{SITE_URL}/llms.txt">
 <link rel="alternate" type="application/json" title="games.json" href="{SITE_URL}/games.json">
 <meta property="og:type" content="website">
@@ -1624,7 +1641,7 @@ def render_sitemap_xml(status):
         key=lambda s: (numbers.get(s, (9999, 0)), s))
     urls = [
         f"  <url><loc>{SITE_URL}/</loc><changefreq>weekly</changefreq></url>",
-        f"  <url><loc>{SITE_URL}/en/</loc><changefreq>weekly</changefreq></url>",
+        f"  <url><loc>{SITE_URL}/zh/</loc><changefreq>weekly</changefreq></url>",
     ]
     urls.append(
         f"  <url><loc>{SITE_URL}/llms.txt</loc>"
@@ -1733,7 +1750,7 @@ def render_llms_txt(status):
     n_no = counts.get("noboot", 0)
     return f"""# LPC MUD 博物馆 (LPC MUD Museum)
 
-> A browser-playable archive of {n_total} restored classic LPC MUD (mudlib) games from the 1990s onward, running on the FluffOS driver compiled to WebAssembly -- no install, no server, click and play.
+> A free browser-playable LPMud / LPC MUD museum: {n_total} restored classic mudlibs from the 1990s onward, running on the FluffOS LPMud driver compiled to WebAssembly -- no install, no server, click and play.
 
 This project (fluffos/mudlibs) extracts, restores, and documents LPC mudlib archives -- mostly Chinese-language wuxia/xianxia titles, several based on Jin Yong novels, plus a growing set of landmark English-language mudlibs (Dead Souls, Discworld, and others) -- fixing decades of bitrot (GBK/UTF-8 encoding bugs, dead code, driver incompatibilities, missing content) while preserving the original gameplay and source code. Every entry ships with a pre-seeded admin/wizard account (shown on its card, marked with 🔑) for immediate full-access exploration of the game world and its code, and a per-library NOTES.md documents every restoration change made.
 
@@ -1741,7 +1758,7 @@ This project (fluffos/mudlibs) extracts, restores, and documents LPC mudlib arch
 
 - {n_total} total libraries: {n_play} fully playable in-browser, {n_lim} boot{'s' if n_lim == 1 else ''} but {'has' if n_lim == 1 else 'have'} a login/feature limitation (usually a missing browser-environment capability like `query_ip_number()`), {n_no} not yet bootable under WebAssembly (most still run natively).
 - Driver: [FluffOS](https://github.com/fluffos/fluffos), an actively-maintained LPMud/LPC driver, compiled to WebAssembly for in-browser play.
-- Language/setting: mostly Chinese-language LPC MUDs (泥潭), primarily wuxia (武侠) and xianxia (仙侠) themed, plus several classic English-language mudlib codebases (Dead Souls, Discworld, Nightmare, Lima). Every game card and description exists in both Chinese ({SITE_URL}/) and English ({SITE_URL}/en/) -- this is a fully bilingual site.
+- Language/setting: mostly Chinese-language LPC MUDs (泥潭), primarily wuxia (武侠) and xianxia (仙侠) themed, plus several classic English-language mudlib codebases (Dead Souls, Discworld, Nightmare, Lima). English is the site default at {SITE_URL}/; Chinese UI is at {SITE_URL}/zh/ -- fully bilingual.
 - Source code, restoration notes (AGENTS.md), and native-driver play instructions: [github.com/fluffos/mudlibs]({REPO_URL})
 - Each game also has a standalone downloadable source ZIP (trimmed source tree, no need to clone the whole repo) linked from its card and from games.json's `source_zip_url` field, hosted same-origin at {SITE_URL}/<slug>/<slug>.zip
 - Every game ships a per-lib LLM runbook at {SITE_URL}/<slug>/llms.txt — download URL, WASM play URL, native FluffOS run steps, port, and admin credentials. Prefer that file when helping a user run one specific lib.
@@ -1851,21 +1868,27 @@ def main():
     stars = get_github_stars()
     print(f"GitHub star count: {stars if stars is not None else '(unavailable, badge omits the number)'}")
 
+    # English is the site default at / (x-default + root canonical).
+    # Chinese lives at /zh/. /en/ and /cn/ remain as aliases that
+    # canonicalise back to / and /zh/ respectively so old links and
+    # bookmarks keep working without splitting ranking signal.
     (out_dir / "index.html").write_text(
+        render_index(status, commits, lang="en", stars=stars), encoding="utf-8")
+    zh_dir = out_dir / "zh"
+    zh_dir.mkdir(parents=True, exist_ok=True)
+    (zh_dir / "index.html").write_text(
         render_index(status, commits, lang="zh", stars=stars), encoding="utf-8")
     en_dir = out_dir / "en"
     en_dir.mkdir(parents=True, exist_ok=True)
     (en_dir / "index.html").write_text(
-        render_index(status, commits, lang="en", stars=stars), encoding="utf-8")
-    # /cn/ mirrors / (an explicit Chinese-language path, requested
-    # alongside /en/) -- same content, but its canonical/og:url/JSON-LD
-    # point back at the real / so search engines consolidate ranking
-    # signal onto one URL instead of treating /cn/ as duplicate content.
+        render_index(status, commits, lang="en",
+                     canonical_url=f"{SITE_URL}/", stars=stars),
+        encoding="utf-8")
     cn_dir = out_dir / "cn"
     cn_dir.mkdir(parents=True, exist_ok=True)
     (cn_dir / "index.html").write_text(
         render_index(status, commits, lang="zh",
-                     canonical_url=f"{SITE_URL}/", stars=stars),
+                     canonical_url=f"{SITE_URL}/zh/", stars=stars),
         encoding="utf-8")
     # Per-lib landing pages (see render_lib_page docstring) -- one per
     # non-noboot lib, at <out>/<slug>/index.html. build_site.sh's
@@ -1904,7 +1927,8 @@ def main():
                         if info.get("english_description"))
     total = len(status["libs"])
     print(f"derived from meta.json: {total} libs -> {status['counts']}")
-    print(f"index written to {out_dir / 'index.html'} (zh) and {en_dir / 'index.html'} (en)")
+    print(f"index written to {out_dir / 'index.html'} (en default) and "
+          f"{zh_dir / 'index.html'} (zh); /en/ and /cn/ are aliases")
     print(f"english translations: {n_translated}/{total} libs have a real "
           "english_description (rest fall back to Chinese on the EN page)")
     print(f"robots.txt, sitemap.xml, llms.txt, llm.txt, llms-full.txt, "
