@@ -578,7 +578,18 @@ Site UX / LLM-doc learnings (2026-09-13):
   mirror, every sitemap `<loc>`, every packable `play.html` +
   `/<slug>.html` alias, and `/zh|/en|/cn` indexes. A verifier failure
   blocks the deploy; extend the verifier when adding new published URLs,
-  do not delete it.
+  do not delete it. It also asserts favicon/og-image/catalog JSON, lean
+  homepage CollectionPage JSON-LD (no giant ItemList), and sitemap
+  `<lastmod>` consistency once lib-commits.json has dates.
+- **Homepage weight (2026-09-13):** index HTML no longer SSR's ~900KB of
+  catalog cards or a ~300KB ItemList JSON-LD blob. Cards load from
+  `/assets/catalog-{en,zh}.json`; JSON-LD is WebSite + CollectionPage
+  with `numberOfItems`. Per-lib pages + `games.json` + sitemap remain
+  the crawler discovery surface. Brand assets (`/favicon.ico`,
+  `/assets/icon.svg`, `/og-image.png`) are generated at build time and
+  wired on home/lib/play pages; sitemap `<lastmod>` comes from
+  lib-commits.json (Search Console already submitted — lastmod takes
+  effect on the next crawl without a resubmit).
 
 - **English is the site default** (2026-09-13): `/` and `hreflang
   x-default` are English; Chinese lives at `/zh/` (`/en/` and `/cn/`

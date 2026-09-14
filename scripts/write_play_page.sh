@@ -191,13 +191,19 @@ cosmetic = [
      '<meta name="robots" content="index, follow">\n'
      '<meta name="description" content="Play %s in your browser via '
      'FluffOS WebAssembly. No install required.">\n'
+     '<link rel="icon" href="/favicon.ico" sizes="any">\n'
+     '<link rel="icon" href="/assets/icon.svg" type="image/svg+xml">\n'
      '<meta property="og:type" content="website">\n'
      '<meta property="og:url" content="%s/%s/play.html">\n'
      '<meta property="og:title" content="%s — Play in Browser">\n'
      '<meta property="og:description" content="Play %s in your browser '
      'via FluffOS WebAssembly.">\n'
+     '<meta property="og:image" content="%s/og-image.png">\n'
+     '<meta name="twitter:card" content="summary_large_image">\n'
+     '<meta name="twitter:image" content="%s/og-image.png">\n'
      '<script type="application/ld+json">%s</script>'
      % (name, site_url, slug, name, site_url, slug, name, name,
+        site_url, site_url,
         json.dumps({
             "@context": "https://schema.org",
             "@type": "BreadcrumbList",

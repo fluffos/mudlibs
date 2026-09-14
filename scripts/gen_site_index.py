@@ -90,6 +90,9 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 REPO_URL = "https://github.com/fluffos/mudlibs"
 SITE_URL = "https://mudlibs.fluffos.info"
+OG_IMAGE_URL = f"{SITE_URL}/og-image.png"
+FAVICON_ICO_URL = f"{SITE_URL}/favicon.ico"
+FAVICON_SVG_URL = f"{SITE_URL}/assets/icon.svg"
 # Per-lib source ZIPs (scripts/make_source_zips.sh) are hosted same-origin
 # at /<slug>/<slug>.zip -- the exact same file scripts/web_shell_override/
 # zip-loader.js fetches to boot the game, so there is no separate archive
@@ -375,6 +378,8 @@ UI = {
         "lang_switch_label": "English", "lang_switch_href": f"{SITE_URL}/",
         "untranslated_suffix": "",
         "self_url": f"{SITE_URL}/zh/",
+        "catalog_loading": "正在加载游戏目录…",
+        "catalog_error": "目录加载失败，请刷新页面重试。",
         "lineage_label": "同源 · {n} 个快照",
         "upstream_label": "上游",
         "upstream_title": "本馆快照所克隆的上游仓库（不是实时镜像）",
@@ -411,6 +416,8 @@ UI = {
         "lang_switch_label": "中文", "lang_switch_href": f"{SITE_URL}/zh/",
         "untranslated_suffix": " (untranslated — showing original Chinese)",
         "self_url": f"{SITE_URL}/",
+        "catalog_loading": "Loading catalog…",
+        "catalog_error": "Could not load the catalog. Refresh to try again.",
         "lineage_label": "Same lineage · {n} snapshots",
         "upstream_label": "Upstream",
         "upstream_title": "GitHub repo this snapshot was cloned from (not a live mirror)",
@@ -689,65 +696,117 @@ def render_engage_badges(lang, stars):
     )
 
 
+def brand_head_tags(*, twitter_card="summary_large_image"):
+    """Shared favicon + Open Graph image tags for every generated page."""
+    return (
+        f'<link rel="icon" href="/favicon.ico" sizes="any">\n'
+        f'<link rel="icon" href="/assets/icon.svg" type="image/svg+xml">\n'
+        f'<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">\n'
+        f'<meta property="og:image" content="{OG_IMAGE_URL}">\n'
+        f'<meta property="og:image:width" content="1200">\n'
+        f'<meta property="og:image:height" content="630">\n'
+        f'<meta property="og:image:alt" content="LPC MUD Museum">\n'
+        f'<meta name="twitter:card" content="{twitter_card}">\n'
+        f'<meta name="twitter:image" content="{OG_IMAGE_URL}">'
+    )
+
+
+def write_brand_assets(out_dir: Path):
+    """Emit favicon.ico, SVG icon, apple-touch, and default og-image.png."""
+    from PIL import Image, ImageDraw, ImageFont
+
+    assets = out_dir / "assets"
+    assets.mkdir(parents=True, exist_ok=True)
+    bg = (11, 14, 20, 255)
+    fg = (213, 219, 229, 255)
+    accent = (122, 162, 247, 255)
+
+    def mark(size: int, radius_frac=0.18) -> Image.Image:
+        im = Image.new("RGBA", (size, size), bg)
+        d = ImageDraw.Draw(im)
+        pad = max(1, size // 12)
+        r = int(size * radius_frac)
+        d.rounded_rectangle(
+            [pad, pad, size - pad - 1, size - pad - 1],
+            radius=r, outline=accent, width=max(2, size // 16))
+        y1, y2 = size * 0.38, size * 0.55
+        x0, x1 = size * 0.28, size * 0.72
+        lw = max(2, size // 14)
+        d.line([(x0, y1), (x1, y1)], fill=fg, width=lw)
+        d.line([(x0, y2), (x0 + (x1 - x0) * 0.55, y2)], fill=accent, width=lw)
+        return im
+
+    icon_512 = mark(512)
+    icon_512.save(assets / "apple-touch-icon.png", format="PNG")
+    icon_512.save(out_dir / "favicon.ico", format="ICO",
+                  sizes=[(16, 16), (32, 32), (48, 48)])
+    (assets / "icon.svg").write_text(
+        """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="12" fill="#0b0e14"/>
+  <rect x="6" y="6" width="52" height="52" rx="10" fill="none"
+        stroke="#7aa2f7" stroke-width="3"/>
+  <line x1="18" y1="26" x2="46" y2="26" stroke="#d5dbe5" stroke-width="4"
+        stroke-linecap="round"/>
+  <line x1="18" y1="36" x2="36" y2="36" stroke="#7aa2f7" stroke-width="4"
+        stroke-linecap="round"/>
+</svg>
+""",
+        encoding="utf-8",
+    )
+    og = Image.new("RGB", (1200, 630), (11, 14, 20))
+    d = ImageDraw.Draw(og)
+    d.rectangle([40, 40, 1160, 590], outline=(35, 42, 56), width=2)
+    d.rectangle([40, 40, 48, 590], fill=(122, 162, 247))
+    try:
+        font_lg = ImageFont.truetype(
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 72)
+        font_sm = ImageFont.truetype(
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 32)
+    except OSError:
+        font_lg = ImageFont.load_default()
+        font_sm = font_lg
+    d.text((80, 200), "LPC MUD Museum", fill=(213, 219, 229), font=font_lg)
+    d.text((80, 300), "Play classic LPMud / LPC mudlibs in your browser",
+           fill=(107, 116, 132), font=font_sm)
+    d.text((80, 500), "mudlibs.fluffos.info", fill=(122, 162, 247), font=font_sm)
+    og.save(out_dir / "og-image.png", format="PNG", optimize=True)
+
+
 def build_jsonld(status, lang, ui, numbers, canonical_url=None):
-    """schema.org structured data: a WebSite wrapping an ItemList of
-    every linked (non-noboot) game as a VideoGame entry. This is the
-    machine-readable twin of the human-facing cards -- search engines
-    and LLM agents that parse JSON-LD get clean, unambiguous entity
-    data (name/description/URL/genre) without needing to parse the
-    card markup or run the page's search JS. Kept lean (no images/
-    ratings/etc that don't exist) rather than padded out with
-    schema.org fields this project has no real data for."""
-    libs = status["libs"]
-    entries = sorted(
-        ((slug, info) for slug, info in libs.items() if info["status"] != "noboot"),
-        key=lambda kv: (numbers.get(kv[0], (9999, 0)), kv[0]))
-    items = []
-    for i, (slug, info) in enumerate(entries, start=1):
-        if lang == "en":
-            name = info.get("english_name") or info["name"]
-            desc = info.get("english_description") or info["description"]
-        else:
-            name = info["name"]
-            desc = info["description"]
-        items.append({
-            "@type": "ListItem",
-            "position": i,
-            "item": {
-                "@type": "VideoGame",
-                "name": name,
-                "description": desc,
-                "url": f"{SITE_URL}/{slug}/",
-                "genre": ["MUD", "Text Adventure", "RPG"],
-                "gamePlatform": "Web browser (WebAssembly)",
-                "playMode": "MultiPlayer",
-                "inLanguage": "zh-CN",
-                "isAccessibleForFree": True,
-            },
-        })
+    """Lean homepage JSON-LD: WebSite + CollectionPage.
+
+    Individual VideoGame entities live on per-lib landing pages (and in
+    games.json). Embedding a full ItemList of every title here used to
+    add ~300KB of duplicate structured data to every language index."""
+    n_linked = sum(
+        1 for info in status["libs"].values() if info["status"] != "noboot")
+    canon = canonical_url or ui["self_url"]
     doc = {
         "@context": "https://schema.org",
         "@graph": [
             {
                 "@type": "WebSite",
                 "name": ui["site_name"],
-                "url": canonical_url or ui["self_url"],
-                "description": (info["description"] if False else None),
+                "url": canon,
                 "inLanguage": ui["html_lang"],
                 "isAccessibleForFree": True,
+                "image": OG_IMAGE_URL,
             },
             {
-                "@type": "ItemList",
+                "@type": "CollectionPage",
                 "name": ui["h1"],
-                "numberOfItems": len(items),
-                "itemListElement": items,
+                "url": canon,
+                "isPartOf": {"@type": "WebSite", "url": SITE_URL + "/"},
+                "numberOfItems": n_linked,
+                "about": {
+                    "@type": "Thing",
+                    "name": "LPMud / LPC mudlib museum",
+                },
             },
         ],
     }
-    # drop the placeholder None (kept the key above only for readability
-    # while writing this; schema.org tolerates a missing description)
-    doc["@graph"][0].pop("description", None)
-    return json.dumps(doc, ensure_ascii=False).replace("</", "<\\/")
+    return json.dumps(doc, ensure_ascii=False).replace("</", "<\/")
+
 
 
 def _is_cjk_name(name):
@@ -881,12 +940,16 @@ def render_markdown_html(md):
     return "".join(out)
 
 
-def build_meta_bits(slug, info, ui, commits, linked):
+def build_meta_bits(slug, info, ui, commits, linked, *, index_card=False):
     """The admin-credential / updated-commit / source / download-zip line
     shared by both the index card (render_index) and the per-lib landing
     page (render_lib_page). Returns (meta_bits_html_list, admin_id) --
     callers that also need admin_id for their own search corpus (only
-    render_index does) get it back rather than re-parsing the README."""
+    render_index does) get it back rather than re-parsing the README.
+
+    index_card=True uses site-root-relative ZIP hrefs (`/<slug>/<slug>.zip`)
+    because index pages live at `/` and `/zh/`, where a bare `{slug}.zip`
+    would resolve to the wrong path."""
     meta_bits = []
     admin_id, admin_pw = parse_admin(slug)
     if admin_id:
@@ -911,8 +974,10 @@ def build_meta_bits(slug, info, ui, commits, linked):
         f'<a href="{REPO_URL}/tree/main/libs/{html.escape(slug)}" '
         f'title="{ui["source_title"]}">{ui["source_label"]}</a>')
     if linked:
+        zip_href = (f"/{html.escape(slug)}/{html.escape(slug)}.zip"
+                    if index_card else f"{html.escape(slug)}.zip")
         meta_bits.append(
-            f'<a href="{html.escape(slug)}.zip" '
+            f'<a href="{zip_href}" '
             f'title="{ui["download_title"]}">{ui["download_label"]}</a>')
     up = load_upstreams().get(slug)
     if up and up.get("url") and up.get("repo"):
@@ -1183,6 +1248,7 @@ def render_lib_page(slug, info, commits, stars=None, page="landing"):
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="{title_bits}">
 <meta name="twitter:description" content="{meta_desc_attr}">
+{brand_head_tags()}
 <script type="application/ld+json">{jsonld}</script>
 {THEME_SCRIPT}
 <link rel="stylesheet" href="/assets/pico.min.css">
@@ -1332,6 +1398,83 @@ def render_lib_page(slug, info, commits, stars=None, page="landing"):
 """
 
 
+
+def build_catalog(status, commits, lang, ui, numbers):
+    """Lean per-language catalog payload for the homepage grid.
+
+    Cards used to be server-rendered into index.html (~900KB HTML). They
+    now live in /assets/catalog-{lang}.json and are painted client-side;
+    per-lib landing pages, games.json, and the sitemap remain the
+    crawler-facing discovery surface.
+    """
+    libs = status["libs"]
+    entries = sorted(
+        libs.items(),
+        key=lambda kv: (numbers.get(kv[0], (9999, 0)), kv[0]))
+    clusters = _lineage_clusters(entries, numbers, lang)
+    out_clusters = []
+    noscript_links = []
+    for base, members in clusters:
+        cards = []
+        for slug, info in members:
+            st = info["status"]
+            icon = BADGE[st][0]
+            label = ui["badge"][st]
+            if lang == "en":
+                name_src = info.get("english_name") or display_name(slug, info["name"])
+                desc_src = info.get("english_description") or info["description"]
+                desc_suffix = (
+                    "" if info.get("english_description")
+                    else ui["untranslated_suffix"])
+            else:
+                name_src = display_name(slug, info["name"])
+                desc_src = info["description"]
+                desc_suffix = ""
+            linked = st != "noboot"
+            meta_bits, admin_id = build_meta_bits(
+                slug, info, ui, commits, linked, index_card=True)
+            search_bits = [
+                slug, info["name"], info["description"],
+                info.get("english_name", ""), info.get("english_description", ""),
+                info.get("archive", ""), info.get("archive_num", ""),
+                admin_id or "",
+                (load_upstreams().get(slug) or {}).get("repo") or "",
+            ]
+            cards.append({
+                "slug": slug,
+                "status": st,
+                "name": name_src,
+                "desc": desc_src + desc_suffix,
+                "badge": label,
+                "icon": icon,
+                "linked": linked,
+                "search": " ".join(b for b in search_bits if b).lower(),
+                "meta": "\n    ".join(meta_bits),
+            })
+            if linked:
+                noscript_links.append((slug, name_src))
+        if lang == "en":
+            canon_name = members[0][1].get("english_name") or members[0][1]["name"]
+        else:
+            canon_name = members[0][1]["name"]
+        num_label = f"{base:03d}" if base < 9999 else "?"
+        out_clusters.append({
+            "num": num_label,
+            "name": canon_name,
+            "count_label": ui["lineage_label"].format(n=len(members)),
+            "cards": cards,
+        })
+    return {"lang": lang, "clusters": out_clusters, "noscript": noscript_links}
+
+
+def render_catalog_json(status, commits, lang):
+    ui = UI[lang]
+    numbers = load_numbers()
+    payload = build_catalog(status, commits, lang, ui, numbers)
+    wire = {"lang": payload["lang"], "clusters": payload["clusters"]}
+    return json.dumps(wire, ensure_ascii=False, separators=(",", ":")) + "\n"
+
+
 def render_index(status, commits, lang="zh", canonical_url=None, stars=None):
     ui = UI[lang]
     libs = status["libs"]
@@ -1343,99 +1486,12 @@ def render_index(status, commits, lang="zh", canonical_url=None, stars=None):
     # back at canonical_url while hreflang still references the real zh/en
     # canonical pair, so crawlers consolidate signal onto one URL per lang.
     canonical_url = canonical_url or ui["self_url"]
-    # Always sort by catalog number first so NNN / NNN-M siblings are
-    # consecutive, then cluster. The /en/ English-first boost is applied
-    # to whole lineages (see _lineage_clusters), not individual cards --
-    # otherwise a CJK-titled snapshot would split away from its English-
-    # titled sibling.
-    entries = sorted(
-        libs.items(),
-        key=lambda kv: (numbers.get(kv[0], (9999, 0)), kv[0]))
-    clusters = _lineage_clusters(entries, numbers, lang)
-
-    # Cards contain inner links (commit / source / play), so they cannot be
-    # <a> elements themselves (nested anchors are invalid HTML and browsers
-    # split them apart).  Instead every card is a <div>; on linked cards the
-    # title <a class="play"> is stretched over the whole card via ::after,
-    # and the meta links sit above it with a higher z-index.
-    def render_card(slug, info):
-        st = info["status"]
-        icon = BADGE[st][0]
-        label = ui["badge"][st]
-        if lang == "en":
-            name_src = info.get("english_name") or display_name(slug, info["name"])
-            desc_src = info.get("english_description") or info["description"]
-            desc_suffix = "" if info.get("english_description") else ui["untranslated_suffix"]
-        else:
-            name_src = display_name(slug, info["name"])
-            desc_src = info["description"]
-            desc_suffix = ""
-        name = html.escape(name_src)
-        desc = html.escape(desc_src) + html.escape(desc_suffix)
-        linked = st != "noboot"
-        # Absolute (site-root-relative) path -- the en page is served from
-        # /en/, so a plain "{slug}/" relative href would resolve to
-        # /en/{slug}/ (404) instead of the real play page at /{slug}/.
-        title_html = (f'<a class="play" href="/{slug}/">{name}</a>' if linked
-                      else name)
-
-        meta_bits, admin_id = build_meta_bits(slug, info, ui, commits, linked)
-        meta_html = ('<p class="meta">' + "\n    ".join(meta_bits) + '</p>')
-
-        # Search should cover every field a visitor might type, not just the
-        # visible slug/name/description text -- including fields that never
-        # render on the card at all (original archive filename, admin id,
-        # and -- on the English page -- both the Chinese AND English name/
-        # description, so a visitor typing either language finds the card).
-        search_bits = [
-            slug, info["name"], info["description"],
-            info.get("english_name", ""), info.get("english_description", ""),
-            info.get("archive", ""), info.get("archive_num", ""),
-            admin_id or "",
-            (load_upstreams().get(slug) or {}).get("repo") or "",
-        ]
-        search_corpus = html.escape(" ".join(b for b in search_bits if b).lower())
-        return f"""<div class="card {st}{' linked' if linked else ''}" data-search="{search_corpus}">
-  <div class="card-head">
-    <h2>{title_html}</h2>
-    <span class="badge {st}">{icon} {label}</span>
-  </div>
-  <p class="slug">{html.escape(slug)}</p>
-  <p class="desc">{desc}</p>
-  {meta_html}
-</div>"""
-
-    blocks = []
-    for base, members in clusters:
-        member_html = [render_card(slug, info) for slug, info in members]
-        if len(members) == 1:
-            blocks.extend(member_html)
-            continue
-        # Title the group after the canonical (lowest-variant) member so
-        # a later snapshot's branding doesn't hide the family's name.
-        canon_slug, canon_info = members[0]
-        if lang == "en":
-            canon_name = canon_info.get("english_name") or canon_info["name"]
-        else:
-            canon_name = canon_info["name"]
-        num_label = f"{base:03d}" if base < 9999 else "?"
-        blocks.append(
-            f'<section class="lineage" data-lineage="{html.escape(num_label)}">\n'
-            f'  <header class="lineage-head">'
-            f'<span class="lineage-num">#{html.escape(num_label)}</span>'
-            f'<span class="lineage-name">{html.escape(canon_name)}</span>'
-            f'<span class="lineage-count">'
-            f'{html.escape(ui["lineage_label"].format(n=len(members)))}'
-            f'</span></header>\n'
-            f'  <div class="lineage-grid">\n    '
-            + "\n    ".join(member_html)
-            + "\n  </div>\n</section>")
+    catalog = build_catalog(status, commits, lang, ui, numbers)
 
     n_total = len(libs)
     n_play = counts.get("playable", 0)
     n_lim = counts.get("limited", 0)
     n_no = counts.get("noboot", 0)
-    cards_html = "\n".join(blocks)
 
     page_title = ui["page_title"]
     if lang == "en":
@@ -1455,12 +1511,8 @@ def render_index(status, commits, lang="zh", canonical_url=None, stars=None):
             "(mudlib) games, running on the FluffOS driver via WebAssembly.")
     meta_desc_attr = html.escape(meta_desc)
 
-    other = "en" if lang == "zh" else "zh"
     jsonld = build_jsonld(status, lang, ui, numbers, canonical_url=canonical_url)
 
-    # Chinese index sits under /zh/; give it a Home → 中文 trail. English
-    # root is already the site home, so a lone "Home" crumb adds noise —
-    # skip it there.
     if lang == "zh":
         index_crumb_html, index_crumb_ld = render_breadcrumbs([
             ("Home", f"{SITE_URL}/"),
@@ -1478,38 +1530,20 @@ def render_index(status, commits, lang="zh", canonical_url=None, stars=None):
                 node = {k: v for k, v in graph.items() if k != "@context"}
                 graph = {"@context": graph.get("@context", "https://schema.org"),
                          "@graph": [node, index_crumb_ld]}
-            jsonld = _json.dumps(graph, ensure_ascii=False).replace("</", "<\\/")
+            jsonld = _json.dumps(graph, ensure_ascii=False).replace("</", "<\/")
     else:
-        index_crumb_html, index_crumb_ld = "", None
+        index_crumb_html = ""
 
+    catalog_url = f"/assets/catalog-{lang}.json"
+    brand = brand_head_tags()
+    loading = html.escape(ui["catalog_loading"])
+    err_js = json.dumps(ui["catalog_error"], ensure_ascii=False)
+    noscript_items = "\n".join(
+        f'  <li><a href="/{html.escape(slug)}/">{html.escape(name)}</a></li>'
+        for slug, name in catalog["noscript"]
+    )
 
-    return f"""<!doctype html>
-<html lang="{ui['html_lang']}">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{html.escape(page_title)}</title>
-<meta name="description" content="{meta_desc_attr}">
-<meta name="robots" content="index, follow">
-<link rel="canonical" href="{canonical_url}">
-<link rel="alternate" hreflang="en" href="{UI['en']['self_url']}">
-<link rel="alternate" hreflang="zh-CN" href="{UI['zh']['self_url']}">
-<link rel="alternate" hreflang="x-default" href="{UI['en']['self_url']}">
-<link rel="alternate" type="text/plain" title="llms.txt" href="{SITE_URL}/llms.txt">
-<link rel="alternate" type="application/json" title="games.json" href="{SITE_URL}/games.json">
-<meta property="og:type" content="website">
-<meta property="og:site_name" content="{html.escape(ui['site_name'])}">
-<meta property="og:title" content="{html.escape(page_title)}">
-<meta property="og:description" content="{meta_desc_attr}">
-<meta property="og:url" content="{canonical_url}">
-<meta property="og:locale" content="{ui['og_locale']}">
-<meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="{html.escape(page_title)}">
-<meta name="twitter:description" content="{meta_desc_attr}">
-<script type="application/ld+json">{jsonld}</script>
-{THEME_SCRIPT}
-<link rel="stylesheet" href="/assets/pico.min.css">
-<style>
+    css = """
   /* Same palette remap as the per-lib landing page (render_lib_page) --
      kept in sync by hand since these are two independent inline
      <style> blocks, not a shared stylesheet. */
@@ -1627,7 +1661,42 @@ def render_index(status, commits, lang="zh", canonical_url=None, stars=None):
   .meta a {{ position: relative; z-index: 2; }}
   .upstream-behind {{ position: relative; z-index: 1; color: var(--warn); font-weight: 600; }}
   body > footer {{ margin-top: 36px; color: var(--pico-muted-color); font-size: 12px; }}
+  .catalog-status {
+    grid-column: 1 / -1; color: var(--pico-muted-color); font-size: 14px;
+    margin: 8px 0; padding: 0;
+  }
 {THEME_STYLE_BLOCK}
+"""
+
+    return f"""<!doctype html>
+<html lang="{ui['html_lang']}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{html.escape(page_title)}</title>
+<meta name="description" content="{meta_desc_attr}">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="{canonical_url}">
+<link rel="alternate" hreflang="en" href="{UI['en']['self_url']}">
+<link rel="alternate" hreflang="zh-CN" href="{UI['zh']['self_url']}">
+<link rel="alternate" hreflang="x-default" href="{UI['en']['self_url']}">
+<link rel="alternate" type="text/plain" title="llms.txt" href="{SITE_URL}/llms.txt">
+<link rel="alternate" type="application/json" title="games.json" href="{SITE_URL}/games.json">
+<link rel="preload" href="{catalog_url}" as="fetch" crossorigin>
+{brand}
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="{html.escape(ui['site_name'])}">
+<meta property="og:title" content="{html.escape(page_title)}">
+<meta property="og:description" content="{meta_desc_attr}">
+<meta property="og:url" content="{canonical_url}">
+<meta property="og:locale" content="{ui['og_locale']}">
+<meta name="twitter:title" content="{html.escape(page_title)}">
+<meta name="twitter:description" content="{meta_desc_attr}">
+<script type="application/ld+json">{jsonld}</script>
+{THEME_SCRIPT}
+<link rel="stylesheet" href="/assets/pico.min.css">
+<style>
+{css}
 </style>
 </head>
 <body>
@@ -1656,22 +1725,73 @@ def render_index(status, commits, lang="zh", canonical_url=None, stars=None):
     <button class="fbtn" data-f="limited">{html.escape(ui['filter_limited'])} {n_lim}</button>
     <button class="fbtn" data-f="noboot">{html.escape(ui['filter_noboot'])} {n_no}</button>
   </div>
-  <div class="grid" id="grid">
-{cards_html}
+  <div class="grid" id="grid" data-catalog="{catalog_url}">
+    <p class="catalog-status" id="catalog-status">{loading}</p>
   </div>
+  <noscript>
+    <ul>
+{noscript_items}
+    </ul>
+  </noscript>
 </main>
 <footer>
 {FOOTER[lang]}
 </footer>
 <script>
 (function () {{
+  var grid = document.getElementById('grid');
+  var statusEl = document.getElementById('catalog-status');
   var q = document.getElementById('q');
-  var cards = Array.prototype.slice.call(
-      document.querySelectorAll('#grid .card'));
   var btns = Array.prototype.slice.call(document.querySelectorAll('.fbtn'));
   var filter = 'all';
-  var groups = Array.prototype.slice.call(
-      document.querySelectorAll('#grid .lineage'));
+  var cards = [];
+  var groups = [];
+  var errMsg = {err_js};
+
+  function esc(s) {{
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }}
+
+  function cardHtml(c) {{
+    var title = c.linked
+      ? '<a class="play" href="/' + esc(c.slug) + '/">' + esc(c.name) + '</a>'
+      : esc(c.name);
+    return '<div class="card ' + esc(c.status) + (c.linked ? ' linked' : '') +
+      '" data-search="' + esc(c.search) + '">' +
+      '<div class="card-head"><h2>' + title + '</h2>' +
+      '<span class="badge ' + esc(c.status) + '">' + esc(c.icon) + ' ' +
+      esc(c.badge) + '</span></div>' +
+      '<p class="slug">' + esc(c.slug) + '</p>' +
+      '<p class="desc">' + esc(c.desc) + '</p>' +
+      (c.meta ? '<p class="meta">' + c.meta + '</p>' : '') +
+      '</div>';
+  }}
+
+  function render(data) {{
+    var html = [];
+    (data.clusters || []).forEach(function (cl) {{
+      var cardsHtml = (cl.cards || []).map(cardHtml);
+      if (cardsHtml.length <= 1) {{
+        html.push(cardsHtml[0] || '');
+        return;
+      }}
+      html.push(
+        '<section class="lineage" data-lineage="' + esc(cl.num) + '">' +
+        '<header class="lineage-head">' +
+        '<span class="lineage-num">#' + esc(cl.num) + '</span>' +
+        '<span class="lineage-name">' + esc(cl.name) + '</span>' +
+        '<span class="lineage-count">' + esc(cl.count_label) + '</span>' +
+        '</header><div class="lineage-grid">' + cardsHtml.join('') +
+        '</div></section>');
+    }});
+    grid.innerHTML = html.join('');
+    cards = Array.prototype.slice.call(grid.querySelectorAll('.card'));
+    groups = Array.prototype.slice.call(grid.querySelectorAll('.lineage'));
+    apply();
+  }}
+
   function apply() {{
     var needle = q.value.trim().toLowerCase();
     cards.forEach(function (c) {{
@@ -1689,6 +1809,7 @@ def render_index(status, commits, lang="zh", canonical_url=None, stars=None):
       g.style.display = visible ? '' : 'none';
     }});
   }}
+
   q.addEventListener('input', apply);
   btns.forEach(function (b) {{
     b.addEventListener('click', function () {{
@@ -1698,6 +1819,17 @@ def render_index(status, commits, lang="zh", canonical_url=None, stars=None):
       apply();
     }});
   }});
+
+  fetch(grid.getAttribute('data-catalog'), {{ credentials: 'same-origin' }})
+    .then(function (r) {{
+      if (!r.ok) throw new Error('catalog HTTP ' + r.status);
+      return r.json();
+    }})
+    .then(render)
+    .catch(function () {{
+      if (statusEl) statusEl.textContent = errMsg;
+      else grid.textContent = errMsg;
+    }});
 }})();
 </script>
 </body>
@@ -1771,47 +1903,57 @@ Sitemap: {SITE_URL}/sitemap.xml
 """
 
 
-def render_sitemap_xml(status):
-    """Root index + every linked (non-noboot) lib's play page. noboot
-    entries have no page of their own (see render_index's `linked`
-    check) so they're excluded here too."""
+def render_sitemap_xml(status, commits=None):
+    """Root index + every linked (non-noboot) lib URL, with <lastmod>.
+
+    lastmod comes from lib-commits.json (last commit touching that lib)
+    when available; the homepage / zh index / catalog feeds use the newest
+    of those dates so crawlers see freshness without a Search Console
+    resubmit.
+    """
+    commits = commits or {}
     libs = status["libs"]
     numbers = load_numbers()
     slugs = sorted(
         (slug for slug, info in libs.items() if info["status"] != "noboot"),
         key=lambda s: (numbers.get(s, (9999, 0)), s))
+
+    def lastmod_for(slug):
+        entry = commits.get(slug) or {}
+        day = (entry.get("date") or "")[:10]
+        return day if len(day) == 10 else None
+
+    days = [d for d in (lastmod_for(s) for s in slugs) if d]
+    site_lastmod = max(days) if days else None
+
+    def url_el(loc, changefreq, lastmod=None):
+        lm = f"<lastmod>{lastmod}</lastmod>" if lastmod else ""
+        return (
+            f"  <url><loc>{loc}</loc>{lm}"
+            f"<changefreq>{changefreq}</changefreq></url>"
+        )
+
     urls = [
-        f"  <url><loc>{SITE_URL}/</loc><changefreq>weekly</changefreq></url>",
-        f"  <url><loc>{SITE_URL}/zh/</loc><changefreq>weekly</changefreq></url>",
+        url_el(f"{SITE_URL}/", "weekly", site_lastmod),
+        url_el(f"{SITE_URL}/zh/", "weekly", site_lastmod),
+        url_el(f"{SITE_URL}/llms.txt", "weekly", site_lastmod),
+        url_el(f"{SITE_URL}/games.json", "weekly", site_lastmod),
+        url_el(f"{SITE_URL}/assets/catalog-en.json", "weekly", site_lastmod),
+        url_el(f"{SITE_URL}/assets/catalog-zh.json", "weekly", site_lastmod),
     ]
-    urls.append(
-        f"  <url><loc>{SITE_URL}/llms.txt</loc>"
-        "<changefreq>weekly</changefreq></url>")
-    urls.append(
-        f"  <url><loc>{SITE_URL}/games.json</loc>"
-        "<changefreq>weekly</changefreq></url>")
     for slug in slugs:
-        urls.append(
-            f"  <url><loc>{SITE_URL}/{html.escape(slug)}/</loc>"
-            "<changefreq>monthly</changefreq></url>")
-        # info.html / play.html are the stable static URLs for "read about
-        # this lib" and "play this lib"; each has its own rel=canonical.
-        urls.append(
-            f"  <url><loc>{SITE_URL}/{html.escape(slug)}/info.html</loc>"
-            "<changefreq>monthly</changefreq></url>")
-        urls.append(
-            f"  <url><loc>{SITE_URL}/{html.escape(slug)}/play.html</loc>"
-            "<changefreq>monthly</changefreq></url>")
-        urls.append(
-            f"  <url><loc>{SITE_URL}/{html.escape(slug)}/llms.txt</loc>"
-            "<changefreq>monthly</changefreq></url>")
+        lm = lastmod_for(slug)
+        esc = html.escape(slug)
+        urls.append(url_el(f"{SITE_URL}/{esc}/", "monthly", lm))
+        urls.append(url_el(f"{SITE_URL}/{esc}/info.html", "monthly", lm))
+        urls.append(url_el(f"{SITE_URL}/{esc}/play.html", "monthly", lm))
+        urls.append(url_el(f"{SITE_URL}/{esc}/llms.txt", "monthly", lm))
     body = "\n".join(urls)
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 {body}
 </urlset>
 """
-
 
 
 def render_lib_llms_txt(slug, info):
@@ -2012,6 +2154,9 @@ def main():
     pico_src = REPO / "scripts" / "vendor" / "pico.classless.min.css"
     (assets_dir / "pico.min.css").write_bytes(pico_src.read_bytes())
 
+    write_brand_assets(out_dir)
+    print(f"brand assets written under {out_dir}/ (favicon, og-image, icons)")
+
     # GitHub star count for the engagement badge, fetched once here
     # rather than per-page -- see get_github_stars()/render_engage_badges().
     stars = get_github_stars()
@@ -2039,6 +2184,11 @@ def main():
         render_index(status, commits, lang="zh",
                      canonical_url=f"{SITE_URL}/zh/", stars=stars),
         encoding="utf-8")
+    (assets_dir / "catalog-en.json").write_text(
+        render_catalog_json(status, commits, "en"), encoding="utf-8")
+    (assets_dir / "catalog-zh.json").write_text(
+        render_catalog_json(status, commits, "zh"), encoding="utf-8")
+    print(f"catalog JSON written under {assets_dir}/catalog-{{en,zh}}.json")
     # Per-lib landing pages (see render_lib_page docstring) -- one per
     # non-noboot lib, at <out>/<slug>/index.html. build_site.sh's
     # assembly step copies this alongside the WASM bundle (play.html
@@ -2063,7 +2213,7 @@ def main():
     print(f"per-lib landing pages + llms.txt: {n_landing} written under {out_dir}/<slug>/")
 
     (out_dir / "robots.txt").write_text(render_robots_txt(), encoding="utf-8")
-    (out_dir / "sitemap.xml").write_text(render_sitemap_xml(status),
+    (out_dir / "sitemap.xml").write_text(render_sitemap_xml(status, commits),
                                           encoding="utf-8")
     llms_txt = render_llms_txt(status)
     (out_dir / "llms.txt").write_text(llms_txt, encoding="utf-8")

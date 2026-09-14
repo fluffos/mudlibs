@@ -17,6 +17,10 @@ Checks (all must pass):
      not by the generator).
   3. Every <loc> in sitemap.xml resolves to a real file under site/.
   4. The root and /zh/ lang-switch targets exist.
+  5. Brand assets (favicon / og-image / icons) and catalog JSON exist.
+  6. Homepage JSON-LD is the lean CollectionPage form (no giant ItemList).
+  7. Sitemap entries carry <lastmod> when any lastmod is present (the
+     generator always emits them once lib-commits.json has dates).
 
 Usage: verify_site_publish.py <index-staging-dir> <site-dir>
 Exit 0 on success; 1 with a missing-path report on failure.
@@ -24,6 +28,8 @@ Exit 0 on success; 1 with a missing-path report on failure.
 
 from __future__ import annotations
 
+import json
+import re
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -98,7 +104,7 @@ def main() -> int:
                 if not site_path_exists(site, path):
                     missing.append(f"sitemap 404: {loc}  (expected {path})")
 
-    # --- 4. lang-switch targets --------------------------------------------
+    # --- 4. lang-switch targets + brand/catalog assets ---------------------
     for required in (
         "index.html",
         "zh/index.html",
@@ -108,9 +114,53 @@ def main() -> int:
         "games.json",
         "robots.txt",
         "assets/pico.min.css",
+        "favicon.ico",
+        "og-image.png",
+        "assets/icon.svg",
+        "assets/apple-touch-icon.png",
+        "assets/catalog-en.json",
+        "assets/catalog-zh.json",
     ):
         if not (site / required).is_file():
             missing.append(f"required publish path missing: {required}")
+
+    # --- 5. lean homepage JSON-LD ------------------------------------------
+    index_html = site / "index.html"
+    if index_html.is_file():
+        text = index_html.read_text(encoding="utf-8", errors="replace")
+        if '"@type":"ItemList"' in text or '"@type": "ItemList"' in text:
+            missing.append(
+                "index.html still embeds ItemList JSON-LD "
+                "(expected lean CollectionPage only)"
+            )
+        if "CollectionPage" not in text:
+            missing.append("index.html missing CollectionPage JSON-LD")
+        if 'property="og:image"' not in text and "property='og:image'" not in text:
+            missing.append("index.html missing og:image")
+        if 'href="/favicon.ico"' not in text:
+            missing.append("index.html missing favicon link")
+        # Cards must not be SSR'd into the homepage anymore.
+        if text.count('class="card ') > 2:
+            missing.append(
+                "index.html still server-renders catalog cards "
+                "(expected client fetch of assets/catalog-*.json)"
+            )
+
+    # --- 6. sitemap lastmod consistency ------------------------------------
+    sitemap = site / "sitemap.xml"
+    if sitemap.is_file():
+        sm = sitemap.read_text(encoding="utf-8", errors="replace")
+        n_url = sm.count("<url>")
+        n_last = sm.count("<lastmod>")
+        # lastmod is emitted from lib-commits.json; a cold cache / local
+        # gen without --commits yields zero dates — don't fail that case.
+        # Once any lastmod exists, site-level URLs (/, /zh/, llms.txt,
+        # games.json) must carry it too.
+        if n_last and n_last < 4:
+            missing.append(
+                f"sitemap.xml has only {n_last} <lastmod> tags "
+                f"(expected site-level URLs to carry lastmod too)"
+            )
 
     if missing:
         print(
