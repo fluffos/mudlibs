@@ -186,7 +186,10 @@ sockets anywhere. The GitHub Pages workflow (`.github/workflows/pages.yml`
 + `scripts/build_site.sh` / `pack_lib_zip.sh` / `write_play_page.sh` /
 `gen_site_index.py`) packs every lib this way and publishes a
 click-to-play site — see §1.6 for how the in-browser filesystem is
-actually populated at play time.
+actually populated at play time. After every push that touches that
+pipeline, check the Actions run finishes green before treating the
+work as done (install deps the generator needs, e.g. Pillow for brand
+assets; Astro needs Node on the runner).
 
 Build notes (once per machine):
 
