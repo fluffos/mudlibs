@@ -17,10 +17,10 @@ Checks (all must pass):
      not by the generator).
   3. Every <loc> in sitemap.xml resolves to a real file under site/.
   4. The root and /zh/ lang-switch targets exist.
-  5. Brand assets (favicon / og-image / icons) and catalog JSON exist.
+  5. Brand assets (favicon / og-image / icons) exist.
   6. Homepage JSON-LD is the lean CollectionPage form (no giant ItemList).
-  7. Sitemap entries carry <lastmod> when any lastmod is present (the
-     generator always emits them once lib-commits.json has dates).
+  7. Homepage HTML prerenders catalog cards (Astro SSR — crawler-visible).
+  8. Sitemap entries carry <lastmod> when any lastmod is present.
 
 Usage: verify_site_publish.py <index-staging-dir> <site-dir>
 Exit 0 on success; 1 with a missing-path report on failure.
@@ -118,13 +118,11 @@ def main() -> int:
         "og-image.png",
         "assets/icon.svg",
         "assets/apple-touch-icon.png",
-        "assets/catalog-en.json",
-        "assets/catalog-zh.json",
     ):
         if not (site / required).is_file():
             missing.append(f"required publish path missing: {required}")
 
-    # --- 5. lean homepage JSON-LD ------------------------------------------
+    # --- 5. lean homepage JSON-LD + prerendered cards (Astro SSR) ----------
     index_html = site / "index.html"
     if index_html.is_file():
         text = index_html.read_text(encoding="utf-8", errors="replace")
@@ -139,11 +137,12 @@ def main() -> int:
             missing.append("index.html missing og:image")
         if 'href="/favicon.ico"' not in text:
             missing.append("index.html missing favicon link")
-        # Cards must not be SSR'd into the homepage anymore.
-        if text.count('class="card ') > 2:
+        # Astro prerenders the full catalog into HTML for crawlers.
+        n_cards = text.count('class="card ')
+        if n_cards < 50:
             missing.append(
-                "index.html still server-renders catalog cards "
-                "(expected client fetch of assets/catalog-*.json)"
+                f"index.html only has {n_cards} prerendered catalog cards "
+                "(Astro SSR expected a full museum grid for SEO)"
             )
 
     # --- 6. sitemap lastmod consistency ------------------------------------

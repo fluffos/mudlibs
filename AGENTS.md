@@ -581,6 +581,13 @@ Site UX / LLM-doc learnings (2026-09-13):
   do not delete it. It also asserts favicon/og-image/catalog JSON, lean
   homepage CollectionPage JSON-LD (no giant ItemList), and sitemap
   `<lastmod>` consistency once lib-commits.json has dates.
+- **Astro static indexes (2026-09-13):** museum `/`, `/zh/`, `/en/`, `/cn/`
+  HTML is prerendered by the Astro app in `web/` from `web/data/museum.json`
+  (exported by `gen_site_index.py`). Every catalog card is in the first
+  HTML response for crawlers; filter/search is progressive enhancement.
+  Lib landing/info pages remain Python-rendered static HTML. CI installs
+  Node 22 before `build_site.sh`. Use `--html-engine python` only for
+  emergency fallbacks.
 - **Homepage weight (2026-09-13):** index HTML no longer SSR's ~900KB of
   catalog cards or a ~300KB ItemList JSON-LD blob. Cards load from
   `/assets/catalog-{en,zh}.json`; JSON-LD is WebSite + CollectionPage

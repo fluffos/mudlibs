@@ -2112,6 +2112,173 @@ Companion to [llms.txt]({SITE_URL}/llms.txt). Every library in this archive, gro
 """
 
 
+def export_astro_museum_data(status, commits, stars, dest: Path):
+    """Write web/data/museum.json for the Astro static site.
+
+    Index pages are fully prerendered by Astro from this payload so
+    crawlers see every catalog card without executing JS. Lib landing
+    pages remain Python-rendered (already crawlable static HTML).
+    """
+    from datetime import datetime, timezone
+
+    numbers = load_numbers()
+    indexes = {}
+    for lang in ("en", "zh"):
+        ui = UI[lang]
+        catalog = build_catalog(status, commits, lang, ui, numbers)
+        counts = status["counts"]
+        n_total = len(status["libs"])
+        n_play = counts.get("playable", 0)
+        n_lim = counts.get("limited", 0)
+        n_no = counts.get("noboot", 0)
+        canonical = ui["self_url"]
+        if lang == "en":
+            meta_desc = (
+                f"Play {n_play}+ classic LPMud / LPC mudlibs in your browser — "
+                f"a free FluffOS WebAssembly museum of {n_total} restored games "
+                f"from the 1990s onward. No install, no server.")
+        else:
+            meta_desc = (
+                f"收藏了 {n_total} 个 LPC MUD(泥潭)游戏库,其中 {n_play} 款可在"
+                f"浏览器内通过 WebAssembly 完整游玩,无需安装、无需服务器。")
+        jsonld = build_jsonld(status, lang, ui, numbers, canonical_url=canonical)
+        crumb_html = ""
+        if lang == "zh":
+            crumb_html, crumb_ld = render_breadcrumbs([
+                ("Home", f"{SITE_URL}/"),
+                ("中文", None),
+            ])
+            if crumb_ld:
+                import json as _json
+                try:
+                    graph = _json.loads(jsonld)
+                except Exception:
+                    graph = {"@context": "https://schema.org", "@graph": []}
+                if "@graph" in graph:
+                    graph["@graph"].append(crumb_ld)
+                else:
+                    node = {k: v for k, v in graph.items() if k != "@context"}
+                    graph = {
+                        "@context": graph.get("@context", "https://schema.org"),
+                        "@graph": [node, crumb_ld],
+                    }
+                jsonld = _json.dumps(graph, ensure_ascii=False).replace("</", "<\/")
+        clusters = []
+        for cl in catalog["clusters"]:
+            clusters.append({
+                "num": cl["num"],
+                "name": cl["name"],
+                "count_label": cl["count_label"],
+                "cards": [{
+                    "slug": c["slug"],
+                    "status": c["status"],
+                    "name": c["name"],
+                    "desc": c["desc"],
+                    "badge": c["badge"],
+                    "icon": c["icon"],
+                    "linked": c["linked"],
+                    "search": c["search"],
+                    "meta_html": c["meta"],
+                } for c in cl["cards"]],
+            })
+        indexes[lang] = {
+            "lang": lang,
+            "html_lang": ui["html_lang"],
+            "og_locale": ui["og_locale"],
+            "canonical_url": canonical,
+            "page_title": ui["page_title"],
+            "meta_desc": meta_desc,
+            "site_name": ui["site_name"],
+            "h1": ui["h1"],
+            "intro_html": INTRO[lang].format(n_total=n_total),
+            "stats_html": STATS[lang].format(
+                n_play=n_play, n_lim=n_lim, n_no=n_no),
+            "footer_html": FOOTER[lang],
+            "lang_switch_href": ui["lang_switch_href"],
+            "lang_switch_label": ui["lang_switch_label"],
+            "search_placeholder": ui["search_placeholder"],
+            "filter_all": ui["filter_all"],
+            "filter_playable": ui["filter_playable"],
+            "filter_limited": ui["filter_limited"],
+            "filter_noboot": ui["filter_noboot"],
+            "n_total": n_total,
+            "n_play": n_play,
+            "n_lim": n_lim,
+            "n_no": n_no,
+            "jsonld": jsonld,
+            "crumb_html": crumb_html,
+            "engage_html": render_engage_badges(lang, stars),
+            "clusters": clusters,
+        }
+
+    payload = {
+        "site_url": SITE_URL,
+        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "indexes": indexes,
+        "index_aliases": [
+            {"path": "en", "lang": "en", "canonical_url": f"{SITE_URL}/"},
+            {"path": "cn", "lang": "zh", "canonical_url": f"{SITE_URL}/zh/"},
+        ],
+        "libs": {},
+    }
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(
+        json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+        encoding="utf-8")
+    print(f"astro museum data exported -> {dest} "
+          f"({len(indexes['en']['clusters'])} en clusters)")
+
+
+def run_astro_html_build(out_dir: Path):
+    """Prerender index HTML via Astro into out_dir (SEO-friendly SSR cards)."""
+    import shutil
+    import os
+
+    web = REPO / "web"
+    data_path = web / "data" / "museum.json"
+    if not data_path.is_file():
+        raise SystemExit(f"missing {data_path}; export_astro_museum_data first")
+
+    env = os.environ.copy()
+    node_bin = Path.home() / ".local" / "node-v22.19.0" / "bin"
+    if node_bin.is_dir():
+        env["PATH"] = f"{node_bin}:{env.get('PATH', '')}"
+
+    npm = shutil.which("npm", path=env["PATH"])
+    if not npm:
+        raise SystemExit(
+            "npm not found — install Node 22+ to build the Astro museum site")
+
+    # Prefer ci when lockfile present; fall back to install.
+    lock = web / "package-lock.json"
+    install_cmd = [npm, "ci"] if lock.is_file() else [npm, "install"]
+    print(f"astro: {' '.join(install_cmd)} (in {web})")
+    subprocess.run(install_cmd, cwd=web, check=True, env=env)
+    print("astro: npm run build")
+    subprocess.run([npm, "run", "build"], cwd=web, check=True, env=env)
+
+    dist = web / "dist"
+    if not dist.is_dir():
+        raise SystemExit(f"astro build produced no dist at {dist}")
+
+    # Overlay Astro HTML (+ any hashed assets) onto the Python out_dir.
+    n_html = 0
+    for src in dist.rglob("*"):
+        if not src.is_file():
+            continue
+        rel = src.relative_to(dist)
+        # Skip Astro's default favicon if Python already wrote brand assets.
+        if rel.as_posix() in ("favicon.ico", "favicon.svg") and (out_dir / rel).is_file():
+            continue
+        dest = out_dir / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dest)
+        if src.suffix == ".html":
+            n_html += 1
+    print(f"astro: copied {n_html} HTML files from dist -> {out_dir}")
+
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(REPO / "site"),
@@ -2120,6 +2287,12 @@ def main():
                     help="lib-commits.json from update_lib_commits.py "
                          "(slug -> last commit that changed the lib); "
                          "omit / missing file = render without that info")
+    ap.add_argument("--html-engine", choices=("astro", "python"),
+                    default="astro",
+                    help="index HTML renderer (default: astro = fully "
+                         "prerendered cards for SEO; python = legacy)")
+    ap.add_argument("--export-astro-data", action="store_true",
+                    help="only write web/data/museum.json and exit")
     args = ap.parse_args()
 
     commits = {}
@@ -2166,24 +2339,36 @@ def main():
     # Chinese lives at /zh/. /en/ and /cn/ remain as aliases that
     # canonicalise back to / and /zh/ respectively so old links and
     # bookmarks keep working without splitting ranking signal.
-    (out_dir / "index.html").write_text(
-        render_index(status, commits, lang="en", stars=stars), encoding="utf-8")
-    zh_dir = out_dir / "zh"
-    zh_dir.mkdir(parents=True, exist_ok=True)
-    (zh_dir / "index.html").write_text(
-        render_index(status, commits, lang="zh", stars=stars), encoding="utf-8")
-    en_dir = out_dir / "en"
-    en_dir.mkdir(parents=True, exist_ok=True)
-    (en_dir / "index.html").write_text(
-        render_index(status, commits, lang="en",
-                     canonical_url=f"{SITE_URL}/", stars=stars),
-        encoding="utf-8")
-    cn_dir = out_dir / "cn"
-    cn_dir.mkdir(parents=True, exist_ok=True)
-    (cn_dir / "index.html").write_text(
-        render_index(status, commits, lang="zh",
-                     canonical_url=f"{SITE_URL}/zh/", stars=stars),
-        encoding="utf-8")
+    astro_data = REPO / "web" / "data" / "museum.json"
+    export_astro_museum_data(status, commits, stars, astro_data)
+    if args.export_astro_data:
+        print("--export-astro-data: done")
+        return
+
+    if args.html_engine == "astro":
+        # Astro prerenders index HTML with every catalog card in the
+        # first response (crawler-friendly). Lib landing pages below
+        # stay Python-rendered — they were already fully static HTML.
+        run_astro_html_build(out_dir)
+    else:
+        (out_dir / "index.html").write_text(
+            render_index(status, commits, lang="en", stars=stars), encoding="utf-8")
+        zh_dir = out_dir / "zh"
+        zh_dir.mkdir(parents=True, exist_ok=True)
+        (zh_dir / "index.html").write_text(
+            render_index(status, commits, lang="zh", stars=stars), encoding="utf-8")
+        en_dir = out_dir / "en"
+        en_dir.mkdir(parents=True, exist_ok=True)
+        (en_dir / "index.html").write_text(
+            render_index(status, commits, lang="en",
+                         canonical_url=f"{SITE_URL}/", stars=stars),
+            encoding="utf-8")
+        cn_dir = out_dir / "cn"
+        cn_dir.mkdir(parents=True, exist_ok=True)
+        (cn_dir / "index.html").write_text(
+            render_index(status, commits, lang="zh",
+                         canonical_url=f"{SITE_URL}/zh/", stars=stars),
+            encoding="utf-8")
     (assets_dir / "catalog-en.json").write_text(
         render_catalog_json(status, commits, "en"), encoding="utf-8")
     (assets_dir / "catalog-zh.json").write_text(
@@ -2231,7 +2416,8 @@ def main():
     total = len(status["libs"])
     print(f"derived from meta.json: {total} libs -> {status['counts']}")
     print(f"index written to {out_dir / 'index.html'} (en default) and "
-          f"{zh_dir / 'index.html'} (zh); /en/ and /cn/ are aliases")
+          f"{out_dir / 'zh' / 'index.html'} (zh); /en/ and /cn/ are aliases "
+          f"(html-engine={args.html_engine})")
     print(f"english translations: {n_translated}/{total} libs have a real "
           "english_description (rest fall back to Chinese on the EN page)")
     print(f"robots.txt, sitemap.xml, llms.txt, llm.txt, llms-full.txt, "
