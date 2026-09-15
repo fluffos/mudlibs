@@ -1759,7 +1759,9 @@ def render_index(status, commits, lang="zh", canonical_url=None, stars=None):
       ? '<a class="play" href="/' + esc(c.slug) + '/">' + esc(c.name) + '</a>'
       : esc(c.name);
     return '<div class="card ' + esc(c.status) + (c.linked ? ' linked' : '') +
-      '" data-search="' + esc(c.search) + '">' +
+      '" data-search="' + esc(c.search) + '"' +
+      ' data-slug="' + esc(c.slug) + '"' +
+      ' data-name="' + esc(c.name) + '">' +
       '<div class="card-head"><h2>' + title + '</h2>' +
       '<span class="badge ' + esc(c.status) + '">' + esc(c.icon) + ' ' +
       esc(c.badge) + '</span></div>' +
@@ -1792,21 +1794,52 @@ def render_index(status, commits, lang="zh", canonical_url=None, stars=None):
     apply();
   }}
 
+  // Prefer slug/title hits over mid-word description noise
+  // (e.g. query "fy" must not rank "identiFY" / "veriFY" above fy2005).
+  function boundaryIndex(hay, needle) {{
+    var i = hay.indexOf(needle);
+    while (i >= 0) {{
+      var prev = i === 0 ? '' : hay.charAt(i - 1);
+      if (!prev || !/[a-z0-9]/.test(prev)) return i;
+      i = hay.indexOf(needle, i + 1);
+    }}
+    return -1;
+  }}
+  function scoreCard(c, needle) {{
+    if (!needle) return 1;
+    var slug = (c.getAttribute('data-slug') || '').toLowerCase();
+    var name = (c.getAttribute('data-name') || '').toLowerCase();
+    var hay = (c.getAttribute('data-search') || (c.textContent || '')).toLowerCase();
+    if (slug === needle) return 1000;
+    if (slug.indexOf(needle) === 0) return 900;
+    if (boundaryIndex(slug, needle) >= 0) return 800;
+    if (name.indexOf(needle) === 0 || boundaryIndex(name, needle) >= 0) return 700;
+    if (boundaryIndex(hay, needle) >= 0) return 400;
+    if (needle.length >= 4 && hay.indexOf(needle) >= 0) return 100;
+    return 0;
+  }}
   function apply() {{
     var needle = q.value.trim().toLowerCase();
     cards.forEach(function (c) {{
       var okStatus = filter === 'all' || c.classList.contains(filter);
-      var hay = c.dataset.search || c.textContent.toLowerCase();
-      var okText = !needle || hay.indexOf(needle) >= 0;
+      var sc = scoreCard(c, needle);
+      var okText = !needle || sc > 0;
       c.style.display = okStatus && okText ? '' : 'none';
+      c.style.order = needle ? String(10000 - sc) : '';
     }});
     groups.forEach(function (g) {{
       var any = g.querySelectorAll('.card');
       var visible = 0;
+      var best = 0;
       for (var i = 0; i < any.length; i++) {{
-        if (any[i].style.display !== 'none') visible++;
+        if (any[i].style.display !== 'none') {{
+          visible++;
+          var sc = scoreCard(any[i], needle);
+          if (sc > best) best = sc;
+        }}
       }}
       g.style.display = visible ? '' : 'none';
+      g.style.order = needle ? String(10000 - best) : '';
     }});
   }}
 
