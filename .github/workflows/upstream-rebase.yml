@@ -1,0 +1,115 @@
+# Twice-daily safe upstream submodule pin bumps.
+#
+# Runs scripts/rebase_upstreams.py which:
+#   1. Refreshes scripts/upstream_status.json
+#   2. For each behind lib whose work/ is a real git submodule, fetches
+#      upstream HEAD and bumps the pin iff every patches/*.patch still
+#      applies cleanly (git apply --check). Patches are never left
+#      applied in work/.
+#   3. Skips vendored trees / unknown pins; reports patch failures.
+#
+# Schedule: 04:00 and 16:00 UTC (~21:00 / 09:00 America/Los_Angeles).
+
+name: Rebase upstream submodules
+
+on:
+  schedule:
+    - cron: '0 4,16 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: upstream-rebase
+  cancel-in-progress: false
+
+jobs:
+  rebase:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: recursive
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Rebase behind upstreams (patch-check safe)
+        id: rebase
+        run: |
+          set +e
+          python3 scripts/rebase_upstreams.py
+          echo "rc=$?" >> "$GITHUB_OUTPUT"
+          set -e
+
+      - name: Commit pin bumps + status
+        id: commit
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/upstream_status.json || true
+          if [ -f scripts/upstream_rebase_report.json ]; then
+            python3 - <<'PY'
+          import json, subprocess
+          from pathlib import Path
+          rep = json.loads(Path("scripts/upstream_rebase_report.json").read_text())
+          for r in rep.get("results") or []:
+              if r.get("result") != "bumped":
+                  continue
+              slug = r["slug"]
+              for p in (f"libs/{slug}/work", f"libs/{slug}/meta.json"):
+                  subprocess.run(["git", "add", "-A", p], check=False)
+          PY
+          fi
+          if git diff --cached --quiet; then
+            echo "changed=0" >> "$GITHUB_OUTPUT"
+            echo "nothing to commit"
+            exit 0
+          fi
+          git commit -m "$(cat <<'EOF'
+          chore: refresh upstream pins (scheduled safe rebase)
+
+          Auto-bumped submodule pins where patches still apply cleanly.
+          See scripts/upstream_status.json / Actions run log for skips.
+          EOF
+          )"
+          git push origin HEAD:${{ github.ref_name }}
+          echo "changed=1" >> "$GITHUB_OUTPUT"
+
+      - name: Upload rebase report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: upstream-rebase-report
+          path: |
+            scripts/upstream_status.json
+            scripts/upstream_rebase_report.json
+          if-no-files-found: warn
+
+      - name: Open/update issue on patch-check failures
+        if: steps.rebase.outputs.rc == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TITLE="Upstream rebase: patch-check failures"
+          BODY_FILE=$(mktemp)
+          {
+            echo "Scheduled \`scripts/rebase_upstreams.py\` could not bump one or more behind upstreams because patches no longer apply (or fetch failed)."
+            echo
+            echo "Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo
+            echo '```json'
+            cat scripts/upstream_rebase_report.json 2>/dev/null || echo '{}'
+            echo '```'
+            echo
+            echo "Manual fix: review the new upstream commits, refresh the pin, re-apply \`libs/<slug>/patches/\`."
+          } > "$BODY_FILE"
+          EXISTING=$(gh issue list --state open --search "in:title Upstream rebase: patch-check failures" --json number -q '.[0].number' || true)
+          if [ -n "${EXISTING}" ]; then
+            gh issue comment "$EXISTING" --body-file "$BODY_FILE"
+          else
+            gh issue create --title "$TITLE" --body-file "$BODY_FILE"
+          fi

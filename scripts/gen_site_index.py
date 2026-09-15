@@ -1796,6 +1796,7 @@ def render_index(status, commits, lang="zh", canonical_url=None, stars=None):
 
   // Prefer slug/title hits over mid-word description noise
   // (e.g. query "fy" must not rank "identiFY" / "veriFY" above fy2005).
+  // Multi-token queries are AND'd. ?q= is kept in the URL for sharing.
   function boundaryIndex(hay, needle) {{
     var i = hay.indexOf(needle);
     while (i >= 0) {{
@@ -1805,7 +1806,7 @@ def render_index(status, commits, lang="zh", canonical_url=None, stars=None):
     }}
     return -1;
   }}
-  function scoreCard(c, needle) {{
+  function scoreToken(c, needle) {{
     if (!needle) return 1;
     var slug = (c.getAttribute('data-slug') || '').toLowerCase();
     var name = (c.getAttribute('data-name') || '').toLowerCase();
@@ -1818,16 +1819,41 @@ def render_index(status, commits, lang="zh", canonical_url=None, stars=None):
     if (needle.length >= 4 && hay.indexOf(needle) >= 0) return 100;
     return 0;
   }}
+  function scoreCard(c, query) {{
+    var tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (!tokens.length) return 1;
+    var total = 0;
+    for (var i = 0; i < tokens.length; i++) {{
+      var sc = scoreToken(c, tokens[i]);
+      if (sc <= 0) return 0;
+      total += sc;
+    }}
+    return total;
+  }}
+  function readQ() {{
+    try {{
+      return new URLSearchParams(location.search).get('q') || '';
+    }} catch (e) {{ return ''; }}
+  }}
+  function writeQ(v) {{
+    try {{
+      var u = new URL(location.href);
+      if (v) u.searchParams.set('q', v);
+      else u.searchParams.delete('q');
+      history.replaceState(null, '', u.pathname + u.search + u.hash);
+    }} catch (e) {{}}
+  }}
   function apply() {{
-    var needle = q.value.trim().toLowerCase();
-    cards.forEach(function (c) {{
+    var query = q.value.trim();
+    var needle = query.toLowerCase();
+    cards.forEach(function (c, idx) {{
       var okStatus = filter === 'all' || c.classList.contains(filter);
       var sc = scoreCard(c, needle);
       var okText = !needle || sc > 0;
       c.style.display = okStatus && okText ? '' : 'none';
-      c.style.order = needle ? String(10000 - sc) : '';
+      c.style.order = needle ? String((100000 - sc) * 1000 + idx) : '';
     }});
-    groups.forEach(function (g) {{
+    groups.forEach(function (g, gidx) {{
       var any = g.querySelectorAll('.card');
       var visible = 0;
       var best = 0;
@@ -1839,11 +1865,18 @@ def render_index(status, commits, lang="zh", canonical_url=None, stars=None):
         }}
       }}
       g.style.display = visible ? '' : 'none';
-      g.style.order = needle ? String(10000 - best) : '';
+      g.style.order = needle ? String((100000 - best) * 1000 + gidx) : '';
     }});
   }}
 
-  q.addEventListener('input', apply);
+  if (q) {{
+    var initial = readQ();
+    if (initial && !q.value) q.value = initial;
+    q.addEventListener('input', function () {{
+      writeQ(q.value.trim());
+      apply();
+    }});
+  }}
   btns.forEach(function (b) {{
     b.addEventListener('click', function () {{
       btns.forEach(function (x) {{ x.classList.remove('active'); }});

@@ -1048,11 +1048,17 @@ the next one of these:
      git submodule pinned by `"upstream".commit`. Follow **their**
      file conventions in the submodule (`.c` or whatever they
      ship). Catalog-only FluffOS-compat lives in
-     `libs/<slug>/patches/` (`NNNN-name.patch`, applied with
+     `libs/<slug>/patches/`      (`NNNN-name.patch`, applied with
      `python3 scripts/apply_lib_patches.py <slug>`). Do not fork
-     the same LPC into a second committed tree. **Do not
-     auto-rebase** a behind submodule: review the new upstream
-     commits, refresh the pin, re-apply patches. The site zip
+     the same LPC into a second committed tree. **Scheduled safe
+     rebase** (`.github/workflows/upstream-rebase.yml`, twice
+     daily): `scripts/rebase_upstreams.py` may bump a behind
+     submodule pin to upstream HEAD only when every
+     `patches/*.patch` still `git apply --check`s cleanly; it
+     never leaves patches applied in `work/`. Patch-check
+     failures stay manual (review commits, refresh pin, re-apply
+     patches) and open/update a tracking issue. Do not force a
+     blind pin bump by hand when patches fail. The site zip
      (`make_source_zips.sh`) must contain the **playable** tree
      (submodule + patches applied) plus `patches/` and `meta.json`
      so a download is fully reproducible — not a raw unpatched
