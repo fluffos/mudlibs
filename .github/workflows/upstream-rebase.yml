@@ -37,11 +37,27 @@ jobs:
 
       - name: Rebase behind upstreams (patch-check safe)
         id: rebase
+        env:
+          # check_upstream_rebase.py needs this; Actions does not always
+          # export GITHUB_TOKEN into the step environment for scripts.
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set +e
           python3 scripts/rebase_upstreams.py
           echo "rc=$?" >> "$GITHUB_OUTPUT"
           set -e
+          if [ -f scripts/upstream_status.json ]; then
+            python3 - <<'PY'
+          import json, sys
+          d = json.load(open("scripts/upstream_status.json"))
+          print(f"status: offline={d.get('offline')} behind={d.get('behind')} count={d.get('count')}")
+          if d.get("offline"):
+              print("ERROR: upstream check ran offline (no GitHub token)", file=sys.stderr)
+              sys.exit(2)
+          PY
+          fi
+
 
       - name: Commit pin bumps + status
         id: commit

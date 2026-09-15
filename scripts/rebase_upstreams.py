@@ -187,6 +187,13 @@ def main() -> int:
         return 1
 
     doc = json.loads(STATUS.read_text(encoding="utf-8"))
+    if doc.get("offline"):
+        print(
+            "upstream_status.json is offline (no GitHub token); "
+            "refusing to rebase. Set GH_TOKEN/GITHUB_TOKEN.",
+            file=sys.stderr,
+        )
+        return 2
     behind = {
         slug: info for slug, info in (doc.get("libs") or {}).items()
         if info.get("status") == "behind"
