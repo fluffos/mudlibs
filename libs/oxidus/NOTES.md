@@ -571,3 +571,37 @@ spelling, or both) rather than guessed at.
   (bakery vs. tavern) — easy to misnavigate by title alone; check the
   room's own listed exits, not just the heading, when route-planning
   through the village by hand.
+
+## 深度功能测试（§10.7，2026-09-16）— post submodule-patch cutover
+
+Re-verified against the cutover tree: `work/` =
+`gesslar/oxidus-mudlib` @ `b5beb8ab` + patches `0001`–`0003` +
+`overlay/` (driver headers incl. `promise.h`, `adm/custom/first_user`).
+`upstream.auto_rebase: false` still required (promise combinators).
+Port 40256. Cutover wiped prior seeds — first admin this pass was
+`olumadmin` / account `deepox` / `Mud@2026` (wipe `first_user` + data
+if re-testing first-admin on a dirty tree).
+
+### Native (`scripts/tmux_mud.sh`)
+
+Continuous play on the patched+overlay work tree: shop (`list` /
+`buy tunic` at the tailor — exact item name required), combat
+(`environment(this_body())->add_inventory("mob/field_mouse")` then
+`punch`, not `kill`), `halt`, clean `quit`, reconnect as
+`olumadmin@deepox`. No new programming bugs vs the 2026-08-31 pass;
+cutover patches/overlay hold.
+
+### WASM
+
+`node scripts/wasm_client.js … libs/oxidus` with
+`olumadmin@deepox` / `Mud@2026` → Developer Workroom `look` /
+`score` ("You are Olumadmin, a level 1 human.") / `quit`
+("Y'all come back, now, y'hear?"). Playable. Same first-boot
+messaging-race noise as §10.7 2026-08-31 (caught, non-fatal).
+
+### Cleanup
+
+`git -C work reset --hard` + `apply_lib_patches.py oxidus` + overlay
+rsync; removed throwaway play dirs (`olumadmin/`, etc.). Patches stay
+out-of-tree in `patches/` / `overlay/` — do not commit dirty submodule
+work tree.
