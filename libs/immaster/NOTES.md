@@ -408,6 +408,15 @@ boot per this project's own `.gitignore`) stayed completely empty
 across the whole multi-session test — zero uncaught errors of any
 kind.
 
+## WASM GBK prompt fix (2026-09-15)
+
+Corpus sweep for fy2005-class `set_encoding("GBK")` failures found
+`ext/mudcore/system/daemons/login_d.lpc` `get_encoding()`: answering
+`y` called `set_encoding("GBK")`, which on catalog WASM ICU raises
+`U_FILE_ACCESS_ERROR` and aborted the login path (player saw a hard
+error / stuck prompt). Archive text is UTF-8-native and museum clients
+are UTF-8-only, so both `y`/`n` now keep utf-8 (prompt wording kept).
+
 ## WASM measurement (2026-09-03)
 
 `meta.json` was already `playable` from the 2026-08-31 deploy-unblock;

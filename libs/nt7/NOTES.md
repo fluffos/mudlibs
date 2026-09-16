@@ -64,6 +64,14 @@ LPC delta on `fluffos/nt7` and pinned that SHA.
   the mudlib itself.
 - Port: **40211** (pre-assigned).
 
+## WASM-safe GBK port branch (2026-09-15)
+
+Corpus `set_encoding` sweep: `adm/kernel/master.lpc` `connect()` called
+`set_encoding("GBK")` when `port == 5555`. Catalog config uses **40211**,
+so museum WASM never hit it; still hardened upstream (`fluffos/nt7`
+`201c00b5`) with `catch()` → utf-8 fallback in case a multi-port / 5555
+listener is used under an ICU-slim build.
+
 ## Status: native + WASM playable, full registration verified both ways
 
 ## Lineage vs. the existing NT/nitan/Lonely family (AGENTS.md §2.1/§11)

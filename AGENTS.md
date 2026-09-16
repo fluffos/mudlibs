@@ -16125,6 +16125,18 @@ re-enter the failing path. Do not require GBK ICU in WASM just to
 paint a museum login menu. Catalog patch example:
 `libs/fy2005/patches/0002-logind-wasm-safe-encoding-prompt.patch`.
 
+**Corpus sweep (2026-09-15)** of every `set_encoding("gbk"|"GBK"|"big5"|…)`
+literal under `libs/*/work` (login/adm/feature paths): only four files
+had hard non-utf8 charset literals —
+`fy2005` (fixed, catch), `xyxyutf8` (already `catch`), `immaster`
+(MudCore `login_d.lpc` on answer `y` — mapped to utf-8; archive is
+UTF-8-native), and `nt7` (`connect()` only when `port == 5555`;
+catalog uses 40211, still `catch`→utf-8 on `fluffos/nt7`). Int-flag
+local `feature/encoding.lpc` overrides and `ob->query_encoding()`
+forwards are a different shape (§8.7 second mechanism); they do not
+call the driver efun with a GBK name. `aoxiangtianji` / `pkuxkx`
+already force utf-8 on the menu path.
+
 ### 8.8 `get_id()` routes ANY wiz-level id through a password check that assumes a save file already exists
 
 A registration flow's `get_id()` sometimes has an early, wizard-specific
