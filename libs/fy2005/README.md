@@ -2,7 +2,7 @@
 
 配置内自报名为"风云Ⅳ"，站内横幅写作"国内经典版"。与 `fengyun434` 是同一套"风云Ⅳ"引擎的不同年份/站点快照，同属本批次的"风云" （Fengyun）武侠引擎家族。
 
-**上游**：[`seikichin/-mud`](https://github.com/seikichin/-mud)（`main` @ `32803f7`）。本馆以 `submodule-patch` 跟踪该仓库；`work/` 是 submodule，管理员试玩号在 `overlay/`，FluffOS 兼容补丁在 `patches/`（含 GMCP 所需的 software `json.lpc` 挂载）。
+**上游**：[`seikichin/-mud`](https://github.com/seikichin/-mud)（`main` @ `32803f7`）。本馆以 `submodule-patch` 跟踪该仓库；`work/` 是 submodule，管理员试玩号在 `overlay/`，FluffOS 兼容补丁在 `patches/`（GMCP 用的 software `json.lpc` 挂载，以及 WASM 下跳过不可用的 GBK `set_encoding`）。
 
 ## 内容亮点
 

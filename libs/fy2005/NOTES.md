@@ -10,14 +10,62 @@
   the mudlib. Upstream is a FluffOS fy2005 tree with MXP/GMCP work; the
   catalog previously vendored the same lineage from `fy2005.rar`. Admin
   seed lives in `overlay/` (upstream `.gitignore`s `data/login/` and
-  `data/user/`). Catalog patch
-  `patches/0001-simul-efun-include-software-json.patch` flips
-  `adm/obj/simul_efun.lpc` to `#ifndef __PACKAGE_JSON_EXTENSION__` so
-  the shipped `json.lpc` provides `json_encode` for `feature/gmcp.lpc`
-  on catalog FluffOS builds (no PACKAGE_JSON). Apply with
+  `data/user/`).   Catalog patches (apply with
   `python3 scripts/apply_lib_patches.py fy2005` after checkout; source
-  zips apply it automatically. Do not auto-rebase; refresh the pin after
-  reviewing upstream commits.
+  zips apply them automatically):
+  - `patches/0001-simul-efun-include-software-json.patch` flips
+    `adm/obj/simul_efun.lpc` to `#ifndef __PACKAGE_JSON_EXTENSION__` so
+    the shipped `json.lpc` provides `json_encode` for `feature/gmcp.lpc`
+    on catalog FluffOS builds (no PACKAGE_JSON).
+  - `patches/0002-logind-wasm-safe-encoding-prompt.patch` makes
+    `get_encoding()` tolerate missing GBK ICU converters (see below).
+  Do not auto-rebase; refresh the pin after reviewing upstream commits.
+
+## WASM break fix (2026-09-15) — `set_encoding("gbk")` / ICU
+
+Live https://mudlibs.fluffos.info/fy2005/ hung up on connect before the
+name prompt. Root cause: `adm/daemons/logind.lpc` `get_encoding()` drew
+its bilingual menu by calling `set_encoding("gbk")` (then utf-8, then
+gbk again). Catalog WASM FluffOS ships ICU without GBK converter data,
+so `ucnv_open("gbk")` → `U_FILE_ACCESS_ERROR` → `error()` →
+`new_conn_handler: logon() … has failed, the user is disconnected.`
+
+Native telnet still has full ICU, so the same path worked there (send
+`1` for utf-8, then `fluffos` / `Mud@2026`).
+
+**Fix** (`0002-…`): `catch(set_encoding("gbk"))`. If GBK is unavailable,
+stay on utf-8, set `char_encoding` to utf-8, and continue login without
+the menu (browser clients are UTF-8 anyway). If GBK works, keep the
+original bilingual prompt. Choosing `0` also falls back to utf-8 when
+GBK cannot be opened.
+
+## 深度功能测试（§10.7，2026-09-15，WASM encoding fix）
+
+Native `build-debug` on port **40013** + in-process WASM
+(`scripts/wasm_client.js`), both with patches 0001+0002 and `overlay/`
+admin seed applied. Live `libs/fy2005/log/debug.log` confirmed writable
+this boot (deliberate wizard `update` compile errors appeared there and
+in `work/log/log` via `log_error()`). Admin play session itself left
+both logs free of unexpected runtime `Error` / `Bad argument` /
+`undefined function` lines.
+
+### Covered
+
+- **WASM admin**: no encoding menu; `fluffos` / `Mud@2026` → wiz hall →
+  `look` / `score` / `i` / `hp` → `goto /d/fy/fysquare` (风云天下 +
+  盘龙摩天柱) → `map` → `quit`. No peer hangup on connect.
+- **Native admin**: bilingual encoding menu still shown; send `1` →
+  same hall → square → `help newbie` path exercised → `quit`.
+- **Caught GBK probe**: WASM driver stdout still records the caught
+  `Fail to set encoding…U_FILE_ACCESS_ERROR` once per connect (mudlib
+  `error_handler` returns the trace); the player transcript does not
+  disconnect.
+
+### Gaps (unchanged from 2026-09-13)
+
+- Live outdoor combat / paid shop purchase not re-run this pass.
+- Registration CAPTCHA path not re-run (native-only coverage remains
+  the 2026-09-13 notes).
 
 ## Upstream cutover smoke (2026-09-13)
 

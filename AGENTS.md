@@ -16096,6 +16096,22 @@ fixing anything: `dtsl2`'s menu is unreachable behind an
 bug, out of scope, don't "fix" the typo as part of this pass unless
 asked.
 
+**Third shape — catalog WASM ICU cannot open GBK at all (`fy2005`,
+2026-09-15).** Distinct from the mojibake-on-choice bug above: some
+login menus call `set_encoding("gbk")` *while drawing the prompt*
+(bilingual GBK-then-UTF-8 wire bytes), before the player has chosen
+anything. Native FluffOS with full ICU succeeds; catalog WASM FluffOS
+ships ICU without GBK converter data, so `ucnv_open("gbk")` returns
+`U_FILE_ACCESS_ERROR`, `set_encoding` calls `error()`, and
+`new_conn_handler` disconnects the user before the name prompt.
+Symptom on the live site: banner (or part of it) then immediate hangup,
+with driver stderr `Fail to set encoding to 'gbk'`. **Fix**:
+`catch(set_encoding("gbk"))` and, on failure, stay on utf-8 and either
+skip the menu (browser is UTF-8) or still offer choices that never
+re-enter the failing path. Do not require GBK ICU in WASM just to
+paint a museum login menu. Catalog patch example:
+`libs/fy2005/patches/0002-logind-wasm-safe-encoding-prompt.patch`.
+
 ### 8.8 `get_id()` routes ANY wiz-level id through a password check that assumes a save file already exists
 
 A registration flow's `get_id()` sometimes has an early, wizard-specific
