@@ -271,7 +271,11 @@ migration token. Restored upstream Oxidus meaning (gesslar/oxidus-mudlib
   `a.b.c`.
 
 Quoted includes and collection-driver comments are left as shared-build
-adaptations (documented above), not reverted.
+adaptations (documented above), not reverted. 2026-09-15 follow-up:
+softened the three LPC comments that cited `AGENTS.md` section numbers
+(`std/living/ed.lpc`, `adm/obj/master.lpc`, `adm/simul_efun/hash.lpc`)
+so they say "required by the collection's shared driver build" without
+implying those constraints are upstream Oxidus policy. Issue #3 closed.
 
 ## WASM
 
