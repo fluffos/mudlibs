@@ -86,6 +86,13 @@ Conventions used throughout:
   `main` directly. (People sometimes say "master"; this repo's default
   branch is `main`.) External contributors may still send PRs; that does
   not change the agent workflow.
+- **Upstream rebase is an agent-armed timer, never a GitHub Action.**
+  Arm `cursor-subscriptions` `subscribe_timer` named
+  `mudlibs-upstream-rebase` with cron `0 4,16 * * *` UTC (list
+  first; dedupe by name). On fire: `scripts/rebase_upstreams.py`,
+  commit+push safe pin bumps, watch Pages CI, open/update the
+  patch-failure issue. Do not recreate
+  `.github/workflows/upstream-rebase.yml`.
 - **Keep `AGENTS.md` (and the live plan queues it points at) current as
   you go — learnings *and* plans, not a cleanup pass at the end.** When
   you discover a reusable trap, a standing policy, a scope decision, or
@@ -1051,14 +1058,20 @@ the next one of these:
      `libs/<slug>/patches/`      (`NNNN-name.patch`, applied with
      `python3 scripts/apply_lib_patches.py <slug>`). Do not fork
      the same LPC into a second committed tree. **Scheduled safe
-     rebase** (`.github/workflows/upstream-rebase.yml`, twice
-     daily): `scripts/rebase_upstreams.py` may bump a behind
+     rebase** (agent-armed timer, **not** a GitHub Action): twice
+     daily at `0 4,16 * * *` UTC (~21:00 / 09:00 America/Los_Angeles)
+     via `cursor-subscriptions` `subscribe_timer` named
+     `mudlibs-upstream-rebase`. On fire, run
+     `scripts/rebase_upstreams.py`, which may bump a behind
      submodule pin to upstream HEAD only when every
      `patches/*.patch` still `git apply --check`s cleanly; it
-     never leaves patches applied in `work/`. Patch-check
-     failures stay manual (review commits, refresh pin, re-apply
-     patches) and open/update a tracking issue. Do not force a
-     blind pin bump by hand when patches fail. The site zip
+     never leaves patches applied in `work/`. Commit + push pin
+     bumps / `scripts/upstream_status.json`, watch Pages CI, and
+     open/update a tracking issue on patch-check failures. Do not
+     force a blind pin bump by hand when patches fail. **Agents
+     arm this timer themselves** (list subscriptions first; dedupe
+     by name). Do not recreate
+     `.github/workflows/upstream-rebase.yml`. The site zip
      (`make_source_zips.sh`) must contain the **playable** tree
      (submodule + patches applied) plus `patches/` and `meta.json`
      so a download is fully reproducible — not a raw unpatched

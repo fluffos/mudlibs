@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """Twice-daily helper: bump behind upstream submodule pins when safe.
 
-Policy (AGENTS.md §2.3, amended for this scheduled job):
+Invoked by an agent-armed cursor-subscriptions timer
+(`mudlibs-upstream-rebase`, cron `0 4,16 * * *` UTC) — not by a
+GitHub Action. See AGENTS.md §2.3 hosting modes.
+
+Policy:
   - Refresh scripts/upstream_status.json first (check_upstream_rebase.py).
   - For each lib with status=behind whose work/ is a real git submodule:
       fetch upstream HEAD, verify every patches/*.patch still applies
@@ -9,7 +13,8 @@ Policy (AGENTS.md §2.3, amended for this scheduled job):
       meta.json upstream.commit (+ archive pin text when present).
   - Never leave patches applied in work/ (zips apply them at pack time).
   - Skip vendored trees and unknown pins. Patch-check / fetch failures
-    are reported for human review (CI opens/updates an issue).
+    are reported for human review (the waking agent opens/updates an
+    issue titled "Upstream rebase: patch-check failures").
 
 Usage:
   python3 scripts/rebase_upstreams.py            # check + rebase
@@ -19,7 +24,7 @@ Usage:
 
 Exit 0 when every behind lib was skipped-with-reason or successfully
 bumped (or none were behind). Exit 1 when at least one behind lib
-failed patch-check / fetch so CI can surface it.
+failed patch-check / fetch so the agent can surface it.
 """
 from __future__ import annotations
 
