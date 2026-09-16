@@ -4,17 +4,21 @@
  * A command to update objects! Neat, huh?
  *
  * @created 2026-07-13 - Gesslar
- * @last_modified 2026-07-13 - Gesslar
+ * @last_modified 2026-08-30 - Gesslar
  *
  * @history
  * 2026-07-13 - Gesslar - Created
+ * 2026-08-30 - Gesslar - Added smart updating (-s)
  */
+
+#include <stat.h>
 
 inherit STD_CMD;
 
 void setup() {
   usage_text =
     "update [<file|object>]\n"
+    "update -s [<file|object>]\n"
     "update -r [<file|object>]\n"
     "update -R [<file|object>]\n"
   ;
@@ -29,6 +33,12 @@ void setup() {
     "the whole inheritance tree beneath it. Virtual objects are reloaded "
     "through their virtual master.\n"
     "\n"
+    "'-s' is the smart form of '-R': it walks the same tree but reloads only "
+    "the files whose source has changed since they were last compiled, and "
+    "everything that inherits one of those. The object itself is always "
+    "reloaded. If it is a clone, you may wish to refresh it with the `renew` "
+    "command.\n"
+    "\n"
     "This command cannot update itself — destruct it instead and it will "
     "reload on next use.\n"
     "\n"
@@ -37,6 +47,9 @@ void setup() {
 
 private nomask mapping resolve_target(mixed target, string kind);
 private nomask void generate_graph(mapping target, string kind);
+private nomask void prune_graph(mapping target);
+private nomask int source_changed(string file);
+private nomask int inherits_stale(string file, mapping stale);
 private nomask mixed reload_it(mixed target);
 private nomask mixed perform_update(object tp, mapping target);
 
@@ -57,6 +70,10 @@ mixed main(
     to_update = resolve_target(tp->query_env("cwf"), "deep");
   else if(sscanf(arg, "-R %s", target) == 1)
     to_update = resolve_target(target, "deep");
+  else if(arg == "-s")
+    to_update = resolve_target(tp->query_env("cwf"), "smart");
+  else if(sscanf(arg, "-s %s", target) == 1)
+    to_update = resolve_target(target, "smart");
   else
     to_update = resolve_target(arg, "single");
 
@@ -130,7 +147,7 @@ private nomask void generate_graph(mapping target, string kind) {
   if(kind != "single") {
     if(kind == "shallow")
       process_leaf(target["object"], ref target["graph"], 0);
-    if(kind == "deep")
+    if(kind == "deep" || kind == "smart")
       process_leaf(target["object"], ref target["graph"], 1);
   }
 
@@ -139,7 +156,84 @@ private nomask void generate_graph(mapping target, string kind) {
   else
     push(ref target["graph"], ({target.file}));
 
-  target["graph"] = flatten(target["graph"]);
+  target["graph"] = uniq_array(flatten(target["graph"]));
+
+  if(kind == "smart")
+    prune_graph(target);
+}
+
+/**
+ * Reduces a target's graph to the files whose source has changed, plus
+ * everything that inherits one of them, keeping the target itself in every
+ * case. Records the number of entries dropped in the target's "pruned" key.
+ *
+ * Only a source change seeds staleness. A file merely being loaded, or having
+ * been reloaded, says nothing about whether its code differs from what its
+ * inheritors compiled against, so it does not drag the tree along with it.
+ *
+ * @param {mapping} target - A target mapping whose graph has been generated
+ */
+private nomask void prune_graph(mapping target) {
+  string anchor = target.virtual ? target.virtual_master : target.file;
+  mapping stale = ([]);
+  string *pruned = ({});
+
+  foreach(string file in target["graph"]) {
+    if(file != anchor && !source_changed(file) && !inherits_stale(file, stale))
+      continue;
+
+    stale[source_file(file)] = 1;
+    pruned += ({ file });
+  }
+
+  target["pruned"] = sizeof(target["graph"]) - sizeof(pruned);
+  target["graph"] = pruned;
+}
+
+/**
+ * Reports whether a file inherits something already marked stale. Inheriting
+ * binds the inheritable's compiled program, so a file that inherits stale code
+ * is carrying stale code itself and has to be recompiled with it.
+ *
+ * The graph is walked deepest-first, so every inheritable of a file has
+ * already been decided by the time the file itself is reached — checking the
+ * immediate list is enough to carry the whole chain upwards.
+ *
+ * @param {string} file - A file from the target's graph
+ * @param {mapping} stale - Source paths already marked stale, as a set
+ * @returns {int} 1 if the file inherits something stale, otherwise 0
+ */
+private nomask int inherits_stale(string file, mapping stale) {
+  object ob = find_object(file);
+
+  if(!objectp(ob))
+    return 1;
+
+  foreach(string parent in inherit_list(ob))
+    if(stale[source_file(parent)])
+      return 1;
+
+  return 0;
+}
+
+/**
+ * Reports whether a file's source has outrun the program compiled from it.
+ * A file that is not loaded at all, or whose source cannot be stat'd, counts
+ * as changed so that nothing is silently skipped.
+ *
+ * @param {string} file - A file from the target's graph
+ * @returns {int} 1 if the source is newer than the loaded program, else 0
+ */
+private nomask int source_changed(string file) {
+  mixed *info = stat(source_file(file));
+
+  if(!pointerp(info) || sizeof(info) != 4)
+    return 1;
+
+  if(!intp(info[STAT_LAST_MODIFIED]))
+    return 1;
+
+  return info[STAT_LAST_MODIFIED] >= info[STAT_TIME_OBJECT_LOADED];
 }
 
 private nomask mixed reload_it(mixed target) {
@@ -163,6 +257,10 @@ private nomask mixed reload_it(mixed target) {
 }
 
 private nomask mixed perform_update(object tp, mapping target) {
+  if(target["pruned"])
+    _info(tp, "Skipping %d unchanged %s in the graph.", target["pruned"],
+          target["pruned"] == 1 ? "file" : "files");
+
   foreach(string file in target.graph) {
     string err = reload_it(file);
     if(err) {

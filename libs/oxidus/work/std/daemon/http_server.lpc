@@ -3,12 +3,20 @@
  * Inheritable HTTP server with socket lifecycle management, incremental
  * request framing, optional TLS and deflate support, and response generation.
  *
+ * An inheriting server answers requests by defining `http_handle_request(fd,
+ * client)`, which may be `async`: a handler that awaits a database query or an
+ * outbound request before calling `send_http_response()` is dispatched exactly
+ * like a synchronous one, and its rejection is answered with a 500. A request
+ * still has `REQUEST_TIMEOUT` seconds to be answered, however long the handler
+ * suspends for.
+ *
  * @created 2024-07-05 - Gesslar
- * @last_modified 2026-08-26 - Gesslar
+ * @last_modified 2026-08-29 - Gesslar
  *
  * @history
  * 2024-07-05 - Gesslar - Created
  * 2026-08-26 - Gesslar - Hardened connection handling and documented the API.
+ * 2026-08-29 - Gesslar - Allowed asynchronous request handlers.
  */
 
 #include <socket.h>
@@ -28,10 +36,12 @@ protected nomask void close_client_connection(int fd);
 protected nomask void close_all_client_connections();
 protected nomask void socket_shutdown(int fd);
 private nomask void remove_client(int fd);
+private nomask void handle_request_failure(int fd, int id, mixed err);
 
 // Variables
 private nomask nosave int LISTEN_PORT = 8080;
 private nomask nosave mapping clients = ([ ]);
+private nomask nosave int client_serial;
 private nomask nosave mapping standard_headers = ([]);
 
 void mudlib_setup() {
@@ -130,6 +140,7 @@ protected nomask void on_socket_listen(int fd) {
   sscanf(client_address, "%s %d", client_host, client_port);
 
   client = ([
+    "id": ++client_serial,
     "host": client_host,
     "port": client_port,
     "time": time_frac(),
@@ -288,15 +299,13 @@ protected nomask void socket_read(int fd, buffer incoming) {
   clients[fd]["http"]["request"] = result;
 
   if(function_exists("http_handle_request")) {
-    err = catch(call_other(this_object(), "http_handle_request", fd, client));
-    if(err) {
-      _log(0, "Request handler failed: %O", err);
-      client["http"]["response"] = ([
-        "status": HTTP_STATUS_INTERNAL_SERVER_ERROR,
-        "content-type": CONTENT_TYPE_TEXT_PLAIN,
-      ]);
-      send_http_response(fd, client);
-    }
+    mixed handled;
+
+    err = catch(handled = call_other(this_object(), "http_handle_request", fd, client));
+    if(err)
+      handle_request_failure(fd, client["id"], err);
+    else if(promisep(handled))
+      promise_catch(handled, (: handle_request_failure, fd, client["id"] :));
   } else {
     client["http"]["response"] = ([
       "status": HTTP_STATUS_NOT_IMPLEMENTED,
@@ -308,10 +317,51 @@ protected nomask void socket_read(int fd, buffer incoming) {
 }
 
 /**
+ * Answers a client whose request handler failed.
+ *
+ * A synchronous handler's error arrives from the catch around the dispatch; an
+ * asynchronous one's arrives later, as the rejection of the promise it
+ * returned. Either way the client is owed a 500 — unless the handler already
+ * answered it before failing, or the request timed out while the handler was
+ * suspended, in which case the connection is gone and there is nothing left to
+ * answer.
+ *
+ * The connection is identified by its serial rather than by its descriptor
+ * alone, because a rejection that arrives after the connection ended finds a
+ * descriptor the driver may already have handed to somebody else.
+ *
+ * @param {int} fd - The client socket descriptor.
+ * @param {int} id - The serial of the connection being answered.
+ * @param {mixed} err - The error or rejection reason.
+ */
+private nomask void handle_request_failure(int fd, int id, mixed err) {
+  mapping client = clients[fd];
+
+  _log(0, "Request handler failed: %O", err);
+
+  if(!client || client["id"] != id)
+    return;
+
+  client["http"]["response"] = ([
+    "status": HTTP_STATUS_INTERNAL_SERVER_ERROR,
+    "content-type": CONTENT_TYPE_TEXT_PLAIN,
+  ]);
+
+  send_http_response(fd, client);
+}
+
+/**
  * Builds and writes an HTTP response for a client.
  *
  * Standard headers and Content-Length are generated automatically. The body
  * is optionally deflated when both peers enable that encoding.
+ *
+ * An asynchronous handler can outlive the connection it was answering — its
+ * client may have disconnected, or the request timed out, while it was
+ * suspended. The descriptor is then free for the driver to hand to somebody
+ * else, so the connection's serial is checked before anything is written:
+ * dropping a late response is a great deal better than delivering it to
+ * whoever holds that descriptor now.
  *
  * @param {int} fd - The client socket descriptor.
  * @param {mapping} client - The client request and response state.
@@ -319,6 +369,7 @@ protected nomask void socket_read(int fd, buffer incoming) {
 protected nomask void send_http_response(int fd, mapping client) {
   string response = "";
   mapping headers = copy(standard_headers);
+  mapping current;
   mixed body;
   string status, content_type;
   int result;
@@ -326,6 +377,13 @@ protected nomask void send_http_response(int fd, mapping client) {
   if(fd < 0 || !client || !client["http"]["response"]["status"] ||
      !client["http"]["response"]["content-type"])
     return;
+
+  current = clients[fd];
+  if(!current || current["id"] != client["id"]) {
+    _log(1, "Discarding a response for a connection that has gone: %d", fd);
+
+    return;
+  }
 
   body = client["http"]["response"]["body"];
   status = client["http"]["response"]["status"];

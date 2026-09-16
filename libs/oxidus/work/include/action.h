@@ -1,7 +1,7 @@
 #ifndef __ACTION_H__
 #define __ACTION_H__
 
-#include "daemons.h"
+#include <daemons.h>
 
 varargs void simple_action(mixed msg, mixed *obs...);
 varargs void my_action(mixed msg, mixed *obs...);

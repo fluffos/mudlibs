@@ -1,7 +1,7 @@
 #ifndef __ROOMS_H__
 #define __ROOMS_H__
 
-#include "areas.h"
+#include <areas.h>
 
 #define ROOM_VOID    "/d/std/void"
 #define ROOM_FREEZER "/d/std/freezer"

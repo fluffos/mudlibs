@@ -338,9 +338,13 @@ Two consequences decide most cases:
   caught `throw()` never reaches `error_handler()` at all. Raising a routine,
   handled outcome with `error()` therefore pages the whole team.
 - **The `*` prefix belongs to the driver.** It prepends one to every `error()`
-  — `simulate.cc`, "all system errors get a * at the start" — so a leading `*`
-  means *this came from the error machinery*. Never hand-write one onto a
-  thrown value; it misrepresents a soft error as a system fault.
+  — `simulate.cc`, "all system errors get a * at the start" — and it authors
+  `*`-prefixed values on paths that are not errors at all, notably the promise
+  rejection reasons in `include/driver/promise.h`. So a leading `*` means *the
+  driver wrote this*, which is broader than *this was a fault*:
+  `PROMISE_REASON_CANCELLED` carries one and never reaches `error_handler()`. Either way the prefix is
+  the driver's to write. Never hand-write one onto a thrown value; it
+  misrepresents a soft error as a system fault.
 
 Use `catch` to handle either, or `acatch` in code that may suspend, and log with
 enough information to debug from. See the `async-promises` skill for how this

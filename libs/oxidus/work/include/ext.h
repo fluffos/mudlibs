@@ -1,7 +1,7 @@
 #ifndef __EXT_H__
 #define __EXT_H__
 
-#include "dirs.h"
+#include <dirs.h>
 
 #define EXT_ACTION        DIR_STD_EXT "action"
 #define EXT_BANK          DIR_STD_EXT "bank"

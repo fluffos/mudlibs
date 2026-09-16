@@ -1068,7 +1068,10 @@ the next one of these:
      never leaves patches applied in `work/`. Commit + push pin
      bumps / `scripts/upstream_status.json`, watch Pages CI, and
      open/update a tracking issue on patch-check failures. Do not
-     force a blind pin bump by hand when patches fail. **Agents
+     force a blind pin bump by hand when patches fail. Optional `upstream.auto_rebase: false` holds the pin
+     (timer skips that lib) when HEAD needs a newer shared driver than
+     this catalog currently ships — e.g. `oxidus` until promise
+     combinators land in the shared build. **Agents
      arm this timer themselves** (list subscriptions first; dedupe
      by name). Do not recreate
      `.github/workflows/upstream-rebase.yml`. The site zip

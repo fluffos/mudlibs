@@ -1,0 +1,85 @@
+diff --git a/lib/secure/std/editor.c b/lib/secure/std/editor.c
+index 131a7e86..6ffea8f7 100644
+--- a/lib/secure/std/editor.c
++++ b/lib/secure/std/editor.c
+@@ -11,31 +11,11 @@
+ nosave private function __EndFn;
+ /** @type {STD_USER} __User */
+ nosave private object __User;
+-
+-nomask private string query_prompt() {
+-    switch (query_ed_mode()) {
+-        case 0:
+-            return ":";
+-            // mode 1 = line input, -2 = executing macro, others = unknown
+-        case -2: default:
+-            return "*";
+-    }
+-}
+-
+-private nomask void editor_input(mixed s) {
+-    // s == -1 means the connection dropped
+-    if (s == -1) {
+-        return destruct();
+-    }
+-    message("raw ansi", ed_cmd(s), __User);
+-    if (query_ed_mode() == -1) {
+-        __User->input_pop();
+-        if (__EndFn) {
+-            evaluate(__EndFn);
+-        }
+-        return destruct();
+-    }
+-}
++// Set once the driver calls our ed_exit() callback (see below) -- this
++// build's ed session state lives entirely inside the driver under
++// __OLD_ED__ (no query_ed_mode() to poll), so this flag is the only way
++// clean_up() can tell whether a session is still active.
++nosave private int __EdDone;
+ 
+ /**
+  * Start the line editor on a file, calling endFn when the session closes.
+@@ -46,8 +26,32 @@ private nomask void editor_input(mixed s) {
+ void editor_start(string file, function endFn) {
+     __EndFn = endFn;
+     __User = this_user();
+-    __User->input_push((: editor_input :), (: query_prompt :));
+-    ed_start(file, 0);
++    // This driver build was compiled with __OLD_ED__ -- only the single
++    // old-style `ed()` efun exists (ed_start()/ed_cmd()/query_ed_mode() are
++    // undefined here). Under __OLD_ED__ the driver's C-level input loop
++    // intercepts every keystroke directly for the whole ed session,
++    // bypassing process_input()/input_to() entirely, and calls the named
++    // exit function (ed_exit(), below) on this object once the session
++    // ends -- there is no equivalent of the new API's per-keystroke
++    // ed_cmd() callback to drive manually, so the old query_prompt()/
++    // editor_input() closures this file used to register via
++    // __User->input_push() are gone too (nothing else calls them, and the
++    // driver draws its own ed prompt for the session's whole duration
++    // either way). `0` for restricted matches this file's original
++    // `ed_start(file, 0)` (unrestricted).
++    ed(file, "ed_exit", 0);
++}
++
++/**
++ * Driver callback: invoked on this object when the ed session started by
++ * editor_start() ends (old-ed exit function, see editor_start() above).
++ */
++void ed_exit() {
++    __EdDone = 1;
++    if (__EndFn) {
++        evaluate(__EndFn);
++    }
++    destruct();
+ }
+ 
+ /* ----- ed setup ----- */
+@@ -79,7 +83,7 @@ void set_ed_setup(int code) {
+  * @returns {int} 0 when destructed, 1 when kept alive
+  */
+ int clean_up(mixed args...) {
+-    if (query_ed_mode() == -1) {
++    if (__EdDone) {
+         destruct();
+         return !this_object();
+     } else {

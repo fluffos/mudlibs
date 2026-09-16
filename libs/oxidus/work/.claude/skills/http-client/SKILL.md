@@ -1,6 +1,6 @@
 ---
 name: http-client
-description: Create HTTP client daemons for Oxidus. Covers inheriting STD_HTTP_CLIENT, making requests (GET/POST/PUT/DELETE etc.), the callback lifecycle, redirect handling, TLS/HTTPS, response processing, and the HTTPC_D fetch wrapper.
+description: Create HTTP client daemons for Oxidus. Covers inheriting STD_HTTP_CLIENT, making requests (GET/POST/PUT/DELETE etc.), awaiting a response, the lifecycle hooks, redirect handling, TLS/HTTPS, response processing, and the HTTPC_D fetch wrapper.
 ---
 
 # HTTP Client Skill
@@ -17,7 +17,22 @@ STD_DAEMON + EXT_HTTP
 
 - **`STD_HTTP_CLIENT`** (`#define STD_HTTP_CLIENT DIR_STD "daemon/http_client"`) — base class providing socket management, request sending, response parsing, redirect following, and caching.
 - **`EXT_HTTP`** (`std/ext/http.lpc`) — shared module for URL parsing, header parsing, body parsing, URL encoding/decoding, and caching utilities. Inherited by `STD_HTTP_CLIENT` automatically.
-- **`HTTPC_D`** (`adm/daemons/httpc.lpc`) — a ready-made wrapper daemon that adds a callback mechanism on top of `STD_HTTP_CLIENT`. Use this for simple fetch-and-callback patterns instead of writing your own daemon.
+
+**`EXT_HTTP` is shared by four objects, not two.** `STD_HTTP_CLIENT`,
+`STD_HTTP_SERVER`, `STD_WS_CLIENT` (a WebSocket handshake *is* an HTTP
+response — it goes through `parse_response_status()` and `parse_headers()`),
+and `DB_D` (`parse_query()` only). Anything changed in `EXT_HTTP` has to be
+weighed against all four; the WebSocket client is the one that gets forgotten,
+and its `process_handshake()` validates `upgrade`, `connection`, and
+`sec-websocket-accept` strictly, so a framing slip there surfaces as an
+apparently misbehaving remote server.
+
+Its framing is done in **buffer space** on purpose: `find_marker()` reports a
+byte offset while an LPC string counts CRLF as a single character
+(`strlen("\r\n")` is 1, `sizeof(to_binary("\r\n"))` is 2), so a byte offset
+applied to a decoded string drifts one position per preceding CRLF. Locate the
+boundary in the buffer, slice the buffer, decode last.
+- **`HTTPC_D`** (`adm/daemons/httpc.lpc`) — a ready-made wrapper daemon whose `fetch()` you `await` for the response. Use this for one-off requests instead of writing your own daemon.
 
 ## Required Include
 
@@ -29,7 +44,7 @@ This provides HTTP status codes, states, redirect codes, and content-type consta
 
 ## Creating a Custom HTTP Client Daemon
 
-Inherit `STD_HTTP_CLIENT` and implement callback functions:
+Inherit `STD_HTTP_CLIENT` and `await` the request:
 
 ```c
 #include <http.h>
@@ -41,42 +56,57 @@ void setup() {
   set_log_level(0);
 }
 
-// Initiate a request
-void do_fetch() {
-  http_request("https://api.example.com/data", "GET", ([
-    "Authorization" : "Bearer my-token",
-    "Accept" : "application/json",
-  ]), 0);
-}
+private async void do_fetch() {
+  mixed err = acatch {
+    mapping server = await http_request("https://api.example.com/data", "GET", ([
+      "Authorization" : "Bearer my-token",
+      "Accept" : "application/json",
+    ]), 0);
+    mapping response = server["response"];
 
-// Called when the connection fully shuts down and response is ready
-void http_handle_shutdown(mapping server) {
-  mapping response = server["response"];
-  int status_code = response["status"]["code"];
-  mixed body = response["body"];
+    if(response["status"]["code"] == 200) {
+      // body is auto-parsed based on content-type
+      // JSON responses become LPC mappings/arrays
+      mixed body = response["body"];
+    }
+  };
 
-  if(status_code == 200) {
-    // body is auto-parsed based on content-type
-    // JSON responses become LPC mappings/arrays
-  }
+  if(err)
+    _log(1, "Fetch failed: %O", err);
 }
 ```
+
+A public entry point must not be `async` — see **The Entry-Point Boundary** in
+the `async-promises` skill. Keep it synchronous and have it call the async
+helper without awaiting it.
 
 ## Core Function
 
 ### `http_request(url, method, headers, body)`
 
 ```c
-varargs nomask mapping http_request(string url, string method, mapping headers, string body)
+varargs nomask promise<mapping> http_request(string url, string method, mapping headers, string body)
 ```
 
 - **url** — Full URL including scheme (e.g., `"https://api.example.com/path?q=1"`)
 - **method** — HTTP method: `"GET"`, `"POST"`, `"PUT"`, `"DELETE"`, `"OPTIONS"`, `"HEAD"`, `"PATCH"`, `"TRACE"`, `"CONNECT"`
 - **headers** — Optional mapping of custom headers (merged with defaults)
 - **body** — Optional request body string
-- **Returns** — A mapping with parsed URL info (`host`, `port`, `path`, `method`, `start_time`, etc.), or `null` on parse failure
+- **Returns** — A `promise<mapping>` that settles once, when the request reaches its end, after any redirect chain it followed
 
-The request is dispatched asynchronously via `call_out_walltime`. Responses arrive through callback functions.
+The promise is **fulfilled with the `server` mapping** — the same one the
+lifecycle hooks receive — for every response the server produced, whatever its
+status code. A 404 is an answer, so it fulfils; the caller decides what the
+status means.
+
+It is **rejected** only when no response was obtained at all: an unparseable
+URL, a failed hostname lookup, a refused connection, a socket failure, a
+response the client could not frame, or the request timeout expiring. The
+rejection reason is the same string that lands in `server["error"]`. Observe it
+with `acatch`.
+
+Because each request carries its own promise, there is no need to correlate a
+response with its request by id or start time.
 
 ### Default Headers
 
@@ -92,7 +122,10 @@ These are sent automatically with every request (your custom headers are merged 
 
 If a body is provided, `Content-Length` and `Content-Type` (with charset) are added automatically.
 
-## Callback Lifecycle
+## Lifecycle Hooks
+
+These are for **observing** a request in flight — logging, metrics, reacting to
+a redirect. The response itself comes from the promise, not from a hook.
 
 Implement any of these functions in your daemon to handle events. All receive a `mapping server` argument containing connection state:
 
@@ -107,7 +140,7 @@ Implement any of these functions in your daemon to handle events. All receive a 
 | `http_handle_response(mapping server)` | Response body received (Content-Length matched) |
 | `http_handle_redirect(mapping server)` | Redirect detected (301/302/303/307/308) |
 | `http_handle_closed(mapping server)` | Socket closed by remote |
-| `http_handle_shutdown(mapping server)` | Connection fully shut down — **this is the main callback for processing responses** |
+| `http_handle_shutdown(mapping server)` | Connection fully shut down, just before the request's promise settles |
 
 ### The `server` Mapping
 
@@ -170,9 +203,40 @@ set_option("cache", "/tmp/http/");   // Response cache directory (default)
 set_option("deflate", 1);            // Enable deflate compression (Accept-Encoding: deflate)
 set_option("tls", 1);               // Force TLS for all connections
 set_max_redirects(10);               // Max redirect follows (default: 5)
+set_request_timeout(15.0);           // Request deadline in seconds (default: 30.0)
 set_log_level(2);                    // Logging verbosity (0=minimal, 4=verbose)
 set_log_prefix("(MY CLIENT)");       // Log line prefix
 ```
+
+## The Request Timeout
+
+Every request is raced against a deadline, `promise_race()`-style: whichever
+settles first — the response or the timeout — is what the caller gets. The
+default is 30 seconds, covering the **whole** request including any redirects
+it follows, not each hop. `set_request_timeout(0.0)` disables it, leaving a
+request to run until the peer or the network ends it.
+
+When the deadline wins, two separate things happen, and the distinction
+matters if you touch this code:
+
+- The request is **aborted** — its socket is torn down through
+  `shutdown_socket()`, which reclaims the fd and the cache file, and fires
+  the usual `http_handle_shutdown` hook with `HTTP_STATE_ERROR`.
+- The **race** rejects the caller. This is what releases a caller whose
+  request timed out before it ever got a socket to abort, in the brief window
+  before `http_connect()` runs, where there is nothing for the teardown to
+  find.
+
+A losing input to a race keeps running, so the race alone would bound the
+wait but not the transfer. That is why the abort exists alongside it.
+
+**A timeout is not a failure, it is an unknown.** Aborting stops the transfer,
+not whatever the far end already did with it: a request that timed out after
+its bytes went out may have succeeded remotely. So do not retry a
+non-idempotent request on the strength of a timeout without deciding what a
+duplicate costs you. `GH_ISSUES_D` retries anyway and says why in
+`submit_issue()` — a duplicate issue is cheaper than a dropped bug report —
+but that is a judgement about *that* request, not a default to copy.
 
 ## Redirect Handling
 
@@ -196,40 +260,56 @@ The base class handles:
 
 ## Using HTTPC_D (The Fetch Wrapper)
 
-For simple request-and-callback patterns, use the pre-built `HTTPC_D` instead of writing a custom daemon:
+For a one-off request, use the pre-built `HTTPC_D` instead of writing a custom
+daemon. Its `fetch()` is `async`, so every call site receives a
+`promise<mapping>` fulfilled with the **response** mapping — one level in from
+what `http_request()` delivers, since there is nothing to correlate.
 
 ```c
 #include <daemons.h>
 
-void do_fetch() {
-  HTTPC_D->fetch(
-    ({ this_object(), "handle_response" }),  // callback
-    "GET",                                    // method
-    "https://api.example.com/data",          // url
-    ([ "Accept" : "application/json" ]),     // headers (optional)
-    0                                         // body (optional)
-  );
-}
+private async void do_fetch() {
+  mixed err = acatch {
+    mapping response = await HTTPC_D->fetch(
+      "GET",                                  // method
+      "https://api.example.com/data",         // url
+      ([ "Accept" : "application/json" ]),    // headers (optional)
+      0                                       // body (optional)
+    );
+    int code = response["status"]["code"];
+    mixed body = response["body"];
+  };
 
-void handle_response(mapping response) {
-  // response contains: status, headers, body
-  int code = response["status"]["code"];
-  mixed body = response["body"];
+  if(err)
+    debug_message(`fetch: ${err}\n`);
 }
 ```
 
-The callback receives the `server["response"]` mapping directly.
+Fan several out with the combinators — `promise_all_settled()` reports each
+outcome without one failure spoiling the rest:
+
+```c
+mixed *results = await promise_all_settled(
+  map(urls, (: HTTPC_D->fetch("GET", $1) :))
+);
+```
 
 ## Sending a POST with JSON Body
 
 ```c
-void post_data(mapping data) {
-  string json_body = json_encode(data);
+private async void post_data(mapping data) {
+  mixed err = acatch {
+    mapping server = await http_request("https://api.example.com/items", "POST", ([
+      "Content-Type" : "application/json",
+      "Authorization" : "Bearer my-token",
+    ]), json_encode(data));
 
-  http_request("https://api.example.com/items", "POST", ([
-    "Content-Type" : "application/json",
-    "Authorization" : "Bearer my-token",
-  ]), json_body);
+    if(server["response"]["status"]["code"] != 201)
+      _log(1, "Unexpected status: %O", server["response"]["status"]);
+  };
+
+  if(err)
+    _log(1, "Post failed: %O", err);
 }
 ```
 
@@ -284,13 +364,10 @@ These are available in any object inheriting `STD_HTTP_CLIENT`:
 
 Inherits `STD_HTTP_CLIENT`, POSTs to GitHub API to create issues with OAuth token authentication. Saves failed requests for retry.
 
-### Zoho Daemon (`adm/daemons/zoho.lpc`)
-
-Inherits `STD_HTTP_CLIENT`, implements OAuth2 token refresh flow and sends emails via Zoho Mail API.
-
 ### HTTPC Daemon (`adm/daemons/httpc.lpc`)
 
-General-purpose fetch wrapper with callback tracking by serial number.
+General-purpose fetch wrapper. Validates its arguments, awaits `http_request()`,
+and delivers the response.
 
 ## Async Handlers
 
@@ -326,6 +403,4 @@ If a handler only needs a delay rather than real async work, `await
 call_out_walltime(n)` inside it is the non-blocking pause; do not use a
 callback-form `call_out`, which is not awaitable.
 
-To fan several requests out and collect them, `promise_all_settled()` reports
-each outcome without one failure spoiling the rest. See the `async-promises`
-skill.
+See the `async-promises` skill for the full picture.

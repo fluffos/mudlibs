@@ -2,7 +2,7 @@
 
 A genuinely modern, actively-developed FluffOS mudlib -- not a 1990s/2000s archive like most of this collection. Self-described as "an effort to create an opinionated base mudlib... a modern and feature-rich codebase for the LPMud community." Written from scratch (a distant fork of LPUniversity that has long since diverged into its own codebase), with its own real unit test suite, its own documentation site (<https://oxidus.online/>), and its own bundled agent-coding guides.
 
-Source: `gesslar/oxidus-mudlib` on GitHub.
+Source: [`gesslar/oxidus-mudlib`](https://github.com/gesslar/oxidus-mudlib) (`submodule-patch`, pin `b5beb8ab`; `auto_rebase` held until the shared driver ships promise combinators). Catalog patches in `patches/`; driver headers in `overlay/`.
 
 ## Highlights
 

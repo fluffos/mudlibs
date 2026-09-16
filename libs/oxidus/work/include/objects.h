@@ -1,7 +1,7 @@
 #ifndef __OBJECTS_H__
 #define __OBJECTS_H__
 
-#include "dirs.h"
+#include <dirs.h>
 
 // Admin objects
 #define ADM_OBJ_SIMUL_EFUN      DIR_ADM_OBJ "simul_efun"

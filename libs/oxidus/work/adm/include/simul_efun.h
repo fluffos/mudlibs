@@ -205,7 +205,11 @@ string ob_long(object ob);
 // File: predicates.c
 int alarmp(object ob);
 int errorp(mixed input);
+int pendingp(promise p);
+int rejectedp(promise p);
+int resolvedp(promise p);
 int roomp(object ob);
+int settledp(promise p);
 
 // File: prompt.c
 varargs void prompt_colour(object body, mixed *cb, string prompt);
@@ -263,11 +267,6 @@ int starts_with(string str, string starting_string);
 int ends_with(string str, string ending_string);
 string sanitize_regex(string msg);
 varargs string safe_string(string str, string replacement);
-
-#ifndef __PACKAGE_CRYPTO__
-// File: hash.c -- WASM/no-crypto stub only; native uses the real efun
-string hash(string algo, string data);
-#endif
 
 // File: system.c
 int port();

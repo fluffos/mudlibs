@@ -3,8 +3,8 @@
 #ifndef DISCORD_H
 #define DISCORD_H
 
-#include "websocket.h"
-#include "discord_intents.h"
+#include <websocket.h>
+#include <discord_intents.h>
 
 // Discord opcodes
 #define DISCORD_DISPATCH 0x00

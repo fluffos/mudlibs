@@ -1,10 +1,21 @@
 /**
  * @file /std/ext/http.lpc
  * Shared HTTP parsing, encoding, response-cache, and protocol utility
- * functions used by the HTTP client and server daemons.
+ * functions.
+ *
+ * Four objects inherit this, and a change here reaches all of them:
+ * STD_HTTP_CLIENT, STD_HTTP_SERVER, STD_WS_CLIENT — whose handshake is an
+ * HTTP response, parsed by parse_response_status() and parse_headers() —
+ * and DB_D, which uses parse_query() alone.
+ *
+ * Message framing is done in **buffer space**. find_marker() reports a byte
+ * offset, while an LPC string counts a CRLF as a single character, so an
+ * offset applied to a decoded string drifts by one position per CRLF that
+ * precedes it. Locate a boundary in the buffer, slice the buffer, and decode
+ * only the piece you need.
  *
  * @created 2024-07-05 - Gesslar
- * @last_modified 2026-08-26 - Gesslar
+ * @last_modified 2026-08-29 - Gesslar
  *
  * @history
  * 2024-07-05 - Gesslar - Created
@@ -14,6 +25,8 @@
  *                        enhanced error handling for JSON decoding. Cleaned
  *                        up code for better readability.
  * 2026-08-26 - Gesslar - Hardened protocol framing and documented the API.
+ * 2026-08-29 - Gesslar - Kept status-line and header framing in buffer space,
+ *                        where find_marker() offsets are meaningful.
  */
 
 inherit EXT_LOG;
@@ -31,15 +44,15 @@ protected nomask string to_string(buffer buf);
 protected nomask varargs int find_marker(mixed buf, mixed marker);
 protected nomask varargs int bufsrch(buffer buf, mixed str);
 protected nomask void cache_response(string file, mixed response);
-protected nomask mixed read_cache(string file);
+protected nomask buffer read_cache(string file);
 protected nomask void set_option(string key, mixed value);
 protected nomask mixed get_option(string key);
 
 nomask mapping parse_http_request(buffer buf);
-nomask mapping parse_http_response(string str);
+nomask mapping parse_http_response(mixed str);
 nomask mapping parse_http_request_line(string str);
-nomask mapping parse_headers(string str, int keep_remainder);
-nomask mapping parse_body(string str, string content_type);
+nomask mapping parse_headers(mixed str, int keep_remainder);
+nomask mixed parse_body(mixed body, string content_type);
 nomask mapping parse_route(string str);
 nomask mapping parse_query(string str);
 nomask mapping parse_url(string str);
@@ -101,30 +114,43 @@ protected nomask mapping parse_http_request(buffer buf) {
 }
 
 /**
- * Parses HTTP response headers and a body from a response string.
+ * Parses HTTP response headers and a body from a response message.
  *
- * @param {string} str - The complete response text after its status line.
+ * The status line is parsed separately, by parse_response_status(); what
+ * arrives here is everything after it.
+ *
+ * @param {string | buffer} str - The response bytes after the status line.
  * @returns {mapping | 0} The parsed response, or 0 when framing is absent
  *                        or invalid.
  */
-protected nomask mapping parse_http_response(string str) {
-  string header, body;
+protected nomask mapping parse_http_response(mixed str) {
   mapping result = ([]);
-  int end_cursor;
-  end_cursor = find_marker(str, "\r\n\r\n");
-  if(end_cursor == -1)
+  buffer buf;
+  buffer body;
+  string header;
+  int header_end;
+
+  // Buffer space, for the reason given in parse_response_status(): a
+  // find_marker() offset counts bytes, while a decoded string counts CRLF as
+  // one character.
+  buf = stringp(str) ? to_binary(str) : str;
+
+  header_end = find_marker(buf, "\r\n\r\n");
+  if(header_end == -1)
     return 0;
 
-  header = str[0..end_cursor-2];
-  body = str[end_cursor+2..];
+  header = to_string(buf[0..header_end+1]);
+  body = buf[header_end+4..];
 
   _log(1, "header: %s", header);
 
   result["headers"] = parse_headers(header, 0);
-  if(!result["headers"]) return 0;
+  if(!result["headers"])
+    return 0;
 
   result["body"] = parse_body(body, result["headers"]["content-type"]);
-  if(!result["body"]) return 0;
+  if(!result["body"])
+    return 0;
 
   return result;
 }
@@ -197,22 +223,23 @@ protected nomask mapping parse_route(string route) {
  *                        invalid.
  */
 protected nomask mapping parse_response_status(mixed str, int keep_remainder: (: 0 :)) {
+  buffer buf;
   string line;
-  string remainder;
   string message;
   mapping result = ([]);
   int line_end;
   int code;
 
-  if(bufferp(str))
-    str = to_string(str);
+  // Frame in buffer space. find_marker() reports a byte offset, while a
+  // string counts CRLF as a single character, so slicing the decoded string
+  // at that offset drifts by one position per CRLF that precedes it.
+  buf = stringp(str) ? to_binary(str) : str;
 
-  line_end = find_marker(str, "\r\n");
+  line_end = find_marker(buf, "\r\n");
   if(line_end == -1)
     return 0;
 
-  line = str[0..line_end-1];
-  remainder = str[line_end+2..];
+  line = to_string(buf[0..line_end-1]);
   if(sscanf(line, "HTTP/%*s %d %s", code, message) != 3 &&
      sscanf(line, "HTTP/%*s %d", code) != 2)
     return 0;
@@ -224,7 +251,7 @@ protected nomask mapping parse_response_status(mixed str, int keep_remainder: (:
   result["message"] = message || "";
 
   if(keep_remainder)
-    result["buffer"] = to_binary(remainder);
+    result["buffer"] = buf[line_end+2..];
 
   return result;
 }
@@ -242,22 +269,26 @@ protected nomask mapping parse_response_status(mixed str, int keep_remainder: (:
  */
 protected nomask mapping parse_headers(mixed str, int keep_remainder) {
   mapping headers = ([]);
-  string remainder;
+  buffer remainder;
+  string block;
 
-  if(bufferp(str))
-    str = to_string(str);
-
+  // Frame in buffer space, for the reason given in parse_response_status():
+  // find_marker() offsets are bytes, and a decoded string counts CRLF as one
+  // character. Only the header block itself is decoded, and only once the
+  // terminator has been located.
   if(keep_remainder) {
-    int header_end = find_marker(str, "\r\n\r\n");
+    buffer buf = stringp(str) ? to_binary(str) : str;
+    int header_end = find_marker(buf, "\r\n\r\n");
 
     if(header_end == -1)
       return 0;
 
-    remainder = str[header_end+4..];
-    str = str[0..header_end+1];
-  }
+    remainder = buf[header_end+4..];
+    block = to_string(buf[0..header_end+1]);
+  } else
+    block = bufferp(str) ? to_string(str) : str;
 
-  foreach(string line in explode(str, "\r\n")) {
+  foreach(string line in explode(block, "\r\n")) {
     int separator;
 
     if(line == "")
@@ -295,7 +326,7 @@ protected nomask mapping parse_headers(mixed str, int keep_remainder) {
   }
 
   if(keep_remainder)
-    headers["buffer"] = to_binary(remainder);
+    headers["buffer"] = remainder;
 
   return headers;
 }
@@ -680,13 +711,16 @@ private nomask int integrity_check(string file, buffer response) {
 /**
  * Reads a complete cached response into a buffer.
  *
+ * An empty cache file is a legitimate empty entity body and yields a
+ * zero-length buffer, which is truthy. Only a genuine failure to read the
+ * body returns 0, so a caller distinguishes the two with a plain truth test.
+ *
  * @param {string} file - The cache file path.
- * @returns {buffer | string | 0} The cached bytes, an empty string when the
- *                                file is absent or empty, or 0 when it is
- *                                larger than the driver string limit.
+ * @returns {buffer} The cached bytes, a zero-length buffer when the file is
+ *                   empty, or 0 when the file is absent or is larger than the
+ *                   driver string limit.
  */
-protected nomask mixed read_cache(string file) {
-  mixed response = "";
+protected nomask buffer read_cache(string file) {
   int chunk_size = (int)get_config(__MAX_BYTE_TRANSFER__);
   int max = (int)get_config(__MAX_STRING_LENGTH__);
   buffer total;
@@ -698,20 +732,22 @@ protected nomask mixed read_cache(string file) {
 
   if(sz == -1) {
     _log(2, "Cache file does not exist: %s", file);
-    return response;
+
+    return 0;
   } else if(sz == 0) {
     _log(2, "Cache file is empty: %s", file);
-    return response;
+
+    return allocate_buffer(0);
   }
 
   tail = tail(file, 5);
   _log(3, "Tail of file (5 lines): %O", tail);
 
-  if(sz < 1)
-    return response;
+  if(sz > max) {
+    _log(0, "Cache file %s is %d bytes, over the %d byte limit", file, sz, max);
 
-  if(sz > max)
     return 0;
+  }
 
   total = allocate_buffer(sz);
 

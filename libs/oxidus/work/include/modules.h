@@ -1,7 +1,7 @@
 #ifndef __MODULES_H__
 #define __MODULES_H__
 
-#include "dirs.h"
+#include <dirs.h>
 
 #define M_MOBILE    DIR_STD_MODULES "module"
 #define M_RESOURCE  DIR_STD_MODULES "room/resource"

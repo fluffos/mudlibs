@@ -6,8 +6,9 @@
 string set_name(string str);
 string query_name();
 string query_real_name();
+void set_real_name(string str);
 
-int remove();
+void remove();
 varargs void reset(mixed args...);
 string set_real_name(string str);
 string find_path(string path);

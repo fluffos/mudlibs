@@ -8,24 +8,17 @@
  *     gathers free text into a temp file and fires a callback. Used for
  *     composing blobs of text (bug reports, descriptions) - it does not touch
  *     the driver editor.
- *   - ed_edit() : a thin wrapper around the driver's classic ed() efun. The
- *     driver owns the whole input loop directly; the 'w'/'x' commands write
- *     the real file through valid_write() via the ed_write() callback.
+ *   - ed_edit() : a session driver around the modern ed_start()/ed_cmd()
+ *     efuns. The mudlib owns the input loop; the driver owns the buffer. The
+ *     'w'/'x' commands write the real file directly through valid_write().
  *
  * @created 2024-07-20 - Gesslar
- * @last_modified 2026-08-30 - fluffos/mudlibs onboarding
+ * @last_modified 2026-07-17 - Gesslar
  *
  * @history
  * 2024-07-20 - Gesslar - Created
  * 2026-07-17 - Gesslar - Converted ed_edit() to the modern ed_start()/ed_cmd()
  *                        paradigm; removed the OLD_ED ed() wrapper
- * 2026-08-30 - fluffos/mudlibs onboarding - Reverted ed_edit() to the classic
- *                        ed() efun: this corpus's shared driver build has
- *                        OLD_ED defined (needed by hundreds of other libs'
- *                        own wizard editors), which compiles out
- *                        ed_start()/ed_cmd()/query_ed_mode() entirely (see
- *                        fluffos core.spec). Required by the collection's
- *                        shared driver build (OLD_ED), not by upstream Oxidus.
  */
 
 #include <ed.h>
@@ -155,27 +148,19 @@ protected void abort_edit() {
   edit_file = post_edit = temp_file = null;
 }
 
-// ─── classic ed() session ────────────────────────────────────────────────
-//
-// The "modern" ed_start()/ed_cmd()/query_ed_mode() trio this file's history
-// mentions (see @history above) does not exist on every driver build this
-// mudlib runs under -- those three efuns compile out entirely whenever the
-// driver is built with OLD_ED defined (see fluffos's core.spec: the two
-// efun sets are an #if/#else, never both available at once). This corpus's
-// shared driver build has OLD_ED defined (hundreds of other, older mudlibs
-// depend on the classic ed() efun for their own wizard editors), so Oxidus
-// runs against the classic API instead. The driver owns the whole input
-// loop directly once ed() is called -- no input_to() loop needed here --
-// calling back into ed_write() before/after every write and ed_exit() when
-// the session ends.
+// ─── modern ed session (ed_start/ed_cmd) ────────────────────────────────────
+
+private void ed_line(string line);
+private void ed_continue();
+private string ed_prompt();
 
 private nosave mixed *ed_post;
 private nosave string ed_target;
 
 /**
- * Starts a driver ed session on <file>. The driver holds the buffer and
- * drives the whole input loop directly. Writing ('w'/'x') goes through
- * valid_write() via the ed_write() callback below. An optional callback, if
+ * Starts a driver ed session on <file>. The mudlib drives the input loop; the
+ * driver holds the buffer. Writing ('w'/'x') goes straight to <file> through
+ * valid_write(), so no temp-file dance is needed. An optional callback, if
  * given, is fired once when the session ends.
  *
  * @param {string} file - The file to edit; may be null to open an empty buffer.
@@ -186,6 +171,8 @@ private nosave string ed_target;
  * @returns {int} 1 on start, or an error result if already editing.
  */
 public varargs int ed_edit(string file, mixed *cb, int restricted) {
+  string out;
+
   if(in_edit(this_object()))
     return _error(this_object(), "You are already editing something.");
 
@@ -195,39 +182,60 @@ public varargs int ed_edit(string file, mixed *cb, int restricted) {
   ed_post = cb;
   ed_target = file;
 
-  ed(file, "ed_write", "ed_exit", restricted);
+  out = ed_start(file, restricted, 0);   // loads the buffer; sets O_IN_EDIT
+
+  if(stringp(out) && strlen(out))
+    tell(this_object(), out);
+
+  ed_continue();
 
   return 1;
 }
 
-// ed() write callback: the driver calls this once before (flag == 0, to
-// authorize the write) and once after (flag != 0) every write the editor
-// performs. Must stay `public` -- unlike a true fixed-name driver apply
-// (create/heart_beat/valid_*), this is a dynamic string-name callback the
-// driver reaches via the same generic by-name apply used for call_out()
-// callbacks, which -- per function_exists()'s own docs -- treats
-// `private`/`protected` functions as not defined for any caller outside
-// the object. A `private` ed_write()/ed_exit() here is silently never
-// invoked: every write fails with ed's generic "Failed command." (dowrite()
-// sees the callback return as zero/not-found) and no error is logged
-// anywhere, since safe_apply() swallows a not-found callback silently.
-public int ed_write(string fname, int flag) {
-  if(!flag)
-    return master()->valid_write(fname, this_object(), "ed");
+// input_to target: feed one line to the session, echo the result, loop or finish.
+private void ed_line(string line) {
+  string out;
 
-  return 1;
+  if(!in_edit(this_object()))
+    return;
+
+  out = ed_cmd(line);
+
+  if(stringp(out) && strlen(out))
+    tell(this_object(), out);
+
+  ed_continue();
 }
 
-// ed() exit callback: fired when the session ends, for whatever reason (the
-// file, if any, has already been written by the editor itself).
-public void ed_exit() {
-  mixed *cb = ed_post;
-  string target = ed_target;
+// Re-arm the input loop while the session is live; fire the callback when it
+// ends (the file has already been written by the editor itself).
+private void ed_continue() {
+  if(in_edit(this_object())) {
+    tell(this_object(), ed_prompt());
+    input_to(ed_line, 0);
+  } else {
+    mixed *cb = ed_post;
+    string target = ed_target;
 
-  ed_post = ed_target = null;
+    ed_post = ed_target = null;
 
-  if(!nullp(cb))
-    catch(call_back(cb, ED_STATUS_SUCCESS, target));
+    if(!nullp(cb))
+      catch(call_back(cb, ED_STATUS_SUCCESS, target));
+  }
+}
+
+// query_ed_mode(): 0 = command mode, >0 = input/append mode (next line number),
+// -2 = pager. The pager prints its own prompt, so we emit nothing for it.
+private string ed_prompt() {
+  int mode = query_ed_mode();
+
+  if(mode == -2)
+    return "";
+
+  if(mode > 0)
+    return sprintf("%d\t", mode);
+
+  return ":";
 }
 
 public string query_editing() {

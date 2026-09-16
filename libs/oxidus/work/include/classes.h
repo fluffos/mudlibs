@@ -1,7 +1,7 @@
 #ifndef __CLASSES_H__
 #define __CLASSES_H__
 
-#include "dirs.h"
+#include <dirs.h>
 
 #define CLASS_ACT           DIR_STD_CLASSES "act"
 #define CLASS_ALARM         DIR_STD_CLASSES "alarm"

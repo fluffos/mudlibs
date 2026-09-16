@@ -1,7 +1,7 @@
 #ifndef __ARMOUR_H__
 #define __ARMOUR_H__
 
-#include "clothing.h"
+#include <clothing.h>
 
 public int equip(object tp, string slot);
 public int unequip(object tp, int silent);

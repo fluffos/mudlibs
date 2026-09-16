@@ -109,6 +109,14 @@ def rebase_one(slug: str, info: dict, dry_run: bool) -> dict:
     if not meta_path.is_file():
         return {"slug": slug, "result": "skip", "detail": "missing meta.json"}
 
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    up = meta.get("upstream") or {}
+    if up.get("auto_rebase") is False:
+        return {
+            "slug": slug, "result": "skip",
+            "detail": "upstream.auto_rebase=false (manual pin hold)",
+        }
+
     fetch = run(["git", "fetch", "--quiet", "origin"], cwd=work, check=False)
     if fetch.returncode != 0:
         return {

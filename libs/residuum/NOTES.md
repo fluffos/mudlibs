@@ -12,6 +12,26 @@ invoked). Mudlib root is the repo's `lib/` directory: 712 raw files,
 4.3MB -- by far the smallest and most modern archive processed in this
 session so far. Slug `residuum`, number 935, port 40237.
 
+## Hosting (2026-09-16) — real submodule-patch
+
+`work/` is a git submodule of
+[`michaelprograms/nightmare-residuum`](https://github.com/michaelprograms/nightmare-residuum)
+@ `dee36ca29f8ac5a0e016c4c2e49296cabc2dd70b` (`main`). Mudlib root is
+`work/lib` (`upstream.mudlib_subdir`, same pattern as `lima`). Upstream
+ships `.c`; catalog follows that (no `.c`→`.lpc` rename in the submodule).
+
+Catalog FluffOS-compat in `patches/`:
+
+- `0001` — `PACKAGE_UIDS` stubs on `secure/daemon/master.c`
+- `0002` — classic `ed()` for shared `OLD_ED` (`secure/std/editor.c`)
+- `0003` — LPC `message()` for non-`NO_ADD_ACTION` shared driver
+  (`secure/sefun/override.c`)
+- `0004` — `/log/` write ACL includes `COMMAND` (`secure/etc/write.cfg`)
+
+Slice-width fixes from the old vendored `.lpc` tree are intentionally
+not carried forward — they existed only because of the catalog rename.
+
+
 ## 0. Confirmed genuinely distinct from `nightmare3`/`nightmare4`
 
 Before investing effort: this is NOT a period MudOS snapshot at all --

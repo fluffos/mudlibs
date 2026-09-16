@@ -1,7 +1,7 @@
 #ifndef __HANDLERS_H__
 #define __HANDLERS_H__
 
-#include "dirs.h"
+#include <dirs.h>
 
 #define H_GMCP_BASE  DIR_STD_HANDLERS_GMCP "gmcp_module"
 #define H_GMCP_CHAR  DIR_STD_HANDLERS_GMCP "Char"

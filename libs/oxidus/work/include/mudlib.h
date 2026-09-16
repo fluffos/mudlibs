@@ -13,7 +13,7 @@
 #ifndef __MUDLIB_H__
 #define __MUDLIB_H__
 
-#include "dirs.h"
+#include <dirs.h>
 
 /* Standard Inheritables */
 

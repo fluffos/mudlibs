@@ -4,11 +4,12 @@
  * Basic command for interacting with the GMCP system.
  *
  * @created 2024-02-23 - Gesslar
- * @last_modified 2026-07-13 - Gesslar
+ * @last_modified 2026-08-29 - Gesslar
  *
  * @history
  * 2024-02-23 - Gesslar - Created
  * 2026-07-13 - Gesslar - Moved help into setup()
+ * 2026-08-29 - Gesslar - Awaited the GUI release lookup
  */
 
 #include <gmcp_defines.h>
@@ -16,7 +17,7 @@
 inherit STD_CMD;
 
 private mixed gmcp_status(object tp);
-private void gmcp_gui_result(mapping response, object tp);
+private async void request_gui(object tp);
 
 void setup() {
     usage_text =
@@ -70,12 +71,7 @@ mixed main(/** @type {STD_PLAYER} */ object tp, string arg) {
             return "GMCP is not available. Ensure you are using a GMCP "
                 "capable client and that GMCP is enabled in the client.";
 
-        HTTPC_D->fetch(
-            assemble_call_back((: gmcp_gui_result :), tp),
-            "GET",
-            "https://api.github.com/repos/gesslar/gLPUi/releases/latest",
-            ([ "Accept" : "application/vnd.github.v3+json" ]),
-        );
+        request_gui(tp);
 
         return "Initiating "+mud_name()+" GUI request...";
     }
@@ -83,6 +79,12 @@ mixed main(/** @type {STD_PLAYER} */ object tp, string arg) {
     return "Syntax: gmcp OR gmcp [on|off]";
 }
 
+/**
+ * Describes the player's current GMCP status.
+ *
+ * @param {STD_PLAYER} tp - The player asking
+ * @returns {mixed} The status message
+ */
 private mixed gmcp_status(/** @type {STD_PLAYER} */ object tp) {
     if(tp->gmcp_enabled())
         return "GMCP is currently enabled.";
@@ -93,40 +95,65 @@ private mixed gmcp_status(/** @type {STD_PLAYER} */ object tp) {
     return "GMCP is currently disabled.";
 }
 
-private void gmcp_gui_result(mapping response, object tp) {
-    string url;
-    string version;
-    mapping data;
+/**
+ * Looks up the latest GUI release and sends it to the player's client.
+ *
+ * The command has already answered by the time this runs, so everything the
+ * player learns about the outcome is told to them here. The player may well
+ * have gone by then.
+ *
+ * @param {STD_PLAYER} tp - The player who asked for the GUI
+ */
+private async void request_gui(/** @type {STD_PLAYER} */ object tp) {
+    mixed err = acatch {
+        mapping response, data;
+        string url, version;
 
-    if(!response) {
-        tell(tp, "Error fetching version information.\n");
-        return;
-    }
+        response = await HTTPC_D->fetch(
+            "GET",
+            "https://api.github.com/repos/gesslar/gLPUi/releases/latest",
+            ([ "Accept" : "application/vnd.github.v3+json" ]),
+        );
 
-    if(response["status"]["code"] != 200) {
-        tell(tp, "Error fetching version information.\n");
-        return;
-    }
+        if(!objectp(tp))
+            return;
 
-    data = json_decode(response["body"]);
-    version = data["tag_name"];
-    foreach(mapping value in data["assets"]) {
-        if(pcre_match(value["name"], "\\.mpackage")) {
-            url = value["browser_download_url"];
-            break;
+        if(response["status"]["code"] != 200) {
+            tell(tp, "Error fetching version information.\n");
+            return;
         }
-    }
 
-    if(!url) {
-        tell(tp, "Error determining download URL.\n");
-        return;
-    }
+        // The client decodes an application/json body already; this is the
+        // release mapping, not the text of one.
+        data = response["body"];
 
-    GMCP_D->send_gmcp(tp,
-        GMCP_PKG_CLIENT_GUI_INSTALL,
-        ([
-            GMCP_LBL_GMCP_CLIENT_GUI_URL : url,
-            GMCP_LBL_GMCP_CLIENT_GUI_VERSION : version,
-        ])
-    );
+        if(!mapp(data)) {
+            tell(tp, "Error fetching version information.\n");
+            return;
+        }
+
+        version = data["tag_name"];
+        foreach(mapping value in data["assets"]) {
+            if(pcre_match(value["name"], "\\.mpackage")) {
+                url = value["browser_download_url"];
+                break;
+            }
+        }
+
+        if(!url) {
+            tell(tp, "Error determining download URL.\n");
+            return;
+        }
+
+        GMCP_D->send_gmcp(tp,
+            GMCP_PKG_CLIENT_GUI_INSTALL,
+            ([
+                GMCP_LBL_GMCP_CLIENT_GUI_URL : url,
+                GMCP_LBL_GMCP_CLIENT_GUI_VERSION : version,
+            ])
+        );
+    };
+
+    if(err && objectp(tp))
+        tell(tp, "Error fetching version information.\n");
 }

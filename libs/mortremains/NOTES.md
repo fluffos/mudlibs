@@ -510,7 +510,7 @@ outbound network event, even if the far end is currently unreachable.
   and documented regardless.
 - WASM status: not attempted (`wasm_status` left `""` per task scope).
 
-## 深度功能测试 / Deep functional test (round two, AGENTS.md \S10.7)
+## 深度功能测试（§10.7，round two） / Deep functional test (AGENTS.md §10.7)
 
 First real *playthrough* pass on this lib (the onboarding session above
 only verified registration + `look`/`score`/`who`/`quit` + the admin

@@ -1,11 +1,11 @@
 #ifndef __GRAPEVINE_H__
 #define __GRAPEVINE_H__
 
-#include "socket.h"
-#include "socket_err.h"
-#include "origin.h"
-#include "daemons.h"
-#include "websocket.h"
+#include <socket.h>
+#include <socket_err.h>
+#include <origin.h>
+#include <daemons.h>
+#include <websocket.h>
 
 // Grapevine statuses
 #define GR_STATUS_OK "success"

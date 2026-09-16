@@ -10,8 +10,7 @@ public mapping query_commands();
 public string *query_matching_commands(string command);
 public string *query_all_commands();
 public void init_commands();
-public mixed evaluate_command(object tp, string command,
-  string arg);
+public mixed evaluate_command(object tp, string command, string arg);
 
 // Path functions
 public string *get_path();
@@ -28,8 +27,7 @@ public void add_ghost_paths();
 public string find_command_path(string verb);
 
 // Command history and execution
-public nomask varargs string *query_command_history(int index,
-  int range);
+public nomask varargs string *query_command_history(int index, int range);
 public int command_hook(string arg);
 private nomask int evaluate_result(mixed result);
 public int force_me(string cmd);

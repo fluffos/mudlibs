@@ -4,6 +4,32 @@ Source: `gh repo clone gesslar/oxidus-mudlib` (cloned 2026-08-28/30).
 Number 954, port 40256. Status: **done** — boots clean natively, full
 registration-to-gameplay playthrough verified live and repeatedly.
 
+## Hosting (2026-09-16) — real submodule-patch
+
+`work/` is now a git submodule of [`gesslar/oxidus-mudlib`](https://github.com/gesslar/oxidus-mudlib)
+pinned at `b5beb8abf4e39eb1d54820d69369cfa755547e05` (last upstream commit before
+the GMCP/login `promise_race` / combinator stack that needs FluffOS promise
+phase 1.5 efuns the shared catalog driver does not yet ship).
+
+Catalog FluffOS-compat lives in `patches/` (applied by
+`python3 scripts/apply_lib_patches.py oxidus` / source-zip pack):
+
+- `0001-PACKAGE_UIDS-stubs-on-master.patch` — `get_root_uid` / `get_bb_uid` /
+  `creator_file` stubs for the shared `PACKAGE_UIDS` build.
+- `0002-OLD_ED-classic-ed-for-shared-driver.patch` — classic `ed()` for
+  shared `OLD_ED`.
+- `0003-WASM-hash-stub-without-PACKAGE_CRYPTO.patch` — `hash()` sefun stub
+  so WASM rooms compile without `PACKAGE_CRYPTO`.
+
+Driver headers (`include/driver/*.h`, including `promise.h`) and the
+`adm/custom/` first-user seed live in `overlay/` (rsync'd onto zip staging).
+
+`upstream.auto_rebase` is **false**: the twice-daily rebase timer must not
+bump this pin to current `main` until the shared driver includes
+`promise_all` / `promise_race` / `promise_cancel`. Re-enable after that
+driver rebuild, then let the timer advance.
+
+
 ## What this lib is
 
 A genuinely modern, actively-developed (pushed within the last day as of

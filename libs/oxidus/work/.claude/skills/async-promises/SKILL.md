@@ -427,12 +427,15 @@ work can reject too**. Give the timeout a defined reason constant —
 channel of your own, so nothing the work returns can collide with it, and a
 constant survives someone rewording the message.
 
-Note the constant carries no `*` — that prefix marks a driver error, and a
-thrown value is not one. See the `lpc-coding-style` skill.
+Note the constant carries no `*`. That prefix belongs to the driver: it marks
+a reason the driver authored, and it is how you tell one of its outcomes from
+one of yours. Those reasons are named in `include/driver/promise.h` — see **Driver
+rejection reasons** below, and the `lpc-coding-style` skill for the convention.
 
 Do **not** discriminate with `promise_status(timer)` instead. It looks
-equivalent — `2` for a timer that rejected and so won, `0` for one still pending
-— but a losing timer keeps running and rejects on its own schedule, so a work
+equivalent — `PROMISE_REJECTED` for a timer that rejected and so won,
+`PROMISE_PENDING` for one still pending — but a losing timer keeps running and
+rejects on its own schedule, so a work
 failure at t=9.99 against a 10s timer reads back as `2` and reports a timeout
 that never happened. The status is a live value; the reason is a fact about the
 settle that actually won.
@@ -456,10 +459,17 @@ Three more things this shape is getting right:
 ## Cancellation
 
 `promise_cancel(p)` asks the `async` function body that owns `p` to give up: its
-**next `await` raises** a catchable error whose value is the string
-`"*async function cancelled"`. It returns `1` if a cancellation was armed and
-`0` if there was nothing left to cancel — a body racing its canceller to
-completion is a normal outcome, not an error.
+**next `await` raises** a catchable value — the reason `PROMISE_REASON_CANCELLED`
+(`include/driver/promise.h`). It returns `1` if a cancellation was armed and `0` if
+there was nothing left to cancel — a body racing its canceller to completion is
+a normal outcome, not an error.
+
+**A cancel costs you nothing in the logs.** It is delivered through the driver's
+throw path, not `error()`, so it never reaches `error_handler()`: no traceback,
+no `/log/catch` entry, no dev notification. `promise_cancel()` also marks the
+promise handled, so a fire-and-forget cancel does not produce an
+`Unhandled promise rejection` line either. Cancelling on purpose is silent, as
+routine control flow should be.
 
 Four properties to hold onto:
 
@@ -577,7 +587,7 @@ co-tenanted host.
 |---|---|---|
 | Uncaught `error()` in an async body | the promise rejects **and** `/log/catch` gets a traceback with a dev-wide notification, observed or not | raise expected conditions with `throw()` in the body |
 | Rejection nothing ever observes | additionally `Unhandled promise rejection (…): reason` in the debug log at deallocation — so an `error()` rejection logs through **both** paths | observe it, or reject with `throw()` |
-| Awaited promise garbage collected while pending | the function's promise rejects with `*awaited promise was collected before settling`; **no `acatch` inside the function runs** | observe the returned promise |
+| Awaited promise garbage collected while pending | the function's promise rejects with `PROMISE_REASON_AWAITED_COLLECTED`; **no `acatch` inside the function runs** | observe the returned promise |
 | Object destructed while suspended | the resume is abandoned and the promise rejects | see the `defer()` caveat below |
 | Object recompiled or `replace_program()`ed while suspended | same | reload deliberately, not mid-flight |
 | `max suspended async functions` exceeded | clean error at the await point | find the leak with `async_info()` |
@@ -595,6 +605,49 @@ mid-`await`** — put that cleanup in an object that outlives the operation.
 
 Driver shutdown discards queued deliveries without running them, like pending
 `call_out()`s.
+
+### Driver rejection reasons
+
+The driver rejects with a fixed set of constant strings, named in
+`include/driver/promise.h` (pulled in by `<global.h>`, so they are always in
+scope). That header is a verbatim copy of the driver's own
+`src/include/promise.h`, which the driver `#include`s and rejects with — so the
+names below cannot drift from what actually arrives. Compare against the
+constant, never the literal:
+
+```lpc
+mixed err = acatch(await worker());
+
+if(err == PROMISE_REASON_CANCELLED)
+  return;                       // asked to stop; not a failure
+else if(err)
+  _error(this_body(), `Worker failed: ${err}`);
+```
+
+The same header names `promise_status()`'s return codes — `PROMISE_PENDING`
+(0), `PROMISE_FULFILLED` (1), `PROMISE_REJECTED` (2). The driver's own state
+field is typed from those three, so they cannot drift either.
+
+| Constant | Raised when |
+|---|---|
+| `PROMISE_REASON_CANCELLED` | `promise_cancel()` reached the body's next `await` |
+| `PROMISE_REASON_DESTRUCTED` | the suspended body's owner was destructed |
+| `PROMISE_REASON_RECOMPILED` | the owner was recompiled while suspended |
+| `PROMISE_REASON_REPLACED_PROGRAM` | the owner's program was replaced while suspended |
+| `PROMISE_REASON_STACK_OVERFLOW` | no stack left to rebuild the frame on resume |
+| `PROMISE_REASON_AWAITED_COLLECTED` | the promise a body was parked on died unsettled |
+| `PROMISE_REASON_ADOPTION_COLLECTED` | a resolve-with-promise source died unsettled |
+| `PROMISE_REASON_COLLECTED` | a combinator input died unsettled |
+| `PROMISE_REASON_SELF_RESOLVED` | `promise_resolve(p, p)` |
+| `PROMISE_REASON_ANY_EMPTY` | `promise_any()` over an empty array |
+| `PROMISE_REASON_YIELD_SHUTDOWN` | an `async_yield()` was still queued at shutdown |
+| `PROMISE_REASON_NO_REASON` | `promise_reject(p)` called with no reason |
+
+All of these are delivered outcomes, not faults — they arrive at an `await` or
+`acatch` like any other rejection and none of them reach the error handler.
+Only `PROMISE_REASON_CANCELLED` is one you asked for; the rest mean something went
+wrong. `PROMISE_REASON_NO_REASON` exists so a bare `promise_reject(p)` is never falsy,
+which would read as success through `acatch`.
 
 ## Oxidus Helpers
 
@@ -634,6 +687,8 @@ Before reporting async work as done:
 - [ ] No `promise_resolve()` / `promise_reject()` targets an async function's
       own promise.
 - [ ] `promise_race()` is never handed a possibly-empty array.
+- [ ] Driver rejection reasons are compared against the `include/driver/promise.h`
+      constants, not against the literal strings.
 - [ ] Long loops yield with `await async_yield()`, not a plain `await`.
 - [ ] Cleanup that must survive destruction is not in a `defer()` inside the
       suspended object.

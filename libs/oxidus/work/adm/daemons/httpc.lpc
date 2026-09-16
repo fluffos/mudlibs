@@ -1,19 +1,20 @@
 /**
  * @file /adm/daemons/httpc.lpc
- * General-purpose HTTP fetch daemon that associates each outbound request
- * with a callback and invokes it with the completed response mapping.
+ * General-purpose HTTP fetch daemon. Wraps the inheritable HTTP client so
+ * callers can issue a one-off request without inheriting one themselves, and
+ * awaits the response.
  *
  * @created 2024-07-06 - Gesslar
- * @last_modified 2026-08-26 - Gesslar
+ * @last_modified 2026-08-29 - Gesslar
  *
  * @history
  * 2024-07-06 - Gesslar - Created
  * 2026-08-26 - Gesslar - Stabilised request identities and documented the API.
+ * 2026-08-29 - Gesslar - Replaced the callback-and-serial API with an
+ *                        awaitable fetch().
  */
 
 inherit STD_HTTP_CLIENT;
-
-private nosave mapping serials = ([]);
 
 void setup() {
   set_log_prefix("(HTTPC)");
@@ -21,71 +22,39 @@ void setup() {
 }
 
 /**
- * Starts an HTTP request and records a completion callback.
+ * Performs an HTTP request and delivers the response.
  *
- * @param {mixed*} callback - A callback descriptor accepted by call_back().
+ * The promise is fulfilled with the response for every status the server
+ * returned — a 404 is an answer, not a failure — and is rejected only when no
+ * response was obtained: an unparseable URL, a failed hostname lookup, a
+ * refused connection, or a malformed response. Use `acatch` to observe that.
+ *
  * @param {string} method - The HTTP request method.
  * @param {string} url - The absolute request URL.
  * @param {mapping} [headers] - Additional request headers.
  * @param {string} [body] - The optional request body.
- * @returns {int} The unique request serial.
- * @errors If the callback, method, URL, headers, or request is invalid.
- */
-varargs int fetch(mixed *callback, string method, string url, mapping headers, string body) {
-  int serial;
-  mapping request;
-
-  _log(2, "Fetching " + url);
-
-  if(nullp(callback))
-    error("No callback specified");
-
-  if(!stringp(method))
-    error("Invalid method");
-
-  if(!stringp(url))
-    error("Invalid URL");
-
-  if(!nullp(headers) && !mapp(headers))
-    error("Invalid headers");
-
-  if(!mapp(request = http_request(url, method, headers, body)))
-    error("Error creating request");
-
-  serial = request["id"];
-  serials[serial] = callback;
-
-  _log(3, "Recording serial %d for callback: %O %O", serial, callback, previous_object());
-
-  return serial;
-}
-
-/**
- * Dispatches the callback associated with a completed HTTP request.
+ * @returns {mapping} The response, carrying the "status", "headers", and
+ *                    "body" keys. Each call site receives a
+ *                    `promise<mapping>`.
+ * @errors If the method, URL, or headers are invalid.
+ * @example
+ * mapping response = await HTTPC_D->fetch("GET", url, headers);
  *
- * @param {mapping} server - The completed client connection state.
+ * if(response["status"]["code"] != 200)
+ *   return;
  */
-nomask void http_handle_shutdown(mapping server) {
-  int serial;
-  mixed *callback;
-  string err;
+varargs public async mapping fetch(string method, string url, mapping headers, string body) {
+  mapping server;
 
-  _log(2, "Handling shutdown");
+  assert_arg(stringp(method), 1, "Invalid method.");
+  assert_arg(stringp(url), 2, "Invalid URL.");
+  assert_arg(nullp(headers) || mapp(headers), 3, "Invalid headers.");
 
-  serial = server["request"]["id"];
-  if(!serials[serial]) {
-    _log(3, "No callback found for serial %d", serial);
-    return;
-  }
+  _log(2, "Fetching %s", url);
 
-  callback = serials[serial];
+  server = await http_request(url, method, headers, body);
 
-  _log(3, "Callback found for serial %d: %O", serial, callback);
-  map_delete(serials, serial);
+  _log(3, "Fetched %s: %O", url, server["response"]["status"]);
 
-  err = catch(call_back(callback, server["response"]));
-  if(err)
-    _log(2, "Error executing callback: %O", err);
-  else
-    _log(3, "Callback executed");
+  return server["response"];
 }

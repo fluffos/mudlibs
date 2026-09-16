@@ -5,11 +5,13 @@
  * in the mud's GitHub repository.
  *
  * @created 2024-07-07 - Gesslar
- * @last_modified 2026-07-25 - Gesslar
+ * @last_modified 2026-08-29 - Gesslar
  *
  * @history
  * 2024-07-07 - Gesslar - Created
  * 2026-07-25 - Gesslar - Some tidying and correction.
+ * 2026-08-29 - Gesslar - Awaited the API response instead of correlating it
+ *                        through the shutdown hook.
  */
 
 #include <daemons.h>
@@ -21,8 +23,9 @@ private nomask void check_token();
 private nomask void process_backlog();
 private nomask void process_next(string *files);
 private nomask void execute_callback(mapping request, mapping response);
+private nomask async void submit_issue(mapping request, string url, mapping headers, string body);
+private nomask void save_pending(mapping request);
 
-private nomask nosave mapping api_calls = ([ ]);
 private nomask nosave int scheduled = 0;
 private nosave string pending_dir = "/data/github/issues/pending";
 
@@ -43,12 +46,14 @@ void setup() {
  * @param {string} body - The body of the issue
  * @param {mixed*} [callback] - The callback function to call when the request
  *  is complete
- * @returns {int | string} 1 if the request was successful, or an error message
+ * @returns {int | string} 1 if the request was submitted, or an error message
  *  string
  */
 
 varargs mixed create_issue(string type, string title, string body, mixed *callback) {
   mapping config = mud_config("GITHUB_REPORTER");
+  mapping request;
+  string url;
 
   if(!stringp(type) || !strlen(type))
     return "Type must be a valid string";
@@ -65,12 +70,23 @@ varargs mixed create_issue(string type, string title, string body, mixed *callba
   if(!config["owner"] || !config["repo"] || !config["token"])
     return "GitHub Issues API not setup in adm/etc/config.json";
 
-  string url =
+  url =
     `https://api.github.com/repos/${config["owner"]}/${config["repo"]}/issues`;
 
-  mapping request = http_request(
+  request = ([
+    "type" : "create",
+    "label" : type,
+    "title" : title,
+    "body" : body,
+    "callback" : callback,
+    "caller" : previous_object(),
+  ]);
+
+  _log(2, "Request %O", request);
+
+  submit_issue(
+    request,
     url,
-    "POST",
     ([
       "Authorization": `token ${config["token"]}`,
       "Accept": "application/vnd.github.v3+json",
@@ -83,57 +99,74 @@ varargs mixed create_issue(string type, string title, string body, mixed *callba
     ])),
   );
 
-  api_calls[request["start_time"]] = ([
-    "type" : "create",
-    "label" : type,
-    "title" : title,
-    "body" : body,
-    "callback" : callback,
-    "caller" : previous_object(),
-    "request" : request
-  ]);
-
-  _log(2, "Request %O", request);
-
-  return mapp(request) ? 1 : 0;
+  return 1;
 }
 
 /**
- * Handle the response from the GitHub API.
+ * Send an issue to the GitHub API and act on what comes back.
  *
- * @param {mapping} response - The response from the GitHub API
+ * Anything short of a created issue — a rejected request, or a response that
+ * is not a 201 — is written to the pending directory for the backlog to
+ * retry later.
+ *
+ * That includes a request that timed out, which is a deliberate choice rather
+ * than an oversight. A timeout means the outcome is *unknown*, not that the
+ * request failed: the POST may well have reached GitHub and created the issue
+ * before the client gave up on waiting, in which case the retry files it
+ * twice. Retrying anyway is still the better trade here — a duplicate issue
+ * takes seconds to close, while a report dropped on the assumption that it
+ * failed is invisible to everyone. Anything that cannot afford the duplicate
+ * needs an idempotency key, which the GitHub issues API does not offer.
+ *
+ * @param {mapping} request - The issue being submitted
+ * @param {string} url - The GitHub issues endpoint
+ * @param {mapping} headers - The request headers, including authorisation
+ * @param {string} body - The JSON-encoded issue
  */
-void http_handle_shutdown(mapping response) {
-  mixed body = response["response"]["body"];
-  int request_id = response["request"]["start_time"];
-  mapping request;
-  if(!request = api_calls[request_id]) {
-    _log(2, "No request found for id %d", request_id);
-    return;
+private nomask async void submit_issue(mapping request, string url, mapping headers, string body) {
+  mixed err = acatch {
+    mapping server = await http_request(url, "POST", headers, body);
+    mapping response = server["response"];
+    mapping status = response["status"];
+
+    if(status["code"] != 201) {
+      _log(2, "Request error: %d %s\n%O",
+        status["code"],
+        status["message"],
+        response["body"]
+      );
+
+      save_pending(request);
+
+      return;
+    }
+
+    _log(2, "Content-Type: %O", response["headers"]["content-type"]);
+
+    execute_callback(request, status);
+  };
+
+  if(err) {
+    // A timeout lands here too, and may have succeeded remotely. See above.
+    _log(2, "Failed to submit issue: %O", err);
+
+    save_pending(request);
   }
-
-  map_delete(api_calls, request_id);
-
-  if(response["response"]["status"]["code"] != 201) {
-    string file;
-    _log(2, "Request error: %d %s\n",
-      response["response"]["status"]["code"],
-      response["response"]["status"]["message"],
-      body
-    );
-    file = time_ns() + ".txt";
-    string write_to = `${pending_dir}/${file}`;
-    write_file(write_to, json_encode(request));
-    _log(2, "Request saved to %s", write_to);
-    return;
-  }
-
-  _log(2, "Content-Type: %O", response["response"]["headers"]["content-type"]);
-
-  body = parse_body(body, response["response"]["headers"]["content-type"]);
-
-  execute_callback(request, response["response"]["status"]);
 }
+
+/**
+ * Write a request to the pending directory for the backlog to retry.
+ *
+ * @param {mapping} request - The issue that could not be created
+ */
+private nomask void save_pending(mapping request) {
+  string write_to = `${pending_dir}/${time_ns()}.txt`;
+
+  write_file(write_to, json_encode(request));
+
+  _log(2, "Request saved to %s", write_to);
+}
+
 /**
  * Execute the callback function.
  *
@@ -165,7 +198,8 @@ void execute_callback(mapping request, mapping response) {
 }
 
 /**
- * Process the backlog of requests in the /data/github/issues/pending directory.
+ * Process the backlog of requests in the pending directory.
+ *
  * Passes a list of files to process_next() to process each request.
  */
 private nomask void process_backlog() {
@@ -225,11 +259,6 @@ private nomask void process_next(string *files) {
     if(sizeof(files) > 1)
       schedule_next(files);
 
-    return;
-  }
-
-  if(!mapp(request["request"])) {
-    _log(2, "Invalid request in %s", file);
     return;
   }
 

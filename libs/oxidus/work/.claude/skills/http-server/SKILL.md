@@ -193,13 +193,13 @@ If parsing fails, a `400 Bad Request` response is sent automatically.
 
 If `http_handle_request()` is not defined, a `501 Not Implemented` response is sent.
 
-## The `http_handle_request` Callback
+## The `http_handle_request` Handler
 
 ```c
 void http_handle_request(int fd, mapping client)
 ```
 
-This is the main callback you implement. It receives:
+This is the handler you implement. It receives:
 - `fd` — The client's socket file descriptor (pass to `send_http_response`)
 - `client` — The client mapping with parsed request data
 
@@ -207,6 +207,49 @@ You must:
 1. Read the request from `client["http"]["request"]`
 2. Set `client["http"]["response"]` with `status`, `content-type`, and optionally `body`
 3. Call `send_http_response(fd, client)`
+
+If it errors, or if an `async` handler's promise rejects, the client is sent a
+`500 Internal Server Error` — unless the handler already answered it, or the
+request timed out first.
+
+### Asynchronous Handlers
+
+`http_handle_request()` may be `async`. The server recognises the promise it
+returns and answers a rejection with a 500, so a handler is free to await a
+database query, a file read, or an outbound request before responding:
+
+```c
+async void http_handle_request(int fd, mapping client) {
+  mapping upstream = await HTTPC_D->fetch("GET", UPSTREAM_URL);
+
+  client["http"]["response"] = ([
+    "status"       : HTTP_STATUS_OK,
+    "content-type" : CONTENT_TYPE_APPLICATION_JSON,
+    "body"         : json_encode(upstream["body"]),
+  ]);
+
+  send_http_response(fd, client);
+}
+```
+
+A rejection needs no handling here: letting it reject is how the client gets
+its 500. Wrap the body in `acatch` only when you want to answer with something
+other than that.
+
+Two things to know:
+
+- **The request timeout still applies.** A request has `REQUEST_TIMEOUT`
+  seconds to be answered however long the handler suspends for, and when it
+  expires the connection is shut down out from under the handler.
+- **A late response is dropped, not misdelivered.** Every accepted connection
+  carries a serial, and `send_http_response()` checks it before writing, so a
+  handler that comes back after its client has gone cannot deliver its answer
+  to whoever now holds that descriptor. The same check guards the automatic
+  500. You still should not assume post-`await` that the client is there —
+  anything *else* the handler does is its own business — but the response
+  write itself is safe by construction rather than by discipline.
+- **`async` is a decision, not an upgrade.** A handler that only reads state
+  already in memory should stay synchronous. See the `async-promises` skill.
 
 ## Minimal Example
 

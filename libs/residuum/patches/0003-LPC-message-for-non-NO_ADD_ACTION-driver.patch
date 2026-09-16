@@ -1,0 +1,88 @@
+diff --git a/lib/secure/sefun/override.c b/lib/secure/sefun/override.c
+index 86b161cd..3012183b 100644
+--- a/lib/secure/sefun/override.c
++++ b/lib/secure/sefun/override.c
+@@ -46,20 +46,81 @@ nomask void write(string msg) {
+     }
+ }
+ 
++/**
++ * Deliver a message to one target, or (if it isn't itself a listener)
++ * recurse into its full contents looking for listeners inside it -- the
++ * exact semantics of the driver's own do_message() dispatch, reimplemented
++ * in LPC. See message() below for why.
++ *
++ * @param type the type of message
++ * @param message text to display
++ * @param ob the object to deliver to (or recurse through)
++ * @param exclude objects to skip
++ */
++private void deliver_message(mixed type, string message, object ob, object *exclude) {
++    if (!ob || member_array(ob, exclude) > -1) {
++        return;
++    }
++    if (interactive(ob) || function_exists("receive_message", ob)) {
++        catch(ob->receive_message(type, message));
++    } else {
++        // Single arg only on this driver (the internal recursion depth
++        // do_message() itself uses is exactly one level too -- its "1"
++        // argument to the internal all_inventory() means "include hidden
++        // objects", not "recurse deeper"; that hidden-object nuance is
++        // the one edge case this LPC reimplementation doesn't replicate).
++        object *contents = all_inventory(ob);
++        foreach (object item in contents) {
++            if (member_array(item, exclude) > -1) {
++                continue;
++            }
++            if (interactive(item) || function_exists("receive_message", item)) {
++                catch(item->receive_message(type, message));
++            }
++        }
++    }
++}
++
+ /**
+  * Deliver typed messages to the targets.
+  *
++ * This driver build was NOT compiled with NO_ADD_ACTION (this project's
++ * shared driver, unlike the local_options.h this repo ships and expects
++ * you to build your own driver from), so the real efun::message() never
++ * routes to a target that isn't itself flagged O_LISTENER/interactive --
++ * that flag is only auto-set by the driver's own object-init code under
++ * `#ifdef NO_ADD_ACTION` (see fluffos's vm/internal/simulate.cc). Since
++ * this codebase's whole account/character split relies on message()
++ * reaching a plain, non-interactive STD_CHARACTER object (which forwards
++ * to its owning STD_USER's receive_message()), every message() call to a
++ * character (or to a room, to reach the characters standing in it) was
++ * silently swallowed -- confirmed live: catch(message("room", "x", ob))
++ * returned 0 (no error) but delivered nothing, while write() (which calls
++ * receive_message() directly via -> rather than through efun::message())
++ * worked fine. Reimplemented message() entirely in LPC against
++ * receive_message(), replicating do_message()'s own dispatch (deliver
++ * directly to a listener/interactive target, otherwise recurse into its
++ * full inventory looking for one) instead of depending on a driver
++ * capability this build doesn't have.
++ *
+  * @param type the type of message
+  * @param message text to display to targets
+  * @param target the recipient(s) of message
+  * @param exclude an exclusion list of recipients
+  */
+ varargs void message(mixed type, string message, mixed target, mixed exclude) {
++    object *targets;
++
+     if (!strlen(message) || (!objectp(target) && !arrayp(target))) {
+         return;
+     }
+-    if (!arrayp(exclude) && !objectp(exclude)) {
++    if (objectp(exclude)) {
++        exclude = ({ exclude });
++    } else if (!arrayp(exclude)) {
+         exclude = ({});
+     }
+-    efun::message(type, message, target, exclude);
++    targets = objectp(target) ? ({ target }) : target;
++    foreach (object ob in targets) {
++        deliver_message(type, message, ob, exclude);
++    }
+ }

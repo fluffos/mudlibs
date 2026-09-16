@@ -78,4 +78,63 @@ void setup() {
       ASSERT_EQ(0, parse_http_request(data));
     }),
   }));
+
+  // Response framing is done in buffer space because find_marker() reports a
+  // byte offset while a string counts CRLF as a single character. These guard
+  // that split: each one drifts by a byte per preceding CRLF if the framing
+  // ever slips back into string space.
+  describe("HTTP response framing", ({
+    test("keeps the byte following the status line", function() {
+      buffer data = to_binary("HTTP/1.1 200 OK\r\nServer: Oxidus\r\n\r\nbody");
+      mapping status = parse_response_status(data, 1);
+
+      ASSERT_EQ(200, status["code"]);
+      ASSERT_EQ("OK", status["message"]);
+      ASSERT_EQ("Server: Oxidus\r\n\r\nbody", to_string(status["buffer"]));
+    }),
+    test("splits the body from the headers at the terminator", function() {
+      buffer data = to_binary(
+        "Server: Oxidus\r\nContent-Length: 4\r\n"
+        "Content-Type: text/plain\r\n\r\nbody",
+      );
+      mapping headers = parse_headers(data, 1);
+
+      ASSERT_EQ(4, headers["content-length"]);
+      ASSERT_EQ("text/plain", headers["content-type"]);
+      ASSERT_EQ("body", to_string(headers["buffer"]));
+    }),
+    test("splits the body however many headers precede it", function() {
+      buffer data = to_binary(
+        "A: 1\r\nB: 2\r\nC: 3\r\nD: 4\r\nE: 5\r\nF: 6\r\n\r\npayload",
+      );
+      mapping headers = parse_headers(data, 1);
+
+      ASSERT_EQ("payload", to_string(headers["buffer"]));
+    }),
+    test("preserves CRLF inside a response body", function() {
+      buffer data = to_binary("Content-Length: 4\r\n\r\na\r\nb");
+      mapping headers = parse_headers(data, 1);
+
+      ASSERT_EQ("a\r\nb", to_string(headers["buffer"]));
+    }),
+    test("parses headers and body from a response", function() {
+      mapping result = parse_http_response(to_binary(
+        "Content-Type: text/plain\r\nContent-Length: 5\r\n\r\nhello",
+      ));
+
+      ASSERT_EQ("text/plain", result["headers"]["content-type"]);
+      ASSERT_EQ(5, result["headers"]["content-length"]);
+      ASSERT_EQ("hello", result["body"]);
+    }),
+    test("decodes a JSON response body", function() {
+      mapping result = parse_http_response(to_binary(
+        "Content-Type: application/json\r\n\r\n{\"ok\":1}",
+      ));
+
+      ASSERT_EQ(([ "ok": 1 ]), result["body"]);
+    }),
+    test("rejects a response with no header terminator", function() {
+      ASSERT_EQ(0, parse_http_response(to_binary("Content-Length: 5\r\n")));
+    }),
+  }));
 }
