@@ -4,12 +4,22 @@ Source: `gh repo clone gesslar/oxidus-mudlib` (cloned 2026-08-28/30).
 Number 954, port 40256. Status: **done** — boots clean natively, full
 registration-to-gameplay playthrough verified live and repeatedly.
 
-## Hosting (2026-09-16) — real submodule-patch
+## Hosting (2026-09-17) — real submodule-patch
 
-`work/` is now a git submodule of [`gesslar/oxidus-mudlib`](https://github.com/gesslar/oxidus-mudlib)
-pinned at `b5beb8abf4e39eb1d54820d69369cfa755547e05` (last upstream commit before
-the GMCP/login `promise_race` / combinator stack that needs FluffOS promise
-phase 1.5 efuns the shared catalog driver does not yet ship).
+`work/` is a git submodule of [`gesslar/oxidus-mudlib`](https://github.com/gesslar/oxidus-mudlib)
+(gitlink mode `160000` — the 2026-09-15 cutover had left a vendored tree in
+the parent index despite `.gitmodules`; corrected here so the rebase timer
+updates a pin, not 1600 tracked files).
+`upstream.auto_rebase` is **true** — the twice-daily rebase timer advances
+the pin to upstream `main` when catalog patches still apply cleanly.
+
+Native play requires FluffOS promise phase 1.5 combinators
+(`promise_all` / `promise_race` / `promise_cancel`). Local
+`~/src/fluffos/build-debug` was rebuilt from `origin/master`
+(`2c272875`, 2026-09-17) and confirms those symbols. Site Pages WASM
+still ships FluffOS **v2026.0901.0**, which lacks combinators, so
+`wasm_status` is **limited** until a newer published WASM release
+includes phase 1.5.
 
 Catalog FluffOS-compat lives in `patches/` (applied by
 `python3 scripts/apply_lib_patches.py oxidus` / source-zip pack):
@@ -23,11 +33,6 @@ Catalog FluffOS-compat lives in `patches/` (applied by
 
 Driver headers (`include/driver/*.h`, including `promise.h`) and the
 `adm/custom/` first-user seed live in `overlay/` (rsync'd onto zip staging).
-
-`upstream.auto_rebase` is **false**: the twice-daily rebase timer must not
-bump this pin to current `main` until the shared driver includes
-`promise_all` / `promise_race` / `promise_cancel`. Re-enable after that
-driver rebuild, then let the timer advance.
 
 
 ## What this lib is
@@ -577,10 +582,15 @@ spelling, or both) rather than guessed at.
 Re-verified against the cutover tree: `work/` =
 `gesslar/oxidus-mudlib` @ `b5beb8ab` + patches `0001`–`0003` +
 `overlay/` (driver headers incl. `promise.h`, `adm/custom/first_user`).
-`upstream.auto_rebase: false` still required (promise combinators).
 Port 40256. Cutover wiped prior seeds — first admin this pass was
 `olumadmin` / account `deepox` / `Mud@2026` (wipe `first_user` + data
 if re-testing first-admin on a dirty tree).
+
+**2026-09-17 follow-up:** `upstream.auto_rebase` re-enabled; pin tracks
+`main`. Local native driver rebuilt with promise phase 1.5. Site WASM
+release `v2026.0901.0` still lacks combinators → `wasm_status: limited`
+until the next published FluffOS WASM includes them. The 2026-09-16 WASM
+pass below was on the pre-combinator pin `b5beb8ab`.
 
 ### Native (`scripts/tmux_mud.sh`)
 

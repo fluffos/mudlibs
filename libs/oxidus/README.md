@@ -2,7 +2,7 @@
 
 A genuinely modern, actively-developed FluffOS mudlib -- not a 1990s/2000s archive like most of this collection. Self-described as "an effort to create an opinionated base mudlib... a modern and feature-rich codebase for the LPMud community." Written from scratch (a distant fork of LPUniversity that has long since diverged into its own codebase), with its own real unit test suite, its own documentation site (<https://oxidus.online/>), and its own bundled agent-coding guides.
 
-Source: [`gesslar/oxidus-mudlib`](https://github.com/gesslar/oxidus-mudlib) (`submodule-patch`, pin `b5beb8ab`; `auto_rebase` held until the shared driver ships promise combinators). Catalog patches in `patches/`; driver headers in `overlay/`.
+Source: [`gesslar/oxidus-mudlib`](https://github.com/gesslar/oxidus-mudlib) (`submodule-patch`; `upstream.auto_rebase: true` — pin tracks upstream `main`). Catalog patches in `patches/`; driver headers in `overlay/`. Native play needs a FluffOS build with promise phase 1.5 combinators (`promise_all` / `promise_race` / `promise_cancel`). Site WASM stays **limited** until the published FluffOS WASM release includes those efuns.
 
 ## Highlights
 
