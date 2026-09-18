@@ -236,6 +236,14 @@ def main() -> int:
         print(f"{r['result']:10} {r['slug']:22} {r['detail']}")
     print(f"bumped={len(bumped)} failed={len(failed)} skipped={len(skipped)}")
 
+    # check_upstream_rebase reads pins from lib_numbering.json, which is
+    # assembled from meta.json. A pin bump that skips this leaves the next
+    # timer fire comparing stale SHAs and reporting a false "behind".
+    if bumped and not args.dry_run:
+        subprocess.run(
+            [sys.executable, str(REPO / "scripts" / "assemble_numbering.py")],
+            cwd=REPO, check=False)
+
     REPORT.write_text(
         json.dumps({
             "checked_at": doc.get("checked_at"),
