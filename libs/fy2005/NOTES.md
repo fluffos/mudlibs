@@ -6,7 +6,7 @@
 - Port: **40013**.
 - **Hosting (2026-09-15)**: `submodule-patch` →
   [`https://github.com/seikichin/-mud`](https://github.com/seikichin/-mud)
-  pin `9be2dae46d7af048410f906efdbf6adf8b6c308d` (`main`). Repo root is
+  pin `588b6bd677fd12e74474b97f86e82ee08d9ec157` (`main`). Repo root is
   the mudlib. Upstream is a FluffOS fy2005 tree with MXP/GMCP work; the
   catalog previously vendored the same lineage from `fy2005.rar`. Admin
   seed lives in `overlay/` (upstream `.gitignore`s `data/login/` and
