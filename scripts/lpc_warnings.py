@@ -30,6 +30,12 @@ Mechanical fixes (positions come from the driver; columns are 1-based BYTES):
   Unused local variable                -> delete the declarator (rebuild the statement)
   negative constant range end          -> `..-N]` becomes `..<N]` (section 7.209)
   Unknown escape sequence              -> drop the backslash
+  Unknown #pragma, ignored             -> delete the bare `#pragma name` line (`save_binary`;
+                                          the driver already ignores it)
+  Number of arguments ... disagrees    -> `varargs` on the declaration the warning is reported on
+                                          (either side being varargs silences it; never makes a call fail)
+  Unused local variable                -> not touched when the name also appears inside an
+                                          #if/#ifdef block of the same function (listed instead)
 A lib's own compiler tests (Lil: /single/tests/) are broken on purpose; pass --skip '^/single/tests/'.
 Everything else is listed for hand work (see KB 04 section 6.10 for the fixes).
 Only vendored libs (work/ tracked here) are supported.
@@ -315,6 +321,37 @@ def split_commas(masked, a, b):
     return parts
 
 
+def conditional_lines(masked):
+    """Per-line flag: is this line inside an #if/#ifdef/#ifndef ... #endif block
+    (directive lines themselves excluded).  Used to spot a local that looks unused
+    only because the branch that uses it is not compiled on this driver."""
+    flags, depth = [], 0
+    for line in masked.split("\n"):
+        m = re.match(r"\s*#\s*(\w+)", line)
+        if m:
+            d = m.group(1)
+            if d in ("if", "ifdef", "ifndef"):
+                depth += 1
+            elif d == "endif" and depth:
+                depth -= 1
+            flags.append(False)
+        else:
+            flags.append(depth > 0)
+    return flags
+
+
+def used_in_conditional(masked, flags, name, a, b, skip_a, skip_b):
+    """True if `name` occurs in masked[a:b] (outside the declarator being
+    removed, masked[skip_a:skip_b]) on a line inside a preprocessor conditional."""
+    for m in re.finditer(r"\b" + re.escape(name) + r"\b", masked[a:b]):
+        p = a + m.start()
+        if skip_a <= p < skip_b:
+            continue
+        if flags[masked.count("\n", 0, p)]:
+            return True
+    return False
+
+
 def fix_unused_locals(work, rows):
     by_file = collections.defaultdict(list)
     for f, ln, col, sev, msg in rows:
@@ -328,6 +365,7 @@ def fix_unused_locals(work, rows):
             src = fh.read().decode("latin-1")
         lines = src.split("\n")
         masked = mask(src)
+        cflags = conditional_lines(masked)
         scopes = collections.defaultdict(set)
         for ln, col, name in items:
             if col <= 0:
@@ -363,6 +401,13 @@ def fix_unused_locals(work, rows):
                 if not drop:
                     continue
                 for d in list(drop):
+                    if used_in_conditional(masked, cflags, d[0], op + 1, close, d[1], d[2]):
+                        manual.append((f, src.count("\n", 0, d[1]) + 1, d[0],
+                                       "also named inside an #if/#ifdef branch that this driver does not "
+                                       "compile: move the declaration into that branch by hand"))
+                        remaining.discard(d[0])
+                        drop.remove(d)
+                        continue
                     if d[3] and "(" in d[3]:
                         manual.append((f, src.count("\n", 0, d[1]) + 1, d[0],
                                        "initializer calls something: " + src[d[1]:d[2]].strip()[:60]))
@@ -413,6 +458,90 @@ def fix_range_ends(work, rows):
                 continue
             L[ln - 1] = line[:m.start()] + m.group(1) + "<" + m.group(2) + m.group(3) + line[col - 1:]
             n += 1
+        write_lines(path, L)
+    return n, manual
+
+
+HEAD_RE = re.compile(r"^(?P<ind>[ \t]*)(?:(?:private|protected|public|static|nomask|nosave|deprecated)\s+)*"
+                     r"(?:" + TYPES + r")[ \t]*\**[ \t]*$")
+
+
+def fix_arg_counts(work, rows):
+    """`Number of arguments to 'f' disagrees with previous definition`: the driver
+    (compiler.cc define_new_function) stays quiet when EITHER declaration is
+    varargs, and varargs never makes a call fail that passed before (it only skips
+    the optional call_other type check and the compile-time 'Wrong number of
+    arguments' error), so the declaration the warning is reported on gets
+    `varargs` -- KB 04 section 6.10.  Only a head that starts its line
+    (`[modifiers] type name(`) is edited; anything else is listed."""
+    n = 0
+    manual = []
+    by_file = collections.defaultdict(set)
+    for f, ln, col, sev, msg in rows:
+        m = re.match(r"Number of arguments to '(\w+)' disagrees", msg)
+        if m:
+            by_file[f].add((ln, col, m.group(1)))
+    for f, items in by_file.items():
+        path = os.path.join(work, f.lstrip("/"))
+        with open(path, "rb") as fh:
+            src = fh.read().decode("latin-1")
+        masked = mask(src)
+        lines = src.split("\n")
+        starts = [0]
+        for x in lines:
+            starts.append(starts[-1] + len(x) + 1)
+        depth_at = []
+        d = 0
+        for c in masked:
+            depth_at.append(d)
+            if c == '{':
+                d += 1
+            elif c == '}':
+                d -= 1
+        edits = set()
+        for ln, col, name in items:
+            end = starts[ln - 1] + (col - 1 if col > 0 else len(lines[ln - 1]))
+            cands = [m for m in re.finditer(r"(?<![\w>:.])" + re.escape(name) + r"\s*\(", masked[:end + 1])
+                     if depth_at[m.start()] == 0]
+            if not cands:
+                manual.append((f, ln, name, "no definition head found before the reported position"))
+                continue
+            pos = cands[-1].start()
+            ls = masked.rfind("\n", 0, pos) + 1
+            head = masked[ls:pos]
+            hm = HEAD_RE.match(head)
+            if not hm or "varargs" in head:
+                manual.append((f, src.count("\n", 0, pos) + 1, name, "declaration head is not a plain `modifiers type` line"))
+                continue
+            edits.add(ls + len(hm.group("ind")))
+        for p in sorted(edits, reverse=True):
+            src = src[:p] + "varargs " + src[p:]
+            n += 1
+        if edits:
+            with open(path, "wb") as fh:
+                fh.write(src.encode("latin-1"))
+    return n, manual
+
+
+def fix_pragmas(work, rows):
+    """`#pragma save_binary` and friends: the driver reports "Unknown #pragma,
+    ignored" and ignores the line, so a bare pragma line is just deleted.  Runs
+    as its own pass before the others, because it removes lines."""
+    n = 0
+    manual = []
+    by_file = collections.defaultdict(set)
+    for f, ln, col, sev, msg in rows:
+        if msg.startswith("Unknown #pragma"):
+            by_file[f].add(ln)
+    for f, lns in by_file.items():
+        path = os.path.join(work, f.lstrip("/"))
+        L = read_lines(path)
+        for ln in sorted(lns, reverse=True):
+            if re.match(r"\s*#\s*pragma\s+\w+\s*$", L[ln - 1]):
+                del L[ln - 1]
+                n += 1
+            else:
+                manual.append((f, ln, L[ln - 1].strip(), "not a bare #pragma line"))
         write_lines(path, L)
     return n, manual
 
@@ -476,6 +605,12 @@ def main():
     summary(rows, npass, nfail)
     manual_all = []
     if a.fix:
+        npr, mpr = fix_pragmas(work, rows)
+        if npr:
+            print(f"unknown #pragma lines deleted: {npr}")
+            sync_changes(a.slug, lib)
+            rows, npass, nfail, raw = scan(lib, a.skip)     # line numbers moved
+        manual_all += mpr
         hits = external_callers(work, nosave_function_names(work, rows))
         if hits:
             print("kept public (a call_other-style use exists elsewhere; check whether it is the same function):")
@@ -488,11 +623,12 @@ def main():
             ne_, m3 = fix_escapes(work, rows)
             sync_changes(a.slug, lib)
             rows2, npass, nfail, raw = scan(lib, a.skip)       # unused-local positions need a rescan after other edits
+            na_, m5 = fix_arg_counts(work, rows2)              # in-line edit: keeps every line number
             nu_, m4 = fix_unused_locals(work, rows2)
-            manual_all = m1 + m4
-            changed = np_ + nd_ + nr_ + ne_ + nu_
+            manual_all = m1 + m4 + m5
+            changed = np_ + nd_ + nr_ + ne_ + na_ + nu_
             print(f"round {rnd}: nosave functions {np_} protected + {nd_} dropped, range ends {nr_}, "
-                  f"escapes {ne_}, unused locals {nu_}")
+                  f"escapes {ne_}, varargs added {na_}, unused locals {nu_}")
             sync_changes(a.slug, lib)
             rows, npass, nfail, raw = scan(lib, a.skip)
             if not changed:
