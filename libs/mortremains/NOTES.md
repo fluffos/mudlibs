@@ -786,3 +786,38 @@ affecting anything else. Full session verified: real TMI-2 registration
 flow (name, y/n confirm, password + confirm, email, real name, the
 1/2/3/4/5/6/0 stat-optimization menu), landing in The YMAA (Decatur),
 `look`/`score`/`quit` all correct.
+
+## 深度功能测试（§10.7，2026-10-03）— TMI-2 sibling fixes
+
+Found on `tmi2` (same TMI-2 1.4alpha code) and checked here on a throwaway
+copy of the committed tree (`git archive` + fixes, fresh driver):
+
+- **`eval` was dead on any fresh checkout.** `/open` does not exist in the
+  tree (the archive never had it; `work/tmp` is tracked, `open` is not), so
+  the admin `eval` command (`cmds/adm/_eval`, needs `path -add /cmds/adm`)
+  failed with `*Wrong permissions for opening file /open/eval.<name>.lpc for
+  append. "No such file or directory"`. Added `work/open/.gitkeep`; `eval`
+  runs afterwards.
+- **`suicide`: the "busy" flag was never released after an abort.**
+  `confirm_suicide()` answered "Suicide attempt aborted." and set `busy = 1`,
+  so after one `n` every player got "the suicide command is presently busy"
+  until the daemon was reloaded; a player who vanished at a prompt wedged it
+  the same way. `busy` now holds the player in the dialog and is cleared on
+  abort; a holder that is no longer interactive does not block anyone.
+  Reachable here by ordinary players (level 3+). Verified: prompt, `n`, prompt
+  again; second player mid-dialog gives "busy" to the first; after the
+  second disconnects the first can start the dialog again. (To reach the
+  dialog the level-3 gate was bypassed in the throwaway copy only; the
+  committed gate is untouched.)
+- **A connection dropped at the "Press ENTER to continue" prompt raised an
+  error in `net_dead()`** (`Bad argument 3 to EFUN message()`: the body has
+  no environment yet; `base_name(environment(TO))` below it fails the same
+  way), skipping the rest of the function. Guarded both uses with
+  `if (environment())`. Verified: register, drop at the pager, relogin: no
+  `log/runtime` entry, login works.
+
+`die()` here has no ghost body (the death room handles the aftermath and the
+body is not restored from its save file), so the coin duplication found in
+`tmi2` does not apply, and `remove()` has no `seteuid(euid)` line, so the
+`tmi2` failure of a `call_out`-driven first removal does not apply either.
+Formatter not run (minimal edits).

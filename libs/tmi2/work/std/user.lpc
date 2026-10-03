@@ -762,6 +762,13 @@ void remove() {
     int loop;
     object prev;
 
+    /*
+     * die() schedules this with call_out("remove", 0), where there is no
+     * previous_object().  Keep the body's own euid then: seteuid(0) left
+     * free_locks() below unable to load FLOCK_D (first removal after boot),
+     * which aborted the removal and left the dead body lying in the room.
+     */
+    euid = geteuid(this_object());
     if (prev = previous_object()) {
         euid = geteuid(previous_object());
         if ( (euid != ROOT_UID) && 
@@ -1302,8 +1309,14 @@ nosave
 void net_dead() {
 
     save_data();
-    message(MSG_MOVEMENT,(string)query("cap_name") + " has gone net-dead.\n",
-          environment(), this_object());
+    /*
+     * A connection dropped at the "Press ENTER to continue" prompt belongs
+     * to a body that has no environment yet: message() raised an error
+     * for it and the rest of this function (heart beat, link) was skipped.
+     */
+    if (environment())
+        message(MSG_MOVEMENT,(string)query("cap_name") + " has gone net-dead.\n",
+              environment(), this_object());
 //  check_team();
     PARTY_D->check_party(this_object());
     ANNOUNCE->announce_user(this_object(), 3);
@@ -1445,6 +1458,16 @@ nosave void die() {
 
     res = query("capacity");
     set ("capacity", res + totcoins);
+
+    /*
+     * Reviving turns the ghost back into a body by restoring this user's
+     * save file (ghost.lpc revive() -> switch_body() -> restore_body()).
+     * The purse was just emptied into the corpse, so save it now.  Without
+     * this the revived body gets back the coins it had at its last save
+     * (login or autosave) while the corpse holds them too: every death
+     * duplicated the player's money.
+     */
+    save_data();
 
     if (killer)  name = (string)killer->query("cap_name");
 

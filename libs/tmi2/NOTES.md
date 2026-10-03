@@ -537,6 +537,105 @@ pass's instructions -- only the seeded `fluffos` admin account remains.
 Driver killed cleanly by exact PID after this pass; zero `log/runtime`
 entries accumulated across the whole session.
 
+## 深度功能测试（§10.7，2026-10-03）— round three, fresh angles
+
+The 2026-08-27 pass covered the combat/shop/bank/reconnect player path. Two
+facts kept the rest of the lib unexercised: `AUTO_WIZHOOD` is defined, so
+every new character is a wizard (the player-only code paths -- `suicide`,
+the non-wizard ghost `revive` -- are never reached by a visitor), and the
+08-27 working tree still had the archive's empty `tmp/` and `open/`
+directories on disk. This pass registered fresh characters, demoted one with
+`dewiz` (admin: `path -add /cmds/adm` first, the admin path is not in
+`NEW_WIZ_PATH`), and drove death, ghost, revive, mail, boards, the editor and
+the communication commands. Six real bugs, all fixed:
+
+1. **`tmp/` and `open/` missing: mail, board `post`, every editor-opening
+   command, and `eval` were dead.** `mail <user>` printed the Subject prompt,
+   then `*Wrong permissions for opening file /tmp/<name>-47.m for append.
+   "No such file or directory"` (trace in `log/runtime`) and swallowed the
+   rest of the input; `post` and `eval` failed the same way (`/open/
+   eval.fluffos.lpc`). Cause: git does not track empty directories; the
+   archive's `lib/tmp` and `lib/open` were not carried into `work/` (they
+   only existed in the old working tree). Fix: tracked `work/tmp/.gitkeep`
+   and `work/open/.gitkeep` (the zip and a fresh clone both create the
+   directories). The other 231 empty directories of the archive were checked
+   and left alone: the `data/mail/mesg|net|mbox` and `data/std/*` buckets are
+   created on demand (`mkdirs()`, `assure_user_save_dir()`, confirmed live
+   for `mbox/q`, `std/user/q`), `adm/harass` is created by `_harass`, and no
+   code references the rest.
+2. **Bare `help` printed a runtime error and nothing else** (every user and
+   ghost): `cmds/std/_help.lpc` had `#define STD_HELP "/help/help_screen"`
+   but the file is `/doc/help/help_screen` (the older `help-050596.lpc` and
+   `ohelp.lpc` already use that path), so `read_file()` returned 0 and
+   `message("help", 0, ...)` raised `Bad argument 1 to receive()`. Fixed the
+   path. A scan of every `read_file`/`more`/`file_size` target in
+   `cmds/ std/ adm/daemons/` against the filesystem found no other dead
+   reference. (`u/l/leto/cmds/_bhelp.lpc` still has the stale path; it is a
+   dormant personal copy on nobody's path, left as is.)
+3. **SEVERE: every death duplicated the player's coins.** `die()` moved the
+   coins into the corpse and set `wealth` to `([ ])` but never saved; the
+   ghost is turned back into a body by restoring the save file
+   (`ghost.lpc revive()` -> `switch_body()` -> `restore_body()`), so the
+   revived character got back the purse of its last save (login/autosave)
+   while the corpse also held the coins. Controlled test: 500 gold, save,
+   die, `pray` -> corpse `gold coins x500` and the revived player `Gold 500`
+   at the same time. Fix: `save_data()` in `die()` right after the purse is
+   emptied (any other unsaved progress made since the last save also
+   survives death now).
+4. **First removal after boot being a death left the dead body lying in the
+   room.** `die()` ends with `call_out("remove", 0)`, where there is no
+   `previous_object()`; `remove()` then did `seteuid(euid)` with an unset
+   `euid`, so `free_locks()` (`FLOCK_D->...`) could not load the lock daemon
+   (`Can't load objects when no effective user.`, `log/runtime`) and the
+   removal aborted. Live proof on an unmodified tree: the old `/std/user#7`
+   stayed in the quad next to the revived body in the cemetery. It only
+   showed on a fresh process because any earlier `quit` loads `FLOCK_D`,
+   which is why the 08-27 pass never saw it (and why a one-visitor WASM
+   session is the likely victim). Fix: default `euid` to the body's own
+   euid, then override from `previous_object()` as before.
+5. **`suicide`: the "busy" flag was never released after an abort.**
+   `confirm_suicide()` printed "Suicide attempt aborted." and set `busy = 1`
+   (the reset in `pass_check()` is never reached), so after one `n` the
+   command answered "presently busy" for every player until the daemon was
+   reloaded; a player disconnecting at the prompt wedged it the same way.
+   `busy` now holds the player in the dialog and is cleared on abort; a
+   holder that is no longer interactive does not block others. Latent in
+   this install (wizards cannot suicide) and reachable in `mortremains`,
+   which has the identical file (fixed there too).
+6. **A connection dropped at the "Press ENTER to continue" prompt raised an
+   error in `net_dead()`.** The body has no environment yet, so
+   `message(..., environment(), ...)` got `0` (`Bad argument 3 to EFUN
+   message()`, `log/runtime`) and the rest of `net_dead()` (heart beat off,
+   link removal) was skipped. That prompt follows every login, so closing a
+   browser tab there hits it. Fixed with an `if (environment())` guard
+   (also in `mortremains`, same code).
+
+Verified on a pristine tree (`git archive` of the tracked files plus the
+fixes, `log/` created as the site loader does) on a fresh driver process:
+24 scripted checks pass (eval, bare help, mail compose/send/read, board post,
+death + `pray` with no coin duplication and the corpse holding the gold,
+suicide abort/retry/disconnect, exactly one body after death, one bank card
+after death + revive, disconnect at the news pager and relogin), `log/runtime`
+was never created, `log/catch` holds
+only the boot-time `weather_d.c` preload miss. The same death sequence on an
+unmodified copy reproduces bugs 3 and 4.
+
+Also exercised and clean: death in combat while the connection is dropped
+(net-dead body keeps fighting, reconnect re-attaches), wizard and non-wizard
+ghost (`look`/`say` refused/`score`/`who`/`help`, `revive` vs cemetery
+`pray`), quit as a ghost and relogin ("You suddenly realize that you are
+still a ghost."), corpse retrieval, `say`/`tell`/`reply`/`shout`/`emote` with
+`%s %d` and a 3000-character line, `finger`, board read/post, `ed`/`ls`/
+`cat`/`cp`/`tail`/`mkdir`/`rmdir`/`rm`. Bank and `give` reject non-positive
+amounts in code. Not fixed, documented: one `look at corpse` after a combat
+death listed two blank `0` entries (not reproduced in four later deaths, no
+error logged); the boot preload entry `/adm/daemons/weather_d.c` carries a
+stale extension (the daemon loads on demand, room weather text works);
+`finger leto` says "no such user" (a dormant 1990s wizard save with no
+connection record). Formatter not run (minimal edits to files that keep their
+original style). Test characters and mail/board data deleted by exact name;
+the driver was killed by PID.
+
 ## Local run
 
 ```
