@@ -199,7 +199,7 @@ void ResetLocation(){
 
 /******************* virt_land.c driver applies ***************/
 
-varargs nosave void create(int x, int y,int z){
+varargs protected void create(int x, int y,int z){
     SetNoReplace(1);
     room::create();
     SetCoordinates(x, y, z);

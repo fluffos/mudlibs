@@ -11,8 +11,8 @@ class ClanClass {
     string skill;
 }
 
-nosave void create();
-nosave void init();
+protected void create();
+void init();
 
 mixed CanJoin(object ob);
 string GetAffectLong(object ob);

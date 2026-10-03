@@ -1,10 +1,10 @@
 #ifndef __CHAT_H__
 #define __CHAT_H__
 
-nosave void create();
+protected void create();
 
-nosave string cache_commands(string str);
-nosave void net_dead();
+protected string cache_commands(string str);
+protected void net_dead();
 
 void eventReconnect();
 int eventDestruct();

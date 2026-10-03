@@ -1,7 +1,7 @@
 #ifndef l_say_h
 #define l_say_h
 
-nosave void create();
+protected void create();
 mixed can_say();
 mixed can_say_to_liv(object ob);
 mixed can_say_to_liv_str(object ob, string str);

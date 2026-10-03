@@ -42,7 +42,6 @@ varargs object get_object( string str, object player, int living )
             return player;
         }
         if( what = present( str, player ) ){
-            object env = player;
             object *candidates = ({});
             if(!OBJECT_MATCHING){
                 return what;

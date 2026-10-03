@@ -1,7 +1,7 @@
 #ifndef l_party_h
 #define l_party_h
 
-nosave void create();
+protected void create();
 int livings_are_remote();
 mixed can_party_wrd(string cmd);
 mixed can_party_wrd_wrd(string cmd, string party);

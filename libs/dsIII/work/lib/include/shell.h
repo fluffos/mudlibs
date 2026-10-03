@@ -1,7 +1,7 @@
 #ifndef l_shell_h
 #define l_shell_h
 
-nosave void create();
+protected void create();
 
 int SetCaliber(int x);
 int SetMillimeter(int x);

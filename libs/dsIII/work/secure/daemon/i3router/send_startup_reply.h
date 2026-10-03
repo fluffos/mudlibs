@@ -1,6 +1,6 @@
 // This file written mostly by Tim Johnson (Tim@TimMUD)
 
-nosave void send_startup_reply(string mudname){
+protected void send_startup_reply(string mudname){
     // This packet will be delivered to a mud for three conditions:
     //  in response to a startup-req packet,
     //  when the router wishes the mud to connect to a different router,
