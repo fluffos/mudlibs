@@ -34,7 +34,7 @@ int cmd_uptime() {
     if (tm) {
         str += tm + "s ";
     }
-    str = str[0..-2] + "%^RESET%^.";
+    str = str[0..<2] + "%^RESET%^.";
     write(str);
     return 1;
 }

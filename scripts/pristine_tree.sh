@@ -52,6 +52,17 @@ CFG="$DEST/$LIB/config.fluffos"
 sed -i "s|^mudlib directory.*|mudlib directory : $DEST/$LIB/work|; s|^port number.*|port number : $PORT|" "$CFG"
 mkdir -p "$DEST/$LIB/work/log"
 
+# The site loader also recreates every dir wasm_keep_dirs.txt records for this
+# slug (the zip carries none of them); do the same so this tree is what a
+# visitor's browser sees, not just what a clone sees.
+if [ -f "$REPO_ROOT/scripts/wasm_keep_dirs.txt" ]; then
+  awk -F'\t' -v s="$SLUG" '$1==s {print $2}' "$REPO_ROOT/scripts/wasm_keep_dirs.txt" |
+    while IFS= read -r d; do
+      case "$d" in ..*|*/../*|/*) continue ;; esac
+      mkdir -p -- "$DEST/$LIB/work/$d"
+    done
+fi
+
 echo "pristine tree: $DEST/$LIB   port: $PORT"
 echo "start: cd $DEST/$LIB && setsid nohup \$HOME/src/fluffos/build-debug/src/driver config.fluffos > /tmp/pristine-$SLUG.out 2>&1 &"
 echo "other ports in config.fluffos (ftp/http/i3) may collide with a running copy of the same lib"
