@@ -477,3 +477,44 @@ verbs. Live on 40221 as seeded admin `fluffos` / `Mud@2026` in
 `/domains/Standard/center`: `buy`, `list`, `shop`, `apprentice`,
 `join`, `become`, and `拜师` all printed `What?`. `look`/`inventory`
 still work. Left as-is.
+
+## 深度功能测试（§10.7，2026-10-03）— site-like tree, every compile warning
+
+Same method as `foundation1` (a tree built the way the site builds it:
+tracked files, `work/log`, and the directories `wasm_keep_dirs.txt` records;
+see that lib's 2026-10-03 section). Registration, `bug -r` (the ed-based
+tracker), mail, the soul and chat commands, ~60 further commands, and
+disconnects at every login prompt and inside the bug dialog, the mailer and
+the news pager. Fixed:
+
+1. **`tmp/` missing**: `bug -r` ran `ed` on `tmp/<name>`, then `Couldn't open
+   file for writing!` -- no bug could ever be filed. Added `tmp/.gitkeep`.
+2. **`secure/save/letters/` missing**: mail composed, then `*Could not open
+   /secure/save/letters/<n>/<id>.o.tmp for a save` (the daemon makes the digit
+   directory but not its parent). Added `secure/save/letters/.gitkeep`.
+3. **`log/` subdirectories**: the keep list had no entry for the lib, so the
+   site's new characters died at the `y` prompt exactly like `foundation1`
+   (`gen_keep_dirs.py --merge`), and the recorded set was still not complete:
+   `eval` logs to `/log/adm/eval`, which no local boot had ever created
+   (`Wrong permissions ... "No such file or directory"` after the command had
+   run). `master_log_file()` now creates the missing parent directories of
+   the log file it writes, so the list no longer has to be complete.
+4. **`drop <thing you do not hold>`** fell through the unfinished "do money
+   here later" branch and called `CanDrop` on 0: `Bad argument 1 to EFUN
+   call_other()`. It now says "You do not have that."
+5. **`magic`** called `new("/realms/b/beek/magic")->eventMove(...)`; the object
+   (a wizard's private game, not in the archive) does not exist, so `new()`
+   returned 0 and the command raised instead of printing its own "Error in
+   loading magic object." message. Null-checked.
+6. **Every compile warning fixed at its source** (`scripts/lpc_warnings.py
+   --fix`, KB 04 section 6.10): ~500 `nosave` function declarations
+   (`protected`; `private` ones lose `nosave`; names another object calls stay
+   public), 94 unused locals, `get_stack()` printing the function name twice
+   (`stack0` was the unused variable), `interactive.lpc` `SetKeyName` returning
+   `void` against `object.lpc`'s `string`, `SetPassword` with a bare `return`
+   in a `string` function, the Examples start room's `(: "search_brush" :)`.
+   `lpcc --batch` over 246 files reports no warning; the 23 Examples /
+   School / `move` objects of section 3 still fail with their missing-subsystem
+   errors, unchanged.
+7. Not a bug: `chfn`, `passwd` and `suicide` -- this lib has no `passwd` or
+   `suicide` command at all (`cmds/player`, `secure/cmds/player`).
