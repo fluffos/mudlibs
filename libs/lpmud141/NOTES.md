@@ -568,6 +568,49 @@ account). All other test characters created during this pass were
 deleted afterward (not committed) per this project's `git add -u`
 convention for avoiding test-save clutter.
 
+## 深度功能测试（§10.7，2026-10-03）— round three: post office and the rest of the shipped world
+
+Driven on a pristine tree (`git archive` of the tracked files, `log/` created
+as the site loader does, fresh driver): player registration, shop
+(`list`/`buy`/`sell`/`value` with odd arguments, gold arithmetic exact),
+walking the village, the post office, a fight to the death with a cloned
+troll and `regenerate` in the church, `describe`/`bug`/`typo`/`idea`/`tell`/
+`shout`/`emergency`/`wimpy`/`brief`, odd arguments to `give`/`get`/`kill`,
+`help ../../secure/master` (path traversal is refused), and a hand-promoted
+wizard (`promote`, `ed`, `clone`).
+
+- **The post office was dead: `mail <player>` raised a runtime error and wedged
+  the room.** `room/post.lpc` saves letters with `save_object("room/post_dir/
+  <name>")`; the directory is not in the archive (nor in `raw/`: the original
+  server created it by hand), so the first `mail` ended in `*Could not open
+  /room/post_dir/plain.o.tmp for a save. Object: /room/post at
+  /room/post.lpc:79`. The error aborted `save_message()` before it reset
+  `now_writing`, so the sender saw no "Ok." and every later `mail`/`read` got
+  "You have to wait for <sender>." while that player stayed connected. Added
+  `work/room/post_dir/.gitkeep`; `mail` then prints "Ok.", the recipient is told
+  "You have mail." in the post office, `read` shows the letter (`%s %d` stay
+  literal) and the next `read` says "No mail !". Same for the adventurers' guild
+  `banish` command, which saves to `banish/<name>` (directory also missing):
+  added `work/banish/.gitkeep`. (`lpmud245` ships both directories.)
+- **Death is correct here**: the player is saved after the purse and
+  possessions moved to the corpse (killed by the troll -> ghost -> `regenerate`
+  -> 3/4 of the experience, no gold, full hit points, corpse left behind), so
+  none of the `tmi2` death bugs (see its NOTES) apply.
+
+Observations left alone (design calls, not fixes): the six standalone NPCs that
+include `living.h` without defining `valid_attack()` (`troll`, `guard`,
+`octopus`, `beggar`, `leo`, `go_player`) log `*Undefined function called:
+valid_attack` (`/obj/living.h:578`) every time they try to start a fight, and
+the attempt is abandoned. On the original driver an undefined call most likely
+returned 0 (not verified), i.e. they never opened hostilities either; giving
+them `monster.lpc`'s definition would make them aggressive, which is a gameplay
+change, so it was left. After a "throw the other copy out"
+reconnect a hand-promoted wizard's soul commands are registered twice (`promote`
+prompts twice and then grants level 0); the cause was not pinned down and it is
+unreachable for visitors (no wizard is seeded), so it is only noted here.
+Formatter not run (no source edits). Test characters and saves live only in the
+throwaway copy; the driver was killed by PID.
+
 ## 10. WASM status audit (2026-09-01)
 
 `playable`. Booted `~/src/fluffos/build-wasm/src` against this lib via
