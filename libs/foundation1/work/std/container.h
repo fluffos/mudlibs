@@ -12,7 +12,7 @@ int query_max_encumbrance();
 float query_encumbered();
 object *query_living_contents();
 object *query_item_contents();
-nosave int filter_living(object ob);
-nosave int filter_items(object ob);
+protected int filter_living(object ob);
+protected int filter_items(object ob);
 
 #endif /* __CONTAINER_H */

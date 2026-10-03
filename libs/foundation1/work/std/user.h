@@ -14,7 +14,7 @@ void hide(int x);
 void reset_terminal();
 void restrict_channel(string channel);
 void unrestrict_channel(string str);
-nosave private void register_channels();
+private void register_channels();
 void receive_snoop(string str);
 int cmd_quit(string str);
 int query_age();

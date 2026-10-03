@@ -2,9 +2,9 @@
 #define __EDITOR_H
 
 varargs int edit(string nom, function f, function abort, mixed args);
-nomask nosave void enter_line(string str);
+nomask protected void enter_line(string str);
 nomask void end_edit();
-nomask nosave private void clear_editor();
+nomask private void clear_editor();
 nomask void return_to_edit();
 nomask string query_edit_file();
 string query_escape();

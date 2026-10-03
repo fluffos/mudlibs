@@ -1,8 +1,8 @@
 #ifndef __EXITS_H
 #define __EXITS_H
 
-nosave int cmd_go(string str);
-nosave int cmd_enter(string str);
+protected int cmd_go(string str);
+protected int cmd_enter(string str);
 void reinitiate();
 void set_exits(mapping mp);
 varargs void add_exit(string dir, string dest, function pre, function post);
