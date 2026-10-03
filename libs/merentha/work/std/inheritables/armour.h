@@ -11,7 +11,7 @@ string query_type();
 void set_ac(int i);
 int query_ac();
 void set_limbs(string *str);
-int query_limbs();
+string *query_limbs();
 object query_worn_by();
 int is_armour();
 
