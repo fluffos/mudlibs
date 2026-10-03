@@ -714,3 +714,33 @@ root cause — the `link` field turned out to populate correctly under
 normal held-open-connection conditions, ruling out a suspected
 connection-race explanation for the stalled death sequence before the
 real `tell_room()` crash was found).
+
+## 深度功能测试（§10.7，2026-10-03）— die() null-killer sibling fix
+
+Checked the TMI-2/ES1 death path here after the `tmi2` pass (see
+`libs/tmi2/NOTES.md`, 2026-10-03). Two questions, answered on a throwaway copy
+of the committed tree (`git archive`, fresh driver, test character with
+500 gold granted through the admin `eval` and saved):
+
+- **Coin duplication on revive (found in `tmi2`): does not apply.** After
+  death and the automatic revival the purse is empty (`([ ])`) and the corpse
+  holds the gold; this lib backs the user up at revive
+  (`/adm/daemons/backup->user_backup`). `esI` was checked the same way (same
+  result); `es1_win` differs from `esI` by two lines in `ghost.lpc`,
+  `body.lpc` and `connection.lpc`.
+- **`die()` crashed forever when the character has no living last attacker --
+  still present here.** The fix found on `esI` (round four, commit
+  `e68cac32fcd`) and ported to `es1_win` (`0c150df4d62`) never reached this
+  sibling. `killer = query("last_attacker")` falls back to
+  `previous_object()`, which is 0 when `die()` runs from the body's own
+  `heart_beat()`; `killer->query("npc")` then raises `Bad argument 1 to EFUN
+  call_other()` at `std/user.lpc` line 1015, and `continue_attack()` re-enters
+  `die()` on every heartbeat, so a death by poison, bleeding, drowning, a trap
+  or an admin `receive_damage()` never finishes (no ghost, no corpse, the
+  runtime error repeating). Reproduced live (`receive_damage(9999)` on a fresh
+  character: the error loops on stdout, the character stays "dying").
+  Guarded the two unguarded sites with `killer &&`, exactly as in `esI`
+  (lines 1015 and 1019; the other `killer->` uses sit inside `if (killer)`).
+  Verified live on a fresh copy: `receive_damage(9999)` -> death narrative
+  (黑无常) -> automatic revival in `/d/noden/farwind/cemetery`, zero runtime
+  errors, corpse with the gold. Formatter not run (two-line edit).
