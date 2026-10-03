@@ -780,3 +780,113 @@ worked with no idle collapse. Verb-file `hobbled(this_player())`
 checks in go/jump/enter/climb were left alone (those run in command
 context). Same one-line fix applied this session to
 `dshakkard`/`riftsds`/`ds386` (dsI has no `hobbled()`).
+
+## 深度功能测试（§10.7，2026-10-03）— compile warnings
+
+Method: `scripts/lpc_warnings.py dsIII --fix` (KB 04 §6.10) over all
+2298 `.lpc` files, then a pristine-tree (`scripts/pristine_tree.sh`)
+live boot: admin login (`fluffos`/`Mud@2026`), movement between the
+workroom and the sample room, NPC load, and a direct `eval
+MASTER_D->log_error(...)` probe. Clean boot, no crash, no
+"insufficient permission" apply-rejection anywhere in the console.
+
+**Fixed, mechanically, across ~1390 files**: every `nosave`-function
+(the historic `static`→`nosave` conversion hitting functions, not
+just variables)→`protected`/dropped-if-called-cross-object, every
+unused local variable, every unknown escape sequence. See the commit
+log for the itemized breakdown; this is this lib's share of the
+corpus-wide warning-is-a-bug policy (AGENTS.md Conventions, 2026-10-03).
+
+**Fixed by hand, five distinct arg-count/return-type families** (KB 04
+§6.10's `varargs`-on-override pattern; none change call-site behavior
+since LPC already tolerates a call with a different arg count than
+declared):
+- `domains/default/npc/horse.lpc`: dropped two redundant direct
+  inherits (`LIB_MOUNT`/`LIB_DOMESTICATE`) already reached through
+  `LIB_SENTIENT`→`LIB_NPC`/`LIB_LIVING` — the safe, same-file diamond
+  case.
+- `lib/std/germ.lpc`'s `eventSuffer()` family: base changed `void`→
+  `int` (its only caller discards the return value); six disease
+  overrides (ecoli/lice/cold/h1n1/flu/fleas) got `varargs`;
+  `rage.lpc`'s bare `return;` became `return 0;`.
+- `eventTurnOn()`/`eventTurnOff()` family: `varargs` on five files'
+  overrides (jennybot, turret, rocketpack, wristcomp, drone2) plus
+  `generator.lpc`'s `eventTurnOn()`-only override.
+- `create()` family (six files): checked each override against the
+  *actual* base it inherits before fixing, since unlike the two
+  families above these don't share one common base. Five get
+  `varargs`; `secure/lib/net/remote.lpc` is the one case where the
+  *base* has more required args than its two overriders
+  (`realms/{fluffos,template}/adm/remote.lpc`), so the fix lands on
+  the base instead.
+
+**Two real bugs found and fixed**:
+- `secure/daemon/imc2.lpc`'s `GetChanInfo()` built a copy of
+  `chaninfo` and then returned the literal `1` instead of the copy.
+  Grepped every file for a caller: none exist today, so this is
+  currently unreached, but it's a real bug fixed at the root.
+- `scripts/wasm_keep_dirs.txt` had **zero entries for dsIII**. Since
+  git doesn't track `log/` and the WASM site's zip-boot only
+  pre-creates directories listed there, every live site boot has
+  been silently failing every `log_error()` write
+  ("Wrong permissions ... No such file or directory") and dumping the
+  raw warning/backtrace text onto the player's screen instead —
+  this is what actually surfaced the "Redeclaration of global
+  variable" spam visibly during this session's own boot test rather
+  than it going to a bedroom-quiet-but-dead log. Ran
+  `python3 scripts/gen_keep_dirs.py --merge dsIII` (targeted single-lib
+  mode, no 15-minute corpus rescan) and live-verified the fix: created
+  `work/log/errors` by hand in the running pristine-tree boot, then
+  confirmed a repeat `eval MASTER_D->log_error(...)` wrote cleanly to
+  `log/errors/fluffos` with no error, both on screen and by reading
+  the file on disk.
+
+**One self-caught mistake, documented so the class is on record**:
+`secure/sefun/fuzzymatch.lpc` had been "fixed" in an earlier slice by
+moving `alen`/`blen`/`dist` inside each function's `#ifdef
+__FLUFFOS__` guard (this driver never defines `__FLUFFOS__`, so the
+guarded block, and everything only used inside it, is dead on this
+build — KB 04 §6.10's documented ifdef-branch caveat). That earlier
+pass missed that `mixed foo, baz = alen+1;` on the next line is
+*also* only used inside that same guarded block, and had deleted it
+outright instead of moving it in too, leaving a dangling `while(baz)`
+reference in the (currently dead) branch. Caught on a pre-commit
+re-read of the diff, not by the compiler (the branch doesn't compile
+here, so lpcc never saw it either) — restored the declaration inside
+the guard in both affected functions. Grepped the rest of this
+session's unused-locals diff for the same shape (a deleted
+declaration whose *use* is also inside an `#ifdef` a few lines below
+the deletion point) and found no other instance.
+
+**Explicitly deferred, not rushed** — a fresh full scan after all of
+the above shows 2193 distinct diagnostics remain (2298 files compile,
+10 pre-existing/deliberate failures unrelated to this session:
+`obj/area_room.lpc`, `obj/stargate.lpc`, `open/prog.lpc`,
+`secure/cmds/admins/opcprof.lpc` — a missing `customdefs.h`, a
+file whose own header says "here on purpose to prevent this from
+loading", and an `opcprof` efun this driver build lacks):
+- **1671 "Redeclaration of global variable" warnings across 929
+  files** — two unrelated mixins declaring the same global name; the
+  driver forces the second to `nosave` to avoid a save-key collision.
+  Cosmetic when both sides were already `nosave`; a real miss only
+  when a side that wasn't `nosave` silently loses persistence. Top
+  clusters are the `read`/`touch`/`smell`/`listen`/`look` event mixins
+  pulled in via `storage.lpc`/`flask.lpc`, and `base_armor.lpc`. This
+  needs its own dedicated pass, not a rushed one.
+- ~190 "inherited from both" diamond-inheritance warnings in the same
+  `storage.lpc`/`flask.lpc`/`base_armor.lpc`/`client.lpc` clusters —
+  each is a judgment call about which definition should win, unlike
+  the clean same-file `horse.lpc` case already fixed.
+- ~20 remaining "Number of arguments disagrees"/return-type-mismatch
+  instances beyond the three families already fixed (`GetHelp`,
+  `eventReleaseObject`, `SetProtection`, `CanRelease`/`pre_north`,
+  `CanReceive`, `clean_up`, `eventCatch`, `eventReceiveObject`,
+  `CanGet`/`GetLong`, `eventJump`, `GetExternalDesc`,
+  `SetCoordinates`, `eventRead`/`eventSocketClosed`,
+  `eventReceiveCommand`, `CanSell`).
+- A handful of one-off warnings (`Function pointer returning string
+  constant is NOT a function call`, `Non-void functions must return a
+  value`, `Types in ?: do not match`, a few `Previous function
+  prototype ... does not match`) scattered across `domains/Praxis/*`,
+  `lib/props/save.lpc`, `daemon/classes.lpc`, `lib/pager.lpc`, and
+  others — each needs its own individual read, not a mechanical fix.
