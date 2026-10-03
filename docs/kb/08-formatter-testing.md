@@ -160,10 +160,15 @@ Checklist:
    - Test disconnects mid-action (§10.10) and a net-dead soak (§10.8).
 7. Run the first session on a pristine copy (`scripts/pristine_tree.sh
    <slug> <port>`: `git archive` of the tracked files, own config, port and
-   `log/`), not on the working tree: the working
-   tree keeps directories earlier boots created and hides §7.203. Cover
-   mail, board `post`, the editor, `eval`, death + revive with money (§7.204),
-   and a disconnect at every prompt (§7.206).
+   `log/`, plus the directories `scripts/wasm_keep_dirs.txt` records for the
+   slug, which is exactly what the site's browser gets), not on the working
+   tree: the working tree keeps directories earlier boots created and hides
+   §7.203 (and, for `log/` subdirectories, a character-creation crash:
+   Foundation I). Cover mail, board `post`, the editor, `eval`, death + revive
+   with money (§7.204), and a disconnect at every prompt (§7.206).
+   Afterwards: `log/errors/*` and the console must hold no warning (§6.10),
+   and `grep "insufficient permission"` on the console must be empty (a
+   `protected` function reached from another object, §6.10).
 8. Fix in place, then write a dated
    `## 深度功能测试（§10.7，YYYY-MM-DD）` section in `NOTES.md`, plus a
    compact KB entry if the pattern recurs. Check §11 siblings for the

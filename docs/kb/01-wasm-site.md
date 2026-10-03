@@ -177,6 +177,18 @@ Traps:
   corpus median is about 9.9k files and the max about 72k, so main-thread
   decompression took over a minute. Test loader changes against a large
   real lib.
+- **Runtime directories.** The zip carries no `log/` and no empty directory.
+  `zip-loader.js` creates `work/log` plus every directory
+  `scripts/wasm_keep_dirs.txt` lists for the slug (`keepDirs` in the live
+  `<slug>/fluffos-boot.js`). A `log/` subdirectory a lib writes into can only
+  arrive that way; elsewhere a tracked `.gitkeep` also works. A lib with no
+  entry looks fine to a local WASM check and still dies for every visitor
+  (Foundation I: the new-character prompt logs to `/log/secure`). Add entries
+  with `python3 scripts/gen_keep_dirs.py --merge <slug>...` (seconds). Never
+  run it bare to "refresh" the file: a full replace forgets every directory
+  the local tree no longer has (it dropped 9.5k lines at once on 2026-10-03),
+  and the committed file is not slug-sorted because onboarding commits
+  appended their own blocks, so the tool edits blocks in place.
 - **Persistence.** `persist.js` is an IndexedDB overlay of
   `/mudlib/work/data` only. `save-export.js` handles export, import, and
   reset; `safeRel()` blocks path traversal on both import and restore.

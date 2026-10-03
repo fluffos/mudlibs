@@ -80,8 +80,13 @@ path are `.lpc`.
 
 ### 4.3 `static` → `nosave`, and its collisions
 
-The driver accepts `static` on variables but hard-errors on functions.
-Replace `\bstatic\b` with `nosave` blanket-wide. After that:
+This driver has no `static` keyword at all (variables or functions).
+Replace `\bstatic\b` on a *variable* with `nosave`. On a *function* it meant
+"not callable from other objects": write `protected`, or just `private` if it
+is already private. A blanket `static`→`nosave` also hits functions, and
+`nosave` on a function compiles with a warning ("Illegal to declare nosave
+function", hundreds per lib); `scripts/lpc_warnings.py --fix` repairs it (KB 04
+§6.10). After that:
 - **String literals.** `log_file("static/CRASHES")` becomes
   `"nosave/..."`, which orphans the real `log/static/` history and
   crashes on the missing `log/nosave/` dir.

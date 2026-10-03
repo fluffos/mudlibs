@@ -830,3 +830,22 @@ admin `receive_damage()`); `killer->query("npc")` raises, and
 `continue_attack()` re-enters `die()` every tick, so the death never
 finishes. Guard with `killer &&`. A fix ported to one sibling must be swept
 to all: `esI` -> `es1_win` -> `es1` (the last one missed).
+
+### 7.209 `[0..-2]` / `[-2..]`: negative range ends do not count from the end
+**Symptom:** an empty string or array, or the whole value, where "all but the
+last" or "the last two" was meant. Foundation I `uptime` printed a lone `.`,
+and `cd ~` went to `/` because `absolute_path()` built `user_path(...)[0..-2]`.
+**Cause:** the MudOS/LDMud idiom. Here a negative end gives `""` / `({ })`
+(`"abcd"[0..-1]` too), a negative start clamps to 0 (`"abcd"[-2..]` is the
+whole string). `old range behavior : 1` is not the fix: it handles strings and
+buffers only, not arrays (docs/lpc/types/substructures), and the docs advise
+against it.
+**Fix:** count from the end with `<`: `[a..-N]` → `[a..<N]`, `[-N..]` →
+`[<N..]`, `[-N..-M]` → `[<N..<M]`; "to the end" is `[x..]`. Leave range
+*lvalues* alone: `str[0..-1] = foo` is the documented prepend.
+**Detection:** the compiler warns `A negative constant as the second element
+of arr[x..y] no longer means indexing from the end` (rvalue end indexes only),
+so `scripts/lpc_warnings.py` sees those; negative *start* indexes need a grep
+(`\[\s*-\d+\s*\.\.`). A corpus grep for a negative constant end ≤ -2 found
+247 sites in 149 libs (2026-10-03; `genesis` 39, `arkadia` 22, `nirvlp312` 9,
+`es1` 6, `sticklib` 5, ...): a sweep is queued, history libs first.

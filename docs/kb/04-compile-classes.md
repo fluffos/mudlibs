@@ -145,3 +145,25 @@ appears in type position. Grep bare `\bstatus\b` and filter out prose
 - `#define FOO "/path"` followed by `FOO->meth()` parses as class
   access. Use `efun::call_other(FOO, "meth", args)`, with no trailing
   comma when there are no args (`mundoscuro`).
+
+### 6.10 Compiler warnings: each one is a fix, never `#pragma no_warnings`
+`scripts/lpc_warnings.py <slug>` builds a site-like tree, runs `lpcc
+--batch` over every `.lpc`, and groups the diagnostics. Read the boot-time
+block that lpcc prints *before* the first `=====` header too (master,
+simul_efun and preloaded daemons are reported there, not under their file),
+accept warnings with no column (`file:13: warning: Macro ...`), and rescan
+until stable: a file stops listing after its warning cap ("too many warnings
+in this file"). The driver's own run (`log/errors/*`, console) must end with
+none. `Foundation I` went from ~480 to 0 this way.
+
+| Warning | Cause and fix |
+|---|---|
+| `Illegal to declare nosave function` | §4.3's blanket `static`→`nosave` also hit functions. A function that was `static` is `protected`; beside `private` drop the `nosave`; keep it public when another object calls it (`reset()` from the `reset` command). Variables keep `nosave`. A rejected outside call to a `protected` function is logged as `apply() with insufficient permission ... needs: public, has: protected` in the driver output: run the batteries, grep for it, expect none. Driver applies (`create`, `crash`, `slow_shutdown`, ...) are not affected. |
+| `Unused local variable 'x'` (reported at the closing brace of its scope) | Delete the declarator (several in one statement: rebuild it). If the variable was meant to be read, read it (`get_stack()` printed the function name twice; `stack0` was the program name). |
+| `Function pointer returning string constant is NOT a function call` | `(: "name" :)` was the pre-NEW_FUNCTIONS this_object pointer. It is now a function returning the string. Write `(: name :)` (forward-declare `name` if it is defined later). If `name()` never existed the old pointer answered 0: say so with a real function. |
+| `Unknown escape sequence '\x'` | The character stands for itself: drop the backslash (`"%s\.%s"`, `"\Problem"`, `"%%\|%ds"`). |
+| `Previous function prototype for f does not match current function in return type` | The header disagrees with the definition. Make the prototype match the definition (callers use the definition). |
+| `Expression has no side effects` / `Value of conditional expression is unused` | Usually an empty `if (x) { }` with only a comment inside, or a stray `tmp + "";`; the line reported is the *next* statement. Delete it (a variable that was only read there becomes unused: delete that too). |
+| `Macro 'X' redefined` | Several files `#include`d into one object spell the body differently. Make the text identical, and define what the body uses in each file so each still compiles on its own. |
+| `f() inherited from both A and B` + `Redeclaration of global variable` | Diamond inheritance (a daemon that inherits both DAEMON and OB_USER brings /std/clean_up in twice). Overriding the functions does not silence the variable warning: drop one inherit and spell out what it added. |
+| `A negative constant as the second element of arr[x..y]` | §7.209. |

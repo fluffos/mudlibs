@@ -524,3 +524,73 @@ of those rooms exist in this archive (zero `*shop*` / `*supply*` under
 `fluffos` / `Mud@2026` into the Pool Room cavern: `buy torch`, `list`,
 `shop`, and `apprentice` all printed `What?`. Help's player-general
 topics are mail/prompt/terminal — no shop. Left as-is.
+
+## 深度功能测试（§10.7，2026-10-03）— site-like tree, every compile warning
+
+Method: a tree built the way the site builds it (`scripts/pristine_tree.sh`:
+tracked files only, plus `work/log` and the directories
+`scripts/wasm_keep_dirs.txt` records for the slug), not the old working tree
+that earlier boots had filled with directories. Registration, the one-line
+reports, the editor-based `bug`, mail, `passwd`, `chfn`, `suicide`, tells,
+the soul, ~90 further commands, and disconnects at the name, password,
+confirm, gender, email and news-pager prompts and inside the editor and the
+mailer. Final run (fresh tree from HEAD): 25/25 verify checks, the chat /
+passwd / suicide / disconnect battery all pass, 89 commands with no error.
+
+1. **New characters could not be created on the site.** After the `y` at
+   "Do you really wish ... to be your name?" `login.lpc` calls
+   `log_file("new_players", ...)`, which (called from a user object) writes
+   `/log/secure/new_players`. The zip never carries `log/`, and the keep list
+   had no entry for foundation1, so the write raised `Wrong permissions for
+   opening file ... "No such file or directory"` and `new_user()` aborted
+   before `input_to("choose_password")`: a bare `>` prompt, no account. The
+   live `fluffos-boot.js` showed `keepDirs: []`. Fix: `gen_keep_dirs.py
+   --merge foundation1 foundation2` recorded the 15 + 6 `log/` directories
+   the lib uses (`log/secure`, `log/errors`, `log/etc/*`, `log/reports`,
+   ...).
+2. **`tmp/` missing**: `bug` without text (editor mode) raised the same
+   `Wrong permissions ... /tmp/<name>.bug` error. Added `tmp/.gitkeep`.
+3. **`secure/save/letters/` missing**: mail composed fine, then `*Could not
+   open /secure/save/letters/<n>/<id>.o.tmp for a save`; the letters daemon
+   `mkdir`s the one-digit bucket but not its parent. Added
+   `secure/save/letters/.gitkeep`. Also added `realms/.gitkeep`: `user_path()`
+   is `/realms/<name>/` and `eval`/`~` need that directory, which a creator
+   makes with one `mkdir`.
+4. **`[0..-2]` is empty in this driver** (negative range ends do not count
+   from the end; the form is `[0..<2]`). `uptime` printed a lone `.`, and the
+   `~` / `~name` expansion in `absolute_path()` produced `""`, so `cd ~` and
+   `ls ~` went to `/` even with a home directory. Both fixed to `[0..<2]`.
+5. **Every compile warning fixed at its source** (the first visitor used to
+   get ~400 lines of them, because everyone is a creator and `log_error`
+   prints to creators). `lpcc --batch` over all 275 files now reports none:
+   - 374 `nosave` function declarations (the `.c` to `.lpc` conversion turned
+     every `static` into `nosave`; FluffOS accepts `nosave` on variables
+     only): `protected` (the historic `static` meaning), `private` ones lose
+     the redundant `nosave`; `reset()` stays public because the `reset`
+     command calls it from outside. A rejected external call is logged by the
+     driver as `apply() with insufficient permission`; zero of those appeared
+     in any run (only a deliberate probe).
+   - 98+ unused locals removed; `get_stack()` listed the function name twice
+     and never the program name (`stack0` was the unused variable).
+   - `(: "remove" :)` in the post box is a function returning the string
+     "remove", not a pointer to `remove()` (old MudOS meant the latter): now
+     `(: remove :)`; `(: "drop" :)` called a `drop()` that exists nowhere and
+     so always answered 0, now an explicit `prevent_put()` returning 0. Same
+     in `Examples/room/search` and `Examples/virtual/start` (`(: search_brush :)`
+     with a forward prototype).
+   - prototypes that disagreed with the definition (`query_enters`,
+     `query_reply_text`, `date`), unknown escapes (`\|` in the centred
+     `sprintf`, `\.` in two `sscanf` patterns, `\<`, `\P`), empty `if` bodies
+     and a no-op statement in master / intermud / network, the services
+     daemon's `MSG_SYSTEM` spelled two ways.
+   - `secure/daemon/users.lpc` inherited `DAEMON` and `OB_USER`, so
+     `/std/clean_up` came in twice (four ambiguous functions and a redeclared
+     `__NoClean`); it inherits `OB_USER` only and spells out what `DAEMON`
+     added (`remove()` with the `valid_apply` check, `query_prevent_shadow`).
+   - `#pragma no_warnings` is not used: a mudlib does not carry it.
+6. Still failing to compile, unchanged (archive content gaps, section 3):
+   `Examples/etc/{chest,flu,match,torch}` and `secure/etc/cowtown`.
+7. Native only, not touched: `daemon/intermud` saves `/save/intermud.o`, which
+   `secure/cfg/write.cfg` does not allow and the tree does not have, so every
+   I3 packet from a router logs `Denied write permission in save_object()`
+   (hundreds per hour in `log/runtime`). The site has no sockets.

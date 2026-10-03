@@ -72,6 +72,15 @@ corpus. To find work:
   before committing (§10.5).
 - **§9 formatter (KB 08):** run it on every lib whose `.lpc`/`.h` files you
   edited, check its three blind spots, then re-boot and re-test.
+- **Compile warnings are bugs (user, 2026-10-03).** A mudlib never carries
+  `#pragma no_warnings` (not in `global.h`, not per file), and every warning
+  the driver prints is fixed at its source. Scan with
+  `scripts/lpc_warnings.py <slug>`; the classes and their fixes are KB 04
+  §6.10. Do not hide a warning to quiet the first visitor's screen.
+- **Ranges count from the end with `<`:** `[0..<2]`, `[<2..]`. A negative
+  literal (`[0..-2]`, `[-2..]`) is empty or the whole value in this driver
+  (KB 06 §7.209). Never switch on `old range behavior`: it covers
+  strings only, not arrays.
 - **Slugs** are short pinyin initials of the Chinese name: `bxsj`
   (书剑天下), `yhyxcs`. Roman numerals become digits (`Ⅱ` → `2`). Add a
   suffix only to disambiguate siblings. To rename a slug:
@@ -101,9 +110,9 @@ corpus. To find work:
 | `01-wasm-site.md` | §1 | WASM build and test, WASM gaps and the loopback policy, triage, admin seeding, site packing, SEO and the publish invariant, the ZJ protocol adapter |
 | `02-pipeline.md` | §2–§3 | bring-up steps, definition of done, the on-sight grep checklist, hosting modes (`vendored`/`submodule-patch`/`fluffos-upstream`), LDMud port policy, archive extraction traps |
 | `03-encoding-config.md` | §4–§5 | GB18030/BIG5 conversion, `.o` CRLF, `.c`→`.lpc` fallout, `static`→`nosave` collisions, BIG5 `0x5C`, config and ports |
-| `04-compile-classes.md` | §6 | includes, missing efuns, grammar strictness, binding order, reserved words |
+| `04-compile-classes.md` | §6 | includes, missing efuns, grammar strictness, binding order, reserved words, compiler warnings (§6.10) |
 | `05-runtime-classes-1.md` | §7.1–§7.60 | ACL, `restore()`, missing dirs and `log_file`, message wrappers, nitan dbase, re-entrancy, death/netdead, sockets, eval-cost |
-| `06-runtime-classes-2.md` | §7.61–§7.208 | `replace_program` (§7.86/§7.100), float/int, autoload, LDMud/TMI/Nightmare/Dead Souls/Genesis/Lima-specific traps |
+| `06-runtime-classes-2.md` | §7.61–§7.209 | `replace_program` (§7.86/§7.100), float/int, autoload, LDMud/TMI/Nightmare/Dead Souls/Genesis/Lima-specific traps |
 | `07-login-classes.md` | §8 | Chinese detection (§8.1), dead command dispatch (§8.3), encoding menus, registration/relogin bugs |
 | `08-formatter-testing.md` | §9–§10 | formatter blind spots, verification bar, client tools, lpcc sweeps and memory, process hygiene, §10.7 deep-test method, the debug.log-is-dead trap |
 | `09-lineage-driver.md` | §11–§12 | lineage map, driver patches, `MARCH_NATIVE` SIGILL, WASM terminal |
