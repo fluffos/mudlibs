@@ -240,14 +240,18 @@ mandates with no completion target:
   resolved. `realms` needs MySQL; don't retry it.
 
 ### 13.9 Discovery/onboarding policy
-- **No half-baked new libs; focus on old libs (user, 2026-10-03).** Do
-  not onboard young, still-moving hobby repos, prototypes, or testbeds
-  for a custom driver (e.g. `dyher/mudlib_ro`: two weeks old, three
-  rooms, needs `sqlite3_*`/`websocket_accept` efuns FluffOS lacks).
-  Work goes to the existing collection: §10.7 re-tests, bug sweeps,
-  description accuracy, WASM-status honesty. Onboard a new lib only if
-  it is substantial, stable and historically meaningful, or the user
-  names it.
+- **No half-baked new libs; focus on libs that have history (user,
+  2026-10-03).** Do not onboard young, still-moving hobby repos,
+  prototypes, or testbeds for a custom driver (e.g. `dyher/mudlib_ro`:
+  two weeks old, three rooms, needs `sqlite3_*`/`websocket_accept`
+  efuns FluffOS lacks). Work goes to the historically significant libs
+  already in the collection: LPMud 1.4.1/2.4.5, TMI-2, Nightmare, Dead
+  Souls, Discworld, Foundation, Lima, Genesis, Final Realms, the
+  Eastern Story/xkx roots, and similar (KB 09 §11 English stacks and
+  ES II family). Do §10.7 re-tests (thinnest or oldest coverage
+  first), bug sweeps, description accuracy, WASM-status honesty. Onboard
+  a new lib only if it is substantial, stable and historically
+  meaningful, or the user names it.
 - Broad discovery grinding is **paused** (2026-09-04). The ~weekly
   `gh search repos --created=>DATE` re-sweep is now check-only. Last
   run 2026-10-03 (cutoff `>2026-09-12`); next ~2026-10-17 with
