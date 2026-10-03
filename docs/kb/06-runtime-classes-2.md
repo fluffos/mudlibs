@@ -777,3 +777,54 @@ Move it to the recipient. Keep the `receive_money` opt-in hook
 ### 7.202 Player input concatenated into a `sprintf` format string
 A `%` in the input crashes it. Pass the input as an argument
 (`huoying`, `naruto` meeting rooms).
+
+### 7.203 Directories the code writes into but never creates are missing from the tree
+Mail, board `post`, the line editor and `eval` die with `*Wrong permissions
+for opening file /tmp/<name>-N.m ... "No such file or directory"` or
+`*Could not open /room/post_dir/<name>.o.tmp for a save`. The archive's
+empty dir was dropped (git tracks no empty dirs) or never shipped. The first
+error aborts the caller before it resets its lock (`lpmud141` post office:
+"You have to wait for <sender>" for everyone). Fix: tracked `.gitkeep`.
+**Detection:** boot a pristine `git archive HEAD libs/<slug>/work` copy
+(the working tree keeps the dirs earlier boots made) and run mail, board
+post, `ed`, `eval` and every saving command; static hint: `#define *_DIR
+"/..."` and literal `save_object("dir/..")` targets absent from `work/`.
+Seen: `tmi2` (`tmp`, `open`), `mortremains` (`open`), `lpmud141`
+(`room/post_dir`, `banish`). Dirs the code makes itself (`mkdirs()`,
+`assure_user_save_dir()`) need nothing.
+
+### 7.204 Death empties the purse into the corpse but never saves
+If the ghost is turned back into a body by restoring the save file, the
+revived player gets the purse of the last save while the corpse holds the
+coins too. **Detection:** set wealth W, save, die, revive: expect an empty
+purse and W in the corpse. Fix: save right after emptying (`tmi2`
+`std/user.lpc die()`). `lpmud141` saves after `transfer_all_to`; the ES1
+libs back the user up at revive.
+
+### 7.205 `remove()` run from `call_out` has no `previous_object()`
+`seteuid(euid)` with an unset `euid` clears the euid, so the next
+call-by-path (`FLOCK_D->...`) cannot load the daemon (`Can't load objects
+when no effective user`), `remove()` aborts and the dead body stays in
+the room. Only the first removal after boot fails (any earlier `quit`
+loaded the daemon). Fix: default `euid` to `geteuid(this_object())`
+(`tmi2`).
+
+### 7.206 `net_dead()` assumes the body is already in a room
+A connection dropped at the post-login "Press ENTER to continue" prompt
+has no environment: `message(..., environment(), ...)` raises `Bad
+argument 3 to EFUN message()` and the rest of `net_dead()` is skipped.
+Guard with `if (environment())` (`tmi2`, `mortremains`).
+
+### 7.207 Global dialog lock never released on abort or disconnect
+A daemon flag set on entry (`suicide`'s `busy`) was reset only on the
+success path (`busy = 1` typo on abort), so one `n` or one dropped
+connection disabled the command for everyone. Keep the owner object and
+ignore a holder that is no longer interactive (`tmi2`, `mortremains`).
+
+### 7.208 `die()` dereferences a null `killer`
+`killer = query("last_attacker")` falls back to `previous_object()`, which
+is 0 when `die()` runs from the body's own `heart_beat()` (poison, trap,
+admin `receive_damage()`); `killer->query("npc")` raises, and
+`continue_attack()` re-enters `die()` every tick, so the death never
+finishes. Guard with `killer &&`. A fix ported to one sibling must be swept
+to all: `esI` -> `es1_win` -> `es1` (the last one missed).
