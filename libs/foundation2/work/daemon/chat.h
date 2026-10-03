@@ -1,7 +1,7 @@
 #ifndef __CHAT_H__
 #define __CHAT_H__
 
-nosave void create();
+protected void create();
 string *eventRegisterMember(string *chans);
 string *eventRemoveMember(string *chans);
 int cmdChannel(string verb, string str);

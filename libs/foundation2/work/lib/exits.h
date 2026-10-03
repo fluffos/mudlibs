@@ -1,7 +1,7 @@
 #ifndef __EXITS_H__
 #define __EXITS_H__
 
-nosave void create();
+protected void create();
 int cmdGo(string str);
 int cmdEnter(string str);
 int cmdLock(string which);

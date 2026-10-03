@@ -1,16 +1,16 @@
 #ifndef __INTERACTIVE_H__
 #define __INTERACTIVE_H__
 
-nosave void create();
+protected void create();
 int Setup();
-nosave void InitPath();
-nosave void net_dead();
-nosave void restart_heart();
+protected void InitPath();
+protected void net_dead();
+void restart_heart();
 void eventDescribeEnvironmentoom(int verbose);
 varargs int eventMoveLiving(mixed dest, string msg);
 int eventDestruct();
 int cmdQuit(string str);
-nosave int cmdAll(string str);
+protected int cmdAll(string str);
 
 int GetAge();
 int GetBirth();
@@ -21,7 +21,7 @@ void SetId(string *bogus);
 string *GetId();
 int id(string str);
 int GetLoginTime();
-void SetKeyName(string str);
+string SetKeyName(string str);
 string GetKeyName();
 void SetNews(string type, int sz);
 int GetNews(string type);

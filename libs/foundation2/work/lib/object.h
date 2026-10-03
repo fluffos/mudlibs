@@ -1,8 +1,8 @@
 #ifndef __LIB_ITEM_H__
 #define __LIB_ITEM_H__
 
-nosave void create();
-nosave void init();
+protected void create();
+protected void init();
 void reset();
 int id(string str);
 string *parse_command_id_list();
@@ -11,7 +11,7 @@ string *parse_command_adjectiv_id_list();
 
 int cmdRead(string str);
 
-nosave int Destruct();
+protected int Destruct();
 
 void SetId(mixed val);
 string *GetId();

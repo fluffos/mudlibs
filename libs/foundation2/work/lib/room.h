@@ -1,14 +1,14 @@
 #ifndef __ROOM_H__
 #define __ROOM_H__
 
-nosave void create();
+protected void create();
 void reset();
-nosave void init();
+protected void init();
 int id(string str);
 
 int eventMove(mixed dest);
 
-nosave void LoadInventory();
+protected void LoadInventory();
 
 void SetShort(string str);
 void SetLong(string str);

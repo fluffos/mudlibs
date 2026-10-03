@@ -1,7 +1,7 @@
 #ifndef __DOOR_H__
 #define __DOOR_H__
 
-nosave void create();
+protected void create();
 
 varargs int eventOpen(object by, object agent);
 varargs int eventClose(object by, object agent);
@@ -9,9 +9,9 @@ varargs int eventLock(object by, object agent);
 varargs int eventUnlock(object by, object agent);
 int eventRegisterSide(string dir);
 
-nosave int SetClosed(int x);
+protected int SetClosed(int x);
 int GetClosed();
-nosave int SetLocked(int x);
+protected int SetLocked(int x);
 int GetLocked();
 mapping SetSide(string side, mapping mp);
 int SetLockable(string side, int x);

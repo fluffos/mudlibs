@@ -3,8 +3,8 @@
  
 int clean_up();
 int eventDestruct();
-nosave int Destruct();
-nosave int SetNoClean(int x);
+protected int Destruct();
+protected int SetNoClean(int x);
 int GetNoClean();
 
 #endif /* __LIB_CLEAN_H */ 

@@ -1,14 +1,14 @@
 #ifndef __INTERFACE_H__
 #define __INTERFACE_H__
 
-nosave void create();
-nosave string process_input(string str);
-nosave void terminal_type(string str);
-nosave void window_size(int width, int height);
+protected void create();
+protected string process_input(string str);
+protected void terminal_type(string str);
+protected void window_size(int width, int height);
 void receive_message(string msg_class, string msg);
-nosave void receive_snoop(string msg);
+protected void receive_snoop(string msg);
 
-nosave string cache_commands(string str);
+protected string cache_commands(string str);
 int Setup();
 
 int SetBlocked(string type);

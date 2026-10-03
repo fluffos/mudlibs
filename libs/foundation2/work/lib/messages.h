@@ -1,7 +1,7 @@
 #ifndef __MESSAGES_H__
 #define __MESSAGES_H__
 
-nosave void create();
+protected void create();
 
 string SetMessage(string msg, string str);
 varargs string GetMessage(string msg, mixed arg);

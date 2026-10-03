@@ -1,7 +1,7 @@
 #ifndef __ITEMS_H__
 #define __ITEMS_H__
 
-nosave void create();
+protected void create();
 int id(string str);
 
 string *GetId();

@@ -1,12 +1,12 @@
 #ifndef __EVENTS_H__
 #define __EVENTS_H__
 
-nosave void create();
-varargs nosave int eventSave(int ung);
+protected void create();
+varargs protected int eventSave(int ung);
 void eventReboot(int x);
-nosave void eventAnnounceReboot(int x);
+protected void eventAnnounceReboot(int x);
 void eventShutdown();
-nosave void eventPollEvents();
+protected void eventPollEvents();
 
 int SetRebootInterval(int x);
 int GetRebootInterval();
