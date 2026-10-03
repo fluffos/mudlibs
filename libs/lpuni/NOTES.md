@@ -393,3 +393,36 @@ previously-undiscovered bugs, both filed as new AGENTS.md entries
   links (several fresh registrations used to isolate the two bugs
   above) before committing, keeping only the seeded `fluffos` admin
   account.
+
+## 深度功能测试（§10.7，2026-10-03）— site-like tree, every compile warning
+
+Method: a tree built the way the site builds it (`scripts/pristine_tree.sh`: tracked files,
+`work/log`, the directories `wasm_keep_dirs.txt` records for the slug). Registration (several
+accounts, including ones whose first letter has no bucket on a fresh tree), tell/reply/say/emote,
+save, passwd, the news client, ~20 further player commands, and disconnects at every login prompt
+and inside passwd/news. All pass (`/tmp/fdtest/lp_battery.py`, throwaway). Fixed:
+
+1. **A brand-new account whose first letter has no bucket yet could not save.** `setupNew()`
+   `mkdir`s `/data/users/<letter>/<name>/` but never `/data/users/<letter>/` itself; the tracked
+   tree (and the site zip) only ships the buckets that already hold a seeded account (`f/` for
+   `fluffos`). The very first registration whose name starts with any other letter hit `*Could not
+   open /data/users/l/.../....o.tmp for a save` right after the welcome banner, i.e. essentially
+   every real visitor. Fixed in `setupNew()`.
+2. **The unsupported `#pragma save_binary`** (three files: `adm/obj/simul_efun.lpc`,
+   `adm/obj/master.lpc`, `adm/daemons/chmodules/chdmod_localNet.lpc`) printed "Unknown #pragma,
+   ignored." -- dropped; this driver's pragma is `save_types`, not `save_binary` (KB 04 §6.10 lists
+   it as a class). `adm/simul_efun/overrides.lpc`'s `efun::` overrides are rejected by this archive's
+   own `valid_override()` on this driver's compiler internals (`Invalid simulated efunction
+   override`, pre-existing, out of driver-compat scope -- not touched; the companion "no side
+   effects" warning disappears once the override itself is accepted, so no separate fix needed
+   there).
+3. **27 `nosave` function declarations in the lazily-compiled mail client** became `protected`
+   (`scripts/lpc_warnings.py --fix`; KB 04 §6.10) -- the same class the round-two pass already
+   found and fixed for the always-loaded files; this lazily-compiled one was a gap in that sweep's
+   coverage.
+4. Not fixed, unrelated to this pass: the 11 `Undefined variable`/`send_packet`/`I3LOG`/`get_rank`
+   errors are the chat/channel Intermud-3 modules this archive ships without their matching
+   `chmodules` daemon state (pre-existing content gap, same class as round two's §6 note).
+
+Admin-account wizard commands (eval/goto/ls/update/...) were not re-verified this pass (round two
+already confirmed `update`/`ls`/`more` live); see that section.
