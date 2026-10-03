@@ -158,8 +158,9 @@ Checklist:
    - An admin ghost stalling is usually a deliberate
      `wizardp(previous_object())` exclusion. Retry with a non-admin.
    - Test disconnects mid-action (§10.10) and a net-dead soak (§10.8).
-7. Run the first session on a pristine `git archive HEAD libs/<slug>/work`
-   copy (own config, port and `log/`), not on the working tree: the working
+7. Run the first session on a pristine copy (`scripts/pristine_tree.sh
+   <slug> <port>`: `git archive` of the tracked files, own config, port and
+   `log/`), not on the working tree: the working
    tree keeps directories earlier boots created and hides §7.203. Cover
    mail, board `post`, the editor, `eval`, death + revive with money (§7.204),
    and a disconnect at every prompt (§7.206).

@@ -787,8 +787,10 @@ error aborts the caller before it resets its lock (`lpmud141` post office:
 "You have to wait for <sender>" for everyone). Fix: tracked `.gitkeep`.
 **Detection:** boot a pristine `git archive HEAD libs/<slug>/work` copy
 (the working tree keeps the dirs earlier boots made) and run mail, board
-post, `ed`, `eval` and every saving command; static hint: `#define *_DIR
-"/..."` and literal `save_object("dir/..")` targets absent from `work/`.
+post, `ed`, `eval` and every saving command (`scripts/pristine_tree.sh`);
+static hint: `scripts/missing_write_dirs.py <slug>` lists literal and
+`#define`d write targets whose directory is absent from `work/` (noisy:
+confirm by running the command).
 Seen: `tmi2` (`tmp`, `open`), `mortremains` (`open`), `lpmud141`
 (`room/post_dir`, `banish`). Dirs the code makes itself (`mkdirs()`,
 `assure_user_save_dir()`) need nothing.
