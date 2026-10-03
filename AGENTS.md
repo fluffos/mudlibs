@@ -240,18 +240,24 @@ mandates with no completion target:
   resolved. `realms` needs MySQL; don't retry it.
 
 ### 13.9 Discovery/onboarding policy
-- **No half-baked new libs; focus on libs that have history (user,
-  2026-10-03).** Do not onboard young, still-moving hobby repos,
-  prototypes, or testbeds for a custom driver (e.g. `dyher/mudlib_ro`:
-  two weeks old, three rooms, needs `sqlite3_*`/`websocket_accept`
-  efuns FluffOS lacks). Work goes to the historically significant libs
-  already in the collection: LPMud 1.4.1/2.4.5, TMI-2, Nightmare, Dead
-  Souls, Discworld, Foundation, Lima, Genesis, Final Realms, the
-  Eastern Story/xkx roots, and similar (KB 09 §11 English stacks and
-  ES II family). Do §10.7 re-tests (thinnest or oldest coverage
-  first), bug sweeps, description accuracy, WASM-status honesty. Onboard
-  a new lib only if it is substantial, stable and historically
-  meaningful, or the user names it.
+- **Museum inclusion criterion (user, 2026-10-03).** The museum holds
+  only old archives, plus active libs that have an existing user base or
+  a long history of development. We do not incorporate new
+  experimental libs: no learning projects, skeletons, prototypes, young
+  still-moving hobby repos, or testbeds for a custom driver (e.g.
+  `dyher/mudlib_ro`: two weeks old, three rooms, needs
+  `sqlite3_*`/`websocket_accept` efuns FluffOS lacks).
+- **Focus on libs that have history.** Effort goes to the historically
+  significant libs already in the collection: LPMud 1.4.1/2.4.5, TMI-2,
+  Nightmare, Dead Souls, Discworld, Foundation, Lima, Genesis, Final
+  Realms, the Eastern Story/xkx roots, and similar (KB 09 §11 English
+  stacks and ES II family). Do §10.7 re-tests (thinnest or oldest
+  coverage first), bug sweeps, description accuracy, WASM-status
+  honesty. Onboard a new lib only if it is substantial, stable and
+  historically meaningful, or the user names it.
+- Existing libs that fail the criterion are listed in
+  `scratchpad/librarian-next.txt` for the user to decide on. Do not
+  delist or delete a lib on your own.
 - Broad discovery grinding is **paused** (2026-09-04). The ~weekly
   `gh search repos --created=>DATE` re-sweep is now check-only. Last
   run 2026-10-03 (cutoff `>2026-09-12`); next ~2026-10-17 with
