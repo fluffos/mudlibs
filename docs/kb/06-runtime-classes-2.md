@@ -1,0 +1,779 @@
+# KB 06 — Boot-time and runtime crash classes, part 2 (§7.61–§7.202)
+
+### 7.61 The §7.12 bug inside `message()` itself
+3-arg calls from `channeld` and `questd` leave `exclude` as int 0. Fix
+the root wrapper with `exclude || ({})`.
+
+### 7.62 `check_legal_id`'s `while (i--)` accepts `""`
+The empty id later crashes `sprintf("%c", id[0])`. Reject `!strlen(id)`
+explicitly.
+
+### 7.63 One `new(X)` call site lacks the guard every sibling call site has
+That asymmetry is the diagnosis. Copy the siblings' guard; don't chase
+driver internals.
+- `jinyongwenzi`: a missing `/quest/weiguo/` tree plus unguarded `new()`
+  in `natured` killed the day/night heartbeat.
+- `hy5`: `room2->query("short")` after `load_object` →
+  `local = objectp(room2) ? room2->query("short") : 0;` (54 sites).
+
+### 7.64 Stray `;` after `if (...)`
+It makes an unconditional call to a dev daemon that was never shipped.
+Remove the dead call. Grep `if\s*\([^)]*\)\s*;`.
+
+### 7.65 Uncaught `create()` error leaves a daemon non-resident
+A later implicit `X->foo()` silently no-ops, which can wedge
+character creation (`hhsj`'s `named`).
+- Fix: `catch()` the `restore()`.
+- Bisect with `write()`, not `log_file()`.
+
+### 7.66 Archive ships only part of `/d/obj/`
+Referenced items are either relocated or genuinely gone. Relocations
+seen: `d/city/obj/` and top-level `/obj/...` (strip the `/d`). Verify
+each candidate by matching `set_name()`, then repath. Leave truly
+missing items alone (`xiyouji2003`).
+
+### 7.67 Menu label disagrees with the value actually assigned
+Grep where the value is consumed downstream; that tells you which side
+is wrong. On `sanjieshenhua`, the label was wrong.
+
+### 7.68 RETRACTED except `bmxkx2001`: `present(ob)` abandon in death `call_out` chains
+Abandoning when absent is often intended (ghosts wander). Only retry if
+you confirm LIVE that ghosts can't move on their own AND something else
+forcibly moves them. Reverted in 28 libs. See §7.112 for the real
+re-entrancy bug in the same files.
+
+### 7.69 The real auto-included header lacks a macro an unused duplicate header has
+Confirm which header `global include file` actually loads, then add only
+the missing macro (`bmxkx2001`'s `EDITOR_D`).
+
+### 7.70 `query(prop, ob)` used as if it meant `ob->query(prop)`
+This codebase's `query(prop, raw)` takes an int. The fix is
+`X->query("prop")`. Swept on `wxddym` (130 files / 471 sites) via
+`lpcc --batch` before/after diffs. `query_temp` with the same shape was
+left alone.
+
+### 7.71 `call_out` to a function whose body is commented out
+Silent no-op forever. Restore the already-written body (`syxjl`'s
+`bgargoyle`).
+
+### 7.72 Flood-kick `command("quit")` without `return`
+The next line touches the destructed object. Add `return`.
+
+### 7.73 `carry_object(missing)->wear()` in `create()`
+Store the result and guard it:
+```lpc
+object c; c = carry_object(p); if (c) c->wear();
+```
+- **Blast radius:** inside a room's NPC population, the throw truncates
+  the rest of the room's `create()` (on `ldtx` the board never
+  appeared).
+- The `if (object x = ...)` declaration form passes the formatter but
+  NOT the driver; declare first.
+- **Mini-archive variant (`xo`):** the target was relocated locally;
+  repath and keep the guard. Check `vendor_goods` paths too.
+
+### 7.74 UNRESOLVED: `ob->move(REVIVE_ROOM)` never returns inside a `call_out` after `reincarnate()` (`wmkj`)
+Suspect `notify_fail` in `move()`'s equip guard. Instrument inside
+`move()` before changing anything.
+
+### 7.75 A room macro used as a call target points at the wrong file after a split
+`DEATHROOM->end_death()` silently no-ops. The real function lives in a
+file whose header comment names the old path. Call the file that
+actually defines it (`kxkj1`).
+
+### 7.76 `REVIVE_ROOM` points at a renamed-away file
+Even an undisturbed death strands the player. Use paired same-content
+files to find the new name (`fys`: `yangzhou/temple` →
+`damingshi`). Always run a full undisturbed death cycle to the end.
+
+### 7.77 Food/water capacity computed from `query_weight()` before the clothes are given
+New characters start at 0 food and water. Move the init after
+equipping, guarded with `!query("food")` (`njhhdxdes2hx`).
+
+### 7.78 Bare `set`/`query` inside F_* mixins that don't inherit F_DBASE
+LPC binds a bare call at the DEFINING file's compile time. Fixes:
+- Route mixin self-calls through
+  `this_object()->query(...)`/`set(...)`.
+- Do NOT add `inherit F_DBASE` to the mixin. The duplicate `nomask`
+  inherit is fatal.
+
+Present in every NT/nitan/Lonely lib (13 mixins). Companion:
+`message()` non-varargs, fixed with `if (!exclude) exclude = ({});`.
+
+### 7.79 `addn()` / `addn_temp()` 2-arg self calls (done)
+The simul_efun-only shim's `this_object()` is the simul_efun object, so
+the write is lost.
+- Rewrite `addn(A,B)` → `this_object()->add(A,B)`.
+- Exclude files with a LOCAL `addn` (`baby.lpc`, `user.lpc`) and never
+  rewrite definitions.
+- Libs fixed: `xfbhh`, `hhsj`, `nitan170911`, `nitan6`, `nt6`,
+  `nt6nitan6win` (4,424 sites).
+- `wxddym` and `shenmo` had NO shim at all (compile-fatal): add the shim,
+  and convert `ob->addn` to `add`.
+
+### 7.80 Suffix-strip slice off by one
+`str[0..<n]` keeps `len-n+1` characters, so `.lpc` needs `[0..<5]`.
+- `eventd.lpc`'s event list was silently empty on 15 libs (swept).
+- `nt7`: `explode(__FILE__,"/")[<1][0..<3]` at 29 skill sites corrupted
+  skill ids.
+
+### 7.81 Wrapper parameter narrower than the daemon it forwards to
+`set_information(string key, string info)` while callers pass closures.
+Widen it to `mixed`, in both `inherit/misc/quest.lpc` and
+`include/quest.h`. Swept on 16 libs. General form: §7.127.
+
+### 7.82 Login object's own `nomask set()` guard blocks a legitimate root-less writer
+Registration "succeeds" but the mailed password never applies. Route the
+write through a root daemon helper that checks `base_name(linkob)`. Grep
+transcripts for `set is error`.
+
+### 7.83 `apply_condition("x")` with no `/kungfu/condition/x.lpc` daemon
+The condition is removed every tick, so the cooldown never engages
+(unlimited farming) and errors spam. Write the minimal decrement daemon
+(`xkm`'s `boardread`).
+
+### 7.84 SEVERE: plaintext passwords appended to a `/doc/help/` file
+Any player can read them via `help`. Delete the `write_file`. Keep the
+historical entries, but revert any your test added (`tybxjh`'s
+`neima2`/`neima3`). Diff `doc/` after registration tests.
+
+### 7.85 Bar renderer keeps the GBK `*2` width math
+`bar[0..-1]` returns the full bar for 0, and anything above 50% clamps
+to full. Rework the bar as 1 glyph = 1 char. A full-looking bar hides
+§8.9-class zeroes (`tybxjh`'s `score`).
+
+### 7.86 `inherit X;` + redundant `replace_program(X)`
+Any later closure bound to that object fails: `cannot bind an lfun fp
+to an object with a pending replace_program()`. The usual victim is
+board `post`.
+- Delete the `replace_program`; keep the `inherit`.
+- Check every class that creates `(: lfun ... :)` closures, plus
+  generator templates (`cmds/king/set_board.lpc`, `build.lpc`).
+- Grep bare `replace_program(` and compare its argument against the
+  file's `inherit`, whether a macro or a literal path.
+- Corpus-wide for rooms: §7.100.
+
+### 7.87 `if (!restore() && !mapp(X)) X = ...` is unsafe
+`restore()` THROWS when:
+- the file exceeds `maximum read file size`,
+- the mapping is corrupt, or
+- the file is unconverted GBK.
+
+`X` then stays 0 and emotes break game-wide, invisible to logs. Fix
+with `catch(restore()); if (!mapp(X)) X = ([]);`, and raise
+`maximum read file size` above the `.o` file's size (400000 is common).
+`emoted.lpc` swept on 165 libs; the size check was not swept.
+
+### 7.88 Non-varargs 4-param `message()` wrapper called with 3 args
+On `zjdywzb` and `yhwhpublicfi`, this soft-locked character creation
+(an NPC `command("chat")` mid-`valid_leave`). Fix:
+`varargs`, plus `exclude || ({})`. On the current driver,
+`f_message` ignores a non-object arg 4, so verify live before claiming
+a repro.
+
+### 7.89 Bundled `runtime_config.h` index numbering mismatches the driver
+`get_config()` reads the wrong slot.
+- Typical symptom: a string port, so `socket_bind("10")` crashes the
+  wizard login.
+- Fix: replace the header with the driver's canonical copy. Alias
+  dropped symbols (`__SAVE_BINARIES_DIR__` → `__MUD_LIB_DIR__`) and
+  remove `__ADDR_SERVER_IP__` uses.
+- `__PORT__` is compiler-predefined; don't redefine it.
+- `__BIN_DIR__` throws; `catch` it.
+- Grep every `get_config(` call site.
+
+### 7.90 `maximum evaluation cost` too low (700000 template, sometimes 400000)
+Cold compiles and NPC setup trip `cost limit reached`. Shapes seen:
+- non-wizards see a generic "臭虫" message on room entry,
+- `make_body()` aborts registration silently,
+- background daemon heartbeats.
+
+Fix: raise it to `5000000`. Proactively bumped on 74 libs. A retry that
+succeeds in the same process is NOT proof it's fine; the compile is
+cached. Test with a fresh driver.
+
+### 7.91 One-character skill typo in a sect master's `create()`
+`set_wugong("shalin-xinfa")` throws before `create_family()`, which
+kills the whole sect's join path. Grep `No such skill` after visiting
+each master's room (`xajhxo`).
+
+### 7.92 `user_cwd()` assumes letter-sharded `/u/` while the tree is flat
+Return `"/u/" + name` (the 风云3 family; done).
+
+### 7.93 Admin set-command writes `me` where it means `ob`
+One late line in `setparty` mutated the admin, not the target. Grep
+`cmds/{wiz,arch,adm}/set*.lpc`.
+
+### 7.94 Live command lost its plain `.lpc` filename
+Only `.C`/`.bak`/`复件` drafts remain, so the verb is "什么？". Restore
+it only when an independent matching copy proves which version is real
+(`xyzxfk`'s `inventory`, `xyzx3`'s `setskill`).
+
+### 7.95 `notify_fail(...)` followed by `return 1`
+The message is discarded. Return 0, i.e. `return notify_fail(...)`
+(`xbtxiii`'s `fight`).
+
+### 7.96 `catch(load_object(path))` isn't an existence test
+`load_object` of a missing path returns 0 without throwing. Use
+`file_size(path + ".lpc") >= 0`, with chained fallbacks.
+
+### 7.97 Multi-line `#define` with no `\` on the FIRST line
+The rest leaks as top-level statements, so `dns_master` fails to
+compile. Every death then crashes in `gchannel`, and `die()` loops
+forever (`sjsh`'s `include/net/config.h`).
+
+### 7.98 Daemon reads its own config in `create()` without `seteuid()`
+The custom ACL denies the read, `read_file` returns 0, and an
+`explode()` crash during preload looks like a missing file.
+- Fix: `seteuid(ROOT_UID)` first.
+- Also check functions reached only by player actions (`hy5`'s
+  `bgift`).
+
+### 7.99 `file_size(file) < 0` guard ahead of `new()` breaks extensionless paths
+`file_size` is a literal `stat` with no `.lpc` resolution. Check
+`file`, `file + ".lpc"`, and `file + ".c"` (`sjshwzjqb`).
+
+### 7.100 `inherit ROOM; ... replace_program(ROOM);` on the room base class (corpus sweep COMPLETE)
+Same mechanism as §7.86. Nearly every room is a dormant closure
+landmine; rooms that create a closure first get "cannot replace a
+program… ignored".
+- **Method:** a binary-mode script deletes lines that are exactly
+  `replace_program(<macro>);`. Hand-fix the irregular shapes:
+  - space before `;`,
+  - shared line with `setup();`,
+  - trailing comment,
+  - `\r\r\n` endings,
+  - `.lpc` source living under `work/data/` or a dir literally named
+    `binaries/`.
+- Also fix room-generator templates: `roommaker`, `rmaker`, `wall.lpc`,
+  `flatroom`, guild-hall commands, and `item_desc`-conditional variants.
+- Verify each lib: diff-stat count equals the script count, `build-debug`
+  boot is clean, and an admin room walk works.
+- **Result:** 191 libs, about 349.7k occurrences, all swept. Leave
+  already-commented lines and files that are syntactically broken
+  anyway.
+- **Never `git stash` mid-sweep** (§10.5). Use `git add -u` plus
+  explicit `NOTES.md` paths.
+
+### 7.101 `valid_leave()` handles directions that `exits` omits
+`go` rejects anything not in `exits` before `valid_leave` runs, so the
+death-recovery `south`/`up` were dead and every death was permanent.
+Restore the commented-out exits (`kxkjii2`; `kxkj` is identical). Type
+every recovery command during a death test.
+
+### 7.102 `go.lpc` force-loads the exit destination unguarded
+A stale exit dumps a raw traceback. Fix:
+`if (catch(call_other(dest,"???"))) return notify_fail("无法移动。\n");`
+(`zzfy3`, `zzfy`).
+
+### 7.103 `log_error` writes compile warnings to `this_player(1)` (every player)
+Gate the write with `strsrch(message,"warning:")==-1`. Better: use
+`"arning:"` (§7.10). Some libs gate behind `wizardp` already, so only
+wizards see it.
+
+### 7.104 Netdead auto-cleanup deletes young accounts without the quit path's y/n
+`force_quit()` calls `remove_user()` when `mud_age < 1800` (or a
+`birthday` variant). Delete that branch so it always saves. Done on 10
+libs, verified via grep that the `remove_user` inside `force_quit` is
+gone.
+
+### 7.105 Training dummy lacks the flag `fight` checks
+`fight` only calls `accept_fight()` when `can_speak` is set, so spars
+were lethal. Fix by `set("can_speak",1)` on the dummies
+(`tianxiawuxue`).
+
+### 7.106 `update.lpc`: `present(file, environment(me))` with no environment
+Guard with `environment(me) &&`. Swept across `cmds/{wiz,adm,imm,apr}/`.
+
+### 7.107 `closed.lpc` mass-restores closed accounts each heartbeat; `restore()` uncaught
+One corrupt save leaks a zombie object every tick, burns CPU for hours,
+and churns hundreds of saves. Fix:
+`err = catch(ok = ob->restore()); if (err || !ok) {cleanup; continue;}`.
+Swept on 36 libs. Revert the save churn before committing.
+
+### 7.108 Kick-duplicate-login reconnect loses command dispatch
+Every command answers "什么？". Fix: `enable_commands()` at the top of
+the body's `reconnect()`. 162 libs, plus `qhxajh`, which the sweep
+missed. Test by logging in twice and answering `y`. "Stalled boot"
+outliers were all false positives; verify with `nc`.
+
+### 7.109 Uncaught `init_new_player(user)` before world entry
+A throw strands the character forever with no save. Fix:
+`catch(init_new_player(user));` (113 libs). An independent §7.90 cold
+compile can cause the identical symptom; test with a fresh driver.
+
+### 7.110 DANGER: `closed.lpc` `load_all_users()` mass `enter_world()` at t≈3s
+Compiling dozens of zones at once fragments the allocator. RSS
+balloons; `nt1` hit 10GB and OOMed the host. Before booting a lib with a
+big `data/closed.o`, run `wc -c` on it and boot under a cap:
+`(ulimit -v 6291456; exec ./driver config.fluffos)`. Signature: LPC
+"accounted" memory is small while RSS is huge (`mud_status(1)`). No fix
+implemented yet (it would need batching).
+
+### 7.111 `standard_trace()` calls `file_name(error["object"])` when the object is 0
+The handler crashes and eats the real trace. Fix:
+`objectp(o) ? file_name(o) : "(driver)"` (67 libs).
+
+### 7.112 `init()` unconditionally schedules a `call_out` chain
+`enable_commands()` on reconnect re-broadcasts `init()`, so chains
+duplicate and race (wrong revive room, double penalties).
+- Fix: a per-victim `set_temp`/`delete_temp` guard, cleared at every
+  exit of the chain.
+- Hides under many filenames: `wgargoyle`/`bgargoyle`/`pang`/`b`/
+  `yu-zu2`/`panguan`/`mengpo`/`yanluo`, arena rooms, `kfroom_*`. Grep
+  `call_out("death_stage"` (and any `call_out` inside `init()`) and
+  read the control flow. `remove_call_out` self-guards and differently
+  named flags are already safe.
+- Swept on about 300 libs. If it keeps recurring, move the fix into a
+  shared base.
+
+### 7.113 Netdead reconnect never restores `heart_beat`
+Healing freezes and the revive gate never opens. The real reconnect
+path must call a body-side `resume_heart_beat()`, since
+`set_heart_beat` only affects `this_object()`. Only `shzs` had it; 61
+other libs verified clean. Don't trust `call ob->query_heart_beat()`;
+an undefined function returns 0.
+
+### 7.114 `private` `input_to()` string callback reached via an inherited mixin
+The re-arm silently fails, so the multi-line editor (post, mail, chfn)
+swallows every line after the first. Drop `private` (5 libs). Same
+family as §8.3a.
+
+### 7.115 `QUEST` macro points at a missing file
+Only `aoxiangtianji` had live callers. Guard with
+`file_size(QUEST+".lpc") > 0 &&`. Survey of 80 libs is closed.
+
+### 7.116 `userp()` is sticky ("ever interactive")
+A natured cleanup `move()`d destructed zombies forever. Use
+`interactive()` (`bmxkx2001` plus 6 siblings).
+
+### 7.117 Apprentice "betrayed old sect" check without a family-exists guard
+First-time joins get rejected. Fix:
+`me->query("family") && ...`. `sj` also had
+`query("family/master_id" == ...)`. 121 files swept; `sjshv150` was
+missed. Check both halves of the `recruit`/`apprentice` pair.
+
+### 7.118 Hardcoded `.c`-length slice math in dispatch tables and header generators
+Command keys come out as `look.l`, so everything is "What?"; or
+generated headers are empty, cascading hundreds of failures.
+- Libs seen: `sunshadow`, `nightmare4`, `residuum`, `revivalworld`,
+  `dsI`, `rifts2`, `pd`, `sanguozhi`'s `dir`/`doc_d`.
+- A `continue`-skip variant (`sunshadow`'s `feat_d`) hid a whole layer
+  of feat files.
+- Also grep `+".c"`/`file_size(x+".c")` existence gates
+  (`dreamofseven`). Make slices extension-agnostic.
+
+### 7.119 Warning filter checks `"Warning"` while the driver emits `"warning:"`
+Use `"arning:"` (`zhyx`, `naruto`).
+
+### 7.120 Save-integrity helper is a no-op stub
+Every player is locked out after the first driver restart. Restore it
+from a sibling (`revive` ← `hell`). Always test stop → restart →
+reconnect.
+
+### 7.121 Declared-`int` economy/XP math returns floats
+`(int)` is a no-op at runtime; use `to_int()`.
+- Floats corrupt saved money, crash array indexing, or garble
+  `random()`.
+- Also applies to call arguments passed to `int` parameters
+  (`AddHealthPoints(float)` in Dead Souls `eventRevive`).
+- Seen in: Dead Souls `economy.lpc` (`dsIII`), `ninetears`,
+  `sanguozhi`'s `jimou`, and `ds386`/`dshakkard`/`deadsouls_fluffos`'s
+  `eventRevive`.
+- Check every caller.
+
+### 7.122 Autoload reload clones markers already present
+Saves embed the item, then `load_autoload_obj()` clones again, so items
+duplicate on each reconnect cycle. Make the reload idempotent: skip any
+`base_name` already in the inventory.
+- TMI-2 lineage: `mortremains`, `tmi2`, `es1`, `es1_win`.
+- Nightmare: `nightmare3`'s `__AutoLoad`/`setup()`.
+
+### 7.123 Bare top-level `ident = (...);` at file scope
+Parsed as a redeclaration; the file never compiles. Merge it into the
+declaration or move it into `create()` (`sunshadow`'s `astronomy_d`
+blanked every outdoor `look`).
+
+### 7.124 Percent threshold initialized with a fraction (`Wimpy = 0.20`)
+The flee check is dead and float returns corrupt the display. Fix
+`Wimpy = 20` and use `int` setters and getters. Seen in
+`nightmare4`, `dsI`, `dsII`, `ds386`, `dsIII`, `dshakkard`,
+`deadsouls_fluffos`.
+
+### 7.125 `enter_world()` sets `registered=1` unconditionally
+The email-register gate never works. Delete it; the NPC's `do_decide`
+sets it. Seen in `zhyx`, `yanhuangwuhun`, `yhyxs`, `yhwhpublicfi`.
+
+### 7.126 Stale `.c` inside `.o` save data used by `load_object`
+Seen as AREA door macros (`naruto`, `huoying`), bank `location`
+(`dreamofseven`), and player `guild_ob` (`ninetears`). Fix: strip a
+trailing `.c` at the resolve choke point; don't edit the saves.
+
+### 7.127 Wrapper parameter type narrower than every real caller
+Generalizes §7.81. Examples: `revive`'s `set_information`; `pd`'s
+`set_id`/`set_long`/etc. declared `string` while callers pass arrays or
+closures. Widen to `mixed` and normalize where needed. That fixed 88%
+of `pd`'s failures.
+
+### 7.128 Custom dispatch's `process_input()` returns the input string
+The driver re-parses it against an empty `add_action` table and appends
+"什么？" after every command. Return `1`; `0` still falls through
+(`revivalworld`).
+
+### 7.129 `tell_room` forwards an omitted `exclude` as int 0
+`create_ghost`'s 2-arg call broke `es1`'s whole death cycle (`die()`
+looped). Fix with an `if (exclude)` branch. In the ES2 family,
+`demonangel` and `naruto` were also unfixed. Trace with
+`debug_message()`; `log_file` silently no-ops without euid.
+
+### 7.130 `query_idle()` after a non-interactive branch in `heart_beat()`
+Crashes every tick and leaks a body. Guard with
+`if (objectp(this_object()) && interactive(this_object()))`; a
+synchronous `quit()` can destruct mid-tick (`ninetears`,
+`finalrealms`).
+
+### 7.131 Pre-master-object archives never call `set_living_name()`
+`find_player`/`find_living` always return 0. Register at login and in
+monster `set_name()`.
+- The duplicate-login self-exclusion trick breaks: register only after
+  the dup check.
+- `try_throw_out`'s `restore_object` wipes object globals: re-set
+  `myself`/`soul`.
+- Seen in `lpmud141`.
+
+### 7.132 `map()` over a mapping calls `(key, value)` here
+Single-parameter callbacks get the KEY. Add the key parameter
+(`arkadia`/`genesis`'s `do_decay`).
+
+### 7.133 Master `remove_interactive()` is never called; the driver calls `net_dead()` on the player
+Add `nomask void net_dead(){ SECURITY->remove_interactive(this_object(),1); }`
+on the player class. That exposed a statue `revive()` string→object
+bug (`arkadia`, `genesis`).
+
+### 7.134 Room `room_descs` declared without an initializer
+`member_array(0, room_descs)` crashes every `look`. Fix:
+`= ({})`. Sibling shape: an unconditional `return align_array[0]` on a
+possibly-empty array (`finalrealms`).
+
+### 7.135 One accessor in a family lacks the lazy-default guard its siblings have
+`query_list_temp_start()` returned 0, so `quit` crashed before saving.
+Add the guard (`arkadia`). On `genesis`, `quit` called missing
+functions; switched to the `VALID_*_START_LOCATION` macros.
+
+### 7.136 Mortal `cmdsoul_list` stripped, relying on missing race content
+Players get only the NPC soul set, so `look` is "What?". Reseed from
+the archive's own `proto_char.o` list, guarded by
+`member_array("/cmd/live/things",...) < 0` (`genesis`).
+
+### 7.137 `command("$verb")` alias-bypass prefix is unsupported
+The literal `$look` fails. Strip the `$`; the quicktyper's
+`modify_command` is dead here anyway (`genesis`, 13 sites).
+
+### 7.138 `notify_fail` wrapper keys on `efun_defined()` (build flavor) instead of runtime state
+Custom messages vanish into "What?". Branch on
+`efun::query_verb()`, and hoist the `_notify_fail` prototype out of its
+`#if`. Native `query_verb()` returns int 0 when there is no verb, not
+`""` (`skylib`).
+
+### 7.139 Colour translation lives in `catch_tell`; config lacks `interactive catch tell : 1`
+Literal `%^TAG%^` appears everywhere. Add the config key. Check the
+archive's `local_options` for `INTERACTIVE_CATCH_TELL` (`lpuni`).
+
+### 7.140 `valid_read` uses `this_interactive()`'s privileges for `func=="include"`
+The first non-admin to trigger a lazy compile permanently breaks that
+file.
+- Fix: `if (func=="include") return 1;`.
+- Also: home dirs were created only for the first registrant. Hoist the
+  mkdir, and guard `log_error`'s write with `directory_exists`
+  (`lpuni`). Always test with a fresh non-admin account.
+
+### 7.141 `replace_program()` fold in room `create()`
+This driver defers the replace for about 5 minutes. Closures (in `say`)
+fail with "pending replace_program" during that window. Remove the
+fold. Seen in `dsI`, `ds386`, `dsII`, `dsIII`, `dshakkard`,
+`deadsouls_fluffos`.
+
+### 7.142 Virtual-grid exit typo
+`compile_object` manufactures an orphan duplicate room instead of
+failing, so `file_exists` checks give false negatives. Compare against
+the namespace convention (`tmi2`: `/d/grid/9,14` vs
+`/d/grid/rooms/9,14`).
+
+### 7.143 Self-registered `add_action("cmd_hook","",1)` never attaches for reset-spawned NPCs
+There's no `command_giver` at registration, so NPC `force_me()`
+silently fails.
+- Fix: route vendor speech via a `tell_room` helper rather than editing
+  the core `cmd_hook` (`nightmare3`).
+- Unverified siblings: monster spellcasting, `realtor`.
+
+### 7.144 Generic NPC base self-names in `setup()`
+`set_name` is one-shot, so later per-instance renames silently fail and
+lookups break (`finalrealms`'s healer). Don't name the shared base;
+callers name it.
+
+### 7.145 Subclass `add_action` on a verb the base shop already handles
+It shadows the real buy/sell (silent no-op). Use the base's
+`set_open_condition()` hook instead. Check NPC `id()` case (`finalrealms`).
+
+### 7.146 `/ text */` (missing `*`)
+Compile error at some sites; silently compiled garbage at others. Grep
+`'); / [a-z]'` (`finalrealms`).
+
+### 7.147 Unguarded `FACTORY->request(...)->move()` when the factory documents a possible 0 return
+Store the result and guard it (`discworld`).
+- More severe when reached from a bootstrap or crontab loop: one miss
+  silently truncates every later entry (`nt7`'s `equipmentd`/`timed`).
+- Grep `find_object(X) || load_object(X)` loops too.
+
+### 7.148 Parameter named `nosave`/`static`
+These are `L_TYPE_MODIFIER` tokens here, so the file fails to parse
+with "unexpected L_TYPE_MODIFIER". Rename (`discworld`'s print shop).
+
+### 7.149 First-admin bootstrap checks membership in a domain that is never created
+The bootstrap re-fires for every registrant and nobody actually becomes
+admin. Also, case normalization differs between create and check.
+- Fix: create the domain first and use one consistent case
+  (`sanguozhi`).
+- Verify by exercising a privileged action, not by trusting the
+  message.
+
+### 7.150 Throwaway password-check clone of a `LIVING` class is never destructed
+Its heartbeat autosaves a stale snapshot over the real save, reverting
+progress silently. Destruct it before reassigning, and in
+`net_dead` (`merentha`).
+
+### 7.151 `tmp[goods]` (array as mapping key) where `tmp[goods[i]]` was meant
+Shop stock always shows 0 (`xxcqii`, `xxcqii2`).
+
+### 7.152 `reconnect()` omits `set_living_name()`
+After any dropped connection, `tell`/`call` can't find the player. Mirror
+`enable_player()` (`xxcqii`, `xxcqii2`). Don't confuse this with the
+lib's 10-second relogin cooldown.
+
+### 7.153 `read new` branch falls into an unconditional `if (!sscanf(arg,"%d",num))`
+Fix with `else if` (`yxsj`, `yxzsj`'s `jboard`).
+
+### 7.154 `present("fire", this_player())` in `look_room()` reached from `call_out`s
+`this_player()` is 0 there, so corpse decay and dawn crash at night.
+Guard with `objectp(this_player())` (`xyj2006zzzhx`, `xyj2006n`).
+
+### 7.155 Netdead `reconnect()` overwrites `link_ob` without destructing the stale one
+One object leaks per reconnect. Mirror `confirm_relogin`'s destruct
+(`xsfyssjb`).
+
+### 7.156 Regression risk from the §7.30 fix
+A caller that relied on a falsy `query_skills()` to call `set_skill()`
+now mutates a disconnected copy, so the first learned skill is lost.
+Call `set_skill()` unconditionally. Only the `xyxyutf8` lineage was
+affected (3 libs); survey closed.
+
+### 7.157 Diamond inheritance duplicates instance variables per path
+Fixing the `nomask` errors makes functions resolve; variables still
+duplicate, with only a "Redeclaration of global variable" warning. Two
+functions can then touch different copies (`realms`'s region `grid`).
+- Minimal fix: override the writer in the reader's file.
+- Real fix: a singleton object instead of a shared inherit.
+
+### 7.158 LDMud lineage (`questmud`): architecture gaps
+1. `valid_read` needs `load_object`/`recompile_object`/`include` cases.
+2. `creator_file()` must return a string. Exempt the backbone uid in any
+   `creator()`-based guard.
+3. `efun::` overrides outside simul_efun need a permissive
+   `valid_override()`.
+4. `reset()` is lazy here; see §7.192.
+5. **`A->move_object(B)` silently no-ops** when `A` lacks an LPC
+   `move_object`: `call_other` never falls back to the efun. Add
+   `move_object(dest){ return efun::move_object(dest); }` to the
+   targets' base class.
+
+Guide: `docs/ldmud-to-fluffos.md`.
+
+### 7.159 Wizard-home paths in shipped content (`majik3`)
+- If the real file exists elsewhere, repath it (sed
+  `/home/madrid/agriculture/` → `/world/agriculture/`, 47 files).
+- If it was never archived, leave it.
+- A bare "Fail to load object" with no error text usually means a call
+  to an undefined function (a runtime error the batch swallows). Read
+  `log/runtime`.
+- `say()` passed the raw `ob` instead of the built `ob2` to the first
+  `message()`, so every `quit` errored.
+
+### 7.160 Missing native driver-package efun (`majik4`'s `generate_map`)
+Add a minimal labeled stub so the game is enterable; that's not a real
+port. Also needed: master uid applies, missing `log/`/`binaries/`, and
+typo fixes. Commands queue one per 2+ heartbeats, so wait longer
+between sends.
+
+### 7.161 Modern lib uses non-`OLD_ED` editor efuns (`oxidus`)
+That breaks the whole body chain. Revert to the classic `ed()`. Never
+flip `OLD_ED` corpus-wide.
+
+### 7.162 Dynamic callback-name targets must not be `private`
+`ed()` write/exit callbacks, `call_out`s, and socket callbacks resolve
+by name like outside callers, so a private target silently fails. Make
+them public. Fixed-name driver applies may stay private.
+
+### 7.163 `class X array NAME`
+Rewrite to `class X *NAME`. Grep `class \w+ array` (`riftsds`).
+
+### 7.164 Flagship content depends on a base framework the author never committed
+`riftsds`'s omega/common/std domains: 496 failures from one root cause.
+Document it; don't author the framework. Don't advertise that content.
+
+### 7.165 `message()` compat shim always forwards `exclude`
+Branch on whether `exclude` was given. On `darkelib` that took
+failures from 1363 to 493.
+
+### 7.166 Daemon `create()` calls its own `check_privilege()`-gated mutator
+There's no `this_user()` at boot, so it fails silently under
+`preload`'s `catch`. Wrap with `unguarded(1, (: fn, args :))`
+(`spacemud`'s `method_d`/`space_d`).
+
+### 7.167 Collection-emptiness traps
+- `mapping == ([])` compares references and is always 0. Use
+  `!sizeof(m)`.
+- `explode("", sep)` returns `({})`. Guard with `sizeof` before `[0]`
+  (`spacemud`'s `crafting_d`, `m_frame`).
+
+### 7.168 `(: head, "method" :)` is a call_other pointer only when `head` is a bare compile-time NAME
+A string constant or a function call silently becomes a
+comma-expression (returns `"method"`). Use
+`(: call_other, target, "method" :)` (`basis`).
+
+### 7.169 Vestigial `private inherit` of an already-public base
+It creates an ambiguous second, uninitialized copy. Delete it; changing
+it to `protected` hides the bug silently (`basis`).
+
+### 7.170 `file_name()` has a leading `/`
+`== "room/room"` is always false, and the self-delegation recurses
+infinitely (`lpmud245`).
+
+### 7.171 Non-wizards see only `default error message`
+`debug.log` still has the full trace. Read it before concluding "no
+bug".
+
+### 7.172 `command(str, ob)` doesn't exist
+`command()` runs as `current_object`. Add `do_command(str){return
+command(str);}` and call `target->do_command(str)`.
+
+### 7.173 `transfer(a, b)` doesn't exist
+Use `a->move_object(b)` via the §7.158 shim. Return values are no
+longer meaningful.
+
+### 7.174 `add_action("f"); add_verb("v");`
+Merge into `add_action("f","v")` (`lpmud245`: 366 sites).
+
+### 7.175 `PACKAGE_UIDS` needs `creator_file()` for every load
+Stub it alongside `get_root_uid`/`get_bb_uid`.
+
+### 7.176 `valid_read`/`valid_write` get the calling OBJECT, not a euid string
+`string eff_user` comparisons are always false, so every save is
+denied. Fix:
+`if (objectp(eff_user)) eff_user = geteuid(eff_user) || getuid(eff_user);`
+(`lplib8`).
+
+### 7.177 A direct `reset(0)` call can silently no-op
+Move the logic into `do_reset()` and call that from `create()`, or use
+`call_other(this_object(),"reset",0)` (`holymission`; `lpmud141` used
+the latter).
+
+### 7.178 Master apply never called by this driver (`inaugurate_master`)
+Seed data in `create()` instead. Grep the driver source for any
+hook-sounding name.
+
+### 7.179 `mkdir()` doesn't create parents
+Create the letter-bucket dir first (`dock9`; `lpuni` is latent).
+
+### 7.180 Monster `heart_beat` chat/emote/wander blocks lack `ENV(THOB)` guards
+Pre-cloned, undispatched guard pools crash every tick. Guard every
+block, and check `ENV(guard)` after `move` (`majik3`).
+
+### 7.181 Unchecked `sscanf` leaves outputs at 0, which then go into `present()`
+Check the match count and `stringp` (`basis`'s `look`, `ready`).
+
+### 7.182 `create()` override omits `::create()`
+Base `seteuid`/`set_permission` never runs, so commands fail permission
+checks as if gated (`basis`: 13 commands).
+
+### 7.183 Command entry point not named `do_command`
+`cmd_<verb>` leftovers produce silent dead commands (`basis`: 20
+files).
+
+### 7.184 Simul_efun replacing a "trusted" efun must `seteuid(ROOT_UID)` itself
+`valid_write` sees the simul_efun object, so `log_file` silently fails
+(`basis`).
+
+### 7.185 Shared room macros (`ONE_EXIT` etc.) also need `create(){reset(0);}`
+Fixing only hand-written files leaves most of the map dark
+(`lpmud245`).
+
+### 7.186 `this_player()` is invalid in heartbeat-queued `force_us()` commands
+Use `previous_object()` like the majority convention (`majik4`'s `warp`,
+`vlook`, `who`).
+
+### 7.187 Dispatcher keeps using `THOB` after the command destructed it
+Guard with `if (!THOB) return ret;` after dispatch. `quit` →
+`offline` replacement crashed every quit (`majik4`).
+
+### 7.188 `move_object(string)` resolves only with `find_object`, never auto-loading
+An `update` that only destructs breaks every later move to that room
+(login stuck). Reload after destruct (`amylaarmini`).
+
+### 7.189 Hazard-room `object_arrived` destructs small arrivals without an `is_living()` check
+It destroys the player's body. Add the guard (`wilderness`'s
+`Outside_Cave`).
+
+### 7.190 Per-daemon ACL trust exemptions added piecemeal
+`mail_d` lacked read trust, and `valid_write` had no daemon mechanism at
+all. Add both (`dock9`; `lpuni` latent).
+
+### 7.191 Sequential `get_dir()+get_dir()` with a missing dir
+`array + int` aborts index loading midway. Wrap each call in an
+`arrayp`-guarded helper (`havenmud`'s `help`).
+
+### 7.192 The lazy-`reset()` gap hits base classes too
+Rooms and monsters with no `create()` stay exit-less until the first
+reset, an hour later. Add
+`create(){ call_other(this_object(),"reset",0); }` to the base classes;
+that exposes many latent bugs in `reset()`. Walk the world to verify
+(`questmud`).
+
+### 7.193 Diku port put the room-listing sentence in `SetShort()`
+"…is here. is standing here." Strip it to a noun phrase for livings
+only (`brassring`).
+
+### 7.194 Reconstructed `#define Str (query_str())` used inside `query_str()` itself
+Infinite recursion. Make accessors read storage directly
+(`holymission`).
+
+### 7.195 Dead Souls Praxis `*_join.lpc` use `SetClass()` where `ChangeClass()` is needed
+The class silently never applies. Seen in `riftsds`, `ds386`, `dsIII`,
+`dshakkard`, `deadsouls_fluffos`. monk/kataan/rogue have no class data
+(content gap).
+
+### 7.196 `compat.h` shim incomplete
+Add `query_name`/`query_cap_name`/`query_gender` (same 5 libs).
+
+### 7.197 Utility mixin's vestigial `id()` shadows the player's real `id()`
+`present()` can't find players. Remove it. Read "inherited from both…"
+warnings carefully (`lplib8`).
+
+### 7.198 No `valid_shadow()` apply means all `shadow()` calls are denied
+Ghosts fail and `die()` loops. Add `int valid_shadow(object ob){return 1;}`
+(`lplib8`).
+
+### 7.199 `std/money.lpc`'s `query_autoload()` commented out
+Every `quit` drops the player's money on the floor. Uncomment it
+(风云 lineage, 16 libs).
+
+### 7.200 `set_in_room_desc()` evaluates its closure at set time
+Dynamic descriptions freeze. Store the raw argument; the getter already
+evaluates (`sanguozhi`).
+
+### 7.201 `give` money destructs it instead of moving it
+Move it to the recipient. Keep the `receive_money` opt-in hook
+(`sanguozhi`).
+
+### 7.202 Player input concatenated into a `sprintf` format string
+A `%` in the input crashes it. Pass the input as an argument
+(`huoying`, `naruto` meeting rooms).
