@@ -240,9 +240,18 @@ mandates with no completion target:
   resolved. `realms` needs MySQL; don't retry it.
 
 ### 13.9 Discovery/onboarding policy
-- Broad discovery grinding is **paused** (2026-09-04). Replacement: a
-  ~weekly `gh search repos --created=>DATE` re-sweep. The last dry run
-  was 2026-09-12; next ~2026-09-19 onward.
+- **No half-baked new libs; focus on old libs (user, 2026-10-03).** Do
+  not onboard young, still-moving hobby repos, prototypes, or testbeds
+  for a custom driver (e.g. `dyher/mudlib_ro`: two weeks old, three
+  rooms, needs `sqlite3_*`/`websocket_accept` efuns FluffOS lacks).
+  Work goes to the existing collection: §10.7 re-tests, bug sweeps,
+  description accuracy, WASM-status honesty. Onboard a new lib only if
+  it is substantial, stable and historically meaningful, or the user
+  names it.
+- Broad discovery grinding is **paused** (2026-09-04). The ~weekly
+  `gh search repos --created=>DATE` re-sweep is now check-only. Last
+  run 2026-10-03 (cutoff `>2026-09-12`); next ~2026-10-17 with
+  `>2026-10-03`.
 - Don't onboard zayaville.
 - A **specific named lead** from the user is NOT paused. Chase it
   thoroughly.
