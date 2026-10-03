@@ -9,7 +9,6 @@
 //Last edited by Parthenon on August 6th, 2006
 
 #include <mudlib.h>
-#pragma save_binary
 
 #define SAVE_PATH "/data/daemons/chmodules/localNet.o"
 
