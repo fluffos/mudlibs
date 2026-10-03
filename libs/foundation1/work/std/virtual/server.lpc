@@ -16,7 +16,6 @@ int query_prevent_shadow()
 object compile_object(string file)
 {
    string name, server, tmp, args;
-   object obj;
  
    if (sscanf(file,"%s.%s",args,tmp) != 2)
       return 0;

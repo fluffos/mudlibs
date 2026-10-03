@@ -7,7 +7,7 @@
 int clean_up();
 int move(mixed dest);
 int remove();
-nosave void set_no_clean(int x);
+protected void set_no_clean(int x);
 int query_no_clean();
 
 #endif /* __CLEAN_UP_H */ 

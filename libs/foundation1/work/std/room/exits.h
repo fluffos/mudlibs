@@ -13,7 +13,7 @@ void set_enters(mapping mp);
 varargs void add_enter(string dir, string dest, function pre, function post);
 void remove_enter(string dir);
 string query_enter(string str);
-string query_enters();
+string *query_enters();
 string query_direction(string dest);
 void add_track(object ob, string str);
 int query_track(string res);

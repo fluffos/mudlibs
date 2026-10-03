@@ -16,7 +16,7 @@ string consolidate(int x, string str);
 string convert_name(string str);
 mixed copy(mixed val);
 varargs int creatorp(object ob);
-string date(int x);
+int date(int x);
 string day(int x);
 int destruct(object ob);
 mixed *distinct_array(mixed *arr);

@@ -51,7 +51,7 @@ protected void really_change_option(string str, int x);
 private void reply(string str);
 protected void get_reply_confirm(string str);
 protected void get_reply_list(string str);
-private void query_reply_text();
+private string query_reply_text();
 private void forward_letter(string str, int flag);
 protected void get_forward_list(string str);
 protected void confirm_comments(string str);
