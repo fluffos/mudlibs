@@ -449,3 +449,25 @@ all working). All throwaway test characters (`corwin`, `aldric`,
 commit; `git status` shows only the `std/login/login.lpc` fix and the
 new (now non-empty, via a leftover diagnostic `eval.lpc` matching the
 existing `realms/petrarch/` precedent) `realms/fluffos/` directory.
+
+## 深度功能测试（§10.7，2026-10-03）— every compile warning
+
+Method: a tree built the way the site builds it (`scripts/pristine_tree.sh`). Registration
+(name -> keep? -> password -> confirm -> name format -> race-selection room), the seeded
+`fluffos`/`Mud2026` admin's `eval`, and a live money test (clone `/std/obj/money`, set gold,
+move it onto a player to trigger `post_move`'s removal call_out) all pass with no error.
+
+**Fixed: every compile warning** (`scripts/lpc_warnings.py --fix`, then by hand; KB 04 §6.10
+lists the classes). `lpcc --batch` over all 143 non-doc files now reports zero; see the commit
+message for the itemized list (27 `nosave` functions, the `get_stack()` program-name bug,
+`SERVICES_D` redefined, `finger.lpc`'s dead `ob`, 7 stale forward declarations in `login.lpc`,
+two header/definition prototype mismatches, a stray `;`, two ternary type mismatches in
+`living.lpc` rewritten as if/else, and `money.lpc`'s `remove(object env)` override needing
+`varargs` against the inherited 0-arg `clean_up::remove()`). One item worth flagging: the
+`--fix` tool's first automatic pass had deleted three declarations in `functionprofile.lpc`
+as "unused" that are genuinely used only inside an `#else` branch this driver does not compile
+(no `__PROFILE_FUNCTIONS__` package) -- a real risk for that class of fix, caught by inspection
+and documented in KB 04 §6.10 rather than left in a half-fixed state.
+
+`doc/old/lpc/constructs/ref.lpc` is a manual page (TITLE/PRE/ENDPRE markup) with a `.lpc`
+extension, not source; scanned with `--skip '^/doc/'`, not touched.
