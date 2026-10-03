@@ -30,6 +30,7 @@ Mechanical fixes (positions come from the driver; columns are 1-based BYTES):
   Unused local variable                -> delete the declarator (rebuild the statement)
   negative constant range end          -> `..-N]` becomes `..<N]` (section 7.209)
   Unknown escape sequence              -> drop the backslash
+A lib's own compiler tests (Lil: /single/tests/) are broken on purpose; pass --skip '^/single/tests/'.
 Everything else is listed for hand work (see KB 04 section 6.10 for the fixes).
 Only vendored libs (work/ tracked here) are supported.
 
@@ -86,7 +87,7 @@ def sync_changes(slug, lib):
     return len(names)
 
 
-def scan(lib):
+def scan(lib, skips=()):
     work = os.path.join(lib, "work")
     objs = []
     for dp, dn, fn in os.walk(work):
@@ -102,6 +103,8 @@ def scan(lib):
     seen, rows = set(), []
     for m in DIAG.finditer(raw):
         f, ln, col, sev, msg = m.groups()
+        if any(re.search(x, f) for x in skips):
+            continue
         key = (f, ln, msg)
         if key in seen:
             continue
@@ -457,6 +460,9 @@ def main():
     ap.add_argument("--rounds", type=int, default=8)
     ap.add_argument("--tree", default=None, help="scan tree (default /tmp/lpcw-SLUG)")
     ap.add_argument("--list", type=int, default=3, help="examples per remaining kind")
+    ap.add_argument("--skip", action="append", default=[],
+                    help="regex of file paths to leave alone (repeatable); use it for a lib's own "
+                         "compiler tests that are broken on purpose, e.g. --skip '^/single/tests/'")
     a = ap.parse_args()
     if not os.path.isfile(LPCC):
         sys.exit(f"lpcc not found at {LPCC} (build target lpcc in ~/src/fluffos/build-debug)")
@@ -465,7 +471,7 @@ def main():
     work = os.path.join(REPO, "libs", a.slug, "work")
     public = set(x for x in a.public.split(",") if x)
     sync_changes(a.slug, lib)
-    rows, npass, nfail, raw = scan(lib)
+    rows, npass, nfail, raw = scan(lib, a.skip)
     print(f"{a.slug}: scan 1")
     summary(rows, npass, nfail)
     manual_all = []
@@ -481,14 +487,14 @@ def main():
             nr_, m2 = fix_range_ends(work, rows)
             ne_, m3 = fix_escapes(work, rows)
             sync_changes(a.slug, lib)
-            rows2, npass, nfail, raw = scan(lib)       # unused-local positions need a rescan after other edits
+            rows2, npass, nfail, raw = scan(lib, a.skip)       # unused-local positions need a rescan after other edits
             nu_, m4 = fix_unused_locals(work, rows2)
             manual_all = m1 + m4
             changed = np_ + nd_ + nr_ + ne_ + nu_
             print(f"round {rnd}: nosave functions {np_} protected + {nd_} dropped, range ends {nr_}, "
                   f"escapes {ne_}, unused locals {nu_}")
             sync_changes(a.slug, lib)
-            rows, npass, nfail, raw = scan(lib)
+            rows, npass, nfail, raw = scan(lib, a.skip)
             if not changed:
                 break
         print(f"{a.slug}: after fixing")
