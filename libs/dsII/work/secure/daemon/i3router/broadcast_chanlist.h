@@ -1,7 +1,7 @@
 // This file written completely by Tim Johnson (Tim@TimMUD)
 
 // broadcast the chanlist-reply when a channel just now got changed...
-nosave void broadcast_chanlist(string channame){
+protected void broadcast_chanlist(string channame){
     string name; // channel name in first loop, then mud name in later loop
 #ifdef SEND_WHOLE_CHANLIST
     mapping out=([]); // only used if whole chanlist is sent

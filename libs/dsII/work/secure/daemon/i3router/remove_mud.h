@@ -1,6 +1,6 @@
 // This file written completely by Tim Johnson (Tim@TimMUD)
 
-nosave void remove_mud(string mudname){
+protected void remove_mud(string mudname){
     if(connected_muds[mudname]){
 	trr("Cannot remove mud ["+mudname+"] because it is still online right now.\n");
 	return;

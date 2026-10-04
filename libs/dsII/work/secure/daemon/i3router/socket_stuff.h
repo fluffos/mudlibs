@@ -1,6 +1,6 @@
 // This file written in great part by Tim Johnson (Tim@TimMUD)
 
-nosave void close_callback(int fd){
+protected void close_callback(int fd){
     string mudname;
     trr("close_callback: fd="+fd+"\n");
     foreach(mudname in keys(muds_on_this_fd(fd))){
@@ -12,7 +12,7 @@ nosave void close_callback(int fd){
     close_connection(fd);
 }
 
-nosave void listen_callback(int fd){
+protected void listen_callback(int fd){
     int fdstat;
     if ((fdstat = socket_accept(fd, "read_callback", "write_callback")) < 0) {
 	return;
@@ -29,7 +29,7 @@ void write_callback(int fd){
     }
 }
 
-nosave void write_data_retry(int fd, mixed data, int counter){
+protected void write_data_retry(int fd, mixed data, int counter){
     int rc;
     if (counter == MAXIMUM_RETRIES) {
 	close_connection(fd);
@@ -59,18 +59,18 @@ nosave void write_data_retry(int fd, mixed data, int counter){
     }
 }
 
-nosave void close_connection(int fd){
+protected void close_connection(int fd){
     int sockerr;
     map_delete(sockets, fd);
     sockerr = socket_close(fd);
     trr("closing sockerr:"+sockerr);
 }
 
-nosave void write_data(int fd, mixed data){
+protected void write_data(int fd, mixed data){
     write_data_retry(fd, data, 0);
 }
 
-nosave void broadcast_data(mapping targets, mixed data){
+protected void broadcast_data(mapping targets, mixed data){
     foreach(int *arr in unique_array(values(targets), (: $1 :))){
 	write_data(arr[0], data);
     }

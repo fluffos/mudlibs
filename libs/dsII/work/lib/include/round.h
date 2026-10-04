@@ -1,7 +1,7 @@
 #ifndef l_round_h
 #define l_round_h
 
-nosave void create();
+protected void create();
 
 int SetCaliber(int x);
 int SetMillimeter(int x);

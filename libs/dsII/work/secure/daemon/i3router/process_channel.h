@@ -1,7 +1,7 @@
 // This file written completely by Tim Johnson (Tim@TimMUD)
 #include <save.h>
 
-nosave void process_channel(int fd, mixed *info){
+protected void process_channel(int fd, mixed *info){
     string mudname;
     trr("extra stuff is ["+info[0][8..]+"]");
     switch(info[0][8..]){ // what is after the "channel-"

@@ -2,12 +2,12 @@
 
 string *banned_muds = ({});
 
-nosave void process_startup_req(int protocol, mixed info, int fd){
+void process_startup_req(int protocol, mixed info, int fd){
     // Handles startup stuff.
     //  Loads info into newinfo mapping.
     //  Error if mud is already connected.
     mapping newinfo;
-    string site_ip, junk;
+    string site_ip;
     // router name is info[4], I'll just pretend I'm every router though, ha-ha!
     // also, should verify that all the fields are the right type
 

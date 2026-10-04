@@ -1,6 +1,6 @@
 // This file written completely by Tim Johnson (Tim@TimMUD)
 
-nosave void send_mudlist_updates(string updating_mudname, int old_mudlist_id){
+protected void send_mudlist_updates(string updating_mudname, int old_mudlist_id){
     string mudname; // mud name
     string *kys; // array of strings for keys that need to be sent
     mapping out=([ ]); // mapping to send

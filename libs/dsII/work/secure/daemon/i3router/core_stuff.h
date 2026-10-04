@@ -2,7 +2,7 @@
 #include <network.h>
 #include <save.h>
 
-nosave void create(){ 
+protected void create(){ 
     SetNoClean(1);
     sockets = ([]);
     connected_muds = ([]);
@@ -29,7 +29,7 @@ void heart_beat(){
 }
 
 
-nosave void setup(){
+protected void setup(){
     trr("setup got called");
     if( file_size( SAVE_ROUTER __SAVE_EXTENSION__ ) > 0 )
 	unguarded( (: restore_object, SAVE_ROUTER, 1 :) );
@@ -63,7 +63,6 @@ void remove(){
     mudinfo_update_counter++; // just increment once... all the connected muds
     // getting simultaneously disconnected is okay to count as one change :)
     foreach(mudname in keys(connected_muds)){
-	mudinfo_updates[mudname];
 	mudinfo[mudname]["disconnect_time"]=time();
 	map_delete(connected_muds,mudname); // unneeded: connected_muds isn't saved anyway
     }

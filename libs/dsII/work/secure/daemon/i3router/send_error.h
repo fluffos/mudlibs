@@ -1,6 +1,6 @@
 // This file written completely by Tim Johnson (Tim@TimMUD)
 
-nosave void send_error(string mud, string user, string errcode, string errmsg, mixed *info){
+protected void send_error(string mud, string user, string errcode, string errmsg, mixed *info){
     if(!connected_muds[mud]){
 	trr("Can't send error to "+mud+" because they're not connected.");
 	return;

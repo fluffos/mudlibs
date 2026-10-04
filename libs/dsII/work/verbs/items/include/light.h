@@ -1,7 +1,7 @@
 #ifndef l_light_h
 #define l_light_h
 
-nosave void create();
+protected void create();
 
 mixed can_light_obj();
 mixed can_light_obj_with_obj();

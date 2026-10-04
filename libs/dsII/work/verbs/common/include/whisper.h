@@ -1,7 +1,7 @@
 #ifndef l_whisper_h
 #define l_whisper_h
 
-nosave void create();
+protected void create();
 mixed can_whisper();
 mixed can_whisper_to_liv(object ob);
 mixed can_whisper_in_wrd(string wrd);

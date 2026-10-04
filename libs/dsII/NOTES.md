@@ -748,3 +748,52 @@ worked (no mid-news `What?` collapse). 拜师 analogue is
 (2026-08-27); not re-run. Same unfixed `this_player()` line
 still on `dsIII`/`dshakkard`/`riftsds` (dsI is an older
 generation and has no `hobbled()` at all).
+
+## 深度功能测试（§10.7，2026-10-03）— compile warnings
+
+Scope and method as in `dsI/NOTES.md` (same date): `scripts/lpc_warnings.py dsII --fix`
+over 1420 `.lpc` files, hand fixes for what the tool lists, a golden-master comparison of
+the 163 `lib/` programs against HEAD (`scripts/ds_oracle.py`, KB 08 §10.12), pristine-tree
+live boot with the admin `fluffos`/`fluffwiz123` (login, 95-command battery, shop
+buy/sell, elevator button, NPC clone, container/armour round trips).
+
+Result: 5773 distinct diagnostics → 3956 at the last scan. The remainder is the 3256
+`Redeclaration of global variable` / 675 `inherited from both` family from duplicate
+inherit paths (66 source files: 40 redundant leaf inherits, 12 partial overlaps, 9 name
+collisions, 6 function overlaps; queued) plus `secure/daemon/remote.lpc` (§7).
+
+Mechanical: 45 pragma lines deleted; 1450 `nosave` functions → `protected`, 206 left public
+(called through `->`); 78 unused locals; 6 unknown escapes; 36 `varargs`; 6 bare `return;`
+in value-returning functions. The oracle: 212 distinct functions flipped public →
+protected (the `static` semantics the archive had), nothing else changed in the 163
+programs; none of the flipped names has a cross-object caller.
+
+Real bugs found while doing it (all fixed):
+- `lib/std/book.lpc`: `if(!file_exists(globalstr2)) globalstr2 == "";` (comparison where
+  an assignment was meant).
+- `lib/living.lpc` `CanCastMagic()` lost a `return` (as in dsI); `lib/std/room.lpc`
+  `RemoveItem`/`SetItems`/`RemoveRead` were `void` in a `mixed` family; `lib/interactive.lpc`
+  `SetId`/`SetCapName`; `lib/std/limb.lpc` `GetSaveString` type; `secure/include/socket.h`
+  (`ERROR_STRINGS`, `EEBADDATA`) — same defects and fixes as dsI.
+- `secure/include/lib.h` `LIB_VIRTUAL` pointed at the non-existent `/lib/virtual`; the
+  virtual-room base lives in `DIR_VIRT "/virt_std"`.
+- The elevator's own `SetDoor(int)` shadowed `LIB_EXITS::SetDoor(dir, file)`; renamed
+  `SetDoorClosed` in `domains/town/room/elevator.lpc` and in both call buttons
+  (`ebutton1`/`ebutton2`), as dsIII did (KB 06 §7.211).
+- `secure/cmds/admins/opcprof.lpc` called the `opcprof()` efun, which FluffOS removed
+  (commit 27f47faf "REMOVE OPCPROF OPCPROF_2D"): the command now says so instead of
+  failing to compile. `secure/tmp/cratylus_CMD_EVAL_TMP_FILE.lpc`, a leftover from a
+  failed `eval` (it called an undefined `reverse_stringy`), deleted; it was listed as
+  "left as-is" in §7. Two `/*` inside the comment block in `lib/events/look.lpc` and
+  `look_in.lpc` (`domains/*`) reworded.
+- `secure/daemon/snoop.lpc` had an empty `if(target != "cratylus") {}` (debug leftover) and
+  `i3router/core_stuff.h` a no-op statement `mudinfo_updates[mudname];`; removed.
+
+Not done, deliberately: `secure/daemon/remote.lpc` is the Foundation II Remote Creator
+Protocol daemon (single object handling raw fds); Dead Souls' `LIB_SERVER` hands each
+connection to a per-connection socket object, so a port is a redesign of a feature that
+`secure/cfg/preload.cfg` already has commented out. It stays documented, not loaded.
+
+`help` was dead in a fresh clone and on the site (`secure/cmds/common`, `verbs/spells`,
+`verbs/undead` ship empty in the archive): KB 06 §7.212; 24 directories are now in
+`scripts/wasm_keep_dirs.txt`. Verified on a pristine tree: `help`, `help look` print.

@@ -1,8 +1,8 @@
 #ifndef l_vendor_h
 #define l_vendor_h
 
-nosave void create();
-nosave void init();
+protected void create();
+protected void init();
 mixed direct_buy_str_from_liv(string str);
 
 mixed CanBuy(object who, object *obs);

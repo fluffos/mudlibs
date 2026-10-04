@@ -1,6 +1,6 @@
 // This file written completely by Tim Johnson (Tim@TimMUD)
 
-nosave void read_callback(int fd, mixed info){
+protected void read_callback(int fd, mixed info){
     // This is called when messages come in from a MUD.
     // Should reject all messages if they have not done a (successful) startup-req,
     // Should check to make sure the fd matches with the mud they are claiming to be, else error.

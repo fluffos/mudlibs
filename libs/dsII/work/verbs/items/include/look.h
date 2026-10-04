@@ -1,7 +1,7 @@
 #ifndef l_look_h
 #define l_look_h
 
-nosave void create();
+protected void create();
 
 mixed can_look();
 mixed can_look_at_str(string str, string verb);

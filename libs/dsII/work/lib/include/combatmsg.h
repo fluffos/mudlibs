@@ -2,7 +2,7 @@
 #define l_combatmsg_h
 
 mixed GetMissData(object target, int type, string limb);
-nosave void eventSendMissMessages(object target, int x, string limb);
+protected void eventSendMissMessages(object target, int x, string limb);
 mixed GetCombatVerbs(string type, int damage);
 mixed GetCombatMove(string type, int skill);
 varargs void SendMeleeMessages(object target, int x, string targlimb, string limb);

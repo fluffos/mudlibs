@@ -104,6 +104,6 @@
 #define LIB_UNDEAD         DIR_LIB        "/undead"
 #define LIB_VEHICLE        DIR_LIB        "/vehicle"
 #define LIB_VERB           DIR_LIB        "/verb"
-#define LIB_VIRTUAL        DIR_LIB        "/virtual"
+#define LIB_VIRTUAL        DIR_VIRT "/virt_std"
 
 #endif /* s_lib_h */
