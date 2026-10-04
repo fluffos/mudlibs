@@ -31,7 +31,8 @@ args = sys.argv[1:]
 if not args or args[0].startswith("--"):
     sys.exit(__doc__)
 slug = args[0]
-work = f"/home/sunyc/src/mudlib/libs/{slug}/work"
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+work = f"{REPO}/libs/{slug}/work"
 only_lib = "--only-lib" in args
 fix = "--fix-redundant" in args
 apply_ = "--apply" in args

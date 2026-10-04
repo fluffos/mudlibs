@@ -219,7 +219,9 @@ running a whole suite live.
 trees, the baseline (`REV=<sha> scripts/pristine_tree.sh SLUG PORT DIR`, `REV` defaults to
 HEAD) and HEAD plus the working-tree edits (`pristine_tree.sh` + `lpc_warnings.sync_changes`),
 boot each, run `python3 scripts/ds_oracle.py DIR/libs/SLUG/work PORT ADMIN PW out.txt --lib`
-(admin names and passwords: `dsI`/`dsII` `fluffos`/`fluffwiz123`, `dsIII` `fluffos`/`Mud@2026`),
+(admin names and passwords: `dsI`/`dsII` `fluffos`/`fluffwiz123`, `dsIII` `fluffos`/`Mud@2026`,
+`deadsouls_fluffos` `shopdive`/`Mud@2026`: a submodule, so run the scripts from its scratch repo (KB 02 §2.3)
+with the `shopdive` save and `ed_compat.lpc` in both trees),
 kill each driver by exact PID, `diff` the two files (clone numbers are normalised). Per
 probed program it records the file that defines the final version of every function and
 whether it is public (`function_exists` with and without the flag), every global variable

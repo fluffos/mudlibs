@@ -919,4 +919,5 @@ clean checkout with the patch: four errors in a row, then `look`, `i` and `!look
 Separate from that, `~/src/fluffos/build-debug/src/driver` built from fluffos/fluffos at `2c272875` (2026-09-16) segfaults
 in about half of the first logins here (`copy_functions()` -> `lookup_ident()` with a garbage name while compiling
 `std/race/human`, a two-hop `FUNC_ALIAS` chain for `receive_remote_msg`). That is the #1403 regression fixed upstream by
-#1420 (2026-10-03); a driver built from current master does not have it.
+#1420 (2026-10-03); a driver built from current master does not have it: six fresh boots with the master build
+(`01026e1f`) each logged in clean, where the same six commands with the 2026-09-16 build crashed on about half.

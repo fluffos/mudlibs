@@ -909,7 +909,7 @@ the current program does not define. So a leaf that inherits `LIB_ITEM` and then
 extra `inherit "/lib/props/ambiance"` after `LIB_ROOM` replaces `room.lpc`'s
 `GetAmbientLight()` (day/night light, the lit lamps in the room) with the plain getter.
 Descendants repeat every warning, so the *source* files are few (`dsI` 9, `dsII` 66, `dsIII`
-46, `ds386` 50): `scripts/lpc_diamonds.py SLUG` lists files whose direct inherits overlap, and a
+46, `ds386` 50, `deadsouls_fluffos` 50): `scripts/lpc_diamonds.py SLUG` lists files whose direct inherits overlap, and a
 warning anchored on a declaration or `inherit` line that no parent already warns about
 marks a source. **Fix, by kind:** (1) a redundant leaf inherit (everything it brings is
 already in another inherit's closure): delete the line, unless the file calls `b::fn()`
@@ -978,6 +978,10 @@ fixer's routines (`fix_nosave_functions`, `fix_escapes`, `fix_unused_locals`) ov
 the result back; once the wizard has run, `diff connect.real connect.lpc` is empty.
 **Detection:** `grep -rn 'cp(\|rename(' work | grep -v '\.lpc'` for source copied at runtime, and
 a boot that completes the wizard, then a second login with the console watched.
+`deadsouls_fluffos` (2026-10-04): `update.patch` and `update.blank` said `static void create()`, which this
+driver does not read as a modifier at all (`syntax error, unexpected L_BASIC_TYPE`), so the first live upgrade
+would have installed an update daemon that does not compile; `connect.real` had an unknown escape and
+a `type.h`/`compat.h` `OBJECT` redefinition that only shows when a copy includes both. `static` -> `protected`.
 
 ### 7.217 Two uncaught errors in a row leave a Lima-family session mute (`HAS_PROCESS_INPUT` is dropped)
 **Symptom:** a wizard's `clone` of a broken object fails twice (or a player repeats a command that raises), and from

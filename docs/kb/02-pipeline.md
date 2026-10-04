@@ -80,6 +80,19 @@ Also apply the WASM standards: §1.3b, §1.3e, and §1.5.
     (`work/lib`), `deadsouls_fluffos` (`work/lib`).
   - An archived fluffos-org repo is not a hosting target. `lima` tracks
     `limalib/lima` as `submodule-patch`.
+  - A big pass (a warnings sweep) is made in the same scratch repo as a
+    lima patch set: `scripts/submodule_patch_scratch.py build <slug>` (the
+    mudlib subdir, `lib/` here, becomes `work/`), then commit the catalog
+    `overlay/` files there as a baseline (and `git commit-tree` a second
+    baseline of upstream + overlay for the oracle's HEAD side) so scans,
+    `ds_oracle_run.sh` and live sessions boot like the site. The PR is two
+    scratch diffs applied with `git apply --directory=lib -p4` on a branch
+    of the fork (mechanical, then structural), after a paired
+    baseline/branch live run; merge it yourself once tested, bump the pin
+    with `rebase_upstreams.py`, and **rebuild every overlay file that is a
+    full copy of an upstream file** (`deadsouls_fluffos`'s
+    `overlay/lib/secure/sefun/sefun.lpc` is upstream's plus one `#include`,
+    so a pin bump that touches `sefun.lpc` is undone on the site otherwise).
 - The site zip contains the **patched playable tree** plus `patches/`
   and `meta.json`.
 - `scripts/check_upstream_rebase.py` regenerates

@@ -475,3 +475,68 @@ under their new names), checked live on a tree built from it against a tree buil
 `shopdive` creator, `goto /domains/Praxis/fighter_join`, `become fighter`, `skills`: master leaves a level 1 Explorer
 with Explorer skills after the initiation text, the branch a level 1 Fighter with the fighter list), merged as
 `e7a25776`, and the pin bumped to it.
+
+## 深度功能测试（§10.7，2026-10-04）— compile warnings: 3114 -> 2 diagnostics ([fluffos/dead-souls#18](https://github.com/fluffos/dead-souls/pull/18))
+
+Baseline (scan with `scripts/lpc_warnings.py`, KB 04 §6.10): 2386 files compile, 23 do not, 3114 distinct diagnostics —
+1922 `Redeclaration of global variable` in 1011 files (`Search` 595, `counter` 590, `Unique` 229, `my_save` 165), 305
+unused locals, 83 `nosave` functions, 54 argument-count disagreements, 55 unknown escapes, 15 `(: "name" :)` pointers, 13
+bare returns, and about 110 `x() inherited from both` rows from 25 leaf files. After the PR: 2404 files compile and the
+scan lists 2 diagnostics, `obj/area_room.lpc` (includes a `../customdefs.h` that does not exist) and `obj/stargate.lpc`
+(refuses to compile on purpose); `open/prog.lpc`, the third dead archive file the other Dead Souls libs keep, is not
+visited by the scan. The submodule is `fluffos-upstream`, so the change went in as one PR with two commits (mechanical,
+then structural), merged as `31d342a` + `161b8dcc` and pinned.
+
+Method. The scripts want a repo whose `libs/SLUG/work` is the mudlib directory, so the work happened in a scratch repo
+(`scripts/submodule_patch_scratch.py build deadsouls_fluffos`: upstream's `lib/` as `work/`), with the catalog overlay
+committed as a baseline (`ed_compat.lpc`, the `shopdive` creator save and the `#include` line in `sefun.lpc`) so that
+scans, the oracle and the live sessions boot the way the site does. Mechanical pass: `lpc_warnings.py --fix`. Structural
+pass: the ds386/dsIII recipe (KB 06 §7.213-§7.215) applied by hand to the 50 source files, since the lib was reformatted
+upstream and a line merge from ds386 conflicted in 1376 places (`lpc_diamonds.py`, `lpc_rename_ident.py`,
+`lpc_name_winner.py`, `lpc_fix_strptr.py --comma` found and did most of it). The PR is `git apply --directory=lib -p4` of
+two scratch diffs; the merged tree is byte-identical to the tested one.
+
+What the pass found beyond the warnings:
+- **The spells daemon, the `clean` command and `history` did not compile.** The upstream formatting pass turned
+  `string *spells, *prayers;` into `string *spells, prayers;`; the star is per declarator in this grammar (`new_local_def:
+  optional_star new_local_name`), so `prayers = get_dir(...)` assigned an array to a `string` and the program was a
+  compile error. Live on master: `SPELLS_D->GetSpells()` raises `No program in object '/daemon/spells'` (no spell or
+  prayer was ever loaded), `history` and `clean` answer the same; on the branch `GetSpells()` is 8 spells and 1 prayer,
+  `history` lists the commands, `clean here` cleans the room, `cast fireball` runs. 12 declarations restored, found by
+  comparing every `T *a, b;` line with ds386, dsIII, dsII, dsI, dshakkard, riftsds and brassring (20 of 46 candidates
+  had a starred sibling; the other 26 are genuinely `string *shorts, ret;`). The formatter in `~/src/fluffos/tools/
+  lpc-syntax/` keeps the stars today (tested), so this came from an older run of it.
+- `lib/trainer.lpc` `init()` was displaced by sentient's: a pupil who left in the middle of a lesson stayed "already
+  trained" (live, master "I am already training you!", branch "begins teaching you about the skill of magic defense").
+- `GetRadiantLight()` counted the own glow of NPCs, chests, beds, chairs, corpses and limbs twice (the oracle's
+  `SetRadiantLight(7)` read 14 on 41 programs, 7 now) and a worn pack's contents not at all (KB 06 §7.215).
+- `virt_land` `SetCoordinates(int,int,int)` clobbered `LIB_ROOM`'s `SetCoordinates(string)` in every virtual room.
+- 15 `(: "name" :)` and 30 `(: this_object(), "name" :)` Praxis pointers returned their own name (`look at gallows`
+  printed `long_func`, the planning room's long description was `go_away`, the voting halls printed `new_long`); the
+  targets had never run, so the search handlers return their text and place the shovel and dagger with `eventMove()`, the
+  Knight's helm asks `GetMorality()` (at morality 0: "This helmet burns with disgust."), the invis ring's test takes the
+  viewer (`GetInvis(orc)` is 1 for an orc and 0 for a human), `stone.lpc` returns its text, the bank vault and yard
+  manhole are plain texts (they named `look_at_vault`/`look_at_manhole`, which exist nowhere).
+- `daemon/books.lpc` `globalstr2 == ""` (no-op), `pscoutsuit` stray `;`, six `#define __DIR__` (a predefined macro) in
+  the amigara/learning virtual-room servers, `opcprof()` (gone from the driver; the command says so), the `OBJECT` macro
+  of `type.h`/`compat.h` redefined, `static` (a syntax error) in `update.patch`/`update.blank`.
+
+Verification. Rescanned with `~/src/fluffos`'s stale `lpcc` and with a build of fluffos at `01026e1f` (same 2
+diagnostics). Golden-master oracle (`scripts/ds_oracle.py` through the scratch repo, admin `shopdive`/`Mud@2026`, master
+against branch, same driver; 263 programs = `lib/` plus the 38 leaf paths of ds386): 50 definer changes, every one an
+explicit choice above; 110 visibility rows (the `nosave` -> `protected` flips, whose cross-object callers the fixer greps for); 566
+variable-count rows (the renames); 88 radiance rows; 180 removed functions = the
+enter/knock/scratch families of the five scenery containers; no `GetSaveString()` row changes; the remaining `get` rows are
+per-creation randoms (HP, carry). Live, paired, 167 + 10 steps as `shopdive`: fixtures (trashcan, river, sea, coffin,
+hoverpod), trainer, search, zpem, horse, virtual rooms, death and corpse, the Praxis callbacks, spells/history/clean. The
+branch printed no compiler warning in the whole session, master about 1000 lines of them; no `insufficient permission`
+on the console. The only visible difference besides the fixes: `You can't enter that!` -> `You can't enter that.` on the
+river (the refusal now comes from the parser, as on ds386).
+
+Overlay. `overlay/lib/secure/sefun/sefun.lpc` is a full copy of upstream's plus one `#include`, so a pin bump that
+touches `sefun.lpc` is undone on the site unless the overlay is rebuilt: insert `#include "/secure/sefun/ed_compat.lpc"`
+after the `astar.lpc` include of the new upstream file (done for this pin; the `rets` local is gone from both).
+
+Left alone: `update.patch`/`update.blank` still name `.c` files in a few `cp`/`rm` calls (the live-upgrade tool targets the
+pre-rename tree); the config has three obsolete lines the driver reports (`address server ip`, `address server port`,
+`binary directory`).

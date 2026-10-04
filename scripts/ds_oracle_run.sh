@@ -25,7 +25,7 @@ else
   REV=$REV scripts/pristine_tree.sh "$SLUG" "$PORT" "$DEST" > /dev/null
 fi
 cd "$DEST/libs/$SLUG"
-setsid nohup $HOME/src/fluffos/build-debug/src/driver config.fluffos > /tmp/oracle-$LABEL-$SLUG.out 2>&1 &
+setsid nohup ${DRIVER:-$HOME/src/fluffos/build-debug/src/driver} config.fluffos > /tmp/oracle-$LABEL-$SLUG.out 2>&1 &
 PID=$!
 echo $PID > /tmp/oracle-$LABEL-$SLUG.pid
 trap 'kill $PID 2>/dev/null' EXIT
