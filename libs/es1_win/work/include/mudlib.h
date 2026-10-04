@@ -12,7 +12,9 @@
 #define ROOM_OBJECT			"/std/object/room_ob"
 #define ROOM 			"/std/room/room"
 #define DAEMON 			"/std/cmd_m"
+#undef WEAPON
 #define WEAPON 			"/std/weapon/weapon"
+#undef ARMOR
 #define ARMOR 			"/std/armor/armor"
 #define MONSTER 		"/std/npc"
 #define LIVING 			"/std/living"

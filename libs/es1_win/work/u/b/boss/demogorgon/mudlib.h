@@ -25,6 +25,7 @@
 // #define GUILD                   "/std/guild" 
 #define MAP                             "/std/std_map"
 #define MOUNT                   "/std/mount"
+#undef GUILD_OB
 #define GUILD_OB        "/u/s/sage/guild/std/guild_ob"
 //#define GUILD_OB                "/std/guild_ob"
 #define SHOP            "/std/room/shop"
@@ -69,6 +70,7 @@
 // #define GUILD                   "/std/guild" 
 #define MAP                             "/std/std_map"
 #define MOUNT                   "/std/mount"
+#undef GUILD_OB
 #define GUILD_OB                "/std/guild_ob"
 #define SHOP            "/std/room/shop"
 #define SELLER          "/std/seller"

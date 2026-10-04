@@ -751,3 +751,50 @@ fix needing its own from-scratch reproduction).
 ## 深度功能测试（§10.7，2026-10-04）— negative range ends
 
 `scripts/lpc_fix_negative_ranges.py`: 16 line(s) in 9 file(s) count a range from the end with `<` (`x[a..-1]` -> `x[a..<1]`, `x[-2..]` -> `x[<2..]`; KB 06 §7.209). In this driver a negative constant end gave `""` / `({ })` and a negative start the whole value, so each of these returned the wrong slice; the compile warning `A negative constant as the second element of arr[x..y]` is gone from the files that compile. Range lvalues (`s[0..-1] = text`, the prepend idiom) are left alone. A paired compile of the changed files at HEAD and in the working tree showed no new error.
+
+## 深度功能测试（§10.7，2026-10-04）— compile warnings: 2583 -> 46, and 191 more files load
+
+`scripts/lpc_warnings.py es1_win`: 5764 files compile, 1169 do not; 3282 distinct diagnostics (2583 warnings, 699 errors). Now
+5955 / 977; 358 diagnostics: 46 warnings, all in two files that cannot compile (`std/adt/body.lpc` inherits the dbase twice,
+`u/s/sage/test/dragon.lpc` is two files pasted one after the other), and 312 errors in files that still do not load. 929 files
+edited.
+
+**183 files under `d/` did not load: `#include <../hole.h>`.** A header named relative to the including file, in angle
+brackets (71 x `../hole.h`, 30 `../goomay.h`, 23 `../replace_room.h`, 18 `../mumar.h`, 10 `../island.h`, 9 `../zeus.h`, 9
+`../takeda.h` ...). The driver refuses `..` in a `<...>` name and resolves only a quoted include against the including file, so
+every NPC, weapon and armour of those areas died with `Cannot #include` and each user of the macros it defines with a second
+error (218 files). A wizard's `goto /d/deathland/dwarf/center` answered `No program in object`, as did the Deathland fog,
+palace and troll rooms, `cook_master`, the island vampire and the dragon-bone amulet. `adm/obj/master.lpc` now answers
+`include_file()` with `"./" + path` for a name that starts `../` (a different string makes the driver resolve it the way a
+quoted include is, through `merge()`, which understands `..`; KB 04 §6.1). 177 of the 184 files then load through `lpcc
+--batch` (it runs `create()`), and a live session against HEAD and the working tree shows the same rooms and clones working
+where HEAD printed the error. The 7 that still fail are content gaps, left: `liang_shan/monster/guard2.lpc` wields
+`gurad_sword` and `guard1.lpc` `guard_dagger`, neither of which exists in the area (no room places either guard);
+`mumar/monster/temp.lpc` is a draft of `cook_master` with a broken `if`; `d/island/monster/{feller,old_feller}.lpc` include
+`../hole.h` where the header lives in `d/island/hole/`; `d/scholar/demand/where/{fire_beast,princess}.lpc` include the headers
+of two other areas that are not there. `d/noden/drow/mob/ghost.lpc` had lost the `);` after its `set_long` here-document and the
+`()` of `my_tactic`; both are back.
+
+Mechanical (`--fix`): 429 `nosave` functions made `protected` (21 left public because another object calls them), 305 stray
+backslashes after the Big5 characters whose second byte was 0x5C (KB 03 §4.4), 809 unused locals. The esI hand fixes carried
+over (see its section of 2026-10-04): the second `mapping alias` of `std/npc.lpc` (1116 of the warnings), `class` -> `cls`
+(16 files), `ref` -> `refl`, `new` -> `new_mud`, `==` typed for `=` in `_bribe.lpc` (13), `_who.lpc`, the acupuncture and
+jousting files and the two shield spells, the leaf NPCs whose two parents both define `init()` or `reset()` (chained), the
+prototypes that disagreed with their definitions, `levels` -> `sort_levels` in the five guild books that redeclared the
+guild object's table.
+
+Found here, not in esI:
+- **`obj/shells/shsh.lpc`** had been converted from `buffer` (a type name in this driver) to `buffer1` with a global
+  search-and-replace, which also renamed the unrelated `BUFFER` message list, so one name declared two variables (the colour
+  pair that is saved, the list that is not). The list is `BUFFER1` again.
+- **`std/priv.lpc`**: both `case PRIVATE:` labels of `valid_read()`/`valid_write()` had lost the word (`case:`), a syntax error
+  that kept the file from loading.
+- Return types: `std/ghost.lpc` `save_data()` is `void` like the body's, `cmds/ghost/_look.lpc` prototypes `content_match` as
+  `string`, `u/m/moon/user.lpc` prototypes `create_ghost` as `object`, `gnome_archelder1.lpc` overrides `die()` with the
+  body's `varargs void die(int silent)`, `goomay/monster/army.lpc` `remove()` is `void`.
+- `u/s/sage/CMD_EVAL_TMP_FILE.lpc` (the scratch file the `eval` command writes into a wizard's home; this one held `kissyou;`)
+  is deleted; the other wizard scratch file, `u/m/moon/CMD_EVAL_TMP_FILE.lpc`, compiles and stays.
+
+Checked: `scripts/lpc_audit_removed_locals.py HEAD` over 2526 removed declarators found nothing a function still reads, and a
+live pair (HEAD and working tree, `fluffos` admin) logged in, walked `look` / `goto` / `clone` through the Deathland and
+island files that HEAD refused with no new error in the driver output.
