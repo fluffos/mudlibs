@@ -7,12 +7,15 @@
 #define SECURE_OBJECT 	"/std/object/sec_ob"
 #define USER 			"/std/user"
 #define TEST_USER       "/std/user_test"	// add for test by Ruby
+#undef NPC
 #define NPC             "/std/npc"
 #define BODY_BASE		"/std/body"
 #define ROOM_OBJECT			"/std/object/room_ob"
 #define ROOM 			"/std/room/room"
 #define DAEMON 			"/std/cmd_m"
+#undef WEAPON
 #define WEAPON 			"/std/weapon/weapon"
+#undef ARMOR
 #define ARMOR 			"/std/armor/armor"
 #define MONSTER 		"/std/npc"
 #define LIVING 			"/std/living"

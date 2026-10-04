@@ -702,3 +702,43 @@ confirmed the vulnerable shape was never present):
 ## WASM 修复摘要（迁移自 meta.json 的 group_note）
 
 同一血统（屠龙之战）。
+
+## 深度功能测试（§10.7，2026-10-04）— compile warnings: 3795 -> 4, none in a file that compiles
+
+`scripts/lpc_warnings.py esI`: 5859 files compile, 1176 do not; 4462 distinct diagnostics (3795 warnings, 667 errors). Now
+5918 / 1117; 598 diagnostics: 594 errors in the files that still do not load (missing `../hole.h`-style includes, `set_closed_long`
+and other functions of another lib, syntax errors) and 4 warnings, all in three of those files (`adm/daemons/mailmesg.lpc`,
+`d/eastland/mumar/monster/cook_master.lpc`, `d/noden/asterism/monster/gnome_archelder1.lpc`). 1208 files edited.
+
+Mechanical (`--fix`): 603 `#pragma save_binary` lines (two more spelled `#pragma save_binary ;`), 385 `nosave` functions (364
+`protected`, 21 left public because another object calls them), about 1100 unused locals, 8 range ends `..-N]` -> `..<N]`,
+31 escapes. **438 stray backslashes** after the Big5 characters whose second byte was 0x5C (`功`, `许`, `摆`, `缕`, `髅`, `盖`,
+`枯`, `豹` ...; KB 03 §4.4): the driver prints `Unknown escape sequence` at the end of the string or statement, not at the
+backslash, so the fixer now cleans every `\` before a multi-byte character in a file that reports one. 24 macros the old
+`globals.h` and the ES headers both define get an `#undef` before the later `#define` (the later one was already in effect).
+
+By hand:
+- **`std/npc.lpc` declared a second `mapping alias`** (the body's alias module has its own) and only ever stored `([])` in it:
+  1099 of the warnings. Both lines are gone; the module initialises its table lazily.
+- **Reserved words used as names**, so 59 files did not load: `class` -> `cls` (17 files: guards, pets, the war mob, the
+  Chi Yu NPCs, `std/body_npc.lpc`, `/cmds/adm/_setnews.lpc`), `ref` -> `refl` (`adm/daemons/ref_d.lpc` and five NPCs), `new` ->
+  `new_mud` (`adm/daemons/network/services/mudlist_a.lpc`). Two missing `)` in `d/std/social_guild/wolf_killer.lpc`.
+- **`==` typed for `=`, a lost `return`, a lost assignment** (these are gameplay): `d/adventurer/cmds/_bribe.lpc` (13 `charm == N;`:
+  `charm` stayed 0 for every race), `cmds/std/_who.lpc` (`wiz_only == 1`: `who -w` filtered nothing), the three
+  `_acupunct*.lpc` (`targetname == "自己"`), `d/noden/moyada/sand_square.lpc` (`for (i == 0; ...)`), the two shield spells'
+  `query_need_skill()` (`{ 40 + 15 * level; }`: casting needed no skill), both `jousting.lpc` (`{ 50; }` for `dam = 50`: the top
+  tier did no extra damage), `std/room/std_storage.lpc` (the `AMOUNT < 0` floor was never stored), `d/std/IRC/lobby.lpc`
+  (`else ("...")` never printed), a stray `;` after `if (str == "none")` in `std/lock.lpc` (unreachable code).
+- **Two parents, one `init()`**: `vendor`, `medic`, `patolas` inherit `/std/seller` beside the NPC base and `shepherdess` inherits
+  `/std/teacher`; the later inherit's `init()` replaced the other, so `buy` and the teaching commands were never added. They call
+  both now, as `obj/vendor.lpc` and `lulu.lpc` always did; `d/eastland/yogor/room4.lpc` does the same for `reset()` (seller's
+  restock had replaced the room's). Seven `coinvalue()`/`cointypes()` diamonds (stateless) and the two Saulin towers'
+  `clean_up()` from `STATS_D` are named, nothing changes.
+- Return types made to agree: `create_ghost()` prototypes are `object` like the body's, `shop.lpc` `clean_up()` is `int` like
+  its leaf, `die()`, `remove()` and `reset()` of three leaves are `void` like their bases, and five prototype/definition pairs
+  (`stats_npc.lpc`, `courthouse.lpc`, `_operate.lpc`, `_su.lpc`, `new.lpc`). `levels` of the mage and monk books is
+  `sort_levels` (`nosave`), `_goto.lpc` `!where | !objectp(where)` is `||`, `_less.lpc`'s header no longer nests `/*`.
+
+Pristine tree, HEAD against the working tree, same driver: `look`, `score`, `who`, `skills`, `help` answer identically for the
+admin; the HEAD console prints 769 compile warnings while it boots, the new one none.
+`scripts/lpc_audit_removed_locals.py HEAD` checked 2149 deleted declarators: none is read afterwards.

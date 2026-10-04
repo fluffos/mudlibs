@@ -15,10 +15,13 @@
 #define BANISH_D		"/adm/daemons/banish"
 #define CHANNELS_D		"/adm/daemons/channels"
 #define CHANNELD_D              "/adm/daemons/channeld"
+#undef CHINESE_D
 #define CHINESE_D		"/adm/daemons/chinese_d"
 #define CLEAN_D			"/adm/daemons/clean_dir"
 #define CMD_D			"/adm/daemons/cmd_d"
+#undef COMBAT_D
 #define COMBAT_D		"/adm/daemons/combat_d"
+#undef CONDITION_D
 #define CONDITION_D     "/adm/daemons/condition_d.lpc"
 #define CONVERTER_D		"/adm/daemons/converter"
 #define DOMAIN_D		"/adm/daemons/domain"
@@ -26,6 +29,7 @@
 #define ENTER_D         "/adm/daemons/enter_d"
 #define EVENT 			"/adm/daemons/event"
 #define EXPLORE_D       "/adm/daemons/explore_d"
+#undef FINGER_D
 #define FINGER_D		"/adm/daemons/finger"
 #define FLOCK_D			"/adm/daemons/flock"
 #define GUILD_D         "/adm/daemons/guild_d"
@@ -45,6 +49,7 @@
 #define PURGE_D			"/adm/daemons/purge"
 #define QUEST_D         "/adm/daemons/quest_d"
 #define QUOTA			"/adm/daemons/quota"
+#undef RACE_D
 #define RACE_D          "/adm/daemons/race_d"
 #define REF_D			"/adm/daemons/ref_d"
 #define SHUTDOWN_D		"/adm/daemons/shutdownd"
@@ -53,6 +58,7 @@
 #define TIME_D			"/adm/daemons/timezone"
 #define TOPPLAYER_D     "/adm/daemons/topplayer"
 #define USE_R_D			"/adm/daemons/use_remove"
+#undef VIRTUAL_D
 #define VIRTUAL_D		"/adm/daemons/virtual_d"
 #define WEATHER_D		"/adm/daemons/weather_d"
 #define WHATIS_D		"/adm/daemons/whatisd"
