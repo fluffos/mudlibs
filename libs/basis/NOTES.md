@@ -592,3 +592,24 @@ exercising every one of the 13 previously-dead maker commands
 zero errors in the driver's own captured stdout across the whole
 session (native builds' `debug.log` is dead for the process's whole
 life per §10.9, so stdout is the only reliable error channel).
+
+## 深度功能测试（§10.7，2026-10-03）— compile warnings
+
+`scripts/lpc_warnings.py basis` found 174 diagnostics. Mechanical: 83 unused locals (42 files),
+44 `static`-turned-`nosave` functions made `protected` and 3 more dropped the redundant `nosave`
+(`do_command` stays public: the `make` command family calls it), one negative range end, two
+`varargs`. By hand: `adm/daemon/inet/ms.lpc` had `tmp[i] == EOT + "."` where an assignment was
+meant, so a mail line equal to the EOT marker was never dot-stuffed; `bin/maker/objects/clean.lpc`
+inherited `CLEAN_UP`, which no header defines, so the `clean` command never loaded (every sibling
+inherits `BIN`; `clean here` now cleans the room); `adm/obj/login.lpc`'s private `new_obj` is not
+`adm/std/login/new_user.lpc`'s private `new_obj` (renamed `login_new_obj`); the header of
+`bin/maker/file/less.lpc` opened a new `/*` on every revision line inside the one open comment;
+the `opcprof` command calls an efun FluffOS removed (it says so now) and `sockinfo` called
+`dump_socket_status()`, gone since MudOS 22 (`socket_status()` prints the table under
+`#ifdef __PACKAGE_SOCKETS__`). What is left are the simul_efun fragments under
+`adm/obj/simul_efun/` (they are `#include`d by `simul_efun.lpc`, which declares their macros and
+`debug()`), `std/i/history.lpc` and `std/i/tsh.lpc` (shell code whose `tsh.h` and `commands.h` are
+not in the archive) and the scratch file `bin/maker/test/ws.lpc` (`nosave int string do_command`).
+Live as the seeded admin on a pristine tree: `sockinfo` lists the inetd socket, `opcprof` prints
+the notice, `clean here`, `more`, `cat`, `update`, `people`, `who`, `mail` all answer; nothing on
+the console.
