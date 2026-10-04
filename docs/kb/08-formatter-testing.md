@@ -232,6 +232,16 @@ grep for cross-object callers: `apply_low` lets driver-origin calls (`create`, `
 `heart_beat`, `add_action`/`input_to`/`get_char`/`ed` callbacks) ignore visibility and lets
 `this_object()->f()` reach protected and private functions; only a call from another
 object to a protected function fails (console: `apply() with insufficient permission`).
-Limits: it probes `lib/` programs, not domain leaf files; a value that is random per
-creation (an elevator's max HP) differs between runs and is noise.
+`scripts/ds_oracle_run.sh LABEL SLUG PORT ADMIN PW HEAD|WORK [--paths FILE]` does the build,
+boot, probe and kill for one side (ports at least 100 apart: a lib's INET services bind
+neighbours); `scripts/ds_oracle_diff.py OLD NEW --verbose --no-visibility` prints per object
+the definer changes, added and removed functions, variable count changes and getter changes.
+Limits: it probes `lib/` programs (add leaf objects with `--paths`: one path per line, the files
+a refactor touched), not every domain file; a value that is random per creation (HP, MaxCarry,
+clone-numbered ids) differs between runs and is noise. Two things it cannot see, both found
+the hard way: a *definer* row can hide an identical body (ds386's horse: `direct_mount_liv`
+moved from `LIB_MOUNT` to `LIB_LIVING`, both `return this_object()->GetMount()`, read both),
+and it has no row for what a dropped class's `create()` called (`SetNoSink(1)`, KB 06 7.213
+kind 5): run the same scripted session on the pre-change and the changed tree
+(`REV=<pre-change sha>`) and compare the transcripts, including getters you pick for the case.
 

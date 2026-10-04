@@ -155,6 +155,12 @@ accept warnings with no column (`file:13: warning: Macro ...`), and rescan
 until stable: a file stops listing after its warning cap ("too many warnings
 in this file"). The driver's own run (`log/errors/*`, console) must end with
 none. `Foundation I` went from ~480 to 0 this way.
+Helpers around it (each prints a plan without `--apply`): `scripts/lpc_check_files.py SLUG OBJ...` recompiles just
+the objects you edited in the scan tree in seconds; `scripts/lpc_fix_unused_init.py` handles the unused locals whose
+declaration has an initializer (a pure literal goes, a call stays as a statement); `scripts/lpc_move_decl.py` moves a
+local that is only used in an inactive `#if` branch into that branch; `scripts/lpc_fix_strptr.py [--comma]` rewrites
+`(: "name" :)` and `(: this_object(), "name" :)` into `(: name :)` with forward prototypes;
+`scripts/lpc_fuzzy_patch.py` carries a patch from one lib to a reformatted sibling.
 `--fix` applies the mechanical classes: `nosave` functions, unused locals, unknown escapes, negative range ends, unknown pragma lines, and `varargs` for an arg-count mismatch. Its unused-locals pass leaves a name alone (and lists it under "not fixed automatically") when the name also appears on a line inside an `#if`/`#ifdef` block of the same function -- the `fuzzymatch.lpc` shape below -- and a call initializer (`x = time()`) is listed rather than guessed. **Do not wrap it in `timeout`:** stdout is block-buffered, so a killed run prints nothing although every edit it made is already on disk (a 2300-file lib takes ~2 minutes per scan, two scans per round); run it with the harness's background mode instead.
 
 | Warning | Cause and fix |
