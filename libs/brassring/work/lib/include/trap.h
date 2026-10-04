@@ -1,8 +1,8 @@
 #ifndef l_trap_h
 #define l_trap_h
 
-nosave void create();
-nosave void heart_beat();
+protected void create();
+protected void heart_beat();
 
 mixed CanCapture(object who, object target);
 mixed CanFree(object who, object target);

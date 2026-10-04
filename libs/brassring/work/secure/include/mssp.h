@@ -129,14 +129,13 @@ string mssp_reply(){
 }
 
 mapping mssp_map(){
-    string text = mssp_reply();
+  mssp_reply();
     mapping ret = ([]), tmp = add_maps(reply, notes);
     foreach(mixed key, mixed val in tmp){
         if(undefinedp(val)) continue;
         if(grepp(val, "\t")){
             ret[key] = explode(val, "\t");
-        }
-        else ret[key] = val;
+    } else ret[key] = val;
     }
     return ret;
 }

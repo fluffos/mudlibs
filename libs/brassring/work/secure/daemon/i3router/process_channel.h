@@ -6,7 +6,7 @@
 #define FILTER_D "/secure/daemon/filter"
 #endif
 
-nosave void process_channel(mixed fd, mixed *info){
+protected void process_channel(mixed fd, mixed *info) {
     string mudname;
     string sendermsg, sendername, senderrealname, sendermud;
     string targetname, targetmud, targstr = "";
@@ -35,8 +35,7 @@ nosave void process_channel(mixed fd, mixed *info){
                 targetname = info[12];
                 targetmud = info[7];
                 sendermsg = info[9];
-            }
-            else{ // m, e
+      } else {  // m, e
                 if(sizeof(info)!=9 || !stringp(info[3]) || !sizeof(info[3])){
                     send_error(info[2],info[3],"bad-pkt","Bad packet format.",info);
                     return;
@@ -247,8 +246,7 @@ nosave void process_channel(mixed fd, mixed *info){
         if(info[7]){ // on_or_off is on
             if(member_array(info[2],listening[info[6]])!=-1)
                 return; // already listening, ignore them
-        }
-        else{ // on_or_off is off
+      } else {  // on_or_off is off
             if(member_array(info[2],listening[info[6]])==-1)
                 return; // already NOT listening, ignore them
         }

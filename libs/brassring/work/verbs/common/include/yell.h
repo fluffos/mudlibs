@@ -1,7 +1,7 @@
 #ifndef l_yell_h
 #define l_yell_h
 
-nosave void create();
+protected void create();
 mixed can_yell();
 mixed can_yell_str(string str);
 mixed can_yell_in_wrd_str(string wrd, string str);

@@ -532,5 +532,69 @@ join / skill trainers, already covered 2026-08-31.
 `domains/town/obj/ebutton1.lpc` and `ebutton2.lpc` called `car->SetDoor(1)`, the name the elevator had before
 it renamed its own function `SetDoorClosed` (it shadowed `LIB_EXITS::SetDoor(dir, file)`); the old name
 resolves to the inherited exit function and the call is a silent no-op, so the call buttons never closed the
-car door. Changed to `SetDoorClosed(1)`, as in dsIII and ds386 (KB 06 §7.211). The rest of this lib's compile
-warnings are still to do (queue: Dead Souls siblings).
+car door. Changed to `SetDoorClosed(1)`, as in dsIII and ds386 (KB 06 §7.211).
+
+## 深度功能测试（§10.7，2026-10-03）— compile warnings, inherit diamonds, and the ds386 fixes ported
+
+Method. `work/` is the corpus formatter's output of the Dead Souls 3.8.6 sources plus this lib's own Diku-Alfa
+zone, Wyr domain and a few lib classes (`factions`, `rent`, the skill-picking login). For 1409 of the 1508
+files ds386's warning pass changed, brassring's tokens equal ds386's pre-fix tokens, and `format(ds386 pre)`
+reproduces brassring's HEAD byte for byte (1360 files; 49 more are byte-identical unformatted), so those files
+were set to `format(ds386 post)` with `scripts/lpc_twin_port.py adopt` (KB 08 §10.13): they equal ds386's
+verified result token for token. The other 87 files carry brassring's own code; they went through a fuzzy hunk
+applier and `scripts/lpc_warnings.py brassring --fix`, and `lpc_twin_port.py audit` then listed every hunk
+ds386 made that brassring lacked (three empty `if () {}` shells, `cedit`'s two `int ret`, `master`'s
+inactive-branch locals, player's `CanGet`, the council's prototypes), which were finished by hand. Eleven
+admin-realm sample files ds386 touched do not exist here. 2778 files changed: 2631 `.lpc`, 144 `.h`, and the
+runtime-swapped `secure/lib/connect.real`, `secure/daemon/update.patch`/`update.blank` (KB 06 §7.216).
+
+**Result: 9795 -> 4 distinct diagnostics.** The four are the same three dead archive files ds386 keeps:
+`obj/area_room.lpc` (includes a `../customdefs.h` that does not exist), `obj/stargate.lpc` and `open/prog.lpc`
+(deliberately uncompilable). `scripts/lpc_diamonds.py brassring` lists no overlapping inherits. The baseline was
+4243 `Redeclaration` rows (2058 files), 3452 `nosave` functions (2602 files), 468 unused locals, 120 override
+argument-count disagreements, 58 unknown escapes, 15 bare `return;`, 15 `(: "name" :)` pointers and the
+`inherited from both` families.
+
+**Brassring-only changes** (everything else is ds386's, see its NOTES):
+- `lib/player.lpc` inherits `LIB_FACTIONS` and `LIB_RENT`, which both define `CheckTimer()`; `heart_beat()` called
+  each by name and nothing called the bare one, so the player now defines `CheckTimer()` once and `heart_beat()`
+  calls it. `CanGet()` names living's, as in ds386. The Diku-Alfa `etc/trainer.lpc` gets the same `init()` pair as
+  `lib/trainer.lpc` (KB 06 §7.214).
+- Wyr's `bard_stool`, `dummy_chair` and `dummy_sofa` (sit + surface, once also `LIB_BASE_DUMMY`) define
+  `isDummy()`, call `SetNoSink(1)`/`SetInvis(1)` themselves and ask `sit::CanGet()` first, as `LIB_CHAIR` does: a
+  seated NPC now makes `get stool` answer "Fostaine Pyre is using it right now." instead of "The stool does not
+  budge." (KB 06 §7.213 kind 5). `parchment.lpc` inherited `LIB_PERSIST` and `LIB_READ` next to `LIB_ITEM`, which
+  holds both (7 duplicated globals, 24 overlap rows). `30.zon/obj/dump[bak].lpc`, a draft that inherited a room
+  (`LIB_FURNACE`) and the item base, is the furnace room it inherits now: `SetKeyName`/`SetId`/`SetAdjectives`
+  mean nothing on a room, and nothing loads it.
+- About sixty Diku-Alfa NPCs declared an unused `object env = environment(this_object())` in `CheckNPC()`
+  (deleted); the fixer's list of side-effect-free calls grew for it (`scripts/lpc_fix_unused_init.py`).
+  `combat.lpc`/`combat_r_o.lpc` keep their `room_environment()` call as a statement, as ds386 does.
+
+**Real bugs found while fixing warnings:**
+- `domains/diku-alfa/room/74.zon/npc/7045_jones_ettin.lpc` lacked a `;` after `SetClass("fighter")`, so the file
+  never compiled and Jones's room (`rm_7419`) died in `SetInventory()` with "No program in object" every time it
+  loaded; the room loads, with Jones in it, now.
+- `domains/diku-alfa/room/90.zon/rm_9000.lpc` stops inside `create()` in the archive copy; the function is closed
+  and the room loads as an empty shell (the archive has no description or exits for it).
+- Eight Diku-Alfa armors and a sword gated wearing on `GetMorality() > 700 | GetMorality() < -700`, a bitwise OR of
+  two booleans that was meant as `||` (KB 04 §6.10); same result, no short circuit.
+- Wyr rooms `rm_159` and `rm_197` listed `/domains/etnar/wyr/wyr/virtual/dummy_{chair,table,sofa,cabinet}` (four
+  paths) where the objects live in `obj/`; `SetInventory()` raised "couldn't find object" in `create()` before
+  `SetExits()` ran, so the guardhouse and the sofa room loaded with `Obvious exit:` empty and no furniture, and
+  every visitor got a stack trace. They load whole now (`look at chair`, `sit on chair`, exits down and east).
+- Everything ds386 found in the shared files carries over: the 15 Praxis `(: "name" :)` pointers (`look at
+  gallows` printed `long_func`; `stone.lpc`'s `long_func` returns its text now), `virt_land`'s clobbered
+  `SetCoordinates`, the shadowed trainer `init()`, the glow counted twice (`SetRadiantLight(7)` read back 14),
+  the `books.lpc` no-op `==`, and the rest of that list.
+
+**Verification.** Golden-master oracle (HEAD vs working tree, 228 programs, KB 08 §10.12): 1398
+`public -> protected` flips (the mechanical pass), 26 definer changes (player `CanGet`/`CheckTimer`, the
+chamber/elevator/vehicle door and language picks, trainer `init`, worn_storage `GetRadiantLight`,
+`virt_land`'s rename), 130 duplicate variables removed or renamed, 63 radiance rows (14 -> 7, the glow fix) and
+three added functions (`SetVirtualCoordinates`); nothing else moved. Paired live sessions as admin
+`fluffos`/`Mud@2026` on a HEAD tree and a working-tree copy (165 family steps plus 63 brassring-specific ones):
+the differences are the fixes above, the river's `You can't enter that!` -> `You can't enter that.`, the
+time-of-day text and wandering-NPC chatter. A fresh mortal registered through the skill-picking login
+(`PickSkillsorClass` .. `InputPrimarySkills`, rewritten by the pass), killed an orc in the start room and
+survived; `log/runtime` and `log/catch` stayed empty.

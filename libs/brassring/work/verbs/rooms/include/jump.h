@@ -1,7 +1,7 @@
 #ifndef l_jump_h
 #define l_jump_h
 
-nosave void create();
+protected void create();
 
 mixed can_jump_word_obj();
 mixed can_jump_word_word_obj();
@@ -18,4 +18,3 @@ varargs mixed do_jump_onto_obj(object ob, mixed *args...);
 varargs mixed do_jump_on_obj(object ob, mixed *args...);
 
 #endif /* l_jump_h */
-

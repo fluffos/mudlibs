@@ -1,8 +1,8 @@
 #ifndef __FOLDERS_H
 #define __FOLDERS_H
 
-nosave private void load_folder(string who, string folder);
-nosave private void save_folder();
+private void load_folder(string who, string folder);
+private void save_folder();
 mapping *query_box_info(string who, string folder);
 void add_post(string who, string folder, mapping borg);
 void delete_posts(string who, string folder, int *del);

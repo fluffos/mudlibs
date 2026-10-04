@@ -1,8 +1,8 @@
 #ifndef l_donate_h
 #define l_donate_h
 
-nosave void create();
-nosave void init();
+protected void create();
+void init();
 int GetAssets();
 int AddAssets(int amount);
 string GetOwner();

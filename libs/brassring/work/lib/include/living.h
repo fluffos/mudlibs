@@ -1,7 +1,7 @@
 #ifndef l_living_h
 #define l_living_h
 
-nosave void create();
+protected void create();
 int is_living();
 int inventory_accessible();
 int inventory_visible();

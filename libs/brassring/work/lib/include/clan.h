@@ -1,5 +1,3 @@
-
-
 #ifndef l_clan_h
 #define l_clan_h
 
@@ -11,8 +9,8 @@ class ClanClass {
     string skill;
 }
 
-nosave void create();
-nosave void init();
+protected void create();
+void init();
 
 mixed CanJoin(object ob);
 string GetAffectLong(object ob);
@@ -34,5 +32,3 @@ void eventWelcome(object ob);
 
 
 #endif /* l_clan_h */
-
-

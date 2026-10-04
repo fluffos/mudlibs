@@ -1,7 +1,7 @@
 #ifndef l_target_h
 #define l_target_h
 
-nosave void create();
+protected void create();
 
 mixed can_target_liv(object target);
 

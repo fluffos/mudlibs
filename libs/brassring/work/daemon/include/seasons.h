@@ -16,14 +16,14 @@ class moon {
     string Color;
 }
 
-nosave void create();
-nosave void eventConfigure();
-nosave void eventDawn();
-nosave void eventMorning();
-nosave void eventNoon();
-nosave void eventTwilight();
-nosave void eventNight();
-nosave void eventMidnight();
+protected void create();
+protected void eventConfigure();
+protected void eventDawn();
+protected void eventMorning();
+protected void eventNoon();
+protected void eventTwilight();
+protected void eventNight();
+protected void eventMidnight();
 int GetCurrentDay();
 string GetCurrentDayName();
 string GetCurrentMonth();
@@ -52,5 +52,3 @@ int GetMoonLight();
 string GetLong(string arg);
 
 #endif /* __SEASONS_H__ */
-
-

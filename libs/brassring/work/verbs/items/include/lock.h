@@ -1,7 +1,7 @@
 #ifndef l_lock_h
 #define l_lock_h
 
-nosave void create();
+protected void create();
 
 mixed can_lock_obj_with_obj(string verb);
 

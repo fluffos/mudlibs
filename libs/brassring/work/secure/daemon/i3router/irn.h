@@ -43,10 +43,10 @@ nosave mapping chan_conv = ([
 mapping irn_connections = ([]);
 mapping irn_sockets = ([]);
 
-nosave void write_data(int fd, mixed data);
-nosave varargs void SendList(mixed data, int fd, string type);
+void write_data(int fd, mixed data);
+protected varargs void SendList(mixed data, int fd, string type);
 varargs void SendWholeList(int fd,string type);
-nosave void begin_socket_handoff(int i);
+protected void begin_socket_handoff(int i);
 
 void build_ok_ips(){
     ok_ips = ({});
@@ -141,8 +141,7 @@ void irn_checkstat(){
             trr("%^B_BLUE%^I be wantin to restart "+val["name"]+".\nrouters: "+identify(routers));
             if(sizeof(routers) > 2) this_object()->irn_setup(0, val["name"]);
             return;
-        }
-        else setuptype = 1;
+    } else setuptype = 1;
     }
 
     if(!sizeof(irn_connections) || !sizeof(irn_sockets)){
@@ -188,7 +187,7 @@ void check_desync(){
     }
 }
         
-nosave int GoodPeer(int fd, mixed data){
+protected int GoodPeer(int fd, mixed data) {
     string ip = explode(socket_address(fd)," ")[0];
     if(!irn_enabled) return 0;
     if(member_array(ip,ok_ips) == -1){
@@ -219,7 +218,7 @@ nosave int GoodPeer(int fd, mixed data){
     return 1;
 }
 
-varargs nosave int ValidatePeer(int fd, mixed data, int outbound){
+varargs protected int ValidatePeer(int fd, mixed data, int outbound) {
     string ip = explode(socket_address(fd)," ")[0];
     mixed tmp;
     mixed name;
@@ -263,7 +262,7 @@ varargs nosave int ValidatePeer(int fd, mixed data, int outbound){
     return 1;
 }
 
-nosave string id_mud(int fd){
+protected string id_mud(int fd) {
     string *ret = ({});
     foreach(mixed element in keys(irn_connections)){
         if(irn_connections[element]["fd"] == fd) ret += ({ element });
@@ -420,10 +419,9 @@ varargs void eventSendStartup(int fd){
     }
 }
 
-nosave void irn_write_callback(int fd){
-}
+protected void irn_write_callback(int fd) {}
 
-nosave void irn_close_callback(int fd){
+protected void irn_close_callback(int fd) {
     if(!irn_enabled) return;
     if(irn_connections[id_mud(fd)]){
         irn_connections[id_mud(fd)]["fd"] = -1;
@@ -436,7 +434,7 @@ nosave void irn_close_callback(int fd){
     trr("I'm wanting to close "+id_mud(fd)+" on fd"+fd+" now.");
 }
 
-nosave void irn_read_callback(int fd, mixed data){
+protected void irn_read_callback(int fd, mixed data) {
     int i;
     string tmp="";
     mapping MudList = ([]);
@@ -446,8 +444,7 @@ nosave void irn_read_callback(int fd, mixed data){
     else MudList = ([ "wt" : "f" ]);
     if(!data || !sizeof(data)){
         trr("irn: no data");
-    }
-    else {
+  } else {
         if(bufferp(data)){
             for(i=0;i<sizeof(data);i++){
                 tmp += sprintf("%c",data[i]);
@@ -594,10 +591,9 @@ nosave void irn_read_callback(int fd, mixed data){
     }
 }
 
-nosave varargs void SendList(mixed data, int fd, string type){
+protected varargs void SendList(mixed data, int fd, string type) {
     int *targets = ({});
-    string *cmuds = this_object()->query_connected_muds();
-    mixed *outbound = ({});
+  this_object()->query_connected_muds();
     mapping tmp = ([]);
     if(!type || !sizeof(type)) type = "irn-mudlist-delta";
     if(type == "mudlist") type = "irn-mudlist-delta";
@@ -617,8 +613,7 @@ nosave varargs void SendList(mixed data, int fd, string type){
                 trr("irn: Non mapping val. Key: "+key+". stack: "+get_stack(),"yellow");
                 trr("irn: guilty stack: "+get_stack(),"cyan");
                 continue;
-            }
-            else {
+      } else {
                 if(type == "mudlist"){
                     if(mudinfo[key] && mudinfo[key]["router"] &&
                             mudinfo[key]["router"] != my_name){
@@ -685,7 +680,7 @@ varargs void SendWholeList(int fd, string type){
     }
 }
 
-nosave void SendMessage(mixed data){
+protected void SendMessage(mixed data) {
     string routername, cible;
     mapping tmpinfo = this_object()->query_mudinfo();
     mixed tmpdata; 
@@ -704,7 +699,10 @@ nosave void SendMessage(mixed data){
         trr("irn sending "+data[0]+" for "+identify(data[4])+
                 " to "+identify(irn_sockets[router]["name"]));
         tmpdata = copy(data);
-        if((convert_channel || convert_channel2) && !strsrch(tmpdata[0],"chan") && strsrch(tmpdata[0],"chan-user")){
+    if ((convert_channel || convert_channel2) && !strsrch(
+      tmpdata[0],
+      "chan"
+    ) && strsrch(tmpdata[0], "chan-user")) {
             routername = irn_sockets[router]["name"];
             if(member_array(routername, keys(chan_conv)) != -1){
                 foreach(string key, string val in chan_conv[routername]){
@@ -757,7 +755,7 @@ string Report(){
     if(sizeof(irn_connections))
         foreach(mixed key, mixed val in irn_connections){
             if(!key) continue;
-            if(!irn_connections[key]) return;
+      if (!irn_connections[key]) return 0;
             ret += key+":"+irn_connections[key]["fd"]+" ";
         }
     ret += "\n";
@@ -786,7 +784,7 @@ string Report(){
     return ret;
 }
 
-nosave void begin_socket_handoff(int fd){
+protected void begin_socket_handoff(int fd) {
     object rsock = find_object(RSOCKET_D);
     if(!irn_enabled) return;
     if(!rsock) rsock = load_object(RSOCKET_D);

@@ -1,4 +1,4 @@
-nosave void validate();
+protected void validate();
 nosave int *conn_fds = ({});
 
 varargs void remove_mud(mixed mudname, int forced){
@@ -7,8 +7,7 @@ varargs void remove_mud(mixed mudname, int forced){
     if(intp(mudname)){
         targetfd = mudname;
         mudname = (this_object()->query_connected_fds()[targetfd] || "");
-    }
-    else {
+  } else {
         targetfd = connected_muds[mudname];
         if(undefinedp(connected_muds[mudname])) targetfd = -1;
     }
@@ -21,16 +20,14 @@ varargs void remove_mud(mixed mudname, int forced){
     if(targetfd == -1){
         //trr("Warning: cannot disconnect mud ["+mudname+"] because it is not in the connected_muds list.\n");
         server_log("Warning: cannot disconnect mud ["+mudname+"] because it is not in the connected_muds list.");
-    }
-    else {
+  } else {
         server_log(" Disconnecting mud: "+mudname+" on fd: "+targetfd+"\n");
         //trr(timestamp()+" Disconnecting mud: "+mudname+" on fd: "+targetfd);
     }
     if(!mudinfo[mudname] && forced){         
         //trr("Warning: cannot remove mud ["+mudname+"] because it is not in the mudinfo list.\n");
         server_log(" Warning: cannot remove mud ["+mudname+"] because it is not in the mudinfo list.");
-    }
-    else{
+  } else {
         server_log("Removing mud: "+mudname+" on fd: "+targetfd+"\n");
         //trr(timestamp()+" Removing mud: "+mudname+" on fd: "+targetfd);
     }

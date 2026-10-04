@@ -34,6 +34,18 @@ inherit LIB_LIVING;
 inherit LIB_FACTIONS;
 inherit LIB_RENT;
 
+/* interactive and living both define CanGet(); living's (events/get) is the one in effect, and
+ * living::direct_get_obj() relies on it to let a big player lift a small one. */
+mixed CanGet(object who) {
+  return living::CanGet(who);
+}
+
+/* factions and rent each define CheckTimer(); heart_beat() runs both, each when the player has any. */
+void CheckTimer() {
+  if (sizeof(GetFacs())) factions::CheckTimer();
+  if (sizeof(GetRents())) rent::CheckTimer();
+}
+
 private string *Titles;
 string *Muffed = ({});
 private mapping *Deaths;
@@ -43,7 +55,7 @@ private mixed telopt_ip;
 
 /* *****************  /lib/player.c driver applies  ***************** */
 
-nosave void create() {
+protected void create() {
   interactive::create();
   living::create();
 
@@ -51,10 +63,9 @@ nosave void create() {
   TitleLength = 1;
 }
 
-nosave void heart_beat() {
+protected void heart_beat() {
   mixed heartping;
   int idle;
-  int rented;
 
   if (!interactive(this_object())) return;
 
@@ -69,8 +80,7 @@ nosave void heart_beat() {
       RemoveProperty("reply_time");
     }
   }
-  if (sizeof(GetFacs())) factions::CheckTimer();
-  if (sizeof(GetRents())) rent::CheckTimer();
+  CheckTimer();
   interactive::heart_beat();
   living::heart_beat();
 
@@ -89,12 +99,12 @@ nosave void heart_beat() {
 #endif
 }
 
-nosave void net_dead() {
+protected void net_dead() {
   interactive::net_dead();
   set_heart_beat(0);
 }
 
-nosave int Destruct() {
+protected int Destruct() {
   CHARACTER_D->eventSaveTime();
   living::Destruct();
   return interactive::Destruct();
@@ -161,7 +171,7 @@ varargs mixed eventDisplayStatus(int simple) {
   return str;
 }
 
-nosave void eventDestroyUndead(object agent) {}
+protected void eventDestroyUndead(object agent) {}
 
 varargs int eventDie(mixed agent) {
   int x;
@@ -219,7 +229,6 @@ mixed eventTurn(object who) {
 }
 
 varargs void eventRevive(int nopenalty) {
-  string skill;
 
   this_object()->SetDead(0);
   if (!creatorp(this_object())) this_object()->SetInvis(0);
@@ -238,6 +247,7 @@ varargs void eventRevive(int nopenalty) {
   if (!nopenalty) {
     int expee, subexpee;
 #ifdef LIB_PLAYER_SKILL_LOSS
+    string skill;
     foreach (skill in GetSkills()) {
       int x;
 
@@ -630,7 +640,7 @@ varargs mixed GetEffectiveVision(mixed location, int raw_score) {
   else return living::GetEffectiveVision();
 }
 
-varargs nosave int AddHealthPoints(int x, string limb, object agent) {
+varargs protected int AddHealthPoints(int x, string limb, object agent) {
   int hp, ret, undead;
   hp = GetHealthPoints();
   undead = GetUndead();

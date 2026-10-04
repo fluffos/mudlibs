@@ -1,8 +1,8 @@
 #ifndef l_pile_h
 #define l_pile_h
 
-nosave void create();
-nosave void init();
+protected void create();
+void init();
 mixed direct_get_wrd_wrd_from_obj(string num, string curr);
 mixed direct_get_wrd_wrd_out_of_obj(string num, string curr);
 

@@ -1,7 +1,7 @@
 #ifndef l_race_h
 #define l_race_h
 
-nosave void create();
+protected void create();
 
 mixed CanDrink(object ob);
 mixed CanEat(object ob);
@@ -31,4 +31,3 @@ int GetStatLevel(string stat);
 int GetAlcohol();
 
 #endif /* l_race_h */
-

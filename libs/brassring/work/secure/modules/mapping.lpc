@@ -2,9 +2,9 @@
 #include <daemons.h>
 #include <modules.h>
 
-string globaltmp, globalstr, globalstr2, func, data, temporary;
+string mapping_globaltmp, mapping_globalstr, mapping_globalstr2, mapping_func, data, mapping_temporary;
 int automated;
-object target;
+object mapping_target;
 mixed newval;
 
 int GetKey(string str);
@@ -31,11 +31,11 @@ int eventStoreMapping(string savefile, mapping plan) {
 }
 
 varargs int eventStartMappingQuestions(mapping oldmap, object ob, string tmpfile, string auto) {
-  if (ob) target = ob;
-  if (tmpfile) temporary = tmpfile;
+  if (ob) mapping_target = ob;
+  if (tmpfile) mapping_temporary = tmpfile;
   if (auto && auto != "") {
     automated = 1;
-    func = auto;
+    mapping_func = auto;
   }
 
   if (ob && !check_privs(this_player(), ob)) {
@@ -43,7 +43,7 @@ varargs int eventStartMappingQuestions(mapping oldmap, object ob, string tmpfile
     return 1;
   }
 
-  if (file_exists(temporary) && !check_privs(this_player(), temporary)) {
+  if (file_exists(mapping_temporary) && !check_privs(this_player(), mapping_temporary)) {
     write("You do not appear to have write access to this file. Modification aborted.");
     return 1;
   }
@@ -58,19 +58,19 @@ varargs int eventStartMappingQuestions(mapping oldmap, object ob, string tmpfile
 }
 
 int GetKey(string str) {
-  if (file_exists(temporary) && !check_privs(this_player(), temporary)) {
+  if (file_exists(mapping_temporary) && !check_privs(this_player(), mapping_temporary)) {
     write("You do not appear to have write access to this file. Modification aborted.");
     return 1;
   }
   if (str && str == "q") {
     write("Aborting modification. For information on mappings, type: help mappings");
-    rm(temporary);
+    rm(mapping_temporary);
     return 1;
   }
   if (!str || str == "" || str == ".") {
     if (!sizeof(key_arr)) {
       write("Aborting modification. For information on mappings, type: help mappings");
-      rm(temporary);
+      rm(mapping_temporary);
       return 1;
     }
     write("Please enter the value for key " + identify(key_arr) + ":\n");
@@ -104,21 +104,21 @@ varargs mapping GetTheValue(
   if (str == "AUTOMATED") {
     NewMap = ([]);
     automated = 1;
-    target = targ;
+    mapping_target = targ;
     key_arr = ({ k1 });
-    temporary = tempy;
+    mapping_temporary = tempy;
     str = v1;
     if (sizeof(MapThing)) NewMap = MapThing;
-    func = passed_fun;
-    unguarded((: cp(base_name(target) + ".lpc", temporary) :));
+    mapping_func = passed_fun;
+    unguarded((: cp(base_name(mapping_target) + ".lpc", mapping_temporary) :));
   }
-  if (file_exists(temporary) && !check_privs(this_player(), temporary)) {
+  if (file_exists(mapping_temporary) && !check_privs(this_player(), mapping_temporary)) {
     write("You do not appear to have write access to this file. Modification aborted.");
     return ([]);
   }
   if (!str || str == "" || str == "." || str == "q") {
     write("Aborting modification. For information on mappings, type: help mappings");
-    rm(temporary);
+    rm(mapping_temporary);
     return ([]);
   }
 
@@ -140,8 +140,13 @@ varargs mapping GetTheValue(
   else NewMap[key_arr[0]] = newval;
   if (automated) {
     automated = 0;
-    if (func) this_object()->eventResumeMappingChange(target, temporary, NewMap, func);
-    else this_object()->eventResumeMappingChange(target, temporary, NewMap);
+    if (mapping_func) this_object()->eventResumeMappingChange(
+      mapping_target,
+      mapping_temporary,
+      NewMap,
+      mapping_func
+    );
+    else this_object()->eventResumeMappingChange(mapping_target, mapping_temporary, NewMap);
   }
   return copy(NewMap);
 }
@@ -235,7 +240,7 @@ string eventReadThing(string map) {
   return new_string;
 }
 
-int eventSpecialMapHandler(object ob, string func, mixed mode, mixed value) {
+int eventSpecialMapHandler(object ob, string mapping_func, mixed mode, mixed value) {
   string tmp, filename, func2, junk, junk2;
   string *plural_maps;
   int integer;
@@ -246,7 +251,7 @@ int eventSpecialMapHandler(object ob, string func, mixed mode, mixed value) {
   plural_maps = ({ "SetProperties" });
   if (stringp(value)) value = trim(replace_string(value, mode, ""));
 
-  if (stringp(value) && !grepp(lower_case(func), "prop")) {
+  if (stringp(value) && !grepp(lower_case(mapping_func), "prop")) {
     if (sscanf(value, "%d", integer) != 1 &&
       sscanf(value, "%d %s", integer, junk) != 2) {
       sscanf(value, "%s %s", tmp, junk);
@@ -276,28 +281,28 @@ int eventSpecialMapHandler(object ob, string func, mixed mode, mixed value) {
     return 1;
   }
 
-  globalstr = filename;
-  unguarded((: globalstr2 = read_file(globalstr) :));
+  mapping_globalstr = filename;
+  unguarded((: mapping_globalstr2 = read_file(mapping_globalstr) :));
 
 
-  switch (func) {
+  switch (mapping_func) {
     case "SetProperties": func2 = "SetProperty"; break;
     case "SetSkills": func2 = "SetSkill"; break;
     case "SetStats": func2 = "SetStat"; break;
   }
 
   FirstMap = this_object()->eventReadPair(filename, func2, 1);
-  SecondMap = this_object()->eventReadMapping(filename, ({ func }), 1);
+  SecondMap = this_object()->eventReadMapping(filename, ({ mapping_func }), 1);
   NewMap = add_maps(FirstMap, SecondMap);
   if (stringp(value) && sscanf(value, "%d", integer) == 1) {
     NewMap[mode] = integer;
   } else NewMap[mode] = value;
-  globaltmp = generate_tmp(ob);
-  unguarded((: write_file(globaltmp, globalstr2, 1) :));
+  mapping_globaltmp = generate_tmp(ob);
+  unguarded((: write_file(mapping_globaltmp, mapping_globalstr2, 1) :));
 
-  if (member_array(func, plural_maps) != -1)
-    this_object()->eventResumeMappingChange(ob, globaltmp, copy(NewMap), func);
-  else this_object()->eventAddSettings(ob, globaltmp, copy(NewMap), func2);
+  if (member_array(mapping_func, plural_maps) != -1)
+    this_object()->eventResumeMappingChange(ob, mapping_globaltmp, copy(NewMap), mapping_func);
+  else this_object()->eventAddSettings(ob, mapping_globaltmp, copy(NewMap), func2);
   return 1;
 }
 
@@ -313,11 +318,11 @@ mapping eventReadPair(string filename, string param, int destructive) {
     return ([]);
   }
 
-  globalstr = filename;
+  mapping_globalstr = filename;
   if (file_exists(filename)) {
-    unguarded((: globalstr2 = read_file(globalstr) :));
+    unguarded((: mapping_globalstr2 = read_file(mapping_globalstr) :));
   }
-  contents = globalstr2;
+  contents = mapping_globalstr2;
   file_arr = explode(contents, "\n");
   line_arr = ({});
 
@@ -343,13 +348,13 @@ mapping eventReadPair(string filename, string param, int destructive) {
   }
 
   if (destructive) {
-    globalstr2 = remove_matching_line(globalstr2, param, 1);
-    globalstr = generate_tmp();
-    unguarded((: write_file(globalstr, globalstr2, 1) :));
-    tmp = globalstr;
-    globalstr = filename;
-    globalstr2 = tmp;
-    unguarded((: cp(globalstr2, globalstr) :));
+    mapping_globalstr2 = remove_matching_line(mapping_globalstr2, param, 1);
+    mapping_globalstr = generate_tmp();
+    unguarded((: write_file(mapping_globalstr, mapping_globalstr2, 1) :));
+    tmp = mapping_globalstr;
+    mapping_globalstr = filename;
+    mapping_globalstr2 = tmp;
+    unguarded((: cp(mapping_globalstr2, mapping_globalstr) :));
     rm(tmp);
   }
   return copy(NewMap);
