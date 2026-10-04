@@ -627,3 +627,9 @@ Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
 remedy. Verified via `lpcc --batch` static compile check only (not a
 live boot) as part of a large mechanical sweep; not individually
 functionally re-tested live on this lib.
+
+## 深度功能测试（§10.7，2026-10-04）— negative range ends: catalog patch 0003
+
+`work/` is the upstream submodule, so the four `..-1]` bounds of `include/net/ftpdsupp.h` (`sites[0][10..-1]`,
+`site[l1-l2..-1]`, `sites[i][1..-1]`, `sites[i][l2..-1]`; an empty string in this driver) are carried as
+`patches/0003-negative-ranges.patch` (`..<1`, KB 06 §7.209). The header is not included by any object of this tree.
