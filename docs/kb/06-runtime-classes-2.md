@@ -181,6 +181,16 @@ a repro.
 - `__PORT__` is compiler-predefined; don't redefine it.
 - `__BIN_DIR__` throws; `catch` it.
 - Grep every `get_config(` call site.
+- Survey 2026-10-04 (`scripts/runtime_config_survey.py`): 205 of the 216 libs that ship a `runtime_config.h` still have the
+  MudOS-era numbering (integer settings from 15, this driver from 256; strings 1 and 6 are obsolete and answer `Bad
+  argument to get_config()`). The driver's copy is in `skylib`, `openlib`, `nt7`, `xkx100utf8`, `aoxiangtianji`,
+  `yhwhpublicfi`, `zjdy2008wzb`, `zjdywzb` and, since today, the Discworld family (where `/net/daemon/http`'s `create()`
+  died on `Trying to put string in int` every time). The call sites in the rest: the shared xkx `config` admin command
+  (`__ADDR_SERVER_IP__` raises), `LOCAL_PORT()` (`((int) get_config(__MUD_PORT__))`: the cast does not convert; 55 sites
+  in 51 libs), and `versiond.lpc`/`cruised.lpc` (`bin_path = get_config(__SAVE_BINARIES_DIR__)` raises in `create()`, so the
+  daemon never loads, which the `find_object(VERSION_D) &&` login guard of §1.3(c) papers over). Replacing the header
+  changes which of those work, so a sweep is per class, not a blanket copy: a version daemon that starts to load can
+  start to gate logins.
 
 ### 7.90 `maximum evaluation cost` too low (700000 template, sometimes 400000)
 Cold compiles and NPC setup trip `cost limit reached`. Shapes seen:
