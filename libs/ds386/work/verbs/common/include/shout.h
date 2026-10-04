@@ -1,7 +1,7 @@
 #ifndef l_shout_h
 #define l_shout_h
 
-nosave void create();
+protected void create();
 mixed can_shout();
 mixed can_shout_str(string str);
 mixed can_shout_in_wrd_str(string wrd, string str);

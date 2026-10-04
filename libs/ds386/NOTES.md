@@ -960,3 +960,80 @@ elevator had before it renamed its own function `SetDoorClosed` (it shadowed
 the call is a silent no-op, so the call buttons never closed the car door. Changed to
 `SetDoorClosed(1)` (KB 06 §7.211). `secure/cmds/admins/opcprof.lpc` called the `opcprof()`
 efun that FluffOS removed; the command now says so instead of failing to compile.
+
+## 深度功能测试（§10.7，2026-10-03）— compile warnings and inherit diamonds
+
+Method: `scripts/lpc_warnings.py ds386 --fix` over the 2421 compiling `.lpc` files (KB 04 §6.10), then
+the dsIII structural pass ported file by file (`scripts/lpc_diamonds.py`, KB 06 §7.213-§7.215: the same
+50 source files; the dsIII diffs applied with `patch` and every hunk read against ds386's code, three
+rejected hunks redone by hand), then the rest by hand. Verified with the golden-master oracle
+(`scripts/ds_oracle.py`, 262 programs, HEAD vs working tree, KB 08 §10.12) and paired HEAD/working-tree
+live sessions as admin `fluffos`/`Mud@2026`.
+
+**Result: 5244 -> 4 distinct diagnostics.** The four are the same three dead archive files dsIII keeps:
+`obj/area_room.lpc` (includes a `../customdefs.h` that does not exist), `obj/stargate.lpc` and
+`open/prog.lpc` (deliberately uncompilable). `scripts/lpc_diamonds.py ds386` lists no overlapping inherits.
+
+**Mechanical, 1507 files:** 1929 `nosave` functions -> `protected` (268 more dropped beside `private` or
+because a `call_other` caller exists), 76 unknown escapes, 60 `varargs` for override arg-count
+disagreements, 15 bare `return;`, 277 unused locals. Locals whose only use sits in an inactive `#if`
+branch (daemon/map, Praxis/roots, lib/body, lib/cedit, chamber, player, gauge, autoexec, imc2, master,
+http, fuzzymatch) were moved into the branch instead of deleted. The runtime-swapped files the scan never
+compiles (`secure/lib/connect.real`, which the first-boot wizard copies over `connect.lpc`, and
+`secure/daemon/update.patch`/`update.blank`) got the same fixes through temporary `.lpc` copies: 38
+`nosave` functions and an escape would have come back on the first player's screen (KB 06 §7.216).
+
+**Structural (1937 `Redeclaration` rows plus the `inherited from both` families, from 50 source files; 1020
+descendants only repeated them):** twenty leaf files lose an inherit another inherit already contained
+(the `LIB_READ` letters, maps, notes, signs and leaflet; `LIB_SMELL` in the couches, cot and altar;
+`LIB_SHOOT` in the plasma cannon and the zpem; `LIB_AMBIANCE` in the healer room; `LIB_MOUNT`/
+`LIB_DOMESTICATE` in the horse). Private-name collisions renamed (room `counter`/`Search`, exits `Dir`,
+donate `Owner`, corpse `Class`, autosave `LastSave`, pipe `BurnRate`, worn_storage `my_save`, the creator
+modules' scratch globals, `LIB_AIM`'s copy of `mustcarry`/`mustwield`) or removed where unused (npc
+`Unique`, bot_limb `stank`). Functions two inherits define now name their winner (player `CanGet`,
+chamber/vehicle door and language calls, the turnable bots' `eventTurn`, pole `GetSave`, worn_storage,
+trainer `init`, seawater's door calls, zpem's `MustCarry`/`MustWield`). The five dummy hybrids (trashcan,
+river, pool, spring and sea water) define `isDummy()` instead of inheriting `LIB_BASE_DUMMY` next to
+`LIB_STORAGE`/`LIB_FLASK`, and `LIB_OOB` inherits `LIB_CLIENT` only. ds386-only: `hpoolwater`,
+`hspringwater`, seawater keeping its own `LIB_EXITS` + `LIB_ENTER`, zpem and the horse.
+
+**Real bugs the pass exposed** (same as dsIII, verified here): `lib/trainer.lpc` `init()` was shadowed by
+sentient's, so a pupil who walked away in the middle of a lesson was never forgotten (live: leave and come
+back within two seconds, `ask radagast to train magic defense` again: HEAD answers "I am already training
+you!", the working tree starts the lesson again; after a 12 s absence both start it, because the lesson's
+own call-out has cleared the record by then); the healer room ignored lit lamps (its ambient light was the
+plain getter); NPCs, chests, beds, chairs, corpses and limbs reported twice their own glow
+(`SetRadiantLight(7)` read back 14); `worn_storage` resolved `GetRadiantLight()` to the armor's own getter
+instead of the container's (visible only for a non-opaque pack: the backpack reads 0 either way).
+
+**Real bugs found while fixing warnings:**
+- 15 `(: "name" :)` pointers in the Praxis domain returned their own name: `look at gallows` printed
+  `long_func`, the planning room's `up` exit check was a non-empty string (the arch room was open to
+  everyone; now `archp()` only), the sheriff's `prevent_down`, the orc-valley guards, the tunnel and
+  sage-room exit checks, the spider's `death_func` and the council's `edit()` callbacks never ran. All 15
+  are now real pointers with forward prototypes and were called once live; `stone.lpc`'s `long_func`
+  printed with `message()` and returned nothing, which turned `look at stone` into a run-time error once
+  the pointer worked, so it returns its text now. The object form `(: this_object(), "fn" :)` has the same
+  defect without any warning (the planning room's long description is the word `go_away`; 29 sites in 21
+  Praxis files, left for a sweep: KB 04 §6.10).
+- `lib/virtual/virt_land.lpc` defined `SetCoordinates(int,int,int)`, which clobbered `LIB_ROOM`'s
+  `SetCoordinates(string)` in every virtual room (the sea around the town): renamed
+  `SetVirtualCoordinates` as in dsIII.
+- `daemon/books.lpc` `globalstr2 == ""` (a no-op) -> `=`; `secure/daemon/imc2.lpc` `GetChanInfo()` returned
+  `1` instead of the copy it built (no callers); `pscoutsuit.lpc` had a stray `;` that dropped its last help
+  line; `lib/props/save.lpc` `RestoreObject()` carried a no-op `i == str`; `room.lpc` `RemoveSearch()` and
+  `SetSky()` return types now agree with their ancestors (`SetSky()` still shadows `LIB_EXITS`'s setter,
+  which nothing calls); prototypes in `pager.h`, `post.h`, `bboard.h`, `remotepost.h` and five `.lpc` files
+  now match their definitions; the `OBJECT` and `ERROR_STRINGS` header macros are `#undef`'d before they are
+  redefined; empty `if(){}` shells deleted.
+
+**Verification.** Oracle, 262 programs: 1779 `public -> protected` flips (the mechanical pass), 48
+function-definer changes (every one an explicit choice listed above, plus `virt_land` -> `room`), 546
+duplicate variables removed or renamed (no saved variable lost: `GetSaveString()` is equal for every
+program), 87 radiance rows (14 -> 7, the glow fix), and the enter/knock/scratch/door families the five dummy
+hybrids no longer inherit through `LIB_BASE_DUMMY` (KB 06 §7.213 kind 5: `knock`, `enter`, `open` and `lock`
+on them answer the parser's own "You can't ..." either way, checked live on both trees). Live, paired:
+trashcan, river, sea, coffin, hoverpod, pole, sign, note, plasma cannon, zpem, horse, the mansion search,
+the planning-room exit, `jump into sea` (virtual rooms), the Praxis callbacks. Differences between HEAD and
+the working tree: the Praxis descriptions above and the punctuation of one refusal (`You can't enter
+that!` -> `You can't enter that.` on the river); everything else is chatter from the wandering NPCs.

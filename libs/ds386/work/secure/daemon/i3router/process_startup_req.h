@@ -4,7 +4,7 @@ void check_discs();
 string *banned_muds = ({});
 mapping bad_connects = ([]);
 
-nosave void process_startup_req(int protocol, mixed info, int fd){
+void process_startup_req(int protocol, mixed info, int fd){
     // Handles startup stuff.
     //  Loads info into newinfo mapping.
     //  Error if mud is already connected.

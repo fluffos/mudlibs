@@ -1,7 +1,7 @@
 #ifndef l_bugs_h
 #define l_bugs_h
 
-nosave void create();
+protected void create();
 int eventAssign(int bug, string who);
 int eventComplete(int bug, string resolution);
 int eventDelete(int bug);

@@ -1,7 +1,7 @@
 #ifndef l_mail_h
 #define l_mail_h
 
-nosave void create();
+protected void create();
 
 mixed can_mail();
 mixed can_mail_str(string str);

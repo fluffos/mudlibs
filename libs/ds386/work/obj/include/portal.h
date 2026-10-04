@@ -1,7 +1,7 @@
 #ifndef __portal_obj_h__
 #define __portal_obj_h__
  
-nosave void create();
+protected void create();
 string eventShowPortal();
 int SetLink(mixed dest);
 string GetLink();

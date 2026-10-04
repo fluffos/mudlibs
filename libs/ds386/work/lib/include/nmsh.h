@@ -2,23 +2,23 @@
 #define __NMSH_H
 
 int Setup();
-nomask nosave int cmd_alias(string str);
-nomask nosave int cmd_cd(string str);
-nomask nosave int cmd_nickname(string str);
-nomask nosave int cmd_nmsh(string str);
-nomask nosave int cmd_pushd(string str);
-nomask nosave int cmd_popd();
+nomask protected int cmd_alias(string str);
+nomask protected int cmd_cd(string str);
+nomask protected int cmd_nickname(string str);
+nomask protected int cmd_nmsh(string str);
+nomask protected int cmd_pushd(string str);
+nomask protected int cmd_popd();
 nomask string write_prompt();
 nomask string process_input(string str);
-nomask nosave void process_request(string request, string xtra);
-nosave int request_vis(object ob);
-nosave string user_name(object ob);
-nosave private int set_cwd(string str);
-nosave private void pushd(string str);
-nosave private string popd();
-nomask nosave private string do_nickname(string str);
-nomask nosave private string do_alias(string str);
-nomask nosave string replace_nickname(string str);
+nomask protected void process_request(string request, string xtra);
+protected int request_vis(object ob);
+protected string user_name(object ob);
+private int set_cwd(string str);
+private void pushd(string str);
+private string popd();
+nomask private string do_nickname(string str);
+nomask private string do_alias(string str);
+nomask protected string replace_nickname(string str);
 void reset_prompt();
 string query_cwd();
 string GetPrompt();
@@ -32,7 +32,7 @@ string get_path();
 string GetClient();
 varargs int GetInvis(object ob);
 string GetKeyName();
-nosave string cache_commands(string str);
+protected string cache_commands(string str);
 
 #endif /* __NMSH_H */
 

@@ -1,7 +1,7 @@
 #ifndef l_marry_h
 #define l_marry_h
 
-nosave void create();
+protected void create();
 
 mixed can_marry_liv_to_liv();
 

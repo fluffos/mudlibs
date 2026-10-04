@@ -1,8 +1,8 @@
 #ifndef __trainer_h__
 #define __trainer_h__
 
-nosave void create();
-nosave void init();
+protected void create();
+void init();
 
 mixed AddTrainingSkills(string *args...);
 mixed RemoveTrainingSkills(string *args...);
@@ -15,7 +15,7 @@ mapping AddRequestResponses(mapping mp);
 int eventHelp(object who, string unused);
 int eventTrain(object who, string verb, string skill);
 
-nosave int ContinueTraining(object who, string skill, int x);
+protected int ContinueTraining(object who, string skill, int x);
 
 int eventStart(object who, string skill);
 int eventContinue(object who, string skill, int x);

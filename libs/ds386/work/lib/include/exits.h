@@ -1,7 +1,7 @@
 #ifndef l_exits_h
 #define l_exits_h
 
-nosave void create();
+protected void create();
 
 mixed CanFly(object who, string dest);
 mixed CanGo(object who, string str);
@@ -16,7 +16,7 @@ string GetDirection(string dest);
 object GetDummyItem(mixed id);
 varargs void AddEnter(string dir, string dest, function pre, function post);
 string GetEnter(string dir);
-nosave mapping GetEnterData(string str);
+mapping GetEnterData(string str);
 string *GetEnters();
 void RemoveEnter(string dir);
 void SetEnters(mapping mp);
@@ -24,7 +24,7 @@ string GetEnterMessage();
 string SetEnterMessage(string str);
 varargs mapping AddExit(string dir, string dest, function pre, function post);
 string GetExit(string str);
-nosave mapping GetExitData(string str);
+mapping GetExitData(string str);
 string *GetExits();
 mapping RemoveExit(string dir);
 mapping SetExits(mapping mp);

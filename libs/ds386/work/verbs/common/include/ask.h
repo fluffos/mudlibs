@@ -1,7 +1,7 @@
 #ifndef l_ask_h
 #define l_ask_h
  
-nosave void create();
+protected void create();
 
 mixed can_ask_obj_str(string str);
 mixed can_ask_str(string str);

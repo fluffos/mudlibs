@@ -1,7 +1,7 @@
 #ifndef l_fly_h
 #define l_fly_h
 
-nosave void create();
+protected void create();
 
 mixed can_fly_str(string str);
 mixed can_fly_into_str(string str);

@@ -1,7 +1,7 @@
 #ifndef l_attack_h
 #define l_attack_h
 
-nosave void create();
+protected void create();
 
 mixed can_attack_liv(object target);
 

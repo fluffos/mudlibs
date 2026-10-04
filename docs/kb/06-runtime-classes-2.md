@@ -899,7 +899,7 @@ to +' console` after the first creator login. Companion of §7.203 (write paths)
 ### 7.213 One file reached through two inherit paths
 **Symptom:** hundreds of `Redeclaration of global variable 'RadiantLight'`/`'Smell'` and
 `GetSmell() inherited from both /lib/events/smell.lpc and /lib/events/smell.lpc (via ...)`
-whenever a class (and every descendant: 485 files in `dsII`, 929 in `dsIII`) is compiled.
+whenever a class (and every descendant: 485 files in `dsII`, 929 in `dsIII`, 1020 in `ds386`) is compiled.
 **Cause:** FluffOS has no virtual inherit: each inherit path carries its own copy of the
 variables. `define_variable()` warns when a name is already known and forces the *later*
 copy `nosave`; `overload_function()` lets the *later* inherit win every function (order:
@@ -909,7 +909,7 @@ the current program does not define. So a leaf that inherits `LIB_ITEM` and then
 extra `inherit "/lib/props/ambiance"` after `LIB_ROOM` replaces `room.lpc`'s
 `GetAmbientLight()` (day/night light, the lit lamps in the room) with the plain getter.
 Descendants repeat every warning, so the *source* files are few (`dsI` 9, `dsII` 66, `dsIII`
-46): `scripts/lpc_diamonds.py SLUG` lists files whose direct inherits overlap, and a
+46, `ds386` 50): `scripts/lpc_diamonds.py SLUG` lists files whose direct inherits overlap, and a
 warning anchored on a declaration or `inherit` line that no parent already warns about
 marks a source. **Fix, by kind:** (1) a redundant leaf inherit (everything it brings is
 already in another inherit's closure): delete the line, unless the file calls `b::fn()`
@@ -927,12 +927,18 @@ in the class that inherits both and call the intended parent by scope; that is a
 silences the overlap for sibling parser applies (`direct_look_obj`, `inventory_visible`),
 and the choice to spell out is whatever the inherit order already picked. (4) A private
 variable with the same name in an ancestor and a descendant (`Level`, `Obvious`,
-`CommandFail`): rename the `nosave`/private one (no save-file impact), never the saved
+`CommandFail`, `mustcarry` in the copy-pasted `LIB_AIM` and `LIB_SHOOT`): rename the `nosave`/private one (no save-file impact), never the saved
 one. (5) A leaf that inherits two *complete* classes (`LIB_BASE_DUMMY` next to
-`LIB_STORAGE`/`LIB_FLASK`: dsIII's scenery containers and water sources) has no redundant
-line to delete: take what the first one adds (`isDummy()` and `SetInvis(1)`), define it in
-the leaf, drop the inherit, and make every `inherits(LIB_BASE_DUMMY, ob)` test ask
-`ob->isDummy()`. (6) A dual-role class over two sibling classes that share a base
+`LIB_STORAGE`/`LIB_FLASK`: dsIII's and ds386's scenery containers and water sources) has no
+redundant line to delete: take what the first one adds (`isDummy()` and `SetInvis(1)`),
+define it in the leaf, drop the inherit, and make every `inherits(LIB_BASE_DUMMY, ob)` test
+ask `ob->isDummy()`. `LIB_BASE_DUMMY` also brings `LIB_ENTER`, `LIB_KNOCK` and `LIB_SCRATCH`
+(the oracle lists 30 to 44 `direct_*`/`event*`/`Set*` rows per object as removed); nothing in the lib
+uses them on these fixtures and `knock`/`enter`/`open` on them answer the parser's own
+"You can't ..." either way (live-checked, `dsIII/NOTES.md`, `ds386/NOTES.md`). Where a leaf
+inherits one of those for its own use (ds386's `seawater`: `LIB_EXITS` + `LIB_ENTER`), keep
+that inherit and name the winner of the door calls the two share (`GetDoor`, `SetDoor`,
+`ResolveObjectName`) with `enter::`. (6) A dual-role class over two sibling classes that share a base
 (`LIB_OOB` = `LIB_SOCKET` + `LIB_CLIENT`, both daemons): inherit the heavier one and carry
 the few members of the other (a `Descriptor`, an `Owner`, three small functions).
 **Detection:** `scripts/ds_oracle.py` before and after (KB 08 §10.12): function
@@ -959,3 +965,14 @@ wins and what the pack carries is not counted. **Fix:** all three return
 `container::`/`base_storage::GetRadiantLight(ambient)` alone, as `interactive.lpc` does.
 **Detection:** the `SetRadiantLight(7)` rows of `scripts/ds_oracle.lpc` across the lib.
 
+### 7.216 A source file the driver only compiles at runtime is invisible to the scan (ds386)
+**Symptom:** the lib scans clean, then the first-boot admin wizard (`cp("/secure/lib/connect.real",
+LIB_CONNECT ".lpc")`) or the live-upgrade tool (`update.patch`, `update.blank`) copies a
+non-`.lpc` file over a live program and 38 `nosave` function warnings, an unknown escape and two
+unused locals are back on the first player's screen. **Cause:** `scripts/lpc_warnings.py`
+compiles `.lpc` files only; `.real`, `.patch`, `.blank` are source in disguise. **Fix:** run the
+fixer's routines (`fix_nosave_functions`, `fix_escapes`, `fix_unused_locals`) over temporary
+`.lpc` copies in a scratch tree, with the diagnostics from a one-file `lpcc --batch` run, and copy
+the result back; once the wizard has run, `diff connect.real connect.lpc` is empty.
+**Detection:** `grep -rn 'cp(\|rename(' work | grep -v '\.lpc'` for source copied at runtime, and
+a boot that completes the wizard, then a second login with the console watched.
