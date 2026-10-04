@@ -737,3 +737,7 @@ twice, then `look`. A player who repeats one failing command hits the same thing
 which is what upstream Lima already does. `error_handler()` still prints the error and `Trace written to` (the log is
 `/log/catch` now, not `/log/runtime`). Live on a pristine tree: four errors in a row (and one more after a `look`), then
 `look`, `i` and `!look` answer. KB 06 §7.217.
+
+Follow-up (2026-10-04, later): `domains/std/rooms/caves/Sloping_Tunnel` called the retired `set_default_exit()` (only the
+non-compiling `room/exits` module defines it) and did not load; it calls `set_default_error()` like its sibling caves, and
+`north` prints "You can't find an exit in that direction."

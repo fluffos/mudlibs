@@ -11,7 +11,7 @@ void setup()
    set_light(0);
    set_exits((["south":"Inside_Cave", ]));
    set_hidden_exits();
-   set_default_exit("You can't find an exit in that direction.\n");
+   set_default_error("You can't find an exit in that direction.\n");
 
    set_objects(([
 

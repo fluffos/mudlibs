@@ -666,3 +666,6 @@ string), `doc/etc/func_spec.lpc`, `std/adt/{iqueue,istack}.lpc`, `std/castle.lpc
 `std/diewarzau/obj/misc/clone_soul.lpc` (truncated) and `std/obj/container.lpc` (a new save system on an `::save()`
 its parent lacks). Live as `fluffos` on a working-tree copy: `look`, `who`, `finger fluffos`, `cd`, `pushd`/`popd`
 (the directory stack stays empty unless the `pushd` environment variable sets a size, in HEAD as well), `score`, `ls`.
+
+Follow-up (2026-10-04): `cmds/cmds_m.lpc` now includes `<uid.h>` (`adm/include`), where `ROOT_UID` lives; it compiles, so it
+is off the list of non-compiling files above.

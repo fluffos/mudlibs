@@ -1080,8 +1080,10 @@ headers do not define: `DAEMON`, `MONSTER`, `M_DRINK_SOURCE`, `COMPLEX_CONTAINER
 example monsters (`add_script()` / `run_script()` do not exist), `secure/daemons/ftp_d.lpc` (locals in a function
 pointer), and three example scripts: `domains/lpscript/camera.scr` (`obj` is not a class name, the `action[...]` and
 `failed` syntax is from an older script grammar, and `picture.scr` is not in the archive), `large_oak_door.scr`
-(`setup_door()` takes the destination room as a third argument) and `wizroom.scr` (`default_exit=` maps to
-`set_default_exit()`, which only the non-compiling `room/exits` module defines). None is on the login or new-player path.
+(`setup_door()` takes the destination room as a third argument) and `wizroom.scr` (it needs that door). None is on the
+login or new-player path. Follow-up (2026-10-04, later): the room `domains/std/rooms/caves/Sloping_Tunnel` and the script
+attribute `default_exit=` (`std/base_room.lpc`) called the retired `set_default_exit()`, which only the non-compiling
+`room/exits` module defines; both call `set_default_error()` now, and the tunnel loads (`north` prints its message).
 
 ## 深度功能测试（§10.7，2026-10-04）— two uncaught errors in a row left the session mute
 
