@@ -40,7 +40,8 @@ Mechanical fixes (positions come from the driver; columns are 1-based BYTES):
                                           #if/#ifdef block of the same function (listed instead)
 A lib's own compiler tests (Lil: /single/tests/) are broken on purpose; pass --skip '^/single/tests/'.
 Everything else is listed for hand work (see KB 04 section 6.10 for the fixes).
-Only vendored libs (work/ tracked here) are supported.
+Only vendored libs (work/ tracked here) are supported; a submodule-patch lib (lima) is scanned and fixed in a scratch
+repo built by scripts/submodule_patch_scratch.py.
 
 The edits touch libs/SLUG/work only, in binary mode (CRLF and LF both survive),
 and never add or remove lines except a deleted declaration.  After --fix, boot

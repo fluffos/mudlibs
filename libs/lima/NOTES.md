@@ -20,6 +20,8 @@ mudlib directory 指向 `work/lib`。
   驱动预处理器吃不了 `ENSURE(x /* c */)`（NOTES bug #4）
 - `patches/0002-troll-split-heredoc-start-marker.patch` —
   驱动词法吃不了 `@LONG text` 同行正文（NOTES bug #5 的 troll 处）
+- `patches/0003-remove-no_warnings-pragma.patch` … `0006-cmds-domains-contrib-fix-compile-warnings.patch` —
+  2026-10-04：去掉 `#pragma no_warnings` 并修掉它遮住的编译警告（见文末同日一节）
 - `overlay/lib/data/` — `fluffos` / `Mud@2026` Admin 播种
   （`access.o` + `links/f/fluffos.o` + `players/f/fluffos.o`）
 
@@ -845,3 +847,64 @@ sect/family game. Live probes: `apprentice` / `become` / `拜师`
 `GUILD_D` stock guilds are still not loaded (same as the
 2026-08-27 `guild_guard`/`sorcery` finding). School rooms are
 a wizard-coding tutorial, not an apprenticeship.
+
+## 深度功能测试（§10.7，2026-10-04）— `#pragma no_warnings` removed (patches 0003–0006), every compile warning fixed
+
+`lib/include/mudlib.h` (so every file that includes it) and the three example rooms `lib/domains/std/room/{Attic,Church,
+wiz_hall}.c` open with `#pragma no_warnings` upstream. The catalog's playable tree must not carry it (AGENTS.md), so
+patch 0003 removes the four lines and 0004–0006 fix what they hid. With the pragma gone the Lima-driver `lpcc`
+(`~/src/fluffos-lima/build-debug/src/lpcc`) printed 549 distinct diagnostics over the 1174 objects; on the patched tree
+there are 8, all errors in files that do not compile, and **0 warnings** (`lpcc --batch` over every `.c` object of a
+fresh upstream copy with the six patches applied: 1159 load, 15 do not).
+
+The patches are split by directory so that a pin bump that breaks one still leaves the others applying: 0004 is
+`std/` (77 files), 0005 `daemons/ secure/ obj/ trans/ WWW/` (53), 0006 `cmds/ domains/ contrib/` (87). They were made in
+a scratch repo (`scripts/submodule_patch_scratch.py build lima --below 3`, then the usual `lpc_warnings.py` /
+`lpc_name_winner.py` / `lpc_rename_ident.py` / `lpc_fix_unused_init.py` passes on its `.lpc`-named copy, then
+`export lima --stage std-fix-compile-warnings:std/ ...`); the same two commands regenerate them against a new pin.
+`rebase_upstreams.py` holds a pin when a patch stops applying.
+
+Root causes (KB 04 §6.10, the Lima-family classes again):
+- **Private names that met in one class** got module prefixes: `base` (`exit_base` in `m_exit`, `cx_base`, `obj_base` /
+  `obj_default_desc`, `rx_base` in `room/exits`), `env` (`act_env`, `blocker_env`), `move_hook` (`blocker_move_hook`,
+  `wander_move_hook`, `wield_move_hook`), `taste_action` (`drink_taste_action`), `fluid_disturb` (`drink_disturb`),
+  `skill_used` / `magic_skill_used` (`spell_*` in `spell.c`, `throw_skill_used`), `stats` (`conv_stats`), `keywords`
+  (`md_keywords`), `colours` (`frame_themes` in the admtool frames), `no_heals`, `queue`, and `test_dummy`'s `target`;
+  `guild_d` lost a dead saveable duplicate of `guild_favours`.
+- **A mixin that inherits its own dependency**: `m_assistance` re-inherited `M_MESSAGES` (which `ADVERSARY` has) and the
+  yakitori delivery boy inherited `M_ASSISTANCE` twice; the module declares `targetted_action()` now.
+- **About 150 `F() inherited from both A and B` overlaps** in 62 files are named in the leaf (`lpc_name_winner.py`). Where two
+  real `mudlib_setup()`s met, the leaf now calls both: `food` + `m_decay` (hamburger, three skewers), `object` +
+  `light_object` (candle), `container` + `m_wearable` (backpack), `adversary` + `m_accountant` (bank accountant),
+  `object` + `m_companion` + `m_stateful` (dancing lights). `std/body.c` keeps its wrapper block outside
+  `#ifdef USE_GUILDS`, with `nomask` moved from `body/cmd.c`'s `do_game_command()` to the wrapper.
+- **`weapon.c` dropped `m_wieldable::internal_setup()`**: `m_durability`'s `nomask internal_setup()` won the overlap, so
+  `wielding_limbs` was never registered for saving on any weapon, and `special_longsword.c` could not compile at all
+  ("Illegal to redefine 'nomask' function"). The `nomask` is gone and `weapon.c` calls both; `special_longsword` loads and
+  clones now (it names its four overlapping functions too).
+- Return-type disagreements: `base_room`'s `do_listen()` / `do_smell()` return 1 like the yakitori rooms' versions, the
+  five transient effects define `void do_effect(object affected)` like `transient.c`, `xterm256_d` and `navigation`
+  prototypes match their definitions; `?:` with a string and an int branch became `if`/`return`; rest parameters are
+  `string *x...`; `(: "pop_up", "fast forward" :)` in `recorder.c` was a comma expression, a real pointer now;
+  `m_frame`'s default column colour is the string `"<res>"` (`evaluate()` returns it as is).
+- Not warnings, but broken enough to fix on the way: `m_react.c` (text block terminator indented and followed by `;`,
+  `string *parts` holding an int counter), `Sloping_Tunnel` (`set_default_exit()` is the retired API for
+  `set_default_error()`), the yakitori uniform (`ARMOR` / `set_armor_class()` for `ARMOUR` / `set_armour_class()`), the
+  contrib boards (`set_in_room_desc()` took a string but is handed a function; it keeps `evaluate()`-able values now),
+  `contrib/bboard` and `contrib/marriage/user_d` (`static` variables), `WWW/cgi/mudinfo` (`mixed array`) and
+  `secure/daemons/ftp_d` (a `$(local)` inside the outer functional of the PASV socket).
+
+Live on a pristine tree with the Lima driver, baseline (upstream with patches 0001/0002) against the patched tree, the same
+48-command battery as the seeded `fluffos` admin: clones of the troll, goblin, dragon, wolf, test dummy, Harry, Robert,
+four weapons, water, ale, keg, tankard, hamburger, candle, backpack, trainer, bank accountant, horse, camaro, cooking
+station, delivery boy and uniform; `wield` / `drink` / `eat` / `light`; `smell` and `listen` in the kitchen; the cave and
+the wizard room; `help`. The transcripts agree except for two objects that now load (`special_longsword`,
+`Sloping_Tunnel`); the console shows no warning and no error. Pre-existing, not touched: `fighter_master` raises "Non-existant
+guild - stock-fighter" in `guild_d`, and `m_react`'s `add_script()` is upstream's own stub ("Don't you wish this function
+wasn't missing").
+
+Left: 8 diagnostics in the files that do not compile: `WWW/cgi/autodoc.c` (inline `@END` text blocks), `contrib/marriage/
+{finger,finger_d}.c` (the class member `spouse` the contrib expects the core finger class to have),
+`domains/std/object/portable_board.c` (`BOARD_OB` is defined by nothing in the tree) and `std/behaviour/test.c` (a
+three-line scratch file); another eleven objects fail to load in a batch without a diagnostic (they need arguments or a
+user: virtual rooms, menus, mailers, `contrib/bboard/news_d`).

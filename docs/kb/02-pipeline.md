@@ -68,6 +68,11 @@ Also apply the WASM standards: §1.3b, §1.3e, and §1.5.
   - `upstream.auto_rebase: false` holds the pin.
   - `upstream.branch` overrides the compare branch (`sagenwelt` uses
     `feature/player`).
+  - A large patch set (lima's warnings, patches 0003-0006) is made in a
+    scratch repo, not in the submodule: `scripts/submodule_patch_scratch.py
+    build|export <slug>` (the scanners need `.lpc` names; export maps them
+    back and splits the diff into per-directory patches). The same two
+    commands regenerate it when a pin bump breaks a patch.
 - **`fluffos-upstream`**: a live `github.com/fluffos/<repo>`. It uses a
   submodule with **empty** `patches/`. The remote itself follows this
   catalog's conventions (`.lpc`, §9-formatted), so land LPC fixes there.

@@ -1,0 +1,2049 @@
+diff --git a/lib/std/accountant.c b/lib/std/accountant.c
+index 404f9fd..2245eae 100644
+--- a/lib/std/accountant.c
++++ b/lib/std/accountant.c
+@@ -3,6 +3,10 @@
+ inherit ADVERSARY;
+ inherit M_ACCOUNTANT;
+ 
++/* Two inherits define colour_strlen, remove(); the later one was already in effect: name it. */
++int colour_strlen(string str) { return m_accountant::colour_strlen(str); }
++void remove() { m_accountant::remove(); }
++
+ void mudlib_setup(mixed *args...)
+ {
+    adversary::mudlib_setup(args...);
+diff --git a/lib/std/adversary/behaviors.c b/lib/std/adversary/behaviors.c
+index be726e2..132be21 100644
+--- a/lib/std/adversary/behaviors.c
++++ b/lib/std/adversary/behaviors.c
+@@ -14,7 +14,7 @@ nosave object busy_with;
+ nosave int busy_at = 0;
+ nosave string busy_func;
+ nosave string busy_action;
+-nosave int no_heals = 0;
++nosave int adv_no_heals = 0;
+ 
+ void adversary_met(object who);
+ varargs void attacked_by(object who, int take_a_swing);
+@@ -225,7 +225,7 @@ void try_heal()
+ 
+    if (!pick)
+    {
+-      no_heals = 1;
++      adv_no_heals = 1;
+       return;
+    }
+ 
+@@ -251,7 +251,7 @@ void try_heal()
+ // The default behavior is to randomly flee or surrender.
+ void panic()
+ {
+-   if (random(10) < 10 && !this_object()->is_body() && !no_heals)
++   if (random(10) < 10 && !this_object()->is_body() && !adv_no_heals)
+       try_heal();
+    if (random(10) < 3)
+       flee();
+diff --git a/lib/std/adversary/condition.c b/lib/std/adversary/condition.c
+index 61bc9c4..3a99238 100644
+--- a/lib/std/adversary/condition.c
++++ b/lib/std/adversary/condition.c
+@@ -207,21 +207,27 @@ string condition_string()
+ 
+ mixed can_lie_down()
+ {
+-   return prone ? "You are already lying down." : 1;
++   if (prone)
++      return "You are already lying down.";
++   return 1;
+ }
+ 
+ mixed can_sit()
+ {
+    if (query_stunned())
+       return "You're stunned right now.";
+-   return sitting ? "You are already sitting." : 1;
++   if (sitting)
++      return "You are already sitting.";
++   return 1;
+ }
+ 
+ mixed can_stand()
+ {
+    if (query_stunned())
+       return "You're stunned right now.";
+-   return sitting + prone ? 1 : "You're already standing.";
++   if (sitting + prone)
++      return 1;
++   return "You're already standing.";
+ }
+ 
+ mixed can_stand_wrd()
+diff --git a/lib/std/adversary/health/limbs.c b/lib/std/adversary/health/limbs.c
+index 58af761..b3f418a 100644
+--- a/lib/std/adversary/health/limbs.c
++++ b/lib/std/adversary/health/limbs.c
+@@ -654,7 +654,7 @@ varargs int hurt_us(int x, string limb)
+    tmp = health[limb];
+ 
+    if (tmp.health == -1)
+-      return;
++      return 0;
+ 
+    if (!tmp)
+       error("Bad limb '" + limb + "'.\n");
+diff --git a/lib/std/adversary.c b/lib/std/adversary.c
+index 26e8ea8..1d6b9f9 100644
+--- a/lib/std/adversary.c
++++ b/lib/std/adversary.c
+@@ -42,6 +42,10 @@ inherit MODULE("blows", BLOW_MODULE);
+ inherit MODULE("formula", FORMULA_MODULE);
+ inherit MODULE("advancement", ADVANCEMENT_MODULE);
+ 
++/* Two inherits define event_to_str, get_extra_long(); the later one was already in effect: name it. */
++string event_to_str(class event_info evt) { return ::event_to_str(evt); }
++string get_extra_long() { return m_damage_source::get_extra_long(); }
++
+ #include <stats.h>
+ 
+ void mudlib_setup(mixed *args...)
+diff --git a/lib/std/aggressive_monster.c b/lib/std/aggressive_monster.c
+index ead07df..d1707dd 100644
+--- a/lib/std/aggressive_monster.c
++++ b/lib/std/aggressive_monster.c
+@@ -8,6 +8,9 @@
+ inherit ADVERSARY;
+ inherit M_AGGRESSIVE;
+ 
++/* Two inherits define i_met(); the later one was already in effect: name it. */
++void i_met(object who) { m_aggressive::i_met(who); }
++
+ void mudlib_setup()
+ {
+    adversary::mudlib_setup();
+diff --git a/lib/std/armour.c b/lib/std/armour.c
+index c8ab6a5..f7656b1 100644
+--- a/lib/std/armour.c
++++ b/lib/std/armour.c
+@@ -8,6 +8,9 @@ inherit M_DAMAGE_SINK;
+ 
+ inherit M_DURABILITY;
+ 
++/* Two inherits define direct_salvage_obj(); the later one was already in effect: name it. */
++int direct_salvage_obj() { return m_salvageable::direct_salvage_obj(); }
++
+ #define ARMOUR_LVL_PRICE 50
+ 
+ //: MODULE
+diff --git a/lib/std/art_object.c b/lib/std/art_object.c
+index 2408a46..aec7e81 100644
+--- a/lib/std/art_object.c
++++ b/lib/std/art_object.c
+@@ -39,7 +39,7 @@ string item_name()
+    if (!id)
+    {
+       TBUG("Bad format art object: '" + item + "'");
+-      return;
++      return 0;
+    }
+    set_id(id);
+ 
+diff --git a/lib/std/base_room.c b/lib/std/base_room.c
+index e50e378..cc91252 100644
+--- a/lib/std/base_room.c
++++ b/lib/std/base_room.c
+@@ -283,12 +283,13 @@ string query_smell()
+ //: FUNCTION do_listen
+ // Uses write() to return the listen text set with the ``set_listen()``
+ // function, otherwise returns "You hear nothing unusual.".
+-void do_listen()
++int do_listen()
+ {
+    if (listen)
+       write(listen + "\n");
+    else
+       write("You hear nothing unusual.\n");
++   return 1;
+ }
+ 
+ void do_look_at_str()
+@@ -301,12 +302,13 @@ void do_pray()
+    write("Nothing special happens.\n");
+ }
+ 
+-void do_smell()
++int do_smell()
+ {
+    if (smell)
+       write(smell + "\n");
+    else
+       write("You smell nothing unusual.\n");
++   return 1;
+ }
+ 
+ int listeners()
+diff --git a/lib/std/behaviour/behaviour_tree.c b/lib/std/behaviour/behaviour_tree.c
+index 221eefd..fee37e9 100644
+--- a/lib/std/behaviour/behaviour_tree.c
++++ b/lib/std/behaviour/behaviour_tree.c
+@@ -60,7 +60,7 @@ varargs int evaluate_node()
+    {
+       debug("<161>Queue empty - missing node? Restarting from <069>ROOT<res>.");
+       frontpush("root");
+-      return;
++      return 0;
+    }
+ 
+    debug("<214>Evaluating node: <043>" + node.name + "<res>"); // <214>Queue: <043>" + print_queue() + "<res>");
+@@ -74,7 +74,7 @@ varargs int evaluate_node()
+       parses++;
+       if (query_observers())
+          evaluate_node();
+-      return;
++      return 0;
+       break;
+    case NODE_SEQUENCE:
+       // We're done in the sequence
+diff --git a/lib/std/behaviour/clusters/base.c b/lib/std/behaviour/clusters/base.c
+index f521a9b..19ec1bd 100644
+--- a/lib/std/behaviour/clusters/base.c
++++ b/lib/std/behaviour/clusters/base.c
+@@ -56,7 +56,7 @@ private object env;
+ 
+ private int delay_time = 5;   // Default delay time for leaves.
+ private object debugee = 0;   // The body of the person debugging us.
+-private string *queue = ({}); // Queue of nodes that must be processed.
++private string *node_queue = ({}); // Queue of nodes that must be processed.
+ 
+ private object *arrived = ({});
+ private object *left = ({});
+@@ -111,21 +111,19 @@ string status(int s)
+ void backpush(mixed node)
+ {
+    if (arrayp(node))
+-      queue += node;
++      node_queue += node;
+    else
+-      queue += ({node});
++      node_queue += ({node});
+ }
+ 
+ void frontpush(string node)
+ {
+-   queue = ({node}) + queue;
++   node_queue = ({node}) + node_queue;
+ }
+ 
+ string print_queue()
+ {
+-   string out = "";
+-   int i = 1;
+-   return format_list(queue);
++   return format_list(node_queue);
+ }
+ 
+ mapping query_nodes()
+@@ -147,13 +145,13 @@ void reset_tree()
+          node.status = EVAL_NONE;
+       node.node_num = 0;
+    }
+-   queue = ({});
++   node_queue = ({});
+    reset_last_failed_leaves();
+ }
+ 
+ class node front()
+ {
+-   return sizeof(queue) ? node_list[queue[0]] : 0;
++   return sizeof(node_queue) ? node_list[node_queue[0]] : 0;
+ }
+ 
+ class node parent(class node node)
+@@ -164,7 +162,7 @@ class node parent(class node node)
+ class node pop()
+ {
+    class node n = front();
+-   queue = sizeof(queue) ? queue[1..] : ({});
++   node_queue = sizeof(node_queue) ? node_queue[1..] : ({});
+    return n;
+ }
+ 
+diff --git a/lib/std/behaviour/clusters/combat.c b/lib/std/behaviour/clusters/combat.c
+index 375760e..4ca9eac 100644
+--- a/lib/std/behaviour/clusters/combat.c
++++ b/lib/std/behaviour/clusters/combat.c
+@@ -37,7 +37,7 @@ int food_attack()
+       object *targets = this_object()->potential_targets();
+       if (sizeof(targets))
+       {
+-         object target = targets[random(sizeof(targets))];
++         targets[random(sizeof(targets))];
+          this_object()->start_fight(targets[0]);
+          return EVAL_SUCCESS;
+       }
+diff --git a/lib/std/behaviour/clusters/equipment.c b/lib/std/behaviour/clusters/equipment.c
+index fe39425..35e4102 100644
+--- a/lib/std/behaviour/clusters/equipment.c
++++ b/lib/std/behaviour/clusters/equipment.c
+@@ -179,7 +179,7 @@ int find_armour_in_inventory()
+ 
+ int find_armour_in_room()
+ {
+-   object *armours = filter(all_inventory(this_object()), ( : $1->is_wearable() :));
++   filter(all_inventory(this_object()), ( : $1->is_wearable() :));
+    object *in_room = filter(all_inventory(environment()), ( : $1->is_wearable() :));
+    int worn = 0;
+ 
+diff --git a/lib/std/behaviour/clusters/navigation.c b/lib/std/behaviour/clusters/navigation.c
+index 2dcab52..737abde 100644
+--- a/lib/std/behaviour/clusters/navigation.c
++++ b/lib/std/behaviour/clusters/navigation.c
+@@ -14,7 +14,7 @@ void do_game_command(string str);
+ int has_room_changed();
+ int im_bored();
+ void room_checked();
+-void do_wander();
++int do_wander();
+ int player_did_arrive(string dir);
+ void moving();
+ int query_emotion(mixed emotion);
+@@ -116,7 +116,7 @@ int do_wander()
+ 
+    /* Stop if there are no directions (this takes care of blue prints*/
+    if (!directions || !i = sizeof(directions))
+-      return;
++      return 0;
+ 
+    chosen_dir = directions[random(i)];
+ 
+diff --git a/lib/std/body/cmd.c b/lib/std/body/cmd.c
+index c5eda34..b283101 100644
+--- a/lib/std/body/cmd.c
++++ b/lib/std/body/cmd.c
+@@ -32,7 +32,7 @@ mixed *debug_ids(object ob)
+    return ({ob, ob->query_id()});
+ }
+ 
+-varargs nomask int do_game_command(string str, int debug)
++varargs int do_game_command(string str, int debug)
+ {
+    mixed result;
+    mixed go_result;
+diff --git a/lib/std/body/skills.c b/lib/std/body/skills.c
+index e4efb19..a71fc3f 100644
+--- a/lib/std/body/skills.c
++++ b/lib/std/body/skills.c
+@@ -238,7 +238,6 @@ int query_skill_pts(string skill)
+ 
+ void add_skill_bonus(string s, int v)
+ {
+-   class skill skill, new_skill;
+    if (!skills[s])
+       skills[s] = new (class skill);
+    if (!skill_bonus[s])
+diff --git a/lib/std/body.c b/lib/std/body.c
+index 228ebdd..3f23447 100644
+--- a/lib/std/body.c
++++ b/lib/std/body.c
+@@ -54,6 +54,18 @@ inherit __DIR__ "body/title";
+ inherit __DIR__ "body/guilds";
+ #endif
+ 
++/* Two inherits define aggregate_skill, cached_skill_rank, query_max_capacity, query_no_move_capacity, query_skill, query_skill_pts, query_skills, set_skill, test_skill(); the later one was already in effect: name it. */
++int aggregate_skill(string skill) { return skills::aggregate_skill(skill); }
++int cached_skill_rank(string s) { return skills::cached_skill_rank(s); }
++varargs int query_max_capacity(string relation) { return pockets::query_max_capacity(relation); }
++varargs int query_no_move_capacity(string relation) { return pockets::query_no_move_capacity(relation); }
++class skill query_skill(string s) { return skills::query_skill(s); }
++int query_skill_pts(string skill) { return skills::query_skill_pts(skill); }
++mapping query_skills() { return skills::query_skills(); }
++class skill set_skill(string skill, int skill_points, int training_points) { return skills::set_skill(skill, skill_points, training_points); }
++varargs int test_skill(string skill, int opposing_skill, int no_learn) { return skills::test_skill(skill, opposing_skill, no_learn); }
++varargs nomask int do_game_command(string str, int debug) { return cmd::do_game_command(str, debug); }   // nomask moved here from body/cmd.lpc
++
+ void heal_all();
+ varargs void stop_fight(object);
+ void reinstate_effects();
+diff --git a/lib/std/climb_challenge.c b/lib/std/climb_challenge.c
+index 04c4fa7..a3f4124 100644
+--- a/lib/std/climb_challenge.c
++++ b/lib/std/climb_challenge.c
+@@ -57,7 +57,7 @@ int do_verb_rule(string action, string rule, string prep, object ob)
+    if (action == "ascend" && this_body()->query_reflex() < 5)
+    {
+       write("You cannot concentrate enough to climb this.\n");
+-      return;
++      return 0;
+    }
+ 
+    if (action == "descend" && this_body()->query_reflex() < 5)
+diff --git a/lib/std/coins.c b/lib/std/coins.c
+index f353827..b8efd91 100644
+--- a/lib/std/coins.c
++++ b/lib/std/coins.c
+@@ -55,7 +55,7 @@ void split_coins(float amount, string type)
+       write("There aren't that many coins of that type here.\n");
+ }
+ 
+-mixed get(string amount_str, string type)
++varargs mixed get(string amount_str, string type)
+ {
+    string denomination;
+    int amount;
+diff --git a/lib/std/combat_spell.c b/lib/std/combat_spell.c
+index 0954f83..b82d128 100644
+--- a/lib/std/combat_spell.c
++++ b/lib/std/combat_spell.c
+@@ -9,6 +9,11 @@
+ inherit SPELL;
+ inherit M_DAMAGE_SOURCE;
+ 
++/* Two inherits define query_magic_skill_used, query_skill_used, set_skill_used(); the later one was already in effect: name it. */
++string query_magic_skill_used() { return m_damage_source::query_magic_skill_used(); }
++string query_skill_used() { return m_damage_source::query_skill_used(); }
++void set_skill_used(string new_skill_used) { m_damage_source::set_skill_used(new_skill_used); }
++
+ //: FUNCTION do_spell_damage
+ // Inflicts damage on the target and initiates combat between the attacker and the target.
+ // Parameters:
+@@ -20,7 +25,7 @@ inherit M_DAMAGE_SOURCE;
+ varargs void do_spell_damage(object attacker, object target, mixed damage, string limb, int no_dodge)
+ {
+    int s_level = query_level();
+-   int opposing_dodge = SKILL_D->pts_for_rank(s_level);
++   SKILL_D->pts_for_rank(s_level);
+ 
+    if (!attacker || !target)
+       return;
+diff --git a/lib/std/container.c b/lib/std/container.c
+index a8f9702..c55d73a 100644
+--- a/lib/std/container.c
++++ b/lib/std/container.c
+@@ -129,7 +129,7 @@ void remove_relations(string *rels...)
+ // Set the relations which are legal for a complex container.  Example:
+ // set_relations("on", "in", "under").  The first one is the default
+ // relation (the one used by set_objects(), etc)
+-void set_relations(string rels...)
++void set_relations(string *rels...)
+ {
+    /* Ok, a bit tricky here.  We can't remove relations if there is an
+       object occupying that, so we remove all relations with no objects,
+diff --git a/lib/std/corpse.c b/lib/std/corpse.c
+index 0738787..2a0d5d1 100644
+--- a/lib/std/corpse.c
++++ b/lib/std/corpse.c
+@@ -5,6 +5,9 @@ inherit M_DECAY;
+ inherit M_MESSAGES;
+ inherit M_SALVAGEABLE;
+ 
++/* Two inherits define direct_salvage_obj(); the later one was already in effect: name it. */
++int direct_salvage_obj() { return m_salvageable::direct_salvage_obj(); }
++
+ string the_name;
+ object link;
+ 
+@@ -28,7 +31,7 @@ object query_link()
+    return link;
+ }
+ 
+-void mudlib_setup(string name, string long, object l)
++varargs void mudlib_setup(string name, string long, object l)
+ {
+    ::mudlib_setup();
+    m_decay::mudlib_setup();
+@@ -74,7 +77,7 @@ string introduce_contents()
+    return "On " + the_short() + " you see:\n";
+ }
+ 
+-mixed indirect_get_obj_from_obj(object ob1, object ob2)
++varargs mixed indirect_get_obj_from_obj(object ob1, object ob2)
+ {
+    return 1;
+ }
+diff --git a/lib/std/crafting_station.c b/lib/std/crafting_station.c
+index 643689a..a719c26 100644
+--- a/lib/std/crafting_station.c
++++ b/lib/std/crafting_station.c
+@@ -6,6 +6,9 @@
+ inherit FURNITURE;
+ inherit M_CRAFTING;
+ 
++/* Two inherits define get_extra_long(); the later one was already in effect: name it. */
++string get_extra_long() { return m_crafting::get_extra_long(); }
++
+ #undef CAN_UPGRADE_DOWNGRADE
+ 
+ void mudlib_setup()
+diff --git a/lib/std/drink.c b/lib/std/drink.c
+index 165bd5d..195263d 100644
+--- a/lib/std/drink.c
++++ b/lib/std/drink.c
+@@ -31,7 +31,7 @@ void set_heal_value(int v)
+    ::set_heal_value(v);
+ }
+ 
+-mixed direct_drink_obj(object ob)
++varargs mixed direct_drink_obj(object ob)
+ {
+    return m_drinkable::direct_drink_obj(ob);
+ }
+diff --git a/lib/std/elevator_button.c b/lib/std/elevator_button.c
+index 73b9166..1b73c30 100644
+--- a/lib/std/elevator_button.c
++++ b/lib/std/elevator_button.c
+@@ -5,7 +5,7 @@ string dest;
+ string key = "";
+ 
+ mixed do_press();
+-mixed direct_press_obj();
++varargs mixed direct_press_obj();
+ 
+ string long()
+ {
+@@ -37,7 +37,7 @@ mixed do_press()
+    return 1;
+ }
+ 
+-mixed direct_press_obj()
++varargs mixed direct_press_obj()
+ {
+    return 1;
+ }
+diff --git a/lib/std/elevator_call_button.c b/lib/std/elevator_call_button.c
+index c2e1307..aa3209c 100644
+--- a/lib/std/elevator_call_button.c
++++ b/lib/std/elevator_call_button.c
+@@ -4,7 +4,7 @@ inherit OBJ;
+ string where;
+ string elevator;
+ 
+-mixed direct_press_obj();
++varargs mixed direct_press_obj();
+ 
+ void do_press()
+ {
+@@ -39,7 +39,7 @@ void setup(string w, string e)
+    elevator = e;
+ }
+ 
+-mixed direct_press_obj()
++varargs mixed direct_press_obj()
+ {
+    return 1;
+ }
+diff --git a/lib/std/elevator_internal_door.c b/lib/std/elevator_internal_door.c
+index 56957c6..9e8ead4 100644
+--- a/lib/std/elevator_internal_door.c
++++ b/lib/std/elevator_internal_door.c
+@@ -17,7 +17,6 @@ string long()
+ 
+ void setup()
+ {
+-   function f;
+    set_id("door");
+    set_adj("elevator");
+    set_attached(1);
+diff --git a/lib/std/flask.c b/lib/std/flask.c
+index dfed6f2..dc0c0c4 100644
+--- a/lib/std/flask.c
++++ b/lib/std/flask.c
+@@ -4,6 +4,9 @@ inherit CONTAINER;
+ inherit M_GETTABLE;
+ inherit M_FLUID_CONTAINER;
+ 
++/* Two inherits define get_extra_long(); the later one was already in effect: name it. */
++string get_extra_long() { return m_fluid_container::get_extra_long(); }
++
+ void setup()
+ {
+    set_adj("clear", "glass", "blown");
+diff --git a/lib/std/food.c b/lib/std/food.c
+index 1523bc1..340a8e0 100644
+--- a/lib/std/food.c
++++ b/lib/std/food.c
+@@ -28,7 +28,7 @@ int query_value()
+    return to_int((float)query_num_eats() * query_heal_value() * heal_mod);
+ }
+ 
+-mixed direct_eat_obj(object ob)
++varargs mixed direct_eat_obj(object ob)
+ {
+    return m_edible::direct_eat_obj(ob);
+ }
+diff --git a/lib/std/gem.c b/lib/std/gem.c
+index b46333c..5d262d5 100644
+--- a/lib/std/gem.c
++++ b/lib/std/gem.c
+@@ -60,7 +60,6 @@ int gem_value()
+ 
+ void roll_gem()
+ {
+-   int value = 0;
+    if (!rolled)
+    {
+       gsize = randomize_gem();
+diff --git a/lib/std/junk.c b/lib/std/junk.c
+index f338549..2a866a6 100644
+--- a/lib/std/junk.c
++++ b/lib/std/junk.c
+@@ -2,6 +2,9 @@ inherit OBJ;
+ inherit M_GETTABLE;
+ inherit M_SALVAGEABLE;
+ 
++/* Two inherits define direct_salvage_obj(); the later one was already in effect: name it. */
++int direct_salvage_obj() { return m_salvageable::direct_salvage_obj(); }
++
+ int junk_level = 1;
+ 
+ varargs void mudlib_setup(string material)
+diff --git a/lib/std/ladder.c b/lib/std/ladder.c
+index 23f13c7..42cdea0 100644
+--- a/lib/std/ladder.c
++++ b/lib/std/ladder.c
+@@ -2,7 +2,7 @@
+ 
+ inherit STAIRS;
+ 
+-void more_create(mixed up_dest, mixed down_dest, int attached)
++varargs void more_create(mixed up_dest, mixed down_dest, int attached)
+ {
+    setup_messages("ladder", up_dest, down_dest);
+ }
+diff --git a/lib/std/lantern.c b/lib/std/lantern.c
+index a6d803d..d70dd97 100644
+--- a/lib/std/lantern.c
++++ b/lib/std/lantern.c
+@@ -5,6 +5,9 @@ inherit M_GETTABLE;
+ inherit LIGHT_OBJECT;
+ inherit M_SWITCHABLE;
+ 
++/* Two inherits define direct_flip_obj(); the later one was already in effect: name it. */
++mixed direct_flip_obj(object ob) { return m_switchable::direct_flip_obj(ob); }
++
+ void turn_on()
+ {
+    set_is_on(1);
+diff --git a/lib/std/loot_chest.c b/lib/std/loot_chest.c
+index 2b58b13..6dd00e0 100644
+--- a/lib/std/loot_chest.c
++++ b/lib/std/loot_chest.c
+@@ -7,6 +7,13 @@
+ inherit CHEST;
+ inherit M_GRAMMAR;
+ 
++/* Two inherits define genetive, number_of, number_word, pluralize, punctuate(); the later one was already in effect: name it. */
++string genetive(mixed o) { return m_grammar::genetive(o); }
++string number_of(int num, string what) { return m_grammar::number_of(num, what); }
++string number_word(int num) { return m_grammar::number_word(num); }
++string pluralize(string str) { return m_grammar::pluralize(str); }
++string punctuate(string str) { return m_grammar::punctuate(str); }
++
+ object loot_for;
+ object env;
+ int dest_step = 0;
+@@ -51,7 +58,7 @@ void setup(object player)
+    call_out("destroy_loot_chest", (CHEST_GONE_IN / (1 + sizeof(msgs))));
+ }
+ 
+-mixed direct_open_obj()
++varargs mixed direct_open_obj()
+ {
+    if (this_body() == loot_for)
+       return 1;
+@@ -65,14 +72,14 @@ mixed indirect_get_obs_from_obj()
+    return "Not your loot chest, sorry.";
+ }
+ 
+-mixed indirect_get_obj_from_obj()
++varargs mixed indirect_get_obj_from_obj()
+ {
+    if (this_body() == loot_for)
+       return 1;
+    return "Not your loot chest, sorry.";
+ }
+ 
+-mixed indirect_put_obj_wrd_obj(object ob)
++varargs mixed indirect_put_obj_wrd_obj(object ob)
+ {
+    return "You can only take from loot chests.";
+ }
+diff --git a/lib/std/material_spawner.c b/lib/std/material_spawner.c
+index c81abb5..ac12efd 100644
+--- a/lib/std/material_spawner.c
++++ b/lib/std/material_spawner.c
+@@ -4,6 +4,13 @@ inherit OBJ;
+ inherit M_STATEFUL;
+ inherit M_GRAMMAR;
+ 
++/* Two inherits define genetive, number_of, number_word, pluralize, punctuate(); the later one was already in effect: name it. */
++string genetive(mixed o) { return m_grammar::genetive(o); }
++string number_of(int num, string what) { return m_grammar::number_of(num, what); }
++string number_word(int num) { return m_grammar::number_word(num); }
++string pluralize(string str) { return m_grammar::pluralize(str); }
++string punctuate(string str) { return m_grammar::punctuate(str); }
++
+ mapping receiver_counts = ([]);
+ string *material = ({});
+ string success_action;
+diff --git a/lib/std/meat.c b/lib/std/meat.c
+index 41d2bcd..655181b 100644
+--- a/lib/std/meat.c
++++ b/lib/std/meat.c
+@@ -2,6 +2,9 @@ inherit JUNK;
+ inherit M_DECAY;
+ inherit M_EDIBLE;
+ 
++/* Two inherits define direct_eat_obj(); the later one was already in effect: name it. */
++mixed direct_eat_obj() { return m_edible::direct_eat_obj(); }
++
+ string meat_type = "unknown";
+ int meat_level = 1;
+ 
+@@ -20,7 +23,7 @@ void setup_meat()
+    set_last_eat_action("$N $vfinish the raw " + meat_type + ". A bit chewy.");
+ }
+ 
+-void mudlib_setup(string type, int level)
++varargs void mudlib_setup(string type, int level)
+ {
+    ::mudlib_setup(type);
+    m_decay::mudlib_setup();
+diff --git a/lib/std/modules/m_actions.c b/lib/std/modules/m_actions.c
+index ff0dbd6..3606a29 100644
+--- a/lib/std/modules/m_actions.c
++++ b/lib/std/modules/m_actions.c
+@@ -32,7 +32,7 @@ private
+ string *my_actions;
+ 
+ private
+-object env;
++object act_env;
+ 
+ mixed need_hooks()
+ {
+@@ -135,9 +135,9 @@ void respond(string str)
+ int query_listeners()
+ {
+    object *inv;
+-   if (!env)
++   if (!act_env)
+       return 0;
+-   if (inv = all_inventory(env))
++   if (inv = all_inventory(act_env))
+       return sizeof(filter(inv, ( : $1->query_link() :)));
+    return 0;
+ }
+@@ -179,15 +179,15 @@ void action_arrival(object who)
+ // when the action monster moves
+ void action_movement()
+ {
+-   if (env)
++   if (act_env)
+    {
+-      env->remove_hook("object_arrived", arrival_fn);
+-      env->remove_hook("object_left", departure_fn);
++      act_env->remove_hook("object_arrived", arrival_fn);
++      act_env->remove_hook("object_left", departure_fn);
+    }
+ 
+-   env = environment();
+-   env->add_hook("object_arrived", arrival_fn);
+-   env->add_hook("object_left", departure_fn);
++   act_env = environment();
++   act_env->add_hook("object_arrived", arrival_fn);
++   act_env->add_hook("object_left", departure_fn);
+    if (find_call_out("actions") < 0)
+       if (query_listeners())
+          call_out("actions", delay_time);
+@@ -200,10 +200,10 @@ void start_actions()
+       return;
+ 
+    add_hook("move", ( : action_movement:));
+-   if (env = environment(this_object()))
++   if (act_env = environment(this_object()))
+    {
+-      env->add_hook("object_arrived", arrival_fn);
+-      env->add_hook("object_left", departure_fn);
++      act_env->add_hook("object_arrived", arrival_fn);
++      act_env->add_hook("object_left", departure_fn);
+    }
+ 
+    if (query_listeners() && find_call_out("actions") == -1)
+diff --git a/lib/std/modules/m_assistance.c b/lib/std/modules/m_assistance.c
+index 83169a5..7cd37b6 100644
+--- a/lib/std/modules/m_assistance.c
++++ b/lib/std/modules/m_assistance.c
+@@ -1,6 +1,6 @@
+ /* Do not remove the headers from this file! see /USAGE for more info. */
+ 
+-inherit M_MESSAGES;
++varargs void targetted_action(mixed msg, object target, mixed *obs...);   // M_MESSAGES, which ADVERSARY has
+ 
+ //: MODULE
+ // M_ASSISTANCE for having mobs help each other when under attack. This module
+diff --git a/lib/std/modules/m_blockexits.c b/lib/std/modules/m_blockexits.c
+index acf58df..c82ce85 100644
+--- a/lib/std/modules/m_blockexits.c
++++ b/lib/std/modules/m_blockexits.c
+@@ -13,8 +13,8 @@ void we_moved();
+ 
+ string *current_blocks = ({});
+ function hook = ( : handle_blocks:);
+-function move_hook = ( : we_moved:);
+-object env;
++function blocker_move_hook = ( : we_moved:);
++object blocker_env;
+ mixed block_action;
+ 
+ void add_hook(string, mixed);
+@@ -23,21 +23,21 @@ void remove_hook(string, mixed);
+ private
+ void we_moved()
+ {
+-   if (env)
++   if (blocker_env)
+    {
+       foreach (string dir in current_blocks)
+-         env->remove_hook("block_" + dir, hook);
++         blocker_env->remove_hook("block_" + dir, hook);
+    }
+    else
+    {
+       foreach (string dir in current_blocks)
+          remove_hook("block_" + dir, hook);
+    }
+-   env = environment();
+-   if (env)
++   blocker_env = environment();
++   if (blocker_env)
+    {
+       foreach (string dir in current_blocks)
+-         env->add_hook("block_" + dir, hook);
++         blocker_env->add_hook("block_" + dir, hook);
+    }
+    else
+    {
+@@ -52,14 +52,14 @@ void we_moved()
+ void add_block(string *exits...)
+ {
+    current_blocks += exits;
+-   if (env)
++   if (blocker_env)
+       foreach (string dir in exits)
+-         env->add_hook("block_" + dir, hook);
++         blocker_env->add_hook("block_" + dir, hook);
+    else
+       foreach (string dir in exits)
+          add_hook("block_" + dir, hook);
+    if (sizeof(current_blocks))
+-      add_hook("move", move_hook);
++      add_hook("move", blocker_move_hook);
+ }
+ 
+ //: FUNCTION remove_block
+@@ -67,14 +67,14 @@ void add_block(string *exits...)
+ void remove_block(string *exits...)
+ {
+    current_blocks -= exits;
+-   if (env)
++   if (blocker_env)
+       foreach (string dir in exits)
+-         env->remove_hook("block_" + dir, hook);
++         blocker_env->remove_hook("block_" + dir, hook);
+    else
+       foreach (string dir in exits)
+          remove_hook("block_" + dir, hook);
+    if (!sizeof(current_blocks))
+-      remove_hook("move", move_hook);
++      remove_hook("move", blocker_move_hook);
+ }
+ 
+ //: FUNCTION set_block_action
+@@ -93,7 +93,7 @@ varargs void targetted_action();
+ mixed handle_blocks(string dir)
+ {
+    // sanity check
+-   if (env != environment(this_object()))
++   if (blocker_env != environment(this_object()))
+    {
+       we_moved();
+       return 0; // don't block, we weren't even in the room we thought
+diff --git a/lib/std/modules/m_complex_exit.c b/lib/std/modules/m_complex_exit.c
+index eba2021..c4c34b6 100644
+--- a/lib/std/modules/m_complex_exit.c
++++ b/lib/std/modules/m_complex_exit.c
+@@ -23,7 +23,7 @@ mapping methods = ([]); /* All of the data for methods of this exit */
+ private
+ mixed obvious_desc; /* The obvious exit description */
+ private
+-mixed base = this_object(); /* The base directory to determine exit
++mixed cx_base = this_object(); /* The base directory to determine exit
+                              * destinations from.  This can be either a
+                              * string, object, or function pointer */
+ 
+@@ -95,7 +95,6 @@ int prime_method(string method)
+ {
+    string verb;
+    string prep;
+-   string *matches = ({});
+    /* The first word of the method is expected to be the verb, the rest is
+     * a preposition, if it exists.  If it is only one word, that is the verb */
+    if (sscanf(method, "%s %s", verb, prep) == 2)
+@@ -114,7 +113,7 @@ int prime_method(string method)
+ // evaluating to one of these.
+ void set_base(mixed foo)
+ {
+-   base = foo;
++   cx_base = foo;
+ }
+ 
+ //: FUNCTION query_base
+@@ -122,7 +121,7 @@ void set_base(mixed foo)
+ // are figured
+ mixed query_base()
+ {
+-   return evaluate(base);
++   return evaluate(cx_base);
+ }
+ 
+ /*********   Hidden exits    ********/
+@@ -375,7 +374,7 @@ string query_method_enter_message(string method)
+    if (sizeof(applicable_methods) > 1)
+       error("Attempted to query_method_enter_message on an ambiguous method");
+    if (!sizeof(methods[applicable_methods[0]].enter_messages))
+-      return;
++      return 0;
+ 
+    ret = methods[applicable_methods[0]].enter_messages;
+    /* We know that ret has to be an *at this point, select one element
+@@ -456,7 +455,7 @@ string query_method_exit_message(string method)
+    if (sizeof(applicable_methods) > 1)
+       error("Attempted to query_method_exit_message on an ambiguous method");
+    if (!sizeof(methods[applicable_methods[0]].exit_messages))
+-      return;
++      return 0;
+ 
+    ret = methods[applicable_methods[0]].exit_messages;
+    /* We know that ret has to be an array at this point, select one element
+@@ -485,7 +484,6 @@ mixed *list_method_exit_messages(string method)
+ mixed complex_exit_direct_verb_rule(string verb, string rule, mixed args...)
+ // second_part,mixed third)
+ {
+-   string prep;
+    string *matches;
+    string method;
+    /* The first argument is always the verb used. */
+diff --git a/lib/std/modules/m_conversation.c b/lib/std/modules/m_conversation.c
+index e4c6fde..9deb939 100644
+--- a/lib/std/modules/m_conversation.c
++++ b/lib/std/modules/m_conversation.c
+@@ -69,7 +69,7 @@ inherit M_ACTIONS;
+ inherit M_INPUT;
+ 
+ private
+-mapping stats = (["str":"Strength", "agi":"Agility", "int":"Intelligence", "con":"Constitution", "cha":"Charisma"]);
++mapping conv_stats = (["str":"Strength", "agi":"Agility", "int":"Intelligence", "con":"Constitution", "cha":"Charisma"]);
+ 
+ void simple_action(string);
+ string query_name();
+@@ -194,7 +194,7 @@ int check_option(string key)
+          int stat = call_other(this_body(), "query_" + stat_chk);
+          if ((gt && req > stat) || (lt && req < stat) || (eq && req == stat))
+             return 0;
+-         s = "[<229>" + stats[stat_chk] + "<res>] " + s;
++         s = "[<229>" + conv_stats[stat_chk] + "<res>] " + s;
+       }
+       else
+       {
+@@ -237,12 +237,16 @@ varargs void set_start(mixed *a, object target)
+ 
+ mixed direct_talk_to_liv()
+ {
+-   return can_talk ? 1 : "#That person cannot talk right now.";
++   if (can_talk)
++      return 1;
++   return "#That person cannot talk right now.";
+ }
+ 
+ mixed direct_talk_with_liv()
+ {
+-   return can_talk ? 1 : "#That person cannot talk right now.";
++   if (can_talk)
++      return 1;
++   return "#That person cannot talk right now.";
+ }
+ 
+ void continue_conversation(object, string);
+diff --git a/lib/std/modules/m_crafting.c b/lib/std/modules/m_crafting.c
+index 516de68..a9f642c 100644
+--- a/lib/std/modules/m_crafting.c
++++ b/lib/std/modules/m_crafting.c
+@@ -40,8 +40,8 @@ int simple_craft(object body, string what)
+    string category;
+    string material;
+    mapping money;
+-   object employee = present("employee", environment(body));
+-   int exchange_rate = MONEY_D->query_exchange_rate(craft_currency_type);
++   present("employee", environment(body));
++   MONEY_D->query_exchange_rate(craft_currency_type);
+    int number = 1;
+    int challenge_rating = 10;
+ 
+@@ -50,7 +50,7 @@ int simple_craft(object body, string what)
+       if (member_array(what, keys(CRAFTING_D->query_crafting_recipes(station_filter))) == -1)
+       {
+          tell(body, "You cannot craft '" + what + "' at this station, sorry.\n");
+-         return;
++         return 0;
+       }
+ 
+       return craft_item(body, what);
+@@ -65,7 +65,7 @@ int simple_craft(object body, string what)
+    if (sizeof(parts) < 2)
+    {
+       tell(body, "Craft what? Better look at the station again.\n");
+-      return;
++      return 0;
+    }
+ 
+    // Do some number parsing
+@@ -77,7 +77,7 @@ int simple_craft(object body, string what)
+       if (!number)
+       {
+          tell(body, "Craft how many? Better look at the station again.\n");
+-         return;
++         return 0;
+       }
+       parts = parts[1..2];
+    }
+@@ -88,7 +88,7 @@ int simple_craft(object body, string what)
+    if (!CRAFTING_D->valid_material(parts[0] + " " + parts[1]))
+    {
+       tell(body, "Craft " + parts[0] + " " + parts[1] + "? You don't know how to do that.\n");
+-      return;
++      return 0;
+    }
+ 
+    material = parts[0] + " " + parts[1];
+@@ -99,21 +99,21 @@ int simple_craft(object body, string what)
+    {
+       tell(body, sprintf("They are too small to craft, but perhaps you can get some by salvaging %s?\n",
+                          CRAFTING_D->material_above(category, material)));
+-      return;
++      return 0;
+    }
+ 
+    if (MAT_CRAFT_COST > this_body()->query_amt_currency(craft_currency_type))
+    {
+       printf("Sorry, that costs %s, which you don't have!\n",
+              MONEY_D->currency_to_string(MAT_CRAFT_COST, craft_currency_type));
+-      return;
++      return 0;
+    }
+ 
+    if (!body->remove_material(CRAFTING_D->material_below(category, material), (number * 10)))
+    {
+       tell(body, sprintf("Crafting that, requires %d %s which you do not have.\n", number * 10,
+                          pluralize(CRAFTING_D->material_below(category, material))));
+-      return;
++      return 0;
+    }
+ 
+    // We have the materials and the money now! Hooray again! \o/
+@@ -179,7 +179,7 @@ int simple_salvage(object body, string what)
+       if (!number)
+       {
+          tell(body, "Salvage how many? Better look at the station again.");
+-         return;
++         return 0;
+       }
+       parts = parts[1..2];
+    }
+@@ -192,7 +192,7 @@ int simple_salvage(object body, string what)
+    if (!CRAFTING_D->valid_material(parts[0] + " " + parts[1]))
+    {
+       tell(body, "Salvage " + parts[0] + " " + parts[1] + "? You don't know how to do that.\n");
+-      return;
++      return 0;
+    }
+ 
+    material = parts[0] + " " + parts[1];
+@@ -201,7 +201,7 @@ int simple_salvage(object body, string what)
+    if (!CRAFTING_D->material_below(category, material))
+    {
+       tell(body, "The " + material + " cannot be salvaged further.\n");
+-      return;
++      return 0;
+    }
+ 
+    // We have a valid number, category and material, hooray! \o/
+@@ -210,14 +210,14 @@ int simple_salvage(object body, string what)
+    {
+       printf("Sorry, that costs %s to salvage, which you don't have!\n",
+              MONEY_D->currency_to_string(MAT_SALVAGE_COST, craft_currency_type));
+-      return;
++      return 0;
+    }
+ 
+    if (!body->remove_material(material, number))
+    {
+       tell(body, sprintf("Crafting that, requires %d %s which you do not have.\n", number,
+                          pluralize(category + " " + material)));
+-      return;
++      return 0;
+    }
+ 
+    // We have the materials and the money now! Hooray again! \o/
+@@ -255,14 +255,14 @@ int simple_salvage2(object body, string what)
+    if (sizeof(parts) < 2)
+    {
+       tell(body, "Salvage what? Better look at the bench again.\n");
+-      return;
++      return 0;
+    }
+ 
+    // No crafting without a smith
+    if (!smith || (smith && !smith->is_smith()))
+    {
+       tell(body, "Better not use the bench without the smith present?\n");
+-      return;
++      return 0;
+    }
+ 
+    // Do some number parsing
+@@ -274,7 +274,7 @@ int simple_salvage2(object body, string what)
+       if (!number)
+       {
+          tell(body, "Salvage how many? Better look at the bench again.");
+-         return;
++         return 0;
+       }
+       parts = parts[1..2];
+    }
+@@ -282,7 +282,7 @@ int simple_salvage2(object body, string what)
+    if (!CRAFTING_D->valid_category(parts[0]))
+    {
+       tell(body, "Salvage " + parts[0] + "? You don't know how to do that.\n");
+-      return;
++      return 0;
+    }
+    else
+       category = parts[0];
+@@ -295,7 +295,7 @@ int simple_salvage2(object body, string what)
+    if (!CRAFTING_D->valid_material(parts[0] + " " + parts[1]))
+    {
+       tell(body, "Salvage " + parts[0] + " " + parts[1] + "? You don't know how to do that.\n");
+-      return;
++      return 0;
+    }
+    else
+       material = parts[1];
+@@ -303,7 +303,7 @@ int simple_salvage2(object body, string what)
+    if (!CRAFTING_D->material_below(category, material))
+    {
+       tell(body, "The " + category + " " + material + " cannot be salvaged further.\n");
+-      return;
++      return 0;
+    }
+ 
+    // We have a valid number, category and material, hooray! \o/
+@@ -312,14 +312,14 @@ int simple_salvage2(object body, string what)
+    {
+       printf("Sorry, that costs %s to salvage, which you don't have!\n",
+              MONEY_D->currency_to_string(MAT_SALVAGE_COST, craft_currency_type));
+-      return;
++      return 0;
+    }
+ 
+    if (!body->remove_material(category + " " + material, number))
+    {
+       tell(body, sprintf("Crafting that, requires %d %s which you do not have.\n", number,
+                          pluralize(category + " " + material)));
+-      return;
++      return 0;
+    }
+ 
+    // We have the materials and the money now! Hooray again! \o/
+diff --git a/lib/std/modules/m_drink_source.c b/lib/std/modules/m_drink_source.c
+index 12370e2..2b8f7b9 100644
+--- a/lib/std/modules/m_drink_source.c
++++ b/lib/std/modules/m_drink_source.c
+@@ -7,7 +7,7 @@
+ // leaves off.  It allows drinking from a source.
+ 
+ mixed drink_action = "$N $vdrink some $o from $o1.";
+-mixed fluid_disturb;
++mixed drink_disturb;
+ 
+ void remove_id(string *id...);
+ object is_source_of();
+@@ -45,14 +45,14 @@ int drink_from_it(mixed fluid)
+    if (!cntinue)
+       return 0;
+ 
+-   fluid_disturb = get_fluid_disturb_action();
++   drink_disturb = get_fluid_disturb_action();
+ 
+-   if (fluid_disturb)
++   if (drink_disturb)
+    {
+-      if (functionp(fluid_disturb))
+-         cntinue = evaluate(fluid_disturb);
++      if (functionp(drink_disturb))
++         cntinue = evaluate(drink_disturb);
+       else
+-         this_body()->my_action(fluid_disturb, fluid, this_object());
++         this_body()->my_action(drink_disturb, fluid, this_object());
+    };
+ 
+    if (!cntinue)
+diff --git a/lib/std/modules/m_drinkable.c b/lib/std/modules/m_drinkable.c
+index 5571813..cecd7fd 100644
+--- a/lib/std/modules/m_drinkable.c
++++ b/lib/std/modules/m_drinkable.c
+@@ -14,7 +14,7 @@ private
+ int num_drinks = 2;
+ 
+ private
+-mixed taste_action = "Your thirst is quenched.";
++mixed drink_taste_action = "Your thirst is quenched.";
+ private
+ mixed drink_action = "$N $vdrink some $o.";
+ private
+@@ -42,12 +42,12 @@ void remove();
+ // zero.
+ void set_taste_action(mixed x)
+ {
+-   taste_action = x;
++   drink_taste_action = x;
+ }
+ 
+ mixed get_taste_action()
+ {
+-   return taste_action;
++   return drink_taste_action;
+ }
+ 
+ int query_drinks_current_unit()
+@@ -138,9 +138,9 @@ varargs void drink_it(object drinkee)
+ 
+    if (query_poisonous())
+    {
+-      object p = new ("/std/transient/poison", query_poisonous(), query_poisonous(),
+-                      "$N $vbend over in pain. Must be something $n drank.")
+-                     ->move(drinkee);
++      new ("/std/transient/poison", query_poisonous(), query_poisonous(),
++           "$N $vbend over in pain. Must be something $n drank.")
++         ->move(drinkee);
+    }
+ 
+    // Are we in the presence of the source?
+@@ -166,9 +166,9 @@ varargs void drink_it(object drinkee)
+    else
+       drinkee->simple_action(action, this_object());
+ 
+-   if (taste_action && num_drinks != 1)
++   if (drink_taste_action && num_drinks != 1)
+    {
+-      action = taste_action;
++      action = drink_taste_action;
+       if (arrayp(action))
+          action = choice(action);
+       if (functionp(action))
+diff --git a/lib/std/modules/m_durability.c b/lib/std/modules/m_durability.c
+index 65db971..74517d1 100644
+--- a/lib/std/modules/m_durability.c
++++ b/lib/std/modules/m_durability.c
+@@ -165,7 +165,6 @@ void increase_durability(int d)
+ // This is used to ensure that the durability and current maximum durability are saved when the object is saved
+ // and restored when the player loads in again.
+ // This is important for maintaining the state of the object across sessions.
+-nomask
+ void internal_setup()
+ {
+    this_object()->add_save(({"durability", "current_max_dura"}));
+diff --git a/lib/std/modules/m_edible.c b/lib/std/modules/m_edible.c
+index ff4d398..2dff96e 100644
+--- a/lib/std/modules/m_edible.c
++++ b/lib/std/modules/m_edible.c
+@@ -103,9 +103,9 @@ varargs void do_eat(object eater)
+ 
+    if (query_poisonous())
+    {
+-      object p = new ("/std/transient/poison", query_poisonous(), query_poisonous(),
+-                      "$N $vbend over in pain. Must be something $n ate.")
+-                     ->move(eater);
++      new ("/std/transient/poison", query_poisonous(), query_poisonous(),
++           "$N $vbend over in pain. Must be something $n ate.")
++         ->move(eater);
+    }
+ 
+    if (num_eats == 1)
+diff --git a/lib/std/modules/m_exit.c b/lib/std/modules/m_exit.c
+index a7186ee..736849b 100644
+--- a/lib/std/modules/m_exit.c
++++ b/lib/std/modules/m_exit.c
+@@ -27,7 +27,7 @@ mixed default_check;
+ private
+ mixed default_desc;
+ private
+-nosave mixed base = ( : file_name(this_object())[0..strsrch(file_name(this_object()), '/', -1)] :);
++nosave mixed exit_base = ( : file_name(this_object())[0..strsrch(file_name(this_object()), '/', -1)] :);
+ 
+ varargs mixed call_hooks(string tag, mixed func, mixed start, mixed *args...);
+ mixed query_exit_check(string);
+@@ -326,7 +326,7 @@ string eval_dest(mixed arg)
+       return 0;
+    if (tmp[0] == '#')
+       return tmp;
+-   return absolute_path(tmp, evaluate(base));
++   return absolute_path(tmp, evaluate(exit_base));
+ }
+ 
+ //: FUNCTION query_exit_destination
+@@ -549,12 +549,12 @@ mapping debug_exits()
+ // Return the evaluated string which is the directory the object is in.
+ string query_base()
+ {
+-   return evaluate(base);
++   return evaluate(exit_base);
+ }
+ 
+ //: FUNCTION set_base
+ // Set the base directory to be used by the exits of the environment.
+ void set_base(mixed what)
+ {
+-   base = what;
++   exit_base = what;
+ }
+diff --git a/lib/std/modules/m_exit_obj.c b/lib/std/modules/m_exit_obj.c
+index 87acf86..4f88af6 100644
+--- a/lib/std/modules/m_exit_obj.c
++++ b/lib/std/modules/m_exit_obj.c
+@@ -11,7 +11,7 @@ nosave mixed def_enter_msg = 0;
+ private
+ nosave mixed def_check = 0;
+ private
+-nosave mixed default_desc = 0;
++nosave mixed obj_default_desc = 0;
+ private
+ nosave mapping prep_dest = ([]);
+ private
+@@ -25,7 +25,7 @@ nosave mapping prep_desc = ([]);
+ private
+ nosave string go_verb = "go";
+ private
+-nosave string base = 0;
++nosave string obj_base = 0;
+ private
+ nosave mapping prep_aliases = ([]);
+ 
+@@ -80,10 +80,10 @@ mixed query_default_destination()
+    mixed dirs = keys(prep_dest) + query_exit_directions(0);
+    if (def_dest == 0)
+       if (member_array(dirs[0], query_exit_directions(0)) != -1)
+-         return query_exit_destination(dirs[0], base);
++         return query_exit_destination(dirs[0], obj_base);
+       else
+-         return eval_dest(prep_dest[dirs[0]], 0, base);
+-   return eval_dest(def_dest, 0, base);
++         return eval_dest(prep_dest[dirs[0]], 0, obj_base);
++   return eval_dest(def_dest, 0, obj_base);
+ }
+ 
+ mixed query_default_exit_msg()
+@@ -155,7 +155,7 @@ void add_prep(string prep, mixed dest)
+    else
+       prep_check[prep] = 1;
+    prep_dest[prep] = dest;
+-   prep_desc[prep] = default_desc;
++   prep_desc[prep] = obj_default_desc;
+    prep_exit_msg[prep] = ( : prep_default_msg:);
+    prep_enter_msg[prep] = ( : prep_default_msg:);
+ }
+@@ -172,7 +172,7 @@ void set_preps(mapping p)
+             prep_check[key] = p[key][1..];
+          else
+             prep_check[key] = 1;
+-         prep_desc[key] = default_desc;
++         prep_desc[key] = obj_default_desc;
+          prep_exit_msg[key] = ( : prep_default_msg:);
+          prep_enter_msg[key] = prep_exit_msg[key];
+       }
+@@ -200,7 +200,7 @@ mixed query_prep_description(string prep)
+ mixed query_prep_destination(string prep)
+ {
+    prep = PREPOSITION_D->translate_preposition(prep);
+-   return eval_dest(prep_dest[prep], 0, base);
++   return eval_dest(prep_dest[prep], 0, obj_base);
+ }
+ 
+ // prep_only only adds the direction to the object,
+@@ -324,7 +324,7 @@ void delete_exits_up()
+ varargs void on_clone()
+ {
+    propogate_exits_up();
+-   base = environment(this_object())->query_base();
++   obj_base = environment(this_object())->query_base();
+    setup_default_prep_aliases();
+ }
+ 
+diff --git a/lib/std/modules/m_frame.c b/lib/std/modules/m_frame.c
+index 72d4cf0..c4ef439 100644
+--- a/lib/std/modules/m_frame.c
++++ b/lib/std/modules/m_frame.c
+@@ -387,9 +387,7 @@ private string create_menu_header()
+    string out = "";
+    string h_title = colour_strlen(title) > (width - 8) ? title[0..width - 8] : title;
+    int i = 0;
+-   int simple_header = style == "lines" || style == "none";
+    int header_width = colour_strlen(h_title) + (text_margin * 2);
+-   string *headers = explode(header_content || "", "\n");
+ 
+    out += repeat_string(" ", title_margin) + " " + bits[TRD];
+    while (i < header_width)
+@@ -483,7 +481,6 @@ private string create_header()
+ private string create_footer()
+ {
+    string out = "";
+-   int i = 0;
+    string *footers = explode(footer_content || "", "\n");
+ 
+    out += bits[TV] + bits[TRD] + repeat_string(bits[TH], (width - 4)) + bits[TLD] + bits[TV] + "\n";
+@@ -788,7 +785,7 @@ varargs void frame_add_column(string name, mixed *data, function colour_function
+       return;
+    column_order += ({name});
+    columns[name] = data;
+-   column_functions[name] = colour_function || ( : "<res>" :);
++   column_functions[name] = colour_function || "<res>";
+ 
+    // If max_width is set, skip using the expensive max(map()) combo below.
+    if (max_width > 0)
+diff --git a/lib/std/modules/m_guild_master.c b/lib/std/modules/m_guild_master.c
+index 8964703..958be0d 100644
+--- a/lib/std/modules/m_guild_master.c
++++ b/lib/std/modules/m_guild_master.c
+@@ -225,7 +225,6 @@ void release_a_member(object who)
+ 
+ mixed guild_master_receive(object target)
+ {
+-   string questState;
+ 
+    if (base_name(target) == "/domains/std/guild/item/artefact_module")
+    {
+diff --git a/lib/std/modules/m_guild_member.c b/lib/std/modules/m_guild_member.c
+index bc9de3f..73b9912 100644
+--- a/lib/std/modules/m_guild_member.c
++++ b/lib/std/modules/m_guild_member.c
+@@ -78,7 +78,7 @@ void understand_cmds(object *cmds)
+ {
+    foreach (object cmd in cmds)
+    {
+-      string name = cmd->query_name();
++      cmd->query_name();
+       int cost = cmd->query_reflex_cost();
+       int target_req = cmd->query_target_required();
+ 
+diff --git a/lib/std/modules/m_mdview.c b/lib/std/modules/m_mdview.c
+index 300692b..d1be317 100644
+--- a/lib/std/modules/m_mdview.c
++++ b/lib/std/modules/m_mdview.c
+@@ -8,15 +8,14 @@
+ // This module requires M_COLOURS.
+ 
+ private
+-string *keywords = ({"void ", "mixed ", "string ", "int ", "object ", "function "});
++string *md_keywords = ({"void ", "mixed ", "string ", "int ", "object ", "function "});
+ 
+ private
+ int is_synopsis(string l)
+ {
+    string *parts = explode(trim(l), " ");
+-   string tmp1, tmp2, tmp3;
+ 
+-   if (sizeof(parts) > 3 && member_array(parts[0] + " ", keywords) != -1 && strsrch(parts[1], "(") != -1 &&
++   if (sizeof(parts) > 3 && member_array(parts[0] + " ", md_keywords) != -1 && strsrch(parts[1], "(") != -1 &&
+        parts[ < 1] == ");")
+    {
+       return 1;
+@@ -43,8 +42,6 @@ string replace_types(string s, string replace, string with)
+ string md_format(string *file, string searchtext)
+ {
+    string *output = ({});
+-   string out;
+-   string *code;
+    int lines = 0;
+ 
+    foreach (string line in file)
+@@ -58,7 +55,7 @@ string md_format(string *file, string searchtext)
+          fun = explode(explode(line, "(")[0], " ")[ < 1];
+          line = replace_string(line, fun, "<221><ul1>" + fun + "<ul0><res> ");
+ 
+-         foreach (string k in keywords)
++         foreach (string k in md_keywords)
+             line = replace_types(line, k, "<039>" + k + "<res>");
+       }
+ 
+diff --git a/lib/std/modules/m_npcscript.c b/lib/std/modules/m_npcscript.c
+index d56544b..6c6cce5 100644
+--- a/lib/std/modules/m_npcscript.c
++++ b/lib/std/modules/m_npcscript.c
+@@ -285,13 +285,13 @@ int state_update(string state)
+          running_step = 0;
+          started_at = 0;
+       }
+-      return;
++      return 0;
+    }
+    // If this is a script name, execute it.
+    else if (member_array(state, keys(scripts)) != -1)
+    {
+       execute_script(state);
+-      return;
++      return 0;
+    }
+ 
+    // Let people know we were told to do something we do not know how to do.
+diff --git a/lib/std/modules/m_react.c b/lib/std/modules/m_react.c
+index 2bc22be..3ad1a4a 100644
+--- a/lib/std/modules/m_react.c
++++ b/lib/std/modules/m_react.c
+@@ -157,7 +157,7 @@ string parse_literal(string expr)
+    return expr;
+ }
+ 
+-string parse_expr1(string *parts)
++string parse_expr1(mixed *parts)
+ {
+    string expr1, expr2;
+    string token = parts[parts[0]++];
+@@ -187,7 +187,7 @@ string parse_expr1(string *parts)
+  * expr: expr1 |
+  *       expr1 infix expr
+  */
+-string parse_expr(string *parts)
++string parse_expr(mixed *parts)
+ {
+    string expr1, expr2;
+    string token;
+@@ -205,7 +205,7 @@ string parse_expr(string *parts)
+ 
+ string handle_expression(string e)
+ {
+-   string *parts = explode(e, " ");
++   mixed *parts = explode(e, " ");
+ 
+    parts = ({1}) + map(parts, ( : trim:)) - ({""});
+ 
+@@ -303,14 +303,16 @@ string compile_program(class parse_info pi, mixed *prog)
+ 
+    compile_func(funcs, "main", prog);
+ 
+-   ret = @END object actor;
++   ret = @END
++   object actor;
+ 
+    void create(object a)
+    {
+       actor = a;
+    }
+ 
+-   END;
++END
++   ;
+ 
+    foreach (string var_name in pi.vars)
+    {
+diff --git a/lib/std/modules/m_special_weapon.c b/lib/std/modules/m_special_weapon.c
+index f23d024..cff8dec 100644
+--- a/lib/std/modules/m_special_weapon.c
++++ b/lib/std/modules/m_special_weapon.c
+@@ -277,10 +277,7 @@ void internal_roll_item()
+ /* Does the special damage */
+ class event_info source_modify_event(class event_info evt)
+ {
+-   int opp_health;
+    int damage;
+-   int excess;
+-   string *system_limbs;
+ 
+    if (evt->data == "miss" || evt->data == "disarm")
+       return evt;
+diff --git a/lib/std/modules/m_test_suite.c b/lib/std/modules/m_test_suite.c
+index 796670e..fec74e2 100644
+--- a/lib/std/modules/m_test_suite.c
++++ b/lib/std/modules/m_test_suite.c
+@@ -219,7 +219,6 @@ void run_tests()
+    foreach (class test t in tests)
+    {
+       string eval = t.assertion ? " True" : "False";
+-      string out;
+       string test_out = sprintf("%O", t.f);
+       t = run_test(t);
+ 
+diff --git a/lib/std/modules/m_throwable.c b/lib/std/modules/m_throwable.c
+index 35319c0..1dc5ec6 100644
+--- a/lib/std/modules/m_throwable.c
++++ b/lib/std/modules/m_throwable.c
+@@ -8,7 +8,7 @@ nosave mixed throw_response = 1;
+ private
+ nosave function my_throw_hook;
+ private
+-nosave string skill_used = "combat/thrown";
++nosave string throw_skill_used = "combat/thrown";
+ 
+ void add_hook(string, function);
+ mixed move(object);
+@@ -115,7 +115,7 @@ mixed do_throw(object target)
+       {
+          string defend_skill = target->query_defend_skill_used();
+          int defend_value;
+-         string skill = this_object()->query_skill_used() || skill_used;
++         string skill = this_object()->query_skill_used() || throw_skill_used;
+ 
+          // If it's not a weapon, then we're basically done.
+          if (!this_object()->is_weapon())
+diff --git a/lib/std/modules/m_trainer.c b/lib/std/modules/m_trainer.c
+index 8700840..6e0ca93 100644
+--- a/lib/std/modules/m_trainer.c
++++ b/lib/std/modules/m_trainer.c
+@@ -188,7 +188,6 @@ void begin_conversation()
+    stat_abrevs = this_body()->stat_abrevs();
+    if (sizeof(stats_we_train))
+    {
+-      int train_cost;
+       if (sscanf(STAT_TRAIN_COST, "%d %s", stat_cost, currency) != 2)
+          error("STAT_TRAIN_COST is " + STAT_TRAIN_COST +
+                " in /include/config/skills.h incorrect format, should be \"50 gold\" or similar.");
+diff --git a/lib/std/modules/m_vendor.c b/lib/std/modules/m_vendor.c
+index c79da0b..eb30cc9 100644
+--- a/lib/std/modules/m_vendor.c
++++ b/lib/std/modules/m_vendor.c
+@@ -348,7 +348,6 @@ int test_buy(object ob)
+ void buy_object(object ob)
+ {
+    float cost;
+-   mixed item;
+    string file;
+    mapping money;
+    int exchange_rate = MONEY_D->query_exchange_rate(currency_type);
+@@ -416,10 +415,9 @@ string random_item_short()
+ string ask_about_items(string item)
+ {
+    int *keys = ({});
+-   int num, item_lng, cost_lng, i;
++   int num, item_lng, cost_lng;
+    string *item_names = ({});
+    string *cost_names = ({});
+-   string out = "";
+    float exchange_rate;
+    currency_type = DOMAIN_D->query_currency();
+    exchange_rate = to_float(MONEY_D->query_exchange_rate(currency_type));
+@@ -476,7 +474,7 @@ mixed query_items(string item, int flag)
+    string *item_names = ({});
+    string *cost_names = ({});
+    int num, item_lng, cost_lng, i;
+-   string cost, out = "";
++   string out = "";
+    float exchange_rate;
+    currency_type = DOMAIN_D->query_currency();
+    exchange_rate = to_float(MONEY_D->query_exchange_rate(currency_type));
+diff --git a/lib/std/modules/m_wander.c b/lib/std/modules/m_wander.c
+index 4433c30..2162212 100644
+--- a/lib/std/modules/m_wander.c
++++ b/lib/std/modules/m_wander.c
+@@ -46,7 +46,7 @@ nosave int counting_moves;
+ private
+ nosave function arrive_func = ( : player_did_arrive:);
+ private
+-nosave function move_hook = ( : moving:);
++nosave function wander_move_hook = ( : moving:);
+ 
+ //: FUNCTION set_wander_area
+ // Set the area(s) that an NPC can wander in.  If this is not set
+@@ -327,5 +327,5 @@ void do_wander()
+ void mudlib_setup()
+ {
+    set_def_msgs("living-default");
+-   add_hook("move", move_hook);
++   add_hook("move", wander_move_hook);
+ }
+diff --git a/lib/std/modules/m_wieldable.c b/lib/std/modules/m_wieldable.c
+index e0e5bb3..bb59408 100644
+--- a/lib/std/modules/m_wieldable.c
++++ b/lib/std/modules/m_wieldable.c
+@@ -26,7 +26,7 @@ void clear_flag(int);
+ private
+ nosave object wielded_by;
+ private
+-nosave function move_hook = ( : unwield_me:);
++nosave function wield_move_hook = ( : unwield_me:);
+ private
+ string *wielding_limbs;
+ private
+@@ -101,7 +101,7 @@ void mark_wielded_by(object which, string *limbs)
+       this_object()->unwielded();
+    else
+       this_object()->wielded();
+-   hook_state("move", move_hook, which && which != this_object());
++   hook_state("move", wield_move_hook, which && which != this_object());
+    if (arrayp(limbs) && sizeof(limbs) >= 2)
+    {
+       this_object()->dual_wielded();
+diff --git a/lib/std/money.c b/lib/std/money.c
+index 9dacfb4..a64c814 100644
+--- a/lib/std/money.c
++++ b/lib/std/money.c
+@@ -55,7 +55,7 @@ void split_money(int amount, string type)
+       write("There aren't that many money of that type here.\n");
+ }
+ 
+-mixed get(string amount_str, string type)
++varargs mixed get(string amount_str, string type)
+ {
+    string denomination;
+    int amount;
+diff --git a/lib/std/non_room.c b/lib/std/non_room.c
+index 94407fa..98c2d96 100644
+--- a/lib/std/non_room.c
++++ b/lib/std/non_room.c
+@@ -14,6 +14,10 @@ inherit M_COMPLEX_EXIT;
+ inherit M_ITEMS;
+ inherit M_EXIT;
+ 
++/* Two inherits define query_base, set_base(); the later one was already in effect: name it. */
++string query_base() { return m_exit::query_base(); }
++void set_base(mixed what) { m_exit::set_base(what); }
++
+ int is_player_inside();
+ 
+ string stat_me()
+diff --git a/lib/std/object/description.c b/lib/std/object/description.c
+index 3984d54..9456d77 100644
+--- a/lib/std/object/description.c
++++ b/lib/std/object/description.c
+@@ -159,9 +159,11 @@ string show_in_room()
+ //: FUNCTION set_in_room_desc
+ // Set the description an object has when it is sitting in a room
+ protected
+-void set_in_room_desc(string arg)
++void set_in_room_desc(mixed arg)
+ {
+-   in_room_desc = punctuate(arg);
++   if (stringp(arg))
++      arg = punctuate(arg);
++   in_room_desc = arg;
+ }
+ 
+ void set_plural_in_room_desc(string arg)
+diff --git a/lib/std/pelt.c b/lib/std/pelt.c
+index 8759672..ea81268 100644
+--- a/lib/std/pelt.c
++++ b/lib/std/pelt.c
+@@ -4,6 +4,9 @@ inherit OBJ;
+ inherit M_GETTABLE;
+ inherit M_SALVAGEABLE;
+ 
++/* Two inherits define direct_salvage_obj(); the later one was already in effect: name it. */
++int direct_salvage_obj() { return m_salvageable::direct_salvage_obj(); }
++
+ private int pelt_size = 0;
+ private string pelt_type;
+ 
+diff --git a/lib/std/portal.c b/lib/std/portal.c
+index f7f09cb..0023896 100644
+--- a/lib/std/portal.c
++++ b/lib/std/portal.c
+@@ -44,7 +44,7 @@ string get_destination()
+    return query_method_destination("enter");
+ }
+ 
+-int direct_look_str_obj()
++varargs int direct_look_str_obj()
+ {
+    return 1;
+ }
+diff --git a/lib/std/ranged_weapon.c b/lib/std/ranged_weapon.c
+index 4135cad..4ddfe69 100644
+--- a/lib/std/ranged_weapon.c
++++ b/lib/std/ranged_weapon.c
+@@ -38,7 +38,7 @@ string *query_fire_type()
+    return fire_type;
+ }
+ 
+-void set_fire_type(string ft...)
++void set_fire_type(string *ft...)
+ {
+    // single, pump, semi, fully
+    fire_type = flatten_array(ft);
+@@ -194,7 +194,7 @@ object loaded_with()
+ 
+ void do_load(object ammo)
+ {
+-   int ammo_charges = ammo->query_charges();
++   ammo->query_charges();
+    if (!ammo_ob)
+    {
+       this_body()->simple_action("$N $vload the $o1 with $o2.", this_body(), this_object(), ammo);
+diff --git a/lib/std/room/exits.c b/lib/std/room/exits.c
+index a0db26a..adcdaf8 100644
+--- a/lib/std/room/exits.c
++++ b/lib/std/room/exits.c
+@@ -9,19 +9,19 @@ string get_default_exit();
+ void do_go_somewhere(string);
+ 
+ private
+-nosave string base;
++nosave string rx_base;
+ private
+ nosave mixed def_exit;
+ 
+ void create()
+ {
+-   base = file_name(this_object());
+-   base = base[0..strsrch(base, '/', -1)];
++   rx_base = file_name(this_object());
++   rx_base = rx_base[0..strsrch(rx_base, '/', -1)];
+ }
+ 
+ string query_base()
+ {
+-   return base;
++   return rx_base;
+ }
+ 
+ mixed can_go_somewhere(string dir)
+@@ -87,15 +87,15 @@ void do_go_somewhere(string dir)
+    if (call_hooks("block_" + dir, HOOK_LOR, 0, dir) || call_hooks("block_all", HOOK_LOR, 0, dir))
+       return;
+    if (!this_body()->query_driving_vehicle())
+-      this_body()->move_to(query_exit_destination(dir, base), dir, query_exit_msg(dir), query_enter_msg(dir));
++      this_body()->move_to(query_exit_destination(dir, rx_base), dir, query_exit_msg(dir), query_enter_msg(dir));
+    else
+       environment(this_body())
+-          ->move_to(query_exit_destination(dir, base), dir, query_exit_msg(dir), query_enter_msg(dir));
++          ->move_to(query_exit_destination(dir, rx_base), dir, query_exit_msg(dir), query_enter_msg(dir));
+ }
+ 
+ mixed query_exit_destination(string arg, string unused)
+ {
+-   mixed tmp = ::query_exit_destination(arg, base);
++   mixed tmp = ::query_exit_destination(arg, rx_base);
+    if (!tmp)
+       return get_default_exit();
+    return tmp;
+diff --git a/lib/std/secret_door.c b/lib/std/secret_door.c
+index ce2840a..619e165 100644
+--- a/lib/std/secret_door.c
++++ b/lib/std/secret_door.c
+@@ -11,7 +11,7 @@ string extra_long_stuff()
+    return capitalize(the_short()) + " is open.\n";
+ }
+ 
+-mixed door_check()
++varargs mixed door_check()
+ {
+    string ret = environment(this_object())->query_default_error();
+    if (query_closed())
+diff --git a/lib/std/spell.c b/lib/std/spell.c
+index a771ccf..c7712b6 100644
+--- a/lib/std/spell.c
++++ b/lib/std/spell.c
+@@ -40,9 +40,9 @@ nosave int cast_time;
+ private
+ nosave int level = 1;
+ private
+-nosave string skill_used;
++nosave string spell_skill_used;
+ private
+-nosave string magic_skill_used;
++nosave string spell_magic_skill_used;
+ private
+ nosave int channeling;
+ private
+@@ -233,7 +233,11 @@ nomask mixed check_valid_spell(int has_target, int has_sc)
+    // Do we not have a target? Then we need to have TARGET_ROOM
+    // defined as a valid target.
+    if (valid_targets && !has_target)
+-      return valid_targets & TARGET_ROOM ? 1 : "The spell requires a target.";
++   {
++      if (valid_targets & TARGET_ROOM)
++         return 1;
++      return "The spell requires a target.";
++   }
+ 
+    return valid_circumstances(has_target, has_sc);
+ }
+@@ -288,14 +292,14 @@ nomask mixed check_valid_spell_components(mapping sc, mixed has_target)
+ // - val: The skill used for casting the spell.
+ void set_skill_used(string val)
+ {
+-   skill_used = val;
++   spell_skill_used = val;
+ }
+ 
+ //: FUNCTION query_skill_used
+ // Returns the skill used for casting the spell.
+ string query_skill_used()
+ {
+-   return skill_used;
++   return spell_skill_used;
+ }
+ 
+ //: FUNCTION set_magic_skill_used
+@@ -304,14 +308,14 @@ string query_skill_used()
+ // - val: The magic skill used for casting the spell.
+ void set_magic_skill_used(string val)
+ {
+-   magic_skill_used = val;
++   spell_magic_skill_used = val;
+ }
+ 
+ //: FUNCTION query_magic_skill_used
+ // Returns the magic skill used for casting the spell.
+ string query_magic_skill_used()
+ {
+-   return magic_skill_used;
++   return spell_magic_skill_used;
+ }
+ 
+ //: FUNCTION set_channeling_time
+@@ -428,20 +432,20 @@ int cast_action(mixed *args)
+    if (!target && !valid_targets & TARGET_ROOM)
+    {
+       channel_failure("Your target has disappeared.");
+-      return;
++      return 0;
+    }
+ 
+    // If we have a target, but it's not present in inventory or room, we can't cast the spell.
+    if (!valid_targets & TARGET_ROOM && !present(target, environment(this_body())) && !present(target, this_body()))
+    {
+       channel_failure("Your target seems to have disappeared.");
+-      return;
++      return 0;
+    }
+ 
+    if (valid_targets & TARGET_LIVING && target==this_body())
+    {
+       channel_failure("You cannot cast the spell on yourself.");
+-      return;
++      return 0;
+    }
+ 
+    this_object()->cast_spell(target, sc, success);
+diff --git a/lib/std/stock_master.c b/lib/std/stock_master.c
+index cdd951d..9626195 100644
+--- a/lib/std/stock_master.c
++++ b/lib/std/stock_master.c
+@@ -10,6 +10,9 @@ inherit ADVERSARY;
+ inherit M_GUILD_MASTER;
+ inherit M_REGEX;
+ 
++/* Two inherits define indirect_give_obj_to_liv(); the later one was already in effect: name it. */
++mixed indirect_give_obj_to_liv(object ob, object liv) { return m_guild_master::indirect_give_obj_to_liv(ob, liv); }
++
+ void setup(string guildname)
+ {
+    object sword;
+diff --git a/lib/std/tests/race.c b/lib/std/tests/race.c
+index 2a9ac17..a2256bd 100644
+--- a/lib/std/tests/race.c
++++ b/lib/std/tests/race.c
+@@ -119,7 +119,6 @@ int check_duplicate_races()
+ int clean_up()
+ {
+    int result = 1;
+-   mapping dup = ([]);
+ 
+    foreach (string file, object ob in races)
+    {
+diff --git a/lib/std/transient/poison.c b/lib/std/transient/poison.c
+index 009ae97..fe1ab05 100644
+--- a/lib/std/transient/poison.c
++++ b/lib/std/transient/poison.c
+@@ -30,7 +30,7 @@ int query_poison_strength()
+    return strength;
+ }
+ 
+-int do_effect()
++void do_effect(object affected)
+ {
+    poison_action();
+ }
+@@ -48,7 +48,7 @@ void extend_effect(object t)
+    }
+ }
+ 
+-void mudlib_setup(int s, int d, string a)
++varargs void mudlib_setup(int s, int d, string a)
+ {
+    transient::mudlib_setup();
+    add_save(({"action", "strength"}));
+diff --git a/lib/std/transient/speed.c b/lib/std/transient/speed.c
+index b54a5b1..f487e2f 100644
+--- a/lib/std/transient/speed.c
++++ b/lib/std/transient/speed.c
+@@ -22,7 +22,7 @@ int query_boost_strength()
+    return strength;
+ }
+ 
+-int do_effect()
++void do_effect(object affected)
+ {
+    speed_action();
+ }
+@@ -48,7 +48,7 @@ void remove()
+    ::remove();
+ }
+ 
+-void mudlib_setup(int s, int d, string a)
++varargs void mudlib_setup(int s, int d, string a)
+ {
+    transient::mudlib_setup();
+    add_save(({"action", "strength"}));
+diff --git a/lib/std/transient_spell.c b/lib/std/transient_spell.c
+index 53cf504..28c9b9b 100644
+--- a/lib/std/transient_spell.c
++++ b/lib/std/transient_spell.c
+@@ -50,7 +50,7 @@ int query_boost_strength()
+    return strength;
+ }
+ 
+-void mudlib_setup(int strength_par, int duration_par, string action_par, string limb_par)
++varargs void mudlib_setup(int strength_par, int duration_par, string action_par, string limb_par)
+ {
+    transient::mudlib_setup();
+    strength = strength_par;
+diff --git a/lib/std/water.c b/lib/std/water.c
+index 8d7bbf9..611e589 100644
+--- a/lib/std/water.c
++++ b/lib/std/water.c
+@@ -6,6 +6,11 @@
+ inherit FLUID;
+ inherit M_DRINKABLE;
+ 
++/* Two inherits define direct_drink_obj, direct_drink_obj_from_obj, drink_it(); the later one was already in effect: name it. */
++mixed direct_drink_obj() { return m_drinkable::direct_drink_obj(); }
++mixed direct_drink_obj_from_obj() { return m_drinkable::direct_drink_obj_from_obj(); }
++varargs void drink_it(object drinkee) { m_drinkable::drink_it(drinkee); }
++
+ void mudlib_setup()
+ {
+    set_proper_name("some water");
+diff --git a/lib/std/weapon.c b/lib/std/weapon.c
+index 06a0f9c..70d70d6 100644
+--- a/lib/std/weapon.c
++++ b/lib/std/weapon.c
+@@ -9,6 +9,11 @@ inherit M_SALVAGEABLE;
+ 
+ inherit M_DURABILITY;
+ 
++/* Two inherits define direct_salvage_obj, get_extra_long, internal_setup(); the later one was already in effect: name it. */
++int direct_salvage_obj() { return m_salvageable::direct_salvage_obj(); }
++string get_extra_long() { return m_damage_source::get_extra_long(); }
++void internal_setup() { m_wieldable::internal_setup(); m_durability::internal_setup(); }
++
+ #define WEAPON_LVL_PRICE 25
+ 
+ void mudlib_setup()
