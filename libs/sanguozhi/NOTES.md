@@ -913,5 +913,10 @@ second uncaught error inside the input handler turns every later line into `ไป€ไ
 Reproduced on a clean checkout with a one-line command that raises (`boom`, `boom`, `look`). This lib has no mudlib
 error handler, so the fix catches the error, re-arms the input and prints what the driver's default handler would have
 (wizards the error, players the configured default error message). The submodule is `fluffos-upstream`, so the change
-goes there: [fluffos/sanguozhi#5](https://github.com/fluffos/sanguozhi/pull/5). Live on a clean checkout with the
-patch: four errors in a row, then `look`, `i` and `!look` answer. After the PR is merged, bump the pin.
+goes there: [fluffos/sanguozhi#5](https://github.com/fluffos/sanguozhi/pull/5), merged as `7dd06525` and pinned. Live on a
+clean checkout with the patch: four errors in a row, then `look`, `i` and `!look` answer.
+
+Separate from that, `~/src/fluffos/build-debug/src/driver` built from fluffos/fluffos at `2c272875` (2026-09-16) segfaults
+in about half of the first logins here (`copy_functions()` -> `lookup_ident()` with a garbage name while compiling
+`std/race/human`, a two-hop `FUNC_ALIAS` chain for `receive_remote_msg`). That is the #1403 regression fixed upstream by
+#1420 (2026-10-03); a driver built from current master does not have it.
