@@ -16,7 +16,8 @@ unnamed parameters), a `private`/`nomask` W, a scope name two direct inherits sh
 already.  Read the plan once: the unqualified F() calls that W's own code makes now reach the leaf's function, which
 calls W's F, so nothing changes; but a lib whose design needs the *other* inherit's F to win wants a hand edit
 (`autoload::get()` vs `object::get()`; KB 06 section 7.213 kind 3).  The new functions go after the last top-level
-`inherit` line of the leaf.  Edits are byte-exact (line endings kept)."""
+`inherit` line of the leaf -- even when that line sits inside `#if`/`#ifdef`, so check the placement when the wrapper
+scopes belong to another branch (spacemud `std/body.lpc` needed a hand move).  Edits are byte-exact (line endings kept)."""
 import collections
 import os
 import re

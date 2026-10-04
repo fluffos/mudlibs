@@ -635,3 +635,52 @@ immediately on the equivalent recompile beforehand.
   how/whether to alter shipped security-daemon state, not just play the
   game) -- flagged honestly as unreachable-by-design rather than
   silently skipped, distinct from a code bug.
+
+## 深度功能测试（§10.7，2026-10-04）— `#pragma no_warnings` removed, every compile warning fixed
+
+`include/mudlib.h` (every file that includes it) and the three example rooms `domains/std/room/{Attic,Church,wiz_hall}.lpc`
+opened with `#pragma no_warnings`. With the pragma gone a scan on the Lima-family driver build
+(`~/src/fluffos-lima/build-debug/src/lpcc`) showed 746 distinct diagnostics (1377 of 1400 files compile). Now: 22, all
+errors, in the 23 files that still do not compile; **0 warnings**.
+
+The same four root causes as `libs/swmud` (KB 04 §6.10; this lib is the older Lima base, so most module variables are
+public rather than private):
+- `lpc_warnings.py spacemud --fix` (69 `varargs`, 44 bare returns, 109 unused locals, 2 escapes) and
+  `lpc_fix_unused_init.py` did the mechanical classes.
+- **Dependencies a module brings along.** `m_npcscript` inherited `M_ACTIONS`, which every conversation, accountant and
+  vendor NPC already has (`canteen_sales`, `alexia_novak`, `doc_williams`): it declares `start_actions()` and
+  `stop_actions()` instead, and `robert` (which had nothing else) inherits `M_ACTIONS` itself. `m_assistance`
+  inherited `M_MESSAGES`, which `ADVERSARY` has: a prototype for `targetted_action()`. Leaves that listed a module twice
+  or that their base already provides lost the extra line (`zara_nebulon` had `M_ACTIONS` twice, the omega `greeter`
+  after `M_CONVERSATION`, `delivery_boy` `M_ASSISTANCE` twice, `hint_token`, `radio`, `material_spawner` and `loot_chest`
+  `M_GRAMMAR`).
+- **Names that met in one class**, renamed on the module side with a prefix: `base` (`m_exit`, `m_complex_exit`,
+  `room/exits`, `m_exit_obj` -- the 13 vehicle and furniture classes under `non_room`), `default_desc`, `fluid_disturb`,
+  `spell.lpc`'s `skill_used`/`magic_skill_used` (`COMBAT_SPELL` inherits `SPELL` and `M_DAMAGE_SOURCE`),
+  `m_throwable`'s `skill_used`, `m_drinkable`'s `taste_action`, `m_blockexits`' `env` and `move_hook`, `m_wander`'s
+  `move_hook`, `m_npcscript`'s `debug`, `m_mdview`'s `keywords`, `m_conversation`'s `stats` (a table of stat names that
+  met the real `stats` of every adversary), the behaviour cluster's `queue`, the adversary's `no_heals`, `frames.lpc`'s
+  `colours` and `test_dummy`'s `target`; `guild_d` lost a dead duplicate of `guild_favours`.
+- **155 `F() inherited from both A and B` overlaps** in 67 leaves are named (`lpc_name_winner.py`; its block went inside
+  `body.lpc`'s `#ifdef USE_GUILDS` and was moved out by hand: the tool does not look at preprocessor nesting). Twelve
+  of those leaves had one small `mudlib_setup()` replace a real one, so they ran without it: the three omega mobs
+  (`adversary` + `m_wander`: no combat config), `aria_voss`, `alexia_novak`, `canteen_cleaner` (`living`), `bank_accountant`
+  (`adversary`) and the four food leaves plus `decay_food` (`food` + `m_decay`: `m_edible`'s setup). They call every real
+  setup now, in inherit order.
+- `body/cmd.lpc`'s `nomask do_game_command` moved to a wrapper in `std/body.lpc` (it collides with `M_ACTIONS`);
+  `do_smell()` and `do_listen()` answer `1` in the base room, the spaceship and `swamp1` like the yakitori rooms and the
+  `smell` verb expect; `npcship.lpc`'s `stat_me()` returns the ship map (the `stat` command prints a returned string and
+  said "No information available" after the map was written); nine `?:` that returned a string or `1` are `if`/`return`;
+  `(: "say Are you Mr. Stevens?" :)` and `(: "<res>" :)` are plain strings (`add_pattern()` and `evaluate()` take them);
+  `do_effect`, `update_ansi` and `string x...` rest parameters agree with their definitions; nine files' local fixes were carried from
+  `libs/swmud` with `lpc_twin_port.py adopt`.
+
+Live on a pristine tree with the Lima driver as `fluffos`/`Mud12345` (the character-select menu takes `p`): `look`, `score`,
+`history`, and clones of `bank_accountant`, `lunar_lurker`, `hamburger`, `backpack`, `greeter` (Kimby Watson, who
+greets), `water`, `alexia_novak`. Not mine, seen on the way: cloning `delivery_boy` stops in `m_guild_member.lpc:79`
+(`foreach` over an unset array, the same at HEAD); `m_damage_source.lpc`'s `query_magic_skill_used()` returns
+`skill_used` and writes it from the magic one.
+
+Left: the 23 files that do not compile -- the CGI scripts, the two `contrib` boards (`set_in_room_desc()` takes a string),
+the marriage `finger` pair (a `finger` class without `spouse`), `m_react.lpc`, `portable_board.lpc`, a cave room
+(`set_default_exit()`), the mailer (`trim_spaces`), `ftp_d.lpc` and `std/behaviour/test.lpc`.
