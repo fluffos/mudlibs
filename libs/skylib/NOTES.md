@@ -810,3 +810,9 @@ second_sight `player` -> `scry_player`, guard_duty `id` -> `call_out_handle`, ca
 `SAVE_DIR` and `SHADOWS` are `#undef`'d before they are redefined; `std/effects/poisons/hp.lpc` had a stray string
 statement after the "clenches his teeth" line; `std/shops/player_shop/storeroom.lpc` had a `/*` inside the commented-out
 block of the old stock command.
+
+Correction, same day: the first pass also emptied five of the demonstration files (`bad_local_init2.lpc`, `local_redef.lpc`,
+`local_redef2.lpc`, `lvar_func.lpc`, `void_local.lpc`: each one is a three-line function that shows a creator one
+compiler message), so the "107 -> 7" above counted their warnings as fixed. They are back as they were, and
+`scripts/lpc_warnings.py` skips `help_topics/error_messages/` by default. Outside those files the scan went from 267
+distinct diagnostics (94 warnings) to 173 (0 warnings, the remaining ones are errors in files that do not compile).

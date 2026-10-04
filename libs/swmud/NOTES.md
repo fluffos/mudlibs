@@ -741,3 +741,9 @@ which is what upstream Lima already does. `error_handler()` still prints the err
 Follow-up (2026-10-04, later): `domains/std/rooms/caves/Sloping_Tunnel` called the retired `set_default_exit()` (only the
 non-compiling `room/exits` module defines it) and did not load; it calls `set_default_error()` like its sibling caves, and
 `north` prints "You can't find an exit in that direction."
+
+## 2026-10-04 (later) — a deleted local declared again
+
+`scripts/lpc_audit_removed_locals.py` over the warning sweep found `secure/user/login.lpc`'s `string *foo;` deleted
+although `#ifdef WELCOME_DIR` reads it; it is declared inside that branch again (a build that defines `WELCOME_DIR`
+compiles). The scan is unchanged: 1740 files compile, 120 do not.

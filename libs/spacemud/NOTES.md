@@ -684,3 +684,11 @@ greets), `water`, `alexia_novak`. Not mine, seen on the way: cloning `delivery_b
 Left: the 23 files that do not compile -- the CGI scripts, the two `contrib` boards (`set_in_room_desc()` takes a string),
 the marriage `finger` pair (a `finger` class without `spouse`), `m_react.lpc`, `portable_board.lpc`, a cave room
 (`set_default_exit()`), the mailer (`trim_spaces`), `ftp_d.lpc` and `std/behaviour/test.lpc`.
+
+## 2026-10-04 (later) — two deleted locals declared again
+
+`scripts/lpc_audit_removed_locals.py` over the warning sweep found two locals that the unused-variable pass had deleted
+although an inactive branch reads them: `cmds/player/hp.lpc` `string shield;` (read under `#ifdef LIMB_SHIELDS` and
+`#if ADVANCEMENT_STYLE == ADVANCEMENT_RIFTS`; declared again under `#if defined(LIMB_SHIELDS) || ADVANCEMENT_STYLE ==
+ADVANCEMENT_RIFTS`) and `secure/user/login.lpc` `string *foo;` (inside `#ifdef WELCOME_DIR`). A build that turns either
+option on compiles again. The scan is unchanged: 1377 files compile, 23 do not, 22 diagnostics, 0 warnings.
