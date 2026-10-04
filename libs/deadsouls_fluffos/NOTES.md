@@ -465,3 +465,13 @@ the Praxis guild rooms, already covered 2026-09-01.
 `/open/`, beggar map, `supply2`, and `replace_program()` fixes.
 Pin advanced to `4ddbd3b964`. No new rooms. Do not rebase the local
 FluffOS tree over those commits.
+
+## 深度功能测试（§10.7，2026-10-04）— fluffos/dead-souls#17 merged, pin moved
+
+The Praxis `become <class>` fix (`SetClass()` -> `ChangeClass()` in the six join rooms, three `query_*` mappings in
+`compat.h`) was filed as [fluffos/dead-souls#17](https://github.com/fluffos/dead-souls/pull/17) on 2026-09-01 and sat
+open; the `.lpc` rename made it conflict. The branch was brought up to date with a merge commit (the six files re-edited
+under their new names), checked live on a tree built from it against a tree built from current master (the seeded
+`shopdive` creator, `goto /domains/Praxis/fighter_join`, `become fighter`, `skills`: master leaves a level 1 Explorer
+with Explorer skills after the initiation text, the branch a level 1 Fighter with the fighter list), merged as
+`e7a25776`, and the pin bumped to it.
