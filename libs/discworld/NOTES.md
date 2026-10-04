@@ -648,3 +648,57 @@ Newbie Area 币种表（比值来自本树 `money_symboliser`，P$1 == 100）。
 `std/effects/basic.lpc` carried a mid-file `#pragma no_warnings` (before `query_attrs()`); it hid nothing: the file
 compiles without a diagnostic once the line is gone. The same file, byte for byte, sits in skylib, discworld,
 dw_fluffos_v1 and dw_fluffos_v2.
+
+## 深度功能测试（§10.7，2026-10-04）— compile warnings: 248 -> 47
+
+`scripts/lpc_warnings.py discworld`: 1699 files compile, 316 do not; 647 distinct diagnostics outside the 45 creator-help
+examples under `d/learning/help_topics/error_messages/` (248 warnings, 399 errors). Now 446: the same 399 errors
+(files written for another lib: `Undefined variable`, `Cannot #include`, the player-shop `office_code/*.lpc` fragments,
+`www/`; none touched) and 47 warnings. Those 47 are 33 in `std/living/living.eff_shad.lpc` (revision 1.72 of `living.lpc`,
+kept beside it and inherited by nothing; it adds `inherit "/std/living/effects"` to a container that has it already) and
+14 in files that do not compile (`office_code` fragments, `net/daemon/nhttp.lpc`, `std/environ/weather.lpc`,
+`secure/simul_efun/add_action.lpc`). The creator-help examples show one compiler message each; their warnings are what
+they are for, so `lpc_warnings.py` skips that directory (its first pass here emptied five of them: restored).
+
+128 files for the 248 warnings (unused locals 95 -> 5, override arity 72 -> 0, `inherited from both` 38 -> 30, redeclarations 27 -> 4,
+the 7 expressions without effect stay, eight others fixed):
+- `varargs` on the override where the base is `varargs` (`init_dynamic_arg` of the furniture and containers,
+  `query_look` of the seven topography areas, `test_remove`, `can_enter_from`, `event_death`, ...).
+- **Eight winners named** (`F() { return Q::F(); }` after the inherits; the driver already used W): `query_multiple_short()`
+  in `secure/simul_efun.lpc` (from `modified_efuns`), `dest_me()` in the four terrain-map bases (from `terrain_room`) and
+  in `std/room/room_save.lpc`, `query_keep_room_loaded()` there. For `room_save.lpc` W is the `inherit/room_save` side,
+  whose `dest_me()` only flushes pending saves; the `#ifdef DONT_USE` block above it holds the combined version the
+  authors turned off, and it stays off.
+- **Names that met in one object**, renamed on the leaf side with the uses following: `artifact.lpc` `type` ->
+  `artifact_type` (rings, wands and staffs set it through `set_artifact_type()` only), `camera.lpc` `colour` ->
+  `film_colour` (`query_colour()` is `mixed` over the base's `string`; the autoload key stays `"colour"`), pumpkin `dog.lpc`
+  `colour` -> `dog_colour`, `simple_disease.lpc` `shadow_ob` -> `disease_shadow_ob`, `guard_duty.lpc` `id` ->
+  `call_out_handle`, `pickler.lpc` `_revenue` -> `_pickler_revenue`, `bank_credit_note.lpc` `_id` -> `_note_id`,
+  `store_close.lpc` `_exits` -> `_close_exits`, `club_discuss.lpc` `_discussion_items` -> `_discuss_items`. No object in
+  those chains calls `save_object()`; they persist through autoload mappings with fixed keys.
+- **The four socket daemons** (`http`, `imap4`, `pop3`, `ftp_auth`) each declared a second `Sockets` next to
+  `net/inherit/server.lpc`'s `private nosave mapping Sockets`: `HttpSockets`, `ImapSockets`, `PopSockets`, `FtpSockets`.
+  `pop3.lpc` and `imap4.lpc` save and restore themselves (`net/save/pop3.o`, `imap4.o`), and their copy was *not*
+  `nosave`: the shipped `imap4.o` carries a stale session table (a "ceres" session on fd 9) that every boot restored.
+  The renamed tables are `nosave`, so nothing from an earlier boot comes back; the old `Sockets` key in an existing `.o`
+  is ignored.
+- Locals that only an inactive branch reads are declared inside it (`USE_RAMDISK` in `shop_base.lpc` twice and
+  `craft_shop.lpc`, `DISABLED` in `read_desc.lpc`, `#ifdef 0` in `mtf2.lpc` and `quests.lpc`, `__DISTRIBUTION_LIB__` in
+  `score.lpc`, `compile.lpc`, `board_handler.lpc`); the rest were deleted.
+- Single ones: `add_material()` of `cmr_handler` is `varargs mixed` over the base's `void`, `dividor_room.lpc`
+  `query_main_room()` is `mixed`, `club_badge.lpc` prototypes agree with `club_insignia`, `mtf.lpc` `return;` ->
+  `return 0;`, `newspaper.lpc` `#undef SAVE_DIR` before its `#define`, `parcel.lpc`'s commented-out `get_dir("/save/parcels/*")`
+  has no `/*` inside the comment, and `terrain_room.lpc` lost an empty `else if (...) { }`.
+
+Checked on pristine trees with the same driver, HEAD against the working tree: boot and login of the seeded admin look
+the same, the HEAD console prints 21 compile warnings and the new one none, the 3 compile errors it prints are the same
+(`finderror_helper.lpc`, `CONFIG_DB_ERRORS_USER`). A throwaway object under `/obj/` that loads or clones 31 of the changed
+things through the lib's own master -- rings, wand, staff, the camera with an autoload round trip, the dog, the disease
+effects, the pickler's autoload keys, the credit note, the two closing shops, the club, cmr, pop3, imap4, ftp_auth and
+parcel handlers, `room_save`, the four terrain bases, `query_multiple_short()`, the present, `mtf2`, `shop_base`,
+`craft_shop`, `read_desc` -- answers identically in both trees, while HEAD's batch prints 55 warning lines and the new one
+none. (`exec` from a telnet session returns nothing here: the game queues each command and the answers never arrive.)
+`scripts/lpc_audit_removed_locals.py` lists every deleted declaration the function still reads: it found the four locals the
+first pass deleted from inactive branches (`mtf2.lpc`, `read_desc.lpc`, `shop_base.lpc`, `craft_shop.lpc`; back in their
+branch), and a read of the diff found a deleted `object ob` in the include fragment `office_code/lists.lpc` whose next line
+reads it (the compiler's "unused" came from a scope an earlier error had confused; restored).

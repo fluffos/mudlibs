@@ -7,7 +7,6 @@
 
 //optimize and save_types are off because they can crash us
 
-#pragma save_binary
 #pragma strict_types
 #pragma warnings
 #pragma no_save_types

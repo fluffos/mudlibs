@@ -184,3 +184,11 @@ restart: PID **4074608**, cwd `libs/dw_fluffos_v1/work`.
 `std/effects/basic.lpc` carried a mid-file `#pragma no_warnings` (before `query_attrs()`); it hid nothing: the file
 compiles without a diagnostic once the line is gone. The same file, byte for byte, sits in skylib, discworld,
 dw_fluffos_v1 and dw_fluffos_v2.
+
+## 深度功能测试（§10.7，2026-10-04）— compile warnings: 249 -> 47
+
+The same edits as `libs/discworld` (the patch applied unchanged, two files at shifted line numbers; see its section of
+this date for the list and the reasoning), plus the one line that is only in this tree: `include/all_inc.h` opened with `#pragma save_binary`, which
+the driver ignores and warns about. `scripts/lpc_warnings.py`: 1695 files compile, 320 do not; 649 distinct diagnostics
+outside the creator-help examples (249 warnings) before, 447 after: the 400 errors are unchanged and the 47 warnings left
+are the same as in `libs/discworld` (33 in the unused `std/living/living.eff_shad.lpc`, 14 in files that do not compile).
