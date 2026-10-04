@@ -619,3 +619,19 @@ verified: register a brand-new character (letters-only name), land in
 the Endoplasmatorium lit and described, `look`, `score`, `quit` (with
 autosave). No sockets/pcre/uptime-gate issues -- consistent with this
 lib's own "no outbound network connections of any kind" finding above.
+
+## 深度功能测试（§10.7，2026-10-03）— compile warnings
+
+`scripts/lpc_warnings.py lpmud141` found 39 diagnostics: 27 unused locals in 12 files (the tool
+deleted the declarators), 3 `Redeclaration of global variable`, and errors in two files that are
+never compiled on their own. Hand fixes: `obj/leo.lpc` redeclared `int level;` after
+`#include "living.h"` already declares it; the old driver let the second declaration share the
+first's storage, FluffOS makes it a second variable, so `level = 40` in `leo.lpc` never reached
+`query_level()` (Leo the Archwizard was level 0, and `living.h`'s fight code read the other copy).
+The line is gone. `obj/monster.lpc` and `obj/monster.talk.lpc` redeclared `spell_dam` the same way
+(never read after the declaration; dropped). Left as they are: `obj/soul_com.lpc` is an include
+fragment (`soul.lpc` and `wiz_soul.lpc` `#include` it and declare `cap_name`) and
+`room/def_castle.lpc` is the castle template `create_wizard()` fills in with `#define NAME`/`DEST`;
+neither is meant to compile alone. Live on a pristine tree against HEAD: registration, `look`,
+`score`, `i`, `save`, a 70-step walk through 16 rooms (green, bridge, village road, yard, alley,
+pub, bank, post office, advancement hall) with nothing on the console.

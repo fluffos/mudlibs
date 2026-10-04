@@ -301,7 +301,6 @@ attacked_by(ob) {
 }
 
 show_stats() {
-    int i;
     if (!this_player() || call_other(this_player(),"query_level",0) < CREATE)
 	return;
     write(short() + "\nlevel:\t" + level + "\n");
