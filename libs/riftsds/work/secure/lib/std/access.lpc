@@ -21,7 +21,7 @@ private nosave function WriteFunction = 0;
  * Note: this uses the old NM 3 naming scheme and is not worth the
  * trouble of changing
  */
-nosave void set_access(string type, function f) {
+protected void set_access(string type, function f) {
     if( type == "read" ) {
         ReadFunction = f;
     }

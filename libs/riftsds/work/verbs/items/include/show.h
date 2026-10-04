@@ -1,7 +1,7 @@
 #ifndef l_show_h
 #define l_show_h
 
-nosave void create();
+protected void create();
 
 mixed can_show_liv_obj();
 mixed can_show_obj_to_liv();

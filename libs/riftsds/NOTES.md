@@ -787,3 +787,28 @@ it renamed its own function `SetDoorClosed` (it shadowed `LIB_EXITS::SetDoor(dir
 resolves to the inherited exit function and the call is a silent no-op, so the call buttons never closed the
 car door. Changed to `SetDoorClosed(1)`, as in dsIII and ds386 (KB 06 §7.211). The rest of this lib's compile
 warnings are still to do (queue: Dead Souls siblings).
+
+## 深度功能测试（§10.7，2026-10-03）— compile warnings and inherit diamonds
+
+Method: as in dshakkard (same twin of ds386, KB 06 §7.213-§7.216): ds386's commit applied with `patch`
+(1476 files, 42 hunks and 31 absent files left over), `scripts/lpc_warnings.py riftsds --fix` for the mechanical
+hunks that did not apply (183 `nosave` functions -> `protected`, 23 dropped, 27 escapes, 8 `varargs`, 2 bare returns,
+19 unused locals), `scripts/lpc_move_decl.py` (`master.lpc`), `scripts/lpc_fix_strptr.py` (`orc_valley/guard.lpc`),
+`scripts/lpc_fix_unused_init.py` (`cmds/players/equipment.lpc`), `scripts/lpc_diamonds.py --fix-redundant`
+(`domains/town/meals/worm.lpc`: `LIB_BAIT_WITH` already inside `LIB_MEAL`, which this lib has and ds386 does not)
+and by hand the empty `if` in `daemon/intermud.lpc`, `room.lpc`'s `SetSky()` and `opcprof.lpc` (the efun is gone
+from FluffOS). Oracle (263 programs, HEAD against working tree): 1763 `public -> protected` flips, 46
+definer changes (the same explicit choices as dshakkard, including the horse's five mount applies whose bodies
+are identical in `LIB_MOUNT` and `LIB_LIVING`), 455 duplicate variables removed or renamed, 92 enter/knock/
+scratch/door functions the three dummy hybrids (trashcan, riverwater, seawater) no longer inherit, 88 glow
+rows. Live, paired: the trainer (HEAD "I am already training you!" after a pupil left and came back within two
+seconds, now "You will have to start your studies anew"), gallows and stone (HEAD printed `long_func`), fixtures,
+search, zpem, horse, death and corpse.
+
+**Result: 6213 -> 534 distinct diagnostics, none of them a warning in a loadable file.** 533 are the errors of the
+518 files this lib has never been able to compile (the Lima-style `domains/std`, `domains/omega`,
+`domains/common` and creator-realm content, triaged in the 2026-08 sections above: missing `ITEM_DECAY_FOOD`/
+`GUILD_D`/`RACE_D`/`ROOM_NEWBIE` and headers that do not exist); the last is an `Expression has no side
+effects` in a creator's eval scratch file (`secure/tmp/thurtea_CMD_EVAL_TMP_FILE.lpc`, untracked save churn).
+The comma pointers `(: this_object(), "fn" :)` of the Praxis domain (29 sites in 21 files) are still to do
+(KB 04 §6.10).

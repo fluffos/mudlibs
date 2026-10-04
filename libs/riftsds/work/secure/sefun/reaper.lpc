@@ -24,7 +24,6 @@ varargs void reap_other(string s1){
     // Destroys any non-special objects and clones that
     // do not have an environment, as well as temporary objects.
     //
-    string s2;
     int fail;
     object *garbage;
     object *others;
@@ -62,7 +61,6 @@ mixed reap_list(){
     //
     // returns a list of cloned objects without an environment
     //
-    string s1,s2;
     object *clones = objects((: $1 && clonep($1) && !environment($1) :))[0..6300];
     glist = ({});
     filter(clones, (: glist += ({ file_name($1) }) :));

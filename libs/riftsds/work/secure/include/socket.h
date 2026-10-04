@@ -36,6 +36,7 @@
 #define EESOCKRLSD	-30		/* Socket already released */
 #define EESOCKNOTRLSD   -31		/* Socket not released */
 
+#undef ERROR_STRINGS
 #define	ERROR_STRINGS	 32		/* sizeof (error_strings) */
 
 #endif /* __SOCKET_H */

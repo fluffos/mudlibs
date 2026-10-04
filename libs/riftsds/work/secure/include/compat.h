@@ -4,6 +4,7 @@
 #define ROOM				"/lib/std/room"
 #define DOORS				"/lib/blank"
 #define DAEMON				"/lib/std/daemon"
+#undef OBJECT
 #define OBJECT				"/lib/std/item"
 #define OB_SIMUL_EFUN			"/secure/sefun/sefun"
 #define OB_DEED                         "/obj/deed"

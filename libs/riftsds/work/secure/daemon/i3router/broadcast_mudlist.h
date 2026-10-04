@@ -2,7 +2,7 @@
 
 // broadcast the mudlist when a mud just now got changed...
 
-nosave void validate();
+protected void validate();
 
 nosave mapping BroadcastQueue = ([]);
 

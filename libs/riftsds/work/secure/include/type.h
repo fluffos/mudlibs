@@ -6,6 +6,7 @@
 #define INT             0x2
 #define STRING  	0x4
 #define ARRAY   	0x8
+#undef OBJECT
 #define OBJECT  	0x10
 #define MAPPING         0x20
 #define FUNCTION        0x40
