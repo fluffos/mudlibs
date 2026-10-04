@@ -1,4 +1,3 @@
-#pragma save_binary
 // Weather daemon
 // Originally coded by Megadeath@TMI-2
 // Overhauled by Mobydick@TMI-2
@@ -53,7 +52,6 @@ void read_day_phases() {
 	string str ;
 	string *datafile ;
 	int which_line ;
-	mapping new_phase ;
 
 // Which_line keeps track of where in the file format we are.
 	which_line = 0 ;

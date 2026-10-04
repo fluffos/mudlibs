@@ -644,3 +644,40 @@ cd libs/tmi2
 ```
 
 Game port: **40220**.
+
+## 深度功能测试（§10.7，2026-10-03）— compile warnings
+
+`scripts/lpc_warnings.py tmi2` found 961 diagnostics; 45 are left, all in the disabled or
+scratch files listed in §4 (`usage_d`/`usage_i`, `I3-0505`, `channels0505`, `missile_spell_j`,
+the wizards' `blah`/`doh`/`nntp`, `shsh`, `www`, `barney`, `istack`, `o_server`, `func_spec`,
+`net/macros.h`). Mechanical (`--fix`): 420 `static`-turned-`nosave` functions made `protected` and
+62 dropped the redundant `nosave`, 323 unused locals, 13 `varargs`, 2 bare returns, one range end,
+one escape. The unused locals that the code only uses inside an `#ifdef`/`#if 0` branch
+(`logind.lpc`, `prune_logdir.lpc`, `_debugmalloc.lpc`, both `_diff.lpc`, `_fref.lpc`,
+`std/user.lpc`) had their declarations moved into the branch rather than deleted
+(`/tmp`-free recipe: KB 04 §6.10).
+
+Hand fixes, all verified against what the code was written to do:
+- `std/living/spells.lpc` and `std/body/attack.lpc` both declared a global `target` (the spell's
+  and the combat target); each file keeps its own, the spell one is `spell_target`. 22 monster
+  files and `std/user.lpc` repeated the warning.
+- `std/monster.lpc` redeclared `alias` after `std/body/alias.lpc`; its `create()` meant to empty
+  the body's mapping ("no default aliases") but emptied a private copy, so `add_alias`/`remove_alias`
+  on a monster indexed a zero. The redeclaration is gone (`call orc;add_alias;x;smile` works).
+- `adm/daemons/ref_d.lpc` returned `(: $(tmp1), $(tmp2) :)` for the `(:ob,func:)` reference syntax;
+  FluffOS reads that as a comma expression returning `tmp2`. It is `(: call_other, tmp1, tmp2 :)`.
+- `std/lock.lpc` had `if (str == "none"); { pick_lock(...) }` (unreachable either way, now an `if`),
+  `cmds/wiz/_goto.lpc` `!where | !objectp(where)`, `obj/tools/paintbrush.lpc` `for(parents;...)`.
+- `std/cmd_m.lpc`'s `void clean_up()` is `int` (the driver's contract, and what the six command
+  objects that override it return); `std/board/bboard.lpc` overrides `int clean_up(int)` with a
+  no-op, `std/object/ob_logic.lpc` declares `set()` `int` like its definition, the
+  `create_ghost()` prototypes in `monster.lpc`/`user.lpc` say `object`, and `cmds/std/_praise.lpc`'s
+  `help()` is `mixed` (it prints and returns 1; `_bug`/`_idea` override it with a `string` one).
+- `adm/daemons/flock.lpc` `#define PRIVATE nosave` is `protected` (two functions).
+- `adm/etc/preload` listed `/adm/daemons/weather_d.c`; the file is `.lpc`, so the daemon was
+  never preloaded and the boot logged `call_other() couldn't find object` on `log/catch`.
+- `u/l/leto/ident.lpc` redefined `__tmi__` (`include/config.h` has it), `u/l/leto/smtp.lpc`
+  redefined `OB_RESOLVER`.
+Live as the seeded admin on a pristine tree: clean boot (no `log/catch`), `call`, `clone`, `stat`,
+a fight with a cloned orc (and death), `help`, `help bug`/`praise`/`typo`/`idea`, `fref`, `date`,
+`people`, `users`, a mortal's `cast`/`spells` refusals; nothing on the console.

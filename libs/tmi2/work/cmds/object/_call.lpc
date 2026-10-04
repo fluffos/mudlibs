@@ -28,7 +28,7 @@ inherit REF_D;
 #define FUNC_LIST ({ "query_skills", "query_nicknames", "query_aliases" })
 #define TAB "\t"
 
-nosave
+protected
 string * do_call( object ob, string func, mixed args );
 
 int cmd_call( string a )
@@ -150,7 +150,7 @@ int cmd_call( string a )
   return 1;
 }
 
-nosave
+protected
 string *do_call( object ob, string func, mixed args )
 {
   mixed ret, err;
