@@ -594,3 +594,11 @@ passwd / suicide / disconnect battery all pass, 89 commands with no error.
    `secure/cfg/write.cfg` does not allow and the tree does not have, so every
    I3 packet from a router logs `Denied write permission in save_object()`
    (hundreds per hour in `log/runtime`). The site has no sockets.
+
+## 2026-10-03 addendum — an unused-local deletion that broke an inactive branch
+
+`domains/Examples/room/search.lpc` `search_brush()`: the compile-warning sweep deleted
+`object ob;` as unused, but `ob` is used inside the `#ifdef OB_TORCH` branch the driver does
+not compile here. Restored inside the branch. The same scope-aware check (a deleted
+declaration whose name still occurs under an `#if` in the same function) found nothing else
+in this lib; `scripts/lpc_warnings.py` now skips such locals (KB 04 §6.10).

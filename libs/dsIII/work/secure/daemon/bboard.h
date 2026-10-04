@@ -3,7 +3,7 @@
 
 void create();
 private void save_board();
-private void restore_board();
+private int restore_board();
 private int valid_access();
 void add_post(string id, string who, string subj, string msg);
 void remove_post(string id, int post);

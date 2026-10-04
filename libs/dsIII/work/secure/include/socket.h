@@ -35,7 +35,8 @@
 #define	EECALLBACK	-29		/* Wait for callback */
 #define EESOCKRLSD	-30		/* Socket already released */
 #define EESOCKNOTRLSD   -31		/* Socket not released */
+#define EEBADDATA       -32		/* sending data with too many nested levels */
 
-#define	ERROR_STRINGS	 32		/* sizeof (error_strings) */
+#define	ERROR_STRINGS	 33		/* sizeof (error_strings) */
 
 #endif /* __SOCKET_H */

@@ -9,7 +9,7 @@ int lastchecked, lastmessage;
 string message, announce, name, final, tempy, cratty, f_global, forwardee;
 object owner;
 
-int read_it(string str);
+string read_it(string str);
 
 int validate(){
     object prev = previous_object();

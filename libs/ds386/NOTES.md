@@ -951,3 +951,12 @@ after `dsIII`/`dshakkard`/`riftsds`. Same two-line fix:
 guard in `secure/sefun/disable.lpc`. Admin `fluffos` / `Mud@2026`
 reached the workroom after the edit. Save-file churn left
 uncommitted.
+
+## 2026-10-03 — elevator buttons, opcprof
+
+`domains/town/obj/ebutton1.lpc` and `ebutton2.lpc` called `car->SetDoor(1)`, the name the
+elevator had before it renamed its own function `SetDoorClosed` (it shadowed
+`LIB_EXITS::SetDoor(dir, file)`); the old name now resolves to the inherited exit function and
+the call is a silent no-op, so the call buttons never closed the car door. Changed to
+`SetDoorClosed(1)` (KB 06 §7.211). `secure/cmds/admins/opcprof.lpc` called the `opcprof()`
+efun that FluffOS removed; the command now says so instead of failing to compile.

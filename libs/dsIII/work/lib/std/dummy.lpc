@@ -8,7 +8,7 @@
 
 #include <lib.h>
 
-inherit LIB_BASE_DUMMY;;
+inherit LIB_BASE_DUMMY;
 inherit LIB_SHADOW_HOOK;
 
 /* ******************* dummy.c driver applies ******************** */

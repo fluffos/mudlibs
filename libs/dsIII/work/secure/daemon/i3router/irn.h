@@ -753,7 +753,7 @@ string Report(){
     if(sizeof(irn_connections))
         foreach(mixed key, mixed val in irn_connections){
             if(!key) continue;
-            if(!irn_connections[key]) return;
+            if(!irn_connections[key]) return 0;
             ret += key+":"+irn_connections[key]["fd"]+" ";
         }
     ret += "\n";

@@ -4,7 +4,7 @@
 string postal_check(string mud);
 string next_post(string mud);
 string resend_post(string mud);
-void send_post(mapping borg, string mud);
+int send_post(mapping borg, string mud);
 int incoming_post(mapping info);
 private string *local_targets(string *str);
 private void save_mailqueue();

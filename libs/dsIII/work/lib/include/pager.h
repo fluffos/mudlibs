@@ -2,7 +2,7 @@
 #define l_pager_h
 
 varargs mixed eventPage(mixed val, string msg_class, function f,mixed args...);
-protected void Page(mapping file);
+protected int Page(mixed tmpfile);
 protected void cmdPage(string str, mapping file);
 varargs private void RazzleDazzle(mixed args...);
 private string GetPagerPrompt(mapping file);

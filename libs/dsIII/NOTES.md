@@ -890,3 +890,37 @@ loading", and an `opcprof` efun this driver build lacks):
   prototype ... does not match`) scattered across `domains/Praxis/*`,
   `lib/props/save.lpc`, `daemon/classes.lpc`, `lib/pager.lpc`, and
   others — each needs its own individual read, not a mechanical fix.
+
+## 深度功能测试（§10.7，2026-10-03, addendum）— corrections and follow-up
+
+Correction to the 2026-10-03 section above: its sentence "Grepped the rest of this session's
+unused-locals diff for the same shape … found no other instance" was wrong. The grep
+was by name, not by scope. A scope-aware check (a deleted declaration whose name still
+occurs, inside the same function body of the original file, on a line under an
+`#if`/`#ifdef`) found 23 more: the declaration had been deleted because the driver does
+not compile the branch that uses it, which silently breaks the branch for the day it is
+compiled. All 23 were restored *inside* their inactive branch (`daemon/map.lpc`,
+`domains/Praxis/roots.lpc`, `lib/body.lpc`, `lib/cedit.lpc` ×2, `lib/chamber.lpc`,
+`lib/lvs/position.lpc`, `secure/cmds/creators/gauge.lpc`, `secure/daemon/autoexec.lpc`,
+`secure/daemon/imc2.lpc`, `secure/daemon/master.lpc`, `secure/lib/net/http.lpc`), the
+same fix `fuzzymatch.lpc` needed, and `scripts/lpc_warnings.py` now refuses to delete such
+a local (KB 04 §6.10).
+
+Follow-up fixes (same day): 15 `(: "name" :)` function pointers in `domains/Praxis/*`
+(a string constant, not a call, in this driver) → `(: name :)` with a forward prototype;
+`domains/town/obj/ebutton1`/`ebutton2` `car->SetDoor(1)` → `SetDoorClosed(1)` (KB 06 §7.211);
+`lib/virtual/virt_land.lpc` `SetCoordinates(int x, int y, int z)` renamed
+`SetVirtualCoordinates` (it clobbered `LIB_ROOM::SetCoordinates(mixed)` in every virtual
+room; the only callers of the 3-int form are in the file itself); return-type/prototype
+families (`limb.lpc` `GetSaveString`, `room.lpc` `RemoveSearch`, `eventDeteriorate` in
+`obj/light`/`obj/whip`, `oob.lpc` `eventRead`, `corpse.lpc` `SetClass`/`GetClass`);
+29 more `varargs` and 14 bare `return;` by the tool; `secure/cmds/admins/opcprof.lpc` now
+reports that the `opcprof()` efun is gone from FluffOS. Oracle against the pre-session
+commit (`8ef71a2827e`): 1385 `nosave`→`protected` flips, no other change except the
+intended `SetCoordinates` rename.
+
+Remaining diagnostics: 1671 `Redeclaration of global variable` (929 files) and 418 `inherited
+from both`, from 46 source files (17 redundant leaf inherits, 8 function overlaps, 4
+partial overlaps, 17 name collisions; queued), and the four files that never compiled
+(`obj/area_room`, `obj/stargate`, `open/prog`, `secure/cmds/admins/opcprof` before this
+change).
