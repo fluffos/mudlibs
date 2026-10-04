@@ -29,9 +29,8 @@ for f, items in sorted(want.items()):
     path = work + f
     try: raw = open(path, "rb").read().decode("latin-1")
     except OSError: continue
-    nl = "\r\n" if "\r\n" in raw else "\n"
-    lines = raw.split(nl)
-    mlines = mask(raw).split(nl)
+    lines = [l.rstrip("\r") for l in raw.split("\n")]     # the driver counts "\n"; a file may mix CRLF and LF
+    mlines = [l.rstrip("\r") for l in mask(raw).split("\n")]
     for fnend, name in sorted(items):
         # function extent: walk back from fnend to the function's opening brace line (depth 0 start)
         end = fnend - 1
@@ -76,8 +75,9 @@ if not apply_:
 for f, lst in sorted(by_file.items()):
     path = work + f
     raw = open(path, "rb").read().decode("latin-1")
-    nl = "\r\n" if "\r\n" in raw else "\n"
-    lines = raw.split(nl)
+    raw_lines = raw.split("\n")
+    cr = [l.endswith("\r") for l in raw_lines]               # per-line CR flags, kept parallel to `lines`
+    lines = [l[:-1] if e else l for l, e in zip(raw_lines, cr)]
     # group by declaration line; one declaration may feed several branches
     bydecl = collections.defaultdict(lambda: collections.defaultdict(list))
     for name, d, c in lst: bydecl[d][c].append(name)
@@ -95,9 +95,11 @@ for f, lst in sorted(by_file.items()):
         for c in sorted(branches, reverse=True):
             moved = [v for v in parts if re.sub(r"[\*\s]|=.*", "", v) in branches[c]]
             lines.insert(c, f"{indent}{typ_clean} {', '.join(moved)};")
+            cr.insert(c, cr[c - 1] if c - 1 < len(cr) else False)
         if keep:
             lines[d - 1] = f"{indent}{typ_clean} {', '.join(keep)};{rest}"
         else:
             del lines[d - 1]
-    open(path, "wb").write(nl.join(lines).encode("latin-1"))
+            del cr[d - 1]
+    open(path, "wb").write("\n".join(l + ("\r" if e else "") for l, e in zip(lines, cr)).encode("latin-1"))
     print("edited", f)

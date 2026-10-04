@@ -90,8 +90,10 @@ def sync_changes(slug, lib):
     manifest = os.path.join(lib, ".synced")
     if os.path.isfile(manifest):
         names.update(n for n in open(manifest, encoding="utf-8").read().split("\n") if n)
-    for args in (["diff", "--name-only", "HEAD", "--", work],
-                 ["ls-files", "-o", "--exclude-standard", "--", work]):
+    # core.quotepath=false: without it git prints a non-ASCII file name as "\346\240..." in quotes, the copy is skipped and
+    # the scan keeps compiling the old text of every file with a Chinese name (its line numbers then drift from the edits)
+    for args in (["-c", "core.quotepath=false", "diff", "--name-only", "HEAD", "--", work],
+                 ["-c", "core.quotepath=false", "ls-files", "-o", "--exclude-standard", "--", work]):
         out = subprocess.run(["git", "-C", REPO] + args, capture_output=True, text=True).stdout
         names.update(n for n in out.split("\n") if n)
     for n in names:
@@ -250,8 +252,13 @@ def fix_nosave_functions(work, rows, public):
     return n_prot, n_drop, manual
 
 
+HEREDOC = re.compile(r"@@?(\w+)[ \t]*\r?\n.*?\r?\n\1\b", re.S)
+
+
 def mask(src):
-    """Same-length copy with comments and string/char literal contents blanked."""
+    """Same-length copy with comments, string/char literal contents and `@TEXT ... TEXT` here-documents blanked (a
+    quote or apostrophe inside help text would otherwise hide the closing braces of the functions after it)."""
+    src = HEREDOC.sub(lambda m: re.sub(r"[^\n]", " ", m.group(0)), src)
     out = list(src)
     i, n = 0, len(src)
     while i < n:
@@ -597,14 +604,48 @@ def fix_pragmas(work, rows):
     return n, manual
 
 
+def drop_high_byte_escapes(line):
+    """delete every lone backslash that is followed by a byte >= 0x80 (the line is read as latin-1: one char per byte);
+    a `\\` pair is skipped as a unit, so an escaped backslash before a multi-byte character stays"""
+    out, i, n, dropped = [], 0, len(line), 0
+    while i < n:
+        c = line[i]
+        if c == "\\" and i + 1 < n:
+            if line[i + 1] == "\\":
+                out.append("\\\\")
+                i += 2
+                continue
+            if ord(line[i + 1]) >= 0x80:
+                dropped += 1
+                i += 1
+                continue
+        out.append(c)
+        i += 1
+    return "".join(out), dropped
+
+
 def fix_escapes(work, rows):
     n = 0
     manual = []
     by_file = collections.defaultdict(set)
+    high = set()
     for f, ln, col, sev, msg in rows:
         m = re.match(r"Unknown escape sequence '(\\.)'", msg)
         if m:
-            by_file[f].add((ln, col, m.group(1)))
+            if m.group(1)[1] == "\ufffd":
+                high.add(f)         # a backslash before a multi-byte character; the driver prints the lead byte as U+FFFD
+            else:
+                by_file[f].add((ln, col, m.group(1)))
+    for f in sorted(high):
+        # Big5 -> UTF-8 conversion leaves a stray backslash after every character whose second byte was 0x5C (KB 03
+        # section 4.4).  The driver already drops it, so deleting it changes nothing.  The warning is reported at the end
+        # of the string or statement, not at the backslash: clean the whole file.
+        path = os.path.join(work, f.lstrip("/"))
+        L = read_lines(path)
+        for k, line in enumerate(L):
+            L[k], d = drop_high_byte_escapes(line)
+            n += d
+        write_lines(path, L)
     for f, sites in by_file.items():
         path = os.path.join(work, f.lstrip("/"))
         L = read_lines(path)

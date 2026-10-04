@@ -28,7 +28,7 @@ if len(sys.argv) < 2 or sys.argv[1].startswith("-"):
     sys.exit(__doc__)
 base = sys.argv[1]
 spec = sys.argv[2:] or ["libs/*/work/*"]
-names = subprocess.run(["git", "-C", REPO, "diff", "--name-only", base, "--"] + spec,
+names = subprocess.run(["git", "-C", REPO, "-c", "core.quotepath=false", "diff", "--name-only", base, "--"] + spec,
                        capture_output=True, text=True).stdout.split("\n")
 TY = r"(?:int|string|object|mixed|mapping|float|function|buffer|status|class\s+\w+)"
 DECL = re.compile(r"^\s*(?:nosave\s+)?" + TY + r"\b[^;]*;\s*$")

@@ -114,6 +114,10 @@ function", hundreds per lib); `scripts/lpc_warnings.py --fix` repairs it (KB 04
   Tokenize each string, un-double `\\`, decode BIG5, then re-escape.
 - Detect: grep `功\`/`許\`, and grep boot output for `Illegal mapping
   format`. This applies to any genuinely BIG5-sourced lib.
+- Source files carry the same stray `\` (UTF-8 after the conversion, so also after `許`->`许`, `縷`->`缕`, `髏`->`髅`,
+  `擺`->`摆`, `蓋`->`盖`): `esI` had 438. The driver drops it and prints `Unknown escape sequence '\<byte>'` at the *end of
+  the string or statement*, not at the backslash, so `scripts/lpc_warnings.py --fix` deletes every `\` before a
+  multi-byte character in each file that reports one (an escaped `\\` pair is kept).
 
 ---
 

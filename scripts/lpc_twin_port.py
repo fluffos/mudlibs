@@ -113,7 +113,7 @@ def hunks(a, b):
 
 
 def changed_paths(src, pre):
-    out = subprocess.run(["git", "diff", "--name-only", pre, "--", f"libs/{src}/work"], cwd=ROOT,
+    out = subprocess.run(["git", "-c", "core.quotepath=false", "diff", "--name-only", pre, "--", f"libs/{src}/work"], cwd=ROOT,
                          capture_output=True, text=True).stdout.split("\n")
     pref = f"libs/{src}/work/"
     return [n[len(pref):] for n in out if n.startswith(pref)]

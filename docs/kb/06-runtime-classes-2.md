@@ -853,6 +853,10 @@ against it.
 **Fix:** count from the end with `<`: `[a..-N]` → `[a..<N]`, `[-N..]` →
 `[<N..]`, `[-N..-M]` → `[<N..<M]`; "to the end" is `[x..]`. Leave range
 *lvalues* alone: `str[0..-1] = foo` is the documented prepend.
+`scripts/lpc_fix_negative_ranges.py SLUG [--apply]` does all three in code only (comments, strings, here-documents blanked),
+skips range lvalues and lists the bounds that are negative *expressions* (`msgs[-max+1..-1]`) for a hand edit; it refuses
+submodule-hosted libs (patch or PR). A 2026-10-04 survey (constant `..-N]`, both `-1` and below) found 1402 sites in 214 libs, 1170 of them
+`..-1]`, 24 libs hosted as submodules.
 **Detection:** the compiler warns `A negative constant as the second element
 of arr[x..y] no longer means indexing from the end` (rvalue end indexes only),
 so `scripts/lpc_warnings.py` sees those; negative *start* indexes need a grep

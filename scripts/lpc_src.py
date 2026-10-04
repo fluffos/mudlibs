@@ -32,9 +32,18 @@ def blank_if0(src):
     return "\n".join(lines)
 
 
+HEREDOC = re.compile(r"@@?(\w+)[ \t]*\r?\n.*?\r?\n\1\b", re.S)
+
+
+def blank_heredocs(src):
+    """blank `@TEXT ... TEXT` here-document text (keeps newlines): a quote or apostrophe inside it would otherwise
+    flip the string state of everything after it and hide the closing braces of the functions that follow"""
+    return HEREDOC.sub(lambda m: re.sub(r"[^\n]", " ", m.group(0)), src)
+
+
 def mask(src):
-    """same-length copy with comments, string/char literal contents and `#if 0` blocks blanked"""
-    src = blank_if0(src)
+    """same-length copy with comments, string/char literal contents, here-documents and `#if 0` blocks blanked"""
+    src = blank_heredocs(blank_if0(src))
     out, i, n = list(src), 0, len(src)
     while i < n:
         c, two = src[i], src[i:i + 2]
