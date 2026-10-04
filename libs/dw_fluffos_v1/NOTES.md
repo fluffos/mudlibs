@@ -192,3 +192,12 @@ this date for the list and the reasoning), plus the one line that is only in thi
 the driver ignores and warns about. `scripts/lpc_warnings.py`: 1695 files compile, 320 do not; 649 distinct diagnostics
 outside the creator-help examples (249 warnings) before, 447 after: the 400 errors are unchanged and the 47 warnings left
 are the same as in `libs/discworld` (33 in the unused `std/living/living.eff_shad.lpc`, 14 in files that do not compile).
+
+## 深度功能测试（§10.7，2026-10-04）— `include/runtime_config.h` was the MudOS-era one
+
+The header numbered the integer settings from 15 where this driver numbers them from 256 (KB 06 §7.89), so
+`get_config(__MAX_BUFFER_SIZE__)` answered `""` and `/net/daemon/http`'s `create()` died with `Trying to put string in
+int` (line 133) every time it was loaded; the web daemon never came up. The header is the driver's own copy now. The
+four settings `http.lpc` reads (`__MAX_BUFFER_SIZE__`, `__MAX_STRING_LENGTH__`, `__MAX_READ_FILE_SIZE__`,
+`__MAX_BYTE_TRANSFER__`) are the only symbols the lib takes from it; `load_object("/net/daemon/http")` answers an object
+now and the rest of the load-and-clone check is unchanged.

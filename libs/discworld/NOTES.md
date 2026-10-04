@@ -702,3 +702,12 @@ none. (`exec` from a telnet session returns nothing here: the game queues each c
 first pass deleted from inactive branches (`mtf2.lpc`, `read_desc.lpc`, `shop_base.lpc`, `craft_shop.lpc`; back in their
 branch), and a read of the diff found a deleted `object ob` in the include fragment `office_code/lists.lpc` whose next line
 reads it (the compiler's "unused" came from a scope an earlier error had confused; restored).
+
+## 深度功能测试（§10.7，2026-10-04）— `include/runtime_config.h` was the MudOS-era one
+
+The header numbered the integer settings from 15 where this driver numbers them from 256 (KB 06 §7.89), so
+`get_config(__MAX_BUFFER_SIZE__)` answered `""` and `/net/daemon/http`'s `create()` died with `Trying to put string in
+int` (line 133) every time it was loaded; the web daemon never came up. The header is the driver's own copy now. The
+four settings `http.lpc` reads (`__MAX_BUFFER_SIZE__`, `__MAX_STRING_LENGTH__`, `__MAX_READ_FILE_SIZE__`,
+`__MAX_BYTE_TRANSFER__`) are the only symbols the lib takes from it; `load_object("/net/daemon/http")` answers an object
+now and the rest of the load-and-clone check is unchanged.
