@@ -34,6 +34,8 @@ Mechanical fixes (positions come from the driver; columns are 1-based BYTES):
                                           the driver already ignores it)
   Number of arguments ... disagrees    -> `varargs` on the declaration the warning is reported on
                                           (either side being varargs silences it; never makes a call fail)
+  Non-void functions must return value -> the bare `return;` on the reported line becomes `return 0;`
+                                          (a bare return already yields 0)
   Unused local variable                -> not touched when the name also appears inside an
                                           #if/#ifdef block of the same function (listed instead)
 A lib's own compiler tests (Lil: /single/tests/) are broken on purpose; pass --skip '^/single/tests/'.
@@ -523,6 +525,30 @@ def fix_arg_counts(work, rows):
     return n, manual
 
 
+def fix_bare_returns(work, rows):
+    """`Non-void functions must return a value`: reported on the line of a bare
+    `return;` inside a function with a return type.  A bare return already yields
+    0, so `return 0;` says the same thing without the warning.  In-line edit."""
+    n = 0
+    manual = []
+    by_file = collections.defaultdict(set)
+    for f, ln, col, sev, msg in rows:
+        if msg.startswith("Non-void functions must return a value"):
+            by_file[f].add(ln)
+    for f, lns in by_file.items():
+        path = os.path.join(work, f.lstrip("/"))
+        L = read_lines(path)
+        for ln in sorted(lns):
+            new, k = re.subn(r"\breturn\s*;", "return 0;", L[ln - 1])
+            if k:
+                L[ln - 1] = new
+                n += k
+            else:
+                manual.append((f, ln, L[ln - 1].strip()[:60], "no bare `return;` on the reported line"))
+        write_lines(path, L)
+    return n, manual
+
+
 def fix_pragmas(work, rows):
     """`#pragma save_binary` and friends: the driver reports "Unknown #pragma,
     ignored" and ignores the line, so a bare pragma line is just deleted.  Runs
@@ -624,11 +650,12 @@ def main():
             sync_changes(a.slug, lib)
             rows2, npass, nfail, raw = scan(lib, a.skip)       # unused-local positions need a rescan after other edits
             na_, m5 = fix_arg_counts(work, rows2)              # in-line edit: keeps every line number
+            nb_, m6 = fix_bare_returns(work, rows2)            # in-line edit
             nu_, m4 = fix_unused_locals(work, rows2)
-            manual_all = m1 + m4 + m5
-            changed = np_ + nd_ + nr_ + ne_ + na_ + nu_
+            manual_all = m1 + m4 + m5 + m6
+            changed = np_ + nd_ + nr_ + ne_ + na_ + nb_ + nu_
             print(f"round {rnd}: nosave functions {np_} protected + {nd_} dropped, range ends {nr_}, "
-                  f"escapes {ne_}, varargs added {na_}, unused locals {nu_}")
+                  f"escapes {ne_}, varargs added {na_}, bare returns {nb_}, unused locals {nu_}")
             sync_changes(a.slug, lib)
             rows, npass, nfail, raw = scan(lib, a.skip)
             if not changed:

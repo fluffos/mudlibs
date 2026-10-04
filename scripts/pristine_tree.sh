@@ -7,8 +7,10 @@
 # (docs/kb/08-formatter-testing.md): the working tree hides missing-directory
 # bugs (docs/kb/06-runtime-classes-2.md §7.203).
 #
-# Usage: scripts/pristine_tree.sh <slug> <port> [dest_dir]
-#   dest_dir defaults to /tmp/pristine-<slug>.  Prints the driver command; it
+# Usage: [REV=<commit>] scripts/pristine_tree.sh <slug> <port> [dest_dir]
+#   dest_dir defaults to /tmp/pristine-<slug>.  REV (default HEAD) builds the tree
+#   from an older commit, e.g. the baseline for a before/after oracle run
+#   (scripts/ds_oracle.py).  Prints the driver command; it
 #   does not start anything, so the caller owns (and kills, by PID) the driver:
 #     cd <dest>/libs/<slug> && setsid nohup <driver> config.fluffos > out 2>&1 &
 #
@@ -45,7 +47,7 @@ if [ -e "$DEST" ] && [ ! -f "$DEST/.pristine-tree" ]; then
 fi
 rm -rf -- "$DEST"
 mkdir -p "$DEST"
-git -C "$REPO_ROOT" archive HEAD "$LIB/work" "$LIB/config.fluffos" | tar -x -C "$DEST"
+git -C "$REPO_ROOT" archive "${REV:-HEAD}" "$LIB/work" "$LIB/config.fluffos" | tar -x -C "$DEST"
 touch "$DEST/.pristine-tree"
 
 CFG="$DEST/$LIB/config.fluffos"

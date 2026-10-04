@@ -849,3 +849,50 @@ so `scripts/lpc_warnings.py` sees those; negative *start* indexes need a grep
 (`\[\s*-\d+\s*\.\.`). A corpus grep for a negative constant end ≤ -2 found
 247 sites in 149 libs (2026-10-03; `genesis` 39, `arkadia` 22, `nirvlp312` 9,
 `es1` 6, `sticklib` 5, ...): a sweep is queued, history libs first.
+
+### 7.210 `lib.h` redefines a `LIB_*` macro to a path that does not exist
+**Symptom:** `warning: Macro 'LIB_LIMB' redefined`; in `dsI` severing a limb prints
+"X's fourth hand is severed!" and then dies at `new(LIB_LIMB)` (`Bad argument 1 to
+EFUN call_other ... Got int(0)`), so the limb never appears and its worn items stay
+on the body. **Cause:** `lib.h` includes `std.h` (`LIB_LIMB DIR_STD "/limb"`, the real
+`/lib/std/limb`) and then redefines it as `DIR_LIB "/limb"`, a stale line pointing at
+a file that is not there; every object that includes `<lib.h>` gets the wrong path and
+`new()` returns 0. **Fix:** delete the stale line (the later Dead Souls releases did).
+**Detection:** a `Macro redefined` warning on a `LIB_*`/`DIR_*` name is not cosmetic
+until both expansions have been checked with `ls`; in a pristine boot run
+`eval return new(LIB_X)`.
+
+### 7.211 A function renamed in one file, its `call_other` callers in other files not
+**Symptom:** the elevator's call buttons stopped closing the door: `car->SetDoor(1)`
+now answers "Door not found." and nothing errors. **Cause:** upstream renamed the
+elevator's own `SetDoor(int)` to `SetDoorClosed(int)` (it shadowed `LIB_EXITS::SetDoor(dir,
+file)`), fixed the calls inside `elevator.lpc`, and left `car->SetDoor(1)` in
+`obj/ebutton1.lpc`/`ebutton2.lpc`. The old name still resolves to the *inherited*
+function, so the stale call "works". Present in `ds386`, `dsIII`, `brassring`,
+`dshakkard`, `riftsds`; `dsII` still had the pre-rename `SetDoor(int)` (consistent, but it
+clashed with `LIB_EXITS::SetDoor`, an arg-count warning) and was renamed in step with
+dsIII. **Fix:** point the callers at the new name (`ds386`, `dsII`, `dsIII` done; the three
+submodule-patch libs need a patch or upstream PR). **Detection:** after any rename, grep
+the whole tree for `->oldname(`: the compiler cannot warn about `call_other`, and an
+inherited function of the same name turns the mistake into a silent no-op.
+
+### 7.212 Directories the archive ships empty, listed with `get_dir`, missing on a clone and on the site
+**Symptom:** `help` answers `*Bad type argument to +.  Had array and int.  Object: /daemon/help
+at line 58 ... 'LoadIndices' ... 'create'` and every later `help` fails too (`dsI`, `dsII`:
+on the site and in any fresh clone; fine on the machine that did the port, where the
+directories exist). **Cause:** the help daemon builds its index with `get_dir(DIR_X "/*.lpc") +
+get_dir(...)`; `get_dir` of a directory that does not exist returns 0, and `array + 0`
+aborts `create()`. The archive ships `secure/cmds/common`, `verbs/spells`, `verbs/undead` as
+empty directories; git drops empty directories, and `scripts/gen_keep_dirs.py` only records
+directories that exist in the LOCAL `work/` tree, which these never did. **Fix:**
+`python3 scripts/raw_only_dirs.py [--apply] SLUG...` compares the pristine `raw/` extraction
+with git plus `wasm_keep_dirs.txt` and lists the directories the lib's own code names (a
+`#define` or literal that expands to exactly that directory); `--apply` appends them to
+`wasm_keep_dirs.txt` (2026-10-03: 186 lines for 19 libs, among them `dsI`, `dsII`, `dsIII`,
+`dshakkard`, `brassring`, `skylib`, `tmi2`, `discworld`, `foundation1/2`). The report reads a
+submodule's own index, but its raw-root guess can be wrong (`deadsouls_fluffos` guesses
+`secure`; skipped): read the printed root before `--apply`. A plain `git clone` still lacks
+the empty directories, only the site recreates them from the list. **Detection:** a pristine
+boot (`scripts/pristine_tree.sh` recreates the list) and `help`; `grep -c 'Bad type argument
+to +' console` after the first creator login. Companion of §7.203 (write paths).
+

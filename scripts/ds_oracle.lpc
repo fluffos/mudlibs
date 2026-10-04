@@ -1,0 +1,171 @@
+/* ds_oracle.lpc -- golden-master probe for the Dead Souls family libs.
+ *
+ * scripts/ds_oracle.py copies this file to <work>/realms/<admin>/oracle.lpc of a
+ * THROWAWAY tree (never into libs/), logs in as the admin and calls probe(path) for each
+ * object.  The probe writes a text fingerprint of the object to oracle.out: which program
+ * defines the final version of every function, every global variable with its type
+ * modifiers, a battery of getter results, and a few dynamic behaviours (radiance, smell,
+ * a lit lamp inside a container, ...).  Run it on HEAD and on the working tree and diff:
+ * a change meant to be behaviour-neutral must leave the diff empty except where the
+ * change is the point (see docs/kb/06-runtime-classes-2.md section 7.213).
+ */
+#include <lib.h>
+
+#define OUTF "/realms/fluffos/oracle.out"
+
+private mixed *CALLS = ({
+    ({ "GetShort" }), ({ "GetLong" }), ({ "GetKeyName" }), ({ "GetId" }), ({ "GetAdjectives" }),
+    ({ "GetMass" }), ({ "GetValue" }), ({ "GetBaseCost" }), ({ "GetDestroyOnSell" }), ({ "GetClass" }),
+    ({ "GetSave" }), ({ "GetSaveString" }), ({ "GetRadiantLight", 0 }), ({ "GetRadiantLight", 20 }),
+    ({ "GetSmell", "default" }), ({ "GetSmells" }), ({ "GetRead", "default" }), ({ "GetReads" }),
+    ({ "GetLanguage" }), ({ "GetOpacity" }), ({ "GetClosed" }), ({ "GetLocked" }), ({ "GetKeys" }),
+    ({ "GetLockStrength" }), ({ "GetArmorType" }), ({ "GetWorn" }), ({ "GetPoison" }),
+    ({ "GetDeterioration" }), ({ "GetCarriedMass" }), ({ "GetMaxCarry" }), ({ "GetAmbientLight" }),
+    ({ "GetDayLight" }), ({ "GetNightLight" }), ({ "GetObviousExits" }), ({ "GetClimate" }),
+    ({ "GetInternalDesc" }), ({ "GetExternalDesc" }), ({ "GetHealthPoints" }), ({ "GetLevel" }),
+    ({ "GetRace" }), ({ "GetName" }), ({ "GetPosition" }), ({ "GetMaxHealthPoints" }),
+    ({ "GetLimbs" }), ({ "GetInventory" }), ({ "GetMoney", "silver" }), ({ "GetCanClose" }),
+    ({ "GetCanLock" }), ({ "CanSell" }), ({ "CanReceive" }), ({ "CanRelease" }),
+    ({ "direct_smell_obj" }), ({ "direct_read_obj" }), ({ "direct_look_obj" }),
+});
+
+private void emit(string s) {
+    write_file(OUTF, s + "\n");
+}
+
+private string clip(string s, int n) {
+    if( strlen(s) > n ) return s[0..n-1] + "...";
+    return s;
+}
+
+private string callit(object ob, mixed *call) {
+    mixed r;
+    string e;
+
+    if( !function_exists(call[0], ob, 1) ) return "-";
+    e = catch( r = call_other(ob, call) );
+    if( e ) return "ERR " + clip(replace_string(e, "\n", " "), 100);
+    return clip(identify(r), 300);
+}
+
+private void row(string label, string val) {
+    emit("    " + label + " = " + val);
+}
+
+private void fingerprint(object ob) {
+    mapping seen = ([]);
+    string *fns, *rows;
+    mixed *vars;
+
+    fns = sort_array(functions(ob), 1);
+    rows = ({});
+    foreach(string fn in fns) {
+        string f;
+
+        if( seen[fn] ) continue;
+        seen[fn] = 1;
+        f = function_exists(fn, ob, 1);
+        rows += ({ fn + " @ " + (f ? f : "?") + (function_exists(fn, ob) ? " pub" : " hid") });
+    }
+    emit("  functions: " + sizeof(rows));
+    foreach(string r in rows) emit("    fn " + r);
+    vars = variables(ob, 1);
+    emit("  variables: " + sizeof(vars));
+    foreach(mixed v in vars) emit("    var " + identify(v));
+}
+
+private void getters(object ob) {
+    emit("  getters:");
+    foreach(mixed *c in CALLS) row(identify(c), callit(ob, c));
+}
+
+private void dynamic(object ob) {
+    object lamp;
+
+    emit("  dynamic:");
+    if( function_exists("SetRadiantLight", ob) ) {
+        catch( ob->SetRadiantLight(7) );
+        row("SetRadiantLight(7) -> GetRadiantLight(0)", callit(ob, ({ "GetRadiantLight", 0 })));
+        row("SetRadiantLight(7) -> GetRadiantLight(20)", callit(ob, ({ "GetRadiantLight", 20 })));
+        catch( ob->SetRadiantLight(0) );
+    }
+    if( function_exists("SetSmell", ob) ) {
+        catch( ob->SetSmell("oracle smell") );
+        row("SetSmell(str) -> GetSmell(default)", callit(ob, ({ "GetSmell", "default" })));
+        catch( ob->SetSmell("probe", "probe smell") );
+        row("SetSmell(probe) -> GetSmell(probe)", callit(ob, ({ "GetSmell", "probe" })));
+        row("GetSmells()", callit(ob, ({ "GetSmells" })));
+        catch( ob->RemoveSmell("probe") );
+        row("RemoveSmell(probe) -> GetSmells()", callit(ob, ({ "GetSmells" })));
+        catch( ob->RemoveSmell("default") );
+    }
+    if( function_exists("SetRead", ob) ) {
+        catch( ob->SetRead("oracle text") );
+        row("SetRead(str) -> GetRead(default)", callit(ob, ({ "GetRead", "default" })));
+        catch( ob->SetRead("default", 0) );
+    }
+    if( function_exists("GetSaveString", ob) ) {
+        row("GetSaveString (after dynamic edits)", callit(ob, ({ "GetSaveString" })));
+    }
+    if( function_exists("CanReceive", ob) && function_exists("GetRadiantLight", ob) ) {
+        lamp = new(LIB_ITEM);
+        if( lamp ) {
+            lamp->SetKeyName("probe lamp");
+            lamp->SetId( ({ "lamp" }) );
+            lamp->SetShort("a probe lamp");
+            lamp->SetRadiantLight(5);
+            catch( lamp->eventMove(ob) );
+            row("lamp(5) inside? ", environment(lamp) == ob ? "yes" : "no");
+            row("lamp inside -> GetRadiantLight(0)", callit(ob, ({ "GetRadiantLight", 0 })));
+            row("lamp inside -> GetRadiantLight(20)", callit(ob, ({ "GetRadiantLight", 20 })));
+            row("lamp inside -> GetAmbientLight", callit(ob, ({ "GetAmbientLight" })));
+            catch( lamp->eventDestruct() );
+            if( lamp ) destruct(lamp);
+        }
+    }
+}
+
+string probe(string path) {
+    object ob;
+    string e, kind;
+
+    emit("OBJ " + path);
+    e = catch( ob = load_object(path) );
+    if( e ) {
+        emit("  LOADERR " + clip(replace_string(e, "\n", " "), 200));
+        return "loaderr";
+    }
+    if( !ob ) {
+        emit("  NOOBJ");
+        return "noobj";
+    }
+    kind = "blueprint";
+    if( !inherits(LIB_ROOM, ob) && !userp(ob) && path != "PLAYER" ) {
+        object c;
+
+        e = catch( c = new(path) );
+        if( !e && c ) {
+            ob = c;
+            kind = "clone";
+        }
+    }
+    emit("  kind: " + kind);
+    fingerprint(ob);
+    getters(ob);
+    dynamic(ob);
+    if( kind == "clone" ) {
+        catch( ob->eventDestruct() );
+        if( ob ) destruct(ob);
+    }
+    return "ok";
+}
+
+string probe_player() {
+    object ob = this_player();
+
+    emit("OBJ PLAYER " + base_name(ob));
+    fingerprint(ob);
+    getters(ob);
+    dynamic(ob);
+    return "ok";
+}

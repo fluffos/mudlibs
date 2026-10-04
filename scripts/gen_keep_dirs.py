@@ -22,6 +22,11 @@ Run this from a machine where the libs have actually been booted (i.e. the
 runtime dir shapes exist on disk) whenever a lib gains new runtime dirs,
 and commit the result.
 
+It cannot see directories the original archive shipped EMPTY and the port
+never had (a `get_dir()` of one returns 0 and aborts the help daemon):
+scripts/raw_only_dirs.py reads the pristine raw/ extraction for those
+(docs/kb/06-runtime-classes-2.md section 7.212).
+
 Usage:
   python3 scripts/gen_keep_dirs.py                  # every lib, REPLACE all lines
   python3 scripts/gen_keep_dirs.py SLUG [SLUG ...]  # rescan only these libs,

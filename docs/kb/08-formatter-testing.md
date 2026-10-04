@@ -213,3 +213,25 @@ Run the untested subtrees directly (via `eval` on the runner's own
 `recurse()`). On `sluggymud` the tail held 8 more stale-path bugs plus
 a fixture that `shutdown()`s the driver after 60s. Know that before
 running a whole suite live.
+
+### 10.12 Golden-master oracle for refactors that must not change behaviour
+`scripts/ds_oracle.py` + `scripts/ds_oracle.lpc` (Dead Souls family). Build two throwaway
+trees, the baseline (`REV=<sha> scripts/pristine_tree.sh SLUG PORT DIR`, `REV` defaults to
+HEAD) and HEAD plus the working-tree edits (`pristine_tree.sh` + `lpc_warnings.sync_changes`),
+boot each, run `python3 scripts/ds_oracle.py DIR/libs/SLUG/work PORT ADMIN PW out.txt --lib`
+(admin names and passwords: `dsI`/`dsII` `fluffos`/`fluffwiz123`, `dsIII` `fluffos`/`Mud@2026`),
+kill each driver by exact PID, `diff` the two files (clone numbers are normalised). Per
+probed program it records the file that defines the final version of every function and
+whether it is public (`function_exists` with and without the flag), every global variable
+with its modifiers, ~55 getters, and dynamic behaviour (radiance, smell, a lit lamp inside a
+container, save string after edits). One run takes 1-3 minutes per lib.
+A pure `nosave`→`protected` sweep must produce *only* `pub`→`hid` flips: `dsII` 212 distinct
+functions and nothing else, `dsI` 769 flips plus the intended `Level`→`NpcLevel` rename,
+`dsIII` 1385 flips plus the intended `SetCoordinates` rename. Audit the flipped names with a
+grep for cross-object callers: `apply_low` lets driver-origin calls (`create`, `init`,
+`heart_beat`, `add_action`/`input_to`/`get_char`/`ed` callbacks) ignore visibility and lets
+`this_object()->f()` reach protected and private functions; only a call from another
+object to a protected function fails (console: `apply() with insufficient permission`).
+Limits: it probes `lib/` programs, not domain leaf files; a value that is random per
+creation (an elevator's max HP) differs between runs and is noise.
+
