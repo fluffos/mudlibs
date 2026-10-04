@@ -746,3 +746,29 @@ admin; the HEAD console prints 769 compile warnings while it boots, the new one 
 ## 深度功能测试（§10.7，2026-10-04）— negative range ends
 
 `scripts/lpc_fix_negative_ranges.py`: 8 line(s) in 2 file(s) count a range from the end with `<` (`x[a..-1]` -> `x[a..<1]`, `x[-2..]` -> `x[<2..]`; KB 06 §7.209). In this driver a negative constant end gave `""` / `({ })` and a negative start the whole value, so each of these returned the wrong slice; the compile warning `A negative constant as the second element of arr[x..y]` is gone from the files that compile. Range lvalues (`s[0..-1] = text`, the prepend idiom) are left alone. A paired compile of the changed files at HEAD and in the working tree showed no new error.
+
+## 深度功能测试（§10.7，2026-10-04）— `<../x.h>` includes resolve: 184 more files load, 0 warnings left
+
+`#include <../hole.h>` (185 files under `d/`) names a header relative to the including file. The driver refuses `..` in a
+`<...>` name and resolves only a quoted include against the including file, so every one of those NPCs, weapons and armours
+died with `Cannot #include`, and so did everything that used the macros the header defines (the earlier section's "missing
+`../hole.h`-style includes" was this, not missing headers: 178 of the 184 headers are where the name says). A wizard's `goto
+/d/deathland/dwarf/center` answered `No program in object`, as did the Deathland fog, palace and troll rooms, `cook_master`,
+the island vampire and the dragon-bone amulet. `adm/obj/master.lpc` now answers `include_file()` with `"./" + path` for a
+name that starts `../` (KB 04 §6.1). `lpcc --batch` (it runs `create()`) loads 178 of the 186 files that carry such an include
+(HEAD: 1), and a live session against HEAD and the working tree shows the rooms and clones working where HEAD printed the
+error. The 8 that still fail are content gaps, left: `liang_shan/monster/guard2.lpc` wields `gurad_sword` that no weapon
+directory has, `mumar/monster/temp.lpc` is a draft with a broken `if`, `d/island/monster/{feller,old_feller}.lpc` include
+`../hole.h` where the header lives in `d/island/hole/`, `d/scholar/demand/where/{fire_beast,princess}.lpc` include the headers
+of two other areas, and `mumar/UNDER/MONSTER/{armor,weapon}_smith.lpc` sit in a directory of upper-case DOS names (`*.C`) that
+is no part of the game. `d/noden/drow/mob/ghost.lpc` had lost the `);` after its `set_long` here-document and the `()` of
+`my_tactic`; both are back.
+
+Newly loading files showed what they had been hiding (24 unused locals and 11 stray backslashes, mechanical), and the
+hand-fixes: `obj/shells/shsh.lpc` used `buffer` and `class` as names (both are types here: the saved colour pair is now
+`buffer1`, so a shell saved with the old name loses that one colour setting; `class` -> `cls`) and 50 of its functions were
+`nosave`; `adm/daemons/mailmesg.lpc` had `//#include <config.h>` commented out and no `SAVE_EXTENSION`, so the daemon never
+compiled; `d/noden/asterism/monster/gnome_archelder1.lpc` used `ref`, and its `die()` is the body's `varargs void die(int
+silent)`; `goomay/monster/army.lpc` `remove()` is `void`. `scripts/lpc_warnings.py esI`: 5918 files compile, 1117 do not -> 6102
+/ 933; 0 warnings and 246 errors, all in files that still do not load. `scripts/lpc_audit_removed_locals.py HEAD` found nothing
+a function still reads.

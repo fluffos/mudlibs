@@ -28,7 +28,8 @@ detection.
 - **`..` in include paths is forbidden.** Use the real absolute path.
   - **`#include <../hole.h>`** (a header named relative to the including file, in angle brackets) is the same
     refusal: the driver skips the search for any `<...>` name with `..` in it and resolves only a quoted one against
-    the including file. 183 + 185 files under `d/` of `es1_win` and `esI` died with `Cannot #include` and a second
+    the including file. 183 + 185 files under `d/` of `es1_win` and `esI` (and 35, 8, 7, 3 and 3 in `kxkjii2`, `kxkj`, `darkelib`, `sunshadow`,
+    `shadowgate`) died with `Cannot #include` and a second
     error wherever the missing header's macros were used (`inherit MONSTER;` with `MONSTER` undefined: *syntax error,
     unexpected L_IDENTIFIER, expecting L_STRING*). One `master::include_file()` fixes them all: an answer that
     differs from the name makes the driver resolve it like a quoted include through `merge()`, which understands `..`:
@@ -38,7 +39,7 @@ detection.
         return path;
     }
     ```
-    (`kxkjii2` and `xyxy2` already answer for an absolute name; one function can do both.) Detection:
+    (`kxkjii2` already answered for an absolute name and `xyxy2` still does; one function can do both.) Detection:
     `grep -rlE '#[ \t]*include[ \t]*<\.\./' libs/<slug>/work`, or a scan whose top error is *Cannot #include ../x.h*
     in dozens of files. `lpcc --batch` runs `create()`, so feeding it those files proves they load.
 - **Case sensitivity.** `<Action.h>` vs `action.h`. One wrong-case

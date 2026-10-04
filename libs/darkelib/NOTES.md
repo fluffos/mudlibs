@@ -858,3 +858,13 @@ Live (pristine tree plus the working-tree changes, native driver): the seeded `f
 character (`qatester`) registers, picks `high-man` in the setter room, assigns stats, answers the ANSI question and
 lands with `score`, `inventory`, `colour tell hired` and `who` working. The error log directory stayed empty and the
 driver printed no `insufficient permission` line.
+
+## 深度功能测试（§10.7，2026-10-04）— `<../x.h>` includes resolve: 4 more files load
+
+7 files under `d/damned/guilds/mercenary/` and `join_rooms/` include a header named relative to themselves in angle brackets
+(`#include <../merc.h>`); the driver refuses `..` in a `<...>` name. `adm/obj/master.lpc` now answers `include_file()` with
+`"./" + path` for such a name (KB 04 §6.1). `lpcc --batch` loads 5 of the 8 files that carry such an include (HEAD: 1).
+Still failing, left: `join_rooms/dblw3.lpc` (`../daybreak.h` is not in the archive) and the two mercenary guildmasters
+(`mon/cg_gm.lpc`, `mon/merc_gm.lpc`), whose guild token names `/d/damned/guilds/join_rooms/mercenary_join`: the archive only
+has it as `mercenary_join.c.jdp`. `mercenary/weapon/gm_axe.lpc` got the sibling guild items' `int get() { return
+autoload::get(); }` for the warning it now showed.

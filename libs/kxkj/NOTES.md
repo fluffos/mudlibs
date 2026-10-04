@@ -964,3 +964,11 @@ compile check (PASS) -- not individually live-boot-tested.
 ## 深度功能测试（§10.7，2026-10-04）— negative range ends
 
 `scripts/lpc_fix_negative_ranges.py`: 21 line(s) in 10 file(s) count a range from the end with `<` (`x[a..-1]` -> `x[a..<1]`, `x[-2..]` -> `x[<2..]`; KB 06 §7.209). In this driver a negative constant end gave `""` / `({ })` and a negative start the whole value, so each of these returned the wrong slice; the compile warning `A negative constant as the second element of arr[x..y]` is gone from the files that compile. Range lvalues (`s[0..-1] = text`, the prepend idiom) are left alone. A paired compile of the changed files at HEAD and in the working tree showed no new error.
+
+## 深度功能测试（§10.7，2026-10-04）— `<../x.h>` includes resolve: 5 more files load
+
+8 files include a header named relative to themselves in angle brackets (`#include <../badman.h>`); the driver refuses `..` in
+a `<...>` name. `adm/obj/master.lpc` now answers `include_file()` with `"./" + path` for such a name (KB 04 §6.1). `lpcc
+--batch` loads 6 of the 9 files that carry such an include (HEAD: 1); `open/start/room/bad{2,3,4}.lpc` still fail, their
+`../badman.h` is not in the archive. The lib's warnings pass has not been done (the master itself still declares `nosave`
+functions; stray Big5 backslashes in `open/` files).

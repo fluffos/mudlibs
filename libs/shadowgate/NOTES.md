@@ -578,3 +578,11 @@ respectively).
 ## 深度功能测试（§10.7，2026-10-04）— negative range ends
 
 `scripts/lpc_fix_negative_ranges.py`: 1 line(s) in 1 file(s) count a range from the end with `<` (`x[a..-1]` -> `x[a..<1]`, `x[-2..]` -> `x[<2..]`; KB 06 §7.209). In this driver a negative constant end gave `""` / `({ })` and a negative start the whole value, so each of these returned the wrong slice; the compile warning `A negative constant as the second element of arr[x..y]` is gone from the files that compile. Range lvalues (`s[0..-1] = text`, the prepend idiom) are left alone. A paired compile of the changed files at HEAD and in the working tree showed no new error.
+
+## 深度功能测试（§10.7，2026-10-04）— `<../x.h>` includes resolve: 3 more files load
+
+3 files in old areas (`d/dragon/old/sewer/fall1.lpc`, `d/dagger/derro/old/mon/elemental.lpc`,
+`d/islands/common/eldebaro/eldebaro/ob/runestone.lpc`) include a header named relative to themselves in angle brackets; the
+driver refuses `..` in a `<...>` name. `adm/obj/master.lpc` now answers `include_file()` with `"./" + path` (KB 04 §6.1) and all
+three load. The lib's warnings pass has not been done (unused locals in the master, redeclared `ac`/`size` in
+`derro/old/mon/elemental.lpc`).

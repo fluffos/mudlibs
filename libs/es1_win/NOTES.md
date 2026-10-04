@@ -798,3 +798,8 @@ Found here, not in esI:
 Checked: `scripts/lpc_audit_removed_locals.py HEAD` over 2526 removed declarators found nothing a function still reads, and a
 live pair (HEAD and working tree, `fluffos` admin) logged in, walked `look` / `goto` / `clone` through the Deathland and
 island files that HEAD refused with no new error in the driver output.
+
+(2026-10-04, later the same day) `obj/shells/shsh.lpc`'s blind `buffer` -> `buffer1` / `cursor` -> `cursor1` conversion had also
+changed text the player sees: the `/buffer` verb itself, the `Cursor [` / `Buffer [` prompts, the buffer view's banner and its
+`[Top of Buffer]` / `[End of Buffer]` / `[Buffer view closed]` lines and the recall message. The strings read as in `esI` again; the
+function-name strings (`"open_buffer1"`, `"cursor1_colour"`, ...) keep their renamed targets.
