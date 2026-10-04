@@ -639,3 +639,30 @@ this fix only silences the spurious daemon-load broadcast.
 - **Organic (non-admin) skill/teacher acquisition**: no teacher
   NPC/soul command exists anywhere in this archive (see above);
   genuinely unreachable, not merely unbudgeted.
+
+## 深度功能测试（§10.7，2026-10-04）— `#pragma no_warnings` removed, every compile warning fixed
+
+`adm/include/global.h` opened with `#pragma no_warnings` (every file that includes it was silenced) and three
+commands (`cmds/creator/_goto.lpc`, `cmds/system/_massreplace.lpc`, `_replace.lpc`) carried their own. With the
+pragmas gone: 417 distinct diagnostics. `scripts/lpc_warnings.py rifts2 --fix` did the mechanical classes (124
+`nosave` functions -> `protected` and 70 dropped, 174 unused locals, 6 `varargs`, 2 bare returns, 2 negative range
+ends), then by hand:
+- `std/user/tsh.lpc` inherits `cstack` and `history`, which both define `alloc()` and `enqueue()` with different
+  signatures; the shell calls each by name (`cstack::`, `history::`), so it now defines the two bare names as
+  history's (what `history.lpc`'s own calls always reached).
+- `adm/daemon/finger_d.lpc` declared a second `true_name` next to the user body's (renamed `fd_true_name`; the
+  daemon's own `query_true_name()` reads it); `std/obj/dark_orb.lpc` and `light_orb.lpc` redeclared `/std/Object`'s
+  `creator` (now `orb_creator`; the strings in the "only the creator" messages are untouched).
+- Three `?:` with an `int` branch next to a `string` one (the bulletin board's index numbers, the watch tower's
+  clock, `_goto`'s object-or-path destination), a stray `tmp + "";` in `daemon/network.lpc`, and `_callouts.lpc`'s
+  `args` moved into the `#if` branch that uses it.
+- `cmds/mortal/who/_who.lpc` (a stale copy of the `who` command) declared `string *argv;` before `inherit DAEMON;`,
+  which this driver rejects; it compiles now.
+
+**Result: 417 -> 28 distinct diagnostics**, all errors in twelve files that never compiled: `cmds/cmds_m.lpc`
+(`ROOT_UID` from a TMI header), the two `locker_hash.lpc` copies and `d/diewarzau/{misc/tmp_obj,save_items2}.lpc` (work in
+progress with a `#inherit` typo and missing semicolons), `d/standard/obj/mon/atmos.lpc` (`set_alignment()` takes a
+string), `doc/etc/func_spec.lpc`, `std/adt/{iqueue,istack}.lpc`, `std/castle.lpc` (`DIR_CASTLES_HM`),
+`std/diewarzau/obj/misc/clone_soul.lpc` (truncated) and `std/obj/container.lpc` (a new save system on an `::save()`
+its parent lacks). Live as `fluffos` on a working-tree copy: `look`, `who`, `finger fluffos`, `cd`, `pushd`/`popd`
+(the directory stack stays empty unless the `pushd` environment variable sets a size, in HEAD as well), `score`, `ls`.
