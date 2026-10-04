@@ -779,3 +779,11 @@ Two-sided shop already verified 2026-09-01; not re-run. Same
 alone. Admin `fluffos` / `Mud@2026` logged in after the edit
 (village bank / Zoe). Save-file churn from this boot left
 uncommitted.
+
+## 2026-10-03 — elevator buttons
+
+`domains/town/obj/ebutton1.lpc` and `ebutton2.lpc` called `car->SetDoor(1)`, the name the elevator had before
+it renamed its own function `SetDoorClosed` (it shadowed `LIB_EXITS::SetDoor(dir, file)`); the old name
+resolves to the inherited exit function and the call is a silent no-op, so the call buttons never closed the
+car door. Changed to `SetDoorClosed(1)`, as in dsIII and ds386 (KB 06 §7.211). The rest of this lib's compile
+warnings are still to do (queue: Dead Souls siblings).

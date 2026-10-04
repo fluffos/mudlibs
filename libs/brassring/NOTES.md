@@ -526,3 +526,11 @@ Same heartbeat bug as `deadsouls_fluffos`: `lib/body.lpc` called
 collapse/`call_other(0)` spam after the reboot used for this buy.
 Pet-shop adopt was not re-run. 拜师 analogue is Dead Souls class
 join / skill trainers, already covered 2026-08-31.
+
+## 2026-10-03 — elevator buttons
+
+`domains/town/obj/ebutton1.lpc` and `ebutton2.lpc` called `car->SetDoor(1)`, the name the elevator had before
+it renamed its own function `SetDoorClosed` (it shadowed `LIB_EXITS::SetDoor(dir, file)`); the old name
+resolves to the inherited exit function and the call is a silent no-op, so the call buttons never closed the
+car door. Changed to `SetDoorClosed(1)`, as in dsIII and ds386 (KB 06 §7.211). The rest of this lib's compile
+warnings are still to do (queue: Dead Souls siblings).
