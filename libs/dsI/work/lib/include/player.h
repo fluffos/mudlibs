@@ -11,9 +11,9 @@ class quest {
     string Description;
 }
 
-nosave void create();
-nosave void heart_beat();
-nosave void net_dead();
+protected void create();
+protected void heart_beat();
+protected void net_dead();
 void eventReconnect();
 
 int cmdListen(string str);
@@ -58,7 +58,7 @@ string GetCapName();
 int ResetLevel();
 string SetClass(string str);
 string SetGuild(string guild);
-varargs nosave int AddHealthPoints(int x, string limb, object agent);
+varargs protected int AddHealthPoints(int x, string limb, object agent);
 int GetLanguageLevel(string lang);
 int is_living();
 mapping *GetDeaths();

@@ -15,13 +15,13 @@ class moon {
     string Description;
 }
 
-nosave void create();
-nosave void eventConfigure();
-nosave void eventDawn();
-nosave void eventMorning();
-nosave void eventTwilight();
-nosave void eventNight();
-nosave void eventMidnight();
+protected void create();
+protected void eventConfigure();
+protected void eventDawn();
+protected void eventMorning();
+protected void eventTwilight();
+protected void eventNight();
+protected void eventMidnight();
 int GetCurrentDay();
 string GetCurrentDayName();
 string GetCurrentMonth();

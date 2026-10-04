@@ -1,7 +1,7 @@
 #ifndef l_fish_h
 #define l_fish_h
 
-nosave void create();
+protected void create();
 
 mixed can_fish_with_obj();
 

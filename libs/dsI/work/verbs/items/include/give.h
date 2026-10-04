@@ -1,7 +1,7 @@
 #ifndef l_give_h
 #define l_give_h
 
-nosave void create();
+protected void create();
 
 mixed can_give_liv_obj();
 mixed can_give_obj_to_liv();

@@ -1,8 +1,8 @@
 #ifndef l_body_h
 #define l_body_h
  
-nosave void create();
-nosave void heart_beat();
+protected void create();
+protected void heart_beat();
 void restart_heart();
 
 int CanFly();
@@ -39,7 +39,7 @@ varargs int AddFingers(string limb, int x);
 int GetFingers(string limb);
 varargs object *GetWorn(string limb);
 varargs mixed GetWielded(string limb);
-varargs nosave int AddHealthPoints(int x, string limb, object agent);
+varargs protected int AddHealthPoints(int x, string limb, object agent);
 varargs int GetHealthPoints(string limb);
 varargs int GetMaxHealthPoints(string limb);
 int AddMagicPoints(int x);
@@ -76,7 +76,7 @@ int GetHeartRate();
 int GetHealRate();
 /* pure virtual */ string GetShort();
 /* pure virtual */ varargs mixed eventPrint(mixed msg, mixed cl, mixed three);
-/* pure virtual */ varargs void SetParalyzed(int x, function f);
+/* pure virtual */ varargs int SetParalyzed(int x, function f);
 /* pure virtual */ varargs mixed eventMoveLiving(mixed dest, string omsg,
 						 string imsg);
 

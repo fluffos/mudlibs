@@ -1,7 +1,7 @@
 #ifndef l_drop_h
 #define l_drop_h
 
-nosave void create();
+protected void create();
 
 mixed can_drop_obj(string verb);
 mixed can_drop_wrd_wrd(string amt, string curr);

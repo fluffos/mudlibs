@@ -1,7 +1,7 @@
 #ifndef l_use_h
 #define l_use_h
 
-nosave void create();
+protected void create();
 
 mixed can_use_obj_to_str(string str);
 

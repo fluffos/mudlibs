@@ -824,3 +824,55 @@ the armour, purse 40000→10057 electrum (40000−29943). Integer
 in §10.7 (2026-08-27). Not re-run. Throwaway `shopdsj` save removed
 before commit; `shopdsi` never got a save file (failed on the
 mkdir bug).
+
+## 深度功能测试（§10.7，2026-10-03）— compile warnings
+
+Scope: every compiler warning the driver prints for this lib, fixed at its source
+(AGENTS.md Conventions, 2026-10-03; KB 04 §6.10). Method: `python3
+scripts/lpc_warnings.py dsI --fix` over all 585 `.lpc` files, a hand pass over what the
+tool lists, a golden-master comparison of the 130 `lib/` programs against HEAD
+(`scripts/ds_oracle.py`, KB 08 §10.12), and a pristine-tree live boot
+(`scripts/pristine_tree.sh`; admin `fluffos`/`fluffwiz123`, a fresh mortal registered,
+look/score/inventory, a 26-command admin battery).
+
+Result: 1387 distinct diagnostics → 125. What is left is 60 `Redeclaration of global
+variable` and 37 `inherited from both` warnings in 24 files (the duplicate-inherit
+diamonds in `lib/interactive`, `npc`, `player`, `std/storage`, `std/corpse`, plus the
+`CanSell`/`GetSave` function overlaps; queued) and the files that never compiled (§6
+below, `secure/daemon/remote.lpc` and `secure/daemon/bugs.lpc` too).
+
+Mechanical (tool): 34 `#pragma no_warnings`-style lines deleted; 875 `nosave` functions
+→ `protected` and 199 left public because the name is called through `->` or as a
+function pointer; 115 unused locals removed (8 by hand); 2 unknown escapes; 16 `varargs`
+on arg-count mismatches. The `nosave` function is the historical `static`→`nosave` port
+artifact: the driver ignores the modifier on a function, so those functions were public
+to every object; `protected` restores the original `static`. The oracle on the 130
+`lib/` programs: 769 `pub`→`hid` flips, no other change in function resolution; every
+flipped name was grepped for cross-object callers (the survivors are `this_object()->f()`
+or driver callbacks: `add_action`, `input_to`, `filter(..., "fn", this_object())`).
+
+Real bugs found while doing it (all fixed):
+- `secure/include/lib.h` redefined `LIB_LIMB` to the non-existent `/lib/limb`; severing a
+  limb died at `new(LIB_LIMB)` (KB 06 §7.210).
+- `daemon/soul.lpc`: `res == who;` where `res = who;` was meant.
+- `lib/living.lpc` `CanCastMagic()`: `if( !env ) "You are nowhere!";` lost its `return`,
+  so a living with no environment went on to `env->GetProperty(...)`.
+- `cmds/creators/force.lpc`: the usage line `"Force whom to do what?";` lost its `return`.
+- `secure/cmds/players/tell.lpc`: `return ("help", ...)` is the comma operator and
+  returned only the second value.
+- `lib/npc.lpc` kept a private `Level` that collided with the inherited one; renamed
+  `NpcLevel` (it is `nosave`, no save-file impact). `lib/nmsh.lpc` declared a second,
+  unused `CommandFail` (the real one is in `lib/command.lpc`); removed.
+- `lib/interactive.lpc` `SetId()`/`SetCapName()` were `void` but have value-returning
+  siblings and callers; now return `UserId`/the name. `lib/std/limb.lpc`
+  `int GetSaveString()` → `string`; `lib/command.lpc` `string GetClient()` → `int` (it
+  returns 0); `secure/include/socket.h` had `ERROR_STRINGS 32` but 33 error codes and no
+  `EEBADDATA`; `classes.h`/`races.h` had a stray `;` after a closing brace.
+- `lib/std/room.lpc` `RemoveItem()`/`SetItems()` were `void` with bare `return`s in a
+  family that returns `mixed`; `secure/cmds/creators/update.lpc` prototype type fixed.
+- Unknown escapes (`"%s\.%s"` in `secure/daemon/letters.lpc`) and an empty `if` in
+  `daemon/intermud.lpc` removed.
+
+The `help` command is broken in a fresh clone and on the site (`get_dir()` of
+`secure/cmds/common`, which the archive ships empty, returns 0): see KB 06 §7.212; the
+eight directories the code names are now in `scripts/wasm_keep_dirs.txt`.

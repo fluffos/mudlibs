@@ -4,7 +4,7 @@
 class Stat {
     int Class;
     int Average;
-};
+}
 
 class Race {
     mixed *Limbs;
@@ -15,7 +15,7 @@ class Race {
     int Complete;
     int PlayerFlag;
     string Language;
-};
+}
 
 int GetArmour(string str);
 int GetResistance(string str);

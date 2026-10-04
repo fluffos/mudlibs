@@ -1,7 +1,7 @@
 #ifndef l_teller_h
 #define l_teller_h
  
-nosave void create();
+protected void create();
 string SetBankName(string str);
 string SetLocalCurrency(string str);
 int SetLocalFee(int x);
