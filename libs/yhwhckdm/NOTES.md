@@ -86,3 +86,7 @@ preload/`shopd`/`quit` 的 unused-variable 警告，无同形功能缺口。
 - 嫁接上限：`help newbie` 桃源文案与参考树扬州起点不一致；玩家
   `quest` 空、无 `job` 指令（任务精灵 ambient 自转不等于可玩任务线）。
 - 端口配置已改为 40321（本轮空闲优先），未改回 40270。
+
+## 深度功能测试（§10.7，2026-10-04）— negative range ends
+
+`scripts/lpc_fix_negative_ranges.py`: 4 line(s) in 1 file(s) count a range from the end with `<` (`x[a..-1]` -> `x[a..<1]`, `x[-2..]` -> `x[<2..]`; KB 06 §7.209). In this driver a negative constant end gave `""` / `({ })` and a negative start the whole value, so each of these returned the wrong slice; the compile warning `A negative constant as the second element of arr[x..y]` is gone from the files that compile. Range lvalues (`s[0..-1] = text`, the prepend idiom) are left alone. A paired compile of the changed files at HEAD and in the working tree showed no new error.

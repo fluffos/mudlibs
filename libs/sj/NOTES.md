@@ -351,3 +351,7 @@ track，直接 rm），`fluffosb` 的临时技能/门派/称号/score 已用
 168/2660 处无关失败，与本次改动无关，未深究）；`~/src/fluffos` 的
 Node 格式化工具本次环境不可用（`node` 命令缺失），未运行 §9 格式化
 ——改动本身极小（两处括号/一处存在性守卫），未引入格式问题。
+
+## 深度功能测试（§10.7，2026-10-04）— negative range ends
+
+`scripts/lpc_fix_negative_ranges.py`: 5 line(s) in 2 file(s) count a range from the end with `<` (`x[a..-1]` -> `x[a..<1]`, `x[-2..]` -> `x[<2..]`; KB 06 §7.209). In this driver a negative constant end gave `""` / `({ })` and a negative start the whole value, so each of these returned the wrong slice; the compile warning `A negative constant as the second element of arr[x..y]` is gone from the files that compile. Range lvalues (`s[0..-1] = text`, the prepend idiom) are left alone. A paired compile of the changed files at HEAD and in the working tree showed no new error.

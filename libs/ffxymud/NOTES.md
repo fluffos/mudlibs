@@ -135,3 +135,7 @@ Live pass, port **40142**. Prior §10.7 already did 白驼山李教头 `apprenti
 **Shop**: `goto /d/city/zuixianlou`. `clone /clone/money/gold` then `buy jitui` succeeded (“你向店小二买下一根烤鸡腿”, inventory 鸡腿 + 99 两银子 + 20 铜板). `list` initially crashed after printing 烤鸡腿: `shanzi.lpc` calls `init_shan(250, 2)` while `inherit SWORD` only defines `init_sword` — `Undefined function init_shan` then `*No program in object`. Fixed both copies (`d/city/npc/obj/shanzi.lpc` is the vendor path; `d/city/npc/shanzi.lpc` is a duplicate) to `init_sword`. After `update`, `list` shows the full board (鸡腿/扇子/酒袋/包子/养身丹) with no compile error.
 
 No other code change.
+
+## 深度功能测试（§10.7，2026-10-04）— negative range ends
+
+`scripts/lpc_fix_negative_ranges.py`: 5 line(s) in 2 file(s) count a range from the end with `<` (`x[a..-1]` -> `x[a..<1]`, `x[-2..]` -> `x[<2..]`; KB 06 §7.209). In this driver a negative constant end gave `""` / `({ })` and a negative start the whole value, so each of these returned the wrong slice; the compile warning `A negative constant as the second element of arr[x..y]` is gone from the files that compile. Range lvalues (`s[0..-1] = text`, the prepend idiom) are left alone. A paired compile of the changed files at HEAD and in the working tree showed no new error.

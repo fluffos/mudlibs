@@ -143,3 +143,7 @@ playthrough）。用真实原生 driver（端口 40149）走完了：注册（�
 shenmu/` 已删除）。保留的唯一存档账号是管理员种子账号
 `data/{login,user}/f/fluffos/`（id `fluffos`，密码 `Mud@2026`，
 `(admin)` 权限）。
+
+## 深度功能测试（§10.7，2026-10-04）— negative range ends
+
+`scripts/lpc_fix_negative_ranges.py`: 5 line(s) in 2 file(s) count a range from the end with `<` (`x[a..-1]` -> `x[a..<1]`, `x[-2..]` -> `x[<2..]`; KB 06 §7.209). In this driver a negative constant end gave `""` / `({ })` and a negative start the whole value, so each of these returned the wrong slice; the compile warning `A negative constant as the second element of arr[x..y]` is gone from the files that compile. Range lvalues (`s[0..-1] = text`, the prepend idiom) are left alone. A paired compile of the changed files at HEAD and in the working tree showed no new error.

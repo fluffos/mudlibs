@@ -291,3 +291,7 @@ CHARACTER 的 nomask `_query` 冲突）。旁路文件 `feature/dealer1.lpc`
 重启驱动后现场复核：`list` 列出烤鸡腿/包子/烤鸭/酒袋/干粮等货表；
 `giveall /clone/money/gold` 后 `buy 1 jitui` 得到「你从店小二那里买下
 了一根烤鸡腿」，身上出现 `jitui`，找零灵石碎片/灵石。
+
+## 深度功能测试（§10.7，2026-10-04）— negative range ends
+
+`scripts/lpc_fix_negative_ranges.py`: 4 line(s) in 1 file(s) count a range from the end with `<` (`x[a..-1]` -> `x[a..<1]`, `x[-2..]` -> `x[<2..]`; KB 06 §7.209). In this driver a negative constant end gave `""` / `({ })` and a negative start the whole value, so each of these returned the wrong slice; the compile warning `A negative constant as the second element of arr[x..y]` is gone from the files that compile. Range lvalues (`s[0..-1] = text`, the prepend idiom) are left alone. A paired compile of the changed files at HEAD and in the working tree showed no new error.

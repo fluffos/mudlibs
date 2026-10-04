@@ -150,3 +150,7 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
   未当新 bug 修）。`CHANNEL_D` 把这些警告广播成「┋错误┋」——观感差，
   不是本轮新引入的运行期故障。
 - **结论**：商店 / 有机拜师 / 重连均通过，本轮无新编程 bug 可修。
+
+## 深度功能测试（§10.7，2026-10-04）— negative range ends
+
+`scripts/lpc_fix_negative_ranges.py`: 4 line(s) in 1 file(s) count a range from the end with `<` (`x[a..-1]` -> `x[a..<1]`, `x[-2..]` -> `x[<2..]`; KB 06 §7.209). In this driver a negative constant end gave `""` / `({ })` and a negative start the whole value, so each of these returned the wrong slice; the compile warning `A negative constant as the second element of arr[x..y]` is gone from the files that compile. Range lvalues (`s[0..-1] = text`, the prepend idiom) are left alone. A paired compile of the changed files at HEAD and in the working tree showed no new error.

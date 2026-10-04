@@ -288,3 +288,7 @@ coin->set_amount(250)`/`give` 给测试角色 250 个铜板（同一操作过
 存档文件，未纳入提交）。管理员 `fluffos`/`Mud@2026` 因本轮临时持
 有的铜板道具及在线时间/食物饮水漂移，已用 `git checkout` 还原，
 未纳入提交。驱动两次启动均按精确 PID 结束。
+
+## 深度功能测试（§10.7，2026-10-04）— negative range ends
+
+`scripts/lpc_fix_negative_ranges.py`: 5 line(s) in 2 file(s) count a range from the end with `<` (`x[a..-1]` -> `x[a..<1]`, `x[-2..]` -> `x[<2..]`; KB 06 §7.209). In this driver a negative constant end gave `""` / `({ })` and a negative start the whole value, so each of these returned the wrong slice; the compile warning `A negative constant as the second element of arr[x..y]` is gone from the files that compile. Range lvalues (`s[0..-1] = text`, the prepend idiom) are left alone. A paired compile of the changed files at HEAD and in the working tree showed no new error.

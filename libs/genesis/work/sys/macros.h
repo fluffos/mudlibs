@@ -178,7 +178,7 @@
  * MASTER_HASH(obj) - gives an 6 character hash of the object master of an
  *                    object.
  */
-#define STRING_HASH_LEN(str, len) (crypt((str), "$1$0$")[-(len)..])
+#define STRING_HASH_LEN(str, len) (crypt((str), "$1$0$")[<(len)..])
 #define STRING_HASH(str) STRING_HASH_LEN((str), 6)
 #define OBJECT_HASH(obj) STRING_HASH(file_name(obj))
 #define MASTER_HASH(obj) STRING_HASH(MASTER_OB(obj))

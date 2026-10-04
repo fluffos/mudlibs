@@ -270,3 +270,7 @@ Admin `fluffos`：`clone /obj/money/gold` 得到一两黄金，然后
 将军府第三代弟子，师承秦琼。`quit` 后重连，`score` 仍是师承秦琼 / 第三代弟子。
 
 本机临时建了空 `/u/f/fluffos/`（不入库）。驱动 PID 已杀，端口 40157 已空。
+
+## 深度功能测试（§10.7，2026-10-04）— negative range ends
+
+`scripts/lpc_fix_negative_ranges.py`: 6 line(s) in 3 file(s) count a range from the end with `<` (`x[a..-1]` -> `x[a..<1]`, `x[-2..]` -> `x[<2..]`; KB 06 §7.209). In this driver a negative constant end gave `""` / `({ })` and a negative start the whole value, so each of these returned the wrong slice; the compile warning `A negative constant as the second element of arr[x..y]` is gone from the files that compile. Range lvalues (`s[0..-1] = text`, the prepend idiom) are left alone. A paired compile of the changed files at HEAD and in the working tree showed no new error.

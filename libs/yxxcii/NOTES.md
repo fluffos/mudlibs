@@ -107,3 +107,7 @@ autoload 随身物（鸡腿、袍子），人物档本身保存。
 巫师重连只有「距上次退出仅 N 秒」警告，无硬冷却。再选 `GB` 重连：
 门派仍在，找零银子还在。驱动 `log/debug.log` 无运行时错误（本档
 `error_handler` 把 trace 交回驱动 debug.log）。无新编程 bug。
+
+## 深度功能测试（§10.7，2026-10-04）— negative range ends
+
+`scripts/lpc_fix_negative_ranges.py`: 9 line(s) in 3 file(s) count a range from the end with `<` (`x[a..-1]` -> `x[a..<1]`, `x[-2..]` -> `x[<2..]`; KB 06 §7.209). In this driver a negative constant end gave `""` / `({ })` and a negative start the whole value, so each of these returned the wrong slice; the compile warning `A negative constant as the second element of arr[x..y]` is gone from the files that compile. Range lvalues (`s[0..-1] = text`, the prepend idiom) are left alone. A paired compile of the changed files at HEAD and in the working tree showed no new error.

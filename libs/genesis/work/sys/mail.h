@@ -169,7 +169,7 @@
 #define GUEST_NAME    "guest"    /* The name of Guest                       */
 
 #define MAKE_DATE(d)  ((ctime(d))[4..9])
-#define DATE_YEAR(d)  ((ctime(d))[-4..])
+#define DATE_YEAR(d)  ((ctime(d))[<4..])
 #define MAKE_LONG_DATE(d) \
     ((ctime(d))[4..9] + (ctime(d))[19..23])
 #define READER_HELP   "/doc/help/general/mail_"

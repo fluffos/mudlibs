@@ -165,3 +165,7 @@ AGENTS.md §9220 记录过的"先 `call_other(dest,"???")` 探测再
 存档一并提交——这是这份档案里可复用的标准巫师测试账号，历次深度
 测试都会累积游玩痕迹，属预期行为。此前"第二轮"测试注册的一次性角
 色 `mnhdive` 存档（未提交过的 untracked 文件）本轮已清理删除。
+
+## 深度功能测试（§10.7，2026-10-04）— negative range ends
+
+`scripts/lpc_fix_negative_ranges.py`: 5 line(s) in 2 file(s) count a range from the end with `<` (`x[a..-1]` -> `x[a..<1]`, `x[-2..]` -> `x[<2..]`; KB 06 §7.209). In this driver a negative constant end gave `""` / `({ })` and a negative start the whole value, so each of these returned the wrong slice; the compile warning `A negative constant as the second element of arr[x..y]` is gone from the files that compile. Range lvalues (`s[0..-1] = text`, the prepend idiom) are left alone. A paired compile of the changed files at HEAD and in the working tree showed no new error.

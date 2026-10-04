@@ -855,8 +855,12 @@ against it.
 *lvalues* alone: `str[0..-1] = foo` is the documented prepend.
 `scripts/lpc_fix_negative_ranges.py SLUG [--apply]` does all three in code only (comments, strings, here-documents blanked),
 skips range lvalues and lists the bounds that are negative *expressions* (`msgs[-max+1..-1]`) for a hand edit; it refuses
-submodule-hosted libs (patch or PR). A 2026-10-04 survey (constant `..-N]`, both `-1` and below) found 1402 sites in 214 libs, 1170 of them
-`..-1]`, 24 libs hosted as submodules.
+submodule-hosted libs (patch or PR). Run 2026-10-04 over every lib whose `work/` is plain tracked files: 1550 bounds in about 545 files of 212 libs (1170 of the
+sites were `..-1]`; `nirvlp312` 154, `holymission` 109, `genesis` 69, `arkadia` 41), each lib's changed files compiled at HEAD
+and in the working tree with no new error. Four range lvalues in `nirvlp312` stay. The ten libs whose `work/` is a gitlink
+(`fy2005`, `imud`, `lima`, `nightmare3`, `nt7`, `oxidus`, `residuum`, `sanguozhi`, `xkx100utf8`, `deadsouls_fluffos`) need the
+same change as a catalog patch or a PR. `-name`, `-(expr)` and `-f(args)` bounds become `<name`, `<(expr)`, `<f(args)`
+(a variable that is 0 at run time reads as `<0`, not `-0`).
 **Detection:** the compiler warns `A negative constant as the second element
 of arr[x..y] no longer means indexing from the end` (rvalue end indexes only),
 so `scripts/lpc_warnings.py` sees those; negative *start* indexes need a grep

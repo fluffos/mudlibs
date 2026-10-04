@@ -881,3 +881,7 @@ functionally re-tested live on this lib.
 无 `error:` / `Too deep recursion`。`error_handler` 把轨迹交回驱动
 debug.log。`work/log/log` 只有编译期 pragma/unused 警告；`move.bug`
 停在 2026-07-22。管理员存档未提交。
+
+## 深度功能测试（§10.7，2026-10-04）— negative range ends
+
+`scripts/lpc_fix_negative_ranges.py`: 5 line(s) in 2 file(s) count a range from the end with `<` (`x[a..-1]` -> `x[a..<1]`, `x[-2..]` -> `x[<2..]`; KB 06 §7.209). In this driver a negative constant end gave `""` / `({ })` and a negative start the whole value, so each of these returned the wrong slice; the compile warning `A negative constant as the second element of arr[x..y]` is gone from the files that compile. Range lvalues (`s[0..-1] = text`, the prepend idiom) are left alone. A paired compile of the changed files at HEAD and in the working tree showed no new error.

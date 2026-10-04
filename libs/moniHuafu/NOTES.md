@@ -608,3 +608,7 @@ quit/reconnect 持久性**完全正常，没有数据丢失**。
 `testqaz` 的存档变化（等级、货币、邮件等）随本次提交一并保留，
 `fluffos` 管理员账号的信箱/位置变化同样保留（历次深度测试的标准
 可复用巫师账号，累积游玩痕迹属预期行为）。
+
+## 深度功能测试（§10.7，2026-10-04）— negative range ends
+
+`scripts/lpc_fix_negative_ranges.py`: 5 line(s) in 2 file(s) count a range from the end with `<` (`x[a..-1]` -> `x[a..<1]`, `x[-2..]` -> `x[<2..]`; KB 06 §7.209). In this driver a negative constant end gave `""` / `({ })` and a negative start the whole value, so each of these returned the wrong slice; the compile warning `A negative constant as the second element of arr[x..y]` is gone from the files that compile. Range lvalues (`s[0..-1] = text`, the prepend idiom) are left alone. A paired compile of the changed files at HEAD and in the working tree showed no new error.

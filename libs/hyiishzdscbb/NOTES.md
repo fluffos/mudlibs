@@ -128,3 +128,7 @@ codepoint 阵列——`is_chinese()` 检查的是 `str[0] in
 bug。** 没有编造问题；`log/debug.log` 全程只有正常的首次装载编译期
 warning（未使用局部变量），无一条 error/crash/"Too deep
 recursion"。驱动按精确 PID kill。
+
+## 深度功能测试（§10.7，2026-10-04）— negative range ends
+
+`scripts/lpc_fix_negative_ranges.py`: 5 line(s) in 2 file(s) count a range from the end with `<` (`x[a..-1]` -> `x[a..<1]`, `x[-2..]` -> `x[<2..]`; KB 06 §7.209). In this driver a negative constant end gave `""` / `({ })` and a negative start the whole value, so each of these returned the wrong slice; the compile warning `A negative constant as the second element of arr[x..y]` is gone from the files that compile. Range lvalues (`s[0..-1] = text`, the prepend idiom) are left alone. A paired compile of the changed files at HEAD and in the working tree showed no new error.

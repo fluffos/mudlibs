@@ -269,7 +269,7 @@
  * Get the path part of a file name, including the trailing /.
  * Example: /d/Domain/dir/foo.c -> /d/Domain/dir/
  */
-#define FILE_PATH(path) (implode(explode((path), "/")[0..-2], "/") + "/")
+#define FILE_PATH(path) (implode(explode((path), "/")[0..<2], "/") + "/")
 
 /*
  * FILE_NAME(path)
@@ -277,7 +277,7 @@
  * Get the name part of a file name.
  * Example: /d/Domain/dir/foo.c -> foo.c
  */
-#define FILE_NAME(path) (explode((path), "/")[-1..][0])
+#define FILE_NAME(path) (explode((path), "/")[<1..][0])
 
 /*
  * VALID_DEF_START_LOCATION(string path)

@@ -119,7 +119,7 @@
 #define GMCP_INTERVAL  60.0
 
 /* The token to identify a player with, based on his name and last login time. */
-#define GMCP_PLAYER_TOKEN(name, login_time) (crypt((name), "$1$" + (login_time) + "$")[-8..])
+#define GMCP_PLAYER_TOKEN(name, login_time) (crypt((name), "$1$" + (login_time) + "$")[<8..])
 
 /* No definitions beyond this line. */
 #endif GMCP_DEF

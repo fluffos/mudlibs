@@ -196,3 +196,7 @@ functionally re-tested live on this lib.
 战斗/死亡/复活/拜师全程 `debug.log` 干净。驱动按精确 PID 结束并重
 启验证过一次（确认两处崩溃彻底消失；唯一一次"删了 `.o` 还是崩"的
 意外是漏删了 `towiz_b.o.gz` 压缩回退文件，补删后重启复测干净）。
+
+## 深度功能测试（§10.7，2026-10-04）— negative range ends
+
+`scripts/lpc_fix_negative_ranges.py`: 5 line(s) in 2 file(s) count a range from the end with `<` (`x[a..-1]` -> `x[a..<1]`, `x[-2..]` -> `x[<2..]`; KB 06 §7.209). In this driver a negative constant end gave `""` / `({ })` and a negative start the whole value, so each of these returned the wrong slice; the compile warning `A negative constant as the second element of arr[x..y]` is gone from the files that compile. Range lvalues (`s[0..-1] = text`, the prepend idiom) are left alone. A paired compile of the changed files at HEAD and in the working tree showed no new error.

@@ -24,15 +24,15 @@ pLs( path )
    else {                                                      /* check extensions      */
       if ( path[0..0] == "~" ) {
          if ( path[1..1] == "/" )
-            path = "/players/" + this_player()->query_real_name() + path[1..-1];
+            path = "/players/" + this_player()->query_real_name() + path[1..<1];
          else
-            path = "/players/" + this_player()->query_real_name() + "/" + path[1..-1];
+            path = "/players/" + this_player()->query_real_name() + "/" + path[1..<1];
       }
       if ( path[0..0] != "/" )                                 /* current directory     */
          path = "/" + this_player()->query_path() + "/" + path;
       
-      if ( path[-1..-1] == "*" ) {;}
-      else if ( path[-1..-1] == "/" )
+      if ( path[<1..<1] == "*" ) {;}
+      else if ( path[<1..<1] == "/" )
          path = path + "*";
       else
          path = path + "/*";
