@@ -77,9 +77,13 @@ def build_tree(slug, dest):
 
 
 def sync_changes(slug, lib):
-    """Copy files that differ from HEAD (or are new) into the scan tree."""
+    """Copy files that differ from HEAD (or are new) into the scan tree, and re-copy every file an earlier sync
+    copied (a file edited back to HEAD's text would otherwise keep its edited copy in the scan tree)."""
     work = f"libs/{slug}/work"
     names = set()
+    manifest = os.path.join(lib, ".synced")
+    if os.path.isfile(manifest):
+        names.update(n for n in open(manifest, encoding="utf-8").read().split("\n") if n)
     for args in (["diff", "--name-only", "HEAD", "--", work],
                  ["ls-files", "-o", "--exclude-standard", "--", work]):
         out = subprocess.run(["git", "-C", REPO] + args, capture_output=True, text=True).stdout
@@ -92,6 +96,8 @@ def sync_changes(slug, lib):
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         with open(src, "rb") as a, open(dst, "wb") as b:
             b.write(a.read())
+    with open(manifest, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(sorted(names)))
     return len(names)
 
 

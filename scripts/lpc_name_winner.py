@@ -90,14 +90,27 @@ def main():
     rows = [l.rstrip("\n").split("\t") for l in open(ROWS, encoding="utf-8", errors="replace")]
     plans = collections.defaultdict(dict)       # leaf -> {fn: (qualifier, signature)}
     skipped = []
+    pairs = collections.defaultdict(list)       # (leaf, fn) -> every message about it, in file order
     for f, ln, col, sev, msg in rows:
         m = MSG.match(msg)
         if not m or (only and not any(o in f for o in only)):
             continue
-        fn, w = m["fn"], m["w"]
         if f.endswith(".h"):
-            skipped.append((f, fn, "diagnostic is in a header"))
+            skipped.append((f, m["fn"], "diagnostic is in a header"))
             continue
+        pairs[(f, m["fn"])].append(m)
+    chosen = []
+    for (f, fn), ms in pairs.items():
+        # Three inherits that define one function give two messages (A over B, then C over A): the driver's final
+        # winner is the W no other message displaces, i.e. one that is nobody's `b` under a different W.
+        ws = {m["w"] for m in ms}
+        alive = {w for w in ws if not any(m["b"] == w and m["w"] != w for m in ms)}
+        if len(alive) != 1:
+            skipped.append((f, fn, f"{len(alive)} candidate winners ({', '.join(sorted(ws))})"))
+            continue
+        chosen.append((f, next(m for m in ms if m["w"] in alive)))
+    for f, m in chosen:
+        fn, w = m["fn"], m["w"]
         if w == m["a"]:
             direct = m["av"] or m["a"]
         elif w == m["b"]:

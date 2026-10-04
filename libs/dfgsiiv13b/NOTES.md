@@ -440,3 +440,8 @@ variant, `\n\tsetup();\n    replace_program(ROOM);\n}\n"`, hand-fixed).
 A full post-fix grep confirms 0 live occurrences remain. Verified via a
 clean native driver boot (zero new `debug.log` errors, port listening,
 killed by exact PID after ~8s).
+
+## 深度功能测试（§10.7，2026-10-04）— commented-out `#pragma no_warnings` removed
+
+`include/weapon.h` carried `//#pragma no_warnings` (already disabled); the line is deleted so a grep for the pragma
+finds nothing in this lib.

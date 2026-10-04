@@ -821,3 +821,9 @@ same date: `SetSearch` handlers return their text, the helm asks `GetMorality()`
 `look_at_vault`/`look_at_manhole` restored as text) carry over here: `scripts/lpc_twin_port.py adopt ds386 riftsds
 --pre HEAD --apply` (all 21 are token twins: 12 byte-identical, 9 spliced into riftsds's own spacing). All 21 files compile without a diagnostic, and a live spot check (`search field`,
 `search mounds`, `look at mound`/`manhole`/`vault`/`treats`, the planning room, a voting hall) answers as in ds386.
+
+## 深度功能测试（§10.7，2026-10-04）— last `#pragma no_warnings` removed
+
+`domains/std/{Attic,Church,wiz_hall}.lpc` still opened with `#pragma no_warnings`. They inherit `/std/indoor_room`,
+which this lib does not have, so they never compiled and the pragma hid nothing; it is gone, and no lib file carries
+it any more.

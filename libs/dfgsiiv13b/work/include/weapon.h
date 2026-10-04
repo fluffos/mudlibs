@@ -3,7 +3,6 @@
 #ifndef __WEAPON_H__
 #define __WEAPON_H__
 
-//#pragma no_warnings
 
 #define F_SWORD		"/feature/weapon/sword.lpc"
 #define F_BLADE		"/feature/weapon/blade.lpc"

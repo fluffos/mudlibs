@@ -677,3 +677,49 @@ or register the short name.
 Driver killed by exact PID after the pass. Test-session save/log churn
 (`data/links`, `data/players`, `data/daemons/guild.o`, `data/secure/LOG`)
 was reverted and not committed.
+
+## 深度功能测试（§10.7，2026-10-04）— `#pragma no_warnings` removed, every compile warning fixed
+
+`include/mudlib.h` (every file that includes it) and the three example rooms `domains/std/{Attic,Church,wiz_hall}.lpc`
+opened with `#pragma no_warnings`. With the pragma gone a scan on the Lima-family driver build
+(`~/src/fluffos-lima/build-debug/src/lpcc`) showed 1287 distinct diagnostics (1733 of 1860 files compile). Now: 164, all
+errors, in the 121 files that still do not compile; **0 warnings in any file that compiles** (one is left in the CGI
+`WWW/cgi/who.lpc`, which needs class members `finger` does not have).
+
+`lpc_warnings.py swmud --fix` did the mechanical classes (60 `varargs`, 36 bare returns, 13 escapes, 88 unused locals);
+`lpc_fix_unused_init.py` kept the calls of the unused initializers as statements. Then, by root cause (KB 04 §6.10):
+- **Modules the base class already has.** `hammer`, `knife_carving` (`inherit WEAPON; inherit M_VALUABLE;`),
+  `health_scanner`, `inject_syringe` (+ `M_GETTABLE`), `troll`, `std/moving_monster` (`M_ACTIONS`, `M_SMARTMOVE`),
+  `hint_token`, `material_spawner` (`M_GRAMMAR`), `blade_base` (`CLASS_EVENT_INFO`), `std/body` and `following_monster`
+  (`M_FOLLOW`) and `trans/obj/wish` (`M_PROMPT`) inherited a module twice. The re-inherit also let the module's tiny
+  `mudlib_setup()` replace the base class's real one, so the hammer and the knife ran without `weapon.lpc`'s setup
+  (damage source, durability, wieldable); the redundant inherits are gone (the syringe's explicit
+  `m_valuable::mudlib_setup()` too, the wish shell's `prompt::create()`: `::create()` reaches the shell's own).
+- **Mixins that bring their own dependency.** `m_accountant` and `m_conversation` inherited `M_ACTIONS`, which
+  `ADVERSARY` (every accountant, trainer and monster) has as well: they declare `do_game_command()` as a prototype and
+  `greeter`/`beek`/`rust` inherit `M_ACTIONS` themselves. `ranged_base` does the same for `M_SAVE` (`add_save`).
+- **Private names that met in one class**: `base` (`m_exit`, `m_complex_exit`, `room/exits`), `env`, `arrival_fn`,
+  `departure_fn`, `my_hook`, `delay_time`, `npc_dirs`, `response_queue`, `my_actions` (`m_actions`), `death_message`,
+  `skill_used` (`m_damage_source`, `m_damage_source_body`), `skills` (`adversary/skills`), `default_desc`
+  (`m_exit_obj`; `m_exit` declared it twice with two types, which was the warning in 159 files), `fluid_disturb`
+  (`m_drink_source`), `queue` (behaviour cluster) and `no_heals` (adversary behaviours) got module prefixes;
+  `guild_d` lost a dead duplicate of `guild_favors`.
+- **Over 300 `F() inherited from both A and B` overlaps** are named in the leaf (`lpc_name_winner.py`); where two
+  real `mudlib_setup()`s met, `std/holster` and `d/obj/backpack` now call both `m_valuable` and `m_wearable`, and
+  `bank_accountant` calls `adversary::` as `std/accountant` does. The same overlap in `leaf + M_ACCOUNTANT` for the
+  other accountant, trainer and wolf classes is named as it was.
+- `body/cmd.lpc`'s `do_game_command` was `nomask` and collided with `M_ACTIONS`'s: the keyword moved to a wrapper in
+  `std/body.lpc` (the same protection one level up); `assign_flag`, `do_wander`, `do_effect` prototypes and overrides
+  now agree with their definitions; `string x...` rest parameters are `string *x...`; `(: "pop_up", "fast forward" :)`
+  in `domains/std/recorder.lpc` was a comma expression (the call-out did nothing before or after; it is a real
+  pointer now); smaller ones (`?:` branches, an empty `if`, a stray `;`, `/*/*`).
+
+Live on a pristine tree with the Lima driver: the seeded `fluffos` admin runs the wish shell (`alias`, `aliases`,
+`prompt`, `history`, `ls`, `pwd`), clones and carries the hammer, backpack (worn), health scanner, syringe and holster,
+and clones `bank_accountant`, `accountant`, `greeter`, `wolf` and `beek`; a fresh character registers through race,
+attributes, hand and team and reaches the game (`score`, `who`, `skills`, `inventory`). Not mine, seen on the way:
+`domains/std/trainer` cannot be cloned (`m_trainer` calls `add_option()`, which nothing defines) and the troll stops on
+`/std/sword.lpc` (`set_damage_type()` with one argument).
+
+Left: the 121 files that do not compile are Lima's example domain `domains/std` (37; it calls `set_weapon_class()` and
+`set_value()`, which this game's weapon API replaced), `std/effect/*`, retired std classes and the two CGI scripts.
