@@ -7,7 +7,9 @@
   scripts/lpc_twin_port.py tokdiff  A B [--context N] [--stats]
 
 SRC is the lib that was fixed (its work tree now), REV the commit before that fix; DST is the sibling, taken as it
-is in HEAD.  Paths are relative to libs/<slug>/work.  A token stream is the file's code without whitespace and
+is in HEAD.  Paths are relative to libs/<slug>/work.  Set TWIN_DST_TREE=<dir> to take (and write) DST's files from a
+directory with the same relative layout instead of libs/<dst>/work -- a submodule lib's tree, e.g. the flattened
+scratch tree of scripts/submodule_patch_scratch.py.  A token stream is the file's code without whitespace and
 comments (strings and directives intact), so two files "carry the same code" when their streams are equal.
 
 classify  every file SRC changed since REV -> `twin` (DST's tokens equal SRC's pre-fix tokens: the fix applies
@@ -35,6 +37,11 @@ import tempfile
 from collections import Counter
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DST_TREE = os.environ.get("TWIN_DST_TREE")
+
+
+def dst_path(dst, p):
+    return os.path.join(DST_TREE or os.path.join(ROOT, "libs", dst, "work"), p)
 FORMATTER = os.path.expanduser("~/src/fluffos/tools/lpc-syntax/bin/format-corpus.mjs")
 TOK = re.compile(r'''
     //[^\n]*|/\*.*?\*/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])+'|@\w+|[A-Za-z_]\w*|0[xX][0-9a-fA-F]+|\d+\.\d*|\d+
@@ -115,7 +122,7 @@ def changed_paths(src, pre):
 def sides(src, dst, pre, p):
     """(src_pre, src_post, dst_head) bytes or None"""
     return (show(f"{pre}:libs/{src}/work/{p}"), read(os.path.join(ROOT, "libs", src, "work", p)),
-            show(f"HEAD:libs/{dst}/work/{p}"))
+            read(dst_path(dst, p)) if DST_TREE else show(f"HEAD:libs/{dst}/work/{p}"))
 
 
 def classify(src, dst, pre):
@@ -178,7 +185,7 @@ def cmd_adopt(a):
         else:
             new = splice(sp, so, dh)
             how = "splice" if new is not None else "SKIPPED"
-        dst_file = os.path.join(ROOT, "libs", a.dst, "work", p)
+        dst_file = dst_path(a.dst, p)
         cur = read(dst_file)
         n[how] += 1
         if how == "SKIPPED" or cur != new:
@@ -195,7 +202,7 @@ def cmd_audit(a):
         rows = [r for r in rows if r[0] in a.only]
     for p, _ in rows:
         sp, so, dh = sides(a.src, a.dst, a.pre, p)
-        dc = read(os.path.join(ROOT, "libs", a.dst, "work", p))
+        dc = read(dst_path(a.dst, p))
         tpre, tpost, thead, tcur = toks(sp), toks(so), toks(dh), toks(dc)
         d0, d1 = hunks(tpre, thead), hunks(tpost, tcur)
         c0 = Counter((h[0], h[1]) for h in d0)
