@@ -1037,3 +1037,9 @@ trashcan, river, sea, coffin, hoverpod, pole, sign, note, plasma cannon, zpem, h
 the planning-room exit, `jump into sea` (virtual rooms), the Praxis callbacks. Differences between HEAD and
 the working tree: the Praxis descriptions above and the punctuation of one refusal (`You can't enter
 that!` -> `You can't enter that.` on the river); everything else is chatter from the wandering NPCs.
+
+**Addendum (same day): `SetNoSink(1)`.** ds386's `lib/std/base_dummy.lpc` (unlike dsIII's) calls `SetNoSink(1)`
+in `create()`, so dropping `base_dummy::create()` from the five dummy hybrids also dropped it: a paired live
+check of `GetNoSink()` caught `1` -> `0` on all five (the oracle's getter list has no `GetNoSink` row). The
+hybrids call `SetNoSink(1)` themselves now. KB 06 §7.213 kind 5: read the dropped class's `create()` for
+every call it makes, not only the inherit list.

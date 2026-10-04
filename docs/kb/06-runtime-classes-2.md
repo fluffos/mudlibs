@@ -938,7 +938,9 @@ uses them on these fixtures and `knock`/`enter`/`open` on them answer the parser
 "You can't ..." either way (live-checked, `dsIII/NOTES.md`, `ds386/NOTES.md`). Where a leaf
 inherits one of those for its own use (ds386's `seawater`: `LIB_EXITS` + `LIB_ENTER`), keep
 that inherit and name the winner of the door calls the two share (`GetDoor`, `SetDoor`,
-`ResolveObjectName`) with `enter::`. (6) A dual-role class over two sibling classes that share a base
+`ResolveObjectName`) with `enter::`. Read the dropped class's `create()` for every call it makes, not
+only its inherit list: ds386's `base_dummy::create()` also calls `SetNoSink(1)` (dsIII's does not), which the
+hybrids must make themselves; the oracle's getter list has no row for it, so check `GetNoSink()` live. (6) A dual-role class over two sibling classes that share a base
 (`LIB_OOB` = `LIB_SOCKET` + `LIB_CLIENT`, both daemons): inherit the heavier one and carry
 the few members of the other (a `Descriptor`, an `Owner`, three small functions).
 **Detection:** `scripts/ds_oracle.py` before and after (KB 08 §10.12): function
