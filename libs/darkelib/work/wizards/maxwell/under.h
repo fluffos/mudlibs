@@ -11,4 +11,5 @@
 #define UNWORK  "/wizards/maxwell/workroom"
 #define UNEQP   "/wizards/maxwell/objects/mon/mob_eq2"
 #define GUILDR "/wizards/maxwell/underzone/"
+#undef UNTHIEF
 #define UNTHIEF "/wizards/maxwell/guild/thief/"

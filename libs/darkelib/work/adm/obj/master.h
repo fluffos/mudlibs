@@ -50,7 +50,7 @@ object connect();
 
 mixed compile_object(string file);
 
-nosave void crash(string err);
+protected void crash(string err);
 
 int valid_shutdown(string euid);
 
@@ -94,7 +94,7 @@ string domain_file(string str);
 
 string author_file(string str);
 
-nosave int slow_shutdown();
+protected int slow_shutdown();
 
 int save_ed_setup(object who, int code);
 

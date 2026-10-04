@@ -1,4 +1,4 @@
-nosave void set_item_functions(mixed *things, string *funcs) {
+protected void set_item_functions(mixed *things, string *funcs) {
     mapping tmp;
     int i;
 

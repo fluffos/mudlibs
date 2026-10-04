@@ -785,3 +785,76 @@ is correctly left at 1.
 Files touched: `d/standard/waiting_room.lpc` (new `init()`),
 `d/standard/setter.lpc` (`pick()` and `yes_or_no()`, both in the file's
 existing functions, no new functions added).
+
+## 深度功能测试（§10.7，2026-10-04）— every compile warning fixed (2703 -> 569 distinct diagnostics, 15 warnings left)
+
+Ten files carried `#pragma no_warnings` (`cmds/creator/_goto`, `cmds/system/_massreplace` and `_replace`,
+`d/damned/arena/battle_room`, and the `d/excelsior` and `wizards/excelsior` copies of `_replace`, `replace`, `replacer`);
+the pragma is gone and every warning the driver prints for a file that compiles is fixed at its source. A fresh scan
+before this pass: 6566 of 6957 files compile, 2703 distinct diagnostics (1235 unused locals in 727 files, 397 global
+redeclarations in 111 files, 230 `nosave` functions, 33 non-void functions without a value, 30 argument-count
+mismatches, 24 redefined macros, ...). After: 6589 compile, 569 distinct diagnostics, of which **15 are warnings**, all in
+files that cannot compile (below).
+
+Mechanical classes went through `scripts/lpc_warnings.py darkelib --fix` (nosave functions -> `protected`/dropped,
+unused locals, `varargs`, escapes, negative range ends, bare returns) and the structural helpers in KB 04 §6.10:
+- 45 `F() inherited from both A and B; using the definition in W` overlaps (39 of them `get()` in autoloading weapons
+  and armours, `/std/autoload` against `/std/Object`; `clean_up()` in four daemons; `alloc()`/`enqueue()` in `tsh`)
+  are named in the leaf (`RET f(...) { return W::f(...); }`, `lpc_name_winner.py`): the driver already used W's function.
+- `int init()` / `reset()` / `create()` that never return a flag over a `void` base became `void`
+  (`lpc_fix_void_override.py`); `#undef X` before the later of two `#define X` (`lpc_fix_macro_redef.py`).
+- Global redeclarations where a leaf declares the name its base already has were fixed on the leaf side
+  (`lpc_rename_ident.py`), which keeps behaviour exactly: `/std/user.lpc` and its copies `count` -> `login_count`
+  (`/adm/include/user.h` is an inherit-list header whose `tsh` brings cstack's `count`), `adm/daemon/finger_d.lpc`
+  `true_name` -> `fd_true_name`, the spell files (`prepare_spell`/`prepare_skill` `skill` -> `prep_skill`,
+  `lock_enchantment`/`scribe_scroll`/`imbue_spell` `spell_pow` over `long_term_spell`'s private one, `imbue_skill`
+  `skill_name`), the `smear_body` MONSTER leaf's `following` (a second variable next to `std/living/follow.lpc`'s),
+  `infernal_slave`'s `tmp`, the guardian pets' message list `spells` (the base has a `mapping spells`), the mines
+  and maxwell mobs' `x`/`y`/`mob`/`money` globals, the light/recall orbs' `creator`. One was the other reading: `d/excelsior/workroom.lpc`
+  declared `mapping props;` for skill code that reads `props["skill level"]`, which was always 0 in the leaf's own copy;
+  the declaration is gone and the code reads `/std/Object`'s `props`.
+- `clean_up()` is read by the driver (a zero return clears the object's clean-up flag), so it is not a hook:
+  `daemon/voter.lpc` and `d/damned/virtual/clan_server.lpc` now match the `void` base (neither destructed before or
+  after).
+- Prototypes now match their definitions (`dealer.lpc` `fold`/`ante` in four copies, `orderly.lpc` `talk`,
+  `battle_room.lpc` `leaving`); locals used only inside `#if 0` moved into the branch (`save_items_d` and its two
+  copies, `_callouts`, the two `ztest/rooms/spawn.lpc`).
+- `d/khojem/nomad/mon/mercenary.lpc` is two programs concatenated by the archive (a mercenary pet, then an earlier
+  variant of `std/diewarzau/obj/pet/lesser_elemental.lpc`); the second half is compiled out with `#if 0` (it re-inherits
+  `/std/pet`, which produced 100 of the redeclaration warnings).
+- `/wizards/maxwell/test/test.lpc` defined its `add` command handler as `add()`, overriding `/std/Object`'s protected
+  `add(what, arg)` with another signature; the handler is `cmd_add` now.
+
+Files that did not compile at HEAD, found while the scan was open, and what was fixed in the live directories:
+- `std/skills/attic/*` (11 skills) used `class` as a variable name, a reserved word: renamed `cls`; they compile now and
+  their own unused locals and a `\m` typo for `\n` in `_mend` are fixed.
+- `cmds/mortal/_colour.lpc` included `/wizards/geldron/pt/valid_colour.lpc`, which is not in the archive, so the player
+  command `colour` could not load. `valid_colour()` is defined in the command from the names `colours` lists; the
+  listed `himagenta` was missing from `std/user/ansi_convert.lpc` and answered with no colour.
+- `tail()` (a MudOS efun this driver lacks) is a new `adm/simul_efun/tail.lpc`; `log`, `replog` and `tail` load.
+- `cmds/creator/_netstat.lpc` called `dump_socket_status()` (gone) and uses `socket_status()`; `WIZCHAR_D`, used by
+  `wizchar`/`adwizchar` and never defined, is in `adm/include/daemons.h`; `cmds/cmds_m.lpc` includes `<uid.h>`;
+  `cmds/system/_clog.lpc` named a parameter `ref`; `std/voteboard.lpc` called `add_issue()`/`rm_issue()` before
+  defining them (prototypes added); `cmds/creator/_pupdate.lpc` compared a path to the `master()` object and called
+  the TMI `tell_group()` (now `file_name(master())` and a `message()` to the superuser group). `pupdate` loads now
+  and then stops at `Mudlibrary is not allowed to destruct Backbone` (it destructs a temporary bag under euid `TEMP`):
+  the plain `update` command is the one that works.
+
+**Left, because the file cannot compile for a reason that is not a warning** (369 files, 554 error diagnostics):
+- `d/excelsior/tinker2` and its `wizards/excelsior` copy: `tinker/` with the letter `w` changed to `d` inside
+  identifiers (`dhile`, `drite`, `set_deight`, `shadod`, `loder_case`, `old_deapon.h`); `tinker/` is the working copy.
+- Stale copies of the user object (`std/user.new`, `user.c2`, `user.realold`, `d/warsyn/user`, `wizards/warsyn/user`)
+  call `arenap()`/`arena_ownerp()`, which `adm/obj/simul_efun.lpc` leaves commented out on purpose (see section 3);
+  they got the same `count` rename and the `status` type (unknown to this driver) became `int`, nothing more.
+- The internet daemons under `adm/daemon/network/` (I3, ftpd, http, smtp, socket, telnetd) need headers the archive
+  does not have (`mudlib.h`, `flock.h`, `mailer.h`, ...); `d/excelsior/mon/dealer.lpc` and the `d/nfd` one end in
+  the middle of a function; `true_strike.lpc`, `t_guard.lpc`, `std/spells/shadows/hp_shadow.lpc`,
+  `std/obj/container.lpc`, `std/adt/*`, `cmds/adm/_dragonraid.lpc` are unfinished drafts; `adm/simul_efun/message.lpc`
+  is not included by the simul_efun object.
+
+Live (pristine tree plus the working-tree changes, native driver): the seeded `fluffos` admin logs in; `colours`,
+`colour tell himagenta` / `bogus` / `none`, `colour types`, `log nosuchfile`, `tail` on a file and on a directory,
+`netstat`, `update` of the voteboard, an attic skill, the mercenary and an imbue spell all answer as expected. A fresh
+character (`qatester`) registers, picks `high-man` in the setter room, assigns stats, answers the ANSI question and
+lands with `score`, `inventory`, `colour tell hired` and `who` working. The error log directory stayed empty and the
+driver printed no `insufficient permission` line.

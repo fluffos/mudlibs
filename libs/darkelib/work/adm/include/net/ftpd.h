@@ -2,6 +2,7 @@
 #ifndef __FTPD_H
 #define __FTPD_H
 
+#undef POS
 #define POS		1
 #define DATA		2
 #define USER_NAME	3
