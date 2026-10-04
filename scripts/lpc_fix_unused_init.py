@@ -2,8 +2,10 @@
 """scripts/lpc_fix_unused_init.py SLUG [--apply] [--only SUBSTR ...]
 
 Handle the `Unused local variable` diagnostics that scripts/lpc_warnings.py --fix refuses because the declaration
-has an initializer.  A pure literal initializer (`({})`, `([])`, a number, a string) deletes the declaration; any
-other initializer stays as an expression statement, because the call may have an effect.  The declaration must be a
+has an initializer.  A pure initializer deletes the declaration: a literal (`({})`, `([])`, a number, a string) or an
+expression built only from variables, operators and the side-effect-free calls in PURE_CALLS (`environment()`,
+`this_player()`, `sort_array(...)`, ...).  Any other initializer stays as an expression statement, because the
+call may have an effect.  The declaration must be a
 single-declarator line whose enclosing block closes at the line the driver reports, so a same-named local in another
 function is never touched; anything else is listed as SKIP for a hand edit (multi-declarator lines, locals only used
 in an inactive #if branch: scripts/lpc_move_decl.py).  Diagnostics come from /tmp/lpcw-SLUG/diagnostics.tsv, which
@@ -60,6 +62,21 @@ def block_end(clean_lines, k):
     return None
 
 PURE = re.compile(r'^(\(\{\s*\}\)|\(\[\s*\]\)|-?\d+|"[^"]*"|0)$')
+PURE_CALLS = set("""environment this_object this_player previous_object all_inventory deep_inventory sizeof time file_name
+base_name format_page sort_array capitalize lower_case upper_case member_array keys values copy identify sprintf implode
+explode query_ip_name objectp stringp intp mapp arrayp living interactive to_int to_float""".split())
+
+def is_pure(init):
+    """literal, or variables/operators/PURE_CALLS only: no assignment, ++/--, ->, closures, other calls"""
+    s = init.strip()
+    if PURE.match(s):
+        return True
+    t = re.sub(r'"(?:\\.|[^"\\])*"', '""', s)
+    t = re.sub(r"'(?:\\.|[^'\\])+'", "0", t)
+    t = t.replace("==", " ").replace("!=", " ").replace("<=", " ").replace(">=", " ")
+    if "=" in t or re.search(r"\+\+|--|->|::|\(:|\$|\bcatch\b|\bnew\b", t):
+        return False
+    return all(m in PURE_CALLS for m in re.findall(r"\b([A-Za-z_]\w*)\s*\(", t))
 for f, items in sorted(want.items()):
     path = W + f
     data = open(path, "rb").read().decode("latin-1")
@@ -78,7 +95,7 @@ for f, items in sorted(want.items()):
         k, m = found
         indent, init = m.group(1), m.group(2)
         cr = "\r" if lines[k].endswith("\r") else ""
-        if init is None or PURE.match(init.strip()):
+        if init is None or is_pure(init):
             edits.append((k, None)); how = "delete"
         else:
             edits.append((k, indent + init.strip() + ";" + cr)); how = "call kept"

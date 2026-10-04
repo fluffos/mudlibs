@@ -245,3 +245,22 @@ and it has no row for what a dropped class's `create()` called (`SetNoSink(1)`, 
 kind 5): run the same scripted session on the pre-change and the changed tree
 (`REV=<pre-change sha>`) and compare the transcripts, including getters you pick for the case.
 
+### 10.13 Porting a fix to a sibling whose files carry the same code
+**Symptom:** a lib you are about to fix looks like one you already fixed (same `lib/`, same domain files), but
+`patch` and the fuzzy applier (`scripts/lpc_fuzzy_patch.py`) lose hunks on it and leave files that no longer compile
+(brassring after the ds386 pass: council prototypes missing, creator modules half-renamed, oob.lpc half rewritten,
+45 broken files). **Cause:** the sibling is the corpus formatter's output of the same sources, so every line break
+differs and a hunk's context never matches. **Fix:** compare token streams, not text (`scripts/lpc_twin_port.py
+classify SRC DST --pre REV`: `twin` = DST's tokens equal SRC's pre-fix tokens). When `format(SRC pre)` equals DST's
+HEAD byte for byte (the tool checks it per file), `adopt --apply` writes `format(SRC post)`: tokens identical to the
+verified fix by construction, style identical to the lib (brassring: 1409 of 1508 files, 1360 byte-checked, 49
+unformatted; before this, 45 hand repairs). Files with the lib's own code (`differs`) take the fuzzy applier, then
+`audit` lists every token hunk SRC made that DST lacks and every difference the port removed: an empty list means
+the port is complete (brassring: 12 files, each an empty `if () {}` shell, a local moved into an inactive branch or a
+missing `CanGet` override; the rest was the lib's own code). **Detection:** `git ls-tree -r REV libs/` hashes show how
+much of a lib is byte-identical to another (36 families of two or more libs; the largest, 33 libs around `hy5`/`wdxtym`/`haiyang2`, holds 427k files); a
+formatted twin only shows up in token streams. Then rescan the lib (`scripts/lpc_warnings.py DST`): inherit overlaps
+depend on the lib's other files and do not travel with a file, and the lib's own extra classes (brassring's `factions`
+and `rent`) bring their own. A live pair of sessions found two bugs the scan could not: a room whose furniture sits
+in the wrong directory (the room died in `create()` before `SetExits()`, so it had no exits) and an NPC file with a
+missing `;` that made its room unloadable -- both warning-free in HEAD because the file failed earlier than any warning.

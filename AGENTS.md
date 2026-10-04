@@ -76,7 +76,9 @@ corpus. To find work:
   `#pragma no_warnings` (not in `global.h`, not per file), and every warning
   the driver prints is fixed at its source. Scan with
   `scripts/lpc_warnings.py <slug>`; the classes and their fixes are KB 04
-  §6.10. Do not hide a warning to quiet the first visitor's screen.
+  §6.10. A lib whose files carry the same code as one already fixed takes
+  the fix with `scripts/lpc_twin_port.py` (KB 08 §10.13), not by hand.
+  Do not hide a warning to quiet the first visitor's screen.
 - **Ranges count from the end with `<`:** `[0..<2]`, `[<2..]`. A negative
   literal (`[0..-2]`, `[-2..]`) is empty or the whole value in this driver
   (KB 06 §7.209). Never switch on `old range behavior`: it covers
