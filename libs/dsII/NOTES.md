@@ -757,10 +757,9 @@ the 163 `lib/` programs against HEAD (`scripts/ds_oracle.py`, KB 08 §10.12), pr
 live boot with the admin `fluffos`/`fluffwiz123` (login, 95-command battery, shop
 buy/sell, elevator button, NPC clone, container/armour round trips).
 
-Result: 5773 distinct diagnostics → 3956 at the last scan. The remainder is the 3256
-`Redeclaration of global variable` / 675 `inherited from both` family from duplicate
-inherit paths (66 source files: 40 redundant leaf inherits, 12 partial overlaps, 9 name
-collisions, 6 function overlaps; queued) plus `secure/daemon/remote.lpc` (§7).
+Result: 5773 distinct diagnostics → 6, all in `secure/daemon/remote.lpc` (see "Not done" below).
+The 3956 that survived the mechanical pass were one structural family, solved in a second
+pass (below).
 
 Mechanical: 45 pragma lines deleted; 1450 `nosave` functions → `protected`, 206 left public
 (called through `->`); 78 unused locals; 6 unknown escapes; 36 `varargs`; 6 bare `return;`
@@ -797,3 +796,58 @@ connection to a per-connection socket object, so a port is a redesign of a featu
 `help` was dead in a fresh clone and on the site (`secure/cmds/common`, `verbs/spells`,
 `verbs/undead` ship empty in the archive): KB 06 §7.212; 24 directories are now in
 `scripts/wasm_keep_dirs.txt`. Verified on a pristine tree: `help`, `help look` print.
+
+**Structural pass (same day): one file reached through two inherit paths** (KB 06 §7.213 has
+the mechanism). 3256 `Redeclaration of global variable` + 675 `inherited from both X and X`
+warnings came from 66 source files; their descendants (485 files) only repeated them. Fixes,
+by kind: `container.lpc` no longer inherits `LIB_RADIANCE` (the classes that are both object
+and container add `object::GetRadiantLight()`; the old own-radiance branch divided by zero at
+ambient 0), `living.lpc` lost `LIB_SMELL` and its pass-through, `corpse.lpc` inherits
+`LIB_SURFACE` only (`LIB_STORAGE`/`LIB_SMELL` were already in it); `npc.lpc` lost the second
+`LIB_CRAWL` and renames its private `Level` to `NpcLevel`; the parser applies that exist on
+both sides are spelled out in `npc.lpc` (object side) and `player.lpc` (living side);
+`CanSell` existed twice with the same body (`value.lpc` and `events/sell.lpc`), the
+`value.lpc` copy is gone (`secure/obj/staff.lpc`'s override takes the same argument now);
+`GetSave()` of lock/close/bait is resolved in `seal.lpc` (both lists), `storage.lpc` and the
+two pole leaves (`item::GetSave()`); `exits.lpc` renames its nosave `Obvious` (room.lpc has a
+saved int of the same name), `nmsh.lpc` lost an unused second `CommandFail`, `fish.lpc` its
+`Mass` (`FishMass`), `bot.lpc` two unused copies of body's `Dying`/`LastHeal`,
+`pwatch.lpc`, `drone.lpc` and the door module a variable declared twice in the same file; the
+nine creator modules under `secure/modules/` each declared their own `globalstr`/`globaltmp`/
+`func`/`target`/... scratch variables, which `glasses.lpc` and `staff.lpc` (25-35 warnings
+each time a creator loaded one) inherit together, now prefixed per module, and
+`GetValue()` of the mapping module (it replaced the item's value getter) is
+`GetMappingValue()`. Thirty-three leaf files inherited something their other inherit already
+contained (`LIB_READ` after `LIB_ITEM`, `"/lib/props/ambiance"` after `LIB_ROOM`, `LIB_STORAGE`/
+`LIB_SURFACE`/`LIB_SMELL` after `LIB_BED`, ...): `scripts/lpc_diamonds.py --fix-redundant`
+removed the line, and `bed.lpc`, `chair.lpc`, `table.lpc`, `clay.lpc`, `pistol.lpc`,
+`dining_table.lpc`, `pool_table.lpc` were reduced by hand the way dsIII's are (no `LIB_ITEM`
+next to `LIB_SURFACE`, `surface::create()` instead of `::create()`, `surface::CanGet()` for
+`item::CanGet()`). The seven backpack leaves (`LIB_STORAGE` + `LIB_ARMOR`, 96 duplicate
+variables each) now inherit `LIB_WORN_STORAGE`, the class the lib itself uses for wearable
+containers (`combat_pack`, `robe`) and dsIII uses for these files; the 35 functions they lose
+(`throw`, `bless`, `curse`, `judge`, `compare`, `balance`, `sacrifice`, `use`, `wield`
+family) are item and weapon verbs that no other armor here has either.
+
+What the golden-master oracle (213 programs, KB 08 §10.12) showed beyond "warnings gone":
+real behaviour changes, all in the direction the code was written for. The 20 campus/town
+rooms that inherited `"/lib/props/ambiance"` after `LIB_ROOM` ignored lit lamps (the plain
+ambiance getter replaced `room.lpc`'s `GetAmbientLight()`; a lamp of strength 5 now adds 5).
+Furniture and packs saved the `Mass`, `Cost` and `DamagePoints` of the dead first copy
+(`bed` saved `Mass` 0 while it weighs 1700; the live copy was forced `nosave`), now the live
+values. Chairs never ran `storage::create()` (`::create()` took `LIB_ITEM`, the first
+inherit). `worn_storage` with its own radiance divided by zero at ambient 0. The pistol uses
+`item`'s `eventDeteriorate()` (which halves the value and marks it destroy-on-sell, as for
+every other weapon) instead of the bare weapon one. `GetSave()` of a chest lists the
+persist variables instead of the lock's three; `storage` now saves `Closed` (seal's list
+was missing it).
+
+Live (pristine tree): clean boot (no warning on the console), `help` works, 100-command
+admin battery without a runtime error, fresh mortal registered, packs and the rucksack
+worn/opened/filled/emptied/dropped/thrown, a fight in the arena (damage both ways).
+
+Not done, deliberately: the six `remote.lpc` errors above; `domains/Ylsrim/room/tower`,
+`campus/room/conf2` and `Ylsrim/broken/jar` still fail to load for the missing content
+already described in §7 (their `SetInventory()` targets or `LIB_CAPTURE`
+are not in the archive).
+
