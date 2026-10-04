@@ -129,6 +129,20 @@ The `key : value` format is unchanged (canonical example:
 - Prune keys the driver rejects.
 - Never trust the shipped absolute paths or `name:`; they are often
   copy-pasted from other muds.
+- The driver prints a message for every key it does not take, and every
+  one is a fix (2026-10-04 sweep: 371 messages in 277 configs, none left).
+  Scan with `for each lib: (cd libs/S && lpcc config.fluffos /nonexistent.lpc | sed -n '1,/Execution root/p')`:
+  `*Warning: obsolete line in config file, please delete:` (`address server
+  ip/port`, `binary directory`, `reserved size`, `swap file`, `wombles`,
+  `warn tab`: delete the line and the comment above it);
+  `living hash table size: invalid new value` (must be 4, 16, 64, 256, 1024
+  or 4096: the old generator wrote `100`; `docs/driver/config.md` has the
+  minimums of `hash table size` 7001 and `object table size` 1024); and
+  `external_port_1 already defined ... by the line 'port number : N'` (the
+  `port number` line is the telnet port, so a second `external_port_1 :
+  telnet N` is ignored: delete it). Every invalid value was already being
+  reset to the default, so the fix keeps the effective setting.
+  `scripts/lib_write_config.py` writes new configs without them.
 
 ### 5.2 `log directory` resolves against the launch CWD
 

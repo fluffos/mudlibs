@@ -186,6 +186,7 @@
 /**
  * The path to save data to
  */
+#undef SAVE_DIR
 #define SAVE_DIR "/save/player_shops/"
 /**
  * Path to the shop cabinet object

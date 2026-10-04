@@ -297,3 +297,11 @@ pass exists to confirm the original conversion-time findings are still
 accurate under this project's round-two live-testing bar, and it
 found one new (driver-level, not mudlib-level) methodology gap along
 the way, documented above and cross-referenced into AGENTS.md.
+
+## 深度功能测试（§10.7，2026-10-04）— compile warnings: 19 -> 0
+
+`/command/speed.lpc`, the driver benchmark, timed expressions the compiler rightly calls pointless (`s1 + s2;`, `a1[3];`,
+`if (x == 0) { }`): 17 `Expression has no side effects` and 2 `Value of conditional expression is unused`. Each timed
+expression is stored in a new `mixed sink` and the empty `if` bodies assign it, so the benchmark still measures the
+operation plus one assignment, so its absolute numbers are a little higher. The scan
+(`--skip '^/single/tests/'`, the lib's own deliberately broken compiler tests) lists no diagnostic.

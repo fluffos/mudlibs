@@ -5,6 +5,7 @@
 
 #define SYMBOL_DIR    OBJ_DIR     "/faith/symbols/"
 #define RITUAL_DIR    OBJ_DIR     "/rituals/"
+#undef SHADOWS
 #define SHADOWS       SHADOWS_DIR "/rituals/"
 #define EFFECTS       EFFECTS_DIR "/rituals/"
 #define BASIC_RITUAL  EFFECTS     "basic_ritual"

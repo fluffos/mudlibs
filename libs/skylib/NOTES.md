@@ -790,3 +790,23 @@ increments from this session's own admin testing) are committed.
 `std/effects/basic.lpc` carried a mid-file `#pragma no_warnings` (before `query_attrs()`); it hid nothing: the file
 compiles without a diagnostic once the line is gone. The same file, byte for byte, sits in skylib, discworld,
 dw_fluffos_v1 and dw_fluffos_v2.
+
+## 深度功能测试（§10.7，2026-10-04）— compile warnings: 107 -> 7, none in a file that compiles
+
+`scripts/lpc_warnings.py skylib`: 2035 files compile, 128 do not, 326 distinct diagnostics (107 warnings, 80 files). The
+mechanical pass (`--fix`: 38 `varargs` for override argument-count disagreements, 30 unused locals) leaves 24 name
+collisions and 12 other warnings, fixed by hand. The seven warnings left are the six demonstration files under
+`d/learning/help_topics/error_messages/` (each one shows a compiler message to a new creator on purpose) and the unused
+`x` of `bad_local_init.lpc`. The 124 files that still do not compile (219 errors: `set_race`/`set_level`/`set_short` in
+`d/` NPCs written for another lib, missing includes, `Redeclaration of function`) were not touched.
+
+Name collisions renamed on the leaf or module side, uses following (KB 04 §6.10): artifact `type` -> `artifact_type` (the
+armour chain's `wearable` has its own; rings), `basic_cure` `do_setup` -> `cure_do_setup` (cure_wand), club_insignia
+`_last_time` -> `_insignia_last_time`, craft_shop_category `_extra_sell_check` -> `_category_sell_check` (six shops),
+second_sight `player` -> `scry_player`, guard_duty `id` -> `call_out_handle`, camera `colour` -> `film_colour`, present
+`colour` -> `paper_colour` (its two `#define` texts too), granny/magrat `player` -> `task_player`, trainer `counts` ->
+`hit_counts`; the octagon's `player` was never used and went. Return types: camera `query_colour()`, present
+`set_colour()`, scroll `add_read_mess()` and womble `event_enter()` are `mixed` over the base's `string`/`void`; the macros
+`SAVE_DIR` and `SHADOWS` are `#undef`'d before they are redefined; `std/effects/poisons/hp.lpc` had a stray string
+statement after the "clenches his teeth" line; `std/shops/player_shop/storeroom.lpc` had a `/*` inside the commented-out
+block of the old stock command.
