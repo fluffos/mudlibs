@@ -896,3 +896,38 @@ the empty directories, only the site recreates them from the list. **Detection:*
 boot (`scripts/pristine_tree.sh` recreates the list) and `help`; `grep -c 'Bad type argument
 to +' console` after the first creator login. Companion of §7.203 (write paths).
 
+### 7.213 One file reached through two inherit paths
+**Symptom:** hundreds of `Redeclaration of global variable 'RadiantLight'`/`'Smell'` and
+`GetSmell() inherited from both /lib/events/smell.lpc and /lib/events/smell.lpc (via ...)`
+whenever a class (and every descendant: 485 files in `dsII`, 929 in `dsIII`) is compiled.
+**Cause:** FluffOS has no virtual inherit: each inherit path carries its own copy of the
+variables. `define_variable()` warns when a name is already known and forces the *later*
+copy `nosave`; `overload_function()` lets the *later* inherit win every function (order:
+first inherit < ... < last inherit < the current program) and warns only for functions
+the current program does not define. So a leaf that inherits `LIB_ITEM` and then
+`LIB_READ` again is served by the second copy and its variables are never saved, and an
+extra `inherit "/lib/props/ambiance"` after `LIB_ROOM` replaces `room.lpc`'s
+`GetAmbientLight()` (day/night light, the lit lamps in the room) with the plain getter.
+Descendants repeat every warning, so the *source* files are few (`dsI` 9, `dsII` 66, `dsIII`
+46): `scripts/lpc_diamonds.py SLUG` lists files whose direct inherits overlap, and a
+warning anchored on a declaration or `inherit` line that no parent already warns about
+marks a source. **Fix, by kind:** (1) a redundant leaf inherit (everything it brings is
+already in another inherit's closure): delete the line, unless the file calls `b::fn()`
+through that scope name (only direct inherits are searched) or uses an unqualified
+`::fn()` and the redundant inherit comes first (`::fn()` takes the first inherit that has
+it); `lpc_diamonds.py --fix-redundant --apply` does the safe ones. (2) A mixin pulled in by
+two parents of which one does not need it: `LIB_CONTAINER` and `LIB_OBJECT` both inherited
+`LIB_RADIANCE`, `LIB_LIVING` and `LIB_OBJECT` both `LIB_SMELL`. Drop it from the parent
+whose own use is nil (container: its function returns the contents' light, the classes
+that are both object and container already add `object::GetRadiantLight()`; living is
+never used without an object) and the pass-through that used the scope name. (3) The same
+function in two unrelated mixins (`CanSell` in value and sell, `GetSave` in lock, close,
+bait): delete the duplicate if the bodies are identical, otherwise define the function
+in the class that inherits both and call the intended parent by scope; that is also what
+silences the overlap for sibling parser applies (`direct_look_obj`, `inventory_visible`),
+and the choice to spell out is whatever the inherit order already picked. (4) A private
+variable with the same name in an ancestor and a descendant (`Level`, `Obvious`,
+`CommandFail`): rename the `nosave`/private one (no save-file impact), never the saved
+one. **Detection:** `scripts/ds_oracle.py` before and after (KB 08 §10.12): function
+definers change only where resolution was made explicit, `GetSaveString()` stays equal.
+

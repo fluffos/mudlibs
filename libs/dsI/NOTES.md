@@ -835,11 +835,9 @@ tool lists, a golden-master comparison of the 130 `lib/` programs against HEAD
 (`scripts/pristine_tree.sh`; admin `fluffos`/`fluffwiz123`, a fresh mortal registered,
 look/score/inventory, a 26-command admin battery).
 
-Result: 1387 distinct diagnostics → 125. What is left is 60 `Redeclaration of global
-variable` and 37 `inherited from both` warnings in 24 files (the duplicate-inherit
-diamonds in `lib/interactive`, `npc`, `player`, `std/storage`, `std/corpse`, plus the
-`CanSell`/`GetSave` function overlaps; queued) and the files that never compiled (§6
-below, `secure/daemon/remote.lpc` and `secure/daemon/bugs.lpc` too).
+Result: 1387 distinct diagnostics → 28, all of them in the nine files that never compiled
+(§6 below). The 125 that survived the mechanical pass were one structural family, solved in
+a second pass (below).
 
 Mechanical (tool): 34 `#pragma no_warnings`-style lines deleted; 875 `nosave` functions
 → `protected` and 199 left public because the name is called through `->` or as a
@@ -876,3 +874,28 @@ Real bugs found while doing it (all fixed):
 The `help` command is broken in a fresh clone and on the site (`get_dir()` of
 `secure/cmds/common`, which the archive ships empty, returns 0): see KB 06 §7.212; the
 eight directories the code names are now in `scripts/wasm_keep_dirs.txt`.
+
+**Structural pass (same day): one file reached through two inherit paths.** The 60
+`Redeclaration of global variable` + 37 `inherited from both X and X` warnings came from
+five classes (KB 06 §7.213 has the mechanism): `LIB_CONTAINER` inherited `LIB_RADIANCE` and
+`LIB_OBJECT` inherits it too, so `npc`, `interactive` (hence `player`/`creator`) and
+`storage` (hence `corpse`, `limb`, `trap`, the chests) each carried two copies; `LIB_LIVING`
+inherited `LIB_SMELL` next to `LIB_OBJECT`'s, and `corpse` inherited `LIB_SMELL` once more.
+Fixes: `container.lpc` no longer inherits `LIB_RADIANCE` (its function returns the
+contents' light; the classes that are both object and container already add
+`object::GetRadiantLight()`, so the totals do not change; no room, container or holder
+sets its own radiance, and the old branch for it divided by zero at ambient 0);
+`living.lpc` lost `LIB_SMELL` and its pass-through `direct_smell_obj()`; `corpse.lpc`
+lost the redundant inherit. The parser applies that exist on both sides
+(`direct_look_obj`, `direct_look_at_obj`, `indirect_look_at_obj_word_obj`,
+`inventory_visible`) are now spelled out in `npc.lpc` (object side wins, as the inherit
+order made it) and `player.lpc` (living wins); `CanSell` existed twice with the same body
+(`value.lpc` and `events/sell.lpc`), the copy in `value.lpc` is gone; `GetSave()` of
+`lock`/`close`/`bait` collided with `item`'s: `seal.lpc` returns both lists, `storage.lpc`
+and the pole leaf return `item::GetSave()` (nobody calls `GetSave()` virtually here).
+Golden-master oracle against the first commit: only the intended differences (removed
+duplicate variables and functions, the explicit resolutions, the two `GetSave()`
+contents), `GetSaveString()` of every probed object unchanged. Live: pristine boot with no
+warnings, `help` works, a fresh mortal registered, walked, looked, smelled, listened and
+fought the Traveller (limb names and damage lines as before).
+
