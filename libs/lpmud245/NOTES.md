@@ -424,3 +424,23 @@ command (score, inventory, combat, quit, reconnect) in one final
 continuous session: zero errors in the driver's own captured stdout
 (this native build's `debug.log` is dead for the process's whole life
 per AGENTS.md §10.9, so stdout is the only reliable error channel).
+
+## 深度功能测试（§10.7，2026-10-03）— compile warnings
+
+`scripts/lpc_warnings.py lpmud245` found 113 diagnostics. Mechanical: 74 `static` functions that
+came through as `nosave` are `protected` (all add_action/input_to/heart_beat handlers, which the
+driver calls regardless of visibility; `set_short`/`set_long` stay public because other objects
+call them), 2 more lost the redundant `nosave`, 23 unused locals deleted. By hand: `obj/monster.lpc`
+and `obj/monster.talk.lpc` declare their own `spell_dam` next to `obj/living.lpc`'s `nosave` one;
+the monster's is set by `set_spell_dam()` and read by its own `heart_beat`, while `living.lpc`'s
+`attack()` adds and zeroes the other, so the two have always been separate variables here
+(merging them, as the 1990 driver did, would let the first melee round zero a monster's spell
+damage); the monster's is now `monster_spell_dam`. `obj/player.lpc` redeclared `is_npc` and
+`hunting_time`, which `living.h`'s `inherit "obj/living"` already provides (its local copy of
+`move_player()` now uses the inherited ones; nothing else read either). `obj/quicktyper.lpc`'s
+`object obj;` is only used inside an `#if 0` block, so the declaration moved into that block. Left
+as they are: `players/lars/test.lpc` (a wizard's scratch file with constant divisions by zero) and
+`room/def_castle.lpc` (the castle template `create_wizard()` fills in). Live on a pristine tree:
+registration, a mortal's first commands, then the same character hand-promoted to level 21
+(`ls`/`cd`/`cat`/`goto`/`clone`/`load`/`echo`/`people` and the line editor) with no
+`insufficient permission` or runtime error on the console.
