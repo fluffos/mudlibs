@@ -1025,3 +1025,60 @@ Grand Hall → `look` → `score` ("You are an implementor.") → `quit`
 ("You have left Wilderness."). `wasm_status` is `playable` again,
 now actually true for the browser. Native play on
 `~/src/fluffos-wilderness` is unchanged.
+
+## 深度功能测试（§10.7，2026-10-04）— `#pragma no_warnings` removed, every compile warning fixed
+
+`include/mudlib.h` (so every file that includes it), the 33 generated `domains/std/2.4.5/**/tmp_*.lpc` files and
+`domains/lpscript/tmp_harry.lpc` opened with `#pragma no_warnings`, and the script compiler
+(`secure/daemons/lpscript_d.lpc`) wrote it into every file it generates. With the pragma gone a scan on the
+wilderness driver build (`LPCC=~/src/fluffos-wilderness/build-debug/src/lpcc scripts/lpc_warnings.py wilderness`) showed
+758 distinct diagnostics (854 of 887 files compile). Now: 32, all errors, in the 29 files that still do not compile;
+**0 warnings**, also in the files the script compiler generates when the shipped `.scr` scripts load (nine of the
+twelve load; see Left for the other three).
+
+Root causes, by class (KB 04 §6.10):
+- **The script compiler** wrote the pragma, an unused `function f;` into every generated `setup()` (31 files; it is
+  emitted now only when the body uses `f`), non-`varargs` `direct_*`/`indirect_*` handlers (the parser passes
+  arguments the script does not name), and bare `array patterns` / `array num` for the trigger table. A bare `array`
+  is an array of unknown element type, so `sscanf(...) == num[i]` is a compile error ("int vs unknown"): every script
+  with triggers (`beavis`, `butthead`, `harry`) and the generated `tmp_harry.lpc` / `tmp_leo.lpc` never compiled.
+  It writes `string *patterns` and `int *num` now. A script that mixes two classes defining `lpscript_attributes()`
+  (`is= torch,valuable`) drew the "inherited from both" warning in every load; the generated file now names both, as
+  `std/torch.lpc` does by hand. `barney.scr` carried an unused local of its own.
+- **Private names that met in one class** got module prefixes: `base` (`exit_base` in `m_exit`, `cx_base` in both copies
+  of `m_complex_exit`, `rx_base` in `room/exits`, `obj_base` / `obj_default_desc` in `m_exit_obj`), `env` (`act_env` in
+  `m_actions`, `blocker_env` in `m_blockexits`), `blocker_move_hook`, `wander_move_hook` (`m_wander`),
+  `wield_move_hook` (`m_wieldable`), `drink_taste_action` (`m_drinkable`), `ds_dmg` / `ds_weapon_skill`
+  (`m_damage_source`) and `obj_size` (`object/size`); `m_exit` declared `default_desc` twice with two types.
+- **Modules the base class already has**: `trans/obj/wish` (`M_PROMPT`: the shell keeps its own copy and registers the
+  `PROMPT` hook itself), `domains/std/sewer_grate` (a door is lockable already; the second `M_LOCKABLE` also put its
+  tiny `mudlib_setup()` over the door's) and 14 `wiz/*` monsters (`M_ACTIONS`, which `ADVERSARY` has) inherited a module
+  twice.
+- **65 `F() inherited from both A and B` overlaps** in 30 files are named in the leaf (`lpc_name_winner.py`);
+  `std/body.lpc` needed the block moved by hand out of `#ifndef NEWS_DATA_IN_USER`, and `do_game_command` /
+  `get_size` lost their `nomask` where a mixin defines the same name (the keyword moved to a wrapper one level up).
+- Smaller: `varargs int clean_up()` in `std/body`, `string *aliases...` rest parameters, a `/*/*` comment, a stray `};`,
+  comma-form function pointers in `recorder`, unused locals in `shellfuncs`, `hintmenu`, `pac_sword`, `login`.
+
+Removed: `tmp/EVAL.lpc`, the leftover of an interrupted `treefor` call (the command writes, loads and `rm`s that file
+on every use; its last body, `__TREE__{0; }`, was the one warning the scan showed).
+
+Formatter (KB 08 §9) not applied: all 141 changed `.lpc`/`.h` files are already not formatter-clean at HEAD.
+
+Live on a pristine tree with the wilderness driver: the seeded `fluffos` admin clones Tiamat, Bill the Troll, the Mog
+goblin, rabbit and puffball, Sammy Snake and a rock; Mog's Arena grate runs the full door cycle (locked → unlock with
+the gold key → open → walk down into the sewer, where the grate shows open through the sibling room → close → lock →
+open refused → unlock → open) and the arena fight resolves. The `.scr` scripts `beavis`, `butthead`, `harry`,
+`chainmail`, `magic_flame`, `magic_torch`, `portal`, `barney` and `attic` load and clone; `tmp_magic_torch.lpc` and
+`tmp_barney.lpc` are written without a warning.
+
+Left: the 29 files that do not compile are `std/accountant.lpc` (`add_menu_item()` gets a `flag_set_info` from a second
+definition of the class), `std/adversary/armor/limbs.lpc`, `std/room/exits.lpc` (inherits a function nothing
+provides), `daemons/channel/moderation.lpc` (`channel_info`), `contrib/marriage/finger*` (`spouse` member),
+`contrib/homepage_d`, `contrib/marriage/body`, `domains/std/{keg,river,table}.lpc` (each inherits a macro the
+headers do not define: `DAEMON`, `MONSTER`, `M_DRINK_SOURCE`, `COMPLEX_CONTAINER`), the `domains/std/attic`
+example monsters (`add_script()` / `run_script()` do not exist), `secure/daemons/ftp_d.lpc` (locals in a function
+pointer), and three example scripts: `domains/lpscript/camera.scr` (`obj` is not a class name, the `action[...]` and
+`failed` syntax is from an older script grammar, and `picture.scr` is not in the archive), `large_oak_door.scr`
+(`setup_door()` takes the destination room as a third argument) and `wizroom.scr` (`default_exit=` maps to
+`set_default_exit()`, which only the non-compiling `room/exits` module defines). None is on the login or new-player path.

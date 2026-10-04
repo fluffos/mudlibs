@@ -190,7 +190,6 @@ void assert_alphanum(int line, string what) {
 }
 
 void handle_grouping() {
-    int newind;
     
     attributes = ([ "is" : ({ LPSCRIPT_SPECIAL, (: handle_is :) }),
 		    "variables" : ({ LPSCRIPT_SPECIAL, (: handle_variables :) }) ]);
@@ -832,18 +831,36 @@ private nomask void handle_generation(string outname) {
     string protos = "";
     mixed * tmp;
     string actions = "";
+    string *providers = ({ });
+    mapping seen = ([ ]);
     
+    /* Two inherits that define lpscript_attributes() draw the compiler's "inherited from both" warning in every
+       script that mixes them (`is= torch,valuable`): name them all, the way the library's own classes do. */
+    foreach (string inh in inherits) {
+	object ob = load_object(inh);
+	string def = ob ? function_exists("lpscript_attributes", ob) : 0;
+	string nm = explode(inh, "/")[<1];
+
+	if (def && !seen[def]) {
+	    seen[def] = 1;
+	    providers += ({ strlen(nm) > 4 && nm[<4..] == ".lpc" ? nm[0..<5] : nm });
+	}
+    }
+    if (sizeof(providers) > 1)
+	header += "mapping lpscript_attributes() {\n    return " +
+	    implode(providers, "::lpscript_attributes() + ") + "::lpscript_attributes();\n}\n\n";
+
     if (sizeof(triggers)) {
 	for (int i = 0; i < sizeof(triggers); i++)
 	    actions += "case " + i + ":\n" + triggers[i][2] + "return;\n";
 	
-	ret += "array patterns = ({ ";
+	ret += "string *patterns = ({ ";
 	for (int i = 0; i < sizeof(triggers); i++) {
 	    if (i) ret += ", ";
 	    ret += "\"" + triggers[i][0] + "\"";
 	}
 	ret += "});\n";
-	ret += "array num = ({ ";
+	ret += "int *num = ({ ";
 	for (int i = 0; i < sizeof(triggers); i++) {
 	    if (i) ret += ", ";
 	    ret += triggers[i][1];
@@ -864,24 +881,34 @@ END + actions + "}}}}";
     
     tmp = unique_array(lines - ({ 0 }), (: $1[0] :));
     foreach (mixed * item in tmp) {
+	string body = "";
+
 	if (item[0][0] == -1) {
 	    foreach (mixed * block in item)
 		globals += block[1] + ";\n";
 	    continue;
 	} else if (item[0][0] == "setup") {
 	    protos += "void setup(" + setup_args + ");\n";
-            ret += "\nvoid setup(" + setup_args + ") {\nfunction f;\n";
+            /* `function f;` only when the body uses it: an unused local is a compiler warning */
+	    foreach (mixed * block in item)
+		body += block[1] + ";\n";
+            ret += "\nvoid setup(" + setup_args + ") {\n" +
+		(sizeof(regexp(explode(body, "\n"), "(^|[^A-Za-z0-9_])f($|[^A-Za-z0-9_])")) ? "function f;\n" : "");
         } else {
-	    protos += "mixed " + item[0][0] + "();\n";
-	    ret += "\nmixed " + item[0][0] + "() {\n";
+	    /* verb-rule handlers (direct_*, indirect_*) are varargs: the parser passes arguments the script does not name */
+	    string vp = (strsrch(item[0][0], "direct_") == 0 || strsrch(item[0][0], "indirect_") == 0) ? "varargs " : "";
+
+	    protos += vp + "mixed " + item[0][0] + "();\n";
+	    ret += "\n" + vp + "mixed " + item[0][0] + "() {\n";
 	}
 	
-	foreach (mixed * block in item)
-	    ret += block[1] + ";\n";
-	ret += "}\n\n";
+	if (body == "")
+	    foreach (mixed * block in item)
+		body += block[1] + ";\n";
+	ret += body + "}\n\n";
     }
  
-    unguarded(1, (: write_file, outname,"#pragma no_warnings\n" + header + globals + protos + tail + ret, 1 :));
+    unguarded(1, (: write_file, outname, header + globals + protos + tail + ret, 1 :));
 }
 
 object compile(string scrname) {

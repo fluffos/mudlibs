@@ -2,7 +2,6 @@
 
 #ifndef __MUDLIB_H__
 #define __MUDLIB_H__
-#pragma no_warnings
 
 #include "daemons.h"
 #include "dirs.h"
