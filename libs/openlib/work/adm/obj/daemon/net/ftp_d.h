@@ -64,27 +64,27 @@ class socket {
   int pos;               // current position in transfer
 }
 
-nosave void eventNewConnection(int fd);
-nosave void eventResolveCallback(string ipnum, string hostname, int key);
-nosave void eventWriteError(int fd);
-nosave void eventSocketClosed(int fd);
-nosave void eventRead(int fd, mixed val);
-nosave void eventReadData(class socket sock, mixed val);
-nosave int  eventOpenDataConn(class socket sock, int type);
-nosave void eventSendData(class socket sock);
-nosave void eventShowFiles(class socket sock, string code);
-nosave void requestUSER(class socket sock, string uname);
-nosave void requestPASS(class socket sock, string passwd);
-nosave void requestPORT(class socket sock, string addr);
-nosave void requestTYPE(class socket sock, string type);
-nosave void requestRETR(class socket sock, string filename);
-nosave void requestSTOR(class socket sock, string filename);
-nosave void requestXCWD(class socket sock, string pathname);
-nosave void requestLIST(class socket sock, string pathname);
-nosave void requestNLST(class socket sock, string pathname);
-nosave void requestXPWD(class socket sock);
+protected void eventNewConnection(int fd);
+protected void eventResolveCallback(string ipnum, string hostname, int key);
+protected void eventWriteError(int fd);
+protected void eventSocketClosed(int fd);
+protected void eventRead(int fd, mixed val);
+protected void eventReadData(class socket sock, mixed val);
+protected int  eventOpenDataConn(class socket sock, int type);
+protected void eventSendData(class socket sock);
+protected void eventShowFiles(class socket sock, string code);
+protected void requestUSER(class socket sock, string uname);
+protected void requestPASS(class socket sock, string passwd);
+protected void requestPORT(class socket sock, string addr);
+protected void requestTYPE(class socket sock, string type);
+protected void requestRETR(class socket sock, string filename);
+protected void requestSTOR(class socket sock, string filename);
+protected void requestXCWD(class socket sock, string pathname);
+protected void requestLIST(class socket sock, string pathname);
+protected void requestNLST(class socket sock, string pathname);
+protected void requestXPWD(class socket sock);
 #ifdef ANONYMOUS_FTP
-nosave string PseudoRootPath(string cur, string rel);
+protected string PseudoRootPath(string cur, string rel);
 #endif
 mixed* query_connections();
 

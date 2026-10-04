@@ -13,7 +13,7 @@ string short();   // get this defined somewhere
 // Prototypes
 //
 void low_setup();          // make sure you call thisthis
-void remove();             // and this
+int remove();              // and this
 int is_living();
 int set_name(string);
 string query_name();

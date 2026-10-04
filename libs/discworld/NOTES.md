@@ -642,3 +642,9 @@ Newbie Area 币种表（比值来自本树 `money_symboliser`，P$1 == 100）。
 
 2026-08-27 的「list 时序」不再算未完成。没有拜师（distribution 公会
 内容未随包）。
+
+## 2026-10-04 — `#pragma no_warnings` removed
+
+`std/effects/basic.lpc` carried a mid-file `#pragma no_warnings` (before `query_attrs()`); it hid nothing: the file
+compiles without a diagnostic once the line is gone. The same file, byte for byte, sits in skylib, discworld,
+dw_fluffos_v1 and dw_fluffos_v2.

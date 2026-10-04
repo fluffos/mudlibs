@@ -7,7 +7,6 @@
 // the euid gets set right.
 //
 
-#pragma save_binary
 
 #include "mudlib.h"
 #include "dirs.h"

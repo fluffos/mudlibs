@@ -179,3 +179,8 @@ restart: PID **4074608**, cwd `libs/dw_fluffos_v1/work`.
   (pace / long waits; do **not** `stop` between shop cmds or the buy
   is cancelled); net-dead statues stall heartbeats.
 
+## 2026-10-04 — `#pragma no_warnings` removed
+
+`std/effects/basic.lpc` carried a mid-file `#pragma no_warnings` (before `query_attrs()`); it hid nothing: the file
+compiles without a diagnostic once the line is gone. The same file, byte for byte, sits in skylib, discworld,
+dw_fluffos_v1 and dw_fluffos_v2.

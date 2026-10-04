@@ -784,3 +784,9 @@ intermud.o`) reverted/removed before staging -- only the two `.lpc`
 fixes and the admin account's own legitimately-updated save file
 (`save/players/f/fluffos.o` -- new login timestamp, skill-practice
 increments from this session's own admin testing) are committed.
+
+## 2026-10-04 — `#pragma no_warnings` removed
+
+`std/effects/basic.lpc` carried a mid-file `#pragma no_warnings` (before `query_attrs()`); it hid nothing: the file
+compiles without a diagnostic once the line is gone. The same file, byte for byte, sits in skylib, discworld,
+dw_fluffos_v1 and dw_fluffos_v2.

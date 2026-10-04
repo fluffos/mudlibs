@@ -619,3 +619,30 @@ this is `adm/obj/daemon/master.lpc`'s `log_error()` broadcasting a
 background daemon's periodic recompile-retry failure to whichever
 player happens to be connected at that tick; cosmetic noise, not a
 sign that the connecting player's own login/commands failed.)
+
+## 深度功能测试（§10.7，2026-10-04）— `#pragma no_warnings` removed, every compile warning fixed
+
+`obj/inherit/living.lpc`, `object.lpc` and `room.lpc` each opened with `#pragma no_warnings`, which kept the base
+classes quiet while 246 distinct diagnostics sat underneath. With the pragmas gone, `scripts/lpc_warnings.py
+openlib --fix` did the mechanical classes (131 `nosave` functions -> `protected` and 31 dropped, six
+`#pragma save_binary` lines, 32 unused locals, 3 bare returns, one `varargs`), then by hand:
+- `remove()` is an `int` everywhere: the `destruct()` simul_efun refuses to destroy an object whose `remove()`
+  returns non-zero, but `base.lpc`, `living.lpc` and `m_living.lpc` declared it `void` while `armour`, `weapon` and
+  the user body returned an `int` (and a stale `void remove();` prototype sat in `m_living.h`).
+- `room.lpc`, `container.lpc` and `living.lpc` name the module that wins where two modules define the same function
+  (`query_bulk`, `query_weight`, `receive_object`, `query_base_weight`, `query_weight_contained`): the later inherit
+  was already in effect, so nothing changed but the warnings.
+- `include/races/clay.h` declared its own `armour_types`, `armour_locations`, `base_ac`, `hands` and `combat_info`
+  next to `m_race`'s private ones; renamed `clay_*` (only that header uses them).
+- `cmd/wiz/netstat.lpc` called `dump_socket_status()`, which the driver dropped long ago; it lists
+  `socket_status()` now (and says so when the sockets package is absent).
+- `adm/tmp/tmp_eval_file.lpc` (the `eval` command's scratch file, kept in the archive) lost an unused local.
+- The fixer turned two `private` / `nomask nosave int cmd_cd()` heads (the modifier alone on the line above) into
+  `private nomask protected`, which does not compile (`nmsh.lpc`, `rsh.lpc`); fixed by hand and in
+  `scripts/lpc_warnings.py`.
+
+**Result: 246 -> 20 distinct diagnostics**, all in five files that never compiled: `adm/obj/daemon/master/valid.lpc`
+(a fragment the master includes), `master_old.lpc` (an older master nothing loads), `doc/misc/m_ansi.lpc` (a Lima
+example in the docs), `obj/clone/money.lpc` and `obj/clone/reinzombie.lpc` (written for an earlier `OBJECT` API:
+`create()` against a `nomask create()`, `set_ids`, `OBJECT_LIVING`). Live as `root` on a working-tree copy: `look`, `i`,
+`score`, `west`/`east`, `netstat` (the five listening/Intermud sockets), `lswiz`, `where`, `help`; `log/errors` stayed empty.

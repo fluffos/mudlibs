@@ -8,15 +8,15 @@ class client {
 }
 
 int eventCreateSocket(string host, int port);
-nosave void eventAbortCallback(int fd);
-nosave void eventReadCallback(int fd, mixed val);
-nosave void eventRead(mixed val);
-nosave void eventWriteCallback(int fd);
+protected void eventAbortCallback(int fd);
+protected void eventReadCallback(int fd, mixed val);
+protected void eventRead(mixed val);
+protected void eventWriteCallback(int fd);
 void eventWrite(mixed val);
-nosave void eventClose(class client sock);
-nosave void eventSocketClose();
+protected void eventClose(class client sock);
+protected void eventSocketClose();
 int eventDestruct();
-nosave void eventSocketError(string str, int x);
+protected void eventSocketError(string str, int x);
 
 function SetRead(function f);
 function SetSocketClose(function f);

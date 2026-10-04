@@ -218,6 +218,8 @@ def fix_nosave_functions(work, rows, public):
                 manual.append((f, ln, name, "statement boundary inside the declaration"))
                 continue
             vis = re.search(r"\b(private|protected)\b", head[max(0, m.start() - 40):m.end() + 60])
+            if not vis and start > 0 and re.fullmatch(r"\s*(?:(?:private|protected|public|static|nomask|varargs)\s+)+\s*", L[start - 1]):
+                vis = re.search(r"\b(private|protected)\b", L[start - 1])   # `private` alone on the line above the head
             if vis or name in public:
                 after = head[m.end():]
                 after = after[1:] if after.startswith(" ") else after

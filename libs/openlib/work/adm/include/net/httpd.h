@@ -31,10 +31,10 @@ void listen_callback(int fd);
 void write_callback(int fd);
 void read_callback(int fd, string str);
 void resolve_incoming(string addr, string nom, int cle);
-nosave private void http_error(int fd, mapping err);
-nosave private void add_activity(int fd, string str);
+private void http_error(int fd, mapping err);
+private void add_activity(int fd, string str);
 void close_connection(int fd);
-nosave private void get_file(int fd, string file);
-nosave private string format_date(int x);
+private void get_file(int fd, string file);
+private string format_date(int x);
 
 #endif /* __HTTP_H */

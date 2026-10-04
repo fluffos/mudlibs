@@ -120,3 +120,8 @@ Driver PID for the play boot was **4037845** (cwd
   not exist!` during wander.
 - Same Discworld queue / net-dead pacing rules as v1.
 
+## 2026-10-04 — `#pragma no_warnings` removed
+
+`std/effects/basic.lpc` carried a mid-file `#pragma no_warnings` (before `query_attrs()`); it hid nothing: the file
+compiles without a diagnostic once the line is gone. The same file, byte for byte, sits in skylib, discworld,
+dw_fluffos_v1 and dw_fluffos_v2.
