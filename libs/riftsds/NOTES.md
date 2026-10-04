@@ -809,6 +809,7 @@ search, zpem, horse, death and corpse.
 518 files this lib has never been able to compile (the Lima-style `domains/std`, `domains/omega`,
 `domains/common` and creator-realm content, triaged in the 2026-08 sections above: missing `ITEM_DECAY_FOOD`/
 `GUILD_D`/`RACE_D`/`ROOM_NEWBIE` and headers that do not exist); the last is an `Expression has no side
-effects` in a creator's eval scratch file (`secure/tmp/thurtea_CMD_EVAL_TMP_FILE.lpc`, untracked save churn).
+effects` in a creator's eval scratch file the archive shipped (`secure/tmp/thurtea_CMD_EVAL_TMP_FILE.lpc`, which
+the `eval` command overwrites on every use).
 The comma pointers `(: this_object(), "fn" :)` of the Praxis domain (29 sites in 21 files) are still to do
 (KB 04 §6.10).
