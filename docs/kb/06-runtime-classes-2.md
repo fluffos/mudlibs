@@ -978,3 +978,24 @@ fixer's routines (`fix_nosave_functions`, `fix_escapes`, `fix_unused_locals`) ov
 the result back; once the wizard has run, `diff connect.real connect.lpc` is empty.
 **Detection:** `grep -rn 'cp(\|rename(' work | grep -v '\.lpc'` for source copied at runtime, and
 a boot that completes the wizard, then a second login with the console watched.
+
+### 7.217 Two uncaught errors in a row leave a Lima-family session mute (`HAS_PROCESS_INPUT` is dropped)
+**Symptom:** a wizard's `clone` of a broken object fails twice (or a player repeats a command that raises), and from
+then on every line gets only the driver's `> ` (swmud, wilderness) or `What?` (sgzmudsgz): `look`, `i`, `!look`,
+`quit` all answer nothing until the player reconnects. **Cause:** Lima's `inputsys` registers
+`input_to((: dispatch_modal_input :))` and re-arms it with `modal_recapture()` after the handler returns, so an
+uncaught error in a handler unwinds past it and the next line reaches the user object's `process_input()` fallback
+(the comment above it says so). `dispatch_modal_input` runs again there, and if that raises too the driver
+(`comm.cc` `process_input`: `if (!ret) ip->iflags &= ~HAS_PROCESS_INPUT`) never calls `process_input()` for the
+connection again; Lima has no `add_action` commands, so every line falls to `safe_parse_command` and is dropped.
+**Fix:** what upstream Lima and spacemud already do: `catch()` around `evaluate(info->input_func, str)` and the `!`
+escape's `dispatch_to_bottom()`, then `modal_recapture()` as before (swmud, wilderness, sgzmudsgz). The mudlib's
+`error_handler()` prints for caught errors too (it checks `caught` only to pick `/log/catch`), so the player still sees
+`*message` and `Trace written to`. Where it does not (`config.fluffos` has no `mudlib error handler`: sanguozhi; a
+handler that logs a caught error and tells nobody: sagenwelt), print the caught string with `write()` the way the
+driver's default does (wizards the error, players the `default error message`). **Detection:** boot, log in as a
+wizard, `clone` a file whose `create()` is `int *a; a[0] = 1;` three times, then `look`; or
+`grep -l 'modal_recapture' libs/*/work/secure/user/inputsys.*` and read `dispatch_modal_input`. Libs: lima and
+spacemud had it fixed upstream; swmud, wilderness, sgzmudsgz fixed here; sanguozhi (submodule) goes upstream as a
+PR; sagenwelt's `inp_sys.lpc` has the same shape but its header uses default arguments, so the player layer never
+compiles and nothing runs it.

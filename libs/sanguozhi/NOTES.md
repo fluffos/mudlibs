@@ -905,3 +905,13 @@ Cleanup: `qtstv`/`qtstw` removed from `CHAR_D` via
 `call /daemons/char_d,remove_char,<id>` (run as `fluffos`, live, before
 killing the test driver) and their `data/{players,pshells,links}/q/`
 save files deleted before commit.
+
+## 深度功能测试（§10.7，2026-10-04）— two uncaught errors in a row left the session mute (upstream PR)
+
+The same `secure/user/inputsys.lpc` defect as swmud, wilderness and sgzmudsgz (KB 06 §7.217): with this snapshot a
+second uncaught error inside the input handler turns every later line into `什么?` until the player reconnects.
+Reproduced on a clean checkout with a one-line command that raises (`boom`, `boom`, `look`). This lib has no mudlib
+error handler, so the fix catches the error, re-arms the input and prints what the driver's default handler would have
+(wizards the error, players the configured default error message). The submodule is `fluffos-upstream`, so the change
+goes there: [fluffos/sanguozhi#5](https://github.com/fluffos/sanguozhi/pull/5). Live on a clean checkout with the
+patch: four errors in a row, then `look`, `i` and `!look` answer. After the PR is merged, bump the pin.

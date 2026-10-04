@@ -723,3 +723,17 @@ attributes, hand and team and reaches the game (`score`, `who`, `skills`, `inven
 
 Left: the 121 files that do not compile are Lima's example domain `domains/std` (37; it calls `set_weapon_class()` and
 `set_value()`, which this game's weapon API replaced), `std/effect/*`, retired std classes and the two CGI scripts.
+
+## 深度功能测试（§10.7，2026-10-04）— two uncaught errors in a row left the session mute
+
+`secure/user/inputsys.lpc` re-armed the player's `input_to()` (`modal_recapture()`) only after the input handler
+returned, so an uncaught error in a handler lost it. The next line then reached `process_input()`, and a second error
+there made the driver stop calling `process_input()` for the connection for good (`comm.cc`: `if (!ret) ip->iflags &=
+~HAS_PROCESS_INPUT`); the Lima command set has no `add_action` commands, so every later line was dropped and the player
+saw only the driver's `> `. Reproduced on the unchanged tree: clone a file whose `create()` is `int *a; a[0] = 1;`
+twice, then `look`. A player who repeats one failing command hits the same thing, and only a reconnect helps.
+
+`dispatch_modal_input()` now wraps the handler call and the `!` escape in `catch()` and re-arms the input as before,
+which is what upstream Lima already does. `error_handler()` still prints the error and `Trace written to` (the log is
+`/log/catch` now, not `/log/runtime`). Live on a pristine tree: four errors in a row (and one more after a `look`), then
+`look`, `i` and `!look` answer. KB 06 §7.217.

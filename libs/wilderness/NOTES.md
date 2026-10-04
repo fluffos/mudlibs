@@ -1082,3 +1082,17 @@ pointer), and three example scripts: `domains/lpscript/camera.scr` (`obj` is not
 `failed` syntax is from an older script grammar, and `picture.scr` is not in the archive), `large_oak_door.scr`
 (`setup_door()` takes the destination room as a third argument) and `wizroom.scr` (`default_exit=` maps to
 `set_default_exit()`, which only the non-compiling `room/exits` module defines). None is on the login or new-player path.
+
+## 深度功能测试（§10.7，2026-10-04）— two uncaught errors in a row left the session mute
+
+`secure/user/inputsys.lpc` (as in swmud and the other Lima-family copies) re-armed the player's `input_to()` (`modal_recapture()`) only after the input handler
+returned, so an uncaught error in a handler lost it. The next line then reached `process_input()`, and a second error
+there made the driver stop calling `process_input()` for the connection for good (`comm.cc`: `if (!ret) ip->iflags &=
+~HAS_PROCESS_INPUT`); the Lima command set has no `add_action` commands, so every later line was dropped and the player
+saw only the driver's `> `. Reproduced on the unchanged tree: clone a file whose `create()` is `int *a; a[0] = 1;`
+twice, then `look`. A player who repeats one failing command hits the same thing, and only a reconnect helps.
+
+`dispatch_modal_input()` now wraps the handler call and the `!` escape in `catch()` and re-arms the input as before,
+which is what upstream Lima already does. `error_handler()` still prints the error and `Trace written to` (the log is
+`/log/catch` now, not `/log/runtime`). Live on a pristine tree: four errors in a row (and one more after a `look`), then
+`look`, `i` and `!look` answer. KB 06 §7.217.

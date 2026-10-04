@@ -121,3 +121,14 @@ fluffos / 汉末 / 白身）/ `quit` 都通。
 
 Do not invent digsoil rooms. Empty numbering rows (mhxy2002/fy4/jy/
 hylib/dtxy) stay confirmed duplicates.
+
+## 深度功能测试（§10.7，2026-10-04）— 连续两次未捕获的错误会让会话哑掉
+
+`secure/user/inputsys.lpc` 只在输入处理函数正常返回后才用 `modal_recapture()` 重新挂上 `input_to()`。处理函数里一次
+未捕获的错误会跳过它，下一行输入走 `process_input()` 兜底；兜底里再出一次错，驱动（`comm.cc` 的 `process_input`）就对这条
+连接永远停用 `process_input()`，之后每一行都落到普通命令解析器，只回「What?」，只有重连才能恢复。原树复现：往
+`cmds/player` 放一条 `main()` 里 `int *a; a[0] = 1;` 的命令，连敲两次，再 `look`。玩家把同一条出错的命令敲两遍就会碰上。
+
+`dispatch_modal_input()` 现在把处理函数调用和 `!` 转义都包进 `catch()`，其后照旧 `modal_recapture()`（上游 Lima 的做法）；
+`error_handler()` 仍会给玩家打印错误和「Trace written to」（日志改记 `/log/catch`）。实测：连续四次出错后 `look`、`i`、
+`!look` 都正常。KB 06 §7.217。
