@@ -1019,3 +1019,11 @@ Found while verifying the same Praxis files in ds386 (`eval new("/domains/Praxis
   lib uses either), and `socket_err.h`/`socket.h` do the same with `ERROR_STRINGS` (32 against 33). Each
   `#define` now follows an `#undef`, which keeps the include-order behaviour the lib always had. dsIII is
   at 4 diagnostics: `obj/area_room.lpc`, `obj/stargate.lpc` and `open/prog.lpc` (two errors).
+
+## 深度功能测试（§10.7，2026-10-04）— Praxis comma-form function pointers
+
+The 30 comma-form pointers in the 21 Praxis files and the target fixes made in ds386 (see its NOTES section of the
+same date: `SetSearch` handlers return their text, the helm asks `GetMorality()`, `test_invis` takes the viewer,
+`look_at_vault`/`look_at_manhole` restored as text) carry over here: `scripts/lpc_twin_port.py adopt ds386 dsIII
+--pre HEAD --apply` (18 files are token twins: 12 byte-identical, 6 spliced into dsIII's own spacing; `farm`, `west_road2` and `yard` carry dsIII's own code and were edited by hand the same way). All 21 files compile without a diagnostic, and a live spot check (`search field`,
+`search mounds`, `look at mound`/`manhole`/`vault`/`treats`, the planning room, a voting hall) answers as in ds386.

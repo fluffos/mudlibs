@@ -839,3 +839,11 @@ Live, paired: the trainer (leave and come back within two seconds: HEAD "I am al
 (HEAD printed `long_func`), fixtures, search, zpem, horse, death and corpse. The comma pointers
 `(: this_object(), "fn" :)` of the Praxis domain (29 sites in 21 files, the same as ds386) are still to do
 (KB 04 §6.10).
+
+## 深度功能测试（§10.7，2026-10-04）— Praxis comma-form function pointers
+
+The 30 comma-form pointers in the 21 Praxis files and the target fixes made in ds386 (see its NOTES section of the
+same date: `SetSearch` handlers return their text, the helm asks `GetMorality()`, `test_invis` takes the viewer,
+`look_at_vault`/`look_at_manhole` restored as text) carry over here: `scripts/lpc_twin_port.py adopt ds386 dshakkard
+--pre HEAD --apply` (all 21 are token twins: 12 byte-identical, 9 spliced into dshakkard's own spacing). All 21 files compile without a diagnostic, and a live spot check (`search field`,
+`search mounds`, `look at mound`/`manhole`/`vault`/`treats`, the planning room, a voting hall) answers as in ds386.

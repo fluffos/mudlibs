@@ -14,8 +14,10 @@ classify  every file SRC changed since REV -> `twin` (DST's tokens equal SRC's p
           verbatim), `differs` (DST has its own code there) or `absent` (DST has no such file).
 adopt     for the `twin` files, make DST's file equal SRC's fixed one.  When DST is the corpus formatter's output of
           the same sources (format(SRC pre) == DST byte for byte, checked per file) the new file is format(SRC post), so
-          it stays formatted; when DST == SRC pre byte for byte it is SRC post as is.  Anything else is reported
-          MISMATCH and still written formatted: look at it.  Without --apply it only prints what would change.
+          it stays formatted; when DST == SRC pre byte for byte it is SRC post as is.  Otherwise (same code, own
+          whitespace or comments) the token edits SRC made are spliced into DST's text, so everything outside the
+          edited spans keeps DST's style; a splice whose result does not have SRC post's tokens is SKIPPED, never
+          written.  Without --apply it only prints what would change.
 audit     for the `differs` files: token hunks SRC's pass made that DST does not have (a fuzzy or hand port left them
           out), and differences between the two libs that the port removed.  Empty output = the port is complete.
 tokdiff   token-level diff of two files, blind to whitespace/comments/line breaks.
@@ -43,6 +45,50 @@ TOK = re.compile(r'''
 def toks(data):
     return [m.group(0) for m in TOK.finditer(data.decode("utf-8", "replace"))
             if not (m.group(0).startswith("//") or m.group(0).startswith("/*"))]
+
+
+def spans(data):
+    """(latin-1 text, [(token, start, end)]) -- offsets are byte offsets; comments are not tokens"""
+    text = data.decode("latin-1")
+    return text, [(m.group(0), m.start(), m.end()) for m in TOK.finditer(text)
+                  if not (m.group(0).startswith("//") or m.group(0).startswith("/*"))]
+
+
+def splice(pre, post, dst):
+    """Apply the token edits that turn `pre` into `post` to `dst` (whose tokens equal pre's), keeping dst's text
+    outside the edited spans.  Returns bytes, or None when dst is not a token twin of pre or the result is wrong."""
+    tp_text, tp = spans(pre)
+    tq_text, tq = spans(post)
+    td_text, td = spans(dst)
+    a, b = [t[0] for t in tp], [t[0] for t in tq]
+    if a != [t[0] for t in td]:
+        return None
+    edits = []
+    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes():
+        if tag == "equal":
+            continue
+        snippet = tq_text[tq[j1][1]:tq[j2 - 1][2]] if j2 > j1 else ""
+        if i2 > i1:
+            start, end = td[i1][1], td[i2 - 1][2]
+            if j2 == j1:                                   # a deletion: take the blank line with it
+                s0, e0 = start, end
+                while s0 > 0 and td_text[s0 - 1] in " \t":
+                    s0 -= 1
+                while e0 < len(td_text) and td_text[e0] in " \t":
+                    e0 += 1
+                if (s0 == 0 or td_text[s0 - 1] == "\n") and (e0 >= len(td_text) or td_text[e0] in "\r\n"):
+                    start, end = s0, e0 + (2 if td_text[e0:e0 + 2] == "\r\n" else 1 if e0 < len(td_text) else 0)
+            edits.append((start, end, snippet))
+        else:                                              # an insertion after the previous token
+            pos = td[i1 - 1][2] if i1 > 0 else 0
+            gap = tq_text[tq[j1 - 1][2]:tq[j1][1]] if j1 > 0 and j1 < len(tq) else " "
+            sep = ("\n" + gap.rsplit("\n", 1)[1]) if "\n" in gap else " "
+            edits.append((pos, pos, sep + snippet))
+    out = td_text
+    for start, end, rep in sorted(edits, reverse=True):
+        out = out[:start] + rep + out[end:]
+    result = out.encode("latin-1")
+    return result if [t[0] for t in spans(result)[1]] == b else None
 
 
 def show(rev_path):
@@ -125,20 +171,19 @@ def cmd_adopt(a):
         fpre = read(os.path.join(tmp, "pre", p))
         fpost = read(os.path.join(tmp, "post", p))
         refused_any = os.path.join(tmp, "pre", p) in refused or os.path.join(tmp, "post", p) in refused
-        if not refused_any and fpre == dh:
+        if not refused_any and fpre == dh and toks(fpost) == toks(so):
             new, how = fpost, "format"
         elif sp == dh:
             new, how = so, "raw"
         else:
-            new, how = (so if refused_any else fpost), "MISMATCH"
+            new = splice(sp, so, dh)
+            how = "splice" if new is not None else "SKIPPED"
         dst_file = os.path.join(ROOT, "libs", a.dst, "work", p)
         cur = read(dst_file)
-        if toks(new) != toks(so):
-            how, new = "TOKEN-LOSS", so          # the formatter must never change code; fall back to the raw fix
         n[how] += 1
-        if how in ("MISMATCH", "TOKEN-LOSS") or cur != new:
+        if how == "SKIPPED" or cur != new:
             print(f"{how:10s} {'same' if cur == new else 'changes':8s} {p}")
-        if a.apply and cur != new:
+        if a.apply and new is not None and cur != new:
             open(dst_file, "wb").write(new)
     shutil.rmtree(tmp, ignore_errors=True)
     print(dict(n), "applied" if a.apply else "dry run (use --apply)")

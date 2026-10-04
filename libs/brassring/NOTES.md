@@ -598,3 +598,11 @@ the differences are the fixes above, the river's `You can't enter that!` -> `You
 time-of-day text and wandering-NPC chatter. A fresh mortal registered through the skill-picking login
 (`PickSkillsorClass` .. `InputPrimarySkills`, rewritten by the pass), killed an orc in the start room and
 survived; `log/runtime` and `log/catch` stayed empty.
+
+## 深度功能测试（§10.7，2026-10-04）— Praxis comma-form function pointers
+
+The 30 comma-form pointers in the 21 Praxis files and the target fixes made in ds386 (see its NOTES section of the
+same date: `SetSearch` handlers return their text, the helm asks `GetMorality()`, `test_invis` takes the viewer,
+`look_at_vault`/`look_at_manhole` restored as text) carry over here: `scripts/lpc_twin_port.py adopt ds386 brassring
+--pre HEAD --apply` (all 21 are formatted twins: `format(ds386 fixed file)`). All 21 files compile without a diagnostic, and a live spot check (`search field`,
+`search mounds`, `look at mound`/`manhole`/`vault`/`treats`, the planning room, a voting hall) answers as in ds386.

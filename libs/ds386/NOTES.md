@@ -1043,3 +1043,36 @@ in `create()`, so dropping `base_dummy::create()` from the five dummy hybrids al
 check of `GetNoSink()` caught `1` -> `0` on all five (the oracle's getter list has no `GetNoSink` row). The
 hybrids call `SetNoSink(1)` themselves now. KB 06 §7.213 kind 5: read the dropped class's `create()` for
 every call it makes, not only the inherit list.
+
+## 深度功能测试（§10.7，2026-10-04）— Praxis comma-form function pointers
+
+`(: this_object(), "fn" :)` compiles as a comma expression, so the pointer was the string `"fn"` and nothing warned
+(KB 04 §6.10). 30 sites in 21 Praxis files (29 live, one in a comment) are real pointers now
+(`scripts/lpc_fix_strptr.py ds386 --comma`, forward prototypes included), and every target was called through its
+real entry point on a HEAD tree and a working-tree copy. What the pointers had been doing, and what changed in the
+targets (they had never run):
+- `SetLong()` pointers: the planning room printed `go_away` and the six voting halls (`mage_`, `rogue_`, `monk_`,
+  `fighter_`, `cleric_`, `kataan_vote`) printed `new_long`; they show their texts now (the election date).
+- Item handlers (`house` door, `west_road2` mound, `crypt` altar, `roots`/`trunk` "room", the party's lava, lights and
+  treats): `look at ...` printed the function name; the lib evaluates a function value and prints what it returns, so
+  `look_treat` returns `""` instead of `1` (which printed a lone `1`).
+- `bank` vault and `yard` manhole named `look_at_vault`/`look_at_manhole`, which exist nowhere in this port; they are
+  the Nightmare lineage's closed-state texts (sunshadow `d/standard/old/bank.c`, `yard.c`) as plain strings.
+- `SetSearch()` handlers (`dump` mounds, `farm` stalks, `tunnel3` ball) must return their text: the lib prints it and
+  tells the room. They wrote with `message()` and returned nothing, so `search field` printed the shovel line and
+  then "You find nothing."; they return the text now and place the item with `eventMove()` (the Nightmare `move()`
+  does not exist here: the shovel and the dagger were never put in the room). The dump's item is `mounds`, and
+  `tunnel3` has no `tunnel` item, so `search tunnel` still answers "There is no tunnel here." (Praxis is mostly
+  unported Nightmare code: 156 `query_cap_name()` calls and `move()`/`add_hp()` elsewhere return 0 silently.)
+- `obj/armour/helm.lpc` `SetWear()`: a function returns 0 to block the wearing. `extra_worn()` asked for
+  `query_alignment()`, which does not exist here (always 0), so with a real pointer nobody could wear the Knight's
+  helm; it asks `GetMorality()` (below 200: "This helmet burns with disgust."; otherwise worn).
+- `obj/magic/invis.lpc` `test_invis(who, whom)`: `GetInvis()` hands the pointer only the viewer, so `whom` was 0 and
+  every `look` at the wearer raised in `whom->query_race()`. It takes the viewer, compares `GetRace()` (invisible to
+  orcs, visible to humans and to the wearer, checked live). Nothing creates this object but a hand-made call.
+- `post.lpc` `more()` (the exit's `pre` check) returns 1 as before.
+
+Verification: compiled, then HEAD vs working tree live as admin `fluffos`: every `look at ...`, the six halls, the
+search handlers (`search mounds` places the dagger and removes the search, `search field` the shovel), the helm at
+morality 0 and 500 with a free head slot, the invis ring against an orc and a human. A grep for `(: this_object(), "` over the five Dead Souls libs (dsIII, ds386, dshakkard, riftsds,
+brassring) finds nothing now.
