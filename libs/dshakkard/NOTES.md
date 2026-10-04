@@ -807,3 +807,35 @@ it renamed its own function `SetDoorClosed` (it shadowed `LIB_EXITS::SetDoor(dir
 resolves to the inherited exit function and the call is a silent no-op, so the call buttons never closed the
 car door. Changed to `SetDoorClosed(1)`, as in dsIII and ds386 (KB 06 §7.211). The rest of this lib's compile
 warnings are still to do (queue: Dead Souls siblings).
+
+## 深度功能测试（§10.7，2026-10-03）— compile warnings and inherit diamonds
+
+Method: ds386's committed pass (`b04f640`: mechanical sweep, dsIII structural recipe, hand fixes; KB 06
+§7.213-§7.216) applied with `patch` to this lib's twin files (1491 files; 37 hunks and 16 absent files left
+over), `scripts/lpc_warnings.py dshakkard --fix` for the mechanical hunks that did not apply (44 `nosave`
+functions -> `protected`, 7 dropped, 26 escapes, 2 `varargs`, 2 bare returns, 11 unused locals),
+`scripts/lpc_move_decl.py` for `master.lpc`'s three locals that are only used in an inactive `#ifdef`,
+`scripts/lpc_fix_strptr.py` for the last Praxis pointer (`orc_valley/guard.lpc`), and by hand the empty `if`
+in `daemon/intermud.lpc`, `room.lpc`'s `SetSky()` return type and `opcprof.lpc` (the efun is gone from
+FluffOS; same text as ds386). Verified with the golden-master oracle (263 programs, HEAD against working
+tree) and a paired live session as admin `fluffos`/`Mud@2026`.
+
+**Result: 4950 -> 6 distinct diagnostics**, all dead files: `obj/area_room.lpc`, `obj/stargate.lpc`,
+`open/prog.lpc` (two errors) and a leftover editor temp file in a creator realm
+(`realms/muirrum/tmp/eegndioa1558469566.lpc`, a `../customdefs.h` include and a syntax error).
+
+This lib has the same three dummy hybrids as dsIII (trashcan, riverwater, seawater; no pool or spring
+water): they define `isDummy()` instead of inheriting `LIB_BASE_DUMMY`, whose `create()` here does not
+call `SetNoSink(1)` (ds386's does), so nothing else was needed. Oracle: 1763 `public -> protected` flips,
+46 definer changes (chamber/vehicle door and language calls, player `CanGet`, trainer `init`, zpem
+`MustCarry`/`MustWield`, seawater's door calls, turnable bots, poles, worn_storage glow, healer ambient light,
+`virt_land` -> `room` `SetCoordinates`, the oob members, and the horse's five mount applies, which moved from
+`LIB_MOUNT` to `LIB_LIVING` where the bodies are identical), 455 duplicate variables removed or renamed,
+92 enter/knock/scratch/door functions the three hybrids no longer inherit through `LIB_BASE_DUMMY`
+(KB 06 §7.213 kind 5), 88 glow rows (14 -> 7, KB 06 §7.215).
+
+Live, paired: the trainer (leave and come back within two seconds: HEAD "I am already training you!", now
+"You will have to start your studies anew" and a fresh lesson), `look` at the gallows and the throwing stone
+(HEAD printed `long_func`), fixtures, search, zpem, horse, death and corpse. The comma pointers
+`(: this_object(), "fn" :)` of the Praxis domain (29 sites in 21 files, the same as ds386) are still to do
+(KB 04 §6.10).

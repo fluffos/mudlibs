@@ -12,7 +12,7 @@ mixed instances;
 
 #define SEP repeat_string("*=",39)+"*\n";
 
-nosave int LevelSort(mixed one, mixed two){
+protected int LevelSort(mixed one, mixed two){
     int i1, i2, alpha;
     string s1, s2;
     if(objectp(one)){

@@ -1,7 +1,7 @@
 #ifndef l_evade_h
 #define l_evade_h
 
-nosave void create();
+protected void create();
 mixed can_evade_liv();
 mixed do_evade_liv(object ob);
 

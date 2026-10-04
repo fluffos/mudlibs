@@ -1,8 +1,8 @@
 #ifndef __trainer_h__
 #define __trainer_h__
 
-nosave void create();
-nosave void init();
+protected void create();
+void init();
 
 mixed AddTeachingLanguages(string *args...);
 mixed RemoveTeachingLanguages(string *args...);
@@ -12,7 +12,7 @@ mapping GetStudents();
 int eventHelp(object who, string unused);
 int eventTeachLanguage(object who, string verb, string language);
 
-nosave int ContinueTeaching(object who, string language, int x);
+protected int ContinueTeaching(object who, string language, int x);
 
 int eventStart(object who, string language);
 int eventContinue(object who, string language, int x);

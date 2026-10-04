@@ -1,7 +1,7 @@
 #ifndef l_stop_h
 #define l_stop_h
 
-nosave void create();
+protected void create();
 mixed can_stop_str(string str);
 mixed do_stop_str(string str);
 string GetHelp(string str);

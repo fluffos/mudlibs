@@ -160,7 +160,7 @@ varargs string *send_post(mapping borg, mixed who) {
     }
 }
 
-nosave private mixed map_groups(string str, mapping grps, string who) {
+private mixed map_groups(string str, mapping grps, string who) {
     if(__MudGroups[str]) return __MudGroups[str] - ({ who });
     else if(grps[str] && sizeof(grps[str]))
         return grps[str] - ({ who });

@@ -93,7 +93,6 @@ int mkdir_recurse(string path){
 
 string new_savename(string name){
     string unoed, ported, bare;
-    int ret;
     if(grepp(name, "."+__PORT__)) return name;
     if(last(name,2) == ".o") unoed = truncate(name, 2);
     else unoed = (name || "");

@@ -1,7 +1,7 @@
 #ifndef l_put_h
 #define l_put_h
 
-nosave void create();
+protected void create();
 
 mixed can_put_obj_word_obj(object target, string wrd, object storage);
 
