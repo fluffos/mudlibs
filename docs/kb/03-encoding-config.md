@@ -131,7 +131,9 @@ The `key : value` format is unchanged (canonical example:
   copy-pasted from other muds.
 - The driver prints a message for every key it does not take, and every
   one is a fix (2026-10-04 sweep: 371 messages in 277 configs, none left).
-  Scan with `for each lib: (cd libs/S && lpcc config.fluffos /nonexistent.lpc | sed -n '1,/Execution root/p')`:
+  `python3 scripts/lint_configs.py [SLUG]` prints them (it parses a copy of each config whose `mudlib
+  directory` is an empty scratch dir; running `lpcc config.fluffos` inside `libs/S` boots the lib in place and
+  rewrites tracked save files):
   `*Warning: obsolete line in config file, please delete:` (`address server
   ip/port`, `binary directory`, `reserved size`, `swap file`, `wombles`,
   `warn tab`: delete the line and the comment above it);

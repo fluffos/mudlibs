@@ -39,6 +39,8 @@ Mechanical fixes (positions come from the driver; columns are 1-based BYTES):
   Unused local variable                -> not touched when the name also appears inside an
                                           #if/#ifdef block of the same function (listed instead)
 A lib's own compiler tests (Lil: /single/tests/) are broken on purpose; pass --skip '^/single/tests/'.
+Files under /help_topics/error_messages/ (Discworld family: `void bing() { int x = "hi"; }` shows a new creator one
+compiler message) are skipped by default: they are content, and a --fix pass once emptied five of them.
 Everything else is listed for hand work (see KB 04 section 6.10 for the fixes).
 Only vendored libs (work/ tracked here) are supported; a submodule-patch lib (lima) is scanned and fixed in a scratch
 repo built by scripts/submodule_patch_scratch.py.
@@ -61,6 +63,8 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LPCC = os.environ.get("LPCC", os.path.expanduser("~/src/fluffos/build-debug/src/lpcc"))
 DIAG = re.compile(r"^(\S+?):(\d+):(?:(\d+):)? (warning|error): (.*)$", re.M)
 TYPES = r"(?:int|string|object|mixed|mapping|float|function|buffer|status|void|class\s+\w+)"
+DEMO_FILES = (r"/help_topics/error_messages/",)     # files that exist to show one compiler message
+SKIPPED = collections.Counter()                      # diagnostics dropped by --skip / DEMO_FILES, per pattern
 
 
 # ---------------------------------------------------------------- scanning
@@ -121,7 +125,9 @@ def scan(lib, skips=()):
     seen, rows = set(), []
     for m in DIAG.finditer(raw):
         f, ln, col, sev, msg = m.groups()
-        if any(re.search(x, f) for x in skips):
+        hit = next((x for x in skips if re.search(x, f)), None)
+        if hit:
+            SKIPPED[hit] += 1
             continue
         key = (f, ln, msg)
         if key in seen:
@@ -422,6 +428,13 @@ def fix_unused_locals(work, rows):
                         remaining.discard(d[0])
                         drop.remove(d)
                         continue
+                    if len(re.findall(r"(?<![\w$])" + re.escape(d[0]) + r"(?!\w)", masked[op + 1:close])) > 1:
+                        manual.append((f, src.count("\n", 0, d[1]) + 1, d[0],
+                                       "the scope reads the name again, so the warning cannot be trusted "
+                                       "(an earlier error in the file leaves a used local marked unused): left alone"))
+                        remaining.discard(d[0])
+                        drop.remove(d)
+                        continue
                     if d[3] and "(" in d[3]:
                         manual.append((f, src.count("\n", 0, d[1]) + 1, d[0],
                                        "initializer calls something: " + src[d[1]:d[2]].strip()[:60]))
@@ -633,6 +646,7 @@ def main():
     a = ap.parse_args()
     if not os.path.isfile(LPCC):
         sys.exit(f"lpcc not found at {LPCC} (build target lpcc in ~/src/fluffos/build-debug)")
+    a.skip = list(a.skip) + list(DEMO_FILES)
     dest = a.tree or f"/tmp/lpcw-{a.slug}"
     lib = build_tree(a.slug, dest)
     work = os.path.join(REPO, "libs", a.slug, "work")
@@ -641,6 +655,9 @@ def main():
     rows, npass, nfail, raw = scan(lib, a.skip)
     print(f"{a.slug}: scan 1")
     summary(rows, npass, nfail)
+    if SKIPPED:
+        print("skipped (--skip / demonstration files): " + ", ".join(f"{n} in {p}" for p, n in sorted(SKIPPED.items())))
+        SKIPPED.clear()
     manual_all = []
     if a.fix:
         npr, mpr = fix_pragmas(work, rows)
