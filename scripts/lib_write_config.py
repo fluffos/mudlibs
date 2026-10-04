@@ -69,7 +69,7 @@ maximum users : 70
 evaluator stack size : 1000
 compiler stack size : 200
 maximum call depth : 30
-living hash table size : 100
+living hash table size : 256
 """
 
 def find_master_and_simul(work):
