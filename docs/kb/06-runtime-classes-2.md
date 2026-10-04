@@ -928,6 +928,34 @@ silences the overlap for sibling parser applies (`direct_look_obj`, `inventory_v
 and the choice to spell out is whatever the inherit order already picked. (4) A private
 variable with the same name in an ancestor and a descendant (`Level`, `Obvious`,
 `CommandFail`): rename the `nosave`/private one (no save-file impact), never the saved
-one. **Detection:** `scripts/ds_oracle.py` before and after (KB 08 §10.12): function
+one. (5) A leaf that inherits two *complete* classes (`LIB_BASE_DUMMY` next to
+`LIB_STORAGE`/`LIB_FLASK`: dsIII's scenery containers and water sources) has no redundant
+line to delete: take what the first one adds (`isDummy()` and `SetInvis(1)`), define it in
+the leaf, drop the inherit, and make every `inherits(LIB_BASE_DUMMY, ob)` test ask
+`ob->isDummy()`. (6) A dual-role class over two sibling classes that share a base
+(`LIB_OOB` = `LIB_SOCKET` + `LIB_CLIENT`, both daemons): inherit the heavier one and carry
+the few members of the other (a `Descriptor`, an `Owner`, three small functions).
+**Detection:** `scripts/ds_oracle.py` before and after (KB 08 §10.12): function
 definers change only where resolution was made explicit, `GetSaveString()` stays equal.
+
+### 7.214 A hook both parents define: the later inherit's silently displaces the other
+**Symptom:** `init() inherited from both /lib/npc.lpc (via /lib/sentient.lpc) and
+/lib/base_trainer.lpc; using the definition in /lib/sentient.lpc`, and a feature that never
+happens: in dsIII Radagast says "I am already training you!" for good once a pupil leaves in
+the middle of a lesson. **Cause:** `overload_function()` keeps the later inherit's
+`init()`/`create()`/`heart_beat()`; the earlier one (here the code that forgets a student who
+walked away) is dead. **Fix:** define the hook in the class that inherits both and call both,
+`sentient::init(); base_trainer::init();`. **Detection:** the warning, for `init`, `create`,
+`heart_beat`, `reset`, `clean_up`, `eventDestruct`: read both bodies before choosing, and
+check live that the displaced body's effect now happens (`dsIII/NOTES.md` structural pass).
+
+### 7.215 `GetRadiantLight()` counts an object's own glow twice (dsIII)
+**Symptom:** `SetRadiantLight(7)` then `GetRadiantLight(0)` is 14 for an NPC, a chest, a bed, a
+chair, a corpse and 7 for an item or a player. **Cause:** dsIII's
+`container::GetRadiantLight()` adds `GetBaseRadiance()` (the object's own glow) itself, while
+`npc.lpc` and `storage.lpc` still add `object::`/`item::GetRadiantLight()`, which was right for
+the dsI/dsII container (§7.213 kind 2). `worn_storage.lpc` goes the other way: armor's getter
+wins and what the pack carries is not counted. **Fix:** all three return
+`container::`/`base_storage::GetRadiantLight(ambient)` alone, as `interactive.lpc` does.
+**Detection:** the `SetRadiantLight(7)` rows of `scripts/ds_oracle.lpc` across the lib.
 

@@ -924,3 +924,77 @@ from both`, from 46 source files (17 redundant leaf inherits, 8 function overlap
 partial overlaps, 17 name collisions; queued), and the four files that never compiled
 (`obj/area_room`, `obj/stargate`, `open/prog`, `secure/cmds/admins/opcprof` before this
 change).
+
+## 深度功能测试（§10.7，2026-10-03, structural pass）— one file reached through two inherit paths
+
+The last open cluster of the compile-warning pass (KB 06 §7.213 has the mechanism). 1671
+`Redeclaration of global variable` + 418 `inherited from both X and Y` warnings came from 46
+source files; the other ~900 files repeated them. dsIII now prints 5 diagnostics, all in the
+three files that never compiled (`obj/area_room`, `obj/stargate`, `open/prog`; `type.h`'s
+`OBJECT` redefinition is `open/prog.lpc` including it next to `compat.h`).
+
+Fixes, by kind:
+- 16 leaf files inherited something their other inherit already contained (`LIB_READ` after
+  `LIB_ITEM`/`LIB_ARMOR`, `LIB_SMELL` after `LIB_BED`, `LIB_SHOOT` in `pcannon`, `LIB_AMBIANCE`
+  after `LIB_SHOP` in `healer`): `scripts/lpc_diamonds.py --fix-redundant --apply` removed the
+  line. `healer` lit lamps now count (the plain ambiance getter had replaced `room.lpc`'s).
+- Name collisions between private variables: `npc.lpc` lost a dead `Unique` (the real one is
+  `LIB_UNIQUENESS`'s), `interactive.lpc` an unused `globaltmp`, `autosave.lpc` renames
+  `LastSave`→`LastAutoSave` (`props/save.lpc` has its own), `pipe.lpc` `BurnRate`→`PipeBurnRate`,
+  `room.lpc` `counter`→`RoomCounter` and `Search`→`DefaultSearch` (`inventory.lpc` and
+  `events/search.lpc` have theirs; the room's own `AddSearch`/`GetSearch` keep using the room's),
+  `exits.lpc` `Dir`→`RoomDir` (`enter.lpc` has one), `corpse.lpc` `Class`→`LivingClass`
+  (`damage.lpc`'s is the weapon class; corpses do not save), `donate.lpc` `Owner`→`DonateOwner`
+  (`domesticate.lpc` has one), `bot_limb.lpc` lost its copy of `limb.lpc`'s `stank`,
+  `base_storage.lpc` its unused `my_save` (`worn_storage.lpc` renames its own to `WornSave`),
+  `players.lpc`/`pwatch.lpc`/`drone.lpc`/the door module declared a name twice in one file, and the
+  nine creator modules prefix their scratch globals (`globalstr` → `file_globalstr`, ...) the way
+  dsII's do: `staff.lpc` and `glasses.lpc` inherit all nine.
+- Functions defined by two inherits, resolved in the class that inherits both and spelled the way
+  the inherit order had already chosen: `player.lpc` `CanGet()` (living's, which
+  `living::direct_get_obj()` needs; interactive's "is a living being!" never was in effect),
+  `chamber.lpc`/`vehicle.lpc` `GetDoor`/`SetDoor`/`GetEnter`/`ResolveObjectName` (exits') and
+  `SetLanguage` (read's), `eventTurn()` of the four activatable/turnable bots (the later inherit,
+  `LIB_ACTIVATE`/`LIB_TURN`), `GetSave()` of the two poles (`item::GetSave()`, as in dsII),
+  `worn_storage.lpc` `SetSaveRecurse()` (persist's, which its `create()` relies on).
+- `trainer.lpc` `init()`: `base_trainer` and `sentient` both define it, the later inherit won, so
+  `base_trainer`'s `init()` — it forgets a student who left in the middle of a lesson — never ran
+  and "I am already training you!" stuck for good. It now calls both. Live, before and after: leave
+  Radagast's room mid-lesson, wait out one tick, come back → before: "I am already training you!"
+  forever; after: "You will have to start your studies anew, Fluffos." and the next lesson starts.
+- Dummy hybrids (`campus/obj/trashcan`, `town/obj/riverwater`, `town/obj/seawater`) inherited
+  `LIB_BASE_DUMMY` and `LIB_STORAGE`/`LIB_FLASK`, i.e. every item mixin twice (100 warnings each).
+  What `LIB_BASE_DUMMY` adds to an item is `isDummy()` and `SetInvis(1)`; the leaves define those
+  and drop the inherit (and with it the door/knock/scratch verbs of `LIB_ENTER`: "knock on river"
+  now gets the parser's refusal, "enter river" says "You can't enter that." instead of "...!").
+  The eight places that asked `inherits(LIB_BASE_DUMMY, ob)` (`verbs/items/look.lpc` ×3,
+  `room.lpc`, `flask.lpc` ×3, `sefun/get_object.lpc`) ask `ob->isDummy()`, which every dummy and
+  hybrid answers.
+- `LIB_OOB` (`secure/lib/net/oob.lpc`) inherited `LIB_SOCKET` and `LIB_CLIENT`, both `LIB_DAEMON`s
+  (28 warnings, and `OOB_D` another 24 because it inherited `LIB_DAEMON` next to `LIB_CLIENT`). The
+  class now inherits `LIB_CLIENT` only and carries the six `LIB_SOCKET` members it used
+  (`Descriptor`, `Owner`, `GetAddress`, `GetDescriptor`, `eventCloseSocket`, `eventSocketClosed`,
+  `SocketWrite` for `socket::eventWrite`); `OOB_D` calls `client::create()`.
+
+Radiance (a bug the oracle exposed, not a warning): `container::GetRadiantLight()` already adds
+`GetBaseRadiance()`, the object's own glow, but `npc.lpc` and `storage.lpc` still added
+`object::`/`item::GetRadiantLight()` on top, so `SetRadiantLight(7)` gave 14 for an NPC, chest, bed
+or chair and 7 for an item or a player. Both return the container's value now (7); `worn_storage`
+did not count its contents at all (armor's getter won) and returns it too. No shipped object sets a
+radiance on those classes. The container formula itself (own glow attenuated by `ambient`: 0 at
+ambient 20 for a 7) is untouched.
+
+Verification. Golden-master oracle (`scripts/ds_oracle.py`, KB 08 §10.12), 266 + 18 programs
+(every `lib/` program and 61 leaf files) probed on HEAD and on the working tree: normalised `GetSaveString()` unchanged everywhere, no getter changed
+besides random per-creation stats; function definers change only where the resolution is now
+explicit (list above), duplicate variables disappear, the radiance rows above, `healer`'s
+lamp-in-room 30→35, and the three hybrids lose the `enter`/`knock`/`scratch` functions. Live on a
+pristine tree, HEAD and edited side by side: trashcan (look at/in, get/put, "firmly attached",
+knock, open), river and sea (look, fill, drink, "stays in place", `jump into sea` swims), coffin and
+hoverpod (`enter`/`out`), pole `GetSave()`, sign and note `read`, plasma cannon wear/remove, the
+trainer scenario above, the OOB service port (`oob-test`, `oob-begin`, `oob-file` replies are
+byte-identical to HEAD) and the OOB client (clone to a local listener: same `oob-begin` packet, the
+socket closes after `oob-end`), a fresh mortal (13+ prompt, race, start room, `score`,
+`inventory`) fighting the dodo with damage both ways, and the admin command battery with no
+runtime error on the console. The formatter (KB 08 §9) was not run: this tree is not
+formatter-clean, it rewrites nearly every line of the 58 touched files.

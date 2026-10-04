@@ -88,14 +88,19 @@ def login(c, name, pw):
     c.expect(r"(?i)password")
     c.send(pw)
     c.send("")
-    for _ in range(8):
+    # A "Press <return> to continue" pager (the news screens) swallows whatever is typed at it,
+    # so offer the marker again after every page until the command prompt answers it.
+    for _ in range(40):
+        c.send('eval return "ZZSTART"')
         try:
-            c.expect(r"(?i)press <?return>?|continue", timeout=4)
-            c.send("")
+            out = c.expect(r"Result = \"?ZZSTART\"?|(?i:press <?return>?)", timeout=8)
         except TimeoutError:
-            break
-    c.send('eval return "ZZSTART"')
-    c.expect(r"Result = \"?ZZSTART\"?", timeout=40)
+            c.send("")
+            continue
+        if "ZZSTART" in out:
+            return
+        c.send("")
+    raise TimeoutError("login never reached a command prompt")
 
 
 def run(c, expr, timeout=120):
