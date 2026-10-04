@@ -655,7 +655,7 @@ the wizards' `blah`/`doh`/`nntp`, `shsh`, `www`, `barney`, `istack`, `o_server`,
 one escape. The unused locals that the code only uses inside an `#ifdef`/`#if 0` branch
 (`logind.lpc`, `prune_logdir.lpc`, `_debugmalloc.lpc`, both `_diff.lpc`, `_fref.lpc`,
 `std/user.lpc`) had their declarations moved into the branch rather than deleted
-(`/tmp`-free recipe: KB 04 §6.10).
+(KB 04 §6.10).
 
 Hand fixes, all verified against what the code was written to do:
 - `std/living/spells.lpc` and `std/body/attack.lpc` both declared a global `target` (the spell's
@@ -680,4 +680,4 @@ Hand fixes, all verified against what the code was written to do:
   redefined `OB_RESOLVER`.
 Live as the seeded admin on a pristine tree: clean boot (no `log/catch`), `call`, `clone`, `stat`,
 a fight with a cloned orc (and death), `help`, `help bug`/`praise`/`typo`/`idea`, `fref`, `date`,
-`people`, `users`, a mortal's `cast`/`spells` refusals; nothing on the console.
+`people`, `users`, the admin's `cast`/`spells` refusals; nothing on the console.
