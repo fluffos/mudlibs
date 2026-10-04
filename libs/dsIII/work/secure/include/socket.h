@@ -37,6 +37,7 @@
 #define EESOCKNOTRLSD   -31		/* Socket not released */
 #define EEBADDATA       -32		/* sending data with too many nested levels */
 
+#undef ERROR_STRINGS
 #define	ERROR_STRINGS	 33		/* sizeof (error_strings) */
 
 #endif /* __SOCKET_H */

@@ -998,3 +998,24 @@ socket closes after `oob-end`), a fresh mortal (13+ prompt, race, start room, `s
 `inventory`) fighting the dodo with damage both ways, and the admin command battery with no
 runtime error on the console. The formatter (KB 08 §9) was not run: this tree is not
 formatter-clean, it rewrites nearly every line of the 58 touched files.
+
+## 深度功能测试（§10.7，2026-10-03, addendum 2）— a regression of mine in Praxis `stone.lpc`, and a corrected claim
+
+Found while verifying the same Praxis files in ds386 (`eval new("/domains/Praxis/obj/misc/stone")->GetLong()`).
+- **`domains/Praxis/obj/misc/stone.lpc`:** once the `(: "long_func" :)` pointer became a real pointer (the
+  15-pointer fix earlier today), `look at stone` ran `long_func()`, which printed its text with `message()` and
+  returned nothing; `GetExternalDesc()` then added to the `0` it got back and the player saw a run-time error
+  trace (`Left hand side of += is a number (or zero)`). `long_func()` now returns the text (the same fix as
+  ds386). The other 14 pointers' targets were each called once live in ds386 (exit checks, `at_desk`,
+  `la_jail`, `listen_council`, the spider's `death_func`, ...): none raises an error.
+- **Correction to the structural-pass notes and to the comments in `trashcan`/`riverwater`/`seawater`:**
+  `LIB_BASE_DUMMY` added more than `isDummy()` and the invisibility. It also brings `LIB_ENTER`, `LIB_KNOCK`
+  and `LIB_SCRATCH`, and the oracle's `fn -` rows for these three objects (about 30 `direct_*`/`event*`/`Set*`
+  functions) are that loss, not noise. Nothing in the lib calls them on these fixtures, and the live
+  transcripts show `knock on trashcan`/`knock on river`/`open river`/`enter river` answering "You can't ..."
+  before and after (KB 06 §7.213 kind 5 now says so). The comments in the three files now say it too.
+- **One of the "5 remaining diagnostics" was not a dead file:** `secure/include/type.h` redefines the
+  `OBJECT` macro that `compat.h` already defined (`"/lib/std/item"` against the bit mask `0x10`; nothing in the
+  lib uses either), and `socket_err.h`/`socket.h` do the same with `ERROR_STRINGS` (32 against 33). Each
+  `#define` now follows an `#undef`, which keeps the include-order behaviour the lib always had. dsIII is
+  at 4 diagnostics: `obj/area_room.lpc`, `obj/stargate.lpc` and `open/prog.lpc` (two errors).
