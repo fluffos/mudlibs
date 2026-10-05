@@ -97,6 +97,16 @@ Also apply the WASM standards: §1.3b, §1.3e, and §1.5.
   and `meta.json`.
 - `scripts/check_upstream_rebase.py` regenerates
   `scripts/upstream_status.json`. Never hand-edit it.
+- **A submodule's object store must stand alone.** One cloned with
+  `--reference`/`--shared` against a `/tmp` clone keeps only a few loose
+  objects; after a reboot every `git status` prints `object directory
+  /tmp/... does not exist` and nothing past the pin is readable (`nt7`,
+  2026-10-05). Repair: bare-clone the upstream, write its `objects` path into
+  `.git/modules/libs/<slug>/work/objects/info/alternates`, confirm
+  `git rev-list --objects --missing=print HEAD | grep -c '^?'` is 0, run
+  `git repack -a -d` (no `-l`), delete the alternates file, then
+  `git fsck --connectivity-only`. Detect: `find .git/modules -path
+  '*objects/info/alternates'`.
 
 Lessons from onboarding git-hosted sources (`imud`):
 - Still run `convert_lib.sh`.
