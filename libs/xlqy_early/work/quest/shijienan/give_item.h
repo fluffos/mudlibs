@@ -21,7 +21,7 @@ int give_item(object player,int lucky)
 	{
 		if(!random(44)||wizardp(player))
 		{
-			if(!item = "/adm/daemons/Diabloset"->drop())
+			if(!item = "/adm/daemons/diabloset"->drop())
 				error("error occurs when new in diabloset");
 			if( ! item->move(player))
 			{
