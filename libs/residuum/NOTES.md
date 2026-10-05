@@ -16,8 +16,8 @@ session so far. Slug `residuum`, number 935, port 40237.
 
 `work/` is a git submodule of
 [`michaelprograms/nightmare-residuum`](https://github.com/michaelprograms/nightmare-residuum)
-@ `6c08edc585480c19715dde78c96b4906053ab483` (`main`; scheduled safe
-rebase 2026-10-04 from `65c9ced3`, +1 pedantic code tweaks, 4 catalog patches
+@ `86e64a0b2499e9636fa66169d0470edb6f8b53e6` (`main`; scheduled safe
+rebase 2026-10-05 from `6c08edc5`, +1 astronomy test coverage, 4 catalog patches
 still apply). Mudlib root is
 `work/lib` (`upstream.mudlib_subdir`, same pattern as `lima`). Upstream
 ships `.c`; catalog follows that (no `.c`→`.lpc` rename in the submodule).
