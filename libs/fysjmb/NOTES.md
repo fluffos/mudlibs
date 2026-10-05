@@ -193,3 +193,17 @@ argument`/`No program`/`Too deep recursion`/`FATAL` 记录。测试角色
 ## 深度功能测试（§10.7，2026-10-04）— negative range ends
 
 `scripts/lpc_fix_negative_ranges.py`: 5 line(s) in 2 file(s) count a range from the end with `<` (`x[a..-1]` -> `x[a..<1]`, `x[-2..]` -> `x[<2..]`; KB 06 §7.209). In this driver a negative constant end gave `""` / `({ })` and a negative start the whole value, so each of these returned the wrong slice; the compile warning `A negative constant as the second element of arr[x..y]` is gone from the files that compile. Range lvalues (`s[0..-1] = text`, the prepend idiom) are left alone. A paired compile of the changed files at HEAD and in the working tree showed no new error.
+
+## 深度功能测试（§10.7，2026-10-05）— compile-warning pass (ported from fengyun434)
+
+`scripts/lpc_warnings.py fysjmb` (8359 files): 2321 distinct diagnostics and 47 files that did not compile at the start, 82 diagnostics and 45 files at the end (7630 compile;
+the six files below and the `tail()` command compile after that scan, checked individually). 876 files changed. This lib is a different build of the Fengyun code than
+fengyun434 (about 700 files differ), so the root's pass was ported where the code is the same (`lpc_twin_port.py adopt fengyun434 fysjmb`: 496 reformatted, 174 verbatim, 1
+spliced) and the rest was scanned on its own; `scripts/lpc_family_pass.py` ran the tools (KB 04 §6.10, the 87 prototypes for functions called before their definition).
+It has no `.C` files: `scripts/lpc_case_paths.py` found nothing to rename.
+
+**By hand.** `adm/simul_efun/file.lpc` defines `tail()` in LPC (the efun of the MudOS this archive ran on; `cmds/wiz/tail.lpc` called it). `d/biancheng/npc/obj/paper_{1..5}.lpc`
+end in a story note that opens with `/*` and was cut off before its `*/`: the comment is closed at the end of the file, the text is unchanged (fengyun434 carries the files without the note).
+
+**What is left (33 files with a compile error; 7 of them are not failing in the root):** the root's list (`ed.c`-style leftovers, the TMI-2 network daemons without headers,
+drafts) minus the files its pass fixed, plus `cmds/std/practice_.lpc` and a saved user file `data/login/p/peal/peallkpmpdi.lpc` (damaged bytes).
