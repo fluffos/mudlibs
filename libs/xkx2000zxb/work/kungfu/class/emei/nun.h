@@ -98,7 +98,7 @@ int do_kneel()
 
         string *prename =
          ({ "文", "妙", "灵", "如" });
-        string name, sujia_name, nun_name;
+        string name,  nun_name;
 
         if( !me->query_temp("pending/join_bonze") )
                 return 0;

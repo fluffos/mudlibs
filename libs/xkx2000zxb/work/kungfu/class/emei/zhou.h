@@ -29,7 +29,6 @@ string ask_jiuyin()
 
 void attempt_apprentice(object ob)
 {
-    mapping fam;
     int last_betray,shen;
 
         // Yinli and Qianzhu-wandu: by yasuko

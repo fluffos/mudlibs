@@ -74,7 +74,7 @@ void tell_player_family_job_contribute(object player,object master)
 void tell_player_family_job_opposepkerplace(object player,object master)
 {
 	object job_data;
-	string family_name,master_name,msg,master_call;
+	string family_name, master_name, master_call;
 	mapping job_map;
 	
 	family_name=player->query("family/family_name");

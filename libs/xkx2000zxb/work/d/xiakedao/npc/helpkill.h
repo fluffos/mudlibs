@@ -2,7 +2,6 @@
 int do_kill()
 {
 	object me, dest;
-	int i;
 	string killer;
 	helpee = this_player();
 	me = this_object();

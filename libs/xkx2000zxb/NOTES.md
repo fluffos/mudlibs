@@ -264,3 +264,18 @@ live `debug.log` 是 `libs/xkx2000zxb/log/debug.log`（Boot Time Fri Sep 4
 ## 深度功能测试（§10.7，2026-10-04）— negative range ends
 
 `scripts/lpc_fix_negative_ranges.py`: 5 line(s) in 2 file(s) count a range from the end with `<` (`x[a..-1]` -> `x[a..<1]`, `x[-2..]` -> `x[<2..]`; KB 06 §7.209). In this driver a negative constant end gave `""` / `({ })` and a negative start the whole value, so each of these returned the wrong slice; the compile warning `A negative constant as the second element of arr[x..y]` is gone from the files that compile. Range lvalues (`s[0..-1] = text`, the prepend idiom) are left alone. A paired compile of the changed files at HEAD and in the working tree showed no new error.
+
+## 深度功能测试（§10.7，2026-10-04）— compile-warning and load-failure pass (ported from xkx2001)
+
+`scripts/lpc_warnings.py xkx2000zxb`: 166 distinct diagnostics at the end, 7991 files compile and 98 do not. A load check of every
+`.lpc` (8099 files, 700 per VM boot) at HEAD and in the working tree: 7950 PASS -> 7986 PASS, no file that loaded before fails now
+that is not a random draw. 1132 files changed. The code is the xkx2001 root's, so the pass is its pass (libs/xkx2001/NOTES.md has
+every class, the typos found through the no-side-effects list and the list of files left alone):
+`lpc_twin_port.py adopt xkx2001 xkx2000zxb` carried the fixes of the files whose code is the root's, then
+`lpc_warnings.py --fix`, `lpc_diamonds.py --fix-redundant`, `lpc_fix_void_override.py`, `lpc_fix_macro_redef.py`,
+`lpc_fix_prototype_types.py`, `lpc_move_decl.py`, `lpc_fix_no_effect.py`, `lpc_fix_heredoc_terminator.py` and (after a rescan)
+`lpc_name_winner.py` handled the diagnostics that depend on this lib's own files.
+
+Fixed by hand in this lib (each read first; nothing written new): `d/city/qiyuan{2,3,4}.lpc` (the root's lost closing quote of `set("short", "棋室);`; the splice that ports the root's fix refused these three files because the pre-image has an unterminated string, so the quote was closed by hand); `kungfu/class/shenlong/lu.lpc` (the damaged reply, restored from the sentence `jym` and `xuanjianlu` carry); `d/zhongnan/bingdong.lpc` (`set("long",@long ... LONG` — the opener is spelled in lower case, the terminator is not, so the block never ended; both are `LONG` now); `d/dali/npc/daobaifeng.lpc` (`attempt_apprentice(object ob)` tested `me->query("family/family_name")` with `me` undefined; `shenzhou` carries `ob`); `d/zhongnan/gate.lpc` and `gate1.lpc` (a `varargs` the port had left on a line of its own, now part of the function header).
+
+What is left: the files that do not load in the root either (drafts, pasted logs, the TMI-2 network daemons without headers, wizard work), plus `d/city/yuelao2.lpc` (a quoted multi-line string and a stray `]) );` after the exits), `d/city/grt.lpc` (a pasted log), `d/hangzhou/hangzhou.lpc` and `d/taihu/gumu/houtang.lpc` (damaged bytes inside the text), `d/dali/npc/a.lpc`, `d/qilian/npc/pixie_superskill.lpc`, and the headers that were never part of the archive (`/u/maco/poison_list.h`, `/d/quanzhou/obj/drug_list.h`, `/d/shaolin/npc/job.h`).

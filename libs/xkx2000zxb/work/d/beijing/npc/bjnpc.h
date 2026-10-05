@@ -11,8 +11,8 @@ mapping nondirs = ([
 
 int random_walk()
 {
-        mapping exits, doors;
-        string *dirs, dir, last_room, this_room;
+        mapping exits;
+        string *dirs, dir, this_room;
         object here = environment();
 
         if( strsrch(base_name(here), "/d/beijing/") != 0 ) {

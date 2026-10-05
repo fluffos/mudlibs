@@ -34,7 +34,7 @@ void searchitem_job(object master,object player,mapping job)
 
 void tell_player_search_place(object player,object master)
 {
-	string *ask_list,two_area,place,room_name,region;
+	string *ask_list, place, room_name, region;
 	object room;
 
 	ask_list=({});

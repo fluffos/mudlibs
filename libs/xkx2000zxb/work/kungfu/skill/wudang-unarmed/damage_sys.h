@@ -3,7 +3,7 @@ mixed damage_sys(object me, object victim, string attack_skill, object weapon, m
 {
 	mapping my, your;
 	string result;
-	string force_skill, martial_skill, dodge_skill, parry_skill;
+	string force_skill, martial_skill, parry_skill;
 	mixed foo;
 	int damage, damage_bonus, defense_factor;
 

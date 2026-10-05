@@ -28,7 +28,7 @@ int do_search(string arg) {
 
 	object bug, me, fighter, room, gold, ob;
 
-	int kar1, kar2, pot, max_pot, damage;	
+	int kar1, kar2, damage;	
 
 	me=this_player();
 
@@ -159,7 +159,7 @@ int do_search(string arg) {
 int do_search1(){
 	
 	int damage, kar1, kar2;
-	object bug, room, me, gold;
+	object me, gold;
 	me=this_player();
 	
 	kar2=me->query("int")+me->query("con")+me->query("str");

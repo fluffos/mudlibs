@@ -188,7 +188,7 @@ int accept_kill(object victim)
         call_out("checking", 1, me, victim);
         return 1;
 }
-void unconcious(object victim)
+varargs void unconcious(object victim)
 {
         message_vision("\n$N突然卖一破绽，跳出战圈，逃了！\n", this_object());
         destruct(this_object());

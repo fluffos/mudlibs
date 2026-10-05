@@ -1,4 +1,4 @@
-//Cracked by Kafei
+ varargs//Cracked by Kafei
 mixed hit_ob(object me, object victim, object weapon, int damage_bonus, int factor)
 {
         object ob;

@@ -299,7 +299,7 @@ void fighting(object fighter, int count)
 
 void do_recruit(object fighter)
 {
-	mapping ft_fam, my_fam;
+	mapping ft_fam;
 
         if( (int)fighter->query("combat_exp") < 300000 )
 	fighter->add("combat_exp", 20000000 / (100000 + (int)fighter->query("combat_exp")) * 100);

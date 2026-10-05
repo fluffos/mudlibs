@@ -36,7 +36,7 @@ void init()
 {
 	object me=this_object();
 
-	int my_jingli, my_mj, i, addjing;
+	int my_jingli, my_mj, addjing;
         my_jingli  = (int)me->query("jingli");
         my_mj = (int)me->query("max_jingli");
         addjing = (my_mj - my_jingli)/2;

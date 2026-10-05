@@ -117,9 +117,7 @@ string *get_arearoom(string area)
 //鉴定所选取的房间是否合乎条件。
 int judge_room(string room_name)
 {
-	string area;
 	object room;
-	int ret;
 	if(!room_name)
 		return 0;
 	if (strsrch(room_name, "/d/beijing/")==0 ||
@@ -151,7 +149,7 @@ int judge_room(string room_name)
 string get_room(string area)
 {
 	string *area_roomname,are_name;
-	int ret,i;;
+	int ret;;
 	ret=0;
 	
 	area_roomname=get_arearoom(area);

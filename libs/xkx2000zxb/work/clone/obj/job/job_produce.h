@@ -6,7 +6,7 @@ nosave string *cleanup_filename=({"job_data","job_menpai",});
 
 void clean_up_job_object()
 {
-	object master,*ob_list;
+	object *ob_list;
 	int i,j;
 	for(j=0;j<sizeof(cleanup_filename);j++)
 	{
@@ -33,12 +33,10 @@ void clean_up_job_object()
 
 void job_tell_player(object player)
 {
-	string msg,area_name,master_place,menpai_place,master_name,menpai_c_place,master_id,master_place_full,
-		master_full_name;
+	string msg, area_name, menpai_place, master_name, menpai_c_place, master_id, master_place_full, master_full_name;
 	string state;
 	object master;
 	mapping job_data_message;
-	int i;
 	object room_master;
 	state="传话";
 	msg="";
@@ -227,8 +225,6 @@ void master_tell_player(object player)
 //门派任务完成数据调整。
 void adjust_menpai_job_data(object player,string kind)
 {
-	string menpai_name;
-	object menpai_ob;
 	if(!job_data=find_object(JOB_DIR+"job_data"))
 		job_data=new(JOB_DIR+"job_data");
 	if(!objectp(job_data)) return;
@@ -244,7 +240,7 @@ void adjust_menpai_job_data(object player,string kind)
 void award_job(int exp_lim,int pot_lim,int time1,int time2,int luck,
 			   int neili,int jingli,int skills_lim,object player,object master,string kind)
 {
-	int exp,pot,max_pot,time,ver;
+	int exp, pot, max_pot, time;
 	//kind=1;
 	exp=player->query("combat_exp");
 	pot=player->query("potential");

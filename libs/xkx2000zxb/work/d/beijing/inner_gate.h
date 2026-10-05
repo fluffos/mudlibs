@@ -37,7 +37,7 @@ void create()
 
 void init()
 {
-    object player = this_player(), me = this_object();
+    object player = this_player();
 
     add_action("do_guard", "guard");
     add_action("do_pancha", "pancha");
@@ -214,7 +214,7 @@ int do_pancha(string name)
 int valid_leave(object me, string dir)
 {
     object *inv;
-    int i, stage, fail_num, shiwei_present=0;
+    int i, stage, fail_num;
     
     if (IS_SHIWEI(me) && me->query_temp("can_pancha"))
 	return notify_fail("你还没完成守门的任务呢，怎么能离开？\n");

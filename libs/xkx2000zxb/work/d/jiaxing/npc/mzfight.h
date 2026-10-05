@@ -1,4 +1,4 @@
-//Cracked by Kafei
+ varargs//Cracked by Kafei
 
 int accept_fight()
 {

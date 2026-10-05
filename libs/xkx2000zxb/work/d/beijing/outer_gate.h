@@ -135,13 +135,13 @@ int gen_killer()
     if (shiwei_present == 0) return 1;
 
     if (HELPER->is_night_shift()) {	// day time
-	if (killers) return;
+	if (killers) return 0;
 	killer = new("/d/beijing/npc/killer1.lpc");
 	killer->move(env);
 	killer->upgrade(1);
 	message_vision("$N快步走了过来。\n", killer);
     }else {
-	if (killers) return;
+	if (killers) return 0;
 	killer = new("/d/beijing/npc/killer1.lpc");
 	killer->move(env);
 	message_vision("$N快步走了过来。\n", killer);
@@ -248,7 +248,7 @@ int do_allow(string name)
 int valid_leave(object me, string dir)
 {
     object *inv, *env, shiwei, bing;
-    mapping myfam, mygen;
+    mapping myfam;
     int i, bing_present, shiwei_present;
 
     myfam = (mapping)me->query("family");
