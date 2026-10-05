@@ -1,3 +1,4 @@
+#include <ansi.h>
 // hui.h for fight and get letter from Hui
 
 int accept_object(object ob, object obj)

@@ -192,3 +192,36 @@ functionally re-tested live on this lib.
 ## 深度功能测试（§10.7，2026-10-04）— undefined macro and simul_efun gaps
 
 - `message_combatd(msg, me, you)` is called by 133 file(s) (the perform files) and defined nowhere in this archive (a simul_efun of the original server): 133 of them did not compile (`Undefined function message_combatd`). `adm/simul_efun/message.lpc` now has `varargs void message_combatd(string msg, object me, object you, mixed extra)` calling `message_vision()`, placed after `message_vision`'s definition (KB 04 §6.2). All callers compile.
+
+## 深度功能测试（§10.7，2026-10-04）— compile-warning and load-failure pass
+
+`scripts/lpc_warnings.py xbtxiii` (8372 `.lpc`): 6341 distinct diagnostics and 580 files that did not compile at the start, 227
+diagnostics and 418 files at the end (7954 compile). A load check of every `.lpc` (700 per VM boot) at HEAD and in the working tree:
+7908 PASS -> 7939 PASS, 33 more load. The two files that flip the other way, `d/npc/walker.lpc` (one of its random branches sets a
+skill, `spicyclaw`, that this lib does not have) and `d/shenlong/npc/yunsumei.lpc` (it passed in the HEAD batch and fails at HEAD when loaded alone: the
+`/d/city/obj/duanjian` it carries was never shipped), are batch artifacts, not regressions. 4964 files changed. The code is a
+Fengyun/xkx mixture, so the root's tools ran as they are (libs/xkx2001/NOTES.md has the classes), in the order of
+`scripts/lpc_family_pass.py` (the name-winner tool only after the redundant inherits were gone; run before that it wrote
+`skill::fn()` wrappers for 24 files whose inherit no longer existed, they were removed again).
+
+**Bulk.** 4846 `#pragma` lines in 4714 files (`save_binary`, `optimize all` ...: `Unknown #pragma, ignored`), unused locals, 36
+redundant leaf inherits, 21 `int init()`-style overrides of `void` hooks made `void`, 15 prototypes whose return type disagreed with the
+definition, 2 `#undef` lines for macros that two headers define (`ROOM`, `STORY_DIR`), 35 diamonds named (27 `type()`, 6
+`clean_up()`, 2 `NewRandom()`), one here-document terminator; `adm/object/bmm.lpc` `transfer`'s declaration moved into its branch. The two stray string statements after the
+`return` in `d/secret/secret1/npc/king.lpc` (`"爱卿拿去吧。\n";` ...) never ran and are gone.
+
+**Fixed by hand (each read first).**
+- `include/globals.h` defines `SAVE_EXTENSION` (`".o"`, the driver's default `save file extension`): `d/death/npc/hoo.lpc`,
+  `obj/npc/horse.lpc`, `d/green/try.lpc`, `d/jiangnan/yangzhou/qianzhuang.lpc` and three more name it and did not compile.
+- Five headers use `HIG` / `NOR` / `MAG` and rely on the includer's `<ansi.h>`, which the NPCs of this lib do not include
+  (the same NPCs in `chidi`, `bixiecanyang`, `hc` have it on line 2): `d/mingjiao/npc/zhangqishi.h`, `d/mingjiao2/npc/zhangqishi.h`
+  (10 NPCs) and `daemon/class/shaolin/{cheng,dao,hui}.h` (the shaolin masters) now `#include <ansi.h>` themselves.
+
+**What is left, and why (content gaps, not code).** 418 files still do not load; 83 have a compile error, the rest die in `create()`.
+- The archive has **no `/clone` tree**: 128 of the 152 distinct `carry_object()` / `new()` lines that raise `Bad argument 1 to call_other`
+  name a file under `clone/misc`, `clone/weapon` or `clone/cloth` (the xkx NPCs this lib took over carry xkx items), the others a few
+  `d/city` / `d/ustc` objects that are not there (`/d/city/obj/duanjian`).
+- 96 files raise `F_SKILL: No such skill (..)`: `set_skill()` needs `/daemon/skill/<name>.lpc`; 56 of the files use skills that exist only in
+  `/daemon/gongfu/` (a second, xkx-style skill directory no code of this lib refers to) and 72 use skills that exist nowhere.
+- `inherit F_DEALER;` / `inherit CLUB;` / `BUNCHER` ...: the std objects were never part of the archive. The TMI-2 network daemons under
+  `adm/daemons/network/` lack their headers (`uid.h`, `config.h`, `mailer.h` ...). Nothing was written new for any of them.

@@ -1,3 +1,4 @@
+#include <ansi.h>
 // cheng.h for fight and get letter from Cheng
 
 void init()

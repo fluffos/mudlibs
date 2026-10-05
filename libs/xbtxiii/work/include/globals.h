@@ -159,3 +159,4 @@
 #undef PROFILE_COMMANDS
 
 
+#define SAVE_EXTENSION ".o"

@@ -1,3 +1,4 @@
+#include <ansi.h>
 // dao.h for fight and get letter from Dao
 
 int accept_object(object ob, object obj)

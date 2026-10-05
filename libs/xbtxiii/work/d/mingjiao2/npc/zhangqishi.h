@@ -1,3 +1,4 @@
+#include <ansi.h>
 // ZhangQiShi.h for fight and get letter from ZhangQiShi
 
 void init()
