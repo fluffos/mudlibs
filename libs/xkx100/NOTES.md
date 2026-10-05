@@ -198,3 +198,10 @@ live `debug.log` 是 `libs/xkx100/log/debug.log`（Boot Time Fri Sep 4
 ## 深度功能测试（§10.7，2026-10-05）— here-document terminators (opener line, case)
 
 `scripts/lpc_fix_heredoc_terminator.py --all --apply`: 2 more block(s) repaired: 2 where the text sits on the opener's line (`@LONG   text...LONG`, the newlines were lost): `open/task1/huodu.lpc`, `d/city/task1/huodu.lpc`.
+
+## 深度功能测试（§10.7，2026-10-05）— 任务表里的 `.c` 路径与任务守护进程的防护
+
+`scripts/lpc_dynamic_rows.py`：`quest/dynamic_location` 里 4141 行写的是原档案的 `.c` 路径。转档时文件已改名 `.lpc`，而显式后缀按原样解析，`load_object("/d/x.c")`、`new("/d/obj/quest/x.c")` 返回 0 且不报错（KB 03 §4.2，KB 06 §7.220），所以 `adm/daemons/questd.lpc`、`last_modify/quest/questd.lpc` 读到的每一行都加载不出来：随机任务和任务物品从未生成，在 `create()` 里直接对结果调用 `tar->set()` 的版本还会崩溃，连带加载它的 cron 守护进程和 `give` 的任务钩子。这些行已改为 `.lpc`。
+`scripts/lpc_dynamic_quest_guard.py`：2 处 `spread_quest()` 调用（`init_dynamic_quest()` 的循环里）包进 `catch()`，缺失的任务物品或编译不过的房间只跳过那一个任务，守护进程照常加载、其余任务照常生成；`cmds/std/look.lpc` 夜间检查的 `!present("fire", this_player())` 前加 `objectp(this_player()) &&`（房间 `reset()` 销毁物品时 `/feature/move.lpc` 的 `remove()` 会调用 `look_room()`，此时没有 this_player()，`present(…, 0)` 报 `Bad argument 2 to present()`）。
+验证：`adm/daemons/questd.lpc`、`last_modify/quest/questd.lpc`和 cron 守护进程在新进程里加载（HEAD 一次，工作树三次，选房是随机的）：HEAD 通过 3 个，工作树三次分别通过 3、3、3 个（共 3 个），无回退。
+验证：改动过的 `adm/daemons/questd.lpc`、`cmds/std/look.lpc`、`last_modify/quest/questd.lpc` 在新进程里加载，HEAD 通过 3 个、工作树通过 3 个（共 3 个），无回退。

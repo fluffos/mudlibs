@@ -416,3 +416,8 @@ left uncommitted.
 ## 深度功能测试（§10.7，2026-10-04）— undefined macro and simul_efun gaps
 
 - 3 file(s) `inherit F_SSERVER;` and no header defines it (3 did not compile: `syntax error, unexpected L_IDENTIFIER, expecting L_STRING or '('`). `#define F_SSERVER SSERVER` in `include/globals.h` (KB 04 §6.2, `scripts/lpc_alias_macro.py`). 0 still fail.
+
+## 深度功能测试（§10.7，2026-10-05）— 任务表里的 `.c` 路径与任务守护进程的防护
+
+`scripts/lpc_dynamic_quest_guard.py`：2 处 `spread_quest()` 调用（`init_dynamic_quest()` 的循环里）包进 `catch()`，缺失的任务物品或编译不过的房间只跳过那一个任务，守护进程照常加载、其余任务照常生成。
+验证：`adm/daemons/questd.lpc`、`adm/daemons/tongjid.lpc`、`quest/tongji/npc/zhuge.lpc`、`u/lost/cmds/questd.lpc`和 cron 守护进程在新进程里加载（HEAD 一次，工作树三次，选房是随机的）：HEAD 通过 5 个，工作树三次分别通过 5、5、5 个（共 5 个），无回退。

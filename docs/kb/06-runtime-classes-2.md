@@ -1040,3 +1040,22 @@ c_str) {`; the definition's flags win, so a one-argument call is an error althou
 **Fix:** `varargs` on the definition. **Detection:** the scan's top error kind for the calling files, then compare the
 prototype and the definition; MudOS passed the missing argument as 0, so any lib of that age can have call sites that
 pass fewer arguments than the definition takes.
+
+### 7.220 Plain-text path tables written with `.c` (`dynamic_location`, `dynamic_quest`), and what fixing them runs for the first time
+
+**Symptom:** `adm/daemons/questd.lpc` never loads: `Bad argument 1 to EFUN call_other()` at `tar->set("value", 0)` in `spread_quest()`, out of
+`create()` -> `init_dynamic_quest(1)`; the cron daemon that loads it fails with it, and `give` (which loads questd lazily for its quest hook) raised
+(xyj2006n, the Journey-to-the-West family; xysylmhb found it first, August). The xkx / Fengyun / Haiyang daemons test the result: the random room
+jobs and quest items silently never spawn, and hy5 `natured.lpc` raises on `base_name(room2)` of 0. **Cause:** the tables list `/d/x/y.c`; the
+extraction renamed the files to `.lpc` and an explicit extension is resolved exactly (KB 03 §4.2), so `load_object("/d/x/y.c")` and
+`new("/d/obj/quest/x.c")` are 0 without an error, while `children()`, `find_object()` and `base_name()` ignore the extension. **Fix:** the rows,
+`X.c` -> `X.lpc` where `X.c` is not there and `X.lpc` is (`scripts/lpc_dynamic_rows.py`: 83,854 rows in 147 tables of 77 libs, only tables the
+lib's code reads; no consumer mentions `.c` in code, checked over 152 files; rows naming a file in neither spelling are content gaps and stay:
+fyzfqyy 2,268, jqxz2008 6,666). **Running it exposes what never ran:** `scripts/lpc_dynamic_quest_guard.py` wraps the `spread_quest()` call of
+the `init_dynamic_quest()` loop in `catch()` (153 sites, 90 libs; `new()` of an item the archive never shipped is 0, a room may not compile:
+xjcq2000 has none of its 42 `/quest/shenshu/bookN`, and its questd failed to load once the rooms resolved) and puts `objectp(this_player()) &&`
+in front of `look_room()`'s `!present("fire", this_player())` (30 sites, 22 libs: `/feature/move.lpc remove()` calls `look_room()` for every
+item a room's reset() destructs, with no this_player(), so `Bad argument 2 to present()` failed questd's create() on a random room pick in
+xiyouji2006; xyj2006n carried that guard). **Detection:** `read_file("...dynamic_...")` in a daemon, then the tool's dead-row list; load the
+daemon three times in fresh processes (the room picks are random: one pass proves nothing); never trust a HEAD PASS of a daemon that
+tests `new()` for 0, it only means the code did not run.
