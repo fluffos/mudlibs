@@ -605,3 +605,33 @@ Intermud-3 outbound connection noted in §12 was observed reaching
 as before -- no change in that behavior, and the session stayed well
 within a small number of manual reboots rather than any automated
 loop.
+
+## 深度功能测试（§10.7，2026-10-05）— round three: 注册、选种族、进入世界
+
+复测原因：`queue` 中的 history 序列（tmi2 > nightmare3 > nightmare4 > lpmud141）；
+本 lib 之前只有无日期的一轮测试（`第 14 节` 的 round two 为 2026-08-27）。
+
+**流程**（原生驱动 `build-debug`，`ulimit -v 6291456` 限制内存，PID 精确结束）：
+banner → 注册（新名 `Zephyrq`，`y`，密码 ≥5 字母，`male`，显示名默认，email，
+真实姓名可留空）→ 在**同一连接内** `pick human`（账号要到选种族完成后才保存，
+中途断开会留下未保存的半成品，再次登录会被当作新注册）→ 新手新闻按回车 → `score`、
+`inventory`、`quit` 正常。新手进入 Ylsrim 中央集市。
+
+**存档字母目录的一次性失败（未复现，未修）**：首次注册时 `ConfirmPassword` →
+`SetPassword` → `save_player` 报 `Could not open /secure/save/players/z/zephyrq.o.tmp
+for a save`（`log/runtime`，14:50）。随后该字母目录出现，同一驱动里 `Quintara`（`q` 目录原本
+不存在）完整注册、进入世界，没有再报错。`master.lpc` 的 `player_object()` 会在目录缺失时
+`mkdir` 字母目录，所以这次更像首次启动时的一次性竞争，而不是持续存在的缺陷。`log/runtime`
+里另有一条 `n/nativetest.o.tmp` 的旧记录，早于本次测试。若将来再出现，先看 `player_object()`
+的 `if(!NewPlayer) return 0;` 早退分支是否被触发。
+
+**运行期日志**：`config.fluffos` 的 `debug log file` 是 `debug.log`，但启动后并不生成
+该文件；本 lib 只通过 `log_file()` 写 `work/log/runtime`、`work/log/errors`。判断"无错误"
+时应读这些文件，而不是 `debug.log`（参见 KB 08 §10.9）。
+
+**编译警告**：本次未扫描（`submodule-patch` 托管，`lpc_warnings.py` 需要 scratch 基线），
+与 `nightmare3` 一样，待下一轮统一处理。
+
+**测试账号清理**：`Zephyrq`、`Quintara` 的 `users` 存档、`postal` 目录，以及由测试
+重写的 `save/economy.o`、`save/intermud.o` 均已删除或还原；`secure/save/players/` 下
+的字母目录也已删除（它们是本次测试创建的）。
