@@ -130,7 +130,10 @@ one shared `inherit`/`#include` first. Examples: a bad base declaration
 ### 6.5 Function-binding order within a file
 
 - **Calling a same-file helper before its definition** can fail. Define
-  it first or forward-declare it.
+  it first or forward-declare it. Under `#pragma strict_types` the driver says
+  `Called function 'f' not compiled with type testing.` at the definition (88 warnings in `fengyun434`, the `smart_npc`
+  NPC bases and `fightnpc*.lpc`: 15 files); `scripts/lpc_fix_forward_decl.py SLUG` copies the header of each such definition
+  (modifiers, type, name, parameters) and inserts the prototypes in front of the first function of the file.
 - **A wrapper named after a real efun** (`message`, `write`,
   `tell_room`) that is called before its definition binds to the REAL
   efun silently. Add a `varargs` forward declaration at the top.

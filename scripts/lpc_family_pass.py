@@ -6,7 +6,7 @@ The warnings pass of a sibling lib, after the root of its family is done and com
   1. lpc_twin_port.py adopt ROOT SIB --pre REV --apply     the fixes of the files that carry the root's code
   2. lpc_warnings.py SIB --fix                              scan; the mechanical classes
   3. lpc_diamonds.py --fix-redundant, lpc_fix_void_override.py, lpc_fix_macro_redef.py, lpc_fix_prototype_types.py,
-     lpc_move_decl.py, lpc_fix_no_effect.py, then lpc_fix_heredoc_terminator.py (each reads the scan of step 2 and edits
+     lpc_move_decl.py, lpc_fix_forward_decl.py, lpc_fix_no_effect.py, then lpc_fix_heredoc_terminator.py (each reads the scan of step 2 and edits
      SIB; the last one needs no scan)
   4. lpc_warnings.py SIB --fix; lpc_name_winner.py; lpc_warnings.py SIB --fix   (the winners only after the redundant
      inherits are gone)
@@ -76,6 +76,7 @@ for sib in sibs:
                  ["scripts/lpc_fix_macro_redef.py", sib, "--apply"],
                  ["scripts/lpc_fix_prototype_types.py", "--apply", sib],
                  ["scripts/lpc_move_decl.py", sib, "--apply"],
+                 ["scripts/lpc_fix_forward_decl.py", sib, "--apply"],
                  ["scripts/lpc_fix_no_effect.py", sib, "--apply"]):
         run(["python3"] + tool, log)
     if heredoc:

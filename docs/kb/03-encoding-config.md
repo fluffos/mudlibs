@@ -76,7 +76,7 @@ An explicit extension is resolved exactly. An extensionless path tries
    like a source file.
 7. Uppercase `.C` files are missed by both the rename and the transcode.
    Run `find -name '*.C'`, then check macros whose case no longer
-   matches.
+   matches; §4.5 for the tool that renames them and every wrong-case path.
 8. Orphaned non-LPC `.c` files (ASCII maps): rename them to `.txt`.
 
 A lib may keep non-critical `.c` files as long as the master and login
@@ -131,6 +131,28 @@ function", hundreds per lib); `scripts/lpc_warnings.py --fix` repairs it (KB 04
   `bullets.lpc`) are not handled; read those by hand.
 
 ---
+
+### 4.5 Paths the code names in another case than the archive stores them
+
+**Symptom.** A room is "missing" although its file is there: an exit leads nowhere, `carry_object("/d/city/npc/tea/longjing")`
+returns 0 (`Bad argument 1 to call_other` two lines later), `#include "bagua.h"` is `Cannot #include`, a whole directory
+(`d/SHAOLIN/BAMBOO1.C`, `d/Mojie/`, `HELLZhen/`) is unreachable. The scan does not see it: a `.C` file is not an `.lpc` file, and a
+reference that does not resolve is a run-time failure of the *caller*.
+**Cause.** The archives come from DOS / Windows hosts that ignore case. Files are stored as `BAGUA0.lpc`, `longjing.C`, `ANSI.h`,
+`d/SHAOLIN/`; the code says `__DIR__ "bagua0"`, `"tea/longjing"`, `#include "ansi.h"`, `"/d/shaolin/..."`, often both spellings in the same
+lib. The extraction renamed `.c` -> `.lpc` but not `.C` (§4.2 item 7), and 15 of the 3274 uppercase-extension files were never transcoded.
+**Fix.** `python3 scripts/lpc_case_paths.py [--convert] [--apply] [--list FILE] SLUG` (gitlink libs refused): resolves every path
+literal of every code file (`"/d/x/y"`, `"d/x/y.c"`, `__DIR__ "y"`, `#include "x.h"` / `<x.h>`; comments, strings in heredocs and `#if 0` are
+masked) as the driver would, treats a reference that resolves only when case (and `.C` / `.c` / `.LPC`) is ignored as a wrong-case
+name, renames every such file and directory to lower case (`.C` -> `.lpc`, `.H` -> `.h`), staging the moves, and rewrites **every** reference
+to a path that moved (the right ones in the old spelling too), changing only the components that were renamed. A target that exists, two
+renames with one target, a reference that two real paths could mean and a non-UTF-8 `.C` file (`--convert` transcodes GB18030) are listed
+and left. `--list` writes the objects to load-check (renamed, edited, naming a renamed path): `listcheck_chunks.sh` on that list, HEAD
+against the tree.
+**Detection.** Run the tool without `--apply`; `Cannot #include X` in a scan where a file of another case exists;
+`git ls-files | grep -E '\.(C|H)$'`. After the rename run `scripts/lpc_warnings.py` again: files that never loaded show errors
+of their own. Computed paths (`"/d/" + zone + "/NPC/"`) are invisible to the tool; it prints the old upper-case directory names that
+still occur in string literals so they can be read. Commit with a pathspec: the moves are already staged (AGENTS.md section 13.3).
 
 ## 5. Config files
 
