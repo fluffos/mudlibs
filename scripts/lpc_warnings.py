@@ -136,9 +136,35 @@ def scan(lib, skips=()):
             continue
         seen.add(key)
         rows.append((f, int(ln), int(col or 0), sev, msg))
+    rows = drop_fragment_artifacts(work, rows)
     npass = len(re.findall(r"^PASS ", raw, re.M))
     nfail = len(re.findall(r"^FAIL ", raw, re.M))
     return rows, npass, nfail, raw
+
+
+def drop_fragment_artifacts(work, rows):
+    """A file the lib's simul_efun.lpc `#include`s (adm/simul_efun/object.lpc with its `efun::destruct`) is compiled here as an
+    object of its own, where master's valid_override() refuses `efun::name()` (`Invalid simulated efunction override`, and the call
+    then reads as `Expression has no side effects`).  Compiled as the part of simul_efun it is, it has neither: drop both."""
+    frag = {r[0] for r in rows if r[4] == "Invalid simulated efunction override"}
+    if not frag:
+        return rows
+    names = {os.path.basename(f) for f in frag}
+    included = set()
+    pat = re.compile(r'^[ \t]*#[ \t]*include[ \t]+"([^"]+)"', re.M)
+    for dp, dn, fn in os.walk(work):
+        for f in fn:
+            if f.endswith((".lpc", ".h")):
+                try:
+                    txt = open(os.path.join(dp, f), "rb").read().decode("latin-1")
+                except OSError:
+                    continue
+                for m in pat.finditer(txt):
+                    if os.path.basename(m.group(1)) in names:
+                        included.add(os.path.basename(m.group(1)))
+    gone = {(r[0], r[1]) for r in rows if r[4] == "Invalid simulated efunction override" and os.path.basename(r[0]) in included}
+    return [r for r in rows if not ((r[0], r[1]) in gone and (r[4] == "Invalid simulated efunction override"
+                                                          or r[4].startswith("Expression has no side effects")))]
 
 
 def kind(msg):
@@ -382,19 +408,22 @@ def used_in_conditional(masked, flags, name, a, b, skip_a, skip_b):
 PURE_EFUNS = {"this_player", "this_object", "previous_object", "environment", "find_player", "find_object", "find_living",
               "query", "query_temp", "time", "sizeof", "strlen", "lower_case", "capitalize", "geteuid", "getuid", "file_name",
               "base_name", "all_inventory", "users", "member_array", "present", "intp", "stringp", "objectp", "pointerp",
-              "mapp", "functionp", "to_int", "to_float", "ctime", "keys", "values", "random"}
+              "mapp", "functionp", "to_int", "to_float", "ctime", "keys", "values", "random", "allocate",
+              "allocate_mapping", "upper_case", "arrayp", "floatp", "clonep", "living", "interactive", "wizardp", "userp",
+              "explode", "implode", "sprintf", "file_size", "strsrch", "abs", "sqrt", "uptime"}
 PURE_METHODS = {"query", "query_temp", "query_skill", "name", "short", "query_name", "query_level", "select_opponent"}
 
 
 def pure_initializer(text):
-    """True when an initializer `= expr` only calls side-effect-free efuns and getter methods, so deleting the
+    """True when an initializer `= expr` only calls side-effect-free efuns and getter methods (`query*`), so deleting the
     declaration of an unused local cannot drop an effect: this_player(), environment(me), me->query("x") ..."""
     if re.search(r"\+\+|--|[^=!<>]=[^=]|\bnew\b|\bclone_object\b|->\s*\w+\s*\(\s*\)\s*->", text[1:]):
         return False
     for m in re.finditer(r"(->\s*)?([A-Za-z_]\w*)\s*\(", text):
         name = m.group(2)
         if m.group(1):
-            if name not in PURE_METHODS:
+            # `query_*` is the getter convention of every mudlib here (me->query_kar(), RANK_D->query_rude(me))
+            if name not in PURE_METHODS and not name.startswith("query_"):
                 return False
         elif name not in PURE_EFUNS:
             return False
@@ -457,7 +486,8 @@ def fix_unused_locals(work, rows):
                         remaining.discard(d[0])
                         drop.remove(d)
                         continue
-                    if len(re.findall(r"(?<![\w$])(?<!->)(?<!::)" + re.escape(d[0]) + r"(?!\w)", masked[op + 1:close])) > 1:
+                    # `fail(me)` calls the function `fail`, never a local of that name (a closure local is called `(*fail)(x)`)
+                    if len(re.findall(r"(?<![\w$])(?<!->)(?<!::)" + re.escape(d[0]) + r"(?!\w)(?!\s*\()", masked[op + 1:close])) > 1:
                         manual.append((f, src.count("\n", 0, d[1]) + 1, d[0],
                                        "the scope reads the name again, so the warning cannot be trusted "
                                        "(an earlier error in the file leaves a used local marked unused): left alone"))
