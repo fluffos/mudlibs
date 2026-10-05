@@ -4,7 +4,7 @@
 
 string ask_job()
 {
-        object me = this_player(), leader, ling, ob, *obj, dest, room;
+        object me = this_player(), leader, ling, ob, *obj, dest;
         string myfam, *files, file, region, biaoju, ob_bang;
         int i, temp, myexp;
         mapping job;

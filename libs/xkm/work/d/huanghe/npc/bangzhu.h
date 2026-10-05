@@ -59,8 +59,6 @@ int ask_join()
 {
         object ob = this_player(), obj;
         string myfam, ob_fam;
-        int exp = ob->query("combat_exp");
-        int sc=ob->query("score");
 
         ob_fam = (string)ob->query("family/family_name");
 
@@ -164,7 +162,7 @@ string ask_skills()
 
 int do_xue(string arg)
 {
-        object ling, me = this_player(); //program
+        object me = this_player(); //program
         string *sname;
         int i, amount, level, mylvl;
 

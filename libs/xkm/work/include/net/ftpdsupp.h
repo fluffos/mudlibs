@@ -39,7 +39,6 @@
  */
 int check_access(string name)
 {
-  string file;
 
 #ifdef FTP_USERS
     if (!sizeof(FTP_USERS))
@@ -53,6 +52,7 @@ int check_access(string name)
 #endif /* ANONYMOUS_FTP */
 
 #ifdef GUEST_WIZARD_FTP
+    string file;
     // TMI-2 allows those wizards w/o directories to log in
     file = PDATA_DIR + name[0..0] + "/" + name + SAVE_EXTENSION;
     return ( file_exists( file ) &&

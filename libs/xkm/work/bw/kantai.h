@@ -32,7 +32,7 @@ void create()
 }
 void back_stuff(string id)
 {
-	object *inv,cangku,*basket;
+	object cangku, *basket;
 	int i;
 	object player;
 	player=find_player(id);
@@ -70,7 +70,7 @@ void back_stuff(string id)
 }
 void restore_stuff(object player)
 {
-	object *inv,cangku,*basket;
+	object *inv;
 	string id;
 	int i;
 	id=player->query("id");
@@ -319,8 +319,7 @@ int do_start(string arg)
 }
 int do_stop(string arg)
 {
-	object ob1,ob2,me=this_player(),kt,*inv;
-	int age,i;
+	object ob1, ob2, me=this_player();
 	string host,challenger;
 	if(!wizardp(me)&&!me->query("judge"))
 	{
@@ -394,10 +393,10 @@ int do_bet(string arg)
 }
 int do_baoming()
 {
-	string msg, name;
+	string name;
 	object me;
-	string host,challenger,girl;
-	int i, age;
+	string host, challenger;
+	int age;
 
 	remove_call_out("auto_check");
 	call_out("auto_check",0);
@@ -482,7 +481,7 @@ int start(string host,string challenger)
 int update_room (string file, string winner)
 {
 	int i,amount,total,win_m,me_m;
-	object obj,*inv,money,me=this_player(),here=find_object(KANTAI);
+	object obj, *inv, money, here=find_object(KANTAI);
 	string err;
 	tell_room(LEITAI,HIY"主持人高声说，开奖开奖啦，买得越多赚得越多！\n"NOR,this_object());
 	inv=all_inventory(here);
@@ -561,10 +560,7 @@ void move_me(object ob, string target)
 int auto_check()
 {
 	object ob1,ob2;
-	object me,ob;
-	mapping boy;
-	int i,*times;
-	string old_host,old_challenger,host,girl,challenger,name;
+	string old_host, old_challenger, host, challenger;
 	if(!query("start"))	return 0;
 	if(!(host=query("host")))
 	{
@@ -805,7 +801,6 @@ int let(string arg)
 {
 	object ob;
 	string pl1,pl2;
-	object room=this_object();
 	object *inv;
 	object *old_basket,*basket;
 	object cangku;

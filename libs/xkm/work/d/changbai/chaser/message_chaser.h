@@ -9,7 +9,7 @@ void message_chaser()
         mapping owner_list;
         object *obj, ob, owner, rum_ob, *owners;
         object victim, chaser_ob, thief_ob, dest, room;
-        string *names, filename, *filenames, file, chaser_file;
+        string  filename, *filenames, chaser_file;
         int i, v_exp, temp;
 
         string *levels = ({

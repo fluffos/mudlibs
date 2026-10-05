@@ -5,7 +5,6 @@ int auto_perform()
 {
 	object me = this_object();
 	object target = me->select_opponent();
-	object weapon = me->query_temp("weapon");
 
 	if ( !objectp(target)
 	  || !random( (int)me->query("combat_exp") * 2

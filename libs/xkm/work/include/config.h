@@ -29,6 +29,7 @@
  
 #define PDATA_DIR	"/data/std/connection/"		
 #define CDATA_DIR	"/data/std/user"
+#undef DATA_DIR
 #define DATA_DIR	"/data"
 #define CONFIG_DIR	"/adm/etc/"
 #define SECURE_DIR	"/adm/"
@@ -38,6 +39,7 @@
 #define NEWS_DIR 	"/adm/news/"
 #define TMP_DIR		"/tmp/"
 #define OPEN_DIR	"/open/"
+#undef HELP_DIR
 #define HELP_DIR	"/doc/help/"
 #define WIZH_DIR	"/doc/wizhelp/"
 #define PROPH_DIR	"/doc/properties/"
@@ -46,12 +48,15 @@
  
 //  System objects
  
+#undef USER_OB
 #define USER_OB		"/std/user"
 #define CONNECTION	"/std/connection"
+#undef MASTER_OB
 #define MASTER_OB	master()
 // These functions are both handled by the master object in the TMI lib
 #define GROUP_OB	MASTER_OB
 #define ACCESS_OB	MASTER_OB
+#undef SIMUL_EFUN_OB
 #define SIMUL_EFUN_OB	"/adm/obj/simul_efun"
  
 //  User command locations

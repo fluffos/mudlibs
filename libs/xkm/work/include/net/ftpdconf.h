@@ -87,7 +87,9 @@
  * and are manually generated, so don't change them)
  */
 /*#define VALID_READ       0              // rely on valid_read()*/
+#undef VALID_READ
 #define VALID_READ	1
+#undef RESTRICTED_READ
 #define RESTRICTED_READ  2              // ditto, but limited to public dirs
 #define WRITE_LIMIT_READ 2              // access limited by write access
 /*#endif*/
@@ -102,7 +104,9 @@
  * and are manually generated, so don't change them)
  */
 /*#define VALID_WRITE      0              // rely on valid_write()*/
+#undef VALID_WRITE
 #define VALID_WRITE	1
+#undef RESTRICTED_WRITE
 #define RESTRICTED_WRITE 2              // ditto, but limited to public dirs
 #define READ_ONLY        2              // no write access, at all
 /*#endif*/

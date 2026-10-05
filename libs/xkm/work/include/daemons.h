@@ -20,6 +20,7 @@
 #define DOMAIN_D		"/adm/daemons/domain"
 #define EMOTE_D 		"/adm/daemons/emoted"
 #define EVENT 			"/adm/daemons/event"
+#undef FINGER_D
 #define FINGER_D		"/adm/daemons/finger"
 #define FLOCK_D                 "/adm/daemons/flock"
 #define GA_SERVER_D             "/adm/daemons/ga_server"
@@ -30,6 +31,7 @@
 //#define MAIL_SERV		"/adm/daemons/network/mail_serv"
 #define MAN_D			"/adm/daemons/mand"
 #define MSG_D			"/adm/daemons/news"
+#undef NEWS_D
 #define NEWS_D			"/adm/daemons/news_server"
 #define NEWUSER_D		"/adm/daemons/newuserd"
 #define PARTY_D			"/adm/daemons/party_d"
@@ -44,6 +46,7 @@
 #define TIME_D			"/adm/daemons/timezone"
 #define USAGE_D			"/adm/daemons/usage_d"
 #define USE_R_D			"/adm/daemons/use_remove"
+# undef VIRTUAL_D
 #define VIRTUAL_D		"/adm/daemons/virtual_d"
 #define WEATHER_D		"/adm/daemons/weather_d"
 #define WHATIS_D		"/adm/daemons/whatisd"

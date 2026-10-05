@@ -9,7 +9,6 @@ void init()
 
 int do_yell(string arg)
 {
-	string dir;
 
 	if( !arg || arg=="" ) return 0;
 
@@ -72,7 +71,7 @@ void check_trigger()
 	call_out("on_board", 15, room);
 }
 
-void on_board(object room)
+varargs void on_board(object room)
 {
 	if( !this_object()->query("exits/enter") ) 
 		return;

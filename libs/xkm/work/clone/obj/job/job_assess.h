@@ -4,7 +4,7 @@
 //获得活着的master
 object master_living(string master_name,string id)
 {
-	object master,*ob_list;
+	object *ob_list;
 	int i;
 	ob_list=children(master_name);
 	i=sizeof(ob_list);
@@ -91,7 +91,7 @@ string *get_punish_player(string family)
 //
 mapping make_pubish(object player,object master,string family)
 {
-	int exp,skills_lvl,max_neili,max_jingli,max_qi,max_jing,luck;
+	int exp, skills_lvl, max_neili, max_jingli, luck;
 	object menpai_ob;
 	mapping p_data;
 	p_data=([]);
@@ -130,7 +130,7 @@ mapping make_pubish(object player,object master,string family)
 
 mapping make_assess_award(object player,object master,string family)
 {
-	int exp,skills_lvl,max_neili,max_jingli,max_qi,max_jing,luck;
+	int exp, skills_lvl, max_neili, max_jingli, luck;
 	object menpai_ob;
 	mapping p_data;
 	p_data=([]);
@@ -176,7 +176,7 @@ void family_assess_award(object player,object master,string family)
 {
 	object place;
 	mapping award_assess_best;
-	int i,skills_add,skills_lvl,exp;
+	int i, skills_lvl, exp;
 	string *skills_name,msg;
 	award_assess_best=([]);
 	msg=HIC"\n";
@@ -227,7 +227,7 @@ void family_assess_punish(object player,object master,string family)
 {
 	object place;
 	mapping punish_assess;
-	int i,skills_add,skills_lvl,exp;
+	int exp;
 	string *skills_name,msg;
 	punish_assess=([]);
 	msg=HIB"\n";
@@ -318,7 +318,6 @@ void set_family_assess_data(object master,string family)
 void send_assess_msg(object master,string family)
 {
 	string master_say;
-	mapping assess=([]);
 
 	
 	master_say=get_family_master_massage("assess",family,"send_to");
@@ -361,7 +360,6 @@ void do_assess_1(mapping family)
 {
 	//check place and master
 	object master,place;
-	mapping exits;
 	//mapping *family_assess;
 	if(!job_data=find_object(JOB_DIR+"job_data"))
 		job_data=new(JOB_DIR+"job_data");
@@ -414,7 +412,7 @@ void do_assess_1(mapping family)
 
 void do_assess_2(mapping family)
 {
-	object *player_list,player,kickout_place,place,master;
+	object *player_list, kickout_place, place, master;
 	mapping out;
 	string msg_1,exit;
 	int i,kick_o;
@@ -498,7 +496,7 @@ void do_assess_2(mapping family)
 //award player
 void do_assess_3(mapping family)
 {
-	object *player_list,player,kickout_place,place,master;
+	object *player_list, kickout_place, place, master;
 	mapping out,*family_assess;
 	string msg_1,exit,*player_name;
 	
@@ -602,7 +600,7 @@ void do_assess_3(mapping family)
 //punish player
 void do_assess_4(mapping family)
 {
-	object *player_list,player,kickout_place,place,master;
+	object *player_list, kickout_place, place, master;
 	mapping out,*family_assess;
 	string msg_1,exit,*player_name;
 	
@@ -709,7 +707,7 @@ void do_assess_4(mapping family)
 //award common .
 void do_assess_5(mapping family)
 {
-	object *player_list,player,kickout_place,place,master,frist_place;
+	object *player_list, kickout_place, place, master, frist_place;
 	mapping out,*family_assess;
 	string msg_1,exit;
 	

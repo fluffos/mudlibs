@@ -166,3 +166,17 @@ README 写的 `fluffos` / `Mud@2026` 在 2026-08-19 的 §7.100 机械验证
 ## 深度功能测试（§10.7，2026-10-04）— negative range ends
 
 `scripts/lpc_fix_negative_ranges.py`: 5 line(s) in 2 file(s) count a range from the end with `<` (`x[a..-1]` -> `x[a..<1]`, `x[-2..]` -> `x[<2..]`; KB 06 §7.209). In this driver a negative constant end gave `""` / `({ })` and a negative start the whole value, so each of these returned the wrong slice; the compile warning `A negative constant as the second element of arr[x..y]` is gone from the files that compile. Range lvalues (`s[0..-1] = text`, the prepend idiom) are left alone. A paired compile of the changed files at HEAD and in the working tree showed no new error.
+
+## 深度功能测试（§10.7，2026-10-04）— compile-warning and load-failure pass (ported from xkx2001)
+
+`scripts/lpc_warnings.py xkm`: 305 distinct diagnostics at the end, 10215 files compile and 196 do not. A load check of every
+`.lpc` (10487 files, 700 per VM boot) at HEAD and in the working tree: 10176 PASS -> 10207 PASS, no file that loaded before fails now. 1487 files changed. The code is the xkx2001 root's, so the pass is its pass (libs/xkx2001/NOTES.md has
+every class, the typos found through the no-side-effects list and the list of files left alone):
+`lpc_twin_port.py adopt xkx2001 xkm` carried the fixes of the files whose code is the root's, then
+`lpc_warnings.py --fix`, `lpc_diamonds.py --fix-redundant`, `lpc_fix_void_override.py`, `lpc_fix_macro_redef.py`,
+`lpc_fix_prototype_types.py`, `lpc_move_decl.py`, `lpc_fix_no_effect.py`, `lpc_fix_heredoc_terminator.py` and (after a rescan)
+`lpc_name_winner.py` handled the diagnostics that depend on this lib's own files.
+
+Fixed by hand in this lib (each read first; nothing written new): `clone/board/news_b.lpc` (`do_discard()` was `string` and returned its messages as strings, so the `newsdel` command never printed them and always reported success: `int`, `notify_fail()`, `write()` and `return 1`); `d/city/qiyuan{2,3,4}.lpc` (lost closing quote of `set("short", "棋室);`; the splice that ports the root's fix refused these three files because the pre-image has an unterminated string); `d/murong/obj/qingxin-san.lpc` (the credit line `by beyond` outside a comment); and `adm/simul_efun/message.lpc` got the `message_combatd()` alias (KB 04 §6.2).
+
+What is left: the files that do not load in the root either, the wizard directories (`/u/program`, `/u/bright`, `/u/puma`), `d/minjiao/` (a second, broken copy of `d/mingjiao`), the `jobold`/`jobaa`/`obj1` copies of the job files, `d/murong/npc/murong-fu.lpc` (its `where.h` never shipped), and `d/heimuya/basket.lpc` (an `ITEM` that calls `::reset()` and the undefined `check_trigger()`).

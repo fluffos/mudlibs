@@ -3,7 +3,9 @@
 
 //  The base distribution mudlib name.  
 
+#undef MUDLIB_NAME
 #define MUDLIB_NAME             "The Quest of Oriental Chivalry"
+#undef MUDLIB_VERSION_NUMBER
 #define MUDLIB_VERSION_NUMBER   "1.0"
 #define MUDLIB_VERSION          (MUDLIB_NAME + " " + MUDLIB_VERSION_NUMBER)
 #define INTERMUD_MUD_NAME       "XKMNEW"

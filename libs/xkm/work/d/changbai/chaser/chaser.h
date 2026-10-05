@@ -222,10 +222,9 @@ int accept_object(object who, object ob)
 
 void setup_skill(object me,object victim)
 {
-	object *inv;
 	mapping skill_status;
 	string *sname;
-	int i, max = 0, max1, j;
+	int i, max = 0, max1;
 
 		if ( mapp(skill_status = victim->query_skills()) ) {
 		skill_status = victim->query_skills();
@@ -284,7 +283,7 @@ void setup_skill(object me,object victim)
 
 int number_goodstuff(object victim)
 {
-		  object *obj, ob, owner, rum_ob, *owners;
+		  object *obj, ob, owner;
 		  string filename, *filenames;
 		  int i, nStuff = 0;
 

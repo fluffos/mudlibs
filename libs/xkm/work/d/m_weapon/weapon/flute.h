@@ -65,7 +65,7 @@ string *faint_msg = ({
 
 int do_play()
 {
-	int i, count, range;
+	int i, count;
 	object me, ob, weapon;
 	string msg, play_type, *shape;
 
@@ -135,7 +135,7 @@ int do_play()
 void playing(object me)
 {
 	string play, succeed, fail, faint, map_force;
-	int range, i, k=0, flag, music, music2, force, force2, tag, attacker, defender,damage,times;
+	int i, k=0, flag, music, music2, force, force2, tag, attacker, defender, damage, times;
 	object *target, ob, env;
 	
 	env = environment(me);
