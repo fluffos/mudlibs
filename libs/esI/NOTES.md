@@ -786,3 +786,12 @@ A Big5 character whose second byte is 0x5C was written with one extra backslash 
 - `get_dir(x) == -2` in `cmds/std/_bug.lpc` and `praise.lpc` -> `file_size(x) == -2` (KB 06 §7.218); `tail()` as a simul_efun.
 
 Left as content gaps (not invented): 40 inherits of files that are not in the archive, 30 NPCs that wield or wear files that were never shipped, wizard-home headers, drafts, the upper-case DOS directory `d/eastland/mumar/UNDER` (`*.C`), a stray `std/user/复件 bitflags.lpc` ("copy of bitflags"), and the same commands saved without the leading underscore (`flee`, `praise`, `typo`).
+
+## 深度功能测试（§10.7，2026-10-04）— paths named in another case
+
+The archive comes from a case-insensitive host: files are stored as `BAGUA0.lpc`, `longjing.C`, `d/SHAOLIN/`, the code names them in lower
+case (`__DIR__ "bagua0"`, `"tea/longjing"`, `"/d/shaolin/..."`), so the rooms, NPCs and items behind them could not be loaded (a `.C` file is
+not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply esI`: 72 file(s) renamed to lower case (`.C` -> `.lpc`,
+`.H` -> `.h`) and 0 path reference(s) in 0 file(s) rewritten to the new spelling; 0 skipped, 0 ambiguous. Load check of the 75 objects that were renamed, edited or name a renamed path (HEAD against the working tree, an object is the same under any spelling of its path): 1 PASS -> 5 PASS, 0 that loaded before fail now, 4 more load.
+
+72 files moved (63 `.C`, 6 `.lpc`, 2 `.H`, 1 `.h`); mostly under `d/eastland/mumar` (71), `d/DONY/VALLEY` (1). A rescan with `scripts/lpc_warnings.py esI` is still due: the renamed files are compiled for the first time.
