@@ -1,7 +1,7 @@
 //Cracked by Roath
 void init()
 {
-	object *inv, victim, me = this_object();
+	object victim, me = this_object();
 
 	if ( !me->query_temp("target") || !objectp(victim = find_player(me->query_temp("target")) ) ) {
 		call_out("destruct_me", 1, me);

@@ -1,6 +1,6 @@
 //Cracked by Roath
 
-int accept_fight()
+varargs int accept_fight()
 {
         object me, ob;
 

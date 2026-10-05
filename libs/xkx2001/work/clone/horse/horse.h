@@ -7,7 +7,7 @@
 condition_check()
 {
         object *ob, me = this_object();
-        int my_jingli, my_mj, i, addjing;
+        int my_jingli, my_mj, addjing;
 
         my_jingli  = (int)me->query("jingli");
 	my_mj = (int)me->query("max_jingli");
@@ -43,7 +43,7 @@ void init()
 {
 	object me=this_object();
 
-	int my_jingli, my_mj, i, addjing;
+	int my_jingli, my_mj, addjing;
 
 	if( environment(me)->query("resource/grass") &&
 	me->query("food") < (me->max_food_capacity())){

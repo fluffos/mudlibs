@@ -104,10 +104,9 @@ int do_search(string arg)
 
 void setup_ob(object me,object victim)
 {
-        object *inv;
         mapping skill_status;
         string *sname;
-        int i, max = 0, max1, j;
+        int i, max = 0, max1;
 
 
         if ( !me->query_temp("copied") ) {
@@ -124,7 +123,7 @@ void setup_ob(object me,object victim)
 
                 //max = (int)max*3/4 + 1 + random((int)max/4);
 
-                if( victim->query("combat_exp",1) < 10000 ) max1/2;
+                if( victim->query("combat_exp",1) < 10000 ) max1 /= 2;
                 me->set_skill("dodge", max1);
                 me->set_skill("parry", max1 );
                 me->set_skill("force", max1);

@@ -17,6 +17,7 @@
 #define SECURE_OBJECT   "/std/object/sec_ob"
 #define USER            "/std/user"
 #define BODY_BASE       "/std/body"
+#undef ROOM
 #define ROOM            "/std/room"
 #define DAEMON          "/std/cmd_m"
 #define SERVER          "/std/server"
@@ -101,6 +102,7 @@
 #define NPC_TRAINEE	"/inherit/char/trainee"
 #define PILL		"/inherit/medicine/pill"
 #define POWDER		"/inherit/medicine/powder"
+#undef ROOM
 #define ROOM		"/inherit/room/room"
 #define SHIP		"/inherit/room/ship"
 #define SKILL		"/inherit/skill/skill"

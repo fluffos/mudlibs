@@ -837,3 +837,91 @@ BIG5 code?(y/n)`，回 `n` 用 GB。落地侠客岛沙滩 `/d/xiakedao/shatan`�
 ## 深度功能测试（§10.7，2026-10-04）— negative range ends
 
 `scripts/lpc_fix_negative_ranges.py`: 5 line(s) in 2 file(s) count a range from the end with `<` (`x[a..-1]` -> `x[a..<1]`, `x[-2..]` -> `x[<2..]`; KB 06 §7.209). In this driver a negative constant end gave `""` / `({ })` and a negative start the whole value, so each of these returned the wrong slice; the compile warning `A negative constant as the second element of arr[x..y]` is gone from the files that compile. Range lvalues (`s[0..-1] = text`, the prepend idiom) are left alone. A paired compile of the changed files at HEAD and in the working tree showed no new error.
+
+## 深度功能测试（§10.7，2026-10-04）— compile-warning and load-failure pass
+
+`scripts/lpc_warnings.py xkx2001` (8123 `.lpc`): 3380 distinct diagnostics and 154 files that did not load at the start,
+160 diagnostics and 120 files at the end (8003 load). 1159 files changed. The 160 left are 151 errors in the dead files
+listed below and 9 warnings in the same places (8 in four non-loading copies of `tomb.lpc`, 1 artifact). A load check of
+every file at HEAD and in the working tree (700 files per VM boot): 7965 PASS -> 7999 PASS, 0 files that loaded before
+fail now, 34 more load. A live pair (HEAD vs working tree, same admin save, 36 commands): HEAD printed 44 compile or
+runtime error blocks for the rooms below, the working tree none.
+
+**Bulk (scan tools, KB 04 §6.10).** 2174 unused locals in 955 files (the `object me = this_player(), ob, ...`
+boilerplate; `scripts/lpc_audit_removed_locals.py` listed 44 hits, all of them names declared again in an inner block or
+parameters of another function, none a global that a removed local used to shadow); 215 `short()` diamonds from one
+duplicate in `feature/food.lpc` (the driver already used `name.lpc`'s); 64 prototypes whose return type disagreed with
+the definition; 49 header macros that clash with another header (`#undef` in front of the second `#define`:
+`include/config.h` `MUDLIST_BAK` x8, `globals.h` `ROOM`, `daemons.h`, `ftpdconf.h`, `harbor.lpc` `SHIP` ...); 36
+redundant leaf inherits; 44 files with a `clean_up()` diamond (`feature/sserver.lpc` and `NPC`/`ROOM`/`SKILL`/`ITEM`
+both inherit `F_CLEAN_UP`): 42 leaves name the winner (`lpc_name_winner.py`; `d/zhongnan/dajiaochang.lpc` below its
+`#include`), `d/city/{n,s}proom.lpc` and `d/zhongnan/beidou.h` drop their own redundant `inherit F_CLEAN_UP;` (the 165
+perform files that inherit only `F_SSERVER` need `sserver.lpc`'s inherit, so the base keeps it); 56 `nosave` functions made `protected`, 15 un-`nosave`d; 85 unknown escapes; 63 `varargs`; 62 bare
+`return;` -> `return 0;`; 10 `#pragma` lines (`save_binary`, `optimize all`); `DEBUG(...)` is a variadic macro this
+driver does not have, so every call was a statement `("text", n);`: `genmap.lpc`, `traverser.lpc` and
+`kungfu/skill/linji-zhuang/youming.lpc` get a real `varargs void DEBUG(string fmt, mixed arg) {}`.
+
+**Typos the no-side-effects list exposed (each read, then fixed to what the line plainly meant).**
+- `if(power,18)power=18;` x3 in `d/zhongnan/beidou.h`, `if (power, 15) power = 15;` in `cmds/std/beidou3.lpc`: a comma for
+  `<`. The comma expression is 18, which is true, so the Beidou formation's power was always 18 (15) whatever the team
+  added up to; it is `power < 18` now (the same line sits in 11 more libs, swept in `cd82039c63c`).
+- `max1 / 2;` in `clone/drug/fengdong.lpc` and `d/zhongnan/caiyao.h`: the halving for a victim under 10000 exp never
+  happened, `max1 /= 2;`.
+- `seed == 1;` in `d/huashan/bian.lpc` (the 1-in-100 chance for a stranger to find the Zixia book never applied) and
+  `skill == 30/60/100;` in `d/xingxiu/obj/tongbo.lpc` (the three flattery tiers never applied: the bonus grew without
+  bound with the number of earlier flatteries): `=`. `tmp[i] == EOT + ".";` in `adm/daemons/network/mail_serv.lpc`: `=`.
+- `if (ob);` in `d/qilian/npc/huoji.lpc` was a guard that guarded nothing, `destruct(0)` ran for a missing object:
+  `if (ob) destruct(ob);`.
+- `for (times; times > 0; times--)` (init clause with no effect) in `cmds/skill/{lian,practice}.lpc`,
+  `d/shenlong/{jushi,sea,sea2}.lpc`, `d/taohua/shijian.lpc`: `for (; ...)`.
+- `if (current_water == 0) {}` (`d/xingxiu/shanjiao.lpc`), `neili == 0;` (`kungfu/condition/xianglu-du.lpc`, `neili` is
+  never read afterwards), a `-(x) * (x);` left behind after `-=` (`kungfu/skill/taiji-shengong/{heal,lifesave}.lpc`), a
+  stray `"\n";` after the `return` (`d/changbai/ssmiao.lpc`): deleted.
+- `#if PREF_TELL & SVC_TCP` inside `if (...) { }` left an empty `if` when the option is off (`adm/daemons/dns_master.lpc`
+  and `network/dns_master.lpc`): the `#if` moved outside the `if`.
+- `(a & b)` between two booleans (`d/forest/npc/langren.lpc`, `d/quanzhou/npc/langren.lpc`): `&&`. `};` after a function
+  (7 files), `!= =` (`kungfu/class/dali/yanqing.lpc`, the file is a draft, see below).
+
+**Rooms and objects that never loaded, repaired (live-checked).**
+- Here-document terminators (`scripts/lpc_fix_heredoc_terminator.py`): ` LONG` indented in `d/taihu/gumu/{cye,cyn,cyw,
+  line,lins,linw}.lpc`, `d/beijing/zijin/shunzhme.lpc`; glued to the last text line in `d/dali/tianls9.lpc`,
+  `d/beijing/kangqin/chufang.lpc`, `d/kunlun/mj_center.lpc` (the raw bytes show a lone GBK lead byte before the newline,
+  which the conversion dropped together with it; `tianls9`'s last line ends in damaged characters that stay damaged).
+- Lost closing quote: `set("short", "棋室);` in `d/city/qiyuan{2,3,4}.lpc`; `d/shaolin/jiebei.lpc` (`...修好。}`, the text
+  `。\n";` is the one `jym` and `shenzhou` carry); `clone/npc/shan.lpc` (`...自强不息啊);`, `。"` from `xuanjianlu`);
+  `kungfu/class/shenlong/lu.lpc` (the damaged reply `你现在身上不是雄坡穑趺从掷...` became `你现在身上不是有雄黄么?`, the sentence
+  `xuanjianlu` and `jym` carry); `d/huanghe/doc/set_bang.h` (two answers end in unrecoverable characters; the strings are
+  closed after `帮主的景仰之情`, nothing was written new: `d/huanghe/npc/bangzhu.lpc` loads again).
+- Strings broken by a raw newline: `clone/misc/sing.lpc` (13 song headings `WHT "` / text; the file is `#include`d by
+  `qupu.lpc`), `d/changbai/damk.lpc` (`...地对洞` / `"了出去。\n"`).
+- Octal-escaped GBK bytes: `"\241\243"` for `。` in `d/shenlong/{jushi,sea,sea2}.lpc`; `sea.lpc` and `sea2.lpc` also lost the
+  closing quote inside `不由得走近一看，原来是` (`不傻米呓豢矗词`), restored from the same message in `jushi.lpc`.
+- Missing declarations or code: `d/huangshan/{jushi,penglai,wenshu,yixian1}.lpc` `do_zuan()` used `me` without declaring it
+  and never returned 1 (`object me = this_player();`, `return 1;`); `d/xiakedao/shatan5.lpc` has no `inherit` at all (its
+  neighbour `shatan4.lpc`, edited by the same wizard on the same day, has `inherit __DIR__ "no_pk_room";` -- restored the
+  same way, a judgement call from the neighbours); `d/shaolin/{obj,npc/obj}/putao.lpc` call `::init()` with no parent
+  `init` (deleted); `d/changbai/obj/sanqi.lpc` has the `}` of `create()` in front of `setup();`;
+  `d/quanzhou/yaopu/obj/huanglian.lpc` lacks a `)`.
+
+**Left alone, with the reason (120 files that do not load).**
+- *Not code*: `d/em/garbage.lpc`, `d/hangzhou/hangzhou.lpc`, `d/kunlun/map_mingjiao.lpc`, `doc/help/map_mingjiao.lpc` (ASCII
+  art or binary), `d/city/grt.lpc`, `kungfu/class/emei/zhou_log.lpc` (pasted logs), `d/shaolin/npc/obj/saoba.lpc`,
+  `clone/food/dianxin.lpc` (pasted player dumps), `clone/obj/job.sav/*` (binary).
+- *Drafts, copies and scratch nothing references*: `backup/` and `template.lpc` files, `d/wudang/taoyuan/tyroad{4..7}.lpc`
+  (`#include __DIR_"feng.h"`, the real rooms are in `d/wudang/`), four identical `tomb.lpc` / `tomb2.lpc` pairs under
+  `d/em/` and `d/emei/` (older drafts of the working `d/emei/tomb.lpc`), `d/kunlun/skill/bagua-dao.lpc`,
+  `kungfu/class/dali/yanqing.lpc` (a quoted line between every character, an unbalanced `"`), `d/taihu/gumu/houtang.lpc`
+  (`item_desc` strings broken across lines), `d/xiakedao/npc/temp.lpc`.
+- *Half-written*: `d/heimuya/basket.lpc` calls a `check_trigger()` that was never written (and `::reset()` with no parent
+  `reset`); the sibling ferry `d/changbai/damk.lpc` has the working version to copy from, which is new content, so it
+  stays.
+- *Headers the archive never had*: the TMI-2 network daemons `adm/daemons/{socket.lpc,network/*}` (`uid.h`, `mailer.h`,
+  `priv.h`, `post.h`, `net/socket_err.h`; the preload line for `dns_master` is commented out and no live code names these
+  daemons), `d/shaolin/npc/xuanci.lpc` (`job.h`, `xuan-ci.lpc` is the working NPC), `cmds/std/{xunbu,yunyong}.lpc`,
+  `d/wizard/center.lpc`, `d/quanzhou/yaopu/obj/yaolu.lpc`, `d/xiakedao/npc/gaolao1.lpc`, `cmds/wiz/{map2,rstbkup}.lpc`.
+- *Artifacts of compiling an `#include`d fragment on its own*: `adm/simul_efun/object.lpc` (`Invalid simulated efunction
+  override` and the no-side-effects warning at `efun::destruct(ob);`; `/adm/single/simul_efun.lpc` compiles), `clone/obj/
+  npc_setup.lpc`.
+
+The same ~100 files are dead in `bmxkx2001`, `jym`, `shenzhou`, `xkm`, `xkx2000zxb` and `xuanjianlu`; the repairs above
+are ported to them with `lpc_twin_port.py`.
