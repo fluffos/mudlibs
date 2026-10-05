@@ -179,7 +179,7 @@ int do_beidouzhen(string arg)
 		  power = power / 140;
 
 		  if(power>50)power=50;
-		  if(power,18)power=18;
+		  if(power<18)power=18;
 
 
 		  start_beidouzhen(me,0,power);
@@ -264,7 +264,7 @@ int do_beidouzhen2(string arg)
 		  power *= bd_power;
 
 		  if(power>50)power=50;
-		  if(power,15)power=15;
+		  if(power<15)power=15;
 
 
 		  start_beidouzhen(me,0,power);
@@ -373,7 +373,7 @@ int do_beidou(string arg)
 		  power = power / 140;
 
 		  if(power>50)power=50;
-		  if(power,18)power=18;
+		  if(power<18)power=18;
 
 		  start_beidouzhen(me,0,power);
 		  start_beidouzhen(ob1,1,power);
