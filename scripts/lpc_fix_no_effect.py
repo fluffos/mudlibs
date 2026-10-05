@@ -2,7 +2,7 @@
 """scripts/lpc_fix_no_effect.py [--apply] SLUG      (reads the scan scripts/lpc_warnings.py SLUG left behind)
 
 `Expression has no side effects, and the value is unused` (KB 04 section 6.10): most of them are typos a human has to read
-(`res == who;` was meant `res = who;`), but four shapes have exactly one meaning, and this fixes only those, in the files
+(`res == who;` was meant `res = who;`), but five shapes have exactly one meaning, and this fixes only those, in the files
 the scan flagged (the line the driver reports is the *next* token's, so the shapes are looked for in the whole file):
 
   `for (times; times > 0; times--)`   an init clause that is a bare variable does nothing: `for (; times > 0; times--)`
@@ -11,6 +11,8 @@ the scan flagged (the line the driver reports is the *next* token's, so the shap
   `if (!(mud_svc[mud]["tell"] & SVC_KNOWN)) {` whose whole body is `#if PREF_TELL & SVC_TCP ... #endif` (the TMI-2
                                        `dns_master.lpc` query_services()): with the option off the `if` is empty and its test an
                                        expression with no effect; the `#if` / `#endif` pair moves outside the braces (same code)
+  `for (n == 0; n < 4; n++)`           a comparison where the assignment was meant (the loop variable starts from whatever it
+                                       held): `for (n = 0; ...)`
   `(: name :);`                        a function-pointer literal as a statement on its own line (xyj `practice_skill()`: the
                                        `throw_weapon` of the combat actions, never called from there): deleted
 
@@ -38,6 +40,7 @@ for line in open(tsv, errors="replace"):
         flagged.setdefault(f[0], []).append(int(f[1]))
 
 FOR = re.compile(r"(\bfor\s*\(\s*)([A-Za-z_]\w*)(\s*;)")
+FOR_EQ = re.compile(r"(\bfor\s*\(\s*[A-Za-z_]\w*\s*)==(\s*-?\w+\s*;)")
 STR = re.compile(r'^[ \t]*"(?:[^"\\\n]|\\.)*"[ \t]*;[ \t]*$')
 FPTR = re.compile(r"^[ \t]*\(:[ \t]*[A-Za-z_]\w*[ \t]*:\)[ \t]*;[ \t]*$")
 PREF_IF = re.compile(r"^#[ \t]*if[ \t]+PREF_\w+[ \t]*&[ \t]*SVC_\w+[ \t]*(//.*)?\r?$")
@@ -101,6 +104,12 @@ for path in sorted(flagged):
     lines = text.split("\n")
     n0 = done
     for k, l in enumerate(lines):
+        m = FOR_EQ.search(l)
+        if m:
+            lines[k] = l[:m.start()] + m.group(1) + "=" + m.group(2) + l[m.end():]
+            print(f"  {path}:{k + 1}: `{m.group(0).strip()}` -> `=`")
+            done += 1
+            continue
         m = FOR.search(l)
         if m:
             lines[k] = l[:m.start()] + m.group(1) + m.group(3).lstrip() + l[m.end():]
@@ -130,7 +139,7 @@ for path in sorted(flagged):
         k += 1
     if done == n0:
         left += len(flagged[path])
-        print(f"  {path}: {len(flagged[path])} warning(s) at line(s) {sorted(set(flagged[path]))[:4]}: not one of the four shapes, read it")
+        print(f"  {path}: {len(flagged[path])} warning(s) at line(s) {sorted(set(flagged[path]))[:4]}: not one of the five shapes, read it")
     elif apply_:
         open(full, "wb").write("\n".join(lines).encode("latin-1"))
 print(f"{done} edit(s) {'written' if apply_ else 'planned'}; {left} flagged warning(s) in files with no such shape")
