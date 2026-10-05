@@ -925,3 +925,11 @@ driver does not have, so every call was a statement `("text", n);`: `genmap.lpc`
 
 The same ~100 files are dead in `bmxkx2001`, `jym`, `shenzhou`, `xkm`, `xkx2000zxb` and `xuanjianlu`; the repairs above
 are ported to them with `lpc_twin_port.py`.
+
+## 深度功能测试（§10.7，2026-10-05）— paths named in another case, the peak-view rooms
+
+The ten tea items `d/city/npc/tea/*.C` (the stock of `d/city/npc/c_waiter.lpc`: `__DIR__ "tea/longjing"`, ...) were stored with an upper-case extension and never loaded:
+`scripts/lpc_case_paths.py --apply xkx2001` renamed them to `.lpc` (KB 03 §4.5; the renames went into the `xkm` commit by accident of staging, see `git log --follow`); the five-lib audit of
+the wrong-case paths of the family found nothing else in this lib. `d/wudang/taoyuan/tyroad4-7.lpc` included their header through `__DIR_"feng.h"` (one trailing underscore, `Bad #include
+directive`) and now `#include "/d/wudang/feng.h"` (the sweep commit of 40 libs). Rescan after both: 152 distinct diagnostics, 8017 files compile and 116 do not (160 / 8003 / 120 before);
+`scripts/lpc_check_files.py`: the ten tea items, `c_waiter` and the four rooms load.
