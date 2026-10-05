@@ -804,3 +804,8 @@ The four defects the root's NOTES describe are present here too and were repaire
 Load check of all 4987 `.lpc` objects (one VM per 700, HEAD against the working tree): HEAD 4947 PASS, tree 4955 PASS, 0 that loaded before fail now, 8 more load (`d/gao/obj/pen`, `d/obj/books-nonskill/hmeng014`, `data/armor` among them).
 
 **What is left (4 files, 18 error rows, the same as the root).** `cmds/imm/cast1.lpc` (cut in the middle of a string), `d/moon/obj/poem.lpc` (a garbled GBK line), `d/obj/fabao/EXAMPLE.lpc` (a template with placeholders), `d/qujing/jingjiling/jingji6.lpc` (truncated; the sibling's copy is a reformatted version).
+
+## 深度功能测试（§10.7，2026-10-05）— 房间列出的物件缺档时房间照常加载
+
+房间基类 `std/room.lpc`：`make_inventory()` 用 `catch()` 包住 `new(file)`，做不出来就返回 0；`reset()` 的 `case 1:` 拿到 0 就跳过这一项（`if (!objectp(ob[list[i]])) break;`）。档案里没有的 NPC 或物品（或 `create()` 出错的物件）原先会让列出它的房间整个加载失败（`Bad argument 1 to environment()`，或对 0 的 `call_other()`），连带这个房间后面的区域；现在房间照常加载，只是少了那个物件，下次 `reset()` 再试（KB 05 §7.25；`scripts/lpc_resilient_room.py`、`scripts/lpc_room_reset_guard.py`）。
+验证：探针（`scripts/lpc_room_reset_probe.py`：房间基类列出一个不存在的物件，再调用 `reset()`）HEAD 单件 崩溃、多件 崩溃，工作树 单件 OK、多件 OK。

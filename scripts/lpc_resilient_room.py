@@ -10,6 +10,9 @@ and `new()` of a file that is not there returns 0 on this driver, but `new()` of
 skill file for `set_skill()`, a weapon `carry_object()` cannot find, an include that never shipped) raises in the room.  Once
 the wrong-case paths of a lib are fixed (scripts/lpc_case_paths.py) the NPCs behind them exist for the first time, and every
 room that holds one with a content gap stopped loading (sjshwzjqb, sjcs): worse than the missing NPC it had before.
+The unique-object form of the sje / shujian / sjsh family (`ob = unew(file); if (ob) {...} else ob = filter_array(children(file),
+(: clonep :))[<1];`) gets `if (catch(ob = unew(file))) ob = 0;` and an `else` that indexes only a non-empty array.
+
 This replaces the one `ob = new(file);` of make_inventory by
 
     if (catch(ob = new(file)) || !objectp(ob)) return 0;
@@ -32,6 +35,10 @@ if not slugs:
     sys.exit(__doc__)
 
 CANDIDATES = ("std/room.lpc", "inherit/room/room.lpc", "inherit/room.lpc", "std/room/room.lpc", "obj/room.lpc")
+UNEW = re.compile(r"(?m)^([ \t]*)ob[ \t]*=[ \t]*unew[ \t]*\([ \t]*file[ \t]*\)[ \t]*;[ \t]*(\r?)$")
+UNEW_ELSE = re.compile(r"(\}?[ \t]*)else[ \t]+ob[ \t]*=[ \t]*filter_array[ \t]*\([ \t]*children[ \t]*\([ \t]*file[ \t]*\)[ \t]*,[ \t]*"
+                       r"\(:[ \t]*clonep[ \t]*:\)[ \t]*\)[ \t]*\[[ \t]*<[ \t]*1[ \t]*\][ \t]*;")
+DECL = re.compile(r"(?m)^([ \t]*)object[ \t]+ob[ \t]*;")
 STMT = re.compile(r"(?m)^([ \t]*)ob[ \t]*=[ \t]*new[ \t]*\([ \t]*file[ \t]*\)[ \t]*;[ \t]*(\r?)$")
 
 
@@ -69,6 +76,23 @@ for slug in slugs:
             print(f"{slug}: {rel} make_inventory has a catch already: left")
             continue
         ms = list(STMT.finditer(body))
+        mu, me = UNEW.search(body), UNEW_ELSE.search(body)
+        if len(ms) != 1 and mu and me and len(UNEW.findall(body)) == 1 and DECL.search(body):
+            # the unique-object form (sje / shujian / sjsh): `ob = unew(file);` raises in the simul_efun for a file that is not
+            # there (`new()` is 0, then `ob->query("unique")`), and the `else` takes `[<1]` of an empty array
+            eol = "\r\n" if "\r\n" in text else "\n"
+            ind = mu.group(1)
+            nb = body[:mu.start()] + (f"{ind}// a missing or broken object file must not take the room down with it{eol}"
+                                      f"{ind}if (catch(ob = unew(file))) ob = 0;" + mu.group(2)) + body[mu.end():]
+            me = UNEW_ELSE.search(nb)
+            nb = nb[:me.start()] + me.group(1) + "else if (sizeof(obs = filter_array(children(file), (: clonep :)))) ob = obs[<1];" + nb[me.end():]
+            d = DECL.search(nb)
+            nb = nb[:d.start()] + d.group(1) + "object ob, *obs;" + nb[d.end():]
+            out = text[:i] + nb + text[j + 1:]
+            print(f"{slug}: {rel}: make_inventory made resilient (unew form)")
+            if apply_:
+                open(path, "wb").write(out.encode("latin-1"))
+            break
         if len(ms) != 1:
             print(f"{slug}: {rel} make_inventory has {len(ms)} `ob = new(file);` statements: left")
             continue

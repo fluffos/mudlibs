@@ -336,6 +336,23 @@ that fails to compile, so a post-hoc `objectp` check is too late.
   as `carry_object(missing)->wear()`. The shared-helper fix doesn't
   cover those (`revive`).
 
+**Second half (2026-10-05): `reset()` of the same room base, and the rest of `make_inventory()`.** With the helper fixed,
+`case 1:` still went on with `environment(ob[list[i]])` / `ob[list[i]]->is_character()` on the 0 it returned, and both raise
+(`Bad argument 1 to environment()`): the first listed NPC the archive never shipped kept the room, and the area behind it,
+from loading (xyj2006n: 50 rooms). Three shapes, three edits:
+- `case 1:` -> `if (!objectp(ob[list[i]])) break;` behind the make_inventory statement (`scripts/lpc_room_reset_guard.py`,
+  also the `if (!ob[list[i]]) { ... }` brace form of hy5 / hymud / yszz). A base whose statement carries an `else`, or that
+  already tests the entry (es2, fy2, tianlongbabu, zjdyzj ...), is left.
+- `default:` (cctx / jhfy / xajh / pkuxkx): `ob[list[i]][j] = make_inventory(...)` followed by `ob[list[i]][j]->is_character()`
+  instead of `continue;` -> `if (!objectp(ob[list[i]][j])) continue;` (same tool). `if (ob[list[i]][j] && ...)` counts as a test.
+- The unique-object helper of sje / shujian / sjsh (`ob = unew(file);` raises inside the simul_efun, `new()` being 0 for a
+  file that is not there, and the `else` takes `[<1]` of an empty `children()` list) -> `catch` + a size check
+  (`scripts/lpc_resilient_room.py`, which also gave the plain `catch` of the first half to 90 more bases).
+**Check:** `scripts/lpc_room_reset_probe.py SLUG...` loads the room base, lists `/zz/none/a` (1 copy) and `/zz/none/b` (2 copies)
+in `objects`, calls `reset()` under `catch()` and prints HEAD against the tree; it reports through `debug_message()` because
+some error handlers only log (jhfy family). 2026-10-05, 149 bases: at HEAD 148 crashed on the single entry and 120 on the
+double one, in the tree all 149 are OK.
+
 Don't fabricate missing content.
 
 ### 7.26 `file_owner()` captures the wrong path segment
