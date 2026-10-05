@@ -794,3 +794,13 @@ single-file compile check (PASS). Part of the corpus-wide §7.19 sweep
 ## 深度功能测试（§10.7，2026-10-05）— here-document terminators
 
 `scripts/lpc_fix_heredoc_terminator.py --all --apply`: 1 here-document block(s) repaired (1 with the terminator glued to the last text line, 0 with it indented), so `End of file in text block` no longer hides the room or object behind them: `d/moon/bedroom.lpc`. The terminator must start its line (the lexer's own test, KB 04 §6.10); a glued one lost its newline in the GBK -> UTF-8 conversion together with a half character, which stays out.
+
+## 深度功能测试（§10.7，2026-10-05）— compile-warning pass (ported from xiyouji)
+
+`xiyouji450` is `xiyouji`'s sibling (4946 of 4987 files the same text). The fixes of the root were adopted file by file (`scripts/lpc_twin_port.py adopt xiyouji xiyouji450`: 287 reformatted twins, 2 spliced, 23 raw copies), then the same sequence ran here (`scripts/lpc_family_pass.py`: redundant inherits, `void` overrides, macro redefinitions, prototype types, forward declarations, here-document terminators, `clean_up()` name winners after a rescan) and the second round of the root's warning fixes (`scripts/lpc_fix_no_effect.py`, unused locals with getter initializers, `d/kaifeng/ground.h`'s tables defined once, see the root's NOTES). 645 diagnostics (the 2026-10-04 census) -> 0 warnings and 18 error rows in 4 files. 338 files changed.
+
+The four defects the root's NOTES describe are present here too and were repaired the same way: `d/gao/obj/pen.lpc` (`([ "/u/bula/gao/obj/kaoji" ])` -> `: 1`), `d/obj/books-nonskill/hmeng014.lpc` (the closing `"` of `string name`), `data/armor.lpc` (`ob->set_alias(cmd, ");` -> `0`, as `do_opencommand()` in the same file), and `obj/file.lpc` (416 bytes of binary noise, referenced nowhere) renamed to `obj/file.orphaned-junk`.
+
+Load check of all 4987 `.lpc` objects (one VM per 700, HEAD against the working tree): HEAD 4947 PASS, tree 4955 PASS, 0 that loaded before fail now, 8 more load (`d/gao/obj/pen`, `d/obj/books-nonskill/hmeng014`, `data/armor` among them).
+
+**What is left (4 files, 18 error rows, the same as the root).** `cmds/imm/cast1.lpc` (cut in the middle of a string), `d/moon/obj/poem.lpc` (a garbled GBK line), `d/obj/fabao/EXAMPLE.lpc` (a template with placeholders), `d/qujing/jingjiling/jingji6.lpc` (truncated; the sibling's copy is a reformatted version).
