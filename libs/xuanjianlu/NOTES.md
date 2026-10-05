@@ -1409,3 +1409,12 @@ every class, the typos found through the no-side-effects list and the list of fi
 Fixed by hand in this lib (each read first; text restored only from a sentence that a sibling lib carries unchanged): `clone/board/news_b.lpc` (`do_discard()` was `string` and returned its messages as strings, so the `newsdel` command never printed them and always reported success: `int`, `notify_fail()`, `write()` and `return 1`); `d/huanghe/doc/set_bang.h` (two answers end in unrecoverable characters; both strings are closed after `帮主的景仰之情`); `kungfu/skill/shenghuo-quan.lpc` (`return notify_fail("你的内力太弱，无法练仁セ鹑);` — the sentence `bixiecanyang`, `chidi`, `hc` and `ffxymud` carry: `无法练圣火拳。\n"`); `d/zhongnan/gate1.lpc` (a `varargs` the port had left on a line of its own, now part of the function header); and the libs' `adm/simul_efun/message.lpc` got the `message_combatd()` alias (KB 04 §6.2).
 
 What is left: the files that do not load in the root either, the wizard directories (`/u/dns`, `/u/feitian`, `/u/yijiu`, `/clone/obj/u/xuanyuan`) with their missing headers (`BINGQI_D`, `c_cond.h`, `wanted.h`), and `quest/wei/` (`QUESTH_D` never shipped, `qhlist600000.lpc` has a syntax error at line 2181).
+
+## 深度功能测试（§10.7，2026-10-04）— paths named in another case
+
+The archive comes from a case-insensitive host: files are stored as `BAGUA0.lpc`, `longjing.C`, `d/SHAOLIN/`, the code names them in lower
+case (`__DIR__ "bagua0"`, `"tea/longjing"`, `"/d/shaolin/..."`), so the rooms, NPCs and items behind them could not be loaded (a `.C` file is
+not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply xuanjianlu`: 42 file(s) renamed to lower case (`.C` -> `.lpc`,
+`.H` -> `.h`) and 0 path reference(s) in 0 file(s) rewritten to the new spelling; 0 skipped, 0 ambiguous. Load check of the 50 objects that were renamed, edited or name a renamed path (HEAD against the working tree, an object is the same under any spelling of its path): 4 PASS -> 45 PASS, 0 that loaded before fail now, 41 more load.
+
+The 42 files are 41 `.C` -> `.lpc` (the tea items of `d/city/npc/tea`, the Lingjiu array rooms `bagua*`, items of `d/lingjiu/obj` ...) and `d/lingjiu/BAGUA.H` -> `bagua.h`. Rescan: 352 distinct diagnostics, 10355 files compile and 217 do not (10310 / 221 / 360 before).
