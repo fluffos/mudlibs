@@ -170,6 +170,9 @@ mandates with no completion target:
   didn't start.
 - **Use `git add -u <path>` or explicit paths**, never a bare directory
   add (it sweeps untracked saves).
+  A bare `git commit` also takes whatever is already staged, and `git mv` / `git rm` (and
+  `scripts/lpc_case_paths.py`) stage on their own: commit with a pathspec
+  (`git commit -m ... -- libs/<slug>`) so one lib's renames do not ride in another lib's commit.
 - **Never force-push, `reset --hard`, rewrite history, or `git stash`
   in this shared tree.** Fix forward with additive commits. A leaked
   secret gets redacted in a new commit.

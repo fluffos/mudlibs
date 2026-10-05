@@ -109,8 +109,13 @@ def repair(lines, op_line, term):
         nxt0 = next((x.strip() for x in lines[op_line + 1:op_line + 6] if x.strip()), "")
         if m0.group(3).strip() or re.match(r"[)\];,}]", nxt0):
             return (op_line, "opener-glued", [m0.group(1), m0.group(2), term + (m0.group(3).rstrip() if m0.group(3).strip() else "")])
+    ci = re.compile(r"(%s)(?![A-Za-z0-9_])" % re.escape(term), re.I)
     for k in range(op_line + 1, len(lines)):
         l = lines[k].rstrip("\r")
+        mci = ci.match(l)
+        if mci and mci.group(1) != term and not cand:
+            # `@long ... LONG`: the driver compares the terminator case-sensitively; spell the opener like the terminator
+            return (op_line, "case-mismatch", [re.sub(r"(@@?)%s" % re.escape(term), lambda m: m.group(1) + mci.group(1), lines[op_line].rstrip("\r"), count=1)])
         if ind.match(l):
             cand.append((k, "indented", [l.lstrip(" \t")]))
             continue
