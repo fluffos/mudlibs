@@ -49,6 +49,9 @@ TOK = re.compile(r'''
 ''', re.S | re.X)
 
 
+MODIFIERS = {"varargs", "nosave", "private", "protected", "public", "nomask", "static"}
+
+
 def toks(data):
     return [m.group(0) for m in TOK.finditer(data.decode("utf-8", "replace"))
             if not (m.group(0).startswith("//") or m.group(0).startswith("/*"))]
@@ -86,6 +89,10 @@ def splice(pre, post, dst):
                 if (s0 == 0 or td_text[s0 - 1] == "\n") and (e0 >= len(td_text) or td_text[e0] in "\r\n"):
                     start, end = s0, e0 + (2 if td_text[e0:e0 + 2] == "\r\n" else 1 if e0 < len(td_text) else 0)
             edits.append((start, end, snippet))
+        elif snippet.split() and set(snippet.split()) <= MODIFIERS and i1 < len(td):
+            # a modifier (`varargs`, `nosave`, ...) belongs in front of the token that follows it, not after the
+            # previous token: that left a lone `varargs` line behind the `}` of the previous function
+            edits.append((td[i1][1], td[i1][1], snippet + " "))
         else:                                              # an insertion after the previous token
             pos = td[i1 - 1][2] if i1 > 0 else 0
             gap = tq_text[tq[j1 - 1][2]:tq[j1][1]] if j1 > 0 and j1 < len(tq) else " "
@@ -95,7 +102,25 @@ def splice(pre, post, dst):
     for start, end, rep in sorted(edits, reverse=True):
         out = out[:start] + rep + out[end:]
     result = out.encode("latin-1")
-    return result if [t[0] for t in spans(result)[1]] == b else None
+    if [t[0] for t in spans(result)[1]] != b:
+        return None
+    # An unterminated string in the pre-image (`set("short", "X);`) shifts the string/non-string alternation of every
+    # token after it, so the token diff covers most of the file and the splice rewrites text SRC never touched
+    # (xkx2000zxb d/city/qiyuan2.lpc came out as `...一幠兯�联`).  The result may differ from DST by about as much as
+    # SRC's post differs from its pre, and no more.
+    if changed_bytes(td_text, out) > 3 * changed_bytes(tp_text, tq_text) + 200:
+        return None
+    return result
+
+
+def changed_bytes(x, y):
+    """size of the lines that differ between two texts (added + removed)"""
+    xl, yl = x.split("\n"), y.split("\n")
+    n = 0
+    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, xl, yl, autojunk=False).get_opcodes():
+        if tag != "equal":
+            n += sum(len(l) + 1 for l in xl[i1:i2]) + sum(len(l) + 1 for l in yl[j1:j2])
+    return n
 
 
 def show(rev_path):

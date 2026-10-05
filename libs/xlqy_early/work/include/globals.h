@@ -129,6 +129,7 @@
 #define NEWSKILL            "/std/skill"
 #define CREATESKILL         "/std/createskill"
 #define SSERVER             "/std/sserver"
+#define F_SSERVER SSERVER
 #define FAMILYSKILL         "/std/familyskill"
 #define CANWUROOM           "/std/room/canwu"
 #define SKILLROOM           "/std/room/chskill"

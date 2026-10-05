@@ -53,6 +53,20 @@ detection.
   simul_efun. A *definition* there is the fix for every command that
   calls it at once (`es1_win`/`esI`: `/adm/simul_efun/tail.lpc`, the last
   1000 bytes from the first whole line, `message()`d to `this_player()`).
+- **`message_combatd(msg, me, target)`**: a simul_efun of the original xkx server that 27 archives never shipped
+  (`Undefined function message_combatd`; every perform file that calls it fails to compile: `xbtxiii` 133, `shenmo`
+  1017, `xkxyb` 84, `xjcq2000` 52 ...). The lib's own `message_vision()` is the same call without the combat channel:
+  `scripts/lpc_add_message_combatd.py SLUG...` adds `varargs void message_combatd(string msg, object me, object you,
+  mixed extra) { message_vision(msg, me, you); }` right after `message_vision`'s definition in
+  `adm/simul_efun/message.lpc` (a call before the textual definition of the callee does not resolve here, §6.5).
+  Find the libs with `git grep -l 'message_combatd *('` minus the ones that define it.
+- **A macro the files use and no header defines** (`inherit F_SSERVER;` where the lib's header says `SSERVER`): the file stops at
+  `syntax error, unexpected L_IDENTIFIER, expecting L_STRING or '('` on its `inherit` line. `shenmo` had 1932 skill/perform files
+  that never loaded (every `perform` of those skills died at compile time; `/std/sserver` is the file `SSERVER` names), 22 more libs
+  1-106 files each (`njhhdxdes2hx` 104). `scripts/lpc_alias_macro.py SLUG F_SSERVER SSERVER` adds `#define F_SSERVER SSERVER` after the
+  line that defines `SSERVER` (a path as the last argument goes into the global include file: `sjpl2`/`sjplii` have the xkx
+  `/feature/sserver.lpc`). Find them by compiling, not by grepping for the macro: `scripts/lpc_add_missing_include.py` covers the
+  macros some header does define. Check the users HEAD vs tree afterwards (all 24 libs: 0 regressions, shenmo 1961 -> 29 failing).
 - **`efun::set/query/delete/addn`** (nitan property system): see §7.15.
 - **`LONELY_IMPROVED`-gated `efun::` families**: flip the guard to the
   pure-LPC `#else` branch. The `count_*` bignum wrappers have no

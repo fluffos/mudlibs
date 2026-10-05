@@ -271,3 +271,8 @@ live `debug.log` 是 `libs/fys/log/debug.log`（Boot Time Fri Sep 4
 ## 深度功能测试（§10.7，2026-10-04）— negative range ends
 
 `scripts/lpc_fix_negative_ranges.py`: 17 line(s) in 5 file(s) count a range from the end with `<` (`x[a..-1]` -> `x[a..<1]`, `x[-2..]` -> `x[<2..]`; KB 06 §7.209). In this driver a negative constant end gave `""` / `({ })` and a negative start the whole value, so each of these returned the wrong slice; the compile warning `A negative constant as the second element of arr[x..y]` is gone from the files that compile. Range lvalues (`s[0..-1] = text`, the prepend idiom) are left alone. A paired compile of the changed files at HEAD and in the working tree showed no new error.
+
+
+## 深度功能测试（§10.7，2026-10-04）— undefined macro and simul_efun gaps
+
+- 16 file(s) `inherit F_SSERVER;` and no header defines it (16 did not compile: `syntax error, unexpected L_IDENTIFIER, expecting L_STRING or '('`). `#define F_SSERVER SSERVER` in `include/globals.h` (KB 04 §6.2, `scripts/lpc_alias_macro.py`). 1 still fail.

@@ -382,7 +382,7 @@ def used_in_conditional(masked, flags, name, a, b, skip_a, skip_b):
 PURE_EFUNS = {"this_player", "this_object", "previous_object", "environment", "find_player", "find_object", "find_living",
               "query", "query_temp", "time", "sizeof", "strlen", "lower_case", "capitalize", "geteuid", "getuid", "file_name",
               "base_name", "all_inventory", "users", "member_array", "present", "intp", "stringp", "objectp", "pointerp",
-              "mapp", "functionp", "to_int", "to_float", "ctime", "keys", "values"}
+              "mapp", "functionp", "to_int", "to_float", "ctime", "keys", "values", "random"}
 PURE_METHODS = {"query", "query_temp", "query_skill", "name", "short", "query_name", "query_level", "select_opponent"}
 
 

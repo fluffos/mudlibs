@@ -107,6 +107,7 @@
 #define ROOM                    "/std/room/room"
 #define SKILL                   "/std/skill/skill"
 #define SSERVER                 "/std/skill/sserver"
+#define F_SSERVER SSERVER
 
 // User IDs
 

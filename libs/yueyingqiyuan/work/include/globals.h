@@ -97,6 +97,7 @@
 #define ROOM			"/std/room"
 #define SKILL			"/std/skill"
 #define SSERVER			"/std/sserver"
+#define F_SSERVER SSERVER
 #define SKILL_MODEL_UNARMED    "/std/skill_model_unarmed.lpc"
 #define SKILL_MODEL_WEAPON     "/std/skill_model_weapon.lpc"
 #define SKILL_MODEL_DEFAULT    "/std/skill_model_default.lpc"

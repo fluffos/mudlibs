@@ -152,3 +152,4 @@
 // in effect.
 
 #undef PROFILE_COMMANDS
+#define F_SSERVER "/feature/sserver.lpc"

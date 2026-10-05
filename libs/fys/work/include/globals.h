@@ -82,6 +82,7 @@
 #define ROOM			"/std/room"
 #define SKILL			"/std/skill"
 #define SSERVER			"/std/sserver"
+#define F_SSERVER SSERVER
 #define KZZNPC			"/std/char/kzznpc"
 
 // User IDs

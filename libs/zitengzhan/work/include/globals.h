@@ -152,6 +152,7 @@
 #define ROOM			"/std/room"
 #define SKILL			"/std/skill"
 #define SSERVER			"/std/sserver"
+#define F_SSERVER SSERVER
 #define SSSERVER                   "/std/ssserver"
 #define WARPLACE                "/d/zhanchang/warplace"
 #define CJNPC_EASY              "/std/char/cjnpc_easy"//huarong 2003/10

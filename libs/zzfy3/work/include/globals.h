@@ -105,6 +105,7 @@
 #define ROOM                    "/std/room"
 #define SKILL                   "/std/skill"
 #define SSERVER                 "/std/sserver"
+#define F_SSERVER SSERVER
 // User IDs
 
 #define ROOT_UID                "Root"

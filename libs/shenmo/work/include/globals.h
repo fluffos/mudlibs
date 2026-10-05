@@ -107,6 +107,7 @@
 #define MAGIC_ROOM              "/std/magicroom"
 #define SKILL                   "/std/skill"
 #define SSERVER                 "/std/sserver"
+#define F_SSERVER               "/std/sserver"
 #define SELLYAO                 "/std/room/sellyao"
 //#define COMBINE                 "/std/room/combine"
 //#define MAZE                    "/u/koker/files/maze"

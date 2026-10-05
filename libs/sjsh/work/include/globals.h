@@ -95,6 +95,7 @@
 #define ROOM			"/std/room"
 #define SKILL			"/std/skill"
 #define SSERVER			"/std/sserver"
+#define F_SSERVER SSERVER
 //#define SELLYAO                 "/std/room/sellyao"      //new koker
 //#define COMBINE                 "/std/room/combine"    //new koker
 //#define MAZE			"/u/koker/files/maze"    //new koker
