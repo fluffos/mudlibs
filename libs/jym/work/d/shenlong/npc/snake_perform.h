@@ -49,9 +49,6 @@ int auto_perform_chan()
 {
 	object me = this_object();
 	object target = me->select_opponent();
-	object owner;
-	object here = environment(me);
-	int damage;
 
 	if( me->query("jingli") < 500 ) return 0;
 

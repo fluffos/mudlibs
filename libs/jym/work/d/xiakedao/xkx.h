@@ -43,7 +43,6 @@ string* askills = ({
 	"", });
 int do_study(string arg)
 {	object me = this_player();
-	int check;
 
 	if ( !arg )
 		return notify_fail( "你想学什麽?\n");

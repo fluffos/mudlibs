@@ -233,8 +233,8 @@ void init()
 int do_jie(string arg)
 {
         object me, ob;
-        mapping weizhis, target;
-        int exp, position, i, j;
+        mapping weizhis;
+        int exp;
 
         if(!arg) return 0;
         me = this_player();

@@ -5,7 +5,6 @@ int auto_perform()
 {
 	object me=this_object();
 	object weapon=me->query_temp("weapon");
-	object opp=me->select_opponent();
 
 	//yangguo's perform
 

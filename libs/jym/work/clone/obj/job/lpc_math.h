@@ -104,7 +104,7 @@ mixed get_msg_map(string tag1,string tag1_str,string tag2,mapping *map)
 //获得一个*mapping中某种成员的所有数值的阵列
 mixed *get_array_map(string tag1,mapping *map)
 {
-	int i,j;
+	int i;
 	mixed *str;
 	string *keys;
 	if(!pointerp(map))

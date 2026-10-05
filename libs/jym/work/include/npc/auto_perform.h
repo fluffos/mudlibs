@@ -192,7 +192,6 @@ int gaibang_perform()
 {
 object me=this_object();
         object weapon=me->query_temp("weapon");
-        object opp=me->select_opponent();
 
         if ( !me->is_fighting() ) {
                 if ( me->query("eff_qi") < me->query("max_qi") )
@@ -496,7 +495,6 @@ int auto_perform()
 {
 	object me = this_object();
 	string menpai;
-	int rmpfm;
 
 	if (me->query("combat_exp") < 1000000)  return 0;
 

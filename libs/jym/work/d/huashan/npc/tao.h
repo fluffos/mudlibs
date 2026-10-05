@@ -1,7 +1,6 @@
 //Cracked by Roath
 void init()
 {
-        object ob, me = this_object();
 }
 
 int accept_fight(object ob)
@@ -114,7 +113,6 @@ int observe(object me, object ob)
 {
 
         int my_max_qi;
-        string msg;
 
         if (!me || !ob ) return 0;
         my_max_qi = me->query("max_qi");

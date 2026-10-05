@@ -347,7 +347,7 @@ void full(object ob)
 
 void die()
 {
-        object ob, me, target;
+        object ob, me;
         mapping dizhis;
         
         ob = this_object();

@@ -15,8 +15,11 @@
 #define MUDLIST_DNS  ({ "127.0.0.1", 5559 })
 // The Eastern Stories
 #define MUDLIST_BAK  ({ "140.113.204.42", 8008 })
+#undef MUDLIST_BAK
 #define MUDLIST_BAK ({"193.10.174.41", 5563})
+#undef MUDLIST_BAK
 #define MUDLIST_BAK ({"209.191.135.218",5559})
+#undef MUDLIST_BAK
 #define MUDLIST_BAK ({"209.191.135.218",2229})
 
 #define LISTNODES ([ \

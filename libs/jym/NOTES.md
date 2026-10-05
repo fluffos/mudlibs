@@ -368,3 +368,18 @@ to `feature/command.lpc` only. Verified via single-file `lpcc --batch` PASS.
 ## 深度功能测试（§10.7，2026-10-04）— negative range ends
 
 `scripts/lpc_fix_negative_ranges.py`: 5 line(s) in 2 file(s) count a range from the end with `<` (`x[a..-1]` -> `x[a..<1]`, `x[-2..]` -> `x[<2..]`; KB 06 §7.209). In this driver a negative constant end gave `""` / `({ })` and a negative start the whole value, so each of these returned the wrong slice; the compile warning `A negative constant as the second element of arr[x..y]` is gone from the files that compile. Range lvalues (`s[0..-1] = text`, the prepend idiom) are left alone. A paired compile of the changed files at HEAD and in the working tree showed no new error.
+
+## 深度功能测试（§10.7，2026-10-04）— compile-warning and load-failure pass (ported from xkx2001)
+
+`scripts/lpc_warnings.py jym`: 286 distinct diagnostics at the end, 10985 files compile and 213 do not. A load check of every
+`.lpc` (12504 files, 700 per VM boot) at HEAD and in the working tree: 10937 PASS -> 10974 PASS, no file that loaded before fails now
+that is not a random draw. 1710 files changed. The code is the xkx2001 root's, so the pass is its pass (libs/xkx2001/NOTES.md has
+every class, the typos found through the no-side-effects list and the list of files left alone):
+`lpc_twin_port.py adopt xkx2001 jym` carried the fixes of the files whose code is the root's, then
+`lpc_warnings.py --fix`, `lpc_diamonds.py --fix-redundant`, `lpc_fix_void_override.py`, `lpc_fix_macro_redef.py`,
+`lpc_fix_prototype_types.py`, `lpc_move_decl.py`, `lpc_fix_no_effect.py`, `lpc_fix_heredoc_terminator.py` and (after a rescan)
+`lpc_name_winner.py` handled the diagnostics that depend on this lib's own files.
+
+Fixed by hand in this lib (each read first; nothing written new): `d/changbai/damk.lpc` (a string broken by a raw newline, joined as in the root); `kungfu/class_all/shenlong/lu.lpc` and `class_bak/shenlong/lu.lpc` (the same damaged reply as the root's `lu.lpc`, replaced by the sentence the live `kungfu/class/shenlong/lu.lpc` of this lib carries); `adm/daemons/rankd1.lpc` (`return "婆婆;` lost its closing quote, `hc` and `zhonghua2` carry `"婆婆"`); `kungfu/skill/miaoshouhuichun/lifeheal.lpc` (`ob` was used and never declared: `object ob;`); `d/dali/npc/daobaifeng.lpc` (`attempt_apprentice(object ob)` tested `me->query("family/family_name")` with `me` undefined; `shenzhou` carries `ob`).
+
+The one file that loaded at HEAD and fails in the load check, `kungfu/class_all/generate/chinese.lpc`, picks random skills when it is created and raises `No such skill` for the ones this lib does not have, so it loads or fails by chance (it failed with a different skill name each time); it is not a regression. What is left: dead files (drafts, pasted logs, wizard work, the TMI-2 network daemons without headers), the `kungfu/class_bak` and `class_all` copies that never loaded, `inherit F_JIEBAI;`, `F_NATURE`, `BUNCHER` and other macros this lib never defined, and `d/heimuya/basket.lpc` (an `ITEM` that calls `::reset()` and the undefined `check_trigger()`).

@@ -64,7 +64,6 @@ string ask_jiuyin()
 
 void attempt_apprentice(object ob)
 {
-    mapping fam;
     int last_betray,shen;
 	
 	//xiaojian: added a check before recruiting, i.e. won't recruit pxj dizi.

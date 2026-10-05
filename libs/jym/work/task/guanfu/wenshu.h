@@ -121,7 +121,6 @@ int do_yes()
 
 int do_no()
 {
-    object me = this_player();
     return notify_fail("取消放弃。\n");
 }
 

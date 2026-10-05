@@ -7,7 +7,7 @@ string set_npc(object ob, string menpai, int exp, int skill_rate)
     "huashan", "shaolin", "wudang", "emei", "gaibang", "lingjiu", "quanzhen",
     "baituo", "xueshan", "xingxiu", "taohua", "gumu", "shenlong", "dali"  });
 
-    int level, i;
+    int level;
 	string c_menpai;
 
     //if (exp < 0 || skill_rate < 0) return;

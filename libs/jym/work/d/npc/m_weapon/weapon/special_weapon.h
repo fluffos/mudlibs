@@ -1,5 +1,5 @@
 //Cracked by Kafei
-mixed hit_ob(object me, object victim, int damage_bonus, int factor)
+varargs mixed hit_ob(object me, object victim, int damage_bonus, int factor)
 {
         object obj;
 
