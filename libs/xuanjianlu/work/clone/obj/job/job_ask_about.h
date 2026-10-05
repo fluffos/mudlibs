@@ -74,10 +74,7 @@ void tell_player_family_job_contribute(object player,object master)
 
 void tell_player_family_job_open(object player,object master)
 {
-	object job_data,menpai_ob;
-	string family_name,master_name,master_call,msg;
-	mapping family_map;
-	int point;
+	string family_name, master_name, master_call;
 	family_name=player->query("family/family_name");
 	if(!family_name||
 		family_name!=master->query("family/family_name"))
@@ -100,10 +97,7 @@ void tell_player_family_job_open(object player,object master)
 }
 void tell_player_family_job_close(object player,object master)
 {
-	object job_data,menpai_ob;
-	string family_name,master_name,master_call,msg;
-	mapping family_map;
-	int point;
+	string family_name, master_name, master_call;
 	family_name=player->query("family/family_name");
 	if(!family_name||
 		family_name!=master->query("family/family_name"))

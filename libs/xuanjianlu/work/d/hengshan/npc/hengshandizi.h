@@ -142,7 +142,7 @@ void unconcious()
 		message_vision(CYN"$N说道：“贵派意欲将五岳剑派合而为一，并成一个五岳派。此事本来尽可从长计议，何以各位竟冒充魔教，痛下毒手，要将我恒山派尽数诛灭。”\n"NOR, me, ob);
 		message_vision(CYN"$N惨然叹道：“嵩山派左掌门一代高人，却收罗了许多左道……这许多江湖异士，和同道中人为难，真是居心……唉……”\n"NOR, me, ob);
 		message_vision(CYN"\n$n由怀里抽出绳子，将$N五花大绑押了起来。\n"NOR, me, ob);
-		message_vision(CYN"\$n说道：“左掌门好好劝你归降投诚，你偏偏固执不听，自今而后，武林中可再没恒山一派了。\n"NOR, me, ob);
+		message_vision(CYN"$n说道：“左掌门好好劝你归降投诚，你偏偏固执不听，自今而后，武林中可再没恒山一派了。\n"NOR, me, ob);
 		me->set("eff_qi", me->query("max_qi"));
 		me->set("qi", me->query("max_qi"));
 		me->set("eff_jing", me->query("max_jing"));
@@ -172,7 +172,7 @@ void die()
 		message_vision(CYN"$N说道：“贵派意欲将五岳剑派合而为一，并成一个五岳派。此事本来尽可从长计议，何以各位竟冒充魔教，痛下毒手，要将我恒山派尽数诛灭。”\n"NOR, me, ob);
 		message_vision(CYN"$N惨然叹道：“嵩山派左掌门一代高人，却收罗了许多左道……这许多江湖异士，和同道中人为难，真是居心……唉……”\n"NOR, me, ob);
 		message_vision(CYN"\n$n由怀里抽出绳子，将$N五花大绑押了起来。\n"NOR, me, ob);
-		message_vision(CYN"\$n说道：“左掌门好好劝你归降投诚，你偏偏固执不听，自今而后，武林中可再没恒山一派了。\n"NOR, me, ob);
+		message_vision(CYN"$n说道：“左掌门好好劝你归降投诚，你偏偏固执不听，自今而后，武林中可再没恒山一派了。\n"NOR, me, ob);
 		me->set("eff_qi", me->query("max_qi"));
 		me->set("qi", me->query("max_qi"));
 		me->set("eff_jing", me->query("max_jing"));

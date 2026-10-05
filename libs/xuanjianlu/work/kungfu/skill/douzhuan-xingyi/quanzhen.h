@@ -121,8 +121,8 @@ int quanzhen(object me,object target)
 	} else if ( random(3) == 2 ) {
 
 		object weapon;
-		int damage,skill,wap,wdp;
-		string *limb, type, result, str,msg;
+		int skill, wap, wdp;
+		string type, msg;
 
 		type = "内伤";
 

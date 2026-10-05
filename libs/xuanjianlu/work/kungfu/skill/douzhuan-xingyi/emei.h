@@ -78,9 +78,8 @@ int emei(object me,object target)
                 	message_vision("($N"+str+")\n", target);
         	}
 	} else {
-		object ob;
 		string msg;
-		int damage, finger, skill, jiali, my_rate, your_rate;
+		int damage, jiali;
 
 		jiali=(int)me->query("jiali");
 

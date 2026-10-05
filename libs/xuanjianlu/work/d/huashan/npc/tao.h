@@ -1,7 +1,6 @@
 //Cracked by Roath
 void init()
 {
-        object ob, me = this_object();
 }
 
 int accept_fight(object ob)
@@ -97,7 +96,6 @@ int tear_and_kill(object me, object ob, string msg)
 int observe(object me, object ob)
 {
         int my_max_qi = me->query("max_qi");
-        string msg;
 
         if (me->is_fighting()) {
 	   if ( (me->query("qi")*100 / my_max_qi) <= 80 ) {

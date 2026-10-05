@@ -104,6 +104,7 @@
 #define NPC_TRAINEE	"/inherit/char/trainee"
 #define PILL		"/inherit/medicine/pill"
 #define POWDER		"/inherit/medicine/powder"
+#undef ROOM
 #define ROOM		"/inherit/room/room"
 #define SHIP		"/inherit/room/ship"
 #define SKILL		"/inherit/skill/skill"

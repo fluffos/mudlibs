@@ -17,7 +17,7 @@ void init()
 void showup()
 {
 
-        int level = 0, exp, ob_exp;
+        int exp;
         object ob = this_player(),snake;
         exp = ob->query("combat_exp");
         snake = new("/d/shenlong/npc/snake");

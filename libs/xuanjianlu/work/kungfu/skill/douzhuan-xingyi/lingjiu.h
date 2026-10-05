@@ -5,11 +5,11 @@
 #include <armor.h>
 #include <combat.h>
 
-string* xuedao1 = ({"肩井穴","紫宫穴","中庭穴","关元穴","天池穴"});
-string* xuedao2 = ({"中渎穴","风市穴","环跳穴","渊液穴","阴谷穴","足三里"});
-string* xuedao3 = ({"中府穴","尺泽穴","孔最穴","列缺穴","太渊穴","少商穴"});
-string* xuedao4 = ({"商阳穴","合谷穴","手三里","曲池穴","迎香穴"});
-string* xuedao5 = ({"百会穴","灵台穴","太阳穴","膻中穴","命门穴","鸠尾穴","气海穴"});
+string* lingjiu_xuedao1 = ({"肩井穴","紫宫穴","中庭穴","关元穴","天池穴"});
+string* lingjiu_xuedao2 = ({"中渎穴","风市穴","环跳穴","渊液穴","阴谷穴","足三里"});
+string* lingjiu_xuedao3 = ({"中府穴","尺泽穴","孔最穴","列缺穴","太渊穴","少商穴"});
+string* lingjiu_xuedao4 = ({"商阳穴","合谷穴","手三里","曲池穴","迎香穴"});
+string* lingjiu_xuedao5 = ({"百会穴","灵台穴","太阳穴","膻中穴","命门穴","鸠尾穴","气海穴"});
 
 void tie2_hit(object me, object target);
 void nuan_hit(object me, object target);
@@ -271,7 +271,7 @@ void han_hit(object me, object target)
 	time = (me->query_skill("force") - target->query_skill("force") + me->query_skill("hand"))/10;
 	if (time > 12) time = 12;
 	if (time < 4) time = 4;
-	message_vision(HIC "\n同时$N左手顺势一拂，折梅手含而不露，却似香梅傲雪，隐隐带着一丝寒意拂向$n的" + xuedao3[random(6)] + "！\n\n" NOR, me, target);
+	message_vision(HIC "\n同时$N左手顺势一拂，折梅手含而不露，却似香梅傲雪，隐隐带着一丝寒意拂向$n的" + lingjiu_xuedao3[random(6)] + "！\n\n" NOR, me, target);
 
 	if( random(ap) < dp/2 && time > 0 )
 	{

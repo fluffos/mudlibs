@@ -5,8 +5,6 @@
 #include <armor.h>
 #include <combat.h>
 
-string* place = ({"太阳穴","面门","前胸","左肩","右肩","小腹","天灵盖"});
-string* side = ({"左侧","右侧","身后"});
 
 int taohua(object me,object target)
 {
@@ -18,7 +16,6 @@ int taohua(object me,object target)
 	{
 
 		int strike, extra, kick, power;
-		string weapon;
 
 		if(me->query_skill("luoying-shenjian")) {
 			me->set_temp("memory",me->query_skill("luoying-shenjian",1));

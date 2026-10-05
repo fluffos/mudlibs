@@ -2,7 +2,7 @@
 mixed hit_ob(object me, object victim, int damage_bonus, int factor)
 {
 	object obj;
-	string weapon, me_weapon, op_skill, *pname,result, str, msg;
+	string me_weapon, op_skill, str;
 	int me_power, victim_power;
 
 	if (objectp(obj = victim->query_temp("weapon"))){

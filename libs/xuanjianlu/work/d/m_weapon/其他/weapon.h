@@ -26,6 +26,7 @@
 #define WHIP		"/inherit/weapon/whip"		// 鞭
 #define HOOK		"/inherit/weapon/hook"		// 钩
 #define BOW		"/inherit/weapon/bow"		// 弓
+#undef S_WEAPON
 #define S_WEAPON	"/inherit/weapon/weapon"	// 制造兵器
 
 #define F_BOW		"/inherit/weapon/_bow"		

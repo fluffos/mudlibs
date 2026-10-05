@@ -19,7 +19,6 @@ int gaibang(object me,object target)
 
 	if( random(2) == 0 )
 	{
-		string weapon;
 		int skill, enfor, amount;
 		enfor = me->query("jiali");
 		skill = me->query_skill("force");
@@ -70,7 +69,6 @@ int gaibang(object me,object target)
 
 	} else {
 
-		object armor;
 		int jiali, jiajin, lvl, my_exp;
 	
 		my_exp = me->query("combat_exp");
@@ -238,9 +236,9 @@ void msg_display(object me, object target, int lvl)
 
 void remove_effect2(object me, object target, int lvl)
 {
-	int jiali, jiajin, ap, dp, pp,dmg,damage;
+	int jiali, jiajin, ap, dp, pp, dmg;
 	object weapon;
-	string *limbs, limb, result, str, type;
+	string *limbs, result, str, type;
 
 	int dk = me->query_skill("douzhuan-xingyi",1);
 

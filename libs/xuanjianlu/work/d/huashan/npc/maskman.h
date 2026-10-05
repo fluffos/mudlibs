@@ -3,10 +3,10 @@
 
 void init()
 {
-	object *inv, victim = this_player(), me = this_object();
+	object victim = this_player(), me = this_object();
 	mapping skill_status;
 	string *sname;
-	int i, max = 0, max1, j;
+	int i, max = 0, max1;
 	if ( !living(me)) return;
 
 	if ( living(me) &&( (me->query("eff_qi") * 100 / me->query("max_qi")) < 20
@@ -254,7 +254,6 @@ int do_filter(string arg)
 */
 void destruct_me(object me, object victim)
 {
-	object target;
 	if ( me->query("kill_player") &&  !environment(me)->query("no_fight") )
 		return 0;
 	if(me) {
@@ -302,7 +301,7 @@ int checking(object me, object victim)
 		remove_call_out("checking");
 		remove_call_out("destruct_me");
 		call_out("destruct_me", 1, me, victim);
-		return;
+		return 0;
 	}
 
 	if ( !victim=find_player(me->query_temp("victim")) ) {

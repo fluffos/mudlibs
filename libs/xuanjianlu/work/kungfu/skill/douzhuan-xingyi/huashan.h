@@ -12,7 +12,6 @@ int huashan(object me,object target)
 	if( random(2) == 1 )
 	{
 		int str, dex;
-		string weapon;
 
 		message_vision(MAG "\n只听得$N一声大喝，拳风突然变得猛劲之极，身法却更加飘忽难测！\n\n" NOR, me, target);
 
@@ -49,7 +48,6 @@ int huashan(object me,object target)
 		me->start_busy(1+random(1));
 	} else {
 
-		string weapon;
 		int time,level,old_time;
 
 		level = me->query_skill("douzhuan-xingyi", 1);

@@ -1395,3 +1395,17 @@ re-invoke `enable_player()` on this lib while the object is still
 ## 深度功能测试（§10.7，2026-10-04）— negative range ends
 
 `scripts/lpc_fix_negative_ranges.py`: 5 line(s) in 2 file(s) count a range from the end with `<` (`x[a..-1]` -> `x[a..<1]`, `x[-2..]` -> `x[<2..]`; KB 06 §7.209). In this driver a negative constant end gave `""` / `({ })` and a negative start the whole value, so each of these returned the wrong slice; the compile warning `A negative constant as the second element of arr[x..y]` is gone from the files that compile. Range lvalues (`s[0..-1] = text`, the prepend idiom) are left alone. A paired compile of the changed files at HEAD and in the working tree showed no new error.
+
+## 深度功能测试（§10.7，2026-10-04）— compile-warning and load-failure pass (ported from xkx2001)
+
+`scripts/lpc_warnings.py xuanjianlu`: 360 distinct diagnostics at the end, 10310 files compile and 221 do not. A load check of every
+`.lpc` (10605 files, 700 per VM boot) at HEAD and in the working tree: 10252 PASS -> 10302 PASS, no file that loaded before fails now. 1550 files changed. The code is the xkx2001 root's, so the pass is its pass (libs/xkx2001/NOTES.md has
+every class, the typos found through the no-side-effects list and the list of files left alone):
+`lpc_twin_port.py adopt xkx2001 xuanjianlu` carried the fixes of the files whose code is the root's, then
+`lpc_warnings.py --fix`, `lpc_diamonds.py --fix-redundant`, `lpc_fix_void_override.py`, `lpc_fix_macro_redef.py`,
+`lpc_fix_prototype_types.py`, `lpc_move_decl.py`, `lpc_fix_no_effect.py`, `lpc_fix_heredoc_terminator.py` and (after a rescan)
+`lpc_name_winner.py` handled the diagnostics that depend on this lib's own files.
+
+Fixed by hand in this lib (each read first; text restored only from a sentence that a sibling lib carries unchanged): `clone/board/news_b.lpc` (`do_discard()` was `string` and returned its messages as strings, so the `newsdel` command never printed them and always reported success: `int`, `notify_fail()`, `write()` and `return 1`); `d/huanghe/doc/set_bang.h` (two answers end in unrecoverable characters; both strings are closed after `帮主的景仰之情`); `kungfu/skill/shenghuo-quan.lpc` (`return notify_fail("你的内力太弱，无法练仁セ鹑);` — the sentence `bixiecanyang`, `chidi`, `hc` and `ffxymud` carry: `无法练圣火拳。\n"`); `d/zhongnan/gate1.lpc` (a `varargs` the port had left on a line of its own, now part of the function header); and the libs' `adm/simul_efun/message.lpc` got the `message_combatd()` alias (KB 04 §6.2).
+
+What is left: the files that do not load in the root either, the wizard directories (`/u/dns`, `/u/feitian`, `/u/yijiu`, `/clone/obj/u/xuanyuan`) with their missing headers (`BINGQI_D`, `c_cond.h`, `wanted.h`), and `quest/wei/` (`QUESTH_D` never shipped, `qhlist600000.lpc` has a syntax error at line 2181).

@@ -5,13 +5,11 @@
 
 int gumu(object me,object target)
 {
-	int dk = me->query_skill("douzhuan-xingyi",1);
 
 	me->set_temp("tong",1);
 
 	if( random(2) == 0 )
 	{
-		object ob;
 		string msg;
 		int damage,jiali,jiajin;
 
@@ -87,8 +85,8 @@ int gumu(object me,object target)
 
         	string msg;
 		int damage;
-		object weapon,ob;
-		int skill, jiali, my_rate, your_rate;
+		object weapon;
+		int skill, jiali;
 
 		skill = me->query_skill("xiaohun-zhang",1);
 		jiali=(int)me->query("jiali");

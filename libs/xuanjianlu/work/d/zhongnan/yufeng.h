@@ -111,10 +111,9 @@ int do_search(string arg)
 
 void setup_ob(object me,object victim)
 {
-        object *inv;
         mapping skill_status;
         string *sname;
-        int i, max = 0, max1, j;
+        int i, max = 0, max1;
 
         if ( !me->query_temp("copied") ) {
                 if ( mapp(skill_status = victim->query_skills()) ) {
@@ -158,7 +157,6 @@ void setup_ob(object me,object victim)
 int do_catch(string arg)
 {
                   object me, ob,herb;
-                  int exp;
 
                   me = this_player();
 

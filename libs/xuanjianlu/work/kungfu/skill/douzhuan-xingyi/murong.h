@@ -13,7 +13,6 @@ int murong(object me,object target)
 	if( random(2) == 1 )
 	{
 		int lvl, str, wx, skill;
-		string weapon;
 
 		if(me->query_skill("canhe-zhi")) {
 			me->set_temp("memory",me->query_skill("canhe-zhi",1));
@@ -59,7 +58,7 @@ int murong(object me,object target)
 
         	object weapon;
         	string *limb, type, result;
-        	int skill,jiajin,max_jiajin,jiali,max_jiali,damage;
+        	int skill, jiajin, jiali, damage;
 
 		if(me->query_skill("xingyi-zhang")) {
 			me->set_temp("memory",me->query_skill("xingyi-zhang",1));

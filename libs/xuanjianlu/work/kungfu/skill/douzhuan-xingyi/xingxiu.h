@@ -12,10 +12,7 @@ int xingxiu(object me,object target)
 	if( !target->query_temp("huagong") )
 	{
 
-	        object weapon;
-	        int myexp, targexp, damage, skill, merand, targrand, targneili,time,i;
-		string str,*limb,type;
-		mapping myfam;
+	        int myexp, targexp, skill, merand, targrand, targneili, time;
 
         	message_vision(HIB"$N挥右拳挡住$n拳头，跟着左爪猛力向$n抓去。\n\n"NOR, me,target);
 
@@ -63,10 +60,7 @@ int xingxiu(object me,object target)
 
 	} else {
 
-	        object weapon;
-        	int myexp, targexp, damage, skill, merand, targrand, targneili,time,i;
-		string str,*limb,type;
-		mapping myfam;
+        	int skill;
 
 		if(me->query_skill("sanyin-zhua")) {
 			me->set_temp("memory",me->query_skill("sanyin-zhua",1));

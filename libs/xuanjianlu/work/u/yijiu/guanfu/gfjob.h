@@ -16,7 +16,7 @@ int do_jie(string arg)
         mapping weizhis;
         string room_msg, region;
 
-	int exp, position;
+	int exp;
 
 	if(!arg) return 0;
 	me = this_player();

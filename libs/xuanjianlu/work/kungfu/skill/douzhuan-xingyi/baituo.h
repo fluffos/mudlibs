@@ -11,7 +11,6 @@ void lingshe(object me, object target);
 
 int baituo(object me,object target)
 {
-	int dk = me->query_skill("douzhuan-xingyi",1);
 
 	me->set_temp("tong",1);
 /*
