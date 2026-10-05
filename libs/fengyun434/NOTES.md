@@ -501,3 +501,25 @@ Sep 4 03:43:50 2026），无 `error:` / `Too deep recursion`。管理员
 ## 深度功能测试（§10.7，2026-10-04）— negative range ends
 
 `scripts/lpc_fix_negative_ranges.py`: 5 line(s) in 2 file(s) count a range from the end with `<` (`x[a..-1]` -> `x[a..<1]`, `x[-2..]` -> `x[<2..]`; KB 06 §7.209). In this driver a negative constant end gave `""` / `({ })` and a negative start the whole value, so each of these returned the wrong slice; the compile warning `A negative constant as the second element of arr[x..y]` is gone from the files that compile. Range lvalues (`s[0..-1] = text`, the prepend idiom) are left alone. A paired compile of the changed files at HEAD and in the working tree showed no new error.
+
+## 深度功能测试（§10.7，2026-10-05）— compile-warning and load-failure pass, wrong-case paths
+
+`scripts/lpc_warnings.py fengyun434` (9245 files): 2578 distinct diagnostics and 83 files that did not compile at the start, 127 diagnostics and
+72 files at the end (8228 compile). 980 files changed. This is the root of the Fengyun family (`fengyun434`, `xsfyssjb`, `fysjmb`); the tools
+are the ones of libs/xkx2001/NOTES.md (KB 04 §6.10): 2165 unused locals in 958 files, redundant leaf inherits (2), and the one class the xkx
+family did not have, now `scripts/lpc_fix_forward_decl.py`: **87 `Called function 'f' not compiled with type testing` warnings in 15 files**
+(`std/char/smart_npc.lpc`, the `smart_npc` copies of `d/taiping` and `d/eren2`, `d/fy/npc/fightnpc*.lpc`, `d/eren2/npc/wuya.lpc`): a function the
+file calls before the place where it defines it has no declaration at the call under `#pragma strict_types`; the prototypes (`varargs void
+single_busy(object target);`) now stand in front of the first function of each file (KB 04 §6.5).
+
+**Wrong-case paths (KB 03 §4.5).** `scripts/lpc_case_paths.py --apply fengyun434`: 62 `.C` files renamed to `.lpc` (rooms and NPCs of `d/`) so that the names the code uses resolve; no reference needed to be rewritten. Load check of the 98 affected objects, HEAD against the
+working tree: 29 PASS -> 98 PASS, 69 more load, none fewer.
+
+**By hand.** `adm/simul_efun/file.lpc` defines `tail()` in LPC (the efun of the MudOS this archive ran on; `cmds/wiz/tail.lpc` called it and did not
+compile).
+
+**What is left (40 files with a compile error).** `ed.c`-style leftovers (`adm/daemons/ed.lpc`, `simulate.lpc`, `adm/obj/*`: `std.h`, `lpc_incl.h`,
+`file_incl.h` ... are the MudOS driver's own headers), the TMI-2 network daemons without headers, drafts and pasted listings (`d/jinan/npc/temp.lpc`,
+`/open/tempmask*`, `/quest/later.lpc`, `/daemon/damage-1.lpc` ...), and rooms/objects that call `setup()` without a base (`d/huangshan/obj/cq.lpc`,
+`/newtask/*.lpc`). `d/eren2/npc/fighter1.lpc` and `fightnpc.lpc` declare their own 7-argument `auto_npc_setup()` next to the inherited 8-argument
+one and call it with 7 (the driver checks the call against the inherited entry): not changed.
