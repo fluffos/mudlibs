@@ -589,3 +589,34 @@ silently returns 0. Dropped `private`, kept `nomask`. Sibling
 admin `fluffos` / `Mud2026Wiz`, `goto /domains/Praxis/supply`,
 `force horace to say testhook` → `Horace says: testhook` / `Ok.`;
 `force horace to smile` → `Horace smiles`.
+
+## 深度功能测试（§10.7，2026-10-05）— round three: 注册、进入世界、log 复核
+
+复测原因：`queue` 中的 history 序列（tmi2 > nightmare3 > nightmare4 > lpmud141）；
+本 lib 之前只有无日期的一轮测试，没有带日期的 §10.7 节。
+
+**流程**（原生驱动 `build-debug`，`ulimit -v 6291456` 限制内存，PID 精确结束）：
+banner 正常显示 → 注册（新名 `Zephyrs`，`y`，密码需纯字母 ≥5，性别 `male`，
+显示名默认，email 需 `user@host`，新手新闻按回车）→ 重新登录 → `read list`
+→ `pick human`（随即掷属性、进入 Monument Square）→ `look` / `score` /
+`inventory` / `quit` 全部正常。
+
+**发现的运行期错误（已修）**：`intermud` 的 `eventRead()`（每次收到 I3 包）
+在保存 `/save/intermud.o.tmp` 时报 `Could not open /save/intermud.o.tmp for a
+save`。`SAVE_INTERMUD` 定义为 `/save/intermud.o`，但归档里没有 `save/` 目录，
+git 也不跟踪空目录。修复：在 `overlay/lib/save/.gitkeep` 放一个空占位（与同一
+lib 已有的 `overlay/lib/secure/save` 同一做法；overlay 由 `apply_lib_patches`/
+`make_source_zips` 在打包时叠加）。重启驱动后同一 I3 写入成功（写出约 60KB 的
+`intermud.o`），debug.log 中不再有该错误。注意：`work/` 是 submodule，本地的
+`work/lib/save/.gitkeep` 是我误放在 submodule 里的，已删除，只保留 overlay 中的版本。
+
+**未修、已记录**：启动时 `lpcc` 输出大量编译警告（`Unused local variable`、
+`Redeclaration of global variable '__LastAged'`、`set_invis` 参数个数不一致等，
+如 `std/living/combat.lpc`、`std/living.lpc`、`std/user.lpc`）。按 2026-10-03 的规则
+应逐条修到源头，但本 lib 是 `fluffos-upstream` 托管，`scripts/lpc_warnings.py`
+不支持直接扫 submodule（会报 `is a submodule`），需要先按 KB 08 §10.13 通过
+`scripts/submodule_patch_scratch.py` 建立 scratch 基线后再做。本轮未处理，列入
+`scratchpad/librarian-next.txt` 的后续待办。
+
+**测试账号清理**：`Zephyrs` 的账号文件（`secure/save/users/z/zephyrs.o`、
+`secure/save/postal/z/zephyrs/`）已删除；`postal/` 下其他既有存档未动。
