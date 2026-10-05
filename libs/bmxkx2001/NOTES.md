@@ -480,3 +480,12 @@ files at the end (8014 load). 1164 files changed. The code is the xkx2001 root's
 handled the diagnostics that depend on this lib's own files.
 
 The files that do not load are the same ones as in xkx2001 (drafts, pasted logs, the TMI-2 network daemons without headers, half-written wizard work), with the same errors; the `sjsz/`, `sjsz2/`, `sjsz3/` challenge arenas of `d/bwdh/` carry the same `BOARD` macro clash and `void`/`int` prototypes as the rest of the family and are fixed the same way.
+
+## 深度功能测试（§10.7，2026-10-04）— paths named in another case
+
+The archive comes from a case-insensitive host: files are stored as `BAGUA0.lpc`, `longjing.C`, `d/SHAOLIN/`, the code names them in lower
+case (`__DIR__ "bagua0"`, `"tea/longjing"`, `"/d/shaolin/..."`), so the rooms, NPCs and items behind them could not be loaded (a `.C` file is
+not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply bmxkx2001`: 10 file(s) renamed to lower case (`.C` -> `.lpc`,
+`.H` -> `.h`) and 0 path reference(s) in 0 file(s) rewritten to the new spelling; 0 skipped, 0 ambiguous. Load check of the 11 objects that were renamed, edited or name a renamed path (HEAD against the working tree): 1 PASS -> 11 PASS, 0 that loaded before fail now, 10 more load.
+
+After the rename: `scripts/lpc_warnings.py bmxkx2001` 152 distinct diagnostics, 8028 files compile and 115 do not (8014 / 119 / 160 before; the pass is the one of libs/xkx2001/NOTES.md). The four peak-view rooms `d/wudang/taoyuan/tyroad4-7.lpc` include their header through `__DIR_"feng.h"` (one trailing underscore, `Bad #include directive`) and now `#include "/d/wudang/feng.h"`, the file that `tybxjh` / `wlhd` / `yxjh` keep in `d/wudang/taoyuan/`.
