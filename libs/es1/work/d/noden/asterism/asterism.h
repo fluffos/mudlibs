@@ -1,5 +1,6 @@
 #define ASTR     "/d/noden/asterism/"
 #define MOB      "/d/noden/asterism/monster/"
+#undef ITEM
 #define ITEM     "/d/noden/asterism/item/"
 #define DUNGEON  "/d/noden/asterism/dungeon/"
 #define WEAPONS  "/d/noden/asterism/weapon/"

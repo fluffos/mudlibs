@@ -38,7 +38,11 @@
 int
 check_access(string name)
 {
+#ifndef FTP_USERS
+#ifdef GUEST_WIZARD_FTP
   string file;
+#endif
+#endif
 
 #ifdef FTP_USERS
     if (!sizeof(FTP_USERS))

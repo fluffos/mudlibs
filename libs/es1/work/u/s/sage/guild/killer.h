@@ -10,6 +10,7 @@
 //#define GUILD_LOCATION  "/d/monk/guild/monk_guild"
 #define GUILD_DATA      "/d/monk/doc/"
 
+#undef GUILD_MASTER
 #define GUILD_MASTER   ({ "shan chi", "玄慈神僧" })
 #define MONK_GONFU     ({ "heal-cycle", "fist-technic", "martial-art", })
 

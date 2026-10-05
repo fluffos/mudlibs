@@ -4,6 +4,7 @@
 #define ORG_OBJ          "/d/killer/killer"
 #define KILLER           "/d/killer/guild/"
 #define DATA		 "/d/killer/data/"
+#undef GUILD_MASTER
 
 #define GUILD_MASTER     ({ "blowblood", "西门吹雪" })
 #define ALLOWED_MATERIAL ({ "cloth", "leather", "wood", "stone",\

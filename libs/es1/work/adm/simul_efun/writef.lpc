@@ -9,7 +9,7 @@
 string
 writef( string str, int n, int flags )
 {
-   int len, i;
+   int len;
    
    if( ! str ) str = "";
    len = strlen( str );

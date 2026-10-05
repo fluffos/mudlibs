@@ -11,8 +11,10 @@
 #define LEVEL_UP_SKILL		10	//每升一级能训练的skills等级
 #define MAX_ORG_LEVEL		10	//组织的最大等级
 
+# undef CLASS_NAMES
 #define CLASS_NAMES ({ "adventurer","knight","mage","healer",\
         "monk", "scholar", "thief",})
+#undef GUILD_FILES
 #define GUILD_FILES ({ "/d/adventurer/adventurer", "/d/knight/knight",\
         "/d/mage/mage", "/d/healer/healer", "/d/monk/monk", "/d/scholar/scholar",\
         "/d/thief/thief",})
