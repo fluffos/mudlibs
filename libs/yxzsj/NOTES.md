@@ -183,3 +183,12 @@ this login did not broadcast compile warnings.
 ## 深度功能测试（§10.7，2026-10-04）— stray backslash before a closing quote
 
 A Big5 character whose second byte is 0x5C was written with one extra backslash after it (the old driver read `5C 5C` as one backslash and so completed the character) and the UTF-8 conversion kept it (KB 03 §4.4). Before a closing quote it escapes the quote, the string runs into the next line and the file does not compile. `scripts/lpc_fix_big5_quote_backslash.py` deletes it when the character before it encodes to cp950 with 0x5C as second byte and the quote ends an expression. Here: `cmds/std/enable.lpc` (`"force": "…功\",` and `"dodge"`), so the `enable` command never loaded, and four `if (temp == "…功\")` lines in `daemon/class/sage/{su-sk,bullets}/bullets.lpc`, `u/d/daniel/temp/bullets.lpc` and `u/d/daniel/npc/mastersu.lpc`. `enable.lpc` loads now. The four bullets files still do not: their first message line has `功\\"` (two backslashes) in front of a colour macro, which this fix does not touch; read them by hand.
+
+## 深度功能测试（§10.7，2026-10-04）— paths named in another case
+
+The archive comes from a case-insensitive host: files are stored as `BAGUA0.lpc`, `longjing.C`, `d/SHAOLIN/`, the code names them in lower
+case (`__DIR__ "bagua0"`, `"tea/longjing"`, `"/d/shaolin/..."`), so the rooms, NPCs and items behind them could not be loaded (a `.C` file is
+not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply yxzsj`: 66 file(s) renamed to lower case (`.C` -> `.lpc`,
+`.H` -> `.h`) and 1 path reference(s) in 1 file(s) rewritten to the new spelling; 0 skipped, 0 ambiguous. Load check of the 67 objects that were renamed, edited or name a renamed path (HEAD against the working tree, an object is the same under any spelling of its path): 1 PASS -> 67 PASS, 0 that loaded before fail now, 66 more load.
+
+66 files moved (66 `.lpc`); mostly under `d/Pili/glass` (64), `d/Pili/obj` (2). A rescan with `scripts/lpc_warnings.py yxzsj` is still due: the renamed files are compiled for the first time.
