@@ -1,13 +1,14 @@
 # lima — Lima Mudlib
 
-来源：活跃上游是 `limalib/lima`（HEAD `ffed9c588ee5`，2026-09-03；
+来源：活跃上游是 `limalib/lima`（HEAD `98431aa05cc9`，scheduled safe
+rebase 2026-10-05 from `eefaff66`；
 官网 <https://www.limamudlib.dev/>）。本馆可玩树最初从已归档的
 `fluffos/lima` 克隆（`dbcef2a Update fluffos/lima to 1.1a2 (#33)`，
 2026-08-24）。编号 164，端口 40212。状态：**done**（干净启动，真实注册
 流程 + 角色创建 + `look`/`score`/`inventory`/`who`/`quit` 全部验证可用；
 管理员账号 `fluffos` 已播种并验证 `update`/`admtool` 等高权限指令）。
 `hosting` 为 `submodule-patch`。leftover 684：`work/` 已切成
-`limalib/lima` submodule（pin `ffed9c588ee5`），`config.fluffos` 的
+`limalib/lima` submodule（pin `98431aa05cc9`），`config.fluffos` 的
 mudlib directory 指向 `work/lib`。
 
 ## leftover 684：lima work/ 切到 limalib/lima submodule
