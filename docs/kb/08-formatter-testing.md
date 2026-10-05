@@ -70,7 +70,11 @@ branches where cheap.
   - `#include`-only fragments;
   - hardcoded-path `call_other`s;
   - `valid_override` arity (use the 3-arg form);
-  - eval-cost accumulating across a batch.
+  - eval-cost accumulating across a batch;
+  - `Nesting call_out(0) level limit exceeded: 1000`: after about a thousand rooms whose `create()` does
+    `call_out(f, 0)` every later one FAILs in the batch and loads fine alone (743 of es1_win's 927 FAILs).
+    `scripts/lpcc_real_fails.py OUT` lists the other FAILs, one line each. A scan's "N files do not compile"
+    counts the artifact too; its diagnostics are unaffected.
 
   Confirm against a real boot. `lpcc` FAIL with a live boot OK is a
   known artifact when `create()` touches missing content.

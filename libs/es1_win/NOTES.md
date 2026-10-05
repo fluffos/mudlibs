@@ -803,3 +803,5 @@ island files that HEAD refused with no new error in the driver output.
 changed text the player sees: the `/buffer` verb itself, the `Cursor [` / `Buffer [` prompts, the buffer view's banner and its
 `[Top of Buffer]` / `[End of Buffer]` / `[Buffer view closed]` lines and the recall message. The strings read as in `esI` again; the
 function-name strings (`"open_buffer1"`, `"cursor1_colour"`, ...) keep their renamed targets.
+
+(2026-10-04, same pass) `d/eastland/saulin_temple/obj/vege_food.lpc` had the stray backslash before the closing quote of `set_name` and `set_short` (`素食大餐\"`; `餐` is cp950 C0 5C, KB 03 §4.4): the file did not compile. Fixed with `scripts/lpc_fix_big5_quote_backslash.py`.

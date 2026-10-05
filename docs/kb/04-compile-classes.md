@@ -50,7 +50,9 @@ detection.
 ### 6.2 Things that were never real efuns on this driver
 
 - **`tail()`**: reimplement it in LPC. It's fatal if it sits inside
-  simul_efun.
+  simul_efun. A *definition* there is the fix for every command that
+  calls it at once (`es1_win`/`esI`: `/adm/simul_efun/tail.lpc`, the last
+  1000 bytes from the first whole line, `message()`d to `this_player()`).
 - **`efun::set/query/delete/addn`** (nitan property system): see §7.15.
 - **`LONELY_IMPROVED`-gated `efun::` families**: flip the guard to the
   pure-LPC `#else` branch. The `count_*` bignum wrappers have no

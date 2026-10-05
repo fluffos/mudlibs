@@ -1021,3 +1021,22 @@ wizard, `clone` a file whose `create()` is `int *a; a[0] = 1;` three times, then
 spacemud had it fixed upstream; swmud, wilderness, sgzmudsgz fixed here; sanguozhi (submodule) goes upstream as a
 PR; sagenwelt's `inp_sys.lpc` has the same shape but its header uses default arguments, so the player layer never
 compiles and nothing runs it.
+
+### 7.218 `get_dir(path) == -2` as a directory test (ES / TMI lineage)
+
+**Symptom:** `bug`, `typo`, `praise` and `idea` answer `Thanks for the report` and never write the report to the domain's
+`reports` file. **Cause:** the MudOS/LPmud `get_dir("/d/x")` of a directory answered `-2`; this driver answers an array, so
+`(int)get_dir(d) == -2` (the cast is compile-time only) and `-2 == get_dir(d)` are always false (the driver says so:
+`== always false because of incompatible types ( int vs mixed * )`, once the file compiles). **Fix:** `file_size(d) == -2`.
+**Detection:** `grep -rnE 'get_dir[^;]*[=!]=[ ]*-2|-2 *== *get_dir' libs/*/work`; only `cmds/std/_bug.lpc` and `praise.lpc` of
+`es1_win`, `esI` and `es1` had it (fixed 2026-10-04). Related: §7.191, §7.212.
+
+### 7.219 A prototype says `varargs`, the definition does not
+
+**Symptom:** `Wrong number of arguments to 'set_name', expected: 2, minimum: 2, got: 1` in five objects of `es1_win`/`esI`
+(`silver_card`, `tavern_key`, `crimson_scepter`, `pig`, `wanderthief`), which therefore never loaded. **Cause:** `std/object/
+ob_logic.lpc` prototypes `varargs void set_name(string str, string c_str);` and defines `void set_name(string str, string
+c_str) {`; the definition's flags win, so a one-argument call is an error although the body already handles `c_str == 0`.
+**Fix:** `varargs` on the definition. **Detection:** the scan's top error kind for the calling files, then compare the
+prototype and the definition; MudOS passed the missing argument as 0, so any lib of that age can have call sites that
+pass fewer arguments than the definition takes.

@@ -772,3 +772,7 @@ compiled; `d/noden/asterism/monster/gnome_archelder1.lpc` used `ref`, and its `d
 silent)`; `goomay/monster/army.lpc` `remove()` is `void`. `scripts/lpc_warnings.py esI`: 5918 files compile, 1117 do not -> 6102
 / 933; 0 warnings and 246 errors, all in files that still do not load. `scripts/lpc_audit_removed_locals.py HEAD` found nothing
 a function still reads.
+
+## 深度功能测试（§10.7，2026-10-04）— stray backslash before a closing quote
+
+A Big5 character whose second byte is 0x5C was written with one extra backslash after it (the old driver read `5C 5C` as one backslash and so completed the character) and the UTF-8 conversion kept it (KB 03 §4.4). Before a closing quote it escapes the quote, the string runs into the next line and the file does not compile. `scripts/lpc_fix_big5_quote_backslash.py` deletes it when the character before it encodes to cp950 with 0x5C as second byte and the quote ends an expression. Here: `d/eastland/saulin_temple/obj/vege_food.lpc` (`set_name` and `set_short` end in `素食大餐\"`; `餐` is cp950 C0 5C), which did not compile.

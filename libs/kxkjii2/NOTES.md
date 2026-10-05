@@ -304,3 +304,7 @@ not individually live-boot-tested.
 still fail are `open/start/room/bad{2,3,4}.lpc`, whose `../badman.h` is not in the archive. The newly loading files carry
 warnings of the classes the rest of the lib has (stray Big5 backslashes, unused locals, `greeting()` return types): the lib's
 warnings pass has not been done.
+
+## 深度功能测试（§10.7，2026-10-04）— stray backslash before a closing quote
+
+A Big5 character whose second byte is 0x5C was written with one extra backslash after it (the old driver read `5C 5C` as one backslash and so completed the character) and the UTF-8 conversion kept it (KB 03 §4.4). Before a closing quote it escapes the quote, the string runs into the next line and the file does not compile. `scripts/lpc_fix_big5_quote_backslash.py` deletes it when the character before it encodes to cp950 with 0x5C as second byte and the quote ends an expression. Here: `open/scholar/room/newplan/npc/guard8.lpc` and `data/autoload/scholar/secret_book.lpc`, the same two files as in `kxkj`.

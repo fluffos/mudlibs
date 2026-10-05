@@ -118,6 +118,13 @@ function", hundreds per lib); `scripts/lpc_warnings.py --fix` repairs it (KB 04
   `擺`->`摆`, `蓋`->`盖`): `esI` had 438. The driver drops it and prints `Unknown escape sequence '\<byte>'` at the *end of
   the string or statement*, not at the backslash, so `scripts/lpc_warnings.py --fix` deletes every `\` before a
   multi-byte character in each file that reports one (an escaped `\\` pair is kept).
+- **Before a closing quote in a source file the stray `\` is not a warning but a compile error**: `"force": "内功\",`,
+  `set_name("豹\", ...)`, `if (temp == "功\") ...` escape the quote and the string runs into the next line.
+  `cmds/std/enable.lpc` of yxsj, yxzsj, kxkj1 and dfgs2 did not load for that (the `enable` command), and neither did
+  NPCs of dreamofseven, kxkj, kxkj1, kxkjii2 and the ES libs: 39 sites in 10 libs, found by a corpus scan 2026-10-04.
+  `scripts/lpc_fix_big5_quote_backslash.py [--apply] SLUG...|--all` deletes the backslash when the character before it
+  encodes to cp950 with 0x5C as second byte and the quote ends an expression. Two backslashes (`功\\"`, yxsj
+  `bullets.lpc`) are not handled; read those by hand.
 
 ---
 
