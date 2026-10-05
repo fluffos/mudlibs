@@ -1147,3 +1147,7 @@ finds nothing in this lib.
 ## 深度功能测试（§10.7，2026-10-04）— stray backslash before a closing quote
 
 A Big5 character whose second byte is 0x5C was written with one extra backslash after it (the old driver read `5C 5C` as one backslash and so completed the character) and the UTF-8 conversion kept it (KB 03 §4.4). Before a closing quote it escapes the quote, the string runs into the next line and the file does not compile. `scripts/lpc_fix_big5_quote_backslash.py` deletes it when the character before it encodes to cp950 with 0x5C as second byte and the quote ends an expression. Here: `cmds/std/enable.lpc` (`"force": "内功\",`, `"dodge": "轻功\",`), so the `enable` command never loaded. `lpcc --batch`: HEAD fails, working tree loads.
+
+## 深度功能测试（§10.7，2026-10-05）— tail() simul_efun
+
+`scripts/lpc_add_tail.py --apply`: `cmds/wiz/tail.lpc` calls `tail(file)`, an efun of the MudOS this archive ran on that FluffOS does not have (`Undefined function tail`: the command did not compile). `adm/simul_efun/file.lpc` now defines `void tail(string file)`: the last 10 lines of the file, written to the player. Load check (HEAD against the working tree): 1 of the 1 tail command file(s) failed to load at HEAD, all load now, and the simul_efun file loads. KB 04 §6.2.

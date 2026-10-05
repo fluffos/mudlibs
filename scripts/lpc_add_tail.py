@@ -2,8 +2,8 @@
 """scripts/lpc_add_tail.py [--apply] SLUG...
 
 `Undefined function tail` (KB 04 section 6.2): `tail()` was an efun of the MudOS the xkx / Fengyun / ES II archives ran on and
-FluffOS has no such efun, so the wizard command `cmds/*/tail.lpc` (`tail(file);`) fails to compile in 93 libs.  Where a lib
-has such a command and defines `tail` nowhere under adm/ (nor as a macro), this appends
+FluffOS has no such efun, so the wizard command `cmds/*/tail.lpc` (`tail(file);`) fails to compile in about 60 libs.  Where a lib
+has such a command that does not define `tail` itself and defines `tail` nowhere under adm/ (nor as a macro), this appends
 
     void tail(string file)       the last 10 lines of the file, written to this_player()
 
@@ -50,6 +50,9 @@ for slug in slugs:
         print(f"{slug}: work/ is a gitlink: left")
         continue
     cmds = [p for p in git("grep", "-l", "-E", r"^[ \t]*tail[ \t]*\(", "--", f"{w}/cmds/*/tail.lpc").split("\n") if p]
+    # a command that defines its own tail() (bxsj `int tail(string fname)`) compiles as it is
+    own = set(git("grep", "-l", "-E", r"^(varargs[ \t]+)?(void|int|string|mixed|object)[ \t]+tail[ \t]*\(", "--", f"{w}/cmds/*/tail.lpc").split("\n"))
+    cmds = [c for c in cmds if c not in own]
     if not cmds:
         print(f"{slug}: no tail command calls tail(): left")
         continue

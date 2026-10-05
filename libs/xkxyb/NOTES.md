@@ -127,3 +127,7 @@ functionally re-tested live on this lib.
 ## 深度功能测试（§10.7，2026-10-04）— undefined macro and simul_efun gaps
 
 - `message_combatd(msg, me, you)` is called by 84 file(s) (the perform files) and defined nowhere in this archive (a simul_efun of the original server): 84 of them did not compile (`Undefined function message_combatd`). `adm/simul_efun/message.lpc` now has `varargs void message_combatd(string msg, object me, object you, mixed extra)` calling `message_vision()`, placed after `message_vision`'s definition (KB 04 §6.2). All callers compile.
+
+## 深度功能测试（§10.7，2026-10-05）— tail() simul_efun
+
+`scripts/lpc_add_tail.py --apply`: `cmds/app/tail.lpc` calls `tail(file)`, an efun of the MudOS this archive ran on that FluffOS does not have (`Undefined function tail`: the command did not compile). `adm/simul_efun/file.lpc` now defines `void tail(string file)`: the last 10 lines of the file, written to the player. Load check (HEAD against the working tree): 1 of the 1 tail command file(s) failed to load at HEAD, all load now, and the simul_efun file loads. KB 04 §6.2.

@@ -740,3 +740,7 @@ Files modified this pass:
 Test character saves (`advtest`, `hytestone`) and incidental board/
 admin-account save churn removed after testing; driver killed by exact
 PID.
+
+## 深度功能测试（§10.7，2026-10-05）— tail() simul_efun
+
+`scripts/lpc_add_tail.py --apply`: `cmds/wiz/tail.lpc` calls `tail(file)`, an efun of the MudOS this archive ran on that FluffOS does not have (`Undefined function tail`: the command did not compile). `adm/simul_efun/file.lpc` now defines `void tail(string file)`: the last 10 lines of the file, written to the player. Load check (HEAD against the working tree): 1 of the 1 tail command file(s) failed to load at HEAD, all load now, and the simul_efun file loads. KB 04 §6.2.
