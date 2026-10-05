@@ -799,3 +799,7 @@ live-boot-tested.
 ## 深度功能测试（§10.7，2026-10-04）— stray backslash before a closing quote
 
 A Big5 character whose second byte is 0x5C was written with one extra backslash after it (the old driver read `5C 5C` as one backslash and so completed the character) and the UTF-8 conversion kept it (KB 03 §4.4). Before a closing quote it escapes the quote, the string runs into the next line and the file does not compile. `scripts/lpc_fix_big5_quote_backslash.py` deletes it when the character before it encodes to cp950 with 0x5C as second byte and the quote ends an expression. Here: `open/badman/obj/meal.lpc` (`餐\`), `open/badman/npc/pard.lpc` (`豹\`), `daemon/class/scholar/obj/secret_book.lpc` and `u/a/anmy/book/secret_book.lpc` (`功\` twice each), `u/f/fund/mud/cmds/std/enable.lpc`. Three of the five load now (HEAD: none); the two books compile and fail only when loaded without a `this_player()`.
+
+## 深度功能测试（§10.7，2026-10-05）— here-document terminators
+
+`scripts/lpc_fix_heredoc_terminator.py --all --apply`: 2 here-document block(s) repaired (2 with the terminator glued to the last text line, 0 with it indented), so `End of file in text block` no longer hides the room or object behind them: `open/capital/room/king/kr4-5.lpc`, `u/a/anmy/room/kr4-5.lpc`. The terminator must start its line (the lexer's own test, KB 04 §6.10); a glued one lost its newline in the GBK -> UTF-8 conversion together with a half character, which stays out.

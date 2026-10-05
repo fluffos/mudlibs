@@ -164,3 +164,7 @@ Verified via single-file `lpcc --batch` PASS.
 ## 深度功能测试（§10.7，2026-10-04）— undefined macro and simul_efun gaps
 
 - `message_combatd(msg, me, you)` is called by 9 file(s) (the perform files) and defined nowhere in this archive (a simul_efun of the original server): 8 of them did not compile (`Undefined function message_combatd`). `adm/simul_efun/message.lpc` now has `varargs void message_combatd(string msg, object me, object you, mixed extra)` calling `message_vision()`, placed after `message_vision`'s definition (KB 04 §6.2). All callers compile.
+
+## 深度功能测试（§10.7，2026-10-05）— here-document terminators
+
+`scripts/lpc_fix_heredoc_terminator.py --all --apply`: 3 here-document block(s) repaired (3 with the terminator glued to the last text line, 0 with it indented), so `End of file in text block` no longer hides the room or object behind them: `d/heimuya/shenggu.lpc`, `d/heimuya/tang.lpc`, `d/heimuya/npc/tang.lpc`. The terminator must start its line (the lexer's own test, KB 04 §6.10); a glued one lost its newline in the GBK -> UTF-8 conversion together with a half character, which stays out.

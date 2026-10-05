@@ -276,3 +276,7 @@ live `debug.log` 是 `libs/fys/log/debug.log`（Boot Time Fri Sep 4
 ## 深度功能测试（§10.7，2026-10-04）— undefined macro and simul_efun gaps
 
 - 16 file(s) `inherit F_SSERVER;` and no header defines it (16 did not compile: `syntax error, unexpected L_IDENTIFIER, expecting L_STRING or '('`). `#define F_SSERVER SSERVER` in `include/globals.h` (KB 04 §6.2, `scripts/lpc_alias_macro.py`). 1 still fail.
+
+## 深度功能测试（§10.7，2026-10-05）— here-document terminators
+
+`scripts/lpc_fix_heredoc_terminator.py --all --apply`: 4 here-document block(s) repaired (4 with the terminator glued to the last text line, 0 with it indented), so `End of file in text block` no longer hides the room or object behind them: `d/wudang/bolin.lpc`, `u/xxy/room/heimuya/shenggu.lpc`, `u/xxy/room/heimuya/tang.lpc`, `u/xxy/room/heimuya/npc/tang.lpc`. The terminator must start its line (the lexer's own test, KB 04 §6.10); a glued one lost its newline in the GBK -> UTF-8 conversion together with a half character, which stays out.

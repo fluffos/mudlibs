@@ -1014,3 +1014,7 @@ Corpus-wide mechanical fix (AGENTS.md §7.19, Batch F of 6). `feature/command.lp
 `living()`, ruling out a bare `living()` guard. Fixed with the standard
 `in_enable_player_now` true reentrancy flag (mhxy's reference fix). Verified
 via single-file `lpcc --batch` PASS.
+
+## 深度功能测试（§10.7，2026-10-05）— here-document terminators
+
+`scripts/lpc_fix_heredoc_terminator.py --all --apply`: 4 here-document block(s) repaired (2 with the terminator glued to the last text line, 2 with it indented), so `End of file in text block` no longer hides the room or object behind them: `d/heimuya/shenggu.lpc`, `d/heimuya/tang.lpc`, `u/ken/b1.lpc`, `u/ken/tobig5.lpc`. The terminator must start its line (the lexer's own test, KB 04 §6.10); a glued one lost its newline in the GBK -> UTF-8 conversion together with a half character, which stays out.

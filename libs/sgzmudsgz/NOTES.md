@@ -132,3 +132,7 @@ hylib/dtxy) stay confirmed duplicates.
 `dispatch_modal_input()` 现在把处理函数调用和 `!` 转义都包进 `catch()`，其后照旧 `modal_recapture()`（上游 Lima 的做法）；
 `error_handler()` 仍会给玩家打印错误和「Trace written to」（日志改记 `/log/catch`）。实测：连续四次出错后 `look`、`i`、
 `!look` 都正常。KB 06 §7.217。
+
+## 深度功能测试（§10.7，2026-10-05）— here-document terminators
+
+`scripts/lpc_fix_heredoc_terminator.py --all --apply`: 1 here-document block(s) repaired (0 with the terminator glued to the last text line, 1 with it indented), so `End of file in text block` no longer hides the room or object behind them: `wiz/lei/room/startroom.lpc`. The terminator must start its line (the lexer's own test, KB 04 §6.10); a glued one lost its newline in the GBK -> UTF-8 conversion together with a half character, which stays out.

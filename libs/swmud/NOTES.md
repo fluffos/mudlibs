@@ -747,3 +747,7 @@ non-compiling `room/exits` module defines it) and did not load; it calls `set_de
 `scripts/lpc_audit_removed_locals.py` over the warning sweep found `secure/user/login.lpc`'s `string *foo;` deleted
 although `#ifdef WELCOME_DIR` reads it; it is declared inside that branch again (a build that defines `WELCOME_DIR`
 compiles). The scan is unchanged: 1740 files compile, 120 do not.
+
+## 深度功能测试（§10.7，2026-10-05）— here-document terminators
+
+`scripts/lpc_fix_heredoc_terminator.py --all --apply`: 1 here-document block(s) repaired (0 with the terminator glued to the last text line, 1 with it indented), so `End of file in text block` no longer hides the room or object behind them: `std/modules/m_react.lpc`. The terminator must start its line (the lexer's own test, KB 04 §6.10); a glued one lost its newline in the GBK -> UTF-8 conversion together with a half character, which stays out.

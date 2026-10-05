@@ -692,3 +692,7 @@ although an inactive branch reads them: `cmds/player/hp.lpc` `string shield;` (r
 `#if ADVANCEMENT_STYLE == ADVANCEMENT_RIFTS`; declared again under `#if defined(LIMB_SHIELDS) || ADVANCEMENT_STYLE ==
 ADVANCEMENT_RIFTS`) and `secure/user/login.lpc` `string *foo;` (inside `#ifdef WELCOME_DIR`). A build that turns either
 option on compiles again. The scan is unchanged: 1377 files compile, 23 do not, 22 diagnostics, 0 warnings.
+
+## 深度功能测试（§10.7，2026-10-05）— here-document terminators
+
+`scripts/lpc_fix_heredoc_terminator.py --all --apply`: 1 here-document block(s) repaired (0 with the terminator glued to the last text line, 1 with it indented), so `End of file in text block` no longer hides the room or object behind them: `std/modules/m_react.lpc`. The terminator must start its line (the lexer's own test, KB 04 §6.10); a glued one lost its newline in the GBK -> UTF-8 conversion together with a half character, which stays out.

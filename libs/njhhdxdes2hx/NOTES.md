@@ -259,3 +259,7 @@ admin 登入时间戳漂移已在提交前用 `git checkout --` 撤销。
 ## 深度功能测试（§10.7，2026-10-04）— undefined macro and simul_efun gaps
 
 - 106 file(s) `inherit F_SSERVER;` and no header defines it (104 did not compile: `syntax error, unexpected L_IDENTIFIER, expecting L_STRING or '('`). `#define F_SSERVER SSERVER` in `include/globals.h` (KB 04 §6.2, `scripts/lpc_alias_macro.py`). 0 still fail.
+
+## 深度功能测试（§10.7，2026-10-05）— here-document terminators
+
+`scripts/lpc_fix_heredoc_terminator.py --all --apply`: 2 here-document block(s) repaired (2 with the terminator glued to the last text line, 0 with it indented), so `End of file in text block` no longer hides the room or object behind them: `d/heimuya/fangtang.lpc`, `d/road/rdktojd0.lpc`. The terminator must start its line (the lexer's own test, KB 04 §6.10); a glued one lost its newline in the GBK -> UTF-8 conversion together with a half character, which stays out.
