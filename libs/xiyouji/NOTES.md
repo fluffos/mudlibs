@@ -1077,3 +1077,19 @@ compile check (exit 0, no errors) against `feature/command.lpc`.
 ## 深度功能测试（§10.7，2026-10-05）— here-document terminators
 
 `scripts/lpc_fix_heredoc_terminator.py --all --apply`: 1 here-document block(s) repaired (1 with the terminator glued to the last text line, 0 with it indented), so `End of file in text block` no longer hides the room or object behind them: `d/moon/bedroom.lpc`. The terminator must start its line (the lexer's own test, KB 04 §6.10); a glued one lost its newline in the GBK -> UTF-8 conversion together with a half character, which stays out.
+
+## 深度功能测试（§10.7，2026-10-05）— compile-warning pass, truncated files completed
+
+`scripts/lpc_warnings.py xiyouji` (4987 files; the oldest ancestor of the Journey-to-the-West / ES II family, see the English description): 659 distinct diagnostics at the
+start (492 unused locals in 273 files, 39 unknown escapes, 25 prototypes with another argument count, 14 `nosave` functions ...), 78 at the end, 4937 files compile
+and 50 do not before the repairs below. 329 files changed. Tools: `scripts/lpc_warnings.py --fix`, `scripts/lpc_family_pass.py`'s sequence (redundant inherits, void
+overrides, macro redefinitions, prototype return types, `clean_up()` diamonds named after a rescan, forward declarations); this lib has no wrong-case paths.
+
+**Truncated files completed from a sibling (four files, each checked byte for byte).** The archive's copies of `d/qujing/jindou/obj/zhuofake.lpc` (1137 bytes), `d/qujing/jingjiling/jingji1.lpc`
+(1089) and `d/qujing/wudidong/npc/fangzhang-jail.lpc` (1150) stop in the middle of a function; each is exactly the first bytes of the same file in `xiyouji2006` (4546 / 2293 /
+10490 bytes), whose remainder was appended (`End of file` in all three before). `d/nanhai/obj/jingu2.lpc` lacks only the closing `}` of `free_jingu()` that the sibling's copy
+has. `d/qujing/jingjiling/jingji6.lpc` is cut the same way but the sibling's copy is a reformatted version, so it was left.
+
+**What is left (19 files with a compile error).** Dead or damaged: `d/kaifeng/npc/old/*` (headers `quest_*.h`, `reporting.h` never shipped), `cmds/imm/cast1.lpc`, `d/obj/fabao/EXAMPLE.lpc`, `d/moon/obj/poem.lpc`,
+`/obj/toy/*` (`message.h`), `d/city/obj/dami.lpc` and `d/obj/food/dami.lpc` (a weapon class `UNARMED` this lib does not have), `d/city/npc/duguoyin.lpc` (`::buy_object()` in an NPC with no
+dealer base), `cmds/wiz/tail.lpc` (no `tail()` simul_efun, as in 92 other libs).
