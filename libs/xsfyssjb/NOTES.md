@@ -147,3 +147,15 @@ shenmu/` 已删除）。保留的唯一存档账号是管理员种子账号
 ## 深度功能测试（§10.7，2026-10-04）— negative range ends
 
 `scripts/lpc_fix_negative_ranges.py`: 5 line(s) in 2 file(s) count a range from the end with `<` (`x[a..-1]` -> `x[a..<1]`, `x[-2..]` -> `x[<2..]`; KB 06 §7.209). In this driver a negative constant end gave `""` / `({ })` and a negative start the whole value, so each of these returned the wrong slice; the compile warning `A negative constant as the second element of arr[x..y]` is gone from the files that compile. Range lvalues (`s[0..-1] = text`, the prepend idiom) are left alone. A paired compile of the changed files at HEAD and in the working tree showed no new error.
+
+## 深度功能测试（§10.7，2026-10-05）— compile-warning pass and wrong-case paths (ported from fengyun434)
+
+`scripts/lpc_warnings.py xsfyssjb` (9247 files): 2578 distinct diagnostics and 83 files that did not compile at the start, 127 diagnostics and 72 files at the end
+(8228 compile). 981 files changed. The code is the fengyun434 root's, so the pass is its pass (libs/fengyun434/NOTES.md has the classes, among them the 87 prototypes
+for functions called before their definition): `lpc_twin_port.py adopt fengyun434 xsfyssjb` carried the fixes of the files whose code is the root's (711 reformatted,
+252 verbatim), then `lpc_warnings.py --fix` and the tools of `scripts/lpc_family_pass.py`. `adm/simul_efun/file.lpc` defines `tail()` in LPC like the root's.
+The only file that failed here and not in the root was `cmds/wiz/tail.lpc` (no `tail()` yet).
+
+**Wrong-case paths (KB 03 §4.5).** `scripts/lpc_case_paths.py --apply xsfyssjb`: 62 `.C` files renamed to `.lpc`, none of the references needed a rewrite; load check of the
+98 affected objects, HEAD against the working tree: 29 PASS -> 98 PASS, 69 more load, none fewer. What is left is the root's list (`ed.c`-style leftovers, the TMI-2 network daemons
+without headers, drafts).
