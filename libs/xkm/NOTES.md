@@ -180,3 +180,12 @@ every class, the typos found through the no-side-effects list and the list of fi
 Fixed by hand in this lib (each read first; nothing written new): `clone/board/news_b.lpc` (`do_discard()` was `string` and returned its messages as strings, so the `newsdel` command never printed them and always reported success: `int`, `notify_fail()`, `write()` and `return 1`); `d/city/qiyuan{2,3,4}.lpc` (lost closing quote of `set("short", "棋室);`; the splice that ports the root's fix refused these three files because the pre-image has an unterminated string); `d/murong/obj/qingxin-san.lpc` (the credit line `by beyond` outside a comment); and `adm/simul_efun/message.lpc` got the `message_combatd()` alias (KB 04 §6.2).
 
 What is left: the files that do not load in the root either, the wizard directories (`/u/program`, `/u/bright`, `/u/puma`), `d/minjiao/` (a second, broken copy of `d/mingjiao`), the `jobold`/`jobaa`/`obj1` copies of the job files, `d/murong/npc/murong-fu.lpc` (its `where.h` never shipped), and `d/heimuya/basket.lpc` (an `ITEM` that calls `::reset()` and the undefined `check_trigger()`).
+
+## 深度功能测试（§10.7，2026-10-04）— paths named in another case
+
+The archive comes from a case-insensitive host: files are stored as `BAGUA0.lpc`, `longjing.C`, `d/SHAOLIN/`, the code names them in lower
+case (`__DIR__ "bagua0"`, `"tea/longjing"`, `"/d/shaolin/..."`), so the rooms, NPCs and items behind them could not be loaded (a `.C` file is
+not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply xkm`: 29 file(s) renamed to lower case (`.C` -> `.lpc`,
+`.H` -> `.h`) and 0 path reference(s) in 0 file(s) rewritten to the new spelling; 0 skipped, 0 ambiguous. Load check of the 36 objects that were renamed, edited or name a renamed path (HEAD against the working tree, an object is the same under any spelling of its path): 7 PASS -> 27 PASS, 0 that loaded before fail now, 20 more load.
+
+30 files moved (the 29 of the first run, then `d/lingjiu/BAGUA.H` -> `bagua.h` once the include resolution of the tool was fixed; the load check above ran before that last rename): the Lingjiu array (`bagua.lpc`, `bagua0-7.lpc`, `bagua.h`), `dadao3-4`, `damen2`, `gudi`, `hubian` ... of `d/lingjiu`, `d/REGIONS.h` -> `regions.h`. Rescan: 297 distinct diagnostics, 10219 files compile and 192 do not (10215 / 196 / 305 before); the eight `bagua*` rooms compile after the last rename (checked individually).
