@@ -857,3 +857,7 @@ functionally re-tested live on this lib.
 ## 深度功能测试（§10.7，2026-10-05）— here-document terminators
 
 `scripts/lpc_fix_heredoc_terminator.py --all --apply`: 9 here-document block(s) repaired (2 with the terminator glued to the last text line, 7 with it indented), so `End of file in text block` no longer hides the room or object behind them: `d/moon/bedroom.lpc`, `u/skyhawk/cmds/adcp.lpc`, `u/doer/wanju.lpc`, `u/kexin/baigu/baigudong.lpc`, `u/kexin/baigu/baigushan.lpc`, `u/kexin/baigu/banshanpo.lpc` and 3 more. The terminator must start its line (the lexer's own test, KB 04 §6.10); a glued one lost its newline in the GBK -> UTF-8 conversion together with a half character, which stays out.
+
+## 深度功能测试（§10.7，2026-10-05）— here-document terminators (opener line, case)
+
+`scripts/lpc_fix_heredoc_terminator.py --all --apply`: 1 more block(s) repaired: 1 where the text sits on the opener's line (`@LONG   text...LONG`, the newlines were lost): `u/kvv/jiaowai.lpc`.

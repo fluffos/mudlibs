@@ -831,3 +831,7 @@ A Big5 character whose second byte is 0x5C was written with one extra backslash 
 ## 深度功能测试（§10.7，2026-10-05）— here-document terminators
 
 `scripts/lpc_fix_heredoc_terminator.py --all --apply`: 10 here-document block(s) repaired (5 with the terminator glued to the last text line, 5 with it indented), so `End of file in text block` no longer hides the room or object behind them: `daemon/skill/moon_force.2000.5.15.lpc`, `daemon/skill/moon_force2.lpc`, `u/m/matlab/area/r5.lpc`, `u/j/jsh/area2/under/npc/obj/eouwang-woojin.lpc`, `u/j/jsh/underground/kingroom.lpc`, `u/j/jsh/underground/test.lpc` and 4 more. The terminator must start its line (the lexer's own test, KB 04 §6.10); a glued one lost its newline in the GBK -> UTF-8 conversion together with a half character, which stays out.
+
+## 深度功能测试（§10.7，2026-10-05）— here-document terminators (opener line, case)
+
+`scripts/lpc_fix_heredoc_terminator.py --all --apply`: 5 more block(s) repaired: 4 with the terminator spelled in another case than the opener (`@MING_PART ... MING_part`: the lexer compares case-sensitively, so the block never ended); 1 where the text sits on the opener's line (`@LONG   text...LONG`, the newlines were lost): `u/b/baal/backup/ming_mark.lpc`, `u/b/baal/ming_clan/ming_mark.lpc`, `u/b/baal/ming_clan/item/ming_mark.lpc`, `u/s/sexking/bear_cloth.lpc`, `u/h/hack/aaa.lpc`.
