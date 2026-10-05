@@ -633,3 +633,12 @@ sweep guards against cannot occur here regardless of the `enabled` flag's
 ordering. **Left untouched, no fix applied** (the mechanical fix would be
 inert but harmless; skipped per this project's "don't fix what isn't
 reachable" standing practice).
+
+## 深度功能测试（§10.7，2026-10-04）— paths named in another case
+
+The archive comes from a case-insensitive host: files are stored as `BAGUA0.lpc`, `longjing.C`, `d/SHAOLIN/`, the code names them in lower
+case (`__DIR__ "bagua0"`, `"tea/longjing"`, `"/d/shaolin/..."`), so the rooms, NPCs and items behind them could not be loaded (a `.C` file is
+not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply aoxiangtianji`: 1 file(s) renamed to lower case (`.C` -> `.lpc`,
+`.H` -> `.h`) and 0 path reference(s) in 0 file(s) rewritten to the new spelling; 0 skipped, 0 ambiguous. Load check of the 2 objects that were renamed, edited or name a renamed path (HEAD against the working tree, an object is the same under any spelling of its path): 1 PASS -> 2 PASS, 0 that loaded before fail now, 1 more load.
+
+1 files moved (1 `.C`); mostly under `obj/job/teamjob` (1). A rescan with `scripts/lpc_warnings.py aoxiangtianji` is still due: the renamed files are compiled for the first time.
