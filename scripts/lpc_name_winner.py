@@ -17,7 +17,10 @@ already.  Read the plan once: the unqualified F() calls that W's own code makes 
 calls W's F, so nothing changes; but a lib whose design needs the *other* inherit's F to win wants a hand edit
 (`autoload::get()` vs `object::get()`; KB 06 section 7.213 kind 3).  The new functions go after the last top-level
 `inherit` line of the leaf -- even when that line sits inside `#if`/`#ifdef`, so check the placement when the wrapper
-scopes belong to another branch (spacemud `std/body.lpc` needed a hand move).  Edits are byte-exact (line endings kept)."""
+scopes belong to another branch (spacemud `std/body.lpc` needed a hand move).  An `inherit` that comes from an
+`#include`d header is not seen: the rescan then reports `Unable to find the inherited function 'f' in file 'x'` for the
+leaf (xkx2001 `d/zhongnan/dajiaochang.lpc`, `d/city/nproom.lpc`); move the wrapper below the include, or delete the
+leaf's redundant inherit.  Edits are byte-exact (line endings kept)."""
 import collections
 import os
 import re

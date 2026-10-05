@@ -30,8 +30,8 @@ Mechanical fixes (positions come from the driver; columns are 1-based BYTES):
   Unused local variable                -> delete the declarator (rebuild the statement)
   negative constant range end          -> `..-N]` becomes `..<N]` (section 7.209)
   Unknown escape sequence              -> drop the backslash
-  Unknown #pragma, ignored             -> delete the bare `#pragma name` line (`save_binary`;
-                                          the driver already ignores it)
+  Unknown #pragma, ignored             -> delete the `#pragma name [word...]` line (`save_binary`,
+                                          `optimize all`; the driver already ignores it)
   Number of arguments ... disagrees    -> `varargs` on the declaration the warning is reported on
                                           (either side being varargs silences it; never makes a call fail)
   Non-void functions must return value -> the bare `return;` on the reported line becomes `return 0;`
@@ -370,13 +370,35 @@ def conditional_lines(masked):
 def used_in_conditional(masked, flags, name, a, b, skip_a, skip_b):
     """True if `name` occurs in masked[a:b] (outside the declarator being
     removed, masked[skip_a:skip_b]) on a line inside a preprocessor conditional."""
-    for m in re.finditer(r"\b" + re.escape(name) + r"\b", masked[a:b]):
+    for m in re.finditer(r"(?<!->)(?<!::)\b" + re.escape(name) + r"\b", masked[a:b]):
         p = a + m.start()
         if skip_a <= p < skip_b:
             continue
         if flags[masked.count("\n", 0, p)]:
             return True
     return False
+
+
+PURE_EFUNS = {"this_player", "this_object", "previous_object", "environment", "find_player", "find_object", "find_living",
+              "query", "query_temp", "time", "sizeof", "strlen", "lower_case", "capitalize", "geteuid", "getuid", "file_name",
+              "base_name", "all_inventory", "users", "member_array", "present", "intp", "stringp", "objectp", "pointerp",
+              "mapp", "functionp", "to_int", "to_float", "ctime", "keys", "values"}
+PURE_METHODS = {"query", "query_temp", "query_skill", "name", "short", "query_name", "query_level", "select_opponent"}
+
+
+def pure_initializer(text):
+    """True when an initializer `= expr` only calls side-effect-free efuns and getter methods, so deleting the
+    declaration of an unused local cannot drop an effect: this_player(), environment(me), me->query("x") ..."""
+    if re.search(r"\+\+|--|[^=!<>]=[^=]|\bnew\b|\bclone_object\b|->\s*\w+\s*\(\s*\)\s*->", text[1:]):
+        return False
+    for m in re.finditer(r"(->\s*)?([A-Za-z_]\w*)\s*\(", text):
+        name = m.group(2)
+        if m.group(1):
+            if name not in PURE_METHODS:
+                return False
+        elif name not in PURE_EFUNS:
+            return False
+    return True
 
 
 def fix_unused_locals(work, rows):
@@ -435,14 +457,14 @@ def fix_unused_locals(work, rows):
                         remaining.discard(d[0])
                         drop.remove(d)
                         continue
-                    if len(re.findall(r"(?<![\w$])" + re.escape(d[0]) + r"(?!\w)", masked[op + 1:close])) > 1:
+                    if len(re.findall(r"(?<![\w$])(?<!->)(?<!::)" + re.escape(d[0]) + r"(?!\w)", masked[op + 1:close])) > 1:
                         manual.append((f, src.count("\n", 0, d[1]) + 1, d[0],
                                        "the scope reads the name again, so the warning cannot be trusted "
                                        "(an earlier error in the file leaves a used local marked unused): left alone"))
                         remaining.discard(d[0])
                         drop.remove(d)
                         continue
-                    if d[3] and "(" in d[3]:
+                    if d[3] and "(" in d[3] and not pure_initializer(d[3]):
                         manual.append((f, src.count("\n", 0, d[1]) + 1, d[0],
                                        "initializer calls something: " + src[d[1]:d[2]].strip()[:60]))
                         remaining.discard(d[0])
@@ -583,7 +605,8 @@ def fix_bare_returns(work, rows):
 
 def fix_pragmas(work, rows):
     """`#pragma save_binary` and friends: the driver reports "Unknown #pragma,
-    ignored" and ignores the line, so a bare pragma line is just deleted.  Runs
+    ignored" and ignores the line, so the pragma line is just deleted (it also
+    takes `#pragma optimize all`: only the bare name `optimize` is known).  Runs
     as its own pass before the others, because it removes lines."""
     n = 0
     manual = []
@@ -595,11 +618,11 @@ def fix_pragmas(work, rows):
         path = os.path.join(work, f.lstrip("/"))
         L = read_lines(path)
         for ln in sorted(lns, reverse=True):
-            if re.match(r"\s*#\s*pragma\s+\w+\s*$", L[ln - 1]):
+            if re.match(r"\s*#\s*pragma\s+\w+(?:\s+\w+)*\s*$", L[ln - 1]):
                 del L[ln - 1]
                 n += 1
             else:
-                manual.append((f, ln, L[ln - 1].strip(), "not a bare #pragma line"))
+                manual.append((f, ln, L[ln - 1].strip(), "not a plain #pragma line"))
         write_lines(path, L)
     return n, manual
 

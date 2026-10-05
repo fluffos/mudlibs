@@ -37,6 +37,10 @@
     comment swallowing the next line's code. The swallowed code can
     silently delete a function or a `set_name()`, with no compile error.
   - Diff the bytes against `raw/` and re-insert the dropped character.
+    For the heredoc terminator (`...。LONG`, the newline before `LONG` gone with a lone GBK
+    lead byte) `scripts/lpc_fix_heredoc_terminator.py` does that for the whole corpus
+    (2026-10-04: 269 glued and 107 indented terminators, KB 04 §6.10); the half character
+    itself cannot be restored in UTF-8, the raw bytes show it as the lone byte before `\n`.
   - A file flagged LOSSY in the conversion log is suspect even if it
     compiles. Combat and movement exercise many lazily compiled files.
 - **One file can mix encodings.** BIG5 lines inside a GBK file decode
