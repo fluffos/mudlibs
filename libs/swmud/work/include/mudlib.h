@@ -162,7 +162,7 @@
 #define ROOM                    INDOOR_ROOM
 
 #define VOID_ROOM               "/d/common/void"
-#define WIZ_ROOM                "/domains/std/Wizroom"
+#define WIZ_ROOM                "/domains/std/wizroom"
 #define HEAVEN                  "/domains/std/Heaven"
 
 #define ADVERSARY               "/std/adversary"
