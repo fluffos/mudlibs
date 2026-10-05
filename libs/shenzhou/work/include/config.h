@@ -13,13 +13,20 @@
 // The TMI-2
 #define MUDLIST_DNS  ({ "202.101.100.209", 7478 })
 #define MUDLIST_BAK  ({ "202.101.100.209", 5559 })
+#undef MUDLIST_BAK
 #define MUDLIST_BAK  ({ "61.170.130.89", 5559 })
+#undef MUDLIST_BAK
 #define MUDLIST_BAK  ({ "211.91.27.134", 5559 })
+#undef MUDLIST_BAK
 #define MUDLIST_BAK  ({ "211.91.27.134", 8892 })
 // The Eastern Stories
+#undef MUDLIST_BAK
 #define MUDLIST_BAK  ({ "140.113.204.42", 8008 })
+#undef MUDLIST_BAK
 #define MUDLIST_BAK ({"193.10.174.41", 5563})
+#undef MUDLIST_BAK
 #define MUDLIST_BAK ({"209.191.135.218",5559})
+#undef MUDLIST_BAK
 #define MUDLIST_BAK ({"209.191.135.218",2229})
 
 #define LISTNODES ([ \

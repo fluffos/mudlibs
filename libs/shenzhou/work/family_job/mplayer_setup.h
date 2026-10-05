@@ -1,8 +1,7 @@
 void do_mp_setup()
 {
-	object me;
 	string msgout;
-	int i, totalexp, expavg, z;
+	int i, totalexp, expavg;
 
 
 	msgout = "\n***********************\n门派工作系统 之 多人参与工作系统\n被选取玩家名单如下(BETA 巫师测试版):\n***********************\n";
@@ -28,7 +27,6 @@ void do_mp_setup()
 
 void do_mp_npc_setup(int totalexp, int expavg)
 {
-	object me;
 	object *ob1, *ob2, *ob3, *ob4, *ob5, *ob6, *ob7, *ob8, *ob9, *ob10, *ob11, *ob12, *ob13, *ob14, *ob15, *ob16, *ob17, *ob18;
 	string msgout, fname, pdata;
 	int i, j, exp, *lvl1, *lvl2, *lvl3, *lvl4, *lvl5, *lvl6, *lvl7, *lvl8, *lvl9, *lvl10, *lvl11, *lvl12, *lvl13, *lvl14, *lvl15, *lvl16, *lvl17, *lvl18, answer, m, comexp;

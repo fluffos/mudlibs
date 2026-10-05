@@ -101,7 +101,7 @@ int perform_sanshen()
 void attempt_apprentice(object me)
 {	command("say 别来烦我啦");
 }
-int accept_fight()
+varargs int accept_fight()
 {	command("say OK");
 	return 1;
 }

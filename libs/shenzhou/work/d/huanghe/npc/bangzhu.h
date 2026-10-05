@@ -58,11 +58,10 @@ int do_check(string arg)
 
 int ask_join()
 {
-        object ob = this_player(), obj, situ = this_object();
-        string ob_fam;
+        object ob = this_player(), obj;
         object sf_d;
 	string myfam,mypos,msg,*msg_a,nowmsg,sfn;
-	int lastscore,score,i;
+	int score, i;
         
 
         myfam = (string)query("fam");
@@ -144,7 +143,7 @@ int ask_join()
 
 string ask_skills()
 {
-        object ling, me = this_player();
+        object me = this_player();
         int amount;
 
         if( is_fighting() )

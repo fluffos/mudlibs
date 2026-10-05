@@ -1,6 +1,5 @@
 int do_mp_check_user(object ob, string strMenpai) 
 {
-    string strSwitch;
 
     if(ob->query("family/family_name") != strMenpai)
     {
@@ -30,10 +29,9 @@ int do_mp_check_user(object ob, string strMenpai)
 
 void mplayer_get_user()
 {
-        object me, *players;
-    string strName, strId, strFName, strMenpai, *MenpaiList;
-        string strJobMsg;
-    int i, j, total, intExp, count;
+        object *players;
+    string *MenpaiList;
+    int i, j, total;
 
 
         plist = allocate(13);

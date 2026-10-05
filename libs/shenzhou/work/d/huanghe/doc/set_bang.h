@@ -91,9 +91,9 @@ void set_follower(object obnpc, object owner)
 
         obnpc->set("inquiry/" + fam, fam + "威震江湖，指日可待！！！");
         name = (string)owner->query("name");
-        obnpc->set("inquiry/" + "帮主", "我对我们" + name[0..01] + "帮主的景仰之情腥缣咸辖嗖痪);
+        obnpc->set("inquiry/" + "帮主", "我对我们" + name[0..01] + "帮主的景仰之情");
         obnpc->set("inquiry/" + name, "这几个字是你说的吗？");
-        obnpc->set("inquiry/" + name[0..01] + "帮主", "我对我们" + name[0..01] + "镏鞯木把鲋椋腥缣咸辖嗖痪);
+        obnpc->set("inquiry/" + name[0..01] + "帮主", "我对我们" + name[0..01] + "帮主的景仰之情");
 }
 
 

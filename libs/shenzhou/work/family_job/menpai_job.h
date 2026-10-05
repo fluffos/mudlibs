@@ -9,7 +9,6 @@
 void detect_menpai(object me, string strName, string strId, string strFName, int intExp)
 {
         string strMenpai, strMsg, strDir, strCPlace;
-        int intRnd;
 
         switch(strFName)
         {
@@ -199,9 +198,9 @@ void detect_menpai(object me, string strName, string strId, string strFName, int
 
 void create_path(object me, string strName, string strId, string strFName, int intExp, string strMenpai, string strMsg, string strDir, string strCPlace)
 {
-        string *dir, *dirx, roomx;
-        object npc, room;
-        int i, j;
+        string *dirx, roomx;
+        object room;
+        int j;
 
                 dirx = get_dir(strDir);
         
@@ -225,7 +224,7 @@ void create_path(object me, string strName, string strId, string strFName, int i
 
 void do_set_skill(object me, object room, string strMsg, string strDir, string strCPlace, string roomx)
 {
-        object ob, npc;
+        object npc;
         string pkid;
         write("skill_set\n");
 
@@ -254,7 +253,7 @@ private int copy_skill(object npc, object me)
         mapping skill_statusb;
         string *sname, *mname, *pname;
         string *snameb;
-    int i, temp, myexp, mylvl, k, count, point;
+    int i, temp, myexp, mylvl, k, count;
         int j, total, looptime, m;
         
         list = users();

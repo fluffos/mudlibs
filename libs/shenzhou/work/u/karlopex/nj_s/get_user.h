@@ -23,8 +23,8 @@ int do_check_user(object ob, string strMenpai)
 void get_player()
 {
         object me, *list0, *list1, *list2, *list3, *list4, *list5, *list6, *list7, *list8, *list9, *list10, *list11, *list12;
-        string strName, strId, strFName, strMenpai;
-        int j, total, intExp, count;
+        string strMenpai;
+        int j, total, count;
 
 
         if(!query_temp("job_enable"))

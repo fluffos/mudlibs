@@ -19,6 +19,7 @@ mapping islands = ([
         "/d/island/icefire1"   : ({100,  600}),
         "/d/taohua/haitan"     : ({ 20, -210}),
 ]);
+#ifndef HARBOR_NO_WILD
 
 // 荒岛
 // 如果船停在荒岛，玩家可以派一个人守船
@@ -26,3 +27,4 @@ mapping islands = ([
 string *wildharbors = ({
         "/d/island/icefire1",
 });
+#endif

@@ -12,6 +12,7 @@
 // Elon (07-01-95) updated LISTNODES to current
 // The TMI-2
 #define MUDLIST_DNS  ({ "211.91.27.134", 5559 })
+#undef MUDLIST_DNS
 #define MUDLIST_DNS  ({ "211.91.27.134", 7478 })
 #define MUDLIST_BAK  ({ "61.241.107.7", 2006 })
 

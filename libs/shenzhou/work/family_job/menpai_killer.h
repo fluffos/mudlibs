@@ -11,7 +11,7 @@ void menpai_killer(object me, string strName, string strId, string strFName, int
     mapping hp_status, skill_status, map_status, prepare_status;
     mapping my;
     mapping skill_statusb;
-    int i, temp, myexp, mylvl, k, count, point;
+    int i, temp, myexp, mylvl, k, count;
     int j, total, looptime, m, x;
     string *sname, *mname, *pname, pkid;
     string *snameb;

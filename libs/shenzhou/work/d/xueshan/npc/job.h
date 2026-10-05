@@ -18,7 +18,6 @@ string ask_me()
 
 int accept_object(object ob, object obj)
 {
-        mapping fam;
         object me = this_object();
         int obj_exp,my_exp,got_pot,shen;
         shen = obj->query("shen");

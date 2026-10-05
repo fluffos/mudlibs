@@ -5,7 +5,7 @@ void init()
 }
 int do_yao(string arg)
 {
-  int water_filled, full, aa;
+  int aa;
   object ob;
   object me = this_player();
   aa = random(50);

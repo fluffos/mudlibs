@@ -13,7 +13,7 @@ int auto_perform()
 	switch (me->query("real_menpai")) {
 	case "huashan" :
 
-	if( me->query("qi",1) < 10 || me->query("jing",1) < 10 || me->query("jingli",1) < 10) return;
+	if( me->query("qi",1) < 10 || me->query("jing",1) < 10 || me->query("jingli",1) < 10) return 0;
 
 	if ( !me->is_fighting() ) {
 		if ( me->query("eff_qi") < me->query("max_qi") )

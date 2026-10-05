@@ -1,4 +1,4 @@
-// Code of ShenZhou
+ varargs// Code of ShenZhou
 
 int accept_fight()
 {

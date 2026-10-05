@@ -148,13 +148,12 @@ void destroying(object obj)
         destruct(obj);
         return;
 }
-
-int accept_fight()
+varargs int accept_fight()
 {
 	object me, obj;
 	mapping skill_status;
 	string *sname;
-	int i ,num, level = 0, s_level, exp, obj_exp, rate;
+	int i , level = 0, s_level, exp, rate;
 
 	obj = this_object();
 	me = this_player();

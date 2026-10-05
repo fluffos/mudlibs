@@ -31,11 +31,10 @@ string *ras_name = ({
 string ask_for_job()
 {
         object ob,obj,me=this_player();
-        int i,j,k;
+        int i, j;
          string dir,msg;
         string meet_room,room;
          mixed *file;
-        int lvl = me->query_skill("persuading",1);
         int     qn,exp;
         string  bonus;
 /*

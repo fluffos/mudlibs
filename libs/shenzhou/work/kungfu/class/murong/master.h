@@ -4,7 +4,6 @@
 
 void attempt_apprentice(object ob)
 {
-       mapping fam;
        string gsmr;
         if (ob->query("class")=="bonze") {
                 if (ob->query("gender")=="女性")

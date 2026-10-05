@@ -19,9 +19,9 @@ string *tan_msg =
 
 int do_play()
 {
-	int i, count, range, skill;
+	int skill;
 	object me, ob, weapon;
-        string msg, tan_type, *shape, family;
+        string msg, *shape, family;
 
 	ob = this_object();
 	me = this_player();
@@ -81,7 +81,7 @@ int do_play()
 
 void playing(object me, int stage)
 {
-	int i, size, exp, pot, myexp, jingcost, jinglicost;
+	int size, exp, pot, myexp, jingcost, jinglicost;
 	size=sizeof(tan_msg);
 	if( stage < size)
 	{

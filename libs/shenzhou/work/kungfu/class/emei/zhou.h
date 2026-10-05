@@ -80,7 +80,6 @@ string ask_jiuyin()
 
 void attempt_apprentice(object ob)
 {
-    mapping fam;
     int last_betray,shen;
 	
 	//xiaojian: added a check before recruiting, i.e. won't recruit pxj dizi.
@@ -228,7 +227,6 @@ void destob(object ob)
 int ask_whip2()
 {
          object me = this_player();
-         object ob = this_object();
          if (me->query_temp("feiyu") != 3)
          {
          say("周芷若说：我凭什么教你！\n");
@@ -242,7 +240,7 @@ int ask_whip2()
 */
          return 1;
 }
-int accept_fight()
+varargs int accept_fight()
 {
        object me = this_object();
        object ob = this_player();

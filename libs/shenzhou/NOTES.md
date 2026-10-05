@@ -1218,3 +1218,17 @@ re-invoke `enable_player()` on this lib while the object is still
 ## 深度功能测试（§10.7，2026-10-04）— negative range ends
 
 `scripts/lpc_fix_negative_ranges.py`: 6 line(s) in 3 file(s) count a range from the end with `<` (`x[a..-1]` -> `x[a..<1]`, `x[-2..]` -> `x[<2..]`; KB 06 §7.209). In this driver a negative constant end gave `""` / `({ })` and a negative start the whole value, so each of these returned the wrong slice; the compile warning `A negative constant as the second element of arr[x..y]` is gone from the files that compile. Range lvalues (`s[0..-1] = text`, the prepend idiom) are left alone. A paired compile of the changed files at HEAD and in the working tree showed no new error.
+
+## 深度功能测试（§10.7，2026-10-04）— compile-warning and load-failure pass (ported from xkx2001)
+
+`scripts/lpc_warnings.py shenzhou`: 482 distinct diagnostics at the end, 12506 files compile and 207 do not. A load check of every
+`.lpc` (12742 files, 700 per VM boot) at HEAD and in the working tree: 12476 PASS -> 12497 PASS, no file that loaded before fails now except one random draw (below). 1999 files changed. The code is the xkx2001 root's, so the pass is its pass (libs/xkx2001/NOTES.md has
+every class, the typos found through the no-side-effects list and the list of files left alone):
+`lpc_twin_port.py adopt xkx2001 shenzhou` carried the fixes of the files whose code is the root's, then
+`lpc_warnings.py --fix`, `lpc_diamonds.py --fix-redundant`, `lpc_fix_void_override.py`, `lpc_fix_macro_redef.py`,
+`lpc_fix_prototype_types.py`, `lpc_move_decl.py`, `lpc_fix_no_effect.py`, `lpc_fix_heredoc_terminator.py` and (after a rescan)
+`lpc_name_winner.py` handled the diagnostics that depend on this lib's own files.
+
+Fixed by hand in this lib (each read first; nothing written new): `d/shaolin/shaolin/obj/putao.lpc` (`::init();` in an `ITEM`+`F_FOOD` object whose parents have no `init()`); `d/baituo/barn.lpc` (a stray `:` in front of the `//` of the second line, the same in the archive's own file and in `zhonghua2`, `zhyx`); `d/huanghe/doc/set_bang.h` (two answers end in unrecoverable characters; both strings are closed after `帮主的景仰之情`, as in the root: `d/huanghe/npc/bangzhu.lpc` loads again). The load check's one flip, `u/haihe/naihe_b.lpc`, picks a random `location` and fails when it picks `/u/spark/spark_room`, which this lib does not have.
+
+What is left: dead files (the `ftp/` and `u/` wizard trees, drafts, pasted logs, the TMI-2 network daemons without headers); `d/wuguan/zhengting.lpc` (ends inside a `/*` comment), `d/dali/npc/fy-skset1.h` (`skill_set2` defined twice), `kungfu/class/kunlun/hetaichong.lpc`, `clone/gift/pantao.lpc` (a call left without its closing `);`), `d/shaolin/haishui3.lpc` (`yaoshui.h` never shipped), and `d/heimuya/basket.lpc` (an `ITEM` that calls `::reset()` and the undefined `check_trigger()`).

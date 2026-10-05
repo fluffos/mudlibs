@@ -7,7 +7,7 @@ int do_dazuo(string arg)
 	int i,num;
 	object me = this_player();
 	object ob = this_object();
-	object *obs,obj;
+	object *obs;
 
 	seteuid(getuid());
 	
@@ -54,7 +54,7 @@ int exercising(object me)
 {
 	int exercise_cost = (int)me->query_temp("exercise_cost");
 	int neili_gain = 2 + (int)me->query_skill("force") / 5;
-	int i, clan, extra;
+	int extra;
 	string force;
 
         if (exercise_cost < 1)

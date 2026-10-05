@@ -6,6 +6,7 @@
 #define HEAD		"/inherit/armor/head"
 #define NECK		"/inherit/armor/neck"
 #define CLOTH		"/inherit/armor/cloth"
+#undef ARMOR
 #define ARMOR		"/inherit/armor/armor"
 #define SURCOAT		"/inherit/armor/surcoat"
 #define WAIST		"/inherit/armor/waist"

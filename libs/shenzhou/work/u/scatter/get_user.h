@@ -42,8 +42,8 @@ int do_check_user(object ob, string strMenpai)
 void get_player()
 {
         object me, *players;
-        string strName, strId, strFName, strMenpai, *MenpaiList;
-        int i, j, total, intExp, count;
+        string strName, strId, strFName, *MenpaiList;
+        int i, j, total, intExp;
 
         MenpaiList = ({"武当派","少林派","丐帮","星宿派","峨嵋派","大理段家","古墓派","白驼山","华山派","雪山派","桃花岛","全真教","昆仑派"});
         

@@ -4,9 +4,9 @@
 
 string ask_job()
 {
-        object me = this_player(), leader, ling, ob, *obj, dest, room,obtemp;
+        object me = this_player(), ling, ob, *obj, dest, obtemp;
         string myfam, *files, file, region, biaoju, ob_bang,place ,name;
-        int i, temp, myexp,n,sz,highprice,lowprice,tim;
+        int i, temp, myexp, n, sz, tim;
         mapping job;
         object npcroom;
 

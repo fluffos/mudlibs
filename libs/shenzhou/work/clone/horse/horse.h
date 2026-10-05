@@ -7,13 +7,13 @@
 int condition_check()
 {
         object *ob, me = this_object();
-        int my_jingli, my_mj, i, addjing;
+        int my_jingli, my_mj, addjing;
 
         my_jingli  = (int)me->query("jingli");
 	my_mj = (int)me->query("max_jingli");
 	addjing = (my_mj - my_jingli)/2;
 
-	if(!living(me)) return;
+	if(!living(me)) return 0;
 
 	if(my_jingli <=10){
 	if (ob = me->query("rider")){
@@ -26,24 +26,24 @@ int condition_check()
     // modified by aln to let horses follow none after be faint
         me->set_leader(0);
         me->unconcious();
-        return;
+        return 0;
         }
 
         if(my_jingli <=30 && my_jingli > 20){
         say(me->name() +"只在喘气，渐渐地快跑不动了！\n");
-	return;
+	return 0;
         }
 
 	if(my_jingli <= my_mj/3){
         say(me->name() +"大口大口地喘着粗气。\n");
-        return;
+        return 0;
         }
 }
 void init()
 {
 	object me=this_object();
 
-	int my_jingli, my_mj, i, addjing;
+	int my_jingli, my_mj, addjing;
 
 	if( environment(me)->query("resource/grass") &&
 	me->query("food") < (me->max_food_capacity())){

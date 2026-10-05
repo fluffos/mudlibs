@@ -76,9 +76,9 @@ int ask_join()
 
 string ask_job()
 {
-        object me = this_player(), leader, ling, ob, *obj, dest, room,obtemp;
-        string myfam, *files, file, region, biaoju, ob_bang,place;
-        int i, temp, myexp,n,sz,highprice,lowprice,tim;
+        object me = this_player(), leader, ling, ob, *obj, dest, obtemp;
+        string myfam, file, region, biaoju, ob_bang;
+        int i, temp, myexp, n, sz;
         string *mydests, mydest, *starts;
         mapping job, destine;
 

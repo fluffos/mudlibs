@@ -1,6 +1,5 @@
 int do_check_user(object ob, string strMenpai) 
 {
-    string strSwitch;
 
     if(ob->query("family/family_name") != strMenpai)
     {
@@ -28,9 +27,9 @@ int do_check_user(object ob, string strMenpai)
 void get_player()
 {
     object me, *players;
-    string strName, strId, strFName, strMenpai, *MenpaiList;
+    string strName, strId, strFName, *MenpaiList;
         string strJobMsg;
-    int i, j, total, intExp, count;
+    int i, j, total, intExp;
 
 
         switch(random(7))

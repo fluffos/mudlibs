@@ -108,7 +108,7 @@ void dest_tool(object me, object obj)
 }
 void reward_dest(object me, object obj)
 {
-	int pot, exp;
+	int exp;
 	command("thank "+me->query("id"));
 	command("say 辛苦你了，下去休息一下吧。\n");
 	destruct(obj);

@@ -21,9 +21,8 @@ void destroy_jian(object me, object ob)
 }
 int do_trans(string arg)
 {
-        object me,room,ob,*obj;
+        object me, room, ob;
         string msg;
-        int i;
         me=this_player();
         
         if( ! environment()->is_character() ) return 0;
@@ -133,7 +132,7 @@ int do_exp(string arg)
         int myexp, mylvl ;
         mapping skill_status;
         string *sname;
-        int i, count,point;
+        int i, count;
 
         if(!arg) return notify_fail("你要多少经验？\n");
 
@@ -227,12 +226,12 @@ int do_clone(string file)
 		message_vision(msg + "\n", me, obj);
 
 	if( !obj->is_character() && obj->move(me) ) {
-		write(obj->query("name") + "复制成功\，放在你的物品栏。\n");
+		write(obj->query("name") + "复制成功，放在你的物品栏。\n");
 		obj->set("cloner", geteuid(me));
 		return 1;
 	}
 	if( obj->move(environment(me)) ) {
-		write(obj->query("name") + "复制成功\，放在这个房间。\n");
+		write(obj->query("name") + "复制成功，放在这个房间。\n");
 		obj->set("cloner", geteuid(me));
 		return 1;
 	}
