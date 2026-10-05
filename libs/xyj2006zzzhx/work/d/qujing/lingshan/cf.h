@@ -91,7 +91,7 @@ void reward(object me)
 {
 	int wuxue,level,kind_bonus,level_bonus,timep;
 	int extra_bonus,potential_bonus,combat_exp_bonus,daoxing_bonus;
-	string str,kind,time,msg;
+	string str, kind, time;
 	
 	wuxue = me->query("combat_exp");
 	level = me->query("rulaitask/level");

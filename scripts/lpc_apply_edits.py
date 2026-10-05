@@ -65,6 +65,10 @@ for slug in slugs:
             old, new = old.replace("\n", "\r\n"), new.replace("\n", "\r\n")
         old_b, new_b = old.encode("utf-8"), new.encode("utf-8")
         n = b.count(old_b)
+        if new_b and old_b in new_b and b.count(new_b) >= want:
+            print(f"{slug}: {e['file']}: already there")
+            total["already"] += 1
+            continue
         if n == want:
             print(f"{slug}: {e['file']}: {'edited' if apply_ else 'would edit'} ({n} place{'s' if n != 1 else ''})")
             total["applied"] += 1

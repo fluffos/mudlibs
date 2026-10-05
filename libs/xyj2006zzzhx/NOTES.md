@@ -219,3 +219,11 @@ single-file compile check (PASS). Part of the corpus-wide §7.19 sweep
 ## 深度功能测试（§10.7，2026-10-05）— here-document terminators
 
 `scripts/lpc_fix_heredoc_terminator.py --all --apply`: 1 here-document block(s) repaired (1 with the terminator glued to the last text line, 0 with it indented), so `End of file in text block` no longer hides the room or object behind them: `d/moon/bedroom.lpc`. The terminator must start its line (the lexer's own test, KB 04 §6.10); a glued one lost its newline in the GBK -> UTF-8 conversion together with a half character, which stays out.
+
+## 深度功能测试（§10.7，2026-10-05）— 编译警告与加载失败整理
+
+与 `xiyouji2006` 同日同批修复（本库与它的 `d/`、`adm/`、`std/` 是同一份代码：改动的 1036 个文件中 984 个与 `xiyouji2006` 工作树逐字节相同，其余 52 个含本库自有代码，由同一套工具处理）：`scripts/lpc_warnings.py xyj2006zzzhx --fix` 与 KB 08 §10.13 的结构化工具，855 行增、1967 行删。逐条记录见 `libs/xiyouji2006/NOTES.md` 同日一节（`d/kaifeng/ground.h`、`quest.lpc`、`yaoguai.lpc`、`mojie.lpc` 等手工修复，`for (n == 0; ...)`、邮件守护进程 `tmp[i] == EOT + "."`、`int ref ()`（`ref` 是保留字，改 `do_refresh`，连同 `call_out("ref", 20)`）、`cmds/wiz/tail.lpc` 用的 `tail()` 在 `adm/simul_efun/file.lpc`）。
+
+验证：全部 `.lpc`（9264 个对象，每次 VM 启动 700 个，HEAD 对工作树）9020 PASS -> 9036 PASS，由通变不通 0 个，新增可加载 16 个（8 个来自上述修复，8 个来自房间基类：`std/room.lpc` 的 `make_inventory()` 加了 `catch(ob = new(file)) || !objectp(ob)`，`scripts/lpc_resilient_room.py`，KB 05 §7.25）。`scripts/lpc_audit_removed_locals.py HEAD`：19 条候选全是误报（声明被重建，仍在用的名字仍在；这些文件无诊断）。`scripts/lpc_warnings.py xyj2006zzzhx` 剩 292 条诊断：87 个文件 287 条错误、5 条警告，都在本来就不能编译的文件里（与 `xyj2006n` 相同；本库另有 3 条未用局部变量，`d/dntg/yunlou/npc/lj.lpc` 的 `ghost`、`d/penglai/npc/luxing.lpc` 与 `shouxing.lpc` 的 `obj`，已手工删除，这三个文件现与 `xyj2006n` 的相同）。
+
+**剩余（不虚构内容）**：TMI-2 网络守护进程（`adm/daemons/network`、`daemons/network`：`uid.h`、`config.h`、`mailer.h` 档案里没有）；`d/kaifeng` 的 `old/quest_*` 片段；巫师目录（`u/yesi`、`u/vikee`）；损坏内容：`d/qujing/start/24/12.lpc` 在路径中间截断，`d/xueshan/obj/hufabird.lpc` 的函数写在 `create()` 里，`d/shendian/obj/niepan.lpc`、`d/moon/obj/poem.lpc`、`d/obj/quest/shuijingqiu.lpc` 有乱码字节（`Illegal character`），`d/dntg/sky/npc/yuhuang1.lpc` 丢了引号和分号。警告 5 条：`adm/simul_efun/oo.lpc`（`object.lpc` 里 `destruct()` 的无引用副本，simul_efun 之外被 `valid_override()` 拒绝）、`vikee.canoe.lpc`（`case` 写成 `cast`）、`d/penglai/_._/10.10/score.lpc` 与 `u/vikee/10.10/score.lpc`（缺分号）。

@@ -100,7 +100,9 @@ detection.
   - `command(str, ob)`, `transfer()`, `add_verb()`: see
     §7.172–§7.174.
 - **`new` and `class` are always reserved words.** Rename parameters or
-  locals that use them.
+  locals that use them. So is `ref` (reference parameters): `int ref () {` as a function name is
+  `syntax error, unexpected L_REF` (xyj2006 `d/penglai/npc/{luxing,shouxing}.lpc`, which also name it in
+  `call_out("ref", 20)`: rename both, `do_refresh`).
 - **`get_dir(dir, 2)`** (Amylaar's "detailed" flag) is `-1` here. Index
   `[1]` for size and `[2]` for mtime.
 

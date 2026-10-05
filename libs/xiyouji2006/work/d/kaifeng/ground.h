@@ -19,6 +19,9 @@
 #define MODE_TEAM_LT   2
 #define MODE_TEAM_DZ   3
 #define MODE_TEAM_XH   4
+// the tables belong to ground0.lpc; the programs that inherit it define GROUND_TABLES_INHERITED, or each of them redeclares
+// the variables it already has (`Redeclaration of global variable`)
+#ifndef GROUND_TABLES_INHERITED
 string *modes = ({
   "个人散打",
   "个人擂台",
@@ -33,6 +36,7 @@ string *mode_hints = ({
   "每门派的选手按弱强等级分类，各门派间的同级选手较量",
   "每门派的选手依次与别的门派所有选手较量",
 });
+#endif
 
 #define FAMILY_NONE     0
 #define FAMILY_FANGCUN  1
@@ -46,6 +50,7 @@ string *mode_hints = ({
 #define FAMILY_SHUSHAN  9
 #define FAMILY_PANSI  10
 #define FAMILY_HYD  11
+#ifndef GROUND_TABLES_INHERITED
 string *families = ({
   "混合门派",
   "方寸山三星洞",
@@ -61,4 +66,5 @@ string *families = ({
   "火云洞",
 
 });
+#endif
 
