@@ -212,3 +212,12 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 ## 深度功能测试（§10.7，2026-10-05）— here-document terminators
 
 `scripts/lpc_fix_heredoc_terminator.py --all --apply`: 1 here-document block(s) repaired (1 with the terminator glued to the last text line, 0 with it indented), so `End of file in text block` no longer hides the room or object behind them: `d/moon/bedroom.lpc`. The terminator must start its line (the lexer's own test, KB 04 §6.10); a glued one lost its newline in the GBK -> UTF-8 conversion together with a half character, which stays out.
+
+## 深度功能测试（§10.7，2026-10-04）— paths named in another case
+
+The archive comes from a case-insensitive host: files are stored as `BAGUA0.lpc`, `longjing.C`, `d/SHAOLIN/`, the code names them in lower
+case (`__DIR__ "bagua0"`, `"tea/longjing"`, `"/d/shaolin/..."`), so the rooms, NPCs and items behind them could not be loaded (a `.C` file is
+not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply sjshwzb`: 278 file(s) renamed to lower case (`.C` -> `.lpc`,
+`.H` -> `.h`) and 3 path reference(s) in 3 file(s) rewritten to the new spelling; 0 skipped, 0 ambiguous. Load check of the 372 objects that were renamed, edited or name a renamed path (HEAD against the working tree, an object is the same under any spelling of its path): 103 PASS -> 361 PASS, 0 that loaded before fail now, 258 more load.
+
+In total 335 files differ from the old names (249 `.C` -> `.lpc`, 83 files of renamed directories, 2 `.H`, 1 `.bak`): the references-driven run (278 moves) and `--dos` (79 more: the other `.C` / `.H` files of those directories and the all-upper-case directory names in them, `daemon/skill/MAHAYANA.C` among them). The code is the same as `sjshwzjqb`'s, and so is the finding: `std/room.lpc` `make_inventory()` now `catch`es `new(file)` (`scripts/lpc_resilient_room.py`), because the NPCs behind the renamed directories exist for the first time and some of them raise in `create()` (the six `d/mojie/npc/*` need a skill `molianspells` this archive does not have); the 11 objects of the load check that still fail (those six, two NPCs whose `carry_object()` item is not in the archive, `d/dntg/yunlou/npc/yg-shaolin.lpc` (its base `yaoguai` is missing), `d/youxia/npc/maihuanu1.lpc` (`init()` twice), `std/weapon/_qin.lpc` (`#include "qin.c"`)) are content gaps. A rescan with `scripts/lpc_warnings.py sjshwzb` is still due.
