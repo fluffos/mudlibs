@@ -469,3 +469,14 @@ re-invoke `enable_player()` on this lib while the object is still
 ## 深度功能测试（§10.7，2026-10-04）— negative range ends
 
 `scripts/lpc_fix_negative_ranges.py`: 5 line(s) in 2 file(s) count a range from the end with `<` (`x[a..-1]` -> `x[a..<1]`, `x[-2..]` -> `x[<2..]`; KB 06 §7.209). In this driver a negative constant end gave `""` / `({ })` and a negative start the whole value, so each of these returned the wrong slice; the compile warning `A negative constant as the second element of arr[x..y]` is gone from the files that compile. Range lvalues (`s[0..-1] = text`, the prepend idiom) are left alone. A paired compile of the changed files at HEAD and in the working tree showed no new error.
+
+## 深度功能测试（§10.7，2026-10-04）— compile-warning and load-failure pass (ported from xkx2001)
+
+`scripts/lpc_warnings.py bmxkx2001`: 3381 distinct diagnostics and 153 files that did not load at the start, 160 diagnostics and 119
+files at the end (8014 load). 1164 files changed. The code is the xkx2001 root's, so the pass is its pass
+(libs/xkx2001/NOTES.md has every class, the typos found through the no-side-effects list and the list of files left alone):
+`lpc_twin_port.py adopt xkx2001 bmxkx2001` carried the fixes of the files whose code is the root's (928 reformatted, 121 spliced, 70 verbatim), then
+`lpc_warnings.py --fix`, `lpc_fix_macro_redef.py`, `lpc_fix_prototype_types.py`, `lpc_name_winner.py` and `lpc_move_decl.py`
+handled the diagnostics that depend on this lib's own files.
+
+The files that do not load are the same ones as in xkx2001 (drafts, pasted logs, the TMI-2 network daemons without headers, half-written wizard work), with the same errors; the `sjsz/`, `sjsz2/`, `sjsz3/` challenge arenas of `d/bwdh/` carry the same `BOARD` macro clash and `void`/`int` prototypes as the rest of the family and are fixed the same way.

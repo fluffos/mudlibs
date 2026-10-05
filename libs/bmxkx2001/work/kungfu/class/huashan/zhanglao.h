@@ -102,7 +102,7 @@ void attempt_apprentice(object ob)
 
 int accept_fight(object ob)
 {
-	object obj, me = this_object();
+	object me = this_object();
 	int my_max_qi = me->query("max_qi");
 
 	if ( me->query("qi")*100 / my_max_qi <= 80 ) {

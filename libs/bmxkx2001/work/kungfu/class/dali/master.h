@@ -1,8 +1,6 @@
 //Cracked by Roath
 void attempt_apprentice(object ob)
 {
-	mapping fam;
-    string dldj;
 
 	if (ob->query("family/family_name")!="大理段家") {
 		command("shake "+ob->query("id"));

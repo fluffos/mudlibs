@@ -1,6 +1,7 @@
 //Cracked by Roath
 // Modified by Apache for Group BWDH
 // sdong, 8/8/1999
+#undef BOARD
 #define BOARD "/clone/board/bwboard"
 int do_attack(string arg);
 int do_stop(string arg);
@@ -66,7 +67,6 @@ void my_destruct(object obj)
 		  int i;
 
 		  object *inv;
-		  string err;
 
 		  if (obj && objectp(obj) ) {
 								inv = all_inventory(obj);
@@ -132,7 +132,7 @@ void finish(object target) {
 	object ob, me, corpse;
 	object board;
 	mapping entryA, entryB;
-	int i, scoreA,scoreB;
+	int scoreA, scoreB;
 
 	 board =  find_object(BOARD);
 	 if (!objectp(board)) {
