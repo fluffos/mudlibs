@@ -14,7 +14,7 @@ The warnings pass of a sibling lib, after the root of its family is done and com
 
 REV is the commit before the root's fix (its tree is the pre-image the siblings are compared with).  Every step's tail
 goes to /tmp/fdtest/fam_SIB.log (the directory is created); the final numbers are printed.  Nothing is committed: read
-`git diff --shortstat -- libs/SIB`, run the load check (/tmp/fdtest/listcheck_chunks.sh style: HEAD vs tree), write the
+`git diff --shortstat -- libs/SIB`, run the load check (scripts/lpc_listcheck.sh over every `.lpc`, then scripts/lpc_load_diff.py: HEAD vs tree), write the
 NOTES.md section, `git add -u libs/SIB`.  One sibling at a time (each scan is a full lpcc boot over every file)."""
 import os
 import re

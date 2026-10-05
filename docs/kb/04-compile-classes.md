@@ -52,7 +52,8 @@ detection.
 - **`tail()`**: reimplement it in LPC. It's fatal if it sits inside
   simul_efun. A *definition* there is the fix for every command that
   calls it at once (`es1_win`/`esI`: `/adm/simul_efun/tail.lpc`, the last
-  1000 bytes from the first whole line, `message()`d to `this_player()`).
+  1000 bytes from the first whole line, `message()`d to `this_player()`). The xkx / Fengyun / ES II archives (93 libs) call it from
+  `cmds/*/tail.lpc` and have `adm/simul_efun/file.lpc`: `scripts/lpc_add_tail.py SLUG...` appends a 10-line `tail()` there.
 - **`message_combatd(msg, me, target)`**: a simul_efun of the original xkx server that 27 archives never shipped
   (`Undefined function message_combatd`; every perform file that calls it fails to compile: `xbtxiii` 133, `shenmo`
   1017, `xkxyb` 84, `xjcq2000` 52 ...). The lib's own `message_vision()` is the same call without the combat channel:

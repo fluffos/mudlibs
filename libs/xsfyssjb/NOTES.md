@@ -159,3 +159,7 @@ The only file that failed here and not in the root was `cmds/wiz/tail.lpc` (no `
 **Wrong-case paths (KB 03 §4.5).** `scripts/lpc_case_paths.py --apply xsfyssjb`: 62 `.C` files renamed to `.lpc`, none of the references needed a rewrite; load check of the
 98 affected objects, HEAD against the working tree: 29 PASS -> 98 PASS, 69 more load, none fewer. What is left is the root's list (`ed.c`-style leftovers, the TMI-2 network daemons
 without headers, drafts).
+
+## 深度功能测试（§10.7，2026-10-05）— room base survives a raising NPC
+
+`scripts/lpc_resilient_room.py --apply`: `make_inventory()` of `std/room.lpc` loads each inventory object as `if (catch(ob = new(file)) || !objectp(ob)) return 0;`. `new()` of a file that is not there returns 0 (the room just lacks that NPC), but `new()` of a file whose `create()` raises (a skill file for `set_skill()` this archive never had, a `carry_object()` item that is not there, a header that never shipped) raised inside the room and the room did not load at all. The wrong-case renames of this lib (the section above) make the NPCs behind them reachable for the first time, so a room that holds one with such a content gap would have gone from "NPC missing" to "room missing"; now it loads without that NPC, as it did before. The room base compiles and loads with the change (HEAD against the working tree). KB 03 §4.5.

@@ -177,3 +177,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 `.H` -> `.h`) and 0 path reference(s) in 0 file(s) rewritten to the new spelling; 0 skipped, 0 ambiguous. Load check of the 10 objects that were renamed, edited or name a renamed path (HEAD against the working tree, an object is the same under any spelling of its path): 4 PASS -> 10 PASS, 0 that loaded before fail now, 6 more load.
 
 6 files moved (6 `.C`); mostly under `d/feitian/ximen.C` (1), `d/japan/path1.C` (1), `d/japan/senlin1.C` (1), `d/japan/senlin2.C` (1). A rescan with `scripts/lpc_warnings.py xyzxyl201412` is still due: the renamed files are compiled for the first time.
+
+## 深度功能测试（§10.7，2026-10-05）— room base survives a raising NPC
+
+`scripts/lpc_resilient_room.py --apply`: `make_inventory()` of `inherit/room/room.lpc` loads each inventory object as `if (catch(ob = new(file)) || !objectp(ob)) return 0;`. `new()` of a file that is not there returns 0 (the room just lacks that NPC), but `new()` of a file whose `create()` raises (a skill file for `set_skill()` this archive never had, a `carry_object()` item that is not there, a header that never shipped) raised inside the room and the room did not load at all. The wrong-case renames of this lib (the section above) make the NPCs behind them reachable for the first time, so a room that holds one with such a content gap would have gone from "NPC missing" to "room missing"; now it loads without that NPC, as it did before. The room base compiles and loads with the change (HEAD against the working tree). KB 03 §4.5.

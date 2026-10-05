@@ -147,8 +147,13 @@ masked) as the driver would, treats a reference that resolves only when case (an
 name, renames every such file and directory to lower case (`.C` -> `.lpc`, `.H` -> `.h`), staging the moves, and rewrites **every** reference
 to a path that moved (the right ones in the old spelling too), changing only the components that were renamed. A target that exists, two
 renames with one target, a reference that two real paths could mean and a non-UTF-8 `.C` file (`--convert` transcodes GB18030) are listed
-and left. `--list` writes the objects to load-check (renamed, edited, naming a renamed path): `listcheck_chunks.sh` on that list, HEAD
+and left. `--list` writes the objects to load-check (renamed, edited, naming a renamed path): `scripts/lpc_listcheck.sh` on that list, HEAD
 against the tree.
+`--dos` also renames what the references cannot show: in every directory that holds an upper-case-extension file or something the first phase renamed, the
+remaining `.C` / `.H` / `.LPC` files, the code files with an all-upper-case stem and the all-upper-case directory names (the skills of the Journey-to-the-West libs are looked up
+as `SKILL_D + name`: `daemon/skill/MAHAYANA.C` is invisible to a scan of literals). **Side effect to plan for:** an NPC that was unreachable behind a wrong-case path exists
+for the first time and may raise in `create()` (a skill file or a `carry_object()` item that this archive never had); the room that holds it then stops loading (`sjshwzjqb`, `sjcs`).
+`scripts/lpc_resilient_room.py SLUG` makes the room base's `make_inventory()` `catch` the `new(file)`, so the room loads without that NPC, as it did before.
 **Detection.** Run the tool without `--apply`; `Cannot #include X` in a scan where a file of another case exists;
 `git ls-files | grep -E '\.(C|H)$'`. After the rename run `scripts/lpc_warnings.py` again: files that never loaded show errors
 of their own. Computed paths (`"/d/" + zone + "/NPC/"`) are invisible to the tool; it prints the old upper-case directory names that

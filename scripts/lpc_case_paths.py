@@ -20,7 +20,7 @@ What this does, per lib (gitlink libs are refused):
   4. skips, and lists, a rename whose target already exists, a name that two renames would give the same target, a
      `.C` file that is not valid UTF-8 (convert it with iconv first), and a reference that two real paths could mean.
 
-Without --apply it prints the plan; --convert also transcodes a GB18030 `.C`/`.H` file it renames (the archives
+--dos extends the renames to the DOS-mangled areas the references do not reach (see below). Without --apply it prints the plan; --convert also transcodes a GB18030 `.C`/`.H` file it renames (the archives
 converted everything else already).  The moves are staged (`git add -A`, retried while another git process holds the index lock); edited files keep their line endings; paths that only some
 other code names (a computed `"/d/" + zone + "/room"`) cannot be seen.  Run scripts/lpc_warnings.py afterwards: files that
 were never loaded can show errors of their own, and the empty old directories are removed only when nothing is in them."""
@@ -38,6 +38,7 @@ from lpc_src import mask  # noqa: E402
 args = sys.argv[1:]
 apply_ = "--apply" in args
 convert_ = "--convert" in args
+dos_ = "--dos" in args
 list_path = None
 if "--list" in args:
     i = args.index("--list")
@@ -104,6 +105,8 @@ def process(slug):
         if stem + ".lpc" in P:
             return stem + ".lpc", True
         if p in D:
+            return p, True
+        if p in P and not p.endswith((".lpc", ".c")):   # a literal that spells `MAP.C` / `X.H` names that very file
             return p, True
         hit = ci_obj.get(stem.lower()) or ci.get(p.lower())
         if hit:
@@ -228,9 +231,40 @@ def process(slug):
         if is_obj and os.path.splitext(real)[1] in (".C", ".c", ".LPC"):
             affected.add(real)
 
+    dos_files = set()
+    if dos_ and affected:
+        # DOS-mangled areas: a directory that holds an upper-case-extension file (`.C`, `.H`, `.LPC`) or something the evidence
+        # phase renamed.  Everything in it that DOS would have upper-cased follows: the `.C` / `.H` / `.LPC` files, the
+        # code files with an all-upper-case stem, and the all-upper-case directory names on the way (the dynamic references --
+        # `set_skill("mahayana")` -> `SKILL_D + "mahayana"` -- are not visible to the scan above).
+        mangled = set()
+        for f in P:
+            if os.path.splitext(f)[1] in (".C", ".H", ".LPC") or f in affected:
+                d = os.path.dirname(f)
+                if d:
+                    mangled.add(d)
+        for f in sorted(P):
+            d = os.path.dirname(f)
+            if d not in mangled:
+                continue
+            base, e = os.path.splitext(os.path.basename(f))
+            if e in (".C", ".H", ".LPC"):
+                affected.add(f)
+                dos_files.add(f)
+            elif e in (".lpc", ".h") and base.isupper() and re.search(r"[A-Z]", base):
+                affected.add(f)
+                dos_files.add(f)
+        for d in sorted(mangled):
+            cs = comps(d)
+            for i, c in enumerate(cs):
+                if c.isupper() and re.search(r"[A-Z]", c):
+                    affected.add("/".join(cs[:i + 1]))
+
     def final_component(prefix_path, comp):
         if prefix_path in P:                      # a file
             base, e = os.path.splitext(comp)
+            if prefix_path in dos_files and not base.isupper():
+                return base + lower_ext(e)        # a DOS-mode file keeps a lower or mixed-case stem
             return base.lower() + lower_ext(e)
         return comp.lower()
 
@@ -314,8 +348,12 @@ def process(slug):
                 break
             if oc[j] != nc[j]:
                 if first and is_obj:
-                    suffix = ".c" if t.endswith(".c") else (".lpc" if t.endswith(".lpc") else "")
-                    out[i] = os.path.splitext(nc[j])[0] + suffix
+                    ext_old = os.path.splitext(oc[j])[1]
+                    if ext_old and t.endswith(ext_old):          # the literal spells the real extension (`MAP.C`)
+                        out[i] = nc[j]
+                    else:
+                        suffix = ".c" if t.endswith(".c") else (".lpc" if t.endswith(".lpc") else "")
+                        out[i] = os.path.splitext(nc[j])[0] + suffix
                 else:
                     out[i] = nc[j]
             first = False

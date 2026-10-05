@@ -225,3 +225,7 @@ definition, 2 `#undef` lines for macros that two headers define (`ROOM`, `STORY_
   `/daemon/gongfu/` (a second, xkx-style skill directory no code of this lib refers to) and 72 use skills that exist nowhere.
 - `inherit F_DEALER;` / `inherit CLUB;` / `BUNCHER` ...: the std objects were never part of the archive. The TMI-2 network daemons under
   `adm/daemons/network/` lack their headers (`uid.h`, `config.h`, `mailer.h` ...). Nothing was written new for any of them.
+
+## 深度功能测试（§10.7，2026-10-05）— room base survives a raising NPC
+
+`scripts/lpc_resilient_room.py --apply`: `make_inventory()` of `std/room.lpc` loads each inventory object as `if (catch(ob = new(file)) || !objectp(ob)) return 0;`. `new()` of a file that is not there returns 0 (the room just lacks that NPC), but `new()` of a file whose `create()` raises (a skill file for `set_skill()` this archive never had, a `carry_object()` item that is not there, a header that never shipped) raised inside the room and the room did not load at all. The wrong-case renames of this lib (the section above) make the NPCs behind them reachable for the first time, so a room that holds one with such a content gap would have gone from "NPC missing" to "room missing"; now it loads without that NPC, as it did before. The room base compiles and loads with the change (HEAD against the working tree). KB 03 §4.5.
