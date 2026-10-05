@@ -518,3 +518,12 @@ tiejiang` 成功（「你向铁匠买下一把长剑」），讨价还价涨了�
    双方「没有办法行拜师之礼」，却不 `delete_temp("pending/apprentice")`。
    本轮 fluffos 不是鬼魂，没现场踩到；补丁形状与 dtsl2 已验证的修法
    相同。
+
+## 深度功能测试（§10.7，2026-10-04）— paths named in another case
+
+The archive comes from a case-insensitive host: files are stored as `BAGUA0.lpc`, `longjing.C`, `d/SHAOLIN/`, the code names them in lower
+case (`__DIR__ "bagua0"`, `"tea/longjing"`, `"/d/shaolin/..."`), so the rooms, NPCs and items behind them could not be loaded (a `.C` file is
+not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply dtslmud`: 4 file(s) renamed to lower case (`.C` -> `.lpc`,
+`.H` -> `.h`) and 0 path reference(s) in 0 file(s) rewritten to the new spelling; 0 skipped, 0 ambiguous. Load check of the 7 objects that were renamed, edited or name a renamed path (HEAD against the working tree, an object is the same under any spelling of its path): 0 PASS -> 5 PASS, 0 that loaded before fail now, 5 more load.
+
+4 files moved (4 `.C`); mostly under `d/emeishan/npc` (2), `d/hangzhou/npc` (1), `d/luoyang/npc` (1). A rescan with `scripts/lpc_warnings.py dtslmud` is still due: the renamed files are compiled for the first time.
