@@ -263,3 +263,27 @@ lpcc 编译扫查的 8 个 FAIL、WASM 实测差异），全部是本仓库自�
 `fluffos/imud` PR #1 is the in-tree `handle_router_read()` missing
 `return`. Pin advanced to `3f303add53`. Do not high-frequency reboot
 this lib (live I3).
+
+## 深度功能测试（§10.7，2026-10-05）— round three: 编译警告
+
+复测原因：本 lib 的上一轮 §10.7（2026-08-27）早于 2026-10-03 的"编译警告即 bug"规则。
+
+**扫描**：`submodule_patch_scratch.py build imud` 建 scratch 树，`lpc_warnings.py imud`
+共 45 条诊断，其中 42 条在 `imud.lpc` 从不 `inherit` 的 I3 扩展模块里（`channel`、
+`emoteto`、`file`、`finger`、`locate`、`oob`、`who` 等，缺宿主 mudlib 的头文件，
+上游自己就没启用，按 KB 02 §2.3 不动）。真正加载的代码里有 3 条：
+- `secure/master/error.lpc`：`error_handler()` 声明了 `userid` 却从不读取；
+- `secure/imud/imud.lpc`：`create()` 声明了 `err` 却从不读取（`catch` 早已挪进 `reconnect()`）；
+- `secure/commands/mudlist.lpc`：`int main()` 的"无匹配"分支是裸 `return;`。
+
+**修复**：上游 PR fluffos/imud#2（三行），本地实测后合并，`rebase_upstreams.py`
+把 pin 推到 `73ae084`。实测：打了补丁的树启动全程驱动输出 0 条编译警告；`mudlist`
+（真实 I3 路由器，192 个 mud）、未知命令兜底 `What?`、`update <path>`、无参数
+`update` 全部照旧；`work/log/log`、`work/log/log_catch` 只有时间戳头，没有运行期错误。
+
+**观察（未修，属设计）**：`mudlist` 保留了 Lima 命令的签名 `main(mixed *arg, mapping flags)`，
+而本 demo 的 `commandHook()` 只传字符串，`main()` 第一段就把字符串参数换成"无参数"。
+所以 `mudlist <pattern>` 的过滤从命令行永远到不了，上面那条 `return;` 分支实际不可达——
+这是上游把 Lima 命令搬进极简 demo 时的取舍，修它等于给 demo 加功能，不在 §10.7 范围内。
+
+每次启动都会真实连公网 I3 路由器，本轮共启动 2 次（修复前 1 次、修复后 1 次）。
