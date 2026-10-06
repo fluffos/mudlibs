@@ -67,6 +67,16 @@ test at least one NPC `command()`.
     swept 2026-10-06 to `protected` in 77 libs after a live hxxtjqb boot
     logged `apply() with insufficient permission ... destruct_me ...
     needs: private, has: hidden` for every coin pile.
+  - Corpus sweep 2026-10-06 (87 files, 64 libs): every *inherited* file
+    (its path resolved from the lib's `inherit` lines and header macros)
+    that `call_out`/`input_to`/`get_char`s one of its own private
+    functions -- `feature/action::eval_function` (37 libs),
+    `feature/team::follow_path`, `d/xueshan/inherit/liquid_content::
+    destruct_me`, `std/index::sort_manual_dirs` (finalrealms `man`,
+    ninetears), wqa rooms, furnace rooms. `protected` is virtual, so a
+    function was changed only when no inheritor of that file defines the
+    same name (none did). A leaf object's call_out to its own private
+    function works and was left alone.
   - Libs: Doing-Lu "hell" lineage, `xkx2001`, `ninetears`'s `refresh2`.
     In `ninetears` the boundary was an `#include`d `.lpc` file, then
     inherited.
