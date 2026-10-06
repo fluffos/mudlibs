@@ -73,6 +73,12 @@ Also apply the WASM standards: §1.3b, §1.3e, and §1.5.
     build|export <slug>` (the scanners need `.lpc` names; export maps them
     back and splits the diff into per-directory patches). The same two
     commands regenerate it when a pin bump breaks a patch.
+  - **Trust the gitlink, not `meta.json`.** About 48 libs (nightmare4,
+    mundoscuro, genesis, arkadia, ...) say `submodule-patch` because an
+    upstream is recorded, but `work/` is plain files tracked here with no
+    `patches/`. They are vendored: edit `work/` directly. The tools check
+    `git ls-files -s libs/<slug>/work` for mode `160000`
+    (`rebase_upstreams.py` skips them as "not a git submodule checkout").
 - **`fluffos-upstream`**: a live `github.com/fluffos/<repo>`. It uses a
   submodule with **empty** `patches/`. The remote itself follows this
   catalog's conventions (`.lpc`, §9-formatted), so land LPC fixes there.
