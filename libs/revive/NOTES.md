@@ -908,3 +908,7 @@ bug**：这个 lineage 的游戏内提示符自带每秒刷新的实时时钟
 ## 深度功能测试（§10.7，2026-10-04）— negative range ends
 
 `scripts/lpc_fix_negative_ranges.py`: 4 line(s) in 1 file(s) count a range from the end with `<` (`x[a..-1]` -> `x[a..<1]`, `x[-2..]` -> `x[<2..]`; KB 06 §7.209). In this driver a negative constant end gave `""` / `({ })` and a negative start the whole value, so each of these returned the wrong slice; the compile warning `A negative constant as the second element of arr[x..y]` is gone from the files that compile. Range lvalues (`s[0..-1] = text`, the prepend idiom) are left alone. A paired compile of the changed files at HEAD and in the working tree showed no new error.
+
+## 深度功能测试（§10.7，2026-10-06）— 编译警告（机械部分）
+
+`scripts/lpc_warnings.py revive --fix`：删 62 处 `#pragma save_binary`，15 个 `nosave` 函数改 `protected`，删 435 个未用局部变量，补 9 处 `varargs`。`lpc_audit_removed_locals.py` 复核 558 个，提示 1 个（`adm/daemons/newsd.lpc` 的 `int time`，后面读的是外部函数 `time()`，不是这个变量）。改动的 216 个 `.lpc` 在只含被跟踪文件的树里 HEAD 与新版各编一次：都是 201 个通过，无差异。启动警告 105 → 2，错误 0（剩下 `natured.lpc` 的 `lt[LT_MON];` 空语句，原档案如此）。实测 `fluffos` 登录、`look`（世外桃源，水笙、狄云在场）、`i`、`quit` 正常。本库未经 §9 格式化。

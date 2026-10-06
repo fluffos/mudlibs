@@ -69,8 +69,6 @@ int test(string st, int year, int month, int day, int hour, mixed para)
 int at_when(int year, int month, int day, int hour, mixed para)
 {
         object pob;
-        int t;
-        mixed *lt;
 
         if (! objectp(pob = previous_object()))
                 return 0;
