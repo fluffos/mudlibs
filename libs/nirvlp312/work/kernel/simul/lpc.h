@@ -1,4 +1,4 @@
-nosave mapping alloc_wl_entry(string name);
+protected mapping alloc_wl_entry(string name);
 varargs void set_timed_flag(string flag,int delay,int mode);
 int test_timed_flag(string flag);
 int clear_timed_flag(string flag);

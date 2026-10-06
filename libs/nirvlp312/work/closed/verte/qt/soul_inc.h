@@ -125,7 +125,6 @@ handle_def_query(string type, string arg)
 int
 process_hook(string cmd)
 {
-     int value_returned;
      qtHooking = 1;
      command(cmd, environment());
      qtHooking = 0;
@@ -147,9 +146,8 @@ process_hook(string cmd)
 int
 qtHook(string arg)
 {
-     string cmd, a_arg, b_arg, cmd_to_do, x;
+     string cmd, a_arg, b_arg, x;
      status  flag;
-     int     num, size;
 
      if(environment()->query_afk_message() &&
         !query_idle(environment()))

@@ -1,4 +1,3 @@
-#pragma verbose_errors
 
 /* Includes */
 #include "/sys/security.h"
