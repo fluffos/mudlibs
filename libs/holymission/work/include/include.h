@@ -39,7 +39,10 @@ varargs mixed move_object(mixed item, mixed dest) {
     // move is that object's (a call from its own shadow reaches it).
     if (victim = query_shadowing(this_object()))
       return victim->move_object(item);
-    return efun::move_object(item);
+    efun::move_object(item);
+    // The onboarding rewrote `move_object(m = clone_object(f), dest)` as
+    // `m = clone_object(f)->move_object(dest)` (241 calls): give back the object.
+    return this_object();
   }
   if (stringp(item))
     item = load_object(item);

@@ -10,7 +10,7 @@
 #define RAN random
 #define HERE present
 #define ME write
-
+
 #define QATT query_attack()
 #define QLVL query_level()
 #define QWIZ query_immortal()
@@ -51,36 +51,36 @@
 #define QGP query_money()
 #define QPSN query_poisoned()
 #define QXP query_exp
-
+
 #define CLONE clone_object
 #define TELL tell_object
 #define MOVE move_object
 #define FIND find_object
 #define DEST destruct
-
+
 #define INVF first_inventory
 #define INVN next_inventory
 #define INVALL all_inventory
-
+
 #define XP add_exp
 #define WGT add_weight
 #define GP add_money
 #define PS add_poison
 #define MP move_player
-
+
 #define RSP restore_spell_points
 #define RHP restore_hit_points
 #define HEAL heal_self
 #define REDHP reduce_hit_points
 #define HIT hit_player
 #define CHNGSKL change_skill
-
+
 #define ATTBY attacked_by
 #define STPWD stop_wielding
 #define CALM stop_fight()
 #define STOP stop_hunter(1)
 #define RUN run_away()
-
+
 #define XX "/players/exos"
 #define XMON "/players/exos/monsters"
 #define XWEP "/players/haplo/guild/weapons"
@@ -94,7 +94,7 @@
 #define XDOC "/players/haplo/guild/docs"
 #define XHRM "/players/exos/harem"
 #define XFRY "/players/exos/faerie"
-
+
 #define TPN TP->QNAME
 #define TPRN TP->QRNAM
 #define TPRO TP->QPRO
@@ -119,16 +119,16 @@
 #define TPMV TP->MP
 #define TPINV TP->QINV
 #define TPSKL TP->get_skill
-
+
 OTHERS(string str, object ob1) {
-   object old, new;
-
-   old=INVF(ENV(ob1));
-   if (!old) return;   
-   while (old) {
-      new=INVN(old);
-      if (living(old) && old!=ob1 && old!=TP) TELL(old,str);
-      old=new;
-   }
-   return;
-}
+  object old, new_;
+
+  old = INVF(ENV(ob1));
+  if (!old) return;
+  while (old) {
+    new_ = INVN(old);
+    if (living(old) && old != ob1 && old != TP) TELL(old, str);
+    old = new_;
+  }
+  return;
+}

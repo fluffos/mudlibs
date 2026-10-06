@@ -133,14 +133,14 @@
 #define TPSKL TP->get_skill
 
 OTHERS(string str, object ob1) {
-   object old, new;
+   object old, new_;
 
    old=INVF(ENV(ob1));
    if (!old) return;   
    while (old) {
-      new=INVN(old);
+      new_=INVN(old);
       if (living(old) && old!=ob1 && old!=TP) TELL(old,str);
-      old=new;
+      old=new_;
    }
    return;
 }

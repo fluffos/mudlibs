@@ -696,3 +696,19 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 10. **`players/haplo/defs.h`** 里的死函数 `OTHERS()` 用 `new` 当变量名，且有 `old!=ob1 = TP` 这样的非法赋值，包含它的 50 个文件（包括教堂东边路北的赌场）全部编译失败；变量改名、条件改为 `old != ob1 && old != TP` 后 50 个全部通过。
 11. 实测（只含被跟踪文件的树）：新角色注册、选性别、`choose human`、教堂、`score`、`s`/`e`/`n` 走动、重连“Throw the other copy out”、`quit` 保存都正常。§9 格式化只动了本次改过的文件，其中 24 个巫师灵魂此前因为 `#'` 无法解析，这次第一次被格式化（格式化器只在词法序列等价时写入）；`secure/master.lpc` 仍不格式化（盲点 3）。
 12. 全库批量编译：19346 个通过，4602 个失败。最大几类：`Cannot #include`（918，多为巫师目录间缺失的头文件）、继承的文件不存在（770）、`new` 作变量名（343，包括 `obj/soul`）、参数个数不对（384）、`in`/`float` 等作变量名（`room/shop`、`room/yard`）。下一步处理核心目录里的这几类。
+
+## 深度功能测试（§10.7，2026-10-06，续）— 全库编译 19346 → 20365，邮件、法术、商店
+
+接上一节，按全库批量编译的错误种类继续修：
+
+1. **保留字当名字（KB 04）。** `class`（102 个文件）、`function`（98）、`new`（34）、`in`（26）作变量名，用 `scripts/lpc_rename_ident.py` 改为 `class_`/`function_`/`new_`/`in_`（在出错的每个文件里改，基类和子类一致）。作函数名的另改：`in()` → `do_in()`（连同 `add_action` 的函数名参数；silas 的护身符帮助按主题名调用，`help in` 映射到 `in_()`），布告栏的 `new()` → `new_note()`，`cremate` 的 `new()` 与它的 `call_out`，`ls`/`saber` 的 `class()` → `do_class()`；两个农夫的 `hoe->class(11)` 改为 `set_class(11)`（武器没有 `class()`，同一区域其他 NPC 都用 `set_class`）。
+2. **2.4.5 式 `add_action(fn); add_verb(v);`（KB 06 §7.174）。** 732 处、260 个文件合成 `add_action(fn, v)`，`add_xverb(v)` 合成 `add_action(fn, v, 1)`（前缀匹配）。
+3. **两参数 `command(str, ob)`。** skeeve 的 NPC 装备宏（`WEAPON`/`ARMOUR`，十几个 NPC）和两个 `climb.h` 改为 `ob->force_me(str)`。
+4. **法术系统。** `spells/master`、`abilities/master`、`masters/skills` 的排序函数把法术名（字符串）声明为 `object` 并用 `<` 比较，FluffOS 编译时拒绝，于是所有法术文件都载入失败；参数改为 `mixed`，返回 -1/0/1（LDMud 的 `sort_array` 在返回真时交换，保持原来的降序）。德鲁伊法术包含的 `/players/sourcer/guild/druid.h` 不在档案里（sourcer 的目录被移到 `players/mangla/gal/sourcer/`，`guild/` 没有留下）：10 个法术不用它，注释掉包含后编译通过；`flameblade` 改包含移走后的 `define.h`；`heat_armor`、`flame_blade`、`tree_grow` 要用它定义的法力消耗与路径，无法复原，记为缺失。
+5. **邮件（第一次可用）。** `obj/mail_reader` 包含的 `/sys/sheriffs.h` 在档案里是空文件，改用已有的占位 `sys/include/sys_sheriffs.h`（`SHERIFFS ({ })`）；抄送处理里的 LDMud `lambda` 改为 `(: strlen($1) > 0 :)`。实测：在邮局给自己写信、收到新邮件提示、`from` 列出、`read` 进入阅读菜单。
+6. **`room/store`**（村庄商店的库房）在一个 `if` 块里声明 `torch`，下一个块又用它；在第二块里另行声明。实测商店 `list` 列出火柴与火把。
+7. **移动返回值。** 移植时把 `move_object(m = clone_object(f), dest)` 改写成 `m = clone_object(f)->move_object(dest)`（241 处，多为 NPC 生成器，如 moonchild 森林生物、哥布林、侏儒），`m` 得到 0，随后的 `m->set_name()` 出错。全局包含文件里的 `move_object` 现在返回被移动的对象。
+8. **whisky 的 `obj/std_shadow`、`std_potion`、`std_scroll`。** `players/whisky/obj/` 整个不在档案里，而核心 `/obj/` 下有同名文件（`std_shadow` 的说明正是 whisky 的“standardshadow”，接口 `start_shadow(player, time, id)` 与各公会影子的调用一致）；84 个继承它们的文件改为继承 `/obj/` 下的版本后 81 个编译通过。whisky 的其他物品（卷轴、药水、`std_dragon` 等，几十处引用）没有可靠的替代，记为缺失；引用它们的随机刷新（如 tatsuo 洞穴的真菌三分之一几率带 `bless_potion`）会让房间偶尔载入失败。
+9. **`players/haplo/defs.h`、`obj/bull_board` 等见上。** `room/village/` 是另一个未完成的村庄（引用不存在的 `street9`、`path.h`），没有处理；`qclxxiv`、`arthur`、`chomp`、`silver` 等退役巫师目录被搬到 `players/mangla/gal/` 或 `players/archive/` 下，代码仍用旧绝对路径（`Cannot #include /players/qclxxiv/myroom.h` 等约 1200 处），属原 MUD 退役内容，没有改。
+10. **玩家进出房间时别人看到 “0 arrives.”。** 玩家的 `move_player()` 用 `TName`（`this_object()->query_name_true()`），而 `doc/lib/player.lpc` 不继承 living，没有这个函数；按 living 的定义补上。双客户端实测：现在看到 “Zzholyb arrives.”。同样缺少的还有 `query_level`、`attack`、`run_away`、`add_hunted`、`query_noshouts`、`query_earmuff_level`、`queryenv`、`query_testchar`：玩家心跳里的 `this_object()->attack()` 因此永远返回 0。原档案的 `doc/lib/player.c` 使用 living 的变量却不声明它们，说明原来是与 living 一起编译的；把玩家改回继承 living 是下一步的单独工作。
+11. 全库批量编译：20365 个通过（上一节 19346），3583 个失败；第一次通过、这次失败的 34 个都是载入时的随机刷新碰到缺失文件（见 8）。本次改过的文件 §9 格式化，`secure/master.lpc` 除外。

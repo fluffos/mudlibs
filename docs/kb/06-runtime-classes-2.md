@@ -1201,5 +1201,8 @@ receives every `call_other` to the object it shadows. **Fix:** `varargs mixed mo
 argument moves this object; two forward to the item; inside a shadow (`query_shadowing(this_object())`) forward to the
 shadowed object (a call from its own shadow reaches it). **Detection:** count calls with a top-level comma plus the
 `#define \w+ move_object` aliases.
+The same onboarding rewrote `move_object(m = clone_object(f), dest)` as `m = clone_object(f)->move_object(dest)` (241 calls,
+most NPC spawners): `m` got the efun's 0 and the next `m->set_name()` failed. The shim returns the moved object; check the
+rewrite against raw (`grep -rn '= *clone_object([^;]*)->move_object('`).
 
 
