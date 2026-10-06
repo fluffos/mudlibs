@@ -7,7 +7,7 @@ class FollowerClass {
   int lost;
 }
 
-nosave void create();
+protected void create();
 object *AddFollower(object follower);
 object *RemoveFollower(object follower);
 object *GetFollowers();

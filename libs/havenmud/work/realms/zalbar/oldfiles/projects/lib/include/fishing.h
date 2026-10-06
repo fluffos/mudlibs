@@ -1,15 +1,15 @@
 #ifndef l_fishing_h
 #define l_fishing_h
 
-nosave void create();
-nosave void init();
-nosave void heart_beat();
+protected void create();
+protected void init();
+protected void heart_beat();
 
 mixed CanStop(object who, string str);
 mixed CanCast(object who, string str);
 
 mixed eventCast(object who, object pole, string str);
-nosave void eventCatch(object who, string fish, object pole);
+void eventCatch(object who, string fish, object pole);
 mixed eventStop(object who, string str);
 
 int SetChance(int x);

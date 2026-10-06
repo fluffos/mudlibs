@@ -14,10 +14,10 @@ class page_file {
 }
 
 varargs mixed eventPage(mixed val, string msg_class, function f, mixed args...);
-nosave void Page(class page_file file);
-nosave void cmdPage(string str, class page_file file);
-varargs nosave private void RazzleDazzle(mixed args...);
-nosave private string GetPagerPrompt(class page_file file);
+protected void Page(class page_file file);
+protected void cmdPage(string str, class page_file file);
+varargs private void RazzleDazzle(mixed args...);
+private string GetPagerPrompt(class page_file file);
 string GetHelp(string str);
 /* pure virtual */ varargs int eventPrint(string msg, mixed arg2, mixed arg3);
 /* pure virtual */ int *GetScreen();

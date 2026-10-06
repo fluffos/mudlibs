@@ -9,8 +9,8 @@ class GuildClass {
   string skill;
 }
 
-nosave void create();
-nosave void init();
+protected void create();
+protected void init();
 
 mixed CanJoin(object ob);
 string GetAffectLong(object ob);

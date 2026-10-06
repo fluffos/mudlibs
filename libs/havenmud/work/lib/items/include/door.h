@@ -10,7 +10,7 @@ class door_side {
   object *Rooms;
 }
 
-nosave void create();
+protected void create();
 
 mixed CanLock(object who, string id);
 mixed CanUnlock(object who, string id);

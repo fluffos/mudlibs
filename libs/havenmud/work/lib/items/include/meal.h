@@ -1,12 +1,12 @@
 #ifndef l_meal_h
 #define l_meal_h
 
-nosave void create();
+protected void create();
 mixed direct_drink_obj();
 mixed direct_drink_from_obj();
 mixed direct_eat_obj();
 
-nosave void eventDecay();
+protected void eventDecay();
 int SetDecayTime(int x);
 int GetDecayTime();
 mixed eventDrink(object who);

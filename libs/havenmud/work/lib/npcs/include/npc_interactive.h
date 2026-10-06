@@ -1,7 +1,7 @@
 #ifndef l_interactive_h
 #define l_interactive_h
 
-nosave void create();
+protected void create();
 int inventory_accessible();
 int inventory_visible();
 

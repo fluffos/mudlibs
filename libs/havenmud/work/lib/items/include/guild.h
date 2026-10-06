@@ -10,8 +10,8 @@ class GuildClass {
   int MagicGuild;
 }
 
-nosave void create();
-nosave void init();
+protected void create();
+protected void init();
 
 mixed CanJoin(object ob);
 string SetLeader(string str);

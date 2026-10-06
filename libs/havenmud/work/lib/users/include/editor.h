@@ -2,6 +2,6 @@
 #define __EDITOR_H__
 
 varargs void eventEdit(string file, function callback);
-nosave string process_input(string cmd);
+protected string process_input(string cmd);
 
 #endif /* __EDITOR_H__ */

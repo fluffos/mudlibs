@@ -1,8 +1,8 @@
 #ifndef __trainer_h__
 #define __trainer_h__
 
-nosave void create();
-nosave void init();
+protected void create();
+protected void init();
 
 mixed AddTrainingSkills(string);
 mixed RemoveTrainingSkills(string);

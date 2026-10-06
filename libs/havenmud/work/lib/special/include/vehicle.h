@@ -56,6 +56,6 @@ mixed CanPilot(object, mixed);
 varargs mixed CanHyperjump(object, string, string, string);
 varargs mixed CanLaunchWeapons(object, object, string);
 mixed CanRepair(object, string);
-nosave mixed *AddSave(mixed *vars);
+mixed *AddSave(mixed *vars);
 string SetUniqueVehicleId();
 string GetUniqueVehicleId();

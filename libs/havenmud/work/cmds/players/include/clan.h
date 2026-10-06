@@ -9,8 +9,8 @@ class ClanClass {
   string skill;
 }
 
-nosave void create();
-nosave void init();
+protected void create();
+protected void init();
 
 
 

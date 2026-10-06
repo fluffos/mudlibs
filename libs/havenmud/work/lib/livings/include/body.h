@@ -1,8 +1,8 @@
 #ifndef l_body_h
 #define l_body_h
 
-nosave void create();
-nosave void heart_beat();
+protected void create();
+protected void heart_beat();
 void restart_heart();
 
 int CanFly();

@@ -1,13 +1,13 @@
 #ifndef __EVENTS_H__
 #define __EVENTS_H__
 
-nosave void create();
-varargs nosave int eventSave(int ung);
+protected void create();
+varargs protected int eventSave(int ung);
 varargs void eventReboot(int x, int skip_backup);
-nosave void eventAnnounceReboot(int x, int skip_backup);
+protected void eventAnnounceReboot(int x, int skip_backup);
 void eventShutdown(int skip_backup);
-nosave void Shutdown(int skip_backup);
-nosave void eventPollEvents();
+protected void Shutdown(int skip_backup);
+protected void eventPollEvents();
 
 int SetRebootInterval(int x);
 int GetRebootInterval();

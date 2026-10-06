@@ -11,8 +11,8 @@
 
 private int check_security(object who);
 private int GroupExists(string group);
-private nosave void eventLoadGroups();
-private nosave void eventLoadGroup(string name);
+private void eventLoadGroups();
+private void eventLoadGroup(string name);
 nomask string *GetAllowedGroupList(object who);
 private int sort_imm_groups(string group1, string group2);
 private mixed *categorize_imm_groups(string *groups);

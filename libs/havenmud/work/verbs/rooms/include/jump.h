@@ -1,7 +1,7 @@
 #ifndef l_jump_h
 #define l_jump_h
 
-nosave void create();
+protected void create();
 
 mixed can_jump_word_obj();
 mixed can_jump_word_word_obj();

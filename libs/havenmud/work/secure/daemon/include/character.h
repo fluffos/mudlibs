@@ -1,7 +1,7 @@
 #ifndef l_character_h
 #define l_character_h
 
-nosave void create();
+protected void create();
 
 mixed eventConnect(string who);
 mixed eventLink(string primary, string secondary, string email);

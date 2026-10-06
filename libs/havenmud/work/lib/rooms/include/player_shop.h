@@ -5,7 +5,7 @@ string GetOwner();
 string SetCurrentBidder(string);
 string GetCurrentBidder();
 mixed SetKiller(mixed);
-nosave void LoadInventory();
+protected void LoadInventory();
 mixed GetKiller();
 mapping SetSaleInventory(mapping);
 mapping GetSaleInventory();

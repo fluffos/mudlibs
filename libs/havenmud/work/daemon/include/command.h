@@ -1,7 +1,7 @@
 #ifndef __COMMAND_H__
 #define __COMMAND_H__
 
-nosave void create();
+protected void create();
 void eventRehash(mixed paths);
 string GetCommand(string cmd, string *path);
 varargs string *GetCommands(string path);

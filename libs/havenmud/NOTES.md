@@ -810,3 +810,11 @@ character back to the host. Do not loop-reboot (I3).
 `secure/daemon/master.lpc` 的 `compile_object()` 用 `else if` 先建 `players` 目录、再建字母目录：父目录不存在时只建父目录，这位玩家第一次存档（设密码时）打开 `players/<字母>/<名字>.o.tmp` 失败。git 不跟踪这个目录下的文件，全新检出与网页版每位访客都会遇到。第二个 `else if` 改为 `if`（与 dsI 相同）。nightmare4 上用只含被跟踪文件的树实测注册→重登通过；本库主控编译通过。
 另：`/secure/daemon/remote`（远程创作者协议）从预载中注释掉。它按 Foundation II 的旧套接字接口写成，本库的 `server.lpc` 接口不同，每次启动编译失败；协议还需要每位创作者的 `~/adm/remote` 对象，本档案没有。与 dsI、dsII、nightmare4 及 fluffos 组织的 Dead Souls 上游相同。
 另：`lib/verbs/jump.lpc` 的 `GetJumps()` 只写了 `Jumps;`，永远返回 0，补上 `return`（与 nightmare4 的 `lib/events/jump.lpc` 同一处）。
+
+## 深度功能测试（§10.7，2026-10-05）— 编译警告（机械部分）、新角色邮箱存档失败
+
+1. **新角色的邮箱存档失败。** `secure/daemon/options.lpc` 的 `assure_box_exists()` 只建 `postal/<字母>` 与 `postal/<字母>/<名字>`，不建 `DIR_POSTAL`（`secure/save/postal`）本身；git 不跟踪这个目录下的任何文件，所以全新检出与网页版里它不存在，每个新角色进入游戏时 `Could not open /secure/save/postal/q/qahaven/postalrc.o.tmp for a save`。先建 `DIR_POSTAL` 再建下层。nightmare4、dsI、dsII、foundation2 在这个目录下有被跟踪的文件，不受影响。
+2. 编译警告（机械部分，KB 04 §6.10）：`scripts/lpc_warnings.py havenmud --fix`，12535 个 `nosave` 函数改 `protected`（被别处按名调用的 244 个保持 public）、删 562 个未用局部变量、补 173 处 `varargs`、75 处缺返回值的 `return;`、3 处无效转义；`lpc_audit_removed_locals.py` 复核 719 个被删声明，0 个需要处理。§9 格式化只动了 6 个文件。启动无错误；剩下的警告是结构性的：`RadiantLight`（2635）、`CommandFail`（2418）等由同一 mixin 经两条路径继承造成，与 nightmare4 同源，但本库的房间和 `worn_storage` 真的会用到容器那份光亮变量，不能照搬 nightmare4 的做法，留作下一步单独处理。
+3. 用只含被跟踪文件的树（`git archive` + 本次改动）新建角色 `qahaven`（人类、Haven）：天空房间、`score`、`inventory`、`smell`、`who`、`quit` 正常，驱动输出没有权限拒绝。单打 `down` 不是命令（本库默认别名只有 `d`/`u` 等缩写，`go down` 可用并提示先读新手书），属设计。
+4. 编译不过的文件多为档案残留：巫师个人目录里过时的区域副本（如 `realms/alessandra/malveillant` 引用已搬到 `domains/havenwood` 的 `../mal.h`）、`std/tower`（另一个 mudlib 的区域，引用本库没有的 `mudlib.h`/`types.h`）、`domains/averath/oldareas`。
+

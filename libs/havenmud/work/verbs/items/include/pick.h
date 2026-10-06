@@ -1,7 +1,7 @@
 #ifndef l_pick_h
 #define l_pick_h
 
-nosave void create();
+protected void create();
 
 mixed can_pick_str_on_obj(string str);
 mixed can_pick_str_on_obj_with_obj(string str);
