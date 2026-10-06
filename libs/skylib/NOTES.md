@@ -816,3 +816,7 @@ Correction, same day: the first pass also emptied five of the demonstration file
 compiler message), so the "107 -> 7" above counted their warnings as fixed. They are back as they were, and
 `scripts/lpc_warnings.py` skips `help_topics/error_messages/` by default. Outside those files the scan went from 267
 distinct diagnostics (94 warnings) to 173 (0 warnings, the remaining ones are errors in files that do not compile).
+
+## 深度功能测试（§10.7，2026-10-05）— 主控 domain_file("/")
+
+驱动的 mudlib_stats 包在主控载入时调用一次 `domain_file("/")`，要求返回字符串。本库 `secure/master/creator_file.lpc` 的 `domain_file()` 在 `creator_file()` 没有答案时返回 0，"/" 正是这种情况，所以每次启动都打印 `domain_file() in the master file does not work, using bb_ui as fallback` 一行，网页版每位访客的终端里都看得到（`author_file(<主控文件>)` 本来就返回 root uid，不报警）。现在 `domain_file()` 对 "/" 直接返回 `get_bb_uid()`，正是驱动缺省时用的值。其他路径不变：创作者的 `ls` 和 ftpd 直接调用 `master()->domain_file()`，返回 0 时显示 "Root"，所以没有把 0 一律改成字符串（KB 06 §7.222）。用 `lpcc config.fluffos /nonexistent.lpc` 前后对比，主控载入段只少了这一行。
