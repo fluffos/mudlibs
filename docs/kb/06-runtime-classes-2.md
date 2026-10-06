@@ -770,7 +770,9 @@ warnings carefully (`lplib8`).
 
 ### 7.198 No `valid_shadow()` apply means all `shadow()` calls are denied
 Ghosts fail and `die()` loops. Add `int valid_shadow(object ob){return 1;}`
-(`lplib8`).
+(`lplib8`). An LDMud-era master may carry the old name `query_allow_shadow()`
+(holymission): have `valid_shadow()` return it. Shadows that start working can
+expose code that moves a shadowed object (§7.231).
 
 ### 7.199 `std/money.lpc`'s `query_autoload()` commented out
 Every `quit` drops the player's money on the floor. Uncomment it
@@ -1167,4 +1169,37 @@ argument, so `if (arg) return;` code re-runs its setup each cycle (harmless wher
 **Fix:** that same bridge `create()` in every core standalone file defining `reset()` and no `create()` (113 in questmud, generated
 list; leave out wizard dirs, backups, and anything whose reset needs a player). **Detection:** clone a weapon/item and call `short()`
 in an lpcc probe; a daemon's `reset()`-initialized array reads 0.
+A root base that defines no `reset()` of its own (holymission `obj/treasure`: every subclass sets itself up in `reset(arg)`)
+needs the bridge too; a scan for "defines reset, lacks create" misses it. Resolve per base: walk each file's inherit chain and
+flag the root that has no `create()` calling `reset`.
+
+### 7.229 LDMud compatibility sefuns with the wrong signature (holymission, 2026-10-06)
+
+**Symptom:** every `member()` call errors (`Bad argument 1/2 to member_array()`): banks, pubs, signposts, doors, the mage soul's
+command hook (`member(verb, '.') != -1` on every command). `extract(name, 0, 0)` returns the whole name instead of its initial.
+**Cause:** the onboarding wrote the sefuns from memory: `member(item, container)` (LDMud is `member(container, item)`, returning
+0/1 for a mapping and the index or -1 for an array or string), and `extract()` treated an explicit end of 0 as "to the end".
+**Fix:** match the original efun (`undefinedp(end)` tells an omitted argument from 0). **Detection:** an lpcc probe calling each
+compat sefun with the original's documented cases; tally the call sites' argument shapes (`grep -rhoP "member\s*\([^,]{1,40},"`).
+
+### 7.230 LDMud `set_modify_command()` → FluffOS `process_input()` (holymission, 2026-10-06)
+
+**Symptom:** `n`/`s`/`e` say "What?" while `north` works; aliases and `!` history do nothing. **Cause:** the player's
+`modify_command()` (expander: aliases, history, the master's `modify_command_global` direction table) was registered with
+`set_modify_command()`, stubbed as a no-op on the claim that FluffOS has no such hook. FluffOS calls `process_input(string)` on
+the interactive object and uses a returned string in place of the typed line. **Fix:**
+`string process_input(string str) { return modify_command(str); }` beside `modify_command()`. **Detection:** a no-op
+`set_modify_command` sefun; a master table mapping `"n": "north"`.
+
+### 7.231 LDMud two-argument `move_object(item, dest)` behind a one-argument shim (holymission, 2026-10-06)
+
+**Symptom:** `Can't move object inside itself` (a castle moving to the quest room), later `Can't move an object that is
+shadowing`. **Cause:** a global-include `mixed move_object(mixed dest)` lfun stood in for the 1400 rewritten call sites, but
+~100 calls and the `#define MOVE move_object` / `MO` macros still pass `(item, dest)`; untyped callers compile, the extra
+argument is dropped and the caller moves itself. Forwarding `item->move_object(dest)` then hits the item's shadow, which
+receives every `call_other` to the object it shadows. **Fix:** `varargs mixed move_object(mixed item, mixed dest)`: one
+argument moves this object; two forward to the item; inside a shadow (`query_shadowing(this_object())`) forward to the
+shadowed object (a call from its own shadow reaches it). **Detection:** count calls with a top-level comma plus the
+`#define \w+ move_object` aliases.
+
 

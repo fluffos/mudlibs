@@ -28,8 +28,24 @@
 // efun when the target has none (a confirmed silent-failure class, see
 // AGENTS.md). Defining it once here, instead of on every base class
 // individually, guarantees every single object in the mudlib has one.
-mixed move_object(mixed dest) {
-  return efun::move_object(dest);
+// The two-argument form survives in ~100 calls and in the MOVE/MO macros
+// (`#define MOVE move_object`, include/defs.h and many wizard headers):
+// move_object(item, dest) moves item, not the caller.
+varargs mixed move_object(mixed item, mixed dest) {
+  object victim;
+
+  if (undefinedp(dest)) {
+    // A shadow receives the calls meant for the object it shadows; the
+    // move is that object's (a call from its own shadow reaches it).
+    if (victim = query_shadowing(this_object()))
+      return victim->move_object(item);
+    return efun::move_object(item);
+  }
+  if (stringp(item))
+    item = load_object(item);
+  if (item != this_object())
+    return item->move_object(dest);
+  return move_object(dest);
 }
 
 // Driver-compat shim, same reasoning as move_object() above: this

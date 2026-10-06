@@ -1,4 +1,4 @@
- /*island defines */
+/*island defines */
 #define ISLPATH "/players/haplo/island/"
 #define INVF first_inventory
 #define INVN next_inventory
@@ -19,14 +19,14 @@
 
 #define PKPATH "/players/haplo/pk/
 
- OTHERS(string str, object ob1) {
-    object old, new;
-    old=INVF(ENV(ob1));
-   if (!old) return;
-    while (old) {
-    new=INVN(old);
-    if (living(old) && old!=ob1 = TP) TELL(old,str);
-    old=new;
-    }
-    return;
-    }
+OTHERS(string str, object ob1) {
+  object old, nxt;
+  old = INVF(ENV(ob1));
+  if (!old) return;
+  while (old) {
+    nxt = INVN(old);
+    if (living(old) && old != ob1 && old != TP) TELL(old, str);
+    old = nxt;
+  }
+  return;
+}

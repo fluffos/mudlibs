@@ -224,6 +224,14 @@ adds before committing: tally the new non-ASCII characters per file, and revert 
 spaces `A1A1` in ASCII art came out as `¡¡`). For lines the script keeps because they were edited, a CJK character whose
 GB18030 second byte is ASCII maps back to `cp1252(first byte)` plus that byte (`抯` -> `’s`). cp437 block art in old letters stays.
 
+### `\` + CR CR LF: a doubled DOS conversion ends macros and strings early (holymission, 2026-10-06)
+
+**Symptom:** a multi-line `#define` stops at its first line (`syntax error, unexpected L_IF` in the header that uses it), and
+a `"...\` string continuation keeps a CR and a hard line break mid-description. **Cause:** the archive went through CRLF
+conversion twice (`\r\r\n`); the lexer joins `\` + `\r\n` but takes `\` + `\r` as an escape. **Fix:** drop the extra CRs
+after an odd run of backslashes, outside `@`/`@@` text blocks (ASCII art there ends in `\` on purpose). **Detection:**
+`grep -rlP '\\\r+\r\n'`; 170 files in holymission; the Chinese hits (help.h in five xyj/sjpl libs) sit inside `/* */`.
+
 ### LDMud save files: multi-value and width-0 mappings (questmud, 2026-10-05)
 
 `([k:v1;v2;v3])` (wide), `(["a","b",])` (width 0, a key set) and `([:5])` (empty, width 5) do not parse in FluffOS, so a player

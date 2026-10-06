@@ -679,3 +679,20 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 ## 深度功能测试（§10.7，2026-10-05）— 压缩存档
 
 `players/mangla/gal/sourcer/default/start.o.gz` 改为明文 `start.o`（网页版驱动没有 zlib，读不了 `.o.gz`；KB 01）。空文件 `players/moonchild/gquest/bastard.o.gz` 不是 gzip，保持原样。
+
+## 深度功能测试（§10.7，2026-10-06）— LDMud 兼容层：member()、影子、载入时 reset、命令缩写、move_object
+
+全库 `lpcc --batch` 编译与启动检查发现，本库按 MudOS 移植时补的 LDMud 兼容层有几处与原语义不符，影响整片功能：
+
+1. **`member()` 参数顺序反了（KB 06 §7.229）。** 模拟外部函数写成 `member(item, container)`，而全部约 230 处调用都是 LDMud 的 `member(container, item)`，于是每次调用都报 `Bad argument 1/2 to member_array()`：银行、酒馆、路标、门、法师公会的命令钩子（每条命令都调用 `member(verb, '.')`）全部出错。改为 LDMud 语义：映射返回 0/1，数组和字符串返回下标或 -1。
+2. **`extract(s, 0, 0)` 返回整串。** 兼容函数把显式的 0 当作“到结尾”，而 16 处调用（包括 udp 主控的封禁与存档路径）用它取首字母。改用 `undefinedp(end)` 区分省略与 0。
+3. **所有 `shadow()` 都被拒绝（KB 06 §7.198）。** 主控只有旧名 `query_allow_shadow()`，没有 FluffOS 询问的 `valid_shadow()`，驱动在缺少它时一律拒绝；公会的树皮术、火盾、忍者、窃贼等影子效果从未生效。补 `valid_shadow()` 返回 `query_allow_shadow()`；另补 `unshadow()` 模拟外部函数（`remove_shadow(previous_object())`，37 处调用）。
+4. **载入时不执行 `reset(0)`（KB 06 §7.228）。** `obj/treasure`、`obj/thing`、`obj/container`、`obj/food`、`boards/board`、`spells/spell` 等基类没有 `create()`，子类都在 `reset(arg)` 里设置自己，所以新克隆的火炬、背包、报纸、法杖等没有短描述（看不见），要等第一次定时重置（约 30 分钟）；十个公会的灵魂也是这样，克隆出来没有初始化。给 109 个独立文件（核心目录与十个公会目录，`secure/` 下的备用副本除外）补 `create() { call_other(this_object(), "reset", 0); }`。其中 `obj/treasure` 本身没有 `reset()`，按“定义 reset 却没有 create”扫描会漏掉，要沿继承链找根基类。补完后 `obj/explore_xp`、`tools/filetool`、`sargon/guild/obj/mantle` 在无玩家的批量编译里载入失败，是因为它们的 reset 需要 `this_player()`，游戏里克隆时总有玩家，与 LDMud 相同。
+5. **方向缩写、别名、历史从未生效（KB 06 §7.230）。** 玩家的 `modify_command()`（obj/expander：别名、历史、主控 `modify_command_global` 的 n/s/e 方向表）原本靠 `set_modify_command()` 注册，移植时把它写成空函数并注明 FluffOS 没有此类钩子；实际上 FluffOS 调用交互对象的 `process_input()`。在 expander 里补 `process_input()` 转给 `modify_command()`。实测 `s`、`n`、`e` 可以走动。
+6. **两参数 `move_object(item, dest)`（KB 06 §7.231）。** 全局包含文件里的单参数 `move_object(dest)` 替代了约 1400 处改写，但还有约 100 处调用和 `#define MOVE move_object`/`MO` 宏（`include/defs.h` 与许多巫师头文件）传两个参数，多出的参数被丢掉，调用者把自己移走：`players/matt/castle` 报 `Can't move object inside itself`。改为可变参数：一个参数移动自己，两个参数转给 item；在影子里转给被影子的对象（影子会接到对被影子对象的所有调用，否则移动 Will 这个带隐形侦测影子的 NPC 时会移动影子本身）。
+7. **`\` 后接 `\r\r\n`（KB 03）。** 档案被两次转换为 DOS 换行，170 个文件里多行 `#define` 在第一行就结束（`players/redsexy/guild/functions.h` 让召唤师灵魂编译失败），`"...\` 字符串续行留下 CR 和硬换行。在 `@` 文本块之外，奇数个反斜杠后的多余 CR 删掉；这 167 个 `.lpc` 全部编译通过（之前两个失败）。
+8. **启动时的编译错误 27 → 0。** LDMud 闭包 `#'call_out` → `(: call_out :)`，`sort_array(a, #'>)` → `sort_array(a, 1)`（LDMud 的 `#'>` 是升序），`#'fn` → `(: fn :)`，21 个文件，其中 14 个由失败变为通过（含 `std/mapping_book`、德鲁伊以外的多个公会灵魂）；含 `lambda()` 的巫师工具没有改。德鲁伊灵魂（`meecham`）的宽映射改为 `([ 键: ({ 冷却, 下次时间 }) ])`，`times[spell, 1]` → `times[spell][1]`。`saffrin` 的 `oldstart`（法师公会房间继承它）把变量 `new` 改名。`cloakspells` 包含的 `.c` 文件已改名为 `.lpc`。`whisky/genesis/sys/` 不在档案里，`filter_live.h`、`break_string.h` 从 darastor 公会的同名副本恢复（darastor 的野蛮人公会照搬自 whisky 的武僧公会），whisky 的 31 个文件由 0 个通过变为 20 个。吟游诗人灵魂包含的 `guild/bin/sing.h`（连同整个 `bin/` 目录）不在档案里，灵魂里没有代码调用它，注释掉这条包含后灵魂可以编译、施法可用，唱歌功能缺失。`ted/castle` 的 2.4.5 式 `add_action("north"); add_verb("north");` 改为两参数；`tinman` 工作室自定义的 `filter()` 改名。
+9. **任务表。** `room/quest_room` 依次调用 22 个任务主人的 `make_quest()`，`map_array` 遇到第一个出错的就整个中止，后面的任务都没注册。`matt` 的城堡（家目录 `guild/rooms/` 不在档案里）在最后移回家时出错；sherman、pretzel、patience 的城堡不在档案里。每个主人改用 `catch()`，任务数由 6 个变为 26 个。
+10. **`players/haplo/defs.h`** 里的死函数 `OTHERS()` 用 `new` 当变量名，且有 `old!=ob1 = TP` 这样的非法赋值，包含它的 50 个文件（包括教堂东边路北的赌场）全部编译失败；变量改名、条件改为 `old != ob1 && old != TP` 后 50 个全部通过。
+11. 实测（只含被跟踪文件的树）：新角色注册、选性别、`choose human`、教堂、`score`、`s`/`e`/`n` 走动、重连“Throw the other copy out”、`quit` 保存都正常。§9 格式化只动了本次改过的文件，其中 24 个巫师灵魂此前因为 `#'` 无法解析，这次第一次被格式化（格式化器只在词法序列等价时写入）；`secure/master.lpc` 仍不格式化（盲点 3）。
+12. 全库批量编译：19346 个通过，4602 个失败。最大几类：`Cannot #include`（918，多为巫师目录间缺失的头文件）、继承的文件不存在（770）、`new` 作变量名（343，包括 `obj/soul`）、参数个数不对（384）、`in`/`float` 等作变量名（`room/shop`、`room/yard`）。下一步处理核心目录里的这几类。

@@ -142,9 +142,9 @@ varargs int strstr(string big, mixed small, int start) {
 }
 
 // extract(str, start, [end]) -- classic substring efun, gone from this
-// driver in favor of the [start..end] range syntax. `end` omitted (or
-// 0) means "to the end of the string", matching every real call site in
-// this archive (never a genuine explicit end==0). Negative indices
+// driver in favor of the [start..end] range syntax. `end` omitted means
+// "to the end of the string"; an explicit 0 is the first character
+// (`extract(name, 0, 0)`, the save-path initial). Negative indices
 // count from the end, same convention this codebase already uses for
 // real range expressions elsewhere.
 varargs string extract(string str, int start, int end) {
@@ -159,7 +159,7 @@ varargs string extract(string str, int start, int end) {
     start = 0;
   if (start >= len)
     return "";
-  if (!end)
+  if (undefinedp(end))
     end = len - 1;
   else if (end < 0)
     end = len + end;
@@ -283,21 +283,12 @@ varargs void set_prompt(string str, object ob) {}
 // equivalent and no clear evidence it's still needed. Safe no-op.
 void disable_interactive(object ob) {}
 
-// set_modify_command(ob) -- classic MudOS efun registering `ob` as a
-// per-player command-preprocessing hook (obj/expander.lpc's alias/
-// history/command-expansion feature calls this on itself from its own
-// reset_expander()). This driver has no such mechanism at all (checked
-// the whole driver source -- not even under a different name), and
-// every new character's very first reset_expander() call used to crash
-// uncaught with "Undefined function called: set_modify_command",
-// aborting doc/lib/player.lpc's own move_player_to_start3() partway
-// through and silently skipping the real move-into-starting-room call
-// further down in that same function -- so nobody ever actually arrived
-// anywhere (confirmed live: "It's too dark" / unrecognized room
-// commands, right after a brand new character picked a gender). Command
-// aliasing/history genuinely won't work without a real driver hook for
-// this, but that's a lost cosmetic feature, not a crash; no-op instead
-// of blocking every single login. See AGENTS.md, NOTES.md.
+// set_modify_command(ob) -- LDMud efun registering `ob` as the per-player
+// command preprocessor (obj/expander.lpc calls it on itself from
+// reset_expander()). FluffOS instead calls the interactive object's
+// process_input() apply, which obj/expander.lpc now defines to pass each
+// line through modify_command() (aliases, history, the master's n/s/e
+// direction table). Nothing to register here.
 void set_modify_command(mixed ob) {}
 
 // cat(file, [start_line], [num_lines]) -- classic "display part of a
@@ -455,17 +446,21 @@ varargs string get_prompt_str(int flag) {
   return "";
 }
 
-// member(item, container) -- classic membership-test efun distinct from
-// this driver's member_array() (which returns an INDEX or -1, not a
-// boolean -- every real call site here checks the result against
-// 0/1/!, never uses it as an index). Handles both arrays/strings
-// (member_array's own native container types) and mappings (checked via
-// keys(), so a key whose value happens to be falsy -- e.g. a bank
-// account with a 0 balance -- still correctly counts as present).
-int member(mixed item, mixed container) {
+// member(container, item) -- the LDMud efun, container first: for a
+// mapping, 1 when item is a key (checked via keys(), so a key whose value
+// happens to be falsy -- e.g. a bank account with a 0 balance -- still
+// counts as present); for an array or string, the index of item or -1
+// (`member(verb, '.') != -1`).
+int member(mixed container, mixed item) {
   if (mapp(container))
     return member_array(item, keys(container)) != -1;
-  return member_array(item, container) != -1;
+  return member_array(item, container);
+}
+
+// unshadow() -- LDMud: the calling object stops shadowing (it is not
+// destructed). FluffOS's remove_shadow() unlinks a given shadow.
+void unshadow() {
+  remove_shadow(previous_object());
 }
 
 // process_string(str) -- classic value-substitution efun, gone from
