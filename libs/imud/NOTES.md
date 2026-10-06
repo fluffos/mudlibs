@@ -287,3 +287,7 @@ this lib (live I3).
 这是上游把 Lima 命令搬进极简 demo 时的取舍，修它等于给 demo 加功能，不在 §10.7 范围内。
 
 每次启动都会真实连公网 I3 路由器，本轮共启动 2 次（修复前 1 次、修复后 1 次）。
+
+## 深度功能测试（§10.7，2026-10-05）— 主控 author_file()/domain_file()（上游 #3）
+
+驱动的 mudlib_stats 包在主控载入时各调用一次 `author_file(<主控文件>)` 和 `domain_file("/")`，主控没有这两个 apply，所以每次启动都打印 `author_file() in the master file does not work, using root_uid as fallback` 和 `domain_file() ... using bb_ui as fallback` 两行。上游 PR fluffos/imud#3（已合并，ba915a2）在 `secure/master.lpc` 补上两者，返回 `get_root_uid()` / `get_bb_uid()`，正是驱动缺省时用的值（KB 06 §7.222）。pin 已用 `rebase_upstreams.py` 升到 ba915a2；`lpcc config.fluffos /nonexistent.lpc` 前后对比只少了这两行。

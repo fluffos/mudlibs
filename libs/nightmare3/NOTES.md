@@ -620,3 +620,8 @@ lib 已有的 `overlay/lib/secure/save` 同一做法；overlay 由 `apply_lib_pa
 
 **测试账号清理**：`Zephyrs` 的账号文件（`secure/save/users/z/zephyrs.o`、
 `secure/save/postal/z/zephyrs/`）已删除；`postal/` 下其他既有存档未动。
+
+## 深度功能测试（§10.7，2026-10-05）— 主控 author_file()/domain_file()（上游 #7）
+
+驱动的 mudlib_stats 包在主控载入时各调用一次 `author_file(<主控文件>)` 和 `domain_file("/")`，要求返回字符串。`secure/daemon/master.lpc` 的这两个 apply 只为 domains / realms 目录下的文件返回名字，其余返回 0，所以每次启动都打印两行 `... in the master file does not work`。上游 PR fluffos/nightmare3#7（已合并，b5364a1）把末尾的 0 改成 `"BACKBONE"` / `"NONAME"`，与 fluffos 组织的 Dead Souls 仓库相同；域等于 backbone 域时对象沿用创建者的域，与返回 0 时相同；`_realms` 只列有 realm 目录的作者，输出不变（KB 06 §7.222）。pin 已升到 b5364a1；用 site 同构树（上游 + overlay）跑 `lpcc config.fluffos /nonexistent.lpc`，只少了这两行。
+顺带发现：驱动的 `read_config()` 用 120 字节的定长缓冲读配置行，过长的一行（例如很长的 `mudlib directory` 绝对路径）会让 `getline()` 失败并静默丢掉其后所有配置，报 `Missing line: mudlib directory`；本地测试时改用相对路径绕过。
