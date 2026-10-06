@@ -210,3 +210,7 @@ live `debug.log` 是 `libs/xkx100/log/debug.log`（Boot Time Fri Sep 4
 
 房间基类 `inherit/room/room.lpc`：`make_inventory()` 用 `catch()` 包住 `new(file)`，做不出来就返回 0；`reset()` 的 `case 1:` 拿到 0 就跳过这一项（`if (!objectp(ob[list[i]])) break;`）。档案里没有的 NPC 或物品（或 `create()` 出错的物件）原先会让列出它的房间整个加载失败（`Bad argument 1 to environment()`，或对 0 的 `call_other()`），连带这个房间后面的区域；现在房间照常加载，只是少了那个物件，下次 `reset()` 再试（KB 05 §7.25；`scripts/lpc_resilient_room.py`、`scripts/lpc_room_reset_guard.py`）。
 验证：探针（`scripts/lpc_room_reset_probe.py`：房间基类列出一个不存在的物件，再调用 `reset()`）HEAD 单件 崩溃、多件 崩溃，工作树 单件 OK、多件 OK。
+
+## 深度功能测试（§10.7，2026-10-06）— 编译警告整理
+
+`scripts/lpc_warnings.py xkx100 --fix`：无用局部变量 1993 个、`varargs` 8 处、转义 34 处、`nosave` 函数 30 个；`scripts/lpc_fix_no_effect.py` 删去 `return "...";` 后遗留的 `"\n";` 等 6 处；`scripts/lpc_diamonds.py --fix-redundant` 删去 156 个多余的 `inherit F_SKILL;`（`NPC` 已经带进来，两份 `skill.lpc` 让技能变量变成 `nosave`，KB 06 §7.213），`d/city/pai9room.lpc` 多余的 `inherit F_CLEAN_UP;` 手工删去（它的 `::valid_leave()` 本来就落在 `ROOM` 上）。`feature/alias.lpc` 的 `if (str != "");`（空的 if，`last_input` 总被赋值）删去，与 `hy` 把这行注释掉的做法一致，行为不变。共改动 1039 个 `.lpc`，HEAD 与工作树分别加载（新进程）：1005 -> 1005 通过，无回退；可编译的文件 14126 -> 14138，诊断 4316 -> 146；启动时警告 189 -> 0；新进程启动后登录界面正常。
