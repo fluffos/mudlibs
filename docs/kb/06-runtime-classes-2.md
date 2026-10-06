@@ -938,7 +938,13 @@ two parents of which one does not need it: `LIB_CONTAINER` and `LIB_OBJECT` both
 `LIB_RADIANCE`, `LIB_LIVING` and `LIB_OBJECT` both `LIB_SMELL`. Drop it from the parent
 whose own use is nil (container: its function returns the contents' light, the classes
 that are both object and container already add `object::GetRadiantLight()`; living is
-never used without an object) and the pass-through that used the scope name. (3) The same
+never used without an object) and the pass-through that used the scope name. When some
+classes do read the container's copy (havenmud: a room's own `SetRadiantLight()`, worn
+storage that glows), give the container a `protected int GetContainerLight() { return 0; }`
+hook in place of the inherit, and let those classes return their own `LIB_RADIANCE`'s
+value from it (and pick the container's total with a `GetRadiantLight()` that calls
+`container::`/`holder::`). Probe `SetRadiantLight(n)` on a room, a worn container and an npc
+before and after. (3) The same
 function in two unrelated mixins (`CanSell` in value and sell, `GetSave` in lock, close,
 bait): delete the duplicate if the bodies are identical, otherwise define the function
 in the class that inherits both and call the intended parent by scope; that is also what

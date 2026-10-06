@@ -818,3 +818,7 @@ character back to the host. Do not loop-reboot (I3).
 3. 用只含被跟踪文件的树（`git archive` + 本次改动）新建角色 `qahaven`（人类、Haven）：天空房间、`score`、`inventory`、`smell`、`who`、`quit` 正常，驱动输出没有权限拒绝。单打 `down` 不是命令（本库默认别名只有 `d`/`u` 等缩写，`go down` 可用并提示先读新手书），属设计。
 4. 编译不过的文件多为档案残留：巫师个人目录里过时的区域副本（如 `realms/alessandra/malveillant` 引用已搬到 `domains/havenwood` 的 `../mal.h`）、`std/tower`（另一个 mudlib 的区域，引用本库没有的 `mudlib.h`/`types.h`）、`domains/averath/oldareas`。
 5. `lib/users/nmsh.lpc` 声明了从未使用的 `private nosave string CommandFail`，与 `lib/livings/command.lpc` 的同名变量在玩家和 NPC 里重复，删掉后 2418 条重复声明警告消失（与 nightmare4 相同）。
+
+## 深度功能测试（§10.7，2026-10-06）— 光亮变量的重复继承（KB 06 §7.213）
+
+`lib/common/container.lpc` 继承 `LIB_RADIANCE`，而 npc、玩家、储物箱又经 `LIB_OBJECT`/`LIB_ITEM` 带一份，于是每个这样的类里有两份 `RadiantLight`，编译时打印 2635 条重复声明警告。与 nightmare4 不同，本库房间（`SetRadiantLight()` 设的房间自身光亮）和 `worn_storage`（会发光的可穿戴容器）真的读的是容器那一份，不能直接删掉。改法：容器不再继承 `LIB_RADIANCE`，改用 `protected int GetContainerLight()` 取“自身光亮”，默认 0；`lib/rooms/room.lpc` 自己继承 `LIB_RADIANCE` 并在这个钩子里返回它，`lib/items/worn_storage.lpc` 返回 armour 那一份，两者的总光亮仍由容器（holder）一侧计算（自身加内容物）。lpcc 探针前后一致：房间 `SetRadiantLight(4)` 得 4，可穿戴容器 2 得 2，NPC 3 得 3，可穿戴容器放进房间后房间得 6。重复声明警告总数从 7781 降到 2764，`RadiantLight` 不再出现；余下的是 `Short`、`Smell`、`Touch` 等同一结构的其他 mixin，留待逐个处理。用只含被跟踪文件的树新建角色 `zzlite`：天空房间、`inventory`、`score`、读新手书后 `d` 进入 Elven Charity 楼上房间、`quit` 正常。
