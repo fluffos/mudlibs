@@ -748,3 +748,11 @@ PID.
 ## 深度功能测试（§10.7，2026-10-05）— 主控 author_file()/domain_file()
 
 驱动的 mudlib_stats 包在主控载入时各调用一次 `author_file(<主控文件>)` 和 `domain_file("/")`。本库主控没有这两个 apply，所以每次启动都打印 `author_file() in the master file does not work, using root_uid as fallback` 和 `domain_file() in the master file does not work, using bb_ui as fallback` 两行，网页版每位访客的终端里都看得到。`adm/obj/master.lpc` 补上了这两个 apply：作者返回 `get_root_uid()`，域返回 `get_bb_uid()`，正是驱动缺少它们时所用的值。域名等于 backbone 域时，驱动让对象沿用创建者的域，与没有这个 apply 时相同（KB 06 §7.222）。两个新函数不加 `nosave`（本主控其余函数的 `nosave` 会触发 `Illegal to declare nosave function` 警告，属于本库尚未做的警告清理）。用 `lpcc config.fluffos /nonexistent.lpc` 前后对比，主控载入段只少了这两行。
+
+## 深度功能测试（§10.7，2026-10-05）— 编译警告清理
+
+1. 编译警告：启动时 约 30 条 → 0，整树扫描 215 条 → 0。`scripts/lpc_warnings.py --fix`：28 个 `nosave` 函数改 `protected`（被别处按名调用的 4 个去掉 `nosave` 保持 public）、删 CD/MudOS 专用 `#pragma`、删 112 个未用局部变量、29 处无效转义（BIG5 第二字节 0x5C 转码后残留的 `\`，如 `不允許\你`，KB 03）、2 处补 `varargs`；`lpc_audit_removed_locals.py` 复核 175 个被删声明，标出的 `apply` 是本文件的 `apply()` 函数调用，不是被删的变量。手工：`logind` 的 `#if 0` 分支变量移入同条件声明块，`httpd` 删无用的 `q = query_ip_port()`。
+2. `std/room/hockshop.lpc` 的 `remove()` 声明为 `int`（父类 `room` 是 `void`），而且没有调用 `::remove()`，当铺被销毁时不会像其他房间那样清理它放出去游荡的 NPC。改为 `void remove() { save(); ::remove(); }`。`logind` 的 `init_new_body()` 里只声明不用的 `penalty` 删除。
+3. `version` 用了旧驱动的 `__DRIVER__` 宏（本驱动没有，指令编译失败），改为只印 `__VERSION__`。`cmds/adm/socket.lpc` 调用 MudOS 的 `dump_socket_status()`，改用 `socket_status()`，并以 `#ifdef __PACKAGE_SOCKETS__` 保护（KB 01 §1.3(c)）。
+4. 仍无法编译、无人引用的孤立文件（不改，属内容缺口）：`obj/water.lpc`（`F_DRINK`、`feature/drink` 不在本档案）、`world/item/mj.lpc`（`ansi2.h`）、`world/item/gobang.lpc`（`path.h`），都是从别的库带进来的。
+5. 验证：§9 格式化（4 个文件只调整 `::` 前的空格）后全新启动 0 警告；`fluffos` 登录 → `who`、`version`、`tell`、`reply`、`socket`、`score`、`quit` 全部正常。

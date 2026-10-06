@@ -453,3 +453,10 @@ finds nothing in this lib.
 ## 深度功能测试（§10.7，2026-10-05）— 主控 author_file()/domain_file()
 
 驱动的 mudlib_stats 包在主控载入时各调用一次 `author_file(<主控文件>)` 和 `domain_file("/")`。本库主控没有这两个 apply，所以每次启动都打印 `author_file() in the master file does not work, using root_uid as fallback` 和 `domain_file() in the master file does not work, using bb_ui as fallback` 两行，网页版每位访客的终端里都看得到。`adm/obj/master.lpc` 补上了这两个 apply：作者返回 `get_root_uid()`，域返回 `get_bb_uid()`，正是驱动缺少它们时所用的值。域名等于 backbone 域时，驱动让对象沿用创建者的域，与没有这个 apply 时相同（KB 06 §7.222）。两个新函数不加 `nosave`（本主控其余函数的 `nosave` 会触发 `Illegal to declare nosave function` 警告，属于本库尚未做的警告清理）。用 `lpcc config.fluffos /nonexistent.lpc` 前后对比，主控载入段只少了这两行。
+
+## 深度功能测试（§10.7，2026-10-05）— 编译警告清理，以及 tell/reply/who 无法编译
+
+1. 编译警告：启动时 约 40 条 → 0，整树扫描 239 条 → 0。`scripts/lpc_warnings.py --fix`：24 个 `nosave` 函数改 `protected`（被别处按名调用的 5 个去掉 `nosave` 保持 public）、删 CD/MudOS 专用 `#pragma`、删 120 个未用局部变量、53 处无效转义（BIG5 第二字节 0x5C 转码后残留的 `\`，如 `不允許\你`，KB 03）、10 处补 `varargs`；`lpc_audit_removed_locals.py` 复核 195 个被删声明，标出的 `apply` 是本文件的 `apply()` 函数调用，不是被删的变量。手工：`logind` 的 `#if 0` 分支变量移入同条件声明块，`httpd` 删无用的 `q = query_ip_port()`。
+2. **`tell`、`reply`、`who` 三个基本指令无法编译。** 它们 `#include <net/dns.h>` 并引用网际互联守护 `GTELL`/`RWHO_Q`，而本档案里根本没有 `net/dns.h` 和这些守护（`raw/` 中也没有），于是玩家打 `tell`/`reply`/`who` 都是指令编译失败。同源的 huoying 已把这段注掉；这里改为 `#ifdef GTELL`/`#ifdef RWHO_Q` 包住 `名字@站名` 分支，本站内的私聊、回答、在线列表照常工作。`fingerd` 的 `mud` 变量同理放进 `#if 0`。
+3. `version` 用了旧驱动的 `__DRIVER__` 宏（本驱动没有，指令编译失败），改为只印 `__VERSION__`（内容已是 `fluffos <版本>`）。`cmds/adm/socket.lpc` 调用 MudOS 的 `dump_socket_status()`，本驱动没有，改用文档中的 `socket_status()` 列出各套接字，并按 KB 01 §1.3(c) 以 `#ifdef __PACKAGE_SOCKETS__` 保护（网页版没有套接字包）。
+4. 验证：全新启动 0 警告；`fluffos` 登录 → `look`、`who`、`version`（`fluffos 20260830-…` / `Eastern Stories 2.1.3a`）、`tell fluffos hello`、`reply hi`、`socket`、`score`、`quit` 全部正常。无参数的 `who` 只列与自己等级相差 5 以内的非巫师玩家，所以管理员看到 `0/1` 是设计如此。
