@@ -383,4 +383,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 4. `quest/menpaijob/mingjiao/zhangwuji` 少一个右引号（原文 `A3 22`，转码时连引号一起丢了），整个文件编译不过，明教张无忌从未载入；补回。hymud、haiyang2 同样修改。
 5. 验证（新进程，临时副本）：GB 选码 → `fluffos` 登录 → `score`、`look`、`i`、`wiz` 频道、`quit` 正常。
 6. **所有对象的 uid/euid 都是空字符串（KB 06 §7.235）。** `quit` 时报「你()不能摧毁其他的使用者」、离开消息打两遍，断线玩家永远留在世界里。原因：主控的 `creator_file()` 有一个启动保护 `if (!find_object(SIMUL_EFUN_OB)) return "";`，而 `config.fluffos` 写的是 `/adm/obj/simul_efun`，`globals.h` 和原始 `config.cfg` 都是 `/adm/single/simul_efun`（两个文件内容相同）。保护所查的对象从未载入，于是每个文件的 uid 都是 `""`，通不过 `ROOT_UID` 判断和 `securd` 的大部分写权限表。把配置改回 `/adm/single/simul_efun`：`/cmds/usr/quitgame` 的 uid 变为 `Root`；登录、`save`、`quit`、断线后重连再 `quit` 都没有错误。
+7. **迷宫 NPC 有一半载入失败。** `d/migong/romnpc`、`romnpc2`、`romnpcboss`（被几百个迷宫/首领 NPC include）随机给 NPC 一把 `"/p/item/ritemtz3/wsword" + random(10)` 之类的武器，而这些文件在原 Windows 存档里是大写 `Wsword3.lpc`；早先的大小写修复只把代码里写死的几个（`wsword44`、`ahands42`……）改成了小写，拼出来的路径看不到。`carry_object()` 返回 0，`->wield()` 出错，整个 `create()` 中断：同一批 18 个 NPC 每次编译有 9–11 个失败。前缀改成大写（与 `d/npc/nanxian` 的写法一致），并在 `carry_object()` 失败时不再调用 `wield()`（`Wsword8` 只有小写版本）。修改后连续三次 0 失败。
 
