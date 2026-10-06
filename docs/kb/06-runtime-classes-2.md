@@ -1216,3 +1216,15 @@ inherit; delete the copies (the driver's `Redeclaration of global variable` warn
 no argument). **Detection:** a class whose original source uses globals it never declares, or calls `::fn()` with no parent
 defining `fn`; list `this_object()->X()` names the class does not define (`function_exists` probe).
 
+### 7.233 Two saved variables with one name: restore fills the first and clears the second (finalrealms, 2026-10-06)
+
+**Symptom:** a player's skill levels are 0 after every login although the save file holds them (`skills` appears twice in the
+`.o`). **Cause:** `save_object()` writes every saved variable, so a name declared in two inherited programs (`std/skills.lpc`'s
+skill tree, `std/living/skills.lpc`'s levels) is written twice; `restore_object()` looks each line up with
+`find_global_variable()`, which returns the first match depth-first (the earliest, deepest inherit), so both lines land in that
+variable and the other is left cleared. The compiler only says `Redeclaration of global variable`. **Fix:** make the copy that
+needs no persistence `nosave` (state rebuilt in `create()`), or rename one; old saves then restore into the right variable.
+**Detection:** a save file with the same variable name on two lines (`awk '{print $1}' file.o | sort | uniq -d`); filter out
+`.o` files that are not saves. Corpus candidates 2026-10-06: nirvlp312 `dead`, ninetears `creator`, havenmud `isRiding`,
+pkuxkx `cond_def` (x4), sanguozhi/sgzmudsgz `name`, swmud `follow_search`, wilderness `dmg`/`weapon_skill`.
+

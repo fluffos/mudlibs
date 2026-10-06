@@ -686,3 +686,7 @@ project's usual convention.
 ## 深度功能测试（§10.7，2026-10-05）— 主控 domain_file("/")
 
 驱动的 mudlib_stats 包在主控载入时调用一次 `domain_file("/")`，要求返回字符串。本库 `secure/master/creator_file.lpc` 的 `domain_file()` 在 `creator_file()` 没有答案时返回 0，"/" 正是这种情况，所以每次启动都打印 `domain_file() in the master file does not work, using bb_ui as fallback` 一行，网页版每位访客的终端里都看得到（`author_file(<主控文件>)` 本来就返回 root uid，不报警）。现在 `domain_file()` 对 "/" 直接返回 `get_bb_uid()`，正是驱动缺省时用的值。其他路径不变：创作者的 `ls` 和 ftpd 直接调用 `master()->domain_file()`，返回 0 时显示 "Root"，所以没有把 0 一律改成字符串（KB 06 §7.222）。用 `lpcc config.fluffos /nonexistent.lpc` 前后对比，主控载入段只少了这一行。
+
+## 深度功能测试（§10.7，2026-10-06）— 技能等级每次登录都丢失（KB 06 §7.233）
+
+`std/skills.lpc`（技能控制器）声明了存档变量 `skills`（技能树，`create()` 里由 `STD_SKILLS` 生成），`std/living/skills.lpc` 继承它，又声明了自己的存档变量 `skills`（玩家的技能等级）。于是玩家存档里有两行 `skills`；`restore_object()` 按变量名找第一个匹配的变量（继承链最深最早的那个），两行都写进控制器的技能树，玩家自己的技能等级被清成 0。实测（只含被跟踪文件的树，`god` 登录）：`exec` 给 `str` 加 5 级，`query_skill("str")` 为 5，存档第二行 `skills ({"str",5,0,({}),})`，退出再登录后为 0。控制器的三个变量（`skills`、`reg_skills`、`stat_bonus`，都在 `create()` 里重建，没有任何代码保存它们）改为 `nosave`：存档里只剩玩家的技能等级，旧存档的两行都写进等级变量、后一行为准。复测：`dex` 加 3 级，退出再登录后仍为 3。档案里所有玩家存档的技能等级都是空的，与此相符。
