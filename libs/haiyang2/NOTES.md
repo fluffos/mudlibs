@@ -1414,3 +1414,8 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 
 房间基类 `inherit/room/room.lpc`：`reset()` 的 `case 1:` 拿到 0 就跳过这一项（`if (!objectp(ob[list[i]])) break;`）。档案里没有的 NPC 或物品（或 `create()` 出错的物件）原先会让列出它的房间整个加载失败（`Bad argument 1 to environment()`，或对 0 的 `call_other()`），连带这个房间后面的区域；现在房间照常加载，只是少了那个物件，下次 `reset()` 再试（KB 05 §7.25；`scripts/lpc_resilient_room.py`、`scripts/lpc_room_reset_guard.py`）。
 验证：探针（`scripts/lpc_room_reset_probe.py`：房间基类列出一个不存在的物件，再调用 `reset()`）HEAD 单件 崩溃、多件 OK，工作树 单件 OK、多件 OK。
+
+## 深度功能测试（§10.7，2026-10-06）— 明教张无忌编译不过
+
+`quest/menpaijob/mingjiao/zhangwuji` 第 289 行附近的 `command("say " + … + "  我教目的在与反抗元兵，现在正在练兵  ");` 少了右引号：原文这里是 `A3 22`（半个全角字符后面紧跟引号），MudOS 按字节读没问题，转 UTF-8 时这一对被当成无效字符连同引号一起丢掉。整个文件因此编译不过，明教的任务 NPC 张无忌（`romnpc2`/`romnpc3` 里也会引用他）从未载入。补回引号。hy5、hymud、haiyang2 三个同源库同样修改。
+
