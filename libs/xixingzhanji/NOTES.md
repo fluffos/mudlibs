@@ -744,3 +744,7 @@ jitui`。`buy jitui from xiaoer` 成功（「你向店小二买下一根炸鸡�
 
 房间基类 `std/room.lpc`：`make_inventory()` 用 `catch()` 包住 `new(file)`，做不出来就返回 0；`reset()` 的 `case 1:` 拿到 0 就跳过这一项（`if (!objectp(ob[list[i]])) break;`）。档案里没有的 NPC 或物品（或 `create()` 出错的物件）原先会让列出它的房间整个加载失败（`Bad argument 1 to environment()`，或对 0 的 `call_other()`），连带这个房间后面的区域；现在房间照常加载，只是少了那个物件，下次 `reset()` 再试（KB 05 §7.25；`scripts/lpc_resilient_room.py`、`scripts/lpc_room_reset_guard.py`）。
 验证：探针（`scripts/lpc_room_reset_probe.py`：房间基类列出一个不存在的物件，再调用 `reset()`）HEAD 单件 崩溃、多件 崩溃，工作树 单件 OK、多件 OK。
+
+## 深度功能测试（§10.7，2026-10-06）— 编译警告整理
+
+`scripts/lpc_warnings.py xixingzhanji --fix`：无用局部变量 914 个、`varargs` 47 处、转义 13 处、`nosave` 函数 23 个改 `protected`、裸 `return` 1 处，共改动 498 个 `.lpc`。这些文件在 HEAD 与工作树分别加载（新进程）：483 -> 483 通过，无回退；`scripts/lpc_audit_removed_locals.py HEAD` 的 17 条候选都是声明被重建（仍在用的名字保留）或同名的 efun 调用（`time()`）。手工：`d/moon/npc/yutu.lpc` 的 `int kill_ob()` 覆盖了 `/feature/attack.lpc` 的 `void kill_ob()`，还 `return ::kill_ob(victim)`（void 值），改为 `void`（没有调用者读它的返回值）。启动时警告 489 -> 0；新进程启动后新角色注册（英文名、中文名、密码、邮箱、性别、天赋）进入游戏，`look`、`score`、`quit` 正常。

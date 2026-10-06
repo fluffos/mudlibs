@@ -398,7 +398,6 @@ int remove_previous_position (object who, int position)
 int push_other_positions (object me, int position, int previous_position)
 {
   int i;
-  string src, dst;
   object who;
   object ob;
 
