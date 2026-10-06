@@ -48,7 +48,6 @@ int do_back(object me)
 }
 void die()
 {
-	object corpse;
 	mixed killer;
 	if( !living(this_object()) ) revive(1);
 	else delete_temp("faint_by");

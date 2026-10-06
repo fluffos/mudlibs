@@ -458,8 +458,7 @@ void change_combat_mode(object me, int mode)
 void random_chat()
 {
   string *e,str="";
-   int i;
-   object npc,*inv;
+   object *inv;
 if (!environment(this_object()))
    return;
    inv=all_inventory(environment(this_object()));
@@ -474,9 +473,8 @@ if (!environment(this_object()))
 
 int chat()
 {
-	int i, ratio, chance, rnd, flag = 0;
-	string *msg, *emotes, cmd;
-	object *inv, *killer;
+	int i, chance, rnd;
+	string *msg;
 
 	if (!is_busy() 
 	&& living(this_object())

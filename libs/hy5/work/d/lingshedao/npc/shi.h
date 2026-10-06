@@ -85,11 +85,6 @@ string* names = ({
 });
 
         object aa=this_object();
-        object tld;
-        object room3;
-        object room4;
-        int i;
-        int j;
         int k;
         message_vision(HIC"流云使说道:东西到手了,我们走!说完三人飞速离去.\n\n"NOR,ob);
         for(k=1;k<=3;k++)

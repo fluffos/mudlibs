@@ -125,7 +125,7 @@ int waiting(object me)
 
 int preparing(object me, object fighter)
 {
-	object monk, room, ob;
+	object room;
         if (!me) return 0;
 	if(!( room = find_object("/d/shaolin/wuchang")) )
 	room = load_object("/d/shaolin/wuchang");
@@ -208,7 +208,7 @@ if (monk1)
 
 int do_recruit(object me, object fighter)
 {
-	mapping ft_fam, my_fam;
+	mapping ft_fam;
         if (!me) return 0;
 	fighter->delete_temp("beat_count");
 	fighter->delete_temp("fighting");

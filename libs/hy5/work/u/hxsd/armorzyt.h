@@ -1,8 +1,6 @@
 int ob_hit(object ob, object me, int damage)
 {
-   int neili,a;
-   int n,sharpness,j,i;
-object weapon;
+   int sharpness, j, i;
 string msg1;
 sharpness=query("sharpness");
 msg1="";
@@ -368,9 +366,9 @@ return damage/8;
 
 mixed hit_ob(object me, object victim, int damage_bonus)
 {
-        int n,sharpness,damage;
+        int sharpness, damage;
 object weapon;
-string msg1,msg2,msg3;
+string msg1;
 sharpness=query("sharpness");
 if (!sharpness) sharpness=0;
 msg1="";
