@@ -800,3 +800,7 @@ character back to the host. Do not loop-reboot (I3).
 ## 深度功能测试（§10.7，2026-10-04）— negative range ends
 
 `scripts/lpc_fix_negative_ranges.py`: 1 line(s) in 1 file(s) count a range from the end with `<` (`x[a..-1]` -> `x[a..<1]`, `x[-2..]` -> `x[<2..]`; KB 06 §7.209). In this driver a negative constant end gave `""` / `({ })` and a negative start the whole value, so each of these returned the wrong slice; the compile warning `A negative constant as the second element of arr[x..y]` is gone from the files that compile. Range lvalues (`s[0..-1] = text`, the prepend idiom) are left alone. A paired compile of the changed files at HEAD and in the working tree showed no new error.
+
+## 深度功能测试（§10.7，2026-10-05）— 主控 author_file()/domain_file()
+
+驱动的 mudlib_stats 包在主控载入时各调用一次 `author_file(<主控文件>)` 和 `domain_file("/")`，要求返回字符串。本库这两个 apply 只为 domains / realms 目录下的文件返回名字，其余返回 0，所以每次启动都打印 `author_file() in the master file does not work, using root_uid as fallback` 和 `domain_file() in the master file does not work, using bb_ui as fallback` 两行，网页版每位访客的终端里都看得到。`secure/daemon/master.lpc` 改成与 fluffos 组织维护的 Dead Souls 上游（`deadsouls_fluffos`）相同的写法：其余文件的域返回 `"BACKBONE"`，作者返回 `"NONAME"`。域等于 backbone 域时驱动让对象沿用创建者的域，与返回 0 时相同；作者统计（`author_stats()`）多出一行 `NONAME`，汇总 realms 目录以外的对象（KB 06 §7.222）。用 `lpcc config.fluffos /nonexistent.lpc` 前后对比，主控载入段只少了这两行。
