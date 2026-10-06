@@ -103,6 +103,9 @@ detection.
   locals that use them. So is `ref` (reference parameters): `int ref () {` as a function name is
   `syntax error, unexpected L_REF` (xyj2006 `d/penglai/npc/{luxing,shouxing}.lpc`, which also name it in
   `call_out("ref", 20)`: rename both, `do_refresh`).
+  A local named `new` (`object *inv, new;` in the xkx `do_clone()` of tang / meng-zhu / xingtang, Fengyun
+  `ghostcurse.lpc`) kept 351 files of 72 libs from ever compiling: `scripts/lpc_rename_new_var.py` renames every
+  non-call `new` of such a file to `new_ob` (2026-10-06: 0 -> 159 of them load; the rest fail for other reasons).
 - **`get_dir(dir, 2)`** (Amylaar's "detailed" flag) is `-1` here. Index
   `[1]` for size and `[2]` for mtime.
 
