@@ -25,7 +25,6 @@ int cook_time_diff();
 /* data is the ipnumber */
 int do_xdate(string data, object me) {
   int fd, err;
-  string *junk;
 
   if (!data) END;
   if (!me) END;

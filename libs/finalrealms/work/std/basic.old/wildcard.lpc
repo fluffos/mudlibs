@@ -2,7 +2,6 @@
 
 string wild2regexp(string pattern, int sloppy) {
   string tmp;
-  int a, b;
 
   if(!strlen(pattern)) 
     return "^$";

@@ -690,3 +690,12 @@ project's usual convention.
 ## 深度功能测试（§10.7，2026-10-06）— 技能等级每次登录都丢失（KB 06 §7.233）
 
 `std/skills.lpc`（技能控制器）声明了存档变量 `skills`（技能树，`create()` 里由 `STD_SKILLS` 生成），`std/living/skills.lpc` 继承它，又声明了自己的存档变量 `skills`（玩家的技能等级）。于是玩家存档里有两行 `skills`；`restore_object()` 按变量名找第一个匹配的变量（继承链最深最早的那个），两行都写进控制器的技能树，玩家自己的技能等级被清成 0。实测（只含被跟踪文件的树，`god` 登录）：`exec` 给 `str` 加 5 级，`query_skill("str")` 为 5，存档第二行 `skills ({"str",5,0,({}),})`，退出再登录后为 0。控制器的三个变量（`skills`、`reg_skills`、`stat_bonus`，都在 `create()` 里重建，没有任何代码保存它们）改为 `nosave`：存档里只剩玩家的技能等级，旧存档的两行都写进等级变量、后一行为准。复测：`dex` 加 3 级，退出再登录后仍为 3。档案里所有玩家存档的技能等级都是空的，与此相符。
+
+## 深度功能测试（§10.7，2026-10-06）— 编译警告
+
+命令文件在第一次使用时才编译，编译警告直接打印到玩家屏幕上（如 `look.lpc` 的 `Number of arguments to 'cmd' disagrees`），所以警告就是玩家看得到的问题。
+
+1. `scripts/lpc_warnings.py finalrealms --fix`：13 个 `nosave` 函数改 `protected`，补 213 处 `varargs`（包括 192 个两参数 `cmd()` 覆盖三参数基类的情形），4 处缺返回值的 `return;`，删 454 个未用局部变量；`lpc_audit_removed_locals.py` 复核 725 个，0 个需要处理。
+2. 同名变量（KB 04 §6.10，都是 `nosave`，不涉及存档）：`global/more_file.lpc` 与 `more_string.lpc` 各有一套分页状态（`fsize`、`topl`、`fname`、`stat_line`、`last_search`、`finish_func`），前者改 `mf_` 前缀；`std/living/equip.lpc` 的私有 `worn_ac` 只被置 0（查询走 `wear.lpc` 的那份），改名 `equip_worn_ac`；技能控制器的树改名 `skill_tree`（上一节已改为 `nosave`）；`global/wiz_communicate.lpc` 未使用的 `my_file_name` 改名；`global/pweath.lpc`（个人天气）的昼夜标志 `light` 与 `std/basic/light` 的光照值同名，改名 `daylight`。
+3. `net/daemon/http` 的 `protected private` 改为 `private`（FluffOS 不允许两个访问修饰），现在可以编译。`global/events.lpc` 注释掉的旧 `fix_string` 结尾行里的 `/*` 去掉（只留关闭的 `*/`）。
+4. 启动警告 202 → 0，错误 0。改动的 `.lpc` 在只含被跟踪文件的树里 HEAD 与新版各编一次：352 → 353 通过，无回退。实测 `god` 登录，`look`、`score`、`i`、`who` 屏幕上不再出现编译警告，技能等级退出再登录后保留。本库未经 §9 格式化，本次也不格式化。

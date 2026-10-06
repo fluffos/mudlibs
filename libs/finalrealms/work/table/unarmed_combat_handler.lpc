@@ -46,7 +46,6 @@ void remove_uc_style(string name)
 int unarmed_damage(string style, int num, int type)
 {
   int res;
-  int lvl;
   if(num>0 && type>0)
     res=roll(num, type);
   else

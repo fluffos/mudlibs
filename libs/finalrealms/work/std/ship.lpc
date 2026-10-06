@@ -25,7 +25,6 @@ void print(int i) {
   int p;
   object *plist;
   if(i == sizeof(mess)) {
-    object dest;
     origin->add_exit(exitname,file_name(this_object()),"path");
     plist=all_inventory(this_object());
     plist = filter(plist, (: interactive :));

@@ -318,8 +318,6 @@ string *parse_command_adjectiv_id_list() { return my_adjectives; }
 
 object query_parse_id(mixed *arr) {
   string *bits;
-  mixed stuff;
-  int i;
 
   if (arr[P_THING] == 0) {
     bits = explode(arr[P_STR], " ");

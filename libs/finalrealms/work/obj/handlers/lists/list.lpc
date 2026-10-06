@@ -12,9 +12,7 @@ void create() {
 }
 
 void update_list(mixed info) {
-  int i,honk;
-  object ob;
-  string me;
+  int i;
 
   if (this_player()->query_app_creator())
     return;

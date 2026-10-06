@@ -36,7 +36,7 @@ int do_blow(object *indir, string s1, string s2, string prep) {
 }
 
 int finish_quest() {
-  object *obs, *obs2, *obs3, ob, fish, frisbee, ladel;
+  object *obs, *obs2, *obs3, fish, frisbee, ladel;
   string failure;
   int i, j;
 

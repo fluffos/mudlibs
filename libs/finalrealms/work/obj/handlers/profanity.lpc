@@ -23,7 +23,6 @@ void create() {
 string clean_language(string str) {
   string lowered;
   int i, loc;
-  string *strwords;
 
   if(!str || !strlen(str))
     return str;

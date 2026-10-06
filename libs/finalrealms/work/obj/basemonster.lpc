@@ -10,7 +10,6 @@ inherit "/obj/monster";
 void set_base_monster(string lookup)
   {
   mixed *data;
-  int i;
 
   data = MONSTER_TABLE->get_monster_data(lookup);
 

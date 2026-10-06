@@ -20,7 +20,7 @@ void setup() {
 }
 
 int level_advanced(object playerob) {
-  int time_now, level, age, i;
+  int level, age, i;
   object g_ob;
   string g_name;
   if(!playerob) return 0;
