@@ -1059,3 +1059,15 @@ item a room's reset() destructs, with no this_player(), so `Bad argument 2 to pr
 xiyouji2006; xyj2006n carried that guard). **Detection:** `read_file("...dynamic_...")` in a daemon, then the tool's dead-row list; load the
 daemon three times in fresh processes (the room picks are random: one pass proves nothing); never trust a HEAD PASS of a daemon that
 tests `new()` for 0, it only means the code did not run.
+
+### 7.221 A simul_efun override does not cover the files inherited into the simul_efun object
+
+**Symptom:** residuum on the shared driver: every combat hit, miss, block and heal message is missing (only the `hp:` prompt moves while a
+fight runs), while every other message arrives; its own `test all` fails `ability.test` (`'action'` where `'ability hit'` is expected).
+**Cause:** catalog patch 0003 replaces `message()` in `secure/sefun/override.c` with an LPC version, because on a driver built without
+`NO_ADD_ACTION` the efun never reaches a non-interactive character (no `O_LISTENER`). `sefun.c` inherits `combat.c` beside `override.c`, and
+inside the simul_efun object a call that its own program does not define binds to the **efun**: `lpcc` on `sefun.c` shows `EFUN: message`
+in `combat_hit_message`. Objects outside it get the override. **Fix:** `SEFUN->message(` at the 25 call sites in `combat.c`. A
+`varargs void message(...);` prototype also rebinds the calls, but `combat.test` loads `combat.c` on its own, where the prototype has no body
+(`Undefined function called: message`). **Detection:** for each name the lib's simul_efun overrides, grep the other files of the simul_efun
+directory for bare calls, and confirm with the disassembly (`F_CALL_FUNCTION_BY_ADDRESS` vs `EFUN:`).

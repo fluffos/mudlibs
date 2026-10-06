@@ -507,3 +507,57 @@ rename). Port 40237. Fresh world (cutover wiped the old vendored
 Killed residuum driver by exact PID. `git -C work reset --hard` +
 `apply_lib_patches.py residuum` restored a clean patched tree. Play
 saves/logs under `work/lib/save` and `work/lib/log` are gitignored.
+
+## 深度功能测试（§10.7，2026-10-05）— round three: 全量 `test all`、战斗消息、目录补丁
+
+复测原因：pin 从 `86e64a0b` 推到 `9476138`（上游只给 `soul.test.c` 加了两行），且上一轮（2026-09-16）
+之后上游改了 `module/reset`（收编游荡怪物、计数 ≤0 时清除）、`daemon/astronomy`/`soul`/`experience` 的条件分支。
+round two 因时间没跑全量 `test all`，这次作为主要的新角度。
+
+**测法**：不碰 submodule 工作树。`git -C work archive HEAD` 解到 scratch，
+`apply_lib_patches.py residuum --work` 打补丁，按 `wasm_keep_dirs.txt` 建目录，单独的 config，
+即站点上的同一棵树。两种跑法：在线（第一个注册的角色自动成为 immortal，`test all`），以及无人在线的
+`driver config.fluffos -ftest`（master `flag("test")` 带覆盖率跑全部测试后关机，与上游 CI 同一条件）。
+原生驱动，`ulimit -v 6291456`，PID 精确结束。
+
+**修了四处（目录补丁，`patches/`）：**
+
+1. **战斗消息全部丢失（玩家可见，严重）。** 在线打一只 `curious_raccoon`：只有 `hp:` 提示在变，没有任何
+   "You hit … / … misses you" 之类的消息。原因：补丁 0003 在 `secure/sefun/override.c` 里用 LPC 重写了
+   `message()`（本驱动没有 `NO_ADD_ACTION`，efun 送不到非交互的角色对象），但 `sefun.c` 把 `combat.c` 作为
+   另一个程序 `inherit` 进 simul_efun 对象；在 simul_efun 对象内部，本程序没有定义的调用绑定到 **efun**——
+   `lpcc` 反汇编 `combat_hit_message` 看到的就是 `EFUN: message`。所以战斗类消息（hit/miss/block/parry/
+   evade/heal/useless/attack）全部走了 efun、全部丢掉，而 `std/` 里直接调 `message()` 的消息走的是覆盖版本，
+   正常显示。修法：`combat.c` 里 25 处调用改成 `SEFUN->message(`（文件里本来就用 `SEFUN->possessive()`），
+   并入补丁 0003。先试过在 `combat.c` 声明 `varargs void message(...);` 原型——在 simul_efun 里能改绑定，
+   但 `combat.test` 会单独 `new()` 一个 `combat.c`，那里原型没有函数体，报 `Undefined function called: message`，
+   所以改用 `SEFUN->`。修后实测战斗消息全部出现；KB 06 §7.221。
+2. **`test all` 遇到一个加载失败的测试文件就永远停住。** `secure/daemon/test.c` `process_file()` 在
+   `load_object()` 失败的分支里只打印 `Error in test` 就 `return`，不调用 `fnDone`，不前进到下一个文件，
+   也不出总结（本驱动没有 SQLite，`/std/database.test.c` 加载失败，第 55 个文件后就停了）。新补丁 0005：
+   把加载失败记为一个失败的 expect 并继续（直接跳过会让上游 CI 在测试文件编译失败时反而通过）。
+3. **补丁 0001 的写法让 master 的覆盖率副本编译失败。** 测试框架的覆盖率插桩在每行语句后面追加
+   `D_TEST->line_hit(N);`，0001 把三个 stub 写成单行函数 `string get_root_uid() { return "Root"; }`，插桩落在函数
+   外面，`master.coverage.c` 语法错误，`master.test` 整个报错。0001 改成上游一贯的多行写法（参数名按上游
+   风格写成 `_file`）。
+4. **每次启动驱动都打印 `author_file()/domain_file() in the master file does not work`。** master 没有这两个
+   apply（mudlib_stats 包在启动时问 master 文件的作者和 `"/"` 的 domain）。新补丁 0006：两个函数分别返回
+   `get_root_uid()`、`get_bb_uid()`——正是驱动原来的回退值；domain 返回 backbone uid 时驱动把对象的 domain
+   记为其创建者的 domain，与没有这个 apply 时一致，行为不变。
+
+**结果**：无人在线的 `-ftest`：断言 4414/4414 全过，expect 806/808；剩下两个都是环境差异，不修：
+- `master.test` "flag handles unknown flag" 读 `/log/debug.log`：上游 `local.config` 用 `log directory : lib/log`
+  从仓库根启动，驱动把 debug log 开在启动目录下，于是落在 mudlib 的 `/log/` 里；本项目统一从
+  `libs/<slug>/` 启动，debug log 在 `libs/residuum/log/`，不在 mudlib 内。
+- `/std/database.test.c` 需要 SQLite（本驱动未编入）。
+
+另外记录、不修：
+- `astronomy.test` 的 `test_scan_and_process_scheduling` 只在有角色在线时失败：`scan()` 在有人在线时会处理
+  所有注册的历法（包括测试注入的那一个），测试注释假设"无人在线时是 no-op"。无人在线跑就通过。
+- `character.test` 的 `test_gmcp` 偶尔失败：`gmcpName`/`gmcpData` 是测试对象的全局变量，不在
+  `before_each_test` 里清空；本驱动 `functions()` 返回的顺序不是源码顺序，而且不同跑法不一样，
+  当 `test_setup_character` 先跑时会留下 `Char.Vitals` 数据。属上游测试隔离问题，非游戏 bug。
+- `wasm_keep_dirs.txt` 里有一条 `lib/realm/deepres`，是 2026-09-16 那次测试账号的目录被扫进了清单；
+  无害，下次重生成清单时注意。
+
+**清理**：所有驱动均按 PID 结束；测试都在 scratch 副本里，submodule 工作树没有改动。

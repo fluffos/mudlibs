@@ -629,8 +629,8 @@ for a save`（`log/runtime`，14:50）。随后该字母目录出现，同一驱
 该文件；本 lib 只通过 `log_file()` 写 `work/log/runtime`、`work/log/errors`。判断"无错误"
 时应读这些文件，而不是 `debug.log`（参见 KB 08 §10.9）。
 
-**编译警告**：本次未扫描（`submodule-patch` 托管，`lpc_warnings.py` 需要 scratch 基线），
-与 `nightmare3` 一样，待下一轮统一处理。
+**编译警告**：本次未扫描，待下一轮处理。（更正：`meta.json` 虽写 `submodule-patch`，但本 lib 的
+`work/` 是本仓库直接跟踪的文件，不是 gitlink，`lpc_warnings.py nightmare4` 可以直接扫，不需要 scratch 基线。）
 
 **测试账号清理**：`Zephyrq`、`Quintara` 的 `users` 存档、`postal` 目录，以及由测试
 重写的 `save/economy.o`、`save/intermud.o` 均已删除或还原；`secure/save/players/` 下
