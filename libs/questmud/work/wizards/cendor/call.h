@@ -68,11 +68,9 @@ if(len > 3) {
 
 string make_path(string file) {
 
-  string *path_split, tmp;
 
   string tmp1, tmp2;
 
-  int i, len;
 
   string current_path;
 
@@ -126,7 +124,7 @@ if(!file || file == "") return "/"+current_path;
 
         
 
-nosave varargs object *FIND_OBJECT(string str, object who){
+protected varargs object *FIND_OBJECT(string str, object who){
 
   string tmp1, tmp2;
 
@@ -134,7 +132,6 @@ nosave varargs object *FIND_OBJECT(string str, object who){
 
   object *ob;
 
-  string current_path;
 
             
 
@@ -276,7 +273,7 @@ if(!str){
 
 
 
-nosave object *PROCESS_ARG(string arg){
+protected object *PROCESS_ARG(string arg){
 
   string tmp1, tmp2;
 

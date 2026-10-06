@@ -704,3 +704,11 @@ debris.
 11. 巫师工具 `world/misc/trace`、`trace2` 编译通过：LDMud 的 `transfer(ob, dest)`（成功返回 0）改成 `catch(ob->move_object(dest))`；保留字 `in` 作函数名，改 `trace_in`（它注册的动作是 `"In"`，大小写不同，原本就没有绑定）；函数上的 `nosave` 改 `protected`；`man` 的 `string manuals` 改 `string *manuals`。
 12. 未做：本库的 2700 多条编译警告。发帖需要 10 级、投票需要 40 级，这两条写入路径只做了编译检查。
 
+
+## 深度功能测试（§10.7，2026-10-06）— 编译警告整理
+
+`scripts/lpc_warnings.py questmud --fix`（无用局部变量、转义、`nosave` 函数等机械类）：1242 个文件改动。改动过的 1240 个 `.lpc` 在 HEAD 与工作树分别加载（新进程）：925 -> 925 通过，无回退；`scripts/lpc_audit_removed_locals.py HEAD`：3504 个被删声明，0 条需要看。启动时的警告 71 -> 0。手工修的三处：
+- `daemons/area_entry_d.lpc` `add_road()`：`VMAP->set_special_mark(new_[0,0], new_[0,1], new_[0,2])` 是 LDMud 宽映射的写法，而 `new_` 的键是 `m_sizeof(roads)` 不是 0，取到的都是 0；改为直接传 `x, y, mark`。
+- `secure/master.lpc` `prepare_destruct()`：`errors`、`i` 只在 `#ifdef COMPAT_FLAG` 里用，声明移进该分支。
+- `obj/player.lpc`：LDMud 的 `(object) ("/cmds/std/_say");`（装载对象）在这里只是一个无作用的表达式，下一行的 `call_other` 本来就会装载，删去。
+验证：新进程启动，以访客（`g`）登录，`look`、`score`、`quit`（存档）正常。剩下 2867 条诊断几乎都是本来就不能编译的文件里的错误（LDMud 专用语法与缺失的头文件），留待逐个阅读。
