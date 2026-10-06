@@ -826,3 +826,10 @@ character back to the host. Do not loop-reboot (I3).
 ## 2026-10-06 — 剩余的重复声明
 
 `lib/special/action.lpc` 自己的字符串 `Help`（`SetHelp`/`GetHelp` 用）与父类 `verb.lpc` 的私有映射 `Help` 同名，改名 `ActionHelp`（37 个子类都不直接读写它）。另记两处未改：`lib/users/player.lpc` 同时经 `LIB_INTERACTIVE` 与 `LIB_LIVING`（`body.lpc`）继承 `move.lpc`，`isRiding` 有两份并都存档（KB 06 §7.233：登录后函数读的那份被清零，骑乘状态不跨登录保留）；`creator` 只继承 interactive 且调用 `move::eventMove`，不能简单去掉一条继承。`lib/items/meal.lpc` 自己的 `Long`/`Short` 与物品基类的私有 `Short` 同名，而 `AddSave(({ "Long", "Short" }))` 按名字取变量时取到的是先继承的那份，餐食自己的描述可能没有存档，待查。
+
+## 深度功能测试（§10.7，2026-10-06）— 两处同名变量的结论
+
+- `lib/livings/move.lpc` 的 `isRiding` 被玩家经两条继承路径各带一份并都存档（KB 06 §7.233）。全库没有任何地方调用 `SetIsRiding`/`GetIsRiding`（骑乘功能没有实现），改成 `nosave`：存档不再出现两行，行为不变。
+- `lib/items/meal.lpc` 的 `Long`/`Short`：查证后不是 bug。物品基类的长描述存在 `ExternalDesc`，`Long` 只有餐食自己一份，按名字存取没有歧义；`Short` 有两份（`lib/common/description.lpc` 的私有 `Short` 在前），`fetch_variable`/`store_variable` 取到的是基类那份，而餐食的 `SetShort` 经 `item::SetShort` 同时写入它、`GetShort` 经 `::GetShort()` 读它，存取一致。
+- 未做：`lpc_diamonds.py` 列出 4 处可直接删的重复继承和 10 处需人工判断的（聊天守护的 `daemon::` 作用域调用、`creator.lpc` 的继承顺序），以及玩家经 `living` 与 `interactive` 两条路径继承 `move.lpc` 等更深的重叠；留待一次完整的菱形继承/警告清理。
+
