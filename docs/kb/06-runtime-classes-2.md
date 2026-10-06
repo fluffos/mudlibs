@@ -1205,4 +1205,14 @@ The same onboarding rewrote `move_object(m = clone_object(f), dest)` as `m = clo
 most NPC spawners): `m` got the efun's 0 and the next `m->set_name()` failed. The shim returns the moved object; check the
 rewrite against raw (`grep -rn '= *clone_object([^;]*)->move_object('`).
 
+### 7.232 A fragment rebuilt as a standalone class (holymission player, 2026-10-06)
+
+**Symptom:** the player has no `attack()`/`run_away()`/`query_level()`; `this_object()->attack()` in its heart_beat returns 0,
+death never ends a fight, `look` shows no room contents, others see `0 arrives.`. **Cause:** the archive's `player.c` used
+`living`'s variables without declaring them and called `::reset(arg)` with no parent; the onboarding read that as "undeclared"
+and "orphaned" and re-created the variables and ~56 simplified `living` functions inside the player. **Fix:** restore the
+inherit; delete the copies (the driver's `Redeclaration of global variable` warnings give each position; take `living`'s
+`nosave` where they differ); keep the leaf's own overrides; call the parent's `reset` once (FluffOS's periodic reset passes
+no argument). **Detection:** a class whose original source uses globals it never declares, or calls `::fn()` with no parent
+defining `fn`; list `this_object()->X()` names the class does not define (`function_exists` probe).
 

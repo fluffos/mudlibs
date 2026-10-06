@@ -712,3 +712,15 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 9. **`players/haplo/defs.h`、`obj/bull_board` 等见上。** `room/village/` 是另一个未完成的村庄（引用不存在的 `street9`、`path.h`），没有处理；`qclxxiv`、`arthur`、`chomp`、`silver` 等退役巫师目录被搬到 `players/mangla/gal/` 或 `players/archive/` 下，代码仍用旧绝对路径（`Cannot #include /players/qclxxiv/myroom.h` 等约 1200 处），属原 MUD 退役内容，没有改。
 10. **玩家进出房间时别人看到 “0 arrives.”。** 玩家的 `move_player()` 用 `TName`（`this_object()->query_name_true()`），而 `doc/lib/player.lpc` 不继承 living，没有这个函数；按 living 的定义补上。双客户端实测：现在看到 “Zzholyb arrives.”。同样缺少的还有 `query_level`、`attack`、`run_away`、`add_hunted`、`query_noshouts`、`query_earmuff_level`、`queryenv`、`query_testchar`：玩家心跳里的 `this_object()->attack()` 因此永远返回 0。原档案的 `doc/lib/player.c` 使用 living 的变量却不声明它们，说明原来是与 living 一起编译的；把玩家改回继承 living 是下一步的单独工作。
 11. 全库批量编译：20365 个通过（上一节 19346），3583 个失败；第一次通过、这次失败的 34 个都是载入时的随机刷新碰到缺失文件（见 8）。本次改过的文件 §9 格式化，`secure/master.lpc` 除外。
+
+## 深度功能测试（§10.7，2026-10-06，续二）— 玩家改回继承 living（KB 06 §7.232）
+
+入库时 `doc/lib/player.lpc` 被做成不继承 living 的“独立玩家类”（见 §3、§14.7）：补了 58 个与 living 同名的全局变量、56 个 living 已有函数的简化副本（`move_player`、简化的 `attack_object()`/`hit_player()` 等），删掉了原文的 `::reset(arg)`（原注释 “!!! HERP”）。但原档案的 `player.c` 使用 living 的变量却不声明它们，`reset()` 第一行就是 `::reset(arg)`，说明它本来就是在 living 之上编译的。后果：玩家没有 `attack()`、`run_away()`、`query_level()`、`add_hunted()` 等函数，心跳里 `this_object()->attack()` 永远返回 0；死亡不结束战斗（§14.7）；`look` 不列出房间里的人和物。
+
+修复：
+1. `doc/lib/player.lpc` 加 `inherit "/doc/lib/living";`，删去入库时补的 53 个重复变量声明与 56 个重复函数（编译器的重复声明警告给出确切位置）；原文自己覆盖的 10 个 living 函数（`reset`、`short`、`wield`、`add_weight` 等）保留。14 个变量入库时声明为存档变量而 living 是 `nosave`（`attacker_ob`、`hands`、`cap_name`、法术计时等瞬时状态），以 living 为准；旧存档里的这些字段 `restore_object()` 直接跳过，旧角色登录正常。
+2. `do_reset()` 恢复 `living::reset(arg)`，只在第一次执行：FluffOS 的定时重置不带参数，living 会把属性数组重新分配。
+3. living 的 `move_player(s[,o][,r][,i])` 文档写明后面参数可省，加 `varargs`；`obj/descs.h` 的 `get_prompt_str(int)`（真正的提示符生成，原来被模拟外部函数的空实现替代）同样加 `varargs`。
+4. `sys/mylook.lpc` 在档案里是 0 字节，`sys/archive/mylook.c` 是同一文件的旧版（“the look that is called from living.c”，列出房间里的生物与物品并合并复数）；用它替换玩家里只打印房间长描述的代用 `mylook()`。
+
+实测（只含被跟踪文件的树）：新角色注册、`choose human`、`score`（体型 medium、最大生命 74，来自 living 与公会主控的公式）、走动、`look` 列出 “Priest.”、“Preacher man.”；旧存档角色登录正常（邮件提示、属性完整）；`kill priest`：双方命中/落空与状态行，玩家死亡 “You die. ... Priest killed Zzml.” 变成鬼魂，`score` 显示 “You are a ghost”，在教堂 `pray` 复活（“You reappear in a more solid form.”）。启动编译错误 0。
