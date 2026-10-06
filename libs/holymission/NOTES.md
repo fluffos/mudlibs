@@ -730,3 +730,10 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 1. `obj/monsoul.lpc` 是 `obj/monster`、`obj/mon`、玩家文本包含的文件，入库时给它补了 `msgin`/`msgout`/`mmsgin`/`mmsgout` 的声明，而三个包含者都继承 living，已有这些变量；每个 NPC 编译时都报四条重复声明（约 2859 个文件、11999 条警告的大头）。删掉这行声明，`sreset()` 设置的就是 living 的那一份。
 2. `scripts/lpc_warnings.py holymission --fix`：643 个 `nosave` 函数改 `protected`（105 个直接去掉修饰），删 3571 个未用局部变量，补 69 处 `varargs`、7 处缺返回值的 `return;`、约 217 处无效转义。`lpc_audit_removed_locals.py` 复核 5801 个被删声明，0 个需要处理。改动的 1506 个 `.lpc` 用 `lpcc --batch` 复编，之前通过的没有一个失败。全库编译 20419 → 20433，诊断 11796 → 7242 种。§9 格式化：`secure/backmaster.lpc`、`secure/mmm.lpc`（主控的旧副本，不载入）被格式化器拆坏字符串（盲点 3），恢复为 HEAD，本次不改。
 3. 启动警告 471 → 34，错误 0；剩下的是结构性的（`Types in ?:`、`add_poison` 返回类型等）。实测（只含被跟踪文件的树）：旧角色登录、`look` 列出 Priest、`kill priest` 死亡、鬼魂、教堂 `pray` 复活；新角色注册、走到商店 `list`。
+
+## 深度功能测试（§10.7，2026-10-06）— LDMud 存档：换行和共享值
+
+1. **存档里的换行读回来是字母 `n`（KB 03）。** LDMud 把字符串中的换行存成 `\n` 两个字符，本驱动存成一个 CR 字节，读档时把 `\X` 还原成 `X`：信件（`room/post_dir`）、留言板、巫师物品存档里的文字全挤成一行，每个换行变成 `n`。`scripts/ldmud_save_newlines.py` 把引号内的 `\n` 改成 CR、`\t` 改成制表符：1184 个文件、72,364 处。用驱动自己的 `restore_variable()` 读 `room/post_dir/akira.o` 的 `messages`：767 行，不再有 `Jun 29n` 这种连写。
+2. **玩家房屋存档全部读不回。** `players/silas/houses/` 的 40 个房屋存档用了 LDMud 的共享值写法：`exits_special ({…,<1>=({}),…})` 定义一个共享的空数组，后面的 `<1>` 引用它。本驱动不认识，`restore_object()` 报 `Illegal array format`，房屋（Silas 的房产中介、`house.lpc`、`house_map.lpc`）读不到任何房屋。`scripts/ldmud_wide_save_convert.py` 现在把共享值展开成副本（这里共享的都是空数组，展开后语义不变）。用 `restore_variable()` 逐值检查全部房屋存档：16,707 个值都能读。
+3. 仍读不回：`players/moonchild/save/guild_board.o` 的 `tmp_text`，原始存档在一个词中间就截断了，没有右引号，无法恢复。
+

@@ -250,6 +250,9 @@ raw CR byte instead, and its `restore_object()` turns any `\X` into a plain `X`.
 `\n` to a CR byte and `\t` to a tab (`\"` and `\\` mean the same in both drivers). A `\r` cannot be kept: a raw CR restores
 as a newline. **Detection:** `\n` escapes in `.o` files that start with `#N:M`; only questmud (41,888) and holymission
 (72,364) have them. Many `.o` files in the Chinese libs are LPC sources with a `.o` name; ignore them.
+LDMud saves can also share a value: `<1>=({})` defines it and a later `<1>` in the same file refers back; FluffOS stops with
+`restore_object(): Illegal array format` (holymission's 40 player houses). `ldmud_wide_save_convert.py` expands each reference into a
+copy (`grep -rlP '[,(\[:]<\d+>' --include='*.o'`; only holymission has them).
 
 A related trap in the same saves: the 2026-10-05 Latin-1 line repair skips a line that was changed later, and a save line
 whose mapping was converted counts as changed. Rebuild such lines from `raw/` by emulating the bad decode exactly (a

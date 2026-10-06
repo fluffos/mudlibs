@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Convert LDMud multi-value mappings (and width-0 key sets, `(["a","b",])` -> `(["a":1,"b":1,])`) in save files (`([k:v1;v2;v3,k2:...])`) to the array-valued
-form FluffOS can restore and this catalog's ported code reads (`([k:({v1,v2,v3}),k2:...])`, KB 03).
+form FluffOS can restore and this catalog's ported code reads (`([k:({v1,v2,v3}),k2:...])`, KB 03).  LDMud's shared
+values (`<1>=({})` defines one, a later `<1>` in the same file refers back) are expanded into copies.
 
   python3 scripts/ldmud_wide_save_convert.py [--apply] FILE.o...
 
@@ -12,10 +13,17 @@ apply_ = "--apply" in sys.argv
 files = [a for a in sys.argv[1:] if a != "--apply"]
 
 class P:
-    def __init__(self, s): self.s = s; self.i = 0; self.wide = 0
+    def __init__(self, s, refs=None): self.s = s; self.i = 0; self.wide = 0; self.refs = {} if refs is None else refs
     def peek(self): return self.s[self.i] if self.i < len(self.s) else ""
     def value(self):
         s, i = self.s, self.i
+        m = re.match(r"<(\d+)>(=?)", s[i:])
+        if m:   # LDMud shared value: <N>=value defines it, a bare <N> refers back (FluffOS has neither: expand a copy)
+            self.i += m.end(); self.wide += 1
+            if m.group(2):
+                v = self.value(); self.refs[m.group(1)] = v; return v
+            if m.group(1) not in self.refs: raise ValueError("undefined <%s> at %d" % (m.group(1), i))
+            return self.refs[m.group(1)]
         if s.startswith('"', i):
             j = i + 1
             while s[j] != '"':
@@ -63,12 +71,12 @@ total = 0
 for f in files:
     raw = open(f, "rb").read(); text = raw.decode("latin-1")
     nl = "\r\n" if "\r\n" in text else "\n"
-    out = []; changed = 0
+    out = []; changed = 0; refs = {}   # shared values are numbered per file
     for line in text.split(nl):
         sp = line.find(" ")
-        if sp > 0 and not line.startswith("#") and "([" in line:
+        if sp > 0 and not line.startswith("#") and ("([" in line or re.search(r"<\d+>", line)):
             try:
-                p = P(line[sp + 1:]); v = p.value()
+                p = P(line[sp + 1:], refs); v = p.value()
                 if p.i == len(p.s) and p.wide:
                     line = line[:sp + 1] + v; changed += p.wide
             except (ValueError, IndexError) as e:
