@@ -189,6 +189,10 @@ Traps:
   ask for a password it could not check). Detection: `git ls-files
   'libs/*/work/*.o.gz'`; check the inner encoding (a GBK lib's `.o.gz`
   escaped `convert_lib.sh`).
+  Natively a `.o.gz` also shadows the plain `.o` the object writes with
+  `save_object(file)`: the xkx-family wizard boards reverted to the 1996
+  snapshot on every reboot (12 libs, `data/board/{wiz,towiz}_b`), while the
+  archive's `.o` beside it was an unreadable binary blob.
 - **Runtime directories.** The zip carries no `log/` and no empty directory.
   `zip-loader.js` creates `work/log` plus every directory
   `scripts/wasm_keep_dirs.txt` lists for the slug (`keepDirs` in the live

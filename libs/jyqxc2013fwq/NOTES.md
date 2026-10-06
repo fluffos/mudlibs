@@ -398,3 +398,7 @@ Time Fri Sep 4 01:27:54 2026），无 `error:` / `Too deep recursion`。
 
 房间基类 `inherit/room/room.lpc`：`make_inventory()` 用 `catch()` 包住 `new(file)`，做不出来就返回 0；`reset()` 的 `case 1:` 拿到 0 就跳过这一项（`if (!objectp(ob[list[i]])) break;`）。档案里没有的 NPC 或物品（或 `create()` 出错的物件）原先会让列出它的房间整个加载失败（`Bad argument 1 to environment()`，或对 0 的 `call_other()`），连带这个房间后面的区域；现在房间照常加载，只是少了那个物件，下次 `reset()` 再试（KB 05 §7.25；`scripts/lpc_resilient_room.py`、`scripts/lpc_room_reset_guard.py`）。
 验证：探针（`scripts/lpc_room_reset_probe.py`：房间基类列出一个不存在的物件，再调用 `reset()`）HEAD 单件 崩溃、多件 崩溃，工作树 单件 OK、多件 OK。
+
+## 深度功能测试（§10.7，2026-10-05）— 巫师留言板存档 `data/board/*.o.gz`
+
+巫师留言板 `wiz_b` / `towiz_b` 以 `.o.gz` 存档（1996 年的帖子）。本机驱动 `restore_object()` 优先读 `.o.gz`，而留言板用 `save_object(file)` 写明文 `.o`，所以本机上新帖每次重启都退回旧快照；网页版驱动没有 zlib，只读 `.o`，而归档自带的 `.o` 是读不出的二进制。`.gz` 内容为 GB18030（转码时没被处理），转成 UTF-8 写成 `.o`，替换归档里那个读不出的二进制 `.o`；`towiz_b` 原文有 4 个残字节，转为替换符。删除 `.o.gz`（KB 01）。用 lpcc 载入留言板核对条数（jqxz2008：wiz_b 47 条、towiz_b 115 条）。
