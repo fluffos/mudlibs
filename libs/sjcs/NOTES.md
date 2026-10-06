@@ -282,3 +282,9 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply s
 
 房间基类 `std/room.lpc`：`reset()` 的 `case 1:` 拿到 0 就跳过这一项（`if (!objectp(ob[list[i]])) break;`）。档案里没有的 NPC 或物品（或 `create()` 出错的物件）原先会让列出它的房间整个加载失败（`Bad argument 1 to environment()`，或对 0 的 `call_other()`），连带这个房间后面的区域；现在房间照常加载，只是少了那个物件，下次 `reset()` 再试（KB 05 §7.25；`scripts/lpc_resilient_room.py`、`scripts/lpc_room_reset_guard.py`）。
 验证：探针（`scripts/lpc_room_reset_probe.py`：房间基类列出一个不存在的物件，再调用 `reset()`）HEAD 单件 崩溃、多件 OK，工作树 单件 OK、多件 OK。
+
+## 深度功能测试（§10.7，2026-10-06）— 编译警告清理；飞贼事件第一次就中断
+
+1. `scripts/lpc_warnings.py --fix` 机械修复 1027 个文件，启动警告 507 → 0。HEAD 与修改后各编译一遍：唯一的差异 `d/qujing/sanda/shanpo1` 重试即通过（随机内容）。被删局部变量的审计 17 处都只出现在注释或同名函数调用里（`piggy` 的 `#ifdef` 与相关函数无关）。手工：`adm/daemons/natured` 的 `for (i;…)` 改 `for (;…)`；`d/moon/npc/yutu` 的 `kill_ob` 改 `void`，与 `feature/attack` 一致。
+2. **飞贼事件只运行一次。** 预载的 `u/tonggang/feizei/feizei` 每 250 秒放一个飞贼，给他带的兵器、护具写成 `/u/tianlin/feizei/obj/…`，而这些文件在 `/u/tonggang/feizei/obj/`（本库没有 `u/tianlin/feizei`）。`carry_object()` 出错，`choose_feizei()` 在重新 `call_out` 之前中断，事件从此停止。路径改成本目录。启动后 2 秒的第一次放飞贼不再出错。
+3. 验证（新进程，临时副本）：GB → 年龄问题答 `no` → `fluffos` 登录（admin）→ `look`、`score`、`i`、`quit` 正常。

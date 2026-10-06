@@ -161,7 +161,6 @@ void print3()
 
 void add(string site)
 {
-   int i;
    
    Sites += ({site});
    write_file(BANNED_SITES, Sites[sizeof(Sites)-1] + "\n", 0);
@@ -169,7 +168,6 @@ void add(string site)
 
 void add2(string site)
 {
-   int i;
    
    Sites2 += ({site});
    write_file(CHAR_BANNED_SITES, Sites2[sizeof(Sites2)-1] + "\n", 0);
@@ -177,7 +175,6 @@ void add2(string site)
 
 void add3(string site)
 {
-        int i;
 
         Sites3 += ({site});
         write_file(STRICT_BANNED_SITES, Sites3[sizeof(Sites3)-1] + "\n", 0);

@@ -207,7 +207,7 @@ string per_status_msg(int age, int per, string gender)
 
 int look_living(object me, object obj)
 {
-   string str, limb_status, ridemsg, pro;
+   string str, ridemsg, pro;
    mixed *inv;
    mapping my_fam, fam;
 // added for bian by mon.
