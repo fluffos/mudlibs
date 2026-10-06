@@ -590,3 +590,7 @@ three load. The lib's warnings pass has not been done (unused locals in the mast
 ## 深度功能测试（§10.7，2026-10-05）— 主控 author_file()/domain_file()
 
 驱动的 mudlib_stats 包在主控载入时各调用一次 `author_file(<主控文件>)` 和 `domain_file("/")`，要求返回字符串。本库这两个 apply 只为 domains / realms 目录下的文件返回名字，其余返回 0，所以每次启动都打印 `author_file() in the master file does not work, using root_uid as fallback` 和 `domain_file() in the master file does not work, using bb_ui as fallback` 两行，网页版每位访客的终端里都看得到。`adm/obj/master.lpc` 改成与 fluffos 组织维护的 Dead Souls 上游（`deadsouls_fluffos`）相同的写法：其余文件的域返回 `"BACKBONE"`，作者返回 `"NONAME"`。域等于 backbone 域时驱动让对象沿用创建者的域，与返回 0 时相同；作者统计（`author_stats()`）多出一行 `NONAME`，汇总 realms 目录以外的对象（KB 06 §7.222）。用 `lpcc config.fluffos /nonexistent.lpc` 前后对比，主控载入段只少了这两行。
+
+## 2026-10-06 — `protected private`
+
+`adm/daemon/services.lpc` 的 `build_mudlist()` 声明为 `protected private`（早期把 `static` 换成 `protected` 时留下的两个访问修饰），FluffOS 报 `Multiple access modifiers`；改为 `private`。该文件仍因缺少 `NETWORK_D`（本驱动没有网络包下的互联服务）无法编译。

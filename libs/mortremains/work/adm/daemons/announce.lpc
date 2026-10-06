@@ -23,7 +23,7 @@ void create() {
  
 int announce_user(object who, int type) {
     mixed *list, *ann;
-    string name, what, mud;
+    string name, mud;
     int loop, s, member;
     object ob;
 #ifdef AUTOACTION

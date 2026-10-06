@@ -15,7 +15,7 @@
 void listen_callback(int fd);
 void write_callback(int fd);
 void read_callback(int fd, string str);
-nosave private void smtp_send(int fd, string code);
+private void smtp_send(int fd, string code);
 void close_connection(int fd);
 
 #endif /* __SMTP_H */

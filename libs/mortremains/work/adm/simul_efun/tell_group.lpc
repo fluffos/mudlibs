@@ -14,7 +14,6 @@ int tell_group (mixed file, string msg)
    string data;
    object *people;
    int i;
-   object ob;
    
    people = ({ });
    if(stringp(file))

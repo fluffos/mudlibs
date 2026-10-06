@@ -833,3 +833,7 @@ Formatter not run (minimal edits).
 ## 深度功能测试（§10.7，2026-10-05）— 主控 author_file()
 
 驱动的 mudlib_stats 包在主控载入时调用一次 `author_file(<主控文件>)`，要求返回字符串，否则每次启动都打印 `author_file() in the master file does not work, using root_uid as fallback` 一行，网页版每位访客的终端里都看得到。本库 `adm/obj/master.lpc` 的 `author_file()` 只为 `/u/<字母>/<名字>/` 下的文件返回作者，其余返回 0。而且驱动传入的路径是 `"/"` 加上配置里的 `/adm/obj/master`，即 `//adm/obj/master`，sane 模式的 `explode()` 会保留一个开头的 `""`。`praise` 和 `find -author` 直接调用 `master()->author_file()`，把 0 当作“没有作者”，所以没有把 0 改成字符串。现在先去掉空段（`explode(...) - ({ "" })`），`/adm` 下的文件返回 `ROOT_UID`（与同文件 `domain_file()` 的 `adm` 分支一致），这样也回答了开机探测；`/u` 分支加了长度检查（原来 `/u/<x>` 这样的短路径取 `path[2]` 会越界出错，而 author_file() 在每个对象载入时都会调用）（KB 06 §7.222）。用 `lpcc config.fluffos /nonexistent.lpc` 前后对比（主控和 preload 全程），只少了这一行。
+
+## 深度功能测试（§10.7，2026-10-06）— 编译警告（机械部分）
+
+`scripts/lpc_warnings.py mortremains --fix`：删 16 处 `#pragma save_binary` 之外，631 个 `nosave` 函数改 `protected`（102 个去掉修饰），删 1188 个未用局部变量，补 32 处 `varargs`、32 处缺返回值的 `return;`；`lpc_audit_removed_locals.py` 复核 1901 个，0 个需要处理。改动的 622 个 `.lpc` 在只含被跟踪文件的树里 HEAD 与新版各编一次，发现一处回退：`adm/AFD/object/prop_logic.kenny.lpc` 的修饰符分行写（`nomask` / `private` / `nosave` 各占一行），工具没看到上一行的 `private`，把 `nosave` 改成了 `protected`，成了编译不过的 `private protected`；手工改回 `private`，工具已修正（逐行向上看纯修饰符行）。启动警告 97 → 8，错误 0。实测 `fluffos` 登录、`look`（Immortal's Hall）、`score`、`i`、`who`、`quit` 正常。

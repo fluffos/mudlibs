@@ -31,7 +31,6 @@ mapping load_access()
     string file;
     int i, j;
     string *rest;
-    int setbits;
     string path;
     string tmp, name;
     
