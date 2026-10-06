@@ -809,4 +809,4 @@ character back to the host. Do not loop-reboot (I3).
 
 `secure/daemon/master.lpc` 的 `compile_object()` 用 `else if` 先建 `players` 目录、再建字母目录：父目录不存在时只建父目录，这位玩家第一次存档（设密码时）打开 `players/<字母>/<名字>.o.tmp` 失败。git 不跟踪这个目录下的文件，全新检出与网页版每位访客都会遇到。第二个 `else if` 改为 `if`（与 dsI 相同）。nightmare4 上用只含被跟踪文件的树实测注册→重登通过；本库主控编译通过。
 另：`/secure/daemon/remote`（远程创作者协议）从预载中注释掉。它按 Foundation II 的旧套接字接口写成，本库的 `server.lpc` 接口不同，每次启动编译失败；协议还需要每位创作者的 `~/adm/remote` 对象，本档案没有。与 dsI、dsII、nightmare4 及 fluffos 组织的 Dead Souls 上游相同。
-
+另：`lib/verbs/jump.lpc` 的 `GetJumps()` 只写了 `Jumps;`，永远返回 0，补上 `return`（与 nightmare4 的 `lib/events/jump.lpc` 同一处）。
