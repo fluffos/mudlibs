@@ -700,3 +700,12 @@ project's usual convention.
 3. `net/daemon/http` 的 `protected private` 改为 `private`（FluffOS 不允许两个访问修饰），现在可以编译。`global/events.lpc` 注释掉的旧 `fix_string` 结尾行里的 `/*` 去掉（只留关闭的 `*/`）。
 4. 启动警告 202 → 0，错误 0。改动的 `.lpc` 在只含被跟踪文件的树里 HEAD 与新版各编一次：352 → 353 通过，无回退。实测 `god` 登录，`look`、`score`、`i`、`who` 屏幕上不再出现编译警告，技能等级退出再登录后保留。本库未经 §9 格式化，本次也不格式化。
 5. `std/index.lpc`（手册索引）与 `net/daemon/remotepost.lpc` 里还有 12 处 `private protected`（早期把 `static` 一律换成 `protected` 时，`private static` 变成了两个访问修饰），整个文件编译不过：函数改为 `private`，变量改为 `private nosave`（即原来 `private static` 的意思）。`remotepost` 现在可以编译；`std/index` 编译通过但载入时另有问题，未处理。
+
+## 深度功能测试（§10.7，2026-10-06）— 巫师 `man` 命令
+
+巫师命令 `man` 一直回答「It appears that the manual page displayer is broken.」，三处原因：
+1. `std/index`（文档索引，`obj/handlers/man` 继承它）和 `obj/menu`（翻页显示器）都 `inherit "/std/basic/wildcard.lpc"`，而原始存档里这个文件只在 `std/basic.old/` 下。两个对象都载入失败。改为继承 `/std/basic.old/wildcard.lpc`。
+2. 索引在 `create()` 后用 `call_out("sort_manual_dirs", 2)` 分批建立，而 `sort_manual_dirs()` 是 `private`：继承它的 `obj/handlers/man` 里看不见，驱动拒绝这个 call_out（`apply() with insufficient permission ... sort_manual_dirs ... needs: private, has: hidden`，KB 07 §8.3），索引永远停在「the system is currently loading」。改 `protected`。
+3. `obj/menu` 一个没用的局部变量 `is_directory`：警告会在第一次 `man` 时直接打到巫师屏幕上，删去。
+验证（临时副本，新进程）：`fluffos` 登录，`man write_file` 显示 `efuns/filesystem/write_file` 的说明。登录时 `secure/login` 对 `global/creator` 调 `set_name()` 被拒（该函数是 `protected`，原 MudOS 版是 `static`，同样不能被外部调用；名字随后由存档恢复时设置），是原样行为，未改。
+
