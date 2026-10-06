@@ -4,7 +4,7 @@
 // by mon
 
 int valid_perform(object me, object target)
-{    int pk_k, pk_v;   
+{   
 
 //  if( userp(target) && userp(me) ) return notify_fail("目前是安全日，禁止PK\n");
      
