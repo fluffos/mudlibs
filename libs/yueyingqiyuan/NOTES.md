@@ -1008,3 +1008,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply y
 
 房间基类 `std/room.lpc`：`reset()` 的 `case 1:` 拿到 0 就跳过这一项（`if (!objectp(ob[list[i]])) break;`）。档案里没有的 NPC 或物品（或 `create()` 出错的物件）原先会让列出它的房间整个加载失败（`Bad argument 1 to environment()`，或对 0 的 `call_other()`），连带这个房间后面的区域；现在房间照常加载，只是少了那个物件，下次 `reset()` 再试（KB 05 §7.25；`scripts/lpc_resilient_room.py`、`scripts/lpc_room_reset_guard.py`）。
 验证：探针（`scripts/lpc_room_reset_probe.py`：房间基类列出一个不存在的物件，再调用 `reset()`）HEAD 单件 崩溃、多件 OK，工作树 单件 OK、多件 OK。
+
+## 深度功能测试（§10.7，2026-10-06）— 编译警告整理
+
+`scripts/lpc_warnings.py yueyingqiyuan --fix`：无用局部变量 1697 个、`varargs` 60 处、转义 64 处、`nosave` 函数 12 个改 `protected`、裸 `return` 7 处，共改动 888 个 `.lpc`。这些文件在 HEAD 与工作树分别加载（新进程）：842 -> 842 通过，无回退；`scripts/lpc_audit_removed_locals.py HEAD` 的 24 条候选都是声明被重建（仍在用的名字保留；有 `#if` 的只有 `d/city/piggy*.lpc`，与被删的名字无关）。手工：`adm/daemons/natured.lpc` `update_day_phase()` 的 `for (i; ...)`（初始化部分无作用）改为 `for (; ...)`，`i` 在上一行已置 0。启动时警告 613 -> 0；新进程启动后登录界面（gb/big5 选择、"工作没做完"问答、英文名校验）正常。剩下 407 条诊断都在本来就不能编译的 224 个文件里。
