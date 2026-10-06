@@ -6,7 +6,6 @@
 
 #define __INCLUDE_H__
 
-#pragma combine_strings
 
 #include "/include/daemon.h"
 

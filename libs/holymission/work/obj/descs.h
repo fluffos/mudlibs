@@ -79,7 +79,7 @@ string show_vitals() {
 #endif
 
 varargs string get_prompt_str(int f) {
-  string pr, pr2, sep, hlp, aname;
+  string pr, pr2, sep, aname;
   object a, o, aa;
   int mhp, hp, msp, sp, amhp, ahp, aamhp, aahp, *cp;
 

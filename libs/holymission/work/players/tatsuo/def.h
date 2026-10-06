@@ -136,12 +136,12 @@ OTHERS(string str, object ob1) {
    object old, new_;
 
    old=INVF(ENV(ob1));
-   if (!old) return;   
+   if (!old) return 0;   
    while (old) {
       new_=INVN(old);
       if (living(old) && old!=ob1 && old!=TP) TELL(old,str);
       old=new_;
    }
-   return;
+   return 0;
 }
 

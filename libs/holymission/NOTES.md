@@ -724,3 +724,9 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 4. `sys/mylook.lpc` 在档案里是 0 字节，`sys/archive/mylook.c` 是同一文件的旧版（“the look that is called from living.c”，列出房间里的生物与物品并合并复数）；用它替换玩家里只打印房间长描述的代用 `mylook()`。
 
 实测（只含被跟踪文件的树）：新角色注册、`choose human`、`score`（体型 medium、最大生命 74，来自 living 与公会主控的公式）、走动、`look` 列出 “Priest.”、“Preacher man.”；旧存档角色登录正常（邮件提示、属性完整）；`kill priest`：双方命中/落空与状态行，玩家死亡 “You die. ... Priest killed Zzml.” 变成鬼魂，`score` 显示 “You are a ghost”，在教堂 `pray` 复活（“You reappear in a more solid form.”）。启动编译错误 0。
+
+## 深度功能测试（§10.7，2026-10-06，续三）— 编译警告（机械部分）
+
+1. `obj/monsoul.lpc` 是 `obj/monster`、`obj/mon`、玩家文本包含的文件，入库时给它补了 `msgin`/`msgout`/`mmsgin`/`mmsgout` 的声明，而三个包含者都继承 living，已有这些变量；每个 NPC 编译时都报四条重复声明（约 2859 个文件、11999 条警告的大头）。删掉这行声明，`sreset()` 设置的就是 living 的那一份。
+2. `scripts/lpc_warnings.py holymission --fix`：643 个 `nosave` 函数改 `protected`（105 个直接去掉修饰），删 3571 个未用局部变量，补 69 处 `varargs`、7 处缺返回值的 `return;`、约 217 处无效转义。`lpc_audit_removed_locals.py` 复核 5801 个被删声明，0 个需要处理。改动的 1506 个 `.lpc` 用 `lpcc --batch` 复编，之前通过的没有一个失败。全库编译 20419 → 20433，诊断 11796 → 7242 种。§9 格式化：`secure/backmaster.lpc`、`secure/mmm.lpc`（主控的旧副本，不载入）被格式化器拆坏字符串（盲点 3），恢复为 HEAD，本次不改。
+3. 启动警告 471 → 34，错误 0；剩下的是结构性的（`Types in ?:`、`add_poison` 返回类型等）。实测（只含被跟踪文件的树）：旧角色登录、`look` 列出 Priest、`kill priest` 死亡、鬼魂、教堂 `pray` 复活；新角色注册、走到商店 `list`。

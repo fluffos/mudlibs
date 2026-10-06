@@ -5,172 +5,167 @@
 string apple_look();
 int _jump(string str);
 int _pick(string str);
-private nosave mixed *random_insect();
-private nosave mixed *random_bird();
+private mixed *random_insect();
+private mixed *random_bird();
 
 nosave int apple_count;
 
 string apple_look() {
-  if(apple_count <= 0)
+  if (apple_count <= 0)
     return "There are no apples here. ";
   return "There are a few apples here you could reach. ";
 }
 
 int _jump(string str) {
   string nothing, filename, msg, location;
-  int    dam;
+  int dam;
 
   dam = 0;
-  switch(str) {
-    case "off" :
-    case "off tree" :
-    case "off branch" :
-    case "off the branch" :
-    case "off the tree" :
-    case "to ground" :
-    case "down" :
-    case "to the ground" :
-      if(sscanf(file_name(TO), "%s/tree%s", nothing, filename) != 2)
+  switch (str) {
+    case "off":
+    case "off tree":
+    case "off branch":
+    case "off the branch":
+    case "off the tree":
+    case "to ground":
+    case "down":
+    case "to the ground":
+      if (sscanf(file_name(TO), "%s/tree%s", nothing, filename) != 2)
         return 0;
       dam = 5;
-      switch(filename) {
-        case "05" :
-        case "20" :
-        case "30" :
-        case "35" :
-          writelw("You cannot jump at the trunk of the tree. You must "+
-                  "be on a branch.\n");
+      switch (filename) {
+        case "05":
+        case "20":
+        case "30":
+        case "35":
+          writelw("You cannot jump at the trunk of the tree. You must " +
+            "be on a branch.\n");
           return 1;
-        case "23" :
+        case "23":
           location = VILLAGE_GARDEN + "tree04";
-        case "25" :
+        case "25":
           dam += 5;
-          if(!random(5)) {
-            msg = "You jump from the branch and head toward the ground "+
-                  "but land on the branch below you! OUCH, that hurt.\n";
+          if (!random(5)) {
+            msg = "You jump from the branch and head toward the ground " +
+              "but land on the branch below you! OUCH, that hurt.\n";
             dam -= 5;
-            if(!location)
+            if (!location)
               location = VILLAGE_GARDEN + "tree04";
             break;
           }
-        case "06" :
-        case "07" :
-        case "10" :
-          msg = "You jump from the branch and you notice you may hit the "+
-                "town wall below. ";
-          if(!random(3)) {
-            msg += "Unfortunately, your luck has run out and you hit the "+
-                   "wall! OUCH, that hurt!\n";
+        case "06":
+        case "07":
+        case "10":
+          msg = "You jump from the branch and you notice you may hit the " +
+            "town wall below. ";
+          if (!random(3)) {
+            msg += "Unfortunately, your luck has run out and you hit the " +
+              "wall! OUCH, that hurt!\n";
             dam += 5;
-          }
-          else
-            msg += "Thankfully, the fates are with you today as you miss it "+
-                   "and head for the garden ground.\n";
+          } else
+            msg += "Thankfully, the fates are with you today as you miss it " +
+              "and head for the garden ground.\n";
           location = VILLAGE_GARDEN + "garden3";
           break;
-        case "22" :
+        case "22":
           dam += 5;
-          if(!random(5)) {
-            msg = "You jump from the branch and head toward the ground "+
-                  "but land on the branch below you! OUCH, that hurt.\n";
+          if (!random(5)) {
+            msg = "You jump from the branch and head toward the ground " +
+              "but land on the branch below you! OUCH, that hurt.\n";
             dam -= 5;
             location = VILLAGE_GARDEN + "tree04";
             break;
           }
-        case "04" :
-          msg = "You jump from the branch and head straight for the "+
-                "ground.\n";
+        case "04":
+          msg = "You jump from the branch and head straight for the " +
+            "ground.\n";
           location = VILLAGE_GARDEN + "garden3";
           break;
-        case "24" :
+        case "24":
           dam += 5;
-          if(!random(5)) {
-            msg = "You jump from the branch and head toward the ground "+
-                  "but land on the branch below you! OUCH, that hurt.\n";
+          if (!random(5)) {
+            msg = "You jump from the branch and head toward the ground " +
+              "but land on the branch below you! OUCH, that hurt.\n";
             dam -= 5;
             location = VILLAGE_GARDEN + "tree09";
             break;
           }
-        case "09" :
-          msg = "You jump from the branch over the town wall and head "+
-                "straight into the fields outside of the town!\n";
+        case "09":
+          msg = "You jump from the branch over the town wall and head " +
+            "straight into the fields outside of the town!\n";
           location = FIELDS + "crops";
           break;
-        case "26" :
+        case "26":
           dam += 5;
-          msg = "You jump from the branch past the town wall and into "+
-                "a forest.\n";
+          msg = "You jump from the branch past the town wall and into " +
+            "a forest.\n";
           location = "";
           break;
-        case "08" :
-          msg = "You jump from the branch past the town wall and into "+
-                "the fields outside of town.\n";
+        case "08":
+          msg = "You jump from the branch past the town wall and into " +
+            "the fields outside of town.\n";
           location = FIELDS + "crops";
           break;
-        case "03" :
+        case "03":
           msg = "You jump from the branch and head toward the town wall. ";
-          if(!random(3)) {
-            msg += "Unfortunately, your luck has run out and you hit the "+
-                   "wall! OUCH, that hurt!\n";
+          if (!random(3)) {
+            msg += "Unfortunately, your luck has run out and you hit the " +
+              "wall! OUCH, that hurt!\n";
             dam += 5;
-          }
-          else
-            msg += "Thankfully, the fates are with you today as you miss it "+
-                   "and head for the garden ground.\n";
+          } else
+            msg += "Thankfully, the fates are with you today as you miss it " +
+              "and head for the garden ground.\n";
           location = VILLAGE_GARDEN + "garden6";
           break;
-        case "01" :
+        case "01":
           msg = "You jump from the branch and head toward the town wall. ";
-          if(!random(3)) {
-            msg += "Unfortunately, your luck has run out and you hit the "+
-                   "wall! OUCH, that hurt!\n";
+          if (!random(3)) {
+            msg += "Unfortunately, your luck has run out and you hit the " +
+              "wall! OUCH, that hurt!\n";
             dam += 5;
-          }
-          else
-            msg += "Thankfully, the fates are with you today as you miss it "+
-                   "and head for the garden ground.\n";
-        location = VILLAGE_GARDEN + "garden5";
+          } else
+            msg += "Thankfully, the fates are with you today as you miss it " +
+              "and head for the garden ground.\n";
+          location = VILLAGE_GARDEN + "garden5";
           break;
-        case "02" :
+        case "02":
           msg = "You jump from the branch and head toward the town wall. ";
-          if(!random(3)) {
-            msg += "Unfortunately, your luck has run out and you hit the "+
-                   "wall! OUCH, that hurt!\n";
+          if (!random(3)) {
+            msg += "Unfortunately, your luck has run out and you hit the " +
+              "wall! OUCH, that hurt!\n";
             dam += 5;
-          }
-          else
-            msg += "Thankfully, the fates are with you today as you miss it "+
-                   "and head for the garden ground.\n";
+          } else
+            msg += "Thankfully, the fates are with you today as you miss it " +
+              "and head for the garden ground.\n";
           location = VILLAGE_GARDEN + "garden6";
           break;
-        case "11" :
+        case "11":
           msg = "You jump from the branch and head toward the town wall. ";
-          if(!random(3)) {
-            msg += "Unfortunately, your luck has run out and you hit the "+
-                   "wall! OUCH, that hurt!\n";
+          if (!random(3)) {
+            msg += "Unfortunately, your luck has run out and you hit the " +
+              "wall! OUCH, that hurt!\n";
             dam += 5;
-          }
-          else
-            msg += "Thankfully, the fates are with you today as you miss it "+
-                   "and head for the garden ground.\n";
+          } else
+            msg += "Thankfully, the fates are with you today as you miss it " +
+              "and head for the garden ground.\n";
           location = VILLAGE_GARDEN + "garden2";
           break;
-        case "12" :
+        case "12":
           msg = "You jump from the branch and head toward the ground.\n";
           location = VILLAGE_GARDEN + "garden2";
           break;
-        case "13" :
-          msg = "You jump from the branch past the town wall and into "+
-                "a forest.\n";
+        case "13":
+          msg = "You jump from the branch past the town wall and into " +
+            "a forest.\n";
           location = "";
           break;
-        default :
+        default:
           msg = "You jump and land on the ground.\n";
           location = VILLAGE_GARDEN + "garden3";
           break;
       }
       break;
-    default :
+    default:
       notify_fail("Jump where?\n");
       return 0;
   }
@@ -188,42 +183,42 @@ int _jump(string str) {
 int _pick(string str) {
   object ob;
 
-  switch(str) {
-    case "apple" :
-    case "apples" :
-    case "an apple" :
-    case "a apple" :
-    case "the apple" :
-      if(apple_count <= 0) {
+  switch (str) {
+    case "apple":
+    case "apples":
+    case "an apple":
+    case "a apple":
+    case "the apple":
+      if (apple_count <= 0) {
         write("There are no apples left to pick!\n");
         return 1;
       }
       apple_count--;
       write("You pick a delicious red apple!\n");
-      ob=clone_object("/obj/food");
+      ob = clone_object("/obj/food");
       ob->set_name("apple");
       ob->set_alias_list(({ "fruit", "red apple" }));
       ob->set_short("A bright red apple");
-      ob->set_long("A delicious-looking apple. It is probably sweet and "+
-                   "juicy.\n");
-      ob->set_heal_amount(2+random(8));
+      ob->set_long("A delicious-looking apple. It is probably sweet and " +
+        "juicy.\n");
+      ob->set_heal_amount(2 + random(8));
       ob->set_value(20);
       ob->set_weight(1);
-      if(transfer(ob, TP))
+      if (transfer(ob, TP))
         MOVE(ob, ENV(TP));
       return 1;
-    default :
+    default:
       notify_fail("Pick what?\n");
       return 0;
   }
 }
 
-private nosave mixed *random_insect() {
+private mixed *random_insect() {
   mixed *tmp;
 
   tmp = allocate(2);
-  switch(random(10)) {
-    case 0..1 :
+  switch (random(10)) {
+    case 0..1:
       tmp[0] = 3 + random(3);
       tmp[1] = ({
         "set_name", "termite",
@@ -235,7 +230,7 @@ private nosave mixed *random_insect() {
         "set_size", 1,
       });
       break;
-    case 2..3 :
+    case 2..3:
       tmp[0] = 2 + random(3);
       tmp[1] = ({
         "set_name", "mosquito",
@@ -247,19 +242,19 @@ private nosave mixed *random_insect() {
         "set_size", 1,
       });
       break;
-    case 4..5 :
+    case 4..5:
       tmp[0] = 2 + random(3);
       tmp[1] = ({
-        "set_name","caterpillar",
+        "set_name", "caterpillar",
         "set_level", 1,
         "set_race", "insect",
-        "set_short","A small caterpillar",
-        "set_long","A small caterpillar crawling along.\n",
+        "set_short", "A small caterpillar",
+        "set_long", "A small caterpillar crawling along.\n",
         "set_gender", 0,
         "set_size", 1,
       });
       break;
-    case 6..7 :
+    case 6..7:
       tmp[0] = 5 + random(2);
       tmp[1] = ({
         "set_name", "gnat",
@@ -271,7 +266,7 @@ private nosave mixed *random_insect() {
         "set_size", 1,
       });
       break;
-    default :
+    default:
       tmp[0] = 4 + random(5);
       tmp[1] = ({
         "set_name", "ant",
@@ -287,12 +282,12 @@ private nosave mixed *random_insect() {
   return tmp;
 }
 
-private nosave mixed *random_bird() {
+private mixed *random_bird() {
   mixed *tmp;
 
   tmp = allocate(2);
-  switch(random(10)) {
-    case 0..1 :
+  switch (random(10)) {
+    case 0..1:
       tmp[0] = 1 + random(2);
       tmp[1] = ({
         "set_name", "sparrow",
@@ -304,7 +299,7 @@ private nosave mixed *random_bird() {
         "set_size", 1,
       });
       break;
-    case 2..3 :
+    case 2..3:
       tmp[0] = 1 + random(2);
       tmp[1] = ({
         "set_name", "robin",
@@ -316,7 +311,7 @@ private nosave mixed *random_bird() {
         "set_size", 1,
       });
       break;
-    case 4..5 :
+    case 4..5:
       tmp[0] = 1 + random(2);
       tmp[1] = ({
         "set_name", "raven",
@@ -328,7 +323,7 @@ private nosave mixed *random_bird() {
         "set_size", 1,
       });
       break;
-    case 7..8 :
+    case 7..8:
       tmp[0] = 1 + random(2);
       tmp[1] = ({
         "set_name", "woodpecker",
@@ -340,7 +335,7 @@ private nosave mixed *random_bird() {
         "set_size", 1,
       });
       break;
-    default  :
+    default:
       tmp[0] = 1 + random(2);
       tmp[1] = ({
         "set_name", "quail",
@@ -354,4 +349,3 @@ private nosave mixed *random_bird() {
       break;
   }
 }
-

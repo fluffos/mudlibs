@@ -4,10 +4,10 @@
 
 // Prototypes:
 
-nosave int try_throw_out(string str);
-nosave void move_player_to_start3(string where);
-nosave void getgender(string str);
-nosave void move_player_to_start2(string where);
+protected int try_throw_out(string str);
+protected void move_player_to_start3(string where);
+protected void getgender(string str);
+protected void move_player_to_start2(string where);
 void logon(string n, int quiet);
 void compute_auto_str();
 void check_start_pos(object me);
@@ -23,18 +23,18 @@ string start_where();
 
 // Global variables:
 
-int            bug_file_size;       // Used to check if there are new
-int            start_at_guild;      //
-int            stats_is_updated;    //
+int bug_file_size;       // Used to check if there are new
+int start_at_guild;      //
+int stats_is_updated;    //
 
-object         other_copy;          //
+object other_copy;          //
 
-string         called_from_ip;      // IP number was used last time
-string         start_where;         // room where to start from
+string called_from_ip;      // IP number was used last time
+string start_where;         // room where to start from
 
-nosave string  login_msg;           //
-nosave string  saved_where;         // Temp
-nosave int     time_to_save;        // Time to autosave
+nosave string login_msg;           //
+nosave string saved_where;         // Temp
+nosave int time_to_save;        // Time to autosave
 
 // End global variables.
 

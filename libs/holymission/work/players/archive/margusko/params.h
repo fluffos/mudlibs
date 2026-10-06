@@ -1,5 +1,3 @@
-#pragma SAVE_BINARY
-#pragma OPTIMALIZE
 #pragma strict_types
 
 

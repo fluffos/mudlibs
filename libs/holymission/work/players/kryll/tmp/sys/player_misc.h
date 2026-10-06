@@ -12,8 +12,8 @@ nomask void set_balance(int val);
 nomask void add_balance(int val);
 nomask string query_wimpydir();
 int check_wimpy(object attacker_ob);
-nosave int in_room(string str);
-nomask nosave void set_wimpydir(string str);
+protected int in_room(string str);
+nomask void set_wimpydir(string str);
 
 // End prototypes.
 
