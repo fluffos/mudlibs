@@ -1628,7 +1628,27 @@ strip(string str)
  * call_out() handle so remove_alarm() can cancel it.
  */
 private int __alarm_next_id = 1;
-private mapping __alarms = ([]);  /* id -> ({ callout_handle, repeat, func }) */
+/* id -> ({ callout_handle, repeat, func, fire_time, owner }). On the CD
+ * driver alarms are per object: get_all_alarms()/get_alarm()/remove_alarm()
+ * only see the caller's own, and they go away with the object. A single
+ * global table without an owner let std/object.lpc's reset() and
+ * enable_reset(), which remove every "reset" alarm get_all_alarms() lists,
+ * cancel the scheduled reset of every other object, and kept firing the
+ * alarms of destructed objects ("Owner ... of function pointer is
+ * destructed"). */
+private mapping __alarms = ([]);
+
+private string
+__alarm_func_name(function f)
+{
+    string s;
+
+    s = sprintf("%O", f);
+    if (sscanf(s, "(: %s :)", s) != 1)
+        return "";
+    sscanf(s, "%s,", s);
+    return s;
+}
 
 private void
 __alarm_fire(int id)
@@ -1640,12 +1660,20 @@ __alarm_fire(int id)
     entry = __alarms[id];
     if (!entry)
         return;
+    if (!entry[4])
+    {
+        map_delete(__alarms, id);
+        return;
+    }
 
     func = entry[2];
     repeat = entry[1];
 
     if (repeat > 0.0)
+    {
         __alarms[id][0] = call_out((: __alarm_fire, id :), repeat);
+        __alarms[id][3] = time() + repeat;
+    }
     else
         map_delete(__alarms, id);
 
@@ -1660,7 +1688,7 @@ set_alarm(float delay, float repeat, function func)
 
     id = __alarm_next_id++;
     handle = call_out((: __alarm_fire, id :), delay);
-    __alarms[id] = ({ handle, repeat, func });
+    __alarms[id] = ({ handle, repeat, func, time() + delay, previous_object() });
     return id;
 }
 
@@ -1670,27 +1698,38 @@ remove_alarm(int id)
     mixed *entry;
 
     entry = __alarms[id];
-    if (!entry)
+    if (!entry || entry[4] != previous_object())
         return;
     remove_call_out(entry[0]);
     map_delete(__alarms, id);
 }
 
-mixed
+mixed *
 get_alarm(int id)
 {
     mixed *entry;
 
     entry = __alarms[id];
-    if (!entry)
+    if (!entry || entry[4] != previous_object())
         return 0;
-    return entry[2];
+    return ({ id, __alarm_func_name(entry[2]), to_float(entry[3] - time()),
+        entry[1], ({}) });
 }
 
-int *
+mixed *
 get_all_alarms()
 {
-    return keys(__alarms);
+    object owner = previous_object();
+    int *ids;
+    mixed *result;
+    int i;
+
+    ids = filter(keys(__alarms), (: __alarms[$1][4] == $(owner) :));
+    result = allocate(sizeof(ids));
+    for (i = 0; i < sizeof(ids); i++)
+        result[i] = ({ ids[i], __alarm_func_name(__alarms[ids[i]][2]),
+            to_float(__alarms[ids[i]][3] - time()), __alarms[ids[i]][1], ({}) });
+    return result;
 }
 
 /* FluffOS PORT NOTE: break_string() (doc/man/efun/break_string --

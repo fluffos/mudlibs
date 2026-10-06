@@ -369,7 +369,15 @@ itof(mixed i)
  * doesn't expose a call_out's remaining time directly either).
  */
 private int __alarm_next_id = 1;
-private mapping __alarms = ([]);  /* id -> ({ callout_handle, repeat, func, fire_time }) */
+/* id -> ({ callout_handle, repeat, func, fire_time, owner }). On the CD
+ * driver alarms are per object: get_all_alarms()/get_alarm()/remove_alarm()
+ * only see the caller's own, and they go away with the object. A single
+ * global table without an owner let std/object.lpc's reset() and
+ * enable_reset(), which remove every "reset" alarm get_all_alarms() lists,
+ * cancel the scheduled reset of every other object, and kept firing the
+ * alarms of destructed objects ("Owner ... of function pointer is
+ * destructed"). */
+private mapping __alarms = ([]);
 
 private string
 __alarm_func_name(function f)
@@ -393,6 +401,11 @@ __alarm_fire(int id)
     entry = __alarms[id];
     if (!entry)
         return;
+    if (!entry[4])
+    {
+        map_delete(__alarms, id);
+        return;
+    }
 
     func = entry[2];
     repeat = entry[1];
@@ -416,7 +429,7 @@ set_alarm(float delay, float repeat, function func)
 
     id = __alarm_next_id++;
     handle = call_out((: __alarm_fire, id :), delay);
-    __alarms[id] = ({ handle, repeat, func, time() + delay });
+    __alarms[id] = ({ handle, repeat, func, time() + delay, previous_object() });
     return id;
 }
 
@@ -426,7 +439,7 @@ remove_alarm(int id)
     mixed *entry;
 
     entry = __alarms[id];
-    if (!entry)
+    if (!entry || entry[4] != previous_object())
         return;
     remove_call_out(entry[0]);
     map_delete(__alarms, id);
@@ -438,7 +451,7 @@ get_alarm(int id)
     mixed *entry;
 
     entry = __alarms[id];
-    if (!entry)
+    if (!entry || entry[4] != previous_object())
         return 0;
     return ({ id, __alarm_func_name(entry[2]), to_float(entry[3] - time()),
         entry[1], ({}) });
@@ -447,14 +460,16 @@ get_alarm(int id)
 mixed *
 get_all_alarms()
 {
-    mixed *ids;
-    int i;
+    object owner = previous_object();
+    int *ids;
     mixed *result;
+    int i;
 
-    ids = keys(__alarms);
+    ids = filter(keys(__alarms), (: __alarms[$1][4] == $(owner) :));
     result = allocate(sizeof(ids));
     for (i = 0; i < sizeof(ids); i++)
-        result[i] = get_alarm(ids[i]);
+        result[i] = ({ ids[i], __alarm_func_name(__alarms[ids[i]][2]),
+            to_float(__alarms[ids[i]][3] - time()), __alarms[ids[i]][1], ({}) });
     return result;
 }
 

@@ -758,3 +758,7 @@ pass.
 3. **CD 与 FluffOS 的 map/filter 语义差异（KB 06 §7.223）。** FluffOS 对映射调用函数时传 (key, value)，CD 只传 value。`secure_var()` 因此把每个映射变成 key:key，`lib/cache.lpc` 的每次读取都被破坏（`mbs` 第二次运行报 `Trying to put string in int`）。`secure/simul_efun.lpc` 加了 CD 语义的 `map`/`filter` 覆盖（映射按 value 调用，数组和字符串交给 efun），sefun 自身里的 `secure_var` 用 `(: secure_var($2) :)`。
 4. `players/mbs_save/<字母>/` 不存在，mbs 存档报 `Wrong permissions`；补了 26 个 `.gitkeep`。`cmd/std/tracer_tool.lpc` 的 `member_array(flag, vars) > 0` 原样保留（原代码行为）。
 5. 仍有：化身时日志一行 `Owner (/d/Standard/login/ghost_player#N) of function pointer is destructed`（鬼魂对象被替换后它的定时器还在），流程不受影响；新编译的文件带进了本库原有的警告类（`nosave` 函数、CD 的 `#pragma`），归入警告清理。
+
+## 深度功能测试（§10.7，2026-10-05）— set_alarm 闹钟按对象归属
+
+`secure/simul_efun.lpc` 用一张全局表模拟 CD 驱动的 `set_alarm()`。`get_all_alarms()` 返回所有对象的闹钟，而 `std/object.lpc` 的 `reset()` / `enable_reset()` 会先删掉列表里所有名为 reset 的闹钟再排自己的，结果任何一个对象 reset 都会取消其他所有对象的 reset，房间实际上不再重置（NPC、物品不刷新）。用 lpcc 载入两个房间验证：改前两个房间看到同样 5 个闹钟、只剩一个 reset；改后各自只有自己的 reset。现在每个闹钟记录 `previous_object()` 为主人，`get_all_alarms()` / `get_alarm()` / `remove_alarm()` 只作用于调用者自己的闹钟，返回 CD 格式；主人已销毁的闹钟到期时直接丢弃（KB 06 §7.224）。化身时那行 `Owner (/d/Standard/login/ghost_player#N) of function pointer is destructed` 也随之消失（鬼魂销毁后它的闹钟被静默丢弃）。

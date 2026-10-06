@@ -850,3 +850,7 @@ items, no shops exist to test against.
 
 1. FluffOS 对映射的 `map()`/`filter()` 传 (key, value)，CD 驱动只传 value；`secure_var()` 的 `map(var, secure_var)` 把每个映射变成 key:key，`lib/cache.lpc` 的读取全部被破坏。`secure/simul_efun.lpc` 加了 CD 语义的 `map`/`filter` 覆盖，sefun 内部的 `secure_var` 改用 `(: secure_var($2) :)`（KB 06 §7.223；arkadia 同样修复）。
 2. `secure/mbs_central` 一直载入失败：`create()` 只调用 `seteuid(ROOT_UID)` 而不先 `setuid()`，`query_auth()` 对未登记的对象返回 `"0:0"`，`valid_seteuid` 拒绝，随后 `restore_object(/data/mbs_central)` 报 read permission denied，于是每个 `mbs` 命令都拿不到数据。CD 驱动会自动给新对象创建者的 uid；照 arkadia 的写法，`query_auth()` 在没有 `set_auth()` 记录时返回 `creator_object(ob) + ":0"`。现在 mbs_central 正常载入，`mbs`、`mbs L` 无错误。`data/mbs_save/<字母>/` 补了 26 个 `.gitkeep`（保存路径 `SAVE_DIR + 首字母 + "/"`）。
+
+## 深度功能测试（§10.7，2026-10-05）— set_alarm 闹钟按对象归属
+
+`secure/simul_efun.lpc` 用一张全局表模拟 CD 驱动的 `set_alarm()`。`get_all_alarms()` 返回所有对象的闹钟，而 `std/object.lpc` 的 `reset()` / `enable_reset()` 会先删掉列表里所有名为 reset 的闹钟再排自己的，结果任何一个对象 reset 都会取消其他所有对象的 reset，房间实际上不再重置（NPC、物品不刷新）。用 lpcc 载入两个房间验证：改前两个房间看到同样 5 个闹钟、只剩一个 reset；改后各自只有自己的 reset。现在每个闹钟记录 `previous_object()` 为主人，`get_all_alarms()` / `get_alarm()` / `remove_alarm()` 只作用于调用者自己的闹钟，返回 CD 格式；主人已销毁的闹钟到期时直接丢弃（KB 06 §7.224）。genesis 原来的 `get_all_alarms()` 只返回 id 整数、`get_alarm()` 返回函数，`std/object.lpc` 的 reset 扫描以及 torch / corpse / resistance 里的 `get_alarm(id)[2]` 都会出错，现在与 arkadia 用同一份实现。

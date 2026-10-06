@@ -1107,3 +1107,14 @@ efun (§7.221). Neither lib had FluffOS-style `$2` code to break. **Detection:**
 `m_indexes()`. Companion trap: CD partial application (`&operator(==)(x) @ &operator([])(, F)`, `&f(, a)`, a bare `@` that
 the lexer reads as a here-document start: `End of file in text block`) is rewritten by `scripts/lpc_cd_closures.py`, capturing
 lowercase locals with `$(...)`; a `(: f :) @ (: g :)` composition needs a hand rewrite.
+
+### 7.224 CD-driver ports: a `set_alarm()` shim must keep alarms per object
+
+**Symptom:** genesis / arkadia: rooms stop resetting (NPCs and items never come back); every new arkadia character logs `Owner
+(/d/Standard/login/ghost_player#N) of function pointer is destructed`; in genesis `get_alarm(id)[2]` (torch, corpse, resistance) and
+the reset scan fail on a non-array. **Cause:** the shim kept one global id table in the simul_efun object. `get_all_alarms()` listed every
+object's alarms, so `std/object.lpc`'s `reset()`/`enable_reset()` ("remove every alarm named reset, then schedule mine") cancelled
+every other object's reset (an lpcc probe: two rooms each saw the same 5 alarms and only one `reset`), and alarms of destructed objects
+still fired. **Fix:** record `previous_object()` as the owner; `get_all_alarms()`/`get_alarm()`/`remove_alarm()` act on the caller's
+own alarms and return the CD shape `({ id, name, time_left, repeat, args })`; a firing alarm whose owner is gone is dropped.
+**Detection:** `grep -n "get_all_alarms" secure/simul_efun*`, then `query_alarms()` on two freshly loaded rooms.
