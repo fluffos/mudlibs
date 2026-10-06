@@ -198,7 +198,7 @@ Both confirmed via direct code reading, not guesswork:
    *does* clear `GP_EMAIL` once completed, so this is a one-time,
    self-resolving, non-crashing redundant prompt on a character's first
    arrival, not an infinite loop or persistent problem.
-2. **The "become an embodied player" pipeline appears incomplete/unreachable
+2. **(WRONG, corrected 2026-10-05: the pipeline works, see the dated section at the end.) The "become an embodied player" pipeline appears incomplete/unreachable
    as shipped.** `sala.lpc` (the race-choosing hall) offers `dotknij <race>`
    (touch a race statue, calls `set_race_name()` immediately) then `przejdz
    przez portal` (enter the portal), which is supposed to call `gotow()` ->
@@ -750,3 +750,11 @@ pass.
 ## 深度功能测试（§10.7，2026-10-05）— 主控 author_file()/domain_file()
 
 驱动的 mudlib_stats 包在主控载入时各调用一次 `author_file(<主控文件>)` 和 `domain_file("/")`。本库主控没有这两个 apply，所以每次启动都打印 `author_file() in the master file does not work, using root_uid as fallback` 和 `domain_file() in the master file does not work, using bb_ui as fallback` 两行，网页版每位访客的终端里都看得到。`secure/master.lpc` 补上了这两个 apply：作者返回 `get_root_uid()`，域返回 `get_bb_uid()`，正是驱动缺少它们时所用的值。域名等于 backbone 域时，驱动让对象沿用创建者的域，与没有这个 apply 时相同（KB 06 §7.222）。本库保留上游代码风格（几乎所有文件都未经 §9 格式化），所以只插入代码，不格式化。用 `lpcc config.fluffos /nonexistent.lpc` 前后对比，主控载入段只少了这两行。
+
+## 深度功能测试（§10.7，2026-10-05）— 巫师命令魂、化身流程、CD 的 map/filter 语义
+
+1. **巫师命令魂从未载入。** `cmd/wiz/apprentice{,/files,/communication,/people}.lpc`、`cmd/wiz/normal{,/files}.lpc`、`cmd/wiz/mbs.lpc`、`secure/mbs_central.lpc`、`cmd/std/tracer_tool.lpc` 编译失败（启动时 29 个错误）。之前 §7 说它们是"与移植无关的原有语法错误"，实际全是 CD 驱动的写法：偏应用与组合（`&operator(==)(x) @ &operator([])(, F)`、`&f(, a)`）、`@` 被词法器当作 here-document 开头（`End of file in text block`）、`(: f :) @ (: g :)`、字符串 case 区间 `"0".."9"`、保留字 `new` 作参数名、`mixed *data` 存映射、`string *` 赋值缺显式转换。用 genesis 已移植的写法逐处改（`scripts/lpc_cd_closures.py` 改写组合链，局部变量用 `$(...)` 捕获；mbs 用 genesis 的 `__field_eq_bound` 等辅助函数）。现在启动 0 个编译错误，92 个 preload 全部载入。
+2. **化身流程其实完整，§5.2 判断错误。** `gotow()` 由 `sala.lpc` 的 `set_alarm(1.5, 0.0, (: gotow, this_player() :))` 调用，鬼魂状态由 `set_cechy.lpc` 的 `set_ghost(0)` 清掉。流程：大厅 `dotknij czlowieka` → 往南的画廊等雕塑者提问（`odpowiedz mezczyzna`、身高、体型、`wybierz` 两项特征）→ `dotknij figurki` → 回大厅 `przejdz przez portal` → 进入 `/d/Standard/start/church` 成为真正的玩家。管理员 fluffos 已按此流程化身（人类），存档已提交，所以巫师命令（`tree`、`ls`、`mbs`、`Dump`、`whichsoul`）登录即可用，已逐个实测。
+3. **CD 与 FluffOS 的 map/filter 语义差异（KB 06 §7.223）。** FluffOS 对映射调用函数时传 (key, value)，CD 只传 value。`secure_var()` 因此把每个映射变成 key:key，`lib/cache.lpc` 的每次读取都被破坏（`mbs` 第二次运行报 `Trying to put string in int`）。`secure/simul_efun.lpc` 加了 CD 语义的 `map`/`filter` 覆盖（映射按 value 调用，数组和字符串交给 efun），sefun 自身里的 `secure_var` 用 `(: secure_var($2) :)`。
+4. `players/mbs_save/<字母>/` 不存在，mbs 存档报 `Wrong permissions`；补了 26 个 `.gitkeep`。`cmd/std/tracer_tool.lpc` 的 `member_array(flag, vars) > 0` 原样保留（原代码行为）。
+5. 仍有：化身时日志一行 `Owner (/d/Standard/login/ghost_player#N) of function pointer is destructed`（鬼魂对象被替换后它的定时器还在），流程不受影响；新编译的文件带进了本库原有的警告类（`nosave` 函数、CD 的 `#pragma`），归入警告清理。

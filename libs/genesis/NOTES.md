@@ -845,3 +845,8 @@ items, no shops exist to test against.
 ## 深度功能测试（§10.7，2026-10-05）— 主控 author_file()/domain_file()
 
 驱动的 mudlib_stats 包在主控载入时各调用一次 `author_file(<主控文件>)` 和 `domain_file("/")`。本库主控没有这两个 apply，所以每次启动都打印 `author_file() in the master file does not work, using root_uid as fallback` 和 `domain_file() in the master file does not work, using bb_ui as fallback` 两行，网页版每位访客的终端里都看得到。`secure/master.lpc` 补上了这两个 apply：作者返回 `get_root_uid()`，域返回 `get_bb_uid()`，正是驱动缺少它们时所用的值。域名等于 backbone 域时，驱动让对象沿用创建者的域，与没有这个 apply 时相同（KB 06 §7.222）。本库保留上游代码风格（几乎所有文件都未经 §9 格式化），所以只插入代码，不格式化。用 `lpcc config.fluffos /nonexistent.lpc` 前后对比，主控载入段只少了这两行。
+
+## 深度功能测试（§10.7，2026-10-05）— map/filter 语义、mbs 中心守护进程
+
+1. FluffOS 对映射的 `map()`/`filter()` 传 (key, value)，CD 驱动只传 value；`secure_var()` 的 `map(var, secure_var)` 把每个映射变成 key:key，`lib/cache.lpc` 的读取全部被破坏。`secure/simul_efun.lpc` 加了 CD 语义的 `map`/`filter` 覆盖，sefun 内部的 `secure_var` 改用 `(: secure_var($2) :)`（KB 06 §7.223；arkadia 同样修复）。
+2. `secure/mbs_central` 一直载入失败：`create()` 只调用 `seteuid(ROOT_UID)` 而不先 `setuid()`，`query_auth()` 对未登记的对象返回 `"0:0"`，`valid_seteuid` 拒绝，随后 `restore_object(/data/mbs_central)` 报 read permission denied，于是每个 `mbs` 命令都拿不到数据。CD 驱动会自动给新对象创建者的 uid；照 arkadia 的写法，`query_auth()` 在没有 `set_auth()` 记录时返回 `creator_object(ob) + ":0"`。现在 mbs_central 正常载入，`mbs`、`mbs L` 无错误。`data/mbs_save/<字母>/` 补了 26 个 `.gitkeep`（保存路径 `SAVE_DIR + 首字母 + "/"`）。

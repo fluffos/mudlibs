@@ -2400,7 +2400,9 @@ secure_var(mixed var)
     if (pointerp(var) ||
 	mappingp(var))
     {
-	return map(var, secure_var);
+	/* Inside this object map() is the efun, which hands a mapping's
+	 * function (key, value). */
+	return mapp(var) ? map(var, (: secure_var($2) :)) : map(var, secure_var);
     }
     return var;
 }
@@ -2569,3 +2571,41 @@ mkcompare(function f, function compare_fun : (: &operator(<)() :))
 }
 
 #endif _FUNCTION
+
+/* FluffOS PORT NOTE: the CD driver calls the function of map()/filter() over
+ * a MAPPING with the value only; FluffOS calls it with (key, value), so every
+ * one-argument function this mudlib maps or filters over a mapping got the
+ * key instead (secure_var() turned each mapping into key:key, which corrupted
+ * every lib/cache.lpc read). These overrides give mappings the CD semantics
+ * again; arrays and strings go straight to the efuns. Calls made from inside
+ * this object still reach the efuns (KB 06 §7.221, §7.223). */
+varargs mixed
+map(mixed x, mixed f, mixed *args...)
+{
+    mapping r;
+
+    if (!mapp(x))
+        return efun::map(x, f, args...);
+    r = ([ ]);
+    foreach (mixed k, mixed v in x)
+        r[k] = stringp(f) ? call_other(sizeof(args) ? args[0] : previous_object(),
+                                       f, v, (sizeof(args) ? args[1..] : ({ }))...)
+                          : evaluate(f, v, args...);
+    return r;
+}
+
+varargs mixed
+filter(mixed x, mixed f, mixed *args...)
+{
+    mapping r;
+
+    if (!mapp(x))
+        return efun::filter(x, f, args...);
+    r = ([ ]);
+    foreach (mixed k, mixed v in x)
+        if (stringp(f) ? call_other(sizeof(args) ? args[0] : previous_object(),
+                                    f, v, (sizeof(args) ? args[1..] : ({ }))...)
+                       : evaluate(f, v, args...))
+            r[k] = v;
+    return r;
+}

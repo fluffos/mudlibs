@@ -62,12 +62,24 @@ nosave void dump_elem(mixed sak, string tab);
  */
 private mapping auth_map = ([]);
 
+/* FluffOS PORT NOTE: the CD driver gives a new object its creator's uid
+ * by itself; this shim only learns about an object when set_auth() runs,
+ * so an object that calls seteuid() without setuid() first (secure/
+ * mbs_central's create()) had uid "0", valid_seteuid() refused, and its
+ * restore_object() was denied. Report the creator of the object's file as
+ * the uid until set_auth() runs (euid stays unset), as arkadia's copy of
+ * this file does. */
 string
 query_auth(object ob)
 {
+    string owner;
+
     if (!ob)
         return "0:0";
-    return auth_map[ob] || "0:0";
+    if (auth_map[ob])
+        return auth_map[ob];
+    owner = SECURITY->creator_object(ob);
+    return (owner ? owner : "0") + ":0";
 }
 
 void
@@ -1404,7 +1416,9 @@ secure_var(mixed var)
     if (pointerp(var) ||
 	mapp(var))
     {
-	return map(var, secure_var);
+	/* Inside this object map() is the efun, which hands a mapping's
+	 * function (key, value). */
+	return mapp(var) ? map(var, (: secure_var($2) :)) : map(var, secure_var);
     }
     return var;
 }
@@ -2376,4 +2390,42 @@ member_array(mixed elem, mixed arr, int start : (: 0 :), int end : (: -1 :))
         return -1;
     }
     return efun::member_array(elem, arr, start, end);
+}
+
+/* FluffOS PORT NOTE: the CD driver calls the function of map()/filter() over
+ * a MAPPING with the value only; FluffOS calls it with (key, value), so every
+ * one-argument function this mudlib maps or filters over a mapping got the
+ * key instead (secure_var() turned each mapping into key:key, which corrupted
+ * every lib/cache.lpc read). These overrides give mappings the CD semantics
+ * again; arrays and strings go straight to the efuns. Calls made from inside
+ * this object still reach the efuns (KB 06 §7.221, §7.223). */
+varargs mixed
+map(mixed x, mixed f, mixed *args...)
+{
+    mapping r;
+
+    if (!mapp(x))
+        return efun::map(x, f, args...);
+    r = ([ ]);
+    foreach (mixed k, mixed v in x)
+        r[k] = stringp(f) ? call_other(sizeof(args) ? args[0] : previous_object(),
+                                       f, v, (sizeof(args) ? args[1..] : ({ }))...)
+                          : evaluate(f, v, args...);
+    return r;
+}
+
+varargs mixed
+filter(mixed x, mixed f, mixed *args...)
+{
+    mapping r;
+
+    if (!mapp(x))
+        return efun::filter(x, f, args...);
+    r = ([ ]);
+    foreach (mixed k, mixed v in x)
+        if (stringp(f) ? call_other(sizeof(args) ? args[0] : previous_object(),
+                                    f, v, (sizeof(args) ? args[1..] : ({ }))...)
+                       : evaluate(f, v, args...))
+            r[k] = v;
+    return r;
 }

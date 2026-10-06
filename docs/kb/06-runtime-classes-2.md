@@ -1094,3 +1094,16 @@ and `/wiz/<name>/`, else `"std"` / `"mudlib"`); their drivers lack `PACKAGE_UIDS
 fallback`. **Detection:** `lpcc config.fluffos /nonexistent.lpc` runs the master load; grep the lines between `Loading master file` and
 `Loading preload files` for `does not work`. A submodule lib needs a site-like tree (pin + catalog patches + overlay), and a custom-driver
 lib its own `lpcc`; the bare submodule fails earlier (oxidus: `No function get_root_uid()`).
+
+### 7.223 CD-driver ports: `map()` / `filter()` over a mapping hand the function the key
+
+**Symptom:** genesis / arkadia: anything read through `lib/cache.lpc` comes back with every value replaced by its key (`"sel" : "sel"`),
+so arkadia's `mbs` died with `Trying to put string in int` in `restore_mbs()`; any CD-era `filter(BbpMap, ...)` tests the wrong thing.
+**Cause:** the CD driver calls the function of `map()`/`filter()` over a mapping with the value only; FluffOS calls it with `(key, value)`
+(checked live: `map(([ "k":"v" ]), (: one :))` gives `([ "k":"k" ])`). `secure_var()` (`map(var, secure_var)`) therefore turned each
+mapping into key:key, and `read_cache()` returns `secure_var(data)`. **Fix:** CD-semantics `map`/`filter` simul_efun overrides for
+mappings (arrays and strings go to `efun::`), plus `(: secure_var($2) :)` inside the simul_efun object itself, where calls bind to the
+efun (§7.221). Neither lib had FluffOS-style `$2` code to break. **Detection:** `grep -n "map(var, secure_var)"`; a CD port with
+`m_indexes()`. Companion trap: CD partial application (`&operator(==)(x) @ &operator([])(, F)`, `&f(, a)`, a bare `@` that
+the lexer reads as a here-document start: `End of file in text block`) is rewritten by `scripts/lpc_cd_closures.py`, capturing
+lowercase locals with `$(...)`; a `(: f :) @ (: g :)` composition needs a hand rewrite.

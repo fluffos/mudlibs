@@ -1,6 +1,6 @@
 # Arkadia
 
-Polskojęzyczna lokalizacja/fork mudliba silnika Genesis (CD gamedriver), tego samego, na którym oparty jest już włączony do tej kolekcji `genesis` (oryginał angielski) -- pierwsza pozycja w tej kolekcji w języku innym niż chiński, angielski czy niemiecki. Standardowy fantastyczny świat w stylu silnika CD, z własnym, charakterystycznym dla tej lokalizacji wymogiem przy tworzeniu postaci: nowo przybyła dusza musi samodzielnie podać odmianę własnego imienia przez wszystkie 6 polskich przypadków (mianownik/dopełniacz/celownik/biernik/narzędnik/miejscownik), a standardowe angielskie komendy duszy zostały w pełni zastąpione polskimi odpowiednikami (`spojrz`/`sp`, `zakoncz`, `stan`, `nagraj`, `haslo`). Świeżo zarejestrowana postać trafia jako bezcielesny duch do kamiennej sali na planie półkola, otoczonej pięcioma milczącymi posągami trzymającymi płonące pochodnie, z tajemniczym portalem pośrodku -- dotknięcie posągu ma wybrać rasę, a przejście przez portal nadać prawdziwe ciało, lecz w tym zrzucie archiwum ten ostatni krok nigdy się nie udaje, więc duch może się zarejestrować, zalogować ponownie i grać podstawowymi komendami, ale nigdy nie opuszcza stanu ducha -- walka, sklepy i szkolenie w gildiach pozostają poza zasięgiem. Źródło: <https://github.com/84rn/lpmud>.
+Polskojęzyczna lokalizacja/fork mudliba silnika Genesis (CD gamedriver), tego samego, na którym oparty jest już włączony do tej kolekcji `genesis` (oryginał angielski) -- pierwsza pozycja w tej kolekcji w języku innym niż chiński, angielski czy niemiecki. Standardowy fantastyczny świat w stylu silnika CD, z własnym, charakterystycznym dla tej lokalizacji wymogiem przy tworzeniu postaci: nowo przybyła dusza musi samodzielnie podać odmianę własnego imienia przez wszystkie 6 polskich przypadków (mianownik/dopełniacz/celownik/biernik/narzędnik/miejscownik), a standardowe angielskie komendy duszy zostały w pełni zastąpione polskimi odpowiednikami (`spojrz`/`sp`, `zakoncz`, `stan`, `nagraj`, `haslo`). Świeżo zarejestrowana postać trafia jako bezcielesny duch do kamiennej sali na planie półkola, otoczonej pięcioma milczącymi posągami trzymającymi płonące pochodnie, z tajemniczym portalem pośrodku -- dotknięcie posągu wybiera rasę (ogr, halfling, człowiek, krasnolud lub elf), a w sąsiedniej galerii o kopulastym sklepieniu bezwłosy rzeźbiarz pyta o płeć, wzrost, budowę i dwie cechy wyglądu, po czym lepi z gliny figurkę na twoje podobieństwo; po jej dotknięciu przyjmujesz jej postać, a przejście przez portal daje prawdziwe ciało i przenosi do lokalnej świątyni, w której zaczynają wszyscy nowi gracze. Źródło: <https://github.com/84rn/lpmud>.
 
 ## Ciekawostki
 
@@ -20,13 +20,6 @@ Polskojęzyczna lokalizacja/fork mudliba silnika Genesis (CD gamedriver), tego s
   (rozjeżdżający się z rzeczywistymi stałymi `FOB_DOM_*`), oraz pusty,
   nigdy nie skonfigurowany plik `syslog/KEEPERSAVE.o` z archiwum autora.
   Pełne szczegóły w `NOTES.md`.
-- Znany, udokumentowany (nie naprawiony -- to luka w treści, nie błąd
-  sterownika) problem: ścieżka "zostań prawdziwym graczem" (`dotknij <rasa>`
-  + `przejdz przez portal` w sali wyboru rasy) wygląda na niekompletną w
-  tym zrzucie archiwum -- funkcja `gotow()` nie ma żadnego wywołania
-  nigdzie w kodzie. Nowa postać może się zarejestrować, zalogować i grać
-  podstawowymi komendami, ale nie da się jej "ucieleśnić" przez zwykłą
-  rozgrywkę. Zobacz `NOTES.md`, sekcja 5.
 
 ## Konto administratora / Admin account
 
@@ -35,17 +28,13 @@ Polskojęzyczna lokalizacja/fork mudliba silnika Genesis (CD gamedriver), tego s
   się literą), ranga: `WIZ_KEEPER` (9, najwyższa w tym mudlibie).
 - Zarejestrowane najpierw jako zwykły śmiertelnik, następnie dodane do
   `DEFAULT_WIZARDS`/`DEFAULT_DOMAINS` w `config/sys/local.h` (`new_character()`
-  odrzuca rejestrację imienia już figurującego jako czarodziej). Logowanie
-  pokazuje tytuł "Mistrz" potwierdzający rozpoznanie rangi -- pełne
-  wykonywanie komend administracyjnych blokuje wspomniana wyżej luka w
-  "ucieleśnianiu" (dusze komend czarodzieja są nadawane tylko realnemu,
-  ucieleśnionemu graczowi).
+  odrzuca rejestrację imienia już figurującego jako czarodziej). Postać jest
+  już ucieleśniona (człowiek), więc po zalogowaniu działają komendy
+  czarodzieja (`tree`, `ls`, `mbs`, `Dump`).
 
 ## Status
 
-Czysty rozruch: 92 pliki na liście preloadu, 87 ładuje się poprawnie, 5
-(izolowany klaster narzędzi administracyjnych z własnymi, niezwiązanymi z
-portowaniem błędami) jest łagodnie pomijanych przez `preload_boot()`. Pełna
+Czysty rozruch: wszystkie 92 pliki z listy preloadu ładują się poprawnie. Pełna
 rejestracja nowej postaci, gra podstawowymi komendami oraz ponowne
 logowanie po restarcie sterownika zweryfikowane end-to-end. Brak
 jakichkolwiek wychodzących połączeń sieciowych. Pełne szczegóły w

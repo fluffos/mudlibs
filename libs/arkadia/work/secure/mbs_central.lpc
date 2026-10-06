@@ -75,13 +75,11 @@ nosave mapping  BobMap;		// Board object mapping
  * or board and domain
  */
 #define get_board_list_cath(board, cath) filter(BbcMap[(cath)], \
-						&operator(==)(board) \
-						@ &operator([])(, BBP_BOARD))
+						(: ($(board)) == (($1)[BBP_BOARD]) :))
 #define get_board_cath(board, cath) (get_board_list_cath((board), \
 							 (cath)) + ({ 0 }))[0]
 #define get_board_list_dom(board, dom) filter(BbdMap[(dom)], \
-					      &operator(==)(board) \
-					      @ &operator([])(, BBP_BOARD))
+					      (: ($(board)) == (($1)[BBP_BOARD]) :))
 #define get_board_dom(board, dom) (get_board_list_dom((board), \
 						      (dom)) + ({ 0 }))[0]
 
@@ -147,7 +145,7 @@ create()
     SaveAlarm = set_alarm(300.0, 300.0, autosave_mbs);
 
     /* Load all boards, but slowly */
-    load_map = filter(BbpMap, strlen @ &operator([])(, BBP_BOARD));
+    load_map = filter(BbpMap, (: strlen(($1)[BBP_BOARD]) :));
     BobMap = ([]);
     load_all_boards(m_indexes(load_map));
 
@@ -156,11 +154,11 @@ create()
      * This shouldn't be necessary, strictly speaking, but.. 
      */
     avail = m_indexes(BrokenMap);
-    avail = filter(avail, sizeof @ &operator([])(BbpMap, ));
-    BrokenMap = mkmapping(avail, map(avail, &operator([])(BrokenMap, )));
+    avail = filter(avail, (: sizeof((BbpMap)[$1]) :));
+    BrokenMap = mkmapping(avail, map(avail, (: (BrokenMap)[$1] :)));
     avail = m_indexes(UnusedMap);
-    avail = filter(avail, sizeof @ &operator([])(BbpMap, ));
-    UnusedMap = mkmapping(avail, map(avail, &operator([])(UnusedMap, )));
+    avail = filter(avail, (: sizeof((BbpMap)[$1]) :));
+    UnusedMap = mkmapping(avail, map(avail, (: (UnusedMap)[$1] :)));
 
     /*
      * Initialize the cache
@@ -602,29 +600,28 @@ list_new_boards(string dom : (: "" :))
     /*
      * Find all new boards
      */
-    boards = filter(BbpMap, &operator(==)("") @ &operator([])(, BBP_BOARD));
+    boards = filter(BbpMap, (: ("") == (($1)[BBP_BOARD]) :));
 
     /*
      * Eliminate bogus and unused boards.
      */
-    disc_map = filter(boards, &try_load_board() @ &operator([])(, BBP_RPATH)) +
-	filter(boards, &operator(<)(DTS(SCRAP_DELAY)) @ &tmfunc()
-	       @ &operator([])(, BBP_LNOTE));
+    disc_map = filter(boards, (: try_load_board(($1)[BBP_RPATH]) :)) +
+	filter(boards, (: (DTS(SCRAP_DELAY)) < (tmfunc(($1)[BBP_LNOTE])) :));
 
     if (m_sizeof(disc_map))
     {
 	discard = sort_array(m_indexes(disc_map));
 	write("Removing bogus boards, old or non-loading (" + sizeof(discard) + ")\n");
 	write("-----------------------------------------\n");
-	map(sort_array(discard), (: write :) @ (: sprintf, "%s\n" :));
+	map(sort_array(discard), (: write(sprintf("%s\n", $1)) :));
 	discard_list = map(discard, (: mk_discard_list :));
 	mail_notify(M_E_REMOVED, discard_list);
 	remains = m_indexes(BbpMap) - discard;
-	BbpMap = mkmapping(remains, map(remains, &operator([])(BbpMap, )));
+	BbpMap = mkmapping(remains, map(remains, (: (BbpMap)[$1] :)));
 	dosave();
 	write("\n");
     }
-    boards = filter(BbpMap, &operator(==)("") @ &operator([])(, BBP_BOARD));
+    boards = filter(BbpMap, (: ("") == (($1)[BBP_BOARD]) :));
 
     /*
      * Find out which boards are interesting.
@@ -632,8 +629,7 @@ list_new_boards(string dom : (: "" :))
     if (!query_admin((name = TI->query_real_name())))
     {
 	domain = SECURITY->query_wiz_dom(name);
-	boards = filter(boards, &operator(==)(domain)
-			@ &operator([])(, BBP_DOMAIN));
+	boards = filter(boards, (: ($(domain)) == (($1)[BBP_DOMAIN]) :));
     }
     else if (strlen(dom))
     {
@@ -643,8 +639,7 @@ list_new_boards(string dom : (: "" :))
 	    MBS->err_args(dom);
 	    return MBM_NO_DOMAIN;
 	}
-	boards = filter(boards, &operator(==)(dom)
-			@ &operator([])(, BBP_DOMAIN));
+	boards = filter(boards, (: ($(dom)) == (($1)[BBP_DOMAIN]) :));
     }
 
     if (!m_sizeof(boards))
@@ -653,7 +648,7 @@ list_new_boards(string dom : (: "" :))
     {
 	write("Unattached boards (" + m_sizeof(boards) + ")\n");
 	write("-----------------\n");
-	map(sort_array(m_indices(boards)), (: write :) @ (: sprintf, "%s\n" :));
+	map(sort_array(m_indices(boards)), (: write(sprintf("%s\n", $1)) :));
     }
 
     return MBM_NO_ERR;
@@ -700,8 +695,7 @@ list_boards(int order, int admin, string spec)
 	write(sprintf("%-11s%-11s%-11s%-31s%s\n", "-----", "---------", "------", "----------------------", "------"));
 	for (i = 0, sz = sizeof(caths) ; i < sz ; i++)
 	{
-	    bds2 = sort_array(filter(boards, &operator(==)(caths[i])
-				     @ &operator([])(, BBP_CAT)), "sort_cat_boards");
+	    bds2 = sort_array(filter(boards, (: ($(caths[i])) == (($1)[BBP_CAT]) :)), "sort_cat_boards");
 	    if (sizeof(bds2))
 	    {
 		map(bds2, print_board_info);
@@ -871,7 +865,7 @@ delete_category(string cath)
  * Returns:	  Error code, if any
  */
 public nomask int
-rename_category(string old, string new, string ndesc)
+rename_category(string old, string newname, string ndesc)
 {
     string	desc;
     mixed	bds;
@@ -881,38 +875,38 @@ rename_category(string old, string new, string ndesc)
 	return MBM_BAD_CALL;
 
     old = UC(old);
-    new = UC(new);
+    newname = UC(newname);
     
     if (!strlen(CategoryMap[old]))
     {
 	MBS->err_args(old);
 	return MBM_NO_CAT;
     }
-    if (strlen(new) > NAME_LEN)
+    if (strlen(newname) > NAME_LEN)
     {
-	MBS->err_args(new);
+	MBS->err_args(newname);
 	return MBM_STR_LONG;
     }
     if (strlen(BASE_CAT[old]))
 	return MBM_BASE_CAT;
 
     desc = CategoryMap[old];
-    CategoryMap[new] = strlen(ndesc) ? ndesc : desc;
-    if (old != new)
+    CategoryMap[newname] = strlen(ndesc) ? ndesc : desc;
+    if (old != newname)
     {
 	CategoryMap = m_delete(CategoryMap, old);
 
 	bds = BbcMap[old];
 	for (i = 0, sz = sizeof(bds) ; i < sz ; i++)
-	    bds[i][BBP_CAT] = new;
+	    bds[i][BBP_CAT] = newname;
 	update_bbmaps();
 	write("Renamed category '" + old + "' to '" +
-	      new + "'.\n");
-	logit("Category rename [" + UC(TI->query_real_name()) + "] " + old + " -> " + new);
+	      newname + "'.\n");
+	logit("Category rename [" + UC(TI->query_real_name()) + "] " + old + " -> " + newname);
 	GcTime = time();
     }
     else
-	write("Changed the description of the category '" + new + "'.\n");
+	write("Changed the description of the category '" + newname + "'.\n");
 
     dosave();
     return MBM_NO_ERR;
@@ -994,8 +988,7 @@ generate_report(int what)
 	return MBM_BAD_CALL;
     
     blist = m_values(BbpMap);
-    blist = filter(blist, &operator(!=)(0) @ strlen @
-		   &operator([])(, BBP_BOARD));
+    blist = filter(blist, (: (0) != (strlen(($1)[BBP_BOARD])) :));
     write("Report of usage activity since " + ctime(ReportTime) + ".\n");
     write(sprintf("%-11s%-11s%-11s%-31s%-5s%-5s\n", "Board", "Category", "Domain", "Description", "Post", "Read"));
     write(sprintf("%-11s%-11s%-11s%-31s%-5s%-5s\n", "-----", "---------", "------", "-----------", "----", "----"));
@@ -1206,20 +1199,20 @@ query_boards(int order, string spec, string *excl)
     if (CALL_CHECK)
 	return MBS_BAD_CALL;
 
-    bmap = filter(BbpMap, strlen @ &operator([])(, 0));
+    bmap = filter(BbpMap, (: strlen(($1)[0]) :));
     bnames = m_indexes(bmap);
     bnames -= excl;
-    bmap = mkmapping(bnames, map(bnames, &operator([])(BbpMap, )));
+    bmap = mkmapping(bnames, map(bnames, (: (BbpMap)[$1] :)));
     if (strlen(spec))
     {
 	switch (order)
 	{
 	case ORDER_DOMAIN:
-	    bmap = filter(bmap, &operator(==)(spec) @ &operator([])(, BBP_DOMAIN));
+	    bmap = filter(bmap, (: ($(spec)) == (($1)[BBP_DOMAIN]) :));
 	    break;
 
 	default:
-	    bmap = filter(bmap, &operator(==)(spec) @ &operator([])(, BBP_CAT));
+	    bmap = filter(bmap, (: ($(spec)) == (($1)[BBP_CAT]) :));
 	    break;
 	}
     }
@@ -1244,7 +1237,7 @@ query_board(string board, string cath)
     if (!strlen(CategoryMap[cath]))
 	return MBS_BAD_CAT;
 
-    blist = filter(BbcMap, &operator(==)(board) @ &operator([])(, BBP_BOARD));
+    blist = filter(BbcMap, (: ($(board)) == (($1)[BBP_BOARD]) :));
     if (sizeof(blist))
 	return MBS_NO_BOARD;
 
@@ -1769,7 +1762,7 @@ update_bbmaps()
     BbcMap = mkmapping(caths, cmap);
 
     doms = SECURITY->query_domain_list();
-    entry_map = filter(BbpMap, strlen @ &operator([])(, 0));
+    entry_map = filter(BbpMap, (: strlen(($1)[0]) :));
     dmap = map(doms, (: __filt_bbp_data_bound, entry_map, BBP_DOMAIN :));
     BbdMap = mkmapping(doms, dmap);
 }
@@ -1920,7 +1913,7 @@ nosave nomask mixed
 filt_bbp_data(string what, mapping mapp, int ind)
 {
     mixed data;
-    data = filter(mapp, &operator(==)(what) @ &operator([])(, ind));
+    data = filter(mapp, (: ($(what)) == (($1)[$(ind)]) :));
 
     return m_values(data);
 }
