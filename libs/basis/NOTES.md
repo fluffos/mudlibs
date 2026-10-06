@@ -613,3 +613,7 @@ not in the archive) and the scratch file `bin/maker/test/ws.lpc` (`nosave int st
 Live as the seeded admin on a pristine tree: `sockinfo` lists the inetd socket, `opcprof` prints
 the notice, `clean here`, `more`, `cat`, `update`, `people`, `who`, `mail` all answer; nothing on
 the console.
+
+## 深度功能测试（§10.7，2026-10-05）— 主控 author_file()/domain_file()
+
+驱动的 mudlib_stats 包在主控载入时各调用一次 `author_file(<主控文件>)` 和 `domain_file("/")`，要求返回字符串，否则每次启动都打印 `author_file() in the master file does not work, using root_uid as fallback` 和 `domain_file() in the master file does not work, using bb_ui as fallback` 两行，网页版每位访客的终端里都看得到。本库主控把这两个 apply 转给 simul_efun 的 `adm/obj/simul_efun/domain_file.lpc` / `author_file.lpc`。`domain_file()` 对 `/` 返回 0：旧 MudOS 的 `explode("/", "/")` 是 `({"",""})`，原代码落到 switch 末尾返回 `"Backbone"`；SANE_EXPLODE 修复只防了越界，改成了返回 0。现在空路径返回 `"Backbone"`，恢复原值。`author_file()` 对 `/u/<字母>/<名字>/` 以外的文件返回 0，现在返回 `"NONAME"`（与 Dead Souls 系上游相同），`makers` 命令多出一行 NONAME 汇总系统对象。顺带修了同一函数里的越界：`/u/<字母>/` 下直接放的文件只有三段路径，原来的 `path[2] && path[3]` 会出错，而 author_file() 在每个对象载入时都会调用，所以这种文件根本载入不了；改为 `sizeof(path) > 3`。用 `lpcc config.fluffos /nonexistent.lpc` 前后对比（主控和 preload 全程），只少了这两行（KB 06 §7.222）。

@@ -1095,3 +1095,7 @@ eval/lpcc 觸發之異常一貫的存疑處理原則，未在本輪確認為真�
 `invite`/`kickout`）等多人協作指令因為只有單一測試角色在線，本輪
 未能實測，邏輯上看起來直接明瞭（`ENTERPRISE_D`/`find_player()` 呼
 叫，不涉及本輪發現的 `init()` 那類坑）。
+
+## 深度功能测试（§10.7，2026-10-05）— 主控 author_file()/domain_file()
+
+驱动的 mudlib_stats 包在主控载入时各调用一次 `author_file(<主控文件>)` 和 `domain_file("/")`，要求返回字符串，否则每次启动都打印 `author_file() in the master file does not work, using root_uid as fallback` 和 `domain_file() in the master file does not work, using bb_ui as fallback` 两行，网页版每位访客的终端里都看得到。`system/kernel/master/file.lpc` 里这两个函数原本是空函数（作者 Clode 注明“不知道能做啥”），返回 0。现在域返回 `get_bb_uid()`，作者返回 `get_root_uid()`，正是驱动缺省时用的值；域等于 backbone 域时对象沿用创建者的域，与返回 0 时相同。file.lpc 在 master.lpc 定义这两个 uid 函数之前就被 #include，所以加了两行原型（不加就是 `Undefined function get_bb_uid`，主控载不起来）。用 `lpcc config.fluffos /nonexistent.lpc` 前后对比（主控和 preload 全程），只少了这两行（KB 06 §7.222）。
