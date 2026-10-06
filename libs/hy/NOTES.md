@@ -332,3 +332,7 @@ functionally re-tested live on this lib.
 
 与 hy5 相同（KB 06 §7.235）：`config.fluffos` 的 simul_efun 写成 `/adm/obj/simul_efun`，主控 `creator_file()` 的保护查的是 `globals.h` 里的 `/adm/single/simul_efun`（原始配置也是这个），从未载入，于是每个对象的 uid/euid 都是 `""`，`Root` 权限的判断全部失败（断线玩家无法被 `quitgame` 清除，守护进程大多写不了文件）。配置改回 `/adm/single/simul_efun` 后，`/cmds/usr/quit` 的 uid 为 `Root`；临时副本新进程登录、`score`、`save`、`quit` 无错误。
 
+
+## 深度功能测试（§10.7，2026-10-06）— 白驼山掌门欧阳锋编译不过
+
+`d/baituo/ouyangfeng.lpc` 有两处笔误，整个 NPC 从未编译成功：`greeting()` 里 `write("你是谁？我要杀了你！哈￣哈￣哈￣") break;` 缺分号，`inquiry_map()` 里 `object me = this - player();`（应为 `this_player()`）。白驼山派的掌门因此不存在，拜师、问路（`inquiry_map`）都无从谈起。两处改正后，新进程里 HEAD 加载失败、工作树加载成功。同一文件在 14 个 xkx 系的库里一字不差。

@@ -213,3 +213,7 @@ functionally re-tested live on this lib.
 ## 深度功能测试（§10.7，2026-10-05）— 巫师留言板存档 `data/board/*.o.gz`
 
 巫师留言板 `wiz_b` / `towiz_b` 以 `.o.gz` 存档（1996 年的帖子）。本机驱动 `restore_object()` 优先读 `.o.gz`，而留言板用 `save_object(file)` 写明文 `.o`，所以本机上新帖每次重启都退回旧快照；网页版驱动没有 zlib，只读 `.o`，而归档自带的 `.o` 是读不出的二进制。本库原有的明文 `wiz_b.o` 是更新的 22 条（1996-06 起），保留；`.gz` 里较早的 47 条（1996-02 起）转成 UTF-8 存为 `wiz_b.bak`，不被载入但保留下来。删除 `.o.gz`（KB 01）。用 lpcc 载入留言板核对条数（jqxz2008：wiz_b 47 条、towiz_b 115 条）。
+
+## 深度功能测试（§10.7，2026-10-06）— 白驼山掌门欧阳锋编译不过
+
+`d/baituo/ouyangfeng.lpc` 有两处笔误，整个 NPC 从未编译成功：`greeting()` 里 `write("你是谁？我要杀了你！哈￣哈￣哈￣") break;` 缺分号，`inquiry_map()` 里 `object me = this - player();`（应为 `this_player()`）。白驼山派的掌门因此不存在，拜师、问路（`inquiry_map`）都无从谈起。两处改正后，新进程里 HEAD 加载失败、工作树加载成功。同一文件在 14 个 xkx 系的库里一字不差。
