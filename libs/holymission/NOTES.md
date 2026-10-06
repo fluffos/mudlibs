@@ -671,3 +671,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 `.H` -> `.h`) and 7 path reference(s) in 6 file(s) rewritten to the new spelling; 0 skipped, 0 ambiguous. Load check of the 9 objects that were renamed, edited or name a renamed path (HEAD against the working tree, an object is the same under any spelling of its path): 7 PASS -> 9 PASS, 0 that loaded before fail now, 2 more load.
 
 2 files moved (2 `.lpc`); mostly under `players/bobo/clan` (2). A rescan with `scripts/lpc_warnings.py holymission` is still due: the renamed files are compiled for the first time.
+
+## 深度功能测试（§10.7，2026-10-05）— 主控 author_file()/domain_file()
+
+驱动的 mudlib_stats 包在主控载入时各调用一次 `author_file(<主控文件>)` 和 `domain_file("/")`。本库主控没有这两个 apply，所以每次启动都打印 `author_file() in the master file does not work, using root_uid as fallback` 和 `domain_file() in the master file does not work, using bb_ui as fallback` 两行，网页版每位访客的终端里都看得到。`secure/master.lpc` 补上了这两个 apply：作者返回 `get_root_uid()`，域返回 `get_bb_uid()`，正是驱动缺少它们时所用的值。域名等于 backbone 域时，驱动让对象沿用创建者的域，与没有这个 apply 时相同（KB 06 §7.222）。注意：§9 格式化工具仍会把这个主控里 `#if 0` 死代码之后的字符串拆坏（`"secure/login"` 变成 `" secure / login "`，KB 08 §9 盲点 3），本次只插入代码，未格式化此文件。用 `lpcc config.fluffos /nonexistent.lpc` 前后对比，主控载入段只少了这两行。

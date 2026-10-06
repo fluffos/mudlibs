@@ -1071,3 +1071,18 @@ in `combat_hit_message`. Objects outside it get the override. **Fix:** `SEFUN->m
 `varargs void message(...);` prototype also rebinds the calls, but `combat.test` loads `combat.c` on its own, where the prototype has no body
 (`Undefined function called: message`). **Detection:** for each name the lib's simul_efun overrides, grep the other files of the simul_efun
 directory for bare calls, and confirm with the disassembly (`F_CALL_FUNCTION_BY_ADDRESS` vs `EFUN:`).
+
+### 7.222 `author_file() in the master file does not work` at every boot (mudlib_stats probes)
+
+**Symptom:** two lines right after the master loads, on every boot and so in every site visitor's terminal: `author_file() in the
+master file does not work, using root_uid as fallback (see author_file.4)` and `domain_file() in the master file does not work, using
+bb_ui as fallback (see domain_file.4)d` (43 libs on 2026-10-05). **Cause:** with `PACKAGE_MUDLIB_STATS` (on in the native and WASM
+builds) `set_master()` calls `author_file(<master file>)` and `domain_file("/")` once and wants strings. A missing apply, an empty body,
+a forward into a simul_efun that does not define it, or the TMI-2 / Nightmare / Dead Souls shape that credits only realm and domain
+directories and falls through to `return 0;` all fail the probe. Old MudOS never asked: it used the root and backbone uids, which is
+what the fallback does. **Fix:** answer the probes with those values. A missing apply becomes `return get_root_uid();` /
+`return get_bb_uid();`; an existing one that falls through to `return 0;` returns `"NONAME"` / `"BACKBONE"` there (the fluffos-org
+`deadsouls_fluffos` upstream shape). Objects keep their domains: a domain equal to the backbone domain, like a 0, makes the driver give
+the object its creator's domain. Authors become visible only through `author_stats()`. Do not mark the new applies `nosave`: the driver
+warns `Illegal to declare nosave function`. **Detection:** `lpcc config.fluffos /nonexistent.lpc` runs the master load; grep the lines
+between `Loading master file` and `Loading preload files` for `does not work`.
