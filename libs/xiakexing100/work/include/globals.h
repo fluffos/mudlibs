@@ -2,7 +2,6 @@
 // this file will be automatically included by the driver
 // for XKX mudlib, by Xiang
 // for XKX100 mudlib, by Winder 2001.6.3
-#pragma save_binary
 
 // Important directories
 #define INC_DIR                   "/include/"

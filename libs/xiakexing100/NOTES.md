@@ -449,3 +449,7 @@ functionally re-tested live on this lib.
 
 房间基类 `inherit/room/room.lpc`：`make_inventory()` 用 `catch()` 包住 `new(file)`，做不出来就返回 0；`reset()` 的 `case 1:` 拿到 0 就跳过这一项（`if (!objectp(ob[list[i]])) break;`）。档案里没有的 NPC 或物品（或 `create()` 出错的物件）原先会让列出它的房间整个加载失败（`Bad argument 1 to environment()`，或对 0 的 `call_other()`），连带这个房间后面的区域；现在房间照常加载，只是少了那个物件，下次 `reset()` 再试（KB 05 §7.25；`scripts/lpc_resilient_room.py`、`scripts/lpc_room_reset_guard.py`）。
 验证：探针（`scripts/lpc_room_reset_probe.py`：房间基类列出一个不存在的物件，再调用 `reset()`）HEAD 单件 崩溃、多件 崩溃，工作树 单件 OK、多件 OK。
+
+## 深度功能测试（§10.7，2026-10-06）— 编译警告整理
+
+`scripts/lpc_warnings.py xiakexing100 --fix`：无用局部变量 1847 个、`varargs` 7 处、转义 34 处、`nosave` 函数 30 个改 `protected`，共改动 879 个 `.lpc`。这些文件在 HEAD 与工作树分别加载（新进程）：867 -> 867 通过，无回退；`scripts/lpc_audit_removed_locals.py HEAD` 的 16 条候选都是声明被重建（仍在用的名字保留）或同名的 efun 调用（`time()`）。启动时警告 505 -> 0；新进程启动后登录界面（侠客行时间与农历日期、名字校验、新人物确认）正常。
