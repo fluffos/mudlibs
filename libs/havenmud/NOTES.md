@@ -822,3 +822,7 @@ character back to the host. Do not loop-reboot (I3).
 ## 深度功能测试（§10.7，2026-10-06）— 光亮变量的重复继承（KB 06 §7.213）
 
 `lib/common/container.lpc` 继承 `LIB_RADIANCE`，而 npc、玩家、储物箱又经 `LIB_OBJECT`/`LIB_ITEM` 带一份，于是每个这样的类里有两份 `RadiantLight`，编译时打印 2635 条重复声明警告。与 nightmare4 不同，本库房间（`SetRadiantLight()` 设的房间自身光亮）和 `worn_storage`（会发光的可穿戴容器）真的读的是容器那一份，不能直接删掉。改法：容器不再继承 `LIB_RADIANCE`，改用 `protected int GetContainerLight()` 取“自身光亮”，默认 0；`lib/rooms/room.lpc` 自己继承 `LIB_RADIANCE` 并在这个钩子里返回它，`lib/items/worn_storage.lpc` 返回 armour 那一份，两者的总光亮仍由容器（holder）一侧计算（自身加内容物）。lpcc 探针前后一致：房间 `SetRadiantLight(4)` 得 4，可穿戴容器 2 得 2，NPC 3 得 3，可穿戴容器放进房间后房间得 6。重复声明警告总数从 7781 降到 2764，`RadiantLight` 不再出现；余下的是 `Short`、`Smell`、`Touch` 等同一结构的其他 mixin，留待逐个处理。用只含被跟踪文件的树新建角色 `zzlite`：天空房间、`inventory`、`score`、读新手书后 `d` 进入 Elven Charity 楼上房间、`quit` 正常。
+
+## 2026-10-06 — 剩余的重复声明
+
+`lib/special/action.lpc` 自己的字符串 `Help`（`SetHelp`/`GetHelp` 用）与父类 `verb.lpc` 的私有映射 `Help` 同名，改名 `ActionHelp`（37 个子类都不直接读写它）。另记两处未改：`lib/users/player.lpc` 同时经 `LIB_INTERACTIVE` 与 `LIB_LIVING`（`body.lpc`）继承 `move.lpc`，`isRiding` 有两份并都存档（KB 06 §7.233：登录后函数读的那份被清零，骑乘状态不跨登录保留）；`creator` 只继承 interactive 且调用 `move::eventMove`，不能简单去掉一条继承。`lib/items/meal.lpc` 自己的 `Long`/`Short` 与物品基类的私有 `Short` 同名，而 `AddSave(({ "Long", "Short" }))` 按名字取变量时取到的是先继承的那份，餐食自己的描述可能没有存档，待查。
