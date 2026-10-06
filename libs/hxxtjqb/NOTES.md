@@ -337,3 +337,11 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 
 房间基类 `std/room.lpc`：`reset()` 的 `case 1:` 拿到 0 就跳过这一项（`if (!objectp(ob[list[i]])) break;`）。档案里没有的 NPC 或物品（或 `create()` 出错的物件）原先会让列出它的房间整个加载失败（`Bad argument 1 to environment()`，或对 0 的 `call_other()`），连带这个房间后面的区域；现在房间照常加载，只是少了那个物件，下次 `reset()` 再试（KB 05 §7.25；`scripts/lpc_resilient_room.py`、`scripts/lpc_room_reset_guard.py`）。
 验证：探针（`scripts/lpc_room_reset_probe.py`：房间基类列出一个不存在的物件，再调用 `reset()`）HEAD 单件 崩溃、多件 OK，工作树 单件 OK、多件 OK。
+
+## 深度功能测试（§10.7，2026-10-06）— 编译警告清理；表情存档读不回
+
+1. `scripts/lpc_warnings.py --fix` 机械修复 710 个文件，启动警告 519 → 0。HEAD 与修改后各编译一遍改动的文件：686 = 686，无回归。被删局部变量的审计 19 处只出现在注释或同名函数调用里（`piggy` 的 `#ifdef` 与相关函数无关）。手工：`adm/daemons/natured` 的 `for (i; …)` 改 `for (; …)`；`d/moon/npc/yutu` 的 `kill_ob` 改 `void`（与 `feature/attack` 一致）。
+2. **表情守护启动时读档失败，所有表情丢失。** `data/emoted.o` 中 `nokiss` 一条原文是 `“` + 半个汉字（`0xBA`）+ `\"`；转 UTF-8 时 `BA 5C` 被当成一个字（`篭`），吃掉了转义用的反斜杠，剩下的裸引号让字符串提前结束，`restore_object()` 报 `Illegal mapping format while restoring emote`。把这个字还原成反斜杠（半个字无法保留）。修复后新进程启动无此错误，`nod` 显示「你点了点头」。
+3. **钱币花到 0 不会消失。** `std/item/combined.lpc` 的 `destruct_me()` 是 `private`，继承它的银两、金子用 `call_out` 调用时被驱动拒绝（启动后即有 9 条 `apply() with insufficient permission ... destruct_me`）。改 `protected`，同一处改动扫了 77 个库（KB 07 §8.3）；修改后 0 条。
+4. 验证（新进程，临时副本）：GB → 年龄问题答 `no` → `fluffos` 登录（admin）→ `look`、`nod`、`quit`。
+
