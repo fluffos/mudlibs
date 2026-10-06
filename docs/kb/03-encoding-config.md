@@ -210,3 +210,21 @@ arrays), while `*` belongs to one declarator. A conversion that rewrote `array` 
 **Fix:** star every later name. **Detection:** compare against raw/ (`scripts/lpc_array_decl_scan.py [slug...]`, which needs raw/
 extracted). Found in nightmare4 (4: `Religion`, `send_to`, `fun`, `ots`), sgzmudsgz (`nation_menu.lpc` x4) and swmud (1).
 
+### A Latin-1 lib decoded as GB18030 (questmud, 2026-10-05)
+
+**Symptom:** Finnish text turns into CJK (`ensimm鋓nen paikka on tyhj`), and an odd high byte swallows the ASCII byte after it,
+often a space or a closing quote, so strings never end, save files fail `restore_object()` (`surname "牋牋`), and aliases lose
+their keys. **Cause:** the onboarding transcoded a Latin-1 archive with the Chinese default. **Fix:**
+`scripts/latin1_misdecode_repair.py SLUG [--apply]` aligns work lines with the raw ones and replaces a line by its true
+Latin-1 decoding only when the two ASCII skeletons differ by nothing but bytes deleted next to a high byte (an edited line is kept).
+Run it on save files *before* converting their mappings. **Detection:** a non-Chinese lib whose work tree has CJK characters
+(`grep -rlP "[\x{4e00}-\x{9fff}]" libs/SLUG/work`); a raw file that is not valid GB18030. Candidates found: pd (64 files).
+
+### LDMud save files: multi-value and width-0 mappings (questmud, 2026-10-05)
+
+`([k:v1;v2;v3])` (wide), `(["a","b",])` (width 0, a key set) and `([:5])` (empty, width 5) do not parse in FluffOS, so a player
+file, mail folder or daemon save holding one never restores. `scripts/ldmud_wide_save_convert.py [--apply] FILE.o...` rewrites
+them as `([k:({v1,v2,v3})])`, `(["a":1,"b":1])` and `([])`, the layout of the ported code (`m[k][N]`, `m[k] = 1`); the code that
+writes them needs the same change (`m[k, N]` -> `m[k][N]`, `m += ([ k ])` -> `m[k] = 1`, `m -= ([ k ])` -> `map_delete`).
+Check with a probe that calls `restore_variable()` on every saved value.
+

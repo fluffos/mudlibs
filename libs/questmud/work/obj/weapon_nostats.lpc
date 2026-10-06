@@ -4,7 +4,7 @@
 #define SUBTYPES "/daemons/weapon_sub_types"
 #define ENVIRONMENT_D "/cmds/std/_environment"
 
-int class_of_weapon, value, weight, class, damage_chance, forced2h=0;
+int class_of_weapon, value, weight, cls, damage_chance, forced2h=0;
 nosave object wielded_by;
 nosave int max_dur, dur;
 string short_desc, long_desc, additional_desc;
@@ -13,11 +13,23 @@ string wiz_flag;
 string damage_type;
 string slayer;
 
+/* Called before their definitions (LDMud allowed that). */
+varargs mixed calculate_value();
+varargs mixed calculate_wc();
+varargs mixed calculate_weight();
+varargs mixed do_long();
+varargs mixed do_short();
+varargs mixed old_weapon();
+varargs mixed can_wield(int str, int size);
+varargs mixed query_type();
+varargs mixed set_slot(mixed sl);
+varargs mixed short(int disable_colour);
+
 mixed query_slayer() {
   return slayer;
 }
 
-void set_dur(int i, int arg) {
+varargs void set_dur(int i, int arg) {
   dur = i;
   if(!arg && dur > max_dur) dur = max_dur;
 }
@@ -91,6 +103,12 @@ mixed check_weapon_break() {
 }
 
 mixed set_stats() { } /* Ettei set_stattia callaavat asee bugais.. */
+
+/* LDMud ran reset(0) when an object loaded; this driver only runs create().
+ * call_other so the most-derived reset() runs (KB 06 section 7.177). */
+void create() {
+    call_other(this_object(), "reset", 0);
+}
 
 mixed reset(mixed arg) {
   if (arg)
@@ -295,7 +313,7 @@ mixed query_hit_bonus(int str) {
   /* hb = [-2,2] */
   hb = call_other(SUBTYPES, "query_hit_bonus", sub_type);
   /* hb = [90,100] + [-40,40] = [50,140] */
-  hb = (90+class) + (hb*20);
+  hb = (90+cls) + (hb*20);
   /* weight = [100,800]? */
   /* 20kg ase & 100 str -> -25 hb. ^D^Dritapaus eli ei paljoo vaikutusta //Celtron */
   hb -= ( (weight/2) / (str+100) )*5;
@@ -324,7 +342,7 @@ mixed drop(mixed silently, mixed arg) {
 
 mixed query_wielder() { return wielded_by; }
 
-mixed hit(mixed attacker) {
+varargs mixed hit(mixed attacker) {
     return 0;
 }
 
@@ -383,19 +401,19 @@ mixed set_sub_type(string s) {
     sub_type = s;
     name = s;
   }
-  if(sub_type == "club" || sub_type == "staff") class = 0;
+  if(sub_type == "club" || sub_type == "staff") cls = 0;
   calculate_weight();
   calculate_value();
   calculate_wc();
   do_short();
   do_long();
 }
-mixed query_class() { return class; }
+mixed query_class() { return cls; }
 mixed set_class(mixed c) {
   if(c<1||c>12) return;
   if(sub_type == "club") return;
   if(sub_type == "staff") return;
-  class = c;
+  cls = c;
 }
 
 mixed set_desc(mixed str) {
@@ -404,7 +422,7 @@ mixed set_desc(mixed str) {
 
 mixed calculate_value() {
   int c,tmp;
-  c = class;
+  c = cls;
   while(c) {
     c -= 1;
     tmp += tmp;
@@ -424,7 +442,7 @@ mixed calculate_weight() {
   /* w = (pros * (100 + [-20,20]*3)) * base = [50,100] * [40,160] *base = [2, 16]k * base */
   w = (w* (100 + tmp*3) ) * BASE_WEAPON_WEIGHT;
   /* class vaikuttaa [-20%max]. jakajana: k,classpros */
-  w = w * (100 - class*2) / (1000*100);
+  w = w * (100 - cls*2) / (1000*100);
   weight = w;
 }
 
@@ -434,7 +452,7 @@ mixed calculate_wc() {
   /* c = [1,9]  */
   c = call_other(SUBTYPES, "query_damage_bonus", sub_type);
   /* tmp = ( [1,9] * 10) + class + 20 = [30,120] */
-  tmp = c * 10 + class + 20;
+  tmp = c * 10 + cls + 20;
 
   /* blunt (1): 30,80 blade (3): 50,110 axes (2): 60,140 */
   i = call_other(SUBTYPES, "valid_type", sub_type);
@@ -450,13 +468,13 @@ mixed calculate_wc() {
 
   class_of_weapon = tmp;
   /* durability set */
-  max_dur = class*10+10;
+  max_dur = cls*10+10;
   dur = max_dur;
 }
 
 mixed do_short() {
   string str, vo;
-  str = call_other(SUBTYPES, "query_class_adjective", class);
+  str = call_other(SUBTYPES, "query_class_adjective", cls);
   str = str+" "+sub_type;
   if (additional_desc) { str = " "+additional_desc+str; }
 

@@ -22,6 +22,9 @@
 nosave int MAX_Y, MAX_X;
 nosave string *no_walk;         /*  '*' stands for allocate */
 nosave mapping rooms;           /* loaded rooms, objects. room = rooms[x+"_"+y] */
+/* Last use of each room. LDMud kept it as a second column of rooms
+ * (rooms[k, 1]); FluffOS mappings hold one value. */
+nosave mapping rooms_time;
 nosave string *mapdata;         /* actual map data, allocs in alloc */
 nosave string mapfile;          /* datafile. txt map */
 
@@ -48,6 +51,13 @@ void destruct_loaded_room(int x, int y)
         return;
   destruct(rooms[prefix]);
   map_delete(rooms, prefix);
+  map_delete(rooms_time, prefix);
+}
+
+/* LDMud ran reset(0) when an object loaded; this driver only runs create().
+ * call_other so the most-derived reset() runs (KB 06 section 7.177). */
+void create() {
+    call_other(this_object(), "reset", 0);
 }
 
 void reset(int arg) {
@@ -55,7 +65,9 @@ void reset(int arg) {
   no_walk = ({" ", "^", "~", }); /* default no_walk */
   this_object()->start();
   rooms = ([ ]);
-  rooms += ([ "load": this_object(); 0 ]);
+  rooms_time = ([ ]);
+  rooms += ([ "load": this_object() ]);
+  rooms_time["load"] = 0;
   write("room/virtual_map_d.c loaded.\n");
 }
 
@@ -169,14 +181,14 @@ object get_room(string dir, string dest, int x, int y)
   return rooms[prefix];
 }
 
-int generate_room(int x, int y, string msymbol) {
+varargs int generate_room(int x, int y, string msymbol) {
   string file;
   object room;
 
   // Room exists in cache, no need to generate, just renew timestamp
   if(rooms[x+"_"+y])
     {
-     rooms[x+"_"+y, 1] = time();
+     rooms_time[x+"_"+y] = time();
      return 1;
     }
 
@@ -194,7 +206,8 @@ int generate_room(int x, int y, string msymbol) {
     file->loadaus();
     room = find_object(file);
     if(room) {
-      rooms += ([ (string) x+"_"+y : room; time() ]);
+      rooms += ([ (string) x+"_"+y : room ]);
+      rooms_time[(string) x+"_"+y] = time();
       return 1;
     }
     write("Failed to load.\n");
@@ -206,7 +219,8 @@ int generate_room(int x, int y, string msymbol) {
   room = clone_object(file);
   room->set_coordinates(x,y);
   room->set_mainfile(MAINFILE);
-  rooms += ([ x+"_"+y : room; time() ]);
+  rooms += ([ x+"_"+y : room ]);
+  rooms_time[x+"_"+y] = time();
   return 1;
 }
 
@@ -467,13 +481,14 @@ int clean_up_rooms()
 
  for(int i=0; i < sizeof(room_indices); i++)
     {
-     if( time() - rooms[ room_indices[i], 1 ] > CLEANUP_TIME_THRESHOLD )
+     if( time() - rooms_time[ room_indices[i] ] > CLEANUP_TIME_THRESHOLD )
        {
 	if( room_indices[i] != "load" )
 	   {
 	    cleaned++;
 	    destruct(rooms[ room_indices[i] ]);
 	    map_delete(rooms, room_indices[i]);
+	    map_delete(rooms_time, room_indices[i]);
 	   }
        }
     }

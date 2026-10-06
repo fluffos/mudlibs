@@ -1150,3 +1150,15 @@ When the parent is missing it makes the parent and skips the letter. **Fix:** ma
 **Detection:** `grep -rn "else if(file_size(DIR_PLAYERS) != -2)" libs/*/work`. Fixed in nightmare4, dsII, foundation2, havenmud
 (2026-10-05). To reproduce, use a tree of tracked files only (git archive), not the local tree, which already has the dirs.
 
+### 7.228 LDMud libs: `reset(0)` never runs at load, and `lazy resets` does not change that
+
+**Symptom (questmud, 2026-10-05):** every fresh weapon errors in `short()` (its `start()` never ran); the chat-channel daemon has no
+channels; new characters skip the gender question and start in no channel. **Cause:** LDMud calls `reset(0)` when an object loads;
+FluffOS calls only `create()`. Rooms and monsters worked because their bases had `create() { call_other(this_object(), "reset", 0); }`
+(§7.177), but standalone objects (no `inherit`) and the `obj/weapon`/`obj/armour`/`obj/player` bases did not. `lazy resets : 1`
+does not help: `try_reset()` fires only once `next_reset` has passed (`simulate.cc`), never at load. The periodic reset passes no
+argument, so `if (arg) return;` code re-runs its setup each cycle (harmless where it is guarded, as `obj/player` is).
+**Fix:** that same bridge `create()` in every core standalone file defining `reset()` and no `create()` (113 in questmud, generated
+list; leave out wizard dirs, backups, and anything whose reset needs a player). **Detection:** clone a weapon/item and call `short()`
+in an lpcc probe; a daemon's `reset()`-initialized array reads 0.
+

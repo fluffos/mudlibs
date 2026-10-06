@@ -672,3 +672,20 @@ debris.
 ## 深度功能测试（§10.7，2026-10-05）— 主控 author_file()/domain_file()
 
 驱动的 mudlib_stats 包在主控载入时各调用一次 `author_file(<主控文件>)` 和 `domain_file("/")`。本库主控没有这两个 apply，所以每次启动都打印 `author_file() in the master file does not work, using root_uid as fallback` 和 `domain_file() in the master file does not work, using bb_ui as fallback` 两行，网页版每位访客的终端里都看得到。`secure/master.lpc` 补上了这两个 apply：作者返回 `get_root_uid()`，域返回 `get_bb_uid()`，正是驱动缺少它们时所用的值。域名等于 backbone 域时，驱动让对象沿用创建者的域，与没有这个 apply 时相同（KB 06 §7.222）。本库保留上游代码风格（几乎所有文件都未经 §9 格式化），所以只插入代码，不格式化。用 `lpcc config.fluffos /nonexistent.lpc` 前后对比，主控载入段只少了这两行。
+
+## 深度功能测试（§10.7，2026-10-05）— 启动预载全部能编译；武器、护甲、频道、角色创建、旧存档
+
+启动时 55 条编译错误 → 0。整树扫描编译/载入失败的文件 5643 → 约 2850（剩下的多在巫师个人目录）。
+
+1. **启动预载（`obj/init_file`）里的核心对象大多编译不过。**
+   - `obj/weapon`、`obj/armour`：用了保留字 `class` 作变量名，调用在定义之前的函数（LDMud 不需要原型），`armour` 的 `value`/`weight` 声明成字符串却存整数。591 件武器、784 件护甲继承它们，全部无法载入。
+   - `daemons/channel_d`（聊天频道）、`room/virtual_map_d`、`daemons/news_d`、`daemons/area_entry_d`：用 LDMud 多列映射（`([k: a; b; c])`、`m[k, N]`），改成数组值（`m[k][N]`），与当年移植 `ability_train`、邮件、封禁名单的做法一致；`virtual_map_d` 的第二列（最后使用时间）拆成平行映射 `rooms_time`。
+   - `daemons/lotto` 的 `m - ([ key ])` 改 `map_delete`；`std/user_meter` 用 `new` 作变量名；`obj/wizlist`、`daemons/explist`、`daemons/questlist`、`room/house_shop_d`、`guilds/obj/skillfun` 的声明类型与实际存放的值不符（LDMud 不检查），按实际改正。
+2. **LDMud 在对象载入时调用 `reset(0)`，本驱动只调用 `create()`（KB 06 §7.228）。** 房间、怪物的基类早有 `create() { call_other(this_object(), "reset", 0); }`，但武器、护甲、玩家对象和 113 个不继承任何东西的核心对象没有：新克隆的武器 `short()` 出错（`start()` 从未运行），频道守护没有频道，新角色跳过性别提问、也不会加入 `inform`/`mud`/`newbie` 频道。`config.fluffos` 的 `lazy resets` 注释说会补上，实际不会（驱动只在 `next_reset` 到期后才调用）。按 §7.177 的写法补上这些 `create()`。
+3. **整个库被当成 GB18030 转码，而原文是 Latin-1（芬兰语，KB 03）。** 一对高字节变成一个汉字，落单的高字节连同后面的 ASCII 字节（空格、句点、右引号）一起被吞掉：`ensimmäinen paikka on tyhjä` 变成 `ensimm鋓nen paikka on tyhj`，玩家存档的别名 `"ä"` 吞掉右引号后整个存档无法读回。`scripts/latin1_misdecode_repair.py` 按 `raw/` 原文逐行修复 814 个文件、约 5600 行（只改除了被吞字节外与原文一致的行，之后改动过的行不动）。
+4. **旧存档读不回。** 玩家存档的 `ability_train`、`notes`（LDMud 宽度为 0 的映射）、邮件、封禁名单、道路、新闻、留言板、错误报告、投票都是 LDMud 映射写法。`scripts/ldmud_wide_save_convert.py` 改成数组值 / `key:1` / `([])`；逐值调用 `restore_variable()` 检查，253,085 个值全部可读（原有 2 处损坏按 `raw/` 手工修复）。笔记本命令 `_note` 同时改掉 `note += ([ arg ])` 这种写法。
+5. 全库机械修复：调用在定义之前的函数补 `varargs` 原型（`scripts/lpc_forward_undefined.py`）；声明类型与用法不符的变量改 `mixed`（`scripts/lpc_loosen_types.py`，运行时行为不变）；`room/room.lpc` 的 `string items;` 改 `string *items;`（2400 个房间因此编译失败）；参数不足的调用给被调用的那个定义加 `varargs`；`#'func` 闭包改 `(: func :)`。
+6. 小问题：`channel_d` 的 `last` 只有一条消息时显示 0 条；`area_entry_d` 道路键有空号时取到 0；`_ignore` 的列表 `[0]` 存等级，声明成字符串数组。
+7. 验证（只含被跟踪文件的树）：启动 0 错误；新建角色（问性别 → 选人类 → 战士公会）、`newbie hello all` 显示 `Qatestw [newbie]: hello all`、`channels` 列出 11 个频道并显示已加入的三个、走动、`ignore`、`quit`（`Nothing dropped.`、`[inform]: Qatestw left the game.`），驱动无运行时错误。低于 2 级且不满一小时的新角色不存档，是原设计。
+8. 仍未处理：留言板（`mudboard`/`wizboard`/`warlockboard`/`vboard`/`bull_board`）、`bug_d`、据点 `stronghold/daemons/sh_main_d` 的多列映射代码（存档已转换），`world/misc/trace` 的 `transfer()`，以及巫师目录里约 800 个有编译错误的文件。
+
