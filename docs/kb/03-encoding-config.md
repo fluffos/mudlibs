@@ -218,7 +218,11 @@ their keys. **Cause:** the onboarding transcoded a Latin-1 archive with the Chin
 `scripts/latin1_misdecode_repair.py SLUG [--apply]` aligns work lines with the raw ones and replaces a line by its true
 Latin-1 decoding only when the two ASCII skeletons differ by nothing but bytes deleted next to a high byte (an edited line is kept).
 Run it on save files *before* converting their mappings. **Detection:** a non-Chinese lib whose work tree has CJK characters
-(`grep -rlP "[\x{4e00}-\x{9fff}]" libs/SLUG/work`); a raw file that is not valid GB18030. Candidates found: pd (64 files).
+(`grep -rlP "[\x{4e00}-\x{9fff}]" libs/SLUG/work`); a raw file that is not valid GB18030. pd (2026-10-06) is Windows text:
+`--encoding cp1252` (smart quotes `’`); its LPC textbook chapter is Mac Roman (`0xD5` = `’`, not `Õ`). Check what the repair
+adds before committing: tally the new non-ASCII characters per file, and revert a file that really was GB2312 (full-width
+spaces `A1A1` in ASCII art came out as `¡¡`). For lines the script keeps because they were edited, a CJK character whose
+GB18030 second byte is ASCII maps back to `cp1252(first byte)` plus that byte (`抯` -> `’s`). cp437 block art in old letters stays.
 
 ### LDMud save files: multi-value and width-0 mappings (questmud, 2026-10-05)
 

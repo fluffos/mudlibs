@@ -456,3 +456,13 @@ fresh driver boot plus the full long-sit idle window below.
 ## 深度功能测试（§10.7，2026-10-05）— 主控 author_file()/domain_file()
 
 驱动的 mudlib_stats 包在主控载入时各调用一次 `author_file(<主控文件>)` 和 `domain_file("/")`，要求返回字符串。本库这两个 apply 只为 domains / realms 目录下的文件返回名字，其余返回 0，所以每次启动都打印 `author_file() in the master file does not work, using root_uid as fallback` 和 `domain_file() in the master file does not work, using bb_ui as fallback` 两行，网页版每位访客的终端里都看得到。`adm/obj/master.lpc` 改成与 fluffos 组织维护的 Dead Souls 上游（`deadsouls_fluffos`）相同的写法：其余文件的域返回 `"BACKBONE"`，作者返回 `"NONAME"`。域等于 backbone 域时驱动让对象沿用创建者的域，与返回 0 时相同；作者统计（`author_stats()`）多出一行 `NONAME`，汇总 realms 目录以外的对象（KB 06 §7.222）。用 `lpcc config.fluffos /nonexistent.lpc` 前后对比，主控载入段只少了这两行。
+
+## 深度功能测试（§10.7，2026-10-06）— Windows 文本被当作 GB18030 解码（KB 03）
+
+本库原文是 Windows 西文（cp1252）：弯引号 `’`、`é`、`»`、`ß` 这类字节在入库转码时被当成 GB18030，两个高位字节合成一个汉字（`owner抯`、`world抯`），单个高位字节则连同后面的 ASCII 字节一起被吃掉（`Aimeé went` 成了 `Aimewent`，存档里的字符串少了收尾引号）。`scripts/latin1_misdecode_repair.py pd --prefix beta-ii --encoding cp1252 --apply` 按 raw 逐行恢复，共 98 个文件（61 个存档、33 个 `.lpc`、几份帮助文档）。
+
+- **四个玩家存档读不出来。** aximili、bahamut、popov、ramona 的别名里有 `Ç`、`å` 之类的键，被吃掉的引号让 `restore_object()` 报 `Illegal mapping format while restoring alias`，这四位无法登录。修复后 61 个改动的存档全部读得出（HEAD 下 57/61）。
+- `doc/lpc/intermed/chapter1`（Descartes 的 LPC 教程）是 Mac Roman，`0xD5` 是 `’`，单独改正（cp1252 会给出 `Õ`）。
+- `wizards/seeker/asciis.txt` 的 `A1A1` 真是 GB2312 全角空格，转码原本是对的，不改。
+- 入库后改过的行脚本不动（23 行，都在房间描述里），其中 `抯` 一类第二字节为 ASCII 的汉字按字符还原为 `’s`（11 个文件）。旧信件里的 cp437 方块画（`圹圹`）不动。
+- 改动的 33 个 `.lpc` 用 `lpcc --batch` 编译，32 个通过；`wizards/hermes/workroom` 在 HEAD 也载入失败，与本次无关。

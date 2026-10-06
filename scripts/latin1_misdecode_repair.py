@@ -5,7 +5,7 @@ GB18030 turns each pair of Latin-1 high bytes (Finnish ä ö) into one CJK chara
 pair, drops the high byte together with the ASCII byte after it (a space, a period, a closing quote:
 `pitää pysty` -> `pit鋝 pystyclear...`, `"ä"` -> a string that never ends).  raw/ has the original bytes.
 
-  python3 scripts/latin1_misdecode_repair.py SLUG [--apply] [--prefix RAWSUBDIR]
+  python3 scripts/latin1_misdecode_repair.py SLUG [--apply] [--prefix RAWSUBDIR] [--encoding cp1252]
 
 For every raw file with high bytes it aligns raw lines and work lines (difflib on the lines' ASCII
 skeletons) and replaces a work line by the correct Latin-1 -> UTF-8 decoding of its raw line only when
@@ -16,6 +16,7 @@ import difflib, os, sys
 args = sys.argv[1:]; apply_ = "--apply" in args; args = [a for a in args if a != "--apply"]
 slug = args[0]
 prefix = args[args.index("--prefix") + 1] if "--prefix" in args else "lib"
+ENC = args[args.index("--encoding") + 1] if "--encoding" in args else "latin-1"   # cp1252 for Windows-authored text (smart quotes)
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RAW = f"{REPO}/libs/{slug}/raw/{prefix}"; WORK = f"{REPO}/libs/{slug}/work"
 
@@ -53,7 +54,7 @@ for dp, dn, fn in os.walk(RAW):
         try: wt = wraw.decode("utf-8")
         except UnicodeDecodeError: continue
         nl = "\r\n" if "\r\n" in wt else "\n"
-        rl = [l.rstrip(b"\r").decode("latin-1") for l in rb.split(b"\n")]
+        rl = [l.rstrip(b"\r").decode(ENC, "replace") for l in rb.split(b"\n")]
         wl = wt.split(nl)
         rs = [skel(l).strip() for l in rl]; ws = [skel(l).strip() for l in wl]
         sm = difflib.SequenceMatcher(None, rs, ws, autojunk=False)
