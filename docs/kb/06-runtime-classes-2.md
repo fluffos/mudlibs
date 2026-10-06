@@ -1089,5 +1089,8 @@ ftpd print `Root`; ES / TMI `praise` and `find -author`), keep the 0 and answer 
 gets `ROOT_UID` (`explode(f, "/") - ({ "" })`). Objects keep their domains: a domain equal to the backbone domain, like a 0, makes the
 driver give the object its creator's domain. Authors become visible only through `author_stats()`. Do not mark the new applies
 `nosave` (the driver warns `Illegal to declare nosave function`). A helper the applies call that is defined later than an included
-file needs a prototype there (revivalworld, zsdsj). **Detection:** `lpcc config.fluffos /nonexistent.lpc` runs the master load; grep the lines
-between `Loading master file` and `Loading preload files` for `does not work`.
+file needs a prototype there (revivalworld, zsdsj). Lima-family masters take LIMA's own pair (limalib/lima `f85dba3a`: `/domains/<name>/`
+and `/wiz/<name>/`, else `"std"` / `"mudlib"`); their drivers lack `PACKAGE_UIDS`, so the lines read `using 'BACKBONE'` / `'NONAME' as
+fallback`. **Detection:** `lpcc config.fluffos /nonexistent.lpc` runs the master load; grep the lines between `Loading master file` and
+`Loading preload files` for `does not work`. A submodule lib needs a site-like tree (pin + catalog patches + overlay), and a custom-driver
+lib its own `lpcc`; the bare submodule fails earlier (oxidus: `No function get_root_uid()`).

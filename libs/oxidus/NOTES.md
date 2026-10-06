@@ -615,3 +615,7 @@ messaging-race noise as §10.7 2026-08-31 (caught, non-fatal).
 rsync; removed throwaway play dirs (`olumadmin/`, etc.). Patches stay
 out-of-tree in `patches/` / `overlay/` — do not commit dirty submodule
 work tree.
+
+## 深度功能测试（§10.7，2026-10-05）— 主控 author_file()/domain_file()
+
+共享驱动的 mudlib_stats 包在主控载入时各调用一次 `author_file(<主控文件>)` 和 `domain_file("/")`。补丁 0001 加的 stub 里没有这两个 apply，所以每次启动都打印两行 `... in the master file does not work`。0001 的 stub 块补上 `author_file()` / `domain_file()`，返回 `get_root_uid()` / `get_bb_uid()`（ROOT / BACKBONE），正是驱动缺省时用的值（KB 06 §7.222）。写进 0001 而不是新补丁：rebase 脚本单独检查每个补丁，新补丁的上下文会是 0001 加的行（KB 02 §2.3）。site 同构树（pin + 补丁 + overlay）跑 `lpcc config.fluffos /nonexistent.lpc` 前后对比，只少了这两行。

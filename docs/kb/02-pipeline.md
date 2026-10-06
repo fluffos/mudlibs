@@ -97,6 +97,14 @@ Also apply the WASM standards: §1.3b, §1.3e, and §1.5.
   and `meta.json`.
 - `scripts/check_upstream_rebase.py` regenerates
   `scripts/upstream_status.json`. Never hand-edit it.
+- **Every catalog patch must apply on its own.** `rebase_upstreams.py` runs
+  `git apply --check` for each patch against the pristine pin, not after the
+  earlier ones, so a patch whose context is another patch's lines fails and
+  holds the pin (residuum `0006` on `0001`'s master stubs, 2026-10-05). A
+  change to lines an earlier patch added belongs in that patch: rebuild it in
+  a temp repo (pristine file, apply both, `git diff`). Check: `for p in
+  libs/<slug>/patches/*.patch; do git -C libs/<slug>/work apply --check -p1
+  $PWD/$p; done`.
 - **A submodule's object store must stand alone.** One cloned with
   `--reference`/`--shared` against a `/tmp` clone keeps only a few loose
   objects; after a reboot every `git status` prints `object directory
