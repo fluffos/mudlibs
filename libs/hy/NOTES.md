@@ -327,3 +327,8 @@ functionally re-tested live on this lib.
 
 房间基类 `inherit/room/room.lpc`：`make_inventory()` 用 `catch()` 包住 `new(file)`，做不出来就返回 0；`reset()` 的 `case 1:` 拿到 0 就跳过这一项（`if (!objectp(ob[list[i]])) break;`）。档案里没有的 NPC 或物品（或 `create()` 出错的物件）原先会让列出它的房间整个加载失败（`Bad argument 1 to environment()`，或对 0 的 `call_other()`），连带这个房间后面的区域；现在房间照常加载，只是少了那个物件，下次 `reset()` 再试（KB 05 §7.25；`scripts/lpc_resilient_room.py`、`scripts/lpc_room_reset_guard.py`）。
 验证：探针（`scripts/lpc_room_reset_probe.py`：房间基类列出一个不存在的物件，再调用 `reset()`）HEAD 单件 崩溃、多件 崩溃，工作树 单件 OK、多件 OK。
+
+## 深度功能测试（§10.7，2026-10-06）— 所有对象的 uid 都是空字符串
+
+与 hy5 相同（KB 06 §7.235）：`config.fluffos` 的 simul_efun 写成 `/adm/obj/simul_efun`，主控 `creator_file()` 的保护查的是 `globals.h` 里的 `/adm/single/simul_efun`（原始配置也是这个），从未载入，于是每个对象的 uid/euid 都是 `""`，`Root` 权限的判断全部失败（断线玩家无法被 `quitgame` 清除，守护进程大多写不了文件）。配置改回 `/adm/single/simul_efun` 后，`/cmds/usr/quit` 的 uid 为 `Root`；临时副本新进程登录、`score`、`save`、`quit` 无错误。
+

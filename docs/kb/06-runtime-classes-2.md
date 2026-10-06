@@ -1241,3 +1241,13 @@ indexes 0. **Fix:** `#'>` -> `sort_array(a, 1)`, `#'<` -> `-1`. Guard converted 
 `grep -rn "sort_array([^;]*-1).*#'>"` (a comment left by the port); for wide mappings, read every `m[i][N]` whose `i` comes
 from a counter rather than `keys()`.
 
+
+### 7.235 A master guard on `SIMUL_EFUN_OB` gives every object uid `""` when the config loads another simul_efun file (hy, hy5, 2026-10-06)
+**Symptom:** a link-dead player is never removed: `quit` after a disconnect errors `你()不能摧毁其他的使用者` from `feature/move.lpc`
+`remove()` and prints the leave message twice; `getuid()`/`geteuid()` of every object, `/cmds` included, is `""`. **Cause:** the
+master's `creator_file()` forwards to the simul_efun with a boot guard `if (!find_object(SIMUL_EFUN_OB)) return "";`, but the
+onboarding config named `/adm/obj/simul_efun` while `globals.h` (and the archive's own `config.cfg`) use `/adm/single/simul_efun`; the
+guarded object is never loaded, so every file gets `""`, which fails the `ROOT_UID` checks and most `valid_write` trust tables. A master
+without the guard just loads the second copy and still answers correctly (17 other xkx/jqxz/sj/ldtx libs have the same path mismatch
+and resolve `Root`). **Fix:** point `simulated efun file` at the path the lib's own macro and original config use. **Detection:** a
+probe that prints `getuid(load_object("/cmds/..."))`; compare `config.fluffos`'s simul_efun path with `#define SIMUL_EFUN_OB`.

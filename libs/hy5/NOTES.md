@@ -381,5 +381,6 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 2. 检查：HEAD 与修改后各编译一遍改动过的 5644 个 `.lpc`，结果只差 18 个迷宫（`migong`）NPC，它们的 `create()` 走 `random(2)` 分支，HEAD 自己连跑三次也有 9–11 个随机失败，不是回归。被删局部变量的审计 64 处全是注释里的同名词或同名函数调用（`message(`、`time(`），这些文件都没有 `#if`。两边都编译不过的 40 个文件，错误完全相同。
 3. 手工：`quest/shenshu/npc/man2` 里 `order`、`data` 各声明了两次（后一个生效，前一个是旧的短名单），删去前一份；多余的 `int ask_job();` 原型与定义 `string ask_job()` 冲突，删去；`man`/`man2` 的 `kill_ob` 改 `void`，与 `feature/attack` 一致（函数本来就不返回值）。
 4. `quest/menpaijob/mingjiao/zhangwuji` 少一个右引号（原文 `A3 22`，转码时连引号一起丢了），整个文件编译不过，明教张无忌从未载入；补回。hymud、haiyang2 同样修改。
-5. 验证（新进程，临时副本）：GB 选码 → `fluffos` 登录 → `score`、`look`、`i`、`wiz` 频道、`quit` 正常。`quit` 时报「你()不能摧毁其他的使用者」，HEAD 同样出现，留待单独追查。
+5. 验证（新进程，临时副本）：GB 选码 → `fluffos` 登录 → `score`、`look`、`i`、`wiz` 频道、`quit` 正常。
+6. **所有对象的 uid/euid 都是空字符串（KB 06 §7.235）。** `quit` 时报「你()不能摧毁其他的使用者」、离开消息打两遍，断线玩家永远留在世界里。原因：主控的 `creator_file()` 有一个启动保护 `if (!find_object(SIMUL_EFUN_OB)) return "";`，而 `config.fluffos` 写的是 `/adm/obj/simul_efun`，`globals.h` 和原始 `config.cfg` 都是 `/adm/single/simul_efun`（两个文件内容相同）。保护所查的对象从未载入，于是每个文件的 uid 都是 `""`，通不过 `ROOT_UID` 判断和 `securd` 的大部分写权限表。把配置改回 `/adm/single/simul_efun`：`/cmds/usr/quitgame` 的 uid 变为 `Root`；登录、`save`、`quit`、断线后重连再 `quit` 都没有错误。
 
