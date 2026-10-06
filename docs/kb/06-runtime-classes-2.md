@@ -1140,3 +1140,13 @@ which runs `set_auth(this_object(), "root:root")`. **Fix:** in `valid_read`, ret
 directories (`players`, `binaries`, `data`) are refused; the CD driver does not check includes. **Detection:** boot before and after a
 warnings pass and diff the error lines, not only the warning count. A new `Cannot #include` of an existing file means `valid_read`.
 
+### 7.227 Nightmare-family master: `else if` creates the players dir but not the letter bucket
+
+**Symptom:** the first character registered on a fresh tree fails its first save: `Could not open /secure/save/players/z/zephyrq.o.tmp
+for a save` (`ConfirmPassword` → `SetPassword` → `save_player`). The password is never written, and a second try works. On the site
+this hits every visitor, because git tracks nothing under `secure/save/players/`. **Cause:** `compile_object()` in
+`secure/daemon/master` runs `else if (file_size(DIR_PLAYERS) != -2) mkdir(DIR_PLAYERS); else if (<letter dir missing>) mkdir(<letter>);`.
+When the parent is missing it makes the parent and skips the letter. **Fix:** make the letter check a plain `if` (dsI already did).
+**Detection:** `grep -rn "else if(file_size(DIR_PLAYERS) != -2)" libs/*/work`. Fixed in nightmare4, dsII, foundation2, havenmud
+(2026-10-05). To reproduce, use a tree of tracked files only (git archive), not the local tree, which already has the dirs.
+

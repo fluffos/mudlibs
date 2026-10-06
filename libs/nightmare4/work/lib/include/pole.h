@@ -1,7 +1,7 @@
 #ifndef l_pole_h
 #define l_pole_h
  
-nosave void create();
+protected void create();
 mixed direct_bait_obj_with_obj();
 mixed direct_fish_with_obj();
 

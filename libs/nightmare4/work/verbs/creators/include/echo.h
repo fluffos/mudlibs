@@ -1,7 +1,7 @@
 #ifndef l_echo_h
 #define l_echo_h
 
-nosave void create();
+protected void create();
 mixed can_echo();
 mixed can_echo_to_liv_str(object who, string what);
 mixed can_echo_str(string str);

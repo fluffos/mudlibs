@@ -4,6 +4,6 @@
 mixed direct_strike_obj();
 mixed eventStrike(object who);
 int GetStrikeChance();
-nosave int SetStrikeChance(int x);
+protected int SetStrikeChance(int x);
 
 #endif /* l_match_h */

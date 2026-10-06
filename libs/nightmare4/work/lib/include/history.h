@@ -1,8 +1,8 @@
 #ifndef l_history_h
 #define l_history_h
 
-nosave string eventHistory(string str);
-nomask private nosave string Push(string cmd);
+protected string eventHistory(string str);
+nomask private string Push(string cmd);
 private string GetHistory(mixed val);
 
 /* pure abstract */ varargs int eventPrint(string msg, int cl);

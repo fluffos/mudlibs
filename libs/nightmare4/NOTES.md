@@ -639,3 +639,10 @@ for a save`（`log/runtime`，14:50）。随后该字母目录出现，同一驱
 ## 深度功能测试（§10.7，2026-10-05）— 主控 author_file()/domain_file()
 
 驱动的 mudlib_stats 包在主控载入时各调用一次 `author_file(<主控文件>)` 和 `domain_file("/")`，要求返回字符串。本库这两个 apply 只为 domains / realms 目录下的文件返回名字，其余返回 0，所以每次启动都打印 `author_file() in the master file does not work, using root_uid as fallback` 和 `domain_file() in the master file does not work, using bb_ui as fallback` 两行，网页版每位访客的终端里都看得到。`secure/daemon/master.lpc` 改成与 fluffos 组织维护的 Dead Souls 上游（`deadsouls_fluffos`）相同的写法：其余文件的域返回 `"BACKBONE"`，作者返回 `"NONAME"`。域等于 backbone 域时驱动让对象沿用创建者的域，与返回 0 时相同；作者统计（`author_stats()`）多出一行 `NONAME`，汇总 realms 目录以外的对象（KB 06 §7.222）。用 `lpcc config.fluffos /nonexistent.lpc` 前后对比，主控载入段只少了这两行。
+
+## 深度功能测试（§10.7，2026-10-05）— 首次注册存档失败的原因找到了；编译警告清理（机械部分）
+
+1. **首次存档失败（上文“未复现，未修”的那条）原因找到并修复（KB 06 §7.227）。** `secure/daemon/master.lpc` 的 `compile_object()` 为新玩家建目录时写成 `else if (players 目录不存在) mkdir(players); else if (字母目录不存在) mkdir(字母目录);`：父目录不存在时只建父目录、跳过字母目录，于是这位玩家第一次 `save_player` 打开 `players/<字母>/<名字>.o.tmp` 失败，密码没有存下；再试一次父目录已在，才建出字母目录。git 不跟踪 `secure/save/players/` 下任何文件，所以全新检出、以及网页版每位访客都会遇到。第二个 `else if` 改为 `if`（dsI 早已如此）。用只含被跟踪文件的树（`git archive` + 本次改动）验证：注册 `qanine` 首次即存档到 `players/q/qanine.o`，重新登录、走到战士公会 `ask roshd to join fighters`、`score` 变为 Fighter、`quit` 都正常。同样的写法也在 dsII、foundation2、havenmud 修了。
+2. 编译警告（机械部分）：`scripts/lpc_warnings.py nightmare4 --fix`，874 个 `nosave` 函数改 `protected`（被别处按名调用的 192 个去掉 `nosave` 保持 public）、删 34 行 `#pragma`、删 121 个未用局部变量、补 17 处 `varargs`、2 处无效转义；`lpc_audit_removed_locals.py` 复核 170 个被删声明，0 个需要处理。按名动态调用只有 `secure/daemon/localpost.lpc`（读 `secure/cfg/aliases.cfg`），其中用到的 `query_groups` 仍是 public；套接字回调、`call_out`、`input_to` 走驱动内部调用，可以调用 protected 函数。整树诊断 1373 → 164，剩下的是结构性警告（同名全局变量重复声明、菱形继承、覆盖函数返回类型不一致、`LIB_LIMB` 宏重定义），下一步处理。管理员会话（`look`、`who`、走到战士大厅、`say`、`smell`、`eval`、`update`、`help`）无权限警告。
+3. 已有的问题（不是本次引入）：`secure/daemon/remote.lpc` 编译失败，它按旧版接口调用 `eventWrite(fd, ...)`，而 `secure/lib/net/server.lpc` 的 `eventWrite` 第一个参数是对象；`secure/cfg/aliases.cfg` 的 `creator:` 别名调用主控不存在的 `query_creators`。
+
