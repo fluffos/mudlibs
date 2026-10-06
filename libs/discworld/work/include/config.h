@@ -41,6 +41,12 @@
 #define CONFIG_DB_USER "ddt"
 
 /**
+ * The user for the error-tracking tables (finderror_helper, bug_top).
+ * The public release dropped it; the same account as CONFIG_DB_USER.
+ */
+#define CONFIG_DB_ERRORS_USER CONFIG_DB_USER
+
+/**
  * The web address to use for the site.
  */
 #define CONFIG_WEB_ADDRESS "http://dead-souls.net/"

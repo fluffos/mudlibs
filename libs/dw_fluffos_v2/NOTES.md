@@ -150,3 +150,7 @@ now and the rest of the load-and-clone check is unchanged.
 ## 深度功能测试（§10.7，2026-10-05）— 压缩存档改为明文；board_backups 目录
 
 网页版的 WASM 驱动没有 zlib，`restore_object()` 只读 `<名>.o`，打包脚本也排除 `*.gz`；本库以 `.o.gz` 存的种子存档（6 个：管理员、bastards、boards、hist_handler、armoury、intermud、rcs_handler）在网页版上全部缺失：文档里的管理员 `fluffos` / `Mud@2026` 在网页版上不存在，登录时打印 `Failed to restore bastards.`。现已 `gzip -d` 成内容逐字节相同的明文 `.o`（KB 01）。本机驱动在没有 `.o.gz` 时读 `.o`，之后自己的压缩存档会替换它。另外 board handler 启动时把 boards 备份到 `/save/board_backups/`，目录不存在，每次报 `Error copying file`；加了 `save/board_backups/.gitkeep`。验证：本机登录 fluffos / Mud@2026 成功，无 bastards / 复制错误；WASM（解开的 site zip + 明文存档）同一密码登录成功。
+
+## 2026-10-05 — `CONFIG_DB_ERRORS_USER` 未定义
+
+`obj/handlers/finderror_helper.lpc`（`finderrors` 创作者命令与各领域错误追踪的助手）和 `www/secure/creator/bug_top.lpc` 用了 `CONFIG_DB_ERRORS_USER`，公开发布版的 `include/config.h` 删掉了这个定义，两个文件都编译失败。在全新检出（及网页版）里启动时会载入它，打印 3 条编译错误。`config.h` 补上 `#define CONFIG_DB_ERRORS_USER CONFIG_DB_USER`；全新树启动 0 错误 0 警告。
