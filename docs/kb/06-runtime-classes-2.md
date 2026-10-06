@@ -1080,9 +1080,14 @@ bb_ui as fallback (see domain_file.4)d` (43 libs on 2026-10-05). **Cause:** with
 builds) `set_master()` calls `author_file(<master file>)` and `domain_file("/")` once and wants strings. A missing apply, an empty body,
 a forward into a simul_efun that does not define it, or the TMI-2 / Nightmare / Dead Souls shape that credits only realm and domain
 directories and falls through to `return 0;` all fail the probe. Old MudOS never asked: it used the root and backbone uids, which is
-what the fallback does. **Fix:** answer the probes with those values. A missing apply becomes `return get_root_uid();` /
-`return get_bb_uid();`; an existing one that falls through to `return 0;` returns `"NONAME"` / `"BACKBONE"` there (the fluffos-org
-`deadsouls_fluffos` upstream shape). Objects keep their domains: a domain equal to the backbone domain, like a 0, makes the driver give
-the object its creator's domain. Authors become visible only through `author_stats()`. Do not mark the new applies `nosave`: the driver
-warns `Illegal to declare nosave function`. **Detection:** `lpcc config.fluffos /nonexistent.lpc` runs the master load; grep the lines
+what the fallback does. The author probe's path is `"/"` + the configured master file, so `master file : /adm/obj/master` passes
+`//adm/obj/master`, and sane `explode()` keeps one leading `""` for it: a TMI / Eastern Story `author_file()` testing `path[0]` never
+sees `adm`. **Fix:** answer the probes with those values. A missing apply becomes `return get_root_uid();` / `return get_bb_uid();`;
+an existing one that falls through to `return 0;` returns `"NONAME"` / `"BACKBONE"` there (the fluffos-org `deadsouls_fluffos`
+upstream shape). Where the lib's own code calls `master()->author_file()` / `domain_file()` and reads 0 as "none" (Discworld `ls` and
+ftpd print `Root`; ES / TMI `praise` and `find -author`), keep the 0 and answer only the probe: `"/"` gets the backbone uid, `/adm`
+gets `ROOT_UID` (`explode(f, "/") - ({ "" })`). Objects keep their domains: a domain equal to the backbone domain, like a 0, makes the
+driver give the object its creator's domain. Authors become visible only through `author_stats()`. Do not mark the new applies
+`nosave` (the driver warns `Illegal to declare nosave function`). A helper the applies call that is defined later than an included
+file needs a prototype there (revivalworld, zsdsj). **Detection:** `lpcc config.fluffos /nonexistent.lpc` runs the master load; grep the lines
 between `Loading master file` and `Loading preload files` for `does not work`.
