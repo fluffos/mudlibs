@@ -174,4 +174,4 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply d
 
 ## 深度功能测试（§10.7，2026-10-06）— 飞贼的装备路径
 
-`u/lying/feizei/feizei`（预载）和 `u/lying/tonggang/feizei/feizei` 给飞贼带的装备写成 `/u/tianlin/feizei/obj/…`，本库没有这个目录，装备在各自的 `obj/` 下。`carry_object()` 出错时 `choose_feizei()` 在重新 `call_out` 之前中断，飞贼事件第一次就停止。路径改成各自所在目录（与 sjcs 同一处代码）。
+`u/lying/feizei/feizei` 和 `u/lying/tonggang/feizei/feizei` 给飞贼带的装备写成 `/u/tianlin/feizei/obj/…`，本库没有这个目录，装备在各自的 `obj/` 下。`carry_object()` 出错时 `choose_feizei()` 在重新 `call_out` 之前中断，飞贼事件第一次就停止。路径改成各自所在目录（与 sjcs 同一处代码）。
