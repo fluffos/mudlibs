@@ -62,7 +62,11 @@ test at least one NPC `command()`.
   - `feature/action.lpc::eval_function` (behind `start_call_out`, so all
     buffs and DoTs).
   - `inherit/item/combined.lpc::destruct_me` (money spent to 0 never
-    destructs).
+    destructs). The ES/xyj copies at `std/item/combined.lpc` were already
+    `private` in the MudOS original (MudOS let a call_out reach it);
+    swept 2026-10-06 to `protected` in 77 libs after a live hxxtjqb boot
+    logged `apply() with insufficient permission ... destruct_me ...
+    needs: private, has: hidden` for every coin pile.
   - Libs: Doing-Lu "hell" lineage, `xkx2001`, `ninetears`'s `refresh2`.
     In `ninetears` the boundary was an `#include`d `.lpc` file, then
     inherited.
