@@ -177,6 +177,18 @@ Traps:
   corpus median is about 9.9k files and the max about 72k, so main-thread
   decompression took over a minute. Test loader changes against a large
   real lib.
+- **Compressed saves (`*.o.gz`) never work on the site.** The WASM driver is
+  built without zlib, so `restore_object()` only looks for `<name>.o`, and
+  `make_source_zips.sh` drops `*.gz` anyway. A seed stored compressed
+  (Discworld's admin `save/players/f/fluffos.o.gz`, `secure/bastards.o.gz`)
+  is missing for every visitor: the documented admin password fails or the
+  account does not exist, and `Failed to restore bastards.` prints at login.
+  Store seeds as plain `.o` (`gzip -d`, byte-identical): the native driver
+  reads `.o` when no `.o.gz` exists, and its own later compressed save just
+  replaces it. Do not un-exclude `*.o.gz` in the packer (that made the login
+  ask for a password it could not check). Detection: `git ls-files
+  'libs/*/work/*.o.gz'`; check the inner encoding (a GBK lib's `.o.gz`
+  escaped `convert_lib.sh`).
 - **Runtime directories.** The zip carries no `log/` and no empty directory.
   `zip-loader.js` creates `work/log` plus every directory
   `scripts/wasm_keep_dirs.txt` lists for the slug (`keepDirs` in the live
