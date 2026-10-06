@@ -1128,3 +1128,15 @@ gives the same number, and the appraisal code seeds with both objects' numbers o
 5 files: state, shop, heap, area_handler, gog_accounts), and arkadia's `random()` simul_efun accepted the seed and ignored it.
 **Fix:** a `random(int range, mixed *seed...)` simul_efun that hashes the seed (`efun::random()` when there is none), and the seeds put
 back from the pristine `raw/` sources. **Detection:** `grep -rn "random([^()]*,[^()]*)" raw/` against the work tree.
+
+### 7.226 A master whose `log_error()` changes its euid: clearing warnings breaks `#include`
+
+**Symptom:** after a warnings pass (arkadia, 2026-10-05) `/std/room`, `/cmd/live/state` and `/cmd/wiz/apprentice` fail to load with
+`Cannot #include /d/Standard/login/login.h`. The file exists and nothing on the include path changed. **Cause:** the driver checks
+each `#include` with `valid_read(file, master, "include")`, so the answer depends on the master's euid at that moment.
+`preload_boot()` sets that euid to the preloaded file's creator ("backbone" for `/cmd` and `/std`), and backbone may not read
+`/d/Standard` (not a registered domain). It used to work only because every compile warning called the master's `log_error()`,
+which runs `set_auth(this_object(), "root:root")`. **Fix:** in `valid_read`, return 1 for `func == "include"` once the closed
+directories (`players`, `binaries`, `data`) are refused; the CD driver does not check includes. **Detection:** boot before and after a
+warnings pass and diff the error lines, not only the warning count. A new `Cannot #include` of an existing file means `valid_read`.
+
