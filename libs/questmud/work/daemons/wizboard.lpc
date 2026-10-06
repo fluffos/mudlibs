@@ -21,9 +21,10 @@ nosave string message_body,topic;
 
 string player_status(object player);
 int read(string str);
-int new(string str);
+int new_thread(string str);
 int reply(string str);
 int remove(string str);
+void headers();
 string bold_number(int number);
 string bold_string(string str);
 string cyan_string(string str);
@@ -68,7 +69,7 @@ r_arr=keys(r_map);
   add_action("board","board");
   add_action("read","bread");
   add_action("reply","breply");
-  add_action("new","bnew");
+  add_action("new_thread","bnew");
 }
 
 /***********/
@@ -106,7 +107,7 @@ save_object(SAVEFILE);
 return 1; }
 
 if(sscanf(str, "read %s", tmp)) { read(tmp); return 1; }
-if(sscanf(str, "new %s", tmp)) { new(tmp); return 1; }
+if(sscanf(str, "new %s", tmp)) { new_thread(tmp); return 1; }
 if(sscanf(str, "reply %s", tmp)) { reply(tmp); return 1; }
 if(sscanf(str, "remove %s", tmp)) { remove(tmp); return 1; }
 
@@ -131,11 +132,11 @@ write("\nThere are a total of "+total+" threads and "+sizeof(r_arr)+
       " follow-ups on the board.\n");
 HRLINE
 for(n=0;n<total;n++)    {
-if (!m_map[n,0]) total++; else // To work with removed threads
+if (!m_map[n] || !m_map[n][0]) total++; else // To work with removed threads
 write((n+1)+
-".'"+cyan_string(m_map[n,3])+"' by "+bold_string(m_map[n,0])+
-" ("+m_map[n,1]+" "+
-m_map[n,2]+")\nPosted on: "+m_map[n,4]+" Follow-ups: "+m_map[n,6]+"\n");
+".'"+cyan_string(m_map[n][3])+"' by "+bold_string(m_map[n][0])+
+" ("+m_map[n][1]+" "+
+m_map[n][2]+")\nPosted on: "+m_map[n][4]+" Follow-ups: "+m_map[n][6]+"\n");
                         }
 write("\n");
 }
@@ -184,17 +185,17 @@ thread=to_int(str);
 n=thread-1;
 
 pager_data="\nStarted reading thread "+ cyan_string(to_string(thread))+" ...\n"+
-        HRSTR+(n+1)+".'"+cyan_string(m_map[n,3])+"' by "
-        +bold_string(m_map[n,0])+" ("+m_map[n,1]+" "+m_map[n,2]+")\n"+
-        "Posted on: '"+m_map[n,4]+"' Follow-ups: "+
-        m_map[n,6]+"\n"+HRSTR+m_map[n,7]+"\n"+HRSTR;
+        HRSTR+(n+1)+".'"+cyan_string(m_map[n][3])+"' by "
+        +bold_string(m_map[n][0])+" ("+m_map[n][1]+" "+m_map[n][2]+")\n"+
+        "Posted on: '"+m_map[n][4]+"' Follow-ups: "+
+        m_map[n][6]+"\n"+HRSTR+m_map[n][7]+"\n"+HRSTR;
 
 // Check for replies
-if(m_map[n,6])  
+if(m_map[n][6])  
 if(sizeof(r_arr))       {
-for(x=0;x<m_map[n,6];x++)
+for(x=0;x<m_map[n][6];x++)
 for(i=0;i<sizeof(r_arr);i++) {
-if((x==r_map[i,1])&&(n==r_map[i,0])) 
+if(r_map[i] && (x==r_map[i][1])&&(n==r_map[i][0])) 
 pager_data+=print_reply(i); 
                              }
                         }
@@ -211,7 +212,7 @@ return 1;
 /**********/
 
 int remove(string str) {
-int n,i,x,thread;
+int n,i,thread;
 
 if(!str) { write("Syntax: board remove <thread #>\n"); return 1; }
 
@@ -224,14 +225,14 @@ thread=to_int(str);
 n=thread-1;
 
 // Check that we have rights to the thread
-if((TP->query_wiz()<3) && (TP->query_name()!=m_map[n,0])) 
+if((TP->query_wiz()<3) && (TP->query_name()!=m_map[n][0])) 
         {
 write("You do not have access to remove this thread.\n");
 return 1;
         }
 if(TP->query_level()<500) // +500 wizzes can remove all threads
-if ( (TP->query_wiz())  && ((TP->query_level())<(m_map[n,1]))  && 
-     (m_map[n,2]!="[Player]")  && (m_map[n,2]!="{Player}")
+if ( (TP->query_wiz())  && ((TP->query_level())<(m_map[n][1]))  && 
+     (m_map[n][2]!="[Player]")  && (m_map[n][2]!="{Player}")
     )
  { write("You do not have access to remove this thread.\n");
    return 1;
@@ -241,7 +242,7 @@ map_delete(m_map, n);
 
 // Remove replies
 for(i=0;i<sizeof(r_arr);i++) 
-if(n==r_map[to_int(r_arr[i]),0]) r_map-=([to_int(r_arr[i])]);
+if(n==r_map[to_int(r_arr[i])][0]) map_delete(r_map, to_int(r_arr[i]));
 
 // Update arrays
 if(!m_map) m_map=([]); if(!r_map) r_map=([]);
@@ -258,10 +259,10 @@ string temp;
 
 n=number;
 
-temp="Reply by "+bold_string(r_map[n,2])+" ("+r_map[n,3]+" "+r_map[n,5]+
-") to "+bold_number(r_map[n,0]+1)+".'"+ r_map[n,4]+"'\n"+
-"Posted on: '"+r_map[n,6]+"' (Reply #"+(r_map[n,1]+1)+")\n";
-temp+=HRSTR+r_map[n,7]+"\n"+HRSTR;
+temp="Reply by "+bold_string(r_map[n][2])+" ("+r_map[n][3]+" "+r_map[n][5]+
+") to "+bold_number(r_map[n][0]+1)+".'"+ r_map[n][4]+"'\n"+
+"Posted on: '"+r_map[n][6]+"' (Reply #"+(r_map[n][1]+1)+")\n";
+temp+=HRSTR+r_map[n][7]+"\n"+HRSTR;
 
 return temp;
 }
@@ -310,7 +311,7 @@ else { return str; }
 /**********/
 
 // Create a new thread
-int new(string str) {
+int new_thread(string str) {
 int i,x;
 
 if(!str) { write("Syntax : board new <topic>\n"); return 1; }
@@ -327,7 +328,7 @@ return 1;
 
 // Check the amount of threads started by this player
 for(i=0,x=0;i<sizeof(m_arr);i++) 
-if(TP->query_name()==m_map[to_int(m_arr[i]),0]) x++;
+if(TP->query_name()==m_map[to_int(m_arr[i])][0]) x++;
 
 // limit
 if(x>=PLTHREADMAX+(TP->query_level()/30) && !TP->query_wiz()) {
@@ -359,10 +360,10 @@ reply=to_int(str);
 
 // To work with removed threads
 for(map_place=0;map_place<sizeof(m_arr);map_place++)
-if(m_map[m_arr[map_place],0]) if(m_arr[map_place]==str) break;
+if(m_map[m_arr[map_place]][0]) if(m_arr[map_place]==str) break;
 
 write("Replying to thread "+str+" with the topic '"+
-        bold_string(m_map[reply-1,3])+"'.\n");
+        bold_string(m_map[reply-1][3])+"'.\n");
 write_message();
 return 1;
 }
@@ -370,7 +371,7 @@ return 1;
 /**********/
 
 void send_message() {
-int i,n,thread,map_place;
+int i,thread,map_place;
 
 // Give the thread the right number
 thread=sizeof(m_arr);
@@ -383,15 +384,15 @@ if(!m_map[i]) map_place=i;
 if((!message_body) || (message_body==""))       {
 write("Cancelled.\n"); return;          }
 
-m_map+=([       map_place:
-                TP->query_name();
-                TP->query_level();
-                player_status(TP);
-                topic;
-                ctime();
-                thread;
-                0;
-                message_body
+m_map+=([       map_place:({
+                TP->query_name(),
+                TP->query_level(),
+                player_status(TP),
+                topic,
+                ctime(),
+                thread,
+                0,
+                message_body})
         ]);
 
 m_arr=keys(m_map);
@@ -405,7 +406,7 @@ return;
 /*********/
 
 void reply_message() {
-int i,n,thread,reply_number;
+int thread,reply_number;
 
 // Thread
 thread=reply;
@@ -420,18 +421,18 @@ write("Too short message. Cancelled.\n"); return;       }
  */
 reply_number=sizeof(r_arr); // mapping key
 
-r_map+=([       reply_number:
-                thread;
-                m_map[thread,6]; // # reply
-                TP->query_name();
-                TP->query_level();
-                m_map[thread,3]; // original topic
-                player_status(TP);
-                ctime();
-                message_body
+r_map+=([       reply_number:({
+                thread,
+                m_map[thread][6], // # reply
+                TP->query_name(),
+                TP->query_level(),
+                m_map[thread][3], // original topic
+                player_status(TP),
+                ctime(),
+                message_body})
         ]);
 
-m_map[thread,6]++;
+m_map[thread][6]++;
 
 r_arr=keys(r_map);
 

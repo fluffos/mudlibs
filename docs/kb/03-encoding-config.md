@@ -240,3 +240,18 @@ them as `([k:({v1,v2,v3})])`, `(["a":1,"b":1])` and `([])`, the layout of the po
 writes them needs the same change (`m[k, N]` -> `m[k][N]`, `m += ([ k ])` -> `m[k] = 1`, `m -= ([ k ])` -> `map_delete`).
 Check with a probe that calls `restore_variable()` on every saved value.
 
+
+### LDMud save files: `\n` in a string restores as a literal `n` (questmud, holymission, 2026-10-06)
+
+**Symptom:** board posts, mail and player descriptions from old saves print `nn Sehän on…!!!n`: every newline is an `n`.
+**Cause:** LDMud's `save_object()` writes a newline inside a string as the escape `\n` (a tab as `\t`); FluffOS writes a
+raw CR byte instead, and its `restore_object()` turns any `\X` into a plain `X`. **Fix:**
+`scripts/ldmud_save_newlines.py [--apply] PATH...` rewrites, inside quoted strings of files with LDMud's `#N:M` header,
+`\n` to a CR byte and `\t` to a tab (`\"` and `\\` mean the same in both drivers). A `\r` cannot be kept: a raw CR restores
+as a newline. **Detection:** `\n` escapes in `.o` files that start with `#N:M`; only questmud (41,888) and holymission
+(72,364) have them. Many `.o` files in the Chinese libs are LPC sources with a `.o` name; ignore them.
+
+A related trap in the same saves: the 2026-10-05 Latin-1 line repair skips a line that was changed later, and a save line
+whose mapping was converted counts as changed. Rebuild such lines from `raw/` by emulating the bad decode exactly (a
+GB18030 pair, or an invalid pair dropped together with the byte after it); replace a work line only when it equals that
+emulation, then run the same mapping conversion on the correct decoding.

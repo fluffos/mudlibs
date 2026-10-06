@@ -594,7 +594,9 @@ functions can then touch different copies (`realms`'s region `grid`).
 5. **`A->move_object(B)` silently no-ops** when `A` lacks an LPC
    `move_object`: `call_other` never falls back to the efun. Add
    `move_object(dest){ return efun::move_object(dest); }` to the
-   targets' base class.
+   global include, not one base class: boards, plaques and loot
+   that inherit nothing stayed put (questmud's hall boards,
+   2026-10-06).
 
 Guide: `docs/ldmud-to-fluffos.md`.
 
@@ -1229,4 +1231,13 @@ needs no persistence `nosave` (state rebuilt in `create()`), or rename one; old 
 finalrealms was live; havenmud `isRiding` comes from the `move.lpc` diamond (riding state, minor); nirvlp312 `dead`
 (`banish/` copies), ninetears `creator` (`w/oldcreators`), pkuxkx `cond_def` (now `nosave`), sanguozhi/sgzmudsgz `name`,
 swmud `follow_search` and wilderness `dmg` were saves written by older code.
+
+### 7.234 Converting LDMud closures and wide mappings: `#'>` sorts ascending, a missing key reads 0 (questmud, 2026-10-06)
+**Symptom:** after a port, the emote list prints Z to A; a board's `list` errors `Value being indexed is zero` once a thread
+has been removed. **Cause:** LDMud's `sort_array(a, #'>)` swaps when the closure is true, so it sorts ascending, not
+descending (`({4,5,2,6})` -> `({2,4,5,6})`). LDMud's `m[k, N]` returns 0 for a missing key `k`; the converted `m[k][N]`
+indexes 0. **Fix:** `#'>` -> `sort_array(a, 1)`, `#'<` -> `-1`. Guard converted reads that probe keys which may be gone
+(`if (!m[n] || !m[n][0])`), typically loops over `0..sizeof()` of a mapping with deleted keys. **Detection:**
+`grep -rn "sort_array([^;]*-1).*#'>"` (a comment left by the port); for wide mappings, read every `m[i][N]` whose `i` comes
+from a counter rather than `keys()`.
 

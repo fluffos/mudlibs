@@ -689,3 +689,15 @@ debris.
 7. 验证（只含被跟踪文件的树）：启动 0 错误；新建角色（问性别 → 选人类 → 战士公会）、`newbie hello all` 显示 `Qatestw [newbie]: hello all`、`channels` 列出 11 个频道并显示已加入的三个、走动、`ignore`、`quit`（`Nothing dropped.`、`[inform]: Qatestw left the game.`），驱动无运行时错误。低于 2 级且不满一小时的新角色不存档，是原设计。
 8. 仍未处理：留言板（`mudboard`/`wizboard`/`warlockboard`/`vboard`/`bull_board`）、`bug_d`、据点 `stronghold/daemons/sh_main_d` 的多列映射代码（存档已转换），`world/misc/trace` 的 `transfer()`，以及巫师目录里约 800 个有编译错误的文件。
 
+## 深度功能测试（§10.7，2026-10-06）— 冒险者大厅、留言板、存档里的换行和芬兰文
+
+1. **非生物对象的 `X->move_object(dest)` 全部无效。** 移植时把 LDMud 的 `move_object(A, B)` 改成 `A->move_object(B)`，而本驱动的 `move_object()` 只移动 `this_object()`，`call_other()` 也不会回落到同名外部函数。当年只给 `obj/living.lpc` 补了同名函数，所以留言板、奖牌、怪物身上的物品等一切非生物对象都“移动成功”却留在原地（世界目录里有 452 处这种调用）。现在把这个函数放进全局 include `/include/empty.h`，每个对象都有，`obj/living.lpc` 里的那份删掉。
+2. **冒险者大厅（城里的休息回复点）进不去。** 投票板 `daemons/vboard` 用 LDMud 多列映射编译失败，大厅 `reset()` 克隆它时出错，`west` 从旅店进大厅毫无反应。投票板和三块留言板（`mudboard`、`wizboard`、`warlockboard`）改成数组值（`m[k][N]`）；`m -= ([ k ])` 改 `map_delete`；`new` 是保留字，留言板的 `new` 改名 `new_thread`；`wizboard` 缺 `headers()` 原型。LDMud 读不存在的键返回 0，数组写法读已删除的主题会出错，所以列表和回复扫描先判断 `m_map[n]`/`r_map[i]` 是否存在。连带能载入的还有战士巫师公会 `guilds/warlock/warlock`、`obj/warlock`、`room/job_room`。
+3. `daemons/bug_d`（玩家 `bug` 命令）同样改成数组值，`#'>` 排序改 `sort_array(x, 1)`；`obj/bull_board` 的 `add_action("new"); add_verb("note");` 合成一句，`new` 改名 `new_note`。
+4. **表情列表是倒序的，第三人称代词固定为第一个使用者的。** 早先把 `sort_array(x, #'>)` 改成了 `-1`（降序），而 LDMud 在 `a > b` 时交换，是升序，现改 `1`。`daemons/emote_data` 在载入时读 `this_player()->query_possessive()` 拼进 `shakes his head` 之类的文字：没有玩家时载入出错，有玩家时所有人都用第一个人的性别。改成占位符 `$POSS$`，由 `emote_d` 的 `third_person()` 在每次表情时替换。
+5. `log_file()` 用 LDMud 的 `get_dir(f, 2)`（旧版表示取文件大小）判断日志大小，本驱动返回文件名，字符串与整数比较报错，新角色注册时写 `NEWPLAYER` 日志就出错。改用 `file_size()`。巫师命令 `ls`/`cls` 的 `get_dir(path, 0x21/2/4)` 改 `get_dir(path, -1)`，并补 `dir_filter2` 原型（两个命令以前都编译不过）。
+6. **存档里的芬兰文仍是乱码。** 10-05 的逐行修复跳过了已转换多列映射的存档行（和其他被改过的行）。按 `raw/` 原文重建：精确模拟当年的错误解码（GB18030 双字节；无效的一对连同后一个字节一起丢掉），工作树的行与模拟结果完全相同才换成正确的 Latin-1 解码，再做同样的映射转换；被吞掉换行而合并的行按原文分组处理。147 个文件、443 行（玩家存档、信件、留言板、日志）。新增的非 ASCII 字符几乎全是 `ä`/`ö`/`å`。剩 `AREA_OHJEET` 和 `log/SHOUT` 两个文本文件有后来改动过的行，没动。
+7. **LDMud 存档里的换行读回来是字母 `n`。** LDMud 把字符串中的换行存成 `\n` 两个字符，本驱动存成一个 CR 字节，读档时把 `\X` 还原成 `X`。留言板内容显示为 `nn Sehän on…!!!n`。新脚本 `scripts/ldmud_save_newlines.py` 把引号内的 `\n` 改成 CR、`\t` 改成制表符：1162 个存档、41,888 处（KB 03）。`\r`（击杀统计里怪物名末尾带的回车）无法表示，保留。
+8. 验证（临时副本，新进程）：新角色从战士公会走到大厅，看到留言板、金色奖牌、投票板；`board list` 跳过已删除的 3 号主题；`board read 2/4` 显示正确的芬兰文和换行；投票板 `list`/`info Mudcon` 读出旧票数；`look at plaque` 显示排行；`shake`/`snap` 正常，`emotes` 按字母升序；`bug here …` 写入数组格式的存档。非巫师目录 1683 个文件编译：失败数 297 → 284，无新失败。
+9. 未做：本库的 2700 多条编译警告；`stronghold/daemons/sh_main_d`、`stronghold/base/sh_base_room` 的多列映射代码；`world/misc/trace` 的 `transfer()`。发帖需要 10 级、投票需要 40 级，这两条写入路径只做了编译检查。
+
