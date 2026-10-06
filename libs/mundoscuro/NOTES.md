@@ -296,3 +296,14 @@ nested `/*`).
 ## 深度功能测试（§10.7，2026-10-05）— 主控 author_file()/domain_file()
 
 驱动的 mudlib_stats 包在主控载入时各调用一次 `author_file(<主控文件>)` 和 `domain_file("/")`。本库主控没有这两个 apply，所以每次启动都打印 `author_file() in the master file does not work, using root_uid as fallback` 和 `domain_file() in the master file does not work, using bb_ui as fallback` 两行，网页版每位访客的终端里都看得到。`kernel/master.lpc` 补上了这两个 apply：作者返回 `get_root_uid()`，域返回 `get_bb_uid()`，正是驱动缺少它们时所用的值。域名等于 backbone 域时，驱动让对象沿用创建者的域，与没有这个 apply 时相同（KB 06 §7.222）。用 `lpcc config.fluffos /nonexistent.lpc` 前后对比，主控载入段只少了这两行。
+
+## 深度功能测试（§10.7，2026-10-05）— 编译警告清理、命令历史从未记录
+
+需要 MySQL 容器 `mundoscuro_mysql` 运行（重启后要 `docker start mundoscuro_mysql`），否则 `initd` 在 `check_database()` 失败时 `shutdown(-1)`，`lpc_warnings.py` 的整树扫描也因此一个文件都没编译（`lpcc --batch` 在预载阶段就退出）。
+
+1. 编译警告：启动 2 条 → 0，整树 22 条 → 0。`kernel/master.lpc` 的 `error_handler` 删未用的 `trace`；`kernel/simul_efun/security/call_other.lpc` 整段被注释掉的旧实现里多出的一个 `/*` 删掉；`lpc_warnings.py --fix` 删了 20 个未用局部变量（复核 36 个被删声明，0 个需要处理）；`global/object/nombres.lpc` 的 `determinante_q(string gg, string nn)` 参数实为性别/单复数整数（赋给 int、与 `FEMENINO`/`SINGULAR` 比较），改为 `int`，无参调用行为不变。
+2. 原作者的编译错误：`tablas/danos.lpc` 用了未定义的 `MUERTE`（`include/danos.h` 里致死等级叫 `MORTAL`），整张伤害表载入失败；`global/arma.lpc` 的 `tipo_dano_q()` 声明返回 `string *`、实际返回 `int *`，武器基类编译失败，`global/daemons/combate.lpc` 接收它的局部变量同样改成 `int *`。两处修好后武器基类与伤害表都能载入。
+3. **命令历史从未记录。** `global/jugador/shell.lpc` 的 `process_input()` 用 `TP->add_history(input)`，而 `history.lpc` 的 `add_history()` 是 `protected`，经 call_other 调用一律被拒，驱动每条命令打印一次 `apply() with insufficient permission ... add_history`，`historial` 永远是空的。按本文件已有的 `/* Extern */` 原型写法声明 `add_history()`，直接调用（`TP == this_object()` 时）。实测：`mirar`、`score`、`who` 之后 `historial` 列出这三条，驱动输出不再有权限警告。
+4. 仍未编译、属原作者未完成的文件（不改）：`comandos/jugador/mv.lpc`（半截 `cp` 代码贴在函数外）、`client.lpc`/`server.lpc`（套接字试验，`socket.h` 不存在）、`kernel/daemons/ftp.lpc`（见上文，`initd` 已跳过）。`kernel/simul_efun/filesystem/*` 的报错是被单独编译的 sefun 片段，在 simul_efun 里编译时没有问题。
+5. 验证：全新启动 0 警告；新建角色（男/人类/战士）→ `mirar`、`score`、`ficha`、`who`、`inventario`、`comun`、`salir`（`Ficha grabada.`）→ 重新登录 → `historial` 正常。测试角色 `qatestb` 的存档和数据库行已删除。`fluffos` 管理员账号不在当前容器的数据库里（容器数据早于该账号），这是本机数据库状态，不是代码问题。
+
