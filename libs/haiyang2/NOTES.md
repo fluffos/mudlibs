@@ -1419,3 +1419,9 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 
 `quest/menpaijob/mingjiao/zhangwuji` 第 289 行附近的 `command("say " + … + "  我教目的在与反抗元兵，现在正在练兵  ");` 少了右引号：原文这里是 `A3 22`（半个全角字符后面紧跟引号），MudOS 按字节读没问题，转 UTF-8 时这一对被当成无效字符连同引号一起丢掉。整个文件因此编译不过，明教的任务 NPC 张无忌（`romnpc2`/`romnpc3` 里也会引用他）从未载入。补回引号。hy5、hymud、haiyang2 三个同源库同样修改。
 
+## 深度功能测试（§10.7，2026-10-06）— 编译警告清理
+
+1. `scripts/lpc_warnings.py --fix` 机械修复 2608 个文件，启动警告 508 → 0。HEAD 与修改后各编译一遍改动的文件：2574 = 2574，无回归；全库扫描里多出的 18 个载入失败不在改动文件之中，有编译错误的 71 个文件两边错误相同（其余是 NPC 随机内容造成的载入失败，HEAD 重跑也会变动）。被删局部变量审计 48 处，所在文件都没有 `#if`，读到的都在注释里或是同名函数调用。
+2. 手工：`quest/shenshu/npc/man2` 的 `order`、`data` 各声明两次（后一个生效；前一份在两个 `#include` 之前，被包含的文件不用它们），删去前一份；多余的 `int ask_job();` 原型与定义 `string ask_job()` 冲突，删去；`man`/`man2` 的 `kill_ob` 改 `void`，与 `feature/attack` 一致（函数不返回值）。与 hy5 同一处代码。
+3. 验证（新进程，临时副本）：GB → `fluffos` 登录 → `look`、`score`、`i`、`quit` 正常，驱动无运行时错误。
+

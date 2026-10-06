@@ -62,7 +62,7 @@ return 1;
 
 void die()
 {
-        object ob, me, corpse;
+        object ob;
         
         ob = this_object();
 message_vision("$N「啪」地一声倒在地上，嘴角溢出几丝鲜血，痛苦的挣扎了几下就死了。\n", ob);
