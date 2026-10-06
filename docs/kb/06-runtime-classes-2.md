@@ -1225,6 +1225,8 @@ skill tree, `std/living/skills.lpc`'s levels) is written twice; `restore_object(
 variable and the other is left cleared. The compiler only says `Redeclaration of global variable`. **Fix:** make the copy that
 needs no persistence `nosave` (state rebuilt in `create()`), or rename one; old saves then restore into the right variable.
 **Detection:** a save file with the same variable name on two lines (`awk '{print $1}' file.o | sort | uniq -d`); filter out
-`.o` files that are not saves. Corpus candidates 2026-10-06: nirvlp312 `dead`, ninetears `creator`, havenmud `isRiding`,
-pkuxkx `cond_def` (x4), sanguozhi/sgzmudsgz `name`, swmud `follow_search`, wilderness `dmg`/`weapon_skill`.
+`.o` files that are not saves, then check the save's class still declares the name twice. Corpus sweep 2026-10-06: only
+finalrealms was live; havenmud `isRiding` comes from the `move.lpc` diamond (riding state, minor); nirvlp312 `dead`
+(`banish/` copies), ninetears `creator` (`w/oldcreators`), pkuxkx `cond_def` (now `nosave`), sanguozhi/sgzmudsgz `name`,
+swmud `follow_search` and wilderness `dmg` were saves written by older code.
 
