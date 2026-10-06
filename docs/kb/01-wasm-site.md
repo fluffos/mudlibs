@@ -138,6 +138,16 @@ Known one-offs: `xo` hangs at world entry under WASM only;
   onto `site/`. `scripts/verify_site_publish.py` must pass; it blocks
   deploy. When you add a published URL, extend the verifier. Never
   delete it.
+- **Live SEO telemetry (two layers — do not merge them):**
+  1. CI publish invariant above = the *artifact* is coherent.
+  2. `scripts/seo_telemetry.py` = the *live origin* still serves
+     robots/sitemap/canonicals/canary hubs (lima, tmi2, …) and a
+     sitemap sample. Weekly agent timer `mudlibs-seo-telemetry` runs
+     it, then (when `~/.config/gsc/` has an OAuth token) fills the
+     ranking half via GSC MCP: 28d performance, WoW compare, URL
+     inspection + indexing issues on the canary set, sitemap
+     submission status. A green CI build does not prove Google can
+     fetch or rank the site.
 
 ### 1.5 Admin account seeding
 
