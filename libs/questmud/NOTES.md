@@ -699,5 +699,7 @@ debris.
 6. **存档里的芬兰文仍是乱码。** 10-05 的逐行修复跳过了已转换多列映射的存档行（和其他被改过的行）。按 `raw/` 原文重建：精确模拟当年的错误解码（GB18030 双字节；无效的一对连同后一个字节一起丢掉），工作树的行与模拟结果完全相同才换成正确的 Latin-1 解码，再做同样的映射转换；被吞掉换行而合并的行按原文分组处理。147 个文件、443 行（玩家存档、信件、留言板、日志）。新增的非 ASCII 字符几乎全是 `ä`/`ö`/`å`。剩 `AREA_OHJEET` 和 `log/SHOUT` 两个文本文件有后来改动过的行，没动。
 7. **LDMud 存档里的换行读回来是字母 `n`。** LDMud 把字符串中的换行存成 `\n` 两个字符，本驱动存成一个 CR 字节，读档时把 `\X` 还原成 `X`。留言板内容显示为 `nn Sehän on…!!!n`。新脚本 `scripts/ldmud_save_newlines.py` 把引号内的 `\n` 改成 CR、`\t` 改成制表符：1162 个存档、41,888 处（KB 03）。`\r`（击杀统计里怪物名末尾带的回车）无法表示，保留。
 8. 验证（临时副本，新进程）：新角色从战士公会走到大厅，看到留言板、金色奖牌、投票板；`board list` 跳过已删除的 3 号主题；`board read 2/4` 显示正确的芬兰文和换行；投票板 `list`/`info Mudcon` 读出旧票数；`look at plaque` 显示排行；`shake`/`snap` 正常，`emotes` 按字母升序；`bug here …` 写入数组格式的存档。非巫师目录 1683 个文件编译：失败数 297 → 284，无新失败。
-9. 未做：本库的 2700 多条编译警告；`stronghold/daemons/sh_main_d`、`stronghold/base/sh_base_room` 的多列映射代码；`world/misc/trace` 的 `transfer()`。发帖需要 10 级、投票需要 40 级，这两条写入路径只做了编译检查。
+9. **据点（stronghold）的代码全部编译不过。** `sh_main_d`（每个据点的数据守护）和 `sh_base_room`（据点房间基类）的多列映射改成数组值（`room_data`、`hired_guards`、`door_data`、`chest_data`、`guard_data`、雇佣守卫列表 `mapp[k][N]`）；`add_door` 的原型少了第三个参数 `flag`；`daemons/copier` 用保留字 `in` 作参数名，改 `src`；`base/sh_guard` 的 LDMud 单参数 `remove_action(verb)` 改 `remove_action("block_move", verb)`。`stronghold/` 下 9 个文件现在全部编译通过。读这些映射的地方都遍历 `keys()`，不会读到不存在的键。据点存档在运行时生成，库里还没有，所以只做了编译检查。
+10. `obj/monster` 和 `obj/living` 各声明了一个 `spell_dam`（重复声明警告；两边都没有读它，怪物法术按咒语命令施放），删掉 `monster` 的那个。
+11. 未做：本库的 2700 多条编译警告；`world/misc/trace` 的 `transfer()`。发帖需要 10 级、投票需要 40 级，这两条写入路径只做了编译检查。
 
