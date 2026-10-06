@@ -701,5 +701,6 @@ debris.
 8. 验证（临时副本，新进程）：新角色从战士公会走到大厅，看到留言板、金色奖牌、投票板；`board list` 跳过已删除的 3 号主题；`board read 2/4` 显示正确的芬兰文和换行；投票板 `list`/`info Mudcon` 读出旧票数；`look at plaque` 显示排行；`shake`/`snap` 正常，`emotes` 按字母升序；`bug here …` 写入数组格式的存档。非巫师目录 1683 个文件编译：失败数 297 → 284，无新失败。
 9. **据点（stronghold）的代码全部编译不过。** `sh_main_d`（每个据点的数据守护）和 `sh_base_room`（据点房间基类）的多列映射改成数组值（`room_data`、`hired_guards`、`door_data`、`chest_data`、`guard_data`、雇佣守卫列表 `mapp[k][N]`）；`add_door` 的原型少了第三个参数 `flag`；`daemons/copier` 用保留字 `in` 作参数名，改 `src`；`base/sh_guard` 的 LDMud 单参数 `remove_action(verb)` 改 `remove_action("block_move", verb)`。`stronghold/` 下 9 个文件现在全部编译通过。读这些映射的地方都遍历 `keys()`，不会读到不存在的键。据点存档在运行时生成，库里还没有，所以只做了编译检查。
 10. `obj/monster` 和 `obj/living` 各声明了一个 `spell_dam`（重复声明警告；两边都没有读它，怪物法术按咒语命令施放），删掉 `monster` 的那个。
-11. 未做：本库的 2700 多条编译警告；`world/misc/trace` 的 `transfer()`。发帖需要 10 级、投票需要 40 级，这两条写入路径只做了编译检查。
+11. 巫师工具 `world/misc/trace`、`trace2` 编译通过：LDMud 的 `transfer(ob, dest)`（成功返回 0）改成 `catch(ob->move_object(dest))`；保留字 `in` 作函数名，改 `trace_in`（它注册的动作是 `"In"`，大小写不同，原本就没有绑定）；函数上的 `nosave` 改 `protected`；`man` 的 `string manuals` 改 `string *manuals`。
+12. 未做：本库的 2700 多条编译警告。发帖需要 10 级、投票需要 40 级，这两条写入路径只做了编译检查。
 
