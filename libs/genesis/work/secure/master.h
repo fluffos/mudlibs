@@ -10,8 +10,8 @@
 /*
  * /secure/master.c
  */
-nosave void reset_master();
-nosave void save_master();
+protected void reset_master();
+protected void save_master();
 varargs object finger_player(string pl_name, string file);
 varargs mixed do_debug(string icmd, mixed a1, mixed a2, mixed a3);
 public void check_memory(int dodecay);
@@ -26,17 +26,17 @@ public int query_start_time();
 /*
  * /secure/master/fob.c
  */
-nosave void remove_all_applications(string wname);
-nosave string add_wizard_to_domain(string dname, string wname, string cmder);
-nosave int do_change_rank(string wname, int rank, string cmder);
+protected void remove_all_applications(string wname);
+protected int add_wizard_to_domain(string dname, string wname, string cmder);
+protected int do_change_rank(string wname, int rank, string cmder);
 
 /*
  * /secure/master/sanction.c
  */
-nosave void remove_all_sanctions(string name);
+protected void remove_all_sanctions(string name);
 
 
 /*
  * /secure/master/guild.c
  */
-nosave void remove_from_guilds(string name);
+protected void remove_from_guilds(string name);

@@ -266,7 +266,6 @@
 
 /* ACTION_OLFACTORY - This action can be perceived with the sense of smell */
 #define ACTION_OLFACTORY 16
-/*
 /* ACTION_LACTIVITY - This action requires a low level of activity.
  * These actions can typically be performed while the actor is restrained,
  * though not while completely unable to move.

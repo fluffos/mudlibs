@@ -23,7 +23,6 @@
  * The reason of this, is that the above saves a lot of memory.
  */
 
-#pragma save_binary
 #pragma strict_types
 
 inherit "/std/container";

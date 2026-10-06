@@ -4,7 +4,6 @@
  * This object holds the commands reserved for administrators.
  */
 
-#pragma save_binary
 
 inherit "/cmd/std/command_driver";
 

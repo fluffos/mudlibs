@@ -4,7 +4,7 @@
 void create_living();
 void reset_living();
 int query_base_stat(int stat);
-nosave void update_acc_exp(int stat_exp, int guild_exp);
+protected void update_acc_exp(int stat_exp, int guild_exp);
 string query_real_name();
 mixed query_learn_pref(int stat);
 int query_stat(int stat);

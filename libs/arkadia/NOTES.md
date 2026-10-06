@@ -762,3 +762,7 @@ pass.
 ## 深度功能测试（§10.7，2026-10-05）— set_alarm 闹钟按对象归属
 
 `secure/simul_efun.lpc` 用一张全局表模拟 CD 驱动的 `set_alarm()`。`get_all_alarms()` 返回所有对象的闹钟，而 `std/object.lpc` 的 `reset()` / `enable_reset()` 会先删掉列表里所有名为 reset 的闹钟再排自己的，结果任何一个对象 reset 都会取消其他所有对象的 reset，房间实际上不再重置（NPC、物品不刷新）。用 lpcc 载入两个房间验证：改前两个房间看到同样 5 个闹钟、只剩一个 reset；改后各自只有自己的 reset。现在每个闹钟记录 `previous_object()` 为主人，`get_all_alarms()` / `get_alarm()` / `remove_alarm()` 只作用于调用者自己的闹钟，返回 CD 格式；主人已销毁的闹钟到期时直接丢弃（KB 06 §7.224）。化身时那行 `Owner (/d/Standard/login/ghost_player#N) of function pointer is destructed` 也随之消失（鬼魂销毁后它的闹钟被静默丢弃）。
+
+## 深度功能测试（§10.7，2026-10-05）— 带种子的 random、set_alarm 字符串形式
+
+`secure/simul_efun.lpc` 的 `random(range, seed)` 原来收下种子却忽略它；CD 驱动对同一种子给同一个数，`cmd/live/state.lpc` 的比较/估价依赖这一点（KB 06 §7.225），现在对种子做固定散列。`set_alarm()` 接受 CD 的完整形式 `(float, float, function|string, args...)`：本库 20 处用函数名字符串加参数（如 `cmd/wiz/keeper.lpc` 的 `set_alarm(3.5, 0.0, "chor_cd", ++faza, wizowie)`），原来的模拟只收函数指针（KB 06 §7.224）。编译警告清理（约 818 条）尚未做，可照 genesis 的做法。

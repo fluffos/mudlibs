@@ -369,7 +369,7 @@ itof(mixed i)
  * doesn't expose a call_out's remaining time directly either).
  */
 private int __alarm_next_id = 1;
-/* id -> ({ callout_handle, repeat, func, fire_time, owner }). On the CD
+/* id -> ({ callout_handle, repeat, func, fire_time, owner, args }). On the CD
  * driver alarms are per object: get_all_alarms()/get_alarm()/remove_alarm()
  * only see the caller's own, and they go away with the object. A single
  * global table without an owner let std/object.lpc's reset() and
@@ -395,7 +395,8 @@ private void
 __alarm_fire(int id)
 {
     mixed *entry;
-    function func;
+    mixed func;
+    mixed *args;
     float repeat;
 
     entry = __alarms[id];
@@ -409,6 +410,7 @@ __alarm_fire(int id)
 
     func = entry[2];
     repeat = entry[1];
+    args = entry[5];
 
     if (repeat > 0.0)
     {
@@ -418,18 +420,25 @@ __alarm_fire(int id)
     else
         map_delete(__alarms, id);
 
-    (*func)();
+    if (stringp(func))
+        call_other(entry[4], func, args...);
+    else
+        evaluate(func, args...);
 }
 
-int
-set_alarm(float delay, float repeat, function func)
+/* The CD form: func is a function or the name of a function in the
+ * calling object; any further arguments are passed to it. */
+varargs int
+set_alarm(mixed delay, mixed repeat, mixed func, mixed *args...)
 {
     int id;
     mixed handle;
 
+    delay = to_float(delay);
+    repeat = to_float(repeat);
     id = __alarm_next_id++;
     handle = call_out((: __alarm_fire, id :), delay);
-    __alarms[id] = ({ handle, repeat, func, time() + delay, previous_object() });
+    __alarms[id] = ({ handle, repeat, func, time() + delay, previous_object(), args });
     return id;
 }
 
@@ -453,8 +462,8 @@ get_alarm(int id)
     entry = __alarms[id];
     if (!entry || entry[4] != previous_object())
         return 0;
-    return ({ id, __alarm_func_name(entry[2]), to_float(entry[3] - time()),
-        entry[1], ({}) });
+    return ({ id, stringp(entry[2]) ? entry[2] : __alarm_func_name(entry[2]),
+        to_float(entry[3] - time()), entry[1], entry[5] });
 }
 
 mixed *
@@ -468,8 +477,7 @@ get_all_alarms()
     ids = filter(keys(__alarms), (: __alarms[$1][4] == $(owner) :));
     result = allocate(sizeof(ids));
     for (i = 0; i < sizeof(ids); i++)
-        result[i] = ({ ids[i], __alarm_func_name(__alarms[ids[i]][2]),
-            to_float(__alarms[ids[i]][3] - time()), __alarms[ids[i]][1], ({}) });
+        result[i] = get_alarm(ids[i]);
     return result;
 }
 
@@ -637,21 +645,25 @@ object_time(object ob)
     return time();
 }
 
-/* FluffOS PORT NOTE: this driver's real random() efun takes a single
- * int argument only -- the CD driver's random(range, seed) 2-arg
- * seeded-random variant has no equivalent (there's no way to seed this
- * driver's PRNG per-call). Shadows the real efun with a simul_efun of
- * the same name that accepts (and silently ignores) the extra seed
- * argument, bypassing to the real efun via efun::random() for the
- * actual random draw -- confirmed dead/unused-in-effect on the sibling
- * `genesis` port of this engine family (its one caller never even
- * passed a seed), and ~18 call sites here do pass one, but always as an
- * attempt at determinism/variety this driver's real random() already
- * provides on its own. */
+/* FluffOS PORT NOTE: the CD driver's random(range, seed) is deterministic:
+ * the same seed always gives the same number. The appraisal commands (the
+ * compare/estimate code in cmd/live/state.lpc seeds with both objects'
+ * numbers) rely on it so that asking again does not average a skill-limited
+ * guess into the truth. This driver's random() takes one argument; a call
+ * with a seed gets a fixed hash of it, a call without one the efun. */
 varargs int
-random(int range, mixed seed)
+random(int range, mixed *seed...)
 {
-    return efun::random(range);
+    int h;
+
+    if (!sizeof(seed))
+        return efun::random(range);
+    if (range <= 0)
+        return 0;
+    h = intp(seed[0]) ? seed[0] : sizeof(sprintf("%O", seed[0]));
+    h = (h * 1103515245 + 12345) & 0x7fffffff;
+    h = (h ^ (h >> 16)) & 0x7fffffff;
+    return h % range;
 }
 
 /* FluffOS PORT NOTE: rnd() (a random FLOAT in [0.0, 1.0)) is a CD-driver

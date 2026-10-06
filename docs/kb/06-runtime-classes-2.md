@@ -1117,4 +1117,14 @@ object's alarms, so `std/object.lpc`'s `reset()`/`enable_reset()` ("remove every
 every other object's reset (an lpcc probe: two rooms each saw the same 5 alarms and only one `reset`), and alarms of destructed objects
 still fired. **Fix:** record `previous_object()` as the owner; `get_all_alarms()`/`get_alarm()`/`remove_alarm()` act on the caller's
 own alarms and return the CD shape `({ id, name, time_left, repeat, args })`; a firing alarm whose owner is gone is dropped.
-**Detection:** `grep -n "get_all_alarms" secure/simul_efun*`, then `query_alarms()` on two freshly loaded rooms.
+The CD signature is `set_alarm(float, float, function|string, args...)`: a string names a function of the caller, and the
+extra arguments go to it (arkadia: 20 call sites; genesis's `std/callout.lpc` `call_out()` passes one). **Detection:** `grep -n "get_all_alarms" secure/simul_efun*`, then `query_alarms()` on two freshly loaded rooms.
+
+### 7.225 CD-driver ports: `random(range, seed)` is deterministic
+
+**Symptom:** genesis `cmd/live/state.lpc`: five `Unused local variable 'seed'` warnings; `compare`/appraisal answers change on every
+try, so repeating the command averages a skill-limited estimate into the true value. **Cause:** on the CD driver the same seed always
+gives the same number, and the appraisal code seeds with both objects' numbers on purpose. The onboarding dropped the seeds (45 calls in
+5 files: state, shop, heap, area_handler, gog_accounts), and arkadia's `random()` simul_efun accepted the seed and ignored it.
+**Fix:** a `random(int range, mixed *seed...)` simul_efun that hashes the seed (`efun::random()` when there is none), and the seeds put
+back from the pristine `raw/` sources. **Detection:** `grep -rn "random([^()]*,[^()]*)" raw/` against the work tree.

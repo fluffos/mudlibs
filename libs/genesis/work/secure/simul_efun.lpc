@@ -13,9 +13,6 @@
  */
 #include "/sys/std.h"
 
-#pragma no_clone
-#pragma no_inherit
-#pragma resident
 #pragma strict_types
 
 /* Define this if you have CFUN's turned on. If not, then LPC functions will
@@ -39,7 +36,7 @@ int seteuid(string str);
 
 nomask varargs void dump_array(mixed a, string tab);
 nomask varargs void dump_mapping(mapping m, string tab);
-nosave void dump_elem(mixed sak, string tab);
+protected void dump_elem(mixed sak, string tab);
 
 /*
  * FluffOS PORT NOTE: set_auth()/query_auth() are real gamedriver efuns on
@@ -136,7 +133,7 @@ tell_object(object liveob, string message)
     liveob->catch_tell(message);
 }
 
-nosave string
+protected string
 getnames(object ob)
 {
     return ob->query_real_name();
@@ -620,8 +617,8 @@ sort_array(mixed arr, mixed lfunc, object obj)
 		arr = insertion_sort(arr, bot, bot + n - 1, lfunc, obj); \
     }
 
-nosave mixed quick_sort(mixed arr, int orig_bot, int orig_top, string lfunc, object obj);
-nosave mixed insertion_sort(mixed arr, int orig_bot, int orig_top, string lfunc, object obj);
+protected mixed quick_sort(mixed arr, int orig_bot, int orig_top, string lfunc, object obj);
+protected mixed insertion_sort(mixed arr, int orig_bot, int orig_top, string lfunc, object obj);
 
 // public varargs void log_file(string file, string text, int csize);
 
@@ -659,7 +656,7 @@ sort_array(mixed arr, string lfunc, object obj)
 	return insertion_sort(arr, 0, sizeof(arr) - 1, lfunc, obj);
 }
 
-nosave mixed
+protected mixed
 quick_sort(mixed arr, int orig_bot, int orig_top, string lfunc, object obj)
 {
     mixed elem;
@@ -813,7 +810,7 @@ quick_sort(mixed arr, int orig_bot, int orig_top, string lfunc, object obj)
     }
 }
 
-nosave mixed
+protected mixed
 insertion_sort(mixed arr, int bot, int orig_top, string lfunc, object obj)
 {
     mixed elem;
@@ -1233,7 +1230,7 @@ strchar(int x)
  * Arguments    : mixed etwas - the variable to type.
  * Returns      : string - the name of the type.
  */
-nosave string 
+protected string 
 type_name(mixed etwas)
 {
     if (intp(etwas))
@@ -1265,7 +1262,6 @@ dump_array(mixed a, string tab)
 {
     int             n,
                     m;
-    mixed 	    ix, val;
 
     if (!tab)
 	tab = "";
@@ -1380,7 +1376,7 @@ inherit_list(object ob)
     return SECURITY->do_debug("inherit_list", ob);
 }
 
-nosave nomask void
+protected nomask void
 dump_elem(mixed sak, string tab)
 {
     if (pointerp(sak))
@@ -1628,7 +1624,7 @@ strip(string str)
  * call_out() handle so remove_alarm() can cancel it.
  */
 private int __alarm_next_id = 1;
-/* id -> ({ callout_handle, repeat, func, fire_time, owner }). On the CD
+/* id -> ({ callout_handle, repeat, func, fire_time, owner, args }). On the CD
  * driver alarms are per object: get_all_alarms()/get_alarm()/remove_alarm()
  * only see the caller's own, and they go away with the object. A single
  * global table without an owner let std/object.lpc's reset() and
@@ -1654,7 +1650,8 @@ private void
 __alarm_fire(int id)
 {
     mixed *entry;
-    function func;
+    mixed func;
+    mixed *args;
     float repeat;
 
     entry = __alarms[id];
@@ -1668,6 +1665,7 @@ __alarm_fire(int id)
 
     func = entry[2];
     repeat = entry[1];
+    args = entry[5];
 
     if (repeat > 0.0)
     {
@@ -1677,18 +1675,25 @@ __alarm_fire(int id)
     else
         map_delete(__alarms, id);
 
-    (*func)();
+    if (stringp(func))
+        call_other(entry[4], func, args...);
+    else
+        evaluate(func, args...);
 }
 
-int
-set_alarm(float delay, float repeat, function func)
+/* The CD form: func is a function or the name of a function in the
+ * calling object; any further arguments are passed to it. */
+varargs int
+set_alarm(mixed delay, mixed repeat, mixed func, mixed *args...)
 {
     int id;
     mixed handle;
 
+    delay = to_float(delay);
+    repeat = to_float(repeat);
     id = __alarm_next_id++;
     handle = call_out((: __alarm_fire, id :), delay);
-    __alarms[id] = ({ handle, repeat, func, time() + delay, previous_object() });
+    __alarms[id] = ({ handle, repeat, func, time() + delay, previous_object(), args });
     return id;
 }
 
@@ -1712,8 +1717,8 @@ get_alarm(int id)
     entry = __alarms[id];
     if (!entry || entry[4] != previous_object())
         return 0;
-    return ({ id, __alarm_func_name(entry[2]), to_float(entry[3] - time()),
-        entry[1], ({}) });
+    return ({ id, stringp(entry[2]) ? entry[2] : __alarm_func_name(entry[2]),
+        to_float(entry[3] - time()), entry[1], entry[5] });
 }
 
 mixed *
@@ -1727,8 +1732,7 @@ get_all_alarms()
     ids = filter(keys(__alarms), (: __alarms[$1][4] == $(owner) :));
     result = allocate(sizeof(ids));
     for (i = 0; i < sizeof(ids); i++)
-        result[i] = ({ ids[i], __alarm_func_name(__alarms[ids[i]][2]),
-            to_float(__alarms[ids[i]][3] - time()), __alarms[ids[i]][1], ({}) });
+        result[i] = get_alarm(ids[i]);
     return result;
 }
 
@@ -2467,4 +2471,25 @@ filter(mixed x, mixed f, mixed *args...)
                        : evaluate(f, v, args...))
             r[k] = v;
     return r;
+}
+
+/* FluffOS PORT NOTE: the CD driver's random(range, seed) is deterministic:
+ * the same seed always gives the same number. The appraisal commands (the
+ * compare/estimate code in cmd/live/state.lpc seeds with both objects'
+ * numbers) rely on it so that asking again does not average a skill-limited
+ * guess into the truth. This driver's random() takes one argument; a call
+ * with a seed gets a fixed hash of it, a call without one the efun. */
+varargs int
+random(int range, mixed *seed...)
+{
+    int h;
+
+    if (!sizeof(seed))
+        return efun::random(range);
+    if (range <= 0)
+        return 0;
+    h = intp(seed[0]) ? seed[0] : sizeof(sprintf("%O", seed[0]));
+    h = (h * 1103515245 + 12345) & 0x7fffffff;
+    h = (h ^ (h >> 16)) & 0x7fffffff;
+    return h % range;
 }
