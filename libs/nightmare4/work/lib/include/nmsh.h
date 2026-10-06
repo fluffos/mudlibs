@@ -29,7 +29,7 @@ int query_max_hp();
 int query_sp();
 int query_max_sp();
 string get_path();
-string GetClient();
+int GetClient();
 varargs int GetInvis(object ob);
 string GetKeyName();
 protected string cache_commands(string str);

@@ -136,3 +136,7 @@ hylib/dtxy) stay confirmed duplicates.
 ## 深度功能测试（§10.7，2026-10-05）— here-document terminators
 
 `scripts/lpc_fix_heredoc_terminator.py --all --apply`: 1 here-document block(s) repaired (0 with the terminator glued to the last text line, 1 with it indented), so `End of file in text block` no longer hides the room or object behind them: `wiz/lei/room/startroom.lpc`. The terminator must start its line (the lexer's own test, KB 04 §6.10); a glued one lost its newline in the GBK -> UTF-8 conversion together with a half character, which stays out.
+
+## 2026-10-05 — `T array a, b` 转换遗漏
+
+四个 `nation_menu.lpc`（`cmds/area`、`wiz/edc`、`wiz/xiaobai/menu`、`wiz/mimi`）的 `string * keys, dis;` 由原文 `string array keys, dis;` 转换而来，`dis` 丢了 `*`（MudOS 的 `array` 属于类型，两个名字都是数组）。补回 `*`；运行时驱动不检查局部变量类型，所以以前也能用（KB 03）。

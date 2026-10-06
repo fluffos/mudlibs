@@ -88,7 +88,7 @@ string strip_colours(string str);
 void tell_object(object ob, mixed str);
 varargs void tell_room(object ob, mixed str, mixed exclude);
 varargs object this_agent(mixed val);
-void time_event(string tod, function f);
+function time_event(string tod, function f);
 object to_object(mixed target);
 varargs int total_light(object ob);
 string translate(string str, int prof);

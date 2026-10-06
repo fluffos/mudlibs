@@ -764,3 +764,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply s
 ## 深度功能测试（§10.7，2026-10-05）— 主控 author_file()/domain_file()
 
 本库驱动（`~/src/fluffos-lima`，没有 PACKAGE_UIDS）的 mudlib_stats 包在主控载入时调用 `domain_file("/")` 和 `author_file(<主控文件>)`。主控没有这两个 apply，所以每次启动都打印 `... using 'BACKBONE' as fallback` / `... using 'NONAME' as fallback` 两行。`secure/master.lpc` 补上 LIMA 上游自己的写法（limalib/lima f85dba3a）：`/domains/<名>/` 下的文件属于该域，`/wiz/<名>/` 下的属于该巫师，其余为 "std" / "mudlib"；去掉了上游把 master 记在 beek 名下的那一行。本库没有代码读取作者或域统计（KB 06 §7.222）。`lpcc config.fluffos /nonexistent.lpc` 前后对比，只少了这两行。
+
+## 2026-10-05 — `T array a, b` 转换遗漏
+
+`std/object/description.lpc` 的 `plural_discarded_message` 由原文 `protected string array discarded_message, plural_discarded_message;` 转换时丢了 `*`，补回（该变量未被使用，KB 03）。

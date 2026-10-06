@@ -49,7 +49,6 @@
 #define LIB_LEAD           DIR_LIB "/lead"
 #define LIB_LEADER         DIR_LIB "/leader"
 #define LIB_LIGHT          DIR_LIB "/light"
-#define LIB_LIMB           DIR_LIB "/limb"
 #define LIB_LIVING         DIR_LIB "/living"
 #define LIB_LOGIN          DIR_SECURE_LIB "/login"
 #define LIB_MAGIC          DIR_LIB        "/magic"

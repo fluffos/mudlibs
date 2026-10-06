@@ -199,3 +199,14 @@ A `MUD_PORT`/`PORTNO` constant checked in `master::connect()` rejects
 every connection when it doesn't match: the log looks clean, but the
 server is dead (`huoying`, `dfgsiiv13b`). Read what the constant gates.
 Some are cosmetic only.
+
+### `T array a, b` became `T * a, b`: only the first name stays an array (2026-10-05)
+
+**Symptom:** a variable that should hold an array is declared as a plain type. Most of the time nothing shows, because the driver does
+not enforce local types at run time. A global restored from a save file is different: nightmare4's finger daemon read the player's
+`Religion` as a string, so `Religion[1]` was a character code and every finger said `Agnostic`; the scan reports
+`Types in ?: do not match ( int vs string )`. **Cause:** in MudOS `array` belongs to the type (`string array a, b` makes two
+arrays), while `*` belongs to one declarator. A conversion that rewrote `array` as `*` starred only the first name.
+**Fix:** star every later name. **Detection:** compare against raw/ (`scripts/lpc_array_decl_scan.py [slug...]`, which needs raw/
+extracted). Found in nightmare4 (4: `Religion`, `send_to`, `fun`, `ots`), sgzmudsgz (`nation_menu.lpc` x4) and swmud (1).
+
