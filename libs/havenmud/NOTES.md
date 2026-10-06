@@ -817,4 +817,4 @@ character back to the host. Do not loop-reboot (I3).
 2. 编译警告（机械部分，KB 04 §6.10）：`scripts/lpc_warnings.py havenmud --fix`，12535 个 `nosave` 函数改 `protected`（被别处按名调用的 244 个保持 public）、删 562 个未用局部变量、补 173 处 `varargs`、75 处缺返回值的 `return;`、3 处无效转义；`lpc_audit_removed_locals.py` 复核 719 个被删声明，0 个需要处理。§9 格式化只动了 6 个文件。启动无错误；剩下的警告是结构性的：`RadiantLight`（2635）、`CommandFail`（2418）等由同一 mixin 经两条路径继承造成，与 nightmare4 同源，但本库的房间和 `worn_storage` 真的会用到容器那份光亮变量，不能照搬 nightmare4 的做法，留作下一步单独处理。
 3. 用只含被跟踪文件的树（`git archive` + 本次改动）新建角色 `qahaven`（人类、Haven）：天空房间、`score`、`inventory`、`smell`、`who`、`quit` 正常，驱动输出没有权限拒绝。单打 `down` 不是命令（本库默认别名只有 `d`/`u` 等缩写，`go down` 可用并提示先读新手书），属设计。
 4. 编译不过的文件多为档案残留：巫师个人目录里过时的区域副本（如 `realms/alessandra/malveillant` 引用已搬到 `domains/havenwood` 的 `../mal.h`）、`std/tower`（另一个 mudlib 的区域，引用本库没有的 `mudlib.h`/`types.h`）、`domains/averath/oldareas`。
-
+5. `lib/users/nmsh.lpc` 声明了从未使用的 `private nosave string CommandFail`，与 `lib/livings/command.lpc` 的同名变量在玩家和 NPC 里重复，删掉后 2418 条重复声明警告消失（与 nightmare4 相同）。
