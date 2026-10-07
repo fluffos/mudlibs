@@ -200,8 +200,7 @@ void hurt_env(string type)
 
 varargs int receive_damage(string type, int damage, object who,mixed attack_type)
 {
-	string str,id;
-	int p;
+	string str;
 	if( !who || who==this_object() || !objectp(who) )
 		return ::receive_damage(type,damage,who,attack_type);
 	if(objectp(who->query_temp("invoker")))
@@ -227,8 +226,7 @@ varargs int receive_damage(string type, int damage, object who,mixed attack_type
 
 varargs int receive_wound(string type, int damage, object who,mixed attack_type)
 {
-	string str,id;
-	int p;
+	string str;
 	if( !who || who==this_object() || !objectp(who) || damage<10 )
 		return ::receive_wound(type,damage,who,attack_type);
 	if(objectp(who->query_temp("invoker")))

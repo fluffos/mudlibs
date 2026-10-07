@@ -3,7 +3,7 @@
 mixed about_panlong()
 {
 	string str;
-	int i,v,need,base = 30000;
+	int v, need, base = 30000;
 	object xin,me = this_player();
 	
 	if( me->query("family/family_name")!="方寸山三星洞")
