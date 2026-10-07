@@ -928,3 +928,10 @@ top-level memory doc). No fix applied.
 ## 深度功能测试（§10.7，2026-10-07）— 兵器的 `actions` 函数指针
 
 `set("actions", (: WEAPON_D, "query_action" :));`：旧 MudOS 把 `(: 字符串, "函数" :)` 当作 call_other 函数指针，本驱动把它当作表达式函数指针，求值只得到字符串 `"query_action"`。没有对应兵器技能时 `feature/attack.lpc` 直接用兵器的 `actions`，`COMBAT_D` 拿到的不是 mapping，`reset_action()` 后仍不是，记一条 bad action 就不出招——拿着这些兵器打不出攻击。改成别的兵器早已用的 `(: call_other, WEAPON_D, "query_action" :)`（KB 04 §6.10）：`std/weapon/lance.lpc`、`std/weapon/katana.lpc`、`std/weapon/stabber.lpc`、`std/weapon/club.lpc`。改动的文件在 HEAD 与工作树分别加载（新进程），无回退。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py xiyouji2003 --fix` 加 `scripts/lpc_fix_no_effect.py --apply`：共改动 411 个 `.lpc` 和若干 `.h`。HEAD 与工作树分别加载（新进程）：389 -> 389 通过，无回退。
+手工：`adm/daemons/natured.lpc` 删去空语句 `lt[LT_MON];`；`job/merchant/chaomai/npc/obj/check.lpc` 进货 `jinhuo all` 时 `if (... used_money < 0) used_money == 0;` 是比较不是赋值，钱数溢出成负数时没有归零、下一行"帑钱不足"的检查也就拦不住；改成 `=`。`std/weapon/club.lpc` 等四个兵器基类的 `actions` 见同日的兵器函数指针一节。
+
+启动时警告 94 -> 0；新进程登录正常。

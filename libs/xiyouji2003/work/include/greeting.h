@@ -6,7 +6,7 @@
 void greeting(object who)
 {
 	object me = this_object();
-	string str,wizmsg;
+	string str;
 	object weapon = me->query_temp("weapon");
 
 	if(!visible (who)) return;

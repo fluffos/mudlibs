@@ -1,6 +1,5 @@
 // Update by waiwai@2003/04/10
 
-#pragma save_binary
 
 // 重要的索引目录(Directories)
 #define COMMAND_DIR		"/cmds/"
