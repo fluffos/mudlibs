@@ -41,7 +41,7 @@
 
 int make_log(object player,string type,string msg)
 {
-	string file,player_id,file_msg;
+	string file, file_msg;
 	mixed time;
 	int year,mon,day,hour,min,sec;
 	
