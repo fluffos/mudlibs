@@ -245,3 +245,9 @@ In total 376 files differ from the old names (288 `.C` -> `.lpc`, 86 files of re
 ## 深度功能测试（§10.7，2026-10-06）— 编译警告整理
 
 与 `sjsh` 同代码的 779 个文件照搬 `sjsh` 的修复（`scripts/lpc_twin_port.py adopt sjsh sjshwzjqb`；非 ASCII 文字检查无差异），其余由 `scripts/lpc_warnings.py sjshwzjqb --fix` 处理（无用局部变量 1000 个、`varargs` 12 处、转义 24 处），共改动 1240 个 `.lpc`。HEAD 与工作树分别加载（新进程）：1206 -> 1206 通过，无回退；`scripts/lpc_audit_removed_locals.py HEAD` 的 20 条候选都是声明被重建。启动时警告 197 -> 0。
+
+## 深度功能测试（§10.7，2026-10-06）— 与 zhonghua2 同源的三处编译警告
+
+- `clone/drug/fengdong.lpc`：`if (... < 10000) max1 / 2;` 是空语句，改成 `max1 /= 2;`（经验不足一万的对手，分身技能减半）。
+
+验证：改动的文件和包含 `npc/indian` 的守护进程在 HEAD 与工作树分别加载（`scripts/lpc_listcheck.sh`，新进程），无回退。

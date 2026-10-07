@@ -425,3 +425,10 @@ left uncommitted.
 ## 深度功能测试（§10.7，2026-10-06）— 编译警告整理
 
 `scripts/lpc_warnings.py fyzfqyy --fix`：无用局部变量 476 个、`varargs` 7 处、转义 56 处、`nosave` 函数 15 个改 `protected`，共改动 220 个 `.lpc`。HEAD 与工作树分别加载（新进程）：211 -> 211 通过，无回退；`scripts/lpc_audit_removed_locals.py HEAD` 的 5 条候选都是声明被重建或同名 efun（`time()`）。手工：`adm/daemons/logind.lpc` `get_id()` 的 `string ip = query_ip_number(ob);` 只被一段注释掉的站点检查读，删去。启动时警告 145 -> 0；新进程登录（英文名、新人物确认、中文名提示）正常。
+
+## 深度功能测试（§10.7，2026-10-06）— 与 zhonghua2 同源的三处编译警告
+
+- `include/npc/indian.lpc` 与 `masia.lpc` 共用全局名 `ma_sname`/`ma_pname`；两个头文件被同一个守护进程（`npcd` 等）一起包含时，后包含的印度名表覆盖马来名表，`generate_ma_name()` 生成的是印度名字。印度表改名 `in_sname`/`in_pname`（KB 04 §6.10）。
+- `cmds/std/team/swear.lpc`：结义失败提示被多余的 `;` 截成两句，`fail` 只剩"……可惜现在有人不在，$N"，后半句"的提议只好作罢。"丢了；接回去。
+
+验证：改动的文件和包含 `npc/indian` 的守护进程在 HEAD 与工作树分别加载（`scripts/lpc_listcheck.sh`，新进程），无回退。

@@ -365,3 +365,9 @@ Too-deep-recursion) recurred at boot; no new error from shop/拜师.
 - `adm/daemons/wendad.lpc` `heart_beat()` 里 `wjgl_flag == 0;`：异朽阁事件结束后标志从不复位，改为赋值。
 - `adm/daemons/natured.lpc` 一行无作用的 `lt[LT_MON];` 删去。
 剩下：`adm/daemons/payd.lpc` 注释里的 `/*`（需人工读懂那段被注释掉的条件）。
+
+## 深度功能测试（§10.7，2026-10-06）— 与 zhonghua2 同源的三处编译警告
+
+- `include/npc/indian.lpc` 与 `masia.lpc` 共用全局名 `ma_sname`/`ma_pname`；两个头文件被同一个守护进程（`npcd` 等）一起包含时，后包含的印度名表覆盖马来名表，`generate_ma_name()` 生成的是印度名字。印度表改名 `in_sname`/`in_pname`（KB 04 §6.10）。
+
+验证：改动的文件和包含 `npc/indian` 的守护进程在 HEAD 与工作树分别加载（`scripts/lpc_listcheck.sh`，新进程），无回退。

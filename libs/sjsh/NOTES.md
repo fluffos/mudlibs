@@ -123,3 +123,9 @@ compile check (exit 0, no errors) against `feature/command.lpc`.
 ## 深度功能测试（§10.7，2026-10-06）— 编译警告整理
 
 `scripts/lpc_warnings.py sjsh --fix`：无用局部变量 1565 个、`varargs` 60 处、转义 39 处、`nosave` 函数 14 个改 `protected`、裸 `return` 4 处，共改动 843 个 `.lpc`。HEAD 与工作树分别加载（新进程）：823 -> 823 通过，无回退；`scripts/lpc_audit_removed_locals.py HEAD` 的 15 条候选都是声明被重建（有 `#if` 的只有 `d/city/piggy*.lpc`，与被删的名字无关）。手工：`adm/daemons/cron.lpc` `reward()` 里的 `if (tang) { }` 只剩一行被注释掉的频道消息，空的判断删去。启动时警告 195 -> 0。
+
+## 深度功能测试（§10.7，2026-10-06）— 与 zhonghua2 同源的三处编译警告
+
+- `clone/drug/fengdong.lpc`：`if (... < 10000) max1 / 2;` 是空语句，改成 `max1 /= 2;`（经验不足一万的对手，分身技能减半）。
+
+验证：改动的文件和包含 `npc/indian` 的守护进程在 HEAD 与工作树分别加载（`scripts/lpc_listcheck.sh`，新进程），无回退。

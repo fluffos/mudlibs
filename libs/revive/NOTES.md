@@ -912,3 +912,10 @@ bug**：这个 lineage 的游戏内提示符自带每秒刷新的实时时钟
 ## 深度功能测试（§10.7，2026-10-06）— 编译警告（机械部分）
 
 `scripts/lpc_warnings.py revive --fix`：删 62 处 `#pragma save_binary`，15 个 `nosave` 函数改 `protected`，删 435 个未用局部变量，补 9 处 `varargs`。`lpc_audit_removed_locals.py` 复核 558 个，提示 1 个（`adm/daemons/newsd.lpc` 的 `int time`，后面读的是外部函数 `time()`，不是这个变量）。改动的 216 个 `.lpc` 在只含被跟踪文件的树里 HEAD 与新版各编一次：都是 201 个通过，无差异。启动警告 105 → 2，错误 0（剩下 `natured.lpc` 的 `lt[LT_MON];` 空语句，原档案如此）。实测 `fluffos` 登录、`look`（世外桃源，水笙、狄云在场）、`i`、`quit` 正常。本库未经 §9 格式化。
+
+## 深度功能测试（§10.7，2026-10-06）— 与 zhonghua2 同源的三处编译警告
+
+- `include/npc/indian.lpc` 与 `masia.lpc` 共用全局名 `ma_sname`/`ma_pname`；两个头文件被同一个守护进程（`npcd` 等）一起包含时，后包含的印度名表覆盖马来名表，`generate_ma_name()` 生成的是印度名字。印度表改名 `in_sname`/`in_pname`（KB 04 §6.10）。
+- `cmds/std/team/swear.lpc`：结义失败提示被多余的 `;` 截成两句，`fail` 只剩"……可惜现在有人不在，$N"，后半句"的提议只好作罢。"丢了；接回去。
+
+验证：改动的文件和包含 `npc/indian` 的守护进程在 HEAD 与工作树分别加载（`scripts/lpc_listcheck.sh`，新进程），无回退。

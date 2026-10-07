@@ -922,3 +922,9 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 ## 深度功能测试（§10.7，2026-10-06）— 编译警告整理
 
 `scripts/lpc_warnings.py shenmo --fix`（第一轮；本库 33000 多个 `.lpc`，扫描很慢，只提交第一轮）：无用局部变量、`nosave` 函数、`varargs`、转义等，共改动 5287 个 `.lpc`。HEAD 与工作树分别加载（新进程）：4760 -> 4762 通过，无回退；`scripts/lpc_audit_removed_locals.py HEAD` 的 61 条候选都是声明被重建（有 `#if` 的只有 `d/city/piggy*.lpc`，与被删的名字无关）。启动时警告 214 -> 0。
+
+## 深度功能测试（§10.7，2026-10-06）— 与 zhonghua2 同源的三处编译警告
+
+- `clone/drug/fengdong.lpc`：`if (... < 10000) max1 / 2;` 是空语句，改成 `max1 /= 2;`（经验不足一万的对手，分身技能减半）。
+
+验证：改动的文件和包含 `npc/indian` 的守护进程在 HEAD 与工作树分别加载（`scripts/lpc_listcheck.sh`，新进程），无回退。
