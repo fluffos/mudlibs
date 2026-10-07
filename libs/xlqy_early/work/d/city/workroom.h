@@ -102,7 +102,7 @@ int do_work()
     return 1;
 }
 
-int valid_leave()
+varargs int valid_leave()
 {
     object me = this_player();
 

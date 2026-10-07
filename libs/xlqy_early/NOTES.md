@@ -970,3 +970,11 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 `scripts/lpc_dynamic_rows.py`：`quest/xunbao/obj/dynamic_quest` 里 74 行写的是原档案的 `.c` 路径。转档时文件已改名 `.lpc`，而显式后缀按原样解析，`load_object("/d/x.c")`、`new("/d/obj/quest/x.c")` 返回 0 且不报错（KB 03 §4.2，KB 06 §7.220），所以 `quest/xunbao/npc/xunbaonpc.lpc` 读到的每一行都加载不出来：随机任务和任务物品从未生成，在 `create()` 里直接对结果调用 `tar->set()` 的版本还会崩溃，连带加载它的 cron 守护进程和 `give` 的任务钩子。这些行已改为 `.lpc`。
 `scripts/lpc_dynamic_quest_guard.py`：1 处 `spread_quest()` 调用（`init_dynamic_quest()` 的循环里）包进 `catch()`，缺失的任务物品或编译不过的房间只跳过那一个任务，守护进程照常加载、其余任务照常生成。
 验证：`quest/xunbao/npc/xunbaonpc.lpc`和 cron 守护进程在新进程里加载（HEAD 一次，工作树三次，选房是随机的）：HEAD 通过 2 个，工作树三次分别通过 2、2、2 个（共 2 个），无回退。
+
+## 深度功能测试（§10.7，2026-10-06）— 编译警告整理
+
+`scripts/lpc_warnings.py xlqy_early --fix`：无用局部变量 2006 个、`varargs` 101 处、转义 10 处、裸 `return` 8 处、`nosave` 函数 18 个改 `protected`，共改动 974 个 `.lpc` 和若干 `.h`。`scripts/lpc_fix_no_effect.py --apply`：`daemon/skill/xuanyuan-archery.lpc` 的 `practice_skill()` 删去什么也不做的 `(: throw_weapon :);`，`dns_master.lpc` 把 `#if PREF_* & SVC_TCP` 移到 `if` 外面。
+手工：`d/shushan/npc/zhangmen.lpc` `kill_ob()` 先找房间里的师父，然后 `if (master) ; else {}`（师父加入战斗那句早被注释掉了）；这段什么也不做，删去，留一行注释。
+HEAD 与工作树分别加载（新进程）：952 -> 952 通过，无回退；改过的头文件的 401 个包含者 384 -> 384 通过。`scripts/lpc_audit_removed_locals.py HEAD` 的 18 条候选都是声明被重建或同名 efun。
+
+启动时警告 123 -> 0；新进程登录（编码选择、新人物提问）正常。
