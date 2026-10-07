@@ -3,7 +3,7 @@
 void powerup();
 void full_me(object me);
 
-void remove_killer()
+varargs void remove_killer()
 {
 	
 	delete_temp("my_killer");	
@@ -30,7 +30,6 @@ void kill_ob(object ob)
 void check2()
 {
         object me = this_object();
-        int i;
 				object *emery=me->query_enemy();
 
         if( sizeof(emery)==0 )

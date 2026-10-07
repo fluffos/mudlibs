@@ -24,7 +24,6 @@ void build_armor(object ob,object base)
 	int	rev;
 	string  fabao_id = base->query("id");
 	string  fabao_name = HIY""+base->query("name")+""NOR;
-	string  fabao_desc = base->query("desc");
 	string  fabao_unit = base->query("unit");
         string  fabao_long ;
 	string  armor_type = base->query("armor_type");
@@ -199,8 +198,7 @@ void build_weapon(object ob,object base)
 	int	rev;
 	string  fabao_id = base->query("id");
 	string  fabao_name = HIY""+base->query("name")+""NOR;
-	string  fabao_desc = base->query("desc");
-	string  fabao_unit = base->query("unit");
+	string    fabao_unit = base->query("unit");
         string  fabao_long ;
 	string  weapon_type = base->query("skill_type");
         int gold_num = ob->query("gold/gold_num");
