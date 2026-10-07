@@ -421,3 +421,7 @@ left uncommitted.
 
 `scripts/lpc_dynamic_quest_guard.py`：2 处 `spread_quest()` 调用（`init_dynamic_quest()` 的循环里）包进 `catch()`，缺失的任务物品或编译不过的房间只跳过那一个任务，守护进程照常加载、其余任务照常生成。
 验证：`adm/daemons/questd.lpc`、`adm/daemons/tongjid.lpc`、`quest/tongji/npc/zhuge.lpc`、`u/lost/cmds/questd.lpc`和 cron 守护进程在新进程里加载（HEAD 一次，工作树三次，选房是随机的）：HEAD 通过 5 个，工作树三次分别通过 5、5、5 个（共 5 个），无回退。
+
+## 深度功能测试（§10.7，2026-10-06）— 编译警告整理
+
+`scripts/lpc_warnings.py fyzfqyy --fix`：无用局部变量 476 个、`varargs` 7 处、转义 56 处、`nosave` 函数 15 个改 `protected`，共改动 220 个 `.lpc`。HEAD 与工作树分别加载（新进程）：211 -> 211 通过，无回退；`scripts/lpc_audit_removed_locals.py HEAD` 的 5 条候选都是声明被重建或同名 efun（`time()`）。手工：`adm/daemons/logind.lpc` `get_id()` 的 `string ip = query_ip_number(ob);` 只被一段注释掉的站点检查读，删去。启动时警告 145 -> 0；新进程登录（英文名、新人物确认、中文名提示）正常。

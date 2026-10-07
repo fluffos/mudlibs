@@ -5,7 +5,6 @@
 // (See config file of driver)
 
 #pragma optimize
-#pragma save_binary
 
 
 // Directories
