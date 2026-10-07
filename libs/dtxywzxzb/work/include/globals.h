@@ -4,7 +4,6 @@
 // This file is #included in all objects automatically by the driver.
 // (See config file of driver)
 
-#pragma save_binary
 //added by Beeby @ DTXY for TOPTEN
 #define TOPTEN_RICH     "/data/topten/rich.o"
 #define TOPTEN_PKER     "/data/topten/pker.o"

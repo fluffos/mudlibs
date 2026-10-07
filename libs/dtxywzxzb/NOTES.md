@@ -220,3 +220,11 @@ Sep 4 03:51:35 2026），无 `error:` / `Too deep recursion`。玩家可见
 
 房间基类 `std/room.lpc`：`make_inventory()` 用 `catch()` 包住 `new(file)`，做不出来就返回 0；`reset()` 的 `case 1:` 拿到 0 就跳过这一项（`if (!objectp(ob[list[i]])) break;`）。档案里没有的 NPC 或物品（或 `create()` 出错的物件）原先会让列出它的房间整个加载失败（`Bad argument 1 to environment()`，或对 0 的 `call_other()`），连带这个房间后面的区域；现在房间照常加载，只是少了那个物件，下次 `reset()` 再试（KB 05 §7.25；`scripts/lpc_resilient_room.py`、`scripts/lpc_room_reset_guard.py`）。
 验证：探针（`scripts/lpc_room_reset_probe.py`：房间基类列出一个不存在的物件，再调用 `reset()`）HEAD 单件 崩溃、多件 崩溃，工作树 单件 OK、多件 OK。
+
+## 深度功能测试（§10.7，2026-10-06）— 编译警告整理
+
+`scripts/lpc_warnings.py dtxywzxzb --fix`：无用局部变量 2004 个、`varargs` 63 处、转义 8 处、裸 `return` 7 处、`nosave` 函数 16 个改 `protected`，共改动 975 个 `.lpc` 和若干 `.h`。`scripts/lpc_fix_no_effect.py --apply`：`d/dntg/doushuai/bgl1.lpc`、`d/dntg/yunlou/npc/yaoguai.lpc`（及 `u/canoe/` 副本）的 `for (n == 0; ...)` 改成 `=`；两份 `xuanyuan-archery.lpc` 的 `practice_skill()` 删去什么也不做的 `(: throw_weapon :);`；三份 `dns_master.lpc` 把 `#if PREF_* & SVC_TCP` 移到 `if` 外面。
+HEAD 与工作树分别加载（新进程）：941 -> 941 通过，无回退；改过的头文件的 375 个包含者 361 -> 361 通过。`scripts/lpc_audit_removed_locals.py HEAD` 的 17 条候选都是声明被重建或同名 efun。
+未动：`d/city/npc/vikee.canoe.lpc`（及 `npc/npc/` 副本）把 `case` 写成 `cast`，是没人引用的旧副本；`adm/simul_efun/oo.lpc` 单独编译的告警是被包含片段的假象（KB 04 §6.10）。
+
+启动时警告 99 -> 0；新进程登录（编码选择、新人物提问）正常。
