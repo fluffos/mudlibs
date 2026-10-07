@@ -315,3 +315,10 @@ lines on that boot. Demo `fluffos` save left uncommitted.
 ## 深度功能测试（§10.7，2026-10-07）— 空的 `if (current_water == 0) {}`
 
 4 个房间的 `valid_leave()` 里有一行什么也不做的 `if (current_water == 0) {}`（编译警告 `Expression has no side effects`），删去，行为不变：`d/gaochang/room11.lpc`、`d/gaochang/room12.lpc`、`d/gaochang/room13.lpc`、`d/gaochang/room14.lpc`。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+先用 `scripts/lpc_twin_port.py adopt nitan_ceshi nt1` 把 nitan_ceshi 警告整理提交（ae7fbb619a5）里的改动搬到 495 个修改前与它一致的文件（逐文件核对非 ASCII 文字：除 nitan_ceshi 自己删掉的以外没有丢失或改动），再用 `scripts/lpc_nitan_family_fixes.py nt1`（`adm/daemons/combatd.lpc` 删去空语句 `your_temp["guarding"];`）。剩下的再跑 `scripts/lpc_warnings.py nt1 --fix`：无用局部变量 1104 个、`varargs` 45 处、`nosave` 函数 27 个改 `protected`、转义 13 处，共改动 1099 个 `.lpc` 和若干 `.h`。
+HEAD 与工作树分别加载（新进程）：1087 -> 1087 通过，无回退；改过的头文件的 225 个包含者 223 -> 223 通过。
+
+启动时警告 94 -> 0。登录画面在启动后头几秒不回应输入——`adm/daemons/closed.lpc` 的 heart_beat 正在恢复闭关人物（KB 05 §7.110 的大 `closed.o`），HEAD 也一样，不是这次的改动。

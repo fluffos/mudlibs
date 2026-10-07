@@ -399,3 +399,12 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply w
 - `include/npc/indian.lpc` 与 `masia.lpc` 共用全局名 `ma_sname`/`ma_pname`；两个头文件被同一个守护进程（`npcd` 等）一起包含时，后包含的印度名表覆盖马来名表，`generate_ma_name()` 生成的是印度名字。印度表改名 `in_sname`/`in_pname`（KB 04 §6.10）。
 
 验证：改动的文件和包含 `npc/indian` 的守护进程在 HEAD 与工作树分别加载（`scripts/lpc_listcheck.sh`，新进程），无回退。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py wqfy --fix` 加 `scripts/lpc_fix_no_effect.py --apply`：无用局部变量 1379 个、转义 28 处、`nosave` 函数 19 个改 `protected` 等，共改动 695 个 `.lpc` 和若干 `.h`；`adm/daemons/network/545554.lpc`（`dns_master` 的副本）把 `#if PREF_* & SVC_TCP` 移到 `if` 外面。HEAD 与工作树分别加载（新进程）：670 -> 670 通过，无回退。
+手工：
+- `adm/daemons/combatd.lpc` 易筋经反震"内伤"的一档 `else if (damage < 1600) HIM "…" NOR;` 少了 `return`，伤害在 800–1600 之间时这句描述算出来就扔了，函数落到 `break` 返回空；补上 `return`。
+- `d/kaifeng/npc/huzhou.lpc` `gethelp()`：`command("follow %s", ob->query("id"));` 把 `command()` 当成 printf，跟随的对象是字面的 `%s`；改成 `command("follow " + ob->query("id"));`。
+
+启动时警告 93 -> 0；新进程登录画面正常（输入英文名后断开，HEAD 也一样）。
