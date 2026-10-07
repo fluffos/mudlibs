@@ -204,3 +204,11 @@ program: /adm/obj/master.lpc, ... file: /adm/obj/master.lpc:315
 
 房间基类 `inherit/room/room.lpc`：`make_inventory()` 用 `catch()` 包住 `new(file)`，做不出来就返回 0；`reset()` 的 `case 1:` 拿到 0 就跳过这一项（`if (!objectp(ob[list[i]])) break;`）。档案里没有的 NPC 或物品（或 `create()` 出错的物件）原先会让列出它的房间整个加载失败（`Bad argument 1 to environment()`，或对 0 的 `call_other()`），连带这个房间后面的区域；现在房间照常加载，只是少了那个物件，下次 `reset()` 再试（KB 05 §7.25；`scripts/lpc_resilient_room.py`、`scripts/lpc_room_reset_guard.py`）。
 验证：探针（`scripts/lpc_room_reset_probe.py`：房间基类列出一个不存在的物件，再调用 `reset()`）HEAD 单件 崩溃、多件 崩溃，工作树 单件 OK、多件 OK。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py fqyy2 --fix`：无用局部变量 1922 个、转义 73 处、`nosave` 函数 37 个改 `protected`、`varargs` 19 处，共改动 922 个 `.lpc` 和若干 `.h`。`scripts/lpc_fix_no_effect.py --apply`：`d/tiezhang/pingtai.lpc`、`wmfeng.lpc`、`wztang.lpc` 删去 `return` 后面永远执行不到的 `"\n";`，`kungfu/skill/xuanyuan-arrow.lpc` 删去什么也不做的 `(: throw_weapon :);`，`dns_master.lpc` 把 `#if PREF_* & SVC_TCP` 移到 `if` 外面。
+手工：`d/xingxiu/shanjiao.lpc`、`nanjiang2.lpc`、`nanjiang3.lpc` 删去空的 `if (current_water == 0) {}`；`kungfu/skill/liangyi-jian.bak.lpc` 删去空语句 `level;`。
+HEAD 与工作树分别加载（新进程）：895 -> 895 通过，无回退；改过的头文件的 216 个包含者 216 -> 216 通过。`scripts/lpc_audit_removed_locals.py HEAD` 的 19 条候选都是声明被重建或同名 efun。
+
+启动时警告 105 -> 0；新进程登录（编码选择、新人物确认）正常。

@@ -7,7 +7,7 @@ int do_quest()
         object me,obj,xin;
         int j, combatexp, timep,num;
         string tag = "1000000";
-        string pai,mulu;
+        string pai;
         int score;
         string *menpai = ({
                 "日月神教",
