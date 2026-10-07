@@ -333,3 +333,11 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply k
 ## 深度功能测试（§10.7，2026-10-07）— 兵器的 `actions` 函数指针
 
 `set("actions", (: WEAPON_D, "query_action" :));`：旧 MudOS 把 `(: 字符串, "函数" :)` 当作 call_other 函数指针，本驱动把它当作表达式函数指针，求值只得到字符串 `"query_action"`。没有对应兵器技能时 `feature/attack.lpc` 直接用兵器的 `actions`，`COMBAT_D` 拿到的不是 mapping，`reset_action()` 后仍不是，记一条 bad action 就不出招——拿着这些兵器打不出攻击。改成别的兵器早已用的 `(: call_other, WEAPON_D, "query_action" :)`（KB 04 §6.10）：`std/weapon/throwing.lpc`、`std/weapon/stick.lpc`、`std/weapon/whip.lpc`、`std/weapon/sword.lpc`、`std/weapon/lance.lpc`、`std/weapon/arrow.lpc`、等共 13 个。改动的文件在 HEAD 与工作树分别加载（新进程），无回退。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+先用 `scripts/lpc_twin_port.py adopt kxkj kxkjii2` 把 kxkj 警告整理提交（13b6c22f0aa）里的改动搬到 1737 个修改前与它一致的文件（逐文件核对非 ASCII 文字：除 kxkj 自己删掉的以外没有丢失或改动），其中包括四把兵器的 `(: __FILE__, "query_action" :)` -> `(: call_other, __FILE__, "query_action" :)`（原写法在本驱动是表达式函数指针，拿着这些兵器不出招，KB 04 §6.10）。剩下的再跑 `scripts/lpc_warnings.py kxkjii2 --fix`，共改动 1741 个 `.lpc` 和若干 `.h`。
+手工：`adm/daemons/logind.lpc` `get_id()` 只在 `#ifdef MAX_USERS` 分支用的局部变量，声明挪进同样的条件里；`obj/mailbox.lpc` 群发信件 `send` 时 `mail["to", groups[i]];` 什么也没做（LDMud 的多值 mapping 写法），信件没有收信人字段；改成 `mail["to"] = groups[i];`（kxkj、kxkj1 同改）。
+HEAD 与工作树分别加载（新进程）：1653 -> 1653 通过，无回退。
+
+启动时警告 91 -> 0；新进程登录正常。

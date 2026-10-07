@@ -1011,3 +1011,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply k
 - 未动：`open/scholar/npc/fall.lpc`、`open/scholar/room/newplan/npc/guard4.lpc` 里单独一行的 `(: perform_action, "…" :);` 只造了函数指针、从不调用——要不要让这些 NPC 真的出招是内容设计，不在本次范围。
 
 启动时警告 91 -> 0；新进程登录正常。
+
+## 深度功能测试（§10.7，2026-10-07）— 群发信件没有收信人
+
+`obj/mailbox.lpc` `send <group> <file> <title>`：循环里 `mail["to", groups[i]];` 是什么也不做的表达式（LDMud 多值 mapping 的写法），每封信都没有 `to` 字段；改成 `mail["to"] = groups[i];`。新进程编译通过。

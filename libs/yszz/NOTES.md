@@ -186,3 +186,10 @@ After reboot, `buy jitui` purchased 炸鸡腿 and changed 1 黄金 into 99
 ## 深度功能测试（§10.7，2026-10-07）— 兵器的 `actions` 函数指针
 
 `set("actions", (: WEAPON_D, "query_action" :));`：旧 MudOS 把 `(: 字符串, "函数" :)` 当作 call_other 函数指针，本驱动把它当作表达式函数指针，求值只得到字符串 `"query_action"`。没有对应兵器技能时 `feature/attack.lpc` 直接用兵器的 `actions`，`COMBAT_D` 拿到的不是 mapping，`reset_action()` 后仍不是，记一条 bad action 就不出招——拿着这些兵器打不出攻击。改成别的兵器早已用的 `(: call_other, WEAPON_D, "query_action" :)`（KB 04 §6.10）：`std/weapon/club.lpc`、`d/obj/inherit/weapon/throwing.lpc`、`d/obj/inherit/weapon/fork.lpc`、`d/obj/inherit/weapon/whip.lpc`、`d/obj/inherit/weapon/sword.lpc`、`d/obj/inherit/weapon/axe.lpc`、等共 10 个。改动的文件在 HEAD 与工作树分别加载（新进程），无回退。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py yszz --fix` 加 `scripts/lpc_fix_no_effect.py --apply`（四份 `xuanyuan-archery`/`xuanyuan-arrow` 删去什么也不做的 `(: throw_weapon :);`）：共改动 677 个 `.lpc` 和若干 `.h`。兵器基类的 `(: WEAPON_D, "query_action" :)` 已在同日的兵器函数指针一节修过。HEAD 与工作树分别加载（新进程）：651 -> 651 通过，无回退；改过的头文件的 272 个包含者 271 -> 271 通过。
+手工：`adm/daemons/logind.lpc` `get_id()` 里只在 `#ifdef MAX_LOGIN` 分支用的七个局部变量（同 IP 多重登录的计数），声明挪进同样的条件里。
+
+启动时警告 93 -> 0；新进程登录正常（新人物用 `new`）。

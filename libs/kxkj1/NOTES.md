@@ -833,3 +833,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply k
 ## 深度功能测试（§10.7，2026-10-07）— 兵器的 `actions` 函数指针
 
 `open/poison/obj/esword.lpc`：`(: __FILE__, "query_action" :)` 改成 `(: call_other, __FILE__, "query_action" :)`（与 kxkj 同；`__FILE__` 是字符串，本驱动把原写法当作表达式函数指针，KB 04 §6.10）。这个文件第 28 行的名字被编码弄坏，HEAD 起就编译不过。
+
+## 深度功能测试（§10.7，2026-10-07）— 群发信件没有收信人
+
+`obj/mailbox.lpc` `send <group> <file> <title>`：循环里 `mail["to", groups[i]];` 是什么也不做的表达式（LDMud 多值 mapping 的写法），每封信都没有 `to` 字段；改成 `mail["to"] = groups[i];`。新进程编译通过。
