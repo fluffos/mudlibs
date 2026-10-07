@@ -242,3 +242,7 @@ definition, 2 `#undef` lines for macros that two headers define (`ROOM`, `STORY_
 ## 深度功能测试（§10.7，2026-10-07）— 空的 `if (current_water == 0) {}`
 
 3 个房间的 `valid_leave()` 里有一行什么也不做的 `if (current_water == 0) {}`（编译警告 `Expression has no side effects`），删去，行为不变：`d/xingxiu/nanjiang2.lpc`、`d/xingxiu/nanjiang3.lpc`、`d/xingxiu/shanjiao.lpc`。
+
+## 深度功能测试（§10.7，2026-10-07）— 皇帝的两句话
+
+`d/secret/secret1/npc/king.lpc`：`msg = "……这里是200两黄金。\n";` 后面单独一行 `"爱卿拿去吧。\n";`，`msg = "……去后宫了。\n";` 后面单独一行 `"不过临走之前给了$N一个免死金牌\n";`——多余的 `;` 把消息截成两句，后半句从来没显示过。2026-10-05 的警告整理（a68352ca1f6）把这两行当作无用语句删了；现在接回 `msg` 上。新进程加载通过。

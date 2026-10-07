@@ -6,7 +6,7 @@
 the scan flagged (the line the driver reports is the *next* token's, so the shapes are looked for in the whole file):
 
   `for (times; times > 0; times--)`   an init clause that is a bare variable does nothing: `for (; times > 0; times--)`
-  `"\\n";` on a line of its own right after a statement that ended with `;`, `{` or `}`: a string statement left behind after
+  `"\\n";` (nothing but newlines/blanks) on a line of its own right after a statement that ended with `;`, `{` or `}`: a string statement left behind after
                                        the `return "...";` it was meant to continue (xkx `look_lingwei()`): deleted
   `if (!(mud_svc[mud]["tell"] & SVC_KNOWN)) {` whose whole body is `#if PREF_TELL & SVC_TCP ... #endif` (the TMI-2
                                        `dns_master.lpc` query_services()): with the option off the `if` is empty and its test an
@@ -41,7 +41,9 @@ for line in open(tsv, errors="replace"):
 
 FOR = re.compile(r"(\bfor\s*\(\s*)([A-Za-z_]\w*)(\s*;)")
 FOR_EQ = re.compile(r"(\bfor\s*\(\s*[A-Za-z_]\w*\s*)==(\s*-?\w+\s*;)")
-STR = re.compile(r'^[ \t]*"(?:[^"\\\n]|\\.)*"[ \t]*;[ \t]*$')
+# only a literal that holds nothing but newlines/blanks: a string statement with text in it is a message cut off by a stray
+# `;` (the nitan swear.lpc `fail = "...$N";` + `"的提议只好作罢。\n";`), which wants joining, not deleting: left for a human
+STR = re.compile(r'^[ \t]*"(?:\\n|\\r|[ \t])*"[ \t]*;[ \t]*$')
 FPTR = re.compile(r"^[ \t]*\(:[ \t]*[A-Za-z_]\w*[ \t]*:\)[ \t]*;[ \t]*$")
 PREF_IF = re.compile(r"^#[ \t]*if[ \t]+PREF_\w+[ \t]*&[ \t]*SVC_\w+[ \t]*(//.*)?\r?$")
 IF_KNOWN = re.compile(r"^[ \t]*if[ \t]*\(.*SVC_KNOWN.*\)[ \t]*\{?[ \t]*$")
