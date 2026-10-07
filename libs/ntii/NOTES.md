@@ -368,3 +368,11 @@ Fri Sep 4 03:02:17 2026），修复后无 `error:` / `Too deep recursion` /
 - `clone/drug/fengdong.lpc`：`if (... < 10000) max1 / 2;` 是空语句，改成 `max1 /= 2;`（经验不足一万的对手，分身技能减半）。
 
 验证：改动的文件和包含 `npc/indian` 的守护进程在 HEAD 与工作树分别加载（`scripts/lpc_listcheck.sh`，新进程），无回退。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+先用 `scripts/lpc_twin_port.py adopt nitan_ceshi ntii` 把 nitan_ceshi 警告整理提交（ae7fbb619a5）里的改动搬到约 980 个修改前与它一致的文件（逐文件核对非 ASCII 文字：除 nitan_ceshi 自己删掉的以外没有丢失或改动）。剩下的再跑 `scripts/lpc_warnings.py ntii --fix`：无用局部变量 698 个、`varargs` 14 处，共改动 1251 个 `.lpc` 和若干 `.h`。
+手工（与 nitan_ceshi 相同）：`adm/daemons/logind.lpc`、`fingerd.lpc` 里只在 `#ifdef DB_SAVE` 或 `#ifndef NO_FEE` 分支用的局部变量，声明挪进同样的条件里；`adm/daemons/combatd.lpc` 删去空语句 `your_temp["guarding"];`。`cmds/std/team/swear.lpc` 结义失败提示"的提议只好作罢。"与上一句隔着空行，前次的整理漏了它；接回去（`lpc_fix_no_effect.py` 原先会把它当作无用语句删掉，已改为只删空的 `"\n";`）。
+HEAD 与工作树分别加载（新进程）：1245 -> 1245 通过，无回退；改过的头文件的 290 个包含者 289 -> 289 通过。
+
+启动时警告 112 -> 0；新进程登录（英文名、新人物确认）正常。

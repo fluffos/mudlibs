@@ -47,7 +47,6 @@ void init()
 int check_ob(object ob,object me)
 {
 	string ob_name;
-	object weapon;
 	if( !objectp(ob) )
 	{
 		return notify_fail("可惜没有这个人。\n");
@@ -85,8 +84,8 @@ void start_beidouzhen(object ob, int mypos,int beidou_time )
 
 int do_beidouzhen(string arg)
 {
-	object ob,me = this_player(),weapon;
-	int beidou_time,i,mypos=0,power;
+	object me = this_player();
+	int i, power;
 	object where;
 	string ob_name;
 	string name1,name2,name3,name4,name5,name6;
@@ -203,10 +202,9 @@ int do_beidouzhen(string arg)
 
 int do_beidouzhen2(string arg)
 {
-	object ob,me,weapon;
-	int beidou_time,i,mypos=0,power,bd_power;
+	object me;
+	int i, power;
 	object here;
-	string ob_name;
 	string name0,name1,name2,name3,name4,name5,name6;
 	object ob1,ob2,ob3,ob4,ob5,ob6;
 
@@ -308,8 +306,8 @@ int do_beidouzhen2(string arg)
 
 int do_beidou(string arg)
 {
-	object ob,weapon,me = this_player();
-	int beidou_time,i,mypos=0,power;
+	object me = this_player();
+	int i, power;
 	object where;
 	string ob_name;
 	string name1,name2,name3,name4,name5,name6,name0;
@@ -470,8 +468,8 @@ int beidouzhen(object me)
 {
 	object  where = environment(this_player());
 	int beidou_time = (int)me->query_temp("beidou_time");
-	object room, obj,enemy,weapon;
-	int cost, bonus,mypos=me->query_temp("bd_pos");
+	object room, enemy, weapon;
+	int bonus, mypos=me->query_temp("bd_pos");
 	int power;
 	object ob1,ob2,ob3,ob4,ob5,ob6,ob7;
 
