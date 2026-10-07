@@ -27,10 +27,7 @@ int do_lihun(string arg)
 {
 object me;
 object ob;
-object card;
 
-object *inv;
-int i;
 
 me=this_player(1);
 
@@ -121,8 +118,6 @@ int do_jiehun(string arg)
 {
 object me;
 object ob;
-object card;
-string mes1;
 me=this_player(1);
 
 if ( me->query("gender")=="无性") 

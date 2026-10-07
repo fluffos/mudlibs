@@ -152,3 +152,10 @@ recursion"。驱动按精确 PID kill。
 ## 深度功能测试（§10.7，2026-10-07）— 空的 `if (current_water == 0) {}`
 
 3 个房间的 `valid_leave()` 里有一行什么也不做的 `if (current_water == 0) {}`（编译警告 `Expression has no side effects`），删去，行为不变：`d/xingxiu/nanjiang2.lpc`、`d/xingxiu/nanjiang3.lpc`、`d/xingxiu/shanjiao.lpc`。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理；组队/跟随从来没起作用
+
+`scripts/lpc_warnings.py hyiishzdscbb --fix` 加 `scripts/lpc_fix_no_effect.py --apply`（`d/tiezhang` 三个房间删去 `return` 后面的 `"\n";`，`kungfu/skill/xuanyuan-arrow.lpc` 删去什么也不做的 `(: throw_weapon :);`），共改动 686 个 `.lpc` 和若干 `.h`。HEAD 与工作树分别加载（新进程）：648 -> 648 通过，无回退。
+**`feature/team.lpc` 是 `cmds/std/team.lpc` 指令的一份拷贝**（`int main(object me, string arg)`），不是组队特性——归档里就是这样。人物（`inherit/char/char.lpc` 的 `inherit F_TEAM;`）因此没有 `set_leader()`、`query_leader()`、`query_team()`、`follow_me()` 等函数：`follow`、`team`、`come`、`stay` 这些指令对玩家 `->set_leader()` 什么也不做，跟随和组队从来没起作用；直接调用 `set_leader()` 的 NPC（`d/binghuodao/npc/wuji.lpc`、神龙教的 `kungfu/class/shenlong/*` 等 8 个）根本编译不过。换成 hy 的 `feature/team.lpc`（hy 的 `inherit/char/char.lpc` 与本库一字不差）。改过的头文件和人物基类的 168 个包含者 160 -> 167 通过，新能加载的就是这些 NPC；启动时的 `clean_up() inherited from both`（那份指令拷贝 `inherit F_CLEAN_UP` 带进来的）也没了。
+
+启动时警告 77 -> 0；新进程登录正常。

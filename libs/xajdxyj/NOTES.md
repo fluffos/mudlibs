@@ -223,3 +223,9 @@ compile check (exit 0, no errors) against `feature/command.lpc`.
 ## 深度功能测试（§10.7，2026-10-07）— 兵器的 `actions` 函数指针
 
 `set("actions", (: WEAPON_D, "query_action" :));`：旧 MudOS 把 `(: 字符串, "函数" :)` 当作 call_other 函数指针，本驱动把它当作表达式函数指针，求值只得到字符串 `"query_action"`。没有对应兵器技能时 `feature/attack.lpc` 直接用兵器的 `actions`，`COMBAT_D` 拿到的不是 mapping，`reset_action()` 后仍不是，记一条 bad action 就不出招——拿着这些兵器打不出攻击。改成别的兵器早已用的 `(: call_other, WEAPON_D, "query_action" :)`（KB 04 §6.10）：`d/obj/inherit/weapon/throwing.lpc`、`d/obj/inherit/weapon/fork.lpc`、`d/obj/inherit/weapon/whip.lpc`、`d/obj/inherit/weapon/sword.lpc`、`d/obj/inherit/weapon/axe.lpc`、`d/obj/inherit/weapon/blade.lpc`、等共 9 个。改动的文件在 HEAD 与工作树分别加载（新进程），无回退。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py xajdxyj --fix` 加 `scripts/lpc_fix_no_effect.py --apply`：`cmds/adm/reg_mail.lpc`、`d/happy/register.lpc` 生成注册密码的 `for (j == 0; ...)` 改成 `=`（`j` 未初始化恰好是 0，行为不变）；三份 `xuanyuan-archery.lpc` 删去什么也不做的 `(: throw_weapon :);`。共改动 655 个 `.lpc` 和若干 `.h`。HEAD 与工作树分别加载（新进程）：620 -> 620 通过，无回退；改过的头文件的 291 个包含者 277 -> 277 通过。
+
+启动时警告 66 -> 0。新进程登录画面正常；启动后三分钟内登录会答"服务器正在进行启动前事务处理"，是 `adm/daemons/logind.lpc` 有意的启动锁。

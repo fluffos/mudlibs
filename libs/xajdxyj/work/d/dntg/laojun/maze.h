@@ -86,9 +86,7 @@ int valid_leave(object me,string dir) {
   int steps=(int)me->query_temp("laojunmaze/steps");
 
   
-  string ridemsg;
-  string loc="/d/dntg/laojun/gate";  
-  object ridee;
+  
   me->add("kee",-60+me->query_kar());
 
   if (!steps) return 1;
