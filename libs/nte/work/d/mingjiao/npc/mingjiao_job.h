@@ -117,7 +117,7 @@ string ask_abandon()
 
 void reward(object me, string job_flg)
 {
-        int old_cc,add_cc,max_pot,old_pot,add_exp,add_pot;
+        int old_cc, add_cc, old_pot, add_exp, add_pot;
 
 	if (!me) return;
 

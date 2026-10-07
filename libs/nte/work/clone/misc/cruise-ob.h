@@ -493,7 +493,7 @@ int hide_anywhere(object me)
         destruct(this_object());
         return 1;
 }
-int remove()
+varargs int remove()
 {
         save();
 }
@@ -520,7 +520,6 @@ int receive_dbase_data(mixed data)
 mixed save_dbase_data()
 {
         mapping data;
-        object  user;
 
         data = ([ ]);
         
