@@ -340,3 +340,10 @@ recursion`。mudlib `work/log/log` 只有开机/指令编译警告。心跳期
 - `cmds/std/team/swear.lpc`：结义失败提示被多余的 `;` 截成两句，`fail` 只剩"……可惜现在有人不在，$N"，后半句"的提议只好作罢。"丢了；接回去。
 
 验证：改动的文件和包含 `npc/indian` 的守护进程在 HEAD 与工作树分别加载（`scripts/lpc_listcheck.sh`，新进程），无回退。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py zjdywzb --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 528 个 `.lpc` 和若干 `.h`。HEAD 与工作树分别加载（新进程）：527 -> 527 通过，无回退；改过的头文件的 153 个包含者 152 -> 152 通过。
+手工：`kungfu/skill/huifeng-jian/mie.lpc`（回风剑「灭剑」）的出招描述 `msg = HIC "…幻出死亡的色彩，剑尖渐\n";` 后面两行（"渐逼近$n…""影化为一剑直刺$n前胸…"）被多余的 `;` 截成单独的语句，玩家只看到半句；接回去（`scripts/lpc_join_cut_strings.py` 现在也认带颜色宏的字符串）。`adm/daemons/natured.lpc` 的空语句 `lt[LT_MON];`、`adm/daemons/combatd.lpc` 的空语句 `your_temp["guarding"];` 删去。
+
+启动时警告 49 -> 0；新进程登录（新人物确认）正常。

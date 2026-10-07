@@ -43,8 +43,27 @@ os.chdir(REPO)
 if not slugs:
     slugs = sorted(d for d in os.listdir("libs") if os.path.isdir(f"libs/{d}/work"))
 
-STR = re.compile(rb'^[ \t]*"((?:[^"\\\n]|\\.)*)"[ \t]*;[ \t]*\r?$')
-CONT = re.compile(rb'^[ \t]*"')            # a continuation line of a multi-line concatenation
+TOK = re.compile(rb'[ \t]*(?:"((?:[^"\\\n]|\\.)*)"|([A-Z][A-Z0-9_]*)(?![A-Za-z0-9_]))')
+
+
+def string_statement(line):
+    """The literals of a statement made only of string literals and upper-case colour macros (`"..." HIC "..." NOR;`),
+    or None.  A linear scan: a regex with repeated optional-space tokens backtracks without end on long lines."""
+    t = line.rstrip(b"\r").rstrip()
+    if not t.endswith(b";"):
+        return None
+    t, pos, lits = t[:-1].rstrip(), 0, []
+    while pos < len(t):
+        m = TOK.match(t, pos)
+        if not m or m.end() == pos:
+            return None
+        if m.group(1) is not None:
+            lits.append(m.group(1))
+        pos = m.end()
+    return lits or None
+
+
+CONT = re.compile(rb'^[ \t]*(?:[A-Z][A-Z0-9_]*[ \t]*)*"')            # a continuation line of a multi-line concatenation
 
 
 def gitlink(slug):
@@ -80,8 +99,8 @@ for slug in slugs:
         lines = data.split(b"\n")
         changed = False
         for i, line in enumerate(lines):
-            m = STR.match(line)
-            if not m or not has_text(m.group(1)):
+            lits = string_statement(line)
+            if not lits or not any(has_text(x) for x in lits):
                 continue
             j = i - 1
             while j >= 0 and not lines[j].strip():
@@ -89,7 +108,7 @@ for slug in slugs:
             if j < 0:
                 continue
             prev = lines[j].rstrip(b"\r").rstrip()
-            if not prev.endswith(b'";') or b"//" in prev or prev.lstrip().startswith(b"/*"):
+            if not re.search(rb'("|\b[A-Z][A-Z0-9_]*)[ \t]*;$', prev) or not re.search(rb'"', prev) or b"//" in prev or prev.lstrip().startswith(b"/*"):
                 continue
             total += 1
             head = statement_head(lines, j).strip()
