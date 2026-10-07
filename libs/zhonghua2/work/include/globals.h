@@ -1,7 +1,6 @@
 // globals.h
 // this file will be automatically included by the driver
 
-#pragma save_binary
 
 //新增趣味任务主文件路径
 #define XQUEST          "/u/sanben/xquest/xquest"

@@ -8,7 +8,7 @@ int sqrt3(int x)
 
 int get_exp_rate()
 {
-        int max_exp = 10000000, exp_rate;
+        int max_exp = 10000000;
         return 100000000;
         
         foreach (object user in users())
@@ -35,7 +35,7 @@ int get_level(int exp)
 void check_me(object me)
 {
         object *ob, obb, env, room;
-        string *dirs, dir, temp;
+        string *dirs, dir;
         mapping exits;
         int group, i;
 

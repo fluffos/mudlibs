@@ -900,3 +900,17 @@ functionally re-tested live on this lib.
 
 房间基类 `inherit/room/room.lpc`：`make_inventory()` 用 `catch()` 包住 `new(file)`，做不出来就返回 0；`reset()` 的 `case 1:` 拿到 0 就跳过这一项（`if (!objectp(ob[list[i]])) break;`）。档案里没有的 NPC 或物品（或 `create()` 出错的物件）原先会让列出它的房间整个加载失败（`Bad argument 1 to environment()`，或对 0 的 `call_other()`），连带这个房间后面的区域；现在房间照常加载，只是少了那个物件，下次 `reset()` 再试（KB 05 §7.25；`scripts/lpc_resilient_room.py`、`scripts/lpc_room_reset_guard.py`）。
 验证：探针（`scripts/lpc_room_reset_probe.py`：房间基类列出一个不存在的物件，再调用 `reset()`）HEAD 单件 崩溃、多件 崩溃，工作树 单件 OK、多件 OK。
+
+## 深度功能测试（§10.7，2026-10-06）— 编译警告整理
+
+`scripts/lpc_warnings.py zhonghua2 --fix`：无用局部变量 2529 个、`varargs` 67 处、转义 36 处、裸 `return` 2 处、`nosave` 函数 27 个改 `protected`，共改动 1255 个 `.lpc` 和若干 `.h`。HEAD 与工作树分别加载（新进程）：1220 -> 1220 通过，无回退；改过的头文件的 223 个包含者 217 -> 217 通过。`scripts/lpc_audit_removed_locals.py HEAD` 的 55 条候选都是声明被重建（同一行剩下的变量还在）或同名 efun（`time()`）。
+手工：
+- `include/npc/indian.lpc` 与 `include/npc/masia.lpc` 都声明全局 `ma_sname`/`ma_pname`，`adm/daemons/npcd.lpc`、`group_questd.lpc` 两个都包含，后包含的印度名表覆盖了马来名表，`generate_ma_name()` 生成的其实是印度名字。印度表改名 `in_sname`/`in_pname`。
+- `clone/drug/fengdong.lpc`：`if (... < 10000) max1 / 2;` 是空语句，按原意改成 `max1 /= 2;`（经验不足一万的对手，分身技能减半）。
+- `cmds/std/swear.lpc`、`cmds/std/team/swear.lpc`、`cmds/std/team/bunch.lpc`：结义失败提示被多余的 `;` 截成两句，`fail` 只剩"……可惜现在有人不在，$N"，后半句"的提议只好作罢。"丢了；接回去。
+- `adm/daemons/combatd.lpc`、`combatd1.lpc`：招架反击里的 `your_temp["guarding"];` 是什么也不做的语句（别的库作者把它注释掉了），删去，行为不变。
+- `adm/daemons/dns_master.lpc`、`network/dns_master.lpc` `query_services()`：`PREF_FINGER`/`PREF_TELL` 不含 TCP 时 `if` 体被 `#if` 掏空；把 `#if` 移到 `if` 外面，行为不变。
+- `clone/obj/genmap.lpc`、`traverser.lpc`、`kungfu/skill/linji-zhuang/youming.lpc`：关掉的 `#define DEBUG`（空）让 `DEBUG("…", x);` 成了无用表达式；本驱动的预处理器不支持可变参数宏，改成 `#define DEBUG debug_off` 加一个空的 `private void debug_off(string fmt, mixed args...)`。
+- 未动：`adm/daemons/questd11.lpc` 是没人引用的旧副本，本身有语法错误；`clone/obj/genmap.lpc` 里 `#include "harbor.h"` 在函数内声明的局部变量没用到（头文件共用）。
+
+启动时警告 134 -> 0；新进程登录（标题画面、英文名、新人物确认）正常。
