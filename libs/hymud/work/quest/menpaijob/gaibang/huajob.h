@@ -3,7 +3,6 @@
 int ask_job()
 {
         object me;
-        object ob;
 int exp,pot;
           mapping myfam;
 

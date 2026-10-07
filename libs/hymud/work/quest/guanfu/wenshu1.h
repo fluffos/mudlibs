@@ -225,8 +225,8 @@ me->add_temp("mpjobn9",1);
 int do_wancheng2()
 {
 // object ob;
-	object me, target;
-	int exp,pot,gfjob_times,now_time;
+	object me;
+	int now_time;
 
 	//if(!arg) return notify_fail("你要干什么？\n");
 	me = this_player();

@@ -53,7 +53,6 @@ int valid_leave(object me, string dir)
 int check_dirs(object me, string dir)
 {
         string attrib_old,attrib_new;
-        int stag;
         object room;
         mapping dirs;
         dirs=query("exits");

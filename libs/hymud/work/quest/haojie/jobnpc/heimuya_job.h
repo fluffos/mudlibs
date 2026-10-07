@@ -1,7 +1,7 @@
 #include <ansi.h>;
 void init()
 
-{        object ob,me,what;
+{        object ob, me;
 
         ::init();
 

@@ -1052,3 +1052,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 
 `quest/menpaijob/mingjiao/zhangwuji` 第 289 行附近的 `command("say " + … + "  我教目的在与反抗元兵，现在正在练兵  ");` 少了右引号：原文这里是 `A3 22`（半个全角字符后面紧跟引号），MudOS 按字节读没问题，转 UTF-8 时这一对被当成无效字符连同引号一起丢掉。整个文件因此编译不过，明教的任务 NPC 张无忌（`romnpc2`/`romnpc3` 里也会引用他）从未载入。补回引号；`ask_wldh()`、`destroying()` 里没用到的局部变量一并删掉。hy5、hymud、haiyang2 三个同源库同样修改。
 
+
+## 深度功能测试（§10.7，2026-10-06）— 编译警告整理，迷宫怪物武器路径
+
+`scripts/lpc_warnings.py hymud --fix`（无用局部变量、`nosave` 函数、`varargs`、转义等）改动 5551 个 `.lpc` 和 50 个头文件；本库 58882 个文件，一次 VM 编译全部会耗尽内存，第二轮扫描没有完成，只提交第一轮。与 `hy5` 同代码的修复照搬过来（`scripts/lpc_twin_port.py adopt hy5 hymud`）：`quest/shenshu/npc/man2.lpc`、`man.lpc` 重复的全局变量和 `kill_ob` 返回类型，`d/pingan/shenzhen/npc/shenyi.lpc`。`d/migong/romnpc.lpc`、`romnpc2.lpc`、`romnpcboss.lpc`：迷宫怪物随机武器拼的是 `/p/item/ritemtz3/wsword` + `random(10)`，档案里的文件是 `Wsword0.lpc`（Windows 下不分大小写），`carry_object()` 返回 0 再 `->wield()` 就让怪物 `create()` 失败；改为大写前缀并在 `wield()` 前检查（与 `hy5` 相同）。验证：改动过的文件与包含改动头文件的文件共 17236 个，HEAD 与工作树分别分批加载（新进程，每批 700 个）：17104 -> 17169 通过，无回退，新增 65 个可加载；`scripts/lpc_audit_removed_locals.py HEAD` 的 60 条候选都是声明被重建。启动时警告 328 -> 0。
