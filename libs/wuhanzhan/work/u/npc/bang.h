@@ -56,9 +56,7 @@ string query_save_file(string name)
 
 int create_guild(object ob,string name)
 {
-	int i;
 	string str,filename;
-	object *temp;
 	
 	str = 	"帮名："+name+"\n";
 	str +=	"成员数：1\n";

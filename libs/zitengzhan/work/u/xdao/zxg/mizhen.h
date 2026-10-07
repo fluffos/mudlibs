@@ -39,7 +39,7 @@ void init()
 object me = this_player();
 object ob = this_object();
 object yao;
-int i, j;
+int i;
 if(!userp(me)) return 0;
 
 if(ob->query("xianjin")) {

@@ -5,7 +5,7 @@
 
   void set_my_killer_list(object killer, object victim);
 int valid_kill(object killer, object victim)
-{    int pk_k, pk_v;   
+{   
  
      if(userp(victim) && killer->query_condition("no_pk_time")>240 
        && userp(killer))

@@ -879,3 +879,10 @@ functionally re-tested live on this lib.
 ## 深度功能测试（§10.7，2026-10-07）— 兵器的 `actions` 函数指针
 
 `set("actions", (: WEAPON_D, "query_action" :));`：旧 MudOS 把 `(: 字符串, "函数" :)` 当作 call_other 函数指针，本驱动把它当作表达式函数指针，求值只得到字符串 `"query_action"`。没有对应兵器技能时 `feature/attack.lpc` 直接用兵器的 `actions`，`COMBAT_D` 拿到的不是 mapping，`reset_action()` 后仍不是，记一条 bad action 就不出招——拿着这些兵器打不出攻击。改成别的兵器早已用的 `(: call_other, WEAPON_D, "query_action" :)`（KB 04 §6.10）：`d/obj/inherit/weapon/throwing.lpc`、`d/obj/inherit/weapon/fork.lpc`、`d/obj/inherit/weapon/whip.lpc`、`d/obj/inherit/weapon/sword.lpc`、`d/obj/inherit/weapon/axe.lpc`、`d/obj/inherit/weapon/blade.lpc`、等共 9 个。改动的文件在 HEAD 与工作树分别加载（新进程），无回退。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py wuhanzhan --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 1286 个 `.lpc` 和若干 `.h`。HEAD 与工作树分别加载（新进程）：1233 -> 1233 通过，无回退；改过的头文件的 358 个包含者 343 -> 343 通过。
+记录、未改：`story/*.lpc` 六个故事（牛郎、宋代、起床、西游、砸缸、征西）的 `give_gift()` 只剩一句什么也不做的 `HIM "…掉到你面前。" NOR;`——对照 mhxy 的同名文件，原本是 `STORY_D->give_gift("/obj/money/gold", 20, HIM "…" NOR);`。归档里就是这样：只删了 `STORY_D->give_gift(…,` 那一行，续行的缩进还在，征西的奖品描述也从倚天剑改成了万年灵芝。看来是本站有意取消故事奖励、删得不干净（玩家看到"掉到你面前"却什么也没有）。要不要恢复奖励是站务设计，不在本次范围。
+
+启动时警告 59 -> 0；新进程登录（新人物确认）正常。

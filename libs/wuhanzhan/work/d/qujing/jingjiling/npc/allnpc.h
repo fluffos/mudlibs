@@ -33,7 +33,6 @@ void announce_success (object who)
 
 void player_win (object me, object who)
 {
-  object obj;
   
   who->set_temp("obstacle/jingjiling/"+me->query("id"),1);
   message_vision("$N对$n一鞠躬：不错，不错！\n",me,who);  
