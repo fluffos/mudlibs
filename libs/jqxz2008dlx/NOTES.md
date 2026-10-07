@@ -867,3 +867,7 @@ bug），最终靠"先用一次会被拒绝的真实 `bai`（这一步真实无�
 ## 深度功能测试（§10.7，2026-10-05）— 巫师留言板存档 `data/board/*.o.gz`
 
 巫师留言板 `wiz_b` / `towiz_b` 以 `.o.gz` 存档（1996 年的帖子）。本机驱动 `restore_object()` 优先读 `.o.gz`，而留言板用 `save_object(file)` 写明文 `.o`，所以本机上新帖每次重启都退回旧快照；网页版驱动没有 zlib，只读 `.o`，而归档自带的 `.o` 是读不出的二进制。`.gz` 内容为 GB18030（转码时没被处理），转成 UTF-8 写成 `.o`，替换归档里那个读不出的二进制 `.o`；`towiz_b` 原文有 4 个残字节，转为替换符。删除 `.o.gz`（KB 01）。用 lpcc 载入留言板核对条数（jqxz2008：wiz_b 47 条、towiz_b 115 条）。
+
+## 深度功能测试（§10.7，2026-10-07）— 空的 `if (current_water == 0) {}`
+
+3 个房间的 `valid_leave()` 里有一行什么也不做的 `if (current_water == 0) {}`（编译警告 `Expression has no side effects`），删去，行为不变：`d/xingxiu/nanjiang2.lpc`、`d/xingxiu/nanjiang3.lpc`、`d/xingxiu/shanjiao.lpc`。

@@ -1425,3 +1425,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 2. 手工：`quest/shenshu/npc/man2` 的 `order`、`data` 各声明两次（后一个生效；前一份在两个 `#include` 之前，被包含的文件不用它们），删去前一份；多余的 `int ask_job();` 原型与定义 `string ask_job()` 冲突，删去；`man`/`man2` 的 `kill_ob` 改 `void`，与 `feature/attack` 一致（函数不返回值）。与 hy5 同一处代码。
 3. 验证（新进程，临时副本）：GB → `fluffos` 登录 → `look`、`score`、`i`、`quit` 正常，驱动无运行时错误。
 
+
+## 深度功能测试（§10.7，2026-10-07）— 空的 `if (current_water == 0) {}`
+
+3 个房间的 `valid_leave()` 里有一行什么也不做的 `if (current_water == 0) {}`（编译警告 `Expression has no side effects`），删去，行为不变：`d/xingxiu/nanjiang2.lpc`、`d/xingxiu/nanjiang3.lpc`、`d/xingxiu/shanjiao.lpc`。

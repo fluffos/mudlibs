@@ -214,3 +214,7 @@ live `debug.log` 是 `libs/xkx100/log/debug.log`（Boot Time Fri Sep 4
 ## 深度功能测试（§10.7，2026-10-06）— 编译警告整理
 
 `scripts/lpc_warnings.py xkx100 --fix`：无用局部变量 1993 个、`varargs` 8 处、转义 34 处、`nosave` 函数 30 个；`scripts/lpc_fix_no_effect.py` 删去 `return "...";` 后遗留的 `"\n";` 等 6 处；`scripts/lpc_diamonds.py --fix-redundant` 删去 156 个多余的 `inherit F_SKILL;`（`NPC` 已经带进来，两份 `skill.lpc` 让技能变量变成 `nosave`，KB 06 §7.213），`d/city/pai9room.lpc` 多余的 `inherit F_CLEAN_UP;` 手工删去（它的 `::valid_leave()` 本来就落在 `ROOM` 上）。`feature/alias.lpc` 的 `if (str != "");`（空的 if，`last_input` 总被赋值）删去，与 `hy` 把这行注释掉的做法一致，行为不变。共改动 1039 个 `.lpc`，HEAD 与工作树分别加载（新进程）：1005 -> 1005 通过，无回退；可编译的文件 14126 -> 14138，诊断 4316 -> 146；启动时警告 189 -> 0；新进程启动后登录界面正常。
+
+## 深度功能测试（§10.7，2026-10-07）— 空的 `if (current_water == 0) {}`
+
+3 个房间的 `valid_leave()` 里有一行什么也不做的 `if (current_water == 0) {}`（编译警告 `Expression has no side effects`），删去，行为不变：`d/xingxiu/nanjiang2.lpc`、`d/xingxiu/nanjiang3.lpc`、`d/xingxiu/shanjiao.lpc`。

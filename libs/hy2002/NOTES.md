@@ -234,3 +234,7 @@ functionally re-tested live on this lib.
 ## 深度功能测试（§10.7，2026-10-06）— 编译警告整理
 
 `scripts/lpc_warnings.py hy2002 --fix`：无用局部变量 2056 个、`varargs` 35 处、转义 48 处、`nosave` 函数 50 个改 `protected`；`scripts/lpc_fix_no_effect.py` 删去 `return "...";` 之后遗留的 `"\n";` 等 12 处。手工：`quest/shenshu/npc/man.lpc` 的 `int kill_ob()` 覆盖 `/feature/attack.lpc` 的 `void kill_ob()`，改 `void`（没有调用者读返回值）；`d/xingxiu/shanjiao.lpc`、`nanjiang3.lpc` 里空的 `if (current_water == 0) {}` 删去。共改动 977 个 `.lpc`，HEAD 与工作树分别加载（新进程）：949 -> 949 通过，无回退；`scripts/lpc_audit_removed_locals.py HEAD` 的 20 条候选都是声明被重建。启动时警告 387 -> 0。
+
+## 深度功能测试（§10.7，2026-10-07）— 空的 `if (current_water == 0) {}`
+
+1 个房间的 `valid_leave()` 里有一行什么也不做的 `if (current_water == 0) {}`（编译警告 `Expression has no side effects`），删去，行为不变：`d/xingxiu/nanjiang2.lpc`。

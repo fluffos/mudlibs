@@ -453,3 +453,7 @@ functionally re-tested live on this lib.
 ## 深度功能测试（§10.7，2026-10-06）— 编译警告整理
 
 `scripts/lpc_warnings.py xiakexing100 --fix`：无用局部变量 1847 个、`varargs` 7 处、转义 34 处、`nosave` 函数 30 个改 `protected`，共改动 879 个 `.lpc`。这些文件在 HEAD 与工作树分别加载（新进程）：867 -> 867 通过，无回退；`scripts/lpc_audit_removed_locals.py HEAD` 的 16 条候选都是声明被重建（仍在用的名字保留）或同名的 efun 调用（`time()`）。启动时警告 505 -> 0；新进程启动后登录界面（侠客行时间与农历日期、名字校验、新人物确认）正常。
+
+## 深度功能测试（§10.7，2026-10-07）— 空的 `if (current_water == 0) {}`
+
+3 个房间的 `valid_leave()` 里有一行什么也不做的 `if (current_water == 0) {}`（编译警告 `Expression has no side effects`），删去，行为不变：`d/xingxiu/nanjiang2.lpc`、`d/xingxiu/nanjiang3.lpc`、`d/xingxiu/shanjiao.lpc`。
