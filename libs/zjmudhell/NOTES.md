@@ -346,3 +346,10 @@ reverted via `git checkout` before committing.
 - `cmds/std/team/swear.lpc`：结义失败提示被多余的 `;` 截成两句，`fail` 只剩"……可惜现在有人不在，$N"，后半句"的提议只好作罢。"丢了；接回去。
 
 验证：改动的文件和包含 `npc/indian` 的守护进程在 HEAD 与工作树分别加载（`scripts/lpc_listcheck.sh`，新进程），无回退。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py zjmudhell --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，再用 `scripts/lpc_nitan_family_fixes.py zjmudhell`（`adm/daemons/natured.lpc` 的空语句 `lt[LT_MON];`），共改动 533 个 `.lpc` 和若干 `.h`。HEAD 与工作树分别加载（新进程）：531 -> 531 通过，无回退；改过的头文件的 139 个包含者 138 -> 138 通过。
+手工：28 处 `Illegal to declare nosave function`（`adm/single/master.lpc`、`feature/treemap.lpc`、`adm/daemons/questd.lpc`、`dbased.lpc`、`network/cmwhod.lpc`、`cmds/arch/data.lpc` 和四个卖吃喝的房间的 `create_food/water/wine`）。`include/globals.h` 有 `#define nosave nosave`，`nosave` 成了宏，扫描工具认不出这个关键字，于是没自动改；照 KB 04 §6.10 的做法手工改成 `protected`。这些函数都只被本对象（`call_out`、`sort_array` 的回调）或驱动程序（`crash()`）调用，没有别的对象 `->` 调它们。
+
+启动时警告 71 -> 0。新进程登录画面正常；普通 telnet 输入名字后答"客户端非法"——本库用指间 MUD 的客户端握手（KB 01 §1.7），HEAD 也一样。
