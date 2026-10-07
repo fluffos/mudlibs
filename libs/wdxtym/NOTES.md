@@ -357,3 +357,11 @@ Too-deep-recursion) recurred at boot; no new error from shop/拜师.
 
 房间基类 `inherit/room/room.lpc`：`make_inventory()` 用 `catch()` 包住 `new(file)`，做不出来就返回 0；`reset()` 的 `case 1:` 拿到 0 就跳过这一项（`if (!objectp(ob[list[i]])) break;`）。档案里没有的 NPC 或物品（或 `create()` 出错的物件）原先会让列出它的房间整个加载失败（`Bad argument 1 to environment()`，或对 0 的 `call_other()`），连带这个房间后面的区域；现在房间照常加载，只是少了那个物件，下次 `reset()` 再试（KB 05 §7.25；`scripts/lpc_resilient_room.py`、`scripts/lpc_room_reset_guard.py`）。
 验证：探针（`scripts/lpc_room_reset_probe.py`：房间基类列出一个不存在的物件，再调用 `reset()`）HEAD 单件 崩溃、多件 崩溃，工作树 单件 OK、多件 OK。
+
+## 深度功能测试（§10.7，2026-10-06）— 编译警告整理（第一轮）
+
+`scripts/lpc_warnings.py wdxtym --fix` 第一轮：无用局部变量 1284 个、`varargs` 16 处、裸 `return` 9 处、`#pragma save_binary` 等，共改动 353 个 `.lpc` 和 2 个头文件。本库有 46890 个 `.lpc`，一次 VM 编译全部文件会耗尽内存，第二轮扫描没能完成，所以只提交这一轮。验证：改动过的文件与包含改动头文件的文件共 410 个，HEAD 与工作树分别分批加载（新进程，每批 700 个）：407 -> 407 通过，无回退；`scripts/lpc_audit_removed_locals.py HEAD` 的 6 条候选都是声明被重建或同名 efun（`time()`）。启动时警告 229 -> 2。手工改的三处真问题：
+- `adm/daemons/questd.lpc` 两处 `jifen1 == 10;`（应为赋值）。
+- `adm/daemons/wendad.lpc` `heart_beat()` 里 `wjgl_flag == 0;`：异朽阁事件结束后标志从不复位，改为赋值。
+- `adm/daemons/natured.lpc` 一行无作用的 `lt[LT_MON];` 删去。
+剩下：`adm/daemons/payd.lpc` 注释里的 `/*`（需人工读懂那段被注释掉的条件）。
