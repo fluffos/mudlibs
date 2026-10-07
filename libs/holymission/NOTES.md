@@ -737,3 +737,9 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 2. **玩家房屋存档全部读不回。** `players/silas/houses/` 的 40 个房屋存档用了 LDMud 的共享值写法：`exits_special ({…,<1>=({}),…})` 定义一个共享的空数组，后面的 `<1>` 引用它。本驱动不认识，`restore_object()` 报 `Illegal array format`，房屋（Silas 的房产中介、`house.lpc`、`house_map.lpc`）读不到任何房屋。`scripts/ldmud_wide_save_convert.py` 现在把共享值展开成副本（这里共享的都是空数组，展开后语义不变）。用 `restore_variable()` 逐值检查全部房屋存档：16,707 个值都能读。
 3. 仍读不回：`players/moonchild/save/guild_board.o` 的 `tmp_text`，原始存档在一个词中间就截断了，没有右引号，无法恢复。
 
+
+## Deep test (§10.7, 2026-10-07) — messages cut by a stray `;`
+
+Messages cut by a stray `;`: the second half stood alone as a string statement and never showed. Joined where it continues the text (`players/iishima/workroom.lpc`, `players/archive/thumper/cavern.lpc` — whose long description was only its first line —, `players/ace/castle/rooms/dark1.lpc`, `dark2.lpc`). Deleted where the orphan is a leftover of an earlier wording that the text above already says (`and south.`, `crater.`, `be very painful shouts.` and similar in 22 rooms of emerald, colossus, sargon, kelly, helmut, tatsuo, beardy, warlord, bobo, tamina and `room/plane4.lpc`): no change in what players see.
+
+Changed files loaded at HEAD and in the tree in fresh processes: no regression.

@@ -712,3 +712,9 @@ debris.
 - `secure/master.lpc` `prepare_destruct()`：`errors`、`i` 只在 `#ifdef COMPAT_FLAG` 里用，声明移进该分支。
 - `obj/player.lpc`：LDMud 的 `(object) ("/cmds/std/_say");`（装载对象）在这里只是一个无作用的表达式，下一行的 `call_other` 本来就会装载，删去。
 验证：新进程启动，以访客（`g`）登录，`look`、`score`、`quit`（存档）正常。剩下 2867 条诊断几乎都是本来就不能编译的文件里的错误（LDMud 专用语法与缺失的头文件），留待逐个阅读。
+
+## Deep test (§10.7, 2026-10-07) — messages cut by a stray `;`
+
+Messages cut by a stray `;`: joined in `wizards/terror/goblin/roomit/g1.lpc` and `wizards/daoloth/mansion/path2.lpc` (the orphan adds a sentence); deleted in `wizards/torspo/areat/ogre/room4.lpc`, `terror/goblin/roomit/g5.lpc`, `rimber/cave/room4.lpc` (a fragment or copy of the line above). `daemons/ability_d.lpc` is an LDMud `([ k: v1; v2 ])` table, not a cut message.
+
+Changed files loaded at HEAD and in the tree in fresh processes: no regression.

@@ -594,3 +594,9 @@ three load. The lib's warnings pass has not been done (unused locals in the mast
 ## 2026-10-06 — `protected private`
 
 `adm/daemon/services.lpc` 的 `build_mudlist()` 声明为 `protected private`（早期把 `static` 换成 `protected` 时留下的两个访问修饰），FluffOS 报 `Multiple access modifiers`；改为 `private`。该文件仍因缺少 `NETWORK_D`（本驱动没有网络包下的互联服务）无法编译。
+
+## Deep test (§10.7, 2026-10-07) — messages cut by a stray `;`
+
+`std/class/crypt_stalker.lpc` and `shadowdancer.lpc` prerequisite text: a stray `;` ended the string early, so "10 Ranks spent in Survival skill", "Undead Favored Enemy" and "10 Ranks spent in Athletics Skill" were never shown. Joined.
+
+Changed files loaded at HEAD and in the tree in fresh processes: no regression.

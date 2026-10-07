@@ -845,3 +845,9 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply c
 ## 深度功能测试（§10.7，2026-10-07）— 空的 `if (current_water == 0) {}`
 
 5 个房间的 `valid_leave()` 里有一行什么也不做的 `if (current_water == 0) {}`（编译警告 `Expression has no side effects`），删去，行为不变：`d/gaochang/room11.lpc`、`d/gaochang/room12.lpc`、`d/gaochang/room13.lpc`、`d/gaochang/room14.lpc`、`d/xingxiu/shanjiao.lpc`。
+
+## 深度功能测试（§10.7，2026-10-07）— 被 `;` 截断的消息
+
+`kungfu/skill/yizhi-chan/yizhi.lpc` 第二式的 `msg += "…护住身前。";` 后面单独一行"只听「嗤」的一声，掌影顿消，$p已经变得脸色惨白。"、`d/banghui/include/bunchnew.lpc` 结义失败提示"的提议只好作罢。"——多余的 `;` 把消息截成两句，后半句从来没显示过；接回去。
+
+验证：改动的文件在 HEAD 与工作树分别加载（新进程），无回退。

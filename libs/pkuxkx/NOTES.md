@@ -234,3 +234,9 @@ python3 scripts/mudclient.py 127.0.0.1 40274 --timeout 40 --idle 0.5 \
 手工：`include/condition.h` 里的条件表 `cond_def` 被 `feature/condition.lpc`、`feature/damage.lpc`、`feature/name.lpc` 和 `inherit/char/char.lpc` 各包含一份，人物对象里四份同名全局变量（启动时 28 条 `Redeclaration of global variable 'cond_def'`）。表用 `#ifndef CONDITION_NO_TABLE` 包起来；只用 `CND_*` 宏的 `char.lpc`、`name.lpc` 先 `#define CONDITION_NO_TABLE`；`damage.lpc` 判断死因时要读毒的名字，改为调用 `F_CONDITION` 新增的 `query_condition_def(cnd)`。`kungfu/condition/*.lpc` 各自独立编译，仍各带一份表。
 
 启动时警告 191 -> 0；新进程登录（标题画面、英文名、新人物确认）正常。
+
+## 深度功能测试（§10.7，2026-10-07）— 被 `;` 截断的消息
+
+`d/baituo/shechang.lpc` 蛇场帮助里 `str += "ask she nu about 蛇(snake) …\n";` 后面三行（怪蛇、取蛇、怪蛇杖）各自成了单独的字符串语句，从来没显示过；接回 `str`。
+
+验证：改动的文件在 HEAD 与工作树分别加载（新进程），无回退。
