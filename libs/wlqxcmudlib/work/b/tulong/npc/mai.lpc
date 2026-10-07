@@ -122,7 +122,7 @@ void guo(object me)
 
 int do_get(string arg)
 {
-        object obj, env, ding;
+        object obj;
         string what, where;
 
         if (! arg)

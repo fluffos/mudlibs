@@ -62,7 +62,7 @@ int do_wizhg()
 void checking()
 {
     object ob,me,*all_mine,naihe;
-    int temp,hp,i;
+    int hp,i;
 
     time = this_object()->query("lost_time");
     deng = this_object()->query("last_deng");

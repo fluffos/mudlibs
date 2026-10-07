@@ -123,7 +123,6 @@ int receive_dbase_data(mixed data)
 mixed save_dbase_data()
 {
         mapping data;
-        object  user;
 
         data = ([ ]);
         
