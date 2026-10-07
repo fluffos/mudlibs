@@ -8,7 +8,6 @@ void init()
 int do_zhuyao(string arg)
 {
     object obj;
-    object ob;
     object me = this_player();
 
     if(!arg) return notify_fail("你要拿什么东西当主药？\n");
@@ -52,7 +51,6 @@ int do_yao(object me,object obj)
 int do_fangdan(string arg)
 {
     object obj;
-    object ob;
     object me = this_player();
 
     if(!arg) return notify_fail("你要放什么药进去？\n");

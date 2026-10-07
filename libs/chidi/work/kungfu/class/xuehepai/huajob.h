@@ -1,7 +1,6 @@
 int ask_job()
 {
         object me;
-        object ob;
           mapping myfam;
 
         me=this_player();

@@ -7,7 +7,7 @@ return NATURE_D->game_time();
 
 int diary_write(object ob,string sth)
 {
-   string dir,idu,tmp,time,place,path,nameu;
+   string dir, idu, time, place, path, nameu;
    int back;
     time=g_time();
      nameu=ob->query("name");

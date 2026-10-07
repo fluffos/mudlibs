@@ -851,3 +851,11 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply c
 `kungfu/skill/yizhi-chan/yizhi.lpc` 第二式的 `msg += "…护住身前。";` 后面单独一行"只听「嗤」的一声，掌影顿消，$p已经变得脸色惨白。"、`d/banghui/include/bunchnew.lpc` 结义失败提示"的提议只好作罢。"——多余的 `;` 把消息截成两句，后半句从来没显示过；接回去。
 
 验证：改动的文件在 HEAD 与工作树分别加载（新进程），无回退。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py chidi --fix` 加 `scripts/lpc_fix_no_effect.py --apply`：共改动 1296 个 `.lpc` 和若干 `.h`。HEAD 与工作树分别加载（新进程）：1235 -> 1235 通过；`d/chaoting/npc/japanese` 新能加载，`obj/npc/marchial` 一次失败——这个 NPC 加载时有随机成分，同一个新进程里连载三次，工作树也是时成时败，改动只是删了两行 `#pragma save_binary`，不是回退。改过的头文件的 56 个包含者 51 -> 51 通过。
+手工：`feature/dbase.lpc` `set()` 里只剩注释的 `if (data > 500000000) { }` 去掉，注释留着；`adm/daemons/autobootd.lpc` 只在 `#ifdef REBOOT_TIME` 用的局部变量，声明挪进同样的条件里。
+未动：`inherit/misc/bbsboard1.lpc` 的 `note["msg"] = (text, 1);` 是逗号表达式，帖子内容会存成 1——但这个留言板基类没有任何对象继承；`d/feitian/npc/xunbu.lpc` 的 `(: random_move() :);` 只造函数指针不调用，巡捕要不要走开是内容设计；`clone/misc/card.lpc` 本身有语法错误，HEAD 起就编译不过。
+
+启动时警告 85 -> 0；新进程登录正常。

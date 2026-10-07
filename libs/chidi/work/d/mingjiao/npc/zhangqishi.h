@@ -120,7 +120,7 @@ int checking(object me, object ob)
 	return 1;  
 }
 
-void do_join()
+varargs void do_join()
 {
 	object me,ob;
 	mapping ob_party;
