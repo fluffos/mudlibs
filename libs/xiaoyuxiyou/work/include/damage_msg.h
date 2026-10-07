@@ -226,7 +226,7 @@ nosave mapping damage_msgs = ([
                 }),
 ]);
 
-nosave string eff_status_msg(int ratio)
+string eff_status_msg(int ratio)
 {
 	if( ratio==100 ) return HIG "看起来气血充盈，并没有受伤。"NOR;
 	if( ratio > 95 ) return HIG "似乎受了点轻伤，不过光从外表看不大出来。"NOR;

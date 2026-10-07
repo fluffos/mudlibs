@@ -64,7 +64,7 @@ int do_transform (string arg)
                                                                                 
   void owner_is_killed()                                                 
   {                                                                      
-     object me = this_player();                                     
+                                     
      write("只见一阵烟雾闪过...尸体上什么东西消失了。\n");    
      destruct(this_object());                                       
      return;                                                        

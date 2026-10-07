@@ -2,7 +2,6 @@ int is_sea(){return 1;}
 
 mixed valid_move(object me)
 {
-	object npc;
 	if( !userp(me) || !clonep(this_object())
 	 || me!=query("owner") )
 		return 0;

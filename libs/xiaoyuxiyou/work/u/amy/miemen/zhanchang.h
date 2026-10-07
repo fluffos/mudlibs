@@ -56,9 +56,6 @@ int block_cmd(string args)
 int do_tiaozhan()
 {
 	object room ,me ,newob ,ob;
-	int i ,max_level ,nkf;
-	mapping skill;
-	string* key;
 	string dir;
 	int menpai;
 

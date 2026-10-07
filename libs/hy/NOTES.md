@@ -340,3 +340,9 @@ functionally re-tested live on this lib.
 ## 深度功能测试（§10.7，2026-10-07）— 空的 `if (current_water == 0) {}`
 
 3 个房间的 `valid_leave()` 里有一行什么也不做的 `if (current_water == 0) {}`（编译警告 `Expression has no side effects`），删去，行为不变：`d/xingxiu/nanjiang2.lpc`、`d/xingxiu/nanjiang3.lpc`、`d/xingxiu/shanjiao.lpc`。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py hy --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 665 个 `.lpc` 和若干 `.h`。HEAD 与工作树分别加载（新进程）：648 -> 648 通过，无回退；改过的头文件的 343 个包含者 334 -> 334 通过。剩下的告警都在 `海洋2002/hy3/` 下——库里夹带的另一份 hy3 源码，不加载，未动。
+
+启动时警告 65 -> 0；新进程登录（编码选择、新人物确认）正常。
