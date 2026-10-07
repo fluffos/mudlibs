@@ -61,8 +61,6 @@ int accept_fight(object who) {
 }
 
 void player_win(object me, object who) {
-  object tieshan = present("tie shan", me);
-  string msg;
 
   message_vision("$N对$n说：大师果然身手不凡！\n", me, who);
   who->set_temp("won_cloud_fog", 1);

@@ -1,5 +1,4 @@
 void init() {
-  object where = this_object();
 
   add_action("do_feel", "tang");
 }
