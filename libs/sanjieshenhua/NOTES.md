@@ -378,3 +378,12 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply s
 - `cmds/std/team/party.lpc`、`cmds/std/team/swear.lpc`：结义失败提示被多余的 `;` 截成两句，`fail` 只剩"……可惜现在有人不在，$N"，后半句"的提议只好作罢。"丢了；接回去。
 
 验证：改动的文件和包含 `npc/indian` 的守护进程在 HEAD 与工作树分别加载（`scripts/lpc_listcheck.sh`，新进程），无回退。
+
+## 深度功能测试（§10.7，2026-10-06）— 编译警告整理
+
+`scripts/lpc_warnings.py sanjieshenhua --fix`：无用局部变量 2790 个、`varargs` 103 处、转义 93 处、裸 `return` 3 处、`nosave` 函数 10 个改 `protected`，共改动 1375 个 `.lpc` 和若干 `.h`。`scripts/lpc_fix_no_effect.py --apply`：两份 `xuanyuan-archery.lpc` 删去什么也不做的 `(: throw_weapon :);`，`dns_master.lpc` 把 `#if PREF_* & SVC_TCP` 移到 `if` 外面。
+手工：`adm/daemons/natured.lpc` 删去空语句 `lt[LT_MON];`；`adm/daemons/securityd.lpc` `valid_grant()` 删去没用到的 `string ip = query_ip_number(ob);`；`adm/daemons/channeld.lpc` `do_channel()` 里只在 `#ifdef XYJ` 分支用的四个局部变量，声明挪进同样的条件里。
+HEAD 与工作树分别加载（新进程）：1330 -> 1330 通过，无回退；改过的头文件的 498 个包含者 473 -> 473 通过。`scripts/lpc_audit_removed_locals.py HEAD` 的 20 条候选都是声明被重建或同名 efun。
+未动：`d/gumu/npc/zhangmen.lpc` 的 `fully_recover()` 中间缺了一段（恢复失败分支之后到重新装备武器之前，连同一个右括号），整个文件编译不过；但古墓掌门实际用的是 `obj/zhangmen/gumu.lpc`（`d/gumu/qianting.lpc` 加载它），这份是没人引用的旧稿。`d/quest/mofeng/npc/stey/` 下的文件同样是不加载的草稿。
+
+启动时警告 119 -> 0；新进程登录（编码选择、英文名提示，新人物用 `new`）正常。

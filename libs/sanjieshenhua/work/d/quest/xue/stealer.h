@@ -5,7 +5,7 @@ void do_copy(object me)
     int level;
     object weapon;
     object killer = this_object();
-    string action, family;
+    string family;
 
     level = NPC_D->get_skill_level(me);
     if (me->query("combat_exp") < 1000000)

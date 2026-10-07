@@ -1,7 +1,6 @@
 void do_copy(object me)
 {
     int level;
-    string family;
     object weapon;
     object env = environment(me);
     object killer = this_object();

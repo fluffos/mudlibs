@@ -5,7 +5,6 @@ int do_task2()
     object me = this_player();
     object guai;
     string where;
-    int tt;
 
     if (me->query("combat_exp") < 1800000)
     {
