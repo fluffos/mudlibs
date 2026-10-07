@@ -231,3 +231,7 @@ In total 335 files differ from the old names (249 `.C` -> `.lpc`, 83 files of re
 `scripts/lpc_dynamic_rows.py`：`d/obj/quest/dynamic_location`、`d/obj/quest/dynamic_quest` 里 280 行写的是原档案的 `.c` 路径。转档时文件已改名 `.lpc`，而显式后缀按原样解析，`load_object("/d/x.c")`、`new("/d/obj/quest/x.c")` 返回 0 且不报错（KB 03 §4.2，KB 06 §7.220），所以 `adm/daemons/questd.lpc`、`u/stey/u/lestat/questd.lpc` 读到的每一行都加载不出来：随机任务和任务物品从未生成，在 `create()` 里直接对结果调用 `tar->set()` 的版本还会崩溃，连带加载它的 cron 守护进程和 `give` 的任务钩子。这些行已改为 `.lpc`；另有 3 行指向的文件两种后缀都不存在（档案缺内容），保持原样。
 `scripts/lpc_dynamic_quest_guard.py`：2 处 `spread_quest()` 调用（`init_dynamic_quest()` 的循环里）包进 `catch()`，缺失的任务物品或编译不过的房间只跳过那一个任务，守护进程照常加载、其余任务照常生成。
 验证：`adm/daemons/questd.lpc`、`u/stey/u/lestat/questd.lpc`和 cron 守护进程在新进程里加载（HEAD 一次，工作树三次，选房是随机的）：HEAD 通过 3 个，工作树三次分别通过 3、3、3 个（共 3 个），无回退。
+
+## 深度功能测试（§10.7，2026-10-06）— 编译警告整理
+
+与 `sjsh` 同代码的 779 个文件照搬 `sjsh` 的修复（`scripts/lpc_twin_port.py adopt sjsh sjshwzb`，757 个按格式化重写、17 个拼接、5 个原样；非 ASCII 文字检查无差异），其余由 `scripts/lpc_warnings.py sjshwzb --fix` 处理（无用局部变量 1004 个、`varargs` 16 处、转义 24 处），共改动 1223 个 `.lpc`。HEAD 与工作树分别加载（新进程）：1188 -> 1188 通过，无回退；`scripts/lpc_audit_removed_locals.py HEAD` 的 20 条候选都是声明被重建。启动时警告 197 -> 0。
