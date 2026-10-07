@@ -466,3 +466,10 @@ fresh driver boot plus the full long-sit idle window below.
 - `wizards/seeker/asciis.txt` 的 `A1A1` 真是 GB2312 全角空格，转码原本是对的，不改。
 - 入库后改过的行脚本不动（23 行，都在房间描述里），其中 `抯` 一类第二字节为 ASCII 的汉字按字符还原为 `’s`（11 个文件）。旧信件里的 cp437 方块画（`圹圹`）不动。
 - 改动的 33 个 `.lpc` 用 `lpcc --batch` 编译，32 个通过；`wizards/hermes/workroom` 在 HEAD 也载入失败，与本次无关。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py pd --fix`（3 万多个文件，单独跑；第一次被一小时的超时打断，先改了 `nosave` 函数——`static` 留下的 `nosave` 改成 `protected`，与 `private` 并列的去掉——再完整跑一遍）：无用局部变量 1081 个、裸 `return` 21 处、`varargs` 16 处等，共改动 681 个 `.lpc`。HEAD 与工作树分别加载（新进程）：621 -> 620，少的那个 `d/citrin/rooms/lake/20,4` 只删了两个没用到的局部变量，单独连载三次 HEAD 与工作树都通过，是批量加载的假象（KB 08 §10.13）。
+未动：`wizards/danovae/extra/_catchip.lpc` 有一行被 `;` 截断的字符串，但那个变量之后没再用，接不接都一样。
+
+启动时警告 68 -> 0；新进程登录（标题画面、新人物）正常。
