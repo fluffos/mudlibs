@@ -4,8 +4,8 @@ int do_task1()
 {
     object me = this_player();
     object guai,xie;
-    string where,msg;
-    int level;
+
+
 
     if (me->query("combat_exp") < 1800000)
     {
@@ -60,7 +60,7 @@ int do_cancel1()
 {
     object me;
     object guai;
-    int tt;
+
 
     me = this_player();
 
