@@ -1056,3 +1056,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 ## 深度功能测试（§10.7，2026-10-06）— 编译警告整理，迷宫怪物武器路径
 
 `scripts/lpc_warnings.py hymud --fix`（无用局部变量、`nosave` 函数、`varargs`、转义等）改动 5551 个 `.lpc` 和 50 个头文件；本库 58882 个文件，一次 VM 编译全部会耗尽内存，第二轮扫描没有完成，只提交第一轮。与 `hy5` 同代码的修复照搬过来（`scripts/lpc_twin_port.py adopt hy5 hymud`）：`quest/shenshu/npc/man2.lpc`、`man.lpc` 重复的全局变量和 `kill_ob` 返回类型，`d/pingan/shenzhen/npc/shenyi.lpc`。`d/migong/romnpc.lpc`、`romnpc2.lpc`、`romnpcboss.lpc`：迷宫怪物随机武器拼的是 `/p/item/ritemtz3/wsword` + `random(10)`，档案里的文件是 `Wsword0.lpc`（Windows 下不分大小写），`carry_object()` 返回 0 再 `->wield()` 就让怪物 `create()` 失败；改为大写前缀并在 `wield()` 前检查（与 `hy5` 相同）。验证：改动过的文件与包含改动头文件的文件共 17236 个，HEAD 与工作树分别分批加载（新进程，每批 700 个）：17104 -> 17169 通过，无回退，新增 65 个可加载；`scripts/lpc_audit_removed_locals.py HEAD` 的 60 条候选都是声明被重建。启动时警告 328 -> 0。
+
+## 深度功能测试（§10.7，2026-10-07）— 郭靖任务的名单被覆盖
+
+`quest/guojob/guo.lpc` 先后 `#include "zzzjob.lpc"` 和 `"teamjob.lpc"`，两个文件都声明全局 `mixed names`、内容不同（`Redeclaration of global variable 'names'`），后包含的 teamjob 名单覆盖了 zzzjob 的，"保护"任务的目标其实从 teamjob 的名单里抽。teamjob 的表改名 `team_names`（KB 04 §6.10）。`guo.lpc` 在 HEAD 与工作树分别加载（新进程）通过。
