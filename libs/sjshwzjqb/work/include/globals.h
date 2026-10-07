@@ -4,7 +4,6 @@
 // This file is #included in all objects automatically by the driver.
 // (See config file of driver)
 
-#pragma save_binary
 
 #define DRUG_D(x)               ("/clone/drug/" + x)
 #define HERB_D(x)               ("/clone/herb/" + x)
