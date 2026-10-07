@@ -719,3 +719,14 @@ Same typo `nitan_san`/`nitan3` already live-verified. Corrected (LF-only).
 
 房间基类 `inherit/room/room.lpc`：`make_inventory()` 用 `catch()` 包住 `new(file)`，做不出来就返回 0；`reset()` 的 `case 1:` 拿到 0 就跳过这一项（`if (!objectp(ob[list[i]])) break;`）。档案里没有的 NPC 或物品（或 `create()` 出错的物件）原先会让列出它的房间整个加载失败（`Bad argument 1 to environment()`，或对 0 的 `call_other()`），连带这个房间后面的区域；现在房间照常加载，只是少了那个物件，下次 `reset()` 再试（KB 05 §7.25；`scripts/lpc_resilient_room.py`、`scripts/lpc_room_reset_guard.py`）。
 验证：探针（`scripts/lpc_room_reset_probe.py`：房间基类列出一个不存在的物件，再调用 `reset()`）HEAD 单件 崩溃、多件 崩溃，工作树 单件 OK、多件 OK。
+
+## 深度功能测试（§10.7，2026-10-06）— 编译警告整理
+
+`scripts/lpc_warnings.py nitan_ceshi --fix`：无用局部变量 2359 个、`varargs` 70 处、转义 36 处、裸 `return` 2 处、`nosave` 函数 14 个改 `protected`，共改动 1302 个 `.lpc` 和若干 `.h`。HEAD 与工作树分别加载（新进程）：1288 -> 1288 通过，无回退；改过的头文件的 294 个包含者 293 -> 293 通过。`scripts/lpc_audit_removed_locals.py HEAD` 的 72 条候选都是声明被重建（同一行剩下的变量还在）或同名 efun。
+手工（与 zhonghua2 同源的几处见那边的 NOTES）：
+- `include/npc/indian.lpc` 与 `masia.lpc` 共用全局名 `ma_sname`/`ma_pname`，印度名表覆盖马来名表；印度表改名 `in_sname`/`in_pname`。
+- `clone/drug/fengdong.lpc` `max1 / 2;` -> `max1 /= 2;`；`cmds/std/team/swear.lpc`、`bunch.lpc` 结义失败提示被多余的 `;` 截断，接回去。
+- `adm/daemons/logind.lpc`、`fingerd.lpc`：只在 `#ifdef DB_SAVE`（本库 `include/ntsql.h` 里 `#undef`）或 `#ifndef NO_FEE`（`logind.lpc` 自己 `#define NO_FEE`）分支里用的局部变量，声明挪进同样的条件里。顺带：`check_ok()` 的收费分支引用了未声明的 `onl`，只在去掉 `NO_FEE` 时才会编译到，未动。
+- `adm/daemons/natured.lpc` 删去空语句 `lt[LT_MON];`；`adm/daemons/questd.lpc` 最后一个空的 `else if ((total_count % 10) == 0) { /* … */ }` 改成注释；`adm/daemons/combatd.lpc` 删去空语句 `your_temp["guarding"];`；`d/jingzhou/luan2.lpc`、`d/lingjiu/men2.lpc` 删去 `return` 后面那行永远执行不到的 `"\n";`；`adm/daemons/network/dns_master.lpc` 把 `#if PREF_* & SVC_TCP` 移到 `if` 外面；`clone/obj/genmap.lpc`、`traverser.lpc`、`kungfu/skill/linji-zhuang/youming.lpc` 的空 `DEBUG` 宏改成调用空函数 `debug_off()`；`adm/daemons/backupd.lpc` 注释里的 `"enchase/*jewel1*"` 写成 `"enchase/" + "*jewel1*"`，不再触发"注释里有 `/*`"。以上都不改变行为。
+
+启动时警告 132 -> 0；新进程登录（标题画面、编码选择、新人物确认）正常。

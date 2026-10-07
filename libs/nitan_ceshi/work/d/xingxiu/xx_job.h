@@ -28,7 +28,7 @@ int do_search(string arg) {
 
 	object bug, me, fighter, room, gold, ob;
 
-	int kar1, kar2, kar3, pot, max_pot, damage, find;	
+	int kar1, kar2, kar3, damage, find;	
 
 	me=this_player();
 

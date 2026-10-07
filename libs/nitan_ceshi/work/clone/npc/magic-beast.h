@@ -270,7 +270,6 @@ void init()
 int do_modify(string arg)
 {
         string item, msg;
-        object me = this_player();
         if(!arg || sscanf(arg,"%s %s",item,msg) != 2)
         return notify_fail("SYNTAX: modify 款项 内容\n");
         if(item == "flee")
@@ -398,7 +397,6 @@ string status_color(int current, int max)
 int do_shape(string arg)
 {        
         mapping my;
-        string shape;
         mixed at_pt, pa_pt, do_pt;
         
         my = query_entire_dbase();
@@ -748,8 +746,7 @@ int accept_object(object me, object ob)
 
 void die()
 {        
-        int i;
-        object owner, *enemy;
+        object owner;
         int jing, qi;
         mixed exp;
 
@@ -863,7 +860,6 @@ int receive_dbase_data(mixed data)
 mixed save_dbase_data()
 {
         mapping data;
-        object  user;
 
         data = ([ ]);
         
