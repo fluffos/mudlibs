@@ -542,3 +542,10 @@ individually live-boot-tested.
 `scripts/lpc_dynamic_rows.py`：`d/obj/quest/dynamic_location`、`d/obj/quest/dynamic_quest` 里 279 行写的是原档案的 `.c` 路径。转档时文件已改名 `.lpc`，而显式后缀按原样解析，`load_object("/d/x.c")`、`new("/d/obj/quest/x.c")` 返回 0 且不报错（KB 03 §4.2，KB 06 §7.220），所以 `adm/daemons/questd.lpc` 读到的每一行都加载不出来：随机任务和任务物品从未生成，在 `create()` 里直接对结果调用 `tar->set()` 的版本还会崩溃，连带加载它的 cron 守护进程和 `give` 的任务钩子。这些行已改为 `.lpc`；另有 4 行指向的文件两种后缀都不存在（档案缺内容），保持原样。
 `scripts/lpc_dynamic_quest_guard.py`：1 处 `spread_quest()` 调用（`init_dynamic_quest()` 的循环里）包进 `catch()`，缺失的任务物品或编译不过的房间只跳过那一个任务，守护进程照常加载、其余任务照常生成。
 验证：`adm/daemons/questd.lpc`和 cron 守护进程在新进程里加载（HEAD 一次，工作树三次，选房是随机的）：HEAD 通过 2 个，工作树三次分别通过 2、2、2 个（共 2 个），无回退。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py xlqyzdb --fix` 加 `scripts/lpc_fix_no_effect.py --apply`（`daemon/skill/xuanyuan-archery.lpc` 删去什么也不做的 `(: throw_weapon :);`），共改动 753 个 `.lpc` 和若干 `.h`。HEAD 与工作树分别加载（新进程）：734 -> 734 通过，无回退；改过的头文件的 296 个包含者 292 -> 292 通过。
+未动：`adm/daemons/loggind.lpc` 是 `logind.lpc` 的旧副本（`else if {` 语法错误，`LOGIN_D` 指的是 `logind`）；`cmds/arch/full.lpc` 连写两个 `else`；`d/city/npc/vikee.canoe.lpc` 把 `case` 写成 `cast`——都是 HEAD 起就编译不过、没人引用的文件。
+
+启动时警告 48 -> 0；新进程登录（编码选择、新人物提问）正常。

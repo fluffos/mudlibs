@@ -7,7 +7,7 @@
 int give_item(object player,int lucky)
 {
 	string* item_file_name = get_dir(ITEM_PATH);
-	int item_file_number=sizeof(item_file_name),temp;
+	int item_file_number=sizeof(item_file_name);
 	object item;
 
 
