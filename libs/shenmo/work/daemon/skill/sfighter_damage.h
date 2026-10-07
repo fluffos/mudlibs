@@ -1,7 +1,7 @@
 
 mixed hit_ob(object me, object victim, int damage_bonus)
 {
-        int mylvl,tlvl,i,j,k;
+        int mylvl, tlvl, i, j;
         string msg,msgcol;
         object tweapon,target;
         target=victim;

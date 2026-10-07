@@ -35,7 +35,7 @@ int do_wancheng(string arg)
 {
         string ttime; 
         object me, target;
-        int exp,pot,gfjob_times,now_time,pot_reward,exp_reward;
+        int exp, gfjob_times, now_time, pot_reward, exp_reward;
 
         if(!arg) return notify_fail("[官府]:你要干什么？\n");
         me = this_player();

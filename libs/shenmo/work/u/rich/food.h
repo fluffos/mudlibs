@@ -1,7 +1,7 @@
 int do_food (string arg)
 {
-int i,rev,exp;
-string title,name,msg,sx,id,id2,add_sx;
+int i, exp;
+string title, name, msg, id, id2, add_sx;
 object hs,shuijing,me;
 hs = this_object();
 me = this_player();

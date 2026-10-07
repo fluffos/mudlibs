@@ -310,7 +310,7 @@ void copy_status(object me,object ob,int lv)
 {
         //这里的lv 取值是1或者2。
         //第二次和第三次的叛徒势力是一样的。
-        int j, lvl;
+        int lvl;
         int base=5;
         int max_sk;
         mapping skill=ob->query_skills();

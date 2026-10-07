@@ -373,9 +373,6 @@ mapping lion     = ([ "name"  :  "狮"     ,  "id"   :  "lion"     ,
 void check_hs(object ob)
 { 
     mapping att=ob->query("att");
-    mapping skill_status;
-    string *skills;
-    int i,j;
     
     ob->set("name",att["hs_name"]);
     ob->set("id",att["id"]+" "+att["hs_id"]);

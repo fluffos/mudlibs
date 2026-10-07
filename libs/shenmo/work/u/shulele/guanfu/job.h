@@ -12,7 +12,7 @@ int do_jie(string arg)
 {
     object me, ob, wsh;
     mapping weizhis, target;
-    int exp, position;
+    int exp;
     me = this_player();
     exp = (int)me->query("combat_exp");
 

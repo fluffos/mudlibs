@@ -92,7 +92,7 @@ return 1;
 
 int do_attack5(object me,object target,int damage,int ap,int dp)
 {
-object weapon;  
+  
 if ( !me || !target || !me->is_fighting(target) )
         return 0;
 if ( !me->query("env/no_msg") && !target->query("env/no_msg") )               
@@ -116,7 +116,7 @@ return 1;
 
 int do_attack6(object me,object target,int damage,int ap,int dp)
 {
-object weapon;  
+  
 if ( !me || !target || !me->is_fighting(target) )
         return 0;
 if ( !me->query("env/no_msg") && !target->query("env/no_msg") )
@@ -139,7 +139,7 @@ return 1;
 
 int do_attack7(object me,object target,int damage,int ap,int dp)
 {
-object weapon;  
+  
 if ( !me || !target || !me->is_fighting(target) )
         return 0;
 if ( !me->query("env/no_msg") && !target->query("env/no_msg") )
@@ -164,7 +164,7 @@ return 1;
 
 int do_attack8(object me,object target,int damage,int ap,int dp)
 {
-object weapon;  
+  
 if ( !me || !target || !me->is_fighting(target) )
         return 0;
 if ( !me->query("env/no_msg") && !target->query("env/no_msg") )
@@ -191,7 +191,7 @@ return 1;
 
 int do_attack9(object me,object target,int damage,int ap,int dp)
 {
-object weapon;  
+  
 if ( !me || !target || !me->is_fighting(target) )
         return 0;
 if ( target->is_busy() )
@@ -223,7 +223,7 @@ return 1;
 
 int do_attack10(object me,object target,int damage,int ap,int dp)
 {
-object weapon;  
+  
 int i;
 if ( !me || !target || !me->is_fighting(target) )
         return 0;

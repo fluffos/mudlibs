@@ -297,7 +297,7 @@ void copy_status(object me,object ob,int lv)
 {
         //这里的lv 取值是1、2、3，依次增加。
 
-    int j, lvl;
+    int lvl;
     int base=10;
     int max_sk;
     mapping skill=ob->query_skills();

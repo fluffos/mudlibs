@@ -172,8 +172,6 @@ return;
 
 void bianshen(object ob,object env)
 {
-object player,where,*who;
-int i;
 if ( ob->query("变身") || !living(ob) ) return;
 if ( !present(ob,env) ) return;
 

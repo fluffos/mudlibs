@@ -41,7 +41,6 @@ int do_wear (string arg)
 {
 object me = this_player();
 object jia = this_object();
-string name = jia->query("name");
 string msg;
 
 if ( !present(jia,me) )				//不在身上 

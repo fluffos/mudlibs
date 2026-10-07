@@ -44,7 +44,6 @@ int do_cast(string arg) {
 }
 int valid_leave(object me, string dir)
 {
-  object ob;
   if(me->query_temp("husong_rob") )
     { 
       tell_object(me,HIR"强盗在逃亡,我们得快快寻找.\n"NOR);

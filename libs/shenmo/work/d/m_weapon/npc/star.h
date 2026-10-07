@@ -21,7 +21,7 @@ return;
 
 void kill_ob(object me)
 {
-int damage, lvl, r_lvl,skill, i;
+int lvl, r_lvl, i;
 object ob=this_object();
     
 if ( !me || !present(me,environment()) 

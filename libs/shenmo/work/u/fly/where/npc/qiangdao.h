@@ -196,7 +196,7 @@ void dest()
 void copy_status(object me,object ob,int lv)
 {
       
-        int j, lvl;
+        int lvl;
         int base=5;
         int max_sk;
         mapping skill=ob->query_skills();

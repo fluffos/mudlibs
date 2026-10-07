@@ -1,6 +1,5 @@
 // file: globals.h
 
-#pragma save_binary
 
 #define crypt oldcrypt
 

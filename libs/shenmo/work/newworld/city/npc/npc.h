@@ -2,7 +2,7 @@
 
 void die()
 {
-int exp,lvl,pot,up,i,j,k;
+int exp, lvl, pot, up, i;
 mapping skills;
 object obj;
 object ob = this_object();

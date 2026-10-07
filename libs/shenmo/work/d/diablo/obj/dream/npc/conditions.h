@@ -14,9 +14,8 @@ else return 0;
 
 void taishi_condition(object me,object hs) 
 {
-string msg,sx;
-object target;
-int ap,dp,qz,mj,ll,jl,lvl,time,spells_time,add_armor,add_dodge,add_kee,add_sen,add_spells,add_damage,i;
+string sx;
+int qz, mj, ll, jl, lvl, time, add_armor, add_dodge, add_kee, add_sen;
 qz=hs->query("qz"); //强壮 影响所加气血
 mj=hs->query("mj"); //敏捷 影响所加防御
 ll=hs->query("ll"); //力量 影响物理攻击
@@ -65,9 +64,8 @@ call_out("taishi_condition",2+random(3),me,hs);
 
 void taichu_condition(object me,object hs) 
 {
-string msg,sx;
-object target;
-int ap,dp,qz,mj,ll,jl,lvl,time,spells_time,add_armor,add_dodge,add_kee,add_sen,add_spells,add_damage,i;
+string sx;
+int qz, mj, ll, jl, lvl, time, add_armor, add_dodge, add_spells, add_damage;
 qz=hs->query("qz"); //强壮 影响所加气血
 mj=hs->query("mj"); //敏捷 影响所加防御
 ll=hs->query("ll"); //力量 影响物理攻击
@@ -213,7 +211,7 @@ void huo_condition(object me,object hs) //火 eff_kee,eff_sen
 {
 string msg,sx;
 object target;
-int ap,dp,qz,mj,ll,jl,lvl,time,spells_time,damage;
+int ap, dp, qz, mj, ll, jl, lvl, time, damage;
 qz=hs->query("qz"); //强壮 影响所加气血
 mj=hs->query("mj"); //敏捷 影响所加防御
 ll=hs->query("ll"); //力量 影响物理攻击
@@ -266,7 +264,7 @@ void lei_condition(object me,object hs) //雷 kee eff_kee eff_sen
 {
 string msg,sx;
 object target;
-int ap,dp,qz,mj,ll,jl,lvl,time,spells_time,damage,i;
+int ap, dp, qz, mj, ll, jl, lvl, time, damage;
 qz=hs->query("qz"); //强壮 影响所加气血
 mj=hs->query("mj"); //敏捷 影响所加防御
 ll=hs->query("ll"); //力量 影响物理攻击
@@ -318,7 +316,7 @@ call_out("huanyuan",time,me,hs);
 void shui_condition(object me,object hs) // 水,busy kee,sen
 {
 string msg,sx;
-int ap,dp,qz,mj,ll,jl,lvl,time,spells_time,add_kee,add_sen;
+int qz, jl, lvl, time, add_kee, add_sen;
 qz=hs->query("qz"); //强壮 影响所加气血
 jl=hs->query("jl"); //精力 影响法术攻击
 lvl=hs->query("lvl"); //等级
@@ -354,7 +352,7 @@ call_out("shui_condition",2+random(3),me,hs);
 void light_condition(object me,object hs) // 光 kee,sen
 {
 string msg,sx;
-int ap,dp,qz,mj,ll,jl,lvl,time,spells_time,add_kee,add_sen;
+int qz, jl, lvl, time, add_kee, add_sen;
 qz=hs->query("qz"); //强壮 影响所加气血
 jl=hs->query("jl"); //精力 影响法术攻击
 lvl=hs->query("lvl"); //等级
@@ -393,7 +391,7 @@ void dark_condition(object me,object hs) //暗黑 pfm
 {
 string msg,sx;
 object target;
-int ap,dp,qz,mj,ll,jl,lvl,time,spells_time,damage,i;
+int ap, dp, qz, ll, jl, lvl, time, spells_time, i;
 ll=hs->query("ll"); //力量 影响物理攻击
 jl=hs->query("jl"); //精力 影响法术攻击
 lvl=hs->query("lvl"); //等级

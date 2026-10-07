@@ -81,7 +81,6 @@ return 1;
 int do_kill(string arg)
 {
 object ob,me,env;
-int mypot,hispot;
 me=this_player();
 env=this_object();
 
@@ -145,7 +144,7 @@ void alternative_die (object me)
 {
 int i,value=80000;
 string *limbs,msg,str,prefix,s1,s2,*lost_msg,*win_msg;
-string my_name,his_name,limb;
+string limb;
 object weapon,env;
 object ob = me->query_temp("last_damage_from");
 env = this_object();

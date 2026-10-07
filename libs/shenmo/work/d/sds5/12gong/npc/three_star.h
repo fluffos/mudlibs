@@ -73,7 +73,7 @@ return 0;
 
 void die_sp(object me,object ob)
 {
-object npc,where;
+object where;
 string title = WHT"【"NOR HIB"圣战"NOR HIY"十二宫"NOR HIB"之卷"NOR WHT"】"NOR;
 
 if ( !me || !ob || environment(me)!=environment(ob) )
@@ -102,7 +102,7 @@ return;
 
 void die_sz(object me,object ob)
 {
-object npc,where;
+object where;
 string title = WHT"【"NOR HIB"圣战"NOR HIY"十二宫"NOR HIB"之卷"NOR WHT"】"NOR;
 
 if ( !me || !ob || environment(me)!=environment(ob) )
@@ -130,7 +130,7 @@ return;
 
 void die_sy(object me,object ob)
 {
-object npc,where;
+object where;
 string title = WHT"【"NOR HIB"圣战"NOR HIY"十二宫"NOR HIB"之卷"NOR WHT"】"NOR;
 
 if ( !me || !ob || environment(me)!=environment(ob) )
@@ -161,7 +161,6 @@ void die()
 string name;
 object ob = this_object();
 object me = ob->query_temp("last_opponent");
-object where = environment(ob);
 powerup();
 if ( !me || !present(me,environment(ob)) )
 	return;
