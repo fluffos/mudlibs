@@ -765,3 +765,10 @@ files (LF-only). `qingcheng/yu.lpc` is not in this tree.
 - `clone/drug/fengdong.lpc`：`if (... < 10000) max1 / 2;` 是空语句，改成 `max1 /= 2;`（经验不足一万的对手，分身技能减半）。
 
 验证：改动的文件和包含 `npc/indian` 的守护进程在 HEAD 与工作树分别加载（`scripts/lpc_listcheck.sh`，新进程），无回退。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+先用 `scripts/lpc_twin_port.py adopt nitan_ceshi nitan_san` 把 nitan_ceshi 警告整理提交（ae7fbb619a5）里的改动搬到 1016 个修改前与它一致的文件（逐文件核对非 ASCII 文字：除 nitan_ceshi 自己删掉的以外没有丢失或改动），再用 `scripts/lpc_nitan_family_fixes.py nitan_san`（`clone/obj/traverser.lpc` 的空 `DEBUG` 宏改成调用空函数；`adm/daemons/questd.lpc` 最后一个空的 `else if ((total_count % 10) == 0) { /* … */ }` 改成注释）。剩下的再跑 `scripts/lpc_warnings.py nitan_san --fix`，共改动 1023 个 `.lpc` 和若干 `.h`。以上都不改变行为。
+HEAD 与工作树分别加载（新进程）：1008 -> 1008 通过，无回退；改过的头文件的 260 个包含者 257 -> 257 通过。
+
+启动时警告 67 -> 0；新进程登录正常。
