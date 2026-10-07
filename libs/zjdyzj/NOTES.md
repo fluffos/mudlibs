@@ -876,3 +876,10 @@ back to their pre-test committed contents.
 - `cmds/std/team/swear.lpc`：结义失败提示被多余的 `;` 截成两句，`fail` 只剩"……可惜现在有人不在，$N"，后半句"的提议只好作罢。"丢了；接回去。
 
 验证：改动的文件和包含 `npc/indian` 的守护进程在 HEAD 与工作树分别加载（`scripts/lpc_listcheck.sh`，新进程），无回退。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py zjdyzj --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 538 个 `.lpc` 和若干 `.h`。HEAD 与工作树分别加载（新进程）：536 -> 536 通过，无回退；改过的头文件的 128 个包含者 127 -> 127 通过。
+手工（与 zjmudhell 相同）：28 处 `Illegal to declare nosave function`——`include/globals.h` 的 `#define nosave nosave` 让扫描工具认不出这个关键字，手工改成 `protected`（这些函数只被本对象回调或驱动程序调用）；`adm/daemons/natured.lpc` 的空语句 `lt[LT_MON];`、`adm/daemons/test.lpc` 的空语句 `your_temp["guarding"];` 删去。都不改变行为。
+
+启动时警告 55 -> 0。新进程登录画面正常；普通 telnet 输入名字后答"客户端非法"——指间 MUD 的客户端握手（KB 01 §1.7），HEAD 也一样。
