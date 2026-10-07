@@ -214,3 +214,11 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply s
 - `cmds/std/team/swear.lpc`：结义失败提示被多余的 `;` 截成两句，`fail` 只剩"……可惜现在有人不在，$N"，后半句"的提议只好作罢。"丢了；接回去。
 
 验证：改动的文件和包含 `npc/indian` 的守护进程在 HEAD 与工作树分别加载（`scripts/lpc_listcheck.sh`，新进程），无回退。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+先用 `scripts/lpc_twin_port.py adopt sjsh sjshv150` 把 sjsh 警告整理提交里的改动搬到 489 个修改前与它一致的文件（159 个按块拼接；逐文件核对非 ASCII 文字：除 sjsh 自己删掉的以外没有丢失或改动）。剩下的再跑 `scripts/lpc_warnings.py sjshv150 --fix`：无用局部变量 1481 个、`varargs` 47 处、转义 23 处、`nosave` 函数 14 个改 `protected`；`scripts/lpc_fix_no_effect.py --apply`：两份 `xuanyuan-archery.lpc` 删去 `(: throw_weapon :);`，`dns_master.lpc` 把 `#if PREF_* & SVC_TCP` 移到 `if` 外面。共改动 1142 个 `.lpc` 和若干 `.h`。
+手工：`adm/daemons/natured.lpc` 删去空语句 `lt[LT_MON];`；`adm/daemons/securityd.lpc` 的 `valid_write()`、`valid_grant()` 删去没用到的 `string ip = query_ip_number(...)`（`valid_write()` 的 `user` 也可能是字符串，那时这句本身就会出错）；`adm/daemons/logind.lpc` `get_id()` 删去没用到的 `*usr = children(USER_OB)`。
+HEAD 与工作树分别加载（新进程）：1103 -> 1103 通过，无回退；改过的头文件的 348 个包含者 336 -> 336 通过。`d/gumu/npc/zhangmen.lpc` 是编译不过、没人引用的旧稿，未动。
+
+启动时警告 105 -> 0；新进程登录（编码选择、新人物提问）正常。
