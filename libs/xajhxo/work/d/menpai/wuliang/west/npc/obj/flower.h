@@ -20,7 +20,7 @@ varargs void init_sword(int damage, int flag)
         set("weapon_prop/damage", damage);
         set("skill_type", "sword");
         if( !query("actions") ) {
-                set("actions", (: WEAPON_D, "query_action" :) );
+                set("actions", (: call_other, WEAPON_D, "query_action" :) );
                 set("verbs", ({ "slash", "slice", "thrust" }) );
         }
 }

@@ -482,3 +482,7 @@ lpc` 会调用双方 `kill_ob()`，NPC 真实反击），几回合后一次「�
 ## 深度功能测试（§10.7，2026-10-05）— here-document terminators
 
 `scripts/lpc_fix_heredoc_terminator.py --all --apply`: 1 here-document block(s) repaired (1 with the terminator glued to the last text line, 0 with it indented), so `End of file in text block` no longer hides the room or object behind them: `d/city/dali/huating.lpc`. The terminator must start its line (the lexer's own test, KB 04 §6.10); a glued one lost its newline in the GBK -> UTF-8 conversion together with a half character, which stays out.
+
+## 深度功能测试（§10.7，2026-10-07）— 兵器的 `actions` 函数指针
+
+`set("actions", (: WEAPON_D, "query_action" :));`：旧 MudOS 把 `(: 字符串, "函数" :)` 当作 call_other 函数指针，本驱动把它当作表达式函数指针，求值只得到字符串 `"query_action"`。没有对应兵器技能时 `feature/attack.lpc` 直接用兵器的 `actions`，`COMBAT_D` 拿到的不是 mapping，`reset_action()` 后仍不是，记一条 bad action 就不出招——拿着这些兵器打不出攻击。改成别的兵器早已用的 `(: call_other, WEAPON_D, "query_action" :)`（KB 04 §6.10）：`d/menpai/wuliang/west/npc/obj/flower.h`。改动的文件在 HEAD 与工作树分别加载（新进程），无回退。

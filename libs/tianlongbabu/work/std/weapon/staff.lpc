@@ -16,7 +16,7 @@ varargs void init_staff(int damage, int flag)
 	set("flag", (int)flag | LONG );
 	set("skill_type", "staff");
 	if( !query("actions") ) {
-		set("actions", (: WEAPON_D, "query_action" :) );
+		set("actions", (: call_other, WEAPON_D, "query_action" :) );
 		set("verbs", ({ "bash", "crush", "slam" }) );
 	}
 }

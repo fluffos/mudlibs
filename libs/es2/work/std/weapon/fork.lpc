@@ -16,7 +16,7 @@ varargs void init_fork(int damage, int flag)
 	set("flag", (int)flag | POINTED);
 	set("skill_type", "fork");
 	if( !query("actions") ) {
-		set("actions", (: WEAPON_D, "query_action" :) );
+		set("actions", (: call_other, WEAPON_D, "query_action" :) );
 		set("verbs", ({ "thrust" }) );
 	}
 }

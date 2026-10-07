@@ -16,7 +16,7 @@ varargs void init_whip(int damage, int flag)
 	set("flag", flag );
 	set("skill_type", "whip");
 	if( !query("actions") ) {
-		set("actions", (: WEAPON_D, "query_action" :) );
+		set("actions", (: call_other, WEAPON_D, "query_action" :) );
 		set("verbs", ({ "whip" }) );
 	}
 }

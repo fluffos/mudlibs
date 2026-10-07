@@ -22,7 +22,7 @@ void setup()
 
 	set("skill_type", "throwing");
 	if( !query("actions") ) {
-		set("actions", (: WEAPON_D, "query_action" :));
+		set("actions", (: call_other, WEAPON_D, "query_action" :));
 		set("verbs", ({ "throw" }) );
 	}
 }

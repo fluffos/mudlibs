@@ -246,3 +246,7 @@ definition, 2 `#undef` lines for macros that two headers define (`ROOM`, `STORY_
 ## 深度功能测试（§10.7，2026-10-07）— 皇帝的两句话
 
 `d/secret/secret1/npc/king.lpc`：`msg = "……这里是200两黄金。\n";` 后面单独一行 `"爱卿拿去吧。\n";`，`msg = "……去后宫了。\n";` 后面单独一行 `"不过临走之前给了$N一个免死金牌\n";`——多余的 `;` 把消息截成两句，后半句从来没显示过。2026-10-05 的警告整理（a68352ca1f6）把这两行当作无用语句删了；现在接回 `msg` 上。新进程加载通过。
+
+## 深度功能测试（§10.7，2026-10-07）— 兵器的 `actions` 函数指针
+
+`set("actions", (: WEAPON_D, "query_action" :));`：旧 MudOS 把 `(: 字符串, "函数" :)` 当作 call_other 函数指针，本驱动把它当作表达式函数指针，求值只得到字符串 `"query_action"`。没有对应兵器技能时 `feature/attack.lpc` 直接用兵器的 `actions`，`COMBAT_D` 拿到的不是 mapping，`reset_action()` 后仍不是，记一条 bad action 就不出招——拿着这些兵器打不出攻击。改成别的兵器早已用的 `(: call_other, WEAPON_D, "query_action" :)`（KB 04 §6.10）：`d/npc/m_weapon/weapon/m_club.lpc`、`d/npc/m_weapon/weapon/m_blade.lpc`、`d/npc/m_weapon/weapon/m_whip.lpc`、`d/npc/m_weapon/weapon/m_sword.lpc`、`d/npc/m_weapon/weapon/m_staff.lpc`。改动的文件在 HEAD 与工作树分别加载（新进程），无回退。

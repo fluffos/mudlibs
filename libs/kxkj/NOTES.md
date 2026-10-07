@@ -997,3 +997,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply k
 ## 深度功能测试（§10.7，2026-10-05）— tail() simul_efun
 
 `scripts/lpc_add_tail.py --apply`: `cmds/apr/tail.lpc` calls `tail(file)`, an efun of the MudOS this archive ran on that FluffOS does not have (`Undefined function tail`: the command did not compile). `adm/simul_efun/file.lpc` now defines `void tail(string file)`: the last 10 lines of the file, written to the player. Load check (HEAD against the working tree): 1 of the 1 tail command file(s) failed to load at HEAD, all load now, and the simul_efun file loads. KB 04 §6.2.
+
+## 深度功能测试（§10.7，2026-10-07）— 兵器的 `actions` 函数指针
+
+`set("actions", (: WEAPON_D, "query_action" :));`：旧 MudOS 把 `(: 字符串, "函数" :)` 当作 call_other 函数指针，本驱动把它当作表达式函数指针，求值只得到字符串 `"query_action"`。没有对应兵器技能时 `feature/attack.lpc` 直接用兵器的 `actions`，`COMBAT_D` 拿到的不是 mapping，`reset_action()` 后仍不是，记一条 bad action 就不出招——拿着这些兵器打不出攻击。改成别的兵器早已用的 `(: call_other, WEAPON_D, "query_action" :)`（KB 04 §6.10）：`std/weapon/throwing.lpc`、`std/weapon/stick.lpc`、`std/weapon/whip.lpc`、`std/weapon/sword.lpc`、`std/weapon/lance.lpc`、`std/weapon/arrow.lpc`、等共 13 个。改动的文件在 HEAD 与工作树分别加载（新进程），无回退。

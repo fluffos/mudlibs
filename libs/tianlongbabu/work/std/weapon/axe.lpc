@@ -16,7 +16,7 @@ varargs void init_axe(int damage, int flag)
 	set("flag", (int)flag | EDGED);
 	set("skill_type", "axe");
 	if( !query("actions") ) {
-		set("actions", (: WEAPON_D, "query_action" :) );
+		set("actions", (: call_other, WEAPON_D, "query_action" :) );
 		set("verbs", ({ "chop", "slice", "hack" }) );
 	}
 }

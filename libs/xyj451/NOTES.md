@@ -249,3 +249,7 @@ single-file compile check (PASS). Part of the corpus-wide §7.19 sweep
 ## 深度功能测试（§10.7，2026-10-07）— 空的 `if (current_water == 0) {}`
 
 3 个房间的 `valid_leave()` 里有一行什么也不做的 `if (current_water == 0) {}`（编译警告 `Expression has no side effects`），删去，行为不变：`d/suburb/xkx/xingxiu/nanjiang2.lpc`、`d/suburb/xkx/xingxiu/nanjiang3.lpc`、`d/suburb/xkx/xingxiu/shanjiao.lpc`。
+
+## 深度功能测试（§10.7，2026-10-07）— 兵器的 `actions` 函数指针
+
+`set("actions", (: WEAPON_D, "query_action" :));`：旧 MudOS 把 `(: 字符串, "函数" :)` 当作 call_other 函数指针，本驱动把它当作表达式函数指针，求值只得到字符串 `"query_action"`。没有对应兵器技能时 `feature/attack.lpc` 直接用兵器的 `actions`，`COMBAT_D` 拿到的不是 mapping，`reset_action()` 后仍不是，记一条 bad action 就不出招——拿着这些兵器打不出攻击。改成别的兵器早已用的 `(: call_other, WEAPON_D, "query_action" :)`（KB 04 §6.10）：`d/obj/inherit/weapon/throwing.lpc`、`d/obj/inherit/weapon/fork.lpc`、`d/obj/inherit/weapon/whip.lpc`、`d/obj/inherit/weapon/sword.lpc`、`d/obj/inherit/weapon/axe.lpc`、`d/obj/inherit/weapon/blade.lpc`、等共 9 个。改动的文件在 HEAD 与工作树分别加载（新进程），无回退。
