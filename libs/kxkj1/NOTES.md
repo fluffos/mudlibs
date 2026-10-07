@@ -829,3 +829,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply k
 ## 深度功能测试（§10.7，2026-10-07）— 兵器的 `actions` 函数指针
 
 `set("actions", (: WEAPON_D, "query_action" :));`：旧 MudOS 把 `(: 字符串, "函数" :)` 当作 call_other 函数指针，本驱动把它当作表达式函数指针，求值只得到字符串 `"query_action"`。没有对应兵器技能时 `feature/attack.lpc` 直接用兵器的 `actions`，`COMBAT_D` 拿到的不是 mapping，`reset_action()` 后仍不是，记一条 bad action 就不出招——拿着这些兵器打不出攻击。改成别的兵器早已用的 `(: call_other, WEAPON_D, "query_action" :)`（KB 04 §6.10）：`std/weapon/throwing.lpc`、`std/weapon/stick.lpc`、`std/weapon/whip.lpc`、`std/weapon/sword.lpc`、`std/weapon/stabber.lpc`、`std/weapon/axe.lpc`、等共 11 个。改动的文件在 HEAD 与工作树分别加载（新进程），无回退。
+
+## 深度功能测试（§10.7，2026-10-07）— 兵器的 `actions` 函数指针
+
+`open/poison/obj/esword.lpc`：`(: __FILE__, "query_action" :)` 改成 `(: call_other, __FILE__, "query_action" :)`（与 kxkj 同；`__FILE__` 是字符串，本驱动把原写法当作表达式函数指针，KB 04 §6.10）。这个文件第 28 行的名字被编码弄坏，HEAD 起就编译不过。
