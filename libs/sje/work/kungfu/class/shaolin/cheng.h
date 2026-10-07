@@ -12,8 +12,6 @@ void init() {
 int accept_object(object ob, object obj) {
   object me = this_object();
 
-  mapping my_fam = me->query("family");
-  mapping ob_fam = ob->query("family");
 
   if (obj->query("id") == "tuijian xin3"
     && ob->query_temp("have_letter")) {

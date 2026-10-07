@@ -34,7 +34,7 @@ void init() {
 }
 
 int do_clone(object me, object ob) {
-  int k_qi, k_neili, k_jing;
+  int k_qi, k_jing;
   k_qi = (int)ob->query("max_qi");
   k_jing = (int)ob->query("max_jing");
 

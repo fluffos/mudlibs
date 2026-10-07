@@ -42,9 +42,8 @@ void init() {
 }
 
 int do_clone(object me, object ob) {
-  object weapon;
   mapping killerskill1;
-  int number, k_qi, k_neili, k_jing, i, j, k;
+  int number, k_qi, k_neili, k_jing, j, k;
   string t_force, t_dodge;
   number = (int)ob->query("max_pot");
   number = number - 100;

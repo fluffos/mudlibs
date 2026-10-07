@@ -178,7 +178,6 @@ int ask_sword() {
 
 int accept_object(object who, object ob) {
   object sword, me;
-  mapping fam;
   me = this_object();
   if (!who || environment(who) != environment()) return 0;
   if (!objectp(ob)) return 0;

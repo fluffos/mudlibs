@@ -1,9 +1,6 @@
 int do_walk() {
-  string start_room;
-  string name, weapon;
-  object room;
+  string name;
   object ob;
-  mapping obmap;
   int n;
   int i;
   object *inv;
@@ -177,7 +174,7 @@ mapping *dizhia = ({
 void unconcious() {
   object ob, me;
   mapping dizhis;
-  int exp, nei, nei1;
+  int exp;
 
   ob = this_object();
   dizhis = dizhia[random(sizeof(dizhia))];
@@ -213,7 +210,7 @@ void unconcious() {
 void die() {
   object ob, me;
   mapping dizhis;
-  int exp, nei, nei1;
+  int exp;
 
   ob = this_object();
   dizhis = dizhia[random(sizeof(dizhia))];

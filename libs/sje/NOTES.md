@@ -196,3 +196,13 @@ Century/`adm-single` 形状）**：`adm/simul_efun/file.lpc` 的
 
 房间基类 `inherit/room/room.lpc`：`make_inventory()` 用 `catch()` 包住 `unew(file)`（缺档时它在 simul_efun 里对 0 调用 `query("unique")`），`else` 分支只在确有克隆时才取 `[<1]`；`reset()` 的 `case 1:` 拿到 0 就跳过这一项（`if (!objectp(ob[list[i]])) break;`）。档案里没有的 NPC 或物品（或 `create()` 出错的物件）原先会让列出它的房间整个加载失败（`Bad argument 1 to environment()`，或对 0 的 `call_other()`），连带这个房间后面的区域；现在房间照常加载，只是少了那个物件，下次 `reset()` 再试（KB 05 §7.25；`scripts/lpc_resilient_room.py`、`scripts/lpc_room_reset_guard.py`）。
 验证：探针（`scripts/lpc_room_reset_probe.py`：房间基类列出一个不存在的物件，再调用 `reset()`）HEAD 单件 崩溃、多件 崩溃，工作树 单件 OK、多件 OK；全库 8363 个对象 HEAD 对工作树的加载检查：8216 -> 8235，新增 19 个可加载，无回退。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理；网页版只有巫师能登录
+
+`scripts/lpc_warnings.py sje --fix` 加 `scripts/lpc_fix_no_effect.py --apply`（`d/tiezhang` 三个房间删去 `return` 后面的 `"\n";`），共改动 489 个 `.lpc` 和若干 `.h`。HEAD 与工作树分别加载（新进程）：460 -> 460 通过，无回退；改过的头文件的 122 个包含者 121 -> 121 通过。
+手工：
+- `kungfu/class/shaolin/xuan-du.lpc`（玄度）：`("chat_msg_combat", ({ ... }));` 少了 `set`，只是一个括号表达式，战斗中从不出招；补上 `set`。
+- `adm/daemons/sited.lpc` `is_valid()`：从 127.0.0.1/localhost 来的连线只放巫师身份的 id。上面"WASM 修复摘要"当时把这看作这条血统的安全策略、改用播种巫师账号来测；但网页版每个玩家都从 127.0.0.1 连进来（KB 01 §1.3），结果网页上任何玩家 id（包括新注册）都会被"这个英文名字不能从当前地址登录"挡住，`playable` 名不副实。按 KB 01 §1.3(b) 的标准做法改为回环地址一律放行（本机原生运行时回环地址只能是机器自己）。新进程里用新名字登录已能进入注册流程。
+- 未动：`d/quanzhen/hudi5.lpc` 第 10 行编码损坏，HEAD 起就编译不过。
+
+启动时警告 62 -> 0。

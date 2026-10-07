@@ -10,7 +10,6 @@
 #define SAVE_EXTENSION __SAVE_EXTENSION__ 
 #define save_binary
 #pragma optimize
-#pragma save_binary
 
 // Important directories
 #define private
