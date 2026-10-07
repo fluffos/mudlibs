@@ -4,7 +4,6 @@
 // This file is #included in all objects automatically by the driver.
 // (See config file of driver)
 
-#pragma save_binary
 
 #define JOB_OB(x)		("/d/job/"+x+"/job")
 #define CITY_OB(city,room)      ("/d/"+city+"/"+room)
