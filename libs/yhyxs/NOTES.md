@@ -975,3 +975,10 @@ dbased.o` 的 ID 计数器、管理员 `fluffos` 账号的登录位置/时间戳
 - `cmds/std/swear.lpc`、`cmds/std/team/swear.lpc`：结义失败提示被多余的 `;` 截成两句，`fail` 只剩"……可惜现在有人不在，$N"，后半句"的提议只好作罢。"丢了；接回去。
 
 验证：改动的文件和包含 `npc/indian` 的守护进程在 HEAD 与工作树分别加载（`scripts/lpc_listcheck.sh`，新进程），无回退。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+先用 `scripts/lpc_twin_port.py adopt nitan_ceshi yhyxs` 把 nitan_ceshi 警告整理提交（ae7fbb619a5）里的改动搬到 279 个修改前与它一致的文件（逐文件核对非 ASCII 文字：除 nitan_ceshi 自己删掉的以外没有丢失或改动），再用 `scripts/lpc_nitan_family_fixes.py yhyxs`（`adm/daemons/combatd.lpc` 的空语句 `your_temp["guarding"];`、`d/jingzhou/luan2.lpc` 的死字符串）。剩下的再跑 `scripts/lpc_warnings.py yhyxs --fix` 加 `scripts/lpc_fix_no_effect.py --apply`（`d/tiezhang`、`d/wudu` 几个房间删去 `return` 后面的 `"\n";`），共改动 824 个 `.lpc` 和若干 `.h`。以上都不改变行为。
+HEAD 与工作树分别加载（新进程）：822 -> 822 通过，无回退；改过的头文件的 152 个包含者 151 -> 151 通过。
+
+启动时警告 84 -> 0；新进程登录正常（这个库回应较慢，输入名字后十秒左右才回）。

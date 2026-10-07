@@ -845,3 +845,10 @@ did not re-boot. Still no reachable shop or `bai` path to exercise.
 - `cmds/std/team/swear.lpc`：结义失败提示被多余的 `;` 截成两句，`fail` 只剩"……可惜现在有人不在，$N"，后半句"的提议只好作罢。"丢了；接回去。
 
 验证：改动的文件和包含 `npc/indian` 的守护进程在 HEAD 与工作树分别加载（`scripts/lpc_listcheck.sh`，新进程），无回退。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py zhongjidiyu --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，再用 `scripts/lpc_nitan_family_fixes.py zhongjidiyu`（`adm/daemons/natured.lpc` 的空语句 `lt[LT_MON];`、`adm/daemons/combatd.lpc` 的空语句 `your_temp["guarding"];`），共改动 216 个 `.lpc` 和若干 `.h`，都不改变行为。HEAD 与工作树分别加载（新进程）：199 -> 199 通过，无回退。
+未动：`adm/daemons/cruised.lpc`（跨站漫游守护进程）是编译不过的草稿（`set`、`socket_info` 未定义，`CAHNNEL_D` 拼错），没人加载。
+
+启动时警告 85 -> 0；新进程登录正常。
