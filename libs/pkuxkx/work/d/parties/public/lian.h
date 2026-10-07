@@ -21,7 +21,6 @@ int do_lian(string arg)
 {
     object me=this_player();
     object ob=load_object(__DIR__"biguanchu");
-	object where = environment(me);
 	object weapon,weapon2;
 	string skillname, sname;
 	int skill, skill_basic,times,i,realtimes,bonus;

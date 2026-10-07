@@ -91,7 +91,6 @@ int get_average_user()
 int rebuild()
 {
     object ob=this_object();
-    string family=ob->query("family");
     ob->restore();
     delete("realmap");
     set("short", "石门");

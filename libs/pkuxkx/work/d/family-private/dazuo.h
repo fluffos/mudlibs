@@ -94,7 +94,6 @@ int get_lv()
 {
     object ob=this_object();
     object sm=load_object(__DIR__"shimen");
-    int grade=ob->query("overall_dazuo_tuna_donate");
     int need=sm->get_average_user();
     int result,loss;
     mixed *tm=localtime(time());

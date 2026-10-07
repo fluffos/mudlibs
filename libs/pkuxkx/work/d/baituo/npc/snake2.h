@@ -15,7 +15,6 @@ void init()
 int convert(string arg)
 {
 	object me = this_player();
-	object ob;
 
 	if (arg!="snake" && arg!="she") return 0;
 	if (me->query("family/family_name") != "白驼山") 

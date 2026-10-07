@@ -227,3 +227,10 @@ python3 scripts/mudclient.py 127.0.0.1 40274 --timeout 40 --idle 0.5 \
 
 房间基类 `inherit/room/room.lpc`：`reset()` 的 `default:` 拿到 0 就跳过这一项（`if (!objectp(ob[list[i]][j])) continue;`）。档案里没有的 NPC 或物品（或 `create()` 出错的物件）原先会让列出它的房间整个加载失败（`Bad argument 1 to environment()`，或对 0 的 `call_other()`），连带这个房间后面的区域；现在房间照常加载，只是少了那个物件，下次 `reset()` 再试（KB 05 §7.25；`scripts/lpc_resilient_room.py`、`scripts/lpc_room_reset_guard.py`）。
 验证：探针（`scripts/lpc_room_reset_probe.py`：房间基类列出一个不存在的物件，再调用 `reset()`）HEAD 单件 OK、多件 崩溃，工作树 单件 OK、多件 OK。
+
+## 深度功能测试（§10.7，2026-10-06）— 编译警告整理
+
+`scripts/lpc_warnings.py pkuxkx --fix`（大库单独跑，七轮）：无用局部变量约 5820 个、转义约 150 处、`varargs` 43 处、裸 `return` 6 处、`nosave` 函数 8 个改 `protected`，删去 233 行本驱动不认的 `#pragma save_binary`，共改动 2301 个 `.lpc` 和若干 `.h`。HEAD 与工作树分别加载（新进程）：2086 -> 2086 通过，无回退；改过的头文件的 2333 个包含者 2088 -> 2088 通过。`scripts/lpc_audit_removed_locals.py HEAD` 的 97 条候选都是声明被重建（同一行剩下的变量还在）或同名 efun。
+手工：`include/condition.h` 里的条件表 `cond_def` 被 `feature/condition.lpc`、`feature/damage.lpc`、`feature/name.lpc` 和 `inherit/char/char.lpc` 各包含一份，人物对象里四份同名全局变量（启动时 28 条 `Redeclaration of global variable 'cond_def'`）。表用 `#ifndef CONDITION_NO_TABLE` 包起来；只用 `CND_*` 宏的 `char.lpc`、`name.lpc` 先 `#define CONDITION_NO_TABLE`；`damage.lpc` 判断死因时要读毒的名字，改为调用 `F_CONDITION` 新增的 `query_condition_def(cnd)`。`kungfu/condition/*.lpc` 各自独立编译，仍各带一份表。
+
+启动时警告 191 -> 0；新进程登录（标题画面、英文名、新人物确认）正常。

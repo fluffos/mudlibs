@@ -17,7 +17,7 @@ string * s_zihuaid=({"lanting xu","kuaixue tie","songzi tu",});
 int * s_zihuavalue=({2700000,1900000,1750000,});
 int get_level(object ob)
 {
-    int n,i;
+    int n;
     if (ob->query("guwan"))
     {
         n=random(sizeof(guwanlist));

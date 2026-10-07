@@ -89,7 +89,6 @@ int get_lv()
 {
     object ob=this_object();
     object sm=load_object(__DIR__"shimen");
-    int grade=ob->query("overall_xiulian_donate");
     int need=sm->get_average_user();
     int result,loss;
     mixed *tm=localtime(time());
@@ -216,7 +215,7 @@ int do_xiulian(object me)
     string skill;
     int my_skill;
     int my_con;
-    int imp_skill,bonus;
+    int bonus;
     object ob=this_object();
     my_con=(int)me->query("con")/2+(int)me->query("int")/2+5;
     if (my_con >=40) my_con=40;

@@ -8,7 +8,7 @@ void init()
 	renew(this_player());
 }
 
-void interrupt_me(object me)
+varargs void interrupt_me(object me)
 {
 	object ob=this_object();
 	if (!ob->query("interrupt_busy")) return;
@@ -42,7 +42,6 @@ void killall()
 
 void renew(object me)
 {
-	mapping hp_status, skill_status, map_status, prepare_status;
 	int exp, level;
 	object ob = this_object();
 	ob->start_busy(0);

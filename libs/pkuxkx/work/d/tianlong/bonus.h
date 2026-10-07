@@ -57,7 +57,7 @@ string completeness(object me)
 
 int bonus(object me)
 {
-	int exp,pot,rep,score,neili,jingli,n;
+	int exp, pot, rep, score, neili, jingli;
 	string percent;
 	exp=CalcResult(me,"bonus","exp");
 	pot=CalcResult(me,"bonus","pot");

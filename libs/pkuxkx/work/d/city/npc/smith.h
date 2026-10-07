@@ -27,14 +27,12 @@ int check()
 
 int ask_here()
 {
-	object env = environment(this_object());
 	message_vision("$N回答$n：“我只是个小小铁匠，没有名字，至于我家老板嘛，就是大名鼎鼎的"+this_object()->query("boss_name")+"("+this_object()->query("boss_id")+")了！”\n",this_object(),this_player());
 	return 1;
 }
 
 int ask_buy()
 {
-	object env = environment(this_object());
 	object me = this_player(), ob = this_object();
 	message_vision("$N对$n说道：“你想盘下这间铁铺？真有眼光！实话告诉你，这间铺子是只赚不赔！\n“不过嘛，我看你的锻造术也忒低了点儿，还是练好了手艺再来吧！”\n",ob,me);
 	return 1;
@@ -279,7 +277,7 @@ void forge(string arg)
 
 void add_equip(string arg)
 {
-	object item, ob, auxiliary, *inv;
+	object item, ob, *inv;
 	object env = environment(this_object());
 	object me=this_object();
   int i, j, capacity, bonus,count=0;

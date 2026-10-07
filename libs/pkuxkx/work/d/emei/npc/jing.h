@@ -62,7 +62,6 @@ int ask_job()
 int ask_finish()
 {
     object me=this_player();
-    object ob=this_object();
     object jing;
     if (!me->query_temp("emnewbiejob/jingwen/finish"))
     {

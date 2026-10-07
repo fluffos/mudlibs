@@ -42,8 +42,8 @@ void leave()
 void do_copy(object me)
 {
         object ob=this_object();
-        mapping skills, hp_status, skill_status;
-        int i,exp,count,tempskill;
+        mapping skills, hp_status;
+        int i, exp, tempskill;
         exp = (int)me->query("combat_exp");
         tempskill = to_int(pow(exp/100,0.333)*10);
         if ((int)ob->query("boss")==1)

@@ -162,8 +162,8 @@ int do_move()
 	object here;
 	string leave_direction;
 	string *pname;
-	object room,me,obj,bing,*inv;
-	int i,menggu_number;
+	object room, me, bing;
+	int menggu_number;
 	me=this_player();
 	bing=this_object();
 	if(spot[query("index")]=="HALT") 
@@ -285,8 +285,6 @@ int do_move()
 int do_judge(object room)
 {
 	int menggu_number;
-	object obj,*inv;
-	int i;
 	if(!room->query("gate")||query("changed"))
 	{
 		remove_call_out("do_move");

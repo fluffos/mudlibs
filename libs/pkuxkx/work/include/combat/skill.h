@@ -31,7 +31,7 @@ string choose_attack_skill(object me,object weapon)
 //比如200表示一个心跳可以出两招，50表示2个心跳出一招
 varargs int attack_speed(object me, object weapon, int hubo, int hubei)
 {
-	int spd, base, allspd, hbspd, dexspd, skspd, buff, wspd;
+	int spd, base, allspd, hbspd, dexspd, skspd, buff;
 	string attack_skill, martial_skill;
 	
 	attack_skill = choose_attack_skill(me,weapon);

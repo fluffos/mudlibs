@@ -7,8 +7,7 @@ void disloading(string arg, object ob,object who);
 //重新装载武器
 int do_reload()
 {
-  int i, ltime, lbal;
-  string  ldate;
+  int i;
   string *autoloads;
   object  uitem;
   object obj;
@@ -105,7 +104,6 @@ int do_reload()
 int do_autoload(string arg)
 {
         object ob,who;
-        mapping num,ob_dbase;
         who = this_player();
         if(!userp(who))
                 return 0;
@@ -180,7 +178,6 @@ int do_disload(string arg)
 {
         object ob,who;
         
-        mapping num,ob_dbase;
         who = this_player();
         if(!userp(who))
                 return 0;
@@ -206,7 +203,6 @@ int do_disload(string arg)
 
 void disloading(string arg, object ob,object me)
 {
-     string okey;
      object uitem;
      
      if(arg!="y"&&arg!="Y"&&arg!="yes"&&arg!="YES")
@@ -233,7 +229,7 @@ void disloading(string arg, object ob,object me)
 int do_rename(string arg)
 {
         object  me,ob;
-        string item,msg,arg_old;
+        string item, msg;
         int cost;
         
         me = this_player();

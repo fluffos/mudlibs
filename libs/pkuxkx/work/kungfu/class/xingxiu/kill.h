@@ -1,7 +1,6 @@
 void init()
 {
         object ob;
-        mapping myfam;
         add_action("do_qingan", ({ "qingan" }));
         ::init();
         if (interactive(ob = this_player()) && !is_fighting()) {

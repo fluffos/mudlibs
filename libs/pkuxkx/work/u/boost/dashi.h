@@ -4,7 +4,7 @@ void give_reward();
 
 void step(object me)
 {
-	int i, j, k, m, n ;
+	int j, k, m, n;
 	mapping exits;
 	string *dirs;
 	object dashi, killer, env, *envs, *envs2;

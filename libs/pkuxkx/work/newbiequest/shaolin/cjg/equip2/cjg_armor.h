@@ -190,7 +190,7 @@ void set_cjg_armor(string key)
 {
 	mapping armor_det;
 	string *attr;
-	int flag,lp;
+	int lp;
 	
 	if ( !(armor_det=armor_info[key]) )
 		return;

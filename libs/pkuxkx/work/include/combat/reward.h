@@ -19,12 +19,6 @@ int check_victim_value(object victim)
 
 void bijiao(object killer,object victim)
 {
-  int score,mp_num;
-  object *user_list;
-  string *killers;
-  string allstr;
-  string str,pai,pai2,pai3;
-  int i,j,k;
   /*********该为直接进行门派追杀，不记录hate了，否则难以维护
   if (victim->query("family/family_name") == "杀手帮"
   || !userp(victim))
@@ -154,13 +148,12 @@ void winner_reward(object killer, object victim)
 
 void killer_reward(mixed killer, object victim)
 {
-    int bls,check,score,badscore;
+    int bls, score;
     string vmark;
     string deathplace="未知地点";
-    object killer_ob,victim_ob,where;//where计算当前地点
-    object owner,jujing,feilong,mengzhu;
-    int bonus, exp, i, msize, pot, shen, kill_ya;
-    object *mem;
+    object where;//where计算当前地点
+    object owner;
+    int bonus, exp, pot;
     mapping wsquest;
     int gain_shen;
     int real_die = 0;

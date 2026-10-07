@@ -66,7 +66,6 @@ int dest() //By Zine ，15分钟自毁，有些劫匪在街上一直存在 13 No
 }
 int checking(object me, object ob)
 {
-        object obgem;
         int mf_rate,deactivity_rate;//限制全自动机器
         if(!ob||!me)
               	return 1;
@@ -175,8 +174,7 @@ void die()
 void do_change(object ob)
 {
       object me,robber;
-      mapping skills, hp_status, skill_status;
-      string *sname;
+      mapping skills, hp_status;
       int i, temp,factor,exp,count,tempskill,lianxu;
       me = this_object();
 //      ob = this_player(); 

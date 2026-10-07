@@ -13,7 +13,7 @@ void init()
 
 int over_canwu(object me,string type)
 {
-    int maxlv,exp,i;
+    int maxlv, exp;
     exp = me->query("combat_exp");
 	maxlv = to_int(pow(exp/100,0.333)*10);
 	if (member_array(me->query("adv_weapon/current"),adv_weapon_name)==-1)

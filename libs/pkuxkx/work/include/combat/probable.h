@@ -3,7 +3,7 @@
 //这里修改经验等对ap,dp的影响
 varargs int skill_power(object ob, string skill, int usage, object opponent)
 {
-    int status, level, power, value, ratio, enemy_num, combat_exp;
+    int level, power, value, enemy_num, combat_exp;
     int ap_factor, pp_factor, dp_factor;
     string askill;
 

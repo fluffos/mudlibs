@@ -78,9 +78,8 @@ int npc_renew(object me,object ob)
 
 int npc_update(mapping ming,object npc)
 {
-    string name,title,npc_file;
+    string name, title;
     object pl;
-    int i;
     name=ming["owner_name"];
     title=ming["title"];
     npc->set("name",name);

@@ -71,7 +71,6 @@ int chat()
 {
 	object me = this_object();
 	object ob = me->query_temp("challenger");
-	object obj;
 
 	int my_max_qi, his_max_qi;
 	if (!objectp(ob)) return ::chat();

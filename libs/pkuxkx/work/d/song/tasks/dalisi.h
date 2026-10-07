@@ -22,7 +22,7 @@ int ask_finish()
 int ask_task()
 {
     object me=this_player();
-    object ob=this_object(),gy,an;
+    object an;
     if (pre_assign(me,DEPART,tasks)==0)
     return 1;
     else

@@ -22,7 +22,7 @@ int ask_task()
 {
 	int n;
     object me=this_player();
-    object ob=this_object(),gy;
+    object ob=this_object();
 	object letter;
     string *country=({"蒙古国","大理国","西夏国"});
     string *place=({"蒙古金帐","大殿","皇宫正殿"});

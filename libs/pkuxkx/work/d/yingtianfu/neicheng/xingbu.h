@@ -21,12 +21,8 @@ int task_finish(object me,int taskno,int result,object npc)
 {
     object ob=load_object("/d/yingtianfu/neicheng/shengzhi");
     int n;
-    int tongyu=npc->query("ming/ability/tongyu");
     int zhengwu=npc->query("ming/ability/zhengwu");
-    int lianbing=npc->query("ming/ability/lianbing");
-    int renji=npc->query("ming/ability/renji");
     int zhihui=npc->query("ming/ability/zhihui");
-    int qinmian=npc->query("ming/ability/qinmian");
     if (taskno==1)
     {
         if (result==2)//成功

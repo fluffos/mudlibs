@@ -53,7 +53,7 @@ void create()
 
 void init()
 {
-    object player = this_player(), me = this_object();
+    object player = this_player();
 
     add_action("do_guard", "guarding");
     add_action("do_pancha", "pancha");
@@ -257,9 +257,8 @@ int do_pancha(string name)
 
 int valid_leave(object me, string dir)
 {
-    object *inv,*env,bing;
+    object *inv, *env;
     int i, stage, fail_num, shiwei_present=0, bing_present = 0;
-    mapping myfam = (mapping)me->query("family");
     env = all_inventory(environment(me));
     for (i=sizeof(env)-1; i>=0; i--) {
         if( living(env[i]) && env[i]->query("id") == "guan bing" )

@@ -490,7 +490,7 @@ void clear_exit(object exit,string exit_dir)
 }
 string clear_all()
 {
-	object exit=load_object("/d/luoyang/wumiao"),origin,dest_room,*all_pl;
+	object exit=load_object("/d/luoyang/wumiao"), origin;
 	int i,j;
 	string uni_exit,msg,*exits=({"exit1","exit2","exit3","exit4"});
 	mapping variables;
@@ -734,10 +734,8 @@ int already_link(object room1,object room2)//检查2个房间是否已经联通
 
 int link_edge(object room_a,object room_b,int x1,int x2,int y1,int y2,object origin)
 {
-	int i,j,k,l;
-	string result,result2,dir,*dirs,*extra_dirs,*extra_name;
-	mapping *conns=connections;
-	object del_room,affect_room;
+	int j, k, l;
+	string result, result2, *extra_dirs, *extra_name;
 	result=position(room_a,room_b);
 	result2=op_position(result);
 	extra_dirs=extra_conn;
@@ -946,7 +944,7 @@ string connect_edge(object origin)
 
 string obtain_edge(object origin)
 {
-	int i,j,min_layer,max_layer=0,flag=0,max_x=0,max_y=0,min_x=0,min_y=0;
+	int i, j, min_layer, max_x=0, max_y=0, min_x=0, min_y=0;
 	object *outer_layer=({}),*inner_layer=({});
 	object room,room_y_max,room_y_min,room_x_max,room_x_min;
 	min_layer=(int)origin->query("total_layers")-1;

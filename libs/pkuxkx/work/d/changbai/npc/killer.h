@@ -7,9 +7,7 @@ void delete_init_num(object me)
 
 void init()
 {
-        object stage,env,where;
         object me=this_player();
-        string exit_place;
         if (this_object()->query("uni_target")==me)
         {
             switch (random(10-this_object()->query("hyd/step")))
@@ -168,7 +166,7 @@ void unconcious()
 int do_copy(object me)  
 {                       
         int exp;
-        int skill, str, rw_lv;
+        int str, rw_lv;
         int index;
         int factor, jl_fact, qx_fact, nl_fact;
         int tf_mi, tf_ma;

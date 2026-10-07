@@ -170,7 +170,6 @@ int time_period(int timep, object me,object obj)
  int accept_object(object who, object ob)
 {
         int score;
-        string test;
         mapping quest;
         object obj=this_object();
    

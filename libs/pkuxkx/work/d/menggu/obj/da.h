@@ -2,7 +2,6 @@
 
 void init()
 {
-	object ob=this_object();
     add_action("do_da","da");
 	add_action("do_zha","zha");
 	return;

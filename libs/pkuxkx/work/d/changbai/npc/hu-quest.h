@@ -250,7 +250,7 @@ int ask_job()
 {
 	object me=this_player();
 	object ob=this_object();
-	int mylvl,i;
+	int mylvl;
 
 	mylvl = ((int)me->query("yidao/times")-250)/70;
 
@@ -314,9 +314,8 @@ int ask_help()
 {
   object me=this_player();
 	object ob=this_object();
-	object old_killer,killer; //杀手
-	object where; //出现的地点
-	int i;
+	object old_killer; //杀手
+ //出现的地点
   
   if(ANTIROBOT_D->stopped())
   {
@@ -389,13 +388,12 @@ int ask_help()
 int give_reward(object me)
 {
 	string msg,qid;
-	string maze_map,inside,dataname;
 	object newmap,letter,xtshi,xiliandan,baoshi2;
 	string *gems=({"gu","yu","jiao","jia"});
 	object gem,material;
 
 	int folds,nrn,id_mf;//
-	int deactivity_rate;//antirobot
+//antirobot
 	int reward,preward,rreward;//exp奖励
 	int sk,lvl;//胡家刀法的等级,奖励的等级（碎片1，地图8）
 	int index, point, hard; //超过250级别，每250级加50%奖励，即0-250 100%，251-500 150%,501-705 200%, 705+ 250%

@@ -162,7 +162,7 @@ string interpret(mixed ob)//把药材翻译成药材代码
 }
 mapping check_prescription(object me)//返回成品药物路径，考虑炉中药材，自身配方，公共配方，以及自身炼丹级别，([])为失败
 {
-	mapping raws,result,*prescriptions;
+	mapping *prescriptions;
 	object *inv,ob=this_object();
 	string *temp_sets;
 	int i,check;

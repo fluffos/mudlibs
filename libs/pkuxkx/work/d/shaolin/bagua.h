@@ -8,7 +8,7 @@ string* dirs = ({
 
 int check_dirs(object me, string dir)
 {
-	int i, bc, count;
+	int bc, count;
         if (!userp(me)) {
             me->move("/d/shaolin/zhonglou1");
             return 1;}

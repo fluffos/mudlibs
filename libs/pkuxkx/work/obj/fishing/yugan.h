@@ -48,7 +48,6 @@ int do_diao(string arg)
 {
 	object me=this_player();
     object room=environment(me);
-	int t;
 	
 	if(!arg)
 	{
@@ -96,7 +95,6 @@ int do_diao(string arg)
 }
 int end_diaoyu(object me)
 {
-	object ob;
 	object yuer = this_object();
     int cd,bonus;
 	if (!objectp(me)) return 1;

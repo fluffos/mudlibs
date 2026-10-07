@@ -1061,7 +1061,7 @@ if(SECURITY_D->get_status(me)== "(admin)")
 tell_object(me,
 HIY"　　　  　地图扩充系统
 系统说明：
-sample\samplenpc\sampleitem三个文件是模板文件
+samplesamplenpcsampleitem三个文件是模板文件
 ，请慎重在里面做任何操作！你可以将sample重命
 名为其他文件做为种子，在种子房间中来发展地图。
 userchecker为检查器
@@ -1095,7 +1095,7 @@ make系列：输入make* 文件名　之后会提示你输入房
 文件保存在种源房间同一个目录下。
 
 link 命令：在你相连接的一个房间输入：link 方向
-<north\south\southeast....>之后，到另一个房间
+<northsouthsoutheast....>之后，到另一个房间
 输入link，之后两个房间就会相连。\n");
 tell_object(this_player(),
 "
@@ -1146,7 +1146,7 @@ return 1;
 
 int do_del(string arg)
 {
-	string this_filename,that_filename,*objects,npcfile;
+	string this_filename, that_filename, *objects;
 	object to_room;
 	this_filename=file_name(this_object())+".lpc";
 	if(!__DIR__"userchecker.lpc"->is_granted(this_player())) return notify_fail("你没有被授权!\n");

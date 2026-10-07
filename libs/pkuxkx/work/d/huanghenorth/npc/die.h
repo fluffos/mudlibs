@@ -7,7 +7,6 @@ void unconcious()
 void die()
 {
     object killer;
-    object ob=this_object();
     killer = this_object()->get_damage_origin_object();
     
     if(!killer || !objectp(killer))

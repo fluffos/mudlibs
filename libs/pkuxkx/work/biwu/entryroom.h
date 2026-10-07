@@ -8,7 +8,6 @@ int valid_leave(object me,string dir)
     object* invs;
    
 
-    int i;
 
 	if(dir == "enter")
 	{
@@ -35,7 +34,6 @@ int valid_leave(object me,string dir)
 
 void init()  
  {  
-      object me=this_player();
 
      add_action("do_leave","leave");
 

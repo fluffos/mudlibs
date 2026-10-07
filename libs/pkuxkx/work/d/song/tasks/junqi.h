@@ -16,7 +16,7 @@ int ask_finish()
 int ask_task()
 {
     object me=this_player();
-    object ob=this_object(),wg;
+    object ob=this_object();
     if (pre_assign(me,DEPART,tasks)==0)
     return 1;
     else

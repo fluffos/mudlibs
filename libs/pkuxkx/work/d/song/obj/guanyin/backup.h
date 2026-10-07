@@ -123,7 +123,6 @@ int get_unique_position(object me)
 }
 int force_suikao(object me)
 {
-	int age=me->query("mud_age");
 	if (DASONG_D->get_my_pin(me)!=1&&me->query("song/suikao/time")&&me->query("mud_age")-me->query("song/suikao/time")>432000)
     {
 		if (me->query("song/suikao/new_modify"))

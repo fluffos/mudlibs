@@ -125,8 +125,6 @@ int log10 (int i)
 int quest_reward (object who, mapping quests)
 {
   int reward;
-  int exp = who->query("combat_exp");
-  int questexp = who->query("quest/combat_exp");
   int index = who->query("quest/index");
 
  reward = MAXREWARD*(1+index)/sizeof(quests_list); // normal value
@@ -154,7 +152,7 @@ int ask_quest()
   int temp,donenumber;
   mapping quest;
   string *queststring;
-  int i,j,k,score;   
+  int i, score;   
   int day,hour,min,sec,t;
   int pot,exp;
   string time;
@@ -395,7 +393,6 @@ int ask_quest()
 int accept_object(object who, object ob)
 {
   object me = this_object();
-  int t;
   int score;
   int temp,donenumber;
   int exp,pot;

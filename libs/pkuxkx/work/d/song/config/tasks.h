@@ -26,7 +26,7 @@ int ask_tasks()
 	mixed tm=localtime(time());
 	string day=sprintf("%d-%d-%d", tm[5], tm[4]+1,tm[3]);
     object me=this_player();
-    object ob=this_object(),tc;
+    object tc;
 	string *wen=({"同中书门下平章事","参知政事","门下侍郎","中书侍郎"}),*wu=({"枢密使","枢密副使","知枢密院事","同知枢密院事"}),*huan=({"入内内侍省都都知",}),pro;
 	mapping *tasks,*tasks_wen=({
 		(["name":"三司使","id":"sansishi","officer":"三司使","start_pin":6,"pin":3]),
@@ -73,7 +73,7 @@ int ask_tasks()
 		(["name":"翰林院","id":"hanlin","officer":"提举翰林院","start_pin":9,"pin":8]),
 	});
 	mapping give_task;
-	int tasknumber,cdtime;
+	int cdtime;
 	string title="",new_title,name,*titles;
 	mapping *tasks_overall=tasks_wen;
 	tasks_overall+=tasks_wu;

@@ -15,7 +15,6 @@ void init()
 {
 	object me=this_player();
     object ob,room;
-	object *tasknpc;
 
     int target_num;
 	lvl = query("room_lvl");
@@ -370,8 +369,7 @@ int do_qiao(string arg)
 
 int give_reward(object me)
 {
-    string msg,system_msg,channel_msg;
-	int reward, i, cost_time;
+    string system_msg, channel_msg;
 	object tasknpc;
 	object box;
 

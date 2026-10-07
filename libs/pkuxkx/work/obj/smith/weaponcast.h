@@ -509,8 +509,7 @@ string inside_detail()
 }
 int do_place(string arg)//加药材进炉子
 {
-	object *inv,me=this_player(),ob=this_object(),obj;
-	int i;
+	object me=this_player(), ob=this_object(), obj;
 	if (me->is_busy()||me->is_fighting())
 		return notify_fail("你正忙着呢。\n");
 	if (!arg)
@@ -646,7 +645,7 @@ int do_takeout(string arg)
 int do_put(string arg)
 {
 	string target, item;
-	object obj, dest;
+	object dest;
 	object me = this_player();
 	if(!arg) 
 	return notify_fail("你要将什么东西放进哪里？\n");

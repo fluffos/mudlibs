@@ -45,7 +45,7 @@ int query_other_family_force(object me)
 int ask_ningshen()
 {
 	object pl, me;
-	int pflv, lv, pot1, pot2, pot3, pot4, fami;
+	int pflv, lv, pot1, pot2, pot3, fami;
 	mapping add;
 	mapping purefamily_ningshen = ([
 		"明教": (["qi":80,"jing":80,]),

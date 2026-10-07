@@ -78,7 +78,7 @@ int message_show_killer(object me)
 int check_status()
 {
 	object ob = this_object(),me,where;
-	string name,*tmp,*pinying,loc;
+	string name, *tmp, *pinying;
 	if (!ob->query("killer"))
 	return 1;
 	if (!me=find_player(ob->query("killer")))
@@ -140,10 +140,9 @@ void leave()
 
 void do_copy(object me)
 {
-	object ob,robber,armor,*npc_random_armor;
-	mapping skills, hp_status, skill_status;
-	string *sname;
-	int factor,exp,count,tempskill,lianxu,f;
+	object ob, armor, *npc_random_armor;
+	mapping skills, hp_status;
+	int exp, tempskill, f;
 	ob = this_object();
 	tempskill = 0;
 	f=random(11);

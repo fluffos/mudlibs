@@ -101,7 +101,7 @@ int give_quest()
         mapping quest ;
         object me,obj,xin;
         int j,timep,num;
-        int score,dork;
+        int dork;
         int rnd = random(100);            
 	string *levels = ({    
 		        "0",
@@ -221,8 +221,6 @@ int time_period(int timep, object me,object obj)
 }
  int accept_object(object who, object ob)
 {
-        int score;
-        string test;
         mapping quest;
         object obj=this_object();
         if(obj->query("family/family_name")!=who->query("family/family_name"))

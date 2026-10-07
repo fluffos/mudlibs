@@ -2,7 +2,6 @@
 
 int getnpc(object me)
 {
-    object ob=this_object();
     int n=random(140);
     int m=random(9);
     object thetarget;

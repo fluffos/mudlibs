@@ -126,8 +126,7 @@ void die()
 void do_change(object ob)
 {
       object me,robber;
-      mapping skills, hp_status, skill_status;
-      string *sname;
+      mapping skills, hp_status;
       int i, temp,factor,exp,count;
       me = this_object();
       ob = this_player(); 

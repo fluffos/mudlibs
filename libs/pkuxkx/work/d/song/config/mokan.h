@@ -14,9 +14,9 @@ int baoxiao_require(object me,int point)
 }
 int do_suikao()
 {
-    object me=this_player(),*ob;
+    object me=this_player();
     int age=me->query("mud_age");
-    string zhengji,renmai,title,title_place;
+    string zhengji, renmai;
     int p;
     if (!DASONG_D->get_my_pin(me)||!me->query("song/pro"))
     return 0;

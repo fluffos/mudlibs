@@ -260,7 +260,7 @@ int get_shoot_y()
 }
 int do_fire()
 {
-	int limit,distance,x,y,shoot_x,shoot_y,level_1,level_2,wide,height,china;
+	int distance, x, y, shoot_x, shoot_y, level_1, level_2, wide, height, china;
 	object me;
 	china=0;
 	if(query("pai")=="中国") china=1;
@@ -320,7 +320,7 @@ int shoot(int shoot_x,int shoot_y,object shooter,object me,int rand)
 {
 	int x,y,china;
 	string target,*chuansheng;
-	object jwhz,chuan,cang,thischuan,all_cang;
+	object jwhz, chuan, cang, all_cang;
 	jwhz=load_object("/adm/daemons/jwhz.lpc");
 	china=0;
 	if(shooter->query("pai")=="中国") china=1;

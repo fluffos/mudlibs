@@ -16,11 +16,6 @@ void to_do0(object me)  //删除定义为”“的title项
     mapping title;
     string* ty;
     int i;
-    string* wang_title=({"礼亲王","睿亲王","豫亲王","郑亲王","肃亲王","庄亲王","克勤郡王","顺承郡王",});
-    string* color=({HIR,RED,HIY,YEL,HIB,BLU,HIG,GRN,HIC,CYN,MAG,HIM,HIW,WHT});
-    string title1=wang_title[random(sizeof(wang_title))];
-    string color1=color[random(sizeof(color))];
-    string color2=color[random(sizeof(color))];
 
     // 补quest1的铁帽子title
     /*if (me->query("chaoting/jiawang")||me->query("chaoting/wang"))
@@ -441,7 +436,7 @@ int to_do16(object me)
 	object ob,real;
 	string guider="";
 	mapping *ent;
-    int i,index=-1;
+    int i;
 	if (stringp(me->query("newbie/guider")))
 	guider=me->query("newbie/guider");
 	if (stringp(me->query("newbie/old_guider")))

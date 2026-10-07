@@ -68,7 +68,7 @@ string start_chanting(string name,string questid)
 		              "罗汉堂八部","罗汉堂九部","和尚院一部","和尚院二部","和尚院三部",
 		              "和尚院四部","和尚院五部","和尚院六部","地藏殿","白衣殿","千佛殿",
 		            	GRN"达摩洞"NOR});
-	string head,*headBuf,book;
+	string head, *headBuf;
 	int *lines,lp,rt,maxPage,totalPage,randPage;
 	object me;
 	mapping chanting;

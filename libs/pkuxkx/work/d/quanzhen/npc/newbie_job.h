@@ -1,7 +1,7 @@
 int bonus(object me,int task_factor)
 {
     object ob=this_object();
-    int self_factor,exp,pot,rep,neili,jingli,n;
+    int self_factor, exp, pot, rep, neili, jingli;
     
 	if (!task_factor)
 	{

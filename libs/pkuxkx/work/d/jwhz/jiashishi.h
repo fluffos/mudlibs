@@ -421,7 +421,7 @@ int auto_move()
 int auto_fire()
 {
 	object jwhz,target,*alive_target,cang;
-	int distance,times,sign,level1,wide,height,x,y,target_x,target_y,shoot_x,shoot_y,min_i;
+	int distance, sign, level1, wide, height, x, y, target_x, target_y, min_i;
 	string *chuansheng;
 	if(query("sink")) return 1;//沉了，就不动了。
 	if(query("pai")=="中国") return 1;//中国的船，不能自动开炮!需要玩家操纵。

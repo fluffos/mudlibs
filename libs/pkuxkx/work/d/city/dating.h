@@ -41,7 +41,7 @@ string swap_word(string str)
 string insert_string(string str)
 {
               int len=strwidth(str);
-              int i,j;
+              int i;
               string tmp="";
         string *spch = ({"├","┝","┞","┟","┠","┡","┢","┣","│","┬","┭","┮","┯",
                 "┰","┱","┲","┳","┼","┽","┾","┿","╀","╁","╂","＄","￡","‰",
@@ -62,7 +62,7 @@ string get_question(object me)
 {
         int max_questions=703;//题目数
         int i, j, k;
-        string file,str,quest_list,*quests;
+        string str, quest_list, *quests;
         string *quest;
         int answer;
         

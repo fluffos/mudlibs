@@ -256,7 +256,6 @@ int valid_leave(object me,string dir)
     object ob=this_object();
     object mupai;
     string pl_ip,*ips=({});
-    int i;
     if (userp(me))
     {
         pl_ip=query_ip_number(me);

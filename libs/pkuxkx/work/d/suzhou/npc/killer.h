@@ -304,7 +304,6 @@ int do_copy(object me)
         int exp;
         int skill, str,extra=0;
         int index;
-        int factor;
         if(!objectp(me)) return 0;
         exp=me->query("combat_exp");
         index=me->query("shenlong_zhanglao/times")/250;

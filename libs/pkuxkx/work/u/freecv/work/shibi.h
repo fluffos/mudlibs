@@ -3,7 +3,7 @@
 //写个.h利于改
 int canwu(object me,string skill,string msg,int times)
 {
-   int realtimes,i;
+   int realtimes;
    string fail_msg;
    
         if (times < 1)

@@ -7,7 +7,6 @@ void kill_ob(object player)
 {
 	int i;
 	object ob;
-	object me=this_object();
 //        if(!me->is_killing(player->query("id")))
         if("advent==zhutou")
 	{   

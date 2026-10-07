@@ -6,7 +6,7 @@
 int do_write(string arg)
 {
     object pl,me=this_player();
-    string name,*names;
+    string name;
     object ct=load_object(__DIR__"biguanchu");
     int i;
     if (!owner_access(me))

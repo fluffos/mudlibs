@@ -4,7 +4,7 @@ int play_music(object player, object target, string instrument, string tune)
 {
 	object *listeners, *team;
 	int level, coef, oth_coef, aux_coef;
-	int master, aux_level;
+	int master;
 	string tName;
 	
 	tName=query_tune_name(tune);
@@ -92,8 +92,8 @@ int play_music(object player, object target, string instrument, string tune)
 
 void in_playing( object player, object *listeners, object env, string instrument, string tune, int pri_coef, int aux_coef, int master, int times)
 {
-	object listener, weapon, *reslis;
-	int aux_level, n_aux_coef, sectT, sects;
+	object weapon, *reslis;
+	int n_aux_coef, sectT, sects;
 	string tName;
 	
 	sectT=SectTime;

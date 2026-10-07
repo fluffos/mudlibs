@@ -56,7 +56,7 @@ int do_query_active()//查询行动力
 
 int report_result(object me,object npc)//报告结果
 {
-    int i,result,result2;
+    int result, result2;
     if (!me)
     {
         return 1;
@@ -171,7 +171,6 @@ int do_list()//可选任务
     string msg="现在你可以进行的公务有：\n";
     string *tasks=this_object()->query("tasks");//任务数和消耗精力数必须对应，否则可能出错
     int *tasks_energy=this_object()->query("tasks_energy");
-    int *tasks_diffculty=this_object()->query("tasks_diffculty");
     int *tasks_range=this_object()->query("tasks_range");
     int *tasks_xiang=this_object()->query("tasks_xiang");
     int *tasks_liang=this_object()->query("tasks_liang");
@@ -214,8 +213,6 @@ int do_select(string arg) //选定任务
     object ob=load_object("/d/yingtianfu/neicheng/shengzhi");
     string *tasks=this_object()->query("tasks");//任务数和消耗精力数必须对应，否则可能出错
     int *tasks_energy=this_object()->query("tasks_energy");
-    int *tasks_diffculty=this_object()->query("tasks_diffculty");
-    int *tasks_range=this_object()->query("tasks_range");
     int *tasks_xiang=this_object()->query("tasks_xiang");
     int *tasks_liang=this_object()->query("tasks_liang");
     points=(int)me->query("ming/energy");
@@ -261,10 +258,8 @@ int do_select(string arg) //选定任务
 }
 int cost_me(object me,int no)
 {
-    string *tasks=this_object()->query("tasks");//任务数和消耗精力数必须对应，否则可能出错
+//任务数和消耗精力数必须对应，否则可能出错
     int *tasks_energy=this_object()->query("tasks_energy");
-    int *tasks_diffculty=this_object()->query("tasks_diffculty");
-    int *tasks_range=this_object()->query("tasks_range");
     int n=tasks_energy[no-1];
     me->add("ming/energy",-n);
     tell_object(me,"你消耗了"+chinese_number(n)+"点行动力，下达了命令。\n");
@@ -308,7 +303,6 @@ int query_officer(object me)
 int do_query_officer()
 {
     object me=this_player();
-    int i;
     if (!access(me))
     {
         tell_object(me,"你不是"+DEPART+"高级官员，不能随意调阅"+DEPART+"的记录。\n");
@@ -330,9 +324,7 @@ int select(string arg,object ob,object me,int no)
     object officer,npc;
     string get_path;
     string *tasks=this_object()->query("tasks");//任务数和消耗精力数必须对应，否则可能出错
-    int *tasks_energy=this_object()->query("tasks_energy");
     int *tasks_diffculty=this_object()->query("tasks_diffculty");
-    int *tasks_range=this_object()->query("tasks_range");
     int *tasks_xiang=this_object()->query("tasks_xiang");
     int *tasks_liang=this_object()->query("tasks_liang");
     if (me->query_temp("ming_adv_tasks/task_give_pending"))
@@ -408,8 +400,6 @@ int select_officer(string arg,object ob,object me,int no)
 {
     int i,num,flag=0;
     string *tasks=this_object()->query("tasks");//任务数和消耗精力数必须对应，否则可能出错
-    int *tasks_energy=this_object()->query("tasks_energy");
-    int *tasks_diffculty=this_object()->query("tasks_diffculty");
     int *tasks_range=this_object()->query("tasks_range");
     if (arg=="mission_cancel")
     {
@@ -455,9 +445,7 @@ int officer_avaliable(object me,int no)
     mapping *officers;
     string officers_list="大人，"+DEPART+"现在可用官员如下：\n";
     int i,count=0;
-    string *tasks=this_object()->query("tasks");//任务数和消耗精力数必须对应，否则可能出错
-    int *tasks_energy=this_object()->query("tasks_energy");
-    int *tasks_diffculty=this_object()->query("tasks_diffculty");
+//任务数和消耗精力数必须对应，否则可能出错
     int *tasks_range=this_object()->query("tasks_range");
     ob->restore();
     officers=ob->query(DEPART_NAME+"/officers");

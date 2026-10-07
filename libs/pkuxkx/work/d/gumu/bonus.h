@@ -41,8 +41,8 @@ int SilentReward(object me,int score,int neili,int jingli)
 int bonus(object me,int flag,int exp,int pot,int rep,string msg)
 {
 	//flag 1: caodi3,2:ceshi, 3:duandi, 4:duandi2, 5:caoping, 6:longer
-	int BaseValue,neili,jingli,score;
-	string percent,skill="";
+	int neili, jingli, score;
+	string percent;
 	if (flag==1||flag==2||flag==3||flag==4||flag==5)//simply add exp pot and rep,without any notice. Rewarding msg has been sent during the job process.
 	{
 		exp=CalcResult(me,exp);

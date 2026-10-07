@@ -90,7 +90,6 @@ int bonus(object me)
 {
 	int pin,count,i,exp,pot,rep,neili,jingli,score;
 	int limit_sk=to_int(pow((int)me->query("combat_exp")/100,0.333)*10)-10;
-	object ob=this_object();
 	object target,where,*inv,item;
 	string percent,*skill_set=({"force","huntian-qigong","begging","stealing","xiaoyaoyou","checking"});
 	me->add("jobs/completed/newbie_gb",1);

@@ -22,7 +22,6 @@ int ask_task()
 {
 	int n;
     object me=this_player();
-    object ob=this_object(),gy;
 	string *book=({"史记","汉书","后汉书","三国志","晋书","宋书","南齐书","梁书","陈书","魏书","北齐书","周书","隋书","南史","北史",});
     if (pre_assign(me,DEPART,tasks)==0)
     return 1;

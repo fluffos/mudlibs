@@ -22,7 +22,7 @@ int ask_task()
 {
 	int n;
     object me=this_player();
-    object ob=this_object(),gy;
+    object ob=this_object();
 	string *drug=({"鸡血藤","薄荷","鱼腥草","常山","当归","丁香","茯苓","覆盆子","合欢","荆芥","地骨皮","蛇床子","生甘草"});
     if (pre_assign(me,DEPART,tasks)==0)
     return 1;

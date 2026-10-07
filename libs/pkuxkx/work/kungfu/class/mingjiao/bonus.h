@@ -45,7 +45,6 @@ string completeness(object me)
 }
 int bonus(object me)
 {
-	object ob=this_object();
 	int exp,pot,rep,neili,jingli,score,limit_sk=to_int(pow((int)me->query("combat_exp")/100,0.333)*10)-5;
 	string percent,*skill_set=({"force","parry","dodge","sword","guangming-shenghuogong","datengnuo-bufa","shenghuo-lingfa","literate"});
 	exp=CalcResult(me,"bonus","exp");

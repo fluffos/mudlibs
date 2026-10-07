@@ -134,10 +134,9 @@ void die()
 
 void do_change(object ob)
 {
-      object me,robber;
-      mapping skills, hp_status, skill_status;
-      string *sname;
-      int i, temp,factor,exp,count,tempskill,lianxu;
+      object me;
+      mapping skills, hp_status;
+      int i, temp, exp, count, tempskill, lianxu;
       me = this_object();
 //    ob = this_player();
 //    Modified by iszt@pkuxkx, 2007-03-08, ob是传入的参数！

@@ -108,8 +108,8 @@ int start_move()
 int do_move()
 {
     
-    object room,me,obj,bing,*inv;
-    int i,menggu_number;
+    object room, me, bing;
+    int menggu_number;
     me=this_player();
     bing=this_object();
     if(query("victory"))
@@ -327,8 +327,6 @@ int do_judge(object room)
 {
     
     int menggu_number;
-    object obj,*inv;
-    int i;
     if (!room->query("gate"))
     {
         

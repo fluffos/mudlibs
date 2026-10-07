@@ -20,7 +20,7 @@ int ask_finish()
 {
     object me=this_player();
     object ob=this_object();
-	int n,*rewards=({8+random(2),3+random(2),1+random(4),2+random(3),});
+	int *rewards=({8+random(2),3+random(2),1+random(4),2+random(3),});
 	string *finish_comments=({"你找到的贤士真的很不错，将来可能成为国之栋梁，今次你为大明立下了举荐之功呀。\n","呵呵，还不错嘛，这么快就干完了。\n",
 		"岁赐勋爵的任务简单吧？还落个人情。\n","完成了，下去吧，你的功劳我们不会抹煞的。\n",});
     if (!me->query_temp("mingtasks/libu/start")&&me->query("mingpin")!=1)

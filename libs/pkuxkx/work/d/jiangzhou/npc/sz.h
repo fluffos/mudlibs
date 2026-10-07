@@ -93,10 +93,9 @@ void leave()
 void do_copy(object me)
 {
 	object ob= this_object();
-	mapping skills, hp_status, skill_status;
-	string *sname;
+	mapping skills, hp_status;
 	string* color=({HIR,RED,HIY,YEL,HIB,BLU,HIG,GRN,HIC,CYN,MAG,HIM,HIW,WHT});
-	int i, temp,factor,exp,count,tempskill,lianxu,f,extra=0;
+	int i, temp, exp, tempskill, extra=0;
 	set("gender", random(2)?"男性":"女性");
     temp = 0;
 	tempskill = 0;

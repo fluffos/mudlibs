@@ -182,8 +182,8 @@ int move_in_map(string arg)
 
 int init_map()
 {
-	int line_no=16+random(10),col_no=16+random(10),line,col,*origin=({}),*target=({}),*target2=({});
-	string msg="",BLOCK,ME,TARGET,color,*colors=({HIR,MAG,HIB});
+	int line_no=16+random(10), col_no=16+random(10), *target=({}), *target2=({});
+	string color, *colors=({HIR,MAG,HIB});
 	if (query("map_generated"))
 	return 1;
 	set("map_generated",1);
@@ -206,8 +206,8 @@ int init_map()
 
 int show_detail(object me)
 {
-	int line_no=query_temp("SmallMaze/line_no"),col_no=query_temp("SmallMaze/col_no"),line,col,*origin=({}),*target=query_temp("SmallMaze/target"),*target2=query_temp("SmallMaze/target2");
-	string msg="",BLOCK,ME,TARGET,color,*colors=({HIR,MAG,HIB});
+	int line_no=query_temp("SmallMaze/line_no"), col_no=query_temp("SmallMaze/col_no"), *origin=({}), *target=query_temp("SmallMaze/target"), *target2=query_temp("SmallMaze/target2");
+	string msg="", BLOCK, ME, TARGET;
 	if (me->query_temp("SmallMaze/spot")!=this_object())
 	{
 		me->set_temp("SmallMaze/spot",this_object());

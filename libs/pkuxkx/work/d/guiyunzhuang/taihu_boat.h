@@ -143,7 +143,6 @@ string to_dir(int x,int y,int dest_x,int dest_y)
 }
 int check_shediao(object me,object ob)
 {
-	int x,y;
 	string to_dir;
 	if (ob->query("lu_x")&&ob->query("lu_y")&&me->query_temp("shediaoquest/guiyun/step")==2)
 		{
@@ -164,7 +163,6 @@ int check_shediao(object me,object ob)
 }
 int check_xingbu(object me,object ob)
 {
-	int x,y;
 	string to_dir;
 	if (ob->query("xingbu_robber_x")&&ob->query("xingbu_robber_y"))
 	{

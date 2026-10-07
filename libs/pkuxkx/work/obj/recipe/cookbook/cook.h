@@ -9,7 +9,6 @@ int do_recite(string arg)
 {
 	object me = this_player();
 	int sk = me->query_skill(skill, 1);
-	string *all;
 	mapping skl;
 	
 	if (!arg || (arg != "cook book" && arg != "menu" && arg != "pu" && arg != "book") )

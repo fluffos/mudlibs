@@ -18,7 +18,6 @@ int ask_finish()
 int ask_task()
 {
     object me=this_player();
-    object ob=this_object();
 	string *gates=({"和宁门","丽正门"});
 	int n;
     if (pre_assign(me,DEPART,tasks)==0)

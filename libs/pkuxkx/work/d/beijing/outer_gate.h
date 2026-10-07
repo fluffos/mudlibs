@@ -303,7 +303,7 @@ int do_allow(string name)
 int valid_leave(object me, string dir)
 {
     object *inv, *env, shiwei, bing;
-    mapping myfam, mygen;
+    mapping myfam;
     int i, shiwei_num, bing_present = 0, shiwei_present = 0;
     myfam = (mapping)me->query("family");
     env = all_inventory(environment(me));

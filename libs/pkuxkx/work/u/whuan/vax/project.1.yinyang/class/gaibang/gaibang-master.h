@@ -42,8 +42,6 @@ int accept_object(object ob, object obj)
         object shengdairoom;
 
 
-        mapping my_fam  = me->query("family");
-        mapping ob_fam  = ob->query("family");
         int n;
         n=ob->query("dai");
 
@@ -119,7 +117,7 @@ void move_to(object ob,object room)
         
 int accept_fight(object ob)
 {
-        object me,obj,weapon,armor;
+        object me, weapon, armor;
         int dai;
 
         me=this_object();

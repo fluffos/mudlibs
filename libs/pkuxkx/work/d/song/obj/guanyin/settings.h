@@ -153,7 +153,7 @@ int deal(string arg,object ob,object me,int i)
 int to_do_list(object me)
 {
 	object ob=load_object(RECORD);
-	int i,flag=0;
+	int i;
 	string msg="现在急需要你处理的事务：\n";
 	if (!is_song_player(me)||DASONG_D->get_my_pin(me)>3)
 	return 1;

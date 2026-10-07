@@ -140,7 +140,6 @@ int price_down()
 int do_ke()
 {
     object me=this_player();
-    string name;
     if (me->is_busy()||me->is_fighting())
     {
         tell_object(me,"你正忙着呢。\n");

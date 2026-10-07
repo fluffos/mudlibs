@@ -38,7 +38,7 @@ void learn_mining(object me,int sk_point,int suc)
 }
 int obtain_mine(object me,object shovel)
 {
-	string mark,*names=({"坤地","艮山","坎水","巽風","震雷","離火","兌澤","乾天"});
+	string *names=({"坤地","艮山","坎水","巽風","震雷","離火","兌澤","乾天"});
 	object ob;
 	int i,sk=2+random(2),piece,num,remain=0;
 	if (!shovel)
@@ -140,8 +140,7 @@ int do_excavate()
 int move_MINE_map(string arg)
 {
 	object me=this_player();
-	mapping default_dirs = (["left":"左边","right":"右边"]),legal_dirs=(["north":({-1,0}),"n":({-1,0}),"south":({1,0}),"s":({1,0}),"east":({0,1}),"e":({0,1}),"west":({0,-1}),"w":({0,-1}),"northwest":({-1,-1}),"nw":({-1,-1}),"northeast":({-1,1}),"ne":({-1,1}),"southwest":({1,-1}),"sw":({1,-1}),"southeast":({1,1}),"se":({1,1})]);
-	int *my_loc,*loc;
+	mapping default_dirs = (["left":"左边","right":"右边"]);
 	if (!query("MINE_SPOT"))
 	{
 		return notify_fail("这里没有矿藏。\n");
@@ -198,8 +197,8 @@ int move_MINE_map(string arg)
 
 int init_mine_map()
 {
-	int i,horizon=16+random(10),vertical=4+random(4),half_h=horizon/2,*origin=({}),*target_vertical=({}),x1,x2,peak;
-	string msg="",BLOCK,ME,TARGET,color,*colors=({HIR,MAG,HIB});
+	int i, horizon=16+random(10), vertical=4+random(4), half_h=horizon/2, *target_vertical=({}), x1, x2;
+	string color, *colors=({HIR,MAG,HIB});
 	if (query(MINE+"_generated"))
 	return 1;
 	set(MINE+"_generated",1);
@@ -248,7 +247,7 @@ string my_loc(object me,string symbol,int y1,int y2,int x1,int x2,string color)
 int show_MINE_detail(object me)
 {
 	int i,HalfPoint=query_temp(MINE+"/HalfPoint"),MaxHorizon=query_temp(MINE+"/MaxHorizon"),BaseLine=query_temp(MINE+"/BaseLine"),start=query_temp(MINE+"/start"),peak=query_temp(MINE+"/peak"),target_x=query_temp(MINE+"/target_x"),target_y=query_temp(MINE+"/target_y");
-	string msg="",BLOCK,ME,TARGET,LEFT_EDGE,RIGHT_EDGE,PEAK,color,*colors=({HIR,MAG,HIB});
+	string msg="", BLOCK, ME, TARGET, LEFT_EDGE, RIGHT_EDGE, PEAK;
 	if (me->query_temp(MINE+"/spot")!=this_object())
 	{
 		me->set_temp(MINE+"/spot",this_object());

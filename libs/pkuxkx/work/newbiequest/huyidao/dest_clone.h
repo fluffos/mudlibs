@@ -13,7 +13,7 @@ void dest_clone()
 		"/newbiequest/huyidao/hyd7_config",
 		"/newbiequest/huyidao/hyd8_config",
 	  "/newbiequest/huyidao/hyd9_config"});
-	object *exobj, *vob, obm, *eob, *oob, pl;
+	object *exobj, obm, pl;
 	int lp;
   
   exobj=({});
@@ -54,7 +54,7 @@ void dest_clone()
 //初始化动态地图  
 int init_virtualMap()
 {
-	object ob1,ob2, ob=this_object(),*obl;
+	object ob=this_object();
 
   ob->virtualRoomDestruct(ob->query("froom"));
 /*  if ( (obl=ob->query("vroom"))&&

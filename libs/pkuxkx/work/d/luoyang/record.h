@@ -126,7 +126,7 @@ string look_pai()
 }
 int do_del(string arg)
 {
-    int n,i,m,j,k,flag=0;
+    int n, i, m, k, flag=0;
     object me=this_player(),ob=this_object();
     string serial;
     if (me->query("id")!="zine")
@@ -346,8 +346,7 @@ int Count_in(object ob,object me,int flag)
 
 int RecordRankMe(string serial,object ob,int rank,int inc,object me,int anonymous)
 {
-    string name,id;
-    int i,len;
+    string name;
     name=COLOR_D->uncolor(me->query("name"));
     ob->set(serial+"/no"+rank+"record",inc);
     ob->set(serial+"/no"+rank+"id",me->query("id"));
@@ -563,7 +562,6 @@ int finish_passive(string id,int flag)
 int do_query()
 {
     object me=this_player();
-    object ob=this_object();
     if (!me->query_temp("exp_record_base_on_time/"+TIME))
     {
         tell_object(me,"你并未参加这里的『"+get_time(TIME)+"』个人挑战。\n");
@@ -586,7 +584,6 @@ int do_query()
 int do_start()
 {
     object me=this_player();
-    object ob=this_object();
     int time=TIME;
     if (me->query_temp("exp_record_base_on_time/"+TIME))
     {

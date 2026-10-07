@@ -96,7 +96,6 @@ int shoot_player(object me, object target, int type)		//type 预留给shoot all
 	int interval; //发枪间隔
 	int is_knife = 0;
 	int busy_time;
-	string msg;
 	object weapon = this_object();
 	object targetCard = target->query_temp("cs/card");
 	int curtime = time();

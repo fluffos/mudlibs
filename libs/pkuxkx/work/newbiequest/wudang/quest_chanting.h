@@ -66,7 +66,7 @@ string start_chanting(string name,string questid)
 		              "飞升岩","后殿","五老峰","三老峰","太子岩","虎头岩","凌霄宫",
 		              "玄武门","桃园篱笆","桃园木门","天柱峰下","一天门","潘神洞",
 		              "竹林小院","小园","小屋","北侧门","西廊","东厢走廊","茶室"});
-	string head,*headBuf,book;
+	string head, *headBuf;
 	int *lines,lp,rt,maxPage,totalPage,randPage;
 	object me;
 	mapping chanting;

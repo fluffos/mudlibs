@@ -5,7 +5,7 @@
 
 int canwu(object me,string skill,string msg,int times)
 {
-	int realtimes,i;
+	int realtimes;
 	int imp_skill;
 	string fail_msg;
 	int sk=me->query_skill(skill,1);	

@@ -42,14 +42,12 @@ int ask_fail()
 
 int give_reward(object me)
 {
-	string msg;
 	object letter,xiliandan;
 	string *slo=({"goodman","u&me2","ambition","clever"});
 	string *gems=({"gu","yu","jiao","jia"});
 	object gem,material;
 	int reward, i, cost_time, hard, j;
 	int id_mf;
-	string respect = RANK_D->query_respect(me);
 	mapping skills = me->query_skills();
 	string* sname,extra_msg="";
 	string skill;

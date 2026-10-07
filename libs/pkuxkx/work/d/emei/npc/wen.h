@@ -98,7 +98,6 @@ void attempt_apprentice(object ob)
         object me  = this_object();
         mapping ob_fam;
         mapping my_fam  = me->query("family");
-        string name, new_name;
         if (!(ob_fam = ob->query("family")) || ob_fam["family_name"] != "峨嵋派")
         {
                 command("say " + RANK_D->query_respect(ob) + "与本派素无来往，不知此话从何谈起？");

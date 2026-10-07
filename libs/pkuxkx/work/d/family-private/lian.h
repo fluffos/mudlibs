@@ -90,7 +90,6 @@ int get_lv()
 {
     object ob=this_object();
     object sm=load_object(__DIR__"shimen");
-    int grade=ob->query("overall_practice_donate");
     int need=sm->get_average_user();
     int result,loss;
     mixed *tm=localtime(time());
@@ -146,7 +145,6 @@ int do_lian(string arg)
 {
     object me=this_player();
     object ob=this_object();
-	object where = environment(me);
 	object weapon,weapon2;
 	string skillname, sname;
 	int skill, skill_basic,times,i,realtimes,bonus;

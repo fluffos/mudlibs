@@ -5,6 +5,7 @@
 #define CND_NO_HEAL_UP		2
 
 //存放三种类型的条件解释：poison-毒，disease-疾病，injure-创伤
+#ifndef CONDITION_NO_TABLE
 protected mapping cond_def=
 (["anran_poison":
 	(["name":"情毒",//in use
@@ -165,5 +166,6 @@ protected mapping cond_def=
   "yf_condition"://in use
 	(["name":"玉蜂针毒",
 		"type":"poison"])]);
+#endif // CONDITION_NO_TABLE
 
 #endif

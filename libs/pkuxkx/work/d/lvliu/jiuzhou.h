@@ -429,10 +429,9 @@ int do_qiao(string arg)
 
 int give_reward(object me)
 {
-    string msg,system_msg,channel_msg;
-	int reward, add, i, cost_time;
+    string system_msg, channel_msg;
+	int add;
 	object tasknpc;
-	object box;
 	int exp,pot,rep;
 
 	if (!me) return 1;

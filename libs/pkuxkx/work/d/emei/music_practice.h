@@ -105,7 +105,6 @@ int do_play(string arg)
 
 void in_play(object me, object weapon, string music, string skill, int times)
 {
-	int learn_speed, music_level, mint, learn_exp;
 	
 	if ( !objectp(weapon) )
 	{

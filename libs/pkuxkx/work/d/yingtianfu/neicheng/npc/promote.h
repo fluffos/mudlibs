@@ -598,7 +598,7 @@ string ming_title(object me)
 {
     object ob=load_object("/d/yingtianfu/neicheng/shengzhi");
     mapping *give_outs,*titles=({}),*suit_titles=({}),give_title;
-    int i,pin=(int)me->query("mingpin")-1,depart=me->query("ming/depart");
+    int i, pin=(int)me->query("mingpin")-1;
     string title,pro=me->query("ming/pro");
     if (me->query_temp("ming/hor_promote"))
     pin=pin+1;
@@ -736,13 +736,13 @@ string ming_title(object me)
 
 string extra_ming_title(object me)
 {
-    string* title1a=({"东南","西南","九边"});//+督师
+//+督师
     string* title_local=({"扬州","镇江","杭州","苏州","福州","泉州","南昌","岳阳","江州","成都","牙山"});
-    string* title2a=({"山东","山西","河南","陕西","四川","江西","湖广","浙江","福建","广东","广西","云南","贵州"});//+总督
-    string* title3a=({"山东","山西","河南","陕西","四川","江西","湖广","浙江","福建","广东","广西","云南","贵州"});//+巡抚
+//+总督
+//+巡抚
     string* title1b=({"三大营总管"});
     string* title2b=({"御林军副统领"});
-    string* title3b=({"山东","山西","河南","陕西","四川","江西","湖广","浙江","福建","广东","广西","云南","贵州"});//+将军
+//+将军
     int i,pin=(int)me->query("mingpin")-1;
     string title,pro=me->query("ming/pro");
     object ob=load_object("/d/yingtianfu/neicheng/shengzhi");
@@ -811,7 +811,6 @@ int position_me(object me)
 	string title,vice_title;
     string new_depart;
 	object *ob;
-    int pin=me->query("mingpin");
 	if (me->query("ming/2to1")&&me->query("mingpin")==2&&!me->query_temp("ming/hor_promote"))
 	{
 		me->set("ming/promote_from_depart_position",me->query("ming/title"));

@@ -76,8 +76,8 @@ int do_set()
 
 void explode(object room)
 {
-		int i, m, total;
-		object *player, bomb, victim, shenji;
+		int i, m;
+		object *player, bomb, victim;
 		string *dir;
 		mapping exits = room->query("exits");
 		
@@ -144,8 +144,7 @@ void explode(object room)
 int check_winner()
 {
 		int j, k, n, total;
-		object *livep, winner, arbiter, groom;
-		int flag;
+		object *livep, winner;
 				
 		total = 0;
 	
@@ -200,8 +199,7 @@ int check_winner()
 int check_total()
 {
 		int j, k, n, total;
-		object *livep, winner, arbiter, groom, troom;
-		int flag;
+		object *livep, winner, groom, troom;
 				
 		total = 0;
 		for(j = 0; j < L; j++)
@@ -229,7 +227,6 @@ int check_total()
 
 int valid_leave(object me, string dir)
 {
-		int i;
 		object ob, room;
 		mapping exits = this_object()->query("exits");;
 // 测试成功后再开放		
@@ -288,7 +285,7 @@ int choose(object ob)
 void set_exits(object ob)
 {
 	string *dir = ({"east", "south", "west", "north"});
-	string str1, *str = allocate(4), file1, file2;
+	string str1, *str = allocate(4), file1;
 	mapping exit = ([]);
 	int i, j, x, y;
 	

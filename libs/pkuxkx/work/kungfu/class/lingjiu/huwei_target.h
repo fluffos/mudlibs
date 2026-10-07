@@ -117,7 +117,7 @@ void init()
 
 int do_copy(object me,int maxpot,int type)
 {
-        int i,ratio,j;
+        int i, j;
         object ob;
         mapping skills;
         ob = this_object();
@@ -159,7 +159,7 @@ int do_copy(object me,int maxpot,int type)
 //死亡管理
 void die()
 {
-	int pot,exp,deactivity_rate,ratio,i;
+	int pot, exp;
 	object killer,ob;
 	ob = this_player(); 
 //          exp= random(3000) + 1000;

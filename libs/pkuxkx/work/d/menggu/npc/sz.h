@@ -96,7 +96,7 @@ int weigh_money(object user,int point)
 }
 int reward(object user,object robber,int damage,int flag)
 {
-	object *teamers,manager,lord,record=load_object("/d/menggu/zeiwo");
+	object record=load_object("/d/menggu/zeiwo");
 	int point,exp=user->query("combat_exp");
 	mixed tm=localtime(time());
     string current=sprintf("%d-%d-%d-%d", tm[5], tm[4]+1, tm[3],tm[2]+1);

@@ -5,7 +5,7 @@
 #define ComMark "NoNeed"
 int CalcResult(object me,string Type,string ValueType,string Giver)
 {
-	int BaseValue,TaskFactor,tmp;
+	int BaseValue;
 	if (Giver=="luguanying")
 	BaseValue=(200+random(200))*BuffInc()/6;
 	if (Giver=="killer")

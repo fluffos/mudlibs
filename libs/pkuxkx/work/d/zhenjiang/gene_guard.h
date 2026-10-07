@@ -125,7 +125,6 @@ void init()
 
 int valid_leave(object me,string dir)
 {
-	mixed *info;
 	object ob=this_object();
 	int size=me->query_temp("OustBandit/size")-1;
 	if (ob->query("exits/"+dir))

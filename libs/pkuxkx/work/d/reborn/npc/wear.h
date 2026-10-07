@@ -5,10 +5,8 @@ void wear_armor(object);
 
 void wear_armor(object pl)
 {
-    object ob, *inv, env, newob, *newob_list, uitem;
-    mapping gem_armor_map, dbase;
-    string *ids, files, *armor_list, *prop;
-    int i, j, num, armor_need_change;
+    object ob, *inv, env, *newob_list, uitem;
+    int i, j, armor_need_change;
 
     ob = this_object();
     inv = all_inventory(ob);

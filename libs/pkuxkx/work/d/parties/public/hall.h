@@ -281,7 +281,6 @@ int clear_title(object me,object ob)
 int group_title(object me)
 {
 	object ob=this_object();
-	int flag;
 	string *list=({}),*classes=({}),*all_classes=all_classes();
 	if ((objectp(GUIDER_D->get_base(me))&&ob!=GUIDER_D->get_base(me))||!objectp(GUIDER_D->get_base(me)))
 	return 1;
@@ -378,7 +377,7 @@ int do_clearrank(string arg)
 }
 int legal_old_rank(string rank,object ob)
 {
-	string *ranks,*all_classes=all_classes();
+	string *all_classes=all_classes();
 	mapping my_class_name,*class_name=class_name();
 	my_class_name=class_name[ob->query("group_level")-1];
 	if (member_array(COLOR_D->uncolor(rank),all_classes)==-1)
@@ -587,7 +586,7 @@ string show_premise_detail(int para1,int para2)
 }
 int show_premise(object ob,object me)
 {
-	int lv,i;
+	int i;
 	mapping premise,*premises=premises();
 	string msg;
 	if (ob->query("group_level")>=GROUP_MAX_LV)
@@ -637,7 +636,7 @@ int check_premise(object me,object ob)
 }
 int do_upgrade()
 {
-	int pl_no=0,cost;
+	int pl_no=0;
 	object ob=this_object(),me=this_player(),*all_pl;
 	if (!owner_access(me))
 	return notify_fail("只有此间的主人才可以主持升级的仪式！\n");
@@ -693,7 +692,7 @@ int entry_code(string arg,object me,object real,mapping *ent,int index)
 
 int do_change_passwd()
 {
-    object room,me=this_player();
+    object me=this_player();
     object real=load_object("/d/parties/public/obj/real");
     mapping *ent;
     int i,index=-1;
@@ -785,7 +784,7 @@ int do_blacklist(string arg)
 int do_gongxian(string arg)
 {
     object me=this_player();
-    int amount,got;
+    int amount;
     string type,*types=({"dz","lian","du"}),*eff=({"打坐吐纳","练习外功","读书学习"});
     if (!old_student(me))
     {
