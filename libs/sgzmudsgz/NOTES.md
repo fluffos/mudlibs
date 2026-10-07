@@ -140,3 +140,13 @@ hylib/dtxy) stay confirmed duplicates.
 ## 2026-10-05 — `T array a, b` 转换遗漏
 
 四个 `nation_menu.lpc`（`cmds/area`、`wiz/edc`、`wiz/xiaobai/menu`、`wiz/mimi`）的 `string * keys, dis;` 由原文 `string array keys, dis;` 转换而来，`dis` 丢了 `*`（MudOS 的 `array` 属于类型，两个名字都是数组）。补回 `*`；运行时驱动不检查局部变量类型，所以以前也能用（KB 03）。
+
+## 深度功能测试（§10.7，2026-10-06）— 编译警告整理
+
+`scripts/lpc_warnings.py sgzmudsgz --fix`：无用局部变量 216 个、`varargs` 8 处、裸 `return` 3 处、`nosave` 函数 136 个改 `protected`（8 个去掉），共改动 136 个 `.lpc`。HEAD 与工作树分别加载（新进程）：134 -> 134 通过，无回退；`scripts/lpc_audit_removed_locals.py HEAD` 检查 291 个删除的声明，0 条需看。
+手工：
+- `cmds/verbs/throw.lpc` 把 `inherit VERB_OB;` 写了两遍（第二遍在 `//ok` 之后），12 个函数报"从两处继承"；删去重复的那一行。
+- `secure/user/inputsys.lpc` 的 `object save_this_user = this_user();` 只被一行注释掉的 `set_this_player` 读，删去。
+- `scripts/lpc_diamonds.py --fix-redundant`：`domains/std/scarf.lpc`、`wiz/yue/obj/door/lockable_door.lpc` 去掉已被其他父类带进来的重复 `inherit`。`std/armor.lpc` 用 `object::remove()` 依赖 `inherit OBJ` 的作用域名，保留；`wiz/yue/obj/door/lock_door.lpc` 是巫师目录里的菱形继承，启动不加载，未动。
+
+启动时警告 139 -> 0；新进程登录（标题画面、`new` 注册、英文名确认）正常。
