@@ -304,3 +304,11 @@ functionally re-tested live on this lib.
 - `include/npc/indian.lpc` 与 `masia.lpc` 共用全局名 `ma_sname`/`ma_pname`；两个头文件被同一个守护进程（`npcd` 等）一起包含时，后包含的印度名表覆盖马来名表，`generate_ma_name()` 生成的是印度名字。印度表改名 `in_sname`/`in_pname`（KB 04 §6.10）。
 
 验证：改动的文件和包含 `npc/indian` 的守护进程在 HEAD 与工作树分别加载（`scripts/lpc_listcheck.sh`，新进程），无回退。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+先用 `scripts/lpc_twin_port.py adopt wqfy zzfy3` 把 wqfy 警告整理提交（0dd906c83e7）里的改动搬到约 525 个修改前与它一致的文件（逐文件核对非 ASCII 文字：除 wqfy 自己删掉的以外没有丢失或改动），剩下的再跑 `scripts/lpc_warnings.py zzfy3 --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 816 个 `.lpc` 和若干 `.h`。
+与 wqfy 相同的两处真错误：`adm/daemons/combatd.lpc` 易筋经反震"内伤"800–1600 一档少了 `return`，描述算出来就扔了；`d/kaifeng/npc/huzhou.lpc` 的 `command("follow %s", ob->query("id"))` 在本库是编译错误，护舟这个 NPC 整个加载不了——改成 `command("follow " + ob->query("id"))` 后能加载了。
+HEAD 与工作树分别加载（新进程）：745 -> 746 通过（多出的就是 huzhou），无回退；改过的头文件的 25 个包含者 24 -> 24 通过。
+
+启动时警告 76 -> 0。
