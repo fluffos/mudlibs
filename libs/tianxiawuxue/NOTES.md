@@ -1021,3 +1021,11 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply t
 ## 深度功能测试（§10.7，2026-10-07）— 空的 `if (current_water == 0) {}`
 
 5 个房间的 `valid_leave()` 里有一行什么也不做的 `if (current_water == 0) {}`（编译警告 `Expression has no side effects`），删去，行为不变：`d/gaochang/room11.lpc`、`d/gaochang/room12.lpc`、`d/gaochang/room13.lpc`、`d/gaochang/room14.lpc`、`d/xingxiu/shanjiao.lpc`。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py tianxiawuxue --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 826 个 `.lpc` 和 8 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：762 -> 762 通过，无回退；改过的头文件的 49 个包含者 44 -> 44 通过。
+手改一处：`d/liwu/obj/ling3.lpc` 的 `if ("mark_place", base_name(environment(me)) == "llzhuang")`，逗号表达式左边的字符串什么也不做（编译警告 `Expression has no side effects`），去掉，行为不变。
+记录、未改：任务基类 `inherit/misc/quest.lpc` 在第 74 行报 `syntax error, unexpected '}'`，HEAD 起就编译不过；`quest/quest_sc/guo.lpc` 调用本库没有的 `message_sort()`，HEAD 起也编译不过。
+
+启动时警告 26 -> 0；新进程登录（新人物确认）正常。

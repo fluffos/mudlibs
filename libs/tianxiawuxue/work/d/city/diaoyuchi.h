@@ -39,7 +39,7 @@ int do_banned2(string arg)
 
 int do_fish()
 {
-    object me, fish;
+    object me;
     me = this_player();
     if(me->is_fighting())
 	return notify_fail("一边打架一边钓鱼，太累了吧？\n");
