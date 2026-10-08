@@ -111,6 +111,34 @@ def sync_changes(slug, lib):
     return len(names)
 
 
+CHUNK = int(os.environ.get("LPCW_CHUNK", "4000"))
+
+
+def batch_compile(lib, objs):
+    """`lpcc --batch` over objs, at most CHUNK per VM (one boot of a ~50k-file lib outgrows any sane memory cap), and
+    resumed past an object that kills the VM: lpcc prints `===== /obj =====` before each one, so a run that stops early
+    is restarted after the last object it reached (that object is recorded as a FAIL)."""
+    out, i, n = [], 0, len(objs)
+    while i < n:
+        part = objs[i:i + CHUNK]
+        raw = subprocess.run([LPCC, "--batch", "config.fluffos"], cwd=lib, input="\n".join(part) + "\n",
+                             capture_output=True, text=True, errors="replace").stdout
+        out.append(raw)
+        heads = re.findall(r"^===== (\S+) =====", raw, re.M)
+        done = part.index(heads[-1]) + 1 if heads and heads[-1] in part else 0
+        if done >= len(part) or re.search(r"^(PASS|FAIL) " + re.escape(part[-1]) + r"$", raw, re.M):
+            i += len(part)
+            continue
+        if done == 0:
+            done = 1
+        stuck = part[done - 1]
+        if not re.search(r"^(PASS|FAIL) " + re.escape(stuck) + r"$", raw, re.M):
+            out.append("\nFAIL " + stuck + "\n")
+            print(f"  lpcc stopped at {stuck}; resuming after it", file=sys.stderr)
+        i += done
+    return "".join(out)
+
+
 def scan(lib, skips=()):
     work = os.path.join(lib, "work")
     objs = []
@@ -122,8 +150,7 @@ def scan(lib, skips=()):
             if f.endswith(".lpc"):
                 objs.append("/" + os.path.join("" if rel == "." else rel, f[:-4]).replace(os.sep, "/"))
     objs.sort()
-    raw = subprocess.run([LPCC, "--batch", "config.fluffos"], cwd=lib, input="\n".join(objs) + "\n",
-                         capture_output=True, text=True, errors="replace").stdout
+    raw = batch_compile(lib, objs)
     seen, rows = set(), []
     for m in DIAG.finditer(raw):
         f, ln, col, sev, msg = m.groups()

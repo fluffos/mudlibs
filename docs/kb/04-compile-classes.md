@@ -189,7 +189,9 @@ appears in type position. Grep bare `\bstatus\b` and filter out prose
 
 ### 6.10 Compiler warnings: each one is a fix, never `#pragma no_warnings`
 `scripts/lpc_warnings.py <slug>` builds a site-like tree, runs `lpcc
---batch` over every `.lpc`, and groups the diagnostics. Read the boot-time
+--batch` over every `.lpc` (at most `LPCW_CHUNK`, default 4000, objects per VM,
+resuming after an object that kills the VM -- one batch over nitan170911's
+~55k files stopped after 312 and the scan looked clean), and groups the diagnostics. Read the boot-time
 block that lpcc prints *before* the first `=====` header too (master,
 simul_efun and preloaded daemons are reported there, not under their file),
 accept warnings with no column (`file:13: warning: Macro ...`), and rescan
