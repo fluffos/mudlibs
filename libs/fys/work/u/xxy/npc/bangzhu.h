@@ -26,7 +26,7 @@ int ask_jiaru()
    return 1;
        }
             }
-  return;
+  return 0;
 }
 int check_banghui()
 {

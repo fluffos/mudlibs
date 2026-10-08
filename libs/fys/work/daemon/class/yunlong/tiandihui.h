@@ -3,7 +3,7 @@
 
 int do_join()
 {
-	object me, ob, obj ;
+	object me, ob;
 	string tang;
 
 	me = this_object () ;

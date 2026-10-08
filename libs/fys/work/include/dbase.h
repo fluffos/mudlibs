@@ -5,9 +5,9 @@
 #define DEFAULT_DBASE_SIZE		15
 
 
-nosave nomask private mixed _query( mapping map, string *parts );
-nosave nomask private int _delete( mapping map, string *parts );
-nosave nomask private mixed _set( mapping map, string *parts, mixed value );
+nomask private mixed _query( mapping map, string *parts );
+nomask private int _delete( mapping map, string *parts );
+nomask private mixed _set( mapping map, string *parts, mixed value );
 
 
 
