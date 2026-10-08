@@ -1,7 +1,7 @@
 // modify by xiha@wmkj
 
 int valid_kill(object killer, object victim)
-{    int pk_k, pk_v;   
+{   
  
      if(environment(killer)->query("no_fight"))
        return 0;
