@@ -821,3 +821,7 @@ an already live-verified fix from the shared-lineage sibling `zhyx`).
 - `cmds/std/swear.lpc`、`cmds/std/team/swear.lpc`：结义失败提示被多余的 `;` 截成两句，`fail` 只剩"……可惜现在有人不在，$N"，后半句"的提议只好作罢。"丢了；接回去。
 
 验证：改动的文件和包含 `npc/indian` 的守护进程在 HEAD 与工作树分别加载（`scripts/lpc_listcheck.sh`，新进程），无回退。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py yanhuangwuhun --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 486 个 `.lpc` 和 14 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：484 -> 484 通过，无回退；改过的头文件的 24 个包含者 23 -> 23 通过。启动时警告 2 -> 0；新进程登录（输入名字）正常。
