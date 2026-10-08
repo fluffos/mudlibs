@@ -860,3 +860,8 @@ live `debug.log` 是 `libs/zjdyaryl/log/debug.log`（Boot Time Fri Sep 4
 - `cmds/std/team/swear.lpc`：结义失败提示被多余的 `;` 截成两句，`fail` 只剩"……可惜现在有人不在，$N"，后半句"的提议只好作罢。"丢了；接回去。
 
 验证：改动的文件和包含 `npc/indian` 的守护进程在 HEAD 与工作树分别加载（`scripts/lpc_listcheck.sh`，新进程），无回退。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py zjdyaryl --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 543 个 `.lpc` 和 14 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：536 -> 536 通过，无回退；改过的头文件的 128 个包含者 127 -> 127 通过。
+本库与其他指间 MUD 一样在 `globals.h` 里 `#define nosave nosave`，扫描器看不出旧 `static` 函数改成的 `nosave` 函数（`Illegal to declare nosave function`），按扫描诊断把 10 个文件的 28 处改成 `protected`（master、treemap、questd、dbased、cmwhod 等），这 10 个文件和 `adm/daemons/natured.lpc`（删去空语句 `lt[LT_MON];`）在 HEAD 与工作树分别加载 11 -> 11 通过。启动时警告 52 -> 0；新进程登录（新人物确认）正常。
