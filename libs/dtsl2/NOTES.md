@@ -715,3 +715,10 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply d
 - `d/job/cisha/changzhen.lpc`、`fanan.lpc`、`killer.lpc`：战斗招式 `(: "apply_action", "linglong-yuquan", 2, 10 :)`——函数名写成了字符串，本驱动把它当作表达式函数指针，只得到字符串，杀手在战斗中从不出招（KB 04 §6.10）；改成同库其他 NPC 用的 `(: apply_action, ... :)`。
 
 改动的文件在 HEAD 与工作树分别加载（新进程）通过。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+先用 `scripts/lpc_twin_port.py adopt dtsl dtsl2` 把 dtsl 警告整理提交（a6a78f6443f）里的改动搬到 260 个修改前与它一致的文件（逐文件核对非 ASCII 文字：没有丢失或改动），剩下的再跑 `scripts/lpc_warnings.py dtsl2 --fix`，共改动 376 个 `.lpc` 和若干 `.h`。HEAD 与工作树分别加载（新进程）：342 -> 342 通过，无回退；改过的头文件的 249 个包含者 208 -> 208 通过。
+手工：`adm/daemons/logind.lpc` 删去没用到的 `string ip = query_ip_number(ob);`，以及与 `include/tomud.h` 一样的 `#define TMI(x)` 重复定义（展开结果相同）。
+
+启动时警告 26 -> 0；新进程登录（新人物确认）正常。
