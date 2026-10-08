@@ -19,7 +19,7 @@ void eventLogin();
 void RestoreTask();
 int CanTask( string );
 
-nosave void create();
-nosave void heart_beat();
+protected void create();
+protected void heart_beat();
 
 #endif /* T__TASK_H */
