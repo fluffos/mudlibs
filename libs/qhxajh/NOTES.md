@@ -249,3 +249,10 @@ Same convert-era byte corruption as the waiter `！”\n` / `！\n` →
 ## 深度功能测试（§10.7，2026-10-04）— negative range ends
 
 `scripts/lpc_fix_negative_ranges.py`: 4 line(s) in 1 file(s) count a range from the end with `<` (`x[a..-1]` -> `x[a..<1]`, `x[-2..]` -> `x[<2..]`; KB 06 §7.209). In this driver a negative constant end gave `""` / `({ })` and a negative start the whole value, so each of these returned the wrong slice; the compile warning `A negative constant as the second element of arr[x..y]` is gone from the files that compile. Range lvalues (`s[0..-1] = text`, the prepend idiom) are left alone. A paired compile of the changed files at HEAD and in the working tree showed no new error.
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py qhxajh --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 73 个 `.lpc`。HEAD 与工作树分别加载（新进程）：72 -> 72 通过，无回退。
+手工：`system/daemon/natured.lpc` `game_season()` 删去没用到的 `mixed *local = localtime(TIME_TICK);`；`system/daemon/logind.lpc` 的 `my_ip` 只在 `#ifdef ALLOW_MULTI_LOGIN` 里用、`system/daemon/combatd.lpc` 的 `debug` 只在 `#ifdef DEBUG` 里用，声明挪进同样的条件里。
+
+启动时警告 32 -> 0；新进程登录（新人物确认）正常。

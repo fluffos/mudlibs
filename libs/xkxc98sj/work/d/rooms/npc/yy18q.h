@@ -202,7 +202,7 @@ int accept_object(object me, object obj)
 
 void destroying(object obj, object ob, object me)
 {   
-   object weapon, master, *inv;
+   object weapon, *inv;
    int i;
    weapon = ob->query_temp("weapon");
 

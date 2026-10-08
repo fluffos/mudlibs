@@ -303,3 +303,10 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 - `cmds/std/team/swear.lpc`：结义失败提示被多余的 `;` 截成两句，`fail` 只剩"……可惜现在有人不在，$N"，后半句"的提议只好作罢。"丢了；接回去。
 
 验证：改动的文件和包含 `npc/indian` 的守护进程在 HEAD 与工作树分别加载（`scripts/lpc_listcheck.sh`，新进程），无回退。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py xkxc98sj --fix` 加 `scripts/lpc_fix_no_effect.py --apply`（`d/tiezhang` 三个房间删去 `return` 后面的 `"\n";` 等），再用 `scripts/lpc_nitan_family_fixes.py xkxc98sj`（`natured.lpc` 的空语句 `lt[LT_MON];`、`combatd.lpc` 的空语句 `your_temp["guarding"];`），并删去 `adm/daemons/logind.lpc` 没用到的 `string ip = query_ip_number(ob);`。共改动 410 个 `.lpc`。HEAD 与工作树分别加载（新进程）：382 -> 382 通过，无回退；改过的头文件的 25 个包含者 25 -> 25 通过。
+记录、未改：`clone/quest/block.lpc` 的 `STORY_DIR + "yanmen"->prompt()` 因为 `->` 比 `+` 优先，调用的是名叫 `"yanmen"` 的物件（应写 `(STORY_DIR + "yanmen")->prompt()`）；但这个文件本身有多处编译错误（未定义的 `my` 等），HEAD 起就加载不了。`d/tdh/job1/yi.lpc` 把保留字 `do` 当变量名，同样编译不过。
+
+启动时警告 32 -> 0；新进程登录（字体选择、英文名、新人物确认）正常。
