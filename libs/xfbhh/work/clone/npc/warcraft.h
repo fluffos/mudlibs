@@ -37,7 +37,7 @@ inherit F_SSERVER;
 
 #define RIDE_CMD              "/cmds/std/ride"
 
-void remove(string euid)
+varargs void remove(string euid)
 {
         object env;
         
@@ -591,7 +591,6 @@ varargs mixed set(string idx, mixed para, object ob)
 
 mixed add(string prop, mixed data)
 {
-        string para;
         mixed old;
         int level;
 
@@ -614,7 +613,6 @@ mixed add(string prop, mixed data)
 varargs int receive_whistle(object me, int flag)
 {
         object env, follower;
-        int    period;
 
         if( (env = environment()) && env == me )
         {
