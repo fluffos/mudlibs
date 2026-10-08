@@ -1151,3 +1151,7 @@ A Big5 character whose second byte is 0x5C was written with one extra backslash 
 ## 深度功能测试（§10.7，2026-10-05）— tail() simul_efun
 
 `scripts/lpc_add_tail.py --apply`: `cmds/wiz/tail.lpc` calls `tail(file)`, an efun of the MudOS this archive ran on that FluffOS does not have (`Undefined function tail`: the command did not compile). `adm/simul_efun/file.lpc` now defines `void tail(string file)`: the last 10 lines of the file, written to the player. Load check (HEAD against the working tree): 1 of the 1 tail command file(s) failed to load at HEAD, all load now, and the simul_efun file loads. KB 04 §6.2.
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py dfgs2 --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 76 个 `.lpc` 和 1 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：75 -> 75 通过，无回退。启动时警告 23 -> 0；新进程登录（新人物确认）正常。
