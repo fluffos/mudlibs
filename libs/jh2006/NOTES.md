@@ -451,3 +451,4 @@ re-invoke `enable_player()` on this lib while the object is still
 ## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
 
 `scripts/lpc_warnings.py jh2006 --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 99 个 `.lpc`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：93 -> 93 通过，无回退。启动时警告 9 -> 0；新进程登录（输入名字）正常。
+手改 `adm/daemons/logind.lpc`：`get_id()` 里从未用到的 `ip` 删去。

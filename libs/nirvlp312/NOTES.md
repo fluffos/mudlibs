@@ -237,3 +237,7 @@ header-encrypted. Skip nitan.zip.
 1. `scripts/lpc_warnings.py nirvlp312 --fix`：359 个 `nosave` 函数改 `protected`（19 个去掉修饰），删 845 个未用局部变量，补 14 处 `varargs`、1 处 `return;`、45 处无效转义；`lpc_audit_removed_locals.py` 复核 1354 个，0 个需要处理。改动的 490 个 `.lpc` 在只含被跟踪文件的树里 HEAD 与新版各编一次：都是 230 个通过，无差异。
 2. 逐条看了 “Expression has no side effects”：`obj/monster.lpc`（及 `std/monster.lpc`）的 `query_armor_params()` 用逗号表达式 `return (a, b, c, d);`，只返回最后一个，改为数组 `({ a, b, c, d })`（目前没有调用者）；`room/test.lpc` 的 `shorty == "Computer room.\n";` 改为赋值。`obj/player.lpc` 里 `race = "creature"; gender=="male";` 的第二句什么也不做，但意图不明（这一分支本来就是让种族去配合 “creature” 性别），未改；`obj/guild.lpc` 与 `player.lpc` 的空 `if` 块与原档案相同。
 3. 启动警告 165 → 26，错误 0；剩下的是 `format()` 菱形继承（模拟外部函数）、未经类型检查的调用等结构性问题。实测 `fluffos` 登录、`look`、`score`、进学院、军械库 `browse`、`quit` 保存正常。本库未经 §9 格式化。
+
+## 深度功能测试（§10.7，2026-10-08）— 编译警告整理（部分）
+
+`scripts/lpc_warnings.py nirvlp312 --fix` 只改动了 8 个文件（未用的局部变量、空语句；改动的文件中能加载的 4 个 HEAD 与工作树都通过）。本库 3607 个文件里 1407 个在本驱动下编译不过（缺 LDMud 式 efun、玩家目录头文件等），启动时的 22 条警告都在核心物件里，工具留给手工：`obj/living.lpc`（声明不在作用域开头的未用局部变量、`#if` 分支里的 `pro_object`）、`obj/player.lpc`（`fname`、条件表达式值未用、`set_top_kill`/`set_top_boot_xp` 参数个数与前面的声明不一致、未带类型检查的函数调用）、`obj/guild.lpc` 两处空语句、`obj/simul_efun.lpc` 从两条路径继承 `format()`。待单独处理。

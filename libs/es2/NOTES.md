@@ -564,3 +564,4 @@ live `debug.log` 是 `libs/es2/log/debug.log`（Boot Time Fri Sep 4
 ## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
 
 `scripts/lpc_warnings.py es2 --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 180 个 `.lpc` 和 1 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：175 -> 175 通过，无回退；改过的头文件的 1 个包含者 1 -> 1 通过。启动时警告 21 -> 0；新进程登录（输入名字）正常。
+手改 `include/net/ftpdsupp.h`：`check_access()` 的局部 `file` 只在 `#ifdef GUEST_WIZARD_FTP` 分支里用到，声明挪进同一个 `#ifdef`。
