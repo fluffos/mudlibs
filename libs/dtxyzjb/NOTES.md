@@ -175,3 +175,11 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply d
 ## 深度功能测试（§10.7，2026-10-06）— 飞贼的装备路径
 
 `u/lying/feizei/feizei` 和 `u/lying/tonggang/feizei/feizei` 给飞贼带的装备写成 `/u/tianlin/feizei/obj/…`，本库没有这个目录，装备在各自的 `obj/` 下。`carry_object()` 出错时 `choose_feizei()` 在重新 `call_out` 之前中断，飞贼事件第一次就停止。路径改成各自所在目录（与 sjcs 同一处代码）。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py dtxyzjb --fix` 加 `scripts/lpc_fix_no_effect.py --apply`（`d/dntg/yunlou/npc/yaoguai.lpc`、`yaoguai-b.lpc` 的 `for(t==0; ...)` 改成 `=`，`xuanyuan-archery` 删去 `(: throw_weapon :);` 等），共改动 906 个 `.lpc` 和若干 `.h`。HEAD 与工作树分别加载（新进程）：865 -> 864，少的那个 `u/pujing/room/leitai4/milin` 只删了两个没用到的局部变量，单独加载通过，是批量加载的假象；改过的头文件的 465 个包含者 416 -> 416 通过。
+手工：`daemon/skill/huomo-dao/boyue.lpc` 和 `daemon/class/tianmo/huomo-dao/boyue.lpc`（火魔刀「波月」）的出招描述被多余的 `;` 截断，后半句"$n只觉刀光如电，竟不知如何躲避了！"从来没显示过、颜色也没还原；接回去（`scripts/lpc_join_cut_strings.py`）。`adm/daemons/natured.lpc` `event_night()` 里只在注释掉的钟馗段落用的 `badguy`、`room2` 删去。
+未动：`d/jjf/npc/xiaomotou1.lpc`、`d/npc/vr_room/obj/tai1.lpc` 本身有语法错误，HEAD 起就编译不过。
+
+启动时警告 53 -> 0；新进程登录正常（新人物用 `new`）。

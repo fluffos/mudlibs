@@ -10,7 +10,6 @@
 #define nosave nosave
 #define protected nosave
 #endif
-#pragma save_binary
 #define JOB_OB(x)		("/job/"+x+"/job")
 #define CITY_OB(city,room)   ("/d/"+city+"/"+room)
 //added by Beeby @ DTXY for TOPTEN

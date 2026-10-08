@@ -11,7 +11,7 @@ inherit F_BACKUP;
 
 void initzhuangbei(object me,object ob,string name,string long,int damage)
 { 
-            int lvl=0,type=0,zsh_xrc,zw_xrc,xrc,zshrd,zwrd,xrcrandom;
+            int lvl=0, zsh_xrc, zw_xrc, xrc, xrcrandom;
             int i,j,num,real_value,need_lvl=1;
             int better_chance;
             string color,c,ch,itemtype=ob->query("type/large");

@@ -339,3 +339,9 @@ functionally re-tested live on this lib.
 ## 深度功能测试（§10.7，2026-10-07）— 郭靖任务的名单被覆盖
 
 `quest/guojob/guo.lpc` 先后 `#include "zzzjob.lpc"` 和 `"teamjob.lpc"`，两个文件都声明全局 `mixed names`、内容不同（`Redeclaration of global variable 'names'`），后包含的 teamjob 名单覆盖了 zzzjob 的，"保护"任务的目标其实从 teamjob 的名单里抽。teamjob 的表改名 `team_names`（KB 04 §6.10）。`guo.lpc` 在 HEAD 与工作树分别加载（新进程）通过。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py tybxjh --fix` 加 `scripts/lpc_fix_no_effect.py --apply`（`kungfu/skill/xuanyuan-arrow.lpc` 删去什么也不做的 `(: throw_weapon :);` 等），共改动 655 个 `.lpc` 和若干 `.h`。HEAD 与工作树分别加载（新进程）：596 -> 596 通过，无回退；改过的头文件的 36 个包含者 36 -> 36 通过。`d/feitian/npc/xunbu.lpc` 的 `(: random_move() :);` 只造函数指针不调用，属内容设计，未动。
+
+启动时警告 43 -> 0；新进程登录（新人物确认）正常。
