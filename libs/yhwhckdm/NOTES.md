@@ -101,3 +101,7 @@ preload/`shopd`/`quit` 的 unused-variable 警告，无同形功能缺口。
 - `cmds/std/swear.lpc`、`cmds/std/team/swear.lpc`：结义失败提示被多余的 `;` 截成两句，`fail` 只剩"……可惜现在有人不在，$N"，后半句"的提议只好作罢。"丢了；接回去。
 
 验证：改动的文件和包含 `npc/indian` 的守护进程在 HEAD 与工作树分别加载（`scripts/lpc_listcheck.sh`，新进程），无回退。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py yhwhckdm --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 458 个 `.lpc` 和 12 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：454 -> 454 通过，无回退；改过的头文件的 22 个包含者 21 -> 21 通过。启动时警告 2 -> 0；新进程登录（输入名字）正常。

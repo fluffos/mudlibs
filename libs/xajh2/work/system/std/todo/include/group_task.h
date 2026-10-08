@@ -10,8 +10,8 @@ void TaskSuccess( object );
 void TaskFail( object );
 int CanBegin( object );
 int CanEnd( object );
-nosave void create();
-nosave void heart_beat();
+protected void create();
+protected void heart_beat();
 
 #endif /* __GROUP_TASK_H */
 

@@ -177,7 +177,7 @@ int accept_object( object me, object obj)
     return 1;
 }
 
-void destruct_quest_object(object obj)
+varargs void destruct_quest_object(object obj)
 {
 	destruct(obj);
 }
