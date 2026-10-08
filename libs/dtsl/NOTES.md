@@ -1168,3 +1168,10 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply d
 
 房间基类 `std/room.lpc`：`reset()` 的 `case 1:` 拿到 0 就跳过这一项（`if (!objectp(ob[list[i]])) break;`）。档案里没有的 NPC 或物品（或 `create()` 出错的物件）原先会让列出它的房间整个加载失败（`Bad argument 1 to environment()`，或对 0 的 `call_other()`），连带这个房间后面的区域；现在房间照常加载，只是少了那个物件，下次 `reset()` 再试（KB 05 §7.25；`scripts/lpc_resilient_room.py`、`scripts/lpc_room_reset_guard.py`）。
 验证：探针（`scripts/lpc_room_reset_probe.py`：房间基类列出一个不存在的物件，再调用 `reset()`）HEAD 单件 崩溃、多件 OK，工作树 单件 OK、多件 OK。
+
+## 深度功能测试（§10.7，2026-10-07）— 正午的天气消息和刺杀任务的杀手
+
+- `adm/daemons/natured.lpc` `event_noon()`：按月份选生病消息的 `switch` 里，三、四、六、七、九、十、十二、一这八个月写的是 `case "三": HIG + "…" + NOR; break;`——少了 `msg =`，是什么也不做的表达式。这些月份里如果后面的 `random(2)` 没中，`msg` 仍是 0，户外体弱的玩家每到正午就会触发 `tell_object(ob, 0)` 的执行错误，原作者写的季节描述也从没显示过。补上 `msg =`（与五、八、十一、二月一致）。
+- `d/job/cisha/changzhen.lpc`、`fanan.lpc`、`killer.lpc`：战斗招式 `(: "apply_action", "linglong-yuquan", 2, 10 :)`——函数名写成了字符串，本驱动把它当作表达式函数指针，只得到字符串，杀手在战斗中从不出招（KB 04 §6.10）；改成同库其他 NPC 用的 `(: apply_action, ... :)`。
+
+改动的文件在 HEAD 与工作树分别加载（新进程）通过。
