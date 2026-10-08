@@ -4,7 +4,6 @@ int accept_object(object ob, object obj) {
   object me = this_object();
 
   mapping my_fam = me->query("family");
-  mapping ob_fam = ob->query("family");
 
   if (!my_fam || (my_fam["family_name"] != "丐帮"))
     return notify_fail("你哪里来的青竹令？\n");

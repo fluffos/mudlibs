@@ -27,7 +27,6 @@ int do_study(string arg) {
   });
   object me, where;
   int jing_cost, learn_pot, item, times, i, success = 0;
-  string skillname;
 
   me = this_player();
   if (!arg) return notify_fail("你要领悟什么呀？\n");
