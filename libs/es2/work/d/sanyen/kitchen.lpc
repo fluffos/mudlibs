@@ -39,7 +39,7 @@ int do_open(string arg)
       return notify_fail("你要打开什么？\n");
    if (!present("cook bonze"))
       {
-       message_vision("$N打开蒸笼的盖\子, 一股热气冒向$N的脸上。\n"
+       message_vision("$N打开蒸笼的盖子, 一股热气冒向$N的脸上。\n"
                       "$N仔细一看, 只见蒸笼里排著一粒粒又白又Ｑ的大馒头(maintal)。\n",this_player());
        return 1;
       }

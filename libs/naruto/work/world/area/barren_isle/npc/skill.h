@@ -2,7 +2,7 @@ void do_fight()
 {
     string dogname;
     int damage, raiseDamage, x, y, exact, evade;
-    object enemy, me, mob, ob;
+    object enemy, me, mob;
     mapping cnd = ([]);
 
     string *name1 = ({ "蘇", "聖", "邦", "頑固", "愛", "掰", "沖田", "樓", "楊", "風","吸", 

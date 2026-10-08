@@ -1,7 +1,7 @@
 void do_fight()
 {
-    int damage, raiseDamage, x, y, lv, sock, exact, evade;
-    object enemy, item;
+    int damage, raiseDamage, x, y, lv, exact, evade;
+    object enemy;
     object* targets;
     mapping cnd = ([]);
 

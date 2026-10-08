@@ -6,7 +6,7 @@ int isSock(object ob, object enemy)
 void do_fight()
 {
     int damage, raiseDamage, x, y, lv, sock, exact, evade;
-    object enemy, item;
+    object enemy;
     object* targets;
     mapping cnd = ([]);
 

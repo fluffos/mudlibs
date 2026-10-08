@@ -560,3 +560,7 @@ live `debug.log` 是 `libs/es2/log/debug.log`（Boot Time Fri Sep 4
 ## 深度功能测试（§10.7，2026-10-07）— 兵器的 `actions` 函数指针
 
 `set("actions", (: WEAPON_D, "query_action" :));`：旧 MudOS 把 `(: 字符串, "函数" :)` 当作 call_other 函数指针，本驱动把它当作表达式函数指针，求值只得到字符串 `"query_action"`。没有对应兵器技能时 `feature/attack.lpc` 直接用兵器的 `actions`，`COMBAT_D` 拿到的不是 mapping，`reset_action()` 后仍不是，记一条 bad action 就不出招——拿着这些兵器打不出攻击。改成别的兵器早已用的 `(: call_other, WEAPON_D, "query_action" :)`（KB 04 §6.10）：`std/weapon/throwing.lpc`、`std/weapon/fork.lpc`、`std/weapon/whip.lpc`、`std/weapon/sword.lpc`、`std/weapon/axe.lpc`、`std/weapon/blade.lpc`、等共 8 个。改动的文件在 HEAD 与工作树分别加载（新进程），无回退。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py es2 --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 180 个 `.lpc` 和 1 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：175 -> 175 通过，无回退；改过的头文件的 1 个包含者 1 -> 1 通过。启动时警告 21 -> 0；新进程登录（输入名字）正常。

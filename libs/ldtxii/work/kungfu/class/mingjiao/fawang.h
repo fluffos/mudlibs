@@ -4,8 +4,8 @@ int accept_object(object ob, object obj)
 {
 	object me = this_object();
 
-	mapping my_fam  = me->query("family");
-	mapping ob_fam  = ob->query("family");
+
+
 
 	if ( ob->query_temp("have_letter") && present("tuijian xin5", ob) ) 
 	{
@@ -42,7 +42,7 @@ void attempt_apprentice(object ob)
 	mapping ob_fam;
 	mapping my_fam  = me->query("family");
 
-	string name, new_name;
+
 
         if (!(ob_fam = ob->query("family")) || ob_fam["family_name"] != "明教")
 	{

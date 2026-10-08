@@ -232,7 +232,7 @@ void attempt_apprentice(object ob)
 
 
 
-	string name, new_name;
+	string name;
 
 
 

@@ -246,7 +246,7 @@ int preparing(object me, object fighter)
 
 {
 
-	object monk, room, ob;
+	object monk, room;
 
 
 
@@ -428,7 +428,7 @@ int do_recruit(object me, object fighter)
 
 {
 
-	mapping ft_fam, my_fam;
+	mapping ft_fam;
 
 
 

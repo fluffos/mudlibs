@@ -275,3 +275,7 @@ lpc`/`pigd.lpc` 里搜不到任何 `money`/`balance` 相关调用——它不是
 ## 深度功能测试（§10.7，2026-10-07）— 空的 `if (current_water == 0) {}`
 
 3 个房间的 `valid_leave()` 里有一行什么也不做的 `if (current_water == 0) {}`（编译警告 `Expression has no side effects`），删去，行为不变：`d/xingxiu/nanjiang2.lpc`、`d/xingxiu/nanjiang3.lpc`、`d/xingxiu/shanjiao.lpc`。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py ldtxii --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 82 个 `.lpc` 和 4 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：71 -> 71 通过，无回退；改过的头文件的 7 个包含者 5 -> 5 通过。启动时警告 2 -> 0；新进程登录（输入名字）正常。
