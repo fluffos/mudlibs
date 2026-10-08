@@ -242,7 +242,7 @@ void xyjob_3()  // 判断胜负
 
 void xyjob_4()  // 发放奖励
 {
-  int i, at, df, exp, nexp, pot, SJ_Credit;
+  int i, at, df;
   object *attackers = filter_array(
     "/cmds/std/xyjob"->player_list(),
     (: $1->query_temp("xyjob/mg_attack") :)

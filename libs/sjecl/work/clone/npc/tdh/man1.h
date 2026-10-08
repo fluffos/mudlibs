@@ -92,7 +92,6 @@ void finish(object me) {
   object target, ob = this_object();
   mapping tdh;
   string str;
-  int exp, pot, time;
 
   if (!me
     || !present(me, environment(ob))

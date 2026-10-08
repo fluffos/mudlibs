@@ -65,7 +65,7 @@ string Random_Source(int i) {
 }
 
 int buy_caipiao(string arg) {
-  int i, k;
+  int k;
   string strMyCP, huobi, count;
   object me = this_player();
   object cp;

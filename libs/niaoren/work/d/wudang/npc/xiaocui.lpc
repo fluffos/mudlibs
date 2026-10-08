@@ -147,7 +147,7 @@ int accept_object(object who, object ob)
 
 void serve_tea(object who)
 {
-	object obt, obc, obn;
+	object obn;
 	object room;
 
 	if( !who || environment(who) != environment() ) return;

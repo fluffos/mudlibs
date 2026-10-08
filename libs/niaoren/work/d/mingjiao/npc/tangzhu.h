@@ -125,7 +125,7 @@ void do_join()
 	object me,ob;
         mapping ob_party;
         mapping party;
-	string qi,new_rank;
+	string qi;
 
 	me=this_object();
 	ob=this_player();
