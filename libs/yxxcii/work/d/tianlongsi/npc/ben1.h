@@ -95,7 +95,6 @@ string ask_sao()
 string ask_over()
 {
         object me=this_player();
-        object who;
         int combat_exp,potential,exp,pot,exp1,pot1,m1;
 
         if (me->query_temp("marks/工具") == 0)  

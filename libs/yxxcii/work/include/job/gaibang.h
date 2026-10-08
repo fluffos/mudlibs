@@ -8,7 +8,7 @@ void init()
 int do_ba(string arg)
 {
         object ob, me;
-        int i, kar, cps, str, dex;
+        int kar, cps, str, dex;
         me = this_player();
 
         if( (!arg) || !((arg == "草") ))

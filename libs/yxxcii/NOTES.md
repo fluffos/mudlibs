@@ -124,3 +124,9 @@ autoload 随身物（鸡腿、袍子），人物档本身保存。
 ## 深度功能测试（§10.7，2026-10-07）— 空的 `if (current_water == 0) {}`
 
 3 个房间的 `valid_leave()` 里有一行什么也不做的 `if (current_water == 0) {}`（编译警告 `Expression has no side effects`），删去，行为不变：`d/xingxiu/nanjiang2.lpc`、`d/xingxiu/nanjiang3.lpc`、`d/xingxiu/shanjiao.lpc`。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py yxxcii --fix` 加 `scripts/lpc_fix_no_effect.py --apply`（`kungfu/skill/xuanyuan-arrow.lpc` 删去什么也不做的 `(: throw_weapon :);` 等），共改动 436 个 `.lpc` 和若干 `.h`。HEAD 与工作树分别加载（新进程）：414 -> 414 通过，无回退；改过的头文件的 177 个包含者 177 -> 177 通过。
+
+启动时警告 29 -> 0；新进程登录（编码选择、英文名、新人物确认）正常。

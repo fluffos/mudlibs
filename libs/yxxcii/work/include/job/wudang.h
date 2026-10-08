@@ -8,7 +8,7 @@ void init()
 int do_sao(string arg)
 {
 
-        object me,ob,weapon;
+        object me;
         int times;
      
         me = this_player();
@@ -54,8 +54,7 @@ int do_sao(string arg)
 }
 void compelete_sao(object me)
 {
-        object ob;
-        int i, n,percost,karcost;
+        int percost, karcost;
         
 
         percost = random(15)*(me->query("per")) / 10;
