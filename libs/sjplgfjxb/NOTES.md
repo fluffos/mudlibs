@@ -284,3 +284,11 @@ live-boot-tested.
 
 房间基类 `std/room.lpc`：`make_inventory()` 用 `catch()` 包住 `new(file)`，做不出来就返回 0；`reset()` 的 `case 1:` 拿到 0 就跳过这一项（`if (!objectp(ob[list[i]])) break;`）。档案里没有的 NPC 或物品（或 `create()` 出错的物件）原先会让列出它的房间整个加载失败（`Bad argument 1 to environment()`，或对 0 的 `call_other()`），连带这个房间后面的区域；现在房间照常加载，只是少了那个物件，下次 `reset()` 再试（KB 05 §7.25；`scripts/lpc_resilient_room.py`、`scripts/lpc_room_reset_guard.py`）。
 验证：探针（`scripts/lpc_room_reset_probe.py`：房间基类列出一个不存在的物件，再调用 `reset()`）HEAD 单件 崩溃、多件 崩溃，工作树 单件 OK、多件 OK。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理、错误处理器
+
+`scripts/lpc_warnings.py sjplgfjxb --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 224 个 `.lpc` 和 1 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：209 -> 209 通过，无回退；改过的头文件的 29 个包含者 29 -> 29 通过。启动时警告 23 -> 0；新进程登录（新人物确认）正常。
+
+主控对象 `adm/obj/master.lpc` 的 `report_error()` 用 `CHANNEL_D->do_channel(this_object(), ...)` 把运行错误报到频道，但主控对象没有 `query()`，`channeld` 拿不到 `channel_id`，就去取 `capitalize(me->query("id"))`，即 `capitalize(0)` 出错——没有玩家触发的错误（call_out、heart_beat、加载时）都让错误处理器自己再出错（`Error in mudlib error handler: *Bad argument 1 to capitalize()`），频道上收不到错误报告。照 `sj` 的主控对象补上 `query("channel_id")` 返回 "系统核心"。验证：加载一个出错的 NPC，修改前出现 `Error in mudlib error handler`，修改后错误处理器正常跑完。（同 `sjpl2`、`sjplii`。）
+
+记录、未改（档案缺内容）：扬州一带 49 个 NPC 文件引用 `/d/city/obj/cloth/...`、`/d/city/obj/weapon/<类>/...`，这两个子目录档案里没有，其中 jinpao、baojian、bullboots、magua、gangqiang 等十几件在全库都找不到，这些 NPC（项三娘 boss、花钿 girla、彭飞 pengfei 等）在 `create()` 里 `carry_object(...)->wear()` 拿到 0 就加载失败。`feature/dealer.lpc` 用了未定义的 `MONEY_D`，但没有任何文件继承它（无 `F_DEALER`），是死文件。
