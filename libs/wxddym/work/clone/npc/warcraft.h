@@ -35,7 +35,7 @@ inherit F_NOCLONE;
 inherit F_OBSAVE;
 inherit F_SSERVER;
 
-void remove(string euid)
+varargs void remove(string euid)
 {
         object env;
         
@@ -590,7 +590,6 @@ varargs mixed set(string idx, mixed para, object ob)
 
 mixed add(string prop, mixed data)
 {
-        string para;
         mixed old;
         int level;
 

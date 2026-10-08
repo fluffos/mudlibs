@@ -574,3 +574,11 @@ No new errors after the shop commands. Demo `fluffos` save churn
 ## 深度功能测试（§10.7，2026-10-07）— 村长的疗伤说明被截断
 
 `d/newbie/npc/laocunzhang.lpc`：新手村长讲内功疗伤的那段 `msg`，`"…达到一定等级。\n\n" HIY;` 后面单独一行 `"    更多相关帮助请参阅帮助文件 help force\n\n" NOR;`——多余的 `;` 把最后一句截掉了，颜色也没有还原（`NOR` 在被丢掉的那句里）。接回去（`scripts/lpc_join_cut_strings.py`，现在也认带颜色宏的字符串）。HEAD 与工作树分别加载（新进程）通过。
+
+## 深度功能测试（§10.7，2026-10-08）— 编译警告整理、追杀任务杀手
+
+`scripts/lpc_warnings.py wxddym --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 2479 个 `.lpc` 和 35 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：2124 -> 2123 通过，差的两项都不是这次改动造成：`d/migong/lev20/npc/lev3`/`lev5` 两边各有一个批量加载失败（已知的批量假象，单独加载都过），`quest/chousha/killer` HEAD 起就随机加载失败（见下）。改过的头文件的 2627 个包含者 2533 -> 2533 通过。审计列出的“删了但仍读取”都是重建后的声明语句里留下的名字（逐一看过不能编译的那些文件）。
+手改：`globals.h` 有 `#define static nosave`，旧 `static` 函数成了 `Illegal to declare nosave function`，按扫描诊断把 10 个文件的 26 处改成 `protected`（master、treemap、questd、dbased、cmwhod 等）；`adm/daemons/natured.lpc` 空语句 `lt[LT_MON];` 删去。启动时警告 60 -> 0；新进程登录到版本验证正常。
+
+追杀任务的三个杀手 `quest/chousha/killer.lpc`、`killer1.lpc`、`killer2.lpc` 的门派表里有本库没有的武功（honghua-shengong、dugu-jiujian、wugong-zhao 等十几种），`F_SKILL` 的 `set_skill()` 遇到就 `error`：`killer` 约一半加载失败，`killer2` 每次都失败。三个文件各加一个 `set_skill()`，跳过本库没有的武功（`map_skill` 随之跳过）；修正后 `killer` 单独加载 8 次全过，`killer2` 由 HEAD 失败变为通过。注意：本库没有地方放置 `quest/chousha/yelao1`（`d/wizard/guest_room` 里那一行被注释掉），`haojie.h` 也只有它在用，这几个杀手目前是休眠内容。
+`d/city/task2/shashou.lpc`、`renzhi.lpc` 和 `inherit/char/manager.lpc` 调用 `NAME_D->man_name()` 等，本库的 `NAME_D`（`adm/daemons/named`）是保存玩家名字的，没有这些函数（来自 xkx100 的名字生成器没有带过来）；但没有任何文件生成 `renzhi` 或继承 `manager`，未改，记录在此。

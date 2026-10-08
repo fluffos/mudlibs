@@ -12,7 +12,7 @@ string check_len(string str)
 int init()
 {
 	object ob = this_object();
-	string name,gender,str,temp_str,equip_zl,chars;
+	string name, gender, str, equip_zl, chars;
 	int weight,level,value,armor,ap,dp,pp,hp,mp,exp,lasting,cp,zl,zj,strs,dex,ints,cons,jing,jingli;
 
 	if(!ob->query("long"))
