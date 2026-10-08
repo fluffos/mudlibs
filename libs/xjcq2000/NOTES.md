@@ -760,3 +760,10 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 ## 深度功能测试（§10.7，2026-10-07）— return 后面的死字符串
 
 `d/mingjiao/npc/zhangwuji.lpc`：`return "九阳真经我知道，但是现在还不能给你说！";` 下一行又单独写了同一句字符串，永远执行不到；删去，行为不变。新进程加载通过。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py xjcq2000 --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 756 个 `.lpc` 和若干 `.h`。HEAD 与工作树分别加载（新进程）：718 -> 718 通过，无回退；改过的头文件的 77 个包含者 65 -> 65 通过。
+记录、未改：`d/shushan/` 下 14 个 NPC（剑圣、明王、清风、醉道、龙等）的战斗招式用了 `cast_spell`——西游记系的法术函数，本库的 NPC 基类没有，于是这些文件编译不过（`Undefined variable 'cast_spell'`），蜀山一带的这些 NPC 从来没加载过；是移植区域时带进来的，要补一套法术系统超出本次范围。`inherit/char.lpc` 是没人引用的旧文件（`CHARACTER` 指的是 `/inherit/char/char`）。
+
+启动时警告 31 -> 0；新进程登录（编码选择、新人物确认）正常。

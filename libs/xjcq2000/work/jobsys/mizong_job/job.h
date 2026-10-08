@@ -1,7 +1,7 @@
 string do_ask()
 {
     object me, ob;
-    int i;	
+	
     string type;
     mapping myfam, quest;
     
@@ -54,9 +54,8 @@ void init()
 
 void greeting(object me)
 {
-	object target, ob;
+	object ob;
 	mapping quest;
-	int type;
 	
         if( !me || environment(me) != environment() || !living(me)) return;
         

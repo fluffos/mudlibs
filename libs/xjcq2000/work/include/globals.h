@@ -1,7 +1,6 @@
 // globals.h
 // this file will be automatically included by the driver
 // for JY mudlib
-#pragma save_binary
 //added by JackyBoy @ CCTX for TOPTEN
 #define TOPTEN_RICH 	"/topten/rich.txt"
 #define TOPTEN_PKER	"/topten/pker.txt"

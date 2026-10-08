@@ -1175,3 +1175,9 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply d
 - `d/job/cisha/changzhen.lpc`、`fanan.lpc`、`killer.lpc`：战斗招式 `(: "apply_action", "linglong-yuquan", 2, 10 :)`——函数名写成了字符串，本驱动把它当作表达式函数指针，只得到字符串，杀手在战斗中从不出招（KB 04 §6.10）；改成同库其他 NPC 用的 `(: apply_action, ... :)`。
 
 改动的文件在 HEAD 与工作树分别加载（新进程）通过。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py dtsl --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，并删去 `adm/daemons/logind.lpc` 没用到的 `string ip = query_ip_number(ob);`，共改动 286 个 `.lpc` 和若干 `.h`。HEAD 与工作树分别加载（新进程）：265 -> 265 通过，无回退；改过的头文件的 245 个包含者 203 -> 203 通过。
+
+启动时警告 23 -> 0；新进程登录（新人物确认）正常。

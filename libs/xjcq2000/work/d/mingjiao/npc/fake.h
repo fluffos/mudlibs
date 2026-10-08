@@ -30,8 +30,8 @@ void greeting(object ob)
 int do_copy(object ob)
 {
 	object me;
-	mapping hp_status, skill_status, map_status, prepare_status;
-	string *sname, *mname, *pname;
+	mapping hp_status, skill_status;
+	string *sname;
 	int i, temp;
 	me = this_object();
 

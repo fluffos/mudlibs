@@ -1,7 +1,7 @@
 
 
 int valid_kill(object killer, object victim)
-{    int pk_k, pk_v;   
+{   
  
 if(userp(victim) &&time()-killer->query("TIME_PKS_TIME")<killer->query("TIME_PKS")*1800&&killer->query("pker")
        && userp(killer))
