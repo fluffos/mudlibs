@@ -162,3 +162,4 @@ No other code change.
 ## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
 
 `scripts/lpc_warnings.py ffxymud --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 420 个 `.lpc` 和 3 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：395 -> 395 通过，无回退；改过的头文件的 34 个包含者 34 -> 34 通过。启动时警告 8 -> 0；新进程登录（输入名字）正常。
+（本库连线时检查专用客户端，裸 telnet 输入名字得到“你的客户端版本有问题!!”，与 HEAD 相同。）
