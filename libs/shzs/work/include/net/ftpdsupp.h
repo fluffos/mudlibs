@@ -38,7 +38,6 @@
  */
 int check_access(string name)
 {
-  string file;
 
 #ifdef FTP_USERS
     if (!sizeof(FTP_USERS))
@@ -139,8 +138,8 @@ int check_password(string name, string plaintext)
  * dotted quad) with an ip number pattern (ie containing wildcard(s))
  * - returns 1 if a match, 0 otherwise
  */
-nosave int dot_match(string *site, string *pattern, int flag) {
-    int i, j;
+protected int dot_match(string *site, string *pattern, int flag) {
+    int j;
 
     j = sizeof(pattern);
     if (j != 4)
@@ -179,7 +178,6 @@ int check_site(string who, int fd) {
     string site, site_num;
     string arg;
     string *sites;
-    object ob;
     int i, s, l1, l2;
     string *site_dots, *match_dots;
 
