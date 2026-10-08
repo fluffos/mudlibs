@@ -24,7 +24,7 @@ void add_shili(object me,int exp,int money)
    return;
 }
 
-nosave int sort_keys(string one, string two) 
+protected int sort_keys(string one, string two) 
 {
    return strcmp(one, two);  
 

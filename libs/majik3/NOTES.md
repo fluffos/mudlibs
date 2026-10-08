@@ -434,3 +434,13 @@ Not reachable in the time budgeted for this pass: the `agriculture`
 zone's actual farming/money-making gameplay loop beyond the compile fix
 already verified in §4 (growing crops from seed to sale) -- flagged
 here as unverified-live rather than silently presented as tested.
+
+## Deep test (§10.7, 2026-10-07) — compile warnings
+
+`scripts/lpc_warnings.py majik3 --fix` + `scripts/lpc_fix_no_effect.py --apply`: 58 `.lpc` changed. HEAD and the tree loaded in fresh processes: 52 -> 52 PASS, no regression.
+By hand:
+- `command/mortal/irc.lpc` `irc off`: `if (ob); destruct (ob);` — the stray `;` made the guard empty, so `irc off` without an IRC object called `destruct(0)` and raised. The `;` is gone.
+- `inherit/base/room.lpc` declared `nosave int no_clean_up;` again although it inherits `BASE`, which declares it (also `nosave`); the room's copy is gone, so the room's `set_no_clean_up()` / `clean_up()` and the base's share one variable (`Redeclaration of global variable 'no_clean_up'` in the room, `world/virtual/server.lpc` and `terrain.lpc`).
+- `daemon/soul.lpc`: `create()` called `get_souls()` / `get_adverbs()` before their definitions without prototypes (`not compiled with type testing`); prototypes added. `obj/redit_ob.lpc`: a stray `d_long;` statement deleted.
+
+Boot warnings 36 -> 0; fresh-process login screen works.
