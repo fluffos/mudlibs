@@ -694,3 +694,7 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 ## 深度功能测试（§10.7，2026-10-07）— 错误处理器自身出错
 
 主控对象 `adm/obj/master.lpc` 的 `report_error()` 用 `CHANNEL_D->do_channel(this_object(), ...)` 把运行错误报到频道，但主控对象没有 `query()`，`channeld` 拿不到 `channel_id`，就去取 `capitalize(me->query("id"))`，即 `capitalize(0)` 出错——没有玩家触发的错误（call_out、heart_beat、加载时）都让错误处理器自己再出错（`Error in mudlib error handler: *Bad argument 1 to capitalize()`），频道上收不到错误报告。照 `sj` 的主控对象补上 `query("channel_id")` 返回 "系统核心"。验证：加载一个出错的 NPC，修改前出现 `Error in mudlib error handler`，修改后错误处理器正常跑完。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py sjpl2 --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 1221 个 `.lpc` 和 4 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：1167 -> 1167 通过，无回退；改过的头文件的 148 个包含者 145 -> 145 通过。启动时警告 20 -> 0；新进程登录（新人物确认）正常。

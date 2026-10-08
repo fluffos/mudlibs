@@ -378,7 +378,6 @@ int remove_previous_position(object who, int position) {
 
 int push_other_positions(object me, int position, int previous_position) {
   int j;
-  string src, dst;
   object who;
   object ob;
 
@@ -397,8 +396,6 @@ int push_other_positions(object me, int position, int previous_position) {
 int fully_recover(object me) {
   object *inv;
   object ob;
-  string player_name;
-  object current_player;
 
   reset_eval_cost();
 

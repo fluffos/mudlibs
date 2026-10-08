@@ -52,8 +52,7 @@ string get_respect_str() {
 }
 
 int save_record(object me, object ob) {
-  object *inv;
-  mapping hp_status, skill_status, map_status;
+  mapping hp_status;
 
   hp_status = ob->query_entire_dbase();
 
@@ -127,8 +126,6 @@ int convert_identity(object me, object ob) {
 int fully_recover(object me) {
   object *inv;
   object ob;
-  string player_name;
-  object current_player;
 
   me->set("eff_gin", me->query("max_gin"));
   me->set("gin", me->query("max_gin"));
@@ -236,7 +233,6 @@ int check_result(object me, object ob) {
   }
 
   if (((int)me->query("kee") * 100 / (1 + my_max_kee)) <= 50) {
-    int previous_position;
     message_vision("$N翻身下拜，连声佩服！\n", me);
     me->set("new_player", 1);
     huangpu_execute_fight_result(huangpu, me, ob, 1);
