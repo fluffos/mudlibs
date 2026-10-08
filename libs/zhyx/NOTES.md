@@ -813,3 +813,13 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply z
 - `cmds/std/swear.lpc`、`cmds/std/team/bunch.lpc`、`cmds/std/team/swear.lpc`：结义失败提示被多余的 `;` 截成两句，`fail` 只剩"……可惜现在有人不在，$N"，后半句"的提议只好作罢。"丢了；接回去。
 
 验证：改动的文件和包含 `npc/indian` 的守护进程在 HEAD 与工作树分别加载（`scripts/lpc_listcheck.sh`，新进程），无回退。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py zhyx --fix` 加 `scripts/lpc_fix_no_effect.py --apply`（`d/tiezhang`、`d/wudu` 几个房间删去 `return` 后面的 `"\n";` 等），再用 `scripts/lpc_nitan_family_fixes.py zhyx`（`combatd.lpc` 的空语句 `your_temp["guarding"];`，`genmap`/`traverser` 的空 `DEBUG` 宏），共改动 1634 个 `.lpc` 和若干 `.h`。HEAD 与工作树分别加载（新进程）：1594 -> 1594 通过，无回退；改过的头文件的 213 个包含者 207 -> 207 通过。
+手工：
+- `clone/drug/fengdong.lpc`：`if (... < 10000) max1/2;`（没空格，前次全库清扫没认出来）改成 `max1 /= 2;`——经验不足一万的对手，分身技能减半（pkuxkx 同改）。
+- `kungfu/skill/sixiang-shengong/perform/jing.lpc`（四象神功「精」）：命中描述 `msg += HIW + "…" HIW + "…被最后一发打了个正中。" NOR;` 后面一行"惨叫一声，血流如注。"被多余的 `;` 截成单独的语句；接回去。
+- `adm/daemons/combatd1.lpc` 副本里同样的空语句 `your_temp["guarding"];` 删去。
+
+启动时警告 34 -> 0；新进程登录正常（回应较慢）。

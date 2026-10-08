@@ -28,7 +28,6 @@ mapping default_dirs = ([
 
 int main(object me, string arg)
 {
-        string dir;
         object ob, *guards;
         object env;
         mixed old_target;
