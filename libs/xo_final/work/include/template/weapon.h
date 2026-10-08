@@ -4,8 +4,6 @@
 string long()
 {
     string  long;
-    string *fix_list;
-    string  fix_name;
     string  extra;
 
     long = query("long");

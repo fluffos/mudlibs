@@ -26,7 +26,6 @@ int alternative_die(object who)
 {
     string start;
     int i, lost;
-    object target;
 
     if ( !who )
     {

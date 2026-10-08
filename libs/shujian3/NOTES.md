@@ -217,3 +217,10 @@ re-invoke `enable_player()` on this lib while the object is still
 
 房间基类 `inherit/room/room.lpc`：`make_inventory()` 用 `catch()` 包住 `unew(file)`（缺档时它在 simul_efun 里对 0 调用 `query("unique")`），`else` 分支只在确有克隆时才取 `[<1]`。档案里没有的 NPC 或物品（或 `create()` 出错的物件）原先会让列出它的房间整个加载失败（`Bad argument 1 to environment()`，或对 0 的 `call_other()`），连带这个房间后面的区域；现在房间照常加载，只是少了那个物件，下次 `reset()` 再试（KB 05 §7.25；`scripts/lpc_resilient_room.py`、`scripts/lpc_room_reset_guard.py`）。
 验证：探针（`scripts/lpc_room_reset_probe.py`：房间基类列出一个不存在的物件，再调用 `reset()`）HEAD 单件 崩溃、多件 崩溃，工作树 单件 OK、多件 OK。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py shujian3 --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 574 个 `.lpc` 和 14 个 `.h`（多为删去未用的局部变量、`#pragma save_binary`）。HEAD 与工作树分别加载（新进程）：566 -> 566 通过，无回退；改过的头文件的 28 个包含者 27 -> 27 通过。
+手改一处：`adm/daemons/logind.lpc` 登录时查新信件后的 `if (num > 0) { }`，原作者把里面的提示语注释掉了，只剩空的分支（编译警告 `Value of conditional expression is unused`）；把 `if` 也注释掉，行为不变。
+
+启动时警告 26 -> 0；新进程连线行为与 HEAD 相同（本库走指间 MUD 协议，裸 telnet 输入名字得到“未知错误”，HEAD 亦然）。

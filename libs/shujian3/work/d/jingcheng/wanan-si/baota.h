@@ -92,7 +92,7 @@ int do_jiejiu(string arg)
 {
         int jilu, rss; 
         object me = this_player(), ob = present("yuanbing shouwei", environment(me));
-        object obj, *team, ob_rz;
+        object *team, ob_rz;
         object *obs = all_inventory();
         if (query("save"))
                 return notify_fail("已经解救成功，向上前进吧。\n");
