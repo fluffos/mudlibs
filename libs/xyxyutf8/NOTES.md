@@ -290,3 +290,7 @@ existing `enabled` guard.
 - `include/npc/indian.lpc` 与 `masia.lpc` 共用全局名 `ma_sname`/`ma_pname`；两个头文件被同一个守护进程（`npcd` 等）一起包含时，后包含的印度名表覆盖马来名表，`generate_ma_name()` 生成的是印度名字。印度表改名 `in_sname`/`in_pname`（KB 04 §6.10）。
 
 验证：改动的文件和包含 `npc/indian` 的守护进程在 HEAD 与工作树分别加载（`scripts/lpc_listcheck.sh`，新进程），无回退。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py xyxyutf8 --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 752 个 `.lpc` 和 8 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：731 -> 731 通过，无回退；改过的头文件的 491 个包含者 484 -> 484 通过。启动时警告 63 -> 0；新进程登录（编码选择、输入名字）与 HEAD 相同。

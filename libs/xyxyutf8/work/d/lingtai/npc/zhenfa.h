@@ -54,7 +54,7 @@ string ask_sixiang()
         mapping skl; 
         object fighter, me ;
         string *sname;
-        int i,j;
+        int i;
 
         fighter = this_player();
         me = this_object();
@@ -98,7 +98,7 @@ string ask_bagua()
         mapping skl; 
         object fighter, me ;
         string *sname;
-        int i,j;
+        int i;
         fighter = this_player();
         me = this_object();
         if( time()<fighter->query("family/八卦_fail")+43200 )

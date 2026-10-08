@@ -28,9 +28,7 @@ string *dirs = ({
 
 void init()
 {
-object me=this_object();
 object who=this_player();
-int type;
 int t=query("stay_time");
 
 ::init();
