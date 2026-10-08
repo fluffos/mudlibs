@@ -47,7 +47,6 @@ void lock_quest(object who, string quest_type, string lock_type) {
 
 int islocked(object who, string quest_type) {
   string lock_quest = who->query("quest/" + quest_type + "/lock");
-  object me = this_object();
 
   if (stringp(lock_quest) && lock_quest != "") {
     tell_object(who, "你得先完成" HIY + quest_name[lock_quest] + NOR "任务才能继续这个任务。\n");

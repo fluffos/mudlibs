@@ -2,7 +2,7 @@
 #include <ansi.h>
 
 int do_join(string arg) {
-  object me, ob, obj;
+  object me, ob;
   string men;
   mapping party;
 

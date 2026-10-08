@@ -48,9 +48,6 @@ int auto_perform_duwu() {
 int auto_perform_chan() {
   object me = this_object();
   object target = me->select_opponent();
-  object owner;
-  object here = environment(me);
-  int damage;
 
   if (query("jingli", me) < 500) return 0;
 
@@ -82,7 +79,7 @@ int auto_perform_double() {
   return 1;
 }
 
-mapping query_action() {
+varargs mapping query_action() {
   object me = this_object();
   string msg1, msg2;
   msg1 = HIR "祗听簌簌声响，$N蜿蜒窜前，" + (random(2) ? "右" : "左") + "边的蛇头嘶嘶吐信，猛然咬向$n的$l" NOR;

@@ -126,7 +126,6 @@ int checking(object me, object ob) {
 void attempt_apprentice(object ob) {
   object me;
   mapping ob_family;
-  string qi, new_rank;
 
   me = this_object();
 

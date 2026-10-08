@@ -130,7 +130,6 @@ int list_vip() {
 int do_vip(string arg) {
   string *vip;
   object ob, me;
-  int num;
 
   ob = this_object();
   me = this_player();

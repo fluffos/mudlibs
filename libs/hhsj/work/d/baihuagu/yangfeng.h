@@ -1,7 +1,6 @@
 // yangfeng.h
 #include <ansi.h>
 int do_yang(string arg) {
-  object bee;
   object me, obj;
   int c, qufeng;
 

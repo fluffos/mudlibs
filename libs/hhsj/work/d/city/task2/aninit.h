@@ -139,7 +139,6 @@ void do_check() {
 }
 
 void do_wait() {
-  object ob;
   object me = this_object();
 
   remove_call_out("do_wait");

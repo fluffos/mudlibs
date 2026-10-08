@@ -37,7 +37,7 @@ inherit F_SSERVER;
 
 #define RIDE_CMD              "/cmds/std/ride"
 
-void remove(string euid) {
+varargs void remove(string euid) {
   object env;
 
   if (is_fighting()) remove_all_enemy(1);
@@ -590,7 +590,6 @@ varargs mixed set(string idx, mixed para, object ob) {
 }
 
 mixed add(string prop, mixed data) {
-  string para;
   mixed old;
   int level;
 
@@ -612,7 +611,6 @@ mixed add(string prop, mixed data) {
 // 召唤接口
 varargs int receive_whistle(object me, int flag) {
   object env, follower;
-  int period;
 
   if ((env = environment()) && env == me) {
     write(name() + "你不是正骑着吗？你召唤个什么劲？\n");
