@@ -1261,3 +1261,13 @@ probe that prints `getuid(load_object("/cmds/..."))`; compare `config.fluffos`'s
 { if (arg == "channel_id") return "系统核心"; return 0; }` (what `sj`'s master has). Channel daemons that guard `if (me->query("id"))`
 or fall back to `"未知"` (dtsl2, dtxywzxzb, xyj2006*) are safe. **Detection:** a master that calls `do_channel(this_object()` with no
 `channel_id` in it; load a failing object with `lpcc --batch` and look for `Error in mudlib error handler`.
+
+
+### 7.237 A file copied from another lineage calls that lineage's daemon API (nitan family task2 killer, 2026-10-08)
+**Symptom:** an NPC fails to load one time in three, with no compile error (`Fail to load object`); the quest that `new()`s
+it errors mid-command. **Cause:** nitan's `d/city/task2/shashou.lpc` came from xkx100's task2: `switch (random(3))` calls
+`NAMES_D->jap_name()`, which only xkx100's name daemon has (a `call_other` to a missing function returns 0, so
+`name["name"]` errors), and wraps the id as `({ name["id"] })`, xkx100's string-id convention, while nitan's daemon already
+returns an id array (the NPC's `"id"` becomes an array). **Fix:** port the missing function to the daemon in the target's own
+return shape and pass the id through (`scripts/lpc_nitan_jap_name.py`). **Detection:** a file that flips PASS/FAIL between
+fresh loads (random branch); grep the `DAEMON->fn()` it calls against the daemon's definitions.
