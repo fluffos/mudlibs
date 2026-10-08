@@ -11,7 +11,7 @@ void create()
 		set_default_object(__FILE__);
 	else {
 		set("long",
-			"灵芝是一种相当昂贵的药材，但是许\多方士都把灵芝当成重要的\n"
+			"灵芝是一种相当昂贵的药材，但是许多方士都把灵芝当成重要的\n"
 			"药品。\n");
 		set("unit", "株");
 		set("value", 4000);
