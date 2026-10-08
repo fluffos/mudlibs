@@ -241,3 +241,11 @@ header-encrypted. Skip nitan.zip.
 ## 深度功能测试（§10.7，2026-10-08）— 编译警告整理（部分）
 
 `scripts/lpc_warnings.py nirvlp312 --fix` 只改动了 8 个文件（未用的局部变量、空语句；改动的文件中能加载的 4 个 HEAD 与工作树都通过）。本库 3607 个文件里 1407 个在本驱动下编译不过（缺 LDMud 式 efun、玩家目录头文件等），启动时的 22 条警告都在核心物件里，工具留给手工：`obj/living.lpc`（声明不在作用域开头的未用局部变量、`#if` 分支里的 `pro_object`）、`obj/player.lpc`（`fname`、条件表达式值未用、`set_top_kill`/`set_top_boot_xp` 参数个数与前面的声明不一致、未带类型检查的函数调用）、`obj/guild.lpc` 两处空语句、`obj/simul_efun.lpc` 从两条路径继承 `format()`。待单独处理。
+
+## 深度功能测试（§10.7，2026-10-08）— 核心物件的编译警告（手工）
+
+接上一节，启动时剩下的 22 条警告都在核心物件里，逐条手改，启动时警告 22 -> 0：
+- `obj/living.lpc`：`hit_player_old()` 的 `pro_object` 只在 `#if 0` 的圣骑士段落里用到，声明也放进 `#if 0`；`attack()` 的 `tmpk`、`whit`、`weap_tmp`、`name_alt_at` 和 `attack_old()` 的 `tmpk` 从未用到，删去（声明之间夹着 `#if 0`，工具没认出作用域开头）；文件顶部补 `void clear_follow();` 原型（3066 行先调用，定义在 player 包含的 `obj/play/follow/follow.lpc`，原先隐式声明与之冲突）。
+- `obj/player.lpc`：`valid_write()` 的 `fname` 只在 `#ifdef __LDMUD__` 里用到，声明挪进去；`gender=="male";` 是比较不是赋值（下一行无论如何把 creature 改成 male，行为不变），改成 `=`；空的 `if (length > 11) { }`（原档案即如此）删去；补 `set_top_kill`、`set_top_boot_xp`、`add_alignment`、`remove_ghost`、`is_real_player_ob`、`query_pwd` 的原型（先调用后定义，参数个数与隐式声明不一致）。
+- `obj/guild.lpc` 两个空的 `if( str ) { }`（原档案即如此）删去；`obj/monster.lpc` 补 `ready_eq()` 原型；`obj/play/follow/follow.lpc` 补 `clear_follow()` 原型；`obj/simul_efun.lpc` 去掉直接 `inherit` 的 `format`（`format_colour` 已继承它，原先两条路径继承同一个 `format()`）。
+验证：改动的 8 个文件 HEAD 与工作树分别加载 6 -> 6 通过；新进程完整建人物（密码、提示、性别、种族、身高体重、确认、来源）后 `look`、`score` 与 HEAD 输出相同。
