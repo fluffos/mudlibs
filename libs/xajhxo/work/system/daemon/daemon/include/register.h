@@ -17,7 +17,7 @@ void RehashQuitedId();
 void UserLogin( object );
 void UserQuit( object );
 
-nosave void create();
+protected void create();
 
 private int IsGuestId( string );
 private int IsBannedId( string );

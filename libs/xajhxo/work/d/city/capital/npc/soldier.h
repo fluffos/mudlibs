@@ -10,8 +10,6 @@ void init()
 }
 void greeting()
 {      
-    object *all;
-    int i;
     object me = this_player();
     if( me->query_condition("kill_capital") || me->query_condition("
 kill_soldier") || me->query_condition("kill_government") )
@@ -28,7 +26,6 @@ int accept_bihua(object me)
 
 int accept_fight(object me)
 {
-    string ob;
     if ( me->query( "class" ) == "soldier" || me->query( "class" ) == "government" )
     {
         set("factor" , query("force_factor"));
@@ -66,9 +63,9 @@ string call_others(object who)
 }
 void kill_player(object me)
 {                             
-    object crime, *all;
+    object *all;
 //    string ob;
-    int bonus, i;
+    int i;
     command("say 我看你今天是活得不耐烦了,"+ RANK_D->query_rude(me)+",去死吧！\n"); 
     CRIME_D->set_crime( me , "capital" );
     CRIME_D->set_crime( me , "soldier" );

@@ -860,3 +860,8 @@ Same convert-era byte corruption as the waiter `！”\n` / `！\n` →
 ## 深度功能测试（§10.7，2026-10-07）— 兵器的 `actions` 函数指针
 
 `set("actions", (: WEAPON_D, "query_action" :));`：旧 MudOS 把 `(: 字符串, "函数" :)` 当作 call_other 函数指针，本驱动把它当作表达式函数指针，求值只得到字符串 `"query_action"`。没有对应兵器技能时 `feature/attack.lpc` 直接用兵器的 `actions`，`COMBAT_D` 拿到的不是 mapping，`reset_action()` 后仍不是，记一条 bad action 就不出招——拿着这些兵器打不出攻击。改成别的兵器早已用的 `(: call_other, WEAPON_D, "query_action" :)`（KB 04 §6.10）：`d/menpai/wuliang/west/npc/obj/flower.h`、`d/menpai/wuliang/backup/npc/obj/flower.h`。改动的文件在 HEAD 与工作树分别加载（新进程），无回退。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py xajhxo --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 245 个 `.lpc` 和 15 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：222 -> 222 通过，无回退；改过的头文件的 26 个包含者 24 -> 24 通过。
+手改两处，把只在条件编译里用到的局部变量声明挪进同一个 `#ifdef`：`system/daemon/logind.lpc` `get_id()` 的 `my_ip`（`ALLOW_MULTI_LOGIN`），`system/daemon/combatd.lpc` 里与全局 `debug` 同名的局部 `debug`（`DEBUG`）。启动时警告 31 -> 0；新进程登录（新人物确认）正常。

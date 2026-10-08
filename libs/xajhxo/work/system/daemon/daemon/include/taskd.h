@@ -4,7 +4,7 @@
 //#define TASK_DIR                "/system/task/"
 #define TASK_TIME               2
 
-nosave void create();
+protected void create();
 
 void RehashTask();
 varargs void TaskBegin(object, string, string);

@@ -9,11 +9,10 @@ string crime_short( object );
 
 string look_bangwen()
 {
-    object crime ;
     mapping crime_name;
-    string *crime_id, msg, space, space2, temp, temp_msg, arg;
+    string *crime_id, msg, temp, arg;
     object player;
-    int i, number = 0, bonus, length;
+    int i, number = 0, bonus;
 
     arg = "yangzhou";
     msg = @TEXT

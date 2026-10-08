@@ -1,8 +1,8 @@
 //这是高升泰对要求升级的反应
 int change_dengji()
 {
-    object me, ob, here, obj, npc;
-    int score, num, i;
+    object me, ob, here;
+    int score;
     
     me = this_player();
     ob = this_object();
@@ -50,8 +50,8 @@ int change_dengji()
 
 int say_ok()
 {
-    object me, ob, here, obj, npc;
-    int score, num, i;
+    object me, ob, here;
+    int score, num;
     
     me = this_player();
     ob = this_object();

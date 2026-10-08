@@ -9,7 +9,7 @@ void eventDestructTask( object );
 void TaskRestore( object, string, string );
 varargs void TaskBegin( object, string, string ); 
 
-nosave void create();
+protected void create();
 
 private object * get_group_task( string, int );
 private object load_task( string, int, string );

@@ -4,7 +4,7 @@
 
 void init()
 {
-    object me, *inv, obj, env;
+    object me, *inv, env;
     int i;
     me = this_player();
     env = environment(me);

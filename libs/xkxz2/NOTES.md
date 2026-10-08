@@ -881,3 +881,8 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 - `cmds/std/team/swear.lpc`：结义失败提示被多余的 `;` 截成两句，`fail` 只剩"……可惜现在有人不在，$N"，后半句"的提议只好作罢。"丢了；接回去。
 
 验证：改动的文件和包含 `npc/indian` 的守护进程在 HEAD 与工作树分别加载（`scripts/lpc_listcheck.sh`，新进程），无回退。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py xkxz2 --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 409 个 `.lpc` 和 6 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：381 -> 381 通过，无回退；改过的头文件的 25 个包含者 25 -> 25 通过。
+手改两处：`adm/daemons/natured.lpc` 的空语句 `lt[LT_MON];` 删去（与 nitan 一系同）；`adm/daemons/logind.lpc` `get_id()` 里从未用到的 `ip` 删去。启动时警告 32 -> 0；新进程登录（编码选择、新人物确认）与 HEAD 相同。

@@ -24,7 +24,6 @@ int give_quest()
 {
     object me = this_player();
     object ob = this_object();
-    object obj;
     int num1;
 
     if( me->query("class") != "duanshi" )
@@ -193,7 +192,7 @@ void give_quest_4( object me )
     
 int accept_object( object me, object obj)
 {
-    int lost_score, i, room_num, num1, num2;
+    int i, room_num, num1, num2;
     string *map;
 //下面是给几个比较大的任务
     if( obj->query("name") == RED"巡逻腰牌"NOR )
