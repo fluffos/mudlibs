@@ -527,3 +527,9 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 ## 深度功能测试（§10.7，2026-10-07）— 空的 `if (current_water == 0) {}`
 
 3 个房间的 `valid_leave()` 里有一行什么也不做的 `if (current_water == 0) {}`（编译警告 `Expression has no side effects`），删去，行为不变：`d/xingxiu/nanjiang2.lpc`、`d/xingxiu/nanjiang3.lpc`、`d/xingxiu/shanjiao.lpc`。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py hy3 --fix` 加 `scripts/lpc_fix_no_effect.py --apply`（`d/tiezhang` 三个房间删去 `return` 后面的 `"\n";`，`kungfu/skill/xuanyuan-arrow.lpc` 删去什么也不做的 `(: throw_weapon :);` 等），共改动 431 个 `.lpc` 和若干 `.h`。HEAD 与工作树分别加载（新进程）：401 -> 401 通过，无回退；改过的头文件的 33 个包含者 28 -> 28 通过。`adm/single/simul_efun.lpc` 单独编译的告警是被包含片段的假象（KB 04 §6.10）。
+
+启动时警告 41 -> 0；新进程登录正常（英文名限 3 到 7 个字母）。

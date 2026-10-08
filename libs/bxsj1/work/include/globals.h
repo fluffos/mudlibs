@@ -25,7 +25,6 @@
 #define INC_DIR		"/include/"
 #define LOG_DIR		"/log/"
 #define STORY_DIR       "/adm/daemons/story/"
-#define SAVE_EXTENSION	".o"
 
 // Daemons
 #define PERFORM_D		"/adm/daemons/performd"

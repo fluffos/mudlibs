@@ -40,9 +40,8 @@ void init()
 int do_clone(object me, object ob)
 {
         object weapon;
-        mapping victimskill,killerskill1;
-        mixed *skillkeys;
-        int i,k_skill,k_qi,k_neili,k_jing,j, k;
+        mapping killerskill1;
+        int k_skill, k_qi, k_neili, k_jing, j, k;
         string t_force,t_dodge;
         k_skill = ceil( pow( ob->query("combat_exp")*10.0, 0.333333) );
         k_skill = k_skill/10*10;
