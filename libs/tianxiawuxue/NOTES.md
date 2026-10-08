@@ -1029,3 +1029,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply t
 记录、未改：任务基类 `inherit/misc/quest.lpc` 在第 74 行报 `syntax error, unexpected '}'`，HEAD 起就编译不过；`quest/quest_sc/guo.lpc` 调用本库没有的 `message_sort()`，HEAD 起也编译不过。
 
 启动时警告 26 -> 0；新进程登录（新人物确认）正常。
+
+## 深度功能测试（§10.7，2026-10-08）— 追杀杀手 killer.lpc
+
+`quest/chousha/killer.lpc` 的门派表里有本库没有的武功（feihua-wuping、guiyuan-dafa、tiexian-quan），`set_skill()` 遇到会 `error`，选到那一派时杀手加载失败；加一个 `set_skill()` 跳过本库没有的武功（同 wxddym，`map_skill` 随之跳过）。这个文件只由 `haojie.h` 生成，`haojie.h` 只有没放置的 `yelao1` 在用，属休眠内容；实际放在 `d/city/shijian` 的 `yelao` 生成 `killer1`/`killer2`，单独加载 12 次全过，未改。
