@@ -1085,3 +1085,9 @@ pass (created, empty, harmless — several existing call sites, e.g.
 ## 深度功能测试（§10.7，2026-10-07）— 村长的疗伤说明被截断
 
 `d/newbie/npc/laocunzhang.lpc`：新手村长讲内功疗伤的那段 `msg`，`"…达到一定等级。\n\n" HIY;` 后面单独一行 `"    更多相关帮助请参阅帮助文件 help force\n\n" NOR;`——多余的 `;` 把最后一句截掉了，颜色也没有还原（`NOR` 在被丢掉的那句里）。接回去（`scripts/lpc_join_cut_strings.py`，现在也认带颜色宏的字符串）。HEAD 与工作树分别加载（新进程）通过。
+
+## 深度功能测试（§10.7，2026-10-08）— 编译警告整理、任务杀手加载失败
+
+`scripts/lpc_warnings.py nitan6 --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 1824 个 `.lpc` 和 50 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：1762 -> 1762 通过，无回退；改过的头文件的 628 个包含者两边同为 606/607 通过（差的一个是下面的 `shashou`，随机加载失败）。手改：`adm/kernel/master.lpc` `direct_run_binary()` 的 `ob`、`vob` 只在 `#else`（BINARY_SUPPORT）里用到，声明挪进去；`adm/daemons/natured.lpc` 空语句 `lt[LT_MON];` 删去。启动时警告 11 -> 0；新进程登录（新人物确认）正常。
+
+护送任务（`d/city/task2/renzhi.lpc`）途中一半机会刷出的杀手 `d/city/task2/shashou.lpc` 是从 xkx100 的 task2 抄来的：`create()` 里 `random(3)` 的第三种调用 `NAMES_D->jap_name()`，本库 `adm/daemons/namesd.lpc` 没有这个函数，返回 0，`name["name"]` 出错——三次里一次加载失败，`renzhi` 的 `new(ss_name)` 跟着出错，护送那一步中断；另两种用 xkx100 的写法 `({ name["id"] })`，而本库 namesd 返回的 id 已经是数组，嵌套之后 `query("id")` 是数组，玩家无法用 id 指这个杀手。修正（`scripts/lpc_nitan_jap_name.py`）：namesd 补上 `jap_name()`（名表取自 xkx100 `adm/daemons/named`，返回本库的数组 id），shashou 直接传 `name["id"]`。验证：HEAD 单独加载 3 次 1 次失败；修正后 8 次全过；探针连续 `new` 30 个，`query("id")` 都是字符串且 `id()` 认得。

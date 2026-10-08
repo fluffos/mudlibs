@@ -5,7 +5,6 @@ int accept_object(object ob, object obj)
 {
         object me = this_object();
 
-        mapping my_fam=query("family", me);
         mapping ob_fam=query("family", ob);
         int r;
 
