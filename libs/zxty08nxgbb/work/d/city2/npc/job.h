@@ -24,10 +24,7 @@ int get_mission()
 {
 	object me,killer;
 	int combatexp, timep;
-	string missiondata;
-	string filename,cname,id,party;
 	string time;
-	int level;
 	mapping quest = (__DIR__"where")->query_quest();
 
 	me = this_player();
@@ -118,14 +115,9 @@ string time_period(int timep, object me)
 
 int accept_object(object who, object ob)
 {
-	int exp, pot, shen,factor,money,gongji,gongji2;		
-	string missiondata;
-	object mm,killer;
+	int gongji;		
 	//mapping mbonus;
-	string filename,cname,id,party;
-	string temp;
-	int level,i,miss_count;
-	int jd=0,no_getdrop=0,bought=0,unique=0;
+	string id;
 	gongji = (int)who->query("mark/achievement");
 	
 	//who=this_player();
@@ -205,13 +197,8 @@ void select_gift(string arg,object who)
 int get_jiangli(object who,int i)
 {
 	mixed *local = localtime(time());
-	int exp, shen,factor,money,gongji,gongji2,pot;		
-	string missiondata;
-	object mm;
+	int exp, shen, money, gongji, gongji2, pot;		
 	//mapping mbonus;
-	string filename,cname,id,party;
-	int level,miss_count;
-	int no_getdrop=0,bought=0;
 	gongji = (int)who->query("mark/achievement");
 	
 	//  计算附加奖励值

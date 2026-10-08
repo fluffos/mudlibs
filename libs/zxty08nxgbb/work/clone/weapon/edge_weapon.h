@@ -1,5 +1,5 @@
 //Cracked by Roath
-mixed hit_ob(object me, object victim, object weapon, int damage_bonus, int factor)
+varargs mixed hit_ob(object me, object victim, object weapon, int damage_bonus, int factor)
 {
         object ob;
         int j, k; 

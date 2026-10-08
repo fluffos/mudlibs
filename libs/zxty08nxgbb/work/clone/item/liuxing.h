@@ -4,7 +4,6 @@
 
 void init()
 {
-			object me = this_player();
 		add_action("block_cmd","beg",1);
 		add_action("block_cmd","steal",1);
 		add_action("block_cmd","sleep",1);
