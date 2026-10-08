@@ -385,3 +385,9 @@ functionally re-tested live on this lib.
 ## 深度功能测试（§10.7，2026-10-05）— tail() simul_efun
 
 `scripts/lpc_add_tail.py --apply`: `cmds/apr/tail.lpc` calls `tail(file)`, an efun of the MudOS this archive ran on that FluffOS does not have (`Undefined function tail`: the command did not compile). `adm/simul_efun/file.lpc` now defines `void tail(string file)`: the last 10 lines of the file, written to the player. Load check (HEAD against the working tree): 1 of the 1 tail command file(s) failed to load at HEAD, all load now, and the simul_efun file loads. KB 04 §6.2.
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+先用 `scripts/lpc_twin_port.py adopt xkyxciii xkyx3b` 把 xkyxciii 警告整理提交（59e3eb25955）里的改动搬到 210 个修改前与它一致的文件（逐文件核对非 ASCII 文字：没有丢失或改动），剩下的再跑 `scripts/lpc_warnings.py xkyx3b --fix`，共改动 214 个 `.lpc`。HEAD 与工作树分别加载（新进程）：206 -> 206 通过，无回退。
+
+启动时警告 37 -> 0；新进程登录（新人物确认）正常。
