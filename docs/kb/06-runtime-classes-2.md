@@ -1251,3 +1251,13 @@ guarded object is never loaded, so every file gets `""`, which fails the `ROOT_U
 without the guard just loads the second copy and still answers correctly (17 other xkx/jqxz/sj/ldtx libs have the same path mismatch
 and resolve `Root`). **Fix:** point `simulated efun file` at the path the lib's own macro and original config use. **Detection:** a
 probe that prints `getuid(load_object("/cmds/..."))`; compare `config.fluffos`'s simul_efun path with `#define SIMUL_EFUN_OB`.
+
+
+### 7.236 The master reports errors to a channel as `this_object()` but has no `channel_id` (sjpl2, sjplii, sjplgfjxb, 2026-10-07)
+**Symptom:** every error with no player behind it (load, call_out, heart_beat) logs `Error in mudlib error handler: *Bad argument
+1 to capitalize()` from `report_error()`, and the error never reaches the wizard channel. **Cause:** `CHANNEL_D->do_channel(this_object(),
+"sys", ...)` in the master; `channeld` names a non-user speaker by `me->query("channel_id")` and falls back to
+`capitalize(me->query("id"))`, and the master has no `query()`, so `capitalize(0)`. **Fix:** give the master `mixed query(string arg)
+{ if (arg == "channel_id") return "系统核心"; return 0; }` (what `sj`'s master has). Channel daemons that guard `if (me->query("id"))`
+or fall back to `"未知"` (dtsl2, dtxywzxzb, xyj2006*) are safe. **Detection:** a master that calls `do_channel(this_object()` with no
+`channel_id` in it; load a failing object with `lpcc --batch` and look for `Error in mudlib error handler`.
