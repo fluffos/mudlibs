@@ -231,3 +231,10 @@ functionally re-tested live on this lib.
 ## 深度功能测试（§10.7，2026-10-07）— 空的 `if (current_water == 0) {}`
 
 5 个房间的 `valid_leave()` 里有一行什么也不做的 `if (current_water == 0) {}`（编译警告 `Expression has no side effects`），删去，行为不变：`d/gaochang/room11.lpc`、`d/gaochang/room12.lpc`、`d/gaochang/room13.lpc`、`d/gaochang/room14.lpc`、`d/xingxiu/shanjiao.lpc`。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+先用 `scripts/lpc_twin_port.py adopt zxty08nxgbb zxty` 把 zxty08nxgbb 警告整理提交（20451f2a232）里的改动搬到 715 个修改前与它一致的文件（逐文件核对非 ASCII 文字：没有丢失或改动），剩下的再跑 `scripts/lpc_warnings.py zxty --fix` 加 `scripts/lpc_fix_no_effect.py --apply`（两份 `wzd_log.lpc` 的 `for (i == 0; ...)` 改成 `=`），共改动 1007 个 `.lpc` 和若干 `.h`。HEAD 与工作树分别加载（新进程）：857 -> 857；`d/migong/lev20/npc/lev3` 在批量里 HEAD 通过、工作树失败，单独连载三次 HEAD 与工作树都失败，是批量加载的假象（随机迷宫 NPC），对应的 `lev18/npc/lev3` 反过来新能加载。改过的头文件的 94 个包含者 77 -> 77 通过。
+手工：`feature/jh_dealer.lpc` 只剩注释的 `if (!vip) { }` 去掉，注释留着；`clone/obj/traverser.lpc` 的空 `DEBUG` 宏改成调用空函数。`clone/obj/job_server.lpc` HEAD 起就编译不过，未动。
+
+启动时警告 27 -> 0；新进程登录（新人物确认）正常。

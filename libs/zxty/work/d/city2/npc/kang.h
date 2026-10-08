@@ -6,8 +6,8 @@ string ask_fenglu();
 string ask_shengqian();
 string ask_shengqian()
 {
-	object me,ob;
-	string rank,rank2,guanzhi;
+	object me;
+	string rank2, guanzhi;
 	int position,pos;
 	string  *rank_zhengjiu = ({
 	BLU"【修武校尉】"NOR,	BLU"【  把 总 】"NOR,	BLU"【 营翎长 】"NOR});
@@ -181,7 +181,7 @@ me->query("rank_info/title2") 是title上显示的rank称呼
 
 string ask_fenglu()
 {
-	object me,ob,qian;
+	object me, qian;
 	int sil,sil1,sil2,guanzhi,fenglu;
 	me=this_player(); 
 	guanzhi= me->query("mark/guanzhi");

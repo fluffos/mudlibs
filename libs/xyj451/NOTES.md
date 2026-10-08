@@ -253,3 +253,10 @@ single-file compile check (PASS). Part of the corpus-wide §7.19 sweep
 ## 深度功能测试（§10.7，2026-10-07）— 兵器的 `actions` 函数指针
 
 `set("actions", (: WEAPON_D, "query_action" :));`：旧 MudOS 把 `(: 字符串, "函数" :)` 当作 call_other 函数指针，本驱动把它当作表达式函数指针，求值只得到字符串 `"query_action"`。没有对应兵器技能时 `feature/attack.lpc` 直接用兵器的 `actions`，`COMBAT_D` 拿到的不是 mapping，`reset_action()` 后仍不是，记一条 bad action 就不出招——拿着这些兵器打不出攻击。改成别的兵器早已用的 `(: call_other, WEAPON_D, "query_action" :)`（KB 04 §6.10）：`d/obj/inherit/weapon/throwing.lpc`、`d/obj/inherit/weapon/fork.lpc`、`d/obj/inherit/weapon/whip.lpc`、`d/obj/inherit/weapon/sword.lpc`、`d/obj/inherit/weapon/axe.lpc`、`d/obj/inherit/weapon/blade.lpc`、等共 9 个。改动的文件在 HEAD 与工作树分别加载（新进程），无回退。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py xyj451 --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 533 个 `.lpc` 和若干 `.h`。HEAD 与工作树分别加载（新进程）：516 -> 516 通过，无回退；改过的头文件的 256 个包含者 251 -> 251 通过。
+记录、未改：`d/suburb/es/npc/oldman.lpc`（采药老者/山药蛋）的 `kill_ob()` 里那句 `HIY "采药老者眼放异光……纳命来！" NOR "\n", environment(), this_object());` 丢了开头的 `message(…` 调用，第 154–155 行还有类型错误，HEAD 起就编译不过。
+
+启动时警告 27 -> 0；新进程登录（编码选择、新人物确认）正常。

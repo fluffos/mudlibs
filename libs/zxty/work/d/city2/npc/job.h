@@ -112,14 +112,11 @@ string time_period(int timep, object me)
 
 int accept_object(object who, object ob)
 {
-	int exp, pot, shen,factor,money,gongji,gongji2;		
+	int gongji;		
 	string missiondata;
-	object mm;
 	mapping mbonus;
 	string filename,cname,id,party;
-	string temp;
-	int level,i,miss_count;
-	int jd=0,no_getdrop=0,bought=0,unique=0;
+	int level;
 	gongji = (int)who->query("mark/achievement");
 	
 	//who=this_player();
@@ -195,11 +192,9 @@ void select_gift(string arg,object who,mapping mbonus)
 int get_jiangli(object who,int i,mapping mbonus)
 {
 	int exp, shen,factor,money,gongji,gongji2;		
-	string missiondata;
 	object mm;
 	//mapping mbonus;
-	string filename,cname,id,party;
-	int level,miss_count;
+	int miss_count;
 	int no_getdrop=0,bought=0;
 	gongji = (int)who->query("mark/achievement");
 	
