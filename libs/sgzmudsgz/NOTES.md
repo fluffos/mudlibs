@@ -154,3 +154,8 @@ hylib/dtxy) stay confirmed duplicates.
 ## 深度功能测试（§10.7，2026-10-08）— `.lpc` 后缀的定宽切片
 
 `.c` 改名 `.lpc` 时只改了字符串没改切片宽度：`f[<2..] == ".lpc"` 拿两个字符比四个字符，永远不成立（`!=` 永远成立），按后缀筛文件、去后缀的代码因此从不运行或截成 `x.l`（KB 06 §7.238）。`scripts/lpc_lpc_suffix_slice.py --apply` 改了 8 处比较、2 处去后缀（如 `daemons/doc_d.lpc`）；改动的文件 HEAD 与工作树分别加载（新进程），无回退。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+`scripts/lpc_warnings.py sgzmudsgz --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 311 个 `.lpc`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：306 -> 306 通过，无回退。启动时警告 0 -> 0；新进程登录（输入名字）正常。
+（这一轮用分块扫描重跑：上一轮单次 `lpcc --batch` 中途死掉，只扫到 3546 个文件里的 1452 个。）
