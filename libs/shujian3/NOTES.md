@@ -224,3 +224,7 @@ re-invoke `enable_player()` on this lib while the object is still
 手改一处：`adm/daemons/logind.lpc` 登录时查新信件后的 `if (num > 0) { }`，原作者把里面的提示语注释掉了，只剩空的分支（编译警告 `Value of conditional expression is unused`）；把 `if` 也注释掉，行为不变。
 
 启动时警告 26 -> 0；新进程连线行为与 HEAD 相同（本库走指间 MUD 协议，裸 telnet 输入名字得到“未知错误”，HEAD 亦然）。
+
+## 深度功能测试（§10.7，2026-10-08）— `.lpc` 后缀的定宽切片
+
+`.c` 改名 `.lpc` 时只改了字符串没改切片宽度：`f[<2..] == ".lpc"` 拿两个字符比四个字符，永远不成立（`!=` 永远成立），按后缀筛文件、去后缀的代码因此从不运行或截成 `x.l`（KB 06 §7.238）。`scripts/lpc_lpc_suffix_slice.py --apply` 改了 10 处比较、0 处去后缀（如 `d/xueshan/zanpugc.lpc`）；改动的文件 HEAD 与工作树分别加载（新进程），无回退。

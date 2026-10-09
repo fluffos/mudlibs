@@ -861,3 +861,7 @@ items, no shops exist to test against.
 2. 带种子的 random（KB 06 §7.225）：CD 驱动的 `random(range, seed)` 对同一种子总给同一个数，`compare`/估价按两个物件的编号取种子，避免反复比较把受技能限制的估计平均成真值。上线时 5 个文件里 45 处的种子被删掉了（`state.lpc` 留下 5 个无用的 `seed` 变量）。按 `raw/` 原文把种子放回，simul_efun 加了 `random(int range, mixed *seed...)`：有种子时对种子做固定散列。
 3. `set_alarm()` 接受 CD 的完整形式 `set_alarm(float, float, function|string, args...)`：字符串是调用者自己的函数名，多余参数传给它（`std/callout.lpc` 的 `call_out()` 就这样用）；`get_alarm()` 返回参数（KB 06 §7.224）。
 4. `secure/master.lpc` 的 `valid_read` 对 `#include` 放行（`binaries`、`data` 仍关闭）。驱动拿主控当读者检查每个 include，结果取决于主控当时的 euid，而 `preload_boot()` 会把它设成被载入文件的创建者。arkadia 清完警告后就因此载入失败，因为以前每条警告都调用 `log_error()`，顺手把 euid 设回 root（KB 06 §7.226）。genesis 目前没有触发，这里是预防性修改。
+
+## 深度功能测试（§10.7，2026-10-08）— `.lpc` 后缀的定宽切片
+
+`.c` 改名 `.lpc` 时只改了字符串没改切片宽度：`f[<2..] == ".lpc"` 拿两个字符比四个字符，永远不成立（`!=` 永远成立），按后缀筛文件、去后缀的代码因此从不运行或截成 `x.l`（KB 06 §7.238）。`scripts/lpc_lpc_suffix_slice.py --apply` 改了 1 处比较、1 处去后缀（如 `std/domain_link.lpc`）；改动的文件 HEAD 与工作树分别加载（新进程），无回退。

@@ -244,3 +244,7 @@ python3 scripts/mudclient.py 127.0.0.1 40274 --timeout 40 --idle 0.5 \
 ## 深度功能测试（§10.7，2026-10-07）— 风洞分身的技能减半
 
 `clone/drug/fengdong.lpc`：`if (victim->query("combat_exp", 1) < 10000) max1/2;` 是空语句（写法没空格，2026-10-06 的全库清扫没认出来），改成 `max1 /= 2;`。新进程编译通过。
+
+## 深度功能测试（§10.7，2026-10-08）— `.lpc` 后缀的定宽切片
+
+`.c` 改名 `.lpc` 时只改了字符串没改切片宽度：`f[<2..] == ".lpc"` 拿两个字符比四个字符，永远不成立（`!=` 永远成立），按后缀筛文件、去后缀的代码因此从不运行或截成 `x.l`（KB 06 §7.238）。`scripts/lpc_lpc_suffix_slice.py --apply` 改了 5 处比较、4 处去后缀（如 `clone/misc/roommaker.lpc`）；改动的文件 HEAD 与工作树分别加载（新进程），无回退。

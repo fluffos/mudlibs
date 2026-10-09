@@ -1271,3 +1271,17 @@ it errors mid-command. **Cause:** nitan's `d/city/task2/shashou.lpc` came from x
 returns an id array (the NPC's `"id"` becomes an array). **Fix:** port the missing function to the daemon in the target's own
 return shape and pass the id through (`scripts/lpc_nitan_jap_name.py`). **Detection:** a file that flips PASS/FAIL between
 fresh loads (random branch); grep the `DAEMON->fn()` it calls against the daemon's definitions.
+
+
+### 7.238 `f[<2..] == ".lpc"`: the rename changed the suffix, not the slice width (102 libs, 2026-10-08)
+**Symptom:** a directory filter keeps nothing or everything, a suffix strip never runs (or leaves `x.l`), a daemon that
+walks rooms by file name never accepts one. nitan's `taskd` rejected every room in `alloc_task()` and, because
+`rooms -= ({ room })` removed `zone + name` from a list of bare names, drew forever: `taskd` never loaded, so the player
+commands `task` and `locate` printed the generic "这里发现了臭虫" bug message in the whole nitan family. **Cause:** the
+`.c` -> `.lpc` rename (KB 03 section 4.2 item 4) turned `f[<2..] == ".c"` into `f[<2..] == ".lpc"`, two characters
+against four; the strip after it, `f = f[0..<3]`, stayed two characters too. **Fix:** `scripts/lpc_lpc_suffix_slice.py
+--apply` sets the slice to `[<4..]`/`[<4..<1]` and widens the strip of the same name within two lines to `[0..<5]`
+(also `[..<3]` and a strip after an already-correct test); read its READ lines by hand (skylib's cloner stripped with
+`f[<2..]`). 425 comparisons + 96 strips in 363 files. nitan `taskd` also needed the list fix and, once it really walks
+the rooms, more than a 2-5 s `maximum evaluation cost` for its cold first load (10000000). **Detection:**
+`grep -rnE '\[<[0-35-9]\.\.(<1)?\] *[!=]= *"\.lpc"'`; a daemon whose load runs the VM out of memory or eval time.

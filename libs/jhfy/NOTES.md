@@ -831,3 +831,7 @@ functionally re-tested live on this lib.
 ## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
 
 `scripts/lpc_warnings.py jhfy --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 345 个 `.lpc` 和 3 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：330 -> 330 通过，无回退；改过的头文件的 34 个包含者 34 -> 34 通过。启动时警告 8 -> 0；新进程登录（输入名字）正常。
+
+## 深度功能测试（§10.7，2026-10-08）— `.lpc` 后缀的定宽切片
+
+`.c` 改名 `.lpc` 时只改了字符串没改切片宽度：`f[<2..] == ".lpc"` 拿两个字符比四个字符，永远不成立（`!=` 永远成立），按后缀筛文件、去后缀的代码因此从不运行或截成 `x.l`（KB 06 §7.238）。`scripts/lpc_lpc_suffix_slice.py --apply` 改了 1 处比较、0 处去后缀（如 `cmds/app/ls.lpc`）；改动的文件 HEAD 与工作树分别加载（新进程），无回退。

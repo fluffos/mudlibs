@@ -249,3 +249,7 @@ header-encrypted. Skip nitan.zip.
 - `obj/player.lpc`：`valid_write()` 的 `fname` 只在 `#ifdef __LDMUD__` 里用到，声明挪进去；`gender=="male";` 是比较不是赋值（下一行无论如何把 creature 改成 male，行为不变），改成 `=`；空的 `if (length > 11) { }`（原档案即如此）删去；补 `set_top_kill`、`set_top_boot_xp`、`add_alignment`、`remove_ghost`、`is_real_player_ob`、`query_pwd` 的原型（先调用后定义，参数个数与隐式声明不一致）。
 - `obj/guild.lpc` 两个空的 `if( str ) { }`（原档案即如此）删去；`obj/monster.lpc` 补 `ready_eq()` 原型；`obj/play/follow/follow.lpc` 补 `clear_follow()` 原型；`obj/simul_efun.lpc` 去掉直接 `inherit` 的 `format`（`format_colour` 已继承它，原先两条路径继承同一个 `format()`）。
 验证：改动的 8 个文件 HEAD 与工作树分别加载 6 -> 6 通过；新进程完整建人物（密码、提示、性别、种族、身高体重、确认、来源）后 `look`、`score` 与 HEAD 输出相同。
+
+## 深度功能测试（§10.7，2026-10-08）— `.lpc` 后缀的定宽切片
+
+`.c` 改名 `.lpc` 时只改了字符串没改切片宽度：`f[<2..] == ".lpc"` 拿两个字符比四个字符，永远不成立（`!=` 永远成立），按后缀筛文件、去后缀的代码因此从不运行或截成 `x.l`（KB 06 §7.238）。`scripts/lpc_lpc_suffix_slice.py --apply` 改了 25 处比较、5 处去后缀（如 `std/room.lpc`）；改动的文件 HEAD 与工作树分别加载（新进程），无回退。

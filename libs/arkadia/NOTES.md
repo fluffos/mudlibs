@@ -773,3 +773,7 @@ pass.
 2. 原作者的几个小错：`cmd/live/things.lpc` 和旧的 `std/living/things.lpc` 里 `trop()` 的 `gBezokol == "tropic";` 是无效比较，`trop()` 之后也不读这个变量，删掉；`doc/examples/org/room/cave1.lpc` 一段注释少了 `*/`，把 `set_long(...)` 整个吞掉，示例房间没有长描述，补上；`tiger.lpc`、`energy_blast.lpc` 的 `how == ""` 应为赋值（轻伤时本该不显示 "without effect"）。`std/leftover.lpc` 重新声明了父类 `food` 的 `decay_time`/`decay_alarm`，两套变量本来就各管各的（leftover 覆盖了 `set_decay_time`，food 的腐烂流程对它不起作用），改名为 `leftover_decay_time`/`leftover_decay_alarm` 让这一点写在代码里；`config/race/generic.lpc` 的 `com_sounds` 同理改名 `race_com_sounds`（`cmdhooks` 的那个是 private）。
 3. **被警告掩盖的问题（KB 06 §7.226）。** 清完警告后启动时 `/std/room`、`/cmd/live/state`、`/cmd/wiz/apprentice` 载入失败：`Cannot #include /d/Standard/login/login.h`。驱动对每个 `#include` 调用 `valid_read(file, 主控, "include")`；`preload_boot()` 载入每个文件前把主控的 euid 设成该文件的创建者（`/cmd`、`/std` 是 backbone），而 backbone 不能读未登记为域的 `/d/Standard`。以前能过，只因为每条编译警告都会调用主控的 `log_error()`，它顺手执行 `set_auth(this_object(), "root:root")`。`valid_read` 现在对 `func == "include"` 放行（`players`、`binaries` 仍然关闭），CD 驱动本来就不检查 include。genesis 的主控同样修了。
 4. 验证：全新启动 0 警告 0 错误；`fluffos` 登录后 `kto`、`tree`、`mbs`、`Dump me`、`finger fluffos`、`porownaj`、`i`、`ls /std`、`zabij`、`zakoncz` 全部正常，驱动输出无警告、无 `insufficient permission`。
+
+## 深度功能测试（§10.7，2026-10-08）— `.lpc` 后缀的定宽切片
+
+`.c` 改名 `.lpc` 时只改了字符串没改切片宽度：`f[<2..] == ".lpc"` 拿两个字符比四个字符，永远不成立（`!=` 永远成立），按后缀筛文件、去后缀的代码因此从不运行或截成 `x.l`（KB 06 §7.238）。`scripts/lpc_lpc_suffix_slice.py --apply` 改了 2 处比较、0 处去后缀（如 `cmd/wiz/normal/files.lpc`）；改动的文件 HEAD 与工作树分别加载（新进程），无回退。

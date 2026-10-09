@@ -1015,3 +1015,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply k
 ## 深度功能测试（§10.7，2026-10-07）— 群发信件没有收信人
 
 `obj/mailbox.lpc` `send <group> <file> <title>`：循环里 `mail["to", groups[i]];` 是什么也不做的表达式（LDMud 多值 mapping 的写法），每封信都没有 `to` 字段；改成 `mail["to"] = groups[i];`。新进程编译通过。
+
+## 深度功能测试（§10.7，2026-10-08）— `.lpc` 后缀的定宽切片
+
+`.c` 改名 `.lpc` 时只改了字符串没改切片宽度：`f[<2..] == ".lpc"` 拿两个字符比四个字符，永远不成立（`!=` 永远成立），按后缀筛文件、去后缀的代码因此从不运行或截成 `x.l`（KB 06 §7.238）。`scripts/lpc_lpc_suffix_slice.py --apply` 改了 1 处比较、0 处去后缀（如 `adm/daemons/network/httpd.lpc`）；改动的文件 HEAD 与工作树分别加载（新进程），无回退。

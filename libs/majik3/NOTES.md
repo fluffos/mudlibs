@@ -444,3 +444,7 @@ By hand:
 - `daemon/soul.lpc`: `create()` called `get_souls()` / `get_adverbs()` before their definitions without prototypes (`not compiled with type testing`); prototypes added. `obj/redit_ob.lpc`: a stray `d_long;` statement deleted.
 
 Boot warnings 36 -> 0; fresh-process login screen works.
+
+## Deep test (§10.7, 2026-10-08) -- fixed-width `.lpc` suffix slices
+
+The `.c` -> `.lpc` rename changed the string but not the slice width: `f[<2..] == ".lpc"` compares two characters with four and is never true (`!=` always true), so suffix filters and strips never ran or cut `x.l` (KB 06 §7.238). `scripts/lpc_lpc_suffix_slice.py --apply` fixed 12 comparison(s) and 2 strip(s) (e.g. `inherit/living.lpc`); the changed files load at HEAD and in the tree (fresh processes) with no regression.

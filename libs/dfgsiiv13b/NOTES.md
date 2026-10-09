@@ -460,3 +460,7 @@ finds nothing in this lib.
 2. **`tell`、`reply`、`who` 三个基本指令无法编译。** 它们 `#include <net/dns.h>` 并引用网际互联守护 `GTELL`/`RWHO_Q`，而本档案里根本没有 `net/dns.h` 和这些守护（`raw/` 中也没有），于是玩家打 `tell`/`reply`/`who` 都是指令编译失败。同源的 huoying 已把这段注掉；这里改为 `#ifdef GTELL`/`#ifdef RWHO_Q` 包住 `名字@站名` 分支，本站内的私聊、回答、在线列表照常工作。`fingerd` 的 `mud` 变量同理放进 `#if 0`。
 3. `version` 用了旧驱动的 `__DRIVER__` 宏（本驱动没有，指令编译失败），改为只印 `__VERSION__`（内容已是 `fluffos <版本>`）。`cmds/adm/socket.lpc` 调用 MudOS 的 `dump_socket_status()`，本驱动没有，改用文档中的 `socket_status()` 列出各套接字，并按 KB 01 §1.3(c) 以 `#ifdef __PACKAGE_SOCKETS__` 保护（网页版没有套接字包）。
 4. 验证：全新启动 0 警告；`fluffos` 登录 → `look`、`who`、`version`（`fluffos 20260830-…` / `Eastern Stories 2.1.3a`）、`tell fluffos hello`、`reply hi`、`socket`、`score`、`quit` 全部正常。无参数的 `who` 只列与自己等级相差 5 以内的非巫师玩家，所以管理员看到 `0/1` 是设计如此。
+
+## 深度功能测试（§10.7，2026-10-08）— `.lpc` 后缀的定宽切片
+
+`.c` 改名 `.lpc` 时只改了字符串没改切片宽度：`f[<2..] == ".lpc"` 拿两个字符比四个字符，永远不成立（`!=` 永远成立），按后缀筛文件、去后缀的代码因此从不运行或截成 `x.l`（KB 06 §7.238）。`scripts/lpc_lpc_suffix_slice.py --apply` 改了 1 处比较、0 处去后缀（如 `cmds/wiz/update.lpc`）；改动的文件 HEAD 与工作树分别加载（新进程），无回退。

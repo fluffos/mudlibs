@@ -200,3 +200,7 @@ Leftover 647 (2026-09-11). User: source-complete
 is done; do not invent. Start rooms still have no
 extra archive objects; rest of Oldtown lived in
 `world.obj`. Do not invent streets.
+
+## Deep test (§10.7, 2026-10-08) -- fixed-width `.lpc` suffix slices
+
+The `.c` -> `.lpc` rename changed the string but not the slice width: `f[<2..] == ".lpc"` compares two characters with four and is never true (`!=` always true), so suffix filters and strips never ran or cut `x.l` (KB 06 §7.238). `scripts/lpc_lpc_suffix_slice.py --apply` fixed 6 comparison(s) and 2 strip(s) (e.g. `bin/wiz/clone.lpc`); the changed files load at HEAD and in the tree (fresh processes) with no regression.

@@ -105,3 +105,7 @@ Logs this boot:
   one-shot `catch(error("catch-path-probe"))` in `cmd_score` →
   `CAUGHT /secure/obj/catalog_user.lpc:… *catch-path-probe`, then
   reverted. No code fixes this pass.
+
+## Deep test (§10.7, 2026-10-08) -- fixed-width `.lpc` suffix slices
+
+The `.c` -> `.lpc` rename changed the string but not the slice width: `f[<2..] == ".lpc"` compares two characters with four and is never true (`!=` always true), so suffix filters and strips never ran or cut `x.l` (KB 06 §7.238). `scripts/lpc_lpc_suffix_slice.py --apply` fixed 2 comparison(s) and 2 strip(s) (e.g. `secure/obj/master_orig.lpc`); the changed files load at HEAD and in the tree (fresh processes) with no regression.

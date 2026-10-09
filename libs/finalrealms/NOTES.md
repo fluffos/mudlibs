@@ -709,3 +709,7 @@ project's usual convention.
 3. `obj/menu` 一个没用的局部变量 `is_directory`：警告会在第一次 `man` 时直接打到巫师屏幕上，删去。
 验证（临时副本，新进程）：`fluffos` 登录，`man write_file` 显示 `efuns/filesystem/write_file` 的说明。登录时 `secure/login` 对 `global/creator` 调 `set_name()` 被拒（该函数是 `protected`，原 MudOS 版是 `static`，同样不能被外部调用；名字随后由存档恢复时设置），是原样行为，未改。
 
+
+## 深度功能测试（§10.7，2026-10-08）— `.lpc` 后缀的定宽切片
+
+`.c` 改名 `.lpc` 时只改了字符串没改切片宽度：`f[<2..] == ".lpc"` 拿两个字符比四个字符，永远不成立（`!=` 永远成立），按后缀筛文件、去后缀的代码因此从不运行或截成 `x.l`（KB 06 §7.238）。`scripts/lpc_lpc_suffix_slice.py --apply` 改了 2 处比较、2 处去后缀（如 `std/remote.lpc`）；改动的文件 HEAD 与工作树分别加载（新进程），无回退。

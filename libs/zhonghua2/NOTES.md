@@ -914,3 +914,7 @@ functionally re-tested live on this lib.
 - 未动：`adm/daemons/questd11.lpc` 是没人引用的旧副本，本身有语法错误；`clone/obj/genmap.lpc` 里 `#include "harbor.h"` 在函数内声明的局部变量没用到（头文件共用）。
 
 启动时警告 134 -> 0；新进程登录（标题画面、英文名、新人物确认）正常。
+
+## 深度功能测试（§10.7，2026-10-08）— `.lpc` 后缀的定宽切片
+
+`.c` 改名 `.lpc` 时只改了字符串没改切片宽度：`f[<2..] == ".lpc"` 拿两个字符比四个字符，永远不成立（`!=` 永远成立），按后缀筛文件、去后缀的代码因此从不运行或截成 `x.l`（KB 06 §7.238）。`scripts/lpc_lpc_suffix_slice.py --apply` 改了 3 处比较、0 处去后缀（如 `u/sanben/giftd.lpc`）；改动的文件 HEAD 与工作树分别加载（新进程），无回退。

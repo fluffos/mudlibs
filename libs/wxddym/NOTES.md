@@ -582,3 +582,8 @@ No new errors after the shop commands. Demo `fluffos` save churn
 
 追杀任务的三个杀手 `quest/chousha/killer.lpc`、`killer1.lpc`、`killer2.lpc` 的门派表里有本库没有的武功（honghua-shengong、dugu-jiujian、wugong-zhao 等十几种），`F_SKILL` 的 `set_skill()` 遇到就 `error`：`killer` 约一半加载失败，`killer2` 每次都失败。三个文件各加一个 `set_skill()`，跳过本库没有的武功（`map_skill` 随之跳过）；修正后 `killer` 单独加载 8 次全过，`killer2` 由 HEAD 失败变为通过。注意：本库没有地方放置 `quest/chousha/yelao1`（`d/wizard/guest_room` 里那一行被注释掉），`haojie.h` 也只有它在用，这几个杀手目前是休眠内容。
 `d/city/task2/shashou.lpc`、`renzhi.lpc` 和 `inherit/char/manager.lpc` 调用 `NAME_D->man_name()` 等，本库的 `NAME_D`（`adm/daemons/named`）是保存玩家名字的，没有这些函数（来自 xkx100 的名字生成器没有带过来）；但没有任何文件生成 `renzhi` 或继承 `manager`，未改，记录在此。
+
+## 深度功能测试（§10.7，2026-10-08）— `.lpc` 后缀的定宽切片
+
+`.c` 改名 `.lpc` 时只改了字符串没改切片宽度：`f[<2..] == ".lpc"` 拿两个字符比四个字符，永远不成立（`!=` 永远成立），按后缀筛文件、去后缀的代码因此从不运行或截成 `x.l`（KB 06 §7.238）。`scripts/lpc_lpc_suffix_slice.py --apply` 改了 2 处比较、0 处去后缀（如 `adm/daemons/taskd.lpc`）；改动的文件 HEAD 与工作树分别加载（新进程），无回退。
+使命任务：`adm/daemons/taskd.lpc` `alloc_task()` 的 `room[<2..<1] != ".lpc"` 让每个房间都被拒，`rooms -= ({ room })` 又拿 `zone + 名字` 去减只有名字的列表，于是无限重抽，`taskd` 从来加载不起来——玩家的 `task`、`locate` 指令只显示“这里发现了臭虫”。改正切片和列表（列表空了就停）；真正走房间之后首次冷加载要 5 秒以上，`maximum evaluation cost` 提到 10000000（nt6 原本就是最大值）。新进程建人物后 `task` 列出使命物品、`locate` 可用；HEAD 两者都失败。

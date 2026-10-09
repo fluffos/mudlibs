@@ -205,3 +205,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 `scripts/lpc_warnings.py xyzxyl201412 --fix` 加 `scripts/lpc_fix_no_effect.py --apply`（`d/tiezhang` 三个房间删去 `return` 后面的 `"\n";`，`kungfu/skill/xuanyuan-arrow.lpc` 删去什么也不做的 `(: throw_weapon :);` 等），共改动 772 个 `.lpc` 和若干 `.h`。HEAD 与工作树分别加载（新进程）：744 -> 744 通过，无回退；改过的头文件的 37 个包含者 37 -> 37 通过。手工：`adm/daemons/story/new7.lpc` 里只剩注释的 `if (ob) { }` 去掉，注释留着。`adm/daemons/cruised.lpc` 是编译不过的漫游守护进程草稿，未动。
 
 启动时警告 41 -> 0；新进程登录（新人物确认）正常。
+
+## 深度功能测试（§10.7，2026-10-08）— `.lpc` 后缀的定宽切片
+
+`.c` 改名 `.lpc` 时只改了字符串没改切片宽度：`f[<2..] == ".lpc"` 拿两个字符比四个字符，永远不成立（`!=` 永远成立），按后缀筛文件、去后缀的代码因此从不运行或截成 `x.l`（KB 06 §7.238）。`scripts/lpc_lpc_suffix_slice.py --apply` 改了 2 处比较、1 处去后缀（如 `cmds/app/ls3.lpc`）；改动的文件 HEAD 与工作树分别加载（新进程），无回退。

@@ -68,8 +68,9 @@ An explicit extension is resolved exactly. An extensionless path tries
    room-pool tables, scenery tables. Preload failures are silent. Verify
    every row in a data file with a script, not just a sample.
 3. Runtime `sscanf(f+"$", "%s.c$", f)` filters (§8.3b).
-4. Fixed-width slices (`[0..<3]`, `len-2..len-1` compared against
-   `".lpc"`). See §7.80 and §7.118.
+4. Fixed-width slices (`[0..<3]`, `len-2..len-1`, `f[<2..] == ".lpc"`
+   compared against `".lpc"`). See §7.80, §7.118 and §7.238
+   (`scripts/lpc_lpc_suffix_slice.py`).
 5. An extensionless live file plus a same-named `.c` backup: after the
    rename the backup can win. Diff every pair.
 6. A *directory* named `x.c`. Rename it to something that doesn't look

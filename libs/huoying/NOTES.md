@@ -756,3 +756,7 @@ PID.
 3. `version` 用了旧驱动的 `__DRIVER__` 宏（本驱动没有，指令编译失败），改为只印 `__VERSION__`。`cmds/adm/socket.lpc` 调用 MudOS 的 `dump_socket_status()`，改用 `socket_status()`，并以 `#ifdef __PACKAGE_SOCKETS__` 保护（KB 01 §1.3(c)）。
 4. 仍无法编译、无人引用的孤立文件（不改，属内容缺口）：`obj/water.lpc`（`F_DRINK`、`feature/drink` 不在本档案）、`world/item/mj.lpc`（`ansi2.h`）、`world/item/gobang.lpc`（`path.h`），都是从别的库带进来的。
 5. 验证：§9 格式化（4 个文件只调整 `::` 前的空格）后全新启动 0 警告；`fluffos` 登录 → `who`、`version`、`tell`、`reply`、`socket`、`score`、`quit` 全部正常。
+
+## 深度功能测试（§10.7，2026-10-08）— `.lpc` 后缀的定宽切片
+
+`.c` 改名 `.lpc` 时只改了字符串没改切片宽度：`f[<2..] == ".lpc"` 拿两个字符比四个字符，永远不成立（`!=` 永远成立），按后缀筛文件、去后缀的代码因此从不运行或截成 `x.l`（KB 06 §7.238）。`scripts/lpc_lpc_suffix_slice.py --apply` 改了 1 处比较、0 处去后缀（如 `cmds/wiz/update.lpc`）；改动的文件 HEAD 与工作树分别加载（新进程），无回退。

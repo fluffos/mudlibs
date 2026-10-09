@@ -837,3 +837,7 @@ Formatter not run (minimal edits).
 ## 深度功能测试（§10.7，2026-10-06）— 编译警告（机械部分）
 
 `scripts/lpc_warnings.py mortremains --fix`：删 16 处 `#pragma save_binary` 之外，631 个 `nosave` 函数改 `protected`（102 个去掉修饰），删 1188 个未用局部变量，补 32 处 `varargs`、32 处缺返回值的 `return;`；`lpc_audit_removed_locals.py` 复核 1901 个，0 个需要处理。改动的 622 个 `.lpc` 在只含被跟踪文件的树里 HEAD 与新版各编一次，发现一处回退：`adm/AFD/object/prop_logic.kenny.lpc` 的修饰符分行写（`nomask` / `private` / `nosave` 各占一行），工具没看到上一行的 `private`，把 `nosave` 改成了 `protected`，成了编译不过的 `private protected`；手工改回 `private`，工具已修正（逐行向上看纯修饰符行）。启动警告 97 → 8，错误 0。实测 `fluffos` 登录、`look`（Immortal's Hall）、`score`、`i`、`who`、`quit` 正常。
+
+## 深度功能测试（§10.7，2026-10-08）— `.lpc` 后缀的定宽切片
+
+`.c` 改名 `.lpc` 时只改了字符串没改切片宽度：`f[<2..] == ".lpc"` 拿两个字符比四个字符，永远不成立（`!=` 永远成立），按后缀筛文件、去后缀的代码因此从不运行或截成 `x.l`（KB 06 §7.238）。`scripts/lpc_lpc_suffix_slice.py --apply` 改了 9 处比较、1 处去后缀（如 `obj/tools/paintbrush.lpc`）；改动的文件 HEAD 与工作树分别加载（新进程），无回退。

@@ -391,3 +391,7 @@ functionally re-tested live on this lib.
 先用 `scripts/lpc_twin_port.py adopt xkyxciii xkyx3b` 把 xkyxciii 警告整理提交（59e3eb25955）里的改动搬到 210 个修改前与它一致的文件（逐文件核对非 ASCII 文字：没有丢失或改动），剩下的再跑 `scripts/lpc_warnings.py xkyx3b --fix`，共改动 214 个 `.lpc`。HEAD 与工作树分别加载（新进程）：206 -> 206 通过，无回退。
 
 启动时警告 37 -> 0；新进程登录（新人物确认）正常。
+
+## 深度功能测试（§10.7，2026-10-08）— `.lpc` 后缀的定宽切片
+
+`.c` 改名 `.lpc` 时只改了字符串没改切片宽度：`f[<2..] == ".lpc"` 拿两个字符比四个字符，永远不成立（`!=` 永远成立），按后缀筛文件、去后缀的代码因此从不运行或截成 `x.l`（KB 06 §7.238）。`scripts/lpc_lpc_suffix_slice.py --apply` 改了 1 处比较、0 处去后缀（如 `adm/daemons/natured.lpc`）；改动的文件 HEAD 与工作树分别加载（新进程），无回退。
