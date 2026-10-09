@@ -133,8 +133,15 @@ def batch_compile(lib, objs):
             done = 1
         stuck = part[done - 1]
         if not re.search(r"^(PASS|FAIL) " + re.escape(stuck) + r"$", raw, re.M):
-            out.append("\nFAIL " + stuck + "\n")
-            print(f"  lpcc stopped at {stuck}; resuming after it", file=sys.stderr)
+            # the VM often dies from what the batch built up, not from this object: retry it alone
+            alone = subprocess.run([LPCC, "--batch", "config.fluffos"], cwd=lib, input=stuck + "\n",
+                                   capture_output=True, text=True, errors="replace").stdout
+            if re.search(r"^(PASS|FAIL) " + re.escape(stuck) + r"$", alone, re.M):
+                out.append(alone[alone.find("===== " + stuck):] if "===== " + stuck in alone else alone)
+                print(f"  lpcc stopped at {stuck} (loads alone); resuming after it", file=sys.stderr)
+            else:
+                out.append("\nFAIL " + stuck + "\n")
+                print(f"  lpcc stopped at {stuck} (kills the VM alone too); resuming after it", file=sys.stderr)
         i += done
     return "".join(out)
 
