@@ -159,3 +159,4 @@ hylib/dtxy) stay confirmed duplicates.
 
 `scripts/lpc_warnings.py sgzmudsgz --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 311 个 `.lpc`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：306 -> 306 通过，无回退。启动时警告 0 -> 0；新进程登录（输入名字）正常。
 （这一轮用分块扫描重跑：上一轮单次 `lpcc --batch` 中途死掉，只扫到 3546 个文件里的 1452 个。）
+记录、未改：分块扫描时 `daemons/warai_d/warai_d.lpc`、`wiz/edc/code/troop_d.lpc`、`wiz/edc/code/warai_d.lpc` 让 lpcc 进程死掉（`Too deep recursion`）。它们是放在子目录里的旧副本，`inherit __DIR__ + "warai_d/attack"` 指向不存在的 `.../warai_d/warai_d/attack`，master 的 `compile_object()` 又按“上一级同名文件”去找 `warai_d.lpc` 的 `virtual_create()`，于是加载自己、无限递归。真正在用的是 `/daemons/warai_d.lpc`、`/daemons/troop_d.lpc`（`include/daemons.h`），这几个副本没人加载。
