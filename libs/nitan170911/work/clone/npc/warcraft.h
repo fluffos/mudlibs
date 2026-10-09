@@ -591,7 +591,6 @@ varargs mixed set(string idx, mixed para, object ob)
 
 mixed add(string prop, mixed data)
 {
-        string para;
         mixed old;
         int level;
 
@@ -614,7 +613,6 @@ mixed add(string prop, mixed data)
 varargs int receive_whistle(object me, int flag)
 {
         object env, follower;
-        int    period;
 
         if( (env = environment()) && env == me )
         {

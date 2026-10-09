@@ -911,3 +911,11 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply n
 ## 深度功能测试（§10.7，2026-10-07）— 村长的疗伤说明被截断
 
 `d/newbie/npc/laocunzhang.lpc`：新手村长讲内功疗伤的那段 `msg`，`"…达到一定等级。\n\n" HIY;` 后面单独一行 `"    更多相关帮助请参阅帮助文件 help force\n\n" NOR;`——多余的 `;` 把最后一句截掉了，颜色也没有还原（`NOR` 在被丢掉的那句里）。接回去（`scripts/lpc_join_cut_strings.py`，现在也认带颜色宏的字符串）。HEAD 与工作树分别加载（新进程）通过。
+
+## 深度功能测试（§10.7，2026-10-08）— 编译警告整理、使命任务、`.lpc` 切片
+
+`scripts/lpc_warnings.py nitan170911 --fix`（分块扫描，见下）加 `scripts/lpc_fix_no_effect.py --apply`，共改动 1990 个 `.lpc` 和 51 个 `.h`（多为删去未用的局部变量）。验证（分块加载，新进程）：改动的 1990 个文件里两边都有结果的 1399 个 HEAD 1346 -> 工作树 1930 通过、无回退，其余 7 个工作树失败的文件单独在 HEAD 加载同样失败；改过的头文件的 9323 个包含者 3439 -> 3439 通过。启动时警告 11 -> 0。
+扫描工具问题：一次 `lpcc --batch` 加载全部约 5.5 万个文件时，在 `adm/daemons/taskd` 内存耗尽，进程死掉，扫描只看到 312 个文件却显得很干净；`lpc_warnings.py` 现在分块并跳过把进程弄死的文件继续。
+手改（同 nitan6 一系）：`adm/kernel/master.lpc` `direct_run_binary()` 的 `ob`、`vob` 挪进 `#else`；`adm/daemons/natured.lpc` 空语句 `lt[LT_MON];` 删去；`d/city/task2/shashou.lpc` 的 `jap_name()`（KB 06 §7.237）。
+使命任务：`adm/daemons/taskd.lpc` `alloc_task()` 的 `room[<2..<1] != ".lpc"` 让每个房间都被拒（KB 06 §7.238），`rooms -= ({ room })` 又拿 `zone + 名字` 去减只有名字的列表，于是无限重抽、不断载入房间直到内存耗尽——`taskd` 从来加载不起来，玩家的 `task`、`locate` 指令失效。改正切片和列表（列表空了就停），`maximum evaluation cost` 提到 10000000（真正走房间后首次冷加载要几秒）；改后单独加载 `taskd` 无错误。本库注册新人物需要 MySQL（见上文），本机没有，未能现场跑 `task`；同样的修正在 nitan6 现场验证过（HEAD 两个指令都只显示“这里发现了臭虫”，修正后正常）。另：`scripts/lpc_lpc_suffix_slice.py` 在本库改了 9 处 `.lpc` 定宽切片。
+本地 `data/dbased.o`（23MB，.gitignore 有意不收）格式损坏，`restore_object` 报 `Illegal mapping format`；不随游戏发布，只影响本机测试。
