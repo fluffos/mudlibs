@@ -935,3 +935,5 @@ top-level memory doc). No fix applied.
 手工：`adm/daemons/natured.lpc` 删去空语句 `lt[LT_MON];`；`job/merchant/chaomai/npc/obj/check.lpc` 进货 `jinhuo all` 时 `if (... used_money < 0) used_money == 0;` 是比较不是赋值，钱数溢出成负数时没有归零、下一行"帑钱不足"的检查也就拦不住；改成 `=`。`std/weapon/club.lpc` 等四个兵器基类的 `actions` 见同日的兵器函数指针一节。
 
 启动时警告 94 -> 0；新进程登录正常。
+
+- 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 1 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 1 个，只在 #if 分支用的声明移进分支 0 个文件；改动 2 个文件，HEAD 与工作树各载入一次无回退（2 objects; HEAD PASS 1, tree PASS 1; regress 0; newly loading 0），这些文件的警告 2 -> 0。
