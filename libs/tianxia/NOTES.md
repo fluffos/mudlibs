@@ -1046,3 +1046,5 @@ functionally re-tested live on this lib.
 ## 深度功能测试（§10.7，2026-10-07）— 兵器的 `actions` 函数指针
 
 `set("actions", (: WEAPON_D, "query_action" :));`：旧 MudOS 把 `(: 字符串, "函数" :)` 当作 call_other 函数指针，本驱动把它当作表达式函数指针，求值只得到字符串 `"query_action"`。没有对应兵器技能时 `feature/attack.lpc` 直接用兵器的 `actions`，`COMBAT_D` 拿到的不是 mapping，`reset_action()` 后仍不是，记一条 bad action 就不出招——拿着这些兵器打不出攻击。改成别的兵器早已用的 `(: call_other, WEAPON_D, "query_action" :)`（KB 04 §6.10）：`wiz/aiai/treasure/treasure.lpc`。改动的文件在 HEAD 与工作树分别加载（新进程），无回退。
+
+- 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 0 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 31 个，只在 #if 分支用的声明移进分支 0 个文件；改动 21 个文件，HEAD 与工作树各载入一次无回退（21 objects; HEAD PASS 17, tree PASS 17; regress 0; newly loading 0），这些文件的警告 65 -> 35。
