@@ -799,3 +799,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply e
 ## 深度功能测试（§10.7，2026-10-05）— 主控 author_file()
 
 驱动的 mudlib_stats 包在主控载入时调用一次 `author_file(<主控文件>)`，要求返回字符串，否则每次启动都打印 `author_file() in the master file does not work, using root_uid as fallback` 一行，网页版每位访客的终端里都看得到。本库 `adm/obj/master.lpc` 的 `author_file()` 只为 `/u/<字母>/<名字>/` 下的文件返回作者，其余返回 0。而且驱动传入的路径是 `"/"` 加上配置里的 `/adm/obj/master`，即 `//adm/obj/master`，sane 模式的 `explode()` 会保留一个开头的 `""`。`praise` 和 `find -author` 直接调用 `master()->author_file()`，把 0 当作“没有作者”，所以没有把 0 改成字符串。现在先去掉空段（`explode(...) - ({ "" })`），`/adm` 下的文件返回 `ROOT_UID`（与同文件 `domain_file()` 的 `adm` 分支一致），这样也回答了开机探测；`/u` 分支加了长度检查（原来 `/u/<x>` 这样的短路径取 `path[2]` 会越界出错，而 author_file() 在每个对象载入时都会调用）（KB 06 §7.222）。用 `lpcc config.fluffos /nonexistent.lpc` 前后对比（主控和 preload 全程），只少了这一行。
+
+- 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 1 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 1 个，只在 #if 分支用的声明移进分支 0 个文件；改动 1 个文件，HEAD 与工作树各载入一次无回退（1 objects; HEAD PASS 1, tree PASS 1; regress 0; newly loading 0），这些文件的警告 7 -> 5。
