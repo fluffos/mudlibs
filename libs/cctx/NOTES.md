@@ -308,3 +308,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply c
 
 `scripts/lpc_warnings.py cctx --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 350 个 `.lpc` 和 6 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：325 -> 325 通过，无回退；改过的头文件的 115 个包含者 115 -> 115 通过。启动时警告 13 -> 0；新进程登录（输入名字）正常。
 附带：HEAD 时连线画面会把启动时的编译警告（`/adm/daemons/band.lpc:63:1: warning: Unused local variable 'i'`）直接显示给玩家；这次整理后连线画面不再出现警告。
+
+- 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 12 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 0 个，只在 #if 分支用的声明移进分支 0 个文件；改动 11 个文件，HEAD 与工作树各载入一次无回退（11 objects; HEAD PASS 10, tree PASS 10; regress 0; newly loading 0），这些文件的警告 12 -> 0。
