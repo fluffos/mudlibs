@@ -689,3 +689,5 @@ a fight with a cloned orc (and death), `help`, `help bug`/`praise`/`typo`/`idea`
 ## 深度功能测试（§10.7，2026-10-08）— `.lpc` 后缀的定宽切片
 
 `.c` 改名 `.lpc` 时只改了字符串没改切片宽度：`f[<2..] == ".lpc"` 拿两个字符比四个字符，永远不成立（`!=` 永远成立），按后缀筛文件、去后缀的代码因此从不运行或截成 `x.l`（KB 06 §7.238）。`scripts/lpc_lpc_suffix_slice.py --apply` 改了 4 处比较、0 处去后缀（如 `obj/tools/paintbrush.lpc`）；改动的文件 HEAD 与工作树分别加载（新进程），无回退。
+
+- 2026-10-10：`std/user.lpc` 的 `cmd_hook()`：上一轮把 `PROFILING` 用的 `before`/`after` 分开声明在第一个 `if` 里的 `#ifdef PROFILING` 中，而后面 `if` 之外的 `#ifdef PROFILING` 块也用它们——一旦启用 `PROFILING` 这个文件就编译不过。改为在函数开头的 `#ifdef PROFILING` 里一次声明（mortremains 同样处理）。
