@@ -130,3 +130,5 @@ autoload 随身物（鸡腿、袍子），人物档本身保存。
 `scripts/lpc_warnings.py yxxcii --fix` 加 `scripts/lpc_fix_no_effect.py --apply`（`kungfu/skill/xuanyuan-arrow.lpc` 删去什么也不做的 `(: throw_weapon :);` 等），共改动 436 个 `.lpc` 和若干 `.h`。HEAD 与工作树分别加载（新进程）：414 -> 414 通过，无回退；改过的头文件的 177 个包含者 177 -> 177 通过。
 
 启动时警告 29 -> 0；新进程登录（编码选择、英文名、新人物确认）正常。
+
+- 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 2 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 0 个，只在 #if 分支用的声明移进分支 1 个文件；改动 2 个文件，HEAD 与工作树各载入一次无回退（2 objects; HEAD PASS 2, tree PASS 2; regress 0; newly loading 0），这些文件的警告 2 -> 0。
