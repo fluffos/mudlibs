@@ -963,3 +963,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply y
 ## 深度功能测试（§10.7，2026-10-10）— 编译警告整理
 
 `scripts/lpc_warnings.py ylfyxa3 --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 7 个 `.lpc`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：7 -> 7 通过，无回退。启动时警告 0 -> 0；新进程登录（输入名字）正常。
+
+- 2026-10-10（续）：余下 6 条警告手工处理：`adm/daemons/cruised.lpc` 五处 `if (cruise[USER_ID]) { /* 只剩注释 */ }` 空分支连同条件一并注释掉（与 xajh4gkb 已修的副本相同）；`d/tianlongsi/npc/yideng.lpc` 的 `checking()` 原型由 `void` 改为与定义一致的 `int`。两文件 HEAD 与工作树都能载入，警告清零。
