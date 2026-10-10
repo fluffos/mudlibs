@@ -533,3 +533,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 `scripts/lpc_warnings.py hy3 --fix` 加 `scripts/lpc_fix_no_effect.py --apply`（`d/tiezhang` 三个房间删去 `return` 后面的 `"\n";`，`kungfu/skill/xuanyuan-arrow.lpc` 删去什么也不做的 `(: throw_weapon :);` 等），共改动 431 个 `.lpc` 和若干 `.h`。HEAD 与工作树分别加载（新进程）：401 -> 401 通过，无回退；改过的头文件的 33 个包含者 28 -> 28 通过。`adm/single/simul_efun.lpc` 单独编译的告警是被包含片段的假象（KB 04 §6.10）。
 
 启动时警告 41 -> 0；新进程登录正常（英文名限 3 到 7 个字母）。
+
+- 2026-10-10：4 个 NPC 同时继承 `NPC` 和 `F_UNIQUE`、自己没有 `init()`，驱动只取其中一份（`init() inherited from both /feature/unique.lpc and /feature/attack.lpc`）：要么 `attack.lpc` 的主动攻击/仇杀检查从不执行，要么 `F_UNIQUE` 的持有者检查从不执行。每个补一个两份都调的 `init()`（`scripts/lpc_fix_unique_init.py`）；HEAD 与工作树载入结果相同，这条警告清零。
