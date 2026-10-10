@@ -53,6 +53,8 @@ grep -rn "switch\s*([^)]*)\s*{\s*default:" .                              # §6.
 grep -rn 'replace_program(' --include='*.lpc' . | wc -l                   # §7.86/§7.100
 grep -rn 'maximum evaluation cost' config.fluffos                         # §7.90 (use >= 5000000)
 ```
+
+**A `.gitignore` inside `work/` (an upstream repo's own) hides files the game needs from every git-built tree** (site zip, `pristine_tree.sh`, the warning-scan and listcheck trees) while the local working tree still has them. sunshadow (2026-10-10): `adm/db/access.db`, `groups.db` and `privs.db` were ignored, only the `.example` copies were tracked; the master's `load_access()` did `explode(read_file(ACCESS_DB))` on 0, every `check_access()` failed (the error handler's own `write_file()` too, so the real error was swallowed), and 38 of 40 NPCs in one area could not load. Detection: `git status --ignored --short libs/<slug>/work | grep -v '/save/\|/log/\|\.o$'`, and any tracked `X.example` whose `X` is untracked. Fix: `git add -f` the file (shadowgate tracks the same three).
 Also apply the WASM standards: §1.3b, §1.3e, and §1.5.
 
 ### 2.3 Hosting modes and already-git-hosted sources
