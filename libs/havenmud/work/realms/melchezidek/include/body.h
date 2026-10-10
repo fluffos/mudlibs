@@ -95,7 +95,7 @@ int GetRecoveryTime();
   string imsg);
 int GetStatLevel(string);
 int GetProperty(string);
-void eventDisplayStatus();
+int eventDisplayStatus();
 int GetSize();
 int GetInCombat();
 /* pure virtual */ int ClearShortSuffixes();

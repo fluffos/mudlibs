@@ -35,6 +35,7 @@ mapping MoveMessages = ([
   "sprite": ({ "$N buzzes out $D", "$N buzzes in." }),
 ]);
 
+#ifndef SETUP_NO_RELIGIONS   /* the spells that include this inherit LIB_SPELL, which has its own Religions */
 mapping Religions = ([
   "Arcanith": "agnostic",
   "Averath": "Aetarin",
@@ -61,6 +62,7 @@ mapping Religions = ([
   "Underland": "agnostic",
   "Yozrath": "Kylin",
 ]);
+#endif
 
 mapping StartingAges = ([
   "daemon": 80,
