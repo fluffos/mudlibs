@@ -625,3 +625,5 @@ functionally re-tested live on this lib.
 `scripts/lpc_warnings.py fy3xd --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 288 个 `.lpc`。HEAD 与工作树分别加载（新进程）：283 -> 283 通过，无回退。
 
 启动时警告 61 -> 0；新进程登录（新人物确认）正常。
+
+- 2026-10-10：`include/net/ftpdsupp.h` 的 `check_access()` 里 `string file;` 只在 `#ifdef GUEST_WIZARD_FTP` 分支里用，声明移进该分支（编译警告第二轮；与 xkx 一系其他库相同）。
