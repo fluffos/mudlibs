@@ -1,7 +1,7 @@
 ## 概述
 
 `discworld`（901）是官方 Discworld MUD 的 mudlib，本次转换自
-`archives/901-2_dw_fluffos_v3_dw_fluffos_v3.zip`（Cratylus 打包的
+`archives/901_discworld_dw_fluffos_v3.zip`（Cratylus 打包的
 "Discworld Bundle" 第三版，随附一份匹配的 FluffOS 驱动源码——按
 AGENTS.md §2 惯例忽略捆绑驱动，只用本项目自己的驱动）。这是本项目
 第一个真正意义上的纯英文 mudlib（此前"deprioritize English libs"

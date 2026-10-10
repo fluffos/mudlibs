@@ -1,6 +1,6 @@
 # dw_fluffos_v2（Discworld bundle v2）-- porting notes
 
-`archives/901-1_dw_fluffos_v2_dw_fluffos_v2.zip` 是 Cratylus「Discworld
+`archives/901-2_dw_fluffos_v2_dw_fluffos_v2.zip` 是 Cratylus「Discworld
 Bundle」三份快照的中间一份。捆绑的 `fluffos-2.9-ds2.05/` 驱动按 §2
 惯例忽略；mudlib 根是 `dw_fluffos_v2/lib/`。
 

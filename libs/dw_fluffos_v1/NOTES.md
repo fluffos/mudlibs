@@ -1,6 +1,6 @@
 # dw_fluffos_v1（Discworld bundle v1）-- porting notes
 
-`archives/901_dw_fluffos_v1_dw_fluffos_v1.tar.gz` 是 Cratylus「Discworld
+`archives/901-1_dw_fluffos_v1_dw_fluffos_v1.tar.gz` 是 Cratylus「Discworld
 Bundle」三份快照里最早的一份。捆绑的 `fluffos-1.22c11/` 驱动按 §2
 惯例忽略；mudlib 根是 `dw_fluffos_v1/lib/`（`master file :
 /secure/master`）。

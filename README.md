@@ -163,9 +163,10 @@ is cataloged for provenance but was never convertible and has no `libs/`
 directory.
 
 The same mapping is machine-readable in `lib_numbering.json`, and the raw
-files under `archives/` are named `NNN[-M]_<slug>_<original-name>.<ext>` —
-the original archive filename is preserved verbatim inside the new name so
-the provenance reference stays intact.
+files under `archives/` are named `NNN[-M]_<slug>_<original-name>.<ext>`,
+one file per distinct archive. `scripts/archives_manifest.tsv` lists each
+file's SHA-256, size, catalog number and every name it was ever uploaded
+under, so byte-identical re-uploads are kept once without losing provenance.
 
 WASM status values: **playable** = full registration + gameplay verified
 end-to-end in the WASM harness (registration, look/score/quit, and the
@@ -518,7 +519,8 @@ classes it's found.
 ## Repository layout
 
 ```
-archives/                 original archive files, renamed NNN[-M]_<slug>_<original-name>
+archives/                 original archive files, NNN[-M]_<slug>_<original-name> (gitignored;
+                          index in scripts/archives_manifest.tsv)
 libs/<slug>/raw/          pristine extraction, original encoding/extensions (gitignored,
                           regenerable via scripts/extract.sh)
 libs/<slug>/work/         the playable mudlib: UTF-8, .lpc extensions, fixes applied

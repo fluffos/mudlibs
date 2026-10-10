@@ -145,6 +145,19 @@ Policy (2026-09-11):
 
 ## 3. Archive extraction traps
 
+**The archive store (2026-10-10).** `archives/` holds one file per
+distinct archive (SHA-256), named `NNN[-M]_<slug>_<original-name>` from
+the *current* catalog. Original bytes are never re-encoded.
+`scripts/archives_manifest.py` (dry run; `--apply`) places new files,
+drops byte-identical copies, and writes `archives/MANIFEST.tsv`,
+`archives/SHA256SUMS` and the committed `scripts/archives_manifest.tsv`
+(every name a file was seen under, plus its source). A bulk upload goes in
+with `--bundle <extracted-dir> --bundle-name <upload.rar>`; add an
+`OVERRIDES` entry for what the catalog can't place by name. Old filename
+prefixes are not trustworthy (slugs were renamed, 901/930/931 renumbered),
+and two different uploads can share a name (`重出江湖.rar` is 905 and 905-3;
+`终极地狱.rar` in `mudlib.rar` is really `终极地狱2008完整版.rar`).
+
 - `unrar x -y`, `7z`, `unzip`, and `tar` all work. A self-extracting
   `.exe` opens with `unrar`/`7z`.
 - **`7z` can report success while writing all-zero-byte files.**

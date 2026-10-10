@@ -1,6 +1,6 @@
 # 20150716未知lib.zip → `xyxy2`
 
-- Archive: `archives/20150716未知lib.zip` (9.5MB, "unknown lib" dated
+- Archive: `archives/003_xyxy2_20150716未知lib.zip` (9.5MB, "unknown lib" dated
   2015-07-16 in the filename — actually **『小雨西游Ⅱ』(Xiaoyu Xiyou II /
   "Light Rain Journey to the West II")**, v3.0, confirmed from the live
   banner ("站点创建时间：2013年12月30日"). Journey-to-the-West themed,
