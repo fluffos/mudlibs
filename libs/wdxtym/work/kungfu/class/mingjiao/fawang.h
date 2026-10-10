@@ -5,7 +5,6 @@
 int accept_object(object ob, object obj)
 {
         object me = this_object();
-        int r;
 
         mapping my_fam = me->query("family");
         mapping ob_fam = ob->query("family");
@@ -111,7 +110,7 @@ void attempt_apprentice(object ob)
         mapping ob_fam;
         mapping my_fam=me->query("family");
 
-        string name, new_name;
+        string name;
 
         if (! permit_recruit(ob) )
                 return;

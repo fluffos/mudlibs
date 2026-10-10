@@ -19,7 +19,6 @@ void init()
 int accept_object(object ob, object obj)
 {
 	string name;
-	string job_flg;
 	object me = this_object();
 
 	mapping ob_family  = ob->query("family");
@@ -122,7 +121,6 @@ void attempt_apprentice(object ob)
 {
 	object me;
 	mapping ob_family;
-	string qi,new_rank;
 
 	me=this_object();
 

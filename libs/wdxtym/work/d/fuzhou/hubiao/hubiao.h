@@ -10,11 +10,11 @@ string *target_list = ({
 
 int do_accept(string arg)
 {
-	object ob, cart, biaotou, target, *living;
+	object ob, cart, biaotou, target;
 	object me, *team, maxplayer, place;
 	int totalexp=0, maxexp, minexp;
-	int i, j, teams,times;
-	string endname, str;
+	int i, teams, times;
+	string endname;
         mixed *local,*last;
 
         local = localtime(time() * 60);

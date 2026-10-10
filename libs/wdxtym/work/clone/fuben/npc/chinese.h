@@ -355,7 +355,6 @@ private void from_gumu()
 
 private void from_quanzhen()
 {
-	object ob;
 
 	set_skill("force", 1);
 	set_skill("quanzhen-xinfa", 1);

@@ -58,7 +58,7 @@ private void auto_check()
 	string msg;
 	string room;
 	object *lost;
-	int i,pot,exp;
+	int i;
 
 	lost = ({ });
 	for (i = 0; i < sizeof(total); i++)
@@ -162,8 +162,6 @@ private void kickout_players()
 private void kickout_jjnpc()
 {
 	object ob;
-	string room;
-	mapping my;
 
 	if (! arrayp(jjnpc))
 		return;
@@ -185,10 +183,6 @@ private void message_competition(string msg)
 
 private void give_bouns(object me)
 {
-	int exp;
-	int pot;
-	string msg;
-	object ob;
 
 	restore_status(me);
 	tell_object(me, "这次真是爽呆了...\n");
@@ -309,7 +303,6 @@ int check_out(object me)
 	mapping my;
 	string msg;
 	string room;
-	int score;
 
 	room = base_name(environment(me));
 	if (member_array(room,jjrooms)==-1)

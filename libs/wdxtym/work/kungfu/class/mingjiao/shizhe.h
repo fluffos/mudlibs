@@ -38,7 +38,6 @@ void attempt_apprentice(object ob)
         mapping ob_fam;
         mapping my_fam=me->query("family");
 
-        string name, new_name;
 
         if (! permit_recruit(ob))
                 return;

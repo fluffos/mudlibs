@@ -39,7 +39,6 @@ void auto_cook(object me)
 string ask_job()
 {
 	object me;
-	object *obs;
 
 	me = this_player();
 
@@ -95,7 +94,6 @@ int recognize_apprentice(object ob, string skill)
 
 int accept_object(object who, object ob)
 {
-	object me = this_player();
 
 	if ((int)who->query_temp("mark/厨娘") < 1)
 		who->set_temp("mark/厨娘", 0);

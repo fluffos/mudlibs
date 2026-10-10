@@ -39,7 +39,7 @@ void do_copy()
 {
 	object room;
 	string *strtemp, locastr, exit;
-	int temp, i1, i;
+	int temp, i1;
 		
 	//确定位置 
 	if (!query("where")) {

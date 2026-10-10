@@ -57,7 +57,7 @@ int checking(object me, object ob)
 	object obj;
 	int my_max_qi, his_max_qi;
 
-	if (!ob) return;
+	if (!ob) return 0;
 	my_max_qi  = me->query("max_qi");
 	his_max_qi = ob->query("max_qi");
 
