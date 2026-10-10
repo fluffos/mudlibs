@@ -1063,3 +1063,11 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply y
 
 `scripts/lpc_warnings.py yxcs --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 1173 个 `.lpc` 和 22 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：1125 -> 1125 通过，无回退；改过的头文件的 271 个包含者 267 -> 267 通过。启动时警告 30 -> 0；新进程登录（输入名字）正常。
 整库对比的 1 个“回退” `/obj/npc/marchial` 是随机的：它在 `create()` 里随机八选一拿兵器，其中 `obj/weapon/stick`、`obj/weapon/sixhammer` 在存档里不存在，`carry_object()` 返回 0 后 `->wield()` 出错，四分之一的江湖人载入失败（HEAD 那次碰巧没抽到；`d/chaoting/npc/japanese.lpc` 同样，这次反过来碰巧通过）。两个文件改用现有的 `obj/weapon/club`（木棍）与 `obj/weapon/hammer`（铁锤），此后两者连续 8 次载入都通过。
+
+## 深度功能测试（§10.7，2026-10-10）— 编译警告整理的剩余部分；28 个“唯一”NPC 从不主动战斗
+
+- 28 个 NPC（黑木崖、明教等的头目）同时继承 `NPC`（`/inherit/char/b_npc`）和后面的 `F_UNIQUE`，两者都有 `init()`，驱动取后继承的 `unique.lpc` 那份（`init() inherited from both`）。`/feature/attack.lpc` 的 `init()`（主动攻击、仇杀、`auto_fight` 的检查）对这些 NPC 从不执行，它们见到仇人或在主动攻击设定下也不会出手。它们自己的 `init()` 要么只有原型、要么整个在注释里。每个补一个 `init()`，两份都调（`b_npc::init(); unique::init();`）。
+- 23 处多余的继承（`lpc_diamonds.py`）：`NPC` 之外的 `F_SAVE`、`F_CLEAN_UP` 等；五个玩家自建技能文件（`kungfu/skill/club-sword.lpc` 等）里第二个 `inherit SKILL;` 落在数组字面量中间，是生成器拼坏的文件，本来就编译不过，未动。`lpc_diamonds.py` 同时修正：它用文本模式读文件，`d/shashou/shiren.lpc` 第一行以 `\r\r\r\n` 结尾，行号偏了两行，删掉的是 `void create() {`；现改为原样读入，载入对比查出后已恢复。此前所有用它提交的改动已复核，没有删错行。
+- 11 处 `&` 改 `&&`、22 个 `int init()` 改 `void`、`clear_title`/`do_challenge`/`mapit` 原型与定义不符（`lpc_fix_bitwise_bool.py`、`lpc_fix_return_types.py`）。
+- `clone/obj/genmap.lpc`：空的 `#define DEBUG` 让 `DEBUG("...", x);` 变成无副作用的逗号表达式，改为空的 `varargs` 函数；函数体内 `#include` 的 `clone/ship/harbor.h` 的 `wildharbors` 用 `HARBOR_NO_WILD` 跳过（与 xkx2001 相同）。
+改动的 84 个文件 HEAD 与工作树各载入一次：84 -> 84 通过，无回退，警告 101 -> 0。

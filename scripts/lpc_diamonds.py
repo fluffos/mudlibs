@@ -143,7 +143,7 @@ def inherits_of(path):
     fp = file_for(path)
     res = []
     if fp:
-        text = open(work + fp, encoding="latin-1").read()
+        text = open(work + fp, encoding="latin-1", newline="").read()   # newline="": a stray \r must not count as a line
         masked = mask_comments(text)
         for m in INH.finditer(masked):
             raw = m.group(3).strip()
@@ -217,7 +217,7 @@ def plan_fixes(files):
     plans = {}
     for f in files:
         fp = file_for(f)
-        text = open(work + fp, encoding="latin-1").read()
+        text = open(work + fp, encoding="latin-1", newline="").read()   # newline="": a stray \r must not count as a line
         masked = mask_comments(text)
         mlines = masked.split("\n")
         cond = conditional_flags(mlines)
