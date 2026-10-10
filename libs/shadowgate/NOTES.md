@@ -600,3 +600,8 @@ three load. The lib's warnings pass has not been done (unused locals in the mast
 `std/class/crypt_stalker.lpc` and `shadowdancer.lpc` prerequisite text: a stray `;` ended the string early, so "10 Ranks spent in Survival skill", "Undead Favored Enemy" and "10 Ranks spent in Athletics Skill" were never shown. Joined.
 
 Changed files loaded at HEAD and in the tree in fresh processes: no regression.
+
+## 深度功能测试（§10.7，2026-10-10）— 编译警告整理
+
+`scripts/lpc_warnings.py shadowgate --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 3256 个 `.lpc` 和 3 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：3002 -> 3002 通过，无回退；改过的头文件的 76 个包含者 63 -> 63 通过。启动时警告 39 -> 0；新进程登录（输入名字）正常。
+整库对比的 2 个“回退”已逐个核对：`/d/atoyatl/tecqumin/jungleh/rooms/tun_entry` 单独载入通过（批处理伪影，`/d/deku/keep/monster/prisoner` 则反向翻转）；`/d/azha/mon/impguard` 在 HEAD 也随机失败——随机三选一的装备里 `/d/tsarven/equip/ghalberd.lpc`、`gshield.lpc` 从不存在，`new()` 出错中断 `create()`，且三个 `case` 没有 `break`。`impguard.lpc`、`s-impguard.lpc` 改用现有的 `/d/tsarven/equip/ihalberd.lpc` 与 `/d/azha/equip/ishield.lpc` 并补上 `break`，此后连续 6 次载入都通过。`adm/include/conf.h`、`config.h` 重复定义的 6 个宏照 sunshadow 的做法在 `#define` 前加 `#undef`，启动警告 39 -> 0。审计标出的 3 个未载入文件均为误报（`east_limit(path)` 是函数调用；`qcs` 仍在声明中）。登录（英文提示）手工核对，HEAD 与工作树回应相同。

@@ -70,7 +70,7 @@ replace_words(string orig, string *words) {
 
 
 string do_xverb(string str) {
-  string *xv, ret, tmp, *words;
+  string *xv, ret, *words;
   int i;
 
   if (!xverb)
