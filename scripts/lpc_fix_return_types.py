@@ -10,6 +10,7 @@ Two return-type warnings from the lpc_warnings.py diagnostics list (default /tmp
   Previous function prototype for F does not match current function in return type ( A vs B )
       the prototype is wrong about its own file's definition: the prototype takes the definition's type.
 
+`--also NAME` adds a non-apply function after you have checked that no caller uses its value.
 Everything else (a leaf that really returns a value where the base says void) is listed.  Binary-safe."""
 import importlib.util
 import os
@@ -23,12 +24,13 @@ argv, sys.argv = sys.argv, ["lpc_warnings.py"]
 spec.loader.exec_module(lw)
 sys.argv = argv
 
-args = [a for a in sys.argv[1:] if not a.startswith("--")]
+also = [sys.argv[i + 1] for i, a in enumerate(sys.argv) if a == "--also" and i + 1 < len(sys.argv)]
+args = [a for i, a in enumerate(sys.argv[1:], 1) if not a.startswith("--") and sys.argv[i - 1] != "--also"]
 apply_ = "--apply" in sys.argv
 slug = args[0]
 tsv = args[1] if len(args) > 1 else f"/tmp/lpcw-{slug}/diagnostics.tsv"
 work = os.path.join(REPO, "libs", slug, "work")
-APPLIES = {"create", "init", "reset"}
+APPLIES = {"create", "init", "reset"} | set(also)   # --also NAME: a function whose callers you checked ignore the value
 INH = re.compile(r"Function (\w+) inherited from '([^']+)' does not match current function in return type \( void vs int \)")
 PRO = re.compile(r"Previous function prototype for (\w+) does not match current function in return type \( (.+?) vs (.+?) \)")
 

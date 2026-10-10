@@ -273,3 +273,13 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 ## 深度功能测试（§10.7，2026-10-10）— 编译警告整理
 
 `scripts/lpc_warnings.py xxcq --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 203 个 `.lpc` 和 1 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：192 -> 192 通过，无回退；改过的头文件的 1 个包含者 0 -> 0 通过。启动时警告 0 -> 0；新进程登录（输入名字）正常。
+
+## 深度功能测试（§10.7，2026-10-10）— 编译警告整理的剩余部分；三个从未能编译的文件
+
+整理后余下的警告逐个处理，其中三处是从未能编译的文件：
+- `kungfu/skill/wenjia-daofa/wryd.lpc`（温家刀法「温柔一刀」）：`if (me->query_skill("force")) > random(...)` 括号放错，整个 perform 是语法错误，从来用不了；改为 `if (me->query_skill("force") > random(...))`。
+- `d/wenjia/obj/xiangshi.lpc`：`me->die;` 少了括号（驱动把 `->die` 当成类成员访问，编译失败）；改为 `me->die();`。
+- `d/wenjia/{skill,wenjia}/xiangshi_poison.lpc` 两份草稿少一个右括号（实际生效的是 `kungfu/condition/xiangshi_poison.lpc`），补上。
+- `d/longmen/xuehepai/obj/xueyi.lpc`（血衣）同时继承 `CLOTH` 和 `F_UNIQUE`，两者都有 `init()`；自己的 `init()` 整个在 `/* */` 注释里，驱动取 cloth 的那份，`F_UNIQUE` 的持有者检查（`check_owner()`）从不执行。补一个 `init()` 两者都调。
+- `inherit/private_room.lpc`、`recordable_room.lpc` 的 `int setup()` 与基类 `void setup()` 不符（没有调用者用返回值），改为 `void`；`d/murong/hssg.lpc` 同一函数里把 `skill` 声明了两次且都没用，删去；`d/murong/test.lpc` 的 `int lianing = 0;` 是遮住全局变量的局部变量，改为给全局赋值；`wenliangyu.lpc` 在 `F_DEALER`（它已继承 `NPC`）之外又继承 `NPC`（33 条重复声明），`services/temp.lpc` 多余的 `F_CLEAN_UP`，删去。
+改动的 11 个文件 HEAD 与工作树各载入一次：5 -> 10 通过，无回退，警告 42 -> 0。

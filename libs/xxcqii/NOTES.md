@@ -165,3 +165,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 ## 深度功能测试（§10.7，2026-10-08）— 编译警告整理
 
 `scripts/lpc_warnings.py xxcqii --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 105 个 `.lpc` 和 1 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：94 -> 94 通过，无回退；改过的头文件的 1 个包含者 0 -> 0 通过。启动时警告 3 -> 0；新进程登录（输入名字）正常。
+
+- 2026-10-10：与 xxcq 相同的两处编译错误：`kungfu/skill/wenjia-daofa/wryd.lpc`（「温柔一刀」）的 `if` 括号放错、`d/wenjia/obj/xiangshi.lpc` 的 `me->die;` 少括号，以及 `d/wenjia/` 下两份 `xiangshi_poison.lpc` 草稿少的右括号，从未能编译；已改正，改动文件 HEAD 0 个、工作树全部载入。
