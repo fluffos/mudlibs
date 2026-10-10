@@ -140,3 +140,5 @@ compile check (exit 0, no errors) against `feature/command.lpc`.
 `scripts/lpc_warnings.py xyj2000 --fix` 加 `scripts/lpc_fix_no_effect.py --apply`（`daemon/skill/xuanyuan-archery.lpc` 删去什么也不做的 `(: throw_weapon :);`），共改动 400 个 `.lpc` 和若干 `.h`。HEAD 与工作树分别加载（新进程）：388 -> 388 通过，无回退；改过的头文件的 185 个包含者 182 -> 182 通过。`adm/simul_efun/oo.lpc` 单独编译的告警是被包含片段的假象（KB 04 §6.10）。
 
 启动时警告 84 -> 0；新进程登录（编码选择、新人物提问）正常。
+
+- 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 8 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 6 个，只在 #if 分支用的声明移进分支 0 个文件；改动 12 个文件，HEAD 与工作树各载入一次无回退（12 objects; HEAD PASS 12, tree PASS 12; regress 0; newly loading 0），这些文件的警告 34 -> 20。
