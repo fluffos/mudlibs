@@ -114,6 +114,20 @@ def sync_changes(slug, lib):
 CHUNK = int(os.environ.get("LPCW_CHUNK", "4000"))
 
 
+BATCH_TIMEOUT = int(os.environ.get("LPCW_TIMEOUT", "1800"))
+
+
+def run_lpcc(lib, stdin):
+    """One lpcc batch; an object that loops forever (no memory growth, so no crash) would hang the scan: kill the VM
+    after BATCH_TIMEOUT seconds and keep what it printed, so batch_compile resumes after the last object it reached."""
+    try:
+        return subprocess.run([LPCC, "--batch", "config.fluffos"], cwd=lib, input=stdin, capture_output=True,
+                              text=True, errors="replace", timeout=BATCH_TIMEOUT).stdout
+    except subprocess.TimeoutExpired as e:
+        out = e.stdout or b""
+        return out.decode("utf-8", "replace") if isinstance(out, bytes) else out
+
+
 def batch_compile(lib, objs):
     """`lpcc --batch` over objs, at most CHUNK per VM (one boot of a ~50k-file lib outgrows any sane memory cap), and
     resumed past an object that kills the VM: lpcc prints `===== /obj =====` before each one, so a run that stops early
@@ -121,8 +135,7 @@ def batch_compile(lib, objs):
     out, i, n = [], 0, len(objs)
     while i < n:
         part = objs[i:i + CHUNK]
-        raw = subprocess.run([LPCC, "--batch", "config.fluffos"], cwd=lib, input="\n".join(part) + "\n",
-                             capture_output=True, text=True, errors="replace").stdout
+        raw = run_lpcc(lib, "\n".join(part) + "\n")
         out.append(raw)
         heads = re.findall(r"^===== (\S+) =====", raw, re.M)
         done = part.index(heads[-1]) + 1 if heads and heads[-1] in part else 0
@@ -134,8 +147,7 @@ def batch_compile(lib, objs):
         stuck = part[done - 1]
         if not re.search(r"^(PASS|FAIL) " + re.escape(stuck) + r"$", raw, re.M):
             # the VM often dies from what the batch built up, not from this object: retry it alone
-            alone = subprocess.run([LPCC, "--batch", "config.fluffos"], cwd=lib, input=stuck + "\n",
-                                   capture_output=True, text=True, errors="replace").stdout
+            alone = run_lpcc(lib, stuck + "\n")
             if re.search(r"^(PASS|FAIL) " + re.escape(stuck) + r"$", alone, re.M):
                 out.append(alone[alone.find("===== " + stuck):] if "===== " + stuck in alone else alone)
                 print(f"  lpcc stopped at {stuck} (loads alone); resuming after it", file=sys.stderr)
