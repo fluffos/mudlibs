@@ -722,3 +722,5 @@ project's usual convention.
 - `obj/monster.lpc` 的 `level` 与 `std/living/living.lpc` 的同名（living 里只声明不用）：怪物改用 living 的那份。
 - `std/living/mon_actions.lpc` 的触发表 `spells` 与 `global/spells.lpc` 的法术表同名：前者改名 `trigger_spells`（只在本文件里用）。
 四个基础类加上继承它们的 458 个物件，HEAD 与工作树各载入一次：408 -> 408 通过，无回退；这批文件里的重复声明警告 1164 -> 22。剩下的 22 条来自三个叶子文件：`d/newbie/gnome/npcs/clones/cave_rat*.lpc` 为了 `death()` 回调又继承了 `/std/actions`（它继承 `/std/room`），而注册回调的 `add_triggered_action()` 早已被注释成空函数；`npcs/king*.lpc` 继承的 `respond_give` 有自己的 `value`。未改。
+
+- 2026-10-10（续）：`scripts/lpc_fix_return_types.py` 改正 4 处返回类型/原型与基类或定义不符（`int reset()`/`init()` 改 `void` 等）；改动的 5 个文件 HEAD 与工作树载入 2 -> 2，无回退，警告 7 -> 2。

@@ -116,7 +116,7 @@ cache, clo_cache = {}, {}
 
 def mask_comments(t):
     # `@CODE ... CODE` here-documents are text (xajhzcjh objmaker/roommaker write `inherit ITEM;` into new files)
-    t = re.sub(r"@@?([A-Za-z_]\w*)[ \t]*\n.*?\n[ \t]*\1\b", lambda m: re.sub(r"[^\n]", " ", m.group(0)), t, flags=re.S)
+    t = re.sub(r"@@?([A-Za-z_]\w*)[ \t\r]*\n.*?\n[ \t]*\1\b", lambda m: re.sub(r"[^\n]", " ", m.group(0)), t, flags=re.S)
     t = re.sub(r"/\*.*?\*/", lambda m: re.sub(r"[^\n]", " ", m.group(0)), t, flags=re.S)
     return re.sub(r"//[^\n]*", lambda m: " " * len(m.group(0)), t)
 

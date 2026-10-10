@@ -288,3 +288,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply s
 1. `scripts/lpc_warnings.py --fix` 机械修复 1027 个文件，启动警告 507 → 0。HEAD 与修改后各编译一遍：唯一的差异 `d/qujing/sanda/shanpo1` 重试即通过（随机内容）。被删局部变量的审计 17 处都只出现在注释或同名函数调用里（`piggy` 的 `#ifdef` 与相关函数无关）。手工：`adm/daemons/natured` 的 `for (i;…)` 改 `for (;…)`；`d/moon/npc/yutu` 的 `kill_ob` 改 `void`，与 `feature/attack` 一致。
 2. **飞贼事件只运行一次。** 预载的 `u/tonggang/feizei/feizei` 每 250 秒放一个飞贼，给他带的兵器、护具写成 `/u/tianlin/feizei/obj/…`，而这些文件在 `/u/tonggang/feizei/obj/`（本库没有 `u/tianlin/feizei`）。`carry_object()` 出错，`choose_feizei()` 在重新 `call_out` 之前中断，事件从此停止。路径改成本目录。启动后 2 秒的第一次放飞贼不再出错。
 3. 验证（新进程，临时副本）：GB → 年龄问题答 `no` → `fluffos` 登录（admin）→ `look`、`score`、`i`、`quit` 正常。
+
+## 深度功能测试（§10.7，2026-10-10）— 编译警告整理（机械部分与返回类型）
+
+`scripts/lpc_warnings.py sjcs --fix`（5 个文件）之后：`scripts/lpc_fix_return_types.py` 把 22 个 `int init()`、5 个 `int create()` 等与基类 `void` 不符的驱动回调改为 `void`（函数体不返回值）；`lpc_diamonds.py` 删去 12 行多余的继承（`CLOTH`/`BOOTS`/`NPC`/`BLADE`/`SSERVER` 之外的 `F_CLEAN_UP`，`FORCE` 之外的 `SKILL`）。工具同时修正：它没认出 `obj/objmaker.lpc`、`d/changan/playerhomes/home.lpc` 里结尾带 `\r` 的 here-document 标记，曾把模板里的 `inherit` 当成代码。改动的 44 个文件 HEAD 与工作树各载入一次：40 -> 40 通过，无回退，警告 58 -> 2。
