@@ -833,3 +833,12 @@ character back to the host. Do not loop-reboot (I3).
 - `lib/items/meal.lpc` 的 `Long`/`Short`：查证后不是 bug。物品基类的长描述存在 `ExternalDesc`，`Long` 只有餐食自己一份，按名字存取没有歧义；`Short` 有两份（`lib/common/description.lpc` 的私有 `Short` 在前），`fetch_variable`/`store_variable` 取到的是基类那份，而餐食的 `SetShort` 经 `item::SetShort` 同时写入它、`GetShort` 经 `::GetShort()` 读它，存取一致。
 - 未做：`lpc_diamonds.py` 列出 4 处可直接删的重复继承和 10 处需人工判断的（聊天守护的 `daemon::` 作用域调用、`creator.lpc` 的继承顺序），以及玩家经 `living` 与 `interactive` 两条路径继承 `move.lpc` 等更深的重叠；留待一次完整的菱形继承/警告清理。
 
+
+## 深度功能测试（§10.7，2026-10-10）— 重复继承与重复变量（第三轮）
+
+分块扫描器整库重扫：仍有 5714 条警告，其中 2838 条 `Redeclaration of global variable`、几百条 `inherited from both`，绝大多数是同一个程序经两条继承路径进入（KB 06 §7.213）。
+- `scripts/lpc_diamonds.py` 之前漏掉了大半：`LIB_SMELL` 在 `secure/include/events.h` 和 `lib.h` 里各定义一次、目录不同，工具取了先读到的那个，于是认不出 `inherit LIB_ITEM; inherit LIB_SMELL;` 是重复继承。工具已改为优先取展开后指向真实文件的定义。修正后它自动删掉 51 行多余的 `inherit`（叶子文件在 `LIB_ITEM`/`LIB_MEAL`/`LIB_ARMOUR` 之外又继承 `LIB_SMELL`、`LIB_TOUCH`、`LIB_LISTEN`，`daemon/description.lpc` 两次 `LIB_DAEMON`，两个农作物文件的 `LIB_COMBINE` 等）。
+- 36 个食物/物品叶子文件为了消除歧义写了 `mixed direct_smell_obj() { return smell::direct_smell_obj(); }`：多余的 `inherit LIB_SMELL` 删掉后只剩一份 `direct_smell_obj()`，这个包装函数一并删去（item、meal、object 都没有覆盖它，行为不变）。
+- `lib/items/meal.lpc` 自己声明了私有的 `Short`，只写不读；`AddSave(({ "Long", "Short" }))` 里的 `"Short"` 经 `fetch_variable()` 按名字先找继承链（驱动 `fgv_recurse` 先递归父程序），找到的本来就是 `LIB_DESCRIPTION` 的那份。删掉这个只写变量，行为不变。
+- 聊天守护进程：`daemon/chat.lpc`（以及没人用的 `newchat.lpc`）继承 `LIB_DAEMON` 和四个模块 `daemon/chat/{censor,members,history,brackets}`，而四个模块各自又继承了 `LIB_DAEMON`，只为在 `create()` 里调 `::create(); SetNoClean(1);`。于是聊天守护进程带着五份 daemon 状态；`daemon/services.lpc` 经 `#include "/daemon/services/channel.lpc"` 继承 censor，也是两份。四个模块不再继承 `LIB_DAEMON`（它们不存档，也不用 daemon 的其他函数），这两行由继承它们的守护进程自己做。
+改动的 66 个文件加上全部 `LIB_MEAL` 子孙（522 个物件），HEAD 与工作树各载入一次：518 -> 519 通过，无回退；这批文件的警告 1923 -> 642。聊天相关 7 个物件 7 -> 7 通过，警告清零；带改动的只含被跟踪文件的树启动无运行错误，出现登录提示。剩下的重复声明大多在巫师目录 `realms/` 下，以及既是武器又是护甲的几件物品（部分重叠，需逐个判断）；机械类警告留给随后的整库整理。
