@@ -42,7 +42,7 @@ if "--files" in args:
 
 SKIP_TOP = ("log", "www", "doc", "realms", "estates")
 
-defs = {}
+defs, alts = {}, {}
 for dp, dn, fn in os.walk(work):
     rel = os.path.relpath(dp, work)
     if rel.startswith(SKIP_TOP):
@@ -55,7 +55,7 @@ for dp, dn, fn in os.walk(work):
                 continue
             for m in re.finditer(r"^[ \t]*#[ \t]*define[ \t]+([A-Za-z_]\w*)[ \t]+([^\n]*)$", t, re.M):
                 body = re.sub(r"/\*.*?\*/|//.*", "", m.group(2)).strip()
-                defs.setdefault(m.group(1), body)
+                alts.setdefault(m.group(1), []).append(body)
 
 
 def expand(expr, depth=0):
@@ -74,6 +74,20 @@ def expand(expr, depth=0):
         else:
             return None
     return out
+
+
+# one name defined in several headers (havenmud: LIB_SMELL in secure/include/events.h and lib.h, different
+# directories): take the first definition whose expansion names a file that exists, else the first one
+defs.update({k: v[0] for k, v in alts.items()})
+for k, v in alts.items():
+    if len(set(v)) > 1:
+        for body in v:
+            defs[k] = body
+            r = expand(body)
+            if r and any(os.path.isfile(work + "/" + r.lstrip("/") + e) for e in (".lpc", ".c", "")):
+                break
+        else:
+            defs[k] = v[0]
 
 
 def resolve(arg):
