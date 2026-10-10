@@ -286,3 +286,5 @@ admin 登入时间戳漂移已在提交前用 `git checkout --` 撤销。
 `scripts/lpc_warnings.py njhhdxdes2hx --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 842 个 `.lpc` 和 5 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：803 -> 803 通过，无回退；改过的头文件的 84 个包含者 81 -> 81 通过。启动时警告 11 -> 0；新进程登录（输入名字）正常。
 
 - 2026-10-10：仓库顶层 `.gitignore` 的 `libs/*/work/**/log` 本为运行日志而设，却把存档里名为 `log` 的源码目录也挡在版本库外（站点下载缺这些文件）：`d/heimuya/log/`（巫师补丁包：文件清单与改过的技能、命令副本，41 个文件）。已 `git add -f`（KB 02 §2.2）。
+
+- 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 6 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 0 个，只在 #if 分支用的声明移进分支 1 个文件；改动 6 个文件，HEAD 与工作树各载入一次无回退（6 objects; HEAD PASS 6, tree PASS 6; regress 0; newly loading 0），这些文件的警告 10 -> 4。
