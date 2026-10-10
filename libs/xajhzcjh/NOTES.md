@@ -1069,3 +1069,12 @@ functionally re-tested live on this lib.
 ## 深度功能测试（§10.7，2026-10-10）— 编译警告整理
 
 `scripts/lpc_warnings.py xajhzcjh --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 390 个 `.lpc` 和 4 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：367 -> 367 通过，无回退；改过的头文件的 39 个包含者 39 -> 39 通过。启动时警告 0 -> 0；新进程登录（输入名字）正常。
+
+## 深度功能测试（§10.7，2026-10-10）— 编译警告整理的剩余部分（手工与新工具）
+
+整理后余下 42 条警告，全部处理：
+- 11 处 `bitwise operation on boolean values`（五毒教 `d/wudujiao/` 的毒囊与洞穴：`if (arg != "ba" & arg != "huo ba")`），`&` 改 `&&`（新脚本 `scripts/lpc_fix_bitwise_bool.py`，按驱动报告的行改唯一一个单独的 `&`/`|`）。
+- 17 个 NPC 的 `int init()` 与 `/feature/attack.lpc` 的 `void init()` 不符，函数体没有返回值，改为 `void`；三个裁判 `clear_title()` 的原型写成 `int`，定义返回 `string`（`arg + clear_title(...)` 拼称号），原型改正；`kungfu/class/xiakedao/yufu.lpc` 的 `accept_object` 原型 `void` 改为与定义一致的 `int`（新脚本 `scripts/lpc_fix_return_types.py`）。
+- 8 个文件在 `NPC`/`MONEY`/`BLADE` 之外又继承 `F_CLEAN_UP`（`clean_up() inherited from both`），删去多余的继承（`lpc_diamonds.py`）。工具同时被修正：它原先把 `clone/misc/objmaker.lpc`、`roommaker.lpc` 里 here-document 模板中的 `inherit ITEM;`/`inherit ROOM;` 当作代码。
+- `clone/misc/board.lpc` 的 `transfer` 只在 `#ifdef BACKUP_B` 分支里用，声明移进分支；`kungfu/skill/huashan-jian.lpc` 多余的 `;` 删去。
+42 个改动文件 HEAD 与工作树各载入一次：39 -> 39 通过，无回退，警告 42 -> 0。
