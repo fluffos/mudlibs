@@ -85,6 +85,13 @@ branches where cheap.
   3. Kill by PID past ~10GB.
 - `lpcc_check.sh` boots a real driver and can churn saves. Re-check
   `git status` before committing.
+- **A config line over 120 characters ends the config parse.** `rc.cc` reads lines with
+  `getline(tmp, K_MAX_CONFIG_LINE_LENGTH = 120)`; a longer line sets failbit, the loop stops, and
+  every line after it is lost. The error names the first missing required line
+  (`*Error in config file.  Missing line: mudlib directory`), not the long one. It bites
+  `pristine_tree.sh`/`lpc_warnings.py --tree` with a deep destination (the session scratchpad):
+  the absolute `mudlib directory` path is too long and every object "kills the VM alone".
+  Keep scan trees short (`/tmp/lpcw-SLUG`, `/tmp/listchunk-SLUG`) or set `mudlib directory : work`.
 
 ### 10.4a ASAN/UBSAN builds can be 10–20× slower on some preloads
 Re-test with `build-debug` before blaming content (`nitan_san`).
