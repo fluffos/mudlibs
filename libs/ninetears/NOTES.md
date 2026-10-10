@@ -785,4 +785,4 @@ The `.c` -> `.lpc` rename changed the string but not the slice width: `f[<2..] =
 ## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
 
 `scripts/lpc_warnings.py ninetears --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 1206 个 `.lpc` 和 6 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：901 -> 901 通过，无回退；改过的头文件的 23 个包含者 16 -> 16 通过。启动时警告 0 -> 0；新进程登录（输入名字）正常。
-Login checked by hand (Spanish prompts, identical at HEAD and after). The two audit flags in muro_crumble.lpc are false positives: `i` stays declared, only the unused `j`/`str` were dropped.
+登录为西班牙语提示，自动检查认不出，改为手工核对：HEAD 与工作树输入名字后回应完全相同。审计标出的 `muro_crumble.lpc` 两处是误报：`i` 仍然声明，删掉的只是未用的 `j`、`str`。
