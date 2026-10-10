@@ -1285,3 +1285,9 @@ against four; the strip after it, `f = f[0..<3]`, stayed two characters too. **F
 `f[<2..]`). 425 comparisons + 96 strips in 363 files. nitan `taskd` also needed the list fix and, once it really walks
 the rooms, more than a 2-5 s `maximum evaluation cost` for its cold first load (10000000). **Detection:**
 `grep -rnE '\[<[0-35-9]\.\.(<1)?\] *[!=]= *"\.lpc"'`; a daemon whose load runs the VM out of memory or eval time.
+
+### 7.239 An empty stub kept "so the file compiles alone" wins over the real function (havenmud corpse, 2026-10-10)
+**Symptom:** `AddSave() inherited from both /lib/common/persist.lpc ... and /lib/items/light.lpc; using the definition in light.lpc`, and the object silently saves nothing.
+**Cause:** a mix-in defines a do-nothing body (`void AddSave(mixed n) {};`) instead of a prototype, so it compiles standalone; when it is the *later* inherit (corpse: storage, cook, light) the driver picks it for every unqualified call, including the parents' own `AddSave(({...}))` in their `create()`.
+**Fix:** make it a prototype with the real signature (`mixed *AddSave(mixed *vars);`) or call `this_object()->AddSave(...)` as ds386 does; never "name the winner" for these rows without reading both definitions (`lpc_name_winner.py` would freeze the stub in place).
+**Detection:** in every `inherited from both` row, open W's definition; a `{}` or `{ return 0; }` body for a getter/setter that the other side implements is this bug. havenmud's `combat/magic.lpc` carried the same stub, harmless only because `physical`'s real one is inherited later.
