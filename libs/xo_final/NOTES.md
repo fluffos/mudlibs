@@ -500,3 +500,5 @@ lpc` 会调用双方 `kill_ob()`，NPC 真实反击），几回合后一次「�
 ## 深度功能测试（§10.7，2026-10-10）— 编译警告整理
 
 `scripts/lpc_warnings.py xo_final --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 3 个 `.lpc`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：3 -> 3 通过，无回退。启动时警告 0 -> 0；新进程登录（输入名字）正常。
+
+- 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 2 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 1 个，只在 #if 分支用的声明移进分支 0 个文件；改动 3 个文件，HEAD 与工作树各载入一次无回退（3 objects; HEAD PASS 3, tree PASS 3; regress 0; newly loading 0），这些文件的警告 3 -> 0。
