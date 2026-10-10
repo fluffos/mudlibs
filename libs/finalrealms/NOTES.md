@@ -713,3 +713,12 @@ project's usual convention.
 ## 深度功能测试（§10.7，2026-10-08）— `.lpc` 后缀的定宽切片
 
 `.c` 改名 `.lpc` 时只改了字符串没改切片宽度：`f[<2..] == ".lpc"` 拿两个字符比四个字符，永远不成立（`!=` 永远成立），按后缀筛文件、去后缀的代码因此从不运行或截成 `x.l`（KB 06 §7.238）。`scripts/lpc_lpc_suffix_slice.py --apply` 改了 2 处比较、2 处去后缀（如 `std/remote.lpc`）；改动的文件 HEAD 与工作树分别加载（新进程），无回退。
+
+## 深度功能测试（§10.7，2026-10-10）— 基础类里的重复全局变量
+
+分块扫描器重新整库扫描，还有 1565 条 `Redeclaration of global variable`（634 个文件），根源在四个基础类。这些警告在物件第一次被复制时打印（武器、护甲、怪物都不在预载里，所以启动时看不到）。
+- `obj/weapon.lpc`、`obj/armour.lpc` 继承了 `std/item`，又直接继承一次 `std/basic/condition`，而 `std/item` 已经继承了它：每件武器、护甲带着两份 `cond`/`max_cond`，外加五个 `inherited from both` 警告。删去第二次继承；两处 `condition::cond_string()` 改为 `item::cond_string()`（经 item 找到同一个函数；`item.lpc` 里那个返回 0 的 `cond_string()` 其实在 `/* Bah. ... */` 注释里，从未生效），两处空的 `condition::create()` 调用删去。
+- `obj/armour.lpc` 自己声明了两次 `armour_ac`（第 40 行的 `nosave` 那份在所有函数之前就被第二份遮住，从未被用到），`armour_type` 又与 `std/item.lpc` 的同名：删去前者，`armour_type` 改用 item 的那份（护甲上没有任何地方调用 `set_armour_type()`，行为不变）。
+- `obj/monster.lpc` 的 `level` 与 `std/living/living.lpc` 的同名（living 里只声明不用）：怪物改用 living 的那份。
+- `std/living/mon_actions.lpc` 的触发表 `spells` 与 `global/spells.lpc` 的法术表同名：前者改名 `trigger_spells`（只在本文件里用）。
+四个基础类加上继承它们的 458 个物件，HEAD 与工作树各载入一次：408 -> 408 通过，无回退；这批文件里的重复声明警告 1164 -> 22。剩下的 22 条来自三个叶子文件：`d/newbie/gnome/npcs/clones/cave_rat*.lpc` 为了 `death()` 回调又继承了 `/std/actions`（它继承 `/std/room`），而注册回调的 `add_triggered_action()` 早已被注释成空函数；`npcs/king*.lpc` 继承的 `respond_give` 有自己的 `value`。未改。
