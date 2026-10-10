@@ -135,7 +135,7 @@ functionally re-tested live on this lib.
 
 5 个房间的 `valid_leave()` 里有一行什么也不做的 `if (current_water == 0) {}`（编译警告 `Expression has no side effects`），删去，行为不变：`d/gaochang/room11.lpc`、`d/gaochang/room12.lpc`、`d/gaochang/room13.lpc`、`d/gaochang/room14.lpc`、`d/xingxiu/shanjiao.lpc`。
 
-## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+## 深度功能测试（§10.7，2026-10-08）— 编译警告整理
 
 `scripts/lpc_warnings.py xyzxiiylzymh --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 329 个 `.lpc` 和 3 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：312 -> 312 通过，无回退；改过的头文件的 34 个包含者 34 -> 34 通过。启动时警告 8 -> 0；新进程登录（输入名字）正常。
 （本库只接受 Tomud/笑傲江湖客户端，裸 telnet 输入名字得到“你的客户端非Tomud……”，与 HEAD 相同。）

@@ -1061,6 +1061,6 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 
 `quest/guojob/guo.lpc` 先后 `#include "zzzjob.lpc"` 和 `"teamjob.lpc"`，两个文件都声明全局 `mixed names`、内容不同（`Redeclaration of global variable 'names'`），后包含的 teamjob 名单覆盖了 zzzjob 的，"保护"任务的目标其实从 teamjob 的名单里抽。teamjob 的表改名 `team_names`（KB 04 §6.10）。`guo.lpc` 在 HEAD 与工作树分别加载（新进程）通过。
 
-## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+## 深度功能测试（§10.7，2026-10-10）— 编译警告整理
 
 `scripts/lpc_warnings.py hymud --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 11 个 `.lpc`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：11 -> 11 通过，无回退。启动时警告 0 -> 0；新进程登录（输入名字）正常。

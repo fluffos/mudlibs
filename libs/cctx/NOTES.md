@@ -304,7 +304,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply c
 
 `d/baituo/ouyangfeng.lpc` 有两处笔误，整个 NPC 从未编译成功：`greeting()` 里 `write("你是谁？我要杀了你！哈￣哈￣哈￣") break;` 缺分号，`inquiry_map()` 里 `object me = this - player();`（应为 `this_player()`）。白驼山派的掌门因此不存在，拜师、问路（`inquiry_map`）都无从谈起。两处改正后，新进程里 HEAD 加载失败、工作树加载成功。同一文件在 14 个 xkx 系的库里一字不差。
 
-## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+## 深度功能测试（§10.7，2026-10-08）— 编译警告整理
 
 `scripts/lpc_warnings.py cctx --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 350 个 `.lpc` 和 6 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：325 -> 325 通过，无回退；改过的头文件的 115 个包含者 115 -> 115 通过。启动时警告 13 -> 0；新进程登录（输入名字）正常。
 附带：HEAD 时连线画面会把启动时的编译警告（`/adm/daemons/band.lpc:63:1: warning: Unused local variable 'i'`）直接显示给玩家；这次整理后连线画面不再出现警告。

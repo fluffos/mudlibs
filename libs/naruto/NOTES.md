@@ -696,7 +696,7 @@ correct. Consistent with this lib's own "confirmed making zero
 outbound network connections" finding above -- no sockets-package
 issues encountered.
 
-## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+## 深度功能测试（§10.7，2026-10-08）— 编译警告整理
 
 `scripts/lpc_warnings.py naruto --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 260 个 `.lpc` 和 3 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：257 -> 257 通过，无回退；改过的头文件的 43 个包含者 42 -> 42 通过。启动时警告 12 -> 0；新进程登录（输入名字）正常。
 手改 `adm/daemons/logind.lpc`：`reset()` 的 `room`、`ob` 只在 `#if 0` 里用到，声明挪进去；`init_new_body()` 里从未用到的 `penalty` 删去。

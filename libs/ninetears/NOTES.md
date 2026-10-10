@@ -782,7 +782,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply n
 
 The `.c` -> `.lpc` rename changed the string but not the slice width: `f[<2..] == ".lpc"` compares two characters with four and is never true (`!=` always true), so suffix filters and strips never ran or cut `x.l` (KB 06 §7.238). `scripts/lpc_lpc_suffix_slice.py --apply` fixed 1 comparison(s) and 1 strip(s) (e.g. `std/index.lpc`); the changed files load at HEAD and in the tree (fresh processes) with no regression.
 
-## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+## 深度功能测试（§10.7，2026-10-10）— 编译警告整理
 
 `scripts/lpc_warnings.py ninetears --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 1206 个 `.lpc` 和 6 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：901 -> 901 通过，无回退；改过的头文件的 23 个包含者 16 -> 16 通过。启动时警告 0 -> 0；新进程登录（输入名字）正常。
 登录为西班牙语提示，自动检查认不出，改为手工核对：HEAD 与工作树输入名字后回应完全相同。审计标出的 `muro_crumble.lpc` 两处是误报：`i` 仍然声明，删掉的只是未用的 `j`、`str`。

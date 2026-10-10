@@ -920,6 +920,6 @@ bug**：这个 lineage 的游戏内提示符自带每秒刷新的实时时钟
 
 验证：改动的文件和包含 `npc/indian` 的守护进程在 HEAD 与工作树分别加载（`scripts/lpc_listcheck.sh`，新进程），无回退。
 
-## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+## 深度功能测试（§10.7，2026-10-08）— 编译警告整理
 
 `scripts/lpc_warnings.py revive --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 2 个 `.lpc`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：1 -> 1 通过，无回退。启动时警告 2 -> 0；新进程登录（输入名字）正常。

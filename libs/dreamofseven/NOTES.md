@@ -845,7 +845,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply d
 
 3 files moved (3 `.C`); mostly under `u/t/truewind` (3). A rescan with `scripts/lpc_warnings.py dreamofseven` is still due: the renamed files are compiled for the first time.
 
-## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+## 深度功能测试（§10.7，2026-10-08）— 编译警告整理
 
 `scripts/lpc_warnings.py dreamofseven --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 2018 个 `.lpc`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：1918 -> 1918 通过，无回退。启动时警告 3 -> 0；新进程登录（输入名字）正常。
 

@@ -478,7 +478,7 @@ fresh driver boot plus the full long-sit idle window below.
 
 `.c` 改名 `.lpc` 时只改了字符串没改切片宽度：`f[<2..] == ".lpc"` 拿两个字符比四个字符，永远不成立（`!=` 永远成立），按后缀筛文件、去后缀的代码因此从不运行或截成 `x.l`（KB 06 §7.238）。`scripts/lpc_lpc_suffix_slice.py --apply` 改了 10 处比较、8 处去后缀（如 `std/vault.lpc`）；改动的文件 HEAD 与工作树分别加载（新进程），无回退。
 
-## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+## 深度功能测试（§10.7，2026-10-10）— 编译警告整理
 
 `scripts/lpc_warnings.py pd --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 755 个 `.lpc`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：686 -> 686 通过，无回退。启动时警告 0 -> 0；新进程登录（输入名字）正常。
 （这一轮用分块扫描重跑：上一轮单次 `lpcc --batch` 中途死掉，只扫到 31936 个文件里的 2241 个；pd 的房间多，一个 VM 加载几百个就把内存吃到十几 GB，改成每批 600 个。）手改 `wizards/venenum/book.lpc` `set_size()`：每个分支里的 `int maxpages = 5;` 等是新声明的局部变量，遮住了同名的全局 `maxpages`，书的大小从来没被设上；改成给全局赋值 `maxpages = 5;`（该文件 HEAD 起就编译不过，属休眠内容）。新进程登录到 New Character 画面正常。

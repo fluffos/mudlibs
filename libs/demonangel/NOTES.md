@@ -667,6 +667,6 @@ use a different, internally-consistent implementation shape entirely).
 
 `scripts/lpc_fix_negative_ranges.py`: 6 line(s) in 3 file(s) count a range from the end with `<` (`x[a..-1]` -> `x[a..<1]`, `x[-2..]` -> `x[<2..]`; KB 06 §7.209). In this driver a negative constant end gave `""` / `({ })` and a negative start the whole value, so each of these returned the wrong slice; the compile warning `A negative constant as the second element of arr[x..y]` is gone from the files that compile. Range lvalues (`s[0..-1] = text`, the prepend idiom) are left alone. A paired compile of the changed files at HEAD and in the working tree showed no new error.
 
-## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+## 深度功能测试（§10.7，2026-10-08）— 编译警告整理
 
 `scripts/lpc_warnings.py demonangel --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 154 个 `.lpc`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：146 -> 146 通过，无回退。启动时警告 34 -> 0；新进程登录（输入名字）正常。
