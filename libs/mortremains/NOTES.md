@@ -848,3 +848,11 @@ Formatter not run (minimal edits).
 - `std/living/spells.lpc` 的 `object target` 与 `std/body/attack.lpc` 的战斗目标 `target` 同名。法术目标只在 spells.lpc 内部使用，改名为 `spell_target`（与 tmi2 的文件逐字相同，玩家可见的文字不变）。
 - `std/monster.lpc` 又声明了一次 `mapping alias`，它的 `create()` 本想清空身体（`std/body/alias.lpc`）的别名表，清空的却是自己的副本；怪物的 `add_alias`/`remove_alias` 操作的是一个 0。删掉重复声明。
 `/d/` 下 300 个怪物文件及三个基础类在 HEAD 与工作树各载入一次：246 -> 246 通过，无回退；抽样 40 个文件的重复声明警告全部消失。
+
+## 深度功能测试（§10.7，2026-10-10）— 编译警告整理（续）：返回类型、基础类
+
+- `std/cmd_m.lpc` 的 `clean_up()` 声明为 `void`，而驱动按返回值决定是否再调用它（0 表示不再调用）；照 tmi2 改为 `int clean_up() { destruct(this_object()); return 0; }`，八个命令的 `int clean_up()` 因此与基类一致。`std/object/ob_logic.lpc` 的 `set()` 原型写成 `void`，定义（`std/object/prop.lpc`）返回 `int`，照 tmi2 改正。
+- 60 个房间、物品的 `int reset()` 与基类 `void reset()` 不符（驱动不看 `reset()` 的返回值），改为 `void`（`scripts/lpc_fix_return_types.py`）；`kyton.lpc` 的 `heart_beat()`、三件兵器的 `unwield()`（`return ::unwield(...)` 改为调用后返回）、两个 `return ::reset();` 同样处理。
+- `cmds/object/_load.lpc`：原型 `int help();` 与返回字符串的定义不符；改正原型后暴露出 `cmd_load()` 里的 `return help();`——不带参数的 `load` 把帮助文字当返回值交给命令分派器，屏幕上什么也不显示。改为 `write(help()); return 1;`。
+- `lpc_twin_port.py` 从 tmi2 移植 4 个与之逐字相同的文件（`prune_logdir`、`_debugmalloc`、`_diff`、`_fref` 里只在 `#if` 分支里用的局部变量移进分支）；`u/c/chronos/objmaker/toy.lpc` 多余的 `inherit OBJECT;` 删去。
+改动的文件及继承 `cmd_m`/`ob_logic` 的 119 个物件 HEAD 与工作树各载入一次：112 -> 113 通过，无回退，这批文件的警告 92 -> 12。剩下的主要是 `logind.lpc`、`user.lpc`（及 `adm/AFD/` 下的旧副本）里只在 `#if` 分支用到的局部变量，需逐个移进分支。
