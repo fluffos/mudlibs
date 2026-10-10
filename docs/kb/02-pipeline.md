@@ -157,6 +157,11 @@ with `--bundle <extracted-dir> --bundle-name <upload.rar>`; add an
 prefixes are not trustworthy (slugs were renamed, 901/930/931 renumbered),
 and two different uploads can share a name (`重出江湖.rar` is 905 and 905-3;
 `终极地狱.rar` in `mudlib.rar` is really `终极地狱2008完整版.rar`).
+A lib onboarded from a download or a git clone also gets its source stored:
+save the downloaded file itself (not only `raw/`), and for a git source a
+`git clone --mirror` packed as `<owner>-<repo>.bundle` (`git bundle create
+--all`; verify inside an empty bare repo, `bundle verify` refuses to run
+outside one). The script places bundles by the GitHub URL in the catalog.
 
 - `unrar x -y`, `7z`, `unzip`, and `tar` all work. A self-extracting
   `.exe` opens with `unrar`/`7z`.

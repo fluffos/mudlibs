@@ -38,6 +38,9 @@ OVERRIDES = {
     '火影 (2).rar': ('078', 'hy2', 'purged'),
     'foundationI_fluffos_v1.zip': ('174-1', None, None),
     'lima_fluffos_v1.zip': ('164', None, None),
+    # mudbytes.net download endpoints carry no filename in the catalog
+    'dsII.zip': ('006-2', None, None),
+    'ds3.0.zip': ('006-3', None, None),
     # ftp.lysator.liu.se Amylaar/minilib was a bare directory; packed 2026-10-10
     'minilib.tar.gz': ('962', None, None),
     # two different uploads both named 重出江湖.rar
@@ -69,6 +72,9 @@ def load_catalog():
     for e in libs:
         a = e.get('archive') or ''
         names = {a} | {t for t in re.split(r'[;,]?\s+|/', a) if re.search(EXT, t, re.I)}
+        # git-sourced libs are stored as `git bundle`s named <owner>-<repo>.bundle
+        for m in re.finditer(r'(?:github\.com/|gh repo clone )([\w.-]+)/([\w-]+(?:\.[\w-]+)*?)(?:\.git)?(?=[\s/),;]|$)', a):
+            names.add(f'{m.group(1)}-{m.group(2)}.bundle')
         for n in names:
             byarch[n].add(e['number'])
     return bynum, byarch
@@ -109,12 +115,14 @@ def main():
     if os.path.exists(mp):
         for r in csv.DictReader(open(mp, encoding='utf-8'), delimiter='\t'):
             old_manifest[r['sha256']] = r
+    # bulk uploads already broken up into the store stay out of it
+    containers = {src for r in old_manifest.values() for src in r['sources'].split(' | ')} - {'archives/'}
 
     # sha -> {paths, names, sources}
     blobs = collections.defaultdict(lambda: {'paths': [], 'names': set(), 'sources': set()})
     for f in sorted(os.listdir(ARCH)):
         p = os.path.join(ARCH, f)
-        if f in OUT_FILES or f in a.bundle_name or not os.path.isfile(p):
+        if f in OUT_FILES or f in a.bundle_name or f in containers or not os.path.isfile(p):
             if os.path.isdir(p):
                 print(f'WARNING: loose directory archives/{f}/ is not stored; pack it first', file=sys.stderr)
             continue
@@ -153,19 +161,26 @@ def main():
             nums = [num]
         else:
             nums = set()
-            for n in cands:
-                nums |= byarch.get(n, set())
+            # a file already carrying a current NNN_slug_ prefix was placed on purpose
             for p in b['paths']:
                 f = os.path.basename(p)
                 m = re.match(r'^(\d{3}(?:-\d+)?)_(.+)$', f)
                 if m and m.group(1) in bynum and m.group(2).startswith(bynum[m.group(1)]['slug'] + '_'):
                     nums.add(m.group(1))
+            if not nums:
+                for n in cands:
+                    nums |= byarch.get(n, set())
             nums = sorted(nums, key=lambda n: (bynum[n].get('duplicate_of') is not None, numkey(n)))
             if not nums:
                 problems.append(f'UNPLACED {sorted(cands)}')
                 continue
             num, slug = nums[0], bynum[nums[0]]['slug']
         status = status or bynum[num].get('wasm_status') or ''
+        # other catalog entries built from the very same upload
+        alias = set()
+        for n in ([] if ov else b['names']):  # overrides exist because the name misleads
+            alias |= byarch.get(n, set())
+        nums = sorted(set(nums) | alias, key=numkey)
         if not b['names']:
             b['names'] = {n for n in b['cands'] if n in byarch or n in OVERRIDES}
         if not b['names']:
