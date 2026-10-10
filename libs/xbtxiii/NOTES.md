@@ -250,3 +250,9 @@ definition, 2 `#undef` lines for macros that two headers define (`ROOM`, `STORY_
 ## 深度功能测试（§10.7，2026-10-07）— 兵器的 `actions` 函数指针
 
 `set("actions", (: WEAPON_D, "query_action" :));`：旧 MudOS 把 `(: 字符串, "函数" :)` 当作 call_other 函数指针，本驱动把它当作表达式函数指针，求值只得到字符串 `"query_action"`。没有对应兵器技能时 `feature/attack.lpc` 直接用兵器的 `actions`，`COMBAT_D` 拿到的不是 mapping，`reset_action()` 后仍不是，记一条 bad action 就不出招——拿着这些兵器打不出攻击。改成别的兵器早已用的 `(: call_other, WEAPON_D, "query_action" :)`（KB 04 §6.10）：`d/npc/m_weapon/weapon/m_club.lpc`、`d/npc/m_weapon/weapon/m_blade.lpc`、`d/npc/m_weapon/weapon/m_whip.lpc`、`d/npc/m_weapon/weapon/m_sword.lpc`、`d/npc/m_weapon/weapon/m_staff.lpc`。改动的文件在 HEAD 与工作树分别加载（新进程），无回退。
+
+- 2026-10-10：`/cmds/wiz/roommaker.lpc` 生成新文件用的 here-document 模板（`@ROOM_CODE`/`@OBJ_CODE`）里的 `inherit` 行，被 a68352ca1f6 的重复继承清理当成代码删掉了（`lpc_diamonds.py` 当时不识别 here-document），用它生成的房间/物品会因缺少继承而无法编译。已恢复该行；工具已修正。
+
+- 2026-10-10：`/d/ny/obj/roommaker.lpc` 生成新文件用的 here-document 模板（`@ROOM_CODE`/`@OBJ_CODE`）里的 `inherit` 行，被 a68352ca1f6 的重复继承清理当成代码删掉了（`lpc_diamonds.py` 当时不识别 here-document），用它生成的房间/物品会因缺少继承而无法编译。已恢复该行；工具已修正。
+
+- 2026-10-10：`/obj/misc/roommaker.lpc` 生成新文件用的 here-document 模板（`@ROOM_CODE`/`@OBJ_CODE`）里的 `inherit` 行，被 a68352ca1f6 的重复继承清理当成代码删掉了（`lpc_diamonds.py` 当时不识别 here-document），用它生成的房间/物品会因缺少继承而无法编译。已恢复该行；工具已修正。

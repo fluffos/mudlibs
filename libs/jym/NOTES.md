@@ -406,3 +406,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply j
 ## 深度功能测试（§10.7，2026-10-08）— 编译警告整理
 
 `scripts/lpc_warnings.py jym --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 3 个 `.lpc` 和 1 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：3 -> 3 通过，无回退；改过的头文件的 17 个包含者 16 -> 16 通过。启动时警告 2 -> 0；新进程登录（输入名字）正常。
+
+- 2026-10-10：`/clone/misc/roommaker.lpc` 生成新文件用的 here-document 模板（`@ROOM_CODE`/`@OBJ_CODE`）里的 `inherit` 行，被 9246fbacc89 的重复继承清理当成代码删掉了（`lpc_diamonds.py` 当时不识别 here-document），用它生成的房间/物品会因缺少继承而无法编译。已恢复该行；工具已修正。

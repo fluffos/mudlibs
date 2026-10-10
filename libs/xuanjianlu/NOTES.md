@@ -1428,3 +1428,5 @@ The 42 files are 41 `.C` -> `.lpc` (the tea items of `d/city/npc/tea`, the Lingj
 `scripts/lpc_dynamic_rows.py`：`quest/wei/dynamic_location` 里 185 行写的是原档案的 `.c` 路径。转档时文件已改名 `.lpc`，而显式后缀按原样解析，`load_object("/d/x.c")`、`new("/d/obj/quest/x.c")` 返回 0 且不报错（KB 03 §4.2，KB 06 §7.220），所以 `adm/daemons/questd.lpc` 读到的每一行都加载不出来：随机任务和任务物品从未生成，在 `create()` 里直接对结果调用 `tar->set()` 的版本还会崩溃，连带加载它的 cron 守护进程和 `give` 的任务钩子。这些行已改为 `.lpc`；另有 647 行指向的文件两种后缀都不存在（档案缺内容），保持原样。
 `scripts/lpc_dynamic_quest_guard.py`：1 处 `spread_quest()` 调用（`init_dynamic_quest()` 的循环里）包进 `catch()`，缺失的任务物品或编译不过的房间只跳过那一个任务，守护进程照常加载、其余任务照常生成。
 验证：`adm/daemons/questd.lpc`在新进程里加载（HEAD 一次，工作树三次，选房是随机的）：HEAD 通过 0 个，工作树三次分别通过 1、1、1 个（共 1 个），无回退；`adm/daemons/questd.lpc` 原先加载失败，现在加载成功。
+
+- 2026-10-10：`/clone/misc/roommaker.lpc` 生成新文件用的 here-document 模板（`@ROOM_CODE`/`@OBJ_CODE`）里的 `inherit` 行，被 af623d42ce0 的重复继承清理当成代码删掉了（`lpc_diamonds.py` 当时不识别 here-document），用它生成的房间/物品会因缺少继承而无法编译。已恢复该行；工具已修正。

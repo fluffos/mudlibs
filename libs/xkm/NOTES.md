@@ -200,3 +200,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 验证：改动过的 `adm/daemons/questd.lpc` 在新进程里加载，HEAD 通过 1 个、工作树通过 1 个（共 1 个），无回退。
 
 - 2026-10-10：仓库顶层 `.gitignore` 的 `libs/*/work/**/log` 本为运行日志而设，却把存档里名为 `log` 的源码目录也挡在版本库外（站点下载缺这些文件）：`backup/log/`（`drop.lpc`、`give` 的旧备份）。已 `git add -f`（KB 02 §2.2）。
+
+- 2026-10-10：`/clone/misc/roommaker.lpc` 生成新文件用的 here-document 模板（`@ROOM_CODE`/`@OBJ_CODE`）里的 `inherit` 行，被 9157c76719a 的重复继承清理当成代码删掉了（`lpc_diamonds.py` 当时不识别 here-document），用它生成的房间/物品会因缺少继承而无法编译。已恢复该行；工具已修正。
