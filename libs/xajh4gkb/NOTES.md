@@ -321,3 +321,11 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 ## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
 
 `scripts/lpc_warnings.py xajh4gkb --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 1 个 `.lpc`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：1 -> 1 通过，无回退。启动时警告 0 -> 0；新进程登录（输入名字）正常。
+
+## 深度功能测试（§10.7，2026-10-09）— 编译警告（分块扫描重跑）
+
+上一轮的修正工具超时、什么也没写；这一轮分块扫描全部 16174 个文件，剩下的手改：
+- `adm/daemons/jobd.lpc`（门派战争）：`log_file("fight/family_zhan", sprintf("门派战争：%s 攻打 %s on %s\n", 门派), 对象), 时间) );` 括号错位，三个 `%s` 只给了一个参数，`sprintf` 运行时出错，门派战争开打那一刻 `get_job()` 中断、杀手刷不出来；改成三个参数都给 `sprintf`。（`adm/etc/preload` 里 jobd 那行被注释，目前休眠。）
+- `adm/daemons/cruised.lpc` 五个只剩注释的 `if (cruise[USER_ID]) { }`，连同 `if` 一起注释掉，行为不变。
+- `adm/daemons/race/beast.lpc`、`monster.lpc` 先 `#define BASE_WEIGHT` 再包含同名定义的头文件，头文件的值生效（编译警告 `Macro redefined`）；删去文件里不起作用的那行，行为不变。
+改动的文件单独加载都通过。
