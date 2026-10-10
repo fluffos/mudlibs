@@ -841,3 +841,10 @@ Formatter not run (minimal edits).
 ## 深度功能测试（§10.7，2026-10-08）— `.lpc` 后缀的定宽切片
 
 `.c` 改名 `.lpc` 时只改了字符串没改切片宽度：`f[<2..] == ".lpc"` 拿两个字符比四个字符，永远不成立（`!=` 永远成立），按后缀筛文件、去后缀的代码因此从不运行或截成 `x.l`（KB 06 §7.238）。`scripts/lpc_lpc_suffix_slice.py --apply` 改了 9 处比较、1 处去后缀（如 `obj/tools/paintbrush.lpc`）；改动的文件 HEAD 与工作树分别加载（新进程），无回退。
+
+## 深度功能测试（§10.7，2026-10-10）— 两个重复的全局变量（照 tmi2 修法）
+
+重新整库扫描（分块扫描器）发现 2096 条 `Redeclaration of global variable`，分布在 1054 个文件里，根源只有两处，都在 TMI-2 基础类中，tmi2 已于 2026-10-03 修过（`4db43f60e6b`）：
+- `std/living/spells.lpc` 的 `object target` 与 `std/body/attack.lpc` 的战斗目标 `target` 同名。法术目标只在 spells.lpc 内部使用，改名为 `spell_target`（与 tmi2 的文件逐字相同，玩家可见的文字不变）。
+- `std/monster.lpc` 又声明了一次 `mapping alias`，它的 `create()` 本想清空身体（`std/body/alias.lpc`）的别名表，清空的却是自己的副本；怪物的 `add_alias`/`remove_alias` 操作的是一个 0。删掉重复声明。
+`/d/` 下 300 个怪物文件及三个基础类在 HEAD 与工作树各载入一次：246 -> 246 通过，无回退；抽样 40 个文件的重复声明警告全部消失。
