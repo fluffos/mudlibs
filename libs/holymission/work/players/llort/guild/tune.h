@@ -163,7 +163,7 @@
 #define		PRISON_CHANCE	(50+(TPL-prisoner->query_level())*5)
 
 /* AC of the shield spell */
-#define		SHIELD_AC	((TPL/10) + 1) /* Way too with TPL/3 + 10
+#define		SHIELD_AC	((TPL/10) + 1) /* Way too with TPL/3 + 10 */
 
 /* WC of the cloned staff */
 #define 	STAFF_WC	0

@@ -12,7 +12,7 @@
 #define CHAT		"sys/chatd"->do_chat
 #define GM "guild/master"
 #define GS(x) (int)this_player()->get_skills(x)[0]
-#define COST(x) x==100 ? "Already Bestest" : x*95 + x*5+400
+#define COST(x) (x==100 ? (mixed)"Already Bestest" : x*95 + x*5+400)
 
 #define NORM_STORE_WEA ("/players/darastor/guild/weapons/" + "guild_weap")
 #define NORM_STORE_ARM ("/players/darastor/guild/armour/" + "guild_armour")
