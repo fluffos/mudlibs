@@ -623,3 +623,5 @@ mudlib bug.
 ## 深度功能测试（§10.7，2026-10-05）— 主控 author_file()/domain_file()
 
 驱动的 mudlib_stats 包在主控载入时各调用一次 `author_file(<主控文件>)` 和 `domain_file("/")`。本库主控没有这两个 apply，所以每次启动都打印 `author_file() in the master file does not work, using root_uid as fallback` 和 `domain_file() in the master file does not work, using bb_ui as fallback` 两行，网页版每位访客的终端里都看得到。`secure/master.lpc` 补上了这两个 apply：作者返回 `get_root_uid()`，域返回 `get_bb_uid()`，正是驱动缺少它们时所用的值。域名等于 backbone 域时，驱动让对象沿用创建者的域，与没有这个 apply 时相同（KB 06 §7.222）。用 `lpcc config.fluffos /nonexistent.lpc` 前后对比，主控载入段只少了这两行。
+
+- 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 0 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 8 个，只在 #if 分支用的声明移进分支 0 个文件；改动 7 个文件，HEAD 与工作树各载入一次无回退（7 objects; HEAD PASS 7, tree PASS 7; regress 0; newly loading 0），这些文件的警告 35 -> 27。
