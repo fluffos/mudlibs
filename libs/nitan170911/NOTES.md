@@ -919,3 +919,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply n
 手改（同 nitan6 一系）：`adm/kernel/master.lpc` `direct_run_binary()` 的 `ob`、`vob` 挪进 `#else`；`adm/daemons/natured.lpc` 空语句 `lt[LT_MON];` 删去；`d/city/task2/shashou.lpc` 的 `jap_name()`（KB 06 §7.237）。
 使命任务：`adm/daemons/taskd.lpc` `alloc_task()` 的 `room[<2..<1] != ".lpc"` 让每个房间都被拒（KB 06 §7.238），`rooms -= ({ room })` 又拿 `zone + 名字` 去减只有名字的列表，于是无限重抽、不断载入房间直到内存耗尽——`taskd` 从来加载不起来，玩家的 `task`、`locate` 指令失效。改正切片和列表（列表空了就停），`maximum evaluation cost` 提到 10000000（真正走房间后首次冷加载要几秒）；改后单独加载 `taskd` 无错误。本库注册新人物需要 MySQL（见上文），本机没有，未能现场跑 `task`；同样的修正在 nitan6 现场验证过（HEAD 两个指令都只显示“这里发现了臭虫”，修正后正常）。另：`scripts/lpc_lpc_suffix_slice.py` 在本库改了 9 处 `.lpc` 定宽切片。
 本地 `data/dbased.o`（23MB，.gitignore 有意不收）格式损坏，`restore_object` 报 `Illegal mapping format`；不随游戏发布，只影响本机测试。
+
+- 2026-10-10：`/kungfu/skill/sad-strike/tuo.lpc`、`/kungfu/skill/taiji-jian/jian.lpc`、`/u/mud/skills/wudang/jian.lpc` 的技能判断用按位 `&` 连接两个比较（如 `tjss > 10000 & taoism > 10000`），改为逻辑 `&&`。两边都是 0/1 比较结果，行为不变，只是写法纠正。

@@ -380,3 +380,5 @@ Too-deep-recursion) recurred at boot; no new error from shop/拜师.
 
 `scripts/lpc_warnings.py wdxtym --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 2348 个 `.lpc` 和 28 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：2039 -> 2040 通过，无回退；改过的头文件的 250 个包含者 216 -> 216 通过。启动时警告 1 -> 0；新进程登录（输入名字）正常。
 （这一轮用分块扫描重跑：上一轮单次 `lpcc --batch` 中途死掉，只扫到 46890 个文件里的 8599 个。）手改 `adm/daemons/payd.lpc`：充值赠送那几行原档案就写成 `amount += amount / 0;`、`amount * 0 / 0`（显然是有人想取消赠送），结果一次充值 1500 以上就是除零错误、充值处理中断；改成 `amount += 0;`（不赠送，行为与作者意图一致）。被注释掉的一段里又有一个 `/*`（编译警告 `/* found in comment`），去掉，不影响代码。
+
+- 2026-10-10：`/u/mud/skills/wudang/jian.lpc` 的技能判断用按位 `&` 连接两个比较（如 `tjss > 10000 & taoism > 10000`），改为逻辑 `&&`。两边都是 0/1 比较结果，行为不变，只是写法纠正。

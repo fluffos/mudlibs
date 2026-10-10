@@ -936,3 +936,5 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 ## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
 
 `scripts/lpc_warnings.py wmkj --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 555 个 `.lpc` 和 6 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：492 -> 492 通过，无回退；改过的头文件的 43 个包含者 43 -> 43 通过。启动时警告 33 -> 0；新进程登录（新人物确认）正常。
+
+- 2026-10-10：`/u/snow/wudujiao/mishi.lpc` 的技能判断用按位 `&` 连接两个比较（如 `tjss > 10000 & taoism > 10000`），改为逻辑 `&&`。两边都是 0/1 比较结果，行为不变，只是写法纠正。
