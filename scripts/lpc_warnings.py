@@ -36,6 +36,8 @@ Mechanical fixes (positions come from the driver; columns are 1-based BYTES):
                                           (either side being varargs silences it; never makes a call fail)
   Non-void functions must return value -> the bare `return;` on the reported line becomes `return 0;`
                                           (a bare return already yields 0)
+  Unused local variable                -> not touched (listed) when it has an initializer and a file
+                                          global has the same name: likely a missed assignment
   Unused local variable                -> not touched when the name also appears inside an
                                           #if/#ifdef block of the same function (listed instead)
 A lib's own compiler tests (Lil: /single/tests/) are broken on purpose; pass --skip '^/single/tests/'.
@@ -478,6 +480,26 @@ def pure_initializer(text):
     return True
 
 
+def file_globals(masked):
+    """Names declared at file level (brace depth 0): a local with an initializer that shares one of them is more often a
+    missed assignment (`int maxpages = 20;` meant to set the global, pd book.lpc) than a dead variable."""
+    flat, depth = [], 0
+    for ch in masked:
+        if ch == '{':
+            depth += 1
+        flat.append(ch if depth == 0 else ' ')
+        if ch == '}':
+            depth = max(depth - 1, 0)
+    names = set()
+    for m in re.finditer(r"(?:^|(?<=[;}]))\s*(?:(?:nosave|static|private|protected|public|nomask|varargs)\s+)*(?:" + TYPES
+                         + r")\b([^;{}()=]*(?:=[^;{}]*)?);", "".join(flat)):
+        for part in m.group(1).split(","):
+            nm = re.match(r"\s*\**\s*([A-Za-z_]\w*)", part)
+            if nm:
+                names.add(nm.group(1))
+    return names
+
+
 def fix_unused_locals(work, rows):
     by_file = collections.defaultdict(list)
     for f, ln, col, sev, msg in rows:
@@ -492,6 +514,7 @@ def fix_unused_locals(work, rows):
         lines = src.split("\n")
         masked = mask(src)
         cflags = conditional_lines(masked)
+        globs = file_globals(masked)
         scopes = collections.defaultdict(set)
         for ln, col, name in items:
             if col <= 0:
@@ -539,6 +562,13 @@ def fix_unused_locals(work, rows):
                         manual.append((f, src.count("\n", 0, d[1]) + 1, d[0],
                                        "the scope reads the name again, so the warning cannot be trusted "
                                        "(an earlier error in the file leaves a used local marked unused): left alone"))
+                        remaining.discard(d[0])
+                        drop.remove(d)
+                        continue
+                    if d[3] and d[0] in globs:
+                        manual.append((f, src.count("\n", 0, d[1]) + 1, d[0],
+                                       "a file global has this name: the declaration may be a missed assignment "
+                                       "(drop the type to set the global): " + src[d[1]:d[2]].strip()[:60]))
                         remaining.discard(d[0])
                         drop.remove(d)
                         continue
