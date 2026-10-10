@@ -169,7 +169,6 @@ int ask_kungfu_asked1()
            mapping myparty;
            mapping myfam;
            int skills;
-                   mapping guild;
 
            me=this_player();
            myfam=(mapping)me->query("family");

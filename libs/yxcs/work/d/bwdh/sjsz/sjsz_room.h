@@ -67,7 +67,6 @@ void my_destruct(object obj)
 		  int i;
 
 		  object *inv;
-		  string err;
 
 		  if (obj && objectp(obj) ) {
 								inv = all_inventory(obj);
@@ -133,7 +132,7 @@ void finish(object target) {
 	object ob, me, corpse;
 	object board;
 	mapping entryA, entryB;
-	int i, scoreA,scoreB;
+	int scoreA, scoreB;
 
 	 board =  find_object(BOARD);
 	 if (!objectp(board)) {

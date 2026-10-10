@@ -1058,3 +1058,8 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply y
 `kungfu/skill/yizhi-chan/yizhi.lpc` 第二式的 `msg += "…护住身前。";` 后面单独一行"只听「嗤」的一声，掌影顿消，$p已经变得脸色惨白。"——多余的 `;` 把消息截成两句，后半句从来没显示过；接回去。
 
 验证：改动的文件在 HEAD 与工作树分别加载（新进程），无回退。
+
+## 深度功能测试（§10.7，2026-10-10）— 编译警告整理
+
+`scripts/lpc_warnings.py yxcs --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 1173 个 `.lpc` 和 22 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：1125 -> 1125 通过，无回退；改过的头文件的 271 个包含者 267 -> 267 通过。启动时警告 30 -> 0；新进程登录（输入名字）正常。
+整库对比的 1 个“回退” `/obj/npc/marchial` 是随机的：它在 `create()` 里随机八选一拿兵器，其中 `obj/weapon/stick`、`obj/weapon/sixhammer` 在存档里不存在，`carry_object()` 返回 0 后 `->wield()` 出错，四分之一的江湖人载入失败（HEAD 那次碰巧没抽到；`d/chaoting/npc/japanese.lpc` 同样，这次反过来碰巧通过）。两个文件改用现有的 `obj/weapon/club`（木棍）与 `obj/weapon/hammer`（铁锤），此后两者连续 8 次载入都通过。

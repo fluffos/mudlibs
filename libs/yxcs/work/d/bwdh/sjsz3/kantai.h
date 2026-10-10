@@ -34,7 +34,6 @@ int do_get(string arg) {
 int do_watch(string arg)
 {
 	 object camera, me=this_player(), ob;
-	 string type;
 
 	 if(!arg) return 0;
 

@@ -61,7 +61,6 @@ int relogin_player(object me)
 
 int update_player(object me)
 {
-		  object env, link_ob, obj;
 
 		  if( !me ) return 1;
 		  if(!objectp(me))return 1;
@@ -114,7 +113,7 @@ void go_xiangfang() {
 
 void back_stuff(string id)
 {
-	object *inv, cangku, *basket;
+	object cangku, *basket;
 	int i;
 	object player;
 
@@ -154,7 +153,7 @@ void back_stuff(string id)
 
 void out_xiangfang() {
 	 object me = this_player();
-	 object *inv, cangku, *basket;
+	 object *inv;
 	 int i;
 	 string id;
 

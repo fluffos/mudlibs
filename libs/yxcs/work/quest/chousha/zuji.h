@@ -3,7 +3,6 @@ int zuji_times;
 void zuji_begin(int num)
 {
      object killer;
-     object killer1;
      int n;
 
 /*
@@ -82,8 +81,7 @@ void zuji_continue(int num)
 }
 void zuji_over(int num)
 {
-     object killer,killer1;
-     int n;
+     object killer1;
    message("channel:rumor",MAG"【故事传闻】只听得马蹄声音，西北角又有两骑马驰来，马上是男女二人。\n"
         "这两人见到那一十九名武士死在地下，那男子立时神色十分凶猛，向众人大声喝问。\n"
         "辽人：$*@!@#$%^&*！\n"
@@ -155,7 +153,7 @@ void zuji_fail()
      call_out("remove_enemy",1);
      return;
 }
-void remove_enemy()
+varargs void remove_enemy()
 {
    string temp;
         object *enemys;
