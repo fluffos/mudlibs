@@ -130,3 +130,5 @@ directory : /log` 相对启动 cwd）与 mudlib `work/log/log`
 ## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
 
 `scripts/lpc_warnings.py tianlongbabu --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 181 个 `.lpc` 和 1 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：176 -> 176 通过，无回退。手改 `include/net/ftpdsupp.h`：`check_access()` 的局部 `file` 只在 `#ifdef GUEST_WIZARD_FTP` 分支里用到，声明挪进同一个 `#ifdef`（其包含者 2 个，1 -> 1 通过）。启动时警告 21 -> 0；新进程登录（新人物确认）正常。
+
+- 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 1 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 0 个，只在 #if 分支用的声明移进分支 0 个文件；改动 1 个文件，HEAD 与工作树各载入一次无回退（1 objects; HEAD PASS 1, tree PASS 1; regress 0; newly loading 0），这些文件的警告 1 -> 0。
