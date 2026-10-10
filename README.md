@@ -1,35 +1,83 @@
-# mudlibs — 199 restored classic Chinese LPC mudlibs (158 unique games), runnable natively and most in the browser
+# mudlibs — 276 restored LPC mudlibs (225 unique games), playable in the browser
 
 **▶ Play now, no install: https://mudlibs.fluffos.info/** (English default; Chinese UI at https://mudlibs.fluffos.info/zh/)
 
 ![Screenshot of the mudlibs.fluffos.info game gallery](docs/site-preview.png)
 
-This repository preserves and restores the golden age of the Chinese MUD
-scene (mid-1990s to ~2015): **199 restored LPC mudlibs across 158 unique
-game codebases** (193 fully verified playable — 191 with their own site
-card, plus 2 further archives confirmed byte-identical re-uploads of an
-already-listed sibling and folded into that sibling's card rather than
-duplicated — 1 more playable with a documented caveat, 1 native-only by
-policy, 4 confirmed non-bootable — see below) — 侠客行, 笑傲江湖,
-金庸群侠传, 西游记, 风云, 大唐双龙, 书剑天下, 东方故事, and dozens of
-derivatives and forks — recovered from community archive dumps, transcoded
-to UTF-8, and fixed to boot and play on the modern
+This repository is a working museum of LPC MUDs. It holds **276 restored
+mudlibs from 225 distinct game codebases**: 211 Chinese MUDs from the golden
+age of the Chinese MUD scene (mid-1990s to about 2015) and 65 games and
+base libraries in English and other languages. Each one has been recovered
+from an archive, converted to UTF-8 and fixed to run on the modern
 [FluffOS](https://github.com/fluffos/fluffos) driver.
+
+- **Chinese**: 侠客行, 笑傲江湖, 金庸群侠传, 西游记, 风云, 大唐双龙, 书剑天下,
+  东方故事 and their many derivatives and forks. Most are wuxia (武侠) and
+  xianxia (仙侠) worlds; there are also a GPLv2 Taiwanese life simulation, a
+  Naruto-themed lib and a high-school simulator.
+- **English and others**: the historic base libraries (LPMud 1.4.1/2.4.5,
+  TMI-2, Nightmare, Dead Souls, Discworld, Foundation, Lima, Genesis) and
+  games built on them, plus libs in Polish, Spanish and German.
 
 Every restored lib runs two ways:
 
-- **Natively**: the real FluffOS driver, a real telnet port, exactly like
-  hosting the game in 2002 — except on a 2020s driver with UTF-8 strings.
-- **In the browser (the primary distribution channel)**: a WebAssembly
-  build of FluffOS boots the whole game — driver, mudlib, virtual
-  filesystem — inside a browser tab, no server needed. A GitHub Pages site
-  built from this repo lets anyone click a game and start playing.
+- **In the browser**: a WebAssembly build of FluffOS boots the whole game
+  (driver, mudlib and virtual filesystem) inside a browser tab, with no
+  server. The site at https://mudlibs.fluffos.info/ lets anyone click a
+  game and start playing.
+- **Natively**: the real FluffOS driver on a real telnet port, just as
+  hosting the game worked in 2002, but with a 2020s driver and UTF-8 text.
 
-These are wuxia (武侠) and xianxia (仙侠) worlds: martial-arts sects,
-Jin Yong novel characters, cultivation, reincarnation — plus a few
-outliers (a GPLv2 Taiwanese life-simulation MUD, a Naruto-themed lib, a
-high-school simulator). Nearly all gameplay text is Simplified Chinese;
-one archive is BIG5 Traditional Chinese.
+## Support this project / 支持本项目
+
+This archive is maintained by volunteers. Two things keep it going:
+
+**1. Donate a mudlib.** The collection grows only when someone finds an old
+archive. If you have a mudlib on an old disk, in a backup, in a forum
+attachment or in an abandoned repository, please send it, whatever state it
+is in: partial, broken, without player data, or in GB2312/BIG5. We preserve
+the original archive untouched, credit you and the original authors, and
+make the game playable in the browser. [Open an issue](https://github.com/fluffos/mudlibs/issues/new)
+with a link or attachment and whatever you remember of its history. If you
+are an original author and prefer that a lib not be published, tell us and
+we will respect that.
+
+**2. Donate to keep it running.** Hosting, build machines and the long hours
+of restoration are funded by donations through the FluffOS
+[Open Collective](https://opencollective.com/fluffos-579). Every
+contribution helps restore the next game.
+
+**捐赠 mudlib。** 这个收藏只有在有人找到旧存档时才会增长。如果你的旧硬盘、
+备份、论坛附件或废弃的代码仓库里还留着 mudlib，无论是否完整、能否运行、
+有没有玩家数据、是 GB2312 还是 BIG5 编码，都欢迎提供。我们会原样保存原始
+存档，注明你和原作者，并让它在浏览器里重新可玩。请
+[提交一个 issue](https://github.com/fluffos/mudlibs/issues/new)，附上链接或文件，
+以及你记得的来历。如果你是原作者、不希望某个 mudlib 公开，告诉我们即可，
+我们会尊重你的意愿。
+
+**资助运行。** 托管、构建和大量修复工作的开销靠捐助维持，可通过 FluffOS 的
+[Open Collective](https://opencollective.com/fluffos-579) 支持本项目。
+
+## Fix your own mudlib — the repair toolkit
+
+The scripts that restored this collection work on any LPC mudlib, including
+the one you run today. Two commands import your lib (your original is never
+touched), fix compile warnings at their source, and prove that every changed
+object still loads:
+
+```
+scripts/toolkit_import.sh /path/to/your/lib mymud /path/to/your/config UTF-8
+scripts/toolkit_fix.sh mymud
+```
+
+The toolkit converts encodings, renames `.c` to `.lpc` (FluffOS loads both),
+and fixes unused locals, prototype mismatches, `&` written for `&&`, files
+inherited twice and more. Every changed object is then loaded from your last
+commit and from your working tree to check that nothing regressed. See
+**[TOOLKIT.md](TOOLKIT.md)** for requirements, the workflow, what to do when
+a lib does not boot, and the full list of tools. The knowledge base behind
+it, more than 200 documented bug classes, each with symptom, cause, fix and
+detection, is in [`docs/kb/`](docs/kb/).
 
 ## Quick start — play in the browser
 
@@ -100,7 +148,7 @@ libs for local convenience, and grants full in-game wizard/admin power
 
 ## The collection — numbering, lineage, and status
 
-Each **unique game/codebase** has a sequential number (`001`–`158`, still
+Each **unique game/codebase** has a sequential number (`001`–`185`, still
 growing as new archives get dropped in). Confirmed derivatives — later
 snapshots, rebrands, site builds, and close forks of the *same* codebase —
 share the base number with a `-1`/`-2`/`-3` suffix (e.g. `031`
@@ -487,6 +535,8 @@ scripts/                  extraction/conversion/test/site tooling:
   pack_lib_zip.sh / write_play_page.sh / build_site.sh / gen_site_index.py   GitHub Pages build
 lib_numbering.json        number <-> slug <-> original archive mapping (machine-readable)
 AGENTS.md                 the contributor/agent handbook: pipeline, fix catalog, WASM triage
+TOOLKIT.md                how to run the repair toolkit on your own mudlib (toolkit_import.sh, toolkit_fix.sh)
+docs/kb/                  the knowledge base: every bug class with symptom, cause, fix, detection
 ```
 
 ## Provenance and licensing
@@ -511,8 +561,8 @@ local-play conveniences described above. Game content was never invented
 ## Contributing / continuing the restoration
 
 Read **`AGENTS.md`** first. It is the accumulated handbook of this
-project: the per-lib conversion pipeline, a ~60-entry catalog of
-driver-compatibility bug classes (with symptoms, root causes, and code
+project: the per-lib conversion pipeline, a catalog of more than 200
+driver-compatibility bug classes in `docs/kb/` (with symptoms, root causes, and code
 fixes), the WASM triage playbook, and the testing methodology (including
 the hard-won rule: a lib is not "working" until a real Chinese name has
 registered *and* a post-login `look` has produced output). The current

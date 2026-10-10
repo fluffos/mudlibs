@@ -526,12 +526,16 @@ FOOTER = {
     "zh": (
         '    源代码与修复记录:<a href="https://github.com/fluffos/mudlibs">fluffos/mudlibs</a>\n'
         '    · 驱动:<a href="https://github.com/fluffos/fluffos">FluffOS</a> (WebAssembly)\n'
-        "    · 游戏内容版权归原作者所有,仅作历史保存用途。"
+        "    · 游戏内容版权归原作者所有,仅作历史保存用途。<br>\n"
+        '    手里有旧的 mudlib 存档?<a href="https://github.com/fluffos/mudlibs/issues/new">欢迎捐赠</a>,我们会保存并让它重新可玩'
+        '    · <a href="https://opencollective.com/fluffos-579">资助本项目</a>'
     ),
     "en": (
         '    Source & restoration notes: <a href="https://github.com/fluffos/mudlibs">fluffos/mudlibs</a>\n'
         '    · Driver: <a href="https://github.com/fluffos/fluffos">FluffOS</a> (WebAssembly)\n'
-        "    · Game content copyright belongs to the original authors; preserved here for historical purposes only."
+        "    · Game content copyright belongs to the original authors; preserved here for historical purposes only.<br>\n"
+        '    Have an old mudlib archive? <a href="https://github.com/fluffos/mudlibs/issues/new">Donate it</a> and we will preserve it and make it playable'
+        '    · <a href="https://opencollective.com/fluffos-579">Support the project</a>'
     ),
 }
 

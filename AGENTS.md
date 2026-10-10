@@ -94,6 +94,9 @@ corpus. To find work:
      site ships without the needed empty runtime dirs, and every WASM
      connection dies silently on its first `write_file()` into a missing
      `log/` dir.
+- **`TOOLKIT.md` is the public face of `scripts/`.** It tells outside mudlib owners how to run the tools on
+  their own lib (`scripts/toolkit_import.sh`, `scripts/toolkit_fix.sh`). When a fixer is added, renamed or
+  learns a new guard, update its row there and, if it belongs in the standard round, `toolkit_fix.sh`.
 - **`meta.json`** holds lightweight structured data only: number, slug,
   archive, name, wasm_status, port, duplicate_of, hosting, upstream,
   english_description. Prose about fixes goes in `NOTES.md`.
