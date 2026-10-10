@@ -748,3 +748,5 @@ jitui`。`buy jitui from xiaoer` 成功（「你向店小二买下一根炸鸡�
 ## 深度功能测试（§10.7，2026-10-06）— 编译警告整理
 
 `scripts/lpc_warnings.py xixingzhanji --fix`：无用局部变量 914 个、`varargs` 47 处、转义 13 处、`nosave` 函数 23 个改 `protected`、裸 `return` 1 处，共改动 498 个 `.lpc`。这些文件在 HEAD 与工作树分别加载（新进程）：483 -> 483 通过，无回退；`scripts/lpc_audit_removed_locals.py HEAD` 的 17 条候选都是声明被重建（仍在用的名字保留）或同名的 efun 调用（`time()`）。手工：`d/moon/npc/yutu.lpc` 的 `int kill_ob()` 覆盖了 `/feature/attack.lpc` 的 `void kill_ob()`，还 `return ::kill_ob(victim)`（void 值），改为 `void`（没有调用者读它的返回值）。启动时警告 489 -> 0；新进程启动后新角色注册（英文名、中文名、密码、邮箱、性别、天赋）进入游戏，`look`、`score`、`quit` 正常。
+
+- 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 13 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 6 个，只在 #if 分支用的声明移进分支 0 个文件；改动 17 个文件，HEAD 与工作树各载入一次无回退（17 objects; HEAD PASS 17, tree PASS 17; regress 0; newly loading 0），这些文件的警告 39 -> 20。
