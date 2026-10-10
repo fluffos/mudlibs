@@ -42,7 +42,6 @@ int init_shape(object obj,string mysubrace)
 
 varargs int reverse_shape(object obj,int silent)
 {
-    string *subraces;
     if(!objectp(obj))
         return 3;
     if(!objectp(shape = obj->query_property("shapeshifted")))
