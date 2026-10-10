@@ -6,7 +6,7 @@ void create() {
 }
 
 void do_shadow() {
-  int i, num;
+  int i;
   object ob;
   string fname;
   mixed myeuid;

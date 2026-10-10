@@ -8,13 +8,13 @@ class list {
     mapping List;
 }
 
-nosave void create();
-nosave void Setup();
-nosave void eventRead(mixed *packet);
-nosave void eventRequestMudList();
-nosave void eventRequestChannelList();
-nosave void eventSocketClose();
-nosave void eventConnectionFailure();
+protected void create();
+protected void Setup();
+protected void eventRead(mixed *packet);
+protected void eventRequestMudList();
+protected void eventRequestChannelList();
+protected void eventSocketClose();
+protected void eventConnectionFailure();
 int SetDestructOnClose(int x);
 int SetSocketType(int x);
 string GetMudName(string mud);

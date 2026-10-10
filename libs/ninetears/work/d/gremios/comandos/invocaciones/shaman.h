@@ -1,6 +1,5 @@
 void init()
 {
-  object *obs;
   ::init();
 
   if(!mi_player || !environment())
