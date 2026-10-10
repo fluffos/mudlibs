@@ -248,3 +248,5 @@ Do not invent Port Vain.
 ## Deep test (§10.7, 2026-10-08) -- fixed-width `.lpc` suffix slices
 
 The `.c` -> `.lpc` rename changed the string but not the slice width: `f[<2..] == ".lpc"` compares two characters with four and is never true (`!=` always true), so suffix filters and strips never ran or cut `x.l` (KB 06 §7.238). `scripts/lpc_lpc_suffix_slice.py --apply` fixed 20 comparison(s) and 11 strip(s) (e.g. `std/shells/magier/moving.lpc`); the changed files load at HEAD and in the tree (fresh processes) with no regression.
+
+- 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 0 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 3 个，只在 #if 分支用的声明移进分支 0 个文件；改动 3 个文件，HEAD 与工作树各载入一次无回退（3 objects; HEAD PASS 1, tree PASS 1; regress 0; newly loading 0），这些文件的警告 3 -> 0。
