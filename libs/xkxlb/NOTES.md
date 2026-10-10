@@ -231,3 +231,5 @@ functionally re-tested live on this lib.
 `scripts/lpc_warnings.py xkxlb --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 217 个 `.lpc` 和 8 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：200 -> 200 通过，无回退；改过的头文件的 36 个包含者 34 -> 34 通过。启动时警告 13 -> 0；新进程登录（输入名字）正常。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 13 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 1 个，只在 #if 分支用的声明移进分支 0 个文件；改动 11 个文件，HEAD 与工作树各载入一次无回退（11 objects; HEAD PASS 11, tree PASS 11; regress 0; newly loading 0），这些文件的警告 13 -> 0。
+
+- 2026-10-10（续）：第二轮编译警告整理（`lpc_fix_unused_init.py`）删掉了只在不启用的 `#if` 分支里用到的局部变量声明（如 `include/net/ftpdsupp.h` 中 `#ifdef GUEST_WIZARD_FTP` 分支的 `file`），启用该选项时会编译失败；声明已放回所用的分支里，工具已改为跳过这种情况（交给 `lpc_move_decl.py`）。

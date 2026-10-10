@@ -142,3 +142,5 @@ Listed `playable` only after the native village §10.7-shaped pass
 `partial` and off the public site.
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 0 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 19 个，只在 #if 分支用的声明移进分支 0 个文件；改动 11 个文件，HEAD 与工作树各载入一次无回退（11 objects; HEAD PASS 7, tree PASS 7; regress 0; newly loading 0），这些文件的警告 38 -> 19。
+
+- 2026-10-10（续）：第二轮编译警告整理把 `light.lpc` 里未用的 `object env = (all_environment() || ...)[<1];` 留成了无意义的表达式语句，改为整行删去（`lpc_fix_unused_init.py` 现只在初始化式就是单个调用时保留调用）。

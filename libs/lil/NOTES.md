@@ -311,3 +311,5 @@ operation plus one assignment, so its absolute numbers are a little higher. The 
 `scripts/lpc_fix_negative_ranges.py`: 2 line(s) in 1 file(s) count a range from the end with `<` (`x[a..-1]` -> `x[a..<1]`, `x[-2..]` -> `x[<2..]`; KB 06 §7.209). In this driver a negative constant end gave `""` / `({ })` and a negative start the whole value, so each of these returned the wrong slice; the compile warning `A negative constant as the second element of arr[x..y]` is gone from the files that compile. Range lvalues (`s[0..-1] = text`, the prepend idiom) are left alone. A paired compile of the changed files at HEAD and in the working tree showed no new error.
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 0 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 6 个，只在 #if 分支用的声明移进分支 0 个文件；改动 5 个文件，HEAD 与工作树各载入一次无回退（5 objects; HEAD PASS 1, tree PASS 4; regress 0; newly loading 3），这些文件的警告 7 -> 1。
+
+- 2026-10-10（续）：第二轮编译警告整理误改了 `tests/compiler/fail/` 下故意编译失败的测试文件（删掉了它们要测的重复/未用声明），已恢复原样；工具链已改为不处理测试目录。

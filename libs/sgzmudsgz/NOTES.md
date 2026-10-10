@@ -162,3 +162,5 @@ hylib/dtxy) stay confirmed duplicates.
 记录、未改：分块扫描时 `daemons/warai_d/warai_d.lpc`、`wiz/edc/code/troop_d.lpc`、`wiz/edc/code/warai_d.lpc` 让 lpcc 进程死掉（`Too deep recursion`）。它们是放在子目录里的旧副本，`inherit __DIR__ + "warai_d/attack"` 指向不存在的 `.../warai_d/warai_d/attack`，master 的 `compile_object()` 又按“上一级同名文件”去找 `warai_d.lpc` 的 `virtual_create()`，于是加载自己、无限递归。真正在用的是 `/daemons/warai_d.lpc`、`/daemons/troop_d.lpc`（`include/daemons.h`），这几个副本没人加载。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 0 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 20 个，只在 #if 分支用的声明移进分支 0 个文件；改动 13 个文件，HEAD 与工作树各载入一次无回退（13 objects; HEAD PASS 13, tree PASS 13; regress 0; newly loading 0），这些文件的警告 20 -> 1。
+
+- 2026-10-10（续）：第二轮编译警告整理（`lpc_fix_unused_init.py`）删掉了只在不启用的 `#if` 分支里用到的局部变量声明（如 `include/net/ftpdsupp.h` 中 `#ifdef GUEST_WIZARD_FTP` 分支的 `file`），启用该选项时会编译失败；声明已放回所用的分支里，工具已改为跳过这种情况（交给 `lpc_move_decl.py`）。

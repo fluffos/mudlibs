@@ -51,6 +51,7 @@ int check_access(string name)
 #endif /* ANONYMOUS_FTP */
 
 #ifdef GUEST_WIZARD_FTP
+    string file;   /* declared here: only this branch uses it */
     // TMI-2 allows those wizards w/o directories to log in
     file = PDATA_DIR + name[0..0] + "/" + name + __SAVE_EXTENSION__;
     return ( file_exists( file ) &&

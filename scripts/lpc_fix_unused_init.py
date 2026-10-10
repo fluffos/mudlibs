@@ -77,12 +77,36 @@ def is_pure(init):
     if "=" in t or re.search(r"\+\+|--|->|::|\(:|\$|\bcatch\b|\bnew\b", t):
         return False
     return all(m in PURE_CALLS for m in re.findall(r"\b([A-Za-z_]\w*)\s*\(", t))
+def single_call(init):
+    """the whole initializer is one call: `f(...)`, `ob->f(...)`, `::f(...)`, `a->b()->f(...)` (outer parens matched)"""
+    s = init.strip()
+    if not s.endswith(")"):
+        return False
+    depth, i = 0, len(s) - 1
+    while i >= 0:
+        if s[i] == ")":
+            depth += 1
+        elif s[i] == "(":
+            depth -= 1
+            if depth == 0:
+                break
+        i -= 1
+    head = s[:i].strip()
+    return bool(re.fullmatch(r"(?:[A-Za-z_]\w*(?:\([^;]*\))?\s*->\s*)*(?:::)?[A-Za-z_]\w*(?:::[A-Za-z_]\w*)?", head))
 for f, items in sorted(want.items()):
     path = W + f
     data = open(path, "rb").read().decode("latin-1")
     lines = data.split("\n")
     edits = []
     clean = strip_code(data).split("\n")
+    cond, depth = [], 0
+    for l in clean:
+        s = l.strip()
+        if re.match(r"#\s*if", s):
+            depth += 1
+        elif re.match(r"#\s*endif", s):
+            depth = max(depth - 1, 0)
+        cond.append(depth > 0)
     for ln, name in sorted(items, reverse=True):
         decl = re.compile(r'^(\s*)(?:(?:varargs|nosave|static|private|protected)\s+)*' + TYPE + r'\s*\**\s*' + re.escape(name) + r'\s*(?:=\s*(.+?))?\s*;\s*(?://.*)?\r?$')
         found = None
@@ -93,12 +117,20 @@ for f, items in sorted(want.items()):
         if not found:
             print(f"SKIP {f}:{ln} {name}: no single-declarator line whose block closes at the diagnostic"); continue
         k, m = found
+        # a name read inside an #if/#ifdef branch of its scope is only unused because the branch is off: leave it
+        # for scripts/lpc_move_decl.py (yxsj ftpdsupp.h: `file` under #ifdef GUEST_WIZARD_FTP)
+        if any(cond[j] and re.search(r"(?<![\w$])" + re.escape(name) + r"(?!\w)", clean[j]) for j in range(k + 1, ln)):
+            print(f"SKIP {f}:{ln} {name}: also named inside an #if branch of its scope (lpc_move_decl.py)"); continue
         indent, init = m.group(1), m.group(2)
         cr = "\r" if lines[k].endswith("\r") else ""
         if init is None or is_pure(init):
             edits.append((k, None)); how = "delete"
-        else:
+        elif single_call(init):
             edits.append((k, indent + init.strip() + ";" + cr)); how = "call kept"
+        else:
+            # `(all_environment() || ({ this_object() }))[<1]`: keeping it would leave an expression statement with no
+            # effect of its own; which call matters is a hand decision
+            print(f"SKIP {f}:{ln} {name}: initializer is not a single call: {init.strip()[:60]}"); continue
         print(f"{'FIX ' if apply else 'plan'} {f}:{k+1} {name}: {how}: {lines[k].strip()[:90]}")
     if apply:
         for k, new in sorted(edits, reverse=True):
