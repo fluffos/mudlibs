@@ -310,3 +310,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 记录、未改：`clone/quest/block.lpc` 的 `STORY_DIR + "yanmen"->prompt()` 因为 `->` 比 `+` 优先，调用的是名叫 `"yanmen"` 的物件（应写 `(STORY_DIR + "yanmen")->prompt()`）；但这个文件本身有多处编译错误（未定义的 `my` 等），HEAD 起就加载不了。`d/tdh/job1/yi.lpc` 把保留字 `do` 当变量名，同样编译不过。
 
 启动时警告 32 -> 0；新进程登录（字体选择、英文名、新人物确认）正常。
+
+- 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 2 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 0 个，只在 #if 分支用的声明移进分支 0 个文件；改动 2 个文件，HEAD 与工作树各载入一次无回退（2 objects; HEAD PASS 2, tree PASS 2; regress 0; newly loading 0），这些文件的警告 3 -> 1。
