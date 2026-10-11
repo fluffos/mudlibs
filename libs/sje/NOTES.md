@@ -206,3 +206,5 @@ Century/`adm-single` 形状）**：`adm/simul_efun/file.lpc` 的
 - 未动：`d/quanzhen/hudi5.lpc` 第 10 行编码损坏，HEAD 起就编译不过。
 
 启动时警告 62 -> 0。
+
+- 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 0 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 2 个，只在 #if 分支用的声明移进分支 0 个文件；改动 2 个文件，HEAD 与工作树各载入一次无回退（2 objects; HEAD PASS 2, tree PASS 2; regress 0; newly loading 0），这些文件的警告 2 -> 0。
