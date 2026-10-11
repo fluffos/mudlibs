@@ -122,7 +122,8 @@ STATUS_MAP = {
 # CI. Not a Chinese mud and not meant to be on this site anyway, so
 # excluded outright rather than shipped in a "limited" state or patched
 # around.
-EXCLUDE_STATUSES = {"not-mudlib", "not-convertible", "deprioritized", "partial", ""}
+# binary-pending-tooling: a compiled-only release with no LPC source (AGENTS.md 13.8), nothing to boot in the browser
+EXCLUDE_STATUSES = {"not-mudlib", "not-convertible", "deprioritized", "partial", "binary-pending-tooling", ""}
 
 
 def load_lib_numbering():
