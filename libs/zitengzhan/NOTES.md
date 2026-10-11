@@ -646,3 +646,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply z
 启动时警告 65 -> 0；新进程登录（编码选择、进入游戏菜单）正常。
 
 - 2026-10-11：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 175 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 21 个，只在 #if 分支用的声明移进分支 0 个文件；改动 187 个文件，HEAD 与工作树各载入一次无回退（187 objects; HEAD PASS 181, tree PASS 181; regress 0; newly loading 0），这些文件的警告 267 -> 72。
+
+- 2026-10-11：第二轮整理删掉了 `u/lying/d/npc/vr_room/obj/tai1.lpc` 的 `do_get()` 里仍在使用的 `object ob = this_object();`（该文件本来就编译不过，编译器的“未用”报告不可信）；已恢复。
