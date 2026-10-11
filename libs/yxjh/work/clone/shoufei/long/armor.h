@@ -35,14 +35,14 @@ string desc_str(object ob)
 	return str;
 }
 
-int init()
+void init()
 {
 	object ob = this_object();
 	object me = environment(ob);
 	string name,gender,str,temp_str,equip_zl,chars,msg;
 	int weight,level,value,armor,ap,dp,pp,hp,mp,exp,lasting,cp,zl,zj,strs,dex,ints,cons,jing,jingli;
 
-	if(!me || !userp(me)) return 1;
+	if(!me || !userp(me)) return;
 
 	if(ob->query("jianding"))
 	{
@@ -219,5 +219,5 @@ int init()
 		}
 		ob->set("long",str);
 	}
-	return 1;
+	return;
 }
