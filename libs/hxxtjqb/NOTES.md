@@ -345,3 +345,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 3. **钱币花到 0 不会消失。** `std/item/combined.lpc` 的 `destruct_me()` 是 `private`，继承它的银两、金子用 `call_out` 调用时被驱动拒绝（启动后即有 9 条 `apply() with insufficient permission ... destruct_me`）。改 `protected`，同一处改动扫了 77 个库（KB 07 §8.3）；修改后 0 条。
 4. 验证（新进程，临时副本）：GB → 年龄问题答 `no` → `fluffos` 登录（admin）→ `look`、`nod`、`quit`。
 
+
+- 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 19 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 9 个，只在 #if 分支用的声明移进分支 0 个文件；改动 26 个文件，HEAD 与工作树各载入一次无回退（26 objects; HEAD PASS 26, tree PASS 26; regress 0; newly loading 0），这些文件的警告 50 -> 22。
