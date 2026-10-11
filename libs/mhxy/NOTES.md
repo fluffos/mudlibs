@@ -1017,3 +1017,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply m
 ## 深度功能测试（§10.7，2026-10-06）— 编译警告整理
 
 `scripts/lpc_warnings.py mhxy --fix`：无用局部变量 2294 个、`varargs` 69 处、转义 50 处、`nosave` 函数 17 个改 `protected`、裸 `return` 7 处，共改动 1230 个 `.lpc`。这些文件在 HEAD 与工作树分别加载（新进程）：1200 -> 1200 通过，无回退；`scripts/lpc_audit_removed_locals.py HEAD` 的 21 条候选都是声明被重建（仍在用的名字保留；有 `#if` 的只有 `d/city/piggy*.lpc`，与被删的名字无关）。手工：`adm/daemons/logind.lpc` `enter_world()` 里的 `if (!silent) { }` 只剩一行被注释掉的进场消息，空的条件判断删去（注释保留）。启动时警告 490 -> 0；新进程启动后新角色注册（英文名、中文名、密码、身份标识、邮箱、性别、天赋）进入游戏，`look`、`score`、`quit` 正常。
+
+- 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 28 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 15 个，只在 #if 分支用的声明移进分支 0 个文件；改动 39 个文件，HEAD 与工作树各载入一次无回退（39 objects; HEAD PASS 38, tree PASS 38; regress 0; newly loading 0），这些文件的警告 83 -> 40。
