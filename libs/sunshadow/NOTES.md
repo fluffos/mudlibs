@@ -776,3 +776,5 @@ By hand: `adm/include/conf.h` and `config.h` both define MUDLIB, MUDLIB_VERSION,
 - `d/azha/mon/impguard.lpc`、`s-impguard.lpc`：随机三选一的装备里，`/d/tsarven/equip/ghalberd.lpc` 和 `gshield.lpc` 在存档里从来不存在，`new()` 出错使 `create()` 中断，三分之二的卫兵载入失败；`switch` 的三个 `case` 也没有 `break`，持戟的卫兵会把三套武器都拿上。改用现有的同系装备 `/d/tsarven/equip/ihalberd.lpc`（Tsarvani halberd）和 `/d/azha/equip/ishield.lpc`（Tsarvani medium shield），并补上 `break`。有 access.db 的树里，两个卫兵连续 4 次载入都通过（之前 HEAD 3 次全失败）。
 
 - 2026-10-11：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 140 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 11 个，只在 #if 分支用的声明移进分支 2 个文件；改动 116 个文件，HEAD 与工作树各载入一次无回退（116 objects; HEAD PASS 54, tree PASS 54; regress 0; newly loading 0），这些文件的警告 392 -> 252。
+
+- 2026-10-11：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 19 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 0 个，只在 #if 分支用的声明移进分支 0 个文件；改动 17 个文件，HEAD 与工作树各载入一次无回退（17 objects; HEAD PASS 4, tree PASS 4; regress 0; newly loading 0），这些文件的警告 71 -> 91。
