@@ -731,3 +731,5 @@ project's usual convention.
 - `std/living/dankequip/stats.lpc` `set_extra_bonus()`：switch 缺 `break`，设攻击加成时会顺带覆盖防御加成；`default : 0;` 是空语句。补 `break`。
 - `d/newbie/human/monsters/bandicoo.lpc`：`":snarls."` 那一行写在战斗喊话数组外面（落成无副作用的表达式），挪回数组里。
 - 5 个对象 HEAD 与工作区都能载入，无回退。
+- `std/actions.lpc`（NPC 回调混入：`death()`/`do_pick_up()`/`pub_brawl()`）自己 `inherit "/std/room"`。两只地底大老鼠 `inherit "/obj/monster"; inherit "/std/actions";`，后继承者胜出，于是 `create`/`init`/`id`/`short`/`dest_me`/`add_alias` 全用了房间的版本：`cave_rat` 载入时在房间的 create 流程里出错，`cave_rat2` 的 `add_alias("rat")` 撞上房间两参数的出口别名，连编译都过不去。混入只用 `previous_object()` 和 efun，删掉对房间的继承（KB 06 §7.239 变体）。
+- `d/newbie/gnome/npcs/clones/cave_rat2.lpc` 是矮人区同名 NPC 的拷贝，`MISC + "bread.lpc"` 在地精区指向不存在的文件；改成矮人区真实的 `/d/newbie/dwarf/misc/bread.lpc`。修后两只老鼠 clone 出来都是 living、等级 4、create/init 来自 `/obj/monster`。
