@@ -119,6 +119,11 @@ for f, items in sorted(want.items()):
         k, m = found
         # a name read inside an #if/#ifdef branch of its scope is only unused because the branch is off: leave it
         # for scripts/lpc_move_decl.py (yxsj ftpdsupp.h: `file` under #ifdef GUEST_WIZARD_FTP)
+        # the scope reads the name after its declaration: an earlier error in a file that does not compile left the
+        # local marked unused (zitengzhan tai1.lpc do_get) -- never trust that warning
+        if any(re.search(r"(?<![\w$>.])" + re.escape(name) + r"(?!\w)(?!\s*\()", clean[j]) for j in range(k + 1, ln)) and \
+                not any(cond[j] for j in range(k + 1, ln)):
+            print(f"SKIP {f}:{ln} {name}: the scope reads the name again (the warning cannot be trusted)"); continue
         if any(cond[j] and re.search(r"(?<![\w$])" + re.escape(name) + r"(?!\w)", clean[j]) for j in range(k + 1, ln)):
             print(f"SKIP {f}:{ln} {name}: also named inside an #if branch of its scope (lpc_move_decl.py)"); continue
         indent, init = m.group(1), m.group(2)
