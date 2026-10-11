@@ -759,3 +759,5 @@ Chunked rescan first (`LPCW_CHUNK=600`; the fixer had little left: 12 files). Th
 Verification: the edited files and the includers of the edited headers, 163 objects, load at HEAD and in the tree in fresh processes 137 -> 137; full boot (96 preloads) prints no warning; login on a fresh driver is the same as HEAD.
 
 - 2026-10-10: eight more player copies of the armour inherit carried the same `if (i < 0 & i > NUMBER_OF_SIZES)` size check (`&` where `||` was meant, so it could never fire and an out-of-range size indexed past the table); fixed to `||`: `/players/cashimor/inherit/armour.lpc`, `/players/gareth/guild/obj/armour.lpc`, `/players/gareth/inherit/armour.lpc`, `/players/goldsun/mud/armour.lpc`, `/players/mangla/gal/qclxxiv/armour.lpc`, `/players/sargon/guild/obj/armour.lpc`, `/players/shakra/armour.lpc`, `/players/uruz/fighter/obj/armour.lpc`.
+
+- 2026-10-11：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 4 处，返回类型/原型 15 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 0 个，只在 #if 分支用的声明移进分支 40 个文件；改动 59 个文件，HEAD 与工作树各载入一次无回退（59 objects; HEAD PASS 40, tree PASS 40; regress 0; newly loading 0），这些文件的警告 149 -> 29。
