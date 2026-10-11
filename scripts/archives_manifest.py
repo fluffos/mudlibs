@@ -75,6 +75,8 @@ def load_catalog():
         # git-sourced libs are stored as `git bundle`s named <owner>-<repo>.bundle
         for m in re.finditer(r'(?:github\.com/|gh repo clone )([\w.-]+)/([\w-]+(?:\.[\w-]+)*?)(?:\.git)?(?=[\s/),;]|$)', a):
             names.add(f'{m.group(1)}-{m.group(2)}.bundle')
+            # GitHub's "Download ZIP" of a branch
+            names.update(f'{m.group(2)}-{br}.zip' for br in ('master', 'main'))
         for n in names:
             byarch[n].add(e['number'])
     return bynum, byarch
