@@ -718,3 +718,5 @@ debris.
 Messages cut by a stray `;`: joined in `wizards/terror/goblin/roomit/g1.lpc` and `wizards/daoloth/mansion/path2.lpc` (the orphan adds a sentence); deleted in `wizards/torspo/areat/ogre/room4.lpc`, `terror/goblin/roomit/g5.lpc`, `rimber/cave/room4.lpc` (a fragment or copy of the line above). `daemons/ability_d.lpc` is an LDMud `([ k: v1; v2 ])` table, not a cut message.
 
 Changed files loaded at HEAD and in the tree in fresh processes: no regression.
+
+- 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 1 处，返回类型/原型 12 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 1 个，只在 #if 分支用的声明移进分支 5 个文件；改动 19 个文件，HEAD 与工作树各载入一次无回退（19 objects; HEAD PASS 14, tree PASS 15; regress 0; newly loading 1），这些文件的警告 28 -> 9。
