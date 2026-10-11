@@ -212,3 +212,5 @@ program: /adm/obj/master.lpc, ... file: /adm/obj/master.lpc:315
 HEAD 与工作树分别加载（新进程）：895 -> 895 通过，无回退；改过的头文件的 216 个包含者 216 -> 216 通过。`scripts/lpc_audit_removed_locals.py HEAD` 的 19 条候选都是声明被重建或同名 efun。
 
 启动时警告 105 -> 0；新进程登录（编码选择、新人物确认）正常。
+
+- 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 10 处，返回类型/原型 29 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 0 个，只在 #if 分支用的声明移进分支 1 个文件；改动 34 个文件，HEAD 与工作树各载入一次无回退（34 objects; HEAD PASS 32, tree PASS 32; regress 0; newly loading 0），这些文件的警告 41 -> 0。
