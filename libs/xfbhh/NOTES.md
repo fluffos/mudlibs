@@ -349,3 +349,9 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 - `d/dj/dj9.lpc`：`ob == me;` 应为 `ob = me;`，否则后面的 `if (ob == me)` 永远不成立，死因“挑战天威,最终身死道消”从不记录。
 - `kungfu/skill/miaojia-jian/gan.lpc`、`zhai.lpc`：`string name() { HIY "…" NOR; }` 少了 `return`，招式名为 0；补 `return`。
 - 改动的对象 HEAD 与工作区都能载入，无回退。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查（批 6）
+
+- 补齐前几批漏掉的同码副本：`your_temp["guarding"];` 补 `= 0`（反击后清除防守姿态，含 `u/` 下的 combatd 拷贝）；`(: WEAPON_D, "query_action" :)` 改为 `(: call_other, WEAPON_D, "query_action" :)`（KB 04）；`mysql_d.lpc` 的空 `MSG` 宏改成空函数；`gigicook.lpc` 的 `arg == menu_list[0]` 改为 `=`。
+- 改动文件：adm/daemons/mysql_d.lpc u/lonely/combatd.lpc u/redl/combatd.lpc 
+- 改动的对象 HEAD 与工作区都能载入，无回退。

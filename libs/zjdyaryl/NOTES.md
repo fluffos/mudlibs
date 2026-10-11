@@ -865,3 +865,9 @@ live `debug.log` 是 `libs/zjdyaryl/log/debug.log`（Boot Time Fri Sep 4
 
 `scripts/lpc_warnings.py zjdyaryl --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 543 个 `.lpc` 和 14 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：536 -> 536 通过，无回退；改过的头文件的 128 个包含者 127 -> 127 通过。
 本库与其他指间 MUD 一样在 `globals.h` 里 `#define nosave nosave`，扫描器看不出旧 `static` 函数改成的 `nosave` 函数（`Illegal to declare nosave function`），按扫描诊断把 10 个文件的 28 处改成 `protected`（master、treemap、questd、dbased、cmwhod 等），这 10 个文件和 `adm/daemons/natured.lpc`（删去空语句 `lt[LT_MON];`）在 HEAD 与工作树分别加载 11 -> 11 通过。启动时警告 52 -> 0；新进程登录（新人物确认）正常。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查（批 6）
+
+- 补齐前几批漏掉的同码副本：`your_temp["guarding"];` 补 `= 0`（反击后清除防守姿态，含 `u/` 下的 combatd 拷贝）；`(: WEAPON_D, "query_action" :)` 改为 `(: call_other, WEAPON_D, "query_action" :)`（KB 04）；`mysql_d.lpc` 的空 `MSG` 宏改成空函数；`gigicook.lpc` 的 `arg == menu_list[0]` 改为 `=`。
+- 改动文件：adm/daemons/test.lpc 
+- 改动的对象 HEAD 与工作区都能载入，无回退。

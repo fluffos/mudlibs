@@ -288,3 +288,9 @@ admin 登入时间戳漂移已在提交前用 `git checkout --` 撤销。
 - 2026-10-10：仓库顶层 `.gitignore` 的 `libs/*/work/**/log` 本为运行日志而设，却把存档里名为 `log` 的源码目录也挡在版本库外（站点下载缺这些文件）：`d/heimuya/log/`（巫师补丁包：文件清单与改过的技能、命令副本，41 个文件）。已 `git add -f`（KB 02 §2.2）。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 6 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 0 个，只在 #if 分支用的声明移进分支 1 个文件；改动 6 个文件，HEAD 与工作树各载入一次无回退（6 objects; HEAD PASS 6, tree PASS 6; regress 0; newly loading 0），这些文件的警告 10 -> 4。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查（批 6）
+
+- 补齐前几批漏掉的同码副本：`your_temp["guarding"];` 补 `= 0`（反击后清除防守姿态，含 `u/` 下的 combatd 拷贝）；`(: WEAPON_D, "query_action" :)` 改为 `(: call_other, WEAPON_D, "query_action" :)`（KB 04）；`mysql_d.lpc` 的空 `MSG` 宏改成空函数；`gigicook.lpc` 的 `arg == menu_list[0]` 改为 `=`。
+- 改动文件：d/heimuya/log/xkx/inherbit/weapon/gou.lpc d/heimuya/log/xkx/inherbit/weapon/ji.lpc d/heimuya/log/xkx/inherbit/weapon/qian.lpc 
+- 改动的对象 HEAD 与工作区都能载入，无回退。
