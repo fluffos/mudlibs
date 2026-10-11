@@ -37,13 +37,13 @@
  * disallowed even if the user knows the password.
  */
 int check_access(string name) {
-  string file;
 
 #ifdef FTP_USERS
   if (!sizeof(FTP_USERS))
     return 0;
   return (member_array(name, FTP_USERS) != -1) ? 1 : 0;
 #else
+  string file;
 
 #ifdef ANONYMOUS_FTP
   if (name == "anonymous")
