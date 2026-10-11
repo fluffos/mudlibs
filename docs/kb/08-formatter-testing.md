@@ -87,6 +87,11 @@ branches where cheap.
      several sessions scanning at once). A hand-run lpcc or driver needs the same:
      `ulimit -v "$(python3 scripts/lpcc_mem.py)"` in the subshell first.
   3. Still poll RSS (`ps -o rss= -p PID`) on a hand run and kill by PID if it climbs.
+  4. Host-wide backstop: `scripts/mem_guard.py` runs as the systemd user service `mem-guard`
+     (`python3 scripts/mem_guard.py --install`; lingering keeps it across reboots). Every 2 s it kills
+     by PID any `lpcc`/`driver` of this user above 10 GB RSS, and the largest one when MemAvailable
+     falls under 1.5 GB; kills are in `journalctl --user -u mem-guard`. The VM wedges in swap thrash
+     before the kernel OOM killer acts, so the crashes leave no OOM line in the journal.
 - `lpcc_check.sh` boots a real driver and can churn saves. Re-check
   `git status` before committing.
 - **A config line over 120 characters ends the config parse.** `rc.cc` reads lines with
