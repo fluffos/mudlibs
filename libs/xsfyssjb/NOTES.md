@@ -171,3 +171,8 @@ without headers, drafts).
 验证：`adm/daemons/taskd.lpc`、`adm/daemons/tasknpcd.lpc`、`adm/daemons/tasknpcd1.lpc`、`d/biancheng/taskd.lpc`、`d/for_martea/for_suu/tasknpcd.lpc`和 cron 守护进程在新进程里加载（HEAD 一次，工作树三次，选房是随机的）：HEAD 通过 5 个，工作树三次分别通过 5、5、5 个（共 6 个），无回退；`adm/daemons/tasknpcd1.lpc` 在 HEAD 与工作树都加载失败，另有原因，与本次无关。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 0 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 2 个，只在 #if 分支用的声明移进分支 0 个文件；改动 2 个文件，HEAD 与工作树各载入一次无回退（2 objects; HEAD PASS 2, tree PASS 2; regress 0; newly loading 0），这些文件的警告 2 -> 0。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查
+
+- `d/tieflag/npc/drinkmonk.lpc` `go_in()`：`for (int i = 0; i < sizeof(enemy); i)` 没有自增，第一个敌人不在同一房间时死循环（直到 eval cost 报错）；改为 `i++`。
+- 改动的对象 HEAD 与工作区都能载入，无回退。

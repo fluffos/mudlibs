@@ -1071,3 +1071,8 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply y
 - 11 处 `&` 改 `&&`、22 个 `int init()` 改 `void`、`clear_title`/`do_challenge`/`mapit` 原型与定义不符（`lpc_fix_bitwise_bool.py`、`lpc_fix_return_types.py`）。
 - `clone/obj/genmap.lpc`：空的 `#define DEBUG` 让 `DEBUG("...", x);` 变成无副作用的逗号表达式，改为空的 `varargs` 函数；函数体内 `#include` 的 `clone/ship/harbor.h` 的 `wildharbors` 用 `HARBOR_NO_WILD` 跳过（与 xkx2001 相同）。
 改动的 84 个文件 HEAD 与工作树各载入一次：84 -> 84 通过，无回退，警告 101 -> 0。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查
+
+- `d/*/npc/xunbu.lpc` 巡捕：`(: random_move() :);` 只造了一个函数指针就丢掉，巡捕从不走动；改为 `random_move();`。
+- 改动的对象 HEAD 与工作区都能载入，无回退。

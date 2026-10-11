@@ -856,3 +856,11 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply d
 - 2026-10-10：仓库顶层 `.gitignore` 的 `libs/*/work/**/log` 本为运行日志而设，却把存档里名为 `log` 的源码目录也挡在版本库外（站点下载缺这些文件）：`u/a/alickyuen/www/board/log/`（1 个文件）。已 `git add -f`（KB 02 §2.2）。
 
 - 2026-10-11：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 5 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 1 个，只在 #if 分支用的声明移进分支 0 个文件；改动 6 个文件，HEAD 与工作树各载入一次无回退（6 objects; HEAD PASS 5, tree PASS 5; regress 0; newly loading 0），这些文件的警告 6 -> 0。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查
+
+- 14 个 NPC（`open/world1/faceoff/bird/npc/prayer.lpc`、`woodguard.lpc` 及 `u/` 下的同类拷贝）：`set("chat_chance_combat", N);` 下一行只剩 `(:command,"say …":),`，`set("chat_msg_combat", ({` 外壳丢了，逗号把函数并进 `setup()`，战斗喊话从不出现；补回外壳（`garrison_1`/`guard_2` 是 `chat_msg`）。
+- `adm/daemons/event/tidy.lpc`：`"…十分壯觀。\n";NOR;` 分号把 `NOR` 隔成独立语句，颜色不复位；改为 `"…" NOR;`。
+- `std/item/box_log.lpc`：`else HIR"BOX_LOG 錯誤…";` 少了 `str +=`，错误提示从不显示；补上并加 `NOR`。
+- `u/f/faceoff/skills/godvenison.lpc`、`u/a/acme/skill/test.lpc`：`target==me;` 应为 `target = me;`。`u/j/jsh/play/test.lpc` `(: command("hmm"):);`、`u/t/tmr/eval.tmr.lpc` `time;` 同类，一并改正；`u/a/alickyuen/www/obj/backup/mary.lpc` 的 `"無";` 改为 `ip = "無";`，空的 `"";` 分支改为 `{}`。
+- 21 个对象 HEAD 与工作区都能载入，无回退。
