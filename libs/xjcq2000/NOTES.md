@@ -767,3 +767,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 记录、未改：`d/shushan/` 下 14 个 NPC（剑圣、明王、清风、醉道、龙等）的战斗招式用了 `cast_spell`——西游记系的法术函数，本库的 NPC 基类没有，于是这些文件编译不过（`Undefined variable 'cast_spell'`），蜀山一带的这些 NPC 从来没加载过；是移植区域时带进来的，要补一套法术系统超出本次范围。`inherit/char.lpc` 是没人引用的旧文件（`CHARACTER` 指的是 `/inherit/char/char`）。
 
 启动时警告 31 -> 0；新进程登录（编码选择、新人物确认）正常。
+
+- 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 8 处，返回类型/原型 18 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 0 个，只在 #if 分支用的声明移进分支 0 个文件；改动 26 个文件，HEAD 与工作树各载入一次无回退（26 objects; HEAD PASS 26, tree PASS 26; regress 0; newly loading 0），这些文件的警告 26 -> 0。
