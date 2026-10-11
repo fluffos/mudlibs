@@ -665,3 +665,8 @@ functionally re-tested live on this lib.
 `scripts/lpc_warnings.py niaoren --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 500 个 `.lpc` 和 14 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：471 -> 471 通过，无回退；改过的头文件的 146 个包含者 146 -> 146 通过。启动时警告 16 -> 0；新进程登录（输入名字）正常。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 18 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 0 个，只在 #if 分支用的声明移进分支 0 个文件；改动 12 个文件，HEAD 与工作树各载入一次无回退（12 objects; HEAD PASS 12, tree PASS 12; regress 0; newly loading 0），这些文件的警告 18 -> 0。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查（批 5）
+
+- `d/xingxiu/nanjiang2/3.lpc`、`shanjiao.lpc`：删去空的 `if (current_water==0) { }`（行为不变）。
+- 改动的对象 HEAD 与工作区都能载入，无回退。

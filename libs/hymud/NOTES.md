@@ -1079,3 +1079,8 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 - `d/tieflag/npc/drinkmonk.lpc`：`for (…; i )` 没有自增，第一个敌人不在场时死循环；改为 `i++`。
 - `*/wudoumi-shengong/perform/gui.lpc`：多余的独立 `NOR;` 删去。
 - 改动的对象 HEAD 与工作区都能载入，无回退。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查（批 5）
+
+- `d/xingxiu/nanjiang2/3.lpc`、`shanjiao.lpc`：删去空的 `if (current_water==0) { }`（行为不变）。
+- 改动的对象 HEAD 与工作区都能载入，无回退。

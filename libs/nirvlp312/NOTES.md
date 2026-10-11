@@ -255,3 +255,12 @@ header-encrypted. Skip nitan.zip.
 `.c` 改名 `.lpc` 时只改了字符串没改切片宽度：`f[<2..] == ".lpc"` 拿两个字符比四个字符，永远不成立（`!=` 永远成立），按后缀筛文件、去后缀的代码因此从不运行或截成 `x.l`（KB 06 §7.238）。`scripts/lpc_lpc_suffix_slice.py --apply` 改了 25 处比较、5 处去后缀（如 `std/room.lpc`）；改动的文件 HEAD 与工作树分别加载（新进程），无回退。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 1 处，返回类型/原型 3 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 0 个，只在 #if 分支用的声明移进分支 11 个文件；改动 15 个文件，HEAD 与工作树各载入一次无回退（15 objects; HEAD PASS 10, tree PASS 10; regress 0; newly loading 0），这些文件的警告 64 -> 29。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查（批 5）
+
+- `player.lpc`（含备份）：`race = "creature"; gender=="male";` 应为 `gender = "male";`，性别为 creature 而种族不是时修正从不生效。
+- `dd.lpc`：`for (…; i < maxfn, j < FILES; …)` 逗号只留下后一个条件，`fs[fn]` 会越界；改为 `&&`。
+- `obj/bandit.lpc`（含 workfiles 副本）：只有注释的 `if (winning > 30) { }` 挪进注释。
+- `open/pestilence/tshop.lpc`：删去孤立的 `soldout;`。
+- `open/sparrow/entrance.lpc`：`moveto == myroom;` 应为 `=`，否则出错时 moveto 仍为 0。
+- 改动的对象 HEAD 与工作区都能载入，无回退。

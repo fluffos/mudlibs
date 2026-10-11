@@ -807,3 +807,10 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply m
 
 - `daemon/skill/*-archery.lpc` `practice_skill()`：`(: throw_weapon :);` 只造函数指针不调用（练习本就不该射箭），删去。
 - 改动的对象 HEAD 与工作区都能载入，无回退。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查（批 5）
+
+- `d/city/silao.lpc`：`if (msg == "ground") msg == "center";` 应为 `=`。
+- `d/youxia/npc/shaolong.lpc`：注释掉的 `chat_msg` 里漏了一行字符串没注释，成了独立语句；一并注释。
+- `daemon/skill_wiz/archery/xuanyuan-archery.lpc` `practice_skill()`：`(: throw_weapon :);` 只造函数指针不调用，删去。
+- 改动的对象 HEAD 与工作区都能载入，无回退。

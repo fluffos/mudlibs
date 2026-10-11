@@ -538,3 +538,8 @@ a fresh session against the same character.
 ## Deep test (§10.7, 2026-10-08) -- fixed-width `.lpc` suffix slices
 
 The `.c` -> `.lpc` rename changed the string but not the slice width: `f[<2..] == ".lpc"` compares two characters with four and is never true (`!=` always true), so suffix filters and strips never ran or cut `x.l` (KB 06 §7.238). `scripts/lpc_lpc_suffix_slice.py --apply` fixed 5 comparison(s) and 2 strip(s) (e.g. `inherit/areamap.lpc`); the changed files load at HEAD and in the tree (fresh processes) with no regression.
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查（批 5）
+
+- `inherit/behavior.lpc`：`enemies - ({ obj });` 结果被丢弃，已消失的敌人一直留在仇敌名单里；改为 `-=`。
+- 改动的对象 HEAD 与工作区都能载入，无回退。
