@@ -469,3 +469,8 @@ functionally re-tested live on this lib.
 ## 深度功能测试（§10.7，2026-10-11）：钱塘潮颜色
 
 - `adm/daemons/event/qiantang.lpc`：`"…十分壮观。\n"; NOR;` 分号把 `NOR` 隔成独立语句，颜色不复位；改为 `"…" NOR;`。载入无回退。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查（批 3）
+
+- `daemon/skill/*-archery.lpc` `practice_skill()`：`(: throw_weapon :);` 只造函数指针不调用（练习本就不该射箭），删去。
+- 改动的对象 HEAD 与工作区都能载入，无回退。

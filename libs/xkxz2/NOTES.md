@@ -888,3 +888,8 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 手改两处：`adm/daemons/natured.lpc` 的空语句 `lt[LT_MON];` 删去（与 nitan 一系同）；`adm/daemons/logind.lpc` `get_id()` 里从未用到的 `ip` 删去。启动时警告 32 -> 0；新进程登录（编码选择、新人物确认）与 HEAD 相同。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 2 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 0 个，只在 #if 分支用的声明移进分支 0 个文件；改动 2 个文件，HEAD 与工作树各载入一次无回退（2 objects; HEAD PASS 2, tree PASS 2; regress 0; newly loading 0），这些文件的警告 3 -> 1。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查（批 3）
+
+- `adm/daemons/combatd.lpc` 反击：`your_temp["guarding"];` 丢了 `= 0`（ES2 原版是 `set_temp("guarding", 0)`），一次防守姿态可无限次触发反击；补上 `= 0`。
+- 改动的对象 HEAD 与工作区都能载入，无回退。

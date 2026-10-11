@@ -1249,3 +1249,8 @@ The 53 files are 52 `.C` -> `.lpc` (the tea items of `d/city/npc/tea`, the Lingj
 - 2026-10-10：`/u/karlopex/obj/objmaker.lpc` 生成新文件用的 here-document 模板（`@ROOM_CODE`/`@OBJ_CODE`）里的 `inherit` 行，被 ee91fb8a703 的重复继承清理当成代码删掉了（`lpc_diamonds.py` 当时不识别 here-document），用它生成的房间/物品会因缺少继承而无法编译。已恢复该行；工具已修正。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 0 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 3 个，只在 #if 分支用的声明移进分支 0 个文件；改动 3 个文件，HEAD 与工作树各载入一次无回退（3 objects; HEAD PASS 3, tree PASS 3; regress 0; newly loading 0），这些文件的警告 3 -> 0。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查（批 3）
+
+- `clone/obj/genmap.lpc`/`traverser.lpc`：`DEBUG` 是空宏，调用处留下 `("text", n);`；改成空函数 `varargs void DEBUG(string fmt, mixed arg) {}`。
+- 改动的对象 HEAD 与工作区都能载入，无回退。

@@ -1014,3 +1014,8 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply y
 `scripts/lpc_warnings.py yueyingqiyuan --fix`：无用局部变量 1697 个、`varargs` 60 处、转义 64 处、`nosave` 函数 12 个改 `protected`、裸 `return` 7 处，共改动 888 个 `.lpc`。这些文件在 HEAD 与工作树分别加载（新进程）：842 -> 842 通过，无回退；`scripts/lpc_audit_removed_locals.py HEAD` 的 24 条候选都是声明被重建（仍在用的名字保留；有 `#if` 的只有 `d/city/piggy*.lpc`，与被删的名字无关）。手工：`adm/daemons/natured.lpc` `update_day_phase()` 的 `for (i; ...)`（初始化部分无作用）改为 `for (; ...)`，`i` 在上一行已置 0。启动时警告 613 -> 0；新进程启动后登录界面（gb/big5 选择、"工作没做完"问答、英文名校验）正常。剩下 407 条诊断都在本来就不能编译的 224 个文件里。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 26 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 10 个，只在 #if 分支用的声明移进分支 0 个文件；改动 34 个文件，HEAD 与工作树各载入一次无回退（34 objects; HEAD PASS 30, tree PASS 30; regress 0; newly loading 0），这些文件的警告 60 -> 24。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查（批 3）
+
+- `daemon/skill/*-archery.lpc` `practice_skill()`：`(: throw_weapon :);` 只造函数指针不调用（练习本就不该射箭），删去。
+- 改动的对象 HEAD 与工作区都能载入，无回退。

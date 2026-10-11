@@ -244,3 +244,8 @@ functionally re-tested live on this lib.
 `quest/guojob/guo.lpc` 先后 `#include "zzzjob.lpc"` 和 `"teamjob.lpc"`，两个文件都声明全局 `mixed names`、内容不同（`Redeclaration of global variable 'names'`），后包含的 teamjob 名单覆盖了 zzzjob 的，"保护"任务的目标其实从 teamjob 的名单里抽。teamjob 的表改名 `team_names`（KB 04 §6.10）。`guo.lpc` 在 HEAD 与工作树分别加载（新进程）通过。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 14 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 4 个，只在 #if 分支用的声明移进分支 0 个文件；改动 10 个文件，HEAD 与工作树各载入一次无回退（10 objects; HEAD PASS 9, tree PASS 9; regress 0; newly loading 0），这些文件的警告 18 -> 0。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查（批 3）
+
+- `kungfu/skill/liangyi-jian.bak.lpc`：`int i; level;` 去掉无用的 `level;`。
+- 改动的对象 HEAD 与工作区都能载入，无回退。

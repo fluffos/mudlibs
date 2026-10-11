@@ -253,3 +253,8 @@ In total 376 files differ from the old names (288 `.C` -> `.lpc`, 86 files of re
 验证：改动的文件和包含 `npc/indian` 的守护进程在 HEAD 与工作树分别加载（`scripts/lpc_listcheck.sh`，新进程），无回退。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 26 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 7 个，只在 #if 分支用的声明移进分支 0 个文件；改动 31 个文件，HEAD 与工作树各载入一次无回退（31 objects; HEAD PASS 30, tree PASS 30; regress 0; newly loading 0），这些文件的警告 53 -> 20。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查（批 3）
+
+- `daemon/skill/*-archery.lpc` `practice_skill()`：`(: throw_weapon :);` 只造函数指针不调用（练习本就不该射箭），删去。
+- 改动的对象 HEAD 与工作区都能载入，无回退。

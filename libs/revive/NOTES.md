@@ -923,3 +923,8 @@ bug**：这个 lineage 的游戏内提示符自带每秒刷新的实时时钟
 ## 深度功能测试（§10.7，2026-10-08）— 编译警告整理
 
 `scripts/lpc_warnings.py revive --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 2 个 `.lpc`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：1 -> 1 通过，无回退。启动时警告 2 -> 0；新进程登录（输入名字）正常。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查（批 3）
+
+- `adm/daemons/combatd.lpc` 反击：`your_temp["guarding"];` 丢了 `= 0`（ES2 原版是 `set_temp("guarding", 0)`），一次防守姿态可无限次触发反击；补上 `= 0`。
+- 改动的对象 HEAD 与工作区都能载入，无回退。
