@@ -159,3 +159,5 @@ recursion"。驱动按精确 PID kill。
 **`feature/team.lpc` 是 `cmds/std/team.lpc` 指令的一份拷贝**（`int main(object me, string arg)`），不是组队特性——归档里就是这样。人物（`inherit/char/char.lpc` 的 `inherit F_TEAM;`）因此没有 `set_leader()`、`query_leader()`、`query_team()`、`follow_me()` 等函数：`follow`、`team`、`come`、`stay` 这些指令对玩家 `->set_leader()` 什么也不做，跟随和组队从来没起作用；直接调用 `set_leader()` 的 NPC（`d/binghuodao/npc/wuji.lpc`、神龙教的 `kungfu/class/shenlong/*` 等 8 个）根本编译不过。换成 hy 的 `feature/team.lpc`（hy 的 `inherit/char/char.lpc` 与本库一字不差）。改过的头文件和人物基类的 168 个包含者 160 -> 167 通过，新能加载的就是这些 NPC；启动时的 `clean_up() inherited from both`（那份指令拷贝 `inherit F_CLEAN_UP` 带进来的）也没了。
 
 启动时警告 77 -> 0；新进程登录正常。
+
+- 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 11 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 0 个，只在 #if 分支用的声明移进分支 0 个文件；改动 5 个文件，HEAD 与工作树各载入一次无回退（5 objects; HEAD PASS 5, tree PASS 5; regress 0; newly loading 0），这些文件的警告 11 -> 0。
