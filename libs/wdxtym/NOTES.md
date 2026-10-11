@@ -382,3 +382,5 @@ Too-deep-recursion) recurred at boot; no new error from shop/拜师.
 （这一轮用分块扫描重跑：上一轮单次 `lpcc --batch` 中途死掉，只扫到 46890 个文件里的 8599 个。）手改 `adm/daemons/payd.lpc`：充值赠送那几行原档案就写成 `amount += amount / 0;`、`amount * 0 / 0`（显然是有人想取消赠送），结果一次充值 1500 以上就是除零错误、充值处理中断；改成 `amount += 0;`（不赠送，行为与作者意图一致）。被注释掉的一段里又有一个 `/*`（编译警告 `/* found in comment`），去掉，不影响代码。
 
 - 2026-10-10：`/u/mud/skills/wudang/jian.lpc` 的技能判断用按位 `&` 连接两个比较（如 `tjss > 10000 & taoism > 10000`），改为逻辑 `&&`。两边都是 0/1 比较结果，行为不变，只是写法纠正。
+
+- 2026-10-11：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 19 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 8 个，只在 #if 分支用的声明移进分支 1 个文件；改动 26 个文件，HEAD 与工作树各载入一次无回退（26 objects; HEAD PASS 6, tree PASS 6; regress 0; newly loading 0），这些文件的警告 59 -> 31。
