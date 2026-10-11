@@ -1064,3 +1064,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 ## 深度功能测试（§10.7，2026-10-10）— 编译警告整理
 
 `scripts/lpc_warnings.py hymud --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 11 个 `.lpc`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：11 -> 11 通过，无回退。启动时警告 0 -> 0；新进程登录（输入名字）正常。
+
+- 2026-10-11：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 74 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 12 个，只在 #if 分支用的声明移进分支 1 个文件；改动 70 个文件，HEAD 与工作树各载入一次无回退（70 objects; HEAD PASS 59, tree PASS 59; regress 0; newly loading 0），这些文件的警告 112 -> 32。
