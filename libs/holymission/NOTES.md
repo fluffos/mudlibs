@@ -761,3 +761,19 @@ Verification: the edited files and the includers of the edited headers, 163 obje
 - 2026-10-10: eight more player copies of the armour inherit carried the same `if (i < 0 & i > NUMBER_OF_SIZES)` size check (`&` where `||` was meant, so it could never fire and an out-of-range size indexed past the table); fixed to `||`: `/players/cashimor/inherit/armour.lpc`, `/players/gareth/guild/obj/armour.lpc`, `/players/gareth/inherit/armour.lpc`, `/players/goldsun/mud/armour.lpc`, `/players/mangla/gal/qclxxiv/armour.lpc`, `/players/sargon/guild/obj/armour.lpc`, `/players/shakra/armour.lpc`, `/players/uruz/fighter/obj/armour.lpc`.
 
 - 2026-10-11：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 4 处，返回类型/原型 15 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 0 个，只在 #if 分支用的声明移进分支 40 个文件；改动 59 个文件，HEAD 与工作树各载入一次无回退（59 objects; HEAD PASS 40, tree PASS 40; regress 0; newly loading 0），这些文件的警告 149 -> 29。
+
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查
+
+驱动对本库能编译的文件报出的 206 条 `Expression has no side effects` / `Value of conditional expression is unused` 逐条读上下文，全部是真实的编程错误，改了 145 个文件（143 个 .lpc + 2 个 genhouse.h）：
+
+- `==` 误写成赋值的 `=`（34 个文件）：19 份盗贼公会 soul/steal 的 `if (what == "money") what == "coins";`（`steal money from X` 从来偷不到钱，现在按 coins 处理）；`players/cashimor/rooms/ice3.lpc` 的 `broken == 0;` 让冰洞永远不复原、再也凿不开，同处 `destruct("hole")` 传字符串（运行时报错）改成 `if (hole) destruct(hole);`，`hole->move_object(this_object())` 调用不存在的函数，洞从未出现在房间里，改成 `move_object(hole, this_object())`；`players/cashimor/objects/wheel2.lpc` 失控时轮子反转从未生效；`players/herp/obj/reaper.lpc` `set_death()` 把 `kill_str == "str"` 改成 `kill_str = str`，死神现在会攻击被指定的人；`players/warlord/rooms/skel2.lpc` 的 `query_property()` 里 `arg == "no_fiht"; return;`（对任何属性都答 0）改成 `return arg == "no_fight";`；三份 inpanzer 的 `arg == "yeahright"`、两份 house_room 的 `str == "**"` / `new_exit_dir == ""`（描述超长时不收尾）、axe/light24 的默认参数、broom、mill、island 38、antecham。
+- `if (cond);` 多一个分号、后面的大括号块总是执行（67 个文件）：tegerl/exos 的 jabberwocky 小镇与 term 路径房间、genhouse.h 的 `if (!arg);`，tuppence 的 fbelt `if (flag == 0);`，manu `do_move` 与 tourn `chall` 的 `if (str == ...);`（前面已有守卫，行为不变）。
+- `block()` 守卫失效（6 个文件：`players/akira/mobs/` guardian、brandon、test、x、yeh，`players/uruz/mobs/sifu.lpc`）：`if (arg == "guardian");` 后面的格挡与反击伤害对任何目标都执行（在房间里踢别的东西也会被守卫打 50-400 点），改成只在目标是这个 NPC 时；brandon/sifu 里大写的 `"Brandon"` 改小写以匹配玩家输入；`assassinate && backstab` 永远不成立改成 `||`，其中的 `if (query_invis());` 去掉分号。
+- 工具里的 `for (i - 0; ...)` 改 `i = 0`（7 个文件：filetool、librarian、comtool、gal_lib、Blah）。
+- 空的 if（只剩注释或空块）删除或并进注释（12 个文件）：circlet、goat、wiseman2、两个 bank 的 `if (arg);` 类死语句，nylakoorub workroom、t54/t55、dreamer 的空块，hudriwudri `catch_tell()`、两份 castle.org 的 WALKER_LOG 注释块，arthur inpanzer。
+- 被 `;` 或 `})` 截断的条目（7 个文件）：iishima cave10、beardy workroom（property 数组）、tatsuo c9、wilbie hall1 的 items 条目被挤到数组外（look 不到），并回数组；kelly road5/road7 的旧版描述残句、sorcguard 的 `(" of the MUD.\n");` 是早期措辞的残留，删除（无可见变化）。
+- 丢了函数名/括号（5 个文件）：dice mz1 的 `("enter_hole", "enter")` 补 `add_action`（洞以前进不去）；kawai fieldpath 的 `clone_list = (...)` 补 `({ })`（贩卖机从未出现）；herp show1 `long()` 补 `write`；nunu b1/bagroom 的 `case 3:` 补 `write`。
+- `msg + "Knarr..."` 改 `+=`（4 个文件）；amylaar history/lib 的 `for (...) 0;` 改空循环体（2）；blade soul.121995、unuscione soul 的 `if (who, environment(thief)->query_immortal())` 按上一行注释恢复成 `present(who, environment(thief))->query_immortal()`（2）。
+
+验证：改动文件与包含 genhouse.h 的房间共 176 个对象，HEAD 与工作树各在新进程载入（176 objects; HEAD PASS 175, tree PASS 175; regress 0; newly loading 0），175 个对象载入无回退（`/tools/filetool` 在两边都因批量载入时没有 this_player 而失败，非本次改动）；这些文件的“无副作用”警告 231 -> 0。

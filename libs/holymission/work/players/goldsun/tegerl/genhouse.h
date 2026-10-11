@@ -19,7 +19,7 @@ inherit "room/room";
 void reset(int arg) 
 {
 
-if (!arg);
+if (!arg)
 {
  clone_list=({1,1,"man",PATH+"monsters/hman",0,
              2,1,"woman",PATH+"monsters/hwoman",0,
