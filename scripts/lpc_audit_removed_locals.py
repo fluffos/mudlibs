@@ -12,7 +12,7 @@ still reads it and no declaration of it is left there.  Two shapes turn up:
   confused, and the code reads the variable (Discworld `office_code/lists.lpc`).  Put the declaration back.
 
 Reads are looked for in code only: comments, strings, `#if 0` blocks and `<<` heredocs are blanked, `x->name`,
-`x.name` and `class name` are not reads of a local.  Remaining hits are candidates: look at each one.
+`x.name`, `class name` and a call `name(...)` (a function of that name, not the local) are not reads of a local.  Remaining hits are candidates: look at each one.
 Example: scripts/lpc_audit_removed_locals.py 6165f9c678d~1   (every vendored lib since the 2026-10-03 warning sweep)."""
 import difflib
 import os
@@ -109,7 +109,7 @@ for n in names:
                 checked += 1
                 if (nm, blk) in seen:
                     continue
-                if re.search(r"(?<![\w$>.])" + re.escape(nm) + r"(?!\w)", reads) and \
+                if re.search(r"(?<![\w$>.])" + re.escape(nm) + r"(?!\w)(?!\s*\()", reads) and \
                         not re.search(r"\b" + TY + r"\b[^;()]*[\s*,]" + re.escape(nm) + r"\b", text):
                     seen.add((nm, blk))
                     print(f"{n}:{blk[0] + 1}: removed `{ln.strip()}` but `{nm}` is still read in the function")
