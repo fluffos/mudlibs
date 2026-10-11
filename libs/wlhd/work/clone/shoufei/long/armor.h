@@ -9,7 +9,7 @@ string check_len(string str)
 	return sprintf("%"+len+"s","│\n");
 }
 
-int init()
+void init()
 {
 	object ob = this_object();
 	string name,gender,str,temp_str,equip_zl,chars;
@@ -165,5 +165,5 @@ int init()
 
 		ob->set("long",str);
 	}
-	return 1;
+	return;
 }
