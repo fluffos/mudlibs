@@ -125,7 +125,7 @@ void setup_ob(object me,object victim)
 
         //max = (int)max*3/4 + 1 + random((int)max/4);
 
-        if( victim->query("combat_exp",1) < 10000 ) max1/2;
+        if( victim->query("combat_exp",1) < 10000 ) max1 /= 2;
         me->set_skill("dodge", max1);
         me->set_skill("parry", max1 );
         me->set_skill("force", max1);

@@ -843,3 +843,12 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply k
 `scripts/lpc_warnings.py kxkj1 --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 799 个 `.lpc` 和 1 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：741 -> 741 通过，无回退；改过的头文件的 135 个包含者 134 -> 134 通过。启动时警告 34 -> 0；新进程登录（新人物确认）正常。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 1 处，返回类型/原型 1 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 6 个，只在 #if 分支用的声明移进分支 1 个文件；改动 6 个文件，HEAD 与工作树各载入一次无回退（6 objects; HEAD PASS 5, tree PASS 5; regress 0; newly loading 0），这些文件的警告 8 -> 0。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查（批 4）
+
+- `daemon/class/officer/cmds/powerup.lpc`：`count + count / 2;` 结果被丢弃，官职战力少算三分之一；改为 `count += count / 2;`。
+- `u/` 下 11 把武器 `set("actions", (: __FILE__, "query_action" :))` 是表达式函数（逗号表达式），求值得到字符串，持有者从不出招；改为 `(: call_other, __FILE__, "query_action" :)`（KB 04）。
+- `u/j/joel/mail.lpc`：`mail["to", groups[i]];` 改为 `mail["to"] = groups[i];`。
+- `u/m/mtl/obj/car.lpc`：删去空的 `if (arg == "car") {}`。
+- `u/t/tide/npc/girl.lpc`：`P == 0;` 改为 `P = 0;`。
+- 改动的对象 HEAD 与工作区都能载入，无回退。

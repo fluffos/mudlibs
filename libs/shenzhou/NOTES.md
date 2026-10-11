@@ -1254,3 +1254,10 @@ The 53 files are 52 `.C` -> `.lpc` (the tea items of `d/city/npc/tea`, the Lingj
 
 - `clone/obj/genmap.lpc`/`traverser.lpc`：`DEBUG` 是空宏，调用处留下 `("text", n);`；改成空函数 `varargs void DEBUG(string fmt, mixed arg) {}`。
 - 改动的对象 HEAD 与工作区都能载入，无回退。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查（批 4）
+
+- `caiyao.h`/`wayao.h` 采药：`max1/2;` 结果被丢弃，低经验受害者的上限从不减半；改为 `max1 /= 2;`。
+- `kungfu/skill/*/lifesave.lpc`：`-= skill_amount;` 后残留 `-(x) * (x);` 无用表达式，删去。
+- `u/` 下 11 把武器 `set("actions", (: __FILE__, "query_action" :))` 是表达式函数（逗号表达式），求值得到字符串，持有者从不出招；改为 `(: call_other, __FILE__, "query_action" :)`（KB 04）。
+- 改动的对象 HEAD 与工作区都能载入，无回退。

@@ -1072,3 +1072,10 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 - `d/qujing/*/npc/` 下 NPC 的 `create()` 首行残留 `("baoxiang_lao_ban");` 之类的裸字符串（原档删了 `reload` 调用但没删参数，本库没有 `npcsave`），无作用，删去。
 - `kungfu/skill/shier-strike.lpc`、`twelve-finger.lpc`：注释掉的 `case 2` 只注释了第一行，第二行 `"迫退至丈许开外。\n" NOR;` 留成独立语句；一并注释。
 - 改动的对象 HEAD 与工作区都能载入，无回退。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查（批 4）
+
+- `adm/daemons/event/qiantang.lpc`：`"…十分壮观。\n";NOR;` 改为 `"…" NOR;`（颜色复位）。
+- `d/tieflag/npc/drinkmonk.lpc`：`for (…; i )` 没有自增，第一个敌人不在场时死循环；改为 `i++`。
+- `*/wudoumi-shengong/perform/gui.lpc`：多余的独立 `NOR;` 删去。
+- 改动的对象 HEAD 与工作区都能载入，无回退。
