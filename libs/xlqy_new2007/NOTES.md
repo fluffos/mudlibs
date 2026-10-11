@@ -554,3 +554,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 手工：`adm/daemons/logind.lpc` 有意用自己的 `localhosts` 地址覆盖 `include/mudlib.h` 的那个，前面补 `#undef localhosts`。
 
 启动时警告 116 -> 0；新进程登录（编码选择、新人物提问）正常。
+
+- 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 21 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 9 个，只在 #if 分支用的声明移进分支 0 个文件；改动 28 个文件，HEAD 与工作树各载入一次无回退（28 objects; HEAD PASS 27, tree PASS 27; regress 0; newly loading 0），这些文件的警告 52 -> 22。
