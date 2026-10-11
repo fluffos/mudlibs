@@ -408,3 +408,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply w
 - `d/kaifeng/npc/huzhou.lpc` `gethelp()`：`command("follow %s", ob->query("id"));` 把 `command()` 当成 printf，跟随的对象是字面的 `%s`；改成 `command("follow " + ob->query("id"));`。
 
 启动时警告 93 -> 0；新进程登录画面正常（输入英文名后断开，HEAD 也一样）。
+
+- 2026-10-10：`include/net/ftpdsupp.h` 的 `string file;` 只在 `#ifdef GUEST_WIZARD_FTP` 分支里用，声明移进该分支（编译警告第二轮）。
