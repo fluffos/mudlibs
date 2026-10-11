@@ -23,7 +23,17 @@ for s in "$@"; do
   echo "  $out"
   rm -rf /tmp/lpcw-$s
   files=$(git -c core.quotepath=false diff --name-only -- libs/$s/work | grep -E '\.lpc$')
-  [ -z "$files" ] && { echo "  nothing changed"; continue; }
+  if [ -z "$files" ]; then
+    hdrs=$(git -c core.quotepath=false diff --name-only -- libs/$s/work | grep -E '\.h$')
+    if [ -n "$hdrs" ]; then
+      # a header-only edit has no object of its own to load-check: record it for a hand look, leave the tree clean
+      echo "$hdrs" | sed "s/^/$s /" >> $S/header-only.txt; git checkout -- $hdrs
+      echo "  header-only edits reverted, listed in $S/header-only.txt"
+    else
+      echo "  nothing changed"
+    fi
+    continue
+  fi
   echo "$files" | sed "s#^libs/$s/work##; s#\.lpc\$##" > $S/p2-$s.list
   scripts/lpc_listcheck.sh $s $S/p2-$s.list > /dev/null 2>&1
   res=$(python3 scripts/lpc_load_diff.py $s | tail -1); echo "  $res"
