@@ -2,7 +2,7 @@ inherit NPC;
 
 int give_book ();
 
-int create()
+void create()
 {
   set_name("疥顶小僧", ({"jieding xiaoseng","xiaoseng", "seng"}));
   set("long", "一位小和尚，头上全是疥疤。\n");

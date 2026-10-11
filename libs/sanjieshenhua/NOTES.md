@@ -387,3 +387,5 @@ HEAD 与工作树分别加载（新进程）：1330 -> 1330 通过，无回退�
 未动：`d/gumu/npc/zhangmen.lpc` 的 `fully_recover()` 中间缺了一段（恢复失败分支之后到重新装备武器之前，连同一个右括号），整个文件编译不过；但古墓掌门实际用的是 `obj/zhangmen/gumu.lpc`（`d/gumu/qianting.lpc` 加载它），这份是没人引用的旧稿。`d/quest/mofeng/npc/stey/` 下的文件同样是不加载的草稿。
 
 启动时警告 119 -> 0；新进程登录（编码选择、英文名提示，新人物用 `new`）正常。
+
+- 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 41 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 13 个，只在 #if 分支用的声明移进分支 0 个文件；改动 52 个文件，HEAD 与工作树各载入一次无回退（52 objects; HEAD PASS 51, tree PASS 51; regress 0; newly loading 0），这些文件的警告 74 -> 20。
