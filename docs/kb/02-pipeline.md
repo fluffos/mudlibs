@@ -162,6 +162,9 @@ save the downloaded file itself (not only `raw/`), and for a git source a
 `git clone --mirror` packed as `<owner>-<repo>.bundle` (`git bundle create
 --all`; verify inside an empty bare repo, `bundle verify` refuses to run
 outside one). The script places bundles by the GitHub URL in the catalog.
+The off-machine copy is the maintainer's Google Drive (`backup-mud/archives/`);
+after `--apply`, re-sync with `rclone copy archives <remote>:backup-mud/archives`
+and confirm with `rclone check --one-way`.
 
 - `unrar x -y`, `7z`, `unzip`, and `tar` all work. A self-extracting
   `.exe` opens with `unrar`/`7z`.
