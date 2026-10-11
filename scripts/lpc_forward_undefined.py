@@ -4,6 +4,7 @@ before the definition; FluffOS needs a declaration first), insert `varargs <head
 front of the first function definition.  usage: scripts/lpc_forward_undefined.py SLUG [--apply] [--files REGEX]
 Reads /tmp/lpcw-SLUG/diagnostics.tsv, or compiles each named file with lpcc when --compile FILE... is given."""
 import os, re, sys, subprocess
+import lpcc_mem  # hard memory cap for lpcc (scripts/lpcc_mem.py)
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 args = sys.argv[1:]
 apply_ = "--apply" in args; args = [a for a in args if a != "--apply"]
@@ -11,7 +12,7 @@ slug = args[0]; work = f"{REPO}/libs/{slug}/work"
 files = {}
 if "--compile" in args:
     for f in args[args.index("--compile")+1:]:
-        out = subprocess.run([os.path.expanduser("~/src/fluffos/build-debug/bin/lpcc"), "config.fluffos", f],
+        out = subprocess.run([os.path.expanduser("~/src/fluffos/build-debug/bin/lpcc"), "config.fluffos", f], preexec_fn=lpcc_mem.cap,
                              cwd=f"{REPO}/libs/{slug}", capture_output=True, text=True, errors="replace").stdout
         for m in re.finditer(r"^(\S+?):\d+:\d+: error: Undefined function (\w+)", out, re.M):
             if m.group(1) == f: files.setdefault(f, set()).add(m.group(2))

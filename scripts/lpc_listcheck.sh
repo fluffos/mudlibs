@@ -13,6 +13,7 @@ set -uo pipefail
 SLUG=$1; LIST=$2; CHUNK=${3:-700}
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 cd "$REPO"
+MEMKB=$(python3 scripts/lpcc_mem.py)   # hard memory cap per lpcc VM (scripts/lpcc_mem.py)
 DEST=/tmp/listchunk-$SLUG
 rm -rf "$DEST"
 scripts/pristine_tree.sh "$SLUG" 45993 "$DEST" > /dev/null
@@ -23,7 +24,7 @@ split -l "$CHUNK" -d -a 3 "$LIST" /tmp/listchunk-$SLUG.part.
 run() {
   : > /tmp/listchunk-$SLUG.$1.out
   for p in /tmp/listchunk-$SLUG.part.*; do
-    (cd "$DEST/libs/$SLUG" && timeout 900 "${LPCC:-$HOME/src/fluffos/build-debug/src/lpcc}" --batch config.fluffos < "$p" >> /tmp/listchunk-$SLUG.$1.out 2>&1)
+    (cd "$DEST/libs/$SLUG" && ulimit -v "$MEMKB" && timeout 900 "${LPCC:-$HOME/src/fluffos/build-debug/src/lpcc}" --batch config.fluffos < "$p" >> /tmp/listchunk-$SLUG.$1.out 2>&1)
   done
   echo "$1: $(grep -a -c '^PASS' /tmp/listchunk-$SLUG.$1.out) PASS, $(grep -a -c '^FAIL' /tmp/listchunk-$SLUG.$1.out) FAIL of $N"
 }

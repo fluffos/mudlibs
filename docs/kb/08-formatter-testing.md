@@ -81,8 +81,12 @@ branches where cheap.
 - **Memory:** batch mode never unloads. A broken widely-inherited base
   class gets recompiled for every dependent (17GB RSS seen).
   1. Compile the core base classes cleanly first.
-  2. Poll RSS (`ps -o rss= -p PID`).
-  3. Kill by PID past ~10GB.
+  2. Every repo script now starts lpcc under `RLIMIT_AS` (`scripts/lpcc_mem.py`, default 6 GB,
+     `LPCC_MEM_GB` to change): a runaway batch dies with exit 127 / an allocation failure and the
+     scan resumes after it, instead of taking the host down (two hard resets on 2026-10-11 with
+     several sessions scanning at once). A hand-run lpcc or driver needs the same:
+     `ulimit -v "$(python3 scripts/lpcc_mem.py)"` in the subshell first.
+  3. Still poll RSS (`ps -o rss= -p PID`) on a hand run and kill by PID if it climbs.
 - `lpcc_check.sh` boots a real driver and can churn saves. Re-check
   `git status` before committing.
 - **A config line over 120 characters ends the config parse.** `rc.cc` reads lines with

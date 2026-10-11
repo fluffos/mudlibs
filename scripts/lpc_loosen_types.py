@@ -9,6 +9,7 @@ For each such error it finds the variable on that line (the left side of the ass
 the `[`), finds its declaration (a local of the enclosing function first, then a global), moves that declarator
 out to its own `mixed NAME...;` line, and repeats the compile until nothing changes."""
 import os, re, sys, subprocess
+import lpcc_mem  # hard memory cap for lpcc (scripts/lpcc_mem.py)
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 args = sys.argv[1:]; apply_ = "--apply" in args; args = [a for a in args if a != "--apply"]
 slug, files = args[0], [a for a in args[1:] if a != "--tsv"]
@@ -18,7 +19,7 @@ TYPES = r"(?:int|string|object|mapping|mixed|float|status|function|closure)"
 MODS = r"(?:(?:private|nosave|static|protected|public|nomask|varargs)\s+)*"
 ERR = re.compile(r"^(\S+?):(\d+):(\d+): error: (Bad assignment \( .* \)\.|Value indexed has a bad type : \"(?:object|int|string|float) \"|Bad argument 1 to efun (?:explode|implode|sizeof)\(\))", re.M)
 def errors(f):
-    out = subprocess.run([LPCC, "config.fluffos", f], cwd=LIB, capture_output=True, text=True, errors="replace").stdout
+    out = subprocess.run([LPCC, "config.fluffos", f], cwd=LIB, capture_output=True, preexec_fn=lpcc_mem.cap, text=True, errors="replace").stdout
     return [(int(m.group(2)), int(m.group(3)), m.group(4)) for m in ERR.finditer(out) if m.group(1) == f]
 def target_name(line, col, kind):
     s = line[:max(col, 1) + 40]

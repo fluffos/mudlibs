@@ -30,7 +30,7 @@ def main():
     if not os.path.isdir(lib):
         sys.exit(f"no scan tree {lib}: run scripts/lpc_warnings.py {slug} first")
     lw.sync_changes(slug, lib)
-    raw = subprocess.run([lw.LPCC, "--batch", "config.fluffos"], cwd=lib, input="\n".join(objs) + "\n",
+    raw = subprocess.run([lw.LPCC, "--batch", "config.fluffos"], cwd=lib, input="\n".join(objs) + "\n", preexec_fn=lw.lpcc_mem.cap,
                          capture_output=True, text=True, errors="replace").stdout
     seen = set()
     for m in lw.DIAG.finditer(raw):

@@ -29,7 +29,7 @@ RAWLOG="$(dirname "$WORK")/lpcc_batch_raw.log"
 # resolution prefers .lpc -- matches what the driver itself would load).
 find "$WORK" -type f \( -name "*.lpc" -o -name "*.c" \) \
   | sed -e "s#^$WORK##" -e 's/\.lpc$//' -e 's/\.c$//' -e 's#^[^/]#/&#' \
-  | "$LPCC" --batch "$CONFIG" > "$RAWLOG" 2>&1
+  | ( ulimit -v "$(python3 "$(dirname "$0")/lpcc_mem.py")" && "$LPCC" --batch "$CONFIG" ) > "$RAWLOG" 2>&1   # hard memory cap
 
 python3 - "$RAWLOG" "$FAILLOG" <<'PYEOF'
 import re, sys

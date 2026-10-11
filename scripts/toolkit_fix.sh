@@ -38,7 +38,7 @@ LPCC=${LPCC:-$HOME/src/fluffos/build-debug/src/lpcc}
 [ -x "$LPCC" ] || { echo "lpcc not found at $LPCC: build FluffOS (target lpcc) and set LPCC=" >&2; exit 1; }
 MASTER=$(sed -n 's/^master file *: *//p' "libs/$SLUG/config.fluffos" | head -1)
 mkdir -p "libs/$SLUG/work/log"
-( cd "libs/$SLUG" && echo "$MASTER" | timeout 300 "$LPCC" --batch config.fluffos > "$OUT/boot.txt" 2>&1 )
+( cd "libs/$SLUG" && ulimit -v "$(python3 "$OLDPWD/scripts/lpcc_mem.py" 2>/dev/null || echo 6291456)" && echo "$MASTER" | timeout 300 "$LPCC" --batch config.fluffos > "$OUT/boot.txt" 2>&1 )
 if ! grep -aq "^PASS " "$OUT/boot.txt"; then
   echo "   no: the driver stops before it can compile anything. Its last words:"
   grep -av '^\s*$' "$OUT/boot.txt" | grep -av 'Uncollected profiling\|Trace duration\|Dump trace' | tail -8 | sed 's/^/     /'

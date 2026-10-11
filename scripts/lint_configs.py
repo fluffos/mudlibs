@@ -9,6 +9,7 @@ The driver only parses the file and stops: the copy of the config points `mudlib
 directory, so no lib is booted (a boot in place rewrites tracked save files and drops stray files into work/).
 Without SLUG every libs/*/config.fluffos is checked; an argument that is a file is linted as it is.  Exit status 1 when anything was printed."""
 import glob
+import lpcc_mem  # hard memory cap for lpcc (scripts/lpcc_mem.py)
 import os
 import re
 import subprocess
@@ -33,7 +34,7 @@ for slug in slugs:
     path = f"{scratch}/{slug}.fluffos"
     open(path, "wb").write(cfg)
     try:
-        out = subprocess.run([lpcc, path, "/nonexistent.lpc"], cwd=scratch, capture_output=True, timeout=30).stdout
+        out = subprocess.run([lpcc, path, "/nonexistent.lpc"], cwd=scratch, capture_output=True, preexec_fn=lpcc_mem.cap, timeout=30).stdout
     except subprocess.TimeoutExpired:
         print(f"{slug}\tlpcc timed out")
         bad += 1

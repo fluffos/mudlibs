@@ -55,6 +55,7 @@ call from another object fail, and the driver logs
 """
 
 import argparse
+import lpcc_mem  # hard memory cap for lpcc (scripts/lpcc_mem.py)
 import collections
 import os
 import re
@@ -123,7 +124,7 @@ def run_lpcc(lib, stdin):
     """One lpcc batch; an object that loops forever (no memory growth, so no crash) would hang the scan: kill the VM
     after BATCH_TIMEOUT seconds and keep what it printed, so batch_compile resumes after the last object it reached."""
     try:
-        return subprocess.run([LPCC, "--batch", "config.fluffos"], cwd=lib, input=stdin, capture_output=True,
+        return subprocess.run([LPCC, "--batch", "config.fluffos"], cwd=lib, input=stdin, capture_output=True, preexec_fn=lpcc_mem.cap,
                               text=True, errors="replace", timeout=BATCH_TIMEOUT).stdout
     except subprocess.TimeoutExpired as e:
         out = e.stdout or b""

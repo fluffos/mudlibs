@@ -28,6 +28,9 @@ Everything here is MIT-licensed (see `LICENSE`).
   target, which provides `lpcc --batch`. The scripts look for
   `~/src/fluffos/build-debug/src/lpcc`; set `LPCC=/path/to/lpcc` if yours is
   elsewhere.
+  Every lpcc run is capped at 6 GB of address space so one runaway object
+  fails its batch instead of exhausting the machine; set `LPCC_MEM_GB` to
+  change it (`scripts/lpcc_mem.py`).
 
   Build dependencies are listed in FluffOS's own
   [build guide](https://github.com/fluffos/fluffos/blob/master/docs/build.mdx).

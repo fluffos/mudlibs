@@ -8,6 +8,7 @@ Two runs per lib in one pristine tree of HEAD: the committed room base first, th
 `slug: base: HEAD case1=OK|ERR default=OK|ERR -> tree case1=... default=...`.  Needs the debug driver
 (~/src/fluffos/build-debug/src/lpcc); a lib whose room base is not a loadable object prints `no probe`."""
 import os
+import lpcc_mem  # hard memory cap for lpcc (scripts/lpcc_mem.py)
 import shutil
 import subprocess
 import sys
@@ -39,7 +40,7 @@ def run_probe(dest, slug, base):
     os.makedirs(f"{work}/log", exist_ok=True)
     with open(f"{work}/zprobe.lpc", "w") as f:
         f.write(PROBE % (base, base))
-    p = subprocess.run([LPCC, "--batch", "config.fluffos"], input="/zprobe.lpc\n", capture_output=True, encoding="utf-8", errors="replace",
+    p = subprocess.run([LPCC, "--batch", "config.fluffos"], input="/zprobe.lpc\n", preexec_fn=lpcc_mem.cap, capture_output=True, encoding="utf-8", errors="replace",
                        cwd=f"{dest}/libs/{slug}", timeout=900)
     out = p.stdout + p.stderr
     for line in out.split("\n"):
