@@ -867,3 +867,5 @@ compile check (exit 0, no errors) against `feature/command.lpc`.
 手工：`adm/daemons/fingerd.lpc` 把 `string *exclude` 声明了两次（先 `({})`，再 `({ "gslxz", "suannai" })`），删去前一个，值不变；`adm/daemons/logind.lpc` `get_id()` 删去没用到的 `*usr = children(USER_OB)`。
 
 启动时警告 91 -> 0；新进程登录（编码选择、新人物提问）正常。
+
+- 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 17 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 10 个，只在 #if 分支用的声明移进分支 0 个文件；改动 25 个文件，HEAD 与工作树各载入一次无回退（25 objects; HEAD PASS 19, tree PASS 19; regress 0; newly loading 0），这些文件的警告 50 -> 20。
