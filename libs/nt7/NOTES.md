@@ -580,3 +580,8 @@ cd libs/nt7
 ```
 
 Port: **40211**.
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查（上游 PR）
+
+- nt7 是 fluffos-upstream 库，修复走上游 fluffos/nt7 PR #7（已合并）：`jiuguan.lpc`/`bingfu.lpc` 的 `query_temp("cai_" + (i + 1, me) + …)` 括号错位、`u/*/combatd.lpc` 的 `your_temp["guarding"];` 补 `= 0`、`miaojia-jian` 两个 `name()` 补 `return`、`genmap`/`traverser`/`mysql_d` 的空 `DEBUG`/`MSG` 宏改空函数、`xuanyuan-arrow` 的死语句、两个空 `if`。13 个对象改前改后同为 12 过 1 败（`clone/obj/genmap` 原本就载入失败）。
+- 本库 pin 由 62aae7b5 升到 aa597459。
