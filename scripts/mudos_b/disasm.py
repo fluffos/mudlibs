@@ -116,7 +116,9 @@ def decode_one(code, pc, efuns):
     elif op == OP['while_dec']:
         lv = code[pc]
         s = _s16(code, pc + 1)
-        ins = I(args=(lv, s), target=pc - s)
+        # real target is relative to the offset field; dump_prog prints pc - s
+        ins = I(args=(lv, s), target=pc + 1 - s)
+        ins.extra['shown'] = pc - s
         pc += 3
     elif op == OP['loop_cond_number']:
         lv = code[pc]
@@ -331,7 +333,7 @@ def render_dump(prog, mud, efuns, simuls):
                     OP['void_assign_local']):
             buff = b'LV%d' % a[0]
         elif op == OP['while_dec']:
-            buff = b'LV%d--, branch %04x (%04x)' % (a[0], a[1], ins.target & 0xffff)
+            buff = b'LV%d--, branch %04x (%04x)' % (a[0], a[1], ins.extra['shown'] & 0xffff)
         elif op == OP['loop_cond_number']:
             buff = b'LV%d < %d bbranch_when_non_zero %04x (%04x)' % (a[0], a[1], a[2], ins.target & 0xffff)
         elif op == OP['loop_cond_local']:
