@@ -565,3 +565,12 @@ round two 因时间没跑全量 `test all`，这次作为主要的新角度。
 ## 深度功能测试（§10.7，2026-10-05）— 补丁 0006 并入 0001
 
 `scripts/rebase_upstreams.py` 对每个补丁单独在原始 pin 上跑 `git apply --check`，不是按顺序叠加。0006 的上下文是 0001 加的 stub，单独检查失败，下一次定时 rebase 就会卡住 pin 并报 patch-check 失败。现在 0006 并入 0001（同一个 `secure/daemon/master.c` 块），0001–0005 各自都能单独套用；套用后的树与之前逐字节相同（KB 02 §2.3）。
+
+## Upstream pin refresh (2026-10-11) — drop museum patch 0005
+
+Upstream `1f612d19` (*prevent a failing test from stopping test suite*) now
+counts a test file that fails to load and continues the suite — the same
+behavior our `0005-test-daemon-count-a-test-file-that-fails-to-load.patch`
+added. That patch no longer applies on tip; removed it so the scheduled
+safe rebase can advance the pin. Patches remaining: 0001–0004.
+
