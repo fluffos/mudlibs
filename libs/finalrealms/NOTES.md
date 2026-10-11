@@ -724,3 +724,10 @@ project's usual convention.
 四个基础类加上继承它们的 458 个物件，HEAD 与工作树各载入一次：408 -> 408 通过，无回退；这批文件里的重复声明警告 1164 -> 22。剩下的 22 条来自三个叶子文件：`d/newbie/gnome/npcs/clones/cave_rat*.lpc` 为了 `death()` 回调又继承了 `/std/actions`（它继承 `/std/room`），而注册回调的 `add_triggered_action()` 早已被注释成空函数；`npcs/king*.lpc` 继承的 `respond_give` 有自己的 `value`。未改。
 
 - 2026-10-10（续）：`scripts/lpc_fix_return_types.py` 改正 4 处返回类型/原型与基类或定义不符（`int reset()`/`init()` 改 `void` 等）；改动的 5 个文件 HEAD 与工作树载入 2 -> 2，无回退，警告 7 -> 2。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查
+
+- `obj/weapons/ranged/shoot.lpc`、`throw.lpc`、`throwold.lpc`：`me, him, ammo = 0;` 是逗号表达式，只清掉最后一个变量，`me`/`him` 一直留着上一次的射手和目标；`create()` 里的 `me, him = ({ })` 还把数组赋给 object 变量。改成 `me = him = ammo = 0;`（共 15 处）。
+- `std/living/dankequip/stats.lpc` `set_extra_bonus()`：switch 缺 `break`，设攻击加成时会顺带覆盖防御加成；`default : 0;` 是空语句。补 `break`。
+- `d/newbie/human/monsters/bandicoo.lpc`：`":snarls."` 那一行写在战斗喊话数组外面（落成无副作用的表达式），挪回数组里。
+- 5 个对象 HEAD 与工作区都能载入，无回退。
