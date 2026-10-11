@@ -549,3 +549,5 @@ individually live-boot-tested.
 未动：`adm/daemons/loggind.lpc` 是 `logind.lpc` 的旧副本（`else if {` 语法错误，`LOGIN_D` 指的是 `logind`）；`cmds/arch/full.lpc` 连写两个 `else`；`d/city/npc/vikee.canoe.lpc` 把 `case` 写成 `cast`——都是 HEAD 起就编译不过、没人引用的文件。
 
 启动时警告 48 -> 0；新进程登录（编码选择、新人物提问）正常。
+
+- 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 17 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 8 个，只在 #if 分支用的声明移进分支 0 个文件；改动 23 个文件，HEAD 与工作树各载入一次无回退（23 objects; HEAD PASS 22, tree PASS 22; regress 0; newly loading 0），这些文件的警告 47 -> 22。
