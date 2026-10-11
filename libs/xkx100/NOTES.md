@@ -228,3 +228,7 @@ live `debug.log` 是 `libs/xkx100/log/debug.log`（Boot Time Fri Sep 4
 - 2026-10-10：`/clone/misc/roommaker.lpc` 生成新文件用的 here-document 模板（`@ROOM_CODE`/`@OBJ_CODE`）里的 `inherit` 行，被 cb9eeb980cd 的重复继承清理当成代码删掉了（`lpc_diamonds.py` 当时不识别 here-document），用它生成的房间/物品会因缺少继承而无法编译。已恢复该行；工具已修正。
 
 - 2026-10-11：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 12 处，返回类型/原型 41 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 0 个，只在 #if 分支用的声明移进分支 0 个文件；改动 42 个文件，HEAD 与工作树各载入一次无回退（42 objects; HEAD PASS 42, tree PASS 42; regress 0; newly loading 0），这些文件的警告 53 -> 0。
+
+## 深度功能测试（§10.7，2026-10-11）：钱塘潮颜色
+
+- `adm/daemons/event/qiantang.lpc`：`"…十分壮观。\n"; NOR;` 分号把 `NOR` 隔成独立语句，颜色不复位；改为 `"…" NOR;`。载入无回退。

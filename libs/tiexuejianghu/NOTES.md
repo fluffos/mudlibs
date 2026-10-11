@@ -1018,3 +1018,4 @@ No code change. 拜师 not re-done.
 
 - `d/*/npc/xunbu.lpc` 巡捕：`(: random_move() :);` 只造了一个函数指针就丢掉，巡捕从不走动；改为 `random_move();`。
 - 改动的对象 HEAD 与工作区都能载入，无回退。
+- `d/hangzhou/npc/mameipo.lpc` 媒婆：`return "…嘻嘻.\n", i = 0;` 未满 16 岁返回 0 而非提示；拆成两句。`u/lxh/emoted.lpc` 删去空的 `if (!channel_emote) {}`。

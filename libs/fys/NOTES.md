@@ -317,3 +317,8 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply f
 
 - `d/*/npc/xunbu.lpc` 巡捕：`(: random_move() :);` 只造了一个函数指针就丢掉，巡捕从不走动；改为 `random_move();`。
 - 改动的对象 HEAD 与工作区都能载入，无回退。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查（二）
+
+- `d/hangzhou/npc/mameipo.lpc` 媒婆：`return "这么小就想找对象啦,嘻嘻.\n", i = 0;` 逗号把 `i = 0` 并进 return，未满 16 岁返回 0，提示永远不出；拆成两句（tiexuejianghu 同码一并修）。
+- `u/lxh/emoted.lpc`：删去空的 `if (!channel_emote) {}`。载入无回退。

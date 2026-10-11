@@ -404,3 +404,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 
 - `d/tieflag/npc/drinkmonk.lpc` `go_in()`：`for (int i = 0; i < sizeof(enemy); i)` 没有自增，第一个敌人不在同一房间时死循环（直到 eval cost 报错）；改为 `i++`。
 - 改动的对象 HEAD 与工作区都能载入，无回退。
+
+## 深度功能测试（§10.7，2026-10-11）：钱塘潮颜色
+
+- `adm/daemons/event/qiantang.lpc`：`"…十分壮观。\n"; NOR;` 分号把 `NOR` 隔成独立语句，颜色不复位；改为 `"…" NOR;`。载入无回退。

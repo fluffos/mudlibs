@@ -484,3 +484,7 @@ fresh driver boot plus the full long-sit idle window below.
 （这一轮用分块扫描重跑：上一轮单次 `lpcc --batch` 中途死掉，只扫到 31936 个文件里的 2241 个；pd 的房间多，一个 VM 加载几百个就把内存吃到十几 GB，改成每批 600 个。）手改 `wizards/venenum/book.lpc` `set_size()`：每个分支里的 `int maxpages = 5;` 等是新声明的局部变量，遮住了同名的全局 `maxpages`，书的大小从来没被设上；改成给全局赋值 `maxpages = 5;`（该文件 HEAD 起就编译不过，属休眠内容）。新进程登录到 New Character 画面正常。
 
 - 2026-10-11：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 4 处，返回类型/原型 64 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 5 个，只在 #if 分支用的声明移进分支 1 个文件；改动 63 个文件，HEAD 与工作树各载入一次无回退（63 objects; HEAD PASS 56, tree PASS 56; regress 0; newly loading 0），这些文件的警告 85 -> 6。
+
+## 深度功能测试（§10.7，2026-10-11）：set_items 逗号键
+
+- `d/old/citrin.old/rooms/` 三个房间 `set_items` 的键写成 `("grip", "hand grip")`，逗号只留最后一个名字；改为数组键 `({ ... })`（`std/room/items.lpc` 会展开数组键）。载入无回退。

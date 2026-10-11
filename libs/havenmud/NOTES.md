@@ -851,3 +851,9 @@ character back to the host. Do not loop-reboot (I3).
   - `include/setup.h` 的 `mapping Religions` 与 `LIB_SPELL` 的同名变量冲突（两个传送法术在继承后又包含它），加 `SETUP_NO_RELIGIONS` 开关；两个法术里 `/*` 写在块注释中间、`consider.lpc` 与 `attack.lpc` 的 `?:` 两边类型不一。
   改动文件加 700 个物品/NPC 抽样共 725 个物件，HEAD 与工作树各载入一次：719 -> 719 通过，无回退；带改动的只含被跟踪文件的树启动 0 警告，登录正常。
 - 2026-10-10（续）：KB 06 §7.239 的同类：`lib/items/key.lpc` 有一个空的 `mixed *AddSave(mixed *vars) { return ({}); }`，27 把钥匙（`inherit LIB_ITEM; inherit LIB_KEY;`，key 在后）里它压过了物品的真 `AddSave`，连 `item::create()` 自己登记的存档变量也一并作废：钥匙什么都不存。删去空函数，`create()` 改为 `this_object()->AddSave(...)`（照 ds386 的做法）；钥匙及其 31 个子孙载入 31 -> 31，`AddSave() inherited from both` 30 条清零。（Dead Souls 各版 `lib/pole.lpc` 里的同样空函数不是问题：那些鱼竿的叶子文件都显式写了 `item::AddSave`。）
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查
+
+- `SetItems`/`SetItemAdjectives` 的键写成 `("white trim", "trim")`、`(("branch", "branches"))`：逗号表达式只剩最后一个名字，玩家 `look white trim`、`look branch` 找不到（`camp6`、`camp7`、`h5` 及 `realms/alessandra` 小屋外 20 个房间）。改为数组键 `({ ... })`，本库别处本就这样写。
+- `cmds/players/forget.lpc`：`return "You cannot be forced to forget.", str = lower_case(str);` 逗号把后一句并进 return，被强迫时返回的是参数字符串而非拒绝信息，正常路径反而不做小写；拆成两句。
+- `secure/cmds/admins/tell.lpc` `GetHelp()`：`return ("help", "…")` 去掉无用的首操作数。15 个能载入的对象载入无回退。
