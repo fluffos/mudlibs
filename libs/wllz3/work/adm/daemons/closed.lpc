@@ -1,0 +1,146 @@
+// 本文件由编译后的 .b 二进制程序反编译还原，原始源码未随档案发布。
+// Decompiled from the compiled .b binary; the original source was not distributed.
+inherit "/feature/save";
+void load_all_users();
+void create();
+void remove();
+void mud_shutdown();
+string query_save_file();
+mapping query_closed_users();
+void user_closed(mixed);
+void user_opened(mixed);
+void heart_beat();
+void continue_doing(mixed);
+
+mapping closed_users = 0;
+
+void create() {
+    seteuid(getuid());
+    restore();
+    set_heart_beat(3);
+}
+
+void remove() {
+    save();
+}
+
+void mud_shutdown() {
+    save();
+}
+
+string query_save_file() {
+    return "/data/closed";
+}
+
+mapping query_closed_users() {
+    return closed_users;
+}
+
+void user_closed(mixed arg) {
+    arg->set_short_desc("盘膝而坐，正在瞑目闭关修炼。");
+    arg->set_temp("last_closing", time());
+    if (!closed_users) {
+        closed_users = ([ ]);
+    }
+    if (undefinedp(closed_users[arg->query("id")])) {
+        closed_users += ([ arg->query("id") : arg->query("startroom") ]);
+    } else {
+        closed_users[arg->query("id")] = arg->query("startroom");
+    }
+    save();
+    arg->save();
+    set_heart_beat(random(10) + 10);
+}
+
+void user_opened(mixed arg) {
+    arg->delete("doing");
+    arg->set_short_desc(0);
+    arg->delete_temp("last_closing");
+    if (mapp(closed_users)) {
+        map_delete(closed_users, arg->query("id"));
+        if (!sizeof(closed_users)) {
+            closed_users = 0;
+            set_heart_beat(0);
+        }
+    }
+    save();
+    arg->delete("startroom");
+    arg->save();
+}
+
+void heart_beat() {
+    load_all_users();
+}
+
+void continue_doing(mixed arg) {
+    mixed v1;
+    switch (arg->query("doing")) {
+    case "closed":
+        v1 = "/cmds/skill/closed"->continue_closing(arg);
+        break;
+    case "breakup":
+        v1 = "/cmds/skill/breakup"->continue_breaking(arg);
+        break;
+    case "scheme":
+        v1 = "/cmds/usr/scheme"->continue_scheme(arg);
+        break;
+    default:
+        v1 = 0;
+        return;
+    }
+    if (!v1) {
+        user_opened(arg);
+    }
+}
+
+void load_all_users() {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    if (!mapp(closed_users)) {
+        return;
+    }
+    if (!"/adm/daemons/logind"->can_login()) {
+        return;
+    }
+    set_heart_beat(random(10) + 10);
+    foreach (v1 in keys(closed_users)) {
+        if (!objectp(v3 = "/adm/daemons/logind"->find_body(v1))) {
+            v2 = clone_object("/clone/user/login");
+            v2->set("id", v1);
+            if (!v2->restore()) {
+                destruct(v2);
+                map_delete(closed_users, v1);
+                log_file("log", sprintf("closed：没有玩家(%s)。\n", v1));
+                continue;
+            }
+            v3 = "/adm/daemons/logind"->make_body(v2);
+            if (!v3) {
+                destruct(v2);
+                map_delete(closed_users, v1);
+                log_file("log", sprintf("closed：无法生成玩家(%s)。\n", v1));
+                continue;
+            }
+            if (!v3->restore()) {
+                destruct(v2);
+                destruct(v3);
+                map_delete(closed_users, v1);
+                log_file("log", sprintf("closed：无法读取玩家(%s)的档案。\n", v1));
+                continue;
+            }
+            catch {
+    "/adm/daemons/logind"->enter_world(v2, v3);
+};
+            if (!stringp(v3->query("doing")) || !environment(v3)) {
+                destruct(v2);
+                destruct(v3);
+                map_delete(closed_users, v1);
+            }
+            continue;
+        }
+        if (query_heart_beat(v3)) {
+            continue;
+        }
+        continue_doing(v3);
+    }
+}

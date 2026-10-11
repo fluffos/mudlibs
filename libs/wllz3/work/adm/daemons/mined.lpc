@@ -1,0 +1,184 @@
+// 本文件由编译后的 .b 二进制程序反编译还原，原始源码未随档案发布。
+// Decompiled from the compiled .b binary; the original source was not distributed.
+inherit "/feature/save";
+inherit "/feature/dbase";
+void create();
+mixed create_skill(mixed);
+int valid_skill_msg(mixed, mixed);
+mapping create_mine_action(mixed, mixed, mixed, mixed);
+void setup_skill(mixed, mixed, mixed);
+int map_name_dbase(mixed, mixed);
+mapping query_name_dbase(mixed);
+int remove_name_dabse(mixed);
+string query_save_file();
+
+mapping name_dbase;
+
+void create() {
+    seteuid(geteuid());
+    set("channel_id", "技能系统");
+    if (!restore()) {
+        name_dbase = ([ ]);
+    }
+    save();
+}
+
+mixed create_skill(mixed arg) {
+    switch (arg) {
+    case "axe":
+    case "whip":
+    case "club":
+    case "hand":
+    case "hammer":
+    case "claw":
+    case "unarmed":
+    case "staff":
+    case "spear":
+    case "strike":
+    case "sword":
+    case "finger":
+    case "blade":
+    case "cuff":
+        return read_file("/adm/daemons/skill/attack");
+    case "force":
+        return read_file("/adm/daemons/skill/force");
+    case "dodge":
+        return read_file("/adm/daemons/skill/dodge");
+    default:
+        return 0;
+    }
+}
+
+int valid_skill_msg(mixed arg1, mixed arg2) {
+    mixed v1;
+    v1 = sizeof(arg2);
+    if (v1 < 30 || v1 > 64) {
+        write("招式描述最少为 15 个中文字，最多为 32 个中文字。\n");
+        return 0;
+    }
+    while (v1--) {
+        if (arg2[v1] <= 32) {
+            write("招式描述不能使用控制字元。\n");
+            return 0;
+        }
+    }
+    return 1;
+}
+
+mapping create_mine_action(mixed arg1, mixed arg2, mixed arg3, mixed arg4) {
+    mixed v3;
+    v3 = ([ ]);
+    if (arg4 == "dodge") {
+        if (arg2 < 1) {
+            v3["action"] = arg1->query_temp("special/" + (random(7) + 1)) + "\n";
+            v3["dodge"] = random(10) + 20;
+        } else {
+            v3["action"] = arg1->query_temp("special/" + arg2 / 100) + "\n";
+            v3["dodge"] = arg1->query("dex") * arg2 / 500;
+        }
+    } else {
+        if (arg2 < 1) {
+            v3["action"] = arg1->query_temp("special/1");
+            v3["lvl"] = 0;
+            v3["damage"] = random(20) + 20;
+            v3["dodge"] = random(20) + 20;
+            v3["force"] = random(20) + 20;
+            v3["skill_name"] = arg3;
+        } else {
+            v3["action"] = arg1->query_temp("special/" + arg2 / 100);
+            v3["lvl"] = arg2;
+            v3["damage"] = arg1->query("str") * arg2 / 100;
+            v3["dodge"] = arg1->query("dex") * arg2 / 100;
+            v3["force"] = arg1->query("cor") * arg2 / 100;
+            v3["skill_name"] = arg3;
+        }
+        switch (arg4) {
+        case "sword":
+        case "blade":
+            v3["damage_type"] = random(2) ? "刺伤" : "劈伤";
+            break;
+        case "club":
+        case "staff":
+            v3["damage_type"] = "挫伤";
+            break;
+        case "axe":
+            v3["damage_type"] = random(2) ? "挫伤" : "劈伤";
+            break;
+        case "hammer":
+            v3["damage_type"] = random(2) ? "砸伤" : "挫伤";
+            break;
+        case "spear":
+            v3["damage_type"] = random(2) ? "刺伤" : "割伤";
+            break;
+        case "hand":
+        case "unarmed":
+        case "strike":
+        case "cuff":
+            v3["damage_type"] = random(2) ? "内伤" : random(3) ? "淤伤" : "震伤";
+            break;
+        case "claw":
+            v3["damage_type"] = random(2) ? "抓伤" : "拉伤";
+            break;
+        case "whip":
+            v3["damage_type"] = random(2) ? "鞭伤" : "拉伤";
+            break;
+        default:
+            v3["damage_type"] = "内伤";
+            break;
+        }
+    }
+    return v3;
+}
+
+void setup_skill(mixed arg1, mixed arg2, mixed arg3) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    v3 = arg1->query("id") + "-" + arg2 + "s";
+    v2 = "//" + v3 + "\n";
+    if (arg2 == "force") {
+        v2 += read_file("/adm/daemons/skill/force_header");
+    } else {
+        v2 += read_file("/adm/daemons/skill/skill_header");
+    }
+    v2 += sprintf("\r\nmapping info = ([\r\n\t\"master_id\":\t\"%s\",\t// 技能创造者 id\r\n\t\"master_name\":\t\"%s\",\t// 技能创造者名字\r\n\t\"type\":\t\t\"%s\",\t// 技能类型\r\n\t\"name\":\t\t\"%s\",\t// 技能名称\r\n\t\"time\":\t\t\"%s\",   // 技能创造游戏时间\r\n\t\"cnname\":\t\"%s\",\t// 技能中文名字\r\n]);\r\n\r\n", arg1->query("id"), arg1->name(1), arg2, v3, "/adm/daemons/natured"->game_time(), arg3);
+    if (arg2 != "force") {
+        v2 += "mapping *action =({ \n";
+        for (v1 = 0; v1 < 9; v1++) {
+            v2 += sprintf("\t%O,\n", create_mine_action(arg1, v1 * 100, arg3, arg2));
+        }
+        v2 += "});\n";
+    }
+    v2 += create_skill(arg2);
+    write_file("/data/special/" + v3 + ".lpc", v2);
+    return;
+}
+
+int map_name_dbase(mixed arg1, mixed arg2) {
+    if (stringp(arg1) && stringp(arg2)) {
+        name_dbase += ([ arg1 : arg2 ]);
+    }
+    save();
+    return 1;
+}
+
+mapping query_name_dbase(mixed arg) {
+    if (stringp(arg)) {
+        return name_dbase[arg];
+    } else {
+        return name_dbase;
+    }
+}
+
+int remove_name_dabse(mixed arg) {
+    if (undefinedp(name_dbase[arg])) {
+        return 0;
+    }
+    map_delete(name_dbase, arg);
+    save();
+    return 1;
+}
+
+string query_save_file() {
+    return "/data/mined";
+}

@@ -1,0 +1,171 @@
+// 本文件由编译后的 .b 二进制程序反编译还原，原始源码未随档案发布。
+// Decompiled from the compiled .b binary; the original source was not distributed.
+inherit "/feature/dbase";
+void go_on_process(mixed);
+int filter_listener(mixed);
+void ready_to_start();
+void create();
+int clean_up();
+object query_running_story();
+void start_story();
+void process_story(mixed);
+void give_gift(mixed, mixed, mixed);
+
+private string *story_name = ({ "houyi", "guanzhang", "nanji", "liandan", "caishen", "zhengxi", "zagang", "songdai", "niulang", "biaoche", "xiyou", "rascal", "songshan", "shandian", "qujing", "qingbing" });
+string *give_ips = ({ });
+private object running_story;
+private mapping history;
+private int step;
+
+void ready_to_start() {
+    remove_call_out("process_story");
+    call_out("start_story", random(300) + 2700);
+}
+
+void go_on_process(mixed arg) {
+    remove_call_out("start_story");
+    remove_call_out("process_story");
+    call_out("process_story", 1, arg);
+}
+
+void create() {
+    seteuid("Root");
+    set("channel_id", "事件精灵");
+    "/adm/daemons/channeld"->do_channel(this_object(), "sys", "事件系统已经启动。");
+    history = allocate_mapping(sizeof(story_name));
+    ready_to_start();
+}
+
+int clean_up() {
+    return 1;
+}
+
+object query_running_story() {
+    return running_story;
+}
+
+void start_story() {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    ready_to_start();
+    "/adm/daemons/channeld"->do_channel(this_object(), "sys", "事件系统开始选择事件。");
+    for (v3 = 0; v3 < 16; v3++) {
+        v1 = story_name[random(sizeof(story_name))];
+        if (undefinedp(history[v1])) {
+            history += ([ v1 : 0 ]);
+        }
+        if (time() - history[v1] > 14400 || v1 == "qingbing") {
+            history[v1] = time();
+            break;
+        }
+    }
+    if (v3 >= 16) {
+        return;
+    }
+    "/adm/daemons/channeld"->do_channel(this_object(), "sys", "事件系统选择了事件[" + v1 + "]。");
+    v1 = "/adm/daemons/story/" + v1;
+    if (v2 = find_object(v1)) {
+        destruct(v2);
+    }
+    catch {
+    v2 = find_object(v1, 1);
+};
+    running_story = v2;
+    if (!objectp(v2)) {
+        "/adm/daemons/channeld"->do_channel(this_object(), "sys", "事件系统没找到。");
+        return;
+    }
+    step = 0;
+    go_on_process(v2);
+}
+
+void process_story(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    go_on_process(arg);
+    if (!objectp(arg)) {
+        ready_to_start();
+        return;
+    }
+    v1 = arg->query_story_message(step);
+    step++;
+    v2 = arg->prompt();
+    if (!v2) {
+        v2 = "\e[1;32m【大话泥潭】\e[2;37;0m";
+    }
+    if (functionp(v1)) {
+        catch {
+    v1 = evaluate(v1);
+};
+    }
+    if (stringp(v1)) {
+        v3 = filter(users(), (: filter_listener :));
+        message("story", v2 + "\e" + "[37m" + v1 + "\n\e" + "[2;37;0m", v3);
+    }
+    if (intp(v1) && !v1) {
+        ready_to_start();
+        destruct(arg);
+    }
+}
+
+int filter_listener(mixed arg) {
+    if (arg->query("env/no_story")) {
+        return 0;
+    }
+    return 1;
+}
+
+void give_gift(mixed arg1, mixed arg2, mixed arg3) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    mixed v6;
+    v4 = ([ ]);
+    foreach (v2 in all_interactive()) {
+        if (wizardp(v2) || !living(v2)) {
+            continue;
+        }
+        if (environment(v2)->is_chat_room() || !environment(v2)->query("outdoors")) {
+            continue;
+        }
+        v5 = query_ip_number(v2);
+        if (member_array(v5, give_ips) != -1) {
+            continue;
+        }
+        if (undefinedp(v4[v5])) {
+            v4[v5] = ({ v2 });
+        } else {
+            v4[v5] += ({ v2 });
+        }
+        if (sizeof(give_ips) >= sizeof(keys(v4))) {
+            give_ips = ({ });
+        }
+    }
+    if (sizeof(v4) >= 1) {
+        v6 = keys(v4);
+        v5 = v6[random(sizeof(v6))];
+        give_ips += ({ v5 });
+        v2 = v4[v5][random(sizeof(v4[v5]))];
+        v3 = environment(v2);
+        while (v3 && v3->is_character()) {
+            v3 = environment(v3);
+        }
+        if (!objectp(v3)) {
+            return;
+        }
+        tell_room(v3, arg3);
+        v1 = clone_object(arg1);
+        if (v1->query("money_id")) {
+            v1->set_amount(arg2);
+        }
+        if (v1->move(v2, 1)) {
+            tell_room(v3, sprintf("\e[1;35m只听见%s“哎哟”一声惨叫，一%s%s\e[1;35m砸中了%s的脑袋。\n\e[2;37;0m", v2->name(), v1->query("unit"), v1->name(), v2->name()), ({ v2 }));
+            tell_object(v2, sprintf("你突然觉得身子一沉，好像有什么东西落在你身上。\n你仔细一看，原来是一%s%s，哈，真是好运气！！\n", v1->query("unit"), v1->name()));
+        }
+        "/adm/daemons/channeld"->do_channel(this_object(), "sys", sprintf("赠品%s\e[1;31m掉到了\e[1;36m%s\e[1;31m身上。\e[2;37;0m", v1->name(), v2->name(2)));
+    }
+}

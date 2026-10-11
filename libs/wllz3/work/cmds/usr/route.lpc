@@ -1,0 +1,307 @@
+// route.c
+// write by robert 蝴蝶君 2002.08.15
+
+inherit F_CLEAN_UP;
+
+#include <ansi.h>;
+
+string *valid_dir = ({
+	"north",	"n",
+	"south",	"s",
+	"west",		"w",
+	"east",		"e",
+	"south",	"s",
+	"norhtwest",	"nw",
+	"northeast",	"ne",
+	"southwest",	"sw",
+	"southeast",	"se",
+	"up",		"u",
+	"down",		"d",
+	"northup",	"nu",
+	"southup",	"su",
+	"easthup",	"eu",
+	"westup",	"wu",
+	"southdown",	"sd",
+	"northdown",	"nd",
+	"eastdown",	"ed",
+	"westdown",	"wd",
+	"enter",	"out",
+});
+
+mapping side_dir =([
+	"e":		"w",
+	"east":		"west",
+	"n":		"s",
+	"north":	"south",
+	"s":		"n",
+	"south":	"north",
+	"w":		"e",
+	"west":		"east",
+	"u":		"d",
+	"up":		"down",
+	"d":		"u",
+	"down":		"up",
+	"nw":		"se",
+	"northwest":	"southeast",
+	"ne":		"sw",
+	"northeast":	"southwest",
+	"sw":		"ne",
+	"southwest":	"northeast",
+	"se":		"nw",
+	"southeast":	"northwest",
+	"nu":		"sd",
+	"northup":	"southdown",
+	"su":		"nd",
+	"southup":	"northdown",
+	"eu":		"wd",
+	"eastup":	"westdown",
+	"wu":		"ed",
+	"westup":	"eastdown",
+	"enter":	"out",
+	"out":		"enter",
+	"sd":		"nu",
+	"southdown":	"northup",
+	"ed":		"wu",
+	"eastdown":	"westup",
+	"wd":		"eastdown",
+	"westdown":	"eastup",
+	"nd":		"su",
+	"northdown":	"southup",
+]);
+void create(){ seteuid(getuid());}
+void cancel_route(object me);
+void apply_route(object me);
+
+int main(object me, string arg)
+{
+	string *route;
+	string *path;
+	string str;
+	string verb;
+	string direction;
+	string msg;
+	int i;
+
+	route = me->query_route();
+
+	if( !arg )
+	{
+		if(!sizeof(route))
+			return notify_fail("你的地图现在还没有记载任何路线。\n");
+
+		msg = "你的地图上现在记载的路线有：\n";
+		foreach(str in route)
+		{
+			msg += sprintf(HIW"%s\n"NOR
+				       "----------------------------------------------------------------\n",
+				       str);
+			path = me->query_route(str);
+			for(i=0;i<sizeof(path);i++)
+				msg += sprintf("%s;",path[i]);
+			msg += "\n----------------------------------------------------------------\n";
+		}
+		me->start_more(msg);
+		return 1;
+	}
+	if( sscanf(arg,"check %s",verb) == 1)
+	{
+		if(!sizeof(route))
+			return notify_fail("你的地图现在还没有记载任何路线。\n");
+
+		if(!me->query_route(verb))
+			return notify_fail("你的地图中没有这条路线。\n");
+
+		msg = sprintf("地图上显示"HIW" %s "NOR"路线为：\n"
+		      "----------------------------------------------------------------\n",verb);
+		path = me->query_route(verb);
+		for(i=0;i<sizeof(path);i++)
+			msg += sprintf("%s;",path[i]);
+		msg += "\n----------------------------------------------------------------\n";
+		write(msg);
+		return 1;
+	}
+	if( sscanf(arg,"by %s",verb) == 1)
+	{
+		if(!sizeof(route))
+			return notify_fail("你现在还没有绘制任何路线。\n");
+
+		if(!me->query_route(verb))
+			return notify_fail("你的地图中并没有绘制这条路线。\n");
+
+		if(me->query("route"))
+			return notify_fail("你正在循着路线行走，必须先停下来才可以走新的路线。\n");
+
+		write("你看了看地图，决定根据地图上的 "HIC + verb + NOR" 路线行走。\n");
+		path = me->query_route(verb);
+		me->set("route",path);
+        	me->set_override("unconcious", (: call_other, __FILE__, "cancel_route" :));
+        	me->set_override("die", (: call_other, __FILE__, "cancel_route" :));
+		return 1;
+	}
+	if(sscanf(arg,"reverse %s",verb) == 1)
+	{
+		if(!sizeof(route))
+			return notify_fail("你现在还没有绘制任何路线。\n");
+
+		if(!me->query_route(verb))
+			return notify_fail("你的地图中并没有绘制这条路线。\n");
+
+		if(me->query("route"))
+			return notify_fail("你正在循着路线行走，必须先停下来才可以走新的路线。\n");
+
+		write("你看了看地图，决定根据地图上的 "HIC + verb + NOR" 路线行走。\n");
+		path = me->query_route(verb);
+		me->set("route",path);
+		me->set_temp("reverse_step",1);
+        	me->set_override("unconcious", (: call_other, __FILE__, "cancel_route" :));
+        	me->set_override("die", (: call_other, __FILE__, "cancel_route" :));
+		return 1;
+	}
+	if( sscanf(arg,"%s %s",verb,direction)!=2)
+	{
+		if(!sizeof(route))
+			return notify_fail("你现在还没有绘制任何路线。\n");
+
+		if(!me->query_route(arg))
+			return notify_fail("你的地图中并没有绘制这条路线。\n");
+
+		if(me->query_temp("pending/remove_verb") == arg)
+		{
+			me->set_route(arg, 0);
+			write("你将 "HIC + arg + NOR" 从你的地图中抹去。\n");
+			me->delete_temp("pending/remove_verb");
+			return 1;
+		}
+		me->set_temp("pending/remove_verb",arg);
+		write("如果你确定将 "HIC + arg + NOR" 这条路线删除，请再一次输入这个指令。\n");
+		return 1;
+	}
+	else if( verb == "" )
+		return notify_fail("你要绘制什么路线？\n");
+	else
+	{
+		if(!(int)me->query_skill("drawing"))
+			return notify_fail("你似乎应该先去学点绘画技巧吧？\n");
+
+		if((int)me->query_skill("drawing",1) < 50)
+			return notify_fail("你的绘画技巧还不够娴熟，无法自行绘制路线。\n");
+
+		if(strlen(verb) > 6)
+			return notify_fail("对不起，地图路线名称不能超过 6 个字符。\n");
+
+		if(member_array(direction,valid_dir) == -1)
+			return notify_fail("你琢磨了半天，似乎东西南北之中没有 "+ direction +" 这个方向。\n");
+
+		message("vision",me->name() +"拿起纸笔，开始描画地图。\n",environment(me),me);
+		if(sizeof(route) && me->query_route(verb))
+			write(sprintf("你在"HIC" %s "NOR"这条路线上添加了"HIW" %s "NOR"这个方向。\n",verb,direction));
+		else
+			write(sprintf("你在地图上画下了"HIC" %s "NOR"这条路线。\n",verb));
+		if(!me->set_route(verb,direction))
+		{
+			return 0;
+		}
+	}
+	return 1;
+}
+void cancel_route(object me)
+{
+        me->delete_override("unconcious");
+        me->delete_override("die");
+
+	me->delete("route");
+	me->delete_temp("route_step");
+	me->delete_temp("reverse_step");
+
+	return;
+}
+void apply_route(object me)
+{
+	string *path;
+	string cmd;
+	int i;
+
+	if (! objectp(me) || previous_object() != me)
+		return;
+
+	if (me->is_busy() || ! living(me))
+		return;
+
+	if(me->query_temp("reverse_step"))
+	{
+		path = me->query("route");
+		if(undefinedp(me->query_temp("route_step")))
+			me->set_temp("route_step",sizeof(path));
+		i = me->query_temp("route_step");
+
+		if(i-- <= 0 )
+		{
+			write("你瞧了瞧地图，已经到路线的起点了！\n");
+			cancel_route(me);
+			return;
+		}
+
+		if(undefinedp(cmd = side_dir[path[i]]))
+		{
+			write("你眉头一皱，自言自语道：咦，好像没有这个方向。\n");
+			cancel_route(me);
+			return;
+		}
+
+		tell_object(me, me->prompt() + HIY + cmd + NOR "\n");
+
+		if(!me->force_me(cmd))
+		{
+			write("你眉头一皱，自言自语道：咦，这路线似乎不对！\n");
+			cancel_route(me);
+			return;
+		}
+		me->set_temp("route_step",i);
+	}
+	else
+	{
+		i = me->query_temp("route_step");
+		path = me->query("route");
+
+		if( i < 0 || i >= sizeof(path))
+			i = 0;
+
+		// 取第 n 步骤
+		cmd = path[i];
+
+		// 显示准备执行的命令
+		tell_object(me, me->prompt() + HIY + cmd + NOR "\n");
+		if(!me->force_me(cmd))
+		{
+			write("你眉头一皱，自言自语道：咦，这路线似乎不对！\n");
+			cancel_route(me);
+			return;
+		}
+		if(++i >= sizeof(path))
+		{
+			write("你又瞧了瞧地图，已经到路线的终点了！\n");
+			cancel_route(me);
+			return;
+		}
+
+		me->set_temp("route_step",i);
+
+	}
+}
+
+int help (object me)
+{
+	write(@HELP
+
+指令格式：route <路线> <方向>	| 绘制你所要记录的路线
+	  route <路线>          | 删除已绘制的路线
+	  route by <路线>	| 使用已绘制的路线进行行走
+	  route reverse <路线>  | 以路线逆反的方向进行行走
+	  route check <路线>    | 查阅指定的路线
+
+这个指令是让你可以绘制自己常用的地图，路线，以方便使用。
+
+HELP
+);
+	return 1;
+}

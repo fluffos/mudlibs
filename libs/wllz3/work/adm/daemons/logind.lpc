@@ -1,0 +1,747 @@
+// 本文件由编译后的 .b 二进制程序反编译还原，原始源码未随档案发布。
+// Decompiled from the compiled .b binary; the original source was not distributed.
+inherit "/feature/dbase";
+void check_version(mixed, mixed);
+private void get_id(mixed, mixed);
+private void get_new_id(mixed, mixed);
+private void confirm_id(mixed, mixed);
+private void get_oicq(mixed, mixed, mixed);
+private void init_new_player(mixed);
+private void get_resp(mixed, mixed);
+object make_body(mixed);
+varargs void enter_world(mixed, mixed, mixed);
+varargs void reconnect(mixed, mixed, mixed);
+object find_body(mixed);
+int check_legal_id(mixed);
+int check_legal_name(mixed);
+int check_legal_password(mixed, mixed);
+private void create();
+int is_member_ip(mixed);
+void logon(mixed);
+private void get_passwd(mixed, mixed);
+private void confirm_relogin(mixed, mixed, mixed);
+private void get_name(mixed, mixed);
+private void new_password(mixed, mixed);
+private void confirm_password(mixed, mixed);
+private void get_email(mixed, mixed);
+private void get_gender(mixed, mixed, mixed);
+int set_wizlock(mixed);
+int set_lock(mixed);
+int can_login(mixed);
+
+string *place = ({ "/d/center/inn", "/d/yangzhou/kedian", "/d/center/guandimiao", "/d/city4/guandimiao" });
+string Rname;
+string welcome;
+string motd;
+string motd2;
+nosave int wiz_lock_level = 0;
+nosave int mud_lock = 0;
+string *valid_ip = ({ "61.179.102.36", "61.179.102.37", "202.96.144.222", "218.58.166.253", "202.104.16.48" });
+
+private void create() {
+    seteuid(getuid());
+    set("channel_id", "连线精灵");
+    welcome = read_file("/data/config//welcome");
+    motd = read_file("/data/config//motd");
+    motd2 = read_file("/adm/etc/motd2");
+    if (intp(0)) {
+        wiz_lock_level = 0;
+    } else {
+        wiz_lock_level = 0;
+    }
+}
+
+int is_member_ip(mixed arg) {
+    mixed v1;
+    mixed v2;
+    v1 = filter(all_interactive(), (: wizardp($1) || $1->is_member() :));
+    foreach (v2 in v1) {
+        if (query_ip_number(v2) == arg) {
+            return 1;
+        }
+        continue;
+    }
+    return 0;
+}
+
+void logon(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    mixed v6;
+    mixed v7;
+    mixed v8;
+    if ("/adm/daemons/band"->is_banned(query_ip_number(arg)) == 1) {
+        write("\e[1;37m你的 IP 地址在本游戏不受欢迎，请与巫师联系。\n\e[2;37;0m");
+        destruct(arg);
+        return;
+    }
+    v1 = users() + filter(children("/clone/user/login"), (: interactive :));
+    v3 = 0;
+    v4 = 0;
+    v5 = 0;
+    v6 = 0;
+    for (v2 = 0; v2 < sizeof(v1); v2++) {
+        if (!v1[v2]->is_neat_dead() && query_ip_number(v1[v2]) == query_ip_number(arg)) {
+            v6++;
+        }
+        if (base_name(v1[v2]) == "/clone/user/login") {
+            v5++;
+            continue;
+        }
+        if (wizardp(v1[v2])) {
+            if (!v1[v2]->query("env/invisibility")) {
+                v3++;
+            }
+            continue;
+        }
+        v4++;
+    }
+    if (v6 > 15) {
+        write("\e[1;31m对不起，你登陆的帐号已经太多了，请不要滥用系统资源。\n\e[2;37;0m");
+        destruct(arg);
+        return;
+    }
+    write(welcome);
+    "/cmds/usr/uptime"->main(arg, 1);
+    v7 = "/adm/daemons/logd"->query_user_login();
+    v8 = "/adm/daemons/logd"->query_user_online();
+    printf("\n本站当前访问量为 \e[1;33m%d\e[2;37;0m 人次，最高有 \e[1;33m%d／%d\e[2;37;0m 位玩家同时进行游戏。\n\e[2;37;0m", v7, v8, 300);
+    printf("目前共有\e[1;37m %d \e[2;37;0m位巫师，\e[1;33m%d \e[2;37;0m位江湖儿女正在游戏，以及\e[1;32m %d \e[2;37;0m位使用者正尝试连线。\n", v3, v4, v5);
+    printf("您的网路连线地址为：\e[1;37m%s\e[2;37;0m，该地址目前还有%s位玩家正在连线中。\n", query_ip_number(arg), "/adm/daemons/chinesed"->chinese_number(v6));
+    write("请输入您的英文名字[\e[1;37m新玩家请使用 new 注册\e[2;37;0m]：");
+    input_to("get_id", arg);
+}
+
+private void get_id(mixed arg1, mixed arg2) {
+    mixed v1;
+    arg1 = lower_case(arg1);
+    if (!check_legal_id(arg1)) {
+        write("请输入您的英文名字[\e[1;37m新玩家请使用 new 注册\e[2;37;0m]：");
+        input_to("get_id", arg2);
+        return;
+    }
+    if (intp(300) && 300 > 0) {
+        if ("/adm/obj/securityd"->get_status(arg1) == "(player)" && sizeof(users()) >= 300) {
+            v1 = find_body(arg1);
+            if (!v1) {
+                write("对不起，武林列传Ⅲ的使用者已经太多了，请待会再来。\n");
+                destruct(arg2);
+                return;
+            }
+        }
+    }
+    if (wiz_level(arg1) < wiz_lock_level) {
+        write(sprintf("对不起，本游戏目前限制巫师等级 %d 以上的人才能连线。\n", wiz_lock_level));
+        destruct(arg2);
+        return;
+    }
+    if (mud_lock) {
+        write("系统正在整理玩家资料档，请稍后再尝试连线。\n");
+        destruct(arg2);
+        return;
+    }
+    if (arg2->set("id", arg1) != arg1) {
+        write("Failed setting user name.\n");
+        destruct(arg2);
+        return;
+    }
+    if (file_size("/data/login/" + sprintf("%c", arg1[0]) + "/" + arg1 + ".o") > 0 && file_size("/data/user/" + sprintf("%c", arg1[0]) + "/" + arg1 + ".o") < 0) {
+        if (file_size("/data/login/" + sprintf("%c", arg1[0]) + "/" + arg1 + ".o") > 0) {
+            rm("/data/login/" + sprintf("%c", arg1[0]) + "/" + arg1 + ".o");
+        }
+        if (file_size("/data/user/" + sprintf("%c", arg1[0]) + "/" + arg1 + ".o") > 0) {
+            rm("/data/user/" + sprintf("%c", arg1[0]) + "/" + arg1 + ".o");
+        }
+        if (file_size("/data/mail/" + sprintf("%c", arg1[0]) + "/" + arg1 + ".o") > 0) {
+            rm("/data/mail/" + sprintf("%c", arg1[0]) + "/" + arg1 + ".o");
+        }
+    }
+    if (arg1 != "guest") {
+        if (arg1 == "new") {
+            if (0) {
+                write("对不起，本站目前暂不接受新玩家注册。\n");
+                destruct(arg2);
+            } else {
+                write("alert 新玩家你好，如果您需要更多的游戏介绍，请到我们的网站下载攻略指南。");
+                write("你好，新玩家！请给自己取一个英文名字：");
+                input_to("get_new_id", arg2);
+            }
+            return;
+        } else if (file_size(arg2->query_save_file() + ".o") >= 0) {
+            if (arg2->restore()) {
+                write("该帐号已被注册，请输入密码：");
+                input_to("get_passwd", 1, arg2);
+                return;
+            }
+            write("您的人物储存挡出了一些问题，请利用 guest 人物通知巫师处理。\n");
+            destruct(arg2);
+            return;
+        }
+    }
+    write("没有这个玩家．．．\n");
+    write("请输入您的英文名字[\e[1;37m新玩家请使用 new 注册\e[2;37;0m]：");
+    input_to("get_id", arg2);
+    return;
+}
+
+private void get_new_id(mixed arg1, mixed arg2) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    if (!arg2) {
+        return;
+    }
+    if (!arg1) {
+        write("请您给自己取一个英文名字：");
+        input_to("get_new_id", arg2);
+        return;
+    }
+    arg1 = lower_case(arg1);
+    if (!check_legal_id(arg1)) {
+        write("请您给自己取一个英文名字：");
+        input_to("get_new_id", arg2);
+        return;
+    }
+    if ((v3 = "/adm/daemons/band"->query_ban_user(arg1)) && v3 > time()) {
+        write("\e[1;31m\n对不起，这个帐号已被禁止在本游戏登陆。\n\e[2;37;0m");
+        destruct(arg2);
+        return;
+    }
+    if (arg2->set("id", arg1) != arg1) {
+        write("Failed setting user name.\n");
+        destruct(arg2);
+        return;
+    }
+    if (arg1 == "guest" || arg1 == "new") {
+        write("抱歉！这个名字已经被别的玩家使用了．．．");
+        write("\n请您给自己取一个英文名字：");
+        input_to("get_new_id", arg2);
+        return;
+    }
+    if (file_size(arg2->query_save_file() + ".o") >= 0) {
+        write("抱歉！这个名字已经被别的玩家使用了．．．");
+        write("\n请您给自己取一个英文名字：");
+        input_to("get_new_id", arg2);
+        return;
+    }
+    v1 = filter(children("/clone/user/login"), (: interactive :));
+    v2 = sizeof(v1);
+    while (v2--) {
+        if (v1[v2] != arg2 && v1[v2]->query("id") == arg1) {
+            break;
+        }
+    }
+    if (v2 >= 0) {
+        write("有其他玩家正在使用这个英文名字，请重新选择输入。");
+        write("\n请您给自己取一个英文名字：");
+        input_to("get_new_id", arg2);
+        return;
+    }
+    confirm_id("Yes", arg2);
+    return;
+}
+
+private void get_passwd(mixed arg1, mixed arg2) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    v1 = arg2->query("password");
+    if (crypt(arg1, v1) != v1) {
+        write("\e[1;31m\n密码错误！如果你确实忘记了密码，请和巫师联系！再见！\n\e[2;37;0m");
+        destruct(arg2);
+        return;
+    }
+    if ((v4 = "/adm/daemons/band"->query_ban_user(arg2->query("id"))) && v4 > time()) {
+        write("\e[1;31m对不起，这个帐号已被禁止在本游戏登陆。\n\e[2;37;0m");
+        destruct(arg2);
+        return;
+    }
+    if (arg2->query("last_on") && time() - arg2->query("last_on") < 30 && wiz_level(arg2->query("id")) < 2) {
+        v3 = time() - arg2->query("last_on");
+        write("\e[1;31m对不起，为了降低系统负荷，请稍等" + chinese_number(30 - v3) + "秒后再进入。\n\e" + "[2;37;0m");
+        destruct(arg2);
+        return;
+    }
+    if (time() - arg2->query("kickout_time") < 3600) {
+        write("\e[1;31m你现在没有进入游戏的权利，请一小时后再连线。\n\e[2;37;0m");
+        destruct(arg2);
+        return;
+    }
+    v2 = find_body(arg2->query("id"));
+    if (v2 && !environment(v2)) {
+        destruct(v2);
+    }
+    if (v2) {
+        if (v2->is_net_dead()) {
+            if (v2->query_temp("last_reconnect") && time() - v2->query_temp("last_reconnect") < 30 && !wizardp(v2)) {
+                write("\e[1;31m\n抱歉，为降低系统负担，请稍后再重新连线。\n\e[2;37;0m");
+                destruct(arg2);
+                return;
+            }
+            reconnect(arg2, v2);
+            return;
+        }
+        write("您要将另一个连线中的相同人物赶出去，取而代之吗？(y/n)");
+        input_to("confirm_relogin", arg2, v2);
+        return;
+    }
+    if (objectp(v2 = make_body(arg2))) {
+        if (v2->restore()) {
+            log_file("usage", sprintf("[%s] %s[%s]连线来自[%s]\n", ctime(time()), v2->query("name"), v2->query("id"), query_ip_number(arg2)));
+            enter_world(arg2, v2);
+            return;
+        } else {
+            destruct(v2);
+        }
+    }
+    write("请您重新创造这个人物。\n");
+    confirm_id("y", arg2);
+}
+
+private void confirm_relogin(mixed arg1, mixed arg2, mixed arg3) {
+    mixed v1;
+    if (arg1 == "") {
+        write("您要将另一个连线中的相同人物赶出去，取而代之吗？(y/n)");
+        input_to("confirm_relogin", arg2, arg3);
+        return;
+    }
+    if (arg1[0] != 121 && arg1[0] != 89) {
+        write("好吧，欢迎下次再来。\n");
+        destruct(arg2);
+        return;
+    } else {
+        if (!objectp(arg3)) {
+            write("游戏中用户已离线，请重新登陆。\n");
+            destruct(arg2);
+            return;
+        }
+        tell_object(arg3, "有人从别处[\e[1;31m" + query_ip_number(arg2) + "\e" + "[2;37;0m]连线取代你所控制的人物。\n");
+        log_file("login/relogin", sprintf("[%s] %s[%s]重新连线来自[%s]。\n", ctime(time()), arg3->query("name"), geteuid(arg3), query_ip_number(arg2)));
+    }
+    if (objectp(v1 = arg3->query_temp("link_ob"))) {
+        exec(v1, arg3);
+        destruct(v1);
+    }
+    reconnect(arg2, arg3);
+}
+
+private void confirm_id(mixed arg1, mixed arg2) {
+    if (arg1 == "") {
+        write("您确定要创造一个新人物了吗(y/n)？");
+        input_to("confirm_id", arg2);
+        return;
+    }
+    if (arg1[0] != 121 && arg1[0] != 89) {
+        write("好吧，那么请重新输入您的英文名字：");
+        input_to("get_id", arg2);
+        return;
+    }
+    write("\e[1;32m\n请输入您的高姓大名，由于这个名字将代表你本人的性格，作风，请慎重择\n名。请不要起不雅观的名字，也请尽量不要和别人同名。本游戏巫师工作组\n将保留随时修改你的中文名字的权利。\n\n\e[1;36m如果您不方便输入中文，按「ＥＮＴＥＲ」系统将会为您产生一个中文名字\n\n\e[2;37;0m");
+    write("请输入您的中文名字：");
+    input_to("get_name", arg2);
+}
+
+private void get_name(mixed arg1, mixed arg2) {
+    mixed v1;
+    if (arg1 == "") {
+        write("系统正在产生一个随机的中文名字．．\n");
+        Rname = npc_name(random(3) ? "男性" : "女性");
+        write(sprintf("中文名字：「\e[1;37m%s\e[2;37;0m」\n", Rname));
+        write("您喜欢这个中文名字吗「y/n」？输入「r」则改为自己输入。");
+        input_to("get_resp", arg2);
+    } else {
+        if (!check_legal_name(arg1) || "/adm/daemons/band"->query_ban_name(arg1)) {
+            write("对不起，游戏禁止使用" + arg1 + "这个名字，请重新选择。\n");
+            write("请输入您的中文名字：");
+            input_to("get_name", arg2);
+            return;
+        }
+        if (stringp(v1 = "/adm/daemons/named.lpc"->invalid_new_name(arg1))) {
+            write("对不起，" + v1);
+            write("请输入您的中文名字：");
+            input_to("get_name", arg2);
+            return;
+        }
+        arg2->set("name", arg1);
+        write("\e[1;37m\n为避免你的辛勤成果遭受损失，本站启用 UNIX MD5 任意长度密码设置，你\n的密码支持任意位数，中文字符和特殊字符。为安全起见，请将你的密码尽\n量设置得复杂一些。\n\n\e[2;37;0m");
+        write("请设定您的密码：");
+        input_to("new_password", 1, arg2);
+    }
+}
+
+private void get_resp(mixed arg1, mixed arg2) {
+    if (arg1 == "") {
+        write("您喜欢这个中文名字吗「y/n」？输入「r」则改为自己输入。");
+        input_to("get_resp", arg2);
+        return;
+    }
+    if (arg1[0] == 121 || arg1[0] == 89) {
+        arg2->set("name", Rname);
+        write("\e[1;37m\n为避免你的辛勤成果遭受损失，本站启用 UNIX MD5 任意长度密码设置，你\n的密码支持任意位数，中文字符和特殊字符。为安全起见，请将你的密码尽\n量设置得复杂一些。\n\n\e[2;37;0m");
+        write("请设定您的密码：");
+        input_to("new_password", 1, arg2);
+        return;
+    }
+    if (arg1[0] == 114 || arg1[0] == 82) {
+        write("请输入您的中文名字：");
+        input_to("get_name", arg2);
+        return;
+    } else if (arg1[0] == 110 || arg1[0] == 78) {
+        Rname = npc_name(random(3) ? "男性" : "女性");
+        write(sprintf("中文名字：「\e[1;37m%s\e[2;37;0m」\n", Rname));
+        write("您喜欢这个中文名字吗「y/n」？输入「r」则改为自己输入。");
+        input_to("get_resp", arg2);
+        return;
+    } else {
+        write("您喜欢这个中文名字吗「y/n」？\n");
+        input_to("get_resp", arg2);
+        return;
+    }
+}
+
+private void new_password(mixed arg1, mixed arg2) {
+    if (!check_legal_password(arg2, arg1)) {
+        write("\e[1;37m\n为避免你的辛勤成果遭受损失，本站启用 UNIX MD5 任意长度密码设置，你\n的密码支持任意位数，中文字符和特殊字符。为安全起见，请将你的密码尽\n量设置得复杂一些。\n\n\e[2;37;0m");
+        write("请设定您的密码：");
+        input_to("new_password", 1, arg2);
+        return;
+    }
+    arg2->set("password", crypt(arg1, sprintf("$1$%d", random(99999999))));
+    write("请再输入一次您的密码，以确认您没记错：\n");
+    input_to("confirm_password", 1, arg2);
+}
+
+private void confirm_password(mixed arg1, mixed arg2) {
+    mixed v1;
+    v1 = arg2->query("password");
+    if (crypt(arg1, v1) != v1) {
+        write("\n您两次输入的密码并不一样，请重新设定一次密码：");
+        input_to("new_password", 1, arg2);
+        return;
+    }
+    write("\e[1;37m\n注意：填写你的信箱时，请输入您的真实电子邮件地址，以方便我们与您联\n系。当您忘记密码的时候，这将是您取回密码的唯一方式。巫师组将不对无\n效的注册信箱帐号提供密码保护！\n\n\e[2;37;0m");
+    write("您的电子邮件地址：");
+    input_to("get_email", arg2);
+}
+
+private void get_email(mixed arg1, mixed arg2) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    if (arg1 == "" || strsrch(arg1, "@") == -1 || sscanf(arg1, "%s@%s", v2, v3) != 2 || strsrch(v3, ".") == -1) {
+        write("\e[1;31m\n错误：电子邮件地址必须是 id@address 的格式！\n\e[1;37m\n注意：填写你的信箱时，请输入您的真实电子邮件地址，以方便我们与您联\n系。当您忘记密码的时候，这将是您取回密码的唯一方式。巫师组将不对无\n效的注册信箱帐号提供密码保护！\n\n\e[2;37;0m请重新输入您的电子邮件地址：");
+        input_to("get_email", arg2);
+        return;
+    }
+    arg2->set("email", arg1);
+    arg2->set("registered", 1);
+    arg2->set("body", "/clone/user/user");
+    if (!objectp(v1 = make_body(arg2))) {
+        return;
+    }
+    v1->set("str", 10);
+    v1->set("dex", 10);
+    v1->set("con", 10);
+    v1->set("int", 10);
+    v1->set("per", 10);
+    v1->set("kar", 10);
+    v1->set("spi", 10);
+    v1->set("cor", 10);
+    v1->set("cou", 10);
+    v1->set("registered", 1);
+    v1->set("level", 1);
+    write("你的电子邮箱是：[\e[1;37m" + arg1 + "\e" + "[2;37;0m]\n");
+    write("请输入您的 Oicq 号码：");
+    input_to("get_oicq", arg2, v1);
+}
+
+private void get_oicq(mixed arg1, mixed arg2, mixed arg3) {
+    if (arg1 && arg1 != "") {
+        if (sizeof(arg1) < 4 || sizeof(arg1) > 10) {
+            write("请输入 4 至 10 位数的号码，否则请按回车直接跳过。\n");
+            write("请输入您的 Oicq 号码：");
+            input_to("get_oicq", arg2, arg3);
+            return;
+        }
+        write("您的 Oicq 号码是：[\e[1;36m" + arg1 + "\e" + "[2;37;0m]\n");
+        arg2->set("oicq", arg1);
+    } else {
+        write("您的 Oicq 号码是：[ 没有 ]\n");
+        arg2->set("oicq", "没有");
+    }
+    write("您要扮演男性(\e[1;36mm\e[2;37;0m)的角色或女性(\e[1;35mf\e[2;37;0m)的角色？");
+    input_to("get_gender", arg2, arg3);
+}
+
+private void get_gender(mixed arg1, mixed arg2, mixed arg3) {
+    write("\n");
+    if (arg1 == "") {
+        write("您要扮演男性(\e[1;36mm\e[2;37;0m)的角色或女性(\e[1;35mf\e[2;37;0m)的角色？");
+        input_to("get_gender", arg2, arg3);
+        return;
+    }
+    if (arg1[0] == 109 || arg1[0] == 77) {
+        arg3->set("gender", "男性");
+    } else if (arg1[0] == 102 || arg1[0] == 70) {
+        arg3->set("gender", "女性");
+    } else {
+        write("对不起，您只能选择男性(\e[1;36mm\e[2;37;0m)或女性(\e[1;35mf\e[2;37;0m)的角色：");
+        input_to("get_gender", arg2, arg3);
+        return;
+    }
+    log_file("newbie", sprintf("[%s]新玩家 %s[%s]来自[%s]\n", ctime(time()), arg3->name(1), arg3->query("id"), query_ip_number(arg2)));
+    init_new_player(arg3);
+    enter_world(arg2, arg3);
+}
+
+object make_body(mixed arg) {
+    mixed v1;
+    seteuid(getuid());
+    v1 = clone_object("/clone/user/user");
+    if (!v1) {
+        write("现在可能有巫师正在修改使用者物件的程式，请稍候再试。\n");
+        destruct(arg);
+    }
+    seteuid(arg->query("id"));
+    export_uid(v1);
+    export_uid(arg);
+    seteuid(getuid());
+    v1->set("id", arg->query("id"));
+    v1->set_name(arg->query("name"), ({ arg->query("id") }));
+    return v1;
+}
+
+private void init_new_player(mixed arg) {
+    arg->set("title", "平民百姓");
+    arg->set("birthday", time());
+    arg->set("potential", 100);
+    arg->set("food", arg->max_food_capacity());
+    arg->set("water", arg->max_water_capacity());
+    arg->set("exp_cost/points", 30);
+    arg->set("exp_cost/exp", 0);
+    arg->set("channels", ({ "chat", "rumor", "dealer", "party", "master", "banghui", "frds", "tt", "sos", "teach" }));
+    arg->set("balance", 1000);
+    arg->set("env/prompt", "time");
+    arg->set("env/wimpy", 60);
+    arg->set("valid_attack", "无效");
+    "/adm/daemons/named.lpc"->map_name(arg->query("name"), arg->query("id"));
+    message("channel:chat", "\e[1;37m【奇幻异象】\e[1;35m东面的天空中亮起一片紫红色的云彩，又一个新生命降生凡间。\n\e[2;37;0m", users());
+}
+
+varargs void enter_world(mixed arg1, mixed arg2, mixed arg3) {
+    mixed v1;
+    mixed v2;
+    if (!is_root(previous_object())) {
+        return;
+    }
+    if (arg2->query("name") != arg1->query("name")) {
+        "/adm/daemons/named.lpc"->remove_name(arg1->query("name"), arg1->query("id"));
+        "/adm/daemons/named.lpc"->map_name(arg2->query("name"), arg2->query("id"));
+        arg1->set("name", arg2->query("name"));
+    }
+    arg2->set_temp("link_ob", arg1);
+    arg1->set_temp("body_ob", arg2);
+    arg2->set("registered", arg1->query("registered"));
+    if (interactive(arg1)) {
+        exec(arg2, arg1);
+    }
+    write("\n目前权限：" + wizhood(arg2) + "\n");
+    if (arg2->query("mud_age") < 1) {
+        write("─────────────────────────────────\n新手须知：\n\n您好，新玩家！请先阅读相关游戏规则。使用 \e[1;37mhelp\e[0m 查阅帮助信息！\n请访问我们的游戏主页『\e[1;37mhttp://www.cnmud.com\e[0m』，从中得到帮助。\n─────────────────────────────────\n");
+        write(motd);
+        write("\e[1;32m\n恭喜！游戏角色创建成功，您现在可以使用 \e[1;37mlevelup \e[1;32m指令进行属性分配。\n在分配之前，请用\e[1;37m help levelup \e[1;32m查看相关指令，属性一旦分配成功，将无\n法改变。您目前可分配点数为：\e[1;37m 30 \e[1;32m 点。\n\n\e[2;37;0m");
+        input_to("come_in", arg2);
+    } else {
+        write(motd2);
+        v1 = clone_object("/clone/user/login");
+        v1->set("id", arg2->query("id"));
+        v1->restore();
+        write(sprintf("您上次光临本站是在 %s 从 %s 连接。", ctime(v1->query("last_on")), v1->query("last_from")));
+        destruct(v1);
+    }
+    arg2->setup();
+    arg2->save();
+    arg2->set("last_save", time());
+    arg1->save();
+    "/adm/daemons/updated"->check_user(arg2);
+    if (!arg3) {
+        if (arg2->is_ghost()) {
+            v2 = "/d/death/gate.lpc";
+            arg2->move("/d/death/gate.lpc");
+        } else if (arg2->query_condition("parsion")) {
+            v2 = "/d/xingbu/qiushi1";
+            arg2->move("/d/xingbu/qiushi1");
+        } else if (!stringp(v2 = arg2->query("startroom")) || file_size(v2 + ".lpc") < 0) {
+            v2 = place[random(sizeof(place))];
+            arg2->move(v2);
+        } else if (!catch {
+    find_object(v2, 1);
+}) {
+            arg2->move(v2);
+        } else {
+            arg2->move("/d/center/inn.lpc");
+            v2 = "/d/center/inn.lpc";
+            arg2->set("startroom", "/d/center/inn.lpc");
+        }
+        tell_room(v2, arg2->query("name") + "连线进入这个世界。\n", ({ arg2 }));
+    }
+    "/adm/daemons/channeld"->do_channel(this_object(), "sys", sprintf("%s%s由(%s)连线进入。", wizardp(arg2) ? "\e[1;37m" : "", arg2->name(2), query_ip_name(arg2)));
+    arg2->set_temp("login/level", arg2->query("level"));
+    arg2->set_temp("login/time", time());
+    "/adm/daemons/newsd"->prompt_user(arg2);
+    "/adm/daemons/toptend"->top_checkplayer(arg2);
+    "/adm/daemons/logd"->user_login();
+    arg2->check_brother_online();
+    if ((arg2->query("qi") < 0 || arg2->query("jing") < 0) && living(arg2)) {
+        arg2->unconcious();
+    }
+    if (arg2->is_want_now()) {
+        "/cmds/std/want"->check_status(arg2);
+    }
+}
+
+varargs void reconnect(mixed arg1, mixed arg2, mixed arg3) {
+    arg2->set_temp("link_ob", arg1);
+    arg1->set_temp("body_ob", arg2);
+    exec(arg2, arg1);
+    arg2->reconnect();
+    if (!arg3) {
+        tell_room(environment(arg2), arg2->query("name") + "重新连线回到这个世界。\n", ({ arg2 }));
+    }
+    "/adm/daemons/channeld"->do_channel(this_object(), "sys", sprintf("%s由(%s)重新连线进入。", arg2->query("name"), query_ip_name(arg2)));
+}
+
+int check_legal_id(mixed arg) {
+    mixed v1;
+    mixed v2;
+    v1 = sizeof(arg);
+    if (sizeof(arg) < 3 || sizeof(arg) > 8) {
+        write("对不起，你的英文名字必须是 3 到 8 个英文字母。\n");
+        return 0;
+    }
+    while (v1--) {
+        if (arg[v1] < 97 || arg[v1] > 122) {
+            write("对不起，你的英文名字只能用英文字母。\n");
+            return 0;
+        }
+    }
+    if (file_size("/data/config/banned_ids") >= 0) {
+        v2 = explode(read_file("/data/config/banned_ids"), "\n");
+    } else {
+        v1 = sizeof(v2);
+        while (v1--) {
+            write_file("/data/config/banned_ids", v2[v1] + "\n", 0);
+        }
+    }
+    for (v1 = 0; v1 < sizeof(v2); v1++) {
+        if (strsrch(arg, v2[v1]) == -1) {
+            continue;
+        }
+        write("对不起，这种英文名字会造成其他人的困扰。\n");
+        return 0;
+    }
+    return 1;
+}
+
+int check_legal_name(mixed arg) {
+    mixed v1;
+    mixed v2;
+    v1 = sizeof(arg);
+    if (sizeof(arg) < 1 || sizeof(arg) > 4) {
+        write("对不起，你的中文名字必须是 1 到 4 个中文字。\n");
+        return 0;
+    }
+    while (v1--) {
+        if (arg[v1] <= 32) {
+            write("对不起，你的中文名字不能用控制字元。\n");
+            return 0;
+        }
+        if (!is_chinese(arg[v1..v1])) {
+            write("对不起，请您用「中文」取名字。\n");
+            return 0;
+        }
+    }
+    for (v1 = 0; v1 < sizeof(v2); v1++) {
+        if (strsrch(arg, v2[v1]) == -1) {
+            continue;
+        }
+        write("对不起，这种名字会造成其他人的困扰。\n");
+        return 0;
+    }
+    return 1;
+}
+
+object find_body(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    if (objectp(v1 = find_player(arg))) {
+        return v1;
+    }
+    v2 = children("/clone/user/user");
+    for (v3 = 0; v3 < sizeof(v2); v3++) {
+        if (clonep(v2[v3]) && getuid(v2[v3]) == arg) {
+            return v2[v3];
+        }
+    }
+    return 0;
+}
+
+int set_wizlock(mixed arg) {
+    if (wiz_level(this_player(1)) <= arg) {
+        return 0;
+    }
+    if (geteuid(previous_object()) != "Root") {
+        return 0;
+    }
+    wiz_lock_level = arg;
+    return 1;
+}
+
+int set_lock(mixed arg) {
+    mud_lock = arg;
+    return 1;
+}
+
+int can_login(mixed arg) {
+    if (arg < wiz_lock_level) {
+        return 0;
+    }
+    return 1;
+}
+
+int check_legal_password(mixed arg1, mixed arg2) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    v2 = 0;
+    v3 = 0;
+    v1 = sizeof(arg2);
+    if (sizeof(arg2) < 6) {
+        write("对不起，你的密码必须最少六个字符。\n");
+        return 0;
+    }
+    v4 = arg1->query("id");
+    if (strsrch(v4, arg2) != -1 || strsrch(arg2, v4) != -1) {
+        write("对不起，你的密码和你的英文名字太象了。\n");
+        return 0;
+    }
+    while (v1--) {
+        if (arg2[v1] <= 90 && arg2[v1] >= 65) {
+            v2++;
+        }
+        if (arg2[v1] <= 122 && arg2[v1] >= 97) {
+            v3++;
+        }
+    }
+    if (!v2 || !v3 || v2 + v3 == sizeof(arg2)) {
+        write("您的密码必须包含\e[1;31m大写\e[2;37;0m和\e[1;31m小写英文字母\e[2;37;0m以及\e[1;31m其它字符\e[2;37;0m，例如：Mud-123。\n");
+        return 0;
+    }
+    return 1;
+}

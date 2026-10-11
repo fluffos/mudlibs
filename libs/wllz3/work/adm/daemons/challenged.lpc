@@ -1,0 +1,206 @@
+// challenged.c
+// 挑战系统
+
+#include <ansi.h>
+
+inherit F_DBASE;
+
+void message_competition(string msg);
+void enter_challenge(object me);
+private void restore_status(object me);
+
+void create()
+{
+	seteuid(getuid());
+	CHANNEL_D->do_channel(find_object(SEC_OB),"sys","比武精灵开始工作。");
+}
+
+int join_challenge(object me)
+{
+	int time;
+
+	if((int)me->query("level") < 20)
+		return notify_fail("就你这点本事也想上擂台？\n");
+	
+	if(sizeof(me->query_condition()) > 1)
+		return notify_fail("你现在状态不佳，还是别上去了。\n");
+
+	if(me->query_temp("is_riding"))
+		return notify_fail("骑着马上擂台，你这不是踩场吗？\n");
+
+	if(intp(time = me->query_temp("time/enter_challenge")) 
+	&& time > time())
+		return notify_fail("你刚从擂台上下来，还是休息一会再说吧。\n");
+
+	message_competition(me->name(1) +"纵身一跃，顿时飞出几丈高，又轻轻的落在了擂台。\n");
+	enter_challenge(me);
+	return 1;
+}
+void message_competition(string msg)
+{
+	object usr;
+
+	if(!stringp(msg))
+		return;
+	
+	usr = filter_array(users(),(: !$1->query("env/no_challenge") :));
+	message("challenge",HIY"【比武擂台】"NOR + WHT + msg + NOR,usr);
+}
+void enter_challenge(object me)
+{
+	object room;
+
+	if(!room = get_object(environment(me)->query("enter_room")))
+	{
+		tell_object(me,"奇怪，没有找到比武擂台？还是赶紧找巫师联系吧。\n");
+		return;
+	}
+	me->move(room);
+
+	tell_object(me,HIC"你轻身跃上擂台，全力以赴吧！\n"NOR);
+
+	message("vision",HIC"一个身影从下面跳了上来，细看原来是"+ me->name(1)+"。\n"NOR,
+		environment(me), ({ me }));
+		
+	me->set_override("unconcious", (: call_other, __FILE__, "check_out" :));
+	me->set_override("die", (: call_other, __FILE__, "check_out" :));
+	me->set_override("quit", (: call_other, __FILE__, "check_quit" :));
+	me->set_temp("backup/killer", me->query_killer());
+	me->set_temp("backup/want",me->query_want());
+	me->set("backup/condition", me->query_condition());
+	me->clear_condition();
+	me->set_temp("time/enter_challenge",time() + 30);
+}
+private void restore_status(object me)
+{
+	mapping cnd;
+	string *ks;
+	int i;
+
+	me->delete_override("unconcious");
+	me->delete_override("die");
+	me->delete_override("surrender");
+	me->delete_override("quit");
+	me->remove_all_enemy(1);
+	me->remove_all_killer();
+	me->clear_condition();
+	me->receive_damage("qi",0);
+
+	me->apply_killer(me->query_temp("backup/killer"));
+        me->apply_want(me->query_temp("backup/want"));
+
+	cnd = me->query("backup/condition");
+	me->delete("backup/condition");
+	me->delete_temp("block_msg/all");
+	me->delete_temp("last_damage_from");
+
+	if (! mapp(cnd)) return;
+	ks = keys(cnd);
+	for (i = 0; i < sizeof(ks); i++)
+		me->apply_condition(ks[i], cnd[ks[i]]);
+}
+int check_out(object me)
+{
+	object ob;
+	mapping my;
+	string msg,room;
+	string *dir;
+	mapping out;
+	mapping kezhan = ([ "桃源客栈":"/d/center/inn_2f1",
+			    "昆明客栈":"/d/kunming/kedian1",
+			    "云来客栈":"/d/yangzhou/kedian2",
+			    "大理客店":"/d/dali/kedian2",
+			    "福州客店":"/d/fuzhou/kedian", ]);
+
+	my = me->query_entire_dbase();
+	my["eff_qi"] = my["max_qi"];
+	my["eff_jing"] = my["max_jing"];
+	my["qi"] = 1;
+	my["jing"] = 1;
+
+	tell_object(me, HIR "\n你眼前一黑，只觉被人重重的踢了一脚，摔倒在地....\n\n" NOR);
+
+	if (ob = me->query_temp("last_damage_from"))
+	{
+		switch(random(5))
+		{
+			case 1:
+				msg = "但见" + ob->name(1) + "凌空飞起一脚，将" + me->name(1) + "踢下擂台。\n";
+				break;
+			case 2:
+				msg = me->name(1) +"终究不是"+ ob->name(1) +"对手，惨败在"+ ob->name(1) +"手里。\n";
+				break;
+			case 3:
+				msg = ob->name(1) +"一式"+ to_chinese(ob->query_attack_skill()) +"就将"+ me->name(1)+"打到在地，果然非同凡响。\n";
+				break;
+			case 4:
+				msg = ob->name(1) +"一式"+ to_chinese(ob->query_attack_skill()) +"，将"+ me->name(1)+"打得满地找牙，口沫横飞。\n";
+				break;
+			default:
+				msg = "只听见“哎呀”的一声惨叫，"+ me->name(1) +"被"+ ob->name(1) +"打倒在地，重重摔下擂台。\n";
+				break;
+		}
+	} 
+	else
+		msg = "听说" + me->name(1) + "本领有限、运气不佳，被人一脚踢下了擂台。\n";
+
+	message_competition(msg);
+	restore_status(me);
+
+	if(random(3))
+	{
+		dir = keys(kezhan);
+		room = dir[random(sizeof(dir))];
+		me->move(kezhan[room]);
+		message_competition(HIM"听说"+ me->name(1) +"受伤过重，被人送到"+ room +"救治去了。\n"NOR);
+		message("vision",HIC"一个气喘吁吁，苟喘残息的人被抬了进来，不停的哼哼哟哟，看样子伤得不轻。\n"NOR,
+			environment(me), ({ me }));
+	}
+	else if(mapp(out = environment(me)->query("revive_room")))
+	{
+		dir = keys(out);
+		room = dir[random(sizeof(dir))];
+		me->move(out[room]);
+		message("vision",HIC"只听见“扑通”的一声，" + me->name(1) +"从擂台上摔了下来，鼻青脸肿，好生狼狈。\n"NOR,
+			environment(me), ({ me }));
+	}
+	else
+	{
+		me->move("/d/center/inn_2f1");
+		message_competition(HIM"听说"+ me->name(1) +"受伤过重，也不知道飞到哪间客栈去了。\n"NOR);
+		message("vision",HIC"一个气喘吁吁，苟喘残息的人被抬了进来，不停的哼哼哟哟，看样子伤得不轻。\n"NOR,
+			environment(me), ({ me }));
+	}
+
+	if (! living(me))
+		me->revive();
+
+	return 1;
+}
+int check_quit(object me)
+{
+	mapping out;
+	string *dir;
+	string room;
+
+	if(me->is_fighting())
+		message_competition(me->name(1) + "狼狈不堪的从擂台上跳了下来，逃走了。\n");
+	else
+		message_competition(me->name(1) + "一个纵身从擂台上跳了下来离开了。\n");
+
+	restore_status(me);
+
+	if(mapp(out = environment(me)->query("revive_room")))
+	{
+		dir = keys(out);
+		room = dir[random(sizeof(dir))];
+		me->move(out[room]);
+	}
+	else
+		me->move("/d/center/guangchang");
+
+	// continue run quit function
+	message("vision", HIC"只见" + me->name(1) + "慌慌张张的跑了过来，擦了擦汗。\n"NOR,
+		environment(me), ({ me }));
+	return 1;
+}

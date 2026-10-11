@@ -1,0 +1,126 @@
+// see.c
+// Design By robert 蝴蝶君 email:robert_st@sina.com
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+int main(object me, string arg)
+{
+
+	if(me->ban_say())
+		return 0;
+
+	if( me->is_busy())
+		return notify_fail("你正忙着呢！\n");
+
+	if( me->is_fighting())
+		return notify_fail("你正在战斗中！\n");
+
+	if((int)me->query("brawn") < 20)
+		return notify_fail("你太累了，还是休息一下再说吧。\n");
+
+	me->set_short_desc("正低着头，东张西望的好像在找什么。");
+
+	message_vision("$N开始细心搜索周围的环境，每一个角落都不肯放过. . .\n",me);
+	seteuid(getuid());
+	me->start_busy(bind((:call_other, __FILE__, "searching" :), me),
+		       bind((:call_other, __FILE__, "halt_searching" :), me));
+	return 1;
+}
+object found(object me, object env)
+{
+	mapping task;
+	object ob;
+
+	if((int)me->query_temp("pending/searching") % (random(10) + 10) == 1)
+	{
+		if(mapp(task = me->query_temp("task")))
+		{
+			if(file_name(env) == task["target"])
+				ob=new(task["task"]);
+				me->delete_temp("task");
+				me->delete_temp("pending/searching");
+				return ob;
+		}
+	}
+}
+int searching(object me)
+{
+	object env;
+	object ob;
+
+	env = environment(me);
+
+	if( me->add_temp("pending/searching",1) % 6 == 1)
+	{
+		tell_object(me,"你找了半天，还是一无所获，只好先放弃了。\n");
+		message("vision", me->name() + "无奈的叹了口气，神情有点失望。\n", env, ({ me }));
+		me->set_short_desc(0);
+		return 0;
+	}
+
+	if((int)me->query("brawn") < 20)
+	{
+		tell_object(me,"你实在太疲倦了，还是休息一下再找吧。\n");
+		message("vision", me->name() + "无奈的叹了口气，一脸疲惫的样子。\n",env, ({ me }));
+		me->set_short_desc(0);
+		return 0;
+	}
+
+	if(me->is_member())
+		me->add("brawn",-10);
+	else
+		me->add("brawn",-15);
+
+	ob = found(me, env);
+	if(ob)
+	{
+		ob->start_timer();
+		if(ob->query("base_unit"))
+			ob->set_amount(random(5) + 1);
+		tell_object(me, HIC "你突然发现了一" + ob->query("unit") +
+				ob->name() + HIC "！\n");
+		message("visoin", me->name() + "突然弯下腰，不知道从地"
+			"上捡起了什么东西，眉开眼笑的。\n", env, ({ me }));
+		if(! ob->move(me, 1))
+		{
+			tell_object(me, "可惜" + ob->name() + "对你来"
+				    "说太重了，你只好先放在地上。\n");
+		}
+		me->delete_temp("pending/searching");
+		me->add("score",1);
+		me->set_short_desc(0);
+		return 0;
+	} else
+	{
+		message_vision(random(2) ? "$N继续东张西望的到处瞅。\n"
+					 : "$N时而弯下腰在地上拨拉什么东西。\n",
+			       me);
+		return 1;
+	}
+}
+
+int halt_searching(object me)
+{
+	object env;
+
+	env = environment(me);
+	me->delete_temp("pending/searching");
+	tell_object(me, "你放弃了寻找。\n");
+	message("vision", me->name() + "舒展了一下腰，叹了口气。\n", env, ({ me }));
+	me->set_short_desc(0);
+	return 1;
+}
+
+int help(object me)
+{
+    write(@HELP
+指令格式 : see
+
+这个指令可以让你巡视周围环境，主要是做巡城任务的时候使用。
+
+HELP
+    );
+    return 1;
+}

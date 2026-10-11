@@ -1,0 +1,346 @@
+// smith.c
+
+#include <ansi.h>
+
+inherit NPC;
+inherit F_VENDOR;
+
+int do_repair(string arg);
+int do_inlay(string arg);
+int do_raze(string arg);
+int ask_founding();
+int do_shroff(string arg);
+// no create_function: inherit by other NPC
+
+void init()
+{
+        object ob;
+
+        if ( interactive(ob=this_player()) )
+        {
+                remove_call_out("greeting");
+                call_out("greeting",1,ob);
+        }
+        add_action("do_repair", "repair");
+        add_action("do_repair", "xiuli");
+        add_action("do_inlay",  "inlay");
+        add_action("do_inlay",  "jiagong");
+        add_action("do_raze",   "raze");
+        add_action("do_raze",   "hui");
+        add_action("do_shroff","shroff");
+        if(query("vendor_goods"))
+        add_action("do_vendor_list","list");
+}
+void greeting(object ob)
+{
+        if( !ob || environment(ob) != environment() ) return;
+
+        command("say 欢迎这位"+RANK_D->query_respect(ob)+"光临，请随便参观。");
+}
+
+void setup()
+{
+        set("inquiry/repair", "你想要修(repair)点什么？");
+        set("inquiry/修理",   "你想要修(repair)点什么？");
+        set("inquiry/加工",   "你想加工(inlay)什么？");
+        set("inquiry/inlay",  "你想加工(inlay)什么？");
+        set("inquiry/raze",   "你想毁灭(raze)什么？");
+        set("inquiry/毁灭",   "你想毁灭(raze)什么？");
+        set("inquiry/打铁",   (: ask_founding :));
+        set("inquiry/鉴别",   "你想要鉴别(shroff)什么？");
+        ::setup();
+}
+int do_repair(string arg)
+{
+        object me;
+        object ob;
+        mixed  msg;
+        int consistence;
+        int cost;
+        mapping repair;
+
+        if (! arg)
+                return 0;
+
+        me = this_player();
+
+        if (! objectp(ob = present(arg, me)))
+                return notify_fail("你身上好像没有这样东西。\n");
+
+        if (undefinedp(consistence = ob->query("consistence")))
+                return notify_fail(ob->name() + "似乎不需要在这里修理吧？\n");
+
+        if( !ob->query("weapon_prop"))
+                return notify_fail(name() +"说道："+ ob->name() + "不能在这里修理。\n");
+
+        if( !ob->query("value"))
+                return notify_fail(name() +"满不在意的说：这东西一文不值，修了干嘛啊。\n");
+
+        if (consistence >= 100)
+                return notify_fail(ob->name() + "现在完好无损，修理做什么？\n");
+
+        if (! undefinedp(msg = ob->query("no_repair")))
+        {
+                if (stringp(msg))
+                        write(name() + "道：这我可修理不了。\n");
+                else
+                        write(name() + "道：" + msg);
+                return 1;
+        }
+
+        if (mapp(repair = me->query_temp("pending/repair")) &&
+            repair["item"] == ob)
+        {
+                if (me->is_busy())
+                        return notify_fail("你现在正忙着呢！\n");
+
+                if (MONEY_D->player_pay(me, repair["cost"]) != 1)
+                        return notify_fail(name()+"疑惑的打量了你一番，说道：你有钱修这东西吗？\n");
+
+                message_vision("$n把" + ob->name() + "递给了$N。只见$N"
+                               "拿起工具，东敲西补，将" + ob->name() +
+                               "好好修了修。\n", this_object(), me);
+                ob->set("consistence", 100);
+                if(ob->query_temp("disable_type"))
+                        ob->delete_temp("disable_type");
+                message_vision("$N道：“好了！”随手把" + ob->name() +
+                               "还给了$n，$n看了看，满意的掏出了一些钱"
+                               "付了帐。\n", this_object(), me);
+                me->start_busy(1 + random(100 - consistence) / 10);
+                me->delete_temp("pending/repair");
+                return 1;
+        }
+
+        cost = (120 - consistence) * ob->query("value") / 480;
+        if (cost >= 100000) cost = ((cost - 100000) / 2 + 100000) / 10000 * 10000; else
+        if (cost >= 10000)  cost = cost / 1000 * 1000; else
+        if (cost >= 1000)   cost = cost / 100 * 100; else
+        if (cost >= 100)    cost = cost / 10 * 10;
+
+        msg = "$n拿出一" + ob->query("unit") + ob->name() +
+              "，$N瞥了一眼，道：“要修好它得要" +
+              MONEY_D->price_str(cost) + "才行。”\n";
+
+        message_vision(msg, this_object(), me);
+        tell_object(me, CYN"如果你的确想修理这件物品，请再输入一次这条命令。\n"NOR);
+        me->set_temp("pending/repair/item", ob);
+        me->set_temp("pending/repair/cost", cost);
+        return 1;
+}
+int do_inlay(string arg)
+{
+        object me;
+        object material,weapon;
+        string it,target;
+        string msg;
+        mapping inlay;
+        int point;
+        int lvl,cost;
+
+        if(!arg || arg == "")
+                return notify_fail("指令格式：inlay <材料> on <武器>\n");
+
+        me = this_player();
+
+        if(sscanf(arg,"%s on %s",it,target) == 2)
+        {
+
+                if(!objectp(weapon = present(target,me)))
+                        return notify_fail(name()+"愣愣的看着你道：你想加工什么？\n");
+
+                if(!weapon->query("ownermake")
+                || !weapon->query("weapon_prop"))
+                        return notify_fail(name()+"瞧了瞧"+ weapon->name() +"，说道：加工这个东西我可不懂。\n");
+
+                if(weapon->query("owner_id") != me->query("id"))
+                        return notify_fail(name()+"瞧了瞧"+ weapon->name() +"，一脸惶恐的说道："+ weapon->name()+"又不是你的，\n"
+                                           "万一人家找上门来，我可担当不起哟。\n");
+
+                if(!objectp(material = present(it,me)))
+                        return notify_fail(name()+"说道：你要拿什么材料来加工？\n");
+
+                if(!material->valid_inlay())
+                        return notify_fail(name()+"掂量了一下"+ material->name()+"道：这个东西可不能做为材料。\n");
+
+                if(!point = (int)material->query("inlay"))
+                        return notify_fail(name()+"拿着"+ material->name()+"瞧了瞧，说道：这个东西没有可以加工的成份。\n");
+
+
+                if(mapp(inlay = me->query_temp("pending/inlay"))
+                && inlay["item"] == weapon)
+                {
+                        if (me->is_busy())
+                                return notify_fail("你现在正忙着呢！\n");
+
+                        if (MONEY_D->player_pay(me, inlay["cost"]) != 1)
+                                return notify_fail(name()+"用鄙夷的眼神看你一眼，问道：你有钱加工这东西吗？\n");
+
+                        if(material != inlay["material"])
+                                return notify_fail(name()+"摇了摇头说道：你刚才好像不是给我这材料吧？\n");
+
+                        if(weapon->query("type") != "鞭")
+                                msg = sprintf("$N接过%s和%s，随手丢进大火炉里，待%s烧得通红，用钳子捞了起来；\n"
+                                               "将烧溶了的%s淋在%s上，再用大铁锤子用力的往上敲，叮叮当当的捣弄了半天，\n"
+                                               "才将%s还给了$n，说道：好啦好啦，拿去吧。\n",
+                                               material->name(),weapon->name(),weapon->name(),
+                                               material->name(),weapon->name(),weapon->name());
+                        else
+                                msg = sprintf("$N接过%s，随手将它丢进大火炉里，又转身拉起了鼓风机，呼呼的炉火\n"
+                                               "一会就把%s烧溶了；$N挥起锤子往%s上敲去，还一边喊着：「鬼叫你穷啊，\n"
+                                               "打铁烙！」过了半晌，$N才把%s还给了$n，说道：好了，拿去吧。\n",
+                                                material->name(),material->name(),weapon->name(),weapon->name());
+
+                        message_vision(msg,this_object(),me);
+                        lvl = (int)weapon->query("level");
+                        if((int)weapon->query("status/points") + point >= (lvl  * 100))
+                                weapon->levelup(me);
+                        else
+                                weapon->add("status/points",point);
+                        destruct(material);
+                        me->delete_temp("pending/inlay");
+                        me->start_busy(1+random(2));
+                        return 1;
+                }
+
+                cost = (int)weapon->query("level") * 1200 / 5;
+                msg = sprintf("$N掂量了一下%s，对$n说道：加工这东西，得要%s才行。\n",
+                        weapon->name(),MONEY_D->price_str(cost));
+                message_vision(msg,this_object(),me);
+                me->set_temp("pending/inlay/item",weapon);
+                me->set_temp("pending/inlay/cost",cost);
+                me->set_temp("pending/inlay/material",material);
+                tell_object(me,CYN"如果你确定要让"+ name() +"帮你加工，请再次输入这个指令。\n"NOR);
+                return 1;
+        }
+}
+int do_raze(string arg)
+{
+        object weapon;
+        object me;
+
+        me = this_player();
+
+        if(!arg)
+                return 0;
+
+        if(!objectp(weapon = present(arg,me)))
+                return notify_fail("你想毁了什么？\n");
+
+        if(!weapon->query("weapon_prop"))
+                return notify_fail(name()+"疑道：毁了这东西？丢了便是，何必费心呢？\n");
+
+        if(weapon->query("ownermake")
+        && weapon->query("owner_id") != me->query("id"))
+                return notify_fail(name()+"一脸惊惶的说：这是人家的家伙，万一人家找上门了，我可担当不起啊。\n");
+
+        if(me->query_temp("pending/raze")
+        && me->query_temp("pending/raze") == weapon)
+        {
+                message_vision("$N从$n接过"+ weapon->name()+"，说道：好哩，就让俺帮你烧了这废铜烂铁。$N话音刚落，\n"
+                               "从你手中接过"+ weapon->name() +"，看也不看，随手丢进了大火炉。那炉子火势极旺，不消半\n"
+                               "晌，火炉冒出了一阵清烟，恐怕"+ weapon->name() +"已经化为了铁水。\n",
+                               this_object(),me);
+                if(weapon->query("ownermake"))
+                {
+                        if(weapon->query("owner_id") != me->query("id"))
+                        {
+                                message_vision("$N用一种十分疑惑的眼神瞧瞧"+ weapon->name()+"，说道：你刚才\n"
+                                               "给我的可不是这东西，得让我再仔细瞧瞧。\n");
+                                me->delete_temp("pending/raze");
+                                return 1;
+                        }
+                        rm(weapon->query_save_file() + __SAVE_EXTENSION__);
+                        weapon->delete("owner_id");
+                        weapon->delete("owner_name");
+                        me->delete("item/weapon");
+                        me->save();
+                }
+                me->delete_temp("pending/raze");
+                destruct(weapon);
+                return 1;
+        }
+
+        message_vision("$N不冷不热的说道：毁了这东西，你以后可就没办法再拿回它了。\n",this_object());
+        tell_object(me,YEL"如果你确定毁了"+ weapon->name() + YEL"，那请你再一次输入这个指令。\n"NOR);
+        me->set_temp("pending/raze",weapon);
+        return 1;
+}
+int ask_founding()
+{
+        object me;
+        me = this_player();
+
+        if(me->query("career") != "铸造师")
+        {
+                write(name()+"不耐烦的说道：去去去，别在这里瞎搅和。\n");
+                return 1;
+        }
+
+        if(me->query_temp("pending/founding_money"))
+        {
+                write(name()+"说道：锻造台上有块烙铁，就给你炼炼吧。\n");
+                return 1;
+        }
+
+        if(me->query_temp("pending/ask_money"))
+        {
+                write(name()+"说道：怎么着，嫌贵啊？莫非我的烙铁是不要钱的？\n");
+                return 1;
+        }
+
+        message_vision("$N对$n说道：要来我这里炼炼也行，不过嘛，你得给我五两银子。\n"
+                       "要是钱带来了，就去锻造台那边打铁("HIW" founding "NOR")吧。\n",
+                        this_object(),me);
+        me->set_temp("pending/ask_money",name());
+        return 1;
+}
+
+int do_shroff(string arg)
+{
+        object me,obj;
+        string file,msg;
+
+        me = this_player();
+
+        if(!arg || arg == "")
+                return notify_fail(name()+"说道：你要我鉴别(shroff)什么？\n");
+
+        if(!objectp(obj = present(arg,me)))
+                return notify_fail(name()+"疑道：你要我鉴别什么？\n");
+
+        if(!obj->is_founding())
+                return notify_fail(name()+"说道：这"+ obj->name() +"不就是"+ obj->name()+"嘛！"
+                                  "这个有什么好鉴别的？\n");
+        if(obj->query("equipped"))
+                return notify_fail(name()+"说道：你不把"+ obj->name()+"解下来，我怎么帮你鉴别啊？\n");
+
+        if(obj->is_shroff())
+                return notify_fail(name()+"说道：这东西已经鉴别过了，你就别来瞎搅和了。\n");
+
+        if(MONEY_D->player_pay(me,2000) != 1)
+                return notify_fail(name()+"眼珠子溜溜，说道：想要我帮你鉴别嘛，就随便给个二十两银子吧。\n");
+
+        message_vision("$N接过$n瞄了瞄，又左右摆弄了一会，说道：这家伙，做工精湛，\n"
+                       "不愧为绝世神兵！不错！不错！说完，拿起铁锤往$n上敲敲打打的\n"
+                       "刻了些字，脸上露出了一阵欣喜。\n",this_object(),obj);
+
+        tell_object(me,name()+"说道：好啦，这把"+ obj->name()+"现在可以典当，也可以封存了。\n");
+
+        // 开始读取文件
+        msg = read_file(base_name(obj) + ".lpc");
+        // 文件中加入一个已鉴别的识别
+        msg += "\nint is_shroff() { return 1;}\n";
+        // 毁灭现有的武器文件
+        ITEM_D->raze_item(obj,base_name(obj) + ".lpc");
+        // 重新为该武器构造文件
+        file = base_name(obj) + "s.lpc";
+        // 写入文件
+        write_file(file,msg);
+        // 摧毁老的武器
+        destruct(obj);
+        // 重新复制武器
+        obj = new(file);
+        // 还给玩家
+        obj->move(me,1);
+        return 1;
+}

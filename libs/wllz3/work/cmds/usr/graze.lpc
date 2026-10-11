@@ -1,0 +1,109 @@
+//graze.c
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+int compelete_graze(object me,object horse);
+int halt_graze(object me,object horse);
+
+int main(object me,string arg)
+{
+	object horse;
+	object env;
+
+	if(me->is_busy())
+		return notify_fail("你正忙着呢。\n");
+
+	if(me->is_fighting())
+		return notify_fail("战斗中不能放牧。\n");
+
+	if(!objectp(horse = me->query_temp("is_riding"))
+		|| !present(horse,me))
+		return notify_fail("你要放牧什么？\n");
+
+	if(me->query("brawn") < 10)
+		return notify_fail("你太累了，还是休息一下再说吧。\n");
+
+	if(horse->query("horse_prop/life") >= horse->query("horse_prop/max_life"))
+		return notify_fail(horse->name()+"现在精神很好，不需要再放牧了。\n");
+
+	env = environment(me);
+	if(!env->query("valid_graze"))
+		return notify_fail("这里不能放牧。\n");
+
+	seteuid(getuid());
+
+	message_vision("$N放开手中缰绳，开始放牧$n。\n",me,horse);
+	me->start_busy(bind((: call_other,__FILE__,"compelete_graze",me,horse :),me),
+	               bind((: call_other,__FILE__,"halt_graze",me,horse :),me));
+	me->set_short_desc("牵着"+ horse->name() +"，正在放牧。");
+	return 1;
+}
+int compelete_graze(object me,object horse)
+{
+	mapping horse_prop;
+
+	if(!me ) return 0;
+
+	if(!objectp(horse))
+	{
+		write("突然，你心里一惊：怎么我的马不见了？\n");
+		me->set_short_desc(0);
+		return 0;
+	}
+
+	horse_prop = horse->query("horse_prop");
+	if(horse_prop["life"] >= horse_prop["max_life"])
+	{
+		if(horse->player_horse() && horse_prop["loyalty"] < 100)
+			horse_prop["loyalty"] += 1;
+		write(WHT"你的“" + horse->name() + NOR + WHT"”已经精神百倍了！\n" );
+		me->set_short_desc(0);
+		return 0;
+	}
+
+	horse_prop["life"]+=2;
+	switch(random(5))
+	{
+		case 1:
+			write( horse->name() + "正低着头，细细的嚼着草地上的嫩草！\n" );
+			break;
+		case 2:
+			write( horse->name() + "正在悠闲的散步，看起来精神不错！\n" );
+			break;
+		case 3:
+			write( horse->name() + "跪了下来，懒洋洋的躺在草地上休息！\n" );
+			break;
+		default:
+			write( horse->name() + "低下头，吮吸着嫩草上的露珠！\n" );
+			break;
+	}
+
+	if(horse_prop["life"] % 10 == 2)
+	write(sprintf(WHT"%s"NOR + WHT"的当前能力是：%-3d，最大能力是：%-3d。\n",
+		horse->name(),
+		horse_prop["life"],
+		horse_prop["max_life"]));
+
+	return 1;
+
+}
+int halt_graze(object me,object horse)
+{
+	write("你收回手中缰绳，停止放牧。\n");
+	me->set_short_desc(0);
+	return 1;
+}
+int help(object me)
+{
+	write(@TEXT
+
+这个指令是让你可以放牧你的马匹，恢复马匹的体力。当然，你必须到一
+些空旷的地方，才可以做这些事情。
+
+指令格式：graze | fangmu
+
+TEXT);
+	return 1;
+}

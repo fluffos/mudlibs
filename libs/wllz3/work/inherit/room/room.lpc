@@ -1,0 +1,292 @@
+// 本文件由编译后的 .b 二进制程序反编译还原，原始源码未随档案发布。
+// Decompiled from the compiled .b binary; the original source was not distributed.
+mapping query_entire_dbase();
+mapping query_entire_temp_dbase();
+varargs mixed set(mixed, mixed);
+mixed set_vector(mixed, mixed, mixed);
+varargs mixed query(mixed, mixed);
+mixed add(mixed, mixed);
+varargs void delete(mixed);
+mixed set_temp(mixed, mixed);
+mixed set_temp_vector(mixed, mixed, mixed);
+varargs mixed query_temp(mixed, mixed);
+mixed add_temp(mixed, mixed);
+int delete_temp(mixed);
+inherit "/feature/dbase";
+inherit "/feature/clean_up";
+int query_max_encumbrance();
+object make_inventory(mixed);
+void reset();
+string look_door(mixed);
+varargs int open_door(mixed, mixed);
+varargs int close_door(mixed, mixed);
+int check_door(mixed, mixed);
+varargs void create_door(mixed, mixed, mixed, mixed);
+mapping query_doors();
+mixed query_door(mixed, mixed);
+int valid_leave(mixed, mixed);
+void setup();
+varargs string short();
+varargs string long();
+
+nosave mapping doors;
+nosave string s_long;
+nosave string s_short;
+nosave mixed s_fight;
+
+int query_max_encumbrance() {
+    return 2147483647;
+}
+
+object make_inventory(mixed arg) {
+    mixed v1;
+    v1 = clone_object(arg);
+    v1->set("startroom", base_name(this_object()));
+    v1->move(this_object());
+    return v1;
+}
+
+void reset() {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    mixed v6;
+    mixed v7;
+    if ((v6 = query_temp("guarded")) && !sizeof(v6)) {
+        delete_temp("guarded");
+    }
+    v7 = all_inventory();
+    if (pointerp(query_temp("objects"))) {
+        v7 -= query_temp("objects");
+    }
+    v7 = filter(v7, (: clonep($1) && !$1->is_character() && !$1->no_clean_up() :));
+    if (query("playerhouse")) {
+        if (sizeof(v7) > 40) {
+            v7 = v7[40..];
+            foreach (v2 in v7) {
+                destruct(v2);
+            }
+        }
+    } else {
+        foreach (v2 in v7) {
+            destruct(v2);
+        }
+    }
+    set("no_clean_up", 0);
+    v1 = query("objects");
+    if (!mapp(v1)) {
+        return;
+    }
+    if (!mapp(v2 = query_temp("objects"))) {
+        v2 = allocate_mapping(sizeof(v1));
+    }
+    v3 = keys(v1);
+    for (v4 = 0; v4 < sizeof(v3); v4++) {
+        if (undefinedp(v2[v3[v4]]) && intp(v1[v3[v4]]) && v1[v3[v4]] > 1) {
+            v2[v3[v4]] = allocate(v1[v3[v4]]);
+        }
+        switch (v1[v3[v4]]) {
+        case 1:
+            if (!v2[v3[v4]]) {
+                v2[v3[v4]] = make_inventory(v3[v4]);
+            }
+            if (environment(v2[v3[v4]]) != this_object() && v2[v3[v4]]->is_character()) {
+                if (!v2[v3[v4]]->return_home(this_object())) {
+                    add("no_clean_up", 1);
+                }
+            }
+            break;
+        default:
+            for (v5 = 0; v5 < v1[v3[v4]]; v5++) {
+                if (!objectp(v2[v3[v4]][v5])) {
+                    v2[v3[v4]][v5] = make_inventory(v3[v4]);
+                    continue;
+                }
+                if (environment(v2[v3[v4]][v5]) != this_object() && v2[v3[v4]][v5]->is_character()) {
+                    if (!v2[v3[v4]][v5]->return_home(this_object())) {
+                        add("no_clean_up", 1);
+                    }
+                }
+            }
+        }
+    }
+    set_temp("objects", v2);
+}
+
+string look_door(mixed arg) {
+    if (!mapp(doors) || undefinedp(doors[arg])) {
+        return "你要看什么？\n";
+    }
+    if (doors[arg]["status"] & 1) {
+        return "这个" + doors[arg]["name"] + "是关着的。\n";
+    } else {
+        return "这个" + doors[arg]["name"] + "是开着的。\n";
+    }
+}
+
+varargs int open_door(mixed arg1, mixed arg2) {
+    mixed v1;
+    mixed v2;
+    if (!mapp(doors) || undefinedp(doors[arg1])) {
+        return notify_fail("这个方向没有门。\n");
+    }
+    if (!(doors[arg1]["status"] & 1)) {
+        return notify_fail(doors[arg1]["name"] + "已经是开着的了。\n");
+    }
+    v1 = query("exits");
+    if (!mapp(v1) || undefinedp(v1[arg1])) {
+        error("Room: open_door: attempt to open a door with out an exit.\n");
+    }
+    if (arg2) {
+        message("vision", "有人从另一边将" + doors[arg1]["name"] + "打开了。\n", this_object());
+    } else if (objectp(v2 = find_object(v1[arg1]))) {
+        if (!v2->open_door(doors[arg1]["other_side_dir"], 1)) {
+            return 0;
+        }
+    }
+    doors[arg1]["status"] &= 0;
+    return 1;
+}
+
+varargs int close_door(mixed arg1, mixed arg2) {
+    mixed v1;
+    mixed v2;
+    if (!mapp(doors) || undefinedp(doors[arg1])) {
+        return notify_fail("这个方向没有门。\n");
+    }
+    if (doors[arg1]["status"] & 1) {
+        return notify_fail(doors[arg1]["name"] + "已经是关着的了。\n");
+    }
+    v1 = query("exits");
+    if (!mapp(v1) || undefinedp(v1[arg1])) {
+        error("Room: close_door: attempt to open a door with out an exit.\n");
+    }
+    if (arg2) {
+        message("vision", "有人从另一边将" + doors[arg1]["name"] + "关上了。\n", this_object());
+    } else if (objectp(v2 = find_object(v1[arg1]))) {
+        if (!v2->close_door(doors[arg1]["other_side_dir"], 1)) {
+            return 0;
+        }
+    }
+    doors[arg1]["status"] |= 1;
+    return 1;
+}
+
+int check_door(mixed arg1, mixed arg2) {
+    if (!mapp(doors) || undefinedp(doors[arg1])) {
+        return 1;
+    }
+    arg2["status"] = doors[arg1]["status"];
+    return 1;
+}
+
+varargs void create_door(mixed arg1, mixed arg2, mixed arg3, mixed arg4) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    v2 = query("exits");
+    if (!mapp(v2) || undefinedp(v2[arg1])) {
+        error("Room: create_door: attempt to create a door without exit.\n");
+    }
+    if (stringp(arg2)) {
+        v1 = allocate_mapping(4);
+        v1["name"] = arg2;
+        v1["id"] = ({ arg1, arg2, "door" });
+        v1["other_side_dir"] = arg3;
+        v1["status"] = arg4;
+    } else if (mapp(arg2)) {
+        v1 = arg2;
+    } else {
+        error("Create_door: Invalid door data, string or mapping expected.\n");
+    }
+    set("item_desc/" + arg1, (: look_door, arg1 :));
+    if (objectp(v3 = find_object(v2[arg1]))) {
+        if (!v3->check_door(arg3, v1)) {
+            return;
+        }
+    }
+    if (!mapp(doors)) {
+        doors = ([ arg1 : v1 ]);
+    } else {
+        doors[arg1] = v1;
+    }
+}
+
+mapping query_doors() {
+    return doors;
+}
+
+mixed query_door(mixed arg1, mixed arg2) {
+    if (!mapp(doors) || undefinedp(doors[arg1])) {
+        return 0;
+    } else {
+        return doors[arg1][arg2];
+    }
+}
+
+int valid_leave(mixed arg1, mixed arg2) {
+    if (mapp(doors) && !undefinedp(doors[arg2])) {
+        if (doors[arg2]["status"] & 1) {
+            return notify_fail("你必须先把" + doors[arg2]["name"] + "打开！\n");
+        }
+    }
+    return 1;
+}
+
+void setup() {
+    seteuid(getuid());
+    this_object()->reset();
+}
+
+varargs mixed set(mixed arg1, mixed arg2) {
+    switch (arg1) {
+    case "short":
+        return s_short = arg2;
+    case "long":
+        return s_long = arg2;
+    case "no_fight":
+        return s_fight = arg2;
+    default:
+        return ::set(arg1, arg2);
+    }
+}
+
+varargs mixed query(mixed arg1, mixed arg2) {
+    switch (arg1) {
+    case "short":
+        return s_short;
+    case "long":
+        return s_long;
+    case "no_fight":
+        return s_fight;
+    default:
+        return ::query(arg1, arg2);
+    }
+}
+
+varargs void delete(mixed arg) {
+    switch (arg) {
+    case "short":
+        s_short = 0;
+        break;
+    case "long":
+        s_long = 0;
+        break;
+    case "no_fight":
+        s_fight = 0;
+        break;
+    default:
+        ::delete(arg);
+        break;
+    }
+}
+
+varargs string short() {
+    return s_short;
+}
+
+varargs string long() {
+    return s_long;
+}

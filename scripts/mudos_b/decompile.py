@@ -1315,8 +1315,10 @@ class FuncDecompiler:
             body, st = fd.decode(lo, hi)
             if st:
                 raise DecompileError('anonymous function leaves values')
+            used = set(fd.used_locals)
             params = ', '.join('mixed %s' % fd.lname(n) for n in range(nargs))
-            decls = ['mixed %s;' % fd.lname(n) for n in range(nargs, nargs + nlocals)]
+            decls = ['mixed %s;' % fd.lname(n) for n in range(nargs, nargs + nlocals)
+                     if not (TARGET['fluffos'] and n not in used)]
             body_lines = ['    ' + d for d in decls] + block_lines(trim_return(body, False), '    ')
             stack.append(Raw('function(%s) {\n%s\n}' % (params, '\n'.join(body_lines))))
             return self.idx(hi) if hi < self.end_off() else len(self.ins)
@@ -1412,7 +1414,10 @@ def type_str(t, name='', fn=False):
     return '%s %s%s' % (tn, '*' if arr else '', name)
 
 
-def modifiers(flags):
+TARGET = {'fluffos': False}   # FluffOS output: static functions -> protected, unused locals dropped
+
+
+def modifiers(flags, function=False):
     out = []
     if flags & bfile.NAME_PRIVATE:
         out.append('private')
@@ -1423,7 +1428,14 @@ def modifiers(flags):
     if flags & bfile.NAME_NO_MASK:
         out.append('nomask')
     if flags & bfile.NAME_STATIC:
-        out.append('static')
+        if TARGET['fluffos']:
+            if function:
+                if not flags & (bfile.NAME_PROTECTED | bfile.NAME_PRIVATE):
+                    out.append('protected')
+            else:
+                out.append('nosave')
+        else:
+            out.append('static')
     if flags & bfile.NAME_VARARGS:
         out.append('varargs')
     return out
@@ -1458,7 +1470,7 @@ class ProgramDecompiler:
     def func_header(self, f, nargs, proto, flags=None):
         prog = self.prog
         fl = prog.function_flags[f.runtime_index] if flags is None else flags
-        mods = modifiers(fl)
+        mods = modifiers(fl, function=True)
         ret = type_str(f.type, f.name)
         args = []
         for n in range(nargs):
@@ -1584,7 +1596,10 @@ class ProgramDecompiler:
         if body and isinstance(body[-1], SRet) and body[-1].e is None:
             body = body[:-1]
         lines = [self.func_header(f, nargs, False) + ' {']
+        used = set(fd.used_locals)
         for n in range(nargs, nargs + nloc):
+            if TARGET['fluffos'] and n not in used:
+                continue
             t = fd.local_types.get(n)
             lines.append('    %s;' % (type_str(t, fd.lname(n)) if t else 'mixed ' + fd.lname(n)))
         lines += block_lines(body, '    ')

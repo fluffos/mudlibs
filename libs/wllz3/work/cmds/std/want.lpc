@@ -1,0 +1,184 @@
+// want.c 通缉指令
+// Created by robert
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+int help(object me);
+void check_status(object obj);
+
+int main(object me, string arg)
+{
+	string target;
+	string *list;
+	string id,str;
+	object obj;
+	mapping family;
+	mapping info;
+	int money;
+
+	if(me->is_busy())
+		return notify_fail("你正忙着呢。\n");
+
+	if(!arg || arg == "list")
+	{
+		info = LOG_D->query_want();
+
+		if(!sizeof(info))
+			return notify_fail("目前尚未有任何通缉令存在。\n");
+
+		str = "目前游戏中通缉的人物如下：\n"
+			"------------------------------------------------------------\n";
+		list = keys(info);
+		foreach(id in list)
+			str += sprintf("通缉人物："CYN"%-8s"NOR"  代号："CYN"%-8s"NOR"赏金："CYN"%-8s\n"NOR
+				       "发 布 者：%-18s  有效时间：%s%-16s\n"NOR
+				       "%s",
+				info[id]["want_name"],capitalize(id),
+				MONEY_D->price_str(info[id]["money"]),
+				info[id]["wanter"],
+				info[id]["want_time"] > time()? HIG : HIR,
+				ctime(info[id]["want_time"])[0..15],
+				"------------------------------------------------------------\n");
+		write(str);
+		return 1;
+	}
+	else if(sscanf(arg,"family %s",target) == 1)
+	{
+		if((int)me->query("level") < 30
+			|| (int)me->query("weiwang") < 5000)
+			return notify_fail("你现在还没有资格发布通缉令。\n");
+
+		if(!me->is_member())
+			return notify_fail("对不起，只有会员才可以使用通缉功能。\n");
+
+		if(!mapp(family = me->query("family")))
+			return notify_fail("你还没有加入门派，不能使用门派通缉。\n");
+
+		if(!FAMILY_D->is_family_master(family["family_name"],me))
+			return notify_fail("你不是门派大师兄，不能使用门派通缉。\n");
+
+		obj = present(target,environment(me));
+		if(!obj) obj = find_player(target);
+		if(!obj || !me->visible(obj) || !playerp(obj))
+			return notify_fail("你要通缉的人目前不在游戏中。\n");
+
+		if(obj->is_scheme() || obj->is_ghost())
+			return notify_fail("你现在不能通缉这个人。\n");
+
+		if(LOG_D->query_want(obj->query("id")))
+			return notify_fail("该对象目前正属于被通缉状态中。\n");
+
+		if(obj->query("family/family_name") == family["family_name"])
+			return notify_fail("你不能通缉你的同门。\n");
+
+		money = (int)obj->query("level") * 1000000;
+
+		if(money > (int)me->query("balance"))
+			return notify_fail("你没有足够的金钱发布这个通缉令，请查阅您的存款。\n");
+
+		LOG_D->map_want_user(me,obj,family["family_name"]);
+		message("system",sprintf(HIR"【江湖告示】"NOR + WHT"%s通缉%s%s，赏金%s。\n"NOR,
+				family["family_name"],
+				obj->query("gender") == "女性"?"妖女":"恶贼",
+				obj->name(2),
+				MONEY_D->price_str(money)),users());
+
+		me->add("balance",-money);
+		me->add("weiwang",-2000);
+		check_status(obj);
+		return 1;
+	}
+	else if(sscanf(arg,"%s",target) == 1)
+	{
+		if((int)me->query("level") < 30
+			|| (int)me->query("weiwang") < 5000)
+			return notify_fail("你现在还没有资格发布通缉令。\n");
+
+		if(!me->is_member())
+			return notify_fail("对不起，只有会员才可以使用通缉功能。\n");
+
+		obj = present(target,environment(me));
+		if(!obj) obj = find_player(target);
+		if(!obj || !me->visible(obj) || !playerp(obj))
+			return notify_fail("你要通缉的人目前不在游戏中。\n");
+
+		if(LOG_D->query_want(obj->query("id")))
+			return notify_fail("该对象目前正属于被通缉状态中。\n");
+
+		if(obj->is_scheme() || obj->is_ghost())
+			return notify_fail("你现在不能通缉这个人。\n");
+
+		if((string)obj->query("family/family_name") == (string)me->query("family/family_name"))
+			return notify_fail("你不能通缉你的同门。\n");
+
+		money = (int)obj->query("level") * 500000;
+
+		if(money > (int)me->query("balance"))
+			return notify_fail("你没有足够的金钱发布这个通缉令，请查阅您的存款。\n");
+
+		LOG_D->map_want_user(me,obj,1);
+		message("system",sprintf(HIR"【江湖告示】"NOR + WHT"%s通缉%s%s，赏金%s。\n"NOR,
+				me->name(1),
+				obj->query("gender") == "女性"?"妖女":"恶贼",
+				obj->name(2),
+				MONEY_D->price_str(money)),users());
+		me->add("balance",-money);
+		me->add("weiwang",-1000);
+		check_status(obj);
+		return 1;
+	}
+	else return help(me);
+
+	return 1;
+}
+void check_status(object obj)
+{
+	object env;
+	string room;
+
+	env = environment(obj);
+	
+	if(!env->query("no_fight"))
+	{
+		tell_object(obj,HIR"\n江湖上已经开始散布出追杀你的消息，看来还是找个地方避避吧。\n\n"NOR);
+		return;
+	}
+
+	tell_room(env,"\n"HIY + obj->name(1) +"被人一把推了出去，一个声音战战兢兢的说道："
+			"去去去，这不是你的\n"
+			"避难所，你可别连累了我呀～～～～\n\n"NOR,({ obj }));
+
+	tell_object(obj,HIR"看来哪都不肯收留你，还是快找个地方躲起来吧。\n"NOR);
+	if(stringp(room = obj->query("startroom"))
+	&& !room->query("no_fight"))
+		obj->move(room);
+	else
+		obj->move("/d/center/guangchang");
+
+	tell_room(environment(obj),"\n"HIY + obj->name(1) +"被人从"+ env->short() +"推了出来，一个声音战"
+	                "战兢兢的说道：去去去，\n"
+	                "我可不认识你呀～～～～\n\n"NOR,({ obj }));
+	return;
+}
+
+
+int help(object me)
+{
+	write(@HELP
+
+指令格式：want <sb> | want family <sb>
+
+这个指令是让你对游戏中的某一个玩家进行通缉，被通缉的对象不管仇杀
+状态是否有效，都可以被通缉。但是你必须花费一定的金钱。门派通缉和
+个人通缉有所不同，门派通缉有效时间为四十八小时，而个人通缉则有效
+时间为二十四小时，死亡将降低一级。当然不同的效果，需要花费的金钱
+有所不同，而门派通缉令，也只有门派大师兄才有权发布。
+
+注：发布通缉者等级必须大于三十级且必须为游戏会员。
+
+HELP
+	);
+	return 1;
+}

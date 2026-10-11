@@ -1,0 +1,441 @@
+// 本文件由编译后的 .b 二进制程序反编译还原，原始源码未随档案发布。
+// Decompiled from the compiled .b binary; the original source was not distributed.
+inherit "/feature/dbase";
+private void change_state(mixed);
+private void init_player(mixed);
+private int start_competition();
+private void message_competition(mixed);
+private void auto_check();
+private void give_bouns(mixed);
+private void kickout_players();
+private void restore_status(mixed);
+private void send_invite_message();
+int check_out(mixed);
+int is_pking();
+int is_ready();
+void create();
+int clean_up();
+int join_competition(mixed);
+private void heart_beat();
+int start_by_others(mixed);
+object *query_all_competitor();
+int check_quit(mixed);
+string reject_join(mixed);
+
+nosave int state;
+nosave object *total = ({ });
+nosave int ready_time = 0;
+nosave mapping *tlist = ({ ([ "name" : "武林新秀赛", "time" : ({ 2200, 2210 }), "level" : ({ 30, 60 }), "last_day" : 0 ]), ([ "name" : "武林群英赛", "time" : ({ 400, 410 }), "level" : ({ 61, 120 }), "last_day" : 0 ]), ([ "name" : "武林争霸赛", "time" : ({ 1000, 1010 }), "level" : ({ 121, 200 }), "last_day" : 0 ]), ([ "name" : "武林大会", "time" : ({ 1600, 1610 }), "level" : ({ 30, 200 }), "last_day" : 0 ]) });
+nosave int selected;
+
+int is_pking() {
+    return state == 2;
+}
+
+int is_ready() {
+    return state == 1;
+}
+
+void create() {
+    seteuid("Root");
+    set("channel_id", "比赛精灵");
+    "/adm/daemons/channeld"->do_channel(this_object(), "sys", "比赛精灵已经启动。");
+    state = 0;
+    set_heart_beat(30);
+}
+
+int clean_up() {
+    return 1;
+}
+
+int join_competition(mixed arg) {
+    if (state) {
+        return notify_fail("现在玄冰石室正在举行活动，你还是等等再说吧。\n");
+    }
+    if (arg->query("level") < 20) {
+        return notify_fail("你这点本事就别进去啦。\n");
+    }
+    if (sizeof(arg->query_conditions()) > 1) {
+        return notify_fail("你现在状态不佳，还是别进去了。\n");
+    }
+    if (!pointerp(total)) {
+        total = ({ arg });
+    } else if (member_array(arg, total) == -1) {
+        total += ({ arg });
+    }
+    message_competition("听说" + (arg->query("is_zongshi") ? "一代武林宗师" : "一代武林侠客") + arg->name(2) + "进入玄冰石室。");
+    init_player(arg);
+    set_heart_beat(1);
+    return 1;
+}
+
+private void heart_beat() {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    seteuid("Root");
+    v1 = localtime(time());
+    v2 = v1[2] * 100 + v1[1];
+    switch (state) {
+    case 0:
+        v4 = time() / 86400;
+        for (v3 = 0; v3 < sizeof(tlist); v3++) {
+            if (v2 < tlist[v3]["time"][0] || v2 > tlist[v3]["time"][1]) {
+                continue;
+            }
+            if (v4 == tlist[v3]["last_day"]) {
+                break;
+            }
+            tlist[v3]["last_day"] = v4;
+            selected = v3;
+            change_state(1);
+            break;
+        }
+        break;
+    case 1:
+        if (time() < ready_time + 600) {
+            break;
+        }
+        change_state(2);
+        break;
+    case 2:
+        break;
+    }
+    if (sizeof(total)) {
+        auto_check();
+    }
+}
+
+private void change_state(mixed arg) {
+    mixed v1;
+    mixed v2;
+    v1 = localtime(time());
+    switch (arg) {
+    case 1:
+        kickout_players();
+        ready_time = time();
+        message_competition("听说一年一度的" + tlist[selected]["name"] + "马上就要举行了，不知道今年的冠军是谁？");
+        set_heart_beat(1);
+        send_invite_message();
+        break;
+    case 2:
+        if (!(v2 = start_competition())) {
+            message_competition("听说今年的" + tlist[selected]["name"] + "因故取消了，真是没劲。");
+            arg = 0;
+        } else {
+            message_competition("听说今年的" + tlist[selected]["name"] + "吸引了" + chinese_number(v2) + "名高手！走...看看热闹去。");
+            set_heart_beat(1);
+        }
+        break;
+    default:
+        total = ({ });
+        break;
+    }
+    state = arg;
+    if (!state) {
+        set_heart_beat(30);
+    }
+    return;
+}
+
+private void init_player(mixed arg) {
+    tell_object(arg, "\e[1;36m你眼前忽然一亮...\n\e[2;37;0m");
+    arg->set_override("unconcious", (: call_other, "/adm/daemons/pkd.lpc", "check_out" :));
+    arg->set_override("die", (: call_other, "/adm/daemons/pkd.lpc", "check_out" :));
+    arg->set_override("quit", (: call_other, "/adm/daemons/pkd.lpc", "check_quit" :));
+    arg->set_temp("backup/killer", arg->query_killer());
+    arg->set_temp("backup/want", arg->query_want());
+    arg->move(sprintf("/d/xuanbing/stone%d", random(10) + 1));
+    tell_object(arg, "\e[1;36m你来到了" + environment(arg)->short() + "\e" + "[1;36m里。\n");
+    arg->set("backup/condition", arg->query_condition());
+    arg->clear_condition();
+}
+
+private void kickout_players() {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    if (!pointerp(total)) {
+        return;
+    }
+    foreach (v1 in total) {
+        if (!objectp(v1)) {
+            continue;
+        }
+        v2 = base_name(environment(v1));
+        if (!sscanf(v2, "/d/xuanbing/stone%*s")) {
+            continue;
+        }
+        v3 = v1->query_entire_dbase();
+        v3["eff_qi"] = v3["max_qi"];
+        v3["eff_jing"] = v3["max_jing"];
+        v3["qi"] = 1;
+        v3["jing"] = 1;
+        tell_object(v1, "\e[1;36m\n石室守卫走了过来，嚷嚷道：“清场了！清场了，都快走吧！”\n\e[2;37;0m");
+        restore_status(v1);
+        v1->move("/d/xuanbing/entry");
+        message("vision", "只见" + v1->name() + "悻悻的走了出来。\n", environment(v1), ({ v1 }));
+        if (!living(v1)) {
+            v1->revive();
+        }
+    }
+}
+
+private int start_competition() {
+    mixed v1;
+    mixed v2;
+    mixed v4;
+    v1 = find_object("/d/xuanbing/ready");
+    if (!objectp(v1)) {
+        return 0;
+    }
+    v2 = filter(all_inventory(v1), (: userp($1) && !wizardp($1) :));
+    if (sizeof(v2) < 2) {
+        return 0;
+    }
+    if (sizeof(v2) == 2) {
+        if (v2[0]->query("marry/id") == v2[1]->query("id")) {
+            message_vision("石室守卫在外面喊道：“就你们夫妻俩个参加？还是算了吧。”\n", v2[0]);
+            return 0;
+        }
+    }
+    for (v4 = message("vision", "一个黑影走了过来，打开了门，冷冷道：“都进去吧！”\n", v1); v4 < sizeof(v2); v4++) {
+        set_eval_limit(0);
+        init_player(v2[v4]);
+    }
+    set_heart_beat(1);
+    message("vision", "\e[1;32m武林大会已经开始，快动手吧！\n", v2);
+    return sizeof(total = v2);
+}
+
+private void message_competition(mixed arg) {
+    "/adm/daemons/channeld"->do_channel(this_object(), "rumor", arg);
+}
+
+private void auto_check() {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    v4 = ({ });
+    for (v5 = 0; v5 < sizeof(total); v5++) {
+        if (!objectp(total[v5])) {
+            continue;
+        }
+        v3 = base_name(environment(total[v5]));
+        if (!sscanf(v3, "/d/xuanbing/stone%*s")) {
+            restore_status(total[v5]);
+            total[v5] = 0;
+        }
+        if (total[v5]->query("qi") < 1 || total[v5]->query("jing") < 1) {
+            v4 += ({ total[v5] });
+        }
+    }
+    foreach (v1 in v4) {
+        check_out(v1);
+    }
+    total -= ({ 0 });
+    if (!state) {
+        if (sizeof(total) < 1) {
+            change_state(0);
+        }
+        return;
+    }
+    if (state != 2) {
+        return;
+    }
+    if (sizeof(total) < 1) {
+        v2 = "听说武林大会大赛参赛者死的死，逃的逃，现在一个人都没有啦！";
+    } else if (sizeof(total) == 1) {
+        v2 = "听说本次武林大会圆满结束，" + total[0]->name(1) + "成为武林大会冠军！";
+        give_bouns(total[0]);
+    } else if (sizeof(total) == 2 && total[0]->query("marry/id") == total[1]->query("id")) {
+        v2 = "听说本次武林大会圆满结束，" + total[0]->name(1) + "和" + total[1]->name(1) + "夫妻双双把家还。";
+        give_bouns(total[0]);
+        give_bouns(total[1]);
+    } else {
+        return;
+    }
+    message_competition(v2);
+    change_state(0);
+}
+
+private void give_bouns(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    mixed v6;
+    restore_status(arg);
+    tell_object(arg, "这次真是爽呆了...\n");
+    arg->move("/d/xuanbing/entry");
+    message("vision", arg->name() + "慢慢的走了过来，一脸奸笑。\n", environment(arg), ({ arg }));
+    v2 = arg->query("level") / 3 * 6;
+    v1 = arg->query("level") / 2 * 5;
+    v3 = v2 * 2;
+    v4 = v1 / 3;
+    v5 = "\e[1;32m通过这次大会，你获得了 " + v1 + " 点经验";
+    if (v2 > 0) {
+        v2 = random(v2 / 3) + 1;
+        v5 += "和 " + v2 + " 点潜能。\n";
+    } else {
+        v2 = 0;
+        v5 += "。\n";
+    }
+    if (v3 > 0) {
+        v3 = random(v3 / 3) + 1;
+        v5 += "你的江湖威望提高了 " + v3 + " 点。";
+    } else {
+        v3 = 0;
+        v5 += "";
+    }
+    if (v4 > 0) {
+        v4 = random(v4 / 3) + 1;
+        v5 += "你的江湖阅历也提高了 " + v4 + " 点。\n\e" + "[2;37;0m";
+    } else {
+        v4 = 0;
+        v5 += "。\n\e[2;37;0m";
+    }
+    arg->add_points(arg, v2);
+    arg->add_exp(arg, v1);
+    arg->add("weiwang", v3);
+    arg->add("score", v4);
+    if (mapp(v6 = arg->query("family"))) {
+        "/adm/daemons/familyd"->map_family_score(v6["family_name"], 100);
+        "/adm/daemons/channeld"->do_channel(find_object("/adm/single/master"), "rumor", sprintf("听说%s的%s赢得了这次比武大会，%s的声望也随之提高了。", v6["family_name"], arg->name(), v6["family_name"]));
+    }
+    tell_object(arg, v5);
+    log_file("fight_win", sprintf("%s比武胜利获得经验：%d，潜能：%d，威望：%d，阅历：%d。\n", arg->name(2), v1, v2, v3, v4));
+}
+
+private void restore_status(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    arg->delete_override("unconcious");
+    arg->delete_override("die");
+    arg->delete_override("surrender");
+    arg->delete_override("quit");
+    arg->remove_all_enemy(1);
+    arg->remove_all_killer();
+    arg->clear_condition();
+    arg->receive_damage("qi", 0);
+    arg->delete_temp("last_damage_from");
+    arg->apply_killer(arg->query_temp("backup/killer"));
+    arg->apply_want(arg->query_temp("backup/want"));
+    v1 = arg->query("backup/condition");
+    arg->delete("backup/condition");
+    arg->delete_temp("block_msg/all");
+    if (!mapp(v1)) {
+        return;
+    }
+    v2 = keys(v1);
+    for (v3 = 0; v3 < sizeof(v2); v3++) {
+        arg->apply_condition(v2[v3], v1[v2[v3]]);
+    }
+}
+
+private void send_invite_message() {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    v4 = tlist[selected]["level"][0];
+    v3 = tlist[selected]["level"][1];
+    v1 = filter(all_interactive(), (: !wizardp($1) && $1->query("level") >= $(v4) && $1->query("level") <= $(v3) :));
+    if (!sizeof(v1)) {
+        return;
+    }
+    v2 = find_living("wulin mengzhu");
+    if (!v2) {
+        v2 = find_object("/clone/npc/meng-zhu", 1);
+    }
+    v5 = v2->name();
+    message("vision", "\e[1;32m武林盟主" + v5 + "发来了的武林盟帖，邀请你参加这次" + tlist[selected]["name"] + "，有没有兴趣去显显身手？\n\e" + "[2;37;0m", v1);
+}
+
+int start_by_others(mixed arg) {
+    if (state == 2) {
+        return notify_fail("现在武林大会正在进行中。\n");
+    }
+    if (state == 1) {
+        return notify_fail("现在武林大会正在报名中。\n");
+    }
+    if (arg < 0 || arg >= sizeof(tlist)) {
+        return notify_fail("没有这个等级的武林大会(0-" + (sizeof(tlist) - 1) + ")。\n");
+    }
+    selected = arg;
+    change_state(1);
+    return 1;
+}
+
+object *query_all_competitor() {
+    return total;
+}
+
+int check_quit(mixed arg) {
+    message_competition("听说" + arg->name(1) + "临阵脱逃，溜走了。");
+    restore_status(arg);
+    if (pointerp(total)) {
+        total -= ({ arg });
+    }
+    tell_object(arg, "你逃出了玄冰石室。\n");
+    arg->move("/d/xuanbing/entry");
+    message("vision", "只见" + arg->name() + "慌里慌张的跑了出来。\n", environment(arg), ({ arg }));
+    return 1;
+}
+
+int check_out(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    v4 = base_name(environment(arg));
+    if (!sscanf(v4, "/d/xuanbing/stone%*s")) {
+        total -= ({ arg });
+        return 0;
+    }
+    v2 = arg->query_entire_dbase();
+    v2["eff_qi"] = v2["max_qi"];
+    v2["eff_jing"] = v2["max_jing"];
+    v2["qi"] = 1;
+    v2["jing"] = 1;
+    tell_object(arg, "\e[1;31m\n你觉得眼前一阵模糊...这下完了！\n\e[2;37;0m");
+    if (v1 = arg->query_temp("last_damage_from")) {
+        v3 = "听说" + arg->name(1) + "惨遭" + v1->name(1) + "的毒手，被无情淘汰。";
+    } else {
+        v3 = "听说" + arg->name(1) + "运气不佳，本领有限、已经惨遭淘汰。";
+    }
+    message_competition(v3);
+    restore_status(arg);
+    total -= ({ arg });
+    message("vision", "只听见“乓”的一声，" + arg->name() + "被人从玄冰石室里踢了出来，样子好狼狈。\n", environment(arg), ({ arg }));
+    tell_object(arg, "\e[1;33m恍恍忽忽之中，有人朝你屁股狠狠的揣了一脚，还骂道：这点本事也敢出来混？不自量力！\n话音刚落，你立刻被人从玄冰石室里踢了出来，重重的摔倒了地上。\n\e[2;37;0m");
+    arg->move("/d/xuanbing/entry");
+    if (!living(arg)) {
+        arg->revive();
+    }
+    return 1;
+}
+
+string reject_join(mixed arg) {
+    mixed v1;
+    if (state == 2) {
+        return "现在" + tlist[selected]["name"] + "正在举行，你还是下次再来吧。";
+    }
+    if (state != 1) {
+        return "现在没要举行武林大会啊？你跑来干什么？";
+    }
+    v1 = arg->query("level");
+    if (v1 < tlist[selected]["level"][0]) {
+        return "你还是算了吧，就你这三脚猫功夫，难道去送死？";
+    }
+    if (v1 > tlist[selected]["level"][1]) {
+        return "嘿，一把年纪了还要和小辈们争？";
+    }
+    return 0;
+}

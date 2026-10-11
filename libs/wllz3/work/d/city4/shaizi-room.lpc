@@ -1,0 +1,502 @@
+// 本文件由编译后的 .b 二进制程序反编译还原，原始源码未随档案发布。
+// Decompiled from the compiled .b binary; the original source was not distributed.
+inherit "/inherit/room/room";
+void pay_player(mixed, mixed);
+int pay_out(mixed, mixed);
+int check_silver(mixed);
+void game_process();
+void show_shaizi(mixed);
+void game_result();
+void check_finish(mixed);
+void check_start(mixed);
+void create();
+void init();
+int do_bet(mixed);
+int do_cancel();
+int do_zuozhuang();
+int do_retire();
+int do_start(mixed);
+int do_look(mixed);
+
+int round = 0;
+int ask_for_zhuang = 0;
+int game_status = 0;
+string zhuang_id = "no zhuang";
+int total_bet = 0;
+int max_bet;
+
+void create() {
+    set("short", "骰子房");
+    set("long", "屋中间摆着一张看起来相当结实的大长条桌(table)， 四周围了十几\n把靠背木椅。北面墙上有一块牌子(paizi)。\n");
+    set("item_desc", ([ "paizi" : "\n\n赌骰子规则：\n\n每一轮有个庄家，输赢只跟庄家比。两粒骰子，成对为大。十点最小。\n开赌顺序：\n一，确定庄家(用zz或zuozhuang坐庄，retire或rz, rangzhuang让庄)。\n二，庄家宣布开盘(start <赌注上限>)。\n三，玩家下注(bet或xz, xiazhu)。\n四，庄家下注(bet或xz, xiazhu)，至少要押别的玩家的总和。\n五，庄家下注就开赌了。\n\n注意事项：\n一，赌中不要离开赌场，否则一切损失概不负责。\n二，坐庄时要先拿出五两金子的保证金，让庄时退还。非正常丢庄(如\n　　中途离开等)保证金自动失去。\n三，每一轮从庄家宣布开盘起十分钟之内必须完成，否则取消重来。\n　　非庄家所下之注可被退回，而庄家则可能会有损失。\n四，如果庄家迟迟"
+            "不宣布开盘，玩家可用坐庄(zz)指令要求换庄。\n　　要求换庄后两分钟内庄家比须宣布开盘，否则丢庄。\n五，在下注过程中可用取消(cancel)指令。庄家用此指令则宣布此局无效，\n　　大家将赌注取回，庄家非正常丢庄。非庄家用此指令则表示退出此\n　　局，赌注可取回。\n\n\n" ]));
+    set("exits", ([ "east" : "/d/city4/clubpoem" ]));
+    set("objects", ([ "/d/city4/npc/gongsun" : 1 ]));
+    set("no_fight", 1);
+    set("no_magic", 1);
+    set("no_caishen", 1);
+    setup();
+}
+
+void init() {
+    mixed v1;
+    add_action("do_bet", "bet");
+    add_action("do_bet", "xiazhu");
+    add_action("do_bet", "xz");
+    add_action("do_zuozhuang", "zuozhuang");
+    add_action("do_zuozhuang", "zz");
+    add_action("do_retire", "retire");
+    add_action("do_retire", "rangzhuang");
+    add_action("do_retire", "rz");
+    add_action("do_start", "start");
+    add_action("do_start", "kaipan");
+    add_action("do_start", "kp");
+    add_action("do_cancel", "cancel");
+    add_action("do_look", "look");
+    v1 = this_player();
+    if (v1->query_temp("shaizi")) {
+        v1->delete_temp("shaizi");
+    }
+}
+
+int do_bet(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    v1 = this_player();
+    if (!arg || sscanf(arg, "%d %s", v2, v3) != 2) {
+        return notify_fail("请使用：bet(或xiazhu, xz) <数目> <货币>\n");
+    }
+    v4 = present(v3 + "_money", v1);
+    if (!v4) {
+        return notify_fail("你身上没有这种钱。\n");
+    }
+    if (v2 < 1) {
+        return notify_fail("想行骗？\n");
+    }
+    if (v2 > v4->query_amount()) {
+        return notify_fail("你没这么多钱。\n");
+    }
+    if (v3 == "coin") {
+        return notify_fail("铜板？还是到大街上去赌吧。\n");
+    }
+    if (zhuang_id != v1->query("id")) {
+        if (game_status != 2) {
+            return notify_fail("还没到下注的时候，听庄家吩咐。\n");
+        }
+        v5 = v2 * v4->query("base_value") / 100;
+        if (v5 + v1->query_temp("shaizi/bet_amount") > max_bet) {
+            return notify_fail("庄家太穷了，赌不起。换庄家吧。\n");
+        }
+        total_bet += v5;
+        v1->set_temp("shaizi/bet_amount", v5 + v1->query_temp("shaizi/bet_amount"));
+        message_vision(sprintf("$N拿出%s%s%s，押在桌子上。\n", chinese_number(v2), v4->query("base_unit"), v4->query("name")), v1);
+        if (v2 == v4->query_amount()) {
+            v4->add_amount(-v2);
+            destruct(v4);
+        } else {
+            v4->add_amount(-v2);
+        }
+    } else {
+        if (game_status != 2) {
+            return notify_fail("你现在头脑不清醒，还是别坐庄了。\n");
+        }
+        if (!total_bet) {
+            return notify_fail("还没人下注呢。等大家都下完了你再下吧。\n");
+        }
+        v5 = v2 * v4->query("base_value") / 100;
+        if (v5 < total_bet) {
+            return notify_fail("这一轮共下注" + total_bet + "两银子，庄家所押不能少于这个数目。\n");
+        }
+        total_bet += v5;
+        v1->set_temp("shaizi/bet_amount", v5 + v1->query_temp("shaizi/bet_amount"));
+        message_vision(sprintf("$N拿出%s%s%s，押在桌子上。\n", chinese_number(v2), v4->query("base_unit"), v4->query("name")), v1);
+        if (v2 == v4->query_amount()) {
+            v4->add_amount(-v2);
+            destruct(v4);
+        } else {
+            v4->add_amount(-v2);
+        }
+        message_vision("$N手一压：好！现在开掷，大家一个一个来。\n\e[2;37;0m", v1);
+        game_status = 3;
+        call_out("game_process", 1);
+    }
+    return 1;
+}
+
+int do_cancel() {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    v3 = all_inventory();
+    v1 = this_player();
+    if (game_status != 2) {
+        return notify_fail("现在没有什么需要取消的。\n");
+    }
+    if (v1->query_temp("shaizi_cancel_count") > 5) {
+        return notify_fail("你最近反悔的次数太多了，赌信已经太差。\n");
+    }
+    if (v1->query("id") == zhuang_id) {
+        message_vision("$N起身说道：这一把我赌不下去了，你们把钱拿回去另找人坐庄吧！\n", v1);
+        zhuang_id = "no zhuang";
+        v1->delete_temp("shaizi");
+        v1->set_temp("shaizi_cancel_count", 1 + v1->query_temp("shaizi_cancel_count"));
+        for (v2 = 0; v2 < sizeof(v3); v2++) {
+            if (v3[v2]->query_temp("shaizi/bet_amount") > 0 && v3[v2]->query("id") != zhuang_id) {
+                total_bet -= v3[v2]->query_temp("shaizi/bet_amount");
+                if (total_bet >= 0) {
+                    pay_player(v3[v2], v3[v2]->query_temp("shaizi/bet_amount"));
+                    message_vision("$N起身把放在桌子上的赌注拿了回来。\n", v3[v2]);
+                } else {
+                    message_vision("糟糕！有人在这里偷钱！$N的钱没了。\n", v3[v2]);
+                }
+            }
+            if (v3[v2]->query_temp("shaizi")) {
+                v3[v2]->delete_temp("shaizi");
+            }
+        }
+        zhuang_id = "no zhuang";
+        game_status = 0;
+        total_bet = 0;
+        remove_call_out("check_finish");
+    } else {
+        if (v1->query_temp("shaizi/bet_amount") <= 0) {
+            return notify_fail("你又没下注，在这里起什么哄？\n");
+        }
+        total_bet -= v1->query_temp("shaizi/bet_amount");
+        if (total_bet >= 0) {
+            message_vision("$N起身把放在桌子上的赌注拿了回来。\n", v1);
+            pay_player(v1, v1->query_temp("shaizi/bet_amount"));
+            v1->delete_temp("shaizi");
+            v1->set_temp("shaizi_cancel_count", 1 + v1->query_temp("shaizi_cancel_count"));
+        } else {
+            message_vision("糟糕！有人在这里偷钱！$N的钱没了。\n", v1);
+        }
+    }
+    return 1;
+}
+
+int do_zuozhuang() {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    v3 = 500;
+    v1 = this_player();
+    if (zhuang_id == v1->query("id")) {
+        return notify_fail("你已经是庄家了。\n");
+    }
+    if (game_status == 1 || !game_status) {
+        if (objectp(v2 = present(zhuang_id, this_object()))) {
+            if (!ask_for_zhuang) {
+                ask_for_zhuang = 1;
+                call_out("check_start", 120, round);
+                tell_room(this_object(), v1->query("name") + "也想坐庄。如果庄家两分钟内不能开盘(start)，就得让庄了。\n");
+            }
+            return notify_fail("已经有庄家了，叫" + v2->query("name") + "(" + v2->query("id") + ")让庄吧。\n");
+        } else {
+            if (!pay_out(v1, v3)) {
+                return notify_fail("你没有足够的钱交坐庄保证金。\n");
+            }
+            v1->set_temp("shaizi_zhuang_deposit", 500);
+            message_vision("$N拿出一锭金子往桌上一拍，在庄家的位子上坐了下来。\n", v1);
+            zhuang_id = v1->query("id");
+            game_status = 1;
+            return 1;
+        }
+    } else {
+        return notify_fail("现在还不能换庄。\n");
+    }
+}
+
+int do_retire() {
+    mixed v1;
+    v1 = this_player();
+    if (zhuang_id != v1->query("id")) {
+        return notify_fail("你又不是庄家，让什么让？\n");
+    }
+    if (game_status == 1 || !game_status) {
+        message_vision("$N站起来嚷道：这个霉庄我可不坐了！说罢顺手将桌上的保证金揣在怀里。\n", v1);
+        zhuang_id = "no zhuang";
+        game_status = 0;
+        pay_player(v1, v1->query_temp("shaizi_zhuang_deposit"));
+        v1->delete_temp("shaizi_zhuang_deposit");
+        return 1;
+    } else {
+        return notify_fail("想逃？好歹得赌完这一把。\n");
+    }
+}
+
+int do_start(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    v1 = 1000;
+    v2 = 10;
+    v4 = this_player();
+    if (zhuang_id != v4->query("id")) {
+        return notify_fail("只有庄家才能开盘。\n");
+    }
+    if (game_status == 1 || !game_status) {
+        if (!arg || sscanf(arg, "%d", v3) != 1) {
+            return notify_fail("请使用：start <赌注上限，单位：黄金>\n");
+        }
+        if (v3 < v2) {
+            return notify_fail("你也太穷了吧？还是别坐庄了。赌注上限别少于" + chinese_number(v2) + "两黄金。\n");
+        }
+        if (v3 > v1) {
+            return notify_fail("你也太富了吧？别超过" + chinese_number(v1) + "两黄金。\n");
+        }
+        max_bet = v3 * 100;
+        message_vision("$N手一挥大声叫道：开盘！现在开始下注！\n", v4);
+        message_vision("$N顿了一下：赌注别超过" + chinese_number(v3) + "两黄金。\n", v4);
+        total_bet = 0;
+        game_status = 2;
+        round++;
+        remove_call_out("check_finish");
+        call_out("check_finish", 600, round);
+        return 1;
+    } else {
+        return notify_fail("现在还不能开盘。\n");
+    }
+}
+
+void check_start(mixed arg) {
+    ask_for_zhuang = 0;
+    if (arg != round) {
+        return;
+    }
+    if (game_status == 3) {
+        return;
+    }
+    tell_room(this_object(), "庄家迟迟不开盘，只好换庄了。\n");
+    zhuang_id = "no zhuang";
+    game_status = 0;
+    total_bet = 0;
+}
+
+void check_finish(mixed arg) {
+    mixed v1;
+    mixed v2;
+    v2 = all_inventory();
+    if (arg != round) {
+        return;
+    }
+    if (game_status == 3) {
+        return;
+    }
+    tell_room(this_object(), "这一局迟迟未能完成，只好取消重来了。\n");
+    for (v1 = 0; v1 < sizeof(v2); v1++) {
+        if (v2[v1]->query_temp("shaizi/bet_amount") > 0 && v2[v1]->query("id") != zhuang_id) {
+            total_bet -= v2[v1]->query_temp("shaizi/bet_amount");
+            if (total_bet >= 0) {
+                pay_player(v2[v1], v2[v1]->query_temp("shaizi/bet_amount"));
+                message_vision("$N起身把放在桌子上的赌注拿了回来。\n", v2[v1]);
+            } else {
+                message_vision("糟糕！有人在这里偷钱！$N的钱没了。\n", v2[v1]);
+            }
+        }
+        if (v2[v1]->query_temp("shaizi")) {
+            v2[v1]->delete_temp("shaizi");
+        }
+    }
+    zhuang_id = "no zhuang";
+    game_status = 0;
+    total_bet = 0;
+}
+
+void game_process() {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    v3 = all_inventory();
+    v2 = 0;
+    for (v1 = 0; v1 < sizeof(v3); v1++) {
+        if (v3[v1]->query_temp("shaizi/bet_amount") > 0) {
+            v2++;
+            call_out("show_shaizi", v2 * 4, v3[v1]);
+        }
+    }
+    call_out("game_result", (v2 + 2) * 4);
+}
+
+void show_shaizi(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    v2 = ({ "瞪着一对红眼，大喝一声：杀！手中的两粒骰子往桌子上一摔！\n", "往手上吹了口气，两粒骰子轻轻一抛．．．\n", "微微一笑，两粒骰子往桌子上一滚．．．\n", "望空作了个揖：菩萨保佑！两粒骰子战战噤噤地桌上一投．．．\n", "拿着两粒骰子，抖足精神：娶老婆生孩子在此一举！\n", "衣袖一卷，大声叫道：看我的！\n", "咬牙切齿，两粒骰子往桌子上狠狠地一砸．．．\n", "满头大汗，自言自语道：六对，六对，该上我家了吧．．．\n", "潇洒地作了个四方揖：这把该我赢，看好了．．．\n" });
+    v3 = ({ "\e[47m\e[1;31m┌───┐\n\e[2;37;0m\e[47m\e[1;31m│　　　│\n\e[2;37;0m\e[47m\e[1;31m│　　　│\n\e[2;37;0m\e[47m\e[1;31m│　　　│\n\e[2;37;0m\e[47m\e[1;31m└───┘\n\n\e[2;37;0m", "\e[47m\e[1;31m┌───┐\n\e[2;37;0m\e[47m\e[1;31m│　　　│\n\e[2;37;0m\e[47m\e[1;31m│　●　│\n\e[2;37;0m\e[47m\e[1;31m│　　　│\n\e[2;37;0m\e[47m\e[1;31m└───┘\n\n\e[2;37;0m", "\e[47m\e[1;31m┌───┐\n\e[2;37;0m\e[47m\e[1;31m│　　　│\n\e[2;37;0m\e[47m\e[1;31m│●　●│\n\e[2;37;0m\e[47m\e[1;31m│　　　│\n\e[2;37;0m\e[47m\e[1;31m└───┘\n\n\e[2;37;0m", "\e[47m\e[1;31m┌───┐\n\e[2;37;0m\e[47m\e[1;31m│●　　│\n\e[2;37;0m\e[47m\e[1;31m│　●　│\n\e[2;37;0m\e[47m\e[1;31m│　　●│\n\e[2;37;0m\e[47m\e[1;31m└───┘\n\n\e[2;37;0m",
+            "\e[47m\e[1;31m┌───┐\n\e[2;37;0m\e[47m\e[1;31m│●　●│\n\e[2;37;0m\e[47m\e[1;31m│　　　│\n\e[2;37;0m\e[47m\e[1;31m│●　●│\n\e[2;37;0m\e[47m\e[1;31m└───┘\n\n\e[2;37;0m", "\e[47m\e[1;31m┌───┐\n\e[2;37;0m\e[47m\e[1;31m│●　●│\n\e[2;37;0m\e[47m\e[1;31m│　●　│\n\e[2;37;0m\e[47m\e[1;31m│●　●│\n\e[2;37;0m\e[47m\e[1;31m└───┘\n\n\e[2;37;0m", "\e[47m\e[1;31m┌───┐\n\e[2;37;0m\e[47m\e[1;31m│●　●│\n\e[2;37;0m\e[47m\e[1;31m│●　●│\n\e[2;37;0m\e[47m\e[1;31m│●　●│\n\e[2;37;0m\e[47m\e[1;31m└───┘\n\n\e[2;37;0m" });
+    if (environment(arg) == this_object() || arg->query_temp("shaizi/bet_amount") > 0) {
+        if (wizardp(arg)) {
+            arg->set_temp("shaizi/point1", random(3) + 4);
+            arg->set_temp("shaizi/point2", random(3) + 4);
+        } else {
+            arg->set_temp("shaizi/point1", random(6) + 1);
+            arg->set_temp("shaizi/point2", random(6) + 1);
+        }
+        if (arg->query_temp("shaizi/point1") == arg->query_temp("shaizi/point2") && arg->query_temp("shaizi/point2") != 0) {
+            arg->set_temp("shaizi/point", 100 + arg->query_temp("shaizi/point2"));
+            v1 = chinese_number(arg->query_temp("shaizi/point2")) + "对";
+        } else {
+            arg->set_temp("shaizi/point", (arg->query_temp("shaizi/point1") + arg->query_temp("shaizi/point2")) % 10);
+            v1 = chinese_number(arg->query_temp("shaizi/point")) + "点";
+            if (!arg->query_temp("shaizi/point")) {
+                v1 = "蹩十";
+            }
+        }
+        tell_room(this_object(), arg->query("name") + v2[random(sizeof(v2))]);
+        tell_room(this_object(), v3[arg->query_temp("shaizi/point1")]);
+        tell_room(this_object(), v3[arg->query_temp("shaizi/point2")]);
+        tell_room(this_object(), "众人齐声叫道：" + v1 + "！\n");
+    }
+}
+
+void game_result() {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    v4 = all_inventory();
+    if (objectp(v1 = present(zhuang_id, this_object())) && living(v1)) {
+        tell_room(this_object(), v1->query("name") + "大声宣布：结帐！\n");
+        v3 = v1->query_temp("shaizi/point");
+    } else {
+        tell_room(this_object(), "庄家不知道跑到哪里去了。大家都赢了！\n");
+        v3 = -1;
+        zhuang_id = "no zhuang";
+    }
+    for (v2 = 0; v2 < sizeof(v4); v2++) {
+        if (v4[v2]->query_temp("shaizi/bet_amount") > 0 && v4[v2]->query("id") != zhuang_id) {
+            if (v4[v2]->query_temp("shaizi/point") > v3) {
+                tell_room(this_object(), v4[v2]->query("name") + "赢了" + chinese_number(v4[v2]->query_temp("shaizi/bet_amount")) + "两银子。\n");
+                total_bet -= v4[v2]->query_temp("shaizi/bet_amount") * 2;
+                if (total_bet >= 0) {
+                    pay_player(v4[v2], v4[v2]->query_temp("shaizi/bet_amount") * 2);
+                } else {
+                    tell_room(this_object(), "糟糕！有人在这里偷钱！" + v4[v2]->query("name") + "赢的钱拿不到了。\n");
+                }
+                continue;
+            }
+            tell_room(this_object(), v4[v2]->query("name") + "输了" + chinese_number(v4[v2]->query_temp("shaizi/bet_amount")) + "两银子。\n");
+        }
+    }
+    if (v1 && total_bet > 0) {
+        tell_room(this_object(), "剩下的" + chinese_number(total_bet) + "两银子都是庄家" + v1->query("name") + "的了。\n");
+        pay_player(v1, total_bet);
+        total_bet = 0;
+    }
+    for (v2 = 0; v2 < sizeof(v4); v2++) {
+        if (v4[v2]->query_temp("shaizi")) {
+            v4[v2]->delete_temp("shaizi");
+        }
+    }
+    game_status = 0;
+    total_bet = 0;
+    remove_call_out("check_finish");
+}
+
+void pay_player(mixed arg1, mixed arg2) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    if (arg2 / 1000 > 0) {
+        v1 = clone_object("/clone/money/thousand-cash");
+        v1->set_amount(arg2 / 1000);
+        arg2 -= v1->query_amount() * 1000;
+        v1->move(arg1, 1);
+    }
+    if (arg2 / 100 > 0) {
+        v2 = clone_object("/clone/money/gold");
+        v2->set_amount(arg2 / 100);
+        arg2 -= v2->query_amount() * 100;
+        v2->move(arg1, 1);
+    }
+    v3 = clone_object("/clone/money/silver");
+    v3->set_amount(arg2);
+    if (arg2 > 0) {
+        v3 = clone_object("/clone/money/silver");
+        v3->set_amount(arg2);
+        arg2 -= v3->query_amount();
+        v3->move(arg1, 1);
+    }
+}
+
+int pay_out(mixed arg1, mixed arg2) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    v1 = check_silver(arg1) - arg2;
+    if (v1 < 0) {
+        return 0;
+    }
+    v2 = present("1000-cash_money", arg1);
+    v3 = present("gold_money", arg1);
+    v4 = present("silver_money", arg1);
+    if (v2) {
+        destruct(v2);
+    }
+    if (v3) {
+        destruct(v3);
+    }
+    if (v4) {
+        destruct(v4);
+    }
+    if (v1 > 0) {
+        pay_player(arg1, v1);
+    }
+    return 1;
+}
+
+int check_silver(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    v1 = present("1000-cash_money", arg);
+    v2 = present("gold_money", arg);
+    v3 = present("silver_money", arg);
+    v4 = 0;
+    if (v1) {
+        v4 += v1->query_amount() * 1000;
+    }
+    if (v2) {
+        v4 += v2->query_amount() * 100;
+    }
+    if (v3) {
+        v4 += v3->query_amount();
+    }
+    return v4;
+}
+
+int do_look(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    v2 = all_inventory();
+    if (arg == "table") {
+        if (total_bet > 0) {
+            write("现在的赌注总共是" + total_bet + "两银子。\n");
+            for (v3 = 0; v3 < sizeof(v2); v3++) {
+                if (v2[v3]->query_temp("shaizi/bet_amount") > 0) {
+                    write(v2[v3]->query("name") + "：" + v2[v3]->query_temp("shaizi/bet_amount") + "两。\n");
+                }
+            }
+        } else {
+            write("现在还没有人下注。\n");
+        }
+        if (zhuang_id == "no zhuang") {
+            write("目前还没有庄家。\n");
+        } else if (objectp(v1 = present(zhuang_id, this_object())) && living(v1)) {
+            write("目前的庄家是" + v1->query("name") + "(" + v1->query("id") + ")。\n");
+        } else {
+            write("庄家不知道跑到哪里去了。\n");
+            zhuang_id = "no zhuang";
+        }
+        return 1;
+    }
+    return 0;
+}

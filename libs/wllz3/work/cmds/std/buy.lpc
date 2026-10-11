@@ -1,0 +1,94 @@
+//buy.c
+// Design By Robert 蝴蝶君 email:robert_st@sina.com
+
+#include <ansi.h>
+#include <config.h>
+
+inherit F_CLEAN_UP;
+int help(object me);
+int main(object me, string arg)
+{
+	string item, target = "";
+	object owner;
+	int i, price;
+	int amount;
+	object *inv;
+	object *obs;
+
+	if(me->is_busy())
+		return notify_fail("你现在正忙着呢。\n");
+
+	if(!environment(me))
+		return notify_fail("你要跟谁买东西？\n");
+
+	if(!arg)
+		return help(me);
+
+	if(sscanf(arg,"%s from %s", item, target)!=2 )
+	{
+		inv = all_inventory(environment(me));
+		i = sizeof (inv);
+		while (i--)
+		{
+			if(inv[i]->is_vendor())
+			{
+				item = arg;
+				target = inv[i]->query("id");
+				break;
+			}
+
+		}
+		if (target == "")
+			return notify_fail("指令格式：buy <某物> from <某人>\n");
+
+	}
+
+	if(sscanf(arg,"%d %s",amount,item) != 2)
+		amount = 1;
+
+	if(amount < 1 || amount > 20)
+		return notify_fail("购买物品一次最多只能 20 个，最少为 1 个。\n");
+
+	if( !objectp(owner = present(target, environment(me))) )
+		return notify_fail("你要跟谁买东西？\n");
+
+	obs = filter_array(all_inventory(me), (: !$1->query("equipped") :));
+
+	if( sizeof(all_inventory(me)) >= MAX_ITEM_CARRIED )
+		return notify_fail("你身上的东西已经太多了。\n");
+
+	if(userp(owner))
+	{
+		message_vision("$N想向$n购买「" + item + "」。\n", me, owner);
+			notify_fail("对方好像不愿意跟你交易。\n");
+		return 1;
+	}
+
+	reset_eval_cost();
+	notify_fail("对方好像不愿意跟你交易。\n");
+
+	if( (price = owner->buy_object(me, item)) < 1 ) 
+		return 0;
+
+	price = price * amount;
+	if( MONEY_D->can_afford( me,price))
+	{
+		MONEY_D->player_pay(me,price);
+		owner->compelete_trade(me,item,amount);
+		return 1;
+	} else
+		return notify_fail("你的钱不够。\n");
+}
+
+int help(object me)
+{
+   write( @HELP
+
+指令格式：buy <物品> from <商人>
+	  buy <数量> <物品>
+
+这一指令让你可以从某些人身上买到物品。
+HELP
+);
+   return 1;
+}

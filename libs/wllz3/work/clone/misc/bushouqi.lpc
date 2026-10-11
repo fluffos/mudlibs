@@ -1,0 +1,236 @@
+// 本文件由编译后的 .b 二进制程序反编译还原，原始源码未随档案发布。
+// Decompiled from the compiled .b binary; the original source was not distributed.
+inherit "/inherit/item/item";
+int waitting_animal(mixed);
+int halt_waitting(mixed);
+void remove_status();
+void create();
+void init();
+int do_open(mixed);
+int do_close(mixed);
+int do_lay(mixed);
+int no_clean_up();
+
+void create() {
+    seteuid(getuid());
+    set_name("捕兽器", ({ "bushou qi", "qi" }));
+    set_weight(2000);
+    if (clonep()) {
+        set_default_object("/clone/misc/bushouqi.lpc");
+    } else {
+        set("long", "这是一个布满钉牙的捕兽器，猎人们常用它来捕捉一些猛兽。\n使用前必须先(open)打开它，再(lay)放置在猛兽出没的地方。\n如果不需使用，可以收起(close)它而不被他人获取。\n");
+        set("unit", "个");
+        set("value", 2500);
+    }
+    setup();
+}
+
+void init() {
+    if (environment() == this_player()) {
+        add_action("do_open", "open");
+    }
+    if (query("open_by") && query("open_by") == geteuid(this_player())) {
+        add_action("do_lay", "lay");
+        add_action("do_close", "close");
+    }
+}
+
+int do_open(mixed arg) {
+    mixed v1;
+    v1 = this_player();
+    if (!id(arg) || arg == "") {
+        return 0;
+    }
+    if (v1->is_busy()) {
+        write("你正忙着呢。\n");
+        return 1;
+    }
+    if (v1->is_fighting()) {
+        write("战斗中还要管那么多事情？\n");
+        return 1;
+    }
+    if (query("opened")) {
+        write("捕兽器已经打开了。\n");
+        return 1;
+    }
+    if (query("open_by") && query("open_by") != v1->query("id")) {
+        write("那是别人放置的捕兽器，你怎么能乱搞？\n");
+        return 1;
+    }
+    if (query("blocked")) {
+        write("捕兽器已经彻底损坏，不能再使用了。\n");
+        return 1;
+    }
+    set("no_get", "捕兽器必须合上了才可以拣起来。\n");
+    set("open_by", v1->query("id"));
+    message_vision("$N咬了咬牙，费了九牛二虎之力，终于把捕兽器打开放在地上。\n", v1);
+    set("opened", 1);
+    if (environment() == v1) {
+        this_object()->move(environment(v1));
+    }
+    return 1;
+}
+
+int do_close(mixed arg) {
+    mixed v1;
+    v1 = this_player();
+    if (!id(arg) || arg == "") {
+        return 0;
+    }
+    if (v1->is_busy()) {
+        write("你正忙着呢。\n");
+        return 1;
+    }
+    if (v1->is_fighting()) {
+        write("战斗中还要管那么多事情？\n");
+        return 1;
+    }
+    if (!query("opened")) {
+        write("捕兽器并没有打开。\n");
+        return 1;
+    }
+    if (query("open_by") && query("open_by") != v1->query("id")) {
+        write("那是别人放置的捕兽器，你怎么能乱搞？\n");
+        return 1;
+    }
+    delete("use");
+    message_vision("$N把捕兽器收起，捕兽器“啪”的一声合了起来。\n", v1);
+    remove_status();
+    if (environment() != v1) {
+        this_object()->move(v1, 1);
+    }
+    return 1;
+}
+
+int do_lay(mixed arg) {
+    mixed v1;
+    mixed v2;
+    v1 = this_player();
+    if (!id(arg) || arg == "") {
+        return notify_fail("你要放置什么？\n");
+    }
+    if (v1->is_busy()) {
+        return notify_fail("你正忙着呢。\n");
+    }
+    if (v1->is_fighting()) {
+        return notify_fail("战斗中还要管那么多事情？\n");
+    }
+    if (!query("opened")) {
+        return notify_fail("你必须先把捕兽器打开，才可以进行放置。\n");
+    }
+    if (query("open_by") && query("open_by") != v1->query("id")) {
+        return notify_fail("那是别人放置的捕兽器，你怎么能乱搞？\n");
+    }
+    if (query("blocked")) {
+        return notify_fail("捕兽器已经彻底损坏，不能再使用了。\n");
+    }
+    v2 = environment(v1);
+    if (v2->is_chat_room() || v2->query("no_fight")) {
+        return notify_fail("你不能在这里放置捕兽器。\n");
+    }
+    set("no_get", "捕兽器必须合上了才可以拣起来。\n");
+    message("vision", v1->name() + "把捕兽器打开放在地上，找了些野草铺好，随即躲到一旁静静等候......\n", environment(v1), v1);
+    write("你将捕兽器打开，用野草铺实，随即躲在一旁静心等待。\n");
+    v1->start_busy((: waitting_animal, v1 :), (: halt_waitting, v1 :));
+    set("use", 1);
+    return 1;
+}
+
+int waitting_animal(mixed arg) {
+    mixed v1;
+    mixed v2;
+    if (!arg) {
+        return 0;
+    }
+    if (environment() != environment(arg)) {
+        delete("use");
+        return 0;
+    }
+    if (!mapp(v1 = arg->query("quest")) || v1["from"] != "皮货店") {
+        delete("use");
+        write("你投下捕兽器，许久，却一点反映都没有。\n");
+        remove_status();
+        return 0;
+    }
+    if (base_name(environment(arg)) != v1["path"]) {
+        delete("use");
+        write("你投下捕兽器，许久却一点反映都没有，你猜想，该不会是放错地方了吧？\n");
+        remove_status();
+        return 0;
+    }
+    if (undefinedp(v1["ani"])) {
+        delete("use");
+        write("你投下捕兽器，不过似乎没什么用。\n");
+        return 0;
+    }
+    if (arg->query("brawn") < 20) {
+        delete("use");
+        write("你守着守着，竟然有些累了，于是停下来休息一会。\n");
+        return 0;
+    }
+    if (random(30) > 27) {
+        delete("use");
+        write("只听见捕兽器“啪”的一声合上了，你连忙冲上去一看，不知从哪窜来的\n一只老鼠，竟跑进了捕兽器里。\n");
+        if (add("block", 1) > 10) {
+            delete("value");
+            set("blocked", 1);
+            write("\e[1;34m捕兽器也彻底损坏了！\n\e[2;37;0m");
+            call_out("clean_up", 5, this_object());
+        }
+        remove_status();
+        return 0;
+    }
+    if (random(50) < 47) {
+        switch (random(5)) {
+        case 0:
+            write("你屏住呼吸，躲在一旁静静等候着野兽出现......\n");
+            break;
+        case 1:
+            write("你躲藏在一旁，目光紧紧的注视着捕兽器，耐心的等候着野兽的出现......\n");
+            break;
+        case 2:
+            write("微风轻抚，草木不惊，似乎还没有什么动静。\n");
+            break;
+        default:
+            break;
+        }
+        arg->add("brawn", -10);
+        return 1;
+    }
+    v2 = clone_object("/clone/npc/animal");
+    v2->move(environment(arg));
+    v2->copy_status(arg);
+    message_vision("$N突然，一只$n走了过来，正好踩中了捕兽器，发出一阵撕心裂肺的残嚎！\n", arg, v2);
+    write("\e[1;34m你心中一惊，一转念：机会来了，赶紧下手！\n\e[2;37;0m");
+    remove_status();
+    return 0;
+}
+
+int halt_waitting(mixed arg) {
+    delete("use");
+    write("你守候了许久，终于沉不住气站了起来。\n");
+    return 1;
+}
+
+void remove_status() {
+    delete("no_get");
+    delete("opened");
+    delete("open_by");
+    delete("layed");
+    delete("use");
+    return;
+}
+
+int no_clean_up() {
+    if (query("use")) {
+        return 1;
+    }
+}
+
+void clean_up(mixed arg) {
+    if (!arg || !environment(arg)) {
+        return;
+    }
+    destruct(arg);
+    return;
+}

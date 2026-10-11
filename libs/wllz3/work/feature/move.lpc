@@ -1,0 +1,199 @@
+// 本文件由编译后的 .b 二进制程序反编译还原，原始源码未随档案发布。
+// Decompiled from the compiled .b binary; the original source was not distributed.
+mapping query_entire_dbase();
+mapping query_entire_temp_dbase();
+mixed set(mixed, mixed);
+mixed set_vector(mixed, mixed, mixed);
+varargs mixed query(mixed, mixed);
+mixed add(mixed, mixed);
+int delete(mixed);
+mixed set_temp(mixed, mixed);
+mixed set_temp_vector(mixed, mixed, mixed);
+varargs mixed query_temp(mixed, mixed);
+mixed add_temp(mixed, mixed);
+int delete_temp(mixed);
+nomask int query_encumbrance();
+nomask int over_encumbranced();
+nomask int query_max_encumbrance();
+nomask void set_max_encumbrance(mixed);
+nomask void add_encumbrance(mixed);
+void over_encumbrance();
+nomask int query_weight();
+nomask void set_weight(mixed);
+nomask int weight();
+varargs int move(mixed, mixed);
+void remove(mixed);
+int move_or_destruct(mixed);
+
+nosave int weight = 0;
+nosave int encumb = 0;
+nosave int max_encumb = 0;
+
+nomask int query_encumbrance() {
+    return encumb;
+}
+
+nomask int over_encumbranced() {
+    return encumb > max_encumb;
+}
+
+nomask int query_max_encumbrance() {
+    return max_encumb;
+}
+
+nomask void set_max_encumbrance(mixed arg) {
+    max_encumb = arg;
+}
+
+nomask void add_encumbrance(mixed arg) {
+    encumb += arg;
+    if (encumb < 0) {
+        log_file("move.bug", sprintf("%O encumbrance underflow.\n", this_object()));
+    }
+    if (encumb > max_encumb) {
+        this_object()->over_encumbrance();
+    }
+    if (environment()) {
+        environment()->add_encumbrance(arg);
+    }
+}
+
+void over_encumbrance() {
+    if (!interactive()) {
+        return;
+    }
+    tell_object(this_object(), "你的负荷过重了！\n");
+}
+
+nomask int query_weight() {
+    return weight;
+}
+
+nomask void set_weight(mixed arg) {
+    if (!environment()) {
+        weight = arg;
+        return;
+    }
+    if (arg != weight) {
+        environment()->add_encumbrance(arg - weight);
+    }
+    weight = arg;
+}
+
+nomask int weight() {
+    return weight + encumb;
+}
+
+varargs int move(mixed arg1, mixed arg2) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    mixed v6;
+    v3 = this_object();
+    if (!(v4 = v3->is_character()) && query("equipped") && !v3->unequip()) {
+        return notify_fail("你没有办法取下这样东西。\n");
+    }
+    if (objectp(arg1)) {
+        v1 = arg1;
+    } else if (stringp(arg1)) {
+        call_other(arg1, "???");
+        v1 = find_object(arg1);
+        if (!v1) {
+            return notify_fail("move: destination unavailable.\n");
+        }
+    } else {
+        return notify_fail(sprintf("move: invalid destination %O.\n", arg1));
+    }
+    v2 = v3;
+    while (v2 = environment(v2)) {
+        if (v2 == v1) {
+            break;
+        }
+    }
+    if (!v2 && v1->query_encumbrance() + weight() > v1->query_max_encumbrance()) {
+        if (arg2 && environment(v1)) {
+            message_vision("可是$n对$N来说实在是太重了，$N只好暂且将其扔在一旁。\n", v1, this_object());
+            v1 = environment(v1);
+        } else if (v1 == this_player()) {
+            return notify_fail(this_object()->name() + "对你而言太重了。\n");
+        } else {
+            return notify_fail(this_object()->name() + "对" + v1->name() + "而言太重了。\n");
+        }
+    }
+    if (arg2 && sizeof(all_inventory(v1)) > 30) {
+        message_vision("可是$N身上的东西已经太多了，$N只好将$n丢在了一旁。\n", v1, this_object());
+        v1 = environment(v1);
+    }
+    v2 = environment();
+    v5 = query_temp("guardfor");
+    if (objectp(v5) && !v5->is_character()) {
+        if (pointerp(v6 = v5->query_temp("guarded"))) {
+            v6 -= ({ v3 });
+            if (!sizeof(v6)) {
+                v5->delete_temp("guarded");
+            } else {
+                v5->set_temp("guarded", v6);
+            }
+        }
+        v3->delete_temp("guardfor");
+    } else if (stringp(v5)) {
+        v6 = v2->query_temp("guarded/" + v5);
+        if (pointerp(v6)) {
+            v6 -= ({ v3 });
+            if (!sizeof(v6)) {
+                v2->delete_temp("guarded/" + v5);
+            } else {
+                v2->set_temp("guarded/" + v5, v6);
+            }
+        }
+        v3->delete_temp("guardfor");
+    }
+    if (v4 && interactive(v3) && living(v3) && !arg2) {
+        "/cmds/std/look"->look_room(v3, v1, query("env/brief"));
+    }
+    if (v2) {
+        v2->add_encumbrance(-weight());
+    }
+    if (v1) {
+        v1->add_encumbrance(weight());
+    }
+    move_object(v1);
+    return 1;
+}
+
+void remove(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    if (!previous_object() || base_name(previous_object()) != "/adm/single/simul_efun") {
+        error("move: remove() can only be called by destruct() simul efun.\n");
+    }
+    v2 = this_object();
+    if (userp(v2) && arg != "Root") {
+        if (arg != getuid(v2)) {
+            log_file("destruct", sprintf("%s attempt to destruct user object %s (%s)\n", arg, this_object()->query("id"), ctime(time())));
+            error("你(" + arg + ")不能摧毁其他的使用者。\n");
+        }
+        log_file("destruct", sprintf("%s in %O destruct on %s.\n", v2->query("id"), environment(v2), ctime(time())));
+        error("只有ROOT才能摧毁玩家。\n");
+    } else if (v2->query("equipped")) {
+        if (!v2->unequip()) {
+            log_file("destruct", sprintf("Failed to unequip %s when destructed.\n", file_name(v2)));
+        }
+    }
+    if (objectp(v3 = environment())) {
+        v3->add_encumbrance(-weight());
+    }
+    if (v1 = this_object()->query_default_object()) {
+        v1->add("no_clean_up", -1);
+    }
+}
+
+int move_or_destruct(mixed arg) {
+    if (userp(this_object())) {
+        tell_object(this_object(), "一阵时空的扭曲将你传送到另一个地方....\n");
+        move("/clone/misc/void");
+    }
+}

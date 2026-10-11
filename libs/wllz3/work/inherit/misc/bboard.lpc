@@ -1,0 +1,203 @@
+// 本文件由编译后的 .b 二进制程序反编译还原，原始源码未随档案发布。
+// Decompiled from the compiled .b binary; the original source was not distributed.
+inherit "/inherit/item/item";
+inherit "/feature/save";
+void init();
+string query_save_file();
+void done_post(mixed, mixed, mixed);
+int do_post(mixed);
+int do_read(mixed);
+int do_discard(mixed);
+
+void setup() {
+    mixed v1;
+    if (stringp(v1 = query("location"))) {
+        move(v1);
+    }
+    set("no_get", 1);
+    restore();
+}
+
+void init() {
+    add_action("do_post", "post");
+    add_action("do_read", "read");
+    add_action("do_discard", "discard");
+}
+
+string query_save_file() {
+    mixed v1;
+    if (!stringp(v1 = query("board_id"))) {
+        return 0;
+    }
+    return "/data/board/" + v1;
+}
+
+string short() {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    v5 = this_player();
+    v1 = query("notes");
+    if (!pointerp(v1) || !sizeof(v1)) {
+        return ::short() + " [ 没有任何留言 ]";
+    }
+    if (v5) {
+        v4 = v5->query("board_last_read/" + query("board_id"));
+        v3 = 0;
+        v2 = sizeof(v1) - 1;
+        while (v2 >= 0) {
+            if (v1[v2]["time"] <= v4) {
+                break;
+            }
+            v2--;
+            v3++;
+        }
+    }
+    if (v3) {
+        return sprintf("\e[1;36m%s\e[2;37;0m [ %d 张留言，\e[1;33m%d\e[2;37;0m 张\e[1;31m未读\e[2;37;0m]", ::short(), sizeof(v1), v3);
+    } else {
+        return sprintf("%s [ %d 张留言 ]", ::short(), sizeof(v1));
+    }
+}
+
+string long() {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    v5 = this_player();
+    v1 = query("notes");
+    v4 = query("long");
+    v4 = v4 + "留言版的使用方法请见 help board。\n";
+    if (!pointerp(v1) || !sizeof(v1)) {
+        return query("long");
+    }
+    v3 = v5->query("board_last_read/" + query("board_id"));
+    for (v2 = 0; v2 < sizeof(v1); v2++) {
+        v4 += sprintf("%s[%2d]\e[2;37;0m\e[1;37m %-40s \e[2;37;0m%-18s[%10s]\n", v1[v2]["time"] > v3 ? "\e[1;33m" : "", v2 + 1, v1[v2]["title"][0..38], v1[v2]["author"], ctime(v1[v2]["time"])[0..15]);
+    }
+    v5->start_more(v4);
+    return "\n";
+}
+
+void done_post(mixed arg1, mixed arg2, mixed arg3) {
+    mixed v1;
+    if (wizardp(arg1)) {
+        arg2["msg"] = convert_color(arg3);
+    } else {
+        arg2["msg"] = arg3;
+    }
+    v1 = query("notes");
+    if (!pointerp(v1) || !sizeof(v1)) {
+        v1 = ({ arg2 });
+    } else {
+        v1 += ({ arg2 });
+    }
+    if (sizeof(v1) > query("capacity")) {
+        v1 = v1[query("capacity") / 2..query("capacity")];
+    }
+    set("notes", v1);
+    tell_object(arg1, "留言完毕。\n");
+    save();
+    return;
+}
+
+int do_post(mixed arg) {
+    mixed v1;
+    mixed v2;
+    v2 = this_player();
+    if (!arg) {
+        return notify_fail("留言请指定一个标题。\n");
+    }
+    if (!wizardp(v2) && v2->query_skill("literate", 1) < 10) {
+        return notify_fail("你还是个文盲，先去学点「读书识字」吧！\n");
+    }
+    if (!wizardp(v2) && v2->query("mud_age") < 86400) {
+        return notify_fail("小孩子家，留言板不是你涂鸦的地方！\n");
+    }
+    if (query("wiz_only") && !wizardp(v2)) {
+        return notify_fail("这个留言板只有巫师才能够发布信息。\n");
+    }
+    v1 = allocate_mapping(5);
+    v1["title"] = arg;
+    v1["author"] = v2->name(2);
+    v1["author_id"] = v2->query("id");
+    v1["time"] = time();
+    if (v2->query("env/sign") && v2->query("env/use_sign")) {
+        v1["author_discribe"] = v2->query("env/sign");
+    }
+    v2->edit((: done_post, v2, v1 :));
+    return 1;
+}
+
+int do_read(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    v5 = this_player();
+    v3 = v5->query("board_last_read");
+    v4 = query("board_id");
+    v2 = query("notes");
+    if (!pointerp(v2) || !sizeof(v2)) {
+        return notify_fail("留言板上目前没有任何留言。\n");
+    }
+    if (!arg) {
+        return notify_fail("指令格式：read <留言编号>|new|next\n");
+    }
+    if (arg == "new" || arg == "next") {
+        if (!mapp(v3) || undefinedp(v3[v4])) {
+            v1 = 1;
+        } else {
+            for (v1 = 1; v1 <= sizeof(v2); v1++) {
+                if (v2[v1 - 1]["time"] > v3[v4]) {
+                    break;
+                }
+            }
+        }
+    } else if (!sscanf(arg, "%d", v1)) {
+        return notify_fail("你要读第几张留言？\n");
+    }
+    if (v1 < 1 || v1 > sizeof(v2)) {
+        return notify_fail("没有这张留言。\n");
+    }
+    v1--;
+    v5->start_more(sprintf("编号：\e[1;33m%d\e[2;37;0m　作者：\e[1;37m%-18s\e[2;37;0m 时间：[%s]\n标题：\e[1;37m%s\e[2;37;0m\n────────────────────────────────────\n", v1 + 1, v2[v1]["author"], ctime(v2[v1]["time"]), v2[v1]["title"][0..65]) + v2[v1]["msg"] + (v2[v1]["author_discribe"] ? "\n\n--------------------------\n" + v2[v1]["author_discribe"] : ""));
+    if (!mapp(v3)) {
+        v5->set("board_last_read", ([ v4 : v2[v1]["time"] ]));
+    } else if (undefinedp(v3[v4]) || v2[v1]["time"] > v3[v4]) {
+        v3[v4] = v2[v1]["time"];
+    }
+    return 1;
+}
+
+int do_discard(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    v3 = this_player();
+    if (!arg || sscanf(arg, "%d", v2) != 1) {
+        return notify_fail("指令格式：discard <留言编号>\n");
+    }
+    v1 = query("notes");
+    if (!pointerp(v1) || v2 < 1 || v2 > sizeof(v1)) {
+        return notify_fail("没有这张留言。\n");
+    }
+    v2--;
+    if (v1[v2]["author_id"] != v3->query("id") && "/adm/obj/securityd"->get_status(this_player(1)) != "(admin)" && "/adm/obj/securityd"->get_status(this_player(1)) != "(arch)") {
+        return notify_fail("这个留言不是你写的。\n");
+    }
+    if (!v2) {
+        v1 = v1[v2 + 1..sizeof(v1) - 1];
+    } else {
+        v1 = v1[0..v2 - 1] + v1[v2 + 1..sizeof(v1) - 1];
+    }
+    set("notes", v1);
+    save();
+    write("删除第 " + (v2 + 1) + " 号留言....Ok。\n");
+    return 1;
+}

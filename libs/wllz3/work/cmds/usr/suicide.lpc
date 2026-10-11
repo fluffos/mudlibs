@@ -1,0 +1,285 @@
+// suicide.c
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+private int slow_suicide(object me);
+private int halt_suicide(object me);
+//private int reload_user(object me);
+
+int main(object me, string arg)
+{
+	if( me->is_busy() || me->is_fighting())
+		return notify_fail("你上一个动作还没完成。\n");
+
+	if( !arg )
+	{
+/*
+		if(me->query_temp("pending/reload"))
+		{
+			reload_user(me);
+			return 1;
+		}
+		else if(me->query("combat_exp"))
+		{
+			write(WHT"使用这个指令，你将进行转世投胎，投胎以后，你的经验将被折算为\n"
+			      "等级，你的所有潜能将保留1/10，技能、存款，当铺物品，自造物品\n"
+			      "将全部清空，如果你确定要这么做，请再一次输入这个指令。\n"NOR);
+			me->set_temp("pending/reload",1);
+			return 1;
+		}
+		else
+*/
+		write("重新投胎完毕！\n");
+		return 1;
+	}
+	if( wizardp(me) || wizhood(me) == "(immortal)")
+		return notify_fail("你有重任在身，不能自杀！\n");
+
+	if( arg!="-f" )
+		return notify_fail("自杀有两种，您是要永远死掉还是重新投胎？\n");
+
+	if(me->is_member() && !me->is_manage())
+		return notify_fail("请先进入管理状态，再使用这个指令。\n");
+
+	write("如果您选择永远死掉的自杀方式，这个人物的资料就永远删除了，请务必\n"
+		"考虑清楚，确定的话请输入您的密码：");
+	input_to("check_password", 1, me, 1);
+	return 1;
+}
+
+private void check_password(string passwd, object me, int forever)
+{
+	object link_ob;
+	string old_pass;
+
+	link_ob = me->query_temp("link_ob");
+	old_pass = link_ob->query("password");
+	if( crypt(passwd, old_pass)!=old_pass ) {
+		write("密码错误！\n");
+		return;
+	}
+
+	if (forever)
+	{
+		tell_object( me,HIR "\n\n你决定要自杀了，如果十五秒钟内不后悔，就真的永别了。\n\n\n" NOR);
+		me->add_temp("to_suicide",1);
+		me->set_temp("suicide_countdown", 15);
+		CHANNEL_D->do_channel(find_object(SEC_OB),"sys",
+			sprintf("%s准备删除帐号！",me->name(2)));
+		me->start_busy( (: slow_suicide,me :),
+				(: halt_suicide, me :));
+	}
+}
+
+private int slow_suicide(object me)
+{
+	object link_ob,where;
+	int stage;
+	string place;
+
+	stage = me->query_temp("suicide_countdown");
+	me->add_temp("suicide_countdown", -1);
+
+	if( stage > 1 )
+	{
+		if( stage%5 == 0 )
+			write(sprintf(HIR"\n你还有 %d 秒的时间可以后悔。"HIW"[可用 halt 指令来终止自杀]\n"NOR,
+		  		stage));
+		return 1;
+	}
+
+	link_ob = me->query_temp("link_ob");
+
+	if (! link_ob || ! interactive(me)) return 0;
+
+	log_file("static/suicide",
+		sprintf("[%s]%s[%s]执行自杀指令，连线来自[%s]。\n",
+			ctime(time()),me->name(1),geteuid(me),
+			(string)query_ip_number(me)));
+
+	seteuid(getuid());
+
+	write("好吧，永别了:(\n");
+	tell_room(environment(me), me->name() +"自杀了，以后你再也看不到这个人了。\n", ({me}));
+	where = environment(me);
+	place =  (where->short()?where->short():where->query("short"));
+
+
+	CHANNEL_D->do_channel(find_object(SEC_OB),"sys",
+		sprintf("%s的帐号已经删除。",me->name(2)));
+
+	reclaim_objects();
+
+	UPDATE_D->remove_user(me->query("id"));
+
+	return 0;
+}
+private int halt_suicide(object me)
+{
+	if(me->query_temp("to_suicide") > 3)
+	{
+		tell_object(me,"你把生死当作了儿戏，何必呢？永别吧。:( \n");
+		return 0;
+	}
+
+	write(HIY"\n你回头看看泥潭，过去的风风雨雨犹如电影片段在你眼前泛起。喜、怒、哀、乐 . . . \n你心一软，眼圈一红，终于打消了自杀的念头。\n\n"NOR);
+	me->delete_temp("suicide_countdown");
+	CHANNEL_D->do_channel(find_object(SEC_OB),"sys",
+		sprintf("%s终止自杀进程。",me->name(2)));
+	return 1;
+}
+/*
+private int reload_user(object me)
+{
+	mapping my;
+	int a,b,c,d;
+	my = me->query_entire_dbase();
+
+	me->delete_all_skills();
+	map_delete(my,"pawn");			//清理当铺物品
+	map_delete(my,"item");			//清理自造物品
+	map_delete(my,"jiebai");		//清理结拜信息
+	map_delete(my,"jiebai_id");		//清理结拜的id
+	map_delete(my,"gift");			//清理事件记录
+	map_delete(my,"marry");			//清理结婚记录
+	map_delete(my,"marry_name");		//清理结婚伴侣
+	map_delete(my,"private_room");		//清理自造房屋
+	map_delete(my,"my_friends");		//清理好友名单
+	map_delete(my,"baby");			//清理玩家小孩
+
+	//清理门派信息和职业继承
+	map_delete(my,"family");
+	map_delete(my,"class");
+	map_delete(my,"is_zongshi");		//清理宗师记录
+	map_delete(my,"board_last_read");	//清理留言版信息
+	map_delete(my,"channels");		//清理开通的频道
+	map_delete(my,"kill_family");		//清理背叛门派
+	map_delete(my,"weiwang");		//清理威望值
+	map_delete(my,"score");			//清理阅历值
+	map_delete(my,"party");			//清理系统帮会记录
+	map_delete(my,"clan");			//清理玩家帮会记录
+	map_delete(my,"actions");		//清理错误数据结构
+
+	//清理残留信息
+	map_delete(my,"all_job_times");
+	map_delete(my,"change");
+	map_delete(my,"change1");
+	map_delete(my,"change2");
+	map_delete(my,"futou_count");
+	map_delete(my,"gfquest_fail_time");
+	map_delete(my,"bjquest_fail_time");
+	map_delete(my,"quest_fail_time");
+	map_delete(my,"letter_fail_time");
+	map_delete(my,"luohan_winner");
+	map_delete(my,"login_online");
+	map_delete(my,"last_age");
+	map_delete(my,"pighead");
+	map_delete(my,"pktime");
+	map_delete(my,"register_time");
+	map_delete(my,"shen_learn");
+	map_delete(my,"shen_type");
+	map_delete(my,"rank_info");
+	map_delete(my,"shen");
+	map_delete(my,"nickname");
+	map_delete(my,"backup");
+	map_delete(my,"hunmi");
+	map_delete(my,"marks");
+	map_delete(my,"recover_time");
+	map_delete(my,"vote");
+	map_delete(my,"quest");
+	map_delete(my,"default_actions");
+	map_delete(my,"startroom");
+	map_delete(my,"divorced");
+	map_delete(my,"thief");
+	map_delete(my,"world_fail_time");
+	map_delete(my,"zongshi_gift");
+	map_delete(my,"dali_title");
+	map_delete(my,"disable_type");
+
+	map_delete(my,"MKS");			//清理战斗记录
+	map_delete(my,"VKS");                   //清理被杀记录
+	map_delete(my,"PKS");			//清理PK记录
+	map_delete(my,"fight_lose");		//清理比武记录
+	map_delete(my,"fight_win");		//清理比武记录
+	map_delete(my,"fight_times");		//清理比武记录
+	map_delete(my,"my_killer");		//清理被杀记录
+	map_delete(my,"last_pker");		//清理被杀记录
+	map_delete(my,"my_pker");		//清理被杀记录
+	map_delete(my,"breakup");		//清理闭关信息
+	map_delete(my,"close_skill");		//清理闭关信息
+	map_delete(my,"env");			//清理环境变量
+
+	//清理个人天赋
+	map_delete(my,"con");
+	map_delete(my,"cor");
+	map_delete(my,"per");
+	map_delete(my,"int");
+	map_delete(my,"kar");
+	map_delete(my,"spi");
+	map_delete(my,"dex");
+	map_delete(my,"str");
+	map_delete(my,"jiajing");
+	map_delete(my,"jiali");
+	map_delete(my,"neili");
+	map_delete(my,"max_neili");
+	map_delete(my,"jingli");
+	map_delete(my,"max_jingli");
+	map_delete(my,"bellicosity");
+
+	my["con"] = 10;
+	my["cor"] = 10;
+	my["per"] = 10;
+	my["int"] = 10;
+	my["kar"] = 10;
+	my["spi"] = 10;
+	my["cou"] = 10;
+	my["str"] = 10;
+	my["dex"] = 10;
+
+	d = my["combat_exp"] / 10;
+	b = 1;
+	for(a=0;a < b;a++)
+	{
+		c = b * (b + 3) * 150;
+		if( d > c)
+			d -= c;
+		else
+			break;
+		b += 1;
+	}
+	my["level"] = b;
+	my["exp_cost"] = ([ ]);
+	my["exp_cost"]["exp"] = d;
+	my["exp_cost"]["points"] = 30 + b * 4;
+	map_delete(my,"combat_exp");
+	my["potential"] = my["learned_points"] / 10;
+	map_delete(my,"learned_points");
+	my["title"] = "普通百姓";
+	my["mud_age"] = (my["age"] / 5 - 14) * 86400;
+	my["age"] = 14 + my["age_modify"] + (my["mud_age"] / 86400);
+	my["balance"] = my["balance"] / 10;
+	log_file("reload_user",sprintf("[%s]玩家 %s 转档完成。\n",
+		ctime(time())[0..15],my["id"]));
+	write("转世完成，请重新登陆游戏。\n");
+	me->save();
+	destruct(me);
+}
+*/
+int help (object me)
+{
+	write(@HELP
+指令格式: suicide [-f]
+
+如果因为某种原因你不想活了, 你可以选择自杀，自杀分两种:
+
+suicide    : 重新投胎
+suicide -f : 永远的除去玩家资料, 系统会要求你输入密码以确认身份。
+
+请慎重选择 :)
+
+HELP
+);
+	return 1;
+}

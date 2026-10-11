@@ -1,0 +1,153 @@
+//grubbing.c
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+int main(object me,string arg)
+{
+	object dig;
+	object env;
+	int time;
+
+	env = environment(me);
+
+	if( me->is_busy())
+		return notify_fail("你正忙着呢！\n");
+
+	if( me->is_fighting())
+		return notify_fail("你正在战斗中！\n");
+
+	if(!objectp(dig = present("yao chu",me)))
+		return notify_fail("你没用药锄，怎么采药？\n");
+
+	if(!env->query("valid_grubbing"))
+		return notify_fail("你不能在这里采药。\n");
+
+	if((int)me->query_skill("herbal-skill",1) < 1)
+		return notify_fail("你举起药锄想采药，却不知道从何下手。\n");
+
+	if((int)me->query("brawn") <= 10)
+		return notify_fail("你体力不支，还是等一下再说吧。\n");
+
+	if(!mapp(env->query("herb")))
+		return notify_fail("看清楚点，这里有药草吗？\n");
+
+	me->set_short_desc("手持药锄，正在蹲在地上采药。");
+
+	message_vision("$N手里拿着一把药锄，蹲在地上仔细的刨土，寻找药草的踪迹。\n",me);
+
+
+	if(me->query("quest/from") == "药店" && me->query("quest/task_time") > time())
+		time = 40;
+	else
+		time = 50;
+
+	seteuid(getuid());
+	me->start_busy(bind((:call_other, __FILE__, "grubbing",me,time :), me),
+		       bind((:call_other, __FILE__, "halt_grubbing",me,time :), me));
+	return 1;
+}
+int grubbing(object me,int time)
+{
+	object env,obj;
+	object tools;
+	mapping herb;
+	string *herbs;
+	mapping quest;
+
+
+	env = environment(me);
+
+	if( me->add_temp("pending/grubbing",1) % 10 == 1)
+	{
+		message_vision("$N刨了一会，显然有些累了，于是停了下来。\n",me);
+		me->set_short_desc(0);
+		return 0;
+	}
+	if((int)me->query("brawn") < 20)
+	{
+		write("你实在太疲倦了，还是休息一下再说吧。\n");
+		message("vision", me->name() + "累得气喘吁吁，只有停下来休息一会。\n",env, ({ me }));
+		me->set_short_desc(0);
+		return 0;
+	}
+
+	if(!objectp(tools = present("yao chu",me)))
+	{
+		write("你刨了刨，突然发现手里的药锄不见了！！\n");
+		me->set_short_desc(0);
+		return 0;
+	}
+	
+	if(tools->query("use_time") > random(5) + 10)
+	{
+		write(HIW"只听见“啪”的一声，药出应声断开两半。\n"NOR);
+		destruct(tools);
+		me->set_short_desc(0);
+		return 0;
+	}
+
+	me->add("brawn",-10);
+
+	if(me->query_temp("pending/grubbing") > time)
+	{
+		if(!mapp(herb = env->query("herb")))
+			write("奇怪，这里的药草怎么都不见了？\n");
+
+		if(mapp(quest = me->query("quest")) 
+		&& quest["from"] == "药店" 
+		&& quest["task_time"] > time())
+		{
+			if(undefinedp(herb[quest["base"]]))
+				write(WHT"你慢慢的领悟到，这里似乎不是生长"+ quest["quest"] + NOR WHT"的地方。\n"NOR);
+			else
+			{
+				obj=new(quest["base"]);
+				obj->move(me,1);
+				obj->set("from",me->query("id"));
+				obj->set("time",me->query("quest/task_time"));
+				write(sprintf("一棵%s渐渐的露出了地面，你轻手轻脚的将它拔了出来，丢进药篓。\n",obj->name()));
+				me->delete_temp("pending/grubbing");
+				me->set_short_desc(0);
+				tools->add("use_time",1);
+				return 0;
+			}
+
+		}
+
+		herbs = keys(herb);
+		obj = new(herbs[random(sizeof(herbs))]);
+
+		obj->move(me,1);
+		write(sprintf("一棵%s渐渐的露出了地面，你轻手轻脚的将它拔了出来，丢进药篓。\n",obj->name()));
+
+		me->delete_temp("pending/grubbing");
+		me->set_short_desc(0);
+		tools->add("use_time",1);
+		return 0;
+	}
+	else
+	{
+		message_vision("$N手里拿着药锄，蹲在地上轻轻的刨土，寻找药草的踪迹。\n",me);
+		return 1;
+	}
+}
+int halt_grubbing(object me)
+{
+	message_vision("$N猛的站了起来，停止采药。\n",me);
+	me->set_short_desc(0);
+	return 1;
+}
+int help(object me)
+{
+	write(@HELP
+
+指令格式：grubbing
+
+这个指令是让进行采集药草所用，当然你必须是一个药理师或药剂师，具
+备一定的药理常识。
+
+HELP);
+	return 1;
+}

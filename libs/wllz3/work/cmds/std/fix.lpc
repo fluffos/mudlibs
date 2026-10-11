@@ -1,0 +1,128 @@
+//fix.c
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+int main(object me,string arg)
+{
+	object ob,ore;
+	string target,mar;
+	int consistence;
+	int skill,amount;
+
+	if(!arg || sscanf(arg,"%s with %s",target,mar) != 2)
+		return notify_fail("指令格式：fix <物品> with <材料>\n");
+
+	if(me->is_busy())
+		return notify_fail("你正忙着呢。\n");
+	
+	if(me->is_fighting())
+		return notify_fail("战斗中无法修理东西。\n");
+	
+	if(environment(me)->is_chat_room())
+		return notify_fail("你不能在这里修理东西。\n");
+	
+	if(!present("hammer",me))
+		return notify_fail("你似乎应该先找一把锤子才可以修理东西吧？\n");
+
+	if(me->query("career") != "铸造师")
+		return notify_fail("你手举铁锤，却不知从何下手。\n");
+	
+	if(!intp(skill = (int)me->query_skill("founding",1))|| skill < 30)
+		return notify_fail("你还是先学点铸造技巧再说吧。\n");
+
+	if(!objectp(ob = present(target, me)))
+		return notify_fail("你身上好像没有这样东西。\n");
+
+	if(!objectp(ore = present(mar,me)))
+		return notify_fail("你身上好像没有所需的材料。\n");
+
+	if(!ore->valid_inlay())
+		return notify_fail(ore->name() +"不能做为修理的材料。\n");
+
+	if(undefinedp(consistence = ob->query("consistence")))
+		return notify_fail(ob->name() + "似乎不需要修理。\n");
+
+	if(!ob->query("weapon_prop"))
+		return notify_fail("你似乎不懂修理这个东西。\n");
+
+	if(consistence >= 100)
+		return notify_fail(ob->name() + "现在完好无损，不需要修理。\n");
+
+	if(ob->query("no_repair"))
+		return notify_fail(ob->name() + "似乎不能修理。\n");
+
+	amount = 100 - consistence;
+	amount = amount - skill / 3;
+	amount = amount - ore->query("inlay");
+	if( amount < 5)
+		amount = 5;
+
+	destruct(ore);
+	seteuid(getuid());
+	write("你手举铁锤，试着修复"+ ob->name() +"的创口。\n");
+	me->set_short_desc("手举铁锤，正在修理"+ ob->name() +"。");
+	me->start_busy(bind((: call_other,__FILE__,"compelete_repair",me,ob,amount :),me),
+	               bind((: call_other,__FILE__,"halt_repair",me :),me));
+	return 1;
+}
+int compelete_repair(object me,object ob,int amount)
+{
+	if(me->query("brawn") < 20)
+	{
+		write("你显然已经有些累了，于是停下来休息一会。\n");
+		me->set_short_desc(0);
+		me->delete_temp("pending/repair_weapon");
+		return 0;
+	}
+
+	if(!present(ob,me))
+	{
+		write("你敲敲打打了半天，结果发现要修理的东西却不见了。\n");
+		me->set_short_desc(0);
+		me->delete_temp("pending/repair_weapon");
+		return 0;
+	}
+
+	if(!present("hammer",me))
+	{
+		write("你敲敲打打了半天，可铁锤却不知道跑哪去了。\n");
+		me->set_short_desc(0);
+		me->delete_temp("pending/repair_weapon");
+		return 0;
+	}
+	
+	if(me->add_temp("pending/repair_weapon",1) > amount)
+	{
+		write("你对着"+ ob->name() +"敲敲打打了一会，"+ ob->name() +"的耐久度似乎有所提高了。\n");
+		if(ob->add("consistence",(100 - amount)) > 100)
+		ob->set("consistence",100);
+		me->set_short_desc(0);
+		me->delete_temp("pending/repair_weapon");
+		return 0;
+	}
+	me->add("brawn",-10);
+	write("你手举铁锤，对着"+ ob->name() +"轻轻的敲了敲，试图提高它的耐久度。\n");
+	return 1;
+}
+int halt_repair(object me)
+{
+	write("你觉得有些累了，于是停下来休息一会。\n");
+	me->set_short_desc(0);
+	me->delete_temp("pending/repair_weapon");
+	return 1;
+}
+int help(object me)
+{
+	write(@TEXT
+
+指令格式：fix <物品> with <材料>
+
+这个指令是铸造师专用的修理指令，如果你是铸造师，拥有一定级别的铸
+造技巧，可以尝试修理一些损坏了的武器。修理的速度与铸造技巧、使用
+材料都有一定的关系。
+
+TEXT);
+	return 1;
+}

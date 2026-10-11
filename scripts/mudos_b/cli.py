@@ -18,7 +18,10 @@ def main():
     ap.add_argument('paths', nargs='*')
     ap.add_argument('--out')
     ap.add_argument('--list')
+    ap.add_argument('--fluffos', action='store_true', help='FluffOS flavour (protected, no unused locals)')
     a = ap.parse_args()
+    from . import decompile as _d
+    _d.TARGET['fluffos'] = a.fluffos
     mud = Mudlib(a.bdir)
     efuns = Efuns(json.load(open(a.driver)))
     simuls = mud.simul_names(a.simul)

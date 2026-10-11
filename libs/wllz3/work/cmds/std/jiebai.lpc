@@ -1,0 +1,168 @@
+// jiebai.c
+
+#include <ansi.h>
+
+int help(object me);
+
+#define MAX_BROTHER	20
+
+inherit F_CLEAN_UP;
+
+int main(object me, string arg)
+{
+        object obj, old_target;
+        object ob;
+        mapping brother;
+        string *brolist;
+        string target;
+        string id,msg;
+
+	if(me->is_ghost())
+		return notify_fail("你现在魂魄未定，不能使用这个指令。\n");
+
+	if(me->is_busy())
+		return notify_fail("你正忙着呢。\n");
+
+	if(me->is_fighting())
+		return notify_fail("你正忙着呢。\n");
+
+	if( !arg )
+	{
+		brother = me->query("brother");
+
+		if(!sizeof(brother))
+			return notify_fail("你目前没有任何结拜兄弟。\n");
+
+		msg = "你目前的结拜兄弟有：\n"
+			"--------------------------------------------------------------------\n";
+		brolist = keys(brother);
+        	foreach (id in brolist)
+        	{
+                	msg += sprintf(CYN"名称"NOR"：%-8s  "CYN"性别"NOR"：%-4s",
+                		capitalize(id),brother[id]);
+
+                	if (objectp(ob = find_player(id)))
+	                        msg += sprintf(CYN"  状态"NOR"："HIG"在线" NOR
+                	                       CYN"  等级"NOR"：%-4d"
+        	                               CYN"  门派"NOR"：%-8s",
+					       ob->query("level"),
+					       ob->query("family")?ob->query("family/family_name")+"\n":"没有\n");
+                	else
+                        	msg += CYN"  状态："WHT"离线\n" NOR;
+        	}
+		msg += "--------------------------------------------------------------------\n";
+		write(msg);
+		return 1;
+	}
+	else if( sscanf(arg,"+ %s",target) == 1 )
+	{
+		if(!objectp(obj = present(target,environment(me))))
+			return notify_fail("你要和谁结拜？\n");
+
+		if(!playerp(obj))
+			return notify_fail("你只能和玩家结拜。\n");
+
+		if(!living(obj))
+			return notify_fail(sprintf("你还是先等%s醒了再说。\n",obj->name(2)));
+
+        	if( me->query("marry") == geteuid(obj))
+                	return notify_fail("做了夫妻还结拜，真是亲上加亲呀。\n");
+
+        	if( obj == me )
+                	return notify_fail("你不能和自己结拜。\n");
+
+		if(undefinedp(brother = me->query("brother")))
+			brother = ([ ]);
+
+		if(me->is_brother(geteuid(obj)))
+			return notify_fail(sprintf("你和%s已经是结拜兄弟了。\n",obj->name(2)));
+
+		if(sizeof(brother) > MAX_BROTHER )
+			return notify_fail("你的结拜兄弟已经太多了。\n");
+
+		if(me->query_temp("pending/jiebai") == obj)
+			return notify_fail("你正等着"+ obj->name() +"同意呢。\n");
+
+        	if( userp(obj) && (object)obj->query_temp("pending/jiebai")!=me )
+        	{
+                	message_vision(WHT"\n$N对著$n说道：" + RANK_D->query_self(me) + me->name() + "，对"
+                		+ RANK_D->query_respect(obj) + "心仪已久，愿彼此生死与共，肝胆相照！\n\n"NOR, me, obj);
+
+                	if( objectp(old_target = me->query_temp("pending/jiebai"))
+                		&& old_target != obj )
+                        	tell_object(old_target, RED + me->name() + "取消了和你结拜的念头。\n" NOR);
+
+                	me->set_temp("pending/jiebai", obj);
+
+                	tell_object(obj,sprintf(YEL"如果你愿意和对方结为异姓兄弟，请你也对%s下一次 "WHT"jiebai + %s "YEL"指令。\n" NOR,
+                		me->name(),me->query("id")));
+                	write(RED "必须等待对方同意才可以进行结拜。\n" NOR);
+                	return 1;
+                }
+
+        	message_vision("\n$N对着$n高声说道：不求同年同月同日生，但愿同年同月同日死！\n\n", me, obj);
+        	message("system",sprintf(HIM"【江湖消息】"NOR + WHT"%s与%s撮土为香，结为异姓兄弟；从此有福同享，有难同当！\n"NOR,
+        		me->name(2),obj->name(2)),users());
+
+
+		me->set("brother/"+ geteuid(obj),obj->query("gender"));
+		me->delete_temp("pending/jiebai");
+		obj->set("brother/"+ geteuid(me),me->query("gender"));
+		obj->delete_temp("pending/jiebai");
+		return 1;
+	}
+        else if(sscanf(arg,"- %s",target) == 1)
+        {
+
+		brother = me->query("brother");
+
+		if(undefinedp(brother))
+			return notify_fail("你目前还没有任何结拜兄弟。\n");
+
+                if(!me->is_brother(target))
+                        return notify_fail("你现在没有这个结拜兄弟啊。\n");
+
+                if (objectp(obj = find_player(target)) &&
+                    environment(obj) == environment(me))
+                {
+			message_vision("\n$N对$n喝道：从今往后，你我井水不犯河水，互不相干，从此恩断义绝。\n",me,obj);
+
+			message("system",sprintf(HIM"【江湖消息】"NOR + WHT "%s羞于与%s为伍，决定与之割袍断义！\n"NOR,
+			me->name(2),obj->name(2)),users());
+
+        	}
+        	else
+			message("system",sprintf(HIM"【江湖消息】"NOR + WHT "%s羞于与 %s 为伍，决定与之割袍断义！\n"NOR,
+			me->name(2),capitalize(target)),users());
+
+                UPDATE_D->clear_user_data(me->query("id"), "brother:" + target);
+                UPDATE_D->clear_user_data(target, "brother:" + me->query("id"));
+
+
+		if((int)me->query("weiwang") > 1000)
+			me->add("weiwang",-1000);
+		else
+			me->set("weiwang",0);
+
+        	return 1;
+        }
+        else return help(me);
+}
+
+int help(object me)
+{
+
+write(@HELP
+
+指令格式：jiebai 	        查询当前结拜状态
+	  jiebai + <使用者id>   对某个玩家发送结拜指令
+	  jiebai - <使用者id>   与某个玩家割袍断义
+
+这个指令可以让你用来和其他玩家结拜，当然也必须对方同意才可以成功
+。如果想与对方绝交，会造成你的声望下降，所以，结拜之前请先考虑
+清楚。
+
+HELP
+    );
+    return 1;
+}

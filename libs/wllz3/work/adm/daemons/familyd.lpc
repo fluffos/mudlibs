@@ -1,0 +1,166 @@
+// 本文件由编译后的 .b 二进制程序反编译还原，原始源码未随档案发布。
+// Decompiled from the compiled .b binary; the original source was not distributed.
+inherit "/feature/save";
+inherit "/feature/dbase";
+int clean_up();
+void auto_upgrade();
+void create();
+string query_save_file();
+void heart_beat();
+void remove();
+void mud_shutdown();
+int map_family_score(mixed, mixed);
+mapping query_family(mixed);
+int map_family_info(mixed, mixed);
+int remove_family_info(mixed, mixed);
+mapping query_family_info(mixed);
+int set_family_master(mixed, mixed);
+int is_family_master(mixed, mixed);
+
+mapping family_info = ([ "白驼山派" : ([ ]), "大理段家" : ([ ]), "峨嵋派" : ([ ]), "丐帮" : ([ ]), "古墓新派" : ([ ]), "华山剑派" : ([ ]), "昆仑派" : ([ ]), "灵鹫宫" : ([ ]), "明教" : ([ ]), "慕容世家" : ([ ]), "全真教" : ([ ]), "日月神教" : ([ ]), "少林派" : ([ ]), "神龙教" : ([ ]), "唐门" : ([ ]), "桃花岛" : ([ ]), "天龙寺" : ([ ]), "武当派" : ([ ]), "五毒神教" : ([ ]), "逍遥派" : ([ ]), "血刀门" : ([ ]), "星宿派" : ([ ]), "雪山寺" : ([ ]), "云龙门" : ([ ]) ]);
+mapping family_status = ([ "白驼山派" : 10000, "大理段家" : 10000, "峨嵋派" : 10000, "丐帮" : 10000, "古墓新派" : 10000, "华山剑派" : 10000, "昆仑派" : 10000, "灵鹫宫" : 10000, "明教" : 10000, "慕容世家" : 10000, "全真教" : 10000, "日月神教" : 10000, "少林派" : 10000, "神龙教" : 10000, "唐门" : 10000, "桃花岛" : 10000, "天龙寺" : 10000, "武当派" : 10000, "五毒神教" : 10000, "逍遥派" : 10000, "血刀门" : 10000, "星宿派" : 10000, "雪山寺" : 10000, "云龙门" : 10000 ]);
+
+int clean_up() {
+    return 1;
+}
+
+void create() {
+    seteuid(geteuid());
+    set("channel_id", "门派精灵");
+    "/adm/daemons/channeld"->do_channel(this_object(), "sys", "门派精灵开始启动。");
+    restore();
+    set_heart_beat(1);
+}
+
+string query_save_file() {
+    return "/data/familyd";
+}
+
+void heart_beat() {
+    mixed v1;
+    v1 = query_entire_dbase();
+    if (time() - v1["last_save"] < 300) {
+        return;
+    }
+    if (time() - v1["upgrade_time"] > 86400) {
+        auto_upgrade();
+    }
+    v1["last_save"] = time();
+    save();
+}
+
+void remove() {
+    save();
+}
+
+void mud_shutdown() {
+    save();
+}
+
+void auto_upgrade() {
+    mixed v1;
+    mixed v2;
+    v1 = keys(family_status);
+    foreach (v2 in v1) {
+        family_status[v2] += 10;
+        if (family_status[v2] < 10000) {
+            family_status[v2] = 10000;
+        }
+    }
+    set("upgrade_time", time());
+    save();
+}
+
+int map_family_score(mixed arg1, mixed arg2) {
+    if (!stringp(arg1)) {
+        log_file("family", sprintf("无法识别空的门派名称 %s。\n", arg1));
+        return 0;
+    }
+    if (undefinedp(family_status[arg1])) {
+        log_file("family", sprintf("%s 无法被系统识别。\n", arg1));
+        return 0;
+    }
+    if (family_status[arg1] < 0 && arg2 < 0) {
+        log_file("family", sprintf("%s 的名气值已低于 0。\n", arg1));
+        return 0;
+    }
+    family_status[arg1] += arg2;
+    save();
+    return 1;
+}
+
+mapping query_family(mixed arg) {
+    if (stringp(arg)) {
+        return family_status[arg];
+    } else {
+        return family_status;
+    }
+}
+
+int map_family_info(mixed arg1, mixed arg2) {
+    mixed v1;
+    if (!objectp(arg2) || !environment(arg2)) {
+        log_file("family", sprintf("无法识别" + arg1 + "，门派玩家%s资料增加失败。\n", objectp(arg2) ? arg2->name() : ""));
+        return 0;
+    }
+    if (undefinedp(family_info[arg1])) {
+        log_file("family", "无法识别" + arg1 + "，门派玩家" + arg2->name() + "资料增加失败。\n");
+        return 0;
+    }
+    v1 = arg2->query_entire_dbase();
+    family_info[arg1] += ([ v1["id"] : ([ "name" : v1["name"], "level" : v1["level"] ]) ]);
+    save();
+    restore();
+    return 1;
+}
+
+int remove_family_info(mixed arg1, mixed arg2) {
+    if (!stringp(arg2) || !stringp(arg1)) {
+        return 0;
+    }
+    if (undefinedp(family_info[arg1])) {
+        return 0;
+    }
+    map_delete(family_info[arg1], arg2);
+    save();
+    return 1;
+}
+
+mapping query_family_info(mixed arg) {
+    if (stringp(arg)) {
+        return family_info[arg];
+    } else {
+        return family_info;
+    }
+}
+
+int set_family_master(mixed arg1, mixed arg2) {
+    mixed v1;
+    if (!objectp(arg2) || !environment(arg2)) {
+        return 0;
+    }
+    if (undefinedp(family_status[arg1])) {
+        return 0;
+    }
+    v1 = query_entire_dbase();
+    v1[arg1] = arg2->query("id");
+    save();
+    return 1;
+}
+
+int is_family_master(mixed arg1, mixed arg2) {
+    mixed v1;
+    if (!objectp(arg2) || !environment(arg2)) {
+        return 0;
+    }
+    if (!arg2->query("family")) {
+        return 0;
+    }
+    v1 = query_entire_dbase();
+    if (undefinedp(v1[arg1])) {
+        return 0;
+    }
+    if (v1[arg1] == arg2->query("id")) {
+        return 1;
+    }
+}

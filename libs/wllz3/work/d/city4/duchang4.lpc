@@ -1,0 +1,387 @@
+// 本文件由编译后的 .b 二进制程序反编译还原，原始源码未随档案发布。
+// Decompiled from the compiled .b binary; the original source was not distributed.
+inherit "/inherit/room/room";
+int random2(mixed);
+void create();
+void init();
+int do_sai(mixed);
+void gamble_prepare();
+void gamble_start();
+void display_gui(mixed, mixed, mixed);
+int move_on(mixed);
+void boost_guis(mixed);
+void gamble_perform();
+void player_wins(mixed, mixed);
+void player_loses(mixed, mixed);
+void gamble_finish();
+int do_bian(mixed);
+int do_fight(mixed);
+int do_steal(mixed);
+int do_kill(mixed);
+int do_cast(mixed);
+int do_exert(mixed);
+int do_perform(mixed);
+
+int room_status = 0;
+object nh_gui = 0;
+object bh_gui = 0;
+object ld_gui = 0;
+int *res = allocate(3);
+mapping guis = ([ "nh" : "南海龟", "bh" : "北海龟", "ld" : "陆地龟" ]);
+
+int random2(mixed arg) {
+    return (random(arg) + uptime()) % arg;
+}
+
+void create() {
+    set("short", "赛龟房");
+    set("long", "一排紫色的镂空檀香靠背椅沿着屋子四周放了一圈，坐着聚精会神的\r\n客人。中间是一雕花石座，上面放着一个长长的紫檀龟台。一位扎着青鬏\r\n的青鬏龟童正围着龟台转来转去。龟房的墙上挂着牌子(sign)。\r\n");
+    set("item_desc", ([ "sign" : "押南海龟： ya nh <amount> <money>\n押北海龟： ya bh <amount> <money>\n押陆地龟： ya ld <amount> <money>\n" ]));
+    set("objects", ([ "/d/city4/npc/guitong" : 1 ]));
+    set("exits", ([ "north" : "/d/city4/clubup" ]));
+    set("light_up", 1);
+    set("no_fight", 1);
+    set("no_magic", 1);
+    set("no_beg", 1);
+    set("no_sleep", 1);
+    setup();
+}
+
+void init() {
+    mixed v1;
+    if (interactive(v1 = this_player())) {
+        if (v1->query_temp("gamble_gui")) {
+            v1->delete_temp("gamble_gui");
+        }
+    }
+    add_action("do_sai", "ya");
+    add_action("do_fight", "fight");
+    add_action("do_steal", "steal");
+    add_action("do_kill", "kill");
+    add_action("do_cast", "cast");
+    add_action("do_exert", "exert");
+    add_action("do_perform", "perform");
+    if (room_status > 0) {
+        return;
+    }
+    remove_call_out("gamble_prepare");
+    remove_call_out("gamble_start");
+    remove_call_out("gamble_perform");
+    remove_call_out("gamble_finish");
+    call_out("gamble_prepare", 2);
+    room_status = 1;
+}
+
+int do_sai(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    v1 = this_player();
+    if (!arg || sscanf(arg, "%s %d %s", v2, v3, v4) != 3) {
+        return notify_fail("请使用： ya <押龟种类> <数目> <货币>\n");
+    }
+    if (v2 != "nh" && v2 != "bh" && v2 != "ld") {
+        return notify_fail("你要押什么样的龟？\n");
+    }
+    v5 = present(v4 + "_money", v1);
+    if (!v5) {
+        return notify_fail("你身上没有这种货币。\n");
+    }
+    if (v3 < 1) {
+        return notify_fail("请多押一些钱。\n");
+    }
+    if (v3 > v5->query_amount()) {
+        return notify_fail("你身上的钱不够押。\n");
+    }
+    if (v3 * v5->query("base_value") > 1000) {
+        return notify_fail("你赌疯了啊，下这么多注！\n");
+    }
+    if (v1->query_temp("gamble_gui/amount") > 0) {
+        return notify_fail("你已经押过了。\n");
+    }
+    if (room_status > 1) {
+        return notify_fail("现在正在赛龟呢，稍等片刻。\n");
+    }
+    v1->set_temp("gamble_gui/kind", v2);
+    v1->set_temp("gamble_gui/amount", v3);
+    v1->set_temp("gamble_gui/money", v4);
+    message_vision(sprintf("$N拿出%s%s%s放在紫檀龟台上，押%s。\n", chinese_number(v3), v5->query("base_unit"), v5->query("name"), guis[v2]), v1);
+    if (v3 == v5->query_amount()) {
+        destruct(v5);
+    } else {
+        v5->add_amount(-v3);
+    }
+    return 1;
+}
+
+int valid_leave(mixed arg1, mixed arg2) {
+    if (arg1->query_temp("gamble_gui/amount") > 0) {
+        message_vision("$N扔下押龟的钱不要了。\n", arg1);
+    }
+    arg1->delete_temp("gamble_gui");
+    return ::valid_leave(arg1, arg2);
+}
+
+void gamble_prepare() {
+    mixed v1;
+    v1 = this_object();
+    tell_room(v1, "青鬏龟童将三只龟放在紫檀龟台边。\n");
+    if (!nh_gui) {
+        nh_gui = clone_object("/d/city4/npc/saigui");
+        nh_gui->set("name", "南海龟");
+        nh_gui->move(v1);
+    }
+    if (!bh_gui) {
+        bh_gui = clone_object("/d/city4/npc/saigui");
+        bh_gui->set("name", "北海龟");
+        bh_gui->move(v1);
+    }
+    if (!ld_gui) {
+        ld_gui = clone_object("/d/city4/npc/saigui");
+        ld_gui->set("name", "陆地龟");
+        ld_gui->move(v1);
+    }
+    tell_room(v1, "青鬏龟童说：请各位大人赏押，一赢三。\n");
+    room_status = 1;
+    call_out("gamble_start", 20);
+}
+
+void gamble_start() {
+    mixed v1;
+    v1 = this_object();
+    tell_room(v1, "青鬏龟童说：各位大人停押。\n");
+    tell_room(v1, "然后用兔毛掸将三只赛龟推入龟台内。\n");
+    room_status = 2;
+    res[0] = 0;
+    res[1] = 0;
+    res[2] = 0;
+    call_out("gamble_perform", 1);
+}
+
+void display_gui(mixed arg1, mixed arg2, mixed arg3) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    mixed v6;
+    mixed v7;
+    v1 = "＼－－－／  ";
+    v2 = "（某某龟）＞";
+    v3 = "／－－－＼  ";
+    v4 = "｜";
+    v5 = "｜";
+    v6 = "｜";
+    v2 = "（" + arg2 + "）＞";
+    for (v7 = 0; v7 < res[arg1]; v7++) {
+        v4 = v4 + "..";
+        v5 = v5 + "..";
+        v6 = v6 + "..";
+    }
+    v4 = v4 + v1;
+    v5 = v5 + v2;
+    v6 = v6 + v3;
+    for (v7 = res[arg1]; v7 < 30; v7++) {
+        v4 = v4 + "  ";
+        v5 = v5 + "  ";
+        v6 = v6 + "  ";
+    }
+    v4 = v4 + "｜\n";
+    v5 = v5 + "｜\n";
+    v6 = v6 + "｜\n";
+    tell_room(arg3, v4);
+    tell_room(arg3, v5);
+    tell_room(arg3, v6);
+}
+
+int move_on(mixed arg) {
+    arg += random2(7);
+    if (arg > 30) {
+        arg = 30;
+    }
+    return arg;
+}
+
+void boost_guis(mixed arg) {
+    mixed v1;
+    mixed v2;
+    for (v1 = 0; v1 < 10; v1++) {
+        set_eval_limit(0);
+        v2 = random2(3);
+        if (arg[v2] >= 28) {
+            arg[v2] = 30;
+            break;
+        }
+    }
+}
+
+void gamble_perform() {
+    mixed v1;
+    v1 = this_object();
+    tell_room(v1, "\n\n");
+    display_gui(0, "南海龟", v1);
+    display_gui(1, "北海龟", v1);
+    display_gui(2, "陆地龟", v1);
+    if (res[0] < 30 && res[1] < 30 && res[2] < 30) {
+        res[0] = move_on(res[0]);
+        res[1] = move_on(res[1]);
+        res[2] = move_on(res[2]);
+        boost_guis(res);
+        remove_call_out("gamble_perform");
+        call_out("gamble_perform", 1);
+        return;
+    }
+    call_out("gamble_finish", 1);
+}
+
+void player_wins(mixed arg1, mixed arg2) {
+    mixed v1;
+    mixed v2;
+    v1 = clone_object("/clone/money/" + arg1->query_temp("gamble_gui/money"));
+    v2 = arg1->query_temp("gamble_gui/amount");
+    arg2 = arg2 * v2;
+    v1->set_amount(arg2);
+    message_vision(sprintf("$N赢了%s%s%s！\n", chinese_number(arg2), v1->query("base_unit"), v1->query("name")), arg1);
+    v1->move(arg1);
+}
+
+void player_loses(mixed arg1, mixed arg2) {
+    mixed v1;
+    v1 = clone_object("/clone/money/" + arg1->query_temp("gamble_gui/money"));
+    arg2 = arg1->query_temp("gamble_gui/amount");
+    message_vision(sprintf("青鬏龟童将$N放在龟台上的%s%s%s收走。\n", chinese_number(arg2), v1->query("base_unit"), v1->query("name")), arg1);
+    destruct(v1);
+}
+
+void gamble_finish() {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    v4 = this_object();
+    v5 = all_inventory(v4);
+    if (res[0] == 30 && res[1] == 30 && res[2] == 30) {
+        v2 = 0;
+        v1 = "none of them";
+        tell_room(v4, "青鬏龟童叹道：三龟同胜无赢家！\n");
+    } else if (res[0] == 30 && res[1] == 30 || res[1] == 30 && res[2] == 30 || res[2] == 30 && res[0] == 30) {
+        v2 = 0;
+        v1 = "none of them";
+        tell_room(v4, "青鬏龟童叹道：二龟同胜无赢家！\n");
+    } else if (res[0] == 30) {
+        v2 = 3;
+        v1 = "nh";
+        tell_room(v4, "青鬏龟童喜道：" + guis[v1] + "获胜！\n");
+    } else if (res[1] == 30) {
+        v2 = 3;
+        v1 = "bh";
+        tell_room(v4, "青鬏龟童喜道：" + guis[v1] + "获胜！\n");
+    } else {
+        v2 = 3;
+        v1 = "ld";
+        tell_room(v4, "青鬏龟童喜道：" + guis[v1] + "获胜！\n");
+    }
+    v3 = sizeof(v5);
+    while (v3--) {
+        if (!userp(v5[v3])) {
+            continue;
+        }
+        if (v5[v3]->query_temp("gamble_gui/kind") == v1) {
+            player_wins(v5[v3], v2);
+        } else if (v5[v3]->query_temp("gamble_gui/kind")) {
+            player_loses(v5[v3], v2);
+        }
+        v5[v3]->delete_temp("gamble_gui");
+    }
+    tell_room(v4, "\n");
+    call_out("gamble_prepare", random2(7) + 6);
+}
+
+int do_bian(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    v1 = this_player();
+    v2 = this_object();
+    if (!arg) {
+        return 0;
+    }
+    v3 = present(arg, v2);
+    if (v3 == nh_gui || v3 == bh_gui || v3 == ld_gui) {
+        message_vision("$N挤到龟中间想把自己变成龟。\n", v1);
+        message_vision("青鬏龟童对$N说道：大人，俗话说好汉不和龟赛。\n", v1);
+        return 1;
+    }
+    return 0;
+}
+
+int do_fight(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    v1 = this_player();
+    v2 = this_object();
+    if (!arg) {
+        return 0;
+    }
+    v3 = present(arg, v2);
+    if (v3 == nh_gui || v3 == bh_gui || v3 == ld_gui) {
+        message_vision("$N要与龟比武。\n", v1);
+        message_vision("青鬏龟童对$N说道：大人，俗话说好汉不和龟斗。\n", v1);
+        return 1;
+    }
+    return 0;
+}
+
+int do_steal(mixed arg) {
+    mixed v1;
+    v1 = this_player();
+    message_vision("$N想偷龟。\n", v1);
+    message_vision("青鬏龟童对$N说道：大人窃龟也不羞脸。\n", v1);
+    return 1;
+}
+
+int do_kill(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    v1 = this_player();
+    v2 = this_object();
+    if (!arg) {
+        return 0;
+    }
+    v3 = present(arg, v2);
+    if (v3 == nh_gui || v3 == bh_gui || v3 == ld_gui) {
+        message_vision("$N想杀死龟。\n", v1);
+        message_vision("青鬏龟童对$N说道：大人切莫杀生。\n", v1);
+        return 1;
+    }
+    return 0;
+}
+
+int do_cast(mixed arg) {
+    mixed v1;
+    v1 = this_player();
+    message_vision("$N龟模龟样地念了几句咒语。\n", v1);
+    message_vision("青鬏龟童对$N说道：大人，莫念莫念，切莫伤您龟寿。\n", v1);
+    return 1;
+}
+
+int do_exert(mixed arg) {
+    mixed v1;
+    v1 = this_player();
+    message_vision("$N想借龟施功。\n", v1);
+    message_vision("青鬏龟童对$N说道：大人在这里练功会损了您的龟寿。\n", v1);
+    return 1;
+}
+
+int do_perform(mixed arg) {
+    mixed v1;
+    v1 = this_player();
+    message_vision("$N想借龟施功。\n", v1);
+    message_vision("青鬏龟童对$N说道：大人在这里练功会损了您的龟寿。\n", v1);
+    return 1;
+}

@@ -1,0 +1,99 @@
+// tell.c
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+void create() {seteuid(getuid());}
+
+int help(object me);
+
+int main(object me, string arg)
+{
+	string target, msg,auto_reply;
+	string no_tell,can_tell;
+	object obj;
+	string my_id;
+
+	if(me->ban_say()) return 0;
+
+	if(!arg || sscanf(arg, "%s %s", target, msg)!=2)
+		return help(me);
+
+	if(!wizardp(me) && me->query_condition("no_speak"))
+		return notify_fail("你支支吾吾的，半天也说不出句话来。\n");
+
+	obj = find_player(target);
+
+	if(!obj || !me->visible(obj))
+		return notify_fail("没有这个人....。\n");
+
+	if( obj == me)
+		return notify_fail("告诉自己？你烦不烦呀？\n");
+
+	if(!wizardp(me) && obj->query_temp("pigging_seat"))
+		return notify_fail("正在拱猪的人听不到悄悄话……。\n");
+
+	if(!living(obj))
+		return notify_fail(obj->name(2)+"现在无法听到你的话！\n");
+
+	if(! interactive(obj) || obj->is_net_dead())
+		return notify_fail("对方现在处于离线状态，无法接收你的信息！\n");
+
+	my_id= me->query("id");
+	no_tell = obj->query("env/no_tell");
+
+	if(!wizardp(me) && !me->is_brother(obj->query("id"))
+	&& (string)me->query("marry/id") != (string)obj->query("id")
+	&& (no_tell == "all" || no_tell == "ALL" || is_sub(my_id, no_tell)))
+	{
+		can_tell = obj->query("env/can_tell");
+		if (! is_sub(my_id, can_tell))
+			return notify_fail("对方已经设置了 NO_TELL，看来是不想听你罗嗦啦！\n");
+	}
+
+	write(WHT"『私语』"HIG"你告诉" + obj->name(1) + "：" + msg + "\n" NOR);
+	if(stringp(auto_reply = obj->query("env/auto_reply")))
+		write(BEEP + WHT"『回复』"HIR + obj->name(1) + auto_reply +"\n"NOR);
+
+	tell_object(obj, sprintf(WHT"『私语』"HIG + BEEP"%s告诉你：%s\n" NOR,
+		me->name(2), msg));
+
+	if(obj->query("logd"))
+		log_file("msg/"+ geteuid(obj),sprintf("[%s]\n%s TELL：%s\n",
+			ctime(time()),geteuid(me),msg));
+
+	obj->set_temp("reply", me->query("id"));
+
+	if(query_idle(obj)>120)
+		write(sprintf(HIC"%s已经发呆了"HIY" %d "HIC"分钟了，恐怕不会很快"
+				 "给你答复。\n"NOR,
+				 obj->name(2),
+				 query_idle(obj)/60));
+	if(me->query("logd"))
+		log_file("msg/"+ geteuid(me),sprintf("[%s]\nTELL %s：%s\n",
+			ctime(time()),geteuid(obj),msg));
+	return 1;
+}
+
+int help(object me)
+{
+	write(@HELP
+
+指令格式：tell <某人> <讯息>
+
+你可以用这个指令和其他地方的使用者说话。如果你不将接受对方的信息
+，可以用set no_tell来拒绝。
+
+例如：  set no_tell 不在，有事写信联系。
+
+	如有人tell robert，将会得到以下信息：
+
+	蝴蝶君不在，有事写信联系。
+
+其他相关指令：reply
+
+HELP
+	);
+	return 1;
+}

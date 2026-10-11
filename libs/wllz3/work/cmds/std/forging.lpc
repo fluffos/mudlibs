@@ -1,0 +1,173 @@
+//forging.c
+
+inherit F_CLEAN_UP;
+
+int help(object me);
+
+mapping valid_type = ([
+	"blade":	35,
+	"sword":	30,
+	"staff":	45,
+	"spear":	35,
+	"throwing":	20,
+	"whip":		20,
+]);
+
+int main(object me,string arg)
+{
+	object book,ore;
+	int skill;
+
+	if(!arg)
+		return help(me);
+
+	if(me->is_busy())
+		return notify_fail("你正忙着呢。\n");
+
+	if(me->is_fighiting())
+		return notify_fail("战斗中不能锻造。\n");
+
+	if(!environment(me)->query("valid_founding"))
+		return notify_fail("这里不能进行锻造。\n");
+
+	if(me->query("career") != "铸造师")
+		return notify_fail("你还是先去学点铸造技巧再说吧。\n");
+
+	skill = me->query_skill("founding",1);
+
+	if(!skill)
+		return notify_fail("你还是先去学点铸造技巧再说吧。\n");
+
+	if(skill < 20)
+		return notify_fail("你的铸造技巧还不够娴熟，先去练练再说吧。\n");
+
+	if(me->query("brawn") < 30)
+		return notify_fail("你太累了，还是歇一会再说吧。\n");
+
+	if(arg && sscanf(arg,"by %s",arg) == 1)
+	{
+		if(!objectp(book = present(arg,me)))
+			return notify_fail("你没有这种东西。\n");
+
+		if(!book->query("founding_type"))
+			return notify_fail("这"+ book->name() +"并没有提供任何图示。\n");
+
+		if(me->query_temp("composite/type"))
+			write("你改变主意，打算依据"+ book->name() +"来进行锻造。\n");
+		else
+			write("你打算依据"+ book->name() +"来进行锻造。\n");
+
+		me->set_temp("composite/type",book->query("founding_type"));
+		destruct(book);
+		return 1;
+	}
+	if(arg && sscanf(arg,"use %s",arg) == 1)
+	{
+		if(!objectp(ore = present(arg,me)))
+			return notify_fail("你打算使用什么材料？\n");
+
+		if(!ore->valid_inlay())
+			return notify_fail(ore->name()+"不能做为锻造的材料。\n");
+
+		if(me->query_temp("composite/amount"))
+			write("你在锻造材料里加入了"+ ore->name() +"的成分。\n");
+		else
+			write("你决定使用"+ ore->name() +"做为锻造的材料。\n");
+
+		me->add_temp("composite/amount",ore->query("inlay") / 10);
+		me->set_temp("composite/material",ore->query("material"));
+		destruct(ore);
+		return 1;
+	}
+	if(arg)
+	{
+		if(undefinedp(valid_type[arg]))
+			return notify_fail("你不具备锻造这种武器的能力。\n");
+
+		if(!me->query_temp("composite/type"))
+			return notify_fail("你还没有决定依据哪一种图谱进行锻造。\n");
+
+		if(me->query_temp("composite/amount") < valid_type[arg])
+			return notify_fail("你使用的材料似乎还不足。\n");
+
+		if(!present("hammer",me))
+			return notify_fail("你先找把锤子再说吧？\n");
+
+		write("你决定依据图谱上的示例，自行锻造武器。\n");
+		if(me->query_temp("composite/type") != arg)
+		{
+			write("可能是用错了图谱，你锻造了半天，却什么东西也没有。\n");
+			me->delete_temp("composite");
+			return 1;
+		}
+		seteuid(getuid());
+		me->set_short_desc("手持铁锤，试着锻造一件绝世兵刃。");
+		me->start_busy(bind((: call_other,__FILE__,"compelete_composite",me :),me),
+			       bind((: call_other,__FILE__,"halt_composite",me :),me));
+		return 1;
+	}
+
+}
+int compelete_composite(object me)
+{
+	int time;
+	time = 100 - me->query_skill("founding",1);
+
+	if(time < 30)
+		time = 30;
+
+	if(!me)
+		return 0;
+
+	if(!me->query_temp("composite"))
+	{
+		write("你捣弄了半天，结果什么也没有。\n");
+		me->set_short_desc(0);
+		return 0;
+	}
+	if(!present("hammer",me))
+	{
+		write("你突然手中一空，仔细瞧瞧，咦，怎么锤子不见啦？\n");
+		me->delete_temp("composite");
+		me->set_short_desc(0);
+		return 0;
+	}
+	if(me->query("brawn") < 20)
+	{
+		write("你太累了，于是停下来休息一会。\n");
+		me->set_short_desc(0);
+		return 0;
+	}
+	if(me->add_temp("composite/times",1) && me->query_temp("composite/times") > time)
+	{
+		ITEM_D->composite_weapon(me);
+		me->delete_temp("composite");
+		me->set_short_desc(0);
+		return 0;
+	}
+
+	write("你手持铁锤，照着图谱，试着锻造一件绝世兵刃。\n");
+	me->add("brawn",-5);
+	return 1;
+}
+int halt_composite(object me)
+{
+	write("你放下铁锤，喘了一口气：好累啊。\n");
+	me->delete_temp("composite");
+	return 1;
+}
+
+int help(object me)
+{
+	write(@TEXT
+指令格式：forging by  <图谱>	| 依据某一本图谱进行锻造
+	  forging use <材料>    | 使用某一种材料进行锻造
+	  forging <类型>        | 设定锻造武器的类型
+
+这个指令是让你可以依据图谱锻造武器。前提是你的职业必须是铸造师，
+而且必须拥有 30 级的铸造技巧。锻造之前，必须先选择自己想要锻造的
+武器类型，再加入材料进行锻造。锻造出的武器有多种组合，并附带隐藏
+属性，这和个人铸造等级、五行属性有一定的关系。
+TEXT);
+	return 1;
+}

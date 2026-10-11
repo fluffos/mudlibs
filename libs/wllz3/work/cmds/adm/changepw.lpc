@@ -1,0 +1,91 @@
+//changepw.c
+
+#include <login.h>;
+
+inherit F_CLEAN_UP;
+
+void create(){ seteuid(getuid());}
+
+int main(object me, string arg)
+{
+        object ob,link_ob;
+        string id;
+        string type,pass;
+
+	if(me != this_player(1))
+		return 0;
+
+	if(SECURITY_D->get_status(geteuid(me)) != "(admin)" 
+		|| !is_root(me))
+		return notify_fail("你没有权利修改玩家密码。\n");
+
+        if(!arg || sscanf(arg,"%s for %s %s",id,type,pass) != 3)
+                return notify_fail("指令格式：changepw <玩家> for <连线密码|管理密码> <密码>\n");
+
+	if(type != "login" && type != "manage")
+		return notify_fail("更改类型错误，请选择修改连线密码或管理密码。\n");
+
+
+	if(ob = find_player(id))
+	{
+		if(!objectp(link_ob = ob->query_temp("link_ob")))
+			return notify_fail("该用户现在处于非正常状态连线，无法修改密码。\n");
+		
+		if(SECURITY_D->get_status(geteuid(ob))!="(player)")
+			return notify_fail("你无法修改这个使用者的密码。\n");
+
+		if(type == "login")
+			link_ob->set("password",crypt(pass,0));
+		else
+			link_ob->set("manage_password",crypt(pass,0));
+
+		printf("%s的密码已经设定为：%s\n",
+			ob->name(2),pass);
+
+		link_ob->save();
+		return 1;
+	}
+	else
+	{
+		ob = new(LOGIN_OB);
+		ob->set("id",id);
+		if(!ob->restore())
+		{
+			destruct(ob);
+			return notify_fail("操作错误，没有 "+ id +" 这个玩家。\n");
+		}
+
+		if(SECURITY_D->get_status(geteuid(ob))!="(player)")
+		{
+			destruct(ob);
+			return notify_fail("你无法修改这个使用者的密码。\n");
+		}
+	
+		if(type == "login")
+			ob->set("password",crypt(pass,0));
+		else
+			ob->set("manage_password",crypt(pass,0));
+
+		printf("%s 的密码已经设定为：%s\n",
+			ob->query("id"),pass);
+
+		ob->save();
+		destruct(ob);
+		return 1;
+	}
+
+}
+int help(object me)
+{
+        write(@HELP
+
+指令格式：changepw <连线密码|管理密码> for <玩家> <密码>
+ 
+这个指令可以修改玩家的密码，请谨慎使用。
+ 
+HELP
+    );
+    return 1;
+}
+
+

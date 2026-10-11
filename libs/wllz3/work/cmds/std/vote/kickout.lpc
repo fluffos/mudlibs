@@ -1,0 +1,88 @@
+// vote kickout
+// bbb 99.1.25
+
+#include <vote.h>
+#include <ansi.h>
+
+inherit F_CONDITION;
+
+int clear_vote(object me);
+
+int vote(object me, object victim)
+{
+	int reason; // vote for what?
+	int vv;	// valid voter numbers
+	int vc; 	// vote count;
+	int df;
+	string *juror, my_id;
+	object link_ob;
+
+	seteuid(ROOT_UID);
+
+	if( !victim) return notify_fail("你要驱逐的人已经不在了。\n");
+
+	if (me == victim){
+		if (random(2)) me->add("vote/abuse", 10);
+			return notify_fail("你不是开玩笑吧？当心被剥夺表决权！\n");
+	}
+	if ((reason = (int)victim->query("vote/reason"))>0 && (reason!=V_KICKOUT))
+	{
+		return notify_fail("要把当前的表决完成以后才可以提新的动议。\n");
+	}
+
+	if( victim->query("kickout_on") )
+	{
+		return notify_fail(victim->name()+"已经被驱逐出这个世界了。\n");
+	}
+
+	if (reason <= 0)
+	{
+		victim->set("vote/reason", (int)V_KICKOUT);
+	}
+
+	my_id = me->query("id");
+
+	// dont allow me to vote twice for the same issue
+	juror = victim->query("vote/juror");
+
+	if( !pointerp(juror) )
+	{
+		victim->set("vote/juror", ({ my_id }) );
+	} else if( member_array(my_id, juror) == -1 )
+	{
+		victim->set("vote/juror", juror+({ my_id }) );
+	} else
+	{
+		me->add("vote/abuse", 10);
+		return notify_fail("一人一票！滥用表决权是要受惩罚的！\n");
+	}
+
+	vv = (int) ("/cmds/std/vote")->valid_voters(me) / 4;
+	vc = victim->add("vote/count", 1);
+
+	df = vv - vc;
+	if(vv < 4) df = 4 - vc;
+
+	if( df > 1)
+	{
+		shout(sprintf(HIG "【民意表决】%s投票将%s驱逐出去，还差%s票。\n"NOR,
+			me->name(2),victim->name(2),chinese_number(df-1)));
+		write(sprintf(HIG "【民意表决】%s投票将%s驱逐出去，还差%s票。\n"NOR,
+			me->name(2),victim->name(2),chinese_number(df-1)));
+		victim->apply_condition("vote_clear", 10);
+	} else
+	{
+		shout(sprintf(HIG "【民意表决】%s投票将%s驱逐出去。%s被驱逐出这个世界了！\n"NOR,
+			me->name(2),victim->name(2),victim->name(2)));
+		write(sprintf(HIG "【民意表决】%s投票将%s驱逐出去。%s被驱逐出这个世界了！\n"NOR,
+			me->name(2),victim->name(2),victim->name(2)));
+		victim->apply_condition("vote_clear", -10);
+		victim->set("kickout_on", 1);
+		victim->save();
+		link_ob = victim->query_temp("link_ob");
+		link_ob->set("kickout_time",time());
+		link_ob->save();
+		destruct(victim);
+	}
+	return 1;
+}

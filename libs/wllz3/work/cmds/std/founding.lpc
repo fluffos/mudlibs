@@ -1,0 +1,130 @@
+// founding.c
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+int help(object me);
+
+int main(object me,string arg)
+{
+	string smith;
+	object env;
+
+	if(me->is_busy())
+		return notify_fail("你正忙着呢。\n");
+
+	if(me->is_fighting())
+		return notify_fail("战斗中打铁？\n");
+
+	env = environment(me);
+	if(!env->query("valid_founding"))
+		return notify_fail("这里不能打铁。\n");
+
+	if(!stringp(smith = me->query_temp("pending/ask_money")))
+		return notify_fail("你还是先向铁匠们请教如何打铁吧。\n");
+
+	if(me->query("career") != "铸造师")
+		return notify_fail("你似乎不需要练习这种技能吧？\n");
+
+	if(!(int)me->query_skill("founding",1))
+		return notify_fail("你还是先去学一点铸造技巧再说吧！\n");
+
+	if(me->query("jing") < 20 || me->query("qi") < 20)
+		return notify_fail("你现在精神不好，还是先休息一会再说吧。\n");
+
+	if(me->query("brawn") < 20)
+		return notify_fail("你太累了，还是先休息一会再说吧。\n");
+
+	if(!present("hammer",me))
+		return notify_fail("你没有铁锤，怎么打铁？\n");
+
+	if(!me->query_temp("pending/founding_money"))
+	{
+
+		if(MONEY_D->player_pay(me,500))
+		{
+			message_vision("$N掏出五两银子，塞到了"+ smith +"手中，"+ smith +"掂量了一下，指着锻造台说道：那边\n"
+				       "有块烙铁，你找把锤子，练练去吧，说完把银子塞到怀里。\n",me);
+			me->set_temp("pending/founding_money",500);
+			return 1;
+		}
+		else
+			return notify_fail(smith +"急道：咋了，没钱给老子滚一边去。\n");
+	}
+
+	seteuid(getuid());
+	message_vision("$N赤裸上身，手举铁锤，似模似样的跟着"+ smith +"学打铁。\n",me);
+	me->set_short_desc("赤裸上身，手举铁锤，跟着"+ smith +"学打铁。");
+	me->start_busy(bind((: call_other,__FILE__,"compelete_founding" :),me),
+		       bind((: call_other,__FILE__,"halt_founding" :),me));
+	return 1;
+}
+int compelete_founding(object me)
+{
+	string smith;
+	smith = me->query_temp("pending/ask_money");
+
+	if(!present("hammer",me))
+	{
+		write("你突然觉得手中一轻，仔细一看：啊，怎么手里的铁锤不见了？\n");
+		me->set_short_desc(0);
+		return 0;
+	}
+	if(me->query("jing") < 20 || me->query("qi") < 20)
+	{
+		write("你觉得十分疲惫，于是放下铁锤，擦了擦额头的汗水，停下来休息一会。\n");
+		me->set_short_desc(0);
+		return 0;
+	}
+	if(me->query("brawn") < 20)
+	{
+		write("你气喘嘘嘘，显得疲惫不堪，于是停下来休息一会。\n");
+		me->set_short_desc(0);
+		return 0;
+	}
+	if(me->add_temp("pending/founding_money",-2) < 1)
+	{
+		write(smith +"走了过来对你说道：这烙铁不能再打了，你今天就到此为止，改天再来吧。\n");
+		me->delete_temp("pending/founding");
+		me->delete_temp("pending/ask_money");
+		return 0;
+	}
+	if(random(10) == 7)
+	{
+		write(RED"你稍不留神，只见锤子打在手指上，一股钻心的疼痛让你几乎晕过去。\n"NOR);
+		me->receive_damage("jing",10);
+		me->receive_damage("qi",10);
+		return 1;
+	}
+	if(me->add_temp("pending/founding",1) % 50 == 1)
+	{
+		if(me->can_improve_skill("founding"))
+			me->improve_skill("founding",1 + random(me->query_int() / 10));
+		write(WHT"你似模似样的跟着"+ smith + WHT"学打铁，倒也显得得心应手。\n"NOR);
+
+	}
+	write(random(2) == 1 ? "你拿着铁锤，用尽全身的力气，狠狠的往锻造台上的烙铁打去。\n":
+			       "你把一块红通通的"HIR"烙铁"NOR"放进水中，立刻发出"WHT"哧哧"NOR"的声响。\n"NOR);
+	me->add("brawn",-20);
+	return 1;
+}
+int halt_founding(object me)
+{
+	write("你觉得有些累了，于是停下来休息一会。\n");
+	me->set_short_desc(0);
+	me->delete_temp("pending/founding");
+	return 1;
+}
+int help(object me)
+{
+	write(@TEXT
+
+指令格式：founding
+
+这个指令是让你用来练习铸造技巧，前提必须你的职业是铸造师，而且身
+在打铁铺。打铁之前请先向铁匠们询问关于打铁的技巧。
+
+TEXT);
+	return 1;
+}

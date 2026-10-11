@@ -1,0 +1,130 @@
+// 本文件由编译后的 .b 二进制程序反编译还原，原始源码未随档案发布。
+// Decompiled from the compiled .b binary; the original source was not distributed.
+inherit "/feature/clean_up";
+inherit "/feature/save";
+void create();
+string query_save_file();
+varargs void check_for_mail(mixed, mixed);
+void incoming_request(mixed);
+void get_status();
+void clear_queues();
+
+mapping mail_outgoing;
+mapping mail_incoming;
+
+void create() {
+    seteuid(getuid());
+    mail_outgoing = ([ ]);
+    mail_incoming = ([ ]);
+}
+
+string query_save_file() {
+    return "/data/netmail";
+}
+
+varargs void check_for_mail(mixed arg1, mixed arg2) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    v1 = ([ ]);
+    arg1 = replace_string(lower_case(arg1 ? arg1 : ""), " ", ".");
+    switch (arg2) {
+    case 3:
+        if (!mail_outgoing[arg1]) {
+            mail_outgoing[arg1] = ([ ]);
+        }
+        if (!sizeof(v1)) {
+            map_delete(mail_outgoing, arg1);
+            break;
+        }
+        break;
+    case 1:
+    case 2:
+        if (!sizeof(v1)) {
+            map_delete(mail_outgoing, arg1);
+            break;
+        }
+        mail_outgoing[arg1] = ([ "time" : time(), "index" : 0 ]);
+        break;
+    case 0:
+        mail_outgoing[arg1]["time"] = time();
+        mail_outgoing[arg1]["index"] += 512;
+        break;
+    }
+    if (!sizeof(v1) || !mail_outgoing[arg1]) {
+        return;
+    }
+    v2 = "/adm/daemons/network/dns_master"->query_mud_info(arg1);
+    if (!v2 || !v2["NAME"] || !v2["PORTUDP"]) {
+        return;
+    }
+    if (find_player("inspiral")) {
+        tell_object(find_player("inspiral"), "MAILQ: Sending to " + arg1 + "\n");
+    }
+    v1["MSG"] = replace_string(v1["MSG"], "|", " \b|");
+    v1["MSG"] = replace_string(v1["MSG"], "@", " \b@");
+    if (find_player("inspiral")) {
+        tell_object(find_player("inspiral"), "message size: " + sizeof(v1["MSG"]) + "\n");
+    }
+    v3 = "@@@mail_q||NAME:" + upper_case(capitalize(replace_string("/adm/daemons/network/dns_master"->query_mud_name() ? "/adm/daemons/network/dns_master"->query_mud_name() : "", " ", "."))) + "||PORTUDP:" + "/adm/daemons/network/dns_master"->query_udp_port();
+    if (!mail_outgoing[arg1]["index"]) {
+        v3 += "||WIZTO:" + v1["WIZTO"] + "||WIZFROM:" + v1["WIZFROM"] + "||DATE:" + time() + "||SUBJECT:" + v1["SUBJECT"];
+        if (v1["CC"]) {
+            v3 += "||CC:" + v1["CC"];
+        }
+    }
+    v4 = mail_outgoing[arg1]["index"];
+    v5 = sizeof(v1["MSG"]);
+    if (v5 <= 512 || v4 - 1 + 512 >= v5) {
+        if (find_player("inspiral")) {
+            tell_object(find_player("inspiral"), "Sending ENDMSG:1.\n");
+        }
+        v3 += "||ENDMSG:1";
+    }
+    if (find_player("inspiral")) {
+        tell_object(find_player("inspiral"), "MAILQ: Sending: " + v4 + ".." + (v4 - 1 + 512) + "\n");
+    }
+    v3 += "||MSG:" + v1["MSG"][v4..v4 - 1 + 512];
+    v3 += "@@@\n";
+    "/adm/daemons/network/dns_master"->send_udp(v2["HOSTADDRESS"], v2["PORTUDP"], v3);
+    return;
+}
+
+void incoming_request(mixed arg) {
+    if (!arg["NAME"] || !arg["PORTUDP"]) {
+        return;
+    }
+    if (!"/adm/daemons/network/dns_master"->query_mud_info(arg["NAME"])) {
+        "/adm/daemons/network/services/ping_q"->send_ping_q(arg["HOSTADDRESS"], arg["PORTUDP"]);
+    }
+    if (arg["WIZTO"]) {
+        mail_incoming[arg["NAME"]] = arg;
+    } else if (!mail_incoming[arg["NAME"]]) {
+        arg["RESEND"] = 1;
+    } else {
+        mail_incoming[arg["NAME"]]["MSG"] += arg["MSG"];
+    }
+    "/adm/daemons/network/dns_master"->send_udp(arg["HOSTADDRESS"], arg["PORTUDP"], "@@@mail_a||NAME:" + upper_case(capitalize(replace_string("/adm/daemons/network/dns_master"->query_mud_name() ? "/adm/daemons/network/dns_master"->query_mud_name() : "", " ", "."))) + "||PORTUDP:" + "/adm/daemons/network/dns_master"->query_udp_port() + (arg["ENDMSG"] ? "||ENDMSG:1" : "") + (arg["RESEND"] ? "||RESEND:1" : "") + "@@@\n");
+    if (find_player("inspiral")) {
+        tell_object(find_player("inspiral"), "MAILQ: Sending mail_a " + (arg["ENDMSG"] ? ", ENDMSG:1 " : "") + (arg["RESEND"] ? ", RESEND:1" : "") + "." + "\n");
+    }
+    if (arg["ENDMSG"]) {
+        if (find_player("inspiral")) {
+            tell_object(find_player("inspiral"), "MAILQ:  Sending to netmail.\n");
+        }
+        catch {
+    "/adm/daemons/network/netmail"->incoming_mail(mail_incoming[arg["NAME"]]);
+};
+        map_delete(mail_incoming, arg["NAME"]);
+    }
+}
+
+void get_status() {
+}
+
+void clear_queues() {
+    mail_outgoing = ([ ]);
+    mail_incoming = ([ ]);
+}

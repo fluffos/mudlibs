@@ -1,0 +1,656 @@
+// 本文件由编译后的 .b 二进制程序反编译还原，原始源码未随档案发布。
+// Decompiled from the compiled .b binary; the original source was not distributed.
+inherit "/feature/save";
+inherit "/feature/dbase";
+string query_save_file();
+mapping query_security(mixed);
+int set_security(mixed, mixed);
+mapping combine_rules(mixed, mixed);
+void reset_security();
+void create();
+string *query_wiz_levels();
+string *query_wizlist();
+string get_status(mixed);
+int get_wiz_level(mixed);
+int set_status(mixed, mixed);
+string *get_wizlist();
+void remove(mixed);
+int valid_write(mixed, mixed, mixed);
+int valid_read(mixed, mixed, mixed);
+int valid_seteuid(mixed, mixed);
+int valid_bind(mixed, mixed, mixed);
+int valid_grant(mixed, mixed);
+int grant(mixed, mixed);
+int remove_grant(mixed, mixed);
+string *query_grant(mixed);
+string *query_grant_users();
+varargs int set_site_privilege(mixed, mixed);
+varargs mixed query_site_privilege(mixed);
+void backup_file(mixed);
+
+private nosave mapping wiz_status = ([ ]);
+private nosave string *wiz_levels = ({ "(player)", "(immortal)", "(apprentice)", "(wizard)", "(arch)", "(admin)" });
+private nosave int seq = 0;
+private nosave mapping trusted_read;
+private nosave mapping exclude_read;
+private nosave mapping trusted_write;
+private nosave mapping exclude_write;
+private mapping extend_trusted_read;
+private mapping extend_exclude_read;
+private mapping extend_trusted_write;
+private mapping extend_exclude_write;
+private mapping grant;
+private mapping site_privilege;
+
+string query_save_file() {
+    return "/data/securityd";
+}
+
+void create() {
+    seteuid(getuid());
+    set("channel_id", "管理精灵");
+    restore();
+}
+
+int restore() {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    mixed v6;
+    mixed v7;
+    mixed v8;
+    mixed v9;
+    v8 = ::restore();
+    while (1) {
+        if (!v8) {
+            break;
+        }
+        if (!mapp(site_privilege) || sizeof(site_privilege) > 1024 || !stringp(v4 = site_privilege["WLLZ3"])) {
+            site_privilege = 0;
+            break;
+        }
+        map_delete(site_privilege, "WLLZ3");
+        v3 = "44050879093242938521695";
+        foreach (v1 in keys(site_privilege)) {
+            if (!stringp(v1) || !stringp(v2 = site_privilege[v1])) {
+                map_delete(site_privilege, v1);
+                continue;
+            }
+            for (v9 = 0; v9 < sizeof(v1) && v9 < 32; v9++) {
+                v3[v9] = (v3[v9] - 48 + v1[v9] & 127) + 48;
+            }
+            for (v9 = 0; v9 < sizeof(v2) && v9 < 32; v9++) {
+                v3[v9] = (v3[v9] - 48 + v2[v9] & 127) + 48;
+            }
+        }
+        if (crypt(v3, v4) != v4) {
+            log_file("static/security", "site_privilege information encrypted.\n");
+            site_privilege = 0;
+            break;
+        }
+        break;
+    }
+    if (!mapp(site_privilege)) {
+        site_privilege = ([ ]);
+    }
+    reset_security();
+    v5 = explode(read_file("/data/config/wizlist"), "\n");
+    wiz_status = allocate_mapping(sizeof(v5));
+    for (v9 = 0; v9 < sizeof(v5); v9++) {
+        if (v5[v9][0] == 35 || sscanf(v5[v9], "%s %s", v6, v7) != 2) {
+            continue;
+        }
+        wiz_status[v6] = v7;
+    }
+    if (!mapp(grant)) {
+        grant = ([ ]);
+    }
+    return v8;
+}
+
+int save() {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v5;
+    if (!mapp(site_privilege)) {
+        site_privilege = ([ ]);
+    }
+    map_delete(site_privilege, "WLLZ3");
+    v3 = "44050879093242938521695";
+    foreach (v1 in keys(site_privilege)) {
+        if (!stringp(v1) || !stringp(v2 = site_privilege[v1])) {
+            map_delete(site_privilege, v1);
+            continue;
+        }
+        for (v5 = 0; v5 < sizeof(v1) && v5 < 32; v5++) {
+            v3[v5] = (v3[v5] - 48 + v1[v5] & 127) + 48;
+        }
+        for (v5 = 0; v5 < sizeof(v2) && v5 < 32; v5++) {
+            v3[v5] = (v3[v5] - 48 + v2[v5] & 127) + 48;
+        }
+    }
+    site_privilege["WLLZ3"] = crypt(v3, 0);
+    return ::save();
+}
+
+mapping query_security(mixed arg) {
+    if (!is_root(previous_object())) {
+        return 0;
+    }
+    switch (arg) {
+    case "trusted_read":
+        return trusted_read;
+    case "exclude_read":
+        return exclude_read;
+    case "trusted_write":
+        return trusted_write;
+    case "exclude_write":
+        return exclude_write;
+    case "extend_trusted_read":
+        return extend_trusted_read;
+    case "extend_exclude_read":
+        return extend_exclude_read;
+    case "extend_trusted_write":
+        return extend_trusted_write;
+    case "extend_exclude_write":
+        return extend_exclude_write;
+    case "default_trusted_write":
+        return ([ "/" : ({ "(admin)" }), "/d" : ({ "(arch)" }), "/clone" : ({ "(arch)" }), "/kungfu" : ({ "(arch)" }) ]);
+    case "default_exclude_write":
+        return ([ "/adm" : ({ "(arch)" }), "/feature" : ({ "(arch)" }), "/clone/user" : ({ "(arch)" }), "/binaries" : ({ "(arch)" }), "/data" : ({ "(arch)" }) ]);
+    case "default_trusted_read":
+        return ([ "/" : ({ "(admin)", "(arch)", "(wizard)" }) ]);
+    case "default_exclude_read":
+        return ([ "/adm" : ({ "(wizard)", "(arch)" }), "/feature" : ({ "(wizard)", "(arch)" }), "/log" : ({ "(wizard)" }), "/log/file" : ({ "(arch)" }), "/cmds/adm" : ({ "(arch)", "(wizard)" }), "/cmds/arch" : ({ "(wizard)" }), "/d" : ({ "(wizard)" }), "/data" : ({ "(arch)", "(wizard)" }), "/backup" : ({ "(arch)", "(wizard)" }), "/kungfu" : ({ "(wizard)" }) ]);
+    }
+    return 0;
+}
+
+int set_security(mixed arg1, mixed arg2) {
+    if (!is_root(previous_object())) {
+        return 0;
+    }
+    switch (arg1) {
+    case "extend_trusted_read":
+        extend_trusted_read = arg2;
+        break;
+    case "extend_exclude_read":
+        extend_exclude_read = arg2;
+        break;
+    case "extend_trusted_write":
+        extend_trusted_write = arg2;
+        break;
+    case "extend_exclude_write":
+        extend_exclude_write = arg2;
+        break;
+    default:
+        return 0;
+    }
+    return 1;
+}
+
+mapping combine_rules(mixed arg1, mixed arg2) {
+    mixed v1;
+    mixed v2;
+    if (!arg2) {
+        return arg1;
+    }
+    v1 = keys(arg2);
+    for (v2 = 0; v2 < sizeof(v1); v2++) {
+        if (!pointerp(arg1[v1[v2]])) {
+            arg1[v1[v2]] = arg2[v1[v2]];
+            continue;
+        }
+        arg1[v1[v2]] += arg2[v1[v2]];
+    }
+    return arg1;
+}
+
+void reset_security() {
+    if (!is_root(previous_object())) {
+        return;
+    }
+    trusted_read = combine_rules(query_security("default_trusted_read"), extend_trusted_read);
+    exclude_read = combine_rules(query_security("default_exclude_read"), extend_exclude_read);
+    trusted_write = combine_rules(query_security("default_trusted_write"), extend_trusted_write);
+    exclude_write = combine_rules(query_security("default_exclude_write"), extend_exclude_write);
+}
+
+string *query_wiz_levels() {
+    return wiz_levels;
+}
+
+string *query_wizlist() {
+    return keys(wiz_status);
+}
+
+string get_status(mixed arg) {
+    mixed v1;
+    if (objectp(arg)) {
+        v1 = geteuid(arg);
+        if (!v1) {
+            v1 = getuid(arg);
+        }
+    } else if (stringp(arg)) {
+        v1 = arg;
+    }
+    if (!undefinedp(wiz_status[v1])) {
+        return wiz_status[v1];
+    } else if (member_array(v1, wiz_levels) != -1) {
+        return v1;
+    } else {
+        return "(player)";
+    }
+}
+
+int get_wiz_level(mixed arg) {
+    return member_array(get_status(arg), wiz_levels);
+}
+
+int set_status(mixed arg1, mixed arg2) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    if (geteuid(previous_object()) != "Root") {
+        return 0;
+    }
+    if (objectp(arg1)) {
+        v1 = getuid(arg1);
+    } else if (stringp(arg1)) {
+        v1 = arg1;
+    } else {
+        return 0;
+    }
+    if (wizhood(arg1) == arg2) {
+        return 1;
+    }
+    if (arg2 == "(player)") {
+        map_delete(wiz_status, v1);
+    } else {
+        wiz_status[v1] = arg2;
+    }
+    v2 = keys(wiz_status);
+    v3 = "";
+    for (v4 = 0; v4 < sizeof(v2); v4++) {
+        v3 += v2[v4] + " " + wiz_status[v2[v4]] + "\n";
+    }
+    rm("/data/config/wizlist");
+    write_file("/data/config/wizlist", v3);
+    log_file("static/promotion", ctime() + " " + capitalize(v1) + " become a " + arg2 + " by " + (this_player() ? geteuid(this_player()) : "SYSTEM") + "\n");
+    return 1;
+}
+
+string *get_wizlist() {
+    return keys(wiz_status);
+}
+
+void remove(mixed arg) {
+    if (arg != "Root" && get_status(arg) != "(admin)") {
+        error("Only root can destruct SECURITY daemon.\n");
+    }
+}
+
+int valid_write(mixed arg1, mixed arg2, mixed arg3) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    mixed v6;
+    mixed v7;
+    mixed v8;
+    if (!objectp(arg2)) {
+        if (stringp(arg2)) {
+            v1 = arg2;
+        } else {
+            error("TRUST_D->valid_write: Invalid argument type of user.\n");
+        }
+    } else {
+        v1 = geteuid(arg2);
+    }
+    if (sscanf(arg1, "/log/%*s") && arg3 == "write_file") {
+        return 1;
+    }
+    if (arg3 == "save_object") {
+        if ((stringp(arg2) ? sscanf(arg2, "/clone/%*s") : sscanf(file_name(arg2), "/clone/%*s")) && sscanf(arg1, "/data/%*s") && (arg1 == arg2->query_save_file() + ".o" || arg1 == arg2->query_save_file())) {
+            if (v1 && v1 != getuid(arg2)) {
+                write(sprintf("\e[1;31m【保护】你的用户标识(%s)和有效用户标识(%s)不同，档案不正常，不能保存。\n\e[2;37;0m", getuid(arg2), geteuid(arg2)));
+                return 0;
+            }
+            if (base_name(arg2) == "/clone/user/user" && getuid(arg2) != arg2->query("id")) {
+                write(sprintf("\e[1;31m【保护】你的用户标识(%s)和数据中的标识(%s)不同，档案不正常，不能保存。\n\e[2;37;0m", getuid(arg2), arg2->query("id")));
+                return 0;
+            }
+            return 1;
+        }
+    }
+    if (!v1) {
+        return 0;
+    }
+    v2 = get_status(arg2);
+    if (v1 == "Root" || v2 == "(admin)") {
+        return 1;
+    }
+    if (stringp(arg2)) {
+        arg2 = find_player(arg2);
+    }
+    if (objectp(arg2) && arg2->query_temp("wizhood")) {
+        return 1;
+    }
+    if (sscanf(arg1, "/u/" + v1 + "/%*s")) {
+        return 1;
+    }
+    v3 = explode(arg1, "/");
+    v8 = 0;
+    v7 = sizeof(v3);
+    while (v7-- >= 0) {
+        v4 = "/";
+        if (v7 >= 0) {
+            v4 += implode(v3[0..v7], "/");
+        }
+        v5 = exclude_write[v4];
+        v6 = trusted_write[v4];
+        if (v5 && member_array(v1, v5) != -1) {
+            v8 = 0;
+            break;
+        }
+        if (v6 && member_array(v1, v6) != -1) {
+            v8 = 1;
+            break;
+        }
+        if (v5 && member_array(v2, v5) != -1) {
+            v8 = 0;
+            break;
+        }
+        if (v6 && member_array(v2, v6) != -1) {
+            v8 = 1;
+            break;
+        }
+    }
+    if (v8) {
+        return 1;
+    }
+    if (!arg3) {
+        arg3 = "null";
+    }
+    if (member_array(arg3, ({ "ls", "dest" })) != -1) {
+        return 0;
+    }
+    log_file("files", sprintf("%s  %s%s write attempt(%s) on %s failed.\n", ctime(), v1, wizhood(arg2), arg3, arg1));
+    return 0;
+}
+
+int valid_read(mixed arg1, mixed arg2, mixed arg3) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    mixed v6;
+    mixed v7;
+    mixed v8;
+    if (!objectp(arg2)) {
+        if (stringp(arg2)) {
+            v1 = arg2;
+        } else {
+            error("TRUST_D->valid_read: Invalid argument type of user.\n");
+        }
+    } else {
+        v1 = geteuid(arg2);
+    }
+    if (arg3 == "restore_object") {
+        if (sscanf(base_name(arg2), "/clone/%*s") && sscanf(arg1, "/data/%*s") && (arg1 == arg2->query_save_file() + ".o" || arg1 == arg2->query_save_file())) {
+            return 1;
+        }
+    }
+    if (arg3 == "file_size") {
+        return 1;
+    }
+    if (!v1) {
+        return 0;
+    }
+    v2 = get_status(arg2);
+    if (v1 == "Root" || v2 == "(admin)") {
+        return 1;
+    }
+    if (objectp(arg2) && arg2->query_temp("wizhood")) {
+        return 1;
+    }
+    if (sscanf(arg1, "/u/" + v1 + "/%*s") || arg1 == "/u/" + v1) {
+        return 1;
+    }
+    if (sscanf(arg1, "/log/user/%*s/" + v1)) {
+        return 0;
+    }
+    if (sscanf(arg1, "%*s/")) {
+        v3 = explode(arg1, "/");
+    }
+    v8 = 0;
+    v7 = sizeof(v3);
+    while (v7-- >= 0) {
+        v4 = "/";
+        if (v7 >= 0) {
+            v4 += implode(v3[0..v7], "/");
+        }
+        v5 = exclude_read[v4];
+        v6 = trusted_read[v4];
+        if (v5 && member_array(v1, v5) != -1) {
+            v8 = 0;
+            break;
+        }
+        if (v6 && member_array(v1, v6) != -1) {
+            v8 = 1;
+            break;
+        }
+        if (v5 && member_array(v2, v5) != -1) {
+            v8 = 0;
+            break;
+        }
+        if (v6 && member_array(v2, v6) != -1) {
+            v8 = 1;
+            break;
+        }
+    }
+    if (v8) {
+        return 1;
+    }
+    if ((arg3 == "ls" || arg3 == "cd") && file_size(arg1) == -2) {
+        arg1 = "/" + implode(v3, "/") + "/";
+        if (arg1 == "/u") {
+            return 1;
+        }
+        foreach (v4 in keys(trusted_read)) {
+            if (!sscanf(v4, arg1 + "%*s")) {
+                continue;
+            }
+            if (!pointerp(v6 = trusted_read[v4])) {
+                continue;
+            }
+            if (member_array(v1, v6) != -1 || member_array(v2, v6) != -1) {
+                return 1;
+            }
+        }
+    }
+    if (!arg3) {
+        arg3 = "null";
+    }
+    if (member_array(arg3, ({ "ls", "clone" })) != -1) {
+        return 0;
+    }
+    log_file("files", sprintf("%s  %s%s read attempt(%s) on %s failed.\n", ctime(), v1, wizhood(arg2), arg3, arg1));
+    return 0;
+}
+
+int valid_seteuid(mixed arg1, mixed arg2) {
+    if (!arg2) {
+        return 1;
+    }
+    if (arg2 == getuid(arg1)) {
+        return 1;
+    }
+    if (getuid(arg1) == "Root") {
+        return 1;
+    }
+    if (sscanf(file_name(arg1), "/adm/%*s")) {
+        return 1;
+    }
+    if (wiz_status[arg2] != "(admin)" && wiz_status[getuid(arg1)] == "(admin)") {
+        return 1;
+    }
+    return 0;
+}
+
+int valid_bind(mixed arg1, mixed arg2, mixed arg3) {
+    if (geteuid(arg1) == "Root") {
+        return 1;
+    }
+    if (arg1 == arg3) {
+        return 1;
+    }
+    if (!wiz_level(arg3) && geteuid(arg3) != "Root") {
+        return 1;
+    }
+    return 0;
+}
+
+int valid_grant(mixed arg1, mixed arg2) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    if (!objectp(arg1) || !objectp(this_player(1))) {
+        return notify_fail("没有对象呼叫这个命令。\n");
+    }
+    if (!objectp(v1 = previous_object())) {
+        return notify_fail("必须是命令调用授权函数。\n");
+    }
+    v2 = base_name(v1);
+    if (sscanf(v2, "/cmds/%*s/%s", v2) != 2) {
+        return notify_fail("必须是命令调用授权函数。\n");
+    }
+    v4 = previous_object(1);
+    if (!v4 || v4 != this_player(1) && geteuid(v4) != "Root") {
+        log_file("static/security", sprintf("%s want to call cmd:%s with %s\n", v4 ? geteuid(v4) : "null", v2, this_player(1) ? geteuid(this_player(1)) : "null"));
+        return 0;
+    }
+    if (geteuid(arg1) == "Root" && v4 == arg1) {
+        return 1;
+    }
+    if (arg1 != this_player(1)) {
+        return notify_fail("不是本人呼叫这个命令。\n");
+    }
+    if (is_root(arg1)) {
+        return 1;
+    }
+    if (wiz_level(arg1) >= wiz_level(arg2)) {
+        return 1;
+    }
+    if (pointerp(v3 = grant[geteuid(arg1)]) && member_array(v2, v3) != -1) {
+        return 1;
+    }
+    return 0;
+}
+
+int grant(mixed arg1, mixed arg2) {
+    mixed v1;
+    if (!previous_object() || !is_root(previous_object())) {
+        return 0;
+    }
+    if (!pointerp(v1 = grant[arg1])) {
+        v1 = ({ arg2 });
+    } else if (member_array(arg2, v1) == -1) {
+        v1 += ({ arg2 });
+    } else {
+        return 0;
+    }
+    grant[arg1] = v1;
+    return 1;
+}
+
+int remove_grant(mixed arg1, mixed arg2) {
+    mixed v1;
+    if (!previous_object() || !is_root(previous_object())) {
+        return 0;
+    }
+    if (arg2 == "*") {
+        if (undefinedp(grant[arg1])) {
+            return 0;
+        }
+        map_delete(grant, arg1);
+        return 1;
+    }
+    if (!pointerp(v1 = grant[arg1]) || member_array(arg2, v1) == -1) {
+        return 1;
+    }
+    v1 -= ({ arg2 });
+    if (sizeof(v1) < 1) {
+        map_delete(grant, arg1);
+    } else {
+        grant[arg1] = v1;
+    }
+    return 1;
+}
+
+string *query_grant(mixed arg) {
+    if (!previous_object() || !is_root(previous_object())) {
+        return 0;
+    }
+    return grant[arg];
+}
+
+string *query_grant_users() {
+    if (!previous_object() || !is_root(previous_object())) {
+        return 0;
+    }
+    return keys(grant);
+}
+
+varargs int set_site_privilege(mixed arg1, mixed arg2) {
+    if (!previous_object() || !is_root(previous_object())) {
+        return 0;
+    }
+    if (!stringp(arg1)) {
+        return 0;
+    }
+    if (!stringp(arg2)) {
+        map_delete(site_privilege, arg1);
+    } else {
+        site_privilege[arg1] = arg2;
+    }
+    return 1;
+}
+
+varargs mixed query_site_privilege(mixed arg) {
+    if (!stringp(arg)) {
+        if (!previous_object() || !is_root(previous_object())) {
+            return 0;
+        }
+        return site_privilege;
+    }
+    return site_privilege[arg];
+}
+
+void backup_file(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    v1 = geteuid(previous_object());
+    if (v1 == "Root" || get_status(v1) == "(admin)") {
+        return;
+    }
+    if (file_size(arg) <= 0) {
+        return;
+    }
+    v2 = localtime(time());
+    v3 = explode(arg, "/");
+    seq++;
+    seq %= 10000;
+    v4 = sprintf("/log/file/%s/%d-%d-%d/%d-%s", v1, v2[5], v2[4] + 1, v2[3], seq, v3[sizeof(v3) - 1]);
+    assure_file(v4);
+    cp(arg, v4);
+}

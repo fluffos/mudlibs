@@ -1,0 +1,99 @@
+// ride.c
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+int help(object me);
+int do_ride(object me, object obj);
+int main(object me, string arg)
+{
+	object obj;
+
+	if( !arg )
+		return help( me );
+
+	if(!objectp(obj = present(arg, me)))
+		obj = present(arg,environment(me));
+
+	if(!obj)
+		return notify_fail("你要骑什么东西？\n");
+
+        if( me->is_busy() )
+                return notify_fail("你上一个动作还没有完成！\n");
+
+        if( me->is_fighting() )
+                return notify_fail("你还在战斗中。\n");
+
+	if( !mapp(obj->query("horse_prop")) && !obj->query("ridable"))
+		return notify_fail("你不能骑这样东西。\n");
+
+        if( obj->query("must_money"))
+                return notify_fail("骑"+ obj->name()+"可是要付钱的呀！\n");
+
+	if(me->query_temp("is_riding"))
+		return notify_fail("你已经骑着坐骑了。\n");
+
+	if(!environment(me)->query("outdoors"))
+		return notify_fail("这里地方太小了，不能骑马。\n");
+
+	if(obj->query("owner_id") && obj->query("owner_id") != geteuid(me))
+		return notify_fail("看清楚一点，那可是人家的坐骑。\n");
+
+	return do_ride(me, obj);
+}
+int do_ride(object me, object obj)
+{
+        object *guard;
+
+        if( !obj ) return 0;
+
+        if( guard = obj->query_temp("guarded") )
+        {
+                guard = filter_array(guard, (: objectp($1) && present($1, environment($2)) && living($1) && ($1!=$2) :), me);
+                if( sizeof(guard) )
+                        return notify_fail( guard[0]->name()
+                                + "正守在" + obj->name() + "一旁，防止任何人骑走。\n");
+        }
+
+	if(!obj->is_horse())
+	{
+		if(obj->query("race") != "野兽")
+			return notify_fail("你怎么能骑这东西？\n");
+
+        	if(obj->query_max_encumbrance() * 2 < me->query_weight())
+        		return notify_fail(obj->name()+"恐怕无法承受你的体重。\n");
+	}
+
+	obj->set_weight(1);
+        if( obj->move(me) )
+        {
+		if( stringp(obj->query("ride_msg")) )
+			message_vision(convert_color(obj->query("ride_msg")), me, obj);
+		else
+			message_vision(YEL"$N轻身一跃，骑上一" + sprintf("%s", obj->query("unit"))
+			+ "「$n" YEL "」，身手很是矫捷。\n" NOR , me, obj);
+                obj->set_temp("is_rided_by", me);
+                me->set_temp("is_riding", obj);
+        }
+        else
+        {
+                message_vision( "$N身上带的东西太重了，无法骑到$n身上去。\n", me, obj );
+        }
+
+	return 1;
+}
+
+int help(object me)
+{
+	write(@HELP
+
+指令格式：ride <坐骑名称>
+
+骑马。
+
+HELP
+	);
+
+	return 1;
+}

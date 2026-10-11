@@ -1,0 +1,164 @@
+// 本文件由编译后的 .b 二进制程序反编译还原，原始源码未随档案发布。
+// Decompiled from the compiled .b binary; the original source was not distributed.
+mapping query_entire_dbase();
+mapping query_entire_temp_dbase();
+mixed set(mixed, mixed);
+mixed set_vector(mixed, mixed, mixed);
+varargs mixed query(mixed, mixed);
+mixed add(mixed, mixed);
+int delete(mixed);
+mixed set_temp(mixed, mixed);
+mixed set_temp_vector(mixed, mixed, mixed);
+varargs mixed query_temp(mixed, mixed);
+mixed add_temp(mixed, mixed);
+int delete_temp(mixed);
+string prompt();
+void receive_message(mixed, mixed);
+void clear_written();
+int is_waiting_command();
+void write_prompt();
+void receive_snoop(mixed);
+
+nosave string *msg_buffer = ({ });
+nosave int written = 0;
+
+string prompt() {
+    mixed v1;
+    mixed v2;
+    v2 = this_object()->query_entire_dbase();
+    if (query("env/no_prompt") || !stringp(v1 = query("env/prompt"))) {
+        return "\e[1;33m>\e[2;37;0m";
+    }
+    v1 = clean_color(v1);
+    switch (lower_case(v1)) {
+    case "time":
+        v1 = ctime(time())[11..18];
+        break;
+    case "mud":
+        v1 = "/adm/daemons/natured"->game_time();
+        break;
+    case "status":
+        v1 = sprintf("%d/%d|%d/%d", v2["jing"], v2["eff_jing"], v2["qi"], v2["eff_qi"]);
+        break;
+    case "force":
+        v1 = sprintf("%d/%d|%d/%d", v2["jingli"], v2["max_jingli"], v2["neili"], v2["max_neili"]);
+        break;
+    case "file_name":
+        if (!wizardp(this_object())) {
+            break;
+        }
+        v1 = base_name(environment(this_object()));
+        break;
+    case "exp":
+        v1 = sprintf("%d/%d", v2["exp_cost"]["exp"], this_object()->level_exp_limit());
+        break;
+    case "pot":
+        v1 = sprintf("%d/%d", v2["potential"], this_object()->max_potential());
+        break;
+    case "shen":
+        v1 = sprintf("%s%d", v2["shen"] >= 0 ? "\e[1;37m" : "\e[1;33m", v2["shen"]);
+        break;
+    case "shaqi":
+        v1 = sprintf("%s", v2["bellicosity"] > v2["max_neili"] + v2["neili"] ? "\e[1;35mDANGEROUS" : "\e[1;33mGENIALTY");
+        break;
+    default:
+        v1 = "";
+        break;
+    }
+    v1 += "\e[1;33m> \e[2;37;0m";
+    return "\e[37m" + v1;
+}
+
+void receive_message(mixed arg1, mixed arg2) {
+    mixed v1;
+    mixed v2;
+    if (!interactive()) {
+        this_object()->relay_message(arg1, arg2);
+        return;
+    }
+    if (sscanf(arg1, "%s:%s", v1, arg1) == 2) {
+        switch (v1) {
+        case "channel":
+            if (!pointerp(v2 = query("channels")) || member_array(arg1, v2) == -1) {
+                return;
+            }
+            break;
+        case "outdoor":
+            if (!environment() || !environment()->query("outdoors")) {
+                return;
+            }
+            break;
+        case "system":
+            break;
+        default:
+            error("Message: Invalid Subclass " + v1 + ".\n");
+        }
+    } else {
+    }
+    if (query_temp("block_msg/all") || query_temp("block_msg/" + arg1)) {
+        return;
+    }
+    if (this_object()->query("env/no_color")) {
+        arg2 = clean_color(arg2);
+    }
+    if (in_input() || in_edit() || this_object()->is_attach_system() && arg1 != "system") {
+        if (sizeof(msg_buffer) < 500) {
+            msg_buffer += ({ arg2 });
+        }
+    } else {
+        if (written && !this_object()->is_attach_system()) {
+            if (written == 2) {
+                written = 0;
+                arg2 = "\e[256D\e[K" + arg2;
+            } else {
+                arg2 = "\e[256D\e[K" + arg2 + prompt();
+            }
+        }
+        while (sizeof(arg2) > 8000) {
+            receive(arg2[0..7999]);
+            arg2 = arg2[8000..];
+        }
+        receive(arg2);
+    }
+}
+
+void clear_written() {
+    written = 2;
+}
+
+int is_waiting_command() {
+    return written == 1;
+}
+
+void write_prompt() {
+    mixed v1;
+    if (sizeof(msg_buffer)) {
+        for (v1 = receive("\e[1m[输入时暂存讯息]\n\e[2;37;0m"); v1 < sizeof(msg_buffer); v1++) {
+            receive(msg_buffer[v1]);
+        }
+        msg_buffer = ({ });
+    }
+    if (!living(this_object())) {
+        return;
+    }
+    if (this_object()->is_attach_system()) {
+        receive("\e[1;31m执行中\e[2;37;0m> ");
+    } else {
+        receive("\e[256D" + prompt());
+    }
+    written = 1;
+}
+
+void receive_snoop(mixed arg) {
+    if (arg[0..5] == "\e[256D" && arg[6..8] != "\e[K") {
+        return;
+    }
+    arg = replace_string(arg, "\e[1A", "");
+    arg = replace_string(arg, "\e[2;37;0m", "\e[2;37;0m\e[44m\e[37m");
+    arg = "\e[44m\e[37m" + arg + "\e" + "[2;37;0m" + " " + "\e[1D";
+    while (sizeof(arg) > 8000) {
+        receive(arg[0..7999]);
+        arg = arg[8000..];
+    }
+    receive(arg);
+}

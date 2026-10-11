@@ -1,0 +1,142 @@
+//dig.c
+
+#include <ansi.h>
+#include <config.h>
+
+#define CUTPURSE(me)	((string)me->query("career") == "矿工" ? 1:0)
+
+inherit F_CLEAN_UP;
+
+int main(object me,string arg)
+{
+	object dig;
+	object env;
+
+	seteuid(getuid());
+
+	env = environment(me);
+	if( me->is_busy())
+		return notify_fail("你正忙着呢！\n");
+
+	if( me->is_fighting())
+		return notify_fail("你正在战斗中！\n");
+
+	if(sizeof(all_inventory(me)) >= MAX_ITEM_CARRIED)
+		return notify_fail("你身上的东西已经太多了，先放下一些东西再说吧。\n");
+
+	if(!objectp(dig = present("shizi gao",me)))
+		return notify_fail("你没用十字镐，怎么挖矿？\n");
+
+	if(!env->query("valid_dig"))
+		return notify_fail("你不能在这里挖矿。\n");
+
+	if((int)me->query_skill("dig-skill",1) < 1)
+		return notify_fail("你举起十字镐想挖矿，却不知道从何下手。\n");
+
+	if((int)me->query("brawn") <= 25)
+		return notify_fail("你体力不支，还是等一下再挖吧。\n");
+
+	if((me->query_encumbrance() * 100 / me->query_max_encumbrance()) >= 90)
+		return notify_fail("你负担太重，举起了十字镐又放了下来。\n");
+
+	me->set_short_desc("手持十字镐，正在忙着采矿。");
+
+	message_vision("$N举起十字镐，朝洞壁用力砸去，十字镐砸在洞壁的矿石上，发出星点火花。\n",me);
+
+	me->start_busy(bind((:call_other, __FILE__, "digging" :), me),
+		       bind((:call_other, __FILE__, "halt_digging" :), me));
+	return 1;
+}
+int digging(object me)
+{
+	object env,obj;
+	int time;
+	mapping ores;
+	string *stone;
+
+	env = environment(me);
+	time = (int)me->query_skill("dig-skill",1) / 3;
+	time = 100 - time;
+	if(time < 40)
+		time = 40;
+
+	if( me->add_temp("pending/digging",1) % 20 == 1)
+	{
+		write("你挖了一会，显然有些累了，于是停了一会。\n");
+		me->set_short_desc(0);
+		return 0;
+	}
+
+	if((int)me->query_temp("pending/digging") % 25 == 1)
+	{
+		if(me->can_improve_skill("dig-skill") && (int)me->query_skill("dig-skill",1) < 200)
+			if(CUTPURSE(me))
+				me->improve_skill("dig-skill",random((int)me->query_kar()) + 2);
+			else
+				me->improve_skill("dig-skill",random((int)me->query_kar()));
+	}
+
+	if((int)me->query("brawn") < 30)
+	{
+		write("你实在太疲倦了，还是休息一下再说吧。\n");
+		me->set_short_desc(0);
+		return 0;
+	}
+
+
+	if(me->query("doing"))
+		me->add("brawn",-25);
+	else if(CUTPURSE(me))
+		me->add("brawn",-15);
+	else
+		me->add("brawn",-20);
+
+	if(random(me->query_temp("pending/digging") + (int)me->query_skill("dig-skill")) > time + random(25))
+	{
+		if(!mapp(ores = env->query("special_ore")) && !mapp(ores = env->query("ores")))
+		{
+			write(WHT"你采了半天，竟然什么东东都没有，该不是跑错地方了吧？\n"NOR);
+			me->set_short_desc(0);
+			return 0;
+		}
+		if(CUTPURSE(me) && random(3))
+			ores = env->query("special_ore");
+		else
+			ores = env->query("ores");
+
+		stone = keys(ores);
+		obj = new(stone[random(sizeof(stone))]);
+		write(sprintf("只听见“啪嗒”一声，从洞壁上掉下一%s闪闪发光的%s，\n"
+			      "你连忙把它拣了起来，喘了口气：好累哟！\n",
+			obj->query("unit"),obj->name()));
+		if(!obj->move(me,1))
+			destruct(obj);
+		me->delete_temp("pending/digging");
+		me->set_short_desc(0);
+		return 0;
+	}
+	else
+	{
+		write(random(2) ? "你举起十字镐，朝洞壁用力砸去，十字镐和洞壁擦出星点火花。\n":
+				  "你挥动着手中的十字镐，继续朝洞壁上砸去，发出叮叮当当的声响。\n");
+		return 1;
+	}
+}
+int halt_digging(object me)
+{
+	message_vision("$N放下手中的十字镐，停了下来。\n",me);
+	me->set_short_desc(0);
+	return 1;
+}
+int help(object me)
+{
+	write(@HELP
+
+指令格式：dig
+
+这个指令是让你在矿洞中开采矿石所用，但你必须先学习一级采矿技巧，
+而且必须有一把十字镐。
+
+HELP);
+	return 1;
+}

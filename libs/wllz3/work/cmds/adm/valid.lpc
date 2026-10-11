@@ -1,0 +1,180 @@
+// port.c
+// Created by robert@wllz
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+int help(object me);
+
+int main(object me, string arg)
+{
+	mapping info;
+	string *obs,id;
+	string msg;
+	string type;
+	object ob;
+	int day,time;
+
+
+        if((string)SECURITY_D->get_status(me) != "(admin)")
+                return notify_fail("你没有足够的权利使用这个指令。\n");
+
+	if(arg && sscanf(arg,"%s",type) == 1)
+	{
+		if(type == "all")
+		{
+			info = INFO_D->query_user_time();
+
+			if(!sizeof(info))
+				return notify_fail("现在还没有创建玩家帐号信息。\n");
+
+			obs = keys(info);
+				msg = "以下为本游戏玩家帐号信息：\n"
+				"--------------------------------------------------------------------\n";
+			foreach(id in obs)
+				msg += sprintf("帐号：%-8s月卡期限：%-20s状态：%-10s\n",
+					id,ctime(info[id]),
+					info[id] > time()? HIC"有效"NOR: HIR"到期"NOR);
+				msg += "--------------------------------------------------------------------\n";
+			msg += "共计 "+ sizeof(obs) +" 位会员。\n";
+			me->start_more(msg);
+			return 1;
+		}
+		else if(type == "invalid")
+		{
+			info = INFO_D->query_user_time();
+
+			if(!sizeof(info))
+				return notify_fail("现在还没有创建玩家帐号信息。\n");
+
+			obs = keys(info);
+				msg = "以下为本游戏玩家已无效帐号的信息：\n"
+				"--------------------------------------------------------------------\n";
+			foreach(id in obs)
+			{
+				if(info[id] > time()) continue;
+				msg += sprintf("帐号：%-8s月卡期限：%-20s\n",
+					id,ctime(info[id]));
+			}
+				msg += "--------------------------------------------------------------------\n";
+			me->start_more(msg);
+			return 1;
+		}
+		else if( type == "valid")
+		{
+			info = INFO_D->query_user_time();
+
+			if(!sizeof(info))
+				return notify_fail("现在还没有创建玩家帐号信息。\n");
+
+			obs = keys(info);
+				msg = "以下为本游戏玩家生效帐号的信息：\n"
+				"--------------------------------------------------------------------\n";
+			foreach(id in obs)
+			{
+				if(info[id] < time()) continue;
+
+				msg += sprintf("帐号：%-8s月卡期限：%-20s\n",
+					id,ctime(info[id]));
+			}
+				msg += "--------------------------------------------------------------------\n";
+			me->start_more(msg);
+			return 1;
+		}
+	}
+	if(arg && sscanf(arg,"set %s",id) == 1)
+	{
+		ob = new(LOGIN_OB);
+		ob->set("id",id);
+
+		if(!ob->restore())
+		{
+			destruct(ob);
+			return notify_fail("错误，游戏中并没有"+ id +"这个帐号。\n");
+		}
+
+		if(INFO_D->query_user_time(id))
+			return notify_fail("错误，这个帐号已经成为会员了。\n");
+
+		INFO_D->map_add_user(id,time());
+
+		write("注册成功，该帐号已成为本游戏会员。\n");
+		return 1;
+	}
+
+	if(arg && sscanf(arg,"%s %d",id,day) == 2)
+	{
+		if(day < 30 || day > 365)
+			return notify_fail("错误，充值日期最少三十天，最多为一年。\n");
+
+		ob = new(LOGIN_OB);
+		ob->set("id",id);
+		if(!ob->restore())
+		{
+			destruct(ob);
+			return notify_fail("错误，游戏中没有"+ id +"这个帐号。\n");
+		}
+
+		if(!INFO_D->query_user_time(id))
+			return notify_fail("错误，这个帐号目前还没有加入会员。\n");
+
+		time = INFO_D->query_user_time(id);
+		time += day * 86400;
+
+		INFO_D->map_add_user(id,time);
+
+		write(sprintf("玩家帐号 %s 充值成功，帐号有效期至：%s\n",
+			id,ctime(INFO_D->query_user_time(id))));
+		log_file("static/info",sprintf("[%s]%s 为帐号 %s 充值 %d 天。\n",
+			ctime(time()),
+			me->name(2),id,day));
+		destruct(ob);
+		return 1;
+	}
+	if(arg && sscanf(arg,"del %s",arg) == 1)
+	{
+		if(!INFO_D->query_user_time(arg))
+			return notify_fail("错误，资料库中并没有这位玩家。\n");
+
+		INFO_D->remove_member_user(arg);
+		write("删除玩家帐号成功。\n");
+		log_file("static/info",sprintf("[%s] %s 删除了游戏帐号 %s 。\n",
+			ctime(time()),me->name(2),arg));
+		return 1;
+	}
+	if(arg && sscanf(arg,"check %s",arg) == 1)
+	{
+		info = INFO_D->query_user_time();
+
+		if(!sizeof(info))
+			return notify_fail("现在还没有创建玩家帐号信息。\n");
+
+		if(!INFO_D->query_user_time(arg))
+			return notify_fail("资料库中没有这个帐号信息。\n");
+
+		write(sprintf("玩家 %s 月卡期限至：%s\n",
+			arg,ctime(INFO_D->query_user_time(arg))));
+		return 1;
+	}
+
+	else return help(me);
+}
+int help(object me)
+{
+	write(@HELP
+
+这个指令是让你对玩家帐号进行管理充值。指令格式为：
+
+valid set <帐号>             将帐号设置为会员
+valid del <帐号>             删除帐号，取消会员资格
+valid check <帐号>           查询指定的一个帐号
+valid invalid                只显示过期的会员信息
+valid valid                  只显示有效的会员信息
+valid all                    所有会员信息
+valid <帐号> <天数>          为帐号充值
+
+HELP
+	);
+	return 1;
+}

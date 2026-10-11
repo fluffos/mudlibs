@@ -1,0 +1,283 @@
+// 本文件由编译后的 .b 二进制程序反编译还原，原始源码未随档案发布。
+// Decompiled from the compiled .b binary; the original source was not distributed.
+inherit "/inherit/char/npc";
+int cancel_quest(mixed);
+int create_event(mixed);
+void reply_user(mixed, mixed);
+int cleanup_quest(mixed);
+void destruct_it(mixed);
+void greeting(mixed);
+int do_quest();
+int do_finish(mixed);
+int accept_object(mixed, mixed);
+
+void create() {
+    set_name("高英明", ({ "gao yingming", "xingbu shangshu", "gao" }));
+    set("long", "一脸正气，未怒先威，一看就知道是一个清官。\n");
+    set("gender", "男性");
+    set("title", "刑部尚书");
+    set("nickname", "\e[31m严惩不怠\e[2;37;0m");
+    set("age", 35);
+    set("level", 100);
+    set("attitude", "friendly");
+    set_skill("force", 200);
+    set_skill("dodge", 200);
+    set_skill("parry", 200);
+    set_skill("unarmed", 200);
+    set_skill("hand", 200);
+    set_skill("strike", 200);
+    setup();
+    add_money("silver", 12);
+    carry_object("/clone/cloth/cloth")->wear();
+}
+
+void init() {
+    mixed v1;
+    ::init();
+    if (interactive(v1 = this_player()) && !is_fighting()) {
+        remove_call_out("greeting");
+        call_out("greeting", 1, v1);
+    }
+    add_action("do_quest", "quest");
+    add_action("do_finish", "finish");
+}
+
+void greeting(mixed arg) {
+    if (!arg || environment(arg) != environment()) {
+        return;
+    }
+    say("高英明一拍惊堂木，大喝一声：大胆小民，有何冤情，快快道来。\n");
+}
+
+int cancel_quest(mixed arg) {
+    mixed v1;
+    if (!mapp(v1 = arg->query("quest"))) {
+        return 0;
+    }
+    v1["fail_time"] = time() + 60;
+    v1["task_time"] = 0;
+    arg->delete_temp("counts");
+    arg->delete_temp("arrest");
+    arg->start_call_out(bind((: call_other, "/adm/daemons/quest/master-gao.lpc", "cleanup_quest", arg :), arg), 60);
+    return 1;
+}
+
+int create_event(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    v4 = arg->query("level");
+    if (random(5) > 2) {
+        v2 = "/quest/placeman/arrest"->query_quest();
+    } else {
+        v2 = "/quest/placeman/kill"->query_quest();
+    }
+    v3 = time() / 236 + 2;
+    v3 = v3 * 236 - 1;
+    v1 = clone_object(v2["target"]);
+    v1->move(v2["path"]);
+    arg->set("quest/obj", v1);
+    arg->set("quest/quest", v1->name());
+    arg->set("quest/where", v2["where"]);
+    arg->set("quest/type", v2["type"]);
+    arg->set("quest/from", v2["from"]);
+    arg->set("quest/target", v2["target"]);
+    arg->set("quest/path", v2["path"]);
+    arg->set("quest/pot", v2["pot"]);
+    arg->set("quest/exp", v2["exp"]);
+    arg->set("quest/task_time", v3);
+    v1->start_call_out(bind((: call_other, "/adm/daemons/quest/master-gao.lpc", "destruct_it", v1 :), v1), v3 - time());
+    return 1;
+}
+
+void reply_user(mixed arg1, mixed arg2) {
+    tell_object(arg1, name() + "说道：" + arg2);
+}
+
+int do_quest() {
+    mixed v1;
+    mixed v2;
+    v1 = this_player();
+    if (v1->query("level") < 50) {
+        reply_user(v1, "这位" + "/adm/daemons/rankd"->query_respect(v1) + "一心为朝廷办事虽然精\n神可佳，可惜经验尚浅，恐怕难以担此大任！\n");
+        return 1;
+    }
+    if (v1->query("level") >= 100) {
+        reply_user(v1, "/adm/daemons/rankd"->query_respect(v1) + "大名如雷灌耳，本官岂敢劳烦您呢？\n");
+        return 1;
+    }
+    if (mapp(v2 = v1->query("quest"))) {
+        if (v2["from"] != "官府") {
+            reply_user(v1, "这位" + "/adm/daemons/rankd"->query_respect(v1) + "还有要事在身，还是等一下再说吧。\n");
+            return 1;
+        }
+        if (v2["task_time"] > time()) {
+            reply_user(v1, "嗯，我吩咐你去做的事情怎么样了？\n");
+            return 1;
+        }
+        if (v2["fail_time"] > time()) {
+            reply_user(v1, "任务有别的人去做了，你等一下再来吧。\n");
+            return 1;
+        } else {
+            reply_user(v1, "唉，好吧，我就再给你一次机会。\n");
+            v1->receive_damage("qi", 100);
+            if (v1->query("quest")) {
+                v1->delete("quest");
+            }
+            if (v1->query_temp("arrest")) {
+                v1->delete_temp("arrest");
+            }
+        }
+    }
+    if (create_event(v1)) {
+        v2 = v1->query("quest");
+    } else {
+        reply_user(v1, "咦？任务创建失败，请速和巫师联系。\n");
+        return 1;
+    }
+    if (v2["type"] == "kill") {
+        reply_user(v1, sprintf("据闻一名为%s的狂徒在%s烧杀抢掠，连伤数条\n人命。你务必在%s之前将他捉拿归案。如有违抗者：杀无赦！\n", v2["quest"], v2["where"], "/adm/daemons/chinesed"->chinese_monthday(v2["task_time"])));
+    } else {
+        reply_user(v1, sprintf("接报本府通缉要犯%s在最近在%s附近出没，你务\n必在%s之前将他捉拿归案，以待发落。切记不可将他杀死。\n", v2["quest"], v2["where"], "/adm/daemons/chinesed"->chinese_monthday(v2["task_time"])));
+    }
+    return 1;
+}
+
+int do_finish(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    mixed v6;
+    mixed v7;
+    v1 = this_player();
+    if (!arg || arg == "") {
+        return 0;
+    }
+    if (!mapp(v4 = v1->query("quest")) || v4["from"] != "官府") {
+        reply_user(v1, "放肆，你竟敢无视法纪，扰乱公堂？\n");
+        return 1;
+    }
+    if (v4["type"] != "arrest") {
+        reply_user(v1, "我叫你去抓人了吗？\n");
+        return 1;
+    }
+    if (!objectp(v2 = present(arg, environment(v1)))) {
+        reply_user(v1, "我叫你去抓的人带来了吗？\n");
+        return 1;
+    }
+    if (!objectp(v1 = v2->query_temp("arrest")) || !objectp(v2 = v4["obj"])) {
+        reply_user(v1, "我叫你去抓通缉犯，你怎么就随便抓了个人来交差啊？");
+        return 1;
+    }
+    v5 = "$N将$n带到了刑部大堂，$n随即被几个衙差押入了大牢等待审讯\n";
+    switch (random(6)) {
+    case 1:
+        v5 += "$n回了回头，狠狠的瞪了$N一眼。\n";
+        break;
+    case 2:
+        v5 += "$n歇斯底里的喊着：冤枉啊大人～～冤枉啊～～\n";
+        break;
+    case 3:
+        v5 += "$n狠狠的骂道：$N，有你的，靠！\n";
+        break;
+    case 4:
+        v5 += "$N望着$n狼狈的背影，不禁得意的笑了笑。\n";
+        break;
+    case 5:
+        v5 += "$n突然哈哈大笑道：哈哈，老子十八年后又是一条好汉！！\n";
+        break;
+    default:
+        v5 += "$n狠狠的瞪了$N一眼，突然“呸”的一声朝地上吐了口唾沫。\n";
+        break;
+    }
+    message_vision(v5, v1, v2);
+    if (v4["task_time"] < time()) {
+        reply_user(v1, sprintf("我不是叫你%s之前将他带来吗？怎么才来？也罢也罢，\n人总算是带来了，就算将功补过吧。\n", "/adm/daemons/chinesed"->chinese_monthday(v4["task_time"])));
+        v1->delete("quest");
+        v1->delete_temp("arrest");
+        destruct(v2);
+        return 1;
+    } else {
+        message_vision("\e[37m$N赞许的对$n点了点头道：好，做的好！\n\e[2;37;0m", this_object(), v1);
+        tell_object(v1, "\e[1;36m由于你成功的完成了任务，你获得了高大人的嘉奖。\n\e[2;37;0m");
+        v6 = v4["exp"] + v1->query("level") + v1->query_temp("counts");
+        v7 = v4["pot"] + v1->query("level") + v1->query_temp("counts") / 2;
+        if (v1->add_exp(v1, v6) && v1->add_points(v1, v7)) {
+            v3 = clone_object("/clone/money/silver");
+            v3->set_amount(random(5) + 1);
+            v3->move(v1, 1);
+        }
+        if (v2->query_temp("fight_lost_for") == v1) {
+            message_vision("$N看了看$n，说道：嗯，这个犯人颇为凶狠，你这趟辛苦了。\n", this_object(), v1);
+            tell_object(v1, "\e[1;37m由于你在捉拿犯人时表现英勇，你的江湖威望和江湖阅历提高了。\n\e[2;37;0m");
+            v1->add("weiwang", 1);
+            v1->add("score", 1);
+        }
+        v1->delete("quest");
+        destruct(v2);
+        v1->delete_temp("arrest");
+        v1->add_temp("counts", 1);
+        "/adm/daemons/missiond"->extra_bonus(v1);
+        return 1;
+    }
+}
+
+int accept_object(mixed arg1, mixed arg2) {
+    mixed v1;
+    mixed v2;
+    v1 = this_object();
+    if (arg2->query("money_id")) {
+        if (!mapp(v2 = arg1->query("quest")) || v2["from"] != "官府") {
+            reply_user(arg1, "无功不受禄，本官一向清廉，这位" + "/adm/daemons/rankd"->query_respect(arg1) + "还是把钱收回去吧！\n");
+            return 0;
+        }
+        if (v2["fail_time"] > time()) {
+            reply_user(arg1, "任务已经让其他人去做了，你等一下再来吧。\n");
+            return 0;
+        }
+        if (arg2->value() < 3000) {
+            reply_user(arg1, "这位" + "/adm/daemons/rankd"->query_respect(arg1) + "未必也太小看我们刑部了吧？！\n\e" + "[2;37;0m");
+            return 0;
+        } else if (cancel_quest(arg1)) {
+            reply_user(arg1, "嗯，那好吧，我找让其他人去做！你下去休息吧！\n");
+            return 1;
+        }
+    }
+    command("say 无功不受禄，你给我这个做什么？");
+    return 0;
+}
+
+void destruct_it(mixed arg) {
+    if (!arg || !environment(arg)) {
+        return;
+    }
+    if (arg->is_fighting()) {
+        arg->start_call_out(bind((: call_other, "/adm/daemons/quest/master-gao.lpc", "destruct_it", arg :), arg), 120);
+    } else {
+        if (arg->query_temp("last_damage_from")) {
+            message_vision("$N恶狠狠的说道：就那点三脚猫功夫，也想抓我？再练练几年再说。\n说完挥挥袖口，转身消失在人群之中。\n", arg);
+        } else {
+            message_vision("$N见四下无人，一扭头消失在人群之中。\n", arg);
+        }
+        destruct(arg);
+    }
+}
+
+int cleanup_quest(mixed arg) {
+    mixed v1;
+    if (!arg || !environment(arg)) {
+        return 0;
+    }
+    if (!mapp(arg->query("quest"))) {
+        return 0;
+    }
+    if (objectp(v1 = arg->query("quest/obj"))) {
+        destruct(v1);
+    }
+    tell_object(arg, sprintf("\e[1;37m听说“%s一案”由刑部的捕快完成，刑部现已宣布结案。\n\e[2;37;0m", arg->query("quest/quest")));
+    arg->delete("quest");
+    return 1;
+}

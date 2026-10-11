@@ -1,0 +1,143 @@
+//manage.c
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+int valid_password(string pass,object me);
+
+int main(object me,string arg)
+{
+	object link_ob;
+
+	if(me != this_player(1))
+		return 0;
+
+	if(!me->is_member())
+		return notify_fail("你不是会员，无法启用管理功能。\n");
+
+	if(!objectp(link_ob = me->query_temp("link_ob")))
+		return notify_fail("你不是正常连线用户，不能进行管理操作。\n");
+
+	if(arg == "-e")
+	{
+		if(!me->is_manage())
+			return notify_fail("你还没有进入管理状态。\n");
+
+		me->delete("manage");
+		write(HIC"你退出了管理状态。\n"NOR);
+		return 1;
+	}
+
+	else if(arg == "-c")
+	{
+		if(!me->is_manage())
+			return notify_fail("修改管理密码，请先进入管理状态。\n");
+
+		write("请重新设定你的管理密码：\n");
+		input_to("create_password",1,me);
+		return 1;
+	}
+	else
+	{
+		if(me->is_manage())
+			return notify_fail("你已经进入了管理状态，如果想退出管理状态，请输入：manage -e。\n");
+
+		if(!link_ob->query("manage_password"))
+		{
+			write(HIW"你还没有设置管理密码，请先进行设置。管理密码请不要和你的普通密码\n"
+		      	         "相同，如果你的帐号被窃，这样可以减少你的帐号所遭受的损失。管理密\n"
+		      	         "码位数不限，可包含大小写英文字，数字、字符等。\n"NOR);
+		        write("请设定你的管理密码：\n");
+			input_to("create_password",1,me);
+			return 1;
+		}
+
+		write("请输入你的管理密码：\n");
+		input_to("check_password",1,me);
+		return 1;
+	}
+}
+void check_password(string passwd,object me)
+{
+	object link_ob;
+	string manage_pass;
+
+	link_ob = me->query_temp("link_ob");
+	manage_pass = link_ob->query("manage_password");
+
+	if(crypt(passwd,manage_pass) != manage_pass)
+	{
+		write(HIR"管理密码错误！\n"NOR);
+		return;
+	}
+	me->set("manage",1);
+	write(HIC"密码核对成功，你已经进入管理状态。\n"NOR);
+	return;
+}
+void create_password(string pass,object me)
+{
+	object link_ob;
+
+	link_ob = me->query_temp("link_ob");
+
+	if(!valid_password(pass,me))
+	{
+		write("请重新设定你的管理密码：\n");
+		input_to("create_password",1,me);
+		return;
+	}
+
+	seteuid(getuid());
+	link_ob->set("manage_password", crypt(pass, sprintf("$1$%d", random(99999999))));
+	write(sprintf("管理密码设定完成，您的管理密码是："WHT"%s"NOR"，请牢记下来。\n",pass));
+	link_ob->save();
+	return;
+}
+int valid_password(string pass,object me)
+{
+	object link_ob;
+	string login_pass;
+	string old_pass;
+
+	link_ob = me->query_temp("link_ob");
+
+	if(!LOGIN_D->check_legal_password(link_ob,pass))
+	{
+		write(HIW"\n请尽量将你的管理密码设置得复杂一些，如果你的帐号被窃，这样可以减\n"
+		     "少你的帐号所遭受的损失。\n\n"NOR);
+		return 0;
+	}
+
+	login_pass = link_ob->query("password");
+	if(crypt(pass,login_pass) == login_pass)
+	{
+		write(HIR"\n你的管理密码和普通密码太相似了，毫无保护意义。请重新进行设置。\n\n"NOR);
+		return 0;
+	}
+
+	if(stringp(old_pass = link_ob->query("manage_password"))
+	&& crypt(pass,old_pass) == old_pass)
+	{
+		write(HIR"\n新管理密码与原先的设定管理密码太相似了，请重新设定。\n\n"NOR);
+		return 0;
+	}
+
+	return 1;
+}
+int help(object me)
+{
+	write(@TEXT
+
+指令格式：manage        |进入管理状态
+          manage -c	|修改管理密码
+          manage -e	|退出管理状态
+
+这个指令是让拥有会员身份的玩家，进入角色管理状态。如果一开始你没
+有设置管理密码，系统会提示你先行设置管理密码。以后，当你要对角色
+进行放弃武功，退离师门，删除帐号等，都必须进入管理状态才可以进行
+操作。
+
+TEXT);
+	return 1;
+}

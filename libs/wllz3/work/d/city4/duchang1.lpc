@@ -1,0 +1,226 @@
+// 本文件由编译后的 .b 二进制程序反编译还原，原始源码未随档案发布。
+// Decompiled from the compiled .b binary; the original source was not distributed.
+inherit "/inherit/room/room";
+int random2(mixed);
+void create();
+void init();
+int do_qian(mixed);
+void gamble_prepare();
+void gamble_start();
+void gamble_perform(mixed);
+void player_wins(mixed, mixed);
+void player_loses(mixed, mixed);
+void gamble_finish();
+
+int room_status = 0;
+int *res = allocate(5);
+mapping qians = ([ "dqq" : "大乾签", "dkq" : "大坤签", "xqq" : "小乾签", "xkq" : "小坤签", "qq" : "乾签", "kq" : "坤签" ]);
+
+int random2(mixed arg) {
+    return (random(arg) + uptime()) % arg;
+}
+
+void create() {
+    set("short", "押签房");
+    set("long", "一群人围着紫檀木大桌而坐，首席座着一位精瘦的签客，正在\r\n一本正经地从镶金黑盒里慢悠悠一根一根往外抽出乾坤签，码在桌\r\n面上。\r\n\r\n墙上有一匾写着：\r\n\r\n大乾签（全部五根皆为乾签）\t：一赢三十二\r\n大坤签（全部五根皆为坤签）\t：一赢三十二\r\n小乾签（连续四根皆为乾签）\t：一赢十六\r\n小坤签（连续四根皆为坤签）\t：一赢十六\r\n乾签（任意三根皆为乾签）\t：一赢二\r\n坤签（任意三根皆为坤签）\t：一赢二\r\n\r\n匾角有一个牌子(paizi)。\r\n\r\n");
+    set("item_desc", ([ "paizi" : "押大乾签： qian dqq <amount> <money>\r\n押大坤签： qian dkq <amount> <money>\r\n押小乾签： qian xqq <amount> <money>\r\n押小坤签： qian xkq <amount> <money>\r\n押乾签：   qian qq <amount> <money>\r\n押坤签：   qian kq <amount> <money>\r\n" ]));
+    set("exits", ([ "east" : "/d/city4/clubup" ]));
+    set("objects", ([ "/d/city4/npc/qianke" : 1 ]));
+    set("light_up", 1);
+    set("no_fight", 1);
+    set("no_beg", 1);
+    set("no_magic", 1);
+    set("no_steal", 1);
+    setup();
+}
+
+void init() {
+    mixed v1;
+    if (interactive(v1 = this_player())) {
+        if (v1->query_temp("gamble_qian")) {
+            v1->delete_temp("gamble_qian");
+        }
+    }
+    add_action("do_qian", "qian");
+    if (room_status > 0) {
+        return;
+    }
+    remove_call_out("gamble_prepare");
+    remove_call_out("gamble_start");
+    remove_call_out("gamble_perform");
+    remove_call_out("gamble_finish");
+    call_out("gamble_prepare", 2);
+    room_status = 1;
+}
+
+int do_qian(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    v1 = this_player();
+    if (!arg || sscanf(arg, "%s %d %s", v2, v3, v4) != 3) {
+        return notify_fail("请使用： qian <押签种类> <数目> <货币>\n");
+    }
+    if (v2 != "dqq" && v2 != "dkq" && v2 != "xqq" && v2 != "xkq" && v2 != "qq" && v2 != "kq") {
+        return notify_fail("你要押什么签？\n");
+    }
+    v5 = present(v4 + "_money", v1);
+    if (!v5) {
+        return notify_fail("你身上没有这种货币。\n");
+    }
+    if (v3 < 1) {
+        return notify_fail("请多押一些钱。\n");
+    }
+    if (v3 > v5->query_amount()) {
+        return notify_fail("你身上的钱不够押。\n");
+    }
+    if (v3 * v5->query("base_value") > 1000) {
+        return notify_fail("你想豪赌啊，拜托！官兵就上来了。\n");
+    }
+    if (v1->query_temp("gamble_qian/amount") > 0) {
+        return notify_fail("你已经押过了。\n");
+    }
+    if (room_status > 1) {
+        return notify_fail("现在正在赌呢，稍等片刻。\n");
+    }
+    v1->set_temp("gamble_qian/kind", v2);
+    v1->set_temp("gamble_qian/amount", v3);
+    v1->set_temp("gamble_qian/money", v4);
+    message_vision(sprintf("$N拿出%s%s%s，押在%s上。\n", chinese_number(v3), v5->query("base_unit"), v5->query("name"), qians[v2]), v1);
+    if (v3 == v5->query_amount()) {
+        destruct(v5);
+    } else {
+        v5->add_amount(-v3);
+    }
+    return 1;
+}
+
+int valid_leave(mixed arg1, mixed arg2) {
+    if (arg2 == "east") {
+        if (arg1->query_temp("gamble_qian/amount") > 0) {
+            message_vision("$N扔下押签的钱。\n", arg1);
+        }
+        arg1->delete_temp("gamble_qian");
+    }
+    return ::valid_leave(arg1, arg2);
+}
+
+void gamble_prepare() {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    v1 = this_object();
+    tell_room(v1, "签客将一大束签在桌上哗啦啦地迅速洗了一遍。\n");
+    tell_room(v1, "洗签之后，签客啪地一声将签装入镶金黑盒，叫道：开押！\n");
+    v2 = all_inventory();
+    v3 = sizeof(v2);
+    while (v3--) {
+        if (userp(v2[v3])) {
+            room_status = 1;
+            call_out("gamble_start", 25);
+            return;
+        }
+    }
+    room_status = 0;
+    return;
+}
+
+void gamble_start() {
+    mixed v1;
+    v1 = this_object();
+    tell_room(v1, "签客喊声：停押！\n");
+    tell_room(v1, "然后闭上眼睛，将镶金黑盒打开从里开始往外抽签。\n");
+    room_status = 2;
+    call_out("gamble_perform", 3, 0);
+    call_out("gamble_perform", 6, 1);
+    call_out("gamble_perform", 9, 2);
+    call_out("gamble_perform", 12, 3);
+    call_out("gamble_perform", 15, 4);
+    call_out("gamble_finish", 18);
+}
+
+void gamble_perform(mixed arg) {
+    mixed v1;
+    v1 = this_object();
+    switch (random2(2)) {
+    case 0:
+        tell_room(v1, "\n□□\t坤\t签\t□□\n");
+        res[arg] = 0;
+        break;
+    case 1:
+        tell_room(v1, "\n□□\t乾\t签\t□□\n");
+        res[arg] = 1;
+        break;
+    }
+}
+
+void player_wins(mixed arg1, mixed arg2) {
+    mixed v1;
+    mixed v2;
+    v1 = clone_object("/clone/money/" + arg1->query_temp("gamble_qian/money"));
+    v2 = arg1->query_temp("gamble_qian/amount");
+    arg2 = arg2 * v2;
+    v1->set_amount(arg2);
+    message_vision(sprintf("$N赢了%s%s%s！\n", chinese_number(arg2), v1->query("base_unit"), v1->query("name")), arg1);
+    v1->move(arg1);
+}
+
+void player_loses(mixed arg1, mixed arg2) {
+    mixed v1;
+    v1 = clone_object("/clone/money/" + arg1->query_temp("gamble_qian/money"));
+    arg2 = arg1->query_temp("gamble_qian/amount");
+    message_vision(sprintf("签客将$N押在盘中的%s%s%s收走。\n", chinese_number(arg2), v1->query("base_unit"), v1->query("name")), arg1);
+    destruct(v1);
+}
+
+void gamble_finish() {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    mixed v6;
+    v4 = this_object();
+    v5 = all_inventory(v4);
+    if (res[0] == 1 && res[1] == 1 && res[2] == 1 && res[3] == 1 && res[4] == 1) {
+        v2 = 32;
+        v1 = "dqq";
+    } else if (!res[0] && !res[1] && !res[2] && !res[3] && !res[4]) {
+        v2 = 32;
+        v1 = "dkq";
+    } else if (res[0] == 1 && res[1] == 1 && res[2] == 1 && res[3] == 1 || res[1] == 1 && res[2] == 1 && res[3] == 1 && res[4] == 1) {
+        v2 = 16;
+        v1 = "xqq";
+    } else if (!res[0] && !res[1] && !res[2] && !res[3] || !res[1] && !res[2] && !res[3] && !res[4]) {
+        v2 = 16;
+        v1 = "xkq";
+    } else {
+        v6 = 0;
+        v2 = 2;
+        for (v3 = 0; v3 < 5; v3++) {
+            v6 += res[v3];
+        }
+        if (v6 >= 3) {
+            v1 = "qq";
+        } else {
+            v1 = "kq";
+        }
+    }
+    tell_room(v4, "\n签客睁开眼睛，迅速看一眼桌面，叫道：" + qians[v1] + "！\n");
+    v3 = sizeof(v5);
+    while (v3--) {
+        if (!userp(v5[v3])) {
+            continue;
+        }
+        if (v5[v3]->query_temp("gamble_qian/kind") == v1) {
+            player_wins(v5[v3], v2);
+        } else if (v5[v3]->query_temp("gamble_qian/kind")) {
+            player_loses(v5[v3], v2);
+        }
+        v5[v3]->delete_temp("gamble_qian");
+    }
+    tell_room(v4, "\n");
+    call_out("gamble_prepare", 5);
+}

@@ -1,0 +1,300 @@
+// 本文件由编译后的 .b 二进制程序反编译还原，原始源码未随档案发布。
+// Decompiled from the compiled .b binary; the original source was not distributed.
+inherit "/feature/save";
+inherit "/feature/dbase";
+void create();
+void remove();
+void mud_shutdown();
+void prompt_user(mixed);
+void show_news(mixed, mixed);
+void done_post(mixed, mixed, mixed, mixed);
+void do_post(mixed, mixed);
+void do_read(mixed, mixed);
+void do_discard(mixed, mixed);
+void auto_notice(mixed);
+void do_beep(mixed, mixed);
+string query_save_file();
+
+void create() {
+    seteuid(getuid());
+    restore();
+}
+
+void remove() {
+    save();
+}
+
+void mud_shutdown() {
+    save();
+}
+
+void prompt_user(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    v4 = arg->query("last_read_news");
+    if (!v4) {
+        tell_object(arg, "\e[37m\n欢迎进入武林列传3 \e[2;37;0m\e[37m，今后您可以使用\e[1;33m news \e[2;37;0m\e[37m命令查阅发布的新闻信息。\n\e[2;37;0m");
+        arg->set("last_read_news", time());
+        return;
+    }
+    v3 = query("notes");
+    if (!pointerp(v3) || !sizeof(v3)) {
+        return;
+    }
+    v1 = sizeof(v3);
+    v2 = 0;
+    while (v1--) {
+        if (v3[v1]["time"] > v4) {
+            v2++;
+            continue;
+        }
+        break;
+    }
+    if (!v2) {
+        tell_object(arg, "\n你目前没有未曾阅读过的新闻。\n");
+    } else {
+        tell_object(arg, sprintf("\e[37m\n你目前一共有 \e[1;33m%d\e[2;37;0m\e[37m 条新闻还没有阅读，请使用 \e[1;33mnews\e[2;37;0m\e[37m 命令阅读。\n\e[2;37;0m", v2));
+    }
+    if (previous_object() == find_object("/adm/daemons/logind")) {
+        arg->start_call_out(bind((: call_other, "/adm/daemons/newsd.lpc", "auto_notice", arg :), arg), random(10) + 10);
+    }
+}
+
+void show_news(mixed arg1, mixed arg2) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    v1 = query("notes");
+    if (!pointerp(v1) || !sizeof(v1)) {
+        tell_object(arg1, "目前没有任何新闻。\n");
+        return;
+    }
+    v4 = "目前游戏发布的最新消息如下。\n\e[37m-------------------------------------------------------------------------------\n\e[2;37;0m";
+    v3 = arg1->query("last_read_news");
+    v2 = sizeof(v1);
+    while (v2--) {
+        if (arg2 && v1[v2]["time"] <= v3) {
+            break;
+        }
+        v4 += sprintf("%s[%3d]\e[2;37;0m %-40s %s (%s)\n", v1[v2]["time"] > v3 ? "\e[1;33m" : "", v2 + 1, v1[v2]["title"], v1[v2]["author"], ctime(v1[v2]["time"])[0..15]);
+    }
+    if (v2 == sizeof(v1) - 1) {
+        tell_object(arg1, "目前没有任何未读过的新闻。\n");
+        return;
+    }
+    v4 += "\e[37m-------------------------------------------------------------------------------\n\e[2;37;0m";
+    arg1->start_more(v4);
+}
+
+void done_post(mixed arg1, mixed arg2, mixed arg3, mixed arg4) {
+    mixed v1;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    mixed v6;
+    if (!arg3) {
+        arg3 = arg1->query("env/default_sign");
+    }
+    if (!stringp(v4 = arg1->query(sprintf("env/sign%d", arg3)))) {
+        for (v1 = 1; v1 <= 4; v1++) {
+            v4 = arg1->query(sprintf("env/sign%d", v1));
+            if (stringp(v4)) {
+                break;
+            }
+        }
+    }
+    if (stringp(v4)) {
+        v4 = replace_string(v4, "\\n", "\n");
+        v4 = convert_color(v4, 1);
+        v5 = clean_color(v4);
+        if (sizeof(v5) >= 1 && v5[sizeof(v5) - 1] != 10) {
+            v4 += "\n";
+        }
+        v5 = clean_color(arg4);
+        v3 = sizeof(v5);
+        if (v3 >= 1 && v5[v3 - 1] != 10) {
+            arg4 += "\n\n" + v4;
+        } else if (v3 >= 2 && v5[v3 - 2] != 10) {
+            arg4 += "\n" + v4;
+        } else {
+            arg4 += v4;
+        }
+    }
+    arg4 = convert_color(arg4) + "\e" + "[2;37;0m";
+    arg2["msg"] = arg4;
+    v6 = query("notes");
+    if (!pointerp(v6) || !sizeof(v6)) {
+        v6 = ({ arg2 });
+    } else {
+        v1 = sizeof(v6) - 1;
+        if (arg2["time"] <= v6[v1]["time"]) {
+            arg2["time"] = v6[v1]["time"] + 1;
+        }
+        v6 += ({ arg2 });
+    }
+    if (sizeof(v6) > 1000) {
+        v6 = v6[250..1000];
+    }
+    set("notes", v6);
+    tell_object(arg1, "新闻发布完毕。\n");
+    save();
+}
+
+void do_post(mixed arg1, mixed arg2) {
+    mixed v1;
+    mixed v2;
+    if (!wizardp(arg1) || !interactive(arg1)) {
+        tell_object(arg1, "只有巫师才能发布新闻。\n");
+        return;
+    }
+    if (!arg2) {
+        tell_object(arg1, "发布新闻请指定一个标题。\n");
+        return;
+    }
+    if (sscanf(arg2, "%s with %d", arg2, v1) != 2) {
+        v1 = 0;
+    }
+    if (replace_string(arg2, " ", "") == "") {
+        arg2 = "无标题";
+    } else {
+        arg2 = convert_color(arg2) + "\e" + "[2;37;0m";
+    }
+    v2 = allocate_mapping(4);
+    v2["title"] = arg2;
+    v2["author"] = arg1->name(2);
+    v2["time"] = time();
+    arg1->edit(bind((: call_other, "/adm/daemons/newsd.lpc", "done_post", arg1, v2, v1 :), arg1));
+}
+
+void do_read(mixed arg1, mixed arg2) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    v3 = arg1->query("last_read_news");
+    v2 = query("notes");
+    if (!pointerp(v2) || !sizeof(v2)) {
+        tell_object(arg1, "目前没有任何新闻。\n");
+        return;
+    }
+    if (!arg2) {
+        tell_object(arg1, "你想读那一条新闻？\n");
+        return;
+    }
+    if (arg2 == "new" || arg2 == "next") {
+        if (!v3) {
+            v1 = 1;
+        } else {
+            for (v1 = 1; v1 <= sizeof(v2); v1++) {
+                if (v2[v1 - 1]["time"] > v3) {
+                    break;
+                }
+            }
+        }
+    } else if (!sscanf(arg2, "%d", v1)) {
+        tell_object(arg1, "你要读第几条新闻？\n");
+        return;
+    }
+    if (v1 < 1 || v1 > sizeof(v2)) {
+        tell_object(arg1, "没有这条新闻。\n");
+        return;
+    }
+    v1--;
+    arg1->start_more(sprintf("[%d] %-40s %s (%s)\n----------------------------------------------------------------------\n", v1 + 1, v2[v1]["title"], v2[v1]["author"], ctime(v2[v1]["time"])[0..9]) + v2[v1]["msg"]);
+    if (v2[v1]["time"] > v3) {
+        arg1->set("last_read_news", v2[v1]["time"]);
+    }
+}
+
+void do_discard(mixed arg1, mixed arg2) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    if (!arg2 || sscanf(arg2, "%d", v2) != 1) {
+        tell_object(arg1, "你想去掉哪一条新闻？\n");
+        return;
+    }
+    v1 = query("notes");
+    if (!pointerp(v1) || v2 < 1 || v2 > sizeof(v1)) {
+        tell_object(arg1, "没有这条新闻。\n");
+        return;
+    }
+    v2--;
+    if ((!stringp(v3 = v1[v2]["author"]) || sscanf(v3, "%*s-%s", v4) != 2 || v4 != arg1->query("id")) && "/adm/obj/securityd"->get_status(arg1) != "(admin)") {
+        tell_object(arg1, "你无权进行这项操作！\n");
+        return;
+    }
+    v1 = v1[0..v2 - 1] + v1[v2 + 1..sizeof(v1) - 1];
+    set("notes", v1);
+    save();
+    tell_object(arg1, "删除第 " + (v2 + 1) + " 条新闻....Ok。\n");
+}
+
+void auto_notice(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    if (!objectp(arg)) {
+        return;
+    }
+    v4 = arg->query("last_read_news");
+    v2 = query("notes");
+    if (!pointerp(v2) || !sizeof(v2)) {
+        return;
+    }
+    v1 = sizeof(v2) - 1;
+    if (v2[v1]["time"] <= v4) {
+        return;
+    }
+    arg->start_call_out(bind((: call_other, "/adm/daemons/newsd.lpc", "auto_notice", arg :), arg), random(30) + 30);
+    if (!living(arg) || arg->query_temp("block_msg/all")) {
+        return;
+    }
+    while (v1-- > 0) {
+        if (v2[v1]["time"] <= v4) {
+            v1++;
+            break;
+        }
+    }
+    if (v1 < 0) {
+        v1 = 0;
+    }
+    v3 = "\e[1;35m新闻精灵从怀里掏出一张新闻纸，朗声念道：嗯. . 这个最新消息是：\n\n\e[2;37;0m";
+    tell_object(arg, v3);
+    arg->start_more(sprintf("[%d] %-40s %s (%s)\n───────────────────────────────────\n", v1 + 1, v2[v1]["title"], v2[v1]["author"], ctime(v2[v1]["time"])[0..9]) + v2[v1]["msg"]);
+    if (v2[v1]["time"] > v4) {
+        arg->set("last_read_news", v2[v1]["time"]);
+    }
+    tell_object(arg, "\e[1;35m新闻精灵说完后，消失在一阵烟雾之中。\n\e[2;37;0m");
+}
+
+void do_beep(mixed arg1, mixed arg2) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    if (!arg2 || sscanf(arg2, "%d", v2) != 1) {
+        tell_object(arg1, "你想公布哪一条新闻？\n");
+        return;
+    }
+    v1 = query("notes");
+    if (!pointerp(v1) || v2 < 1 || v2 > sizeof(v1)) {
+        tell_object(arg1, "没有这条新闻。\n");
+        return;
+    }
+    v2--;
+    if ((!stringp(v3 = v1[v2]["author"]) || sscanf(v3, "%*s-%s", v4) != 2 || v4 != arg1->query("id")) && "/adm/obj/securityd"->get_status(arg1) != "(admin)") {
+        tell_object(arg1, "你无权进行这项操作！\n");
+        return;
+    }
+    message_system(sprintf("\a\e[1;31m系统发布了一道最新消息，请在线玩家使用 news %d 查阅！\e[2;37;0m", v2 + 1));
+    return;
+}
+
+string query_save_file() {
+    return "/data/newsd";
+}

@@ -1,0 +1,141 @@
+//daub.c 涂抹
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+#define I_KNOW                  1
+#define I_DONT_KNOW             0
+
+int help(object me);
+void check_poison(object me, object dest, int iknow);
+
+void create() { seteuid(getuid()); }
+
+int main(object me,string arg)
+{
+	string item,target;
+	string name;
+	object ob,obj;
+
+	if(arg && sscanf(arg,"%s on %s",item,target) == 2)
+	{
+		if(!objectp(ob = present(item,me)))
+			return notify_fail("你要用什么东西来涂抹？\n");
+
+		if(!ob->is_color() && !ob->is_poison())
+			return notify_fail(ob->name()+"不能用来涂抹。\n");
+
+		if(!objectp(obj = present(target,me)))
+			return notify_fail("你要涂抹什么东西？\n");
+
+		if(ob->is_color())
+		{
+			if(!obj->query("ownermake"))
+				return notify_fail("你不能对这件东西进行染色。\n");
+
+			if(obj->query("owner_id") && obj->query("owner_id") != geteuid(me))
+				return notify_fail("你怎么能乱染人家的东西？\n");
+
+			name = clean_color(obj->name(1));
+			message_vision("$N拿起一瓶$n，慢慢的涂抹在"+ obj->name(1) +"之上，"+ obj->name(1) +"立刻变了另外一种颜色。\n",me,ob);
+			obj->set("name",ob->color() + name + NOR);
+			obj->unequip();
+			obj->save();
+			obj->set_owner(me->name(1),geteuid(me));
+			destruct(ob);
+			return 1;
+		}
+		else if(ob->is_poison())
+		{
+        		if (!mapp(obj->query("armor_prop")) && ! mapp(obj->query("weapon_prop")))
+				return notify_fail("那既不是武器，也不是防具，你怎么涂抹毒药呢？\n");
+
+        		message("vision", sprintf("%s拿出一些东西涂抹在%s上面。\n",
+                                  me->name(), obj->name()),
+			environment(me), ({ me }));
+        		tell_object(me, HIG "你把" + ob->name() + HIG "涂抹到" + obj->name() + HIG "上。\n" NOR);
+
+	        	obj->set_temp("daub/who_id", me->query("id"));
+	        	obj->set_temp("daub/who_name", me->query("name"));
+	        	obj->set_temp("daub/poison_name", ob->name());
+	        	obj->set_temp("daub/poison_type", ob->query("poison_type"));
+	        	obj->set_temp("daub/poison",
+	                	POISON->mixed_poison(ob->query_temp("daub/poison"), ob->query("poison")));
+
+	        	if (obj->query("equipped") == "worn" &&
+	            		obj->query("armor_type") != "hands" && environment(obj) == me)
+	        	{
+	                	check_poison(me, obj, I_KNOW);
+	        	}
+
+		        if (ob->query_amount() > 1)
+		                ob->add_amount(-1);
+		        else
+			        destruct(ob);
+			return 1;
+		}
+	}
+	else return help(me);
+}
+void check_poison(object me, object dest, int iknow)
+{
+        string name;
+        string type;
+        mapping p;
+        int lvl;
+
+        if (! dest) dest = me;
+        name = dest->query_temp("daub/poison_name");
+        type = dest->query_temp("daub/poison_type");
+        p    = dest->query_temp("daub/poison");
+        if (! name || ! p || ! type) return;
+
+        if (p["id"] == me->query("id"))
+                // The poison is made by me
+                return;
+
+        lvl = me->query_skill("force") + me->query("poison", 1) / 2;
+        if (lvl < 100 || lvl < (int)p["level"])
+        {
+                message("vision", HIC "忽然" + me->name() + HIC "眉头"
+                                  "紧缩，神情痛苦，看来是遇到麻烦了。\n" NOR,
+                                  environment(me), ({ me }));
+                tell_object(me, HIC "忽然你觉得有点不对劲，不好，可能是中毒了。\n" NOR);
+                me->affect_by(type, p);
+                dest->delete_temp("daub");
+                return;
+        }
+
+        message("vision", HIC + me->name() + HIC "眉头"
+                          "微微一皱，随即舒展开来。\n" NOR,
+                          environment(me), ({ me }));
+
+        if (p["level"] > 120)
+        {
+                if (iknow)
+                        tell_object(me, HIC "你发现这" + name + HIC "毒性甚"
+                                        "是猛烈，幸好内功高深，抵挡得住。\n" NOR);
+                else
+                        tell_object(me, HIC "你发现这" + dest->name() + HIC "上的" +
+                                        name + HIC "毒性甚"
+                                        "是猛烈，亏得你内功高深，才幸免无事。\n" NOR);
+        } else
+        if (! iknow && dest->query_temp("who_id") != me->query("id"))
+        {
+                tell_object(me, HIC "你发现这" + name + HIC "上面带毒。\n" NOR);
+        }
+}
+
+int help(object me)
+{
+	write(@TEXT
+
+指令格式：daub <染剂/药物> on <物品>
+
+这个指令是让你可以将物品进行染色，使其变成另外一种颜色。你也可以
+利用它来为物品涂抹毒药，使其沾染毒性。
+
+TEXT);
+	return 1;
+}

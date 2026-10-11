@@ -1,0 +1,705 @@
+// 本文件由编译后的 .b 二进制程序反编译还原，原始源码未随档案发布。
+// Decompiled from the compiled .b binary; the original source was not distributed.
+inherit "/inherit/room/room";
+int pl_count();
+void pig_init();
+void deal_init();
+void bid_init();
+void after_bid();
+void round_init(mixed);
+void after_round();
+void play_init();
+void after_claim();
+void after_play();
+void after_winner(mixed);
+void after_hand();
+void auto_play();
+string refresh_str(mixed);
+string picks_str();
+string table_str(mixed);
+string scoreboard_str();
+void init();
+void score_reset();
+int do_skip(mixed);
+int do_claim(mixed);
+int do_sit(mixed);
+int do_leave(mixed);
+void do_assign_cards();
+int do_deal(mixed);
+int do_refresh(mixed);
+int do_bid(mixed);
+int do_pass(mixed);
+int do_play(mixed);
+
+string *seat = ({ "north", "west", "south", "east" });
+mapping chinese_seat = ([ "north" : "北边", "west" : "西边", "south" : "南边", "east" : "东边" ]);
+int pig_stage;
+int round_no;
+int roundcard_count;
+string *round_order = allocate(4);
+int bid_flag;
+string bidcard_str = "";
+object server;
+string claimer;
+mapping pl = allocate_mapping(4);
+mapping cards = allocate_mapping(4);
+mapping card_count = allocate_mapping(4);
+mapping roundcards = allocate_mapping(4);
+mapping picks = allocate_mapping(4);
+mapping pick_count = allocate_mapping(4);
+mapping passed = allocate_mapping(4);
+mapping agreed = allocate_mapping(4);
+mapping hscore = allocate_mapping(4);
+mapping tscore = allocate_mapping(4);
+string dealer;
+int *allow_playbid = allocate(4);
+int *oldcards = allocate(52);
+int *newcards = allocate(52);
+
+void reset() {
+}
+
+int pl_count() {
+    mixed v1;
+    mixed v2;
+    for (v1 = v2 = 0; v1 < 4; v1++) {
+        if (objectp(pl[seat[v1]])) {
+            v2++;
+            continue;
+        }
+        map_delete(pl, seat[v1]);
+    }
+    return v2;
+}
+
+void pig_init() {
+    mixed v1;
+    pig_stage = 0;
+    for (v1 = 0; v1 < 4; v1++) {
+        tscore[seat[v1]] = hscore[seat[v1]] = 0;
+        cards[seat[v1]] = allocate(13);
+        picks[seat[v1]] = allocate(16);
+    }
+    for (v1 = 0; v1 < 52; v1++) {
+        oldcards[v1] = v1;
+    }
+}
+
+void deal_init() {
+    pig_stage = 1;
+    tell_room(this_object(), scoreboard_str());
+    tell_room(this_object(), "\e[1;31m桌长请 deal ！\n\e[2;37;0m");
+}
+
+void bid_init() {
+    mixed v1;
+    pig_stage = 2;
+    bidcard_str = "";
+    bid_flag = 0;
+    for (v1 = 0; v1 < 4; v1++) {
+        allow_playbid[v1] = 1;
+        passed[seat[v1]] = 0;
+    }
+}
+
+void play_init() {
+    mixed v1;
+    mixed v2;
+    pig_stage = 3;
+    round_no = 1;
+    for (v1 = 0; v1 < 4; v1++) {
+        pick_count[seat[v1]] = 0;
+        card_count[seat[v1]] = 13;
+        for (v2 = 0; v2 < 16; v2++) {
+            picks[seat[v1]][v2] = 53;
+        }
+        claimer = "";
+        agreed[seat[v1]] = 0;
+    }
+    round_init(dealer);
+}
+
+void round_init(mixed arg) {
+    mixed v1;
+    for (v1 = 0; v1 < 4; v1++) {
+        roundcards[seat[v1]] = -1;
+    }
+    roundcard_count = 0;
+    round_order = "/adm/daemons/pigd.lpc"->order_turn(arg);
+    if (pig_stage == 3) {
+        tell_object(pl[arg], refresh_str(arg) + "现在轮到你出牌！\n");
+    }
+}
+
+void init() {
+    add_action("do_sit", "sit");
+    add_action("do_leave", "leave");
+    add_action("do_deal", "deal");
+    add_action("do_bid", "bid");
+    add_action("do_bid", "sell");
+    add_action("do_pass", "pass");
+    add_action("do_play", "play");
+    add_action("do_refresh", "refresh");
+    add_action("do_skip", "skip");
+    add_action("do_claim", "claim");
+}
+
+string picks_str() {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    v2 = "";
+    for (v1 = 0; v1 < 4; v1++) {
+        v3 = "";
+        if (objectp(pl[seat[v1]])) {
+            v3 = pl[seat[v1]]->query("name");
+        } else {
+            v3 = chinese_seat[seat[v1]];
+        }
+        if (pick_count[seat[v1]] > 0) {
+            v3 += "捡了下面这些牌：\n";
+            v3 += "/adm/daemons/pigd.lpc"->refresh(picks[seat[v1]], 0, pick_count[seat[v1]] - 1);
+        } else {
+            v3 = "";
+        }
+        v2 += v3;
+    }
+    return v2;
+}
+
+string refresh_str(mixed arg) {
+    return "/adm/daemons/pigd.lpc"->refresh(cards[arg], 0, card_count[arg] - 1);
+}
+
+string table_str(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    v2 = ([ ]);
+    v3 = "";
+    v4 = "";
+    if (pig_stage == 3 && pl_count() == 4) {
+        if (arg != "north" && arg != "west" && arg != "south" && arg != "east") {
+            v2 = "/adm/daemons/pigd.lpc"->order_turn("north");
+        } else {
+            v2 = "/adm/daemons/pigd.lpc"->order_turn(arg);
+        }
+        if (roundcard_count < 4) {
+            v3 = sprintf("现在是第%s轮，该由%s出牌。\n", chinese_number(round_no), pl[round_order[roundcard_count]]->query("name"));
+        }
+        if (bidcard_str != "") {
+            v3 += "卖了的牌：" + bidcard_str + "\n\n";
+        } else {
+            v3 += "没有人卖牌。\n";
+        }
+        v3 = sprintf("%s%24s（%s）\n", v3, "", pl[v2[2]]->query("name"));
+        v3 = sprintf("%s%26s%s\n", v3, "", "/adm/daemons/pigd.lpc"->card_str(roundcards[v2[2]]));
+        v3 = sprintf("%s%4s%16s%6s%6s%6s%s\n", v3, "", "（" + pl[v2[3]]->query("name") + "）", "/adm/daemons/pigd.lpc"->card_str(roundcards[v2[3]]), "", "/adm/daemons/pigd.lpc"->card_str(roundcards[v2[1]]), "（" + pl[v2[1]]->query("name") + "）");
+        v3 = sprintf("%s%26s%s\n", v3, "", "/adm/daemons/pigd.lpc"->card_str(roundcards[v2[0]]));
+        v3 = sprintf("%s%24s（%s）\n", v3, "", pl[v2[0]]->query("name"));
+        if (card_count[arg] > 0) {
+            v3 += refresh_str(arg);
+        }
+        v3 += picks_str();
+    } else {
+        v3 = "这是一张专门用于拱猪的四方桌。\n\n";
+        if (bidcard_str != "") {
+            v3 += "卖了的牌：" + bidcard_str + "\n\n";
+        } else {
+            v3 += "没有人卖牌。\n";
+        }
+        for (v1 = 0; v1 < 4; v1++) {
+            if (objectp(pl[seat[v1]])) {
+                if (pl[seat[v1]] == server) {
+                    v4 = "@";
+                } else {
+                    v4 = "";
+                }
+                v3 = sprintf("%s%s的椅子上坐的是：%s(%s)%s。\n", v3, chinese_seat[seat[v1]], pl[seat[v1]]->query("name"), pl[seat[v1]]->query("id"), v4);
+                continue;
+            }
+            v3 = sprintf("%s%4s的椅子是空的。如果你想玩，可以用 sit %-5s 坐上去。\n", v3, chinese_seat[seat[v1]], seat[v1]);
+        }
+    }
+    return v3;
+}
+
+string scoreboard_str() {
+    mixed v1;
+    mixed v2;
+    v2 = "拱猪成绩表(Scoreboard)\n－－－－－－－－－－－－－－－－－\n姓名　　　　　　　　盘分　　　总分\n－－－－－－－－－－－－－－－－－\n";
+    for (v1 = 0; v1 < 4; v1++) {
+        if (objectp(pl[seat[v1]])) {
+            v2 = sprintf("%s%-14s%10d%10d\n", v2, pl[seat[v1]]->query("name"), hscore[seat[v1]], tscore[seat[v1]]);
+        }
+    }
+    return v2 + "－－－－－－－－－－－－－－－－－\n";
+}
+
+void score_reset() {
+    mixed v1;
+    for (v1 = 0; v1 < 4; v1++) {
+        tscore[seat[v1]] = 0;
+    }
+}
+
+int do_skip(mixed arg) {
+    if (!this_player()->query_temp("pigging_seat")) {
+        return notify_fail("你没有在拱猪！\n");
+    }
+    if (this_player() != server) {
+        return notify_fail("只有桌长才能跳过这副牌！\n");
+    }
+    if (pig_stage < 2) {
+        return notify_fail("牌都没有，跳什么？\n");
+    }
+    message_vision("桌长$N决定跳过这副牌！！\n", server);
+    if (pl_count() == 4) {
+        deal_init();
+    }
+    return 1;
+}
+
+void after_claim() {
+    mixed v1;
+    mixed v2;
+    for (v1 = 0; v1 < roundcard_count; v1++) {
+        if ("/adm/daemons/pigd.lpc"->is_special(roundcards[v1])) {
+            picks[claimer][pick_count[claimer]++] = roundcards[v2];
+        }
+    }
+    for (v1 = 0; v1 < 4; v1++) {
+        for (v2 = 0; v2 < card_count[seat[v1]]; v2++) {
+            if ("/adm/daemons/pigd.lpc"->is_special(cards[seat[v1]][v2])) {
+                picks[claimer][pick_count[claimer]++] = cards[seat[v1]][v2];
+            }
+        }
+    }
+    after_hand();
+}
+
+int do_claim(mixed arg) {
+    mixed v1;
+    mixed v2;
+    v2 = this_player();
+    if (!v2->query_temp("pigging_seat")) {
+        return notify_fail("你没有在拱猪！\n");
+    }
+    if (pl_count() != 4) {
+        return notify_fail("现在桌子上没坐满！\n");
+    }
+    if (pig_stage != 3) {
+        return notify_fail("你想干什么？\n");
+    }
+    if (claimer == v2->query_temp("pigging_seat")) {
+        return notify_fail("一次就够了！\n");
+    }
+    if (!arg) {
+        if (claimer != "") {
+            return notify_fail("claim yes|no ？\n");
+        }
+        agreed[claimer = v2->query_temp("pigging_seat")] = 1;
+        write("你发出全收的要求！等待回音……\n");
+        for (v1 = 0; v1 < 4; v1++) {
+            if (seat[v1] != claimer) {
+                tell_object(pl[seat[v1]], v2->query("name") + "认为他手中的牌都是大的了！\n" + refresh_str(v2->query_temp("pigging_seat")) + "请用 claim yes 通过，或者 claim no 否决。\n");
+            }
+        }
+        return 1;
+    }
+    if (arg == "yes") {
+        if (claimer == "") {
+            return notify_fail("没有人想全收！\n");
+        }
+        if (!agreed[v2->query_temp("pigging_seat")]) {
+            agreed[v2->query_temp("pigging_seat")] = 1;
+            message_vision("$N同意$n的牌都是大的了！\n", v2, pl[claimer]);
+            for (v1 = 0; v1 < 4; v1++) {
+                if (agreed[seat[v1]] != 1) {
+                    return 1;
+                }
+            }
+            message_vision("$N的要求被通过了！！\n", pl[claimer]);
+            after_claim();
+            return 1;
+        }
+    }
+    if (arg == "no") {
+        if (claimer == "") {
+            return notify_fail("没有人想全收！\n");
+        }
+        message_vision("$N否决了$n的要求！！\n继续出牌！\n", v2, pl[claimer]);
+        claimer = "";
+        for (v1 = 0; v1 < 4; v1++) {
+            agreed[seat[v1]] = 0;
+        }
+        return 1;
+    } else {
+        return notify_fail("claim 什么？\n");
+    }
+}
+
+int do_sit(mixed arg) {
+    mixed v1;
+    v1 = this_player();
+    if (!arg || arg != "north" && arg != "west" && arg != "south" && arg != "east") {
+        return notify_fail("你想坐在哪里？\n");
+    }
+    if (server == v1) {
+        return notify_fail("桌长不能换坐位！\n");
+    }
+    map_delete(pl, v1->query_temp("pigging_seat"));
+    if (!objectp(pl[arg])) {
+        if (!pl_count()) {
+            pig_init();
+            server = v1;
+            write("你现在是桌长！\n");
+            round_order = "/adm/daemons/pigd.lpc"->order_turn(dealer = arg);
+        }
+        pl[arg] = v1;
+        v1->set_temp("pigging_seat", arg);
+        message_vision("$N坐上了" + chinese_seat[arg] + "的位子。\n", v1);
+        if (pl_count() == 3) {
+            tell_room(this_object(), "现在是三缺一，你们只再需要一个玩家就可以开拱了！\n");
+        }
+        if (pl_count() == 4) {
+            tell_room(this_object(), "好，人凑齐了！\n");
+            deal_init();
+        }
+        return 1;
+    } else {
+        return notify_fail("这个位子上已经有人了！\n");
+    }
+}
+
+int do_leave(mixed arg) {
+    mixed v1;
+    mixed v2;
+    v2 = this_player();
+    if (!v2->query_temp("pigging_seat", arg)) {
+        return notify_fail("你现在没有在拱猪！\n");
+    } else if (server == v2) {
+        message_vision("桌长$N不想再拱下去了！\n", v2);
+        server = 0;
+        for (v1 = 0; v1 < 4; v1++) {
+            if (objectp(pl[seat[v1]])) {
+                message_vision("$N站了起来。\n", pl[seat[v1]]);
+                pl[seat[v1]]->delete_temp("pigging_seat");
+                map_delete(pl, seat[v1]);
+            }
+        }
+        pig_stage = 0;
+        return 1;
+    } else {
+        map_delete(pl, v2->query_temp("pigging_seat"));
+        v2->delete_temp("pigging_seat");
+        message_vision("$N不想再拱了，站了起来！\n", v2);
+        return 1;
+    }
+}
+
+void do_assign_cards() {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    v3 = 0;
+    for (v1 = 0; v1 < 13; v1++) {
+        for (v2 = 0; v2 < 4; v2++) {
+            cards[seat[v2]][v1] = newcards[v3++];
+        }
+    }
+    for (v1 = 0; v1 < 4; v1++) {
+        cards[seat[v1]] = sort_array(cards[seat[v1]], 1);
+        tell_object(pl[seat[v1]], "/adm/daemons/pigd.lpc"->refresh(cards[seat[v1]], 0, 12));
+        card_count[seat[v1]] = 13;
+    }
+}
+
+int do_deal(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    v4 = this_player();
+    if (v4 != server) {
+        return notify_fail("你不是桌长！\n");
+    }
+    if (pig_stage != 1 || pl_count() != 4) {
+        return notify_fail("现在不能发牌！\n");
+    }
+    "/adm/daemons/pigd.lpc"->shuffle(oldcards, newcards, 2);
+    for (v1 = 0; v1 < 13; v1++) {
+        for (v2 = 0; v2 < 4; v2++) {
+            cards[seat[v2]][v1] = newcards[v3++];
+        }
+    }
+    for (v1 = 0; v1 < 4; v1++) {
+        cards[seat[v1]] = sort_array(cards[seat[v1]], 1);
+        tell_object(pl[seat[v1]], "你得到的牌为：\n" + "/adm/daemons/pigd.lpc"->refresh(cards[seat[v1]], 0, 12));
+        card_count[seat[v1]] = 13;
+    }
+    tell_room(this_object(), "发完牌了，有谁要卖牌的没有？\n");
+    tell_room(this_object(), "如果你卖完了牌，打一下 pass 。\n");
+    bid_init();
+    return 1;
+}
+
+int do_refresh(mixed arg) {
+    mixed v1;
+    v1 = this_player();
+    if (!v1->query_temp("pigging_seat")) {
+        return notify_fail("你没有在拱猪！\n");
+    }
+    if (pig_stage < 2 || card_count[v1->query_temp("pigging_seat")] < 1) {
+        return notify_fail("你手上没有牌！\n");
+    }
+    tell_object(pl[v1->query_temp("pigging_seat")], "你手上有这些牌：\n" + refresh_str(v1->query_temp("pigging_seat")));
+    return 1;
+}
+
+int do_bid(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    v1 = this_player();
+    if (!v1->query_temp("pigging_seat")) {
+        return notify_fail("你没有在拱猪！\n");
+    }
+    if (pig_stage != 2) {
+        return notify_fail("现在不是卖牌的时候！\n");
+    }
+    if (!arg) {
+        return notify_fail("你想卖什么？\n");
+    }
+    if ((v2 = "/adm/daemons/pigd.lpc"->is_validcard(arg)) == -1 || !"/adm/daemons/pigd.lpc"->has_card(cards[v1->query_temp("pigging_seat")], 0, 12, v2)) {
+        return notify_fail("你手上没有这张牌！\n");
+    }
+    if (!(v3 = "/adm/daemons/pigd.lpc"->is_validbid(v2))) {
+        return notify_fail("这张牌不能被卖！\n");
+    }
+    if (bid_flag & v3) {
+        return notify_fail("这张牌已经被卖过了！\n");
+    }
+    bid_flag |= v3;
+    switch (v3) {
+    case 1:
+        allow_playbid[0] = 0;
+        break;
+    case 2:
+        allow_playbid[1] = 0;
+        break;
+    case 4:
+        allow_playbid[2] = 0;
+        break;
+    case 8:
+        allow_playbid[3] = 0;
+        break;
+    }
+    message_vision("$N说道：我卖" + "/adm/daemons/pigd.lpc"->card_str(v2) + "！\n", v1);
+    v4 = "";
+    if (bidcard_str != "") {
+        v4 = "，";
+    }
+    bidcard_str = "/adm/daemons/pigd.lpc"->card_str(v2) + "（" + v1->query("name") + "）" + v4 + bidcard_str;
+    return 1;
+}
+
+int do_pass(mixed arg) {
+    mixed v1;
+    mixed v2;
+    v1 = this_player();
+    if (!v1->query_temp("pigging_seat")) {
+        return notify_fail("你没有在拱猪！\n");
+    }
+    if (pig_stage != 2) {
+        return notify_fail("你想干什么？\n");
+    }
+    if (passed[v1->query_temp("pigging_seat")] == 1) {
+        return notify_fail("你已经停卖了！\n");
+    }
+    passed[v1->query_temp("pigging_seat")] = 1;
+    message_vision("$N说道：我停卖！\n", v1);
+    for (v2 = 0; v2 < 4; v2++) {
+        if (!passed[seat[v2]]) {
+            return 1;
+        }
+    }
+    for (v2 = 0; v2 < 4; v2++) {
+        passed[seat[v2]] = 0;
+    }
+    tell_room(this_object(), "全部停卖，开拱！！\n");
+    tell_room(this_object(), "这把由" + pl[dealer]->query("name") + "先出。\n");
+    play_init();
+    return 1;
+}
+
+void after_play() {
+    mixed v1;
+    roundcard_count++;
+    for (v1 = 0; v1 < 4; v1++) {
+        if (card_count[seat[v1]] > 0) {
+            tell_object(pl[seat[v1]], table_str(seat[v1]));
+        }
+    }
+    if (roundcard_count > 3) {
+        after_round();
+    }
+}
+
+void after_winner(mixed arg) {
+    mixed v1;
+    message_vision("$N的" + "/adm/daemons/pigd.lpc"->card_str(roundcards[arg]) + "最大！\n", pl[arg]);
+    for (v1 = 0; v1 < 4; v1++) {
+        if ("/adm/daemons/pigd.lpc"->is_special(roundcards[seat[v1]])) {
+            picks[arg][pick_count[arg]++] = roundcards[seat[v1]];
+            if (roundcards[seat[v1]] == 10) {
+                message_vision("$N得到了猪头！！\n", pl[arg]);
+                dealer = arg;
+            }
+        }
+    }
+    picks[arg] = sort_array(picks[arg], 1);
+}
+
+void after_round() {
+    mixed v1;
+    allow_playbid[roundcards[round_order[0]] / 13] = 1;
+    after_winner(v1 = "/adm/daemons/pigd.lpc"->card_cmp4(roundcards, roundcards[round_order[0]] / 13));
+    round_init(v1);
+    if (round_no++ == 12) {
+        auto_play();
+    }
+}
+
+void auto_play() {
+    mixed v1;
+    for (v1 = 0; v1 < 4; v1++) {
+        roundcards[seat[v1]] = cards[seat[v1]][0];
+    }
+    roundcard_count = 4;
+    for (v1 = 0; v1 < 4; v1++) {
+        card_count[seat[v1]] = 0;
+        tell_object(pl[seat[v1]], table_str(seat[v1]));
+    }
+    after_winner("/adm/daemons/pigd.lpc"->card_cmp4(roundcards, roundcards[round_order[0]] / 13));
+    after_hand();
+}
+
+void after_hand() {
+    mixed v1;
+    mixed v2;
+    v2 = "";
+    for (v1 = 0; v1 < 4; v1++) {
+        hscore[seat[v1]] = "/adm/daemons/pigd.lpc"->count_score(picks[seat[v1]], bid_flag);
+        if (hscore[seat[v1]] == 1000) {
+            v2 = seat[v1];
+        }
+        pl[seat[v1]]->add("pig_played", 1);
+        pl[seat[v1]]->add("pig_score", hscore[seat[v1]]);
+    }
+    if (v2 == "") {
+        for (v1 = 0; v1 < 4; v1++) {
+            tscore[seat[v1]] += hscore[seat[v1]];
+            if (tscore[seat[v1]] <= -1000) {
+                pl[seat[v1]]->add("pig_head", 1);
+            }
+        }
+    } else {
+        for (v1 = 0; v1 < 4; v1++) {
+            if (seat[v1] != v2) {
+                pl[seat[v1]]->add("pig_head", 1);
+            }
+        }
+    }
+    for (v1 = 0; v1 < 4; v1++) {
+        if (tscore[seat[v1]] <= -1000) {
+            message_vision("$N是一头猪！\n", pl[seat[v1]]);
+        }
+    }
+    for (v1 = 0; v1 < 4; v1++) {
+        if (tscore[seat[v1]] <= -1000) {
+            score_reset();
+            break;
+        }
+    }
+    deal_init();
+}
+
+int do_play(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    mixed v6;
+    mixed v7;
+    v1 = this_player();
+    v5 = 0;
+    v6 = -1;
+    if (!(v7 = v1->query_temp("pigging_seat"))) {
+        return notify_fail("你没有在拱猪！\n");
+    }
+    if (pig_stage != 3) {
+        return notify_fail("现在不是出牌阶段！\n");
+    }
+    if (v7 != round_order[roundcard_count]) {
+        return notify_fail("还没轮到你出牌！\n");
+    }
+    if (!arg || (v3 = "/adm/daemons/pigd.lpc"->is_validcard(arg)) == -1) {
+        return notify_fail("你要出哪张牌？\n");
+    }
+    for (v2 = 0; v2 < card_count[v7]; v2++) {
+        if (cards[v7][v2] == v3) {
+            v6 = v2;
+            break;
+        }
+    }
+    if (v6 == -1) {
+        return notify_fail("你手里没有这张牌！\n");
+    }
+    if (roundcard_count > 0 && (v4 = "/adm/daemons/pigd.lpc"->has_suit(cards[v7], 0, card_count[v7] - 1, roundcards[round_order[0]] / 13)) > 0 && v3 / 13 != roundcards[round_order[0]] / 13) {
+        return notify_fail("你不能出这张牌！\n");
+    }
+    if (!roundcard_count || v4 > 1) {
+        switch (v3) {
+        case 10:
+            if (!allow_playbid[0]) {
+                v5 = 1;
+            }
+            break;
+        case 25:
+            if (!allow_playbid[1]) {
+                v5 = 1;
+            }
+            break;
+        case 35:
+            if (!allow_playbid[2]) {
+                v5 = 1;
+            }
+            break;
+        case 47:
+            if (!allow_playbid[3]) {
+                v5 = 1;
+            }
+            break;
+        }
+        if (v5) {
+            return notify_fail("卖过的牌不能在第一轮出！\n");
+        }
+    }
+    for (v2 = v6; v2 < card_count[v7] - 1; v2++) {
+        cards[v7][v2] = cards[v7][v2 + 1];
+    }
+    cards[v7][13 - round_no] = 53;
+    roundcards[v7] = v3;
+    card_count[v7]--;
+    if (roundcard_count > 0 && v3 / 13 != roundcards[round_order[0]] / 13) {
+        message_vision("$N垫了一张" + "/adm/daemons/pigd.lpc"->card_str(v3) + "！\n", v1);
+    } else {
+        message_vision("$N出了一张" + "/adm/daemons/pigd.lpc"->card_str(v3) + "！\n", v1);
+    }
+    after_play();
+    return 1;
+}

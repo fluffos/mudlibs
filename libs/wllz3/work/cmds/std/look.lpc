@@ -1,0 +1,583 @@
+// look.c
+// Design By Robert 蝴蝶君 email:robert_st@263.net
+
+#include <room.h>
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+#define RETURN_RESULT           1
+
+int look_room(object me, object env,int brief);
+int look_item(object me, object obj);
+int look_living(object me, object obj);
+int look_room_item(object me, string arg);
+
+string desc_of_objects(object *obs);
+string look_all_inventory_of_room(object me, object env, int ret_str);
+string description(object obj);
+string look_equiped(object me, object obj, string pro);
+nosave int light;
+
+void create() { seteuid(getuid()); }
+
+int main(object me, string arg)
+{
+	object obj;
+	int result;
+
+	if( !arg ) result = look_room(me, environment(me),0);
+	else if( (obj = present(arg, me)) || (obj = present(arg, environment(me))))
+	     {
+		if( obj->is_character() && ! obj->is_corpse() ) result = look_living(me, obj);
+		else result = look_item(me, obj);
+	     } else result = look_room_item(me, arg);
+
+	return result;
+}
+
+int look_room(object me, object env,int brief)
+{
+	int i;
+	mapping exits;
+	string str, *dirs;
+
+	if( !env )
+	{
+		write("你的四周灰蒙蒙地一片，什么也没有。\n");
+		me->move("/d/center/guangchang.lpc");
+		me->save();
+		destruct(me);
+		return 1;
+	}
+/*
+	if(NATURE_D->is_night() && env->query("outdoors")
+		&& !me->query_temp("light"))
+		light = 0;
+	else
+		light = 1;
+*/
+	if(brief)
+	{
+		str = sprintf(HIC"%s，"NOR,env->query("short"));
+	}
+	else
+	{
+		str = sprintf(HIC"%s "NOR"%s\n\n%s",
+		env->short(),env->query("outdoors")? "- "+ NATURE_D->outdoor_room_description( env ) : "",
+		env->long());
+	}
+	if( mapp(exits = env->query("exits")) )
+	{
+		dirs = keys(exits);
+		for(i=0; i<sizeof(dirs); i++)
+			if( (int)env->query_door(dirs[i], "status") & DOOR_CLOSED )
+				dirs[i] = 0;
+		dirs -= ({ 0 });
+
+		if( sizeof(dirs)==0 )
+				str += "    这里没有任何明显的出路。\n";
+		else if( sizeof(dirs)==1 )
+			if(brief)
+				str += "这里唯一的出口是『" + WHT + dirs[0] + NOR + "』。\n";
+			else
+				str += "    这里唯一的出口是 " + WHT + dirs[0] + NOR + "。\n";
+		else
+			if(brief)
+				str += sprintf("这里明显的出口是『" + WHT + "%s" + NOR + "』和『" + WHT + "%s" + NOR + "』。\n",
+					implode(dirs[0..sizeof(dirs)-2], "、"), dirs[sizeof(dirs)-1]);
+			else
+				str += sprintf("    这里明显的出口是 " + WHT + "%s" + NOR + " 和 " + WHT + "%s" + NOR + "。\n",
+					implode(dirs[0..sizeof(dirs)-2], "、"), dirs[sizeof(dirs)-1]);
+	}
+	if( brief < 2 )
+		str += look_all_inventory_of_room(me, env, RETURN_RESULT);
+
+//	if(light)
+		tell_object(me,convert_color(str));
+//	else
+//		tell_object(me,HIK + clean_color(str) + NOR);
+
+	return 1;
+}
+string desc_of_objects(object *obs)
+{
+	int i;
+	object ob;
+
+	string  str;
+	string  ustr;
+	mapping count;
+	mapping unit;
+	string  short_name;
+	string  *dk;
+
+	if (obs && sizeof(obs) > 0)
+	{
+		str = "";
+		count   = ([]);
+		unit    = ([]);
+
+		foreach (ob in obs)
+		{
+			short_name = ob->short();
+			if (undefinedp(count[short_name]))
+			{
+				if (ob->query_amount() > 1)
+					ustr = "批";
+				else
+					ustr = ob->query("unit");
+				count += ([ short_name : 1 ]);
+				unit += ([ short_name : ustr ]);
+			}
+			else
+				count[short_name] += 1;
+		}
+
+		dk = sort_array(keys(count), 1);
+		for (i = 0; i < sizeof(dk); i++)
+		{
+			str += "  ";
+			if (count[dk[i]] > 1)
+				str += chinese_number(count[dk[i]]) + unit[dk[i]];
+			str += dk[i] + "\n";
+		}
+		return str;
+	}
+
+	return "";
+}
+
+string look_all_inventory_of_room(object me, object env, int ret_str)
+{
+	object *inv;
+	object *obs;
+
+	string  str;
+
+	if (! env || ! me) return "";
+
+	str = "";
+
+	inv = all_inventory(env);
+	if (! sizeof(inv)) return str;
+
+	obs = filter_array(inv, (: $(me) != $1 && userp($1) && $(me)->visible($1) :));
+	str += desc_of_objects(obs);
+
+	obs = filter_array(inv, (: $(me) != $1 && ! userp($1) && $1->is_character() &&
+				   $(me)->visible($1) :));
+	str += desc_of_objects(obs);
+
+	obs = filter_array(inv, (: ! $1->is_character() :), me);
+	str += desc_of_objects(obs);
+
+	if (! ret_str)
+		tell_object(me, str);
+
+	return str;
+}
+
+
+int look_item(object me, object obj)
+{
+	mixed *inv;
+	mapping count;
+        mapping equiped;
+	mapping unit;
+	string short_name;
+
+	string str;
+        string *dk;
+	int i;
+
+	str = obj->long();
+
+        count   = ([]);
+        unit    = ([]);
+        equiped = ([]);
+
+	if(obj->valid_level())
+		str += sprintf(WHT"等级：%d \n"NOR,
+			(int)obj->valid_level());
+
+	if(obj->query("weapon_prop") && (int)obj->query("courage"))
+		str += sprintf(WHT"勇气值：%d\n"NOR,
+			(int)obj->query("courage"));
+
+	if(obj->query("consistence"))
+		str += sprintf(WHT"耐久度：%d/100\n" NOR,
+			(int)obj->query("consistence"));
+
+	if((wizardp(me) || me->query("career") == "铸造师") && obj->query("attributive"))
+		str += sprintf(WHT"五行属性：%s\n"NOR,
+			obj->query("attributive"));
+
+	inv = all_inventory(obj);
+	if (! sizeof(inv))
+	{
+		message("vision", str, me);
+		return 1;
+	}
+
+        if (obj->is_corpse())
+		str += "里面的遗物有：\n";
+        else
+                str += "里面有：\n";
+
+        for (i = 0; i < sizeof(inv); i++)
+        {
+                short_name = inv[i]->short();
+                if (undefinedp(count[short_name]))
+                {
+                        count += ([ short_name : 1 ]);
+                        unit += ([ short_name : inv[i]->query("unit") ]);
+                }
+                else
+                        count[short_name] += 1;
+
+                if (inv[i]->query("equipped"))
+                        equiped[short_name] = 1;
+        }
+
+        dk = keys(count);
+        dk = sort_array(dk, 1);
+        for (i = 0; i < sizeof(dk); i++)
+        {
+		if (equiped[dk[i]])
+			str += HIG "  □" NOR;
+		else
+			str += "    ";
+		if (count[dk[i]] > 1)
+			str += chinese_number(count[dk[i]]) + unit[dk[i]];
+		str += dk[i] + "\n";
+        }
+
+        if (strlen(str) > 4096)
+                me->start_more(str);
+        else
+                message("vision", str, me);
+        return 1;
+
+}
+string description(object obj)
+{
+	if (playerp(obj))
+	{
+	    int per;
+	    per = obj->query_per();
+
+	    if ((string) obj->query("gender") == "男性" || (string) obj->query("gender") == "无性")
+	    {
+			if(per >= 100 ) return "现在一派神人气度，仙风道骨，举止出尘。\n";
+			else if( per >= 155) return "现在神清气爽，骨格清奇，宛若仙人。\n";
+			else if( per >= 150) return "现在丰神俊朗，长身玉立，宛如玉树临风。\n";
+			else if( per >= 145) return "现在飘逸出尘，潇洒绝伦。\n";
+			else if( per >= 140) return "现在面如美玉，粉妆玉琢，俊美不凡。\n";
+			else if( per >= 135) return "现在丰神如玉，目似朗星，令人过目难忘。\n";
+			else if( per >= 130) return "现在粉面朱唇，身姿俊俏，举止风流无限。\n";
+			else if( per >= 125) return "现在双目如星，眉梢传情，所见者无不为之心动。\n";
+			else if( per >= 120) return "现在举动如行云游水，独蕴风情，吸引所有异性目光。\n";
+			else if( per >= 115) return "现在双眼光华莹润，透出摄人心魄的光芒。\n";
+			else if( per >= 110) return "生得英俊潇洒，风流倜傥。\n";
+			else if( per >= 105) return "生得目似点漆，高大挺俊，令人心动。\n";
+			else if( per >= 100) return "生得面若秋月，儒雅斯文，举止适度。\n";
+			else if( per >= 95) return "生得剑眉星目，英姿勃勃，仪表不凡。\n";
+			else if( per >= 90) return "生得满面浓髯，环眼豹鼻，威风凛凛，让人倾倒。\n";
+			else if( per >= 85) return "生得眉如双剑，眼如明星，英挺出众。\n";
+			else if( per >= 80) return "生得虎背熊腰，壮健有力，英姿勃发。\n";
+			else if( per >= 75) return "生得肤色白皙，红唇墨发，斯文有礼。\n";
+			else if( per >= 70) return "生得浓眉大眼，高大挺拔，气宇轩昂。\n";
+			else if( per >= 65) return "生得鼻直口方，线条分明，显出刚毅性格。\n";
+			else if( per >= 60) return "生得眉目清秀，端正大方，一表人才。\n";
+			else if( per >= 55) return "生得腰圆背厚，面阔口方，骨格不凡。\n";
+			else if( per >= 50) return "生得相貌平平，不会给人留下什么印相。\n";
+			else if( per >= 45) return "生得膀大腰圆，满脸横肉，恶形恶相。\n";
+			else if( per >= 40) return "生得獐头鼠须，让人一看就不生好感。\n";
+			else if( per >= 35) return "生得面颊深陷，瘦如枯骨，让人要发恶梦。\n";
+			else if( per >= 30) return "生得肥头大耳，腹圆如鼓，手脚短粗，令人发笑。\n";
+			else if( per >= 25) return "生得贼眉鼠眼，身高三尺，宛若猴状。\n";
+			else if( per >= 20) return "生得面如桔皮，头肿如猪，让人不想再看第二眼。\n";
+			else if( per >= 15) return "生得呲牙咧嘴，黑如锅底，奇丑无比。\n";
+			else if( per <= 10) return "生得眉歪眼斜，瘌头癣脚，不象人样。\n";
+	}
+	else {
+			if ( per >= 160 ) return "现在宛如玉雕冰塑，似梦似幻，已不再是凡间人物。\n";
+			else if( per >= 155) return "现在美若天仙，不沾一丝烟尘。\n";
+			else if( per >= 150) return "现在灿若明霞，宝润如玉，恍如神妃仙子。\n";
+			else if( per >= 145) return "现在气质美如兰，才华馥比山，令人见之忘俗。\n";
+			else if( per >= 140) return "现在丰润嫩白，婴桃小口，眉目含情，仿佛太真重临。\n";
+			else if( per >= 135) return "现在鲜艳妩媚，袅娜风流，柔媚姣俏，粉光脂艳。\n";
+			else if( per >= 130) return "现在鬓若刀裁，眉如墨画，面如桃瓣，目若秋波。\n";
+			else if( per >= 125) return "现在凤眼柳眉，粉面含春，丹唇贝齿，转盼多情。\n";
+			else if( per >= 120) return "现在眉目如画，肌肤胜雪，真可谓闭月羞花。\n";
+			else if( per >= 115) return "现在娇若春花，媚如秋月，真的能沉鱼落雁。。\n";
+			else if( per >= 110) return "生得闲静如姣花照水，行动似弱柳扶风，体态万千。\n";
+			else if( per >= 105) return "生得娇小玲珑，宛如飞燕再世，楚楚动人。\n";
+			else if( per >= 100) return "生得鸭蛋秀脸，俊眼修眉，黑发如瀑，风情万种。\n";
+			else if( per >= 95) return "生得削肩细腰，身材苗条，娇媚动人，顾盼神飞。\n";
+			else if( per >= 90) return "生得丰胸细腰，妖娆多姿，让人一看就心跳不已。\n";
+			else if( per >= 85) return "生得粉嫩白至，如芍药笼烟，雾里看花。\n";
+			else if( per >= 80) return "生得腮凝新荔，目若秋水，千娇百媚。\n";
+			else if( per >= 75) return "生得鲜艳妍媚，肌肤莹透，引人遐思。\n";
+			else if( per >= 70) return "生得巧笑嫣然，宛约可人。\n";
+			else if( per >= 65) return "生得如梨花带露，清新秀丽。\n";
+			else if( per >= 60) return "生得风姿楚楚，明丽动人。\n";
+			else if( per >= 55) return "生得肌肤微丰，雅淡温宛，清新可人。\n";
+			else if( per >= 50) return "生得虽不标致，倒也白净，有些动人之处。\n";
+			else if( per >= 45) return "生得身材瘦小，肌肤无光，两眼无神。\n";
+			else if( per >= 40) return "生得干黄枯瘦，脸色腊黄，毫无女人味。\n";
+			else if( per >= 35) return "生得满脸疙瘩，皮色粗黑，丑陋不堪。\n";
+			else if( per >= 30) return "生得一嘴大暴牙，让人一看就没好感。\n";
+			else if( per >= 25) return "生得眼小如豆，眉毛稀疏，手如猴爪，不成人样。\n";
+			else if( per >= 20) return "生得八字眉，三角眼，鸡皮黄发，让人一见就想吐。\n";
+			else if( per >= 15) return "生得歪鼻斜眼，脸色灰败，直如鬼怪一般。\n";
+			else if( per <= 10) return "生得丑如无盐，状如夜叉，女人长成这样真是人生悲剧。\n";
+	}
+
+	}
+	else
+	if (! obj->query("can_speak") && living(obj))
+	{
+		if (! obj->query_temp("owner"))
+			return "是一只未被驯服的畜生，眼光里满是戒心和敌意。\n";
+		else
+			return "是一只被" + obj->query_temp("owner_name") +
+			       "驯服的畜生，一副很温驯的样子。\n";
+	}
+
+	return "";
+}
+int look_living(object me, object obj)
+{
+	int age;
+	string str, pro;
+	mapping my_fam, fam;
+	string desc;
+	object ob;
+
+	if( me!=obj && !wizardp(me))
+		message("vision", me->name() + "正盯著你看，不知道打些什么主意。\n", obj);
+
+	str = obj->long();
+	pro = (obj==me) ? gender_self(obj->query("gender")) : gender_pronoun(obj->query("gender"));
+
+	if(objectp(ob = obj->query_temp("is_riding")) && obj != me)
+		str += sprintf("%s正骑在%s上，低头看着你。\n", pro, ob->name());
+
+	if(obj->query("can_speak") && !obj->query("not_living"))
+	{
+		age = (int)obj->query("age");
+
+		if(wizardp(obj))
+			str += sprintf(HIW"此人谈吐不凡，仙风道骨，看起来绝非等闲之辈啊！\n"NOR,pro);
+
+		else if(age < 10 )
+			str += sprintf("%s看起来还不足十岁，只是个雪白粉嫩的小孩子。\n",pro);
+
+		else if((string)obj->query("gender") == "男性")
+		{
+			if(age < 20 && age > 10)
+				str += sprintf("%s看起来大概只有十多岁，是个青春少年郎。\n", pro);
+
+			else if(age >= 20 && age < 30)
+				str += sprintf("%s看起来大约二十多岁，已是身强力壮的年轻小伙了。\n", pro);
+
+			else if(age >= 30 && age < 40 )
+				str += sprintf("%s看起来已是中年了。\n", pro);
+
+			else if(age >= 40 && age < 50)
+				str += sprintf("%s看起来已是壮年了，一副身强力壮的样子。\n", pro);
+
+			else if(age >= 50 && age < 70 )
+				str += sprintf("%s头发花白，想必年过半百，已是不惑之年了。\n",pro);
+
+			else if(age >= 70 )
+				str += sprintf("%s白发苍苍，满脸皱纹，一副老态龙钟的样子。\n",pro);
+		}
+		else {
+
+			if(age < 20 && age > 10)
+				str += sprintf("%s看起来大概只有十多岁，是个含苞欲放的小姑娘。\n", pro);
+
+			else if(age >= 20 && age < 30 )
+				str += sprintf("%s看起来大约二十多岁，已是亭亭玉立的黄花大闺女了。\n", pro);
+
+			else if(age >= 30 && age < 40 )
+				str += sprintf("%s看起来已是中年了。\n", pro);
+
+			else if(age >= 40 && age < 50 )
+				str += sprintf("%s看起来已经四十来岁了，却仍然徐娘半老，风韵犹存。\n", pro);
+
+			else if(age >= 50 && age < 70 )
+				str += sprintf("%s头发花白，想必年过半百，已是不惑之年了。\n",pro);
+
+			else if(age >= 70 )
+				str += sprintf("%s白发苍苍，满脸皱纹，一副老态龙钟的样子。\n",pro);
+		}
+
+	}
+
+	desc = description(obj);
+	if (desc && desc != "")
+		str += pro + desc;
+
+	//check about wife and husband
+	if((obj->parse_command_id_list())[0] == (string)me->query("marry/id"))
+	{
+		if( (string)me->query("gender")=="女性" )
+		{
+			str += sprintf("%s是你的丈夫。\n", pro);
+		}
+		else
+		{
+			str += sprintf("%s是你的妻子。\n", pro);
+		}
+	}
+
+	if(me->is_brother(geteuid(obj)))
+	{
+		if((string)me->query("gender") == (string)obj->query("gender"))
+			str += sprintf("%s是你的结拜兄弟。\n",pro);
+		else
+			str += sprintf("%s是你的八拜之交。\n",pro);
+	}
+
+	// If we both has family, check if we have any relations.
+	if( obj!=me
+	&&      mapp(fam = obj->query("family"))
+	&&      mapp(my_fam = me->query("family"))
+	&&      fam["family_name"] == my_fam["family_name"] ) {
+
+		if( fam["generation"]==my_fam["generation"] ) {
+
+			if( (string)obj->query("gender") == "男性" ||
+				(string)obj->query("gender") == "无性")
+				str += sprintf( pro + "是你的%s%s。\n",
+					my_fam["master_id"] == fam["master_id"]? "": "同门",
+					my_fam["enter_time"] > fam["enter_time"] ? "师兄": "师弟");
+			else
+				str += sprintf( pro + "是你的%s%s。\n",
+					my_fam["master_id"] == fam["master_id"]? "": "同门",
+					my_fam["enter_time"] > fam["enter_time"] ? "师姐": "师妹");
+		} else if( fam["generation"] < my_fam["generation"] ) {
+			if( my_fam["master_id"] == obj->query("id") )
+				str += pro + "是你的师父。\n";
+			else if( my_fam["generation"] - fam["generation"] > 1 )
+				str += pro + "是你的同门长辈。\n";
+			else if( fam["enter_time"] < my_fam["enter_time"] )
+				str += pro + "是你的师伯。\n";
+			else
+				str += pro + "是你的师叔。\n";
+		} else {
+			if( fam["generation"] - my_fam["generation"] > 1 )
+				str += pro + "是你的同门晚辈。\n";
+			else if( fam["master_id"] == me->query("id") )
+				str += pro + "是你的弟子。\n";
+			else
+				str += pro + "是你的师侄。\n";
+		}
+	}
+
+	if (stringp(obj->query_temp("eff_status_msg")))
+	{
+		str += obj->query_temp("eff_status_msg") + "\n";
+	} else
+
+	if( obj->query("max_qi") )
+		str += pro + COMBAT_D->eff_status_msg((int)obj->query("eff_qi")* 100 / (int)obj->query("max_qi")) + "\n";
+
+	if(obj->is_corpse() && obj->query("kantou") == 1)
+		str += sprintf("%s连头都被割走了。\n", pro);
+
+	str += look_equiped(me, obj, pro);
+	message("vision", str, me);
+	return 1;
+}
+
+string look_equiped(object me, object obj, string pro)
+{
+        mixed *inv;
+        string str;
+        string subs;
+        int i;
+        int n;
+
+        inv = all_inventory(obj);
+        n = 0;
+
+        str = "";
+        subs = "";
+        for (i = 0; i < sizeof(inv); i++)
+        {
+                switch (inv[i]->query("equipped"))
+                {
+                case "wielded":
+                        n++;
+                        subs = HIG "  □" NOR + inv[i]->short() + "\n" + subs;
+                        break;
+
+                case "worn":
+                        n++;
+                        subs += HIG "  □" NOR + inv[i]->short() + "\n";
+                        break;
+
+                default:
+                        break;
+                }
+        }
+
+        if (n)
+                str += pro + "装备着：\n" + subs;
+
+        if(playerp(obj) && !objectp(obj->query_temp("armor/cloth")))
+        {
+		str = pro + "一丝不挂，全身赤裸，什么也没有穿。\n" + str;
+        }
+
+        return str;
+}
+
+int look_room_item(object me, string arg)
+{
+	object env;
+	mapping item, exits;
+
+	if( !objectp(env = environment(me)) )
+		return notify_fail("这里只有灰蒙蒙地一片，什麽也没有。\n");
+
+	if( mapp(item = env->query("item_desc")) && !undefinedp(item[arg]) )
+	{
+		if( stringp(item[arg]) )
+			write( convert_color( item[arg] ) );
+		else if( functionp(item[arg]) )
+			write( convert_color( (string)(*item[arg])(me) ) );
+
+		return 1;
+	}
+	if( mapp(exits = env->query("exits")) && !undefinedp(exits[arg]) )
+	{
+		if( objectp(env = find_object(exits[arg])) )
+			look_room(me, env,0);
+		else
+		{
+			call_other(exits[arg], "???");
+			look_room(me, find_object(exits[arg]),0);
+		}
+		return 1;
+	}
+	return notify_fail("你要看什么？\n");
+}
+
+
+int help (object me)
+{
+	write(@HELP
+指令格式: look [<物品>|<生物>|<方向>]
+
+这个指令让你查看你所在的环境、某件物品、生物、或是方向。
+
+HELP
+);
+	return 1;
+}

@@ -1,0 +1,175 @@
+// sponsor.c 创造
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+int help(object me);
+int main(object me, string arg)
+{
+	string msg;
+	string type,name;
+	string skill;
+	mapping special;
+	int lvl,i;
+
+	if(!me->is_member())
+		return notify_fail("你不具备创造武学的能力。\n");
+
+	if(me->query("level") < 150)
+		return notify_fail("以你现在的能力，不足以创造新武学。\n");
+
+	if(arg && sscanf(arg,"%s == %s",type,name) == 2)
+	{
+		if((int)me->query("max_neili") < 8000)
+			return notify_fail("你的内力修为太差，不足以创造新绝学。\n");
+
+		if((int)me->query("neili") < 8000)
+			return notify_fail("你的内力不足，无法创造新绝学。\n");
+
+		if((int)me->query("potential") < 1000)
+			return notify_fail("你的潜能不足，无法创造新绝学。\n");
+
+		if((int)me->query("jing") < (int)me->query("eff_jing")
+		|| (int)me->query("eff_jing") < (int)me->query("max_jing"))
+			return notify_fail("你现在精神不加，还是休息一下再说吧。\n");
+
+		if((int)me->query("qi") < (int)me->query("eff_qi")
+		|| (int)me->query("eff_qi") < (int)me->query("max_qi"))
+			return notify_fail("你现在气血不调，还是休息一下再说吧。\n");
+
+		i = strlen(name);
+		if(i < 4 || i > 10)
+			return notify_fail("技能名称必须为二至五个中文字。\n");
+
+		while(i--)
+		{
+			if( name[i]<=' ' )
+				return notify_fail("技能名称不能使用控制字元。\n");
+			if( i%2==0 && !is_chinese(name[i..<0]) )
+				return notify_fail("技能名称必须使用中文来命名。\n");
+		}
+
+		if(MINE_D->query_name_dbase(name))
+			return notify_fail("武林中似乎已经有这门技能，你再自创似乎已经毫无意义。\n");
+
+		skill = sprintf("%s-%ss",me->query("id"),type);
+		if(load_object(SPECIAL_D(skill))
+			|| file_size(SPECIAL_D(skill + ".lpc")) > 0)
+			return notify_fail("这种技能已经存在，不能重复创造。\n");
+
+		if(!MINE_D->create_skill(type))
+			return notify_fail("你的脑子一片混乱，似乎天下武学中并没有这种类型的技能。\n");
+
+		if(me->query_skill(type,1) < 400)
+			return notify_fail("你对"+ to_chinese(type) +"的领悟尚未达到可以自创绝学的程度。\n");
+
+		if( type != "force" && (!mapp(special = me->query_temp("special")) || sizeof(special) < 8))
+			return notify_fail("无招无式，如何揣摩出独门绝学？\n");
+
+		if(me->query_temp("pending/special"))
+		{
+			write("你开始尝试创造武林新绝学"+ name +"。\n");
+			me->set("max_neili",0);
+			me->set("neili",0);
+			me->set("jing",0);
+			me->set("qi",0);
+			me->add("potential",-1000);
+			if(random(100000) < (int)me->query("special/exp"))
+			{
+				MINE_D->setup_skill(me,type,name);
+				MINE_D->map_name_dbase(name,skill);
+				CHINESE_D->add_translate(skill,name);
+				CHANNEL_D->do_channel(find_object(MASTER_OB),"rumor",
+					sprintf("听说一代宗师%s，创出武林新绝学「%s」！",
+						me->name(1),name));
+				write(HIY"恭喜，你创出了武林新绝学之「"+ name +"」。\n"NOR);
+				me->add("special/exp",100);
+				me->add("special/success",1);
+				me->delete_temp("special");
+				me->set_skill(skill,1);
+				return 1;
+			}
+			else
+			{
+				write(HIR"可能是根基不足，你尝试创造新绝学，可惜没有什么进展。\n"NOR);
+				me->add("special/exp",50);
+				me->add("special/fail",1);
+				return 1;
+			}
+		}
+
+		write(HIY"创造武林绝学，不管成败与否将会使你的内力尽溃，气血逆行，如果你\n"
+			 "已经准备好了，请再一次输入这个指令。\n"NOR);
+		me->set_temp("pending/special",1);
+		return 1;
+	}
+	if(arg && sscanf(arg,"%s at %d %s",type,lvl,msg) == 3)
+	{
+		if(!MINE_D->create_skill(type))
+			return notify_fail("你的脑子一片混乱，似乎天下武学中并没有这种技能。\n");
+
+		if(type == "force")
+			return notify_fail("你不需要为这种技能创造招式。\n");
+
+		if(lvl < 1 || lvl > 8)
+			return notify_fail("独门技能共分八层，最低为一层。\n");
+
+		if(!MINE_D->valid_skill_msg(me,msg))
+			return 1;
+
+		write(sprintf("你开始揣摩第%s层招式。\n",chinese_number(lvl)));
+		msg = replace_string(msg,"\"","＂");
+		me->set_temp("special/"+ lvl,msg);
+		if(type != "dodge")
+		{
+			msg = replace_string(msg,"$N",HIC"你"NOR);
+			msg = replace_string(msg,"$n",HIR"对手"NOR);
+			msg = replace_string(msg,"$w",HIY"兵器"NOR);
+			msg = replace_string(msg,"$l",HIG"胸口"NOR);
+		}
+		else
+		{
+			msg = replace_string(msg,"$n",HIC"你"NOR);
+			msg = replace_string(msg,"$N",HIR"对手"NOR);
+		}
+		write(sprintf(WHT"\n第%s层招式预览：\n\n"NOR"%s\n",
+			chinese_number(lvl),msg));
+		return 1;
+	}
+	else return help(me);
+
+
+	return 1;
+}
+
+int help(object me)
+{
+	write(@HELP
+指令格式：sponsor <技能类别> == <技能名字>
+	  sponsor <技能类别> at <技能层次> <招式描述>
+
+这个指令是让你在达到一定武学修为以后，自行创造新绝学。创造绝学的
+成功率视个人创招经验而定，不管创招成败与否，都将会消耗完你的内力
+，精神和气血，每次创招，必须有1000点潜能的潜能做为支持。招式描述
+不支持颜色，但支持以下特定的字符。（除特定字符外，其他字符则无法
+显示）
+
+$N	招式中显示你的名字
+$n	招式中显示对手的名字
+$w	招式中，如果你使用了兵器则显示兵器的名字
+$l	招式中攻击对手的部位
+
+示例：
+
+sponsor sword at 1 $N飞起一剑，刺向$n的$l，只见$w飞速旋转，甚是奇妙。
+
+创建后的招式的第一层描述则显示为：
+
+你飞起一剑，刺向对手的胸口，只见长剑飞速旋转，甚是奇妙。
+
+注意：如果是创建轻功描述，$N则代表对手，$n则代表你自己。和创建攻
+击技能描述是不同的。
+HELP );
+	return 1;
+}

@@ -1,0 +1,201 @@
+//modify by robert
+// show.c
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+int do_show(object me,object ob);
+string inventory_desc(object ob,object me);
+
+int main(object me, string arg)
+{
+	object obj,env;
+	object *inv;
+
+	if(me->is_busy())
+		return notify_fail("你正忙着呢！\n");
+
+	if(me->is_fighting())
+		return notify_fail("你正忙着呢！\n");
+
+	if(me->query("career") != "小偷")
+		return notify_fail("你不具备窥窃的能力。\n");
+
+	if(!arg || arg == "")
+		return notify_fail("你要窥窃谁？\n");
+
+	env = environment(me);
+
+	if(env->query("no_fight") || env->query("no_steal"))
+		return notify_fail("这里由不得你放肆。\n");
+	
+	if(me->query_skill("stealing",1) < 50)
+		return notify_fail("你的妙手空空造诣太浅，还是先把手上的功夫练好了再说吧。\n");
+
+	if(me->query("jing") < 500)
+		return notify_fail("你现在精神不好，还是休息一会再说吧。\n");
+
+	if(!objectp(obj = present(arg,environment(me))))
+		return notify_fail("你要窥窃谁？\n");
+	
+	if(!obj->is_character())
+		return notify_fail(obj->name()+"什么好窥窃的？\n");
+
+	if(obj->query("not_living"))
+		return notify_fail("搞清楚，那不是活人，有什么好窥窃的？\n");
+
+	if(!obj->query("can_speak"))
+		return notify_fail("畜生身上有什么好窥窃的？\n");
+	
+	if(wizardp(obj) && !wizardp(me))
+		return notify_fail("你要窥窃谁？\n");
+	
+	
+	write(sprintf("你轻手轻脚，慢慢的向%s身边靠拢，企图窥窃%s身上的物品。\n",obj->name(),obj->name()));
+	
+	message("vision",me->name() +"轻手轻脚，慢慢的向"+ obj->name()+"身边靠拢，眼睛贼兮兮的盯着"+ obj->name()+"......\n",
+		environment(me),({ me,obj }));
+
+	me->receive_damage("jing",100);
+	if(random(me->query_skill("stealing",1)) > obj->query("level") / 2)
+	{
+	
+		inv = all_inventory(obj);
+		if(!sizeof(inv))
+		{
+			write(sprintf("你往%s身上扫了一遍，发现%s身上一点东西都没有。\n",
+				obj->name(),
+				obj->query("gender") == "女性" ? "她" : "他"));
+			me->start_busy(3);
+			return 1;
+		}
+		do_show(me,obj);
+		return 1;
+	}
+	else
+	{
+		write(HIR"\n糟糕！被"+ obj->name() +HIR"发现了！\n\n"NOR);
+		switch(random(5))
+		{
+			case 1:
+				message_vision("$N发现$n眼睛正贼溜溜的盯着自己，连忙把衣兜拉好，走开一边去。\n",obj,me);
+				me->receive_damage("jing",200);
+				break;
+			case 2:
+				message_vision("$N发现$n正不怀好意的盯着自己，不禁怒火中烧，指着$n开口便骂：看什么看？滚！\n"
+				               "$n连忙缩到一边去，甚是狼狈。\n",obj,me);
+				
+				me->receive_damage("jing",250);
+				break;
+			case 3:
+				message_vision("$N眼明手快，一手揪住$n的脖子，一手挥拳便要打去，只见$n连忙跪倒在地上，哆嗦道：\n"
+					       RANK_D->query_respect(obj) +"饶命，小的..再也不..不敢了，小的再也不敢了.....\n",obj,me);
+				
+				me->receive_damage("jing",250);
+				break;
+			case 4:
+				message_vision("$N眼疾手快，揪住$n的衣领喝道："+ RANK_D->query_self_rude(obj) +"正想找个人对对火呢。\n",
+						obj,me);
+				if( playerp(obj) && !obj->is_want_kill(me->query("id")))
+					me->want_kill(obj);
+				me->kill_ob(obj);
+				obj->kill_ob(me);
+				break;
+			default:
+				message_vision("谁料$N早已发现了$n的意图，随手之间"HIW"“啪”"NOR"的一声便赏了$n一记耳光。\n"
+				               "$n自知理亏，连忙退到一边，大气都不敢出一声。\n",obj,me);
+				me->receive_damage("jing",300);
+				break;
+		}
+		me->start_busy(5);
+		return 1;
+	}
+}
+int do_show(object me,object ob)
+{
+        object *inv,*muti,*obs;
+        int n;
+        string output;
+        mixed groups;
+
+        inv = all_inventory(ob);
+        if( !sizeof(inv) )
+        {
+                write((ob==me)? "目前你身上没有任何物品。\n"
+                        : ob->name() + "身上没有携带任何物品。\n");
+                return 1;
+        }
+
+	obs = filter_array(inv,(: !$1->query("equipped") :));
+        output = sprintf("你发现%s的身上正携带了%s件物品：\n",
+                ob->name(),
+                chinese_number(sizeof(obs)));
+
+        muti = filter_array(inv,(: !$1->is_character()
+                                && !$1->query("equipped")
+                                && !$1->query_amount()
+                                && !$1->query_temp("is_rided_by") :));
+        if(sizeof(muti))
+        {
+                inv -= muti;
+                groups = unique_array(muti,(: sprintf("%s%s",base_name($1),$1->name()) :));
+        }
+
+        n = sizeof(inv);
+        for(int i=0;i<n;i++)
+        {
+                if(inv[i]->is_character() && me->visible(inv[i]))
+                        output += sprintf("  %s\n",inv[i]->short());
+                else if(inv[i]->query("equipped")
+                        || inv[i]->query_amount()
+                        || inv[i]->query_temp("is_rided_by"))
+                        output += inventory_desc(inv[i],ob);
+        }
+
+        if(sizeof(groups))
+        {
+                foreach(object *group in groups)
+                {
+                        if( group[0]->query("no_show")) output += "";
+                        else if( (n=sizeof(group)) == 1)
+                                output += sprintf("  %s\n",group[0]->short());
+                        else
+                                output += sprintf("  %s%s%s\n",chinese_number(n),
+                                        group[0]->query("unit"),
+                                        group[0]->query("base_cname")?
+                                        sprintf("%s(%s)",group[0]->query("base_cname"),
+                                        capitalize(group[0]->query("id"))):
+                                        group[0]->short());
+                }
+        }
+
+        write(output);
+        return 1;
+}
+
+string inventory_desc(object ob,object me)
+{
+        return sprintf("%s%s\n",
+                ( ob->query("equipped")
+                || ob->query_temp("is_rided_by"))?
+                        ((ob == me->query_temp("is_riding"))?
+                        HIG "□" NOR:
+                        HIC "□" NOR):
+                        "  ",
+                ob->short()
+        );
+}
+
+int help(object me)
+{
+	write(@TEXT
+
+指令格式：show <目标id>
+
+说明：这个指令是职业小偷用来窥窃行窃对象身上物品所用，当然也会有
+失手的时候，这就要看你在行窃方面的造诣如何了。
+
+TEXT);
+	return 1;
+}

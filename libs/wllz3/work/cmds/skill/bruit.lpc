@@ -1,0 +1,103 @@
+// bruit.c
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+void create() { seteuid(getuid()); }
+
+int main(object me, string arg)
+{
+	string skill,student;
+	object ob;
+	int my_skill,hard;
+	mapping info;
+
+	if (me->is_busy())
+		return notify_fail("你现在正忙着呢。\n");
+
+	if(!arg || (sscanf(arg, "%s %s", student, skill)!=2 ))
+		return notify_fail("指令格式：bruit <某人> <技能>\n");
+
+	if(me->is_fighting())
+		return notify_fail("临阵磨枪？来不及啦。\n");
+
+	if(!objectp(ob = present(student, environment(me)))
+		|| !ob->is_character() || !playerp(ob))
+		return notify_fail("你要向谁传授武功？\n");
+
+	if( ob == me )
+		return notify_fail("你不能向自己传授武功。\n");
+
+	if( !living(ob))
+		return notify_fail("嗯....你得先把" + ob->name() + "弄醒再说。\n");
+
+	if (ob->is_busy())
+		return notify_fail(ob->name() + "现在正忙着呢。\n");
+
+	if( ob->is_fighting())
+		return notify_fail("临阵磨枪？来不及啦。\n");
+
+	if(!my_skill = me->query_skill(skill, 1) )
+		return notify_fail("这项技能你还不会呢！\n");
+
+	if(my_skill < 200)
+		return notify_fail("你对"+ to_chinese(skill)+"一知半解，就想传授给其他人？\n");
+
+	if(SKILL_D(skill)->type() != "sponsor")
+		return notify_fail("这种技能不能传授。\n");
+
+	if(ob->query_skill(skill,1) > 0)
+		return notify_fail(ob->name() + "已经掌握了「"+ to_chinese(skill)+"」的要领。\n");
+
+	if(!SKILL_D(skill)->valid_learn(ob))
+		return notify_fail("依" + ob->name() + "目前的能力，没有办法学习这种技能。\n");
+
+	if(me->query("neili") < 2000 || me->query("max_neili") < 2000)
+		return notify_fail("你现在内力不足，无法向他人传授技能。\n");
+
+	if(ob->query("neili") < 2000 || ob->query("max_neili") < 2000)
+		return notify_fail(ob->name()+"现在的内力修为不足，无法学习这种技能。\n");
+
+	if(!mapp(info = SKILL_D(skill)->query_info()))
+		return notify_fail("这种技能无主无根，不能传授。\n");
+
+	if( ob->query("env/no_learn"))
+		return notify_fail("但是" + ob->name() + "现在并不准备听你解释问题。\n");
+
+	if(info["master_id"] == me->query("id"))
+		hard = my_skill * 80 / 100;
+	else
+		hard = my_skill * 60 / 100;
+
+	message_vision("$N向$n解释关于「"+ to_chinese(skill) +"」的疑问。\n",me,ob);
+
+	ob->set_skill(skill,1);
+	write(sprintf(HIG"%s听了你的指导，对「%s」已经有所领悟了。\n"NOR,
+		ob->name(),to_chinese(skill)));
+	tell_object(ob,sprintf(HIC"你听了%s的指导，对「%s」似乎已经有所领悟了。\n"NOR,
+		me->name(),to_chinese(skill)));
+	ob->add("neili",-2000);
+
+	me->set_skill(skill,hard);
+	write(sprintf(HIR"你的「%s」修为降低了。\n"NOR,to_chinese(skill)));
+	me->add("neili",-2000);
+
+	return 1;
+}
+
+int help(object me)
+{
+	write(@HELP
+
+指令格式：bruit <某人> <技能>
+
+这个指令可以让你向玩家传授自创类的技能。当你的自创技能达到 200 级
+以后，可以传授给游戏中的玩家。每传授一次，你自身对这种技能的修为
+将会降低。
+
+其他相关指令 : apprentice, practice, skills, study, learn
+HELP
+	);
+	return 1;
+}

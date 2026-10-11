@@ -1,0 +1,167 @@
+// score.c
+
+#include <ansi.h>
+#include <combat.h>
+
+inherit F_CLEAN_UP;
+
+int main(object me, string arg)
+{
+	mapping my;
+	mapping prepare;
+	object ob;
+	object weapon;
+	string line, skill_type;
+	int attack_points, dodge_points, parry_points;
+
+	if(me->is_busy())
+		return notify_fail("你正忙着呢。\n");
+
+	if(!arg)
+		ob = me;
+	else if(wizardp(me))
+	{
+		ob = present(arg, environment(me));
+		if (!ob || !ob->is_character()) ob = find_player(arg);
+		if (!ob || !ob->is_character()) ob = find_living(arg);
+		if (!ob || !ob->is_character())
+			return notify_fail("你要察看谁的状态？\n");
+	}
+	else
+		return notify_fail("你要察看谁的状态？\n");
+	my = ob->query_entire_dbase();
+	line =  sprintf("\n%-20s\n",RANK_D->query_rank(ob) + ob->short(1));
+
+	line += "╔─────────────────────────╗\n";
+
+	line += sprintf("│姓名：%-10s 年龄：%-10s 性别：%-10s│\n",
+		my["name"],chinese_number(my["age"]),my["gender"]);
+
+	line += sprintf("│门派：%-10s 师承：%-10s 辈份：%-10s│\n",
+		my["family"]?my["family"]["family_name"]:"不详",
+		my["family"]?my["family"]["master_name"]:"不详",
+		my["family"]?"第" + chinese_number(my["family"]["generation"])+"代":"不详",);
+
+	line += sprintf("│婚姻：%-8s   通缉：%s%-8s"NOR"   职业：%-8s  │\n",
+		my["marry"]? my["marry"]["name"]:"尚未婚配",
+		ob->is_want_now() ? HIR : HIC,
+		ob->is_want_now() ? "有效": "无效",
+		undefinedp(my["career"]) ?"无职业":my["career"]);
+
+	line += "│                                                  │\n";
+	line += sprintf("│人物等级："HIC"%-8d"NOR"武学评价：%-8s          │\n",
+		my["level"],
+		my["is_zongshi"]?HIW"武林宗师"NOR:
+		EVALUA_D->user_level(my["level"]));
+	line += "│                                                  │\n";
+	line += sprintf("│臂力「"WHT"%3d"NOR"／"WHT"%3d"NOR"」      五行属性："HIY"%-8s"NOR"          │\n",
+			my["str"],
+			ob->query_str(),
+			my["attributive"]["att"]);
+
+	line += sprintf("│才智「"WHT"%3d"NOR"／"WHT"%3d"NOR"」      五行所克："HIR"%-8s"NOR"          │\n",
+			my["int"],
+			ob->query_int(),
+			my["attributive"]["con"]);
+
+	line += sprintf("│体质「"WHT"%3d"NOR"／"WHT"%3d"NOR"」      五行所生："HIY"%-8s"NOR"          │\n",
+			my["con"],
+			ob->query_con(),
+			my["attributive"]["raw"]);
+
+	line += sprintf("│魅力「"WHT"%3d"NOR"／"WHT"%3d"NOR"」      五行被克："HIR"%-8s"NOR"          │\n",
+			my["per"],
+			ob->query_per(),
+			my["attributive"]["for"]);
+
+	line += sprintf("│运气「"WHT"%3d"NOR"／"WHT"%3d"NOR"」      实战经验："HIG"%-10d"NOR"        │\n",
+			my["kar"],
+			ob->query_kar(),
+			my["exp_cost"]["exp"]);
+
+	line += sprintf("│灵性「"WHT"%3d"NOR"／"WHT"%3d"NOR"」      升级经验："HIG"%-10d"NOR"        │\n",
+			my["spi"],
+			ob->query_spi(),
+			ob->level_exp_limit());
+
+	line += sprintf("│身法「"WHT"%3d"NOR"／"WHT"%3d"NOR"」      历练潜能："HIG"%-10d"NOR"        │\n",
+			my["dex"],
+			ob->query_dex(),
+			my["potential"]);
+
+	line += sprintf("│定力「"WHT"%3d"NOR"／"WHT"%3d"NOR"」      潜能上限："HIG"%-10d"NOR"        │\n",
+			my["cor"],
+			ob->query_cor(),
+			ob->max_potential());
+
+	line += sprintf("│勇气「"WHT"%3d"NOR"／"WHT"%3d"NOR"」      属性分配："HIY"%-10d"NOR"        │\n",
+			my["cou"],
+			ob->query_cou(),
+			my["exp_cost"]["points"]);
+
+	line += "│                                                  │\n";
+
+
+	prepare = ob->query_skill_prepare();
+        if(objectp(weapon = ob->query_temp("weapon")))
+                skill_type = weapon->query("skill_type");
+        else if (! prepare || sizeof(prepare) == 0)
+        	skill_type = "unarmed";
+        else if (sizeof(prepare) == 1)
+        	skill_type = (keys(prepare))[0];
+        else if (sizeof(prepare) == 2)
+                skill_type = (keys(prepare))[ob->query_temp("action_flag")];
+
+	attack_points = COMBAT_D->skill_power(ob, skill_type, SKILL_USAGE_ATTACK);
+	if( attack_points < 1) attack_points = 1;
+	parry_points = COMBAT_D->skill_power(ob, skill_type, SKILL_USAGE_DEFENSE);
+	if( parry_points < 1) parry_points = 1;
+	dodge_points = COMBAT_D->skill_power(ob, "dodge", SKILL_USAGE_DEFENSE);
+	if( dodge_points < 1) dodge_points = 1;
+
+	line += sprintf("│战斗系数："HIY"%-10d"NOR"  防御系数："HIY"%-10d"NOR"        │\n",
+		attack_points + 1,
+		(dodge_points>parry_points?dodge_points:parry_points) + 1);
+
+	line += sprintf("│%s："HIY"%-10d"NOR"  防御能力："HIY"%-10d"NOR"        │\n",
+			weapon ? "物理攻击": "徒手攻击",
+			weapon ? ob->query_temp("apply/damage")
+			: ob->query_temp("apply/unarmed_damage"),
+			ob->query_temp("apply/armor"));
+	line += "│                                                  │\n";
+	line += sprintf("│江湖仇杀："HIR"%-10d"NOR"杀人次数："HIR"%-10d"NOR"        │\n",
+			my["combat"]["MKS"],
+			my["combat"]["PKS"]);
+
+	line += sprintf("│被害次数："HIR"%-10d"NOR"  罪魁祸首："HIR"%-14s"NOR"    │\n",
+			my["combat"]["VKS"],
+			undefinedp(my["my_pker"])?"不详":
+			clean_color(my["my_pker"])[0..7]);
+	line += "│                                                  │\n";
+	line += sprintf("│善 恶 度：%s%-10d"NOR"  杀 气 值：%s%-10d"NOR"        │\n",
+		ob->is_good() ? HIC:HIM,my["shen"],my["bellicosity"] > (my["max_neili"] + my["neili"])?HIM:HIC,
+		my["bellicosity"]);
+
+	line += sprintf("│江湖阅历："HIC"%-10d"NOR"  江湖威望："HIC"%-10d"NOR"        │\n"NOR,
+		my["score"],my["weiwang"]);
+	line += "╚─────────────────────────╝\n";
+	write(line);
+	return 1;
+}
+
+
+int help(object me)
+{
+	write(@HELP
+指令格式 : score
+	   score <对象名称>                (巫师专用)
+
+这个指令可以显示你(你)或指定对象(含怪物)的基本资料。
+基本资料的设定请参阅 'help feature'。
+
+see also : hp
+HELP
+	);
+	return 1;
+}
+

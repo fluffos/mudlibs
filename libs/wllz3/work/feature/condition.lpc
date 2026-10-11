@@ -1,0 +1,190 @@
+// 本文件由编译后的 .b 二进制程序反编译还原，原始源码未随档案发布。
+// Decompiled from the compiled .b binary; the original source was not distributed.
+string query_last_applyer_name();
+string query_last_applyer_id();
+mapping query_entire_dbase();
+mapping query_entire_temp_dbase();
+mixed set(mixed, mixed);
+mixed set_vector(mixed, mixed, mixed);
+varargs mixed query(mixed, mixed);
+mixed add(mixed, mixed);
+int delete(mixed);
+mixed set_temp(mixed, mixed);
+mixed set_temp_vector(mixed, mixed, mixed);
+varargs mixed query_temp(mixed, mixed);
+mixed add_temp(mixed, mixed);
+int delete_temp(mixed);
+private object get_cnd_object(mixed);
+nomask void clear_condition(mixed);
+nomask int update_condition();
+nomask void apply_condition(mixed, mixed);
+nomask mixed query_condition(mixed);
+nomask mixed query_last_applyer(mixed);
+nomask string query_condition_name(mixed);
+nomask int dispel_condition(mixed, mixed);
+nomask int affect_by(mixed, mixed);
+
+nosave string last_applyer_name;
+nosave string last_applyer_id;
+mapping cond_applyer;
+mapping conditions;
+
+string query_last_applyer_name() {
+    return last_applyer_name;
+}
+
+string query_last_applyer_id() {
+    return last_applyer_id;
+}
+
+private object get_cnd_object(mixed arg) {
+    mixed v1;
+    mixed v2;
+    v2 = find_object("/kungfu/condition/" + arg);
+    if (!v2) {
+        v1 = catch {
+    v2 = find_object("/kungfu/condition/" + arg, 1);
+};
+        if (v1 || !v2) {
+            log_file("condition.err", sprintf("Failed to load condition daemon %s, removed from %O\nError: %s\nCurrent conditions:%O\n", "/kungfu/condition/" + arg, this_object(), v1, conditions));
+        }
+    }
+    return v2;
+}
+
+nomask void clear_condition(mixed arg) {
+    if (!arg) {
+        conditions = 0;
+        cond_applyer = 0;
+        last_applyer_name = 0;
+        last_applyer_id = 0;
+    } else if (conditions) {
+        map_delete(conditions, arg);
+        if (!sizeof(conditions)) {
+            conditions = 0;
+        }
+        if (cond_applyer) {
+            map_delete(cond_applyer, arg);
+            if (!sizeof(cond_applyer)) {
+                cond_applyer = 0;
+            }
+        }
+    }
+}
+
+nomask int update_condition() {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    mixed v6;
+    if (!mapp(conditions)) {
+        return 0;
+    }
+    if (!(v3 = sizeof(conditions))) {
+        conditions = 0;
+        cond_applyer = 0;
+        return 0;
+    }
+    v1 = keys(conditions);
+    v5 = 0;
+    while (v3--) {
+        v6 = get_cnd_object(v1[v3]);
+        if (!v6) {
+            if (v1[v3]) {
+                clear_condition(v1[v3]);
+            }
+            continue;
+        }
+        if (cond_applyer && (v2 = cond_applyer[v1[v3]])) {
+            last_applyer_id = v2[0];
+            last_applyer_name = v2[1];
+        } else {
+            last_applyer_id = 0;
+            last_applyer_name = 0;
+        }
+        v4 = v6->update_condition(this_object(), conditions[v1[v3]]);
+        if (!conditions) {
+            v5 |= v4;
+            break;
+        }
+        if (!(v4 & 1)) {
+            clear_condition(v1[v3]);
+        }
+        v5 |= v4;
+    }
+    return v5;
+}
+
+nomask void apply_condition(mixed arg1, mixed arg2) {
+    mixed v1;
+    if (!stringp(arg1)) {
+        log_file("condition.err", sprintf("Error to apply condition(%O) from object(%O) with info(%O)\n", arg1, previous_object(), arg2));
+        return;
+    }
+    if (!mapp(conditions)) {
+        conditions = ([ arg1 : arg2 ]);
+    } else {
+        conditions[arg1] = arg2;
+    }
+    if (objectp(v1 = this_player()) && v1 != this_object() && userp(v1)) {
+        if (!mapp(cond_applyer)) {
+            cond_applyer = ([ arg1 : ({ v1->query("id"), v1->name(1) }) ]);
+        } else {
+            cond_applyer[arg1] = ({ v1->query("id"), v1->name(1) });
+        }
+    }
+    set_heart_beat(1);
+}
+
+nomask mixed query_condition(mixed arg) {
+    if (!arg) {
+        return conditions;
+    }
+    if (!mapp(conditions) || undefinedp(conditions[arg])) {
+        return 0;
+    }
+    return conditions[arg];
+}
+
+nomask mixed query_last_applyer(mixed arg) {
+    if (!arg) {
+        return cond_applyer;
+    } else {
+        if (!mapp(cond_applyer)) {
+            return 0;
+        }
+        return cond_applyer[arg];
+    }
+}
+
+nomask string query_condition_name(mixed arg) {
+    mixed v1;
+    if (!(v1 = get_cnd_object(arg))) {
+        log_file("condition.err", sprintf("%O query condition %s\n", this_object(), "/kungfu/condition/" + arg));
+        return 0;
+    }
+    return v1->cnd_name();
+}
+
+nomask int dispel_condition(mixed arg1, mixed arg2) {
+    mixed v1;
+    if (!(v1 = get_cnd_object(arg2))) {
+        log_file("condition.err", sprintf("%O try to dispel %O %s\n", arg1, this_object(), "/kungfu/condition/" + arg2));
+        return 0;
+    }
+    return v1->dispel(arg1, this_object(), conditions[arg2]);
+}
+
+nomask int affect_by(mixed arg1, mixed arg2) {
+    mixed v1;
+    if (!(v1 = get_cnd_object(arg1))) {
+        log_file("condition.err", sprintf("%O affect by %s:%O\n", this_object(), "/kungfu/condition/" + arg1, arg2));
+        return 0;
+    }
+    if (!arg2) {
+        arg2 = this_object()->query_temp("para");
+    }
+    return v1->do_effect(this_object(), arg1, arg2);
+}

@@ -1,0 +1,180 @@
+// recall.c
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+int help(object me);
+
+int main(object me, string arg)
+{
+	object ob,env;
+	object guard;
+	mapping my_guard;
+
+	if( !arg )
+		return help(me);
+
+	if( me->is_fighting())
+		return notify_fail("你现在正在战斗！\n");
+
+	if( me->is_busy())
+		return notify_fail("你现在正忙着呢。\n");
+
+	if( me->query("jing") < 40)
+		return notify_fail("你现在精神太差，无法进行召唤。\n");
+
+	if( me->query("brawn") < 40)
+		return notify_fail("你太累了，无法进行召唤。\n");
+
+	if( me->query("neili") < 50)
+		return notify_fail("你的内力不足，无法进行召唤。\n");
+
+	if(me->is_ghost())
+		return notify_fail("你现在什么也召唤不了。\n");
+
+	env = environment(me);
+
+	if(!wizardp(me) && env->is_chat_room())
+		return notify_fail("你不能在这里进行召唤。\n");
+
+	if(!env || !mapp(env->query("exits")))
+		return notify_fail("你在这里召唤，恐怕没什么效果。\n");
+
+	if(arg == "horse" || arg == "my horse")
+	{
+		message_vision("$N吹了一声响亮的口哨，试图召唤$P的独门坐骑.......\n",me);
+		me->receive_damage("jing",20);
+		me->add("brawn",-30);
+
+		if(!me->query("item/horse"))
+			return notify_fail("结果什么用也没有。\n");
+
+		if(!objectp(ob = me->query_temp("item/horse")))
+			return notify_fail("恐怕它已经遭遇不幸，你的召唤迟迟没有得到回应。\n");
+
+		if(environment(ob) == env || present(ob,me))
+		{
+			message_vision(HIC"$n"HIC"很是高兴的看着$N，又是嘶鸣又是甩着尾巴。\n"NOR,me,ob);
+			return 1;
+		}
+
+		message_vision(HIW"\n只听见一阵烈马的嘶鸣声，$n"HIW"突然出现在$N的面前。\n\n"NOR,me,ob);
+		ob->move(env);
+		return 1;
+	}
+
+	if(arg == "weapon" || arg == "my weapon")
+	{
+		message_vision("$N双眼紧闭，默运神功，试图以内劲召唤$P的独门兵刃。\n",me);
+		me->receive_damage("jing",20);
+		me->add("brawn",-30);
+		me->add("neili",-50);
+
+		if(!me->query("item/weapon"))
+			return notify_fail("结果什么用也没有。\n");
+
+		if(!objectp(ob = me->query_temp("item/weapon")))
+			return notify_fail("恐怕它已经不存在于这个空间，你的召唤迟迟没有得到回应。\n");
+
+		if(environment(ob) == env || present(ob,me))
+		{
+			message_vision(HIC"$n"HIC"发出一阵嗡嗡嗡的轰鸣，蠢蠢欲动，似乎对$N的召唤有所感应。\n"NOR,me,ob);
+			return 1;
+		}
+
+		if(environment(ob))
+			tell_room(environment(ob),HIW"\n只听那"+ ob->name() +HIW"发出一阵嗡嗡的蜂鸣，一会又渐渐的向上漂浮，忽然“嗖”的\n"
+						  "一声，似流星般向天空中飞去，随即不见了踪影。\n\n"NOR);
+			
+		message_vision(HIY"\n一道耀眼的金芒突然出现在"+ env->short() + HIY"上空，绕着"+ env->short() + HIY"不断的盘旋。突然，\n"
+				     "那金芒缩成一道光束，急速落在$N的跟前，原来，那正是$N的$n"HIY"。\n\n"NOR,me,ob);
+		ob->move(env);
+		return 1;
+	}
+	if( arg == "guarder" || arg == "保镖")
+	{
+		if(!mapp(my_guard = me->query("my_guard")))
+			return notify_fail("你还没有聘请任何保镖！\n");
+		
+		if(my_guard["employ_time"] <= me->query("mud_age"))
+		{
+			me->delete("my_guard");
+			return notify_fail("你和镖局的聘约已经到期了，哪来的保镖啊？\n");
+		}
+		if(!undefinedp(my_guard["dead"]))
+			return notify_fail("你请来的保镖已经遇害了，莫非你想召魂？\n");
+
+		message_vision("$N施展内功心法，运用千里传音之技，试图将自己的保镖召回来！\n",me);
+		
+		me->add("brawn",-50);
+		if(objectp(guard = me->query_temp("recall_guard")))
+		{
+			if(environment(me)->query("pk_room"))
+				return notify_fail("擂台上召唤保镖？这可不行。\n");
+
+			if(environment(guard) == environment(me))
+			{
+				message_vision("$N对着$n一抱拳，说道：主子有何吩咐，属下听从差遣。\n",guard,me);
+				return 1;
+			}
+			if(guard->is_fighting())
+				return notify_fail(guard->name() +"正在战斗，可能无法回应你的召唤。\n");
+			if(guard->is_busy())
+				return notify_fail(guard->name() +"正忙着呢，可能无法回应你的召唤。\n");
+			if(!living(guard))
+				return notify_fail("你试着把"+ guard->name() +"召回来，可是迟迟没有反应。\n");
+			
+			switch(guard->query("attibute"))
+			{
+				case "heroism":
+					if(random(7) > 3)
+					{
+						guard->move(environment(me));
+						message_vision("$N急急忙忙的走了过来，对着$n一抱拳道：主子有何吩咐，属下听从差遣。\n",guard,me);
+					}
+					else
+						write("你试着把"+ guard->name() +"召回来，可惜迟迟没有音讯。\n");
+					break;
+				case "killer":
+					if(random(3) < 2)
+					{
+						guard->move(environment(me));
+						message_vision("$N大步流星的奔来，对着$n一抱拳道：主子有何吩咐，属下听从差遣。\n",guard,me);
+					}
+					else
+						write("你试着把"+ guard->name() +"召回来，可惜迟迟没有音讯。\n");
+					break;
+				default:
+					if(random(10) >= 7)
+					{
+						guard->move(environment(me));
+						message_vision("$N大步流星的奔来，对着$n一抱拳道：主子有何吩咐，属下听从差遣。\n",guard,me);
+					}
+					else
+						write("你试着把"+ guard->name() +"召回来，只听"+ guard->name() +"懒懒的应了一声：我这正忙着呢，一会再说。\n");
+					break;
+			}
+			return 1;
+		}
+		else
+		{
+			guard = new("/clone/npc/guarder");
+			guard->create_by(me);
+			return 1;
+		}
+	}
+}
+
+int help(object me)
+{
+	write(@HELP
+指令格式：recall [ horse | weapon | guarder]
+
+这个指令是让你可以召唤你的独门坐骑或兵刃、保镖，当它们与你不属于
+同一空间时。每次召唤都将会消耗一些体力和精神。
+
+HELP);
+
+	return 1;
+}

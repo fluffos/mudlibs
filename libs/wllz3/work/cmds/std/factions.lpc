@@ -1,0 +1,601 @@
+// factions.c
+
+#include <ansi.h>
+
+inherit F_CLEAN_UP;
+
+nosave int temp_load = 0;
+int help(object me);
+int main(object me,string arg)
+{
+	mapping info,fac;
+	string id,faction;
+	string msg,target;
+	string confer;
+	string *list;
+	object ob;
+	int i,h=0,a=0;
+
+	seteuid(geteuid());
+
+	if(arg == "list" )
+	{
+		info = FACTION_D->query_faction();
+		if(!sizeof(info))
+			return notify_fail("目前没有任何帮派信息。\n");
+
+		msg = "游戏中目前帮派信息如下：\n"
+		      "-----------------------------------------------------------------------\n";
+		foreach(id in keys(info))
+		{
+			msg += sprintf(CYN"帮派："NOR"%-8s"CYN"帮主："NOR"%-8s"CYN"副帮主："NOR"%-8s"CYN"成员："NOR"%-2d"CYN"声望："NOR"%-4d\n",
+				id,
+				info[id]["faction_master"],
+				info[id]["sec_master"],
+				info[id]["number"],
+				info[id]["score"]);
+		}
+		msg += "-----------------------------------------------------------------------\n";
+		me->start_more(msg);
+		return 1;
+	}
+	else if(arg == "info")
+	{
+		if(!mapp(fac = me->query("faction")))
+			return notify_fail("你还没有加入任何帮派。\n");
+
+		info = FACTION_D->query_faction_info(fac["faction_name"]);
+
+		if(!sizeof(info))
+			return notify_fail("没有这个帮派的记录，请联系巫师。\n");
+
+		msg = sprintf(CYN"%s目前状态如下：\n"NOR
+			      "------------------------------------------------------------\n",
+			      fac["faction_name"]);
+		foreach(id in keys(info))
+		{
+			msg += sprintf("%-20s身份：%-8s等级：%-3d\n"NOR,
+				info[id]["name"] + "(" + info[id]["id"] +")",
+				info[id]["identity"],
+				info[id]["level"]);
+		}
+		msg += "------------------------------------------------------------\n";
+		me->start_more(msg);
+		return 1;
+	}
+	else if(arg && sscanf(arg,"create %s",faction) == 1)
+	{
+		if(!me->is_member())
+			return notify_fail("抱歉，只有会员才可以创建帮派。\n");
+
+		if((int)me->query("level") < 150)
+			return notify_fail("你现在的等级不足以创建帮派。\n");
+
+		if((int)me->query("score") < 50000)
+			return notify_fail("你应该多到江湖上闯荡一番，才可以建立帮派。\n");
+
+		if((int)me->query("weiwang") < 50000)
+			return notify_fail("你的江湖威望太低了，恐怕没有人会服你。\n");
+
+		if(mapp(me->query("faction")))
+			return notify_fail("你已经有帮派了，必须退出帮派才可以创建新的帮派。\n");
+
+		i = strlen(faction);
+
+		if( (strlen(faction) < 4) || (strlen(faction) > 8))
+			return notify_fail("帮派名称必须是二到四个中文字。\n");
+
+		while(i--)
+		{
+			if(faction[i]<=' ')
+				return notify_fail("帮派名称请不要使用控制字元。\n");
+			if( i%2==0 && !is_chinese(faction[i..<0]) )
+				return notify_fail("请使用中文名字为你的帮派取名。\n");
+		}
+
+		if(FACTION_D->query_faction(faction))
+			return notify_fail("抱歉，这个帮派名称已经有人创建了。\n");
+
+		if(!MONEY_D->player_pay(me,500000000))
+			return notify_fail("创建帮派必须有五万两黄金，请先确认你有那么多钱。\n");
+
+		FACTION_D->map_add_faction(faction,me);
+		me->set("faction/faction_name",faction);
+		me->set("faction/master",1);
+		me->set("faction/identity","帮主");
+		CHANNEL_D->do_channel(find_object(MASTER_OB),"rumor",
+			sprintf("听说%s德高望重，天命所归，终于创建了%s。",
+				me->name(1),faction));
+		return 1;
+	}
+	else if(arg && sscanf(arg,"recruit %s",target) == 1)
+	{
+
+		if(!mapp(fac = me->query("faction"))
+		|| (!fac["master"]  && !fac["sec_master"]))
+			return notify_fail("只有帮主和副帮主才可以接收帮众。\n");
+
+		if(!objectp(ob = present(target,environment(me))))
+			return notify_fail("你要接收谁加入你的帮派？\n");
+
+		if(!playerp(ob))
+			return notify_fail("你只能接受玩家加入你的帮派。\n");
+
+		if(ob->query("faction"))
+		{
+			if(ob->query("faction/faction_name") == fac["faction_name"])
+				return notify_fail("对方已经是你的帮派成员。\n");
+			else
+				return notify_fail("对方已经加入了其他帮派，必须退会才再可以加入。\n");
+		}
+
+		if(me->query_temp("pending/faction_recruit") == ob)
+			return notify_fail("你正等待"+ ob->name()+"的答复。\n");
+
+		if(ob->query_temp("pending/faction_join") == me)
+		{
+			CHANNEL_D->do_channel(find_object(MASTER_OB),"rumor",
+						sprintf("听说%s由%s接引，成功加入了%s。",
+						ob->name(1),me->name(1),
+						me->query("faction/faction_name")));
+			ob->set("faction/faction_name",fac["faction_name"]);
+			ob->set("faction/identity","帮众");
+			FACTION_D->map_faction_info(fac["faction_name"],ob,"帮众");
+			ob->delete_temp("pending/faction_recruit");
+			me->delete_temp("pending/faction_join");
+			return 1;
+		}
+		else
+		{
+			message_vision("$N对$n在江湖中之威名仰慕已久，决定招募$n加入"+ fac["faction_name"] +"。\n",me,ob);
+			tell_object(ob,sprintf("如果你愿意加入%s的%s，请输入："WHT"factions join %s。\n"NOR,
+				me->name(),fac["faction_name"],
+				me->query("id")));
+			me->set_temp("pending/faction_recruit",ob);
+			return 1;
+		}
+	}
+	else if(arg && sscanf(arg,"join %s",target) == 1)
+	{
+		if(!objectp(ob = present(target,environment(me))))
+			return notify_fail("你要加入谁的帮派？\n");
+
+		if(!mapp(fac = ob->query("faction"))
+		|| (!fac["master"] && !fac["sec_master"]))
+			return notify_fail("对方没有加入任何帮派或对方无权收取帮众。\n");
+
+		if(mapp(me->query("faction")))
+		{
+			if(fac["faction_name"] == me->query("faction/faction_name"))
+				return notify_fail(ob->name()+"是你的帮派兄弟。\n");
+			else
+				return notify_fail("你必须脱离原有的帮派才可以加入新的帮派。\n");
+		}
+		if(me->query_temp("pending/faction_join") == ob)
+			return notify_fail("你正等待"+ ob->name()+"的同意。\n");
+
+		if(ob->query_temp("pending/faction_recruit") == me)
+		{
+			message_vision("$n恭恭敬敬的对$N磕了个响头，说道：参见帮主，"
+			        + RANK_D->query_self(me) + me->name(1) +"，愿与"
+			        + fac["faction_name"] +"\n"
+			        "同生共死，风雨同舟，永不离弃！\n\n",
+			        ob,me);
+			message_vision("$N拍了拍$n的肩膀，说道：好，好！！\n",ob,me);
+			me->set("faction/faction_name",fac["faction_name"]);
+			me->set("faction/identity","帮众");
+			ob->delete_temp("pending/faction_recruit");
+			me->delete_temp("pending/faction_join");
+			FACTION_D->map_faction_info(fac["faction_name"],me,"帮众");
+			CHANNEL_D->do_channel(find_object(MASTER_OB),"rumor",
+				sprintf("听说%s得以%s%s%s引荐，加入了%s！",
+					me->name(1),
+					fac["faction_name"],
+					ob->query("faction/identity"),
+					ob->name(1),
+					fac["faction_name"]));
+			return 1;
+		}
+		else
+		{
+			message_vision("$N对"+ fac["faction_name"] +"之威名仰慕已久，决心加入"
+				       + fac["faction_name"] +"。\n",me);
+			me->set_temp("pending/faction_join",ob);
+			tell_object(ob,sprintf("%s决心加入%s，如果同意，请输入："WHT"factions recruit %s\n"NOR,
+					me->name(),fac["faction_name"],me->query("id")));
+			return 1;
+		}
+	}
+	else if(arg && sscanf(arg,"expell %s",target) == 1)
+	{
+		if(!mapp(fac = me->query("faction")))
+			return notify_fail("你还是先加入帮派再说吧。\n");
+
+		if(!fac["master"] && !fac["sec_master"])
+			return notify_fail("只有帮主或副帮主才可以开除帮派成员。\n");
+
+		if(target == me->query("id"))
+			return notify_fail("你不能开除自己。\n");
+
+		info = FACTION_D->query_faction_info(fac["faction_name"]);
+		if(!sizeof(info))
+			return notify_fail("你的帮派信息还没有创建！\n");
+
+		if(undefinedp(info[target]))
+			return notify_fail("你的帮派中并没有这个玩家！\n");
+
+		info = FACTION_D->query_faction(fac["faction_name"]);
+		if(!sizeof(info))
+			return notify_fail("你的帮派信息还没有创建！\n");
+
+		if(info["faction_id"] == target	|| info["sec_id"] == target)
+			return notify_fail("此人有重任在身，必须先行解职才可以开除。\n");
+
+		if(objectp( ob = present(target,environment(me))))
+		{
+			if(!playerp(ob))
+				return notify_fail("你只能开除你帮派里的玩家。\n");
+
+			message_vision("$N冷冷的对$n说道：你我今日恩断义绝，分道扬镳。从今往后，"+ fac["faction_name"] +"和\n"
+		                       "你再没任何关系。\n",me,ob);
+		}
+		else if(objectp(ob = find_player(target)))
+			tell_object(ob,me->name() +"将你驱逐出"+ fac["faction_name"]+"，永不录用。\n");
+		else if(objectp(ob = UPDATE_D->load_player(target)))
+		{
+			message_vision("$N决定把$n逐出"+ fac["faction_name"] +"，永不录用。\n",me,ob);
+			temp_load = 1;
+		}
+
+		ob->delete("faction");
+		FACTION_D->remove_faction_info(fac["faction_name"],ob);
+		CHANNEL_D->do_channel(find_object(MASTER_OB),"rumor",
+			sprintf("听说%s被%s逐出了%s！",
+				ob->name(2),me->name(1),fac["faction_name"]));
+		if(temp_load && ob->save())
+			destruct(ob);
+		return 1;
+	}
+	else if(arg && sscanf(arg,"appoint %s",target) == 1)
+	{
+		if(!mapp(fac = me->query("faction")))
+			return notify_fail("你并没有加入任何帮派。\n");
+
+		if(!fac["master"])
+			return notify_fail("只有正帮主才可以任命副帮主。\n");
+
+		if(!objectp(ob = present(target,environment(me))))
+			return notify_fail("你要任命谁为副帮主？\n");
+
+		if(!ob->query("faction")
+		|| ob->query("faction/faction_name") != fac["faction_name"])
+			return notify_fail("对方并不是你的帮众，不能进行任命。\n");
+
+		info = FACTION_D->query_faction(fac["faction_name"]);
+
+		if(!sizeof(info))
+			return notify_fail("你的帮派信息还没有创建。\n");
+
+		if(ob->query("faction/sec_master"))
+			return notify_fail(ob->name()+"已经是帮派中的副帮主。\n");
+
+		ob->set("faction/identity","副帮主");
+		ob->set("faction/sec_master",1);
+		FACTION_D->modify_faction_info(fac["faction_name"],ob);
+		FACTION_D->map_faction_info(fac["faction_name"],ob,"副帮主");
+		CHANNEL_D->do_channel(find_object(FACTION_D),"faction",
+			sprintf("%s，%s委任%s为%s副帮主。",
+				CHINESE_D->chinese_monthday(time()),
+				me->name(1),ob->name(1),fac["faction_name"]));
+		return 1;
+	}
+	else if(arg && sscanf(arg,"layoff %s",target) == 1)
+	{
+		if(!mapp(fac = me->query("faction")))
+			return notify_fail("你并没有加入任何帮派。\n");
+
+		if(!fac["master"])
+			return notify_fail("只有副帮主才可以进行解任。\n");
+
+		info = FACTION_D->query_faction_info(fac["faction_name"]);
+
+		if(!sizeof(info))
+			return notify_fail("你的帮派信息并没有创建。\n");
+
+		if(undefinedp(info[target]))
+			return notify_fail("你的帮派中并没有这个人。\n");
+
+		info = FACTION_D->query_faction(fac["faction_name"]);
+
+		if(!sizeof(info))
+			return notify_fail("你的帮派信息并没有创建。\n");
+
+		if(info["sec_id"] != target)
+			return notify_fail(target +" 目前尚未有帮派职务。\n");
+
+		if(objectp(ob = present(target,environment(me))))
+			message_vision("$N解除了$n在"+ fac["faction_name"] +"的副帮主职务。\n",me,ob);
+		else if(objectp(ob = find_player(target)))
+			tell_object(ob,me->name(1)+"解除了你在"+ fac["faction_name"] +"的副帮主职务。\n");
+		else if(objectp(ob = UPDATE_D->load_player(target)))
+			temp_load = 1;
+
+		ob->delete("faction/sec_master");
+		ob->set("faction/identity","帮众");
+		FACTION_D->modify_faction_info(fac["faction_name"],0);
+		FACTION_D->map_faction_info(fac["faction_name"],ob,"帮众");
+		CHANNEL_D->do_channel(find_object(FACTION_D),"faction",
+			sprintf("%s，%s解除了%s副帮主的职务。",
+				CHINESE_D->chinese_monthday(time()),
+				me->name(1),ob->name(1)));
+
+		if(temp_load && ob->save())
+			destruct(ob);
+		return 1;
+	}
+	else if(arg && sscanf(arg,"%s for %s",confer,target) == 2)
+	{
+		if(!mapp(fac = me->query("faction")))
+			return notify_fail("你并没有加入任何帮派。\n");
+
+		if(!fac["master"] || fac["sec_master"])
+			return notify_fail("只有帮主或副帮主才能授予帮众头衔。\n");
+
+		if(!objectp(ob = present(target,environment(me))))
+			return notify_fail("你要授予谁头衔？\n");
+
+		if(ob->query("faction/faction_name") != fac["faction_name"])
+			return notify_fail("你只能授予自己帮派成员的头衔。\n");
+
+		i = strlen(confer);
+
+		if(i < 4 || i > 8)
+			return notify_fail("设置头衔只能在二到四个中文字。\n");
+
+		while(i--)
+		{
+			if(confer[i]<=' ')
+				return notify_fail("帮派头衔请不要使用控制字元。\n");
+			if( i%2==0 && !is_chinese(confer[i..<0]) )
+				return notify_fail("请使用中文来设置帮派头衔。\n");
+		}
+
+		message_vision("$N轻轻的拍了拍$n的肩膀，说道：从今日起，你就是我"+ fac["faction_name"] + confer +"了。\n"
+                               "希望你勤练武艺，为我派增光，耀我"+ fac["faction_name"] +"声威！\n",me,ob);
+		ob->set("faction/identity",confer);
+		FACTION_D->map_faction_info(fac["faction_name"],ob,confer);
+		return 1;
+	}
+	else if(arg && sscanf(arg,"hostile %s",target) == 1)
+	{
+		if(!mapp(fac = me->query("faction")))
+			return notify_fail("你还没有加入任何帮派。\n");
+
+		if(!fac["master"])
+			return notify_fail("只有正帮主才可以设置敌对帮派。\n");
+
+		if(!FACTION_D->query_faction(target))
+			return notify_fail("游戏中并没有这个帮派。\n");
+
+		if(target == fac["faction_name"])
+			return notify_fail("无法和自己的帮派敌对。\n");
+
+		list = FACTION_D->query_allied_faction(fac["faction_name"]);
+
+		if(sizeof(list) && member_array(target,list) != -1)
+			return notify_fail("你必须先取消了和这个帮派的联盟。\n");
+
+		list = FACTION_D->query_hostile_faction(fac["faction_name"]);
+
+		if(me->query_temp("pending/faction/hostile") == target)
+		{
+			FACTION_D->remove_hostile_faction(fac["faction_name"],target);
+			write("你取消了和"+ target +"之间的敌对关系。\n");
+			CHANNEL_D->do_channel(find_object(MASTER_OB),"rumor",
+				sprintf("听说%s和%s化干戈为玉帛，终止了敌对。",fac["faction_name"],target));
+			me->delete_temp("pending/faction/hostile");
+			return 1;
+		}
+		else if(sizeof(list) && member_array(target,list) != -1)
+		{
+			write(sprintf("%s和%s已经处于敌对状态，如需取消敌对，请再一次输入这个指令。\n",fac["faction_name"],target));
+			me->set_temp("pending/faction/hostile",target);
+			return 1;
+		}
+		else
+		{
+			FACTION_D->set_hostile_faction(fac["faction_name"],target);
+			write("你宣布和"+ target +"进入敌对状态。\n");
+			CHANNEL_D->do_channel(find_object(MASTER_OB),"rumor",
+				sprintf("听说%s和%s势不两立，从此为敌。"NOR,
+					fac["faction_name"],target));
+		}
+		return 1;
+	}
+	else if(arg && sscanf(arg,"allied %s",target) == 1)
+	{
+		if(!mapp(fac = me->query("faction")))
+			return notify_fail("你还没有加入任何帮派。\n");
+
+		if(!fac["master"])
+			return notify_fail("只有正帮主才可以设置敌对帮派。\n");
+
+		if(!FACTION_D->query_faction(target))
+			return notify_fail("游戏中并没有这个帮派。\n");
+
+		if(target == fac["faction_name"])
+			return notify_fail("无法和自己的帮派联盟。\n");
+
+		list = FACTION_D->query_hostile_faction(fac["faction_name"]);
+
+		if(sizeof(list) && member_array(target,list) != -1)
+			return notify_fail("你必须先取消了和这个帮派的敌对状态。\n");
+
+		list = FACTION_D->query_allied_faction(fac["faction_name"]);
+
+		if(me->query_temp("pending/faction/allied") == target)
+		{
+			FACTION_D->remove_allied_faction(fac["faction_name"],target);
+			write("你终止了和"+ target +"之间的联盟。\n");
+			CHANNEL_D->do_channel(find_object(MASTER_OB),"rumor",
+				sprintf("听说%s和%s解除了联盟。",fac["faction_name"],target));
+			me->delete_temp("pending/faction/allied");
+			return 1;
+		}
+		else if(sizeof(list) && member_array(target,list) != -1)
+		{
+			write(sprintf("%s和%s已经处于联盟状态，如需取消联盟，请再一次输入这个指令。\n",
+				fac["faction_name"],target));
+			me->set_temp("pending/faction/allied",target);
+			return 1;
+		}
+		else
+		{
+			FACTION_D->set_allied_faction(fac["faction_name"],target);
+			write("你宣布和"+ target +"进入联盟状态。\n");
+			CHANNEL_D->do_channel(find_object(MASTER_OB),"rumor",
+				sprintf("听说%s与%s共结联盟之好，从此互相扶持，互助互利。",
+					target,fac["faction_name"]));
+		}
+		return 1;
+	}
+	else if(arg == "out")
+	{
+		if(!mapp(fac = me->query("faction")))
+			return notify_fail("你并没有加入帮派。\n");
+
+		if(fac["master"] || fac["sec_master"])
+			return notify_fail("你有重任在身，不得私自脱离帮派。\n");
+
+		if(me->query_temp("pending/out_faction"))
+		{
+			CHANNEL_D->do_channel(find_object(MASTER_OB),"rumor",
+					sprintf("听说%s离开了%s，从今往后，与%s再无任何关系。",
+					me->name(1),fac["faction_name"],fac["faction_name"]));
+			FACTION_D->remove_faction_info(fac["faction_name"],me);
+			write(sprintf("你离开了%s，从今往后，无依无靠，无所牵挂，成为江湖中的自有人。\n",
+				fac["faction_name"]));
+			me->delete("faction");
+			me->add("weiwang",-1000);
+			me->delete_temp("pending/out_faction");
+		}
+		else
+		{
+			write(sprintf("你打算离开%s，如果你已经确定，请再一次输入这个指令。\n",
+				fac["faction_name"]));
+			me->set_temp("pending/out_faction",1);
+		}
+		return 1;
+	}
+	else if(arg == "dismiss")
+	{
+		if(!mapp(fac = me->query("faction")))
+			return notify_fail("你还是先加入一个帮派再说吧。\n");
+
+		if(!fac["master"])
+			return notify_fail("只有正帮主才可以解散帮派。\n");
+
+		if(!sizeof(FACTION_D->query_faction(fac["faction_name"])))
+			return notify_fail("你的帮派信息还没有创建。\n");
+
+		if(me->query_temp("pending/faction_dismiss"))
+		{
+			CHANNEL_D->do_channel(find_object(MASTER_OB),"rumor",
+				sprintf("天道循环，花开花谢，听说名躁一时的%s已经解散了。",
+				fac["faction_name"]));
+
+			info = FACTION_D->query_faction_info(fac["faction_name"]);
+
+			if(!sizeof(info))
+				return notify_fail("你的帮派详细资料还没有创建。\n");
+
+			foreach(id in keys(info))
+				UPDATE_D->clear_user_data(id,"faction");
+
+			FACTION_D->remove_faction_info(fac["faction_name"],me,"all");
+			FACTION_D->remove_faction(fac["faction_name"]);
+			write(sprintf("你把%s解散了，这个帮派从此在江湖上灰飞烟灭。\n",
+				fac["faction_name"]));
+			me->delete("faction");
+			me->delete_temp("pending/faction_dismiss");
+		}
+		else
+		{
+			write(sprintf("你打算解散了%s，如果确定解散，请再一次输入这个指令。\n",
+				fac["faction_name"]));
+			me->set_temp("pending/faction_dismiss",1);
+		}
+		return 1;
+	}
+	else if(arg == "status")
+	{
+		if(!mapp(fac = me->query("faction")))
+			return notify_fail("你还没有加入任何帮派。\n");
+
+		if(!FACTION_D->query_hostile_faction(fac["faction_name"])
+		&& !FACTION_D->query_allied_faction(fac["faction_name"]))
+			return notify_fail(fac["faction_name"]+"现在既无敌对帮派，也无联盟帮派。\n");
+
+		msg = fac["faction_name"] +"当前状态：\n"
+		      "----------------------------------------------------------------\n";
+		list = FACTION_D->query_hostile_faction(fac["faction_name"]);
+		if(!sizeof(list))
+			msg += HIR"敌对帮派："NOR"无\n\n";
+		else
+		{
+			msg += HIR"敌对帮派："NOR;
+			foreach(id in list)
+			{
+				msg += sprintf("%-10s%s",
+				id,h%6 == 4?"\n":"",);
+				h++;
+			}
+			if(h%6) msg += "\n";
+		}
+		list = FACTION_D->query_allied_faction(fac["faction_name"]);
+		if(!sizeof(list))
+			msg += HIG"\n联盟帮派："NOR"无\n\n";
+		else
+		{
+			msg += HIG"\n联盟帮派："NOR;
+			foreach(id in list)
+			{
+				msg += sprintf("%-10s%s",
+				id,a%6 == 4?"\n":"",);
+				a++;
+			}
+			if(a%6) msg += "\n";
+		}
+		msg += "----------------------------------------------------------------\n";
+		write(msg);
+		return 1;
+	}
+	else return help(me);
+
+}
+int help(object me)
+{
+	write(@TEXT
+
+这个指令是针对玩家帮派所做，帮主可以利用它来收取帮众，授予帮众头
+衔，委任帮派副帮主，和其他帮派联盟，或和其他帮派敌对，甚至是解散
+帮派，都可以使用这个指令来操作。帮众也可以利用它来脱离帮派，投身
+帮派等。
+
+指令格式：factions list			帮派列表
+          factions info	      		帮派信息
+	  factions create  <帮派名称>  	创建帮派
+	  factions allied  <帮派名称>   帮派联盟
+	  factions hostile <帮派名称>   帮派敌对
+          factions join    <帮主 id >  	加入帮派
+          factions recruit <玩家 id >  	接受帮众
+          factions expell  <玩家 id >  	开除帮众
+          factions appoint <玩家 id >	帮派任命
+          factions layoff  <玩家 id >   解除任命
+          factions out                	退出帮派
+          factions status 		帮派状态
+          factions dismiss	      	解散帮派
+          factions <头衔> for <玩家id>	授予头衔
+TEXT);
+	return 1;
+}

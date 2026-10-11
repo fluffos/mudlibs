@@ -1,0 +1,124 @@
+// 本文件由编译后的 .b 二进制程序反编译还原，原始源码未随档案发布。
+// Decompiled from the compiled .b binary; the original source was not distributed.
+inherit "/feature/dbase";
+void collect_all_event();
+void create();
+int clean_up();
+string *query_all_event();
+mapping query_event_list(mixed);
+int test(mixed, mixed, mixed, mixed, mixed, mixed);
+int at_when(mixed, mixed, mixed, mixed, mixed);
+int at_after(mixed, mixed, mixed, mixed, mixed);
+void heart_beat();
+
+nosave string *event_name;
+nosave mapping event_list;
+
+void create() {
+    mixed v1;
+    mixed v2;
+    seteuid("Root");
+    set("channel_id", "事件精灵");
+    "/adm/daemons/channeld"->do_channel(this_object(), "sys", "事件系统已经启动。");
+    event_name = get_dir("/adm/daemons/event/*.lpc");
+    event_name = map(event_name, (: $1[0..<5] :));
+    foreach (v1 in event_name) {
+        if (objectp(v2 = find_object("/adm/daemons/event/" + v1))) {
+            destruct(v2);
+        }
+    }
+    event_list = ([ ]);
+    collect_all_event();
+    set_heart_beat(5);
+}
+
+int clean_up() {
+    return 1;
+}
+
+string *query_all_event() {
+    return event_name;
+}
+
+mapping query_event_list(mixed arg) {
+    if (!arg) {
+        return event_list;
+    } else {
+        return event_list[arg];
+    }
+}
+
+void collect_all_event() {
+    mixed v1;
+    foreach (v1 in event_name) {
+        ("/adm/daemons/event/" + v1)->create_event();
+    }
+}
+
+int test(mixed arg1, mixed arg2, mixed arg3, mixed arg4, mixed arg5, mixed arg6) {
+    if (undefinedp(event_list[arg1])) {
+        return notify_fail("not found..\n");
+    }
+    event_list[arg1] = ({ arg2, arg3, arg4, arg5, arg6 });
+}
+
+int at_when(mixed arg1, mixed arg2, mixed arg3, mixed arg4, mixed arg5) {
+    mixed v1;
+    if (!objectp(v1 = previous_object())) {
+        return 0;
+    }
+    event_list[base_name(v1)] = ({ arg1, arg2, arg3, arg4, arg5 });
+}
+
+int at_after(mixed arg1, mixed arg2, mixed arg3, mixed arg4, mixed arg5) {
+    mixed v1;
+    v1 = localtime(time());
+    if (arg1 < 0) {
+        arg1 = -arg1;
+    } else {
+        arg1 += v1[5];
+    }
+    if (arg2 < 0) {
+        arg2 = -arg2;
+    } else {
+        arg2 += v1[4] + 1;
+    }
+    if (arg3 < 0) {
+        arg3 = -arg3;
+    } else {
+        arg3 += v1[3];
+    }
+    if (arg4 < 0) {
+        arg4 = -arg4;
+    } else {
+        arg4 += v1[2];
+    }
+    return at_when(arg1, arg2, arg3, arg4, arg5);
+}
+
+void heart_beat() {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    mixed v6;
+    mixed v7;
+    v1 = localtime(time());
+    v5 = v1[5] * 1000000 + (v1[4] + 1) * 10000 + v1[3] * 100 + v1[2];
+    v2 = keys(event_list);
+    foreach (v3 in v2) {
+        v4 = event_list[v3];
+        v6 = v4[0] * 1000000 + v4[1] * 10000 + v4[2] * 100 + v4[3];
+        if (v5 < v6) {
+            continue;
+        }
+        map_delete(event_list, v3);
+        v7 = catch {
+    v3->trigger_event(v4[4], v1[5], v1[4], v1[4], v1[3]);
+};
+        if (v7) {
+            log_file("static/event", sprintf("%s event:%s trigger occur an error.\n", ctime(time()), v2));
+        }
+    }
+}

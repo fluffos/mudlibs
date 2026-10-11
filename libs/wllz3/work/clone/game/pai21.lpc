@@ -1,0 +1,669 @@
+// 本文件由编译后的 .b 二进制程序反编译还原，原始源码未随档案发布。
+// Decompiled from the compiled .b binary; the original source was not distributed.
+inherit "/inherit/item/item";
+int pai_number(mixed);
+int pai_color(mixed);
+object get_player(mixed);
+int is_playing(mixed);
+int sizeof_pai(mixed);
+void restore_player_data();
+int pick_out();
+int pick_in(mixed, mixed);
+string id_to_pai(mixed);
+int do_pass(mixed);
+int do_nextone(mixed);
+string view_pai(mixed);
+void finish_21();
+int auto_order();
+void msg(mixed, mixed, mixed);
+int c21(mixed);
+void reset_pai();
+int reset_all();
+void create();
+void init();
+int do_reset(mixed);
+int do_restart(mixed);
+int do_join(mixed);
+int do_start(mixed);
+int do_xipai(mixed);
+int do_chupai(mixed);
+int do_view(mixed);
+string extra_long();
+int pai_to_id(mixed);
+int do_showc(mixed);
+void press_counter(mixed, mixed);
+int do_daopai(mixed);
+void save_player_data();
+int sort_21(mixed, mixed);
+int do_help(mixed);
+mixed t();
+
+int has_start;
+mapping player;
+mapping player_data;
+int game_start;
+string who_play;
+int remain;
+mixed pai_on_desk;
+mapping player_hand;
+mapping counter = ([ ]);
+string *suit_str = ({ "\e[37m方块\e[2;37;0m", "\e[1;34m梅花\e[2;37;0m", "\e[1;31m红桃\e[2;37;0m", "\e[47;1m\e[30m黑桃\e[2;37;0m" });
+string *suit_char = ({ "D", "C", "H", "S" });
+string *rank_str = ({ "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A" });
+
+void msg(mixed arg1, mixed arg2, mixed arg3) {
+    if (arg1) {
+        message_vision(arg3, arg1, arg2);
+    } else {
+        tell_room(environment(this_object()), arg3, 0);
+    }
+}
+
+int c21(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    v3 = 0;
+    v4 = 0;
+    for (v1 = 0; v1 < arg[0]; v1++) {
+        v2 = pai_number(arg[v1 + 1]);
+        if (v2 == 14) {
+            v4++;
+            v2 = 11;
+        } else {
+            v2 = v2 > 10 ? 10 : v2;
+        }
+        v3 += v2;
+    }
+    while (v3 > 21 && v4 > 0) {
+        v3 -= 10;
+        v4--;
+    }
+    return v3;
+}
+
+void reset_pai() {
+    mixed v1;
+    mixed v2;
+    for (v1 = 0; v1 < 52; v1++) {
+        pai_on_desk[v1] = v1;
+    }
+    remain = 52;
+    v2 = keys(player);
+    for (v1 = 0; v1 < sizeof(v2); v1++) {
+        player_hand[v2[v1]] = allocate(52);
+    }
+    who_play = 0;
+}
+
+int reset_all() {
+    has_start = 0;
+    if (sizeof(player)) {
+        msg(this_player(), 0, "$N重新置牌了。\n");
+    }
+    player = ([ ]);
+    player_hand = ([ ]);
+    pai_on_desk = allocate(52);
+    reset_pai();
+    counter = ([ ]);
+    return 1;
+}
+
+void create() {
+    set_name("21点牌桌", ({ "card desk", "pai", "pai21" }));
+    if (clonep()) {
+        set_default_object("/clone/game/pai21.lpc");
+    } else {
+        set("long", "一张桌子，上面放着一些牌，使用方法请使用(helppai)命令。\n");
+        set("unit", "张");
+        set("value", 1);
+    }
+    player = ([ ]);
+    reset_all();
+}
+
+void init() {
+    add_action("do_help", "helppai");
+    add_action("do_reset", "reset");
+    add_action("do_restart", "restart");
+    add_action("do_join", "join");
+    add_action("do_start", "start");
+    add_action("do_xipai", "xipai");
+    add_action("do_view", "view");
+    add_action("do_nextone", "next");
+    add_action("do_pass", "pass");
+    add_action("do_chupai", "play");
+    add_action("do_daopai", "daopai");
+    add_action("do_showc", "showc");
+}
+
+int do_reset(mixed arg) {
+    if (arg == "counter") {
+        if (!is_playing(this_player())) {
+            return notify_fail("你都不玩牌啊！\n");
+        }
+        msg(this_player(), 0, "$N复位计数器了。\n");
+        counter = ([ ]);
+        return 1;
+    }
+    if (!this_object()->id(arg)) {
+        return 0;
+    }
+    return reset_all();
+}
+
+int do_restart(mixed arg) {
+    if (!is_playing(this_player())) {
+        return notify_fail("你都不玩，开始什么啊！\n");
+    }
+    if (!has_start) {
+        return notify_fail("游戏还没有开始。\n");
+    }
+    if (sizeof(player)) {
+        msg(this_player(), 0, "$N开始新的一轮牌局了。\n\n");
+    }
+    reset_pai();
+    restore_player_data();
+    msg(0, 0, "在开始游戏之前(play)，请各位洗牌(xipai)。\n");
+    return 1;
+}
+
+int do_join(mixed arg) {
+    mixed v1;
+    v1 = this_player();
+    if (has_start) {
+        return notify_fail("牌局已经开始，不能加入了。\n");
+    }
+    if (is_playing(v1)) {
+        return notify_fail("你已经参加了。\n");
+    }
+    player[v1->query("id")] = "yes";
+    player_hand[v1->query("id")] = allocate(52);
+    msg(v1, 0, "$N加入牌局了。\n");
+    return 1;
+}
+
+int do_start(mixed arg) {
+    if (!is_playing(this_player())) {
+        return notify_fail("你都不玩，开始什么啊！\n");
+    }
+    if (has_start) {
+        return notify_fail("牌局已经开始了。\n");
+    }
+    has_start = 1;
+    msg(this_player(), 0, "$N开始了牌局。\n\n");
+    auto_order();
+    msg(0, 0, "在开始游戏之前(play)，请各位洗牌(xipai)。\n");
+    return 1;
+}
+
+int do_xipai(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    mixed v6;
+    if (!is_playing(this_player())) {
+        return notify_fail("你都不玩，洗什么牌啊！\n");
+    }
+    v6 = pai_on_desk;
+    v2 = remain;
+    v3 = v2;
+    for (v1 = 0; v1 < v2; v1++) {
+        v4 = random(v3);
+        v5 = v6[v3 - 1];
+        v6[v3 - 1] = v6[v4];
+        v6[v4] = v5;
+        v3--;
+    }
+    msg(this_player(), 0, "$N洗了洗桌面的牌。\n");
+    return 1;
+}
+
+int do_chupai(mixed arg) {
+    mixed v2;
+    mixed v4;
+    mixed v6;
+    mixed v7;
+    mixed v9;
+    if (!is_playing(this_player())) {
+        return notify_fail("你都不玩啊！\n");
+    }
+    if (!who_play) {
+        who_play = this_player()->query("id");
+    }
+    if (who_play != this_player()->query("id")) {
+        return notify_fail("还没有轮到到你啊。\n");
+    }
+    v4 = 0;
+    if ((v6 = pick_out()) == -1) {
+        return 0;
+    }
+    if (!pick_in(this_player()->query("id"), v6)) {
+        return 0;
+    }
+    msg(this_player(), 0, "$N摸了一张" + id_to_pai(v6) + "。\n");
+    v4 = 1;
+    v7 = player_hand[this_player()->query("id")];
+    v2 = c21(v7);
+    msg(this_player(), 0, "$N手上有\e[1;33m" + v2 + "点\e" + "[2;37;0m了。\n");
+    if (v2 > 21) {
+        do_pass("\e[1;31m爆了！！！\e[2;37;0m\n");
+        return 1;
+    }
+    v9 = get_player(player[who_play]);
+    if (v9) {
+        who_play = player[who_play];
+        do_nextone("");
+    }
+    return 1;
+}
+
+int do_view(mixed arg) {
+    mixed v1;
+    mixed v2;
+    if (arg == "" || !arg) {
+        arg = this_player()->query("id");
+    } else {
+        v2 = arg;
+    }
+    v1 = player_hand[arg];
+    if (!v1) {
+        return notify_fail("牌局没有这个玩家。\n");
+    }
+    if (v2) {
+        write(v2 + "：");
+    }
+    write(view_pai(arg) + "\n");
+    return 1;
+}
+
+string extra_long() {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    mixed v6;
+    v1 = this_player();
+    v5 = keys(player);
+    v3 = sprintf("牌盒里面有%d张牌\n", remain);
+    if (sizeof(player) > 0) {
+        v3 += "******************************************\n";
+        for (v6 = 0; v6 < sizeof(v5); v6++) {
+            v4 = v5[v6];
+            v2 = get_player(v4);
+            if (v2) {
+                v3 = v3 + v4 + "：" + view_pai(v4) + "\n";
+            }
+        }
+        v3 = v3 + "******************************************\n";
+    }
+    return v3;
+}
+
+int pick_out() {
+    mixed v1;
+    mixed v2;
+    if (remain > 0) {
+        remain--;
+        v1 = remain;
+        v2 = pai_on_desk[v1];
+        pai_on_desk[v1] = -1;
+        return v2;
+    } else {
+        msg(0, 0, "没有牌了");
+        return -1;
+    }
+}
+
+int pick_in(mixed arg1, mixed arg2) {
+    mixed v1;
+    mixed v2;
+    v2 = player_hand[arg1];
+    v1 = v2[0];
+    v1++;
+    v2[v1] = arg2;
+    v2[0]++;
+    return 1;
+}
+
+object get_player(mixed arg) {
+    if (stringp(player[arg])) {
+        return find_player(arg);
+    }
+}
+
+int is_playing(mixed arg) {
+    mixed v2;
+    v2 = arg->query("id");
+    if (stringp(player[v2])) {
+        return 1;
+    }
+    return 0;
+}
+
+int sizeof_pai(mixed arg) {
+    return arg ? arg[0] : 0;
+}
+
+string view_pai(mixed arg) {
+    mixed v1;
+    mixed v3;
+    mixed v5;
+    mixed v6;
+    v1 = player_hand[arg];
+    if (!v1) {
+        return 0;
+    }
+    if (!sizeof_pai(v1)) {
+        return "没有牌";
+    }
+    v5 = "";
+    for (v3 = 0; v3 < v1[0]; v3++) {
+        v6 = id_to_pai(v1[v3 + 1]);
+        v5 += v6 + " ";
+    }
+    return sprintf("%s：%d点", v5, c21(v1));
+}
+
+int do_nextone(mixed arg) {
+    mixed v1;
+    mixed v2;
+    if (!is_playing(this_player())) {
+        return notify_fail("你都不玩牌啊！\n");
+    }
+    if (!who_play) {
+        return notify_fail("现在是谁出牌啊？\n");
+    }
+    v2 = who_play;
+    v1 = get_player(v2);
+    if (!v1) {
+        return msg(0, 0, "有玩家缺场了，请重新开始游戏(reset pai)。\n");
+    }
+    if (this_player()->query("id") != v2) {
+        msg(this_player(), v1, "$N对$n说道：到你了。\n");
+    } else {
+        msg(this_player(), 0, "对自己说道：到我啦！\n");
+    }
+    return 1;
+}
+
+int do_pass(mixed arg) {
+    mixed v1;
+    mixed v3;
+    mixed v5;
+    if (!is_playing(this_player())) {
+        return notify_fail("你都不玩牌啊！\n");
+    }
+    if (who_play != this_player()->query("id")) {
+        return notify_fail("还没有到你啊！\n");
+    }
+    if (!arg) {
+        arg = "ＰＡＳＳ！！";
+    }
+    msg(this_player(), 0, "$N说道：" + arg + "\n");
+    v1 = who_play;
+    who_play = player[who_play];
+    v3 = keys(player);
+    for (v5 = 0; v5 < sizeof(v3); v5++) {
+        if (player[v3[v5]] == v1) {
+            player[v3[v5]] = player[v1];
+        }
+    }
+    player[v1] = "";
+    if (player[who_play] == "") {
+        msg(0, 0, "大家都不要了。\n");
+        finish_21();
+        return 1;
+    }
+    do_nextone("");
+    return 1;
+}
+
+string id_to_pai(mixed arg) {
+    mixed v1;
+    mixed v2;
+    if (arg < 0) {
+        return "\e[1;31m???\e[2;37;0m";
+    }
+    if (arg == 52) {
+        return "\e[1;33m小鬼\e[2;37;0mJS";
+    }
+    if (arg >= 53) {
+        return "\e[1;33m大鬼\e[2;37;0mJB";
+    }
+    v1 = arg / 13;
+    v2 = arg - v1 * 13;
+    return suit_str[v1] + suit_char[v1] + rank_str[v2];
+}
+
+int pai_to_id(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    v1 = -1;
+    v2 = -1;
+    v3 = arg[0..0];
+    v4 = arg[1..sizeof(arg) - 1];
+    if (v3 == "J") {
+        return v4 == "S" ? 52 : 53;
+    }
+    if (v3 == suit_char[0]) {
+        v1 = 0;
+    }
+    if (v3 == suit_char[1]) {
+        v1 = 1;
+    }
+    if (v3 == suit_char[2]) {
+        v1 = 2;
+    }
+    if (v3 == suit_char[3]) {
+        v1 = 3;
+    }
+    if (v1 == -1) {
+        return -1;
+    }
+    if (sscanf(v4, "%d", v2) != 1) {
+        if (v4 == "J") {
+            v2 = 11;
+        }
+        if (v4 == "Q") {
+            v2 = 12;
+        }
+        if (v4 == "K") {
+            v2 = 13;
+        }
+        if (v4 == "A") {
+            v2 = 14;
+        }
+        if (v2 == -1) {
+            return -2;
+        }
+    }
+    v2 -= 2;
+    return v1 * 13 + v2;
+}
+
+int auto_order() {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    v2 = keys(player);
+    v4 = v2[0];
+    v3 = "";
+    for (v1 = 0; v1 < sizeof(v2); v1++) {
+        if (get_player(v2[v1])) {
+            if (v3 == "") {
+                v3 = v2[v1];
+                continue;
+            }
+            player[v3] = v2[v1];
+            v3 = v2[v1];
+        }
+    }
+    player[v3] = v4;
+    return 1;
+}
+
+int do_showc(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    v2 = keys(counter);
+    v1 = "计数表(Scoreboard)\n－－－－－－－－－－－－－－－－－\nID　　　　　　　　分数\n－－－－－－－－－－－－－－－－－\n";
+    for (v3 = 0; v3 < sizeof(v2); v3++) {
+        v1 = sprintf("%s%-14s%10d\n", v1, v2[v3], counter[v2[v3]]);
+    }
+    v1 += "－－－－－－－－－－－－－－－－－\n";
+    msg(0, 0, v1);
+    return 1;
+}
+
+void press_counter(mixed arg1, mixed arg2) {
+    counter[arg1] = counter[arg1] + arg2;
+}
+
+int do_daopai(mixed arg) {
+    mixed v1;
+    mixed v2;
+    if (!is_playing(this_player())) {
+        return notify_fail("你都不玩，搞什么啊！\n");
+    }
+    if (!has_start) {
+        return notify_fail("游戏还没有开始。\n");
+    }
+    if (remain > 0) {
+        v2 = pai_on_desk[0];
+        for (v1 = 1; v1 < remain; v1++) {
+            pai_on_desk[v1 - 1] = pai_on_desk[v1];
+        }
+        pai_on_desk[remain - 1] = v2;
+        msg(this_player(), 0, "$N倒了一下牌。\n");
+        return 1;
+    } else {
+        return notify_fail("没有牌了。\n");
+    }
+}
+
+int pai_number(mixed arg) {
+    if (arg == 52) {
+        return 15;
+    }
+    if (arg == 53) {
+        return 16;
+    }
+    return arg - arg / 13 * 13 + 2;
+}
+
+int pai_color(mixed arg) {
+    if (arg >= 52) {
+        return 5;
+    }
+    return arg / 13 + 1;
+}
+
+void save_player_data() {
+    mixed v1;
+    mixed v2;
+    v1 = keys(player);
+    player_data = ([ ]);
+    for (v2 = 0; v2 < sizeof(v1); v2++) {
+        player_data[v1[v2]] = player[v1[v2]];
+    }
+}
+
+void restore_player_data() {
+    mixed v1;
+    mixed v2;
+    if (!player_data) {
+        return;
+    }
+    v2 = keys(player_data);
+    for (v1 = 0; v1 < sizeof(v2); v1++) {
+        player[v2[v1]] = player_data[v2[v1]];
+    }
+}
+
+int sort_21(mixed arg1, mixed arg2) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    sscanf(arg1, "%s:%d", v3, v1);
+    sscanf(arg2, "%s:%d", v3, v2);
+    if (v1 == v2) {
+        return 0;
+    }
+    if (v1 > 21 && v2 > 21) {
+        return v1 < v2 ? -1 : 1;
+    }
+    if (v1 > 21) {
+        v1 = -1;
+    }
+    if (v2 > 21) {
+        v2 = -1;
+    }
+    return v1 > v2 ? -1 : 1;
+}
+
+void finish_21() {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    mixed v6;
+    mixed v7;
+    mixed v8;
+    mixed v9;
+    mixed v10;
+    mixed v11;
+    v1 = keys(player);
+    v2 = allocate(sizeof(player));
+    for (v7 = 0; v7 < sizeof(v1); v7++) {
+        v4 = v1[v7];
+        v2[v7] = v4 + ":" + c21(player_hand[v4]);
+    }
+    v3 = sort_array(v2, "sort_21", this_object());
+    v11 = -1;
+    v5 = "结果\n－－－－－－－－－－－－－－－－－\nID　　　　　　　　点数       得分\n－－－－－－－－－－－－－－－－－\n";
+    for (v7 = 0; v7 < sizeof(v3); v7++) {
+        sscanf(v3[v7], "%s:%d", v6, v10);
+        if (v10 != v11) {
+            v9 = sizeof(v3) - v7 - 1;
+            v11 = v10;
+        }
+        if (!v7) {
+            v8 = v10;
+        }
+        if (v10 == v8) {
+            v5 += "\e[1;33m";
+        }
+        if (v10 > 21) {
+            v5 += "\e[1;31m";
+            v9 = 0;
+        }
+        v5 = sprintf("%s%-14s%5d%12d\n", v5, v6, v10, v9);
+        v5 += "\e[2;37;0m";
+        press_counter(v6, v9);
+    }
+    v5 += "－－－－－－－－－－－－－－－－－\n\n";
+    msg(0, 0, v5);
+    reset_pai();
+    restore_player_data();
+    msg(0, 0, "请各位重新洗牌(xipai)开始新的一局。\n");
+}
+
+int do_help(mixed arg) {
+    this_player()->start_more("玩21点牌桌使用方法:\r\n——[开始游戏]———————————————\r\n帮助命令：helppai\r\n加入命令：join　　　　　加入游戏\r\n开始命令：start 　　　　开始以后不能再加入\r\n重置命令：reset pai 　　结束游戏\r\n\r\n——[游戏命令]———————————————\r\n重新游戏：restart\r\n　　摸牌：play　　　　　进行游戏\r\n不再要牌: pass\r\n\r\n——[其它命令]———————————————\r\n洗牌命令：xipai\r\n看牌命令：view [玩家ID] 观察玩家手上的牌\r\n催促命令：next　　　　　催促正在出牌的人\r\n\r\n——[计数牌使用]——————————————\r\n显示: showc\r\n重置: reset counter\r\n\r\n\r\n\r\n\r"
+            "\n——[游戏规则]———————————————\r\n游戏开始以后，每人轮流摸牌直到不摸为止。\r\n最后根据每人手上的点数决定胜负。\r\n点数 > 21 为输，点数<21的时候点数大者胜。\r\nJ，Q，k为10点，A可以为1点或者为11点。\r\n\r\n——————————————————————\r\n\t\t\tmake by 猫部猫(Catyboy) v1.0\r\n");
+    return 1;
+}
+
+mixed t() {
+    return pai_on_desk;
+}
