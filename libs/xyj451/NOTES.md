@@ -260,3 +260,5 @@ single-file compile check (PASS). Part of the corpus-wide §7.19 sweep
 记录、未改：`d/suburb/es/npc/oldman.lpc`（采药老者/山药蛋）的 `kill_ob()` 里那句 `HIY "采药老者眼放异光……纳命来！" NOR "\n", environment(), this_object());` 丢了开头的 `message(…` 调用，第 154–155 行还有类型错误，HEAD 起就编译不过。
 
 启动时警告 27 -> 0；新进程登录（编码选择、新人物确认）正常。
+
+- 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 4 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 5 个，只在 #if 分支用的声明移进分支 1 个文件；改动 7 个文件，HEAD 与工作树各载入一次无回退（7 objects; HEAD PASS 7, tree PASS 7; regress 0; newly loading 0），这些文件的警告 27 -> 18。
