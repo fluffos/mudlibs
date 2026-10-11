@@ -230,13 +230,31 @@ class Cond(E):
 
 
 class Logic(E):
-    def __init__(self, sym, l, r):
-        self.sym, self.l, self.r = sym, l, r
+    """x; land/lor END; y; END.  A source chain a && b && c shares one END
+    (the compiler links the left operands); a parenthesized operand that is
+    itself && / || has its own END and must keep its parentheses."""
+
+    def __init__(self, sym, l, r, end=None):
+        self.sym, self.l, self.r, self.end = sym, l, r, end
         self.prec = P_LAND if sym == '&&' else P_LOR
 
+    def chain(self):
+        out = [self.l]
+        r = self.r
+        while isinstance(r, Logic) and r.sym == self.sym and r.end == self.end:
+            out.append(r.l)
+            r = r.r
+        out.append(r)
+        return out
+
     def text(self):
-        r = self.r.text() if isinstance(self.r, Logic) and self.r.sym == self.sym else self.r.src(self.prec + 1)
-        return '%s %s %s' % (self.l.src(self.prec), self.sym, r)
+        parts = []
+        for e in self.chain():
+            if isinstance(e, Logic) and e.sym == self.sym:
+                parts.append('(' + e.text() + ')')
+            else:
+                parts.append(e.src(self.prec + 1))
+        return (' %s ' % self.sym).join(parts)
 
 
 class Array(E):
@@ -864,7 +882,13 @@ class FuncDecompiler:
         if j + 1 >= len(self.ins):
             return True
         nx = self.ins[j + 1]
-        return nx.efun or OPN[nx.op] != 'pop_value'
+        if nx.efun:
+            # e.g. this_player(): the 0 is that efun's default argument
+            e = self.ctx.efun(nx.op)
+            if e and e['default'] == 0 and nx.nargs == e['min_args']:
+                return False
+            return True
+        return OPN[nx.op] != 'pop_value'
 
     def do_lvalue_efun(self, i, x, stmts, stack):
         # sscanf(s, fmt, lv...) : s, fmt pushed, then each lvalue + void_assign
@@ -894,7 +918,7 @@ class FuncDecompiler:
             l, = self.pop(stack)
             sub, st = self.decode(self.ins[i + 1].off, T)
             r = self.one_value(sub, st, x)
-            stack.append(Logic('&&' if name == 'land' else '||', l, r))
+            stack.append(Logic('&&' if name == 'land' else '||', l, r, T))
             return self.idx(T) if T < self.end_off() else len(self.ins)
         negate, cmp = BRANCH_COND[name]
         if cmp:
@@ -990,8 +1014,12 @@ class FuncDecompiler:
         # test is a single expression statement
         cont = T
         bi, ti = self.idx(body_lo), self.idx(T) if T in self.at else len(self.ins)
-        cands = sorted({y.target for y in self.ins[bi:ti]
-                        if not y.efun and OPN[y.op] == 'branch' and body_lo < y.target < T}, reverse=True)
+        # a branch straight to the test is a 'continue' of a loop without an
+        # increment (with an increment every continue lands on it instead)
+        direct = any(not y.efun and OPN[y.op] == 'branch' and y.target == T for y in self.ins[bi:ti])
+        cands = [] if direct else sorted({y.target for y in self.ins[bi:ti]
+                                          if not y.efun and OPN[y.op] == 'branch' and body_lo < y.target < T},
+                                         reverse=True)
         for c in cands:
             ci = self.idx(c) if c in self.at else None
             if ci is None:
@@ -1007,6 +1035,12 @@ class FuncDecompiler:
                 self.claimed = saved
                 continue
             if not st2 and len(incs) == 1 and isinstance(incs[0], SExpr):
+                e_ = incs[0].e
+                # a for-loop's i++ on a local compiles to loop_incr, so a plain
+                # ++ of a local here is an ordinary last statement
+                if (isinstance(e_, IncDec) and e_.sym == '++' and not getattr(incs[0], 'is_incr', False)
+                        and isinstance(e_.lv, Raw) and e_.lv.s in self.slot_of):
+                    continue
                 cont = c
                 break
         for attempt in range(8):
@@ -1096,8 +1130,31 @@ class FuncDecompiler:
                 raise DecompileError('forever loop leaves values')
             stmts.append(SLoop('while', None, body))
             return j + 1
-        # do-while: condition is the trailing expression; continue goes to its start
+        # do-while: condition is the trailing expression; continue goes to its start.
+        # Choose it up front: the smallest branch target in the body from which
+        # only the condition (one pure expression) remains.
         cont = None
+        bi, ci_end = i, j
+        need = 2 if cname == 'bbranch_lt' else (0 if cname in ('loop_cond_local', 'loop_cond_number', 'while_dec') else 1)
+        cands = sorted({y.target for y in self.ins[bi:ci_end]
+                        if not y.efun and OPN[y.op] == 'branch' and x.off < y.target <= closer.off})
+        for c in cands:
+            if c not in self.at and c != closer.off:
+                continue
+            tail = self.ins[self.idx(c):ci_end] if c in self.at else []
+            if any(not y.efun and (y.target is not None and OPN[y.op] not in ('land', 'lor')
+                                   or OPN[y.op] in ('switch', 'catch')) for y in tail):
+                continue
+            try:
+                saved = set(self.claimed)
+                sub, st = self.decode(c, closer.off) if tail else ([], [])
+                self.claimed = saved
+            except DecompileError:
+                self.claimed = saved
+                continue
+            if not sub and len(st) == need:
+                cont = c
+                break
         for attempt in range(8):
             saved = set(self.claimed)
             self.ctl.append({'brk': brk, 'cont': cont, 'do': True})
@@ -1639,6 +1696,16 @@ def wrap_line(line):
             toks.append(('str', '"' + chunk + '"'))
         else:
             toks.append((k, t))
+    # never break inside a functional (: ... :)
+    depth = 0
+    for n, (k, t) in enumerate(toks):
+        if k == 'x':
+            if '(:' in t:
+                depth += t.count('(:')
+            if ':)' in t:
+                depth -= t.count(':)')
+        elif k == 'sp' and depth > 0:
+            toks[n] = ('x', t)
     out = []
     cur = ind
     for k, t in toks:

@@ -21,6 +21,7 @@ def main():
     ap.add_argument('--work', default='/tmp/wlo')
     ap.add_argument('--report', default='/tmp/roundtrip.tsv')
     ap.add_argument('--srcdir', help='also write decompiled sources here')
+    ap.add_argument('--originals', help='file listing paths whose original .c is installed instead')
     a = ap.parse_args()
     paths = list(a.paths)
     if a.list:
@@ -33,8 +34,14 @@ def main():
     orc = Oracle(a.raw, a.work)
     orc.reset()
     status = {}
+    originals = set()
+    if a.originals:
+        originals = {l.strip().lstrip('/') for l in open(a.originals, encoding='latin-1') if l.strip()}
     t0 = time.time()
     for p in paths:
+        if p in originals:
+            orc.install(p, open(os.path.join(a.raw, 'world', p + '.c'), 'rb').read())
+            continue
         prog = mud.get(p)
         if prog is None:
             status[p] = ('nobinary', '')
@@ -60,9 +67,10 @@ def main():
         if p in crashed:
             status[p] = ('crash-driver', crashed[p])
             continue
-        if p in errors or not os.path.exists(orc.new_binary(p)):
+        if not os.path.exists(orc.new_binary(p)):
             status[p] = ('compile', errors.get(p, 'no binary written'))
             continue
+        # a runtime error in create() still leaves a compiled binary to compare
         try:
             d = compare(canon(mud.get(p), mud, efuns, simuls), canon(newmud.get(p), newmud, efuns, simuls))
         except Exception as e:
