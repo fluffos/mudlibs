@@ -312,3 +312,5 @@ functionally re-tested live on this lib.
 HEAD 与工作树分别加载（新进程）：745 -> 746 通过（多出的就是 huzhou），无回退；改过的头文件的 25 个包含者 24 -> 24 通过。
 
 启动时警告 76 -> 0。
+
+- 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 9 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 1 个，只在 #if 分支用的声明移进分支 1 个文件；改动 10 个文件，HEAD 与工作树各载入一次无回退（10 objects; HEAD PASS 5, tree PASS 5; regress 0; newly loading 0），这些文件的警告 11 -> 1。
