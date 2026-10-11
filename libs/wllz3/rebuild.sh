@@ -17,9 +17,9 @@ python3 -m mudos_b.rebuild_tree "$RAW/world" "$TMP/dec" "$LIB/raw/recovered" \
 cd "$ROOT"
 scripts/convert_lib.sh "$LIB/raw/recovered" "$LIB/work"
 # 2. static->nosave also rewrote log paths inside strings (KB 03 §4.3): revert
-grep -rlZ '"nosave/' "$LIB/work" --include='*.lpc' | while IFS= read -r -d '' f; do
+grep -rlZ 'nosave/' "$LIB/work" --include='*.lpc' | while IFS= read -r -d '' f; do
   rel="${f#$LIB/work/}"; src="$LIB/raw/recovered/${rel%.lpc}.c"
-  if [[ -f "$src" ]] && grep -q '"static/' "$src"; then sed -i 's|"nosave/|"static/|g' "$f"; fi
+  if [[ -f "$src" ]] && grep -q 'static/' "$src"; then sed -i 's|\([/"]\)nosave/|\1static/|g' "$f"; fi
 done
 mkdir -p "$LIB/work/log" "$LIB/work/binaries"
 # 3. hand fixes made after the conversion (NOTES.md lists them)

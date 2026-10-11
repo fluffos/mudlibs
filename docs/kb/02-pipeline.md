@@ -176,8 +176,41 @@ and confirm with `rclone check --one-way`.
 - A bare `.gz` can be a tar. Some archives nest the mudlib in an inner
   archive.
 - **Binary-only (`.b`, `MUDB` magic) archives** get
-  `wasm_status: "binary-pending-tooling"`, never `not-convertible`. Look
-  for a 源码版 sibling.
+  `wasm_status: "binary-pending-tooling"`, never `not-convertible`, until
+  §3.1 recovers their source. Look for a 源码版 sibling first.
 - **A `d/`/`npc/` directory shape is not evidence of LPC.** If
   `grep -rIl inherit` finds nothing, it's a C engine. Don't create a
   `libs/` dir for it.
+
+### 3.1 Recovering source from MudOS `.b` binaries (`scripts/mudos_b/`)
+
+A lib that ships `binaries/**/*.b` (MudOS `save_binary` cache, `MUDB`
+magic) with blanked `.c` files can be decompiled back to LPC. First
+case: wllz3 (186), MudOS v22pre11, 9,365 programs, all but one
+recovered; the full story and the commands are in `libs/wllz3/NOTES.md`
+and `libs/wllz3/rebuild.sh`.
+- **Efun numbering comes from the game's own driver.** An unstripped ELF
+  driver has `predefs`/`efun_table`; `python3 -m mudos_b.elfdriver`
+  writes `mudos_b/drivers/<slug>.json`. Never guess the table from a
+  MudOS version string: builds differ by compile options.
+- **Decompile:** `python3 -m mudos_b.cli <binaries> <driver.json>
+  <simul_efun> --list <paths> --out <dir> [--fluffos]`. `--fluffos` emits
+  `protected` for static functions, `nosave` for static vars, and drops
+  unused locals (FluffOS errors on `nosave` functions and warns on the
+  rest).
+- **Prove it with the original driver** when it runs on the host:
+  `python3 -m mudos_b.roundtrip` recompiles every decompiled file in the
+  old driver and compares the new `.b` with the shipped one, canonically
+  (`mudos_b.oracle`). Only a 0-diff round trip counts as recovered.
+  Intact `.c` files that also round-trip are kept as-is (comments
+  survive); the rest are replaced by the decompiled text.
+- Traps in the oracle driver: `read_file` caps at 200,000 bytes (split
+  job lists); `dump_prog` rejects paths with `#`; loading runs
+  `create()` and can segfault the driver (restart and resume).
+- **Originals that compile but disagree with their binary** are stale
+  sources: the binary is what the game ran. Use the decompiled file.
+- Source that MudOS took and FluffOS warns on comes out of the decompiler
+  unchanged (it is faithful): arity mismatches with inherited
+  definitions (`void remove()` vs `remove(string)`), `int setup()` over
+  `void setup()`, an apply name reused for a private helper. Fix them
+  after conversion and keep the fixes as a patch the rebuild applies.

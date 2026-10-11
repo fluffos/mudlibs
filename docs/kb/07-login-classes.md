@@ -197,3 +197,19 @@ Verify with `geteuid(find_object(...))`.
 ### 8.25 `find_player() || load_player()` fallback followed by an unconditional `userp()` check
 The offline branch is always rejected. Gate the check on which branch
 produced the object (`gjzddmudda`'s `fire`).
+
+### 8.26 Abandoned registrations leave bodies that make `find_player()` raise
+**Symptom:** an id that registered after an aborted attempt logs in to a
+dead session: every command answers `什么？`; the console shows
+`The player(<id>) has existed in the world.` from the simul_efun's
+`find_player()`, called by `logind`'s `find_body()` in `get_passwd()`.
+**Cause:** `logind` makes the body before registration ends (wllz3: at
+the e-mail step), and a client that drops later leaves it in no room.
+When the player is offline, `find_player()` falls back to
+`filter(children(USER_OB), filter_player)` and raises on 2+ matches.
+**Fix:** `filter_player()` also requires `environment(ob)` (an orphan is
+then found and destructed by `find_body()`'s own loop).
+**Detection:** `grep -l "has existed in the world" libs/*/work/adm/simul_efun/user.lpc`
+(38 libs share the code); a lib is affected only if its `logind` calls
+`make_body()` before the last prompt. Repro: abort registration twice
+after that prompt, register fully, `quit`, log in again.
