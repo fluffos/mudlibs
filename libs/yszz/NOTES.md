@@ -193,3 +193,5 @@ After reboot, `buy jitui` purchased 炸鸡腿 and changed 1 黄金 into 99
 手工：`adm/daemons/logind.lpc` `get_id()` 里只在 `#ifdef MAX_LOGIN` 分支用的七个局部变量（同 IP 多重登录的计数），声明挪进同样的条件里。
 
 启动时警告 93 -> 0；新进程登录正常（新人物用 `new`）。
+
+- 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 18 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 6 个，只在 #if 分支用的声明移进分支 2 个文件；改动 23 个文件，HEAD 与工作树各载入一次无回退（23 objects; HEAD PASS 23, tree PASS 23; regress 0; newly loading 0），这些文件的警告 52 -> 18。
