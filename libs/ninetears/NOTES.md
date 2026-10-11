@@ -790,3 +790,17 @@ The `.c` -> `.lpc` rename changed the string but not the slice width: `f[<2..] =
 ## 深度功能测试（§10.7，2026-10-11）：stats.lpc switch 贯穿
 
 - `std/living/dankequip/stats.lpc` `set_extra_bonus()` 与 finalrealms 同码：switch 缺 `break`，设攻击加成时会顺带覆盖防御加成。补 `break`，载入无回退。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查（二）
+
+逐条复查 64 处 `Expression has no side effects` / `Value of conditional expression is unused`（dns_master.lpc 除外），并在全树搜同样的错行（`std/antiguo/` 旧副本等），共改 55 个文件：
+
+- `==` 当 `=`（10 处）：`slow_sh.lpc`（8 份）`counter == 0;` 使徒手攻击计数永不归零，减速护盾只在第二次攻击时生效一次；`d/ss/daggerford/table.lpc`（及 `olddagger/` 副本）二十一点桌只剩一人时 `players[1][1]==S_OUT;` 没把剩下的玩家设为出局。
+- `temp + "..."` 当 `temp +=`（32 处，32 个侦测魔法法术 `det_magi`/`det_magic`/`detectar_magia`）：剩余时间很长的魔法效果，描述缺最后半句（`default` 分支），玩家只看到“...<名称> .”。
+- 逗号表达式只清了最后一个变量（15 处，`obj/obsoleto/weapons/ranged/shoot.lpc`/`throw.lpc`/`throwold.lpc`）：`me, him, ammo = 0;` 等改为 `me = him = ammo = 0;`，同 finalrealms。
+- `if ((args,"")==0 || !args)`（`d/gremios/oldcomandos/codazo.lpc`、`dobleg.lpc`）：逗号使条件只剩 `!args`，空串参数漏过语法提示；改为 `if (!args || args == "")`。
+- 小动物 `bandicoot.lpc`（3 份同码）：`1,":grunye.",` 落在 `load_a_chat()` 数组外，和 `set_level()` 成了逗号表达式，战斗喊话少一句；移回数组。
+- `ADJ_COST;`（`wizard/acid_clo.lpc`、`frost_cl.lpc` 及 `std/antiguo/` 副本，4 处）：`areabas.lpc` 里 `ADJ_COST` 只是一个从未使用的 int 变量，语句无作用，兄弟法术（fireball、electric）都没有这一行，删去（行为不变）。
+- 空 if 块（3 处）：`templo.lpc` `reset()` 里 `if(!board) { }`、`punyo_piedra.lpc`（2 份）`wear_off()` 里 `if (target) { }`。作者意图无从推断（法术本身只发消息、不设属性），按行为不变删去空 if。
+
+listcheck：55 个对象 HEAD 47 通过、工作树 47 通过，55 个对象载入无回退。8 个失败均为原有：`std/antiguo/spells/` 下 7 个旧副本继承不存在的 `/std/spells/...`；`templo.lpc` 在无玩家的检查环境中建留言板时 `board_handler` 的 `create_board()` 读 `this_player()` 为 0 而报错（检查环境假象，非本次范围）。
