@@ -5,7 +5,7 @@
 
 int valid_leave(object me, string dir)
 {
-	int food = me->max_food_capacity();
+	me->max_food_capacity();
 	int water = me->max_water_capacity();
 	object camel;
 	if( userp(me) && ::valid_leave(me, dir)

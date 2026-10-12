@@ -270,3 +270,9 @@ python3 scripts/mudclient.py 127.0.0.1 40274 --timeout 40 --idle 0.5 \
 - `d/luoyang/npc/dian.lpc`：`if (!arg) 0;` 改为 `return 0;`；`quest/escort/escort_board.lpc`：`else 0;` 改为 `else return 0;`。
 - `u/boost/gift.lpc`：`#ifndef TEST_MODE` 包住了 if 的全部内容，挪到 if 外面；`adm/daemons/moneyd.lpc` 只剩注释的 `else if (cc) { }` 挪进注释；`d/changbai/ssmiao.lpc` 孤立的 `"\n";` 删去；`inherit/char/family_npc1.lpc`、`u/whuan/familyd.lpc` 空的 `if(armed) { }` 删去；`u/idle/mudi.lpc` `i==0;j==0;` 改为 `=`；`u/jason/13954955881.lpc` `mud_status;` 改为调用；`liangyi-jian.bak.lpc` 去掉无用 `level;`。
 - 13 个对象载入无回退。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾（一）
+
+- `toolkit_fix.sh`：24 个返回类型/原型对齐、21 个带初始化的未用局部变量、22 处多余 inherit、2 处转义。54 个对象载入无回退，删除声明审计为 0。
+- `u/bibi/obj/fire/xiaomao.lpc` 烟花猫脸图案：`/\ ` 在字符串里是未知转义，原本显示成 `/ `；改为 `/\\ `，猫耳朵的反斜杠才显示出来。该文件本身另有未转义的 `"` 导致编译失败（原档如此），未处理。
+- 剩余（约 250 条：`Redeclaration`、die/init/unconcious 等返回类型与基类不符、clean_up 菱形）另行处理。

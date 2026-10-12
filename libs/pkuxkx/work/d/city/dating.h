@@ -1,7 +1,7 @@
 #include <ansi.h>
 string swap_word(string str)
 {
-    int len=strwidth(str);
+    strwidth(str);
     string* words=({});
     int i;
     int w1;
@@ -40,7 +40,7 @@ string swap_word(string str)
 
 string insert_string(string str)
 {
-              int len=strwidth(str);
+              strwidth(str);
               int i;
               string tmp="";
         string *spch = ({"├","┝","┞","┟","┠","┡","┢","┣","│","┬","┭","┮","┯",
