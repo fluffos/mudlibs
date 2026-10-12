@@ -195,3 +195,9 @@ After reboot, `buy jitui` purchased 炸鸡腿 and changed 1 黄金 into 99
 启动时警告 93 -> 0；新进程登录正常（新人物用 `new`）。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 18 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 6 个，只在 #if 分支用的声明移进分支 2 个文件；改动 23 个文件，HEAD 与工作树各载入一次无回退（23 objects; HEAD PASS 23, tree PASS 23; regress 0; newly loading 0），这些文件的警告 52 -> 18。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查
+
+- **安全**：`obj/login.lpc`（及 `edit/obj/login.lpc`）`set()`：`if (prop == "freeze_time"); return ::set(prop, data);` 多了分号，return 无条件执行，下面的 `geteuid(previous_object()) != ROOT_UID` 检查永远到不了——任何对象都能改玩家连接对象的任意属性（密码、权限等）。去掉分号。全库只有本库两份是这个写法。
+- `u/fly/npc/greeting.h` 转码时漏了，仍是 GBK：字符串里的 GBK 尾字节打乱了词法，警告报在 `xuerengui.lpc` 第 66 行。按 GB18030 转成 UTF-8（全库 .lpc/.h 严格 UTF-8 检查另行进行）。
+- 改动的对象载入无回退，`xuerengui` 新增可载入。

@@ -15,10 +15,10 @@ void greeting1 (object who)
     object weapon = me->query_temp("weapon");
 
     if (weapon)
-      str = "$N¾ÙÆğÊÖÖĞµÄ"+weapon->query("name")+"Ïò$nĞĞÀñ£º";
+      str = "$Nä¸¾èµ·æ‰‹ä¸­çš„"+weapon->query("name")+"å‘$nè¡Œç¤¼ï¼š";
     else
-      str = "$N¾ÙÊÖÏò$nĞĞÀñ£º";
-    str = str + RANK_D->query_respect(who)+"Î÷ĞĞÈ¡¾­£¬ÍşÃûØ¨¹Å£¡\n";
+      str = "$Nä¸¾æ‰‹å‘$nè¡Œç¤¼ï¼š";
+    str = str + RANK_D->query_respect(who)+"è¥¿è¡Œå–ç»ï¼Œå¨åäº˜å¤ï¼\n";
 
     message_vision (str,me,who);
   }
@@ -36,8 +36,8 @@ void greeting2 (object who)
   if (who->query("quest/reward") > 0)
   {
     string str;
-    str = "$NÏò$nÒ»¹ª£º"+RANK_D->query_respect(who)+
-          "ÏÉÌåÏéÔÆÁıÕÖ£¬ÇëËÙÈ¥°İ¼ûÎáÍõÌ«×Ú£¡\n";
+    str = "$Nå‘$nä¸€èº¬ï¼š"+RANK_D->query_respect(who)+
+          "ä»™ä½“ç¥¥äº‘ç¬¼ç½©ï¼Œè¯·é€Ÿå»æ‹œè§å¾ç‹å¤ªå®—ï¼\n";
     message_vision (str,me,who);
   }
 }
@@ -52,7 +52,7 @@ void greeting3 (object who)
     return;
 
     string str;
-    str = "$NÍµÍµµØ¿´×Å$n¼éĞ¦×Å£¬"+RANK_D->query_respect(who)+"ÉÏµÈÏÉÌå£¬¿ÉÏ§Ãû×ÖÓĞµãÄÇ¸ö.....£¡\n";
+    str = "$Nå·å·åœ°çœ‹ç€$nå¥¸ç¬‘ç€ï¼Œ"+RANK_D->query_respect(who)+"ä¸Šç­‰ä»™ä½“ï¼Œå¯æƒœåå­—æœ‰ç‚¹é‚£ä¸ª.....ï¼\n";
     message_vision (str,me,who);
       command("grin"):
 }

@@ -213,3 +213,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 - 2026-10-10：`/u/snow/wudujiao/mishi.lpc` 的技能判断用按位 `&` 连接两个比较（如 `tjss > 10000 & taoism > 10000`），改为逻辑 `&&`。两边都是 0/1 比较结果，行为不变，只是写法纠正。
 
 - 2026-10-11：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 29 处，返回类型/原型 36 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 0 个，只在 #if 分支用的声明移进分支 3 个文件；改动 64 个文件，HEAD 与工作树各载入一次无回退（64 objects; HEAD PASS 64, tree PASS 64; regress 0; newly loading 0），这些文件的警告 68 -> 0。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查
+
+- `adm/daemons/cruised.lpc`：五处只剩注释的 `if (cruise[USER_ID]) { }` 挪进注释（与 longyunmeng 同，行为不变）。载入无回退。
