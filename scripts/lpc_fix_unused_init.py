@@ -20,7 +20,7 @@ only = []
 if "--only" in sys.argv:
     only = sys.argv[sys.argv.index("--only") + 1:]
 W = f"{REPO}/libs/{slug}/work"
-rows = [l.rstrip("\n").split("\t") for l in open(f"{_SCRATCH}/lpcw-{slug}/diagnostics.tsv", encoding="utf-8", errors="replace")]
+rows = [l.rstrip("\n").split("\t", 4) for l in open(f"{_SCRATCH}/lpcw-{slug}/diagnostics.tsv", encoding="utf-8", errors="replace")]
 TYPE = r"(?:int|string|object|mixed|mapping|float|function|status|buffer|class\s+\w+)"
 want = collections.defaultdict(set)
 for f, ln, col, sev, msg in rows:

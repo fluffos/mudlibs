@@ -93,7 +93,7 @@ def signature(wpath, fn):
 
 
 def main():
-    rows = [l.rstrip("\n").split("\t") for l in open(ROWS, encoding="utf-8", errors="replace")]
+    rows = [l.rstrip("\n").split("\t", 4) for l in open(ROWS, encoding="utf-8", errors="replace")]
     plans = collections.defaultdict(dict)       # leaf -> {fn: (qualifier, signature)}
     skipped = []
     pairs = collections.defaultdict(list)       # (leaf, fn) -> every message about it, in file order

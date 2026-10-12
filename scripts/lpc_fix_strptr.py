@@ -47,7 +47,7 @@ def main():
         work = sys.argv[sys.argv.index("--work") + 1]
     if "--tsv" in sys.argv:
         tsv = sys.argv[sys.argv.index("--tsv") + 1]
-    rows = [l.rstrip("\n").split("\t") for l in open(tsv, encoding="utf-8", errors="replace")]
+    rows = [l.rstrip("\n").split("\t", 4) for l in open(tsv, encoding="utf-8", errors="replace")]
     sites = collections.defaultdict(list)
     for f, ln, col, sev, msg in rows:
         if msg.startswith("Function pointer returning string constant"):

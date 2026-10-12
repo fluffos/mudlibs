@@ -12,7 +12,7 @@ os.makedirs(_SCRATCH, exist_ok=True)
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 slug = sys.argv[1]; apply_ = "--apply" in sys.argv
 work = f"{REPO}/libs/{slug}/work"
-rows = [l.rstrip("\n").split("\t") for l in open(f"{_SCRATCH}/lpcw-{slug}/diagnostics.tsv", encoding="utf-8", errors="replace")]
+rows = [l.rstrip("\n").split("\t", 4) for l in open(f"{_SCRATCH}/lpcw-{slug}/diagnostics.tsv", encoding="utf-8", errors="replace")]
 want = collections.defaultdict(set)      # file -> {(line, name)}
 for p in rows:
     if len(p) >= 5 and p[3] == "warning":

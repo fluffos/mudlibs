@@ -22,7 +22,7 @@ apply_ = "--apply" in a
 only = a[a.index("--only") + 1:] if "--only" in a else []
 W = f"{REPO}/libs/{slug}/work"
 
-rows = [l.rstrip("\n").split("\t") for l in open(f"{_SCRATCH}/lpcw-{slug}/diagnostics.tsv", encoding="utf-8", errors="replace")]
+rows = [l.rstrip("\n").split("\t", 4) for l in open(f"{_SCRATCH}/lpcw-{slug}/diagnostics.tsv", encoding="utf-8", errors="replace")]
 want = collections.defaultdict(set)
 for f, ln, col, sev, msg in rows:
     m = re.match(r"Macro '(\w+)' redefined", msg)
