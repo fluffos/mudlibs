@@ -217,3 +217,17 @@ The `.c` -> `.lpc` rename changed the string but not the slice width: `f[<2..] =
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 0 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 184 个，只在 #if 分支用的声明移进分支 0 个文件；改动 103 个文件，HEAD 与工作树各载入一次无回退（103 objects; HEAD PASS 56, tree PASS 56; regress 0; newly loading 0），这些文件的警告 436 -> 246。
 
 - 2026-10-10（续）：第二轮编译警告整理把 `light.lpc` 里未用的 `object env = (all_environment() || ...)[<1];` 留成了无意义的表达式语句，改为整行删去（`lpc_fix_unused_init.py` 现只在初始化式就是单个调用时保留调用）。 另外 `secure/ftp.lpc`、`guilds/priests/rooms/registration.lpc`、`secure/master/log_file.lpc` 中同样被删的 `#if` 分支变量已恢复。
+
+## 编译警告收尾（2026-10-12）
+
+`scripts/toolkit_fix.sh` 一轮加手工收尾；能编译的文件警告清零，剩下的警告都在本来就编不过的 LDMud 遗留文件里（`mkmapping`、`interactive_info`、`set_this_object` 等，属移植缺口）。改动的 146 个对象 HEAD 与工作树各载入一次：HEAD PASS 75，tree PASS 75，regress 0。
+
+- 机械类：60 个 `nosave` 函数改 `protected`（2 个删去），121 处无意义转义（`\'`、`\T` 等，输出不变），176 个未用局部变量，3 个只在 `#if` 分支用的声明移进分支。
+- 重复继承：`include/room.h` 本身会 `inherit ROOM_FILE`（有 `ROOM_NO_INHERIT` 开关）。`areas/tristeza/shops/bakery.lpc` 和 priests 的 `armoury`/`artificer`/`quartermasters`/`treasury`/`wine_cellar` 先经头文件继承 room，再继承一个本身就继承 room 的类（food_shop、officer_room、pub），于是 room 的变量声明两次、函数“inherited from both”。在这些文件 include 前加 `#define ROOM_NO_INHERIT`。`guilds/thieves/thief.h` 同理直接继承 `mark/can_throw`、`mark/is_valid_target`，新增 `THIEF_NO_INHERIT` 开关，`skills/_stab.lpc`、`skills/_tth.lpc`（已经继承 `criticals`）打开它。驱动原本就选用子类里的定义，行为不变。
+- 真 bug（“Expression has no side effects”下面藏的）：
+  - `areas/tristeza/finnclub/sauna.lpc`：`str == tmp1` 应为赋值，“... with X” 的写法从没生效。
+  - `lib/armour.lpc`：`rcs[i] == "dwarves"`，dwarf 的复数从没换成 dwarves（变成 “dwarfs”以外的原样）。
+  - `std/obj/pipe.lpc`：`addiction == 0`、`sweat == 0`，负值从不归零。
+  - `bin/pub/_check.lpc`：61–80 一档的 `case` 后面是一个孤立的 `tmp;` 而不是 `break;`，直接落到 default，玩家总看到“死在瓶子里”的那句。
+  - `basic/curse.lpc`：删 `identified_by` 最后一个名字时算出新数组却没赋回去。
+- 其它：`lib/door.lpc` 空的 `if (l_long) {}` 删去；`basic/room/map.lpc`、`bin/usr/_diff.lpc` 的 `?:` 两边类型统一；三个 attack 文件和 `bin/pub/_disguise.lpc` 注释里的嵌套 `/*`。

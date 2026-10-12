@@ -15,8 +15,10 @@
 #include "dirs.h"
 #include "ranks.h"
 
+#ifndef THIEF_NO_INHERIT
 inherit "/guilds/thieves/mark/can_throw";
 inherit "/guilds/thieves/mark/is_valid_target";
+#endif
 
 #define TOP_TEN "/guilds/thieves/top_ten"
 #define GUILD "/guilds/thieves/rooms/guild"

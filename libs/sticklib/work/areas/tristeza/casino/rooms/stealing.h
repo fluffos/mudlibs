@@ -25,7 +25,7 @@
 status steal_cmd( string arg)
 {
   string who;
-  object victim, thief, bouncer;
+  object victim, bouncer;
   int rnd;
 
    if (!arg || sscanf(arg, "%s", who) != 1 )

@@ -9,7 +9,6 @@
 #include <daemons.h>
 #include <driver.h>
 
-#pragma combine_strings
 
 #define MK_DAMAGE_RATE 5.7
 #define PK_DAMAGE_RATE 3.3
