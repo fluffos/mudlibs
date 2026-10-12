@@ -226,7 +226,7 @@ The `.c` -> `.lpc` rename changed the string but not the slice width: `f[<2..] =
 - 重复继承：`include/room.h` 本身会 `inherit ROOM_FILE`（有 `ROOM_NO_INHERIT` 开关）。`areas/tristeza/shops/bakery.lpc` 和 priests 的 `armoury`/`artificer`/`quartermasters`/`treasury`/`wine_cellar` 先经头文件继承 room，再继承一个本身就继承 room 的类（food_shop、officer_room、pub），于是 room 的变量声明两次、函数“inherited from both”。在这些文件 include 前加 `#define ROOM_NO_INHERIT`。`guilds/thieves/thief.h` 同理直接继承 `mark/can_throw`、`mark/is_valid_target`，新增 `THIEF_NO_INHERIT` 开关，`skills/_stab.lpc`、`skills/_tth.lpc`（已经继承 `criticals`）打开它。驱动原本就选用子类里的定义，行为不变。
 - 真 bug（“Expression has no side effects”下面藏的）：
   - `areas/tristeza/finnclub/sauna.lpc`：`str == tmp1` 应为赋值，“... with X” 的写法从没生效。
-  - `lib/armour.lpc`：`rcs[i] == "dwarves"`，dwarf 的复数从没换成 dwarves（变成 “dwarfs”以外的原样）。
+  - `lib/armour.lpc`：`rcs[i] == "dwarves"`，dwarf 从没换成复数 dwarves，描述里一直是单数 dwarf。
   - `std/obj/pipe.lpc`：`addiction == 0`、`sweat == 0`，负值从不归零。
   - `bin/pub/_check.lpc`：61–80 一档的 `case` 后面是一个孤立的 `tmp;` 而不是 `break;`，直接落到 default，玩家总看到“死在瓶子里”的那句。
   - `basic/curse.lpc`：删 `identified_by` 最后一个名字时算出新数组却没赋回去。
