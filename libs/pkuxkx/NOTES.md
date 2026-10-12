@@ -261,3 +261,12 @@ python3 scripts/mudclient.py 127.0.0.1 40274 --timeout 40 --idle 0.5 \
 
 - `d/xingxiu/nanjiang2/3.lpc`、`shanjiao.lpc`：删去空的 `if (current_water==0) { }`（行为不变）。
 - 改动的对象 HEAD 与工作区都能载入，无回退。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查
+
+- `clone/obj/gemlocker.lpc`：`allamount + amount;` 结果被丢弃，“宝石袋里共有 N 个宝石”永远显示 0；改为 `+=`。
+- `d/city/npc/refugee-2.lpc`：`tempskill/5*6;` 结果被丢弃，官兵技能没像气血一样加成；改为 `tempskill = tempskill / 5 * 6;`。
+- `kungfu/skill/shanjue.lpc`：`for (…) t ;` 循环体空，`t` 恒为 1，修炼所需正气不随等级翻倍；按全库 205 处同型写法改为 `t *= 2;`。
+- `d/luoyang/npc/dian.lpc`：`if (!arg) 0;` 改为 `return 0;`；`quest/escort/escort_board.lpc`：`else 0;` 改为 `else return 0;`。
+- `u/boost/gift.lpc`：`#ifndef TEST_MODE` 包住了 if 的全部内容，挪到 if 外面；`adm/daemons/moneyd.lpc` 只剩注释的 `else if (cc) { }` 挪进注释；`d/changbai/ssmiao.lpc` 孤立的 `"\n";` 删去；`inherit/char/family_npc1.lpc`、`u/whuan/familyd.lpc` 空的 `if(armed) { }` 删去；`u/idle/mudi.lpc` `i==0;j==0;` 改为 `=`；`u/jason/13954955881.lpc` `mud_status;` 改为调用；`liangyi-jian.bak.lpc` 去掉无用 `level;`。
+- 13 个对象载入无回退。
