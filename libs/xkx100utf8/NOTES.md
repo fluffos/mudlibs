@@ -181,3 +181,7 @@ python3 scripts/mudclient.py 127.0.0.1 40275 --timeout 55 --idle 0.45 \
   --send "fluffos" --send "Mud@2026" \
   --send "look" --send "score" --send "quit"
 ```
+
+## 深度功能测试（§10.7，2026-10-12）：“无副作用表达式”警告复查（上游 PR）
+
+- fluffos-upstream 库，修复走上游 fluffos/xkx100 PR #7（已合并）：`dns_master.lpc` 空 if、`adm/daemons/event/qiantang.lpc` 钱塘潮 `"…\n"; NOR;` 颜色不复位、三个 `d/xingxiu` 房间空的 `if (current_water == 0) {}`。6 个对象改前改后均载入。pin 升到 182fe371。
