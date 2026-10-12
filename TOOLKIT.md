@@ -137,6 +137,7 @@ Classes the toolkit leaves to you on purpose:
 | `lpc_warnings.py SLUG [--fix] [--list N]` | Scans with `lpcc --batch` in chunks that survive a crashing object, then applies the mechanical fixes |
 | `lpc_fix_bitwise_bool.py` | Turns a lone `&`/`|` between comparisons into `&&`/`||` |
 | `lpc_fix_return_types.py [--also NAME]` | Fixes `int create/init/reset` where the base declares them `void`, and prototypes that disagree with their definition |
+| `lpc_fix_void_override.py SLUG [--mixed]` | `int create()`/`init()`/`reset()` where the base says `void`; with `--mixed`, an override whose return type clashes with the base (`mapping` vs `string`) becomes `mixed` |
 | `lpc_fix_unique_init.py` | Adds `init()` to NPCs that inherit both `NPC` and `F_UNIQUE` |
 | `lpc_fix_unused_init.py` | Handles unused locals with an initializer: deletes a pure one, keeps a single call as a statement |
 | `lpc_move_decl.py` | Moves a declaration that only an inactive `#if` branch uses into that branch |

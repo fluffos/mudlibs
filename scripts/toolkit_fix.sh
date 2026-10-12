@@ -63,6 +63,7 @@ grep -avE '/tests?/|/help_topics/error_messages/' "$D" > "$D.f" && mv "$D.f" "$D
 echo "== 2. diagnostics-driven fixers"
 echo "   bitwise:      $(python3 scripts/lpc_fix_bitwise_bool.py --apply "$SLUG" "$D" | tail -1)"
 echo "   return types: $(python3 scripts/lpc_fix_return_types.py --apply "$SLUG" "$D" | tail -1)"
+echo "   overrides:    $(python3 scripts/lpc_fix_void_override.py "$SLUG" --mixed --apply | tail -1)"
 echo "   unique init:  $(python3 scripts/lpc_fix_unique_init.py --apply "$SLUG" "$D" | tail -1)"
 echo "   unused init:  $(python3 scripts/lpc_fix_unused_init.py "$SLUG" --apply 2>/dev/null | grep -c '^FIX') declaration(s)"
 echo "   #if locals:   $(python3 scripts/lpc_move_decl.py "$SLUG" --apply 2>/dev/null | grep -c '^edited') file(s)"
