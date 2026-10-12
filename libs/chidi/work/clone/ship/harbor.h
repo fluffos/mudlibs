@@ -23,7 +23,10 @@ mapping islands = ([
 // 荒岛
 // 如果船停在荒岛，玩家可以派一个人守船
 // 因为在荒岛，玩家无法唤船
+// genmap.lpc includes this inside find_exits() and has no use for the wild harbors
+#ifndef HARBOR_NO_WILDHARBORS
 string *wildharbors = ({
         "/d/island/icefire1",
 });
+#endif
 

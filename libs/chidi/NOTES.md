@@ -871,3 +871,22 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply c
 - `d/feitian/npc/xunbu.lpc` 巡捕：`(: random_move() :);` 只造函数指针不调用，巡捕从不走动；改为 `random_move();`（同码的另 9 个库一并修）。
 - `inherit/misc/bbsboard1.lpc`：`note["msg"] = (text, 1);` 等四处是逗号表达式，存进去的帖子内容是数字 1（原档就如此，丢了一个函数名）；照 `bbsboard.lpc` 改为存 `text`。目前没有对象继承它。
 - `clone/obj/genmap.lpc`：`DEBUG` 是空宏，留下 `("text", n);` 语句；改成空函数（与 yxcs 同法）。载入无回退。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+`scripts/toolkit_fix.sh` 加手工修复，能编译的文件里的警告 78 → 0（15727 个文件可编译，数量不变）。剩下的 7 条都在本来就编译不过的 `clone/misc/card.lpc` 里（`add(...)` 少分号、`obj3 += 100` 把对象当整数加，不是一处小改能修好的，没动）。
+
+**机械修复（工具）：** 27 个 `int init()` 只回传标志 → `void`（含 `clone/shoufei/long/armor.h`）；21 个 `string query_autoload()` 覆盖 item/whip 的 `int` 版本 → `mixed`（`feature/autoload.lpc` 把返回值原样当 autoload 参数用，返回值不变）；11 处 `a != x & a != y` → `&&`（五毒教毒囊、`dongxue.lpc`，结果不变只是恢复短路）；`clear_title`/`give_gift`/`mapit` 原型与定义对齐；2 处多余 inherit；`board.lpc` 只在 `#ifdef BACKUP_B` 里用的 `transfer` 移进分支。
+
+**手工修复：**
+- `quest/haojie/npc/wuzhe.lpc`：`do_join()` 覆盖 `bhnpc.lpc` 的 `int do_join(object)`，原型和定义都改成 `varargs mixed`（行为不变）。工具这里出过错：原型和定义两条诊断落到同一个定义上，同一处替换做了两次，写出 `varargs mixeddo_join()`（成了另一个函数，询问 join 会改走 bhnpc 的版本）；已手工改正，`scripts/lpc_fix_void_override.py` 现在每处编辑只做一次。
+- `quest/quest_kill/dugu.lpc`：`ask_kill` 有 `int` 和 `string` 两个原型，删掉与定义不符的 `string` 那个。
+- `d/city2/shenzhen/npc/shenyi.lpc`：发银针的计时 `last_time` 跟 `feature/alias.lpc` 的 `nosave last_time` 同名，改名 `last_zhen_time`（本来就是两个变量，行为不变）。
+- `quest/tulong/npc/dragon.lpc`：全局 `object killer = this_player()` 跟 `feature/attack.lpc` 的 `object *killer` 同名，改名 `summoner`（只在 create() 里读属性用）。
+- `d/register/npc/dizangwang.lpc`：`attempt_apprentice()` 改 `void`（`cmds/skill/apprentice.lpc` 不读返回值）。
+- `clone/ship/harbor.h` 的 `wildharbors` 包进 `#ifndef HARBOR_NO_WILDHARBORS`，在 `find_exits()` 里 include 它的 `genmap.lpc` 先 `#define`（它用不到这张表）。
+- `d/emei/user-room/host/home.lpc` 的 `STORY_DIR` 前加 `#undef`；`huashan-jian.lpc` 删掉一个多余的 `;`。
+
+另：本库 `config.fluffos` 是 CRLF，`toolkit_fix.sh` 第 0 步读出的 master 路径带 `\r`，lpcc 一直报 master 载入失败；脚本已改为去掉 `\r`。
+
+915 个对象载入无回退（HEAD 914 通过，现在 914 通过）；`lpc_audit_removed_locals.py` 0 条需复查。
