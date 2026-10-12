@@ -238,3 +238,13 @@ autoload，quit 后不在身上，符合该血统普通物件惯例。
 `scripts/lpc_warnings.py fy2mg --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 245 个 `.lpc`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：230 -> 230 通过，无回退。启动时警告 16 -> 0；新进程登录（输入名字）正常。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 3 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 0 个，只在 #if 分支用的声明移进分支 1 个文件；改动 3 个文件，HEAD 与工作树各载入一次无回退（3 objects; HEAD PASS 1, tree PASS 1; regress 0; newly loading 0），这些文件的警告 3 -> 0。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+能编译的文件里的警告 131 -> 0（`scripts/lpc_warnings.py fy2mg` 重扫：3626 个文件可编译，0 条警告）。fys 同日也收尾，但两库不是同码（`lpc_twin_port.py classify`：fys 改过的 52 个文件在本库 48 个没有、3 个头文件内容不同），没有可直接搬的修改。
+
+**真问题：** `std/weapon/_dagger.lpc` 本应是“作为 feature 继承”的匕首（同目录 `_sword.lpc`、`_blade.lpc` 等以及 fy330/fys/zzfy 等兄弟库的 `_dagger.lpc` 都是两行 `#define AS_FEATURE` + `#include "dagger.lpc"`），这里却是一份 `dagger.lpc` 的旧拷贝，自己 `inherit EQUIP`。唯一用它的 `d/qianfo/obj/silver_clasp.lpc` 银簪（`inherit HEAD; inherit F_DAGGER;`，可戴可当匕首用）因此把 `F_DBASE`/`F_MOVE`/`F_NAME` 等继承两份（7 条 `Redeclaration`：`dbase`、`weight`、`my_id`……两套变量）。按兄弟库改回两行，银簪只剩一套。
+
+**其余：** `toolkit_fix.sh` 删去 10 个多余的 `inherit`（`d/city/npc/*` 等 NPC 再继承 `F_SKILL`/`F_CLEAN_UP`，`std/char/npc.lpc` 已带上）；`daemon/skill/hubo.lpc`（`ITEM`+`SKILL` 双继承）点名 `clean_up()` 的赢家 `skill::clean_up()`，行为不变。
+
+验证：改动的 13 个对象 HEAD 与工作树各用新进程载入：12 -> 13 通过，regress 0（银簪原先编译不过，现在能载入）。删除声明审计 0 项待看。13 个对象载入无回退。
