@@ -15,6 +15,7 @@
 #define MODE_TEAM_LT   2
 #define MODE_TEAM_DZ   3
 #define MODE_TEAM_XH   4
+#ifndef GROUND_TABLES_INHERITED
 string *modes = ({
   "个人散打",
   "个人擂台",
@@ -22,6 +23,8 @@ string *modes = ({
   "门派对阵",
   "门派循环赛",
 });
+#endif
+#ifndef GROUND_TABLES_INHERITED
 string *mode_hints = ({
   "由任意两名玩家上场较量",
   "玩家依次上场与擂主较量，赢者为新擂主",
@@ -29,6 +32,7 @@ string *mode_hints = ({
   "每门派的选手按弱强等级分类，各门派间的同级选手较量",
   "每门派的选手依次与别的门派所有选手较量",
 });
+#endif
 
 #define FAMILY_NONE     0
 #define FAMILY_FANGCUN  1
@@ -39,6 +43,7 @@ string *mode_hints = ({
 #define FAMILY_LONGGONG 6
 #define FAMILY_WUDIDONG 7
 #define FAMILY_XUESHAN  8
+#ifndef GROUND_TABLES_INHERITED
 string *families = ({
   "混合门派",
   "方寸山三星洞",
@@ -52,4 +57,5 @@ string *families = ({
   "五庄观",
   "火云洞",
 });
+#endif
 

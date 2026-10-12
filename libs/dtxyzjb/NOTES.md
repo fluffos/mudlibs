@@ -189,3 +189,22 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply d
 ## 深度功能测试（§10.7，2026-10-11）：全库严格 UTF-8 检查
 
 - `d/sea/npc/beast1.lpc` 转码时漏了，仍是 GBK，且文件末尾 `}` 之后多两个垃圾字节（`\xff\xba`）。去掉垃圾字节后按 GB18030 转成 UTF-8，代码完整，名字（花皮、绿背、双头、虎齿……龟）恢复正常，载入通过。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+能编译的文件里的警告 205 -> 0（`scripts/lpc_warnings.py dtxyzjb` 重扫：13175 个文件可编译；剩下 11 条都在本来就编译不过的 3 个文件里：`adm/simul_efun/oo.lpc` 是 `object.lpc` 的旧拷贝、没人引用；`d/npc/vr_room/obj/tai1.lpc` 是缺了开头的残片；`u/xdao/verifyd.lpc` 有语法错误）。同系的 dtxywzxzb 今天已收尾，`lpc_twin_port.py classify` 显示两库对应文件多数“differs”，所以按它的修法逐个手改（ground.h 表格 guard、quest.lpc 的 colors.h 移进 guard、toptend 的 `#undef`、reporting 的未用 `str`）。
+
+**真问题：**
+- `adm/daemons/network/mail_serv.lpc`：`else if(tmp[i] == EOT) tmp[i] == EOT+".";` 是比较不是赋值（TMI-2 那次全库清扫因为没空格的写法漏了这一处），改成 `=`。
+- `u/yhq/npc/anong.lpc` 阿浓：`int fight_ob()` / `int kill_ob()` 覆盖基类却不调用 `::fight_ob()` / `::kill_ob()`，她只换出招表、从不真的进入战斗；改成 `void`，先调用基类（该文件因缺技能档在 HEAD 就载入失败，修改只在它能载入时生效）。
+- `d/jjf/npc/xiaomotou1.lpc` 小魔头：`attempt_apprentice` 前残留了半截旧函数头 `void attempt_apprentice(object ob, object me) {`，整个文件编译不过；删去这两行，现在能载入。
+
+**其余：**
+- `d/dntg/yunlou/npc/yaoguai.lpc`、`yaoguai-b.lpc`、`yao.lpc` 及 `u/lxmas/` 的 5 份拷贝：自己的 `nosave int tick`（出绝招的节拍）与 `std/char.lpc` 的 `tick`（心跳节拍）同名，驱动本就给了两个变量；把叶子这边改名 `perform_tick`，行为不变（35 条 `Redeclaration` 来自它和继承它的 `yg-*`）。
+- `include/vrm.h`：迷宫表被 `std/room/vrm_server.lpc` 和继承它的 8 个 `d/room/vr_room/vrm_*.lpc` 各包含一次；表格包进 `#ifndef VRM_TABLES_INHERITED`，这些房间在包含前定义它。`u/pujing/room/leitai1-4/ground.h` 同样处理（`GROUND_TABLES_INHERITED`）。
+- `d/kaifeng/npc/quest.lpc` 与 `u/pujing/room/leitai1-4/npc/quest.lpc`：`#include "colors.h"` 移进 `__KAIFENG_QUEST__` guard。
+- `d/game/give/yuan.lpc`：`int bt = 2;` 连写三遍，留一遍。
+- `u/kicky/workroom*.lpc`、`u/xzg/workroom-bak.lpc`：多余的 `inherit newitemname`（`newitems` 已继承它）删去；它们自己那份内容不同的 `tianfu1/tianfu2` 改名 `room_tianfu1/2`，行为不变。
+- `toolkit_fix.sh`：8 个多余 `inherit`（多为 `F_CLEAN_UP`），`u/yhq/westseastore.lpc` 的 `reset()` 改 `void`（原型同改）；`u/rocky/toptend.lpc` 8 个 `#undef`。
+
+验证：改动文件、包含 `vrm.h`/`ground.h` 的对象和继承改名后 `yaoguai` 的对象共 161 个，HEAD 与工作树各用新进程载入：152 -> 153 通过，regress 0。删除声明审计 0 项待看。161 个对象载入无回退。
