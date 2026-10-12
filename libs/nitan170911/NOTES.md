@@ -938,3 +938,26 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply n
 - 补齐前几批漏掉的同码副本：`your_temp["guarding"];` 补 `= 0`（反击后清除防守姿态，含 `u/` 下的 combatd 拷贝）；`(: WEAPON_D, "query_action" :)` 改为 `(: call_other, WEAPON_D, "query_action" :)`（KB 04）；`mysql_d.lpc` 的空 `MSG` 宏改成空函数；`gigicook.lpc` 的 `arg == menu_list[0]` 改为 `=`。
 - 改动文件：adm/daemons/mysql_d.lpc u/gigi/test/gigicook.lpc u/lonely/combatd.lpc u/redl/combatd.lpc 
 - 改动的对象 HEAD 与工作区都能载入，无回退。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+可编译文件的警告 **11991 -> 0**（`lpc_warnings.py` 全库重扫：48355 个文件可编译，剩下 16 条警告都在本来就编译不过的文件里，如 `feature/dealer1.lpc`、`clone/pharmacy/herb/herb.lpc`、`realnews_d.lpc`）。改动的 162 个对象加上 5900 余个抽样对象（`clone/`、`d/city`、`d/xiangyang`、`d/yixing`、`feature/`、`inherit/`、`adm/daemons/`、800 件玩家自制道具）HEAD 与工作树各载入一次：`6086 objects; HEAD PASS 5995, tree PASS 5995; regress 0; newly loading 0`。删除声明审计 0 处待看。
+
+**严重问题一：F_DBASE 旁边的混入件读写的是 simul_efun 的共享 dbase（§7.15 的残留）。** `feature/equip.lpc`、`itemmake.lpc`、`food.lpc`、`liquid.lpc`、`pill.lpc`、`alias.lpc`、`message.lpc`、`name.lpc`、`damage.lpc`、`dealer.lpc`、`banker.lpc`、`guarder.lpc`、`apprentice.lpc`、`unique.lpc`、`control.lpc`、`inherit/char/master.lpc` 都不继承 F_DBASE，自己也没有 `query` 原型，于是裸 `query("x")`/`set("x", v)` 编译成 simul_efun 的后备函数，在 simul_efun 物件里执行，读写的是所有人共用的那一个 dbase。探针（新进程）证实：修正前给 NPC `wield` 长剑，提示照常出现，但 `query_temp("weapon")` 仍是 0、`equipped` 从没写进兵器，`is_equipping()` 恒为 0，`wear` 也一样；自制道具的 `query_autoload()` 不管穿没穿都返回 `"kept"`，`is_weapon()` 恒为 0；食物的剩余份数、店铺货表、`alias` 的命令延迟、`message` 的频道屏蔽都不读自己的属性。修正：`include/dbase.h` 补上与 `feature/dbase.lpc` 完全一致的 `set/query/delete/set_temp/query_temp/delete_temp/add/add_temp` 原型（nitan_san 的 dbase.h 一直有），上面这些混入件都 `#include <dbase.h>`；`adm/daemons/npcsd.lpc` 与 `cmds/adm/eval.lpc` 本身不是 dbase 物件、只用带物件参数的写法，去掉它们的 `#include <dbase.h>`（否则调用一个没有定义的原型会出错）。修正后探针：`wield` 后 `weapon` 指向长剑、`equipped == "wielded"`，`wear` 写入 `armor`，自制道具 `query_autoload()` 返回 `"wielded"`/`"worn"`、`is_weapon()` 为 1。本机原生启动（端口 40018）用 fluffos 登入实测：`list`/`buy jitui`/`eat jitui`（份数 4 -> 3）/`wield`/`unwield`/`wear`（物品栏出现装备标记 □）/`remove`/`alias` 都正常，`log/debug.log` 无新错误。测试后把 fluffos 的三个存档还原。
+- 同一处：`inherit/char/master.lpc` 开除弟子时 `if (query("skill_expell_penalty_tsl"), me)` 是逗号表达式，恒为真，所以从不按上限削减内力/精力；改为 `query("skill_expell_penalty_tsl", me)`（持青石令者免削）。
+
+**自制道具的 autoload（11726 条 `inherited from both` 警告的根源）。** 每件玩家自制道具都是 `inherit 兵器/防具基类; inherit F_ITEMMAKE;`，`/inherit/item/item.lpc`（或 `combined.lpc`）和 `/feature/itemmake.lpc` 各有一对真实的 `query_autoload()`/`autoload()`：item 的把整个 dbase 存进 autoload 字串，itemmake 的只记 `worn`/`wielded`（道具本身由 F_OBSAVE 存盘），驱动选的是后继承的 itemmake。两边都不是空桩（§7.239），itemmake 的才对。没有改 5843 个叶子：itemmake 的这对改名为 `query_itemmake_autoload()`/`itemmake_autoload()`，`item.lpc` 与 `combined.lpc` 的 `query_autoload()`/`autoload()` 先看 `function_exists("query_itemmake_autoload", this_object())`，有就交给它。探针（u/mud 下临时文件，已删）：STAFF、HANDS、THROWING 三种基类各配 F_ITEMMAKE，修正前后 `query_autoload()`/`autoload()` 走的都是 itemmake 的逻辑（数量、名称不变），普通长剑、铁莲子（combined）的结果逐字相同。另外 42 件以 XSWORD 为基类的自制箫剑，`is_weapon()` XSWORD 与 itemmake 都有定义、在这些道具上都是 1（都调用了 `init_xsword()`），在叶子里写 `int is_weapon() { return 1; }`。
+
+**其他：**
+- 幻境 `fairyland_quest` 的四个国度 NPC/宝物和 `room_readygo_hj.lpc`：`string a, b, ..., a = "...", b = "...";` 把每个变量声明了两次（原档如此），去掉前面那串不带初值的。
+- `template/gem/*.lpc`、`template/weapon/*.lpc` 自己又声明了基类 `/inherit/misc/template` 的 `dbase_format` 等变量，再传给 `set_*()`；改名为 `my_*`，行为不变。
+- `clone/misc/swmuding.lpc`（神木王鼎）重新声明了木鼎的 `insects` 表，木鼎的代码读的是自己那份，所以神木王鼎的虫表从没生效；改名 `sw_insects`，在 `create()` 里赋给 `insects`。
+- `d/city/npc/oldman.lpc` 的宠物体重表 `weight` 与 F_MOVE 的同名变量重名，改名 `pet_weights`；`maze/forest/maze.lpc` 的 `unique_rooms` 改名 `forest_unique_rooms`。
+- `d/yixing/doc/info_store.h`、`info_biao.h`、`info_guest.h`：帮主 `bangzhu.lpc` 直接包含一次，又经 `bangzhu_duty.h` -> `guanjia.h` 再包含一次，加头文件守卫。`include/eve.h` 的 `elements` 由 `/d/war/diablo.lpc` 提供（两个包含者都继承它），删去。
+- `include/boss_bad.h`/`boss_good.h` 的 `WAIT_TIME 120` 改成 `#ifndef` 默认值：包含它的 35 个任务 NPC 都先 `#define WAIT_TIME 60  // 完成不了任务的反省时间`，原来被头文件覆盖成 120，现在用各自的 60。
+- `adm/npc/obj/xiang.lpc` 的 `varargs int remove() { save(); }` 盖掉了 F_MOVE 的 `remove()`（减负重、清 handing）；改为先存盘再 `::remove(euid)`。
+- 返回类型与基类不符：`close_gate()`（4 个房间）、`attempt_apprentice()`（4 个 NPC）、`die()`、`heart_beat()`（u/redl 十个茶虫）、`init()` 改成 `void`（调用方都不用返回值）；`feature/food.lpc`、`liquid.lpc` 的 `do_effect()` 改成 `varargs int do_effect(object me)` 并返回 1——`drink`/`eat` 对 `only_do_effect` 物品把返回值当命令结果，两个重载它的物品本来就是 int。
+- 宏重定义加 `#undef`：`invent.lpc` 的三个 SKILL_MODEL、`ultra_questd.lpc` 的 QUEST、`meng-zhu.lpc` 的 MENGZHU、`tianshen.lpc`/`u/lonely/skybook/xiaoaojianghu.lpc` 的 FUBEN_D（指向不存在的 `fuben_daemonsd`，保持原样）、`u/lonely/canhezhi.lpc` 的 BOOK_DIR；`channeld.lpc` 不再定义没用到的 `GWIZ`。
+- `combatd.lpc`（含 u/ 下两个副本）：只在 `#ifdef USE_SKILLS_COMBAT`/`USE_SKILLS_SPECIAL` 里用的 `def`、`armor` 声明挪进对应分支；`genmap.lpc` 的 `find_exits()` 里包含了用不到的 `harbor.h`，删去。
+- toolkit 删去 40 个重复继承（`lingpai*`、任务 NPC 再继承 F_CLEAN_UP，`smith.lpc` 再继承 F_DEALER，几个技能再继承 F_SSERVER 等）。
+- 旁注（未改）：登入时 `newsd` 经 `dboard.lpc` 调用 `DATABASE_D->connect_to_database()`，该函数是 `protected`，`debug.log` 报 `apply() with insufficient permission`，只在没有 MySQL 时出现，结果与连不上一样。

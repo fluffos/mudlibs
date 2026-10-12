@@ -1,3 +1,5 @@
+#ifndef __YIXING_INFO_BIAO_H__
+#define __YIXING_INFO_BIAO_H__
 // /d/yixing/doc/info_biao.h
 // Last Modified by Lonely on Jul. 12 2002
 
@@ -72,3 +74,4 @@ string *biao_places = ({
 
         "/d/xueshan/shanlu4",
 });
+#endif

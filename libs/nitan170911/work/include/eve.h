@@ -179,8 +179,7 @@ mapping	ZONE_RANGE=
 	]);	
 string *commonskill=
 ({"force","unarmed","literate","magic","dodge","parry",});
-string *elements=
-({"earth","fire","water","light"});
+// elements 由 /d/war/diablo.lpc 定义（包含本文件的对象都继承它）。
 
 
 

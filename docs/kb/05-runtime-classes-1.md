@@ -239,6 +239,19 @@ property bag.
 `nitan_ceshi` and `nitan_san` predate the bug.
 **Warning:** don't trust a comment claiming the fix is in place. Grep
 for the actual function signatures. Companion bugs: §7.78, §7.79.
+**Residual, mixins beside F_DBASE (nitan170911/hhsj/xfbhh, 2026-10-12):**
+a mixin inherited *next to* F_DBASE (`equip`, `itemmake`, `food`, `alias`,
+`message`, `dealer` ...) has no `query` of its own, so its bare
+`query("x")` still compiles as the simul_efun fallback. Symptom: `wield`
+prints its message but `query_temp("weapon")` stays 0 and the weapon is
+never `equipped`; player-made items always autoload as `"kept"`; food
+never runs down. Fix: prototypes with F_DBASE's exact signatures in
+`include/dbase.h` (`varargs mixed query(string prop, mixed raw_or_ob);`
+...) and `#include <dbase.h>` in each such mixin (nitan_san's dbase.h
+always had them). Drop the include from daemons that rely on the fallback
+(`npcsd`, `eval`): a prototype nothing defines is a runtime error.
+Detection: probe `ob->set("equipped", 1); ob->is_equipping()` on any
+weapon; scan mixins whose inherit closure lacks F_DBASE for bare calls.
 
 ### 7.16 Stale shipped timestamps feed an unbounded catch-up loop
 **Symptom:** `while (rank["time"] + 3600 < t) {...decay...}` over
