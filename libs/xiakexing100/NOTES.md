@@ -486,3 +486,7 @@ functionally re-tested live on this lib.
 ## 深度功能测试（§10.7，2026-10-11）：铁掌山房间描述
 
 - `d/tiezhang/pingtai.lpc`、`wmfeng.lpc`、`wztang.lpc`：完整描述后孤立的 `"\n";` 删去（无可见变化）。载入无回退。
+
+## 深度功能测试（§10.7，2026-10-12）：黑木崖老者
+
+- `d/heimuya/npc/laozhe.lpc` `init()`：残留调试行 `sprintf("%s \n", what);`，`what` 是对象，本驱动 `sprintf` 的 `%s` 遇对象报错，进房间时 `init()` 每次中断、招呼从不执行；删去（与 fys 同）。

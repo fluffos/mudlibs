@@ -1019,3 +1019,8 @@ No code change. 拜师 not re-done.
 - `d/*/npc/xunbu.lpc` 巡捕：`(: random_move() :);` 只造了一个函数指针就丢掉，巡捕从不走动；改为 `random_move();`。
 - 改动的对象 HEAD 与工作区都能载入，无回退。
 - `d/hangzhou/npc/mameipo.lpc` 媒婆：`return "…嘻嘻.\n", i = 0;` 未满 16 岁返回 0 而非提示；拆成两句。`u/lxh/emoted.lpc` 删去空的 `if (!channel_emote) {}`。
+
+## 深度功能测试（§10.7，2026-10-12）：黑木崖老者
+
+- `d/heimuya/npc/laozhe.lpc` `init()`：残留调试行 `sprintf("%s \n", what);`，`what` 是对象，本驱动 `sprintf` 的 `%s` 遇对象报错，进房间时 `init()` 每次中断、招呼从不执行；删去（与 fys 同）。
+- `d/jinling/obj/y.lpc`（豆腐）：同时继承 `F_FOOD` 与 `F_LIQUID`，只有液体的 `init()` 生效，永远吃不了；补一个叶子 `init()` 依次调用两者（与 fys 同）。

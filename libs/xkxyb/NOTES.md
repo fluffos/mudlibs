@@ -150,3 +150,7 @@ functionally re-tested live on this lib.
 `scripts/lpc_warnings.py xkxyb --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 440 个 `.lpc` 和 11 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：397 -> 397 通过，无回退；改过的头文件的 134 个包含者 129 -> 129 通过。启动时警告 16 -> 0；新进程登录（输入名字）正常。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 25 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 0 个，只在 #if 分支用的声明移进分支 0 个文件；改动 17 个文件，HEAD 与工作树各载入一次无回退（17 objects; HEAD PASS 17, tree PASS 17; regress 0; newly loading 0），这些文件的警告 25 -> 0。
+
+## 深度功能测试（§10.7，2026-10-12）：黑木崖老者
+
+- `d/heimuya/npc/laozhe.lpc` `init()`：残留调试行 `sprintf("%s \n", what);`，`what` 是对象，本驱动 `sprintf` 的 `%s` 遇对象报错，进房间时 `init()` 每次中断、招呼从不执行；删去（与 fys 同）。
