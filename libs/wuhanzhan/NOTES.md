@@ -888,3 +888,8 @@ functionally re-tested live on this lib.
 启动时警告 59 -> 0；新进程登录（新人物确认）正常。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 14 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 10 个，只在 #if 分支用的声明移进分支 3 个文件；改动 22 个文件，HEAD 与工作树各载入一次无回退（22 objects; HEAD PASS 20, tree PASS 20; regress 0; newly loading 0），这些文件的警告 70 -> 31。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查
+
+- `story/` 下六个故事（niulang、songdai、wakeup、xiyou、zagang、zhengxi，及 `u/bqt/story/` 副本）的 `give_gift()` 只剩 `HIM "“啪”的一声…掉到你面前。" NOR;` 一行：`STORY_D->give_gift(物品, 数量, 消息)` 调用被删掉、只留下参数，故事结束时从不发奖励。本库 `adm/daemons/storyd.lpc` 有 `give_gift()`，按 mhxy 等同码库补回调用（灵芝、黄金、冰糖葫芦；物品文件都在）。
+- 12 个对象载入无回退。

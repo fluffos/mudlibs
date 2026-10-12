@@ -945,3 +945,7 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 
 - `d/*/npc/xunbu.lpc` 巡捕：`(: random_move() :);` 只造了一个函数指针就丢掉，巡捕从不走动；改为 `random_move();`。
 - 改动的对象 HEAD 与工作区都能载入，无回退。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查
+
+- `inherit/misc/bbsboard1.lpc`：`note["msg"] = (text, 1);` 等四处逗号表达式，帖子内容存成数字 1；照 `bbsboard.lpc` 改存 `text`（与 chidi 同）。载入无回退。
