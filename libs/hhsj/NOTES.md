@@ -732,3 +732,12 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 - 补齐前几批漏掉的同码副本：`your_temp["guarding"];` 补 `= 0`（反击后清除防守姿态，含 `u/` 下的 combatd 拷贝）；`(: WEAPON_D, "query_action" :)` 改为 `(: call_other, WEAPON_D, "query_action" :)`（KB 04）；`mysql_d.lpc` 的空 `MSG` 宏改成空函数；`gigicook.lpc` 的 `arg == menu_list[0]` 改为 `=`。
 - 改动文件：adm/daemons/mysql_d.lpc u/lonely/combatd.lpc u/redl/combatd.lpc 
 - 改动的对象 HEAD 与工作区都能载入，无回退。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+可编译文件的警告 **316 -> 0**（全库重扫：23246 个文件可编译）。内核与 nitan170911 逐字相同，先用 `scripts/lpc_twin_port.py adopt nitan170911 hhsj` 搬来同日 nitan170911 那一节的 104 个同码文件，再对本库自己的版本手改同样的根因。载入核对 5647 个对象（改动的、改过的头文件的包含者、`clone/`、`d/city`、`d/xiangyang`、`feature/`、`inherit/`、`adm/daemons/`、600 件玩家自制道具）：`5647 objects; HEAD PASS 5547, tree PASS 5547; regress 0; newly loading 0`。删除声明审计 0 处待看。
+
+- **严重：F_DBASE 旁边的混入件读写 simul_efun 的共享 dbase**（详见 nitan170911 同日一节）。`include/dbase.h` 补上 F_DBASE 属性函数的原型，`feature/equip.lpc`、`itemmake.lpc`、`food`、`liquid`、`pill`、`alias`、`message`、`name`、`damage`、`dealer`、`banker`、`guarder`、`apprentice`、`unique`、`control`、`inherit/char/master.lpc` 都包含它；`npcsd.lpc`、`eval.lpc` 去掉包含。探针（新进程）：修正后 NPC `wield` 长剑 `query_temp("weapon")` 指向它、`equipped == "wielded"`，`wear` 写入 `armor`，自制道具 `query_autoload()` 返回 `"wielded"`、`is_weapon()` 为 1（修正前与 nitan170911 一样都是 0/`"kept"`）。
+- 自制道具 autoload：itemmake 的 `query_autoload()`/`autoload()` 改名为 `query_itemmake_autoload()`/`itemmake_autoload()`，`item.lpc`、`combined.lpc` 先交给它；探针三种基类（STAFF/HANDS/THROWING + F_ITEMMAKE）与普通长剑、铁莲子的结果都和改前一致（itemmake 的逻辑照旧胜出）。
+- `inherit/char/master.lpc` 开除弟子的逗号表达式、神木王鼎虫表、`xiang.lpc` 的 `remove()`、boss 任务 NPC 的 `WAIT_TIME`（各自的 60 生效）、幻境变量重复声明、`template/` 变量改名、`d/yixing/doc` 头文件守卫、宏 `#undef` 等，同 nitan170911。
+- 本库自己的：`adm/daemons/chard1~3.lpc` 先 `#define HUMAN_RACE` 为 yao/mo 再定义为 human（后者生效），加 `#undef` 保持现状；`d/guanwai/bingdong.lpc` 的 BOOK 加 `#undef`；`combatd.lpc` 的 `def`/`armor` 挪进 `#ifdef`；`ji.lpc`、`d/u.lpc`、`d/hunduntian/npc/u.lpc` 注释里套的 `/*` 去掉；toolkit 删去 4 个重复继承 F_CLEAN_UP。

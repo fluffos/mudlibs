@@ -476,7 +476,7 @@ mapping ZONE_RANGE =  //ACT1
     "x1": 1200, "x2": 1820, "y1": 3020, "y2": 2000, "z1": 0, "z2": 0, ]),
 ]);
 string *commonskill = ({ "force", "unarmed", "literate", "magic", "dodge", "parry", });
-string *elements = ({ "earth", "fire", "water", "light" });
+// elements 由 /d/war/diablo.lpc 定义（包含本文件的对象都继承它）。
 
 
 
