@@ -348,3 +348,11 @@ HEAD 与工作树分别加载（新进程）：1008 -> 1008 通过，无回退�
 `.c` 改名 `.lpc` 时只改了字符串没改切片宽度：`f[<2..] == ".lpc"` 拿两个字符比四个字符，永远不成立（`!=` 永远成立），按后缀筛文件、去后缀的代码因此从不运行或截成 `x.l`（KB 06 §7.238）。`scripts/lpc_lpc_suffix_slice.py --apply` 改了 4 处比较、0 处去后缀（如 `adm/daemons/taskd.lpc`）；改动的文件 HEAD 与工作树分别加载（新进程），无回退。
 
 - 2026-10-11：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 2 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 0 个，只在 #if 分支用的声明移进分支 0 个文件；改动 2 个文件，HEAD 与工作树各载入一次无回退（2 objects; HEAD PASS 2, tree PASS 2; regress 0; newly loading 0），这些文件的警告 3 -> 1。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+可编译文件的警告 **168 -> 0**（全库重扫：13437 个文件可编译）。改法与 nitan_ceshi 同日那一节相同（`scripts/lpc_twin_port.py adopt nitan_ceshi nitan3`，24 个同码文件），载入核对 962 个对象（改动的、F_UNIQUE/F_LIQUID/F_FOOD 的全部继承者、`feature/`、`inherit/`、`adm/daemons/`、`clone/misc/`）：`962 objects; HEAD PASS 947, tree PASS 947; regress 0; newly loading 0`。删除声明审计 0 处待看。
+
+- **真问题：`feature/unique.lpc` 的 `int remove() { save(); }` 盖掉了 F_MOVE 的 `remove()`**，唯一物品被销毁时不卸装备、不从携带者身上减负重（nitan_ceshi 探针：10000 -> 25000 -> 仍 25000，修正后回到 10000）。删去，F_MOVE 的 `remove()` 对 `is_ob_saved()` 物件本来就先 `save()`。`clone/book/jiuyin1~3.lpc`、`d/tulong/obj/tulongdao.lpc` 原来自己写了 `remove() { item::remove(); }` 绕过它，toolkit 把它们改成 `varargs`。
+- `clone/misc/swmuding.lpc`（神木王鼎）自己的虫表从没生效，改名后在 `create()` 交给木鼎的 `insects`；`adm/npc/obj/xiang.lpc` 先存盘再 `::remove(euid)`；`cruise-ob.h` 的 `remove()` 删去；`clone/npc/pet.h` 删去重复的 F_OBSAVE；`hu.lpc` 的疗伤函数改名 `heal_patient()`；`lubo.lpc` 合并液体与兵器两段说明。
+- 幻境 `huanjing2003` 变量重复声明、`d/maze/forest/maze.lpc` 及 `backup/2009-5-2*/maze/*/forest/maze.lpc` 的 `unique_rooms` 改名、`skillsd.lpc` 的本地 `FORCE` 改 `FORCE2`、`food.lpc`/`liquid.lpc` 的 `do_effect()` 改 `varargs int`、`genmap.lpc` 删去用不到的 `harbor.h`、`vrm_server.lpc` 多余的 `;`。
