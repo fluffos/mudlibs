@@ -28,6 +28,8 @@ Everything here is MIT-licensed (see `LICENSE`).
   target, which provides `lpcc --batch`. The scripts look for
   `~/src/fluffos/build-debug/src/lpcc`; set `LPCC=/path/to/lpcc` if yours is
   elsewhere.
+- Disk space for scratch trees: every scan copies your lib into `$LPC_SCRATCH`
+  (default `~/.cache/lpc-scratch`). lpcc runs are memory-capped at `LPCC_MEM_GB` (default 6).
   Every lpcc run is capped at 6 GB of address space so one runaway object
   fails its batch instead of exhausting the machine; set `LPCC_MEM_GB` to
   change it (`scripts/lpcc_mem.py`).

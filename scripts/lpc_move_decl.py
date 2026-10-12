@@ -5,12 +5,14 @@ For the unused-local diagnostics scripts/lpc_warnings.py leaves alone because th
 #if/#ifdef branch of the same function (a branch this driver does not compile), move the declaration into the first
 such branch instead of deleting it.  Prints the plan; with --apply edits the files (binary mode, line endings kept).
 Names it cannot place are listed as "NAME NOT IN A BRANCH" / "NO DECL FOUND" for a hand edit.  Diagnostics come from
-/tmp/lpcw-SLUG/diagnostics.tsv (written by lpc_warnings.py)."""
+$LPC_SCRATCH/lpcw-SLUG/diagnostics.tsv (written by lpc_warnings.py)."""
 import os, re, sys, collections
+_SCRATCH = os.environ.get("LPC_SCRATCH") or os.path.expanduser("~/.cache/lpc-scratch")  # scratch trees: on disk, never /tmp
+os.makedirs(_SCRATCH, exist_ok=True)
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 slug = sys.argv[1]; apply_ = "--apply" in sys.argv
 work = f"{REPO}/libs/{slug}/work"
-rows = [l.rstrip("\n").split("\t") for l in open(f"/tmp/lpcw-{slug}/diagnostics.tsv", encoding="utf-8", errors="replace")]
+rows = [l.rstrip("\n").split("\t") for l in open(f"{_SCRATCH}/lpcw-{slug}/diagnostics.tsv", encoding="utf-8", errors="replace")]
 want = collections.defaultdict(set)      # file -> {(line, name)}
 for p in rows:
     if len(p) >= 5 and p[3] == "warning":

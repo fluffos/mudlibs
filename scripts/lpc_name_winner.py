@@ -10,7 +10,7 @@ which changes nothing at run time and silences the warning.  W is the later inhe
 name is the basename of the leaf's direct inherit that provides W (W itself, or the `via` file of the message).
 The signature is copied from W's definition, so the override agrees with it in return type and argument list.
 
-Without --apply it prints the plan.  Diagnostics come from /tmp/lpcw-SLUG/diagnostics.tsv (scripts/lpc_warnings.py).
+Without --apply it prints the plan.  Diagnostics come from $LPC_SCRATCH/lpcw-SLUG/diagnostics.tsv (scripts/lpc_warnings.py).
 Skipped, and listed: a leaf that is a header, a W whose definition cannot be parsed (macro, no explicit return type,
 unnamed parameters), a `private`/`nomask` W, a scope name two direct inherits share, a function the leaf defines
 already.  Read the plan once: the unqualified F() calls that W's own code makes now reach the leaf's function, which
@@ -25,6 +25,8 @@ import collections
 import os
 import re
 import sys
+_SCRATCH = os.environ.get("LPC_SCRATCH") or os.path.expanduser("~/.cache/lpc-scratch")  # scratch trees: on disk, never /tmp
+os.makedirs(_SCRATCH, exist_ok=True)
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lpc_src import MODS, TYPES, mask, read, top_level_defs  # noqa: E402
@@ -37,7 +39,7 @@ slug = args[0]
 apply_ = "--apply" in args
 only = args[args.index("--only") + 1:] if "--only" in args else []
 W = f"{REPO}/libs/{slug}/work"
-ROWS = f"/tmp/lpcw-{slug}/diagnostics.tsv"
+ROWS = f"{_SCRATCH}/lpcw-{slug}/diagnostics.tsv"
 
 MSG = re.compile(r"^(?P<fn>\w+)\(\) inherited from both (?P<a>\S+?)(?: \(via (?P<av>\S+?)\))? and (?P<b>\S+?)"
                  r"(?: \(via (?P<bv>\S+?)\))?; using the definition in (?P<w>\S+?)\.$")

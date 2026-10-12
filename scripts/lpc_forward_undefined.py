@@ -2,9 +2,11 @@
 """For `Undefined function f` errors where f is defined LATER in the same file (LDMud allowed calls
 before the definition; FluffOS needs a declaration first), insert `varargs <header>;` prototypes in
 front of the first function definition.  usage: scripts/lpc_forward_undefined.py SLUG [--apply] [--files REGEX]
-Reads /tmp/lpcw-SLUG/diagnostics.tsv, or compiles each named file with lpcc when --compile FILE... is given."""
+Reads $LPC_SCRATCH/lpcw-SLUG/diagnostics.tsv, or compiles each named file with lpcc when --compile FILE... is given."""
 import os, re, sys, subprocess
 import lpcc_mem  # hard memory cap for lpcc (scripts/lpcc_mem.py)
+_SCRATCH = os.environ.get("LPC_SCRATCH") or os.path.expanduser("~/.cache/lpc-scratch")  # scratch trees: on disk, never /tmp
+os.makedirs(_SCRATCH, exist_ok=True)
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 args = sys.argv[1:]
 apply_ = "--apply" in args; args = [a for a in args if a != "--apply"]
@@ -17,7 +19,7 @@ if "--compile" in args:
         for m in re.finditer(r"^(\S+?):\d+:\d+: error: Undefined function (\w+)", out, re.M):
             if m.group(1) == f: files.setdefault(f, set()).add(m.group(2))
 else:
-    for line in open(f"/tmp/lpcw-{slug}/diagnostics.tsv", encoding="utf-8", errors="replace"):
+    for line in open(f"{_SCRATCH}/lpcw-{slug}/diagnostics.tsv", encoding="utf-8", errors="replace"):
         p = line.rstrip("\n").split("\t")
         if len(p) >= 5 and p[3] == "error":
             m = re.match(r"Undefined function (\w+)$", p[4])

@@ -24,13 +24,14 @@
 # not at ~/src/fluffos/build-debug/src/lpcc.
 set -uo pipefail
 
+mkdir -p "${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}"
 SLUG=${1:?usage: toolkit_fix.sh <slug> [--no-fix]}
 FIX=1; [ "${2:-}" = "--no-fix" ] && FIX=0
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 cd "$REPO"
 [ -f "libs/$SLUG/config.fluffos" ] || { echo "libs/$SLUG/config.fluffos not found (scripts/toolkit_import.sh first)" >&2; exit 1; }
-OUT=$(mktemp -d /tmp/toolkit-"$SLUG".XXXX)
-D=/tmp/lpcw-$SLUG/diagnostics.tsv
+OUT=$(mktemp -d ${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}/toolkit-"$SLUG".XXXX)
+D=${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}/lpcw-$SLUG/diagnostics.tsv
 SKIP=(--skip '/tests?/' --skip '/help_topics/error_messages/')
 
 echo "== 0. does the driver load your master and simul_efun?"

@@ -8,11 +8,13 @@ the first type of the pair is the prototype's, the second the definition's.  Thi
 code (comments, strings, here-documents and `#if 0` blanked), the last one before the reported definition line, and
 replaces its return-type word(s).  Modifiers (`varargs`, `nomask`, `protected`, `nosave` ...) stay.  Without --apply it only
 prints the plan; a prototype it cannot find, or a type that is not a plain `[modifiers] type [*] name(...);`, is listed
-and left.  Reads /tmp/lpcw-SLUG/diagnostics.tsv (path, line, column, severity, message).  Re-run the scan afterwards:
+and left.  Reads $LPC_SCRATCH/lpcw-SLUG/diagnostics.tsv (path, line, column, severity, message).  Re-run the scan afterwards:
 a caller that used the old type shows up there."""
 import os
 import re
 import sys
+_SCRATCH = os.environ.get("LPC_SCRATCH") or os.path.expanduser("~/.cache/lpc-scratch")  # scratch trees: on disk, never /tmp
+os.makedirs(_SCRATCH, exist_ok=True)
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -25,7 +27,7 @@ if len(args) != 1:
     sys.exit(__doc__)
 slug = args[0]
 work = f"{REPO}/libs/{slug}/work"
-tsv = f"/tmp/lpcw-{slug}/diagnostics.tsv"
+tsv = f"{_SCRATCH}/lpcw-{slug}/diagnostics.tsv"
 if not os.path.isfile(tsv):
     sys.exit(f"{tsv} missing: run scripts/lpc_warnings.py {slug} first")
 

@@ -10,9 +10,11 @@ their kept sibling (original filename, which differs, is preserved in the
 new name).
 """
 import json, os, sys, unicodedata
+_SCRATCH = os.environ.get("LPC_SCRATCH") or os.path.expanduser("~/.cache/lpc-scratch")  # scratch trees: on disk, never /tmp
+os.makedirs(_SCRATCH, exist_ok=True)
 
 ROOT = "/home/sunyc/src/mudlib"
-OUT = "/home/sunyc/.claude/jobs/02c1e635/tmp/docs_draft"
+OUT = "/home/sunyc/.claude/jobs/02c1e635$LPC_SCRATCH/docs_draft"
 
 ws = json.load(open(os.path.join(ROOT, "scripts/wasm_status.json")))["libs"]
 

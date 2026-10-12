@@ -61,6 +61,8 @@ import os
 import re
 import subprocess
 import sys
+_SCRATCH = os.environ.get("LPC_SCRATCH") or os.path.expanduser("~/.cache/lpc-scratch")  # scratch trees: on disk, never /tmp
+os.makedirs(_SCRATCH, exist_ok=True)
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LPCC = os.environ.get("LPCC", os.path.expanduser("~/src/fluffos/build-debug/src/lpcc"))
@@ -811,7 +813,7 @@ def main():
     ap.add_argument("--fix", action="store_true", help="apply the mechanical fixes and rescan")
     ap.add_argument("--public", default="", help="comma list of nosave functions to leave public")
     ap.add_argument("--rounds", type=int, default=8)
-    ap.add_argument("--tree", default=None, help="scan tree (default /tmp/lpcw-SLUG)")
+    ap.add_argument("--tree", default=None, help="scan tree (default $LPC_SCRATCH/lpcw-SLUG)")
     ap.add_argument("--list", type=int, default=3, help="examples per remaining kind")
     ap.add_argument("--skip", action="append", default=[],
                     help="regex of file paths to leave alone (repeatable); use it for a lib's own "
@@ -820,7 +822,7 @@ def main():
     if not os.path.isfile(LPCC):
         sys.exit(f"lpcc not found at {LPCC} (build target lpcc in ~/src/fluffos/build-debug)")
     a.skip = list(a.skip) + list(DEMO_FILES)
-    dest = a.tree or f"/tmp/lpcw-{a.slug}"
+    dest = a.tree or f"{_SCRATCH}/lpcw-{a.slug}"
     lib = build_tree(a.slug, dest)
     work = os.path.join(REPO, "libs", a.slug, "work")
     public = set(x for x in a.public.split(",") if x)

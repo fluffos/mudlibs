@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """scripts/lpc_fix_return_types.py [--apply] SLUG [DIAGNOSTICS.tsv]
 
-Two return-type warnings from the lpc_warnings.py diagnostics list (default /tmp/lpcw-SLUG/diagnostics.tsv):
+Two return-type warnings from the lpc_warnings.py diagnostics list (default $LPC_SCRATCH/lpcw-SLUG/diagnostics.tsv):
 
   Function F inherited from 'X' does not match current function in return type ( void vs int )
       for the driver applies whose value the driver ignores (create, init, reset): the leaf's `int F(` becomes
@@ -16,6 +16,8 @@ import importlib.util
 import os
 import re
 import sys
+_SCRATCH = os.environ.get("LPC_SCRATCH") or os.path.expanduser("~/.cache/lpc-scratch")  # scratch trees: on disk, never /tmp
+os.makedirs(_SCRATCH, exist_ok=True)
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 spec = importlib.util.spec_from_file_location("lw", os.path.join(REPO, "scripts", "lpc_warnings.py"))
@@ -28,7 +30,7 @@ also = [sys.argv[i + 1] for i, a in enumerate(sys.argv) if a == "--also" and i +
 args = [a for i, a in enumerate(sys.argv[1:], 1) if not a.startswith("--") and sys.argv[i - 1] != "--also"]
 apply_ = "--apply" in sys.argv
 slug = args[0]
-tsv = args[1] if len(args) > 1 else f"/tmp/lpcw-{slug}/diagnostics.tsv"
+tsv = args[1] if len(args) > 1 else f"{_SCRATCH}/lpcw-{slug}/diagnostics.tsv"
 work = os.path.join(REPO, "libs", slug, "work")
 APPLIES = {"create", "init", "reset"} | set(also)   # --also NAME: a function whose callers you checked ignore the value
 INH = re.compile(r"Function (\w+) inherited from '([^']+)' does not match current function in return type \( void vs int \)")

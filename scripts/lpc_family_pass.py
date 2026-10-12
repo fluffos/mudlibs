@@ -10,16 +10,18 @@ The warnings pass of a sibling lib, after the root of its family is done and com
      SIB; the last one needs no scan)
   4. lpc_warnings.py SIB --fix; lpc_name_winner.py; lpc_warnings.py SIB --fix   (the winners only after the redundant
      inherits are gone)
-  5. which files fail here and not in the root's last scan (/tmp/lpcw-ROOT/diagnostics.tsv), and the other way round.
+  5. which files fail here and not in the root's last scan ($LPC_SCRATCH/lpcw-ROOT/diagnostics.tsv), and the other way round.
 
 REV is the commit before the root's fix (its tree is the pre-image the siblings are compared with).  Every step's tail
-goes to /tmp/fdtest/fam_SIB.log (the directory is created); the final numbers are printed.  Nothing is committed: read
+goes to $LPC_SCRATCH/fdtest/fam_SIB.log (the directory is created); the final numbers are printed.  Nothing is committed: read
 `git diff --shortstat -- libs/SIB`, run the load check (scripts/lpc_listcheck.sh over every `.lpc`, then scripts/lpc_load_diff.py: HEAD vs tree), write the
 NOTES.md section, `git add -u libs/SIB`.  One sibling at a time (each scan is a full lpcc boot over every file)."""
 import os
 import re
 import subprocess
 import sys
+_SCRATCH = os.environ.get("LPC_SCRATCH") or os.path.expanduser("~/.cache/lpc-scratch")  # scratch trees: on disk, never /tmp
+os.makedirs(_SCRATCH, exist_ok=True)
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 args = sys.argv[1:]
@@ -34,7 +36,7 @@ args = [a for a in args if not a.startswith("--no-") and a != "--skip-heredoc"]
 if len(args) < 2 or (adopt and not pre):
     sys.exit(__doc__)
 root, sibs = args[0], args[1:]
-os.makedirs("/tmp/fdtest", exist_ok=True)
+os.makedirs(_SCRATCH + "/fdtest", exist_ok=True)
 
 
 def run(cmd, log):
@@ -53,7 +55,7 @@ def summary(text):
 def error_files(slug):
     out = set()
     try:
-        for line in open(f"/tmp/lpcw-{slug}/diagnostics.tsv", errors="replace"):
+        for line in open(f"{_SCRATCH}/lpcw-{slug}/diagnostics.tsv", errors="replace"):
             f = line.rstrip("\n").split("\t")
             if len(f) >= 5 and f[3] == "error":
                 out.add(f[0])
@@ -63,7 +65,7 @@ def error_files(slug):
 
 
 for sib in sibs:
-    log = open(f"/tmp/fdtest/fam_{sib}.log", "w")
+    log = open(f"{_SCRATCH}/fdtest/fam_{sib}.log", "w")
     if adopt:
         run(["python3", "scripts/lpc_twin_port.py", "classify", root, sib, "--pre", pre], log)
         run(["python3", "scripts/lpc_twin_port.py", "adopt", root, sib, "--pre", pre, "--apply"], log)
@@ -92,4 +94,4 @@ for sib in sibs:
     log.write(f"files failing in {root}, not here: {sorted(theirs - mine)}\n")
     log.close()
     print(f"{sib}: after adopt+fix {before} -> {after}; only here {len(mine - theirs)}, only in {root} {len(theirs - mine)}; "
-          f"see /tmp/fdtest/fam_{sib}.log")
+          f"see $LPC_SCRATCH/fdtest/fam_{sib}.log")

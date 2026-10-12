@@ -8,11 +8,13 @@ reads their result); `clean_up()` returns a value the driver does read, and any 
 inside the body becomes `return;`; the driver ignores a hook's return value, and a body that falls off its end returns 0
 either way.  Only the (inherited void, current int) pair is handled; other pairs (`object vs int`, ...) are listed for a
 hand edit, as is a body that returns a computed value (the head is then left alone).  Diagnostics come from
-/tmp/lpcw-SLUG/diagnostics.tsv; without --apply it prints the plan.  Edits are byte-exact (line endings kept)."""
+$LPC_SCRATCH/lpcw-SLUG/diagnostics.tsv; without --apply it prints the plan.  Edits are byte-exact (line endings kept)."""
 import collections
 import os
 import re
 import sys
+_SCRATCH = os.environ.get("LPC_SCRATCH") or os.path.expanduser("~/.cache/lpc-scratch")  # scratch trees: on disk, never /tmp
+os.makedirs(_SCRATCH, exist_ok=True)
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lpc_src import MODS, mask, read, top_level_defs  # noqa: E402
@@ -30,7 +32,7 @@ MSG = re.compile(r"^Function (\w+) inherited from '[^']+' does not match current
 HOOKS = {"init", "reset", "create", "setup"}     # driver applies: their return value is never read
 TYPE_WORDS = ("int", "void", "status", "mixed", "string", "object", "mapping", "float", "function")
 
-rows = [l.rstrip("\n").split("\t") for l in open(f"/tmp/lpcw-{slug}/diagnostics.tsv", encoding="utf-8", errors="replace")]
+rows = [l.rstrip("\n").split("\t") for l in open(f"{_SCRATCH}/lpcw-{slug}/diagnostics.tsv", encoding="utf-8", errors="replace")]
 want = collections.defaultdict(set)
 manual = []
 for f, ln, col, sev, msg in rows:

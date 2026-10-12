@@ -4,17 +4,19 @@
 `bitwise operation on boolean values` (`if (a != "x" & a != "y")`): the result happens to equal `&&`/`||` when both
 sides are comparisons, but `&` does not short-circuit and binds looser than the author meant in any longer chain
 (holymission's `i < 0 & i > N` size check could never fire).  For each such warning in the lpc_warnings.py
-diagnostics list (default /tmp/lpcw-SLUG/diagnostics.tsv; the column points at the end of the expression), the
+diagnostics list (default $LPC_SCRATCH/lpcw-SLUG/diagnostics.tsv; the column points at the end of the expression), the
 reported line is fixed when it holds exactly one lone `&` or `|` outside strings and comments; anything else is
 listed.  Binary-safe.  Without --apply it prints the plan."""
 import os
 import re
 import sys
+_SCRATCH = os.environ.get("LPC_SCRATCH") or os.path.expanduser("~/.cache/lpc-scratch")  # scratch trees: on disk, never /tmp
+os.makedirs(_SCRATCH, exist_ok=True)
 
 args = [a for a in sys.argv[1:] if not a.startswith("--")]
 apply_ = "--apply" in sys.argv
 slug = args[0]
-tsv = args[1] if len(args) > 1 else f"/tmp/lpcw-{slug}/diagnostics.tsv"
+tsv = args[1] if len(args) > 1 else f"{_SCRATCH}/lpcw-{slug}/diagnostics.tsv"
 work = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "libs", slug, "work")
 LONE = re.compile(rb"(?<![&|])([&|])(?![&|=])")
 

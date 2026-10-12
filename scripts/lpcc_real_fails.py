@@ -7,11 +7,14 @@ level limit exceeded: 1000` for every later one: 743 of es1_win's 927 FAILs were
 section 10.4).  This prints the other FAILs, one line each: `path:line: first error`, `path [in inherited]: first error`, or
 `path: RUNTIME first runtime error`, and on stderr how many were PASS, real FAIL, artifact.
 
-  cd /tmp/lpcw-SLUG/libs/SLUG && lpcc --batch config.fluffos < list > out 2>&1     (scripts/lpc_warnings.py SLUG leaves that
+  cd $LPC_SCRATCH/lpcw-SLUG/libs/SLUG && lpcc --batch config.fluffos < list > out 2>&1     (scripts/lpc_warnings.py SLUG leaves that
   tree behind; `find work -name '*.lpc'` makes the list)
   scripts/lpcc_real_fails.py out | sort"""
 import re
 import sys
+import os
+_SCRATCH = os.environ.get("LPC_SCRATCH") or os.path.expanduser("~/.cache/lpc-scratch")  # scratch trees: on disk, never /tmp
+os.makedirs(_SCRATCH, exist_ok=True)
 
 if len(sys.argv) != 2:
     sys.exit(__doc__)

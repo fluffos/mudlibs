@@ -14,6 +14,8 @@ import collections
 import os
 import re
 import sys
+_SCRATCH = os.environ.get("LPC_SCRATCH") or os.path.expanduser("~/.cache/lpc-scratch")  # scratch trees: on disk, never /tmp
+os.makedirs(_SCRATCH, exist_ok=True)
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -26,7 +28,7 @@ if len(args) != 1:
     sys.exit(__doc__)
 slug = args[0]
 work = f"{REPO}/libs/{slug}/work"
-tsv = f"/tmp/lpcw-{slug}/diagnostics.tsv"
+tsv = f"{_SCRATCH}/lpcw-{slug}/diagnostics.tsv"
 if not os.path.isfile(tsv):
     sys.exit(f"{tsv} missing: run scripts/lpc_warnings.py {slug} first")
 

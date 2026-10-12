@@ -4,12 +4,14 @@
 Fix `Macro 'X' redefined` (KB 04 section 6.10) where a file `#define`s a name an earlier header already defined with a
 different body: put `#undef X` in front of the later `#define`.  The later definition was already the one in effect, so
 nothing else changes.  The diagnostic's line must hold `#define X` (it is looked for within three lines when the driver
-reports a continuation line); anything else is listed.  Diagnostics come from /tmp/lpcw-SLUG/diagnostics.tsv; without
+reports a continuation line); anything else is listed.  Diagnostics come from $LPC_SCRATCH/lpcw-SLUG/diagnostics.tsv; without
 --apply it prints the plan.  Edits are byte-exact (line endings kept)."""
 import collections
 import os
 import re
 import sys
+_SCRATCH = os.environ.get("LPC_SCRATCH") or os.path.expanduser("~/.cache/lpc-scratch")  # scratch trees: on disk, never /tmp
+os.makedirs(_SCRATCH, exist_ok=True)
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 a = sys.argv[1:]
@@ -20,7 +22,7 @@ apply_ = "--apply" in a
 only = a[a.index("--only") + 1:] if "--only" in a else []
 W = f"{REPO}/libs/{slug}/work"
 
-rows = [l.rstrip("\n").split("\t") for l in open(f"/tmp/lpcw-{slug}/diagnostics.tsv", encoding="utf-8", errors="replace")]
+rows = [l.rstrip("\n").split("\t") for l in open(f"{_SCRATCH}/lpcw-{slug}/diagnostics.tsv", encoding="utf-8", errors="replace")]
 want = collections.defaultdict(set)
 for f, ln, col, sev, msg in rows:
     m = re.match(r"Macro '(\w+)' redefined", msg)

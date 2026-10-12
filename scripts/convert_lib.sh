@@ -29,6 +29,7 @@
 # read of the actual code. Re-run lpcc_check.sh and a real boot after this.
 set -uo pipefail
 
+mkdir -p "${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}"
 RAW="$1"
 WORK="$2"
 SRC_ENCODING="${3:-GB18030}"
@@ -43,8 +44,8 @@ rm -rf "$WORK"
 cp -r "$RAW" "$WORK"
 
 echo "== encoding: ${SRC_ENCODING} -> UTF-8 for every text file"
-find "$WORK" -type f > /tmp/convert_lib_filelist.$$.txt
-total=$(wc -l < /tmp/convert_lib_filelist.$$.txt)
+find "$WORK" -type f > ${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}/convert_lib_filelist.$$.txt
+total=$(wc -l < ${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}/convert_lib_filelist.$$.txt)
 n=0; already_utf8=0; converted=0; lossy=0; skipped_binary=0
 while IFS= read -r f; do
   n=$((n + 1))
@@ -90,8 +91,8 @@ while IFS= read -r f; do
       echo "  FAILED to convert (left as-is, check encoding manually): $f"
     fi
   fi
-done < /tmp/convert_lib_filelist.$$.txt
-rm -f /tmp/convert_lib_filelist.$$.txt
+done < ${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}/convert_lib_filelist.$$.txt
+rm -f ${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}/convert_lib_filelist.$$.txt
 echo "  encoding: already_utf8=$already_utf8 converted=$converted lossy=$lossy skipped_binary=$skipped_binary"
 
 echo "== renaming .c -> .lpc"
@@ -146,11 +147,11 @@ echo "== static -> nosave (.lpc + .h)"
 # NUL-delimited throughout -- a plain newline-delimited pipe into xargs
 # word-splits any filename containing a space (seen: "char - 副本.lpc",
 # a backup-copy file with a literal space in its Chinese-annotated name).
-statics_count=$(grep -rlZ '\bstatic\b' "$WORK" --include="*.lpc" --include="*.h" 2>/dev/null | tee /tmp/convert_lib_statics.$$.txt | tr -cd '\0' | wc -c)
-if [[ -s /tmp/convert_lib_statics.$$.txt ]]; then
-  xargs -0 -r sed -i -E 's/\bstatic\b/nosave/g' < /tmp/convert_lib_statics.$$.txt
+statics_count=$(grep -rlZ '\bstatic\b' "$WORK" --include="*.lpc" --include="*.h" 2>/dev/null | tee ${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}/convert_lib_statics.$$.txt | tr -cd '\0' | wc -c)
+if [[ -s ${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}/convert_lib_statics.$$.txt ]]; then
+  xargs -0 -r sed -i -E 's/\bstatic\b/nosave/g' < ${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}/convert_lib_statics.$$.txt
 fi
-rm -f /tmp/convert_lib_statics.$$.txt
+rm -f ${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}/convert_lib_statics.$$.txt
 echo "  files touched: $statics_count"
 
 echo "== done. Next: review AGENTS.md §2/§3 leftovers, check master.lpc for the §4"

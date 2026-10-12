@@ -13,10 +13,12 @@ Not touched, listed instead: a name that no header defines, a name several heade
 file that already includes the header (something else is wrong), a name used only after the file's first `inherit`
 being undefined for another reason.  Re-run the scan afterwards: a header can bring macros that clash with the file's own.
 
-Reads /tmp/lpcw-SLUG/diagnostics.tsv (path, line, col, severity, message) and the lib's config.fluffos include path."""
+Reads $LPC_SCRATCH/lpcw-SLUG/diagnostics.tsv (path, line, col, severity, message) and the lib's config.fluffos include path."""
 import os
 import re
 import sys
+_SCRATCH = os.environ.get("LPC_SCRATCH") or os.path.expanduser("~/.cache/lpc-scratch")  # scratch trees: on disk, never /tmp
+os.makedirs(_SCRATCH, exist_ok=True)
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 args = sys.argv[1:]
@@ -31,7 +33,7 @@ if len(args) != 1:
     sys.exit(__doc__)
 slug = args[0]
 work = f"{REPO}/libs/{slug}/work"
-tsv = f"/tmp/lpcw-{slug}/diagnostics.tsv"
+tsv = f"{_SCRATCH}/lpcw-{slug}/diagnostics.tsv"
 if not os.path.isfile(tsv):
     sys.exit(f"{tsv} missing: run scripts/lpc_warnings.py {slug} first")
 

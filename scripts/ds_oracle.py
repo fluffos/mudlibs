@@ -4,8 +4,8 @@
 Boot a throwaway tree (scripts/pristine_tree.sh + the changes under test), run this against
 it, and diff the output of a HEAD tree against the working-tree tree:
 
-  scripts/pristine_tree.sh dsII 40228 /tmp/oracle-head ; start the driver ; \\
-  python3 scripts/ds_oracle.py /tmp/oracle-head/libs/dsII/work 40228 fluffos PASSWORD head.txt --lib
+  scripts/pristine_tree.sh dsII 40228 $LPC_SCRATCH/oracle-head ; start the driver ; \\
+  python3 scripts/ds_oracle.py $LPC_SCRATCH/oracle-head/libs/dsII/work 40228 fluffos PASSWORD head.txt --lib
   ... same for the tree with your edits -> new.txt ... diff -u head.txt new.txt
 
 Each OBJ block lists, per probed program: the file defining the final version of every
@@ -26,6 +26,8 @@ import shutil
 import socket
 import sys
 import time
+_SCRATCH = os.environ.get("LPC_SCRATCH") or os.path.expanduser("~/.cache/lpc-scratch")  # scratch trees: on disk, never /tmp
+os.makedirs(_SCRATCH, exist_ok=True)
 
 IAC, DONT, DO, WONT, WILL, SB, SE = 255, 254, 253, 252, 251, 250, 240
 HERE = os.path.dirname(os.path.abspath(__file__))

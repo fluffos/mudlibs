@@ -7,10 +7,12 @@ missing matches are reported and left alone.  Prints one line per hunk; without 
 
 Why: a sibling lib that went through the formatter (brassring: 2-space indent, `if (x)`) rejects 95% of the hunks of a
 patch cut from a lib that did not (`patch -l` only folds runs of whitespace, it does not equate `if(` with `if (`).
-Typical use: `git show COMMIT --format= -- libs/ds386/work > /tmp/p.patch; scripts/lpc_fuzzy_patch.py /tmp/p.patch
+Typical use: `git show COMMIT --format= -- libs/ds386/work > $LPC_SCRATCH/p.patch; scripts/lpc_fuzzy_patch.py $LPC_SCRATCH/p.patch
 libs/brassring/work --apply`, then `scripts/lpc_warnings.py brassring --fix` for what was missed.  Read the result:
 changed lines carry the patch's spelling, new lines the target's indent width."""
 import re, sys, os, collections
+_SCRATCH = os.environ.get("LPC_SCRATCH") or os.path.expanduser("~/.cache/lpc-scratch")  # scratch trees: on disk, never /tmp
+os.makedirs(_SCRATCH, exist_ok=True)
 args = sys.argv[1:]
 patch, work = args[0], args[1]
 strip = int(args[args.index("--strip") + 1]) if "--strip" in args else 4

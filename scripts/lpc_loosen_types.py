@@ -10,6 +10,8 @@ the `[`), finds its declaration (a local of the enclosing function first, then a
 out to its own `mixed NAME...;` line, and repeats the compile until nothing changes."""
 import os, re, sys, subprocess
 import lpcc_mem  # hard memory cap for lpcc (scripts/lpcc_mem.py)
+_SCRATCH = os.environ.get("LPC_SCRATCH") or os.path.expanduser("~/.cache/lpc-scratch")  # scratch trees: on disk, never /tmp
+os.makedirs(_SCRATCH, exist_ok=True)
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 args = sys.argv[1:]; apply_ = "--apply" in args; args = [a for a in args if a != "--apply"]
 slug, files = args[0], [a for a in args[1:] if a != "--tsv"]
@@ -82,7 +84,7 @@ total = 0
 if TSV:
     rows = {}
     ERRK = re.compile(r"^(Bad assignment \( .* \)\.|Value indexed has a bad type : \"(?:object|int|string|float) \"|Bad argument 1 to efun (?:explode|implode|sizeof)\(\))$")
-    for line in open(f"/tmp/lpcw-{slug}/diagnostics.tsv", encoding="utf-8", errors="replace"):
+    for line in open(f"{_SCRATCH}/lpcw-{slug}/diagnostics.tsv", encoding="utf-8", errors="replace"):
         p = line.rstrip("\n").split("\t")
         if len(p) >= 5 and p[3] == "error" and ERRK.match(p[4]):
             rows.setdefault(p[0], []).append((int(p[1]), int(p[2] or 0), p[4]))

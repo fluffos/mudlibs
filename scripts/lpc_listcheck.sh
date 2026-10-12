@@ -2,7 +2,7 @@
 # scripts/lpc_listcheck.sh SLUG LISTFILE [CHUNK]
 #
 # Load every object of LISTFILE (one `/path/obj.lpc` per line) at HEAD and in the working tree of a vendored lib, CHUNK
-# (default 700) objects per VM boot, and print the PASS / FAIL counts of both.  Outputs: /tmp/listchunk-SLUG.{head,work}.out
+# (default 700) objects per VM boot, and print the PASS / FAIL counts of both.  Outputs: ${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}/listchunk-SLUG.{head,work}.out
 # (`===== /obj.lpc =====` blocks with the driver's messages, then `PASS` / `FAIL /obj.lpc`); compare them with
 # scripts/lpc_load_diff.py.  `REV=<commit> scripts/lpc_listcheck.sh ...` makes the first run use an older commit (a change that is
 # already committed has no diff against HEAD).  One VM nests at most about 1000 `call_out(f, 0)` rooms before every later object prints
@@ -10,23 +10,24 @@
 # A PASS at HEAD can be spurious when an earlier object of the batch left a half-built one loaded (docs/kb/08-formatter-testing.md
 # section 10.13): load a surprising regression alone before believing it.
 set -uo pipefail
+mkdir -p "${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}"
 SLUG=$1; LIST=$2; CHUNK=${3:-700}
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 cd "$REPO"
 MEMKB=$(python3 scripts/lpcc_mem.py)   # hard memory cap per lpcc VM (scripts/lpcc_mem.py)
-DEST=/tmp/listchunk-$SLUG
+DEST=${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}/listchunk-$SLUG
 rm -rf "$DEST"
 scripts/pristine_tree.sh "$SLUG" 45993 "$DEST" > /dev/null
 mkdir -p "$DEST/libs/$SLUG/work/log"
 N=$(wc -l < "$LIST")
-rm -f /tmp/listchunk-$SLUG.part.*
-split -l "$CHUNK" -d -a 3 "$LIST" /tmp/listchunk-$SLUG.part.
+rm -f ${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}/listchunk-$SLUG.part.*
+split -l "$CHUNK" -d -a 3 "$LIST" ${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}/listchunk-$SLUG.part.
 run() {
-  : > /tmp/listchunk-$SLUG.$1.out
-  for p in /tmp/listchunk-$SLUG.part.*; do
-    (cd "$DEST/libs/$SLUG" && ulimit -v "$MEMKB" && timeout 900 "${LPCC:-$HOME/src/fluffos/build-debug/src/lpcc}" --batch config.fluffos < "$p" >> /tmp/listchunk-$SLUG.$1.out 2>&1)
+  : > ${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}/listchunk-$SLUG.$1.out
+  for p in ${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}/listchunk-$SLUG.part.*; do
+    (cd "$DEST/libs/$SLUG" && ulimit -v "$MEMKB" && timeout 900 "${LPCC:-$HOME/src/fluffos/build-debug/src/lpcc}" --batch config.fluffos < "$p" >> ${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}/listchunk-$SLUG.$1.out 2>&1)
   done
-  echo "$1: $(grep -a -c '^PASS' /tmp/listchunk-$SLUG.$1.out) PASS, $(grep -a -c '^FAIL' /tmp/listchunk-$SLUG.$1.out) FAIL of $N"
+  echo "$1: $(grep -a -c '^PASS' ${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}/listchunk-$SLUG.$1.out) PASS, $(grep -a -c '^FAIL' ${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}/listchunk-$SLUG.$1.out) FAIL of $N"
 }
 run head
 python3 - "$SLUG" "$DEST" << 'PY'
@@ -36,4 +37,4 @@ import lpc_warnings as lw
 print("synced", lw.sync_changes(sys.argv[1], f"{sys.argv[2]}/libs/{sys.argv[1]}"), "files")
 PY
 run work
-echo done > /tmp/listchunk-$SLUG.done
+echo done > ${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}/listchunk-$SLUG.done

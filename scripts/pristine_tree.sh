@@ -8,7 +8,7 @@
 # bugs (docs/kb/06-runtime-classes-2.md §7.203).
 #
 # Usage: [REV=<commit>] scripts/pristine_tree.sh <slug> <port> [dest_dir]
-#   dest_dir defaults to /tmp/pristine-<slug>.  REV (default HEAD) builds the tree
+#   dest_dir defaults to ${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}/pristine-<slug>.  REV (default HEAD) builds the tree
 #   from an older commit, e.g. the baseline for a before/after oracle run
 #   (scripts/ds_oracle.py).  Prints the driver command; it
 #   does not start anything, so the caller owns (and kills, by PID) the driver:
@@ -19,6 +19,7 @@
 
 set -euo pipefail
 
+mkdir -p "${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}"
 if [ $# -lt 2 ]; then
   echo "usage: $0 <slug> <port> [dest_dir]" >&2
   exit 2
@@ -27,7 +28,7 @@ SLUG=$1
 PORT=$2
 SELF_DIR=$(cd "$(dirname "$0")" && pwd)
 REPO_ROOT=$(cd "$SELF_DIR/.." && pwd)
-DEST=${3:-/tmp/pristine-$SLUG}
+DEST=${3:-${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}/pristine-$SLUG}
 LIB="libs/$SLUG"
 
 [ -f "$REPO_ROOT/$LIB/config.fluffos" ] || { echo "error: $LIB/config.fluffos not found" >&2; exit 1; }
@@ -36,8 +37,8 @@ if [ -n "$(git -C "$REPO_ROOT" ls-files -s -- "$LIB/work" | awk '$1==160000' | h
   exit 1
 fi
 case "$DEST" in
-  /tmp/*|/var/tmp/*) ;;
-  *) echo "error: dest_dir must be under /tmp or /var/tmp (got $DEST)" >&2; exit 1 ;;
+  ${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}/*|/var/tmp/*) ;;
+  *) echo "error: dest_dir must be under ${LPC_SCRATCH:-$HOME/.cache/lpc-scratch} or /var/tmp (got $DEST)" >&2; exit 1 ;;
 esac
 
 # Refuse to reuse a directory that is not a previous pristine tree.
@@ -66,5 +67,5 @@ if [ -f "$REPO_ROOT/scripts/wasm_keep_dirs.txt" ]; then
 fi
 
 echo "pristine tree: $DEST/$LIB   port: $PORT"
-echo "start: cd $DEST/$LIB && setsid nohup \$HOME/src/fluffos/build-debug/src/driver config.fluffos > /tmp/pristine-$SLUG.out 2>&1 &"
+echo "start: cd $DEST/$LIB && setsid nohup \$HOME/src/fluffos/build-debug/src/driver config.fluffos > ${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}/pristine-$SLUG.out 2>&1 &"
 echo "other ports in config.fluffos (ftp/http/i3) may collide with a running copy of the same lib"

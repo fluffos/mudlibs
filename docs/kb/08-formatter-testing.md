@@ -100,7 +100,7 @@ branches where cheap.
   (`*Error in config file.  Missing line: mudlib directory`), not the long one. It bites
   `pristine_tree.sh`/`lpc_warnings.py --tree` with a deep destination (the session scratchpad):
   the absolute `mudlib directory` path is too long and every object "kills the VM alone".
-  Keep scan trees short (`/tmp/lpcw-SLUG`, `/tmp/listchunk-SLUG`) or set `mudlib directory : work`.
+  Keep scan trees short (`$LPC_SCRATCH/lpcw-SLUG`, `$LPC_SCRATCH/listchunk-SLUG`; default `~/.cache/lpc-scratch`) or set `mudlib directory : work`. Scratch trees never go in `/tmp` (user, 2026-10-12: it takes up memory on this host).
 
 ### 10.4a ASAN/UBSAN builds can be 10–20× slower on some preloads
 Re-test with `build-debug` before blaming content (`nitan_san`).

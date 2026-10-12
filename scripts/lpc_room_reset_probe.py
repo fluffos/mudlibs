@@ -12,6 +12,8 @@ import lpcc_mem  # hard memory cap for lpcc (scripts/lpcc_mem.py)
 import shutil
 import subprocess
 import sys
+_SCRATCH = os.environ.get("LPC_SCRATCH") or os.path.expanduser("~/.cache/lpc-scratch")  # scratch trees: on disk, never /tmp
+os.makedirs(_SCRATCH, exist_ok=True)
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CANDIDATES = ("std/room.lpc", "inherit/room/room.lpc", "inherit/room.lpc", "std/room/room.lpc", "obj/room.lpc")
@@ -59,7 +61,7 @@ def main():
             print(f"{slug}: no room base")
             continue
         base = "/" + rel[:-4]
-        dest = f"/tmp/rprobe-{slug}-{os.getpid()}"
+        dest = f"{_SCRATCH}/rprobe-{slug}-{os.getpid()}"
         try:
             subprocess.run([f"{REPO}/scripts/pristine_tree.sh", slug, "45995", dest], capture_output=True)
             head = run_probe(dest, slug, base)

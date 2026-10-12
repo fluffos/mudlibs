@@ -5,7 +5,7 @@ usage: scripts/lpc_check_files.py SLUG OBJ... [--all]
   OBJ    /domains/town/obj/seawater (no .lpc); list every file you edited or want to re-check
   --all  also print the diagnostics lpcc reports for other files (the boot-time block, inherited warnings)
 
-Needs the scan tree of a previous `scripts/lpc_warnings.py SLUG` run (/tmp/lpcw-SLUG). The working tree's changes
+Needs the scan tree of a previous `scripts/lpc_warnings.py SLUG` run ($LPC_SCRATCH/lpcw-SLUG). The working tree's changes
 (git diff against HEAD plus new files) are copied into it first, so the check sees your edits without rebuilding
 the tree or scanning the whole lib (5-15 minutes). Prints `file:line:col severity message` and PASS/FAIL per object;
 a FAIL with no diagnostic is a load-time run-time error (create() raising), not a compile problem.
@@ -14,6 +14,8 @@ import importlib.util
 import os
 import subprocess
 import sys
+_SCRATCH = os.environ.get("LPC_SCRATCH") or os.path.expanduser("~/.cache/lpc-scratch")  # scratch trees: on disk, never /tmp
+os.makedirs(_SCRATCH, exist_ok=True)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 spec = importlib.util.spec_from_file_location("lw", os.path.join(HERE, "lpc_warnings.py"))
@@ -26,7 +28,7 @@ def main():
         sys.exit(__doc__)
     slug = sys.argv[1]
     objs = [a for a in sys.argv[2:] if not a.startswith("--")]
-    lib = f"/tmp/lpcw-{slug}/libs/{slug}"
+    lib = f"{_SCRATCH}/lpcw-{slug}/libs/{slug}"
     if not os.path.isdir(lib):
         sys.exit(f"no scan tree {lib}: run scripts/lpc_warnings.py {slug} first")
     lw.sync_changes(slug, lib)

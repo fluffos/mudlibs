@@ -9,7 +9,7 @@ fixed and no prototype is written; if it is not inherited either the file stops 
 
 The pointers have never run on this driver, so read each target afterwards and call it once live: one that prints
 instead of returning its text raises a run-time error the first time it is used (Praxis stone.lpc, KB 04 6.10).
-Diagnostics come from /tmp/lpcw-SLUG/diagnostics.tsv (scripts/lpc_warnings.py); without --apply this only lists the
+Diagnostics come from $LPC_SCRATCH/lpcw-SLUG/diagnostics.tsv (scripts/lpc_warnings.py); without --apply this only lists the
 sites.  Edits are byte-exact (line endings kept).
 
 --comma also rewrites the object form `(: this_object(), "name" :)`, which the compiler reads as a comma expression
@@ -19,6 +19,8 @@ import collections
 import os
 import re
 import sys
+_SCRATCH = os.environ.get("LPC_SCRATCH") or os.path.expanduser("~/.cache/lpc-scratch")  # scratch trees: on disk, never /tmp
+os.makedirs(_SCRATCH, exist_ok=True)
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 KEYWORDS = r"(?!(?:if|for|foreach|while|switch|return|else|do|case|catch|sscanf|inherit)\b)"
@@ -40,7 +42,7 @@ def main():
     slug = sys.argv[1]
     apply = "--apply" in sys.argv
     work = f"{REPO}/libs/{slug}/work"
-    tsv = f"/tmp/lpcw-{slug}/diagnostics.tsv"
+    tsv = f"{_SCRATCH}/lpcw-{slug}/diagnostics.tsv"
     if "--work" in sys.argv:          # test hooks: another work root / diagnostics file
         work = sys.argv[sys.argv.index("--work") + 1]
     if "--tsv" in sys.argv:

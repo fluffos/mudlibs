@@ -8,9 +8,11 @@ expression built only from variables, operators and the side-effect-free calls i
 call may have an effect.  The declaration must be a
 single-declarator line whose enclosing block closes at the line the driver reports, so a same-named local in another
 function is never touched; anything else is listed as SKIP for a hand edit (multi-declarator lines, locals only used
-in an inactive #if branch: scripts/lpc_move_decl.py).  Diagnostics come from /tmp/lpcw-SLUG/diagnostics.tsv, which
+in an inactive #if branch: scripts/lpc_move_decl.py).  Diagnostics come from $LPC_SCRATCH/lpcw-SLUG/diagnostics.tsv, which
 lpc_warnings.py writes; without --apply this only prints the plan.  --only restricts it to paths containing a SUBSTR."""
 import os, re, sys, collections
+_SCRATCH = os.environ.get("LPC_SCRATCH") or os.path.expanduser("~/.cache/lpc-scratch")  # scratch trees: on disk, never /tmp
+os.makedirs(_SCRATCH, exist_ok=True)
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 slug = sys.argv[1]
 apply = "--apply" in sys.argv
@@ -18,7 +20,7 @@ only = []
 if "--only" in sys.argv:
     only = sys.argv[sys.argv.index("--only") + 1:]
 W = f"{REPO}/libs/{slug}/work"
-rows = [l.rstrip("\n").split("\t") for l in open(f"/tmp/lpcw-{slug}/diagnostics.tsv", encoding="utf-8", errors="replace")]
+rows = [l.rstrip("\n").split("\t") for l in open(f"{_SCRATCH}/lpcw-{slug}/diagnostics.tsv", encoding="utf-8", errors="replace")]
 TYPE = r"(?:int|string|object|mixed|mapping|float|function|status|buffer|class\s+\w+)"
 want = collections.defaultdict(set)
 for f, ln, col, sev, msg in rows:

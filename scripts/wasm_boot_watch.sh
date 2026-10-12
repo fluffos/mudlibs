@@ -16,7 +16,7 @@
 # --idle is set higher than --timeout so it never exits early on idle
 # silence -- it always runs the full duration regardless of activity.
 #
-# Output: full transcript to /tmp (path printed at the end), plus a grep
+# Output: full transcript to ${LPC_SCRATCH:-$HOME/.cache/lpc-scratch} (path printed at the end), plus a grep
 # summary of common failure signatures printed to stdout. This is a
 # STARTING POINT, not a verdict -- read the full transcript before
 # concluding a lib has a real problem; known noisy-but-harmless lines
@@ -25,6 +25,7 @@
 
 set -uo pipefail
 
+mkdir -p "${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}"
 slug="${1:?usage: $0 <slug> [duration_sec]}"
 duration="${2:-200}"
 idle=$((duration + 60))
@@ -46,7 +47,7 @@ if [ -z "$node_bin" ]; then
   exit 1
 fi
 
-out="/tmp/wasm_boot_watch_${slug}_$$.log"
+out="${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}/wasm_boot_watch_${slug}_$$.log"
 echo "booting $slug under wasm for ${duration}s (transcript: $out)" >&2
 
 "$node_bin" "$repo_root/scripts/wasm_client.js" "$wasm_dir" "$lib_dir" \

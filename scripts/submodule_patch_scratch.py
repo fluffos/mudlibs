@@ -6,7 +6,7 @@ and fixers in this directory work on `libs/SLUG/work` of a repo whose files are 
 and must stay clean.  So the work happens in a scratch repo:
 
   build SLUG [--dest DIR] [--below N]
-      DIR (default /tmp/scratch-SLUG) gets
+      DIR (default $LPC_SCRATCH/scratch-SLUG) gets
         orig/              upstream HEAD of libs/SLUG/work with the compat patches numbered below N applied (default: all
                            patches already in libs/SLUG/patches, i.e. the baseline a NEW patch set starts from; pass
                            --below 3 to regenerate patches 0003 and up)
@@ -32,6 +32,8 @@ import re
 import shutil
 import subprocess
 import sys
+_SCRATCH = os.environ.get("LPC_SCRATCH") or os.path.expanduser("~/.cache/lpc-scratch")  # scratch trees: on disk, never /tmp
+os.makedirs(_SCRATCH, exist_ok=True)
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -191,7 +193,7 @@ def main():
     ap.add_argument("--stage", action="append", default=[], help="export: NAME:PREFIX,PREFIX (repeatable, in order)")
     ap.add_argument("--first-number", type=int, default=3)
     a = ap.parse_args()
-    dest = a.dest or f"/tmp/scratch-{a.slug}"
+    dest = a.dest or f"{_SCRATCH}/scratch-{a.slug}"
     if a.cmd == "build":
         build(a.slug, dest, a.below)
     else:
