@@ -15,10 +15,10 @@
 #define __THING_UTIL_H_PROTO__
 
 public void ShowPropList(string *props);
-nosave void PrettyDump(mixed x);
-nosave void DumpArray(mixed *x);
-nosave void DumpMapping(mapping x);
-nosave void DumpKeyValPair(mapping x, mixed key, int size);
+protected void PrettyDump(mixed x);
+protected void DumpArray(mixed *x);
+protected void DumpMapping(mapping x);
+protected void DumpKeyValPair(mapping x, mixed key, int size);
 
 #endif // __THING_UTIL_H_PROTO__
 

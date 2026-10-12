@@ -62,12 +62,12 @@ public string QueryGenderString();
 public varargs string DeclAdj(mixed adj, int casus, int demon);
 
 // Query- und Set-Methoden
-nosave int _set_article(int fl);
-nosave int _query_article();
-nosave int _set_gender(int i);
+protected int _set_article(int fl);
+protected int _query_article();
+protected int _set_gender(int i);
 
 // Interna
-nosave int QueryAFlag();
+protected int QueryAFlag();
 
 #endif // __THING_LANGUAGE_H_PROTO__
 

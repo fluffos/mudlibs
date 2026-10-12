@@ -27,13 +27,13 @@ varargs void AddCmd(mixed cmd, mixed func, mixed flag, mixed cmdid);
 // remove a command
 varargs int RemoveCmd(mixed cmd, int del_norule, mixed onlyid);
 // Set- und Query-Methoden
-nosave mapping _set_commands(mapping commands);
-nosave mapping _query_commands();
+protected mapping _set_commands(mapping commands);
+protected mapping _query_commands();
 
 
 // internal
-nosave int _execute(mixed fun, string str, mixed *parsed);
-nosave int _process_command(string str, string *noparsestr, mixed fun,
+protected int _execute(mixed fun, string str, mixed *parsed);
+protected int _process_command(string str, string *noparsestr, mixed fun,
                             mixed flag, mixed rule, mixed id, mixed cachedcl);
 public int _cl(string str);
 

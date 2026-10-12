@@ -212,8 +212,8 @@
 #ifdef NEED_PROTOTYPES
 #ifndef _MAGIER_H_PROTOS_
 #define _MAGIER_H_PROTOS_
-nosave string *parseargs(string cmdline,int flags,string opts,int build_fn);
-nosave varargs void asynchron(mixed* array, closure cmd, mixed data, mixed flags, int c);
+protected string *parseargs(string cmdline,int flags,string opts,int build_fn);
+protected varargs void asynchron(mixed* array, closure cmd, mixed data, mixed flags, int c);
 nosave varargs mixed *file_list(string *files, int mode, int recursive, string dest, string mask);
 nosave string to_filename(string str);
 nosave int _verfolge(string str);

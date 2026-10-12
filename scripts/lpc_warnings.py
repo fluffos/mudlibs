@@ -717,7 +717,8 @@ def fix_bare_returns(work, rows):
 def fix_pragmas(work, rows):
     """`#pragma save_binary` and friends: the driver reports "Unknown #pragma,
     ignored" and ignores the line, so the pragma line is just deleted (it also
-    takes `#pragma optimize all`: only the bare name `optimize` is known).  Runs
+    takes `#pragma optimize all`: only the bare name `optimize` is known; and LDMud's comma lists
+    `#pragma strong_types,rtt_checks`, which the driver reports and ignores as one line).  Runs
     as its own pass before the others, because it removes lines."""
     n = 0
     manual = []
@@ -729,7 +730,7 @@ def fix_pragmas(work, rows):
         path = os.path.join(work, f.lstrip("/"))
         L = read_lines(path)
         for ln in sorted(lns, reverse=True):
-            if re.match(r"\s*#\s*pragma\s+\w+(?:\s+\w+)*\s*$", L[ln - 1]):
+            if re.match(r"\s*#\s*pragma\s+\w+(?:\s*[,\s]\s*\w+)*\s*$", L[ln - 1]):   # LDMud lists: strong_types,rtt_checks
                 del L[ln - 1]
                 n += 1
             else:

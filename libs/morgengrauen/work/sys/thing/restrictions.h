@@ -18,9 +18,9 @@
 #ifndef __THING_RESTRICTIONS_H_PROTO__
 #define __THING_RESTRICTIONS_H_PROTO__
 
-nosave void _set_weight(int weight);
-nosave mapping _set_extern_attributes_modifier(mapping xmod);
-nosave mapping _set_extern_health_modifier(mapping xmod);
+protected void _set_weight(int weight);
+protected mapping _set_extern_attributes_modifier(mapping xmod);
+protected mapping _set_extern_health_modifier(mapping xmod);
 
 #endif // __THING_RESTRICTIONS_H_PROTO__
 

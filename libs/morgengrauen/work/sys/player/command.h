@@ -30,8 +30,8 @@ int command_me(string cmd);
 varargs string _unparsed_args(int level);
 
 // Set- und Query-Methoden
-nosave mixed _set_p_lib_disablecommands(mixed data);
-nosave mixed _query_p_lib_disablecommands();
+protected mixed _set_p_lib_disablecommands(mixed data);
+protected mixed _query_p_lib_disablecommands();
 
 #endif // __PLAYER_ATTRIBUTES_H_PROTO__
 

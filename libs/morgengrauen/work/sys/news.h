@@ -29,8 +29,8 @@
 #define M_TITLE 4
 #define M_MESSAGE 5
 
-nosave string user_euid();
-nosave void save_group_list();
-nosave void save_group(string grp,mixed group);
-nosave mixed load_group(string name);
+protected string user_euid();
+protected void save_group_list();
+protected void save_group(string grp,mixed group);
+protected mixed load_group(string name);
                

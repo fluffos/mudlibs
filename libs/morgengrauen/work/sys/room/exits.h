@@ -23,11 +23,11 @@
 #ifndef __ROOM_EXITS_H_PROTO__
 #define __ROOM_EXITS_H_PROTO__
 
-nosave mapping _set_exits(mapping map_ldfied) ;
-nosave mapping _query_exits();
-nosave int _set_special_exits(mapping map_ldfied);
-nosave mapping _query_special_exits();
-nosave string _MakePath(string str);
+protected mapping _set_exits(mapping map_ldfied) ;
+protected mapping _query_exits();
+protected int _set_special_exits(mapping map_ldfied);
+protected mapping _query_special_exits();
+protected string _MakePath(string str);
 void AddExit(string|string* cmd, closure|string dest);
 protected void _AddExit(string|string* cmd, string|closure room,
                         string message);
