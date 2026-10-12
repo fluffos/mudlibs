@@ -490,3 +490,15 @@ functionally re-tested live on this lib.
 ## 深度功能测试（§10.7，2026-10-12）：黑木崖老者
 
 - `d/heimuya/npc/laozhe.lpc` `init()`：残留调试行 `sprintf("%s \n", what);`，`what` 是对象，本驱动 `sprintf` 的 `%s` 遇对象报错，进房间时 `init()` 每次中断、招呼从不执行；删去（与 fys 同）。
+
+## 编译警告收尾（2026-10-12）
+
+`scripts/toolkit_fix.sh` 一轮加手工收尾，能编译的文件警告清零。改动的 34 个对象 HEAD 与工作树各载入一次：HEAD PASS 32，tree PASS 33，regress 0，新载入 1（`laozhe`）。
+
+- 冗余继承 15 处（`lpc_diamonds.py`：`open/task1/*`、`open/xiangyang/npc/*` 的 NPC 又直接继承一遍基类已有的 mixin；`shenzhao-jing`、`taixuan-gong`、`douzhuan-xingyi/xingyi`）。`d/city/pai9room.lpc` 在 `inherit ROOM` 前多写了 `inherit F_CLEAN_UP`，删去（§7.240）。
+- `clean_up()` 两条路进来（`F_SSERVER` 与 NPC/SKILL/ROOM 基类都继承 `F_CLEAN_UP`）：`d/death/god1`、`d/yixing/npc/bangzhong`、`kungfu/skill/{bixie-jian,love-sword,taiji-jian}` 用 `lpc_name_winner.py` 写出驱动本来就选的那一个。
+- `d/heimuya/npc/laozhe.lpc`：`command("give yancao to", me)` 给单参数 efun 传了两个参数，是编译错误，这个老者从来载不进来；同族其它库都已注释掉这一行和白克隆一个 `yancao` 的那行，这里照删。
+- `open/xiangyang/task/guo.lpc` 同时 include `zzzjob.lpc` 和 `teamjob.lpc`，两者各声明一份逐字相同的 `names` 表；两处都加 `#ifndef XIANGYANG_TASK_NAMES` 防重。
+- `d/yixing/doc/info_{store,biao,guest}.h` 经 `bangzhu_duty.h`/`guanjia.h` 被同一文件 include 两次，加 include guard。
+- 宏重定义：`shuyuan2/3` 的 `STORY_DIR`（`globals.h` 里是故事守护的目录）、`clxiaoting`/`bangling` 的 `BANGZHU`、`biaotou` 的 `BIAOHUO`（`changle.h` 已定义），本地 `#define` 前加 `#undef`。`d/city/daxiaoroom.lpc` 注释块里的嵌套 `/*`。
+- 未改：`d/yixing/npc/bangzhu.lpc` HEAD 就编不过（`doc/set_bang.h:83` 语法错误），与本轮无关。

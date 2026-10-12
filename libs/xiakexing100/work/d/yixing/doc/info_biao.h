@@ -1,4 +1,6 @@
 // /d/yixing/doc/info_biao.h
+#ifndef INFO_BIAO_H
+#define INFO_BIAO_H
 // Last Modified by winder on Jul. 12 2002
 
 mapping info_biaoju = ([
@@ -72,3 +74,4 @@ string *biao_places = ({
 
 	"/d/xueshan/shanlu4",
 });
+#endif
