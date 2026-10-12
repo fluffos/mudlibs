@@ -111,9 +111,9 @@
 
 // prototypes of daemon functions
 object        ___debug(int on);
-nosave void   accept_cb(int* msg, int ufd);
-nosave void   callback(int ufd, int action, mixed args);
-nosave void   debug(varargs mixed* x);
+protected void   accept_cb(int* msg, int ufd);
+protected void   callback(int ufd, int action, mixed args);
+void   debug(varargs mixed* x);
 nosave void   flush(int fd);
 nosave void   looked_up(int* msg, int ufd);
 nosave void   lookup(string host, closure cb);

@@ -89,7 +89,7 @@ private int restore_mapping( string str, mixed r, int delimiter ) {
 }
 
 public varargs int restore_value( string str, mixed r, int delimiter ) {
-  int i, i2, c;
+  int i, i2;
   mixed res;
   string wstr;
 

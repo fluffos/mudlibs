@@ -3,8 +3,6 @@
 
 #include <rooms.h>
 #include <secure/wizlevels.h>
-#pragma verbose_errors
-#pragma combine_strings
 
 // name of the guild - move this to the sys dir!!
 #define GC_MADMONKS "madmonks"

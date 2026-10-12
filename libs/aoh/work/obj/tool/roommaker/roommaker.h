@@ -16,16 +16,16 @@
 
 /* Prototypes and global variables */
 
-nosave void gotogetstring();
-nosave void gotogettext();
-nosave void abort();
-nosave string help();
-nosave string file_print();
-nosave void SetLabel(string label,mixed argument);
-nosave mixed QueryLabel(string label);
-nosave void ClearText();
-nosave void SetText(string *text);
-nosave void gotomenu();
+protected void gotogetstring();
+protected void gotogettext();
+protected void abort();
+protected string help();
+protected string file_print();
+protected void SetLabel(string label,mixed argument);
+protected mixed QueryLabel(string label);
+protected void ClearText();
+void SetText(string *text);
+protected void gotomenu();
 string QueryFile();
 string *EditText();
 string arrayprint(string *arr);
