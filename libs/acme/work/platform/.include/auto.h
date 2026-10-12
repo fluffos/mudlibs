@@ -1,17 +1,7 @@
 #ifndef _PLATFORM_AUTO_H
 #define _PLATFORM_AUTO_H
 
-#pragma combine_strings
-#pragma strong_types
 #pragma save_types
-#pragma verbose_errors
-#pragma local_scopes
-#pragma sloppy
-#pragma no_range_check
-#pragma warn_deprecated
-#pragma warn_empty_casts
-#pragma warn_missing_return
-#pragma warn_function_inconsistent
 
 #define AutoInclude          "auto.h"
 #define TopLevelDomain       "acme"

@@ -1,6 +1,5 @@
 #ifndef _ANSI_H
 #define _ANSI_H
-#pragma combine_strings
 
 
 /*  ESC is needed for all codes  */

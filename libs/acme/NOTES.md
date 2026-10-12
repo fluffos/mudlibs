@@ -231,3 +231,10 @@ Leftover 647 (2026-09-11). User: source-complete
 is done; do not invent. Shipped rooms still only
 void and workshop. No extra archive AddItem to
 load. Do not invent rooms.
+
+## Deep test (§10.7, 2026-10-12): compile-warning pass
+
+- Removed LDMud-only pragmas FluffOS ignores (`#pragma no_clone` x57, `combine_strings`, `strong_types`, `warn_*`, ...): no runtime change on this driver.
+- `platform/.lib/exception.lpc`, `player.lpc`, `program.lpc`: `struct X { ... };` -> no `;` after the struct body.
+- Three redundant inherits another inherit already contains (`lpc_diamonds.py`).
+- 59 changed objects: HEAD 6 load, tree 6 load, no regression. The other 118 of 152 files do not compile at all (LDMud closures, `#'` syntax, missing efuns such as `variable_list`/`set_extra_wizinfo`): their warnings are not reachable until that port is done.
