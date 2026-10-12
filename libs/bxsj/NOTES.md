@@ -906,3 +906,19 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 - `d/xingxiu/obj/duchong.lpc` `kill_ob()` 改为 void（无人读返回值）；`d/gumu/npc/mmnz.h` 原型 `int kill_ob` 改为与定义一致的 `void`。
 - 5 处多余的 inherit（`kuihua-shengong.lpc` 的 `SKILL` 已由 `FORCE` 带入等，`lpc_diamonds.py`）。
 - 77 个对象（含包含/继承改动文件的）载入无回退。剩余多为 `Redeclaration of global variable`（`skills_pfm.h`、`r_name.h`、`huanjing2003` 等），按 KB 04 逐个核对后另行处理。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾（二）
+
+全库编译警告 89 -> 0（`scripts/lpc_warnings.py bxsj`），逐条按 KB 04 §6.10 核对后修：
+
+- `adm/daemons/huanjing2003/` 的 4 个国度 NPC、4 个宝物和 `room_readygo_hj.lpc`：一条声明里同名变量写了两遍（`string me_guodu, ask_arg, …, me_guodu = "…", …`），驱动给后一份初始化、前一份是空的。删去前面不带初值的那串名字，只留带初值的一份（代码原本读的就是后一份，`ask_arg = baowu_name` 也读到初值）。
+- 16 个继承 `FIGHTER` 的门派弟子/护卫 NPC（`d/city/npc/laopu.lpc`、`d/huashan/npc/cs_npc.lpc` 等）：自己的 `string *str_menpai`（各自的门派列表）与 `inherit/char/fighter.lpc` 的同名变量冲突。两份各管各的（`setparty()` 读基类的，NPC 自己的 `create()` 读自己的），叶子一侧改名 `npc_menpai`，行为不变。
+- `d/city/npc/r_name.h`（经 `d/city/npc/skills_pfm.h` 包含进上述 NPC）的六张姓名表与 `include/r_name.h`（`fighter.lpc` 包含）同名但内容不同；按“两份头文件同名不同内容”处理，改名 `c_f_name` 等，叶子里的 `random_name()` 照旧读自己那份。
+- `d/city/npc/mengdie_npc{,1,2}.lpc`：已继承 `FIGHTER` 又 `#include <skills_pfm.h>`，变量和函数再来一份；删去多余的 include（函数体相同，继承来的那份照常可用）。
+- `kungfu/skill/dzxy.lpc`：`string *attack_action` 与 `inherit/skill/skill.lpc` 的同名变量本意相同（`skills.h` 读它），删去叶子声明，改在 `create()` 里赋值（先调 `::create()`）。
+- `d/taishan/npc/runner.lpc`：泰山叛徒的逃跑路线 `path` 与 `feature/command.lpc` 的命令搜索路径 `path` 撞名，叶子改名 `route`。
+- `d/village/npc/obj/robber.lpc`、`robber_n.lpc`：`NAME_D` 重定义，前面加 `#undef NAME_D`（生效的仍是本文件的定义）。
+- `cmds/usr/mygift.lpc`、`mygift2.lpc`：`?:` 两支 int/string，去掉无效的 `(int)`。
+- `clone/npc/tdh/man1.h`、`d/shaolin/npc/h.lpc`：块注释里的 `/*` 去掉（注释范围不变）。
+
+改动的 37 个文件及包含改动头文件的对象共 40 个，HEAD 与工作树各载入一次（新进程）：40 个对象载入无回退（regress 0）；`lpc_audit_removed_locals.py` 0 处待查。
