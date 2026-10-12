@@ -857,3 +857,68 @@ character back to the host. Do not loop-reboot (I3).
 - `SetItems`/`SetItemAdjectives` 的键写成 `("white trim", "trim")`、`(("branch", "branches"))`：逗号表达式只剩最后一个名字，玩家 `look white trim`、`look branch` 找不到（`camp6`、`camp7`、`h5` 及 `realms/alessandra` 小屋外 20 个房间）。改为数组键 `({ ... })`，本库别处本就这样写。
 - `cmds/players/forget.lpc`：`return "You cannot be forced to forget.", str = lower_case(str);` 逗号把后一句并进 return，被强迫时返回的是参数字符串而非拒绝信息，正常路径反而不做小写；拆成两句。
 - `secure/cmds/admins/tell.lpc` `GetHelp()`：`return ("help", "…")` 去掉无用的首操作数。15 个能载入的对象载入无回退。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+Warnings in files that compile: 4090 (corpus scan, 191 files) -> 360 (10 files). Almost all of the 4090 were
+`Redeclaration of global variable` / `inherited from both` rows repeated from a few roots (KB 06 §7.213);
+the roots and what each one was hiding:
+
+- **`lib/items/weapon.lpc` `mixed GetPreventDrop() { return 0; }`** in its "abstract methods" block (KB 06
+  §7.239 again). Every item inherits `LIB_WEAPON` after `LIB_DROP`, so the stub won on *every* item, and the
+  2026-10-10 pass had frozen it with a named winner in `item.lpc` (`return weapon::GetPreventDrop();`).
+  `SetPreventDrop()` items could still not be dropped (`CanDrop` reads the variable), but `scrap`, `resize`
+  and disarm (`CanDisarm`) asked `GetPreventDrop()` and always got 0. Now a prototype; the named winner is gone.
+- **`lib/items/key.lpc`** kept its own copy of `lock_with.lpc` (which `LIB_ITEM` already carries): the
+  `Disabled`/`DisableChance` variables and every lock/unlock apply. The key's copy won every function, but its
+  variables were the second declarations (forced `nosave`), so the saved `Disabled` was always lock_with's 0:
+  a key twisted out of shape came back whole, and a key's `DisableChance` saved as 50. key.lpc now only adds
+  `KeyID`. (The broken-key message now names the key, "The iron key gets twisted...", instead of "the key".)
+- **`lib/common/help.lpc` `void create() {}`** won over `daemon.lpc`'s `create()` in 17 commands that inherit
+  `LIB_DAEMON` then `LIB_HELP`. Removed; the 7 commands that called `help::create()` call `daemon::create()`
+  (or nothing, when they are not daemons).
+- **`lib/livings/messages.lpc` `string GetName() { return 0; }`** (prototype already in its header): the
+  `realms/mahkefel/wagon` had no name. Removed.
+- **`lib/rooms/room.lpc` had a `Touch` variable and `SetTouch`/`AddTouch` but no `GetTouch()`**, so the look
+  code (`env->GetTouch("default")`) never showed a room's touch description; 14 rooms inherited `LIB_TOUCH` on
+  top of `LIB_ROOM` to get one. `room.lpc` now has `GetTouch()` (same shape as `GetSmell()`); the extra inherits
+  are gone. The 12 other rooms that call `SetTouch` (e.g. the Arcanith smithy) now show their touch line too.
+- **`LIB_ROOM` + `LIB_FISHING`** in 12 `realms/zalbar/oldfiles/projects/ocean` rooms: the leaf's `::create()`
+  (or `room::create()`) picked `room.lpc`'s create, so `fishing::create()` never ran and the `Fishing` mapping
+  stayed 0, which `CanCast()` indexes. `LIB_ROOM` dropped, `room::` -> `fishing::`.
+- **Crafting clothing**: `std/crafting/clothing/include/craftable.lpc` inherited `LIB_ITEM` itself and
+  `clothing.lpc` added `LIB_ARMOUR`, so every garment (11 of them) carried a second, unused item. The item's
+  variables came first, so the saved ones were the dead copy's: a shirt saved `Mass` 0. craftable is now a
+  mixin (prototypes; fabric, thread and yarn inherit `LIB_ITEM` themselves), its `create()` calls the item
+  through `this_object()->` so the mixin still loads alone (the driver loads every inherited file as an
+  object; with plain prototypes the first garment cloned after boot failed to load). The three mixins'
+  `GetSave()` became `GetCraftSave()`/`GetPatternSave()`/`GetSizeSave()` (only called by scope).
+- Leaves that inherited a whole second class: `sap_mask` (x2, `LIB_ITEM` before `LIB_ARMOUR`: saved
+  `Mass`/`Value`/`DamagePoints` were 0), the alpenstock (`LIB_ITEM` + `LIB_POLE`, only `item::create()` ran,
+  so pole strength and catch chance were never set up or saved), cane/epee/wagon/bong (`LIB_ITEM` next to
+  `LIB_STORAGE`/`LIB_MEAL`), a duplicated `inherit LIB_MEAL` and `LIB_SPELL`, the soggy boots and a test fish
+  (`LIB_FISH` beside `LIB_ARMOUR`/`LIB_MEAL`: the few catch hooks now live in the leaf), item/NPC leaves that
+  re-inherited `LIB_SMELL`/`LIB_TOUCH`/`LIB_LISTEN` (with their pass-through `listen::GetListen()` wrappers),
+  `creator.lpc`'s second `LIB_PERSIST`.
+- `fear.lpc`'s `init()` is an empty body that 6 NPCs/objects inherit after (or before) the NPC's real `init()`;
+  each now defines `init()` calling both (KB 06 §7.214).
+- Sage: `lib/npcs/sage.lpc`'s taught-language list was named `Languages`, colliding with `language.lpc`'s
+  private mapping in every sage; renamed `TaughtLanguages` (and in the Keryth linguist that reads it). The
+  orcknarr shaman redeclared `LIB_PIRATE`'s `pirates` and only reset its own copy; declaration dropped.
+- Prototype/return-type agreement: room `SetItems`/`RemoveItem`, magic `SetSongBook`, vehicle `eventPrint`,
+  interactive `SetId`/`SetCapName`, trainer/chapel/player_shop/post/smtp headers, two meals' `eventDecay`,
+  black dragon `eventEnemyDied`; `#undef` before smtp's `ADMIN_EMAIL`; stray `};`; an unused `rate`, a
+  restore whose result was never read; a `?:` in an old consider verb.
+- toolkit_fix.sh also did 4 `&`→`&&`, 8 return types, 3 overrides, 2 `nosave`→`protected`.
+
+Left (360 warnings, 10 files): the armour-weapons (`babyclaw`, `bearclaw`, `knuckles`, `wantlers`, two
+`ironfist`, `realms/zalbar/.../sphairai`: `LIB_ARMOUR` + `LIB_WEAPON`, a real two-class hybrid whose split is a
+design call), `realms/zalbar/.../natural_herb_ob` (`LIB_BURN` + `LIB_MEAL`), the `realms/mahkefel/wagon`
+experiment (enter + exits + storage), and `player.lpc`'s `move.lpc` reached through both `interactive` and
+`living` (2 rows).
+
+Checked with probes HEAD vs tree (a shirt's and a key's `GetSaveString()`, an item's `GetPreventDrop()`, the
+smithy's touch, the wagon's name, the sap mask and alpenstock saves: each differs only as described above) and
+with `lpc_listcheck.sh` over the 129 changed files, every includer of a changed header, every key, help
+command, fear/sage/fishing/leader/mayor leaf, the clothing set and 400 random domain objects:
+1150 objects, 1089 -> 1089 load, 0 regress (1150 个对象载入无回退).

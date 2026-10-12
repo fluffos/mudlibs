@@ -16,7 +16,7 @@ string *GetClasses();
 string *SetDeities(string *deities);
 string *GetDeities();
 string *SetReligion(string *args);
-varargs string GetReligion(int flag);
+varargs string *GetReligion(int flag);
 int SetSacrificeType(int x);
 int AddSacrificeType(int x);
 int GetSacrificeType();

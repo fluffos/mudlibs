@@ -25,10 +25,10 @@ class EmailMessage {
   string *Recipients;
   string Subject;
   string Body;
-};
+}
 
 mapping GetMessageQueue();
-int eventCreateOutgoingMessage(string *recipients, string txt...);
+int eventCreateOutgoingMessage(string *recipients, string subj, string body);
 private nomask void eventSendOutgoingMessage(class EmailMessage Message);
 
 private nomask int check_security();

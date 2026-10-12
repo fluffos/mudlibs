@@ -41,7 +41,7 @@ string GetShopName();
 string SetShopDesc(string);
 string GetShopDesc();
 int SetPayOut(string, int);
-int RemovePayOut(string);
+mapping RemovePayOut(string);
 int GetPayOut(string);
 mapping GetShopInfo();
 mapping GetPayOuts();

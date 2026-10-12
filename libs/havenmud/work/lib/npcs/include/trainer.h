@@ -6,7 +6,7 @@ protected void init();
 
 mixed AddTrainingSkills(string);
 mixed RemoveTrainingSkills(string);
-mapping SetTrainingSkills(mapping);
+string *SetTrainingSkills(string *);
 string *GetTrainingSkills();
 mapping GetStudents();
 
