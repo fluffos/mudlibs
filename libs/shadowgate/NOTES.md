@@ -617,3 +617,5 @@ Changed files loaded at HEAD and in the tree in fresh processes: no regression.
 - **空 if / `if (x);`**：`daemon/search_d` 的 `is_item_locked()` 写成 `if (locked > 0); return 1;`，对任何已登记物品都答“已锁定”，改为按标志返回；`std/tobj` 的 `do_trap()` 同形，去掉分号；`adm/daemon/ipc`、`daemon/multi_d`、`daemon/unique_d` 只含注释的 if 并入注释。
 
 另外顺手修正 overseer `add_timed_monster()` 里从未赋值的 `ob`（无调用者）。未运行格式化器，以保持差异最小。HEAD 与工作树新进程分别载入改动的 66 个对象：63 -> 63 通过，无回退；未通过的 3 个（`_freeze`、`gnollhunter`、测试用 `battle`）在 HEAD 同样无法载入。改后这些文件的“无副作用”警告 74 -> 0。66 个对象载入无回退。
+
+- 2026-10-11 补记：`d/deku/weapons/winters_chill.lpc`（冬寒法杖）`query_charges()` 声明为 void 却 `return charges;`，`failure()` 为 void 却 `return 1;`；sunshadow 下整份不编译，`d/deku/monster/bheur.lpc` 一半几率 clone 它而载入失败。改为 `int query_charges()`、`return;`（调用方不取返回值）。

@@ -788,3 +788,5 @@ By hand: `adm/include/conf.h` and `config.h` both define MUDLIB, MUDLIB_VERSION,
 - **sunshadow 独有的**：`std/magic/spell.lpc` 的 `define_clevel()` 里一个空的 `if(spell_type == "psion") { }`，删去；`std/effects/effect.lpc` 的 `if(!prof) prof == FULL_EFFECT;` 改 `=`（与 `rooms/spell.lpc` 同形；该基类目前无人继承）。`std/assvendor.lpc` 见上。
 
 HEAD 与工作树新进程分别载入改动的 58 个对象：regress 0。未通过的 25 个（`_freeze`、两份 `river`、`rooms/spell`、`cauldron`、豺狼人、`rumours_d`、`search_d`、`unique_d` 等）在 HEAD 同样无法载入，是本库原有的其它编译错误。`bheur` 在第一次批量载入里失败一次：其 `create()` 有一半机会 `new()` 出 `/d/deku/weapons/winters_chill.lpc`，后者 `void` 函数 `return charges;` 编译失败（shadowgate 同样），单独重载 3 次均通过，属随机伪影。改后这些文件的“无副作用”警告为 0。58 个对象载入无回退。
+
+- 2026-10-11 补记：`d/deku/weapons/winters_chill.lpc`（冬寒法杖）`query_charges()` 声明为 void 却 `return charges;`，`failure()` 为 void 却 `return 1;`；sunshadow 下整份不编译，`d/deku/monster/bheur.lpc` 一半几率 clone 它而载入失败。改为 `int query_charges()`、`return;`（调用方不取返回值）。
