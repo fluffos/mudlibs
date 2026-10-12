@@ -5,7 +5,6 @@
 
 _vanish( arg )
 {
-   string fn;
    int vcost;
 
    if ( !TP->query_immortal() && (TP->query_sp() < (TP->query_maxsp()*6) / 10) 

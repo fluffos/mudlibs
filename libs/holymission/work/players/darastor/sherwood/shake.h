@@ -1,5 +1,8 @@
 #include "/players/goldsun/stand.h"
+#ifndef SHERWOOD_LEAF_VAR
+#define SHERWOOD_LEAF_VAR
 object leaf;
+#endif
 
 shake(str){
 

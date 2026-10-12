@@ -1,6 +1,10 @@
 /* DONT EVEN THINK OF USING THIS ANY FURTHER !!!! 030793 Llort */
 
+/* A file that also inherits room/room (which #includes clean_up.lpc) defines
+   STD_H_NO_CLEAN_UP first, or it gets clean_up() twice. */
+#ifndef STD_H_NO_CLEAN_UP
 inherit "room/clean_up";
+#endif
 
 #define EXTRA_INIT
 #define EXTRA_RESET

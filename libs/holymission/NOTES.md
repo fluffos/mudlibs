@@ -777,3 +777,29 @@ Verification: the edited files and the includers of the edited headers, 163 obje
 - `msg + "Knarr..."` 改 `+=`（4 个文件）；amylaar history/lib 的 `for (...) 0;` 改空循环体（2）；blade soul.121995、unuscione soul 的 `if (who, environment(thief)->query_immortal())` 按上一行注释恢复成 `present(who, environment(thief))->query_immortal()`（2）。
 
 验证：改动文件与包含 genhouse.h 的房间共 176 个对象，HEAD 与工作树各在新进程载入（176 objects; HEAD PASS 175, tree PASS 175; regress 0; newly loading 0），175 个对象载入无回退（`/tools/filetool` 在两边都因批量载入时没有 this_player 而失败，非本次改动）；这些文件的“无副作用”警告 231 -> 0。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+能编译的文件里的编译警告 501 -> 0（`scripts/toolkit_fix.sh` 之后逐条手改，约 360 个文件；有编译错误的文件不在范围内）。按类别：
+
+**真实的编程错误（行为有变化）：**
+- **注释没有闭合，吞掉了代码**：`obj/door.lpc` 及 `players/cashimor/{inherit,objects}/door.lpc` 的 `query_auto_unlock` USERDOC 少了 `*/`，函数本身被注释掉，对门 `partner_door->query_auto_unlock()` 永远是 0，自动解锁的门从不生效；`players/blade/{lib,wiz}/monster.lpc`、`players/archive/margusko/monster.lpc`、`players/mangla/gal/baer/monster.lpc` 的 `query_trapped` USERDOC 同样，`query_trapped()` 和“被困住就不逃跑”的 `run_away()` 都不存在；`players/kasgaroth/private/guild.orgs/fighter/f_soul.lpc` 的 `reset()` 里 `/* ... /*` 一直注释到 118 行，`init()` 的全部 add_action、`rescue`、`help`、`home` 等函数都在注释里，`reset()` 反而执行了 `home` 尾部的扣法力。补上 `*/`。
+- **一个文件里同名全局变量声明两次**（驱动把第二个当成另一个变量，第二个声明之前和之后的代码各用一份）：wilbie 墓地 9 个怪物的 `mace`/`hammer`/`sword`、各盗贼 soul 的 `isbusy`/`in_backstab`/`att`（第二份就在 `headers.h` 或同一长行里）、beardy 监狱房的 `time`/`i`、`paris/house/study.lpc` 的 `name`/`punct`、`whisky/island/room/island18.lpc` 的 `object *o1` 与 `object o1`（保留代码实际用的 `object o1`）等，只留一份。
+- **叶子文件重新声明了基类变量，本意是用基类的**：`players/ted/path/alchemist.lpc` 和 `tamina/teds/path/alchemist.lpc` 的 `short_desc`（炼金店房间的短描述一直是空的）、`sauron/area/wreck/room/outside_water_room{,2}.lpc` 的 `long_desc`（房间的 `query_long()` 看不到描述）、`redsexy/guild/removed/seeker.lpc`、`animal/obj/furniture.lpc` 的 `short_desc`、`matt/.../glassprism.lpc` 的 `value`、四个 std_shadow 影子和 9 个 `me = this_object()` 的怪物：删掉叶子的声明。
+- `players/brainsprain/bis/items/backpack.lpc`、`darastor/vagabond/obj/cloak.lpc`：`inherit "obj/container"` 写在 `obj/armour` 前，所有物品变量两份，背包的 `::reset()`/`::init()` 只到容器那份，armour 的 `reset()` 从未执行（尺寸表为空），`remove` 命令也没加上。改为只继承 armour，把容器需要的几个函数（`add_weight`、`can_put_and_get`、`prevent_insert`、`set/query_max_weight`、透光计算）写在叶子里（KB 06 §7.213 第 5 类）。
+- `players/jewel/quest/overlord.lpc`（Daisy）同时继承 monster 和 `/obj/soul`，后继承的 soul 赢了 `id()`/`long()`/`get()`/`create()`：`look at daisy` 找不到她，还能被捡起来。叶子里改用 monster 的版本；`/obj/soul.lpc` 的 `call` 改名 `soul_call`（只有它自己和 Daisy 用）。
+- `players/goldsun/lank/monster/merlin.lpc` 的 `add_poison()` 调用自己（无限递归），改为 `::add_poison(1)`。
+- `players/tamina/teds/{wands/fear,items/regen_ring}.lpc` 的 `query_info()` 用 `write()` 输出再返回 1，鉴定卷轴（`identify.lpc`）随后 `write(info)` 打出一个 “1”；改为返回说明文字。
+- `players/tuppence/fortress/monster/bat.lpc` 克隆的是 `obj/monster.lpc` 而不是 `obj/money.lpc`（其余 19 个同类怪物都是 money）：蝙蝠身上藏着一个无名怪物，500 金币设在那个怪物上。
+- `players/skeeve/door.h` 的 `_BEGIN` 给每个 open/close 函数都声明了 `object key`，只有 `_LOCK`/`_UNLOCK` 用到，声明移进这两个宏。
+
+**行为不变的整理：**
+- 叶子自己的变量与基类同名而含义不同（拥有者名字 `name`、怪物身上的 `object armour`/`object money`、忍者武器的 `cap_name`、手镯的 `worn` 等）：用 `scripts/lpc_rename_ident.py` 改叶子一侧的名字（宏里的引用另外手改，工具不改预处理行）。`guild/prac_monster.lpc` 的私有 `spells/abilities/skills` 改为 `prac_*`。`silas`/`warlord` 的 `house.lpc` 的 `items` 改为 `nosave string house_items`（驱动原本就把它强制成 nosave，存档里的 `items` 仍归房间那份）。
+- `room/std.h` 的 `inherit "room/clean_up"` 加 `#ifndef STD_H_NO_CLEAN_UP`：58 个房间同时继承 `room/room`（它已 `#include` clean_up），用到 `TWO_EXIT` 等宏的 8 个先定义该宏，其余 50 个删掉没用的 `#include <std.h>`。
+- `room/old_south/` 7 个文件整份内容重复了一遍（第二次的 `reset()` 让文件根本载入不了）：删掉重复的后半。
+- `catch_tell`/`long`/`set_long` 的 `int` 覆盖 `void` 基类（返回值没人读）改 `void`；12 个 `add_poison` 覆盖从不调 `::add_poison`（这些怪物不会中毒），改为 `void` 空函数体，保持现状；两个 board 的 `void short()` 改 `string short() { return 0; }`。
+- 51 个前向原型（`lpc_fix_forward_decl.py`）、20 行 `#pragma strict_types;` / `strict-types`（改成正确写法，编译通过）、3 个未知转义、21 处注释里的 `/*`、3 个宏重定义（`#undef`）、19 个未用局部变量、`sherwood` 的 `tear.h`/`shake.h`/`cut.h` 共用的 `leaf`/`branch` 加头文件守卫。六份 `ninja_weapon.lpc`（darastor×3、dalamar、wilbie、bobo）继承 `/obj/weapon` 后又 `#include <properties.h>`，第二份 `props` 去掉（tatsuo 那份 10-10 已改）。
+
+验证：改动的文件与包含改动头文件的对象共 1051 个，HEAD 与工作树各在新进程载入（1051 objects; HEAD PASS 726, tree PASS 732; regress 0; newly loading 6），726 个对象载入无回退；这些对象（无编译错误者）的警告 432 -> 0。全库重扫：剩下的 12 条（`room/room.h`、`players/kbl/cloud/cell.h`）属于本身有编译错误的 `players/goldsun/not/room/gates.lpc`、`players/kbl/cloud/cloud_cell.lpc`，不在范围内。
+
+顺带修了两个工具：`scripts/lpc_fix_forward_decl.py` 把 `({ })` 初值里的 `}` 当成块结束（majik3 的原型被插进了 `if` 里），以及 `lpc_fix_void_override.py` 等五个读诊断表的脚本遇到消息里含制表符（`Unknown escape sequence '\\<TAB>'`）就崩溃。另外，在 `obj/monsoul.lpc` 被 `#include` 的 monster 副本里，`attack_object` 的原型必须放在那个 include 之前（monsoul 先调用了它）。

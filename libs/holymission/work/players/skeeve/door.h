@@ -7,7 +7,6 @@
   (str) {\
     string d, k;\
     int p;\
-    object key;\
     if (!str) return 0;\
     if ((p = sscanf(str,"%s with %s",d,k))==0){\
       d = str; k = 0;\
@@ -68,6 +67,7 @@
 
 #define _UNLOCK(_id,_name,_type,_code,_query,_set,_room)\
   if (_id) {\
+    object key;\
     if (!k) write ("What will you use to unlock the door?\n");\
     else if (k=="key") write ("Which key will you use to unlock the "+_name+"?\n");\
     else if (k== _type+" key") {\
@@ -88,6 +88,7 @@
   
 #define _LOCK(_id,_name,_type,_code,_query,_set,_room)\
   if (_id) {\
+    object key;\
     if (!k) write ("What will you use to lock the door?\n");\
     else if (k=="key") write ("Which key will you use to lock the "+_name+"?\n");\
     else if (k== _type +" key") {\

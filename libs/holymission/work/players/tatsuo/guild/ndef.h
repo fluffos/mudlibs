@@ -25,6 +25,7 @@
 #ifndef TO
 #define TO this_object()
 #endif
+#undef TPN
 #define TPN          (TP->query_name())                     /* name of player    */
 #define TPL          (TP->query_level())
 #define TP_POSS      (TP->query_possessive())               /* possissive word   */

@@ -40,6 +40,7 @@
 #define SPELL_MASTER	"/spells/master"
 #define ABILITY_MASTER	"/abilities/master"
 #define NO_OF_LANG	3
+#undef QR
 #define QR		"room/quest_room"
 #define ARENA		"/players/patience/arena/prep_room"
 #define KILL_NEUTRAL_ALIGNMENT	10

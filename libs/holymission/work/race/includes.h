@@ -14,4 +14,5 @@
 #define SOUL "race/soul"
 #define ROOM "race/room"
 /* Added by kelly 930526 */
+#undef RM
 #define RM "race/master"

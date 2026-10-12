@@ -1,5 +1,12 @@
 #include "/players/goldsun/stand.h"
-object branch,leaf;
+#ifndef SHERWOOD_BRANCH_VAR
+#define SHERWOOD_BRANCH_VAR
+object branch;
+#endif
+#ifndef SHERWOOD_LEAF_VAR
+#define SHERWOOD_LEAF_VAR
+object leaf;
+#endif
 
 tear2(str){
  if (str=="moss"){

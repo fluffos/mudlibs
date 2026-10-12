@@ -1,4 +1,4 @@
-#pragma strict-types
+#pragma strict_types
 #define path "/players/paris/waste/"
 inherit "/room/room";
 

@@ -1,5 +1,9 @@
 #include "/players/goldsun/stand.h"
-object tree,branch,axe;
+object tree,axe;
+#ifndef SHERWOOD_BRANCH_VAR
+#define SHERWOOD_BRANCH_VAR
+object branch;
+#endif
 
 cut(str){
  if (str=="tree" || str=="bush"){
