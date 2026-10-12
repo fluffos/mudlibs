@@ -871,3 +871,9 @@ live `debug.log` 是 `libs/zjdyaryl/log/debug.log`（Boot Time Fri Sep 4
 - 补齐前几批漏掉的同码副本：`your_temp["guarding"];` 补 `= 0`（反击后清除防守姿态，含 `u/` 下的 combatd 拷贝）；`(: WEAPON_D, "query_action" :)` 改为 `(: call_other, WEAPON_D, "query_action" :)`（KB 04）；`mysql_d.lpc` 的空 `MSG` 宏改成空函数；`gigicook.lpc` 的 `arg == menu_list[0]` 改为 `=`。
 - 改动文件：adm/daemons/test.lpc 
 - 改动的对象 HEAD 与工作区都能载入，无回退。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查（同码收尾）
+
+- 改动文件：cmds/wiz/who1.lpc 
+- 与前几批同型：`youming.lpc` 空 `DEBUG` 宏改空函数；`who1.lpc` 孤立的分隔线字符串删去；`jing.lpc` 被分号截断的“惨叫一声，血流如注。”接回上一句；`_dashi.lpc` 三行只造不调的 `(: call_other, __FILE__, "…_name_skill", who :);` 改成注释（行为不变）。
+- 载入无回退。

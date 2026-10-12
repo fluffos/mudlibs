@@ -341,3 +341,9 @@ functionally re-tested live on this lib.
 手工（与 zjmudhell、zjdyzj 相同）：28 处 `Illegal to declare nosave function`——`include/globals.h` 的 `#define nosave nosave` 让扫描工具认不出这个关键字，手工改成 `protected`；`adm/daemons/natured.lpc` 的空语句 `lt[LT_MON];`、`adm/daemons/combatd.lpc` 和 `test.lpc` 的空语句 `your_temp["guarding"];` 删去。都不改变行为。
 
 启动时警告 52 -> 0；新进程登录（新人物确认）正常。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查（同码收尾）
+
+- 改动文件：cmds/wiz/who1.lpc 
+- 与前几批同型：`youming.lpc` 空 `DEBUG` 宏改空函数；`who1.lpc` 孤立的分隔线字符串删去；`jing.lpc` 被分号截断的“惨叫一声，血流如注。”接回上一句；`_dashi.lpc` 三行只造不调的 `(: call_other, __FILE__, "…_name_skill", who :);` 改成注释（行为不变）。
+- 载入无回退。
