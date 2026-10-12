@@ -1269,3 +1269,10 @@ The 53 files are 52 `.C` -> `.lpc` (the tea items of `d/city/npc/tea`, the Lingj
 ## 深度功能测试（§10.7，2026-10-11）：dns_master 空 if
 
 - `adm/daemons/network/dns_master.lpc` `query_services()`：`if (! (mud_svc[mud]["finger"/"tell"] & SVC_KNOWN))` 块里只有 `#if PREF_X & SVC_TCP … #endif`，选项关闭时 if 为空（“无副作用”警告报在下一句）；把 `#if`/`#endif` 挪到 if 外面（KB 04，2026-10-07 那次扫描漏了 `! (` 加括号换行这种写法）。载入无回退。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查（二）
+
+- `inherit/bboard.lpc` 未读计数：`for (j == 0; …)` 初值没赋，`j` 从上一帖延续，只有第一帖的回复被统计；`unread;` 从不加一，留言板“未读”永远为 0。改为 `j = 0`、`unread++`。
+- `kungfu/skill/force/healx.lpc`（及 `u/karlopex` 下三份）：`if (!target) target == me;` 应为 `=`，不带目标时疗伤对象是 0。
+- `family_job/menpai_job.h`、`menpai_killer.h`、`5.6bak/control.lpc`（及 `u/` 下副本）：`for(m=0; m!=1; m)` 第三项无作用，改为空（循环体内赋 m，行为不变）。
+- 改动及包含它们的对象载入无回退。

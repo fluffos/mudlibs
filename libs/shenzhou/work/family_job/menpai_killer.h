@@ -26,7 +26,7 @@ void menpai_killer(object me, string strName, string strId, string strFName, int
 
     m = 0;
 
-    for(m=0; m!=1; m) 
+    for (m = 0; m != 1; ) 
     {
         j = random(total);
         list[j]->short(1);
