@@ -161,7 +161,7 @@ void finish(object me)
 			pot = exp/5 + random(exp/10);
 
 			//< Modified by mxzhao 2005/01/09
-			///*奖励控制开始*/
+			///奖励控制开始*/
 			//if (me->query("registered")==3){
 			//	exp = exp * TDH_JOB_MUL * VIP_MUL /10000;
 			//			pot = pot * TDH_JOB_MUL * VIP_MUL /10000;

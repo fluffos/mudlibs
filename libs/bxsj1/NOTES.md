@@ -402,3 +402,9 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 `.c` 改名 `.lpc` 时只改了字符串没改切片宽度：`f[<2..] == ".lpc"` 拿两个字符比四个字符，永远不成立（`!=` 永远成立），按后缀筛文件、去后缀的代码因此从不运行或截成 `x.l`（KB 06 §7.238）。`scripts/lpc_lpc_suffix_slice.py --apply` 改了 10 处比较、0 处去后缀（如 `d/xueshan/zanpugc.lpc`）；改动的文件 HEAD 与工作树分别加载（新进程），无回退。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 19 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 1 个，只在 #if 分支用的声明移进分支 0 个文件；改动 18 个文件，HEAD 与工作树各载入一次无回退（18 objects; HEAD PASS 18, tree PASS 18; regress 0; newly loading 0），这些文件的警告 20 -> 0。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+把 bxsj 今天两轮编译警告修复（`00dacc346b9`、`9624dde6015`）移植过来：`scripts/lpc_twin_port.py classify --pre 00dacc346b9~1 bxsj bxsj1` 判定 56 个文件全部是孪生（52 个格式化差异、4 个原样），`adopt --apply` 一次改完，无需手工。内容同 bxsj NOTES 的“编译警告收尾（一）（二）”：11 个阵法技能的 `query_action()` 改 `mixed`、`equip.lpc` 的 `ob_hit()` 改 `mixed`、`kill_ob()` 改 void、5 处多余 inherit；`huanjing2003` 同名变量在一条声明里写两遍、16 个 `FIGHTER` 子类的 `str_menpai` 改名 `npc_menpai`、`d/city/npc/r_name.h` 姓名表改名 `c_*`、`mengdie_npc*` 多余的 `skills_pfm.h` 包含、`dzxy.lpc` 的 `attack_action` 改在 `create()` 赋值、`runner.lpc` 的 `path` 改名 `route`、`robber*.lpc` 的 `#undef NAME_D`、`mygift*.lpc` 的 `?:`、两处注释里的 `/*`。
+
+移植后全库扫描警告为 0（`scripts/lpc_warnings.py bxsj1`），本库没有另外的遗留。改动文件及包含/继承改动文件的对象共 87 个，HEAD 与工作树各载入一次（新进程）：86 -> 86 通过，87 个对象载入无回退（唯一失败的 `adm/daemons/huanjing2003/temp/hj_room_created` 在 HEAD 也载入失败，是运行时生成的临时房间）；`lpc_audit_removed_locals.py` 0 处待查。
