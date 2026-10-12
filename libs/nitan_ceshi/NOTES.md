@@ -736,3 +736,16 @@ Same typo `nitan_san`/`nitan3` already live-verified. Corrected (LF-only).
 `.c` 改名 `.lpc` 时只改了字符串没改切片宽度：`f[<2..] == ".lpc"` 拿两个字符比四个字符，永远不成立（`!=` 永远成立），按后缀筛文件、去后缀的代码因此从不运行或截成 `x.l`（KB 06 §7.238）。`scripts/lpc_lpc_suffix_slice.py --apply` 改了 4 处比较、0 处去后缀（如 `adm/daemons/taskd.lpc`）；改动的文件 HEAD 与工作树分别加载（新进程），无回退。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 2 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 1 个，只在 #if 分支用的声明移进分支 4 个文件；改动 7 个文件，HEAD 与工作树各载入一次无回退（7 objects; HEAD PASS 7, tree PASS 7; regress 0; newly loading 0），这些文件的警告 10 -> 1。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+可编译文件的警告 **187 -> 0**（全库重扫：13381 个文件可编译）。改动对象、F_UNIQUE/F_LIQUID/F_FOOD 的全部继承者和 `feature/`、`inherit/`、`adm/daemons/`、`clone/misc/` 共 950 个对象 HEAD 与工作树各载入一次：`950 objects; HEAD PASS 934, tree PASS 934; regress 0; newly loading 0`。删除声明审计 0 处待看。
+
+**真问题：唯一物品被销毁时不减负重（113 条 `remove() inherited from both` 的根源）。** `feature/unique.lpc` 有一个 `int remove() { save(); }`，作为后继承的一方盖掉了 F_MOVE（以及 NPC 的）`remove()`：销毁时不卸装备、不从携带者身上减负重、不清 handing。F_MOVE 的 `remove()` 对 `is_ob_saved()` 的物件本来就会先 `save()`（F_UNIQUE 继承 F_OBSAVE），所以删掉 unique 的这个函数即可（nitan170911 的 unique.lpc 本来就没有）。探针（新进程，HEAD 与工作树各一次）：镖头身上放一把承影剑再销毁，HEAD 负重 10000 -> 25000 -> 仍是 25000，修正后回到 10000。同类：`adm/npc/obj/xiang.lpc` 改为先 `save()` 再 `::remove(euid)`；`clone/misc/cruise-ob.h` 的 `remove()`（只有 `save()`，物件是 F_OBSAVE）删去。
+- `clone/misc/swmuding.lpc`（神木王鼎）重新声明木鼎的 `insects`，自己的虫表从没生效；改名 `sw_insects` 并在 `create()` 赋给 `insects`（同 nitan170911）。
+- `clone/npc/meng-zhu.lpc`：F_UNIQUE（经 F_OBSAVE）和 F_SAVE 都有 `save()`/`restore()`，盟主存自己的档案（`query_save_file`），在叶子里写明用 `save::save()`/`save::restore()`（原来也是它胜出）。`clone/npc/pet.h` 在 F_UNIQUE 之外又继承 F_OBSAVE，删去重复的。
+- `d/mingjiao/npc/hu.lpc` 的 `varargs int recover(object ob)`（给病人疗伤）盖掉了 NPC 自己的 `recover()`，改名 `heal_patient()`，call_out 一并改。
+- `d/xueshan/obj/lubo.lpc`（颅钵）同时继承 F_LIQUID 和 HAMMER，两边的 `extra_long()` 都是真的；叶子里合起来显示（液体在前，兵器在后）。
+- 幻境 `huanjing2003` 的国度 NPC/宝物和 `room_readygo_hj.lpc`：每个变量声明两次，去掉不带初值的那串。`d/maze/forest/maze.lpc` 的 `unique_rooms` 改名 `forest_unique_rooms`。
+- `feature/food.lpc`、`liquid.lpc` 的 `do_effect()` 改为 `varargs int do_effect(object me)` 并返回 1（`eat`/`drink` 用返回值做命令结果，重载它的物品都是 int）。
+- `combatd.lpc`/`skillsd.lpc` 的本地索引宏 `FORCE` 与全局的 `FORCE`（内功基类路径）重名，改名 `FORCE2`（同 nitan170911）；`combatd.lpc` 删去没用的 `env_me`/`env_v`；`genmap.lpc` 的 `find_exits()` 删去用不到的 `harbor.h`；`vrm_server.lpc` 多余的 `;`。
