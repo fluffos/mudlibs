@@ -230,3 +230,22 @@ HEAD 与工作树分别加载（新进程）：941 -> 941 通过，无回退；�
 启动时警告 99 -> 0；新进程登录（编码选择、新人物提问）正常。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 18 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 28 个，只在 #if 分支用的声明移进分支 0 个文件；改动 36 个文件，HEAD 与工作树各载入一次无回退（36 objects; HEAD PASS 35, tree PASS 35; regress 0; newly loading 0），这些文件的警告 138 -> 92。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+`scripts/toolkit_fix.sh` 加手工修复，能编译的文件里的警告 114 → 0（全库 9077 → 9079 个文件可编译）。剩下的 3 条都在本来就编译不过的文件里：`adm/simul_efun/oo.lpc`（simul_efun 片段单独编译的假象）和两份残缺的 `10.10/score.lpc`（分号、括号全丢）。做法参照同内容的 xyj2006n（提交 94b87c18461）。
+
+**发现的真实 bug：**
+- `d/city/npc/vikee.canoe.lpc` 与 `d/city/npc/npc/vikee.canoe.lpc` 的 `do_yao()` 里 `cast "mace" :` 把 `case` 打错，整个文件编译失败。这两份是没人引用的旧副本（在用的是 `vikee.lpc`），游戏里看不到影响；改成 `case` 后两份都能载入，以后若有人启用也不会坏。（xyj2006n 里也有同样的错字，不在本次范围内。）
+- `d/city/npc/sanhua-counter.lpc`（及 `npc/npc/` 下的副本）自己声明的 `int last_time` 跟 `feature/alias.lpc` 的 `nosave int last_time` 同名，驱动把后声明的一份强制成 nosave，所以这个计时从来没存进存档，重启后每次都重新 `check_date()`。改名为 `last_check`，现在会正常保存。
+
+**机械 / 结构修复：**
+- 9 处多余的 inherit（NPC/武器/sserver 再次 inherit F_CLEAN_UP）删掉。
+- `d/kaifeng/ground.h` 及 `u/yesi/leitai1-4/ground.h`：三张常量表包进 `#ifndef GROUND_TABLES_INHERITED`，继承 ground0 的 ground/ground1/2/3 在 include 前 `#define`（KB 04 §6.10）。
+- 擂台 `npc/quest.lpc`（5 份）：`#include "colors.h"` 挪进 `__KAIFENG_QUEST__` 守卫里，`color_code` 不再重复声明。
+- `npc/reporting.lpc`（5 份）删掉没用的 `str` 局部变量；`yg/yaoguai.lpc`（2 份）删掉从不读的 `yaoguai_type`（基类 yunlou yaoguai 才用它）。
+- `d/dntg/lijing/lijing.lpc` 的 `die()`/`unconcious()` 改为 `void` 空函数（行为不变）。
+- `d/obj/cloth/jiasha.lpc` 明写 `void init() { unique::init(); }`，保留驱动原本选中的定义。
+- `daemons/toptend.lpc` 重定义的 8 个宏前加 `#undef`（原本就是后一个定义生效）。
+
+74 个对象载入无回退（HEAD 67 通过 → 现在 69 通过，新增 2 个载入）；`lpc_audit_removed_locals.py` 0 条需复查。
