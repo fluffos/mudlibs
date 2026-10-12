@@ -91,7 +91,7 @@ def first_function_start(m):
                         s -= 1
                     return decl_start(m, s)
             depth += 1
-        elif c == "}":
+        elif c == "}" and par == 0:  # the '}' of an `({ })` array literal sits inside the parentheses
             depth -= 1
     return None
 

@@ -38,7 +38,10 @@ TYPE_WORDS = ("int", "void", "status", "mixed", "string", "object", "mapping", "
 rows = [l.rstrip("\n").split("\t") for l in open(f"{_SCRATCH}/lpcw-{slug}/diagnostics.tsv", encoding="utf-8", errors="replace")]
 want = collections.defaultdict(set)
 manual = []
-for f, ln, col, sev, msg in rows:
+for row in rows:
+    if len(row) < 5:
+        continue
+    f, ln, col, sev, msg = row[0], row[1], row[2], row[3], "\t".join(row[4:])  # a message can hold a tab ('\<TAB>' escapes)
     m = MSG.match(msg)
     if not m or (only and not any(o in f for o in only)):
         continue

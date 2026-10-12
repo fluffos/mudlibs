@@ -140,6 +140,10 @@ one shared `inherit`/`#include` first. Examples: a bad base declaration
   `Called function 'f' not compiled with type testing.` at the definition (88 warnings in `fengyun434`, the `smart_npc`
   NPC bases and `fightnpc*.lpc`: 15 files); `scripts/lpc_fix_forward_decl.py SLUG` copies the header of each such definition
   (modifiers, type, name, parameters) and inserts the prototypes in front of the first function of the file.
+  Until 2026-10-12 it counted the `}` of an `({ })` global initializer as closing a block, so in a file with
+  `string *titles = ({});` above untyped functions it put the prototype *inside* the first `if (...) {` it met
+  (majik3 `inherit/guild.lpc`: `syntax error, unexpected '('`, caught by the load diff); fixed, but run
+  `lpc_load_diff.py` after it as always.
 - **A wrapper named after a real efun** (`message`, `write`,
   `tell_room`) that is called before its definition binds to the REAL
   efun silently. Add a `varargs` forward declaration at the top.
