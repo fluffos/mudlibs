@@ -310,3 +310,13 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply c
 附带：HEAD 时连线画面会把启动时的编译警告（`/adm/daemons/band.lpc:63:1: warning: Unused local variable 'i'`）直接显示给玩家；这次整理后连线画面不再出现警告。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 12 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 0 个，只在 #if 分支用的声明移进分支 0 个文件；改动 11 个文件，HEAD 与工作树各载入一次无回退（11 objects; HEAD PASS 10, tree PASS 10; regress 0; newly loading 0），这些文件的警告 12 -> 0。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+- 起点（能编译的文件中）：64 条 `F() inherited from both A and B`、16 条 `Redeclaration of global variable`、2 条 `Extra ';'`（另有三个小贩文件各 28 条重复声明，但它们原本编译失败）。
+- `inherited from both` 64 条全是同一文件经两条路径进入：16 个 NPC/物件在 `inherit NPC;` 之外又 `inherit F_CLEAN_UP;`（12 处）或 `F_SKILL;`（4 处），而 NPC（`/inherit/char/npc`）本身已含这两个特性。删去多余的 `inherit`，文件里没有 `clean_up::`/`skill::` 这类限定调用，行为不变。
+- 小贩 `d/city2/npc/xiaofan.lpc`、`d/shaolin/npc/xiao-fan.lpc`、`d/taishan/npc/xiao-fan.lpc` 写成 `inherit NPC; inherit F_VENDOR;`，而 `/feature/dealer.lpc`（F_VENDOR）自己就 `inherit NPC`，于是整套角色基类被继承两次，`is_busy`/`enable_player` 等 nomask 函数“被重定义”，三个文件一直编译失败，这三个小贩从来没出现过。照 `d/lanzhou/npc/xiaofan.lpc` 的写法只留 `inherit F_VENDOR;`，现在能载入，84 条重复声明警告一并消失。
+- `d/dali/huanggong/npc/dao.lpc` 和 `bak1/dao.lpc` 的 `int ask_dan(); ;` 删去多余分号。
+- 未发现 §7.239（空壳函数压过真函数）型问题：没有两个不同文件定义同名函数的菱形。
+- 剩余：`kungfu/skill/shenghuo-lingfa/xiyanling.lpc` 的 `Expression has no side effects` 是语法错误后的恢复噪声，该文件本身不能编译，不在本轮范围。
+- 结果：能编译的文件中警告 82 -> 0；全库 6177 -> 6180 个文件能编译。改动 21 个 `.lpc`，HEAD 与工作树各载入一次（新进程）：21 个对象载入无回退（HEAD PASS 13, tree PASS 16; regress 0; newly loading 3），其余 5 个两边都因运行期权限/数据问题失败，与本次改动无关。
