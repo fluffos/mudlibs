@@ -312,3 +312,8 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 `scripts/lpc_warnings.py sjplii --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 1221 个 `.lpc` 和 4 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：1167 -> 1167 通过，无回退；改过的头文件的 148 个包含者 145 -> 145 通过。启动时警告 20 -> 0；新进程登录（新人物确认）正常。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 4 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 0 个，只在 #if 分支用的声明移进分支 1 个文件；改动 4 个文件，HEAD 与工作树各载入一次无回退（4 objects; HEAD PASS 4, tree PASS 4; regress 0; newly loading 0），这些文件的警告 4 -> 0。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查
+
+- `u/kyd/npc/luqingdu.lpc`：已给过任务物品时的回话少了 `return`，玩家得不到任何答复；补上。`u/gdjk/hongnong/npc/chigu.lpc` 末尾空的 `else if (exp <= 102000) { }`、`u/xiyu/shanjiao.lpc` 空的 `if (current_water == 0) {}` 删去（行为不变）。
+- 改动的对象载入无回退。
