@@ -395,3 +395,8 @@ Too-deep-recursion) recurred at boot; no new error from shop/拜师.
 - 补齐前几批漏掉的同码副本：`your_temp["guarding"];` 补 `= 0`（反击后清除防守姿态，含 `u/` 下的 combatd 拷贝）；`(: WEAPON_D, "query_action" :)` 改为 `(: call_other, WEAPON_D, "query_action" :)`（KB 04）；`mysql_d.lpc` 的空 `MSG` 宏改成空函数；`gigicook.lpc` 的 `arg == menu_list[0]` 改为 `=`。
 - 改动文件：u/lonely/combatd.lpc u/redl/combatd.lpc 
 - 改动的对象 HEAD 与工作区都能载入，无回退。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查（二）
+
+- `cmds/skill/zhanling.lpc`：`lv4 == "神奇普通5串";` 应为 `=`。
+- `kungfu/skill/riyue-xinfa.lpc` `valid_force()`：作者在 return 后补了一句 `force == "kuihua-shengong";`，永远执行不到；并进 return 的条件。载入无回退。

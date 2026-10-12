@@ -595,3 +595,10 @@ No new errors after the shop commands. Demo `fluffos` save churn
 - `clone/obj/genmap.lpc`/`traverser.lpc`：`DEBUG` 是空宏，调用处留下 `("text", n);`；改成空函数 `varargs void DEBUG(string fmt, mixed arg) {}`。
 - `d/guiyun/jiuguan.lpc`（12 处）、`*/song/obj/bingfu.lpc`：`query_temp("cai_" + (i + 1, me) + "/name")` 是把 `me->query_temp(...)` 改写成 `query_temp(..., me)` 时括号放错，逗号表达式让键变成 `"cai_" + me + …`，酒馆菜单前移、兵符统军列表都读不到；改为 `query_temp("cai_" + (i + 1) + "/name", me)`。
 - 改动的对象 HEAD 与工作区都能载入，无回退。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查
+
+- `include/globals.h` 原档用 `#define replace_program(x) ""` 关掉 replace_program，每个调用展开成孤立的 `"";`（110 条警告）。改为空展开 `#define replace_program(x)`，意图不变。
+- `d/maze/` 五个 NPC（孽龙等）：`atoi((userexp, 6000))` 是逗号表达式，本库 `atoi()` 对非字符串返回 0，这一项恒为 0；原意无法确定，删去这一项（行为不变）。
+- `cmds/wiz/who1.lpc` 孤立的分隔线字符串、`u/rock/duihuan.lpc` `for (i - 0; …)`，一并改正。
+- 47 个对象载入无回退。

@@ -266,3 +266,9 @@ definition, 2 `#undef` lines for macros that two headers define (`ROOM`, `STORY_
 ## 深度功能测试（§10.7，2026-10-11）：dns_master 空 if
 
 - `adm/daemons/network/dns_master.lpc` `query_services()`：`if (! (mud_svc[mud]["finger"/"tell"] & SVC_KNOWN))` 块里只有 `#if PREF_X & SVC_TCP … #endif`，选项关闭时 if 为空（“无副作用”警告报在下一句）；把 `#if`/`#endif` 挪到 if 外面（KB 04，2026-10-07 那次扫描漏了 `! (` 加括号换行这种写法）。载入无回退。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查
+
+- `d/baituo/shulin.lpc` 砍柴：`if (i < 1);` 多了分号，“请适量砍伐！”无条件返回，柴永远砍不成；去掉分号。
+- `d/foshan/npc/chaofeng.lpc`：战斗出招列表丢了 `set("chat_msg_combat", ({ … }));` 外壳，五个函数指针被逗号并进 `set_skill()`，战斗中从不出招；补回外壳。
+- `daemon/gongfu/xuanyuan-arrow.lpc` `practice_skill()` 的死语句 `(: throw_weapon :);` 删去。载入无回退。

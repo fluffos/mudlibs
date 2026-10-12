@@ -210,7 +210,8 @@
 #define CONDITION_D(x)  ("/kungfu/condition/" + x)
 #define SKILL_D(x)      ("/kungfu/skill/" + x)
 #define SPECIAL_D(x)    ("/kungfu/special/" + x)
-#define replace_program(x)    ""
+// replace_program() is switched off in this lib; an empty expansion leaves `;`, not a `"";` statement
+#define replace_program(x)
 
 
 

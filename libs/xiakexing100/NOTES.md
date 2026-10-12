@@ -482,3 +482,7 @@ functionally re-tested live on this lib.
 ## 深度功能测试（§10.7，2026-10-11）：dns_master 空 if
 
 - `adm/daemons/network/dns_master.lpc` `query_services()`：`if (! (mud_svc[mud]["finger"/"tell"] & SVC_KNOWN))` 块里只有 `#if PREF_X & SVC_TCP … #endif`，选项关闭时 if 为空（“无副作用”警告报在下一句）；把 `#if`/`#endif` 挪到 if 外面（KB 04，2026-10-07 那次扫描漏了 `! (` 加括号换行这种写法）。载入无回退。
+
+## 深度功能测试（§10.7，2026-10-11）：铁掌山房间描述
+
+- `d/tiezhang/pingtai.lpc`、`wmfeng.lpc`、`wztang.lpc`：完整描述后孤立的 `"\n";` 删去（无可见变化）。载入无回退。
