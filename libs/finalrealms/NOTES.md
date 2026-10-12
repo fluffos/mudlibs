@@ -733,3 +733,17 @@ project's usual convention.
 - 5 个对象 HEAD 与工作区都能载入，无回退。
 - `std/actions.lpc`（NPC 回调混入：`death()`/`do_pick_up()`/`pub_brawl()`）自己 `inherit "/std/room"`。两只地底大老鼠 `inherit "/obj/monster"; inherit "/std/actions";`，后继承者胜出，于是 `create`/`init`/`id`/`short`/`dest_me`/`add_alias` 全用了房间的版本：`cave_rat` 载入时在房间的 create 流程里出错，`cave_rat2` 的 `add_alias("rat")` 撞上房间两参数的出口别名，连编译都过不去。混入只用 `previous_object()` 和 efun，删掉对房间的继承（KB 06 §7.239 变体）。
 - `d/newbie/gnome/npcs/clones/cave_rat2.lpc` 是矮人区同名 NPC 的拷贝，`MISC + "bread.lpc"` 在地精区指向不存在的文件；改成矮人区真实的 `/d/newbie/dwarf/misc/bread.lpc`。修后两只老鼠 clone 出来都是 living、等级 4、create/init 来自 `/obj/monster`。
+
+## Deep test (§10.7, 2026-10-12): compile warnings, final pass
+
+Warnings in files that compile: 59 -> 0 (`lpc_warnings.py` rescan; 2461 -> 2469 files compile, and no file gained an error). Part of this was ported back from ninetears (`lpc_twin_port.py adopt ninetears finalrealms`, 12 twin files: `#undef` before the `standard.h` macros redefined in `net/` daemons and `gopher.h`/`newudp.h`, `stalker.lpc`'s `start_player`, `nameserver.lpc`, `quest_handler.lpc` comment, unused locals).
+
+Real bugs:
+- **Insects had human bodies.** `baseobs/races/insect.lpc` redeclared `race_size`, `limbs` and `bits`. Its `setup()` wrote `race_size = 1` and the six-legged `bits` table into the leaf's own copies, while `query_race_size()` and `query_bits()` in `std/races/standard.lpc` read the base copies: the race reported size 4 and the standard humanoid body parts. The leaf declarations are gone. `strange.lpc` had the same duplicate `bits`, but it overrides every accessor, so removing it changes nothing.
+- **The Cathedral of Lawful Evil never loaded.** `room/sacrifice/le_grimbrand5.lpc` inherited both `/std/raiseroom` (room through `collect`) and `/std/sacroom` (room). With two copies of `/std/room`, the compile failed with `Illegal to redefine 'nomask' function 'query_dest_dir'`. Its `::init()` could only reach raiseroom's `init()`, and it never calls `set_god_here()`. Everything in the room (the plaque, `raise`, the account commands, `heal`) belongs to the raise service, so the `sacroom` inherit was dropped and the room now loads (KB 06 §7.240 shape). In ninetears the same two rooms also fail on other errors, so they were left alone there.
+- `d/vehicle/airplane.lpc` used a global `name` as scratch space for the pilot's name. That shadowed `std/object`'s `name`. It is renamed `pilot_name`.
+- `cmds/creator/dest.lpc` redeclared `wiz_cmd_base`'s `discard_obj`/`dest_obj`/`objn`/`majd`. The base `dest()` and the command's own `ask_dest()` kept separate state. Both now use the base copy.
+
+Behaviour-preserving cleanups: `void` overrides where the parent is `void` and no caller reads the value (monster `set_race`/`set_guild`, weapon `set_name`, six newbie shop/pub `dest_me`, `katuran` `heart_beat`, dankequip `attack_by`); `string query_short_help()` in four `locate`/`rwho` commands; a duplicate `object board;` in the duergar guild room; `equiptest.lpc`'s `worn_ac` renamed `equip_worn_ac` as `equip.lpc` already does; `pendant.lpc`'s bitwise `|` replaced by `||`; `#undef` before `W_BASE` (armory.h after weapon.h), `DEAD` (tree.h), `LEVEL`, and `PACIFY_*`; a `/*` inside comments in `inetd.lpc`, `testsoul.lpc` and `grads/npcs/path.h`, rewritten so each comment still covers the same text.
+
+listcheck: 100 objects (changed files, includers of changed headers, inheritors of changed bases), HEAD 86 -> tree 87 PASS. No load regressions; `le_grimbrand5` loads newly. The deleted-declaration audit has 0 entries to review.

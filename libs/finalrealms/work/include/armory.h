@@ -12,6 +12,7 @@
 
 #define WEAP_A_SIZE 7 
 #define W_OBJ 0
+#undef W_BASE
 #define W_BASE 1
 #define W_NAME 2
 #define W_ALIAS 3

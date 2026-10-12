@@ -1,5 +1,5 @@
 /* FluffOS PORT NOTE: this directory's files #include "path.h" but no such
- * file shipped here (every other d/newbie/grads/* subdirectory has one) --
+ * file shipped here (every other subdirectory of d/newbie/grads has one) --
  * "Cannot #include path.h". Added, mirroring the sibling
  * d/newbie/grads/rooms/path.h content this zone already uses elsewhere. */
 #define ROOM "/d/newbie/grads/rooms/"

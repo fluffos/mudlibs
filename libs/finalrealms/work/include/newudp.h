@@ -50,6 +50,7 @@
 /* These headers are reserved for system use only. */
 #define HOST		"HST"
 #define ID		"ID"
+#undef NAME
 #define NAME		"NAME"
 #define PACKET		"PKT"
 #define UDP_PORT	"UDP"

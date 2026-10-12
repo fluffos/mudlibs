@@ -10,6 +10,7 @@
 #define TYPE 0
 #define DATA 1
 #define TEXT 0
+#undef NAME
 #define NAME 1
 #define MACHINE 2
 #define PORT 3

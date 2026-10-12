@@ -4,6 +4,7 @@
 #define YOUNG 120
 #define MATURE 240
 #define OLD 360
+#undef DEAD
 #define DEAD 480
 #define DRY 540
 #define DEST 600
