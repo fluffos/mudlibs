@@ -804,3 +804,22 @@ The `.c` -> `.lpc` rename changed the string but not the slice width: `f[<2..] =
 - 空 if 块（3 处）：`templo.lpc` `reset()` 里 `if(!board) { }`、`punyo_piedra.lpc`（2 份）`wear_off()` 里 `if (target) { }`。作者意图无从推断（法术本身只发消息、不设属性），按行为不变删去空 if。
 
 listcheck：55 个对象 HEAD 47 通过、工作树 47 通过，55 个对象载入无回退。8 个失败均为原有：`std/antiguo/spells/` 下 7 个旧副本继承不存在的 `/std/spells/...`；`templo.lpc` 在无玩家的检查环境中建留言板时 `board_handler` 的 `create_board()` 读 `this_player()` 为 0 而报错（检查环境假象，非本次范围）。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+能编译的文件里的警告 1194 -> 0（重扫：`lpc_warnings.py`，出错文件集合与改前完全相同）。其中 1013 条 `Redeclaration of global variable`，几乎全部来自一处根源。
+
+- **怪物的两份 `spells`（956 条）**：`std/living/mon_actions.lpc` 的触发表 `mixed *spells` 与 `global/spells.lpc` 的法术表 `mixed spells` 同名，`obj/monster.lpc` 两个都继承，每个怪物叶子文件报一次。前者只在本文件里用，改名 `trigger_spells`。与 finalrealms 同码，用 `lpc_twin_port.py adopt finalrealms ninetears` 搬来，同批还有 `global/more_file.lpc` 的 `mf_` 前缀改名（与 `more_string.lpc` 的 `fname`/`topl`/`stat_line`/`last_search` 等同名）和四个 `cmd()` 补 `varargs`。
+- **玩家/创作者对象**：`global/le.lpc` 的 `last_search` 与 `more_string.lpc` 同名，改名 `le_last_search`；`global/wiz_communicate.lpc` 的 `my_file_name` 与 `communicate.lpc` 同名且从未使用，改名 `wiz_my_file_name`（与 finalrealms 一致）。
+- **真 bug：昆虫的体型**。`baseobs/races/insect.lpc` 自己又声明了 `race_size`/`limbs`，`setup()` 里 `race_size = 1` 写进叶子那份，`query_race_size()` 读的是 `std/races/standard.lpc` 那份，昆虫一直报人类体型 4。删去叶子的两个声明（`limbs` 本来就另外调用了 `set_limbs(6)`）。finalrealms 同改。
+- 其他重复声明：`net/nameserver.lpc` 同一个声明列表里 `services` 写了两次；`d/anduar/anduar/ciudad/casa.lpc` 重抄了 `cityroom.lpc` 的 `int n, init=0;`；两个 Brethem 酒馆（`taberna_noella`、`taberna_refugio`）同一文件里 `object barman;` 写了两次；`w/oldcreators/zonzamas/armour.lpc`、`shield.lpc` 的 `armour_ac` 声明两次、`armour_type` 与 `std/item.lpc` 同名，按本库 `obj/armour.lpc` 的写法处理。
+- 宏重定义（45 条）：全局头文件 `standard.h` 已定义 `TP`/`LEVEL`/`TO`/`NAME`/`ENV`，法术旧副本、`tweaks.h`、`net/` 守护进程、`gopher.h`/`newudp.h` 等又各自定义，在重定义前加 `#undef`（行为不变，原来就是后定义的生效）。
+- 返回类型：怪物假人的 `attack_by`/`attack_ob`（10 个文件）、`watchman` 的 `heart_beat`、二十一点桌的 `dest_me`、`umber_hulk`/`vara1` 的 `write_message`、`stalker` 的 `start_player`、`capilla` 的 `event_enter`、zonzamas 的 `set_name`、`psoul2` 的 `init_arg` 都与父类的 `void` 对齐（调用方不用返回值）；四个 `locate`/`rwho` 命令的 `query_short_help` 改为 `string`。工具链修了 9 个原型（`get_stat_bit` 八份、`send_udp`）。
+- `trap.lpc`（两份）先调用后定义的三个函数补原型；`inetd.lpc`、`quest_handler.lpc` 注释里的 `/*` 整理成不改变注释范围的写法；`scloud.lpc`（四份）把同一个 inherit 写了两行、`thieves/hall1.lpc` 在 `vguild`（已继承 room）前又继承 `/std/room`，由 `lpc_diamonds.py` 删去。
+
+**未改（文件本身编译不过，记下以后修）**：
+- 28 个公会房间（`room/antiguo/guild_*.lpc`、`*/barracks.lpc`、`d/asgard/room/*/sala.lpc` 等）自己声明 `object guildmaster;`，遮住了 `std/guildroom.lpc` 的同名变量：房间把会长复制到自己那份里，而 `do_join()`/`do_info()` 检查的是父类那份，所以一旦这些房间能编译，`join`/`info` 会永远回答“El guildmaster no está”。它们现在因 `set_teaching_person` 未定义而编译不过（本库 guildroom 没有这个函数）。
+- `le_grimbrand5.lpc`、`curar_en_la_room.lpc` 同时继承 `raiseroom`（经 `collect` 继承 room）和 `sacroom`（继承 room），两份 room 引起 nomask `query_dest_dir` 重定义错误；叶子 `::init()` 只会走到 raiseroom 的 init，sacroom 的 worship/sacrifice 动作从不加上。
+- `d/anduar/*/npcs/rutic*.lpc`（8 份）把全局 `call_outed` 当临时变量用，遮住 combat 的同名列表。
+
+listcheck：185 个对象（改过的文件、包含改过头文件的文件、继承改过基础类的玩家/怪物对象）HEAD 139 通过、工作树 139 通过，185 个对象载入无回退；删除声明审计 0 条待看。

@@ -3,6 +3,7 @@
 #define ETO environment(this_object())
 #define ETP environment(this_player())
 #define TP this_player()
+#undef TO
 #define TO this_object();
 
 // Stinking cloud
