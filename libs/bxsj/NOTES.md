@@ -898,3 +898,11 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 ## 深度功能测试（§10.7，2026-10-11）：全库严格 UTF-8 检查
 
 - `d/city/weapon/weapon-2.lpc`、`weapon-4.lpc` 是含 NUL 的二进制垃圾（原档损坏），保留原样。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾（一）
+
+- `kungfu/skill/*zhen*.lpc` 等 11 个阵法技能：`query_action()` 返回招式描述字符串，基类 `inherit/skill/skill.lpc` 声明 `mapping`；子类改为 `mixed`（调用方拿到的值不变，类型检查不再报警）。工具：`lpc_fix_void_override.py --mixed`（新增）。
+- `inherit/misc/equip.lpc`：`void ob_hit()` 改为 `mixed ob_hit()`。`combatd` 把护甲 `ob_hit()` 的返回值当消息字符串或伤害修正读，软猬甲等子类返回 int；基类是 void 才报警。函数体不变，落尾返回 0。
+- `d/xingxiu/obj/duchong.lpc` `kill_ob()` 改为 void（无人读返回值）；`d/gumu/npc/mmnz.h` 原型 `int kill_ob` 改为与定义一致的 `void`。
+- 5 处多余的 inherit（`kuihua-shengong.lpc` 的 `SKILL` 已由 `FORCE` 带入等，`lpc_diamonds.py`）。
+- 77 个对象（含包含/继承改动文件的）载入无回退。剩余多为 `Redeclaration of global variable`（`skills_pfm.h`、`r_name.h`、`huanjing2003` 等），按 KB 04 逐个核对后另行处理。
