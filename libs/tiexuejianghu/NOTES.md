@@ -1024,3 +1024,11 @@ No code change. 拜师 not re-done.
 
 - `d/heimuya/npc/laozhe.lpc` `init()`：残留调试行 `sprintf("%s \n", what);`，`what` 是对象，本驱动 `sprintf` 的 `%s` 遇对象报错，进房间时 `init()` 每次中断、招呼从不执行；删去（与 fys 同）。
 - `d/jinling/obj/y.lpc`（豆腐）：同时继承 `F_FOOD` 与 `F_LIQUID`，只有液体的 `init()` 生效，永远吃不了；补一个叶子 `init()` 依次调用两者（与 fys 同）。
+
+## 编译警告收尾（2026-10-12）
+
+`scripts/toolkit_fix.sh` 一轮（`lpc_diamonds.py` 删去 38 处冗余继承）后，用 `scripts/lpc_twin_port.py adopt fys tiexuejianghu --pre bf39d011b6a~1` 把 fys 同一轮的修法搬过来（46 个与 fys 修前逐 token 相同的文件），再手工补两处与 fys 文字不同的头文件，能编译的文件警告清零。改动的 47 个对象 HEAD 与工作树各载入一次：HEAD PASS 25，tree PASS 28，regress 0，新载入 3（`u/temp/qiaofu`、`u/xxy/ask`、`u/xxy/room/heimuya/npc/laozhe`）。
+
+- `include/globals.h`：`#define BANNED_SITES "/adm/etc/banned_sites";` 末尾多了分号，用到它的表达式都会多一个 `;`；去掉后 `adm/daemons/band*.lpc`、`u/panguan/band.lpc` 里的同名定义与之一致，不再报重定义。
+- `include/armor.h` 的 `FINGER`（指环护具）与 `weapon.h` 的同名宏相撞，`#define` 前加 `#undef`（同 fys）。
+- 孪生搬来的：`d/meizhuang/bingqiku.lpc` 的重复全局变量、`d/zhongzhou/npc/renwu.h` 的重复 `renwu4` 表、`daemon/skill/old/hubo.lpc` 的冗余继承，以及 `u/` 下几个 NPC/房间。

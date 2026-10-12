@@ -14,6 +14,7 @@
 #define WAIST           "/std/armor/waist"
 #define WRISTS          "/std/armor/wrists"
 #define SHIELD          "/std/armor/shield"
+#undef FINGER
 #define FINGER		"/std/armor/finger"
 #define HANDS		"/std/armor/hands"
 #define BOOTS		"/std/armor/boots"

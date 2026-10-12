@@ -9,7 +9,7 @@
 #define COMMAND_DIR		"/cmds/"
 #define CONFIG_DIR		"/adm/etc/"
 #define DATA_DIR		"/data/"
-#define BANNED_SITES "/adm/etc/banned_sites";
+#define BANNED_SITES "/adm/etc/banned_sites"
 #define HELP_DIR		"/doc/"
 #define LOG_DIR			"/log/"
 
