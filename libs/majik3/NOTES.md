@@ -448,3 +448,18 @@ Boot warnings 36 -> 0; fresh-process login screen works.
 ## Deep test (§10.7, 2026-10-08) -- fixed-width `.lpc` suffix slices
 
 The `.c` -> `.lpc` rename changed the string but not the slice width: `f[<2..] == ".lpc"` compares two characters with four and is never true (`!=` always true), so suffix filters and strips never ran or cut `x.l` (KB 06 §7.238). `scripts/lpc_lpc_suffix_slice.py --apply` fixed 12 comparison(s) and 2 strip(s) (e.g. `inherit/living.lpc`); the changed files load at HEAD and in the tree (fresh processes) with no regression.
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+Compile warnings in files that compile: 173 -> 0 (`scripts/toolkit_fix.sh` plus hand edits, 20 files). Real bugs behind the warnings:
+- **`inherit/door.lpc` kept its own `name`/`short_desc`/`long_desc`** and setters over the ones `BASE` already has, so `query_short()`, `query_long()`, `query_cap_name()` and every base function that reads those variables saw empty values on a door (`query_cap_name()` answered "Something"). The door's copies and its `void set_name/short/long` are gone; the base's setters (which return the string) serve.
+- **`inherit/equipment.lpc` declared `int worn` again** with its own `set_worn`/`query_worn` over `inherit/base/item.lpc`'s: `stat_me()` and `create()` in the item read a second copy that the setters never touched (stat showed every worn weapon/armour as not worn). Equipment's copy and duplicate accessors removed.
+- **`secure/player.lpc` redeclared `term`, `client`, `current_language`, `tick`** that `inherit/living/receive.lpc` and `inherit/living.lpc` already declare. The driver forces the second copy `nosave`, and `query("term")`/`set("term", n)` (`fetch_variable`/`store_variable`) had two variables of one name to pick from. The player's copies are removed (the player code only reaches them through `query`/`set`).
+- `world/hilltop/monsters/` clerk (`answers`), gnome and messenger (`money`) meant their own variables, not the inherited `string *answers` of the monster and the player money `int money`: renamed `purity_answers`, `vault_money`, `fee_money` (same behaviour, no shadowing).
+- `world/agriculture/farm_room.lpc` (and `old/`): an unused `int water` over the room's `water` level, removed. `inherit/container.lpc`: an unused `keycode` that collided with `keylock.lpc`'s, removed.
+- `inherit/money.lpc` `int move()` over the base's `void move()` (nobody reads the result) -> `void`; `obj/battle/master.lpc` `void long()` that `write()`s -> `string long()` returning the text, as `look` expects; `varargs` on `inherit/living.lpc` `query_cap_name(object)` and on player `create`/`save_me`/`query_name`/`short`.
+- Redundant inherits dropped by the toolkit: `inherit/living/living.lpc` (`skill_system`, already through `battle`), `world/forest/items/key1.lpc` (`ITEM`, already through `KEY`). Seven forward prototypes (`show_train`, `set_title`, `i2s`, `check_ingredient`, `do_say`).
+
+`scripts/lpc_fix_forward_decl.py` put the `show_train()` prototype inside the first `if (...) {` of the three guild files (it counted the `}` of `string *titles = ({});` as closing a block); the load diff caught it, the tool is fixed (KB 04 §6.5).
+
+Verification: all 1456 objects at HEAD and in the tree in fresh processes: 1365 -> 1366 PASS, regress 0, so 1365 objects load with no regression; a full rescan shows 0 warnings.
