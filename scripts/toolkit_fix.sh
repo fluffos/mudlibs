@@ -37,7 +37,7 @@ SKIP=(--skip '/tests?/' --skip '/help_topics/error_messages/')
 echo "== 0. does the driver load your master and simul_efun?"
 LPCC=${LPCC:-$HOME/src/fluffos/build-debug/src/lpcc}
 [ -x "$LPCC" ] || { echo "lpcc not found at $LPCC: build FluffOS (target lpcc) and set LPCC=" >&2; exit 1; }
-MASTER=$(sed -n 's/^master file *: *//p' "libs/$SLUG/config.fluffos" | head -1)
+MASTER=$(tr -d '\r' < "libs/$SLUG/config.fluffos" | sed -n 's/^master file *: *//p' | head -1 | sed 's/[[:space:]]*$//')
 mkdir -p "libs/$SLUG/work/log"
 ( cd "libs/$SLUG" && ulimit -v "$(python3 "$OLDPWD/scripts/lpcc_mem.py" 2>/dev/null || echo 6291456)" && echo "$MASTER" | timeout 300 "$LPCC" --batch config.fluffos > "$OUT/boot.txt" 2>&1 )
 if ! grep -aq "^PASS " "$OUT/boot.txt"; then
