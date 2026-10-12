@@ -883,3 +883,7 @@ back to their pre-test committed contents.
 手工（与 zjmudhell 相同）：28 处 `Illegal to declare nosave function`——`include/globals.h` 的 `#define nosave nosave` 让扫描工具认不出这个关键字，手工改成 `protected`（这些函数只被本对象回调或驱动程序调用）；`adm/daemons/natured.lpc` 的空语句 `lt[LT_MON];`、`adm/daemons/test.lpc` 的空语句 `your_temp["guarding"];` 删去。都不改变行为。
 
 启动时警告 55 -> 0。新进程登录画面正常；普通 telnet 输入名字后答"客户端非法"——指间 MUD 的客户端握手（KB 01 §1.7），HEAD 也一样。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查
+
+- `cmds/wiz/who1.lpc`：输出数组建好前一行孤立的分隔线字符串（与 wxddym 同码），删去，行为不变。载入无回退。

@@ -353,3 +353,7 @@ reverted via `git checkout` before committing.
 手工：28 处 `Illegal to declare nosave function`（`adm/single/master.lpc`、`feature/treemap.lpc`、`adm/daemons/questd.lpc`、`dbased.lpc`、`network/cmwhod.lpc`、`cmds/arch/data.lpc` 和四个卖吃喝的房间的 `create_food/water/wine`）。`include/globals.h` 有 `#define nosave nosave`，`nosave` 成了宏，扫描工具认不出这个关键字，于是没自动改；照 KB 04 §6.10 的做法手工改成 `protected`。这些函数都只被本对象（`call_out`、`sort_array` 的回调）或驱动程序（`crash()`）调用，没有别的对象 `->` 调它们。
 
 启动时警告 71 -> 0。新进程登录画面正常；普通 telnet 输入名字后答"客户端非法"——本库用指间 MUD 的客户端握手（KB 01 §1.7），HEAD 也一样。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查
+
+- `cmds/wiz/who1.lpc`：输出数组建好前一行孤立的分隔线字符串（与 wxddym 同码），删去，行为不变。载入无回退。
