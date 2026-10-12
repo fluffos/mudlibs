@@ -112,7 +112,8 @@ for f, items in sorted(want.items()):
         print(f"{'FIX ' if apply_ else 'plan'} {f}:{ln} {fn}: -> void ({len(valued)} flag return(s) dropped)")
     if apply_ and edits:
         out = text
-        for s0, e0, rep in sorted(edits, reverse=True):
+        # two diagnostics (a prototype and the definition) can resolve to the same definition: apply each edit once
+        for s0, e0, rep in sorted(set(edits), reverse=True):
             out = out[:s0] + rep + out[e0:]
         open(path, "wb").write(out.encode("latin-1"))
 for f, ln, fn, why in manual:
