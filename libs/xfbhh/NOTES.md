@@ -359,3 +359,11 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 ## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查（二）
 
 - `u/gigi/test/gigicook.lpc`：`arg == menu_list[0]` 改为 `=`（与 nitan170911 同）。载入无回退。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+可编译文件的警告清零（全库重扫：23264 个文件可编译，0 条警告；HEAD 没有单独全库扫，5667 个对象的抽样载入里 HEAD 打印 393 条警告、工作树 30 条，后者都在本来就编译不过的文件里）。内核与 nitan170911/hhsj 逐字相同：`scripts/lpc_twin_port.py adopt nitan170911 xfbhh` 搬来 99 个同码文件，`adopt hhsj xfbhh` 搬来 chard1~3、bingdong、两个 u.lpc，其余本库自己的版本手改同样的根因。载入核对：`5667 objects; HEAD PASS 5556, tree PASS 5556; regress 1; newly loading 1`——那一个回退是 `adm/daemons/taskd.lpc`，它在 HEAD 单独载入（新进程）三次里两次同样以 `cost limit reached, limit: 10000000 usec` 失败、一次通过（耗时约 11 秒，正好卡在上限），与本次改动无关。删除声明审计 0 处待看。
+
+- **严重：F_DBASE 旁边的混入件读写 simul_efun 的共享 dbase**（详见 nitan170911 同日一节；本库 `feature/dealer.lpc` 早先只把 `init_goods()` 一处改成 `this_object()->query`）。`include/dbase.h` 补上原型，`equip`/`itemmake`/`food`/`liquid`/`pill`/`alias`/`message`/`name`/`damage`/`dealer`/`banker`/`guarder`/`apprentice`/`unique`/`control`、`inherit/char/master.lpc` 都包含它；`npcsd.lpc`、`eval.lpc` 去掉包含。
+- **`inherit/char/master.lpc` 开除弟子**：`if (query("skill_expell_penalty_tsl"), me)` 逗号表达式恒真，从不削减内力/精力上限；改为 `query("skill_expell_penalty_tsl", me)`。
+- 自制道具 autoload 由 `item.lpc`/`combined.lpc` 交给 itemmake 的 `query_itemmake_autoload()`/`itemmake_autoload()`；神木王鼎虫表、`xiang.lpc` 的 `remove()`、boss 任务 NPC 的 `WAIT_TIME`、幻境变量重复声明、`template/` 改名、`d/yixing/doc` 头文件守卫、宏 `#undef`（含 `chard1~3` 的 HUMAN_RACE、`bingdong` 的 BOOK、`channeld` 不再定义 GWIZ）、`kuangfeng` 的 `attempt_apprentice()` 改 `void`、三个 `combatd.lpc` 的 `def`/`armor` 挪进 `#ifdef`、注释里套的 `/*`，同 nitan170911/hhsj。toolkit 删去 8 个重复继承 F_CLEAN_UP。
