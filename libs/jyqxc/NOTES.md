@@ -296,3 +296,5 @@ AGENTS.md 已记录过这个坑），再让 `log_file()` 内部先
 ## 深度功能测试（§10.7，2026-10-12）：编译警告收尾（一）
 
 - `toolkit_fix.sh`：35 处多余的 inherit（如 `inherit NPC; inherit F_SKILL;`，NPC 已带 F_SKILL），一个对象同时有两份变量与函数，产生大量 `Redeclaration`/`inherited from both`。删去后 35 个对象载入无回退，另有 3 个原本载入失败的现在能载入。剩余警告另行处理。
+- （二）`include/net/ftpdconf.h`：`VALID_READ`/`VALID_WRITE` 已在 `ftpd.h` 定义为 0，这里重定义为 1（实际生效的是 1）；重定义前加 `#undef`，行为不变。`kungfu/skill/hubo.lpc`：两个父类都有 `clean_up()`，补一个叶子 `clean_up()` 写明原本生效的 `skill::clean_up()`。
+- 剩余：`d/mingjiao/npc/zhangqishi.h:149` 一条“无副作用”警告，只在被 `yanyuan.lpc` 包含时出现，单独复制该函数编译不报，原因未查明，保留；`home/simul_efun.lpc` 是垃圾目录里的旧副本（单独编译 simul_efun 片段的已知假警告）。
