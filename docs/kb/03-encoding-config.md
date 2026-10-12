@@ -267,3 +267,6 @@ A related trap in the same saves: the 2026-10-05 Latin-1 line repair skips a lin
 whose mapping was converted counts as changed. Rebuild such lines from `raw/` by emulating the bad decode exactly (a
 GB18030 pair, or an invalid pair dropped together with the byte after it); replace a work line only when it equals that
 emulation, then run the same mapping conversion on the correct decoding.
+
+### A file the conversion skipped hides behind a wrong-line warning (yszz, dtxyzjb, 2026-10-11)
+**Symptom:** a warning or error reported at a line that has nothing wrong (yszz `xuerengui.lpc:66` "no side effects" on a plain declaration), or Chinese text shown as mojibake. **Cause:** one `.h`/`.lpc` stayed GBK through `convert_lib.sh` (a trailing junk byte made the whole-file decode fail); GBK bytes inside string literals derail the lexer of every file that includes it. **Fix:** decode that file as GB18030 (drop trailing junk first) and re-check. **Detection:** a strict per-file `iconv -f UTF-8 -t UTF-8` over every `.lpc`/`.h` (2026-10-11 corpus: 28 files; 2 were real GBK, 26 binary dumps or truncated archive copies with NUL bytes or garbage tails, left as is).
