@@ -1239,7 +1239,9 @@ descending (`({4,5,2,6})` -> `({2,4,5,6})`). LDMud's `m[k, N]` returns 0 for a m
 indexes 0. **Fix:** `#'>` -> `sort_array(a, 1)`, `#'<` -> `-1`. Guard converted reads that probe keys which may be gone
 (`if (!m[n] || !m[n][0])`), typically loops over `0..sizeof()` of a mapping with deleted keys. **Detection:**
 `grep -rn "sort_array([^;]*-1).*#'>"` (a comment left by the port); for wide mappings, read every `m[i][N]` whose `i` comes
-from a counter rather than `keys()`.
+from a counter rather than `keys()`. Reads the port missed still say `m[k, N]`: in FluffOS that is a comma expression (`m[N]`) and reads the wrong key without
+an error; the driver flags each one as `Expression has no side effects`, so read every such warning on an indexed mapping (questmud
+2026-10-11: 116, among them `lite` colours and the multiguild starter guilds). A width-1 LDMud mapping read as `m[k, 0]` becomes `m[k]`.
 
 
 ### 7.235 A master guard on `SIMUL_EFUN_OB` gives every object uid `""` when the config loads another simul_efun file (hy, hy5, 2026-10-06)

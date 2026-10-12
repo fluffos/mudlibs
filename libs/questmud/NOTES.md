@@ -720,3 +720,32 @@ Messages cut by a stray `;`: joined in `wizards/terror/goblin/roomit/g1.lpc` and
 Changed files loaded at HEAD and in the tree in fresh processes: no regression.
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 1 处，返回类型/原型 12 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 1 个，只在 #if 分支用的声明移进分支 5 个文件；改动 19 个文件，HEAD 与工作树各载入一次无回退（19 objects; HEAD PASS 14, tree PASS 15; regress 0; newly loading 1），这些文件的警告 28 -> 9。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查
+
+逐条复查了能编译的文件里 156 条 `Expression has no side effects` / `Value of conditional expression is unused` 警告，156 条全部修掉。
+
+**LDMud 宽映射读法漏改（116 条，最主要的一类）。** 移植时把宽映射改成了“值是数组”的 `m[k][N]`，但不少读点还是 LDMud 写法 `m[k, N]`。在 FluffOS 里这是逗号表达式，等于 `m[N]`，静悄悄读错了键（通常读出 0）。按写入方的实际布局改正：
+- `cmds/std/_lite.lpc`（及 `wizards/kaappi/cmds`、`wizards/kaappi/fix`、`wizards/nalle` 三份副本）：玩家的 `colors` 映射值是颜色名字符串（LDMud 宽度 1），`l[k,0]` 改 `l[k]`。原来 `give_color()` 总返回空，`lite` 设的 tell/emote/频道自定义颜色从来不生效，`lite` 列表也显示 0。
+- `daemons/multiguild_d.lpc`：`multiguilds[k,0]`、`guilds[x,0/1/2]` 改 `[k][N]`（guild_init 里两张表的值都是数组）。原来 `get_starter_guild()` 对 battlemage/paladin/abjurer 一律返回 0，复合公会的背景公会比较、`join_multiguild()` 的公会文件全部读错。
+- `world/special/slct_gui.lpc` `info`：`query_guilds()[str,2/3/4]` 改 `[str][N]`；只在复合公会表里的名字按 §7.234 加了 `guilds[str] &&` 守卫（LDMud 缺键读 0，原来走“No info”分支）；复合公会表只有两列，`[str,4]` 改成先看长度。
+- `cmds/std/_fixme.lpc`：`guilds[tmp,0/1]` 改 `[tmp][N]`，缺键时报错返回。
+- `daemons/bak.emote_d.lpc`、`daemons/backup.emote_d.lpc`、`wizards/nalle/emote_d.lpc`（在用的 `daemons/emote_d.lpc` 之前已改好）：`e_map[verb,N]` 共 123 处改 `e_map[verb][N]`，和在用版本一致。
+- `wizards/{cendor/leader,moonstar,moonstar/test}/leader_d.lpc`：`leaders[k,0]` 改 `leaders[k]`（值是名字字符串，和在用的 `daemons/leader_d.lpc` 一致）。
+- `wizards/astarel/workroom2.lpc` 读 `bunny_d` 的五列计分；`wizards/astarel/events/b_hunt/bunny_d.lpc` 本身还是 LDMud 的 `([ k: 0;0;0;0;0 ])` 语法，一并改成数组值并给未报名的玩家补默认行（它仍因别的语法问题不能载入，未处理）。
+
+**其他形状（40 条）：**
+- `(object) (X);` 空转型语句 6 条（`_look`、`_wwb`、三份 `channeltest_d`、`guild.lpc`），同样的行另有 8 份副本（`_tell`、`_look2`、公会备份等）一并删掉；下一行都会 call_other 同一对象，行为不变。
+- 空的 `if (guild_level >= N) { }` 6 条（`artists/base_guild` 2、`channel/appr_cleric` 及 jenny 副本、`mage/adv_mages`、`mage/apprmage`）和 `siki/weather_d` 的空 if：删除，行为不变。
+- `belar/dwarf/rooms/*` 8 个房间的 `if(!monster);`（共 9 条）：空 if，删除，行为不变。
+- 被 `;` 截断的房间描述 6 条：`guilds/fighter/warrior.lpc`、`terror/goblin/roomit/g8.lpc` 后半句承接上句，接回；`torspo/areat/ogre/room15.lpc` 三行是旧措辞残留（以 “heart of the fortress” 半句开头），删掉；`walla/void{,2,3}.lpc` 少了 `long_desc =`，补上。
+- `default: "too many";` 3 条（及 `_peer` 等 4 份副本）：改 `enumb = "too many";`，超过 20 个出口时不再拼出 0。
+- `if(move_ep > effect);` 多余分号（`guilds/spells/abjuration/_kyo_zzt_zas.lpc`，及 `moonstar/abjubisnes/ep.lpc`）：去掉分号；同一文件里 `ob->query_ep() + (move_ep);` 丢了外层调用，目标从来没加上体力，改 `ob->add_ep(move_ep);`（living.lpc 的 add_ep 自带上限）。法术提示 “You force some of your endurance” 现在真的生效。
+- `==` 写成赋值的 4 条（`bulut/event/pkobj` 2、`proge/bazaar` 1、`rag/elf/monsters/angdal` `gender == "it"` 改为默认代词 `pron = "it"`，原来对中性对象打印 “throws 0 down”）。
+- `return str == "event_sign","sign";` 改 `||`（原来只认 "sign"）；`light_source` 的 `{ normal_light; }` 改赋值；`siki/void_pocket` 的 `short()` 补 `return`。
+
+**复查中顺带发现的两处编译失败（警告扫描看不到）：**
+- `cmds/std/_tell.lpc`（玩家的 `tell` 命令）：`check_ignored()` 把 `ignore_list` 声明成 `string`，`capitalize(ignore_list[i])` 编译报错，整个 tell 命令自移植以来载入失败。改成 `mixed *`（第 0 格是等级数字），循环加 `sizeof` 上限。
+- `cmds/std/_peer.lpc`（及 garath、astarel、siki 三份副本）：局部变量叫 `buffer`（FluffOS 的类型名），语法错误。改名 `buf`。
+
+验证：改动 64 个对象，HEAD 与工作树各在新进程里载入一次：`64 objects; HEAD PASS 50, tree PASS 55; regress 0; newly loading 5`（`_tell`、`_peer` 及三份 peer 副本）。仍载入失败的 9 个都是 HEAD 就失败的旧副本/草稿（`_look2`、公会备份、`bunny_d`、`kaappi/fix/tell`、`nalle/ng`、`rag/guild`、`yodingui`），以及 `g8.lpc`（它克隆的 `ghunter.lpc` 运行时出错，与本次无关）。临时探针对象对比 HEAD 与工作树：`get_starter_guild("battlemage")` 0 -> "mage"，`give_color(tell)` 0 -> 红色转义码，`bak.emote_d->emote("ack")` 输出 “You 0.” -> “You ack.”。`proge/bazaar.lpc` 还剩一条 `Redeclaration of global variable 'items'`，未处理。
