@@ -322,3 +322,22 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply f
 
 - `d/hangzhou/npc/mameipo.lpc` 媒婆：`return "这么小就想找对象啦,嘻嘻.\n", i = 0;` 逗号把 `i = 0` 并进 return，未满 16 岁返回 0，提示永远不出；拆成两句（tiexuejianghu 同码一并修）。
 - `u/lxh/emoted.lpc`：删去空的 `if (!channel_emote) {}`。载入无回退。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+能编译的文件里的警告 215 -> 0（`scripts/lpc_warnings.py fys` 重扫：8742 个文件可编译，0 条警告）。
+
+**真问题：**
+- `d/heimuya/npc/laozhe.lpc` 黑木崖老者：`init()` 里留着调试语句 `sprintf("%s \n", what);`，`what` 是物件，本驱动的 `sprintf` `%s` 遇到物件直接报错（`Bad argument`），所以每次有人进房间 `init()` 都中途出错，老者的招呼 `greeting` 从不触发。删掉这句。`u/xxy/room/heimuya/npc/laozhe.lpc`（巫师目录的副本）同样删去，并把 `command("give yancao to", me)`（参数太多，文件编译不过）改成正本的写法。
+- `d/jinling/obj/y.lpc` 清水豆腐：同时继承 `F_FOOD` 和 `F_LIQUID`，两者都有 `init()`，后继承的 `liquid` 赢，`eat` 指令从未加上，这块豆腐吃不了。叶子里加 `init()` 依次调用 `food::init()` 和 `liquid::init()`。
+- `include/globals.h`：`#define BANNED_SITES "/adm/etc/banned_sites";` 多一个分号（所以 `band.lpc` 们各自重定义一遍）。去掉分号，`u/lxh/globals.h` 同改。
+- `u/xxy/ask.lpc`：`ob->query("name" == obj->query("who2/name") && ...)` 括号错位，改成 `ob->query("name") == ...`；删去未用的 `inquiry`。`u/temp/qiaofu.lpc`：`message_vision(...)` 后的分号被挪进了行尾注释，补回（这两个文件原先都编译不过，现在能编译）。
+
+**其余：**
+- `toolkit_fix.sh` 删去 39 个多余的 `inherit`（NPC 叶子再继承 `F_SKILL`/`F_CLEAN_UP`、房间再继承 `F_SAVE`/`ROOM` 等，`std/char/npc.lpc` 已经带上）——这是 65 条 `Redeclaration` 和 13×N 条 `inherited from both` 的来源。
+- `d/zhongzhou/npc/renwu.h`：`renwu4` 表出现两次，第一份是残缺的半截粘贴（后一份的初始值本来就覆盖它），删去第一份。
+- `d/meizhuang/bingqiku.lpc`：`mount/dao/jian/zhang/ding` 先声明一次、再带初值声明一次（`jian` 还第三次），保留带初值的那份，行为不变。
+- `include/armor.h`、`include/weapon.h` 都定义 `FINGER`（含两者的 16 个文件都不用它），各自在定义前 `#undef FINGER`，后包含者赢，与原先一致。
+- `daemon/skill/old/hubo.lpc`（旧技能，`ITEM`+`SKILL` 双继承）：点名 `clean_up()` 的赢家 `skill::clean_up()`。
+
+验证：改动文件及包含改动头文件的对象共 1176 个，HEAD 与工作树各用新进程载入：1054 -> 1057 通过，regress 0（新载入 3 个）。删除声明审计 0 项待看。1176 个对象载入无回退。

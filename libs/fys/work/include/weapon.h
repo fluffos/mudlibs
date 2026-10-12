@@ -22,6 +22,7 @@
 #define THROWING		"/std/weapon/throwing" //暗器
 #define WHIP			"/std/weapon/whip"     //鞭
 //add by musix
+#undef FINGER
 #define FINGER			"/std/weapon/finger"   //指环
 #define CLUB                    "/std/weapon/club"     //棍
 

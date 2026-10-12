@@ -1301,25 +1301,6 @@ mapping *renwu4=({
 ([	"type":1,	"id":"zhang chengfeng","name":"张乘风",	"lv":3,	]),
 ([	"type":1,	"id":"zhang chengyun","name":"张乘云",	"lv":3,	]),
 ([	"type":1,	"id":"zhao he",	"name":"赵鹤",	"lv":3,	]),
-([	"type":1,	"id":"yue",		"lv":2,]),
-(["type":3,	"id":"/d/zhongzhou/liwu",		"name":"漕帮里屋",		"lv":2,]),
-(["type":3,	"id":"/d/mingjiao/xuantianshi",	"name":"悬天石",		"lv":1,]),
-(["type":3,	"id":"/d/mingjiao/hsqting",	"name":"洪水旗大厅",	"lv":1,]),
-(["type":3,	"id":"/d/mingjiao/qiandian",	"name":"明教前殿",		"lv":3,]),
-(["type":3,	"id":"/d/mingjiao/dadian",		"name":"明教大殿",		"lv":4,]),
-(["type":3,	"id":"/d/mingjiao/tan",		"name":"碧水潭畔",		"lv":4,]),
-
-});
-
-mapping *renwu4=({
-([	"type":1,	"id":"ouyang feng",	"name":"欧阳锋",	"lv":4,	]),
-([	"type":1,	"id":"dongfang bubai","name":"东方不败","lv":6,	]),
-([	"type":1,	"id":"fan song",	"name":"范松",	"lv":3,	]),
- ([      "type":1,       "id":"snake",           "name":"黑冠巨蟒",      "lv":1, ]),
-([	"type":1,	"id":"xiang wentian","name":"向问天",	"lv":4,	]),
-([	"type":1,	"id":"zhang chengfeng","name":"张乘风",	"lv":3,	]),
-([	"type":1,	"id":"zhang chengyun","name":"张乘云",	"lv":3,	]),
-([	"type":1,	"id":"zhao he",	"name":"赵鹤",	"lv":3,	]),
 ([	"type":1,	"id":"yue buqun",	"name":"岳不群",	"lv":3,	]),
 ([	"type":1,	"id":"cheng buyou",	"name":"成不忧",	"lv":2,	]),
 ([	"type":1,	"id":"cong buqi",	"name":"丛不弃",	"lv":2,	]),
