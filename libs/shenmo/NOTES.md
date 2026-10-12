@@ -961,3 +961,7 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 - `d/xkx/wudu/shanlu1.lpc`、`xiao3.lpc` 描述后孤立的 `"\n";`，`wudoumi-shengong/perform/gui.lpc` 两份多余的 `NOR;`，删去；`u/stey/cron.lpc` 只剩注释的 `if (tang) { }` 挪进注释。
 - `u/angell/npc/shen.lpc`（含 `sjsh/` 副本）：三行 `(: call_other, __FILE__, "…_name_skill", who :);` 只造函数指针不调用，而被指向的是 `input_to` 式回调（参数是 string），无法确定作者原意，改成注释，行为不变。
 - 13 个对象载入无回退。
+
+## 深度功能测试（§10.7，2026-10-11）：全库严格 UTF-8 检查
+
+- `u/shulele/yangxu-yan.lpc` 原档在一句字符串中间截断（GBK，未转码），无法恢复，保留原样。

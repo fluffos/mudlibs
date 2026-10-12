@@ -264,3 +264,7 @@ header-encrypted. Skip nitan.zip.
 - `open/pestilence/tshop.lpc`：删去孤立的 `soldout;`。
 - `open/sparrow/entrance.lpc`：`moveto == myroom;` 应为 `=`，否则出错时 moveto 仍为 0。
 - 改动的对象 HEAD 与工作区都能载入，无回退。
+
+## Deep test (§10.7, 2026-10-11): strict UTF-8 sweep
+
+- `obj/ring_fixer.lpc` and `obj/workfiles/ring_fixer.lpc`: the archive copy turns into binary garbage about 3 KB in, mid-function; not recoverable, left as is.

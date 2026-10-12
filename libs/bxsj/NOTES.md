@@ -894,3 +894,7 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 ## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查
 
 - `clone/obj/traverser.lpc`：`DEBUG` 是空宏，每次调用留下 `("text", n);` 语句；改成空函数 `varargs void DEBUG(string fmt, mixed arg) {}`。载入无回退。
+
+## 深度功能测试（§10.7，2026-10-11）：全库严格 UTF-8 检查
+
+- `d/city/weapon/weapon-2.lpc`、`weapon-4.lpc` 是含 NUL 的二进制垃圾（原档损坏），保留原样。
