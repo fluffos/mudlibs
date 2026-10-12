@@ -749,3 +749,17 @@ Changed files loaded at HEAD and in the tree in fresh processes: no regression.
 - `cmds/std/_peer.lpc`（及 garath、astarel、siki 三份副本）：局部变量叫 `buffer`（FluffOS 的类型名），语法错误。改名 `buf`。
 
 验证：改动 64 个对象，HEAD 与工作树各在新进程里载入一次：`64 objects; HEAD PASS 50, tree PASS 55; regress 0; newly loading 5`（`_tell`、`_peer` 及三份 peer 副本）。仍载入失败的 9 个都是 HEAD 就失败的旧副本/草稿（`_look2`、公会备份、`bunny_d`、`kaappi/fix/tell`、`nalle/ng`、`rag/guild`、`yodingui`），以及 `g8.lpc`（它克隆的 `ghunter.lpc` 运行时出错，与本次无关）。临时探针对象对比 HEAD 与工作树：`get_starter_guild("battlemage")` 0 -> "mage"，`give_color(tell)` 0 -> 红色转义码，`bak.emote_d->emote("ack")` 输出 “You 0.” -> “You ack.”。`proge/bazaar.lpc` 还剩一条 `Redeclaration of global variable 'items'`，未处理。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+能编译的文件里的编译警告 167 -> 0（`scripts/toolkit_fix.sh` 去掉 5 个多余的 inherit（`wizards/manta/eq/damulet2.lpc` 两次 `inherit "obj/armour"` 一项就占 54 条）、4 个未用局部变量，其余逐条手改，共约 90 个文件；有编译错误的文件不在范围内）。
+
+**真实的编程错误：**
+- **`cmds/std/_cal.lpc`（玩家的 `cal` 命令，及 `wizards/cendor/_cal.lpc` 副本）**：两处注释结尾 `*/` 被拆成 `*` 换行 `/`，从 88 行到 118 行全成了注释，`fixtab()`（闰年修正）和 `weekday()`（每月第一天是星期几）两个函数都不存在；`this_object()->fixtab(y)` / `->weekday(m, y)` 对不存在的函数返回 0，日历从不处理闰年、每个月都从星期日开始。接回 `*/`。
+- **`wizards/siki/ent/echo_room.lpc`**：同时继承 `room/room` 和 `echo`，后继承的 echo 的 `init()` 取代了房间的 `init()`（加出口命令的那个），房间里输入 `east` 没有反应。叶子里定义 `init()` 依次调用两者（KB 06 §7.214）。
+- **一个文件里同一全局变量声明两次**（驱动把第二个当成另一个变量）：`castle/obj/castle_code*.lpc` 与 `wizards/astarel/castle/castle_code.lpc` 的 `castledir`、`wizards/grathlek` 五个房间的 `monster`、`wizards/bulut/catacombs/guardian.lpc` 的 `ob`、`wizards/duncan/sharkisland/rooms/ferry/deck2.lpc` 的 `rod_found`：只留一份。
+- `room/shop_d.lpc`、`guilds/library/book_d.lpc` 与 `room/room.lpc` 各有一份相同的 `create()`（调用 `reset(0)`），30 个商店/图书馆房间因此出现菱形继承；用到这两个文件的房间都同时继承 `room/room`，两个 mixin 的 `create()` 删掉，行为不变。
+
+**行为不变的整理：** 叶子变量与基类同名而含义不同时改叶子一侧的名字（`walker03` 的 `dead`→`mom_dead`——基类的 `dead` 表示“已死、不能被攻击”；beldor 三个怪物的 `string *short_desc/long_desc`→`short_descs/long_descs`；mummy 的 `limbs`、lemming 的 `name`（颜色）、`hissi` 电梯的 `direction`、thief/tutor 的 `object money`、`wizards/siki/bow.lpc` 自己的 `short_desc/long_desc/weight`）；没用到的 `direction`（三个 ferry、potup）、bow 的 `slot`/`wielded_by`、bazaar 的全局 `items` 删掉。`wizards/daoloth/mansion` 等 13 个用 `EXTRA_RESET` 调 `extra_reset()` 的房间加原型（调用在宏生成的 `reset()` 里，早于定义）。necro 的 `scythes.lpc`/`shields.lpc` 注释结尾 `~/` 改 `*/`（只吞了注释）。
+
+验证：改动的文件和继承 shop_d/book_d/echo/bow 的对象共 90 个，HEAD 与工作树各在新进程载入（90 objects; HEAD PASS 72, tree PASS 73; regress 0; newly loading 1），72 个对象载入无回退；这些对象的警告 159 -> 0；全库重扫后无编译错误的文件里 0 条警告（10475 个文件能编译）。
