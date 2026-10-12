@@ -965,3 +965,7 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 ## 深度功能测试（§10.7，2026-10-11）：全库严格 UTF-8 检查
 
 - `u/shulele/yangxu-yan.lpc` 原档在一句字符串中间截断（GBK，未转码），无法恢复，保留原样。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾（补）
+
+- `d/quest/dajiu/`、`d/xingji/dajiu/` 的 `baohunpc*.lpc`（8 个）：原型 `voidset_skills(...)`、`voidset_hp_status(...)` 少了空格，被当成返回类型缺省、名为 `voidset_skills` 的另一个函数；改为 `void set_skills(...)`。批量载入时 `create()` 读 `this_player()` 为 0 而失败（任务中由玩家触发生成，不是代码问题）。

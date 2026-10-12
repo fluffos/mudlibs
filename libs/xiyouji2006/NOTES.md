@@ -872,3 +872,7 @@ The fixes of `xiyouji` (the older, smaller sibling) were adopted first (`scripts
 验证：探针（`scripts/lpc_room_reset_probe.py`：房间基类列出一个不存在的物件，再调用 `reset()`）HEAD 单件 崩溃、多件 OK，工作树 单件 OK、多件 OK。
 
 - 2026-10-10：`/obj/roommaker.lpc` 生成新文件用的 here-document 模板（`@ROOM_CODE`/`@OBJ_CODE`）里的 `inherit` 行，被 94b87c18461 的重复继承清理当成代码删掉了（`lpc_diamonds.py` 当时不识别 here-document），用它生成的房间/物品会因缺少继承而无法编译。已恢复该行；工具已修正。
+
+## 深度功能测试（§10.7，2026-10-12）：vikee.canoe.lpc
+
+- `d/city/npc/vikee.canoe.lpc`（及 `npc/npc/` 副本）：`cast "mace" :` 是 `case` 的笔误，整份文件从不编译；改正后可载入（这是 `vikee.lpc` 的旧副本，无人引用）。
