@@ -208,3 +208,7 @@ The `.c` -> `.lpc` rename changed the string but not the slice width: `f[<2..] =
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 0 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 31 个，只在 #if 分支用的声明移进分支 0 个文件；改动 25 个文件，HEAD 与工作树各载入一次无回退（15 objects; HEAD PASS 3, tree PASS 3; regress 0; newly loading 0），这些文件的警告 39 -> 19。
 
 - 2026-10-10（续）：第二轮编译警告整理误改了 `test/quote.lpc` 测试文件，已恢复原样。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/toolkit_fix.sh` 一轮：各处 `int` 函数里光秃的 `return;` 改 `return 0;`（驱动本来就返回 0），没用的局部变量删去，FluffOS 不认的 LDMud 编译指示（`#pragma strong_types`、`no_clone`）去掉；`include/legible.h` 的 `class` 定义后多余的 `;` 删去。能编译的文件警告清零（剩下 `test/quote.lpc` 一条在测试目录，原样保留）；改动的 46 个对象在 HEAD 与工作树各载入一次，regress 0。

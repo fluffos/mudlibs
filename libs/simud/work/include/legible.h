@@ -30,4 +30,4 @@ struct page_contents_struct {
 	int details;	// more details of the document (L_HAND | L_BLACK, etc...)
 	string language; // what language (if any...) is this written in?
 	mixed contents;	// specific data stored in this particular bit of paper
-};
+}
