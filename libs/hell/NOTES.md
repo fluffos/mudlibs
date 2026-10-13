@@ -362,3 +362,5 @@ so it is not `duplicate_of`. When it opens, number it as `076-N`.
 手工（与 zjmudhell、zjdyzj 等相同）：28 处 `Illegal to declare nosave function`——`include/globals.h` 的 `#define nosave nosave` 让扫描工具认不出这个关键字，手工改成 `protected`；`adm/daemons/natured.lpc` 的空语句 `lt[LT_MON];`、`adm/daemons/combatd.lpc` 和 `test.lpc` 的空语句 `your_temp["guarding"];` 删去。都不改变行为。
 
 启动时警告 53 -> 0；新进程登录（新人物确认）正常。
+
+- 2026-10-12：`adm/npc/obj/xiang.lpc`�`adm/npc/obj/xiang1.lpc`�`adm/npc/obj/xiang2.lpc` 写着 `int remove() { save(); }`，盖掉了 `feature/move.lpc` 的 `remove(string euid)`——这些存盘箱子/柜子被销毁时不从携带者身上减负重、不清 handing（KB 06 §7.239 变体，nitan_ceshi/tianxiawuxue 同类）。改成 `varargs void remove(string euid) { save(); ::remove(euid); }`。HEAD 与工作树各载入一次，regress 0（载不进的文件在 HEAD 就载不进）。

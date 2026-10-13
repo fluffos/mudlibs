@@ -404,3 +404,5 @@ correlated with the deletion in the same session.
 ## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查
 
 - `u/rock/duihuan.lpc`：`for (i - 0; …)` 应为 `i = 0`（局部变量本为 0，行为不变）。载入无回退。
+
+- 2026-10-12：`u/jerry/obj/xiang.lpc` 写着 `int remove() { save(); }`，盖掉了 `feature/move.lpc` 的 `remove(string euid)`——这些存盘箱子/柜子被销毁时不从携带者身上减负重、不清 handing（KB 06 §7.239 变体，nitan_ceshi/tianxiawuxue 同类）。改成 `varargs void remove(string euid) { save(); ::remove(euid); }`。HEAD 与工作树各载入一次，regress 0（载不进的文件在 HEAD 就载不进）。
