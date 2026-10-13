@@ -982,3 +982,5 @@ dbased.o` 的 ID 计数器、管理员 `fluffos` 账号的登录位置/时间戳
 HEAD 与工作树分别加载（新进程）：822 -> 822 通过，无回退；改过的头文件的 152 个包含者 151 -> 151 通过。
 
 启动时警告 84 -> 0；新进程登录正常（这个库回应较慢，输入名字后十秒左右才回）。
+
+- 2026-10-12：`clone/misc/swmuding.lpc`（神木王鼎）自己声明了一张 `mapping insects` 虫表，与继承的 `clone/misc/muding.lpc` 的 `insects` 同名；读表的是木鼎的代码，读到的是木鼎自己的表，神木王鼎的虫表从来没用上（`Redeclaration of global variable 'insects'`）。改名 `sw_insects`，`create()` 里 `insects = sw_insects;` 交给木鼎（nitan170911、wxddym、zjdy 系同修）。HEAD 与工作树各载入一次，regress 0。

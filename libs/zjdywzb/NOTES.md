@@ -347,3 +347,5 @@ recursion`。mudlib `work/log/log` 只有开机/指令编译警告。心跳期
 手工：`kungfu/skill/huifeng-jian/mie.lpc`（回风剑「灭剑」）的出招描述 `msg = HIC "…幻出死亡的色彩，剑尖渐\n";` 后面两行（"渐逼近$n…""影化为一剑直刺$n前胸…"）被多余的 `;` 截成单独的语句，玩家只看到半句；接回去（`scripts/lpc_join_cut_strings.py` 现在也认带颜色宏的字符串）。`adm/daemons/natured.lpc` 的空语句 `lt[LT_MON];`、`adm/daemons/combatd.lpc` 的空语句 `your_temp["guarding"];` 删去。
 
 启动时警告 49 -> 0；新进程登录（新人物确认）正常。
+
+- 2026-10-12：`clone/misc/swmuding.lpc`（神木王鼎）自己声明了一张 `mapping insects` 虫表，与继承的 `clone/misc/muding.lpc` 的 `insects` 同名；读表的是木鼎的代码，读到的是木鼎自己的表，神木王鼎的虫表从来没用上（`Redeclaration of global variable 'insects'`）。改名 `sw_insects`，`create()` 里 `insects = sw_insects;` 交给木鼎（nitan170911、wxddym、zjdy 系同修）。HEAD 与工作树各载入一次，regress 0。
