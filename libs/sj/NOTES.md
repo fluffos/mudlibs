@@ -385,3 +385,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply s
 启动时警告 42 -> 0；新进程登录（新人物确认）正常。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 3 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 0 个，只在 #if 分支用的声明移进分支 0 个文件；改动 2 个文件，HEAD 与工作树各载入一次无回退（2 objects; HEAD PASS 2, tree PASS 2; regress 0; newly loading 0），这些文件的警告 3 -> 0。
+
+## 编译警告收尾（2026-10-12）
+
+孪生库 shiji 同日的整理（449f709962b：冗余继承 12 处，钱庄老板等 9 个文件写明 `clean_up()`，`d/shendian/npc/mentu.lpc` 与 `F_SKILL` 同名的空全局 `skills` 删去）用 `scripts/lpc_twin_port.py adopt shiji sj --pre 449f709962b~1` 搬来，24 个文件与 shiji 修前逐 token 相同。HEAD 与工作树各载入一次：24 个对象，HEAD PASS 23，tree PASS 23，regress 0。未改：`include/daemons.h`（Lima 带来的头文件）的宏重定义只出现在编不过的 `ms.lpc`、`mail_serv.lpc` 里。
