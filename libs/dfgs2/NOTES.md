@@ -1155,3 +1155,10 @@ A Big5 character whose second byte is 0x5C was written with one extra backslash 
 ## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
 
 `scripts/lpc_warnings.py dfgs2 --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 76 个 `.lpc` 和 1 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：75 -> 75 通过，无回退。启动时警告 23 -> 0；新进程登录（新人物确认）正常。
+
+## 编译警告收尾（2026-10-13）
+
+手工清掉剩下两条，能编译的文件警告清零；改动的对象（含双股剑 `d/snow/npc/obj/broadsword` 与 `/obj/weapon/sword`）在 HEAD 与工作树各载入一次：10 个，HEAD PASS 9，tree PASS 9，regress 0。
+
+- `feature/weapon/` 七个兵器基类（sword、blade、axe、blunt、dagger、pike、staff）都把 `setup_*()` 里临时用的 `class damage_parameter dp` 声明成全局变量；同时继承两类的兵器（双股剑 `F_SWORD` + `F_BLADE`）因此有两份 `dp`。改成各 `setup_*()` 里的局部变量，伤害参数照旧存进 `damage/*`。
+- `d/snow/npc/teacher.lpc` 空的 `int accept_kill()` 改 `void`，与 `F_VILLAGER` 的一致；`kill` 命令读到的返回值本来就是 0，行为不变。
