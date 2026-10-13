@@ -708,3 +708,10 @@ Save files updated/added this round:
 ## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
 
 `scripts/lpc_warnings.py xzyx --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 258 个 `.lpc` 和 1 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：239 -> 239 通过，无回退；改过的头文件的 1 个包含者 1 -> 1 通过。启动时警告 17 -> 0；新进程登录（输入名字）正常。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/toolkit_fix.sh` 一轮去掉 8 处多余继承，其余手工，能编译的文件警告清零；改动的 13 个对象在 HEAD 与工作树各载入一次：HEAD PASS 12，tree PASS 12，regress 0。
+
+- `include/daemons.h`（另一套 mudlib 带来的守护进程路径表）重定义 `globals.h` 已有的 `ALIAS_D`、`CHANNEL_D`、`MONEY_D`、`SKILL_D`、`FINGER_D`、`FTP_D`，值不同；包含它的文件一直用的是它的值。每个先 `#undef`，行为不变。
+- 神殿门徒 `d/shendian/npc/mentu.lpc` 的可教武功表 `string *skills` 与 `F_SKILL` 存武功数据的 `skills` 同名，改名 `teach_skills`；`d/death/god1.lpc`、`d/fenghuang/fenghuang/npc/obj/blade.lpc` 写明用驱动原先选的 `clean_up()`。

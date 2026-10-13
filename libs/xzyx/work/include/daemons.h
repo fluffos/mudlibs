@@ -4,6 +4,7 @@
 #define __DAEMONS_H__
 
 #define ACCOUNT_D     "/daemons/account_d"
+#undef ALIAS_D
 #define ALIAS_D		"/daemons/alias_d"
 #define ANSI_D		"/daemons/ansi_d"
 #define ANNOTATION_D    "/daemons/annotation_d"
@@ -11,6 +12,7 @@
 #define BANISH_D	"/daemons/banish_d"
 #define BODY_D          "/daemons/body_d"
 #define CHANLOG_D	"/daemons/chanlog_d"
+#undef CHANNEL_D
 #define CHANNEL_D	"/daemons/channel_d"
 #define DID_D           "/daemons/did_d"
 #define DOC_D		"/daemons/doc_d"
@@ -23,6 +25,7 @@
 #define LAST_LOGIN_D	"/daemons/last_login_d"
 #define MAILBOX_D	"/daemons/mailbox_d"
 #define MESSAGES_D	"/daemons/messages_d"
+#undef MONEY_D
 #define MONEY_D		"/daemons/money_d"
 #define NEWS_D		"/daemons/news_d"
 #define PREPOSITION_D   "/daemons/preposition_d"
@@ -33,12 +36,15 @@
 #define TIMER_D		"/daemons/timer_d"
 #define VERB_D		"/daemons/verb_d"
 #define WEATHER_D	"/daemons/weather_d"
+#undef SKILL_D
 #define SKILL_D		"/daemons/skill_d"
 #define SHUTDOWN_D	"/daemons/shutdown_d"
 #define BIRTHDAY_D	"/daemons/birthday_d"
 
 #define CMD_D		"/secure/daemons/cmd_d"
+#undef FINGER_D
 #define FINGER_D	"/secure/daemons/finger_d"
+#undef FTP_D
 #define FTP_D		"/secure/daemons/ftp_d"
 #define LOG_D		"/secure/daemons/log_d"
 #define MAIL_D		"/secure/daemons/mail_d"
