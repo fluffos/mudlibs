@@ -654,3 +654,13 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply z
 - 改动文件：u/yhq/npc/│+_dashi.lpc 
 - 与前几批同型：`youming.lpc` 空 `DEBUG` 宏改空函数；`who1.lpc` 孤立的分隔线字符串删去；`jing.lpc` 被分号截断的“惨叫一声，血流如注。”接回上一句；`_dashi.lpc` 三行只造不调的 `(: call_other, __FILE__, "…_name_skill", who :);` 改成注释（行为不变）。
 - 载入无回退。
+
+## 编译警告收尾（2026-10-12）
+
+`scripts/toolkit_fix.sh` 一轮（冗余继承 11 处，3 个覆盖函数的返回类型）后，用 `scripts/lpc_twin_port.py adopt dtxyzjb zitengzhan --pre 6986ce28cd8~1` 搬来孪生库 dtxyzjb 的同类修法（51 个与 dtxyzjb 修前逐 token 相同的文件），再手工补文字不同的几处，能编译的文件警告清零。改动的 64 个对象 HEAD 与工作树各载入一次：HEAD PASS 55，tree PASS 56，regress 0。
+
+- `d/dntg/yunlou/npc/yaoguai.lpc`、`yaoguaixdao.lpc` 及 `u/jznt`、`u/xdao`、`u/lxmas` 的 `yaoguai.lpc`：自己的 `nosave int tick`（出绝招的节拍）与 `std/char.lpc` 的心跳 `tick` 同名，驱动本就给了两个变量；叶子这边改名 `perform_tick`（`lpc_rename_ident.py`），行为不变，`d/city/npc/yg/*`、`d/dntg/yunlou/npc/yg-*`、`quest/renzhi1/quest_killer` 的重复声明随之消失。
+- `include/vrm.h`：迷宫表被 `std/room/vrm_server.lpc` 和继承它的 `d/room/vr_room/vrm_*.lpc` 各包含一次；表格包进 `#ifndef VRM_TABLES_INHERITED`，房间在包含前定义它（数值保留本库的 7200/3600 秒）。
+- `d/game/give/yuan.lpc`：`int bt = 2;` 连写三次，留一行。
+- `d/jjf/npc/xiaomotou1.lpc`（天魔宫小魔头）从来载不进来：`attempt_apprentice` 外面多套了一个同名函数头；拜师广播的字符串里直接换行（LPC 字符串不能跨行）；文件用了 `HIR` 等颜色宏却没 `#include <ansi.h>`。三处都改，现在能载入。
+- `u/nanf/room/npc/ddz_judge.lpc`：`die()`/`unconcious()` 在 `void` 基类上写成 `int`，没人读返回值，改为 `void`。

@@ -208,3 +208,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply d
 - `toolkit_fix.sh`：8 个多余 `inherit`（多为 `F_CLEAN_UP`），`u/yhq/westseastore.lpc` 的 `reset()` 改 `void`（原型同改）；`u/rocky/toptend.lpc` 8 个 `#undef`。
 
 验证：改动文件、包含 `vrm.h`/`ground.h` 的对象和继承改名后 `yaoguai` 的对象共 161 个，HEAD 与工作树各用新进程载入：152 -> 153 通过，regress 0。删除声明审计 0 项待看。161 个对象载入无回退。
+
+- 2026-10-12：`d/jjf/npc/xiaomotou1.lpc` 拜师广播的字符串里直接换行（LPC 字符串不能跨行，6986ce28cd8 删了外层函数头后仍编不过），改成 `\n\n`，输出不变；现在能载入（zitengzhan 同修）。

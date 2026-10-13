@@ -1,6 +1,7 @@
 #ifndef __VRM__
 #define __VRM__
 
+#ifndef VRM_TABLES_INHERITED
 // 迷宫名称列表
 nosave mapping vrm_name_list = ([
 #if VRM_0001_SUPPORT
@@ -56,11 +57,13 @@ nosave mapping vrm_exist_time_list = ([
     "VRM_0501":    1800,        // 蛇洞    // 半小时
 #endif
 ]);
+#endif
 
 #if RDM_VRM_SUPPORT
 
 #define RDM_VRM_REFRESH_TIME    1800    // 随机迷宫刷新时间，半小时
 #define RDM_VRM_CLOSE_TIME    900    // 随机迷宫门口关闭时间，30分钟
+#ifndef VRM_TABLES_INHERITED
 int refresh_rdm_vrm_time;        // 保存刷新随机迷宫的时间
 
 int close_rdm_vrm_time;            // 保存关闭随机迷宫入口的时间
@@ -74,10 +77,12 @@ nosave string *rdm_vrm_entry_list = ({    // 随机刷新迷宫的随机入口�
 "/d/qujing/jindou/shanshi2",
 "/d/qujing/jilei/jilei2",
 });
+#endif
 
 #endif
 
 
+#ifndef VRM_TABLES_INHERITED
 // 迷宫更新时间列表，时间最好在120到360分钟之间
 nosave mapping vrm_reset_time_list = ([
 #if VRM_0001_SUPPORT
@@ -105,6 +110,7 @@ nosave mapping vrm_reset_time_list = ([
     "VRM_0502":    3600,        // 试炼之地    // 半小时
 #endif
 ]);
+#endif
 
 
 #endif
