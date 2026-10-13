@@ -268,3 +268,23 @@ In total 335 files differ from the old names (249 `.C` -> `.lpc`, 83 files of re
 - 改动的对象载入无回退。
 
 - 2026-10-12：`u/stey/newjob/teamjob.lpc` 的组队任务用 `names[0][random(40)]` 选地点，而这张表只有 12 个地名，`random()` 落到表外时数组越界报错、任务中断。改成 `random(sizeof(names[0]))`（shenmo `u/stey/newjob/teamjob.lpc` 同类）。HEAD 与工作树各载入一次，regress 0。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+`scripts/toolkit_fix.sh` 加手工修复，能编译的文件里的警告 61 条（48 个文件）-> 0（`lpc_warnings.py sjshwzb` 重扫：11648 -> 11650 个文件可编译；剩下的诊断都在本来就编译不过的文件里）。本库的西游记底子与 mhxy 相同，mhxy 当天的修复（提交 a9cd825122a）有 8 个文件是 token 级孪生，用 `lpc_twin_port.py adopt` 搬过来：`d/kaifeng/ground1/2/3.lpc` 的 `GROUND_TABLES_INHERITED`、`ground.h` 的 `#ifndef` 表 guard、`npc/colors.h` 的 guard、`reporting.lpc` 未用的 `str`、`lijing.lpc` 的 `void die()/unconcious()`、`jiasha.lpc` 的 `init()`；其余照 mhxy 手工改。
+
+**真问题：**
+- `d/obj/cloth/jiasha.lpc` 锦镧袈裟：`inherit CLOTH; inherit F_UNIQUE;` 两个基类都有 `init()`，驱动只用 unique 的 `check_owner()`，cloth 的 `tear` 动作丢了；叶子里写 `init() { cloth::init(); unique::init(); }`。
+- `u/koker/obj/axe.lpc`、`blade.lpc`：`inherit F_UNIQUE; inherit AXE/BLADE;` 之外又 `inherit ITEM;`（武器基类已带），`dbase` 等重复声明，HEAD 下两件神兵都载不进来；`toolkit_fix.sh` 删掉多余的 inherit 后能载入。
+
+**其余：**
+- `feature/alias.lpc` 的 `nosave int last_time`（命令频率计数，只有本文件读）与 `d/city/npc/sanhua-counter.lpc` 自己要存档的 `int last_time` 同名，改名 alias 这边为 `last_cmd_time`（同 mhxy），叶子与已有存档不动。
+- `d/city/npc/yg/yaoguai.lpc`：自己的 `int yaoguai_type = 0;` 从来不读（只有基类 `d/dntg/yunlou/npc/yaoguai.lpc` 用），删掉；11 个 `yg-*` 的重复声明警告随之消失。
+- `d/kaifeng/ground.lpc` 加 `GROUND_TABLES_INHERITED`；`d/moon/npc/yutu.lpc`、`d/lingtai/npc/jinren.lpc` 的 `kill_ob()` 改 `void`（仍调用 `::kill_ob()`，没人读返回值）；`d/longzhu/npc/long.lpc`、`d/wosshipg/long.lpc` 删掉没有函数体的 `int long();`（继承来的是 `string long()`）。
+- `u/stey/newjob/teamjob.lpc` 的 `names` 与同被 `guo.lpc` 包含的 `zzzjob.lpc` 同名，改名 `team_names`（同 xkx 系列的处理）。
+- `u/koker/obj/teshu/roommaker.lpc`、`u/qkl/roommaker.lpc`：`special_props` 声明了两次，代码只用后一份，删掉前一份。
+- `d/close/npc/tang.lpc`、`u/angell/npc/tang.lpc`：NPC 与 SSERVER 都带 F_CLEAN_UP，写明 `clean_up()` 用哪一份（`lpc_name_winner.py`，行为不变）。
+- `adm/daemons/toptend.lpc` 与 `u/stey/u/xintai/tmp/toptend.lpc` 有意重定义 `RICH_B/EXP_B/AGE_B`，前面加 `#undef`；`u/stey/u/vikee/network/dns_master.lpc` 的 `#if PREF_X & SVC_TCP` 挪到空 if 外面；`u/stey/u/rainy/` 下 10 个文件的多余 `;`。
+- `toolkit_fix.sh` 另删了 7 个多余的 `inherit F_CLEAN_UP`（NPC/物品/武器基类已带）。
+
+验证：改动文件、`d/kaifeng` 与 `d/city/npc` 全部对象、`/std` 及 `/std/char` 基类、`/obj/user` 共 360 个对象，HEAD 与工作树各用新进程载入：331 -> 333 通过（新增载入 axe、blade），regress 0；删除声明审计 0 项待看。360 个对象载入无回退。
