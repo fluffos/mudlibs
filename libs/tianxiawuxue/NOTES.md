@@ -1039,3 +1039,12 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply t
 ## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查
 
 - `kungfu/skill/liangyi-jian.bak.lpc`：`int i; level;` 去掉无用的 `level;`。载入无回退。
+
+## 编译警告收尾（2026-10-12）
+
+`scripts/toolkit_fix.sh` 一轮（冗余继承 31 处）加手工收尾，能编译的文件警告清零。改动的 42 个对象 HEAD 与工作树各载入一次：HEAD PASS 39，tree PASS 39，regress 0。
+
+- `d/obj/xiang.lpc`（存盘的箱子）：`varargs int remove() { save(); }` 盖掉了 `feature/move.lpc` 的 `remove()`，箱子被销毁时不从携带者身上减负重、不清 handing（nitan_ceshi 的 unique.lpc 同类，KB 06 §7.239 变体）。改成 `varargs void remove(string euid) { save(); ::remove(euid); }`，与 nitan170911 同修。
+- `questobj/guojob/guo.lpc`（郭靖）同时 include `zzzjob.lpc` 和 `teamjob.lpc`，两者各声明一份 `names` 表，内容差两个地名（北疆小镇/伊犁、悬空寺/玄妙观）；每份表只被紧跟其后的代码读到，各用各的。`teamjob.lpc` 这份改名 `team_names`，行为不变。
+- `u/lonely/obj/roommaker.lpc`、`roommk.lpc`：`special_props` 声明两次，后一次（多 `"file_name"`）本来就生效，删去前一次。
+- `d/city/library.lpc`、`d/city2/library.lpc`、`d/emei/user-room/host/home.lpc` 有意改 `STORY_DIR`，前加 `#undef`；`kungfu/skill/huashan-jian.lpc` 招式表后多余的 `;`；`quest/quest_jun/song/obj/bingfu.lpc`、`lingjian.lpc` 用 `lpc_name_winner.py` 写明 `clean_up()`。
