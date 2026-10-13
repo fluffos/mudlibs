@@ -21,6 +21,7 @@
 /* News Directory Defines */
 #define NEWS        "/open/NEWS/"                   /* News Dir     */
 #define GROUPS      (NEWS + "groups/")                /* Groups Dir   */
+#undef ROOM
 #define ROOM        (ROOT + "newsroom.lpc")             /* News Room    */
 #define POSTER      (ROOT + "composer.lpc")             /* News Daemon  */
 #define READER      (ROOT + "newsd.lpc")            /* News Reader  */

@@ -268,3 +268,16 @@ header-encrypted. Skip nitan.zip.
 ## Deep test (§10.7, 2026-10-11): strict UTF-8 sweep
 
 - `obj/ring_fixer.lpc` and `obj/workfiles/ring_fixer.lpc`: the archive copy turns into binary garbage about 3 KB in, mid-function; not recoverable, left as is.
+
+## Compile warnings cleanup (2026-10-12)
+
+`scripts/toolkit_fix.sh` plus hand fixes; every warning in a compiling file is gone except the two parser lines listed under "open" below. HEAD vs working tree, each object loaded once: 44 objects, HEAD PASS 25, tree PASS 25, regress 0.
+
+- `#pragma strong_types  // comment` (LDMud's name, FluffOS does not know it): the 10 lines are deleted. `lpc_warnings.py --fix` now also takes a pragma line with a trailing comment.
+- "Called function 'X' not compiled with type testing": the function was called before its definition and had no prototype (`add_alignment`, `remove_ghost`, `query_pwd`, `is_testchar`, `set_big_kill` in `bin/player.lpc` and its copies; `check_auth`/`trans`/`valid_write` in `closed/wiz_soul.lpc`; `add_region`/`add_world`; `move_me`). Forward prototypes copied from the definitions now sit before the first function. `obj/living.lpc` calls `short()`, which each living leaf defines: the prototype goes there, not into the leaves.
+- `obj/workfiles/testmon.lpc`, `open/new/monster.lpc`: re-declared `chat_nr`/`a_chat_nr` after including `obj/chat_include.lpc`, so `load_chat()` filled one counter and `heart_beat()` read the other (always 0): monsters built on these copies never chatted. `testmon`'s own `spell_dam` hid `obj/living.lpc`'s (the spell code reads the base's). The duplicates are deleted.
+- `obj/monster_spells.lpc` (and its workfiles copy): its `spells`/`multi_cast` repeat `obj/monster.lpc`'s, and it overrides every base function that touches them, so the duplicates are deleted (one variable, same behaviour).
+- Leaf variables renamed where they hold their own data: `open/maledicta/civilian.lpc` `wander` -> `civ_wander`, `open/mizan/FuzzyBeast.lpc` `short_desc`/`long_desc` -> `short_list`/`long_list`, `open/vital/obj/sword.lpc` `ids` -> `sword_ids`; `swhip.lpc` declared `collect` twice.
+- `#undef` before the intentional redefinitions in `include/cfg/master.cfg`, `include/mudlib.h`, `obj/news.h`; nested `/*` in the three `_more.lpc` change logs, `kernel/simul/misc.lpc`, `open/lexi/pillows3.lpc` (`*\` meant `*/`), `open/mizan/deathbeano2.lpc` (the comment opened at line 92 already covers the dead attack code; the inner `/*` is dropped so it still ends at the same place); unused locals in `valid_write()` (`bin/player.lpc` and copy) and `open/squirrel/manager.lpc`.
+
+**Open:** `basic/parser.lpc` (used by every `global/action/*.lpc`: throw, climb, search, pick_lock, ...) builds its result with LDMud wide-mapping syntax, `args[w, 0] = primary; args[w, 1] = secondary;` after `m_allocate(1, 2)`, and the actions read `args[G_OBJECT, 1]`. FluffOS has no wide mappings: `[w, 0]` is a comma expression, so every result goes to key 0/1 and `args[G_OBJECT]` is never set. The action system needs a real port (e.g. `args[w] = ({ primary, secondary })` and every reader adjusted) with a live test; the two "Expression has no side effects" warnings on those lines are the marker.

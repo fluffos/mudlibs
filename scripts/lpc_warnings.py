@@ -730,7 +730,7 @@ def fix_pragmas(work, rows):
         path = os.path.join(work, f.lstrip("/"))
         L = read_lines(path)
         for ln in sorted(lns, reverse=True):
-            if re.match(r"\s*#\s*pragma\s+\w+(?:\s*[,\s]\s*\w+)*\s*$", L[ln - 1]):   # LDMud lists: strong_types,rtt_checks
+            if re.match(r"\s*#\s*pragma\s+\w+(?:\s*[,\s]\s*\w+)*\s*(?://.*|/\*.*\*/\s*)?$", L[ln - 1]):   # LDMud lists: strong_types,rtt_checks; a trailing comment goes with the line
                 del L[ln - 1]
                 n += 1
             else:

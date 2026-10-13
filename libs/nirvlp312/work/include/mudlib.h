@@ -46,6 +46,7 @@
 #define PASTE_DIR              "open/paste"
 
 
+#undef DEBUG_LOG
 #define DEBUG_LOG              "/debug.log"
 
 
