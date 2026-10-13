@@ -251,3 +251,10 @@ functionally re-tested live on this lib.
 - 改动的对象 HEAD 与工作区都能载入，无回退。
 
 - 2026-10-12：`clone/npc/obj/xiang.lpc` 写着 `int remove() { save(); }`，盖掉了 `feature/move.lpc` 的 `remove(string euid)`——这些存盘箱子/柜子被销毁时不从携带者身上减负重、不清 handing（KB 06 §7.239 变体，nitan_ceshi/tianxiawuxue 同类）。改成 `varargs void remove(string euid) { save(); ::remove(euid); }`。HEAD 与工作树各载入一次，regress 0（载不进的文件在 HEAD 就载不进）。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/toolkit_fix.sh` 一轮去掉 5 处多余继承，照 tybxjh（72440a6be25）搬来 peng 的 `ask_fail` 原型、`xingchen` 的 `clean_up()`、`huashan-jian` 的多余 `;`；其余手工。能编译的文件警告清零；改动的 17 个对象在 HEAD 与工作树各载入一次：HEAD PASS 14，tree PASS 14，regress 0。
+
+- `adm/daemons/poistiond.lpc`（继承 `ITEM` 与 `F_SAVE`）的 `varargs int remove() { save(); return 1; }` 盖住了 `F_MOVE` 的 `remove(euid)`——销毁时卸装备、从持有者身上扣重量的那一步（KB 06 §7.239）；改成先 `save()` 再 `::remove(euid)`。
+- `adm/npc/beastseller.lpc` 的 `attempt_apprentice()` 改 `void`；足球赌局五个房间（`d/zjb/zuqiu*.lpc`、`u/zjb/zuqiu.lpc`）把 `MAX` 定义成坐庄本钱，覆盖 `globals.h` 的 `MAX(a, b)`，先 `#undef`；`clone/box/gboxa.lpc` 已在注释里的一段又写了一个 `/*`，删去。
