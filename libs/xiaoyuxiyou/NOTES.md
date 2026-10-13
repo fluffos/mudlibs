@@ -1180,3 +1180,12 @@ verified live on `xyxyutf8`. See AGENTS.md §7.156.
 `.c` 改名 `.lpc` 时只改了字符串没改切片宽度：`f[<2..] == ".lpc"` 拿两个字符比四个字符，永远不成立（`!=` 永远成立），按后缀筛文件、去后缀的代码因此从不运行或截成 `x.l`（KB 06 §7.238）。`scripts/lpc_lpc_suffix_slice.py --apply` 改了 1 处比较、1 处去后缀（如 `cmds/adm/mem2.lpc`）；改动的文件 HEAD 与工作树分别加载（新进程），无回退。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 13 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 6 个，只在 #if 分支用的声明移进分支 0 个文件；改动 17 个文件，HEAD 与工作树各载入一次无回退（17 objects; HEAD PASS 17, tree PASS 17; regress 0; newly loading 0），这些文件的警告 39 -> 20。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/toolkit_fix.sh` 一轮去掉 3 处多余的 `F_CLEAN_UP`；它还把 `d/obj/books-nonskill/` 四本书的 `inherit ITEM;` 当成多余删了，可这几本书包含的 `book.h` 把 `BOOK` 改指向本目录的 `book`（不带 `ITEM`），删后编译失败——载入检查当场发现，已恢复，工具也改了（KB 04 §6.10 (8)）。搬来 xyj2000（969f36bdd8c）逐 token 相同的文件（`feature/alias.lpc` 的 `last_time` 改名 `last_cmd_time`，三花计数员 `sanhua-counter.lpc` 的同名警告随之消失）；其余手工。能编译的文件警告清零；改动的 24 个对象在 HEAD 与工作树各载入一次：HEAD PASS 23，tree PASS 24，regress 0（多出的那个是 `quest/tianguan/npc/other.lpc`，它随机挑武功，挑到本库没有的就在 `set_skill()` 报错，两边成败看运气，与改动无关）。
+
+- 芥子袋 `d/obj/fabao/jiezi-bag.lpc`（存取货币的法宝，`F_SAVE` 存盘）自己声明了 `mapping Gold`，而 `feature/dbase.lpc` 也有一个存盘的 `Gold`：存档里写两条 `Gold`，`restore()` 填前一个（基类的）、清空后一个（袋子用的），袋里的钱每次读档都没了（KB 06 §7.233）。删去袋子自己的声明，`create()` 里 `Gold = ([]);`，袋子的代码用唯一那份；旧存档的 `Gold` 也正好读进这份。
+- 袈裟 `d/obj/cloth/jiasha.lpc`（`CLOTH` + `F_UNIQUE`）只跑 unique 的 `init()`，撕袈裟的 `tear` 从没加上；补 `init() { cloth::init(); unique::init(); }`（同 xyj2000）。
+- `d/kaifeng/ground.h` 的三张表包进 `#ifndef GROUND_TABLES_INHERITED`，层层继承的 `ground1/2/3.lpc`、`ground.lpc` 包含前定义它（同 xyj2000）；李靖 `d/dntg/lijing/lijing.lpc` 的 `die`/`unconcious` 改 `void`。
+- 擂台两人 `d/kaifeng/npc/ye.lpc`、`yuwangye.lpc` 的比赛名 `title` 改名 `game_title`，投票箱 `d/wiz/votebox.lpc` 的改名 `vote_title`，不再与基类的 `title` 同名；突破迷宫五个出口（及 `backup/` 里一份）`out.lpc` 的怪物表 `gg` 与它继承的 `room.lpc` 一字不差，删去重复的那份；`d/obj/books-nonskill/book.h` 的 `BOOK` 先 `#undef`；`quest/tianguan/npc/other.lpc` 没用的 `name` 删去。
