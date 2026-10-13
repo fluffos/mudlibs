@@ -117,8 +117,33 @@ cache, clo_cache = {}, {}
 def mask_comments(t):
     # `@CODE ... CODE` here-documents are text (xajhzcjh objmaker/roommaker write `inherit ITEM;` into new files)
     t = re.sub(r"@@?([A-Za-z_]\w*)[ \t\r]*\n.*?\n[ \t]*\1\b", lambda m: re.sub(r"[^\n]", " ", m.group(0)), t, flags=re.S)
-    t = re.sub(r"/\*.*?\*/", lambda m: re.sub(r"[^\n]", " ", m.group(0)), t, flags=re.S)
-    return re.sub(r"//[^\n]*", lambda m: " " * len(m.group(0)), t)
+    # comments, and string literals that span lines: LPC strings may hold raw newlines, and a room generator's
+    # template ("...\n#include <ansi.h>\ninherit ROOM;\n...") is text, not an inherit (nitan hj_room_created.lpc).
+    # Single-line strings stay visible: `inherit "/path";` needs its argument.
+    out, i, n = [], 0, len(t)
+    while i < n:
+        c = t[i]
+        if c == "/" and t.startswith("/*", i):
+            j = t.find("*/", i + 2)
+            j = n if j < 0 else j + 2
+            out.append(re.sub(r"[^\n]", " ", t[i:j])); i = j
+        elif c == "/" and t.startswith("//", i):
+            j = t.find("\n", i)
+            j = n if j < 0 else j
+            out.append(" " * (j - i)); i = j
+        elif c == "'" and i + 2 < n and (t[i + 2] == "'" or (t[i + 1] == "\\" and i + 3 < n and t[i + 3] == "'")):
+            j = i + (4 if t[i + 1] == "\\" else 3)
+            out.append(t[i:j]); i = j
+        elif c == '"':
+            j = i + 1
+            while j < n and t[j] != '"':
+                j += 2 if t[j] == "\\" else 1
+            j = min(j + 1, n)
+            seg = t[i:j]
+            out.append(re.sub(r"[^\n]", " ", seg) if "\n" in seg else seg); i = j
+        else:
+            out.append(c); i += 1
+    return "".join(out)
 
 
 def conditional_flags(masked_lines):
