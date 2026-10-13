@@ -961,3 +961,10 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply n
 - `combatd.lpc`（含 u/ 下两个副本）：只在 `#ifdef USE_SKILLS_COMBAT`/`USE_SKILLS_SPECIAL` 里用的 `def`、`armor` 声明挪进对应分支；`genmap.lpc` 的 `find_exits()` 里包含了用不到的 `harbor.h`，删去。
 - toolkit 删去 40 个重复继承（`lingpai*`、任务 NPC 再继承 F_CLEAN_UP，`smith.lpc` 再继承 F_DEALER，几个技能再继承 F_SSERVER 等）。
 - 旁注（未改）：登入时 `newsd` 经 `dboard.lpc` 调用 `DATABASE_D->connect_to_database()`，该函数是 `protected`，`debug.log` 报 `apply() with insufficient permission`，只在没有 MySQL 时出现，结果与连不上一样。
+
+## 深度功能测试（§10.7，2026-10-12）：KB 05 §7.15 残留收尾（feature/save.lpc）
+
+- 复查当天早些时候 dbase.h 原型一轮漏掉的混入件。`feature/action.lpc`、`condition.lpc`、`move.lpc` 在本库里**没有问题**：忙乱（`me->query_all_buff("avoid_busy")`）、中毒抗性（`this_object()->query_all_buff("avoid_poison")`）、移动时的 `this_object()->query("equipped")`、`env/brief`、`guardfor` 早就写成 `this_object()->` 或带物件参数的两参形式，没有一处裸单参 `query()`/`set()`（nitan6 的同名文件是裸调用，那里才需要 `#include <dbase.h>`），所以不加包含、不改。
+- 真正漏掉的是 `feature/save.lpc`：它也被不带 F_DBASE 的守护进程继承，不能加原型；`restore_package()` 两处 `log_file("restore_package", query("id") + ...)` 是裸单参调用，读的是 simul_efun 的共享 dbase，日志里的玩家 id 恒为 `0`。改为 `this_object()->query("id")`（同 nitan6 提交 3264a2e14e1）。
+- 探针（新进程，HEAD 与工作树各一次）：两个店小二，一个设 `apply/avoid_busy`=77、`apply/avoid_poison`=88，另一个读到 0，`start_busy(5)` 正常；长剑 `wield` 后移给另一个 NPC，原持有者 `weapon` 清空、`equipped` 清零——改前改后相同。带 F_DBASE+F_SAVE 的探针物件 `restore_package()` 遇到不存在的物件路径：改前日志 `0:/no/such/probefile`，改后 `probesv:/no/such/probefile`。
+- 载入回退检查：继承 F_SAVE 的全部对象加 `clone/`、`d/city`、`feature/`、`inherit/`、`adm/daemons/`、`cmds/` 抽样，`2437 objects; HEAD PASS 2373, tree PASS 2373; regress 0; newly loading 0`（失败的 64 个 HEAD 同样失败），改动文件无编译警告；删除声明审计 0 处。
