@@ -283,3 +283,7 @@ lpc`/`pigd.lpc` 里搜不到任何 `money`/`balance` 相关调用——它不是
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 10 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 0 个，只在 #if 分支用的声明移进分支 2 个文件；改动 9 个文件，HEAD 与工作树各载入一次无回退（9 objects; HEAD PASS 8, tree PASS 8; regress 0; newly loading 0），这些文件的警告 11 -> 1。
 
 - 2026-10-12：明教 `d/mingjiao/npc/yinwufu`、`yinwulu`、`yinwushou` 连写了两行 `inherit F_UNIQUE;`，驱动报 `Illegal to redefine 'nomask' function 'violate_unique'`，这三个 NPC 从来载不进来（xiakexing3/xkxlb 同日同修）。删去重复的一行后三个都能载入（HEAD PASS 0 → tree PASS 3）。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/toolkit_fix.sh` 一轮去掉 10 处多余继承，`d/shenlong/ma.lpc` 补上 `ask_me()` 原型。能编译的文件警告清零；改动的对象在 HEAD 与工作树各载入一次（11 objects; HEAD PASS 9, tree PASS 9; regress 0; newly loading 0）。
