@@ -670,3 +670,15 @@ functionally re-tested live on this lib.
 
 - `d/xingxiu/nanjiang2/3.lpc`、`shanjiao.lpc`：删去空的 `if (current_water==0) { }`（行为不变）。
 - 改动的对象 HEAD 与工作区都能载入，无回退。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+可编译文件中的编译警告 92 → 0，不加 pragma，逐条在源头修。
+
+- 24 处冗余继承删去：20 个 `inherit F_CLEAN_UP;`（`NPC`/`sserver`/`money`/`boots`/`blade`/`SKILL` 基类已带）、`quest/helian.lpc`、`shan.lpc`、`weixiaobao.lpc` 在 `NPC` 之外又 `inherit F_SKILL;`（每个 4 条重复声明 + 14 个函数两份），`kungfu/skill/taixuan-gong.lpc` 在 `FORCE` 之外又 `inherit SKILL;`。同一份代码经两条路进来，删去一份不改行为。
+- `inherit/private_room.lpc`、`recordable_room.lpc` 的 `int setup()` 在 `void` 基类上：改 `void`（无调用者读返回值）。
+- `d/death/god1.lpc` 同时继承 `ROOM` 与 `SKILL`，两边的 `clean_up()` 都来自 `feature/clean_up.lpc`：照驱动原来的选择写出 `skill::clean_up()`。
+- 没有找到玩法上的真 bug。
+- 未修：`include/daemons.h`（Lima 的守护进程表）重定义 `ALIAS_D`/`CHANNEL_D` 等 6 个宏，只有 `adm/daemons/network/ms.lpc`、`mail_serv.lpc` 引用它，这两个文件缺 `uid.h`/`mailer.h` 等头文件，本身编译不过，不在范围内。
+
+改动的 27 个文件与继承两个房间基类的对象共 29 个，HEAD 与工作树各载入一次：HEAD PASS 24，tree PASS 24，regress 0；5 个 FAIL 两边相同（`adm/npc/luban`、`d/quanzhou{,.old}/npc/tang{,3}` 批量载入时 `restore_object` 读存档被拒，运行期问题）。`lpc_audit_removed_locals.py` 0 处待看。
