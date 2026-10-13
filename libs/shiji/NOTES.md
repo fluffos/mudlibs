@@ -611,3 +611,11 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply s
 `scripts/lpc_warnings.py shiji --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 354 个 `.lpc`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：323 -> 323 通过，无回退。`smtp/smtp_d.lpc` HEAD 起就编译不过，这里只删了未用的 `newbie_reg`（已看过）。启动时警告 40 -> 0；新进程登录（新人物确认）正常。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 3 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 0 个，只在 #if 分支用的声明移进分支 0 个文件；改动 2 个文件，HEAD 与工作树各载入一次无回退（2 objects; HEAD PASS 2, tree PASS 2; regress 0; newly loading 0），这些文件的警告 3 -> 0。
+
+## 编译警告收尾（2026-10-12）
+
+`scripts/toolkit_fix.sh` 一轮（冗余继承 12 处，覆盖函数 2 个）加手工收尾，能编译的文件警告清零。改动的 24 个对象 HEAD 与工作树各载入一次：HEAD PASS 23，tree PASS 23，regress 0。
+
+- `clean_up()` 两条路进来（`F_BANKER`/`F_SSERVER` 与 NPC/武器基类都带 `F_CLEAN_UP`）：钱庄老板 5 个、`d/death/god1.lpc`、两把刀等 9 个文件用 `lpc_name_winner.py` 写明驱动本来就选的那个。
+- `d/shendian/npc/mentu.lpc`：一个空的全局 `string *skills = ({});` 与 `F_SKILL` 的技能表 `skills` 同名，`create()` 用的是自己的局部变量，删去空表。
+- 未改：`include/daemons.h` 是从 Lima 带来的头文件（`/daemons/channel_d` 等路径本库没有），只被编不过的 `adm/daemons/network/ms.lpc`、`mail_serv.lpc` 包含，那里报的宏重定义不在能编译的文件里。
