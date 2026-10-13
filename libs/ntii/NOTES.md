@@ -384,3 +384,16 @@ HEAD 与工作树分别加载（新进程）：1245 -> 1245 通过，无回退�
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 2 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 1 个，只在 #if 分支用的声明移进分支 4 个文件；改动 7 个文件，HEAD 与工作树各载入一次无回退（7 objects; HEAD PASS 7, tree PASS 7; regress 0; newly loading 0），这些文件的警告 8 -> 0。
 
 - 2026-10-12：`adm/npc/obj/xiang.lpc` 写着 `int remove() { save(); }`，盖掉了 `feature/move.lpc` 的 `remove(string euid)`——这些存盘箱子/柜子被销毁时不从携带者身上减负重、不清 handing（KB 06 §7.239 变体，nitan_ceshi/tianxiawuxue 同类）。改成 `varargs void remove(string euid) { save(); ::remove(euid); }`。HEAD 与工作树各载入一次，regress 0（载不进的文件在 HEAD 就载不进）。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+能编译的文件里的警告 9 条（7 个文件）-> 0（`lpc_warnings.py ntii` 重扫：13040 个文件可编译，剩下的诊断都在本来就编译不过的文件里）。与 nte 同码：nte 当天的修复（提交 7b93d60fe9b）改的 7 个文件在这里都是 token 级孪生，用 `lpc_twin_port.py adopt` 搬过来，详见 nte 的 NOTES.md 同名一节；本库自己的扫描同样报了 `pldan.lpc` 的 `clean_up()` 双重继承，删掉的 inherit 在本库确实重复。
+
+**真问题（与 nte 相同）：**
+- `clone/misc/swmuding.lpc` 神木王鼎自己的毒虫表从来没被基类 `muding.lpc` 用上 -> 改名 `sw_insects`，`create()` 里交给基类的 `insects`。
+- `d/mingjiao/npc/hu.lpc` 胡青牛的疗伤回调 `recover(object ob)` 盖掉了 NPC 基类的 `recover()` -> 改名 `heal_patient`。
+- `clone/misc/cruise-ob.h` 的 `remove() { save(); }` 盖掉了 F_MOVE 的 `remove(euid)`（不卸装备、不扣负重）-> 删掉，F_OBSAVE 物件由 F_MOVE 先存盘。
+
+**其余：** food/liquid 的 `do_effect()` 改 `varargs int`；`genmap.lpc` 函数内不用的 `harbor.h` 包含；`pldan.lpc` 多余的 inherit。
+
+验证：改动文件、所有继承 F_FOOD/F_LIQUID 的物品、包含 `pigpart.h`/`cruise-ob.h` 的文件、muding、eat/drink 共 308 个对象，HEAD 与工作树各用新进程载入：307 -> 307 通过，regress 0；删除声明审计 0 项待看。308 个对象载入无回退。

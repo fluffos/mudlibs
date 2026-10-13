@@ -493,10 +493,7 @@ int hide_anywhere(object me)
         destruct(this_object());
         return 1;
 }
-varargs int remove()
-{
-        save();
-}
+// remove() 交给 F_MOVE：is_ob_saved() 的物件它会先 save()，再卸装备、减负重。
 
 // 接受存盘数据的接口函数
 int receive_dbase_data(mixed data)
