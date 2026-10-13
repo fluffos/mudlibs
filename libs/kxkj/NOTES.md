@@ -1028,3 +1028,20 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply k
 - `open/scholar/npc/fall.lpc` `in_combat()`：十行 `(: perform_action, "…" :);` 只造函数指针不调用；作者意图（逐个出招）无法确定，改成注释保留原列表，行为不变。
 - `open/scholar/room/newplan/npc/guard4.lpc`：`(: perform_action, "universe.tengin" :),` 同上改为注释，`delete_busy()` 照旧执行。
 - 改动的对象 HEAD 与工作区都能载入，无回退。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+可编译文件中的编译警告 62 → 0，不加 pragma，逐条在源头修；可编译文件 11632 → 11635。先用 `lpc_twin_port.py` 把 kxkj1 同日的修正搬过来（18 个文件逐 token 相同），其余按本库代码手改。
+
+**发现的真 bug：**
+- 7 个首领（`open/capital/npc/officer-wu.lpc` 及 `npcbak/` 两份、`open/tailong/npc/inn.lpc`、`open/wu/npc/{sky_yan_jen,win_jen,yan_din_lee}.lpc`）战斗喊话里写 `(: "cmd god_kee" :)`：这是返回字符串的函数，从不施展 god_kee；改为 `(: command, "cmd god_kee" :)`（本库其他 NPC 用的 `command("cmd god_kee")` 同一命令）。
+- `feature/vendor.lpc` 自己 `inherit NPC;`，`d/snow/npc/keeper.lpc`、`waiter.lpc`、`open/capital/npcbak/solder_officer.lpc` 在前面又继承一遍：`Illegal to redefine 'nomask' function`，从来载不进来；删去叶子那行后载入（kxkj1 同法）。
+- 十几个 NPC 的 `(: "random_move" :)` 从不走动，改为 `(: random_move :)`；`open/poison/npc/bigsnake.lpc`、`snakeking.lpc` 的 `(: "special_att" :)` 改成真指针，并修好 `special_att()` 把敌人数组当对象传给 `tell_room()` 的错（随机咬一个敌人，kxkj1 同法）。
+
+**其余：**
+- 冗余继承 4 处删去；`ITEM` + `F_LIQUID` 容器的 `long()` 两份：照驱动原来的选择写出 `liquid::long(raw)`（29 个文件，含搬来的）。
+- `feature/damage.lpc` 有一个全局临时变量 `int i`（还有 `ghost` 死亡标志）：`open/gblade/npc/{cook,foolboy,shouhon,wen-fun}.lpc`、`open/scholar/npc/boy.lpc` 自己的计数器 `i` 改名 `ncount`（`nosave`），`open/mogi/dragon/npc/older.lpc` 从未使用的 `i` 删去，`open/killer/mon/ghost/npc/bghost.lpc` 的 `object ghost = this_object()` 改名 `self_ob`；`open/capital/npcbak/g1.lpc` 的 `leader` 改名 `helper`。都与原来一样是各自的变量，行为不变。
+- `daemon/skill/gwhip.lpc` 的 `skill_improved` 改成基类签名；`open/start/npc/b_guard.lpc` 的 `greeting()` 改 `void`；4 个港口房间与 `cmds/adm/make_room.lpc` 加原型（调用在定义之前）。
+- `feature/liquid.lpc` 本库已是 `max / 4` 一档，不需要 kxkj1 的那处修正。
+
+改动的 58 个对象 HEAD 与工作树各载入一次：HEAD PASS 54，tree PASS 57，regress 0，新载入 3（上面 3 个 NPC）；`open/gblade/npc/wen-fun` 两边都在 `create()` 装备一把不存在的 `/u/l/longhair/...` 刀时失败，`open/clan/new_heaven/room/room3` 是贴进来的终端记录，本身不是代码，未动。`lpc_audit_removed_locals.py` 0 处待看。
