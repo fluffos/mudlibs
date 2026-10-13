@@ -358,3 +358,10 @@ functionally re-tested live on this lib.
 - 改动的对象 HEAD 与工作区都能载入，无回退。
 
 - 2026-10-12：`u/daniel/obj/xiang.lpc` 写着 `int remove() { save(); }`，盖掉了 `feature/move.lpc` 的 `remove(string euid)`——这些存盘箱子/柜子被销毁时不从携带者身上减负重、不清 handing（KB 06 §7.239 变体，nitan_ceshi/tianxiawuxue 同类）。改成 `varargs void remove(string euid) { save(); ::remove(euid); }`。HEAD 与工作树各载入一次，regress 0（载不进的文件在 HEAD 就载不进）。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/toolkit_fix.sh` 一轮去掉 5 处多余继承，其余手工，能编译的文件警告清零；改动的 10 个对象在 HEAD 与工作树各载入一次：HEAD PASS 7，tree PASS 7，regress 0。
+
+- `d/daniel/job/peng/peng.lpc` 原型写 `string ask_fail();`，包含进来的 `dojob.lpc` 定义的是 `int ask_fail()`，原型改 `int`。
+- `kungfu/skill/guxing-sword/xingchen.lpc`、`quest/chousha/killer.lpc` 写明用驱动原先选的 `clean_up()`；`u/fyue/ansi2.h` 对已由 `ansi.h` 定义的 `ESC`、`BEEP` 先 `#undef` 再定义；`kungfu/skill/huashan-jian.lpc` 多余的 `;` 删去。
