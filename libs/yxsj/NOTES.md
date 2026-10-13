@@ -209,3 +209,10 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply y
 ## 深度功能测试（§10.7，2026-10-08）— 编译警告整理
 
 `scripts/lpc_warnings.py yxsj --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 161 个 `.lpc`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：144 -> 144 通过，无回退。启动时警告 12 -> 0；新进程登录（输入名字）正常。
+
+## 编譯警告收尾（2026-10-13）
+
+`scripts/toolkit_fix.sh` 一轮后剩三条，手工清零。改动的对象在 HEAD 与工作树各载入一次，regress 0（`/adm/daemons/ftpd` 两边都 PASS；`u/d/daniel/npc/chinmo.lpc` 两边都因 `set_skill()` 设了本库没有的武功而载入失败，是内容缺口）。
+
+- `include/net/ftpdsupp.h` 的 `check_access()` 在函数开头声明 `file`，只有 `#ifdef GUEST_WIZARD_FTP` 分支用它；声明移进该分支。
+- `u/d/daniel/npc/chinmo.lpc`、`u/d/daniel/temp/corpse.lpc` 同时继承 `NPC`/`ITEM` 和 `SSERVER`，两边都带 `F_CLEAN_UP`：写明用 `sserver::clean_up()`，与驱动原先的选择相同。
