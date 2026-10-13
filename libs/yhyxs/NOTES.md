@@ -984,3 +984,7 @@ HEAD 与工作树分别加载（新进程）：822 -> 822 通过，无回退；�
 启动时警告 84 -> 0；新进程登录正常（这个库回应较慢，输入名字后十秒左右才回）。
 
 - 2026-10-12：`clone/misc/swmuding.lpc`（神木王鼎）自己声明了一张 `mapping insects` 虫表，与继承的 `clone/misc/muding.lpc` 的 `insects` 同名；读表的是木鼎的代码，读到的是木鼎自己的表，神木王鼎的虫表从来没用上（`Redeclaration of global variable 'insects'`）。改名 `sw_insects`，`create()` 里 `insects = sw_insects;` 交给木鼎（nitan170911、wxddym、zjdy 系同修）。HEAD 与工作树各载入一次，regress 0。
+
+## 编译警告收尾（2026-10-13）
+
+搬来同族已整理的改法：yanhuangwuhun（89552da089f）的 `feature/food.lpc`、`feature/liquid.lpc` `do_effect()` 改 `varargs int`（与重载它、被 `eat`/`drink` 用返回值的蜂蜜、猪肉等一致），zhonghua2 的 `clone/megazine/obj/duka_3b.lpc` 删去不用的那份赔率声明，yhwhpublicfi 的镖师 `d/beijing/npc/qianzhenglun.lpc` `count` 改名 `my_count`。能编译的文件警告清零；改动的 6 个对象在 HEAD 与工作树各载入一次，regress 0。
