@@ -221,3 +221,11 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 ## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查（二）
 
 - `clone/obj1/traverser.lpc`：空 `DEBUG` 宏改成空函数。载入无回退。
+
+## 编译警告收尾（2026-10-13）
+
+手工清零；改动的 8 个对象在 HEAD 与工作树各载入一次：HEAD PASS 7，tree PASS 7，regress 0。
+
+- 五个彩票机（`d/city/bingo.lpc`、`d/city/obj/bingo.lpc`、`u/jhy/bingo.lpc`、`bingo2.lpc`、`u/puma/bingo.lpc`）同一条声明里把 `jiafen`、`wait_time` 等九个变量先裸声明、再带初值声明，驱动造出两份；`scripts/lpc_fix_double_decl.py` 去掉裸的那份，运行时不变。
+- `clone/obj/genmap.lpc` 在函数里包含 `/clone/ship/harbor.h`，用到其中的 `islands`、`harbors`，用不到 `wildharbors`：表格包进 `#ifndef HARBOR_NO_WILD`，genmap 包含前定义它（同 jym）。
+- 慕容任务 `d/murong/mrjob/mrnpc/mr_inherit/npc/Mr_knpc.lpc`、`mr_obj/npc/thief.lpc` 的 `die()` 改 `void`。
