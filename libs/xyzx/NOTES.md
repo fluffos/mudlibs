@@ -169,3 +169,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 - 2026-10-10：`/u/snow/wudujiao/mishi.lpc` 的技能判断用按位 `&` 连接两个比较（如 `tjss > 10000 & taoism > 10000`），改为逻辑 `&&`。两边都是 0/1 比较结果，行为不变，只是写法纠正。
 
 - 2026-10-11：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 29 处，返回类型/原型 36 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 0 个，只在 #if 分支用的声明移进分支 2 个文件；改动 63 个文件，HEAD 与工作树各载入一次无回退（63 objects; HEAD PASS 53, tree PASS 53; regress 0; newly loading 0），这些文件的警告 67 -> 0。
+
+## 编译警告收尾（2026-10-12）
+
+孪生库 bixiecanyang 同日的整理（7c2dd97d9a6：冗余继承 8 处，`u/isle/ToMud/tomud.h` 沙盒副本的 `TMI`/`TMA`/`TMB` 前 `#undef`，`kungfu/skill/huashan-jian.lpc` 多余的 `;`）用 `scripts/lpc_twin_port.py adopt bixiecanyang xyzx --pre 7c2dd97d9a6~1` 搬来，10 个文件与 bixiecanyang 修前逐 token 相同，清单里的警告全部落在这些文件里。HEAD 与工作树各载入一次：10 个对象，HEAD PASS 7，tree PASS 7，regress 0。
