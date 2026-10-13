@@ -4,7 +4,7 @@
 #include <ansi.h>
 
 int do_clone(object me, object ob);
-int kill_ob(object ob);
+void kill_ob(object ob);
 
 void init() {
   object name1;

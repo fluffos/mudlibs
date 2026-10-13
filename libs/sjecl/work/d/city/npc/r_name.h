@@ -7,7 +7,7 @@
 mapping get_random_name(int, int);
 mapping random_name(int, int);
 
-string *f_name = ({
+string *c_f_name = ({
   "爱", "安",
   "柏", "鲍", "贝", "卞", "卜",
   "曹", "岑", "昌", "常", "陈", "成",
@@ -52,7 +52,7 @@ string *f_name = ({
   "宰父", "长孙", "钟离", "仲孙", "诸葛", "颛孔", "宗政", "左丘",
 });
 
-string *f_id = ({
+string *c_f_id = ({
   "ai", "an",
   "bo", "bao", "bei", "bian", "bo",
   "cao", "cen", "chang", "chang", "chen", "cheng",
@@ -97,7 +97,7 @@ string *f_id = ({
   "zaifu", "zhangsun", "zhongli", "zhongsun", "zhuge", "zhuankong", "zongzheng", "zuoqiu",
 });
 
-string *name_m = ({
+string *c_name_m = ({
   "安",
   "霸", "白", "班", "碧", "斌", "宾", "波",
   "才", "财", "昌", "长", "超", "诚", "川",
@@ -121,7 +121,7 @@ string *name_m = ({
   "振", "峥", "之", "志", "智", "忠", "舟", "宙", "子", "自",
 });
 
-string *id_m = ({
+string *c_id_m = ({
   "an",
   "ba", "bai", "ban", "bi", "bin", "bin", "bo",
   "cai", "cai", "chang", "chang", "chao", "cheng", "chuan",
@@ -145,7 +145,7 @@ string *id_m = ({
   "zhen", "zheng", "zhi", "zhi", "zhi", "zhong", "zhou", "zhou", "zi", "zi",
 });
 
-string *name_g = ({     //女性专用
+string *c_name_g = ({     //女性专用
 "爱",
   "宝钗", "碧",
   "春", "翠",
@@ -168,7 +168,7 @@ string *name_g = ({     //女性专用
   "真", "珍", "珠",
 });
 
-string *id_g = ({
+string *c_id_g = ({
   "ai",
   "baochai", "bi",
   "chun", "cui",
@@ -199,11 +199,11 @@ mapping random_name(int gender, int num) {
   string *group_name, *group_id;
   if (gender)                     //判定男或女名字
   {
-    group_name = f_name;
-    group_id = f_id;
+    group_name = c_f_name;
+    group_id = c_f_id;
   } else {
-    group_name = name_g;
-    group_id = id_g;
+    group_name = c_name_g;
+    group_id = c_id_g;
   }
   f_n2 = "";
   f_id2 = ({});

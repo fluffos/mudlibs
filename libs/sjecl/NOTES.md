@@ -168,3 +168,7 @@ and `i` showed 一个烧饼(Shao bing) plus change. No LPC change.
 
 - `clone/obj/genmap.lpc`/`traverser.lpc`：`DEBUG` 是空宏，调用处留下 `("text", n);`；改成空函数 `varargs void DEBUG(string fmt, mixed arg) {}`。
 - 改动的对象 HEAD 与工作区都能载入，无回退。
+
+## 编译警告收尾（2026-10-12）
+
+孪生库 shujian2008 同日的整理（baa6caf453e，其中大半又是从 bxsj 搬来的）用 `scripts/lpc_twin_port.py adopt shujian2008 sjecl --pre baa6caf453e~1` 搬来：55 个文件与 shujian2008 修前逐 token 相同，清单里的警告全部落在这些文件里。内容见 shujian2008 的 NOTES（门派表/路线表改名、`equip.lpc` 的 `ob_hit()`、幻境 NPC 的重复声明、`kill_ob` 返回类型、`NAME_D` 的 `#undef`、嵌套注释等）。改动的 52 个对象 HEAD 与工作树各载入一次：HEAD PASS 52，tree PASS 52，regress 0。
