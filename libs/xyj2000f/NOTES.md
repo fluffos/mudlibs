@@ -397,3 +397,11 @@ compile check (exit 0, no errors) against `feature/command.lpc`.
 ## 深度功能测试（§10.7，2026-10-11）：全库严格 UTF-8 检查
 
 - `d/sky/npc/zz-tianwang.lpc` 原档在函数中途变成二进制垃圾（GBK，未转码），无法恢复，保留原样。
+
+## 编译警告收尾（2026-10-12）
+
+`scripts/lpc_twin_port.py adopt xyj2000 xyj2000f` 搬来 xyj2000 同日整理（969f36bdd8c）里与本库逐 token 相同的 15 个文件；`d/death/npc/wgargoyle.lpc`（白无常）与 xyj2000 不同，`scripts/toolkit_fix.sh` 去掉了它多余的 `inherit F_CLEAN_UP`。能编译的文件警告清零；HEAD 与工作树各载入一次：14 个对象，HEAD PASS 14，tree PASS 14，regress 0。
+
+- 袈裟 `d/obj/cloth/jiasha.lpc` 原来只跑 `F_UNIQUE` 的 `init()`，撕袈裟的 `tear` 命令从没加上；现在两个基类的 `init()` 都调。
+- 开封 `d/kaifeng/ground.h` 的表格包进 `#ifndef GROUND_TABLES_INHERITED`，层层继承的 `ground1/2/3.lpc`、`ground.lpc` 不再各定义一份；`feature/alias.lpc` 的 `last_time` 改名 `last_cmd_time`；`yaoguai_type`、李靖 `die`/`unconcious`、玉兔 `kill_ob` 与 xyj2000 同改。
+- 剩下的 `/adm/simul_efun/oo.lpc` 一条 `no side effects` 是没人包含的 `object.lpc` 旧副本单独编译的假象（KB 04 §6.10 表中 fragment 一行），不是警告。
