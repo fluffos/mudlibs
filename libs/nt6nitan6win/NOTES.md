@@ -403,3 +403,13 @@ id `({ "wu bo", "wu", "bo" })`）。要用 `bai bo`，不要用 `bai wu` /
 - 补齐前几批漏掉的同码副本：`your_temp["guarding"];` 补 `= 0`（反击后清除防守姿态，含 `u/` 下的 combatd 拷贝）；`(: WEAPON_D, "query_action" :)` 改为 `(: call_other, WEAPON_D, "query_action" :)`（KB 04）；`mysql_d.lpc` 的空 `MSG` 宏改成空函数；`gigicook.lpc` 的 `arg == menu_list[0]` 改为 `=`。
 - 改动文件：u/lonely/combatd.lpc 
 - 改动的对象 HEAD 与工作区都能载入，无回退。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+与 nt6 几乎逐字相同（`scripts/lpc_twin_port.py adopt nt6 nt6nitan6win`，76 个文件，另 `feature/name.lpc` 手工补包含），详情见 `libs/nitan6/NOTES.md` 同日一节。可编译文件的警告 **103 -> 0**（`lpc_warnings.py` 全库重扫，22594 个文件可编译；剩下的警告都在本来就编译不过的文件里）。改动的对象、包含改过头文件的对象和 `clone/`、`d/city`、`feature/`、`inherit/`、`adm/daemons/`、`cmds/` 等抽样 HEAD 与工作树各载入一次（新进程）：`2823 objects; HEAD PASS 2723, tree PASS 2723; regress 0; newly loading 0`。删除声明审计 0 处待看。
+
+**严重问题：F_DBASE 旁边的混入件读写 simul_efun 的共享 dbase（KB 05 §7.15 残留）。** `include/dbase.h` 补上与 `feature/dbase.lpc` 一致的属性函数原型，equip、itemmake、food、liquid、pill、alias、message、name、damage、dealer、banker、guarder、apprentice、unique、control、action、condition、move 与 `inherit/char/master.lpc` 都 `#include <dbase.h>`；`npcsd.lpc`、`cmds/adm/eval.lpc` 去掉该包含，`feature/save.lpc` 改用 `this_object()->query("id")`。探针（新进程）：修正前 `wield`、`wear` 都返回 0、装备属性一个也没写上，自制道具 `query_autoload()` 恒为 `"kept"`；修正后 `wield`/`wear` 成功、`equipped` 为 `"wielded"`/`"worn"`，自制道具 `wield` 后 `query_autoload()` 为 `"wielded"`。
+
+其余同 nitan6：自制道具 autoload 交给 item/combined、神木王鼎虫表、`xiang.lpc` 的 `remove()`、幻境变量重复声明、`info_*.h` 头文件守卫、宏 `#undef`、`GWIZ`、返回类型、未用局部变量。
+
+未解决：`u/mike/eval.lpc`（编译不过的临时文件）让 `lpcc` 段错误（驱动问题，HEAD 同样）。
