@@ -506,3 +506,14 @@ lpc` 会调用双方 `kill_ob()`，NPC 真实反击），几回合后一次「�
 ## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查
 
 - `d/menpai/huashan/npc/dugu.lpc`：两个只剩注释的 `if (special) { }`、`if (money) { }` 挪进注释（行为不变）。载入无回退。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/toolkit_fix.sh` 一轮去掉 2 处多余继承（`d/pig/pigroom.lpc` 等），模板与迷宫两类照 nt6 的改法搬来，其余手工，能编译的文件警告清零。改动的 23 个对象在 HEAD 与工作树各载入一次：HEAD PASS 23，tree PASS 23，regress 0。
+
+- 华山风清扬 `d/menpai/huashan/npc/feng.lpc` 自己写了 `int check_skill(string)`，用来挑他肯教的武功，可这个名字正好盖住 `system/feature/char/skill.lpc` 的 `check_skill()`——基类每次 `set_jibie()`/`set_jilei()` 都靠它向 `KUNGFU_D` 检查武功名。于是风清扬身上的武功名从不被检查，给他设任何非剑法武功时还会说一句“我只懂剑法”。他的那个改名 `feng_check_skill`（4 处）。
+- `clone/user/templet.lpc`（存档 `autoload` 转换器）继承 `F_DBASE` 后又自己声明 `dbase`，存盘写出两条 `dbase`，玩家下次载入可能读到空的那条（KB 06 §7.233，同 xo）；删去自己的那个。
+- 六件随身物品（结婚戒指 `clone/toy/marry/ring.lpc`、丐帮布袋、青城 `hong`、无量 `peijian`、一品堂 `qiankunjian`/`riyuedao`）继承了玩家用的 `F_AUTOLOAD`（`class Item *query_autoload()` 存一身装备），又自己定义 `int query_autoload()` 表示“我随身带走”。物品用不到 `F_AUTOLOAD` 的任何东西，`AUTOLOAD_D` 读的是物品自己的 int；去掉那一行继承。
+- `template/weapon/{blade,sword,whip}.lpc`、`template/gem/{gem,skull}.lpc` 把模板数据存进与 `TEMPLATE_OB` 同名的变量再用 `set_*()` 交给基类，`maze/forest/maze.lpc` 的 `unique_rooms` 同理：叶子的变量改名 `my_*`/`forest_unique_rooms`（同 nt6），行为不变。
+- `accept_object()` 同时来自 `master.lpc` 和 `npc.lpc`（后者只 `return 0;`）的五个 NPC、`d/place/player/combine_unarmed.lpc` 的七个函数：写明用驱动原先选的那份（`scripts/lpc_name_winner.py`）。
+- `d/maze/newbie/npc/muren.lpc` 的 `duilian_ob()` 改 `void`，与 `attack.lpc` 一致；`d/pig/pig.h` 的 `PIG_D` 先 `#undef` 再指向同目录的守护进程；草稿 `system/feature/todo/poison.lpc` 的列表 `poison` 改名 `poisons`（同 xo）。

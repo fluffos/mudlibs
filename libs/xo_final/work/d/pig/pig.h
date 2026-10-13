@@ -4,6 +4,7 @@
 #ifndef _PIG_H
 #define _PIG_H
 
+#undef PIG_D   // globals.h names the old daemon; the pig rooms use the one next to them
 #define PIG_D __DIR__"pigd"
 
 #define PIG_RULES	"/doc/help/pig_rules"
