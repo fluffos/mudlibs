@@ -300,3 +300,10 @@ existing `enabled` guard.
 `.c` 改名 `.lpc` 时只改了字符串没改切片宽度：`f[<2..] == ".lpc"` 拿两个字符比四个字符，永远不成立（`!=` 永远成立），按后缀筛文件、去后缀的代码因此从不运行或截成 `x.l`（KB 06 §7.238）。`scripts/lpc_lpc_suffix_slice.py --apply` 改了 1 处比较、1 处去后缀（如 `cmds/adm/mem2.lpc`）；改动的文件 HEAD 与工作树分别加载（新进程），无回退。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 13 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 6 个，只在 #if 分支用的声明移进分支 0 个文件；改动 17 个文件，HEAD 与工作树各载入一次无回退（17 objects; HEAD PASS 16, tree PASS 16; regress 0; newly loading 0），这些文件的警告 39 -> 20。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/lpc_twin_port.py adopt xiaoyuxiyou xyxyutf8` 搬来 xiaoyuxiyou 同日整理（0347f6d042c）里与本库逐 token 相同的文件，`scripts/toolkit_fix.sh` 去掉多余继承，能编译的文件警告清零。改动的 23 个对象在 HEAD 与工作树各载入一次：HEAD PASS 23，tree PASS 22；少的那个是 `quest/tianguan/npc/other.lpc`，它随机挑武功，挑到本库没有的就在 `set_skill()` 报错，成败看运气，与改动无关。
+
+- 芥子袋 `d/obj/fabao/jiezi-bag.lpc` 自己声明了 `mapping Gold`，与 `feature/dbase.lpc` 存盘的 `Gold` 同名：存档写两条 `Gold`，`restore()` 填基类那份、清空袋子用的那份，袋里的钱每次读档都没了（KB 06 §7.233）。删去袋子自己的声明，`create()` 里 `Gold = ([]);`，旧存档的 `Gold` 正好读进唯一那份。
+- `d/kaifeng/ground.h` 表格守卫、`feature/alias.lpc` 的 `last_time` 改名 `last_cmd_time`、擂台与投票箱的 `title` 改名、突破迷宫出口重复的 `gg` 表删去、`d/obj/books-nonskill/book.h` 的 `BOOK` 先 `#undef`，都同 xiaoyuxiyou。
