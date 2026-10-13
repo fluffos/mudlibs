@@ -278,3 +278,15 @@ In total 376 files differ from the old names (288 `.C` -> `.lpc`, 86 files of re
 - 改动的对象载入无回退。
 
 - 2026-10-12：`u/stey/newjob/teamjob.lpc` 的组队任务用 `names[0][random(40)]` 选地点，而这张表只有 12 个地名，`random()` 落到表外时数组越界报错、任务中断。改成 `random(sizeof(names[0]))`（shenmo `u/stey/newjob/teamjob.lpc` 同类）。HEAD 与工作树各载入一次，regress 0。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+能编译的文件里的警告 61 条（48 个文件）-> 0（`lpc_warnings.py sjshwzjqb` 重扫：11609 个文件可编译，剩下的诊断都在本来就编译不过的文件里）。本库与 sjshwzb 同码：sjshwzb 当天的修复（提交 424584b9c2e）改的 42 个文件在这里全部是 token 级孪生（`lpc_twin_port.py classify`），用 `adopt` 原样搬过来，详细说明见 sjshwzb 的 NOTES.md 同名一节。
+
+**真问题（与 sjshwzb 相同）：**
+- `d/obj/cloth/jiasha.lpc` 锦镧袈裟：CLOTH 与 F_UNIQUE 两个 `init()` 只跑了 unique 的，cloth 的 `tear` 丢了；叶子里两个都调。
+- `u/koker/obj/axe.lpc`、`blade.lpc`：武器基类之外又 `inherit ITEM;`，HEAD 下载不进来；删掉多余的 inherit 后能载入。
+
+**其余：** `feature/alias.lpc` 的 `last_time` 改名 `last_cmd_time`（不再与三花计数器要存档的 `last_time` 相撞）；开封擂台 `ground*.lpc`/`ground.h`/`colors.h` 表 guard；`yaoguai.lpc` 不读的 `yaoguai_type`；`lijing`/`yutu`/`jinren`/`long` 的返回类型；`teamjob.lpc` 的 `team_names`；两个 roommaker 的重复 `special_props`；toptend 的 `#undef`；dns_master 空 if；多余的 `;`；9 个多余的 inherit；两个 tang 的 `clean_up()` 写明来源。
+
+验证：改动文件、`d/kaifeng` 与 `d/city/npc` 全部对象、`/std` 及 `/std/char` 基类、`/obj/user` 共 360 个对象，HEAD 与工作树各用新进程载入：331 -> 333 通过（新增载入 axe、blade），regress 0；删除声明审计 0 项待看。360 个对象载入无回退。
