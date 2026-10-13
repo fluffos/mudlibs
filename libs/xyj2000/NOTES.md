@@ -142,3 +142,11 @@ compile check (exit 0, no errors) against `feature/command.lpc`.
 启动时警告 84 -> 0；新进程登录（编码选择、新人物提问）正常。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 8 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 6 个，只在 #if 分支用的声明移进分支 0 个文件；改动 12 个文件，HEAD 与工作树各载入一次无回退（12 objects; HEAD PASS 12, tree PASS 12; regress 0; newly loading 0），这些文件的警告 34 -> 20。
+
+## 编译警告收尾（2026-10-12）
+
+`scripts/toolkit_fix.sh` 一轮（冗余继承 4 处）后，用 `scripts/lpc_twin_port.py adopt mhxy xyj2000 --pre a9cd825122a~1` 搬来 mhxy 同日整理里与本库逐 token 相同的 7 个文件（`d/kaifeng/ground3.lpc`、`npc/colors.h` 防重、`npc/reporting.lpc` 没用的 `str`、`d/obj/cloth/jiasha.lpc` 等），其余照 mhxy 的改法手工补，能编译的文件警告清零。改动与依赖它们的对象 HEAD 与工作树各载入一次：25 个，HEAD PASS 25，tree PASS 25，regress 0。
+
+- `d/obj/cloth/jiasha.lpc`（袈裟，`CLOTH` + `F_UNIQUE`）原来只跑 unique 的 `init()`，撕袈裟的 `tear` 命令从没加上；现在两个基类的 `init()` 都调。
+- `d/kaifeng/ground.h` 的三张表被 `ground0.lpc` 和一层层继承它的 `ground1/2/3.lpc`、`ground.lpc` 各包含一次：表格包进 `#ifndef GROUND_TABLES_INHERITED`，继承方在包含前定义它。
+- `feature/alias.lpc` 的命令计时 `last_time` 改名 `last_cmd_time`（三花计数员 `d/city/npc/sanhua-counter.lpc` 自己的 `last_time` 是存盘的键，不动它）；`d/city/npc/yg/yaoguai.lpc` 没人读的 `yaoguai_type` 删去；`d/dntg/lijing/lijing.lpc` 的 `die`/`unconcious`、`d/moon/npc/yutu.lpc` 的 `kill_ob` 改 `void`。
