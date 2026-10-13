@@ -535,3 +535,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 启动时警告 41 -> 0；新进程登录正常（英文名限 3 到 7 个字母）。
 
 - 2026-10-10：4 个 NPC 同时继承 `NPC` 和 `F_UNIQUE`、自己没有 `init()`，驱动只取其中一份（`init() inherited from both /feature/unique.lpc and /feature/attack.lpc`）：要么 `attack.lpc` 的主动攻击/仇杀检查从不执行，要么 `F_UNIQUE` 的持有者检查从不执行。每个补一个两份都调的 `init()`（`scripts/lpc_fix_unique_init.py`）；HEAD 与工作树载入结果相同，这条警告清零。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/toolkit_fix.sh` 一轮：18 处 `int init()` 改 `void init()`，11 处 `if (arg != "a" & arg != "b")` 的按位 `&` 改 `&&`（两边都是 0/1，结果不变），补两条原型，去掉 1 处多余继承；手工：比武台 `d/biwu/biwutai.lpc`、`d/biwuold/biwu/biwutai.lpc` 的 `no_die()` 改 `void`（`feature/damage.lpc` 不读返回值），书库 `d/city/library.lpc` 的 `STORY_DIR` 先 `#undef`，`kungfu/skill/huashan-jian.lpc` 多余的 `;` 删去。能编译的文件警告清零；改动的 40 个对象在 HEAD 与工作树各载入一次：HEAD PASS 39，tree PASS 39，regress 0。
