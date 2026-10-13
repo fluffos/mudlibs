@@ -290,3 +290,11 @@ functionally re-tested live on this lib.
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 2 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 1 个，只在 #if 分支用的声明移进分支 0 个文件；改动 2 个文件，HEAD 与工作树各载入一次无回退（2 objects; HEAD PASS 0, tree PASS 0; regress 0; newly loading 0），这些文件的警告 2 -> 0。
 
 - 2026-10-10（续）：第二轮编译警告整理（`lpc_fix_unused_init.py`）删掉了只在不启用的 `#if` 分支里用到的局部变量声明（如 `include/net/ftpdsupp.h` 中 `#ifdef GUEST_WIZARD_FTP` 分支的 `file`），启用该选项时会编译失败；声明已放回所用的分支里，工具已改为跳过这种情况（交给 `lpc_move_decl.py`）。
+
+## 编译警告收尾（2026-10-12）
+
+能编译的文件警告清零（74 条）。继承 `SKILL` 的全部 163 个对象加上改动文件 HEAD 与工作树各载入一次：HEAD PASS 162，tree PASS 162，regress 0。
+
+- `std/skill.lpc` 开头的 `mapping action = ([ "action": "", "force": 0, ... ])` 是一份招式栏位说明，基类自己的代码从来不读它（`perform_action()` 用的是同名局部变量），而 71 个武功都声明自己的 `mapping *action` 招式表，于是每个都报 `Redeclaration of global variable 'action'`。把这段改成注释；真正拿它当缓冲用的只有 `daemon/skill/baigu-claw.lpc` 和 `example.lpc`（`query_action()` 里填 `action["action"]` 等再返回），这两个文件各自声明一份同样初值的 `mapping action`，行为不变。
+- `d/beijing2/zhang/npc/dog.lpc`：`chat_msg` 里写成 `(: "random_move" :)`（返回字符串常量的函数指针），狗从不走动；改成 `(: random_move :)`。
+- `d/center/npc/biantai-kuangmo.lpc`、`d/quanzhou/npc/biantai-kuangmo.lpc`：自己记目标的 `object killer` 与 `feature/attack.lpc` 的仇人名单 `string *killer` 同名，改名 `target_ob`；`killa.lpc` 两份函数体后多余的 `};`。
