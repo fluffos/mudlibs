@@ -757,3 +757,22 @@ HEAD 与工作树分别加载（新进程）：910 -> 910 通过，无回退；�
 ## 深度功能测试（§10.7，2026-10-12）：vikee.canoe.lpc
 
 - `d/city/npc/vikee.canoe.lpc`（及 `npc/npc/` 副本）：`cast "mace" :` 是 `case` 的笔误，整份文件从不编译；改正后可载入（这是 `vikee.lpc` 的旧副本，无人引用）。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+可编译文件中的编译警告 95 → 0（剩下 2 条在 `u/vikee/10.10/score.lpc` 及其 `d/penglai/_._/` 副本里，这两个文件后半截每行末字符丢失，本身编译不过，不在范围内）。不加 pragma，逐条在源头修；与 shenmo 同日第二轮的同名文件用 `lpc_twin_port.py` 搬过来（7 个文件逐 token 相同），其余手改。
+
+**发现的真 bug：**
+- `d/obj/cloth/jiasha.lpc` 锦镧袈裟同时继承 `CLOTH` 与 `F_UNIQUE`，两边都有 `init()`，驱动只用 unique 的那份，袈裟不能 `tear`；补一个两份都调的 `init()`（shenmo 同法）。
+
+**其余：**
+- 8 处冗余 `inherit F_CLEAN_UP;`（`NPC`/`sserver`/`blade` 基类已带）删去。
+- `d/kaifeng/ground.h` 与 `u/yesi/leitai1-4/ground.h` 的三张表被 `ground0.lpc` 与继承它的 `ground1/2/3.lpc`、`ground.lpc` 各 include 一遍（60 条重复声明）：沿用 xiyouji 的 `GROUND_TABLES_INHERITED` 做法；五份 `npc/colors.h` 经 `quest.lpc` 被 `quest_*` 各带进一次：加 include 保护。
+- `feature/alias.lpc` 统计命令频率的 `nosave int last_time` 与存档 NPC `d/city/npc/sanhua-counter.lpc` 自己要存盘的 `last_time` 同名：改基类这份为 `last_cmd_time`，存档键不变。
+- `d/city/npc/yg/yaoguai.lpc` 重复声明基类 `d/dntg/yunlou/npc/yaoguai.lpc` 的 `yaoguai_type` 却从不读写：删去叶子这份（11 条警告）。
+- `jjhome/npc/manmade_npc.lpc` 自己的 `heart_beat()` 用的 `tick` 与 `std/char.lpc` 的 `nosave tick` 本来就是两个变量：叶子改名 `hb_tick`（仍 `nosave`），行为不变。
+- `d/dntg/lijing/lijing.lpc` 的 `int die()`/`int unconcious()`（不死不晕）在 `void` 基类上：改 `void`，没有调用者读返回值。
+- `d/obj/newitem/newarmor/cloth.lpc` 注释写明要让 `NEWITEM` 的 `init()` 盖过 `CLOTH` 的：照驱动原来的选择写出 `init() { newitem::init(); }`。
+- 五份 `npc/reporting.lpc` 的未用局部 `str` 注释掉。
+
+改动的文件、引用改动头文件的文件与 include `quest_*` 的 NPC 共 153 个对象，HEAD 与工作树各载入一次：HEAD PASS 82，tree PASS 82，regress 0；FAIL 两边相同，都是 include 片段（`quest*.lpc`）或 `npc/old/` 旧稿。`lpc_audit_removed_locals.py` 0 处待看。
