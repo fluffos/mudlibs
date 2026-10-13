@@ -555,3 +555,7 @@ individually live-boot-tested.
 ## 深度功能测试（§10.7，2026-10-12）：vikee.canoe.lpc
 
 - `d/city/npc/vikee.canoe.lpc`（及 `npc/npc/` 副本）：`cast "mace" :` 是 `case` 的笔误，整份文件从不编译；改正后可载入（这是 `vikee.lpc` 的旧副本，无人引用）。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/toolkit_fix.sh` 一轮去掉 7 处多余继承；搬来 xianlvqiyuan（8c3c85ca28e）的改法（逐 token 相同的照搬，其余手工）：袈裟 `jiasha.lpc` 补 `cloth::init()` 让撕袈裟的 `tear` 生效，`d/kaifeng/ground.h` 表格守卫，`d/city/npc/yg/yaoguai.lpc`、`yaoguai1.lpc` 没人读的 `yaoguai_type` 删去，李靖、西王母 `d/niulang/xiwangmu.lpc` 的 `die`/`unconcious` 与玉兔的 `kill_ob` 改 `void`，`alias.lpc` 的 `last_cmd_time`、`colors.h` 防重。另：`cmds/arch/make_npc.lpc` 生成的文件里写 `\#include`、`\}`，驱动对不认识的转义只留后一个字符，去掉反斜杠，生成内容不变；`d/obj/drug1/punish.lpc`、`punish1.lpc` 写明用驱动原先选的 `clean_up()`。能编译的文件警告清零；改动的 24 个对象在 HEAD 与工作树各载入一次，regress 0。
