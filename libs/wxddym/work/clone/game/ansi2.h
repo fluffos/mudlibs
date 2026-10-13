@@ -6,6 +6,7 @@
  
 #define ESC	""
 #define CSI	ESC + "["
+#undef BEEP
 #define BEEP    ""
  
                 /*  Foreground Colors  */
@@ -74,5 +75,6 @@
 #define BLINK ESC+"[5m"         /* Initialize blink mode */
 #define U ESC+"[4m"             /* Initialize underscore mode */
 #define REV ESC+"[7m"           /* Turns reverse video mode on */
+#undef HIREV
 #define HIREV ESC+"[1,7m"       /* Hi intensity reverse video  */
  

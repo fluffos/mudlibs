@@ -604,3 +604,15 @@ No new errors after the shop commands. Demo `fluffos` save churn
 - 47 个对象载入无回退。
 
 - 2026-10-12：`adm/npc/obj/xiang.lpc`�`u/jerry/obj/xiang.lpc` 写着 `int remove() { save(); }`，盖掉了 `feature/move.lpc` 的 `remove(string euid)`——这些存盘箱子/柜子被销毁时不从携带者身上减负重、不清 handing（KB 06 §7.239 变体，nitan_ceshi/tianxiawuxue 同类）。改成 `varargs void remove(string euid) { save(); ::remove(euid); }`。HEAD 与工作树各载入一次，regress 0（载不进的文件在 HEAD 就载不进）。
+
+## 编译警告收尾（2026-10-12）
+
+`scripts/toolkit_fix.sh` 一轮后，用 `scripts/lpc_twin_port.py adopt nitan170911 wxddym --pre e7b0eac1a63~1` 搬来 nitan170911 同日整理里与本库逐 token 相同的 15 个文件（幻境 `fairyland_quest/npc_obj/*` 的重复声明、`template/gem|weapon/*` 的模板表、`clone/obj/genmap.lpc`、`tianshen.lpc`），其余按同样的改法手工补，能编译的文件警告清零。改动的 81 个对象 HEAD 与工作树各载入一次：HEAD PASS 81，tree PASS 81，regress 0。
+
+- `clone/misc/swmuding.lpc`（神木王鼎）：自己声明了一张 `insects` 表，与继承的 `clone/misc/muding.lpc` 的 `insects` 同名，而读表的是木鼎的代码，神木王鼎自己的虫表从来没用上。改名 `sw_insects`，`create()` 里 `insects = sw_insects;`（nitan170911 同修）。
+- `clone/xiang.lpc`、`clone/newbox/xiang.lpc`、`clone/vip/xiang.lpc`：`varargs int remove() { saveone(); }` 盖掉了 `feature/move.lpc` 的 `remove(string euid)`，箱子销毁时不减负重、不清 handing；改成 `saveone(); ::remove(euid);`（KB 06 §7.239 变体）。
+- `feature/food.lpc`、`feature/liquid.lpc`：`eat`/`drink` 对 `only_do_effect` 的物品 `return ob->do_effect(me)` 当命令结果，基类却是 `void do_effect()`；改 `varargs int do_effect(object me) { ...; return 1; }`，与重载它的 `water.lpc`、`wan.lpc`、`pigpart.h` 同型。
+- `d/maze/*/maze.lpc`（9 个）与 `maze/forestnew/maze.lpc`：叶子的 `unique_rooms` 与 `VRM_SERVER` 的同名变量重复，叶子只把它传给 `set_unique_room()`，改名 `maze_unique_rooms`。
+- `quest/shenshu/npc/man2.lpc` 前后两份 `order`/`data` 表，后面那份才被读到（`data` 前一份是短的旧稿），删去前一份；`man*.lpc` 的 `kill_ob` 在 `void` 基类上写成 `int`，改 `void`。
+- `adm/daemons/fairyland_quest/room_readygo_hj.lpc` 每个名字声明两次的写法合成一次；`u/lonely/obj/roommaker.lpc`、`roommk.lpc` 的重复 `special_props` 删前一个；`d/jerry/job/peng/peng.lpc` 的 `ask_fail` 原型改 `int`（定义在 `dojob.lpc`，返回 1/0）；`u/lonely/obj/user/master.lpc` 两个 `static` 函数改 `protected`。
+- 宏重定义 25 处（`BOOK`、`FUBEN_D`、`HISTORY_D`、`ansi2.h` 的 `BEEP`/`HIREV`/`ESC`/`DELLINE` 等）：有意的本地定义前加 `#undef`。

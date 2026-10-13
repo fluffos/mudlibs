@@ -4,8 +4,10 @@
 //
 //  The standard set of ANSI codes for mudlib use.
  
+#undef ESC
 #define ESC     "^["
 #define CSI     ESC + "["
+#undef BEEP
 #define BEEP    ""
 
  
@@ -72,7 +74,9 @@
 #define BLINK ESC+"[5m"         /* Initialize blink mode */
 #define U ESC+"[4m"             /* Initialize underscore mode */
 #define REV ESC+"[7m"           /* Turns reverse video mode on */
+#undef HIREV
 #define HIREV ESC+"[1,7m"       /* Hi intensity reverse video  */
 #define SETDISPLAY(x,y)  (ESC+"["+x+";"+y+"f")
+#undef DELLINE
 #define DELLINE ESC+"[K"
  
