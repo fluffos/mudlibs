@@ -184,3 +184,7 @@ without headers, drafts).
 ## 深度功能测试（§10.7，2026-10-11）：dns_master 空 if
 
 - `adm/daemons/network/dns_master.lpc` `query_services()`：`if (! (mud_svc[mud]["finger"/"tell"] & SVC_KNOWN))` 块里只有 `#if PREF_X & SVC_TCP … #endif`，选项关闭时 if 为空（“无副作用”警告报在下一句）；把 `#if`/`#endif` 挪到 if 外面（KB 04，2026-10-07 那次扫描漏了 `! (` 加括号换行这种写法）。载入无回退。
+
+## 编译警告收尾（2026-10-12）
+
+孪生库 fengyun434 同日的整理（238c181110e：`kill_ob`/`die`/`check_status` 在 `void` 基类上写成 `int` 的改为 `void`，`snake-spear.lpc` 的 `action` 改名 `spear_action`，`qiankun.lpc` 的 `enemy` 改名 `foes`，`newsman.lpc` 补 `ask_question()` 原型）用 `scripts/lpc_twin_port.py adopt fengyun434 xsfyssjb --pre 238c181110e~1` 搬来：14 个文件与 fengyun434 修前逐 token 相同，清单里的警告全部落在这些文件里。HEAD 与工作树各载入一次：14 个对象，HEAD PASS 14，tree PASS 14，regress 0。
