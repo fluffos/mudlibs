@@ -202,7 +202,7 @@ HEAD 与工作树分别加载（新进程）：1336 -> 1336 通过，无回退�
 
 **真问题：**
 - `d/obj/cloth/jiasha.lpc` 锦镧袈裟：`inherit CLOTH; inherit F_UNIQUE;` 两个 `init()` 只用了 unique 的，cloth 的 `tear` 动作丢了；叶子里两个都调用。
-- `d/quest/task/cron.lpc`（waiwai 那套任务系统的副本）第一行 `#define TASK_D __DIR__"questd"`，随后又 `#include <globals.h>`，全局头把 `TASK_D` 改回 `/adm/daemons/questd`，所以这个副本的 cron 一直在驱动主任务守护进程，而不是同目录自己的 `questd.lpc`（同目录的 `questd.lpc`、`tu.lpc` 都指向本目录）。把定义挪到 include 之后并先 `#undef`。这套副本目前没有别处引用，游戏里看不到影响。
+- `d/quest/task/cron.lpc`（waiwai 那套任务系统的副本）第一行 `#define TASK_D __DIR__"questd"`，随后又 `#include <globals.h>`，全局头把 `TASK_D` 改回 `/adm/daemons/questd`，所以这个副本的 cron 一直驱动的是主任务守护进程，而不是同目录的 `questd.lpc`。同目录的 `questd.lpc` 自己载不进来（缺 `obj/dynamic_location`，HEAD 就如此），所以保留实际行为：删掉那行从未生效的定义，加注释说明 `TASK_D` 来自 globals.h。这套副本没有别处引用。
 
 **其余：**
 - `feature/alias.lpc` 私有的 `nosave int last_time` 改名 `last_cmd_time`：三花计数器 `d/city/npc/sanhua-counter.lpc` 自己的 `int last_time` 是后声明的，驱动（`compiler.cc` `define_variable()`）只在前一个可存档时才强制后一个 nosave，alias 那份本来就是 nosave，所以计数器一直正常存档；只改 alias 这边，存档键不变。
