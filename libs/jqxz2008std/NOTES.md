@@ -1026,3 +1026,7 @@ sweep, and both came back clean/already-fixed.
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 9 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 1 个，只在 #if 分支用的声明移进分支 0 个文件；改动 9 个文件，HEAD 与工作树各载入一次无回退（9 objects; HEAD PASS 9, tree PASS 9; regress 0; newly loading 0），这些文件的警告 9 -> 0。
 
 - 2026-10-10（续）：第二轮编译警告整理（`lpc_fix_unused_init.py`）删掉了只在不启用的 `#if` 分支里用到的局部变量声明（如 `include/net/ftpdsupp.h` 中 `#ifdef GUEST_WIZARD_FTP` 分支的 `file`），启用该选项时会编译失败；声明已放回所用的分支里，工具已改为跳过这种情况（交给 `lpc_move_decl.py`）。
+
+## 编译警告收尾（2026-10-12）
+
+孪生库 jqxz2008 同日的整理（5c9cd3ac3bf：冗余继承 18 处，`include/net/ftpdconf.h` 的 `VALID_READ`/`VALID_WRITE` 前 `#undef`）用 `scripts/lpc_twin_port.py adopt jqxz2008 jqxz2008std --pre 5c9cd3ac3bf~1` 搬来，19 个文件与 jqxz2008 修前逐 token 相同，清单里的警告全部落在这些文件里。HEAD 与工作树各载入一次：19 个对象，HEAD PASS 18，tree PASS 18，regress 0。
