@@ -1,3 +1,7 @@
+// sandbox copy: visible '*' markers instead of the client's \x19/\x1A, on top of /include/tomud.h
+#undef TMI
+#undef TMA
+#undef TMB
 #define TMI(x) ("*"+x+"*")
 #define TMA "*"
 #define TMB "*"
