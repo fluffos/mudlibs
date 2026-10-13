@@ -11,6 +11,7 @@
                     tell_object( find_player( TP_CRE ), STR )
 #define DEBUG_SEND   /* define to debug data_write_callback() */
 #else
+#undef TP
 #define TP(STR)
 #define DEBUG_SEND
 #endif /* DEBUG */

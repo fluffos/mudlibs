@@ -21,6 +21,7 @@
 #define FTP_D			"/adm/daemons/network/ftpd"
 
 // for Truils' http
+#undef OB_RESOLVER
 #define OB_RESOLVER		"/adm/daemons/network/resolver"
 #define I3_DAEMON				"/adm/daemons/network/I3"
 

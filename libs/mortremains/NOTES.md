@@ -866,3 +866,13 @@ Formatter not run (minimal edits).
 - `d/Ocean/Main/mon/turtle.lpc`、`turt.lpc`：唯一一句闲聊写在 `set("chat_output", ({` 之前，数组是空的；挪进数组。
 - `d/Prime/Park/room/path9.lpc`：`set("listen"); "You hear birds…",` 把描述丢了；改为 `set("listen", "…")`。
 - `cmds/wiz/_resist.lpc` 是作者没写完的命令，按原样保留。7 个对象载入无回退。
+
+## Compile warnings (2026-10-13)
+
+`scripts/toolkit_fix.sh` round plus hand fixes; no warnings left in compiling files. The 20 changed objects load the same at HEAD and in the tree (HEAD PASS 16, tree PASS 16, regress 0).
+
+- `std/monster.lpc` prototyped `create_ghost()` as `int`; the definition it inherits from `std/body.lpc` returns the ghost `object`. Prototype fixed.
+- `std/board/bboard.lpc` overrode the object's `int clean_up(int inherited)` with `void clean_up()`; it is now `int clean_up(int inherited) { return 0; }`, which keeps the board's choice (0: never clean up).
+- `adm/daemons/flock.lpc` defined `PRIVATE` as `nosave` and used it on two functions; it is now `protected`.
+- `reset()` as `void` in `adm/AFD/Dark/Prime/rooms/field1.lpc` and `d/Planar/Baator/phlegethos/out01.lpc` (the latter by the toolkit, its `return 1;` became `return;`); an empty `if (!str) { }` stub removed from `cmds/wiz/_resist.lpc`; `u/d/darkg/private/pornomag.lpc` names the `clean_up()` the driver already used; the shops' `tmp` local moved where it is read.
+- 19 headers and files redefine a global macro with a local meaning (the AFD domains' `ARMOR(x)` and `GUILD`, `NO_NEW_CHANNELS`, `TP`, `POSS`, `FIND`, `STD_HELP`, `__tmi__`, `OB_RESOLVER`): each now has `#undef` first. The local value was already the one in effect.

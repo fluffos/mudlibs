@@ -3,6 +3,7 @@
 #define MON(x) BASE_TOWN + "mon/" + "x"
 #define OBJ(x) BASE_TOWN + "obj/" + "x"
 #define WEAPONS(x) BASE_TOWN + "weapons/" + "x"
+#undef ARMOR
 #define ARMOR(x)  BASE_TOWN + "armor/" + "x"
 
 void fill_room(int p);
