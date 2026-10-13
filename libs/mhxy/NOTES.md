@@ -1039,3 +1039,20 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply m
 ## 深度功能测试（§10.7，2026-10-11）：dns_master 空 if
 
 - `adm/daemons/network/dns_master.lpc` `query_services()`：`if (! (mud_svc[mud]["finger"/"tell"] & SVC_KNOWN))` 块里只有 `#if PREF_X & SVC_TCP … #endif`，选项关闭时 if 为空（“无副作用”警告报在下一句）；把 `#if`/`#endif` 挪到 if 外面（KB 04，2026-10-07 那次扫描漏了 `! (` 加括号换行这种写法）。载入无回退。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+`scripts/toolkit_fix.sh` 加手工修复，能编译的文件里的警告 67 -> 0（`lpc_warnings.py mhxy` 重扫：11861 -> 11863 个文件可编译；剩下 2 条警告都在本来就编译不过的文件里）。同内容的 rzrmud（提交 0089d52b3fd）有 9 个文件是 token 级孪生（`lpc_twin_port.py classify`），用 `adopt` 搬过来：`d/kaifeng/ground*.lpc` 的 `GROUND_TABLES_INHERITED`、`npc/colors.h` 的 guard、`reporting.lpc` 未用的 `str`、`lijing.lpc` 的 `void die()/unconcious()`、`jiasha.lpc` 的 `init()`；`ground.h` 本库有自己的表，手工包上 `#ifndef GROUND_TABLES_INHERITED`。`u/redrain/menpai/d/kaifeng/` 是同一份拷贝，照抄。
+
+**真问题：**
+- `d/qujing/sanda/npc/pusa.lpc`（三打白骨精的菩萨）和 `d/qujing/xihai/npc/aoshun.lpc`（西海敖顺）：本站给关卡加了前置条件，却把括号写错成 `if (who->query("obstacle/sanda") == "done") || who->query("obstacle/heishui") != "done"` 再另起一行 `)`，整个文件编译不过，这两关的 NPC 从来载不进来、关卡没法完成。改成 `if (A == "done" || B != "done")`，两个文件现在能载入。
+- `d/obj/cloth/jiasha.lpc` 锦镧袈裟：`inherit CLOTH; inherit F_UNIQUE;` 两个基类都有 `init()`，驱动只用了 unique 的 `check_owner()`，cloth 的 `tear` 动作丢了；叶子里写 `init() { cloth::init(); unique::init(); }`。
+
+**其余：**
+- `d/city/npc/sanhua-counter.lpc` 自己的 `int last_time` 与 `feature/alias.lpc` 的 `nosave int last_time` 同名。查过驱动 `compiler.cc` 的 `define_variable()`：只有前一个声明可存档时才把后一个强制成 nosave；alias 那份本来就是 nosave，所以三花计数器这份一直正常存档。按 KB 04 的做法改名 alias 这边的私有变量为 `last_cmd_time`（只有本文件读它），叶子和已有存档都不动。
+- `d/city/npc/yg/yaoguai.lpc`：自己的 `int yaoguai_type = 0;` 从来不读（只有基类 `d/dntg/yunlou/npc/yaoguai.lpc` 用它，基类也初始化为 0），删掉；13 个 `yg-*` 的重复声明警告随之消失。
+- `d/lingtai/npc/jiefei.lpc` `unconcious()`、`d/qujing/niulang/xiwangmu.lpc` `die()/unconcious()` 改 `void`（基类是 void 的钩子，没人读返回值）；`d/moon/npc/yutu.lpc`、`d/wusheng/npc/jinren.lpc` 的 `kill_ob()` 改 `void`，仍调用 `::kill_ob()`；`d/newjob/longzhu/npc/long.lpc` 删掉没有函数体的 `int long();` 原型（继承来的是 `string long()`）。
+- `www/relative/dns_master.lpc`：`#if PREF_X & SVC_TCP` 挪到空 if 外面（`lpc_fix_no_effect.py`）。
+- `toolkit_fix.sh`：14 个多余的 `inherit F_CLEAN_UP`（NPC/武器/护甲已经带了），`u/*/clone/YI.lpc` 的 `query_autoload()` 改 `mixed`。
+
+验证：改动文件、开封擂台和任务两处目录下全部对象、`d/city/npc` 及 `yg/`、`/obj/user`、`/std/char` 共 519 个对象，HEAD 与工作树各用新进程载入：477 -> 479 通过（新增载入 pusa、aoshun），regress 0；删除声明审计 0 项待看。519 个对象载入无回退。
