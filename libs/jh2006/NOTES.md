@@ -462,3 +462,10 @@ re-invoke `enable_player()` on this lib while the object is still
 ## 深度功能测试（§10.7，2026-10-11）：全库严格 UTF-8 检查
 
 - `u/cht/workroom.lpc` 是含 NUL 的二进制文件（原档损坏），保留原样。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/toolkit_fix.sh` 一轮去掉 1 处多余继承，其余手工清零；改动的 5 个对象在 HEAD 与工作树各载入一次，regress 0。
+
+- 天书任务 `quest/shenshu/npc/man.lpc`、毒虫 `d/xingxiu/obj/duchong.lpc` 的 `kill_ob()` 改 `void`，与 `feature/attack.lpc` 一致（`return ::kill_ob(victim);` 改成先调用再结束）。
+- `cmds/usr/news.lpc` 里只有被注释掉的数据库代码用的 `mysql`、`rows` 删去；`d/city/mine_room.lpc` 自己的 `CLR`（清屏）覆盖 `ansi.h` 的空定义，先 `#undef` 再定义，行为不变。
