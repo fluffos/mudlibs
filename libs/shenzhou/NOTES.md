@@ -1276,3 +1276,12 @@ The 53 files are 52 `.C` -> `.lpc` (the tea items of `d/city/npc/tea`, the Lingj
 - `kungfu/skill/force/healx.lpc`（及 `u/karlopex` 下三份）：`if (!target) target == me;` 应为 `=`，不带目标时疗伤对象是 0。
 - `family_job/menpai_job.h`、`menpai_killer.h`、`5.6bak/control.lpc`（及 `u/` 下副本）：`for(m=0; m!=1; m)` 第三项无作用，改为空（循环体内赋 m，行为不变）。
 - 改动及包含它们的对象载入无回退。
+
+## 编译警告收尾（2026-10-12）
+
+`scripts/toolkit_fix.sh` 一轮（冗余继承 5 处）加手工收尾，能编译的文件警告清零。改动的对象加用到告示板的若干房间 HEAD 与工作树各载入一次：70 个，HEAD PASS 69，tree PASS 69，regress 0。
+
+- 奈何（naihe）系列 24 个文件的 `string a, b, ..., a = "x", b = "y";` 写法让每个名字声明两次，用新写的 `scripts/lpc_fix_double_decl.py` 删去前面那个不带初值的（初始化顺序不变）。`u/naihe/obj/hs_haigu.lpc` 自己的重量计数 `weight` 与 `feature/move.lpc` 的 `weight` 同名，改名 `haigu_weight`（仍通过 `set_weight()` 交给基类）。
+- `u/snowlf/xuelian.lpc`、`u/snowyu/xuelian.lpc`（雪莲）：摘花的命令函数叫 `int remove(string arg)`，正好盖掉 `feature/move.lpc` 的 `remove(string euid)`，雪莲被销毁时走的是命令函数，不减负重、不清 handing；命令函数改名 `do_remove`（`add_action("do_remove", "remove")`，玩家敲的命令不变）。
+- `inherit/bboard.lpc`、`inherit/misc/bboard.lpc`、`sboard.lpc` 及 `u/karlopex` 的三份：告示板的文字上色函数 `set_color(msg, x)` 与 `feature/name.lpc` 的 `set_color(color)` 同名，只在告示板内部调用，改名 `color_text`。
+- `kungfu/class/emei/zhou.lpc` 的 `ask_whip2` 原型改 `int`（定义在 `zhou.h`）；`clone/misc/roommaker.lpc`、`u/karlopex/obj/roommaker.lpc` 的重复 `special_props` 删前一个；`d/qilian/obj/jinhe.lpc` 的 `?:` 类型；`d/beijing/npc/duolong.lpc` 没用的 `shichen` 查询；四个 `dns_master.lpc` 的 `#if PREF_TELL & SVC_TCP` 移到 `if` 外面（选项关闭时不再留空块）；多余的 `;`、`d/wuguan/zhengting.lpc` 注释里的 `//*/`。

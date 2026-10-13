@@ -143,6 +143,7 @@ Classes the toolkit leaves to you on purpose:
 | `lpc_move_decl.py` | Moves a declaration that only an inactive `#if` branch uses into that branch |
 | `lpc_diamonds.py [--fix-redundant]` | Finds inherits another inherit already contains (text in comments, here-documents and multi-line strings is skipped: generator templates carry `inherit` lines) |
 | `lpc_name_winner.py` | Writes down the function the driver already picks for an `inherited from both` overlap |
+| `lpc_fix_double_decl.py` | Drops the bare copy when one declaration statement names a variable twice (`string a, b, a = "x";`), the `Redeclaration of global variable` it causes |
 | `lpc_twin_port.py` | Ports fixes made in one lib to a sibling whose files carry the same code |
 | `lpc_listcheck.sh SLUG LIST` + `lpc_load_diff.py SLUG` | Loads a list of objects at HEAD and in the working tree, then reports regressions |
 | `lpc_audit_removed_locals.py BASE` | Finds deleted declarations whose function still reads the name |

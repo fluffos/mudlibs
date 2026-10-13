@@ -267,6 +267,8 @@ and it has no row for what a dropped class's `create()` called (`SetNoSink(1)`, 
 kind 5): run the same scripted session on the pre-change and the changed tree
 (`REV=<pre-change sha>`) and compare the transcripts, including getters you pick for the case.
 
+**A scan can miss a file that does not compile (shadowgate, 2026-10-12).** When the master's `log_error()` writes compile errors only to `log/debug.log`, some errors ("Undefined function ...") never reach lpcc's stdout: `lpc_warnings.py` then lists the file as compiling and warning-free. Only the HEAD-vs-tree load check (`lpc_listcheck.sh` + `lpc_load_diff.py`) shows it (`d/magic/obj/rebirther.lpc` after an include was removed). Run the load check on every changed file even when the rescan is clean.
+
 ### 10.13 Porting a fix to a sibling whose files carry the same code
 **Symptom:** a lib you are about to fix looks like one you already fixed (same `lib/`, same domain files), but
 `patch` and the fuzzy applier (`scripts/lpc_fuzzy_patch.py`) lose hunks on it and leave files that no longer compile
