@@ -1081,3 +1081,10 @@ seeded admin account.
 ## 深度功能测试（§10.7，2026-10-08）— `.lpc` 后缀的定宽切片
 
 `.c` 改名 `.lpc` 时只改了字符串没改切片宽度：`f[<2..] == ".lpc"` 拿两个字符比四个字符，永远不成立（`!=` 永远成立），按后缀筛文件、去后缀的代码因此从不运行或截成 `x.l`（KB 06 §7.238）。`scripts/lpc_lpc_suffix_slice.py --apply` 改了 2 处比较、0 处去后缀（如 `secure/daemon/httpd.lpc`）；改动的文件 HEAD 与工作树分别加载（新进程），无回退。
+
+## 编译警告收尾（2026-10-13）
+
+手工清零（改动及相关对象在 HEAD 与工作树各载入一次，regress 0）。
+
+- `clone/user/templet.lpc`（把旧存档的字符串 `autoload` 转成 `class Item` 的转换器）继承 `F_DBASE` 后又自己声明一个 `dbase`，于是有两个同名存盘变量：`restore_object()` 填前一个、清空后一个，转换后再存盘就写出两条 `dbase`，玩家下次载入时可能读到空的那条（KB 06 §7.233）。删去自己的那个，存档只剩一份 `dbase`。
+- `system/std/char/npc.lpc` 的默认拒绝语是 `private nosave` 的 `refuse_msg`，与任务 NPC 基类 `system/std/char/questnpc.lpc`、`d/menpai/kunlun/npc/kunlun_quest.h` 各自的 `refuse_msg` 同名；私有的那份改名 `npc_refuse_msg`，各自读的仍是自己那份。
