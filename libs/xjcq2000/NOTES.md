@@ -773,3 +773,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 ## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查
 
 - `kungfu/skill/liangyi-jian.bak.lpc`：`int i; level;` 去掉无用的 `level;`。载入无回退。
+
+- 2026-10-12：`d/shenlong/npc/pang.lpc` 连写了两行 `inherit F_UNIQUE;`（同一 mixin 继承两次，变量重复声明），删去一行；HEAD 与工作树都能载入。
