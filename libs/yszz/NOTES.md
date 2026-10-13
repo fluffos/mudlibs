@@ -201,3 +201,11 @@ After reboot, `buy jitui` purchased 炸鸡腿 and changed 1 黄金 into 99
 - **安全**：`obj/login.lpc`（及 `edit/obj/login.lpc`）`set()`：`if (prop == "freeze_time"); return ::set(prop, data);` 多了分号，return 无条件执行，下面的 `geteuid(previous_object()) != ROOT_UID` 检查永远到不了——任何对象都能改玩家连接对象的任意属性（密码、权限等）。去掉分号。全库只有本库两份是这个写法。
 - `u/fly/npc/greeting.h` 转码时漏了，仍是 GBK：字符串里的 GBK 尾字节打乱了词法，警告报在 `xuerengui.lpc` 第 66 行。按 GB18030 转成 UTF-8（全库 .lpc/.h 严格 UTF-8 检查另行进行）。
 - 改动的对象载入无回退，`xuerengui` 新增可载入。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/toolkit_fix.sh` 一轮去掉 13 处多余继承，其余照同族改法手工，能编译的文件警告清零；改动的 36 个对象在 HEAD 与工作树各载入一次：HEAD PASS 34，tree PASS 34，regress 0。
+
+- 袈裟 `d/obj/cloth/jiasha.lpc` 与宝甲 `obj/baojia.lpc` 都是 `CLOTH` + `F_UNIQUE`，各只跑一边的 `init()`（袈裟的撕袈裟 `tear` 从没加上，宝甲的唯一物品检查从不运行）；两者都补 `init() { cloth::init(); unique::init(); }`。
+- `d/kaifeng/ground.h` 表格守卫（同 xyj2000）；`include/net/ftpdconf.h` 的 `VALID_READ`、`VALID_WRITE` 与 `feature/quest.lpc` 的 `QUEST_D` 先 `#undef`；巫师 fly 的 `u/fly/job/npc/skill.h` 的武功表 `skills` 与 `F_SKILL` 同名，改名 `job_skills`（`killer.lpc` 一处），`u/fly/other/xyj2000_job/npc/yg/yaoguai.lpc` 没人读的 `yaoguai_type` 删去。
+- 玉兔两份（`d/moon/npc/yutu.lpc`、`edit/d/moon/npc/yutu.lpc`）的 `kill_ob()`、劫匪两份 `jiefei.lpc` 的 `unconcious()` 改 `void`；`d/death/god1.lpc`、`d/obj/weapon/sword/di.lpc`、`d/qujing/jilei/obj/fzy.lpc`、`daemon/skill/test-whip.lpc` 写明用驱动原先选的 `clean_up()`；四处多余的 `;` 删去。

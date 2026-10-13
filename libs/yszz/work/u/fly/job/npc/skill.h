@@ -9,7 +9,7 @@ string *k_dodge =({
 			"xiaoyaoyou",
 });
 
-mapping *skills=({
+mapping *job_skills=({
 /*unarmed*/
 	(["t_skill" :              "moyun-shou",
          "b_skill" :              "unarmed",]), 

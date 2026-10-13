@@ -92,6 +92,7 @@
  * and are manually generated, so don't change them)
  */
 /*#define VALID_READ       0              // rely on valid_read()*/
+#undef VALID_READ   // ftpd.h sets 0 (rely on valid_read/valid_write); this mud uses 1
 #define VALID_READ      1
 #define RESTRICTED_READ  1              // ditto, but limited to public dirs
 #define WRITE_LIMIT_READ 2              // access limited by write access
@@ -107,6 +108,7 @@
  * and are manually generated, so don't change them)
  */
 /* #define VALID_WRITE      0              // rely on valid_write() */
+#undef VALID_WRITE   // ftpd.h sets 0 (rely on valid_read/valid_write); this mud uses 1
 #define VALID_WRITE     1
 #define RESTRICTED_WRITE 1              // ditto, but limited to public dirs
 #define READ_ONLY        2              // no write access, at all
