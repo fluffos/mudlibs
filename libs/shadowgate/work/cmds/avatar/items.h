@@ -52,7 +52,7 @@
 #define TEMP_ROOM_EMOTE(x) "\n\t\t\t\ttell_room(EETO, \""+x+"\", ({ETO}));"
 #define TEMP_CASE_CLOSE "\n\t\t\t\tbreak;"
 #define TEMP_SWITCH_CLOSE "\n\t\t}"
-#define TEMP_HEADER_CLOSE "\n\t\}"
+#define TEMP_HEADER_CLOSE "\n\t}"
 #define TEMP_CLOSE "\n}"
 
 //funcs

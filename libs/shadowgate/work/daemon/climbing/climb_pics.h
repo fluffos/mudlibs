@@ -1,4 +1,5 @@
 #define JUG 1
+#undef LEDGE
 #define LEDGE 2
 #define CRIMP 3
 #define PINCH 4
@@ -6,6 +7,7 @@
 #define POCKET 6
 #define SLOPER 7
 #define HORN 8
+#undef ROPE
 #define ROPE 9
 
 #define HANDHOLDS ([\
@@ -121,6 +123,7 @@
 #define L_LEG_10 ({"     ","  _ ","./  ","    ","    "})
 #define L_LEG_11 ({"     ","  _ "," J  ","    ","    "})
 #define L_LEG_12 ({"     ","  , ","  | ","    ","    "})
+#undef L_LEG_13
 #define L_LEG_13 ({"     ","  _ ","  \\,","    ","    "})
 #define L_LEG_14 ({"     ","  .  ","   \\.","    ","     "})
 #define L_LEG_21 ({"     ","    ","  / "," /  ","     "})

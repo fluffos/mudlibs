@@ -5,6 +5,7 @@
 #define SOUTH 5
 #define SOUTHWEST 6
 #define WEST 7
+#undef SOUTHWEST
 #define SOUTHWEST 8
 #define WALL_NS "|"
 #define WALL_EW "-"

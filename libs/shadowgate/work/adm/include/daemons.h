@@ -27,6 +27,7 @@
 #define COMBAT_D             (DIR_DAEMONS+"/combat_d")
 #define CONFIG_D            (DIR_DAEMONS+"/config_d")
 #define CRAYON_D             (DIR_DAEMONS+"/crayon_d")
+#undef DEATH_EFFECTS_D
 #define DEATH_EFFECTS_D     (DIR_DAEMONS+"/death_effects_d")
 #define DESC_D              (DIR_DAEMONS+"/description_d")
 #define DESTINATIONS_D   (DIR_DAEMONS+"/destinations_d")
@@ -78,6 +79,7 @@
 #define REFS_D               DIR_SECURE_DAEMONS+"/refs_d"
 #define REMOTEPOST_D         (DIR_DAEMONS+"/remotepost")
 #define RUMOURS_D            (DIR_DAEMONS+"/rumours_d")
+#undef SAVE_D
 #define SAVE_D               (DIR_DAEMONS+"/save_d")
 #define SAVING_D            (DIR_DAEMONS+"/saving_d")
 #define SAVING_THROW_D      (DIR_DAEMONS+"/saving_throw_d")

@@ -12,7 +12,7 @@
 #define MYINITIAL2(x) "\tinitial2 = \""+x+"\";\n"
 #define MYBACK(x) "\tbackground = \""+x+"\";\n"
 #define LONG "\tset_long(\"This finely crafted signet ring is made of high quality %^BOLD%^white gold%^RESET%^.  It is a rather thick ring with a round, flat top that features \"+(string)TO->query_seal()+\"\");\n"
-#define LORE "\set_lore(\"This signet ring was made by Edric, the firbolg jeweler in the village of Lothwaite.  Its symbols bear meaning for one person and refer to him or her alone.\");\n"
+#define LORE "set_lore(\"This signet ring was made by Edric, the firbolg jeweler in the village of Lothwaite.  Its symbols bear meaning for one person and refer to him or her alone.\");\n"
 #define LOREDIFF "set_property(\"lore difficulty\",12);\n"
 #define WEIGHT "\tset_weight(1);\n"
 #define VALUE "\tset_value(750);\n"

@@ -4,6 +4,7 @@
 #define OBJS "/d/koenig/town/itmes/"
 #define MONS "/d/koenig/town/mon/"
 #define TP this_player()
+#undef ENV
 #define ENV environment(TP)
 #define TPC (string)this_player()->query_cap_name()
 #define TPP this_player()->query_possessive()

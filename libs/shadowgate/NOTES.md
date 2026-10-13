@@ -619,3 +619,28 @@ Changed files loaded at HEAD and in the tree in fresh processes: no regression.
 另外顺手修正 overseer `add_timed_monster()` 里从未赋值的 `ob`（无调用者）。未运行格式化器，以保持差异最小。HEAD 与工作树新进程分别载入改动的 66 个对象：63 -> 63 通过，无回退；未通过的 3 个（`_freeze`、`gnollhunter`、测试用 `battle`）在 HEAD 同样无法载入。改后这些文件的“无副作用”警告 74 -> 0。66 个对象载入无回退。
 
 - 2026-10-11 补记：`d/deku/weapons/winters_chill.lpc`（冬寒法杖）`query_charges()` 声明为 void 却 `return charges;`，`failure()` 为 void 却 `return 1;`；sunshadow 下整份不编译，`d/deku/monster/bheur.lpc` 一半几率 clone 它而载入失败。改为 `int query_charges()`、`return;`（调用方不取返回值）。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+能编译的文件中的警告从 34447 条（5517 个文件）降到约 200 条（2 个文件：`d/atoyatl/tecqumin/obj/table.lpc` 与 `d/laerad/dojo/obj/shield.lpc`，各达到驱动的 100 条上限，见文末“遗留”）。几乎全部来自少数几个根源，按根源修，而不是逐个叶子文件修：
+
+- **`adm/include/priest.h` 里写着 `inherit SPELL;`**，而 158 个牧师法术又自己 `inherit SPELL;`，于是每个法术里有两份 spell.lpc（每个法术约 26 条重复声明、4106 条 `inherited from both`）。`::create()` 走第一份，其余函数走第二份，两份变量各管各的。头文件不再继承，叶子保留自己的 `inherit SPELL;`；原来靠头文件继承的 18 个法术补上这一行。`_mass_cause_*_wounds`（继承 `_mass_harm`）和 `godsfavor`（继承 OBJECT）也包含 priest.h：此前 `::create()` 走的是头文件那份 spell 的 create，`_mass_harm` 和 OBJECT 的 create 从未执行；现在走对了。
+- **`std/living/body.lpc` 的 `ac`、`size` 与 Object 链里 `decay.lpc` 的 `ac`、`move.lpc` 的 `size` 同名**（各约 4100 条，每个生物和玩家都报）。body 的两个都是 nosave，改名 `body_ac`/`body_size`（全库没有别的文件直接读写这两个变量）。
+- **`std/room.lpc` 的 `flag`**（只在 reset() 清零）与 15 个区域房间基类各自的 `int flag` 同名（约 1060 条）。改名 `room_flag`；真正依赖它被 reset 清零的 5 个房间（`d/dagger/derro` 的 c21/c35 及其 old 副本、tonerra 的 m4）跟着改名。`std/townsman.lpc`、`std/caravan.lpc` 的 `path`、caravan 的 `speed` 与 monster.lpc 的同名变量是两回事，改名为 nosave 的 `event_path`/`caravan_path`/`caravan_speed`。
+- **重复继承**：`lpc_diamonds.py --fix-redundant` 删掉 82 行多余的 `inherit`；另有 12 处要人工判断（先列出的基类先被 `::create()` 选中，§7.240），删掉后改由子类的 create 执行：`hutentry`、`hid38`、`cave12`、`lk1`、`unshield`、新手路 road39-41 等；`mine2/rooms/secret1` 的 `room::create()` 改为 `mine::create()`；`foothills14` 的 `ROOMS"foothills.lpc"` 与 `FOOTHILLSINH` 是同一个文件。
+- **两个完整类的拼合**：`concourse`、`pass_parent`、`forest/road1` 三个房间基类从 ROOM 改为 VAULT（VAULT 就是带门的 ROOM），其叶子 `concourse5`/`pass1`/`mainroad6` 去掉自己多加的 VAULT；`Torm/city/c146`（地牢 + 牢房类）只继承 jail_cell 并抄入 cellar 的房间文字；`newtharis/rooms/north5`、`yuki/rooms/barn`、`silesse/clearing`、两个 `shadow.dock` 同样只留功能类（rquestroom、hitching_post、pier、sea/dock，河码头留 dock4 并抄入 river_dock 的四个成员）；`bpeak/rooms/criver` 去掉 bcave1（它的 init() 顶掉了 pier 的钓鱼命令）；`std/obj/ring` 去掉 artifact（只有它用）；`d/magic/etc/d_robe` 改为 PARMOUR（带口袋的护甲本来就是这个类）；`d/magic/obj/rebirther` 删掉 `#include <user.h>`（那一行让这个物品同时成了一具玩家躯体），自己补 `query_invis()`/`set_invis()`。
+- **真错误**：
+  - `d/shadow/room/troll/mon/` 的 7 种巨魔把 TYPE、LONG、POWER、遗言、问候语写成重新声明的全局变量，troll.lpc 的 `set_em_up()` 读的是自己那份空值——每只巨魔都叫“Troll ”、没有描述。改为在 create() 里赋值后再 `::create()`。
+  - `std/user/tsh.lpc`：history 与 pushd 栈都定义 `alloc()`/`enqueue()`，后继承的栈胜出，history 自己调用的 `enqueue(cmd)` 把每条命令塞进 pushd 栈，命令历史从不记录。tsh 显式定义两者转给 `history::`（failsafe 副本同改）。
+  - `d/darkwood/room/road10` 多继承了 DAEMON：它的 `clean_up()` 无条件 destruct，房间会连人带物被清掉。删去。
+  - 法术叶子重复声明 spell.lpc 的 `caster`/`place`/`target`/`clevel`/`cname`/`arg`（182 个声明子删去）：叶子读到的是自己那份，从未赋值时就是 0。`duration` 在 spell.lpc 里是“有持续时间”的标志，与叶子自己的时长含义不同，23 个文件改名 `spell_time` 而不是合并。
+  - `adm/daemon/astronomy_d`、`include/crafting.h`、`common_destinations.h`、`class_spells.h`、`spell_domains_spells.h`、`_rumors`、`_elemental_aura`/`_elemental_body_i`：先 `mapping X;` 再在文件顶层写 `X = ([...]);`——老式 LPC 的隐式声明，等于第二个同名变量。合并为一条带初值的声明。
+  - `std/tobj.lpc` 把 `unique_item`/`unique_lease` 声明了两遍；`faris`、`grolin`、`sandling` 同一个变量在文件里声明两次（sandling 第二次还声明成 int）。
+  - `_kiss_of_beshaba` 的 switch 里多了一对花括号和一句 `return 1;`，整份不能编译；修正后能编译（载入仍失败，与 HEAD 相同，`set_spell_level(3)` 未查）。
+- **字符串函数指针 `(: "name" :)`**（58 处）：本库的 `search`/`items`/`read` 处理器原本就是“求值得到函数名再 call_other”（大量 `(: TO, "fn" :)` 写法依赖这一点）。`std/room/senses.lpc`、`items.lpc` 和 `Object.lpc` 的 read 改为：FP_FUNCTIONAL 指针照旧，真正的函数指针直接以参数求值；`Object::set()` 只为旧式指针登记 `function_X` 属性。各处改成 `(: name :)` 并补前置声明。`set("aggressive", ...)` 在 monster 里只认整数和字符串，bushtiger 的指针从未生效，改为字符串并让 `attack_function()` 在没有参数时取 `this_player()`；`daemon/help` 的 `more` 结束回调是字符串指针，菜单“按回车继续”从不出现，改为 `(: endmore, category :)`；`drow/rooms/city22` 的 `search_it` 全库都不存在，删去这条 search；`_mmap` 的 `allocate(n, (: "." :))` 改为直接给字符串；`puzzle_daemon` 的裂缝描述改为 `(: call_other, room, "crack_description" :)`。
+- **未知转义**：`daemon/pictures/pictures.h` 的 ASCII 图里反斜杠是画的一部分，改为 `\\`；`cardpics2.h` 的 `\/` 本意是 `/`（真正的反斜杠已写成 `\\`），删去反斜杠；另有 `signet_ring.h`、`items.h`、`story.lpc` 各一处。
+- 其余：33 处宏重定义加 `#undef`；`/*` 嵌在注释里的 6 个文件；多余的 `;`；几个未用局部变量；`std/room.lpc` 定义 `initiate()` 调用 exits 与 senses 两份；`std/adt/cstack.lpc` 的 `size` 改名 `cq_size`；`finger_d`/`ava_finger_d` 的工作变量改名，不再顶替用户躯体的私有变量；`psi_comp_bag` 不再重复包含 `spellcomponents.h`；几十个叶子与基类同名、含义不同的变量改名（行为不变）。
+
+遗留：`d/atoyatl/tecqumin/obj/table.lpc` 是会走路的桌子，既是 MONSTER 又是容器（bag_logic），两个完整类都要用，需要重新设计，未动。`d/laerad/dojo/obj/shield.lpc`（盾牌兼剑鞘）去掉 mshield 后因缺 `set_armor_prof`/`set_block_chance` 载入失败，已还原。
+
+验证：改动的 474 个文件加包含改动头文件的文件，共 2666 个对象在 HEAD 与工作树的新进程中分别载入：2665 个对象载入无回退（唯一的回退即上面还原的 shield）。`lpc_audit_removed_locals.py` 列出的 83 条全部是巨魔叶子里改成赋值的声明。

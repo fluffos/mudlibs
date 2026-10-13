@@ -1,5 +1,4 @@
-mapping preset_destinations;
-preset_destinations =
+mapping preset_destinations =
     ([ "asgard" :"/d/laerad/parnelli/asgard/as59",
        "azha"   :"/d/tharis/road/wroad30",
        "deku":"/d/deku/forest/dforest15-5",
