@@ -166,3 +166,14 @@ recursion"。驱动按精确 PID kill。
 
 - `kungfu/skill/liangyi-jian.bak.lpc`：`int i; level;` 去掉无用的 `level;`。
 - 改动的对象 HEAD 与工作区都能载入，无回退。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+能编译的文件里的警告 11 -> 0（`lpc_warnings.py hyiishzdscbb` 重扫：8519 个文件可编译，剩下的诊断都在本来就编译不过的文件里）。与 hy2000 同码：hy2000 当天的修复（提交 d38039ba8e2）改的 11 个文件在这里都是 token 级孪生，用 `lpc_twin_port.py adopt` 搬过来；本库自己的扫描对这 8 个文件同样报了 `clean_up()` 双重继承，删掉的 inherit 在本库基类里确实重复。
+
+- 8 个多余的 `inherit F_CLEAN_UP;`（`NPC`/`BLADE` 基类已带）：`services/temp.lpc`、`d/npc/tie-ren.lpc`、`d/quanzhou{,.old}/npc/tang{,3}.lpc`、两个 `mu-ren.lpc`。
+- `adm/roommaker.lpc` 重复声明的 `special_props` 删掉前一份死声明；两个 `library.lpc` 重定义 `STORY_DIR` 前加 `#undef`。
+
+本轮没有发现玩法层面的真问题。
+
+验证：11 个改动对象 HEAD 与工作树各用新进程载入：7 -> 7 通过（tang 四个两边都因 lpcc 下读 `/data/npc/meng-zhu.o` 被拒而失败），regress 0；删除声明审计 0 项待看。11 个对象载入无回退。
