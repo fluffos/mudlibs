@@ -567,3 +567,11 @@ functionally re-tested live on this lib.
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 2 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 1 个，只在 #if 分支用的声明移进分支 0 个文件；改动 2 个文件，HEAD 与工作树各载入一次无回退（2 objects; HEAD PASS 1, tree PASS 1; regress 0; newly loading 0），这些文件的警告 4 -> 2。
 
 - 2026-10-10（续）：第二轮编译警告整理（`lpc_fix_unused_init.py`）删掉了只在不启用的 `#if` 分支里用到的局部变量声明（如 `include/net/ftpdsupp.h` 中 `#ifdef GUEST_WIZARD_FTP` 分支的 `file`），启用该选项时会编译失败；声明已放回所用的分支里，工具已改为跳过这种情况（交给 `lpc_move_decl.py`）。
+
+## 编译警告收尾（2026-10-12）
+
+`scripts/toolkit_fix.sh` 一轮去掉 `obj/sbaa/` 六个物件多余的 `inherit F_CLEAN_UP`（NPC/ITEM 基类已带），手工清掉剩下两条，能编译的文件警告清零。改动的 8 个对象在 HEAD 与工作树各载入一次：HEAD PASS 5，tree PASS 6，regress 0。
+
+- 药店 `u/cloud/drugstore.lpc` 的 `init()` 用 `in` 做局部变量名，而 `in` 是 FluffOS 的关键字（`foreach (x in y)`），整个文件编译失败，房间从没载入过；改名 `me` 后载入（药店人满时把新来的人请出去的逻辑才第一次生效）。
+- `obj/sbaa/sbgod.lpc` 函数后多余的 `;` 删去。
+- 未改：`obj/sbaa/sbgod.lpc`、`rong.lpc` 设了本库没有的武功（`snowshade-force` 等），`set_skill()` 报 `No such skill`，载入失败，HEAD 也一样，是内容缺口。
