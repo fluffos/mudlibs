@@ -317,3 +317,11 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 
 - `u/kyd/npc/luqingdu.lpc`：已给过任务物品时的回话少了 `return`，玩家得不到任何答复；补上。`u/gdjk/hongnong/npc/chigu.lpc` 末尾空的 `else if (exp <= 102000) { }`、`u/xiyu/shanjiao.lpc` 空的 `if (current_water == 0) {}` 删去（行为不变）。
 - 改动的对象载入无回退。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/lpc_twin_port.py adopt sjpl2 sjplii` 搬来 sjpl2 同日整理（4c889b95867）的 10 个文件（`d/chengdu/npc/cheng.lpc` 等的多余继承、两把剑的 `query_autoload`），能编译的文件警告清零；改动的 10 个对象在 HEAD 与工作树各载入一次：HEAD PASS 7，tree PASS 9，regress 0。
+
+- `d/yangzhou/npc/mouse.lpc` 的闲逛 `(: "random_move" :)` 只返回字符串，老鼠从不走动；改成 `(: random_move :)`。
+- `u/losey/gogoha.lpc`（巫师 losey 的居所）内层 `/* sizeof() == 2 */` 提前结束了外层注释、结尾又写成 `* /`，房间从没编译成功；内层改 `//`、结尾改 `*/` 后载入。
+- 未改：`d/wuhan/npc/npc.lpc`、`cmds/adm/locate.lpc`、`u/lark/luoyang/room1.lpc` 是几个文件首尾相接贴成的一个文件，编译失败，按原样保存（见 sjpl2 NOTES）。
