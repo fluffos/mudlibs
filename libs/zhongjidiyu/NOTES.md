@@ -854,3 +854,9 @@ did not re-boot. Still no reachable shop or `bai` path to exercise.
 启动时警告 85 -> 0；新进程登录正常。
 
 - 2026-10-12：`clone/misc/swmuding.lpc`（神木王鼎）自己声明了一张 `mapping insects` 虫表，与继承的 `clone/misc/muding.lpc` 的 `insects` 同名；读表的是木鼎的代码，读到的是木鼎自己的表，神木王鼎的虫表从来没用上（`Redeclaration of global variable 'insects'`）。改名 `sw_insects`，`create()` 里 `insects = sw_insects;` 交给木鼎（nitan170911、wxddym、zjdy 系同修）。HEAD 与工作树各载入一次，regress 0。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/lpc_twin_port.py adopt revive zhongjidiyu` 搬来 revive 同日整理（cfd7e6a9897）的改动，与本库逐 token 相同，能编译的文件警告清零；改动的对象在 HEAD 与工作树各载入一次，regress 0。
+
+- `clone/megazine/obj/duka_3b.lpc`（赌球卡 B）赔率变量声明两次，代码用后一份；删去前一行，赔率不变。
