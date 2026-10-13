@@ -358,3 +358,7 @@ blocking). No LPC change this pass.
 ## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
 
 `scripts/lpc_warnings.py yhyxcs --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 106 个 `.lpc`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：98 -> 98 通过，无回退。启动时警告 40 -> 0；新进程登录（新人物确认）正常。
+
+## 编译警告收尾（2026-10-13）
+
+`include/net/ftpdsupp.h` 的 `check_access()` 只在 `#ifdef GUEST_WIZARD_FTP` 分支用 `file`，声明移进该分支。能编译的文件警告清零，regress 0。
