@@ -705,3 +705,11 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 
 - `u/kyd/npc/luqingdu.lpc`：已给过任务物品时的回话少了 `return`，玩家得不到任何答复；补上。`u/gdjk/hongnong/npc/chigu.lpc` 末尾空的 `else if (exp <= 102000) { }`、`u/xiyu/shanjiao.lpc` 空的 `if (current_water == 0) {}` 删去（行为不变）。
 - 改动的对象载入无回退。
+
+## 编译警告收尾（2026-10-12）
+
+`scripts/toolkit_fix.sh` 一轮去掉 53 处多余继承（`d/chengdu/npc/cheng.lpc` 在 `NPC` 之外又继承 `F_SKILL` 并重声明它的三张表，muren/jiguan 等多余的 `F_CLEAN_UP`），`scripts/lpc_fix_return_types.py` 改了两把剑的 `query_autoload`；手工两处，能编译的文件警告清零。改动的 13 个对象在 HEAD 与工作树各载入一次：HEAD PASS 7，tree PASS 9，regress 0。
+
+- `d/yangzhou/npc/mouse.lpc` 的闲逛 `(: "random_move" :)` 只是返回字符串，老鼠从不走动；改成真指针 `(: random_move :)`。
+- `u/losey/gogoha.lpc`（巫师 losey 的居所）把 `no_steal` 和出口表注释掉，可内层自动注释 `/* sizeof() == 2 */` 的 `*/` 提前结束了外层注释，结尾又写成 `* /`，整个房间编译失败、从没载入过。内层改 `//`、结尾改 `*/`，按作者标出的范围注释，房间载入（只能从 `u/losey/huayuan.lpc` 进来）。
+- 不是警告、未改：`d/wuhan/npc/npc.lpc` 是四十来个 NPC 文件首尾相接贴成的一个文件（每段都另有单独文件），`cmds/adm/locate.lpc` 后面贴了一份旧 `globals.h` 和 `score.c`；两者都 `Redeclaration of function` 编译失败，扫描报的其余警告是这个错误的连带。没人引用 `npc.lpc`；`locate` 命令本身因此从来不能用。
