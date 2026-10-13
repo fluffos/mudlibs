@@ -574,3 +574,12 @@ behavior our `0005-test-daemon-count-a-test-file-that-fails-to-load.patch`
 added. That patch no longer applies on tip; removed it so the scheduled
 safe rebase can advance the pin. Patches remaining: 0001–0004.
 
+## Deep functional test (§10.7, 2026-10-13): compile-warning scan
+
+`work/` is the upstream submodule, so the in-place warning scan skipped it. Scanned in a scratch repo
+(`scripts/submodule_patch_scratch.py build residuum`, then `lpc_warnings.py residuum`): 662 files compile, **0 warnings**,
+no patch needed. The 3 files that do not compile need efuns this driver build lacks (`ed_cmd`/`ed_start` in
+`cmd/immortal/codesay.c`) or reference an undefined variable; they are not loaded at boot. The first scratch build
+compiled nothing because the sefun inherits its parts as `inherit "/secure/sefun/array.c"` and `global.h` names every
+base as `"/std/object.c"`; the builder now rewrites such `.c` path strings in the `.lpc` copy (KB 02 §2.3).
+

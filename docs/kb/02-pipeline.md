@@ -75,6 +75,15 @@ Also apply the WASM standards: §1.3b, §1.3e, and §1.5.
     build|export <slug>` (the scanners need `.lpc` names; export maps them
     back and splits the diff into per-directory patches). The same two
     commands regenerate it when a pin bump breaks a patch.
+    `lpc_warnings.py` refuses a submodule's `work/`, so a corpus scan run
+    only in place silently skips every such lib (fy2005, residuum,
+    sanguozhi, xkx100utf8 were missed this way): scan them in the scratch
+    repo. The builder rewrites `.c` path strings to `.lpc` (include and
+    inherit lines and any `"/abs/path.c"`, e.g. residuum's
+    `#define STD_OBJECT "/std/object.c"`), and export undoes only what
+    upstream spelled `.c`, so a `.lpc`-named upstream (fy2005) round-trips.
+    An added line ending in blanks fails the byte-for-byte check
+    (`git apply` trims it): strip it in the scratch tree.
   - **Trust the gitlink, not `meta.json`.** About 48 libs (nightmare4,
     mundoscuro, genesis, arkadia, ...) say `submodule-patch` because an
     upstream is recorded, but `work/` is plain files tracked here with no

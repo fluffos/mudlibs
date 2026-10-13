@@ -20,6 +20,7 @@
   - `patches/0002-logind-wasm-safe-encoding-prompt.patch` wraps every
     `set_encoding("gbk")` in `logon()` / `get_encoding()` with `catch()`
     so WASM ICU without GBK converters does not disconnect on connect.
+  - `patches/0004-fix-compile-warnings.patch`：编译警告清零（2026-10-13，见文末同日一节）。
   Do not auto-rebase; refresh the pin after reviewing upstream commits.
 
 ## Upstream pin bump (2026-09-15) — issue #5
@@ -633,3 +634,17 @@ functionally re-tested live on this lib.
 `work/` is the upstream submodule, so the four `..-1]` bounds of `include/net/ftpdsupp.h` (`sites[0][10..-1]`,
 `site[l1-l2..-1]`, `sites[i][1..-1]`, `sites[i][l2..-1]`; an empty string in this driver) are carried as
 `patches/0003-negative-ranges.patch` (`..<1`, KB 06 §7.209). The header is not included by any object of this tree.
+
+## 深度功能测试（§10.7，2026-10-13）：编译警告清零（目录补丁 0004）
+
+`work/` 是上游子模块，此前的警告整理只扫 vendored 库，本库一直没扫到。用 `scripts/submodule_patch_scratch.py build fy2005`
+建 `.lpc` 副本，在副本里跑 `lpc_warnings.py --fix` 再手修，`export fy2005 --first-number 4 --stage fix-compile-warnings:adm/,d/`
+导出为 `patches/0004-fix-compile-warnings.patch`（20 个文件）。可编译文件的警告 44 -> 0（12240 个可编译，3 个本来就编不过的文件不变）；
+四个补丁依次套在钉住的上游提交上无冲突，结果与副本逐字节相同。
+
+- 真 bug：`d/fixedtest/guiyun/jiuguan.lpc` 吃完/喝完一道菜后把后面的菜往前挪，原文写成
+  `query_temp("cai_"+(i+1,  me)+"/name")`（应为 `query_temp("cai_"+(i+1)+"/name", me)`，参数被挪进了括号）。
+  逗号表达式 `(i+1, me)` 的值是 `me`，`"cai_"+对象` 运行时报错，桌上剩的菜从此挪不动。改为
+  `me->query_temp("cai_"+(i+1)+"/…")`，12 处。
+- `d/fixedtest/taohua/shijian.lpc`：`for(times; …)` 的初始化部分无作用，改为 `for(; …)`。
+- 其余是未用的局部变量（toolkit 自动删）。

@@ -32,6 +32,16 @@ import re
 import shutil
 import subprocess
 import sys
+# a `.c` (`.lpc`) file named by string on an include or inherit line, or by any absolute path string (residuum's
+# `#define STD_OBJECT "/std/object.c"` feeds `inherit STD_OBJECT;`): group 1 runs up to the extension, group 2 is the path
+C_REF = re.compile(rb'(?m)(^[ \t]*(?:#[ \t]*include|inherit)[ \t]+"([^"\n]*)|"(/[^"\n]*))\.c"')
+LPC_REF = re.compile(rb'(?m)(^[ \t]*(?:#[ \t]*include|inherit)[ \t]+"([^"\n]*)|"(/[^"\n]*))\.lpc"')
+
+
+def ref_path(m):
+    return m.group(2) if m.group(2) is not None else m.group(3)
+
+
 _SCRATCH = os.environ.get("LPC_SCRATCH") or os.path.expanduser("~/.cache/lpc-scratch")  # scratch trees: on disk, never /tmp
 os.makedirs(_SCRATCH, exist_ok=True)
 
@@ -72,7 +82,7 @@ def build(slug, dest, below):
                 p = p[:-2] + ".lpc"
             if p.endswith((".lpc", ".h")):
                 src = open(p, "rb").read()
-                new = re.sub(rb'(?m)^([ \t]*#[ \t]*include[ \t]+"[^"]*)\.c"', rb'\1.lpc"', src)
+                new = C_REF.sub(rb'\1.lpc"', src)
                 if new != src:
                     open(p, "wb").write(new)
     shutil.copy(f"{REPO}/libs/{slug}/config.fluffos", f"{repo}/libs/{slug}/config.fluffos")
@@ -85,16 +95,24 @@ def build(slug, dest, below):
     print(f"scratch repo {repo}  (orig tree {orig}; mudlib directory {sub or '.'})")
 
 
-def rename_back(tree):
+def rename_back(tree, orig_tree):
+    """Undo what build did, and only that: a `.lpc` file goes back to `.c` when upstream has the `.c` file (an upstream
+    that already names its files `.lpc` keeps them), and a `"x.lpc"` in an include/inherit line goes back to `"x.c"`
+    only when upstream's copy of that file spells it `"x.c"`."""
     for dp, dn, fn in os.walk(tree):
         for f in fn:
             p = os.path.join(dp, f)
-            if f.endswith(".lpc"):
+            rel = os.path.relpath(p, tree)
+            if f.endswith(".lpc") and os.path.isfile(os.path.join(orig_tree, rel[:-4] + ".c")):
                 os.rename(p, p[:-4] + ".c")
-                p = p[:-4] + ".c"
-            if p.endswith((".c", ".h")):
+                p, rel = p[:-4] + ".c", rel[:-4] + ".c"
+            o = os.path.join(orig_tree, rel)
+            if p.endswith((".c", ".lpc", ".h")) and os.path.isfile(o):
+                upstream = set(ref_path(m) for m in C_REF.finditer(open(o, "rb").read()))
+                if not upstream:
+                    continue
                 src = open(p, "rb").read()
-                new = re.sub(rb'(?m)^([ \t]*#[ \t]*include[ \t]+"[^"]*)\.lpc"', rb'\1.c"', src)
+                new = LPC_REF.sub(lambda m: m.group(1) + (b'.c"' if ref_path(m) in upstream else b'.lpc"'), src)
                 if new != src:
                     open(p, "wb").write(new)
 
@@ -114,11 +132,11 @@ def export(slug, dest, stages, first):
     orig, repo = f"{dest}/orig", f"{dest}/repo"
     exp = f"{dest}/export"
     shutil.rmtree(exp, ignore_errors=True)
-    final = f"{exp}/final/{sub or '.'}"
-    os.makedirs(os.path.dirname(final) if sub else exp + "/final", exist_ok=True)
+    final = f"{exp}/final/{sub}" if sub else f"{exp}/final"   # copytree wants a destination that does not exist yet
+    os.makedirs(os.path.dirname(final), exist_ok=True)
     shutil.copytree(f"{repo}/libs/{slug}/work", final, symlinks=True)
-    rename_back(final)
     base = f"{orig}/{sub}" if sub else orig
+    rename_back(final, base)
     changed = []
     for dp, dn, fn in os.walk(final):
         for f in fn:
