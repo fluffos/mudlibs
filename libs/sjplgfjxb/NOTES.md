@@ -292,3 +292,7 @@ live-boot-tested.
 主控对象 `adm/obj/master.lpc` 的 `report_error()` 用 `CHANNEL_D->do_channel(this_object(), ...)` 把运行错误报到频道，但主控对象没有 `query()`，`channeld` 拿不到 `channel_id`，就去取 `capitalize(me->query("id"))`，即 `capitalize(0)` 出错——没有玩家触发的错误（call_out、heart_beat、加载时）都让错误处理器自己再出错（`Error in mudlib error handler: *Bad argument 1 to capitalize()`），频道上收不到错误报告。照 `sj` 的主控对象补上 `query("channel_id")` 返回 "系统核心"。验证：加载一个出错的 NPC，修改前出现 `Error in mudlib error handler`，修改后错误处理器正常跑完。（同 `sjpl2`、`sjplii`。）
 
 记录、未改（档案缺内容）：扬州一带 49 个 NPC 文件引用 `/d/city/obj/cloth/...`、`/d/city/obj/weapon/<类>/...`，这两个子目录档案里没有，其中 jinpao、baojian、bullboots、magua、gangqiang 等十几件在全库都找不到，这些 NPC（项三娘 boss、花钿 girla、彭飞 pengfei 等）在 `create()` 里 `carry_object(...)->wear()` 拿到 0 就加载失败。`feature/dealer.lpc` 用了未定义的 `MONEY_D`，但没有任何文件继承它（无 `F_DEALER`），是死文件。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/toolkit_fix.sh` 一轮：`d/city/obj/muren.lpc` 多余的 `inherit F_CLEAN_UP` 去掉，`include/net/ftpdsupp.h` 只在分支里用的 `file` 声明挪进分支。能编译的文件警告清零，regress 0。
