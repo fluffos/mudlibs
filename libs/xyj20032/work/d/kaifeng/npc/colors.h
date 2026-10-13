@@ -1,3 +1,6 @@
+// included by quest.lpc, which quest_fd/quest_gv/... each include: guard the table
+#ifndef __KAIFENG_COLORS_H__
+#define __KAIFENG_COLORS_H__
 
 mapping color_code=([
         "zhu bajie": HIR"红"NOR,
@@ -12,3 +15,4 @@ mapping color_code=([
 	"xiang lan":HIW"白"NOR,
         ]);
 
+#endif

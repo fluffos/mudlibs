@@ -195,3 +195,21 @@ HEAD 与工作树分别加载（新进程）：1336 -> 1336 通过，无回退�
 启动时警告 115 -> 0；新进程登录（编码选择、英文名、IP 提示）正常。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 41 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 14 个，只在 #if 分支用的声明移进分支 0 个文件；改动 53 个文件，HEAD 与工作树各载入一次无回退（53 objects; HEAD PASS 52, tree PASS 52; regress 0; newly loading 0），这些文件的警告 75 -> 20。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+`scripts/toolkit_fix.sh` 加手工修复，能编译的文件里的警告 53 -> 0（`lpc_warnings.py xyj20032` 重扫：12144 个文件可编译；剩下 20 条警告都在本来就编译不过的文件里，例如拼接错乱的 `d/gumu/npc/zhangmen.lpc` 和 `d/calvin/armor/rjl.lpc`）。mhxy 今天的收尾（提交 a9cd825122a）有 8 个文件在本库是 token 级孪生，`lpc_twin_port.py adopt` 搬过来（开封擂台 `ground.h` 表格 guard 及 `ground1/2/3.lpc`、`npc/colors.h` guard、`reporting.lpc` 未用的 `str`、`lijing.lpc` 钩子改 `void`、`jiasha.lpc`）；其余照同样做法手改。
+
+**真问题：**
+- `d/obj/cloth/jiasha.lpc` 锦镧袈裟：`inherit CLOTH; inherit F_UNIQUE;` 两个 `init()` 只用了 unique 的，cloth 的 `tear` 动作丢了；叶子里两个都调用。
+- `d/quest/task/cron.lpc`（waiwai 那套任务系统的副本）第一行 `#define TASK_D __DIR__"questd"`，随后又 `#include <globals.h>`，全局头把 `TASK_D` 改回 `/adm/daemons/questd`，所以这个副本的 cron 一直在驱动主任务守护进程，而不是同目录自己的 `questd.lpc`（同目录的 `questd.lpc`、`tu.lpc` 都指向本目录）。把定义挪到 include 之后并先 `#undef`。这套副本目前没有别处引用，游戏里看不到影响。
+
+**其余：**
+- `feature/alias.lpc` 私有的 `nosave int last_time` 改名 `last_cmd_time`：三花计数器 `d/city/npc/sanhua-counter.lpc` 自己的 `int last_time` 是后声明的，驱动（`compiler.cc` `define_variable()`）只在前一个可存档时才强制后一个 nosave，alias 那份本来就是 nosave，所以计数器一直正常存档；只改 alias 这边，存档键不变。
+- `d/city/npc/yg/yaoguai.lpc`、`d/quest/yuan/yg/yaoguai.lpc`：叶子自己的 `int yaoguai_type = 0;` 从不读（只有基类 `d/quest/li/yaoguai.lpc` 用，基类也初始化为 0），删掉；22 个 `yg-*` 的重复声明警告随之消失。
+- `d/kaifeng/ground.lpc` 包含前定义 `GROUND_TABLES_INHERITED`；`d/quest/kaifeng/` 的 `colors.h`/`reporting.lpc` 拷贝同样处理。
+- `d/longzhu/npc/long.lpc` 与 `d/quest/longzhu/npc/long.lpc` 删掉没有函数体的 `int long();` 原型；`d/moon/npc/yutu.lpc` 的 `kill_ob()` 改 `void`，仍调用 `::kill_ob()`。
+- `include/net/ftpdconf.h`、`d/quest/task/questd.lpc`、`tu.lpc`：重定义宏前加 `#undef`（本来就是后一个定义生效）。
+- `toolkit_fix.sh`：2 个多余的 `inherit F_CLEAN_UP`。
+
+验证：改动文件、`d/kaifeng`、`d/quest/kaifeng`、`d/city/npc`、`d/quest/yuan`、`d/quest/task` 全部对象、包含 ftpd 头文件的对象、`/obj/user`、`/std/char` 共 418 个对象，HEAD 与工作树各用新进程载入：389 -> 389 通过，regress 0；删除声明审计 0 项待看。418 个对象载入无回退。
