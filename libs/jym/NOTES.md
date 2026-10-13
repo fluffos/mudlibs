@@ -428,3 +428,11 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply j
 - `adm/daemons/network/dns_master.lpc` `query_services()`：`if (! (mud_svc[mud]["finger"/"tell"] & SVC_KNOWN))` 块里只有 `#if PREF_X & SVC_TCP … #endif`，选项关闭时 if 为空（“无副作用”警告报在下一句）；把 `#if`/`#endif` 挪到 if 外面（KB 04，2026-10-07 那次扫描漏了 `! (` 加括号换行这种写法）。载入无回退。
 
 - 2026-10-12：`d/biwu/obj/xiang.lpc`、`u/landy/xiang.lpc` 写着 `int remove() { save(); }`，盖掉了 `feature/move.lpc` 的 `remove(string euid)`——这些存盘箱子/柜子被销毁时不从携带者身上减负重、不清 handing（KB 06 §7.239 变体，nitan_ceshi/tianxiawuxue 同类）。改成 `varargs void remove(string euid) { save(); ::remove(euid); }`。HEAD 与工作树各载入一次，regress 0（载不进的文件在 HEAD 就载不进）。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/toolkit_fix.sh` 一轮去掉 3 处多余继承，其余手工，能编译的文件警告清零；改动的 10 个对象在 HEAD 与工作树各载入一次，regress 0。
+
+- `u/landy/job/npc/old.lpc`、`qlong.lpc` 自己的 `leader`（神兽任务的领队）与 `F_TEAM` 的 `leader` 同名，改名 `job_leader`。
+- `d/mirror/npc/boss.lpc`、`killer.lpc` 只有注释掉的掉宝代码用 `item`、`rand`，从声明里删去；`kungfu/skill/liangyi-jian.bak.lpc` 声明行里多出的 `level;` 删去。
+- `cmds/usr/time1.lpc` 注释块里又一个 `/*`、`kungfu/skill/huagong-dafa/maxsuck.lpc` 的 `//*****` 分隔线被当成嵌套注释，改写（`// *****`），内容不变。
