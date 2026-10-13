@@ -355,3 +355,12 @@ functionally re-tested live on this lib.
 - `liangyi-jian.bak.lpc`：`int i; level;` 去掉无用的 `level;`。
 - `d/xingxiu/nanjiang2/3.lpc`、`shanjiao.lpc`：删去空的 `if (current_water == 0) {}`（行为不变）。
 - 改动的对象 HEAD 与工作区都能载入，无回退。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/toolkit_fix.sh` 一轮去掉 16 处多余继承，其余手工，能编译的文件警告清零；改动的对象在 HEAD 与工作树各载入一次（27 objects; HEAD PASS 19, tree PASS 19; regress 0; newly loading 0）。
+
+- `adm/roommaker.lpc` 与 `海洋2002/hy3/adm/roommaker.lpc` 把 `special_props` 声明两次，代码用的是后一份（多 `file_name`），删去前一份（同 wqfy）。
+- 四间书库（`d/city/library`、`d/city2/library` 及 `海洋2002/hy3/` 下两间）自己的 `STORY_DIR` 覆盖 `globals.h` 的同名宏，先 `#undef`。
+- `海洋2002/hy3/d/pk/sjsz/obj/control.lpc` 在开头把 `auto_check()` 原型写成 `int`，中间又写了两条 `varargs void auto_check(...)`，定义是 `int auto_check()`；删去两条 `void` 原型。
+- `海洋2002/hy3/quest/guojob/guo.lpc` 同时包含 `zzzjob.lpc`、`teamjob.lpc`，两者都声明 `names`：`teamjob.lpc` 的改名 `team_names`（同 yxjh）；天书任务 `quest/shenshu/npc/man.lpc`、`testman.lpc` 的 `kill_ob()` 改 `void`（同 jh2006）。
