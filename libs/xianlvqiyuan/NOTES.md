@@ -610,3 +610,7 @@ compile check (exit 0, no errors) against `feature/command.lpc`.
 启动时警告 73 -> 0；新进程登录（编码选择、新人物提问）正常。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 14 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 7 个，只在 #if 分支用的声明移进分支 0 个文件；改动 19 个文件，HEAD 与工作树各载入一次无回退（19 objects; HEAD PASS 18, tree PASS 18; regress 0; newly loading 0），这些文件的警告 41 -> 20。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/toolkit_fix.sh` 一轮去掉 8 处多余继承；搬来 xyj2000（969f36bdd8c）逐 token 相同的 8 个文件（`feature/alias.lpc` 的 `last_cmd_time`、`d/kaifeng/npc/colors.h` 防重、`reporting.lpc`、袈裟 `jiasha.lpc` 补 `cloth::init()` 让撕袈裟的 `tear` 生效等），其余 8 个与 xyj2000 不同的照同样改法手工：`d/kaifeng/ground.h` 表格守卫、`d/city/npc/yg/yaoguai.lpc` 没人读的 `yaoguai_type`、李靖 `die`/`unconcious`、玉兔 `kill_ob` 改 `void`。能编译的文件警告清零；改动的 21 个对象在 HEAD 与工作树各载入一次，regress 0。
