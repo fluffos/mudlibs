@@ -184,14 +184,43 @@ def cmd_classify(a):
             print("\t".join(r))
 
 
+_DEF = re.compile(r"^[ \t]*(?:(?:nomask|private|protected|public|static|nosave|varargs)[ \t]+)*"
+                  r"(?:(?:void|int|string|object|mixed|mapping|float|status|function|buffer)[ \t*]+)?"
+                  r"(\w+)[ \t]*\([^;{}()]*\)[ \t\r\n]*\{", re.M)
+
+
+def pasted(data):
+    """Name of a function defined twice at top level outside #if (a pasted-together file), or None."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from lpc_warnings import mask
+    text = mask(data.decode("utf-8", "surrogateescape"))
+    keep, depth = [], 0
+    for line in text.split("\n"):
+        if re.match(r"\s*#\s*if", line):
+            depth += 1
+        elif re.match(r"\s*#\s*endif", line):
+            depth = max(0, depth - 1)
+        keep.append("" if depth else line)
+    defs = _DEF.findall("\n".join(keep))
+    twice = sorted({d for d in defs if defs.count(d) > 1 and d not in ("if", "while", "for", "switch", "foreach")})
+    return twice[0] if twice else None
+
+
 def cmd_adopt(a):
     rows = [r for r in classify(a.src, a.dst, a.pre) if r[1] == "twin"]
     if a.only:
         rows = [r for r in rows if any(o in r[0] for o in a.only)]
-    tmp = tempfile.mkdtemp(prefix="twin-")
+    scratch = os.environ.get("LPC_SCRATCH") or os.path.expanduser("~/.cache/lpc-scratch")
+    os.makedirs(scratch, exist_ok=True)
+    tmp = tempfile.mkdtemp(prefix="twin-", dir=scratch)
     todo = []
     for p, _ in rows:
         sp, so, dh = sides(a.src, a.dst, a.pre, p)
+        twice = pasted(dh)
+        if twice:
+            # several files pasted into one never compile; their inherit lines are archive text (KB 04 section 6.10 (7))
+            print(f"{'PASTED':10s} {'skipped':8s} {p} (defines {twice}() twice)")
+            continue
         for tag, data in (("pre", sp), ("post", so)):
             f = os.path.join(tmp, tag, p)
             os.makedirs(os.path.dirname(f), exist_ok=True)

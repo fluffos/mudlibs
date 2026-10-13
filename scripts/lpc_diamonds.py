@@ -251,7 +251,8 @@ def plan_fixes(files):
         # define a function twice and never compile; their inherit lines are archive text, not a fix target
         defs = re.findall(r"^[ \t]*(?:(?:nomask|private|protected|public|static|nosave|varargs)[ \t]+)*"
                           r"(?:(?:void|int|string|object|mixed|mapping|float|status|function|buffer)[ \t*]+)?"
-                          r"(\w+)[ \t]*\([^;{}()]*\)[ \t\r\n]*\{", masked, re.M)
+                          r"(\w+)[ \t]*\([^;{}()]*\)[ \t\r\n]*\{",
+                          "\n".join("" if c else l for l, c in zip(mlines, cond)), re.M)   # #if/#else twins are not pasted
         twice = sorted({d for d in defs if defs.count(d) > 1 and d not in ("if", "while", "for", "switch", "foreach")})
         dropped = set()
         out = []
