@@ -670,3 +670,10 @@ use a different, internally-consistent implementation shape entirely).
 ## 深度功能测试（§10.7，2026-10-08）— 编译警告整理
 
 `scripts/lpc_warnings.py demonangel --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 154 个 `.lpc`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：146 -> 146 通过，无回退。启动时警告 34 -> 0；新进程登录（输入名字）正常。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/toolkit_fix.sh` 一轮后剩两处，手工清零；改动的对象（含 `/obj/user`、`/adm/daemons/ftpd`）在 HEAD 与工作树各载入一次：3 个，regress 0。
+
+- `std/char.lpc` 同时继承 `F_ATTRIBUTE` 和 `F_DAMAGE`，两者都定义 `query_hp`/`query_mp`/`query_base_hp`/`query_base_mp`，内容一字不差；写明用驱动原先选的 `damage::` 版本（`scripts/lpc_name_winner.py`）。
+- `include/net/ftpdsupp.h` 的 `check_access()` 只在 `#ifdef GUEST_WIZARD_FTP` 分支用 `file`，声明移进该分支。
