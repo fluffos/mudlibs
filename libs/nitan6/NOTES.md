@@ -1114,3 +1114,20 @@ pass (created, empty, harmless — several existing call sites, e.g.
 - 补齐前几批漏掉的同码副本：`your_temp["guarding"];` 补 `= 0`（反击后清除防守姿态，含 `u/` 下的 combatd 拷贝）；`(: WEAPON_D, "query_action" :)` 改为 `(: call_other, WEAPON_D, "query_action" :)`（KB 04）；`mysql_d.lpc` 的空 `MSG` 宏改成空函数；`gigicook.lpc` 的 `arg == menu_list[0]` 改为 `=`。
 - 改动文件：u/lonely/combatd.lpc 
 - 改动的对象 HEAD 与工作区都能载入，无回退。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+可编译文件的警告 **103 -> 0**（`lpc_warnings.py` 全库重扫，22637 个文件可编译；剩下的警告都在本来就编译不过的文件里，如 `feature/dealer1.lpc`、`inherit/self/armor/armor.lpc`、`clone/pharmacy/herb/herb.lpc`）。改动的对象、包含改过头文件（`dbase.h`、`d/yixing/doc/info_*.h`）的对象，加上 `clone/`、`d/city`、`d/xiangyang`、`d/shaolin`、`feature/`、`inherit/`、`adm/daemons/`、`cmds/` 的抽样，HEAD 与工作树各载入一次（新进程）：`2823 objects; HEAD PASS 2734, tree PASS 2734; regress 0; newly loading 0`。删除声明审计 0 处待看。
+
+**严重问题：F_DBASE 旁边的混入件读写 simul_efun 的共享 dbase（KB 05 §7.15 残留，与 nitan170911 同一处）。** 本库 `include/dbase.h` 没有属性函数原型，`feature/equip.lpc`、`itemmake.lpc`、`food.lpc`、`liquid.lpc`、`pill.lpc`、`alias.lpc`、`message.lpc`、`name.lpc`、`damage.lpc`、`dealer.lpc`、`banker.lpc`、`guarder.lpc`、`apprentice.lpc`、`unique.lpc`、`control.lpc`、`inherit/char/master.lpc`，还有 nitan170911 漏掉的 `feature/action.lpc`（忙乱的 `apply/avoid_busy`、`reduce_busy` 读不到自己的）、`condition.lpc`（中毒的 `apply/avoid_poison` 等）、`move.lpc`（移动时 `query("equipped")`、`env/brief`、`guardfor`）都不继承 F_DBASE，裸 `query()`/`set()` 编译成 simul_efun 的后备函数，读写所有物件共用的那一个 dbase（之前 `apprentice`、`name`、`damage` 等已经逐处改成 `query(x, this_object())`，其余没改）。探针（新进程）：修正前给店小二 `wield` 长剑返回 0，`query_temp("weapon")` 为 0、`equipped` 没写进兵器；`wear` 布衣同样失败；自制道具（`inherit SWORD; inherit F_ITEMMAKE;`）`wield` 失败、`query_autoload()` 恒为 `"kept"`。修正：`include/dbase.h` 补上与 `feature/dbase.lpc` 签名完全一致的 `set/query/delete/set_temp/query_temp/delete_temp/add/add_temp` 原型（照搬 nitan170911），上述混入件都 `#include <dbase.h>`；`adm/daemons/npcsd.lpc`、`cmds/adm/eval.lpc` 不是 dbase 物件，去掉它们的 `#include <dbase.h>`；`feature/save.lpc` 也被不带 F_DBASE 的守护进程继承，那里两处 `query("id")` 改成 `this_object()->query("id")`，不加原型。修正后探针：`wield` 返回 1、`weapon` 指向长剑、`equipped == "wielded"`，`wear` 写入 `armor/cloth`、`equipped == "worn"`，自制道具 `wield` 成功、`query_autoload()` 为 `"wielded"`。
+
+**自制道具的 autoload。** 玩家自制道具（`adm/npc/ganjiang.lpc` 运行时生成的 `inherit 兵器基类; inherit F_ITEMMAKE;`）每件都报 `query_autoload()/autoload() inherited from both`。照 nitan170911：itemmake 的这对改名 `query_itemmake_autoload()`/`itemmake_autoload()`，`inherit/item/item.lpc` 与 `combined.lpc` 的 `query_autoload()`/`autoload()` 先看 `function_exists()`，有就交给它；驱动原来选的就是 itemmake 那对，行为不变，警告消失（探针确认）。
+
+**其他（多数与 nitan170911 同码，`scripts/lpc_twin_port.py` 搬过来）：**
+- `clone/misc/swmuding.lpc` 神木王鼎重新声明了木鼎的 `insects` 表，木鼎代码读的是自己那份，神木王鼎的虫表从没生效；改名 `sw_insects`，在 `create()` 里赋给 `insects`。
+- `adm/npc/obj/xiang.lpc` 的 `varargs int remove() { save(); }` 盖掉了 F_MOVE 的 `remove()`（减负重、清 handing）；改为先存盘再 `::remove(euid)`。
+- `d/city/npc/oldman.lpc` 宠物体重表 `weight` 与 F_MOVE 同名，改名 `pet_weights`；`maze/forest/maze.lpc` 的 `unique_rooms` 改名 `forest_unique_rooms`；`template/gem/*`、`template/weapon/*` 自己又声明了基类的 `dbase_format` 等，改名 `my_*`。
+- 幻境 `fairyland_quest` 的变量重复声明、`d/yixing/doc/info_*.h` 加头文件守卫、`ultra_questd`/`invent`/`meng-zhu`/`tianshen`/`canhezhi` 的宏重定义（`#undef`）、`channeld.lpc`（含 `u/lonely/` 拷贝）里从没用过的 `GWIZ` 频道位宏被 `<net/dns.h>` 覆盖，删去（频道表本来就直接写 256）。
+- `attempt_apprentice()`/`close_gate()` 返回类型与基类一致（`void`）；`html_d.lpc` 的 `?:` 两边类型；多余的 `;`、重复继承 `F_CLEAN_UP`、未用局部变量；`u/mike/tt.lpc` 的 `s[-1]` 改 `s[<1]`。
+
+未解决：`u/mike/eval.lpc`（eval 指令留下的临时文件，本身编译不过）会让 `lpcc` 段错误：`s[..<1]` 里 `s` 未声明时，驱动报完 `Bad type of left index to range operator` 后空指针崩溃（HEAD 同样，驱动问题，待做最小复现）。
