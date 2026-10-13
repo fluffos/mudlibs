@@ -217,3 +217,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 ## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查
 
 - `adm/daemons/cruised.lpc`：五处只剩注释的 `if (cruise[USER_ID]) { }` 挪进注释（与 longyunmeng 同，行为不变）。载入无回退。
+
+## 编译警告收尾（2026-10-12）
+
+孪生库 longyunmeng 同日的整理（116cf276f5b：27 个物品 `query_autoload` 的返回类型，`cmds/std/look_wiz.lpc` 前一份从没显示过的 `per_msg_beast3`，`d/miwudao/secret/npc/` 三个 NPC 的 `die()` 改 `void`，`huashan-jian.lpc` 多余的 `;`）用 `scripts/lpc_twin_port.py adopt longyunmeng xyzxyl201412 --pre 116cf276f5b~1` 搬来，32 个文件与 longyunmeng 修前逐 token 相同；另 `u/fyue/ansi2.h` 的 `BEEP` 前加 `#undef`。HEAD 与工作树各载入一次：32 个对象，HEAD PASS 28，tree PASS 28，regress 0。
