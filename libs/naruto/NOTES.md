@@ -708,3 +708,9 @@ issues encountered.
 - 2026-10-10：`work/.gitignore` 的 `debug*` 规则把 4 个 efun 说明文件（`doc/efuns/debug_info`、`debugmalloc` 及 `doc/wiz/efuns/internals/` 下的同名文件）挡在版本库外，站点上 `help debug_info` 找不到；已 `git add -f`（KB 02 §2.2）。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 0 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 2 个，只在 #if 分支用的声明移进分支 0 个文件；改动 2 个文件，HEAD 与工作树各载入一次无回退（2 objects; HEAD PASS 2, tree PASS 2; regress 0; newly loading 0），这些文件的警告 2 -> 0。
+
+## 编译警告收尾（2026-10-13）
+
+手工清零；改动的 11 个对象（含 `cmds/std/kill` 和几个 NPC）在 HEAD 与工作树各载入一次，regress 0。
+
+- `cmds/std/kill.lpc` 先问目标 `obj->accept_kill(me)`，非零就不再动手（`if (... && obj->accept_kill(me)) return;`），所以 `accept_kill()` 的返回值是有意义的。八个 NPC（`u/m/mouse/bone/npc/ton`、`world/area/` 下的 `ka`、`clemens`、`johnson`、`nightkid`、`ye`、`lu`、`xiao`）返回 `int`，而它们继承的 `feature/npc/` 六个职业基类（villager、soldier、fighter、bandit、seasoldier、seabandit）写的是 `void`。基类改 `int accept_kill(object ob)`，`return;` 改 `return 0;`、末尾补 `return 0;`——`void` 的结果本来就当 0 读，行为不变，签名与子类一致。
