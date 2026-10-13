@@ -438,3 +438,10 @@ quit cycle confirmed a clean `debug.log` throughout.
 `scripts/lpc_warnings.py gjzddmudda --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 154 个 `.lpc`。HEAD 与工作树分别加载（新进程）：142 -> 142 通过，无回退。
 
 启动时警告 34 -> 0；新进程登录（新人物确认）正常。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/lpc_twin_port.py adopt demonangel gjzddmudda` 搬来 demonangel 同日整理（8f6d5cc3823）的改动，与本库逐 token 相同，能编译的文件警告清零；改动的对象在 HEAD 与工作树各载入一次，regress 0。
+
+- `std/char.lpc` 同时继承 `F_ATTRIBUTE` 和 `F_DAMAGE`，两者的 `query_hp`/`query_mp`/`query_base_hp`/`query_base_mp` 一字不差；写明用驱动原先选的 `damage::` 版本。
+- `include/net/ftpdsupp.h` 的 `check_access()` 只在 `#ifdef GUEST_WIZARD_FTP` 分支用 `file`，声明移进该分支。
