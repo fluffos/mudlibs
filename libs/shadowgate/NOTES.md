@@ -644,3 +644,5 @@ Changed files loaded at HEAD and in the tree in fresh processes: no regression.
 遗留：`d/atoyatl/tecqumin/obj/table.lpc` 是会走路的桌子，既是 MONSTER 又是容器（bag_logic），两个完整类都要用，需要重新设计，未动。`d/laerad/dojo/obj/shield.lpc`（盾牌兼剑鞘）去掉 mshield 后因缺 `set_armor_prof`/`set_block_chance` 载入失败，已还原。`d/magic/obj/rebirther`（复生选择物件）`#include <user.h>`，于是它同时是 OBJECT 和一具玩家躯体；它的 `do_rebirth()`/`do_death()` 从 user.lpc 抄来，`save_player(...)`、`query_currencies()`、`add_money()` 等都作用在它自己身上（金钱转移对象为空，`save_player` 存的是这具空躯体）。去掉 user.h 后这些调用无定义、载入失败（本库主控把编译错误只写进日志，扫描看不到，HEAD 对比载入才发现），已还原，留待按原意改成作用于 `reborn`。
 
 验证：改动的 474 个文件加包含改动头文件的文件，共 2666 个对象在 HEAD 与工作树的新进程中分别载入：2665 个对象载入无回退（唯一的回退即上面还原的 shield）。`lpc_audit_removed_locals.py` 列出的 83 条全部是巨魔叶子里改成赋值的声明。
+
+- 补记（同日，移植到 sunshadow 时发现，两库同改）：`d/guilds/order/` 下 84 个守卫/兵士定义 `object *query_party(){return parties;}`，覆盖了 living.lpc 返回队伍名字符串的 `query_party()`，任何按队伍名比较这些 NPC 的代码拿到的是数组；改名 `query_guard_party()`（全库无调用者）。`std/plate.lpc` 的 `wearit()` 声明为 void：body.lpc 在穿戴函数答 0 时拒绝穿上，void 函数答 0，所有用基类 `wearit` 的板甲都穿不上；改为 `int` 并返回 1（原意见注释：拥有者检查已取消）。载入对比：98 个对象无回退。
