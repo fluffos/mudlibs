@@ -27,7 +27,5 @@
 
 #define P_AGGRESSIVENESS  0
 
-nosave string *personalities =
-({ "aggressiveness" });
 
 #endif /* __BEHAVIOR_H__ */

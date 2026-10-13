@@ -68,6 +68,7 @@
 #define TILE_S_JUN_TREE  '7' /* small jungle tree */
 #define TILE_L_JUN_TREE  '8' /* large jungle tree */
 
+#ifndef TILE_TABLES_INHERITED   /* a file whose parent already includes tile.h defines this first */
 nosave string 
 *blocking_terrains = ({
    TILE_CLOSED_DOOR,
@@ -82,5 +83,6 @@ nosave string
    TILE_L_DEC_TREE,
    TILE_L_JUN_TREE
 });
+#endif
 
 #endif /* __TILE_H__ */

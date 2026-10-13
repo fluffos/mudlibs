@@ -543,3 +543,12 @@ The `.c` -> `.lpc` rename changed the string but not the slice width: `f[<2..] =
 
 - `inherit/behavior.lpc`：`enemies - ({ obj });` 结果被丢弃，已消失的敌人一直留在仇敌名单里；改为 `-=`。
 - 改动的对象 HEAD 与工作区都能载入，无回退。
+
+## Compile warnings (2026-10-13)
+
+Hand fixes; no warnings left in compiling files (the 4 files that did not compile before still do not). The changed objects and their subclasses load the same at HEAD and in the tree (12 objects, regress 0).
+
+- `world/worldmap.lpc` overrode `areamap.lpc`'s `int area_loaded(string file)` with `area_loaded(int x, int y)`. The areamap code the worldmap inherits (it even checks `file_name(THOB) == "/world/worldmap"`) calls `area_loaded(areas[f])` with a file name, which reached the worldmap's coordinate version instead. The worldmap's function is now `area_loaded_at(int x, int y)` (one caller), so the inherited code gets the string version it was written for.
+- `inherit/item.lpc` declared `mapping command;` again on top of `gridobject.lpc`'s `nosave mapping command` (every item, weapon, armour, missile, light, key, board, money and the examples warned); item never used its copy, and gridobject's functions use theirs. Removed.
+- `include/behavior.h` declared `personalities`, so `horseman.lpc` (which includes it and inherits `LIVING`, which inherits `BEHAVIOR`) had two copies, warned in all ten `share/` horsemen. The variable now lives in `inherit/behavior.lpc`. `include/tile.h`'s `blocking_terrains` is wrapped in `#ifndef TILE_TABLES_INHERITED`, defined by `world/worldmap.lpc`, whose parent `areamap.lpc` already includes the header.
+- Signatures: `base.lpc`'s `move(dest)` is `varargs move(dest, int x, int y)` like gridobject's; `gridobject.lpc`'s `query_name`, `query_cap_name` and `query_short` take the optional observer `living.lpc`'s versions take; `secure/player.lpc`'s `remove()` is `void` like `base.lpc`'s.
