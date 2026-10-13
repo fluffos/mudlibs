@@ -262,3 +262,11 @@ single-file compile check (PASS). Part of the corpus-wide §7.19 sweep
 启动时警告 27 -> 0；新进程登录（编码选择、新人物确认）正常。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 4 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 5 个，只在 #if 分支用的声明移进分支 1 个文件；改动 7 个文件，HEAD 与工作树各载入一次无回退（7 objects; HEAD PASS 7, tree PASS 7; regress 0; newly loading 0），这些文件的警告 27 -> 18。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/toolkit_fix.sh` 一轮去掉 12 处多余的 `F_CLEAN_UP`，其余照同族已有改法手工，能编译的文件警告清零；改动的 22 个对象在 HEAD 与工作树各载入一次，regress 0。
+
+- 袈裟 `d/obj/cloth/jiasha.lpc`（`CLOTH` + `F_UNIQUE`）只跑 unique 的 `init()`，撕袈裟的 `tear` 从没加上；补 `init() { cloth::init(); unique::init(); }`（同 xyj2000）。
+- `d/kaifeng/ground.h` 的三张表包进 `#ifndef GROUND_TABLES_INHERITED`，层层继承的 `ground1/2/3.lpc`、`ground.lpc` 包含前定义它（同 xyj2000）；`include/net/ftpdconf.h` 的 `VALID_READ`、`VALID_WRITE` 先 `#undef`（同 xiakexing2017）。
+- `d/suburb/es/city/shangshu/kefang.lpc` 的 `(: "一本诗词集……" :)` 改成字符串本身；`daemon/skill/hubo.lpc`、`test-whip.lpc` 写明用驱动原先选的 `clean_up()`；`daemon/skill/huashan-jianfa.lpc` 多余的 `;` 删去。
