@@ -845,3 +845,12 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply z
 - 2026-10-12：`adm/npc/obj/jubaoxiang.lpc`、`adm/npc/obj/xiang.lpc`、`adm/npc/obj/xiang1.lpc`、`adm/obj/locker.lpc`、`u/npc/storage.lpc`、`u/sanben/obj/deposit.lpc`、`u/sanben/obj/locker.lpc`、`u/sanben/obj/locker2.lpc` 写着 `int remove() { save(); }`，盖掉了 `feature/move.lpc` 的 `remove(string euid)`——这些存盘箱子/柜子被销毁时不从携带者身上减负重、不清 handing（KB 06 §7.239 变体，nitan_ceshi/tianxiawuxue 同类）。改成 `varargs void remove(string euid) { save(); ::remove(euid); }`。HEAD 与工作树各载入一次，regress 0（载不进的文件在 HEAD 就载不进）。
 
 - 2026-10-12：`clone/misc/swmuding.lpc`（神木王鼎）自己声明了一张 `mapping insects` 虫表，与继承的 `clone/misc/muding.lpc` 的 `insects` 同名；读表的是木鼎的代码，读到的是木鼎自己的表，神木王鼎的虫表从来没用上（`Redeclaration of global variable 'insects'`）。改名 `sw_insects`，`create()` 里 `insects = sw_insects;` 交给木鼎（nitan170911、wxddym、zjdy 系同修）。HEAD 与工作树各载入一次，regress 0。
+
+## 编译警告收尾（2026-10-13）
+
+搬来同族已整理的改法（`scripts/lpc_twin_port.py adopt`：yanhuangwuhun 89552da089f、zhonghua2 7d27a20c08d、yhwhpublicfi 2ac7a6f02ed），`scripts/toolkit_fix.sh` 去掉 3 处多余继承，其余手工，能编译的文件警告清零。改动的 21 个对象在 HEAD 与工作树各载入一次：HEAD PASS 21，tree PASS 21，regress 0。
+
+- `adm/daemons/huanjing2003/` 四国 NPC/宝物与 `room_readygo_hj.lpc`：同一条声明里先裸声明再带初值声明的变量去掉裸的那份（`scripts/lpc_fix_double_decl.py`）。
+- `feature/food.lpc`、`feature/liquid.lpc` 的 `do_effect()` 改 `varargs int`，与重载它、被 `eat`/`drink` 用返回值的物品同型；`cmwhod` 的 `nosave` 函数改 `protected`。
+- `clone/megazine/obj/duka_3b.lpc` 赔率变量声明两次，删去不用的前一行（赔率不变）；`d/beijing/npc/qianzhenglun.lpc`、`u/mudren/mj.lpc` 自己的 `count` 遮住基类同名变量，改名；`clone/obj/genmap.lpc` 函数里没用的 `#include "harbor.h"` 删去；`clone/book/yjj_book2.lpc` 写明用 `skill::clean_up()`。
+- 天书任务 `quest/shenshu/npc/man.lpc`、`testman.lpc` 的 `kill_ob()` 改 `void`（同 wxddym），末尾 `return 1;` 改 `return;`。
