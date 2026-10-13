@@ -976,3 +976,28 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 
 - `d/snowtu/obj/birthday.lpc` 生日蛋糕的字符画：旧版转义修复器把 `\\` 的后一半当成未知转义 `\/` 删，每轮删一个、连删 8 轮把这一行删坏；按原文把每个反斜杠写成 `\\`，照原样显示。修复器已改（只认前面有偶数个反斜杠的转义，`\/`、`\_` 加倍而不删；KB 04 转义一行）。
 - 剩下的（约 300 个非钩子函数的返回类型、46 条重复声明、30 个宏重定义等）留待第二轮。
+
+## 编译警告收尾（第二轮，2026-10-12）
+
+按 2026-10-12 扫描结果（可编译文件中 174 条警告）逐条在源头修，不加 pragma。改动 115 个文件；改动的文件、引用改动头文件的文件及受影响子类共 198 个对象，HEAD 与工作树各载入一次：HEAD PASS 191，tree PASS 191，regress 0；这些对象在 HEAD 共 197 条警告，工作树 0 条。7 个 FAIL 两边相同，都是 `create()` 运行期错误（`d/wizz/stey/*guai.lpc` 的 `setname()` 对 0 调用、`u/weilai/tianjie/biyao/zhang.lpc` 用了不存在的技能 `qysword`、`repoo/npc/npc.lpc` 的名字守护进程不存在、`d/kaifeng/npc/quest.lpc` 本是 include 片段），不在这一轮范围内。
+
+**发现的真 bug：**
+- `u/snowtu/bing.lpc` 巡逻官兵的 `kill_ob()` 结尾 `return kill_ob(me);` 调用自身，没有出口：每层还随机放招（克隆 luocheng 打人），直到递归过深报错。改为放招后调一次 `::kill_ob(me)`，返回 `void`。
+- `u/weilai/xyb.lpc` 幸运包状态：`sprintf("…%d…%d…", …)` 的两个 `%d` 分别收到字符串（`"读书"` 等）和 `?:` 里的 `"无限"`，运行时 sprintf 报错；改成 `%s`，剩余分钟用 `sprintf("%d", …)`。
+- `d/obj/cloth/jiasha.lpc` 锦镧袈裟同时继承 `CLOTH` 与 `F_UNIQUE`，两边都有 `init()`，驱动只用 unique 的那份，袈裟不能 `tear`；补一个两份都调的 `init()`（与第一轮 7 个 NPC 同法）。
+- `u/stey/newjob/teamjob.lpc`（含 `sjsh/` 副本）`names[0][random(40)]` 而表只有 12 项，大半时候数组越界；改为 `random(sizeof(...))`。同时把这张表改名 `team_names`（与 `zzzjob.lpc` 的 `names` 同在 `guo.lpc` 里 include，重复声明；数据相同，xkx 家族同名修法）。
+
+**重复声明（46 条）：**
+- `d/kaifeng/ground.h` 的三张表被 `ground0.lpc` 与继承它的 `ground1/2/3.lpc`、`ground.lpc` 各 include 一遍：沿用 xiyouji 的 `GROUND_TABLES_INHERITED` 做法。`d/kaifeng/npc/colors.h` 经 `quest.lpc` 被 `quest_fd`/`quest_gv` 等各带进一次：加 include 保护。
+- `feature/alias.lpc` 统计命令频率的 `nosave int last_time` 与 `d/city/npc/sanhua-counter.lpc`（存档 NPC，`last_time` 要存盘）、`d/pingan/**/shenyi.lpc` 自己的 `last_time` 同名：改基类这份为 `last_cmd_time`，叶子与存档键不变。
+- 叶子与基类各有一份、各读各的：`cmds/std/go*.lpc`、`u/djx/cmds/go.lpc`（两份）的方向表 `default_dirs`（`DIR_D` 里那份没有函数读）改名 `go_dirs`；`d/wizz/fangz/wizman*.lpc`、`u/shulele/npc/wizman2.lpc`、`zqd2.lpc` 的技能名单 `skills`（盖住 F_SKILL 的 `mapping skills`）改名 `skill_list`；`u/xdao/yaoguai.lpc` 自己的放招计数 `tick`（与 `std/char.lpc` 的心跳计数分开）改名 `perform_tick`。
+- 叶子重复了基类变量却从不读：`d/city/npc/yg/yaoguai.lpc` 的 `yaoguai_type`、`d/snowtu/team/npc/evl2.lpc` 的 `atk`，删去叶子那份。
+- 同一文件声明两次：`roommaker.lpc`（4 份）保留后一份（`do_saveroom` 用的就是它），`u/weilai/liwu/jrsj.lpc` 两张节日表（后一份覆盖前一份）合成一张按年份的表。
+
+**其余：**
+- 返回类型：`heart_beat` 20、`die` 5、`unconcious` 2、`fight_ob` 4、`kill_ob` 10（`return ::kill_ob()`、`return 5` 改为无返回值；调用处都不读返回值）用 `scripts/lpc_fix_return_types.py --also …` 改 `void`；`reset` 原型 3 个改 `void`，`d/sds4/npc/hufa.lpc` 多余的 `int kill_ob(object);` 原型删去。`reward_ob`：`d/emei/huanbochi/r.lpc` 读它的返回值（非零 = NPC 战败后不退走），所以基类 `npc.lpc` 改为 `int reward_ob() { return 0; }`，`moshi.lpc` 跟着改 `int`、返回 0，15 个叶子不动。
+- `long()`：5 个神龙/狗 NPC 留着没有函数体的 `int long();` 原型，删去，用继承的 `string long()`。`u/shulele/npc/sz.lpc` 原型 `string ask_wuxue()` 改为与定义一致的 `int`。
+- 宏重定义 30：`toptend.lpc`（两份）、`u/pkl/quest/*`、`repoo/npc/npc.lpc` 有意覆盖 `globals.h` 的宏，在各自 `#define` 前加 `#undef`。
+- 顶层多余的 `;` 21（`inherit ROOM; ;`、函数后 `};`），`clone/box/gbox*.lpc` 注释里嵌套的 `/*`，`d/kaifeng/npc/reporting.lpc` 未用的 `str`（输出语句早已注释掉，声明一并移进注释），`vikee/network/dns_master.lpc`（两份）`#if` 关掉后剩下的空 `if {}`（照 `adm/daemons/network/dns_master.lpc` 把 `#if` 挪到 `if` 外）。
+- 两条路径带进同一个 `/feature/clean_up.lpc` 的 `clean_up()`：三个 `tang.lpc` 根本没用 `SSERVER` 的函数，去掉这个继承；`daemon/skill/hubo.lpc`、`test-whip.lpc` 用 `lpc_name_winner.py` 写出驱动本来就选的那份。
+- `scripts/lpc_audit_removed_locals.py HEAD` 0 项。格式化器只重排了 `jrsj.lpc`、`xyb.lpc` 两个文件。
