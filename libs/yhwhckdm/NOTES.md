@@ -125,3 +125,10 @@ preload/`shopd`/`quit` 的 unused-variable 警告，无同形功能缺口。
 - `adm/daemons/network/dns_master.lpc` `query_services()`：`if (! (mud_svc[mud]["finger"/"tell"] & SVC_KNOWN))` 块里只有 `#if PREF_X & SVC_TCP … #endif`，选项关闭时 if 为空（“无副作用”警告报在下一句）；把 `#if`/`#endif` 挪到 if 外面（KB 04，2026-10-07 那次扫描漏了 `! (` 加括号换行这种写法）。载入无回退。
 
 - 2026-10-12：`clone/misc/swmuding.lpc`（神木王鼎）自己声明了一张 `mapping insects` 虫表，与继承的 `clone/misc/muding.lpc` 的 `insects` 同名；读表的是木鼎的代码，读到的是木鼎自己的表，神木王鼎的虫表从来没用上（`Redeclaration of global variable 'insects'`）。改名 `sw_insects`，`create()` 里 `insects = sw_insects;` 交给木鼎（nitan170911、wxddym、zjdy 系同修）。HEAD 与工作树各载入一次，regress 0。
+
+## 编译警告收尾（2026-10-12）
+
+`scripts/lpc_twin_port.py adopt yanhuangwuhun yhwhckdm` 搬来 yanhuangwuhun 同日整理（89552da089f）里与本库逐 token 相同的文件，能编译的文件警告清零；改动的对象在 HEAD 与工作树各载入一次，regress 0。
+
+- `adm/daemons/huanjing2003/` 四国 NPC/宝物与 `room_readygo_hj.lpc`：同一条声明里先裸声明再带初值声明的变量去掉裸的那份。
+- `feature/food.lpc`、`feature/liquid.lpc` 的 `do_effect()` 改 `varargs int`，与重载它、被 `eat`/`drink` 用返回值的物品同型；`adm/daemons/network/cmwhod.lpc` 的 `nosave` 函数改 `protected`；`adm/daemons/vrm_server.lpc` 多余的 `;` 删去。
