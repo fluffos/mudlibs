@@ -794,3 +794,11 @@ wield()` 对缺失路径返回 `0`，立刻炸：
 ## 深度功能测试（§10.7，2026-10-08）— `.lpc` 后缀的定宽切片
 
 `.c` 改名 `.lpc` 时只改了字符串没改切片宽度：`f[<2..] == ".lpc"` 拿两个字符比四个字符，永远不成立（`!=` 永远成立），按后缀筛文件、去后缀的代码因此从不运行或截成 `x.l`（KB 06 §7.238）。`scripts/lpc_lpc_suffix_slice.py --apply` 改了 2 处比较、0 处去后缀（如 `secure/daemon/httpd.lpc`）；改动的文件 HEAD 与工作树分别加载（新进程），无回退。
+
+## 编译警告收尾（2026-10-13）
+
+手工清零（改动及相关对象在 HEAD 与工作树各载入一次，regress 0）。
+
+- `clone/user/templet.lpc`（存档 `autoload` 转换器）继承 `F_DBASE` 后又自己声明一个 `dbase`：`restore_object()` 填前一个、清空后一个，再存盘写出两条 `dbase`，玩家下次载入可能读到空的那条（KB 06 §7.233）。删去自己的那个。
+- `system/std/char/npc.lpc` 私有的默认拒绝语 `refuse_msg` 与 `d/menpai/wuliang/npc/zuo.lpc` 等任务 NPC 自己的同名，私有的那份改名 `npc_refuse_msg`。
+- 草稿 `system/feature/todo/poison.lpc` 自己的毒药列表 `poison` 与它包含的旧 `include/poison.h` 的 `poison` 同名，改名 `poisons`（文件里 9 处）。
