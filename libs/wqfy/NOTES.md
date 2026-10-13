@@ -410,3 +410,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply w
 启动时警告 93 -> 0；新进程登录画面正常（输入英文名后断开，HEAD 也一样）。
 
 - 2026-10-10：`include/net/ftpdsupp.h` 的 `string file;` 只在 `#ifdef GUEST_WIZARD_FTP` 分支里用，声明移进该分支（编译警告第二轮）。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/toolkit_fix.sh` 一轮去掉 2 处多余继承：`d/fy/fish.lpc` 把 `inherit ROOM;` 写了两遍，房间从没载入过，现在载入；`d/city/obj/muren.lpc` 多余的 `F_CLEAN_UP`。手工：`cmds/adm/roommaker.lpc` 把 `special_props` 声明两次，代码用的是后一份（多 `file_name`），删去前一份；`cmds/adm/wizinfo.lpc` 自己定义、却从不使用的 `CHINESE_MUD_NAME` 删去。能编译的文件警告清零；改动的 4 个对象在 HEAD 与工作树各载入一次：HEAD PASS 3，tree PASS 4，regress 0。
