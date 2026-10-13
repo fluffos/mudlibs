@@ -338,3 +338,7 @@ HEAD 与工作树分别加载（新进程）：1087 -> 1087 通过，无回退�
 - 2026-10-12：`adm/npc/obj/xiang.lpc`、`adm/npc/obj/xiang1.lpc`、`u/lonely/obj/jubaoxiang.lpc` 写着 `int remove() { save(); }`，盖掉了 `feature/move.lpc` 的 `remove(string euid)`——这些存盘箱子/柜子被销毁时不从携带者身上减负重、不清 handing（KB 06 §7.239 变体，nitan_ceshi/tianxiawuxue 同类）。改成 `varargs void remove(string euid) { save(); ::remove(euid); }`。HEAD 与工作树各载入一次，regress 0（载不进的文件在 HEAD 就载不进）。
 
 - 2026-10-12：`clone/misc/swmuding.lpc`（神木王鼎）自己声明了一张 `mapping insects` 虫表，与继承的 `clone/misc/muding.lpc` 的 `insects` 同名；读表的是木鼎的代码，读到的是木鼎自己的表，神木王鼎的虫表从来没用上（`Redeclaration of global variable 'insects'`）。改名 `sw_insects`，`create()` 里 `insects = sw_insects;` 交给木鼎（nitan170911、wxddym、zjdy 系同修）。HEAD 与工作树各载入一次，regress 0。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/toolkit_fix.sh` 一轮去掉 `u/tsunade/godhand.lpc` 多余的 `F_CLEAN_UP`；两张麻将桌 `u/lonely/tools/mj.lpc`、`mjlady3.lpc` 自己的 `count` 与基类同名变量冲突，改名 `mj_count`（同 zhonghua2 的 `mj.lpc`）。能编译的文件警告清零；改动的 3 个对象在 HEAD 与工作树各载入一次，regress 0。
