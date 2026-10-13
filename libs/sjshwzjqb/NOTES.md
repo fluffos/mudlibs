@@ -276,3 +276,5 @@ In total 376 files differ from the old names (288 `.C` -> `.lpc`, 86 files of re
 
 - `u/angell/npc/shen.lpc`（及 `u/immortal/npc/nushen.lpc`）：三行 `(: call_other, __FILE__, "…_name_skill", who :);` 只造函数指针不调用，指向的是 `input_to` 式回调，原意无法确定，改成注释（行为不变，与 shenmo 同）。`d/youxia/npc/shaolong.lpc` 注释掉的 `chat_msg` 中漏注释的一行、`u/stey/cron.lpc` 只剩注释的 `if (tang) { }` 一并注释。
 - 改动的对象载入无回退。
+
+- 2026-10-12：`u/stey/newjob/teamjob.lpc` 的组队任务用 `names[0][random(40)]` 选地点，而这张表只有 12 个地名，`random()` 落到表外时数组越界报错、任务中断。改成 `random(sizeof(names[0]))`（shenmo `u/stey/newjob/teamjob.lpc` 同类）。HEAD 与工作树各载入一次，regress 0。

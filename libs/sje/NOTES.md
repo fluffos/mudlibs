@@ -208,3 +208,5 @@ Century/`adm-single` 形状）**：`adm/simul_efun/file.lpc` 的
 启动时警告 62 -> 0。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 0 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 2 个，只在 #if 分支用的声明移进分支 0 个文件；改动 2 个文件，HEAD 与工作树各载入一次无回退（2 objects; HEAD PASS 2, tree PASS 2; regress 0; newly loading 0），这些文件的警告 2 -> 0。
+
+- 2026-10-12：`job/gbjob/teamjob.lpc` 的组队任务用 `names[0][random(40)]` 选地点，而这张表只有 29 个地名，`random()` 落到表外时数组越界报错、任务中断。改成 `random(sizeof(names[0]))`（shenmo `u/stey/newjob/teamjob.lpc` 同类）。HEAD 与工作树各载入一次，regress 0。

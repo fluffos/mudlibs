@@ -502,3 +502,5 @@ functionally re-tested live on this lib.
 - `d/yixing/doc/info_{store,biao,guest}.h` 经 `bangzhu_duty.h`/`guanjia.h` 被同一文件 include 两次，加 include guard。
 - 宏重定义：`shuyuan2/3` 的 `STORY_DIR`（`globals.h` 里是故事守护的目录）、`clxiaoting`/`bangling` 的 `BANGZHU`、`biaotou` 的 `BIAOHUO`（`changle.h` 已定义），本地 `#define` 前加 `#undef`。`d/city/daxiaoroom.lpc` 注释块里的嵌套 `/*`。
 - 未改：`d/yixing/npc/bangzhu.lpc` HEAD 就编不过（`doc/set_bang.h:83` 语法错误），与本轮无关。
+
+- 2026-10-12：`open/xiangyang/task/teamjob.lpc` 的组队任务用 `names[0][random(40)]` 选地点，而这张表只有 34 个地名，`random()` 落到表外时数组越界报错、任务中断。改成 `random(sizeof(names[0]))`（shenmo `u/stey/newjob/teamjob.lpc` 同类）。HEAD 与工作树各载入一次，regress 0。

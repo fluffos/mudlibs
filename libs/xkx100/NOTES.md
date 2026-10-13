@@ -236,3 +236,5 @@ live `debug.log` 是 `libs/xkx100/log/debug.log`（Boot Time Fri Sep 4
 ## 深度功能测试（§10.7，2026-10-12）：黑木崖老者
 
 - `d/heimuya/npc/laozhe.lpc` `init()`：残留调试行 `sprintf("%s \n", what);`，`what` 是对象，本驱动 `sprintf` 的 `%s` 遇对象报错，进房间时 `init()` 每次中断、招呼从不执行；删去（与 fys 同）。
+
+- 2026-10-12：`open/xiangyang/task/teamjob.lpc` 的组队任务用 `names[0][random(40)]` 选地点，而这张表只有 34 个地名，`random()` 落到表外时数组越界报错、任务中断。改成 `random(sizeof(names[0]))`（shenmo `u/stey/newjob/teamjob.lpc` 同类）。HEAD 与工作树各载入一次，regress 0。
