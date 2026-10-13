@@ -1035,3 +1035,11 @@ id，**不要**先发 `2060`（那会按 Tomud 握手走，本口会直接踢人
 
 - `adm/daemons/cruised.lpc`：五处 `if (cruise[USER_ID]) { // … }` 块内只剩注释，把 `if` 和右括号一起注释（行为不变）。
 - 改动的对象 HEAD 与工作区都能载入，无回退。
+
+## 编译警告收尾（2026-10-12）
+
+`scripts/toolkit_fix.sh` 一轮（27 个覆盖函数，多为物品的 `query_autoload` 在 `string` 基类上写成 `int`；冗余继承 1 处）加手工收尾，能编译的文件警告清零。改动与原先报警告的 32 个对象 HEAD 与工作树各载入一次：HEAD PASS 28，tree PASS 28，regress 0。
+
+- `cmds/std/look_wiz.lpc`：野兽相貌描写 `per_msg_beast3` 连写两份，后面那份（“长的极其丑陋”）才被读到，前一份（“有气无力”）从没显示过，删去前一份，显示不变。
+- `d/miwudao/secret/npc/` 的 `dragon1`、`elf`、`virginia`：`die()` 在 `void` 基类上写成 `int`，没人读返回值，改 `void`。
+- `kungfu/skill/huashan-jian.lpc` 招式表后多余的 `;`。
