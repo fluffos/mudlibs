@@ -232,3 +232,12 @@ drafts) minus the files its pass fixed, plus `cmds/std/practice_.lpc` and a save
 ## 深度功能测试（§10.7，2026-10-11）：dns_master 空 if
 
 - `adm/daemons/network/dns_master.lpc` `query_services()`：`if (! (mud_svc[mud]["finger"/"tell"] & SVC_KNOWN))` 块里只有 `#if PREF_X & SVC_TCP … #endif`，选项关闭时 if 为空（“无副作用”警告报在下一句）；把 `#if`/`#endif` 挪到 if 外面（KB 04，2026-10-07 那次扫描漏了 `! (` 加括号换行这种写法）。载入无回退。
+
+## 编译警告收尾（2026-10-13）
+
+手工清零；改动的 13 个对象在 HEAD 与工作树各载入一次，regress 0。
+
+- 天旗病维摩拳的乾坤挪移 `daemon/class/tieflag/ill-quan/qiankun.lpc` 把施招者的敌人名单存在全局 `nosave object *enemy` 里，与 `F_ATTACK` 的 `enemy` 同名；招式文件是所有玩家共用的一个对象，名单该是 `perform()` 的局部变量，改过去。
+- 车夫两处（`d/fy/npc/officer.lpc`、`d/guanwai/npc/waiter.lpc`）计时收回马车的 `check_status` 与 `feature/damage.lpc` 检查昏迷/死亡的 `check_status()` 同名（基类那个本库无人调用，所以没出事）；改名 `check_rental`（连同 `call_out` 字符串）。
+- 黄山小姑娘、乌龟、画眉，华山燕子，桃源两只猫的 `kill_ob()`，华山青青的 `die()` 改 `void`，与基类一致（`kill` 命令不读返回值）。
+- `daemon/class/yinshi/iceheart/depoison.lpc`（冰心逼毒）多继承了一个用不到的 `/daemon/condition/generic_condition`，它的 `clear_condition*()` 都是对玩家调用的；去掉那行继承。`d/bawang/npc/skill/snake-spear.lpc` 自己的招式表 `action` 与 `SKILL` 的同名，改名 `snake_action`（自带 `query_action()` 读它，行为不变）；`d/fy/npc/newsman.lpc` 在定义前调用 `ask_question()`，补原型。
