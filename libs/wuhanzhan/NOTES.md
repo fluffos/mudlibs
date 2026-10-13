@@ -893,3 +893,11 @@ functionally re-tested live on this lib.
 
 - `story/` 下六个故事（niulang、songdai、wakeup、xiyou、zagang、zhengxi，及 `u/bqt/story/` 副本）的 `give_gift()` 只剩 `HIM "“啪”的一声…掉到你面前。" NOR;` 一行：`STORY_D->give_gift(物品, 数量, 消息)` 调用被删掉、只留下参数，故事结束时从不发奖励。本库 `adm/daemons/storyd.lpc` 有 `give_gift()`，按 mhxy 等同码库补回调用（灵芝、黄金、冰糖葫芦；物品文件都在）。
 - 12 个对象载入无回退。
+
+## 深度功能测试（§10.7，2026-10-13）：编译警告清零
+
+- 收尾一轮（toolkit + 手修），新进程分别加载 HEAD 与工作树：39 个对象 38 -> 38 通过，无回退；可编译文件的警告清零。
+- `d/kaifeng/ground.h` 的 `modes`/`mode_hints`/`families` 表加 `GROUND_TABLES_INHERITED` 守卫，`ground*.lpc` 与 `kk.lpc` 继承基类时不再重复声明。
+- `feature/alias.lpc` 的 `last_time` 改名 `last_cmd_time`，与 `u/skyhawk/xiaocaishen` 等 NPC 自己的 `last_time` 不再冲突。
+- `d/city/npc/yg/yaoguai.lpc`、`d/kaifeng/npc/yg/yaoguai.lpc` 去掉与基类重复的 `yaoguai_type`；`long.lpc`/`nn.lpc` 删掉多余的 `int long();` 原型。
+- `kill_ob`、`die`、`unconcious`、`skill_improved` 的 int/void 与基类对齐（调用者不用返回值）；`wizu/focus/toptend.lpc` 有意重定义的宏前加 `#undef`；`huashan-jianfa.lpc` 删多余的 `;`；`xianlvqiyuan` 采用同码库已修好的写法。
