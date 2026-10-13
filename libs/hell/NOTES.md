@@ -366,3 +366,10 @@ so it is not `duplicate_of`. When it opens, number it as `076-N`.
 - 2026-10-12：`adm/npc/obj/xiang.lpc`、`adm/npc/obj/xiang1.lpc`、`adm/npc/obj/xiang2.lpc` 写着 `int remove() { save(); }`，盖掉了 `feature/move.lpc` 的 `remove(string euid)`——这些存盘箱子/柜子被销毁时不从携带者身上减负重、不清 handing（KB 06 §7.239 变体，nitan_ceshi/tianxiawuxue 同类）。改成 `varargs void remove(string euid) { save(); ::remove(euid); }`。HEAD 与工作树各载入一次，regress 0（载不进的文件在 HEAD 就载不进）。
 
 - 2026-10-12：`clone/misc/swmuding.lpc`（神木王鼎）自己声明了一张 `mapping insects` 虫表，与继承的 `clone/misc/muding.lpc` 的 `insects` 同名；读表的是木鼎的代码，读到的是木鼎自己的表，神木王鼎的虫表从来没用上（`Redeclaration of global variable 'insects'`）。改名 `sw_insects`，`create()` 里 `insects = sw_insects;` 交给木鼎（nitan170911、wxddym、zjdy 系同修）。HEAD 与工作树各载入一次，regress 0。
+
+## 编译警告收尾（2026-10-13）
+
+手工清零；改动的 6 个对象（含 `clone/food/ganliang`、`d/guanwai/obj/wan`、`cmds/std/eat`）在 HEAD 与工作树各载入一次，regress 0。
+
+- `feature/food.lpc`、`feature/liquid.lpc` 的 `do_effect()` 是 `void`，而重载它的干粮 `ganliang`（三处）、`d/guanwai/obj/wan.lpc`、`d/xiakedao/obj/pigpart.h` 返回 `int`，`eat`/`drink` 对 `only_do_effect` 物品用这个返回值做命令结果：基类改 `varargs int do_effect(object me)`，返回 1（同 yanhuangwuhun）。
+- `cmds/wiz/who1.lpc` 里一行孤立的分隔线字符串（`WHT "———…" NOR;`）不赋给任何东西，从不输出，删去（输出不变）。
