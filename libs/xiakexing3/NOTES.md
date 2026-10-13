@@ -365,3 +365,11 @@ variable 警告。
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 11 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 1 个，只在 #if 分支用的声明移进分支 0 个文件；改动 10 个文件，HEAD 与工作树各载入一次无回退（10 objects; HEAD PASS 10, tree PASS 10; regress 0; newly loading 0），这些文件的警告 11 -> 0。
 
 - 2026-10-10（续）：第二轮编译警告整理（`lpc_fix_unused_init.py`）删掉了只在不启用的 `#if` 分支里用到的局部变量声明（如 `include/net/ftpdsupp.h` 中 `#ifdef GUEST_WIZARD_FTP` 分支的 `file`），启用该选项时会编译失败；声明已放回所用的分支里，工具已改为跳过这种情况（交给 `lpc_move_decl.py`）。
+
+## 编译警告收尾（2026-10-12）
+
+`scripts/toolkit_fix.sh` 一轮加两处手工，能编译的文件警告清零。改动的 37 个对象 HEAD 与工作树各载入一次：HEAD PASS 29，tree PASS 32，regress 0，新载入 3。
+
+- 冗余继承 35 处（`lpc_diamonds.py`）。其中 `d/mingjiao/npc/yinwufu`、`yinwulu`、`yinwushou` 的基类已经继承 `F_UNIQUE`，叶子又 `inherit F_UNIQUE;` 一次，驱动报 `Illegal to redefine 'nomask' function 'violate_unique'`，这三个明教 NPC 从来载不进来；删去后都能载入。
+- `kungfu/skill/hubo.lpc`（`ITEM` 与 `SKILL` 都带 `F_CLEAN_UP`）用 `lpc_name_winner.py` 写出驱动本来就选的 `skill::clean_up()`。
+- `include/net/ftpdconf.h` 把 `ftpd.h` 的 `VALID_READ`/`VALID_WRITE`（0）改定义为 1，`ftpd.lpc` 两个头都 include；在改定义前加 `#undef`，取值不变。
