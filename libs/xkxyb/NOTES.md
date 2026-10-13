@@ -154,3 +154,7 @@ functionally re-tested live on this lib.
 ## 深度功能测试（§10.7，2026-10-12）：黑木崖老者
 
 - `d/heimuya/npc/laozhe.lpc` `init()`：残留调试行 `sprintf("%s \n", what);`，`what` 是对象，本驱动 `sprintf` 的 `%s` 遇对象报错，进房间时 `init()` 每次中断、招呼从不执行；删去（与 fys 同）。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/toolkit_fix.sh` 一轮去掉 26 处多余继承（另有 139 处列为“需人工”，都在不能编译的文件里或靠作用域名调用，未动）；照 xzyx（b2d1074232f）：`include/daemons.h` 重定义 `globals.h` 已有的六个守护进程路径（值不同，包含它的文件一直用它的值），每个先 `#undef`，`d/death/god1.lpc` 写明用驱动原先选的 `clean_up()`；`kungfu/skill/huashan-jian.lpc` 多余的 `;` 删去。能编译的文件警告清零；改动的 30 个对象在 HEAD 与工作树各载入一次：HEAD PASS 22，tree PASS 22，regress 0。
