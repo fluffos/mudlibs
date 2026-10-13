@@ -5,8 +5,7 @@
 #define COMMONFILE "/d/common/obj/"
 
 
-mapping ARMORSMITH = ([]);
-ARMORSMITH = ([
+mapping ARMORSMITH = ([
                   "banded mail":(["file":COMMONFILE"armour/banded","units":6]),
                   "barding":(["file":COMMONFILE"armour/pcbarding","units":2]),
                   "tower shield":(["file":COMMONFILE"armour/shield","units":3]),
@@ -28,8 +27,7 @@ ARMORSMITH = ([
                   "splint mail":(["file":COMMONFILE"armour/splint","units":7]),
                   ]);
 
-mapping LEATHERWORK = ([]);
-LEATHERWORK = ([
+mapping LEATHERWORK = ([
                    "barding":(["file":COMMONFILE"armour/pcleatherbarding","units":2,"type":"armor"]),
                    "belt":(["file":COMMONFILE"armour/belt","units":1]),
                    "backpack":(["file":COMMONFILE"misc/backpack","units":2]),
@@ -61,8 +59,7 @@ LEATHERWORK = ([
                    "sling":(["file":COMMONFILE"lrweapon/sling","units":1,"type":"weapon"]),
                    ]);
 
-mapping TAILOR = ([]);
-TAILOR = ([
+mapping TAILOR = ([
               "belt":(["file":COMMONFILE"clothing/belt","units":1]),
               "caparison":(["file":COMMONFILE"clothing/caparison","units":4]),
               "cloak":(["file":COMMONFILE"clothing/cloak","units":3]),
@@ -78,8 +75,7 @@ TAILOR = ([
               "large sack":(["file":COMMONFILE"misc/sack","units":6]),
               ]);
 
-mapping JEWEL = ([]);
-JEWEL = ([
+mapping JEWEL = ([
              "anklet":(["file":COMMONFILE"jewelry/anklet","units":2]),
              "bracelet":(["file":COMMONFILE"jewelry/bracelet","units":2]),
              "bracers":(["file":COMMONFILE"armour/metal_bracers","units":3]),
@@ -91,8 +87,7 @@ JEWEL = ([
 			 "statue":(["file":COMMONFILE"rand/statue","units":1]),
              ]);
 
-mapping WEAPONSMITH = ([]);
-WEAPONSMITH = ([
+mapping WEAPONSMITH = ([
                    "arquebus":(["file":COMMONFILE"lrweapon/arquebus","units":8]),
                    "pistol":(["file":COMMONFILE"lrweapon/pistol","units":4]),
                    "cannon":(["file":COMMONFILE"lrweapon/cannon","units":60]),
@@ -142,8 +137,7 @@ WEAPONSMITH = ([
                    "wand":(["file":COMMONFILE"weapon/club","units":1,"type":"weapon"]),
                    ]);
 
-mapping WOODWORK = ([]);
-WOODWORK = ([
+mapping WOODWORK = ([
                 "cane":(["file":COMMONFILE"weapon/club","units":1,"type":"weapon"]),
                 "giant club":(["file":COMMONFILE"weapon/giant_club","units":5,"type":"weapon"]),
                 "lance":(["file":COMMONFILE"weapon/hhlance","units":4,"type":"weapon"]),

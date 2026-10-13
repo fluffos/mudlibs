@@ -7,6 +7,7 @@
 #define KEYCOST 200
 #define MAIN "/d/player.village/"
 #define HOMES "/d/player.village/data/"
+#undef VILLAGE
 #define VILLAGE "/d/player.village/village/"
 #define VOID "/d/standard/void"
 #define OBJ "/d/player.village/obj/"

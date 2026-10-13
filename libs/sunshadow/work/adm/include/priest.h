@@ -3,7 +3,6 @@
 #include <magic.h>
 #include <daemons.h>
 
-inherit SPELL;
 #define YOU CASTER->query_cap_name()
 #define HIM TARGET->query_cap_name()
 #define OBJ TARGET->query_objective()

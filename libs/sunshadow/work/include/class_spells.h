@@ -1,10 +1,9 @@
 // Use this file by hand, uncrustify and other tools make a mess of it
-mapping class_spell_storage = ([]);
 
 
 // Arrays in this storage for most classes store spells in order by level. If you miss some level, use "".
 // Notable exceptions are "all" specials applied to all characters and some PRC bonus spells.
-class_spell_storage =
+mapping class_spell_storage =
 
 ([
 "oracle":

@@ -464,111 +464,111 @@
 #define TENGEMS ({"------------+",\
 "|           |",\
 "|%^BOLD%^%^RED%^ ^  %^BOLD%^%^WHITE%^TEN%^BOLD%^%^RED%^  ^ %^RESET%^|",\
-"|%^BOLD%^%^RED%^\/^\\     \/^\\%^RESET%^|",\
-"|%^BOLD%^%^RED%^\\_\/ ^  ^\\_\/%^RESET%^|",\
-"|%^BOLD%^%^RED%^   \/^\\\/^\\  %^RESET%^|",\
-"|%^BOLD%^%^RED%^   \\_\/\\_\/  %^RESET%^|",\
+"|%^BOLD%^%^RED%^/^\\     /^\\%^RESET%^|",\
+"|%^BOLD%^%^RED%^\\_/ ^  ^\\_/%^RESET%^|",\
+"|%^BOLD%^%^RED%^   /^\\/^\\  %^RESET%^|",\
+"|%^BOLD%^%^RED%^   \\_/\\_/  %^RESET%^|",\
 "|%^BOLD%^%^RED%^ ^       ^ %^RESET%^|",\
-"|%^BOLD%^%^RED%^\/^\\  %^BOLD%^%^WHITE%^OF%^BOLD%^%^RED%^ \/^\\%^RESET%^|",\
-"|%^BOLD%^%^RED%^\\_\/ ^  ^\\_\/%^RESET%^|",\
-"|%^BOLD%^%^RED%^   \/^\\\/^\\  %^RESET%^|",\
-"|%^BOLD%^%^RED%^   \\_\/\\_\/  %^RESET%^|",\
+"|%^BOLD%^%^RED%^/^\\  %^BOLD%^%^WHITE%^OF%^BOLD%^%^RED%^ /^\\%^RESET%^|",\
+"|%^BOLD%^%^RED%^\\_/ ^  ^\\_/%^RESET%^|",\
+"|%^BOLD%^%^RED%^   /^\\/^\\  %^RESET%^|",\
+"|%^BOLD%^%^RED%^   \\_/\\_/  %^RESET%^|",\
 "|%^BOLD%^%^RED%^ ^       ^ %^RESET%^|",\
-"|%^BOLD%^%^RED%^\/^\\%^BOLD%^%^WHITE%^GEMS%^BOLD%^%^RED%^ \/^\\%^RESET%^|",\
-"|%^BOLD%^%^RED%^\\_\/     \\_\/%^RESET%^|",\
+"|%^BOLD%^%^RED%^/^\\%^BOLD%^%^WHITE%^GEMS%^BOLD%^%^RED%^ /^\\%^RESET%^|",\
+"|%^BOLD%^%^RED%^\\_/     \\_/%^RESET%^|",\
 "|___________|"})
 
 #define NINEGEMS ({"------------+",\
 "|%^BOLD%^%^RED%^ ^   ^   ^ %^RESET%^|",\
-"|%^BOLD%^%^RED%^\/^\\ \/^\\ \/^\\%^RESET%^|",\
-"|%^BOLD%^%^RED%^\\_\/ \\_\/ \\_\/%^RESET%^|",\
+"|%^BOLD%^%^RED%^/^\\ /^\\ /^\\%^RESET%^|",\
+"|%^BOLD%^%^RED%^\\_/ \\_/ \\_/%^RESET%^|",\
 "|           |",\
 "|   %^BOLD%^%^WHITE%^NINE    %^RESET%^|",\
 "|%^BOLD%^%^RED%^ ^   ^   ^ %^RESET%^|",\
-"|%^BOLD%^%^RED%^\/^\\ \/^\\ \/^\\%^RESET%^|",\
-"|%^BOLD%^%^RED%^\\_\/ \\_\/ \\_\/%^RESET%^|",\
+"|%^BOLD%^%^RED%^/^\\ /^\\ /^\\%^RESET%^|",\
+"|%^BOLD%^%^RED%^\\_/ \\_/ \\_/%^RESET%^|",\
 "|           |",\
 "|  %^BOLD%^%^WHITE%^OF GEMS  %^RESET%^|",\
 "|%^BOLD%^%^RED%^ ^   ^   ^ %^RESET%^|",\
-"|%^BOLD%^%^RED%^\/^\\ \/^\\ \/^\\%^RESET%^|",\
-"|%^BOLD%^%^RED%^\\_\/ \\_\/ \\_\/%^RESET%^|",\
+"|%^BOLD%^%^RED%^/^\\ /^\\ /^\\%^RESET%^|",\
+"|%^BOLD%^%^RED%^\\_/ \\_/ \\_/%^RESET%^|",\
 "|           |",\
 "|___________|"})
 
 #define EIGHTGEMS ({"------------+",\
 "|%^BOLD%^%^RED%^ ^       ^ %^RESET%^|",\
-"|%^BOLD%^%^RED%^\/^\\%^BOLD%^%^WHITE%^EIGHT%^BOLD%^%^RED%^\/^\\%^RESET%^|",\
-"|%^BOLD%^%^RED%^\\_\/     \\_\/%^RESET%^|",\
+"|%^BOLD%^%^RED%^/^\\%^BOLD%^%^WHITE%^EIGHT%^BOLD%^%^RED%^/^\\%^RESET%^|",\
+"|%^BOLD%^%^RED%^\\_/     \\_/%^RESET%^|",\
 "|%^BOLD%^%^RED%^     ^     %^RESET%^|",\
-"|%^BOLD%^%^RED%^    \/^\\    %^RESET%^|",\
-"|%^BOLD%^%^RED%^ ^  \\_\/  ^ %^RESET%^|",\
-"|%^BOLD%^%^RED%^\/^\\     \/^\\%^RESET%^|",\
-"|%^BOLD%^%^RED%^\\_\/  %^BOLD%^%^WHITE%^OF%^BOLD%^%^RED%^ \\_\/%^RESET%^|",\
+"|%^BOLD%^%^RED%^    /^\\    %^RESET%^|",\
+"|%^BOLD%^%^RED%^ ^  \\_/  ^ %^RESET%^|",\
+"|%^BOLD%^%^RED%^/^\\     /^\\%^RESET%^|",\
+"|%^BOLD%^%^RED%^\\_/  %^BOLD%^%^WHITE%^OF%^BOLD%^%^RED%^ \\_/%^RESET%^|",\
 "|%^BOLD%^%^RED%^     ^     %^RESET%^|",\
-"|%^BOLD%^%^RED%^    \/^\\    %^RESET%^|",\
-"|%^BOLD%^%^RED%^ ^  \\_\/  ^ %^RESET%^|",\
-"|%^BOLD%^%^RED%^\/^\\     \/^\\%^RESET%^|",\
-"|%^BOLD%^%^RED%^\\_\/ %^BOLD%^%^WHITE%^GEMS%^BOLD%^%^RED%^\\_\/%^RESET%^|",\
+"|%^BOLD%^%^RED%^    /^\\    %^RESET%^|",\
+"|%^BOLD%^%^RED%^ ^  \\_/  ^ %^RESET%^|",\
+"|%^BOLD%^%^RED%^/^\\     /^\\%^RESET%^|",\
+"|%^BOLD%^%^RED%^\\_/ %^BOLD%^%^WHITE%^GEMS%^BOLD%^%^RED%^\\_/%^RESET%^|",\
 "|%^BOLD%^%^RED%^           %^RESET%^|",\
 "|___________|"})
 
 #define SEVENGEMS ({"------------+",\
 "|%^BOLD%^%^RED%^ ^   ^   ^ %^RESET%^|",\
-"|%^BOLD%^%^RED%^\/^\\ \/^\\ \/^\\%^RESET%^|",\
-"|%^BOLD%^%^RED%^\\_\/ \\_\/ \\_\/%^RESET%^|",\
+"|%^BOLD%^%^RED%^/^\\ /^\\ /^\\%^RESET%^|",\
+"|%^BOLD%^%^RED%^\\_/ \\_/ \\_/%^RESET%^|",\
 "|           |",\
 "|   %^BOLD%^%^WHITE%^SEVEN   %^RESET%^|",\
 "|%^BOLD%^%^RED%^     ^     %^RESET%^|",\
-"|%^BOLD%^%^RED%^    \/^\\    %^RESET%^|",\
-"|%^BOLD%^%^RED%^    \\_\/    %^RESET%^|",\
+"|%^BOLD%^%^RED%^    /^\\    %^RESET%^|",\
+"|%^BOLD%^%^RED%^    \\_/    %^RESET%^|",\
 "|           |",\
 "|  %^BOLD%^%^WHITE%^OF GEMS  %^RESET%^|",\
 "|%^BOLD%^%^RED%^ ^   ^   ^ %^RESET%^|",\
-"|%^BOLD%^%^RED%^\/^\\ \/^\\ \/^\\%^RESET%^|",\
-"|%^BOLD%^%^RED%^\\_\/ \\_\/ \\_\/%^RESET%^|",\
+"|%^BOLD%^%^RED%^/^\\ /^\\ /^\\%^RESET%^|",\
+"|%^BOLD%^%^RED%^\\_/ \\_/ \\_/%^RESET%^|",\
 "|           |",\
 "|___________|"})
 
 #define SIXGEMS ({"------------+",\
 "|%^BOLD%^%^RED%^   ^   ^   %^RESET%^|",\
-"|%^BOLD%^%^RED%^  \/^\\ \/^\\  %^RESET%^|",\
-"|%^BOLD%^%^RED%^  \\_\/ \\_\/  %^RESET%^|",\
+"|%^BOLD%^%^RED%^  /^\\ /^\\  %^RESET%^|",\
+"|%^BOLD%^%^RED%^  \\_/ \\_/  %^RESET%^|",\
 "|           |",\
 "|    %^BOLD%^%^WHITE%^SIX    %^RESET%^|",\
 "|%^BOLD%^%^RED%^   ^   ^   %^RESET%^|",\
-"|%^BOLD%^%^RED%^  \/^\\ \/^\\  %^RESET%^|",\
-"|%^BOLD%^%^RED%^  \\_\/ \\_\/  %^RESET%^|",\
+"|%^BOLD%^%^RED%^  /^\\ /^\\  %^RESET%^|",\
+"|%^BOLD%^%^RED%^  \\_/ \\_/  %^RESET%^|",\
 "|           |",\
 "|  %^BOLD%^%^WHITE%^OF GEMS  %^RESET%^|",\
 "|%^BOLD%^%^RED%^   ^   ^   %^RESET%^|",\
-"|%^BOLD%^%^RED%^  \/^\\ \/^\\  %^RESET%^|",\
-"|%^BOLD%^%^RED%^  \\_\/ \\_\/  %^RESET%^|",\
+"|%^BOLD%^%^RED%^  /^\\ /^\\  %^RESET%^|",\
+"|%^BOLD%^%^RED%^  \\_/ \\_/  %^RESET%^|",\
 "|           |",\
 "|___________|"})
 
 
 #define FIVEGEMS ({"------------+",\
 "|%^BOLD%^%^RED%^   ^   ^   %^RESET%^|",\
-"|%^BOLD%^%^RED%^  \/^\\ \/^\\  %^RESET%^|",\
-"|%^BOLD%^%^RED%^  \\_\/ \\_\/  %^RESET%^|",\
+"|%^BOLD%^%^RED%^  /^\\ /^\\  %^RESET%^|",\
+"|%^BOLD%^%^RED%^  \\_/ \\_/  %^RESET%^|",\
 "|           |",\
 "|   %^BOLD%^%^WHITE%^FIVE    %^RESET%^|",\
 "|%^BOLD%^%^RED%^     ^     %^RESET%^|",\
-"|%^BOLD%^%^RED%^    \/^\\    %^RESET%^|",\
-"|%^BOLD%^%^RED%^    \\_\/    %^RESET%^|",\
+"|%^BOLD%^%^RED%^    /^\\    %^RESET%^|",\
+"|%^BOLD%^%^RED%^    \\_/    %^RESET%^|",\
 "|           |",\
 "|  %^BOLD%^%^WHITE%^OF GEMS  %^RESET%^|",\
 "|%^BOLD%^%^RED%^   ^   ^   %^RESET%^|",\
-"|%^BOLD%^%^RED%^  \/^\\ \/^\\  %^RESET%^|",\
-"|%^BOLD%^%^RED%^  \\_\/ \\_\/  %^RESET%^|",\
+"|%^BOLD%^%^RED%^  /^\\ /^\\  %^RESET%^|",\
+"|%^BOLD%^%^RED%^  \\_/ \\_/  %^RESET%^|",\
 "|           |",\
 "|___________|"})
 
 #define FOURGEMS ({"------------+",\
 "|           |",\
 "|%^BOLD%^%^RED%^   ^   ^   %^RESET%^|",\
-"|%^BOLD%^%^RED%^  \/^\\ \/^\\  %^RESET%^|",\
-"|%^BOLD%^%^RED%^  \\_\/ \\_\/  %^RESET%^|",\
+"|%^BOLD%^%^RED%^  /^\\ /^\\  %^RESET%^|",\
+"|%^BOLD%^%^RED%^  \\_/ \\_/  %^RESET%^|",\
 "|           |",\
 "|           |",\
 "|   %^BOLD%^%^WHITE%^FOUR    %^RESET%^|",\
@@ -576,33 +576,33 @@
 "|   %^BOLD%^%^WHITE%^GEMS    %^RESET%^|",\
 "|           |",\
 "|%^BOLD%^%^RED%^   ^   ^   %^RESET%^|",\
-"|%^BOLD%^%^RED%^  \/^\\ \/^\\  %^RESET%^|",\
-"|%^BOLD%^%^RED%^  \\_\/ \\_\/  %^RESET%^|",\
+"|%^BOLD%^%^RED%^  /^\\ /^\\  %^RESET%^|",\
+"|%^BOLD%^%^RED%^  \\_/ \\_/  %^RESET%^|",\
 "|           |",\
 "|___________|"})
 
 #define THREEGEMS ({"------------+",\
 "|%^BOLD%^%^RED%^     ^     %^RESET%^|",\
-"|%^BOLD%^%^RED%^    \/^\\    %^RESET%^|",\
-"|%^BOLD%^%^RED%^    \\_\/    %^RESET%^|",\
+"|%^BOLD%^%^RED%^    /^\\    %^RESET%^|",\
+"|%^BOLD%^%^RED%^    \\_/    %^RESET%^|",\
 "|           |",\
 "|   %^BOLD%^%^WHITE%^THREE  %^RESET%^ |",\
 "|%^BOLD%^%^RED%^     ^     %^RESET%^|",\
-"|%^BOLD%^%^RED%^    \/^\\    %^RESET%^|",\
-"|%^BOLD%^%^RED%^    \\_\/    %^RESET%^|",\
+"|%^BOLD%^%^RED%^    /^\\    %^RESET%^|",\
+"|%^BOLD%^%^RED%^    \\_/    %^RESET%^|",\
 "|           |",\
 "|  %^BOLD%^%^WHITE%^OF GEMS  %^RESET%^|",\
 "|%^BOLD%^%^RED%^     ^     %^RESET%^|",\
-"|%^BOLD%^%^RED%^    \/^\\    %^RESET%^|",\
-"|%^BOLD%^%^RED%^    \\_\/    %^RESET%^|",\
+"|%^BOLD%^%^RED%^    /^\\    %^RESET%^|",\
+"|%^BOLD%^%^RED%^    \\_/    %^RESET%^|",\
 "|           |",\
 "|___________|"})
 
 #define TWOGEMS ({"------------+",\
 "|           |",\
 "|%^BOLD%^%^RED%^     ^     %^RESET%^|",\
-"|%^BOLD%^%^RED%^    \/^\\    %^RESET%^|",\
-"|%^BOLD%^%^RED%^    \\_\/    %^RESET%^|",\
+"|%^BOLD%^%^RED%^    /^\\    %^RESET%^|",\
+"|%^BOLD%^%^RED%^    \\_/    %^RESET%^|",\
 "|           |",\
 "|           |",\
 "|   %^BOLD%^%^WHITE%^TWO     %^RESET%^|",\
@@ -610,8 +610,8 @@
 "|   %^BOLD%^%^WHITE%^GEMS    %^RESET%^|",\
 "|           |",\
 "|%^BOLD%^%^RED%^     ^     %^RESET%^|",\
-"|%^BOLD%^%^RED%^    \/^\\    %^RESET%^|",\
-"|%^BOLD%^%^RED%^    \\_\/    %^RESET%^|",\
+"|%^BOLD%^%^RED%^    /^\\    %^RESET%^|",\
+"|%^BOLD%^%^RED%^    \\_/    %^RESET%^|",\
 "|           |",\
 "|___________|"})
 
@@ -622,10 +622,10 @@
 "|%^BOLD%^%^CYAN%^-+- %^RESET%^       |",\
 "| %^BOLD%^%^CYAN%^'  %^BLUE%^ ^ %^CYAN%^  ^ %^RESET%^|",\
 "|%^BOLD%^%^BLUE%^ ___{=}_ %^CYAN%^|%^RESET%^ |",\
-"|%^BOLD%^%^BLUE%^\/ %^CYAN%^^%^BLUE%^ \\ \/ %^CYAN%^-+-%^RESET%^|",\
-"|%^BOLD%^%^CYAN%^  |%^BLUE%^  ^ \/`0%^RESET%^ |",\
-"|%^BOLD%^%^BLUE%^\\%^CYAN%^-+-%^BLUE%^\/  | %^RESET%^  |",\
-"|%^BOLD%^%^BLUE%^ \\%^CYAN%^'%^BLUE%^\/+_^_\\%^RESET%^  |",\
+"|%^BOLD%^%^BLUE%^/ %^CYAN%^^%^BLUE%^ \\ / %^CYAN%^-+-%^RESET%^|",\
+"|%^BOLD%^%^CYAN%^  |%^BLUE%^  ^ /`0%^RESET%^ |",\
+"|%^BOLD%^%^BLUE%^\\%^CYAN%^-+-%^BLUE%^/  | %^RESET%^  |",\
+"|%^BOLD%^%^BLUE%^ \\%^CYAN%^'%^BLUE%^/+_^_\\%^RESET%^  |",\
 "|%^BOLD%^%^BLUE%^   || ||  %^RESET%^ |",\
 "|%^BOLD%^%^BLUE%^   || ||%^CYAN%^ ^%^RESET%^ |",\
 "|%^BOLD%^%^BLUE%^   d| |b%^CYAN%^ | %^RESET%^|",\
@@ -639,10 +639,10 @@
 "|%^BOLD%^%^BLACK%^ |         %^RESET%^|",\
 "|%^BOLD%^%^BLACK%^ | %^BLUE%^  ^ %^BOLD%^%^BLACK%^  @ %^RESET%^|",\
 "|%^BOLD%^%^BLUE%^ ___{=}_%^BOLD%^%^BLACK%^(#)%^RESET%^|",\
-"|%^BOLD%^%^BLUE%^\/ %^BOLD%^%^BLACK%^@%^BLUE%^ \\ \/ \\%^BOLD%^%^BLACK%^| %^RESET%^|",\
-"| %^BOLD%^%^BLACK%^(#)%^BLUE%^ ^ \/`0 %^RESET%^|",\
-"|%^BOLD%^%^BLUE%^\\%^BOLD%^%^BLACK%^ |%^BLUE%^ \/  |   %^RESET%^|",\
-"|%^BOLD%^%^BLUE%^ \\%^BOLD%^%^BLACK%^|%^BLUE%^\/+_^_\\  %^RESET%^|",\
+"|%^BOLD%^%^BLUE%^/ %^BOLD%^%^BLACK%^@%^BLUE%^ \\ / \\%^BOLD%^%^BLACK%^| %^RESET%^|",\
+"| %^BOLD%^%^BLACK%^(#)%^BLUE%^ ^ /`0 %^RESET%^|",\
+"|%^BOLD%^%^BLUE%^\\%^BOLD%^%^BLACK%^ |%^BLUE%^ /  |   %^RESET%^|",\
+"|%^BOLD%^%^BLUE%^ \\%^BOLD%^%^BLACK%^|%^BLUE%^/+_^_\\  %^RESET%^|",\
 "|%^BOLD%^%^BLUE%^   || ||   %^RESET%^|",\
 "|%^BOLD%^%^BLUE%^   || ||%^BOLD%^%^BLACK%^ @ %^RESET%^|",\
 "|%^BOLD%^%^BLUE%^   d| |b%^BOLD%^%^BLACK%^(#)%^RESET%^|",\
@@ -653,18 +653,18 @@
 #define LORDGEMS ({"------------+",\
 "|           |",\
 "|%^BOLD%^%^RED%^ ^%^BOLD%^%^WHITE%^ LORD    %^RESET%^|",\
-"|%^BOLD%^%^RED%^\/^\\        %^RESET%^|",\
-"|%^BOLD%^%^RED%^\\_\/ %^BLUE%^ ^ %^RED%^  ^ %^RESET%^|",\
-"|%^BOLD%^%^BLUE%^ ___{=}_%^BOLD%^%^RED%^\/^\\%^RESET%^|",\
-"|%^BOLD%^%^BLUE%^\/ %^RED%^^%^BLUE%^ \\ \/ %^RED%^\\_\/%^RESET%^|",\
-"|%^BOLD%^%^RED%^ \/^\\%^BLUE%^ ^ \/`0 %^RESET%^|",\
-"|%^BOLD%^%^BLUE%^\\%^RED%^\\_\/%^BLUE%^\/  |   %^RESET%^|",\
-"|%^BOLD%^%^BLUE%^ \\ \/+_^_\\  %^RESET%^|",\
+"|%^BOLD%^%^RED%^/^\\        %^RESET%^|",\
+"|%^BOLD%^%^RED%^\\_/ %^BLUE%^ ^ %^RED%^  ^ %^RESET%^|",\
+"|%^BOLD%^%^BLUE%^ ___{=}_%^BOLD%^%^RED%^/^\\%^RESET%^|",\
+"|%^BOLD%^%^BLUE%^/ %^RED%^^%^BLUE%^ \\ / %^RED%^\\_/%^RESET%^|",\
+"|%^BOLD%^%^RED%^ /^\\%^BLUE%^ ^ /`0 %^RESET%^|",\
+"|%^BOLD%^%^BLUE%^\\%^RED%^\\_/%^BLUE%^/  |   %^RESET%^|",\
+"|%^BOLD%^%^BLUE%^ \\ /+_^_\\  %^RESET%^|",\
 "|%^BOLD%^%^BLUE%^   || ||   %^RESET%^|",\
 "|%^BOLD%^%^BLUE%^   || ||   %^RESET%^|",\
 "|%^BOLD%^%^BLUE%^   d| |b %^RED%^^ %^RESET%^|",\
-"|%^BOLD%^%^WHITE%^ OF     %^RED%^\/^\\%^RESET%^|",\
-"|%^BOLD%^%^WHITE%^   GEMS %^RED%^\\_\/%^RESET%^|",\
+"|%^BOLD%^%^WHITE%^ OF     %^RED%^/^\\%^RESET%^|",\
+"|%^BOLD%^%^WHITE%^   GEMS %^RED%^\\_/%^RESET%^|",\
 "|___________|"})
 
 #define LORDTOWERS ({"------------+",\
@@ -673,10 +673,10 @@
 "||0|      ^ |",\
 "|| | %^BOLD%^%^BLUE%^ ^ %^RESET%^ |~||",\
 "|%^BOLD%^%^BLUE%^ ___{=}_%^RESET%^|0||",\
-"|%^BOLD%^%^BLUE%^\/ %^RESET%^^%^BOLD%^%^BLUE%^ \\ \/ \\%^RESET%^ ||",\
-"| |~|%^BOLD%^%^BLUE%^ ^ \/`0 %^RESET%^|",\
-"|%^BOLD%^%^BLUE%^\\%^RESET%^|0|%^BOLD%^%^BLUE%^\/  |   %^RESET%^|",\
-"|%^BOLD%^%^BLUE%^ \\ \/+_^_\\  %^RESET%^|",\
+"|%^BOLD%^%^BLUE%^/ %^RESET%^^%^BOLD%^%^BLUE%^ \\ / \\%^RESET%^ ||",\
+"| |~|%^BOLD%^%^BLUE%^ ^ /`0 %^RESET%^|",\
+"|%^BOLD%^%^BLUE%^\\%^RESET%^|0|%^BOLD%^%^BLUE%^/  |   %^RESET%^|",\
+"|%^BOLD%^%^BLUE%^ \\ /+_^_\\  %^RESET%^|",\
 "|%^BOLD%^%^BLUE%^   || ||   %^RESET%^|",\
 "|%^BOLD%^%^BLUE%^   || || %^RESET%^^ |",\
 "|%^BOLD%^%^BLUE%^   d| |b%^RESET%^|~||",\
@@ -686,16 +686,16 @@
 
 #define DAMSELSWORDS ({"------------+",\
 "|%^BOLD%^%^WHITE%^D%^YELLOW%^w*W*W*W*w %^RESET%^|",\
-"|%^BOLD%^%^WHITE%^A %^YELLOW%^\\'.'.'\/  %^RESET%^|",\
-"|%^BOLD%^%^WHITE%^M  %^YELLOW%^(\/`\\)   %^RESET%^|",\
-"|%^BOLD%^%^WHITE%^S %^YELLOW%^(\/%^BLUE%^a a%^YELLOW%^\\)  %^RESET%^|",\
-"|%^BOLD%^%^WHITE%^E %^YELLOW%^(\\%^BLUE%^_%^RED%^-%^BLUE%^_%^YELLOW%^\/)  %^RESET%^|",\
+"|%^BOLD%^%^WHITE%^A %^YELLOW%^\\'.'.'/  %^RESET%^|",\
+"|%^BOLD%^%^WHITE%^M  %^YELLOW%^(/`\\)   %^RESET%^|",\
+"|%^BOLD%^%^WHITE%^S %^YELLOW%^(/%^BLUE%^a a%^YELLOW%^\\)  %^RESET%^|",\
+"|%^BOLD%^%^WHITE%^E %^YELLOW%^(\\%^BLUE%^_%^RED%^-%^BLUE%^_%^YELLOW%^/)  %^RESET%^|",\
 "|%^BOLD%^%^WHITE%^L%^BLUE%^.-~'='~-. %^RESET%^|",\
-"|%^BOLD%^%^BLUE%^\/`~`'Y'`~`\\%^RESET%^|",\
-"|%^BOLD%^%^BLUE%^ \/(_ %^GREEN%^*%^BLUE%^ _)\\ %^RESET%^|",\
-"|%^BOLD%^%^BLUE%^\/  )   (  \\%^RESET%^|",\
-"|%^BOLD%^%^BLUE%^\\_\/\\ %^CYAN%^^%^BLUE%^ \/\\_\/%^RESET%^|",\
-"|%^BOLD%^%^BLUE%^\/_)  %^CYAN%^|  %^BLUE%^(_\\%^RESET%^|",\
+"|%^BOLD%^%^BLUE%^/`~`'Y'`~`\\%^RESET%^|",\
+"|%^BOLD%^%^BLUE%^ /(_ %^GREEN%^*%^BLUE%^ _)\\ %^RESET%^|",\
+"|%^BOLD%^%^BLUE%^/  )   (  \\%^RESET%^|",\
+"|%^BOLD%^%^BLUE%^\\_/\\ %^CYAN%^^%^BLUE%^ /\\_/%^RESET%^|",\
+"|%^BOLD%^%^BLUE%^/_)  %^CYAN%^|  %^BLUE%^(_\\%^RESET%^|",\
 "|%^BOLD%^%^BLUE%^ |  %^CYAN%^-+-%^BLUE%^  | %^RESET%^|",\
 "|%^BOLD%^%^BLUE%^jgs  %^CYAN%^'%^BLUE%^%^   | %^RESET%^|",\
 "|%^BOLD%^%^WHITE%^ OF SWORDS %^RESET%^|",\
@@ -703,16 +703,16 @@
 
 #define DAMSELCLUBS ({"------------+",\
 "|%^BOLD%^%^WHITE%^D%^YELLOW%^w*W*W*W*w %^RESET%^|",\
-"|%^BOLD%^%^WHITE%^A %^YELLOW%^\\'.'.'\/  %^RESET%^|",\
-"|%^BOLD%^%^WHITE%^M  %^YELLOW%^(\/`\\)   %^RESET%^|",\
-"|%^BOLD%^%^WHITE%^S %^YELLOW%^(\/%^BLUE%^a a%^YELLOW%^\\)  %^RESET%^|",\
-"|%^BOLD%^%^WHITE%^E %^YELLOW%^(\\%^BLUE%^_%^RED%^-%^BLUE%^_%^YELLOW%^\/)  %^RESET%^|",\
+"|%^BOLD%^%^WHITE%^A %^YELLOW%^\\'.'.'/  %^RESET%^|",\
+"|%^BOLD%^%^WHITE%^M  %^YELLOW%^(/`\\)   %^RESET%^|",\
+"|%^BOLD%^%^WHITE%^S %^YELLOW%^(/%^BLUE%^a a%^YELLOW%^\\)  %^RESET%^|",\
+"|%^BOLD%^%^WHITE%^E %^YELLOW%^(\\%^BLUE%^_%^RED%^-%^BLUE%^_%^YELLOW%^/)  %^RESET%^|",\
 "|%^BOLD%^%^WHITE%^L%^BLUE%^.-~'='~-. %^RESET%^|",\
-"|%^BOLD%^%^BLUE%^\/`~`'Y'`~`\\%^RESET%^|",\
-"|%^BOLD%^%^BLUE%^ \/(_ %^GREEN%^*%^BLUE%^ _)\\ %^RESET%^|",\
-"|%^BOLD%^%^BLUE%^\/  )   (  \\%^RESET%^|",\
-"|%^BOLD%^%^BLUE%^\\_\/\\ %^BOLD%^%^BLACK%^@%^BLUE%^ \/\\_\/%^RESET%^|",\
-"|%^BOLD%^%^BLUE%^\/_) %^BOLD%^%^BLACK%^(#)%^BLUE%^ (_\\%^RESET%^|",\
+"|%^BOLD%^%^BLUE%^/`~`'Y'`~`\\%^RESET%^|",\
+"|%^BOLD%^%^BLUE%^ /(_ %^GREEN%^*%^BLUE%^ _)\\ %^RESET%^|",\
+"|%^BOLD%^%^BLUE%^/  )   (  \\%^RESET%^|",\
+"|%^BOLD%^%^BLUE%^\\_/\\ %^BOLD%^%^BLACK%^@%^BLUE%^ /\\_/%^RESET%^|",\
+"|%^BOLD%^%^BLUE%^/_) %^BOLD%^%^BLACK%^(#)%^BLUE%^ (_\\%^RESET%^|",\
 "|%^BOLD%^%^BLUE%^ |   %^BOLD%^%^BLACK%^|   %^BLUE%^| %^RESET%^|",\
 "|%^BOLD%^%^BLUE%^jgs  %^BOLD%^%^BLACK%^|   %^BLUE%^| %^RESET%^|",\
 "|%^BOLD%^%^WHITE%^ OF CLUBS  %^RESET%^|",\
@@ -720,16 +720,16 @@
 
 #define DAMSELTOWERS ({"------------+",\
 "|%^BOLD%^%^WHITE%^D%^YELLOW%^w*W*W*W*w %^RESET%^|",\
-"|%^BOLD%^%^WHITE%^A%^YELLOW%^ \\'.'.'\/%^RESET%^^ |",\
-"|%^BOLD%^%^WHITE%^M%^YELLOW%^  (\/`\\)%^RESET%^|~||",\
-"|%^BOLD%^%^WHITE%^S%^YELLOW%^ (\/%^BLUE%^a a%^YELLOW%^\\)%^RESET%^0||",\
-"|%^BOLD%^%^WHITE%^E%^YELLOW%^ (\\%^BLUE%^_%^RED%^-%^BLUE%^_%^YELLOW%^\/)%^RESET%^ ||",\
+"|%^BOLD%^%^WHITE%^A%^YELLOW%^ \\'.'.'/%^RESET%^^ |",\
+"|%^BOLD%^%^WHITE%^M%^YELLOW%^  (/`\\)%^RESET%^|~||",\
+"|%^BOLD%^%^WHITE%^S%^YELLOW%^ (/%^BLUE%^a a%^YELLOW%^\\)%^RESET%^0||",\
+"|%^BOLD%^%^WHITE%^E%^YELLOW%^ (\\%^BLUE%^_%^RED%^-%^BLUE%^_%^YELLOW%^/)%^RESET%^ ||",\
 "|%^BOLD%^%^WHITE%^L%^BLUE%^.-~'='~-. %^RESET%^|",\
-"|%^BOLD%^%^BLUE%^\/`~`'Y'`~`\\%^RESET%^|",\
-"|%^BOLD%^%^BLUE%^ \/(_ %^GREEN%^*%^BLUE%^ _)\\ %^RESET%^|",\
-"|%^BOLD%^%^BLUE%^\/  )   (  \\%^RESET%^|",\
-"|%^BOLD%^%^BLUE%^\\_\/\\ %^RESET%^^%^BOLD%^%^BLUE%^ \/\\_\/%^RESET%^|",\
-"|%^BOLD%^%^BLUE%^\/_) %^RESET%^|~|%^BOLD%^%^BLUE%^ (_\\%^RESET%^|",\
+"|%^BOLD%^%^BLUE%^/`~`'Y'`~`\\%^RESET%^|",\
+"|%^BOLD%^%^BLUE%^ /(_ %^GREEN%^*%^BLUE%^ _)\\ %^RESET%^|",\
+"|%^BOLD%^%^BLUE%^/  )   (  \\%^RESET%^|",\
+"|%^BOLD%^%^BLUE%^\\_/\\ %^RESET%^^%^BOLD%^%^BLUE%^ /\\_/%^RESET%^|",\
+"|%^BOLD%^%^BLUE%^/_) %^RESET%^|~|%^BOLD%^%^BLUE%^ (_\\%^RESET%^|",\
 "|%^BOLD%^%^BLUE%^ |  %^RESET%^|0|%^BOLD%^%^BLUE%^  | %^RESET%^|",\
 "|%^BOLD%^%^BLUE%^jgs %^RESET%^| |%^BOLD%^%^BLUE%^  | %^RESET%^|",\
 "|%^BOLD%^%^WHITE%^ OF TOWERS %^RESET%^|",\
@@ -737,18 +737,18 @@
 
 #define DAMSELGEMS ({"------------+",\
 "|%^BOLD%^%^WHITE%^D%^YELLOW%^w*W*W*W*w %^RESET%^|",\
-"|%^BOLD%^%^WHITE%^A%^YELLOW%^ \\'.'.'\/%^RESET%^  |",\
-"|%^BOLD%^%^WHITE%^M%^YELLOW%^  (\/`\\)%^RESET%^   |",\
-"|%^BOLD%^%^WHITE%^S%^YELLOW%^ (\/%^BLUE%^a a%^YELLOW%^\\)%^RESET%^  |",\
-"|%^BOLD%^%^WHITE%^E%^YELLOW%^ (\\%^BLUE%^_%^RED%^-%^BLUE%^_%^YELLOW%^\/)%^RESET%^  |",\
+"|%^BOLD%^%^WHITE%^A%^YELLOW%^ \\'.'.'/%^RESET%^  |",\
+"|%^BOLD%^%^WHITE%^M%^YELLOW%^  (/`\\)%^RESET%^   |",\
+"|%^BOLD%^%^WHITE%^S%^YELLOW%^ (/%^BLUE%^a a%^YELLOW%^\\)%^RESET%^  |",\
+"|%^BOLD%^%^WHITE%^E%^YELLOW%^ (\\%^BLUE%^_%^RED%^-%^BLUE%^_%^YELLOW%^/)%^RESET%^  |",\
 "|%^BOLD%^%^WHITE%^L%^BLUE%^.-~'='~-. %^RESET%^|",\
-"|%^BOLD%^%^BLUE%^\/`~`'Y'`~`\\%^RESET%^|",\
-"|%^BOLD%^%^BLUE%^ \/(_ %^GREEN%^*%^BLUE%^ _)\\ %^RESET%^|",\
-"|%^BOLD%^%^BLUE%^\/  )   (  \\%^RESET%^|",\
-"|%^BOLD%^%^BLUE%^\/_)     (_\\%^RESET%^|",\
+"|%^BOLD%^%^BLUE%^/`~`'Y'`~`\\%^RESET%^|",\
+"|%^BOLD%^%^BLUE%^ /(_ %^GREEN%^*%^BLUE%^ _)\\ %^RESET%^|",\
+"|%^BOLD%^%^BLUE%^/  )   (  \\%^RESET%^|",\
+"|%^BOLD%^%^BLUE%^/_)     (_\\%^RESET%^|",\
 "|%^BOLD%^%^BLUE%^ |   %^RED%^^%^BLUE%^   | %^RESET%^|",\
-"|%^BOLD%^%^BLUE%^jgs %^RED%^\/^\\%^BLUE%^  | %^RESET%^|",\
-"|%^BOLD%^%^BLUE%^ |  %^RED%^\\_\/%^BLUE%^  |%^RESET%^ |",\
+"|%^BOLD%^%^BLUE%^jgs %^RED%^/^\\%^BLUE%^  | %^RESET%^|",\
+"|%^BOLD%^%^BLUE%^ |  %^RED%^\\_/%^BLUE%^  |%^RESET%^ |",\
 "|%^BOLD%^%^BLUE%^ |%^BOLD%^%^WHITE%^OF GEMS%^BOLD%^%^BLUE%^| %^RESET%^|",\
 "|___________|"})
 
@@ -758,15 +758,15 @@
 "| %^BOLD%^%^CYAN%^^%^RESET%^         |",\
 "| %^BOLD%^%^CYAN%^|  %^BOLD%^%^WHITE%^HUNTER%^RESET%^ |",\
 "|%^BOLD%^%^CYAN%^-+-%^RESET%^     %^ORANGE%^(%^RESET%^  |",\
-"|%^BOLD%^%^CYAN%^ '%^GREEN%^ H   %^BOLD%^%^BLACK%^\/ %^RESET%^%^ORANGE%^\\%^RESET%^ |",\
-"|%^BOLD%^%^BLACK%^ *%^GREEN%^( } %^BOLD%^%^BLACK%^\/%^GREEN%^___%^RESET%^%^ORANGE%^)%^RESET%^|",\
+"|%^BOLD%^%^CYAN%^ '%^GREEN%^ H   %^BOLD%^%^BLACK%^/ %^RESET%^%^ORANGE%^\\%^RESET%^ |",\
+"|%^BOLD%^%^BLACK%^ *%^GREEN%^( } %^BOLD%^%^BLACK%^/%^GREEN%^___%^RESET%^%^ORANGE%^)%^RESET%^|",\
 "|%^BOLD%^%^GREEN%^<___%^BOLD%^%^BLACK%^#%^RESET%^%^ORANGE%^------%^BOLD%^%^CYAN%^>%^RESET%^",\
-"|%^BOLD%^%^GREEN%^ \\   \/%^BOLD%^%^BLACK%^\\   %^RESET%^%^ORANGE%^)%^RESET%^|",\
-"|%^BOLD%^%^GREEN%^  )_|  %^BOLD%^%^BLACK%^\\ %^RESET%^%^ORANGE%^\/ %^RESET%^|",\
-"|%^BOLD%^%^GREEN%^ \/   \\  %^RESET%^%^ORANGE%^(  %^RESET%^|",\
-"|%^BOLD%^%^GREEN%^\/  ^  \\    %^RESET%^|",\
-"|%^BOLD%^%^GREEN%^ \/  | }    %^RESET%^|",\
-"|%^BOLD%^%^GREEN%^\/   | ; %^CYAN%^^  %^RESET%^|",\
+"|%^BOLD%^%^GREEN%^ \\   /%^BOLD%^%^BLACK%^\\   %^RESET%^%^ORANGE%^)%^RESET%^|",\
+"|%^BOLD%^%^GREEN%^  )_|  %^BOLD%^%^BLACK%^\\ %^RESET%^%^ORANGE%^/ %^RESET%^|",\
+"|%^BOLD%^%^GREEN%^ /   \\  %^RESET%^%^ORANGE%^(  %^RESET%^|",\
+"|%^BOLD%^%^GREEN%^/  ^  \\    %^RESET%^|",\
+"|%^BOLD%^%^GREEN%^ /  | }    %^RESET%^|",\
+"|%^BOLD%^%^GREEN%^/   | ; %^CYAN%^^  %^RESET%^|",\
 "|%^BOLD%^%^WHITE%^ OF     %^CYAN%^|  %^RESET%^|",\
 "|%^BOLD%^%^WHITE%^SWORDS %^CYAN%^-+- %^RESET%^|",\
 "|________%^BOLD%^%^CYAN%^'%^RESET%^__|"})
@@ -776,15 +776,15 @@
 "|%^BOLD%^%^BLACK%^ @         %^RESET%^|",\
 "|%^BOLD%^%^BLACK%^(#) %^BOLD%^%^WHITE%^HUNTER %^RESET%^|",\
 "|%^BOLD%^%^BLACK%^ |      %^RESET%^%^ORANGE%^(  %^RESET%^|",\
-"|%^BOLD%^%^BLACK%^ |%^GREEN%^ H   %^BOLD%^%^BLACK%^\/ %^RESET%^%^ORANGE%^\\%^RESET%^ |",\
-"|%^BOLD%^%^BLACK%^ *%^GREEN%^( } %^BOLD%^%^BLACK%^\/%^GREEN%^___%^RESET%^%^ORANGE%^)%^RESET%^|",\
+"|%^BOLD%^%^BLACK%^ |%^GREEN%^ H   %^BOLD%^%^BLACK%^/ %^RESET%^%^ORANGE%^\\%^RESET%^ |",\
+"|%^BOLD%^%^BLACK%^ *%^GREEN%^( } %^BOLD%^%^BLACK%^/%^GREEN%^___%^RESET%^%^ORANGE%^)%^RESET%^|",\
 "|%^BOLD%^%^GREEN%^<___%^BOLD%^%^BLACK%^#%^RESET%^%^ORANGE%^------%^BOLD%^%^CYAN%^>%^RESET%^",\
-"|%^BOLD%^%^GREEN%^ \\   \/%^BOLD%^%^BLACK%^\\   %^RESET%^%^ORANGE%^)%^RESET%^|",\
-"|%^BOLD%^%^GREEN%^  )_|  %^BOLD%^%^BLACK%^\\ %^RESET%^%^ORANGE%^\/ %^RESET%^|",\
-"|%^BOLD%^%^GREEN%^ \/   \\  %^RESET%^%^ORANGE%^(  %^RESET%^|",\
-"|%^BOLD%^%^GREEN%^\/  ^  \\    %^RESET%^|",\
-"|%^BOLD%^%^GREEN%^ \/  | }    %^RESET%^|",\
-"|%^BOLD%^%^GREEN%^\/   | ;%^BOLD%^%^BLACK%^ @  %^RESET%^|",\
+"|%^BOLD%^%^GREEN%^ \\   /%^BOLD%^%^BLACK%^\\   %^RESET%^%^ORANGE%^)%^RESET%^|",\
+"|%^BOLD%^%^GREEN%^  )_|  %^BOLD%^%^BLACK%^\\ %^RESET%^%^ORANGE%^/ %^RESET%^|",\
+"|%^BOLD%^%^GREEN%^ /   \\  %^RESET%^%^ORANGE%^(  %^RESET%^|",\
+"|%^BOLD%^%^GREEN%^/  ^  \\    %^RESET%^|",\
+"|%^BOLD%^%^GREEN%^ /  | }    %^RESET%^|",\
+"|%^BOLD%^%^GREEN%^/   | ;%^BOLD%^%^BLACK%^ @  %^RESET%^|",\
 "|%^BOLD%^%^WHITE%^ OF    %^BOLD%^%^BLACK%^(#) %^RESET%^|",\
 "|%^BOLD%^%^WHITE%^CLUBS   %^BOLD%^%^BLACK%^|  %^RESET%^|",\
 "|________%^BOLD%^%^BLACK%^|%^RESET%^__|"})
@@ -794,15 +794,15 @@
 "| ^         |",\
 "||~| %^BOLD%^%^WHITE%^HUNTER %^RESET%^|",\
 "||0|     %^ORANGE%^(  %^RESET%^|",\
-"|| |%^BOLD%^%^GREEN%^H   %^BOLD%^%^BLACK%^\/ %^RESET%^%^ORANGE%^\\%^RESET%^ |",\
-"|%^BOLD%^%^BLACK%^ *%^GREEN%^( } %^BOLD%^%^BLACK%^\/%^GREEN%^___%^RESET%^%^ORANGE%^)%^RESET%^|",\
+"|| |%^BOLD%^%^GREEN%^H   %^BOLD%^%^BLACK%^/ %^RESET%^%^ORANGE%^\\%^RESET%^ |",\
+"|%^BOLD%^%^BLACK%^ *%^GREEN%^( } %^BOLD%^%^BLACK%^/%^GREEN%^___%^RESET%^%^ORANGE%^)%^RESET%^|",\
 "|%^BOLD%^%^GREEN%^<___%^BOLD%^%^BLACK%^#%^RESET%^%^ORANGE%^------%^BOLD%^%^CYAN%^>%^RESET%^",\
-"|%^BOLD%^%^GREEN%^ \\   \/%^BOLD%^%^BLACK%^\\   %^RESET%^%^ORANGE%^)%^RESET%^|",\
-"|%^BOLD%^%^GREEN%^  )_|  %^BOLD%^%^BLACK%^\\ %^RESET%^%^ORANGE%^\/ %^RESET%^|",\
-"|%^BOLD%^%^GREEN%^ \/   \\  %^RESET%^%^ORANGE%^(  %^RESET%^|",\
-"|%^BOLD%^%^GREEN%^\/  ^  \\    %^RESET%^|",\
-"|%^BOLD%^%^GREEN%^ \/  | }    %^RESET%^|",\
-"|%^BOLD%^%^GREEN%^\/   | ;%^RESET%^ ^  |",\
+"|%^BOLD%^%^GREEN%^ \\   /%^BOLD%^%^BLACK%^\\   %^RESET%^%^ORANGE%^)%^RESET%^|",\
+"|%^BOLD%^%^GREEN%^  )_|  %^BOLD%^%^BLACK%^\\ %^RESET%^%^ORANGE%^/ %^RESET%^|",\
+"|%^BOLD%^%^GREEN%^ /   \\  %^RESET%^%^ORANGE%^(  %^RESET%^|",\
+"|%^BOLD%^%^GREEN%^/  ^  \\    %^RESET%^|",\
+"|%^BOLD%^%^GREEN%^ /  | }    %^RESET%^|",\
+"|%^BOLD%^%^GREEN%^/   | ;%^RESET%^ ^  |",\
 "|%^BOLD%^%^WHITE%^ OF    %^RESET%^|~| |",\
 "|%^BOLD%^%^WHITE%^TOWERS %^RESET%^|0| |",\
 "|_______|_|_|"})
@@ -810,19 +810,19 @@
 #define HUNTERGEMS ({"------------+",\
 "|           |",\
 "|%^BOLD%^%^RED%^ ^  %^BOLD%^%^WHITE%^HUNTER %^RESET%^|",\
-"|%^BOLD%^%^RED%^\/^\\     %^RESET%^%^ORANGE%^(  %^RESET%^|",\
-"|%^BOLD%^%^RED%^\\_\/%^GREEN%^H   %^BOLD%^%^BLACK%^\/ %^RESET%^%^ORANGE%^\\%^RESET%^ |",\
-"|%^BOLD%^%^BLACK%^ *%^GREEN%^( } %^BOLD%^%^BLACK%^\/%^GREEN%^___%^RESET%^%^ORANGE%^)%^RESET%^|",\
+"|%^BOLD%^%^RED%^/^\\     %^RESET%^%^ORANGE%^(  %^RESET%^|",\
+"|%^BOLD%^%^RED%^\\_/%^GREEN%^H   %^BOLD%^%^BLACK%^/ %^RESET%^%^ORANGE%^\\%^RESET%^ |",\
+"|%^BOLD%^%^BLACK%^ *%^GREEN%^( } %^BOLD%^%^BLACK%^/%^GREEN%^___%^RESET%^%^ORANGE%^)%^RESET%^|",\
 "|%^BOLD%^%^GREEN%^<___%^BOLD%^%^BLACK%^#%^RESET%^%^ORANGE%^------%^BOLD%^%^CYAN%^>%^RESET%^",\
-"|%^BOLD%^%^GREEN%^ \\   \/%^BOLD%^%^BLACK%^\\   %^RESET%^%^ORANGE%^)%^RESET%^|",\
-"|%^BOLD%^%^GREEN%^  )_|  %^BOLD%^%^BLACK%^\\ %^RESET%^%^ORANGE%^\/ %^RESET%^|",\
-"|%^BOLD%^%^GREEN%^ \/   \\  %^RESET%^%^ORANGE%^(  %^RESET%^|",\
-"|%^BOLD%^%^GREEN%^\/  ^  \\    %^RESET%^|",\
-"|%^BOLD%^%^GREEN%^ \/  | }    %^RESET%^|",\
-"|%^BOLD%^%^GREEN%^\/   | ;    %^RESET%^|",\
+"|%^BOLD%^%^GREEN%^ \\   /%^BOLD%^%^BLACK%^\\   %^RESET%^%^ORANGE%^)%^RESET%^|",\
+"|%^BOLD%^%^GREEN%^  )_|  %^BOLD%^%^BLACK%^\\ %^RESET%^%^ORANGE%^/ %^RESET%^|",\
+"|%^BOLD%^%^GREEN%^ /   \\  %^RESET%^%^ORANGE%^(  %^RESET%^|",\
+"|%^BOLD%^%^GREEN%^/  ^  \\    %^RESET%^|",\
+"|%^BOLD%^%^GREEN%^ /  | }    %^RESET%^|",\
+"|%^BOLD%^%^GREEN%^/   | ;    %^RESET%^|",\
 "|%^BOLD%^%^WHITE%^ OF     %^RED%^^  %^RESET%^|",\
-"|%^BOLD%^%^WHITE%^GEMS   %^RED%^\/^\\ %^RESET%^|",\
-"|_______%^BOLD%^%^RED%^\\_\/%^RESET%^_|"})
+"|%^BOLD%^%^WHITE%^GEMS   %^RED%^/^\\ %^RESET%^|",\
+"|_______%^BOLD%^%^RED%^\\_/%^RESET%^_|"})
 
 
 #define ROGUECLUBS ({"------------+",\
@@ -844,7 +844,7 @@
 
 #define ROGUESWORDS ({"------------+",\
 "|%^BOLD%^%^CYAN%^     ^   ^ %^RESET%^|",\
-"|%^BOLD%^%^CYAN%^    \/ \\  | %^RESET%^|",\
+"|%^BOLD%^%^CYAN%^    / \\  | %^RESET%^|",\
 "| R  %^BOLD%^%^CYAN%^| | -+-%^RESET%^|",\
 "| O  %^BOLD%^%^CYAN%^| |  ' %^RESET%^|",\
 "| G  %^BOLD%^%^CYAN%^| |    %^RESET%^|",\
@@ -864,8 +864,8 @@
 "|  %^BOLD%^%^BLACK%^   .  %^RESET%^|~||",\
 "|  %^BOLD%^%^BLACK%^   |%^BOLD%^%^BLUE%^@>%^RESET%^|o||",\
 "|%^BOLD%^%^WHITE%^  OF %^BOLD%^%^BLACK%^|  %^RESET%^| ||",\
-"|    \/ \\    |",\
-"|   \/   \\   |",\
+"|    / \\    |",\
+"|   /   \\   |",\
 "|   | %^BOLD%^%^CYAN%^O %^RESET%^|   |",\
 "|   |%^ORANGE%^___%^RESET%^|   |",\
 "|   |%^ORANGE%^ |_%^RESET%^|   |",\
@@ -878,19 +878,19 @@
 
 #define ROGUEGEMS ({"------------+",\
 "|        %^BOLD%^%^RED%^ ^ %^RESET%^|",\
-"| %^BOLD%^%^WHITE%^ ROGUE %^RED%^\/^\\%^RESET%^|",\
-"|     %^BOLD%^%^RED%^   \\_\/%^RESET%^|",\
+"| %^BOLD%^%^WHITE%^ ROGUE %^RED%^/^\\%^RESET%^|",\
+"|     %^BOLD%^%^RED%^   \\_/%^RESET%^|",\
 "|%^BOLD%^%^RED%^   ____%^BOLD%^%^WHITE%^ *  %^RESET%^|",\
-"|%^BOLD%^%^RED%^  \/___\/\\   %^RESET%^|",\
-"|%^BOLD%^%^RED%^ \/%^BOLD%^%^WHITE%^(o%^BOLD%^%^RED%^  \\_\\  %^RESET%^|",\
-"|%^BOLD%^%^RED%^ \\ \\  \/ \/  %^RESET%^|",\
-"|%^BOLD%^%^RED%^  \\ \\\/ \/   %^RESET%^|",\
-"| %^BOLD%^%^RED%^  \\%^RESET%^%^MAGENTA%^X%^BOLD%^%^RED%^ \/    %^RESET%^|",\
-"| %^BOLD%^%^RED%^   \\\/     %^RESET%^|",\
+"|%^BOLD%^%^RED%^  /___/\\   %^RESET%^|",\
+"|%^BOLD%^%^RED%^ /%^BOLD%^%^WHITE%^(o%^BOLD%^%^RED%^  \\_\\  %^RESET%^|",\
+"|%^BOLD%^%^RED%^ \\ \\  / /  %^RESET%^|",\
+"|%^BOLD%^%^RED%^  \\ \\/ /   %^RESET%^|",\
+"| %^BOLD%^%^RED%^  \\%^RESET%^%^MAGENTA%^X%^BOLD%^%^RED%^ /    %^RESET%^|",\
+"| %^BOLD%^%^RED%^   \\/     %^RESET%^|",\
 "|           |",\
 "|%^BOLD%^%^RED%^ ^ %^BOLD%^%^WHITE%^ OF     %^RESET%^|",\
-"|%^BOLD%^%^RED%^\/^\\        %^RESET%^|",\
-"|%^BOLD%^%^RED%^\\_\/ %^BOLD%^%^WHITE%^ GEMS  %^RESET%^|",\
+"|%^BOLD%^%^RED%^/^\\        %^RESET%^|",\
+"|%^BOLD%^%^RED%^\\_/ %^BOLD%^%^WHITE%^ GEMS  %^RESET%^|",\
 "|___________|"})
 
 #define CARDBACK ({"%^B_GREEN%^------------+%^RESET%^",\

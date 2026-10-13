@@ -790,3 +790,19 @@ By hand: `adm/include/conf.h` and `config.h` both define MUDLIB, MUDLIB_VERSION,
 HEAD 与工作树新进程分别载入改动的 58 个对象：regress 0。未通过的 25 个（`_freeze`、两份 `river`、`rooms/spell`、`cauldron`、豺狼人、`rumours_d`、`search_d`、`unique_d` 等）在 HEAD 同样无法载入，是本库原有的其它编译错误。`bheur` 在第一次批量载入里失败一次：其 `create()` 有一半机会 `new()` 出 `/d/deku/weapons/winters_chill.lpc`，后者 `void` 函数 `return charges;` 编译失败（shadowgate 同样），单独重载 3 次均通过，属随机伪影。改后这些文件的“无副作用”警告为 0。58 个对象载入无回退。
 
 - 2026-10-11 补记：`d/deku/weapons/winters_chill.lpc`（冬寒法杖）`query_charges()` 声明为 void 却 `return charges;`，`failure()` 为 void 却 `return 1;`；sunshadow 下整份不编译，`d/deku/monster/bheur.lpc` 一半几率 clone 它而载入失败。改为 `int query_charges()`、`return;`（调用方不取返回值）。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+能编译的文件中的警告从 27853 条（4003 个文件）降到约 100 条（1 个文件，`d/magic/obj/rebirther.lpc`，见下）。
+
+本库与 shadowgate 是同一代码，先用 `scripts/lpc_twin_port.py adopt shadowgate sunshadow --pre a9c8e7aeead` 照搬 258 个代码相同的文件，余下 185 个有差异的文件中 134 个直接套用 shadowgate 的补丁，其余按同样的根源手改（详见 `libs/shadowgate/NOTES.md` 同日一节）：`adm/include/priest.h` 不再 `inherit SPELL`；`body.lpc` 的 `ac`/`size`、`room.lpc` 的 `flag`、`townsman`/`caravan` 的 `path`/`speed` 改名；巨魔七种的属性改在 create() 里赋值（此前每只巨魔都没有类型和描述）；tsh 的命令历史不再被 pushd 栈顶掉；`road10` 去掉会把房间整个清掉的 DAEMON；法术叶子不再重复声明 spell.lpc 的 `caster`/`place` 等，自身的时长 `duration` 改名 `spell_time`（本库另有 17 个）；字符串函数指针的消费者（search/items/read、`Object::set()`）认得真正的函数指针；重复继承与两个完整类的拼合；`d_robe` 改为 PARMOUR、`ring` 自带 artifact 的成员等。
+
+本库自己的部分：
+
+- **返回类型与基类不符**（约 220 条，shadowgate 不报这一类）：叶子把基类的 `void help()`、`void remove()`、`void execute_feat()`、`void init_disease()`、`void die()` 等写成 `int`。没有调用者使用返回值的改为 `void`、`return 1;` 改为 `return;`、`return ::remove();` 改为 `{ ::remove(); return; }`（约 218 个函数），残留的旧原型一并改正；基类为 string、叶子为 int 的 `query_broken()`、`get_serial_number()` 改为 `mixed`；`body.lpc` 返回武器数组的 `query_wielded()` 与 `ammo.lpc` 返回数组的 `query_wc()` 改为 `mixed`。错的重复原型删去：`combat.lpc` 的 `doProtection`、`_note`/`_pcnote` 的 `format_notes`、`government.lpc` 的 `query_offices`、`tunnels/rooms/library` 的 `set_long`。
+- **真错误**：`d/guilds/order/` 下 84 个守卫/兵士的 `object *query_party()` 覆盖了 living.lpc 返回队伍名的同名函数，改名 `query_guard_party()`（无调用者；shadowgate 同改）。`std/plate.lpc` 的 `wearit()` 是 void：body.lpc 在穿戴函数答 0 时拒绝穿上，所有用基类 `wearit` 的板甲都穿不上，改为返回 1（shadowgate 同改）。`d/common/mons/questor.lpc` 的 `string thanklist` 存的是数组，本库严格类型下整份不能编译，导致 `newtharis/rooms/north5` 的任务房间（现在 rquestroom 的 create 才真正执行）载入失败；改为 `string *`（shadowgate 同改）。`std/magic/spell.lpc` 的反射段里两个嵌套的 `/*`。
+- `?:` 两支类型不同（`_date`、`_pcnote`、`jailer` 的分钟补零，`_mmap` 的出口数）：数字一支加 `"" +`，输出不变。`verdant_hammer` 的 `set_wield`/`set_unwield`/`set_hit` 会立即求值指针取得处理函数名，改为本库通用的 `(: TO, "name" :)` 写法。`d/magic/obj/jaunter.lpc` 删掉 `#include <user.h>`，自己补 `query_invis()`/`set_invis()`（它只用到这两个）；`assassinhall` 去掉从未用到的 assassin（VAULT）继承；`graez/rooms/battle/86` 的 `CORE` 已在 scrubland 里；`newuser.lpc` 重复的 `more` 继承与 `diety`/`retinue` 声明；`graez/obj/sword` 声明了两次 `room`。
+
+遗留：`d/magic/obj/rebirther.lpc` 同 shadowgate（从 user.lpc 抄来的死亡代码作用在它自己身上，去掉 user.h 就无定义，未动）。
+
+验证：改动的 719 个文件加包含改动头文件的文件，共 3250 个对象在 HEAD 与工作树的新进程中分别载入：回退 5 个，逐个核对：`newtharis/rooms/north5` 因 questor 编译错误，已修；`deku/hhouse/rooms/ffr7`、`sfr3/5/6` 随机生成的 `good_host`/`monster_feat_d` 本身就编译失败（文件未改动），单独重载 sfr3/5/6 通过、ffr7 视随机结果而定。其余 3245 个对象载入无回退。`lpc_audit_removed_locals.py` 列出的 85 条中 83 条是巨魔叶子改成赋值的声明，另两条核对无误。

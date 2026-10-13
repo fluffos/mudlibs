@@ -29,6 +29,7 @@
 #define HIM             this_player()->query_objective()
 #define HIMSELF         reflexive(this_player())
 #define HE              this_player()->query_subjective()
+#undef ENV
 #define ENV             environment
 #define FP              find_player
  

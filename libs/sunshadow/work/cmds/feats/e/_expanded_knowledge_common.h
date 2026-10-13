@@ -1,4 +1,3 @@
-int ret;
 mapping srow;
 int maxpow, sminpow = 0;
 

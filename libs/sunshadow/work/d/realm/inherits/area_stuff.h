@@ -30,6 +30,7 @@
 #define MyNoGo ({MRS"122", MRS"14", MRS"20", MRS"97", MRS"102", MRS"108", MRS"109",\
 MRS"111", MRS"101", MRS"78", MRS"51", MRS"134", MRS"123", MRS"69", MRS"72"})
 
+#undef DEATH_EFFECTS_D
 #define DEATH_EFFECTS_D RA_INHS+"death_effects_d"
 
 //End Middle Room Specific Defines

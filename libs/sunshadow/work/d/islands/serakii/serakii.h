@@ -6,6 +6,7 @@
 #define MOBS "/d/islands/serakii/mobs/"+
 #define STORAGE "/d/islands/serakii/storage/"+
 
+#undef DOCK
 #define DOCK "/d/islands/serakii/rooms/dock/"+
 #define TOWN "/d/islands/serakii/rooms/village/"+
 #define HOUND "/d/islands/serakii/rooms/hound/"+
@@ -13,6 +14,7 @@
 #define INN "/d/islands/serakii/rooms/inn/"+
 #define ROAD "/d/islands/serakii/rooms/road/"+
 #define FALLOW "/d/islands/serakii/rooms/fallow/"+
+#undef RUINS
 #define RUINS "/d/islands/serakii/rooms/ruin/"+
 #define CAER "/d/islands/serakii/rooms/caer/"+
 #define BONE "/d/islands/serakii/rooms/bone/"+
