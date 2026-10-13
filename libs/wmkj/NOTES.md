@@ -949,3 +949,10 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 ## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查
 
 - `inherit/misc/bbsboard1.lpc`：`note["msg"] = (text, 1);` 等四处逗号表达式，帖子内容存成数字 1；照 `bbsboard.lpc` 改存 `text`（与 chidi 同）。载入无回退。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/toolkit_fix.sh` 一轮去掉 2 处多余的 `F_CLEAN_UP`，其余手工，能编译的文件警告清零；改动的 8 个对象在 HEAD 与工作树各载入一次，regress 0。
+
+- `d/register/npc/dizangwang.lpc`（地藏王）的 `attempt_apprentice()` 改 `void`，与 `inherit/char/npc.lpc` 一致；`cmds/skill/apprentice.lpc` 不读它的返回值。
+- `d/city/library.lpc`、`d/city2/Sino-CO.lpc`、`d/emei/user-room/host/home.lpc` 各自的 `STORY_DIR` 覆盖 `globals.h` 的同名宏，先 `#undef`，行为不变；`clone/unique/fan.lpc` 写明用驱动原先选的 `clean_up()`；`kungfu/skill/huashan-jian.lpc` 多余的 `;` 删去。
