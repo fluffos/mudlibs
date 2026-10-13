@@ -1,7 +1,7 @@
 // poison_bugs.h
 // 用于各种毒虫: scorpins, scolopendra, toad, snake, spider
 // 需要在引用的npc/毒虫里加 poison = 毒, poison_amout = 毒量, die_ob = 死后变成什么.
-int init() {
+void init() {
   object me, who;
   ::init();
   who = this_object();

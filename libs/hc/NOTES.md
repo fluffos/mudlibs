@@ -401,3 +401,10 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 ## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查
 
 - `d/liwu/obj/ling3.lpc`：`if ("mark_place", base_name(...) == "llzhuang")` 开头多一个无用的逗号操作数，删掉（行为不变）。载入无回退。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/toolkit_fix.sh` 一轮去掉 4 处多余继承，其余手工，能编译的文件警告清零；改动的 35 个对象在 HEAD 与工作树各载入一次：HEAD PASS 34，tree PASS 34，regress 0。
+
+- 杀怪任务的怪 `quest/shaguai/guai.ahxia.lpc`、`questguai_n.lpc` 的 `die()`（连同原型）改 `void`，`return 1;` 改 `return;`；`kungfu/new/dizangwang.lpc` 的 `attempt_apprentice()` 改 `void`——基类都是 `void`，调用方不读返回值。
+- 故事守护进程 `adm/daemons/storyd.lpc` 与 `d/emei/user-room/host/home.lpc` 自己的 `STORY_DIR` 覆盖 `globals.h` 的同名宏（值不同，本文件里一直用自己的），先 `#undef`。
