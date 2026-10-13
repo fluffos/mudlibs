@@ -875,3 +875,11 @@ Same convert-era byte corruption as the waiter `！”\n` / `！\n` →
 ## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查
 
 - `system/std/sserver.lpc`：`else 0;` 改为 `return 0;`（行为不变）。载入无回退。
+
+## 编译警告收尾（2026-10-13）
+
+手工清零（`scripts/toolkit_fix.sh` 去掉 `clone/wear/finger/finger.lpc` 一处多余继承）；改动的 6 个对象在 HEAD 与工作树各载入一次，regress 0。
+
+- `clone/user/templet.lpc`（存档 `autoload` 转换器）继承 `F_DBASE` 后又自己声明 `dbase`，存盘写出两条 `dbase`（KB 06 §7.233，同 xo）；删去自己的那个。
+- 左子穆 `d/menpai/wuliang/npc/zuo.lpc` 声明了一份 `refuse_msg`（“现在没什么事做，你先下去练功吧”，是任务 NPC 的拒绝语），可从没读过它，与 `npc.lpc` 的辈分拒绝语同名；改名 `zuo_refuse_msg`，仍不接入，行为不变。
+- `cmds/comm/who.lpc` 外层没用的 `your_id`（内层另有声明）、`d/zuzhi/yipin_tang/peacock/xuanwu_tang/npc/heiyiren.lpc` 没用的 `last_time` 删去；`cmds/wiz/allow.lpc` 与 `globals.h` 相同的 `ALLOW_D` 删去。
