@@ -568,3 +568,7 @@ committing -- only the 8 genuine `.lpc` fixture fixes remain staged.
 ## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查
 
 - 19 条警告全在 `public/cmds/speed.lpc`：这是测量各种表达式耗时的基准命令，`TIME(...)`/`DIFF(...)` 宏故意执行不赋值的纯表达式（含 `if (x) { }`），警告是设计如此，保留不改（同测试目录）。
+
+## Compile warnings (2026-10-13)
+
+`/public/cmds/speed.lpc`, the driver benchmark, timed expressions the compiler rightly calls pointless (`s1 + s2;`, `a1[3];`, `if (x == 0) { }`): 17 `Expression has no side effects` and 2 `Value of conditional expression is unused`. Ported from lil's copy of the same file (a54ee03042c): each timed expression is stored in a new `mixed sink` and the empty `if` bodies assign it, so the benchmark still measures the operation. The two warnings left are in `core/sefun/tests/`, test files kept as they are. The command loads the same at HEAD and in the tree (regress 0).
