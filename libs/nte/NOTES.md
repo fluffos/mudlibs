@@ -551,3 +551,19 @@ HEAD 与工作树分别加载（新进程）：1245 -> 1245 通过，无回退�
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 2 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 1 个，只在 #if 分支用的声明移进分支 4 个文件；改动 7 个文件，HEAD 与工作树各载入一次无回退（7 objects; HEAD PASS 7, tree PASS 7; regress 0; newly loading 0），这些文件的警告 8 -> 0。
 
 - 2026-10-12：`adm/npc/obj/xiang.lpc` 写着 `int remove() { save(); }`，盖掉了 `feature/move.lpc` 的 `remove(string euid)`——这些存盘箱子/柜子被销毁时不从携带者身上减负重、不清 handing（KB 06 §7.239 变体，nitan_ceshi/tianxiawuxue 同类）。改成 `varargs void remove(string euid) { save(); ::remove(euid); }`。HEAD 与工作树各载入一次，regress 0（载不进的文件在 HEAD 就载不进）。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+能编译的文件里的警告 9 条（7 个文件）-> 0（`toolkit_fix.sh nte` 后重扫：13040 个文件可编译，剩下的诊断都在本来就编译不过的文件里）。这几处 nitan170911（e7b0eac1a63）、nitan6（3264a2e14e1）、nitan_ceshi（0d3c177da02）当天都修过，本库代码与它们有出入（twin_port 判为 `differs`），照它们的做法手工改；`adm/npc/obj/xiang.lpc` 的 `remove()` 已在 233a95604a4 修过。
+
+**真问题：**
+- `clone/misc/swmuding.lpc` 神木王鼎：自己的 13 种毒虫表 `mapping insects` 从来没被用过——读表的是基类 `clone/misc/muding.lpc` 的函数，它们读基类那份 8 种虫的木鼎表。改名 `sw_insects`，`create()` 里赋给基类的 `insects`。
+- `d/mingjiao/npc/hu.lpc` 胡青牛：给玩家疗伤的回调叫 `recover(object ob)`，盖掉了 NPC 基类自己的 `void recover()`（回满气血）。改名 `heal_patient`，`call_out` 一并改；基类的 `recover()` 恢复原样。
+- `clone/misc/cruise-ob.h`（随身物品存储的 cruise-ob）：`varargs int remove() { save(); }` 盖掉了 F_MOVE 的 `remove(euid)`，物件销毁时不卸装备、不从携带者负重里扣除。该物件继承 F_OBSAVE，F_MOVE 的 `remove()` 本来就会先 `save()`，删掉叶子的版本。
+
+**其余：**
+- `feature/food.lpc`、`feature/liquid.lpc` 的 `do_effect()` 改为 `varargs int do_effect(object me)` 并 `return 1;`，与 eat/drink 读返回值的重载（`d/gumu/obj/fengmi.lpc`、`d/xiakedao/obj/pigpart.h`）同型。
+- `clone/obj/genmap.lpc`：`find_exits()` 里 `#include "harbor.h"` 引入的三张港口表本函数一张都不用，删掉这行包含及注释。
+- `clone/drug/pldan.lpc` 多余的 `inherit F_CLEAN_UP;`（ITEM 已带，`toolkit_fix.sh` 删）。
+
+验证：改动文件、所有继承 F_FOOD/F_LIQUID 的物品、包含 `pigpart.h`/`cruise-ob.h` 的文件、muding、eat/drink 共 308 个对象，HEAD 与工作树各用新进程载入：307 -> 307 通过，regress 0；删除声明审计 0 项待看。308 个对象载入无回退。
