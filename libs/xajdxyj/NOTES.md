@@ -231,3 +231,20 @@ compile check (exit 0, no errors) against `feature/command.lpc`.
 启动时警告 66 -> 0。新进程登录画面正常；启动后三分钟内登录会答"服务器正在进行启动前事务处理"，是 `adm/daemons/logind.lpc` 有意的启动锁。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 13 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 6 个，只在 #if 分支用的声明移进分支 2 个文件；改动 17 个文件，HEAD 与工作树各载入一次无回退（17 objects; HEAD PASS 17, tree PASS 17; regress 0; newly loading 0），这些文件的警告 39 -> 20。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+`scripts/toolkit_fix.sh` 加手工修复，能编译的文件里的警告 44 -> 0（`lpc_warnings.py xajdxyj` 重扫：7158 个文件可编译；剩下 5 条警告都在本来编译不过的文件里）。mhxy 今天的收尾（提交 a9cd825122a）有 4 个文件在本库是 token 级孪生（`lijing.lpc`、`d/kaifeng/ground1/2/3.lpc`），`lpc_twin_port.py adopt` 搬过来；其余手改。
+
+**真问题：**
+- `obj/home.lpc`（玩家新房）：给 `homename` 命令用的处理函数叫 `set_short(string str)`，正好覆盖了本库 `std/item.lpc` 的 `string set_short()`——后者是 `short()` 计算短描述的地方（`short()` 里 `return set_short();`，`setup()` 里也 `call_out("set_short", 1)`）。于是新房对象的 `short()` 走到新房的版本，无参数时返回 0，房间里列出这件东西时没有名字。处理函数改名 `do_homename`，`add_action` 同改；item 的 `set_short()` 恢复生效。（同系 40 多个库的 `home.lpc` 也有这个处理函数，但它们的 `item.lpc` 没有 `set_short()`，不受影响。）
+- `task/`、`d/task/`、`obj/task.bak/` 三份任务物品 `yjping.lpc`（甘露玉净瓶，`ITEM + F_LIQUID + F_UNIQUE`）和 `pldudou.lpc`（破烂肚兜，`CLOTH + F_UNIQUE`）：两个基类都有 `init()`，驱动只用了 unique 的 `check_owner()`，玉净瓶的 `drink`/`fill`、肚兜的 `tear` 动作都丢了；叶子里定义 `init()` 两个都调用。
+
+**其余：**
+- `d/kaifeng/ground.h` 三张常量表包进 `#ifndef GROUND_TABLES_INHERITED`，派生房间 `ground1/2/3.lpc`、`ground.lpc` 在包含前定义它（KB 04 §6.10）。
+- `d/city/npc/yg/yaoguai.lpc` 删掉从不读的 `int yaoguai_type = 0;`（只有基类 `d/dntg/yunlou/npc/yaoguai.lpc` 用，基类也初始化为 0），10 个 `yg-*` 的重复声明警告随之消失。
+- `lijing.lpc` 的 `die()/unconcious()`、`u/moonsky/sun/guizi.lpc` 的 `die()` 改 `void`（基类是 void 钩子；guizi 仍调用 `::die()`）。
+- `daemon/skill/hubo.lpc`（ITEM + SKILL）、`test-whip.lpc`（SKILL + SSERVER）两条路径带进同一个 `clean_up()`，按驱动原本的选择写明（`lpc_name_winner.py`）；`daemon/skill/huashan-jianfa.lpc` 删掉招式表后多余的 `;`。
+- `toolkit_fix.sh`：9 个多余的 `inherit F_CLEAN_UP`。
+
+验证：改动文件、`d/kaifeng`、`d/city/npc`、`task`、`d/task` 全部对象和 `/obj/user` 共 309 个对象，HEAD 与工作树各用新进程载入：291 -> 291 通过，regress 0；删除声明审计 0 项待看。309 个对象载入无回退。
