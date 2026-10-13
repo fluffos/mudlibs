@@ -166,3 +166,7 @@ driver stdout, **and** the live `debug.log` (6098→6335). So the
 handler path is alive; the empty catch after the organic path was a
 real clean run, not a dead log. Cosmetic only: config
 `external_port_1` vs `port number`, and the two stat-file warnings.
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/toolkit_fix.sh` 一轮：`command/look.lpc` 没用的局部变量 `ob` 删去。能编译的文件警告清零，regress 0。
