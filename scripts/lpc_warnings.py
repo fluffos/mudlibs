@@ -29,7 +29,7 @@ Mechanical fixes (positions come from the driver; columns are 1-based BYTES):
                                           drop `nosave` beside private / for --public names
   Unused local variable                -> delete the declarator (rebuild the statement)
   negative constant range end          -> `..-N]` becomes `..<N]` (section 7.209)
-  Unknown escape sequence              -> drop the backslash
+  Unknown escape sequence              -> drop the backslash (`\/`, `\_`: ASCII art, double it)
   Unknown #pragma, ignored             -> delete the `#pragma name [word...]` line (`save_binary`,
                                           `optimize all`; the driver already ignores it)
   Number of arguments ... disagrees    -> `varargs` on the declaration the warning is reported on
@@ -786,13 +786,18 @@ def fix_escapes(work, rows):
         L = read_lines(path)
         for ln, col, seq in sorted(sites, reverse=True):
             line = L[ln - 1]
-            i = line.rfind(seq, 0, col + 1)
-            if i < 0:
-                i = line.find(seq)
+            # a real escape has an even run of backslashes in front of it: `\\/` is an escaped backslash and a '/', and
+            # taking its second backslash for `\/` breaks the pair (and the next round finds a new unknown escape)
+            hits = [m.start() for m in re.finditer(re.escape(seq), line)
+                    if (m.start() - len(line[:m.start()].rstrip("\\"))) % 2 == 0]
+            before = [k for k in hits if k <= col]
+            i = before[-1] if before else (hits[0] if hits else -1)
             if i < 0:
                 manual.append((f, ln, seq, "escape not found on the line"))
                 continue
-            L[ln - 1] = line[:i] + seq[1:] + line[i + 2:]
+            # ASCII art (`/\/\`, `\_/`): the author meant a visible backslash, which the driver drops: double it
+            # (KB 04 section 6.10, escape row) instead of deleting it
+            L[ln - 1] = line[:i] + ("\\" + seq if seq[1] in "/_" else seq[1:]) + line[i + 2:]
             n += 1
         write_lines(path, L)
     return n, manual
