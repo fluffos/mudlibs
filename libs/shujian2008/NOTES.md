@@ -525,3 +525,13 @@ re-invoke `enable_player()` on this lib while the object is still
 
 - `clone/obj/genmap.lpc`/`traverser.lpc`：`DEBUG` 是空宏，调用处留下 `("text", n);`；改成空函数 `varargs void DEBUG(string fmt, mixed arg) {}`。
 - 改动的对象 HEAD 与工作区都能载入，无回退。
+
+## 编译警告收尾（2026-10-12）
+
+`scripts/toolkit_fix.sh` 一轮（冗余继承 4 处，覆盖函数返回类型 11 个）后，用 `scripts/lpc_twin_port.py adopt bxsj shujian2008 --pre 00dacc346b9~1` 和 `--pre 9624dde6015~1` 搬来孪生库 bxsj 的整理（52 个与 bxsj 修前逐 token 相同的文件：16 个 NPC 自带的门派表与 `FIGHTER` 的 `str_menpai` 同名、`inherit/misc/equip.lpc` 的 `ob_hit()` 改 `mixed`、`d/taishan/npc/runner.lpc` 的路线表与 `feature/command.lpc` 的 `path` 同名、`kungfu/skill/dzxy.lpc` 的招式表改在 `create()` 里赋给 `SKILL` 的 `attack_action` 等），再手工补其余，能编译的文件警告清零。改动的对象 HEAD 与工作树各载入一次：52 个，regress 0。
+
+- `adm/daemons/huanjing2003/npc_obj/{dian,feng,lei,yu}_{npc,obj}.lpc`、`room_readygo_hj.lpc`：`string a, b, a = "x", b = "y";` 的写法让每个名字声明两次，合成一次带初值的声明（初始化顺序不变）。
+- `d/gumu/npc/mmnz.h` 的 `kill_ob` 原型、`d/xingxiu/obj/duchong.lpc` 的 `kill_ob` 在 `void` 基类上写成 `int`，没人读返回值，改为 `void`。
+- `cmds/usr/mygift.lpc`、`mygift2.lpc`：`?:` 两边 `int`/`string`，int 一边改 `(mixed)`。
+- `d/village/npc/obj/robber.lpc`、`robber_n.lpc` 有意把 `NAME_D` 指向 `/inherit/misc/r_name`，`#define` 前加 `#undef`。
+- `clone/npc/tdh/man1.h`：154 行开的注释实际被 164 行 `///*奖励控制开始*/` 末尾的 `*/` 关掉，改成 `*/ // 奖励控制开始`，注释结束位置不变；`d/shaolin/npc/h.lpc` 注释里嵌套的 `/*`。
