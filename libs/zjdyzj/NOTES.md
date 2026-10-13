@@ -887,3 +887,15 @@ back to their pre-test committed contents.
 ## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查
 
 - `cmds/wiz/who1.lpc`：输出数组建好前一行孤立的分隔线字符串（与 wxddym 同码），删去，行为不变。载入无回退。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+能编译的文件里的警告 3 -> 0（`toolkit_fix.sh zjdyzj` 扫描：7289 个文件可编译，0 条诊断）。与 nitan170911/wxddym 当天修过的同一批文件，照它们的做法手工改；ZJ 手机客户端登录协议代码没有动。
+
+**真问题：**
+- `clone/misc/swmuding.lpc` 神木王鼎：自己声明了一张 `mapping insects`（13 种毒虫，含 heiguafu/wucaizhu/bingcan 等），可读这张表的是基类 `clone/misc/muding.lpc` 的函数，它们读的是基类自己那份（8 种虫的普通木鼎表），叶子的表从来没被用过，神木王鼎引来的虫和普通木鼎一样。表改名 `sw_insects`，在 `create()` 里赋给基类的 `insects`。
+
+**其余：**
+- `feature/food.lpc`、`feature/liquid.lpc` 的 `do_effect()` 由 `void` 改为 `varargs int do_effect(object me)`、末尾 `return 1;`：`cmds/std/eat.lpc`/`drink.lpc` 对 `only_do_effect` 的物品用 `return ob->do_effect(me);` 当命令结果，重载它的 `d/guanwai/obj/wan.lpc`、`d/xiakedao/obj/pigpart.h` 都是 `int`，基类与之同型后两条返回类型警告消失。
+
+验证：改动文件、所有继承 F_FOOD/F_LIQUID 的物品、包含 `pigpart.h` 的文件、eat/drink 命令共 206 个对象，HEAD 与工作树各用新进程载入：205 -> 205 通过，regress 0；删除声明审计 0 项待看。206 个对象载入无回退。
