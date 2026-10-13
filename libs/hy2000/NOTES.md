@@ -230,3 +230,15 @@ HEAD 与工作树分别加载（新进程）：812 -> 812 通过，无回退；�
 启动时警告 73 -> 0；新进程登录正常。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 11 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 0 个，只在 #if 分支用的声明移进分支 0 个文件；改动 5 个文件，HEAD 与工作树各载入一次无回退（5 objects; HEAD PASS 5, tree PASS 5; regress 0; newly loading 0），这些文件的警告 11 -> 0。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+能编译的文件里的警告 11 -> 0（`toolkit_fix.sh hy2000` 后重扫：9333 个文件可编译，剩下的诊断都在本来就编译不过的文件里）。
+
+- 8 个文件多余的 `inherit F_CLEAN_UP;`（`NPC`/`BLADE` 基类已经带了），`toolkit_fix.sh`（`lpc_diamonds.py --fix-redundant`）删掉：`adm/daemons/network/services/temp.lpc`、`d/npc/tie-ren.lpc`、`d/quanzhou{,.old}/npc/tang{,3}.lpc`、`d/shaolin/npc/obj/mu-ren.lpc`、`d/working/obj/mu-ren.lpc`。同一份代码，删哪份都不改变行为。
+- `adm/roommaker.lpc`：`special_props` 声明了两次（`({"short","long"})` 与 `({"short","long","file_name"})`），后面的代码只用后一份，删掉前一份死声明。
+- `d/city/library.lpc`、`d/city2/library.lpc`：全局 `include/globals.h` 定义 `STORY_DIR` 为 `/clone/gift/`，这两个书房有意改成 `/doc/story/`，在重定义前加 `#undef STORY_DIR`，行为不变。
+
+本轮没有发现玩法层面的真问题。`d/quanzhou{,.old}/npc/tang{,3}.lpc` 在批量载入里 HEAD 与工作树都失败，原因是 `create()` 里 `restore()` 读 `/data/npc/meng-zhu.o` 在 lpcc 的权限环境下被拒（与这次改动无关）。
+
+验证：11 个改动对象 HEAD 与工作树各用新进程载入：7 -> 7 通过，regress 0；删除声明审计 0 项待看。11 个对象载入无回退。
