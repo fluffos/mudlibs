@@ -663,3 +663,11 @@ functionally re-tested live on this lib.
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 2 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 1 个，只在 #if 分支用的声明移进分支 0 个文件；改动 2 个文件，HEAD 与工作树各载入一次无回退（2 objects; HEAD PASS 1, tree PASS 1; regress 0; newly loading 0），这些文件的警告 4 -> 2。
 
 - 2026-10-10（续）：第二轮编译警告整理（`lpc_fix_unused_init.py`）删掉了只在不启用的 `#if` 分支里用到的局部变量声明（如 `include/net/ftpdsupp.h` 中 `#ifdef GUEST_WIZARD_FTP` 分支的 `file`），启用该选项时会编译失败；声明已放回所用的分支里，工具已改为跳过这种情况（交给 `lpc_move_decl.py`）。
+
+## 编译警告收尾（2026-10-12）
+
+`scripts/lpc_twin_port.py adopt fy2 fy2qh` 搬来 fy2 同日整理（8bb2eeb150f）的 8 个文件，全部与本库逐 token 相同，能编译的文件警告清零。HEAD 与工作树各载入一次：8 个对象，HEAD PASS 5，tree PASS 6，regress 0。
+
+- 药店 `u/cloud/drugstore.lpc` 用关键字 `in` 做局部变量名，房间从没编译成功；改名 `me` 后载入。
+- `obj/sbaa/` 六个物件多余的 `inherit F_CLEAN_UP` 去掉，`sbgod.lpc` 多余的 `;` 删去。
+- 未改：`obj/sbaa/sbgod.lpc`、`rong.lpc` 设了本库没有的武功，`set_skill()` 报错载入失败，HEAD 也一样，是内容缺口。
