@@ -349,3 +349,11 @@ recursion`。mudlib `work/log/log` 只有开机/指令编译警告。心跳期
 启动时警告 49 -> 0；新进程登录（新人物确认）正常。
 
 - 2026-10-12：`clone/misc/swmuding.lpc`（神木王鼎）自己声明了一张 `mapping insects` 虫表，与继承的 `clone/misc/muding.lpc` 的 `insects` 同名；读表的是木鼎的代码，读到的是木鼎自己的表，神木王鼎的虫表从来没用上（`Redeclaration of global variable 'insects'`）。改名 `sw_insects`，`create()` 里 `insects = sw_insects;` 交给木鼎（nitan170911、wxddym、zjdy 系同修）。HEAD 与工作树各载入一次，regress 0。
+
+## 编译警告收尾（2026-10-13）
+
+手工清零；改动的 3 个对象在 HEAD 与工作树各载入一次，regress 0。
+
+- 醉仙楼 `d/city/zuixianlou3.lpc` 同时继承 `ROOM` 和 `F_DEALER`，驱动只用 `dealer` 的 `reset()`，房间的 `objects` 不再刷新；写 `void reset() { room::reset(); dealer::reset(); }`（同 xkxc98sj）。
+- `clone/megazine/obj/duka_3b.lpc`（赌球卡 B）赔率变量声明两次，代码用后一份；删去前一行，赔率不变。
+- 书库 `d/city/library.lpc` 自己把 `STORY_DIR` 定义成 `/doc/story/`，覆盖 `globals.h` 里指向故事守护进程的同名宏；先 `#undef` 再定义，行为不变。
