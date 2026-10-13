@@ -256,3 +256,7 @@ Same convert-era byte corruption as the waiter `！”\n` / `！\n` →
 手工：`system/daemon/natured.lpc` `game_season()` 删去没用到的 `mixed *local = localtime(TIME_TICK);`；`system/daemon/logind.lpc` 的 `my_ip` 只在 `#ifdef ALLOW_MULTI_LOGIN` 里用、`system/daemon/combatd.lpc` 的 `debug` 只在 `#ifdef DEBUG` 里用，声明挪进同样的条件里。
 
 启动时警告 32 -> 0；新进程登录（新人物确认）正常。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/toolkit_fix.sh` 一轮把 `include/net/ftpdsupp.h` 只在分支里用的 `file` 声明挪进分支；`cmds/wiz/allow.lpc` 自己的 `ALLOW_D` 与 `globals.h` 的路径相同，删去。能编译的文件警告清零，regress 0。（`/system/daemon/allowd` 本库没有，`allow` 命令仍用不了，是内容缺口。）
