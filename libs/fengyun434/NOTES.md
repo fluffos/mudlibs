@@ -548,3 +548,11 @@ one and call it with 7 (the driver checks the call against the inherited entry):
 ## 深度功能测试（§10.7，2026-10-11）：dns_master 空 if
 
 - `adm/daemons/network/dns_master.lpc` `query_services()`：`if (! (mud_svc[mud]["finger"/"tell"] & SVC_KNOWN))` 块里只有 `#if PREF_X & SVC_TCP … #endif`，选项关闭时 if 为空（“无副作用”警告报在下一句）；把 `#if`/`#endif` 挪到 if 外面（KB 04，2026-10-07 那次扫描漏了 `! (` 加括号换行这种写法）。载入无回退。
+
+## 编译警告收尾（2026-10-12）
+
+`scripts/toolkit_fix.sh` 一轮加手工收尾，能编译的文件警告清零。改动的 14 个对象 HEAD 与工作树各载入一次：HEAD PASS 14，tree PASS 14，regress 0。
+
+- `kill_ob`（8 个 NPC/物件）、`die`（`d/huashan/npc/qing.lpc`）、`check_status`（`officer.lpc`、`waiter.lpc`）在 `void` 基类上写成 `int`；全库查过没有调用方读这些返回值，用 `lpc_fix_return_types.py --also` 改成 `void`。
+- `d/bawang/npc/skill/snake-spear.lpc` 自己的招式表 `action` 与 `std/skill.lpc` 的同名变量重复；它有自己的 `query_action()` 只读自己的表，改名 `spear_action`，行为不变。`daemon/class/tieflag/ill-quan/qiankun.lpc` 的 `enemy` 与 `SSERVER` 的同名，改名 `foes`。
+- `d/fy/npc/newsman.lpc`：`ask_question()` 在定义之前就被调用、没有原型，补上原型。
