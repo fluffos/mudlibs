@@ -152,3 +152,13 @@ single-file compile check (PASS). Part of the corpus-wide §7.19 sweep
 启动时警告 26 -> 0；新进程登录（新人物确认）正常。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 2 处，返回类型/原型 5 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 5 个，只在 #if 分支用的声明移进分支 1 个文件；改动 9 个文件，HEAD 与工作树各载入一次无回退（9 objects; HEAD PASS 8, tree PASS 8; regress 0; newly loading 0），这些文件的警告 30 -> 18。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+`scripts/toolkit_fix.sh` 加手工修复，能编译的文件里的警告 63 -> 0（`lpc_warnings.py xyj42` 重扫：4766 个文件可编译；剩下 1 条警告在本来编译不过的文件里）。这次没有发现玩法上的真 bug，都是结构性的重复：
+
+- 40 处多余的 `inherit`（`lpc_diamonds.py --fix-redundant`）：38 个 NPC/武器/房间/sserver 叶子又 `inherit F_CLEAN_UP`（基类已经带了）；`daemon/skill_wiz/sword/wind.lpc` 在一段注释诗后面又写了一遍 `inherit SKILL;`；`d/qujing/pingding/obj/weapon.lpc` 的 `inherit F_BLADE;` 连写两遍。同一份代码两条路径进来，删掉一份不改变行为。
+- `d/kaifeng/ground.h`：三张常量表被 `ground0.lpc` 和一个个继承它的 `ground1/2/3.lpc`、`ground.lpc` 各包含一次；表格包进 `#ifndef GROUND_TABLES_INHERITED`，派生房间在包含前定义它（KB 04 §6.10）。
+- `include/net/ftpdconf.h`：`VALID_READ`/`VALID_WRITE` 重定义 `ftpd.h` 的值，前面加 `#undef`（本来就是后一个定义生效）。
+
+验证：改动文件、`d/kaifeng` 全部对象和包含 ftpd 头文件的对象共 157 个，HEAD 与工作树各用新进程载入：154 -> 154 通过，regress 0；删除声明审计 0 项待看。157 个对象载入无回退。
