@@ -272,3 +272,11 @@ definition, 2 `#undef` lines for macros that two headers define (`ROOM`, `STORY_
 - `d/baituo/shulin.lpc` 砍柴：`if (i < 1);` 多了分号，“请适量砍伐！”无条件返回，柴永远砍不成；去掉分号。
 - `d/foshan/npc/chaofeng.lpc`：战斗出招列表丢了 `set("chat_msg_combat", ({ … }));` 外壳，五个函数指针被逗号并进 `set_skill()`，战斗中从不出招；补回外壳。
 - `daemon/gongfu/xuanyuan-arrow.lpc` `practice_skill()` 的死语句 `(: throw_weapon :);` 删去。载入无回退。
+
+## 编译警告收尾（2026-10-13）
+
+手工清零；改动的 15 个对象在 HEAD 与工作树各载入一次，regress 0。
+
+- 七处 `item_desc`/问答写成 `(: "一段高高的院墙……" :)`，是只返回字符串常量的函数指针；改成字符串本身，显示不变（`d/city/newstreet4`、`street3`、两处 `walker`、两处 `kefang`、`d/waterfog/servant_room`）。
+- `cmds/std/look.lpc` 声明了两张 `per_msg_beast3`（野兽第三档相貌描述），代码用的是后一张；前一张改名 `per_msg_beast3_old` 保留原文。
+- `obj/npc/zombie.lpc`、`u/quicksand/npc/snake.lpc` 的 `die()` 改 `void`；`adm/daemons/network/services/dns_master.lpc`、`dns_master1.lpc` 里 `#if PREF_TELL & SVC_TCP` 挪到 `if` 外面（同 shujian3），不再剩一个空 `if`；`d/shaolin/damo-mi.lpc`、`daemon/gongfu/huashan-jian*.lpc` 多余的 `;` 删去。
