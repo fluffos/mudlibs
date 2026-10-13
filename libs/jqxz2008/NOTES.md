@@ -1111,3 +1111,7 @@ timestamp-only churn.
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 9 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 1 个，只在 #if 分支用的声明移进分支 0 个文件；改动 9 个文件，HEAD 与工作树各载入一次无回退（9 objects; HEAD PASS 9, tree PASS 9; regress 0; newly loading 0），这些文件的警告 9 -> 0。
 
 - 2026-10-10（续）：第二轮编译警告整理（`lpc_fix_unused_init.py`）删掉了只在不启用的 `#if` 分支里用到的局部变量声明（如 `include/net/ftpdsupp.h` 中 `#ifdef GUEST_WIZARD_FTP` 分支的 `file`），启用该选项时会编译失败；声明已放回所用的分支里，工具已改为跳过这种情况（交给 `lpc_move_decl.py`）。
+
+## 编译警告收尾（2026-10-12）
+
+`scripts/toolkit_fix.sh` 一轮（冗余继承 18 处，NPC/物件在基类之外又直接继承 `F_CLEAN_UP` 等）后，`include/net/ftpdconf.h` 改定义 `ftpd.h` 的 `VALID_READ`/`VALID_WRITE` 前加 `#undef`（取值不变，同 xiakexing3），能编译的文件警告清零。改动的 19 个对象 HEAD 与工作树各载入一次：HEAD PASS 18，tree PASS 18，regress 0。
