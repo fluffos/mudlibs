@@ -759,3 +759,10 @@ functionally re-tested live on this lib.
 ## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
 
 `scripts/lpc_warnings.py shzs --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 496 个 `.lpc` 和 1 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：490 -> 490 通过，无回退；改过的头文件的 1 个包含者 1 -> 1 通过。启动时警告 17 -> 0；新进程登录（输入名字）正常。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/toolkit_fix.sh` 一轮把 `feature/container.lpc`、`std/equip.lpc`、`std/money.lpc` 的 `query_autoload()` 改成与 `F_AUTOLOAD` 一致的 `mixed`；其余手工，能编译的文件警告清零；改动的 6 个对象在 HEAD 与工作树各载入一次，regress 0。
+
+- 知府欧阳修 `d/mohao/ouyangxiu.lpc` 把在大堂上 `chat` 的人打昏，处理函数叫 `do_chat`，正好盖住 `std/char/npc.lpc` 设定 NPC 下一句闲聊的 `do_chat(mixed)`；目前没有别处对他调用 `do_chat`，但名字冲突留着就是隐患。处理函数改名 `do_noisy`（两条 `add_action` 一起改），行为不变。
+- `obj/user.lpc` 没用的 `last_cmd`（与 `feature/alias.lpc` 的同名）、`std/space_ship/space_ship_room.lpc` 没用的 `doors`（与 `F_DOOR` 的同名）删去。
