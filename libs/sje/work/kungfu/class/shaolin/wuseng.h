@@ -7,7 +7,7 @@ mixed names = ({
   }),
 });
 
-mixed skills = ({
+mixed skill_ids = ({
   ({
     "luohan-quan", "weituo-zhang", "jimie-zhua", "mohe-zhi", "longzhua-gong", "fengyun-shou",
     "shaolin-tantui", "banruo-zhang", "qianye-shou", "jingang-quan", "yizhi-chan", "sanhua-zhang",
@@ -75,7 +75,7 @@ string ask_me() {
   }
   i = random(sizeof(names[0]));
   skill_name = names[0][i];
-  skill_id = skills[0][i];
+  skill_id = skill_ids[0][i];
   skill_type = types[0][i];
   me->set("learn", skill_name);
   me->set("skill", skill_id);

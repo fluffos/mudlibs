@@ -1,4 +1,4 @@
-mapping *skills = ({
+mapping *steal_skills = ({
   /*cuff*/
   ([ "skill_id": "wudang-quan",
     "skill_type": "cuff",

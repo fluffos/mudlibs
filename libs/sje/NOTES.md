@@ -210,3 +210,12 @@ Century/`adm-single` 形状）**：`adm/simul_efun/file.lpc` 的
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 0 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 2 个，只在 #if 分支用的声明移进分支 0 个文件；改动 2 个文件，HEAD 与工作树各载入一次无回退（2 objects; HEAD PASS 2, tree PASS 2; regress 0; newly loading 0），这些文件的警告 2 -> 0。
 
 - 2026-10-12：`job/gbjob/teamjob.lpc` 的组队任务用 `names[0][random(40)]` 选地点，而这张表只有 29 个地名，`random()` 落到表外时数组越界报错、任务中断。改成 `random(sizeof(names[0]))`（shenmo `u/stey/newjob/teamjob.lpc` 同类）。HEAD 与工作树各载入一次，regress 0。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/toolkit_fix.sh` 一轮去掉 5 处多余继承，其余手工，能编译的文件警告清零；改动的 17 个对象在 HEAD 与工作树各载入一次：HEAD PASS 15，tree PASS 15，regress 0。
+
+- 少林武僧 `kungfu/class/shaolin/wuseng.h`（`wuseng2/4/5.lpc` 包含）把可学武功表叫 `skills`，与 `F_SKILL` 存武功等级的 `mapping skills` 同名；文件里照抄 `F_SKILL` 的 `add_skill()` 本该改基类那份，实际改的是这张表：第一次有人教武僧就 `skills = ([])` 把表清空，之后再问学什么 `skills[0][i]` 就取空表。表改名 `skill_ids`，`add_skill()` 才真正记到武僧的武功上。
+- 慕容复 `d/mr/npc/murong-fu.lpc`、`d/mr1/npc/murong-fu.lpc` 的偷学目标 `mapping skills = skills[random(sizeof(skills))];` 用同名局部变量去读 `skill.h` 的表；表改名 `steal_skills`，这行改成读 `steal_skills`。
+- `kungfu/skill/kurong-changong.lpc` 的穴位表 `xue_name` 与它包含的 `eff_msg.h` 一字不差，删去重复的；`kungfu/skill/lanhua-shou/fuxue.lpc` 的穴位表不同，改名 `fuxue_xue_name`。
+- `job/gbjob/teamjob.lpc` 的地名表 `names` 与同被 `ysd.lpc` 包含的 `zzzjob.lpc` 同名，改名 `team_names`；天书任务 `quest/shenshu/npc/man.lpc`、`testman.lpc` 的 `kill_ob()` 改 `void`；`d/xiangyang/npc/shanzei0.lpc` 的 `MAX` 先 `#undef`；`kungfu/skill/jinshe-zhuifa/sheying.lpc` 写明用驱动原先选的 `clean_up()`。
