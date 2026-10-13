@@ -936,3 +936,12 @@ functionally re-tested live on this lib.
 - 2026-10-12：`adm/npc/obj/jubaoxiang.lpc`、`adm/npc/obj/xiang.lpc`、`adm/npc/obj/xiang1.lpc` 写着 `int remove() { save(); }`，盖掉了 `feature/move.lpc` 的 `remove(string euid)`——这些存盘箱子/柜子被销毁时不从携带者身上减负重、不清 handing（KB 06 §7.239 变体，nitan_ceshi/tianxiawuxue 同类）。改成 `varargs void remove(string euid) { save(); ::remove(euid); }`。HEAD 与工作树各载入一次，regress 0（载不进的文件在 HEAD 就载不进）。
 
 - 2026-10-12：`clone/misc/swmuding.lpc`（神木王鼎）自己声明了一张 `mapping insects` 虫表，与继承的 `clone/misc/muding.lpc` 的 `insects` 同名；读表的是木鼎的代码，读到的是木鼎自己的表，神木王鼎的虫表从来没用上（`Redeclaration of global variable 'insects'`）。改名 `sw_insects`，`create()` 里 `insects = sw_insects;` 交给木鼎（nitan170911、wxddym、zjdy 系同修）。HEAD 与工作树各载入一次，regress 0。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/lpc_twin_port.py adopt yanhuangwuhun zhonghua2` 搬来 yanhuangwuhun 整理（89552da089f）里与本库逐 token 相同的 11 个文件（huanjing2003 的重复声明、`food`/`liquid` 的 `do_effect` 改 `varargs int`、`cmwhod` 的 `nosave` 函数改 `protected`），`scripts/toolkit_fix.sh` 去掉 3 处多余继承，其余手工，能编译的文件警告清零。改动的 18 个对象在 HEAD 与工作树各载入一次：HEAD PASS 17，tree PASS 17，regress 0。
+
+- `clone/megazine/obj/duka_3b.lpc`（赌球卡 B）同一个赔率变量声明两次（`peis = 3` 与 `peis = 4`），代码用的是后一份；删去前一行，赔率不变（4.5）。
+- `u/smallfish/mj.lpc`（麻将）自己的 `count` 遮住了基类的同名变量，改名 `mj_count`。
+- `clone/obj/genmap.lpc` 在函数里 `#include "harbor.h"`，函数并不用那些港口表；删去（同 ntii）。
+- `clone/book/yjj_book2.lpc`（易筋经残篇，`ITEM` + `SKILL`）写明用 `skill::clean_up()`，与驱动原先的选择相同。
