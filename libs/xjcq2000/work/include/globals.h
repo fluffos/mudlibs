@@ -35,7 +35,7 @@
 #define PRIVATE_ROOM	"/inherit/private_room.lpc"
 #define RECORDABLE_ROOM	"/inherit/recordable_room.lpc"
 #define ROOM_D		"/adm/daemons/roomd.lpc"	
-#define BANNED_SITES "/adm/etc/banned_sites";
+#define BANNED_SITES "/adm/etc/banned_sites"
 #define PAWN		"/feature/pawn"
 #define BR_D		"/adm/daemons/brd"
 #define QUEST_OB		"/feature/quest_list"

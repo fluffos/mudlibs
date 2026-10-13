@@ -1292,7 +1292,8 @@ mapping *renwu3=({
 
 });
 
-mapping *renwu4=({
+// an earlier, short renwu4 table; the full one below is the one hfh.lpc reads
+mapping *renwu4_old=({
 ([	"type":1,	"id":"ouyang feng",	"name":"欧阳锋",	"lv":4,	]),
 ([	"type":1,	"id":"dongfang bubai","name":"东方不败","lv":6,	]),
 ([	"type":1,	"id":"fan song",	"name":"范松",	"lv":3,	]),

@@ -775,3 +775,12 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 - `kungfu/skill/liangyi-jian.bak.lpc`：`int i; level;` 去掉无用的 `level;`。载入无回退。
 
 - 2026-10-12：`d/shenlong/npc/pang.lpc` 连写了两行 `inherit F_UNIQUE;`（同一 mixin 继承两次，变量重复声明），删去一行；HEAD 与工作树都能载入。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/toolkit_fix.sh` 一轮去掉 14 处多余继承：其中 7 件暗器（`clone/weapon/feidao`、`sjian`、`jin-sjian`，两处 `bqp_obj/feibiao`，归云庄石子 `shizi`，`d/hs/jinshe/obj/jinshezhui`）在 `THROWING` 之外又继承它已带的 `COMBINED_ITEM`，`Illegal to redefine 'nomask' function`，从没载入过，现在载入（同 xkxc98sj）。其余手工，能编译的文件警告清零；改动的 34 个对象在 HEAD 与工作树各载入一次：HEAD PASS 26，tree PASS 33，regress 0，新载入 7 个。
+
+- `include/globals.h` 的 `#define BANNED_SITES "/adm/etc/banned_sites";` 多一个分号；`adm/daemons/band.lpc`、`include/net/telnet.h` 各自定义的是同一路径不带分号，去掉分号后三者一致，不再重定义。
+- 巫师 squall 的备份 `u/squall/bak/wudugou.lpc`、`combatd.lpc` 先包含自己目录里的旧 `ansi.h`，再经 `weapon.h` 等包含标准 `ansi.h`，颜色宏以后者为准；直接包含 `<ansi.h>`，颜色不变。
+- 三份 `hua.lpc`（`d/city/job/`、`jobsys/tianhan_job/`、`u/squall/bak/bak/`）里玩家当前任务 `mapping job` 与后面的任务表 `mapping *job` 同名，表改名 `job_list`；`d/city/npc/renwu.h` 声明了两张 `renwu4`，`hfh.lpc` 读的是后面完整的那张，前面短的改名 `renwu4_old` 保留原文；两份 `roommaker.lpc` 的 `special_props` 删去不用的前一份。
+- 关将 `guanj.lpc`（四处）的 `kill_ob()` 改 `void`；`cmds/std/help1.lpc` 的 `DIR`、`jobsys/tianhan_job/feng1.lpc` 的 `QUEST`、`d/xiangyang/npc/shanzei0.lpc` 的 `MAX`、两间书库的 `STORY_DIR` 先 `#undef`；`kungfu/skill/hubo.lpc` 写明用驱动原先选的 `clean_up()`；`kungfu/skill/huashan-jian.lpc` 多余的 `;` 删去。
