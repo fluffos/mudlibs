@@ -895,3 +895,11 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 - 改动的对象 HEAD 与工作区都能载入，无回退。
 
 - 2026-10-12：`clone/misc/swmuding.lpc`（神木王鼎）自己声明了一张 `mapping insects` 虫表，与继承的 `clone/misc/muding.lpc` 的 `insects` 同名；读表的是木鼎的代码，读到的是木鼎自己的表，神木王鼎的虫表从来没用上（`Redeclaration of global variable 'insects'`）。改名 `sw_insects`，`create()` 里 `insects = sw_insects;` 交给木鼎（nitan170911、wxddym、zjdy 系同修）。HEAD 与工作树各载入一次，regress 0。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/lpc_twin_port.py adopt xkxc98sj xkxz2` 搬来 xkxc98sj 同日整理（a69e715c2f6）的 20 个文件，与本库逐 token 相同，能编译的文件警告清零。改动的 20 个对象在 HEAD 与工作树各载入一次：HEAD PASS 10，tree PASS 20，regress 0，新载入 10 个。
+
+- 暗器类 10 个（`clone/weapon/feidao`、`jinhua`、`sjian`、`jin-sjian`、两处 `bqp_obj/feibiao`、两处石子 `shizi` 等）在 `THROWING` 之外又继承它已带的 `COMBINED_ITEM`，`Illegal to redefine 'nomask' function`，从没载入过；去掉多余的一行后都能载入。
+- 酒楼五间（`d/city/jiulou2`、`zuixianlou2`、`d/dali/jiulou`、`d/quanzhen/jiulou2`、`d/shaolin/jiulou2`）同时继承 `ROOM` 和 `F_DEALER`，驱动只用 `dealer` 的 `reset()`，房间的 `objects` 不再刷新；写 `void reset() { room::reset(); dealer::reset(); }`。
+- `d/rooms/npc/obj/jia.lpc` 写明用驱动原先选的 `clean_up()`；`d/xiangyang/npc/shanzei0.lpc` 与 `globals.h` 相同的 `MAX` 宏删去。
