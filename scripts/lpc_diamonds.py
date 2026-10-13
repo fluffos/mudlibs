@@ -247,6 +247,12 @@ def plan_fixes(files):
         mlines = masked.split("\n")
         cond = conditional_flags(mlines)
         has_unq = re.search(r"(?<![\w:])::\s*\w+\s*\(", masked) is not None
+        # several source files pasted into one (sjpl2 d/wuhan/npc/npc.lpc: ~40 NPCs, each `inherit NPC; void create()`)
+        # define a function twice and never compile; their inherit lines are archive text, not a fix target
+        defs = re.findall(r"^[ \t]*(?:(?:nomask|private|protected|public|static|nosave|varargs)[ \t]+)*"
+                          r"(?:(?:void|int|string|object|mixed|mapping|float|status|function|buffer)[ \t*]+)?"
+                          r"(\w+)[ \t]*\([^;{}()]*\)[ \t\r\n]*\{", masked, re.M)
+        twice = sorted({d for d in defs if defs.count(d) > 1 and d not in ("if", "while", "for", "switch", "foreach")})
         dropped = set()
         out = []
         for a, b, sh, a_in_b, b_in_a in pairs(f):
@@ -261,7 +267,9 @@ def plan_fixes(files):
             if victim["line"] in dropped:
                 continue
             why = None
-            if victim["mods"]:
+            if twice:
+                why = f"file defines {twice[0]}() twice (pasted-together files; it does not compile)"
+            elif victim["mods"]:
                 why = f"inherit has modifiers ({victim['mods']})"
             elif cond[victim["line"] - 1]:
                 why = "inside #if"
