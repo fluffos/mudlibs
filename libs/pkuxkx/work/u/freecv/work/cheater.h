@@ -326,7 +326,7 @@ int do_yun()
 tell_object(this_player(),"你想运用内功御敌，怎奈蒙古兵实在太多，你竟然无法使出!!\n");
 return 1;
 }
-int die()
+void die()
 {
 object me,xytaskd;
 if(query("victory"))
@@ -334,7 +334,7 @@ if(query("victory"))
 message_vision(this_object()->query("name")+"死了,你仔细一看发现他竟然是蒙古奸细假扮的！\n",this_object());
     all_inventory(environment())->remove_killer(this_object());
 destruct(this_object());
-return 1;
+return;
 }
 me=this_object()->query_temp("last_damage_from");
 //if(!me) me=offensive_target(this_object());
@@ -351,7 +351,7 @@ message_vision(this_object()->query("name")+"死了,你仔细一看发现他竟�
     all_inventory(environment())->remove_killer(this_object());
 message( "channel:" + "baowei",HIM + "【襄阳传闻】"WHT +me->query("name")+HIM"锐眼识穿蒙古奸细！\n"NOR,users());
 destruct(this_object());
-return 1;
+return;
 }
 /*
 int unconcious()

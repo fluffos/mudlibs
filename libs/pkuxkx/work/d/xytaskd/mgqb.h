@@ -2,7 +2,7 @@
 
 void create()
 {
-	int bts=join_bts(0), hour=now_hour();
+	int bts=join_bts(0);
 	
   set_name(HIR"蒙古骑兵"NOR, ({ "menggu qibing", "qibing" }));
 	set("age", 22);
@@ -345,14 +345,14 @@ tell_object(this_player(),"你想运用内功御敌，怎奈蒙古兵实在太�
 return 1;
 }
 
-int die()
+void die()
 {
 object me,xytaskd;
 if(query("victory"))
 {
 message_vision(this_object()->query("name")+"死了\n",this_object());
 destruct(this_object());
-return 1;
+return;
 }
 me=this_object()->get_damage_origin_object();
 //if(!me) me=offensive_target(this_object());
@@ -432,7 +432,7 @@ if(random(10)==0&&me)
 	}
 }
 destruct(this_object());
-return 1;
+return;
 }
 /*
 int unconcious()

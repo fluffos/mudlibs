@@ -39,7 +39,6 @@ void bonus(object me,int flag,string skill,int posibility)
 {
 	object ob=this_object();
 	int exp,pot,rep,neili,score,jingli;
-	int limit_sk=to_int(pow((int)me->query("combat_exp")/100,0.333)*10)-10;
 	string percent;
 	exp=CalcResult(me,flag,"exp");
 	pot=CalcResult(me,flag,"pot");

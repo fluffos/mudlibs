@@ -2,7 +2,7 @@
 
 void create()
 {
-	int bts=join_bts(0), hour=now_hour();
+	int bts=join_bts(0);
 	
   set_name(HIW"千户长"NOR, ({ "qianhu zhang", "zhang" }));
 	set("age", 22);
@@ -312,14 +312,14 @@ int do_yun()
 tell_object(this_player(),"你想运用内功御敌，怎奈蒙古兵实在太多，你竟然无法使出!!\n");
 return 1;
 }
-int die()
+void die()
 {
 object me,xytaskd;
 if(query("victory"))
 {
 message_vision(this_object()->query("name")+"死了\n",this_object());
 destruct(this_object());
-return 1;
+return;
 }
 me=this_object()->get_damage_origin_object();
 //if(!me) me=offensive_target(this_object());
@@ -399,7 +399,7 @@ if(random(10)==0&&me)
 	}
 }
 destruct(this_object());
-return 1;
+return;
 }
 /*
 int unconcious()

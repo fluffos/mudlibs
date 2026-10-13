@@ -1,12 +1,12 @@
 
-int die()
+void die()
 {
 object me,xytaskd;
 if(query("victory"))
 {
 message_vision(this_object()->query("name")+"死了\n",this_object());
 destruct(this_object());
-return 1;
+return;
 }
 me=this_object()->get_damage_origin_object();
 //if(!me) me=offensive_target(this_object());
@@ -86,7 +86,7 @@ if(random(10)==0&&me)
 	}
 }
 destruct(this_object());
-return 1;
+return;
 }
 /*
 int unconcious()

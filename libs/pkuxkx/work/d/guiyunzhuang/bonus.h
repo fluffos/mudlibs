@@ -28,7 +28,7 @@ string completeness(object me)
 
 int bonus(object me,string BonusGiver)
 {
-	int BaseValue,exp,pot,rep,neili,jingli,score,limit_sk=to_int(pow((int)me->query("combat_exp")/100,0.333)*10)-10;
+	int BaseValue,exp,pot,rep,neili,jingli,score;
 	string percent,notice,skill="";
 	if (BonusGiver=="taohuazhen")
 	{

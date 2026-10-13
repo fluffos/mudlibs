@@ -3,7 +3,7 @@
 
 void create()
 {
-	int bts=join_bts(0), hour=now_hour();
+	int bts=join_bts(0);
 	
 	if ( bts>=5 )
 	  set_name(HIM"蒙古奸细"NOR, ({ "menggu jianxi", "jianxi" }));
@@ -330,7 +330,7 @@ int do_yun()
 	return 1;
 }
 
-int die()
+void die()
 {
 	object me,xytaskd;
 	if(query("victory"))
@@ -338,7 +338,7 @@ int die()
 		message_vision(this_object()->name()+"死了,你仔细一看发现他竟然是蒙古奸细假扮的！\n",this_object());
 		all_inventory(environment())->remove_killer(this_object());
 		destruct(this_object());
-		return 1;
+		return;
 	}
 	me=this_object()->get_damage_origin_object();
 	//if(!me) me=offensive_target(this_object());
@@ -355,7 +355,7 @@ int die()
 	all_inventory(environment())->remove_killer(this_object());
 	CHANNEL_D->do_channel(this_object(), "bd", HIW + me->query("name")+HIM"锐眼识穿蒙古奸细！" NOR, -1);
 	destruct(this_object());
-	return 1;
+	return;
 }
 
 /*

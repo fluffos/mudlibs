@@ -3,7 +3,7 @@ int des();
 void create()
 {
     
-    int bts=join_bts(0), hour=now_hour();
+    int bts=join_bts(0);
     
     if ( bts>=5 )
     set_name(HIM"蒙古兵"NOR, ({
@@ -411,7 +411,7 @@ int do_yun()
 }
 
 
-int die()
+void die()
 {
     
     object me,xytaskd;
@@ -420,7 +420,7 @@ int die()
         
         message_vision(this_object()->query("name")+"死了\n",this_object());
         des();
-        return 1;
+        return;
         
     }
     
@@ -535,7 +535,7 @@ int die()
     }
     
     des();
-    return 1;
+    return;
     
 }
 

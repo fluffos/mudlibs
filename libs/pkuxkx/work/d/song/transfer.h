@@ -85,7 +85,7 @@ int pre_choose()
 
 int do_choose(string arg)
 {
-	object me=this_player(),ob=load_object("/d/song/record/other");
+	object me=this_player();
 	if (!arrayp(me->query_temp("song/lower_transfer_titles")))
 	return 0;
 	if (!arg)

@@ -276,3 +276,13 @@ python3 scripts/mudclient.py 127.0.0.1 40274 --timeout 40 --idle 0.5 \
 - `toolkit_fix.sh`：24 个返回类型/原型对齐、21 个带初始化的未用局部变量、22 处多余 inherit、2 处转义。54 个对象载入无回退，删除声明审计为 0。
 - `u/bibi/obj/fire/xiaomao.lpc` 烟花猫脸图案：`/\ ` 在字符串里是未知转义，原本显示成 `/ `；改为 `/\\ `，猫耳朵的反斜杠才显示出来。该文件本身另有未转义的 `"` 导致编译失败（原档如此），未处理。
 - 剩余（约 250 条：`Redeclaration`、die/init/unconcious 等返回类型与基类不符、clean_up 菱形）另行处理。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾（第二轮）
+
+- 能编译的文件里的警告：103 → 0（全库扫描 `lpc_warnings.py`；剩下的 103 条都在本身编译失败的文件里，如 `u/iszt/lingxiao/npc/wenwanfu.lpc`、`data/home/std_file/stdroom.lpc`、`u/whuan/vax/` 草稿，不在本轮范围）。
+- 返回类型（46 个函数、4 个原型）：`die`/`unconcious`/`start_busy`/`add_busy`/`fight_ob`/`heart_beat`/`receive_message` 叶子写成 `int`，基类是 `void`。全库查过，没有任何调用方读取这些函数的返回值（`return ::die();` 只出现在 void 函数里），叶子改为 `void`、`return 1;` 改 `return;`。`d/bwdh/sjsz/obj/control.lpc`、`d/diaoyudao/xiaodao/npc/wokou.lpc` 的前置原型一并改正。`d/menggu/npc/liping.lpc` 的 `string ask_job();` 原型与 `muyang.h` 里的 `int ask_job()` 不符，改为 `int`。
+- 变量重复声明（31 处）：叶子与基类同名、各存各的数据，两边各自读取，改叶子一侧的名字，行为不变：宝石/打造装备 13 个文件的 `all_colors`（与 `feature/gems.h` 的宝石颜色表不同）→ `grade_colors`；9 个镖局 NPC 的 `mapping *escort_info`（与 `F_ESCORT` 的 `mapping escort_info` 不同，叶子是作为参数传给 `get_dart()` 的）→ `dart_list`；麻将 `mj.lpc` 的牌堆位置 `count` → `mj_count`；国战兵器的重量表 `weight` → `type_weights`（与 `F_MOVE` 的 `weight` 冲突）；剿匪土匪的路线号 `int path`（与命令搜索路径 `string *path` 冲突）→ `route_no`；`d/quanzhen/npc/kid2.lpc` 同一文件里 `string *name` 与 `string name` 两个变量，数组改名 `candy_names`。`kungfu/music/*.lpc` 13 首乐曲继承了 `F_MUSIC` 又再 include `<combat/music.h>`，表格两份完全相同，删去叶子的 include。`d/changan/npc/sunsimiao.lpc` 继承 NPC 已有 `cond_def`，include `<condition.h>` 前加 `#define CONDITION_NO_TABLE`（库里 char/damage/name 已用此法）。`u/zhx/combatd.lpc` 两份相同的 `verbs` 表删去后一份。
+- `clone/user/user.lpc`：`apply_buffer()` 同时来自 `feature/login.lpc` 和 `feature/skill.lpc`，两份不同（login 版对玩家多了 eff_qi/eff_jing 补足）。驱动一直用的是 login 版，所以玩家切换技能时 skill.lpc 里的调用也走 login 版；在 user.lpc 写明 `login::apply_buffer()`，行为不变。
+- **潜伏 bug**：`feature/skill.lpc` 的 `apply_buffer()` 处理嵌套 mapping 的内层循环写成 `for(lp2=0; lp2<sizeof(nbufs); lp++ )`，`lp2` 永远为 0，一旦遇到嵌套 buffer 就是死循环（eval cost）。目前所有 `buffer_applied()` 返回的都是平坦整数表，玩家又走 login 版，所以没有触发；改为 `lp2++`。
+- 其他：`adm/room/lxguan.lpc`、`cmds/arch/make_npc.lpc` 生成 NPC 文件的宏里 `"\#include"`、`"\}"` 的未知转义去掉反斜杠（输出相同）；未用局部变量 10 处（`bonus.h` 的 `limit_sk`、`xytaskd` 的 `hour=now_hour()`、`danuoyi` 的 `pure`、`song/transfer.h` 的 `ob`，都是纯查询）；`d/beijing/npc/mingzhu.lpc`、`duolong.lpc`、`shenghuo-lingfa/jindou.lpc` 已整段注释掉的代码里嵌套的 `/*` 改为 `//`（注释内文字，无行为变化）。
+- 验证：改动的 .lpc 及改动头文件的全部 includer 共 135 个对象，HEAD 与工作树载入对比 134/134 PASS，无回退；`d/anqimen/npc/ouyangxue.lpc` 在 HEAD 与工作树都载入失败（create() 运行期，非本轮引入，未处理）。删除声明审计 0。
