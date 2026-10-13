@@ -22,7 +22,7 @@
 
 // email handling
 #define MI_EMAIL_INVALID    "@inv@"
-#define MI_EMAIL_INVALID    "@reg@"
+#define MI_EMAIL_REGISTERED "@reg@"
 
 // password handling
 #define MI_PWD_INVALID      "@inv@"
