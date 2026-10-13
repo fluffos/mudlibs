@@ -845,3 +845,11 @@ an already live-verified fix from the shared-lineage sibling `zhyx`).
 - `adm/daemons/network/dns_master.lpc` `query_services()`：`if (! (mud_svc[mud]["finger"/"tell"] & SVC_KNOWN))` 块里只有 `#if PREF_X & SVC_TCP … #endif`，选项关闭时 if 为空（“无副作用”警告报在下一句）；把 `#if`/`#endif` 挪到 if 外面（KB 04，2026-10-07 那次扫描漏了 `! (` 加括号换行这种写法）。载入无回退。
 
 - 2026-10-12：`clone/misc/swmuding.lpc`（神木王鼎）自己声明了一张 `mapping insects` 虫表，与继承的 `clone/misc/muding.lpc` 的 `insects` 同名；读表的是木鼎的代码，读到的是木鼎自己的表，神木王鼎的虫表从来没用上（`Redeclaration of global variable 'insects'`）。改名 `sw_insects`，`create()` 里 `insects = sw_insects;` 交给木鼎（nitan170911、wxddym、zjdy 系同修）。HEAD 与工作树各载入一次，regress 0。
+
+## 编译警告收尾（2026-10-12）
+
+`scripts/toolkit_fix.sh` 一轮后剩 52 条，手工清零（改动及 `d/gumu/obj/fengmi`、`cmds/std/eat` 在 HEAD 与工作树各载入一次：15 个，HEAD PASS 14，tree PASS 14，regress 0）。
+
+- `adm/daemons/huanjing2003/` 的四国 NPC/宝物与 `room_readygo_hj.lpc`：一条声明里同一变量先裸声明、再带初值声明，驱动造出两份；`scripts/lpc_fix_double_decl.py` 去掉裸的那份（44 处，9 个文件），运行时不变。
+- `feature/food.lpc`、`feature/liquid.lpc` 的 `do_effect()` 是 `void`，而重载它的蜂蜜 `d/gumu/obj/fengmi.lpc`、`d/xiakedao/obj/pigpart.h` 返回 `int`，`eat`/`drink` 对 `only_do_effect` 物品用这个返回值做命令结果：基类改 `varargs int do_effect(object me)`，返回 1（同 nitan3）。
+- `adm/daemons/network/cmwhod.lpc` 五个函数用 `STATIC_VAR_TAG`（`nosave`）修饰，改 `protected`；`adm/daemons/vrm_server.lpc` 多余的 `;` 删去。
