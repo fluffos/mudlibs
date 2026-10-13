@@ -433,3 +433,11 @@ HEAD 与工作树分别加载（新进程）：826 -> 826 通过，无回退。
 `.c` 改名 `.lpc` 时只改了字符串没改切片宽度：`f[<2..] == ".lpc"` 拿两个字符比四个字符，永远不成立（`!=` 永远成立），按后缀筛文件、去后缀的代码因此从不运行或截成 `x.l`（KB 06 §7.238）。`scripts/lpc_lpc_suffix_slice.py --apply` 改了 1 处比较、0 处去后缀（如 `adm/daemons/huanjing2003/room_master_hj.lpc`）；改动的文件 HEAD 与工作树分别加载（新进程），无回退。
 
 - 2026-10-12：`clone/misc/swmuding.lpc`（神木王鼎）自己声明了一张 `mapping insects` 虫表，与继承的 `clone/misc/muding.lpc` 的 `insects` 同名；读表的是木鼎的代码，读到的是木鼎自己的表，神木王鼎的虫表从来没用上（`Redeclaration of global variable 'insects'`）。改名 `sw_insects`，`create()` 里 `insects = sw_insects;` 交给木鼎（nitan170911、wxddym、zjdy 系同修）。HEAD 与工作树各载入一次，regress 0。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/lpc_twin_port.py adopt yanhuangwuhun yhwhpublicfi` 搬来 yanhuangwuhun 整理（89552da089f）里与本库逐 token 相同的 12 个文件，能编译的文件警告清零；改动的 13 个对象在 HEAD 与工作树各载入一次：HEAD PASS 12，tree PASS 12，regress 0。
+
+- `adm/daemons/huanjing2003/` 四国 NPC/宝物与 `room_readygo_hj.lpc`：同一条声明里先裸声明再带初值声明的变量去掉裸的那份。
+- `feature/food.lpc`、`feature/liquid.lpc` 的 `do_effect()` 改 `varargs int`，与重载它、被 `eat`/`drink` 用返回值的物品同型；`adm/daemons/network/cmwhod.lpc` 的 `nosave` 函数改 `protected`；`adm/daemons/vrm_server.lpc` 多余的 `;` 删去。
+- 镖师钱正伦 `d/beijing/npc/qianzhenglun.lpc` 记次数的 `count` 遮住基类 `feature/shell.lpc` 的同名变量，改名 `my_count`（同 yanhuangwuhun）。
