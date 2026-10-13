@@ -567,3 +567,11 @@ live `debug.log` 是 `libs/es2/log/debug.log`（Boot Time Fri Sep 4
 手改 `include/net/ftpdsupp.h`：`check_access()` 的局部 `file` 只在 `#ifdef GUEST_WIZARD_FTP` 分支里用到，声明挪进同一个 `#ifdef`。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 1 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 0 个，只在 #if 分支用的声明移进分支 0 个文件；改动 1 个文件，HEAD 与工作树各载入一次无回退（1 objects; HEAD PASS 1, tree PASS 1; regress 0; newly loading 0），这些文件的警告 1 -> 0。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+能编译的文件里的警告 4 -> 0（`toolkit_fix.sh es2` 重扫：1841 个文件可编译，剩下的诊断都在本来就编译不过的文件里）。四条都是 `Function pointer returning string constant is NOT a function call`：`d/city/npc/walker.lpc` 的 inquiry「买官」、`d/city/shangshu/kefang.lpc`、`d/city/street3.lpc`、`daemon/class/scholar/taolin.lpc` 的 item_desc 写成 `(: "一段文字" :)`。这不是函数名而是要显示的文字：`feature/dbase.lpc` 的 `query()` 会 `evaluate()` 函数指针、`cmds/std/look.lpc` 对函数型 item_desc 也是求值后 `write()`，结果都等于那段文字，所以直接写成字符串，行为不变。
+
+另外 `adm/daemons/network/mail_serv.lpc` 的 `tmp[i] == EOT+".";`（上一行是 `=`，TMI-2 原有的笔误，语料里已普遍修过）改为赋值；该文件缺 `daemons.h`/`uid.h`/`post.h`，本来就编译不过，只是顺手改掉。
+
+验证：5 个改动对象 HEAD 与工作树各用新进程载入：4 -> 4 通过（mail_serv 两边都载不进），regress 0；删除声明审计 0 项待看。5 个对象载入无回退。
