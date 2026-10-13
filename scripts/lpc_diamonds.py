@@ -58,7 +58,7 @@ for dp, dn, fn in os.walk(work):
                 alts.setdefault(m.group(1), []).append(body)
 
 
-def expand(expr, depth=0):
+def expand(expr, depth=0, local=None):
     if depth > 8:
         return None
     parts = re.findall(r'"[^"]*"|[A-Za-z_]\w*', expr)
@@ -66,8 +66,13 @@ def expand(expr, depth=0):
     for p in parts:
         if p.startswith('"'):
             out += p[1:-1]
+        elif local and p in local:
+            r = expand(local[p], depth + 1, local)
+            if r is None:
+                return None
+            out += r
         elif p in defs:
-            r = expand(defs[p], depth + 1)
+            r = expand(defs[p], depth + 1, local)
             if r is None:
                 return None
             out += r
@@ -90,9 +95,32 @@ for k, v in alts.items():
             defs[k] = v[0]
 
 
-def resolve(arg):
+def resolve(arg, local=None):
     arg = arg.strip()
-    return arg.strip('"') if arg.startswith('"') else expand(arg)
+    return arg.strip('"') if arg.startswith('"') else expand(arg, 0, local)
+
+
+DEF = re.compile(r"^[ \t]*#[ \t]*define[ \t]+([A-Za-z_]\w*)[ \t]+([^\n]*)$", re.M)
+QINC = re.compile(r'^[ \t]*#[ \t]*include[ \t]+"([^"]+)"', re.M)
+
+
+def local_defines(fp, text, depth=0):
+    """#defines a file makes itself or through its "quoted" includes; they win over the lib-wide table
+    (xiaoyuxiyou books-nonskill: book.h redefines BOOK, which globals.h also defines, to a base without ITEM)"""
+    out = {}
+    if depth > 3:
+        return out
+    for m in QINC.finditer(text):
+        inc = m.group(1)
+        ip = inc if inc.startswith("/") else os.path.normpath(os.path.join(os.path.dirname(fp), inc))
+        if os.path.isfile(work + ip):
+            try:
+                out.update(local_defines(ip, open(work + ip, encoding="latin-1").read(), depth + 1))
+            except OSError:
+                pass
+    for m in DEF.finditer(text):
+        out[m.group(1)] = re.sub(r"/\*.*?\*/|//.*", "", m.group(2)).strip()
+    return out
 
 
 def norm(path):
@@ -170,11 +198,12 @@ def inherits_of(path):
     if fp:
         text = open(work + fp, encoding="latin-1", newline="").read()   # newline="": a stray \r must not count as a line
         masked = mask_comments(text)
+        local = local_defines(fp, text)
         for m in INH.finditer(masked):
             raw = m.group(3).strip()
             ln = masked.count("\n", 0, m.start()) + 1
             mods = m.group(2).strip()
-            r = resolve(raw)
+            r = resolve(raw, local)
             res.append({"raw": raw, "path": norm(r) if r else None, "line": ln, "mods": mods})
     cache[path] = res
     return res
