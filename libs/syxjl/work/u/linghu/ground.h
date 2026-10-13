@@ -15,6 +15,7 @@
 #define MODE_TEAM_LT   2
 #define MODE_TEAM_DZ   3
 #define MODE_TEAM_XH   4
+#ifndef GROUND_TABLES_INHERITED
 string *modes = ({
   "个人散打",
   "个人擂台",
@@ -29,6 +30,7 @@ string *mode_hints = ({
   "每门派的选手按弱强等级分类，各门派间的同级选手较量",
   "每门派的选手依次与别的门派所有选手较量",
 });
+#endif
 
 #define FAMILY_NONE     0
 #define FAMILY_SHAOLIN  1
@@ -44,6 +46,7 @@ string *mode_hints = ({
 #define FAMILY_EMEI     11
 #define FAMILY_QUANZ    12
 
+#ifndef GROUND_TABLES_INHERITED
 string *families = ({
   "混合门派",
   "少林派",
@@ -59,5 +62,6 @@ string *families = ({
   "峨嵋派",
   "全真教",  
 });
+#endif
 
 

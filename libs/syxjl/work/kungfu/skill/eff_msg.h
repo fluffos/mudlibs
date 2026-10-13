@@ -1,5 +1,4 @@
 /*  在相应的perform里加上：
-/*  在相应的perform里加上：
    #include "/kungfu/skill/eff_msg.h";
    int p;
     p = (int)target->query("qi")*100/(int)target->query("max_qi");

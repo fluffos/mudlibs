@@ -918,3 +918,10 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply s
 `scripts/lpc_warnings.py syxjl --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 144 个 `.lpc` 和 3 个 `.h`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：126 -> 126 通过，无回退；改过的头文件的 4 个包含者 2 -> 2 通过。启动时警告 9 -> 0；新进程登录（输入名字）正常。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 10 处，返回类型/原型 30 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 3 个，只在 #if 分支用的声明移进分支 0 个文件；改动 36 个文件，HEAD 与工作树各载入一次无回退（36 objects; HEAD PASS 34, tree PASS 34; regress 0; newly loading 0），这些文件的警告 52 -> 10。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/toolkit_fix.sh` 一轮去掉 8 处多余继承，其余手工，能编译的文件警告清零；改动的 17 个对象在 HEAD 与工作树各载入一次：HEAD PASS 13，tree PASS 13，regress 0。
+
+- `u/linghu/ground.h` 的三张表被 `ground0.lpc` 和层层继承它的 `ground1/2/3.lpc`、`ground.lpc` 各包含一次：表格包进 `#ifndef GROUND_TABLES_INHERITED`，继承方在包含前定义它（同 xyj2000 的 `d/kaifeng`）。
+- 书库三间（`d/city/library.lpc`、`d/city2/library.lpc`、`u/aeolus/city/library.lpc`）自己的 `STORY_DIR` 覆盖 `globals.h` 的同名宏，先 `#undef`；`kungfu/skill/eff_msg.h` 开头连写两行同样的 `/*` 注释开头，删去一行。
