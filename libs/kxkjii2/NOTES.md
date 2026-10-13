@@ -354,3 +354,16 @@ HEAD 与工作树分别加载（新进程）：1653 -> 1653 通过，无回退�
 - `open/scholar/npc/fall.lpc` `in_combat()`：十行 `(: perform_action, "…" :);` 只造函数指针不调用；作者意图（逐个出招）无法确定，改成注释保留原列表，行为不变。
 - `open/scholar/room/newplan/npc/guard4.lpc`：`(: perform_action, "universe.tengin" :),` 同上改为注释，`delete_busy()` 照旧执行。
 - 改动的对象 HEAD 与工作区都能载入，无回退。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+可编译文件中的编译警告 62 → 0，不加 pragma。本库与 kxkj 同一份代码：用 `lpc_twin_port.py` 把 kxkj 同日的修正整体搬过来（57 个文件逐 token 相同，`open/start/npc/b_guard.lpc` 因 `#include` 写法不同手改），再跑一轮 `toolkit_fix.sh` 确认没有本库独有的警告。
+
+**发现的真 bug（同 kxkj）：**
+- 7 个首领战斗喊话的 `(: "cmd god_kee" :)` 只是返回字符串，从不施展；改为 `(: command, "cmd god_kee" :)`。
+- `d/snow/npc/keeper.lpc`、`waiter.lpc`、`open/capital/npcbak/solder_officer.lpc` 在已含 NPC 的 `F_VENDOR` 前面又 `inherit NPC;`，`nomask` 重定义，从来载不进来；删去叶子那行后载入。
+- `(: "random_move" :)` 的 NPC 从不走动，改为真指针；`open/poison/npc/bigsnake.lpc`、`snakeking.lpc` 的 `special_att()` 修好后才接上（原来把敌人数组传给 `tell_room()`）。
+
+**其余（同 kxkj）：** `ITEM` + `F_LIQUID` 容器写出 `liquid::long(raw)`；与 `feature/damage.lpc` 全局 `i`/`ghost` 同名的叶子变量改名（`ncount`、`self_ob`），`g1.lpc` 的 `leader` 改名 `helper`；`gwhip` 的 `skill_improved`、`b_guard` 的 `greeting` 签名；港口房间与 `make_room` 的原型；冗余继承。
+
+改动的 58 个对象 HEAD 与工作树各载入一次：HEAD PASS 54，tree PASS 57，regress 0，新载入 3（上面 3 个 NPC）；`open/gblade/npc/wen-fun` 两边都因装备不存在的刀在 `create()` 失败。`lpc_audit_removed_locals.py` 0 处待看。
