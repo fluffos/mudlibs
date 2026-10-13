@@ -235,3 +235,11 @@ re-invoke `enable_player()` on this lib while the object is still
 
 - `clone/obj/genmap.lpc`/`traverser.lpc`：`DEBUG` 是空宏，调用处留下 `("text", n);`；改成空函数 `varargs void DEBUG(string fmt, mixed arg) {}`。
 - 改动的对象 HEAD 与工作区都能载入，无回退。
+
+## 编译警告收尾（2026-10-12）
+
+先用 `scripts/lpc_twin_port.py adopt shujian2008 shujian3 --pre baa6caf453e~1` 搬来与 shujian2008 修前逐 token 相同的 23 个文件，再跑 `scripts/toolkit_fix.sh`（覆盖函数 11 个，冗余继承 1 处），其余按 shujian2008/bxsj 同样的改法手工补，能编译的文件警告清零。改动的 53 个对象 HEAD 与工作树各载入一次：HEAD PASS 53，tree PASS 53，regress 0。
+
+- 13 个 NPC 自带的门派表与 `FIGHTER` 的 `str_menpai` 同名（叶子用自己的表定 `party`，`FIGHTER` 用它自己的），叶子这边改名 `npc_menpai`（与 bxsj/shujian2008 同名）。
+- `d/city/npc/wushi.lpc` 的 `nick_first`/`nick_second` 与它 include 的 `skills_pfm.h` 里的两张表逐字相同（自己那份 `create_nick()` 已注释掉），删去叶子这份。
+- `adm/daemons/huanjing2003/room_readygo_hj.lpc` 每个名字声明两次的写法合成一次；`cmds/usr/mygift*.lpc` 的 `?:` 类型；`d/village/npc/obj/robber.lpc` 的 `NAME_D` 前 `#undef`；`clone/pet/pet.lpc` 用 `lpc_name_winner.py` 写明 `clean_up()`。
