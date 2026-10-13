@@ -869,3 +869,7 @@ compile check (exit 0, no errors) against `feature/command.lpc`.
 启动时警告 91 -> 0；新进程登录（编码选择、新人物提问）正常。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 17 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 10 个，只在 #if 分支用的声明移进分支 0 个文件；改动 25 个文件，HEAD 与工作树各载入一次无回退（25 objects; HEAD PASS 19, tree PASS 19; regress 0; newly loading 0），这些文件的警告 50 -> 20。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/toolkit_fix.sh` 一轮去掉 11 处多余继承；搬来 xianlvqiyuan（8c3c85ca28e）的 19 个文件，与本库逐 token 相同（袈裟 `tear`、`d/kaifeng/ground.h` 表格守卫、`yaoguai_type`、李靖与玉兔改 `void`、`alias.lpc` 的 `last_cmd_time`、`colors.h` 防重等）；手工：`d/wusheng/npc/jinren.lpc` 的 `kill_ob()` 改 `void`，`cmds/wiz/roommaker.lpc` 两份 `special_props` 删去前一份（代码用后一份）。能编译的文件警告清零；改动的 25 个对象在 HEAD 与工作树各载入一次：HEAD PASS 22，tree PASS 22，regress 0。
