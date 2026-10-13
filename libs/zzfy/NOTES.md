@@ -692,3 +692,11 @@ HEAD 与工作树分别加载（新进程）：745 -> 746 通过（多出的就�
 ## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查
 
 - `u/wiz/u/lxh/emoted.lpc`：删去空的 `if (!channel_emote) {}`（下一句才被报警）。载入无回退。
+
+## 编译警告收尾（2026-10-12）
+
+`scripts/toolkit_fix.sh` 一轮加手工两处，能编译的文件警告清零。改动的 31 个对象 HEAD 与工作树各载入一次：HEAD PASS 11，tree PASS 12，regress 0，新载入 1。
+
+- 冗余继承 28 处（`lpc_diamonds.py`）。其中 `d/fy/fish.lpc` 用 `room.h` 的 `CREATE_CHAT_ROOM` 宏（宏里已 `inherit ROOM`）之外又写了 `inherit ROOM;`，驱动报 `Illegal to redefine 'nomask' function '_query'` 等，这个房间从来载不进来；删去后能载入。
+- `cmds/adm/roommaker.lpc`：`special_props` 声明两次，第二次（多一个 `"file_name"`）的初始化在后、本来就生效；删去第一次。
+- `u/wiz/u/lxh/globals.h`（`topd.lpc`、`test.lpc` 在全局 `globals.h` 之外再包含它，有意把排行榜标题换成“铁血江湖…”）：`RICH_B`/`PKER_B`/`EXP_B` 前加 `#undef`，取值不变；`BANNED_SITES` 末尾多余的 `;` 去掉（同 fys）。

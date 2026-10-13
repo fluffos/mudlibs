@@ -9,7 +9,7 @@
 #define COMMAND_DIR		"/cmds/"
 #define CONFIG_DIR		"/adm/etc/"
 #define DATA_DIR		"/data/"
-#define BANNED_SITES "/adm/etc/banned_sites";
+#define BANNED_SITES "/adm/etc/banned_sites"
 #define HELP_DIR		"/doc/"
 #define LOG_DIR			"/log/"
 
@@ -17,8 +17,11 @@
 #define TOP_RICH     "/u/lxh/top/rich.txt"
 #define TOP_PKER     "/u/lxh/top/pker.txt"
 #define TOP_EXP      "/u/lxh/top/exp.txt"
+#undef RICH_B
 #define RICH_B "铁血江湖十大富人排行榜"
+#undef PKER_B
 #define PKER_B "铁血江湖十大杀人狂排行榜"
+#undef EXP_B
 #define EXP_B  "铁血江湖十大高手排行榜"
 #define TOP_D                "/u/lxh/topd"
 // Daemons
