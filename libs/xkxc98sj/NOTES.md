@@ -314,3 +314,11 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 2 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 0 个，只在 #if 分支用的声明移进分支 0 个文件；改动 2 个文件，HEAD 与工作树各载入一次无回退（2 objects; HEAD PASS 2, tree PASS 2; regress 0; newly loading 0），这些文件的警告 3 -> 1。
 
 - 2026-10-12：`clone/misc/swmuding.lpc`（神木王鼎）自己声明了一张 `mapping insects` 虫表，与继承的 `clone/misc/muding.lpc` 的 `insects` 同名；读表的是木鼎的代码，读到的是木鼎自己的表，神木王鼎的虫表从来没用上（`Redeclaration of global variable 'insects'`）。改名 `sw_insects`，`create()` 里 `insects = sw_insects;` 交给木鼎（nitan170911、wxddym、zjdy 系同修）。HEAD 与工作树各载入一次，regress 0。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/toolkit_fix.sh` 一轮去掉 13 处多余继承，其余手工，能编译的文件警告清零。改动的 20 个对象在 HEAD 与工作树各载入一次：HEAD PASS 10，tree PASS 20，regress 0，新载入 10 个。
+
+- 暗器类 10 个（`clone/weapon/feidao`、`jinhua`、`sjian`、`jin-sjian`，`d/city/bqp_obj/feibiao` 及 `npc/bqp_obj/feibiao`，桃花岛/归云庄的石子 `shizi` 等）在 `inherit THROWING;` 之外又继承 `COMBINED_ITEM`，而 `THROWING` 已经带着它：`Illegal to redefine 'nomask' function '_set'`，这些物件从没载入过，商店、NPC 给不出来。去掉多余的一行后都能载入。
+- 酒楼五间（`d/city/jiulou2`、`zuixianlou2`、`d/dali/jiulou`、`d/quanzhen/jiulou2`、`d/shaolin/jiulou2`）同时继承 `ROOM` 和 `F_DEALER`，两者都有 `reset()`，驱动只用 `dealer` 的（清理过多的货物），房间自己的 `reset()` 从不运行，店小二等 `objects` 走失或被杀后不再刷新。房间里写 `void reset() { room::reset(); dealer::reset(); }`，两个都跑。
+- `d/rooms/npc/obj/jia.lpc` 写明用驱动原先选的 `clean_up()`；`d/xiangyang/npc/shanzei0.lpc` 自己的 `MAX` 宏与 `globals.h` 的相同，删去。
