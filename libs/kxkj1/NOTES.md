@@ -852,3 +852,22 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply k
 - `u/m/mtl/obj/car.lpc`：删去空的 `if (arg == "car") {}`。
 - `u/t/tide/npc/girl.lpc`：`P == 0;` 改为 `P = 0;`。
 - 改动的对象 HEAD 与工作区都能载入，无回退。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+可编译文件中的编译警告 95 → 0，不加 pragma，逐条在源头修；可编译文件 6053 → 6061。
+
+**发现的真 bug：**
+- `feature/vendor.lpc` 自己 `inherit NPC;`，而 `open/capital/npc/solder_officer.lpc`、`u/f/fund/{killer,officer,sword_man,waiter}.lpc`、`u/f/fund/room/npc/keeper.lpc`、`u/o/oda/npc/boss4.lpc`、`u/o/onion/npc/vendor.lpc` 在它前面又 `inherit NPC;`：驱动报 `Illegal to redefine 'nomask' function '_set'`，这 8 个 NPC 从来载不进来。删去叶子那行后都能载入。
+- 20 个 NPC 的 `chat_msg` 里写 `(: "random_move" :)`：这是返回字符串的函数，不是调用，这些蛇、狼、刀客、游客从不走动；改为 `(: random_move :)`。`open/poison/npc/bigsnake.lpc`、`snakeking.lpc` 的 `(: "special_att" :)` 同样从未执行；改成真指针后 `special_att()` 本身也坏：把 `query_enemy()`（整个敌人数组）当成一个对象传给 `tell_room()`，会在每次战斗喊话时报错；改为从敌人里随机咬一个，`tell_object()` 给他，中毒照旧。同类的 `(: this_object(), "special_att" :)` 写法（不报警告，`open/poison/npc/snake.lpc` 等十几个文件）仍未修，留待以后。
+- `feature/liquid.lpc` 的 `long()` 最后一档写成第二个 `amount > max / 2`，永远进不去：容器里剩不到三分之一时不显示内容；改为 `else`（“里面装了少许的…”）。
+- `u/f/fund/mud/cmds/usr/dumpquest.lpc`：`printf` 的 `%d` 在任务数为奇数时收到 `""`，改为 `%s` + `sprintf("%d", …)`。
+
+**其余：**
+- 35 处冗余继承删去（上面 8 处之外多为 `inherit F_CLEAN_UP;`）；`u/f/fund/party_npc.lpc` 被 include 在 `inherit NPC;` 前面，自带的 `inherit F_CLEAN_UP;`/`inherit F_DAMAGE;` 与 NPC 重复，删去；`u/f/fund/test_man.lpc` 经 include 的 `feature/call_soldier.lpc` 已有 `inherit NPC;`，删去自己那行（该文件另有错误，仍载不进）。
+- `ITEM` + `F_LIQUID` 的 18 个容器 `long()` 两份：照驱动原来的选择写出 `liquid::long(raw)`。
+- `daemon/skill/gsword.lpc`、`gwhip.lpc` 的 `string skill_improved(string me)` 改为基类的 `void skill_improved(object me)`；`open/gblade/npc/girl.lpc`、`open/start/npc/b_guard.lpc` 的 `greeting()`、`u/a/anthony/npc/horse.lpc` 的 `die()` 改 `void`（都由 call_out 或战斗调用，无人读返回值；horse 的善后读的 `my_boss` 全库无人设置，照旧不生效）。
+- `open/capital/npc/g1.lpc` 自己的 `object leader`（临时存同伴）与 `feature/team.lpc` 的队长 `leader` 本是两个变量：叶子改名 `helper`（`nosave`）；`open/gblade/npc/pker5.lpc` 从未使用的全局 `object enemy`（`heart_beat()` 用自己的局部变量）删去。
+- 6 个港口房间调用定义在后面的 `do_start_ship()`：加原型。`u/m/mtl/killer/yar.lpc` 的本地 `SKILL_D` 前加 `#undef`；`u/s/server/olddata/kontop2.lpc` 多余的 `;`；`include/net/ftpdsupp.h` 只在 `#ifdef GUEST_WIZARD_FTP` 里用的 `file` 移进该分支。
+
+改动的 92 个文件与继承 `F_LIQUID`、include 改动头文件的对象共 97 个，HEAD 与工作树各载入一次：HEAD PASS 84，tree PASS 92，regress 0，新载入 8（上面的 8 个 NPC）；5 个 FAIL 两边相同（`u/d/dark/glass`、两份 `kawali`、`u/f/fund/test_man`、`u/o/onion/npc/noname`，本身有编译错误）。`lpc_audit_removed_locals.py` 0 处待看。

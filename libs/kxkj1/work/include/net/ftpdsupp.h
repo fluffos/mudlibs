@@ -44,7 +44,6 @@ int check_access(string name)
         return 0;
     return (member_array(name, FTP_USERS) != -1) ? 1 : 0;
 #else
-  string file;
 
 #ifdef ANONYMOUS_FTP
     if ( name == "anonymous" )
@@ -52,6 +51,7 @@ int check_access(string name)
 #endif /* ANONYMOUS_FTP */
 
 #ifdef GUEST_WIZARD_FTP
+  string file;
     // TMI-2 allows those wizards w/o directories to log in
     file = PDATA_DIR + name[0..0] + "/" + name + __SAVE_EXTENSION__;
     return ( file_exists( file ) &&
