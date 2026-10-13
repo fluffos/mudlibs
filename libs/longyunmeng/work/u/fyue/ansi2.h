@@ -6,6 +6,7 @@
  
 #define ESC	""
 #define CSI	ESC + "["
+#undef BEEP
 #define BEEP    ""
  
                 /*  Foreground Colors  */
