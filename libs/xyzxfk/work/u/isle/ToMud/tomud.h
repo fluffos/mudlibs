@@ -1,3 +1,6 @@
+#undef TMI
+#undef TMA
+#undef TMB
 #define TMI(x) ("*"+x+"*")
 #define TMA "*"
 #define TMB "*"

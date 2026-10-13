@@ -435,3 +435,9 @@ functionally re-tested live on this lib.
 - 2026-10-10：`/u/snow/wudujiao/mishi.lpc` 的技能判断用按位 `&` 连接两个比较（如 `tjss > 10000 & taoism > 10000`），改为逻辑 `&&`。两边都是 0/1 比较结果，行为不变，只是写法纠正。
 
 - 2026-10-11：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 29 处，返回类型/原型 36 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 0 个，只在 #if 分支用的声明移进分支 2 个文件；改动 63 个文件，HEAD 与工作树各载入一次无回退（63 objects; HEAD PASS 63, tree PASS 63; regress 0; newly loading 0），这些文件的警告 67 -> 0。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/toolkit_fix.sh` 一轮去掉 2 处多余的 `F_CLEAN_UP`（`adm/daemons/network/services/temp.lpc`、`kungfu/class/taohua/obj/cloth.lpc`），其余手工，能编译的文件警告清零；改动的 4 个对象在 HEAD 与工作树各载入一次，regress 0。
+
+- `u/isle/ToMud/tomud.h` 重定义 `include/tomud.h` 已有的 `TMI`、`TMA`、`TMB`，先 `#undef`；`u/dream/panzi.lpc` 开头连写两个 `/*`，删去一个；`kungfu/skill/huashan-jian.lpc` 多余的 `;` 删去。
