@@ -603,7 +603,7 @@ No new errors after the shop commands. Demo `fluffos` save churn
 - `cmds/wiz/who1.lpc` 孤立的分隔线字符串、`u/rock/duihuan.lpc` `for (i - 0; …)`，一并改正。
 - 47 个对象载入无回退。
 
-- 2026-10-12：`adm/npc/obj/xiang.lpc`�`u/jerry/obj/xiang.lpc` 写着 `int remove() { save(); }`，盖掉了 `feature/move.lpc` 的 `remove(string euid)`——这些存盘箱子/柜子被销毁时不从携带者身上减负重、不清 handing（KB 06 §7.239 变体，nitan_ceshi/tianxiawuxue 同类）。改成 `varargs void remove(string euid) { save(); ::remove(euid); }`。HEAD 与工作树各载入一次，regress 0（载不进的文件在 HEAD 就载不进）。
+- 2026-10-12：`adm/npc/obj/xiang.lpc`、`u/jerry/obj/xiang.lpc` 写着 `int remove() { save(); }`，盖掉了 `feature/move.lpc` 的 `remove(string euid)`——这些存盘箱子/柜子被销毁时不从携带者身上减负重、不清 handing（KB 06 §7.239 变体，nitan_ceshi/tianxiawuxue 同类）。改成 `varargs void remove(string euid) { save(); ::remove(euid); }`。HEAD 与工作树各载入一次，regress 0（载不进的文件在 HEAD 就载不进）。
 
 ## 编译警告收尾（2026-10-12）
 
