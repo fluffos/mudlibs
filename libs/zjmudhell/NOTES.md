@@ -357,3 +357,13 @@ reverted via `git checkout` before committing.
 ## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查
 
 - `cmds/wiz/who1.lpc`：输出数组建好前一行孤立的分隔线字符串（与 wxddym 同码），删去，行为不变。载入无回退。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+能编译的文件里的警告 3 -> 0（`lpc_warnings.py zjmudhell` 重扫：7240 个文件可编译，剩下的诊断都在本来就编译不过的文件里）。与 zjdyzj 同码：zjdyzj 当天的修复（提交 15d40f6ba6a）改的 3 个文件在这里都是 token 级孪生，用 `lpc_twin_port.py adopt` 搬过来；ZJ 登录协议代码没有动。
+
+**真问题：** `clone/misc/swmuding.lpc` 神木王鼎自己声明了一张 13 种毒虫的 `mapping insects`，可读表的是基类 `clone/misc/muding.lpc` 的函数，它们读的是基类那份普通木鼎表，叶子的表从来没用上。改名 `sw_insects`，在 `create()` 里赋给基类的 `insects`。
+
+**其余：** `feature/food.lpc`、`feature/liquid.lpc` 的 `do_effect()` 改为 `varargs int do_effect(object me)` 并 `return 1;`，与 eat/drink 读取返回值的重载（`d/guanwai/obj/wan.lpc`、`d/xiakedao/obj/pigpart.h`）同型。
+
+验证：改动文件、所有继承 F_FOOD/F_LIQUID 的物品、包含 `pigpart.h` 的文件、eat/drink 命令共 206 个对象，HEAD 与工作树各用新进程载入：203 -> 203 通过，regress 0；删除声明审计 0 项待看。206 个对象载入无回退。
