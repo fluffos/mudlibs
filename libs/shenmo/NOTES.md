@@ -969,3 +969,10 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 ## 深度功能测试（§10.7，2026-10-12）：编译警告收尾（补）
 
 - `d/quest/dajiu/`、`d/xingji/dajiu/` 的 `baohunpc*.lpc`（8 个）：原型 `voidset_skills(...)`、`voidset_hp_status(...)` 少了空格，被当成返回类型缺省、名为 `voidset_skills` 的另一个函数；改为 `void set_skills(...)`。批量载入时 `create()` 读 `this_player()` 为 0 而失败（任务中由玩家触发生成，不是代码问题）。
+
+## 编译警告收尾（2026-10-12，第一轮）
+
+`scripts/toolkit_fix.sh` 一轮：钩子函数（`reset`/`init`/`heart_beat`/`create` 等）在 `void` 基类上写成 `int` 的 271 个改为 `void`（`return 1;` 改 `return;`），覆盖函数 6 个，冗余继承 13 处，未用局部变量等机械类。改动的 305 个对象 HEAD 与工作树各载入一次：HEAD PASS 291，tree PASS 296，regress 0，新载入 5：`u/koker/obj/axe`、`blade` 与 `sjsh/u/koker/obj/` 两份拷贝、`u/snowtu/give`——它们在基类之外又直接继承一遍带 `nomask` 的 dbase，驱动报 `Illegal to redefine 'nomask' function '_query'`，从前载不进来。
+
+- `d/snowtu/obj/birthday.lpc` 生日蛋糕的字符画：旧版转义修复器把 `\\` 的后一半当成未知转义 `\/` 删，每轮删一个、连删 8 轮把这一行删坏；按原文把每个反斜杠写成 `\\`，照原样显示。修复器已改（只认前面有偶数个反斜杠的转义，`\/`、`\_` 加倍而不删；KB 04 转义一行）。
+- 剩下的（约 300 个非钩子函数的返回类型、46 条重复声明、30 个宏重定义等）留待第二轮。

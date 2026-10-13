@@ -20,7 +20,7 @@ if(random(4)==1) set("xianjin",1);
  setup();
 }
 
-int reset()
+void reset()
 {
 ::reset();
 if(random(3)==1) set("exits/north", __DIR__"z"+sprintf("%d", random(48)));

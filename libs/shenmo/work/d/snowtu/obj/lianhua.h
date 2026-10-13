@@ -30,7 +30,7 @@ if ( !userp(env) )
 return;
 }
 
-int init()
+void init()
 {
 	check_owner();
 	add_action("do_wear","wear");
