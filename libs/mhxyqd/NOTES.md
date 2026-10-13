@@ -822,3 +822,15 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply m
 ## 深度功能测试（§10.7，2026-10-11）：dns_master 空 if
 
 - `adm/daemons/network/dns_master.lpc` `query_services()`：`if (! (mud_svc[mud]["finger"/"tell"] & SVC_KNOWN))` 块里只有 `#if PREF_X & SVC_TCP … #endif`，选项关闭时 if 为空（“无副作用”警告报在下一句）；把 `#if`/`#endif` 挪到 if 外面（KB 04，2026-10-07 那次扫描漏了 `! (` 加括号换行这种写法）。载入无回退。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+本库与 mhxy（梦幻西游青岛站）几乎逐字节相同。mhxy 今天的收尾（提交 a9cd825122a）改过的 40 个文件里，37 个在本库是 token 级孪生（`lpc_twin_port.py classify`），全部 `adopt`；另 3 个（`long.lpc`、两份 `YI.lpc`）本库没有。之后跑 `toolkit_fix.sh` 重扫：能编译的文件里的警告 62 -> 0（11698 个文件可编译，剩下 2 条警告在本来编译不过的文件里）。搬过来的 12 处删 `inherit F_CLEAN_UP` 都逐个核对过：本库自己的扫描都报了 `clean_up() inherited from both`，或继承的 `SSERVER` 与 mhxy 同一文件、本身已带 `F_CLEAN_UP`（KB 08 §10.13）。
+
+**真问题（与 mhxy 相同）：**
+- `d/qujing/sanda/npc/pusa.lpc`、`d/qujing/xihai/npc/aoshun.lpc`：关卡前置条件的括号写错（`if (A == "done") || B != "done"` 再另起一行 `)`），两个文件从来编译不过，三打白骨精、西海两关的 NPC 载不进来；改正后能载入。
+- `d/obj/cloth/jiasha.lpc` 锦镧袈裟：CLOTH 与 F_UNIQUE 都有 `init()`，`tear` 动作丢了；叶子里两个都调用。
+
+**其余：** 开封擂台 `ground.h`/`colors.h` 表格 guard（含 `u/redrain` 拷贝）、`feature/alias.lpc` 私有 `last_time` 改名 `last_cmd_time`（三花计数器自己的 `last_time` 一直正常存档，不动）、`yg/yaoguai.lpc` 删掉从不读的 `yaoguai_type`、几个 `die/unconcious/kill_ob` 钩子改 `void`、`dns_master.lpc` 空 if、14 个多余 `inherit F_CLEAN_UP`。
+
+验证：改动文件、开封两处目录、`d/city/npc` 全部对象、`/obj/user`、`/std/char` 共 550 个对象，HEAD 与工作树各用新进程载入：508 -> 510 通过（新增 pusa、aoshun），regress 0；删除声明审计 0 项待看。550 个对象载入无回退。
