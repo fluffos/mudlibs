@@ -763,3 +763,5 @@ Changed files loaded at HEAD and in the tree in fresh processes: no regression.
 **行为不变的整理：** 叶子变量与基类同名而含义不同时改叶子一侧的名字（`walker03` 的 `dead`→`mom_dead`——基类的 `dead` 表示“已死、不能被攻击”；beldor 三个怪物的 `string *short_desc/long_desc`→`short_descs/long_descs`；mummy 的 `limbs`、lemming 的 `name`（颜色）、`hissi` 电梯的 `direction`、thief/tutor 的 `object money`、`wizards/siki/bow.lpc` 自己的 `short_desc/long_desc/weight`）；没用到的 `direction`（三个 ferry、potup）、bow 的 `slot`/`wielded_by`、bazaar 的全局 `items` 删掉。`wizards/daoloth/mansion` 等 13 个用 `EXTRA_RESET` 调 `extra_reset()` 的房间加原型（调用在宏生成的 `reset()` 里，早于定义）。necro 的 `scythes.lpc`/`shields.lpc` 注释结尾 `~/` 改 `*/`（只吞了注释）。
 
 验证：改动的文件和继承 shop_d/book_d/echo/bow 的对象共 90 个，HEAD 与工作树各在新进程载入（90 objects; HEAD PASS 72, tree PASS 73; regress 0; newly loading 1），72 个对象载入无回退；这些对象的警告 159 -> 0；全库重扫后无编译错误的文件里 0 条警告（10475 个文件能编译）。
+
+- 2026-10-12：`wizards/yodin/vankila.lpc`（监狱房间的 “HAVE A NICE DAY” 笑脸）在 f5a5b6ea210 的转义整理里丢了图形里的反斜杠：`--fix` 当时把 `\\|` 的后一半当作未知转义 `\|` 删掉，`\-;-/` 等也被删。按原始文本把这五行画面里的每个反斜杠写成 `\\`，现在照原样显示（脚本已修，KB 04 转义一行）。
