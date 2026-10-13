@@ -318,3 +318,7 @@ HEAD 与工作树分别加载（新进程）：745 -> 746 通过（多出的就�
 ## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查
 
 - `u/wiz/u/lxh/emoted.lpc`：删去空的 `if (!channel_emote) {}`（下一句才被报警）。载入无回退。
+
+## 编译警告收尾（2026-10-12）
+
+孪生库 zzfy 同日的整理（33a36d7b904：冗余继承 28 处，`cmds/adm/roommaker.lpc` 重复的 `special_props`，`u/wiz/u/lxh/globals.h` 的 `#undef` 与 `BANNED_SITES` 多余分号）用 `scripts/lpc_twin_port.py adopt zzfy zzfy3 --pre 33a36d7b904~1` 搬来，30 个文件与 zzfy 修前逐 token 相同；清单里的警告全部落在这些文件里。HEAD 与工作树各载入一次：HEAD PASS 11，tree PASS 12，regress 0。新载入的是 `d/fy/fish.lpc`：`CREATE_CHAT_ROOM` 宏已继承 ROOM，又写 `inherit ROOM;` 触发 nomask 重定义，从前载不进来。
