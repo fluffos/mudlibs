@@ -1438,3 +1438,7 @@ The 42 files are 41 `.C` -> `.lpc` (the tea items of `d/city/npc/tea`, the Lingj
 ## 深度功能测试（§10.7，2026-10-11）：dns_master 空 if
 
 - `adm/daemons/network/dns_master.lpc` `query_services()`：`if (! (mud_svc[mud]["finger"/"tell"] & SVC_KNOWN))` 块里只有 `#if PREF_X & SVC_TCP … #endif`，选项关闭时 if 为空（“无副作用”警告报在下一句）；把 `#if`/`#endif` 挪到 if 外面（KB 04，2026-10-07 那次扫描漏了 `! (` 加括号换行这种写法）。载入无回退。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/toolkit_fix.sh` 一轮去掉 4 处多余的 `inherit F_CLEAN_UP`（`d/xingxiu/tianroad3`、`inherit/room/pigroom`、`u/lbc/mj_harbor`、`mj_ship1`）。手工：`u/yijiu/guanfu/killer.lpc` 先包含 `npc.h`（里面已 `#include "map.lpc"`），又直接包含一次 `map.lpc`，地点表 `where` 声明两次；删去第二次包含，表内容相同，行为不变。能编译的文件警告清零；改动的 6 个对象在 HEAD 与工作树各载入一次，regress 0。
