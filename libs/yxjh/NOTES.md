@@ -277,3 +277,10 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply y
 - 改动的对象 HEAD 与工作区都能载入，无回退。
 
 - 2026-10-12：`u/jerry/obj/xiang.lpc` 写着 `int remove() { save(); }`，盖掉了 `feature/move.lpc` 的 `remove(string euid)`——这些存盘箱子/柜子被销毁时不从携带者身上减负重、不清 handing（KB 06 §7.239 变体，nitan_ceshi/tianxiawuxue 同类）。改成 `varargs void remove(string euid) { save(); ::remove(euid); }`。HEAD 与工作树各载入一次，regress 0（载不进的文件在 HEAD 就载不进）。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/toolkit_fix.sh` 一轮去掉 9 处多余继承；照 wlhd（51f5e219b3d）：`d/jerry/job/peng/peng.lpc` 的 `ask_fail` 原型改 `int`，`u/system_1/ansi2.h` 的 `ESC`、`BEEP` 先 `#undef`；其余手工。能编译的文件警告清零；改动的 15 个对象在 HEAD 与工作树各载入一次：HEAD PASS 12，tree PASS 12，regress 0。
+
+- `u/rock/duihuan.lpc`（充值卡兑换）的循环写成 `for (i - 0; ...)`，本意是 `i = 0`；`i` 之前没赋过值、本来就是 0，所以碰巧能用。改成 `=`。
+- 备份 `quest/guojob_bak/guo.lpc` 同时包含 `zzzjob.lpc` 和 `teamjob.lpc`，两者都声明地名表 `names`：`teamjob.lpc` 的改名 `team_names`（只它自己用）；`quest/chousha_bak/killer.lpc` 写明用驱动原先选的 `clean_up()`。
