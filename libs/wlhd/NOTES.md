@@ -406,3 +406,7 @@ correlated with the deletion in the same session.
 - `u/rock/duihuan.lpc`：`for (i - 0; …)` 应为 `i = 0`（局部变量本为 0，行为不变）。载入无回退。
 
 - 2026-10-12：`u/jerry/obj/xiang.lpc` 写着 `int remove() { save(); }`，盖掉了 `feature/move.lpc` 的 `remove(string euid)`——这些存盘箱子/柜子被销毁时不从携带者身上减负重、不清 handing（KB 06 §7.239 变体，nitan_ceshi/tianxiawuxue 同类）。改成 `varargs void remove(string euid) { save(); ::remove(euid); }`。HEAD 与工作树各载入一次，regress 0（载不进的文件在 HEAD 就载不进）。
+
+## 编译警告收尾（2026-10-13）
+
+`scripts/toolkit_fix.sh` 一轮去掉 5 处多余继承；照 tybxjh（72440a6be25）手工：`d/jerry/job/peng/peng.lpc` 的 `ask_fail` 原型改 `int`（`dojob.lpc` 定义的是 `int`），`quest/chousha/killer.lpc` 写明用驱动原先选的 `clean_up()`，`u/system_1/ansi2.h` 的 `ESC`、`BEEP` 先 `#undef` 再定义。能编译的文件警告清零；改动的 8 个对象在 HEAD 与工作树各载入一次：HEAD PASS 5，tree PASS 5，regress 0。

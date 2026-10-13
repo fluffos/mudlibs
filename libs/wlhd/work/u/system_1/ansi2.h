@@ -4,8 +4,10 @@
 //
 //  The standard set of ANSI codes for mudlib use.
  
+#undef ESC
 #define ESC     "^["
 #define CSI     ESC + "["
+#undef BEEP
 #define BEEP    ""
 
  
