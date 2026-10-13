@@ -171,3 +171,14 @@ hylib/dtxy) stay confirmed duplicates.
 - `sgdomain/obj/cloth/cloth.lpc`、`weapon/dandao.lpc`：`if(one_name);` 多了分号，“所有者”行无论有无主人都显示；去掉分号。
 - `wiz/ljty/modules/l_lockable.lpc`：门坏了时的提示 `"它己经坏了…";` 丢了 `write(`，补上。`WWW/cgi/news_groups.lpc` 孤立的 `mud_name();` 删去。
 - 5 个能载入的对象载入无回退。
+
+## 编译警告收尾（2026-10-12）
+
+`scripts/toolkit_fix.sh` 一轮加手工收尾，能编译的文件警告清零。改动的对象加全部继承 `FURNITURE`/`M_MOUNTABLE` 的家具 HEAD 与工作树各载入一次：58 个，HEAD PASS 58，tree PASS 58，regress 0。
+
+- `std/modules/m_mountable.lpc` 的 `mount_it_already()` 是 `private`，私有函数不能被重载：`sit()`/`mount()`/`get_on()` 永远调基类自己那份（只把人挪进去），18 张床、沙发自己写的 `int mount_it_already()`（“脱下衣服躺在床上”等）从来没跑过。基类改 `protected void`，各家具的同名函数改 `void`（`return 1;` 改 `return;`），现在躺床走家具自己的描写。
+- `cmds/player/enable.lpc`（及 `wiz/mimi/update/enable.lpc`）：`main()` 写成 `int` 并用 `return notify_fail("...")` 报错，可是 Lima 的 `cmd.lpc` 的 `call_main()` 不看 `main()` 的返回值，notify_fail 的提示从来不会显示；`main()` 改 `void`，出错处改成 `write(...); return;`，玩家现在能看到“你不会这种技能”等提示。
+- `cmds/player/info.lpc` 及两份拷贝同时继承 `CMD` 和 `VERB_OB`，两者都有 `create()`，原来只跑 `VERB_OB` 的那个，`CMD` 的 `set_privilege(1)` 被跳过；加 `create() { cmd::create(); verb_ob::create(); }`。
+- 两条路进来的同名函数：`sgdomain/event/ev_war.lpc` 的 `train_collect()`（`train.lpc` 与 `train_beg.lpc` 两份逐 token 相同）、`domains/std/shopkeeper.lpc`、`sgdomain/base/room/enter.lpc`、`room.lpc`、`wiz/listen/cmd/call.lpc` 用 `lpc_name_winner.py` 写明驱动本来就选的那个；`wiz/yue/obj/door/lock_door.lpc` 在 `SECRET_DOOR`（已含 `M_LOCKABLE`）前多继承了 `M_LOCKABLE`，删去（§7.240）。
+- 叶子变量与基类同名而各管各的：`sgdomain/job/xuzijiang/xianren.lpc` 的 `busy`/`long` 改 `talk_busy`/`dir_list`，`sgdomain/job/fishing/net.lpc` 的 `size` 改 `net_size`，`wiz/lcm/baguaroom.lpc` 自己的出口表改 `bagua_exits`；`wiz/nono/*.lpc` 四个房间没用的 `private mapping exits;` 删去。
+- `CHINESE_DA`（9 个 NPC）、`wiz/emperor/baby/sanguo.h` 的 `TROOP`/`SALERATE` 前加 `#undef`；`daemons/union_d/cases.lpc` 的 `?:` 类型；`obj/hintmenu.lpc` 没用的 `MENU m`；`wiz/chun/room/dream.lpc` 多余的 `;`。

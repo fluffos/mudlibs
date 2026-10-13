@@ -21,11 +21,13 @@
 #define M_HORSE "/sgdomain/modules/m_horse.lpc"
 #define M_TROOP "/sgdomain/modules/m_troop.lpc"
 #define M_JOB "/sgdomain/modules/m_job.lpc"
+#undef TROOP
 #define TROOP "/sgdomain/modules/troop.lpc"
 #define M_BOARD "/sgdomain/modules/m_board.lpc"
 #define M_WEAPON "/sgdomain/modules/m_weapon.lpc"
 #define M_CHAR "/sgdomain/modules/m_char.lpc"
 #define WAR_GRID "/sgdomain/modules/war_grid.lpc"
+#undef SALERATE
 #define SALERATE 0.9
 #define BUYRATE 0.1
 #define ARRANGE_MONEY "/sgdomain/modules/arrange_money.lpc"
