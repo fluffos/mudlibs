@@ -294,3 +294,12 @@ admin 登入时间戳漂移已在提交前用 `git checkout --` 撤销。
 - 补齐前几批漏掉的同码副本：`your_temp["guarding"];` 补 `= 0`（反击后清除防守姿态，含 `u/` 下的 combatd 拷贝）；`(: WEAPON_D, "query_action" :)` 改为 `(: call_other, WEAPON_D, "query_action" :)`（KB 04）；`mysql_d.lpc` 的空 `MSG` 宏改成空函数；`gigicook.lpc` 的 `arg == menu_list[0]` 改为 `=`。
 - 改动文件：d/heimuya/log/xkx/inherbit/weapon/gou.lpc d/heimuya/log/xkx/inherbit/weapon/ji.lpc d/heimuya/log/xkx/inherbit/weapon/qian.lpc 
 - 改动的对象 HEAD 与工作区都能载入，无回退。
+
+## 编译警告收尾（2026-10-12）
+
+`scripts/toolkit_fix.sh` 一轮（冗余继承 26 处，未用局部变量 2 个）加手工收尾，能编译的文件警告清零。改动的 47 个对象 HEAD 与工作树各载入一次：HEAD PASS 46，tree PASS 46，regress 0。
+
+- `item_desc`/`inquiry` 里的 `(: "字符串" :)`（函数指针只返回一个字符串常量；`taolin.lpc` 两份、`d/city/npc/walker.lpc`、`shangshu/kefang.lpc`、`street3.lpc`）改成字符串本身，显示不变。
+- `d/jingcheng/npc/kid2.lpc`：候选糖人名单 `string *name` 与选中的 `string name = comm_name();` 同名，后面的代码读的是选中的那个；名单改名 `name_list`。
+- `d/guanwai/yizhan.lpc`：同一文件先 `#define BASE_MONEY 1000` 再 `#define BASE_MONEY 300`，生效的是后者，删去前者。
+- 函数体后多余的 `};`（8 个文件）、招式表后多余的 `;`（`u/hacky` 的两个剑法）；`daemon/skill/pixie-jian/shuangda.lpc`、`u/hacky/d/skill/skill/hubo.lpc` 用 `lpc_name_winner.py` 写明 `clean_up()`。
