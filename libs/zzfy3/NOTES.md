@@ -322,3 +322,6 @@ HEAD 与工作树分别加载（新进程）：745 -> 746 通过（多出的就�
 ## 编译警告收尾（2026-10-12）
 
 孪生库 zzfy 同日的整理（33a36d7b904：冗余继承 28 处，`cmds/adm/roommaker.lpc` 重复的 `special_props`，`u/wiz/u/lxh/globals.h` 的 `#undef` 与 `BANNED_SITES` 多余分号）用 `scripts/lpc_twin_port.py adopt zzfy zzfy3 --pre 33a36d7b904~1` 搬来，30 个文件与 zzfy 修前逐 token 相同；清单里的警告全部落在这些文件里。HEAD 与工作树各载入一次：HEAD PASS 11，tree PASS 12，regress 0。新载入的是 `d/fy/fish.lpc`：`CREATE_CHAT_ROOM` 宏已继承 ROOM，又写 `inherit ROOM;` 触发 nomask 重定义，从前载不进来。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。2 个文件 2 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14：技能文件里 `int power_point()`/`int hard_point()` 返回 1.5、1.75 之类的浮点，经 int 返回被截断；本库没有调用者（练功走 `practice_bonus`/`learn_bonus`），改成 `float` 返回值，保留原数值。

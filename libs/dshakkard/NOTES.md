@@ -855,3 +855,5 @@ same date: `SetSearch` handlers return their text, the helm asks `GetMorality()`
 ## Deep test (§10.7, 2026-10-08) -- fixed-width `.lpc` suffix slices
 
 The `.c` -> `.lpc` rename changed the string but not the slice width: `f[<2..] == ".lpc"` compares two characters with four and is never true (`!=` always true), so suffix filters and strips never ran or cut `x.l` (KB 06 §7.238). `scripts/lpc_lpc_suffix_slice.py --apply` fixed 1 comparison(s) and 1 strip(s) (e.g. `daemon/help.lpc`); the changed files load at HEAD and in the tree (fresh processes) with no regression.
+
+- 2026-10-14: FluffOS 970d9f09 warns `Float value truncated to int` (#1426). 13 sites in 10 files: assignments, initializers and returns now spell the truncation `to_int(...)` (same value); `x op= <float>` converted the float before the operation (zeroing `x` for a factor below 1) and is now `x = to_int(x op ...)`: `/lib/teller.lpc`（`total +=`）, `/secure/daemon/players.lpc`（`seed *=`）. Changed objects loaded before and after in fresh drivers, no regressions (`scripts/lpc_fix_float_trunc.py`, KB 04 §6.10).

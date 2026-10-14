@@ -258,3 +258,6 @@ functionally re-tested live on this lib.
 
 - `adm/daemons/poistiond.lpc`（继承 `ITEM` 与 `F_SAVE`）的 `varargs int remove() { save(); return 1; }` 盖住了 `F_MOVE` 的 `remove(euid)`——销毁时卸装备、从持有者身上扣重量的那一步（KB 06 §7.239）；改成先 `save()` 再 `::remove(euid)`。
 - `adm/npc/beastseller.lpc` 的 `attempt_apprentice()` 改 `void`；足球赌局五个房间（`d/zjb/zuqiu*.lpc`、`u/zjb/zuqiu.lpc`）把 `MAX` 定义成坐庄本钱，覆盖 `globals.h` 的 `MAX(a, b)`，先 `#undef`；`clone/box/gboxa.lpc` 已在注释里的一段又写了一个 `/*`，删去。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。1 个文件 1 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14：技能文件里 `int power_point()`/`int hard_point()` 返回 1.5、1.75 之类的浮点，经 int 返回被截断；本库没有调用者（练功走 `practice_bonus`/`learn_bonus`），改成 `float` 返回值，保留原数值。

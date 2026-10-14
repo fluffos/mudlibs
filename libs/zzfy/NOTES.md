@@ -700,3 +700,6 @@ HEAD 与工作树分别加载（新进程）：745 -> 746 通过（多出的就�
 - 冗余继承 28 处（`lpc_diamonds.py`）。其中 `d/fy/fish.lpc` 用 `room.h` 的 `CREATE_CHAT_ROOM` 宏（宏里已 `inherit ROOM`）之外又写了 `inherit ROOM;`，驱动报 `Illegal to redefine 'nomask' function '_query'` 等，这个房间从来载不进来；删去后能载入。
 - `cmds/adm/roommaker.lpc`：`special_props` 声明两次，第二次（多一个 `"file_name"`）的初始化在后、本来就生效；删去第一次。
 - `u/wiz/u/lxh/globals.h`（`topd.lpc`、`test.lpc` 在全局 `globals.h` 之外再包含它，有意把排行榜标题换成“铁血江湖…”）：`RICH_B`/`PKER_B`/`EXP_B` 前加 `#undef`，取值不变；`BANNED_SITES` 末尾多余的 `;` 去掉（同 fys）。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。2 个文件 2 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14：技能文件里 `int power_point()`/`int hard_point()` 返回 1.5、1.75 之类的浮点，经 int 返回被截断；本库没有调用者（练功走 `practice_bonus`/`learn_bonus`），改成 `float` 返回值，保留原数值。

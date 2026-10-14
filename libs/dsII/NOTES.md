@@ -860,3 +860,4 @@ are not in the archive).
 
 `secure/daemon/master.lpc` 的 `compile_object()` 用 `else if` 先建 `players` 目录、再建字母目录：父目录不存在时只建父目录，这位玩家第一次存档（设密码时）打开 `players/<字母>/<名字>.o.tmp` 失败。git 不跟踪这个目录下的文件，全新检出与网页版每位访客都会遇到。第二个 `else if` 改为 `if`（与 dsI 相同）。nightmare4 上用只含被跟踪文件的树实测注册→重登通过；本库主控编译通过。
 
+- 2026-10-14: FluffOS 970d9f09 warns `Float value truncated to int` (#1426). 8 sites in 5 files: assignments, initializers and returns now spell the truncation `to_int(...)` (same value); `x op= <float>` converted the float before the operation (zeroing `x` for a factor below 1) and is now `x = to_int(x op ...)`: `/lib/teller.lpc`（`total +=`）. Changed objects loaded before and after in fresh drivers, no regressions (`scripts/lpc_fix_float_trunc.py`, KB 04 §6.10).

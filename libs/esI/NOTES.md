@@ -805,3 +805,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply e
 ## 编译警告收尾（2026-10-13）
 
 `scripts/toolkit_fix.sh` 一轮：`std/adt/body.lpc` 多余的继承去掉；`std/npc2.lpc` 的 `nosave` 函数改 `protected`（外部调用的 `die()` 只去掉 `nosave`），没用的局部变量删去；`cmds/ghost/_llook.lpc`、`std/npc2.lpc` 字符串里 BIG5 转换留下的 `功\能`、`许\多` 多余反斜杠去掉；`d/eastland/liang_shan/obj/fish_plate.lpc` 没用的局部变量删去。能编译的文件警告清零；改动的对象在 HEAD 与工作树各载入一次，regress 0。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。6 个文件 10 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/d/monk/guild/train_room.lpc`（`exp -=`）、`/d/thief/hall/monsters/taylers.lpc`（`exp -=`）、`/d/thief/hall/monsters/taylers.lpc`（`exp -=`）、`/d/thief/hall/monsters/taylers.lpc`（`exp -=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

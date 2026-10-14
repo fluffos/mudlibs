@@ -164,3 +164,5 @@ now and the rest of the load-and-clone check is unchanged.
 ## Compile warnings (2026-10-13)
 
 Same as `discworld` (f5d0fff16f1): `secure/simul_efun.lpc` no longer inherits `/secure/simul_efun/multiple_short` directly (`modified_efuns` already brings it), and `std/environ/weather.lpc`'s `move(arg)` is typed `mixed`. Both load the same at HEAD and in the tree (regress 0). The 33 warnings left are all in `std/living/living.eff_shad.lpc`, an older variant of `living.lpc` that nothing inherits or loads (it carries `/std/living/effects` beside `/std/container` and calls it by the `effects::` scope); left as archived, see the discworld NOTES.
+
+- 2026-10-14: FluffOS 970d9f09 warns `Float value truncated to int` (#1426). 13 sites in 10 files: assignments, initializers and returns now spell the truncation `to_int(...)` (same value); `x op= <float>` converted the float before the operation (zeroing `x` for a factor below 1) and is now `x = to_int(x op ...)`: `/std/shadows/misc/water.lpc`（`buoyancy *=`）. Changed objects loaded before and after in fresh drivers, no regressions (`scripts/lpc_fix_float_trunc.py`, KB 04 §6.10).

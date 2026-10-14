@@ -249,3 +249,5 @@ HEAD 与工作树分别加载（新进程）：941 -> 941 通过，无回退；�
 - `daemons/toptend.lpc` 重定义的 8 个宏前加 `#undef`（原本就是后一个定义生效）。
 
 74 个对象载入无回退（HEAD 67 通过 → 现在 69 通过，新增 2 个载入）；`lpc_audit_removed_locals.py` 0 条需复查。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。3 个文件 3 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

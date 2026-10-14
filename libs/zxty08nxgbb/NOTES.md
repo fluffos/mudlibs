@@ -201,3 +201,7 @@ functionally re-tested live on this lib.
 - 改动的对象 HEAD 与工作区都能载入，无回退。
 
 - 2026-10-12：`clone/npc/obj/xiang.lpc` 写着 `int remove() { save(); }`，盖掉了 `feature/move.lpc` 的 `remove(string euid)`——这些存盘箱子/柜子被销毁时不从携带者身上减负重、不清 handing（KB 06 §7.239 变体，nitan_ceshi/tianxiawuxue 同类）。改成 `varargs void remove(string euid) { save(); ::remove(euid); }`。HEAD 与工作树各载入一次，regress 0（载不进的文件在 HEAD 就载不进）。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。1 个文件 1 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14：技能文件里 `int power_point()`/`int hard_point()` 返回 1.5、1.75 之类的浮点，经 int 返回被截断；本库没有调用者（练功走 `practice_bonus`/`learn_bonus`），改成 `float` 返回值，保留原数值。
+- 2026-10-14：同一次重扫的其余 15 条：`adm/daemons/poistiond.lpc` 的 `varargs int remove() { save(); return 1; }` 取代了 F_MOVE 的 `remove()`（负重扣减从不执行），改为存盘后调用 `::remove(euid)`；`d/daniel/job/peng/peng.lpc` 的原型 `string ask_fail();` 与同目录 `dojob.lpc` 的 `int ask_fail()` 不符（原型抄自另一份 dojob），改 `int`；`beastseller` 的 `attempt_apprentice` 改 `void`（拜师指令不读返回值）；4 个文件在 NPC 基类已有的情况下又 `inherit F_CLEAN_UP`，删去；`xingchen` 写明 `clean_up()` 胜出者；`MAX` 宏重定义前加 `#undef`；`huashan-jian.lpc` 多余的 `;`、`u/huoji.lpc` 注释里残留的 `/*`。改动的 17 个对象新进程各载入一次，无回退。

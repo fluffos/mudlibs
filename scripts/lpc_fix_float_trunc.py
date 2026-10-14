@@ -95,6 +95,10 @@ def plan_one(b, mask, off):
         return "preprocessor directive inside the statement"
     # `else x = ...;`, `if (c) x = ...;`, `} else if (c) x op= ...;`: skip the prefix to the statement itself
     while True:
+        m = re.match(rb"(?:case\b[^:;]*|default\s*):(?!:)\s*", body)   # `case 26..35: exp -= exp / 7.32;`
+        if m:
+            lead += m.end(); body = body[m.end():]; mb = mb[m.end():]
+            continue
         m = re.match(rb"else\b\s*", body)
         if m:
             lead += m.end(); body = body[m.end():]; mb = mb[m.end():]
