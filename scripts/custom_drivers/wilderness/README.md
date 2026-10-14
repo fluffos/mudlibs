@@ -29,3 +29,7 @@ cmake --build --preset wasm -- -j8
 
 Committed here because CI does not carry emsdk (AGENTS.md §1.6).
 `telnet.js` and `vendor/xterm.*` stay shared.
+
+2026-10-14: the `~/src/fluffos-wilderness` worktree was moved to `970d9f09` (same `src/local_options`
+change) and its native `build-debug/src/lpcc` rebuilt for the warnings rescan. The prebuilt WASM files here
+are unchanged; check out their recorded commit before regenerating them.

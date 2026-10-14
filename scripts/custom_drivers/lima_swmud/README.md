@@ -38,3 +38,8 @@ track every upstream fluffos release the way the shared driver does.
 Only `fluffos.js`/`fluffos.wasm` are lib-specific here -- `telnet.js` and
 `vendor/xterm.*` are driver-config-independent and stay shared (see
 `write_play_page.sh`'s `CUSTOM_DRIVER_DIR` handling).
+
+2026-10-14: the `~/src/fluffos-lima` worktree was moved to `970d9f09` (with the same `src/local_options`
+change) and its native `build-debug/src/lpcc` rebuilt, to scan lima/swmud/spacemud for the new compiler
+warnings. The prebuilt `fluffos.js`/`fluffos.wasm` here are unchanged (still `721878c8`); to regenerate
+them at that commit, check the worktree out at `721878c8` first.
