@@ -284,3 +284,6 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply y
 
 - `u/rock/duihuan.lpc`（充值卡兑换）的循环写成 `for (i - 0; ...)`，本意是 `i = 0`；`i` 之前没赋过值、本来就是 0，所以碰巧能用。改成 `=`。
 - 备份 `quest/guojob_bak/guo.lpc` 同时包含 `zzzjob.lpc` 和 `teamjob.lpc`，两者都声明地名表 `names`：`teamjob.lpc` 的改名 `team_names`（只它自己用）；`quest/chousha_bak/killer.lpc` 写明用驱动原先选的 `clean_up()`。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。9 个文件 13 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14：技能文件 `int power_point()`/`hard_point()` 返回浮点被截断；本库没有调用者，改成 `float`，保留原数值。

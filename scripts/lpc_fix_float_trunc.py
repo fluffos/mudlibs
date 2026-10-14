@@ -85,7 +85,9 @@ def plan_one(b, mask, off):
     start = j + 1
     stmt = b[start:off]
     ms = mask[start:off]
-    lead = len(stmt) - len(stmt.lstrip())
+    lead = 0   # skip whitespace and comments (non-code bytes) in front of the statement
+    while lead < len(stmt) and (not ms[lead] or stmt[lead:lead + 1] in (b" ", b"\t", b"\r", b"\n")):
+        lead += 1
     body, mb = stmt[lead:], ms[lead:]
     body = body.rstrip()
     mb = mb[:len(body)]

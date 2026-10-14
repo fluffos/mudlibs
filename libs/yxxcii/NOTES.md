@@ -132,3 +132,6 @@ autoload 随身物（鸡腿、袍子），人物档本身保存。
 启动时警告 29 -> 0；新进程登录（编码选择、英文名、新人物确认）正常。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 2 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 0 个，只在 #if 分支用的声明移进分支 1 个文件；改动 2 个文件，HEAD 与工作树各载入一次无回退（2 objects; HEAD PASS 2, tree PASS 2; regress 0; newly loading 0），这些文件的警告 2 -> 0。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。2 个文件 2 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14：同一次重扫的其余 30 条：`include/daemons.h` 6 个守护进程宏与先前的定义不同，`#undef` 后再定义（后者本来就生效）；`d/guanwai/npc/chuanfu1.lpc` 和 7 个文件在基类已有的情况下又 `inherit F_SKILL`/`F_CLEAN_UP`，删去（`skills`/`learned` 重复声明随之消失）。改动及受影响的 32 个对象新进程各载入一次，无回退。

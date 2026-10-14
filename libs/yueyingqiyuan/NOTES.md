@@ -1032,3 +1032,6 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply y
 ## 深度功能测试（§10.7，2026-10-11）：dns_master 空 if
 
 - `adm/daemons/network/dns_master.lpc` `query_services()`：`if (! (mud_svc[mud]["finger"/"tell"] & SVC_KNOWN))` 块里只有 `#if PREF_X & SVC_TCP … #endif`，选项关闭时 if 为空（“无副作用”警告报在下一句）；把 `#if`/`#endif` 挪到 if 外面（KB 04，2026-10-07 那次扫描漏了 `! (` 加括号换行这种写法）。载入无回退。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。2 个文件 6 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14：同一次重扫的其余 45 条（xiyouji 同源，照 wuhanzhan/hxxtjqb 的修法）：`obj/npc/ghost.lpc` 自己声明 `int ghost = 1;`，而 `feature/damage.lpc` 有同名的 `int ghost = 0;`，基类读的始终是 0，鬼魂 NPC 从不算鬼魂；去掉叶子的声明，在 `create()` 里给基类的 `ghost` 赋 1。`www/relative/dns_master.lpc` 的 `#if PREF_TELL & SVC_TCP` 放在 `if { }` 里面，选项关闭时剩个空块，移到 `if` 外面。`d/wudang/npc/newplace.h` 的房间表 `path` 与 `feature/command.lpc` 的指令路径同名，改名 `move_dirs`（含三个包含它的 NPC）。其余：kaifeng `ground.h` 守卫、`jiasha` 两个 `init()` 都调用、`yaoguai_type` 重复、`colors.h` 防重复包含、`alias.lpc` 的 `last_time` 改 `last_cmd_time`（`sanhua-counter` 自己存档的同名字段）、`die`/`unconcious`/`kill_ob` 改 `void`、7 个文件多余的 `inherit F_CLEAN_UP`。改动及受影响的对象（33 + 18）新进程各载入一次，无回退。

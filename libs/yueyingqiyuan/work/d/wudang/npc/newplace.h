@@ -64,7 +64,7 @@
 	"/d/wudang/sheshenya",
 });
 */
-string *path = ({
+string *move_dirs = ({
 	"/d/city/",
 	"/d/kaifeng/",
 	"/d/changan/",

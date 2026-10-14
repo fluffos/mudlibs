@@ -436,3 +436,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply j
 - `u/landy/job/npc/old.lpc`、`qlong.lpc` 自己的 `leader`（神兽任务的领队）与 `F_TEAM` 的 `leader` 同名，改名 `job_leader`。
 - `d/mirror/npc/boss.lpc`、`killer.lpc` 只有注释掉的掉宝代码用 `item`、`rand`，从声明里删去；`kungfu/skill/liangyi-jian.bak.lpc` 声明行里多出的 `level;` 删去。
 - `cmds/usr/time1.lpc` 注释块里又一个 `/*`、`kungfu/skill/huagong-dafa/maxsuck.lpc` 的 `//*****` 分隔线被当成嵌套注释，改写（`// *****`），内容不变。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。64 个文件 71 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/d/gumu/skill/yunu-xinjing/xiuxi2.lpc`（`xj_gain *=`）、`/d/gumu/skill/yunu-xinjing/xiuxi2.lpc`（`xj_gain *=`）、`/kungfu/class_bak/gumu/obj/beehive.lpc`（`exp *=`）、`/kungfu/class_bak/gumu/obj/beehive.lpc`（`qn *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

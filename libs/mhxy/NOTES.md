@@ -1056,3 +1056,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply m
 - `toolkit_fix.sh`：14 个多余的 `inherit F_CLEAN_UP`（NPC/武器/护甲已经带了），`u/*/clone/YI.lpc` 的 `query_autoload()` 改 `mixed`。
 
 验证：改动文件、开封擂台和任务两处目录下全部对象、`d/city/npc` 及 `yg/`、`/obj/user`、`/std/char` 共 519 个对象，HEAD 与工作树各用新进程载入：477 -> 479 通过（新增载入 pusa、aoshun），regress 0；删除声明审计 0 项待看。519 个对象载入无回退。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。11 个文件 20 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/daemon/class/wudang/taiji-quan/zhenup.lpc`（`damage *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

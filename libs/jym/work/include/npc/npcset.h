@@ -11,7 +11,7 @@ string set_npc(object ob, string menpai, int exp, int skill_rate)
 	string c_menpai;
 
     //if (exp < 0 || skill_rate < 0) return;
-    level = pow(10*exp, 0.333334);
+    level = to_int(pow(10*exp, 0.333334));
 	level = level * skill_rate / 100;
     if (level < 20) level = 20;
     if (!stringp(menpai)) 
