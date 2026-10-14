@@ -32,6 +32,7 @@
 #define LIB_SUFFIX        DIR_COMMON_LIB "/suffix"
 
 #define LIB_ARMOUR        DIR_ITEMS_LIB "/armour"
+#define LIB_ARMOUR_WEAPON DIR_ITEMS_LIB "/armour_weapon"
 #define LIB_BAIT_WITH     DIR_ITEMS_LIB "/bait_with"
 #define LIB_BBOARD        DIR_ITEMS_LIB "/bboard"
 #define LIB_BOARD         DIR_ITEMS_LIB "/bboard"

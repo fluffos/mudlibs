@@ -11,7 +11,7 @@ float SetExchangeFee(float x);
 mixed SetCurrencies(mixed var);
 int GetLocalFee();
 int GetNonLocalFee();
-int GetExchangeFee();
+float GetExchangeFee();
 int GetOpenFee();
 mixed GetCurrencies();
 string GetBankName();

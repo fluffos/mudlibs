@@ -20,6 +20,12 @@ all three blind spots, then re-boot and re-test:
 Formatter-clean is not compiler-clean (§7.73). Losing formatting on a
 few files is always an acceptable trade.
 
+**In a fix pass, format the changed files only** (`git diff --name-only ... | node .../format-corpus.mjs`). A file the
+formatter already produced comes back `unchanged` or with only the edited lines moved; one that comes back rewritten end to
+end (2026-10-14: 234 of 1040 files, 75k lines, in Discworld, the Dead Souls family, naruto, dreamofseven ...) was never
+normalized, and reformatting a historic lib inside a warning fix buries the fix: revert those files (`git checkout --`) and
+keep the hand edits in the file's own style.
+
 ---
 
 ## 10. Testing methodology and multi-session hygiene

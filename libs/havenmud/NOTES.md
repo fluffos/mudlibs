@@ -922,3 +922,48 @@ smithy's touch, the wagon's name, the sap mask and alpenstock saves: each differ
 with `lpc_listcheck.sh` over the 129 changed files, every includer of a changed header, every key, help
 command, fear/sage/fishing/leader/mayor leaf, the clothing set and 400 random domain objects:
 1150 objects, 1089 -> 1089 load, 0 regress (1150 个对象载入无回退).
+
+
+## Deep functional test (§10.7, 2026-10-14): compile warnings under FluffOS 970d9f09
+
+The rebuilt driver (970d9f09) reported 419 warnings in files that compile (521 error files, unchanged): 107
+`Redeclaration of global variable`, ~250 `f() inherited from both` rows, 58 `Float value truncated to int`, one
+`bitwise operation on boolean values`. After this pass: 101, all in one superseded draft (below); 521 error files.
+
+Method: `lpc_warnings.py` rescans, `lpc_fix_float_trunc.py --apply` plus hand edits for the sites it lists,
+structural fixes for the diamonds by reading which copy each function reads and writes.
+
+Real bugs found and fixed:
+- Claws, knuckles, iron fists, antler gauntlets (6 `domains/westwood` items and a `realms/zalbar` draft) inherited
+  `LIB_ARMOUR` and `LIB_WEAPON` together, so `LIB_EQUIP` and `LIB_POISON` were in twice (34 warnings each). Wielding
+  set the weapon copy of the worn limbs; the armour code (`eventReceiveDamage`'s "breaking armour gives exp")
+  read its own copy, which stayed empty. New base `/lib/items/armour_weapon.lpc` (`LIB_ARMOUR_WEAPON`) inherits
+  `LIB_ARMOUR` once and carries the weapon and damage side itself; where both sides defined a function the weapon
+  version, which was in effect, is kept.
+- Players had two copies of `move.lpc`'s `LastEnvironment` and `isRiding` (through `LIB_INTERACTIVE` and through
+  `LIB_LIVING` -> combat -> race -> body). `player.lpc` moves through `interactive::eventMove` (the first copy) but
+  `GetLastEnvironment()` was named from `living` (the second), so it was always 0 for a player. `body.lpc` no longer
+  inherits `LIB_MOVE`; `basenpc.lpc` inherits it next to `LIB_LIVING` (its `living::eventMove` became
+  `move::eventMove`), players keep the interactive copy, the three wrappers in `player.lpc` are gone.
+- `x *= <float>` converted the factor to int first: `GetDefense()` became 0 for a player in bad light
+  (`pro *= 0.75`); cremate and pyre did no damage to living targets (`damage *= 0.75`); special-action damage
+  multipliers (up to 3.0) were floored; the dirty-tricks bonus `x2 *= 0.5` was always 0; `SetCurrency()` on an
+  NPC multiplied by a floored exchange rate (1.8 -> 1).
+- `GetDefense()`'s `if (userp()) if (...) {...} else if (GetBlind())`: the `else` belonged to the inner `if`, so
+  a blind NPC never had the penalty its comment describes. Braced.
+- `teller.lpc` `int GetExchangeFee()` returned the float fee (0.01, 0.03, 0.05 in the town tellers) truncated
+  to 0, so no teller charged its fee; now `float`, as the `%.3f` fee message expects.
+- `shipseller.lpc`: selling a pirated ship set `cost = 0.333;` (paid 0) instead of a third of the appraisal.
+- `weapon.lpc` `direct_wield_obj()`: `int hands;` was never set, so the limb list was cut with `[0..-1]`;
+  now `GetHands()`.
+- `wagon.lpc` (realms/mahkefel): `LIB_ENTER` duplicated what `LIB_EXITS` and `LIB_STORAGE` already supplied (two
+  `Dir` variables); dropped, its one extra function `direct_enter_into_obj()` written in the wagon.
+- `domains/test/virtual/ocean.lpc`: `&` typed for `&&` (same result on booleans).
+
+Left: `realms/zalbar/oldfiles/projects/obj/natural_herb_ob.lpc` inherits `LIB_BURN` and `LIB_MEAL`, two complete
+`LIB_ITEM`s (101 warnings). It is a superseded draft: the herb the spell clones, `std/spells/obj/natural_herb_ob.lpc`,
+is the same object with `LIB_MEAL` only. Making the draft warning-free means rewriting it, so it stays as it is.
+
+Load check (`lpc_listcheck.sh`, HEAD vs tree) over every changed file, all of `/lib`, every `npc/` object and every
+teller/shipseller/mayor/trainer leaf: 2432 objects, 2312 -> 2313 load (the new base), 0 regress.
+`lpc_audit_removed_locals.py HEAD`: nothing for havenmud.

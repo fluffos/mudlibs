@@ -1,0 +1,305 @@
+/*    /lib/items/armour_weapon.c
+ *    An armour that is wielded as a weapon at the same time: claws worn
+ *    over the hands, knuckle-dusters, antler gauntlets.  It is a full
+ *    LIB_ARMOUR (protection, size, deterioration) with the weapon side of
+ *    LIB_WEAPON and LIB_DAMAGE added here.  The items used to inherit
+ *    LIB_ARMOUR and LIB_WEAPON together, which put LIB_EQUIP and LIB_POISON
+ *    in twice: the weapon copy of the worn limbs was set by wielding while
+ *    the armour code read its own copy, which stayed empty.  Where the two
+ *    sides define the same function, the weapon's version is kept, as it
+ *    was the one in effect.
+ */
+
+#include <lib.h>
+#include <function.h>
+#include <damage_types.h>
+
+inherit LIB_ARMOUR;
+
+private int Hands = 1;
+private string WeaponType = "blunt";
+private nosave mixed Wield = 0;
+private int WeaponClass = 1;
+private int DamageType = BLUNT;
+private int WeaponMaxClass = 1;
+
+/* ******************** damage side ******************** */
+int GetClass() {
+  return WeaponClass;
+}
+
+varargs int SetClass(int x, int y) {
+  if (x > WeaponMaxClass) {
+    WeaponMaxClass = x;
+  }
+  if (y) {
+    WeaponMaxClass = x;
+    SetClass(y);
+  }
+  return (WeaponClass = x);
+}
+
+int GetDamageType() {
+  return DamageType;
+}
+
+int SetDamageType(int x) {
+  return (DamageType = x);
+}
+
+int GetMaxClass() {
+  return WeaponMaxClass;
+}
+
+/* ******************** weapon side ******************** */
+varargs string GetEquippedDescription(object who) {
+  if (GetWorn()) {
+    string tmp = "\nIt is wielded in ";
+
+    if (!who) {
+      who = this_player();
+    }
+    if (who == environment()) {
+      tmp += "your";
+    } else {
+      tmp += possessive_noun(environment());
+    }
+    tmp += " " + replace_string(item_list(GetWorn()), "head", "mouth") + ".";
+    return tmp;
+  }
+  return 0;
+}
+
+string GetEquippedShort() {
+  object env = environment();
+  string ret = GetShort();
+  string *limbs;
+  string limb;
+
+  if (!env || !living(env)) {
+    return ret;
+  }
+  limbs = GetWorn();
+  limb = replace_string(item_list(limbs), "head", "mouth");
+  if (sizeof(limbs) > 0) {
+    ret += " (wielded in " + limb + ")";
+  }
+  return ret;
+}
+
+int GetHands() {
+  return Hands;
+}
+
+int SetHands(int x) {
+  return (Hands = x);
+}
+
+string GetWeaponType() {
+  return WeaponType;
+}
+
+string SetWeaponType(string str) {
+  if (!stringp(str)) {
+    error("Bad argument 1 to SetWeaponType().\n\tExpected: string, Got: " +
+      typeof(str) + "\n");
+  }
+  return (WeaponType = str);
+}
+
+mixed GetWield() {
+  return Wield;
+}
+
+mixed SetWield(mixed val) {
+  return (Wield = val);
+}
+
+/* LIB_EQUIP's CanEquip(), which LIB_WEAPON calls: LIB_ARMOUR's own
+ * CanEquip() adds the armour limb and size rules, which a wielded item
+ * did not have. */
+private mixed equip_can_equip(object who, string *limbs) {
+  if (GetWorn()) {
+    return "#You are already using " + GetDefiniteShort() + ".";
+  }
+  foreach (string skill in GetRequiredSkills()) {
+    if (who->GetSkillLevel(skill) < GetRequiredSkill(skill)) {
+      return "#Equipping " + GetDefiniteShort() + " requires " + GetRequiredSkill(skill) + " " + skill + ".";
+    }
+  }
+  return who->CanWear(this_object(), limbs);
+}
+
+/* LIB_EQUIP's eventEquip(). */
+private mixed equip_event_equip(object who, string *limbs) {
+  mixed tmp = who->eventWear(this_object(), limbs);
+
+  if (tmp != 1) {
+    return tmp;
+  }
+  SetWorn(limbs);
+  return 1;
+}
+
+/* LIB_EQUIP's eventUnequip(). */
+private mixed equip_event_unequip(object who) {
+  mixed tmp = who->eventRemoveItem(this_object());
+
+  if (tmp != 1) {
+    return tmp;
+  }
+  SetWorn(0);
+  return 1;
+}
+
+mixed CanEquip(object who, string *limbs) {
+  mixed tmp;
+
+  if (!limbs || !sizeof(limbs)) { /* let's try and guess */
+    string *guess = who->GetWieldingLimbs();
+    if (!guess) { return "You have no limbs!"; }
+    limbs = guess;
+    limbs = filter(limbs, (: !$(who)->GetWielded($1) :));
+    if (sizeof(limbs) > GetHands()) { limbs = ({ limbs[0] }); }
+  }
+
+  tmp = equip_can_equip(who, limbs);
+
+  if (tmp != 1) {
+    return tmp;
+  }
+  if (GetHands() != sizeof(limbs)) {
+    return "#You must use " + consolidate(Hands, "hand") + " to wield " + GetDefiniteShort() + ".";
+  }
+  if (Hands > sizeof(who->GetWieldingLimbs())) {
+    return "#You do not have enough limbs for that weapon!";
+  }
+  return 1;
+}
+
+/* LIB_WEAPON's version (the weapon class wears down), declared void as
+ * LIB_ARMOUR's is: no caller reads the result. */
+void eventDeteriorate(int type) {
+  int x = GetClass();
+  object env = environment();
+
+  if (!env) {
+    eventDestruct();
+    return;
+  }
+  if (x > 1) {
+    env->eventPrint("%^BOLD%^RED%^" + capitalize(GetDefiniteShort()) + " is wearing down.%^RESET%^");
+    SetClass(x - 1);
+    return;
+  }
+  env->eventPrint("%^RED%^" + capitalize(GetDefiniteShort()) + " breaks.%^RESET%^");
+  eventDestruct();
+}
+
+mixed eventEquip(object who, string *limbs) {
+  mixed tmp;
+
+  if (functionp(Wield)) {
+    if (functionp(Wield) & FP_OWNER_DESTED) {
+      return "Function pointer owner destructed.";
+    }
+    if (!evaluate(Wield, who, limbs)) {
+      return 1;
+    } else {
+      return equip_event_equip(who, limbs);
+    }
+  }
+  tmp = equip_event_equip(who, limbs);
+  if (tmp != 1) {
+    return tmp;
+  }
+  if (stringp(Wield)) {
+    who->eventPrint(Wield);
+  } else {
+    who->eventPrint("You wield " + GetShort() + ".");
+  }
+  environment(who)->eventPrint(who->GetName() + " wields " + GetShort() +
+    ".", who);
+  return 1;
+}
+
+int eventStrike(object target) {
+  int poison = GetPoison();
+
+  if (poison > 0) {
+    int x = random(poison) + 1;
+
+    if (x > 0) {
+      send_messages("", "$agent_possessive_noun " + GetKeyName() +
+        " poisons $target_name.", environment(), target,
+        environment(environment()));
+      target->AddPoison(x);
+      AddPoison(-x);
+    }
+  }
+  return GetClass();
+}
+
+varargs mixed eventUnequip(object who) {
+  mixed tmp = equip_event_unequip(who);
+
+  if (tmp != 1) {
+    return tmp;
+  }
+  send_messages("unwield", "$agent_name $agent_verb $target_name.",
+    who, this_object(), environment(who));
+  return 1;
+}
+
+mixed direct_remove_obj() {
+  if (environment() != this_player()) {
+    return "#You don't have that!";
+  }
+  return "#Do you mean to unwield it?";
+}
+
+mixed direct_wear_obj() {
+  if (environment() != this_player()) {
+    return "#You don't have that!";
+  }
+  return "#Do you mean to wield it?";
+}
+
+mixed direct_unwield_obj() {
+  if (environment() != this_player()) {
+    return "#You don't have that!";
+  }
+  return CanUnequip(this_player());
+}
+
+mixed direct_wield_obj() {
+  int hands = GetHands();
+  string *limbs;
+
+  if (environment() != this_player()) {
+    return "#You don't have that!";
+  }
+
+  limbs = (this_player()->GetWieldingLimbs() || ({}));
+  limbs = filter(limbs, (: !this_player()->GetWielded($1) :));
+  if (!sizeof(limbs)) {
+    return "You have nowhere to wield it!";
+  }
+  if (sizeof(limbs) > hands) {
+    limbs = limbs[0..(hands - 1)];
+  }
+  return CanEquip(this_player(), limbs);
+}
+
+mixed direct_wield_obj_word_str(object target, string wrd, string limb) {
+  if (environment() != this_player()) {
+    return "#You don't have that!";
+  }
+  return CanEquip(this_player(), explode_list(limb));
+}
+
+int CanDisarm(object who, object target) {
+  if (GetProperty("no disarm")) { return 0; }
+  if (GetPreventDrop()) return 0;
+  else return 1;
+}
