@@ -1076,3 +1076,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply y
 
 - `d/*/npc/xunbu.lpc` 巡捕：`(: random_move() :);` 只造了一个函数指针就丢掉，巡捕从不走动；改为 `random_move();`。
 - 改动的对象 HEAD 与工作区都能载入，无回退。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。15 个文件 15 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/kungfu/skill/taiji-quan/zhenup.lpc`（`damage *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14：技能文件 `int power_point()`/`hard_point()`/`effective_level()` 返回 1.2~2.5 之类的浮点，经 int 返回被截断；本库没有（有效的）调用者，改成 `float`，保留原数值。
+- 2026-10-14：同一次重扫的其余 9 条：`inherit/misc/bbsboard1.lpc` 发帖 `note["msg"] = (text, 1);`、回复 `report["msg"] = (text, 1);` 是逗号表达式，存进去的是 1 而不是正文（chidi 同款）；改 `= text;`。`dizangwang` 的 `attempt_apprentice` 改 `void`（拜师指令不读返回值）；两个 roommaker 的第一张 `special_props` 表是死声明，删去；未用的局部变量、`STORY_DIR` `#undef`、多余的 `;`。改动的 30 个对象新进程各载入一次，无回退。

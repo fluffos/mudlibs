@@ -360,3 +360,4 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 ## 深度功能测试（§10.7，2026-10-11）：dns_master 空 if
 
 - `adm/daemons/network/dns_master.lpc` `query_services()`：`if (! (mud_svc[mud]["finger"/"tell"] & SVC_KNOWN))` 块里只有 `#if PREF_X & SVC_TCP … #endif`，选项关闭时 if 为空（“无副作用”警告报在下一句）；把 `#if`/`#endif` 挪到 if 外面（KB 04，2026-10-07 那次扫描漏了 `! (` 加括号换行这种写法）。载入无回退。
+- 2026-10-14：同一次重扫的其余 39 条（与 wuhanzhan 同源，照它 2026-10-13 的修法）：`d/kaifeng/ground.h` 表加 `GROUND_TABLES_INHERITED` 守卫；`d/obj/cloth/jiasha.lpc` 的 `init()` 先后调用 `cloth::init()` 与 `unique::init()`（两个都是真钩子，只留一个会丢功能）；`d/city/npc/yg/yaoguai.lpc` 去掉与基类重复的 `yaoguai_type`；`d/kaifeng/npc/colors.h` 加防重复包含（`quest.lpc` 在自己的守卫外包含它）；`feature/alias.lpc` 的 `last_time` 改名 `last_cmd_time`（神医 NPC 自己存档的同名字段）；`lijing`/`xiwangmu` 的 `die`/`unconcious`、`jinren` 的 `kill_ob` 改 `void`；7 个文件多余的 `inherit F_CLEAN_UP` 删去；roommaker 死表、未用的局部变量。改动及受影响的对象（26 + 18）新进程各载入一次，无回退。

@@ -1115,3 +1115,6 @@ timestamp-only churn.
 ## 编译警告收尾（2026-10-12）
 
 `scripts/toolkit_fix.sh` 一轮（冗余继承 18 处，NPC/物件在基类之外又直接继承 `F_CLEAN_UP` 等）后，`include/net/ftpdconf.h` 改定义 `ftpd.h` 的 `VALID_READ`/`VALID_WRITE` 前加 `#undef`（取值不变，同 xiakexing3），能编译的文件警告清零。改动的 19 个对象 HEAD 与工作树各载入一次：HEAD PASS 18，tree PASS 18，regress 0。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。4 个文件 4 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14：技能文件 `int power_point()`/`hard_point()`/`effective_level()` 返回 1.2~2.5 之类的浮点，经 int 返回被截断；本库没有（有效的）调用者，改成 `float`，保留原数值。

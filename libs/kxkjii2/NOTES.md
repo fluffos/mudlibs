@@ -367,3 +367,5 @@ HEAD 与工作树分别加载（新进程）：1653 -> 1653 通过，无回退�
 **其余（同 kxkj）：** `ITEM` + `F_LIQUID` 容器写出 `liquid::long(raw)`；与 `feature/damage.lpc` 全局 `i`/`ghost` 同名的叶子变量改名（`ncount`、`self_ob`），`g1.lpc` 的 `leader` 改名 `helper`；`gwhip` 的 `skill_improved`、`b_guard` 的 `greeting` 签名；港口房间与 `make_room` 的原型；冗余继承。
 
 改动的 58 个对象 HEAD 与工作树各载入一次：HEAD PASS 54，tree PASS 57，regress 0，新载入 3（上面 3 个 NPC）；`open/gblade/npc/wen-fun` 两边都因装备不存在的刀在 `create()` 失败。`lpc_audit_removed_locals.py` 0 处待看。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。47 个文件 98 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/daemon/skill/shasword.lpc`（`me_lv *=`）、`/open/beggar/skill/shasword.lpc`（`me_lv *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

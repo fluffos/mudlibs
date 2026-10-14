@@ -242,3 +242,5 @@ HEAD 与工作树分别加载（新进程）：812 -> 812 通过，无回退；�
 本轮没有发现玩法层面的真问题。`d/quanzhou{,.old}/npc/tang{,3}.lpc` 在批量载入里 HEAD 与工作树都失败，原因是 `create()` 里 `restore()` 读 `/data/npc/meng-zhu.o` 在 lpcc 的权限环境下被拒（与这次改动无关）。
 
 验证：11 个改动对象 HEAD 与工作树各用新进程载入：7 -> 7 通过，regress 0；删除声明审计 0 项待看。11 个对象载入无回退。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。6 个文件 6 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/kungfu/skill/fengyun-shou/foguang.lpc`（`damage *=`）、`/kungfu/skill/taiji-quan/zhenup.lpc`（`damage *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

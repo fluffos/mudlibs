@@ -428,3 +428,5 @@ new-account `y`, Chinese name `浮浮` (2–10 chars), password `Mud@2026`
 twice, gender `m`. Arrived in 茅草屋, `south` to 前院, `quit` printed
 `Bye，欢迎下次光临`. The existing `teamug` save was left untouched
 (unknown password). Shop/combat/death were not exercised this pass.
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。1 个文件 1 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

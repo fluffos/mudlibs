@@ -1030,3 +1030,6 @@ sweep, and both came back clean/already-fixed.
 ## 编译警告收尾（2026-10-12）
 
 孪生库 jqxz2008 同日的整理（5c9cd3ac3bf：冗余继承 18 处，`include/net/ftpdconf.h` 的 `VALID_READ`/`VALID_WRITE` 前 `#undef`）用 `scripts/lpc_twin_port.py adopt jqxz2008 jqxz2008std --pre 5c9cd3ac3bf~1` 搬来，19 个文件与 jqxz2008 修前逐 token 相同，清单里的警告全部落在这些文件里。HEAD 与工作树各载入一次：19 个对象，HEAD PASS 18，tree PASS 18，regress 0。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。4 个文件 4 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14：技能文件 `int power_point()`/`hard_point()`/`effective_level()` 返回 1.2~2.5 之类的浮点，经 int 返回被截断；本库没有（有效的）调用者，改成 `float`，保留原数值。

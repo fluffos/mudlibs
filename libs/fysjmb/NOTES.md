@@ -241,3 +241,5 @@ drafts) minus the files its pass fixed, plus `cmds/std/practice_.lpc` and a save
 - 车夫两处（`d/fy/npc/officer.lpc`、`d/guanwai/npc/waiter.lpc`）计时收回马车的 `check_status` 与 `feature/damage.lpc` 检查昏迷/死亡的 `check_status()` 同名（基类那个本库无人调用，所以没出事）；改名 `check_rental`（连同 `call_out` 字符串）。
 - 黄山小姑娘、乌龟、画眉，华山燕子，桃源两只猫的 `kill_ob()`，华山青青的 `die()` 改 `void`，与基类一致（`kill` 命令不读返回值）。
 - `daemon/class/yinshi/iceheart/depoison.lpc`（冰心逼毒）多继承了一个用不到的 `/daemon/condition/generic_condition`，它的 `clear_condition*()` 都是对玩家调用的；去掉那行继承。`d/bawang/npc/skill/snake-spear.lpc` 自己的招式表 `action` 与 `SKILL` 的同名，改名 `snake_action`（自带 `query_action()` 读它，行为不变）；`d/fy/npc/newsman.lpc` 在定义前调用 `ask_question()`，补原型。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。4 个文件 9 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

@@ -664,3 +664,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply z
 - `d/game/give/yuan.lpc`：`int bt = 2;` 连写三次，留一行。
 - `d/jjf/npc/xiaomotou1.lpc`（天魔宫小魔头）从来载不进来：`attempt_apprentice` 外面多套了一个同名函数头；拜师广播的字符串里直接换行（LPC 字符串不能跨行）；文件用了 `HIR` 等颜色宏却没 `#include <ansi.h>`。三处都改，现在能载入。
 - `u/nanf/room/npc/ddz_judge.lpc`：`die()`/`unconcious()` 在 `void` 基类上写成 `int`，没人读返回值，改为 `void`。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。11 个文件 22 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/u/nanf/room/ddz_table.lpc`（`score *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

@@ -408,3 +408,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 
 - 杀怪任务的怪 `quest/shaguai/guai.ahxia.lpc`、`questguai_n.lpc` 的 `die()`（连同原型）改 `void`，`return 1;` 改 `return;`；`kungfu/new/dizangwang.lpc` 的 `attempt_apprentice()` 改 `void`——基类都是 `void`，调用方不读返回值。
 - 故事守护进程 `adm/daemons/storyd.lpc` 与 `d/emei/user-room/host/home.lpc` 自己的 `STORY_DIR` 覆盖 `globals.h` 的同名宏（值不同，本文件里一直用自己的），先 `#undef`。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。2 个文件 5 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

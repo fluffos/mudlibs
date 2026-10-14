@@ -373,3 +373,5 @@ so it is not `duplicate_of`. When it opens, number it as `076-N`.
 
 - `feature/food.lpc`、`feature/liquid.lpc` 的 `do_effect()` 是 `void`，而重载它的干粮 `ganliang`（三处）、`d/guanwai/obj/wan.lpc`、`d/xiakedao/obj/pigpart.h` 返回 `int`，`eat`/`drink` 对 `only_do_effect` 物品用这个返回值做命令结果：基类改 `varargs int do_effect(object me)`，返回 1（同 yanhuangwuhun）。
 - `cmds/wiz/who1.lpc` 里一行孤立的分隔线字符串（`WHT "———…" NOR;`）不赋给任何东西，从不输出，删去（输出不变）。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。1 个文件 3 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

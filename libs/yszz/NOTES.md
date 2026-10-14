@@ -209,3 +209,6 @@ After reboot, `buy jitui` purchased 炸鸡腿 and changed 1 黄金 into 99
 - 袈裟 `d/obj/cloth/jiasha.lpc` 与宝甲 `obj/baojia.lpc` 都是 `CLOTH` + `F_UNIQUE`，各只跑一边的 `init()`（袈裟的撕袈裟 `tear` 从没加上，宝甲的唯一物品检查从不运行）；两者都补 `init() { cloth::init(); unique::init(); }`。
 - `d/kaifeng/ground.h` 表格守卫（同 xyj2000）；`include/net/ftpdconf.h` 的 `VALID_READ`、`VALID_WRITE` 与 `feature/quest.lpc` 的 `QUEST_D` 先 `#undef`；巫师 fly 的 `u/fly/job/npc/skill.h` 的武功表 `skills` 与 `F_SKILL` 同名，改名 `job_skills`（`killer.lpc` 一处），`u/fly/other/xyj2000_job/npc/yg/yaoguai.lpc` 没人读的 `yaoguai_type` 删去。
 - 玉兔两份（`d/moon/npc/yutu.lpc`、`edit/d/moon/npc/yutu.lpc`）的 `kill_ob()`、劫匪两份 `jiefei.lpc` 的 `unconcious()` 改 `void`；`d/death/god1.lpc`、`d/obj/weapon/sword/di.lpc`、`d/qujing/jilei/obj/fzy.lpc`、`daemon/skill/test-whip.lpc` 写明用驱动原先选的 `clean_up()`；四处多余的 `;` 删去。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。1 个文件 1 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/u/fly/skill/zhen.lpc`（`damage *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14：技能文件 `int power_point()`/`hard_point()`/`effective_level()` 返回 1.2~2.5 之类的浮点，经 int 返回被截断；本库没有（有效的）调用者，改成 `float`，保留原数值。

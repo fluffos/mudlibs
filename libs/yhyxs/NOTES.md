@@ -988,3 +988,5 @@ HEAD 与工作树分别加载（新进程）：822 -> 822 通过，无回退；�
 ## 编译警告收尾（2026-10-13）
 
 搬来同族已整理的改法：yanhuangwuhun（89552da089f）的 `feature/food.lpc`、`feature/liquid.lpc` `do_effect()` 改 `varargs int`（与重载它、被 `eat`/`drink` 用返回值的蜂蜜、猪肉等一致），zhonghua2 的 `clone/megazine/obj/duka_3b.lpc` 删去不用的那份赔率声明，yhwhpublicfi 的镖师 `d/beijing/npc/qianzhenglun.lpc` `count` 改名 `my_count`。能编译的文件警告清零；改动的 6 个对象在 HEAD 与工作树各载入一次，regress 0。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。1 个文件 1 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

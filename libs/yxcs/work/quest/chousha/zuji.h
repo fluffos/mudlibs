@@ -158,7 +158,6 @@ varargs void remove_enemy()
    string temp;
         object *enemys;
         int i, chousha_count;
-        mapping my = query_entire_dbase();
 
    chousha_count=0;
    temp=sprintf("%d",chousha_count);

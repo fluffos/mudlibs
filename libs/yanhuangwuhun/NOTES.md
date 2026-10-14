@@ -853,3 +853,5 @@ an already live-verified fix from the shared-lineage sibling `zhyx`).
 - `adm/daemons/huanjing2003/` 的四国 NPC/宝物与 `room_readygo_hj.lpc`：一条声明里同一变量先裸声明、再带初值声明，驱动造出两份；`scripts/lpc_fix_double_decl.py` 去掉裸的那份（44 处，9 个文件），运行时不变。
 - `feature/food.lpc`、`feature/liquid.lpc` 的 `do_effect()` 是 `void`，而重载它的蜂蜜 `d/gumu/obj/fengmi.lpc`、`d/xiakedao/obj/pigpart.h` 返回 `int`，`eat`/`drink` 对 `only_do_effect` 物品用这个返回值做命令结果：基类改 `varargs int do_effect(object me)`，返回 1（同 nitan3）。
 - `adm/daemons/network/cmwhod.lpc` 五个函数用 `STATIC_VAR_TAG`（`nosave`）修饰，改 `protected`；`adm/daemons/vrm_server.lpc` 多余的 `;` 删去。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。1 个文件 1 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

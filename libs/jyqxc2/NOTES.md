@@ -241,3 +241,5 @@ functionally re-tested live on this lib.
 ## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
 
 - 与 jyqxc 同码：`lpc_twin_port.py adopt` 移植 37 个文件（35 处多余 inherit、`ftpdconf.h` 的 `#undef`、`hubo.lpc` 的 `clean_up()`）。37 个对象载入无回退，3 个原本失败的现在能载入。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。3 个文件 3 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

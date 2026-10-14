@@ -539,3 +539,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 ## 编译警告收尾（2026-10-13）
 
 `scripts/toolkit_fix.sh` 一轮：18 处 `int init()` 改 `void init()`，11 处 `if (arg != "a" & arg != "b")` 的按位 `&` 改 `&&`（两边都是 0/1，结果不变），补两条原型，去掉 1 处多余继承；手工：比武台 `d/biwu/biwutai.lpc`、`d/biwuold/biwu/biwutai.lpc` 的 `no_die()` 改 `void`（`feature/damage.lpc` 不读返回值），书库 `d/city/library.lpc` 的 `STORY_DIR` 先 `#undef`，`kungfu/skill/huashan-jian.lpc` 多余的 `;` 删去。能编译的文件警告清零；改动的 40 个对象在 HEAD 与工作树各载入一次：HEAD PASS 39，tree PASS 39，regress 0。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。6 个文件 6 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
