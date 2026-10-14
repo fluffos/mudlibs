@@ -928,3 +928,6 @@ session with a clean, in-game `quit`.
 ## 编译警告收尾（2026-10-13）
 
 `scripts/toolkit_fix.sh` 一轮去掉 13 处多余继承；`include/net/ftpdconf.h` 把 `VALID_READ`、`VALID_WRITE` 定为 1，覆盖 `ftpd.h` 的 0，先 `#undef`（同 bmxkx2001、jqxz2008），行为不变。能编译的文件警告清零；改动的 14 个对象在 HEAD 与工作树各载入一次：HEAD PASS 10，tree PASS 10，regress 0。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。3 个文件 4 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14：技能文件里 25 处 `int power_point()` 返回 1.3、1.5 之类的浮点，经 int 返回被截断；本库没有调用者，改成 `float` 返回值，保留原数值（KB 04 §6.10）。

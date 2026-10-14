@@ -238,3 +238,6 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 - 2026-10-10：`/d/wudujiao/mishi.lpc` 的技能判断用按位 `&` 连接两个比较（如 `tjss > 10000 & taoism > 10000`），改为逻辑 `&&`。两边都是 0/1 比较结果，行为不变，只是写法纠正。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 11 处，返回类型/原型 20 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 0 个，只在 #if 分支用的声明移进分支 1 个文件；改动 32 个文件，HEAD 与工作树各载入一次无回退（32 objects; HEAD PASS 32, tree PASS 32; regress 0; newly loading 0），这些文件的警告 32 -> 0。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。1 个文件 1 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14（同一次重扫，手工部分）：神龙岛 5 个 NPC（洪安通、胖头陀、无根道人、许雪亭、张淡月）的 `attempt_apprentice()` 由 `int` 改为 `void`，与 `inherit/char/npc.lpc` 一致；没有调用者用返回值。改动的对象载入无回退。

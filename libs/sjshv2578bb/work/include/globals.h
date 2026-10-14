@@ -59,6 +59,7 @@
 #define BAN_D		        "/adm/daemons/band.lpc"
 #define MONEY_D		        "/adm/daemons/moneyd.lpc"
 #define TOPTEN_D	        "/adm/daemons/toptend"
+#undef TASK_D
 #define TASK_D                  "/adm/daemons/questd"
 #define CRON_D                  "/adm/daemons/cron"
 #define DISASTER_D              "/adm/daemons/disasterd"

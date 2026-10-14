@@ -1,3 +1,5 @@
+#ifndef QUEST_KAIFENG_COLORS_H
+#define QUEST_KAIFENG_COLORS_H
 mapping color_code = ([
   "zhu bajie": HIR "红" NOR,
   "chen guangrui": HIG "绿" NOR,
@@ -10,3 +12,4 @@ mapping color_code = ([
   //	"xiang lan":HIB"蓝"NOR,
   "xiang lan": HIW "白" NOR,
 ]);
+#endif

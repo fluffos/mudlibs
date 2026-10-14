@@ -504,3 +504,12 @@ functionally re-tested live on this lib.
 - 未改：`d/yixing/npc/bangzhu.lpc` HEAD 就编不过（`doc/set_bang.h:83` 语法错误），与本轮无关。
 
 - 2026-10-12：`open/xiangyang/task/teamjob.lpc` 的组队任务用 `names[0][random(40)]` 选地点，而这张表只有 34 个地名，`random()` 落到表外时数组越界报错、任务中断。改成 `random(sizeof(names[0]))`（shenmo `u/stey/newjob/teamjob.lpc` 同类）。HEAD 与工作树各载入一次，regress 0。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。9 个文件 12 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/kungfu/skill/bahuang-gong/powerup.lpc`（`skill *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14（同一次重扫，手工部分）：
+  - 36 个技能文件的 `int power_point()` 返回 1.1–1.5 的浮点（含按内功等级分支的写法），经 `int` 返回一律被截成 1，改为 `float`。
+  - `adm/daemons/combatd.lpc` 用到这个值：
+    - 防守时读进 `float dpower`，限定在 1–1.5，乘到防御等级上，这里原本就是浮点写法。
+    - 进攻时原写 `damage *= (int)SKILL_D(...)->power_point(me)`。`(int)` 对浮点只是编译期标注，不做转换，`damage` 会在运行时变成浮点。现改为 `damage = to_int(damage * ...)`。
+  - **玩家可见**：带威力系数的武功和轻功按原设计的 1.1–1.5 倍计算伤害和防御。原先在本驱动下系数一直被截成 1。
+  - `d/city/daxiaoroom.lpc` 去掉注释里嵌套的 `/*`；`mudlib/testsuite/tmp_eval_file.lpc` 补 `return`。

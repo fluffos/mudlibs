@@ -344,3 +344,9 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply f
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。1 个文件 1 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
 - 2026-10-14：87 个技能文件 `int power_point() { return 1.75; }` / `int hard_point() { return 2.5; }`，浮点经 int 返回被截成 1、2（FluffOS 移植以来一直如此，原 MudOS 下保留小数）。`feature/skill.lpc` 的 `query_skill()`（power_point 作有效等级系数）和学习上限（hard_point 平方作学习点门槛）都读这两个值，`point` 经 call_other 拿到的值不会再被截断。改成 `float` 返回值后恢复原设计数值：**游戏可见**——hard_point 1.75 的技能学习门槛约为现在的 3 倍，power_point 大于 1 的技能有效等级相应提高。改动的 74 个对象新进程各载入一次，无回退。
+- 2026-10-14（补）：上一条把 `power_point`/`hard_point` 改成 `float` 后，有两处调用会把浮点带进整数：
+  - `feature/skill.lpc` 的 `query_skill()` 里 `s += skills[...] * point`，`s` 在运行时变成浮点，`query_skill()` 返回浮点。
+  - `cmds/usr/fenpei.lpc` 的 `all = ... * hard * hard`，提示里的点数会带六位小数。
+  - 现把 `point`/`hard` 声明为 `float`，乘积用 `to_int()`。
+  - 运行时探针：一个 NPC 的 sword 100、duanjia-sword 100（power_point 1.3），`query_skill("sword")` 返回整数 180（100/2 + 100×1.3）。
+  - 另：载入时 `emoted` 恢复存档报 `Invalid utf8 string while restoring emote`，待查。

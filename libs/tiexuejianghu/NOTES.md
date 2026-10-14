@@ -1032,3 +1032,11 @@ No code change. 拜师 not re-done.
 - `include/globals.h`：`#define BANNED_SITES "/adm/etc/banned_sites";` 末尾多了分号，用到它的表达式都会多一个 `;`；去掉后 `adm/daemons/band*.lpc`、`u/panguan/band.lpc` 里的同名定义与之一致，不再报重定义。
 - `include/armor.h` 的 `FINGER`（指环护具）与 `weapon.h` 的同名宏相撞，`#define` 前加 `#undef`（同 fys）。
 - 孪生搬来的：`d/meizhuang/bingqiku.lpc` 的重复全局变量、`d/zhongzhou/npc/renwu.h` 的重复 `renwu4` 表、`daemon/skill/old/hubo.lpc` 的冗余继承，以及 `u/` 下几个 NPC/房间。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。3 个文件 3 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14（同一次重扫，手工部分，与 fys 同源同修）：
+  - 技能文件的 `int power_point()`/`int hard_point()` 返回 1.5、1.75、2.5 之类的浮点，经 `int` 返回被截断，改为 `float`。
+  - `feature/skill.lpc` 的 `query_skill()` 用 power_point 作有效等级系数；学习上限、`cha`、`skills`、`shengji`、`fenpei` 用 hard_point 的平方作学习点门槛。
+  - 为了让这两个值进来以后结果仍是整数：`query_skill()` 的 `point` 声明为 `float`，乘积用 `to_int()`；`fenpei` 的 `hard` 为 `float`，`all = to_int(...)`。否则 `query_skill()` 会在运行时返回浮点，`fenpei` 会显示带六位小数的点数。
+  - **玩家可见**：有效等级和学习门槛按原设计的系数计算。
+  - 改动的 76 个对象 HEAD 与工作树各载入一次，无回退。

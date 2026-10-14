@@ -937,3 +937,10 @@ top-level memory doc). No fix applied.
 启动时警告 94 -> 0；新进程登录正常。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 1 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 1 个，只在 #if 分支用的声明移进分支 0 个文件；改动 2 个文件，HEAD 与工作树各载入一次无回退（2 objects; HEAD PASS 1, tree PASS 1; regress 0; newly loading 0），这些文件的警告 2 -> 0。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。1 个文件 1 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14（同一次重扫，手工部分）：
+  - `adm/daemons/diablod.lpc`、`toptend.lpc` 各自多声明了一个从未使用的 `nosave mapping dbase`，与 `F_DBASE` 的重名；删去。
+  - `std/char/kzznpc.lpc` 的 `remove()` 改 `void`，与 `feature/move.lpc` 一致。
+  - `yaoguai_type` 重复声明、`alias.lpc` 的 `last_time` 照同源各库修。
+  - 改动的 12 个对象 HEAD 与工作树各载入一次，无回退。
