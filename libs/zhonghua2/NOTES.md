@@ -945,3 +945,6 @@ functionally re-tested live on this lib.
 - `u/smallfish/mj.lpc`（麻将）自己的 `count` 遮住了基类的同名变量，改名 `mj_count`。
 - `clone/obj/genmap.lpc` 在函数里 `#include "harbor.h"`，函数并不用那些港口表；删去（同 ntii）。
 - `clone/book/yjj_book2.lpc`（易筋经残篇，`ITEM` + `SKILL`）写明用 `skill::clean_up()`，与驱动原先的选择相同。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。9 个文件 14 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14：技能文件里多行写的 `int hard_point() { return 2.5; }` 之类浮点经 int 返回被截断；本库没有调用者，改成 `float`，保留原数值。

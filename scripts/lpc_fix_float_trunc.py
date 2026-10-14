@@ -156,7 +156,7 @@ def plan_one(b, mask, off):
     while b[rs:rs + 1] in (b" ", b"\t"):
         rs += 1
     re_ = start + lead + len(body)
-    if re.fullmatch(rb"\(?\s*-?\s*[0-9]*\.[0-9]*(?:[eE][-+]?[0-9]+)?\s*\)?", rhs):
+    if op == "=" and re.fullmatch(rb"\(?\s*-?\s*[0-9]*\.[0-9]*(?:[eE][-+]?[0-9]+)?\s*\)?", rhs):
         # `Wimpy = 0.20;` into an int: to_int() would write the bug down (the value is 0); the variable or the
         # constant is wrong -- read the uses (Dead Souls combat.lpc: a percentage, so 20)
         return "a float literal stored into an int: decide the type or the value by hand"

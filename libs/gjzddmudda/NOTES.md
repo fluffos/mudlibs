@@ -445,3 +445,5 @@ quit cycle confirmed a clean `debug.log` throughout.
 
 - `std/char.lpc` 同时继承 `F_ATTRIBUTE` 和 `F_DAMAGE`，两者的 `query_hp`/`query_mp`/`query_base_hp`/`query_base_mp` 一字不差；写明用驱动原先选的 `damage::` 版本。
 - `include/net/ftpdsupp.h` 的 `check_access()` 只在 `#ifdef GUEST_WIZARD_FTP` 分支用 `file`，声明移进该分支。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。1 个文件 1 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

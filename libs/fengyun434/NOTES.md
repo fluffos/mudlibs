@@ -556,3 +556,5 @@ one and call it with 7 (the driver checks the call against the inherited entry):
 - `kill_ob`（8 个 NPC/物件）、`die`（`d/huashan/npc/qing.lpc`）、`check_status`（`officer.lpc`、`waiter.lpc`）在 `void` 基类上写成 `int`；全库查过没有调用方读这些返回值，用 `lpc_fix_return_types.py --also` 改成 `void`。
 - `d/bawang/npc/skill/snake-spear.lpc` 自己的招式表 `action` 与 `std/skill.lpc` 的同名变量重复；它有自己的 `query_action()` 只读自己的表，改名 `spear_action`，行为不变。`daemon/class/tieflag/ill-quan/qiankun.lpc` 的 `enemy` 与 `SSERVER` 的同名，改名 `foes`。
 - `d/fy/npc/newsman.lpc`：`ask_question()` 在定义之前就被调用、没有原型，补上原型。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。5 个文件 10 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

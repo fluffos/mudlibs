@@ -444,3 +444,6 @@ left uncommitted.
 ## 深度功能测试（§10.7，2026-10-11）：dns_master 空 if
 
 - `adm/daemons/network/dns_master.lpc` `query_services()`：`if (! (mud_svc[mud]["finger"/"tell"] & SVC_KNOWN))` 块里只有 `#if PREF_X & SVC_TCP … #endif`，选项关闭时 if 为空（“无副作用”警告报在下一句）；把 `#if`/`#endif` 挪到 if 外面（KB 04，2026-10-07 那次扫描漏了 `! (` 加括号换行这种写法）。载入无回退。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。1 个文件 4 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14：同一次重扫的其余 6 条：`std/room/room.lpc` 覆盖的 `delete()` 写成 `void`，而 `feature/dbase.lpc`/`include/dbase.h` 是 `int`，房间里 `delete()` 的返回值一直是 0；改 `int`，默认分支 `return ::delete(idx)`，自管的三个字段返回 1。`data/group/obj/ling(-pai).lpc` 和两个 roommaker 的第一张 `special_props` 表是死声明（之后的代码只读第二张），删去；`NAME_D` 宏重定义前加 `#undef`。改动对象新进程各载入一次，无回退（`u/island/topten/toptend.lpc`、`ran_name/test_npc.lpc` 本来就编译失败，未动）。

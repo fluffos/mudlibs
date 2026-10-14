@@ -854,3 +854,6 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply z
 - `feature/food.lpc`、`feature/liquid.lpc` 的 `do_effect()` 改 `varargs int`，与重载它、被 `eat`/`drink` 用返回值的物品同型；`cmwhod` 的 `nosave` 函数改 `protected`。
 - `clone/megazine/obj/duka_3b.lpc` 赔率变量声明两次，删去不用的前一行（赔率不变）；`d/beijing/npc/qianzhenglun.lpc`、`u/mudren/mj.lpc` 自己的 `count` 遮住基类同名变量，改名；`clone/obj/genmap.lpc` 函数里没用的 `#include "harbor.h"` 删去；`clone/book/yjj_book2.lpc` 写明用 `skill::clean_up()`。
 - 天书任务 `quest/shenshu/npc/man.lpc`、`testman.lpc` 的 `kill_ob()` 改 `void`（同 wxddym），末尾 `return 1;` 改 `return;`。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。13 个文件 29 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14：技能文件里多行写的 `int hard_point() { return 2.5; }` 之类浮点经 int 返回被截断；本库没有调用者，改成 `float`，保留原数值。
