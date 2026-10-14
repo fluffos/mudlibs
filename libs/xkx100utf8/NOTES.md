@@ -203,3 +203,4 @@ python3 scripts/mudclient.py 127.0.0.1 40275 --timeout 55 --idle 0.45 \
   `d/city/daxiaoroom.lpc` 整段注释里残留的 `/*` 改 `//`。
 - xkx100 的 teamjob 越界修复（`random(40)`）这里不需要：本库原本就是 `random(sizeof(...))`。
 
+- 2026-10-14：FluffOS 970d9f09 的 `Float value truncated to int` 92 处在上游修掉（fluffos/xkx100 PR #9，已合并，pin 更新到 `c1b87db`）。36 个技能文件的 `power_point()` 改为 `float`，按内功等级分支的三个 `yunlong-*` 也一样；`adm/daemons/combatd.lpc` 的攻击行由 `damage *= (int)...->power_point(me)` 改为 `damage = to_int(damage * ...)`，伤害仍是整数。**玩家可见**：威力系数大于 1 的武功和轻功按原设计计算。改动的 77 个对象载入无回退。
