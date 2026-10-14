@@ -51,6 +51,7 @@
 #define BCYN ESC+"[46m"          /* Cyan     */
 // #define BWHT ESC+"[47m"          /* White    */
 
+#undef NOR
 #define NOR ESC+"[2;37;0m"      /* Puts everything back to normal */
  
 /*  Additional ansi Esc codes added to ansi.h by Gothic  april 23,1993 */

@@ -12,6 +12,7 @@
 #define SHENGSAN3	"/open/world3/shengsan/"
 
 #define SHENGSAN	"/u/s/shengsan/"
+#undef LUKY
 #define LUKY		"/u/l/luky/"
 
 #define LUKY_NOW	"/open/world2/luky/"

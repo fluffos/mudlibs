@@ -864,3 +864,14 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply d
 - `std/item/box_log.lpc`：`else HIR"BOX_LOG 錯誤…";` 少了 `str +=`，错误提示从不显示；补上并加 `NOR`。
 - `u/f/faceoff/skills/godvenison.lpc`、`u/a/acme/skill/test.lpc`：`target==me;` 应为 `target = me;`。`u/j/jsh/play/test.lpc` `(: command("hmm"):);`、`u/t/tmr/eval.tmr.lpc` `time;` 同类，一并改正；`u/a/alickyuen/www/obj/backup/mary.lpc` 的 `"無";` 改为 `ip = "無";`，空的 `"";` 分支改为 `{}`。
 - 21 个对象 HEAD 与工作区都能载入，无回退。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。8 个文件 11 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14：同一次重扫的其余 64 条（多在巫师目录 `/u/`、`/open/`）：
+  - naboo 区 6 个 NPC 的 `chat_msg` 写成 `(: "random_move" :)`，在本驱动里只是返回字符串，NPC 从不走动；改为 `(: random_move :)`。
+  - `u/s/suez/skills/handing-dagger.lpc` 把公式分四行写成四个 `int h` 全局变量，每一步读到的是新变量的 0，伤害加成从未按注释里的公式算；合成一个 `h`。
+  - `include/marry.h` 的 `擺\設` 是 BIG5 0x5C 转码遗留（KB 03），去掉多余的 `\`。
+  - 剑类 `attack()` 写成 `int`（基类 `void`，没有调用者用返回值）改 `void`。
+  - 重复声明：`mapmaker2` 自己的灯光开关 `light` 与 `feature/move.lpc` 同名，改 `room_light`；两个 roommaker 的第一张 `special_props` 表、`meo_chung` 的第一个 `int x`、`clockd` 的第二个 `current_week`、银行房间没用到的 `mapping info` 都是死声明，删去。
+  - `yelvqi` 与 6 个 `F_CLEAN_UP` 文件在基类已有的情况下又继承一次，删掉多余的继承；其余跨文件同名函数写明胜出者（行为不变）；`NOR`、`LUKY` 宏重定义前加 `#undef`；`pot.lpc` 多余的 `;`。
+  - 改动及受影响的 444 个对象新进程各载入一次：438 -> 438，无回退。
+
