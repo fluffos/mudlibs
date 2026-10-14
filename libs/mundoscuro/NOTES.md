@@ -307,3 +307,4 @@ nested `/*`).
 4. 仍未编译、属原作者未完成的文件（不改）：`comandos/jugador/mv.lpc`（半截 `cp` 代码贴在函数外）、`client.lpc`/`server.lpc`（套接字试验，`socket.h` 不存在）、`kernel/daemons/ftp.lpc`（见上文，`initd` 已跳过）。`kernel/simul_efun/filesystem/*` 的报错是被单独编译的 sefun 片段，在 simul_efun 里编译时没有问题。
 5. 验证：全新启动 0 警告；新建角色（男/人类/战士）→ `mirar`、`score`、`ficha`、`who`、`inventario`、`comun`、`salir`（`Ficha grabada.`）→ 重新登录 → `historial` 正常。测试角色 `qatestb` 的存档和数据库行已删除。`fluffos` 管理员账号不在当前容器的数据库里（容器数据早于该账号），这是本机数据库状态，不是代码问题。
 
+- 2026-10-14: FluffOS 970d9f09 warns `Float value truncated to int`. `global/comandos/ajustar.lpc` stores `ceil(maxact * pciento / 100)` (an integer division, so the value is whole) into an int twice; both now spell it `to_int(...)`, same value. The scan needs the `mundoscuro_mysql` container running (`docker start mundoscuro_mysql`), or `initd` shuts the driver down at boot and every object reads as failing.
