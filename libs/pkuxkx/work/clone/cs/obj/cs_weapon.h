@@ -129,7 +129,7 @@ int shoot_player(object me, object target, int type)		//type 预留给shoot all
 	if(curtime - weapon->query_temp("last_shoot_time") < interval)		//连发，提升惩罚因子
 	{
 		penality += 4;
-		penality *= 1.2;
+		penality = to_int(penality * (1.2));
 		if(penality > 100)				//最高惩罚到1/10（sqrt）
 			penality = 100;
 		weapon->set_temp("penality", penality);
@@ -142,7 +142,7 @@ int shoot_player(object me, object target, int type)		//type 预留给shoot all
 		weapon->set_temp("penality", penality);
 	}
 //	write(" "+penality+"\n");
-	penality = sqrt(penality);
+	penality = to_int(sqrt(penality));
 //	write(" "+penality+"\n");
 	weapon->set_temp("last_shoot_time", curtime);
 	hit_rate = weapon->query("precision") / penality;

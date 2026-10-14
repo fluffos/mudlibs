@@ -54,7 +54,7 @@ int exercising(object me)
 {
 	int exercise_cost = (int)me->query_temp("exercise_cost");
 	int neili_gain = 2 + (int)me->query_skill("force") / 5;
-	int extra;
+	float extra;   // 1.5: as an int the bonus was 1
 	string force;
 
         if (exercise_cost < 1)
@@ -63,7 +63,7 @@ int exercising(object me)
 
 	extra = 1.5;
 
-	neili_gain = neili_gain*extra;
+	neili_gain = to_int(neili_gain*extra);
 	me->add("neili", neili_gain);
 	me->set_temp("exercise_cost", exercise_cost -= neili_gain);
 

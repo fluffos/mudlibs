@@ -203,14 +203,14 @@ int do_copy(object me)
                      	exp=2140000000;
                      else
                      	exp = me->query("combat_exp")/10 * factor;
-		        skill=pow(exp/100.0,1.0/3)*10;
+		        skill=to_int(pow(exp/100.0,1.0/3)*10);
 		        family_skill(this_object(), "shenlongjiao", skill, 1);
 		        set("chat_chance_combat", 10+this_object()->query("hyd/step")*5);
 		    }
         else
         {
         		exp=exp/5*4;
-		        skill=pow(exp/100.0,1.0/3)*10;
+		        skill=to_int(pow(exp/100.0,1.0/3)*10);
 		        family_skill(this_object(), "shenlongjiao", skill, 1);
         		set("chat_chance_combat", 40);
         }

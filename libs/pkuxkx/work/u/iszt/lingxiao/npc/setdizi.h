@@ -38,7 +38,7 @@ void setcreate(int level)
 
 	me->set("jiali",100);
 
-	exp = pow(level/10, 3) * 100;
+	exp = to_int(pow(level/10, 3) * 100);
 	exp += random(exp/2);
 	me->set("combat_exp", exp);
 	me->set("shen_type", 1);

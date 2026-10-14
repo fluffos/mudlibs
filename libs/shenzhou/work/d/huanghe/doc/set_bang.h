@@ -46,7 +46,7 @@ void set_follower(object obnpc, object owner)
 
         exp = (int)owner->query("combat_exp") / 2;
         obnpc->set("combat_exp", exp);
-        level = ceil( pow( to_float(exp) * 10.0, 0.333333) ) * 4 / 5;
+        level = to_int(ceil( pow( to_float(exp) * 10.0, 0.333333) ) * 4 / 5);
 
            obnpc->set("max_qi",    level * 8 + 100);
            obnpc->set("max_jing",  level * 5 + 100);

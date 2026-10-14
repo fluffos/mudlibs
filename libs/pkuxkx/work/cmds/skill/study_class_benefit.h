@@ -23,7 +23,7 @@ int benefit(object me,int imp_skill)
 	mapping *benefits=({
 	(["name":"乾坤大挪移","desc":HIR+"乾坤大挪移运劲使力的法门，又是集一切武功之大成，一法通，万法通，任何武功在你面前都已无秘奥可言。\n"+NOR,"bene":benefit1(me)])
 	});
-	imp_skill=to_float(imp_skill);
+	imp_skill=to_int(to_float(imp_skill));
 	for (int j=0;j<sizeof(benefits);j++)
 	{
 		imp_skill=to_int(imp_skill*benefits[j]["bene"]);

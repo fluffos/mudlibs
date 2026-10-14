@@ -410,3 +410,6 @@ correlated with the deletion in the same session.
 ## 编译警告收尾（2026-10-13）
 
 `scripts/toolkit_fix.sh` 一轮去掉 5 处多余继承；照 tybxjh（72440a6be25）手工：`d/jerry/job/peng/peng.lpc` 的 `ask_fail` 原型改 `int`（`dojob.lpc` 定义的是 `int`），`quest/chousha/killer.lpc` 写明用驱动原先选的 `clean_up()`，`u/system_1/ansi2.h` 的 `ESC`、`BEEP` 先 `#undef` 再定义。能编译的文件警告清零；改动的 8 个对象在 HEAD 与工作树各载入一次：HEAD PASS 5，tree PASS 5，regress 0。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。1 个文件 1 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14：一个技能文件的 `int power_point()` 返回 1.5，经 int 返回被截断；本库没有调用者，改成 `float` 返回值，保留原数值（KB 04 §6.10）。

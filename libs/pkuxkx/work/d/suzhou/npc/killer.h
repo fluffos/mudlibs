@@ -311,7 +311,7 @@ int do_copy(object me)
         //必须把family_skill放在最前面！
 		if (query("hyd/step")==1)
 		extra=1;
-		skill=pow(exp/100.0,1.0/3)*(10+extra);
+		skill=to_int(pow(exp/100.0,1.0/3)*(10+extra));
 		family_skill(this_object(), "shenlongjiao", skill, 1);
 		set("chat_chance_combat", 0);
 		set("combat_exp",exp);    

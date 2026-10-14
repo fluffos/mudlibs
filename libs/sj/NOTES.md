@@ -389,3 +389,6 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply s
 ## 编译警告收尾（2026-10-12）
 
 孪生库 shiji 同日的整理（449f709962b：冗余继承 12 处，钱庄老板等 9 个文件写明 `clean_up()`，`d/shendian/npc/mentu.lpc` 与 `F_SKILL` 同名的空全局 `skills` 删去）用 `scripts/lpc_twin_port.py adopt shiji sj --pre 449f709962b~1` 搬来，24 个文件与 shiji 修前逐 token 相同。HEAD 与工作树各载入一次：24 个对象，HEAD PASS 23，tree PASS 23，regress 0。未改：`include/daemons.h`（Lima 带来的头文件）的宏重定义只出现在编不过的 `ms.lpc`、`mail_serv.lpc` 里。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。1 个文件 1 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14（同一次重扫）：`include/daemons.h` 里重定义的宏先 `#undef`。改动的对象载入无回退。

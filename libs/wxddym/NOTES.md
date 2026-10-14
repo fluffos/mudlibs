@@ -616,3 +616,6 @@ No new errors after the shop commands. Demo `fluffos` save churn
 - `quest/shenshu/npc/man2.lpc` 前后两份 `order`/`data` 表，后面那份才被读到（`data` 前一份是短的旧稿），删去前一份；`man*.lpc` 的 `kill_ob` 在 `void` 基类上写成 `int`，改 `void`。
 - `adm/daemons/fairyland_quest/room_readygo_hj.lpc` 每个名字声明两次的写法合成一次；`u/lonely/obj/roommaker.lpc`、`roommk.lpc` 的重复 `special_props` 删前一个；`d/jerry/job/peng/peng.lpc` 的 `ask_fail` 原型改 `int`（定义在 `dojob.lpc`，返回 1/0）；`u/lonely/obj/user/master.lpc` 两个 `static` 函数改 `protected`。
 - 宏重定义 25 处（`BOOK`、`FUBEN_D`、`HISTORY_D`、`ansi2.h` 的 `BEEP`/`HIREV`/`ESC`/`DELLINE` 等）：有意的本地定义前加 `#undef`。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。9 个文件 12 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/kungfu/class/generate/killed1234.lpc`（`exp *=`）、`/kungfu/class/generate/killed1234.lpc`（`pot *=`）、`/kungfu/class/generate/killed1234.lpc`（`weiwang *=`）、`/kungfu/class/generate/killed1234.lpc`（`score *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14：技能文件里 29 处 `int power_point()` 返回浮点，经 int 返回被截断；本库没有调用者，改成 `float` 返回值，保留原数值（KB 04 §6.10）。

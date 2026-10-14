@@ -103,16 +103,16 @@ void give_reward()
 			exp = total_exp * kill / total_killer;	//按自己杀掉的杀手数占总杀手数的比例分成
 
 			if(member == leader)						//team leader 额外奖励
-				exp = exp * 1.3;
+				exp = to_int(exp * 1.3);
 
 			if(kill * teamsize > total_killer * 3 / 2)               //如果超过平均水平的1.5倍，奖励打一定的折扣，鼓励平均发展
-				exp = exp / 1.5;
+				exp = to_int(exp / 1.5);
 
 			exp = exp * 2/3 + random(exp*2/3);
 			exp = exp * FACTOR_HS;
 
 			if(member->query("combat_exp") < 30000000)
-				exp = exp * 0.8;
+				exp = to_int(exp * 0.8);
 
 			pot = exp / 6 + random(exp / 10);
 
