@@ -32,7 +32,7 @@
  * If the hosts clock runs correctly, defines this to a value of 0.
  */
 
-#if __HOST_NAME__ == "leander"
+#if 0  /* was: __HOST_NAME__ == "leander" -- the preprocessor does not compare strings, so this was true on every host */
 #define TIME_DELTA 420  // real time - leander time in seconds
 #else
 #ifndef TIME_DELTA

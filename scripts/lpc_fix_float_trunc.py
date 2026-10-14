@@ -14,7 +14,8 @@ things:
 
 Diagnostics come from scripts/lpc_warnings.py ($LPC_SCRATCH/lpcw-SLUG/diagnostics.tsv, or --diag).  The diagnostic's
 column is the statement's closing `;`; the statement starts after the previous `;`, `{` or `}` outside strings and
-comments.  A statement that is none of the three shapes above (a declaration with several declarators, a chained
+comments.  A bare float literal on the right (`Wimpy = 0.20;`, `return 0.5;`) is listed, never wrapped: to_int() would keep
+the 0.  A statement that is none of the three shapes above (a declaration with several declarators, a chained
 assignment, a `for` header, a macro) is listed for a hand edit, never guessed.  Files are read and written in binary,
 so CRLF and GB bytes survive.  Without --apply it prints the plan."""
 import collections
@@ -123,6 +124,8 @@ def plan_one(b, mask, off):
         e = body[m.end():]
         if not e:
             return "bare return"
+        if re.fullmatch(rb"\(?\s*-?\s*[0-9]*\.[0-9]*(?:[eE][-+]?[0-9]+)?\s*\)?", e):
+            return "an int function returns a float literal: decide the return type by hand"
         return start + lead + m.end(), start + lead + len(body), b"to_int(" + e + b")"
     ops = []
     toks = list(top_level(body, mb))
@@ -149,6 +152,10 @@ def plan_one(b, mask, off):
     while b[rs:rs + 1] in (b" ", b"\t"):
         rs += 1
     re_ = start + lead + len(body)
+    if re.fullmatch(rb"\(?\s*-?\s*[0-9]*\.[0-9]*(?:[eE][-+]?[0-9]+)?\s*\)?", rhs):
+        # `Wimpy = 0.20;` into an int: to_int() would write the bug down (the value is 0); the variable or the
+        # constant is wrong -- read the uses (Dead Souls combat.lpc: a percentage, so 20)
+        return "a float literal stored into an int: decide the type or the value by hand"
     if op == "=":
         return rs, re_, b"to_int(" + rhs + b")"
     # x op= e  ->  x = to_int(x op e); the variable alone, possibly indexed by a side-effect-free subscript

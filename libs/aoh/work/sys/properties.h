@@ -32,6 +32,7 @@
 #define P_CLEAN_UP         "CleanUp"
 #define P_CLEANUP          P_CLEAN_UP
 #define P_LAST_RESET       SP_LAST_RESET
+#undef P_RESET_INTERVAL
 #define P_RESET_INTERVAL   SP_RESET_INTERVAL
 
 /* -------------------------------------------------------------------------
@@ -258,6 +259,7 @@
 #define P_GHOST            "Ghost"
 #define P_INVIS            "Invis"
 #define P_IS_LIVING        "IsLiving"
+#undef P_IS_NPC
 #define P_IS_NPC           "IsNPC"
 #define P_IS_PET           "IsPet"
 #define P_IS_PLAYER        "IsPlayer"
@@ -605,10 +607,15 @@
 #define P_FOOD_HEAL       "FoodHeal"
 #define P_FOOD_MSGS       "FoodMsgs"
 
+#undef P_FD_KIND
 #define P_FD_KIND       P_FOOD_KIND
+#undef P_FD_SOAK
 #define P_FD_SOAK       P_FOOD_SOAK
+#undef P_FD_STUFF
 #define P_FD_STUFF      P_FOOD_STUFF
+#undef P_FD_ALC
 #define P_FD_ALC        P_FOOD_ALC
+#undef P_FD_HEAL
 #define P_FD_HEAL       P_FOOD_HEAL
 
 /* ###################################################################### */

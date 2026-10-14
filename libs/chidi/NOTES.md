@@ -890,3 +890,6 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply c
 另：本库 `config.fluffos` 是 CRLF，`toolkit_fix.sh` 第 0 步读出的 master 路径带 `\r`，lpcc 一直报 master 载入失败；脚本已改为去掉 `\r`。
 
 915 个对象载入无回退（HEAD 914 通过，现在 914 通过）；`lpc_audit_removed_locals.py` 0 条需复查。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。10 个文件 13 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/kungfu/skill/taiji-quan/zhenup.lpc`（`damage *=`）、`/quest/quest_kill/quest_npc111.lpc`（`reward_exp +=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14：9 个技能文件 `int power_point() { return 1.75; }`、2 个 `int hard_point() { return 2.5; }`，浮点值经 int 返回被截成 1、2。本库没有调用者（只有书本的 `"power_point"` 属性同名），改成 `float` 返回值，数值照原意保留。

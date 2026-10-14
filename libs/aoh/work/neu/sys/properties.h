@@ -109,6 +109,7 @@
 
 #define P_CLEAN_UP         "CleanUp"
 #define P_CLEANUP          P_CLEAN_UP
+#undef P_RESET_INTERVAL
 #define P_RESET_INTERVAL   "ResetInterval"
 
 // --- /std/corpse ---
@@ -337,6 +338,7 @@
 #define P_MSGIN            "MsgIn"
 #define P_MSGOUT           "MsgOut"
 #define P_NAME             "Name"
+#undef P_IS_NPC
 #define P_IS_NPC           "IsNpc"
 #define P_IS_PLAYER        "IsPlayer"
 #define P_PRESAY           "Presay"
@@ -393,10 +395,15 @@
  * (bert nase && organimedes && pepel)
  */
 
+#undef P_FD_KIND
 #define P_FD_KIND       "FoodKind"
+#undef P_FD_SOAK
 #define P_FD_SOAK       "FoodSoak"
+#undef P_FD_STUFF
 #define P_FD_STUFF      "FoodStuff"
+#undef P_FD_ALC
 #define P_FD_ALC        "FoodAlc"
+#undef P_FD_HEAL
 #define P_FD_HEAL       "FoodHeal"
 #define P_FD_MSG1       "FoodMsg1"
 #define P_FD_MSG2       "FoodMsg2"

@@ -37,6 +37,7 @@
 
 /* the coordinates are right now just some basic values...
  * so that we have something to work with.
+ */
 
 /* the koordinates for silvere. */
 #define C_SILVERE  ({ 50000,50000,0 })

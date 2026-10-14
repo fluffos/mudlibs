@@ -868,3 +868,5 @@ Still failing, left: `join_rooms/dblw3.lpc` (`../daybreak.h` is not in the archi
 (`mon/cg_gm.lpc`, `mon/merc_gm.lpc`), whose guild token names `/d/damned/guilds/join_rooms/mercenary_join`: the archive only
 has it as `mercenary_join.c.jdp`. `mercenary/weapon/gm_axe.lpc` got the sibling guild items' `int get() { return
 autoload::get(); }` for the warning it now showed.
+
+- 2026-10-14: FluffOS 970d9f09 warns `Float value truncated to int` (#1426). 7 sites in 7 files: assignments, initializers and returns now spell the truncation `to_int(...)` (same value). Changed objects loaded before and after in fresh drivers, no regressions (`scripts/lpc_fix_float_trunc.py`, KB 04 §6.10).
