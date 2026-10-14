@@ -329,3 +329,6 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 - `adm/daemons/cruised.lpc` 五个只剩注释的 `if (cruise[USER_ID]) { }`，连同 `if` 一起注释掉，行为不变。
 - `adm/daemons/race/beast.lpc`、`monster.lpc` 先 `#define BASE_WEIGHT` 再包含同名定义的头文件，头文件的值生效（编译警告 `Macro redefined`）；删去文件里不起作用的那行，行为不变。
 改动的文件单独加载都通过。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。10 个文件 11 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14（同一次重扫，手工部分）：`kungfu/skill/force/lifeheal.lpc`（运功疗伤）里给黄金会员的熟练度倍率 `flag = 1.25` 声明成 `int`，被截成 1。同一作者在 `babulongnv-jian/feitian.lpc` 里把同一个 `flag` 声明成了 `float`。现改为 `float flag`，两处 `improve_skill()` 的点数用 `to_int()` 取整，免得把浮点写进技能熟练度。**玩家可见**：黄金会员疗伤时内功熟练度按 1.25 倍增长。改动的 10 个对象 HEAD 与工作树各载入一次，无回退。
