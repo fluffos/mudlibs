@@ -402,3 +402,12 @@ Too-deep-recursion) recurred at boot; no new error from shop/拜师.
 - `kungfu/skill/riyue-xinfa.lpc` `valid_force()`：作者在 return 后补了一句 `force == "kuihua-shengong";`，永远执行不到；并进 return 的条件。载入无回退。
 
 - 2026-10-12：`clone/misc/swmuding.lpc`（神木王鼎）自己声明了一张 `mapping insects` 虫表，与继承的 `clone/misc/muding.lpc` 的 `insects` 同名；读表的是木鼎的代码，读到的是木鼎自己的表，神木王鼎的虫表从来没用上（`Redeclaration of global variable 'insects'`）。改名 `sw_insects`，`create()` 里 `insects = sw_insects;` 交给木鼎（nitan170911、wxddym、zjdy 系同修）。HEAD 与工作树各载入一次，regress 0。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。12 个文件 12 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14（同一次重扫，手工部分）：
+  - `feature/food.lpc`、`feature/liquid.lpc` 的 `do_effect()` 由 `void` 改为 `int`。`drink` 命令把 `ob->do_effect(me)` 当命令结果返回，`eat` 也读它的值，子类（如 `d/guanwai/obj/wan.lpc`）本来就返回 int。
+  - `adm/npc/wizard.lpc` 先包含 `vip_skill.h`（自带 `sk_list`/`sk_list2`，供 `check_vip_skill()` 用），又在本文件里重定义了这两张表。本文件读的是自己的那份，改名为 `wiz_sk_list`/`wiz_sk_list2`，行为不变。
+  - `d/sishenfuben`、`d/xiaobaiben` 四个 NPC 的 `mapping *skill_map` 技能表与 `F_SKILL` 的 `skill_map` 同名，改名为 `skill_tables`。
+  - `quest/shenshu/npc/man2.lpc` 删去较短的旧 `order`/`data` 表；`man2`/`testman` 的 `kill_ob` 改 `void`。
+  - 农场养殖上限写明 `to_int()`；5 个文件注释里嵌套的 `/*` 去掉；两处函数结尾多余的 `;` 去掉。
+  - 改动的 50 个对象载入无回退。

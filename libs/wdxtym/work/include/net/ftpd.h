@@ -27,6 +27,7 @@
 #define TRANSFER_MODE   24
 #define PORT            25
 #define PASV            26
+#undef REF
 #define REF             27
 
 #define FTP_TIME        (sprintf("[%s] ", ctime(time())[4..15]))
