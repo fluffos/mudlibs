@@ -11,6 +11,8 @@ no emotes, a board with no posts, a player who cannot log in).  For each tracked
     (`XX 5C 5C`) would decode as character + a lone escape, so the extra 0x5C is dropped first when that is what parses;
   - the result must parse as a save file (every `name value` line a complete literal: numbers, floats, strings with
     escapes, ({ }), ([ ]), class records), otherwise the file is listed and left alone.
+A double-byte character split by an ANSI colour code (BBS colour art) is rejoined and a lone lead byte dropped; trailing
+zero padding is stripped.  Saves with zeroed blocks in the middle (disk damage) or broken literals stay listed.
 Encrypted or binary saves (no `#` header) are skipped.  Without --apply only the plan is printed."""
 import collections
 import math
@@ -135,13 +137,43 @@ def score(text, profile):
     return sum(math.log((counts.get(ch, 0) + 0.1) / total) for ch in cjk) / len(cjk)
 
 
+def repair_dbcs(b):
+    out, i, n = bytearray(), 0, len(b)
+    esc = re.compile(rb"(?:\x1b\[[0-9;]*m)+")
+    while i < n:
+        c = b[i]
+        if c < 0x81 or c == 0xff:
+            out.append(c)
+            i += 1
+            continue
+        m = esc.match(b, i + 1)
+        j = m.end() if m else i + 1
+        if j < n and (0x40 <= b[j] <= 0x7e or 0x80 <= b[j] <= 0xfe):
+            out += bytes([c, b[j]])
+            if m:
+                out += m.group(0)
+            i = j + 1
+        else:
+            i += 1   # a lone lead byte
+    return bytes(out)
+
+
 def candidates(b, profile):
     """(text, label) pairs, best first: decodings that read like the lib's own text come first."""
     counts, total, chars = profile
     western = chars and total < chars * 0.005   # an English/Finnish lib: its 8-bit bytes are Latin-1, not GBK
     undoubled = re.sub(rb"([\x81-\xfe]\x5c)\x5c", rb"\1", b)
     out = []
-    for raw, tag in ((b, ""), (undoubled, "+5c")):
+    variants = [(b, ""), (undoubled, "+5c")]
+    if b.endswith(b"\x00") and b"\x00" not in b.rstrip(b"\x00"):
+        variants.append((b.rstrip(b"\x00"), "+nul"))   # zero padding after the last line
+    if not western:
+        # BBS colour art splits one double-byte character with an ANSI code (lead, ESC[1m, trail): put the
+        # code after the character; a lead byte with no trail (cut off by a length limit) is dropped
+        joined = repair_dbcs(b)
+        if joined != b:
+            variants.append((joined, "+joined"))
+    for raw, tag in variants:
         if western:
             out.append((raw.decode("latin-1"), "latin-1" + tag, 1.0))
             continue

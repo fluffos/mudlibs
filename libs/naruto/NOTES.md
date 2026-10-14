@@ -716,3 +716,4 @@ issues encountered.
 - `cmds/std/kill.lpc` 先问目标 `obj->accept_kill(me)`，非零就不再动手（`if (... && obj->accept_kill(me)) return;`），所以 `accept_kill()` 的返回值是有意义的。八个 NPC（`u/m/mouse/bone/npc/ton`、`world/area/` 下的 `ka`、`clemens`、`johnson`、`nightkid`、`ye`、`lu`、`xiao`）返回 `int`，而它们继承的 `feature/npc/` 六个职业基类（villager、soldier、fighter、bandit、seasoldier、seabandit）写的是 `void`。基类改 `int accept_kill(object ob)`，`return;` 改 `return 0;`、末尾补 `return 0;`——`void` 的结果本来就当 0 读，行为不变，签名与子类一致。
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。27 个文件 40 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14（续）：留言板存档里有 BBS 彩色字，彩色控制码夹在一个双字节字的两个字节中间（前字节、`ESC[1m`、后字节），另外有被截断的半个字，所以整份文件按任何编码都解不开，留言板一直是空的。`scripts/lpc_save_encoding.py` 先把控制码挪到字后面、丢掉孤立的前字节，再按本库的编码转成 UTF-8，结果按存档格式解析通过才写回。

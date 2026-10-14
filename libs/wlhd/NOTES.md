@@ -413,3 +413,4 @@ correlated with the deletion in the same session.
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。1 个文件 1 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
 - 2026-10-14：一个技能文件的 `int power_point()` 返回 1.5，经 int 返回被截断；本库没有调用者，改成 `float` 返回值，保留原数值（KB 04 §6.10）。
+- 2026-10-14（续）：`data/area/好吃党.o` 末尾多一个零字节，转码解析失败；去掉末尾的零字节后按 GB18030 转为 UTF-8（`scripts/lpc_save_encoding.py`）。

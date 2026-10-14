@@ -145,8 +145,10 @@ function", hundreds per lib); `scripts/lpc_warnings.py --fix` repairs it (KB 04
   posts. `scripts/lpc_save_encoding.py [--apply] SLUG...|--all` transcodes each tracked text save that is not UTF-8 and keeps it
   only when the result parses as a save. The encoding is chosen per file, against the lib's own UTF-8 sources: GB18030 and
   BIG5 both "succeed" on each other's bytes, but the wrong one yields rare characters (dreamofseven's `網咖管理器` read as GBK is
-  `呼〡恨瞶竟`), and a lib without CJK sources (questmud, Finnish) has Latin-1 bytes. Saves no decoding parses (truncated
-  boards, a few toplists) are listed and left. Detection: `git ls-files 'libs/*/work/*.o'`, starting with `#`, not valid UTF-8.
+  `呼〡恨瞶竟`), and a lib without CJK sources (questmud, Finnish) has Latin-1 bytes. BBS colour art splits a double-byte
+  character with an ANSI code (lead byte, `ESC[1m`, trail byte: dreamofseven, hc, naruto boards); the script rejoins it and
+  drops a lone lead byte, and strips trailing zero padding. Saves with zeroed blocks in the middle (disk damage: jym
+  `drop/user_bak/`, shenmo `nancheng_b.o`, the shiji/sj/xkxyb/xzyx `topten.o`) or broken literals are listed and left. Detection: `git ls-files 'libs/*/work/*.o'`, starting with `#`, not valid UTF-8.
 
 ---
 

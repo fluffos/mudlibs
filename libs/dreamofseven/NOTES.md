@@ -876,3 +876,4 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply d
   - 改动及受影响的 444 个对象新进程各载入一次：438 -> 438，无回退。
 
 - 2026-10-14：`data/ip_d.o`（网咖管理器的存档）还是原档案的 BIG5 编码，没有转成 UTF-8，`restore_object()` 报 `Invalid utf8 string` 后以空数据启动；`scripts/lpc_save_encoding.py` 按 BIG5 转码，结果按存档格式解析通过才写回（KB 03 §4）。`data/board/` 下 5 个留言板存档按任何编码都解析不了，未动。
+- 2026-10-14（续）：留言板存档里有 BBS 彩色字，彩色控制码夹在一个双字节字的两个字节中间（前字节、`ESC[1m`、后字节），另外有被截断的半个字，所以整份文件按任何编码都解不开，留言板一直是空的。`scripts/lpc_save_encoding.py` 先把控制码挪到字后面、丢掉孤立的前字节，再按本库的编码转成 UTF-8，结果按存档格式解析通过才写回。
