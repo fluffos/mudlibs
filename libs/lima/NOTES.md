@@ -909,3 +909,10 @@ Left: 8 diagnostics in the files that do not compile: `WWW/cgi/autodoc.c` (inlin
 `domains/std/object/portable_board.c` (`BOARD_OB` is defined by nothing in the tree) and `std/behaviour/test.c` (a
 three-line scratch file); another eleven objects fail to load in a batch without a diagnostic (they need arguments or a
 user: virtual rooms, menus, mailers, `contrib/bboard/news_d`).
+- 2026-10-14: catalog patch `patches/0007-float-truncation.patch`. It fixes the 43 `Float value truncated to int` sites that the Lima-configured driver (`~/src/fluffos-lima`, rebuilt at FluffOS 970d9f09) reports, in 17 files.
+  - `daemons/loot_d.lpc`: `count *= level / 16.0` converted the multiplier first, so below level 16 the loot count was 0. It is now `count = to_int(count * (level / 16.0))`.
+  - `std/adversary/condition.lpc`: the drunk stance penalty `STANCE_IMPACT_AT_30` (1.2) went into an `int` and had no effect. It is now a `float`, and the skill test argument uses `to_int()`.
+  - `std/container.lpc` `receive_object()` and `std/fluid.lpc` `will_fit()` kept float masses in `int`s, so an item under 1 weighed nothing in the capacity check. They now use `float` receivers.
+  - The rest spell their truncation `to_int()`, with the same values.
+  - **Gameplay-visible:** low-level loot drops, the drunk stance penalty, and container capacity for light items now work as designed.
+  - The 17 changed objects load before and after. The patch applies on its own on the pin and after 0001–0006.
