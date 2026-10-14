@@ -415,3 +415,15 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 - `*/wudoumi-shengong/perform/gui.lpc`：多余的独立 `NOR;` 删去。
 - `kungfu/skill/shier-strike.lpc`、`twelve-finger.lpc`：注释掉的 `case 2` 只注释了第一行，第二行 `"迫退至丈许开外。\n" NOR;` 留成独立语句；一并注释。
 - 改动的对象 HEAD 与工作区都能载入，无回退。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。63 个文件 78 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/d/npc/beichou.lpc`（`pot +=`）、`/d/npc/beichou.lpc`（`pot +=`）、`/d/npc/beichou.lpc`（`pot +=`）、`/kfedit/skill/fengyun-shou/foguang.lpc`（`damage *=`）、`/kfedit/skill/longzhua-gong/sanzhua.lpc`（`damage *=`）、`/kfedit/skill/taiji-quan/zhan.lpc`（`damage *=`）、`/kfedit/skill/taiji-quan/zhenup.lpc`（`damage *=`）、`/kungfu/skill/fengyun-shou/foguang.lpc`（`damage *=`）、`/kungfu/skill/longzhua-gong/sanzhua.lpc`（`damage *=`）、`/kungfu/skill/taiji-quan/zhan.lpc`（`damage *=`）、`/kungfu/skill/taiji-quan/zhenup.lpc`（`damage *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14（同一次重扫，手工部分）：
+  - `p/npc/baowu.lpc`、`boss2.lpc`、`quest/boss.lpc` 和 `quest/menpai`、`quest/task` 下各份 boss/baowu（共 7 个文件）在同一文件里把 `order`、`data` 两张表各定义了两次：前一份较短的旧表在后一份前面。代码只读后一份，所以删去前一份，行为不变。
+  - `p/migong/` 下三个迷宫的 `unique_rooms` 与 `VRM_SERVER` 自己的同名变量重名。迷宫是通过 `set_unique_room()` 把表交给基类的，所以把迷宫里的改名 `maze_unique_rooms`，行为不变。
+  - `feature/alias.lpc` 的命令计时 `last_time` 改名 `last_cmd_time`。平一指和神医 NPC 自己有存档字段 `last_time`，两者原来同名；`d/city/npc/ping.lpc` 里重复声明的那一行也删去。
+  - 四份 `control.lpc` 的 `auto_check()` 定义为 `int`，却另有两条 `void` 原型；删去这两条原型。
+  - 21 个 `kill_ob`/`die` 改 `void`，与基类一致（没有调用者用返回值）。
+  - `adm/roommaker.lpc`：删去被后一份覆盖的 `special_props` 表。
+  - `clone/box/gboxa.lpc`：一大段注释里嵌套的 `/*` 去掉，注释范围不变。
+  - 改动的 148 个对象 HEAD 与工作树各载入一次，无回退。
+  - 还剩的警告都在编译不过的文件里，是报错后的连带输出：`romnpc*` 等单独编译的包含片段、`maxim/`、`u/tod/job/cheng.lpc`、`wujincao.lpc`。

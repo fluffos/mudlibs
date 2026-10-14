@@ -883,3 +883,5 @@ Same convert-era byte corruption as the waiter `！”\n` / `！\n` →
 - `clone/user/templet.lpc`（存档 `autoload` 转换器）继承 `F_DBASE` 后又自己声明 `dbase`，存盘写出两条 `dbase`（KB 06 §7.233，同 xo）；删去自己的那个。
 - 左子穆 `d/menpai/wuliang/npc/zuo.lpc` 声明了一份 `refuse_msg`（“现在没什么事做，你先下去练功吧”，是任务 NPC 的拒绝语），可从没读过它，与 `npc.lpc` 的辈分拒绝语同名；改名 `zuo_refuse_msg`，仍不接入，行为不变。
 - `cmds/comm/who.lpc` 外层没用的 `your_id`（内层另有声明）、`d/zuzhi/yipin_tang/peacock/xuanwu_tang/npc/heiyiren.lpc` 没用的 `last_time` 删去；`cmds/wiz/allow.lpc` 与 `globals.h` 相同的 `ALLOW_D` 删去。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。3 个文件 3 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/cmds/skill/xiulian.lpc`（`jilei_gain +=`）、`/system/daemon/combatd.lpc`（`power +=`）、`/system/daemon/daemon/combatd.lpc`（`power +=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

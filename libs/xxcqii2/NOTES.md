@@ -165,3 +165,12 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 - 2026-10-10：与 xxcq 相同的两处编译错误：`kungfu/skill/wenjia-daofa/wryd.lpc`（「温柔一刀」）的 `if` 括号放错、`d/wenjia/obj/xiangshi.lpc` 的 `me->die;` 少括号，从未能编译；已改正，改动文件 HEAD 0 个、工作树全部载入。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 0 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 1 个，只在 #if 分支用的声明移进分支 0 个文件；改动 1 个文件，HEAD 与工作树各载入一次无回退（1 objects; HEAD PASS 0, tree PASS 1; regress 0; newly loading 1），这些文件的警告 2 -> 1。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。23 个文件 23 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14（同一次重扫，手工部分）：
+  - `d/wenjia/wenjia/wenjia/npc/wenliangyu.lpc` 先 `inherit NPC;` 又 `inherit F_DEALER;`，而 `F_DEALER` 自己已经继承 `NPC`，整套角色变量被带进来两份；删去前一行。
+  - `adm/daemons/network/mail_serv.lpc` 的 `tmp[i] == EOT+"."` 改为赋值。
+  - `inherit/private_room.lpc`、`recordable_room.lpc` 的 `setup()` 改 `void`。
+  - `d/murong/hssg.lpc` 删去未用的 `skill`。
+  - `include/daemons.h` 重定义的宏先 `#undef`；多余的 `inherit F_CLEAN_UP` 删去。
+  - 改动的 52 个对象 HEAD 与工作树各载入一次，无回退；原报警告的 30 个对象重编译后没有警告。

@@ -7,7 +7,7 @@ int do_copy(object me,int maxpot)
 		ob = this_object();
         i=maxpot;
 		if( i < 100) i = 100;
-        maxpot=maxpot*0.7;
+        maxpot=to_int(maxpot*0.7);
         ob->set("combat_exp", me->query("combat_exp",1)*4/5);
         skill_all=ob->query_skills();
 		skill = keys(skill_all);

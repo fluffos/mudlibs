@@ -469,3 +469,5 @@ re-invoke `enable_player()` on this lib while the object is still
 
 - 天书任务 `quest/shenshu/npc/man.lpc`、毒虫 `d/xingxiu/obj/duchong.lpc` 的 `kill_ob()` 改 `void`，与 `feature/attack.lpc` 一致（`return ::kill_ob(victim);` 改成先调用再结束）。
 - `cmds/usr/news.lpc` 里只有被注释掉的数据库代码用的 `mysql`、`rows` 删去；`d/city/mine_room.lpc` 自己的 `CLR`（清屏）覆盖 `ansi.h` 的空定义，先 `#undef` 再定义，行为不变。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。7 个文件 7 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/d/mr/npc/murong-fu.lpc`（`bouns *=`）、`/kungfu/skill/force/qi.lpc`（`q *=`）、`/kungfu/skill/force/recover.lpc`（`q *=`）、`/kungfu/skill/jieshou-jiushi/foguang.lpc`（`damage *=`）、`/kungfu/skill/taiji-quan/luanhuan.lpc`（`p *=`）、`/kungfu/skill/taiji-quan/zhen.lpc`（`damage *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

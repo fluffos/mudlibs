@@ -248,3 +248,5 @@ compile check (exit 0, no errors) against `feature/command.lpc`.
 - `toolkit_fix.sh`：9 个多余的 `inherit F_CLEAN_UP`。
 
 验证：改动文件、`d/kaifeng`、`d/city/npc`、`task`、`d/task` 全部对象和 `/obj/user` 共 309 个对象，HEAD 与工作树各用新进程载入：291 -> 291 通过，regress 0；删除声明审计 0 项待看。309 个对象载入无回退。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。1 个文件 1 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

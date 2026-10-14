@@ -283,3 +283,6 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 - `d/longmen/xuehepai/obj/xueyi.lpc`（血衣）同时继承 `CLOTH` 和 `F_UNIQUE`，两者都有 `init()`；自己的 `init()` 整个在 `/* */` 注释里，驱动取 cloth 的那份，`F_UNIQUE` 的持有者检查（`check_owner()`）从不执行。补一个 `init()` 两者都调。
 - `inherit/private_room.lpc`、`recordable_room.lpc` 的 `int setup()` 与基类 `void setup()` 不符（没有调用者用返回值），改为 `void`；`d/murong/hssg.lpc` 同一函数里把 `skill` 声明了两次且都没用，删去；`d/murong/test.lpc` 的 `int lianing = 0;` 是遮住全局变量的局部变量，改为给全局赋值；`wenliangyu.lpc` 在 `F_DEALER`（它已继承 `NPC`）之外又继承 `NPC`（33 条重复声明），`services/temp.lpc` 多余的 `F_CLEAN_UP`，删去。
 改动的 11 个文件 HEAD 与工作树各载入一次：5 -> 10 通过，无回退，警告 42 -> 0。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。22 个文件 22 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14（同一次重扫）：`include/daemons.h` 里重定义的宏先 `#undef`。原报警告的 22 个对象重编译后没有警告。

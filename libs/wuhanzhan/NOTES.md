@@ -901,3 +901,5 @@ functionally re-tested live on this lib.
 - `feature/alias.lpc` 的 `last_time` 改名 `last_cmd_time`，与 `u/skyhawk/xiaocaishen` 等 NPC 自己的 `last_time` 不再冲突。
 - `d/city/npc/yg/yaoguai.lpc`、`d/kaifeng/npc/yg/yaoguai.lpc` 去掉与基类重复的 `yaoguai_type`；`long.lpc`/`nn.lpc` 删掉多余的 `int long();` 原型。
 - `kill_ob`、`die`、`unconcious`、`skill_improved` 的 int/void 与基类对齐（调用者不用返回值）；`wizu/focus/toptend.lpc` 有意重定义的宏前加 `#undef`；`huashan-jianfa.lpc` 删多余的 `;`；`xianlvqiyuan` 采用同码库已修好的写法。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。3 个文件 3 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/daemon/class/shaolin/banruo-zhang/banruo.lpc`（`damage *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
