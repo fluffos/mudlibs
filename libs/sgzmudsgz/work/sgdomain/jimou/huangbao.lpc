@@ -92,7 +92,7 @@ int *task;
 if(!objectp(find_user(who)))
 e_skill = CHAR_D->get_skill(who,"sk_zhimou");
 	if(CHAR_D->get_skill(who,"chenzhuo"))
-e_skill = e_skill + 1.5*CHAR_D->get_skill(who,"chenzhuo");
+e_skill = to_int(e_skill + 1.5*CHAR_D->get_skill(who,"chenzhuo"));
 
 kill = p_skill;
 task = TASK_D->get_char_task(ob->query_primary_id());
@@ -102,7 +102,7 @@ kill-=20;
 if(kill>50)kill=50;
 }
 kill1 = e_skill;
-        kill = kill*2 - kill1 *1.2;
+        kill = to_int(kill*2 - kill1 *1.2);
 kill = random(kill);
         ob->stop_busy();	
 	if(kill>100)
@@ -169,7 +169,7 @@ TROOP_D->find_troop(p_id)->query_id()[1]+"使用谎报之计失败，被敌人�
 	TROOP_D->add_morale(p_id,mora1);
 	TROOP_D->add_morale(e_id,mora);
 	if (kill >20)
-	{	damage =kill*rate*2;
+	{	damage =to_int(kill*rate*2);
 		WARAI_D->kill_troop(e_id,damage);
                 WARAI_D->war_inf(TROOP_D->get_troops(p_id,"task_id"),
 TROOP_D->find_troop(p_id)->query_id()[1]+"使用谎报之计，令"+

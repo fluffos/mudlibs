@@ -73,11 +73,11 @@ void show_result(object ob, string who, int p_skill, int p_id, int e_id)
 if(!objectp(find_user(who)))
 e_skill = CHAR_D->get_skill(who,"sk_zhimou");
 	if(CHAR_D->get_skill(who,"chenzhuo"))
-e_skill = e_skill + 1.5*CHAR_D->get_skill(who,"chenzhuo");
+e_skill = to_int(e_skill + 1.5*CHAR_D->get_skill(who,"chenzhuo"));
 
 kill = p_skill;
 kill1 = e_skill;
-	kill = kill*2 - kill1 *1.2;
+	kill = to_int(kill*2 - kill1 *1.2);
 kill = random(kill);
 	ob->stop_busy();
 	if( kill>50)
@@ -126,12 +126,12 @@ kill = random(kill);
 	TROOP_D->add_morale(p_id,mora1);
 	TROOP_D->add_morale(e_id,mora);
 	if (p_num > (e_num*5))
-	{damage = rate * kill * 2* p_num / (e_num*2.5);}
+	{damage = to_int(rate * kill * 2* p_num / (e_num*2.5));}
 	else 
 	{if (p_num < e_num)
-	damage = rate *kill * p_num * 4/e_num;
+	damage = to_int(rate *kill * p_num * 4/e_num);
 	else 
-	damage = rate * kill * 2 * p_num / e_num *1.2; 
+	damage = to_int(rate * kill * 2 * p_num / e_num *1.2); 
 	}
 	if(damage){
 	 WARAI_D->kill_troop(e_id,damage);

@@ -212,3 +212,4 @@ The `.c` -> `.lpc` rename changed the string but not the slice width: `f[<2..] =
 ## Compile warnings (2026-10-13)
 
 `scripts/toolkit_fix.sh` round: bare `return;` in `int` functions became `return 0;` (the driver already returned 0), unused locals were removed, and the LDMud-only pragmas FluffOS does not know (`#pragma strong_types`, `no_clone`) were dropped. By hand: a stray `;` after the `class` body in `include/legible.h`. No warnings left in compiling files except one in `test/quote.lpc`, a test file left as is. The 46 changed objects load the same at HEAD and in the tree (regress 0).
+- 2026-10-14 (FluffOS 970d9f09 rescan): `test/quote.lpc` drops a local it never used (the macro test only stringifies the literal `"x"`). The file loads.

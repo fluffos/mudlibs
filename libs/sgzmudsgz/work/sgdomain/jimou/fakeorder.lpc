@@ -84,7 +84,7 @@ if(!objectp(find_user(who)))
 e_skill = CHAR_D->get_skill(who,"sk_zhimou");
 kill = p_skill;
 kill1 =e_skill;
-        kill = kill*2 - kill1 *1.2;
+        kill = to_int(kill*2 - kill1 *1.2);
 kill = random(kill);
         ob->stop_busy();	
 	if(kill>50)

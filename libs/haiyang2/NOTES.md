@@ -1444,3 +1444,14 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 
 - `adm/daemons/event/qiantang.lpc` 钱塘潮：`"…十分壮观。\n"; NOR;` 分号把 `NOR` 隔成独立语句，颜色不复位；改为 `"…" NOR;`（hy5、xiakexing100、xkx100 同码一并修；xkx100utf8 走上游）。
 - `kungfu/skill/wudoumi-shengong/perform/gui.lpc` 多余的独立 `NOR;` 删去；`kungfu/skill/liangyi-jian.bak.lpc` `int i; level;` 去掉无用的 `level;`。载入无回退。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。23 个文件 23 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/kungfu/skill/fengyun-shou/foguang.lpc`（`damage *=`）、`/kungfu/skill/taiji-quan/zhenup.lpc`（`damage *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14：技能文件里 37 处 `int power_point()`/`int hard_point()` 返回 1.3、1.75 之类的浮点，经 int 返回被截断；本库没有调用者，改成 `float` 返回值，保留原数值（`float_hooks.py`，KB 04 §6.10）。
+- 2026-10-14（同一次重扫，手工部分，与 hy5 同源同修）：
+  - 四份 `control.lpc` 删去与 `int auto_check()` 不符的两条 `void` 原型。
+  - `adm/roommaker.lpc` 删去被覆盖的 `special_props` 表。
+  - `clone/box/gboxa.lpc` 去掉注释里嵌套的 `/*`。
+  - `feature/alias.lpc` 的 `last_time` 改名 `last_cmd_time`，与神医 NPC 的存档字段分开。
+  - `testman`、`man` 的 `kill_ob` 改 `void`。
+  - 改动的 75 个对象 HEAD 与工作树各载入一次，无回退。
+  - 剩下的警告都在编译不过的文件里：`qiankun-danuoyi.lpc` 括号错乱、`action.lpc` 片段、`cheng.lpc`、`wujincao.lpc`。

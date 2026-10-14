@@ -24,6 +24,7 @@
 #define AC "access"
 #define SL "slits"
 #define SO "slits_open"
+#undef CO
 #define CO "cry_on"
 #define CL "clone"
 #define CD "clone_dest"

@@ -243,3 +243,6 @@ re-invoke `enable_player()` on this lib while the object is still
 - 13 个 NPC 自带的门派表与 `FIGHTER` 的 `str_menpai` 同名（叶子用自己的表定 `party`，`FIGHTER` 用它自己的），叶子这边改名 `npc_menpai`（与 bxsj/shujian2008 同名）。
 - `d/city/npc/wushi.lpc` 的 `nick_first`/`nick_second` 与它 include 的 `skills_pfm.h` 里的两张表逐字相同（自己那份 `create_nick()` 已注释掉），删去叶子这份。
 - `adm/daemons/huanjing2003/room_readygo_hj.lpc` 每个名字声明两次的写法合成一次；`cmds/usr/mygift*.lpc` 的 `?:` 类型；`d/village/npc/obj/robber.lpc` 的 `NAME_D` 前 `#undef`；`clone/pet/pet.lpc` 用 `lpc_name_winner.py` 写明 `clean_up()`。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。9 个文件 18 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/d/mr/npc/murong-fu.lpc`（`bouns *=`）、`/kungfu/skill/force/qi.lpc`（`q *=`）、`/kungfu/skill/force/recover.lpc`（`q *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14（同一次重扫，手工部分）：`d/sld/seawar/seaward.lpc`（海战）里船速、风速、水流、炮弹的 `x = sin(...) * speed` 等 8 处写明 `to_int()`。坐标是整数格，行为不变；原先浮点修正脚本把列号落在 `sin(...)` 括号里的语句误当成条件里的赋值，没有处理，脚本已修正。改动的 9 个对象 HEAD 与工作树各载入一次，无回退。

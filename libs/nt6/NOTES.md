@@ -417,3 +417,9 @@ id `({ "wu bo", "wu", "bo" })`）。F_NAME 修好前 `bai wu bo` 会拜到新手
 其余同 nitan6：自制道具 autoload 交给 item/combined（警告消失、行为不变）、神木王鼎虫表 `sw_insects`、`xiang.lpc` 的 `remove()` 先存盘再 `::remove(euid)`、幻境变量重复声明、`info_*.h` 头文件守卫、宏 `#undef`、`GWIZ`、返回类型、未用局部变量、`u/mike/tt.lpc` 的 `s[<1]`。
 
 未解决：`u/mike/eval.lpc`（编译不过的临时文件）让 `lpcc` 段错误（未声明变量上的 `s[..<1]`，驱动问题，HEAD 同样）。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。20 个文件 25 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/clone/npc/walker.lpc`（`pot *=`）、`/clone/npc/walker.lpc`（`score *=`）、`/kungfu/class/generate/killed.lpc`（`exp *=`）、`/kungfu/class/generate/killed.lpc`（`pot *=`）、`/kungfu/class/generate/killed.lpc`（`weiwang *=`）、`/kungfu/class/generate/killed.lpc`（`score *=`）、`/kungfu/skill/yunv-xinfa/xiuxi2.lpc`（`xj_gain *=`）、`/kungfu/skill/yunv-xinfa/xiuxi2.lpc`（`xj_gain *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14（同一次重扫，手工部分，与 hhsj 同源同修）：
+  - 36 个技能文件的 `int power_point()` 分支里返回 0.6、0.8、1.2、1.4 之类的浮点，经 `int` 返回被截断。本库没有代码调用这个函数，改成 `float` 返回值、保留原数值。
+  - `inherit/room/hockshop.lpc` 的售价和 `adm/kernel/simul_efun/ntefun.lpc` 的 `sqrt` 结果写明 `to_int()`。simul_efun 能载入。
+  - 改动的 243 个对象 HEAD 与工作树各载入一次，无回退（237 -> 237）。

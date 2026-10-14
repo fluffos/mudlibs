@@ -1,3 +1,5 @@
+#ifndef KAIFENG_COLORS_H
+#define KAIFENG_COLORS_H
 
 mapping color_code=([
         "zhu bajie": HIR"红"NOR,
@@ -12,4 +14,4 @@ mapping color_code=([
 //	"xiang lan":HIB"蓝"NOR,
 	"xiang lan":HIW"白"NOR,
         ]);
-
+#endif

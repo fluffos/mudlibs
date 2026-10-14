@@ -77,7 +77,7 @@ void show_result(object ob, string who, int p_skill, int p_id, int e_id)
 	p_skill = p_skill * 3;
         kill =random(p_skill);
         kill1 =random(e_skill);
-        kill = kill*2 - kill1 *1.8;
+        kill = to_int(kill*2 - kill1 *1.8);
         ob->stop_busy();	
 	if(kill>20)
 	{	tell(deep_inventory(TROOP_D->find_troop(e_id)),

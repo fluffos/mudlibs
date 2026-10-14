@@ -427,3 +427,4 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
   - `clone/box/gboxa.lpc`：一大段注释里嵌套的 `/*` 去掉，注释范围不变。
   - 改动的 148 个对象 HEAD 与工作树各载入一次，无回退。
   - 还剩的警告都在编译不过的文件里，是报错后的连带输出：`romnpc*` 等单独编译的包含片段、`maxim/`、`u/tod/job/cheng.lpc`、`wujincao.lpc`。
+- 2026-10-14：技能文件里 40 处 `int power_point()`/`int hard_point()` 返回 1.3、1.75 之类的浮点，经 int 返回被截断；本库没有调用者，改成 `float` 返回值，保留原数值（`float_hooks.py`，KB 04 §6.10）。

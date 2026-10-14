@@ -171,7 +171,7 @@ CHAR_D->get_char(p_name,"name")+
         for (i=0;i<4;i++){
 	if(sizeof(troops)){
 	e_id= troops[random(sizeof(troops))];
-        damage= kill * p_skill*1.2/2 ;
+        damage= to_int(kill * p_skill*1.2/2) ;
 	WARAI_D->war_inf(TROOP_D->get_troops(p_id,"task_id"),
 TROOP_D->find_troop(p_id)->query_id()[1]+"使用占卜之术，招来天龙击杀"+
 TROOP_D->find_troop(e_id)->query_id()[1]+chinese_number(damage)+

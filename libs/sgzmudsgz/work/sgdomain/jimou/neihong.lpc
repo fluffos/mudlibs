@@ -100,13 +100,13 @@ void show_result(object ob, string who, int p_skill, int p_id, int e_id, int t_i
 	else {
 	e_skill=CHAR_D->get_char(who,"skills")["neihong"];}
 	if(!objectp(find_user(who)))
-	  e_skill = CHAR_D->get_skill(who,"sk_zhimou")*1.5;  //默认NPC的chenzhuo=zhimou
+	  e_skill = to_int(CHAR_D->get_skill(who,"sk_zhimou")*1.5);  //默认NPC的chenzhuo=zhimou
 	if(CHAR_D->get_skill(who,"chenzhuo"))
-	  e_skill = e_skill + 1.5*CHAR_D->get_skill(who,"chenzhuo");
+	  e_skill = to_int(e_skill + 1.5*CHAR_D->get_skill(who,"chenzhuo"));
 
 kill = p_skill;
 kill1 = e_skill;
-	kill = kill*2 - kill1 *1.2;
+	kill = to_int(kill*2 - kill1 *1.2);
 kill = random(kill);
 	ob->stop_busy();
 	if( kill>50)
@@ -169,12 +169,12 @@ kill = random(kill);
 	TROOP_D->add_morale(t_id,mora);
 	TROOP_D->add_morale(e_id,mora);
 	if (t_num > (e_num*5))
-damage = rate * kill * 1.5;
+damage = to_int(rate * kill * 1.5);
 	else 
 	{if (t_num < e_num)
-damage = rate * kill * 1.2;
+damage = to_int(rate * kill * 1.2);
 	else 
-damage = rate * kill * 2;
+damage = to_int(rate * kill * 2);
 	}
 	if(damage>0){
             task_id=TROOP_D->get_troops(e_id,"task_id");

@@ -1001,3 +1001,6 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 - 顶层多余的 `;` 21（`inherit ROOM; ;`、函数后 `};`），`clone/box/gbox*.lpc` 注释里嵌套的 `/*`，`d/kaifeng/npc/reporting.lpc` 未用的 `str`（输出语句早已注释掉，声明一并移进注释），`vikee/network/dns_master.lpc`（两份）`#if` 关掉后剩下的空 `if {}`（照 `adm/daemons/network/dns_master.lpc` 把 `#if` 挪到 `if` 外）。
 - 两条路径带进同一个 `/feature/clean_up.lpc` 的 `clean_up()`：三个 `tang.lpc` 根本没用 `SSERVER` 的函数，去掉这个继承；`daemon/skill/hubo.lpc`、`test-whip.lpc` 用 `lpc_name_winner.py` 写出驱动本来就选的那份。
 - `scripts/lpc_audit_removed_locals.py HEAD` 0 项。格式化器只重排了 `jrsj.lpc`、`xyb.lpc` 两个文件。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。18 个文件 25 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/daemon/skill/fengyun-shou/foguang.lpc`（`damage *=`）、`/kungfu/skill/fengyun-shou/foguang.lpc`（`damage *=`）、`/kungfu/skill/taiji-quan/zhenup.lpc`（`damage *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14：技能文件里 72 处 `int power_point()`/`int hard_point()` 返回 1.3、1.75 之类的浮点，经 int 返回被截断；本库没有调用者，改成 `float` 返回值，保留原数值（`float_hooks.py`，KB 04 §6.10）。

@@ -748,3 +748,11 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 - 真正漏掉的是 `feature/save.lpc`：它也被不带 F_DBASE 的守护进程继承，不能加原型；`restore_package()` 两处 `log_file("restore_package", query("id") + ...)` 是裸单参调用，读的是 simul_efun 的共享 dbase，日志里的玩家 id 恒为 `0`。改为 `this_object()->query("id")`（同 nitan6 提交 3264a2e14e1）。
 - 探针（新进程，HEAD 与工作树各一次）：两个店小二，一个设 `apply/avoid_busy`=77、`apply/avoid_poison`=88，另一个读到 0，`start_busy(5)` 正常；长剑 `wield` 后移给另一个 NPC，原持有者 `weapon` 清空、`equipped` 清零——改前改后相同。带 F_DBASE+F_SAVE 的探针物件 `restore_package()` 遇到不存在的物件路径：改前日志 `0:/no/such/probefile`，改后 `probesv:/no/such/probefile`。
 - 载入回退检查：继承 F_SAVE 的全部对象加 `clone/`、`d/city`、`feature/`、`inherit/`、`adm/daemons/`、`cmds/` 抽样，`2490 objects; HEAD PASS 2415, tree PASS 2415; regress 0; newly loading 0`（失败的 75 个 HEAD 同样失败），改动文件无编译警告；删除声明审计 0 处。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。20 个文件 25 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/clone/npc/walker.lpc`（`pot *=`）、`/clone/npc/walker.lpc`（`score *=`）、`/kungfu/class/generate/killed.lpc`（`exp *=`）、`/kungfu/class/generate/killed.lpc`（`pot *=`）、`/kungfu/class/generate/killed.lpc`（`weiwang *=`）、`/kungfu/class/generate/killed.lpc`（`score *=`）、`/kungfu/skill/yunv-xinfa/xiuxi2.lpc`（`xj_gain *=`）、`/kungfu/skill/yunv-xinfa/xiuxi2.lpc`（`xj_gain *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14（同一次重扫，手工部分）：
+  - 36 个技能文件的 `int power_point()` 按性别、内功等级等分支返回 0.6、0.8、1.2、1.4 之类的浮点，经 `int` 返回被截断。本库没有代码调用这个函数，改成 `float` 返回值、保留原数值；`yunlong-*` 三个文件的第三个分支去掉了重扫时加的 `to_int`。
+  - `inherit/room/hockshop.lpc` 当铺货物清单的售价 `value * rate / 100 * 9 / 10` 写明 `to_int()`（`rate` 是浮点）。
+  - `adm/kernel/simul_efun/ntefun.lpc` 的 `y = sqrt(...)` 写明 `to_int()`。simul_efun 能载入。
+  - `u/gigi/test/gigicook.lpc` 的 `arg == menu_list[0]` 改成赋值。
+  - 改动的 251 个对象 HEAD 与工作树各载入一次，无回退（244 -> 244）。

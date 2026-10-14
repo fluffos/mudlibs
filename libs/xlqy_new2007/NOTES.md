@@ -556,3 +556,16 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 启动时警告 116 -> 0；新进程登录（编码选择、新人物提问）正常。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 21 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 9 个，只在 #if 分支用的声明移进分支 0 个文件；改动 28 个文件，HEAD 与工作树各载入一次无回退（28 objects; HEAD PASS 27, tree PASS 27; regress 0; newly loading 0），这些文件的警告 52 -> 22。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。21 个文件 45 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14（同一次重扫，手工部分，与 wuhanzhan/xlqy_early 同源同修）：
+  - `d/kaifeng/ground.h` 加 `GROUND_TABLES_INHERITED` 守卫；`colors.h` 加防重复包含。
+  - `jiasha.lpc` 的 `init()` 先后调用 `cloth::init()` 与 `unique::init()`。
+  - `yaoguai_type` 的重复声明去掉。
+  - `feature/alias.lpc` 的 `last_time` 改名 `last_cmd_time`，与 `sanhua-counter` 自己存档的字段分开。
+  - `lijing`/`xiwangmu` 的 `die`/`unconcious` 和 `yutu`/`jinren` 的 `kill_ob` 改 `void`。
+  - `reporting.lpc` 各份删去未用的 `str`。
+  - `std/equip.lpc` 的 `query_autoload()` 由 `int` 改为 `mixed`：物品子类返回自己的存档字符串。
+  - `d/dntg/yunlou/npc/yaoguai.lpc` 灭妖奖励的倍率 `reward`（0.8、1.2、1.8、2.6、3.8）原声明为 `int`，小数被截掉；现改为 `float`，奖励用 `to_int()` 取整。**玩家可见**：七彩奖励按原倍率发放。
+  - `cmds/arch/make_npc.lpc` 去掉字符串里多余的反斜杠。
+  - 改动的 59 个对象 HEAD 与工作树各载入一次，无回退；定义 `query_autoload` 的 68 个文件重编译后没有警告。

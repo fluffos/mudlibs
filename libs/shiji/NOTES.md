@@ -619,3 +619,6 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply s
 - `clean_up()` 两条路进来（`F_BANKER`/`F_SSERVER` 与 NPC/武器基类都带 `F_CLEAN_UP`）：钱庄老板 5 个、`d/death/god1.lpc`、两把刀等 9 个文件用 `lpc_name_winner.py` 写明驱动本来就选的那个。
 - `d/shendian/npc/mentu.lpc`：一个空的全局 `string *skills = ({});` 与 `F_SKILL` 的技能表 `skills` 同名，`create()` 用的是自己的局部变量，删去空表。
 - 未改：`include/daemons.h` 是从 Lima 带来的头文件（`/daemons/channel_d` 等路径本库没有），只被编不过的 `adm/daemons/network/ms.lpc`、`mail_serv.lpc` 包含，那里报的宏重定义不在能编译的文件里。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。1 个文件 1 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14（同一次重扫）：`include/daemons.h` 里重定义的宏先 `#undef`。

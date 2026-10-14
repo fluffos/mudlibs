@@ -69,6 +69,53 @@ def top_level(s, mask_s):
             yield i, ch
 
 
+def already_wrapped(e):
+    """`to_int(...)` around the whole expression: a rerun over an old diagnostics file must not wrap it again."""
+    e = e.strip()
+    if not e.startswith(b"to_int("):
+        return False
+    depth = 0
+    for i in range(6, len(e)):
+        c = e[i:i + 1]
+        if c == b"(":
+            depth += 1
+        elif c == b")":
+            depth -= 1
+            if depth == 0:
+                return i == len(e) - 1
+    return False
+
+
+def plan_one_start(b, mask, off):
+    j = off - 1
+    while j >= 0 and not (mask[j] and b[j:j + 1] in (b";", b"{", b"}")):
+        j -= 1
+    return j + 1
+
+
+def plain_assignment_around(b, mask, off):
+    """True when the statement holding byte off starts `lhs op= ...` at depth 0 (not a condition or a call)."""
+    start = plan_one_start(b, mask, off)
+    k = start
+    while k < off and (not mask[k] or b[k:k + 1] in (b" ", b"\t", b"\r", b"\n")):
+        k += 1
+    if re.match(rb"(if|while|for|foreach|switch|return|else)\b", b[k:k + 8]):
+        return False
+    depth = 0
+    for i in range(k, off):
+        if not mask[i]:
+            continue
+        c = b[i:i + 1]
+        if c in (b"(", b"["):
+            depth += 1
+        elif c in (b")", b"]"):
+            depth -= 1
+        elif c == b"=" and depth == 0:
+            prev, nxt = b[i - 1:i], b[i + 1:i + 2]
+            return nxt != b"=" and prev not in (b"=", b"!", b"<", b">")
+    return False
+
+
 def plan_one(b, mask, off):
     """off = index of the statement's `;`.  Returns (start, end, new_text) or a reason string."""
     if b[off:off + 1] != b";":
@@ -80,9 +127,12 @@ def plan_one(b, mask, off):
             elif mask[k] and b[k:k + 1] in (b")", b"]"):
                 depth -= 1
                 if depth < 0:
-                    # the column sits inside a parenthesis: `if (x && (j = pow(2, i)))` -- the `;` ahead ends some other
-                    # statement
-                    return "assignment inside an expression (condition or argument)"
+                    # the column sits inside a parenthesis.  `x = sin(a * PI) * s;` with the column inside sin(...) is
+                    # still a plain assignment statement; `if (x && (j = pow(2, i)))` is not -- the `;` ahead ends some
+                    # other statement
+                    if not plain_assignment_around(b, mask, off):
+                        return "assignment inside an expression (condition or argument)"
+                    depth = 0
             k += 1
         if b[k:k + 1] != b";":
             return "no ';' after the column"
@@ -140,6 +190,8 @@ def plan_one(b, mask, off):
             return "bare return"
         if re.fullmatch(rb"\(?\s*-?\s*[0-9]*\.[0-9]*(?:[eE][-+]?[0-9]+)?\s*\)?", e):
             return "an int function returns a float literal: decide the return type by hand"
+        if already_wrapped(e):
+            return "already to_int()"
         return start + lead + m.end(), start + lead + len(body), b"to_int(" + e + b")"
     ops = []
     toks = list(top_level(body, mb))
@@ -171,6 +223,8 @@ def plan_one(b, mask, off):
         # constant is wrong -- read the uses (Dead Souls combat.lpc: a percentage, so 20)
         return "a float literal stored into an int: decide the type or the value by hand"
     if op == "=":
+        if already_wrapped(rhs):
+            return "already to_int()"
         return rs, re_, b"to_int(" + rhs + b")"
     # x op= e  ->  x = to_int(x op e); the variable alone, possibly indexed by a side-effect-free subscript
     decl = re.match(rb"(?:" + MODS + rb"\s+)*" + TYPES + rb"\b", lhs)

@@ -292,3 +292,16 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply s
 ## 深度功能测试（§10.7，2026-10-10）— 编译警告整理（机械部分与返回类型）
 
 `scripts/lpc_warnings.py sjcs --fix`（5 个文件）之后：`scripts/lpc_fix_return_types.py` 把 22 个 `int init()`、5 个 `int create()` 等与基类 `void` 不符的驱动回调改为 `void`（函数体不返回值）；`lpc_diamonds.py` 删去 12 行多余的继承（`CLOTH`/`BOOTS`/`NPC`/`BLADE`/`SSERVER` 之外的 `F_CLEAN_UP`，`FORCE` 之外的 `SKILL`）。工具同时修正：它没认出 `obj/objmaker.lpc`、`d/changan/playerhomes/home.lpc` 里结尾带 `\r` 的 here-document 标记，曾把模板里的 `inherit` 当成代码。改动的 44 个文件 HEAD 与工作树各载入一次：40 -> 40 通过，无回退，警告 58 -> 2。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。3 个文件 8 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14（同一次重扫，手工部分，与 wuhanzhan/xlqy_early 同源同修）：
+  - `d/kaifeng/ground.h` 加 `GROUND_TABLES_INHERITED` 守卫；`colors.h` 加防重复包含。
+  - `jiasha.lpc` 的 `init()` 先后调用 `cloth::init()` 与 `unique::init()`。
+  - `yaoguai_type` 的重复声明去掉。
+  - `feature/alias.lpc` 的 `last_time` 改名 `last_cmd_time`，与 `sanhua-counter` 自己存档的字段分开。
+  - `lijing`/`xiwangmu` 的 `die`/`unconcious` 和 `yutu`/`jinren` 的 `kill_ob` 改 `void`。
+  - `reporting.lpc` 各份删去未用的 `str`。
+  - `std/equip.lpc` 的 `query_autoload()` 由 `int` 改为 `mixed`：物品子类返回自己的存档字符串。
+  - 10 个带调用初始化的未用局部变量：删去声明，调用保留为语句。
+  - `huashan-jian*.lpc` 删去多余的 `;`；`obj/roommaker.lpc` 删去被覆盖的 `special_props` 表。
+  - 改动的 29 个对象 HEAD 与工作树各载入一次，无回退；定义 `query_autoload` 的 71 个文件重编译后没有警告。

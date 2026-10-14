@@ -369,7 +369,7 @@ void input_way(string arg)
         if (arg=="no")
         {       
             this_object()->simple_action("$N道：既然如此，也就罢了。");
-            repd= 0.2*t_money;
+            repd= to_int(0.2*t_money);
             rep = rep - repd;
             CHAR_D->set_char(n_id,"reputation",rep);
             if (repd>15000) repd=15000;

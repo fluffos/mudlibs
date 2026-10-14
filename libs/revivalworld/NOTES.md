@@ -886,3 +886,6 @@ README 里记载的"开机预载持续 2-3 分钟"配套的既有设计。
 ## 深度功能测试（§10.7，2026-10-08）— `.lpc` 后缀的定宽切片
 
 `.c` 改名 `.lpc` 时只改了字符串没改切片宽度：`f[<2..] == ".lpc"` 拿两个字符比四个字符，永远不成立（`!=` 永远成立），按后缀筛文件、去后缀的代码因此从不运行或截成 `x.l`（KB 06 §7.238）。`scripts/lpc_lpc_suffix_slice.py --apply` 改了 3 处比较、1 处去后缀（如 `std/inherit/feature/room/_remove_room.lpc`）；改动的文件 HEAD 与工作树分别加载（新进程），无回退。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。11 个文件 16 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/std/module/room/inherit/_heart_beat_store.lpc`（`productdesire +=`）、`/std/module/room/inherit/_heart_beat_store.lpc`（`productdesire -=`）、`/std/module/room/inherit/_heart_beat_store.lpc`（`desire +=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14（同一次重扫，手工部分）：`cmds/std/ppl/grow.lpc`（收成）的产量倍率 `multiplicand = input_amount * harvest_percent * (growth_level+DEFAULT_GROW) / 1000.` 声明成 `int`，小数被截掉，`amount *= multiplicand` 只乘了整数部分。现改为 `float`，`amount = to_int(amount * multiplicand)`。**玩家可见**：收成量按原公式计算。`wiz/wizhall/room_wizhall_5.lpc` 的图表刻度写明 `to_int()`。改动的 11 个对象 HEAD 与工作树各载入一次，无回退。

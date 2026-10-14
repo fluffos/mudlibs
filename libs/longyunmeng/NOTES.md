@@ -1043,3 +1043,6 @@ id，**不要**先发 `2060`（那会按 Tomud 握手走，本口会直接踢人
 - `cmds/std/look_wiz.lpc`：野兽相貌描写 `per_msg_beast3` 连写两份，后面那份（“长的极其丑陋”）才被读到，前一份（“有气无力”）从没显示过，删去前一份，显示不变。
 - `d/miwudao/secret/npc/` 的 `dragon1`、`elf`、`virginia`：`die()` 在 `void` 基类上写成 `int`，没人读返回值，改 `void`。
 - `kungfu/skill/huashan-jian.lpc` 招式表后多余的 `;`。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。2 个文件 2 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14：技能文件里 3 处 `int power_point()`/`int hard_point()` 返回 1.3、1.75 之类的浮点，经 int 返回被截断；本库没有调用者，改成 `float` 返回值，保留原数值（`float_hooks.py`，KB 04 §6.10）。

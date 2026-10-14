@@ -803,3 +803,8 @@ Verification: the edited files and the includers of the edited headers, 163 obje
 验证：改动的文件与包含改动头文件的对象共 1051 个，HEAD 与工作树各在新进程载入（1051 objects; HEAD PASS 726, tree PASS 732; regress 0; newly loading 6），726 个对象载入无回退；这些对象（无编译错误者）的警告 432 -> 0。全库重扫：剩下的 12 条（`room/room.h`、`players/kbl/cloud/cell.h`）属于本身有编译错误的 `players/goldsun/not/room/gates.lpc`、`players/kbl/cloud/cloud_cell.lpc`，不在范围内。
 
 顺带修了两个工具：`scripts/lpc_fix_forward_decl.py` 把 `({ })` 初值里的 `}` 当成块结束（majik3 的原型被插进了 `if` 里），以及 `lpc_fix_void_override.py` 等五个读诊断表的脚本遇到消息里含制表符（`Unknown escape sequence '\\<TAB>'`）就崩溃。另外，在 `obj/monsoul.lpc` 被 `#include` 的 monster 副本里，`attack_object` 的原型必须放在那个 include 之前（monsoul 先调用了它）。
+
+- 2026-10-14 (FluffOS 970d9f09 rescan): the 13 warnings this lib still had sat in old wizard files under `/players/` that do not load for other reasons (missing `PATH` macros, LDMud-only code).
+  - Macros that are redefined now get an `#undef` first (5 files).
+  - `players/goldsun/not/room/gates.lpc` inherited `/room/room.lpc` and also included `room.h`, which inherits the same room again; the explicit inherit is dropped.
+  - Load check of the 8 objects: no regressions (1 -> 1 pass).

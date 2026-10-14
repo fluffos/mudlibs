@@ -220,3 +220,13 @@ python3 scripts/mudclient.py 127.0.0.1 40276 --timeout 70 --idle 8 \
 - `std/interactive.lpc`（混入）留着一个空的 `init()` 占位，`std/living.lpc` 同时继承 `std/container.lpc` 与它，驱动用的是后继承的这个空 `init()`，`container` 加 `open`/`close` 指令的 `init()` 在生物身上从不运行（KB 06 §7.239）；`armour`、`weapon` 那边被它盖住的只是 `object` 的空 `init()`。删去占位，留下注释。
 - `std/room.lpc`、`daemon/incident_d.lpc` 各有一个只含注释的 `if`（缓存未命中、`unlock_site` 未来扩充），改成纯注释。
 - 未改：`std/bag.lpc`（39 条）同时继承 `std/item.lpc` 和 `std/container.lpc`，两者都继承 `std/object.lpc`，于是 `object` 的变量和函数各有两份。本库没有任何文件继承 `bag.lpc`；要消掉得改 `item`/`container` 的继承结构，按原样保留。
+- 2026-10-14：本驱动不接受在 `case` 标签下（未加大括号）声明局部变量，报 `syntax error ... expecting L_COLON_COLON`。`cmds/player/cmd_party.lpc`（`party`，组队）和 `daemon/channel_d.lpc`（频道）因此都编译不过，HEAD 上组队命令不能用、频道守护进程载不进来。现把 `invitee`/`leader`/`my_leader` 和 `s_leader`/`u_leader` 的声明移到函数开头，`case` 里只赋值。两个对象 HEAD 0 -> 工作树 2 通过。
+  - 另外几处编译不过的文件用到了本驱动没有的函数或写法，这一轮没动：
+    - `area/lm/world.lpc`：`m_add`；
+    - `cmds/player/cmd_suicide.lpc`：一个参数的 `strftime`；
+    - `item/armour/magic_ring.lpc`：`set_magic_level`；
+    - `cmds/player/cmd_incident.lpc`：`INCIDENT_D` 未定义；
+    - `cmds/player/cmd_record.lpc`：`HMAG` 未定义；
+    - `cmds/admin/cmd_rm.lpc:99`：语法错误；
+    - `daemon/oblivion_d.lpc:276`：类型。
+  - `std/combat.lpc` 是被包含的片段，单独编译报错是正常的。
