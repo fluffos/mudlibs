@@ -1131,3 +1131,6 @@ pass (created, empty, harmless — several existing call sites, e.g.
 - `attempt_apprentice()`/`close_gate()` 返回类型与基类一致（`void`）；`html_d.lpc` 的 `?:` 两边类型；多余的 `;`、重复继承 `F_CLEAN_UP`、未用局部变量；`u/mike/tt.lpc` 的 `s[-1]` 改 `s[<1]`。
 
 未解决：`u/mike/eval.lpc`（eval 指令留下的临时文件，本身编译不过）会让 `lpcc` 段错误：`s[..<1]` 里 `s` 未声明时，驱动报完 `Bad type of left index to range operator` 后空指针崩溃（HEAD 同样，驱动问题，待做最小复现）。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。21 个文件 26 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/clone/npc/walker.lpc`（`pot *=`）、`/clone/npc/walker.lpc`（`score *=`）、`/kungfu/class/generate/killed.lpc`（`exp *=`）、`/kungfu/class/generate/killed.lpc`（`pot *=`）、`/kungfu/class/generate/killed.lpc`（`weiwang *=`）、`/kungfu/class/generate/killed.lpc`（`score *=`）、`/kungfu/skill/yunv-xinfa/xiuxi2.lpc`（`xj_gain *=`）、`/kungfu/skill/yunv-xinfa/xiuxi2.lpc`（`xj_gain *=`）、`/quest11/flagwar/flagd.lpc`（`reward_money *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14（同一次重扫，手工部分，与 hhsj/nt6 同源同修）：36 个技能文件的 `int power_point()` 返回 0.6–1.4 的浮点（含分支写法），经 int 返回被截断；本库没有调用者，改为 `float`、保留原数值（`scripts/lpc_fix_float_hooks.py`）。当铺售价和 simul_efun `ntefun.lpc` 的 `sqrt` 写明 `to_int()`，simul_efun 能载入。改动的 244 个对象载入无回退。

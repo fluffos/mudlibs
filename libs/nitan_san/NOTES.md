@@ -785,3 +785,5 @@ HEAD 与工作树分别加载（新进程）：1008 -> 1008 通过，无回退�
 
 - **真问题：`feature/unique.lpc` 的 `int remove() { save(); }` 盖掉了 F_MOVE 的 `remove()`**，唯一物品被销毁时不卸装备、不从携带者身上减负重；删去（F_MOVE 的 `remove()` 对 `is_ob_saved()` 物件本来就先 `save()`）。
 - 其余：神木王鼎的虫表从没生效（`swmuding.lpc`）、`xiang.lpc`/`cruise-ob.h` 的 `remove()`、`pet.h` 重复继承 F_OBSAVE、`hu.lpc` 疗伤函数改名 `heal_patient()`、`lubo.lpc` 合并两段说明、幻境变量重复声明、迷宫 `unique_rooms` 改名、`FORCE2`、`do_effect()` 改 `varargs int`、`genmap.lpc` 的 `harbor.h`、`vrm_server.lpc` 的 `;`。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。9 个文件 13 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/kungfu/class/generate/killed.lpc`（`exp *=`）、`/kungfu/class/generate/killed.lpc`（`pot *=`）、`/kungfu/class/generate/killed.lpc`（`weiwang *=`）、`/kungfu/class/generate/killed.lpc`（`score *=`）、`/kungfu/skill/yunv-xinfa/xiuxi2.lpc`（`xj_gain *=`）、`/kungfu/skill/yunv-xinfa/xiuxi2.lpc`（`xj_gain *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
