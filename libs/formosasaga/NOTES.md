@@ -230,3 +230,14 @@ python3 scripts/mudclient.py 127.0.0.1 40276 --timeout 70 --idle 8 \
     - `cmds/admin/cmd_rm.lpc:99`：语法错误；
     - `daemon/oblivion_d.lpc:276`：类型。
   - `std/combat.lpc` 是被包含的片段，单独编译报错是正常的。
+- 2026-10-14（续）：上一条列出的、一直编译不过的文件，除测试文件外都已修好：
+  - `area/lm/` 的 `world.lpc`、`center_world.lpc`、`guild_world.lpc`（方塊世界）用的是 LDMud 的 `m_add(map, key, value)`，本驱动没有这个函数，改为 `map[key] = value`，共 15 处；`tests/test_new_efuns.lpc` 是专门测 `m_add` 的，未动。
+  - `cmds/admin/cmd_rm.lpc` 的 `main()` 少了右括号，后面几个函数被包进了 `main` 里。
+  - `cmds/admin/cmd_yamllint.lpc` 的 `lint_dir()` 返回 mapping，却声明为 `int`。
+  - `cmds/player/cmd_incident.lpc` 没有包含 `formosa.h`，`INCIDENT_D` 未定义。
+  - `cmds/player/cmd_record.lpc` 的 `HMAG` 改为 `HIM`。
+  - `cmds/player/cmd_suicide.lpc` 的 `strftime()` 补上时间参数。
+  - `daemon/oblivion_d.lpc` 往数组里加映射时少了 `({ })`。
+  - `daemon/ssh_d.lpc` 的 `send_msg()` 少了目标参数。
+  - `item/armour/magic_ring.lpc` 调用了护甲没有的 `set_magic_level()`（只有武器有，也没有地方读护甲的这个值），删去。
+  - 11 个对象：HEAD 上 0 个能载入，现在 11 个都能载入。
