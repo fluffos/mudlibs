@@ -834,3 +834,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply m
 **其余：** 开封擂台 `ground.h`/`colors.h` 表格 guard（含 `u/redrain` 拷贝）、`feature/alias.lpc` 私有 `last_time` 改名 `last_cmd_time`（三花计数器自己的 `last_time` 一直正常存档，不动）、`yg/yaoguai.lpc` 删掉从不读的 `yaoguai_type`、几个 `die/unconcious/kill_ob` 钩子改 `void`、`dns_master.lpc` 空 if、14 个多余 `inherit F_CLEAN_UP`。
 
 验证：改动文件、开封两处目录、`d/city/npc` 全部对象、`/obj/user`、`/std/char` 共 550 个对象，HEAD 与工作树各用新进程载入：508 -> 510 通过（新增 pusa、aoshun），regress 0；删除声明审计 0 项待看。550 个对象载入无回退。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。11 个文件 20 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/daemon/class/wudang/taiji-quan/zhenup.lpc`（`damage *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

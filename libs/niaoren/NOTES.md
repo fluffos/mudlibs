@@ -682,3 +682,5 @@ functionally re-tested live on this lib.
 - 未修：`include/daemons.h`（Lima 的守护进程表）重定义 `ALIAS_D`/`CHANNEL_D` 等 6 个宏，只有 `adm/daemons/network/ms.lpc`、`mail_serv.lpc` 引用它，这两个文件缺 `uid.h`/`mailer.h` 等头文件，本身编译不过，不在范围内。
 
 改动的 27 个文件与继承两个房间基类的对象共 29 个，HEAD 与工作树各载入一次：HEAD PASS 24，tree PASS 24，regress 0；5 个 FAIL 两边相同（`adm/npc/luban`、`d/quanzhou{,.old}/npc/tang{,3}` 批量载入时 `restore_object` 读存档被拒，运行期问题）。`lpc_audit_removed_locals.py` 0 处待看。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。4 个文件 4 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

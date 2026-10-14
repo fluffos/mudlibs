@@ -871,3 +871,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply k
 - 6 个港口房间调用定义在后面的 `do_start_ship()`：加原型。`u/m/mtl/killer/yar.lpc` 的本地 `SKILL_D` 前加 `#undef`；`u/s/server/olddata/kontop2.lpc` 多余的 `;`；`include/net/ftpdsupp.h` 只在 `#ifdef GUEST_WIZARD_FTP` 里用的 `file` 移进该分支。
 
 改动的 92 个文件与继承 `F_LIQUID`、include 改动头文件的对象共 97 个，HEAD 与工作树各载入一次：HEAD PASS 84，tree PASS 92，regress 0，新载入 8（上面的 8 个 NPC）；5 个 FAIL 两边相同（`u/d/dark/glass`、两份 `kawali`、`u/f/fund/test_man`、`u/o/onion/npc/noname`，本身有编译错误）。`lpc_audit_removed_locals.py` 0 处待看。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。46 个文件 103 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/adm/daemons/combatd.lpc`（`damage *=`）、`/u/b/borstquc/combatd.lpc`（`damage *=`）、`/u/k/konn/work/combatd.lpc`（`damage *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

@@ -471,3 +471,5 @@ and documented in KB 04 §6.10 rather than left in a half-fixed state.
 
 `doc/old/lpc/constructs/ref.lpc` is a manual page (TITLE/PRE/ENDPRE markup) with a `.lpc`
 extension, not source; scanned with `--skip '^/doc/'`, not touched.
+
+- 2026-10-14: FluffOS 970d9f09 warns `Float value truncated to int` (#1426). 2 sites in 1 files: assignments, initializers and returns now spell the truncation `to_int(...)` (same value). Changed objects loaded before and after in fresh drivers, no regressions (`scripts/lpc_fix_float_trunc.py`, KB 04 §6.10).

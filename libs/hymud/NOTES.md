@@ -1084,3 +1084,14 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 
 - `d/xingxiu/nanjiang2/3.lpc`、`shanjiao.lpc`：删去空的 `if (current_water==0) { }`（行为不变）。
 - 改动的对象 HEAD 与工作区都能载入，无回退。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。63 个文件 78 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/kfedit/skill/fengyun-shou/foguang.lpc`（`damage *=`）、`/kfedit/skill/longzhua-gong/sanzhua.lpc`（`damage *=`）、`/kfedit/skill/taiji-quan/zhan.lpc`（`damage *=`）、`/kfedit/skill/taiji-quan/zhenup.lpc`（`damage *=`）、`/kungfu/skill/fengyun-shou/foguang.lpc`（`damage *=`）、`/kungfu/skill/longzhua-gong/sanzhua.lpc`（`damage *=`）、`/kungfu/skill/taiji-quan/zhan.lpc`（`damage *=`）、`/kungfu/skill/taiji-quan/zhenup.lpc`（`damage *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14（同一次重扫，手工部分，与 hy5 同源同修）：
+  - `p/npc`、`quest` 下 7 个 boss/baowu 文件里，较短的旧 `order`/`data` 表删去，代码读的是后一份。
+  - `p/migong` 三个迷宫的 `unique_rooms` 改名 `maze_unique_rooms`，与 `VRM_SERVER` 的同名变量分开。
+  - `feature/alias.lpc` 的 `last_time` 改名 `last_cmd_time`，`ping.lpc` 的重复声明删去。
+  - 四份 `control.lpc` 的 `void auto_check` 原型删去。
+  - 21 个 `kill_ob`/`die` 改 `void`。
+  - `roommaker` 删去被覆盖的表；`gboxa` 去掉注释里嵌套的 `/*`。
+  - `d/xiyou/wudidong/npc/smith.lpc`、`waiter.lpc` 里有一句只剩括号的 `("wudidong_blacksmith");`。其他库这里是 `reload(...)`，本库没有 `reload()`，函数名被删掉后这句什么也不做，现删去。
+  - 改动的 149 个对象 HEAD 与工作树各载入一次，无回退。
