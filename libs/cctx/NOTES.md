@@ -320,3 +320,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply c
 - 未发现 §7.239（空壳函数压过真函数）型问题：没有两个不同文件定义同名函数的菱形。
 - 剩余：`kungfu/skill/shenghuo-lingfa/xiyanling.lpc` 的 `Expression has no side effects` 是语法错误后的恢复噪声，该文件本身不能编译，不在本轮范围。
 - 结果：能编译的文件中警告 82 -> 0；全库 6177 -> 6180 个文件能编译。改动 21 个 `.lpc`，HEAD 与工作树各载入一次（新进程）：21 个对象载入无回退（HEAD PASS 13, tree PASS 16; regress 0; newly loading 3），其余 5 个两边都因运行期权限/数据问题失败，与本次改动无关。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。3 个文件 3 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

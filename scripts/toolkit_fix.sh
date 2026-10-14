@@ -8,7 +8,8 @@
 #      fixes (scripts/lpc_warnings.py --fix: unused locals, nosave functions,
 #      bad escapes, negative range ends, varargs, bare returns);
 #   2. apply the fixers that read the compiler's diagnostics list:
-#      bitwise `&` in boolean tests, return types and prototypes, NPC + F_UNIQUE
+#      bitwise `&` in boolean tests, return types and prototypes, float truncated to int (to_int(); x op= <float>
+#      zeroed x and becomes x = to_int(x op ...)), NPC + F_UNIQUE
 #      init(), unused locals with an initializer, declarations used only inside
 #      an inactive #if branch;
 #   3. drop inherits another inherit already contains (scripts/lpc_diamonds.py);
@@ -63,6 +64,7 @@ grep -avE '/tests?/|/help_topics/error_messages/' "$D" > "$D.f" && mv "$D.f" "$D
 echo "== 2. diagnostics-driven fixers"
 echo "   bitwise:      $(python3 scripts/lpc_fix_bitwise_bool.py --apply "$SLUG" "$D" | tail -1)"
 echo "   return types: $(python3 scripts/lpc_fix_return_types.py --apply "$SLUG" "$D" | tail -1)"
+echo "   float->int:   $(python3 scripts/lpc_fix_float_trunc.py "$SLUG" --apply --diag "$D" | tail -1)"
 echo "   overrides:    $(python3 scripts/lpc_fix_void_override.py "$SLUG" --mixed --apply | tail -1)"
 echo "   unique init:  $(python3 scripts/lpc_fix_unique_init.py --apply "$SLUG" "$D" | tail -1)"
 echo "   unused init:  $(python3 scripts/lpc_fix_unused_init.py "$SLUG" --apply 2>/dev/null | grep -c '^FIX') declaration(s)"

@@ -1162,3 +1162,5 @@ A Big5 character whose second byte is 0x5C was written with one extra backslash 
 
 - `feature/weapon/` 七个兵器基类（sword、blade、axe、blunt、dagger、pike、staff）都把 `setup_*()` 里临时用的 `class damage_parameter dp` 声明成全局变量；同时继承两类的兵器（双股剑 `F_SWORD` + `F_BLADE`）因此有两份 `dp`。改成各 `setup_*()` 里的局部变量，伤害参数照旧存进 `damage/*`。
 - `d/snow/npc/teacher.lpc` 空的 `int accept_kill()` 改 `void`，与 `F_VILLAGER` 的一致；`kill` 命令读到的返回值本来就是 0，行为不变。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。1 个文件 1 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
