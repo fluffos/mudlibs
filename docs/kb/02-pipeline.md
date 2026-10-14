@@ -82,8 +82,9 @@ Also apply the WASM standards: §1.3b, §1.3e, and §1.5.
     inherit lines and any `"/abs/path.c"`, e.g. residuum's
     `#define STD_OBJECT "/std/object.c"`), and export undoes only what
     upstream spelled `.c`, so a `.lpc`-named upstream (fy2005) round-trips.
-    An added line ending in blanks fails the byte-for-byte check
-    (`git apply` trims it): strip it in the scratch tree.
+    An added line ending in blanks, or a CRLF line spliced into an LF
+    file by `lpc_twin_port.py adopt`, fails the byte-for-byte check
+    (`git apply` trims both): strip them in the scratch tree first.
   - **Trust the gitlink, not `meta.json`.** About 48 libs (nightmare4,
     mundoscuro, genesis, arkadia, ...) say `submodule-patch` because an
     upstream is recorded, but `work/` is plain files tracked here with no

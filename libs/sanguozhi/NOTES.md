@@ -921,3 +921,24 @@ in about half of the first logins here (`copy_functions()` -> `lookup_ident()` w
 `std/race/human`, a two-hop `FUNC_ALIAS` chain for `receive_remote_msg`). That is the #1403 regression fixed upstream by
 #1420 (2026-10-03); a driver built from current master does not have it: six fresh boots with the master build
 (`01026e1f`) each logged in clean, where the same six commands with the 2026-09-16 build crashed on about half.
+
+## 深度功能测试（§10.7，2026-10-13）：编译警告清零（上游 fluffos/sanguozhi#6）
+
+`work/` 是 `fluffos/sanguozhi` 子模块，此前的警告整理只扫 vendored 库，本库一直没扫到（可编译文件警告 913 条）。在
+`scripts/submodule_patch_scratch.py build sanguozhi` 建的副本里先用 `lpc_twin_port.py adopt sgzmudsgz sanguozhi --pre 4fd6d75aaca~1`
+（`TWIN_DST_TREE` 指向副本）照搬同一游戏 sgzmudsgz 已修好的 346 个文件，再跑 `lpc_warnings.py --fix`，剩下 13 条手修，警告 913 -> 0。
+改动的 443 个对象新进程各载入一次：427 -> 428 通过，无回退；打过补丁的树开机到登录画面。修复提交到上游（PR #6，squash 合并为
+`c4bdc262`），本库钉到该提交（`rebase_upstreams.py`）。
+
+修掉的真 bug（与 sgzmudsgz 同源）：
+- `std/modules/m_mountable.lpc` 的 `mount_it_already()` 是 `private`，`sit()`/`mount()`/`get_on()` 永远调基类那份；18 张床、沙发
+  自己写的 `int mount_it_already()`（脱衣躺下等）从来没跑过。基类改 `protected void`，各家具的同名函数改 `void`。
+- `cmds/player/enable.lpc`（及 `wiz/mimi/update/` 副本）：Lima 指令的返回值没人用，`return notify_fail(...)` 的提示（没有激发技能、
+  格式说明等）玩家从来看不到；改为 `write(...)` 再 `return`。
+- `daemons/messages_d.lpc`（两份）：子类型缺失时造好“少一条信息”数组却没 `return`。
+- `daemons/union_d/cases.lpc`：编号列 `?:` 两边一边 int 一边 string，改 `"" + (i + 1)`。
+- `sgdomain/obj/cloth/cloth.lpc`、`weapon/dandao.lpc`：多余的 `if (one_name);`。
+
+导出时的坑（KB 02 §2.3）：从 CRLF 的孪生文件搬来的一行带着 `\r` 混进 LF 文件，`git apply` 会把它和行尾空白一起去掉，
+导出的逐字节校验失败；在副本里先把新增行的行尾空白和多余 `\r` 去掉再导出。
+
