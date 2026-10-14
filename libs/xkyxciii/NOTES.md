@@ -298,3 +298,5 @@ functionally re-tested live on this lib.
 - `std/skill.lpc` 开头的 `mapping action = ([ "action": "", "force": 0, ... ])` 是一份招式栏位说明，基类自己的代码从来不读它（`perform_action()` 用的是同名局部变量），而 71 个武功都声明自己的 `mapping *action` 招式表，于是每个都报 `Redeclaration of global variable 'action'`。把这段改成注释；真正拿它当缓冲用的只有 `daemon/skill/baigu-claw.lpc` 和 `example.lpc`（`query_action()` 里填 `action["action"]` 等再返回），这两个文件各自声明一份同样初值的 `mapping action`，行为不变。
 - `d/beijing2/zhang/npc/dog.lpc`：`chat_msg` 里写成 `(: "random_move" :)`（返回字符串常量的函数指针），狗从不走动；改成 `(: random_move :)`。
 - `d/center/npc/biantai-kuangmo.lpc`、`d/quanzhou/npc/biantai-kuangmo.lpc`：自己记目标的 `object killer` 与 `feature/attack.lpc` 的仇人名单 `string *killer` 同名，改名 `target_ob`；`killa.lpc` 两份函数体后多余的 `};`。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。12 个文件 13 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/adm/daemons/combatd.lpc`（`damage -=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

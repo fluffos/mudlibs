@@ -188,3 +188,5 @@ without headers, drafts).
 ## 编译警告收尾（2026-10-12）
 
 孪生库 fengyun434 同日的整理（238c181110e：`kill_ob`/`die`/`check_status` 在 `void` 基类上写成 `int` 的改为 `void`，`snake-spear.lpc` 的 `action` 改名 `spear_action`，`qiankun.lpc` 的 `enemy` 改名 `foes`，`newsman.lpc` 补 `ask_question()` 原型）用 `scripts/lpc_twin_port.py adopt fengyun434 xsfyssjb --pre 238c181110e~1` 搬来：14 个文件与 fengyun434 修前逐 token 相同，清单里的警告全部落在这些文件里。HEAD 与工作树各载入一次：14 个对象，HEAD PASS 14，tree PASS 14，regress 0。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。5 个文件 10 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

@@ -980,3 +980,19 @@ HEAD 与工作树分别加载（新进程）：952 -> 952 通过，无回退；�
 启动时警告 123 -> 0；新进程登录（编码选择、新人物提问）正常。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 20 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 9 个，只在 #if 分支用的声明移进分支 0 个文件；改动 27 个文件，HEAD 与工作树各载入一次无回退（27 objects; HEAD PASS 27, tree PASS 27; regress 0; newly loading 0），这些文件的警告 51 -> 22。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。17 个文件 39 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14（同一次重扫，手工部分）：
+  - `d/dntg/yunlou/npc/yaoguai.lpc` 灭妖奖励里的 `reward` 是倍率（0.8、1.2、1.8、2.6、3.8），却声明成 `int`，赋值时小数被丢掉，0.8 变成 0、1.8 变成 1。现改为 `float`，三项奖励用 `to_int()` 取整。**玩家可见**：七彩奖励按原设计的倍率发放。
+  - `daemon/skill/dodge.lpc`、`parry.lpc` 把基类 `/std/skill` 的 `dodge_msg`/`parry_msg` 再声明一次，结果基类那份一直是空的。现在改到 `create()` 里给基类那份赋值。
+  - `manmade/npc/manmade_npc.lpc` 自己的 `tick` 与 `/std/char.lpc` 心跳用的 `tick` 同名，两份本来就各数各的；改名 `rzr_tick`，行为不变。
+  - 其余与 wuhanzhan/hxxtjqb 同源的修法：
+    - `ground.h` 加守卫；
+    - `jiasha.lpc` 两个 `init()` 都调用；
+    - `colors.h` 加防重复包含；
+    - `alias.lpc` 的 `last_time` 改名 `last_cmd_time`；
+    - `yaoguai_type` 重复声明去掉（含 `yaoguai1.lpc`）；
+    - `lijing`/`xiwangmu` 的 `die`/`unconcious` 和 `yutu` 的 `kill_ob` 改 `void`；
+    - 删去 `reporting.lpc` 各份未用的 `str`；
+    - `cmds/arch/make_npc.lpc` 字符串里的 `\#`、`\}` 去掉反斜杠。
+  - 改动的 55 个对象 HEAD 与工作树各载入一次，无回退；原报警告的 54 个对象重编译后没有警告。

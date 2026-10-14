@@ -62,6 +62,7 @@
 #define MONEY_D		 "/adm/daemons/moneyd.lpc"
 #define XYJTIME_D          "/adm/daemons/xyjtimed.lpc" 
 #define TOPTEN_D	        "/adm/daemons/toptend"
+#undef TASK_D
 #define TASK_D                  "/adm/daemons/questd"
 #define CRON_D                  "/adm/daemons/cron"
 #define DISASTER_D              "/adm/daemons/disasterd"

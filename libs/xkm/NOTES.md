@@ -229,3 +229,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 - 五个彩票机（`d/city/bingo.lpc`、`d/city/obj/bingo.lpc`、`u/jhy/bingo.lpc`、`bingo2.lpc`、`u/puma/bingo.lpc`）同一条声明里把 `jiafen`、`wait_time` 等九个变量先裸声明、再带初值声明，驱动造出两份；`scripts/lpc_fix_double_decl.py` 去掉裸的那份，运行时不变。
 - `clone/obj/genmap.lpc` 在函数里包含 `/clone/ship/harbor.h`，用到其中的 `islands`、`harbors`，用不到 `wildharbors`：表格包进 `#ifndef HARBOR_NO_WILD`，genmap 包含前定义它（同 jym）。
 - 慕容任务 `d/murong/mrjob/mrnpc/mr_inherit/npc/Mr_knpc.lpc`、`mr_obj/npc/thief.lpc` 的 `die()` 改 `void`。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。47 个文件 54 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

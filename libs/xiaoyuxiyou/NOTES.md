@@ -1189,3 +1189,5 @@ verified live on `xyxyutf8`. See AGENTS.md §7.156.
 - 袈裟 `d/obj/cloth/jiasha.lpc`（`CLOTH` + `F_UNIQUE`）只跑 unique 的 `init()`，撕袈裟的 `tear` 从没加上；补 `init() { cloth::init(); unique::init(); }`（同 xyj2000）。
 - `d/kaifeng/ground.h` 的三张表包进 `#ifndef GROUND_TABLES_INHERITED`，层层继承的 `ground1/2/3.lpc`、`ground.lpc` 包含前定义它（同 xyj2000）；李靖 `d/dntg/lijing/lijing.lpc` 的 `die`/`unconcious` 改 `void`。
 - 擂台两人 `d/kaifeng/npc/ye.lpc`、`yuwangye.lpc` 的比赛名 `title` 改名 `game_title`，投票箱 `d/wiz/votebox.lpc` 的改名 `vote_title`，不再与基类的 `title` 同名；突破迷宫五个出口（及 `backup/` 里一份）`out.lpc` 的怪物表 `gg` 与它继承的 `room.lpc` 一字不差，删去重复的那份；`d/obj/books-nonskill/book.h` 的 `BOOK` 先 `#undef`；`quest/tianguan/npc/other.lpc` 没用的 `name` 删去。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。3 个文件 3 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

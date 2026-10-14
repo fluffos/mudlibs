@@ -776,3 +776,5 @@ HEAD 与工作树分别加载（新进程）：910 -> 910 通过，无回退；�
 - 五份 `npc/reporting.lpc` 的未用局部 `str` 注释掉。
 
 改动的文件、引用改动头文件的文件与 include `quest_*` 的 NPC 共 153 个对象，HEAD 与工作树各载入一次：HEAD PASS 82，tree PASS 82，regress 0；FAIL 两边相同，都是 include 片段（`quest*.lpc`）或 `npc/old/` 旧稿。`lpc_audit_removed_locals.py` 0 处待看。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。9 个文件 9 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

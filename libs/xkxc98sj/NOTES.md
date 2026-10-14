@@ -322,3 +322,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 - 暗器类 10 个（`clone/weapon/feidao`、`jinhua`、`sjian`、`jin-sjian`，`d/city/bqp_obj/feibiao` 及 `npc/bqp_obj/feibiao`，桃花岛/归云庄的石子 `shizi` 等）在 `inherit THROWING;` 之外又继承 `COMBINED_ITEM`，而 `THROWING` 已经带着它：`Illegal to redefine 'nomask' function '_set'`，这些物件从没载入过，商店、NPC 给不出来。去掉多余的一行后都能载入。
 - 酒楼五间（`d/city/jiulou2`、`zuixianlou2`、`d/dali/jiulou`、`d/quanzhen/jiulou2`、`d/shaolin/jiulou2`）同时继承 `ROOM` 和 `F_DEALER`，两者都有 `reset()`，驱动只用 `dealer` 的（清理过多的货物），房间自己的 `reset()` 从不运行，店小二等 `objects` 走失或被杀后不再刷新。房间里写 `void reset() { room::reset(); dealer::reset(); }`，两个都跑。
 - `d/rooms/npc/obj/jia.lpc` 写明用驱动原先选的 `clean_up()`；`d/xiangyang/npc/shanzei0.lpc` 自己的 `MAX` 宏与 `globals.h` 的相同，删去。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。1 个文件 1 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/kungfu/skill/jieshou-jiushi/foguang.lpc`（`damage *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

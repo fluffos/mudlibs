@@ -517,3 +517,5 @@ lpc` 会调用双方 `kill_ob()`，NPC 真实反击），几回合后一次「�
 - `template/weapon/{blade,sword,whip}.lpc`、`template/gem/{gem,skull}.lpc` 把模板数据存进与 `TEMPLATE_OB` 同名的变量再用 `set_*()` 交给基类，`maze/forest/maze.lpc` 的 `unique_rooms` 同理：叶子的变量改名 `my_*`/`forest_unique_rooms`（同 nt6），行为不变。
 - `accept_object()` 同时来自 `master.lpc` 和 `npc.lpc`（后者只 `return 0;`）的五个 NPC、`d/place/player/combine_unarmed.lpc` 的七个函数：写明用驱动原先选的那份（`scripts/lpc_name_winner.py`）。
 - `d/maze/newbie/npc/muren.lpc` 的 `duilian_ob()` 改 `void`，与 `attack.lpc` 一致；`d/pig/pig.h` 的 `PIG_D` 先 `#undef` 再指向同目录的守护进程；草稿 `system/feature/todo/poison.lpc` 的列表 `poison` 改名 `poisons`（同 xo）。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。9 个文件 10 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/cmds/app/explore.lpc`（`power +=`）、`/cmds/skill/xiulian.lpc`（`jilei_gain +=`）、`/secure/daemon/userd.lpc`（`x +=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

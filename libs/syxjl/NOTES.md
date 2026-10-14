@@ -925,3 +925,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply s
 
 - `u/linghu/ground.h` 的三张表被 `ground0.lpc` 和层层继承它的 `ground1/2/3.lpc`、`ground.lpc` 各包含一次：表格包进 `#ifndef GROUND_TABLES_INHERITED`，继承方在包含前定义它（同 xyj2000 的 `d/kaifeng`）。
 - 书库三间（`d/city/library.lpc`、`d/city2/library.lpc`、`u/aeolus/city/library.lpc`）自己的 `STORY_DIR` 覆盖 `globals.h` 的同名宏，先 `#undef`；`kungfu/skill/eff_msg.h` 开头连写两行同样的 `/*` 注释开头，删去一行。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。3 个文件 3 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

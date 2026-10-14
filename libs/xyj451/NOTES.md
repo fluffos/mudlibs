@@ -270,3 +270,5 @@ single-file compile check (PASS). Part of the corpus-wide §7.19 sweep
 - 袈裟 `d/obj/cloth/jiasha.lpc`（`CLOTH` + `F_UNIQUE`）只跑 unique 的 `init()`，撕袈裟的 `tear` 从没加上；补 `init() { cloth::init(); unique::init(); }`（同 xyj2000）。
 - `d/kaifeng/ground.h` 的三张表包进 `#ifndef GROUND_TABLES_INHERITED`，层层继承的 `ground1/2/3.lpc`、`ground.lpc` 包含前定义它（同 xyj2000）；`include/net/ftpdconf.h` 的 `VALID_READ`、`VALID_WRITE` 先 `#undef`（同 xiakexing2017）。
 - `d/suburb/es/city/shangshu/kefang.lpc` 的 `(: "一本诗词集……" :)` 改成字符串本身；`daemon/skill/hubo.lpc`、`test-whip.lpc` 写明用驱动原先选的 `clean_up()`；`daemon/skill/huashan-jianfa.lpc` 多余的 `;` 删去。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。2 个文件 2 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

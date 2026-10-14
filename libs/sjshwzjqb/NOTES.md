@@ -290,3 +290,5 @@ In total 376 files differ from the old names (288 `.C` -> `.lpc`, 86 files of re
 **其余：** `feature/alias.lpc` 的 `last_time` 改名 `last_cmd_time`（不再与三花计数器要存档的 `last_time` 相撞）；开封擂台 `ground*.lpc`/`ground.h`/`colors.h` 表 guard；`yaoguai.lpc` 不读的 `yaoguai_type`；`lijing`/`yutu`/`jinren`/`long` 的返回类型；`teamjob.lpc` 的 `team_names`；两个 roommaker 的重复 `special_props`；toptend 的 `#undef`；dns_master 空 if；多余的 `;`；9 个多余的 inherit；两个 tang 的 `clean_up()` 写明来源。
 
 验证：改动文件、`d/kaifeng` 与 `d/city/npc` 全部对象、`/std` 及 `/std/char` 基类、`/obj/user` 共 360 个对象，HEAD 与工作树各用新进程载入：331 -> 333 通过（新增载入 axe、blade），regress 0；删除声明审计 0 项待看。360 个对象载入无回退。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。6 个文件 11 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/daemon/class/shaolin/banruo-zhang/banruo.lpc`（`damage *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

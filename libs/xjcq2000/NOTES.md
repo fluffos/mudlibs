@@ -784,3 +784,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 - 巫师 squall 的备份 `u/squall/bak/wudugou.lpc`、`combatd.lpc` 先包含自己目录里的旧 `ansi.h`，再经 `weapon.h` 等包含标准 `ansi.h`，颜色宏以后者为准；直接包含 `<ansi.h>`，颜色不变。
 - 三份 `hua.lpc`（`d/city/job/`、`jobsys/tianhan_job/`、`u/squall/bak/bak/`）里玩家当前任务 `mapping job` 与后面的任务表 `mapping *job` 同名，表改名 `job_list`；`d/city/npc/renwu.h` 声明了两张 `renwu4`，`hfh.lpc` 读的是后面完整的那张，前面短的改名 `renwu4_old` 保留原文；两份 `roommaker.lpc` 的 `special_props` 删去不用的前一份。
 - 关将 `guanj.lpc`（四处）的 `kill_ob()` 改 `void`；`cmds/std/help1.lpc` 的 `DIR`、`jobsys/tianhan_job/feng1.lpc` 的 `QUEST`、`d/xiangyang/npc/shanzei0.lpc` 的 `MAX`、两间书库的 `STORY_DIR` 先 `#undef`；`kungfu/skill/hubo.lpc` 写明用驱动原先选的 `clean_up()`；`kungfu/skill/huashan-jian.lpc` 多余的 `;` 删去。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。8 个文件 12 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/kungfu/skill/fengyun-shou/foguang.lpc`（`damage *=`）、`/kungfu/skill/jieshou-jiushi/foguang.lpc`（`damage *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

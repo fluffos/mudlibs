@@ -614,3 +614,5 @@ compile check (exit 0, no errors) against `feature/command.lpc`.
 ## 编译警告收尾（2026-10-13）
 
 `scripts/toolkit_fix.sh` 一轮去掉 8 处多余继承；搬来 xyj2000（969f36bdd8c）逐 token 相同的 8 个文件（`feature/alias.lpc` 的 `last_cmd_time`、`d/kaifeng/npc/colors.h` 防重、`reporting.lpc`、袈裟 `jiasha.lpc` 补 `cloth::init()` 让撕袈裟的 `tear` 生效等），其余 8 个与 xyj2000 不同的照同样改法手工：`d/kaifeng/ground.h` 表格守卫、`d/city/npc/yg/yaoguai.lpc` 没人读的 `yaoguai_type`、李靖 `die`/`unconcious`、玉兔 `kill_ob` 改 `void`。能编译的文件警告清零；改动的 21 个对象在 HEAD 与工作树各载入一次，regress 0。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。1 个文件 4 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

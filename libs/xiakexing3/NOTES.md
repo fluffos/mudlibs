@@ -373,3 +373,5 @@ variable 警告。
 - 冗余继承 35 处（`lpc_diamonds.py`）。其中 `d/mingjiao/npc/yinwufu`、`yinwulu`、`yinwushou` 的基类已经继承 `F_UNIQUE`，叶子又 `inherit F_UNIQUE;` 一次，驱动报 `Illegal to redefine 'nomask' function 'violate_unique'`，这三个明教 NPC 从来载不进来；删去后都能载入。
 - `kungfu/skill/hubo.lpc`（`ITEM` 与 `SKILL` 都带 `F_CLEAN_UP`）用 `lpc_name_winner.py` 写出驱动本来就选的 `skill::clean_up()`。
 - `include/net/ftpdconf.h` 把 `ftpd.h` 的 `VALID_READ`/`VALID_WRITE`（0）改定义为 1，`ftpd.lpc` 两个头都 include；在改定义前加 `#undef`，取值不变。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。3 个文件 3 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

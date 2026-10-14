@@ -802,3 +802,5 @@ wield()` 对缺失路径返回 `0`，立刻炸：
 - `clone/user/templet.lpc`（存档 `autoload` 转换器）继承 `F_DBASE` 后又自己声明一个 `dbase`：`restore_object()` 填前一个、清空后一个，再存盘写出两条 `dbase`，玩家下次载入可能读到空的那条（KB 06 §7.233）。删去自己的那个。
 - `system/std/char/npc.lpc` 私有的默认拒绝语 `refuse_msg` 与 `d/menpai/wuliang/npc/zuo.lpc` 等任务 NPC 自己的同名，私有的那份改名 `npc_refuse_msg`。
 - 草稿 `system/feature/todo/poison.lpc` 自己的毒药列表 `poison` 与它包含的旧 `include/poison.h` 的 `poison` 同名，改名 `poisons`（文件里 9 处）。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。4 个文件 6 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/cmds/app/explore.lpc`（`power +=`）、`/cmds/app/xplor.lpc`（`points +=`）、`/cmds/skill/xiulian.lpc`（`jilei_gain +=`）、`/secure/daemon/userd.lpc`（`x +=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

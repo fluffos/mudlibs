@@ -237,3 +237,5 @@ functionally re-tested live on this lib.
 ## 编译警告收尾（2026-10-12）
 
 `scripts/toolkit_fix.sh` 一轮（冗余继承 34 处）后，用 `scripts/lpc_twin_port.py adopt xiakexing3 xkxlb --pre fa4f24186c2~1` 搬来孪生库 xiakexing3 同日的修法（`kungfu/skill/hubo.lpc` 写明 `skill::clean_up()`，`include/net/ftpdconf.h` 改定义 `VALID_READ`/`VALID_WRITE` 前 `#undef`），再删去 `kungfu/skill/dugu-jiujian.lpc`、`huashan-jianfa.lpc` 招式表后面多余的一行 `;`，能编译的文件警告清零。改动的 36 个对象 HEAD 与工作树各载入一次：HEAD PASS 29，tree PASS 32，regress 0。新载入的 3 个是明教 `d/mingjiao/npc/yinwufu`、`yinwulu`、`yinwushou`：基类已有 `F_UNIQUE`，叶子再继承一次触发 `Illegal to redefine 'nomask' function 'violate_unique'`，从前载不进来。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。3 个文件 3 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

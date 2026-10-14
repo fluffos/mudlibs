@@ -389,3 +389,19 @@ HEAD 与工作树分别加载（新进程）：1330 -> 1330 通过，无回退�
 启动时警告 119 -> 0；新进程登录（编码选择、英文名提示，新人物用 `new`）正常。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 41 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 13 个，只在 #if 分支用的声明移进分支 0 个文件；改动 52 个文件，HEAD 与工作树各载入一次无回退（52 objects; HEAD PASS 51, tree PASS 51; regress 0; newly loading 0），这些文件的警告 74 -> 20。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。2 个文件 3 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14（同一次重扫，手工部分）：
+  - `d/calvin/armor/rjl.lpc` 和 `d/wizz/calvin/armor/rjl.lpc`（日精轮）原来编译不过，原因有两个：同时 `inherit SHIELD; inherit NECK;`，两条路径各带进一份 EQUIP，`nomask` 函数被重定义；`offensive_target()` 的函数头丢了，只剩函数体。现只保留 `NECK`（原来生效的就是后继承的 `setup()`），并按 `d/9ct/zb/yjl.lpc` 补回函数头。两件现在都能载入。
+  - `adm/daemons/network/mail_serv.lpc` 把 `tmp[i] == EOT+"."` 改成 `=`（原来是比较，不是赋值）。这个文件本身因缺头文件编译不过。
+  - `d/longzhu/npc/long.lpc` 和 `d/quest/longzhu/npc/long.lpc` 删去没有定义、也没人调用的 `int long();` 原型（与 `/feature/name.lpc` 的 `string long()` 冲突）。
+  - 与 wuhanzhan 同源的修法：
+    - `d/kaifeng/ground.h` 加守卫；
+    - `jiasha.lpc` 两个 `init()` 都调用；
+    - 两份 `colors.h` 加防重复包含；
+    - `alias.lpc` 的 `last_time` 改名；
+    - 两组 `yg/yaoguai.lpc` 的 `yaoguai_type` 重复声明去掉；
+    - `lijing` 的 `die`/`unconcious` 和 `yutu` 的 `kill_ob` 改 `void`；
+    - 删去 `reporting.lpc` 未用的 `str`。
+  - 改动的 32 个对象 HEAD 与工作树各载入一次：27 -> 29 通过，无回退。
+  - 未动：`bin/v22pre11/`（附带的 MudOS 源码树）、`d/gumu/npc/zhangmen.lpc`、`d/quest/mofeng/npc/stey/`。这些是编译不过的文件，警告是报错后的连带输出（见上）。
