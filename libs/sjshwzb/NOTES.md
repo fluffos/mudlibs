@@ -288,3 +288,5 @@ In total 335 files differ from the old names (249 `.C` -> `.lpc`, 83 files of re
 - `toolkit_fix.sh` 另删了 7 个多余的 `inherit F_CLEAN_UP`（NPC/物品/武器基类已带）。
 
 验证：改动文件、`d/kaifeng` 与 `d/city/npc` 全部对象、`/std` 及 `/std/char` 基类、`/obj/user` 共 360 个对象，HEAD 与工作树各用新进程载入：331 -> 333 通过（新增载入 axe、blade），regress 0；删除声明审计 0 项待看。360 个对象载入无回退。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。6 个文件 11 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
