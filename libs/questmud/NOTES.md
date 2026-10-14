@@ -766,3 +766,5 @@ Changed files loaded at HEAD and in the tree in fresh processes: no regression.
 
 - 2026-10-12：`wizards/yodin/vankila.lpc`（监狱房间的 “HAVE A NICE DAY” 笑脸）在 f5a5b6ea210 的转义整理里丢了图形里的反斜杠：`--fix` 当时把 `\\|` 的后一半当作未知转义 `\|` 删掉，`\-;-/` 等也被删。按原始文本把这五行画面里的每个反斜杠写成 `\\`，现在照原样显示（脚本已修，KB 04 转义一行）。
 - 2026-10-14: 6 save files (player saves `players/bix.o`, `james.o`, `veron.o`, mail `data/mail/walla.o`, posts in `room/post_dir/`) still held Latin-1 bytes (Finnish text: ä, ö), so `restore_object()` stopped with `Invalid utf8 string` and the player or mailbox loaded empty. `scripts/lpc_save_encoding.py` transcoded them from Latin-1 and kept a file only when the result parses as a save (KB 03 §4).
+
+- 2026-10-14: FluffOS 970d9f09 warns `Float value truncated to int` (#1426). 1 sites in 1 files: assignments, initializers and returns now spell the truncation `to_int(...)` (same value). Changed objects loaded before and after in fresh drivers, no regressions (`scripts/lpc_fix_float_trunc.py`, KB 04 §6.10).

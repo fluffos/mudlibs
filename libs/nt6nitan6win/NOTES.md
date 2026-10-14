@@ -413,3 +413,6 @@ id `({ "wu bo", "wu", "bo" })`）。要用 `bai bo`，不要用 `bai wu` /
 其余同 nitan6：自制道具 autoload 交给 item/combined、神木王鼎虫表、`xiang.lpc` 的 `remove()`、幻境变量重复声明、`info_*.h` 头文件守卫、宏 `#undef`、`GWIZ`、返回类型、未用局部变量。
 
 未解决：`u/mike/eval.lpc`（编译不过的临时文件）让 `lpcc` 段错误（驱动问题，HEAD 同样）。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。20 个文件 25 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/clone/npc/walker.lpc`（`pot *=`）、`/clone/npc/walker.lpc`（`score *=`）、`/kungfu/class/generate/killed.lpc`（`exp *=`）、`/kungfu/class/generate/killed.lpc`（`pot *=`）、`/kungfu/class/generate/killed.lpc`（`weiwang *=`）、`/kungfu/class/generate/killed.lpc`（`score *=`）、`/kungfu/skill/yunv-xinfa/xiuxi2.lpc`（`xj_gain *=`）、`/kungfu/skill/yunv-xinfa/xiuxi2.lpc`（`xj_gain *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14（同一次重扫，手工部分，与 hhsj/nt6 同源同修）：36 个技能文件的 `int power_point()` 返回 0.6–1.4 的浮点（含分支写法），经 int 返回被截断；本库没有调用者，改为 `float`、保留原数值（`scripts/lpc_fix_float_hooks.py`）。当铺售价和 simul_efun `ntefun.lpc` 的 `sqrt` 写明 `to_int()`，simul_efun 能载入。改动的对象载入无回退。

@@ -535,3 +535,5 @@ re-invoke `enable_player()` on this lib while the object is still
 - `cmds/usr/mygift.lpc`、`mygift2.lpc`：`?:` 两边 `int`/`string`，int 一边改 `(mixed)`。
 - `d/village/npc/obj/robber.lpc`、`robber_n.lpc` 有意把 `NAME_D` 指向 `/inherit/misc/r_name`，`#define` 前加 `#undef`。
 - `clone/npc/tdh/man1.h`：154 行开的注释实际被 164 行 `///*奖励控制开始*/` 末尾的 `*/` 关掉，改成 `*/ // 奖励控制开始`，注释结束位置不变；`d/shaolin/npc/h.lpc` 注释里嵌套的 `/*`。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。12 个文件 21 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/d/mr/npc/murong-fu.lpc`（`bouns *=`）、`/kungfu/skill/force/qi.lpc`（`q *=`）、`/kungfu/skill/force/recover.lpc`（`q *=`）、`/kungfu/skill/taiji-quan/luanhuan.lpc`（`p *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
