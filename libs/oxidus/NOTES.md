@@ -645,3 +645,4 @@ Bugs behind the warnings:
   (`set_wealth`, `generate_map`, `query_value` now `mixed` because `lib/coin.lpc` returns an array), `(mixed)` casts on
   deliberately mixed `?:` results, `/*` inside doc comments.
 
+- 2026-10-14 (FluffOS 970d9f09 rescan): new catalog patch `patches/0005-float-truncation.patch`, 13 `Float value truncated to int` sites (unicode bar widths, food/drink percentages, XP adjustment, heart rate clamp, master read-size limit) spell their truncation `to_int()`; same values. Each of the five patches applies alone on the pin and in sequence; the 6 changed objects load before and after.
