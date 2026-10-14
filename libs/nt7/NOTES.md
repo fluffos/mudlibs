@@ -587,3 +587,21 @@ Port: **40211**.
 - 本库 pin 由 62aae7b5 升到 aa597459。
 
 - 2026-10-12：`adm/daemons/network/dns_master.lpc` 的空 if（`#if PREF_X & SVC_TCP` 在 if 里面）走上游 fluffos/nt7 PR #8（已合并），pin 升到 a931a8f7。
+
+## 深度功能测试（§10.7，2026-10-13）：编译警告清零（上游 fluffos/nt7#9）
+
+`work/` 是 `fluffos/nt7` 子模块，此前的警告整理只扫 vendored 库，本库一直没扫到（29920 个对象中 29228 个可编译，可编译文件警告 4896 条，201 个文件本来就编译不过）。做法同 sanguozhi/xkx100utf8：在 `scripts/submodule_patch_scratch.py build nt7` 建的副本里先用 `lpc_twin_port.py adopt nt6 nt7 --pre ad9512a1885~1`（`TWIN_DST_TREE` 指向副本）照搬 nt6 已修好、代码相同的 847 个文件，再跑 `lpc_warnings.py --fix`、`toolkit_fix.sh` 的各个按诊断修复的脚本和 `lpc_diamonds.py --fix-redundant`，剩下的手修。结果：可编译 29480 个，可编译文件的警告 4896 -> 0，编译不过的仍是 201 个。改动的对象加上包含改过头文件的对象共 7948 个，旧树和新树各在新进程里载入一次：7880 -> 7881 通过，无回退；打过补丁的树开机到输入英文名字的提示。修复合并到上游（PR #9，合并提交 `a615a6fb`），本库钉到该提交（`rebase_upstreams.py`）。
+
+孪生搬运的坑：`include/dbase.h` 被判成 twin（文件本身和 nt6 修前一字不差），搬来了 nt6 补的 `set/query/...` 原型。nt6 的 `feature/dbase.lpc` 自己定义这些函数，nt7 的 dbase 只有 `set_db/query_db`，`query()` 等是 simul_efun（`adm/kernel/simul_efun/ntefun.lpc`，按 `previous_object()` 转到 `query_db`），nt6 那个“混入件读到 simul_efun 共享 dbase”的严重问题在本库并不存在。原型一加，继承 F_DBASE 的物件里 `query()` 成了没有定义的本地函数，`Undefined function called: query`，全库只剩 3736 个对象能载入。撤回 `dbase.h`，再去掉 adopt 给 banker/control/guarder/liquid 加的 `#include <dbase.h>`（KB 08 §10.13）。
+
+修掉的真 bug：
+- `cmds/std/team/bunch.lpc`、`swear.lpc`（孪生搬来）：多一个 `;`，“提议只好作罢”的消息被截成两半，后半句是一条什么也不做的语句。
+- `d/newbie/npc/laocunzhang.lpc`：同样多一个 `;`，村长讲内功的说明丢了最后一行“更多相关帮助请参阅帮助文件 help force”。
+- `clone/npc/warcraft.h`：`actions == "follow" ? "仅跟随" : "保护";` 比较完就扔掉结果，宠物状态一直显示英文的 follow/protect；改为赋值。
+- `cmds/wiz/roomlong.lpc`：条件里的 `tempstr1 = ");"` 是赋值，任何一行 `LONG` 都被当作描述的结尾；改 `==`。
+- `u/gigi/test/gigicook.lpc`：`arg == menu_list[0];` 应为 `=`。
+- `include/boss_bad.h`、`boss_good.h`：所有帮派任务 NPC 都在包含前 `#define WAIT_TIME 60`，头文件又重定义成 120，各自的等待时间从没生效；改为 `#ifndef`。
+- `adm/npc/obj/xiang.lpc`：`varargs int remove() { save(); }` 盖掉了 F_MOVE 的 `remove()`（减携带者负重）；改为先存盘再 `::remove(euid)`（同 nt6）。
+- 自制道具（兵器/防具 + F_ITEMMAKE）的 `query_autoload()`/`autoload()` 双重继承：itemmake 那对改名 `query_itemmake_autoload()`/`itemmake_autoload()`，`item.lpc`/`combined.lpc` 有就交给它；驱动原来就选 itemmake 那对，行为不变（同 nt6）。
+- 孪生搬来：神木王鼎 `clone/misc/swmuding.lpc` 重新声明了木鼎的 `insects`，自己的虫表从没生效；`d/city/npc/oldman.lpc` 宠物体重表 `weight` 与 F_MOVE 同名；namesd 补 `jap_name()`，`d/city/task2/shashou` 不再三次一败。
+- 其他：重复的全局变量改名（`maze/forest` 的 `forest_unique_rooms`、template 的 `my_*`）、有意重定义的宏前加 `#undef`、`include/eve.h` 不再重复声明 `d/war/diablo.lpc` 已有的 `elements`、返回类型与基类一致、只在未启用的 `#if` 分支里用的声明挪进分支、未用局部变量。
