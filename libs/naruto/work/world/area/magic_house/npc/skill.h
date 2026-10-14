@@ -97,8 +97,8 @@ void do_fight()
             break;
 
         case 4: // 踩球小丑
-            exact = COMBAT_D->exact(me, enemy, 1)*1.6;
-            evade = COMBAT_D->evade(enemy, me, 1)*1.5;
+            exact = to_int(COMBAT_D->exact(me, enemy, 1)*1.6);
+            evade = to_int(COMBAT_D->evade(enemy, me, 1)*1.5);
 
             message_vision("\n$N將踩在腳下的大球用力一翻，整顆球快速的射向$n。\n", me, enemy);
             if( !COMBAT_D->SkillHit(me, enemy, exact, evade) ) {

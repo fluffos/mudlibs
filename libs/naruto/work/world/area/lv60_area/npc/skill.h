@@ -55,7 +55,7 @@ void do_fight()
                 command("perform wei ice sword.ice");
             } else {
                 if( enemy->is_busy() ) return;
-                exact = COMBAT_D->intimidate(this_object(), 1)*1.2;
+                exact = to_int(COMBAT_D->intimidate(this_object(), 1)*1.2);
                 evade = COMBAT_D->wittiness(enemy, 1);
 
                 this_object()->damage_stat("mp", 5, this_object());
@@ -93,7 +93,7 @@ void do_fight()
             if( random(2) == 1 ) {
                 command("perform nagao katana.hew");
             } else {
-                exact = COMBAT_D->exact(this_object(), enemy, 1)*1.1;
+                exact = to_int(COMBAT_D->exact(this_object(), enemy, 1)*1.1);
                 evade = COMBAT_D->evade(enemy, this_object(), 1);
 
                 this_object()->damage_stat("mp", 15, this_object());
@@ -129,14 +129,14 @@ void do_fight()
                     case 3: command("perform germ gun.loose"); break;
                 }
             } else {
-                exact = COMBAT_D->intimidate(this_object(), 1)*1.8;
+                exact = to_int(COMBAT_D->intimidate(this_object(), 1)*1.8);
 
                 this_object()->damage_stat("mp", 5, this_object());
                 message_vision("\n$N將種子島"REV"鐵砲"NOR"的子彈取出換成另一種紅色子彈「"RED"釣瓶彈"NOR"」射擊！\n"NOR, this_object(), enemy);
                 for(i=0;i<sizeof(targets);i++) {
                     if( i == 4 ) break;
 
-                    evade = COMBAT_D->wittiness(targets[i], 1)*1.5;
+                    evade = to_int(COMBAT_D->wittiness(targets[i], 1)*1.5);
 
                     if( !COMBAT_D->SkillHit(this_object(), targets[i], exact, evade) ) {
                         message_vision("沒想到紅色子彈發射後居然爆裂散射攻擊，可惜沒打中$n\n", this_object(), targets[i] );

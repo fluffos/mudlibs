@@ -61,7 +61,7 @@ void do_fight()
             break;
         case 1: // 鐵線花之舞-單體傷害
             num = num + 50;
-            exact = COMBAT_D->intimidate(this_object(), 1)*1.5;
+            exact = to_int(COMBAT_D->intimidate(this_object(), 1)*1.5);
             evade = COMBAT_D->wittiness(enemy, 1);
 
             this_object()->receive_damage(25, this_object());

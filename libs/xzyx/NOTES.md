@@ -715,3 +715,5 @@ Save files updated/added this round:
 
 - `include/daemons.h`（另一套 mudlib 带来的守护进程路径表）重定义 `globals.h` 已有的 `ALIAS_D`、`CHANNEL_D`、`MONEY_D`、`SKILL_D`、`FINGER_D`、`FTP_D`，值不同；包含它的文件一直用的是它的值。每个先 `#undef`，行为不变。
 - 神殿门徒 `d/shendian/npc/mentu.lpc` 的可教武功表 `string *skills` 与 `F_SKILL` 存武功数据的 `skills` 同名，改名 `teach_skills`；`d/death/god1.lpc`、`d/fenghuang/fenghuang/npc/obj/blade.lpc` 写明用驱动原先选的 `clean_up()`。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。1 个文件 1 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

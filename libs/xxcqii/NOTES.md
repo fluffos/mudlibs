@@ -169,3 +169,6 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 - 2026-10-10：与 xxcq 相同的两处编译错误：`kungfu/skill/wenjia-daofa/wryd.lpc`（「温柔一刀」）的 `if` 括号放错、`d/wenjia/obj/xiangshi.lpc` 的 `me->die;` 少括号，以及 `d/wenjia/` 下两份 `xiangshi_poison.lpc` 草稿少的右括号，从未能编译；已改正，改动文件 HEAD 0 个、工作树全部载入。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 0 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 1 个，只在 #if 分支用的声明移进分支 0 个文件；改动 1 个文件，HEAD 与工作树各载入一次无回退（1 objects; HEAD PASS 0, tree PASS 1; regress 0; newly loading 1），这些文件的警告 2 -> 1。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。23 个文件 23 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14：同一次重扫的其余 14 条：`inherit/private_room.lpc`、`recordable_room.lpc` 的 `setup()` 写成 `int`（基类 `void`，钩子返回值无人读），改 `void`；6 个宏重定义前加 `#undef`；`temp.lpc` 多余的 `inherit F_CLEAN_UP` 删去；一处跨文件同名函数写明胜出者。改动的 50 个对象新进程各载入一次，无回退。

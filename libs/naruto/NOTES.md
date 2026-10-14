@@ -714,3 +714,5 @@ issues encountered.
 手工清零；改动的 11 个对象（含 `cmds/std/kill` 和几个 NPC）在 HEAD 与工作树各载入一次，regress 0。
 
 - `cmds/std/kill.lpc` 先问目标 `obj->accept_kill(me)`，非零就不再动手（`if (... && obj->accept_kill(me)) return;`），所以 `accept_kill()` 的返回值是有意义的。八个 NPC（`u/m/mouse/bone/npc/ton`、`world/area/` 下的 `ka`、`clemens`、`johnson`、`nightkid`、`ye`、`lu`、`xiao`）返回 `int`，而它们继承的 `feature/npc/` 六个职业基类（villager、soldier、fighter、bandit、seasoldier、seabandit）写的是 `void`。基类改 `int accept_kill(object ob)`，`return;` 改 `return 0;`、末尾补 `return 0;`——`void` 的结果本来就当 0 读，行为不变，签名与子类一致。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。27 个文件 40 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

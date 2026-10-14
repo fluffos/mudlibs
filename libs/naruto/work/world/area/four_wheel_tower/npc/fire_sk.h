@@ -27,7 +27,7 @@ void do_fight()
         case 0..5:
             x = this_object()->query("area_info/x_axis");
             y = this_object()->query("area_info/y_axis");
-            exact = COMBAT_D->intimidate(this_object(), 1)*1.2;
+            exact = to_int(COMBAT_D->intimidate(this_object(), 1)*1.2);
             evade = COMBAT_D->wittiness(enemy, 1);
 
             if( !environment(this_object())->is_area() || !environment(this_object())->query_data(x, y, "terrainDamage") ) return;

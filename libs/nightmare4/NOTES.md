@@ -658,3 +658,4 @@ for a save`（`log/runtime`，14:50）。随后该字母目录出现，同一驱
 6. **`/secure/daemon/remote`（远程创作者协议）从预载中注释掉**（与 fluffos 组织的 Dead Souls 上游、本库同源的 dsI、dsII 相同）。它按 Foundation II 的旧套接字接口写成（`eventWrite(fd, ...)`），本库 `secure/lib/net/server.lpc` 的接口是按连接对象的，所以每次启动都编译失败；协议登录后还要加载每位创作者的 `~/adm/remote` 对象，本档案里一个都没有。文件保留。havenmud 同样处理。其余编译失败的文件也都是原有的：`secure/daemon/bugs.lpc`（连接 nightmare.imaginary.com 数据库的未完成原型）、`secure/cmds/creators/lsed.lpc`（需要驱动没有的 `ed_start`）、`daemon/tmp/A_WEARON.lpc`（残留）。
 7. 验证：全新启动 0 警告 0 错误；管理员会话 `smell`、`look at me`、`finger`（信仰一栏）、`help tell`、`eval` 取 NPC 等级（12）、新建断肢对象、点燃火把后的光亮（火把 7，NPC 3+7=10）、jar 的 `GetSave()`、`GetId()`，全部正常。
 
+- 2026-10-14: FluffOS 970d9f09 warns `Float value truncated to int` (#1426). 7 sites in 5 files: assignments, initializers and returns now spell the truncation `to_int(...)` (same value). Changed objects loaded before and after in fresh drivers, no regressions (`scripts/lpc_fix_float_trunc.py`, KB 04 §6.10).

@@ -22,7 +22,7 @@ void do_fight()
         case 0..5:
             x = this_object()->query("area_info/x_axis");
             y = this_object()->query("area_info/y_axis");
-            exact = COMBAT_D->wittiness(this_object(), 1)*1.2;
+            exact = to_int(COMBAT_D->wittiness(this_object(), 1)*1.2);
             evade = COMBAT_D->intimidate(enemy, 1);
 
             if( enemy->query_condition("bad_mud") ) return;

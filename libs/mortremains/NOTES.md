@@ -876,3 +876,5 @@ Formatter not run (minimal edits).
 - `adm/daemons/flock.lpc` defined `PRIVATE` as `nosave` and used it on two functions; it is now `protected`.
 - `reset()` as `void` in `adm/AFD/Dark/Prime/rooms/field1.lpc` and `d/Planar/Baator/phlegethos/out01.lpc` (the latter by the toolkit, its `return 1;` became `return;`); an empty `if (!str) { }` stub removed from `cmds/wiz/_resist.lpc`; `u/d/darkg/private/pornomag.lpc` names the `clean_up()` the driver already used; the shops' `tmp` local moved where it is read.
 - 19 headers and files redefine a global macro with a local meaning (the AFD domains' `ARMOR(x)` and `GUILD`, `NO_NEW_CHANNELS`, `TP`, `POSS`, `FIND`, `STD_HELP`, `__tmi__`, `OB_RESOLVER`): each now has `#undef` first. The local value was already the one in effect.
+
+- 2026-10-14: FluffOS 970d9f09 warns `Float value truncated to int` (#1426). 6 sites in 4 files: assignments, initializers and returns now spell the truncation `to_int(...)` (same value). Changed objects loaded before and after in fresh drivers, no regressions (`scripts/lpc_fix_float_trunc.py`, KB 04 §6.10).

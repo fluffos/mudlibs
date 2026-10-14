@@ -307,3 +307,5 @@ existing `enabled` guard.
 
 - 芥子袋 `d/obj/fabao/jiezi-bag.lpc` 自己声明了 `mapping Gold`，与 `feature/dbase.lpc` 存盘的 `Gold` 同名：存档写两条 `Gold`，`restore()` 填基类那份、清空袋子用的那份，袋里的钱每次读档都没了（KB 06 §7.233）。删去袋子自己的声明，`create()` 里 `Gold = ([]);`，旧存档的 `Gold` 正好读进唯一那份。
 - `d/kaifeng/ground.h` 表格守卫、`feature/alias.lpc` 的 `last_time` 改名 `last_cmd_time`、擂台与投票箱的 `title` 改名、突破迷宫出口重复的 `gg` 表删去、`d/obj/books-nonskill/book.h` 的 `BOOK` 先 `#undef`，都同 xiaoyuxiyou。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。3 个文件 3 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

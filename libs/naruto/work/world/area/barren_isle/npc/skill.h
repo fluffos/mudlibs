@@ -224,8 +224,8 @@ void do_fight()
             } else {
                 message_vision("\n$N將鉛鎚球反手旋轉，一記「"HIR"反手側擊"NOR"」砸向$n的肩膀。\n", me, enemy);
 
-                exact = COMBAT_D->exact(me, enemy, 1)*1.7;
-                evade = COMBAT_D->evade(enemy, me, 1)*1.5;
+                exact = to_int(COMBAT_D->exact(me, enemy, 1)*1.7);
+                evade = to_int(COMBAT_D->evade(enemy, me, 1)*1.5);
 
                 if( !COMBAT_D->SkillHit(me, enemy, exact, evade) ) {
                     message_vision("$N稍微往後一退避開了攻擊。\n\n", enemy);

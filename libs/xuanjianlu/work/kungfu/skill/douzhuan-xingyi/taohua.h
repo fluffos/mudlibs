@@ -218,7 +218,7 @@ int taohua(object me,object target)
 		jiali = me->query("jiali",1);
 		jiajin= me->query("jiajin",1);
 		damage = me->query_skill("force")+me->query_skill("strike")+random(jiali+jiajin)*3;
-		max_skill=pow(me->query("combat_exp")*10,0.33333)+1;
+		max_skill=to_int(pow(me->query("combat_exp")*10,0.33333)+1);
 		max_jiali=me->query_skill("force")/2;
 		max_jiajin = me->query("max_jingli")/20;
 		type="内伤";

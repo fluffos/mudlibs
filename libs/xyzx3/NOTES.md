@@ -658,3 +658,5 @@ functionally re-tested live on this lib.
 `scripts/toolkit_fix.sh` 一轮（冗余继承 7 处）后，从 tianxiawuxue 同日的整理（3b32800e67a）搬来四个文件：`d/city/library.lpc`、`d/city2/library.lpc`、`d/emei/user-room/host/home.lpc` 有意改 `STORY_DIR`，前加 `#undef`；`kungfu/skill/huashan-jian.lpc` 招式表后多余的 `;`。能编译的文件警告清零。改动的对象连同撤回的那些 HEAD 与工作树各载入一次：18 个，regress 0。
 
 - 注意：`lpc_twin_port.py adopt` 还会把 tianxiawuxue 删掉的 `inherit F_SAVE;`（`inherit/char/npcsave.lpc`、`clone/npc/fa-e.lpc` 等）一起搬来——那边的 NPC 基类本身带 F_SAVE，本库的 `CHARACTER` 不带，删了就找不到 `save()`/`restore()`，5 个对象载不进来。这些文件已撤回，只留上面四个。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。2 个文件 5 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

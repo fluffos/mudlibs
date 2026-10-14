@@ -364,3 +364,5 @@ functionally re-tested live on this lib.
 - 四间书库（`d/city/library`、`d/city2/library` 及 `海洋2002/hy3/` 下两间）自己的 `STORY_DIR` 覆盖 `globals.h` 的同名宏，先 `#undef`。
 - `海洋2002/hy3/d/pk/sjsz/obj/control.lpc` 在开头把 `auto_check()` 原型写成 `int`，中间又写了两条 `varargs void auto_check(...)`，定义是 `int auto_check()`；删去两条 `void` 原型。
 - `海洋2002/hy3/quest/guojob/guo.lpc` 同时包含 `zzzjob.lpc`、`teamjob.lpc`，两者都声明 `names`：`teamjob.lpc` 的改名 `team_names`（同 yxjh）；天书任务 `quest/shenshu/npc/man.lpc`、`testman.lpc` 的 `kill_ob()` 改 `void`（同 jh2006）。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。12 个文件 12 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/kungfu/skill/fengyun-shou/foguang.lpc`（`damage *=`）、`/kungfu/skill/taiji-quan/zhenup.lpc`（`damage *=`）、`/海洋2002/hy3/kungfu/skill/fengyun-shou/foguang.lpc`（`damage *=`）、`/海洋2002/hy3/kungfu/skill/taiji-quan/zhenup.lpc`（`damage *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。

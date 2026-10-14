@@ -249,3 +249,6 @@ functionally re-tested live on this lib.
 
 - `kungfu/skill/liangyi-jian.bak.lpc`：`int i; level;` 去掉无用的 `level;`。
 - 改动的对象 HEAD 与工作区都能载入，无回退。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。7 个文件 7 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/kungfu/skill/fengyun-shou/foguang.lpc`（`damage *=`）、`/kungfu/skill/taiji-quan/zhenup.lpc`（`damage *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14：同一次重扫的其余 15 条：8 个文件在基类已有的情况下又 `inherit F_CLEAN_UP`，删去；`quest/shenshu/npc/testman.lpc` 的 `kill_ob` 改 `void`；宏重定义前加 `#undef`。改动的对象新进程各载入一次，无回退。

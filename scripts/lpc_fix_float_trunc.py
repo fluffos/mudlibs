@@ -73,8 +73,16 @@ def plan_one(b, mask, off):
     """off = index of the statement's `;`.  Returns (start, end, new_text) or a reason string."""
     if b[off:off + 1] != b";":
         # some sites point into the expression: the statement still ends at the next code `;`
-        k = off
+        k, depth = off, 0
         while k < len(b) and not (mask[k] and b[k:k + 1] in (b";", b"{", b"}")):
+            if mask[k] and b[k:k + 1] in (b"(", b"["):
+                depth += 1
+            elif mask[k] and b[k:k + 1] in (b")", b"]"):
+                depth -= 1
+                if depth < 0:
+                    # the column sits inside a parenthesis: `if (x && (j = pow(2, i)))` -- the `;` ahead ends some other
+                    # statement
+                    return "assignment inside an expression (condition or argument)"
             k += 1
         if b[k:k + 1] != b";":
             return "no ';' after the column"

@@ -303,3 +303,5 @@ admin 登入时间戳漂移已在提交前用 `git checkout --` 撤销。
 - `d/jingcheng/npc/kid2.lpc`：候选糖人名单 `string *name` 与选中的 `string name = comm_name();` 同名，后面的代码读的是选中的那个；名单改名 `name_list`。
 - `d/guanwai/yizhan.lpc`：同一文件先 `#define BASE_MONEY 1000` 再 `#define BASE_MONEY 300`，生效的是后者，删去前者。
 - 函数体后多余的 `};`（8 个文件）、招式表后多余的 `;`（`u/hacky` 的两个剑法）；`daemon/skill/pixie-jian/shuangda.lpc`、`u/hacky/d/skill/skill/hubo.lpc` 用 `lpc_name_winner.py` 写明 `clean_up()`。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。4 个文件 4 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
