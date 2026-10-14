@@ -129,6 +129,16 @@ detection.
   `TYPE array *NAME` (just drop `array`) and `class X array NAME`
   (§7.163). Base-class instances cascade: `brassring` had 49% of its
   files fail from 2 base files.
+- **`Illegal to inherit after defining global variables`**: every
+  `inherit` must come before the first global; MudOS took them in any
+  order. The usual shapes are `int found;` above `inherit ROOM;` and a
+  header that declares globals (mortremains `m_spells.h`: `mapping
+  ABJURATION = ([...])`) included above the `inherit`. Fix: move the
+  declaration or `#include` line below the last `inherit` (moving down
+  keeps every macro it uses defined). `scripts/lpc_fix_inherit_order.py
+  SLUG --apply` does this from the diagnostics, and it is in
+  `toolkit_fix.sh`. 2026-10-14: 220 files in mortremains (187 newly
+  loading), and the same error in 30+ other libs.
 
 ### 6.4 One shared root cause, not N bugs
 

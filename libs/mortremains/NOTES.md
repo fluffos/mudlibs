@@ -878,3 +878,13 @@ Formatter not run (minimal edits).
 - 19 headers and files redefine a global macro with a local meaning (the AFD domains' `ARMOR(x)` and `GUILD`, `NO_NEW_CHANNELS`, `TP`, `POSS`, `FIND`, `STD_HELP`, `__tmi__`, `OB_RESOLVER`): each now has `#undef` first. The local value was already the one in effect.
 
 - 2026-10-14: FluffOS 970d9f09 warns `Float value truncated to int` (#1426). 6 sites in 4 files: assignments, initializers and returns now spell the truncation `to_int(...)` (same value). Changed objects loaded before and after in fresh drivers, no regressions (`scripts/lpc_fix_float_trunc.py`, KB 04 §6.10).
+
+## Inherit order (2026-10-14)
+
+220 files never compiled with `Illegal to inherit after defining global variables`. FluffOS takes every `inherit` before the first global; the MudOS this lib ran on did not care. Two shapes: a global (`int found;`) above `inherit ROOM;` (the AFD Dark domain rooms, `/d/Arctic/Sebastian` monsters, `_shout`, `_who2`, `obj/net/www`), and `#include <m_spells.h>` above the `inherit` in every mage and priest spell and spell object (`/d/class/wizard`, `/d/class/priest`, `/d/Ocean/Main/spells`).
+
+- `scripts/lpc_fix_inherit_order.py` moved each offending line below the last `inherit`, then a `toolkit_fix.sh` round cleared the warnings the newly loading files exposed (32 nosave functions, 27 bare returns, 103 unused locals, 2 varargs).
+- `include/m_spells.h` declared its nine school tables (`ABJURATION` … `UNIVERSAL`) as global mappings. `std/spell.lpc` includes it too, so every spell redeclared all nine. They are now `#define` mapping literals; the only reader, `d/class/wizard/std/daemons/learn.old`, still works.
+- `light`, `dark`: `check_magic_resist(TP, …)` passed the caster object where the caster level goes; now 0, which makes the function use the caster's level. `bladebarrier_ob` passes `master->query_level()` instead of `master`.
+- `d/Planar/Astral/monsters/githyanki.lpc`: `return 1;` in a `void special_attack()` became `return;`. `pool.lpc` and `sewer.lpc` (cyberparty): `int reset()` → `void reset()` (as in `std/room.lpc`). `vocalize_ob` dropped a `DEBUG` macro identical to the one in `debug.h`.
+- 248 objects checked HEAD vs tree in fresh drivers: 190 newly loading, 0 regressions. Still failing, left alone: content missing from the archive (`SK_BSD`, `/d/Outer/Sigil`, `monster.h`), and AFD attic copies of old `monster.lpc` and rooms calling `add_exit`/`set_value`, which this lib's `std/` no longer has.
