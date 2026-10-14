@@ -650,3 +650,4 @@ Bugs behind the warnings:
   private copy drives aging). Prototypes made to match their definitions: `getuid`/`geteuid` (string), `date` (int),
   `query_reply_text` (string), `query_enters` (string *).
 
+- 2026-10-14: FluffOS 970d9f09 `Float value truncated to int`, fixed upstream (fluffos/nightmare3 PR #9, merged; pin `d249a7e`). `currency_rate()` is a float that inflation moves off whole numbers; stored into an int it lost the fraction, so a rate below 1 became 0 and that currency was left out of the bank `account_summary()` base total and the admin `currency` command. Those receivers are float now and the divisions say `to_int()`. **Gameplay-visible:** bank base totals count every currency.

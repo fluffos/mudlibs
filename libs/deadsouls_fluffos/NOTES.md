@@ -540,3 +540,4 @@ after the `astar.lpc` include of the new upstream file (done for this pin; the `
 Left alone: `update.patch`/`update.blank` still name `.c` files in a few `cp`/`rm` calls (the live-upgrade tool targets the
 pre-rename tree); the config has three obsolete lines the driver reports (`address server ip`, `address server port`,
 `binary directory`).
+- 2026-10-14: FluffOS 970d9f09 `Float value truncated to int`, 20 sites fixed upstream (fluffos/dead-souls PR #19, squash-merged; pin `f1c492e`). `lib/teller.lpc` `int GetExchangeFee()` returned the `float ExchangeFee`, so a fractional exchange fee lost its fraction (below 1% it read as 0 and was not charged); it returns a float now. The rest spell their truncation `to_int()` (same value). Overlay files untouched.

@@ -605,3 +605,4 @@ Port: **40211**.
 - 自制道具（兵器/防具 + F_ITEMMAKE）的 `query_autoload()`/`autoload()` 双重继承：itemmake 那对改名 `query_itemmake_autoload()`/`itemmake_autoload()`，`item.lpc`/`combined.lpc` 有就交给它；驱动原来就选 itemmake 那对，行为不变（同 nt6）。
 - 孪生搬来：神木王鼎 `clone/misc/swmuding.lpc` 重新声明了木鼎的 `insects`，自己的虫表从没生效；`d/city/npc/oldman.lpc` 宠物体重表 `weight` 与 F_MOVE 同名；namesd 补 `jap_name()`，`d/city/task2/shashou` 不再三次一败。
 - 其他：重复的全局变量改名（`maze/forest` 的 `forest_unique_rooms`、template 的 `my_*`）、有意重定义的宏前加 `#undef`、`include/eve.h` 不再重复声明 `d/war/diablo.lpc` 已有的 `elements`、返回类型与基类一致、只在未启用的 `#if` 分支里用的声明挪进分支、未用局部变量。
+- 2026-10-14：FluffOS 970d9f09 的 `Float value truncated to int` 108 处在上游修掉（fluffos/nt7 PR #10，已合并，pin `14c803a`）。任务奖励的 `exp/pot/weiwang/score *= 1.2`、`pot *= 1.5`、`score *= 2.5`、`xj_gain *= 1.5/1.2`，浮点在运算前就被截成整数，发的是原数；现改为 `x = to_int(x * 1.2)`。**玩家可见**：这些奖励加成按原设计生效。69 个技能 `power_point()`/`river_point()` 改为 `float`（本库没有调用者）。

@@ -648,3 +648,4 @@ functionally re-tested live on this lib.
   `me->query_temp("cai_"+(i+1)+"/…")`，12 处。
 - `d/fixedtest/taohua/shijian.lpc`：`for(times; …)` 的初始化部分无作用，改为 `for(; …)`。
 - 其余是未用的局部变量（toolkit 自动删）。
+- 2026-10-14：新目录补丁 `patches/0005-float-truncation.patch`。`cmds/std/look.lpc` 的 `tough_level()` 中 `lvl = pow(power, 0.25)` 写明 `to_int()`，值不变；这是 FluffOS 970d9f09 重扫的唯一一处。五个补丁各自都能在 pin 上 `git apply --check` 通过，按顺序也能叠加。

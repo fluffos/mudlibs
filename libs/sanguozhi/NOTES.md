@@ -942,3 +942,4 @@ in about half of the first logins here (`copy_functions()` -> `lookup_ident()` w
 导出时的坑（KB 02 §2.3）：从 CRLF 的孪生文件搬来的一行带着 `\r` 混进 LF 文件，`git apply` 会把它和行尾空白一起去掉，
 导出的逐字节校验失败；在副本里先把新增行的行尾空白和多余 `\r` 去掉再导出。
 
+- 2026-10-14：FluffOS 970d9f09 的 `Float value truncated to int` 75 处在上游修掉（fluffos/sanguozhi PR #7，已合并，pin `7e2e33b`）。守方加成 `p_kill *= DEF_KILL_MORE`（1.4）在运算前被截成 1，`troop_attack.lpc`、`array_attack.lpc` 里守方从未得到加成；现改为 `x = to_int(x * 1.4)`。**玩家可见**：守城部队按原设计获得 1.4 倍加成。价格、利息、伤害、驿站行程按浮点算后存进整数的地方写明 `to_int()`。
