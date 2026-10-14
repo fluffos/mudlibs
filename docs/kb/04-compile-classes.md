@@ -139,6 +139,20 @@ detection.
   SLUG --apply` does this from the diagnostics, and it is in
   `toolkit_fix.sh`. 2026-10-14: 220 files in mortremains (187 newly
   loading), and the same error in 30+ other libs.
+- **`Type of returned value doesn't match function return type ( int vs
+  void )`**: a `void` function (or one with no type, which this driver reads
+  as void) returns a value. MudOS compiled it and passed the value on, and
+  FluffOS does too with `old type behavior : 1`, which turns type checking
+  off (shadowgate's config has it; sunshadow's does not, so 1,294 of its
+  files failed). Do not switch that option on; fix the functions. In
+  applies whose value the driver ignores (`init`, `reset`, `heart_beat`,
+  `create`), make the return bare (`return ::init();` →
+  `{ ::init(); return; }`). Anything else gets the type it returns: an
+  add_action handler that returns nothing fails its command, and so does
+  a `cmd_*()` for the command daemon. `scripts/lpc_fix_void_return.py SLUG
+  --apply` (in `toolkit_fix.sh`). Where a base class declares the
+  function `void`, the rescan reports `( void vs int )`: read the callers,
+  then `lpc_fix_return_types.py --also NAME`.
 
 ### 6.4 One shared root cause, not N bugs
 
