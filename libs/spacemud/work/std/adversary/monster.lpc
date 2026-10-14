@@ -55,7 +55,7 @@ int skill_for_level()
       return max_skill;
    current = SKILL_D->pts_for_rank(query_level() / 5);
    below = SKILL_D->pts_for_rank((query_level() / 5) - 1);
-   max_skill = (((0.0 + query_level()) / 5 - floor(query_level() / 5)) * (current - below)) + below;
+   max_skill = to_int((((0.0 + query_level()) / 5 - floor(query_level() / 5)) * (current - below)) + below);
 
    return max_skill || (query_level() * 10);
 }

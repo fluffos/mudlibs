@@ -705,3 +705,13 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply s
 `.H` -> `.h`) and 0 path reference(s) in 0 file(s) rewritten to the new spelling; 0 skipped, 0 ambiguous. Load check of the 0 objects that were renamed, edited or name a renamed path (HEAD against the working tree, an object is the same under any spelling of its path): 0 PASS -> 0 PASS, 0 that loaded before fail now, 0 more load.
 
 1 files moved (1 `.lpc`); mostly under `domains/std/room` (1). A rescan with `scripts/lpc_warnings.py spacemud` is still due: the renamed files are compiled for the first time.
+
+- 2026-10-14: FluffOS 970d9f09 warns `Float value truncated to int` (#1426). 43 sites in 17 files: assignments, initializers and returns now spell the truncation `to_int(...)` (same value); `x op= <float>` converted the float before the operation (zeroing `x` for a factor below 1) and is now `x = to_int(x op ...)`: `/daemons/loot_d.lpc`（`count *=`）, `/daemons/loot_d.lpc`（`count *=`）, `/daemons/loot_d.lpc`（`count *=`）, `/daemons/loot_d.lpc`（`count *=`）, `/daemons/loot_d.lpc`（`count *=`）, `/daemons/loot_d.lpc`（`count *=`）, `/daemons/loot_d.lpc`（`count *=`）, `/daemons/loot_d.lpc`（`count *=`）, `/daemons/loot_d.lpc`（`count *=`）, `/daemons/loot_d.lpc`（`count *=`）, `/daemons/loot_d.lpc`（`count *=`）, `/daemons/loot_d.lpc`（`count *=`）, `/daemons/loot_d.lpc`（`count *=`）, `/daemons/loot_d.lpc`（`count *=`）, `/daemons/loot_d.lpc`（`count *=`）, `/daemons/loot_d.lpc`（`count *=`）, `/std/modules/m_durability.lpc`（`current_max_dura *=`）. Changed objects loaded before and after in fresh drivers, no regressions (`scripts/lpc_fix_float_trunc.py`, KB 04 §6.10).
+- 2026-10-14 (same rescan, by hand; this lib needs the Lima-configured driver, so its scan uses `~/src/fluffos-lima/build-debug/src/lpcc`):
+  - `daemons/space_d.lpc` `dist_color()` computed `max -= min - 0.01` into an `int` and then `distances[to_int(floor(dist / max * 11))]`. With an int `max` that is an integer division, so the index was 0 or 11, and 11 is past the end of the 11-colour table. A float `span = max - min + 0.01` restores the gradient.
+  - The lima fixes apply here too:
+    - `daemons/loot_d.lpc`: `count *= level / 16.0` gave no loot below level 16;
+    - `std/adversary/condition.lpc`: the drunk stance penalty 1.2 was an int;
+    - `std/container.lpc` and `std/fluid.lpc`: masses were held in ints.
+  - **Gameplay-visible:** the star map's distance colours, low-level loot, the drunk penalty, and the capacity check for light items.
+  - The 18 changed objects load, with no regressions.

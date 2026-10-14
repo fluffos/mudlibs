@@ -772,3 +772,13 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply s
 ## 深度功能测试（§10.7，2026-10-08）— `.lpc` 后缀的定宽切片
 
 `.c` 改名 `.lpc` 时只改了字符串没改切片宽度：`f[<2..] == ".lpc"` 拿两个字符比四个字符，永远不成立（`!=` 永远成立），按后缀筛文件、去后缀的代码因此从不运行或截成 `x.l`（KB 06 §7.238）。`scripts/lpc_lpc_suffix_slice.py --apply` 改了 6 处比较、3 处去后缀（如 `www/cgi/autodoc.lpc`）；改动的文件 HEAD 与工作树分别加载（新进程），无回退。
+
+- 2026-10-14: FluffOS 970d9f09 warns `Float value truncated to int` (#1426). 74 sites in 30 files: assignments, initializers and returns now spell the truncation `to_int(...)` (same value); `x op= <float>` converted the float before the operation (zeroing `x` for a factor below 1) and is now `x = to_int(x op ...)`: `/cmds/guild/jedi/mwipe.lpc`（`adjustment *=`）, `/daemons/loot_d.lpc`（`count *=`）, `/daemons/loot_d.lpc`（`count *=`）, `/daemons/loot_d.lpc`（`count *=`）, `/daemons/loot_d.lpc`（`count *=`）, `/daemons/loot_d.lpc`（`count *=`）, `/daemons/loot_d.lpc`（`count *=`）, `/daemons/loot_d.lpc`（`count *=`）, `/daemons/loot_d.lpc`（`count *=`）, `/daemons/loot_d.lpc`（`count *=`）, `/daemons/loot_d.lpc`（`count *=`）, `/daemons/loot_d.lpc`（`count *=`）, `/daemons/loot_d.lpc`（`count *=`）, `/daemons/loot_d.lpc`（`count *=`）, `/daemons/loot_d.lpc`（`count *=`）, `/daemons/loot_d.lpc`（`count *=`）, `/daemons/loot_d.lpc`（`count *=`）, `/std/ammo_weapon.lpc`（`last_regen_time +=`）, `/std/modules/m_bodystats.lpc`（`max_health +=`）, `/std/modules/m_bodystats.lpc`（`limb_health +=`）, `/std/modules/m_damage_sink.lpc`（`armor_class +=`）, `/std/modules/m_durability.lpc`（`max_durability +=`）. Changed objects loaded before and after in fresh drivers, no regressions (`scripts/lpc_fix_float_trunc.py`, KB 04 §6.10).
+- 2026-10-14 (same rescan, by hand; scanned with the Lima-configured `~/src/fluffos-lima/build-debug/src/lpcc`):
+  - `std/modules/m_space_object.lpc` moved ships with `location_x += (direction_x * velocity) / 1000.0` into `int` coordinates. The new driver converts the step to an int first, so a step below 1 per heart beat (a slow ship, or the small component of a diagonal heading) was lost every tick and the ship drifted off its heading or stood still. The coordinates are `float` now, so steps accumulate, and the `int` getters return `to_int()`.
+  - `cmds/guild/jedi/mwipe.lpc` `adjustment *= resistance` (a factor below 1) gave 0.
+  - The drunk stance penalty (`std/adversary/condition.lpc`, 1.2) was an `int`.
+  - `std/fluid.lpc` held float masses in `int`s.
+  - Damage, healing, experience and layout figures spell `to_int()` (same values).
+  - **Gameplay-visible:** ship movement at low speed and on diagonals, the Jedi mind-wipe adjustment, and the drunk penalty.
+  - The 31 changed objects load, with no regressions.
