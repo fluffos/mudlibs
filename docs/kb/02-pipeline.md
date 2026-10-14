@@ -77,8 +77,14 @@ Also apply the WASM standards: §1.3b, §1.3e, and §1.5.
     commands regenerate it when a pin bump breaks a patch.
     `lpc_warnings.py` refuses a submodule's `work/`, so a corpus scan run
     only in place silently skips every such lib (fy2005, residuum,
-    sanguozhi, xkx100utf8 were missed this way): scan them in the scratch
-    repo. The builder rewrites `.c` path strings to `.lpc` (include and
+    sanguozhi, xkx100utf8, nightmare3, nt7, oxidus were missed this way):
+    scan them in the scratch repo. List the real ones with
+    `git ls-files -s libs | awk '$1=="160000"'`. The scan tree now gets the
+    lib's `overlay/` (oxidus keeps its driver headers there). Use the
+    default `build-debug/src/lpcc`; the older `build-debug/bin/lpcc` lacks
+    the promise combinators and oxidus compiles nothing with it. The
+    toolkit's boot check reads `libs/<slug>/config.fluffos`, so point its
+    `mudlib directory` at the scratch tree first. The builder rewrites `.c` path strings to `.lpc` (include and
     inherit lines and any `"/abs/path.c"`, e.g. residuum's
     `#define STD_OBJECT "/std/object.c"`), and export undoes only what
     upstream spelled `.c`, so a `.lpc`-named upstream (fy2005) round-trips.
