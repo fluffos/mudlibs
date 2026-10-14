@@ -296,3 +296,4 @@ live-boot-tested.
 ## 编译警告收尾（2026-10-13）
 
 `scripts/toolkit_fix.sh` 一轮：`d/city/obj/muren.lpc` 多余的 `inherit F_CLEAN_UP` 去掉，`include/net/ftpdsupp.h` 只在分支里用的 `file` 声明挪进分支。能编译的文件警告清零，regress 0。
+- 2026-10-14：`data/emoted.o`（表情守护进程的存档）整个还是原档案的 GBK 编码，没有转成 UTF-8，`restore_object()` 报 `Invalid utf8 string while restoring emote`，表情守护进程启动时一个表情都没有。现按 GB18030 转码，丢掉原文件里几个被截断的半个字符。转码后 `adm/daemons/emoted` 载入不再报错（HEAD 上报错）。

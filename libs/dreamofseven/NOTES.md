@@ -875,3 +875,4 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply d
   - `yelvqi` 与 6 个 `F_CLEAN_UP` 文件在基类已有的情况下又继承一次，删掉多余的继承；其余跨文件同名函数写明胜出者（行为不变）；`NOR`、`LUKY` 宏重定义前加 `#undef`；`pot.lpc` 多余的 `;`。
   - 改动及受影响的 444 个对象新进程各载入一次：438 -> 438，无回退。
 
+- 2026-10-14：`data/ip_d.o`（网咖管理器的存档）还是原档案的 BIG5 编码，没有转成 UTF-8，`restore_object()` 报 `Invalid utf8 string` 后以空数据启动；`scripts/lpc_save_encoding.py` 按 BIG5 转码，结果按存档格式解析通过才写回（KB 03 §4）。`data/board/` 下 5 个留言板存档按任何编码都解析不了，未动。

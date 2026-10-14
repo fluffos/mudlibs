@@ -1048,3 +1048,4 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply t
 - `questobj/guojob/guo.lpc`（郭靖）同时 include `zzzjob.lpc` 和 `teamjob.lpc`，两者各声明一份 `names` 表，内容差两个地名（北疆小镇/伊犁、悬空寺/玄妙观）；每份表只被紧跟其后的代码读到，各用各的。`teamjob.lpc` 这份改名 `team_names`，行为不变。
 - `u/lonely/obj/roommaker.lpc`、`roommk.lpc`：`special_props` 声明两次，后一次（多 `"file_name"`）本来就生效，删去前一次。
 - `d/city/library.lpc`、`d/city2/library.lpc`、`d/emei/user-room/host/home.lpc` 有意改 `STORY_DIR`，前加 `#undef`；`kungfu/skill/huashan-jian.lpc` 招式表后多余的 `;`；`quest/quest_jun/song/obj/bingfu.lpc`、`lingjian.lpc` 用 `lpc_name_winner.py` 写明 `clean_up()`。
+- 2026-10-14：1 个存档文件（玩家/登录存档 1 个；`data/user/m/mydjh.o`）还是原档案的 GBK 编码，没有转成 UTF-8，`restore_object()` 报 `Invalid utf8 string` 后对象以空数据启动（表情守护进程没有表情、留言板没有帖子、玩家无法载入）。`scripts/lpc_save_encoding.py` 逐个按 GB18030 解码，结果按存档格式解析通过才写回（KB 03 §4）。

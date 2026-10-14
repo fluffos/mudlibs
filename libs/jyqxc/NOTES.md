@@ -298,3 +298,6 @@ AGENTS.md 已记录过这个坑），再让 `log_file()` 内部先
 - `toolkit_fix.sh`：35 处多余的 inherit（如 `inherit NPC; inherit F_SKILL;`，NPC 已带 F_SKILL），一个对象同时有两份变量与函数，产生大量 `Redeclaration`/`inherited from both`。删去后 35 个对象载入无回退，另有 3 个原本载入失败的现在能载入。剩余警告另行处理。
 - （二）`include/net/ftpdconf.h`：`VALID_READ`/`VALID_WRITE` 已在 `ftpd.h` 定义为 0，这里重定义为 1（实际生效的是 1）；重定义前加 `#undef`，行为不变。`kungfu/skill/hubo.lpc`：两个父类都有 `clean_up()`，补一个叶子 `clean_up()` 写明原本生效的 `skill::clean_up()`。
 - 剩余：`d/mingjiao/npc/zhangqishi.h:149` 一条“无副作用”警告，只在被 `yanyuan.lpc` 包含时出现，单独复制该函数编译不报，原因未查明，保留；`home/simul_efun.lpc` 是垃圾目录里的旧副本（单独编译 simul_efun 片段的已知假警告）。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。3 个文件 3 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14：2 个存档文件（留言板 2 个；`data/board/gaibang_b.o`, `data/board/tiandi_b.o`）还是原档案的 GBK 编码，没有转成 UTF-8，`restore_object()` 报 `Invalid utf8 string` 后对象以空数据启动（表情守护进程没有表情、留言板没有帖子、玩家无法载入）。`scripts/lpc_save_encoding.py` 逐个按 GB18030 解码，结果按存档格式解析通过才写回（KB 03 §4）。

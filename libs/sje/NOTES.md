@@ -219,3 +219,4 @@ Century/`adm-single` 形状）**：`adm/simul_efun/file.lpc` 的
 - 慕容复 `d/mr/npc/murong-fu.lpc`、`d/mr1/npc/murong-fu.lpc` 的偷学目标 `mapping skills = skills[random(sizeof(skills))];` 用同名局部变量去读 `skill.h` 的表；表改名 `steal_skills`，这行改成读 `steal_skills`。
 - `kungfu/skill/kurong-changong.lpc` 的穴位表 `xue_name` 与它包含的 `eff_msg.h` 一字不差，删去重复的；`kungfu/skill/lanhua-shou/fuxue.lpc` 的穴位表不同，改名 `fuxue_xue_name`。
 - `job/gbjob/teamjob.lpc` 的地名表 `names` 与同被 `ysd.lpc` 包含的 `zzzjob.lpc` 同名，改名 `team_names`；天书任务 `quest/shenshu/npc/man.lpc`、`testman.lpc` 的 `kill_ob()` 改 `void`；`d/xiangyang/npc/shanzei0.lpc` 的 `MAX` 先 `#undef`；`kungfu/skill/jinshe-zhuifa/sheying.lpc` 写明用驱动原先选的 `clean_up()`。
+- 2026-10-14：`data/emoted.o`（表情守护进程的存档）整个还是原档案的 GBK 编码，没有转成 UTF-8，`restore_object()` 报 `Invalid utf8 string while restoring emote`，表情守护进程启动时一个表情都没有。现按 GB18030 转码，丢掉原文件里几个被截断的半个字符。转码后 `adm/daemons/emoted` 载入不再报错（HEAD 上报错）。

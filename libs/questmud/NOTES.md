@@ -765,3 +765,4 @@ Changed files loaded at HEAD and in the tree in fresh processes: no regression.
 验证：改动的文件和继承 shop_d/book_d/echo/bow 的对象共 90 个，HEAD 与工作树各在新进程载入（90 objects; HEAD PASS 72, tree PASS 73; regress 0; newly loading 1），72 个对象载入无回退；这些对象的警告 159 -> 0；全库重扫后无编译错误的文件里 0 条警告（10475 个文件能编译）。
 
 - 2026-10-12：`wizards/yodin/vankila.lpc`（监狱房间的 “HAVE A NICE DAY” 笑脸）在 f5a5b6ea210 的转义整理里丢了图形里的反斜杠：`--fix` 当时把 `\\|` 的后一半当作未知转义 `\|` 删掉，`\-;-/` 等也被删。按原始文本把这五行画面里的每个反斜杠写成 `\\`，现在照原样显示（脚本已修，KB 04 转义一行）。
+- 2026-10-14: 6 save files (player saves `players/bix.o`, `james.o`, `veron.o`, mail `data/mail/walla.o`, posts in `room/post_dir/`) still held Latin-1 bytes (Finnish text: ä, ö), so `restore_object()` stopped with `Invalid utf8 string` and the player or mailbox loaded empty. `scripts/lpc_save_encoding.py` transcoded them from Latin-1 and kept a file only when the result parses as a save (KB 03 §4).

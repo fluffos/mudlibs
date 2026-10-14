@@ -224,3 +224,4 @@ HEAD 与工作树分别加载（新进程）：1103 -> 1103 通过，无回退�
 启动时警告 105 -> 0；新进程登录（编码选择、新人物提问）正常。
 
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 30 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 8 个，只在 #if 分支用的声明移进分支 0 个文件；改动 36 个文件，HEAD 与工作树各载入一次无回退（36 objects; HEAD PASS 35, tree PASS 35; regress 0; newly loading 0），这些文件的警告 58 -> 20。
+- 2026-10-14：`data/emoted.o`（表情守护进程的存档）整个还是原档案的 GBK 编码，没有转成 UTF-8，`restore_object()` 报 `Invalid utf8 string while restoring emote`，表情守护进程启动时一个表情都没有。现按 GB18030 转码，丢掉原文件里几个被截断的半个字符。转码后 `adm/daemons/emoted` 载入不再报错（HEAD 上报错）。

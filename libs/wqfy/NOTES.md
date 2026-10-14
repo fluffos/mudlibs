@@ -414,3 +414,4 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply w
 ## 编译警告收尾（2026-10-13）
 
 `scripts/toolkit_fix.sh` 一轮去掉 2 处多余继承：`d/fy/fish.lpc` 把 `inherit ROOM;` 写了两遍，房间从没载入过，现在载入；`d/city/obj/muren.lpc` 多余的 `F_CLEAN_UP`。手工：`cmds/adm/roommaker.lpc` 把 `special_props` 声明两次，代码用的是后一份（多 `file_name`），删去前一份；`cmds/adm/wizinfo.lpc` 自己定义、却从不使用的 `CHINESE_MUD_NAME` 删去。能编译的文件警告清零；改动的 4 个对象在 HEAD 与工作树各载入一次：HEAD PASS 3，tree PASS 4，regress 0。
+- 2026-10-14：1 个存档文件（玩家/登录存档 1 个；`data/login/j/jane/jane.o`）还是原档案的 GBK 编码，没有转成 UTF-8，`restore_object()` 报 `Invalid utf8 string` 后对象以空数据启动（表情守护进程没有表情、留言板没有帖子、玩家无法载入）。`scripts/lpc_save_encoding.py` 逐个按 GB18030 解码，结果按存档格式解析通过才写回（KB 03 §4）。

@@ -325,3 +325,4 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 - `d/yangzhou/npc/mouse.lpc` 的闲逛 `(: "random_move" :)` 只返回字符串，老鼠从不走动；改成 `(: random_move :)`。
 - `u/losey/gogoha.lpc`（巫师 losey 的居所）内层 `/* sizeof() == 2 */` 提前结束了外层注释、结尾又写成 `* /`，房间从没编译成功；内层改 `//`、结尾改 `*/` 后载入。
 - 未改：`d/wuhan/npc/npc.lpc`、`cmds/adm/locate.lpc`、`u/lark/luoyang/room1.lpc` 是几个文件首尾相接贴成的一个文件，编译失败，按原样保存（见 sjpl2 NOTES）。
+- 2026-10-14：`data/emoted.o`（表情守护进程的存档）整个还是原档案的 GBK 编码，没有转成 UTF-8，`restore_object()` 报 `Invalid utf8 string while restoring emote`，表情守护进程启动时一个表情都没有。现按 GB18030 转码，丢掉原文件里几个被截断的半个字符。转码后 `adm/daemons/emoted` 载入不再报错（HEAD 上报错）。

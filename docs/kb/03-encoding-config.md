@@ -138,6 +138,15 @@ function", hundreds per lib); `scripts/lpc_warnings.py --fix` repairs it (KB 04
   parses. 2026-10-06: 32 save files (`data/emoted.o` of 20 libs: mhxy, mhxyqd, shenmo, sjsh*, xiaoyuxiyou, xlqy*, xo*, xyj20032,
   yueyingqiyuan, ...; `xyj2000*/data/doc/1997/Dec/doc12.22.o`). Detection: parse every `#/`-headed save; a failing line with a CJK
   character directly before a `"`.
+- **Whole save files that were never transcoded.** The conversion pass covered sources, not every `.o`: 341 text saves in 33
+  libs (emote tables, bulletin boards, toplists, player and login saves; es1/esI/es1_win attic boards, xkm backups, kxkj boards,
+  `data/emoted.o` of fys, sje, sjpl*, sjshv150) still held the archive's GBK bytes, so `restore_object()` stops with
+  `Invalid utf8 string while restoring <var>` and the object starts empty -- an emote daemon without emotes, a board without
+  posts. `scripts/lpc_save_encoding.py [--apply] SLUG...|--all` transcodes each tracked text save that is not UTF-8 and keeps it
+  only when the result parses as a save. The encoding is chosen per file, against the lib's own UTF-8 sources: GB18030 and
+  BIG5 both "succeed" on each other's bytes, but the wrong one yields rare characters (dreamofseven's `網咖管理器` read as GBK is
+  `呼〡恨瞶竟`), and a lib without CJK sources (questmud, Finnish) has Latin-1 bytes. Saves no decoding parses (truncated
+  boards, a few toplists) are listed and left. Detection: `git ls-files 'libs/*/work/*.o'`, starting with `#`, not valid UTF-8.
 
 ---
 

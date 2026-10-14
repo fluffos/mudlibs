@@ -350,3 +350,4 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply f
   - 现把 `point`/`hard` 声明为 `float`，乘积用 `to_int()`。
   - 运行时探针：一个 NPC 的 sword 100、duanjia-sword 100（power_point 1.3），`query_skill("sword")` 返回整数 180（100/2 + 100×1.3）。
   - 另：载入时 `emoted` 恢复存档报 `Invalid utf8 string while restoring emote`，待查。
+- 2026-10-14：`data/emoted.o`（表情守护进程的存档）整个还是原档案的 GBK 编码，没有转成 UTF-8，`restore_object()` 报 `Invalid utf8 string while restoring emote`，表情守护进程启动时一个表情都没有。现按 GB18030 转码，丢掉原文件里几个被截断的半个字符。转码后 `adm/daemons/emoted` 载入不再报错（HEAD 上报错）。

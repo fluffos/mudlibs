@@ -422,3 +422,4 @@ Time Fri Sep 4 01:27:54 2026），无 `error:` / `Too deep recursion`。
 ## 编译警告收尾（2026-10-13）
 
 `scripts/toolkit_fix.sh` 一轮去掉 16 处多余继承；`include/net/ftpdconf.h` 把 `VALID_READ`、`VALID_WRITE` 定为 1，覆盖 `ftpd.h` 的 0，先 `#undef`（同 xiakexing2017），行为不变。能编译的文件警告清零；改动的对象在 HEAD 与工作树各载入一次（16 objects; HEAD PASS 12, tree PASS 12; regress 0; newly loading 0）。
+- 2026-10-14：2 个存档文件（留言板 2 个；`data/board/gaibang_b.o`, `data/board/tiandi_b.o`）还是原档案的 GBK 编码，没有转成 UTF-8，`restore_object()` 报 `Invalid utf8 string` 后对象以空数据启动（表情守护进程没有表情、留言板没有帖子、玩家无法载入）。`scripts/lpc_save_encoding.py` 逐个按 GB18030 解码，结果按存档格式解析通过才写回（KB 03 §4）。
