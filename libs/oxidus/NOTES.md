@@ -30,6 +30,7 @@ Catalog FluffOS-compat lives in `patches/` (applied by
   shared `OLD_ED`.
 - `0003-WASM-hash-stub-without-PACKAGE_CRYPTO.patch` — `hash()` sefun stub
   so WASM rooms compile without `PACKAGE_CRYPTO`.
+- `0004-fix-compile-warnings.patch` — every compile warning fixed (2026-10-13, see the dated section at the end).
 
 Driver headers (`include/driver/*.h`, including `promise.h`) and the
 `adm/custom/` first-user seed live in `overlay/` (rsync'd onto zip staging).
@@ -619,3 +620,28 @@ work tree.
 ## 深度功能测试（§10.7，2026-10-05）— 主控 author_file()/domain_file()
 
 共享驱动的 mudlib_stats 包在主控载入时各调用一次 `author_file(<主控文件>)` 和 `domain_file("/")`。补丁 0001 加的 stub 里没有这两个 apply，所以每次启动都打印两行 `... in the master file does not work`。0001 的 stub 块补上 `author_file()` / `domain_file()`，返回 `get_root_uid()` / `get_bb_uid()`（ROOT / BACKBONE），正是驱动缺省时用的值（KB 06 §7.222）。写进 0001 而不是新补丁：rebase 脚本单独检查每个补丁，新补丁的上下文会是 0001 加的行（KB 02 §2.3）。site 同构树（pin + 补丁 + overlay）跑 `lpcc config.fluffos /nonexistent.lpc` 前后对比，只少了这两行。
+
+## Deep functional test (§10.7, 2026-10-13): compile warnings 64 -> 0 (catalog patch 0004)
+
+`work/` is the upstream submodule, so the in-place warning campaign never scanned it. Scanned in a scratch repo
+(`scripts/submodule_patch_scratch.py build oxidus`); it needs the overlay's `include/driver/*.h` (now laid by
+`scripts/pristine_tree.sh`) and an lpcc with the promise combinators (`build-debug/src/lpcc`, not the older
+`build-debug/bin/lpcc`). 490 files compile, 64 warnings -> 0 after the fixer and hand fixes; exported as
+`patches/0004-fix-compile-warnings.patch` (byte-for-byte round trip; all four patches apply on the pin). 26 changed objects
+loaded before and after in fresh drivers: 25 -> 26, no regressions; the patched tree boots to the login prompt.
+
+Bugs behind the warnings:
+- `d/cavern/cavern_daemon.lpc`: its private helper `set_path(z, y, x)` shared a name with the public `set_path(mixed path)`
+  that `std/object/command.lpc` provides, so the carving loop's calls never carved a tile, `!is_path()` stayed true and the
+  daemon died on the eval-cost limit every time it loaded (three fresh runs each way: fails at the pin, loads with the fix).
+  Renamed `carve_path()`; `d/maze/maze_daemon.lpc` had the same helper and got the same rename.
+- `adm/daemons/modules/gmcp/Char.lpc`: the Char.List filter `(: $1 != $2, $(who) :)` is a comma expression that always
+  returns `who`, so the player was never excluded from their own list; now `(: $1 != $(who) :)`.
+- `adm/simul_efun/lpml.lpc`: `"\x01BACKSLASH\x01"` — `\x` takes every hex digit after it (`\x01B`), so the placeholder was not
+  the intended bytes; now `"\x01" "BACKSLASH" "\x01"`.
+- Rest: `english.lpc` `case "none" : "its";` without `return` (5, same result through `default`), `adm/obj/login.lpc` inherited
+  EXT_MESSAGING twice (STD_ITEM carries it; identical initialisers) and a private `__name` like its base's, `std/ext/proc.lpc`
+  `__cooldowns` vs `std/object/cooldown.lpc` (two private maps, renamed `__proc_cooldowns`), prototypes made to match
+  (`set_wealth`, `generate_map`, `query_value` now `mixed` because `lib/coin.lpc` returns an array), `(mixed)` casts on
+  deliberately mixed `?:` results, `/*` inside doc comments.
+

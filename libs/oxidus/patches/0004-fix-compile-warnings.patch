@@ -1,0 +1,617 @@
+diff --git a/adm/daemons/grapevine.lpc b/adm/daemons/grapevine.lpc
+index 670e6a1..9451362 100644
+--- a/adm/daemons/grapevine.lpc
++++ b/adm/daemons/grapevine.lpc
+@@ -137,25 +137,25 @@ private nomask mapping connect(mapping grapevine) {
+   if(server) {
+     _log(2, "Already connected to a server");
+ 
+-    return;
++    return 0;
+   }
+ 
+   if(__restart) {
+     _log(2, "Restart in progress");
+ 
+-    return;
++    return 0;
+   }
+ 
+   if(!grapevine) {
+     _log(2, "No Grapevine configuration");
+ 
+-    return;
++    return 0;
+   }
+ 
+   if(!grapevine["host"]) {
+     _log(2, "No Grapevine host");
+ 
+-    return;
++    return 0;
+   }
+ 
+   __reffs = ([]);
+diff --git a/adm/daemons/help.lpc b/adm/daemons/help.lpc
+index a1f33d1..00bc0b5 100644
+--- a/adm/daemons/help.lpc
++++ b/adm/daemons/help.lpc
+@@ -42,7 +42,7 @@ void setup() {
+           ? __help_root + $1[0]
+           : stringp($1)
+             ? __help_root + $1
+-            : error("Invalid include format in config."),
++            : (error("Invalid include format in config."), ""),
+         pointerp($1) && sizeof($1) > 1 ? $1[1] : "all"
+       })
+     :)
+diff --git a/adm/daemons/modules/gmcp/Char.lpc b/adm/daemons/modules/gmcp/Char.lpc
+index 2e94050..6da8c01 100644
+--- a/adm/daemons/modules/gmcp/Char.lpc
++++ b/adm/daemons/modules/gmcp/Char.lpc
+@@ -180,7 +180,7 @@ void Items(object who, string submodule, mixed arg) {
+   // Now we do another switch to build the item data
+   switch(submodule) {
+     case "List" :
+-      items = find_targets(who, null, container, (: $1 != $2, $(who) :)) ?? ({});
++      items = find_targets(who, null, container, (: $1 != $(who) :)) ?? ({});
+       item_data = ({});
+ 
+       foreach(item in items) {
+diff --git a/adm/obj/login.lpc b/adm/obj/login.lpc
+index c0c1ee7..3cbdd51 100644
+--- a/adm/obj/login.lpc
++++ b/adm/obj/login.lpc
+@@ -22,9 +22,8 @@
+ #include <move.h>
+ #include <origin.h>
+ 
+-inherit STD_ITEM;
++inherit STD_ITEM;   // carries EXT_MESSAGING already
+ 
+-inherit EXT_MESSAGING;
+ inherit EXT_CLIENT;
+ inherit EXT_LOG;
+ 
+@@ -34,8 +33,8 @@ private void create_password(string str);
+ private void confirm_password(string str);
+ private void new_account(string str, string name);
+ private void auto_destruct();
+-private void reconnect(string str, string name);
+-private void enter_world(string name, int reconnecting);
++varargs private void reconnect(string str, string name);
++varargs private void enter_world(string name, int reconnecting);
+ private object create_body(string name);
+ private string parse_tokens(string text);
+ private void greet();
+@@ -47,7 +46,7 @@ private void first_admin_login();
+ 
+ /** @type {STD_PLAYER} */ private nosave object body;
+ private nosave mapping __account = null;
+-private nosave string __name, __character;
++private nosave string __login_name, __character;
+ private nosave string __logo = parse_tokens(read_file(mud_config("LOGO")));
+ private nosave string __login_message = parse_tokens(read_file(mud_config("LOGIN_MSG")));
+ private nosave int __call_out_id;
+@@ -239,15 +238,15 @@ private void get_account(string str) {
+     return dest_me();
+   }
+ 
+-  if(sscanf(str, "%s@%s", __character, __name) != 2)
+-    __name = str;
++  if(sscanf(str, "%s@%s", __character, __login_name) != 2)
++    __login_name = str;
+ 
+-  __account = ACCOUNT_D->load_account(__name);
++  __account = ACCOUNT_D->load_account(__login_name);
+ 
+   if(!__account) {
+-    _info("The account %s does not exist.", __name);
++    _info("The account %s does not exist.", __login_name);
+     _question("Would you like to create it? ");
+-    input_to("new_account", __name);
++    input_to("new_account", __login_name);
+     return;
+   }
+ 
+@@ -519,7 +518,7 @@ private void new_character(string str) {
+     return;
+   }
+ 
+-  if(!ACCOUNT_D->add_character(__name, str)) {
++  if(!ACCOUNT_D->add_character(__login_name, str)) {
+     _error("There was a problem creating your character.");
+     return dest_me();
+   }
+diff --git a/adm/obj/master/security.lpc b/adm/obj/master/security.lpc
+index f1ce118..598d8b2 100644
+--- a/adm/obj/master/security.lpc
++++ b/adm/obj/master/security.lpc
+@@ -700,8 +700,8 @@ private nomask void load_access() {
+ /**
+  * Translates a path glob into an anchored regex. '*' matches within a
+  * single path segment (no slash); '**' matches the remainder of the path
+- * (slashes included). A trailing '/**' additionally matches the directory
+- * node itself, so '/adm/**' covers '/adm' as well as '/adm/foo' - callers
++ * (slashes included). A trailing '/\**' additionally matches the directory
++ * node itself, so '/adm/\**' covers '/adm' as well as '/adm/foo' - callers
+  * pass a bare directory path without a trailing slash and still match.
+  * Everything else is matched literally, with regex metacharacters escaped.
+  *
+diff --git a/adm/simul_efun/english.lpc b/adm/simul_efun/english.lpc
+index 5a6f1be..47991c8 100644
+--- a/adm/simul_efun/english.lpc
++++ b/adm/simul_efun/english.lpc
+@@ -142,7 +142,7 @@ string possessive_pronoun(mixed ob) {
+     case "male" : return "his";
+     case "female" : return "hers";
+     case "other" : return "theirs";
+-    case "none" : "its";
++    case "none" : return "its";
+     default: return "its";
+   }
+ }
+@@ -172,7 +172,7 @@ string possessive(mixed ob) {
+     case "male" : return "his";
+     case "female" : return "her";
+     case "other" : return "their";
+-    case "none" : "its";
++    case "none" : return "its";
+     default: return "its";
+   }
+ }
+@@ -202,7 +202,7 @@ string reflexive(mixed ob) {
+     case "male" : return "himself";
+     case "female" : return "herself";
+     case "other" : return "themself";
+-    case "none" : "itself";
++    case "none" : return "itself";
+     default: return "itself";
+   }
+ }
+@@ -232,7 +232,7 @@ string objective(mixed ob) {
+     case "male" : return "him";
+     case "female" : return "her";
+     case "other" : return "them";
+-    case "none" : "it";
++    case "none" : return "it";
+     default: return "it";
+   }
+ }
+@@ -262,7 +262,7 @@ string subjective(mixed ob) {
+     case "male" : return "he";
+     case "female" : return "she";
+     case "other" : return "they";
+-    case "none" : "it";
++    case "none" : return "it";
+     default: return "it";
+   }
+ }
+diff --git a/adm/simul_efun/function.lpc b/adm/simul_efun/function.lpc
+index 84d9ed3..a6b8679 100644
+--- a/adm/simul_efun/function.lpc
++++ b/adm/simul_efun/function.lpc
+@@ -125,7 +125,7 @@ varargs string call_trace(int colour) {
+ 
+   string *colours = colour
+     ? map(trace_colours, (:"{{"+$1[1..]+"}}":))
+-    : map(trace_colours, (: "" :));
++    : allocate(sizeof(trace_colours), "");
+ 
+   // We don't want to include the call_trace() function itself
+   string res = reduce(objects[1..],
+diff --git a/adm/simul_efun/lpml.lpc b/adm/simul_efun/lpml.lpc
+index 71f3f83..ee3a011 100644
+--- a/adm/simul_efun/lpml.lpc
++++ b/adm/simul_efun/lpml.lpc
+@@ -5,7 +5,7 @@
+  * Based on JSON5 with LPC-specific extensions
+  *
+  * Features supported:
+- * - Single and multi-line comments (// and \/* *\/)
++ * - Single and multi-line comments (// and slash-star block comments)
+  * - Unquoted object keys (identifiers)
+  * - Single-quoted strings ('string')
+  * - Multiline strings with automatic folding (real newlines → spaces)
+@@ -580,7 +580,7 @@ private varargs mixed lpml_decode_parse_string(mixed* parse, int quote_char) {
+     string quote_str = sprintf("%c", quote_char);
+ 
+     // First, convert \\\\ to a placeholder to avoid double-processing
+-    string backslash_placeholder = "\x01BACKSLASH\x01";
++    string backslash_placeholder = "\x01" "BACKSLASH" "\x01";
+     if(member_array('\\', out) != -1)
+       out = replace_string(out, "\\\\", backslash_placeholder);
+ 
+diff --git a/cmds/action/wear.lpc b/cmds/action/wear.lpc
+index ea0a053..50702a8 100644
+--- a/cmds/action/wear.lpc
++++ b/cmds/action/wear.lpc
+@@ -111,6 +111,6 @@ private mixed wear_all(/** @type {STD_BODY} */ object tp) {
+   }
+ 
+   return num
+-    ? 1
++    ? (mixed)1
+     : "You found nothing to put on.";
+ }
+diff --git a/cmds/std/colour.lpc b/cmds/std/colour.lpc
+index f0515bb..a5818d0 100644
+--- a/cmds/std/colour.lpc
++++ b/cmds/std/colour.lpc
+@@ -72,9 +72,9 @@ mixed main(/** @type {STD_PLAYER} */ object caller, string str) {
+       string bg = sprintf("^^%s^^", hex);
+ 
+       return _info(caller, "\n"
+-        "%s\'%'0'3d\' will appear like this in the "
++        "%s'%'0'3d' will appear like this in the "
+         "foreground.{{res}}\n"
+-        "%s\'%'0'3d\' will appear like this in the "
++        "%s'%'0'3d' will appear like this in the "
+         "background.{{res}}",
+         fg, num, bg, num);
+     }
+diff --git a/d/cavern/cavern_daemon.lpc b/d/cavern/cavern_daemon.lpc
+index 1bdd3dc..8ce5025 100644
+--- a/d/cavern/cavern_daemon.lpc
++++ b/d/cavern/cavern_daemon.lpc
+@@ -39,7 +39,7 @@ private mixed *find_layer_connections(int z);
+ private int count_neighbour_walls(int z, int y, int x);
+ private string *shuffle_directions(int z, int y, int x);
+ private void setup_dimensions();
+-private string set_path(int z, int y, int x);
++varargs private string carve_path(int z, int y, int x);
+ private string clear_path(int z, int y, int x);
+ public int is_path(int z, int y, int x);
+ private string clear_wall(int z, int y, int x);
+@@ -260,7 +260,7 @@ private void generate_layer(int z) {
+     y = stack[<1][1];
+ 
+     if(!is_path(z, y, x)) {
+-      set_path(z, y, x);
++      carve_path(z, y, x);
+       carved_tiles++;
+     }
+ 
+@@ -775,7 +775,7 @@ private string clear_path(int z, int y, int x) {
+  * @returns {string} The new bit-string for the cell, or 0 if the
+  *                   coordinate is out of bounds.
+  */
+-private string set_path(int z, int y, int x) {
++varargs private string carve_path(int z, int y, int x) {
+   string result;
+ 
+   if(oob(z, y, x))
+diff --git a/d/maze/maze_daemon.lpc b/d/maze/maze_daemon.lpc
+index 86a14de..067b82b 100644
+--- a/d/maze/maze_daemon.lpc
++++ b/d/maze/maze_daemon.lpc
+@@ -42,7 +42,7 @@ private string clear_wall(int z, int y, int x);
+ private string set_wall(int z, int y, int x);
+ public int is_wall(int z, int y, int x);
+ private string clear_path(int z, int y, int x);
+-private string set_path(int z, int y, int x);
++varargs private string carve_path(int z, int y, int x);
+ public int is_path(int z, int y, int x);
+ private string clear_down(int z, int y, int x);
+ private string set_down(int z, int y, int x);
+@@ -253,7 +253,7 @@ private void generate_layer(int z) {
+   seed = result[0];
+   start_y = MIN_Y + result[1];
+ 
+-  if(!set_path(z, start_y, start_x))
++  if(!carve_path(z, start_y, start_x))
+     return;
+ 
+   // Add the starting point to the stack, so we will begin generating from
+@@ -292,8 +292,8 @@ private void generate_layer(int z) {
+         continue;
+ 
+       room_count++;
+-      set_path(z, ny, nx);
+-      set_path(z, current["y"] + dir["dy"], current["x"] + dir["dx"]);
++      carve_path(z, ny, nx);
++      carve_path(z, current["y"] + dir["dy"], current["x"] + dir["dx"]);
+       stack += ({ (["x": nx, "y": ny]) });
+       found_neighbour = 1;
+ 
+@@ -475,7 +475,7 @@ private string clear_path(int z, int y, int x) {
+  * @returns {string} The new bitfield value, or 0 if the coordinates
+  *                   are out of bounds.
+  */
+-private string set_path(int z, int y, int x) {
++varargs private string carve_path(int z, int y, int x) {
+   string result;
+ 
+   if(oob(z, y, x))
+@@ -792,7 +792,7 @@ void determine_exits_and_entrances() {
+ 
+     step = 0;
+     while(step < dimensions[HEIGHT]-1 && is_wall(0, step, hole)) {
+-      set_path(0, step, hole);
++      carve_path(0, step, hole);
+       path_neighbours = find_neighbour_path(0, step, hole, FOREST);
+       if(sizeof(path_neighbours)) {
+         connect_to_neighbour_path(({ 0, step, hole }), path_neighbours);
+@@ -852,7 +852,7 @@ void determine_exits_and_entrances() {
+       while(is_wall(0, hole, step)) {
+         it++;
+ 
+-        set_path(0, hole, step);
++        carve_path(0, hole, step);
+         path_neighbours = find_neighbour_path(0, hole, step, WASTES);
+         if(sizeof(path_neighbours)) {
+           connect_to_neighbour_path(({ 0, hole, step }), path_neighbours);
+@@ -891,7 +891,7 @@ private void connect_to_neighbour_path(int *curr, mixed *neighbours) {
+     new_y += mods[1];
+     new_x += mods[2];
+ 
+-    set_path(new_z, new_y, new_x);
++    carve_path(new_z, new_y, new_x);
+   } while(
+     new_z != dest[0] ||
+     new_y != dest[1] ||
+diff --git a/d/wastes/wastes_daemon.lpc b/d/wastes/wastes_daemon.lpc
+index 22f05ff..335b903 100644
+--- a/d/wastes/wastes_daemon.lpc
++++ b/d/wastes/wastes_daemon.lpc
+@@ -21,7 +21,7 @@ inherit EXT_NOISE;
+ 
+ private void setup_wastes_shorts();
+ private void setup_wastes_longs();
+-private void generate_map();
++protected mixed *generate_map();
+ private mixed *generate_terrain();
+ private mixed *generate_river(mixed *map);
+ varargs string determine_room_type(int z, int y, int x);
+diff --git a/std/cmd/act.lpc b/std/cmd/act.lpc
+index 348615f..c5ed3f7 100644
+--- a/std/cmd/act.lpc
++++ b/std/cmd/act.lpc
+@@ -214,7 +214,7 @@ varargs object carried_or_local_target(object tp, string arg, function f) {
+  * @param {STD_BODY} tp - The player to check resources for
+  * @returns {int} 1 if the player can afford the cost, 0 if not
+  */
+-int cost_check(object tp) {
++varargs int cost_check(object tp) {
+   if(hp_cost && tp->query_hp() < hp_cost) {
+     tell(tp, "You are too weak to do that.\n");
+     return 0;
+@@ -239,7 +239,7 @@ int cost_check(object tp) {
+  *
+  * @param {STD_BODY} tp - The player to deduct costs from
+  */
+-void apply_cost(object tp) {
++varargs void apply_cost(object tp) {
+   hp_cost && tp->adjust_hp(-hp_cost);
+   sp_cost && tp->adjust_sp(-sp_cost);
+   mp_cost && tp->adjust_mp(-mp_cost);
+diff --git a/std/daemon/discord_bot.lpc b/std/daemon/discord_bot.lpc
+index 09d8a38..12e13d2 100644
+--- a/std/daemon/discord_bot.lpc
++++ b/std/daemon/discord_bot.lpc
+@@ -75,7 +75,7 @@ void mudlib_setup() {
+  *
+  * @errors If the bot has no name, token, and intents configured.
+  */
+-void start_bot() {
++varargs void start_bot() {
+     if(!is_setup())
+         error("Bot not setup");
+ 
+@@ -661,7 +661,7 @@ private nomask string query_token() {
+ 
+     if(origin() != ORIGIN_LOCAL) {
+         _log(2, "Illegal call to query_token() from %O", previous_object());
+-        return;
++        return 0;
+     }
+ 
+     return bot_data["token"];
+diff --git a/std/daemon/websocket_client.lpc b/std/daemon/websocket_client.lpc
+index ab464ac..55f55f9 100644
+--- a/std/daemon/websocket_client.lpc
++++ b/std/daemon/websocket_client.lpc
+@@ -1119,7 +1119,7 @@ varargs protected nomask int websocket_close(int code: (: WS_CLOSE_NORMAL :), st
+             break;
+         default:
+             _log(2, "Unknown close code: %d", code);
+-            return;
++            return 0;
+     }
+ 
+     return websocket_message(WS_CLOSE_FRAME, code, reason);
+diff --git a/std/equip/weapon.lpc b/std/equip/weapon.lpc
+index c9231bb..c1a6a60 100644
+--- a/std/equip/weapon.lpc
++++ b/std/equip/weapon.lpc
+@@ -143,7 +143,7 @@ string query_slot() {
+  * @param {STD_BODY} tp - The living attempting to wield
+  * @returns {mixed} 1 if wielding is allowed, or an error string
+  */
+-mixed can_equip(object tp) {
++varargs mixed can_equip(object tp) {
+   return call_if(this_object(), "equip_check", tp) || 1;
+ }
+ 
+diff --git a/std/ext/proc.lpc b/std/ext/proc.lpc
+index fcbdd23..e5c06c5 100644
+--- a/std/ext/proc.lpc
++++ b/std/ext/proc.lpc
+@@ -12,7 +12,7 @@
+ #include <proc.h>
+ 
+ private nosave mapping __procs = ([]);
+-private nosave mapping __cooldowns = ([]);
++private nosave mapping __proc_cooldowns = ([]);
+ private nosave float __proc_chance = 15.0;
+ private nosave int __proc_cooldown = 1;
+ private nosave int __proc_weight = 100;
+@@ -164,7 +164,7 @@ string can_proc() {
+   // a cooldown
+   foreach(string name, mapping proc in __procs) {
+     if(proc.cooldown > 0) {
+-      if(now - __cooldowns[name] > proc.cooldown) {
++      if(now - __proc_cooldowns[name] > proc.cooldown) {
+         procs[name] = proc.weight || 100;
+       }
+     }
+@@ -203,5 +203,5 @@ varargs void proc(string name, mixed args...) {
+   else
+     return;
+ 
+-  __cooldowns[name] = time();
++  __proc_cooldowns[name] = time();
+ }
+diff --git a/std/ext/unicode.lpc b/std/ext/unicode.lpc
+index e3aab89..9862ee9 100644
+--- a/std/ext/unicode.lpc
++++ b/std/ext/unicode.lpc
+@@ -14,7 +14,7 @@
+ 
+ /**
+ Original Lima header:
+-/*
++
+ ** M_WIDGETS (Tsath 2019-2020)
+ **
+ ** This module returns nicely formatted ANSI/xterm type widgets that can be
+diff --git a/std/living/include/wealth.h b/std/living/include/wealth.h
+index d9d4f0e..a09247b 100644
+--- a/std/living/include/wealth.h
++++ b/std/living/include/wealth.h
+@@ -6,7 +6,7 @@ int query_total_wealth() ;
+ mapping query_all_wealth() ;
+ int query_wealth(string currency) ;
+ int adjust_wealth(string currency, int amount) ;
+-void set_wealth(mapping w) ;
++mapping set_wealth(mapping w) ;
+ void init_wealth() ;
+ void wipe_wealth() ;
+ 
+diff --git a/std/living/npc.lpc b/std/living/npc.lpc
+index c0eade2..693e5b8 100644
+--- a/std/living/npc.lpc
++++ b/std/living/npc.lpc
+@@ -39,7 +39,7 @@ string set_name(string name) {
+   string result;
+ 
+   if(!name || !stringp(name))
+-    return;
++    return 0;
+ 
+   result = ::set_name(name);
+ 
+diff --git a/std/object/container.lpc b/std/object/container.lpc
+index 738208a..6a4ba29 100644
+--- a/std/object/container.lpc
++++ b/std/object/container.lpc
+@@ -307,12 +307,12 @@ private nosave string _key_id;
+ 
+ varargs mixed query_container_status(int as_number) {
+   if(is_locked())
+-    return as_number ? 3 : "locked";
++    return as_number ? (mixed)3 : "locked";
+ 
+   if(is_closed())
+-    return as_number ? 2 : "closed";
++    return as_number ? (mixed)2 : "closed";
+ 
+-  return as_number ? 1 : "open";
++  return as_number ? (mixed)1 : "open";
+ }
+ 
+ public void set_key_id(string str) {
+diff --git a/std/object/include/value.h b/std/object/include/value.h
+index b8302d3..2fe49cf 100644
+--- a/std/object/include/value.h
++++ b/std/object/include/value.h
+@@ -2,7 +2,7 @@
+ #define __VALUE_H__
+ 
+ void set_value(int value) ;
+-int query_value() ;
++mixed query_value() ;
+ void adjust_value(int value) ;
+ 
+ #endif // __VALUE_H__
+diff --git a/std/object/inventory.lpc b/std/object/inventory.lpc
+index d7b4cd3..433491c 100644
+--- a/std/object/inventory.lpc
++++ b/std/object/inventory.lpc
+@@ -164,13 +164,13 @@ varargs string add_object(mixed args...) {
+   sz = sizeof(args);
+ 
+   if(sz == 0)
+-    return;
++    return 0;
+ 
+   // Double-check we don't already have this object in our inventory mapping
+   mapping *elements = values(__inventory);
+   foreach(element in elements) {
+     if(element["object"] == args[0]) {
+-      return;
++      return 0;
+     }
+   }
+ 
+diff --git a/std/object/value.lpc b/std/object/value.lpc
+index 2ac3f40..dd7f966 100644
+--- a/std/object/value.lpc
++++ b/std/object/value.lpc
+@@ -45,7 +45,7 @@ void set_value(int value) {
+  *
+  * @returns {int} The object's value in the lowest denomination of currency
+  */
+-int query_value() {
++mixed query_value() {
+   return __value;
+ }
+ 
+diff --git a/std/room/room.lpc b/std/room/room.lpc
+index 982754a..78c6760 100644
+--- a/std/room/room.lpc
++++ b/std/room/room.lpc
+@@ -53,7 +53,7 @@ private nosave int no_gmcp_room_info = 0;
+  *
+  * @returns {mapping} Mapping with room information
+  */
+-mapping gmcp_room_info() {
++varargs mapping gmcp_room_info() {
+   mapping info = ([ ]);
+   string *exit_dirs;
+   string *door_dirs;
+diff --git a/tests/adm/simul_efun/array.functional.test.lpc b/tests/adm/simul_efun/array.functional.test.lpc
+index 3a04560..407a6a6 100644
+--- a/tests/adm/simul_efun/array.functional.test.lpc
++++ b/tests/adm/simul_efun/array.functional.test.lpc
+@@ -213,7 +213,7 @@ void setup() {
+         ASSERT_EQ(1, nullp(result));
+       }),
+     test("returns UNDEFINED for empty array", function() {
+-      mixed result = eval_first(({}), (: "anything" :));
++      mixed result = eval_first(({}), function(mixed x) { return "anything"; });
+       ASSERT_EQ(1, nullp(result));
+     }),
+     test("forwards extra varargs to the callback", function() {
+@@ -255,7 +255,7 @@ void setup() {
+         ASSERT_EQ(1, nullp(result));
+       }),
+     test("returns UNDEFINED for empty array", function() {
+-      mixed result = eval_last(({}), (: "anything" :));
++      mixed result = eval_last(({}), function(mixed x) { return "anything"; });
+       ASSERT_EQ(1, nullp(result));
+     }),
+     test("non-array first arg errors", function() {
+diff --git a/tests/adm/simul_efun/promise.test.lpc b/tests/adm/simul_efun/promise.test.lpc
+index b41d80f..1af0718 100644
+--- a/tests/adm/simul_efun/promise.test.lpc
++++ b/tests/adm/simul_efun/promise.test.lpc
+@@ -368,7 +368,7 @@ private async void check_map_positional() {
+  */
+ private async void check_map_mixed_sync() {
+   mixed *results = await map_async(({ 1, 2 }),
+-    (: $1 == 1 ? doubled($1) : 99 :));
++    (: $1 == 1 ? (mixed)doubled($1) : 99 :));
+ 
+   ASSERT_EQ(2, results[0]);
+   ASSERT_EQ(99, results[1]);
