@@ -185,3 +185,21 @@ python3 scripts/mudclient.py 127.0.0.1 40275 --timeout 55 --idle 0.45 \
 ## 深度功能测试（§10.7，2026-10-12）：“无副作用表达式”警告复查（上游 PR）
 
 - fluffos-upstream 库，修复走上游 fluffos/xkx100 PR #7（已合并）：`dns_master.lpc` 空 if、`adm/daemons/event/qiantang.lpc` 钱塘潮 `"…\n"; NOR;` 颜色不复位、三个 `d/xingxiu` 房间空的 `if (current_water == 0) {}`。6 个对象改前改后均载入。pin 升到 182fe371。
+
+## 深度功能测试（§10.7，2026-10-13）：编译警告清零（上游 fluffos/xkx100#8）
+
+`work/` 是 `fluffos/xkx100` 子模块，此前的警告整理只扫 vendored 库，本库一直没扫到（可编译文件警告 1657 条）。在
+`scripts/submodule_patch_scratch.py build xkx100utf8` 建的副本里先用 `lpc_twin_port.py adopt xkx100 xkx100utf8 --pre cb9eeb980cd~1`
+（`TWIN_DST_TREE` 指向副本）照搬同一游戏 xkx100 已修好、代码相同的 349 个文件，再跑 `lpc_warnings.py --fix` 和
+`scripts/toolkit_fix.sh`，剩下 19 条手修，警告 1657 -> 0。改动的 686 个对象新进程各载入一次：686 -> 686，无回退；打过补丁的树开机到
+登录提示。修复提交到上游（PR #8，合并提交 `2ec5d095`），本库钉到该提交（`rebase_upstreams.py`）。
+
+- 行为上的修正：条件里把按位 `&` 当逻辑与（三种解毒丹、蝎子毒囊、火把、五毒功门槛），`a == x & b == y` 实际是
+  `a == (x & b) == y`，改 `&&`；`d/tiezhang/pingtai.lpc` 多余的 `"\n";` 语句。
+- 手修：`d/yixing/doc/info_{biao,guest,store}.h` 加防重复包含（`bangzhu.lpc` 直接包含一次，又经 `bangzhu_duty.h` -> `guanjia.h`
+  再包含一次）；`open/xiangyang/task/guo.lpc` 先后包含 `zzzjob.lpc`、`teamjob.lpc`，两者的 `names` 表一字不差，`teamjob.lpc` 的那份加
+  `#ifndef XIANGYANG_JOB_NAMES`；有意重定义的 `STORY_DIR`/`BANGZHU`/`BIAOHUO` 前加 `#undef`；两条继承路径都到 `/feature/clean_up`
+  的 6 个文件写明 `clean_up()` 用哪一份（驱动本来就用那份）；`d/city/pai9room.lpc` 去掉多余的 `inherit F_CLEAN_UP`；
+  `d/city/daxiaoroom.lpc` 整段注释里残留的 `/*` 改 `//`。
+- xkx100 的 teamjob 越界修复（`random(40)`）这里不需要：本库原本就是 `random(sizeof(...))`。
+
