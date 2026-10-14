@@ -625,3 +625,28 @@ lib 已有的 `overlay/lib/secure/save` 同一做法；overlay 由 `apply_lib_pa
 
 驱动的 mudlib_stats 包在主控载入时各调用一次 `author_file(<主控文件>)` 和 `domain_file("/")`，要求返回字符串。`secure/daemon/master.lpc` 的这两个 apply 只为 domains / realms 目录下的文件返回名字，其余返回 0，所以每次启动都打印两行 `... in the master file does not work`。上游 PR fluffos/nightmare3#7（已合并，b5364a1）把末尾的 0 改成 `"BACKBONE"` / `"NONAME"`，与 fluffos 组织的 Dead Souls 仓库相同；域等于 backbone 域时对象沿用创建者的域，与返回 0 时相同；`_realms` 只列有 realm 目录的作者，输出不变（KB 06 §7.222）。pin 已升到 b5364a1；用 site 同构树（上游 + overlay）跑 `lpcc config.fluffos /nonexistent.lpc`，只少了这两行。
 顺带发现：驱动的 `read_config()` 用 120 字节的定长缓冲读配置行，过长的一行（例如很长的 `mudlib directory` 绝对路径）会让 `getline()` 失败并静默丢掉其后所有配置，报 `Missing line: mudlib directory`；本地测试时改用相对路径绕过。
+
+## Deep functional test (§10.7, 2026-10-13): compile warnings 329 -> 0 (upstream fluffos/nightmare3#8)
+
+Closes the "not fixed, recorded" item above. Scanned in a scratch repo (`scripts/submodule_patch_scratch.py build nightmare3`):
+329 warnings in files that compile. No sibling carries the same code (`lpc_twin_port.py classify nightmare4 nightmare3`: 0 twins),
+so `scripts/toolkit_fix.sh` plus hand fixes. 751 files compile before and after; the 71 that do not are the dead
+`domains/Praxis/standardOld/` and `attic/` copies, unchanged. Every changed object loaded in a fresh driver before and after
+(174 objects, 155 -> 155, no regressions) and the patched tree boots to the login prompt. Merged upstream as PR #8
+(squash `88034bb8`) and pinned with `rebase_upstreams.py`.
+
+Bugs behind the warnings:
+- `(: "go_down" :)` callbacks (43 lines): a function pointer around a string constant returns the string, so the add_exit()
+  pre-exit checks (`do_check`, `prevent_down`, `go_north`, ...), set_search()/set_items()/set_listen() handlers, set_long()
+  functions, set_die(), add_sky_event() and the edit()/more() callbacks never ran. `std/user/editor.lpc` edit() refuses a
+  non-function ("Bad argument 2 to edit()"), so `bug`, the creator `changelog` command and the council's propose action
+  failed outright. Now `(: go_down :)`, with a prototype where the handler is defined below the call.
+- `std/vendor.lpc`: `cn == "Invisible person"` was a comparison, so an invisible customer stayed "Someone".
+- `domains/Praxis/obj/misc/handcuffs.lpc`: query_auto_load() returned the comma expression `(file, ({}))`, i.e. `({})`.
+- `secure/daemon/users.lpc` inherited `clean_up.lpc` twice (DAEMON and OB_USER: two `__NoClean`, four overlapping functions);
+  DAEMON added only the guarded remove() and query_prevent_shadow(), now written out in the file.
+- Leaf variables sharing a name with a private one of the base renamed (light `__LightPreventPut`, deed/order/RoomCreator
+  short/long, invis `__InvisWho`); `std/user.lpc` dropped its own `__LastAged`, written once and never read (living's
+  private copy drives aging). Prototypes made to match their definitions: `getuid`/`geteuid` (string), `date` (int),
+  `query_reply_text` (string), `query_enters` (string *).
+

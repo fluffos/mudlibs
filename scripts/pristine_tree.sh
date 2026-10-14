@@ -50,6 +50,12 @@ rm -rf -- "$DEST"
 mkdir -p "$DEST"
 git -C "$REPO_ROOT" archive "${REV:-HEAD}" "$LIB/work" "$LIB/config.fluffos" | tar -x -C "$DEST"
 touch "$DEST/.pristine-tree"
+# The site zip lays libs/<slug>/overlay/ over work/ (make_source_zips.sh); so does this tree.  oxidus keeps the
+# driver headers its global.h includes there, and nothing of it compiles without them.
+if git -C "$REPO_ROOT" cat-file -e "${REV:-HEAD}:$LIB/overlay" 2>/dev/null; then
+  git -C "$REPO_ROOT" archive "${REV:-HEAD}" "$LIB/overlay" | tar -x -C "$DEST"
+  rsync -a "$DEST/$LIB/overlay/" "$DEST/$LIB/work/"
+fi
 
 CFG="$DEST/$LIB/config.fluffos"
 sed -i "s|^mudlib directory.*|mudlib directory : $DEST/$LIB/work|; s|^port number.*|port number : $PORT|" "$CFG"
