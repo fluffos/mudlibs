@@ -777,3 +777,7 @@ Same typo `nitan_san`/`nitan3` already live-verified. Corrected (LF-only).
 ## `find_player()` 只认在世界里的身体（2026-10-15，KB 07 §8.26）
 
 simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线留下的、不在任何房间的身体不再被当成玩家，两个以上时 `find_player()` 不会再报 `The player(<id>) has existed in the world.`（wllz3 实测过的问题）。本库若注册流程不会留下带玩家 uid 的身体，这一改动不改变行为。
+
+## 空手使用兵器绝招（2026-10-15，KB 06 §7.246）
+
+`perform` 指令允许直接点名招式（如 `perform stick.ban`），这些绝招读了 `me->query_temp("weapon")` 却从不检查，空手时 `weapon->name()` 报错（有的已先扣了内力）。在赋值后补 `if (!objectp(weapon)) return notify_fail("你必须手持兵器才能使用这一招。\n");`（`scripts/lpc_fix_perform_weapon.py`）：`bingpo-blade/ningxie`、`duanyun-fu/hong`、`huashan-sword/long.bak`、`xue-dao/xuemo`、`yunu-sword/yijian`。

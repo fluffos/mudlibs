@@ -243,3 +243,7 @@ drafts) minus the files its pass fixed, plus `cmds/std/practice_.lpc` and a save
 - `daemon/class/yinshi/iceheart/depoison.lpc`（冰心逼毒）多继承了一个用不到的 `/daemon/condition/generic_condition`，它的 `clear_condition*()` 都是对玩家调用的；去掉那行继承。`d/bawang/npc/skill/snake-spear.lpc` 自己的招式表 `action` 与 `SKILL` 的同名，改名 `snake_action`（自带 `query_action()` 读它，行为不变）；`d/fy/npc/newsman.lpc` 在定义前调用 `ask_question()`，补原型。
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。4 个文件 9 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+
+## 离别剑选目标的笔误（2026-10-15）
+
+`daemon/skill/libie-sword.lpc` 的 `victims[random(sizeof(victim))]` 量的是未赋值的单个 `victim`，总是选第一个敌人；改为 `sizeof(victims)`。

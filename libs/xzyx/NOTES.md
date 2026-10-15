@@ -740,3 +740,7 @@ Save files updated/added this round:
 ## `message_vision(msg, environment(me), me)`（2026-10-15，KB 06 §7.242）
 
 把房间当成了动作者：`message_vision()` 取房间的 `name()` 得 0，`replace_string(msg, "$N", 0)` 报错。在状态（中毒）里，这个错误发生在 `apply_condition(name, duration - 1)` 之前，状态永不结束，心跳里后面的恢复也每次被跳过。改为 `message_vision(msg, me)`：`/d/jianyu/npc/yuzu`、`/d/jianyu/yuzu`、`/kungfu/class/budui/shitailong`。
+
+## 空手使用兵器绝招（2026-10-15，KB 06 §7.246）
+
+`perform` 指令允许直接点名招式（如 `perform stick.ban`），这些绝招读了 `me->query_temp("weapon")` 却从不检查，空手时 `weapon->name()` 报错（有的已先扣了内力）。在赋值后补 `if (!objectp(weapon)) return notify_fail("你必须手持兵器才能使用这一招。\n");`（`scripts/lpc_fix_perform_weapon.py`）：`wuyue-blade/jiao`。

@@ -456,3 +456,7 @@ Too-deep-recursion) recurred at boot; no new error from shop/拜师.
 ## 招式表最低等级之下没有招（2026-10-15，KB 06 §7.243）
 
 招式表的最低 "lvl" 高于 0（如全部为 100），技能等级未到之前取不到招，每次出招都报错。循环后补 `if (!a_action) a_action = action[0];`（`lpc_fix_action_level.py --fallback`）：`zuixin-sword`。
+
+## 空手使用兵器绝招（2026-10-15，KB 06 §7.246）
+
+`perform` 指令允许直接点名招式（如 `perform stick.ban`），这些绝招读了 `me->query_temp("weapon")` 却从不检查，空手时 `weapon->name()` 报错（有的已先扣了内力）。在赋值后补 `if (!objectp(weapon)) return notify_fail("你必须手持兵器才能使用这一招。\n");`（`scripts/lpc_fix_perform_weapon.py`）：`daojian-guizhen/xue`。

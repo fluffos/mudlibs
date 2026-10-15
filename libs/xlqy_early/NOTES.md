@@ -1014,3 +1014,7 @@ HEAD 与工作树分别加载（新进程）：952 -> 952 通过，无回退；�
 ## iori-sword 取招越界（2026-10-15，KB 06 §7.243）
 
 `daemon/skill/iori-sword.lpc` 只有 4 招却 `action[random(7)]`，改为文件里注释掉的 `random(sizeof(action))`（只有巫师区的测试 NPC 用到）。
+
+## 空手使用兵器绝招（2026-10-15，KB 06 §7.246）
+
+`perform` 指令允许直接点名招式（如 `perform stick.ban`），这些绝招读了 `me->query_temp("weapon")` 却从不检查，空手时 `weapon->name()` 报错（有的已先扣了内力）。在赋值后补 `if (!objectp(weapon)) return notify_fail("你必须手持兵器才能使用这一招。\n");`（`scripts/lpc_fix_perform_weapon.py`）：`bainiao-jian/feijian`、`bainiao-jian/fengwu`、`bawang-qiang/qiangjian`、`bingpo-blade/ningxie`、`chixin-jian/haotan`、`dagou-bang/ban`、`dali-bang/shenli`、`fengbo-cha/fengbo`、`fumo-zhang/fuhu`、`ghostaxe/bianshen`、`ghostaxe/tiaozhan`、`hellfire-whip/lunhui` 等 34 个。

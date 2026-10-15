@@ -225,3 +225,6 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply d
 
 49 个文件（技能、绝招、兵器、书籍、区域 NPC 等）来自侠客行体系（qi/jing/neili），而本库人物是 gin/kee/sen/force：`receive_damage("qi", ...)` 报 `伤害种类错误`，`query("neili")` 永远为 0。按 qi→kee、jing→sen（本库学习/读书指令消耗的就是它）、neili→force、max_neili→max_force、jiali→force_factor 改名（`scripts/lpc_port_es_props.py --any-file`）。
 
+## 空手使用兵器绝招（2026-10-15，KB 06 §7.246）
+
+`perform` 指令允许直接点名招式（如 `perform stick.ban`），这些绝招读了 `me->query_temp("weapon")` 却从不检查，空手时 `weapon->name()` 报错（有的已先扣了内力）。在赋值后补 `if (!objectp(weapon)) return notify_fail("你必须手持兵器才能使用这一招。\n");`（`scripts/lpc_fix_perform_weapon.py`）：`bainiao-jian/feijian`、`bawang-qiang/ba`、`bawang-qiang/meihua`、`bawang-qiang/zhuiming`、`bingpo-blade/ningxie`、`canxin-jian/jinsheng`、`canxin-jian/xiaoyao`、`dali-bang/mantian`、`dali-bang/shenli`、`dashen-bian/diaoyu`、`daya-jian/badao`、`duo-sword/shisan` 等 44 个。
