@@ -894,6 +894,8 @@ Same convert-era byte corruption as the waiter `！”\n` / `！\n` →
 
 原档在右引号前有一个孤立的 GBK 前导字节，转 UTF-8 时连引号一起丢了（如 `return name + HIM "发作身亡了;`），字符串一直延续到后面，文件编译失败：`/d/menpai/shaolin/npc/master`。补回引号（`scripts/lpc_fix_eaten_quote.py`）。
 
+补（同日）：这处修改当时漏提交了（提交时只取了 `.lpc`），现补上；这个头文件目前没有文件引用。
+
 ## family 映射（再补）（2026-10-15，KB 05 §7.30）
 
 `mapping fam; fam = (mapping)ob->query("family");`（先声明后赋值）和泥潭式的 `query("family", me)` 同样直接取下标：无门派的新人拜师（`attempt_apprentice`/`recognize_apprentice`）、NPC 的 `greeting`、房间的 `valid_leave`、`ask_me` 等报 `Value being indexed is zero`。3 处补上 `if (!mapp(fam)) fam = ([ ]);`（刚 `recruit_apprentice()` 之后的除外）。
