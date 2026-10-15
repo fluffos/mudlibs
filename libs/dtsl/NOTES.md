@@ -1189,3 +1189,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply d
 - 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 0 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 3 个，只在 #if 分支用的声明移进分支 1 个文件；改动 3 个文件，HEAD 与工作树各载入一次无回退（3 objects; HEAD PASS 3, tree PASS 3; regress 0; newly loading 0），这些文件的警告 3 -> 0。
 
 - 2026-10-12：`obj/updateroom/city/fish.lpc` 的刷新表路径是 Windows 写法 `"d\clone\room\fish/..."`（`\r` 是回车，`\c`、`\f` 被丢掉），`"npc"` 也成了 `"/dcloneoomfish/yufu"`；改为 `/d/clone/room/fish/fish_room.lpc` 与 `/d/clone/room/fish/yufu`（两个文件都在）。读这张表的 `std/room.lpc` 代码目前整段注释掉，表格处于闲置状态。
+
+## 负数伤害当作消耗（2026-10-15，KB 06 §7.241）
+
+`receive_damage("neili", -52)`、`receive_damage("qi", -12)` 之类把 `add()` 的负数写进了 `receive_damage()`：本库 `feature/damage.lpc` 对负数伤害报错（或归零），练功/运功时报 `F_DAMAGE: 伤害值为负值` 或消耗失效。已改为正数伤害，内力/精力类改为 `add(type, -N)`（`scripts/lpc_fix_negative_damage.py`）：`/d/clone/biwutai/biwutai`、`/d/clone/room/leitai/leitai`。

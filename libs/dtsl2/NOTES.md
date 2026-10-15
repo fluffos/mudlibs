@@ -733,3 +733,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply d
 - 2026-10-14：FluffOS 970d9f09 重扫剩 3 条：`channeld.canoe.lpc` 的 `REMOTE_Q`、`logind0.lpc` 的 `TMI` 宏重定义前加 `#undef`（后定义本来就生效）；`adm/daemons/network/services/temp.lpc` 在 BLADE 已有的情况下又 `inherit F_CLEAN_UP`，删去。改动对象新进程各载入一次，无回退。
 
 - 2026-10-14：1 个文件用了颜色宏（`HIW`、`NOR`）却没有 `#include <ansi.h>`（首个错误 `syntax error, unexpected L_STRING`）；开头补上（KB 04 §6.1、§6.3）。新进程比对 HEAD 与工作树：1 个对象，新增载入 0，回退 0。
+
+## 负数伤害当作消耗（2026-10-15，KB 06 §7.241）
+
+`receive_damage("neili", -52)`、`receive_damage("qi", -12)` 之类把 `add()` 的负数写进了 `receive_damage()`：本库 `feature/damage.lpc` 对负数伤害报错（或归零），练功/运功时报 `F_DAMAGE: 伤害值为负值` 或消耗失效。已改为正数伤害，内力/精力类改为 `add(type, -N)`（`scripts/lpc_fix_negative_damage.py`）：`/d/clone/biwutai/biwutai`、`/d/clone/room/leitai/leitai`。

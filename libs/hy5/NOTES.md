@@ -428,3 +428,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
   - 改动的 148 个对象 HEAD 与工作树各载入一次，无回退。
   - 还剩的警告都在编译不过的文件里，是报错后的连带输出：`romnpc*` 等单独编译的包含片段、`maxim/`、`u/tod/job/cheng.lpc`、`wujincao.lpc`。
 - 2026-10-14：技能文件里 40 处 `int power_point()`/`int hard_point()` 返回 1.3、1.75 之类的浮点，经 int 返回被截断；本库没有调用者，改成 `float` 返回值，保留原数值（`float_hooks.py`，KB 04 §6.10）。
+
+## 负数伤害当作消耗（2026-10-15，KB 06 §7.241）
+
+`receive_damage("neili", -52)`、`receive_damage("qi", -12)` 之类把 `add()` 的负数写进了 `receive_damage()`：本库 `feature/damage.lpc` 对负数伤害报错（或归零），练功/运功时报 `F_DAMAGE: 伤害值为负值` 或消耗失效。已改为正数伤害，内力/精力类改为 `add(type, -N)`（`scripts/lpc_fix_negative_damage.py`）：`/kungfu/skill/shaolin-tantui`。

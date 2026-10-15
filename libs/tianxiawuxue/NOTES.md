@@ -1057,3 +1057,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply t
 - 2026-10-14：`kungfu/skill/liu-unarmed.lpc` 的 `query_action()` 里取等级与 `for` 循环两行被注释掉，剩下 `if (level > action[i - 1]["lvl"])`，i 为 0，每次出招都报 `Array index must be positive or zero`；恢复这两行（与其他武功相同的写法）。逐个武功调用 query_action/valid_learn/practice_skill 的运行期探针发现。
 
 - 2026-10-15：`kungfu/skill/guangming-blade.lpc`（光明刀法）是从五虎断门刀抄来的，`query_action()` 里仍按 `wuhu-duanmendao` 的等级挑招式：没练五虎断门刀的人出招时一招都匹配不上，`a_action` 为 0，接着赋值报错。改为按 `guangming-blade` 自己的等级。（武功运行期探针发现。）
+
+## 负数伤害当作消耗（2026-10-15，KB 06 §7.241）
+
+`receive_damage("neili", -52)`、`receive_damage("qi", -12)` 之类把 `add()` 的负数写进了 `receive_damage()`：本库 `feature/damage.lpc` 对负数伤害报错（或归零），练功/运功时报 `F_DAMAGE: 伤害值为负值` 或消耗失效。已改为正数伤害，内力/精力类改为 `add(type, -N)`（`scripts/lpc_fix_negative_damage.py`）：`/kungfu/skill/shaolin-tantui`。

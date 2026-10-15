@@ -344,3 +344,7 @@ HEAD 与工作树分别加载（新进程）：1087 -> 1087 通过，无回退�
 `scripts/toolkit_fix.sh` 一轮去掉 `u/tsunade/godhand.lpc` 多余的 `F_CLEAN_UP`；两张麻将桌 `u/lonely/tools/mj.lpc`、`mjlady3.lpc` 自己的 `count` 与基类同名变量冲突，改名 `mj_count`（同 zhonghua2 的 `mj.lpc`）。能编译的文件警告清零；改动的 3 个对象在 HEAD 与工作树各载入一次，regress 0。
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。6 个文件 6 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+
+## 负数伤害当作消耗（2026-10-15，KB 06 §7.241）
+
+`receive_damage("neili", -52)`、`receive_damage("qi", -12)` 之类把 `add()` 的负数写进了 `receive_damage()`：本库 `feature/damage.lpc` 对负数伤害报错（或归零），练功/运功时报 `F_DAMAGE: 伤害值为负值` 或消耗失效。已改为正数伤害，内力/精力类改为 `add(type, -N)`（`scripts/lpc_fix_negative_damage.py`）：`/kungfu/skill/feifeng-whip`、`/kungfu/skill/pangen-cuojiefu`、`/kungfu/skill/yiwei-dujiang`。

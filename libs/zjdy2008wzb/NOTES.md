@@ -357,3 +357,7 @@ functionally re-tested live on this lib.
 **其余：** `feature/food.lpc`、`feature/liquid.lpc` 的 `do_effect()` 改为 `varargs int do_effect(object me)` 并 `return 1;`，与 eat/drink 读取返回值的重载（`d/guanwai/obj/wan.lpc`、`d/xiakedao/obj/pigpart.h`）同型。
 
 验证：改动文件、所有继承 F_FOOD/F_LIQUID 的物品、包含 `pigpart.h` 的文件、eat/drink 命令共 209 个对象，HEAD 与工作树各用新进程载入：206 -> 206 通过，regress 0；删除声明审计 0 项待看。209 个对象载入无回退。
+
+## 负数伤害当作消耗（2026-10-15，KB 06 §7.241）
+
+`receive_damage("neili", -52)`、`receive_damage("qi", -12)` 之类把 `add()` 的负数写进了 `receive_damage()`：本库 `feature/damage.lpc` 对负数伤害报错（或归零），练功/运功时报 `F_DAMAGE: 伤害值为负值` 或消耗失效。已改为正数伤害，内力/精力类改为 `add(type, -N)`（`scripts/lpc_fix_negative_damage.py`）：`/kungfu/skill/duanyun-fu`、`/kungfu/skill/feifeng-whip`。

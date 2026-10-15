@@ -1095,3 +1095,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
   - `roommaker` 删去被覆盖的表；`gboxa` 去掉注释里嵌套的 `/*`。
   - `d/xiyou/wudidong/npc/smith.lpc`、`waiter.lpc` 里有一句只剩括号的 `("wudidong_blacksmith");`。其他库这里是 `reload(...)`，本库没有 `reload()`，函数名被删掉后这句什么也不做，现删去。
   - 改动的 149 个对象 HEAD 与工作树各载入一次，无回退。
+
+## 负数伤害当作消耗（2026-10-15，KB 06 §7.241）
+
+`receive_damage("neili", -52)`、`receive_damage("qi", -12)` 之类把 `add()` 的负数写进了 `receive_damage()`：本库 `feature/damage.lpc` 对负数伤害报错（或归零），练功/运功时报 `F_DAMAGE: 伤害值为负值` 或消耗失效。已改为正数伤害，内力/精力类改为 `add(type, -N)`（`scripts/lpc_fix_negative_damage.py`）：`/kungfu/skill/shaolin-tantui`。

@@ -357,3 +357,7 @@ recursion`。mudlib `work/log/log` 只有开机/指令编译警告。心跳期
 - 醉仙楼 `d/city/zuixianlou3.lpc` 同时继承 `ROOM` 和 `F_DEALER`，驱动只用 `dealer` 的 `reset()`，房间的 `objects` 不再刷新；写 `void reset() { room::reset(); dealer::reset(); }`（同 xkxc98sj）。
 - `clone/megazine/obj/duka_3b.lpc`（赌球卡 B）赔率变量声明两次，代码用后一份；删去前一行，赔率不变。
 - 书库 `d/city/library.lpc` 自己把 `STORY_DIR` 定义成 `/doc/story/`，覆盖 `globals.h` 里指向故事守护进程的同名宏；先 `#undef` 再定义，行为不变。
+
+## 负数伤害当作消耗（2026-10-15，KB 06 §7.241）
+
+`receive_damage("neili", -52)`、`receive_damage("qi", -12)` 之类把 `add()` 的负数写进了 `receive_damage()`：本库 `feature/damage.lpc` 对负数伤害报错（或归零），练功/运功时报 `F_DAMAGE: 伤害值为负值` 或消耗失效。已改为正数伤害，内力/精力类改为 `add(type, -N)`（`scripts/lpc_fix_negative_damage.py`）：`/kungfu/skill/duanyun-fu`、`/kungfu/skill/feifeng-whip`。

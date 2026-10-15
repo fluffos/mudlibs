@@ -990,3 +990,7 @@ HEAD 与工作树分别加载（新进程）：822 -> 822 通过，无回退；�
 搬来同族已整理的改法：yanhuangwuhun（89552da089f）的 `feature/food.lpc`、`feature/liquid.lpc` `do_effect()` 改 `varargs int`（与重载它、被 `eat`/`drink` 用返回值的蜂蜜、猪肉等一致），zhonghua2 的 `clone/megazine/obj/duka_3b.lpc` 删去不用的那份赔率声明，yhwhpublicfi 的镖师 `d/beijing/npc/qianzhenglun.lpc` `count` 改名 `my_count`。能编译的文件警告清零；改动的 6 个对象在 HEAD 与工作树各载入一次，regress 0。
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。1 个文件 1 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+
+## 负数伤害当作消耗（2026-10-15，KB 06 §7.241）
+
+`receive_damage("neili", -52)`、`receive_damage("qi", -12)` 之类把 `add()` 的负数写进了 `receive_damage()`：本库 `feature/damage.lpc` 对负数伤害报错（或归零），练功/运功时报 `F_DAMAGE: 伤害值为负值` 或消耗失效。已改为正数伤害，内力/精力类改为 `add(type, -N)`（`scripts/lpc_fix_negative_damage.py`）：`/kungfu/skill/duanyun-fu`、`/kungfu/skill/feifeng-whip`、`/kungfu/skill/pangen-cuojiefu`。

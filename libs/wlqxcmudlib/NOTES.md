@@ -188,3 +188,7 @@ HEAD 与工作树分别加载（新进程）：746 -> 746 通过，无回退。
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。1 个文件 1 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
 - 2026-10-14（同一次重扫，手工部分）：`feature/food.lpc`、`feature/liquid.lpc` 的 `do_effect()` 由 `void` 改为 `int`，末尾 `return 1`。`drink`/`eat` 命令对 `only_do_effect` 的物品直接返回 `ob->do_effect(me)` 作命令结果，玉蜂蜜（`d/gumu/obj/fengmi.lpc`）、侠客岛猪肉（`pigpart.h`）这些子类本来就返回 int，基类是 void 才对不上。`d/beijing/npc/qianzhenglun.lpc` 的 `mapping count` 与继承来的同名变量冲突，改名 `ask_count`（只在本文件用）。改动的对象和 `pigpart.h` 的 3 个包含者载入无回退。
+
+## 负数伤害当作消耗（2026-10-15，KB 06 §7.241）
+
+`receive_damage("neili", -52)`、`receive_damage("qi", -12)` 之类把 `add()` 的负数写进了 `receive_damage()`：本库 `feature/damage.lpc` 对负数伤害报错（或归零），练功/运功时报 `F_DAMAGE: 伤害值为负值` 或消耗失效。已改为正数伤害，内力/精力类改为 `add(type, -N)`（`scripts/lpc_fix_negative_damage.py`）：`/kungfu/skill/duanyun-fu`、`/kungfu/skill/feifeng-whip`、`/kungfu/skill/pangen-cuojiefu`。
