@@ -1042,3 +1042,8 @@ No code change. 拜师 not re-done.
   - 改动的 76 个对象 HEAD 与工作树各载入一次，无回退。
 
 - 2026-10-14：4 个文件因 `Type of returned value doesn't match function return type ( int vs void )` 整份不编译：声明为 `void`（或没写类型）的函数却返回值，旧驱动照样把值交给调用者。调用者要用返回值的（add_action 处理函数、命令、辅助函数）改为它实际返回的类型：`player_win()`。新进程比对 HEAD 与工作树：4 个对象，新增载入 4，回退 0（`scripts/lpc_fix_void_return.py`，KB 04 §6.3）。
+
+## 其他体系的属性名（2026-10-15，KB 06 §7.241 第三类，`--any-file`）
+
+19 个文件（技能、绝招、兵器、书籍、区域 NPC 等）来自侠客行体系（qi/jing/neili），而本库人物是 gin/kee/sen/force：`receive_damage("qi", ...)` 报 `伤害种类错误`，`query("neili")` 永远为 0。按 qi→kee、jing→sen（本库学习/读书指令消耗的就是它）、neili→force、max_neili→max_force、jiali→force_factor 改名（`scripts/lpc_port_es_props.py --any-file`）。
+

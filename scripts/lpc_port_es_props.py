@@ -17,11 +17,15 @@ receive_heal, receive_curing, and their `me->` forms) is renamed:
     force -> neili   max_force -> max_neili   force_factor -> jiali
 
 The reverse direction, an xkx file inside an ES/xyj lib that errors on `qi`/`jing` and has `kee`, maps `qi` -> `kee`,
-`jing` -> `gin`, `neili` -> `force`, `jiali` -> `force_factor` (and the `max_`/`eff_` forms); `jingli` has no ES
+`jing` -> the pool the lib's own study/learn/practice commands charge (`sen` in the xyj family, `gin` in ES and
+dtsl), `neili` -> `force`, `jiali` -> `force_factor` (and the `max_`/`eff_` forms); `jingli` has no ES
 counterpart and is left.  `--any-file` widens the scope from kungfu/skill practice_skill() to every file of the lib
 (wizard, backup and data dirs aside) that passes a foreign type to receive_damage()/receive_wound(): performs,
 conditions, NPC specials, items; a two-level directory that no file outside it names (an unwired copy such as
 xbtxiii's daemon/gongfu) is skipped.
+
+A lib whose characters carry `jingli` where xkx has `jing` (the xxcq family: receive_damage() takes jingli, qi,
+douzhi, shenzhi) gets the forward table with every `jing` target, and xkx's own `jing`, renamed to `jingli`.
 
 `query_skill("force")` and other skill names are not touched, nor anything in strings that are not that first
 argument.  Binary-safe.  Without --apply the plan is printed."""
@@ -52,6 +56,7 @@ def call_re(m):
 
 CALL = call_re(MAP)
 RCALL = call_re(RMAP)
+JLCALL = call_re({**MAP, b"jing": b"", b"max_jing": b"", b"eff_jing": b""})
 PRACTICE = re.compile(rb"int\s+practice_skill\s*\([^)]*\)\s*\{(.*?)\n\}", re.S)
 
 
@@ -70,28 +75,35 @@ def lib_dir(work):
         return None
     if XKX_TYPES <= allowed and not allowed & ES_TYPES:
         return "fwd"
+    if {b"qi", b"jingli"} <= allowed and b"jing" not in allowed and not allowed & ES_TYPES:
+        return "jl"   # the xxcq family: xkx's jing is called jingli
     if b"kee" in allowed and not allowed & XKX_TYPES:
         return "rev"
     return None
 
 
-def dir_referenced(work, pre):
-    """True when some .lpc/.h file outside WORK+PRE mentions the directory PRE (e.g. `/daemon/gongfu/`), or when PRE
-    is the skill daemon directory, the condition directory or a file of the top level."""
-    if pre.count("/") < 3:
-        return True
-    key = pre[1:].encode()   # `daemon/gongfu/`, matched with or without the leading slash
+def referenced_dirs(work, pres):
+    """The two-level directories of PRES (e.g. `/daemon/gongfu/`) that some .lpc/.h file outside them names, with or
+    without the leading slash; one pass over the lib."""
+    found = {p for p in pres if p.count("/") < 3}
+    todo = {p: p[1:].encode() for p in pres if p not in found}
     for dp, dn, fn in os.walk(work):
-        if (dp + "/").startswith(work + pre):
-            continue
+        if not todo:
+            break
+        rel = dp[len(work):] + "/"
         for f in fn:
-            if f.endswith((".lpc", ".h")) and key in open(os.path.join(dp, f), "rb").read():
-                return True
-    return False
+            if not f.endswith((".lpc", ".h")) or not todo:
+                continue
+            b = open(os.path.join(dp, f), "rb").read()
+            for p, key in list(todo.items()):
+                if not rel.startswith(p) and key in b:
+                    found.add(p)
+                    del todo[p]
+    return found
 
 
 def needs_port(b, direction="fwd", any_file=False):
-    foreign = rb"kee|gin|sen" if direction == "fwd" else rb"qi|jing"
+    foreign = {"fwd": rb"kee|gin|sen", "rev": rb"qi|jing", "jl": rb"kee|gin|sen|jing"}[direction]
     pat = rb'receive_(?:damage|wound)\(\s*"(' + foreign + rb')"'
     if any_file:
         mask = None
@@ -104,9 +116,38 @@ def needs_port(b, direction="fwd", any_file=False):
     return m is not None and re.search(pat, m.group(1)) is not None
 
 
-def port(b, direction="fwd"):
+def jing_target(work):
+    """The ES pool that stands for xkx `jing` in this lib: the one its own study/learn/practice commands charge
+    (xyj: sen, ES/dtsl: gin); failing that, the more used of query("gin") / query("sen")."""
+    c = {b"gin": 0, b"sen": 0}
+    for d in ("cmds/skill", "cmds/std", "cmds/usr"):
+        for f in ("study.lpc", "learn.lpc", "practice.lpc", "du.lpc"):
+            p = f"{work}/{d}/{f}"
+            if os.path.exists(p):
+                for t in re.findall(rb'receive_damage\(\s*"(gin|sen)"', open(p, "rb").read()):
+                    c[t] += 1
+    if c[b"gin"] != c[b"sen"]:
+        return max(c, key=c.get)
+    for dp, dn, fn in os.walk(f"{work}/kungfu" if os.path.isdir(f"{work}/kungfu") else f"{work}/daemon"):
+        for f in fn:
+            if f.endswith(".lpc"):
+                b = open(os.path.join(dp, f), "rb").read()
+                c[b"gin"] += b.count(b'query("gin")')
+                c[b"sen"] += b.count(b'query("sen")')
+    return b"sen" if c[b"sen"] > c[b"gin"] else b"gin"
+
+
+def port(b, direction="fwd", jing=b"gin"):
     mask = code_mask(b)
-    table, call = (MAP, CALL) if direction == "fwd" else (RMAP, RCALL)
+    if direction == "fwd":
+        table, call = MAP, CALL
+    elif direction == "jl":
+        table = {**MAP, **{k: v.replace(b"jing", b"jingli") for k, v in MAP.items() if v.endswith(b"jing")},
+                 b"jing": b"jingli", b"max_jing": b"max_jingli", b"eff_jing": b"eff_jingli"}
+        call = JLCALL
+    else:
+        table = {**RMAP, b"jing": jing, b"max_jing": b"max_" + jing, b"eff_jing": b"eff_" + jing}
+        call = RCALL
     out, last, n = [], 0, 0
     for m in call.finditer(b):
         if not mask[m.start()]:
@@ -137,23 +178,24 @@ def main():
         else:
             d = f"{work}/kungfu/skill"
             paths = [f"{d}/{f}" for f in os.listdir(d) if f.endswith(".lpc")] if os.path.isdir(d) else []
-        referenced = {}
+        todo = []
         for p in sorted(paths):
-            if any_file:
-                # a two-level directory no file outside it names (xbtxiii's daemon/gongfu, an unwired skill copy)
-                pre = "/".join(p[len(work):].split("/")[:3]) + "/"
-                if pre not in referenced:
-                    referenced[pre] = dir_referenced(work, pre)
-                if not referenced[pre]:
-                    continue
             b = open(p, "rb").read()
-            if b"receive_" not in b or not needs_port(b, direction, any_file):
-                continue
-            out, n = port(b, direction)
+            if b"receive_" in b and needs_port(b, direction, any_file):
+                todo.append((p, b))
+        if any_file and todo:
+            # skip a two-level directory no file outside it names (xbtxiii's daemon/gongfu, an unwired skill copy)
+            pre = {p: "/".join(p[len(work):].split("/")[:3]) + "/" for p, b in todo}
+            live = referenced_dirs(work, set(pre.values()))
+            todo = [(p, b) for p, b in todo if pre[p] in live]
+        jing = jing_target(work) if direction == "rev" and todo else b"gin"
+        for p, b in todo:
+            out, n = port(b, direction, jing)
             if n:
                 files += 1
                 tot += n
-                print(f"PORT  {slug} ({direction}) {p[len(work):]}  {n}")
+                print(f"PORT  {slug} ({direction}{' jing->' + jing.decode() if direction == 'rev' else ''}) "
+                      f"{p[len(work):]}  {n}")
                 if apply:
                     open(p, "wb").write(out)
     print(f"{files} file(s), {tot} key(s)" + ("" if apply else " (plan only; --apply writes)"))

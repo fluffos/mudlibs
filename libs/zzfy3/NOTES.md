@@ -331,3 +331,12 @@ HEAD 与工作树分别加载（新进程）：745 -> 746 通过（多出的就�
 - 2026-10-14：1 个文件用了颜色宏（`HIW`、`NOR`）却没有 `#include <ansi.h>`（首个错误 `syntax error, unexpected L_STRING`）；开头补上；1 个文件的函数声明为 `int`（或 `void`）却返回字符串、对象（`int query_seal() { return "…"; }`），旧驱动照样把值交给调用者；改为实际返回的类型（`scripts/lpc_fix_void_return.py`）（KB 04 §6.1、§6.3）。新编译出来的文件露出的警告一并清掉（删去未用局部变量，有返回值函数里的空 `return;` 改为 `return 0;`）。新进程比对 HEAD 与工作树：4 个对象，新增载入 4，回退 0。
 
 - 2026-10-14：讲故事发奖励系统（`adm/daemons/storyd.lpc` 与 `clone/gift/` 下 20 个故事）照 `obj/gift/readme.txt` 应在 `include/globals.h` 定义 `STORY_D`、`STORY_DIR`，安装时漏了，这 23 个文件整份不编译；补上两个宏后全部载入（新进程比对，回退 0）。readme 还要求把 storyd 加进 preload，那是开不开这项玩法的决定，没有动。`u/wiz/u/xxy/city2/library.lpc` 自己的 `STORY_DIR` 前加 `#undef`。
+
+## 其他体系的属性名（2026-10-15，KB 06 §7.241 第三类，`--any-file`）
+
+10 个文件（技能、绝招、兵器、书籍、区域 NPC 等）来自侠客行体系（qi/jing/neili），而本库人物是 gin/kee/sen/force：`receive_damage("qi", ...)` 报 `伤害种类错误`，`query("neili")` 永远为 0。按 qi→kee、jing→sen（本库学习/读书指令消耗的就是它）、neili→force、max_neili→max_force、jiali→force_factor 改名（`scripts/lpc_port_es_props.py --any-file`）。
+
+
+## 内力/上限当作伤害种类（补）（2026-10-15）
+
+`victim->receive_wound("force", n, me)`（兵器吸内力）、`receive_damage("max_qi", random(100))`（走火入魔扣上限）等本库不接受的种类，1 处改为 `add(type, -N)`。

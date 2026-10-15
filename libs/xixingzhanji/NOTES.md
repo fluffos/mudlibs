@@ -780,3 +780,7 @@ jitui`。`buy jitui from xiaoer` 成功（「你向店小二买下一根炸鸡�
 - 2026-10-14：1 个文件用了颜色宏（`HIW`、`NOR`）却没有 `#include <ansi.h>`（首个错误 `syntax error, unexpected L_STRING`）；开头补上（KB 04 §6.1、§6.3）。新编译出来的文件露出的警告一并清掉（删去未用局部变量，有返回值函数里的空 `return;` 改为 `return 0;`）。新进程比对 HEAD 与工作树：1 个对象，新增载入 0，回退 0。
 
 - 2026-10-14（补）：`cmds/usr/quit2.lpc` 的 `if (login_status = …) {` 少了收尾的 `}`，存档、`destruct(me)`、`return 1;` 被关进了 if，后面的 `do_drop()` 被读成局部声明，整份不编译；照 `quit.lpc` 的结构在频道消息后补上 `}`，现在载入。
+
+## 其他体系的属性名（2026-10-15，KB 06 §7.241 第三类，`--any-file`）
+
+1 个文件（技能、绝招、兵器、书籍、区域 NPC 等）来自侠客行体系（qi/jing/neili），而本库人物是 gin/kee/sen/force：`receive_damage("qi", ...)` 报 `伤害种类错误`，`query("neili")` 永远为 0。按 qi→kee、jing→sen（本库学习/读书指令消耗的就是它）、neili→force、max_neili→max_force、jiali→force_factor 改名（`scripts/lpc_port_es_props.py --any-file`）。

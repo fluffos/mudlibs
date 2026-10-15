@@ -237,3 +237,17 @@ Century/`adm-single` 形状）**：`adm/simul_efun/file.lpc` 的
 ## 东方故事/西游记体系的技能文件（2026-10-15，KB 06 §7.241 第三类）
 
 这些 `kungfu/skill` 文件来自 gin/kee/sen/force 体系，本库人物只有 jing/qi/neili：`receive_damage("kee", 30)` 报 `伤害种类错误`，`query("force")` 永远为 0，技能学不了也练不了。按 kee→qi、gin/sen→jing、force→neili、max_force→max_neili、force_factor→jiali 改了属性名（`scripts/lpc_port_es_props.py`），共 3 个文件。
+
+## 其他体系的属性名（2026-10-15，KB 06 §7.241 第三类，`--any-file`）
+
+另有 2 个文件（绝招、状态、物品、NPC 等，不限于 kungfu/skill）来自 gin/kee/sen/force 体系，同样按 kee→qi、gin/sen→jing、force→neili 改名（`scripts/lpc_port_es_props.py --any-file`）。
+
+
+## family 映射（补）（2026-10-15）
+
+`mapping fam = (mapping)me->query("family");`（带类型转换的写法）同样直接取下标，4 处补上 `if (!mapp(fam)) fam = ([ ]);`。
+
+
+## 内力/上限当作伤害种类（补）（2026-10-15）
+
+`victim->receive_wound("force", n, me)`（兵器吸内力）、`receive_damage("max_qi", random(100))`（走火入魔扣上限）等本库不接受的种类，2 处改为 `add(type, -N)`。

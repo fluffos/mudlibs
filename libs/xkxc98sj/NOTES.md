@@ -334,3 +334,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 ## 无门派玩家的 family 映射（2026-10-15，KB 05 §7.30 第三种）
 
 `mapping fam = ob->query("family");` 之后直接 `fam["family_name"]`：没有门派（新人或叛师后）的玩家在学习、练功、拜师、进入门派房间时报 `Value being indexed is zero`，而不是作者写好的提示。4 处在声明行加上 `if (!mapp(fam)) fam = ([ ]);`（`scripts/lpc_fix_family_guard.py`）。
+
+## family 映射（补）（2026-10-15）
+
+`mapping fam = (mapping)me->query("family");`（带类型转换的写法）同样直接取下标，8 处补上 `if (!mapp(fam)) fam = ([ ]);`。

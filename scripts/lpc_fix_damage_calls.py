@@ -19,8 +19,10 @@ The same for receive_wound().
 
 A second pass handles a resource pool passed as damage in a lib that does not take it: `receive_damage("jingli", 30)`
 where damage.lpc allows only `jing`/`qi` (`F_DAMAGE: 伤害种类错误`, the nitan/xkx families' practice_skill() of
-dozens of movement and weapon skills).  Only receive_damage() statements whose type is a resource (neili, jingli,
-force, mana, atman) missing from the lib's own `type != "..."` list:
+dozens of movement and weapon skills; a weapon's `victim->receive_wound("force", n, me)` drain).  Only
+receive_damage()/receive_wound() statements whose type is a resource (neili, jingli, force, mana, atman, or a `max_`
+pool: the 走火入魔 penalty `receive_damage("max_qi", random(100))`) missing from the lib's own `type != "..."` list
+(read from its receive_damage()):
 
     me->receive_damage("jingli", 30);        ->  me->add("jingli", -30);
     me->receive_damage("neili", 10 + x, me); ->  me->add("neili", -(10 + x));
@@ -72,7 +74,7 @@ def allowed_types(work):
     return a or None
 
 
-RES_CALL = re.compile(rb'receive_damage\((\s*)"(neili|jingli|force|mana|atman)"(\s*),')
+RES_CALL = re.compile(rb'receive_(?:damage|wound)\((\s*)"(neili|jingli|force|mana|atman|max_qi|max_jing|max_neili|max_jingli|max_kee|max_gin|max_sen|max_force)"(\s*),')
 
 
 def split_args(b, i):

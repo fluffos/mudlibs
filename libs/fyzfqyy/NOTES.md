@@ -447,3 +447,7 @@ left uncommitted.
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。1 个文件 4 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
 - 2026-10-14：同一次重扫的其余 6 条：`std/room/room.lpc` 覆盖的 `delete()` 写成 `void`，而 `feature/dbase.lpc`/`include/dbase.h` 是 `int`，房间里 `delete()` 的返回值一直是 0；改 `int`，默认分支 `return ::delete(idx)`，自管的三个字段返回 1。`data/group/obj/ling(-pai).lpc` 和两个 roommaker 的第一张 `special_props` 表是死声明（之后的代码只读第二张），删去；`NAME_D` 宏重定义前加 `#undef`。改动对象新进程各载入一次，无回退（`u/island/topten/toptend.lpc`、`ran_name/test_npc.lpc` 本来就编译失败，未动）。
+
+## 其他体系的属性名（2026-10-15，KB 06 §7.241 第三类，`--any-file`）
+
+6 个文件（技能、绝招、兵器、书籍、区域 NPC 等）来自侠客行体系（qi/jing/neili），而本库人物是 gin/kee/sen/force：`receive_damage("qi", ...)` 报 `伤害种类错误`，`query("neili")` 永远为 0。按 qi→kee、jing→sen（本库学习/读书指令消耗的就是它）、neili→force、max_neili→max_force、jiali→force_factor 改名（`scripts/lpc_port_es_props.py --any-file`）。
