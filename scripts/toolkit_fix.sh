@@ -64,6 +64,7 @@ grep -avE '/tests?/|/help_topics/error_messages/' "$D" > "$D.f" && mv "$D.f" "$D
 echo "== 2. diagnostics-driven fixers"
 echo "   inherit order: $(python3 scripts/lpc_fix_inherit_order.py "$SLUG" --apply --diag "$D" | tail -1)"
 echo "   void returns: $(python3 scripts/lpc_fix_void_return.py "$SLUG" --apply --diag "$D" | tail -1)"
+echo "   array types:  $(python3 scripts/lpc_fix_array_type.py "$SLUG" --apply | tail -1)"
 echo "   bitwise:      $(python3 scripts/lpc_fix_bitwise_bool.py --apply "$SLUG" "$D" | tail -1)"
 echo "   return types: $(python3 scripts/lpc_fix_return_types.py --apply "$SLUG" "$D" | tail -1)"
 echo "   float->int:   $(python3 scripts/lpc_fix_float_trunc.py "$SLUG" --apply --diag "$D" | tail -1)"
