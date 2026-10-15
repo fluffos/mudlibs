@@ -1010,3 +1010,5 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 - 2026-10-14：`std/skill.lpc` 补上 `sum()` 与 `NewRandom()`：所有 `kungfu/skill`、`daemon/skill` 武功的 `query_action()` 都用 `NewRandom()` 按等级挑招式，本 lib 却从没定义，566 个武功文件整份不编译；补上后 560 个新载入（HEAD 与工作树新进程比对，回退 0）。`feature/skill.lpc` 补上 xkx 的 `prepare_skill()`/`query_skill_prepared()`/`query_skill_prepare()`（新增存档变量 `skill_prepare`，旧存档读出为空）：`/kungfu/class`、`/daemon/class` 的门派师父、`copyskill` 与 `zhentian-quan` 调用它们；308 个对象中 97 个新载入，其余卡在缺失的物品文件（`/clone/weapon/changjian`、`/clone/misc/cloth` 等 27 个，内容缺失）。擂台 `d/leitai/leitai.lpc` 补上 `fullup()` 漏掉的 `}` 并删去从未生效的重复 `do_quit()`。`kungfu/skill/poison.lpc` 的 `skill_improved()` 照基类回到 `void`。
 
 - 2026-10-14：2 个文件因 `Illegal to inherit after defining global variables` 整份不编译：FluffOS 要求所有 `inherit` 写在第一个全局变量之前，MudOS 不管。`scripts/lpc_fix_inherit_order.py` 把写在 `inherit` 之前的全局变量（以及声明全局变量的头文件的 `#include`）挪到最后一个 `inherit` 之后（KB 04 §6.3）。
+
+- 2026-10-14（toolkit 一轮，补上 NewRandom/prepare_skill 之后）：全 lib 重扫，31,559 个文件能编译，新载入的武功、师父文件里露出的 8 个未用局部变量删去；改动对象新进程比对无回退。`d/maze` 的 baihuazhen、dayan-ta 等迷宫房间仍不编译（调用的迷宫守护进程本 lib 没有），留着。
