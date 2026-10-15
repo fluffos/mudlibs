@@ -231,3 +231,5 @@ The `.c` -> `.lpc` rename changed the string but not the slice width: `f[<2..] =
   - `bin/pub/_check.lpc`：61–80 一档的 `case` 后面是一个孤立的 `tmp;` 而不是 `break;`，直接落到 default，玩家总看到“死在瓶子里”的那句。
   - `basic/curse.lpc`：删 `identified_by` 最后一个名字时算出新数组却没赋回去。
 - 其它：`lib/door.lpc` 空的 `if (l_long) {}` 删去；`basic/room/map.lpc`、`bin/usr/_diff.lpc` 的 `?:` 两边类型统一；三个 attack 文件和 `bin/pub/_disguise.lpc` 注释里的嵌套 `/*`。
+
+- 2026-10-14: `guilds/thieves/skills/tumble.lpc` declared its globals above `inherit "/guilds/thieves/skills/criticals"` inside the `#ifndef TMARK_C` block (`Illegal to inherit after defining global variables`); the inherit now comes first.

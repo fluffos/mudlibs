@@ -1004,3 +1004,9 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。18 个文件 25 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/daemon/skill/fengyun-shou/foguang.lpc`（`damage *=`）、`/kungfu/skill/fengyun-shou/foguang.lpc`（`damage *=`）、`/kungfu/skill/taiji-quan/zhenup.lpc`（`damage *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
 - 2026-10-14：技能文件里 72 处 `int power_point()`/`int hard_point()` 返回 1.3、1.75 之类的浮点，经 int 返回被截断；本库没有调用者，改成 `float` 返回值，保留原数值（`float_hooks.py`，KB 04 §6.10）。
+
+- 2026-10-14：6 个文件因 `Type of returned value doesn't match function return type ( int vs void )` 整份不编译：声明为 `void`（或没写类型）的函数却返回值，旧驱动照样把值交给调用者。调用者要用返回值的（add_action 处理函数、命令、辅助函数）改为它实际返回的类型：`check_fight()`、`checking()`。驱动忽略返回值的 apply（`init`、`reset`、`heart_beat`、`create`）里改成空 `return;`（`return ::init();` 改为 `{ ::init(); return; }`，调用照旧）。新进程比对 HEAD 与工作树：10 个对象，新增载入 8，回退 0（`scripts/lpc_fix_void_return.py`，KB 04 §6.3）。
+
+- 2026-10-14：`std/skill.lpc` 补上 `sum()` 与 `NewRandom()`：所有 `kungfu/skill`、`daemon/skill` 武功的 `query_action()` 都用 `NewRandom()` 按等级挑招式，本 lib 却从没定义，566 个武功文件整份不编译；补上后 560 个新载入（HEAD 与工作树新进程比对，回退 0）。`feature/skill.lpc` 补上 xkx 的 `prepare_skill()`/`query_skill_prepared()`/`query_skill_prepare()`（新增存档变量 `skill_prepare`，旧存档读出为空）：`/kungfu/class`、`/daemon/class` 的门派师父、`copyskill` 与 `zhentian-quan` 调用它们；308 个对象中 97 个新载入，其余卡在缺失的物品文件（`/clone/weapon/changjian`、`/clone/misc/cloth` 等 27 个，内容缺失）。擂台 `d/leitai/leitai.lpc` 补上 `fullup()` 漏掉的 `}` 并删去从未生效的重复 `do_quit()`。`kungfu/skill/poison.lpc` 的 `skill_improved()` 照基类回到 `void`。
+
+- 2026-10-14：2 个文件因 `Illegal to inherit after defining global variables` 整份不编译：FluffOS 要求所有 `inherit` 写在第一个全局变量之前，MudOS 不管。`scripts/lpc_fix_inherit_order.py` 把写在 `inherit` 之前的全局变量（以及声明全局变量的头文件的 `#include`）挪到最后一个 `inherit` 之后（KB 04 §6.3）。

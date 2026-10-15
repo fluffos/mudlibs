@@ -97,7 +97,7 @@ return((r1*r2)+r3);
 
 
  
-void judge_weapon(object ob, object me)
+int judge_weapon(object ob, object me)
 {
   int dmg;
   int flag;

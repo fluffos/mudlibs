@@ -32,7 +32,7 @@ void init()
    }
 }
 int test_add(object ob, int i) { return 0; }
-void do_death(object att)
+int do_death(object att)
 {
    object *obs;
    if(!my_player) return ::do_death(att);

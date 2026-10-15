@@ -70,7 +70,7 @@ int query_wielded_pick()
    return(0);
 }
 
-void do_dig(mixed *dig_exit, mixed *dig_where,
+int do_dig(mixed *dig_exit, mixed *dig_where,
               object room_ob, string direc)
 {
    mixed path = file_name(room_ob);

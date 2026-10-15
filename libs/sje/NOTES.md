@@ -222,3 +222,7 @@ Century/`adm-single` 形状）**：`adm/simul_efun/file.lpc` 的
 - 2026-10-14：`data/emoted.o`（表情守护进程的存档）整个还是原档案的 GBK 编码，没有转成 UTF-8，`restore_object()` 报 `Invalid utf8 string while restoring emote`，表情守护进程启动时一个表情都没有。现按 GB18030 转码，丢掉原文件里几个被截断的半个字符。转码后 `adm/daemons/emoted` 载入不再报错（HEAD 上报错）。
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。7 个文件 7 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/kungfu/skill/jieshou-jiushi/foguang.lpc`（`damage *=`）、`/kungfu/skill/taiji-quan/1zhen.lpc`（`damage *=`）、`/kungfu/skill/taiji-quan/effect.lpc`（`p *=`）、`/kungfu/skill/taiji-quan/luanhuan.lpc`（`p *=`）、`/kungfu/skill/taiji-quan/zhen.lpc`（`damage *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+
+- 2026-10-14：`d/dali/job/killer1.lpc`（被 `npc1.lpc` #include 的大理送信任务杀手）`init()` 缺了收尾的 `}`，后面的函数全被读成 `init()` 里的局部声明，`npc1` 整份不编译；补上后载入，顺手删去两个没用的局部变量。
+
+- 2026-10-14：2 个文件因 `Illegal to inherit after defining global variables` 整份不编译：FluffOS 要求所有 `inherit` 写在第一个全局变量之前，MudOS 不管。`scripts/lpc_fix_inherit_order.py` 把写在 `inherit` 之前的全局变量（以及声明全局变量的头文件的 `#include`）挪到最后一个 `inherit` 之后（KB 04 §6.3）。
