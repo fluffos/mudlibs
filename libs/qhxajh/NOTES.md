@@ -262,3 +262,5 @@ Same convert-era byte corruption as the waiter `！”\n` / `！\n` →
 `scripts/toolkit_fix.sh` 一轮把 `include/net/ftpdsupp.h` 只在分支里用的 `file` 声明挪进分支；`cmds/wiz/allow.lpc` 自己的 `ALLOW_D` 与 `globals.h` 的路径相同，删去。能编译的文件警告清零，regress 0。（`/system/daemon/allowd` 本库没有，`allow` 命令仍用不了，是内容缺口。）
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。2 个文件 2 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/cmds/skill/xiulian.lpc`（`jilei_gain +=`）、`/system/daemon/combatd.lpc`（`power +=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+
+- 2026-10-14：1 个文件因 `Illegal to inherit after defining global variables` 整份不编译：FluffOS 要求所有 `inherit` 写在第一个全局变量之前，MudOS 不管。`scripts/lpc_fix_inherit_order.py` 把写在 `inherit` 之前的全局变量（以及声明全局变量的头文件的 `#include`）挪到最后一个 `inherit` 之后（KB 04 §6.3）。

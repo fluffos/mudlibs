@@ -808,3 +808,9 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply e
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。6 个文件 10 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/d/monk/guild/train_room.lpc`（`exp -=`）、`/d/thief/hall/monsters/taylers.lpc`（`exp -=`）、`/d/thief/hall/monsters/taylers.lpc`（`exp -=`）、`/d/thief/hall/monsters/taylers.lpc`（`exp -=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
 - 2026-10-14：67 个存档文件（其他 67 个；`d/adventurer/data/attic/adventurer_board_798460167.o`, `d/healer/data/attic/healer_board_780485145.o`, `d/healer/data/attic/healer_board_781540005.o` …）还是原档案的 GBK 编码，没有转成 UTF-8，`restore_object()` 报 `Invalid utf8 string` 后对象以空数据启动（表情守护进程没有表情、留言板没有帖子、玩家无法载入）。`scripts/lpc_save_encoding.py` 逐个按 GB18030 解码，结果按存档格式解析通过才写回（KB 03 §4）。
+
+- 2026-10-14：2 个文件因 `Illegal to inherit after defining global variables` 整份不编译：FluffOS 要求所有 `inherit` 写在第一个全局变量之前，MudOS 不管。`scripts/lpc_fix_inherit_order.py` 把写在 `inherit` 之前的全局变量（以及声明全局变量的头文件的 `#include`）挪到最后一个 `inherit` 之后（KB 04 §6.3）。
+
+- 2026-10-14：1 个文件因 `Type of returned value doesn't match function return type ( int vs void )` 整份不编译：声明为 `void`（或没写类型）的函数却返回值，旧驱动照样把值交给调用者。调用者要用返回值的（add_action 处理函数、命令、辅助函数）改为它实际返回的类型：`report()`。新进程比对 HEAD 与工作树：4 个对象，新增载入 2，回退 0（`scripts/lpc_fix_void_return.py`，KB 04 §6.3）。
+
+- 2026-10-14：`d/deathland/deathworld/hole1-7.lpc` 写成 `#include <DWORLD.h>`，实际文件是 `dworld.h`（大小写），整份不编译；改为小写。

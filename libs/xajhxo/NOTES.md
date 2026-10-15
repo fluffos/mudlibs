@@ -885,3 +885,7 @@ Same convert-era byte corruption as the waiter `！”\n` / `！\n` →
 - `cmds/comm/who.lpc` 外层没用的 `your_id`（内层另有声明）、`d/zuzhi/yipin_tang/peacock/xuanwu_tang/npc/heiyiren.lpc` 没用的 `last_time` 删去；`cmds/wiz/allow.lpc` 与 `globals.h` 相同的 `ALLOW_D` 删去。
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。3 个文件 3 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/cmds/skill/xiulian.lpc`（`jilei_gain +=`）、`/system/daemon/combatd.lpc`（`power +=`）、`/system/daemon/daemon/combatd.lpc`（`power +=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+
+- 2026-10-14：2 个文件因 `Illegal to inherit after defining global variables` 整份不编译：FluffOS 要求所有 `inherit` 写在第一个全局变量之前，MudOS 不管。`scripts/lpc_fix_inherit_order.py` 把写在 `inherit` 之前的全局变量（以及声明全局变量的头文件的 `#include`）挪到最后一个 `inherit` 之后（KB 04 §6.3）。
+
+- 2026-10-14：2 个文件的函数声明为 `int`（或 `void`）却返回字符串、对象（`int query_seal() { return "…"; }`），旧驱动照样把值交给调用者；改为实际返回的类型（`scripts/lpc_fix_void_return.py`）（KB 04 §6.1、§6.3）。新编译出来的文件露出的警告一并清掉（删去未用局部变量，有返回值函数里的空 `return;` 改为 `return 0;`）。新进程比对 HEAD 与工作树：4 个对象，新增载入 2，回退 0。

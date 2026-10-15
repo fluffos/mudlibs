@@ -870,3 +870,5 @@ has it as `mercenary_join.c.jdp`. `mercenary/weapon/gm_axe.lpc` got the sibling 
 autoload::get(); }` for the warning it now showed.
 
 - 2026-10-14: FluffOS 970d9f09 warns `Float value truncated to int` (#1426). 7 sites in 7 files: assignments, initializers and returns now spell the truncation `to_int(...)` (same value). Changed objects loaded before and after in fresh drivers, no regressions (`scripts/lpc_fix_float_trunc.py`, KB 04 §6.10).
+
+- 2026-10-14: 4 files did not compile with `Illegal to inherit after defining global variables`: FluffOS takes every `inherit` before the first global, MudOS did not care. `scripts/lpc_fix_inherit_order.py` moved the globals (and `#include`s of headers that declare globals) written above the `inherit` to just below the last one (KB 04 §6.3).

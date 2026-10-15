@@ -877,3 +877,9 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply d
 
 - 2026-10-14：`data/ip_d.o`（网咖管理器的存档）还是原档案的 BIG5 编码，没有转成 UTF-8，`restore_object()` 报 `Invalid utf8 string` 后以空数据启动；`scripts/lpc_save_encoding.py` 按 BIG5 转码，结果按存档格式解析通过才写回（KB 03 §4）。`data/board/` 下 5 个留言板存档按任何编码都解析不了，未动。
 - 2026-10-14（续）：留言板存档里有 BBS 彩色字，彩色控制码夹在一个双字节字的两个字节中间（前字节、`ESC[1m`、后字节），另外有被截断的半个字，所以整份文件按任何编码都解不开，留言板一直是空的。`scripts/lpc_save_encoding.py` 先把控制码挪到字后面、丢掉孤立的前字节，再按本库的编码转成 UTF-8，结果按存档格式解析通过才写回。
+
+- 2026-10-14：1 个文件因 `Illegal to inherit after defining global variables` 整份不编译：FluffOS 要求所有 `inherit` 写在第一个全局变量之前，MudOS 不管。`scripts/lpc_fix_inherit_order.py` 把写在 `inherit` 之前的全局变量（以及声明全局变量的头文件的 `#include`）挪到最后一个 `inherit` 之后（KB 04 §6.3）。
+
+- 2026-10-14：9 个文件因 `Type of returned value doesn't match function return type ( int vs void )` 整份不编译：声明为 `void`（或没写类型）的函数却返回值，旧驱动照样把值交给调用者。调用者要用返回值的（add_action 处理函数、命令、辅助函数）改为它实际返回的类型：`attempt_apprentice()`、`cover()`、`do_back()`、`do_change()`、`get_paper()`、`is_fighting()`、`relay_say()`。新进程比对 HEAD 与工作树：12 个对象，新增载入 10，回退 0（`scripts/lpc_fix_void_return.py`，KB 04 §6.3）。
+
+- 2026-10-14：2 个文件把 `array` 单独当类型用（`array names;`），本驱动当成普通名字，报 `Illegal lvalue` 整份不编译；改为 `mixed *`，每个声明都带星号（`scripts/lpc_fix_array_type.py`）（KB 04 §6.1、§6.3）。新编译出来的文件露出的警告一并清掉（删去未用局部变量，有返回值函数里的空 `return;` 改为 `return 0;`）。新进程比对 HEAD 与工作树：12 个对象，新增载入 10，回退 0。

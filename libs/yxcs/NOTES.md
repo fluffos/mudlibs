@@ -1080,3 +1080,9 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply y
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。15 个文件 15 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/kungfu/skill/taiji-quan/zhenup.lpc`（`damage *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
 - 2026-10-14：技能文件 `int power_point()`/`hard_point()`/`effective_level()` 返回 1.2~2.5 之类的浮点，经 int 返回被截断；本库没有（有效的）调用者，改成 `float`，保留原数值。
 - 2026-10-14：同一次重扫的其余 9 条：`inherit/misc/bbsboard1.lpc` 发帖 `note["msg"] = (text, 1);`、回复 `report["msg"] = (text, 1);` 是逗号表达式，存进去的是 1 而不是正文（chidi 同款）；改 `= text;`。`dizangwang` 的 `attempt_apprentice` 改 `void`（拜师指令不读返回值）；两个 roommaker 的第一张 `special_props` 表是死声明，删去；未用的局部变量、`STORY_DIR` `#undef`、多余的 `;`。改动的 30 个对象新进程各载入一次，无回退。
+
+- 2026-10-14：1 个文件因 `Illegal to inherit after defining global variables` 整份不编译：FluffOS 要求所有 `inherit` 写在第一个全局变量之前，MudOS 不管。`scripts/lpc_fix_inherit_order.py` 把写在 `inherit` 之前的全局变量（以及声明全局变量的头文件的 `#include`）挪到最后一个 `inherit` 之后（KB 04 §6.3）。
+
+- 2026-10-14：1 个文件因 `Type of returned value doesn't match function return type ( int vs void )` 整份不编译：声明为 `void`（或没写类型）的函数却返回值，旧驱动照样把值交给调用者。调用者要用返回值的（add_action 处理函数、命令、辅助函数）改为它实际返回的类型：`check()`。新进程比对 HEAD 与工作树：2 个对象，新增载入 2，回退 0（`scripts/lpc_fix_void_return.py`，KB 04 §6.3）。
+
+- 2026-10-14：1 个文件的函数声明为 `int`（或 `void`）却返回字符串、对象（`int query_seal() { return "…"; }`），旧驱动照样把值交给调用者；改为实际返回的类型（`scripts/lpc_fix_void_return.py`）（KB 04 §6.1、§6.3）。新编译出来的文件露出的警告一并清掉（删去未用局部变量，有返回值函数里的空 `return;` 改为 `return 0;`）。新进程比对 HEAD 与工作树：2 个对象，新增载入 2，回退 0。

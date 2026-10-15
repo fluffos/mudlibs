@@ -226,3 +226,5 @@ Century/`adm-single` 形状）**：`adm/simul_efun/file.lpc` 的
 - 2026-10-14：`d/dali/job/killer1.lpc`（被 `npc1.lpc` #include 的大理送信任务杀手）`init()` 缺了收尾的 `}`，后面的函数全被读成 `init()` 里的局部声明，`npc1` 整份不编译；补上后载入，顺手删去两个没用的局部变量。
 
 - 2026-10-14：2 个文件因 `Illegal to inherit after defining global variables` 整份不编译：FluffOS 要求所有 `inherit` 写在第一个全局变量之前，MudOS 不管。`scripts/lpc_fix_inherit_order.py` 把写在 `inherit` 之前的全局变量（以及声明全局变量的头文件的 `#include`）挪到最后一个 `inherit` 之后（KB 04 §6.3）。
+
+- 2026-10-14：3 个文件用了颜色宏（`HIW`、`NOR`）却没有 `#include <ansi.h>`（首个错误 `syntax error, unexpected L_STRING`）；开头补上；2 个文件的函数声明为 `int`（或 `void`）却返回字符串、对象（`int query_seal() { return "…"; }`），旧驱动照样把值交给调用者；改为实际返回的类型（`scripts/lpc_fix_void_return.py`）（KB 04 §6.1、§6.3）。新编译出来的文件露出的警告一并清掉（删去未用局部变量，有返回值函数里的空 `return;` 改为 `return 0;`）。新进程比对 HEAD 与工作树：5 个对象，新增载入 5，回退 0。

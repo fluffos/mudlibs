@@ -351,3 +351,9 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply f
   - 运行时探针：一个 NPC 的 sword 100、duanjia-sword 100（power_point 1.3），`query_skill("sword")` 返回整数 180（100/2 + 100×1.3）。
   - 另：载入时 `emoted` 恢复存档报 `Invalid utf8 string while restoring emote`，待查。
 - 2026-10-14：`data/emoted.o`（表情守护进程的存档）整个还是原档案的 GBK 编码，没有转成 UTF-8，`restore_object()` 报 `Invalid utf8 string while restoring emote`，表情守护进程启动时一个表情都没有。现按 GB18030 转码，丢掉原文件里几个被截断的半个字符。转码后 `adm/daemons/emoted` 载入不再报错（HEAD 上报错）。
+
+- 2026-10-14：8 个文件因 `Illegal to inherit after defining global variables` 整份不编译：FluffOS 要求所有 `inherit` 写在第一个全局变量之前，MudOS 不管。`scripts/lpc_fix_inherit_order.py` 把写在 `inherit` 之前的全局变量（以及声明全局变量的头文件的 `#include`）挪到最后一个 `inherit` 之后（KB 04 §6.3）。
+
+- 2026-10-14：9 个文件因 `Type of returned value doesn't match function return type ( int vs void )` 整份不编译：声明为 `void`（或没写类型）的函数却返回值，旧驱动照样把值交给调用者。调用者要用返回值的（add_action 处理函数、命令、辅助函数）改为它实际返回的类型：`greeting()`、`player_win()`、`recognize_apprentice()`。新进程比对 HEAD 与工作树：18 个对象，新增载入 18，回退 0（`scripts/lpc_fix_void_return.py`，KB 04 §6.3）。
+
+- 2026-10-14：1 个文件用了颜色宏（`HIW`、`NOR`）却没有 `#include <ansi.h>`（首个错误 `syntax error, unexpected L_STRING`）；开头补上；1 个文件的函数声明为 `int`（或 `void`）却返回字符串、对象（`int query_seal() { return "…"; }`），旧驱动照样把值交给调用者；改为实际返回的类型（`scripts/lpc_fix_void_return.py`）（KB 04 §6.1、§6.3）。新编译出来的文件露出的警告一并清掉（删去未用局部变量，有返回值函数里的空 `return;` 改为 `return 0;`）。新进程比对 HEAD 与工作树：18 个对象，新增载入 18，回退 0。

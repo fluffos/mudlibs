@@ -247,3 +247,5 @@ live `debug.log` 是 `libs/xkx100/log/debug.log`（Boot Time Fri Sep 4
     - 进攻时原写 `damage *= (int)SKILL_D(...)->power_point(me)`。`(int)` 对浮点只是编译期标注，不做转换，`damage` 会在运行时变成浮点。现改为 `damage = to_int(damage * ...)`。
   - **玩家可见**：带威力系数的武功和轻功按原设计的 1.1–1.5 倍计算伤害和防御。原先在本驱动下系数一直被截成 1。
   - `d/city/daxiaoroom.lpc` 去掉注释里嵌套的 `/*`；`mudlib/testsuite/tmp_eval_file.lpc` 补 `return`。
+
+- 2026-10-14：3 个文件因 `Illegal to inherit after defining global variables` 整份不编译：FluffOS 要求所有 `inherit` 写在第一个全局变量之前，MudOS 不管。`scripts/lpc_fix_inherit_order.py` 把写在 `inherit` 之前的全局变量（以及声明全局变量的头文件的 `#include`）挪到最后一个 `inherit` 之后（KB 04 §6.3）。

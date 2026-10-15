@@ -958,3 +958,5 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 - `d/city/library.lpc`、`d/city2/Sino-CO.lpc`、`d/emei/user-room/host/home.lpc` 各自的 `STORY_DIR` 覆盖 `globals.h` 的同名宏，先 `#undef`，行为不变；`clone/unique/fan.lpc` 写明用驱动原先选的 `clean_up()`；`kungfu/skill/huashan-jian.lpc` 多余的 `;` 删去。
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。6 个文件 6 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+
+- 2026-10-14：1 个文件因 `Illegal to inherit after defining global variables` 整份不编译：FluffOS 要求所有 `inherit` 写在第一个全局变量之前，MudOS 不管。`scripts/lpc_fix_inherit_order.py` 把写在 `inherit` 之前的全局变量（以及声明全局变量的头文件的 `#include`）挪到最后一个 `inherit` 之后（KB 04 §6.3）。
