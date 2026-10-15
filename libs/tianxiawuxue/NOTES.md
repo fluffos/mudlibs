@@ -1102,6 +1102,8 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply t
 
 招式表的最低 "lvl" 高于 0（如全部为 100），技能等级未到之前取不到招，每次出招都报错。循环后补 `if (!a_action) a_action = action[0];`（`lpc_fix_action_level.py --fallback`）：`kuaidao-daofa`、`tiezhang-zhangfa`、`xiongba-tianxia`。
 
+补（同日）：`dugu-jiujian`。招式表前 15 招（lvl 0–98）被 `/* ... */` 注释掉了，生效的最低一招是 105，真正的 `query_action()` 上方也还有一份注释掉的旧定义。第一遍扫描把注释里的招和那份旧定义都算了进去，所以漏掉：105 级以下（包括刚学会的人）每次出招都报 `Illegal type of index`。补上回退后技能探针 0 错误。
+
 ## 空手使用兵器绝招（2026-10-15，KB 06 §7.246）
 
 `perform` 指令允许直接点名招式（如 `perform stick.ban`），这些绝招读了 `me->query_temp("weapon")` 却从不检查，空手时 `weapon->name()` 报错（有的已先扣了内力）。在赋值后补 `if (!objectp(weapon)) return notify_fail("你必须手持兵器才能使用这一招。\n");`（`scripts/lpc_fix_perform_weapon.py`）：`dagou-bang/ban`、`daya-jian/badao`、`tianyu-qijian/kuangwu`、`yujianshu/fumo`、`yujianshu/jinsheng`。

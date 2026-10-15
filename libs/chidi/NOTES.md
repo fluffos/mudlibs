@@ -931,6 +931,8 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply c
 
 这些技能文件是从别的武功复制改名来的，`query_action()` 仍用原武功的等级查招式表：只会本技能的人等级为 0，取不到招，每次出招都报错。改为读本技能自己的等级（`scripts/lpc_fix_action_level.py`）：`quanzhen-jian`。
 
+补（同日）：`kuangfeng-jian` 读的是 `kuangfeng-jianfa` 的等级（华山风不平教的就是 `kuangfeng-jian`）。它真正的 `query_action()` 上方还有一份注释掉的旧定义，第一遍扫描读到的是注释那份，所以漏掉了；脚本现在只认代码里的定义。
+
 ## 妙手回春的银针检查（2026-10-15）
 
 `miaoshouhuichun` 的 `valid_learn()` 用了未赋值的 `object ob`（`ob->query_temp("weapon")` 报错），还把兵器对象和字符串 "银针" 比较。改为 `ob = me->query_temp("weapon")`，再用 `id("yin zhen")`/`id("yinzhen")` 判断是否银针。

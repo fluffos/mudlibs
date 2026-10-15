@@ -305,3 +305,7 @@ live-boot-tested.
 ## family 映射（再补）（2026-10-15，KB 05 §7.30）
 
 `mapping fam; fam = (mapping)ob->query("family");`（先声明后赋值）和泥潭式的 `query("family", me)` 同样直接取下标：无门派的新人拜师（`attempt_apprentice`/`recognize_apprentice`）、NPC 的 `greeting`、房间的 `valid_leave`、`ask_me` 等报 `Value being indexed is zero`。1 处补上 `if (!mapp(fam)) fam = ([ ]);`（刚 `recruit_apprentice()` 之后的除外）。
+
+## 暗器功夫身上没有对应暗器（2026-10-15）
+
+`bolt-throw`（玉石棋子） 的 `query_action()` 先 `present("yushi qizi", me)` 取暗器，再直接调用 `qizi->query_amount()`：throwing 映射到这门功夫、手里拿的却是别的暗器（身上没有这种棋子/佛珠）时，每次出招都报 `Bad argument 1 to call_other()`。数量改为 `objectp(qizi) ? (int)qizi->query_amount() : 0`，兵器判断前补 `!objectp(weapon) ||`，没有对应暗器时退回普通招式。

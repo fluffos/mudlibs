@@ -37,7 +37,9 @@ WALK = re.compile(rb'if\s*\(\s*\w+\s*>\s*action\s*\[\s*i\s*-\s*1\s*\]\s*\[\s*"lv
 
 def add_fallback(b):
     """(new bytes, 1) with the fallback after the table walk, (b, 0) when not needed, (b, -1) for a hand edit."""
-    m = QA.search(b)
+    if b"query_action" not in b:
+        return b, 0
+    m = find_qa(b)
     if not m:
         return b, 0
     end = b.find(b"\n}", m.end())
@@ -50,7 +52,9 @@ def add_fallback(b):
         return b, 0
     i = b.find(b"mapping *action")
     i = b.find(b"mapping*action") if i < 0 else i
-    lv = [int(x) for x in re.findall(rb'"lvl"\s*:\s*(\d+)', b[i:b.find(b"});", i)])] if i >= 0 else []
+    mask0 = code_mask(b)
+    lv = [int(x.group(1)) for x in re.finditer(rb'"lvl"\s*:\s*(\d+)', b[i:b.find(b"});", i)])
+          if mask0[i + x.start() - 1]] if i >= 0 else []   # commented-out moves do not count (the key is a string: test the byte before it)
     if not lv or min(lv) == 0:
         return b, 0
     if not w.group(1):
@@ -86,8 +90,19 @@ def used(work, name, own):
     return False
 
 
+def find_qa(b, mask=None):
+    """The query_action() definition that is code (an older copy may sit in a comment above it)."""
+    mask = mask or code_mask(b)
+    for m in QA.finditer(b):
+        if mask[m.start()]:
+            return m
+    return None
+
+
 def fix(b, name):
-    m = QA.search(b)
+    if b"query_action" not in b:
+        return b, 0
+    m = find_qa(b)
     if not m:
         return b, 0
     end = b.find(b"\n}", m.end())
