@@ -776,3 +776,7 @@ jitui`。`buy jitui from xiaoer` 成功（「你向店小二买下一根炸鸡�
   - `lijing`/`xiwangmu` 的 `die`/`unconcious` 和 `yutu`/`jinren` 的 `kill_ob` 改 `void`。
   - `reporting.lpc` 未用的 `str` 删去；`roommaker` 被覆盖的 `special_props` 表删去；没有定义的 `int long();` 原型删去。
   - 改动的对象 HEAD 与工作树各载入一次，无回退。
+
+- 2026-10-14：1 个文件用了颜色宏（`HIW`、`NOR`）却没有 `#include <ansi.h>`（首个错误 `syntax error, unexpected L_STRING`）；开头补上（KB 04 §6.1、§6.3）。新编译出来的文件露出的警告一并清掉（删去未用局部变量，有返回值函数里的空 `return;` 改为 `return 0;`）。新进程比对 HEAD 与工作树：1 个对象，新增载入 0，回退 0。
+
+- 2026-10-14（补）：`cmds/usr/quit2.lpc` 的 `if (login_status = …) {` 少了收尾的 `}`，存档、`destruct(me)`、`return 1;` 被关进了 if，后面的 `do_drop()` 被读成局部声明，整份不编译；照 `quit.lpc` 的结构在频道消息后补上 `}`，现在载入。

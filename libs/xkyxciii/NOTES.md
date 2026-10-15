@@ -300,3 +300,5 @@ functionally re-tested live on this lib.
 - `d/center/npc/biantai-kuangmo.lpc`、`d/quanzhou/npc/biantai-kuangmo.lpc`：自己记目标的 `object killer` 与 `feature/attack.lpc` 的仇人名单 `string *killer` 同名，改名 `target_ob`；`killa.lpc` 两份函数体后多余的 `};`。
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。12 个文件 13 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/adm/daemons/combatd.lpc`（`damage -=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+
+- 2026-10-14：2 个文件用了颜色宏（`HIW`、`NOR`）却没有 `#include <ansi.h>`（首个错误 `syntax error, unexpected L_STRING`）；开头补上（KB 04 §6.1、§6.3）。新进程比对 HEAD 与工作树：2 个对象，新增载入 0，回退 0。

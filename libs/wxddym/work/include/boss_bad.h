@@ -316,7 +316,7 @@ int accept_object(object me,object ob)
        int exp,pot,score,weiwang;
        mapping bunch_quest,bonus;
        object who,env;
-       array place;
+       mixed *place;
        string the_place, msg;
 
        who = this_object();

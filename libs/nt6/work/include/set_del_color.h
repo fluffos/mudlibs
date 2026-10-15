@@ -2,7 +2,7 @@
 string setcolor(string msg, int raw)
 {
     mapping color_key;
-    array key;
+    mixed *key;
     string k;
     color_key = ([
         "$BLK$" : NOR+BLK,
@@ -74,7 +74,7 @@ string setcolor(string msg, int raw)
 
 string delcolor(string msg)
 {
-    array color_key;
+    mixed *color_key;
     color_key = ({
         BLK, RED, GRN, YEL, BLU, MAG, CYN, WHT,
         NOR, HIR, HIG, HIY, HIB, HIM, HIC, HIW,

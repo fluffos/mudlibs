@@ -731,3 +731,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply d
 
 - 2026-10-12：`obj/updateroom/city/fish.lpc` 的刷新表路径是 Windows 写法 `"d\clone\room\fish/..."`（`\r` 是回车，`\c`、`\f` 被丢掉），`"npc"` 也成了 `"/dcloneoomfish/yufu"`；改为 `/d/clone/room/fish/fish_room.lpc` 与 `/d/clone/room/fish/yufu`（两个文件都在）。读这张表的 `std/room.lpc` 代码目前整段注释掉，表格处于闲置状态。
 - 2026-10-14：FluffOS 970d9f09 重扫剩 3 条：`channeld.canoe.lpc` 的 `REMOTE_Q`、`logind0.lpc` 的 `TMI` 宏重定义前加 `#undef`（后定义本来就生效）；`adm/daemons/network/services/temp.lpc` 在 BLADE 已有的情况下又 `inherit F_CLEAN_UP`，删去。改动对象新进程各载入一次，无回退。
+
+- 2026-10-14：1 个文件用了颜色宏（`HIW`、`NOR`）却没有 `#include <ansi.h>`（首个错误 `syntax error, unexpected L_STRING`）；开头补上（KB 04 §6.1、§6.3）。新进程比对 HEAD 与工作树：1 个对象，新增载入 0，回退 0。

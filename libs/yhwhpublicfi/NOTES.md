@@ -443,3 +443,5 @@ HEAD 与工作树分别加载（新进程）：826 -> 826 通过，无回退。
 - 镖师钱正伦 `d/beijing/npc/qianzhenglun.lpc` 记次数的 `count` 遮住基类 `feature/shell.lpc` 的同名变量，改名 `my_count`（同 yanhuangwuhun）。
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。1 个文件 1 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+
+- 2026-10-14：1 个文件把 `array` 单独当类型用（`array names;`），本驱动当成普通名字，报 `Illegal lvalue` 整份不编译；改为 `mixed *`，每个声明都带星号（`scripts/lpc_fix_array_type.py`）（KB 04 §6.1、§6.3）。新进程比对 HEAD 与工作树：1 个对象，新增载入 1，回退 0。

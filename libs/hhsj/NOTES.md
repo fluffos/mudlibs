@@ -756,3 +756,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
   - `adm/kernel/simul_efun/ntefun.lpc` 的 `y = sqrt(...)` 写明 `to_int()`。simul_efun 能载入。
   - `u/gigi/test/gigicook.lpc` 的 `arg == menu_list[0]` 改成赋值。
   - 改动的 251 个对象 HEAD 与工作树各载入一次，无回退（244 -> 244）。
+
+- 2026-10-14：10 个文件把 `array` 单独当类型用（`array names;`），本驱动当成普通名字，报 `Illegal lvalue` 整份不编译；改为 `mixed *`，每个声明都带星号（`scripts/lpc_fix_array_type.py`）；17 个文件用了颜色宏（`HIW`、`NOR`）却没有 `#include <ansi.h>`（首个错误 `syntax error, unexpected L_STRING`）；开头补上（KB 04 §6.1、§6.3）。新编译出来的文件露出的警告一并清掉（删去未用局部变量，有返回值函数里的空 `return;` 改为 `return 0;`）。新进程比对 HEAD 与工作树：25 个对象，新增载入 21，回退 0。

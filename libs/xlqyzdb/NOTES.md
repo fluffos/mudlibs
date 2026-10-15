@@ -561,3 +561,5 @@ individually live-boot-tested.
 `scripts/toolkit_fix.sh` 一轮去掉 7 处多余继承；搬来 xianlvqiyuan（8c3c85ca28e）的改法（逐 token 相同的照搬，其余手工）：袈裟 `jiasha.lpc` 补 `cloth::init()` 让撕袈裟的 `tear` 生效，`d/kaifeng/ground.h` 表格守卫，`d/city/npc/yg/yaoguai.lpc`、`yaoguai1.lpc` 没人读的 `yaoguai_type` 删去，李靖、西王母 `d/niulang/xiwangmu.lpc` 的 `die`/`unconcious` 与玉兔的 `kill_ob` 改 `void`，`alias.lpc` 的 `last_cmd_time`、`colors.h` 防重。另：`cmds/arch/make_npc.lpc` 生成的文件里写 `\#include`、`\}`，驱动对不认识的转义只留后一个字符，去掉反斜杠，生成内容不变；`d/obj/drug1/punish.lpc`、`punish1.lpc` 写明用驱动原先选的 `clean_up()`。能编译的文件警告清零；改动的 24 个对象在 HEAD 与工作树各载入一次，regress 0。
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。7 个文件 14 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+
+- 2026-10-14：2 个文件用了颜色宏（`HIW`、`NOR`）却没有 `#include <ansi.h>`（首个错误 `syntax error, unexpected L_STRING`）；开头补上（KB 04 §6.1、§6.3）。新进程比对 HEAD 与工作树：2 个对象，新增载入 2，回退 0。

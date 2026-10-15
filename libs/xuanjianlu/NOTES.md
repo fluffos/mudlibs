@@ -1444,3 +1444,5 @@ The 42 files are 41 `.C` -> `.lpc` (the tea items of `d/city/npc/tea`, the Lingj
 `scripts/toolkit_fix.sh` 一轮去掉 4 处多余的 `inherit F_CLEAN_UP`（`d/xingxiu/tianroad3`、`inherit/room/pigroom`、`u/lbc/mj_harbor`、`mj_ship1`）。手工：`u/yijiu/guanfu/killer.lpc` 先包含 `npc.h`（里面已 `#include "map.lpc"`），又直接包含一次 `map.lpc`，地点表 `where` 声明两次；删去第二次包含，表内容相同，行为不变。能编译的文件警告清零；改动的 6 个对象在 HEAD 与工作树各载入一次，regress 0。
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。69 个文件 83 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+
+- 2026-10-14：1 个文件用了颜色宏（`HIW`、`NOR`）却没有 `#include <ansi.h>`（首个错误 `syntax error, unexpected L_STRING`）；开头补上；3 个文件的函数声明为 `int`（或 `void`）却返回字符串、对象（`int query_seal() { return "…"; }`），旧驱动照样把值交给调用者；改为实际返回的类型（`scripts/lpc_fix_void_return.py`）（KB 04 §6.1、§6.3）。新进程比对 HEAD 与工作树：4 个对象，新增载入 1，回退 0。

@@ -410,3 +410,5 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 移植后全库扫描警告为 0（`scripts/lpc_warnings.py bxsj1`），本库没有另外的遗留。改动文件及包含/继承改动文件的对象共 87 个，HEAD 与工作树各载入一次（新进程）：86 -> 86 通过，87 个对象载入无回退（唯一失败的 `adm/daemons/huanjing2003/temp/hj_room_created` 在 HEAD 也载入失败，是运行时生成的临时房间）；`lpc_audit_removed_locals.py` 0 处待查。
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。12 个文件 21 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/d/mr/npc/murong-fu.lpc`（`bouns *=`）、`/kungfu/skill/force/qi.lpc`（`q *=`）、`/kungfu/skill/force/recover.lpc`（`q *=`）、`/kungfu/skill/taiji-quan/luanhuan.lpc`（`p *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+
+- 2026-10-14：1 个文件用了颜色宏（`HIW`、`NOR`）却没有 `#include <ansi.h>`（首个错误 `syntax error, unexpected L_STRING`）；开头补上（KB 04 §6.1、§6.3）。新进程比对 HEAD 与工作树：1 个对象，新增载入 1，回退 0。

@@ -289,3 +289,5 @@ lpc`/`pigd.lpc` 里搜不到任何 `money`/`balance` 相关调用——它不是
 `scripts/toolkit_fix.sh` 一轮去掉 10 处多余继承，`d/shenlong/ma.lpc` 补上 `ask_me()` 原型。能编译的文件警告清零；改动的对象在 HEAD 与工作树各载入一次（11 objects; HEAD PASS 9, tree PASS 9; regress 0; newly loading 0）。
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。3 个文件 3 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+
+- 2026-10-14：22 个文件用了颜色宏（`HIW`、`NOR`）却没有 `#include <ansi.h>`（首个错误 `syntax error, unexpected L_STRING`）；开头补上（KB 04 §6.1、§6.3）。新进程比对 HEAD 与工作树：25 个对象，新增载入 23，回退 0。

@@ -15,7 +15,7 @@ int do_hj_help(string arg)
 {
     string npc_info_form, *e_form;
     int i;
-    array cmds = ({
+    mixed *cmds = ({
         "hj",        "huanjing",
         "hj other",    "huanjing other",
         "hj cmds",    "huanjing cmds",

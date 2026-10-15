@@ -1,3 +1,4 @@
+#include <ansi.h>
 // MingJiao.h for all npc of mingjiao
 
 void greeting(object me, object ob)

@@ -787,3 +787,5 @@ HEAD 与工作树分别加载（新进程）：1008 -> 1008 通过，无回退�
 - 其余：神木王鼎的虫表从没生效（`swmuding.lpc`）、`xiang.lpc`/`cruise-ob.h` 的 `remove()`、`pet.h` 重复继承 F_OBSAVE、`hu.lpc` 疗伤函数改名 `heal_patient()`、`lubo.lpc` 合并两段说明、幻境变量重复声明、迷宫 `unique_rooms` 改名、`FORCE2`、`do_effect()` 改 `varargs int`、`genmap.lpc` 的 `harbor.h`、`vrm_server.lpc` 的 `;`。
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。9 个文件 13 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/kungfu/class/generate/killed.lpc`（`exp *=`）、`/kungfu/class/generate/killed.lpc`（`pot *=`）、`/kungfu/class/generate/killed.lpc`（`weiwang *=`）、`/kungfu/class/generate/killed.lpc`（`score *=`）、`/kungfu/skill/yunv-xinfa/xiuxi2.lpc`（`xj_gain *=`）、`/kungfu/skill/yunv-xinfa/xiuxi2.lpc`（`xj_gain *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+
+- 2026-10-14：2 个文件把 `array` 单独当类型用（`array names;`），本驱动当成普通名字，报 `Illegal lvalue` 整份不编译；改为 `mixed *`，每个声明都带星号（`scripts/lpc_fix_array_type.py`）；2 个文件用了颜色宏（`HIW`、`NOR`）却没有 `#include <ansi.h>`（首个错误 `syntax error, unexpected L_STRING`）；开头补上（KB 04 §6.1、§6.3）。新进程比对 HEAD 与工作树：4 个对象，新增载入 3，回退 0。

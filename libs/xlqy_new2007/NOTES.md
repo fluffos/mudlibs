@@ -569,3 +569,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
   - `d/dntg/yunlou/npc/yaoguai.lpc` 灭妖奖励的倍率 `reward`（0.8、1.2、1.8、2.6、3.8）原声明为 `int`，小数被截掉；现改为 `float`，奖励用 `to_int()` 取整。**玩家可见**：七彩奖励按原倍率发放。
   - `cmds/arch/make_npc.lpc` 去掉字符串里多余的反斜杠。
   - 改动的 59 个对象 HEAD 与工作树各载入一次，无回退；定义 `query_autoload` 的 68 个文件重编译后没有警告。
+
+- 2026-10-14：2 个文件用了颜色宏（`HIW`、`NOR`）却没有 `#include <ansi.h>`（首个错误 `syntax error, unexpected L_STRING`）；开头补上（KB 04 §6.1、§6.3）。新进程比对 HEAD 与工作树：2 个对象，新增载入 2，回退 0。

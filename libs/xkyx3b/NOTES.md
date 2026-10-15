@@ -405,3 +405,5 @@ functionally re-tested live on this lib.
 孪生库 xkyxciii 同日的整理（f771e14aebc）用 `scripts/lpc_twin_port.py adopt xkyxciii xkyx3b --pre f771e14aebc~1` 搬来，8 个文件与 xkyxciii 修前逐 token 相同：`std/skill.lpc` 的 `mapping action` 栏位说明改成注释（71 个武功的 `Redeclaration of global variable 'action'` 由此而来），真正拿它当缓冲的 `baigu-claw.lpc`、`example.lpc` 各自声明；`dog.lpc` 的 `(: "random_move" :)` 改 `(: random_move :)`（狗从不走动）；`biantai-kuangmo.lpc` 的 `killer` 改名 `target_ob`；`killa.lpc` 多余的 `};`。继承 `SKILL` 的全部对象加改动文件 HEAD 与工作树各载入一次：156 个，HEAD PASS 155，tree PASS 155，regress 0。
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。12 个文件 13 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/adm/daemons/combatd.lpc`（`damage -=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+
+- 2026-10-14：2 个文件用了颜色宏（`HIW`、`NOR`）却没有 `#include <ansi.h>`（首个错误 `syntax error, unexpected L_STRING`）；开头补上（KB 04 §6.1、§6.3）。新进程比对 HEAD 与工作树：2 个对象，新增载入 0，回退 0。

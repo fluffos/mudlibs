@@ -411,3 +411,5 @@ Too-deep-recursion) recurred at boot; no new error from shop/拜师.
   - `quest/shenshu/npc/man2.lpc` 删去较短的旧 `order`/`data` 表；`man2`/`testman` 的 `kill_ob` 改 `void`。
   - 农场养殖上限写明 `to_int()`；5 个文件注释里嵌套的 `/*` 去掉；两处函数结尾多余的 `;` 去掉。
   - 改动的 50 个对象载入无回退。
+
+- 2026-10-14：6 个文件把 `array` 单独当类型用（`array names;`），本驱动当成普通名字，报 `Illegal lvalue` 整份不编译；改为 `mixed *`，每个声明都带星号（`scripts/lpc_fix_array_type.py`）（KB 04 §6.1、§6.3）。新进程比对 HEAD 与工作树：6 个对象，新增载入 5，回退 0。

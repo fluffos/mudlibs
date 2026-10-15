@@ -248,3 +248,5 @@ re-invoke `enable_player()` on this lib while the object is still
 - 2026-10-14（同一次重扫，手工部分）：`d/sld/seawar/seaward.lpc`（海战）里船速、风速、水流、炮弹的 `x = sin(...) * speed` 等 8 处写明 `to_int()`。坐标是整数格，行为不变；原先浮点修正脚本把列号落在 `sin(...)` 括号里的语句误当成条件里的赋值，没有处理，脚本已修正。改动的 9 个对象 HEAD 与工作树各载入一次，无回退。
 
 - 2026-10-14：`d/tanggu/biwuleitai.lpc`（比武擂台）`message_vision(HIRNOR "\n", …)` 把两个颜色宏写连了，整份不编译；改为 `HIR NOR`。现在载入。
+
+- 2026-10-14：1 个文件用了颜色宏（`HIW`、`NOR`）却没有 `#include <ansi.h>`（首个错误 `syntax error, unexpected L_STRING`）；开头补上（KB 04 §6.1、§6.3）。新进程比对 HEAD 与工作树：1 个对象，新增载入 1，回退 0。
