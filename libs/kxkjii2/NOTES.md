@@ -372,3 +372,5 @@ HEAD 与工作树分别加载（新进程）：1653 -> 1653 通过，无回退�
 - 2026-10-14：21 个存档文件（留言板 16 个、其他 5 个；`data/board back/acelan_b.o`, `data/board back/adam_b.o`, `data/board back/cccc_b1.o` …）还是原档案的 GBK 编码，没有转成 UTF-8，`restore_object()` 报 `Invalid utf8 string` 后对象以空数据启动（表情守护进程没有表情、留言板没有帖子、玩家无法载入）。`scripts/lpc_save_encoding.py` 逐个按 GB18030 解码，结果按存档格式解析通过才写回（KB 03 §4）。
 
 - 2026-10-14：72 个文件因 `Illegal to inherit after defining global variables` 整份不编译：FluffOS 要求所有 `inherit` 写在第一个全局变量之前，MudOS 不管。`scripts/lpc_fix_inherit_order.py` 把写在 `inherit` 之前的全局变量（以及声明全局变量的头文件的 `#include`）挪到最后一个 `inherit` 之后（KB 04 §6.3）。随后 toolkit_fix.sh 一轮清掉新编译文件露出的警告（nosave 函数 0、空 return 0、未用局部变量 8）。新进程比对 HEAD 与工作树：74 个对象，新增载入 72，回退 0。
+
+- 2026-10-14：`include/sec_kee.lpc` 用了颜色宏却没有 `#include <ansi.h>`，补上后载入。
