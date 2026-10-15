@@ -180,3 +180,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 ## 其他体系的属性名（2026-10-15，KB 06 §7.241 第三类，`--any-file`）
 
 27 个文件来自侠客行体系：本库把 jing 改叫 jingli（`receive_damage()` 只接受 jingli/qi/douzhi/shenzhi），`receive_damage("jing", ...)` 报 `伤害种类错误`。按 jing→jingli、kee→qi、force→neili 改名；其中本库自己的 `cmds/skill/learn.lpc`：玩家教玩家时扣教者的 `jing` 报错，学不动时 `query("jing")` 永远为 0（`scripts/lpc_port_es_props.py --any-file`）。
+
+## 治疗/疗伤的属性名（2026-10-15，KB 06 §7.241）
+
+`receive_heal()`/`receive_curing()` 也只接受本库的种类。1 个文件（多为只调用 `receive_heal`/`receive_curing` 的药物、NPC）来自其他体系，按本库的属性名改名（`scripts/lpc_port_es_props.py --any-file`）。

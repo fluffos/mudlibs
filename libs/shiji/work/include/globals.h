@@ -61,7 +61,7 @@
 // End of appendence
 #define CLASS_D(x)	("/kungfu/class/" + x)
 #define SKILL_D(x)	("/kungfu/skill/" + x)
-#define CONDITION_D(x)  ("/adm/daemons/autosaved")
+#define CONDITION_D(x)  ("/kungfu/condition/" + x)
 
 // Clonable/Non-inheritable Standard Objects
 #define COIN_OB		"/clone/money/coin"

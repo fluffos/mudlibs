@@ -1006,3 +1006,11 @@ HEAD 与工作树分别加载（新进程）：952 -> 952 通过，无回退；�
 ## 无门派玩家的 family 映射（2026-10-15，KB 05 §7.30 第三种）
 
 `mapping fam = ob->query("family");` 之后直接 `fam["family_name"]`：没有门派（新人或叛师后）的玩家在学习、练功、拜师、进入门派房间时报 `Value being indexed is zero`，而不是作者写好的提示。2 处在声明行加上 `if (!mapp(fam)) fam = ([ ]);`（`scripts/lpc_fix_family_guard.py`）。
+
+## 转码吃掉的引号（2026-10-15，KB 03）
+
+原档在右引号前有一个孤立的 GBK 前导字节，转 UTF-8 时连引号一起丢了（如 `return name + HIM "发作身亡了;`），字符串一直延续到后面，文件编译失败：`/d/obj/books-nonskill/hmeng014`。补回引号（`scripts/lpc_fix_eaten_quote.py`）。
+
+## iori-sword 取招越界（2026-10-15，KB 06 §7.243）
+
+`daemon/skill/iori-sword.lpc` 只有 4 招却 `action[random(7)]`，改为文件里注释掉的 `random(sizeof(action))`（只有巫师区的测试 NPC 用到）。

@@ -251,3 +251,7 @@ Century/`adm-single` 形状）**：`adm/simul_efun/file.lpc` 的
 ## 内力/上限当作伤害种类（补）（2026-10-15）
 
 `victim->receive_wound("force", n, me)`（兵器吸内力）、`receive_damage("max_qi", random(100))`（走火入魔扣上限）等本库不接受的种类，2 处改为 `add(type, -N)`。
+
+## 化骨绵掌毒不能编译（2026-10-15）
+
+`kungfu/condition/huagu_poison.lpc` 原档就多一个右括号（`qi = me->query("max_qi"))-1;`），文件从未编译成功，中了化骨绵掌的人没有毒发。按原意改为 `qi = me->query("max_qi") - 1;`，现可载入。

@@ -7,7 +7,7 @@
 inherit ITEM;
 #include <ansi.h>
 
-string name = "《红楼梦》第十四回;
+string name = "《红楼梦》第十四回";
 string number = "014";
 
 void init();

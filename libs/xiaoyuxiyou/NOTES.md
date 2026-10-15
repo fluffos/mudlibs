@@ -1191,3 +1191,12 @@ verified live on `xyxyutf8`. See AGENTS.md §7.156.
 - 擂台两人 `d/kaifeng/npc/ye.lpc`、`yuwangye.lpc` 的比赛名 `title` 改名 `game_title`，投票箱 `d/wiz/votebox.lpc` 的改名 `vote_title`，不再与基类的 `title` 同名；突破迷宫五个出口（及 `backup/` 里一份）`out.lpc` 的怪物表 `gg` 与它继承的 `room.lpc` 一字不差，删去重复的那份；`d/obj/books-nonskill/book.h` 的 `BOOK` 先 `#undef`；`quest/tianguan/npc/other.lpc` 没用的 `name` 删去。
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。3 个文件 3 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+
+## 治疗/疗伤的属性名（2026-10-15，KB 06 §7.241）
+
+`receive_heal()`/`receive_curing()` 也只接受本库的种类。本库人物只有 kee/sen（连 gin 也没有）：药物的 `receive_heal("gin", 60)`、NPC 的 `receive_curing("gin", ...)` 和来自侠客行体系的 qi/jing 调用都报 `伤害种类错误`。1 个文件按 gin→sen、qi→kee、jing→sen、neili→force 改名（`scripts/lpc_port_es_props.py --any-file`）。
+
+
+## 转码吃掉的引号（2026-10-15，KB 03）
+
+原档在右引号前有一个孤立的 GBK 前导字节，转 UTF-8 时连引号一起丢了（如 `return name + HIM "发作身亡了;`），字符串一直延续到后面，文件编译失败：`/d/obj/books-nonskill/hmeng014`。补回引号（`scripts/lpc_fix_eaten_quote.py`）。

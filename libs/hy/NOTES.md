@@ -394,3 +394,6 @@ functionally re-tested live on this lib.
 
 `mapping fam = (mapping)me->query("family");`（带类型转换的写法）同样直接取下标，4 处补上 `if (!mapp(fam)) fam = ([ ]);`。
 
+## `message_vision(msg, environment(me), me)`（2026-10-15，KB 06 §7.242）
+
+把房间当成了动作者：`message_vision()` 取房间的 `name()` 得 0，`replace_string(msg, "$N", 0)` 报错。在状态（中毒）里，这个错误发生在 `apply_condition(name, duration - 1)` 之前，状态永不结束，心跳里后面的恢复也每次被跳过。改为 `message_vision(msg, me)`：`/海洋2002/hy3/kungfu/condition/sanpoison`。

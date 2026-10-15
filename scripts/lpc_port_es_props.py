@@ -24,6 +24,10 @@ counterpart and is left.  `--any-file` widens the scope from kungfu/skill practi
 conditions, NPC specials, items; a two-level directory that no file outside it names (an unwired copy such as
 xbtxiii's daemon/gongfu) is skipped.
 
+In an xyj lib whose pools are only `kee`/`sen` (the 三界神话 family dropped `gin` too), `gin` -> `sen` as well, so a
+pill's `receive_heal("gin", 60)` stops erroring.  Files are chosen by receive_damage(), receive_wound(), receive_heal()
+or receive_curing() with a foreign type.
+
 A lib whose characters carry `jingli` where xkx has `jing` (the xxcq family: receive_damage() takes jingli, qi,
 douzhi, shenzhi) gets the forward table with every `jing` target, and xkx's own `jing`, renamed to `jingli`.
 
@@ -56,6 +60,7 @@ def call_re(m):
 
 CALL = call_re(MAP)
 RCALL = call_re(RMAP)
+REVS_CALL = call_re({**RMAP, b"gin": b"", b"max_gin": b"", b"eff_gin": b""})
 JLCALL = call_re({**MAP, b"jing": b"", b"max_jing": b"", b"eff_jing": b""})
 PRACTICE = re.compile(rb"int\s+practice_skill\s*\([^)]*\)\s*\{(.*?)\n\}", re.S)
 
@@ -78,7 +83,7 @@ def lib_dir(work):
     if {b"qi", b"jingli"} <= allowed and b"jing" not in allowed and not allowed & ES_TYPES:
         return "jl"   # the xxcq family: xkx's jing is called jingli
     if b"kee" in allowed and not allowed & XKX_TYPES:
-        return "rev"
+        return "rev" if b"gin" in allowed else "revs"   # revs: the xyj kee/sen libs, which dropped gin as well
     return None
 
 
@@ -103,8 +108,8 @@ def referenced_dirs(work, pres):
 
 
 def needs_port(b, direction="fwd", any_file=False):
-    foreign = {"fwd": rb"kee|gin|sen", "rev": rb"qi|jing", "jl": rb"kee|gin|sen|jing"}[direction]
-    pat = rb'receive_(?:damage|wound)\(\s*"(' + foreign + rb')"'
+    foreign = {"fwd": rb"kee|gin|sen", "rev": rb"qi|jing", "revs": rb"qi|jing|gin", "jl": rb"kee|gin|sen|jing"}[direction]
+    pat = rb'receive_(?:damage|wound|heal|curing)\(\s*"(' + foreign + rb')"'
     if any_file:
         mask = None
         for m in re.finditer(pat, b):
@@ -148,6 +153,9 @@ def port(b, direction="fwd", jing=b"gin"):
     else:
         table = {**RMAP, b"jing": jing, b"max_jing": b"max_" + jing, b"eff_jing": b"eff_" + jing}
         call = RCALL
+        if direction == "revs":
+            table.update({b"gin": b"sen", b"max_gin": b"max_sen", b"eff_gin": b"eff_sen"})
+            call = REVS_CALL
     out, last, n = [], 0, 0
     for m in call.finditer(b):
         if not mask[m.start()]:
@@ -188,13 +196,13 @@ def main():
             pre = {p: "/".join(p[len(work):].split("/")[:3]) + "/" for p, b in todo}
             live = referenced_dirs(work, set(pre.values()))
             todo = [(p, b) for p, b in todo if pre[p] in live]
-        jing = jing_target(work) if direction == "rev" and todo else b"gin"
+        jing = b"sen" if direction == "revs" else jing_target(work) if direction == "rev" and todo else b"gin"
         for p, b in todo:
             out, n = port(b, direction, jing)
             if n:
                 files += 1
                 tot += n
-                print(f"PORT  {slug} ({direction}{' jing->' + jing.decode() if direction == 'rev' else ''}) "
+                print(f"PORT  {slug} ({direction}{' jing->' + jing.decode() if direction in ('rev', 'revs') else ''}) "
                       f"{p[len(work):]}  {n}")
                 if apply:
                     open(p, "wb").write(out)

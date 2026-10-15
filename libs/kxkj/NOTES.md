@@ -1052,3 +1052,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply k
 - 2026-10-14：1 个文件因 `Type of returned value doesn't match function return type ( int vs void )` 整份不编译：声明为 `void`（或没写类型）的函数却返回值，旧驱动照样把值交给调用者。调用者要用返回值的（add_action 处理函数、命令、辅助函数）改为它实际返回的类型：`attempt_apprentice()`。新进程比对 HEAD 与工作树：1 个对象，新增载入 0，回退 0（`scripts/lpc_fix_void_return.py`，KB 04 §6.3）。
 
 - 2026-10-14：1 个文件用了颜色宏（`HIW`、`NOR`）却没有 `#include <ansi.h>`（首个错误 `syntax error, unexpected L_STRING`）；开头补上；8 个文件的函数声明为 `int`（或 `void`）却返回字符串、对象（`int query_seal() { return "…"; }`），旧驱动照样把值交给调用者；改为实际返回的类型（`scripts/lpc_fix_void_return.py`）（KB 04 §6.1、§6.3）。新进程比对 HEAD 与工作树：9 个对象，新增载入 1，回退 0。
+
+## 独孤九剑招式表越界（2026-10-15，KB 06 §7.243）
+
+`daemon/skill/lonely-sword.lpc` 的 `query_action()` 按 15 招写的取招表（`action[random(9) + 6]` 等），文件里只有 8 招：100 级时有解谜标记 200 次出招 160 次报 `Array index out of bounds`，没有标记 99 次。加 `pick_action()`，越界时取最后一招；实测 0 次。

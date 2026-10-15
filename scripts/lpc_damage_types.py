@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """scripts/lpc_damage_types.py [SLUG...]   (report only)
 
-receive_damage()/receive_wound() called with a type the lib's own feature/damage.lpc rejects (KB 06 section 7.241):
+receive_damage()/receive_wound()/receive_heal()/receive_curing() called with a type the lib's own feature/damage.lpc rejects (KB 06 section 7.241):
 xkx-lineage content (jing/qi/neili/jingli) imported into an ES/xyj lib that keeps gin/kee/sen, or the reverse, or a
 resource passed as damage (`receive_damage("neili", -5)` for `add("neili", -5)`).  The call raises
 `F_DAMAGE: 伤害种类错误` at run time, so practising such a skill or taking such a hit stops with an error.  Reads each lib's
@@ -27,14 +27,14 @@ for s in sorted(os.listdir('libs')):
     if not os.path.isfile(f) or os.path.exists(W+'/.git'): continue
     d=open(f,'rb').read().decode('utf-8','replace')
     allowed={}
-    for fn in ('receive_damage','receive_wound'):
+    for fn in ('receive_damage','receive_wound','receive_heal','receive_curing'):
         i=d.find('int '+fn+'(')
         if i<0: continue
         a=set(re.findall(r'type\s*!=\s*"(\w+)"',d[i:i+1500]))
         if a: allowed[fn]=a
     if not allowed: continue
     allowed_of[s]=allowed.get('receive_damage',set())
-    pat=re.compile(rb'(receive_damage|receive_wound)\(\s*"(\w+)"')
+    pat=re.compile(rb'(receive_damage|receive_wound|receive_heal|receive_curing)\(\s*"(\w+)"')
     for dp,dn,fn in os.walk(W):
         if re.search(r'/(u|w|open|players|backup|old|bak|log|data|doc)(/|$)',dp[len(W):]): continue
         for x in fn:

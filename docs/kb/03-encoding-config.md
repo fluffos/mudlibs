@@ -41,6 +41,10 @@
     lead byte) `scripts/lpc_fix_heredoc_terminator.py` does that for the whole corpus
     (2026-10-04: 269 glued and 107 indented terminators, KB 04 §6.10); the half character
     itself cannot be restored in UTF-8, the raw bytes show it as the lone byte before `\n`.
+    For the closing quote (`"发作身亡了\xf7";` became `"发作身亡了;`), `scripts/lpc_fix_eaten_quote.py`
+    puts the `"` back before a line-final `;`/`);` when the line's last string is unterminated
+    (2026-10-15: 68 lines in 55 libs; the nitan family's `/inherit/condition/damo.lpc`, so every
+    达摩 poison condition, had not loaded).
   - A file flagged LOSSY in the conversion log is suspect even if it
     compiles. Combat and movement exercise many lazily compiled files.
 - **One file can mix encodings.** BIG5 lines inside a GBK file decode

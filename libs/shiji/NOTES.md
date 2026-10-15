@@ -641,3 +641,11 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply s
 ## 其他体系的属性名（2026-10-15，KB 06 §7.241 第三类，`--any-file`）
 
 另有 1 个文件（绝招、状态、物品、NPC 等，不限于 kungfu/skill）来自 gin/kee/sen/force 体系，同样按 kee→qi、gin/sen→jing、force→neili 改名（`scripts/lpc_port_es_props.py --any-file`）。
+
+## 所有状态都指向自动存盘守护进程（2026-10-15，KB 06 §7.244）
+
+原档 `include/globals.h` 写的是 `#define CONDITION_D(x) ("/adm/daemons/autosaved")`：F_CONDITION 把每一种状态（中毒、监禁、杀人犯标记……）都交给 autosaved 处理，它在 `sys` 频道广播 `Auto_save has been started`、几次心跳后给所有在线玩家存盘，并返回 0 让原来的状态立刻消失。`kungfu/condition` 里的 46 个状态文件从未被调用过。改回 `("/kungfu/condition/" + x)`（定时存盘另由 `natured.lpc` 的 `auto_save` 负责）；这些状态里沿用东方故事体系的毒同时按 kee→qi、gin/sen→jing 改名（`scripts/lpc_port_es_props.py --any-file`）。实测：中火玫瑰毒一次心跳扣 10 点气、20 点精上限。
+
+## `message_vision(msg, environment(me), me)`（2026-10-15，KB 06 §7.242）
+
+把房间当成了动作者：`message_vision()` 取房间的 `name()` 得 0，`replace_string(msg, "$N", 0)` 报错。在状态（中毒）里，这个错误发生在 `apply_condition(name, duration - 1)` 之前，状态永不结束，心跳里后面的恢复也每次被跳过。改为 `message_vision(msg, me)`：`/d/jianyu/npc/yuzu`、`/d/jianyu/yuzu`、`/kungfu/class/budui/shitailong`。

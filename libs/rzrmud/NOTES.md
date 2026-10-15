@@ -782,3 +782,7 @@ HEAD 与工作树分别加载（新进程）：910 -> 910 通过，无回退；�
 - 2026-10-14：`obj/npc/smartnpc.lpc` 的 `error("…" + family) break;` 少了分号；补上。之后还缺 `WEAPON_SKILL` 宏（内容缺失，未补）。
 
 - 2026-10-14：2 个文件用了颜色宏（`HIW`、`NOR`）却没有 `#include <ansi.h>`（首个错误 `syntax error, unexpected L_STRING`）；开头补上（KB 04 §6.1、§6.3）。新进程比对 HEAD 与工作树：2 个对象，新增载入 2，回退 0。
+
+## 转码吃掉的引号（2026-10-15，KB 03）
+
+原档在右引号前有一个孤立的 GBK 前导字节，转 UTF-8 时连引号一起丢了（如 `return name + HIM "发作身亡了;`），字符串一直延续到后面，文件编译失败：`/d/obj/books-nonskill/hmeng014`。补回引号（`scripts/lpc_fix_eaten_quote.py`）。

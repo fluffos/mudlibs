@@ -162,3 +162,7 @@ single-file compile check (PASS). Part of the corpus-wide §7.19 sweep
 - `include/net/ftpdconf.h`：`VALID_READ`/`VALID_WRITE` 重定义 `ftpd.h` 的值，前面加 `#undef`（本来就是后一个定义生效）。
 
 验证：改动文件、`d/kaifeng` 全部对象和包含 ftpd 头文件的对象共 157 个，HEAD 与工作树各用新进程载入：154 -> 154 通过，regress 0；删除声明审计 0 项待看。157 个对象载入无回退。
+
+## 转码吃掉的引号（2026-10-15，KB 03）
+
+原档在右引号前有一个孤立的 GBK 前导字节，转 UTF-8 时连引号一起丢了（如 `return name + HIM "发作身亡了;`），字符串一直延续到后面，文件编译失败：`/d/obj/books-nonskill/hmeng014`。补回引号（`scripts/lpc_fix_eaten_quote.py`）。

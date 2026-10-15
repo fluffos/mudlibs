@@ -152,3 +152,7 @@ compile check (exit 0, no errors) against `feature/command.lpc`.
 - `feature/alias.lpc` 的命令计时 `last_time` 改名 `last_cmd_time`（三花计数员 `d/city/npc/sanhua-counter.lpc` 自己的 `last_time` 是存盘的键，不动它）；`d/city/npc/yg/yaoguai.lpc` 没人读的 `yaoguai_type` 删去；`d/dntg/lijing/lijing.lpc` 的 `die`/`unconcious`、`d/moon/npc/yutu.lpc` 的 `kill_ob` 改 `void`。
 
 - 2026-10-14：1 个文件的代码里有只含私用区字符（U+F8F5，GBK 转码留下的）的空行，编译器报 `Illegal character 0xef` 整份不编译；这些行清空（字符串、注释里的不动）。新进程比对 HEAD 与工作树：新增载入 1，回退 0。
+
+## 转码吃掉的引号（2026-10-15，KB 03）
+
+原档在右引号前有一个孤立的 GBK 前导字节，转 UTF-8 时连引号一起丢了（如 `return name + HIM "发作身亡了;`），字符串一直延续到后面，文件编译失败：`/d/obj/books-nonskill/hmeng014`。补回引号（`scripts/lpc_fix_eaten_quote.py`）。

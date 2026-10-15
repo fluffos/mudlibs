@@ -1027,3 +1027,12 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 ## 内力/上限当作伤害种类（补）（2026-10-15）
 
 `victim->receive_wound("force", n, me)`（兵器吸内力）、`receive_damage("max_qi", random(100))`（走火入魔扣上限）等本库不接受的种类，6 处改为 `add(type, -N)`。
+
+## `message_vision(msg, environment(me), me)`（2026-10-15，KB 06 §7.242）
+
+把房间当成了动作者：`message_vision()` 取房间的 `name()` 得 0，`replace_string(msg, "$N", 0)` 报错。在状态（中毒）里，这个错误发生在 `apply_condition(name, duration - 1)` 之前，状态永不结束，心跳里后面的恢复也每次被跳过。改为 `message_vision(msg, me)`：`/d/sfighter/jiejie3`、`/daemon/class/bonze/lunhui-zhang/fire`、`/daemon/class/npc/lunhui-zhang/fire`。
+
+
+## 转码吃掉的引号（2026-10-15，KB 03）
+
+原档在右引号前有一个孤立的 GBK 前导字节，转 UTF-8 时连引号一起丢了（如 `return name + HIM "发作身亡了;`），字符串一直延续到后面，文件编译失败：`/d/sansheng/shijie5`、`/d/wusheng/shijie5`。补回引号（`scripts/lpc_fix_eaten_quote.py`）。

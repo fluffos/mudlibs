@@ -689,3 +689,7 @@ applied -- would be redundant with the existing `enabled` guard.
 - `d/kaifeng/ground.h` 表格守卫、`feature/alias.lpc` 的 `last_time` 改名 `last_cmd_time`、擂台与投票箱的 `title` 改名、突破迷宫出口重复的 `gg` 表删去、`d/obj/books-nonskill/book.h` 的 `BOOK` 先 `#undef`，都同 xiaoyuxiyou。
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。3 个文件 3 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+
+## 治疗/疗伤的属性名（2026-10-15，KB 06 §7.241）
+
+`receive_heal()`/`receive_curing()` 也只接受本库的种类。本库人物只有 kee/sen（连 gin 也没有）：药物的 `receive_heal("gin", 60)`、NPC 的 `receive_curing("gin", ...)` 和来自侠客行体系的 qi/jing 调用都报 `伤害种类错误`。1 个文件按 gin→sen、qi→kee、jing→sen、neili→force 改名（`scripts/lpc_port_es_props.py --any-file`）。

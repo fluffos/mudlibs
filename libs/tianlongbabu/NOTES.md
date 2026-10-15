@@ -138,3 +138,7 @@ directory : /log` 相对启动 cwd）与 mudlib `work/log/log`
 能编译的文件里的警告 4 -> 0（`lpc_warnings.py tianlongbabu` 重扫：2731 个文件可编译，剩下的诊断都在本来就编译不过的文件里）。这几处与 es2 同码，es2 当天的修复（提交 6e744ac9d59）改的 5 个文件在这里都是 token 级孪生，用 `lpc_twin_port.py adopt` 搬过来：`d/city/npc/walker.lpc` 的 inquiry、`d/city/shangshu/kefang.lpc`、`d/city/street3.lpc`、`daemon/class/scholar/taolin.lpc` 的 item_desc 原写成 `(: "一段文字" :)`，`query()`/`look` 求值后就是那段文字，改成直接写字符串，行为不变；`adm/daemons/network/mail_serv.lpc` 的 `tmp[i] == EOT+".";` 改为赋值（该文件本来就编译不过，顺手改）。
 
 验证：5 个改动对象 HEAD 与工作树各用新进程载入：4 -> 4 通过，regress 0；删除声明审计 0 项待看。5 个对象载入无回退。
+
+## 治疗/疗伤的属性名（2026-10-15，KB 06 §7.241）
+
+`receive_heal()`/`receive_curing()` 也只接受本库的种类。1 个文件（多为只调用 `receive_heal`/`receive_curing` 的药物、NPC）来自侠客行体系，按 qi→kee、jing→本库学习指令消耗的池、neili→force 改名（`scripts/lpc_port_es_props.py --any-file`）。
