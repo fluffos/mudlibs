@@ -169,6 +169,10 @@ def fix(b, incdirs, here):
     if not inh:
         return "no top-level inherit"
     last = inh[-1]
+    # the inherits must form one group: a file pasted in twice has a second `inherit` block after function bodies,
+    # and moving the globals below it only trades the error for redeclarations
+    if any(body for s_, e_, t_, body in st if s_ < last[0] and s_ > inh[0][0]):
+        return "a function body between the inherits (a file pasted twice?)"
     if if_depth(pp, b, last[0]):
         return "last inherit inside #if"
     offs = [(s, e) for s, e, t, body in st if e <= last[0] and is_decl(t, body)]
