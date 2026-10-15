@@ -337,3 +337,7 @@ The 10 files are the tea items of `d/city/npc/tea/*.C` that `d/city/npc/c_waiter
 ## 把经验、属性、内力当技能读（2026-10-15，KB 06 §7.247）
 
 经验、属性、内力上限不是技能，xkx/ES 的 `query_skill()` 对它们只返回 0（风云的还会去载入同名技能文件而报错）。改为 `query("...")`（`scripts/lpc_fix_pool_as_skill.py`）：驯马的 `/d/dali/npc/a`、`/d/dali/npc/mafu`（成功率少了福缘一项）。
+
+## 临济庄 remove 没有运功时报错（2026-10-15）
+
+`linji-zhuang/remove` 直接 `switch (lj_exert["name"])`，`lj_exert` 是 `query_temp("lj_exert")`；没有正在运用的临济庄功夫时它是 0，`exert remove` 每次都报 `Value being indexed is zero`。补上 `if (!mapp(lj_exert)) return notify_fail(...)`。本库的临济庄各 exert 都不设置 `lj_exert`，所以这个 exert 以前每次都报错，现在只会提示没有在运功。

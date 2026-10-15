@@ -494,3 +494,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply j
 ## 妙手回春的银针检查（2026-10-15）
 
 `miaoshouhuichun` 的 `valid_learn()` 用了未赋值的 `object ob`，`ob->query_temp("weapon")` 每次都报错，谁也学不了；还把兵器对象和字符串 "银针" 比较。照 chidi 的修法改为 `ob = me->query_temp("weapon")`，再用 `id("yin zhen")`/`id("yinzhen")` 判断是否银针。本库没有银针这件兵器（只有君山银针茶、冰魄银针），这门功夫仍学不了，但不再报错，而是提示要先拿起银针。
+
+## 临济庄 remove 没有运功时报错（2026-10-15）
+
+`linji-zhuang/remove` 直接 `switch (lj_exert["name"])`，`lj_exert` 是 `query_temp("lj_exert")`；没有正在运用的临济庄功夫时它是 0，`exert remove` 每次都报 `Value being indexed is zero`。补上 `if (!mapp(lj_exert)) return notify_fail(...)`。本库有两个 exert 设置 `lj_exert`，运功期间 `remove` 照常收功。

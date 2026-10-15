@@ -594,3 +594,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 ## 暗器功夫取了 this_player() 的兵器（2026-10-15）
 
 `feihua-shou`、`tangmen-anqi` 的 `query_action()` 用 `this_player()->query_temp("weapon")` 代替出手者 `me` 的兵器：NPC 在玩家的回合里出手（反击、进门时 auto_fight 的 call_out）时取到的是玩家的兵器，玩家空手就报错。改为 `me->query_temp("weapon")`，扣暗器数量前先检查兵器存在。
+
+## 碧海生潮曲空手报错（2026-10-15，KB 06 §7.246）
+
+`iceforce/roar`（碧海生潮曲）先 `ob = me->query_temp("weapon")`，再直接拿 `base_name(ob)` 判断是不是玉箫；空手 `exert roar` 时 `base_name(0)` 报错，提示“你必须先找一只玉萧来才可以吹－－曲”根本出不来。条件前补 `!objectp(ob) ||`。
