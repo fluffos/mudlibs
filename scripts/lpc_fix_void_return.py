@@ -10,7 +10,7 @@ here the whole file fails to load.  Per function, from the diagnostics:
     becomes `return;`, or `{ X; return; }` when X is a call (`return ::init();`) so its side effects stay;
   - anything else (add_action handlers, cmd_*() for the command daemon, helpers whose value a caller reads): the
     `void` in the definition, and in same-file prototypes, becomes T -- the value's type, `mixed` when the function
-    returns several types.  That is what callers received before.  A base class that declares the same function
+    returns several types.  That is what callers received before; the function's bare `return;` becomes `return 0;` (the value it gave).  A base class that declares the same function
     `void` then shows up as "Function F inherited from X does not match ... ( void vs int )"; for those, read the
     callers and run `scripts/lpc_fix_return_types.py --also F` (KB 04 section 6.10).
 
@@ -184,6 +184,9 @@ def fix_file(b, rows, synlines=frozenset()):
             # no return type at all (`drop() {`): this driver takes it as void
             edits.append((hs + m.start(), hs + m.start(), t.encode() + b" "))
             retype[name] = t
+            for r in re.finditer(rb"\breturn\s*;", b[brace:k]):
+                if mask[brace + r.start()]:
+                    edits.append((brace + r.start(), brace + r.end(), b"return 0;"))
             continue
         if len(voids) != 1:
             notes.append("HAND %s: %d `void` in the header" % (name, len(voids)))
@@ -191,6 +194,10 @@ def fix_file(b, rows, synlines=frozenset()):
         v = voids[0]
         edits.append((hs + v.start(), hs + v.end(), t.encode()))
         retype[name] = t
+        # its bare `return;` statements would now warn (Non-void functions must return a value): they yielded 0
+        for r in re.finditer(rb"\breturn\s*;", b[brace:k]):
+            if mask[brace + r.start()]:
+                edits.append((brace + r.start(), brace + r.end(), b"return 0;"))
     # same-file prototypes of the retyped functions
     for name, t in retype.items():
         for pm in re.finditer(rb"(?m)^([ \t]*(?:(?:static|nosave|private|protected|public|nomask|varargs)\s+)*)void(\s+\*?\s*"
