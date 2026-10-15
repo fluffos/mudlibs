@@ -967,3 +967,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply y
 - 2026-10-10（续）：余下 6 条警告手工处理：`adm/daemons/cruised.lpc` 五处 `if (cruise[USER_ID]) { /* 只剩注释 */ }` 空分支连同条件一并注释掉（与 xajh4gkb 已修的副本相同）；`d/tianlongsi/npc/yideng.lpc` 的 `checking()` 原型由 `void` 改为与定义一致的 `int`。两文件 HEAD 与工作树都能载入，警告清零。
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。9 个文件 9 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+
+## 内力/精力当作伤害种类（2026-10-15，KB 06 §7.241 第二类）
+
+本库 `feature/damage.lpc` 的 `receive_damage()` 不接受 `jingli`/`neili`/`force` 等种类，`me->receive_damage("jingli", 30)` 之类在练功、绝招、吸取时报 `F_DAMAGE: 伤害种类错误`。13 处改为 `add(type, -N)`（`scripts/lpc_fix_damage_calls.py` 第二步）。

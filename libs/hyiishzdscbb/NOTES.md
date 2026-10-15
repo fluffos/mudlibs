@@ -179,3 +179,7 @@ recursion"。驱动按精确 PID kill。
 验证：11 个改动对象 HEAD 与工作树各用新进程载入：7 -> 7 通过（tang 四个两边都因 lpcc 下读 `/data/npc/meng-zhu.o` 被拒而失败），regress 0；删除声明审计 0 项待看。11 个对象载入无回退。
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。5 个文件 5 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/kungfu/skill/fengyun-shou/foguang.lpc`（`damage *=`）、`/kungfu/skill/taiji-quan/zhenup.lpc`（`damage *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+
+## 内力/精力当作伤害种类（2026-10-15，KB 06 §7.241 第二类）
+
+本库 `feature/damage.lpc` 的 `receive_damage()` 不接受 `jingli`/`neili`/`force` 等种类，`me->receive_damage("jingli", 30)` 之类在练功、绝招、吸取时报 `F_DAMAGE: 伤害种类错误`。12 处改为 `add(type, -N)`（`scripts/lpc_fix_damage_calls.py` 第二步）。

@@ -998,3 +998,7 @@ HEAD 与工作树分别加载（新进程）：952 -> 952 通过，无回退；�
   - 改动的 55 个对象 HEAD 与工作树各载入一次，无回退；原报警告的 54 个对象重编译后没有警告。
 
 - 2026-10-14：2 个文件用了颜色宏（`HIW`、`NOR`）却没有 `#include <ansi.h>`（首个错误 `syntax error, unexpected L_STRING`）；开头补上（KB 04 §6.1、§6.3）。新进程比对 HEAD 与工作树：2 个对象，新增载入 2，回退 0。
+
+## 内力/精力当作伤害种类（2026-10-15，KB 06 §7.241 第二类）
+
+本库 `feature/damage.lpc` 的 `receive_damage()` 不接受 `jingli`/`neili`/`force` 等种类，`me->receive_damage("jingli", 30)` 之类在练功、绝招、吸取时报 `F_DAMAGE: 伤害种类错误`。2 处改为 `add(type, -N)`（`scripts/lpc_fix_damage_calls.py` 第二步）。

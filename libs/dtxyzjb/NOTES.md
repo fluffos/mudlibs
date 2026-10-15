@@ -216,3 +216,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply d
 - 2026-10-14：擂台 `d/leitai/leitai.lpc` 整份不编译：`fullup()` 缺了收尾的 `}`，后面那份重复的 `do_quit()` 被读成 `fullup()` 里的局部声明。补上 `}`，删去那份从未生效的重复 `do_quit()`（前面那份照旧是 add_action 的目标）。现在载入。
 
 - 2026-10-14：1 个文件的函数声明为 `int`（或 `void`）却返回字符串、对象（`int query_seal() { return "…"; }`），旧驱动照样把值交给调用者；改为实际返回的类型（`scripts/lpc_fix_void_return.py`）（KB 04 §6.1、§6.3）。新进程比对 HEAD 与工作树：1 个对象，新增载入 0，回退 0。
+
+## 内力/精力当作伤害种类（2026-10-15，KB 06 §7.241 第二类）
+
+本库 `feature/damage.lpc` 的 `receive_damage()` 不接受 `jingli`/`neili`/`force` 等种类，`me->receive_damage("jingli", 30)` 之类在练功、绝招、吸取时报 `F_DAMAGE: 伤害种类错误`。1 处改为 `add(type, -N)`（`scripts/lpc_fix_damage_calls.py` 第二步）。

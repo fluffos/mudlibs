@@ -250,3 +250,7 @@ compile check (exit 0, no errors) against `feature/command.lpc`.
 验证：改动文件、`d/kaifeng`、`d/city/npc`、`task`、`d/task` 全部对象和 `/obj/user` 共 309 个对象，HEAD 与工作树各用新进程载入：291 -> 291 通过，regress 0；删除声明审计 0 项待看。309 个对象载入无回退。
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。1 个文件 1 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+
+## 内力/精力当作伤害种类（2026-10-15，KB 06 §7.241 第二类）
+
+本库 `feature/damage.lpc` 的 `receive_damage()` 不接受 `jingli`/`neili`/`force` 等种类，`me->receive_damage("jingli", 30)` 之类在练功、绝招、吸取时报 `F_DAMAGE: 伤害种类错误`。1 处改为 `add(type, -N)`（`scripts/lpc_fix_damage_calls.py` 第二步）。

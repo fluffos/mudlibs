@@ -873,3 +873,7 @@ compile check (exit 0, no errors) against `feature/command.lpc`.
 ## 编译警告收尾（2026-10-13）
 
 `scripts/toolkit_fix.sh` 一轮去掉 11 处多余继承；搬来 xianlvqiyuan（8c3c85ca28e）的 19 个文件，与本库逐 token 相同（袈裟 `tear`、`d/kaifeng/ground.h` 表格守卫、`yaoguai_type`、李靖与玉兔改 `void`、`alias.lpc` 的 `last_cmd_time`、`colors.h` 防重等）；手工：`d/wusheng/npc/jinren.lpc` 的 `kill_ob()` 改 `void`，`cmds/wiz/roommaker.lpc` 两份 `special_props` 删去前一份（代码用后一份）。能编译的文件警告清零；改动的 25 个对象在 HEAD 与工作树各载入一次：HEAD PASS 22，tree PASS 22，regress 0。
+
+## 内力/精力当作伤害种类（2026-10-15，KB 06 §7.241 第二类）
+
+本库 `feature/damage.lpc` 的 `receive_damage()` 不接受 `jingli`/`neili`/`force` 等种类，`me->receive_damage("jingli", 30)` 之类在练功、绝招、吸取时报 `F_DAMAGE: 伤害种类错误`。5 处改为 `add(type, -N)`（`scripts/lpc_fix_damage_calls.py` 第二步）。

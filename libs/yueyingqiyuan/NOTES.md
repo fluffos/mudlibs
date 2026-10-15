@@ -1037,3 +1037,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply y
 - 2026-10-14：同一次重扫的其余 45 条（xiyouji 同源，照 wuhanzhan/hxxtjqb 的修法）：`obj/npc/ghost.lpc` 自己声明 `int ghost = 1;`，而 `feature/damage.lpc` 有同名的 `int ghost = 0;`，基类读的始终是 0，鬼魂 NPC 从不算鬼魂；去掉叶子的声明，在 `create()` 里给基类的 `ghost` 赋 1。`www/relative/dns_master.lpc` 的 `#if PREF_TELL & SVC_TCP` 放在 `if { }` 里面，选项关闭时剩个空块，移到 `if` 外面。`d/wudang/npc/newplace.h` 的房间表 `path` 与 `feature/command.lpc` 的指令路径同名，改名 `move_dirs`（含三个包含它的 NPC）。其余：kaifeng `ground.h` 守卫、`jiasha` 两个 `init()` 都调用、`yaoguai_type` 重复、`colors.h` 防重复包含、`alias.lpc` 的 `last_time` 改 `last_cmd_time`（`sanhua-counter` 自己存档的同名字段）、`die`/`unconcious`/`kill_ob` 改 `void`、7 个文件多余的 `inherit F_CLEAN_UP`。改动及受影响的对象（33 + 18）新进程各载入一次，无回退。
 
 - 2026-10-14：1 个文件的函数声明为 `int`（或 `void`）却返回字符串、对象（`int query_seal() { return "…"; }`），旧驱动照样把值交给调用者；改为实际返回的类型（`scripts/lpc_fix_void_return.py`）（KB 04 §6.1、§6.3）。新进程比对 HEAD 与工作树：1 个对象，新增载入 1，回退 0。
+
+## 内力/精力当作伤害种类（2026-10-15，KB 06 §7.241 第二类）
+
+本库 `feature/damage.lpc` 的 `receive_damage()` 不接受 `jingli`/`neili`/`force` 等种类，`me->receive_damage("jingli", 30)` 之类在练功、绝招、吸取时报 `F_DAMAGE: 伤害种类错误`。4 处改为 `add(type, -N)`（`scripts/lpc_fix_damage_calls.py` 第二步）。

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""scripts/lpc_fix_negative_damage.py SLUG... [--apply]
+"""scripts/lpc_fix_damage_calls.py SLUG... [--apply]
 
 `receive_damage("qi", -12)` / `receive_damage("neili", -52)` with a negative literal (KB 06 section 7.241).  The
 author meant "take 12 qi" or "spend 52 neili", but receive_damage() takes a positive amount: in most ES/xkx
@@ -15,8 +15,17 @@ alone:
     receive_damage("qi", -(100 + r), "x")  ->  receive_damage("qi", (100 + r), "x")
     receive_damage("neili", -52)           ->  add("neili", -52)          (a resource pool: a cost, not damage)
 
-The same for receive_wound().  Code only (not strings or comments).  Binary-safe.  Without --apply the plan is
-printed."""
+The same for receive_wound().
+
+A second pass handles a resource pool passed as damage in a lib that does not take it: `receive_damage("jingli", 30)`
+where damage.lpc allows only `jing`/`qi` (`F_DAMAGE: 伤害种类错误`, the nitan/xkx families' practice_skill() of
+dozens of movement and weapon skills).  Only receive_damage() statements whose type is a resource (neili, jingli,
+force, mana, atman) missing from the lib's own `type != "..."` list:
+
+    me->receive_damage("jingli", 30);        ->  me->add("jingli", -30);
+    me->receive_damage("neili", 10 + x, me); ->  me->add("neili", -(10 + x));
+
+Code only (not strings or comments).  Binary-safe.  Without --apply the plan is printed."""
 import os
 import re
 import sys
@@ -48,6 +57,98 @@ def negative_policy(work):
     if re.search(rb"damage\s*<\s*0\s*\)\s*damage\s*=\s*0", body):
         return "clamp"
     return None
+
+
+def allowed_types(work):
+    """The types the lib's receive_damage() accepts (its `type != "..."` tests), or None when it has no such list."""
+    p = f"{work}/feature/damage.lpc"
+    if not os.path.exists(p):
+        return None
+    d = open(p, "rb").read()
+    i = d.find(b"int receive_damage(")
+    if i < 0:
+        return None
+    a = set(re.findall(rb'type\s*!=\s*"(\w+)"', d[i:i + 1500]))
+    return a or None
+
+
+RES_CALL = re.compile(rb'receive_damage\((\s*)"(neili|jingli|force|mana|atman)"(\s*),')
+
+
+def split_args(b, i):
+    """From just after the type's comma, the remaining arguments up to the call's `)`; returns (args, end) or None."""
+    depth, start, args, k = 0, i, [], i
+    while k < len(b):
+        c = b[k]
+        if c in b"([{":
+            depth += 1
+        elif c in b")]}":
+            if depth == 0:
+                args.append(b[start:k])
+                return args, k
+            depth -= 1
+        elif c == 0x2c and depth == 0:
+            args.append(b[start:k])
+            start = k + 1
+        elif c == 0x22:
+            k += 1
+            while k < len(b) and b[k] != 0x22:
+                k += 2 if b[k] == 0x5c else 1
+        elif c == 0x3b:
+            return None
+        k += 1
+    return None
+
+
+def simple(e):
+    """A literal, a name or a call chain: `-e` needs no parentheses."""
+    e = e.strip()
+    if re.fullmatch(rb"\d+", e):
+        return True
+    depth = 0
+    e = re.sub(rb'"(?:[^"\\]|\\.)*"', b'""', e)
+    for i, c in enumerate(e):
+        if c in b"([":
+            depth += 1
+        elif c in b")]":
+            depth -= 1
+        elif depth == 0 and (c in b"+*/%?:<>=&|!" or c == 0x2d and e[i:i + 2] != b"->"):
+            if c == 0x3e and e[i - 1:i] == b"-":
+                continue
+            return False
+    return True
+
+
+def fix_types(b, allowed):
+    hits = [m for m in RES_CALL.finditer(b) if m.group(2) not in allowed]
+    if not hits:
+        return b, 0, []
+    mask = code_mask(b)
+    out, last, n, hand = [], 0, 0, []
+    for m in hits:
+        if not mask[m.start()]:
+            continue
+        ls = b.rfind(b"\n", 0, m.start()) + 1
+        prefix = b[ls:m.start()]
+        if re.search(rb"(=|\breturn\b|\(|&&|\|\||\?|:)\s*[\w\[\]\->\"]*$", prefix.replace(b"->", b"")):
+            hand.append(b[:m.start()].count(b"\n") + 1)   # the value is used: only a statement is rewritten
+            continue
+        r = split_args(b, m.end())
+        if not r or not re.match(rb"\s*;", b[r[1] + 1:]) or not r[0][0].strip():
+            hand.append(b[:m.start()].count(b"\n") + 1)
+            continue
+        args, end = r
+        amt = args[0].strip()
+        if amt.startswith(b"-"):
+            new_amt = amt   # already the add() amount (section 7.241's first class)
+        else:
+            new_amt = b"-" + amt if simple(amt) else b"-(" + amt + b")"
+        out.append(b[last:m.start()])
+        out.append(b"add(" + m.group(1) + b'"' + m.group(2) + b'"' + m.group(3) + b", " + new_amt + b")")
+        last = end + 1
+        n += 1
+    out.append(b[last:])
+    return b"".join(out), n, hand
 
 
 def one_term(rest):
@@ -117,7 +218,8 @@ def main():
     for slug in slugs:
         work = f"{REPO}/libs/{slug}/work"
         pol = negative_policy(work)
-        if not pol:
+        allowed = allowed_types(work)
+        if not pol and not allowed:
             continue
         for dp, dn, fn in os.walk(work):
             if SKIP.search(dp[len(work):] + "/"):
@@ -129,7 +231,11 @@ def main():
                 b = open(p, "rb").read()
                 if b"receive_" not in b:
                     continue
-                out, n, hand = fix(b)
+                out, n, hand = fix(b) if pol else (b, 0, [])
+                if allowed:
+                    out, n2, hand2 = fix_types(out, allowed)
+                    n += n2
+                    hand += hand2
                 for ln in hand:
                     print(f"HAND  {slug} {p[len(work):]}:{ln}")
                 if n:

@@ -895,3 +895,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply c
 - 2026-10-14：9 个技能文件 `int power_point() { return 1.75; }`、2 个 `int hard_point() { return 2.5; }`，浮点值经 int 返回被截成 1、2。本库没有调用者（只有书本的 `"power_point"` 属性同名），改成 `float` 返回值，数值照原意保留。
 
 - 2026-10-15：`kungfu/skill/guangming-blade.lpc`（光明刀法）是从五虎断门刀抄来的，`query_action()` 里仍按 `wuhu-duanmendao` 的等级挑招式：没练五虎断门刀的人出招时一招都匹配不上，`a_action` 为 0，接着赋值报错。改为按 `guangming-blade` 自己的等级。（武功运行期探针发现。）
+
+## 内力/精力当作伤害种类（2026-10-15，KB 06 §7.241 第二类）
+
+本库 `feature/damage.lpc` 的 `receive_damage()` 不接受 `jingli`/`neili`/`force` 等种类，`me->receive_damage("jingli", 30)` 之类在练功、绝招、吸取时报 `F_DAMAGE: 伤害种类错误`。45 处改为 `add(type, -N)`（`scripts/lpc_fix_damage_calls.py` 第二步）。

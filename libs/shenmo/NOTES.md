@@ -1015,3 +1015,7 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 
 - 2026-10-14：`kungfu/skill/`、`daemon/skill/liu-unarmed.lpc` 的 `query_action()` 里取等级与 `for` 循环两行被注释掉，剩下 `if (level > action[i - 1]["lvl"])`，i 为 0，每次出招都报 `Array index must be positive or zero`；恢复这两行（与其他武功相同的写法）。逐个武功调用 query_action/valid_learn/practice_skill 的运行期探针发现。
 - 2026-10-14：`daemon/skill/saoye-leg.lpc` 的 `valid_learn()` 直接取 `me->query("门派/shaolin")["saoye-leg"]`，没有少林记录的人学这门腿法时报 `Value being indexed is zero`；加 `mapp()` 判断。
+
+## 内力/精力当作伤害种类（2026-10-15，KB 06 §7.241 第二类）
+
+本库 `feature/damage.lpc` 的 `receive_damage()` 不接受 `jingli`/`neili`/`force` 等种类，`me->receive_damage("jingli", 30)` 之类在练功、绝招、吸取时报 `F_DAMAGE: 伤害种类错误`。59 处改为 `add(type, -N)`（`scripts/lpc_fix_damage_calls.py` 第二步）。

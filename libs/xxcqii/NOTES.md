@@ -172,3 +172,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。23 个文件 23 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
 - 2026-10-14：同一次重扫的其余 14 条：`inherit/private_room.lpc`、`recordable_room.lpc` 的 `setup()` 写成 `int`（基类 `void`，钩子返回值无人读），改 `void`；6 个宏重定义前加 `#undef`；`temp.lpc` 多余的 `inherit F_CLEAN_UP` 删去；一处跨文件同名函数写明胜出者。改动的 50 个对象新进程各载入一次，无回退。
+
+## 内力/精力当作伤害种类（2026-10-15，KB 06 §7.241 第二类）
+
+本库 `feature/damage.lpc` 的 `receive_damage()` 不接受 `jingli`/`neili`/`force` 等种类，`me->receive_damage("jingli", 30)` 之类在练功、绝招、吸取时报 `F_DAMAGE: 伤害种类错误`。1 处改为 `add(type, -N)`（`scripts/lpc_fix_damage_calls.py` 第二步）。

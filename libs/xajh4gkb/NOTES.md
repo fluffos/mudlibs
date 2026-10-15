@@ -332,3 +332,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。10 个文件 11 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
 - 2026-10-14（同一次重扫，手工部分）：`kungfu/skill/force/lifeheal.lpc`（运功疗伤）里给黄金会员的熟练度倍率 `flag = 1.25` 声明成 `int`，被截成 1。同一作者在 `babulongnv-jian/feitian.lpc` 里把同一个 `flag` 声明成了 `float`。现改为 `float flag`，两处 `improve_skill()` 的点数用 `to_int()` 取整，免得把浮点写进技能熟练度。**玩家可见**：黄金会员疗伤时内功熟练度按 1.25 倍增长。改动的 10 个对象 HEAD 与工作树各载入一次，无回退。
+
+## 内力/精力当作伤害种类（2026-10-15，KB 06 §7.241 第二类）
+
+本库 `feature/damage.lpc` 的 `receive_damage()` 不接受 `jingli`/`neili`/`force` 等种类，`me->receive_damage("jingli", 30)` 之类在练功、绝招、吸取时报 `F_DAMAGE: 伤害种类错误`。6 处改为 `add(type, -N)`（`scripts/lpc_fix_damage_calls.py` 第二步）。

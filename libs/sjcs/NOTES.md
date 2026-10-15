@@ -305,3 +305,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply s
   - 10 个带调用初始化的未用局部变量：删去声明，调用保留为语句。
   - `huashan-jian*.lpc` 删去多余的 `;`；`obj/roommaker.lpc` 删去被覆盖的 `special_props` 表。
   - 改动的 29 个对象 HEAD 与工作树各载入一次，无回退；定义 `query_autoload` 的 71 个文件重编译后没有警告。
+
+## 内力/精力当作伤害种类（2026-10-15，KB 06 §7.241 第二类）
+
+本库 `feature/damage.lpc` 的 `receive_damage()` 不接受 `jingli`/`neili`/`force` 等种类，`me->receive_damage("jingli", 30)` 之类在练功、绝招、吸取时报 `F_DAMAGE: 伤害种类错误`。6 处改为 `add(type, -N)`（`scripts/lpc_fix_damage_calls.py` 第二步）。
