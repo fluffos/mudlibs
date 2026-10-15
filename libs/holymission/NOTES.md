@@ -808,3 +808,7 @@ Verification: the edited files and the includers of the edited headers, 163 obje
   - Macros that are redefined now get an `#undef` first (5 files).
   - `players/goldsun/not/room/gates.lpc` inherited `/room/room.lpc` and also included `room.h`, which inherits the same room again; the explicit inherit is dropped.
   - Load check of the 8 objects: no regressions (1 -> 1 pass).
+
+- 2026-10-14: 43 files did not compile with `Illegal to inherit after defining global variables`: FluffOS takes every `inherit` before the first global, MudOS did not care. `scripts/lpc_fix_inherit_order.py` moved the globals (and `#include`s of headers that declare globals) written above the `inherit` to just below the last one (KB 04 §6.3). The toolkit round then cleared the warnings the newly loading files showed (0 nosave functions, 0 bare returns, 15 unused locals). HEAD vs tree in fresh drivers: 51 objects, 24 newly loading, 0 regressions.
+
+- 2026-10-14: 8 files did not compile with `Type of returned value doesn't match function return type ( int vs void )`: a function declared `void` (or with no type) returns a value, which the old driver passed to the caller. Functions whose value a caller reads (add_action handlers, commands, helpers) now carry the type they return: `drop()`. In driver applies whose value is ignored (`init`, `reset`, `heart_beat`, `create`) the return is now bare (`{ ::init(); return; }` keeps a call). HEAD vs tree in fresh drivers: 51 objects, 24 newly loading, 0 regressions (`scripts/lpc_fix_void_return.py`, KB 04 §6.3).
