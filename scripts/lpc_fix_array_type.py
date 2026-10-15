@@ -10,7 +10,7 @@ file stops with `Illegal lvalue`, `Illegal LHS` or a syntax error (KB 04 section
     void g(array a, int n)  ->  void g(mixed *a, int n)
 
 Only code is touched (not strings or comments), only where `array` stands in type position: at the start of a
-statement after optional modifiers and followed by a name and `=`, `;`, `,` or `(`, or as a parameter type.  A variable
+statement after optional modifiers and followed by a name and `=`, `;`, `,` or `(`, or as a parameter or `foreach` variable type (`foreach (string k, array v in m)`).  A variable
 that is itself called `array` (`object *array;`, `array[i]`) is left alone.  `TYPE array NAME` is a different shape
 (see KB 04 section 6.3).  Files under tests/ are skipped.  Binary-safe.  Without --apply only the plan is printed."""
 import os
@@ -24,7 +24,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODS = rb"(?:(?:static|nosave|private|protected|public|nomask|varargs|register)\s+)*"
 # statement start (after ; { } or line start), modifiers, `array`, optional *, name, then = ; , (
 DECL = re.compile(rb"(?:(?<=[;{}])|(?m:^))([ \t]*" + MODS + rb")array(\s+)(\*?\s*)([A-Za-z_]\w*)(\s*)(?=[=;,(])")
-PARAM = re.compile(rb"([(,]\s*)array(\s+)(\*?\s*)([A-Za-z_]\w*)(\s*)(?=[,)])")
+PARAM = re.compile(rb"([(,]\s*)array(\s+)(\*?\s*)([A-Za-z_]\w*)(\s*)(?=[,)]|in\b)")
 
 
 def split_declarators(s, mask, start, end):

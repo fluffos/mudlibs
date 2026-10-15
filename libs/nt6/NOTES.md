@@ -427,3 +427,5 @@ id `({ "wu bo", "wu", "bo" })`）。F_NAME 修好前 `bai wu bo` 会拜到新手
 - 2026-10-14：`inherit/item/item.lpc` 自己定义了 `string to_chinese(int status)`（物品品质名：普通/优良/珍稀/史诗/传说/神器/仙器），把 simul_efun 的 `to_chinese(string)`（技能、属性译名）遮住了；继承它的兵器、装备、药书显示“装备要求”或技能名时调用 `to_chinese(key)`，旧驱动不查类型，传进字符串只会落到最后一个分支，装备要求一律显示成“仙器”；新驱动直接报 `Bad type for argument 1 of to_chinese ( int vs string )`，这些文件整份不编译。照 nt7 的做法把本地函数改名为 `to_ch_desc()`（`short()` 里的品质调用随之改名）。新进程比对 HEAD 与工作树：168 个对象，新增载入 166，回退 0。
 
 - 2026-10-14：40 个文件把 `array` 单独当类型用（`array names;`），本驱动当成普通名字，报 `Illegal lvalue` 整份不编译；改为 `mixed *`，每个声明都带星号（`scripts/lpc_fix_array_type.py`）；5 个文件用了颜色宏（`HIW`、`NOR`）却没有 `#include <ansi.h>`（首个错误 `syntax error, unexpected L_STRING`）；开头补上（KB 04 §6.1、§6.3）。新编译出来的文件露出的警告一并清掉（删去未用局部变量，有返回值函数里的空 `return;` 改为 `return 0;`）。新进程比对 HEAD 与工作树：45 个对象，新增载入 35，回退 0。
+
+- 2026-10-14：`foreach` 里把 `array` 当类型（`foreach (string type, array data in news)`），本驱动不认；改为 `mixed *`（`scripts/lpc_fix_array_type.py` 现在也处理 foreach 变量）。`cmds/usr/history.lpc` 现在载入；`adm/daemons/realnews_d.lpc` 还调用本驱动没有的 `to_default_encoding()`，仍不编译。
