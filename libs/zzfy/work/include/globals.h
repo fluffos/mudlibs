@@ -6,6 +6,8 @@
 
 // Directories
 
+#define STORY_D                 "/adm/daemons/storyd"
+#define STORY_DIR               "/clone/gift/"
 #define COMMAND_DIR             "/cmds/"
 #define CONFIG_DIR              "/adm/etc/"
 #define BACKUP_DIR              "/backup/"

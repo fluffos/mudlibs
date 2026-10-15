@@ -707,3 +707,5 @@ HEAD 与工作树分别加载（新进程）：745 -> 746 通过（多出的就�
 - 2026-10-14：3 个文件因 `Illegal to inherit after defining global variables` 整份不编译：FluffOS 要求所有 `inherit` 写在第一个全局变量之前，MudOS 不管。`scripts/lpc_fix_inherit_order.py` 把写在 `inherit` 之前的全局变量（以及声明全局变量的头文件的 `#include`）挪到最后一个 `inherit` 之后（KB 04 §6.3）。
 
 - 2026-10-14：1 个文件用了颜色宏（`HIW`、`NOR`）却没有 `#include <ansi.h>`（首个错误 `syntax error, unexpected L_STRING`）；开头补上；1 个文件的函数声明为 `int`（或 `void`）却返回字符串、对象（`int query_seal() { return "…"; }`），旧驱动照样把值交给调用者；改为实际返回的类型（`scripts/lpc_fix_void_return.py`）（KB 04 §6.1、§6.3）。新编译出来的文件露出的警告一并清掉（删去未用局部变量，有返回值函数里的空 `return;` 改为 `return 0;`）。新进程比对 HEAD 与工作树：4 个对象，新增载入 4，回退 0。
+
+- 2026-10-14：讲故事发奖励系统（`adm/daemons/storyd.lpc` 与 `clone/gift/` 下 20 个故事）照 `obj/gift/readme.txt` 应在 `include/globals.h` 定义 `STORY_D`、`STORY_DIR`，安装时漏了，这 23 个文件整份不编译；补上两个宏后全部载入（新进程比对，回退 0）。readme 还要求把 storyd 加进 preload，那是开不开这项玩法的决定，没有动。`u/wiz/u/xxy/city2/library.lpc` 自己的 `STORY_DIR` 前加 `#undef`。
