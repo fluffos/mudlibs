@@ -177,3 +177,5 @@ No other code change.
 `scripts/toolkit_fix.sh` 一轮（冗余继承 7 处）后手工补四处（与 xyzx3、tianxiawuxue 同日的改法相同）：`d/city/library.lpc`、`d/city2/library.lpc`、`d/emei/user-room/host/home.lpc` 有意改 `STORY_DIR`，前加 `#undef`；`kungfu/skill/huashan-jian.lpc` 招式表后多余的 `;`。能编译的文件警告清零。改动的 11 个对象 HEAD 与工作树各载入一次：HEAD PASS 10，tree PASS 10，regress 0。
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。2 个文件 5 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+
+- 2026-10-15：`kungfu/skill/guangming-blade.lpc`（光明刀法）是从五虎断门刀抄来的，`query_action()` 里仍按 `wuhu-duanmendao` 的等级挑招式：没练五虎断门刀的人出招时一招都匹配不上，`a_action` 为 0，接着赋值报错。改为按 `guangming-blade` 自己的等级。（武功运行期探针发现。）

@@ -945,3 +945,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply b
 
 - `u/isle/ToMud/tomud.h`（巫师的 ToMud 客户端协议试验目录）有意把 `TMA`/`TMB` 从客户端控制字符 `\\x19`/`\\x1A` 换成可见的 `*`，与全局 `include/tomud.h` 撞名；文件头加 `#undef TMI`/`TMA`/`TMB`，取值不变。
 - `kungfu/skill/huashan-jian.lpc` 招式表后多余的 `;`。
+
+- 2026-10-15：`kungfu/skill/guangming-blade.lpc`（光明刀法）是从五虎断门刀抄来的，`query_action()` 里仍按 `wuhu-duanmendao` 的等级挑招式：没练五虎断门刀的人出招时一招都匹配不上，`a_action` 为 0，接着赋值报错。改为按 `guangming-blade` 自己的等级。（武功运行期探针发现。）

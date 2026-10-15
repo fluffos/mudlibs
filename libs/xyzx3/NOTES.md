@@ -660,3 +660,5 @@ functionally re-tested live on this lib.
 - 注意：`lpc_twin_port.py adopt` 还会把 tianxiawuxue 删掉的 `inherit F_SAVE;`（`inherit/char/npcsave.lpc`、`clone/npc/fa-e.lpc` 等）一起搬来——那边的 NPC 基类本身带 F_SAVE，本库的 `CHARACTER` 不带，删了就找不到 `save()`/`restore()`，5 个对象载不进来。这些文件已撤回，只留上面四个。
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。2 个文件 5 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+
+- 2026-10-15：`kungfu/skill/guangming-blade.lpc`（光明刀法）是从五虎断门刀抄来的，`query_action()` 里仍按 `wuhu-duanmendao` 的等级挑招式：没练五虎断门刀的人出招时一招都匹配不上，`a_action` 为 0，接着赋值报错。改为按 `guangming-blade` 自己的等级。（武功运行期探针发现。）

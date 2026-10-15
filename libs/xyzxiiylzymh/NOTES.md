@@ -151,3 +151,5 @@ functionally re-tested live on this lib.
 孪生库 xyzx3 同日的整理（e4c410f629c：冗余继承 7 处，三个书房/房间的 `STORY_DIR` 前 `#undef`，`kungfu/skill/huashan-jian.lpc` 多余的 `;`）用 `scripts/lpc_twin_port.py adopt xyzx3 xyzxiiylzymh --pre e4c410f629c~1` 搬来，11 个文件与 xyzx3 修前逐 token 相同，清单里的警告全部落在这些文件里。HEAD 与工作树各载入一次：11 个对象，HEAD PASS 10，tree PASS 10，regress 0。
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。2 个文件 5 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+
+- 2026-10-15：`kungfu/skill/guangming-blade.lpc`（光明刀法）是从五虎断门刀抄来的，`query_action()` 里仍按 `wuhu-duanmendao` 的等级挑招式：没练五虎断门刀的人出招时一招都匹配不上，`a_action` 为 0，接着赋值报错。改为按 `guangming-blade` 自己的等级。（武功运行期探针发现。）

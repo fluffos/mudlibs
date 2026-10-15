@@ -173,3 +173,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 ## 编译警告收尾（2026-10-12）
 
 孪生库 bixiecanyang 同日的整理（7c2dd97d9a6：冗余继承 8 处，`u/isle/ToMud/tomud.h` 沙盒副本的 `TMI`/`TMA`/`TMB` 前 `#undef`，`kungfu/skill/huashan-jian.lpc` 多余的 `;`）用 `scripts/lpc_twin_port.py adopt bixiecanyang xyzx --pre 7c2dd97d9a6~1` 搬来，10 个文件与 bixiecanyang 修前逐 token 相同，清单里的警告全部落在这些文件里。HEAD 与工作树各载入一次：10 个对象，HEAD PASS 7，tree PASS 7，regress 0。
+
+- 2026-10-15：`kungfu/skill/guangming-blade.lpc`（光明刀法）是从五虎断门刀抄来的，`query_action()` 里仍按 `wuhu-duanmendao` 的等级挑招式：没练五虎断门刀的人出招时一招都匹配不上，`a_action` 为 0，接着赋值报错。改为按 `guangming-blade` 自己的等级。（武功运行期探针发现。）
