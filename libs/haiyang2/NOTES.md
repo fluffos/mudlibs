@@ -1455,3 +1455,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
   - `testman`、`man` 的 `kill_ob` 改 `void`。
   - 改动的 75 个对象 HEAD 与工作树各载入一次，无回退。
   - 剩下的警告都在编译不过的文件里：`qiankun-danuoyi.lpc` 括号错乱、`action.lpc` 片段、`cheng.lpc`、`wujincao.lpc`。
+
+- 2026-10-14：`kungfu/skill/liu-unarmed.lpc` 的 `query_action()` 里取等级与 `for` 循环两行被注释掉，剩下 `if (level > action[i - 1]["lvl"])`，i 为 0，每次出招都报 `Array index must be positive or zero`；恢复这两行（与其他武功相同的写法）。逐个武功调用 query_action/valid_learn/practice_skill 的运行期探针发现。

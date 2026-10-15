@@ -1012,3 +1012,6 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 - 2026-10-14：2 个文件因 `Illegal to inherit after defining global variables` 整份不编译：FluffOS 要求所有 `inherit` 写在第一个全局变量之前，MudOS 不管。`scripts/lpc_fix_inherit_order.py` 把写在 `inherit` 之前的全局变量（以及声明全局变量的头文件的 `#include`）挪到最后一个 `inherit` 之后（KB 04 §6.3）。
 
 - 2026-10-14（toolkit 一轮，补上 NewRandom/prepare_skill 之后）：全 lib 重扫，31,559 个文件能编译，新载入的武功、师父文件里露出的 8 个未用局部变量删去；改动对象新进程比对无回退。`d/maze` 的 baihuazhen、dayan-ta 等迷宫房间仍不编译（调用的迷宫守护进程本 lib 没有），留着。
+
+- 2026-10-14：`kungfu/skill/`、`daemon/skill/liu-unarmed.lpc` 的 `query_action()` 里取等级与 `for` 循环两行被注释掉，剩下 `if (level > action[i - 1]["lvl"])`，i 为 0，每次出招都报 `Array index must be positive or zero`；恢复这两行（与其他武功相同的写法）。逐个武功调用 query_action/valid_learn/practice_skill 的运行期探针发现。
+- 2026-10-14：`daemon/skill/saoye-leg.lpc` 的 `valid_learn()` 直接取 `me->query("门派/shaolin")["saoye-leg"]`，没有少林记录的人学这门腿法时报 `Value being indexed is zero`；加 `mapp()` 判断。
