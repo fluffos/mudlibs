@@ -255,3 +255,12 @@ Century/`adm-single` 形状）**：`adm/simul_efun/file.lpc` 的
 ## 化骨绵掌毒不能编译（2026-10-15）
 
 `kungfu/condition/huagu_poison.lpc` 原档就多一个右括号（`qi = me->query("max_qi"))-1;`），文件从未编译成功，中了化骨绵掌的人没有毒发。按原意改为 `qi = me->query("max_qi") - 1;`，现可载入。
+
+## family 映射（再补）（2026-10-15，KB 05 §7.30）
+
+`mapping fam; fam = (mapping)ob->query("family");`（先声明后赋值）和泥潭式的 `query("family", me)` 同样直接取下标：无门派的新人拜师（`attempt_apprentice`/`recognize_apprentice`）、NPC 的 `greeting`、房间的 `valid_leave`、`ask_me` 等报 `Value being indexed is zero`。12 处补上 `if (!mapp(fam)) fam = ([ ]);`（刚 `recruit_apprentice()` 之后的除外）。
+
+
+## `->query_(` 笔误（2026-10-15，KB 06 §7.245）
+
+调用不存在的函数 `query_`，call_other 静默返回 0，相关判断永远按 0 计算。改为 `->query(`：`jinshemiji`。

@@ -867,3 +867,7 @@ an already live-verified fix from the shared-lineage sibling `zhyx`).
 ## 无门派玩家的 family 映射（2026-10-15，KB 05 §7.30 第三种）
 
 `mapping fam = ob->query("family");` 之后直接 `fam["family_name"]`：没有门派（新人或叛师后）的玩家在学习、练功、拜师、进入门派房间时报 `Value being indexed is zero`，而不是作者写好的提示。1 处在声明行加上 `if (!mapp(fam)) fam = ([ ]);`（`scripts/lpc_fix_family_guard.py`）。
+
+## 技能按另一门武功的等级取招（2026-10-15，KB 06 §7.243）
+
+这些技能文件是从别的武功复制改名来的，`query_action()` 仍用原武功的等级查招式表：只会本技能的人等级为 0，取不到招，每次出招都报错。改为读本技能自己的等级（`scripts/lpc_fix_action_level.py`）：`dacidabei-shou`。

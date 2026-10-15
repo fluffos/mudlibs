@@ -442,3 +442,17 @@ Too-deep-recursion) recurred at boot; no new error from shop/拜师.
 ## taixu 状态的颜色宏（2026-10-15）
 
 `kungfu/condition/taixu.lpc` 用了未定义的 `HC`（应为 `HIC`），文件编译失败；已改。目前没有地方施加这个状态。
+
+## family 映射（再补）（2026-10-15，KB 05 §7.30）
+
+`mapping fam; fam = (mapping)ob->query("family");`（先声明后赋值）和泥潭式的 `query("family", me)` 同样直接取下标：无门派的新人拜师（`attempt_apprentice`/`recognize_apprentice`）、NPC 的 `greeting`、房间的 `valid_leave`、`ask_me` 等报 `Value being indexed is zero`。8 处补上 `if (!mapp(fam)) fam = ([ ]);`（刚 `recruit_apprentice()` 之后的除外）。
+
+
+## 技能按另一门武功的等级取招（2026-10-15，KB 06 §7.243）
+
+这些技能文件是从别的武功复制改名来的，`query_action()` 仍用原武功的等级查招式表：只会本技能的人等级为 0，取不到招，每次出招都报错。改为读本技能自己的等级（`scripts/lpc_fix_action_level.py`）：`sougu-yingzhua`、`test`。
+
+
+## 招式表最低等级之下没有招（2026-10-15，KB 06 §7.243）
+
+招式表的最低 "lvl" 高于 0（如全部为 100），技能等级未到之前取不到招，每次出招都报错。循环后补 `if (!a_action) a_action = action[0];`（`lpc_fix_action_level.py --fallback`）：`zuixin-sword`。

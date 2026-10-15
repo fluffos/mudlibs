@@ -919,3 +919,12 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 ## family 映射（补）（2026-10-15）
 
 `mapping fam = (mapping)me->query("family");`（带类型转换的写法）同样直接取下标，8 处补上 `if (!mapp(fam)) fam = ([ ]);`。
+
+## family 映射（再补）（2026-10-15，KB 05 §7.30）
+
+`mapping fam; fam = (mapping)ob->query("family");`（先声明后赋值）和泥潭式的 `query("family", me)` 同样直接取下标：无门派的新人拜师（`attempt_apprentice`/`recognize_apprentice`）、NPC 的 `greeting`、房间的 `valid_leave`、`ask_me` 等报 `Value being indexed is zero`。8 处补上 `if (!mapp(fam)) fam = ([ ]);`（刚 `recruit_apprentice()` 之后的除外）。
+
+
+## `->query_(` 笔误（2026-10-15，KB 06 §7.245）
+
+调用不存在的函数 `query_`，call_other 静默返回 0，相关判断永远按 0 计算。改为 `->query(`：`jinshemiji`、`jsmj`。

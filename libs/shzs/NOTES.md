@@ -766,3 +766,7 @@ functionally re-tested live on this lib.
 
 - 知府欧阳修 `d/mohao/ouyangxiu.lpc` 把在大堂上 `chat` 的人打昏，处理函数叫 `do_chat`，正好盖住 `std/char/npc.lpc` 设定 NPC 下一句闲聊的 `do_chat(mixed)`；目前没有别处对他调用 `do_chat`，但名字冲突留着就是隐患。处理函数改名 `do_noisy`（两条 `add_action` 一起改），行为不变。
 - `obj/user.lpc` 没用的 `last_cmd`（与 `feature/alias.lpc` 的同名）、`std/space_ship/space_ship_room.lpc` 没用的 `doors`（与 `F_DOOR` 的同名）删去。
+
+## family 映射（再补）（2026-10-15，KB 05 §7.30）
+
+`mapping fam; fam = (mapping)ob->query("family");`（先声明后赋值）和泥潭式的 `query("family", me)` 同样直接取下标：无门派的新人拜师（`attempt_apprentice`/`recognize_apprentice`）、NPC 的 `greeting`、房间的 `valid_leave`、`ask_me` 等报 `Value being indexed is zero`。2 处补上 `if (!mapp(fam)) fam = ([ ]);`（刚 `recruit_apprentice()` 之后的除外）。

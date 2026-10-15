@@ -405,7 +405,12 @@ then `fam["family_name"]` with no test: a sectless player (newcomer, or
 after 叛师) gets `Value being indexed is zero` from `valid_learn()`,
 `attempt_apprentice()`, room guards. `scripts/lpc_fix_family_guard.py`
 adds `if (!mapp(fam)) fam = ([ ]);` on the declaration line when the first
-use is an index; it skips an NPC's own family (`me = this_object()`).
+use is an index; it skips an NPC's own family (`me = this_object()`)
+and a family read right after `recruit_apprentice(ob)`. It also takes
+`fam = (mapping)ob->query("family");` to a local `mapping fam` and the
+nitan form `query("family", me)`: 678 more sites (newcomers asking a
+master in `attempt_apprentice`/`recognize_apprentice`, NPC `greeting`,
+room `valid_leave`, 白无常's 天魔解体 `ask_me`).
 **Regression risk:** §7.156.
 
 ### 7.31 `enter_world()` copies stale login-object flags onto the restored body

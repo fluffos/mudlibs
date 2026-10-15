@@ -229,3 +229,7 @@ After reboot, `buy jitui` purchased 炸鸡腿 and changed 1 黄金 into 99
 ## 转码吃掉的引号（2026-10-15，KB 03）
 
 原档在右引号前有一个孤立的 GBK 前导字节，转 UTF-8 时连引号一起丢了（如 `return name + HIM "发作身亡了;`），字符串一直延续到后面，文件编译失败：`/d/obj/books-nonskill/hmeng014`。补回引号（`scripts/lpc_fix_eaten_quote.py`）。
+
+## 技能按另一门武功的等级取招（2026-10-15，KB 06 §7.243）
+
+这些技能文件是从别的武功复制改名来的，`query_action()` 仍用原武功的等级查招式表：只会本技能的人等级为 0，取不到招，每次出招都报错。改为读本技能自己的等级（`scripts/lpc_fix_action_level.py`）：`qianye-shou`。

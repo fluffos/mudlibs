@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """scripts/lpc_fix_family_guard.py SLUG... [--apply]
 
-`mapping fam = me->query("family");` followed straight away by `fam["family_name"]` (KB 05 section 7.30's family
+`mapping fam = me->query("family");` (or `fam = (mapping)me->query("family");` to a local `mapping fam`, or the
+nitan form `query("family", me)`) followed straight away by `fam["family_name"]` (KB 05 section 7.30's family
 variant).  A player without a sect (a newcomer, or one who left it: 叛师 deletes "family" but keeps the skills) has no
 "family" mapping, so the index raises `Value being indexed is zero` instead of the notify_fail() the check was written
 for: practising or learning the skill, asking the master, entering the guarded room all stop with an error.
@@ -19,7 +20,8 @@ from lpc_fix_void_return import code_mask  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SKIP = re.compile(r"/(u|w|open|players|backup|old|bak|log|data|doc)/")
-DECL = re.compile(rb'mapping\s+([A-Za-z_]\w*)\s*=\s*(?:\(\s*mapping\s*\)\s*)?(?:([\w\[\]]+)\s*->\s*)?query\s*\(\s*"family"\s*\)\s*;')
+DECL = re.compile(rb'(?:(mapping)\s+)?([A-Za-z_]\w*)\s*=\s*(?:\(\s*mapping\s*\)\s*)?'
+                  rb'(?:(?:([\w\[\]]+)\s*->\s*)?query\s*\(\s*"family"\s*\)|query\s*\(\s*"family"\s*,\s*([\w\[\]]+)\s*\))\s*;')
 
 
 def fix(b):
@@ -31,11 +33,20 @@ def fix(b):
     for m in decls:
         if not mask[m.start()]:
             continue
-        name, recv = m.group(1), m.group(2)
+        name, recv = m.group(2), m.group(3) or m.group(4)
         start = b.rfind(b"\n}", 0, m.start())
+        if not m.group(1):
+            # a plain assignment: only to a local declared `mapping` earlier in the same function
+            if m.start() > 0 and b[m.start() - 1:m.start()] not in b" \t\n;{":
+                continue
+            if not re.search(rb"\bmapping\b[^;{}]*\b" + re.escape(name) + rb"\b", b[max(start, 0):m.start()]):
+                continue
         if not recv or recv == b"this_object" or re.search(
                 rb"\b" + re.escape(recv) + rb"\s*=\s*this_object\s*\(\s*\)", b[max(start, 0):m.start()]):
             continue   # the NPC's own family, set by create_family()
+        # just recruited: recruit_apprentice() set the family a few lines up
+        if recv and re.search(rb"recruit_apprentice\s*\(\s*" + re.escape(recv) + rb"\s*\)", b[max(m.start() - 400, 0):m.start()]):
+            continue
         # the function ends at the next `}` in column 0
         end = b.find(b"\n}", m.end())
         end = len(b) if end < 0 else end

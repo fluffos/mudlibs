@@ -819,3 +819,26 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 ## receive_wound 的种类表与 receive_damage 不同（2026-10-15）
 
 本库 `receive_damage()` 接受 jingli，`receive_wound()` 只接受 jing/qi：毒（`duzun_poison`、`yao1_poison` 等）里的 `receive_wound("jingli", N)` 报 `伤害种类错误`，在倒计时之前，毒永不消退。12 个文件 15 处改为 `add("jingli", -N)`（`scripts/lpc_fix_damage_calls.py` 现在按函数分别读取种类表）。
+
+## family 映射（再补）（2026-10-15，KB 05 §7.30）
+
+`mapping fam; fam = (mapping)ob->query("family");`（先声明后赋值）和泥潭式的 `query("family", me)` 同样直接取下标：无门派的新人拜师（`attempt_apprentice`/`recognize_apprentice`）、NPC 的 `greeting`、房间的 `valid_leave`、`ask_me` 等报 `Value being indexed is zero`。9 处补上 `if (!mapp(fam)) fam = ([ ]);`（刚 `recruit_apprentice()` 之后的除外）。
+
+
+## 技能按另一门武功的等级取招（2026-10-15，KB 06 §7.243）
+
+这些技能文件是从别的武功复制改名来的，`query_action()` 仍用原武功的等级查招式表：只会本技能的人等级为 0，取不到招，每次出招都报错。改为读本技能自己的等级（`scripts/lpc_fix_action_level.py`）：`anran-zhang`、`duanjia-quan`。
+
+
+## 招式表最低等级之下没有招（2026-10-15，KB 06 §7.243）
+
+招式表的最低 "lvl" 高于 0（如全部为 100），技能等级未到之前取不到招，每次出招都报错。循环后补 `if (!a_action) a_action = action[0];`（`lpc_fix_action_level.py --fallback`）：`zhuifeng-zhang`。
+
+
+## `->query_(` 笔误（2026-10-15，KB 06 §7.245）
+
+调用不存在的函数 `query_`，call_other 静默返回 0，相关判断永远按 0 计算。改为 `->query(`：`jinshemiji`、`jsmj`。
+
+## 妙手回春的银针检查（2026-10-15）
+
+`miaoshouhuichun` 的 `valid_learn()` 用了未赋值的 `object ob`（`ob->query_temp("weapon")` 报错），还把兵器对象和字符串 "银针" 比较。改为 `ob = me->query_temp("weapon")`，再用 `id("yin zhen")`/`id("yinzhen")` 判断是否银针。
