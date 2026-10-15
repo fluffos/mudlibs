@@ -987,3 +987,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply y
 ## family 映射（再补）（2026-10-15，KB 05 §7.30）
 
 `mapping fam; fam = (mapping)ob->query("family");`（先声明后赋值）和泥潭式的 `query("family", me)` 同样直接取下标：无门派的新人拜师（`attempt_apprentice`/`recognize_apprentice`）、NPC 的 `greeting`、房间的 `valid_leave`、`ask_me` 等报 `Value being indexed is zero`。5 处补上 `if (!mapp(fam)) fam = ([ ]);`（刚 `recruit_apprentice()` 之后的除外）。
+
+## 把经验、属性、内力当技能读（2026-10-15，KB 06 §7.247）
+
+经验、属性、内力上限不是技能，xkx/ES 的 `query_skill()` 对它们只返回 0（风云的还会去载入同名技能文件而报错）。改为 `query("...")`（`scripts/lpc_fix_pool_as_skill.py`）：`/d/mr/npc/murong-bo`、`/d/mr/npc/murong-fu` 的拜师条件（悟性、身法、阅历门槛永远不过，拜不了师）。

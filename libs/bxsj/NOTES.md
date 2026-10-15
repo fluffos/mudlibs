@@ -947,3 +947,7 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 ## 技能按另一门武功的等级取招（2026-10-15，KB 06 §7.243）
 
 这些技能文件是从别的武功复制改名来的，`query_action()` 仍用原武功的等级查招式表：只会本技能的人等级为 0，取不到招，每次出招都报错。改为读本技能自己的等级（`scripts/lpc_fix_action_level.py`）：`kuihua-shengong`。
+
+## 把经验、属性、内力当技能读（2026-10-15，KB 06 §7.247）
+
+当前内力、精这类名字有时指的是内功技能，逐处读过后手改：`lengquan-shengong` 的 `ob_hit()` 用 `query_skill("neili")` 比较双方内力，恒为 0 对 0，只会走“化去一部分”的分支，改为 `query("neili")`。

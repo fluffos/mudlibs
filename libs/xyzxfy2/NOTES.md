@@ -594,3 +594,7 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 ## 空手使用兵器绝招（2026-10-15，KB 06 §7.246）
 
 `perform` 指令允许直接点名招式（如 `perform stick.ban`），这些绝招读了 `me->query_temp("weapon")` 却从不检查，空手时 `weapon->name()` 报错（有的已先扣了内力）。在赋值后补 `if (!objectp(weapon)) return notify_fail("你必须手持兵器才能使用这一招。\n");`（`scripts/lpc_fix_perform_weapon.py`）：`dagou-bang/ban`。
+
+## 把经验、属性、内力当技能读（2026-10-15，KB 06 §7.247）
+
+当前内力、精这类名字有时指的是内功技能，逐处读过后手改：落英缤纷 `luoying-shenjian/lybf`：自己的注释说成功率由“精神高低”决定，两处 `query_skill("jing")` 改为 `query("jing")`。

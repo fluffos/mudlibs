@@ -709,3 +709,7 @@ functionally re-tested live on this lib.
 ## 空手使用兵器绝招（2026-10-15，KB 06 §7.246）
 
 `perform` 指令允许直接点名招式（如 `perform stick.ban`），这些绝招读了 `me->query_temp("weapon")` 却从不检查，空手时 `weapon->name()` 报错（有的已先扣了内力）。在赋值后补 `if (!objectp(weapon)) return notify_fail("你必须手持兵器才能使用这一招。\n");`（`scripts/lpc_fix_perform_weapon.py`）：`duanyun-fu/du1`、`wuyue-blade/wu1`。
+
+## 把经验、属性、内力当技能读（2026-10-15，KB 06 §7.247）
+
+经验、属性、内力上限不是技能，xkx/ES 的 `query_skill()` 对它们只返回 0（风云的还会去载入同名技能文件而报错）。改为 `query("...")`（`scripts/lpc_fix_pool_as_skill.py`）：`dragon-whip`（内力修为门槛 `query_skill("max_neili") < 500` 永远不过）；`liancheng-jian/li1`、`liancheng-jian/li2`（`random(me->query_skill("combat_exp")) > target->query_skill("combat_exp")` 恒为 0 > 0，这一招永远不成功）。

@@ -558,3 +558,7 @@ one and call it with 7 (the driver checks the call against the inherited entry):
 - `d/fy/npc/newsman.lpc`：`ask_question()` 在定义之前就被调用、没有原型，补上原型。
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。5 个文件 10 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+
+## 把经验、属性、内力当技能读（2026-10-15，KB 06 §7.247）
+
+经验、属性、内力上限不是技能，xkx/ES 的 `query_skill()` 对它们只返回 0（风云的还会去载入同名技能文件而报错）。改为 `query("...")`（`scripts/lpc_fix_pool_as_skill.py`）：连击之术 `dual-attack` 的 `valid_learn()`（风云的 `query_skill()` 去载入 `/daemon/skill/combat_exp`，报错）。

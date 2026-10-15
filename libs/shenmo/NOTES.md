@@ -1053,3 +1053,7 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 ## 空手使用兵器绝招（2026-10-15，KB 06 §7.246）
 
 `perform` 指令允许直接点名招式（如 `perform stick.ban`），这些绝招读了 `me->query_temp("weapon")` 却从不检查，空手时 `weapon->name()` 报错（有的已先扣了内力）。在赋值后补 `if (!objectp(weapon)) return notify_fail("你必须手持兵器才能使用这一招。\n");`（`scripts/lpc_fix_perform_weapon.py`）：`babao-gun/fo`、`tmjian/jianshen`、`wuyue-blade/jiao`、`yueya-chan/feicha`、`tmjian/jianshen`、`wuyue-blade/jiao`。
+
+## 把经验、属性、内力当技能读（2026-10-15，KB 06 §7.247）
+
+经验、属性、内力上限不是技能，xkx/ES 的 `query_skill()` 对它们只返回 0（风云的还会去载入同名技能文件而报错）。改为 `query("...")`（`scripts/lpc_fix_pool_as_skill.py`）：屠龙刀法 `/daemon/skill/yitian-tulong/tulong`、`/kungfu/skill/yitian-tulong/tulong`（比较经验时目标一侧读成 0）。

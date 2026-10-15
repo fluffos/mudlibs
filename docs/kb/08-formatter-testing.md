@@ -24,7 +24,7 @@ few files is always an acceptable trade.
 formatter already produced comes back `unchanged` or with only the edited lines moved; one that comes back rewritten end to
 end (2026-10-14: 234 of 1040 files, 75k lines, in Discworld, the Dead Souls family, naruto, dreamofseven ...) was never
 normalized, and reformatting a historic lib inside a warning fix buries the fix: revert those files (`git checkout --`) and
-keep the hand edits in the file's own style.
+keep the hand edits in the file's own style. `scripts/lpc_format_changed.py [--apply] FILES` does this split: it runs `--check` on the HEAD copy and on the working copy and formats only files that were normalized at HEAD (the bare formatter writes in place, and a `wouldChange` on a file you edited by a line or two is such a never-normalized file). 2026-10-15: three headers with a one-quote fix were rewritten (337 lines each) and committed before the `"written":3` was read; restored in a fix-forward commit.
 
 ---
 

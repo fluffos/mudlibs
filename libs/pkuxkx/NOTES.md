@@ -331,3 +331,9 @@ python3 scripts/mudclient.py 127.0.0.1 40274 --timeout 40 --idle 0.5 \
 ## 空手使用兵器绝招（2026-10-15，KB 06 §7.246）
 
 `perform` 指令允许直接点名招式（如 `perform stick.ban`），这些绝招读了 `me->query_temp("weapon")` 却从不检查，空手时 `weapon->name()` 报错（有的已先扣了内力）。在赋值后补 `if (!objectp(weapon)) return notify_fail("你必须手持兵器才能使用这一招。\n");`（`scripts/lpc_fix_perform_weapon.py`）：`zhuihun-jian/zhuihun`。
+
+## 把经验、属性、内力当技能读（2026-10-15，KB 06 §7.247）
+
+经验、属性、内力上限不是技能，xkx/ES 的 `query_skill()` 对它们只返回 0（风云的还会去载入同名技能文件而报错）。改为 `query("...")`（`scripts/lpc_fix_pool_as_skill.py`）：驯马的 `/d/dalicheng/npc/mafu`、`/d/tianlong/npc/mafu`、`/d/wuliang/npc/mafu`（成功率少了福缘一项）。
+
+当前内力、精这类名字有时指的是内功技能，逐处读过后手改：`longxiang-boruo` 的 `ob_hit()` 用 `query_skill("neili")` 比较双方内力，恒为 0 对 0，只会走“化去一部分”的分支，改为 `query("neili")`。

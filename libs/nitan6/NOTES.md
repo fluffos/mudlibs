@@ -1193,3 +1193,7 @@ pass (created, empty, harmless — several existing call sites, e.g.
 ## `find_player()` 只认在世界里的身体（2026-10-15，KB 07 §8.26）
 
 simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线留下的、不在任何房间的身体不再被当成玩家，两个以上时 `find_player()` 不会再报 `The player(<id>) has existed in the world.`（wllz3 实测过的问题）。本库若注册流程不会留下带玩家 uid 的身体，这一改动不改变行为。
+
+## 把经验、属性、内力当技能读（2026-10-15，KB 06 §7.247）
+
+经验、属性、内力上限不是技能，xkx/ES 的 `query_skill()` 对它们只返回 0（风云的还会去载入同名技能文件而报错）。改为 `query("...")`（`scripts/lpc_fix_pool_as_skill.py`）：弹指神通 `tanzhi-shentong/dian` 点灵台穴（攻方读 `query("max_neili", me)`，守方却读成 0）。

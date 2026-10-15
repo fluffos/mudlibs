@@ -247,3 +247,7 @@ drafts) minus the files its pass fixed, plus `cmds/std/practice_.lpc` and a save
 ## 离别剑选目标的笔误（2026-10-15）
 
 `daemon/skill/libie-sword.lpc` 的 `victims[random(sizeof(victim))]` 量的是未赋值的单个 `victim`，总是选第一个敌人；改为 `sizeof(victims)`。
+
+## 把经验、属性、内力当技能读（2026-10-15，KB 06 §7.247）
+
+经验、属性、内力上限不是技能，xkx/ES 的 `query_skill()` 对它们只返回 0（风云的还会去载入同名技能文件而报错）。改为 `query("...")`（`scripts/lpc_fix_pool_as_skill.py`）：连击之术 `dual-attack` 的 `valid_learn()`（风云的 `query_skill()` 去载入 `/daemon/skill/combat_exp`，报错）。

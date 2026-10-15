@@ -940,3 +940,9 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply c
 ## 空手使用兵器绝招（2026-10-15，KB 06 §7.246）
 
 `perform` 指令允许直接点名招式（如 `perform stick.ban`），这些绝招读了 `me->query_temp("weapon")` 却从不检查，空手时 `weapon->name()` 报错（有的已先扣了内力）。在赋值后补 `if (!objectp(weapon)) return notify_fail("你必须手持兵器才能使用这一招。\n");`（`scripts/lpc_fix_perform_weapon.py`）：`bahuang-qiangfa/throw`、`bingpo-blade/ningxie`、`liangyi-dao/sanshen`、`murong-jianfa/kuangjian`。
+
+## 把经验、属性、内力当技能读（2026-10-15，KB 06 §7.247）
+
+经验、属性、内力上限不是技能，xkx/ES 的 `query_skill()` 对它们只返回 0（风云的还会去载入同名技能文件而报错）。改为 `query("...")`（`scripts/lpc_fix_pool_as_skill.py`）：`/quest/wudang/song` 生成的任务怪物照抄玩家福缘（`set("kar", who->query_skill("kar"))`，怪物福缘一直为 0）。
+
+当前内力、精这类名字有时指的是内功技能，逐处读过后手改：`gouyee/heal`、`yuxuan-guizhen/heal` 的疗伤量写成 `query_skill("neili") / 5`，本库其余疗伤 exert 都是 `query_skill("force") / 5`，照此改为内功等级（若读内力，疗伤量会大十倍）；落英缤纷 `luoying-shenjian/lybf`：自己的注释说成功率由“精神高低”决定，两处 `query_skill("jing")` 改为 `query("jing")`。

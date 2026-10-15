@@ -264,3 +264,7 @@ Century/`adm-single` 形状）**：`adm/simul_efun/file.lpc` 的
 ## `->query_(` 笔误（2026-10-15，KB 06 §7.245）
 
 调用不存在的函数 `query_`，call_other 静默返回 0，相关判断永远按 0 计算。改为 `->query(`：`jinshemiji`。
+
+## 把经验、属性、内力当技能读（2026-10-15，KB 06 §7.247）
+
+当前内力、精这类名字有时指的是内功技能，逐处读过后手改：`longxiang-boruo` 的 `ob_hit()` 用 `query_skill("neili")` 比较双方内力，恒为 0 对 0，只会走“化去一部分”的分支，改为 `query("neili")`。
