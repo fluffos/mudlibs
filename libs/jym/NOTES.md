@@ -490,3 +490,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply j
 ## 把经验、属性、内力当技能读（2026-10-15，KB 06 §7.247）
 
 经验、属性、内力上限不是技能，xkx/ES 的 `query_skill()` 对它们只返回 0（风云的还会去载入同名技能文件而报错）。改为 `query("...")`（`scripts/lpc_fix_pool_as_skill.py`）：驯马的 `/d/dali/npc/a`、`/d/dali/npc/mafu`（成功率少了福缘一项）。
+
+## 妙手回春的银针检查（2026-10-15）
+
+`miaoshouhuichun` 的 `valid_learn()` 用了未赋值的 `object ob`，`ob->query_temp("weapon")` 每次都报错，谁也学不了；还把兵器对象和字符串 "银针" 比较。照 chidi 的修法改为 `ob = me->query_temp("weapon")`，再用 `id("yin zhen")`/`id("yinzhen")` 判断是否银针。本库没有银针这件兵器（只有君山银针茶、冰魄银针），这门功夫仍学不了，但不再报错，而是提示要先拿起银针。

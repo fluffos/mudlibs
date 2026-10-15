@@ -586,3 +586,11 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 ## 把经验、属性、内力当技能读（2026-10-15，KB 06 §7.247）
 
 经验、属性、内力上限不是技能，xkx/ES 的 `query_skill()` 对它们只返回 0（风云的还会去载入同名技能文件而报错）。改为 `query("...")`（`scripts/lpc_fix_pool_as_skill.py`）：`liancheng-jian/ci`、`liancheng-jian/erguang`（`random(me->query_skill("combat_exp")) > target->query_skill("combat_exp")` 恒为 0 > 0，这一招永远不成功）。
+
+## 妙手回春的银针检查（2026-10-15）
+
+`miaoshouhuichun` 的 `valid_learn()` 用了未赋值的 `object ob`，`ob->query_temp("weapon")` 每次都报错，谁也学不了；还把兵器对象和字符串 "银针" 比较。照 chidi 的修法改为 `ob = me->query_temp("weapon")`，再用 `id("yin zhen")`/`id("yinzhen")` 判断是否银针。
+
+## 暗器功夫取了 this_player() 的兵器（2026-10-15）
+
+`feihua-shou`、`tangmen-anqi` 的 `query_action()` 用 `this_player()->query_temp("weapon")` 代替出手者 `me` 的兵器：NPC 在玩家的回合里出手（反击、进门时 auto_fight 的 call_out）时取到的是玩家的兵器，玩家空手就报错。改为 `me->query_temp("weapon")`，扣暗器数量前先检查兵器存在。
