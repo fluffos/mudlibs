@@ -943,3 +943,5 @@ in about half of the first logins here (`copy_functions()` -> `lookup_ident()` w
 导出的逐字节校验失败；在副本里先把新增行的行尾空白和多余 `\r` 去掉再导出。
 
 - 2026-10-14：FluffOS 970d9f09 的 `Float value truncated to int` 75 处在上游修掉（fluffos/sanguozhi PR #7，已合并，pin `7e2e33b`）。守方加成 `p_kill *= DEF_KILL_MORE`（1.4）在运算前被截成 1，`troop_attack.lpc`、`array_attack.lpc` 里守方从未得到加成；现改为 `x = to_int(x * 1.4)`。**玩家可见**：守城部队按原设计获得 1.4 倍加成。价格、利息、伤害、驿站行程按浮点算后存进整数的地方写明 `to_int()`。
+
+- 2026-10-14：上游 fluffos/sanguozhi#8 已合并：`secure/modules/m_file.lpc` 的 `file_pos()` 声明为 void 却返回位置，改为 `int`；一处 `array` 类型改 `mixed *`；删 4 个未用局部变量。pin 前移到 52fd778。
