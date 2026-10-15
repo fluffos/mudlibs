@@ -621,3 +621,5 @@ No new errors after the shop commands. Demo `fluffos` save churn
 - 2026-10-14：技能文件里 29 处 `int power_point()` 返回浮点，经 int 返回被截断；本库没有调用者，改成 `float` 返回值，保留原数值（KB 04 §6.10）。
 
 - 2026-10-14：36 个文件因 `Type of returned value doesn't match function return type ( int vs void )` 整份不编译：声明为 `void`（或没写类型）的函数却返回值，旧驱动照样把值交给调用者。调用者要用返回值的（add_action 处理函数、命令、辅助函数）改为它实际返回的类型：`changeshape()`。新进程比对 HEAD 与工作树：36 个对象，新增载入 36，回退 0（`scripts/lpc_fix_void_return.py`，KB 04 §6.3）。
+
+- 2026-10-14（补）：上面改成有返回值的函数里残留的空 `return;` 改为 `return 0;`（值不变，消除 `Non-void functions must return a value`）。

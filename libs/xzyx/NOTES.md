@@ -721,3 +721,5 @@ Save files updated/added this round:
 - 2026-10-14：`d/shendian/npc/challenger.lpc` 每个门派分支末尾的 `switch (random(N))` 里作者把 `case` 全注释掉，只剩 `break;`（或只剩 `default: break;`），这在本驱动是语法错误；这些空 switch 一并注释掉。现在能编译（单独载入时 `create()` 要用 `this_player()`，由任务流程 clone 时才有）。`d/city/npc/jiashen.lpc` 的 `init()` 里 `return 1;` 改为 `return;`。
 
 - 2026-10-14：1 个文件因 `Type of returned value doesn't match function return type ( int vs void )` 整份不编译：声明为 `void`（或没写类型）的函数却返回值，旧驱动照样把值交给调用者。驱动忽略返回值的 apply（`init`、`reset`、`heart_beat`、`create`）里改成空 `return;`（`return ::init();` 改为 `{ ::init(); return; }`，调用照旧）。新进程比对 HEAD 与工作树：2 个对象，新增载入 0，回退 0（`scripts/lpc_fix_void_return.py`，KB 04 §6.3）。
+
+- 2026-10-14（补）：`challenger.lpc` 的 `accept_fight()` 改为基类的 `accept_fight(object ob)`（原来自己取 `this_player()` 却不用），`create()` 没用的 `ob` 删去。

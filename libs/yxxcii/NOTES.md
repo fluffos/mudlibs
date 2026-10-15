@@ -137,3 +137,5 @@ autoload 随身物（鸡腿、袍子），人物档本身保存。
 - 2026-10-14：同一次重扫的其余 30 条：`include/daemons.h` 6 个守护进程宏与先前的定义不同，`#undef` 后再定义（后者本来就生效）；`d/guanwai/npc/chuanfu1.lpc` 和 7 个文件在基类已有的情况下又 `inherit F_SKILL`/`F_CLEAN_UP`，删去（`skills`/`learned` 重复声明随之消失）。改动及受影响的 32 个对象新进程各载入一次，无回退。
 
 - 2026-10-14：4 个文件因 `Type of returned value doesn't match function return type ( int vs void )` 整份不编译：声明为 `void`（或没写类型）的函数却返回值，旧驱动照样把值交给调用者。调用者要用返回值的（add_action 处理函数、命令、辅助函数）改为它实际返回的类型：`changeing()`、`compelete_fish()`、`shaqi()`。新进程比对 HEAD 与工作树：4 个对象，新增载入 4，回退 0（`scripts/lpc_fix_void_return.py`，KB 04 §6.3）。
+
+- 2026-10-14（补）：上面改成有返回值的函数里残留的空 `return;` 改为 `return 0;`（值不变，消除 `Non-void functions must return a value`）。

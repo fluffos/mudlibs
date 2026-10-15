@@ -686,3 +686,5 @@ functionally re-tested live on this lib.
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。4 个文件 4 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
 
 - 2026-10-14：`d/baituo/ouyangfeng.lpc` 闲聊的 `write("…")` 少了分号，整份不编译；补上。之后还卡在第 78 行的 `this player`（原文如此，留待逐行修）。
+
+- 2026-10-14（补）：`ouyangfeng.lpc` 的 `inquiry_map()` 写成 `this-player()`，改为 `this_player()`，删去没用的 `ob`。现在载入。
