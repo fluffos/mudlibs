@@ -936,3 +936,7 @@ bug**：这个 lineage 的游戏内提示符自带每秒刷新的实时时钟
 `scripts/toolkit_fix.sh` 一轮后只剩一处，手工清零；改动的对象在 HEAD 与工作树各载入一次，regress 0。
 
 - `clone/megazine/obj/duka_3b.lpc`（赌球卡 B）同一个赔率变量声明两次（`peis=3` 与 `peis=4`），代码用的是后一份；删去前一行，赔率不变（4.5）。
+
+## `find_player()` 只认在世界里的身体（2026-10-15，KB 07 §8.26）
+
+simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线留下的、不在任何房间的身体不再被当成玩家，两个以上时 `find_player()` 不会再报 `The player(<id>) has existed in the world.`（wllz3 实测过的问题）。本库若注册流程不会留下带玩家 uid 的身体，这一改动不改变行为。

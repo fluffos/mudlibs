@@ -213,3 +213,10 @@ then found and destructed by `find_body()`'s own loop).
 (38 libs share the code); a lib is affected only if its `logind` calls
 `make_body()` before the last prompt. Repro: abort registration twice
 after that prompt, register fully, `quit`, log in again.
+**Swept 2026-10-15:** the `environment(ob)` test is in all 42 vendored libs
+that carry this `find_player()` (36 `adm/simul_efun/user.lpc`, 6 nitan-family
+`adm/kernel/simul_efun/user.lpc`); nt7 upstream. It is a no-op where the bug
+cannot happen: in bixiecanyang (body made at the e-mail step) two abandoned
+registrations then a full one and a relogin worked with and without it, its
+abandoned bodies never get the player's uid, so `filter_player()` skipped
+them anyway.
