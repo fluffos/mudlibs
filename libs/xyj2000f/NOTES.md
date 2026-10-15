@@ -405,3 +405,5 @@ compile check (exit 0, no errors) against `feature/command.lpc`.
 - 袈裟 `d/obj/cloth/jiasha.lpc` 原来只跑 `F_UNIQUE` 的 `init()`，撕袈裟的 `tear` 命令从没加上；现在两个基类的 `init()` 都调。
 - 开封 `d/kaifeng/ground.h` 的表格包进 `#ifndef GROUND_TABLES_INHERITED`，层层继承的 `ground1/2/3.lpc`、`ground.lpc` 不再各定义一份；`feature/alias.lpc` 的 `last_time` 改名 `last_cmd_time`；`yaoguai_type`、李靖 `die`/`unconcious`、玉兔 `kill_ob` 与 xyj2000 同改。
 - 剩下的 `/adm/simul_efun/oo.lpc` 一条 `no side effects` 是没人包含的 `object.lpc` 旧副本单独编译的假象（KB 04 §6.10 表中 fragment 一行），不是警告。
+
+- 2026-10-14：1 个文件的代码里有只含私用区字符（U+F8F5，GBK 转码留下的）的空行，编译器报 `Illegal character 0xef` 整份不编译；这些行清空（字符串、注释里的不动）。新进程比对 HEAD 与工作树：新增载入 1，回退 0。

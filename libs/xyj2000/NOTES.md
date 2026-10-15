@@ -150,3 +150,5 @@ compile check (exit 0, no errors) against `feature/command.lpc`.
 - `d/obj/cloth/jiasha.lpc`（袈裟，`CLOTH` + `F_UNIQUE`）原来只跑 unique 的 `init()`，撕袈裟的 `tear` 命令从没加上；现在两个基类的 `init()` 都调。
 - `d/kaifeng/ground.h` 的三张表被 `ground0.lpc` 和一层层继承它的 `ground1/2/3.lpc`、`ground.lpc` 各包含一次：表格包进 `#ifndef GROUND_TABLES_INHERITED`，继承方在包含前定义它。
 - `feature/alias.lpc` 的命令计时 `last_time` 改名 `last_cmd_time`（三花计数员 `d/city/npc/sanhua-counter.lpc` 自己的 `last_time` 是存盘的键，不动它）；`d/city/npc/yg/yaoguai.lpc` 没人读的 `yaoguai_type` 删去；`d/dntg/lijing/lijing.lpc` 的 `die`/`unconcious`、`d/moon/npc/yutu.lpc` 的 `kill_ob` 改 `void`。
+
+- 2026-10-14：1 个文件的代码里有只含私用区字符（U+F8F5，GBK 转码留下的）的空行，编译器报 `Illegal character 0xef` 整份不编译；这些行清空（字符串、注释里的不动）。新进程比对 HEAD 与工作树：新增载入 1，回退 0。
