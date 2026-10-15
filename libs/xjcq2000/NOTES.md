@@ -815,3 +815,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 ## 内力/上限当作伤害种类（补）（2026-10-15）
 
 `victim->receive_wound("force", n, me)`（兵器吸内力）、`receive_damage("max_qi", random(100))`（走火入魔扣上限）等本库不接受的种类，2 处改为 `add(type, -N)`。
+
+## receive_wound 的种类表与 receive_damage 不同（2026-10-15）
+
+本库 `receive_damage()` 接受 jingli，`receive_wound()` 只接受 jing/qi：毒（`duzun_poison`、`yao1_poison` 等）里的 `receive_wound("jingli", N)` 报 `伤害种类错误`，在倒计时之前，毒永不消退。12 个文件 15 处改为 `add("jingli", -N)`（`scripts/lpc_fix_damage_calls.py` 现在按函数分别读取种类表）。

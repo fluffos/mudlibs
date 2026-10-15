@@ -648,3 +648,7 @@ No new errors after the shop commands. Demo `fluffos` save churn
 ## 转码吃掉的引号（2026-10-15，KB 03）
 
 原档在右引号前有一个孤立的 GBK 前导字节，转 UTF-8 时连引号一起丢了（如 `return name + HIM "发作身亡了;`），字符串一直延续到后面，文件编译失败：`/inherit/condition/damo`。补回引号（`scripts/lpc_fix_eaten_quote.py`）。其中 `/inherit/condition/damo.lpc` 不能编译时，所有 `damo_*`（达摩）中毒状态都载入失败。
+
+## 寒星掌毒的伤害种类（2026-10-15）
+
+`kungfu/condition/hanxing_poison.lpc` 的 `receive_wound("sheng", ...)`：本库没有 sheng 这一项，报错发生在 `apply_condition(..., duration - 1)` 之前，中毒的人永远不会好。按上下文（另一行是 jing）改为 qi。

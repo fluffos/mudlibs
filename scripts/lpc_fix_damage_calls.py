@@ -62,19 +62,26 @@ def negative_policy(work):
 
 
 def allowed_types(work):
-    """The types the lib's receive_damage() accepts (its `type != "..."` tests), or None when it has no such list."""
+    """{b"damage": types, b"wound": types}: what the lib's receive_damage() and receive_wound() accept (the
+    `type != "..."` tests inside each function body), or None when neither has such a list.  The two can differ
+    (xjcq2000: damage takes jingli, wound does not)."""
     p = f"{work}/feature/damage.lpc"
     if not os.path.exists(p):
         return None
     d = open(p, "rb").read()
-    i = d.find(b"int receive_damage(")
-    if i < 0:
-        return None
-    a = set(re.findall(rb'type\s*!=\s*"(\w+)"', d[i:i + 1500]))
-    return a or None
+    out = {}
+    for kind in (b"damage", b"wound"):
+        i = d.find(b"int receive_" + kind + b"(")
+        if i < 0:
+            continue
+        j = d.find(b"\n}", i)
+        a = set(re.findall(rb'type\s*!=\s*"(\w+)"', d[i:j if j > 0 else i + 1500]))
+        if a:
+            out[kind] = a
+    return out or None
 
 
-RES_CALL = re.compile(rb'receive_(?:damage|wound)\((\s*)"(neili|jingli|force|mana|atman|max_qi|max_jing|max_neili|max_jingli|max_kee|max_gin|max_sen|max_force)"(\s*),')
+RES_CALL = re.compile(rb'receive_(damage|wound)\((\s*)"(neili|jingli|force|mana|atman|max_qi|max_jing|max_neili|max_jingli|max_kee|max_gin|max_sen|max_force)"(\s*),')
 
 
 def split_args(b, i):
@@ -122,7 +129,8 @@ def simple(e):
 
 
 def fix_types(b, allowed):
-    hits = [m for m in RES_CALL.finditer(b) if m.group(2) not in allowed]
+    hits = [m for m in RES_CALL.finditer(b)
+            if m.group(1) in allowed and m.group(3) not in allowed[m.group(1)]]
     if not hits:
         return b, 0, []
     mask = code_mask(b)
@@ -146,7 +154,7 @@ def fix_types(b, allowed):
         else:
             new_amt = b"-" + amt if simple(amt) else b"-(" + amt + b")"
         out.append(b[last:m.start()])
-        out.append(b"add(" + m.group(1) + b'"' + m.group(2) + b'"' + m.group(3) + b", " + new_amt + b")")
+        out.append(b"add(" + m.group(2) + b'"' + m.group(3) + b'"' + m.group(4) + b", " + new_amt + b")")
         last = end + 1
         n += 1
     out.append(b[last:])

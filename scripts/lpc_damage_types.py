@@ -30,7 +30,8 @@ for s in sorted(os.listdir('libs')):
     for fn in ('receive_damage','receive_wound','receive_heal','receive_curing'):
         i=d.find('int '+fn+'(')
         if i<0: continue
-        a=set(re.findall(r'type\s*!=\s*"(\w+)"',d[i:i+1500]))
+        j=d.find('\n}',i)
+        a=set(re.findall(r'type\s*!=\s*"(\w+)"',d[i:j if j>0 else i+1500]))
         if a: allowed[fn]=a
     if not allowed: continue
     allowed_of[s]=allowed.get('receive_damage',set())
