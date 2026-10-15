@@ -214,3 +214,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply d
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。8 个文件 18 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
 
 - 2026-10-14：擂台 `d/leitai/leitai.lpc` 整份不编译：`fullup()` 缺了收尾的 `}`，后面那份重复的 `do_quit()` 被读成 `fullup()` 里的局部声明。补上 `}`，删去那份从未生效的重复 `do_quit()`（前面那份照旧是 add_action 的目标）。现在载入。
+
+- 2026-10-14：1 个文件的函数声明为 `int`（或 `void`）却返回字符串、对象（`int query_seal() { return "…"; }`），旧驱动照样把值交给调用者；改为实际返回的类型（`scripts/lpc_fix_void_return.py`）（KB 04 §6.1、§6.3）。新进程比对 HEAD 与工作树：1 个对象，新增载入 0，回退 0。

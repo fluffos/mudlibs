@@ -2,7 +2,8 @@
 """scripts/lpc_fix_void_return.py SLUG [--apply] [--diag TSV]
 
 Fix the compile error "Type of returned value doesn't match function return type ( T vs void )": a function declared
-`void` that returns a value.  MudOS (and FluffOS with `old type behavior : 1`, which turns type checking off) compiled
+`void` that returns a value; and "( T vs int )", an `int` function returning a string, object, array (`int
+query_mysize() { return "tiny"; }`): it takes the type it returns, `mixed` if it also returns a non-zero int literal.  MudOS (and FluffOS with `old type behavior : 1`, which turns type checking off) compiled
 it and handed the value to the caller, so an add_action handler `void do_open(string str) { ...; return 1; }` worked;
 here the whole file fails to load.  Per function, from the diagnostics:
 
@@ -51,7 +52,7 @@ def code_mask(b):
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCRATCH = os.environ.get("LPC_SCRATCH") or os.path.expanduser("~/.cache/lpc-scratch")
-MSG = re.compile(r"Type of returned value doesn't match function return type \( (.+?) vs void \)")
+MSG = re.compile(r"Type of returned value doesn't match function return type \( (.+?) vs (void|int) \)")
 IGNORED = {"create", "init", "reset", "heart_beat", "setup"}
 NESTED = re.compile(rb"(?m)^[ \t]*(?:(?:static|nosave|private|protected|public|nomask|varargs)\s+)*"
                     rb"(?:void|int|string|object|mixed|mapping|float|status)\s+\*?\s*\w+\s*\([^;{}()]*\)\s*\{")
@@ -126,9 +127,11 @@ def fix_file(b, rows, synlines=frozenset()):
     mask = code_mask(b)
     dep = depth_map(b, mask)
     starts = [0] + [m.end() for m in re.finditer(rb"\n", b)]
-    funcs = collections.defaultdict(lambda: {"types": set(), "rets": []})
+    funcs = collections.defaultdict(lambda: {"types": set(), "rets": [], "decl": set()})
     notes = []
-    for ln, col, t in rows:
+    for row in rows:
+        ln, col, t = row[:3]
+        decl = row[3] if len(row) > 3 else "void"
         if ln > len(starts):
             continue
         off = starts[ln - 1] + max(col - 1, 0)
@@ -138,6 +141,7 @@ def fix_file(b, rows, synlines=frozenset()):
             continue
         f = funcs[ef]
         f["types"].add(t)
+        f["decl"].add(decl)
         f["rets"].append(off)
     edits = []
     retype = {}
@@ -158,6 +162,33 @@ def fix_file(b, rows, synlines=frozenset()):
             # a function definition inside the body, which the compiler read as a local declaration (`unexpected
             # '('`): a `}` is missing above, and the `return` belongs to the function that was meant to start here
             notes.append("HAND %s: a function definition inside its body (missing `}`?)" % name)
+            continue
+        if f["decl"] == {"int"}:
+            # an `int` function returning another type (`int query_mysize() { return "tiny"; }`): the old driver
+            # handed the string to the caller, so the function takes the type it returns; `mixed` when it also
+            # returns a non-zero int literal or several types
+            ints = [x for x in re.finditer(rb"\bint\b", header[:m.start()]) if mask[hs + x.start()]]
+            if "unknown" in f["types"]:
+                # the value's type is unknown because something earlier failed (a fragment compiled on its own, an
+                # undefined helper): that says nothing about the function, leave it
+                notes.append("HAND %s: declared int, returns a value of unknown type (an earlier error)" % name)
+                continue
+            if len(ints) != 1 or name in IGNORED:
+                notes.append("HAND %s: declared int, returns %s" % (name, "/".join(sorted(f["types"]))))
+                continue
+            types = set(f["types"])
+            t = types.pop() if len(types) == 1 else "mixed"
+            if t == "unknown" or re.search(rb"\breturn\s*\(?\s*-?\s*[1-9][0-9]*\s*\)?\s*;", body):
+                t = "mixed"
+            v = ints[0]
+            edits.append((hs + v.start(), hs + v.end(), t.encode()))
+            retype[name] = t
+            for r in re.finditer(rb"\breturn\s*;", b[brace:k]):
+                if mask[brace + r.start()]:
+                    edits.append((brace + r.start(), brace + r.end(), b"return 0;"))
+            continue
+        if f["decl"] != {"void"}:
+            notes.append("HAND %s: mixed void/int declarations" % name)
             continue
         if name in IGNORED:
             for off in f["rets"]:
@@ -231,7 +262,7 @@ def main():
             syn[r[0]].add(int(r[1]))
         m = MSG.match(r[4])
         if m:
-            rows[r[0]].add((int(r[1]), int(r[2] or 0), m.group(1)))
+            rows[r[0]].add((int(r[1]), int(r[2] or 0), m.group(1), m.group(2)))
     done = hand = 0
     for f in sorted(rows):
         p = work + f

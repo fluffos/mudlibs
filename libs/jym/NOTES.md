@@ -440,3 +440,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply j
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。64 个文件 71 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/d/gumu/skill/yunu-xinjing/xiuxi2.lpc`（`xj_gain *=`）、`/d/gumu/skill/yunu-xinjing/xiuxi2.lpc`（`xj_gain *=`）、`/kungfu/class_bak/gumu/obj/beehive.lpc`（`exp *=`）、`/kungfu/class_bak/gumu/obj/beehive.lpc`（`qn *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
 
 - 2026-10-14：1 个文件用了颜色宏（`HIW`、`NOR`）却没有 `#include <ansi.h>`（首个错误 `syntax error, unexpected L_STRING`）；开头补上；5 个文件的函数声明为 `int`（或 `void`）却返回字符串、对象（`int query_seal() { return "…"; }`），旧驱动照样把值交给调用者；改为实际返回的类型（`scripts/lpc_fix_void_return.py`）（KB 04 §6.1、§6.3）。新进程比对 HEAD 与工作树：6 个对象，新增载入 1，回退 0。
+
+- 2026-10-14（更正）：上一条把 `auto_perform()` 也改成了 `mixed`/`string`，其实那里返回值的类型是因为前面的错误（未定义的函数）才变成未知，不是真的返回字符串；恢复为 `int`。

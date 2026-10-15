@@ -166,6 +166,10 @@ detection.
   --apply` (in `toolkit_fix.sh`). Where a base class declares the
   function `void`, the rescan reports `( void vs int )`: read the callers,
   then `lpc_fix_return_types.py --also NAME`.
+  The same script handles `( string vs int )`, an `int` function returning
+  a string (sunshadow's signet rings: `int query_seal() { return "…"; }`,
+  269 files). It takes the type it returns, or `mixed` when it also returns
+  a non-zero int literal.
 
 ### 6.4 One shared root cause, not N bugs
 
