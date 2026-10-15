@@ -20,14 +20,24 @@ string perform_action_file(string action) {
   return __DIR__ + SKILL_CN_NAME + "/" + action;
 }
 
+// A sword skill whose moves can be borrowed (a missing skill file must not stop the attack).
+int sword_moves(string sk) {
+  mixed r;
+  return !catch(r = SKILL_D(sk)->valid_enable("sword") && arrayp(SKILL_D(sk)->query_actions())) && r;
+}
+
 mapping query_action(object me, object weapon) {
   string *skills = get_dir("/kungfu/skill/*.lpc");
   mapping *actions;
 
-  skills = filter_array(
-    skills,
-    (: SKILL_D($1)->valid_enable("sword") && arrayp(SKILL_D($1)->query_actions()) :)
-  );
+  // The security daemon does not let a /kungfu object (euid Domain) list the directory: borrow from the
+  // attacker's own sword skills instead, and fall back to the plain weapon moves.
+  if (!arrayp(skills)) skills = keys(me->query_skills());
+  skills = filter_array(skills, (: sword_moves :));
+  if (!sizeof(skills)) {   // nothing to borrow: the weapon's own moves, as an unskilled attack uses them
+    if (objectp(weapon) && functionp(weapon->query("actions"))) return evaluate(weapon->query("actions"));
+    return ([ "action": "$N用$w往$n的$l刺去", "damage_type": "刺伤", "dodge": 15, "parry": -15 ]);   // weapond's thrust
+  }
 
   actions = SKILL_D(skills[random(sizeof(skills))])->query_actions();
 
