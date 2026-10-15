@@ -400,6 +400,12 @@ the callers actually expect.
 **Status:** swept across 178 libs.
 **Second shape (NOT swept):** `ob->query("family")["family_name"]`. A
 grep is too imprecise for that; fix per site (`ldtx`).
+**Third shape (swept 2026-10-15):** `mapping fam = ob->query("family");`
+then `fam["family_name"]` with no test: a sectless player (newcomer, or
+after 叛师) gets `Value being indexed is zero` from `valid_learn()`,
+`attempt_apprentice()`, room guards. `scripts/lpc_fix_family_guard.py`
+adds `if (!mapp(fam)) fam = ([ ]);` on the declaration line when the first
+use is an index; it skips an NPC's own family (`me = this_object()`).
 **Regression risk:** §7.156.
 
 ### 7.31 `enter_world()` copies stale login-object flags onto the restored body

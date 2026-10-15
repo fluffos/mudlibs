@@ -280,3 +280,7 @@ definition, 2 `#undef` lines for macros that two headers define (`ROOM`, `STORY_
 - 七处 `item_desc`/问答写成 `(: "一段高高的院墙……" :)`，是只返回字符串常量的函数指针；改成字符串本身，显示不变（`d/city/newstreet4`、`street3`、两处 `walker`、两处 `kefang`、`d/waterfog/servant_room`）。
 - `cmds/std/look.lpc` 声明了两张 `per_msg_beast3`（野兽第三档相貌描述），代码用的是后一张；前一张改名 `per_msg_beast3_old` 保留原文。
 - `obj/npc/zombie.lpc`、`u/quicksand/npc/snake.lpc` 的 `die()` 改 `void`；`adm/daemons/network/services/dns_master.lpc`、`dns_master1.lpc` 里 `#if PREF_TELL & SVC_TCP` 挪到 `if` 外面（同 shujian3），不再剩一个空 `if`；`d/shaolin/damo-mi.lpc`、`daemon/gongfu/huashan-jian*.lpc` 多余的 `;` 删去。
+
+## 无门派玩家的 family 映射（2026-10-15，KB 05 §7.30 第三种）
+
+`mapping fam = ob->query("family");` 之后直接 `fam["family_name"]`：没有门派（新人或叛师后）的玩家在学习、练功、拜师、进入门派房间时报 `Value being indexed is zero`，而不是作者写好的提示。2 处在声明行加上 `if (!mapp(fam)) fam = ([ ]);`（`scripts/lpc_fix_family_guard.py`）。

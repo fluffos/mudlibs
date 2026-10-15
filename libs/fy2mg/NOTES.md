@@ -248,3 +248,7 @@ autoload，quit 后不在身上，符合该血统普通物件惯例。
 **其余：** `toolkit_fix.sh` 删去 10 个多余的 `inherit`（`d/city/npc/*` 等 NPC 再继承 `F_SKILL`/`F_CLEAN_UP`，`std/char/npc.lpc` 已带上）；`daemon/skill/hubo.lpc`（`ITEM`+`SKILL` 双继承）点名 `clean_up()` 的赢家 `skill::clean_up()`，行为不变。
 
 验证：改动的 13 个对象 HEAD 与工作树各用新进程载入：12 -> 13 通过，regress 0（银簪原先编译不过，现在能载入）。删除声明审计 0 项待看。13 个对象载入无回退。
+
+## 无门派玩家的 family 映射（2026-10-15，KB 05 §7.30 第三种）
+
+`mapping fam = ob->query("family");` 之后直接 `fam["family_name"]`：没有门派（新人或叛师后）的玩家在学习、练功、拜师、进入门派房间时报 `Value being indexed is zero`，而不是作者写好的提示。1 处在声明行加上 `if (!mapp(fam)) fam = ([ ]);`（`scripts/lpc_fix_family_guard.py`）。

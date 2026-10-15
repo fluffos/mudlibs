@@ -207,3 +207,12 @@ functionally re-tested live on this lib.
 - 2026-10-14：同一次重扫的其余 15 条：`adm/daemons/poistiond.lpc` 的 `varargs int remove() { save(); return 1; }` 取代了 F_MOVE 的 `remove()`（负重扣减从不执行），改为存盘后调用 `::remove(euid)`；`d/daniel/job/peng/peng.lpc` 的原型 `string ask_fail();` 与同目录 `dojob.lpc` 的 `int ask_fail()` 不符（原型抄自另一份 dojob），改 `int`；`beastseller` 的 `attempt_apprentice` 改 `void`（拜师指令不读返回值）；4 个文件在 NPC 基类已有的情况下又 `inherit F_CLEAN_UP`，删去；`xingchen` 写明 `clean_up()` 胜出者；`MAX` 宏重定义前加 `#undef`；`huashan-jian.lpc` 多余的 `;`、`u/huoji.lpc` 注释里残留的 `/*`。改动的 17 个对象新进程各载入一次，无回退。
 
 - 2026-10-15：`kungfu/skill/guangming-blade.lpc`（光明刀法）是从五虎断门刀抄来的，`query_action()` 里仍按 `wuhu-duanmendao` 的等级挑招式：没练五虎断门刀的人出招时一招都匹配不上，`a_action` 为 0，接着赋值报错。改为按 `guangming-blade` 自己的等级。（武功运行期探针发现。）
+
+## 无门派玩家的 family 映射（2026-10-15，KB 05 §7.30 第三种）
+
+`mapping fam = ob->query("family");` 之后直接 `fam["family_name"]`：没有门派（新人或叛师后）的玩家在学习、练功、拜师、进入门派房间时报 `Value being indexed is zero`，而不是作者写好的提示。3 处在声明行加上 `if (!mapp(fam)) fam = ([ ]);`（`scripts/lpc_fix_family_guard.py`）。
+
+
+## 东方故事/西游记体系的技能文件（2026-10-15，KB 06 §7.241 第三类）
+
+这些 `kungfu/skill` 文件来自 gin/kee/sen/force 体系，本库人物只有 jing/qi/neili：`receive_damage("kee", 30)` 报 `伤害种类错误`，`query("force")` 永远为 0，技能学不了也练不了。按 kee→qi、gin/sen→jing、force→neili、max_force→max_neili、force_factor→jiali 改了属性名（`scripts/lpc_port_es_props.py`），共 1 个文件。
