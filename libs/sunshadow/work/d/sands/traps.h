@@ -8,10 +8,10 @@
 #define INT ob->query_stats("intelligence")
 #define WIS ob->query_stats("wisdom")
 
-void contact_poison();
-void wall_darts();
+int contact_poison();
+int wall_darts();
 
-void contact_poison() {
+int contact_poison() {
   int chance, dmg;
   dmg=random(25)+15;
   chance=random(50);
@@ -30,7 +30,7 @@ void contact_poison() {
   return 1;
 }
 
-void wall_darts() {
+int wall_darts() {
   int chance, number;
   chance=random(50);
   number=random(20)+15;
