@@ -423,3 +423,5 @@ id `({ "wu bo", "wu", "bo" })`）。F_NAME 修好前 `bai wu bo` 会拜到新手
   - 36 个技能文件的 `int power_point()` 分支里返回 0.6、0.8、1.2、1.4 之类的浮点，经 `int` 返回被截断。本库没有代码调用这个函数，改成 `float` 返回值、保留原数值。
   - `inherit/room/hockshop.lpc` 的售价和 `adm/kernel/simul_efun/ntefun.lpc` 的 `sqrt` 结果写明 `to_int()`。simul_efun 能载入。
   - 改动的 243 个对象 HEAD 与工作树各载入一次，无回退（237 -> 237）。
+
+- 2026-10-14：`inherit/item/item.lpc` 自己定义了 `string to_chinese(int status)`（物品品质名：普通/优良/珍稀/史诗/传说/神器/仙器），把 simul_efun 的 `to_chinese(string)`（技能、属性译名）遮住了；继承它的兵器、装备、药书显示“装备要求”或技能名时调用 `to_chinese(key)`，旧驱动不查类型，传进字符串只会落到最后一个分支，装备要求一律显示成“仙器”；新驱动直接报 `Bad type for argument 1 of to_chinese ( int vs string )`，这些文件整份不编译。照 nt7 的做法把本地函数改名为 `to_ch_desc()`（`short()` 里的品质调用随之改名）。新进程比对 HEAD 与工作树：168 个对象，新增载入 166，回退 0。
