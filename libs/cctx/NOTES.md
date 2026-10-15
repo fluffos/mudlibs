@@ -322,3 +322,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply c
 - 结果：能编译的文件中警告 82 -> 0；全库 6177 -> 6180 个文件能编译。改动 21 个 `.lpc`，HEAD 与工作树各载入一次（新进程）：21 个对象载入无回退（HEAD PASS 13, tree PASS 16; regress 0; newly loading 3），其余 5 个两边都因运行期权限/数据问题失败，与本次改动无关。
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。3 个文件 3 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+
+- 2026-10-14：1 个文件因 `Type of returned value doesn't match function return type ( int vs void )` 整份不编译：声明为 `void`（或没写类型）的函数却返回值，旧驱动照样把值交给调用者。调用者要用返回值的（add_action 处理函数、命令、辅助函数）改为它实际返回的类型：`serve_cai()`。新进程比对 HEAD 与工作树：1 个对象，新增载入 1，回退 0（`scripts/lpc_fix_void_return.py`，KB 04 §6.3）。

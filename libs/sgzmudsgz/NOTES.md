@@ -185,3 +185,5 @@ hylib/dtxy) stay confirmed duplicates.
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。46 个文件 109 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/daemons/troop_d/troop_attack.lpc`（`ret *=`）、`/daemons/warai_d/array_attack.lpc`（`p_kill *=`）、`/sgdomain/modules/m_bank.lpc`（`p_bank +=`）、`/wiz/edc/code/array_attack.lpc`（`p_kill *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
 - 2026-10-14（同一次重扫，手工部分）：`sgdomain/jimou/hunluan.lpc`（计策「混乱」）的倍率 `x=1.8`、`z=1.5` 声明成 `int`，被截成 1。施计方的计策值本应乘 1.8，实际只乘 1。现改为 `float x, z;`，`kill = to_int(kill*x - kill1*y)`。**玩家可见**：混乱计策按原设计更容易成功。改动的 46 个对象 HEAD 与工作树各载入一次，无回退。
+
+- 2026-10-14：1 个文件因 `Type of returned value doesn't match function return type ( int vs void )` 整份不编译：声明为 `void`（或没写类型）的函数却返回值，旧驱动照样把值交给调用者。调用者要用返回值的（add_action 处理函数、命令、辅助函数）改为它实际返回的类型：`file_pos()`。新进程比对 HEAD 与工作树：1 个对象，新增载入 0，回退 0（`scripts/lpc_fix_void_return.py`，KB 04 §6.3）。

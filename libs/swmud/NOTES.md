@@ -782,3 +782,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply s
   - Damage, healing, experience and layout figures spell `to_int()` (same values).
   - **Gameplay-visible:** ship movement at low speed and on diagonals, the Jedi mind-wipe adjustment, and the drunk penalty.
   - The 31 changed objects load, with no regressions.
+
+- 2026-10-14: `std/behaviour/test.lpc` declared `string s` above its `inherit` (`Illegal to inherit after defining global variables`); the declaration now follows the inherit (`scripts/lpc_fix_inherit_order.py`). Checked with the Lima-configured lpcc: no regressions.

@@ -715,3 +715,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply s
     - `std/container.lpc` and `std/fluid.lpc`: masses were held in ints.
   - **Gameplay-visible:** the star map's distance colours, low-level loot, the drunk penalty, and the capacity check for light items.
   - The 18 changed objects load, with no regressions.
+
+- 2026-10-14: `std/behaviour/test.lpc` declared `string s` above its `inherit` (`Illegal to inherit after defining global variables`); the declaration now follows the inherit (`scripts/lpc_fix_inherit_order.py`). Checked with the Lima-configured lpcc: no regressions.

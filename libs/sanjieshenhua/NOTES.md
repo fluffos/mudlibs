@@ -405,3 +405,5 @@ HEAD 与工作树分别加载（新进程）：1330 -> 1330 通过，无回退�
     - 删去 `reporting.lpc` 未用的 `str`。
   - 改动的 32 个对象 HEAD 与工作树各载入一次：27 -> 29 通过，无回退。
   - 未动：`bin/v22pre11/`（附带的 MudOS 源码树）、`d/gumu/npc/zhangmen.lpc`、`d/quest/mofeng/npc/stey/`。这些是编译不过的文件，警告是报错后的连带输出（见上）。
+
+- 2026-10-14：1 个文件因 `Type of returned value doesn't match function return type ( int vs void )` 整份不编译：声明为 `void`（或没写类型）的函数却返回值，旧驱动照样把值交给调用者。调用者要用返回值的（add_action 处理函数、命令、辅助函数）改为它实际返回的类型：`break_string()`。新进程比对 HEAD 与工作树：1 个对象，新增载入 0，回退 0（`scripts/lpc_fix_void_return.py`，KB 04 §6.3）。

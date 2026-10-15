@@ -717,3 +717,7 @@ Save files updated/added this round:
 - 神殿门徒 `d/shendian/npc/mentu.lpc` 的可教武功表 `string *skills` 与 `F_SKILL` 存武功数据的 `skills` 同名，改名 `teach_skills`；`d/death/god1.lpc`、`d/fenghuang/fenghuang/npc/obj/blade.lpc` 写明用驱动原先选的 `clean_up()`。
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。1 个文件 1 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+
+- 2026-10-14：`d/shendian/npc/challenger.lpc` 每个门派分支末尾的 `switch (random(N))` 里作者把 `case` 全注释掉，只剩 `break;`（或只剩 `default: break;`），这在本驱动是语法错误；这些空 switch 一并注释掉。现在能编译（单独载入时 `create()` 要用 `this_player()`，由任务流程 clone 时才有）。`d/city/npc/jiashen.lpc` 的 `init()` 里 `return 1;` 改为 `return;`。
+
+- 2026-10-14：1 个文件因 `Type of returned value doesn't match function return type ( int vs void )` 整份不编译：声明为 `void`（或没写类型）的函数却返回值，旧驱动照样把值交给调用者。驱动忽略返回值的 apply（`init`、`reset`、`heart_beat`、`create`）里改成空 `return;`（`return ::init();` 改为 `{ ::init(); return; }`，调用照旧）。新进程比对 HEAD 与工作树：2 个对象，新增载入 0，回退 0（`scripts/lpc_fix_void_return.py`，KB 04 §6.3）。

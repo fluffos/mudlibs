@@ -1,3 +1,374 @@
 
+## WASM 修复摘要（迁移自 meta.json 的 group_note）
+
+ES II/Annihilator 衍生的 mudlib（狂想空间II，"Wild Imagination Space II"），和 jyqxc 家族是不同的血统（存档用驱动原生的明文格式，不是那种旧式二进制编码）。修复了两个 bug：（1）358 个档案用了 AGENTS.md §6.1 类的尖括号绝对路径 #include（例如 #include </open/open.h>），这个驱动会把它解析成相对于配置好的 include 目录而不是 mudlib 根目录——因为分散得太多，不适合逐一手改，改用了文档记载的批量解法：在 master.lpc 里加一个 include_file(compiled, from, path) apply，给看起来是绝对路径的 <> include 前面多加一个"/"，逼它走和带引号 include 相同的、基于 merge() 的路径解析。（2）adm/daemons/natured.lpc 的 check_heart_beat() 里有一个多余的分号提前终止了一个 if 条件（if (wizardp(...) && ...);），导致后面那句原本应该被这个 if 保护的、对不存在的精灵 /adm/daemons/temp.lpc 的 call_other() 变成每次心跳（每秒，永远）都会无条件执行——确认过这个档案在整个代码库里从来不存在（一个被剪掉的开发/调试用暂存精灵，两处呼叫点从没清理干净）；已直接移除这两处死呼叫点，而不是凭空捏造一个替代精灵。注册流程用的是一套特别的互动式点数分配（7 项明确询问的属性、从共享的 160 点数池里分配，第 8 项由剩余点数自动填入），不是 jyqxc 家族那种"自动生成后接受"的模式。这里的管理员等级惯例是 (manager)，比 (admin) 高一级——已把 fluffos 播种为 (manager)，匹配既有的两个条目。完整的注册→look→score→quit 流程和管理员流程在排版格式化前后都验证过；格式化工具还原了 6 个真正损坏的档案（中文字符密集的字符串字面量里出现了错误的"\ n"分词——这是一种 jyqxc 家族里没见过的新损坏形态，和那个家族的 ASCII 地图压缩模式不同）。有几个 diff 特别大的档案（删掉了几千行）经确认是格式化工具正确地清理掉了几千行原本就存在的尾随空行，不是损坏。
+
+## §7.86 跨库扫描修复（留言板 `post` 崩溃）
+
+- **`BULLETIN_BOARD` `inherit` + 多余 `replace_program()` 致命形状（AGENTS.md §7.86，`post` 命令崩溃）**：全档案 14 处命中，已删除多余的 `replace_program(...)` 调用（保留 `inherit`），逐文件保留原有行尾格式（CRLF/LF 按文件原样）。本次为跨库 §7.86 扫描修复（触发原因：该 bug 已在 6+ 个互不相关的血统家族独立确认，属于近乎普遍的拷贝粘贴模式），仅做编译检查（驱动干净启动、端口正常监听），未做完整 §10.7 深度游玩测试。
+
+## 深度功能测试（§10.7，2026-08-08）
+
+### 血统确认：与 `kxkj` 同一份代码，非"改编"关系
+
+`kxkjii2`（本档案，089 号）与 `kxkj`（036 号，本 session 早前已完成
+§10.7 深度测试，结论"deep functional test，no programming bugs
+found"）的 `adm/obj/master.lpc` 主体、`adm/daemons/securityd.lpc`
+逐字节完全相同（`diff` 输出为空，除去两边各自独立打的 WASM 阶段
+`#include`/`compile_error` 补丁）；`work/` 目录树结构、`open/death/`
+整个死亡区（`start.lpc`、`bridge1-3.lpc`、`gate.lpc`、`gateway.lpc`、
+`road1-3.lpc` 等）逐文件字节完全相同；档案总数仅差 10 个文件（均为
+运行期存档差异，非源码）。结论：**这不是"狂想空间"改编或衍生的
+"II"续作，而是同一份 2002 年台湾巫师 wade 发布源码的另一份独立快照/
+存档**，与本档案自己 README 已有的"和 dfgsiiv13b 的雪村同名但内容不
+同——应是各自独立搭建"判断相印证（雪村内容确实独立，但引擎/核心代码
+是同一份）。这次比对方式：直接 `diff` 两份 `work/` 下的核心精灵文
+件与整个 `open/death/` 目录，而非仅凭档案名或简介推测。
+
+### 管理员账号：README 记录与实际存档不符，已重新播种
+
+README 此前记录的 `fluffos`/`Mud2026Adm`/(manager) 虽然 `adm/etc/
+wizlist` 里确实有一行 `fluffos (manager)`，但 `work/data/{login,
+user}/f/` 下翻遍都没有对应的 `fluffos.o` 存档——说明上一轮只写了权
+限名单，从未真正走过注册流程创建账号。本次用标准 `fluffos`/
+`Mud@2026` 组合重新走了一遍正常注册流程（英文 id → y 确认 → 中文名
+"浮浮" → 密码×2 → 邮箱 → 性别 → 7 项天赋各分配 20 点，第 8 项福缘
+自动补满）,`目前权限 -> 【天帝】(manager)` 立即生效。**额外发现并
+确认的存档时机细节**：本档案的 `LOGIN` 对象（含密码的账号存档）既
+不在 `quit` 指令路径写盘，也不在注册完成时写盘，只有真正的 socket
+断线（`net_dead()`）才会写——这点与 `kxkj` 已有 NOTES 记录的现象一
+致。第一次用 `kill <driver pid>` 结束驱动进程时验证到这一点：重启
+后 `data/login/f/` 目录为空，`fluffos` 账号"凭空消失"，被迫重新注
+册；第二次改用正常 telnet 断线（结束 tmux 会话，触发真实 TCP
+FIN/RST）后确认 `data/login/f/fluffos.o` 正确落盘，且用标准密码
+`Mud@2026` 成功重新连线（"重新连线完毕。"），(manager) 权限保留。
+密码沿用项目标准 `Mud@2026`，未被拒绝，无需变体密码。
+
+### 核心发现并已修复：死亡后唯一的"复活"出口是死代码，此前每一次死亡都是无法恢复的死局
+
+用 (manager) 账号在 `d/snow/eroad2`（雪村，与 `kxkj` 完全同一房间）
+对 `野狗`（非会说话生物，走真杀分支）使用 `fight dog`，走完完整的
+真实死亡流程（"你死了" → 送往 `阴曹入口`），`debug.log` 全程干净，
+无任何报错——死亡本身完全正常，问题出在复活出口。
+
+`open/death/start.lpc`（`阴曹入口`）的 `exits` 映射只有 `"north"`
+一个活 key，`"up"`/`"south"` 两行被注释掉；但同一文件的
+`valid_leave()` 紧接着就有这两个方向完整可用的逻辑（`"south"` 是
+"你真的想回家吗"的 5-9 次随机重试门槛，`"up"` 才是真正的复活：
+`reincarnate()` + `move()` 回到人间，打印"恭禧你又重回人世了"）。
+本档案共用的 `cmds/std/go.lpc` 在呼叫 `valid_leave()` 之前先检查方
+向是否是 `exits` 映射里的一个 key（`undefinedp(exit[arg])` 直接
+`return 0`），所以 `"south"`/`"up"` 这两条分支从来没有被真正执行
+过——玩家打 `south`/`up` 得到的是"什么? south? 请用 help cmds 查询
+指令。"，和真正不存在的指令一模一样。已在 `open/death/start.lpc`
+里把这两行注释还原（详见 AGENTS.md §7.101，新增条目）。已在
+`kxkj` 上核对同一档案，确认逐字节相同、同样命中此 bug、本次未修
+（留给下次触碰 `kxkj` 时同步）。
+
+现场验证（修复前 → 修复后对照）：
+1. 修复前：`阴曹入口` 处 `look` 只列出 `north` 一个出口；打
+   `south`/`up`/`stand` 全部得到"什么? xxx? 请用 help cmds 查询
+   指令。"。沿仅有的 `north` 出口一路走到底（`bridge1→bridge2→
+   bridge3→鬼门关→酆都城门→鬼门大道`），发现这整条支线本身也是
+   未完成内容：`open/death/road3.lpc` 的房间描述原文是"路的尽头
+   ..... 还没想到 ...."（原作者自己留下的占位文字），且
+   `open/death/gate.lpc` 一旦向北经过就永久拒绝向南返回（"进了鬼
+   门关就别想回去了！"）——这条支线一旦被误闯，除了管理员
+   `goto`/`transfer` 或 `suicide -n`/`-f`（自毁角色）之外没有任何
+   出路。鉴于这条支线是原作者明显未完成的探索型旁支内容（非死亡
+   恢复的必经之路），本次判定为超出"程序 bug"修复范围的既有设计
+   /未完成内容，只记录不改动。
+2. 用 `update /open/death/start` 热重载后，`look` 显示三个出口
+   `up`、`north`、`south`；连续 `south` 6 次后出现"你真的那么想回
+   家吗？ 好吧！！就如你所愿"门槛消息；`up` 立即触发完整复活：
+   "突然天中降下一团祥光，令人无法用肉眼直视。过了一会儿，祥光散
+   去，一道人影出现，你终于从阴间偷跑回来了。"，落地新手入门房，
+   `score` 确认属性/气血/食物饮水全部正常。重启驱动（完整冷启动而
+   非仅 `update`）后二次复验，行为一致。
+
+**与 §7.68/§7.76 的区别（明确排除，非同一形状）**：本档案确实也有
+经典的 `wgargoyle.lpc`/`bgargoyle.lpc`（白无常/黑无常）
+`present(ob)` 门控 `call_out("death_stage", ...)` 五阶段对话链（位
+于 `鬼门关`/`酆都城门`），且 `wgargoyle.lpc` 的 `init()` 正确地对
+`wizardp(previous_object())` 做了排除（管理员角色路过不会触发这条
+链，符合本项目已确认的既有惯例，未见异常）。但本条修复的根因与这
+条对话链完全无关——是 `阴曹入口`（死亡后第一站）的移动指令被共用
+派工器在方向未列入 `exits` 前直接拒绝，`valid_leave()` 根本没有机
+会执行，不是 `present()` 检查落空或链条被中断。
+
+### 已知 bug 类别逐项核对（除上述新发现外）
+
+- **§7.86（留言板 `post` 崩溃）**：不适用，本档案在更早的 WASM 阶
+  段已扫描修复过全部 14 处（见上一节）。本次现场复测 `post test
+  post`（中央驿站"酸甜苦辣留言版"），`.` 结束后"留言完毕。"，
+  `look board` 能看到新留言，无崩溃。
+- **§7.11（`log_file()`/`write_file()` 缺 `assure_file()`）**：未观
+  察到；死亡记录 `open/death/death_record`、`data/board/` 等写入路
+  径均正常落盘，无 "No such file or directory" 类报错。
+- **§7.5（自定义 securd/securityd ACL 拒绝编译期探测）**：不适
+  用——`securityd.lpc` 与 `kxkj` 逐字节相同，那边已确认无此问题，
+  本档案全程游玩（含死亡/复活/贴板）也未见任何 ACL 拒绝痕迹。
+- **§7.73（NPC `create()` 里无防御的 `carry_object()->wear()` 链）**：
+  未触发；新手房 `quest_girl.lpc`、雪村区多个 NPC 正常加载，无因
+  装备链失败而中断房间 `create()` 的现象。
+- **§7.98（daemon `create()` 忘记 `seteuid()`）**：未观察到；boot
+  日志除既有的编译期警告外无 `explode()`/`sscanf()` 崩溃形状。
+- **§7.34（printf 调试信息泄漏）**：未发现残留 `printf("%O...` 或
+  裸 `tell_object` 调试断点。
+- **§8.13（wizlist 二次登录死锁）**：不适用——本档案权限存于
+  `adm/etc/wizlist` 纯文本，不是需要单独 WIZ 密码二次验证的机制；
+  多次重连、`(manager)` 显示均正常。
+- **§8.14（IP 封禁误用反解主机名）**：`goto`/`transfer` 等管理员
+  路径正常，未见连线即被拒的现象；本轮均用 `127.0.0.1` 连线，未见
+  反解相关报错。
+- **§8.15（大小写不匹配档名运行期崩溃）**：全程游玩未触发；
+  本档案是本 session 已知会命中 §8.15 一类模式的 ES2 家族之一，但
+  本次实际路线（新手房→中央驿站→雪村→死亡区）未踩中任何一处。
+- **§7.90（评估成本上限过低）**：`config.fluffos` 沿用家族常见默
+  认值 `700000`（`kxkj` 自己是 `1500000`），本次游玩全程（含移动、
+  战斗、复活）未观察到任何 eval-cost abort 或"bug found, report
+  it"提示；暂不判定为需要调高，留待后续更大范围游玩时复查。
+
+### 额外顺手修复：master.lpc 把编译警告当错误广播给玩家（对齐 `kxkj` 已有修法）
+
+`kxkj`（同代码血统）的 `master.lpc` 早前已经把 `log_error()` 里的
+`efun::write("编译时段错误：" + message)` 改成只在 `message` 不含
+`"warning:"` 时才广播；`kxkjii2` 这份存档没有这个过滤，导致注册/
+装备/进房间等任何触发懒编译的操作都会把内部档名、行号、"Unused
+local variable"级别的无害警告原样刷给正在连线的普通玩家。已在
+`kxkjii2` 自己的 `master.lpc` 里补上同样的过滤（保留写日志，只是不
+再广播警告级别的消息）。现场验证：重启驱动后重新注册一次
+`fluffos`，整个注册流程不再出现任何"编译时段错误："前缀的警告刷
+屏，功能行为不变（真正的编译错误仍会照常广播，未测试到真错误场
+景，逻辑与 `kxkj` 完全对齐）。
+
+### 测试覆盖小结
+
+注册（含账号丢失重建、密码变更核实）→ `look`/`score` → `enter` 正
+式进世界 → 移动（新手房→狂想空间入口处→中央驿站→雪村黄土小径，管
+理员 `goto` 快速定位）→ 留言板 `post`/`look board` → 战斗
+（`fight dog`，真实杀伤分支）→ 完整死亡 → 复活出口 bug 定位与修复
+→ 修复后完整复活链路复验（含冷启动后二次复验）→ 清理测试残留
+（`death_record` 测试行、`data/board/start_b.o` 测试留言、
+`data/clan.o` 的例行序列化 mtime 变动均已用 `git checkout` 还原，
+不纳入本次提交）→ 正常 telnet 断线以确保账号存档落盘。
+
+## §7.100 跨库扫描修复（`ROOM` 基类同款 `replace_program()` 致命形状）
+
+- 同款 `inherit ROOM; ... replace_program(ROOM);` 冗余自替换（AGENTS.md
+  §7.100）：与姊妹库 `kxkj` 完全同构，`work/` 下 1,310 处存活匹配，全部
+  标准独立行形式，脚本一次性删除，无不规则残留。房间生成工具
+  `obj/roommaker.lpc` 与 `kxkj` 字节相同，模板本身未把冗余调用写进生成
+  结果，不受影响。`data/` 下额外核查过，无命中。验证：真实 debug 驱动
+  干净编译启动、端口正常监听，`debug.log` 无新增 "cannot replace"/错误
+  行。
+
+### ```§7.112``` residual-gap closure (2026-08-20)
+
+Corpus re-scan (`grep -rl 'call_out("death_stage"' ... | filter for missing guard`) found unguarded `init()`-scheduled `death_stage()` call_out chain(s) in `open/death/npc/bgargoyle.lpc`, `open/death/npc/wgargoyle.lpc` that the original two-wave sweep (see AGENTS.md §7.112) missed -- same reconnect-triggered duplicate-chain bug, different filename/lineage. Added the standard `query_temp("death_stage_active")`/`set_temp`/`delete_temp` re-entry guard, adapted per file's own exit points. Compile-verified via `lpcc --batch`.
+
+## §7.30 uninitialized-mapping accessor sweep (2026-08-20)
+
+Corpus-wide mechanical sweep of the `feature/skill.lpc` shared-lineage
+bug (confirmed independently on `xiakexing2017`/`jqxz2015`/`haiyang2`
+via round-four testing): 3 accessor(s) in this file returned a raw
+never-initialized `mapping` instance variable (defaults to `int 0`,
+not `([])`, until first assigned), crashing any unguarded
+`keys()`/`sizeof()`/indexing caller for a fresh/untrained character.
+Fixed at the accessor level (`mapp(x) ? x : ([])`) per the documented
+remedy. Verified via `lpcc --batch` static compile check only (not a
+live boot) as part of a large mechanical sweep; not individually
+functionally re-tested live on this lib.
+
+## Ported §10.7 go.lpc/clan fixes from sibling kxkj (2026-08-21)
+
+`cmds/std/go.lpc`, `cmds/adm/update_dir.lpc`, `cmds/imm/{ls,lstree}.lpc`,
+`cmds/clan/c_create.lpc`, and `adm/daemons/cland.lpc` all confirmed
+byte-identical (md5sum) to `kxkj`'s pre-fix copies. `kxkj`'s round-four
+§10.7 deep test found 4 real bugs:
+
+1. `go.lpc`'s `.lpc`-suffix check sliced only the last 2 characters
+   against the 4-character literal `".lpc"`, so it never matched and
+   always appended `.lpc` -- including to paths that already had it.
+   Since the exits mapping is held by reference, this permanently and
+   cumulatively corrupted any room's exit whose destination lacked a
+   literal `.lpc` suffix in source, breaking that exit for every player
+   after the first use until reboot -- a severe navigation-corrupting
+   bug. Same copy/paste bug in `update_dir.lpc` (made that admin
+   recompile tool a total no-op) and cosmetically in `ls.lpc`/`lstree.lpc`
+   (wrong file-type coloring).
+2. `c_create.lpc` called `CLANV_D->create_clanv()`, which doesn't exist
+   on the live daemon -- the silent undefined-function no-op meant a
+   clan founder's own `clan/name` property was never set.
+3. `cland.lpc`'s `clan_query()` lacked the `undefinedp()` guard its
+   sibling `clan_set()` has, crashing `c_list` with "Value being
+   indexed is zero" under a specific directory/data-entry mismatch.
+
+Ported all fixes directly from `kxkj`'s fixed files rather than
+re-deriving them. Compile-verified via `lpcc --batch` (not
+independently live-boot-tested on this lib -- the fixes were already
+proven live on `kxkj`).
+
+## §10.7 shop purchase + sect apprenticeship (2026-08-24) -- both clean, no bugs found
+
+Two gaps flagged as never tested in this lib's history: `buy` at a
+`SHOP`-type store, and `apprentice` (拜师) at an NPC sect master.
+Live-boot tested with the (manager) `fluffos` account (real telnet
+disconnect afterward, save residue reverted via `git checkout` --
+this run only touched money/family/inventory scratch state, no
+persistent account change was intended).
+
+**Shop purchase (`/open/center/room/store.lpc`, 中央驿站商店)**: this
+lib's only `SHOP`-type stock (`std/room/shop.lpc`) starts genuinely
+empty (`sells = ([])`) -- there's no seeded starting inventory
+anywhere in the two `SHOP`-inheriting rooms found (`store.lpc`,
+`open/magic-manor/town/town20.lpc`); stock is populated entirely by
+players `sell`-ing items to the shop first, which the shop then
+resells. This is a real design (matches `do_list`'s own "在这你可以
+买到" empty-until-stocked framing), not a bug. Tested the full cycle
+with a cloned `/open/main/obj/sword.lpc` (base `value` 400): `sell
+sword` -> correctly priced at trade-skill-adjusted `(int)(400/400*
+(300+trade_lv))` = 301 (三银一文钱), item appears in `list` priced at
+face value 400 (四两银子) as expected. `buy sword` first correctly
+failed ("你身上没有足够的钱币买东西") when the player's cash (301)
+was less than the buy-side price `v/100*(230-trade_lv)` = 916;
+after topping up with a cloned gold coin (10301 total), `buy sword`
+succeeded, charged exactly 916 (九银十六文钱), left correct change
+(9385 = 九十三两银子 + 八十五文钱), moved the sword into inventory,
+and removed the now-fully-bought-out entry from `list`/`sells`. All
+change/inventory math checked out exactly; no crash, no double-spend,
+no stock-count mismatch.
+
+**Sect apprenticeship (`apprentice` / `cmds/std/apprentice.lpc` +
+`feature/apprentice.lpc`)**: checked this lib's `apprentice.lpc`
+against the AGENTS.md §7.117 "did you betray your old sect" pattern
+(unguarded `family_name` string comparison rejecting first-time
+applicants with no family yet) before testing live -- this file does
+**not** have that shape. Its only prior-membership check is `if
+(me->query("family")) { ... "决定背叛师门" ... }` (a plain existence
+check, correctly falsy for a fresh character with no `family` set
+yet), so it was never a §7.117 candidate and needed no fix. Live
+test: joined the `fighter` class (`join`, near
+`open/snow/npc/master_liu.lpc`/雪苍派 in 雪苍紫云宝殿,
+`/open/snow/room/room2`), then `apprentice master liu` -> NPC's
+`attempt_apprentice()` checked class match (`fighter`) and `str >=
+20` (both satisfied by a fresh character's defaults), immediately
+`recruit`-ed the player with no rejection or betrayal-check false
+positive. `score` afterward correctly showed `雪苍派第五代弟子`
+(5th-generation disciple) and `师父： 刘全书` (master: Liu Quanshu) --
+family/title assignment and generation-number formatting all correct.
+
+No programming bugs found in either area; both are clean. ~90 tool
+calls for this session (boot, both playthroughs, code review, cleanup).
+
+## AGENTS.md §7.19 sweep (2026-09-01): `enable_player()` reentrancy from `init()`
+
+Same corpus-wide bug class as `mhxy`/`wuhanzhan` (AGENTS.md §7.19), and
+byte-near-identical to the sibling fix on `kxkj`: this lib's
+`feature/command.lpc` `enable_player()` wrapper (around the raw
+`enable_commands()` efun) is reachable from an NPC's `init()` via a
+redundant `create()`-then-`init()`-calls-`setup()`/`reset_me()` chain --
+confirmed via a body-aware static scan of every `init()` in this lib: 6
+NPC files call `setup()`/`reset_me()` from `init()` (e.g.
+`d/snow/npc/waiter.lpc` and the `open/gblade/npc/pker*.lpc` family),
+after `create()` already made the object `living()`. Calling
+`enable_commands()` a second time on an already-`living()` object makes
+the driver re-invoke that object's own `init()` as a side effect,
+re-entering the same chain while the original call is still on the
+stack -- genuine reentrancy, crashing with "Too deep recursion" (most
+likely on an NPC's first-ever preload/compile).
+
+`feature/damage.lpc`'s `revive()` calls `enable_player()` again while
+the object is still `living()`. This confirms a bare `if
+(living(this_object())) return;` guard would be the WRONG fix -- used
+the same true reentrancy-flag fix as `mhxy` instead: a `nosave private
+int in_enable_player_now;` set for the duration of the wrapper's body,
+guarding only genuine same-call-stack reentrancy while leaving the
+legitimate revive re-enable unaffected. `enable_player()` had a
+pre-existing early return, `if (!this_object()) return;`, right at the
+top -- added `in_enable_player_now = 0;` before that return too
+(rewritten as a 2-line block) alongside the fall-through exit at the
+end. Verified via a single-file `lpcc --batch` compile check (PASS) --
+not individually live-boot-tested.
+
+## 深度功能测试（§10.7，2026-10-04）— negative range ends
+
+`scripts/lpc_fix_negative_ranges.py`: 21 line(s) in 10 file(s) count a range from the end with `<` (`x[a..-1]` -> `x[a..<1]`, `x[-2..]` -> `x[<2..]`; KB 06 §7.209). In this driver a negative constant end gave `""` / `({ })` and a negative start the whole value, so each of these returned the wrong slice; the compile warning `A negative constant as the second element of arr[x..y]` is gone from the files that compile. Range lvalues (`s[0..-1] = text`, the prepend idiom) are left alone. A paired compile of the changed files at HEAD and in the working tree showed no new error.
+
+## 深度功能测试（§10.7，2026-10-04）— `<../x.h>` includes resolve: 32 more files load
+
+35 files (the `open/start/` areas and the like) include a header named relative to themselves in angle brackets
+(`#include <../start.h>`). The driver refuses `..` in a `<...>` name, so they died with `Cannot #include`. The master's
+`include_file()` already turned an absolute `<...>` name into a quoted-style one; it now does the same for a name that starts
+`../` (`"./" + path`; KB 04 §6.1). `lpcc --batch` loads 33 of the 36 files that carry such an include (HEAD: 1); the 3 that
+still fail are `open/start/room/bad{2,3,4}.lpc`, whose `../badman.h` is not in the archive. The newly loading files carry
+warnings of the classes the rest of the lib has (stray Big5 backslashes, unused locals, `greeting()` return types): the lib's
+warnings pass has not been done.
+
+## 深度功能测试（§10.7，2026-10-04）— stray backslash before a closing quote
+
+A Big5 character whose second byte is 0x5C was written with one extra backslash after it (the old driver read `5C 5C` as one backslash and so completed the character) and the UTF-8 conversion kept it (KB 03 §4.4). Before a closing quote it escapes the quote, the string runs into the next line and the file does not compile. `scripts/lpc_fix_big5_quote_backslash.py` deletes it when the character before it encodes to cp950 with 0x5C as second byte and the quote ends an expression. Here: `open/scholar/room/newplan/npc/guard8.lpc` and `data/autoload/scholar/secret_book.lpc`, the same two files as in `kxkj`.
+
+## 深度功能测试（§10.7，2026-10-05）— here-document terminators
+
+`scripts/lpc_fix_heredoc_terminator.py --all --apply`: 5 here-document block(s) repaired (3 with the terminator glued to the last text line, 2 with it indented), so `End of file in text block` no longer hides the room or object behind them: `open/capital/wind-rain.org/obj/bird-blade.lpc`, `open/capital/obj/bird-blade.lpc`, `open/capital/room/king/kr4-5.lpc`, `open/prayer/room/westarea/t.lpc`, `open/prayer/room/uhen/16.lpc`. The terminator must start its line (the lexer's own test, KB 04 §6.10); a glued one lost its newline in the GBK -> UTF-8 conversion together with a half character, which stays out.
+
+## 深度功能测试（§10.7，2026-10-04）— paths named in another case
+
+The archive comes from a case-insensitive host: files are stored as `BAGUA0.lpc`, `longjing.C`, `d/SHAOLIN/`, the code names them in lower
+case (`__DIR__ "bagua0"`, `"tea/longjing"`, `"/d/shaolin/..."`), so the rooms, NPCs and items behind them could not be loaded (a `.C` file is
+not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply kxkjii2`: 14 file(s) renamed to lower case (`.C` -> `.lpc`,
+`.H` -> `.h`) and 26 path reference(s) in 22 file(s) rewritten to the new spelling; 0 skipped, 0 ambiguous. Load check of the 60 objects that were renamed, edited or name a renamed path (HEAD against the working tree, an object is the same under any spelling of its path): 46 PASS -> 60 PASS, 0 that loaded before fail now, 14 more load.
+
+14 files moved (13 `.lpc`, 1 `.C`); mostly under `open/main/room` (13), `open/killer/home` (1). A rescan with `scripts/lpc_warnings.py kxkjii2` is still due: the renamed files are compiled for the first time.
+
+## 深度功能测试（§10.7，2026-10-05）— room base survives a raising NPC
+
+`scripts/lpc_resilient_room.py --apply`: `make_inventory()` of `std/room.lpc` loads each inventory object as `if (catch(ob = new(file)) || !objectp(ob)) return 0;`. `new()` of a file that is not there returns 0 (the room just lacks that NPC), but `new()` of a file whose `create()` raises (a skill file for `set_skill()` this archive never had, a `carry_object()` item that is not there, a header that never shipped) raised inside the room and the room did not load at all. The wrong-case renames of this lib (the section above) make the NPCs behind them reachable for the first time, so a room that holds one with such a content gap would have gone from "NPC missing" to "room missing"; now it loads without that NPC, as it did before. The room base compiles and loads with the change (HEAD against the working tree). KB 03 §4.5.
+
+## 深度功能测试（§10.7，2026-10-05）— tail() simul_efun
+
+`scripts/lpc_add_tail.py --apply`: `cmds/apr/tail.lpc` calls `tail(file)`, an efun of the MudOS this archive ran on that FluffOS does not have (`Undefined function tail`: the command did not compile). `adm/simul_efun/file.lpc` now defines `void tail(string file)`: the last 10 lines of the file, written to the player. Load check (HEAD against the working tree): 1 of the 1 tail command file(s) failed to load at HEAD, all load now, and the simul_efun file loads. KB 04 §6.2.
+
+## 深度功能测试（§10.7，2026-10-07）— 兵器的 `actions` 函数指针
+
+`set("actions", (: WEAPON_D, "query_action" :));`：旧 MudOS 把 `(: 字符串, "函数" :)` 当作 call_other 函数指针，本驱动把它当作表达式函数指针，求值只得到字符串 `"query_action"`。没有对应兵器技能时 `feature/attack.lpc` 直接用兵器的 `actions`，`COMBAT_D` 拿到的不是 mapping，`reset_action()` 后仍不是，记一条 bad action 就不出招——拿着这些兵器打不出攻击。改成别的兵器早已用的 `(: call_other, WEAPON_D, "query_action" :)`（KB 04 §6.10）：`std/weapon/throwing.lpc`、`std/weapon/stick.lpc`、`std/weapon/whip.lpc`、`std/weapon/sword.lpc`、`std/weapon/lance.lpc`、`std/weapon/arrow.lpc`、等共 13 个。改动的文件在 HEAD 与工作树分别加载（新进程），无回退。
+
+## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
+
+先用 `scripts/lpc_twin_port.py adopt kxkj kxkjii2` 把 kxkj 警告整理提交（13b6c22f0aa）里的改动搬到 1737 个修改前与它一致的文件（逐文件核对非 ASCII 文字：除 kxkj 自己删掉的以外没有丢失或改动），其中包括四把兵器的 `(: __FILE__, "query_action" :)` -> `(: call_other, __FILE__, "query_action" :)`（原写法在本驱动是表达式函数指针，拿着这些兵器不出招，KB 04 §6.10）。剩下的再跑 `scripts/lpc_warnings.py kxkjii2 --fix`，共改动 1741 个 `.lpc` 和若干 `.h`。
+手工：`adm/daemons/logind.lpc` `get_id()` 只在 `#ifdef MAX_USERS` 分支用的局部变量，声明挪进同样的条件里；`obj/mailbox.lpc` 群发信件 `send` 时 `mail["to", groups[i]];` 什么也没做（LDMud 的多值 mapping 写法），信件没有收信人字段；改成 `mail["to"] = groups[i];`（kxkj、kxkj1 同改）。
+HEAD 与工作树分别加载（新进程）：1653 -> 1653 通过，无回退。
+
+启动时警告 91 -> 0；新进程登录正常。
+
+## 深度功能测试（§10.7，2026-10-08）— `.lpc` 后缀的定宽切片
+
+`.c` 改名 `.lpc` 时只改了字符串没改切片宽度：`f[<2..] == ".lpc"` 拿两个字符比四个字符，永远不成立（`!=` 永远成立），按后缀筛文件、去后缀的代码因此从不运行或截成 `x.l`（KB 06 §7.238）。`scripts/lpc_lpc_suffix_slice.py --apply` 改了 1 处比较、0 处去后缀（如 `adm/daemons/network/httpd.lpc`）；改动的文件 HEAD 与工作树分别加载（新进程），无回退。
+
+- 2026-10-10：编译警告第二轮（按驱动报告逐条修）：按位 & 改逻辑运算 0 处，返回类型/原型 5 处，NPC+F_UNIQUE 的 init() 0 个，带初始化的未用局部变量 4 个，只在 #if 分支用的声明移进分支 0 个文件；改动 8 个文件，HEAD 与工作树各载入一次无回退（8 objects; HEAD PASS 7, tree PASS 7; regress 0; newly loading 0），这些文件的警告 9 -> 0。
+
+## 深度功能测试（§10.7，2026-10-11）：“无副作用表达式”警告复查（批 4）
+
+- `daemon/class/officer/cmds/powerup.lpc`：`count + count / 2;` 结果被丢弃，官职战力少算三分之一；改为 `count += count / 2;`。
+- `open/scholar/npc/fall.lpc` `in_combat()`：十行 `(: perform_action, "…" :);` 只造函数指针不调用；作者意图（逐个出招）无法确定，改成注释保留原列表，行为不变。
+- `open/scholar/room/newplan/npc/guard4.lpc`：`(: perform_action, "universe.tengin" :),` 同上改为注释，`delete_busy()` 照旧执行。
+- 改动的对象 HEAD 与工作区都能载入，无回退。
+
+## 深度功能测试（§10.7，2026-10-12）：编译警告收尾
+
+可编译文件中的编译警告 62 → 0，不加 pragma。本库与 kxkj 同一份代码：用 `lpc_twin_port.py` 把 kxkj 同日的修正整体搬过来（57 个文件逐 token 相同，`open/start/npc/b_guard.lpc` 因 `#include` 写法不同手改），再跑一轮 `toolkit_fix.sh` 确认没有本库独有的警告。
+
+**发现的真 bug（同 kxkj）：**
+- 7 个首领战斗喊话的 `(: "cmd god_kee" :)` 只是返回字符串，从不施展；改为 `(: command, "cmd god_kee" :)`。
+- `d/snow/npc/keeper.lpc`、`waiter.lpc`、`open/capital/npcbak/solder_officer.lpc` 在已含 NPC 的 `F_VENDOR` 前面又 `inherit NPC;`，`nomask` 重定义，从来载不进来；删去叶子那行后载入。
+- `(: "random_move" :)` 的 NPC 从不走动，改为真指针；`open/poison/npc/bigsnake.lpc`、`snakeking.lpc` 的 `special_att()` 修好后才接上（原来把敌人数组传给 `tell_room()`）。
+
+**其余（同 kxkj）：** `ITEM` + `F_LIQUID` 容器写出 `liquid::long(raw)`；与 `feature/damage.lpc` 全局 `i`/`ghost` 同名的叶子变量改名（`ncount`、`self_ob`），`g1.lpc` 的 `leader` 改名 `helper`；`gwhip` 的 `skill_improved`、`b_guard` 的 `greeting` 签名；港口房间与 `make_room` 的原型；冗余继承。
+
+改动的 58 个对象 HEAD 与工作树各载入一次：HEAD PASS 54，tree PASS 57，regress 0，新载入 3（上面 3 个 NPC）；`open/gblade/npc/wen-fun` 两边都因装备不存在的刀在 `create()` 失败。`lpc_audit_removed_locals.py` 0 处待看。
+
+- 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。47 个文件 98 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/daemon/skill/shasword.lpc`（`me_lv *=`）、`/open/beggar/skill/shasword.lpc`（`me_lv *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+- 2026-10-14：21 个存档文件（留言板 16 个、其他 5 个；`data/board back/acelan_b.o`, `data/board back/adam_b.o`, `data/board back/cccc_b1.o` …）还是原档案的 GBK 编码，没有转成 UTF-8，`restore_object()` 报 `Invalid utf8 string` 后对象以空数据启动（表情守护进程没有表情、留言板没有帖子、玩家无法载入）。`scripts/lpc_save_encoding.py` 逐个按 GB18030 解码，结果按存档格式解析通过才写回（KB 03 §4）。
 
 - 2026-10-14：72 个文件因 `Illegal to inherit after defining global variables` 整份不编译：FluffOS 要求所有 `inherit` 写在第一个全局变量之前，MudOS 不管。`scripts/lpc_fix_inherit_order.py` 把写在 `inherit` 之前的全局变量（以及声明全局变量的头文件的 `#include`）挪到最后一个 `inherit` 之后（KB 04 §6.3）。随后 toolkit_fix.sh 一轮清掉新编译文件露出的警告（nosave 函数 0、空 return 0、未用局部变量 8）。新进程比对 HEAD 与工作树：74 个对象，新增载入 72，回退 0。

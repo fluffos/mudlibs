@@ -1288,3 +1288,5 @@ The 53 files are 52 `.C` -> `.lpc` (the tea items of `d/city/npc/tea`, the Lingj
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。101 个文件 162 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/d/gumu/skill/yunu-xinjing/xiuxi2.lpc`（`xj_gain *=`）、`/d/gumu/skill/yunu-xinjing/xiuxi2.lpc`（`xj_gain *=`）、`/kungfu/skill/yunu-xinjing/xiuxi2.lpc`（`xj_gain *=`）、`/kungfu/skill/yunu-xinjing/xiuxi2.lpc`（`xj_gain *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
 - 2026-10-14（同一次重扫，手工部分）：`d/forest/sifang/sifang.h`（四方练功房）里打坐的内力加成 `extra = 1.5` 声明成 `int`，被截成 1，加成从未生效；现改为 `float extra`，`neili_gain = to_int(neili_gain*extra)`。**玩家可见**：在这些房间打坐按原设计得 1.5 倍内力。`clone/obj/genmap.lpc` 在函数里包含 `harbor.h` 只用港口表，先 `#define HARBOR_NO_WILD`，不再声明用不到的 `wildharbors`（头文件本来就有这个开关）。改动的 107 个对象载入无回退。
+
+- 2026-10-14：1 个文件因 `Type of returned value doesn't match function return type ( int vs void )` 整份不编译：声明为 `void`（或没写类型）的函数却返回值，旧驱动照样把值交给调用者。调用者要用返回值的（add_action 处理函数、命令、辅助函数）改为它实际返回的类型：`check_exp()`。新进程比对 HEAD 与工作树：1 个对象，新增载入 0，回退 0（`scripts/lpc_fix_void_return.py`，KB 04 §6.3）。

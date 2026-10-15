@@ -212,3 +212,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply d
 - 2026-10-12：`d/jjf/npc/xiaomotou1.lpc` 拜师广播的字符串里直接换行（LPC 字符串不能跨行，6986ce28cd8 删了外层函数头后仍编不过），改成 `\n\n`，输出不变；现在能载入（zitengzhan 同修）。
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。8 个文件 18 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+
+- 2026-10-14：擂台 `d/leitai/leitai.lpc` 整份不编译：`fullup()` 缺了收尾的 `}`，后面那份重复的 `do_quit()` 被读成 `fullup()` 里的局部声明。补上 `}`，删去那份从未生效的重复 `do_quit()`（前面那份照旧是 add_action 的目标）。现在载入。

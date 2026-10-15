@@ -873,3 +873,5 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply k
 改动的 92 个文件与继承 `F_LIQUID`、include 改动头文件的对象共 97 个，HEAD 与工作树各载入一次：HEAD PASS 84，tree PASS 92，regress 0，新载入 8（上面的 8 个 NPC）；5 个 FAIL 两边相同（`u/d/dark/glass`、两份 `kawali`、`u/f/fund/test_man`、`u/o/onion/npc/noname`，本身有编译错误）。`lpc_audit_removed_locals.py` 0 处待看。
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。46 个文件 103 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/adm/daemons/combatd.lpc`（`damage *=`）、`/u/b/borstquc/combatd.lpc`（`damage *=`）、`/u/k/konn/work/combatd.lpc`（`damage *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+
+- 2026-10-14：1 个文件因 `Type of returned value doesn't match function return type ( int vs void )` 整份不编译：声明为 `void`（或没写类型）的函数却返回值，旧驱动照样把值交给调用者。调用者要用返回值的（add_action 处理函数、命令、辅助函数）改为它实际返回的类型：`attempt_apprentice()`。新进程比对 HEAD 与工作树：1 个对象，新增载入 0，回退 0（`scripts/lpc_fix_void_return.py`，KB 04 §6.3）。

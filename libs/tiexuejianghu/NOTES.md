@@ -1040,3 +1040,5 @@ No code change. 拜师 not re-done.
   - 为了让这两个值进来以后结果仍是整数：`query_skill()` 的 `point` 声明为 `float`，乘积用 `to_int()`；`fenpei` 的 `hard` 为 `float`，`all = to_int(...)`。否则 `query_skill()` 会在运行时返回浮点，`fenpei` 会显示带六位小数的点数。
   - **玩家可见**：有效等级和学习门槛按原设计的系数计算。
   - 改动的 76 个对象 HEAD 与工作树各载入一次，无回退。
+
+- 2026-10-14：4 个文件因 `Type of returned value doesn't match function return type ( int vs void )` 整份不编译：声明为 `void`（或没写类型）的函数却返回值，旧驱动照样把值交给调用者。调用者要用返回值的（add_action 处理函数、命令、辅助函数）改为它实际返回的类型：`player_win()`。新进程比对 HEAD 与工作树：4 个对象，新增载入 4，回退 0（`scripts/lpc_fix_void_return.py`，KB 04 §6.3）。

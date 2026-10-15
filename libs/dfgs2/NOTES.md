@@ -1164,3 +1164,5 @@ A Big5 character whose second byte is 0x5C was written with one extra backslash 
 - `d/snow/npc/teacher.lpc` 空的 `int accept_kill()` 改 `void`，与 `F_VILLAGER` 的一致；`kill` 命令读到的返回值本来就是 0，行为不变。
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。1 个文件 1 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+
+- 2026-10-14：2 个文件因 `Type of returned value doesn't match function return type ( int vs void )` 整份不编译：声明为 `void`（或没写类型）的函数却返回值，旧驱动照样把值交给调用者。调用者要用返回值的（add_action 处理函数、命令、辅助函数）改为它实际返回的类型：`main()`、`notify_stat()`。新进程比对 HEAD 与工作树：2 个对象，新增载入 2，回退 0（`scripts/lpc_fix_void_return.py`，KB 04 §6.3）。
