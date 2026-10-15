@@ -6,6 +6,14 @@ detection.
 
 ### 6.1 `#include` resolution
 
+- **Colour macros with no `#include <ansi.h>`** (`set_name(HIW "冰魄银针" NOR, …)`):
+  the first error is `syntax error, unexpected L_STRING`, or `Undefined
+  variable 'NOR'`. The file came from a lib whose global include pulled in
+  `ansi.h`; this lib's does not. Add `#include <ansi.h>` at the top.
+  2026-10-14: 79 files in fqyy2 and 196 in 57 other libs (found by taking
+  each failing file's first error and requiring a colour macro in code, not
+  in a string: shadowgate's `%^RED%^` is string text).
+
 - **`<local.h>` next to the including file.** Angle brackets search the
   include path only. Implement `master::get_include_path()` so it
   prepends the compiling file's own directory:
@@ -115,8 +123,13 @@ detection.
 ### 6.3 Grammar strictness
 
 - `static` on functions: see §4.3.
-- **A bare `array x;`** declares nothing. Change it to `mixed *` where it
-  surfaces (bulk-fix only when there are hundreds of hits).
+- **A bare `array x;`** declares nothing (`ARRAY_RESERVED_WORD` is off, so
+  `array` is an identifier): the file stops with `Illegal lvalue`, `Illegal
+  LHS` or a syntax error. `scripts/lpc_fix_array_type.py SLUG --apply`
+  rewrites declarations, return types and parameters to `mixed *`, starring
+  every declarator (`array a, b;` → `mixed *a, *b;`, since in MudOS the word
+  belonged to the type). 2026-10-14: 19 libs, about 160 files, mostly the
+  nitan family's daemons and commands.
 - **`TYPE * a, b;`**: the `*` binds only to `a`. Script-fix the narrow
   shape.
 - **`switch` with only `default:`** is a parse error, fatal in

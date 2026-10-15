@@ -218,3 +218,5 @@ HEAD 与工作树分别加载（新进程）：895 -> 895 通过，无回退；�
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。9 个文件 12 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/kungfu/skill/fengyun-shou/foguang.lpc`（`damage *=`）、`/kungfu/skill/taiji-quan/zhenup.lpc`（`damage *=`）、`/u/xtuzi/taiji-quan/zhenup.lpc`（`damage *=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
 - 2026-10-14：同一次重扫的其余 16 条：8 个文件在基类已有的情况下又 `inherit F_CLEAN_UP`，删去；`fang`、`qiuhang1` 的 `unconcious()`（dangpu 与 damage 两份）和 `li.lpc` 的 `clean_up()` 写明胜出者（行为不变）；`STORY_DIR` 宏重定义前加 `#undef`；`huashan-jian.lpc` 多余的 `;`。改动的 22 个对象新进程各载入一次，无回退。
 - 2026-10-14：`feature/alias.lpc` 的指令频率计时 `nosave int last_time` 与平安城神医 `shenyi.lpc` 自己存档的 `last_time` 同名（KB 04：存档的那份不能改名，否则旧 `.o` 里的键对不上），改名基类私有的那份为 `last_cmd_time`。
+
+- 2026-10-14：79 个文件用了颜色宏（`HIW`、`NOR` 等）却没有 `#include <ansi.h>`（本 lib 的 `globals.h` 不带它），首个错误是 `syntax error, unexpected L_STRING`，整份不编译：成都 `d/city3` 的客房、菜谱、`clone/weapon/bb_zhen` 等。每个文件开头补上 `#include <ansi.h>`。新进程比对 HEAD 与工作树：80 个对象，新增载入 69，回退 0（其余缺 `/inherit/item/embed.h` 等内容）。
