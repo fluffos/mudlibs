@@ -7,6 +7,7 @@ protected void get_id(mixed, mixed, mixed);
 protected void confirm_id(mixed, mixed, mixed);
 object make_body(mixed);
 protected void init_new_player(mixed);
+private int loopback_ip(mixed);
 void get_resp(mixed, mixed);
 protected void new_biaoshi(mixed, mixed);
 protected void confirm_biaoshi(mixed, mixed);
@@ -236,14 +237,18 @@ void logon(mixed arg) {
         v15 = sprintf("%d", v4);
         write_file("/adm/daemons/maxonline", v15, 1);
     }
-    if (v6 > 9) {
+    if (v6 > 9 && !loopback_ip(v14)) {
         write("\e[1;33m这个IP上同时正在连线的玩家太多了，请稍候再尝试！！ \n\e[2;37;0m");
         destruct(arg);
         return;
     }
     write("\e[1;33m如果您使用的是\e[1;36m ZMUD客户端 \e[1;33m请由端口 \e[1;37m" + 2003 + "\e" + "[1;33m 或 \e" + "[1;37m" + 8888 + "\e" + "[1;33m 连线进行游戏。\n\e" + "[2;37;0m" + "\e" + "[33m请输入您的英文名字：\e" + "[2;37;0m");
     Rasc = random_all_char();
-    write("\031connect " + Rasc + "\032" + "\n");
+    // the Tomud handshake only means something to the Tomud client (ports 5555/9999); a
+    // plain client would print it after the name prompt
+    if (query_ip_port(arg) == 5555 || query_ip_port(arg) == 9999) {
+        write("\031connect " + Rasc + "\032" + "\n");
+    }
     input_to((: get_version :), arg, v5);
 }
 
@@ -305,7 +310,7 @@ protected void get_id(mixed arg1, mixed arg2, mixed arg3) {
     }
     if (wiz_level(arg1) < 2) {
         if (!"/adm/daemons/band"->is_welcome(arg1)) {
-            if (arg3 > 50) {
+            if (arg3 > 50 && !loopback_ip(query_ip_number(arg2))) {
                 write("\e[1;31m这个IP上来的玩家太多了，不能进入！！ \n\e[2;37;0m");
                 destruct(arg2);
                 return;
@@ -507,7 +512,6 @@ void get_resp(mixed arg1, mixed arg2) {
         return;
     }
     if (arg1[0] == 121 || arg1[0] == 89) {
-        printf("%O\n", arg2);
         arg2->set("name", Rname);
         write("请设定您的密码：");
         input_to("new_password", 1, arg2);
@@ -538,7 +542,6 @@ protected void get_name(mixed arg1, mixed arg2) {
             input_to("get_name", arg2);
             return;
         }
-        printf("%O\n", arg2);
         arg2->set("name", arg1);
         write("请设定您的密码：");
         input_to("new_password", 1, arg2);
@@ -735,7 +738,7 @@ protected void get_gender(mixed arg1, mixed arg2, mixed arg3) {
     }
     log_file("login/newid.log", sprintf("%-12s was created from %-20s (%s)\n", arg3->query("id"), query_ip_number(arg2), ctime(time())));
     "/adm/daemons/channeld"->do_channel(this_object(), "sys", "又有一个新玩家：" + arg3->query("name") + "[" + arg3->query("id") + "]。\e" + "[2;37;0m");
-    init_new_player(arg3);
+    catch(init_new_player(arg3));
     enter_world(arg2, arg3);
     v2 = read_file("/adm/daemons/iduser", 1);
     v1 = atoi(v2);
@@ -1210,7 +1213,7 @@ protected void get_version(mixed arg1, mixed arg2, mixed arg3) {
         }
         if (wiz_level(arg1) < 2) {
             if (!"/adm/daemons/band"->is_welcome(arg1)) {
-                if (arg3 > 50) {
+                if (arg3 > 50 && !loopback_ip(query_ip_number(arg2))) {
                     write("\e[1;31m这个IP上来的玩家太多了，不能进入！！ \n\e[2;37;0m");
                     destruct(arg2);
                     return;
@@ -1370,4 +1373,10 @@ protected void cha_mail(mixed arg1, mixed arg2) {
     }
     write("请您重新创造这个人物。\n");
     confirm_id("y", arg2, 1);
+}
+
+// the web build connects every player from 127.0.0.1 (KB 01 §1.3b); a missing or
+// malformed address is not loopback
+private int loopback_ip(mixed arg) {
+    return stringp(arg) && (arg == "127.0.0.1" || arg == "::1" || strsrch(arg, "127.") == 0);
 }

@@ -18,6 +18,8 @@ OS 是「MudOS v22pre12 For Windows_Mysql_Bin」，LIB 是「夕阳再起 之 [�
   （主要是 `d/automap`），**264 个只有 `.b`**：`d/migong` 109（其中 108 个是 `lev6`、`lev7` 两层迷宫的房间）、
   `u/snow` 70（巫师 snow 的五毒教区域 `wudujiao` 69）、`u/fyue`（华山浴血残阳任务等）25、`d/ghost`（幽灵山庄）16，
   以及一批命令、技能和 `feature/*_old` 备份。
+  其中 `u/snow/wudujiao` 是巫师的工作区，没有接入游戏世界（游戏里的五毒教是 `d/wudujiao`）；幽灵山庄唯一的入口
+  `d/ghost/lroad1` 通往的 `/u/guanwai/citygate` 档案里没有，只能由巫师进入。
 
 驱动的「纯二进制」机制靠主控对象的两个自定义 apply：`valid_os_lib_version()` 和 `valid_c_or_bin_run()`
 （后者对 `/d/automap/`、`/d/party/`、`/data/` 返回 5，允许从 `.c` 运行；其余返回 1）。两者都检查
@@ -89,7 +91,8 @@ call`）读出这个版本有 116 个运算符，比 v22pre11 标准多 3 个：
 
 - 本版自带原文 1,946 个（`decompile/keep-original.lst`）；
 - 033-2 的原文 8,202 个，外加它们 `#include` 的 64 个头文件（`decompile/borrow-033-2.lst`），每个借来的 `.c`
-  第一行注明出处（`decompile/borrow-header.txt`）；
+  第一行注明出处（`decompile/borrow-header.txt`）；本版自带的 `kungfu/skill/duanjia-jianfa` 要用的
+  `include/power_control.h` 档案里也没有，同样取自 033-2（验证时它就是用这个头文件编出和 `.b` 一致的程序）；
 - 反编译 4,247 个（文件开头有一行说明）。局部变量名丢失，用 `v1`、`arg1` 代替。
 
 按这个组成在 v22pre11 编译器里再整体跑一遍：除 `d/automap` 的 1,500 个（比 `.b` 新）外，12,895 个程序里
@@ -99,6 +102,7 @@ call`）读出这个版本有 116 个运算符，比 v22pre11 标准多 3 个：
 
 `rebuild.sh`：反编译时用 `--fluffos --gbk`（`--gbk` 让字符串里 GBK 第二字节是 `0x5c` 的字不被转义，
 否则转成 UTF-8 后会剩一个反斜杠）→ 组装源码树 → `convert_lib.sh` → 把被 §4.3 改坏的 `static/` 路径改回来 →
+`scripts/lpc_drop_replace_program.py` 删掉多余的 `replace_program(X)`（6,228 个文件）→
 打上 `decompile/fluffos-fixes.patch`。`OUT=<目录> REC=<目录> rebuild.sh` 可以建到别处和 `work/` 比较。
 **`work/` 里的任何修改都要同步进 `fluffos-fixes.patch`，否则 `rebuild.sh` 就不能重现这棵树。**
 
@@ -119,3 +123,70 @@ call`）读出这个版本有 116 个运算符，比 v22pre11 标准多 3 个：
 - **（原版的错误）放弃注册会占掉这个帐号**：simul_efun 的 `destruct()` 对 `userp()` 为真的对象都 `save()`，
   登录对象也算，于是在确认英文名之后断线，`data/login/x/<id>.o` 只存了 id 没有密码，这个 id 以后永远要求
   输入一个不存在的密码。033-2 的作者后来改成只存玩家身体；这里只跳过没有密码的登录对象。
+
+## 移植 033-2 的修正（2026-10-15）
+
+033-2 上线以后陆续修过的错误，本版文件里也有的都搬了过来：
+
+- 借来的 8,202 个文件就是 033-2 修正之前的原文。`lpc_twin_port.py adopt longyunmeng longyunmeng_binary --pre dbc39b6384f`
+  （KB 08 §10.13）把 033-2 此后的修正按 token 拼接进来：3,718 个文件，其中 2,868 个只是删掉多余的
+  `replace_program(ROOM)`。拼接时一处被删掉的空 `if` 把里面两行注释也带走了（`adm/daemons/story/new7.lpc`），已补回。
+- 033-2 上线当天的修正在 `dbc39b6384f` 里面，不会被上面带过来，单独比对：借来的文件只有 8 个和 033-2 当时的
+  版本不同。搬过来的是 `d/gumu/npc/force.h`（`__FILE__` 在头文件里是头文件自己的名字，`valid_learn()` 的「先散掉别的内功」
+  检查把玉女心经自己也算成别的内功：学过一级以后就再也学不上去）和两个 `bowl`（`set_name()` 的第二个参数要数组）；本版自带的
+  `kungfu/skill/force.h` 同样修正。另外三个是 033-2 被 `static`→`nosave` 改坏的日志路径，本版没有这个问题。
+- 反编译出来的核心文件变量名是 `v1`、`arg1`，token 对不上，对照 033-2 的改动逐条手工移植：
+  - 主控对象的 `valid_read()`/`valid_write()`：驱动编译新对象时把主控对象自己当作 user 传进来，直接放行；
+  - `logind`：注册对话里两处 `printf("%O\n", ob)` 调试输出删掉；`init_new_player()` 包上 `catch`（KB 06 §7.109）；
+    同一 IP 连线数的两道限制和 `band` 的封禁检查对 127.0.0.1 放行（网页版的玩家都从这个地址来，KB 01 §1.3b）；
+  - `clone/user/user` 的 `reconnect()` 先 `enable_commands()`（§7.108）；`feature/command` 的 `enable_player()`
+    防重入（KB 05 §7.19）；`feature/skill` 的四个 `query_*()` 在映射没有初始化时返回空映射（§7.30）；
+    `feature/name` 的 `short()` 在 id 不是字符串时不出错；
+  - `inherit/room/room`：`make_inventory()` 用 `catch` 包住 `clone_object()`，`reset()` 拿到 0 就跳过（KB 05 §7.25）；
+  - `d/death/npc/bgargoyle`、`wgargoyle`：重新连线会再跑一次 `init()`，`death_stage` 的 call_out 链加上标记，
+    每个鬼魂只有一条（KB 06 §7.112）；
+  - `quest/guojob/guo`：include 进来的 `zzzjob` 和 `teamjob` 都声明了全局变量 `names`，MudOS 里是两个变量，
+    FluffOS 里是同一个，守城任务会抽到 teamjob 的名单；第二个改名 `team_names`（同 033-2 的 `teamjob.lpc`）；
+  - simul_efun 的 `log_file()` 先建目录（KB 05 §7.44），`cat()` 读不到文件时不出错。
+- `replace_program(X)`（X 是本文件继承的对象）由 `rebuild.sh` 的一步统一删掉，6,228 个文件（借来的文件里 033-2
+  也删过的在内），另加两份 `roommaker` 写出的房间模板（KB 06 §7.86、§7.100）。
+- 拼接时有 396 个文件和 033-2 修正前的原文逐字节相同，`adopt` 会整个换成 033-2 现在的版本（连同 033-2 的排版）；
+  这些文件改成只拼接 token 的改动，保留本版档案的排版：其中 355 个 033-2 只改了排版，41 个有实际修正。
+- `lpc_fix_skill_typo.py`：`d/mr/obj/shu1` 的 `douzhuan-xignyi`（KB 06 §7.249）。
+
+## 编译检查和其余修正（2026-10-15）
+
+`scripts/toolkit_fix.sh` 一轮（编译警告的机械修正，再把改过的 7,114 个对象在 HEAD 和工作树各加载一次）：
+未使用的局部变量 12、`varargs` 2、`init()` 的返回类型和 `feature/attack` 不一致 10（`u/snow/wudujiao` 的 NPC）、
+`query_autoload()` 和继承的定义不一致 5、重复继承 `F_CLEAN_UP` 2；加载对比没有一个退步，多加载成功 86 个。
+其后手工修正：
+- 转码丢掉的字符：`d/heimuya/shenggu`、`tang`、`npc/tang` 的 `@LONG` 结束标记粘到了上一行
+  （`lpc_fix_heredoc_terminator.py`）；`kungfu/skill/qingyi-jian` 的「大悲式」和 `kunlun-zhang` 的「天清云淡」
+  两句字符串原文结尾是半个 GBK 字，转码时连同后面的引号一起没了（`.b` 里这两个字符串就是在那半个字之后结束的），
+  补回引号；
+- `inherit/char/npc` 的 NPC 自动出绝招：从 `kungfu/skill/<武功>/` 的目录列表取文件名后切掉两个字符（原来是
+  `.c`/`.b`），本树是 `.lpc`，切出来的 `xxx.l` 不是绝招名，NPC 打斗时从来不出招；改成去掉扩展名。
+  同样的切法在 `adm/daemons/baoshid`（宝石降落时随机挑一个房间物件，`load_object("xxx.l")` 永远失败，
+  每次都「本次宝石发布失败」）、`cmds/bos/tomud`、`cmds/app/update`；`cmds/app/ls3`、`cmds/bos/memup` 的
+  `[<2..] == ".lpc"` 比较（`lpc_lpc_suffix_slice.py`，KB 06 §7.238）；
+- 中文判断（KB 07 §8.1）：`cmds/std/makelian`、`makeexp`、`makefight`（帮会建房）的名字和描述长度按 GBK
+  字节数写的（「一到十个中文字」实际要求 2–20 个字符，描述「三十到一百个中文字」实际要求 60–200 个），减半；
+  逐字检查不再隔一个字查一次，描述里允许中文标点（原来的检查是「双字节字符」）；`cmds/std/auction` 的物品介绍同样处理；
+  不加载的 `adm/simul_efun/chinese`、`message` 也按 033-2 改了；
+- `logind`：Tomud 客户端的握手串 `\031connect ...\032` 只发给 5555/9999 端口，纯文字客户端不再在提示后面看到它；
+- `cmds/bos/socket2`（MudOS 的 `dump_socket_status()`）、`cmds/bos/socket`（MySQL 的 `db_status()`）用
+  `efun_defined()` 判断，驱动没有这个 efun 时只显示一句说明。
+
+`lpc_warnings.py` 全量扫描：14,402 个 `.lpc` 里 14,315 个能加载，**编译警告 0**。编不过的 7 个在原游戏里都没有
+`.b`（从来没有加载过），保留原样：`doc/mudlib/efuns`（efun 名字清单，纯文本）、`doc/mudlib/efuns/shiwu`、
+`kungfu/skill/feiyuexy`（纯二进制机制的标记文件，内容是一个时间戳，主控对象只检查它在不在）、
+`kungfu/skill/hanbing-mianzhang2`、`huang`、`quanzhen-xinfa`、`xixi-unarmed`。
+
+把 14,402 个对象逐个加载（工作树状态，每个驱动进程 700 个）：14,314 个成功，88 个失败，都不是移植造成的：
+上面 7 个编不过的文件；`u/snow`、`u/fyue` 巫师工作区的 38 个（这两个巫师不在 `adm/etc/wizlist` 里，他们的对象
+读不了 `/kungfu/skill/`，`set_skill()` 就报「No such skill」，而且这两块没有接入游戏世界）；用到档案里根本没有的
+技能（`move`、`notracesnow`、`shenzhao-jing`、`kongmingquan`）的 NPC，在 `d/ghost`、`d/quanzhen_old`、
+`d/migong/obj/npc1`、`clone/npc/robber`；在 `create()` 或全局变量初值里用 `this_player()` 的对象（玩家锻造的兵器
+和护甲、宝石戒指、`adai-quanfa` 等六门技能的招式表），由玩家的动作触发时才能加载，批量加载时没有玩家；以及
+网络守护进程和缺数据文件的 `d/miwudao/secret/npc/room`。
+

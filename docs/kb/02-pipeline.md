@@ -267,6 +267,13 @@ v22pre11 build, 14,395 programs, all but one proven
   the parent reverted to the decompiled text until nothing changes. Leave
   the master and simul_efun out of the big run (a later version that does
   not compile stops the boot).
+- **Then port the source edition's fixes.** A borrowed file is the source
+  edition's pre-fix text, so `lpc_twin_port.py classify/adopt SRC DST --pre
+  <SRC's onboarding commit>` carries every later corpus fix over (033-3: 3,718
+  files from 033-2). Decompiled files (`v1`, `arg1`) match neither the token
+  diff nor the name-based fixers (`lpc_fix_perform_weapon.py` looks for
+  `weapon =`): read the source edition's `tokdiff` of its core files (master,
+  logind, user, `feature/*`, room base) and port by hand.
 - **A generated `work/` drifts when a corpus sweep edits it.** wllz3's
   rebuild stopped reproducing its tree after a skill-name sweep
   (046704ce5fe); the sweep's hunks went into `fluffos-fixes.patch`. Check:

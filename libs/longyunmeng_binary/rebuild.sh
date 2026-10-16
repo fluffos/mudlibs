@@ -33,8 +33,10 @@ grep -rlZ 'nosave/' "$OUT" --include='*.lpc' | while IFS= read -r -d '' f; do
   rel="${f#$OUT/}"; src="$REC/${rel%.lpc}.c"
   if [[ -f "$src" ]] && grep -q 'static/' "$src"; then sed -i 's|\([/"]\)nosave/|\1static/|g' "$f"; fi
 done
+# 3. `replace_program(X);` after `inherit X;` (KB 06 §7.86, §7.100)
+python3 "$ROOT/scripts/lpc_drop_replace_program.py" --apply "$OUT" > /dev/null
 mkdir -p "$OUT/log" "$OUT/binaries"
-# 3. hand fixes made after the conversion (NOTES.md lists them)
+# 4. hand fixes and the fixes ported from 033-2 (NOTES.md lists them)
 patch -p1 -d "$OUT" < "$LIB/decompile/fluffos-fixes.patch"
 rm -rf "$TMP"
 echo "rebuilt $OUT"
