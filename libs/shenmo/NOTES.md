@@ -1087,3 +1087,12 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 ## 存档读不出来：转码损坏（2026-10-15，KB 03 §4.4）
 
 `/u/snowtu/data/user/g/guang.oo.o` 在转码时坏了：原档里孤立的 GBK 前导字节被 `iconv -c` 连同后面的引号一起丢掉，`restore_object()` 报 `Illegal mapping format`，读档的对象（玩家、留言板、信件、表情）从空白开始。按 raw/ 原档重新解码（孤立字节丢掉、引号保留），驱动核对全部能读回（`scripts/lpc_save_encoding.py --from-raw`、`scripts/lpc_save_restore_check.py`）。
+
+## 用兵器的绝招空手施展时报错（内联写法）（2026-10-15，KB 06 §7.246）
+
+绝招不存兵器变量，直接写 `(me->query_temp("weapon"))->query("name")`（或在拒绝判断里写 `(weapon = me->query_temp("weapon"))->query("skill_type")`），之前又没检查兵器：空手 `perform` 时报 `Bad argument 1 to EFUN call_other()`，内力等往往已经扣掉。在第一次用到它的那条语句前补上“你必须手持兵器才能使用这一招”的拒绝（`scripts/lpc_fix_perform_weapon.py`）：`liangyi-sword/yin`。
+
+
+## 存档读不出来：字符串里的换行、空行（2026-10-15，KB 03 §4.4）
+
+`u/snowtu/data/fabao/l/llg-3.o`、`u/snowtu/data/fabao/s/sungirl-3.o`、`u/snowtu/data/zhangmen.o/zhangmen_master_zhaoyang.o`：字符串里有原样的换行（`save_object()` 存成 `\r`，`restore_object()` 逐行读，原样的换行让字符串收不了尾），或有空行（`Illegal file format`），读档的对象（留言板、NPC、玩家）从空白开始。换行改写成 `\r`、删去空行（`scripts/lpc_save_encoding.py --from-raw`），驱动核对全部能读回（`scripts/lpc_save_restore_check.py`）。

@@ -308,3 +308,17 @@ definition, 2 `#undef` lines for macros that two headers define (`ROOM`, `STORY_
 ## 柔云步法「柔云纵」有时报错（2026-10-15，KB 06 §7.251）
 
 `rouyun-steps/zong` 随机把人送到三个房间之一：精、精力已经扣了，“乘云而去了”也说了，送不过去时人留在战斗里并报错。本库的武庙、客店、中央广场在 `/d/yangzhou/`，`/d/city/` 下没有，三处都会报错；改为 `/d/yangzhou/wumiao`、`/d/yangzhou/kedian`、`/d/yangzhou/guangchang`。
+
+## family 映射内联取下标（2026-10-15，KB 05 §7.30）
+
+`ob->query("family")["master_name"]`、`me->query("family")["family_name"]`（泥潭式为 `query("family", ob)[...]`）直接对门派映射取下标：没有门派的人（新玩家、叛师者、大多数 NPC）在 NPC 的打招呼和问话、绝招的门派判断、房间的 `valid_leave` 里报 `Value being indexed is zero`，而不是得到拒绝。4 处（3 个文件）改为 dbase 路径查询 `query("family/master_name")`：有门派时值相同，没有时得 0；原有的判断照常生效（`scripts/lpc_fix_family_index.py`）。给映射赋值的写法未动。
+
+
+## 血刀刀法「祭血神刀」正神时报错（2026-10-15，KB 06 §7.241）
+
+`xue-dao/shendao` 的伤害是 `random(shen / -1000) + shen / -3000`，越邪恶伤害越高；正神的人算出负数，`receive_damage()` 报“伤害值为负值”。补 `if (damage < 0) damage = 0;`，设计不变（正派用不出伤害），不再报错。
+
+
+## 贴身对手不在时绝招报错（2026-10-15）
+
+本库是方位战斗：没有敌人贴身时 `select_opponent()` 返回 0，但仍处于战斗状态。`dugu-jiujian/po`、`dugu-jiujian/poqi`、`hunyuan-zhang/wuji`、`zhemei-shou/duo` 取了对手就直接用，敌人不在身边时报错。取对手后补“你身边没有可以出手的对手”的拒绝（不在战斗中时仍是原来的提示）。（更正：本日较早记下的「柔云纵」修正改的是 `daemon/gongfu/`，那是没有被使用的旧目录，`SKILL_D` 指向 `daemon/skill/`；改了无害，但不影响游戏。）

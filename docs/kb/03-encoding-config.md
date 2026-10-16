@@ -166,6 +166,14 @@ function", hundreds per lib); `scripts/lpc_warnings.py --fix` repairs it (KB 04
   (17). The parser alone over-reports: 22 of its 795 suspects restored fine. Nine archive-damaged live saves were repaired
   by hand (see the libs' NOTES); 53 are left, nearly all backups (`backup/`, `login_bak/`, `board back/`) and wizard
   copies.
+- **What `restore_object()` refuses that a lenient parser accepts (2026-10-15).** It reads the file line by line, so
+  (1) a raw newline inside a string ends the line and the string never closes: `save_object()` writes one as `\r` and
+  restore turns `\r` back into a newline (`src/vm/internal/base/object.cc`), but 159 tracked saves in 59 libs carry raw
+  newlines, mostly from the archives themselves (xjcq2000's boards and NPC saves, fys); (2) a blank line, even a trailing
+  one, is `Illegal file format - 1 ()`; (3) every array and mapping element must end with a comma (`"whip":60])` is
+  `Illegal mapping format`). A line cut off at the end of the file, with no newline, is skipped without an error: the
+  variable is silently lost. `lpc_save_encoding.parses()` now refuses (1)-(3), and `lf_to_cr()` writes the newlines as
+  `\r` and drops blank lines (172 saves; all driver-checked).
 
 ---
 

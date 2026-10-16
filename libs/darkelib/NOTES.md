@@ -872,3 +872,7 @@ autoload::get(); }` for the warning it now showed.
 - 2026-10-14: FluffOS 970d9f09 warns `Float value truncated to int` (#1426). 7 sites in 7 files: assignments, initializers and returns now spell the truncation `to_int(...)` (same value). Changed objects loaded before and after in fresh drivers, no regressions (`scripts/lpc_fix_float_trunc.py`, KB 04 §6.10).
 
 - 2026-10-14: 4 files did not compile with `Illegal to inherit after defining global variables`: FluffOS takes every `inherit` before the first global, MudOS did not care. `scripts/lpc_fix_inherit_order.py` moved the globals (and `#include`s of headers that declare globals) written above the `inherit` to just below the last one (KB 04 §6.3).
+
+## Save files `restore_object()` refused (2026-10-15, KB 03 §4.4)
+
+`d/excelsior/rooms/news.o`、`std/diewarzau/test.o`、`wizards/excelsior/rooms/news.o`: a raw newline inside a string (save_object() writes it as `\r`; restore reads line by line and the string never closes) or a blank line (`Illegal file format`), so the object started empty. Newlines written as `\r`, blank lines dropped (`scripts/lpc_save_encoding.py --from-raw`); the driver restores each one now (`scripts/lpc_save_restore_check.py`).

@@ -721,3 +721,7 @@ functionally re-tested live on this lib.
 ## 八识神通 drift_sense 少一个括号（2026-10-15）
 
 `bashi-shentong/drift_sense` 第 55 行改条件时漏了右括号（`if( random(me->query_skill("magic")) < 100 {`，原条件还注释在上一行），文件编译失败。补上括号，保留本库改过的 `< 100`。本库目前没有地方传授八识神通。
+
+## family 映射内联取下标（2026-10-15，KB 05 §7.30）
+
+`ob->query("family")["master_name"]`、`me->query("family")["family_name"]`（泥潭式为 `query("family", ob)[...]`）直接对门派映射取下标：没有门派的人（新玩家、叛师者、大多数 NPC）在 NPC 的打招呼和问话、绝招的门派判断、房间的 `valid_leave` 里报 `Value being indexed is zero`，而不是得到拒绝。8 处（6 个文件）改为 dbase 路径查询 `query("family/master_name")`：有门派时值相同，没有时得 0；原有的判断照常生效（`scripts/lpc_fix_family_index.py`）。给映射赋值的写法未动。

@@ -69,6 +69,11 @@ detection.
   mixed extra) { message_vision(msg, me, you); }` right after `message_vision`'s definition in
   `adm/simul_efun/message.lpc` (a call before the textual definition of the callee does not resolve here, §6.5).
   Find the libs with `git grep -l 'message_combatd *('` minus the ones that define it.
+  The first pass skipped any lib that defined it *anywhere*: tianxiawuxue's only definition sits in a wizard dir
+  (`u/lonely/sec/message.lpc`), so its 26 callers never compiled. The script now counts a definition only under
+  `adm/simul_efun/` or `include/`, and needs a live call (code, not a comment, not `ob->message_combatd(`, not a
+  daemon's own local function such as hc's `adm/daemons/combatd.ahxia.lpc`): tianxiawuxue added 2026-10-15 (10
+  performs load; its 6 bagua performs also call nitan's `COMBAT_D->do_damage()`, which this lib does not have).
 - **A macro the files use and no header defines** (`inherit F_SSERVER;` where the lib's header says `SSERVER`): the file stops at
   `syntax error, unexpected L_IDENTIFIER, expecting L_STRING or '('` on its `inherit` line. `shenmo` had 1932 skill/perform files
   that never loaded (every `perform` of those skills died at compile time; `/std/sserver` is the file `SSERVER` names), 22 more libs

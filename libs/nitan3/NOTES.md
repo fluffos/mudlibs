@@ -429,3 +429,12 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## `call_out(0) nest level : 10`（2026-10-15，KB 03 §5.4）
 
 这个值来自驱动测试套件的配置（`testsuite/etc/config.test`）。驱动统计的是同一个 gametick（本库 100 毫秒）里全游戏的 call_out(0) 总数，不是一条链的深度，超过 10 个就报 `Nesting call_out(0) level limit exceeded`：多段绝招（如华山剑法「剑芒」的 `call_out("perform2", 0, ...)`）在人多时会断掉。原版跑在 MudOS 上，没有这个限制；改为驱动默认值 1000。
+
+## 用兵器的绝招空手施展时报错（内联写法）（2026-10-15，KB 06 §7.246）
+
+绝招不存兵器变量，直接写 `(me->query_temp("weapon"))->query("name")`（或在拒绝判断里写 `(weapon = me->query_temp("weapon"))->query("skill_type")`），之前又没检查兵器：空手 `perform` 时报 `Bad argument 1 to EFUN call_other()`，内力等往往已经扣掉。在第一次用到它的那条语句前补上“你必须手持兵器才能使用这一招”的拒绝（`scripts/lpc_fix_perform_weapon.py`）：`shenlong-jian/anxi`。
+
+
+## 存档读不出来：字符串里的换行、空行（2026-10-15，KB 03 §4.4）
+
+`help/newsd.o`：字符串里有原样的换行（`save_object()` 存成 `\r`，`restore_object()` 逐行读，原样的换行让字符串收不了尾），或有空行（`Illegal file format`），读档的对象（留言板、NPC、玩家）从空白开始。换行改写成 `\r`、删去空行（`scripts/lpc_save_encoding.py --from-raw`），驱动核对全部能读回（`scripts/lpc_save_restore_check.py`）。

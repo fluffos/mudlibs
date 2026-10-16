@@ -9,7 +9,8 @@ definition of the callee does not resolve on this driver, AGENTS.md 8b),
 
     varargs void message_combatd(string msg, object me, object you, mixed extra) { message_vision(msg, me, you); }
 
-the alias bixiecanyang / xingzhanyingxiu / weimingkongjian carry already.  Libs that define it (any file) or have no
+the alias bixiecanyang / xingzhanyingxiu / weimingkongjian carry already.  Libs that define it (under adm/simul_efun/ or
+include/: a copy in a wizard dir or a daemon does not count) or have no
 adm/simul_efun/message.lpc with exactly one `message_vision` definition are listed and left.  Without --apply it prints
 the plan; edits are byte-exact (line endings kept).  Gitlink libs are refused."""
 import os
@@ -42,11 +43,31 @@ for slug in slugs:
     if not os.path.isfile(target):
         print(f"{slug}: no adm/simul_efun/message.lpc: left")
         continue
-    # defined anywhere?
-    out = subprocess.run(["grep", "-rlE", r"(void|int) +message_combatd *\(|define +message_combatd", root,
-                          "--include=*.lpc", "--include=*.h"], capture_output=True, text=True).stdout.split()
+    # defined as a simul_efun or macro?  (a copy in a wizard dir or a daemon: tianxiawuxue's u/lonely/sec/message.lpc, hc's
+    # adm/daemons/combatd.ahxia.lpc, is not one)
+    out = subprocess.run(["grep", "-rlE", r"(void|int) +message_combatd *\(|define +message_combatd"]
+                         + [d for d in (f"{root}/adm/simul_efun", f"{root}/include") if os.path.isdir(d)]
+                         + ["--include=*.lpc", "--include=*.h"], capture_output=True, text=True).stdout.split()
     if out:
         print(f"{slug}: message_combatd is defined in {os.path.relpath(out[0], root)}: left")
+        continue
+    # a live call: in code (not a comment or string), and not a method call (`ob->message_combatd(`)
+    from lpc_src import mask
+    live = []
+    for f in subprocess.run(["grep", "-rlE", r"message_combatd *\(", root, "--include=*.lpc", "--include=*.h"],
+                            capture_output=True, text=True).stdout.split():
+        if re.search(r"/(u|backup|bak|log)/", f[len(root):]):
+            continue
+        src = open(f, "rb").read().decode("latin-1")
+        if re.search(r"(void|int|mixed) +message_combatd *\(", src):
+            continue   # its own local function (hc's adm/daemons/combatd.ahxia.lpc)
+        mk = mask(src)
+        if any(mk[m.start()] == src[m.start()] and not src[:m.start()].rstrip().endswith("->")
+               and not re.search(r"\b(void|int|mixed|string|varargs)\s*$", src[max(0, m.start() - 40):m.start()])
+               for m in re.finditer(r"message_combatd\s*\(", src)):   # not a definition
+            live.append(f)
+    if not live:
+        print(f"{slug}: no live call to message_combatd (commented out or method calls only): left")
         continue
     raw = open(target, "rb").read()
     text = raw.decode("latin-1")

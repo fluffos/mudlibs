@@ -24,7 +24,8 @@ candidates above (the lone lead byte dropped, the quote kept) and the first deco
 parses, the save is a GB copy of a BIG5 one: a stray backslash after a character whose BIG5 code ends in 0x5C (功, 许,
 么 ...) is dropped (or the quote it swallowed escaped), nearest the break first, until it parses (dreamofseven, kxkj and naruto
 boards; GBK's 賊 誠 運 ... too, and this step also runs on a save with no matching raw/, since it moves only
-backslashes).  A save edited after onboarding, or whose original does not parse either, is listed and left alone.  FILE arguments
+backslashes).  A raw newline inside a string (the archive's own saves: xjcq2000 boards and NPCs, fys) is written as
+`\r`, the way save_object() stores one; restore_object() reads the file line by line and refuses it raw.  A save edited after onboarding, or whose original does not parse either, is listed and left alone.  FILE arguments
 (libs/SLUG/work/...) limit the run to those saves."""
 import collections
 import glob
@@ -60,6 +61,8 @@ def parse_value(s, i):
                 continue
             if s[i] == '"':
                 return i + 1
+            if s[i] == "\n":   # restore_object() reads line by line: a raw newline ends the string (lf_to_cr())
+                raise Bad("newline in a string")
             i += 1
         raise Bad("open string")
     if s.startswith("({", i):
@@ -68,9 +71,9 @@ def parse_value(s, i):
             if s.startswith("})", i):
                 return i + 2
             i = parse_value(s, i)
-            if i < n and s[i] == ",":
+            if i < n and s[i] == ",":   # save_object() ends every element with a comma; restore_object() insists
                 i += 1
-            elif not s.startswith("})", i):
+            else:
                 raise Bad("array")
     if s.startswith("([", i):
         i += 2
@@ -83,7 +86,7 @@ def parse_value(s, i):
             i = parse_value(s, i + 1)
             if i < n and s[i] == ",":
                 i += 1
-            elif not s.startswith("])", i):
+            else:
                 raise Bad("mapping")
     if s.startswith("(/", i):   # class
         i += 2
@@ -102,10 +105,13 @@ def parse_value(s, i):
 
 
 def parses(text):
-    """The whole file as one stream: old saves keep raw newlines inside strings."""
+    """The whole file as one stream.  A raw newline inside a string and a blank line are refused, as restore_object()
+    refuses them; `lf_to_cr()` writes them the way save_object() would."""
     i, n = 0, len(text)
     while i < n:
-        if text[i] in "\r\n":
+        if text[i] == "\n" or text.startswith("\r\n", i):
+            return False   # a blank line: restore_object() wants `name value` on every line
+        if text[i] == "\r":
             i += 1
             continue
         if text[i] == "#" and (i == 0 or text[i - 1] == "\n"):
@@ -123,6 +129,7 @@ def parses(text):
             i += 1
         if i < n and text[i] != "\n":
             return False
+        i += 1   # the line's own newline; another one right after it would be a blank line
     return True
 
 
@@ -131,6 +138,40 @@ def fail_pos(text):
     """None when the save parses, otherwise where the value that breaks it starts."""
     _DEEP[0] = 0
     return None if parses(text) else _DEEP[0]
+
+
+def lf_to_cr(text):
+    """(text, count): a raw newline inside a string literal written as `\\r`, which is how save_object() stores one,
+    and blank lines dropped (restore_object() refuses a line without `name value`, even a trailing one)
+    (restore_object() turns it back into a newline; a raw one ends the line and the string never closes).  The archive's
+    own saves carry them (xjcq2000's boards and NPC saves, fys)."""
+    out, i, n, k, ins = [], 0, len(text), 0, False
+    while i < n:
+        c = text[i]
+        if ins:
+            if c == "\\":
+                out.append(text[i:i + 2])
+                i += 2
+                continue
+            if c == '"':
+                ins = False
+            elif c == "\n":
+                c = "\r"
+                k += 1
+        elif c == '"':
+            ins = True
+        elif c == "#" and (i == 0 or text[i - 1] == "\n"):
+            j = text.find("\n", i)
+            j = n if j < 0 else j + 1
+            out.append(text[i:j])
+            i = j
+            continue
+        out.append(c)
+        i += 1
+    lines = "".join(out).split("\n")   # every newline left is a line break now
+    kept = [l for l in lines[:-1] if l not in ("", "\r")] + lines[-1:]
+    k += len(lines) - len(kept)
+    return "\n".join(kept), k
 
 
 # Characters whose BIG5 or GBK code ends in 0x5C (BIG5 功 许 么, GBK 賊 誠 運; simplified forms too).  MudOS
@@ -284,12 +325,16 @@ def from_raw(f, b):
         if any(iconv_c(rb, enc) == b for enc in ("gb18030", "big5", "cp950", "big5-hkscs")):
             why = "the raw/ original does not parse either"
             for text, how in candidates(rb, lib_profile(slug)):
+                text, k = lf_to_cr(text)
                 if parses(text):
-                    return text, "raw " + how
-    # backslashes only: safe on a save edited since onboarding, and on one converted elsewhere (no GBK/BIG5 raw/)
-    text, n = drop_big5_strays(b.decode("utf-8"))
+                    return text, "raw " + how + (" +%d newline(s) as \\r" % k if k else "")
+    # newlines and backslashes only: safe on a save edited since onboarding, and on one converted elsewhere
+    text, k = lf_to_cr(b.decode("utf-8"))
+    if parses(text):
+        return text, "%d raw newline(s) inside strings written as \\r" % k
+    text, n = drop_big5_strays(text)
     if text is not None:
-        return text, "%d backslash(es) dropped or added after a 0x5C character" % n
+        return text, "%d backslash(es) dropped or added after a 0x5C character" % n + (", %d newline(s) as \\r" % k if k else "")
     return None, why
 
 
@@ -332,8 +377,9 @@ def main():
         pick = None
         slug = f.decode("utf-8", "surrogateescape").split("/")[1]
         for text, how in candidates(b, lib_profile(slug)):
+            text, k = lf_to_cr(text)
             if parses(text):
-                pick = (text, how)
+                pick = (text, how + (" +%d newline(s) as \\r" % k if k else ""))
                 break
         rel = p[len(REPO) + 1:]
         if not pick:

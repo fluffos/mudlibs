@@ -314,3 +314,12 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## 地图档 map.o 读不出来（2026-10-15，KB 03 §4.4）
 
 `data/npc/map.o` 里三个“棋室”房间（`/d/city/qiyuan2`～`qiyuan4`）的 short 少了右引号：原档在“棋室”后有一个孤立的 GBK 前导字节，转码（`iconv -c`）把它和后面的引号一起丢了。`restore_object()` 报 `Illegal mapping format`，mapdb 一直载入失败，用到地图的护镖、jinhe、鸠摩智等都报错。补上三个引号，1512 个房间全部读回；`backup/` 下 25 份同样的旧档按 raw/ 原档重新转码。
+
+## family 映射内联取下标（2026-10-15，KB 05 §7.30）
+
+`ob->query("family")["master_name"]`、`me->query("family")["family_name"]`（泥潭式为 `query("family", ob)[...]`）直接对门派映射取下标：没有门派的人（新玩家、叛师者、大多数 NPC）在 NPC 的打招呼和问话、绝招的门派判断、房间的 `valid_leave` 里报 `Value being indexed is zero`，而不是得到拒绝。4 处（3 个文件）改为 dbase 路径查询 `query("family/master_name")`：有门派时值相同，没有时得 0；原有的判断照常生效（`scripts/lpc_fix_family_index.py`）。给映射赋值的写法未动。
+
+
+## 用兵器的绝招空手施展时报错（内联写法）（2026-10-15，KB 06 §7.246）
+
+绝招不存兵器变量，直接写 `(me->query_temp("weapon"))->query("name")`（或在拒绝判断里写 `(weapon = me->query_temp("weapon"))->query("skill_type")`），之前又没检查兵器：空手 `perform` 时报 `Bad argument 1 to EFUN call_other()`，内力等往往已经扣掉。在第一次用到它的那条语句前补上“你必须手持兵器才能使用这一招”的拒绝（`scripts/lpc_fix_perform_weapon.py`）：`duanyun-bian/duanyun`、`feiyu-bian/chanrao`、`jingang-chu/xiangmo`、`riyue-bian/xumi`、`yunu-jianfa/suxin`。

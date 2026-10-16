@@ -331,3 +331,17 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## 福威镖局的程金斧和刺客从没载入过（2026-10-15）
 
 `clone/obj/npc_setup.lpc` 的技能表抄自 xkx2001，本库没有 `kick` 以及桃花、白驼、雪山、华山的一些技能（共 14 个），F_SKILL 对不存在的技能直接报错：`d/city/npc/ftb_zhu`（程金斧，护镖任务）一载入就报 `F_SKILL: No such skill (kick)`。npc_setup 里加 `set_skill`/`map_skill`/`prepare_skill` 三个包装，跳过本库没有的技能。刺客 `ftb_killer` 另外穿的是本库没有的 `/clone/armor/beixin`，改为本库自己的 `/d/city/obj/beixin`（同一件皮背心）。两者现在都能载入。
+
+## family 映射内联取下标（2026-10-15，KB 05 §7.30）
+
+`ob->query("family")["master_name"]`、`me->query("family")["family_name"]`（泥潭式为 `query("family", ob)[...]`）直接对门派映射取下标：没有门派的人（新玩家、叛师者、大多数 NPC）在 NPC 的打招呼和问话、绝招的门派判断、房间的 `valid_leave` 里报 `Value being indexed is zero`，而不是得到拒绝。6 处（5 个文件）改为 dbase 路径查询 `query("family/master_name")`：有门派时值相同，没有时得 0；原有的判断照常生效（`scripts/lpc_fix_family_index.py`）。给映射赋值的写法未动。
+
+
+## 用兵器的绝招空手施展时报错（内联写法）（2026-10-15，KB 06 §7.246）
+
+绝招不存兵器变量，直接写 `(me->query_temp("weapon"))->query("name")`（或在拒绝判断里写 `(weapon = me->query_temp("weapon"))->query("skill_type")`），之前又没检查兵器：空手 `perform` 时报 `Bad argument 1 to EFUN call_other()`，内力等往往已经扣掉。在第一次用到它的那条语句前补上“你必须手持兵器才能使用这一招”的拒绝（`scripts/lpc_fix_perform_weapon.py`）：`yunu-jianfa/suxin`。
+
+
+## 存档读不出来：字符串里的换行、空行（2026-10-15，KB 03 §4.4）
+
+`d/city/obj/bingqipu.o`：字符串里有原样的换行（`save_object()` 存成 `\r`，`restore_object()` 逐行读，原样的换行让字符串收不了尾），或有空行（`Illegal file format`），读档的对象（留言板、NPC、玩家）从空白开始。换行改写成 `\r`、删去空行（`scripts/lpc_save_encoding.py --from-raw`），驱动核对全部能读回（`scripts/lpc_save_restore_check.py`）。

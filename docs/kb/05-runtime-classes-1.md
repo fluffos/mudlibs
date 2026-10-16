@@ -411,6 +411,15 @@ and a family read right after `recruit_apprentice(ob)`. It also takes
 nitan form `query("family", me)`: 678 more sites (newcomers asking a
 master in `attempt_apprentice`/`recognize_apprentice`, NPC `greeting`,
 room `valid_leave`, 白无常's 天魔解体 `ask_me`).
+The inline shape (2026-10-15) never stores the mapping:
+`ob->query("family")["master_name"] == "白自在"` in an NPC's greeting,
+`me->query("family")["family_name"] != "华山派"` as a perform's sect check
+(xkm huashan-jianfa `san`), nitan's `query("family", ob)["master_id"]`.
+`scripts/lpc_fix_family_index.py` rewrites each read as the dbase path
+query `query("family/master_name")`: the same value when the mapping
+exists, 0 when it does not, and an existing guard keeps working (504 reads,
+416 files, 100 libs; every lib's F_DBASE splits `/` paths). An assignment
+into the mapping is left (a path query is no lvalue).
 **Regression risk:** §7.156.
 
 ### 7.31 `enter_world()` copies stale login-object flags onto the restored body

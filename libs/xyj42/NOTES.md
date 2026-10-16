@@ -170,3 +170,7 @@ single-file compile check (PASS). Part of the corpus-wide §7.19 sweep
 ## 技能名拼错（2026-10-15，KB 06 §7.249）
 
 `query_skill()` 里的技能名拼错了，或用的是本库改名前的旧名；本库没有这个技能，调用永远得 0：门槛（`< N` 就拒绝）永远过不去，相关功夫或绝招学不了、用不了；内功互斥（`> N` 就拒绝）从不生效；公式里这一项一直是 0。经汉字名（提示文字或中文名词典）或纯拼写差异（`_`/`-`、少一个连字符、相邻字母颠倒）核对后，改为本库的技能名（`scripts/lpc_fix_skill_typo.py`）：`baihua_zhang`→`baihua-zhang`（`/daemon/class/moon/baihua-zhang/flower`）。
+
+## 存档读不出来：字符串里的换行、空行（2026-10-15，KB 03 §4.4）
+
+`u/tutu/star.o`：字符串里有原样的换行（`save_object()` 存成 `\r`，`restore_object()` 逐行读，原样的换行让字符串收不了尾），或有空行（`Illegal file format`），读档的对象（留言板、NPC、玩家）从空白开始。换行改写成 `\r`、删去空行（`scripts/lpc_save_encoding.py --from-raw`），驱动核对全部能读回（`scripts/lpc_save_restore_check.py`）。

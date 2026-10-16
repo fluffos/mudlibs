@@ -627,3 +627,7 @@ quit/reconnect 持久性**完全正常，没有数据丢失**。
 ## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
 
 `scripts/lpc_warnings.py moniHuafu --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 147 个 `.lpc`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：141 -> 141 通过，无回退。`obj/home.lpc` HEAD 起就编译不过，这里只删了未用的 `*parents`（已逐行看过）。启动时警告 59 -> 0；新进程登录（新人物确认）正常。
+
+## family 映射内联取下标（2026-10-15，KB 05 §7.30）
+
+`ob->query("family")["master_name"]`、`me->query("family")["family_name"]`（泥潭式为 `query("family", ob)[...]`）直接对门派映射取下标：没有门派的人（新玩家、叛师者、大多数 NPC）在 NPC 的打招呼和问话、绝招的门派判断、房间的 `valid_leave` 里报 `Value being indexed is zero`，而不是得到拒绝。1 处（1 个文件）改为 dbase 路径查询 `query("family/master_name")`：有门派时值相同，没有时得 0；原有的判断照常生效（`scripts/lpc_fix_family_index.py`）。给映射赋值的写法未动。

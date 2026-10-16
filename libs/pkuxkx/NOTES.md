@@ -359,3 +359,7 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## 新闻档读不出来（2026-10-15，KB 03 §4.4）
 
 `data/news/newsd.o` 里一条新闻标题是 `"服务器更新内存成功?,`：上游 UTF-8 转换把一个转不了的字和后面的引号一起变成了 `?`，`restore_object()` 报 `Illegal mapping format`，新闻系统空白。补上引号，驱动核对能读回。
+
+## family 映射内联取下标（2026-10-15，KB 05 §7.30）
+
+`ob->query("family")["master_name"]`、`me->query("family")["family_name"]`（泥潭式为 `query("family", ob)[...]`）直接对门派映射取下标：没有门派的人（新玩家、叛师者、大多数 NPC）在 NPC 的打招呼和问话、绝招的门派判断、房间的 `valid_leave` 里报 `Value being indexed is zero`，而不是得到拒绝。1 处（1 个文件）改为 dbase 路径查询 `query("family/master_name")`：有门派时值相同，没有时得 0；原有的判断照常生效（`scripts/lpc_fix_family_index.py`）。给映射赋值的写法未动。

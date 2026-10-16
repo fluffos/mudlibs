@@ -847,3 +847,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply r
 ## Save files the onboarding transcode broke (2026-10-15, KB 03 §4.4)
 
 `/save/intermud.o`: the archive's Windows-1252 bytes (a `\x92` apostrophe, `¿`, `¡`) were run through `iconv -f gb18030 -c`, which dropped an undecodable byte together with the quote after it, so `restore_object()` stopped with `Illegal mapping format` and the object started empty. Re-decoded from raw/ as Windows-1252 (`scripts/lpc_save_encoding.py --from-raw`); the driver restores each one now (`scripts/lpc_save_restore_check.py`).
+
+## Save files `restore_object()` refused (2026-10-15, KB 03 §4.4)
+
+`domains/campus/save/charles.o`、`domains/campus/save/charly.o`、`secure/save/mudinfo.o`: a raw newline inside a string (save_object() writes it as `\r`; restore reads line by line and the string never closes) or a blank line (`Illegal file format`), so the object started empty. Newlines written as `\r`, blank lines dropped (`scripts/lpc_save_encoding.py --from-raw`); the driver restores each one now (`scripts/lpc_save_restore_check.py`).

@@ -887,3 +887,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply d
 ## 存档读不出来：BIG5/GBK 0x5C 字后的反斜杠（2026-10-15，KB 03 §4.4）
 
 `/data/board/bug_b.o`、`/data/board/jail_board.o`、`/data/board/moon_room6_b.o`、`/data/board/past_b.o`、`/data/board/tmr_b.o`、`/data/board/tmr_future_b.o`、`/u/l/linjack/past_b.o`：第二字节为 0x5C 的字（功、许、么、俞、賊……）MudOS 存档时写成 `\\`，转成 GB 后字保留，多出的一个反斜杠转义了后面的引号（`成功\",` 字符串收不了尾），或反过来，MudOS 当作被 0x5C 转义的引号成了字符串的结尾（`出\"俞" >`）。`restore_object()` 报 `Illegal mapping format`，留言板等从空白开始。在出错处去掉或补上这一个反斜杠，直到能读回（`scripts/lpc_save_encoding.py --from-raw`），驱动核对全部能读回。
+
+## 存档读不出来：字符串里的换行、空行（2026-10-15，KB 03 §4.4）
+
+`data/board/query_b.o`、`u/a/alickyuen/aut.o`、`u/a/alickyuen/aut_login.o`：字符串里有原样的换行（`save_object()` 存成 `\r`，`restore_object()` 逐行读，原样的换行让字符串收不了尾），或有空行（`Illegal file format`），读档的对象（留言板、NPC、玩家）从空白开始。换行改写成 `\r`、删去空行（`scripts/lpc_save_encoding.py --from-raw`），驱动核对全部能读回（`scripts/lpc_save_restore_check.py`）。

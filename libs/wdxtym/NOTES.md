@@ -477,3 +477,12 @@ Too-deep-recursion) recurred at boot; no new error from shop/拜师.
 ## 农场档 farmd.o 截断（2026-10-15，KB 03 §4.4）
 
 `data/farmd.o` 原档只有 45 字节，停在 `farmd (["sword_1":([])`，`restore_object()` 报错，农场守护进程载入失败。补成 `farmd (["sword_1":([]),])`。`backup/` 下的同名旧档同样截断，未动。
+
+## family 映射内联取下标（2026-10-15，KB 05 §7.30）
+
+`ob->query("family")["master_name"]`、`me->query("family")["family_name"]`（泥潭式为 `query("family", ob)[...]`）直接对门派映射取下标：没有门派的人（新玩家、叛师者、大多数 NPC）在 NPC 的打招呼和问话、绝招的门派判断、房间的 `valid_leave` 里报 `Value being indexed is zero`，而不是得到拒绝。1 处（1 个文件）改为 dbase 路径查询 `query("family/master_name")`：有门派时值相同，没有时得 0；原有的判断照常生效（`scripts/lpc_fix_family_index.py`）。给映射赋值的写法未动。
+
+
+## 刀剑归真「天下有血」没有第二件兵器时报错（2026-10-15，KB 06 §7.246）
+
+`daojian-guizhen/xue` 直接读第二件兵器的 `skill_type`，手上只有一件兵器时报错；同目录的 `ben`、`jiu`、`tian` 都先拒绝。补上同样的“你没有同时装备刀剑”拒绝。
