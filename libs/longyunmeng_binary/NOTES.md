@@ -229,6 +229,10 @@ call`）读出这个版本有 116 个运算符，比 v22pre11 标准多 3 个：
   「巫师登陆效验码」（`logind` 的 `get_wizpas()`，`login` 存档里的 `wizpasswd`，原来用 `/cmds/bos/wizpas` 设置），
   预置的效验码和密码相同。
 
+最后在 `38b57939b1e` 的 `scripts/pristine_tree.sh` 副本上新起驱动再走一遍：注册（出生在北疆小镇）、`skills`、`smile`、`hp`、
+`fly yz`、拿礼物后 `i` 显示「幸运包(Gift)」，管理员登录后 `update` 成功，两个人都做过表情以后新连线照常出现名字提示；
+master 的 `error_handler` 一次也没有写 `/log/debug.log`（驱动自己的 debug.log 在这种启动方式下打不开，KB 08 §10.9）。
+
 WASM（`scripts/wasm_client.js`，本机的 build-wasm）：注册、`look`、`score`、表情、`fly yz`、钱庄、买东西、`i`、
 `help` 都正常；管理员登录（效验码 → 密码）后 `update` 成功。`wasm_status` 设为 `playable`。
 
