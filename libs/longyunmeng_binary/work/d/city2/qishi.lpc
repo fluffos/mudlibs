@@ -1,0 +1,773 @@
+// 本文件由编译后的 .b 二进制程序反编译还原，原始源码未随档案发布。
+// Decompiled from the compiled .b binary; the original source was not distributed.
+inherit "/inherit/room/room";
+void create();
+void init();
+void check_players();
+int do_sit(mixed);
+int do_leave(mixed);
+string show_game();
+int str_to_int(mixed);
+int do_new(mixed);
+int do_refresh(mixed);
+int no_qi(mixed, mixed, mixed);
+int remove_block(mixed, mixed, mixed);
+int eat(mixed, mixed, mixed, mixed, mixed);
+int weiqi_rule(mixed, mixed);
+int wuzi_rule(mixed, mixed);
+int translate_position(mixed, mixed, mixed);
+int do_undo();
+int do_play(mixed);
+
+int bsize;
+int *game = allocate(361);
+int *move = allocate(512);
+int move_index;
+int *eat_flag = allocate(512);
+int jie_flag;
+int jie_x_ban;
+int jie_y_ban;
+int status;
+int handicap;
+string lastmove;
+string lastlastmove;
+int WQ_Started;
+int WQ_Undoed;
+string turn;
+mapping pl = allocate_mapping(2);
+int *h_list = ({ 60, 300, 288, 72, 66, 294, 174, 186 });
+string *xindex = ({ "Ａ", "Ｂ", "Ｃ", "Ｄ", "Ｅ", "Ｆ", "Ｇ", "Ｈ", "Ｉ", "Ｊ", "Ｋ", "Ｌ", "Ｍ", "Ｎ", "Ｏ", "Ｐ", "Ｑ", "Ｒ", "Ｓ" });
+string *yindex = ({ "⑴", "⑵", "⑶", "⑷", "⑸", "⑹", "⑺", "⑻", "⑼", "⑽", "⑾", "⑿", "⒀", "⒁", "⒂", "⒃", "⒄", "⒅", "⒆" });
+string *Ucase = ({ "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S" });
+string *lcase = ({ "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s" });
+string *nindex = ({ "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19" });
+
+void create() {
+    set("short", "入神坐照室");
+    set("long", "    \n只见好大一间房中，除了一张石桌、两只石凳之外，空荡荡的一无\n所有，石桌上刻着纵横十九道棋路，对放着一盒黑子、一盒白子。这棋\n室中除了几椅棋子之外不设一物，当是免得对局者分心。墙上贴了一张\n小帖子(tie)。\n");
+    set("objects", ([ "/d/city2/obj/table" : 1, "/d/city2/obj/seat" : 2 ]));
+    set("item_desc", ([ "tie" : "\n在这里您可以下围棋或五子棋，以下告诉您下棋的步骤：\n一、先找好对手，然后分别用 sit black 和 sit white 入座；\n二、使用 new 开始一盘新的棋局：new [-5] [-b(numbers)] [-h(numbers)]\n    其中 -5 代表下五子棋，不选即为下围棋；\n　　-b指定所用棋盘的大小；\n    -h指定让子的数目；\n　　例如：\n　　围棋：new\n　　十五乘十五的五子棋：new -5 -b15\n　　让九子围棋：new -h9\n三、使用 play 轮流走棋：例如 play d4 等等。\n四、使用 refresh观看棋盘。\n五、使用 undo 悔棋。(目前只提供五子棋的悔棋功能。)\n六、使用 leave 站起来开路。\n" ]));
+    set("exits", ([ "north" : "/d/city2/duchang2" ]));
+    setup();
+}
+
+void init() {
+    status = 3;
+    add_action("do_sit", "sit");
+    add_action("do_leave", "leave");
+    add_action("do_play", "play");
+    add_action("do_pass", "pass");
+    add_action("do_new", "new");
+    add_action("do_undo", "undo");
+    add_action("do_refresh", "refresh");
+}
+
+void check_players() {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    v3 = this_object();
+    if (pl["black"]) {
+        v1 = pl["black"];
+        if (!objectp(v1) || !living(v1) || !present(v1, v3)) {
+            map_delete(pl, "black");
+            if (living(v1)) {
+                v1->delete_temp("weiqi_seat");
+            }
+        }
+    }
+    if (pl["white"]) {
+        v2 = pl["white"];
+        if (!objectp(v2) || !living(v2) || !present(v2, v3)) {
+            map_delete(pl, "white");
+            if (living(v2)) {
+                v2->delete_temp("weiqi_seat");
+            }
+        }
+    }
+    call_out("check_players", 3);
+}
+
+int do_sit(mixed arg) {
+    mixed v1;
+    v1 = this_player();
+    if (v1->query_temp("weiqi_seat")) {
+        return notify_fail("你已经坐着了。\n");
+    }
+    if (!arg || arg != "black" && arg != "white") {
+        return notify_fail("你想玩黑棋还是白棋？\n");
+    }
+    if (objectp(pl[arg])) {
+        return notify_fail("这个位子上已经有人了！\n");
+    }
+    pl[arg] = v1;
+    v1->set_temp("weiqi_seat", arg);
+    if (arg == "black") {
+        message_vision("$N坐上了深色的石凳。\n", v1);
+    } else {
+        message_vision("$N坐上了浅色的石凳。\n", v1);
+    }
+    return 1;
+}
+
+int do_leave(mixed arg) {
+    mixed v1;
+    mixed v2;
+    v2 = this_player();
+    if (!v2->query_temp("weiqi_seat")) {
+        return notify_fail("你没有在下棋。\n");
+    }
+    v1 = v2->query_temp("weiqi_seat");
+    message_vision("$N不想再下了，站了起来。\n", v2);
+    map_delete(pl, v1);
+    v2->delete_temp("weiqi_seat");
+    status = 3;
+    return 1;
+}
+
+string show_game() {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    v3 = "\n";
+    for (v1 = 0; v1 < bsize; v1++) {
+        v3 += xindex[v1];
+        v3 += "　";
+        for (v2 = 0; v2 < bsize; v2++) {
+            if (game[v1 * bsize + v2] == 1) {
+                v3 += "●";
+                continue;
+            }
+            if (game[v1 * bsize + v2] == 2) {
+                v3 += "○";
+                continue;
+            }
+            if (!v1 && !v2) {
+                v3 += "┌";
+                continue;
+            }
+            if (!v1 && v2 == bsize - 1) {
+                v3 += "┐";
+                continue;
+            }
+            if (v1 == bsize - 1 && !v2) {
+                v3 += "└";
+                continue;
+            }
+            if (v1 == bsize - 1 && v2 == bsize - 1) {
+                v3 += "┘";
+                continue;
+            }
+            if (!v1) {
+                v3 += "┬";
+                continue;
+            }
+            if (!v2) {
+                v3 += "├";
+                continue;
+            }
+            if (v2 == bsize - 1) {
+                v3 += "┤";
+                continue;
+            }
+            if (v1 == bsize - 1) {
+                v3 += "┴";
+                continue;
+            }
+            v3 += "┼";
+        }
+        v3 += "\n";
+    }
+    v3 += "\n　　";
+    for (v1 = 0; v1 < bsize; v1++) {
+        v3 += yindex[v1];
+    }
+    v3 += "\n\n";
+    return v3;
+}
+
+int str_to_int(mixed arg) {
+    mixed v1;
+    for (v1 = 0; v1 < 19; v1++) {
+        if (arg == nindex[v1]) {
+            return v1 + 1;
+        }
+    }
+}
+
+int do_new(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    mixed v6;
+    mixed v7;
+    mixed v8;
+    v4 = this_player();
+    v5 = environment(v4);
+    if (!v4->query_temp("weiqi_seat")) {
+        return notify_fail("你还没坐好呐。\n");
+    }
+    if (!objectp(pl["black"]) || !objectp(pl["white"])) {
+        return notify_fail("还没有对手呐。\n");
+    }
+    status = 4;
+    jie_flag = 6;
+    turn = "black";
+    bsize = 19;
+    handicap = 0;
+    if (arg) {
+        v7 = explode(arg, " ");
+        v3 = sizeof(v7);
+    } else {
+        v3 = 0;
+    }
+    for (v1 = 0; v1 < v3; v1++) {
+        v8 = v7[v1];
+        if (v8[0..1] == "-5") {
+            status = 7;
+        }
+        if (v8[0..1] == "-b") {
+            bsize = str_to_int(v8[2..sizeof(v8) - 1]);
+            if (bsize <= 0 || bsize > 19) {
+                bsize = 19;
+            }
+        }
+        if (v8[0..1] == "-h") {
+            handicap = str_to_int(v8[2..sizeof(v8) - 1]);
+            if (handicap < 2 || handicap > 9) {
+                handicap = 0;
+            }
+        }
+    }
+    if (bsize != 19 || status != 4) {
+        handicap = 0;
+    }
+    for (v1 = 0; v1 < bsize; v1++) {
+        for (v2 = 0; v2 < bsize; v2++) {
+            game[v1 * bsize + v2] = 0;
+        }
+    }
+    if (handicap) {
+        if (handicap % 2) {
+            game[180] = 1;
+            for (v1 = 0; v1 < handicap - 1; v1++) {
+                game[h_list[v1]] = 1;
+            }
+        } else {
+            for (v1 = 0; v1 < handicap; v1++) {
+                game[h_list[v1]] = 1;
+            }
+        }
+        turn = "white";
+    }
+    WQ_Started = 0;
+    WQ_Undoed = 0;
+    lastmove = "";
+    lastlastmove = "";
+    tell_room(v5, show_game());
+    v6 = pl[turn];
+    if (turn == "black") {
+        message_vision("现在轮到黑方$N走棋。\n", v6);
+    } else {
+        message_vision("现在轮到白方$N走棋。\n", v6);
+    }
+    return 1;
+}
+
+int do_refresh(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    v1 = this_player();
+    v2 = environment(v1);
+    if (status == 3) {
+        return notify_fail("棋盘上是空的。\n");
+    }
+    if (WQ_Started) {
+        if (turn == "black") {
+            tell_object(v1, "\n白棋上一步走在了" + lastmove + "\n");
+        } else {
+            tell_object(v1, "\n黑棋上一步走在了" + lastmove + "\n");
+        }
+    }
+    tell_object(v1, show_game());
+    v3 = pl[turn];
+    if (turn == "black") {
+        tell_object(v1, "现在轮到黑方" + v3->name() + "走棋。\n");
+    } else {
+        tell_object(v1, "现在轮到白方" + v3->name() + "走棋。\n");
+    }
+    return 1;
+}
+
+int no_qi(mixed arg1, mixed arg2, mixed arg3) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    mixed v6;
+    mixed v7;
+    mixed v8;
+    mixed v9;
+    v3 = 0;
+    v6 = allocate(bsize * bsize);
+    v7 = allocate(bsize * bsize);
+    v8 = 0;
+    v9 = 0;
+    v4 = arg1[arg2 * bsize + arg3];
+    v6[v8] = arg2 * bsize + arg3;
+    v8++;
+    while (v8 > 0 && !v3) {
+        v1 = v6[v8 - 1] / bsize;
+        v2 = v6[v8 - 1] % bsize;
+        v8--;
+        v7[v9] = v1 * bsize + v2;
+        v9++;
+        arg1[v1 * bsize + v2] = 8;
+        if (v1 > 0) {
+            v5 = arg1[(v1 - 1) * bsize + v2];
+            if (!v5) {
+                v3 = 1;
+            } else if (v5 == v4) {
+                v6[v8] = (v1 - 1) * bsize + v2;
+                v8++;
+            }
+        }
+        if (v1 < bsize - 1) {
+            v5 = arg1[(v1 + 1) * bsize + v2];
+            if (!v5) {
+                v3 = 1;
+            } else if (v5 == v4) {
+                v6[v8] = (v1 + 1) * bsize + v2;
+                v8++;
+            }
+        }
+        if (v2 > 0) {
+            v5 = arg1[v1 * bsize + v2 - 1];
+            if (!v5) {
+                v3 = 1;
+            } else if (v5 == v4) {
+                v6[v8] = v1 * bsize + v2 - 1;
+                v8++;
+            }
+        }
+        if (v2 < bsize - 1) {
+            v5 = arg1[v1 * bsize + v2 + 1];
+            if (!v5) {
+                v3 = 1;
+                continue;
+            }
+            if (v5 == v4) {
+                v6[v8] = v1 * bsize + v2 + 1;
+                v8++;
+            }
+        }
+    }
+    while (v9 > 0) {
+        arg1[v7[v9 - 1]] = v4;
+        v9--;
+    }
+    return !v3;
+}
+
+int remove_block(mixed arg1, mixed arg2, mixed arg3) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    mixed v6;
+    mixed v7;
+    mixed v8;
+    v4 = allocate(bsize * bsize);
+    v5 = allocate(bsize * bsize);
+    v6 = 0;
+    v7 = 0;
+    v3 = arg1[arg2 * bsize + arg3];
+    v4[0] = arg2 * bsize + arg3;
+    v6++;
+    while (v6 > 0) {
+        v1 = v4[v6 - 1] / bsize;
+        v2 = v4[v6 - 1] % bsize;
+        v6--;
+        v5[v7] = v1 * bsize + v2;
+        v7++;
+        arg1[v1 * bsize + v2] = 8;
+        if (v1 > 0 && v3 == arg1[(v1 - 1) * bsize + v2]) {
+            v4[v6] = (v1 - 1) * bsize + v2;
+            v6++;
+        }
+        if (v1 < bsize - 1 && v3 == arg1[(v1 + 1) * bsize + v2]) {
+            v4[v6] = (v1 + 1) * bsize + v2;
+            v6++;
+        }
+        if (v2 > 0 && v3 == arg1[v1 * bsize + v2 - 1]) {
+            v4[v6] = v1 * bsize + v2 - 1;
+            v6++;
+        }
+        if (v2 < bsize - 1 && v3 == arg1[v1 * bsize + v2 + 1]) {
+            v4[v6] = v1 * bsize + v2 + 1;
+            v6++;
+        }
+    }
+    v8 = v7;
+    while (v7 > 0) {
+        arg1[v5[v7 - 1]] = 0;
+        v7--;
+    }
+    return v8;
+}
+
+int eat(mixed arg1, mixed arg2, mixed arg3, mixed arg4, mixed arg5) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    v3 = 0;
+    v1 = arg1[arg2 * bsize + arg3];
+    if (v1 == 1) {
+        v2 = 2;
+    } else {
+        v2 = 1;
+    }
+    if (arg2 > 0 && arg1[(arg2 - 1) * bsize + arg3] == v2 && no_qi(arg1, arg2 - 1, arg3)) {
+        v3 += remove_block(arg1, arg2 - 1, arg3);
+        arg4[0] = arg2 - 1;
+        arg5[0] = arg3;
+    }
+    if (arg2 < bsize - 1 && arg1[(arg2 + 1) * bsize + arg3] == v2 && no_qi(arg1, arg2 + 1, arg3)) {
+        v3 += remove_block(arg1, arg2 + 1, arg3);
+        arg4[0] = arg2 + 1;
+        arg5[0] = arg3;
+    }
+    if (arg3 > 0 && arg1[arg2 * bsize + arg3 - 1] == v2 && no_qi(arg1, arg2, arg3 - 1)) {
+        v3 += remove_block(arg1, arg2, arg3 - 1);
+        arg4[0] = arg2;
+        arg5[0] = arg3 - 1;
+    }
+    if (arg3 < bsize - 1 && arg1[arg2 * bsize + arg3 + 1] == v2 && no_qi(arg1, arg2, arg3 + 1)) {
+        v3 += remove_block(arg1, arg2, arg3 + 1);
+        arg4[0] = arg2;
+        arg5[0] = arg3 + 1;
+    }
+    return v3;
+}
+
+int weiqi_rule(mixed arg1, mixed arg2) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    mixed v6;
+    v4 = allocate(bsize * bsize);
+    v5 = allocate(1);
+    v6 = allocate(1);
+    if (arg1 < 0 || arg1 >= bsize || arg2 < 0 || arg2 >= bsize) {
+        return 0;
+    }
+    if (game[arg1 * bsize + arg2]) {
+        return -2;
+    }
+    for (v1 = 0; v1 < bsize; v1++) {
+        for (v2 = 0; v2 < bsize; v2++) {
+            v4[v1 * bsize + v2] = game[v1 * bsize + v2];
+        }
+    }
+    if (turn == "black") {
+        v4[arg1 * bsize + arg2] = 1;
+    } else {
+        v4[arg1 * bsize + arg2] = 2;
+    }
+    v3 = eat(v4, arg1, arg2, v5, v6);
+    if (v3 > 1) {
+        for (v1 = 0; v1 < bsize; v1++) {
+            for (v2 = 0; v2 < bsize; v2++) {
+                game[v1 * bsize + v2] = v4[v1 * bsize + v2];
+            }
+        }
+        jie_flag = 6;
+        return 1;
+    } else if (v3 == 1) {
+        if (jie_flag == 5 && arg1 == jie_x_ban && arg2 == jie_y_ban) {
+            return -3;
+        }
+        for (v1 = 0; v1 < bsize; v1++) {
+            for (v2 = 0; v2 < bsize; v2++) {
+                game[v1 * bsize + v2] = v4[v1 * bsize + v2];
+            }
+        }
+        jie_flag = 5;
+        jie_x_ban = v5[0];
+        jie_y_ban = v6[0];
+        return 1;
+    } else {
+        if (no_qi(v4, arg1, arg2)) {
+            return -4;
+        }
+        game[arg1 * bsize + arg2] = v4[arg1 * bsize + arg2];
+        jie_flag = 6;
+        return 1;
+    }
+}
+
+int wuzi_rule(mixed arg1, mixed arg2) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    if (game[arg1 * bsize + arg2]) {
+        return -2;
+    }
+    if (turn == "black") {
+        game[arg1 * bsize + arg2] = 1;
+    } else {
+        game[arg1 * bsize + arg2] = 2;
+    }
+    v3 = game[arg1 * bsize + arg2];
+    v4 = 1;
+    v1 = arg1 + 1;
+    v2 = arg2 + 1;
+    while (v1 >= 0 && v1 < bsize && v2 >= 0 && v2 < bsize && v3 == game[v1 * bsize + v2]) {
+        v1++;
+        v2++;
+        v4++;
+    }
+    v1 = arg1 - 1;
+    v2 = arg2 - 1;
+    while (v1 >= 0 && v1 < bsize && v2 >= 0 && v2 < bsize && v3 == game[v1 * bsize + v2]) {
+        v1--;
+        v2--;
+        v4++;
+    }
+    if (v4 >= 5) {
+        return 9;
+    }
+    v4 = 1;
+    v1 = arg1 - 1;
+    v2 = arg2 + 1;
+    while (v1 >= 0 && v1 < bsize && v2 >= 0 && v2 < bsize && v3 == game[v1 * bsize + v2]) {
+        v1--;
+        v2++;
+        v4++;
+    }
+    v1 = arg1 + 1;
+    v2 = arg2 - 1;
+    while (v1 >= 0 && v1 < bsize && v2 >= 0 && v2 < bsize && v3 == game[v1 * bsize + v2]) {
+        v1++;
+        v2--;
+        v4++;
+    }
+    if (v4 >= 5) {
+        return 9;
+    }
+    v4 = 1;
+    v1 = arg1 + 1;
+    v2 = arg2;
+    while (v1 >= 0 && v1 < bsize && v2 >= 0 && v2 < bsize && v3 == game[v1 * bsize + v2]) {
+        v1++;
+        v4++;
+    }
+    v1 = arg1 - 1;
+    v2 = arg2;
+    while (v1 >= 0 && v1 < bsize && v2 >= 0 && v2 < bsize && v3 == game[v1 * bsize + v2]) {
+        v1--;
+        v4++;
+    }
+    if (v4 >= 5) {
+        return 9;
+    }
+    v4 = 1;
+    v1 = arg1;
+    v2 = arg2 + 1;
+    while (v1 >= 0 && v1 < bsize && v2 >= 0 && v2 < bsize && v3 == game[v1 * bsize + v2]) {
+        v2++;
+        v4++;
+    }
+    v1 = arg1;
+    v2 = arg2 - 1;
+    while (v1 >= 0 && v1 < bsize && v2 >= 0 && v2 < bsize && v3 == game[v1 * bsize + v2]) {
+        v2--;
+        v4++;
+    }
+    if (v4 >= 5) {
+        return 9;
+    }
+    return 1;
+}
+
+int translate_position(mixed arg1, mixed arg2, mixed arg3) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    v2 = 0;
+    if (sizeof(arg1) > 3 || sizeof(arg1) < 2) {
+        return 0;
+    }
+    v3 = arg1[0..0];
+    for (v1 = 0; v1 < bsize; v1++) {
+        if (v3 == Ucase[v1] || v3 == lcase[v1]) {
+            arg2[0] = v1;
+            v2 = 1;
+        }
+    }
+    if (!v2) {
+        return 0;
+    }
+    v2 = 0;
+    v4 = arg1[1..sizeof(arg1) - 1];
+    for (v1 = 0; v1 < bsize; v1++) {
+        if (v4 == nindex[v1]) {
+            arg3[0] = v1;
+            v2 = 1;
+        }
+    }
+    if (v2) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+int do_undo() {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    v1 = allocate(1);
+    v2 = allocate(1);
+    v3 = this_player();
+    v4 = environment(v3);
+    if (!v3->query_temp("weiqi_seat")) {
+        return notify_fail("你是旁观者，怎么好意思瞎指挥？\n");
+    }
+    if (status == 3) {
+        return notify_fail("还没新开一局棋呐。\n");
+    }
+    if (status != 7) {
+        return notify_fail("目前只提供五子棋的悔棋功能。\n");
+    }
+    if (!WQ_Started) {
+        return notify_fail("一步都没走，悔什么棋。\n");
+    }
+    if (v3->query_temp("weiqi_seat") != turn) {
+        return notify_fail("要悔棋也得跟人家商量一下呀。\n");
+    }
+    if (WQ_Undoed) {
+        return notify_fail("一次只能悔一步棋。\n");
+    }
+    WQ_Undoed = 1;
+    translate_position(lastmove, v1, v2);
+    if (status == 7) {
+        game[v1[0] * bsize + v2[0]] = 0;
+        if (lastlastmove == "") {
+            WQ_Started = 0;
+            lastmove = "";
+        } else {
+            lastmove = lastlastmove;
+        }
+    }
+    if (turn == "black") {
+        turn = "white";
+        if (lastmove != "") {
+            tell_room(v4, "\n黑棋上一步走在了" + lastmove + "\n");
+        }
+    } else {
+        turn = "black";
+        if (lastmove != "") {
+            tell_room(v4, "\n白棋上一步走在了" + lastmove + "\n");
+        }
+    }
+    tell_room(v4, show_game());
+    v5 = pl[turn];
+    if (turn == "black") {
+        tell_room(v4, "现在轮到黑方" + v5->name() + "走棋。\n");
+    } else {
+        tell_room(v4, "现在轮到白方" + v5->name() + "走棋。\n");
+    }
+    return 1;
+}
+
+int do_play(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    mixed v6;
+    mixed v7;
+    v1 = allocate(1);
+    v2 = allocate(1);
+    v3 = this_player();
+    v4 = environment(v3);
+    v7 = 0;
+    if (!v3->query_temp("weiqi_seat")) {
+        return notify_fail("你是旁观者，怎么好意思瞎指挥？\n");
+    }
+    if (status == 3) {
+        return notify_fail("还没新开一局棋呐。\n");
+    }
+    if (v3->query_temp("weiqi_seat") != turn) {
+        return notify_fail("还没轮到你走棋。\n");
+    }
+    if (!translate_position(arg, v1, v2)) {
+        return notify_fail("你要下在哪里？\n");
+    }
+    if (status == 7) {
+        v6 = wuzi_rule(v1[0], v2[0]);
+        if (v6 == -2) {
+            return notify_fail("这个位置上已经有子了！\n");
+        }
+        if (v6 == 9) {
+            v7 = 1;
+        }
+    } else {
+        v6 = weiqi_rule(v1[0], v2[0]);
+        if (v6 == -2) {
+            return notify_fail("这个位置上已经有子了！\n");
+        }
+        if (v6 == -3) {
+            return notify_fail("现在还没轮到你提劫！\n");
+        }
+        if (v6 == -4) {
+            return notify_fail("这个位置是禁入点！\n");
+        }
+    }
+    WQ_Started = 1;
+    WQ_Undoed = 0;
+    lastlastmove = lastmove;
+    lastmove = arg;
+    if (turn == "black") {
+        tell_room(v4, "\n黑棋上一步走在了" + arg + "\n");
+    } else {
+        tell_room(v4, "\n白棋上一步走在了" + arg + "\n");
+    }
+    if (v7) {
+        tell_room(v4, show_game());
+        if (turn == "black") {
+            message_vision("黑方$N胜。\n", v3);
+        } else {
+            message_vision("白方$N胜。\n", v3);
+        }
+        status = 3;
+        return 1;
+    }
+    if (turn == "black") {
+        turn = "white";
+        v5 = pl["white"];
+    } else {
+        turn = "black";
+        v5 = pl["black"];
+    }
+    tell_room(v4, show_game());
+    if (turn == "black") {
+        message_vision("现在轮到黑方$N走棋。\n", v5);
+    } else {
+        message_vision("现在轮到白方$N走棋。\n", v5);
+    }
+    return 1;
+}

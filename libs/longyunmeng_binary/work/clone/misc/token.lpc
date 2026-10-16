@@ -1,0 +1,174 @@
+// 本文件由编译后的 .b 二进制程序反编译还原，原始源码未随档案发布。
+// Decompiled from the compiled .b binary; the original source was not distributed.
+inherit "/inherit/item/item";
+inherit "/feature/autoload";
+inherit "/feature/save";
+void create();
+void init();
+string query_save_file();
+void autoload(mixed);
+int do_unseal(mixed);
+int do_assign(mixed);
+int do_modify(mixed);
+int do_dismiss(mixed);
+
+void create() {
+    set_name("领袖信物", ({ "token" }));
+    set("unit", "个");
+    set("leader_title", "帮主");
+    seteuid(getuid());
+}
+
+string short() {
+    mixed v1;
+    if (stringp(query("short")) || !stringp(v1 = query("guild_name"))) {
+        return ::short();
+    } else {
+        return v1 + ::short();
+    }
+}
+
+string long() {
+    if (stringp(query("long"))) {
+        return ::long();
+    } else if (stringp(query("guild_id"))) {
+        return "这是一个已经解开封印的领袖信物，你可以用以下指令来创造属于你自己的门派\n或帮会组织：\n\n    modify <项目> <字串>    修改信物的外观、门派名称等等\n    assign                  将组织领袖的位置传给别人\n    dismiss                 永久解散这个组织\n    \n";
+    } else {
+        return "这是一个用来让玩家建立门派、帮会时所用的领袖信物，持有这项物品的人就是\n这个组织的领袖(帮主)，领袖具有招募新成员、开除原有成员、以及更改成员\n称号等权力，这项信物会自动储存，在建立一个门派之前必须先有一名巫师解除\n信物石的封印(unseal)。\n";
+    }
+}
+
+void init() {
+    if (!environment()->is_character()) {
+        message_vision("$N发出一阵耀眼的光芒，然后消失了。\n", this_object());
+        destruct(this_object());
+    } else {
+        add_action("do_unseal", "unseal");
+        add_action("do_assign", "assign");
+        add_action("do_modify", "modify");
+        add_action("do_dismiss", "dismiss");
+    }
+}
+
+string query_autoload() {
+    return query("guild_id");
+}
+
+string query_save_file() {
+    return "/data/guild/" + query("guild_id");
+}
+
+void autoload(mixed arg) {
+    if (!restore()) {
+        if (environment()) {
+            environment()->delete("family");
+        }
+        destruct(this_object());
+    }
+}
+
+int do_unseal(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    if (query("guild_id")) {
+        return notify_fail(query("name") + "的封印已经被解开了。\n");
+    }
+    if (!wizardp(this_player(1))) {
+        return notify_fail("只有巫师能解除领袖信物的封印，如果你要创立一个新的门派或帮会，请\n先找一位巫师做担保人，请他(她)为你解除封印。\n");
+    }
+    if (!arg) {
+        return notify_fail("指令格式：unseal <门派代号> <门派名称>\n");
+    }
+    if (sscanf(arg, "%s %s", v2, v3) != 2) {
+        set("guild_id", arg);
+        if (restore()) {
+            write("Ok.\n");
+            return 1;
+        } else {
+            delete("guild_id");
+            return notify_fail("没有这个门派。\n");
+        }
+    }
+    for (v1 = 0; v1 < sizeof(v2); v1++) {
+        if (v2[v1] < 97 || v2[v1] > 122) {
+            return notify_fail("<门派代号>必须由小写英文字母组成。\n");
+        }
+    }
+    set("guild_id", v2);
+    set("guild_name", v3);
+    if (file_size(query_save_file() + ".o") >= 0) {
+        restore();
+    } else {
+        log_file("UNSEAL", sprintf("%s [%s] by %s, %s\n", v3, v2, this_player(1)->query("id"), ctime(time())));
+    }
+    write("Ok.\n");
+    return 1;
+}
+
+int do_assign(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    if (!arg || !objectp(v1 = present(arg, environment(this_player()))) || !living(v1)) {
+        return notify_fail("你要将帮主之位传给谁？\n");
+    }
+    v2 = this_player(1)->query("family");
+    if (wizardp(this_player(1)) || mapp(v2) && v2["family_name"] == query("guild_name") && this_player(1)->query("id") == query("leader")) {
+        if (!query("leader")) {
+            v1->create_family(query("guild_name"));
+        } else {
+            v2 = v1->query("family");
+            if (!mapp(v2) || v2["family_name"] != query("guild_name")) {
+                return notify_fail(v1->query("name") + "并不是" + query("guild_name") + "的一份子。\n");
+            }
+        }
+        v1->assign_apprentice(query("leader_title"), -1);
+        set("leader", v1->query("id"));
+        if (stringp(v3 = query("assign_msg"))) {
+            message_vision(v3, this_player(1), v1);
+        } else {
+            message_vision("\n$N将" + query("guild_name") + "的" + query("name") + "交给了$n。\n\n今后$p就是" + query("guild_name") + "的帮主了。\n\n", this_player(1), v1);
+        }
+        move(v1);
+        write("Ok.\n");
+        return 1;
+    } else {
+        return notify_fail("你没有这种权力。\n");
+    }
+}
+
+int do_modify(mixed arg) {
+    mixed v1;
+    mixed v2;
+    if (!query("guild_id")) {
+        return 0;
+    }
+    if (!arg || sscanf(arg, "%s %s", v1, v2) != 2) {
+        return notify_fail("指令格式：modify <项目> <讯息>\n");
+    }
+    switch (v1) {
+    case "name":
+    case "short":
+    case "long":
+    case "leader_title":
+    case "assign_msg":
+        set(v1, v2);
+        save();
+        write("Ok.\n");
+        break;
+    default:
+        write("你能修改的项目只有：name, short, long, assign_msg, leader_title。\n");
+    }
+    return 1;
+}
+
+int do_dismiss(mixed arg) {
+    if (!query("guild_id")) {
+        return 0;
+    }
+    rm(query_save_file() + ".o");
+    write(query("guild_name") + "被解散了。\n");
+    destruct(this_object());
+    return 1;
+}

@@ -19,11 +19,15 @@ def main():
     ap.add_argument('--out')
     ap.add_argument('--list')
     ap.add_argument('--fluffos', action='store_true', help='FluffOS flavour (protected, no unused locals)')
+    ap.add_argument('--gbk', action='store_true',
+                    help='keep GBK characters whole in strings (a 0x5c second byte is not escaped): '
+                         'for a tree that is converted to UTF-8 afterwards')
     a = ap.parse_args()
     from . import decompile as _d
     _d.TARGET['fluffos'] = a.fluffos
-    mud = Mudlib(a.bdir)
+    _d.TARGET['gbk'] = a.gbk
     efuns = Efuns(json.load(open(a.driver)))
+    mud = Mudlib(a.bdir, efuns.entry_size)
     simuls = mud.simul_names(a.simul)
     paths = list(a.paths)
     if a.list:

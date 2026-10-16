@@ -1,0 +1,374 @@
+// 本文件由编译后的 .b 二进制程序反编译还原，原始源码未随档案发布。
+// Decompiled from the compiled .b binary; the original source was not distributed.
+inherit "/inherit/room/room";
+int random2(mixed);
+void create();
+void init();
+int do_dou(mixed);
+void gamble_prepare();
+void gamble_start();
+object present_ji(mixed);
+void gamble_perform();
+void player_wins(mixed, mixed);
+void player_loses(mixed, mixed);
+void clean_ji();
+void gamble_finish();
+int do_bian(mixed);
+int do_fight(mixed);
+int do_steal(mixed);
+int do_kill(mixed);
+int do_ji(mixed);
+int do_cast(mixed);
+int do_exert(mixed);
+int do_perform(mixed);
+
+int room_status = 0;
+object hg_ji = 0;
+object lw_ji = 0;
+mapping jis = ([ "hg" : "红冠鸡", "lw" : "绿尾鸡" ]);
+
+int random2(mixed arg) {
+    return (random(arg) + uptime()) % arg;
+}
+
+void create() {
+    set("short", "斗鸡房");
+    set("long", "斗鸡房里一左一右放着两个青竹鸡笼，一个鸡笼里关着一群红\n冠鸡，另一个鸡笼里关着一群绿尾鸡。屋子正中是七尺见方的斗鸡\n场，由一圈低低的青玉栏杆围成。一位白髯鸡仙正在张罗着斗鸡。\n在他的后面墙上有一个牌子(paizi)。\n");
+    set("item_desc", ([ "paizi" : "押红冠鸡：  dou hg <amount> <money>\n押绿尾鸡：  dou lw <amount> <money>\n" ]));
+    set("objects", ([ "/d/city2/npc/jixian" : 1 ]));
+    set("exits", ([ "west" : "/d/city2/duchang2" ]));
+    set("light_up", 1);
+    set("no_fight", 1);
+    set("no_magic", 1);
+    setup();
+}
+
+void init() {
+    add_action("do_dou", "dou");
+    add_action("do_bian", "bian");
+    add_action("do_fight", "fight");
+    add_action("do_steal", "steal");
+    add_action("do_kill", "kill");
+    add_action("do_ji", "ji");
+    add_action("do_cast", "cast");
+    add_action("do_exert", "exert");
+    add_action("do_perform", "perform");
+    if (room_status > 0) {
+        return;
+    }
+    remove_call_out("gamble_prepare");
+    remove_call_out("gamble_start");
+    remove_call_out("gamble_perform");
+    remove_call_out("gamble_finish");
+    call_out("gamble_prepare", 2);
+    room_status = 1;
+}
+
+int do_dou(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    v1 = this_player();
+    if (!arg || sscanf(arg, "%s %d %s", v2, v3, v4) != 3) {
+        return notify_fail("请使用：  dou <押鸡种类> <数目> <货币>\n");
+    }
+    if (v2 != "hg" && v2 != "lw") {
+        return notify_fail("你要押什么样的鸡？\n");
+    }
+    v5 = present(v4 + "_money", v1);
+    if (!v5) {
+        return notify_fail("你身上没有这种货币。\n");
+    }
+    if (v3 < 1) {
+        return notify_fail("请多押一些钱。\n");
+    }
+    if (v3 > v5->query_amount()) {
+        return notify_fail("你身上的钱不够押。\n");
+    }
+    if (v3 * v5->query("base_value") > 10000) {
+        return notify_fail("你想豪赌啊，拜托！官兵就上来了。\n");
+    }
+    if (v1->query_temp("gamble_ji/amount") > 0) {
+        return notify_fail("你已经押过了。\n");
+    }
+    if (room_status > 1) {
+        return notify_fail("现在正在斗鸡呢，稍等片刻。\n");
+    }
+    v1->set_temp("gamble_ji/kind", v2);
+    v1->set_temp("gamble_ji/amount", v3);
+    v1->set_temp("gamble_ji/money", v4);
+    message_vision(sprintf("$N拿出%s%s%s往青玉栏杆上一放，押在%s上。\n", chinese_number(v3), v5->query("base_unit"), v5->query("name"), jis[v2]), v1);
+    if (v3 == v5->query_amount()) {
+        destruct(v5);
+    } else {
+        v5->add_amount(-v3);
+    }
+    return 1;
+}
+
+int valid_leave(mixed arg1, mixed arg2) {
+    if (arg2 == "south") {
+        if (arg1->query_temp("gamble_ji/amount") > 0) {
+            message_vision("$N扔下押鸡的钱不要了。\n", arg1);
+        }
+        arg1->delete_temp("gamble_ji");
+    }
+    return ::valid_leave(arg1, arg2);
+}
+
+void gamble_prepare() {
+    mixed v1;
+    v1 = this_object();
+    tell_room(v1, "白髯鸡仙从左右鸡笼里各拿出一只红冠鸡和一只绿尾鸡。\n");
+    hg_ji = clone_object("/d/city2/npc/douji");
+    hg_ji->set("name", "红冠鸡");
+    hg_ji->move(v1);
+    lw_ji = clone_object("/d/city2/npc/douji");
+    lw_ji->set("name", "绿尾鸡");
+    lw_ji->move(v1);
+    tell_room(v1, "白髯鸡仙说：好，可以押钱了，一赢二。\n");
+    room_status = 1;
+    call_out("gamble_start", 20);
+}
+
+void gamble_start() {
+    mixed v1;
+    v1 = this_object();
+    tell_room(v1, "白髯鸡仙说声：停押，斗鸡。\n");
+    tell_room(v1, "然后将两只鸡抱起，拿出铁啄熟练地安上，把鸡放进栏内。\n");
+    room_status = 2;
+    hg_ji->kill_ob(lw_ji);
+    lw_ji->kill_ob(hg_ji);
+    call_out("gamble_perform", 1);
+}
+
+object present_ji(mixed arg) {
+    mixed v1;
+    mixed v2;
+    v1 = all_inventory(arg);
+    v2 = sizeof(v1);
+    while (v2--) {
+        if (userp(v1[v2])) {
+            continue;
+        }
+        if (v1[v2]->id("ji")) {
+            return v1[v2];
+        }
+    }
+}
+
+void gamble_perform() {
+    mixed v1;
+    mixed v2;
+    v1 = this_object();
+    if (!living(hg_ji)) {
+        hg_ji->die();
+    }
+    if (!living(lw_ji)) {
+        lw_ji->die();
+    }
+    v2 = present_ji(v1);
+    if (v2 && v2->is_fighting()) {
+        remove_call_out("gamble_perform");
+        call_out("gamble_perform", 1);
+        return;
+    }
+    if (v2->query("qi") < 15) {
+        v2->unconcious();
+        v2->die();
+    }
+    call_out("gamble_finish", 1);
+}
+
+void player_wins(mixed arg1, mixed arg2) {
+    mixed v1;
+    mixed v2;
+    v1 = clone_object("/clone/money/" + arg1->query_temp("gamble_ji/money"));
+    v2 = arg1->query_temp("gamble_ji/amount");
+    arg2 = arg2 * v2;
+    v1->set_amount(arg2);
+    message_vision(sprintf("$N赢了%s%s%s！\n", chinese_number(arg2), v1->query("base_unit"), v1->query("name")), arg1);
+    v1->move(arg1);
+}
+
+void player_loses(mixed arg1, mixed arg2) {
+    mixed v1;
+    v1 = clone_object("/clone/money/" + arg1->query_temp("gamble_ji/money"));
+    arg2 = arg1->query_temp("gamble_ji/amount");
+    message_vision(sprintf("白髯鸡仙将$N留在玉栏上的%s%s%s收走。\n", chinese_number(arg2), v1->query("base_unit"), v1->query("name")), arg1);
+    destruct(v1);
+}
+
+void clean_ji() {
+    mixed v1;
+    mixed v2;
+    v1 = this_object();
+    v2 = present_ji(v1);
+    if (v2) {
+        tell_room(v1, "白髯鸡仙将" + v2->query("name") + "递到屋内。\n");
+        destruct(v2);
+    }
+    v2 = present_ji(v1);
+    if (v2) {
+        tell_room(v1, "白髯鸡仙将" + v2->query("name") + "递到屋内。\n");
+        destruct(v2);
+    }
+    v2 = present("corpse", v1);
+    if (v2) {
+        tell_room(v1, "白髯鸡仙拎起" + v2->query("name") + "回头一扔。\n");
+        destruct(v2);
+    }
+    v2 = present("corpse", v1);
+    if (v2) {
+        tell_room(v1, "白髯鸡仙拎起" + v2->query("name") + "回头一扔。\n");
+        destruct(v2);
+    }
+}
+
+void gamble_finish() {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    mixed v6;
+    v4 = this_object();
+    v5 = present_ji(v4);
+    v6 = all_inventory(v4);
+    if (!v5) {
+        v2 = 0;
+        v1 = "none  of  them";
+    } else if (v5->query("name") == "红冠鸡") {
+        v2 = 2;
+        v1 = "hg";
+    } else {
+        v2 = 2;
+        v1 = "lw";
+    }
+    if (v2 > 0) {
+        tell_room(v4, "白髯鸡仙说道：" + jis[v1] + "获胜！\n");
+    } else {
+        tell_room(v4, "白髯鸡仙叹息道：双败陪本！\n");
+    }
+    v3 = sizeof(v6);
+    while (v3--) {
+        if (!userp(v6[v3])) {
+            continue;
+        }
+        if (v6[v3]->query_temp("gamble_ji/kind") == v1) {
+            player_wins(v6[v3], v2);
+        } else if (v6[v3]->query_temp("gamble_ji/kind")) {
+            player_loses(v6[v3], v2);
+        }
+        v6[v3]->delete_temp("gamble_ji");
+    }
+    tell_room(v4, "\n");
+    call_out("clean_ji", 8);
+    call_out("gamble_prepare", random(3) + 10);
+}
+
+int do_bian(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    v1 = this_player();
+    v2 = this_object();
+    if (!arg) {
+        return 0;
+    }
+    v3 = present(arg, v2);
+    if (v3 == hg_ji || v3 == lw_ji) {
+        message_vision("$N头往鸡肚下一钻，想变成鸡。\n", v1);
+        message_vision("白髯鸡仙对$N说道：是看鸡呢还是看你？\n", v1);
+        return 1;
+    }
+    return 0;
+}
+
+int do_fight(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    v1 = this_player();
+    v2 = this_object();
+    if (!arg) {
+        return 0;
+    }
+    v3 = present(arg, v2);
+    if (v3 == hg_ji || v3 == lw_ji) {
+        message_vision("$N向鸡提出挑战。\n", v1);
+        message_vision("白髯鸡仙对$N说道：是看鸡斗鸡呢还是人斗鸡？\n", v1);
+        return 1;
+    }
+    return 0;
+}
+
+int do_steal(mixed arg) {
+    mixed v1;
+    mixed v2;
+    v1 = this_player();
+    v2 = this_object();
+    message_vision("$N偷偷摸摸地伸出手。\n", v1);
+    message_vision("白髯鸡仙对$N说道：你真的要偷鸡摸狗不成？\n", v1);
+    return 1;
+}
+
+int do_kill(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    v1 = this_player();
+    v2 = this_object();
+    if (!arg) {
+        return 0;
+    }
+    v3 = present(arg, v2);
+    if (v3 == hg_ji || v3 == lw_ji) {
+        message_vision("$N恶狠狠地想杀鸡。\n", v1);
+        message_vision("白髯鸡仙对$N说道：想吃鸡自个上馆子去。\n", v1);
+        return 1;
+    }
+    return 0;
+}
+
+int do_ji(mixed arg) {
+    mixed v1;
+    mixed v2;
+    v1 = this_player();
+    v2 = this_object();
+    message_vision("$N鸡头鸡脑地想要祭什么。\n", v1);
+    message_vision("白髯鸡仙对$N说道：鸡又不是祖宗，对鸡祭什么祭。\n", v1);
+    return 1;
+}
+
+int do_cast(mixed arg) {
+    mixed v1;
+    mixed v2;
+    v1 = this_player();
+    v2 = this_object();
+    message_vision("$N鸡头鸡脑地念了几句咒语。\n", v1);
+    message_vision("白髯鸡仙对$N说道：有鸡妨碍您施法您就出门去念吧。\n", v1);
+    return 1;
+}
+
+int do_exert(mixed arg) {
+    mixed v1;
+    mixed v2;
+    v1 = this_player();
+    v2 = this_object();
+    message_vision("$N想施内功。\n", v1);
+    message_vision("白髯鸡仙对$N说道：别在这里练功，练出鸡胸怎办？\n", v1);
+    return 1;
+}
+
+int do_perform(mixed arg) {
+    mixed v1;
+    mixed v2;
+    v1 = this_player();
+    v2 = this_object();
+    message_vision("$N想施外功。\n", v1);
+    message_vision("白髯鸡仙对$N说道：别在这里练功，练出鸡胸怎办？\n", v1);
+    return 1;
+}

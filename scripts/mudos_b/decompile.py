@@ -17,10 +17,12 @@ than by general graph structuring:
 Correctness is checked by recompiling the output with the original driver
 and comparing the programs (see oracle.py).
 """
+import re
 import struct
 
 from . import bfile
-from .disasm import decode, Efuns, FP_MASK, FP_LOCAL, FP_EFUN, FP_SIMUL, FP_FUNCTIONAL, FP_ANONYMOUS, FP_NOT_BINDABLE
+from .disasm import (decode, Efuns, FP_MASK, FP_LOCAL, FP_EFUN, FP_SIMUL, FP_FUNCTIONAL, FP_ANONYMOUS,
+                     FP_NOT_BINDABLE, FP_G_VAR)
 from .ops import OP, BASE
 
 TYPE_NAMES = {0: '', 1: 'mixed', 2: 'void', 3: 'void', 4: 'int', 5: 'string', 6: 'object',
@@ -76,6 +78,14 @@ class Raw(E):
 
     def text(self):
         return self.s
+
+
+class GlobalRef(Raw):
+    """A global variable; the index tells apart two globals of one name."""
+
+    def __init__(self, s, index):
+        super().__init__(s)
+        self.index = index
 
 
 class Num(E):
@@ -448,8 +458,25 @@ class Context:
     def quote(self, b):
         b = b.split(b'\0')[0]
         out = []
-        for ch in b:
+        gbk = TARGET.get('gbk')
+        skip = 0
+        for k, ch in enumerate(b):
             c = chr(ch)
+            if skip:
+                skip -= 1
+                out.append(c)
+                continue
+            if gbk and 0x81 <= ch <= 0xfe and k + 1 < len(b):
+                # keep a GBK/GB18030 character whole: its second byte may be
+                # 0x5c, and escaping it would leave a stray backslash once the
+                # source is converted to UTF-8
+                nb = b[k + 1]
+                if 0x40 <= nb <= 0xfe and nb != 0x7f:
+                    skip = 1
+                elif 0x30 <= nb <= 0x39 and k + 3 < len(b) and 0x81 <= b[k + 2] <= 0xfe and 0x30 <= b[k + 3] <= 0x39:
+                    skip = 3
+                out.append(c)
+                continue
             if ch == 0x5c:
                 out.append('\\\\')
             elif ch == 0x22:
@@ -499,9 +526,16 @@ class Context:
     def efun_call_name(self, tok):
         e = self.efun(tok)
         n = e['name'] if e else '<efun %d>' % tok
-        if n in self.simul_set:
+        if n in self.simul_set or n in self.own_names():
             return 'efun::' + n
         return n
+
+    def own_names(self):
+        """Names in the program's function table: a call to an efun of the
+        same name was written efun::name (or came before the declaration)."""
+        if not hasattr(self, '_own_names'):
+            self._own_names = {self.mud.function_name(self.prog, i) for i in range(self.prog.num_functions_total)}
+        return self._own_names
 
     def inherit_label(self, i):
         name = self.prog.inherits[i].name
@@ -603,7 +637,7 @@ class FuncDecompiler:
         nxt = i + 1
 
         if x.efun:
-            return self.do_efun(i, x, stmts, stack)
+            return self.do_efun(i, x, stmts, stack, hi)
 
         if name == 'push':
             for kind, n in x.args:
@@ -612,7 +646,7 @@ class FuncDecompiler:
                 elif kind == 'number':
                     stack.append(Num(n))
                 elif kind == 'global':
-                    stack.append(Raw(ctx.var_name(n)))
+                    stack.append(GlobalRef(ctx.var_name(n), n))
                 else:
                     stack.append(Raw(self.lname(n)))
             return nxt
@@ -638,13 +672,13 @@ class FuncDecompiler:
             stack.append(Raw(self.lname(x.args[0])))
             return nxt
         if name == 'global':
-            stack.append(Raw(ctx.var_name(x.args[0])))
+            stack.append(GlobalRef(ctx.var_name(x.args[0]), x.args[0]))
             return nxt
         if name == 'local_lvalue':
             stack.append(Raw(self.lname(x.args[0])))
             return nxt
         if name == 'global_lvalue':
-            stack.append(Raw(ctx.var_name(x.args[0])))
+            stack.append(GlobalRef(ctx.var_name(x.args[0]), x.args[0]))
             return nxt
         if name in BINOPS:
             l, r = self.pop(stack, 2)
@@ -846,7 +880,7 @@ class FuncDecompiler:
         raise DecompileError('no %s' % opname)
 
     # -- efuns
-    def do_efun(self, i, x, stmts, stack):
+    def do_efun(self, i, x, stmts, stack, hi=None):
         ctx = self.ctx
         e = ctx.efun(x.op)
         if e is None:
@@ -868,7 +902,10 @@ class FuncDecompiler:
             call = Call(ctx.efun_call_name(x.op), args)
         if e['ret_type'] == TYPE_NOVALUE:
             nx = self.ins[i + 1] if i + 1 < len(self.ins) else None
-            if nx is not None and not nx.efun and OPN[nx.op] == 'const0' and self.value_used_after(i + 1):
+            # the const0 of a used void value belongs to the same expression:
+            # one past the end of the range being decoded starts the next statement
+            if (nx is not None and (hi is None or nx.off < hi) and not nx.efun and OPN[nx.op] == 'const0'
+                    and self.value_used_after(i + 1)):
                 stack.append(call)
                 return i + 2
             stack.append(Novalue(call))
@@ -933,7 +970,8 @@ class FuncDecompiler:
         last = self.ins[ti - 1]
         els_end = None
         if (not last.efun and OPN[last.op] == 'branch' and last.target >= T and ti - 1 > i
-                and not self.is_jump_out(last.target)):
+                and not self.is_jump_out(last.target, bare=ti - 1 == i + 1)
+                and not (self.forever_cont(last.target) and self.branches_past(i + 1, ti - 1, last.off))):
             els_end = last.target
             then_hi = last.off
         else:
@@ -953,9 +991,23 @@ class FuncDecompiler:
         stmts.append(SIf(cond, then, None))
         return ti
 
-    def is_jump_out(self, target):
+    def branches_past(self, a, b, then_hi):
+        """Some if in ins[a:b] ends beyond then_hi, so the branch at then_hi
+        belongs to that if (`if (x) { if (y) continue; }` in while (1)) and
+        is not the jump over an else-part."""
+        return any(not y.efun and OPN[y.op] in BRANCH_COND and y.target > then_hi for y in self.ins[a:b])
+
+    def forever_cont(self, target):
+        return any(c.get('forever') and target == c.get('cont') for c in self.ctl)
+
+    def is_jump_out(self, target, bare=False):
+        """target is a break/continue destination. A while (1) loop's continue
+        lands on its closing bbranch, where an if/else ending the body jumps
+        too; it counts only when the branch is all the then-part holds (bare):
+        the compiler drops an empty then-block, so `if (c) {} else ...` cannot
+        be what was written."""
         for c in reversed(self.ctl):
-            if target in (c.get('brk'), c.get('cont')):
+            if target == c.get('brk') or (target == c.get('cont') and (bare or not c.get('forever'))):
                 return True
         return False
 
@@ -1123,7 +1175,9 @@ class FuncDecompiler:
         cname = OPN[closer.op]
         self.flush(stmts, stack)
         if cname == 'bbranch':
-            self.ctl.append({'brk': brk, 'cont': None, 'forever': True})
+            # 'continue' in while (1) branches to the closing bbranch (see
+            # is_jump_out for the if/else that ends there too)
+            self.ctl.append({'brk': brk, 'cont': closer.off, 'forever': True})
             body, st = self.decode(x.off, closer.off)
             self.ctl.pop()
             if st:
@@ -1414,7 +1468,9 @@ def type_str(t, name='', fn=False):
     return '%s %s%s' % (tn, '*' if arr else '', name)
 
 
-TARGET = {'fluffos': False}   # FluffOS output: static functions -> protected, unused locals dropped
+# fluffos: static functions -> protected, unused locals dropped
+# gbk: GBK characters in string literals are kept whole (the tree is converted to UTF-8 next)
+TARGET = {'fluffos': False, 'gbk': False}
 
 
 def modifiers(flags, function=False):
@@ -1493,8 +1549,8 @@ class ProgramDecompiler:
         body, st = fd.decode(*rng)
         inits = {}
         for s in body:
-            if isinstance(s, SExpr) and isinstance(s.e, Assign) and isinstance(s.e.lv, Raw):
-                inits[s.e.lv.s] = s.e.rv
+            if isinstance(s, SExpr) and isinstance(s.e, Assign) and isinstance(s.e.lv, GlobalRef):
+                inits[s.e.lv.index] = s.e.rv
             elif isinstance(s, SExpr) and isinstance(s.e, Raw) and s.e.s == '':
                 continue
             elif isinstance(s, SRet):
@@ -1552,40 +1608,160 @@ class ProgramDecompiler:
             tent = tp.runtime[tf.runtime_index]
             events.append((i, 1, (tf, tent[1] if tent[0] == 'def' else 0, fl), 'proto'))
         events.sort(key=lambda e: (e[0], e[1]))
-        for pos, _, item, kind in events:
+        defs = [(f, lo, hi) for f, lo, hi in function_ranges(prog) if f.name != '#global_init#']
+        seq = self.lazy_layout(events, defs)
+        if seq is None:
+            seq = [(kind, item) for _, _, item, kind in events]
+            seq.append(('vars', None))
+            seq += [('def', d) for d in defs]
+        for k, (kind, item) in enumerate(seq):
             if kind == 'inherit':
                 ih = prog.inherits[item]
                 n = ih.name[:-2] if ih.name.endswith('.c') else ih.name
                 out.append('inherit "/%s";' % n)
-            else:
+            elif kind == 'proto':
                 f, nargs, fl = item
                 out.append(self.func_header(f, nargs, True, flags=fl) + ';')
-        if events:
-            out.append('')
-        inits = self.global_inits()
-        for name, t in zip(prog.variables, prog.variable_types):
-            mods = modifiers(t & ~0x1f & ~bfile.TYPE_MOD_ARRAY & ~bfile.TYPE_MOD_CLASS & 0xff00)
-            decl = ' '.join(mods + [type_str(t & 0xff, name)])
-            if name in inits:
-                decl += ' = ' + inits[name].src(P_ASSIGN)
-            out.append(decl + ';')
-        if prog.variables:
-            out.append('')
-        for f, lo, hi in function_ranges(prog):
-            if f.name == '#global_init#':
-                continue
-            ent = prog.runtime[f.runtime_index]
-            nargs, nloc = ent[1], ent[2]
-            try:
-                out += self.function(f, lo, hi, nargs, nloc)
-            except DecompileError as e:
-                self.errors.append('%s: %s' % (f.name, e))
-                out.append('// DECOMPILE FAILED: %s: %s' % (f.name, e))
-            out.append('')
+            elif kind == 'vars':
+                if k and out and out[-1] != '':
+                    out.append('')
+                self.emit_variables(out)
+            elif kind == 'var':
+                if seq[k - 1][0] != 'var' and out and out[-1] != '':
+                    out.append('')
+                self.emit_variable(out, item, self.global_inits())
+            else:
+                if out and out[-1] != '' and seq[k - 1][0] != 'def':
+                    out.append('')
+                f, lo, hi = item
+                ent = prog.runtime[f.runtime_index]
+                nargs, nloc = ent[1], ent[2]
+                try:
+                    out += self.function(f, lo, hi, nargs, nloc)
+                except DecompileError as e:
+                    self.errors.append('%s: %s' % (f.name, e))
+                    out.append('// DECOMPILE FAILED: %s: %s' % (f.name, e))
+                out.append('')
         lines = []
         for l in '\n'.join(out).split('\n'):
             lines += wrap_line(l)
         return '\n'.join(lines).rstrip('\n') + '\n'
+
+    def var_base(self):
+        prog = self.prog
+        if not prog.inherits:
+            return 0
+        last = prog.inherits[-1]
+        return last.variable_index_offset + self.ctx.mud.get(last.name).num_variables_total
+
+    def emit_variable(self, out, k, inits):
+        name, t = self.prog.variables[k], self.prog.variable_types[k]
+        mods = modifiers(t & ~0x1f & ~bfile.TYPE_MOD_ARRAY & ~bfile.TYPE_MOD_CLASS & 0xff00)
+        decl = ' '.join(mods + [type_str(t & 0xff, name)])
+        if self.var_base() + k in inits:
+            decl += ' = ' + inits[self.var_base() + k].src(P_ASSIGN)
+        out.append(decl + ';')
+
+    def emit_variables(self, out):
+        inits = self.global_inits()
+        for k in range(len(self.prog.variables)):
+            self.emit_variable(out, k, inits)
+        if self.prog.variables:
+            out.append('')
+
+    def lazy_layout(self, events, defs):
+        """A program compiled while the simul_efun object was loaded calls the
+        simul_efun N, not its own N, wherever no declaration of N came first
+        (a simul_efun component overriding an efun: `void message(...)` at the
+        end of message.c; a command with its own find_player() below a helper
+        that wants the real one). The usual layout declares every function
+        up front, which turns those calls into local ones, so such programs
+        get each prototype only where the function table order or a local
+        call needs it. None when no call needs that, or the order can't be
+        kept (inherits after own declarations)."""
+        prog, ctx = self.prog, self.ctx
+        protos = {pos: item for pos, _, item, kind in events if kind == 'proto'}
+        own_name = {item[0].name: pos for pos, item in protos.items()}
+        base = self.var_base()
+        simul_calls, local_calls, var_refs = {}, {}, {}
+        for f, lo, hi in defs:
+            sc, lc, vr = set(), set(), set()
+            for x in self.instrs_in(lo, hi):
+                if x.efun:
+                    continue
+                n = OPN[x.op]
+                if n == 'simul_efun':
+                    sc.add(ctx.simuls[x.args[0]])
+                elif n == 'call_function_by_address':
+                    lc.add(x.args[0])
+                elif n in ('global', 'global_lvalue'):
+                    vr.add(x.args[0])
+                elif n == 'push':
+                    vr |= {v for kind, v in x.args if kind == 'global'}
+                elif n == 'foreach':
+                    flags, a, b = x.args
+                    vr |= ({a} if flags & 1 else set()) | ({b} if flags & 2 else set())
+                elif n == 'function_constructor':
+                    k = x.args[0] & FP_MASK
+                    if k == FP_SIMUL:
+                        sc.add(ctx.simuls[x.args[1]])
+                    elif k == FP_LOCAL:
+                        lc.add(x.args[1])
+                    elif k == FP_G_VAR:
+                        vr.add(x.args[1])
+            simul_calls[f.runtime_index] = {own_name[n] for n in sc if n in own_name}
+            local_calls[f.runtime_index] = {j for j in lc if j in protos}
+            var_refs[f.runtime_index] = {v - base for v in vr if v >= base}
+        # two globals of one name: each use binds to the one declared last
+        # before it, so the declarations go between the functions
+        dup = len(set(prog.variables)) < len(prog.variables)
+        if not any(simul_calls.values()) and not dup:
+            return None
+        kinds = [kind for _, _, _, kind in events]
+        if 'inherit' in kinds and 'proto' in kinds and kinds.index('proto') < len(kinds) - kinds[::-1].index('inherit') - 1:
+            return None
+        seq = [('inherit', item) for _, _, item, kind in events if kind == 'inherit']
+        if not dup:
+            seq.append(('vars', None))
+        latest = {}
+        vnext = 0
+        order = sorted(protos)
+        declared = set()
+        nxt = 0
+        for f, lo, hi in defs:
+            d = f.runtime_index
+            if dup:
+                while vnext <= max(var_refs[d], default=-1):
+                    seq.append(('var', vnext))
+                    latest[prog.variables[vnext]] = vnext
+                    vnext += 1
+                if any(latest[prog.variables[v]] != v for v in var_refs[d]):
+                    return None
+            # a function redefining an inherited one is declared by the inherit
+            own = d in protos
+            m = max(({d} if own else set()) | local_calls[d], default=-1)
+            while nxt < len(order) and order[nxt] <= m:
+                j = order[nxt]
+                if j == d and m == d:
+                    break
+                seq.append(('proto', protos[j]))
+                declared.add(j)
+                nxt += 1
+            if own and d not in declared:
+                if nxt >= len(order) or order[nxt] != d:
+                    return None
+                nxt += 1
+            if simul_calls[d] & (declared | {d}):
+                return None
+            if own:
+                declared.add(d)
+            seq.append(('def', (f, lo, hi)))
+        while nxt < len(order):
+            seq.append(('proto', protos[order[nxt]]))
+            nxt += 1
+        if dup:
+            seq += [('var', k) for k in range(vnext, len(prog.variables))]
+        return seq
 
     def function(self, f, lo, hi, nargs, nloc):
         fd = FuncDecompiler(self.ctx, self.instrs_in(lo, hi), nargs, nargs + nloc)
@@ -1593,18 +1769,71 @@ class ProgramDecompiler:
         body, st = fd.decode(lo, hi)
         if st:
             raise DecompileError('function leaves values on stack')
+        inits = {}
+        # The compiler appends `return 0` unless the body is a return or one
+        # statement node followed by a return; local initializers make one node
         if body and isinstance(body[-1], SRet) and body[-1].e is None:
             body = body[:-1]
+            if body and isinstance(body[-1], SRet) and body[-1].e is not None and len(body) < 3:
+                body = spread_top(body)
+        elif body and isinstance(body[-1], SRet) and body[-1].e is not None and len(body) > 2:
+            body, inits = gather_top(body, fd, nargs)
         lines = [self.func_header(f, nargs, False) + ' {']
         used = set(fd.used_locals)
         for n in range(nargs, nargs + nloc):
             if TARGET['fluffos'] and n not in used:
                 continue
             t = fd.local_types.get(n)
-            lines.append('    %s;' % (type_str(t, fd.lname(n)) if t else 'mixed ' + fd.lname(n)))
+            decl = type_str(t, fd.lname(n)) if t else 'mixed ' + fd.lname(n)
+            if n in inits:
+                decl += ' = ' + inits[n].src(P_ASSIGN)
+            lines.append('    %s;' % decl)
         lines += block_lines(body, '    ')
         lines.append('}')
         return lines
+
+
+def spread_top(body):
+    """[stmt, return x] whose code still ends in the added return 0: the
+    source had three statements, the decompiler joined two of them."""
+    if len(body) == 2:
+        first = body[0]
+        if isinstance(first, SLoop) and first.kind == 'for' and first.init is not None:
+            return [SExpr(first.init), SLoop('for', first.cond, first.body, inc=first.inc), body[1]]
+        if isinstance(first, SExpr) and isinstance(first.e, Comma):
+            return [SExpr(first.e.a), SExpr(first.e.b), body[1]]
+    return body
+
+
+def gather_top(body, fd, nargs):
+    """[s1, ..., sn, return x] with no return 0 after it: s1..sn were one
+    node -- local initializers, a for-init, a comma expression, or a block.
+    Returns (body, {slot: initializer})."""
+    head, ret = body[:-1], body[-1]
+    slots = []
+    for st in head:
+        e = st.e if isinstance(st, SExpr) else None
+        if not (isinstance(e, Assign) and e.void and e.sym == '=' and isinstance(e.lv, Raw)
+                and not isinstance(e.lv, GlobalRef) and fd.slot_of.get(e.lv.s, -1) >= nargs):
+            break
+        slots.append(fd.slot_of[e.lv.s])
+    else:
+        later = {nm for nm, n in fd.slot_of.items() if n > min(slots)}
+        if slots == sorted(set(slots)) and not any(
+                set(re.findall(r'\b[a-z]+\d*\b', st.e.rv.src(0))) & (later - {st.e.lv.s}) for st in head):
+            return [ret], {n: st.e.rv for n, st in zip(slots, head)}
+    if isinstance(head[-1], SLoop) and head[-1].kind == 'for' and all(isinstance(st, SExpr) for st in head[:-1]):
+        lp = head[-1]
+        e = lp.init
+        for st in reversed(head[:-1]):
+            e = st.e if e is None else Comma(st.e, e)
+        return [SLoop('for', lp.cond, lp.body, init=e, inc=lp.inc), ret], {}
+    if all(isinstance(st, SExpr) for st in head):
+        e = head[-1].e
+        for st in reversed(head[:-1]):
+            e = Comma(st.e, e)
+        return [SExpr(e), ret], {}
+    return [SBlock(head), ret], {}
 
 
 def decompile(prog, mud, efuns, simuls):
@@ -1663,7 +1892,8 @@ def _tokens(line):
         if c == '"':
             j = i + 1
             while j < n and line[j] != '"':
-                j += 2 if line[j] == '\\' else 1
+                # with TARGET['gbk'] a GBK character may end in a raw 0x5c
+                j += 2 if line[j] == '\\' or (TARGET.get('gbk') and ord(line[j]) >= 0x81) else 1
             toks.append(('str', line[i:j + 1]))
             i = j + 1
         elif c == "'":

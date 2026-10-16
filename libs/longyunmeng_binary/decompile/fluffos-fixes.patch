@@ -1,0 +1,184 @@
+--- a/adm/daemons/automap.lpc
++++ b/adm/daemons/automap.lpc
+@@ -12,6 +12,10 @@
+     seteuid("Root");
+     set("channel_id", "地图创建精灵");
+     set("fs_xx_msg", 1);
++    // the maze on disk is a whole generation already: the first rebuild comes
++    // after the usual 15 hours, not at boot (each rebuild rewrites
++    // /d/automap/*.lpc, which are files of the museum tree)
++    set("update_map_time", time());
+     "/adm/daemons/channeld"->do_channel(this_object(), "sys", "\e[1;35m地图创建精灵已经启动。\n\e[2;37;0m");
+     set_heart_beat(9);
+ }
+--- a/adm/daemons/logind.lpc
++++ b/adm/daemons/logind.lpc
+@@ -157,7 +157,9 @@
+         destruct(arg);
+         return;
+     }
+-    if (!"/adm/daemons/network/dns_master"->query_doing_end()) {
++    // the intermud daemon is not preloaded here (no sockets on the web build):
++    // absent means there is nothing to wait for
++    if (find_object("/adm/daemons/network/dns_master") && !"/adm/daemons/network/dns_master"->query_doing_end()) {
+         write("\e[41;1m\e[1;33m『江西一站』正与主站同步中。。。，请稍候再行连线！！！ \n\e[2;37;0m");
+         destruct(arg);
+         return;
+@@ -410,7 +412,7 @@
+                 v4->set("xieyi/zmud", 1);
+                 v4->set("position", "webuser");
+             }
+-            if (query_ip_port(arg2) == 2003) {
++            if (query_ip_port(arg2) != 5555 && query_ip_port(arg2) != 9999) {
+                 v4->set("xieyi/zmud", 1);
+             }
+             if (query_ip_port(arg2) == 8888) {
+@@ -725,7 +727,7 @@
+         arg3->set("xieyi/zmud", 1);
+         arg3->set("position", "webuser");
+     }
+-    if (query_ip_port(arg2) == 2003) {
++    if (query_ip_port(arg2) != 5555 && query_ip_port(arg2) != 9999) {
+         arg3->set("xieyi/zmud", 1);
+     }
+     if (query_ip_port(arg2) == 8888) {
+@@ -991,7 +993,7 @@
+         arg2->set("xieyi/zmud", 1);
+         arg2->set("position", "webuser");
+     }
+-    if (query_ip_port(arg1) == 2003) {
++    if (query_ip_port(arg1) != 5555 && query_ip_port(arg1) != 9999) {
+         arg2->set("xieyi/zmud", 1);
+     }
+     if (query_ip_port(arg1) == 8888) {
+@@ -1058,7 +1060,8 @@
+ int check_legal_name(mixed arg) {
+     mixed v1;
+     v1 = sizeof(arg);
+-    if (sizeof(arg) < 2 || sizeof(arg) > 10) {
++    // characters, not GBK bytes (KB 07 8.1)
++    if (sizeof(arg) < 1 || sizeof(arg) > 5) {
+         write("对不起，你的中文名字必须是 1 到 5 个中文字。\n");
+         return 0;
+     }
+@@ -1067,7 +1070,7 @@
+             write("对不起，你的中文名字不能用控制字元。\n");
+             return 0;
+         }
+-        if (!(v1 % 2) && !is_chinese(arg[v1..])) {
++        if (!is_chinese(arg[v1..])) {
+             write("对不起，请您用「中文」取名字。\n");
+             return 0;
+         }
+@@ -1348,7 +1351,7 @@
+                 v1->set("xieyi/zmud", 1);
+                 v1->set("position", "webuser");
+             }
+-            if (query_ip_port(arg2) == 2003) {
++            if (query_ip_port(arg2) != 5555 && query_ip_port(arg2) != 9999) {
+                 v1->set("xieyi/zmud", 1);
+             }
+             if (query_ip_port(arg2) == 8888) {
+--- a/adm/etc/preload
++++ b/adm/etc/preload
+@@ -9,7 +9,7 @@
+ /adm/daemons/emoted
+ /adm/daemons/aliasd
+ /adm/daemons/fingerd
+-/adm/daemons/network/dns_master
++#/adm/daemons/network/dns_master
+ /adm/daemons/autosaved
+ /adm/daemons/channeld
+ /adm/daemons/natured
+@@ -23,9 +23,9 @@
+ /adm/daemons/baoshid
+ /d/wizard/newsroom
+ /adm/daemons/automap
+-/adm/daemons/network/fileserver
++#/adm/daemons/network/fileserver
+ /clone/misc/void
+ /clone/misc/void_user
+ /d/city/zuixianlou
+-/adm/daemons/ftpd
+-/adm/daemons/httpd
+\ No newline at end of file
++#/adm/daemons/ftpd
++#/adm/daemons/httpd
+\ No newline at end of file
+--- a/adm/obj/master.lpc
++++ b/adm/obj/master.lpc
+@@ -167,7 +167,9 @@
+     } else {
+         v2 = "/log/";
+     }
+-    if (this_player(1)) {
++    // FluffOS also reports warnings through log_error(); they are not a
++    // compile error for the player whose action loaded the file
++    if (this_player(1) && strsrch(arg2, "warning: ") == -1) {
+         efun::write("编译时段错误：" + arg2 + "\n");
+     }
+     write_file(v2 + "log", arg2);
+--- a/adm/obj/simul_efun.lpc
++++ b/adm/obj/simul_efun.lpc
+@@ -29,7 +29,7 @@
+ varargs void say(mixed, mixed);
+ int notify_fail(mixed);
+ varargs void printf(mixed, mixed, mixed, mixed, mixed, mixed, mixed, mixed, mixed, mixed, mixed, mixed, mixed, mixed, mixed, mixed, mixed);
+-void message(mixed, mixed, mixed, mixed);
++varargs void message(mixed, mixed, mixed, mixed);
+ void cat(mixed);
+ void log_file(mixed, mixed);
+ void assure_file(mixed);
+@@ -122,9 +122,11 @@
+ }
+ 
+ int is_chinese(mixed arg) {
+-    if (sizeof(arg) >= 2 && arg[0] > 160 && arg[0] < 255) {
++    // UTF-8 strings index by character: a CJK ideograph, not a GBK lead byte (KB 07 8.1)
++    if (sizeof(arg) >= 1 && arg[0] >= 0x4e00 && arg[0] <= 0x9fff) {
+         return 1;
+     }
++    return 0;
+ }
+ 
+ string gender_self(mixed arg) {
+@@ -361,12 +363,12 @@
+ 
+ varargs void tell_room(mixed arg1, mixed arg2, mixed arg3) {
+     if (arg1) {
+-        efun::message("tell_room", arg2, arg1, arg3);
++        efun::message("tell_room", arg2, arg1, arg3 || ({ }));
+     }
+ }
+ 
+ void shout(mixed arg) {
+-    efun::message("shout", arg, users(), this_player());
++    efun::message("shout", arg, users(), this_player() || ({ }));
+ }
+ 
+ void write(mixed arg) {
+@@ -405,8 +407,9 @@
+     write(arg1);
+ }
+ 
+-void message(mixed arg1, mixed arg2, mixed arg3, mixed arg4) {
+-    efun::message(arg1, arg2, arg3, arg4);
++varargs void message(mixed arg1, mixed arg2, mixed arg3, mixed arg4) {
++    // FluffOS takes an object or an array as the exclude list, not 0
++    efun::message(arg1, arg2, arg3, arg4 || ({ }));
+ }
+ 
+ void cat(mixed arg) {
+@@ -680,7 +683,11 @@
+                     tell_object(v3[v4], "\031lbrem2 " + "/adm/daemons/rankd"->new_short(arg) + ";" + "\032");
+                 }
+             }
+-            arg->save();
++            // a login object whose registration was abandoned holds just the
++            // id: saving it would leave an account without a password behind
++            if (base_name(arg) != "/clone/user/login" || arg->query("password")) {
++                arg->save();
++            }
+             auto_save_item(arg);
+         }
+         efun::destruct(arg);

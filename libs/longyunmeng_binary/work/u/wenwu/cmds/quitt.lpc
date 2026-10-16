@@ -1,0 +1,109 @@
+// 本文件由编译后的 .b 二进制程序反编译还原，原始源码未随档案发布。
+// Decompiled from the compiled .b binary; the original source was not distributed.
+inherit "/feature/dbase";
+inherit "/feature/clean_up";
+void create();
+string online_time(mixed);
+int main(mixed, mixed);
+int help(mixed);
+
+void create() {
+    seteuid(getuid());
+    set("channel_id", "离线指令");
+}
+
+string online_time(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    v3 = arg % 60;
+    arg /= 60;
+    v2 = arg % 60;
+    arg /= 60;
+    v1 = arg;
+    return sprintf("本次联线时间%d:%d", v2, v3);
+}
+
+int main(mixed arg1, mixed arg2) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    mixed v6;
+    if (arg1->query_busy() && !arg1->query_temp("netdead")) {
+        if (!arg1->query_temp("suicide")) {
+            return notify_fail("上一个动作未完成！\n");
+        } else {
+            "/adm/daemons/channeld"->do_channel(this_object(), "rumor", arg1->name() + "终于想通了，放弃自杀了。 :)");
+            tell_object(arg1, "\e[35m\n\n你决定要放弃自杀，太好了，那下次再来吧！\n\n\n\e[2;37;0m");
+        }
+    }
+    if (environment(arg1)->query("fight_room")) {
+        return notify_fail("擂台上不能退出！\n");
+    }
+    if (arg1->is_fighting()) {
+        return notify_fail("战斗中只能逃跑，不能退出游戏！\n");
+    }
+    v3 = arg1->query_temp("link_ob");
+    if (v3) {
+        if (v3->is_character()) {
+            write("你的魂魄回到" + v3->name(1) + "的身上。\n");
+            exec(v3, arg1);
+            v3->setup();
+            return 1;
+        }
+        if (!living(arg1)) {
+            write("什麽？\n");
+            return 0;
+        }
+        if (!wizardp(arg1)) {
+            if (arg1->query_temp("pker_starttime") + arg1->query_temp("pker_time") * 3600 > arg1->query("mud_age")) {
+                return notify_fail("你现在不能退出游戏！\n");
+            }
+            foreach (v6 in all_inventory(arg1)) {
+                if (v6 && !v6->query_autoload()) {
+                    "/cmds/std/drop"->do_drop(arg1, v6, 1);
+                }
+            }
+        }
+        v2 = time() - v3->query("online_time");
+        v3->set("last_on", time());
+        v3->set("last_from", query_ip_name(arg1));
+        v1 = arg1->query("combat_exp") - v3->query("combat_exp");
+        v3->set("combat_exp", arg1->query("combat_exp"));
+        if (!(wizardp(arg1) && arg1->query("env/invisibility"))) {
+            v3->save();
+        }
+        destruct(v3);
+    }
+    write("欢迎下次再来！\n");
+    message("system", arg1->name() + "离开游戏。\n", environment(arg1), arg1);
+    v4 = query_ip_number(arg1);
+    if (!v4) {
+        v5 = arg1->query("name") + "(" + arg1->query("id") + ")" + "\e" + "[1;31m" + "断线时间过长" + "\e" + "[1;37m" + ",自动离开游戏了。";
+    } else {
+        v5 = arg1->query("name") + "(" + arg1->query("id") + ")(" + query_ip_number(arg1) + ")离开游戏了。";
+    }
+    v5 += online_time(v2);
+    if (v1) {
+        v5 += sprintf("，经验增加\e[1;31m%d\e[2;37;0m\e[37m点。", v1);
+    } else {
+        v5 += "。";
+    }
+    "/adm/daemons/channeld"->do_channel(this_object(), "sys", v5);
+    reclaim_objects();
+    if (!(!wizardp(arg1) && sscanf(base_name(environment(arg1)), "/u/%*s"))) {
+        arg1->set("startroom", base_name(environment(arg1)));
+        write("当你下次连线进来时，会从这里开始。\n");
+    }
+    arg1->save();
+    destruct(arg1);
+    "/adm/daemons/httpd"->make_who();
+    return 1;
+}
+
+int help(mixed arg) {
+    write("指令格式 : quit\n当你想暂时离开时, 可利用此一指令。\n");
+    return 1;
+}

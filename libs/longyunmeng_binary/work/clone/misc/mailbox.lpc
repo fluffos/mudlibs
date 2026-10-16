@@ -1,0 +1,202 @@
+// 本文件由编译后的 .b 二进制程序反编译还原，原始源码未随档案发布。
+// Decompiled from the compiled .b binary; the original source was not distributed.
+inherit "/inherit/item/item";
+inherit "/feature/save";
+void get_mail_text(mixed, mixed);
+void create();
+int set_owner(mixed);
+void init();
+string query_save_file();
+void receive_mail(mixed);
+void send_mail(mixed, mixed);
+int do_mail(mixed);
+void get_mail_title(mixed, mixed);
+void confirm_copy(mixed, mixed);
+int do_from();
+int do_read(mixed);
+int do_discard(mixed);
+int do_forward(mixed);
+void owner_is_killed();
+
+mapping *mails;
+
+void create() {
+    set_name("信箱", ({ "mailbox", "box" }));
+    set("long", "这是一个用来寄信、收信的信箱，你可以用以下指令来处理你的邮件：\n\nfrom                      查看信箱中的信件。\nmail <某人>               寄信给别人。\nforward <信件编号> <某人> 将某封信转寄给别人。\nread <信件编号>           阅读一封信件。\ndiscard <信件编号>        丢弃一封信件。\n");
+    set("unit", "个");
+    set("no_drop", 1);
+    set("no_insert", 1);
+    seteuid(getuid());
+}
+
+int set_owner(mixed arg) {
+    set("owner_id", arg);
+    return restore();
+}
+
+void init() {
+    if (this_player() && environment() == this_player()) {
+        set_owner(this_player()->query("id"));
+        this_player()->set_temp("mbox_ob", this_object());
+        set_name(this_player()->name(1) + "的信箱", ({ "mailbox", "box" }));
+        add_action("do_mail", "mail");
+        add_action("do_forward", "forward");
+        add_action("do_from", "from");
+        add_action("do_read", "read");
+        add_action("do_discard", "discard");
+    }
+}
+
+string query_save_file() {
+    mixed v1;
+    if (!stringp(v1 = query("owner_id"))) {
+        return 0;
+    }
+    return "/data/mail/" + v1[0..0] + "/" + v1;
+}
+
+void receive_mail(mixed arg) {
+    if (!pointerp(mails)) {
+        mails = ({ arg });
+    } else {
+        mails += ({ arg });
+    }
+    save();
+}
+
+void send_mail(mixed arg1, mixed arg2) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    v2 = find_player(arg1);
+    if (!v2) {
+        v2 = "/adm/daemons/fingerd"->acquire_login_ob(arg1);
+    }
+    if (!v2) {
+        write("没有这个人存在。\n");
+        return;
+    }
+    v1 = find_player(arg1);
+    if (v1) {
+        v3 = v1->query_temp("mbox_ob");
+    }
+    if (!v3) {
+        v3 = clone_object("/clone/misc/mailbox");
+        v3->set_owner(arg1);
+        v3->receive_mail(arg2);
+        tell_object(v1, "\e[1m\n杜宽(Post officer)告诉你：有您的信！请到驿站来一趟...\n\n\e[2;37;0m");
+    } else {
+        v3->receive_mail(arg2);
+        tell_object(v1, "\e[1m\n杜宽(Post officer)告诉你：有您的信！快点看呀！\n\n\e[2;37;0m");
+    }
+}
+
+int do_mail(mixed arg) {
+    mixed v1;
+    if (this_player() != environment()) {
+        return 0;
+    }
+    if (!arg || arg == "") {
+        return notify_fail("你要寄信给谁？\n");
+    }
+    v1 = ([ "from" : this_player()->name(1) + "(" + this_player()->query("id") + ")", "title" : "无题", "to" : arg, "time" : time(), "text" : "" ]);
+    write("信件标题：");
+    input_to("get_mail_title", v1);
+    return 1;
+}
+
+void get_mail_title(mixed arg1, mixed arg2) {
+    if (arg1 != "") {
+        arg2["title"] = arg1;
+    }
+    write("信件内容：\n");
+    this_player()->edit((: get_mail_text, arg2 :));
+}
+
+void get_mail_text(mixed arg1, mixed arg2) {
+    arg1["text"] = arg2;
+    write("您自己要留一份备份吗(y/n)？[n]");
+    input_to("confirm_copy", arg1);
+}
+
+void confirm_copy(mixed arg1, mixed arg2) {
+    if (arg1[0] == 121 || arg1[0] == 89) {
+        receive_mail(arg2);
+    }
+    send_mail(arg2["to"], arg2);
+    write("Ok.\n");
+}
+
+int do_from() {
+    mixed v1;
+    if (!pointerp(mails) || !sizeof(mails)) {
+        write("你的信箱中目前没有任何信件。\n");
+        return 1;
+    }
+    write("你的信箱中现在共有 " + sizeof(mails) + " 封信件：\n\n");
+    for (v1 = 0; v1 < sizeof(mails); v1++) {
+        printf("%2d %-50s 寄信人：%-20s\n", v1 + 1, mails[v1]["title"], mails[v1]["from"]);
+    }
+    write("\n");
+    return 1;
+}
+
+int do_read(mixed arg) {
+    mixed v1;
+    v1 = file_size(query_save_file() + ".o");
+    this_player()->set("new_mail", v1);
+    if (!arg || !sscanf(arg, "%d", v1)) {
+        return notify_fail("你要读哪一封信？\n");
+    }
+    if (!pointerp(mails) || v1 < 1 || v1 > sizeof(mails)) {
+        return notify_fail("没有这个编号的信件。\n");
+    }
+    v1--;
+    printf("信件标题：%s\n寄 信 人：%s\n\n%s\n", mails[v1]["title"], mails[v1]["from"], mails[v1]["text"]);
+    return 1;
+}
+
+int do_discard(mixed arg) {
+    mixed v1;
+    if (!arg || !sscanf(arg, "%d", v1)) {
+        return notify_fail("你要丢弃哪一封信？\n");
+    }
+    if (!pointerp(mails) || v1 > sizeof(mails)) {
+        return notify_fail("没有这个编号的信件。\n");
+    }
+    v1--;
+    mails = mails[0..v1 - 1] + mails[v1 + 1..sizeof(mails) - 1];
+    save();
+    write("Ok.\n");
+    return 1;
+}
+
+int do_forward(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    if (!arg || sscanf(arg, "%d %s", v2, v1) != 2) {
+        return notify_fail("你要将哪一封信转寄给别人？\n");
+    }
+    if (!pointerp(mails) || v2 > sizeof(mails)) {
+        return notify_fail("没有这个编号的信件。\n");
+    }
+    v2--;
+    v3 = ([ ]);
+    v3["title"] = mails[v2]["title"];
+    v3["text"] = mails[v2]["text"];
+    v3["time"] = mails[v2]["time"];
+    v3["from"] = mails[v2]["from"] + "/转寄自" + this_player()->query("name");
+    v3["to"] = v1;
+    send_mail(v1, v3);
+    write("Ok.\n");
+    return 1;
+}
+
+void owner_is_killed() {
+    destruct(this_object());
+}
+
+int query_autoload() {
+    return 1;
+}

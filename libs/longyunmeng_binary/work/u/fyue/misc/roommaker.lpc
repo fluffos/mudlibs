@@ -1,0 +1,373 @@
+// 本文件由编译后的 .b 二进制程序反编译还原，原始源码未随档案发布。
+// Decompiled from the compiled .b binary; the original source was not distributed.
+inherit "/inherit/item/item";
+int save_room_file(mixed, mixed, mixed);
+void create();
+void init();
+int do_mkroom(mixed);
+int do_rset(mixed);
+int do_delete(mixed);
+int do_long();
+int get_long(mixed, mixed);
+int do_connect(mixed);
+int do_addobj(mixed);
+int update(mixed, mixed);
+int do_saveroom(mixed);
+void owner_is_killed();
+
+string *special_props = ({ "short", "long" });
+nosave mapping map_dirs = ([ "north" : "北", "south" : "南", "east" : "东", "west" : "西", "northup" : "北边往上", "southdown" : "南边往下", "southup" : "南边往上", "northdown" : "北边往下", "eastup" : "东边往上", "westdown" : "西边往下", "westup" : "西边往上", "eastdown" : "东边往下", "northeast" : "东北", "northwest" : "西北", "southeast" : "东南", "southwest" : "西南", "up" : "上", "down" : "下", "out" : "外" ]);
+
+void create() {
+    set_name("房间编辑器(v2.0)", ({ "roommaker", "maker" }));
+    set_weight(100);
+    set("unit", "个");
+    set("long", "这是一个用来「快速」制造房间的工具，帮助时间不多或有严重  lag 的巫师\n利用线上输入制造简单的房间，不过如果你想提高自己区域房间的品质，最好\n不要太依赖这个东西，你可以使用以下几个指令：\n\nmkroom <房间档名>\n    造出一个「空」房间，之後你可以 goto 到这个房间用 rset 设定房间的\n    叙述或属性。\n\nrset <房间属性> <属性内容>\n    设定你目前所在房间的属性，如 short,outdoors,valid_startroom等。\n\nrdelete <房间属性>\n    删除你目前所在房间的属性，如rset设定的属性和long,objects,exits等。\n\nlong\n    设定你目前所在房间的描述属性。\n\nconnect <方向> <房间档名>||<none>\n    将你目前所在的房间连接一个"
+            "出口到另一个房间，房间档名=none则删除这个方向。\n\naddobj <NPC档名> <数量>\n    设定你目前所在房间的NPC和其数量。\n\nsaveroom\n    将你目前所在的房间存档。\n");
+}
+
+void init() {
+    if (wizardp(environment())) {
+        seteuid(getuid(environment()));
+        add_action("do_mkroom", "mkroom");
+        add_action("do_rset", "rset");
+        add_action("do_delete", "rdelete");
+        add_action("do_connect", "connect");
+        add_action("do_saveroom", "saveroom");
+        add_action("do_addobj", "addobj");
+        add_action("do_long", "long");
+    }
+}
+
+int do_mkroom(mixed arg) {
+    mixed v1;
+    mixed v2;
+    if (!arg) {
+        return notify_fail("指令格式：mkroom <房间档名> [<方向>]\n");
+    }
+    if (sscanf(arg, "%s %s", v1, v2) != 2) {
+        v1 = arg;
+    }
+    seteuid(geteuid(this_player()));
+    v1 = resolve_path(this_player()->query("cwd"), v1) + ".lpc";
+    if (file_size(v1) != -1) {
+        return notify_fail("档案 " + v1 + " 已经存在了。\n");
+    }
+    if (!write_file(v1, "// This is a room made by roommaker.\n\ninherit ROOM;\n\nvoid create()\n{\n    set(\"short\", \"空房间\");\n    set(\"long\", \"这是一间什麽也没有的空房间。\\n\");\n    setup();\n    replace_program(ROOM);\n}\n")) {
+        return notify_fail("你没有写入档案(" + v1 + ")的权利。\n");
+    }
+    message_vision("只听到$N左右手一撑，「哔」的一声，你觉得这个世界又变大了一点。\n", this_player());
+    return 1;
+}
+
+int do_rset(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    if (!arg || sscanf(arg, "%s %s", v1, v2) != 2) {
+        return notify_fail("指令格式：rset <房间属性> <属性内容>\n\n\t rset short           （设定这间房间的简略描述）\n\n\t rset outdoors        （设定这里是户外属性）\n\n\t rset valid_startroom （设定这里是下次连线开始的属性）\n\n\t 其他的如：rset no_fight rset no_magic 等...\n\n");
+    }
+    write("设置" + v1 + "的属性为" + v2);
+    if (sscanf(v2, "%d", v3) != 1) {
+        v3 = v2;
+    }
+    environment(this_player())->set(v1, v2);
+    write("...Ok.\n");
+    return 1;
+}
+
+int do_delete(mixed arg) {
+    if (!arg) {
+        return notify_fail("指令格式：rdelete <房间属性>\n");
+    }
+    environment(this_player())->delete(arg);
+    write("Ok.\n");
+    return 1;
+}
+
+int do_long() {
+    mixed v1;
+    v1 = "";
+    write("讯息可以有好几行，行首用 . 表示结束。\n");
+    write("————————————————————————————————————\n");
+    input_to("get_long", v1);
+    return 1;
+}
+
+int get_long(mixed arg1, mixed arg2) {
+    if (arg1 == ".") {
+        environment(this_player())->set("long", arg2);
+        write("Ok.\n");
+        return 1;
+    }
+    arg2 += arg1 + "\n";
+    input_to("get_long", arg2);
+    return 1;
+}
+
+int do_connect(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    mixed v6;
+    v1 = environment(this_player())->query("exits");
+    if (!arg || sscanf(arg, "%s %s", v4, v5) != 2) {
+        v6 = sort_array(keys(map_dirs), (: strcmp :));
+        v4 = " 一般情况下，使用的出口方向有以下几种: \n";
+        for (v2 = 0; v2 < sizeof(map_dirs); v2++) {
+            v4 += sprintf("%-12s \t %-12s \n", v6[v2], map_dirs[v6[v2]]);
+        }
+        if (mapp(v1)) {
+            v4 += "这里的出口有：\n";
+            v6 = keys(v1);
+            for (v2 = 0; v2 < sizeof(v1); v2++) {
+                if (!(v3 = find_object(v1[v6[v2]]))) {
+                    v3 = find_object(v1[v6[v2]], 1);
+                }
+                if (v3) {
+                    v4 += sprintf("\e[1m\t%-12s\e[2;37;0m\e[33m --> \e[36m%s\e[31m(%s) \n\e[2;37;0m", v6[v2], v3->query("short"), v1[v6[v2]]);
+                    continue;
+                }
+                v4 += sprintf("\e[1m\t%-12s\e[2;37;0m\e[33m --> \e[31m没有正常出口。\n\e[2;37;0m", v6[v2]);
+            }
+        }
+        return notify_fail(v4 + "\n指令格式：connect <方向> <房间档名>||<none>\n");
+    }
+    if (v5 == "none") {
+        environment(this_player())->delete("exits/" + v4);
+        write("删除出口...Ok.\n");
+        return 1;
+    }
+    v5 = resolve_path(this_player()->query("cwd"), v5);
+    if (!(v3 = find_object(v5))) {
+        v3 = find_object(v5, 1);
+    }
+    if (!v3) {
+        return notify_fail("还没有" + v5 + "这个房间...\n");
+    }
+    if (mapp(v1)) {
+        v1[v4] = v5;
+    } else {
+        environment(this_player())->set("exits", ([ v4 : v5 ]));
+    }
+    switch (v4) {
+    case "north":
+        v4 = "south";
+        break;
+    case "northwest":
+        v4 = "southeast";
+        break;
+    case "northeast":
+        v4 = "southwest";
+        break;
+    case "northdown":
+        v4 = "southup";
+        break;
+    case "northup":
+        v4 = "southdown";
+        break;
+    case "south":
+        v4 = "north";
+        break;
+    case "southwest":
+        v4 = "northeast";
+        break;
+    case "southeast":
+        v4 = "northwest";
+        break;
+    case "southdown":
+        v4 = "northup";
+        break;
+    case "southup":
+        v4 = "northdown";
+        break;
+    case "west":
+        v4 = "east";
+        break;
+    case "westup":
+        v4 = "eastdown";
+        break;
+    case "westdown":
+        v4 = "eastup";
+        break;
+    case "eastup":
+        v4 = "westdown";
+        break;
+    case "eastdown":
+        v4 = "westup";
+        break;
+    case "east":
+        v4 = "west";
+        break;
+    case "up":
+        v4 = "down";
+        break;
+    case "down":
+        v4 = "up";
+        break;
+    case "out":
+        v4 = "enter";
+        break;
+    case "enter":
+        v4 = "out";
+        break;
+    default:
+        v4 = "";
+        break;
+    }
+    if (v4 != "") {
+        v1 = v3->query("exits");
+        v5 = base_name(environment(this_player()));
+        if (mapp(v1)) {
+            v1[v4] = v5;
+        } else {
+            v3->set("exits", ([ v4 : v5 ]));
+        }
+    }
+    write("Ok.\n");
+    return 1;
+}
+
+int do_addobj(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    v1 = environment(this_player())->query("objects");
+    if (!arg || sscanf(arg, "%s %d", v2, v4) != 2) {
+        if (mapp(v1)) {
+            v3 = keys(v1);
+        }
+        v2 = " 这个房间的NPC有：\n";
+        for (v4 = 0; v4 < sizeof(v1); v4++) {
+            v2 += sprintf("\e[1m%20s %10s个\n\e[2;37;0m", v3[v4]->short(), chinese_number(v1[v3[v4]]));
+        }
+        return notify_fail(v2 + "\n指令格式：addobj <NPC档名> <数量>\n");
+    }
+    if (file_size(v2 + ".lpc") < 0) {
+        v2 = resolve_path(this_player()->query("cwd"), v2);
+    }
+    if (file_size(v2 + ".lpc") < 0) {
+        return notify_fail("没有这个物件......\n");
+    }
+    if (!v4) {
+        environment(this_player())->delete("objects/" + v2);
+        write("删除NPC，Ok.\n");
+        return 1;
+    }
+    if (mapp(v1)) {
+        v1[v2] = v4;
+    } else {
+        environment(this_player())->set("objects", ([ v2 : v4 ]));
+    }
+    write("Ok.\n");
+    return 1;
+}
+
+int update(mixed arg1, mixed arg2) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    seteuid(geteuid(arg1));
+    if (!sscanf(arg2, "%*s.lpc")) {
+        arg2 += ".lpc";
+    }
+    if (file_size(arg2) == -1) {
+        return notify_fail("没有这个档案。\n");
+    }
+    if (v2 = find_object(arg2)) {
+        if (v2 == environment(arg1)) {
+            if (file_name(v2) == "/clone/misc/void") {
+                return notify_fail("你不能在 VOID_OB \n里重新编译 VOID_OB。\n");
+            }
+            v3 = all_inventory(v2);
+            v1 = sizeof(v3);
+            while (v1--) {
+                if (userp(v3[v1])) {
+                    v3[v1]->move("/clone/misc/void", 1);
+                    continue;
+                }
+                v3[v1] = 0;
+            }
+        }
+        destruct(v2);
+    }
+    if (v2) {
+        return notify_fail("无法清除旧程式码。\n");
+    }
+    write("重新编译 " + arg2 + "：");
+    v4 = catch {
+    call_other(arg2, "???");
+};
+    if (v4) {
+        printf("发生错误：\n%s\n", v4);
+    } else {
+        write("成功！\n");
+        if ((v1 = sizeof(v3)) && (v2 = find_object(arg2))) {
+            while (v1--) {
+                if (v3[v1] && userp(v3[v1])) {
+                    v3[v1]->move(v2, 1);
+                }
+            }
+        }
+    }
+    return 1;
+}
+
+int do_saveroom(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    mixed v6;
+    v1 = environment(this_player());
+    v4 = file_name(v1) + ".lpc";
+    v2 = "// Room: " + v4 + "\n// This is a room made by roommaker. write by Fan. :)\n\ninherit ROOM;\n\nvoid create()\n{\n";
+    v2 += sprintf("\tset(\"short\", %O);\n", v1->query("short"));
+    v2 += sprintf("\tset(\"long\", @LONG\n%sLONG\n);\n", v1->query("long"));
+    v5 = v1->query_entire_dbase();
+    v3 = keys(v5);
+    for (v6 = 0; v6 < sizeof(v3); v6++) {
+        if (member_array(v3[v6], special_props) != -1) {
+            continue;
+        }
+        v2 += sprintf("\tset(\"%s\", %O);\n", v3[v6], v5[v3[v6]]);
+    }
+    v2 += "\n\tsetup();\n\treplace_program(ROOM);\n}\n";
+    v6 = sizeof(v4) - 1;
+    while (v6 > 0 && v4[v6] != 47) {
+        v6--;
+    }
+    if (v6 > 0) {
+        write("目前目录：" + v4[0..v6] + " 以 __DIR__ 取代。\n");
+        v2 = replace_string(v2, "\"" + v4[0..v6], "__DIR__\"");
+    }
+    if (file_size(v4) != -1) {
+        write("档案 " + v4 + " 已存在，要删除旧档吗？[y/n]");
+        input_to("save_room_file", v4, v2);
+        return 1;
+    }
+    return save_room_file("y", v4, v2);
+}
+
+int save_room_file(mixed arg1, mixed arg2, mixed arg3) {
+    if (sizeof(arg1) < 1 || arg1[0] != 121) {
+        return 1;
+    }
+    rm(arg2);
+    write("存档 " + arg2 + "....");
+    if (write_file(arg2, arg3)) {
+        write("Ok.\n");
+        return update(this_player(), arg2);
+    } else {
+        return notify_fail("你没有写入这个档案(" + arg2 + ")的权利。\n");
+    }
+}
+
+void owner_is_killed() {
+    destruct(this_object());
+}

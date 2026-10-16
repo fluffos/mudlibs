@@ -209,7 +209,7 @@ classes it's found.
 | 008 | `es1_win` | 东方故事（蓝天） — es1_win | `es1_win.rar` | 40009 | WASM playable |
 | 008-1 | `esI` | 东方故事 — esI（"屠龙之战"） | `esI.rar` | 40010 | WASM playable |
 | 009 | `fengyun434` | 风云Ⅳ — fengyun434 | `fengyun4-3-4.rar` | 40011 | WASM playable |
-| 009-1 | `fy2005` | 风云Ⅳ（2005 国内经典版）— fy2005 | `fy2005.rar; upstream https://github.com/seikichin/-mud (commit 1009b7092729a7f6337cb0143778ffc245d07598, pinned 2026-09-13); repo root is the mudlib` | 40013 | WASM playable |
+| 009-1 | `fy2005` | 风云Ⅳ（2005 国内经典版）— fy2005 | `fy2005.rar; upstream https://github.com/seikichin/-mud (commit 7eb61c0e4d5c670b42f3efdcf13882fe7785a8d2, pinned 2026-09-13); repo root is the mudlib` | 40013 | WASM playable |
 | 010 | `xiyouji` | 西游记 (A Journey to the West) | `西游记.rar` | 40079 | WASM playable |
 | 010-1 | `xyj2000f` | 西游记 2000 — xyj2000f | `fluffos(西游记2000).tar.gz` | 40012 | WASM playable |
 | 010-2 | `xiyouji2003` | 西游记[光辉岁月] | `西游记2003.rar` | 40075 | WASM playable |
@@ -260,7 +260,7 @@ classes it's found.
 | 033 | `xyzx3` | 夕阳再现III之炎龙封印 | `夕阳再线III之炎龙封印.rar` | 40042 | WASM playable |
 | 033-1 | `ylfyxa3` | 炎龙封印（笑傲江湖·阿飞站） | `炎龙封印-笑傲江湖3阿飞站.rar` | 40062 | WASM playable |
 | 033-2 | `longyunmeng` | 龙云梦·炎龙封印（源码版） | `龙云梦-炎龙封印源码版.rar` | 40094 | WASM playable |
-| 033-3 | `longyunmeng_binary` | 龙云梦·炎龙封印（二进制版） | `龙云梦-炎龙封印-二进制版.rar` | — | binary-pending-tooling |
+| 033-3 | `longyunmeng_binary` | 龙云梦·炎龙封印（二进制版） | `龙云梦-炎龙封印-二进制版.rar` | 40391 | binary-pending-tooling |
 | 033-4 | `xyzxiiidup` | 夕阳再现III (dup) | `夕阳再现III.rar` | — | not-mudlib |
 | 034 | `tianxia` | 天下 Beta | `天下.tar.gz` | 40044 | WASM playable |
 | 035 | `tianxiawuxue` | 天下无雪 | `天下无雪.rar` | 40045 | WASM playable |

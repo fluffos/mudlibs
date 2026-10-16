@@ -34,8 +34,8 @@ def norm_tables(text):
 
 def main():
     bdir, drv, simul = sys.argv[1:4]
-    mud = Mudlib(bdir)
     efuns = Efuns(json.load(open(drv)))
+    mud = Mudlib(bdir, efuns.entry_size)
     simuls = mud.simul_names(simul)
     bad = 0
     for dis in sys.argv[4:]:

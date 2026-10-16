@@ -1,0 +1,160 @@
+// 本文件由编译后的 .b 二进制程序反编译还原，原始源码未随档案发布。
+// Decompiled from the compiled .b binary; the original source was not distributed.
+inherit "/feature/shadow";
+private void send_to_remote();
+void init();
+int is_telneting();
+string query_dest_addr();
+void telnet_input(mixed);
+int clean_up();
+void connect_to(mixed);
+void telnet_resolve_callback(mixed, mixed, mixed);
+void telnet_read_callback(mixed, mixed);
+void telnet_write_callback(mixed);
+void telnet_close_callback(mixed);
+void remove();
+void remove_interactive();
+varargs string short(mixed);
+
+nosave string from_user;
+nosave int fd;
+nosave string dest_addr;
+nosave int port;
+
+void init() {
+}
+
+int is_telneting() {
+    return 1;
+}
+
+string query_dest_addr() {
+    return sprintf("%s %d", dest_addr, port);
+}
+
+void telnet_input(mixed arg) {
+    if (arg == "CLOSE") {
+        write("用户断开了连接。\n");
+        destruct(this_object());
+        return;
+    }
+    input_to("telnet_input");
+    if (sizeof(arg) + sizeof(from_user) < 16384) {
+        from_user += arg + "\n";
+        if (find_call_out("send_to_remote") == -1) {
+            send_to_remote();
+        }
+    } else {
+        write("你输入的太多了...\n");
+    }
+}
+
+int clean_up() {
+    if (query_shadow_now()) {
+        return 1;
+    }
+    destruct(this_object());
+    return 0;
+}
+
+void connect_to(mixed arg) {
+    if (sscanf(arg, "%s %d", dest_addr, port) != 2) {
+        write("地址错误。\n");
+        return;
+    }
+    write("解析地址中...\n");
+    from_user = "";
+    resolve(dest_addr, "telnet_resolve_callback");
+    input_to("telnet_input");
+}
+
+void telnet_resolve_callback(mixed arg1, mixed arg2, mixed arg3) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    if (!objectp(v2 = query_shadow_now())) {
+        destruct(this_object());
+        return;
+    }
+    while (1) {
+        if (!arg2) {
+            message("telnet", "无法解析地址。\n", v2);
+            if (sscanf(dest_addr, "%*d.%*d.%*d.%*d") == 4) {
+                arg2 = dest_addr;
+            } else {
+                break;
+            }
+        }
+        v3 = sprintf("%s %d", arg2, port);
+        fd = socket_create(1, "telnet_read_callback", "telnet_close_callback");
+        if (fd < 0) {
+            message("telnet", "SOCKET 初始化错误。\n", v2);
+            break;
+        }
+        v1 = socket_connect(fd, v3, "telnet_read_callback", "telnet_write_callback");
+        if (v1 != 1) {
+            message("telnet", "网络连接错误。\n", v2);
+            break;
+        }
+        message("telnet", "正在连接" + arg1 + "(" + v3 + ")...\n", v2);
+        return;
+    }
+    v2->write_prompt();
+    destruct(this_object());
+}
+
+void telnet_read_callback(mixed arg1, mixed arg2) {
+    mixed v1;
+    if (!objectp(v1 = query_shadow_now())) {
+        destruct(this_object());
+        return;
+    }
+    if (stringp(arg2)) {
+        message("telnet", arg2, v1);
+    }
+}
+
+void telnet_write_callback(mixed arg) {
+    if (sizeof(from_user)) {
+        send_to_remote();
+    }
+}
+
+void telnet_close_callback(mixed arg) {
+    mixed v1;
+    if (objectp(v1 = query_shadow_now())) {
+        message("telnet", "\e[1;33m连接已断开：请按回车键继续.....\e[2;37;0m", v1);
+    }
+    destruct(this_object());
+}
+
+void remove() {
+}
+
+void remove_interactive() {
+    destruct(this_object());
+}
+
+varargs string short(mixed arg) {
+    mixed v1;
+    mixed v2;
+    if (objectp(v1 = query_shadow_now())) {
+        v2 = v1->short(arg);
+        v2 = replace_string(v2, " <输入文字中>", "\e[1;33m <远程登录中>\e[2;37;0m");
+        return v2;
+    }
+}
+
+private void send_to_remote() {
+    switch (socket_write(fd, from_user)) {
+    case -29:
+    case 1:
+        from_user = "";
+        return;
+    case -17:
+        call_out("send_to_remote", 2);
+        return;
+    default:
+        return;
+    }
+}

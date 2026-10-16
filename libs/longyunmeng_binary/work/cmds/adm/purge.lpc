@@ -1,0 +1,97 @@
+// 本文件由编译后的 .b 二进制程序反编译还原，原始源码未随档案发布。
+// Decompiled from the compiled .b binary; the original source was not distributed.
+int help(mixed);
+inherit "/feature/clean_up";
+protected int do_purge_players(mixed, mixed);
+int main(mixed, mixed);
+
+int main(mixed arg1, mixed arg2) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    if (!arg2) {
+        return help(arg1);
+    }
+    if (sscanf(arg2, "%d", v3) && v3 >= 0) {
+        return do_purge_players(v3, arg1);
+    }
+    if (sscanf(arg2, "%s because %s", v1, v2) != 2) {
+        return help(arg1);
+    }
+    if (arg1 != this_player(1) && wiz_level(arg1) < wiz_level("/adm/daemons/securityd"->get_status(arg2))) {
+        return notify_fail("你没有权力使用这个指令。\n");
+    }
+    seteuid(getuid());
+    if (file_size("/data/login/" + v1[0..0] + "/" + v1 + ".o") < 0) {
+        return notify_fail("没有这位使用者。\n");
+    }
+    rm("/data/login/" + v1[0..0] + "/" + v1 + ".o");
+    rm("/data/user/" + v1[0..0] + "/" + v1 + ".o");
+    rm("/data/mail/" + v1[0..0] + "/" + v1 + ".o");
+    write("使用者 " + capitalize(v1) + " 删除掉了。\n");
+    log_file("static/PURGE", sprintf("[%s] %s purged %s because %s.\n", ctime(time())[0..15], geteuid(this_player(1)), v1, v2));
+    return 1;
+}
+
+protected int do_purge_players(mixed arg1, mixed arg2) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    mixed v6;
+    mixed v7;
+    mixed v8;
+    if (arg2 != this_player(1) && wiz_level(arg2) < wiz_level("(arch)")) {
+        return notify_fail("你的巫师等级太低，没有使用这个指令的权力。\n");
+    }
+    if (arg1 < 60) {
+        arg1 = 60;
+    }
+    seteuid(getuid());
+    message("system", "\e[31m\n 整理玩家储存档中，请稍候....\n", users());
+    write("处理中：\n");
+    v4 = 0;
+    v3 = 0;
+    v5 = get_dir("/data/login/");
+    for (v1 = 0; v1 < sizeof(v5); v1++) {
+        set_eval_limit(0);
+        write("\e[1;33m----------------" + v5[v1] + "-------------\n" + "\e" + "[2;37;0m");
+        v6 = get_dir("/data/login/" + v5[v1] + "/");
+        v3 += sizeof(v6);
+        for (v2 = 0; v2 < sizeof(v6); v2++) {
+            if (sscanf(v6[v2], "%s.o", v7) == 1) {
+                if ("/adm/daemons/securityd"->get_status(v7) != "(player)") {
+                    write("\e[1m排除巫师" + v7 + "\n" + "\e" + "[2;37;0m");
+                    continue;
+                }
+                if (v8 = "/adm/daemons/fingerd"->acquire_login_ob(v7)) {
+                    if ((time() - v8->query("last_on")) / 86400 < arg1) {
+                        destruct(v8);
+                        continue;
+                    }
+                    if (v8->query("combat_exp") > 200000) {
+                        printf("排除老玩家\t%-20s经验:%10d\t%d天未上线。\n", v8->query("name") + "(" + v7 + "):", v8->query("combat_exp"), (time() - v8->query("last_on")) / 86400);
+                        destruct(v8);
+                        continue;
+                    }
+                    destruct(v8);
+                }
+                rm("/data/login/" + v5[v1] + "/" + v6[v2]);
+                rm("/data/user/" + v5[v1] + "/" + v6[v2]);
+                rm("/data/mail/" + v5[v1] + "/" + v6[v2]);
+                v4++;
+            }
+        }
+    }
+    write("\n\n原来总共有 " + v3 + " 位使用者。\n");
+    write(v4 + " 个超过 " + arg1 + " 天未上线的使用者被清除掉了。\n");
+    write("现在总共有 " + (v3 - v4) + " 位使用者。\n");
+    log_file("static/PURGE", sprintf("[%s] %s cleaned up %d characters who didn't login for more than %d days\n\t\tResulting statistics: %d characters remaining.\n", ctime(time())[0..15], geteuid(this_player(1)), v4, arg1, v3 - v4));
+    return 1;
+}
+
+int help(mixed arg) {
+    write("指令格式：purge [<未上线天数>] | <使用者姓名> because <原因>\n清除一个使用者或清除超过一定天数不曾上线地使用者。\n");
+    return 1;
+}

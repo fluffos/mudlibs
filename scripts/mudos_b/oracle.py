@@ -21,7 +21,7 @@ from .ops import NAME as OPN
 NUMBER_OPS = {'const0': 0, 'const1': 1}
 
 
-def canon_function(prog, mud, efuns, simuls, lo, hi, all_instrs):
+def canon_function(prog, mud, efuns, simuls, lo, hi, all_instrs, fold=()):
     ins = [x for x in all_instrs if lo <= x.off < hi]
     toks = []
     offmap = {}
@@ -40,7 +40,7 @@ def canon_function(prog, mud, efuns, simuls, lo, hi, all_instrs):
                 elif kind == 'number':
                     toks.append(('num', v))
                 elif kind == 'global':
-                    toks.append(('global', var_name(prog, mud, v)))
+                    toks.append(('global', var_name(prog, mud, v), v))
                 else:
                     toks.append(('local', v))
             continue
@@ -54,10 +54,11 @@ def canon_function(prog, mud, efuns, simuls, lo, hi, all_instrs):
             toks.append(('real', a[0]))
         elif n in ('string', 'short_string'):
             toks.append(('str', prog.strings[a[0]].split(b'\0')[0]))
-        elif n == 'local':
+        elif n == 'local' or (n == 'transfer_local' and 'transfer_local' in fold):
             toks.append(('local', a[0]))
         elif n in ('global', 'global_lvalue'):
-            toks.append((n, var_name(prog, mud, a[0])))
+            # the index too: one program may declare two globals of one name
+            toks.append((n, var_name(prog, mud, a[0]), a[0]))
         elif n == 'call_function_by_address':
             toks.append(('call', mud.function_name(prog, a[0]), x.nargs))
         elif n == 'call_inherited':
@@ -122,7 +123,12 @@ def var_name(prog, mud, idx):
     return var_name(mud.get(prog.inherits[i].name), mud, idx - prog.inherits[i].variable_index_offset)
 
 
-def canon(prog, mud, efuns, simuls):
+def canon(prog, mud, efuns, simuls, fold=()):
+    """fold: differences between two builds of one driver version to ignore.
+    'transfer_local': the 033-3 Win32 build never moves a local's last use
+    out of its slot (no F_TRANSFER_LOCAL in any of its 14,395 programs), the
+    Linux v22pre11 build that stands in for it does; the value pushed is the
+    same."""
     from .decompile import function_ranges
     all_instrs = decode(prog, efuns)
     funcs = {}
@@ -130,7 +136,7 @@ def canon(prog, mud, efuns, simuls):
         ent = prog.runtime[f.runtime_index]
         funcs[f.name] = dict(type=f.type, flags=prog.function_flags[f.runtime_index],
                              nargs=ent[1], nlocals=ent[2],
-                             code=canon_function(prog, mud, efuns, simuls, lo, hi, all_instrs))
+                             code=canon_function(prog, mud, efuns, simuls, lo, hi, all_instrs, fold))
     table = []
     for i in range(prog.num_functions_total):
         table.append((mud.function_name(prog, i), prog.function_flags[i]))
@@ -165,15 +171,14 @@ def compare(a, b):
 
 # ------------------------------------------------------------------ driver runs
 
-RUNNER = r'''// decompiler oracle: load objects listed in /log/oracle/jobs
+RUNNER = r'''// decompiler oracle: load objects listed in /log/oracle/jobs.N
 int pos, part;
+string *queue;
 void run_batch();
-void create() { pos = 1; part = 0; call_out("run_batch", 1); }
-void run_batch()
+void create() { pos = 1; part = 0; queue = ({}); call_out("run_batch", 1); }
+int refill()
 {
-    string chunk, *lines, path, err;
-    object ob, pre;
-    int n;
+    string chunk;
     // read_file() loads the whole file first and the driver caps that at
     // 200000 bytes, so the job list is split into jobs.0, jobs.1, ...
     chunk = read_file("/log/oracle/jobs." + part, pos, 50);
@@ -182,33 +187,67 @@ void run_batch()
         pos = 1;
         chunk = read_file("/log/oracle/jobs." + part, pos, 50);
     }
-    lines = chunk ? explode(chunk, "\n") : ({});
     pos += 50;
-    for (n = 0; n < sizeof(lines); n++) {
-        if (strlen(lines[n]) < 6 || lines[n][0..4] != "load ") continue;
-        path = lines[n][5..];
+    queue = chunk ? explode(chunk, "\n") : ({});
+    return chunk && strlen(chunk);
+}
+void run_batch()
+{
+    string path, err;
+    object ob;
+    int n;
+    // scheduled first, and each job taken off the queue before it runs: an
+    // error catch() cannot hold (too deep recursion) skips one object
+    // instead of ending the run
+    call_out("run_batch", 0);
+    for (n = 0; n < 50; n++) {
+        while (!sizeof(queue))
+            if (!refill()) {
+                remove_call_out("run_batch");
+                write_file("/log/oracle/DONE", "ok\n", 1);
+                shutdown(0);
+                return;
+            }
+        path = queue[0];
+        queue = queue[1..];
+        if (strlen(path) < 6 || path[0..4] != "load ") continue;
+        path = path[5..];
         write_file("/log/oracle/CURRENT", path + "\n", 1);
-        pre = find_object(path);
-        if (pre) catch(destruct(pre));
+        // loaded already (preloaded, or by an earlier object): it was compiled
+        // from the installed source in this run, and destructing a daemon the
+        // runner relies on (the security daemon) would stop its file writes
+        if (find_object(path)) { write_file("/log/oracle/LOADED", path + "\n"); continue; }
         err = catch(ob = load_object(path));
         if (err || !ob) { write_file("/log/oracle/ERRORS", path + "\t" + replace_string(err || "noobj", "\n", " ") + "\n"); continue; }
         write_file("/log/oracle/LOADED", path + "\n");
         if (!interactive(ob)) catch(destruct(ob));
     }
-    if (sizeof(lines)) { call_out("run_batch", 0); return; }
-    write_file("/log/oracle/DONE", "ok\n", 1);
-    shutdown(0);
 }
 '''
 
 
+SCRATCH = os.environ.get('LPC_SCRATCH', os.path.expanduser('~/.cache/lpc-scratch'))
+
+
 class Oracle:
-    def __init__(self, raw_root, work='/tmp/wlo', port=47186, mem_kb=3000000):
-        """raw_root: the pristine extracted lib (contains config.cfg, driver, world/)."""
+    def __init__(self, raw_root, work=os.path.join(SCRATCH, 'mudos-oracle'), port=47186, mem_kb=3000000,
+                 preload='data/config/preload', driver='driver', config='config.cfg', prepend=b''):
+        """raw_root: the pristine extracted lib (contains config.cfg, driver, world/).
+        preload: the master's preload list, relative to world/ (the runner is appended).
+        The driver need not be the one that wrote the .b files: any build of the same
+        MudOS version compiles the same code, and canon() compares by name."""
         self.raw = raw_root
         self.work = work
         self.port = port
         self.mem_kb = mem_kb
+        self.preload = preload
+        self.driver = driver
+        self.config = config
+        self.stall = 300
+        # put in front of every installed source: a stand-in driver built with
+        # other DEFAULT_PRAGMAS is matched with #pragma lines (033-3: the
+        # Win32 build had no optimize, no strict_types)
+        self.prepend = prepend
 
     @property
     def world(self):
@@ -218,8 +257,8 @@ class Oracle:
         if os.path.exists(self.work):
             shutil.rmtree(self.work)
         shutil.copytree(self.raw, self.work, symlinks=True)
-        os.chmod(os.path.join(self.work, 'driver'), 0o755)
-        cfg = os.path.join(self.work, 'config.cfg')
+        os.chmod(os.path.join(self.work, self.driver), 0o755)
+        cfg = os.path.join(self.work, self.config)
         d = open(cfg, 'rb').read()
         import re
         d = re.sub(rb'mudlib directory : [^\r\n]*', b'mudlib directory : ' + self.world.encode(), d)
@@ -233,7 +272,7 @@ class Oracle:
         d = re.sub(rb'telnet \d+', rep, d)
         open(cfg, 'wb').write(d)
         open(os.path.join(self.world, 'adm/daemons/zzoracle.c'), 'w').write(RUNNER)
-        pre = os.path.join(self.world, 'data/config/preload')
+        pre = os.path.join(self.world, self.preload)
         p = open(pre, 'rb').read().rstrip(b'\r\n') + b'\n/adm/daemons/zzoracle\n'
         open(pre, 'wb').write(p)
         os.makedirs(os.path.join(self.world, 'log/oracle'), exist_ok=True)
@@ -243,7 +282,7 @@ class Oracle:
         path = path.lstrip('/')
         fn = os.path.join(self.world, path + '.c')
         os.makedirs(os.path.dirname(fn), exist_ok=True)
-        open(fn, 'wb').write(source_bytes)
+        open(fn, 'wb').write(self.prepend + source_bytes)
         b = os.path.join(self.world, 'binaries', path + '.b')
         if os.path.exists(b):
             os.remove(b)
@@ -257,16 +296,25 @@ class Oracle:
         remaining = ['/' + p.lstrip('/') for p in paths]
         crashed = {}
         restarts = 0
+        suspect = None
         while remaining and restarts <= max_restarts:
+            cur_f = os.path.join(od, 'CURRENT')
+            if os.path.exists(cur_f):
+                os.remove(cur_f)
             self._run_once(remaining, timeout)
             if os.path.exists(os.path.join(od, 'DONE')):
                 break
-            cur_f = os.path.join(od, 'CURRENT')
-            cur = open(cur_f, 'rb').read().decode('latin-1').strip() if os.path.exists(cur_f) else None
+            cur = open(cur_f, 'rb').read().decode('utf-8', 'surrogateescape').strip() if os.path.exists(cur_f) else None
             if cur in remaining:
                 k = remaining.index(cur)
-                crashed[cur.lstrip('/')] = self._crash_reason()
-                remaining = remaining[k + 1:]
+                # the crash may come from an object loaded earlier (a heart
+                # beat, a call_out): give the current one a fresh driver first
+                if cur != suspect:
+                    suspect = cur
+                    remaining = remaining[k:]
+                else:
+                    crashed[cur.lstrip('/')] = self._crash_reason()
+                    remaining = remaining[k + 1:]
             else:
                 crashed['<boot>'] = self._crash_reason()
                 break
@@ -276,11 +324,11 @@ class Oracle:
         if os.path.exists(ef):
             for line in open(ef, 'rb'):
                 p, _, e = line.rstrip(b'\n').partition(b'\t')
-                errors[p.decode('latin-1').lstrip('/')] = e.decode('gb18030', 'replace')
+                errors[p.decode('utf-8', 'surrogateescape').lstrip('/')] = e.decode('gb18030', 'replace')
         loaded = set()
         lf = os.path.join(od, 'LOADED')
         if os.path.exists(lf):
-            loaded = {l.decode('latin-1').strip().lstrip('/') for l in open(lf, 'rb')}
+            loaded = {l.decode('utf-8', 'surrogateescape').strip().lstrip('/') for l in open(lf, 'rb')}
         return loaded, errors, crashed
 
     def _crash_reason(self):
@@ -297,7 +345,7 @@ class Oracle:
         for old in glob.glob(os.path.join(od, 'jobs.*')):
             os.remove(old)
         for k in range(0, max(len(paths), 1), 4000):
-            open(os.path.join(od, 'jobs.%d' % (k // 4000)), 'w', encoding='latin-1').write(
+            open(os.path.join(od, 'jobs.%d' % (k // 4000)), 'w', encoding='utf-8', errors='surrogateescape').write(
                 ''.join('load %s\n' % p for p in paths[k:k + 4000]))
         zb = os.path.join(self.world, 'binaries/adm/daemons/zzoracle.b')
         if os.path.exists(zb):
@@ -305,11 +353,17 @@ class Oracle:
         log = open(os.path.join(self.work, 'boot.log'), 'wb')
         import resource
         lim = self.mem_kb * 1024
-        proc = subprocess.Popen(['../driver', '../config.cfg'], cwd=self.world, stdout=log, stderr=log,
+        proc = subprocess.Popen(['../' + self.driver, '../' + self.config], cwd=self.world, stdout=log, stderr=log,
                                 preexec_fn=lambda: resource.setrlimit(resource.RLIMIT_AS, (lim, lim)))
         t0 = time.time()
         while proc.poll() is None and time.time() - t0 < timeout:
             if os.path.exists(os.path.join(od, 'DONE')):
+                break
+            # no job started or finished for `stall` seconds: the driver is
+            # stuck inside one object; stop it and resume after that object
+            marks = [os.path.getmtime(f) for f in glob.glob(os.path.join(od, '*')) if not
+                     os.path.basename(f).startswith('jobs.')]
+            if time.time() - max(marks + [t0]) > self.stall:
                 break
             time.sleep(0.5)
         time.sleep(0.5)

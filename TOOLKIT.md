@@ -168,6 +168,7 @@ Classes the toolkit leaves to you on purpose:
 | `lpc_audit_shadow_globals.py` | Finds deleted `int g = N;` locals that were really meant to assign the global `g` |
 | `lpc_lpc_suffix_slice.py` | Finds `f[<2..] == ".lpc"` slices the `.c` rename left too narrow |
 | `pristine_tree.sh SLUG PORT DIR` | Builds a throwaway copy of the committed lib, with its own port, to boot and test |
+| `python3 -m mudos_b.cli` (+ `mudos_b.elfdriver`, `mudos_b.pedriver`, `mudos_b.roundtrip`) | A lib shipped as MudOS v22 `.b` binaries (`MUDB` magic) without its `.c`: reads the efun table from the game's own Linux or Win32 driver, decompiles every `.b` to LPC, and proves each file by recompiling it in a v22pre11 driver and comparing the programs (KB 02 §3.1) |
 
 ## Lessons from 270 libraries
 

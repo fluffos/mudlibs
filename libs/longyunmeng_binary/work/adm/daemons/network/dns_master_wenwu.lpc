@@ -1,0 +1,487 @@
+// 本文件由编译后的 .b 二进制程序反编译还原，原始源码未随档案发布。
+// Decompiled from the compiled .b binary; the original source was not distributed.
+inherit "/feature/dbase";
+int startup_udp();
+void send_udp(mixed, mixed, mixed);
+void read_callback(mixed, mixed, mixed);
+string start_message();
+void init_database();
+void refresh_database();
+void do_pings();
+void set_mud_info(mixed, mixed);
+void zap_mud_info(mixed, mixed);
+void support_q_callback(mixed);
+void query_services(mixed, mixed, mixed, mixed);
+int query_service_method(mixed, mixed);
+mapping query_mud_info(mixed);
+string get_host_name(mixed);
+int get_mudresource(mixed, mixed);
+int dns_mudp(mixed);
+mapping query_muds();
+mapping query_svc();
+varargs int idx_request(mixed);
+void sequence_callback(mixed, mixed);
+void sequence_clean_up();
+void restore_euid();
+void aux_log(mixed, mixed);
+void aux_warning(mixed);
+void log(mixed);
+void resolve_callback(mixed, mixed, mixed);
+int query_udp_port();
+string query_mud_name();
+void send_shutdown();
+mapping query_svc_entry(mixed);
+void idx_callback(mixed, mixed);
+void create();
+void remove();
+
+int my_port;
+int socket_id;
+mapping muds;
+mapping mud_svc;
+mapping this_host;
+mixed *bootsrv;
+int bootsrv_retry;
+int seq_ctr;
+mapping seq_entries;
+
+int startup_udp() {
+    mixed v1;
+    if (socket_id) {
+        return 0;
+    }
+    socket_id = socket_create(2, "read_callback", "close_callback");
+    if (socket_id < 0) {
+        return 0;
+    }
+    v1 = socket_bind(socket_id, my_port);
+    while (v1 == -9) {
+        my_port++;
+        v1 = socket_bind(socket_id, my_port);
+    }
+    if (v1 <= 0) {
+        socket_close(socket_id);
+        return 0;
+    }
+    return 1;
+}
+
+void send_udp(mixed arg1, mixed arg2, mixed arg3) {
+    mixed v1;
+    if (!(!previous_object() || geteuid(previous_object()) == "Root") && file_name(previous_object())[0..sizeof("/adm/daemons/network/services/") - 1] != "/adm/daemons/network/services/") {
+        return;
+    }
+    v1 = socket_create(2, "read_callback", "close_callback");
+    if (v1 <= 0) {
+        return;
+    }
+    socket_write(v1, arg3, arg1 + " " + arg2);
+    socket_close(v1);
+}
+
+void read_callback(mixed arg1, mixed arg2, mixed arg3) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    mixed v6;
+    mixed v7;
+    mixed v8;
+    mixed v9;
+    v9 = 1;
+    if (previous_object()) {
+        return;
+    }
+    if (!sscanf(arg2, "@@@%s||%s@@@%*s", v1, v2)) {
+        if (!sscanf(arg2, "@@@%s@@@%*s", v1)) {
+            return;
+        }
+        v2 = "";
+    }
+    sscanf(arg3, "%s %*s", arg3);
+    v3 = explode(v2, "||");
+    v7 = allocate_mapping(sizeof(v3));
+    v8 = sizeof(v3);
+    while (v8--) {
+        if (v3[v8] && sscanf(v3[v8], "%s:%s", v4, v5) == 2) {
+            v7[v4] = v5;
+        }
+    }
+    v7["HOSTADDRESS"] = arg3;
+    if (v7["NAME"]) {
+        v7["ALIAS"] = replace_string(lower_case(v7["NAME"] ? v7["NAME"] : ""), " ", ".");
+    }
+    if (mapp(muds[v7["NAME"]])) {
+        muds[v7["NAME"]]["_dns_no_contact"] = 0;
+    }
+    v6 = values(([ "DXTWO" : "58.52.115.201 5559", "TTONE" : "222.51.9.138 5570" ]));
+    v8 = sizeof(v6);
+    while (v8--) {
+        sscanf(v6[v8], "%s %s", bootsrv[0], bootsrv[1]);
+        if (bootsrv[0] == arg3 && bootsrv[1] == v7["PORTUDP"]) {
+            if (file_size("/adm/daemons/network/services/" + v1 + ".lpc") > 0 || file_size("/binaries/adm/daemons/network/services/" + v1 + ".b") > 0) {
+                v9 = 1;
+            }
+        }
+    }
+    if (v9) {
+        v6 = values(([ "FengChen.Foshan" : "172.19.16.168 4004", "DTXY" : "61.134.12.112 2004", "JHII.MAIN" : "202.96.144.141 5559", "jhii" : "61.128.193.36 5559", "wlzbii" : "61.128.193.35 5559", "ldj.wuhan" : "202.103.25.163 4004", "The.Admin.Mud" : "140.119.75.11 5009" ]));
+        v8 = sizeof(v6);
+        while (v8--) {
+            sscanf(v6[v8], "%s %s", bootsrv[0], bootsrv[1]);
+            if (bootsrv[0] == arg3 && bootsrv[1] == v7["PORTUDP"]) {
+                v9 = 0;
+            }
+        }
+    }
+    if (v9 > 0) {
+        ("/adm/daemons/network/services/" + v1)->incoming_request(v7);
+    }
+}
+
+int query_udp_port() {
+    return my_port;
+}
+
+string query_mud_name() {
+    return "JXONE";
+}
+
+void send_shutdown() {
+    mixed v1;
+    mixed v2;
+    v1 = keys(muds);
+    v2 = sizeof(v1);
+    while (v2--) {
+        "/adm/daemons/network/services/shutdown"->send_shutdown(muds[v1[v2]]["HOSTADDRESS"], muds[v1[v2]]["PORTUDP"]);
+    }
+    socket_close(socket_id);
+    "/adm/daemons/channeld"->do_channel(this_object(), "sys", "MUD 互联核心 DNS_MASTER 已经被终止。 \n");
+}
+
+string start_message() {
+    return sprintf("||MUDNAME:%s||NAME:%s||VERSION:%s||DRIVER:%s||MUDLIB:%s||HOST:%s||PORT:%d||PORTUDP:%d||TIME:%d||ENCODING:%s||USERS:%d||TCP:%s", "『江西一站』", upper_case(capitalize(replace_string("/adm/daemons/network/dns_master"->query_mud_name() ? "/adm/daemons/network/dns_master"->query_mud_name() : "", " ", "."))), "XYZX-WENWU 1.5", "MudOS v22pre11", "XYZX-YLFY", query_host_name(), 2003, my_port, uptime(), "GB", sizeof(get_all_user()), "all");
+}
+
+void init_database() {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    if ("/adm/daemons/network/services/mudlist_a"->query_db_flag()) {
+        call_out("refresh_database", 300);
+        call_out("sequence_clean_up", 120);
+        do_pings();
+        "/adm/daemons/channeld"->do_channel(this_object(), "sys", "完成送出 startup 讯息。\n");
+        return;
+    }
+    v2 = sprintf("@@@%s%s@@@\n", "startup", start_message());
+    v3 = values(([ "DXTWO" : "58.52.115.201 5559", "TTONE" : "222.51.9.138 5570" ]));
+    v1 = sizeof(v3);
+    while (v1--) {
+        sscanf(v3[v1], "%s %d", bootsrv[0], bootsrv[1]);
+        send_udp(bootsrv[0], bootsrv[1], v2);
+        "/adm/daemons/network/services/mudlist_q"->send_mudlist_q(bootsrv[0], bootsrv[1]);
+    }
+    call_out("init_database", 60);
+    return;
+}
+
+void refresh_database() {
+    mixed v1;
+    mixed v2;
+    while (find_call_out("refresh_database") != -1) {
+    }
+    call_out("refresh_database", 300);
+    v2 = values(([ "DXTWO" : "58.52.115.201 5559", "TTONE" : "222.51.9.138 5570" ]));
+    v1 = sizeof(v2);
+    while (v1--) {
+        sscanf(v2[v1], "%s %d", bootsrv[0], bootsrv[1]);
+        "/adm/daemons/network/services/mudlist_q"->send_mudlist_q(bootsrv[0], bootsrv[1]);
+    }
+}
+
+void do_pings() {
+    mixed v1;
+    mixed v2;
+    if (find_call_out("do_pings") != -1) {
+        return;
+    }
+    call_out("do_pings", 1800);
+    v2 = keys(muds);
+    v1 = sizeof(v2);
+    while (v1--) {
+        if (undefinedp(mud_svc[v2[v1]])) {
+            continue;
+        }
+        muds[v2[v1]]["_dns_no_contact"]++;
+        "/adm/daemons/network/services/ping_q"->send_ping_q(muds[v2[v1]]["HOSTADDRESS"], muds[v2[v1]]["PORTUDP"]);
+        if (muds[v2[v1]]["_dns_no_contact"] >= 3) {
+            zap_mud_info(v2[v1], 0);
+        }
+    }
+}
+
+void set_mud_info(mixed arg1, mixed arg2) {
+    mixed v1;
+    if (!(!previous_object() || geteuid(previous_object()) == "Root") && file_name(previous_object())[0..sizeof("/adm/daemons/network/services/") - 1] != "/adm/daemons/network/services/") {
+        return;
+    }
+    arg1 = replace_string(lower_case(arg1 ? arg1 : ""), " ", ".");
+    while (arg1[sizeof(arg1) - 1] == 46) {
+        arg1 = arg1[0..sizeof(arg1) - 2];
+    }
+    if (arg1 == upper_case(capitalize(replace_string("/adm/daemons/network/dns_master"->query_mud_name() ? "/adm/daemons/network/dns_master"->query_mud_name() : "", " ", ".")))) {
+        return;
+    }
+    arg2["ALIAS"] = capitalize(replace_string(arg2["NAME"] ? arg2["NAME"] : "", ".", " "));
+    if (!undefinedp(mud_svc[arg1])) {
+        muds[arg1] = arg2;
+        return;
+    }
+    if (!undefinedp(muds[arg1])) {
+        this_object()->aux_log("dns_mud_conv", "Udp contact from: " + arg1 + "\n");
+    }
+    if (!arg2["TCP"]) {
+        arg2["TCP"] = "none";
+    }
+    muds[arg1] = arg2;
+    v1 = arg2["TCP"];
+    switch (v1) {
+    case "all":
+        mud_svc[arg1] = ([ "mail" : 2, "finger" : 11, "tell" : 11, "rwho_q" : 8, "gwizmsg" : 8 ]);
+        break;
+    case "only":
+        mud_svc[arg1] = ([ "mail" : 19, "finger" : 19, "tell" : 19, "rwho_q" : 16, "gwizmsg" : 16 ]);
+        break;
+    case "some":
+        mud_svc[arg1] = ([ "mail" : 0, "finger" : 8, "tell" : 8, "rwho_q" : 8, "gwizmsg" : 8 ]);
+        break;
+    default:
+        mud_svc[arg1] = ([ "mail" : 4, "finger" : 13, "tell" : 13, "rwho_q" : 13, "gwizmsg" : 13 ]);
+        break;
+    }
+    if (v1 != "only") {
+        query_services(arg1, arg2["HOSTADDRESS"], arg2["PORTUDP"], v1);
+    }
+}
+
+void zap_mud_info(mixed arg1, mixed arg2) {
+    if (!previous_object() || !(!previous_object() || geteuid(previous_object()) == "Root") || file_name(previous_object())[0..sizeof("/adm/daemons/network/services/") - 1] != "/adm/daemons/network/services/") {
+        return;
+    }
+    map_delete(muds, arg1);
+    map_delete(mud_svc, arg1);
+}
+
+void support_q_callback(mixed arg) {
+    mixed v1;
+    mixed v2;
+    if (!(!previous_object() || geteuid(previous_object()) == "Root")) {
+        return;
+    }
+    if (!arg || !arg["CMD"] || !arg["NAME"] || !sizeof(arg["CMD"]) || !sizeof(arg["NAME"])) {
+        return;
+    }
+    v2 = replace_string(lower_case(arg["NAME"] ? arg["NAME"] : ""), " ", ".");
+    if (undefinedp(muds[v2])) {
+        return;
+    }
+    if (undefinedp(mud_svc[v2])) {
+        mud_svc[v2] = ([ ]);
+    }
+    if (!arg["SUPPORTED"] && !arg["NOTSUPPORTED"]) {
+        return;
+    }
+    if (arg["CMD"] == "tcp") {
+        v1 = arg["PARAM"];
+        if (mud_svc[v2][v1] & 24) {
+            mud_svc[v2][v1] |= 1;
+        }
+        if (arg["SUPPORTED"]) {
+            mud_svc[v2][v1] |= 2;
+            mud_svc[v2][v1] &= -5;
+        } else {
+            mud_svc[v2][v1] |= 4;
+            mud_svc[v2][v1] &= -3;
+            if (!(mud_svc[v2][v1] & 1)) {
+                "/adm/daemons/network/services/support_q"->send_support_q(muds[v2]["HOSTADDRESS"], muds[v2]["PORTUDP"], arg["PARAM"]);
+            }
+        }
+    } else {
+        v1 = arg["CMD"];
+        if (mud_svc[v2][v1] & 6) {
+            mud_svc[v2][v1] |= 1;
+        }
+        if (arg["SUPPORTED"]) {
+            mud_svc[v2][v1] |= 8;
+            mud_svc[v2][v1] &= -17;
+        } else {
+            mud_svc[v2][v1] |= 16;
+            mud_svc[v2][v1] &= -9;
+            if (!(mud_svc[v2][v1] & 1)) {
+                "/adm/daemons/network/services/support_q"->send_support_q(muds[v2]["HOSTADDRESS"], muds[v2]["PORTUDP"], "tcp", arg["CMD"]);
+            }
+        }
+    }
+    return;
+}
+
+void query_services(mixed arg1, mixed arg2, mixed arg3, mixed arg4) {
+    if (!(mud_svc[arg1]["mail"] & 1)) {
+        if (arg4 == "some" && !(mud_svc[arg1]["mail"] & 6)) {
+            "/adm/daemons/network/services/support_q"->send_support_q(arg2, arg3, "tcp", "mail");
+        }
+    }
+    if (!(mud_svc[arg1]["finger"] & 1)) {
+        if (arg4 == "some" && !(mud_svc[arg1]["finger"] & 6)) {
+            "/adm/daemons/network/services/support_q"->send_support_q(arg2, arg3, "tcp", "finger");
+        }
+    }
+    return;
+}
+
+int query_service_method(mixed arg1, mixed arg2) {
+    arg1 = replace_string(lower_case(arg1 ? arg1 : ""), " ", ".");
+    if (undefinedp(muds[arg1])) {
+        return 0;
+    }
+    if (undefinedp(mud_svc[arg1])) {
+        return 19;
+    }
+    if (undefinedp(mud_svc[arg1][arg2])) {
+        if (member_array(arg2, ({ "mail", "finger", "rwho_q", "tell", "gwizmsg" })) != -1) {
+            query_services(arg1, muds[arg1]["HOSTADDRESS"], muds[arg1]["PORTUDP"], muds[arg1]["TCP"]);
+        }
+        return 0;
+    }
+    return mud_svc[arg1][arg2];
+}
+
+mapping query_svc_entry(mixed arg) {
+    return mud_svc[arg];
+}
+
+string get_host_name(mixed arg) {
+    arg = replace_string(lower_case(arg ? arg : ""), " ", ".");
+    if (arg == replace_string(lower_case(upper_case(capitalize(replace_string("/adm/daemons/network/dns_master"->query_mud_name() ? "/adm/daemons/network/dns_master"->query_mud_name() : "", " ", "."))) ? upper_case(capitalize(replace_string("/adm/daemons/network/dns_master"->query_mud_name() ? "/adm/daemons/network/dns_master"->query_mud_name() : "", " ", "."))) : ""), " ", ".")) {
+        return this_host["HOSTADDRESS"];
+    }
+    if (undefinedp(muds[arg])) {
+        return 0;
+    }
+    return muds[arg]["HOSTADDRESS"];
+}
+
+mapping query_mud_info(mixed arg) {
+    arg = replace_string(lower_case(arg ? arg : ""), " ", ".");
+    if (arg == replace_string(lower_case(upper_case(capitalize(replace_string("/adm/daemons/network/dns_master"->query_mud_name() ? "/adm/daemons/network/dns_master"->query_mud_name() : "", " ", "."))) ? upper_case(capitalize(replace_string("/adm/daemons/network/dns_master"->query_mud_name() ? "/adm/daemons/network/dns_master"->query_mud_name() : "", " ", "."))) : ""), " ", ".")) {
+        return this_host + ([ "TIME" : "" + uptime() ]);
+    }
+    return muds[arg];
+}
+
+int dns_mudp(mixed arg) {
+    arg = replace_string(lower_case(arg ? arg : ""), " ", ".");
+    return undefinedp(mud_svc[arg]) ? arg == replace_string(lower_case(upper_case(capitalize(replace_string("/adm/daemons/network/dns_master"->query_mud_name() ? "/adm/daemons/network/dns_master"->query_mud_name() : "", " ", "."))) ? upper_case(capitalize(replace_string("/adm/daemons/network/dns_master"->query_mud_name() ? "/adm/daemons/network/dns_master"->query_mud_name() : "", " ", "."))) : ""), " ", ".") ? 1 : 0 : 1;
+}
+
+mapping query_muds() {
+    return muds + ([ replace_string(lower_case(upper_case(capitalize(replace_string("/adm/daemons/network/dns_master"->query_mud_name() ? "/adm/daemons/network/dns_master"->query_mud_name() : "", " ", "."))) ? upper_case(capitalize(replace_string("/adm/daemons/network/dns_master"->query_mud_name() ? "/adm/daemons/network/dns_master"->query_mud_name() : "", " ", "."))) : ""), " ", ".") : this_host + ([ "TIME" : "" + uptime() ]) + ([ "USERS" : sprintf("%d", sizeof(get_all_user())) ]) ]);
+}
+
+mapping query_svc() {
+    return mud_svc;
+}
+
+varargs int idx_request(mixed arg) {
+    if (file_name(previous_object())[0..sizeof("/adm/daemons/network/services/") - 1] != "/adm/daemons/network/services/") {
+        return 0;
+    }
+    seq_ctr++;
+    seq_entries[seq_ctr] = ({ geteuid(previous_object()), arg, time() });
+    return seq_ctr;
+}
+
+void idx_callback(mixed arg1, mixed arg2) {
+    mixed v1;
+    if (!(!previous_object() || geteuid(previous_object()) == "Root")) {
+        return;
+    }
+    if (undefinedp(seq_entries[arg1])) {
+        return;
+    }
+    v1 = seq_entries[arg1];
+    map_delete(seq_entries, arg1);
+    seteuid(v1[0]);
+    evaluate(v1[1], arg2);
+    restore_euid();
+}
+
+void sequence_clean_up() {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    if (find_call_out("sequence_clean_up") != -1) {
+        return;
+    }
+    v3 = keys(seq_entries);
+    v2 = time();
+    v1 = sizeof(v3);
+    while (v1--) {
+        if (v2 - seq_entries[v3[v1]][2] > 30) {
+            seteuid(seq_entries[v3[v1]][0]);
+            evaluate(seq_entries[v3[v1]][1], 0);
+            restore_euid();
+            map_delete(seq_entries, v3[v1]);
+        }
+    }
+    call_out("sequence_clean_up", 3600);
+}
+
+void restore_euid() {
+    seteuid("Root");
+}
+
+void aux_log(mixed arg1, mixed arg2) {
+    if (!(!previous_object() || geteuid(previous_object()) == "Root")) {
+        return;
+    }
+    restore_euid();
+}
+
+void aux_warning(mixed arg) {
+    if (!(!previous_object() || geteuid(previous_object()) == "Root")) {
+        return;
+    }
+}
+
+void log(mixed arg) {
+}
+
+void resolve_callback(mixed arg1, mixed arg2, mixed arg3) {
+    this_host["HOSTADDRESS"] = arg2;
+}
+
+void create() {
+    restore_euid();
+    set("channel_id", "网路精灵");
+    my_port = 2007;
+    muds = allocate_mapping(60);
+    mud_svc = allocate_mapping(60);
+    seq_ctr = 0;
+    seq_entries = ([ ]);
+    bootsrv = ({ "127.0.0.1", 2007 });
+    bootsrv_retry = 0;
+    "/adm/daemons/network/services/mudlist_a"->clear_db_flag();
+    this_host = ([ "MUDNAME" : "『江西一站』", "NAME" : upper_case(capitalize(replace_string("/adm/daemons/network/dns_master"->query_mud_name() ? "/adm/daemons/network/dns_master"->query_mud_name() : "", " ", "."))), "ALIAS" : upper_case(capitalize(replace_string("/adm/daemons/network/dns_master"->query_mud_name() ? "/adm/daemons/network/dns_master"->query_mud_name() : "", " ", "."))), "DRIVER" : "MudOS v22pre11", "MUDLIB" : "XYZX-YLFY", "VERSION" : "XYZX-WENWU 1.5", "HOST" : query_host_name(), "HOSTADDRESS" : 0, "PORT" : "" + 2003, "PORTUDP" : "" + my_port, "ADMIN" : "WENWU@XYZX", "HTTP" : "http://xiyangzaixian.uuoo.com", "ENCODING" : "GB", "TIME" : "" + uptime(), "TCP" : "all", "USERS" : sprintf("%d", sizeof(get_all_user())) ]);
+    resolve(query_host_name(), "resolve_callback");
+    if (startup_udp()) {
+        init_database();
+    }
+    "/adm/daemons/channeld"->do_channel(this_object(), "sys", "MUD 互联核心 DNS_MASTER 已经启动。 \n");
+}
+
+void remove() {
+    send_shutdown();
+}

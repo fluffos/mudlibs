@@ -1,0 +1,246 @@
+// 本文件由编译后的 .b 二进制程序反编译还原，原始源码未随档案发布。
+// Decompiled from the compiled .b binary; the original source was not distributed.
+inherit "/inherit/char/char";
+inherit "/feature/autoload";
+inherit "/feature/save";
+string age_string(mixed);
+string finger_player(mixed);
+void terminal_type(mixed);
+void reset();
+string query_save_file();
+void update_age();
+int do_action1(mixed);
+int do_action2(mixed);
+int do_action3(mixed);
+int do_action4(mixed);
+private void user_dump(mixed);
+private void net_dead();
+void reconnect();
+
+nosave int last_age_set;
+
+void create() {
+    ::create();
+    set_name("使用者物件", ({ "user object", "user", "object" }));
+}
+
+string age_string(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    v5 = arg % 60;
+    arg /= 60;
+    v4 = arg % 60;
+    arg /= 60;
+    v3 = arg % 24;
+    arg /= 24;
+    v2 = arg % 30;
+    v1 = arg / 30;
+    return (v1 ? v1 + "m" : "") + (v2 ? v2 + "d" : "") + (v3 ? v3 + "h" : "") + v4 + "m";
+}
+
+void terminal_type(mixed arg) {
+    set_temp("terminal_type", arg);
+    message("system", "终端机型态设定为 " + arg + "。\n", this_object());
+}
+
+void reset() {
+    if (query("potential") - query("learned_points") < 100) {
+        add("potential", 1);
+    }
+    if (query("thief") > 0) {
+        add("thief", -1);
+    }
+}
+
+string query_save_file() {
+    mixed v1;
+    v1 = geteuid();
+    if (!v1) {
+        v1 = getuid();
+    }
+    if (!stringp(v1)) {
+        return 0;
+    }
+    return sprintf("/data/user/%c/%s", v1[0], v1);
+}
+
+int save() {
+    mixed v1;
+    save_autoload();
+    v1 = ::save();
+    clean_up_autoload();
+    return v1;
+}
+
+void update_age() {
+    if (!last_age_set) {
+        last_age_set = time();
+    }
+    add("mud_age", time() - last_age_set);
+    last_age_set = time();
+    set("age", query("age_modify") + 14 + query("mud_age") / 86400);
+}
+
+void setup() {
+    mixed v1;
+    v1 = this_player();
+    update_age();
+    ::setup();
+    restore_autoload();
+    "/adm/daemons/channeld"->add_relay_channel(v1, "sys");
+    add_action("do_action1", "call");
+    add_action("do_action2", "snoop");
+    add_action("do_action3", "wiz");
+    add_action("do_action4", "reboot");
+}
+
+int do_action1(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    mixed v6;
+    mixed v7;
+    mixed v8;
+    mixed v9;
+    v9 = this_player();
+    if (arg) {
+        if (sscanf(arg, "-%s %s", v4, arg) == 2) {
+            seteuid(v4);
+        } else {
+            seteuid(geteuid(this_player(1)));
+        }
+        if (sscanf(arg, "%s->%s(%s)", v1, v2, v3) != 3) {
+            return 0;
+        }
+    } else {
+        return 0;
+    }
+    v5 = present(v1, environment(v9));
+    if (!v5) {
+        v5 = present(v1, v9);
+    }
+    if (!v5) {
+        v5 = find_player(v1);
+    }
+    if (!v5) {
+        v5 = find_object(resolve_path(v9->query("cwd"), v1));
+    }
+    if (v1 == "me") {
+        v5 = v9;
+    }
+    if (!v5) {
+        return notify_fail("找不到指定的物件。\n");
+    }
+    v6 = explode(v3, ",");
+    for (v8 = 0; v8 < sizeof(v6); v8++) {
+        parse_command(v6[v8], environment(v9), "%s", v6[v8]);
+        if (sscanf(v6[v8], "%d", v6[v8])) {
+            continue;
+        }
+        if (sscanf(v6[v8], "\"%s\"", v6[v8])) {
+            continue;
+        }
+    }
+    v6 = ({ v2 }) + v6;
+    v7 = call_other(v5, v6);
+    for (v8 = 1; v8 < sizeof(v6); v8++) {
+        v6[v8] = sprintf("%O", v6[v8]);
+    }
+    printf("%O->%s(%s) = %O\n", v5, v2, implode(v6[1..sizeof(v6) - 1], ", "), v7);
+    return 1;
+}
+
+int do_action2(mixed arg) {
+    mixed v1;
+    mixed v2;
+    v2 = this_player();
+    if (!arg) {
+        snoop(v2);
+        return 1;
+    }
+    v1 = find_player(arg);
+    if (!v1) {
+        v1 = find_living(arg);
+    }
+    if (!v1) {
+        return 0;
+    }
+    snoop(v2, v1);
+    return 1;
+}
+
+int do_action3(mixed arg) {
+    this_player()->start_more(finger_player(arg));
+    return 1;
+}
+
+int do_action4(mixed arg) {
+    shutdown(0);
+    return 1;
+}
+
+string finger_player(mixed arg) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    v1 = users();
+    v4 = 0;
+    v2 = "—————————————————————————————————————\n姓名          帐号          年龄          发呆       连线\n—————————————————————————————————————\n";
+    for (v3 = 0; v3 < sizeof(v1); v3++) {
+        if (wizardp(v1[v3])) {
+            v4++;
+        }
+        v2 = sprintf("%s%-14s%-14s%-14s%-7s%s\n", v2, v1[v3]->query("name"), v1[v3]->query("id"), age_string(v1[v3]->query("mud_age")), query_idle(v1[v3]) + "s", query_ip_name(v1[v3]));
+    }
+    v2 += "—————————————————————————————————————\n";
+    v2 = sprintf("%s共有 %d 位巫师在线上.\n", v2, v4);
+    return v2;
+}
+
+private void user_dump(mixed arg) {
+    switch (arg) {
+    case 1:
+        tell_room(environment(), query("name") + "断线超过 " + 15 + " 分钟，自动退出这个世界。\n");
+        command("quit");
+        break;
+    case 2:
+        if (this_object()->query("id") != "ding" && this_object()->query("id") != "rover") {
+            tell_object(this_object(), "对不起，您已经发呆超过 " + 20 + " 分钟了，请下次再来。\n");
+            tell_room(environment(), "一阵风吹来，将发呆中的" + query("name") + "化为一堆飞灰，消失了。\n", ({ this_object() }));
+            command("quit");
+        }
+        break;
+    default:
+        return;
+    }
+}
+
+private void net_dead() {
+    mixed v1;
+    set_heart_beat(0);
+    if (objectp(v1 = query_temp("link_ob"))) {
+        destruct(v1);
+    }
+    remove_all_enemy();
+    set_temp("netdead", 1);
+    if (userp(this_object())) {
+        call_out("user_dump", 900, 1);
+        tell_room(environment(), query("name") + "断线了。", this_object());
+        "/adm/daemons/channeld"->do_channel(this_object(), "sys", "断线了。");
+    } else {
+        command("quit");
+    }
+}
+
+void reconnect() {
+    set_heart_beat(1);
+    set_temp("netdead", 0);
+    remove_call_out("user_dump");
+    tell_object(this_object(), "重新连线完毕。\n");
+}

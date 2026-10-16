@@ -1,0 +1,190 @@
+// 本文件由编译后的 .b 二进制程序反编译还原，原始源码未随档案发布。
+// Decompiled from the compiled .b binary; the original source was not distributed.
+class email { string address; string body; int status; int time_stamp; object user; }
+
+protected void time_out(mixed, mixed);
+protected void success_send(mixed);
+protected void mail_error(mixed, mixed);
+void create();
+int send_mail(mixed, mixed, mixed, mixed);
+protected void hello(mixed, mixed);
+protected void read_callback(mixed, mixed);
+
+nosave mapping queue = ([ ]);
+nosave string smtp_server = "202.97.175.44 25";
+
+void create() {
+    seteuid(getuid());
+}
+
+int send_mail(mixed arg1, mixed arg2, mixed arg3, mixed arg4) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    class email v4;
+    mixed v5;
+    mixed v6;
+    if (geteuid(previous_object()) != "Root" || !objectp(arg1)) {
+        return 0;
+    }
+    if (!stringp(arg4)) {
+        tell_object(arg1, "邮件内容为空。\n");
+        return 0;
+    }
+    if (stringp(arg2) && strsrch(arg2, "@") < 0) {
+        v5 = arg2;
+        arg2 = clone_object("/clone/user/login");
+        arg2->set("id", v5);
+        arg2->restore();
+        v5 = arg2->query("email");
+        destruct(arg2);
+        arg2 = v5;
+    } else if (objectp(arg2)) {
+        if (stringp(v6 = arg2->query("email"))) {
+            arg2 = v6;
+        } else if (objectp(v6 = arg2->query_temp("link_ob"))) {
+            arg2 = v6->query("email");
+        }
+    }
+    if (!stringp(arg2) || sscanf(arg2, "%*s@%*s.%*s") != 3) {
+        tell_object(arg1, "邮件地址错误。\n");
+        return 0;
+    }
+    arg2 = lower_case(arg2);
+    arg4 = replace_string(arg4, "\n.\n", "\n\n");
+    if (!stringp(arg3)) {
+        arg3 = "『江西一站』邮件";
+    }
+    v1 = sprintf("From: \"%s\" <%s>\nTo: <%s>\nSubject: %s\nDate: %s\nX-Mailer: %s\nMIME-Version: 1.0\n\n%s\nhttp://www.mymud.com/", "『江西一站』", "admin@mymud.com", arg2, arg3, ctime(time()), "LPC SMTP Client v1.0", arg4);
+    v4 = new(class email);
+    v4->address = arg2;
+    v4->body = v1;
+    v4->user = arg1;
+    v4->time_stamp = time();
+    v2 = socket_create(1, "read_callback", "close_callback");
+    if (v2 < 0) {
+        tell_object(arg1, "创建套接字发生错误。\n");
+        return 0;
+    }
+    queue += ([ v2 : v4 ]);
+    v3 = socket_connect(v2, smtp_server, "read_callback", "write_call_back");
+    if (v3 != 1) {
+        tell_object(arg1, "连接服务器发生错误。\n");
+        map_delete(queue, v2);
+        socket_close(v2);
+        return 0;
+    }
+    tell_object(arg1, "邮件发送中，请稍候。\n");
+    call_out("time_out", 30, v2, v4->time_stamp);
+    return 1;
+}
+
+protected void time_out(mixed arg1, mixed arg2) {
+    class email v1;
+    mixed v2;
+    if (undefinedp(queue[arg1])) {
+        return;
+    }
+    v1 = queue[arg1];
+    if (v1->time_stamp != arg2) {
+        return;
+    }
+    if (objectp(v2 = v1->user)) {
+        tell_object(v2, "\e[5m发送过程超时，请重新再发送一次。\n\e[2;37;0m");
+    }
+    map_delete(queue, arg1);
+    socket_close(arg1);
+}
+
+protected void success_send(mixed arg) {
+    class email v1;
+    mixed v2;
+    if (undefinedp(queue[arg])) {
+        return;
+    }
+    v1 = queue[arg];
+    if (objectp(v2 = v1->user)) {
+        tell_object(v2, sprintf("\e[1;37m信件已经发往：%s！\n\e[2;37;0m", v1->address));
+    }
+    map_delete(queue, arg);
+    socket_close(arg);
+}
+
+protected void mail_error(mixed arg1, mixed arg2) {
+    class email v1;
+    mixed v2;
+    if (undefinedp(queue[arg1])) {
+        return;
+    }
+    v1 = queue[arg1];
+    if (objectp(v2 = v1->user)) {
+        tell_object(v2, sprintf("\e[5m发送过程中出现异常错误：%s\n\e[2;37;0m", arg2));
+    }
+    map_delete(queue, arg1);
+    socket_close(arg1);
+}
+
+protected void hello(mixed arg1, mixed arg2) {
+    if (!undefinedp(queue[arg1])) {
+        socket_write(arg1, arg2);
+    }
+}
+
+protected void read_callback(mixed arg1, mixed arg2) {
+    mixed v1;
+    class email v2;
+    if (undefinedp(queue[arg1])) {
+        socket_close(arg1);
+        return;
+    }
+    v2 = queue[arg1];
+    v1 = atoi(arg2[0..2]);
+    if (!v1 || v1 >= 500) {
+        mail_error(arg1, arg2);
+        return;
+    }
+    switch (v2->status++) {
+    case 0:
+        if (v1 == 220) {
+            call_out("hello", 1, arg1, sprintf("HELO %s\n", "mymud.com"));
+            return;
+        }
+        break;
+    case 1:
+        if (v1 == 250) {
+            socket_write(arg1, sprintf("MAIL FROM: %s\n", "admin"));
+            return;
+        }
+        break;
+    case 2:
+        if (v1 == 250) {
+            socket_write(arg1, sprintf("RCPT TO: <%s> NOTIFY=NEVER\n", v2->address));
+            return;
+        }
+        break;
+    case 3:
+        if (v1 == 250) {
+            socket_write(arg1, "DATA\n");
+            return;
+        }
+        break;
+    case 4:
+        if (v1 == 354) {
+            socket_write(arg1, sprintf("%s\n.\n", v2->body));
+            return;
+        }
+        break;
+    case 5:
+        if (v1 != 451) {
+            socket_write(arg1, "QUIT\n");
+            return;
+        }
+        break;
+    case 6:
+        if (v1 == 221) {
+            success_send(arg1);
+            return;
+        }
+    }
+    mail_error(arg1, arg2);
+}

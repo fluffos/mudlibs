@@ -18,7 +18,11 @@ FP_MASK, FP_NOT_BINDABLE = 0x0f, 0x40
 
 
 class Efuns:
-    """Efun table from drivers/<name>.json (see elfdriver.py)."""
+    """Efun table from drivers/<name>.json (see elfdriver.py, pedriver.py).
+
+    A table may carry the build's own `operators` list (opcode = index + 1)
+    when it differs from the v22pre11 one in ops.py, and the
+    compiler_function_t size of its .b files as `entry_size`."""
 
     def __init__(self, table):
         self.by_token = {}
@@ -28,8 +32,15 @@ class Efuns:
                 self.aliases.setdefault(e['token'] & 1023, []).append(e)
             else:
                 self.by_token[e['token']] = e
+        ops = table.get('operators')
+        self.base = len(ops) + 1 if ops else BASE
+        # operators past the v22pre11 set (decode_one refuses them)
+        self.extra_ops = {k + 1: n for k, n in enumerate(ops or ()) if k + 1 >= BASE}
+        if min(self.by_token) != self.base:
+            raise ValueError('first efun token %d, operator table ends at %d' % (min(self.by_token), self.base - 1))
         ones = [t for t, e in self.by_token.items() if e['min_args'] == 1 and e['max_args'] == 1]
-        self.onearg_max = BASE + len(ones)
+        self.onearg_max = self.base + len(ones)
+        self.entry_size = table.get('entry_size', bfile.ENTRY_SIZE)
         self.arg_types = table.get('efun_arg_types', [])
 
     def name(self, token):
@@ -64,8 +75,10 @@ def decode_one(code, pc, efuns):
     op = code[pc]
     pc += 1
     I = lambda **kw: Instr(off=start, op=op, size=0, **kw)
-    if op >= BASE:
+    if op >= efuns.base:
         ins = I(efun=True, nargs=1)
+    elif op in efuns.extra_ops:
+        raise ValueError('operator %s at %04x: no decoding for it' % (efuns.extra_ops[op], start))
     elif op == OP['push']:
         n = code[pc]
         pc += 1

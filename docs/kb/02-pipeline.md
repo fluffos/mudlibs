@@ -204,27 +204,78 @@ A lib that ships `binaries/**/*.b` (MudOS `save_binary` cache, `MUDB`
 magic) with blanked `.c` files can be decompiled back to LPC. First
 case: wllz3 (186), MudOS v22pre11, 9,365 programs, all but one
 recovered; the full story and the commands are in `libs/wllz3/NOTES.md`
-and `libs/wllz3/rebuild.sh`.
+and `libs/wllz3/rebuild.sh`. Second: longyunmeng_binary (033-3), a Win32
+v22pre11 build, 14,395 programs, all but one proven
+(`libs/longyunmeng_binary/NOTES.md`, `rebuild.sh`).
 - **Efun numbering comes from the game's own driver.** An unstripped ELF
   driver has `predefs`/`efun_table`; `python3 -m mudos_b.elfdriver`
   writes `mudos_b/drivers/<slug>.json`. Never guess the table from a
   MudOS version string: builds differ by compile options.
+- **A Win32 `mudos.exe` has no symbols.** `python3 -m mudos_b.pedriver
+  mudos.exe <out.json>` finds `predefs` by shape (the longest run of
+  32-byte keyword_t whose `word` points at an identifier, `next` 0, sorted,
+  holding `call_other`) and reads the operator opcodes from the
+  `add_instr_name()` calls in `init_instrs()`. The 033-3 build carries
+  three extra operators (`*_classstack_object`), so every efun token is 3
+  higher than in the Linux build: the JSON then lists `operators`, and
+  `entry_size` 16 (MSVC `compiler_function_t`; 12 on Linux). Symptom of a
+  wrong base: efuns decode as nonsense names, `unknown efun` from `cli`.
 - **Decompile:** `python3 -m mudos_b.cli <binaries> <driver.json>
-  <simul_efun> --list <paths> --out <dir> [--fluffos]`. `--fluffos` emits
+  <simul_efun> --list <paths> --out <dir> [--fluffos] [--gbk]`. `--fluffos` emits
   `protected` for static functions, `nosave` for static vars, and drops
   unused locals (FluffOS errors on `nosave` functions and warns on the
-  rest).
+  rest). `--gbk` keeps GBK characters whole in strings: a second byte
+  `0x5c` written as `\\` leaves a stray backslash once the tree goes to
+  UTF-8 (17 files in 033-3).
 - **Prove it with the original driver** when it runs on the host:
   `python3 -m mudos_b.roundtrip` recompiles every decompiled file in the
   old driver and compares the new `.b` with the shipped one, canonically
   (`mudos_b.oracle`). Only a 0-diff round trip counts as recovered.
   Intact `.c` files that also round-trip are kept as-is (comments
   survive); the rest are replaced by the decompiled text.
+- **No host-runnable original: a stand-in build of the same version.** The
+  wllz3 Linux v22pre11 driver compiles the 033-3 code the way the Win32
+  one did: `roundtrip <oracle-raw> <target.json> --bdir <shipped
+  binaries> --oracle-table mudos_b/drivers/wllz3.json`; `canon()` compares
+  by name, so the efun numbers may differ. Match the target's
+  DEFAULT_PRAGMAS with `--pragma` (033-3: `no_strict_types`, untyped
+  `create()` has no NAME_STRICT_TYPES there) and drop build-only codegen
+  with `--fold transfer_local` (the Win32 build never emits it). Tell: one
+  `differs` reason across thousands of programs is a build difference,
+  not a decompiler bug.
 - Traps in the oracle driver: `read_file` caps at 200,000 bytes (split
   job lists); `dump_prog` rejects paths with `#`; loading runs
-  `create()` and can segfault the driver (restart and resume).
+  `create()` and can segfault the driver (restart and resume; the runner
+  retries an object once, an error `catch()` cannot hold such as too deep
+  recursion skips only that object). Preload the lib's security daemon:
+  `write_file()` goes through it, and without it the runner logs nothing
+  and waits out its stall timer.
+- **Code shapes found on 033-3** (all in `decompile.py`): `continue` in
+  `while (1)` (a branch to the closing `bbranch`); the compiler adds
+  `return 0` after `return x;` only when the body has three or more
+  top-level statements, local initializers counting as one (fold them
+  back: initializers, a comma, a for-init or a block); two globals of one
+  name (`#include` of two files that both declare `names`) and a simul_efun
+  call to a function the program defines later both need declarations
+  placed between the functions; an efun called while a same-named
+  function is visible is `efun::name`.
+- **A source edition of the same game is a source, not an oracle.**
+  Compile its `.c` against the binary edition's tree in the stand-in and
+  keep only exact matches (033-2 gave 8,202 of 12,125, `rebuild_tree
+  --borrow`, with a header naming the source). Inherited programs go in
+  rounds: a parent that differs fails its children, so retry those with
+  the parent reverted to the decompiled text until nothing changes. Leave
+  the master and simul_efun out of the big run (a later version that does
+  not compile stops the boot).
+- **A generated `work/` drifts when a corpus sweep edits it.** wllz3's
+  rebuild stopped reproducing its tree after a skill-name sweep
+  (046704ce5fe); the sweep's hunks went into `fluffos-fixes.patch`. Check:
+  `OUT=<dir> REC=<dir> libs/longyunmeng_binary/rebuild.sh`, then diff.
 - **Originals that compile but disagree with their binary** are stale
   sources: the binary is what the game ran. Use the decompiled file.
+  Unless the source is newer and the driver ran that directory from
+  source: 033-3's `d/automap` (a regenerated maze, `.c` 14 minutes newer
+  than its `.b`, `valid_c_or_bin_run()` allows `.c` there) keeps its `.c`.
 - Source that MudOS took and FluffOS warns on comes out of the decompiler
   unchanged (it is faithful): arity mismatches with inherited
   definitions (`void remove()` vs `remove(string)`), `int setup()` over

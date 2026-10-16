@@ -1,0 +1,361 @@
+// 本文件由编译后的 .b 二进制程序反编译还原，原始源码未随档案发布。
+// Decompiled from the compiled .b binary; the original source was not distributed.
+protected void listen_callback(mixed);
+void write_callback(mixed);
+protected void read_callback(mixed, mixed);
+protected void http_error(mixed, mixed, mixed);
+protected void close_connection(mixed);
+protected void get_file(mixed, mixed, mixed);
+protected void setup();
+protected void write_data(mixed, mixed);
+void set_persistent(mixed);
+void save_data();
+int file_exists(mixed);
+int query_accesses();
+protected void create();
+string http_header(mixed);
+string http_error_header(mixed);
+int query_prevent_shadow(mixed);
+varargs string query_hostname(mixed, mixed);
+protected void clean_up();
+protected void write_data_retry(mixed, mixed, mixed);
+void retry_write(mixed);
+protected void store_client_info(mixed);
+string common_date(mixed);
+void log_http(mixed, mixed, mixed, mixed);
+protected void do_get(mixed, mixed, mixed);
+protected void do_post(mixed, mixed, mixed, mixed);
+protected void close_callback(mixed);
+void resolve_callback(mixed, mixed, mixed);
+
+nosave int httpSock;
+nosave mapping sockets;
+nosave mapping resolve_pending;
+nosave string *months;
+nosave mapping bad_cmd = ([ "error" : "Bad Command", "file" : "/www/errors/badcmd.html" ]);
+nosave mapping access_denied = ([ "error" : "Access Denied", "file" : "/www/errors/access.html" ]);
+nosave mapping not_found = ([ "error" : "Not Found", "file" : "/www/errors/notfound.html" ]);
+nosave mapping bad_gateway = ([ "error" : "Bad Gateway", "file" : "/www/errors/badgate.html" ]);
+nosave int persistent;
+int accesses;
+
+int query_accesses() {
+    return accesses;
+}
+
+protected void create() {
+    seteuid("Root");
+    accesses = 0;
+    set_persistent(1);
+    months = ({ "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" });
+    sockets = ([ ]);
+    resolve_pending = ([ ]);
+    log_file("http_errors", ctime(time()) + "\n");
+    log_file("http_errors", "Created when uptime = " + uptime() + "\n");
+    call_out("setup", 5);
+}
+
+string http_header(mixed arg) {
+    return sprintf("HTTP/1.0 %s%c", arg, 10) + sprintf("Server: 夕阳再现之炎龙封印/0.2\nMIME-version: 1.0%c", 10);
+}
+
+string http_error_header(mixed arg) {
+    return http_header(arg) + sprintf("Content-type: text/html%c%c", 10, 10);
+}
+
+int query_prevent_shadow(mixed arg) {
+    return 1;
+}
+
+varargs string query_hostname(mixed arg1, mixed arg2) {
+    mixed v1;
+    v1 = sockets[arg1];
+    if (!undefinedp(v1)) {
+        if (arg2) {
+            return v1["address"];
+        } else {
+            return v1["name"];
+        }
+    }
+    return 0;
+}
+
+protected void clean_up() {
+}
+
+protected void setup() {
+    if ((httpSock = socket_create(1, "read_callback", "close_callback")) < 0) {
+        log_file("http_errors", ctime(time()) + "\n");
+        log_file("http_errors", "setup: Failed to create socket.\n");
+        return;
+    }
+    if (socket_bind(httpSock, 8000) < 0) {
+        socket_close(httpSock);
+        log_file("http_errors", ctime(time()) + "\n");
+        log_file("http_errors", "setup: Failed to bind socket to port.\n");
+        return;
+    }
+    if (socket_listen(httpSock, "listen_callback") < 0) {
+        socket_close(httpSock);
+        log_file("http_errors", ctime(time()) + "\n");
+        log_file("http_errors", "setup: Failed to listen to socket.\n");
+    }
+}
+
+protected void write_data_retry(mixed arg1, mixed arg2, mixed arg3) {
+    mixed v1;
+    if (arg3 == 10) {
+        close_connection(arg1);
+        return;
+    }
+    v1 = socket_write(arg1, arg2);
+    if (find_player("no-one")) {
+        tell_object(find_player("no-one"), "write_data: rc = " + v1 + ", counter = " + arg3 + "\n");
+    }
+    sockets[arg1]["write_status"] = v1;
+    switch (v1) {
+    case 1:
+        close_connection(arg1);
+        break;
+    case -22:
+        sockets[arg1]["pending"] = arg2;
+        break;
+    case -29:
+        break;
+    case -28:
+    case -17:
+        if (arg3 < 10) {
+            call_out("retry_write", 2, ({ arg1, arg2, arg3 + 1 }));
+            return;
+        }
+    default:
+        log_file("http_errors", ctime(time()) + "\n");
+        log_file("http_errors", "write_data_retry: " + socket_error(v1) + "\n");
+        close_connection(arg1);
+        break;
+    }
+}
+
+void retry_write(mixed arg) {
+    write_data_retry(arg[0], arg[1], arg[2]);
+}
+
+protected void write_data(mixed arg1, mixed arg2) {
+    write_data_retry(arg1, arg2, 0);
+}
+
+protected void store_client_info(mixed arg) {
+    mixed v1;
+    mixed v2;
+    sscanf(socket_address(arg), "%s %d", v1, v2);
+    sockets[arg] = ([ "address" : v1, "name" : v1, "port" : v2, "time" : time(), "write_status" : 1 ]);
+}
+
+protected void listen_callback(mixed arg) {
+    mixed v1;
+    if ((v1 = socket_accept(arg, "read_callback", "write_callback")) < 0) {
+        log_file("http_errors", ctime(time()) + "\n");
+        log_file("http_errors", "listen_callback: socket_accept failed.\n");
+        return;
+    }
+    store_client_info(v1);
+}
+
+void write_callback(mixed arg) {
+    if (sockets[arg]["write_status"] == -22) {
+        write_data(arg, sockets[arg]["pending"]);
+        map_delete(sockets[arg], "pending");
+    } else {
+        sockets[arg]["write_status"] = 1;
+        close_connection(arg);
+    }
+}
+
+string common_date(mixed arg) {
+    mixed v1;
+    v1 = localtime(arg);
+    return sprintf("%02d/%s/%d:%02d:%02d:%02d -%02d00", v1[3], months[v1[4]], v1[5], v1[2], v1[1], v1[0], v1[8] / 3600);
+}
+
+void log_http(mixed arg1, mixed arg2, mixed arg3, mixed arg4) {
+    mixed v1;
+    mixed v2;
+    if (!sockets[arg1]) {
+        return;
+    }
+    v2 = arg3 ? sprintf("%d", arg3) : "-";
+    v1 = sprintf("%s unknown - [%s] \"%s\" %d %s\n", sockets[arg1]["name"], common_date(time()), arg4, arg2, v2);
+    log_file("http", v1);
+}
+
+protected void read_callback(mixed arg1, mixed arg2) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    mixed v6;
+    mixed v7;
+    if (!sizeof(arg2)) {
+        http_error(arg1, bad_cmd, "400 Bad Request");
+        return;
+    }
+    if (v6 = sockets[arg1]["read"]) {
+        arg2 = v6 + arg2;
+    }
+    if (arg2[<1] != 10) {
+        sockets[arg1]["read"] = arg2;
+        return;
+    } else {
+        map_delete(sockets[arg1], "read");
+    }
+    accesses++;
+    if (find_player("no-one")) {
+        tell_object(find_player("no-one"), "read_callback: (" + arg2 + ")\n");
+    }
+    v5 = explode(replace_string(arg2, "\r", ""), "\n");
+    v7 = v5[0];
+    sscanf(v7, "%s %s %s", v1, v3, v2);
+    switch (lower_case(v1)) {
+    case "get":
+        do_get(arg1, v3, v7);
+        break;
+    case "post":
+        v4 = v5[<1];
+        do_post(arg1, v3, v4, v7);
+        break;
+    default:
+        http_error(arg1, bad_cmd, "400 Bad Request");
+        break;
+    }
+}
+
+protected void close_callback(mixed arg) {
+    if (arg == httpSock) {
+        log_file("http_errors", ctime(time()) + "\n");
+        log_file("http_errors", "HTTP socket closed unexpectedly; restarting.\n");
+        call_out("setup", 5);
+    } else {
+        if (undefinedp(sockets[arg])) {
+            log_file("http_errors", ctime(time()) + "\n");
+            log_file("http_errors", sprintf("Client socket %d closed unexpectedly\n", arg));
+        } else {
+            log_file("http_errors", ctime(time()) + "\n");
+            log_file("http_errors", sprintf("Client socket %s %d closed unexpectedly.\n", sockets[arg]["name"], sockets[arg]["port"]));
+        }
+        map_delete(sockets, arg);
+    }
+}
+
+void resolve_callback(mixed arg1, mixed arg2, mixed arg3) {
+    mixed v1;
+    v1 = resolve_pending[arg3];
+    map_delete(resolve_pending, arg3);
+    if (!undefinedp(sockets[v1]) && sockets[v1]["address"] == arg2) {
+        sockets[v1]["name"] = arg1;
+    } else {
+        log_file("http_errors", ctime(time()) + "\n");
+        log_file("http_errors", sprintf("Resolved %s to %s after connection closed.\n", arg2, sizeof(arg1) ? arg1 : "NOT RESOLVED"));
+    }
+}
+
+protected void http_error(mixed arg1, mixed arg2, mixed arg3) {
+    mixed v1;
+    v1 = sprintf("%c%c", 10, 10);
+    if (find_player("no-one")) {
+        tell_object(find_player("no-one"), http_error_header(arg3) + read_file(arg2["file"]) + v1);
+    }
+    write_data(arg1, http_error_header(arg3) + read_file(arg2["file"]) + v1);
+}
+
+protected void close_connection(mixed arg) {
+    if (sockets[arg]["write_status"] == -29) {
+        return;
+    }
+    map_delete(sockets, arg);
+    map_delete(resolve_pending, arg);
+    socket_close(arg);
+}
+
+protected void do_get(mixed arg1, mixed arg2, mixed arg3) {
+    mixed v1;
+    mixed v2;
+    mixed v3;
+    mixed v4;
+    mixed v5;
+    mixed v6;
+    if (arg2[0] != 47) {
+        arg2 = "/" + arg2;
+    }
+    v4 = arg2;
+    v2 = explode(arg2, "/");
+    if (!sizeof(v2)) {
+        arg2 = sprintf("%s/index.html", "/www");
+    } else if (arg2[1] == 126) {
+        v2[0] = sprintf("%s%s", user_path(v2[0][1..]), "public_html");
+        arg2 = implode(v2, "/");
+    } else if (v2[0] == "user" || v2[0] == "home") {
+        v2[0] = 0;
+        if (v2[1]) {
+            v2[1] = sprintf("%s%s", user_path(v2[1]), "public_html");
+        }
+        arg2 = implode(v2, "/");
+    } else if (arg2[0..sizeof("/www") - 1] != "/www") {
+        arg2 = sprintf("%s%s", "/www", arg2);
+    }
+    if (file_size(arg2) == -2) {
+        v1 = arg2;
+        arg2 = sprintf("%s/index.html", arg2);
+        if (file_size(arg2) == -1) {
+            arg2 = "/www/gateways/dirlist" + v1;
+        }
+    }
+    if (find_player("no-one")) {
+        tell_object(find_player("no-one"), "HTTP:" + arg2 + ", " + sockets[arg1]["name"] + "\n");
+    }
+    if (!strsrch(arg2, "/www/cgi-bin")) {
+        if (sscanf(arg2, "/www/cgi-bin/%s?%s", v6, v5) == 2 || sscanf(arg2, "/www/cgi-bin/%s/%s", v6, v5) == 2) {
+            arg2 = sprintf("/www/cgi-bin/%s", v6);
+        }
+        if (catch {
+    v3 = arg2->gateway(v5);
+}) {
+            log_http(arg1, 400, 0, arg3);
+            http_error(arg1, bad_gateway, "400 Bad Request");
+            return;
+        }
+    } else if (!file_exists(arg2)) {
+        if (!strsrch(arg2, "/www") && arg2[<5..] == ".html") {
+            arg2 = arg2[0..<6];
+            if (file_exists(arg2 + ".lpc") && catch {
+    v3 = arg2->gateway();
+}) {
+                log_http(arg1, 400, 0, arg3);
+                http_error(arg1, bad_gateway, "400 Bad Request");
+                return;
+            }
+        } else {
+            log_http(arg1, 404, 0, arg3);
+            http_error(arg1, not_found, "404 Not Found");
+            return;
+        }
+    } else {
+        v3 = read_buffer(arg2);
+    }
+    log_http(arg1, 200, sizeof(v3), arg3);
+    write_data(arg1, v3);
+}
+
+protected void do_post(mixed arg1, mixed arg2, mixed arg3, mixed arg4) {
+    do_get(arg1, arg2 + "?" + arg3, arg4);
+}
+
+void set_persistent(mixed arg) {
+    persistent = arg;
+}
+
+int file_exists(mixed arg) {
+    if (file_length(arg) > 0) {
+        return 1;
+    }
+}

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Pull the efun table out of an unstripped Linux i386 MudOS driver.
 
-    elfdriver.py <driver> <out.json>
+    python3 -m mudos_b.elfdriver <driver> <out.json>
+    (a Win32 mudos.exe has no symbols: use mudos_b.pedriver)
 
 Reads `predefs` (keyword_t[]) and `efun_arg_types` from the symbol table.
 keyword_t (v22, 32 bytes): word*, u16 token, s16 sem_value, next*,
@@ -40,15 +41,20 @@ class Elf32:
         return self.d[o:self.d.index(b'\0', o)].decode('latin-1')
 
 
+RECORD = '<IHhIhhhHHHHhh'   # keyword_t, 32 bytes with padding
+
+
+def record_dict(d, o, cstr):
+    (w, tok, sem, nxt, mn, mx, rt, a1, a2, a3, a4, ai, df) = struct.unpack_from(RECORD, d, o)
+    return dict(name=cstr(w), token=tok, min_args=mn, max_args=mx, ret_type=rt,
+                arg_types=[a1, a2, a3, a4], arg_index=ai, default=df & 0xff)
+
+
 def extract(path):
     e = Elf32(path)
     va, size = e.syms['predefs']
     o = e.off(va)
-    efuns = []
-    for k in range(size // 32):
-        (w, tok, sem, nxt, mn, mx, rt, a1, a2, a3, a4, ai, df) = struct.unpack_from('<IHhIhhhHHHHhh', e.d, o + k * 32)
-        efuns.append(dict(name=e.cstr(w), token=tok, min_args=mn, max_args=mx, ret_type=rt,
-                          arg_types=[a1, a2, a3, a4], arg_index=ai, default=df & 0xff))
+    efuns = [record_dict(e.d, o + k * 32, e.cstr) for k in range(size // 32)]
     va, size = e.syms['efun_arg_types']
     o = e.off(va)
     arg_types = list(struct.unpack_from('<%dh' % (size // 2), e.d, o))
