@@ -1096,3 +1096,7 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 ## 存档读不出来：字符串里的换行、空行（2026-10-15，KB 03 §4.4）
 
 `u/snowtu/data/fabao/l/llg-3.o`、`u/snowtu/data/fabao/s/sungirl-3.o`、`u/snowtu/data/zhangmen.o/zhangmen_master_zhaoyang.o`：字符串里有原样的换行（`save_object()` 存成 `\r`，`restore_object()` 逐行读，原样的换行让字符串收不了尾），或有空行（`Illegal file format`），读档的对象（留言板、NPC、玩家）从空白开始。换行改写成 `\r`、删去空行（`scripts/lpc_save_encoding.py --from-raw`），驱动核对全部能读回（`scripts/lpc_save_restore_check.py`）。
+
+## 移进不存在的巫师房间（2026-10-15，KB 06 §7.251）
+
+用完的物品、要“离开”的 NPC、掷在空中的兵器被移进巫师的工作室（`/u/aln/`、`/u/wind/`），本库没有这些房间。本库的 `move()` 用 `load_object()` 找目的地，找不到就返回 0，不报错，东西留在原处：药（人参、熊胆、狐狸皮、虎骨，`clone/drug/cb_renshen`、`clone/drug/hugu`、`clone/drug/hulipi`、`clone/drug/xiongdan`）吃下后没有移走，31 秒后才销毁，这期间还能交给别人再吃一次；被雇来打晕或杀人的李凌（`sjsh/u/stey/u/cnd/liling`）办完事后没有离开，留在原地。5 个文件改为移进本库的虚空房间 `VOID_OB`（`/obj/void`），与原作把它们“停放”在巫师房间的用意相同。

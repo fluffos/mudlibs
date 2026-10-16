@@ -548,3 +548,7 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## 用兵器的绝招空手施展时报错（内联写法）（2026-10-15，KB 06 §7.246）
 
 绝招不存兵器变量，直接写 `(me->query_temp("weapon"))->query("name")`（或在拒绝判断里写 `(weapon = me->query_temp("weapon"))->query("skill_type")`），之前又没检查兵器：空手 `perform` 时报 `Bad argument 1 to EFUN call_other()`，内力等往往已经扣掉。在第一次用到它的那条语句前补上“你必须手持兵器才能使用这一招”的拒绝（`scripts/lpc_fix_perform_weapon.py`）：`duanyun-bian/duanyun`、`feiyu-bian/chanrao`、`jueqing-bian/sanwu`、`qilin-dao/qilin`、`tangshi-jian/luanci`。
+
+## 移进不存在的巫师房间（2026-10-15，KB 06 §7.251）
+
+用完的物品、要“离开”的 NPC、掷在空中的兵器被移进巫师的工作室（`/u/aln/`、`/u/ryu/`、`/u/wsky/`），本库没有这些房间。本库的 `move()` 用 `call_other(dest, "???")` 载入目的地，找不到文件就报 `call_other() couldn't find object`，后面的语句都不执行：药（人参、狐狸皮、虎骨，`clone/drug/cb_renshen`、`clone/drug/hugu`、`clone/drug/hulipi`）吃下后药效已经生效，随后报错：`call_out("destroy", 31)` 没有排上，药一直留在身上，药效过去后可以再吃；逍遥三笑散（`d/xingxiu/npc/obj/sanxiao`）弹出之后报错，毒药留在身上，可以一再使用；疯魔杖法的掷杖绝招（`kungfu/skill/fengmo-zhang/fengmo`）：内力、精力已扣，杖已卸下，随后报错；接回杖的 `check_fight` 没有排上，`fengmo` 标记不再清除，重新登录之前不能再用；天山杖法「飞杖」（`kungfu/skill/tianshan-zhang/feizhang`）：杖“撞到山石上断成无数截”之后报错，杖仍留在身上。6 个文件改为移进本库的虚空房间 `VOID_OB`（`/clone/misc/void`），与原作把它们“停放”在巫师房间的用意相同。

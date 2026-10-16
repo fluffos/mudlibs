@@ -715,3 +715,7 @@ No new errors after the shop commands. Demo `fluffos` save churn
 ## 松风剑法「缠」每次报错（2026-10-15，KB 06 §7.246）
 
 `songfeng-jian/chan` 在给 `weapon` 赋值之前就判断 `weapon->query_temp("noliving")`（本意是 `target`），每次使用都报错。改为 `target`。
+
+## 移进不存在的巫师房间（2026-10-15，KB 06 §7.251）
+
+用完的物品、要“离开”的 NPC、掷在空中的兵器被移进巫师的工作室（`/u/aln/`），本库没有这些房间。本库的 `move()` 用 `call_other(dest, "???")` 载入目的地，找不到文件就报 `call_other() couldn't find object`，后面的语句都不执行：药（人参，`clone/drug/cb_renshen`）吃下后药效已经生效，随后报错：`call_out("destroy", 31)` 没有排上，药一直留在身上，药效过去后可以再吃。1 个文件改为移进本库的虚空房间 `VOID_OB`（`/clone/misc/void`），与原作把它们“停放”在巫师房间的用意相同。

@@ -1142,3 +1142,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply t
 ## message_combatd 没有定义（2026-10-15，KB 04 §6.2）
 
 26 个绝招调用原 xkx 服务器的 simul_efun `message_combatd()`，本库只在巫师目录 `u/lonely/sec/message.lpc` 里有一份，正式的 simul_efun 没有，这些文件编译失败。`adm/simul_efun/message.lpc` 里补上与 `message_vision()` 等价的定义：10 个绝招现在能载入。八卦系 6 个绝招另外用了泥潭的 `COMBAT_D->do_damage()`，本库的 combatd 没有，仍无法载入（内容缺口）。
+
+## 移进不存在的巫师房间（2026-10-15，KB 06 §7.251）
+
+用完的物品、要“离开”的 NPC、掷在空中的兵器被移进巫师的工作室（`/u/llm/`、`/u/wind/`），本库没有这些房间。本库的 `move()` 用 `load_object()` 找目的地，找不到就返回 0，不报错，东西留在原处：被雇来打晕或杀人的李凌（`d/city2/npc/liling2`）办完事后没有离开，留在原地（`d/city2/npc/liling2` 本身还载入不了：`create()` 里 `carry_object()` 的物品文件缺失或编译失败，见 KB 06 §7.73，另行处理）；婚礼结束（`d/nanyang/npc/meipo` 的 `last_marry`）时月老没有离开喜堂，每办一次婚礼喜堂里就多一个月老；喜宴结束后喜来福（`d/nanyang/npc/xi-laifu`）没有退回内堂，每办一次婚礼迎宾楼就多一个喜来福。3 个文件改为移进本库的虚空房间 `VOID_OB`（`/clone/misc/void`），与原作把它们“停放”在巫师房间的用意相同（haiyang2 的维护者把月老送进 `/d/city/empty`，也是同样的做法）。

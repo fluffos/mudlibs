@@ -313,3 +313,7 @@ live-boot-tested.
 ## 技能名拼错（2026-10-15，KB 06 §7.249）
 
 `query_skill()` 里的技能名拼错了，或用的是本库改名前的旧名；本库没有这个技能，调用永远得 0：门槛（`< N` 就拒绝）永远过不去，相关功夫或绝招学不了、用不了；内功互斥（`> N` 就拒绝）从不生效；公式里这一项一直是 0。经汉字名（提示文字或中文名词典）或纯拼写差异（`_`/`-`、少一个连字符、相邻字母颠倒）核对后，改为本库的技能名（`scripts/lpc_fix_skill_typo.py`）：`wave_step`→`wave_steps`（`bagua-steps`、`wave_steps`）；`iceclaw`→`ice_claw`（`ice_claw`）；`leaf_strike`→`leaf-strike`（`leaf-strike`）；`mizongquan`→`mizong-quan`（`mizong-quan`）；`senluo_force`→`senluo-force`（`fanliangyi-dao`）；`zongzi-force`→`tongzi-force`（`weituo_chu`）。
+
+## 移进不存在的巫师房间（2026-10-15，KB 06 §7.251）
+
+用完的物品、要“离开”的 NPC、掷在空中的兵器被移进巫师的工作室（`/u/baiwt/`），本库没有这些房间。本库的 `move()` 用 `call_other(dest, "???")` 载入目的地，找不到文件就报 `call_other() couldn't find object`，后面的语句都不执行：镖局任务的三个 NPC（`d/city/biaoju/npc/daoyike`、`d/city/biaoju/npc/duanxianke`、`d/city/biaoju/npc/zongjiuke`）收下镖货、发完奖励之后报错，没有离开；官府任务的五位大臣（`d/newquest/dachen1`、`d/newquest/dachen2`、`d/newquest/dachen3`、`d/newquest/dachen4`、`d/newquest/dachen5`）派完任务后报错，没有离开（`d/newquest/dachen1`、`d/newquest/dachen2`、`d/newquest/dachen3`、`d/newquest/dachen4`、`d/newquest/dachen5` 本身还载入不了：`create()` 里 `carry_object()` 的物品文件缺失或编译失败，见 KB 06 §7.73，另行处理）；彭飞（`npc/pengfei`，本库没有地方放他）召集武林大会时要先隐身离开，同样报错（`npc/pengfei` 本身还载入不了：`create()` 里 `carry_object()` 的物品文件缺失或编译失败，见 KB 06 §7.73，另行处理）。9 个文件改为移进本库的虚空房间 `VOID_OB`（`/obj/void`），与原作把它们“停放”在巫师房间的用意相同。
