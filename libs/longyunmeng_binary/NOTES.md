@@ -177,13 +177,16 @@ call`）读出这个版本有 116 个运算符，比 v22pre11 标准多 3 个：
 - `cmds/bos/socket2`（MudOS 的 `dump_socket_status()`）、`cmds/bos/socket`（MySQL 的 `db_status()`）用
   `efun_defined()` 判断，驱动没有这个 efun 时只显示一句说明。
 
-`lpc_warnings.py` 全量扫描：14,402 个 `.lpc` 里 14,315 个能加载，**编译警告 0**。编不过的 7 个在原游戏里都没有
-`.b`（从来没有加载过），保留原样：`doc/mudlib/efuns`（efun 名字清单，纯文本）、`doc/mudlib/efuns/shiwu`、
-`kungfu/skill/feiyuexy`（纯二进制机制的标记文件，内容是一个时间戳，主控对象只检查它在不在）、
-`kungfu/skill/hanbing-mianzhang2`、`huang`、`quanzhen-xinfa`、`xixi-unarmed`。
+`lpc_warnings.py` 全量扫描：14,402 个 `.lpc` 里 14,315 个能加载（第三次提交 `63d1b8ce684` 的树再扫是 14,351 个），
+**编译警告 0**。编不过的 6 个在原游戏里都没有 `.b`（从来没有加载过），保留原样：`doc/mudlib/efuns`（efun 名字清单，
+纯文本）、`doc/mudlib/efuns/shiwu`、`kungfu/skill/feiyuexy`（纯二进制机制的标记文件，内容是一个时间戳，主控对象只
+检查它在不在）、`kungfu/skill/hanbing-mianzhang2`、`huang`、`xixi-unarmed`。同样没有 `.b` 的
+`kungfu/skill/quanzhen-xinfa` 原来是第 7 个：「无性」的等级限制用了没有定义的 `lvl`，编译器还报了两个没用的局部变量
+`i`、`ts`（这两个警告在上面的扫描里漏算了）；`lvl` 改成这门内功自己的等级 `nh`（`chidi` 档案里同一份文件的原文就是
+`nh`），删掉两个变量，现在没有错误也没有警告。
 
 把 14,402 个对象逐个加载（工作树状态，每个驱动进程 700 个）：14,314 个成功，88 个失败，都不是移植造成的：
-上面 7 个编不过的文件；`u/snow`、`u/fyue` 巫师工作区的 38 个（这两个巫师不在 `adm/etc/wizlist` 里，他们的对象
+当时编不过的 7 个文件；`u/snow`、`u/fyue` 巫师工作区的 38 个（这两个巫师不在 `adm/etc/wizlist` 里，他们的对象
 读不了 `/kungfu/skill/`，`set_skill()` 就报「No such skill」，而且这两块没有接入游戏世界）；用到档案里根本没有的
 技能（`move`、`notracesnow`、`shenzhao-jing`、`kongmingquan`）的 NPC，在 `d/ghost`、`d/quanzhen_old`、
 `d/migong/obj/npc1`、`clone/npc/robber`；在 `create()` 或全局变量初值里用 `this_player()` 的对象（玩家锻造的兵器
