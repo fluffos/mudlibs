@@ -971,3 +971,7 @@ re-invoke `enable_player()` on this lib while the object is still
 ## 太极拳绝招依赖的 yinyun-ziqi/taiji 缺失（2026-10-15）
 
 `taiji-quan` 的 `gangrou`、`jueji2`、`jueji3`、`zhannian` 都用 `"/kungfu/skill/yinyun-ziqi/taiji"->check_force()` 判断对手的内功，但本库 `yinyun-ziqi/` 里没有 `taiji.lpc`（原档就缺），这四招一用就报 `couldn't find object`。本库的 `yinyun-ziqi.lpc` 与 jh2006 的逐字节相同，从 jh2006 补回 `yinyun-ziqi/taiji.lpc`（只依赖 `<ansi.h>`）。perform 探针复查 0 错误。
+
+## 技能名拼错：技能文件里拼错自己的名字（2026-10-15，KB 06 §7.249）
+
+技能自己的文件（或它的绝招目录）里，`query_skill()` 读的是差一个字母的自己的名字，永远得 0：“基本功夫要高过本技能”之类的限制从不生效，按等级取招、计算伤害的那一项一直是 0。改为本技能的名字（`scripts/lpc_fix_skill_typo.py` 的 self 判据）：`songyang-zhou`→`songyang-shou`（`songyang-shou`）。

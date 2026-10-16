@@ -464,3 +464,7 @@ Too-deep-recursion) recurred at boot; no new error from shop/拜师.
 ## 技能名拼错（2026-10-15，KB 06 §7.249）
 
 `query_skill()` 里的技能名拼错了，或用的是本库改名前的旧名；本库没有这个技能，调用永远得 0：门槛（`< N` 就拒绝）永远过不去，相关功夫或绝招学不了、用不了；内功互斥（`> N` 就拒绝）从不生效；公式里这一项一直是 0。经汉字名（提示文字或中文名词典）或纯拼写差异（`_`/`-`、少一个连字符、相邻字母颠倒）核对后，改为本库的技能名（`scripts/lpc_fix_skill_typo.py`）：`choushui-zhang`→`chousui-zhang`（`chousui-zhang`）；`cuhixiao-jifa`→`chuixiao-jifa`（`xiaoao-jianghu`）；`lenyue-shengong`→`lengyue-shengong`（`lengyue-shengong`）；`matrial-cognize`→`martial-cognize`（`qiankun-danuoyi/nuoyi`）；`yihua-jimu`→`yihua-jiemu`（`yihua-jiemu`）。
+
+## 技能名拼错：技能文件里拼错自己的名字（2026-10-15，KB 06 §7.249）
+
+技能自己的文件（或它的绝招目录）里，`query_skill()` 读的是差一个字母的自己的名字，永远得 0：“基本功夫要高过本技能”之类的限制从不生效，按等级取招、计算伤害的那一项一直是 0。改为本技能的名字（`scripts/lpc_fix_skill_typo.py` 的 self 判据）：`wushang-jianjingsAA`→`wushang-jianjingsA`（`wushang-jianjingsA`、`wushang-jianjingsA/exert/wushanga1`、`wushang-jianjingsA/perform/wushangb1`、`wushang-jianjingsA/perform/wushangb2`、`wushang-jianjingsA/perform/wushangb3`、`wushang-jianjingsA/perform/wushangb4`、`wushang-jianjingsA/perform/wushangb5`、`wushang-jianjingsA/perform/wushangb6`、`wushang-jianjingsA/perform/wushangb7`）；`taiji-shengon`→`taiji-shengong`（`taiji-shengong`、`wushang-jianjingsA/perform/wushangb5`）；`shicheng-liulang`→`shicheng-liulong`（`shicheng-liulong`）；`xuanyuan-arror`→`xuanyuan-arrow`（`xuanyuan-arrow`）；`youzi-jian`→`youzhi-jian`（`youzhi-jian/kuang`）。

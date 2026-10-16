@@ -16,7 +16,8 @@ A name is fixed only when all of these hold:
     (data/e2c_dict.o or data/chinese.o of the lib, else of the --dict-libs) while not naming the skill's own id,
     or a dictionary gives the misspelled name that same Chinese name, or the difference is one no pinyin word
     comes from (`_` for `-`, a hyphen added or dropped, two adjacent letters swapped: mizongxinfa, dragon_strike,
-    douzhuan-xignyi) and the name is no skill file of any lib (jiuyangforce 九阳神功 is not jiuyang-force 九阳真气).
+    douzhuan-xignyi) and the name is no skill file of any lib, or the site sits in that skill's own file or perform dir
+    and the names are one letter apart (hujian-daofa in hujia-daofa.lpc: its own level, misspelled) (jiuyangforce 九阳神功 is not jiuyang-force 九阳真气).
     Skill files in domain dirs (d/mj/skill) count as the lib's own names.  One confirmed site confirms the name for the whole lib.  A name whose own Chinese name (any dictionary) appears at one of its sites, or that the lib's
     own dictionary translates differently, or three dictionaries agree to name differently, is a different skill
     the lib lacks: never fixed.
@@ -177,6 +178,10 @@ def plan(slug, ext):
                 conf.setdefault(n, set()).add("dict")
             if mechanical(n, near) and n not in corpus_skills():   # a skill file of some lib is a real name
                 conf.setdefault(n, set()).add("mech")
+            own_skill = re.search(r"/(?:kungfu|daemon)/skill/([^/]+?)(?:\.lpc$|/)", p)
+            if own_skill and own_skill.group(1) == near and \
+                    lev(n.replace("-", "").replace("_", ""), near.replace("-", "").replace("_", "")) == 1:
+                conf.setdefault(n, set()).add("self")   # one letter off its own name, in its own file (hujian-daofa)
     # a site that also names the misspelled id's own Chinese name means a real, different skill the lib lacks
     # (syxjl shenghuo-lingfa: "你对圣火心法的领悟不够，无法学圣火令法" gates on shenghuo-xinfa, not on itself);
     # so does a dictionary of this very lib that names it differently (jiuyang-force 九阳真气 vs jiuyangforce)
