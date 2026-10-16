@@ -713,3 +713,7 @@ functionally re-tested live on this lib.
 ## 把经验、属性、内力当技能读（2026-10-15，KB 06 §7.247）
 
 经验、属性、内力上限不是技能，xkx/ES 的 `query_skill()` 对它们只返回 0（风云的还会去载入同名技能文件而报错）。改为 `query("...")`（`scripts/lpc_fix_pool_as_skill.py`）：`dragon-whip`（内力修为门槛 `query_skill("max_neili") < 500` 永远不过）；`liancheng-jian/li1`、`liancheng-jian/li2`（`random(me->query_skill("combat_exp")) > target->query_skill("combat_exp")` 恒为 0 > 0，这一招永远不成功）。
+
+## 技能名拼错（2026-10-15，KB 06 §7.249）
+
+`query_skill()` 里的技能名拼错了，或用的是本库改名前的旧名；本库没有这个技能，调用永远得 0：门槛（`< N` 就拒绝）永远过不去，相关功夫或绝招学不了、用不了；内功互斥（`> N` 就拒绝）从不生效；公式里这一项一直是 0。经汉字名（提示文字或中文名词典）或纯拼写差异（`_`/`-`、少一个连字符、相邻字母颠倒）核对后，改为本库的技能名（`scripts/lpc_fix_skill_typo.py`）：`beimin-shengong`→`beiming-shengong`（`jiuyang-shengong`、`taiji-shengong`、`xiantian-gong`）；`taijishengong`→`taiji-shengong`（`beiming-shengong/god-sword/godangry`、`god-sword/go1`）；`mizongxinfa`→`mizong-xinfa`（`longxiang/f`）；`tanzhi_shentong`→`tanzhi-shentong`（`tanzhi-shentong/ta1`）。

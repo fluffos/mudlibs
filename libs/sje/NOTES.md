@@ -268,3 +268,7 @@ Century/`adm-single` 形状）**：`adm/simul_efun/file.lpc` 的
 ## 把经验、属性、内力当技能读（2026-10-15，KB 06 §7.247）
 
 当前内力、精这类名字有时指的是内功技能，逐处读过后手改：`longxiang-boruo` 的 `ob_hit()` 用 `query_skill("neili")` 比较双方内力，恒为 0 对 0，只会走“化去一部分”的分支，改为 `query("neili")`。
+
+## 技能名拼错（2026-10-15，KB 06 §7.249）
+
+`query_skill()` 里的技能名拼错了，或用的是本库改名前的旧名；本库没有这个技能，调用永远得 0：门槛（`< N` 就拒绝）永远过不去，相关功夫或绝招学不了、用不了；内功互斥（`> N` 就拒绝）从不生效；公式里这一项一直是 0。经汉字名（提示文字或中文名词典）或纯拼写差异（`_`/`-`、少一个连字符、相邻字母颠倒）核对后，改为本库的技能名（`scripts/lpc_fix_skill_typo.py`）：`huanxi_chan`→`huanxi-chan`（`longxiang-boruo/yinyang`）；`jinshe-zhang`→`jinshe-zhangfa`（`jinshe-jianfa/kuangwu`）；`tianang-zhengqi`→`tiangang-zhengqi`（`tiangang-zhengqi/heal`）；`tiangang-zhenqi`→`tiangang-zhengqi`（`tiangang-jian`）；`xixing-dafa`→`xixin-dafa`（`qiantian-yiyang`）；`yinyun_ziqi`→`yinyun-ziqi`（`yinyun-ziqi/cure`）。

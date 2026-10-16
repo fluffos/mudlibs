@@ -463,3 +463,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 ## 五虎断门刀出招时 random() 收到浮点数（2026-10-15）
 
 `wuhu-duanmendao` 的 `query_action()` 写了 `a_action["damage"] = level * 1.5;`，伤害成了浮点数；战斗守护（combatd）随后对它做 `random()`，本驱动的 `random()` 只收整数，于是用这门刀法的每一招都报 `Bad argument 1 to random()`（perform 探针在 `duan` 里发现，平常出招同样如此）。改为整数 `level * 3 / 2`。全库只此一处。
+
+## 技能名拼错（2026-10-15，KB 06 §7.249）
+
+`query_skill()` 里的技能名拼错了，或用的是本库改名前的旧名；本库没有这个技能，调用永远得 0：门槛（`< N` 就拒绝）永远过不去，相关功夫或绝招学不了、用不了；内功互斥（`> N` 就拒绝）从不生效；公式里这一项一直是 0。经汉字名（提示文字或中文名词典）或纯拼写差异（`_`/`-`、少一个连字符、相邻字母颠倒）核对后，改为本库的技能名（`scripts/lpc_fix_skill_typo.py`）：`douzhuan-xignyi`→`douzhuan-xingyi`（`/d/mr/npc/obj/shu1`、`/d/mr/obj/shu1`、`/d/mr/obj/shu2`）；`beimin-shengong`→`beiming-shengong`（`tiangang-zhengqi`、`xiantian-gong`）；`huajia-daofa`→`hujia-daofa`（`hujia-daofa`、`jingzhong-bafa`）；`jinwu-dao`→`jinwu-daofa`（`jinwu-daofa`）；`mizongxinfa`→`mizong-xinfa`（`longxiang/fanchang`）；`yihua-jimu`→`yihua-jiemu`（`yihua-jiemu`）；`zhenfen-xinfa`→`zhenfeng-xinfa`（`zfwy-bu`）。

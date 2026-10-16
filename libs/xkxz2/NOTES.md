@@ -940,3 +940,7 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 ## 独孤九剑列不出剑法目录（2026-10-15）
 
 `lonely-sword` 的 `query_action()` 用 `get_dir("/kungfu/skill/*.lpc")` 列出所有剑法，再随机借一招；但 `/kungfu` 下对象的 euid 是 `Domain`，安全守护（securityd 的默认规则只许 ADM/ARC/WIZ 读）不给它列目录，`get_dir()` 返回 0，`filter_array(0, ...)` 每次出招都报错。改为：列不出目录时借出手者自己会的剑法（找不到技能文件的跳过），一门也没有就用兵器本身的招式，再没有就用 weapond 的「刺」。目前这门功夫没有实际入口：唯一会它的 NPC 是黑木崖的 `npc/linghu`（令狐冲），没有房间放置他，而且他 `set_skill()` 了本库没有的 `feiyan-huixiang`、`huashan-sword`，一载入就报错。
+
+## 技能名拼错（2026-10-15，KB 06 §7.249）
+
+`query_skill()` 里的技能名拼错了，或用的是本库改名前的旧名；本库没有这个技能，调用永远得 0：门槛（`< N` 就拒绝）永远过不去，相关功夫或绝招学不了、用不了；内功互斥（`> N` 就拒绝）从不生效；公式里这一项一直是 0。经汉字名（提示文字或中文名词典）或纯拼写差异（`_`/`-`、少一个连字符、相邻字母颠倒）核对后，改为本库的技能名（`scripts/lpc_fix_skill_typo.py`）：`jinhse-jianfa`→`jinshe-jianfa`（`/d/jinshe/skill/jinshe`）；`xixing-dafa`→`xixin-dafa`（`qiantian-yiyang`）；`yinyun_ziqi`→`yinyun-ziqi`（`yinyun-ziqi/cure`）。

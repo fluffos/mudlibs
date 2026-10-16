@@ -110,3 +110,7 @@ WASM（`scripts/wasm_client.js`）：注册、look、emote、chat、`wllz` 频�
 `/adm/daemons/network/`；`channeld` 的 `remove_addresses()`（每个 emote 都会调用）和 `wllz` 频道转发
 intermud 之前先 `find_object(dns_master)`，否则 WASM 里每个 emote 和 `wllz` 频道都会报错（KB 01 §1.3c）。
 提示符每秒刷新时钟，`wasm_client.js` 要用小于 1 秒的 `--idle`。
+
+## 技能名拼错（2026-10-15，KB 06 §7.249）
+
+`query_skill()` 里的技能名拼错了，或用的是本库改名前的旧名；本库没有这个技能，调用永远得 0：门槛（`< N` 就拒绝）永远过不去，相关功夫或绝招学不了、用不了；内功互斥（`> N` 就拒绝）从不生效；公式里这一项一直是 0。经汉字名（提示文字或中文名词典）或纯拼写差异（`_`/`-`、少一个连字符、相邻字母颠倒）核对后，改为本库的技能名（`scripts/lpc_fix_skill_typo.py`）：`shenghuo-lingfa`→`shenghuo-ling`（`shenghuo-shengong/tougu`、`shenghuo-shengong/yinfeng`）；`mizongxinfa`→`mizong-xinfa`（`longxiang/fanchang`）。

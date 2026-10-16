@@ -1061,3 +1061,7 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 ## 妙手回春的银针检查（2026-10-15）
 
 `miaoshouhuichun` 的 `valid_learn()` 用了未赋值的 `object ob`，`ob->query_temp("weapon")` 每次都报错，谁也学不了；还把兵器对象和字符串 "银针" 比较。照 chidi 的修法改为 `ob = me->query_temp("weapon")`，再用 `id("yin zhen")`/`id("yinzhen")` 判断是否银针。
+
+## 技能名拼错（2026-10-15，KB 06 §7.249）
+
+`query_skill()` 里的技能名拼错了，或用的是本库改名前的旧名；本库没有这个技能，调用永远得 0：门槛（`< N` 就拒绝）永远过不去，相关功夫或绝招学不了、用不了；内功互斥（`> N` 就拒绝）从不生效；公式里这一项一直是 0。经汉字名（提示文字或中文名词典）或纯拼写差异（`_`/`-`、少一个连字符、相邻字母颠倒）核对后，改为本库的技能名（`scripts/lpc_fix_skill_typo.py`）：`hujia-dao`→`hujia-daofa`（`daojian-guizhen`、`daojian-guizhen`）；`lenyue-shengong`→`lengyue-shengong`（`lengyue-shengong`、`lengyue-shengong`）；`yinyun_ziqi`→`yinyun-ziqi`（`yinyun-ziqi/cure`、`yinyun-ziqi/cure`）；`bashishentong`→`bashi-shentong`（`lingjianjue`）；`buddhsim`→`buddhism`（`qianye-shou`）；`jinwu-dao`→`jinwu-daofa`（`jinwu-daofa`）。

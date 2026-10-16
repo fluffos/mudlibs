@@ -602,3 +602,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 ## iceforce「chillgaze」从未编译通过（2026-10-15）
 
 `iceforce/chillgaze` 原档在第一个 `return notify_fail(...)` 后多了一个 `}`，`exert()` 就此结束，后面的语句全落在函数外，`skill`、`damage` 也没有声明，文件编译失败，这个 exert 从来用不了。照 bixiecanyang、hc、xyzx3 已修好的版本删去多余的 `}`、补上 `int skill, damage;`，其余字句不变，只是缩进进函数体。
+
+## 技能名拼错（2026-10-15，KB 06 §7.249）
+
+`query_skill()` 里的技能名拼错了，或用的是本库改名前的旧名；本库没有这个技能，调用永远得 0：门槛（`< N` 就拒绝）永远过不去，相关功夫或绝招学不了、用不了；内功互斥（`> N` 就拒绝）从不生效；公式里这一项一直是 0。经汉字名（提示文字或中文名词典）或纯拼写差异（`_`/`-`、少一个连字符、相邻字母颠倒）核对后，改为本库的技能名（`scripts/lpc_fix_skill_typo.py`）：`beimin-shengong`→`beiming-shengong`（`/d/mj/skill/jiuyang-shengong`、`cha-dao`、`guiyuan-dafa`、`honghua-shengong`、`jiuyang-shengong`、`qidu-xinjing` 等 13 个文件）；`zhenfen-xinfa`→`zhenfeng-xinfa`（`/d/wuguan/skill/zfwy-bu`、`/d/wuguan/skills/zfwy-bu`、`/d/wuguan2/skill/zfwy-bu`、`/d/wuguan2/skills/zfwy-bu`）；`zhenfeng-jian`→`zhenfeng-jianfa`（`bisha-jian/sha`、`zhenfeng-jianfa/feng`、`zhenfeng-jianfa/hu`）；`shiftforce`→`shift-force`（`shiftforce/erase`、`shiftforce/hitback`）；`mizongxinfa`→`mizong-xinfa`（`longxiang/fanchang`）；`yihua-jimu`→`yihua-jiemu`（`yihua-jiemu`）；`zixia-shenggong`→`zixia-shengong`（`fanliangyi-dao/sanshen`）。

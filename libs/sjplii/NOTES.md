@@ -346,3 +346,7 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 ## 暗器功夫身上没有对应暗器（2026-10-15）
 
 `bolt-throw`（玉石棋子）和 `fozhu-throw`（玄木佛珠） 的 `query_action()` 先 `present("yushi qizi", me)` 取暗器，再直接调用 `qizi->query_amount()`：throwing 映射到这门功夫、手里拿的却是别的暗器（身上没有这种棋子/佛珠）时，每次出招都报 `Bad argument 1 to call_other()`。数量改为 `objectp(qizi) ? (int)qizi->query_amount() : 0`，兵器判断前补 `!objectp(weapon) ||`，没有对应暗器时退回普通招式。
+
+## 技能名拼错（2026-10-15，KB 06 §7.249）
+
+`query_skill()` 里的技能名拼错了，或用的是本库改名前的旧名；本库没有这个技能，调用永远得 0：门槛（`< N` 就拒绝）永远过不去，相关功夫或绝招学不了、用不了；内功互斥（`> N` 就拒绝）从不生效；公式里这一项一直是 0。经汉字名（提示文字或中文名词典）或纯拼写差异（`_`/`-`、少一个连字符、相邻字母颠倒）核对后，改为本库的技能名（`scripts/lpc_fix_skill_typo.py`）：`iceclaw`→`ice_claw`（`ice_claw`）；`leaf_strike`→`leaf-strike`（`leaf-strike`）；`mizongquan`→`mizong-quan`（`mizong-quan`）；`senluo_force`→`senluo-force`（`fanliangyi-dao`）；`zongzi-force`→`tongzi-force`（`weituo_chu`）。

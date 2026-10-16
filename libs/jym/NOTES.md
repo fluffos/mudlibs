@@ -498,3 +498,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply j
 ## 临济庄 remove 没有运功时报错（2026-10-15）
 
 `linji-zhuang/remove` 直接 `switch (lj_exert["name"])`，`lj_exert` 是 `query_temp("lj_exert")`；没有正在运用的临济庄功夫时它是 0，`exert remove` 每次都报 `Value being indexed is zero`。补上 `if (!mapp(lj_exert)) return notify_fail(...)`。本库有两个 exert 设置 `lj_exert`，运功期间 `remove` 照常收功。
+
+## 技能名拼错（2026-10-15，KB 06 §7.249）
+
+`query_skill()` 里的技能名拼错了，或用的是本库改名前的旧名；本库没有这个技能，调用永远得 0：门槛（`< N` 就拒绝）永远过不去，相关功夫或绝招学不了、用不了；内功互斥（`> N` 就拒绝）从不生效；公式里这一项一直是 0。经汉字名（提示文字或中文名词典）或纯拼写差异（`_`/`-`、少一个连字符、相邻字母颠倒）核对后，改为本库的技能名（`scripts/lpc_fix_skill_typo.py`）：`xiaowu-xiang`→`xiaowuxiang`（`liuyang-zhang`、`liuyang-zhang/qufu`、`liuyang-zhang/zhongfu`、`ruyi-dao`、`ruyi-dao/lianhuan`、`tianyu-qijian` 等 9 个文件）；`shenhuo-xuanming`→`shenghuo-xuanming`（`/d/kunlun/skill/dafeng-yunfei`、`dafeng-yunfei`、`xiaoyao-zhangfa`）；`jinwu-dao`→`jinwu-daofa`（`jinwu-daofa`）；`qianzhu-wandushou`→`qianzhu-wandu`（`/d/miaojiang/obj/huangjinhe`）；`xiatian-gong`→`xiantian-gong`（`/d/zhongnan/skill/chunyang-quan`）；`yan-fly`→`yanfly`（`yanfly`）；`yinyun_ziqi`→`yinyun-ziqi`（`yinyun-ziqi/cure`）。

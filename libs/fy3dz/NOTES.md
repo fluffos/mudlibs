@@ -844,3 +844,7 @@ this lib's `work/` before killing) after testing.
 ## 深度功能测试（§10.7，2026-10-07）— 编译警告整理
 
 `scripts/lpc_warnings.py fy3dz --fix` 加 `scripts/lpc_fix_no_effect.py --apply`，共改动 290 个 `.lpc`（多为删去未用的局部变量）。HEAD 与工作树分别加载（新进程）：285 -> 285 通过，无回退。启动时警告 62 -> 0；新进程登录（新人物确认）与 HEAD 相同。
+
+## 技能名拼错（2026-10-15，KB 06 §7.249）
+
+`query_skill()` 里的技能名拼错了，或用的是本库改名前的旧名；本库没有这个技能，调用永远得 0：门槛（`< N` 就拒绝）永远过不去，相关功夫或绝招学不了、用不了；内功互斥（`> N` 就拒绝）从不生效；公式里这一项一直是 0。经汉字名（提示文字或中文名词典）或纯拼写差异（`_`/`-`、少一个连字符、相邻字母颠倒）核对后，改为本库的技能名（`scripts/lpc_fix_skill_typo.py`）：`huashanforce`→`huashan-force`（`zhaixin-claw`）；`putfiforce`→`putiforce`（`qiankunwuxing`）。
