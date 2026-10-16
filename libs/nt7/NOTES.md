@@ -608,3 +608,9 @@ Port: **40211**.
 - 2026-10-14：FluffOS 970d9f09 的 `Float value truncated to int` 108 处在上游修掉（fluffos/nt7 PR #10，已合并，pin `14c803a`）。任务奖励的 `exp/pot/weiwang/score *= 1.2`、`pot *= 1.5`、`score *= 2.5`、`xj_gain *= 1.5/1.2`，浮点在运算前就被截成整数，发的是原数；现改为 `x = to_int(x * 1.2)`。**玩家可见**：这些奖励加成按原设计生效。69 个技能 `power_point()`/`river_point()` 改为 `float`（本库没有调用者）。
 
 - 2026-10-14：上游 fluffos/nt7#11 已合并：`array` 单独当类型（含 foreach 变量）改为 `mixed *`，10 个文件补 `#include <ansi.h>`，删 3 个未用局部变量；14 个对象新载入，回退 0。pin 前移到 e19e110。
+
+- 2026-10-14/15：上游 fluffos/nt7#12–#15 已合并，pin 前移到 583e19d。
+  - #12 `pangen-cuojiefu` 练功扣内力写成 `receive_damage("neili", -52)`，F_DAMAGE 报“伤害值为负值”，一练就错；改为 `add("neili", -52)`。
+  - #13 `receive_damage("jingli"/"neili"/"force", N)`：本库 F_DAMAGE 只收 jing/qi，练 liuxing-bu、qianzhu-feixing 等和若干绝招都报“伤害种类错误”，改为 `add(type, -N)`；`SCBORN_D`（转世，`/adm/daemons/scbornd`）从没进过树，而每个绝招都调 `SCBORN_D->valid_perform()`、`force.h` 调 `valid_learn()`，补一个答“未转世”的替身；`qufannao-zhi` 继承 F_DAMAGE 后 `query` 原型盖住了 sefun，改为直接 `ob->query()`；无门派玩家的 `family` 映射加判断。
+  - #14 `filter_player()` 也要求 `environment(ob)`：注册中途放弃的空身体不在任何房间，有两个时下次登录 `find_player()` 报 “The player(<id>) has existed in the world.”；`kungfu/condition/baitan.lpc` 调的命令在 `/cmds/usr/baitan.lpc`，不在 `/cmds/std/`。
+  - #15 18 处拼错/改名前的技能名（`busi-shenglong`、`cuhixiao-jifa`、`jiemie-zhua`、`choushui-zhang`、`xiawuxiang`、`lenyue-shengong`、`yaowang-mishu`、`meiren-shanzhao`、五种毒药的 `five_poison`、`hengshan-jianfa`、`xuanyuan-arror`，KB 06 §7.249）`query_skill()` 恒为 0，门槛永远不过或公式里那一项白算；8 个从英文名技能抄来的 `query_action()` 还读原技能等级（canhe-zhi 读 `canhe-finger`、murong-jianfa 读 `murong-sword`、xuedao-daofa 读 `xue-dao` 等），只学了本技能的人按 0 级取招；6 处无门派判断（一灯门下 du/yu、xxnpc、kunlun-strike、唐门 kedian/wenzi）；`qiantian-yiyang/jujing` 用了 sj 才有的 `MIN` 宏，从没编译过，补本地定义。HEAD 对改后 30 个对象载入对比，回退 0，jujing 新载入。
