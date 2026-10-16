@@ -459,3 +459,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 ## 碧海生潮曲空手报错（2026-10-15，KB 06 §7.246）
 
 `iceforce/roar`（碧海生潮曲）先 `ob = me->query_temp("weapon")`，再直接拿 `base_name(ob)` 判断是不是玉箫；空手 `exert roar` 时 `base_name(0)` 报错，提示“你必须先找一只玉萧来才可以吹－－曲”根本出不来。条件前补 `!objectp(ob) ||`。
+
+## 五虎断门刀出招时 random() 收到浮点数（2026-10-15）
+
+`wuhu-duanmendao` 的 `query_action()` 写了 `a_action["damage"] = level * 1.5;`，伤害成了浮点数；战斗守护（combatd）随后对它做 `random()`，本驱动的 `random()` 只收整数，于是用这门刀法的每一招都报 `Bad argument 1 to random()`（perform 探针在 `duan` 里发现，平常出招同样如此）。改为整数 `level * 3 / 2`。全库只此一处。
