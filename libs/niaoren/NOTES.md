@@ -717,3 +717,7 @@ functionally re-tested live on this lib.
 ## 技能名拼错（2026-10-15，KB 06 §7.249）
 
 `query_skill()` 里的技能名拼错了，或用的是本库改名前的旧名；本库没有这个技能，调用永远得 0：门槛（`< N` 就拒绝）永远过不去，相关功夫或绝招学不了、用不了；内功互斥（`> N` 就拒绝）从不生效；公式里这一项一直是 0。经汉字名（提示文字或中文名词典）或纯拼写差异（`_`/`-`、少一个连字符、相邻字母颠倒）核对后，改为本库的技能名（`scripts/lpc_fix_skill_typo.py`）：`beimin-shengong`→`beiming-shengong`（`jiuyang-shengong`、`taiji-shengong`、`xiantian-gong`）；`taijishengong`→`taiji-shengong`（`beiming-shengong/god-sword/godangry`、`god-sword/go1`）；`mizongxinfa`→`mizong-xinfa`（`longxiang/f`）；`tanzhi_shentong`→`tanzhi-shentong`（`tanzhi-shentong/ta1`）。
+
+## 八识神通 drift_sense 少一个括号（2026-10-15）
+
+`bashi-shentong/drift_sense` 第 55 行改条件时漏了右括号（`if( random(me->query_skill("magic")) < 100 {`，原条件还注释在上一行），文件编译失败。补上括号，保留本库改过的 `< 100`。本库目前没有地方传授八识神通。
