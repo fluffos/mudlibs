@@ -938,3 +938,12 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 ## 移进不存在的巫师房间（2026-10-15，KB 06 §7.251）
 
 用完的物品、要“离开”的 NPC、掷在空中的兵器被移进巫师的工作室（`/u/aln/`），本库没有这些房间。本库的 `move()` 用 `call_other(dest, "???")` 载入目的地，找不到文件就报 `call_other() couldn't find object`，后面的语句都不执行：药（人参，`clone/drug/cb_renshen`）吃下后药效已经生效，随后报错：`call_out("destroy", 31)` 没有排上，药一直留在身上，药效过去后可以再吃。1 个文件改为移进本库的虚空房间 `VOID_OB`（`/clone/misc/void`），与原作把它们“停放”在巫师房间的用意相同。
+
+## 火焰刀「修罗降世」每次报错（2026-10-15，KB 06 §7.246）
+
+本库的 `huoyan-dao/xiuluo` 被换成了取经棍法「震雷乾坤」的文字（同系其他库是真正的火焰刀绝招）：先拒绝持兵器，却用从未赋值的 `weapon->name()` 拼招式，三段伤害又按 `WEAPON_ATTACK` 交给 combatd，每次使用都报错。文字里的兵器名改为“火焰刀”，伤害类型改为 `UNARMED_ATTACK`（火焰刀是掌法），其余原样。
+
+
+## 回龙杖「神龙摆尾」从来用不出（2026-10-15，KB 06 §7.246）
+
+`if (!objectp(me->query_temp("weapon") || weapon->query("skill_type") != "staff"))`：括号放错，`objectp()` 包住了整个 `||`，拿着兵器时 `objectp(1)` 为假，永远“双手应该持杖”；空手时又去读从未赋值的 `weapon`，报错。改为先存兵器再判断。

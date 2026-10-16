@@ -405,3 +405,7 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 ## family 映射内联取下标（2026-10-15，KB 05 §7.30）
 
 `ob->query("family")["master_name"]`、`me->query("family")["family_name"]`（泥潭式为 `query("family", ob)[...]`）直接对门派映射取下标：没有门派的人（新玩家、叛师者、大多数 NPC）在 NPC 的打招呼和问话、绝招的门派判断、房间的 `valid_leave` 里报 `Value being indexed is zero`，而不是得到拒绝。1 处（1 个文件）改为 dbase 路径查询 `query("family/master_name")`：有门派时值相同，没有时得 0；原有的判断照常生效（`scripts/lpc_fix_family_index.py`）。给映射赋值的写法未动。
+
+## 昆仑气法「流」编译失败（2026-10-15）
+
+从 xkx 系抄来的 `kunlun-qifa/liu` 引用 `/kungfu/skill/eff_msg.h`，本库没有这个头文件（只有这一个文件用它）。唯一用到的 `eff_status_msg()` 本库的 combatd 就有，改为 `COMBAT_D->eff_status_msg()`，去掉那行 include；现在能载入。

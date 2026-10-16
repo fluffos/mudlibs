@@ -499,3 +499,7 @@ re-invoke `enable_player()` on this lib while the object is still
 ## 技能名拼错：技能文件里拼错自己的名字（2026-10-15，KB 06 §7.249）
 
 技能自己的文件（或它的绝招目录）里，`query_skill()` 读的是差一个字母的自己的名字，永远得 0：“基本功夫要高过本技能”之类的限制从不生效，按等级取招、计算伤害的那一项一直是 0。改为本技能的名字（`scripts/lpc_fix_skill_typo.py` 的 self 判据）：`songyang-zhou`→`songyang-shou`（`songyang-shou`）。
+
+## 燃木刀法「焚天」的效果一秒就消失（2026-10-15，KB 06 §7.246）
+
+每秒检查的 `check_fight()` 声明了 `object weapon;` 却从不赋值，条件里的 `!weapon` 永远为真，效果在第一次检查时就被撤掉。把这一项改为 `!objectp(weapon = me->query_temp("weapon"))`，先存兵器再判断刀的种类。

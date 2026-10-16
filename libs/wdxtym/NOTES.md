@@ -486,3 +486,7 @@ Too-deep-recursion) recurred at boot; no new error from shop/拜师.
 ## 刀剑归真「天下有血」没有第二件兵器时报错（2026-10-15，KB 06 §7.246）
 
 `daojian-guizhen/xue` 直接读第二件兵器的 `skill_type`，手上只有一件兵器时报错；同目录的 `ben`、`jiu`、`tian` 都先拒绝。补上同样的“你没有同时装备刀剑”拒绝。
+
+## 黯然销魂掌「拖泥带水」气血不足时报错（2026-10-15，KB 06 §7.246）
+
+设置 `cob = find_player(couple)` 的那几行被注释掉了（不再要求配偶在线），后面气血低于四分之一时的招式文字仍用 `cob->name(1)`：正是这一招最该出现的时候报错。改为读存档里配偶的名字 `couple/name`，没有就写“远方”。

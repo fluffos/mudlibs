@@ -814,3 +814,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply e
 - 2026-10-14：1 个文件因 `Type of returned value doesn't match function return type ( int vs void )` 整份不编译：声明为 `void`（或没写类型）的函数却返回值，旧驱动照样把值交给调用者。调用者要用返回值的（add_action 处理函数、命令、辅助函数）改为它实际返回的类型：`report()`。新进程比对 HEAD 与工作树：4 个对象，新增载入 2，回退 0（`scripts/lpc_fix_void_return.py`，KB 04 §6.3）。
 
 - 2026-10-14：`d/deathland/deathworld/hole1-7.lpc` 写成 `#include <DWORLD.h>`，实际文件是 `dworld.h`（大小写），整份不编译；改为小写。
+
+## 储藏室东西过多时清不掉（2026-10-15，KB 06 §7.245）
+
+`std/room/std_storage` 的 `my_clean_func()` 在物品超过上限一半时从最后一件往前清：`for (i = number; ; --i)` 从 `inv[number]` 开始，第一次就越界，报 `Array index out of bounds`，储藏室从来没有被清过；循环也没有下界。改为 `for (i = number - 1; i >= 0; --i)`。跳过玩家的判断写成了 `->querry("npc")`，一并改为 `query`（原意是留下玩家、NPC 也清）。测试里六件物品、上限二：改前越界报错，改后剩两件。

@@ -292,3 +292,7 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## npc_setup 的浮点截断警告（2026-10-15，KB 04 §6.10）
 
 `/clone/obj/npc_setup.lpc`：`level = pow(10 * exp, 0.333334);` 把浮点数隐式截成整数，编译时警告；改为 `to_int(...)`，结果不变。
+
+## 燃木刀法「焚天」的效果一秒就消失（2026-10-15，KB 06 §7.246）
+
+每秒检查的 `check_fight()` 声明了 `object weapon;` 却从不赋值，条件里的 `!weapon` 永远为真，效果在第一次检查时就被撤掉。把这一项改为 `!objectp(weapon = me->query_temp("weapon"))`，先存兵器再判断刀的种类。

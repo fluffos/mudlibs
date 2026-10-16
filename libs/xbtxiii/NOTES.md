@@ -322,3 +322,7 @@ definition, 2 `#undef` lines for macros that two headers define (`ROOM`, `STORY_
 ## 贴身对手不在时绝招报错（2026-10-15）
 
 本库是方位战斗：没有敌人贴身时 `select_opponent()` 返回 0，但仍处于战斗状态。`dugu-jiujian/po`、`dugu-jiujian/poqi`、`hunyuan-zhang/wuji`、`zhemei-shou/duo` 取了对手就直接用，敌人不在身边时报错。取对手后补“你身边没有可以出手的对手”的拒绝（不在战斗中时仍是原来的提示）。（更正：本日较早记下的「柔云纵」修正改的是 `daemon/gongfu/`，那是没有被使用的旧目录，`SKILL_D` 指向 `daemon/skill/`；改了无害，但不影响游戏。）
+
+## 绝情谷（d/ultimate/first）是没有完成的区域（2026-10-15，KB 06 §7.253）
+
+从 `d/ny/droad2` 往北可以走进去，但这条任务链在原档案里就走不通：`secret_house` 编译不过（`__DIR__"npc/xiaolongnv:1,` 少了引号，`greeting()` 里 `npc` 从未赋值、`thank_player(object me)`、`if(temp=0)`），而它是唯一放小龙女的地方；`npc/xiaolongnv.lpc` 其实是杨过的副本（`set_name("杨过", ({ "yang guo" ...`），`climb_up()` 要找的 `xiao long nv` 根本不存在；`come_shuitan()` 声明时只有 `me` 一个参数（call_out 传了 `me, yangguo, xiaolongnv`），区域搬进 `first/` 之后 `/d/ultimate/shuitan`、`gu_di1`、`jueqinggu` 这些路径也没改；最后挖出的奖励 `/d/ultimate/obj/first_stone` 不存在。补全要写新的内容（小龙女、奖励），超出修程序错误的范围，这次没有改动，记在这里。

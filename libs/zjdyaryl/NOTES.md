@@ -915,3 +915,7 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 ## family 映射内联取下标（2026-10-15，KB 05 §7.30）
 
 `ob->query("family")["master_name"]`、`me->query("family")["family_name"]`（泥潭式为 `query("family", ob)[...]`）直接对门派映射取下标：没有门派的人（新玩家、叛师者、大多数 NPC）在 NPC 的打招呼和问话、绝招的门派判断、房间的 `valid_leave` 里报 `Value being indexed is zero`，而不是得到拒绝。1 处（1 个文件）改为 dbase 路径查询 `query("family/master_name")`：有门派时值相同，没有时得 0；原有的判断照常生效（`scripts/lpc_fix_family_index.py`）。给映射赋值的写法未动。
+
+## 没有对手的绝招全部报错：message_combatd()（2026-10-15）
+
+指间版 `message_combatd(msg, me, you, ...)` 为客户端加了图标和伤害行，直接读 `you->query_temp("armor/armor")`、`you->query("qi")`。不对别人出手的招（混天气功、龙象功等的 `roar`，先天功 `shield`，金刚不坏体 `jingang` ……）只传 `msg, me`，`you` 是 0，每次使用都报错，绝招探测里本库有 28 个这样的招。照同系 zjmudhell、wxddym、wdxtym 的写法，伤害行包进 `if (you)`，取护甲图标前也先判断 `you`；28 个招全部能用了。

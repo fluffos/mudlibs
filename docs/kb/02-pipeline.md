@@ -197,6 +197,12 @@ and confirm with `rclone check --one-way`.
 - **A `d/`/`npc/` directory shape is not evidence of LPC.** If
   `grep -rIl inherit` finds nothing, it's a C engine. Don't create a
   `libs/` dir for it.
+- **A directory named like a source file** (zjdywzb: `xiuluo-dao/jueming.c/suoming.c`, a
+  perform stranded inside a folder called `jueming.c`): the `.c` -> `.lpc` rename turns the folder
+  into `jueming.lpc/` and leaves the file inside unrenamed, so the move is missing from the game
+  and loading the folder's name raises `Inherit chain too deep` through `compile_object`.
+  `find libs/*/work -type d -name '*.lpc'` outside wizard dirs; move the file to where its
+  siblings keep it (2026-10-15).
 
 ### 3.1 Recovering source from MudOS `.b` binaries (`scripts/mudos_b/`)
 

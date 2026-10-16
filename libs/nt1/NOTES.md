@@ -420,3 +420,7 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 ## 移进不存在的巫师房间（2026-10-15，KB 06 §7.251）
 
 用完的物品、要“离开”的 NPC、掷在空中的兵器被移进巫师的工作室（`/u/llm/`），本库没有这些房间。本库的 `move()` 用 `call_other(dest, "???")` 载入目的地，找不到文件就报 `call_other() couldn't find object`，后面的语句都不执行：婚礼最后一步（`d/ruzhou/npc/meipo` 的 `last_marry`）先把月老送走，在这里报错：新人不会被送上花轿去迎宾楼，喜宴没有了。1 个文件改为移进本库的虚空房间 `VOID_OB`（`/clone/misc/void`），与原作把它们“停放”在巫师房间的用意相同（haiyang2 的维护者把月老送进 `/d/city/empty`，也是同样的做法）。
+
+## 黯然销魂掌「拖泥带水」气血不足时报错（2026-10-15，KB 06 §7.246）
+
+设置 `cob = find_player(couple)` 的那几行被注释掉了（不再要求配偶在线），后面气血低于四分之一时的招式文字仍用 `cob->name(1)`：正是这一招最该出现的时候报错。改为读存档里配偶的名字 `couple/name`，没有就写“远方”。

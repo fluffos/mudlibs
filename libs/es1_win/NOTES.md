@@ -830,3 +830,7 @@ Left, as content gaps, not invented: 16 inherits of files that are not in the ar
 - 2026-10-14：64 个存档文件（其他 64 个；`d/adventurer/data/attic/adventurer_board_798460167.o`, `d/healer/data/attic/healer_board_780485145.o`, `d/healer/data/attic/healer_board_781540005.o` …）还是原档案的 GBK 编码，没有转成 UTF-8，`restore_object()` 报 `Invalid utf8 string` 后对象以空数据启动（表情守护进程没有表情、留言板没有帖子、玩家无法载入）。`scripts/lpc_save_encoding.py` 逐个按 GB18030 解码，结果按存档格式解析通过才写回（KB 03 §4）。
 
 - 2026-10-14：2 个文件因 `Type of returned value doesn't match function return type ( int vs void )` 整份不编译：声明为 `void`（或没写类型）的函数却返回值，旧驱动照样把值交给调用者。调用者要用返回值的（add_action 处理函数、命令、辅助函数）改为它实际返回的类型：`help_cut()`、`report()`。新进程比对 HEAD 与工作树：2 个对象，新增载入 0，回退 0（`scripts/lpc_fix_void_return.py`，KB 04 §6.3）。
+
+## 储藏室东西过多时清不掉（2026-10-15，KB 06 §7.245）
+
+`std/room/std_storage` 的 `my_clean_func()` 在物品超过上限一半时从最后一件往前清：`for (i = number; ; --i)` 从 `inv[number]` 开始，第一次就越界，报 `Array index out of bounds`，储藏室从来没有被清过；循环也没有下界。改为 `for (i = number - 1; i >= 0; --i)`。跳过玩家的判断写成了 `->querry("npc")`，一并改为 `query`（原意是留下玩家、NPC 也清）。测试里六件物品、上限二：改前越界报错，改后剩两件。

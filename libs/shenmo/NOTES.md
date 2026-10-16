@@ -1100,3 +1100,7 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 ## 移进不存在的巫师房间（2026-10-15，KB 06 §7.251）
 
 用完的物品、要“离开”的 NPC、掷在空中的兵器被移进巫师的工作室（`/u/aln/`、`/u/wind/`），本库没有这些房间。本库的 `move()` 用 `load_object()` 找目的地，找不到就返回 0，不报错，东西留在原处：药（人参、熊胆、狐狸皮、虎骨，`clone/drug/cb_renshen`、`clone/drug/hugu`、`clone/drug/hulipi`、`clone/drug/xiongdan`）吃下后没有移走，31 秒后才销毁，这期间还能交给别人再吃一次；被雇来打晕或杀人的李凌（`sjsh/u/stey/u/cnd/liling`）办完事后没有离开，留在原地。5 个文件改为移进本库的虚空房间 `VOID_OB`（`/obj/void`），与原作把它们“停放”在巫师房间的用意相同。
+
+## 燃木刀法「焚天」的效果一秒就消失（2026-10-15，KB 06 §7.246）
+
+每秒检查的 `check_fight()` 声明了 `object weapon;` 却从不赋值，条件里的 `!weapon` 永远为真，效果在第一次检查时就被撤掉。把这一项改为 `!objectp(weapon = me->query_temp("weapon"))`，先存兵器再判断刀的种类（本库 `SKILL_D` 指向 `daemon/skill/`，生效的是那一份；`kungfu/skill/` 里的旧副本一并改正）。
