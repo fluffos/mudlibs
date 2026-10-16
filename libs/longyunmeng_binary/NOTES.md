@@ -104,7 +104,9 @@ call`）读出这个版本有 116 个运算符，比 v22pre11 标准多 3 个：
 否则转成 UTF-8 后会剩一个反斜杠）→ 组装源码树 → `convert_lib.sh` → 把被 §4.3 改坏的 `static/` 路径改回来 →
 `scripts/lpc_drop_replace_program.py` 删掉多余的 `replace_program(X)`（6,228 个文件）→
 打上 `decompile/fluffos-fixes.patch`。`OUT=<目录> REC=<目录> rebuild.sh` 可以建到别处和 `work/` 比较。
-**`work/` 里的任何修改都要同步进 `fluffos-fixes.patch`，否则 `rebuild.sh` 就不能重现这棵树。**
+**`work/` 里的任何修改都要同步进 `fluffos-fixes.patch`，否则 `rebuild.sh` 就不能重现这棵树**：`PATCH=0 OUT=<目录>/work REC=<目录>/rec rebuild.sh`
+建出打补丁之前的树，`decompile/mkpatch.sh <目录>/work work decompile/fluffos-fixes.patch` 重新生成补丁（跳过 `log/`、
+`binaries/` 和玩家存档，保留管理员的两个存档；`work/` 里删掉的文件不会记进去）。
 
 已做的修改：
 - simul_efun 的 `message()`：FluffOS 的第四个参数（排除列表）不收 0，`message()`、`tell_room()`、`shout()`

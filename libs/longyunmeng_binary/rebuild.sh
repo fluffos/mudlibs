@@ -3,6 +3,8 @@
 # assemble the recovered source tree, convert it for FluffOS. See NOTES.md.
 #   libs/longyunmeng_binary/rebuild.sh            (from the repo root)
 #   OUT=<dir> REC=<dir> libs/longyunmeng_binary/rebuild.sh   builds elsewhere (to compare with work/)
+#   PATCH=0 OUT=<dir> REC=<dir> ...   stops before the patch: the base tree for decompile/mkpatch.sh, which
+#                                     regenerates decompile/fluffos-fixes.patch after an edit in work/
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 LIB="$ROOT/libs/longyunmeng_binary"
@@ -10,6 +12,7 @@ RAW="$LIB/raw/xyzx/ylfy"
 SRC2="$ROOT/libs/longyunmeng/raw/ylfy"     # 033-2, the source edition of the same game
 OUT="${OUT:-$LIB/work}"
 REC="${REC:-$LIB/raw/recovered}"
+PATCH="${PATCH:-1}"
 [[ -d "$RAW/binaries" ]] || scripts/extract.sh "$ROOT/archives/033-3_longyunmeng_binary_龙云梦-炎龙封印-二进制版.rar" longyunmeng_binary
 [[ -d "$SRC2/adm" ]] || scripts/extract.sh "$ROOT/archives/033-2_longyunmeng_龙云梦-炎龙封印源码版.rar" longyunmeng
 SCRATCH="${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}"
@@ -37,6 +40,6 @@ done
 python3 "$ROOT/scripts/lpc_drop_replace_program.py" --apply "$OUT" > /dev/null
 mkdir -p "$OUT/log" "$OUT/binaries"
 # 4. hand fixes and the fixes ported from 033-2 (NOTES.md lists them)
-patch -p1 -d "$OUT" < "$LIB/decompile/fluffos-fixes.patch"
+[[ "$PATCH" == 0 ]] || patch -p1 -d "$OUT" < "$LIB/decompile/fluffos-fixes.patch"
 rm -rf "$TMP"
 echo "rebuilt $OUT"

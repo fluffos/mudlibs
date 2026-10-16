@@ -278,6 +278,9 @@ v22pre11 build, 14,395 programs, all but one proven
   rebuild stopped reproducing its tree after a skill-name sweep
   (046704ce5fe); the sweep's hunks went into `fluffos-fixes.patch`. Check:
   `OUT=<dir> REC=<dir> libs/longyunmeng_binary/rebuild.sh`, then diff.
+  Fold an edit back in: `PATCH=0` on the same command builds the unpatched
+  base, and `decompile/mkpatch.sh <base> work decompile/fluffos-fixes.patch`
+  rewrites the patch (033-3).
 - **Originals that compile but disagree with their binary** are stale
   sources: the binary is what the game ran. Use the decompiled file.
   Unless the source is newer and the driver ran that directory from
