@@ -967,3 +967,7 @@ re-invoke `enable_player()` on this lib while the object is still
 ## 技能名拼错（2026-10-15，KB 06 §7.249）
 
 `query_skill()` 里的技能名拼错了，或用的是本库改名前的旧名；本库没有这个技能，调用永远得 0：门槛（`< N` 就拒绝）永远过不去，相关功夫或绝招学不了、用不了；内功互斥（`> N` 就拒绝）从不生效；公式里这一项一直是 0。经汉字名（提示文字或中文名词典）或纯拼写差异（`_`/`-`、少一个连字符、相邻字母颠倒）核对后，改为本库的技能名（`scripts/lpc_fix_skill_typo.py`）：`xixing-dafa`→`xixin-dafa`（`qiantian-yiyang`、`tianlong-shengong`）；`jinshe-zhang`→`jinshe-zhangfa`（`jinshe-jianfa/kuangwu`）。
+
+## 太极拳绝招依赖的 yinyun-ziqi/taiji 缺失（2026-10-15）
+
+`taiji-quan` 的 `gangrou`、`jueji2`、`jueji3`、`zhannian` 都用 `"/kungfu/skill/yinyun-ziqi/taiji"->check_force()` 判断对手的内功，但本库 `yinyun-ziqi/` 里没有 `taiji.lpc`（原档就缺），这四招一用就报 `couldn't find object`。本库的 `yinyun-ziqi.lpc` 与 jh2006 的逐字节相同，从 jh2006 补回 `yinyun-ziqi/taiji.lpc`（只依赖 `<ansi.h>`）。perform 探针复查 0 错误。
