@@ -468,3 +468,12 @@ Too-deep-recursion) recurred at boot; no new error from shop/拜师.
 ## 技能名拼错：技能文件里拼错自己的名字（2026-10-15，KB 06 §7.249）
 
 技能自己的文件（或它的绝招目录）里，`query_skill()` 读的是差一个字母的自己的名字，永远得 0：“基本功夫要高过本技能”之类的限制从不生效，按等级取招、计算伤害的那一项一直是 0。改为本技能的名字（`scripts/lpc_fix_skill_typo.py` 的 self 判据）：`wushang-jianjingsAA`→`wushang-jianjingsA`（`wushang-jianjingsA`、`wushang-jianjingsA/exert/wushanga1`、`wushang-jianjingsA/perform/wushangb1`、`wushang-jianjingsA/perform/wushangb2`、`wushang-jianjingsA/perform/wushangb3`、`wushang-jianjingsA/perform/wushangb4`、`wushang-jianjingsA/perform/wushangb5`、`wushang-jianjingsA/perform/wushangb6`、`wushang-jianjingsA/perform/wushangb7`）；`taiji-shengon`→`taiji-shengong`（`taiji-shengong`、`wushang-jianjingsA/perform/wushangb5`）；`shicheng-liulang`→`shicheng-liulong`（`shicheng-liulong`）；`xuanyuan-arror`→`xuanyuan-arrow`（`xuanyuan-arrow`）；`youzi-jian`→`youzhi-jian`（`youzhi-jian/kuang`）。
+
+## 柔云步法「柔云纵」有时报错（2026-10-15，KB 06 §7.251）
+
+`rouyun-steps/zong` 随机把人送到三个房间之一：精、精力已经扣了，“乘云而去了”也说了，送不过去时人留在战斗里并报错。第三个是巫师的测试房 `/u/deaner/test1`，库里没有；改为 `/d/city/guangchang`（hy、jym 等库原本就用这个）。
+
+
+## 农场档 farmd.o 截断（2026-10-15，KB 03 §4.4）
+
+`data/farmd.o` 原档只有 45 字节，停在 `farmd (["sword_1":([])`，`restore_object()` 报错，农场守护进程载入失败。补成 `farmd (["sword_1":([]),])`。`backup/` 下的同名旧档同样截断，未动。

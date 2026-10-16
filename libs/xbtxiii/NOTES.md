@@ -304,3 +304,7 @@ definition, 2 `#undef` lines for macros that two headers define (`ROOM`, `STORY_
 ## 技能名拼错（2026-10-15，KB 06 §7.249）
 
 `query_skill()` 里的技能名拼错了，或用的是本库改名前的旧名；本库没有这个技能，调用永远得 0：门槛（`< N` 就拒绝）永远过不去，相关功夫或绝招学不了、用不了；内功互斥（`> N` 就拒绝）从不生效；公式里这一项一直是 0。经汉字名（提示文字或中文名词典）或纯拼写差异（`_`/`-`、少一个连字符、相邻字母颠倒）核对后，改为本库的技能名（`scripts/lpc_fix_skill_typo.py`）：`mizongxinfa`→`mizong-xinfa`（`/daemon/gongfu/longxiang/fanchang`）。
+
+## 柔云步法「柔云纵」有时报错（2026-10-15，KB 06 §7.251）
+
+`rouyun-steps/zong` 随机把人送到三个房间之一：精、精力已经扣了，“乘云而去了”也说了，送不过去时人留在战斗里并报错。本库的武庙、客店、中央广场在 `/d/yangzhou/`，`/d/city/` 下没有，三处都会报错；改为 `/d/yangzhou/wumiao`、`/d/yangzhou/kedian`、`/d/yangzhou/guangchang`。

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""scripts/lpc_save_encoding.py [--apply] SLUG...|--all
+"""scripts/lpc_save_encoding.py [--apply] [--from-raw] SLUG...|FILE...|--all
 Text save files (`.o` starting with `#`) that were never transcoded: the archive's GBK or BIG5 bytes are still there, so
 `restore_object()` stops with `Invalid utf8 string while restoring <var>` and the object starts empty (an emote daemon with
 no emotes, a board with no posts, a player who cannot log in).  For each tracked one that is not valid UTF-8:
   - decode as GB18030 or BIG5 (cp950), whichever reads like the lib's own UTF-8 sources (mean log frequency of its CJK
     characters: the other decoding is mojibake made of rare characters); a lib whose sources hold almost no CJK (English,
-    Finnish) has Latin-1 bytes instead.  A file with at most 8 stray half characters (a byte cut off by a length limit,
+    Finnish) has Windows-1252 bytes instead (Latin-1 when a byte is undefined there).  A file with at most 8 stray half characters (a byte cut off by a length limit,
     `\\xa1\\r`) is decoded as GB18030 with those bytes dropped;
   - MudOS wrote a backslash in a string as `\\\\`; a GBK/BIG5 character whose second byte is 0x5C followed by that escape
     (`XX 5C 5C`) would decode as character + a lone escape, so the extra 0x5C is dropped first when that is what parses;
@@ -13,8 +13,21 @@ no emotes, a board with no posts, a player who cannot log in).  For each tracked
     escapes, ({ }), ([ ]), class records), otherwise the file is listed and left alone.
 A double-byte character split by an ANSI colour code (BBS colour art) is rejoined and a lone lead byte dropped; trailing
 zero padding is stripped.  Saves with zeroed blocks in the middle (disk damage) or broken literals stay listed.
-Encrypted or binary saves (no `#` header) are skipped.  Without --apply only the plan is printed."""
+Encrypted or binary saves (no `#` header) are skipped.  Without --apply only the plan is printed.
+
+--from-raw: saves that were transcoded at onboarding but came out broken.  The conversion was
+`iconv -f gb18030 -t utf-8 -c`, which drops an invalid pair as a unit: a lone lead byte before a closing quote takes the
+quote with it (`"short":"\xc6\xe5\xca\xd2\xb0",` became `"short":"棋室,`), so `restore_object()` stops with `Illegal
+mapping format` and the object starts empty.  For each tracked UTF-8 save (`#/` header) that does not parse: when iconv of
+its raw/ original still gives the tracked bytes exactly (nobody edited it since), the original is decoded again with the
+candidates above (the lone lead byte dropped, the quote kept) and the first decoding that parses replaces it.  When none
+parses, the save is a GB copy of a BIG5 one: a stray backslash after a character whose BIG5 code ends in 0x5C (功, 许,
+么 ...) is dropped (or the quote it swallowed escaped), nearest the break first, until it parses (dreamofseven, kxkj and naruto
+boards; GBK's 賊 誠 運 ... too, and this step also runs on a save with no matching raw/, since it moves only
+backslashes).  A save edited after onboarding, or whose original does not parse either, is listed and left alone.  FILE arguments
+(libs/SLUG/work/...) limit the run to those saves."""
 import collections
+import glob
 import math
 import os
 import re
@@ -28,7 +41,11 @@ class Bad(Exception):
     pass
 
 
+_DEEP = [0]   # the furthest position parse_value() reached: where a failing save breaks
+
+
 def parse_value(s, i):
+    _DEEP[0] = max(_DEEP[0], i)
     n = len(s)
     if i >= n:
         return i   # an empty value at the end of the file
@@ -109,6 +126,54 @@ def parses(text):
     return True
 
 
+
+def fail_pos(text):
+    """None when the save parses, otherwise where the value that breaks it starts."""
+    _DEEP[0] = 0
+    return None if parses(text) else _DEEP[0]
+
+
+# Characters whose BIG5 or GBK code ends in 0x5C (BIG5 功 许 么, GBK 賊 誠 運; simplified forms too).  MudOS
+# (byte-blind) wrote that byte as
+# `\\`; a site that later converted the save to GB kept the character and one backslash, which now escapes whatever
+# follows: `成功\",` never closes the string, and `么\\"` (the stray, then an escaped quote) closes it early.  A save
+# written without the doubling has the reverse: MudOS read the 0x5C as the escape of the quote after it (`出\"俞" >`), so
+# that quote belongs to the text and needs its backslash.
+_B5C = set()
+for _lead in range(0x81, 0xff):
+    try:
+        _B5C.add(bytes([_lead, 0x5c]).decode("cp950"))
+    except UnicodeDecodeError:
+        pass
+_B5C |= set("殁泪许厩铀盖谷阅缕摆髅蹑")
+for _lead in range(0x81, 0xff):
+    try:
+        _B5C.add(bytes([_lead, 0x5c]).decode("gbk"))
+    except UnicodeDecodeError:
+        pass
+_B5C_STRAY = re.compile("[%s]\\\\" % re.escape("".join(sorted(_B5C))))
+_B5C_QUOTE = re.compile("[%s]\"" % re.escape("".join(sorted(_B5C))))
+
+
+def drop_big5_strays(text):
+    """(repaired text, count) or (None, count): at the first such character after where the save breaks, drop the
+    stray backslash or escape the quote, until it parses."""
+    n = 0
+    while n <= 500:
+        d = fail_pos(text)
+        if d is None:
+            return text, n
+        m, q = _B5C_STRAY.search(text, d), _B5C_QUOTE.search(text, d)
+        if m and (not q or m.start() <= q.start()):
+            text = text[:m.start() + 1] + text[m.end():]
+        elif q:
+            text = text[:q.start() + 1] + "\\" + text[q.start() + 1:]
+        else:
+            return None, n
+        n += 1
+    return None, n
+
+
 def lib_profile(slug, cache={}):
     """CJK character counts of the lib's own (UTF-8) sources: the yardstick for which decoding reads like this lib."""
     if slug in cache:
@@ -175,7 +240,10 @@ def candidates(b, profile):
             variants.append((joined, "+joined"))
     for raw, tag in variants:
         if western:
-            out.append((raw.decode("latin-1"), "latin-1" + tag, 1.0))
+            try:   # Windows text: 0x80-0x9f are quotes and dashes (0x92 is the apostrophe), never Latin-1's C1 controls
+                out.append((raw.decode("cp1252"), "cp1252" + tag, 1.0))
+            except UnicodeDecodeError:
+                out.append((raw.decode("latin-1"), "latin-1" + tag, 1.0))
             continue
         for enc in ("gb18030", "cp950"):
             try:
@@ -191,10 +259,46 @@ def candidates(b, profile):
     return [(t, how) for t, how, _ in out]
 
 
+def iconv_c(b, enc):
+    return subprocess.run(["iconv", "-f", enc, "-t", "utf-8", "-c"], input=b, capture_output=True).stdout
+
+
+def raw_counterpart(slug, rel):
+    """libs/SLUG/raw/[DIR/[DIR/]]REL: the archive's own copy of a work/ file."""
+    base = os.path.join(REPO, "libs", slug, "raw")
+    for pre in ("", "*/", "*/*/"):
+        hits = glob.glob(glob.escape(base) + "/" + pre + glob.escape(rel))
+        if len(hits) == 1:
+            return hits[0]
+    return None
+
+
+def from_raw(f, b):
+    """(text, label) for a broken transcoded save, or (None, reason)."""
+    slug, rel = f.split("/", 3)[1], f.split("/", 3)[3]
+    r = raw_counterpart(slug, rel)
+    why = "no raw/ original"
+    if r:
+        rb = open(r, "rb").read()
+        why = "edited since onboarding (iconv of raw/ differs)"
+        if any(iconv_c(rb, enc) == b for enc in ("gb18030", "big5", "cp950", "big5-hkscs")):
+            why = "the raw/ original does not parse either"
+            for text, how in candidates(rb, lib_profile(slug)):
+                if parses(text):
+                    return text, "raw " + how
+    # backslashes only: safe on a save edited since onboarding, and on one converted elsewhere (no GBK/BIG5 raw/)
+    text, n = drop_big5_strays(b.decode("utf-8"))
+    if text is not None:
+        return text, "%d backslash(es) dropped or added after a 0x5C character" % n
+    return None, why
+
+
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     apply = "--apply" in sys.argv
-    pat = ["libs/*/work/*.o"] if "--all" in sys.argv else ["libs/%s/work/*.o" % s for s in args]
+    raw_mode = "--from-raw" in sys.argv
+    pat = (["libs/*/work/*.o"] if "--all" in sys.argv else
+           [a if "/" in a else "libs/%s/work/*.o" % a for a in args])
     files = subprocess.run(["git", "ls-files", "-z", "--"] + pat, cwd=REPO, capture_output=True).stdout.split(b"\0")
     done = left = 0
     for f in files:
@@ -208,10 +312,23 @@ def main():
         if not b.startswith(b"#"):
             continue
         try:
-            b.decode("utf-8")
+            t = b.decode("utf-8")
+            if not raw_mode or not b.startswith(b"#/") or parses(t):
+                continue
+            rel = p[len(REPO) + 1:]
+            text, how = from_raw(rel, b)
+            if text is None:
+                print("LEFT %s: %s" % (rel, how))
+                left += 1
+                continue
+            print("FIX  %s (%s)" % (rel, how))
+            done += 1
+            if apply:
+                open(p, "wb").write(text.encode("utf-8"))
             continue
         except UnicodeDecodeError:
-            pass
+            if raw_mode:
+                continue
         pick = None
         slug = f.decode("utf-8", "surrogateescape").split("/")[1]
         for text, how in candidates(b, lib_profile(slug)):
@@ -230,4 +347,5 @@ def main():
     print("%d file(s) %s, %d left" % (done, "converted" if apply else "to convert (plan only; --apply writes)", left))
 
 
-main()
+if __name__ == "__main__":
+    main()

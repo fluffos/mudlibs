@@ -1040,3 +1040,37 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 ## 乾天一阳「聚精」用了未定义的 MIN（2026-10-15）
 
 `qiantian-yiyang/jujing` 从书剑（sj）移植过来，用到 `MIN(...)`；书剑的 `globals.h` 定义了这个宏，本库没有，文件编译失败。在文件里补一个局部 `#define MIN(x, y)`，现在可以载入。
+
+## 擒龙手「擒龙打」每次都报错（2026-10-15，KB 06 §7.246）
+
+`qinlong-shou/qin` 要求空手施展，却在出招前执行 `wn = weapon->name();`：局部变量 `weapon` 从没赋值，`wn` 也没人用，每次使用都报 `Bad argument 1 to EFUN call_other()`。删去这一行和两个没用的局部变量。
+
+
+## 地图数据库 mapdb 读到只有文件头的 map.o（2026-10-15，KB 06 §7.250）
+
+本库的 `data/npc/map.o` 只有一行文件头：genmap 第一次载入时 `if (!restore()) save();`，地图还没建就存了档，值为 0 的变量不写进去。mapdb 的 `restore()` 读它成功，`map` 却成了 0，`query_room_info()`、`query_room_exits()`、`query_map()` 都对 0 取下标或把 0 交出去：临济庄「幽冥桩」每次都报 `Value being indexed is zero`。mapdb（`/clone/obj/mapdb.lpc`）加一个 `restore()`：读档后 `map` 不是映射就重置为 `([])`；地图为空时 `query_random_room_path()` 返回 0。地图本身仍需巫师用 genmap 生成。
+
+
+## 临济庄「幽冥桩」的两处笔误（2026-10-15，KB 06 §7.245、§7.250）
+
+`linji-zhuang/youming`：`killer->querry(...)`、`me->querry(...)` 调用的是不存在的函数，永远得 0，恶人比值只按 PK 数算，改为 `query`；`visit_room()` 先拿 `range` 作判断、后从参数里取 `range`，判断时它还是 0，效果遇到没载入的房间就停，两行取值挪到前面。
+
+
+## 柔云步法「柔云纵」有时报错（2026-10-15，KB 06 §7.251）
+
+`rouyun-steps/zong` 随机把人送到三个房间之一：精、精力已经扣了，“乘云而去了”也说了，送不过去时人留在战斗里并报错。第三个是巫师的测试房 `/u/deaner/test1`，库里没有；改为 `/d/city/guangchang`（hy、jym 等库原本就用这个）。
+
+
+## 秋林拾叶「随风而舞」成功时报错（2026-10-15，KB 06 §7.252）
+
+`qiulin-shiye/wu` 把房间的出口映射当数组：`mapping *obb = query("exits", env)`，成功时 `me->move(obb[0])`，映射里没有键 0，移动到 0 报错（没有出口的房间则是对 0 取下标）。改为 yanhuangwuhun 一系的写法：从 `values(exits)` 里随机选一个出口。
+
+
+## `call_out(0) nest level : 10`（2026-10-15，KB 03 §5.4）
+
+这个值来自驱动测试套件的配置（`testsuite/etc/config.test`）。驱动统计的是同一个 gametick（本库 100 毫秒）里全游戏的 call_out(0) 总数，不是一条链的深度，超过 10 个就报 `Nesting call_out(0) level limit exceeded`：多段绝招（如华山剑法「剑芒」的 `call_out("perform2", 0, ...)`）在人多时会断掉。原版跑在 MudOS 上，没有这个限制；改为驱动默认值 1000。
+
+
+## 存档读不出来：转码损坏（2026-10-15，KB 03 §4.4）
+
+`/temp/login/s/sina.o`、`/temp/login/t/tiyan.o`、`/temp/user/s/sina.o`、`/temp/user/t/tiyan.o` 在转码时坏了：原档里孤立的 GBK 前导字节被 `iconv -c` 连同后面的引号一起丢掉，`restore_object()` 报 `Illegal mapping format`，读档的对象（玩家、留言板、信件、表情）从空白开始。按 raw/ 原档重新解码（孤立字节丢掉、引号保留），驱动核对全部能读回（`scripts/lpc_save_encoding.py --from-raw`、`scripts/lpc_save_restore_check.py`）。

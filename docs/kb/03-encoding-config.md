@@ -153,6 +153,19 @@ function", hundreds per lib); `scripts/lpc_warnings.py --fix` repairs it (KB 04
   character with an ANSI code (lead byte, `ESC[1m`, trail byte: dreamofseven, hc, naruto boards); the script rejoins it and
   drops a lone lead byte, and strips trailing zero padding. Saves with zeroed blocks in the middle (disk damage: jym
   `drop/user_bak/`, shenmo `nancheng_b.o`, the shiji/sj/xkxyb/xzyx `topten.o`) or broken literals are listed and left. Detection: `git ls-files 'libs/*/work/*.o'`, starting with `#`, not valid UTF-8.
+- **Saves the onboarding transcode broke (2026-10-15).** They are UTF-8, so the pass above skips them, but
+  `restore_object()` refuses them: 166 tracked `#/` saves in 42 libs (jym player saves, the dreamofseven, kxkj, hc, naruto
+  and nt1 boards, xkm's room map and its 25 backups, huoying's and yxzsj/yxsj's emote tables, pkuxkx news). Causes:
+  `iconv -f gb18030 -t utf-8 -c` dropped a lone lead byte *together with the quote after it* (`"short":"棋室\xb0",` became
+  `"short":"棋室,`); a GB copy of a BIG5 save keeps the stray backslash after a 0x5C character (`成功\",`), or the quote
+  that MudOS read as escaped by that byte (`出\"俞" >`); GBK has 0x5C characters too (`賊` D9 5C); and some originals
+  were damaged in the archive (a truncated `farmd.o`, a mapping that ends `]),]`, a lost key mid-emote).
+  `scripts/lpc_save_restore_check.py SLUG...|--all` asks the driver (a throwaway mudlib, each save restored into an object
+  that declares its variables); `scripts/lpc_save_encoding.py --from-raw [--apply] ...` re-decodes a save from raw/ when
+  iconv of raw/ still gives the tracked bytes (66 files), else moves only backslashes after 0x5C characters until it parses
+  (17). The parser alone over-reports: 22 of its 795 suspects restored fine. Nine archive-damaged live saves were repaired
+  by hand (see the libs' NOTES); 53 are left, nearly all backups (`backup/`, `login_bak/`, `board back/`) and wizard
+  copies.
 
 ---
 
@@ -223,6 +236,16 @@ A `MUD_PORT`/`PORTNO` constant checked in `master::connect()` rejects
 every connection when it doesn't match: the log looks clean, but the
 server is dead (`huoying`, `dfgsiiv13b`). Read what the constant gates.
 Some are cosmetic only.
+
+### 5.4 `call_out(0) nest level : 10` copied from the testsuite config (2026-10-15)
+
+**Symptom:** a multi-stage perform (`call_out("perform2", 0, me, target)`) dies with `Nesting call_out(0) level limit
+exceeded: 10` on a busy server, or in any batch that runs many performs in one tick. **Cause:** the driver counts every
+`call_out(0)` scheduled in the same gametick across the whole game (`src/packages/core/call_out.cc`), not the depth of
+one chain. `testsuite/etc/config.test` sets 10 to exercise that guard, and configs built from it carried the 10 into
+MudOS-era games that had no such limit (nitan3, nitan_san, nitan170911, nitan_ceshi, 100 ms gameticks). **Fix:** the
+driver default, 1000. Keep a value the lib's own FluffOS config chose (aoxiangtianji's 2019 `config.cfg` sets 10).
+**Detection:** `grep -h 'call_out(0) nest level' libs/*/config.fluffos`, then check the raw config.
 
 ### `T array a, b` became `T * a, b`: only the first name stays an array (2026-10-05)
 

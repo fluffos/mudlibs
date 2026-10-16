@@ -276,3 +276,7 @@ Century/`adm-single` 形状）**：`adm/simul_efun/file.lpc` 的
 ## 文件首行注释少了一个斜杠（2026-10-15）
 
 首行的说明注释只剩一个 `/`（如 `/kuangwu.c金蛇狂舞`、`/ cloth.txt  //`），文件第一行就语法错误、编译失败：全真教的布衣 `/d/quanzhen/obj/cloth`、`/d/quanzhen/npc/obj/cloth` 因此从来载入不了。补回斜杠成为 `//` 注释，现在都能载入。
+
+## 银索金铃「点穴」对空手的对手报错（2026-10-15，KB 06 §7.246）
+
+`yinsuo-jinling/dian` 失手时三种描写之一是“真气贯注”加对手兵器的名字，对手空手时 `ob` 为 0，三次失手有一次报错。改为 `(objectp(ob) ? ob->query("name") : "全身")`（泥潭一系原本就写作“真气贯注全身”）。

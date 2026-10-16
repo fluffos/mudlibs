@@ -220,3 +220,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply y
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。4 个文件 10 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
 
 - 2026-10-14：2 个文件因 `Illegal to inherit after defining global variables` 整份不编译：FluffOS 要求所有 `inherit` 写在第一个全局变量之前，MudOS 不管。`scripts/lpc_fix_inherit_order.py` 把写在 `inherit` 之前的全局变量（以及声明全局变量的头文件的 `#include`）挪到最后一个 `inherit` 之后（KB 04 §6.3）。
+
+## 表情档读不出来（2026-10-15，KB 03 §4.4）
+
+`data/emoted.o` 中 `grin`（邪惡的笑）一条在原档里就坏了：`"target_res"$P指著自己。說道﹕就是我﹗","others_target":"$N指著$n。"`，一个键丢了后半截，后面接的是别的表情的文字；`restore_object()` 报 `Illegal mapping format`，整个表情系统一个表情都没有。按本条自己的字段补回：`target_rest` 取 `myself_rest` 把 `$P` 换成 `$N`（同档 groan 等表情都是这样），`others_target` 取 `target_self` 把 `$T` 换成 `$n`（同系各库 grin 的 others_target 就是这句）。丢失的那个表情无法恢复。驱动核对能读回。

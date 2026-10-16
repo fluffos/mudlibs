@@ -554,3 +554,27 @@ After the rename: `scripts/lpc_warnings.py bmxkx2001` 152 distinct diagnostics, 
 ## 技能名拼错：技能文件里拼错自己的名字（2026-10-15，KB 06 §7.249）
 
 技能自己的文件（或它的绝招目录）里，`query_skill()` 读的是差一个字母的自己的名字，永远得 0：“基本功夫要高过本技能”之类的限制从不生效，按等级取招、计算伤害的那一项一直是 0。改为本技能的名字（`scripts/lpc_fix_skill_typo.py` 的 self 判据）：`baitao-xuangong`→`bitao-xuangong`（`bitao-xuangong`）。
+
+## 地图数据库 mapdb 的空档防护（2026-10-15，KB 06 §7.250）
+
+genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写出只有文件头的 `data/npc/map.o`；mapdb 读它成功后 `map` 为 0，所有查询都对 0 取下标（nitan170911、shenzhou 等 10 个库就带着这样的文件）。没有 map.o 时 `query_random_room_path()` 又对空数组取下标。mapdb（`/clone/obj/mapdb.lpc`）加一个 `restore()`：读档后 `map` 不是映射就重置为 `([])`；地图为空时 `query_random_room_path()` 返回 0。
+
+
+## 随机取房间后不判断就过滤（2026-10-15，KB 06 §7.250）
+
+`/d/city/npc/ftb_zhu.lpc`、`/d/qilian/obj/jinhe.lpc` 从 mapdb 随机取一个房间后直接 `strsrch(room_path, ...)` 排除区域；地图还没生成时取回的是 0，`strsrch(0, ...)` 报错，护镖等任务就此中断。条件前补 `!stringp(room_path) ||`，取不到房间时走原有的重试和“cannot find target room”提示。
+
+
+## 临济庄「幽冥桩」的两处笔误（2026-10-15，KB 06 §7.245、§7.250）
+
+`linji-zhuang/youming`：`killer->querry(...)`、`me->querry(...)` 调用的是不存在的函数，永远得 0，恶人比值只按 PK 数算，改为 `query`；`visit_room()` 先拿 `range` 作判断、后从参数里取 `range`，判断时它还是 0，效果遇到没载入的房间就停，两行取值挪到前面。
+
+
+## 银索金铃「点穴」对空手的对手报错（2026-10-15，KB 06 §7.246）
+
+`yinsuo-jinling/dian` 失手时三种描写之一是“真气贯注”加对手兵器的名字，对手空手时 `ob` 为 0，三次失手有一次报错。改为 `(objectp(ob) ? ob->query("name") : "全身")`（泥潭一系原本就写作“真气贯注全身”）。
+
+
+## npc_setup 的浮点截断警告（2026-10-15，KB 04 §6.10）
+
+`/clone/obj/npc_setup.lpc`：`level = pow(10 * exp, 0.333334);` 把浮点数隐式截成整数，编译时警告；改为 `to_int(...)`，结果不变。

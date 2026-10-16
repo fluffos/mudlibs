@@ -378,3 +378,7 @@ HEAD 与工作树分别加载（新进程）：1653 -> 1653 通过，无回退�
 ## 独孤九剑招式表越界（2026-10-15，KB 06 §7.243）
 
 同 kxkj：`daemon/skill/lonely-sword.lpc` 取招越界（8 招按 15 招取），加 `pick_action()` 收在最后一招。
+
+## 存档读不出来：BIG5/GBK 0x5C 字后的反斜杠（2026-10-15，KB 03 §4.4）
+
+`/data/board back/bss.o`、`/data/board back/guilty.o`、`/data/board back/hide_b1.o`、`/data/board back/skillswy_b.o`、`/data/board back/sun.o`、`/data/bss_record/heart.o`、`/u/w/wade/chinese.o`：第二字节为 0x5C 的字（功、许、么、俞、賊……）MudOS 存档时写成 `\\`，转成 GB 后字保留，多出的一个反斜杠转义了后面的引号（`成功\",` 字符串收不了尾），或反过来，MudOS 当作被 0x5C 转义的引号成了字符串的结尾（`出\"俞" >`）。`restore_object()` 报 `Illegal mapping format`，留言板等从空白开始。在出错处去掉或补上这一个反斜杠，直到能读回（`scripts/lpc_save_encoding.py --from-raw`），驱动核对全部能读回。

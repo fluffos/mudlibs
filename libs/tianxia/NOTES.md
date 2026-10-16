@@ -1064,3 +1064,7 @@ functionally re-tested live on this lib.
 ## 治疗/疗伤的属性名（2026-10-15，KB 06 §7.241）
 
 `receive_heal()`/`receive_curing()` 也只接受本库的种类。2 个文件（多为只调用 `receive_heal`/`receive_curing` 的药物、NPC）来自侠客行体系，按 qi→kee、jing→本库学习指令消耗的池、neili→force 改名（`scripts/lpc_port_es_props.py --any-file`）。
+
+## 存档读不出来：转码损坏（2026-10-15，KB 03 §4.4）
+
+`/data/login/s/shutong.o`、`/data/user/s/shutong.o` 在转码时坏了：原档里孤立的 GBK 前导字节被 `iconv -c` 连同后面的引号一起丢掉，`restore_object()` 报 `Illegal mapping format`，读档的对象（玩家、留言板、信件、表情）从空白开始。按 raw/ 原档重新解码（孤立字节丢掉、引号保留），驱动核对全部能读回（`scripts/lpc_save_encoding.py --from-raw`、`scripts/lpc_save_restore_check.py`）。

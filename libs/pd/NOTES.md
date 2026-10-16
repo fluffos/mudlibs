@@ -489,3 +489,7 @@ fresh driver boot plus the full long-sit idle window below.
 
 - `d/old/citrin.old/rooms/` 三个房间 `set_items` 的键写成 `("grip", "hand grip")`，逗号只留最后一个名字；改为数组键 `({ ... })`（`std/room/items.lpc` 会展开数组键）。载入无回退。
 - 2026-10-14: `adm/save/users/rid/seeker.o` held two Latin-1 bytes in `real_name`, so `restore_object()` stopped with `Invalid utf8 string`. `scripts/lpc_save_encoding.py` transcoded it from Latin-1 (KB 03 §4).
+
+## Save files the onboarding transcode broke (2026-10-15, KB 03 §4.4)
+
+`/adm/save/boards/spell_idea.o`, `/adm/save/letters/2/1249616752.o`, `/adm/save/users/rid/kenshiro.o`: the archive's Windows-1252 bytes (a `\x92` apostrophe, `¿`, `¡`) were run through `iconv -f gb18030 -c`, which dropped an undecodable byte together with the quote after it, so `restore_object()` stopped with `Illegal mapping format` and the object started empty. Re-decoded from raw/ as Windows-1252 (`scripts/lpc_save_encoding.py --from-raw`); the driver restores each one now (`scripts/lpc_save_restore_check.py`).

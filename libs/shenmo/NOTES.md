@@ -1073,3 +1073,17 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 ## 技能名拼错：技能文件里拼错自己的名字（2026-10-15，KB 06 §7.249）
 
 技能自己的文件（或它的绝招目录）里，`query_skill()` 读的是差一个字母的自己的名字，永远得 0：“基本功夫要高过本技能”之类的限制从不生效，按等级取招、计算伤害的那一项一直是 0。改为本技能的名字（`scripts/lpc_fix_skill_typo.py` 的 self 判据）：`chanyun-tui`→`chuanyun-tui`（`chuanyun-tui/shuangjue`、`chuanyun-tui/shuangjue`）；`xiyu-tiezhang`→`xiyu-tiezheng`（`xiyu-tiezheng`、`xiyu-tiezheng`）；`lianuuan-zhang`→`lianhuan-zhang`（`lianhuan-zhang`）。
+
+## 柔云步法「柔云纵」有时报错（2026-10-15，KB 06 §7.251）
+
+`rouyun-steps/zong` 随机把人送到三个房间之一：精、精力已经扣了，“乘云而去了”也说了，送不过去时人留在战斗里并报错。本库没有 `/d/city/wumiao`、`/d/city/kedian`、`/d/city/guangchang`，每次都报错；改用本库的城隍庙 `/d/city/chenghuang`、南城客栈 `/d/city/kezhan`、十字街头 `/d/city/center`。
+
+
+## 银索金铃「点穴」对空手的对手报错（2026-10-15，KB 06 §7.246）
+
+`yinsuo-jinling/dian` 失手时三种描写之一是“真气贯注”加对手兵器的名字，对手空手时 `ob` 为 0，三次失手有一次报错。改为 `(objectp(ob) ? ob->query("name") : "全身")`（泥潭一系原本就写作“真气贯注全身”）。
+
+
+## 存档读不出来：转码损坏（2026-10-15，KB 03 §4.4）
+
+`/u/snowtu/data/user/g/guang.oo.o` 在转码时坏了：原档里孤立的 GBK 前导字节被 `iconv -c` 连同后面的引号一起丢掉，`restore_object()` 报 `Illegal mapping format`，读档的对象（玩家、留言板、信件、表情）从空白开始。按 raw/ 原档重新解码（孤立字节丢掉、引号保留），驱动核对全部能读回（`scripts/lpc_save_encoding.py --from-raw`、`scripts/lpc_save_restore_check.py`）。

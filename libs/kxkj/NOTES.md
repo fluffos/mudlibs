@@ -1056,3 +1056,17 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply k
 ## 独孤九剑招式表越界（2026-10-15，KB 06 §7.243）
 
 `daemon/skill/lonely-sword.lpc` 的 `query_action()` 按 15 招写的取招表（`action[random(9) + 6]` 等），文件里只有 8 招：100 级时有解谜标记 200 次出招 160 次报 `Array index out of bounds`，没有标记 99 次。加 `pick_action()`，越界时取最后一招；实测 0 次。
+
+## 存档读不出来：转码损坏（2026-10-15，KB 03 §4.4）
+
+`/data/board/guilty.o`、`/data/board/skillswy_b.o` 在转码时坏了：原档里孤立的 GBK 前导字节被 `iconv -c` 连同后面的引号一起丢掉，`restore_object()` 报 `Illegal mapping format`，读档的对象（玩家、留言板、信件、表情）从空白开始。按 raw/ 原档重新解码（孤立字节丢掉、引号保留），驱动核对全部能读回（`scripts/lpc_save_encoding.py --from-raw`、`scripts/lpc_save_restore_check.py`）。
+
+
+## 存档读不出来：BIG5/GBK 0x5C 字后的反斜杠（2026-10-15，KB 03 §4.4）
+
+`/data/board/bss.o`、`/data/board/dancer.o`、`/data/board/hide_b1.o`、`/data/board/sun.o`、`/data/bss_record/heart.o`、`/u/w/wade/chinese.o`：第二字节为 0x5C 的字（功、许、么、俞、賊……）MudOS 存档时写成 `\\`，转成 GB 后字保留，多出的一个反斜杠转义了后面的引号（`成功\",` 字符串收不了尾），或反过来，MudOS 当作被 0x5C 转义的引号成了字符串的结尾（`出\"俞" >`）。`restore_object()` 报 `Illegal mapping format`，留言板等从空白开始。在出错处去掉或补上这一个反斜杠，直到能读回（`scripts/lpc_save_encoding.py --from-raw`），驱动核对全部能读回。
+
+
+## 留言板 mblade_b 读不出来（2026-10-15，KB 03 §4.4）
+
+`data/board/mblade_b.o` 原档里一篇留言的标题是 `"师□,`，少了右引号（GBK 的“□”是真字符），`restore_object()` 报错，整个板子空白。补上引号，驱动核对能读回。

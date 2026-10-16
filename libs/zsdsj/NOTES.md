@@ -1109,3 +1109,7 @@ eval/lpcc 觸發之異常一貫的存疑處理原則，未在本輪確認為真�
 `std/inherit/feature/module/object/_object_action_mod.lpc` 头注释里的 `object/*)` 被编译器当作嵌套注释报警，改写成 `object/ files)`。能编译的文件警告清零，regress 0。
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。11 个文件 16 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/std/module/room/inherit/_heart_beat_store.lpc`（`productdesire -=`）、`/std/module/room/inherit/_heart_beat_store.lpc`（`desire +=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+
+## 存档读不出来：转码损坏（2026-10-15，KB 03 §4.4）
+
+`/data/emotion/emotion.o` 在转码时坏了：原档里孤立的 GBK 前导字节被 `iconv -c` 连同后面的引号一起丢掉，`restore_object()` 报 `Illegal mapping format`，读档的对象（玩家、留言板、信件、表情）从空白开始。按 raw/ 原档重新解码（孤立字节丢掉、引号保留），驱动核对全部能读回（`scripts/lpc_save_encoding.py --from-raw`、`scripts/lpc_save_restore_check.py`）。
