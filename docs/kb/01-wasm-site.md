@@ -70,6 +70,15 @@ byte-preserving the original behavior.
   WASM.** Guard these shapes on sight:
   - `DNS_MASTER->query_muds()` or a mirror-site check in `logind`: wrap
     in `if (find_object(DNS_MASTER))`; absent means skip.
+  - The ES2 `Mud_name()` macro (`include/net/macros.h`, 70 libs) calls
+    `DNS_MASTER->query_mud_name()` unguarded, so the first emote or
+    channel line that prints `name(id@MUD)` loads `dns_master` natively
+    and raises under WASM. If `logind` gates on `query_doing_end()`, a
+    `dns_master` with a bad port (a decompiled MudOS `get_config(14)`,
+    §7.89) loads but never finishes, and every later connection is told
+    the site is syncing (`longyunmeng_binary`). Guard the macro, and any
+    copy expanded in `channeld`: `find_object(DNS_MASTER) ?
+    DNS_MASTER->query_mud_name() : "<the mud's name>"`.
   - A `VERSION_D->is_version_ok()` gate (中华英雄/终极地狱 lineage): guard
     with `find_object(VERSION_D) &&`; absent means allow.
   - `MESSAGE_D->find_chatter()` in `check_ok()`. MESSAGE_D can't compile

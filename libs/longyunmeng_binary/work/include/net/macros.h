@@ -15,7 +15,9 @@
 #define ntoh(x) capitalize(replace_string((x)?(x):""," ","."))
 
 // macros for getting resources
-#define Mud_name() (string)upper_case(ntoh(DNS_MASTER->query_mud_name()))
+// every player emote and channel line asks for the mud name; the intermud daemon is not preloaded and
+// cannot compile without sockets (web build), so without it the name is the one it would give
+#define Mud_name() (string)upper_case(ntoh(find_object(DNS_MASTER) ? DNS_MASTER->query_mud_name() : "JXONE"))
 #define mud_nname() htonn( Mud_name() )
 #define mud_port() __PORT__
 #define udp_port() (int)DNS_MASTER->query_udp_port()

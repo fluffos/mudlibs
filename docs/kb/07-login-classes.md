@@ -23,6 +23,15 @@ characters. Every check written against GBK bytes silently misbehaves.
 - **Word-wrap `sort_string()`** with an extra `i++` inside its
   `> 160` branch drops every other Chinese character from all output.
   Remove the `i++` and keep `len += 2` (`xyxyutf8`).
+- **`unit + short` keys cut with `[2..]`.** `inventory`, the brief-mode
+  item list of `feature/move` and some `look` copies count items in a
+  mapping keyed by `query("unit") + short()` and print `key[2..]` for a
+  single item, to drop a one-hanzi unit. Here that also eats the first
+  character of the name (「包子」 → 「子」) or the ESC of a coloured one. Use `[1..]`.
+  Detection: `grep -rE '== *1 *\? *\w+\[\w+\]\[2\.\.\] *:'`; live in 28
+  libs on 2026-10-15, fixed only in `longyunmeng_binary` (sweep candidate).
+  Same family: `feature/item_make`'s `get_item_id()` splits names into
+  two-hanzi words with `[0..3]` / `len > 4` (4 libs).
 
 **Standing rule:** registration isn't verified until a REAL Chinese name
 (e.g. 秦风) has been accepted into the next stage.

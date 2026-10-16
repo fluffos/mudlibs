@@ -190,3 +190,42 @@ call`）读出这个版本有 116 个运算符，比 v22pre11 标准多 3 个：
 和护甲、宝石戒指、`adai-quanfa` 等六门技能的招式表），由玩家的动作触发时才能加载，批量加载时没有玩家；以及
 网络守护进程和缺数据文件的 `d/miwudao/secret/npc/room`。
 
+## 深度功能测试（§10.7，2026-10-15，FluffOS 原生 + WASM）
+
+原生驱动（`build-debug`）在由提交后的树建的干净副本上跑，纯文字 telnet 客户端：
+- 注册全流程（英文名 → 中文名 林风 → 密码 → 身份标识 → 天赋 → 魔法天赋「火」→ 邮箱 → 性别），新人物随机出生在
+  扬州武庙、北京客店、北疆小镇之一；`look`、`score`、`hp`、`i`、`who` 正常。
+- 断线后重连（「重新连线完毕」，之后指令照常，§7.108）；把注册时间往前调一小时后 `quit` 存档，过了游戏自己的
+  15 秒限流再登录，位置、死亡次数、最后杀你者、钱庄存款都在。
+- `fly yz`、走路、钱庄 `qu`、醉仙楼 `list`/`buy`/`eat`、`pick gift`/`chai gift`、表情 `smile`/`hi`、`help`、`time`。
+- 打架：`kill liumang` 和流氓头对打，火系魔法天赋的「火之屏障」挡伤害，技能长进，气血低时自动逃跑；
+  用 `force` 让郭靖去杀收破烂的，郭靖打出降龙十八掌的「惊天一击」（NPC 出招，见上面 `inherit/char/npc` 的修正）。
+- 死亡：鬼门关里白无常的五段对话只走一遍，之后还阳回到武庙；宝石降落的公告也出现了（`baoshid` 的修正）。
+- 管理员 `fluffos`：`update /d/city/wumiao` 成功，`goto`、`call`、`clone`、`force` 可用。整个过程 `log/debug.log`
+  里只有一条运行时错误，来自测试时用 `call` 误存成字符串的注册时间（`quit` 时减法出错），不是游戏的问题。
+
+测出来并修正的错误：
+- **（移植）第一个表情就把所有人挡在门外**：表情和频道消息要显示「名字(id@JXONE)」，`Mud_name()` 宏和
+  `channeld` 里展开的同一个宏都去问 `/adm/daemons/network/dns_master` 要名字，于是第一个 `smile` 就把这个没有
+  预载的守护进程加载起来；它的 `create()` 用 MudOS 的 `get_config(14)` 取端口，在 FluffOS 里这个位置是「mud ip」
+  （`"0.0.0.0" + 4`，`socket_bind()` 出错），`query_doing_end()` 永远是 0，`logind` 就对此后每一个新连线说
+  「『江西一站』正与主站同步中」并断开。改法：`include/net/macros.h` 的 `Mud_name()` 和 `channeld` 在守护进程
+  没加载时直接用它会给的名字 `JXONE`，不再顺手把它加载起来（网页版没有 socket，它根本编译不了，原来表情和频道
+  在网页版会直接出错）；`dns_master` 的端口改用 `__PORT__`，巫师手动加载它时能正常起来（`query_doing_end()`
+  为 1，登录照常）。
+- **（移植）物品清单吞掉第一个字**：`inventory` 和 `feature/move`（简略模式下进房间看到的物品）把同样的物品按
+  「单位 + 名字」归并，只有一件时切掉 `[2..]`，在 GBK 里是一个汉字的单位，在这里是两个字符：「包子(Baozi)」
+  显示成「子(Baozi)」，带颜色的名字切掉 ESC 后显示成「[1;31m幸运包」；改成 `[1..]`（KB 07 §8.1）。
+- **（移植）自制兵器的 id**：`feature/item_make` 把两字一词的名字按 GBK 字节数拆（`[0..3]`、`> 4`），迷雾森林
+  掉落的兵器 id 只剩「 sword」；按字符数拆以后是「毫光剑(Haoguang jian)」。
+- 网页版的 FluffOS 发布版（v2026.1001.0）读配置文件一行最多 120 字节，`config.fluffos` 第一行注释 127 字节，
+  网页版启动时报「Missing line: name」；注释改短（KB 08 §10.4 那一条）。
+  同一个文件里 `living hash table size : 100` 不是驱动接受的值（只收 4/16/64/256/1024/4096，KB 03），启动时报
+  `invalid new value`，改成 256。
+- 管理员账号按 KB 01 §1.5 预置：正常注册 `fluffos`，`adm/etc/wizlist` 加 `fluffos (boss)`。本版的巫师登录还要先过
+  「巫师登陆效验码」（`logind` 的 `get_wizpas()`，`login` 存档里的 `wizpasswd`，原来用 `/cmds/bos/wizpas` 设置），
+  预置的效验码和密码相同。
+
+WASM（`scripts/wasm_client.js`，本机的 build-wasm）：注册、`look`、`score`、表情、`fly yz`、钱庄、买东西、`i`、
+`help` 都正常；管理员登录（效验码 → 密码）后 `update` 成功。`wasm_status` 设为 `playable`。
+
