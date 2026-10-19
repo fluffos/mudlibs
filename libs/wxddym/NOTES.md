@@ -756,3 +756,11 @@ No new errors after the shop commands. Demo `fluffos` save churn
 ## set_name 的 id 参数传成字符串（2026-10-19，KB 06 §7.260）
 
 `set_name("海口大碗", "bowl");` 把物品的 id 写成了字符串，本库的 `set_name(string name, string *id)` 要的是数组，驱动在编译时报 `Bad type for argument 2 of set_name ( string * vs string )`，整个物件载入不了；旧驱动不检查参数类型，字符串里照样找得到这个词，物品能用 id 称呼。改成 `({ "bowl" })`，共 2 个文件：`/d/baituo/npc/obj/bowl.lpc`、`/d/baituo/obj/bowl.lpc`。（`scripts/lpc_fix_set_name_id.py`）
+
+## 从 nitan6 移植 dbase 的“对象参数”约定和 simul_efun 兜底（2026-10-19，KB 05 §7.15）
+
+本库的代码到处按 nitan 一系的约定写：`query("id", ob)`、`query_temp("fighting", me)`、`set("x", v, ob)`（第二个/末尾的参数是目标物件，等于 `ob->query("id")`），也到处用 `count_lt()`/`count_add()`、`time_period()`、`to_string()`、`good_bunch()` 这些全局函数。可是本库的 `feature/dbase.lpc`、`include/dbase.h` 还是旧签名 `query(string prop, int raw)`，simul_efun 里也没有这些函数：驱动在编译时报 `Bad type for argument 2 of query ( int vs object )`、`Undefined function query_temp/count_lt/time_period`，老村长、张无忌、拍卖/模块守护进程、降龙掌等一批招式都载入不了（1,425 个文件编译不过，其中 353 个靠这次移植解决）。照 nitan6 的做法移植：`dbase.h` 的原型和 `dbase.lpc` 的 `set/query/delete/set_temp/query_temp/delete_temp` 接受目标物件（`raw_or_ob`：整数是“原始值”标志，物件则转给它自己的 dbase）；`inherit/room/room.lpc`、`adm/daemons/examined.lpc`、`clone/user/user.lpc` 里覆盖这些函数的地方同步改签名；simul_efun 对象 `inherit F_TREEMAP` 并在 `adm/simul_efun/wizard.lpc` 里放不继承 F_DBASE 的对象用的兜底版本（同样带目标物件转发，招式 perform 文件就靠它），新增 `adm/simul_efun/ntefun.lpc`（`count()` 及 `count_*`、`time_period`、`to_string`、`range_random`、`base_dir`、`format_string`、`mapping_eqv`、`bunchp/good_bunch/bad_bunch`）。运行时探针（两个 NPC 互相 `query(…, 对方)`、`set(…, 7, 对方)`、非 dbase 对象裸调用 `query_temp(…, 对方)`）全部符合预期。同批里：移植后新能编译的文件里的 32 个未使用局部变量警告按规矩清掉；`d/zhongzhou/zhongzhoudu.lpc` 缺 `inherit ROOM;`（渡口房间），补上。
+
+## 同一个函数原样贴了两遍（2026-10-19，KB 06 §7.264）
+
+同一个文件里同一个函数被原样贴了两遍（除空白外逐字相同），驱动报 `Redeclaration of function`，整个物件载入不了。删掉第二份及以后的副本，共 1 处：`/kungfu/skill/jiuyin-hamagong.lpc` 的 `main_skill()`。（`scripts/lpc_fix_dup_functions.py`）

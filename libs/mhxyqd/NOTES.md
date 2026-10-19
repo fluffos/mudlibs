@@ -909,3 +909,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply m
 ## 武功名拼错的 NPC（2026-10-19，KB 06 §7.258）
 
 `set_skill("kunlun-shnfa", …)`、`map_skill("dodge", "shaolin-shnfa")` 这样的调用把武功名拼错了：本库没有这个武功文件，有的是拼对的那个。以前这种 NPC 在 `create()` 里报 `No such skill` 载入不了；武功缺失时跳过之后它们能载入，可是少了那门武功（`set_skill` 被跳过，`map_skill` 映射不到，门派弟子用普通轻功/拳脚）。按核对过的对照表改正，共 18 处、18 个文件：`dagonforce`→`dragonforce`（4 处）、`dragon-step`→`dragonstep`（4 处）、`yange_blade`→`yange-blade`（3 处）、`hellfire_whip`→`hellfire-whip`（2 处）、`lahua-shou`→`lanhua-shou`（2 处）、`changqaun`→`changquan`（2 处）、`cuixi-zhang`→`cuixin-zhang`（1 处）。（`scripts/lpc_fix_skill_names.py`）
+
+## 技能基类丢了“预备武功”那一段（2026-10-19，KB 06 §7.262）
+
+`feature/skill.lpc` 有 `skill_map`/`map_skill()`，却没有预备武功（`prepare_skill`）这一块：变量 `skill_prepare`、`prepare_skill()`、`query_skill_prepared()`、`query_skill_prepare()`。来自 xkx 系列的 NPC 在 `create()` 里调用 `prepare_skill("cuff", ...)`，于是 `Undefined function prepare_skill` 整个 NPC 载入不了。从同系的 xkx100 把这一块原样补回（声明加在 `skill_map` 后面，函数加在文件末尾），受益 NPC 2 个：`d/city/obj/npc/zhong`、`d/wuguan/npc/master`。（`scripts/lpc_transplant_function.py`）

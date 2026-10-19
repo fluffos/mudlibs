@@ -1543,3 +1543,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 ## 武功名拼错的 NPC（2026-10-19，KB 06 §7.258）
 
 `set_skill("kunlun-shnfa", …)`、`map_skill("dodge", "shaolin-shnfa")` 这样的调用把武功名拼错了：本库没有这个武功文件，有的是拼对的那个。以前这种 NPC 在 `create()` 里报 `No such skill` 载入不了；武功缺失时跳过之后它们能载入，可是少了那门武功（`set_skill` 被跳过，`map_skill` 映射不到，门派弟子用普通轻功/拳脚）。按核对过的对照表改正，共 80 处、63 个文件：`bixie-sword`→`pixie-sword`（32 处）、`kunlun-shnfa`→`kunlun-shenfa`（17 处）、`shaolin-shnfa`→`shaolin-shenfa`（12 处）、`tiaji-jian`→`taiji-jian`（4 处）、`lingbo-weibu`→`lingboweibu`（3 处）、`yunu-xinfa`→`yunv-xinfa`（3 处）、`yan-fly`→`yanfly`（2 处）、`meimv-quan`→`meinv-quan`（1 处）等共 14 个名字。（`scripts/lpc_fix_skill_names.py`）
+
+## feature/damage.lpc 丢了 set_ghost()（2026-10-19，KB 06 §7.262）
+
+`feature/damage.lpc` 里有 `int ghost` 和 `is_ghost()`，没有 `set_ghost(int i)`；木人、狼等 NPC 在 `create()` 里调用它，整个 NPC 报 `Undefined function set_ghost` 载入不了。从 xkx100 补回这一行函数，受益 NPC 9 个：`d/nanshaolin/npc/muren-fighter1`、`d/nanshaolin/npc/muren-fighter2`、`d/nanshaolin/npc/muren-fighter3`。（`scripts/lpc_transplant_function.py`）

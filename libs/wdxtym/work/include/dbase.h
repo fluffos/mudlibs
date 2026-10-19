@@ -7,16 +7,18 @@
 mapping query_entire_dbase();
 mapping query_entire_temp_dbase();
 
-mixed set(string prop, mixed data);
+// The optional trailing object of set/delete and the second argument of query may name the object whose
+// dbase is meant (query("id", ob) is ob->query("id")); see feature/dbase.lpc.
+varargs mixed set(string prop, mixed data, object ob);
 mixed set_vector(string prop, mixed owner, mixed func);
-varargs mixed query(string prop, int raw);
+varargs mixed query(string prop, mixed raw_or_ob);
 mixed add(string prop, mixed data);
-int delete(string prop);
+varargs int delete(string prop, object ob);
 
-mixed set_temp(string prop, mixed data);
+varargs mixed set_temp(string prop, mixed data, object ob);
 mixed set_temp_vector(string prop, mixed owner, mixed func);
-varargs mixed query_temp(string prop, int raw);
+varargs mixed query_temp(string prop, mixed raw_or_ob);
 mixed add_temp(string prop, mixed data);
-int delete_temp(string prop);
+varargs int delete_temp(string prop, object ob);
 
 #endif

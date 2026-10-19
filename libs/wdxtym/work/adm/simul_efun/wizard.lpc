@@ -7,3 +7,117 @@ string wizhood(mixed ob) {
 int wiz_level(mixed ob) {
   return SECURITY_D->get_wiz_level(ob);
 }
+
+///////////////////////
+// set/query/delete (and the _temp variants) here are a FALLBACK ONLY, hit by objects that do not inherit
+// F_DBASE (the martial-art performs, most daemons) and call them as bare global functions with the target
+// object as the trailing / second argument: query("jing", me), query_temp("apply", owner), set("x", v, ob).
+// feature/dbase.lpc defines the real, per-object versions for everything that does inherit F_DBASE. Called
+// as a genuine simul_efun this_object() is the simul_efun object itself, so a call WITHOUT a target would
+// read this file's own shared dbase; the `ob` redirect makes the calling convention of this lib's code
+// (query(prop, ob) is ob->query(prop)) behave as intended (KB 05 section 7.15).
+varargs mixed set(string prop, mixed data, object ob) {
+  if (ob && ob != this_object())
+    return ob->set(prop, data);
+
+  if (!mapp(dbase)) dbase = ([]);
+
+  if (strsrch(prop, '/') != -1)
+    return _set(dbase, explode(prop, "/"), data);
+
+  return dbase[prop] = data;
+}
+
+varargs mixed query(string prop, mixed raw_or_ob) {
+  mixed data;
+  object ob;
+  int raw;
+
+  if (objectp(raw_or_ob))
+    ob = raw_or_ob;
+  else
+    raw = raw_or_ob;
+
+  if (ob && ob != this_object())
+    return ob->query(prop);
+
+  if (!mapp(dbase)) return 0;
+
+  if (undefinedp(dbase[prop]) && (strsrch(prop, '/') != -1))
+    data = _query(dbase, explode(prop, "/"));
+  else
+    data = dbase[prop];
+
+  if (undefinedp(data) && default_ob)
+    data = default_ob->query(prop, 1);
+
+  if (raw) return data;
+
+  return evaluate(data, this_object());
+}
+
+varargs int delete(string prop, object ob) {
+  if (ob && ob != this_object())
+    return ob->delete(prop);
+
+  if (!mapp(dbase)) return 0;
+
+  if (strsrch(prop, '/') != -1)
+    return _delete(dbase, explode(prop, "/"));
+  else {
+    map_delete(dbase, prop);
+    return 1;
+  }
+}
+
+varargs mixed set_temp(string prop, mixed data, object ob) {
+  if (ob && ob != this_object())
+    return ob->set_temp(prop, data);
+
+  if (!mapp(tmp_dbase)) tmp_dbase = ([]);
+
+  if (strsrch(prop, '/') != -1)
+    return _set(tmp_dbase, explode(prop, "/"), data);
+
+  return tmp_dbase[prop] = data;
+}
+
+varargs mixed query_temp(string prop, mixed raw_or_ob) {
+  mixed data;
+  object ob;
+  int raw;
+
+  if (objectp(raw_or_ob))
+    ob = raw_or_ob;
+  else
+    raw = raw_or_ob;
+
+  if (ob && ob != this_object())
+    return ob->query_temp(prop);
+
+  if (!mapp(tmp_dbase)) return 0;
+
+  if (strsrch(prop, '/') != -1)
+    data = _query(tmp_dbase, explode(prop, "/"));
+  else
+    data = tmp_dbase[prop];
+
+  if (functionp(data) && !raw)
+    return (* data) (this_object());
+  else
+    return data;
+}
+
+varargs int delete_temp(string prop, object ob) {
+  if (ob && ob != this_object())
+    return ob->delete_temp(prop);
+
+  if (!mapp(tmp_dbase)) return 0;
+
+  if (strsrch(prop, '/') != -1)
+    return _delete(tmp_dbase, explode(prop, "/"));
+  else {
+    map_delete(tmp_dbase, prop);
+    return 1;
+  }
+}

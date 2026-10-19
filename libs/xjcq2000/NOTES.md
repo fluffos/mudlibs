@@ -937,3 +937,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 ## set_name 的 id 参数传成字符串（2026-10-19，KB 06 §7.260）
 
 `set_name("海口大碗", "bowl");` 把物品的 id 写成了字符串，本库的 `set_name(string name, string *id)` 要的是数组，驱动在编译时报 `Bad type for argument 2 of set_name ( string * vs string )`，整个物件载入不了；旧驱动不检查参数类型，字符串里照样找得到这个词，物品能用 id 称呼。改成 `({ "bowl" })`，共 2 个文件：`/d/baituo/npc/obj/bowl.lpc`、`/d/baituo/obj/bowl.lpc`。（`scripts/lpc_fix_set_name_id.py`）
+
+## 武功文件里混进了分页器的文字（2026-10-19，KB 06 §7.263）
+
+`kungfu/skill/boxing.lpc` 第一行是 `> more boxing.c  // houquan.c 猴拳`，`kungfu/skill/westsword.lpc` 两个数组元素中间有一行 `已 经 显 示 26 % (ENTER 继 续 下 一 页 ， q 离 开 ， b 前 一 页)`：这两个文件是从 `more` 分页器里复制出来的，命令行和分页提示留在了文本里，驱动报 `unexpected L_ORDER`、`Illegal character 0xe5`。前后的代码是完整的（与 chidi、yxjh 的同名文件逐记号对照，除了数值调整之外一致），删掉这两行就能载入。

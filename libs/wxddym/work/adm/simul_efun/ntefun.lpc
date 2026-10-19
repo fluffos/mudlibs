@@ -1,0 +1,201 @@
+// ntefun.c -- global helpers the code of this lib calls and the archive's simul_efun lacks: the arbitrary-precision
+// count_*() family, time_period(), to_string(), range_random(), base_dir(), format_string(), mapping_eqv() and the
+// bunch tests. Taken from nitan6, whose simul_efun directory has them (KB 05 section 7.15, KB 06 section 7.261).
+// Included last by adm/single/simul_efun.lpc: good_bunch() and bad_bunch() call the query() fallback of wizard.lpc.
+
+int array_eqv(mixed arr1, mixed arr2);
+int mapping_eqv(mapping map1, mapping map2);
+
+// emote_d.lpc and the gambling/arena/enterprise daemons call count(n1, op, n2), a bignum efun of the original
+// server's driver; this driver has none. Ordinary 64-bit int arithmetic stands in for it: "+", "-", "*", "/" return
+// a string (every call site stores the result as a string), the comparisons return 0/1.
+mixed count(mixed n1, string op, mixed n2) {
+  int a, b;
+
+  a = intp(n1) ? n1 : atoi(n1);
+  b = intp(n2) ? n2 : atoi(n2);
+
+  switch (op) {
+    case "+": return "" + (a + b);
+    case "-": return "" + (a - b);
+    case "*": return "" + (a * b);
+    case "/": return "" + (b ? a / b : 0);
+    case "<": return a < b;
+    case ">": return a > b;
+    case "<=": return a <= b;
+    case ">=": return a >= b;
+    case "==": return a == b;
+  }
+  return "0";
+}
+
+string count_add(mixed n1, mixed n2) {
+  return count(n1, "+", n2);
+}
+
+string count_mul(mixed n1, mixed n2) {
+  return count(n1, "*", n2);
+}
+
+string count_sub(mixed n1, mixed n2) {
+  return count(n1, "-", n2);
+}
+
+string count_div(mixed n1, mixed n2) {
+  return count(n1, "/", n2);
+}
+
+int count_lt(mixed n1, mixed n2) {
+  return count(n1, "<", n2);
+}
+
+int count_gt(mixed n1, mixed n2) {
+  return count(n1, ">", n2);
+}
+
+int count_le(mixed n1, mixed n2) {
+  return count(n1, "<=", n2);
+}
+
+int count_ge(mixed n1, mixed n2) {
+  return count(n1, ">=", n2);
+}
+
+int count_eq(mixed n1, mixed n2) {
+  return count(n1, "==", n2);
+}
+
+string time_period(int time) {
+  int t, d, h, m, s;
+  string str;
+
+  t = time;
+  s = t % 60; t /= 60;
+  m = t % 60; t /= 60;
+  h = t % 24; t /= 24;
+  d = t;
+
+  if (d) str = chinese_number(d) + "天";
+  else str = "";
+
+  if (h) str += chinese_number(h) + "小时";
+  if (m) str += chinese_number(m) + "分";
+  str += chinese_number(s) + "秒";
+
+  return str;
+}
+
+string to_string(mixed arg) {
+  return stringp(arg) ? arg : save_variable(arg);
+}
+
+int range_random(int i, int j) {
+  return random(i < j ? j - i + 1 : i - j + 1) + ((i < j) ? i : j);
+}
+
+string base_dir(object obj) {
+  string filename;
+  int at;
+
+  filename = base_name(obj);
+  at = strsrch(filename, "/", -1);
+  filename = filename[0..at];
+  return filename;
+}
+
+varargs string format_string(string str, int wrap, int ignore_return) {
+  string tmp = "";
+  int len = 0, ansi = 0, clen = 0;   // clen 是已出现的汉字个数。
+
+  if (!str || !stringp(str))
+    return 0;
+
+  if (!wrap)
+    wrap = 56;
+
+  foreach (int ch in str) {
+    if (ch == '\n' && ignore_return)       // return char
+      continue;           // ignore it.
+
+      tmp += sprintf("%c", ch);
+
+    if (ch == 0x1b) {      // esc char
+      ansi = 1;
+    }
+    if (!ansi) {
+      len++;
+      if (ch > 127)
+        clen++;
+    } else if (ch == 'm' || ch == 'H' || ch == 'J') {
+      ansi = 0;
+    }
+    if (len >= wrap)
+      if ((!(clen % 2)) || (ch == ' ')) {
+        tmp += "\n";
+        wrap = 60;
+        len = 0;
+      }
+  }
+  return tmp + "\n";
+}
+
+int array_eqv(mixed arr1, mixed arr2) {
+  int s_arr = sizeof(arr1);
+  if (s_arr != sizeof(arr2)) return 0;
+  if (s_arr < 1) return 1;
+  for (int i = 0; i < sizeof(arr1); i++) {
+    if (arrayp(arr1[i]) && arrayp(arr2[i])) {
+      if (!array_eqv(arr1[i], arr2[i])) return 0;
+    } else if (mapp(arr1[i]) && mapp(arr2[i])) {
+      if (!mapping_eqv(arr1[i], arr2[i])) return 0;
+    } else if (arr1[i] != arr2[i]) return 0;
+  }
+  return 1;
+}
+
+int mapping_eqv(mapping map1, mapping map2) {
+  int m_arr = sizeof(map1);
+  mixed m_keys1, m_keys2;
+
+  if (m_arr != sizeof(map2)) return 0;
+  if (m_arr < 1) return 1;
+  m_keys1 = keys(map1);
+  m_keys2 = keys(map2);
+
+  for (int i = 0; i < sizeof(m_keys1); i++) {
+    if (mapp(m_keys1[i]) && mapp(m_keys2[i])) {
+      if (!mapping_eqv(m_keys1[i], m_keys2[i])) return 0;
+    } else if (arrayp(m_keys1[i]) && arrayp(m_keys2[i])) {
+      if (!array_eqv(m_keys1[i], m_keys2[i])) return 0;
+    } else if (m_keys1[i] != m_keys2[i]) {
+      return 0;
+    }
+
+    // Value check
+    if (mapp(map1[m_keys1[i]]) && mapp(map2[m_keys2[i]])) {
+      if (!mapping_eqv(map1[m_keys1[i]], map2[m_keys2[i]])) return 0;
+    } else if (arrayp(map1[m_keys1[i]]) && arrayp(map2[m_keys2[i]])) {
+      if (!array_eqv(map1[m_keys1[i]], map2[m_keys2[i]])) return 0;
+    } else if (map1[m_keys1[i]] != map2[m_keys2[i]]) return 0;
+  }
+  return 1;
+}
+
+int bunchp(object ob) {
+  if (query("bunch/bunch_name", ob))
+    return 1;
+}
+
+int good_bunch(object ob) {
+  if (stringp(query("bunch/type", ob)) &&
+    query("bunch/type", ob) == "good" &&
+    bunchp(ob))
+    return 1;
+}
+
+int bad_bunch(object ob) {
+  if (stringp(query("bunch/type", ob)) &&
+    query("bunch/type", ob) == "bad" &&
+    bunchp(ob))
+    return 1;
+}

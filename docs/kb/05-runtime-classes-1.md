@@ -263,6 +263,26 @@ wrappers call the local `count()` of `db_compat.lpc` (included earlier). Same
 edit in the four twins; their `quest*/flagwar/flagd.lpc` also took nitan6's
 `remove_ansi(...)` for `ANSI_D->remove_ansi(...)` and `to_int(reward_money * 0.9)`.
 Detection: `Undefined function count_` in a scan; `lpc_twin_port.py audit nitan6 DST`.
+**Residual, wxddym and wdxtym (2026-10-19):** their `feature/dbase.lpc` and `include/dbase.h` kept the
+old `query(string prop, int raw)` and had no simul_efun fallback or `count_*`, while their code is
+written for the object-argument calling convention: `query("power", f_obj)`, `query_temp("fighting",
+this_player())`, `set("x", v, ob)`, `addn()`, `count_lt()`, `time_period()`. NOTES had called the
+`query()`/`query_temp()` arg-2 family "unrelated" and left it (162 files hit one grep). wxddym:
+1,425 -> 1,072 files that do not compile. The nitan6 recipe, in five places: (1) `dbase.h` and
+`dbase.lpc`: `set/delete/set_temp/delete_temp(..., object ob)` and `query/query_temp(prop,
+mixed raw_or_ob)` redirect to `ob->...` when `ob != this_object()`; (2) the overrides above F_DBASE
+(`inherit/room/room.lpc`, `adm/daemons/examined.lpc`, `clone/user/user.lpc`) take the same
+signatures, and pass `raw_or_ob`/`ob` on to `::query`/`::set`; (3) the simul_efun object `inherit
+F_TREEMAP`, declares `dbase`/`tmp_dbase`/`default_ob`, and `adm/simul_efun/wizard.lpc` holds the
+fallback versions for objects without F_DBASE (the martial-art performs: `query("jing", me)`);
+(4) a new `adm/simul_efun/ntefun.lpc`, included last, with `count()` and `count_*`, `time_period`,
+`to_string`, `range_random`, `base_dir`, `format_string`, `mapping_eqv`, `bunchp/good_bunch/bad_bunch`
+(and `addn/addn_temp` for wdxtym, which had no shim); a function needs a forward prototype for a later
+one in the same file (`array_eqv`/`mapping_eqv`); (5) probe it: `rt.sh LIB probe.lpc` with two
+NPCs: `b->query(k, a)` is `a`'s, `query(k, a)` from a plain object is `a`'s, `set(k, 7, a)` lands in `a`.
+Not done: `full_self`/`clear_weak` (NPC base), `attack_power`/`defense_power`/`damage_power` (skills
+daemon), `damage_msg`, the building daemon's `set_enter_*_level`: each needs a function the lib's base
+never had, with its own dependencies.
 
 ### 7.16 Stale shipped timestamps feed an unbounded catch-up loop
 **Symptom:** `while (rank["time"] + 3600 < t) {...decay...}` over
