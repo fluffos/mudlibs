@@ -156,5 +156,7 @@
 #define SGN(x)                  ((x) > 0 ? 1 : ((x) < 0 ? -1 : 0))
 #define F_VENDOR_SALE            "/feature/vendor_sale"
 #define F_QUEST                  "/feature/quest"
+#define S_RING                   "/inherit/gems/ring"
+#define M_WEAPON                 "/inherit/weapon/weapon"
 
 

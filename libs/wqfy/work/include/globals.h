@@ -153,7 +153,6 @@
 #define MAILDIR "/data/mail/"
 #define BOOK                     "/std/item/book"
 #define F_UNIQUE                 "/feature/unique"
-#define F_NOCLONE                "/feature/noclone"
 // Profiling switches
 //
 // If you changed any of these defines, you'll need reboot to make it 

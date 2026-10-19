@@ -494,6 +494,6 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply w
 - `/std/item/book.lpc`（宏 `BOOK`）←xkyx3b。xkyx3b 和 xkyxciii 里这 40 本书与本库逐字节相同，这个基类就是给它们写的：画一个带书名的彩色封面，颜色读书上的 `bcolor`/`lcolor`/`fcolor`/`tcolor`。
 - 基类调用 `space(n)`，而 `adm/simul_efun/atoi.lpc` 里只有 `atoi()`：补上 `itoa()` 和 `space()`，文字照 xkyx3b 的 `string.lpc`（`scripts/lpc_add_sefun.py space`）。
 - 40 本书的 `set("fcolor", BWHT)` 和基类都要背景色宏 `BWHT`，而 `include/ansi.h` 里这一行被注释掉了（`// #define BWHT ESC+"[47m"`，另外七个背景色都在）：恢复。
-- `/feature/unique.lpc`（宏 `F_UNIQUE`，10 个对象）←zzfy3，`/feature/noclone.lpc`（宏 `F_NOCLONE`，4 个对象）←sjshv150。
+- `/feature/unique.lpc`（宏 `F_UNIQUE`，10 个对象）←zzfy3。`F_NOCLONE` 也试过（`/feature/noclone.lpc` ←sjshv150）：基类载得进来，但用它的 4 个大宗师 NPC 还要 `NPC_D`，一个也载不进来，所以又撤掉了。
 
-57 个对象里 53 个现在载入（HEAD 上一个都不行），逐个与 HEAD 对比没有退步。剩下 4 个是 `include/npc/ultra/{dugu,huang,kuihua,shenni}.lpc`（大宗师 NPC）：它们要 `NPC_D` 守护进程和 `ultrap()`，本库没有这一套，不动。新载入的 NPC 带出的警告（`obj/npc/*-shi` 等的未用局部变量）留给标准一轮修复。（`scripts/lpc_restore_bases.py --evidence --retry`）
+56 个对象里 52 个现在载入（HEAD 上一个都不行），逐个与 HEAD 对比没有退步。剩下 4 个是 `include/npc/ultra/{dugu,huang,kuihua,shenni}.lpc`（大宗师 NPC）：它们要 `NPC_D` 守护进程和 `ultrap()`，本库没有这一套，不动。新载入的 NPC 带出的警告（`obj/npc/*-shi` 等的未用局部变量）留给标准一轮修复。（`scripts/lpc_restore_bases.py --evidence --retry`）

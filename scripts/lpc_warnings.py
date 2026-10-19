@@ -174,6 +174,10 @@ def scan(lib, skips=()):
             if f.endswith(".lpc"):
                 objs.append("/" + os.path.join("" if rel == "." else rel, f[:-4]).replace(os.sep, "/"))
     objs.sort()
+    if skips:
+        # a --skip pattern also keeps the object out of the compile: a lib that carries dated backup copies of itself
+        # (wdxtym: 22,795 rooms under /backup/) spends its whole scan there otherwise, and the diagnostics were dropped anyway
+        objs = [o for o in objs if not any(re.search(x, o + ".lpc") for x in skips)]
     raw = batch_compile(lib, objs)
     seen, rows = set(), []
     for m in DIAG.finditer(raw):

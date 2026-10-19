@@ -172,4 +172,5 @@
 // in effect.
 
 #define PROFILE_COMMANDS
+#define M_WEAPON                 "/inherit/weapon/weapon"
 #undef PROFILE_COMMANDS

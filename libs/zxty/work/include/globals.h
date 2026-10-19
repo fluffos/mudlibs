@@ -183,6 +183,7 @@
 #define RING                     "/inherit/weapon/ring"
 #define F_SILENTDEST "/feature/silentdest.lpc"
 #define LOOK_CMD "/cmds/std/look"
+#define MI_XIAO                  "/inherit/misc/_xiao"
 
 // Profiling switches
 //

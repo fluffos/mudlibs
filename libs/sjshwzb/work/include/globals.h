@@ -176,3 +176,4 @@
 #define NEW_USER_LOCK 0
 #define F_DISASTER "/feature/disaster.lpc"
 #define MUSIC_D "/adm/daemons/musicd"
+#define YUEQI                    "/std/item/yueqi"

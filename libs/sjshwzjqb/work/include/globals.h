@@ -174,3 +174,4 @@
 #define WEAPON_OB "/d/obj/weapon/"
 #define F_DISASTER "/feature/disaster.lpc"
 #define MUSIC_D "/adm/daemons/musicd"
+#define YUEQI                    "/std/item/yueqi"

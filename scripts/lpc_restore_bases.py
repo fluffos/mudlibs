@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""scripts/lpc_restore_bases.py [SLUG...] [--min-rel N] [--evidence K] [--retry] [--apply] [--list DIR] [--refresh]
+"""scripts/lpc_restore_bases.py [SLUG...] [--min-rel N] [--evidence K] [--prefer SLUG] [--retry] [--apply] [--list DIR] [--refresh]
 
 A base class the lib never shipped, restored from a sibling lib (KB 04 section 6.15).  `inherit INDOOR_ROOM;` where no header
 of the lib defines `INDOOR_ROOM`, or `inherit "/std/room/class_guild";` where the file is not in the lib, and every object that
@@ -18,7 +18,9 @@ is left alone, and a path the lib already has is never overwritten.  Files this 
 does not load.  The base may itself inherit a base the lib lacks: run the tool again, it finds that one too.
 Without --apply the plan is printed (ADOPT lines); `--list DIR` writes DIR/bases-SLUG.list (the base files and their users,
 `/path.lpc` per line) for the load check; `--refresh` rebuilds the relatedness cache.
-`--retry` proposes the bases an earlier run took back as well (marked "was rejected"): a base that did not load then may load now that its own prerequisite
+An adopted base brings the headers it includes that the lib lacks and the donor has (`"gems.h"` next to the base, `<medical.h>` in /include; `HEADER` lines):
+the gem sockets of wxddym need `feature/gems.h`, the medical books `medical.h`, the shop NPCs that inherit `KZZNPC` `<kzznpc.h>` (headers of the objects that inherit the base come along as well).  `SLUG... --headers [--apply]` does it for bases adopted before.  `--prefer SLUG` takes the donor from that lib whenever it carries the file (a subsystem whose parts must come from one version: the gem sockets of wxddym from haiyang2, whose
+`clone/gem/ring*.lpc` are the very files wxddym has).  `--retry` proposes the bases an earlier run took back as well (marked "was rejected"): a base that did not load then may load now that its own prerequisite
 (a sefun, a header) was restored.  `--skip SLUG,SLUG` leaves libs out (young hobby repos the museum does not restore).  --apply records what it added in
 $LPC_SCRATCH/bases-applied-SLUG.json; `--undo SLUG /path[ /path...]` takes a base back (the file, its macro line)."""
 import collections
@@ -36,6 +38,34 @@ REPO = R.REPO
 SCRATCH = os.environ.get("LPC_SCRATCH") or os.path.expanduser("~/.cache/lpc-scratch")
 CACHE = os.path.join(SCRATCH, "relatedness.pkl")
 INHL = re.compile(rb'(?m)^[ \t]*inherit[ \t]+"([^"\n]+)"[ \t]*;')
+INC = re.compile(rb'(?m)^[ \t]*#[ \t]*include[ \t]*([<"])([^>"\n]+)[>"]')
+
+
+def headers_of(blob, T, D, P, text, seen=None, depth=0):
+    """the headers an adopted base includes that this lib lacks and the donor has: [(path, donor bytes' path)].  `"x.h"` is looked up next to the base, then in /include;
+    `<x.h>` in /include; a name the lib has at any of those places is not touched."""
+    seen = set() if seen is None else seen
+    out = []
+    base_dir = os.path.dirname(P)
+    for kind, raw in INC.findall(text):
+        name = raw.decode("utf-8", "replace").strip()
+        if not name.endswith(".h") or name.startswith("/") or ".." in name:
+            continue
+        cands = ([os.path.normpath(base_dir + "/" + name)] if kind == b'"' else []) + [os.path.normpath("/include/" + name)]
+        if any(c.lstrip("/") in blob.get(T, {}) for c in cands):
+            continue
+        for c in cands:
+            if c.lstrip("/") in blob.get(D, {}) and c not in seen:
+                seen.add(c)
+                out.append(c)
+                if depth < 3:
+                    try:
+                        sub = open(f"{REPO}/libs/{D}/work{c}", "rb").read()
+                    except OSError:
+                        sub = b""
+                    out += headers_of(blob, T, D, c, sub, seen, depth + 1)
+                break
+    return out
 
 
 def relatedness(refresh):
@@ -89,10 +119,16 @@ def undo(slug, paths):
         if not ent:
             print(f"UNDO  {slug} {P}: not in the manifest")
             continue
-        f = f"{REPO}/libs/{slug}/work{P}.lpc"
+        rel = ent.get("file") or f"{P}.lpc"
+        f = f"{REPO}/libs/{slug}/work{rel}"
         if os.path.exists(f):
-            subprocess.run(["git", "reset", "-q", "--", f"libs/{slug}/work{P}.lpc"], cwd=REPO, capture_output=True)
+            subprocess.run(["git", "reset", "-q", "--", f"libs/{slug}/work{rel}"], cwd=REPO, capture_output=True)
             os.remove(f)
+        for h in ent.get("headers", []):
+            hf = f"{REPO}/libs/{slug}/work{h}"
+            if os.path.exists(hf):
+                subprocess.run(["git", "reset", "-q", "--", f"libs/{slug}/work{h}"], cwd=REPO, capture_output=True)
+                os.remove(hf)
         if ent.get("macro") and hdr:
             b = open(hdr, "rb").read()
             out = re.sub(rb"(?m)^#define %s +\"%s\"\r?\n" % (re.escape(ent["macro"].encode()), re.escape(P.encode())), b"", b)
@@ -104,6 +140,38 @@ def undo(slug, paths):
         json.dump(sorted(rj), open(f"{SCRATCH}/bases-rejected-{slug}.json", "w"))
         print(f"UNDO  {slug} {P}")
     json.dump(mf, open(f"{SCRATCH}/bases-applied-{slug}.json", "w"), indent=1)
+
+
+def own_defs(T, files):
+    """{macro: path} of the `#define NAME "/path"` lines the lib's objects see: the global header (a later define of the same name wins, as in the driver), then the
+    headers of /include, /secure/include, /adm/include, /sys; a name those headers define with two different paths is dropped (a header in a sub-directory
+    that redefines ROOM is not the lib's ROOM)"""
+    files = set(files)
+    out, seen, amb = {}, {}, set()
+
+    def parse(rr):
+        try:
+            b = open(f"{REPO}/libs/{T}/work{rr}", "rb").read()
+        except OSError:
+            return []
+        return [(m.group(1).decode(), m.group(2).decode("utf-8", "replace")) for m in R.DEFQ.finditer(b)]
+    gh = R.global_header(T, files)
+    if gh:
+        for n, p in parse(gh):
+            out[n] = p
+    for rr in sorted(files):
+        if not rr.endswith(".h") or rr == gh or R.SKIP.search(rr) or not rr.startswith(("/include/", "/secure/include/", "/adm/include/", "/sys/")):
+            continue
+        for n, p in parse(rr):
+            if n in out:
+                continue
+            if n in seen and seen[n] != p:
+                amb.add(n)
+            seen.setdefault(n, p)
+    for n, p in seen.items():
+        if n not in amb:
+            out[n] = p
+    return out
 
 
 def norm(path):
@@ -118,6 +186,11 @@ def main():
     refresh = "--refresh" in args
     min_rel = 100
     evidence = 3
+    prefer = None
+    if "--prefer" in args:
+        i = args.index("--prefer")
+        prefer = args[i + 1]
+        del args[i:i + 2]
     retry = "--retry" in args
     args = [a for a in args if a != "--retry"]
     listdir = None
@@ -138,6 +211,36 @@ def main():
         i = args.index("--skip")
         skip = set(args[i + 1].split(","))
         del args[i:i + 2]
+    if "--headers" in args:
+        # headers for bases adopted before the tool brought them along: SLUG... --headers [--apply]
+        _rel, _size, blob = relatedness(False)
+        for T in [a for a in args if not a.startswith("--")]:
+            mp = f"{SCRATCH}/bases-applied-{T}.json"
+            if not os.path.exists(mp):
+                continue
+            mf = json.load(open(mp))
+            for ent in mf["added"]:
+                f = f"{REPO}/libs/{T}/work{ent.get('file') or ent['path'] + '.lpc'}"
+                if not os.path.exists(f):
+                    continue
+                hs = headers_of(blob, T, ent["donor"], ent["path"] + ".lpc", open(f, "rb").read())
+                for u in ent.get("users", []):
+                    try:
+                        hs += [h for h in headers_of(blob, T, ent["donor"], u, open(f"{REPO}/libs/{T}/work{u}", "rb").read()) if h not in hs]
+                    except OSError:
+                        pass
+                for h in hs:
+                    hd = f"{REPO}/libs/{T}/work{h}"
+                    if os.path.exists(hd) or h in ent.get("headers", []):
+                        continue
+                    print(f"HEADER {T} {h} <- {ent['donor']} (included by {ent['path']}.lpc)")
+                    if "--apply" in args:
+                        os.makedirs(os.path.dirname(hd), exist_ok=True)
+                        open(hd, "wb").write(open(f"{REPO}/libs/{ent['donor']}/work{h}", "rb").read())
+                        ent.setdefault("headers", []).append(h)
+            if "--apply" in args:
+                json.dump(mf, open(mp, "w"), indent=1)
+        return
     if "--undo" in args:
         i = args.index("--undo")
         undo(args[i + 1], args[i + 2:])
@@ -181,10 +284,29 @@ def main():
         plan = []                                  # (macro or None, path, donor, rel, users)
         rej = set() if retry else rejected(T)
         was_rej = rejected(T)
+        labels = {}                                # path -> macro the lib already defines for it (no line to add)
         for ident, users in sorted(miss.items(), key=lambda kv: -len(kv[1])):
-            if ident in defs_T:
-                continue
             name = ident.decode()
+            if ident in defs_T:
+                # the lib defines the macro but the file it names is not there (dtxyzjb's M_WEAPON): adopt the file, keep the lib's own line
+                own = own_defs(T, fileset[T]).get(name)
+                P = norm(own) if own else None
+                if not P or P in {x[:-4] for x in fileset[T] if x.endswith(".lpc")} or P in rej:
+                    continue
+                best = None
+                for D in have_path.get(P, ()):
+                    if D == T:
+                        continue
+                    r = rel.get((T, D), 0)
+                    ev = same_users(T, D, users)
+                    ok = r >= min_rel or (ev >= evidence and ev * 2 >= len(users))
+                    key = (bool(prefer) and D == prefer, ok, ev if ev >= evidence and ev * 2 >= len(users) else 0, r)
+                    if best is None or key > best[0]:
+                        best = (key, D, P, r, ev)
+                if best and (best[0][0] or best[0][1]):
+                    plan.append((None, best[2], best[1], best[3], users, best[4]))
+                    labels[best[2]] = name
+                continue
             best = None
             for D, path in defs.get(name, []):
                 if D == T:
@@ -196,10 +318,10 @@ def main():
                     r = rel.get((T, D), 0)
                     ev = same_users(T, D, users)
                     ok = r >= min_rel or (ev >= evidence and ev * 2 >= len(users))
-                    key = (ok, ev if ev >= evidence and ev * 2 >= len(users) else 0, r)
+                    key = (bool(prefer) and D == prefer, ok, ev if ev >= evidence and ev * 2 >= len(users) else 0, r)
                     if best is None or key > best[0]:
                         best = (key, D, P, r, ev)
-            if best and best[0][0]:
+            if best and (best[0][0] or best[0][1]):
                 plan.append((name, best[2], best[1], best[3], users, best[4]))
         # literal inherits of files this lib lacks
         lit = collections.defaultdict(list)
@@ -223,17 +345,17 @@ def main():
                     r = rel.get((T, D), 0)
                     ev = same_users(T, D, users)
                     ok = r >= min_rel or (ev >= evidence and ev * 2 >= len(users))
-                    key = (ok, ev if ev >= evidence and ev * 2 >= len(users) else 0, r)
+                    key = (bool(prefer) and D == prefer, ok, ev if ev >= evidence and ev * 2 >= len(users) else 0, r)
                     if best is None or key > best[0]:
                         best = (key, D, r, ev)
-            if best and best[0][0]:
+            if best and (best[0][0] or best[0][1]):
                 plan.append((None, P, best[1], best[2], users, best[3]))
         if not plan:
             continue
         hdr = R.global_header(T, fileset[T])
         add_macros, adopt = [], {}
         for name, P, D, r, users, ev in plan:
-            print(f"ADOPT {T} {name or '(literal)'} {P}.lpc <- {D} (rel {r}, {len(users)} user(s), {ev} identical in the donor)" + (" was rejected" if P in was_rej else ""))
+            print(f"ADOPT {T} {name or (labels.get(P) and labels[P] + ' (defined)') or '(literal)'} {P}.lpc <- {D} (rel {r}, {len(users)} user(s), {ev} identical in the donor)" + (" was rejected" if P in was_rej else ""))
             adopt[P] = D
             if name:
                 add_macros.append((name, P))
@@ -253,8 +375,23 @@ def main():
             if os.path.exists(dst):
                 continue
             os.makedirs(os.path.dirname(dst), exist_ok=True)
-            open(dst, "wb").write(open(f"{REPO}/libs/{D}/work{P}.lpc", "rb").read())
-            manifest.append({"path": P, "donor": D, "macro": next((m for m, q in add_macros if q == P), None),
+            data = open(f"{REPO}/libs/{D}/work{P}.lpc", "rb").read()
+            open(dst, "wb").write(data)
+            brought = []
+            hs = headers_of(blob, T, D, P + ".lpc", data)
+            for u in sorted({u for _n, q, _d, _r, us, _e in plan if q == P for u in us}):   # the objects that inherit it include headers too (<kzznpc.h>)
+                try:
+                    hs += [h for h in headers_of(blob, T, D, u, open(f"{REPO}/libs/{T}/work{u}", "rb").read()) if h not in hs]
+                except OSError:
+                    pass
+            for h in hs:
+                hd = f"{REPO}/libs/{T}/work{h}"
+                if not os.path.exists(hd):
+                    os.makedirs(os.path.dirname(hd), exist_ok=True)
+                    open(hd, "wb").write(open(f"{REPO}/libs/{D}/work{h}", "rb").read())
+                    brought.append(h)
+                    print(f"HEADER {T} {h} <- {D} (included by {P}.lpc)")
+            manifest.append({"path": P, "donor": D, "macro": next((m for m, q in add_macros if q == P), None), "headers": brought,
                              "users": sorted({u for _n, q, _d, _r, us, _e in plan if q == P for u in us})[:60]})
         if add_macros and hdr:
             p = f"{REPO}/libs/{T}/work{hdr}"

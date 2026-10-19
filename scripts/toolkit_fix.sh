@@ -34,6 +34,9 @@ cd "$REPO"
 OUT=$(mktemp -d ${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}/toolkit-"$SLUG".XXXX)
 D=${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}/lpcw-$SLUG/diagnostics.tsv
 SKIP=(--skip '/tests?/' --skip '/help_topics/error_messages/')
+# TOOLKIT_EXTRA_SKIP='/backup/ /old/' leaves more directories out of the scan (regexes, space separated): dated backup copies of a whole lib
+# (wdxtym's /backup/2023-5-31/... holds 22,795 rooms, and the scan spent its 90 minutes there) are dead code, not objects a visitor meets.
+for _x in ${TOOLKIT_EXTRA_SKIP:-}; do SKIP+=(--skip "$_x"); done
 
 echo "== 0. does the driver load your master and simul_efun?"
 LPCC=${LPCC:-$HOME/src/fluffos/build-debug/src/lpcc}

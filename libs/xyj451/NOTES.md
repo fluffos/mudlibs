@@ -340,3 +340,12 @@ single-file compile check (PASS). Part of the corpus-wide §7.19 sweep
 ## 两个斜杠开头的物件路径（2026-10-19，KB 06 §7.276）
 
 1 个文件、1 处物件路径写成 `//…`（如 `carry_object("//clone/cloth/hic_cloth")`）：`/d/suburb/es/latemoon/room/npc/old.lpc`。当年的驱动不介意（路径先被规范化）；新驱动把原样的字符串交给 master 的 `valid_read()`，securityd 按 `//clone` 查目录，NPC 的 euid 没有权限，报 `Read access denied.`，NPC 载入不了。改成一个斜杠。
+
+## 补回本库没有的基类文件，第二轮（2026-10-19，KB 04 §6.15、§6.18）
+
+宏有定义、基类文件却不在档案里：继承它的对象载入时报 `Inherited file '…' does not exist!`，编译扫描看不到这一类（`scripts/lpc_missing_inherits.py` 能列出）。同系的库里有同一个文件，原样拷来（`scripts/lpc_restore_bases.py`）；基类和继承它的对象 include 而本库没有的头文件一起带来。每个基类补回后单独载入，再载入使用它的对象，载不进来、或一个用户也载不进来的撤掉了。
+
+- `/inherit/weapon/weapon`（宏 `M_WEAPON`）←fy2mg：5/5 个继承它的对象载入
+- 玩家打造兵器的模板（5 个文件）这回有了基类，照 KB 06 §7.275 加上没有打造者时的保护（`scripts/lpc_fix_forge_template.py`）。
+
+逐个与 HEAD 对比载入，没有退步。

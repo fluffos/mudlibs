@@ -432,3 +432,11 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 - `/d/zjb/paimai.lpc`：拍卖房的 `add("pnum",1)`（竞买者计数）被 `//归还前一个竞买者的钱` 注释吞掉，计数从不增加
 
 `scripts/lpc_fix_swallowed_statement.py` 把换行放回去。逐个载入与 HEAD 对比，没有退步。
+
+## 补回本库没有的基类文件，第二轮（2026-10-19，KB 04 §6.15、§6.18）
+
+宏有定义、基类文件却不在档案里：继承它的对象载入时报 `Inherited file '…' does not exist!`，编译扫描看不到这一类（`scripts/lpc_missing_inherits.py` 能列出）。同系的库里有同一个文件，原样拷来（`scripts/lpc_restore_bases.py`）；基类和继承它的对象 include 而本库没有的头文件一起带来。每个基类补回后单独载入，再载入使用它的对象，载不进来、或一个用户也载不进来的撤掉了。
+
+- `/inherit/misc/_xiao`（宏 `MI_XIAO`）←tianxiawuxue：1/1 个继承它的对象载入，同时带来头文件 `/include/music.h`
+
+逐个与 HEAD 对比载入，没有退步。

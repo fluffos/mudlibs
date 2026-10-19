@@ -203,4 +203,5 @@
 #define F_COAGENT                "/feature/coagent"
 #define MEDICINE(x) ("/clone/medicine/" + x)
 #define CHAT_ROOM "/inherit/room/chatroom"
+#define MEDICAL_BOOK             "/inherit/item/medical-book"
 

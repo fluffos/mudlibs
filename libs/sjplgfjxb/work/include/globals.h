@@ -151,6 +151,8 @@
 #define PKER_B "十大魔头排行榜"
 #define EXP_B "十大高手排行榜"
 #define MONEY_D "/adm/daemons/moneyd"
+#define BOW                      "/inherit/weapon/bow"
+#define M_WEAPON                 "/inherit/weapon/weapon"
 // Profiling switches
 //
 // If you changed any of these defines, you'll need reboot to make it 

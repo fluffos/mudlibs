@@ -279,3 +279,12 @@ compile check (exit 0, no errors) against `feature/command.lpc`.
 ## 被注释吞掉的 inherit / include（2026-10-19，KB 06 §7.274）
 
 `/daemon/class/moon/moonshentong/shiyue.lpc`：`inherit SSERVER;`。这些指令接在上一行 `//` 注释的末尾（档案里丢了换行），成了注释的一部分，驱动看不到：缺 `inherit` 的技能报 `Undefined function offensive_target`，缺 `#include <weapon.h>` 的兵器报语法错误。`scripts/lpc_fix_swallowed_directive.py` 把换行放回去。载入检查 1 个文件，1 个原来编译不过、现在载入，没有退步。
+
+## 补回本库没有的基类文件，第二轮（2026-10-19，KB 04 §6.15、§6.18）
+
+宏有定义、基类文件却不在档案里：继承它的对象载入时报 `Inherited file '…' does not exist!`，编译扫描看不到这一类（`scripts/lpc_missing_inherits.py` 能列出）。同系的库里有同一个文件，原样拷来（`scripts/lpc_restore_bases.py`）；基类和继承它的对象 include 而本库没有的头文件一起带来。每个基类补回后单独载入，再载入使用它的对象，载不进来、或一个用户也载不进来的撤掉了。
+
+- `/std/item/yueqi`（宏 `YUEQI`）←sjshwzb：1/1 个继承它的对象载入
+- `/std/medicine/powder`←sjshwzb：1/1 个继承它的对象载入
+
+逐个与 HEAD 对比载入，没有退步。

@@ -340,5 +340,12 @@
 #define TYPE_MEDAL "medal"
 #define GUARD_CMD "/cmds/std/guard"
 #define BUFF_STR "buff/attr/str"
+#define S_RING                   "/inherit/gems/ring"
+#define HAIRPIN                  "/inherit/armor/hairpin"
+#define F_VENDOR_SALE            "/feature/vendor_sale"
+#define F_GEMS                   "/feature/gems"
+#define CHARM                    "/inherit/armor/charm"
+#define TYPE_HAIRPIN "hairpin"
+#define TYPE_CHARM "charm"
 
 #undef PROFILE_COMMANDS

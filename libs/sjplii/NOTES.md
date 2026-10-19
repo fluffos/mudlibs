@@ -424,3 +424,13 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 ## 钱庄老板和客店留言板（2026-10-19，KB 06 §7.262）
 
 `d/hangzhou/npc/qzlaoban`、`d/suzhou/npc/laoban2`（钱庄老板）`inherit F_BANKER`（`/feature/banker`），档案里没有这个文件，NPC 载入不了；取 xkx100 的 `feature/banker.lpc`（`MONEY_D` 已在上一批补上）。`d/hangzhou/tianxianglou` 和 `d/suzhou/kedian` 开头的 `"/clone/board/kedian_b"->foo();` 指向一块档案里没有的留言板（整个 `clone/board/` 都不在），房间载入不了；这两行删掉（`u/kunlun` 下巫师目录里的留言板调用不动）。
+
+## 补回本库没有的基类文件，第二轮（2026-10-19，KB 04 §6.15、§6.18）
+
+宏有定义、基类文件却不在档案里：继承它的对象载入时报 `Inherited file '…' does not exist!`，编译扫描看不到这一类（`scripts/lpc_missing_inherits.py` 能列出）。同系的库里有同一个文件，原样拷来（`scripts/lpc_restore_bases.py`）；基类和继承它的对象 include 而本库没有的头文件一起带来。每个基类补回后单独载入，再载入使用它的对象，载不进来、或一个用户也载不进来的撤掉了。
+
+- `/std/char/kzznpc`（宏 `KZZNPC`）←fys：15/15 个继承它的对象载入，同时带来头文件 `/include/kzznpc.h`、`/include/die.h`
+- `/inherit/weapon/weapon`（宏 `M_WEAPON`）←xjcq2000：5/5 个继承它的对象载入
+- 玩家打造兵器的模板（7 个文件）这回有了基类，照 KB 06 §7.275 加上没有打造者时的保护（`scripts/lpc_fix_forge_template.py`）。
+
+逐个与 HEAD 对比载入，没有退步。

@@ -139,4 +139,5 @@
 
 #define PROFILE_COMMANDS
 #define UNARMED                  "/std/weapon/unarmed"
+#define M_WEAPON                 "/inherit/weapon/weapon"
 #undef PROFILE_COMMANDS

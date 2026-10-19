@@ -514,3 +514,11 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 ## 标准整理轮（2026-10-19，`scripts/toolkit_fix.sh`）
 
 本库在新驱动下重扫，机械修复：42 个未使用的局部变量。修后与 HEAD 逐个物件对比载入，没有退步。
+
+## 补回本库没有的基类文件，第二轮（2026-10-19，KB 04 §6.15、§6.18）
+
+宏有定义、基类文件却不在档案里：继承它的对象载入时报 `Inherited file '…' does not exist!`，编译扫描看不到这一类（`scripts/lpc_missing_inherits.py` 能列出）。同系的库里有同一个文件，原样拷来（`scripts/lpc_restore_bases.py`）；基类和继承它的对象 include 而本库没有的头文件一起带来。每个基类补回后单独载入，再载入使用它的对象，载不进来、或一个用户也载不进来的撤掉了。
+
+- `/feature/encoding`←dtxyzjb：2/2 个继承它的对象载入
+
+逐个与 HEAD 对比载入，没有退步。

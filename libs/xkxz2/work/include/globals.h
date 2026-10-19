@@ -202,4 +202,5 @@
 #define SGN(x)                  ((x) > 0 ? 1 : ((x) < 0 ? -1 : 0))
 #define F_COAGENT                "/feature/coagent"
 #define CHAT_ROOM "/inherit/room/chatroom"
+#define MEDICAL_BOOK             "/inherit/item/medical-book"
 

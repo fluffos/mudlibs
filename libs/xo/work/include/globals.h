@@ -238,6 +238,7 @@
 #define F_ZUZHI             FEATURE_DIR "char/zuzhi.lpc"
 #define TASK_D DAEMON_DIR "taskd"
 #define BET_D DAEMON_DIR "betd"
+#define TASK                     "/system/std/task"
 
 // Profiling switches
 //
