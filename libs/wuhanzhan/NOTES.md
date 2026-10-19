@@ -947,3 +947,11 @@ functionally re-tested live on this lib.
 ## `set_skill()` 遇到本库没有文件的武功不再抛错（2026-10-18，KB 06 §7.256）
 
 `feature/skill.lpc` 里的 `set_skill()`、`map_skill()`、`prepare_skill()` 碰到没有武功文件的名字就 `error("F_SKILL: No such skill (…)")`，调用它们的 NPC `create()` 整个中断：NPC 载入不了，刷出它的房间也少一个人。本库有 8 个对象设了本库没有文件的武功（12 个名字，最多的是 `sevensteps`、`hunyuan-force`、`ruyi-blade`）。三处都改成 `return`：这一门武功不给、不映射，对象照常载入，只是少了它（缺的武功本身仍是内容缺口）。抽样载入这些对象：8 个里 8 个通过。（`scripts/lpc_guard_set_skill.py`）
+
+## 武功名拼错的 NPC（2026-10-19，KB 06 §7.258）
+
+`set_skill("kunlun-shnfa", …)`、`map_skill("dodge", "shaolin-shnfa")` 这样的调用把武功名拼错了：本库没有这个武功文件，有的是拼对的那个。以前这种 NPC 在 `create()` 里报 `No such skill` 载入不了；武功缺失时跳过之后它们能载入，可是少了那门武功（`set_skill` 被跳过，`map_skill` 映射不到，门派弟子用普通轻功/拳脚）。按核对过的对照表改正，共 12 处、12 个文件：`dragon-step`→`dragonstep`（3 处）、`hellfire_whip`→`hellfire-whip`（3 处）、`lingjian-steps`→`lingjian-step`（2 处）、`lunhun-zhang`→`lunhui-zhang`（1 处）、`yange_blade`→`yange-blade`（1 处）、`huntian-qiong`→`huntian-qigong`（1 处）、`dangmo_axe`→`dangmo-axe`（1 处）。（`scripts/lpc_fix_skill_names.py`）
+
+## 调用了父类没有的函数的对象（2026-10-19，KB 06 §7.259）
+
+`::create();`、`::init();`、`return ::buy_object(who, item);` 这类调用写的是父类里有这个函数的版本；本库的父类没有，旧驱动把它当空操作（返回 0），现在的驱动在编译时就报 `Unable to find the inherited function`，整个对象载入不了。单独成句的调用删掉，`return ::f(...)` 改成 `return 0;`（void 函数里是 `return;`），与旧驱动的行为一致。共 1 处、1 个文件：`::buy_object()`（1 处）。只改了出错原因全是这一类的文件；还带着别的错误（多半是父类本身没了）的文件没动，等父类补回后再看。（`scripts/lpc_fix_dangling_super.py`）

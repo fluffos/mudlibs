@@ -233,3 +233,7 @@ The `.c` -> `.lpc` rename changed the string but not the slice width: `f[<2..] =
 - 其它：`lib/door.lpc` 空的 `if (l_long) {}` 删去；`basic/room/map.lpc`、`bin/usr/_diff.lpc` 的 `?:` 两边类型统一；三个 attack 文件和 `bin/pub/_disguise.lpc` 注释里的嵌套 `/*`。
 
 - 2026-10-14: `guilds/thieves/skills/tumble.lpc` declared its globals above `inherit "/guilds/thieves/skills/criticals"` inside the `#ifndef TMARK_C` block (`Illegal to inherit after defining global variables`); the inherit now comes first.
+
+## Objects that call an inherited function no parent has (2026-10-19, KB 06 7.259)
+
+`::create();`, `::init();` and `return ::buy_object(who, item);` were written against a parent that has the function; this lib's parents do not, the old driver took the call for a no-op returning 0, and the current driver stops at compile time with `Unable to find the inherited function`, so the object never loads. A call written as a statement is deleted, `return ::f(...)` becomes `return 0;` (`return;` in a void function), which is what the old driver did. 1 calls in 1 files: `::reset()` (1). Only files whose every error was this one were edited; a file that also has another error (usually a parent that is itself missing) is left until the parent is restored. (`scripts/lpc_fix_dangling_super.py`)

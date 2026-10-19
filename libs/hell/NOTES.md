@@ -413,3 +413,7 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 ## `set_skill()` skips a skill the lib has no file for (2026-10-18, KB 06 7.256)
 
 `set_skill()`, `map_skill()` and `prepare_skill()` of `feature/skill.lpc` raised `error("F_SKILL: No such skill (...)")` on a name without a skill file, which aborted the calling NPC's `create()`: the NPC never loaded and the room that spawns it lost it. No object of this lib sets a missing skill today; The three now `return`: the skill is not granted or mapped and the object loads without it (the missing skill itself stays a content gap).  (`scripts/lpc_guard_set_skill.py`)
+
+## NPCs that name a misspelled skill (2026-10-19, KB 06 7.258)
+
+`set_skill("kunlun-shnfa", ...)` and `map_skill("dodge", "shaolin-shnfa")` spell a skill the lib does not have; the lib has the right one. Such an NPC used to die in `create()` with `No such skill`; since a missing skill is skipped it loads, but without that skill. Corrected from a reviewed table, 12 names in 9 files: `changquana` -> `changquan` (4), `tiaji-jian` -> `taiji-jian` (2), `taiji-shenfong` -> `taiji-shengong` (1), `yan-fly` -> `yanfly` (1), `lingboweibu` -> `lingbo-weibu` (1), `jiahua-neigong` -> `jiaohua-neigong` (1), `zhoangnan-zhi` -> `zhongnan-zhi` (1), `jinggang-zhi` -> `jingang-zhi` (1) (`scripts/lpc_fix_skill_names.py`).

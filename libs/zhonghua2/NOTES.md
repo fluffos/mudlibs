@@ -1036,3 +1036,11 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## 补回本库没有的基类文件（2026-10-18，KB 04 §6.15）
 
 下面这些基类本库没有，继承它们的对象（房间、NPC、物品）整批载入不了（`inherit XXX;` 的宏没定义，或者 `inherit "/std/…";` 的文件不在）。同系的库里有同名文件，两库有大量逐字节相同的文件（亲缘关系），所以从那边原样拷来，缺的宏补进全局头文件：`/d/xueshan/inherit/liquid_container`←nte，1 个对象继承它，抽样 1/1 载入。每个基类补回后单独载入、再抽样载入使用它的对象，基类载不进来或者一个用户也载不进来的就撤掉（本库撤掉了它们，不再补）。（`scripts/lpc_restore_bases.py`）
+
+## 武功名拼错的 NPC（2026-10-19，KB 06 §7.258）
+
+`set_skill("kunlun-shnfa", …)`、`map_skill("dodge", "shaolin-shnfa")` 这样的调用把武功名拼错了：本库没有这个武功文件，有的是拼对的那个。以前这种 NPC 在 `create()` 里报 `No such skill` 载入不了；武功缺失时跳过之后它们能载入，可是少了那门武功（`set_skill` 被跳过，`map_skill` 映射不到，门派弟子用普通轻功/拳脚）。按核对过的对照表改正，共 28 处、14 个文件：`jinyin-baiguzhao`→`jiuyin-baiguzhao`（8 处）、`shenzhao-jing`→`shenzhaojing`（7 处）、`tiaji-jian`→`taiji-jian`（4 处）、`changquana`→`changquan`（4 处）、`taiji-shenfong`→`taiji-shengong`（1 处）、`yan-fly`→`yanfly`（1 处）、`jiahua-neigong`→`jiaohua-neigong`（1 处）、`jinggang-zhi`→`jingang-zhi`（1 处）等共 9 个名字。（`scripts/lpc_fix_skill_names.py`）
+
+## set_name 的 id 参数传成字符串（2026-10-19，KB 06 §7.260）
+
+`set_name("海口大碗", "bowl");` 把物品的 id 写成了字符串，本库的 `set_name(string name, string *id)` 要的是数组，驱动在编译时报 `Bad type for argument 2 of set_name ( string * vs string )`，整个物件载入不了；旧驱动不检查参数类型，字符串里照样找得到这个词，物品能用 id 称呼。改成 `({ "bowl" })`，共 2 个文件：`/d/baituo/npc/obj/bowl.lpc`、`/d/baituo/obj/bowl.lpc`。（`scripts/lpc_fix_set_name_id.py`）

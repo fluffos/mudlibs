@@ -907,3 +907,7 @@ Same convert-era byte corruption as the waiter `！”\n` / `！\n` →
 ## 通向不存在房间的出口，按对面房间的回头出口改正（2026-10-18，KB 06 §7.257）
 
 房间出口 `"west": __DIR__"xxx"` 指向的文件本库没有，玩家走过去就被卡住（笔误、改过名的房间，或者没带进档案的编号房间）。对面的房间存在、并且它相反方向的出口正好指回这个房间，说明出口原本就是通向它：`/d/zuzhi/yipin_tang/peacock/xuanwu_tang/midao` 的 `down`：`yandong1.lpc` → `yandong`。改动后每个出口都能解析到本库的文件（`scripts/lpc_fix_dead_exits.py`；目标在运行时本来就能载入的库——虚拟房间——不动）。
+
+## 调用了父类没有的函数的对象（2026-10-19，KB 06 §7.259）
+
+`::create();`、`::init();`、`return ::buy_object(who, item);` 这类调用写的是父类里有这个函数的版本；本库的父类没有，旧驱动把它当空操作（返回 0），现在的驱动在编译时就报 `Unable to find the inherited function`，整个对象载入不了。单独成句的调用删掉，`return ::f(...)` 改成 `return 0;`（void 函数里是 `return;`），与旧驱动的行为一致。共 1 处、1 个文件：`::valid_teach()`（1 处）。只改了出错原因全是这一类的文件；还带着别的错误（多半是父类本身没了）的文件没动，等父类补回后再看。（`scripts/lpc_fix_dangling_super.py`）

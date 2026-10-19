@@ -565,3 +565,11 @@ functionally re-tested live on this lib.
 ## 宠物商人 `d/city/npc/oldman` 的变量叫 `class`（2026-10-18，KB 04 §6.14）
 
 `string *class = ({ ... })` 的 `class` 在 FluffOS 里是保留字（结构体），`syntax error, unexpected L_CLASS`，老头载入不了。变量改叫 `pet_class`（7 处）。载入：通过。
+
+## 武功名拼错的 NPC（2026-10-19，KB 06 §7.258）
+
+`set_skill("kunlun-shnfa", …)`、`map_skill("dodge", "shaolin-shnfa")` 这样的调用把武功名拼错了：本库没有这个武功文件，有的是拼对的那个。以前这种 NPC 在 `create()` 里报 `No such skill` 载入不了；武功缺失时跳过之后它们能载入，可是少了那门武功（`set_skill` 被跳过，`map_skill` 映射不到，门派弟子用普通轻功/拳脚）。按核对过的对照表改正，共 26 处、18 个文件：`shaolin-shnfa`→`shaolin-shenfa`（5 处）、`pixie-jian`→`bixie-jian`（4 处）、`choushui-zhang`→`chousui-zhang`（4 处）、`pixie-sword`→`bixie-sword`（3 处）、`tiaji-jian`→`taiji-jian`（2 处）、`lingbo-weibu`→`lingboweibu`（2 处）、`shenxingbaibian`→`shenxing-baibian`（1 处）、`jingding-zhang`→`jinding-zhang`（1 处）等共 12 个名字。（`scripts/lpc_fix_skill_names.py`）
+
+## set_name 的 id 参数传成字符串（2026-10-19，KB 06 §7.260）
+
+`set_name("海口大碗", "bowl");` 把物品的 id 写成了字符串，本库的 `set_name(string name, string *id)` 要的是数组，驱动在编译时报 `Bad type for argument 2 of set_name ( string * vs string )`，整个物件载入不了；旧驱动不检查参数类型，字符串里照样找得到这个词，物品能用 id 称呼。改成 `({ "bowl" })`，共 2 个文件：`/d/baituo/npc/obj/bowl.lpc`、`/d/baituo/obj/bowl.lpc`。（`scripts/lpc_fix_set_name_id.py`）

@@ -1552,3 +1552,7 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## `set_skill()` 遇到本库没有文件的武功不再抛错（2026-10-18，KB 06 §7.256）
 
 `feature/skill.lpc` 里的 `set_skill()`、`map_skill()`、`prepare_skill()` 碰到没有武功文件的名字就 `error("F_SKILL: No such skill (…)")`，调用它们的 NPC `create()` 整个中断：NPC 载入不了，刷出它的房间也少一个人。本库有 19 个对象设了本库没有文件的武功（16 个名字，最多的是 `hengshan-sword`、`jiuyin-baiguzhao`、`qiankundanuoyi`）。三处都改成 `return`：这一门武功不给、不映射，对象照常载入，只是少了它（缺的武功本身仍是内容缺口）。抽样载入这些对象：19 个里 17 个通过，其余 2 个停在别的错误上（`d/murong/npc/murong-fu`：*No program in object '/d/murong/npc/murong-fu'!；`quest/wei/helian`：*No program in object '/quest/wei/helian'!）。（`scripts/lpc_guard_set_skill.py`）
+
+## 武功名拼错的 NPC（2026-10-19，KB 06 §7.258）
+
+`set_skill("kunlun-shnfa", …)`、`map_skill("dodge", "shaolin-shnfa")` 这样的调用把武功名拼错了：本库没有这个武功文件，有的是拼对的那个。以前这种 NPC 在 `create()` 里报 `No such skill` 载入不了；武功缺失时跳过之后它们能载入，可是少了那门武功（`set_skill` 被跳过，`map_skill` 映射不到，门派弟子用普通轻功/拳脚）。按核对过的对照表改正，共 31 处、25 个文件：`dashouyin`→`dashou-yin`（7 处）、`lingji-zhuang`→`linji-zhuang`（7 处）、`qiankundanuoyi`→`qiankun-danuoyi`（3 处）、`sanying-zhua`→`sanyin-zhua`（2 处）、`chuosui-zhang`→`chousui-zhang`（2 处）、`pudu-chang`→`pudu-zhang`（2 处）、`stuff`→`staff`（1 处）、`huagu-mainzhang`→`huagu-mianzhang`（1 处）等共 14 个名字。（`scripts/lpc_fix_skill_names.py`）

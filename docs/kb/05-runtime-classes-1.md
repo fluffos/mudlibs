@@ -252,6 +252,17 @@ always had them). Drop the include from daemons that rely on the fallback
 (`npcsd`, `eval`): a prototype nothing defines is a runtime error.
 Detection: probe `ob->set("equipped", 1); ob->is_equipping()` on any
 weapon; scan mixins whose inherit closure lacks F_DBASE for bare calls.
+**Residual, the `count_*` family (hhsj/nt6/nt6nitan6win/xfbhh, 2026-10-19):**
+`ntefun.lpc` wraps `efun::count()` (the bignum efun of the original fork) in
+`count_add/sub/mul/div/lt/gt/le/ge/eq`, all behind `#ifdef __PACKAGE_ARITH_OPERATOR__`
+or `#ifdef LONELY_IMPROVED`; neither is defined here, so the whole family was
+compiled out of the simul_efun object and every caller (`gambled`, the arena
+drums, `enterprised`, `flagd`) died with `Undefined
+function count_lt`. nitan6 and nitan170911 already had the fix: gate `#if 1`,
+wrappers call the local `count()` of `db_compat.lpc` (included earlier). Same
+edit in the four twins; their `quest*/flagwar/flagd.lpc` also took nitan6's
+`remove_ansi(...)` for `ANSI_D->remove_ansi(...)` and `to_int(reward_money * 0.9)`.
+Detection: `Undefined function count_` in a scan; `lpc_twin_port.py audit nitan6 DST`.
 
 ### 7.16 Stale shipped timestamps feed an unbounded catch-up loop
 **Symptom:** `while (rank["time"] + 3600 < t) {...decay...}` over
