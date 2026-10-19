@@ -534,3 +534,7 @@ lpc` 会调用双方 `kill_ob()`，NPC 真实反击），几回合后一次「�
 ## `tuzhong1` 里的全角逗号（2026-10-18，KB 03 §4.6）
 
 `d/zuzhi/yipin_tang/peacock/xuanwu_tang/npc/tuzhong1.lpc` 的 `set_name("徒众", ({ "tu zhong" ， "tuzhong" }))` 里一个逗号是全角的 `，`（`Illegal character 0xef`），NPC 载入不了。换成半角 `,`。载入：通过。
+
+## 通向不存在房间的出口，按对面房间的回头出口改正（2026-10-18，KB 06 §7.257）
+
+房间出口 `"west": __DIR__"xxx"` 指向的文件本库没有，玩家走过去就被卡住（笔误、改过名的房间，或者没带进档案的编号房间）。对面的房间存在、并且它相反方向的出口正好指回这个房间，说明出口原本就是通向它：`/d/zuzhi/yipin_tang/peacock/xuanwu_tang/midao` 的 `down`：`yandong1.lpc` → `yandong`。改动后每个出口都能解析到本库的文件（`scripts/lpc_fix_dead_exits.py`；目标在运行时本来就能载入的库——虚拟房间——不动）。

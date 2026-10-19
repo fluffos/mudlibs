@@ -1222,3 +1222,7 @@ Older MudOS predefined `SAVE_EXTENSION` (`".o"`) in every LPC object; the FluffO
 ## `set_skill()` skips a skill the lib has no file for (2026-10-18, KB 06 7.256)
 
 `set_skill()`, `map_skill()` and `prepare_skill()` of `feature/skill.lpc` raised `error("F_SKILL: No such skill (...)")` on a name without a skill file, which aborted the calling NPC's `create()`: the NPC never loaded and the room that spawns it lost it. 99 objects of this lib set a skill it has no file for (120 names, most often `pojun-quan`, `sanhua-zhi`, `taizu-quan`). The three now `return`: the skill is not granted or mapped and the object loads without it (the missing skill itself stays a content gap). Loaded a sample of these objects: 24 of 30 pass, the other 6 stop on another error (`clone/npc/dzd_man`: *No program in object '/clone/npc/dzd_man'!; `clone/npc/tdh/fangdahong`: *No program in object '/clone/npc/tdh/fangdahong'!, ...). (`scripts/lpc_guard_set_skill.py`)
+
+## Exits to rooms that do not exist, repaired from the room on the other side (2026-10-18, KB 06 7.257)
+
+A room exit named a file the lib does not have, so the player was stuck (a typo, a renamed room, a numbered room the archive lacks). The room at the other end exists and its opposite exit points back, so that is where the exit was meant to go: `/d/cahc/jinshuiqiao` `north`: `wangfu` -> `tongyuchi`. Every repaired exit now resolves to a file of the lib (`scripts/lpc_fix_dead_exits.py`; libs whose virtual rooms load anyway are left alone).

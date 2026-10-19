@@ -697,3 +697,6 @@ a fight with a cloned orc (and death), `help`, `help bug`/`praise`/`typo`/`idea`
 
 Older MudOS predefined `SAVE_EXTENSION` (`".o"`) in every LPC object; the FluffOS ChangeLog (COMPAT_BUSTER) removed it in favour of `__SAVE_EXTENSION__`. This lib never `#define`s it, so each file that names it was `Undefined variable 'SAVE_EXTENSION'` and the object never loaded. Now `__SAVE_EXTENSION__` (`scripts/lpc_fix_predefined_macro.py`): `adm/daemons/network/netmail.lpc`, `adm/daemons/virtual/o_server.lpc`, `obj/shells/shsh.lpc`. Loaded one by one with `lpcc` after the change: 2 pass, 1 still stop on another error (`adm/daemons/network/netmail`: syntax error, unexpected L_BASIC_TYPE, expecting L_ASSIGN or ';' or '(' or ',').
 
+## Exits to rooms that do not exist, repaired from the room on the other side (2026-10-18, KB 06 7.257)
+
+A room exit named a file the lib does not have, so the player was stuck (a typo, a renamed room, a numbered room the archive lacks). The room at the other end exists and its opposite exit points back, so that is where the exit was meant to go: `/d/Conf/room/centre` `south`: `/d/TMI/adminrm` -> `/d/Conf/room/entrance`. Every repaired exit now resolves to a file of the lib (`scripts/lpc_fix_dead_exits.py`; libs whose virtual rooms load anyway are left alone).

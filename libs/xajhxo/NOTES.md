@@ -903,3 +903,7 @@ Same convert-era byte corruption as the waiter `！”\n` / `！\n` →
 ## NPC 带着本库没有的物品，载入失败（2026-10-15，KB 06 §7.73）
 
 11 个文件、20 处在 `create()` 里 `carry_object("<本库没有的文件>")->wear()`（或 `wield()`、`set_amount()`）：`carry_object()` 得 0，接着的调用报 `Bad argument 1 to EFUN call_other()`，NPC 根本载入不了，该有它的房间里就少了这个人。多是从别的系统搬来的 NPC 用了原系统的物品路径（最常见：`/d/city/lanzhou/clone/obj/cloth1`、`/d/menpai/wuliang/obj/cloth`、`/d/city/capital/obj/wuyun_xue`）。每处改为 `{ object carried_ob = carry_object(...); if (carried_ob) carried_ob->wear(); }`（`scripts/lpc_guard_carry_object.py`）：NPC 照常出现，只是不带这件东西；文件补回来（或是虚拟对象）照样会带上。载入检查：改动的文件改前能载入 8 个，改后 8 个（0 个原来载入不了），没有退步；其余 4 个另有原因（多为 `set_skill()` 了本库没有的武功）。
+
+## 通向不存在房间的出口，按对面房间的回头出口改正（2026-10-18，KB 06 §7.257）
+
+房间出口 `"west": __DIR__"xxx"` 指向的文件本库没有，玩家走过去就被卡住（笔误、改过名的房间，或者没带进档案的编号房间）。对面的房间存在、并且它相反方向的出口正好指回这个房间，说明出口原本就是通向它：`/d/zuzhi/yipin_tang/peacock/xuanwu_tang/midao` 的 `down`：`yandong1.lpc` → `yandong`。改动后每个出口都能解析到本库的文件（`scripts/lpc_fix_dead_exits.py`；目标在运行时本来就能载入的库——虚拟房间——不动）。

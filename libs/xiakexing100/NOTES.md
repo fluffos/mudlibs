@@ -561,3 +561,7 @@ functionally re-tested live on this lib.
 ## `set_skill()` 遇到本库没有文件的武功不再抛错（2026-10-18，KB 06 §7.256）
 
 `feature/skill.lpc` 里的 `set_skill()`、`map_skill()`、`prepare_skill()` 碰到没有武功文件的名字就 `error("F_SKILL: No such skill (…)")`，调用它们的 NPC `create()` 整个中断：NPC 载入不了，刷出它的房间也少一个人。本库目前没有对象设了缺失的武功；三处都改成 `return`：这一门武功不给、不映射，对象照常载入，只是少了它（缺的武功本身仍是内容缺口）。（`scripts/lpc_guard_set_skill.py`）
+
+## 宠物商人 `d/city/npc/oldman` 的变量叫 `class`（2026-10-18，KB 04 §6.14）
+
+`string *class = ({ ... })` 的 `class` 在 FluffOS 里是保留字（结构体），`syntax error, unexpected L_CLASS`，老头载入不了。变量改叫 `pet_class`（7 处）。载入：通过。

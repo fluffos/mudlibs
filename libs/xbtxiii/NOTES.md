@@ -338,3 +338,7 @@ definition, 2 `#undef` lines for macros that two headers define (`ROOM`, `STORY_
 ## `set_skill()` 遇到本库没有文件的武功不再抛错（2026-10-18，KB 06 §7.256）
 
 `feature/skill.lpc` 里的 `set_skill()`、`map_skill()`、`prepare_skill()` 碰到没有武功文件的名字就 `error("F_SKILL: No such skill (…)")`，调用它们的 NPC `create()` 整个中断：NPC 载入不了，刷出它的房间也少一个人。本库有 83 个对象设了本库没有文件的武功（78 个名字，最多的是 `xuanyuan-arrow`、`fall-steps`、`snowshade-sword`）。三处都改成 `return`：这一门武功不给、不映射，对象照常载入，只是少了它（缺的武功本身仍是内容缺口）。抽样载入这些对象：30 个里 29 个通过，其余 1 个停在别的错误上（`d/green/npc/master`：*No program in object '/d/green/npc/master'!）。（`scripts/lpc_guard_set_skill.py`）
+
+## 通向不存在房间的出口，按对面房间的回头出口改正（2026-10-18，KB 06 §7.257）
+
+房间出口 `"west": __DIR__"xxx"` 指向的文件本库没有，玩家走过去就被卡住（笔误、改过名的房间，或者没带进档案的编号房间）。对面的房间存在、并且它相反方向的出口正好指回这个房间，说明出口原本就是通向它：`/d/mingjiao/jmqshulin6` 的 `west`：`jmqjiguan` → `jmqshenmu`；`/d/ny/nroad0` 的 `west`：`/d/snow/nroad6` → `/d/ny/nroad5`。改动后每个出口都能解析到本库的文件（`scripts/lpc_fix_dead_exits.py`；目标在运行时本来就能载入的库——虚拟房间——不动）。
