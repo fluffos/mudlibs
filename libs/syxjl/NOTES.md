@@ -1017,3 +1017,11 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply s
 ## 武功名拼错的 NPC（2026-10-19，KB 06 §7.258）
 
 `set_skill("kunlun-shnfa", …)`、`map_skill("dodge", "shaolin-shnfa")` 这样的调用把武功名拼错了：本库没有这个武功文件，有的是拼对的那个。以前这种 NPC 在 `create()` 里报 `No such skill` 载入不了；武功缺失时跳过之后它们能载入，可是少了那门武功（`set_skill` 被跳过，`map_skill` 映射不到，门派弟子用普通轻功/拳脚）。按核对过的对照表改正，共 10 处、6 个文件：`kongmingquan`→`kongming-quan`（10 处）。（`scripts/lpc_fix_skill_names.py`）
+
+## 区域物件的零碎修正（2026-10-19，KB 06 §7.267–§7.271）
+
+- `d/biwu/wudao4.lpc` 删掉 `"/u/lzd/biwu_b"->foo();`（巫师的留言板不在档案里，调用失败会让房间载入不了）
+- 33 个 NPC 文件、48 处 `create()` 里的 `this_player()->carry_object(` 改成 `carry_object(`（没人在场时 `this_player()` 是 0，NPC 载入不了；有玩家在场时衣服武器落到玩家手里）
+- `d/honghua/npc/xutianhong.lpc` 第 63 行 `ob - query("family/master_id")` 改成 `ob->query(...)`（手误，物件编译不过）
+
+逐个物件与 HEAD 对比载入，没有退步。

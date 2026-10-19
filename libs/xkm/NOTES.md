@@ -343,3 +343,13 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## 武功名拼错的 NPC（2026-10-19，KB 06 §7.258）
 
 `set_skill("kunlun-shnfa", …)`、`map_skill("dodge", "shaolin-shnfa")` 这样的调用把武功名拼错了：本库没有这个武功文件，有的是拼对的那个。以前这种 NPC 在 `create()` 里报 `No such skill` 载入不了；武功缺失时跳过之后它们能载入，可是少了那门武功（`set_skill` 被跳过，`map_skill` 映射不到，门派弟子用普通轻功/拳脚）。按核对过的对照表改正，共 22 处、19 个文件：`lingji-zhuang`→`linji-zhuang`（7 处）、`dashouyin`→`dashou-yin`（6 处）、`pudu-chang`→`pudu-zhang`（2 处）、`stuff`→`staff`（1 处）、`huagu-mainzhang`→`huagu-mianzhang`（1 处）、`banrou-zhang`→`banruo-zhang`（1 处）、`qiankundanuoyi`→`qiankun-danuoyi`（1 处）、`jingding-zhang`→`jinding-zhang`（1 处）等共 10 个名字。（`scripts/lpc_fix_skill_names.py`）
+
+## 出口指向不存在的房间（2026-10-19，KB 06 §7.257）
+
+下列房间的出口写的文件不存在，而对面恰好只有一个房间的出口指回本房间，所以按对面的房间改正（笔误、大小写、路径少了一级）：
+
+- `/d/beijing/east/wangfudajie3.lpc` 的 `southwest` 出口：`/d/beijing/zijincheng/dongchangan` → `/d/beijing/zijin/dongchangan`
+- `/d/huangshan/ciguang.lpc` 的 `south` 出口：`wengquan` → `wenquan`
+- `/d/huangshan/tiandu1.lpc` 的 `up` 出口：`jiyubei` → `jiyunbei`
+
+改后房间照常载入（与 HEAD 逐个对比，没有退步），出口现在指向存在的房间。

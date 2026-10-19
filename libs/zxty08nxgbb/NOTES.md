@@ -330,3 +330,13 @@ functionally re-tested live on this lib.
 ## feature/damage.lpc 丢了 set_ghost()（2026-10-19，KB 06 §7.262）
 
 `feature/damage.lpc` 里有 `int ghost` 和 `is_ghost()`，没有 `set_ghost(int i)`；木人、狼等 NPC 在 `create()` 里调用它，整个 NPC 报 `Undefined function set_ghost` 载入不了。从 xkx100 补回这一行函数，受益 NPC 1 个：`d/feitian/npc/wolf`。（`scripts/lpc_transplant_function.py`）
+
+## 全局头文件丢了 2 个宏（2026-10-19，KB 04 §6.16）
+
+`/include/globals.h` 里没有定义 `F_SILENTDEST`、`LOOK_CMD`，用到它们的物件（名单里 2 个）编译时报 `Undefined variable`/`Undefined function`，整个物件载入不了（编译器在第一个未定义的名字上停下，后面的错误和警告都看不到）。同系的库在各自的头文件里都有这几行：照其中和本库共有文件最多的那个库，原样补到 `/include/globals.h` 最后一个 `#define` 之后，宏体里出现的路径在本库里都存在。补完后名单里有 2 个载入，其余还差别的东西。（`scripts/lpc_restore_defines.py`）
+
+## 区域物件的零碎修正（2026-10-19，KB 06 §7.267–§7.271）
+
+- 1 个 NPC 文件、1 处 `create()` 里的 `this_player()->carry_object(` 改成 `carry_object(`（没人在场时 `this_player()` 是 0，NPC 载入不了；有玩家在场时衣服武器落到玩家手里）
+
+逐个物件与 HEAD 对比载入，没有退步。

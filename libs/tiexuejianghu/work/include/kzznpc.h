@@ -1,5 +1,9 @@
         object lingpai;
         restore();
+        if (!stringp(query("name")))
+                set("name", explode(query_save_file(), "/")[<1]);
+        if (!stringp(query("id")))
+                set("id", explode(base_name(this_object()), "/")[<1]);
         if(query("banghui"))    {
                 lingpai=new("/obj/lingpai");
                 lingpai->create(query("banghui"));

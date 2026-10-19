@@ -43,16 +43,60 @@ PAIR = re.compile(rb'"(' + DIRS.encode() + rb')"\s*:\s*(?:(__DIR__)\s*"([^"\n]+)
 ADDX = re.compile(rb'add_exit\s*\(\s*"(' + DIRS.encode() + rb')"\s*,\s*(?:(__DIR__)\s*"([^"\n]+)"|"(/[^"\n]+)")')
 
 
+_STARTS = {}
+
+
+def string_starts(b):
+    """positions of the opening quote of every double-quoted string literal that sits in code (not in a comment, a character constant or a here-doc)"""
+    key = (id(b), len(b))
+    r = _STARTS.get(key)
+    if r is not None:
+        return r
+    r = set()
+    i, n = 0, len(b)
+    while i < n:
+        c = b[i:i + 1]
+        if c == b"@":
+            h = re.compile(rb"@@?([A-Za-z_]\w*)[ \t]*\r?\n").match(b, i)
+            if h:
+                end = re.compile(rb"(?m)^" + re.escape(h.group(1)) + rb"(?![A-Za-z0-9_])").search(b, h.end())
+                i = end.end() if end else n
+                continue
+        if b[i:i + 2] == b"//":
+            j = b.find(b"\n", i)
+            i = n if j < 0 else j
+            continue
+        if b[i:i + 2] == b"/*":
+            j = b.find(b"*/", i + 2)
+            i = n if j < 0 else j + 2
+            continue
+        if c == b"'" and (b[i + 2:i + 3] == b"'" or b[i + 1:i + 2] == b"\\"):
+            j = i + 1
+            while j < n and b[j:j + 1] != c and b[j:j + 1] != b"\n":
+                j += 2 if b[j:j + 1] == b"\\" else 1
+            i = j + 1
+            continue
+        if c == b'"':
+            r.add(i)
+            j = i + 1
+            while j < n and b[j:j + 1] != c:
+                j += 2 if b[j:j + 1] == b"\\" else 1
+            i = j + 1
+            continue
+        i += 1
+    if len(_STARTS) > 64:
+        _STARTS.clear()
+    _STARTS[key] = r
+    return r
+
+
 def in_code(mask, b, pos):
-    """True when the text at pos is code.  A string literal (quotes included) is masked, so a match that starts at an opening
-    quote is judged by the first character before it that is not a blank: `(`, `,` or `[` of the code around it, or
-    the closing `/` of a comment."""
+    """True when the text at pos is code.  A match that starts at an opening quote is code exactly when that quote opens a string literal
+    of the code (the old test looked at the character before it, which is the `/` of a `/* sizeof() == 4 */` comment after `([` and so
+    dropped the first exit of every room written that way)."""
     if mask[pos]:
         return True
-    i = pos - 1
-    while i >= 0 and b[i] in b" \t\r\n":
-        i -= 1
-    return i >= 0 and bool(mask[i]) and b[i] not in b'"'
+    return b[pos:pos + 1] == b'"' and pos in string_starts(b)
 
 
 def area(path):

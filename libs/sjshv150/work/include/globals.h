@@ -177,3 +177,4 @@
 #define EXAMINE_D               "/adm/daemons/examined"
 #define F_NOCLONE               "/feature/noclone.lpc"
 #define INSTALL_COMBAT_TEST     1
+#define WEAPON_OB "/d/obj/weapon/"

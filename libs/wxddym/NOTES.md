@@ -764,3 +764,34 @@ No new errors after the shop commands. Demo `fluffos` save churn
 ## 同一个函数原样贴了两遍（2026-10-19，KB 06 §7.264）
 
 同一个文件里同一个函数被原样贴了两遍（除空白外逐字相同），驱动报 `Redeclaration of function`，整个物件载入不了。删掉第二份及以后的副本，共 1 处：`/kungfu/skill/jiuyin-hamagong.lpc` 的 `main_skill()`。（`scripts/lpc_fix_dup_functions.py`）
+
+## 全局头文件丢了 4 个宏（2026-10-19，KB 04 §6.16）
+
+`/include/globals.h` 里没有定义 `DYNAMIC_D`、`TYPE_MEDAL`、`GUARD_CMD`、`BUFF_STR`，用到它们的物件（名单里 6 个）编译时报 `Undefined variable`/`Undefined function`，整个物件载入不了（编译器在第一个未定义的名字上停下，后面的错误和警告都看不到）。同系的库在各自的头文件里都有这几行：照其中和本库共有文件最多的那个库，原样补到 `/include/globals.h` 最后一个 `#define` 之后，宏体里出现的路径在本库里都存在。补完后名单里有 3 个载入，其余还差别的东西。（`scripts/lpc_restore_defines.py`）
+
+## 和包含文件同目录的头文件，改成引号形式（2026-10-19，KB 04 §6.17）
+
+11 个文件用尖括号写 `#include <hedi.h>` 这类头文件（`12gong.h`、`errs_func.h`、`qizong.h`、`set_del_color.h`、`ultra.h` 等），头文件其实就放在它们自己的目录里。老驱动对尖括号名字也会先找包含文件所在目录，本驱动只找 include 路径，所以报 `Cannot #include ...`，整个物件载入不了。改成 `#include "hedi.h"`（引号形式相对包含文件解析，预加载、`lpcc` 和运行时编译都一样）。（`scripts/lpc_fix_local_include.py`）
+
+## 删掉 exert_function(整数)（2026-10-19，KB 06 §7.266）
+
+`/d/jerry/saveme.lpc`、`/u/jerry/npc/shengji.lpc`、`/u/rock/hlxy/zs.lpc` `create()` 里的 `exert_function(10);` 把整数传给了要字符串的直接调用（让 NPC 闲聊时自己运功），驱动报 `Bad type for argument 1 of exert_function ( string vs int )`，整个 NPC 载入不了。这是存档里的笔误，不知道作者想传哪个字符串，删掉这一句（只影响闲聊时的运功表现）。chidi 的同一个 NPC 早先就是这样处理的。
+
+## die_reason 的参数个数（2026-10-19，KB 04 §6.10）
+
+`/kungfu/condition/damo_luanqi.lpc`、`/kungfu/condition/damo_shangshen.lpc` 里的 `string die_reason()` 覆盖了基类的 `die_reason(string name)`，驱动报 `Number of arguments to 'die_reason' disagrees with previous definition`。补上 `varargs`，调用处不用改；改后与 HEAD 逐个物件对比载入，没有退步。
+
+## 出口指向不存在的房间（2026-10-19，KB 06 §7.257）
+
+下列房间的出口写的文件不存在，而对面恰好只有一个房间的出口指回本房间，所以按对面的房间改正（笔误、大小写、路径少了一级）：
+
+- `/d/huanggon/qihedian.lpc` 的 `south` 出口：`/d/city2/zhengmen` → `/d/huanggon/tinglang3`
+
+改后房间照常载入（与 HEAD 逐个对比，没有退步），出口现在指向存在的房间。
+
+## 区域物件的零碎修正（2026-10-19，KB 06 §7.267–§7.271）
+
+- `feature/dbase.lpc` 的 ZJ 出口提示在目的地不存在时不再中断 `set("exits/…")`（`catch` 住 `data->query("short")`）
+- `data/dbased.o` 里 17 个玩家房屋出口的 `.c` 后缀去掉（显式后缀只认 `.c`，文件是 `.lpc`），6 个房屋入口房间（`d/city/jiaowai7` 等）可以载入
+
+逐个物件与 HEAD 对比载入，没有退步。

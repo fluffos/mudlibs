@@ -838,3 +838,12 @@ Left, as content gaps, not invented: 16 inherits of files that are not in the ar
 ## 去掉的预定义宏 `SAVE_EXTENSION`（2026-10-18，KB 04 §6.11）
 
 老版 MudOS 给每个 LPC 对象预先定义了 `SAVE_EXTENSION`（`".o"`）；FluffOS 的 ChangeLog（COMPAT_BUSTER 一条）把它删了，改用 `__SAVE_EXTENSION__`。本库没有自己 `#define` 这个宏，用到它的文件一律 `Undefined variable 'SAVE_EXTENSION'`，整个对象载入不了。改成 `__SAVE_EXTENSION__`（`scripts/lpc_fix_predefined_macro.py`）：`include/net/oldftp/ftpdsupp.h`。
+
+## 区域物件的零碎修正（2026-10-19，KB 06 §7.267–§7.271）
+
+- `/d/noden/hawk/monster/elder.lpc` 的 `#include "/u/s/smore/hawk.h"` 改成 `/d/noden/hawk/hawk.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- `/d/noden/hawk/monster/god.lpc` 的 `#include "/u/s/smore/hawk.h"` 改成 `/d/noden/hawk/hawk.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- `/d/noden/hawk/monster/god1.lpc` 的 `#include "/u/s/smore/hawk.h"` 改成 `/d/noden/hawk/hawk.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- `std/npc.lpc` 的 `wield_weapon()`/`equip_armor()` 在 `new()` 找不到文件时不再对 0 调 `move()`（`d/noden/hawk/monster/elder` 拿的武器在巫师目录里，整个 NPC 载入不了）
+
+逐个物件与 HEAD 对比载入，没有退步。

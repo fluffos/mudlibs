@@ -458,3 +458,15 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## set_name 的 id 参数传成字符串（2026-10-19，KB 06 §7.260）
 
 `set_name("海口大碗", "bowl");` 把物品的 id 写成了字符串，本库的 `set_name(string name, string *id)` 要的是数组，驱动在编译时报 `Bad type for argument 2 of set_name ( string * vs string )`，整个物件载入不了；旧驱动不检查参数类型，字符串里照样找得到这个词，物品能用 id 称呼。改成 `({ "bowl" })`，共 1 个文件：`/d/baituo/npc/obj/bowl.lpc`。（`scripts/lpc_fix_set_name_id.py`）
+
+## die_reason 的参数个数（2026-10-19，KB 04 §6.10）
+
+`/kungfu/condition/damo_luanqi.lpc`、`/kungfu/condition/damo_shangshen.lpc`、`/kungfu/condition/damo_zheyuan.lpc` 里的 `string die_reason()` 覆盖了基类的 `die_reason(string name)`，驱动报 `Number of arguments to 'die_reason' disagrees with previous definition`。补上 `varargs`，调用处不用改；改后与 HEAD 逐个物件对比载入，没有退步。
+
+## 出口指向不存在的房间（2026-10-19，KB 06 §7.257）
+
+下列房间的出口写的文件不存在，而对面恰好只有一个房间的出口指回本房间，所以按对面的房间改正（笔误、大小写、路径少了一级）：
+
+- `/d/huanggon/qihedian.lpc` 的 `south` 出口：`/d/city2/zhengmen` → `/d/huanggon/tinglang3`
+
+改后房间照常载入（与 HEAD 逐个对比，没有退步），出口现在指向存在的房间。

@@ -762,3 +762,14 @@ HEAD 与工作树分别加载（新进程）：745 -> 746 通过（多出的就�
 ## 标准整理轮（2026-10-19，`scripts/toolkit_fix.sh`）
 
 本库在新驱动下重扫，机械修复：35 个未使用的局部变量，1 处函数返回类型改成与基类一致。修后与 HEAD 逐个物件对比载入，没有退步。
+
+## 找不到父类函数的 ::fn() 调用（2026-10-19，KB 06 §7.259）
+
+`/adm/etc/ranputthing.lpc`、`/d/city/npc/duguoyin.lpc`、`/questnew/ranputthing.lpc`共 3 个物件里写着 `::create();`、`::init();` 这类调用，而它们继承的基类并没有这个函数。老驱动把这种调用当成什么都不做、返回 0 的空调用，本驱动在编译时报 `Unable to find the inherited function 'init'.`，整个物件载入不了。这些物件的错误只有这一种（其他错误清掉之后才露出来的），逐个删掉这些调用（`return ::fn(...)` 改成 `return 0;`）。（`scripts/lpc_fix_dangling_super.py`）
+
+## 区域物件的零碎修正（2026-10-19，KB 06 §7.267–§7.271）
+
+- `adm/simul_efun/file.lpc` 补上同系列（fy3dz、fy3xd）的 `write_file2()`：`adm/daemons/brd.lpc` 和订做衣服、打铁的 NPC 调用它，之前编不过
+- `d/wudujiao/npc/baichan.lpc` 删掉 `map_skill("baichan-hammer", 100);`（第二个参数应是字符串；上面已有 `set_skill`，下面有 `map_skill("hammer", "baichan-hammer")`）
+
+逐个物件与 HEAD 对比载入，没有退步。

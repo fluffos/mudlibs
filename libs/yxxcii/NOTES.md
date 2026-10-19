@@ -200,3 +200,12 @@ autoload 随身物（鸡腿、袍子），人物档本身保存。
 ## laozhe 的 command("give yancao to", me)（2026-10-19，KB 06 §7.266）
 
 `d/heimuya/npc/laozhe.lpc`（黑木崖的老者）的 `init()` 里写着 `command("give yancao to", me);`，`command()` 只收一个字符串，驱动报 `Too many arguments to 'command'`，整个 NPC 载入不了。照 cctx、fys 等库已经改好的写法，改成 `command("give yancao to " + ob->query("id"));`（`ob` 是刚进房间的玩家）。
+
+## 出口指向不存在的房间（2026-10-19，KB 06 §7.257）
+
+下列房间的出口写的文件不存在，而对面恰好只有一个房间的出口指回本房间，所以按对面的房间改正（笔误、大小写、路径少了一级）：
+
+- `/d/city2/domitory.lpc` 的 `west` 出口：`Sino-CO` → `sino-co`
+- `/d/city2/lab.lpc` 的 `east` 出口：`Sino-CO` → `sino-co`
+
+改后房间照常载入（与 HEAD 逐个对比，没有退步），出口现在指向存在的房间。

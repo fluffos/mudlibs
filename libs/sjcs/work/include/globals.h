@@ -141,6 +141,16 @@
 // in effect.
 
 #define PROFILE_COMMANDS
+#define CLUB_D "/adm/daemons/clubd"
+#define CITY_OB(city,room) ("/d/"+city+"/"+room)
+#define WEAPON_OB "/d/obj/weapon/"
+#define HOURLY "hourly"
+#define DAILY "daily"
+#define WEEKLY "weekly"
+#define MONTHLY "monthly"
+#define YEARLY "yearly"
+#define BJTIME_D "/cmds/usr/bjtime"
+#define F_DISASTER "/feature/disaster.lpc"
 #undef PROFILE_COMMANDS
 
 

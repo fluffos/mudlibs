@@ -314,3 +314,14 @@ HEAD 与工作树分别加载（新进程）：895 -> 895 通过，无回退；�
 ## set_name 的 id 参数传成字符串（2026-10-19，KB 06 §7.260）
 
 `set_name("海口大碗", "bowl");` 把物品的 id 写成了字符串，本库的 `set_name(string name, string *id)` 要的是数组，驱动在编译时报 `Bad type for argument 2 of set_name ( string * vs string )`，整个物件载入不了；旧驱动不检查参数类型，字符串里照样找得到这个词，物品能用 id 称呼。改成 `({ "bowl" })`，共 2 个文件：`/d/baituo/npc/obj/bowl.lpc`、`/d/baituo/obj/bowl.lpc`。（`scripts/lpc_fix_set_name_id.py`）
+
+## 全局头文件丢了 3 个宏（2026-10-19，KB 04 §6.16）
+
+`/include/globals.h` 里没有定义 `ARMOR_D(x)`、`BINGQI_D(x)`、`LANGUAGE_D`，用到它们的物件（名单里 3 个）编译时报 `Undefined variable`/`Undefined function`，整个物件载入不了（编译器在第一个未定义的名字上停下，后面的错误和警告都看不到）。同系的库在各自的头文件里都有这几行：照其中和本库共有文件最多的那个库，原样补到 `/include/globals.h` 最后一个 `#define` 之后，宏体里出现的路径在本库里都存在。补完后名单里有 3 个载入，其余还差别的东西。（`scripts/lpc_restore_defines.py`）
+
+## 区域物件的零碎修正（2026-10-19，KB 06 §7.267–§7.271）
+
+- 5 个 NPC 文件、5 处 `create()` 里的 `this_player()->carry_object(` 改成 `carry_object(`（没人在场时 `this_player()` 是 0，NPC 载入不了；有玩家在场时衣服武器落到玩家手里）
+- `d/honghua/npc/xutianhong.lpc` 第 63 行 `ob - query("family/master_id")` 改成 `ob->query(...)`（手误，物件编译不过）
+
+逐个物件与 HEAD 对比载入，没有退步。

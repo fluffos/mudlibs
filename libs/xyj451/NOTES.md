@@ -316,3 +316,15 @@ single-file compile check (PASS). Part of the corpus-wide §7.19 sweep
 ## 武功名拼错的 NPC（2026-10-19，KB 06 §7.258）
 
 `set_skill("kunlun-shnfa", …)`、`map_skill("dodge", "shaolin-shnfa")` 这样的调用把武功名拼错了：本库没有这个武功文件，有的是拼对的那个。以前这种 NPC 在 `create()` 里报 `No such skill` 载入不了；武功缺失时跳过之后它们能载入，可是少了那门武功（`set_skill` 被跳过，`map_skill` 映射不到，门派弟子用普通轻功/拳脚）。按核对过的对照表改正，共 5 处、5 个文件：`yange_blade`→`yange-blade`（1 处）、`dragon-step`→`dragonstep`（1 处）、`huntian-qiong`→`huntian-qigong`（1 处）、`chaos-steos`→`chaos-steps`（1 处）、`xinxiu-duzhang`→`xingxiu-duzhang`（1 处）。（`scripts/lpc_fix_skill_names.py`）
+
+## 找不到父类函数的 ::fn() 调用（2026-10-19，KB 06 §7.259）
+
+`/d/city/npc/duguoyin.lpc`共 1 个物件里写着 `::create();`、`::init();` 这类调用，而它们继承的基类并没有这个函数。老驱动把这种调用当成什么都不做、返回 0 的空调用，本驱动在编译时报 `Unable to find the inherited function 'init'.`，整个物件载入不了。这些物件的错误只有这一种（其他错误清掉之后才露出来的），逐个删掉这些调用（`return ::fn(...)` 改成 `return 0;`）。（`scripts/lpc_fix_dangling_super.py`）
+
+## 出口指向不存在的房间（2026-10-19，KB 06 §7.257）
+
+下列房间的出口写的文件不存在，而对面恰好只有一个房间的出口指回本房间，所以按对面的房间改正（笔误、大小写、路径少了一级）：
+
+- `/d/suburb/es/latemoon/in_room/flower1.lpc` 的 `north` 出口：`corridor7` → `backroom`
+
+改后房间照常载入（与 HEAD 逐个对比，没有退步），出口现在指向存在的房间。

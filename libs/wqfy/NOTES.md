@@ -476,3 +476,9 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply w
 ## 全局头文件丢了 3 个宏（2026-10-19，KB 04 §6.16）
 
 `/include/globals.h` 里没有定义 `STORY_DIR`、`TRANSFER_MODE`、`MAILDIR`，用到它们的物件（名单里 4 个）编译时报 `Undefined variable`/`Undefined function`，整个物件载入不了（编译器在第一个未定义的名字上停下，后面的错误和警告都看不到）。同系的库在各自的头文件里都有这几行：照其中和本库共有文件最多的那个库，原样补到 `/include/globals.h` 最后一个 `#define` 之后，宏体里出现的路径在本库里都存在。补完后名单里有 3 个载入，其余还差别的东西。（`scripts/lpc_restore_defines.py`）
+
+## 区域物件的零碎修正（2026-10-19，KB 06 §7.267–§7.271）
+
+- `d/wudujiao/npc/baichan.lpc` 删掉 `map_skill("baichan-hammer", 100);`（第二个参数应是字符串；上面已有 `set_skill`，下面有 `map_skill("hammer", "baichan-hammer")`）
+
+逐个物件与 HEAD 对比载入，没有退步。

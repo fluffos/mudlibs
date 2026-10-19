@@ -321,3 +321,17 @@ Century/`adm-single` 形状）**：`adm/simul_efun/file.lpc` 的
 ## guo.lpc 的引号丢了（2026-10-19，KB 06 §7.266）
 
 `d/xiangyang/npc/guo.lpc`（郭靖）第 240 行 `(me->query("family/family_name") == "丐帮)&&(query("gbjob")>1)` 的收尾引号丢了（GBK 转 UTF-8 时被 `丐帮` 后面的字节吃掉），后面的汉字被当成代码，驱动报 `Illegal character 0xe6`。补回 `"`：`"丐帮")`。
+
+## 出口指向不存在的房间（2026-10-19，KB 06 §7.257）
+
+下列房间的出口写的文件不存在，而对面恰好只有一个房间的出口指回本房间，所以按对面的房间改正（笔误、大小写、路径少了一级）：
+
+- `/d/city/dayuan.lpc` 的 `north` 出口：`dayuan2` → `houyuan`
+
+改后房间照常载入（与 HEAD 逐个对比，没有退步），出口现在指向存在的房间。
+
+## 区域物件的零碎修正（2026-10-19，KB 06 §7.267–§7.271）
+
+- `/d/gb/npc/nanmin.lpc` 的 `#include "/u/explorer/gb/npc/dest1.h"` 改成 `/d/gb/npc/dest1.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+
+逐个物件与 HEAD 对比载入，没有退步。

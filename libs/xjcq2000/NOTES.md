@@ -945,3 +945,9 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 ## 全局头文件丢了 7 个宏（2026-10-19，KB 04 §6.16）
 
 `/include/globals.h` 里没有定义 `LANGUAGE_D`、`MUDLIB_ENCODING`、`REMOTE_Q`、`INTERMUD_NAME`、`MAILDIR`、`BASE64_D`、`COMPETE_D`，用到它们的物件（名单里 9 个）编译时报 `Undefined variable`/`Undefined function`，整个物件载入不了（编译器在第一个未定义的名字上停下，后面的错误和警告都看不到）。同系的库在各自的头文件里都有这几行：照其中和本库共有文件最多的那个库，原样补到 `/include/globals.h` 最后一个 `#define` 之后，宏体里出现的路径在本库里都存在。补完后名单里有 6 个载入，其余还差别的东西。（`scripts/lpc_restore_defines.py`）
+
+## 区域物件的零碎修正（2026-10-19，KB 06 §7.267–§7.271）
+
+- `/kungfu/skill/chousui-zhang/sandu_test.lpc` 的 `#include "/u/maco/poison_list.h"` 改成 `/kungfu/skill/chousui-zhang/poison_list.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+
+逐个物件与 HEAD 对比载入，没有退步。

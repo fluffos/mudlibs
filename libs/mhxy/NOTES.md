@@ -1147,3 +1147,18 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply m
 ## 同一个 init() 写了两遍、内容不同（2026-10-19，KB 06 §7.265）
 
 `d/youxia/npc/maihuanu1` 里 `init()` 定义了两次（一个加 `buy`/`work` 之类的指令，另一个再加 `list`/`block_cmd`），驱动报 `Redeclaration of function 'init'`，整个物件载入不了。两处作者本来都要：把第二个 `init()` 里的 `add_action(...)` 并到第一个 `init()` 末尾，删掉第二个。（`scripts/lpc_merge_dup_init.py`）
+
+## 出口指向不存在的房间（2026-10-19，KB 06 §7.257）
+
+下列房间的出口写的文件不存在，而对面恰好只有一个房间的出口指回本房间，所以按对面的房间改正（笔误、大小写、路径少了一级）：
+
+- `/d/qujing/wuji2/shandao3.lpc` 的 `west` 出口：`guankou` → `goukano`
+- `/d/qujing/wuji2/shandao4.lpc` 的 `east` 出口：`guankou` → `goukano`
+
+改后房间照常载入（与 HEAD 逐个对比，没有退步），出口现在指向存在的房间。
+
+## 区域物件的零碎修正（2026-10-19，KB 06 §7.267–§7.271）
+
+- `/d/city/obj/npc/daiyu.lpc` 的 `#include "/u/fly/npc/npc.h"` 改成 `/d/city/obj/npc/npc.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+
+逐个物件与 HEAD 对比载入，没有退步。

@@ -220,3 +220,15 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 ## 武功名拼错的 NPC（2026-10-19，KB 06 §7.258）
 
 `set_skill("kunlun-shnfa", …)`、`map_skill("dodge", "shaolin-shnfa")` 这样的调用把武功名拼错了：本库没有这个武功文件，有的是拼对的那个。以前这种 NPC 在 `create()` 里报 `No such skill` 载入不了；武功缺失时跳过之后它们能载入，可是少了那门武功（`set_skill` 被跳过，`map_skill` 映射不到，门派弟子用普通轻功/拳脚）。按核对过的对照表改正，共 16 处、10 个文件：`jinyin-baiguzhao`→`jiuyin-baiguzhao`（4 处）、`changquana`→`changquan`（4 处）、`tiaji-jian`→`taiji-jian`（2 处）、`shenhuo-shengong`→`shenghuo-shengong`（2 处）、`taiji-shenfong`→`taiji-shengong`（1 处）、`yan-fly`→`yanfly`（1 处）、`zhoangnan-zhi`→`zhongnan-zhi`（1 处）、`jinwu-goufan`→`jinwu-goufa`（1 处）。（`scripts/lpc_fix_skill_names.py`）
+
+## guidao 的 is_killing 参数类型（2026-10-19，KB 06 §7.266）
+
+`d/city/npc/guidao.lpc`（鬼刀王五）的 `ask_me()` 里调用 `is_killing(who)`，而本库 `feature/attack.lpc` 的 `is_killing(string id)` 要的是 id 字符串，驱动报 `Bad type for argument 1 of is_killing ( string vs object )`，整个 NPC 载入不了。改成 `is_killing(who->query("id"))`，与本库别处的调用一致。
+
+## 找不到父类函数的 ::fn() 调用（2026-10-19，KB 06 §7.259）
+
+`/kungfu/condition/damo_luanqi.lpc`、`/kungfu/condition/damo_shangshen.lpc`、`/kungfu/condition/damo_zheyuan.lpc`共 3 个物件里写着 `::create();`、`::init();` 这类调用，而它们继承的基类并没有这个函数。老驱动把这种调用当成什么都不做、返回 0 的空调用，本驱动在编译时报 `Unable to find the inherited function 'init'.`，整个物件载入不了。这些物件的错误只有这一种（其他错误清掉之后才露出来的），逐个删掉这些调用（`return ::fn(...)` 改成 `return 0;`）。（`scripts/lpc_fix_dangling_super.py`）
+
+## 标准整理轮（2026-10-19，`scripts/toolkit_fix.sh`）
+
+本库在新驱动下重扫，机械修复：3 个函数补上 varargs（调用处少传参数）。修后与 HEAD 逐个物件对比载入，没有退步。

@@ -1102,3 +1102,17 @@ No code change. 拜师 not re-done.
 ## 标准整理轮（2026-10-19，`scripts/toolkit_fix.sh`）
 
 本库在新驱动下重扫，机械修复：27 个未使用的局部变量，1 处函数返回类型改成与基类一致。修后与 HEAD 逐个物件对比载入，没有退步。
+
+## 找不到父类函数的 ::fn() 调用（2026-10-19，KB 06 §7.259）
+
+`/d/obj/book/kugu-1.lpc`、`/d/obj/book/kugu-2.lpc`、`/d/obj/book/kugu-3.lpc`、`/d/obj/fabao/kunxian-suo.lpc`等共 7 个物件里写着 `::create();`、`::init();` 这类调用，而它们继承的基类并没有这个函数。老驱动把这种调用当成什么都不做、返回 0 的空调用，本驱动在编译时报 `Unable to find the inherited function 'init'.`，整个物件载入不了。这些物件的错误只有这一种（其他错误清掉之后才露出来的），逐个删掉这些调用（`return ::fn(...)` 改成 `return 0;`）。（`scripts/lpc_fix_dangling_super.py`）
+
+## NPC 存档缺失（2026-10-19，KB 06 §7.267）
+
+`kzznpc.h` 的 NPC（客栈伙计、铁匠、裁缝、守卫等，99 个）把名字、id、武功全存在 `data/npc/<名字>.o`，而本档案的 `data/npc/` 是空目录：`restore()` 之后 `set_name(0, ...)`，`enable_player()` 里的 `set_living_name(0)` 报 `Bad argument 1 to set_living_name()`，物件载入失败（房间的 `make_inventory` 吞掉错误，商店里没有掌柜）。同一作者的姊妹档案 `fys`（风云三，`d/` 下 5,832 个共有的 `.lpc` 里 5,767 个逐字节相同）带着 109 个原始存档，其中 96 个正是本库 NPC 用到的名字，已原样复制到 `data/npc/`。`include/kzznpc.h` 另加兜底：存档里没有名字或 id 时，名字取存档文件名，id 取物件文件名（扬州的 `xiaohuoji` 两边都没有存档）。HEAD 上 99 个 NPC 只有 5 个能载入，现在 99 个全部载入，没有退步。
+
+## 区域物件的零碎修正（2026-10-19，KB 06 §7.267–§7.271）
+
+- `d/thd/hall.lpc` 调用的留言板 `/u/aug/thd/thd_b` 改成区域里的 `/d/thd/thd_b`，留言板的 `location` 同步改成 `/d/thd/hall`（作者自己留在注释里的写法）
+
+逐个物件与 HEAD 对比载入，没有退步。

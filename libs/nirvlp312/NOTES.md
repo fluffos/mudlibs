@@ -288,3 +288,9 @@ header-encrypted. Skip nitan.zip.
 - 2026-10-14: 2 files did not compile with `Type of returned value doesn't match function return type ( int vs void )`: a function declared `void` (or with no type) returns a value, which the old driver passed to the caller. Functions whose value a caller reads (add_action handlers, commands, helpers) now carry the type they return: `on_channel()`. HEAD vs tree in fresh drivers: 24 objects, 11 newly loading, 0 regressions (`scripts/lpc_fix_void_return.py`, KB 04 §6.3).
 
 - 2026-10-14: 4 file(s) used `array` on its own as a type (`array names;`), which this driver reads as a plain name (`Illegal lvalue`); now `mixed *`, every declarator starred (`scripts/lpc_fix_array_type.py`) (KB 04 §6.1, §6.3). Warnings the newly loading files showed are fixed (unused locals removed, bare returns in value functions `return 0;`). HEAD vs tree in fresh drivers: 24 objects, 11 newly loading, 0 regressions.
+
+## Small repairs to area objects (2026-10-19, KB 06 §7.267–§7.271)
+
+- `/std/partymaster.lpc`: `#include "/players/beck/esc.h"` rewritten to `/obj/esc.h` (the wizard directory is not in the archive; the lib carries the one copy)
+
+Every changed object was loaded at HEAD and in the tree: no regression.

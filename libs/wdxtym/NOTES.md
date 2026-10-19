@@ -520,3 +520,21 @@ Too-deep-recursion) recurred at boot; no new error from shop/拜师.
 本库的代码到处按 nitan 一系的约定写：`query("id", ob)`、`query_temp("fighting", me)`、`set("x", v, ob)`（第二个/末尾的参数是目标物件，等于 `ob->query("id")`），也到处用 `count_lt()`/`count_add()`、`time_period()`、`to_string()`、`good_bunch()`、`addn()`/`addn_temp()` 这些全局函数。可是本库的 `feature/dbase.lpc`、`include/dbase.h` 还是旧签名 `query(string prop, int raw)`，simul_efun 里也没有这些函数：驱动在编译时报 `Bad type for argument 2 of query ( int vs object )`、`Undefined function query_temp/count_lt/time_period`，kungfu/skill 下的招式、maze 战场的 NPC都载入不了（移植后此前因这一类原因编译不过的 80 个文件里 58 个载入）。照 nitan6 的做法移植：`dbase.h` 的原型和 `dbase.lpc` 的 `set/query/delete/set_temp/query_temp/delete_temp` 接受目标物件（`raw_or_ob`：整数是“原始值”标志，物件则转给它自己的 dbase）；`inherit/room/room.lpc`、`adm/daemons/examined.lpc`、`clone/user/user.lpc` 里覆盖这些函数的地方同步改签名；simul_efun 对象 `inherit F_TREEMAP` 并在 `adm/simul_efun/wizard.lpc` 里放不继承 F_DBASE 的对象用的兜底版本（同样带目标物件转发，招式 perform 文件就靠它），新增 `adm/simul_efun/ntefun.lpc`（`count()` 及 `count_*`、`time_period`、`to_string`、`range_random`、`base_dir`、`format_string`、`mapping_eqv`、`bunchp/good_bunch/bad_bunch`、`addn/addn_temp`）。运行时探针（两个 NPC 互相 `query(…, 对方)`、`set(…, 7, 对方)`、非 dbase 对象裸调用 `query_temp(…, 对方)`）全部符合预期。
 
 移植后才编译到底的文件里露出 12 个未使用的局部变量，已删：`cmds/usr/ability`（`lists`、`temp`）、`cmds/usr/talent`（`lists`、`temp`、`myclass`）、`maze/necropolis/npc/` 下的 `ghost_devil`、`ghost_devil_special`、`skeleton_lich`、`skeleton_lich_special`（`no_busy`）、`taoist`（`obs`、`reward_msg`）、`zombie_blood`（`msg`），与 wxddym 同一处改法。`cmds/usr/ability`、`talent` 仍载入不了：它们调用的 `MYGIFT_D` 本库的头文件没有定义，`adm/daemons/mygiftd` 也没有这个文件（nitan6/nt6 有），这是未定义宏一类，另案处理。
+
+## 全局头文件丢了 3 个宏（2026-10-19，KB 04 §6.16）
+
+`/include/globals.h` 里没有定义 `SPECIAL_ATTACK`、`BUSY_MESSAGE`、`BUFF_STR`，用到它们的物件（名单里 7 个）编译时报 `Undefined variable`/`Undefined function`，整个物件载入不了（编译器在第一个未定义的名字上停下，后面的错误和警告都看不到）。同系的库在各自的头文件里都有这几行：照其中和本库共有文件最多的那个库，原样补到 `/include/globals.h` 最后一个 `#define` 之后，宏体里出现的路径在本库里都存在。补完后名单里有 4 个载入，其余还差别的东西。（`scripts/lpc_restore_defines.py`）
+
+## 找不到父类函数的 ::fn() 调用（2026-10-19，KB 06 §7.259）
+
+`/clone/board/anonymous_b.lpc`、`/clone/board/bocai_b.lpc`、`/clone/board/kedian_b.lpc`、`/clone/board/towiz_b.lpc`共 4 个物件里写着 `::create();`、`::init();` 这类调用，而它们继承的基类并没有这个函数。老驱动把这种调用当成什么都不做、返回 0 的空调用，本驱动在编译时报 `Unable to find the inherited function 'init'.`，整个物件载入不了。这些物件的错误只有这一种（其他错误清掉之后才露出来的），逐个删掉这些调用（`return ::fn(...)` 改成 `return 0;`）。（`scripts/lpc_fix_dangling_super.py`）
+
+## die_reason 的参数个数（2026-10-19，KB 04 §6.10）
+
+`/kungfu/condition/damo_luanqi.lpc`、`/kungfu/condition/damo_shangshen.lpc` 里的 `string die_reason()` 覆盖了基类的 `die_reason(string name)`，驱动报 `Number of arguments to 'die_reason' disagrees with previous definition`。补上 `varargs`，调用处不用改；改后与 HEAD 逐个物件对比载入，没有退步。
+
+## 区域物件的零碎修正（2026-10-19，KB 06 §7.267–§7.271）
+
+- `feature/dbase.lpc` 的 ZJ 出口提示在目的地不存在时不再中断 `set("exits/…")`（`catch` 住 `data->query("short")`）
+
+逐个物件与 HEAD 对比载入，没有退步。

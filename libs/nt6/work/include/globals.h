@@ -316,6 +316,12 @@
 #define INSTALL_COMBAT_TEST     1
 #define S_RING                   "/inherit/gems/ring"
 #define F_GEMS                   "/feature/gems"
+#define ARMOR_D(x) ("/clone/armor/" + x)
+#define BINGQI_D(x) ("/clone/weapon/" + x)
+#define BOOK_D(x) ("/clone/book/" + x)
+#define CLONE_DIR "/clone/"
+#define MAZE_D "/adm/daemons/mazed"
+#define TIME_TICK ((time()-900000000)*60)
 
 #undef PROFILE_COMMANDS
 #undef COUNT_COMMAND_TIMECOST

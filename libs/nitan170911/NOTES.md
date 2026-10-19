@@ -1116,3 +1116,15 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 ## set_name 的 id 参数传成字符串（2026-10-19，KB 06 §7.260）
 
 `set_name("海口大碗", "bowl");` 把物品的 id 写成了字符串，本库的 `set_name(string name, string *id)` 要的是数组，驱动在编译时报 `Bad type for argument 2 of set_name ( string * vs string )`，整个物件载入不了；旧驱动不检查参数类型，字符串里照样找得到这个词，物品能用 id 称呼。改成 `({ "bowl" })`，共 1 个文件：`/d/baituo/npc/obj/bowl.lpc`。（`scripts/lpc_fix_set_name_id.py`）
+
+## 全局头文件丢了 4 个宏（2026-10-19，KB 04 §6.16）
+
+`/include/globals.h` 里没有定义 `BOOK_D(x)`、`CENTER_OB`、`EXIT_SIZE`、`EXIT(n)`，用到它们的物件（名单里 4 个）编译时报 `Undefined variable`/`Undefined function`，整个物件载入不了（编译器在第一个未定义的名字上停下，后面的错误和警告都看不到）。同系的库在各自的头文件里都有这几行：照其中和本库共有文件最多的那个库，原样补到 `/include/globals.h` 最后一个 `#define` 之后，宏体里出现的路径在本库里都存在。补完后名单里有 1 个载入，其余还差别的东西。（`scripts/lpc_restore_defines.py`）
+
+## kedian4 的 mapping ob（2026-10-19，KB 06 §7.266）
+
+`d/city/kedian4.lpc` 的 `give_cigarette()` 把循环变量 `ob` 声明成了 `mapping`，却拿它当物件传给 `query("online_time", ob)`，驱动报 `Bad type for argument 2 of query ( object vs mapping )`，整个房间载入不了。改成 `object ob;`。
+
+## die_reason 的参数个数（2026-10-19，KB 04 §6.10）
+
+`/kungfu/condition/damo_luanqi.lpc`、`/kungfu/condition/damo_shangshen.lpc`、`/kungfu/condition/damo_zheyuan.lpc` 里的 `string die_reason()` 覆盖了基类的 `die_reason(string name)`，驱动报 `Number of arguments to 'die_reason' disagrees with previous definition`。补上 `varargs`，调用处不用改；改后与 HEAD 逐个物件对比载入，没有退步。

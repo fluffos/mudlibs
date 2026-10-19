@@ -209,3 +209,9 @@ live `debug.log` 是 `libs/fy330/log/debug.log`（Boot Time Fri Sep 4
 ## `set_skill()` 遇到本库没有文件的武功不再抛错（2026-10-18，KB 06 §7.256）
 
 `feature/skill.lpc` 里的 `set_skill()`、`map_skill()`、`prepare_skill()` 碰到没有武功文件的名字就 `error("F_SKILL: No such skill (…)")`，调用它们的 NPC `create()` 整个中断：NPC 载入不了，刷出它的房间也少一个人。本库有 1 个对象设了本库没有文件的武功（1 个名字，最多的是 `jiayiqoforce`）。三处都改成 `return`：这一门武功不给、不映射，对象照常载入，只是少了它（缺的武功本身仍是内容缺口）。抽样载入这些对象：1 个里 1 个通过。（`scripts/lpc_guard_set_skill.py`）
+
+## 区域物件的零碎修正（2026-10-19，KB 06 §7.267–§7.271）
+
+- `adm/simul_efun/file.lpc` 补上同系列（fy3dz、fy3xd）的 `write_file2()`：`adm/daemons/brd.lpc` 和订做衣服、打铁的 NPC 调用它，之前编不过
+
+逐个物件与 HEAD 对比载入，没有退步。

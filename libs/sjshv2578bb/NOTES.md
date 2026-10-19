@@ -303,3 +303,12 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 ## 和包含文件同目录的头文件，改成引号形式（2026-10-19，KB 04 §6.17）
 
 2 个文件用尖括号写 `#include <hedi.h>` 这类头文件（`banned.h` 等），头文件其实就放在它们自己的目录里。老驱动对尖括号名字也会先找包含文件所在目录，本驱动只找 include 路径，所以报 `Cannot #include ...`，整个物件载入不了。改成 `#include "hedi.h"`（引号形式相对包含文件解析，预加载、`lpcc` 和运行时编译都一样）。（`scripts/lpc_fix_local_include.py`）
+
+## 出口指向不存在的房间（2026-10-19，KB 06 §7.257）
+
+下列房间的出口写的文件不存在，而对面恰好只有一个房间的出口指回本房间，所以按对面的房间改正（笔误、大小写、路径少了一级）：
+
+- `/d/qujing/wuji2/shandao3.lpc` 的 `west` 出口：`guankou` → `goukano`
+- `/d/qujing/wuji2/shandao4.lpc` 的 `east` 出口：`guankou` → `goukano`
+
+改后房间照常载入（与 HEAD 逐个对比，没有退步），出口现在指向存在的房间。

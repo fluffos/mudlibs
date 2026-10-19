@@ -323,6 +323,10 @@
 #define F_GEMS                   "/feature/gems"
 #define SSERVER                  "/std/sserver"
 #define F_RIDDING                "/feature/ridding"
+#define BOOK_D(x) ("/clone/book/" + x)
+#define CENTER_OB "/d/city/guangchang"
+#define EXIT_SIZE 2
+#define EXIT(n) n + EXIT_SIZE + 1
 
 #undef PROFILE_COMMANDS
 #undef COUNT_COMMAND_TIMECOST

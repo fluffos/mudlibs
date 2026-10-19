@@ -229,5 +229,8 @@
 #define DEMONROOM                "/inherit/room/demonroom"
 #define BH_NPC                   "/inherit/char/bh_npc"
 #define RING                     "/inherit/weapon/ring"
+#define SPECIAL_ATTACK 3
+#define BUSY_MESSAGE "你现在忙得很，无法做任何事情。\n"
+#define BUFF_STR "buff/attr/str"
 
 #undef PROFILE_COMMANDS

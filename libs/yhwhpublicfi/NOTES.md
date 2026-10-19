@@ -497,3 +497,11 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 ## 同一个函数原样贴了两遍（2026-10-19，KB 06 §7.264）
 
 同一个文件里同一个函数被原样贴了两遍（除空白外逐字相同），驱动报 `Redeclaration of function`，整个物件载入不了。删掉第二份及以后的副本，共 1 处：`/d/beijing/npc/dan/danB_6.lpc` 的 `query_autoload()`。（`scripts/lpc_fix_dup_functions.py`）
+
+## 全局头文件丢了 2 个宏（2026-10-19，KB 04 §6.16）
+
+`/include/globals.h` 里没有定义 `TEXT2PIC_D`、`TYPE_CHARM`，用到它们的物件（名单里 2 个）编译时报 `Undefined variable`/`Undefined function`，整个物件载入不了（编译器在第一个未定义的名字上停下，后面的错误和警告都看不到）。同系的库在各自的头文件里都有这几行：照其中和本库共有文件最多的那个库，原样补到 `/include/globals.h` 最后一个 `#define` 之后，宏体里出现的路径在本库里都存在。补完后名单里有 2 个载入，其余还差别的东西。（`scripts/lpc_restore_defines.py`）
+
+## die_reason 的参数个数（2026-10-19，KB 04 §6.10）
+
+`/kungfu/condition/damo_luanqi.lpc`、`/kungfu/condition/damo_shangshen.lpc`、`/kungfu/condition/damo_zheyuan.lpc` 里的 `string die_reason()` 覆盖了基类的 `die_reason(string name)`，驱动报 `Number of arguments to 'die_reason' disagrees with previous definition`。补上 `varargs`，调用处不用改；改后与 HEAD 逐个物件对比载入，没有退步。

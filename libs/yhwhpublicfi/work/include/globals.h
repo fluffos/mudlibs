@@ -189,5 +189,7 @@
 
 // Install information
 #define INSTALL_COMBAT_TEST     1
+#define TEXT2PIC_D "/adm/daemons/text2pic_d"
+#define TYPE_CHARM "charm"
 
 #undef PROFILE_COMMANDS

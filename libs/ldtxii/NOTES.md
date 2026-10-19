@@ -383,3 +383,20 @@ lpc`/`pigd.lpc` 里搜不到任何 `money`/`balance` 相关调用——它不是
 ## set_name 的 id 参数传成字符串（2026-10-19，KB 06 §7.260）
 
 `set_name("海口大碗", "bowl");` 把物品的 id 写成了字符串，本库的 `set_name(string name, string *id)` 要的是数组，驱动在编译时报 `Bad type for argument 2 of set_name ( string * vs string )`，整个物件载入不了；旧驱动不检查参数类型，字符串里照样找得到这个词，物品能用 id 称呼。改成 `({ "bowl" })`，共 2 个文件：`/d/baituo/npc/obj/bowl.lpc`、`/d/baituo/obj/bowl.lpc`。（`scripts/lpc_fix_set_name_id.py`）
+
+## 出口指向不存在的房间（2026-10-19，KB 06 §7.257）
+
+下列房间的出口写的文件不存在，而对面恰好只有一个房间的出口指回本房间，所以按对面的房间改正（笔误、大小写、路径少了一级）：
+
+- `/d/shashou/enterance.lpc` 的 `south` 出口：`/d/dali/dadao1` → `/d/dali1/dadao1`
+
+改后房间照常载入（与 HEAD 逐个对比，没有退步），出口现在指向存在的房间。
+
+## 区域物件的零碎修正（2026-10-19，KB 06 §7.267–§7.271）
+
+- `d/biwu/wudao4.lpc` 删掉 `"/u/lzd/biwu_b"->foo();`（巫师的留言板不在档案里，调用失败会让房间载入不了）
+- `d/wizard/arch_room.lpc` 删掉 `call_other("/u/jiudai/arch_b", "???");`（同上）
+- 27 个 NPC 文件、40 处 `create()` 里的 `this_player()->carry_object(` 改成 `carry_object(`（没人在场时 `this_player()` 是 0，NPC 载入不了；有玩家在场时衣服武器落到玩家手里）
+- `d/city/npc/wei.lpc` 对巫师目录里的衣服 `/u/rhxlwd/xueyuetu` 的 `->wear()` 加上判断（姊妹档案 ldtx 已是这样写）
+
+逐个物件与 HEAD 对比载入，没有退步。

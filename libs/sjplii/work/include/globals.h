@@ -162,3 +162,4 @@
 #define RICH_B "铁血江湖十大富人排行榜"
 #define PKER_B "铁血江湖十大杀人狂排行榜"
 #define EXP_B "铁血江湖十大高手排行榜"
+#define MONEY_D "/adm/daemons/moneyd"

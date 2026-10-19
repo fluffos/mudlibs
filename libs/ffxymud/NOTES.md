@@ -292,3 +292,10 @@ No other code change.
 ## 木人 NPC 的源文件被截断（2026-10-19，KB 06 §7.266）
 
 `d/liangong/npc/muren.lpc`、`muren2.lpc`（练功房里放 100 个的陪练木人）的文件在 `set("score", 2000);` 处结束，`create()` 没有收尾，驱动报 `syntax error, unexpected end of file`，练功房 `liangong`/`liangong2` 里一个木人也出不来。补上 `setup();` 和结尾的 `}`（没有哪个同系库带着完整的这两个文件，所以只补到能载入为止，木人不带武功）。
+
+## 区域物件的零碎修正（2026-10-19，KB 06 §7.267–§7.271）
+
+- `/d/board/mingjiao_b.lpc` 的 `location` 从不存在的 `/d/mj/guangming-ding` 改成 `/d/mingjiao/guangming-ding`（载入明教留言板失败会让光明顶房间载入不了）
+- 2 个 NPC 文件、2 处 `create()` 里的 `this_player()->carry_object(` 改成 `carry_object(`（没人在场时 `this_player()` 是 0，NPC 载入不了；有玩家在场时衣服武器落到玩家手里）
+
+逐个物件与 HEAD 对比载入，没有退步。

@@ -830,3 +830,9 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply e
 ## 补回本库没有的基类文件（2026-10-18，KB 04 §6.15）
 
 下面这些基类本库没有，继承它们的对象（房间、NPC、物品）整批载入不了（`inherit XXX;` 的宏没定义，或者 `inherit "/std/…";` 的文件不在）。同系的库里有同名文件，两库有大量逐字节相同的文件（亲缘关系），所以从那边原样拷来，缺的宏补进全局头文件：`/d/translate/tmp/drink`←es1_win，3 个对象继承它，抽样 3/3 载入。每个基类补回后单独载入、再抽样载入使用它的对象，基类载不进来或者一个用户也载不进来的就撤掉（本库撤掉了它们，不再补）。（`scripts/lpc_restore_bases.py`）
+
+## 区域物件的零碎修正（2026-10-19，KB 06 §7.267–§7.271）
+
+- `std/npc.lpc` 的 `wield_weapon()`/`equip_armor()` 在 `new()` 找不到文件时不再对 0 调 `move()`（`d/noden/hawk/monster/elder` 拿的武器在巫师目录里，整个 NPC 载入不了）
+
+逐个物件与 HEAD 对比载入，没有退步。

@@ -187,3 +187,14 @@
 #define FLOWER                   "/std/armor/flower"
 #define KZZNPC                   "/std/char/kzznpc"
 #define MAGIC_ROOM               "/std/room/magicroom"
+#define PROP_OTHERS 0
+#define TYPE_OTHERS "others"
+#define TYPE_FLOWER "flower"
+#define TYPE_ARMBANDS "armbands"
+#define TYPE_CAPE "cape"
+#define TYPE_LEGGINGS "leggings"
+#define TYPE_PANTS "pants"
+#define TYPE_SHOULDER "shoulder"
+#define TYPE_SKIRTS "skirts"
+#define WEAPON_OB "/d/obj/weapon/"
+#define PROP_SURCOAT 10

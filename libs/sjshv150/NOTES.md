@@ -313,3 +313,20 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 ## 同一个函数原样贴了两遍（2026-10-19，KB 06 §7.264）
 
 同一个文件里同一个函数被原样贴了两遍（除空白外逐字相同），驱动报 `Redeclaration of function`，整个物件载入不了。删掉第二份及以后的副本，共 1 处：`/d/pkdao/room1.lpc` 的 `greeting()`。（`scripts/lpc_fix_dup_functions.py`）
+
+## 全局头文件丢了 1 个宏（2026-10-19，KB 04 §6.16）
+
+`/include/globals.h` 里没有定义 `WEAPON_OB`，用到它们的物件（名单里 1 个）编译时报 `Undefined variable`/`Undefined function`，整个物件载入不了（编译器在第一个未定义的名字上停下，后面的错误和警告都看不到）。同系的库在各自的头文件里都有这几行：照其中和本库共有文件最多的那个库，原样补到 `/include/globals.h` 最后一个 `#define` 之后，宏体里出现的路径在本库里都存在。名单里的物件除了这几个宏之外还有别的错误，暂时仍载入不了。（`scripts/lpc_restore_defines.py`）
+
+## 出口指向不存在的房间（2026-10-19，KB 06 §7.257）
+
+下列房间的出口写的文件不存在，而对面恰好只有一个房间的出口指回本房间，所以按对面的房间改正（笔误、大小写、路径少了一级）：
+
+- `/d/qujing/wuji2/shandao3.lpc` 的 `west` 出口：`guankou` → `goukano`
+- `/d/qujing/wuji2/shandao4.lpc` 的 `east` 出口：`guankou` → `goukano`
+
+改后房间照常载入（与 HEAD 逐个对比，没有退步），出口现在指向存在的房间。
+
+## 标准整理轮（2026-10-19，`scripts/toolkit_fix.sh`）
+
+本库在新驱动下重扫，机械修复：3 处浮点数赋给 int 的地方改成 to_int()，4 处重复的 inherit。修后与 HEAD 逐个物件对比载入，没有退步。

@@ -254,3 +254,9 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## wushi.lpc 重复定义了头文件里的函数（2026-10-19，KB 06 §7.266）
 
 `d/city/npc/wushi.lpc`（地下比武场的拳手）自己又写了一份 `nick_first`/`nick_second`/`create_nick()`，而它包含的 `skills_pfm.h` 里已经有一模一样的一份，驱动报 `Redeclaration of function 'create_nick'`，整个 NPC 载入不了；它还把 `skills_pfm.h` 已经包含过的 `r_name.h` 再包含一遍（`get_random_name()`/`random_name()` 因此也定义两次）。删掉文件里的重复定义和多余的那行 `#include "r_name.h"`，用头文件里的那份。
+
+## 区域物件的零碎修正（2026-10-19，KB 06 §7.267–§7.271）
+
+- `/d/shaolin/npc/xuan-du.lpc` 的 `#include "/u/hunthu/npc/xuan-du.h"` 改成 `/kungfu/class/shaolin/xuan-du.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+
+逐个物件与 HEAD 对比载入，没有退步。

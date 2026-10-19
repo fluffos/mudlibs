@@ -438,3 +438,13 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply f
 ## 全局头文件丢了 4 个宏（2026-10-19，KB 04 §6.16）
 
 `/include/globals.h` 里没有定义 `TYPE_WRISTS`、`TYPE_WAIST`、`TYPE_SHIELD`、`TYPE_SURCOAT`，用到它们的物件（名单里 8 个）编译时报 `Undefined variable`/`Undefined function`，整个物件载入不了（编译器在第一个未定义的名字上停下，后面的错误和警告都看不到）。同系的库在各自的头文件里都有这几行：照其中和本库共有文件最多的那个库，原样补到 `/include/globals.h` 最后一个 `#define` 之后，宏体里出现的路径在本库里都存在。补完后名单里有 8 个载入，其余还差别的东西。（`scripts/lpc_restore_defines.py`）
+
+## kzznpc.h 兜底（2026-10-19，KB 06 §7.267）
+
+`d/yangzhou/npc/xiaohuoji`（听萧伙计）没有存档，`restore()` 后 `set_name(0, ...)`，载入时报 `Bad argument 1 to set_living_name()`。`include/kzznpc.h` 在 `restore()` 之后加了兜底：存档里没有名字或 id 时，名字取存档文件名，id 取物件文件名。100 个 `kzznpc` NPC 全部载入（HEAD 99 个），没有退步。姊妹档案 `tiexuejianghu` 的 NPC 存档就是从这里的 `data/npc/` 补回去的。
+
+## 区域物件的零碎修正（2026-10-19，KB 06 §7.267–§7.271）
+
+- `d/thd/hall.lpc` 调用的留言板 `/u/aug/thd/thd_b` 改成区域里的 `/d/thd/thd_b`，留言板的 `location` 同步改成 `/d/thd/hall`（作者自己留在注释里的写法）
+
+逐个物件与 HEAD 对比载入，没有退步。

@@ -137,6 +137,8 @@
 #define S_WEAPON		"/inherit/gems/weapon.lpc"
 #define S_ROBE			"/inherit/gems/robe.lpc"
 #define S_RING			"/inherit/gems/ring.lpc"
+#define EVENT_D "/adm/daemons/eventd"
+#define EVENT_DIR "/adm/daemons/event/"
 
 // Profiling switches
 //

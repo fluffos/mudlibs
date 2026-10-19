@@ -521,3 +521,43 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 ## set_name 的 id 参数传成字符串（2026-10-19，KB 06 §7.260）
 
 `set_name("海口大碗", "bowl");` 把物品的 id 写成了字符串，本库的 `set_name(string name, string *id)` 要的是数组，驱动在编译时报 `Bad type for argument 2 of set_name ( string * vs string )`，整个物件载入不了；旧驱动不检查参数类型，字符串里照样找得到这个词，物品能用 id 称呼。改成 `({ "bowl" })`，共 2 个文件：`/d/baituo/npc/obj/bowl.lpc`、`/d/baituo/obj/bowl.lpc`。（`scripts/lpc_fix_set_name_id.py`）
+
+## 区域物件的零碎修正（2026-10-19，KB 06 §7.267–§7.271）
+
+- `/d/newbie/npc/emsz.lpc` 的 `#include "/u/swordman/newbie/npc/sujia.h"` 改成 `/d/newbie/npc/sujia.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- `/jobsys/gfjob/npc/ada.lpc` 的 `#include "/u/poi/job/npc/npc.h"` 改成 `/jobsys/gfjob/npc/npc.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- `/jobsys/gfjob/npc/aer.lpc` 的 `#include "/u/poi/job/npc/npc.h"` 改成 `/jobsys/gfjob/npc/npc.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- `/jobsys/gfjob/npc/asan.lpc` 的 `#include "/u/poi/job/npc/npc.h"` 改成 `/jobsys/gfjob/npc/npc.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- `/jobsys/gfjob/npc/cao.lpc` 的 `#include "/u/poi/job/npc/npc.h"` 改成 `/jobsys/gfjob/npc/npc.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- `/jobsys/gfjob/npc/caokou.lpc` 的 `#include "/u/poi/job/npc/npc.h"` 改成 `/jobsys/gfjob/npc/npc.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- `/jobsys/gfjob/npc/chang.lpc` 的 `#include "/u/poi/job/npc/npc.h"` 改成 `/jobsys/gfjob/npc/npc.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- `/jobsys/gfjob/npc/dadao.lpc` 的 `#include "/u/poi/job/npc/npc.h"` 改成 `/jobsys/gfjob/npc/npc.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- `/jobsys/gfjob/npc/eba.lpc` 的 `#include "/u/poi/job/npc/npc.h"` 改成 `/jobsys/gfjob/npc/npc.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- `/jobsys/gfjob/npc/eseng.lpc` 的 `#include "/u/poi/job/npc/npc.h"` 改成 `/jobsys/gfjob/npc/npc.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- `/jobsys/gfjob/npc/gaiyiming.lpc` 的 `#include "/u/poi/job/npc/npc.h"` 改成 `/jobsys/gfjob/npc/npc.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- `/jobsys/gfjob/npc/guo.lpc` 的 `#include "/u/poi/job/npc/npc.h"` 改成 `/jobsys/gfjob/npc/npc.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- `/jobsys/gfjob/npc/hua.lpc` 的 `#include "/u/poi/job/npc/npc.h"` 改成 `/jobsys/gfjob/npc/npc.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- `/jobsys/gfjob/npc/huangxu.lpc` 的 `#include "/u/poi/job/npc/npc.h"` 改成 `/jobsys/gfjob/npc/npc.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- `/jobsys/gfjob/npc/huo.lpc` 的 `#include "/u/poi/job/npc/npc.h"` 改成 `/jobsys/gfjob/npc/npc.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- `/jobsys/gfjob/npc/li.lpc` 的 `#include "/u/poi/job/npc/npc.h"` 改成 `/jobsys/gfjob/npc/npc.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- `/jobsys/gfjob/npc/maijing.lpc` 的 `#include "/u/poi/job/npc/npc.h"` 改成 `/jobsys/gfjob/npc/npc.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- `/jobsys/gfjob/npc/meng.lpc` 的 `#include "/u/poi/job/npc/npc.h"` 改成 `/jobsys/gfjob/npc/npc.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- `/jobsys/gfjob/npc/qian.lpc` 的 `#include "/u/poi/job/npc/npc.h"` 改成 `/jobsys/gfjob/npc/npc.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- `/jobsys/gfjob/npc/quan.lpc` 的 `#include "/u/poi/job/npc/npc.h"` 改成 `/jobsys/gfjob/npc/npc.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- `/jobsys/gfjob/npc/shan.lpc` 的 `#include "/u/poi/job/npc/npc.h"` 改成 `/jobsys/gfjob/npc/npc.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- `/jobsys/gfjob/npc/shanzei.lpc` 的 `#include "/u/poi/job/npc/npc.h"` 改成 `/jobsys/gfjob/npc/npc.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- `/jobsys/gfjob/npc/songyang.lpc` 的 `#include "/u/poi/job/npc/npc.h"` 改成 `/jobsys/gfjob/npc/npc.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- `/jobsys/gfjob/npc/sun.lpc` 的 `#include "/u/poi/job/npc/npc.h"` 改成 `/jobsys/gfjob/npc/npc.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- `/jobsys/gfjob/npc/wu.lpc` 的 `#include "/u/poi/job/npc/npc.h"` 改成 `/jobsys/gfjob/npc/npc.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- `/jobsys/gfjob/npc/xian.lpc` 的 `#include "/u/poi/job/npc/npc.h"` 改成 `/jobsys/gfjob/npc/npc.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- `/jobsys/gfjob/npc/xiaoxiao.lpc` 的 `#include "/u/poi/job/npc/npc.h"` 改成 `/jobsys/gfjob/npc/npc.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- `/jobsys/gfjob/npc/xu.lpc` 的 `#include "/u/poi/job/npc/npc.h"` 改成 `/jobsys/gfjob/npc/npc.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- `/jobsys/gfjob/npc/yu.lpc` 的 `#include "/u/poi/job/npc/npc.h"` 改成 `/jobsys/gfjob/npc/npc.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- `/jobsys/gfjob/npc/yuan.lpc` 的 `#include "/u/poi/job/npc/npc.h"` 改成 `/jobsys/gfjob/npc/npc.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- `/jobsys/gfjob/npc/zhaoyishang.lpc` 的 `#include "/u/poi/job/npc/npc.h"` 改成 `/jobsys/gfjob/npc/npc.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- `/jobsys/gfjob/npc/zheng.lpc` 的 `#include "/u/poi/job/npc/npc.h"` 改成 `/jobsys/gfjob/npc/npc.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- `/jobsys/gfjob/npc/zhou.lpc` 的 `#include "/u/poi/job/npc/npc.h"` 改成 `/jobsys/gfjob/npc/npc.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- `/jobsys/gfjob/npc/zhu.lpc` 的 `#include "/u/poi/job/npc/npc.h"` 改成 `/jobsys/gfjob/npc/npc.h`（巫师目录 `/u/…` 不在档案里，头文件的唯一副本在区域里）
+- 1 个 NPC 文件、1 处 `create()` 里的 `this_player()->carry_object(` 改成 `carry_object(`（没人在场时 `this_player()` 是 0，NPC 载入不了；有玩家在场时衣服武器落到玩家手里）
+
+逐个物件与 HEAD 对比载入，没有退步。

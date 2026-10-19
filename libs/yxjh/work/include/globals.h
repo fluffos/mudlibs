@@ -162,6 +162,7 @@
 #define F_VENDOR_SALE           "/feature/vendor_sale.lpc"
 #define F_BVENDOR        "/feature/vendor.lpc"
 #define STICK                    "/inherit/weapon/stick"
+#define UNARMED_ATTACK 0
 
 // Profiling switches
 //

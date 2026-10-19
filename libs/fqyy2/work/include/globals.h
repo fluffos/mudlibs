@@ -146,6 +146,9 @@
 #define BULLETIN_JBOARD          "/inherit/misc/jboard"
 #define STICK                    "/inherit/weapon/stick"
 #define WEAPON_COMBO             "/inherit/weapon/weapon_combo"
+#define ARMOR_D(x) ("/clone/armor/" + x)
+#define BINGQI_D(x) ("/clone/weapon/" + x)
+#define LANGUAGE_D "/adm/daemons/languaged"
 // Profiling switches
 //
 // If you changed any of these defines, you'll need reboot to make it 

@@ -162,8 +162,11 @@ def load_paths(slug, paths):
     res = {}
     cmd = ["systemd-run", "--user", "--scope", "-q", "-p", "MemoryMax=3G", "-p", "MemorySwapMax=0", "timeout", "1800", C.LPCC, "--batch", "config.fluffos"]
     cwd = f"{dest}/libs/{slug}"
+    # a lib whose master asks SECURITY_D for valid_write() gets it only after the (asynchronous) preload: load it first, or every object
+    # that saves in create() (nitan warehouse rooms: `Denied write permission in save_object()`) fails here and nowhere else
+    pre = [p for p in ("/adm/daemons/securityd.lpc",) if os.path.exists(f"{cwd}/work{p}")]
     for i in range(0, len(paths), 600):
-        r = subprocess.run(cmd, cwd=cwd, input="\n".join(paths[i:i + 600]) + "\n", capture_output=True, text=True, errors="replace")
+        r = subprocess.run(cmd, cwd=cwd, input="\n".join(pre + paths[i:i + 600]) + "\n", capture_output=True, text=True, errors="replace")
         res.update(C.parse(r.stdout))
     quiet = [p for p, v in res.items() if v and "(no message)" in v]
     if quiet:

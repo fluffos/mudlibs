@@ -336,5 +336,9 @@
 #define BHNPC                    "/inherit/char/bhnpc"
 #define F_RIDDING                "/feature/ridding"
 #define BH_NPC                   "/inherit/char/bh_npc"
+#define DYNAMIC_D "/adm/daemons/dynamicd"
+#define TYPE_MEDAL "medal"
+#define GUARD_CMD "/cmds/std/guard"
+#define BUFF_STR "buff/attr/str"
 
 #undef PROFILE_COMMANDS

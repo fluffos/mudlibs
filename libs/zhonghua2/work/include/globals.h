@@ -237,5 +237,6 @@
 // Install information
 #define INSTALL_COMBAT_TEST     1
 #define SKI_ZHEN                 "/inherit/skill/array"
+#define SKILL_USAGE_DODGE 3
 
 #undef PROFILE_COMMANDS

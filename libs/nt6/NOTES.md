@@ -560,3 +560,11 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## count_* 系列简单函数被条件编译挡掉（2026-10-19，KB 05 §7.15）
 
 `adm/kernel/simul_efun/ntefun.lpc` 里的 `count_add/sub/mul/div/lt/gt/le/ge/eq` 整组被 `#ifdef LONELY_IMPROVED` 包着，而且调用的是原版驱动才有的大数 efun `efun::count()`；这里两样都没有，整组函数编译不进 simul_efun，凡是调用它们的对象（`adm/daemons/gambled`、擂台鼓 `adm/npc/obj/drum3/4`、`adm/daemons/enterprised`、`quest11/flagwar/flagd`）都报 `Undefined function count_lt` 载入不了。与 nitan6、nitan170911 的做法一致：去掉条件，包装函数改调 `db_compat.lpc` 里本地的 `count()`。同一批里 `quest11/flagwar/flagd.lpc` 还照 nitan6 把 `ANSI_D->remove_ansi(...)`（本库没有 ANSI_D）改成 `remove_ansi(...)`，把 `reward_money *= 0.9` 改成 `to_int(reward_money * (0.9))`。
+
+## 全局头文件丢了 6 个宏（2026-10-19，KB 04 §6.16）
+
+`/include/globals.h` 里没有定义 `ARMOR_D(x)`、`BINGQI_D(x)`、`BOOK_D(x)`、`CLONE_DIR`、`MAZE_D`、`TIME_TICK`，用到它们的物件（名单里 46 个）编译时报 `Undefined variable`/`Undefined function`，整个物件载入不了（编译器在第一个未定义的名字上停下，后面的错误和警告都看不到）。同系的库在各自的头文件里都有这几行：照其中和本库共有文件最多的那个库，原样补到 `/include/globals.h` 最后一个 `#define` 之后，宏体里出现的路径在本库里都存在。补完后名单里有 4 个载入，其余还差别的东西。（`scripts/lpc_restore_defines.py`）
+
+## die_reason 的参数个数（2026-10-19，KB 04 §6.10）
+
+`/kungfu/condition/damo_luanqi.lpc`、`/kungfu/condition/damo_shangshen.lpc`、`/kungfu/condition/damo_zheyuan.lpc` 里的 `string die_reason()` 覆盖了基类的 `die_reason(string name)`，驱动报 `Number of arguments to 'die_reason' disagrees with previous definition`。补上 `varargs`，调用处不用改；改后与 HEAD 逐个物件对比载入，没有退步。

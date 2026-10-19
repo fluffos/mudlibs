@@ -227,5 +227,11 @@
 #define RIVER                    "/inherit/room/river"
 #define F_COAGENT                "/feature/coagent"
 #define SNAKE                    "/inherit/char/snake"
+#define GOLD_OB "/obj/money/gold"
+#define WEAPON_OB "/d/obj/weapon/"
+#define MUSIC_D "/adm/daemons/musicd"
+#define ZJBR "$br#"
+#define MAILDIR "/data/mail/"
+#define LOCATION_D "/adm/daemons/locationd"
 #undef PROFILE_COMMANDS
 

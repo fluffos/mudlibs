@@ -836,3 +836,7 @@ A room exit named a file the lib does not have, so the player was stuck (a typo,
 ## Headers next to the including file, quoted (2026-10-19, KB 04 6.17)
 
 23 files wrote `#include <area.h>` for a header that sits in their own directory (`area_stuff.h`, `boathouse.h`, `strongholds.h` ...). The old driver searched the includer's directory for an angle-bracket name; this one searches only the include path, so each stopped at `Cannot #include ...`. Rewritten to `#include "area.h"` (resolved against the includer everywhere: preload, `lpcc`, run-time compiles). (`scripts/lpc_fix_local_include.py`)
+
+## Calls to an inherited function no parent has (2026-10-19, KB 06 7.259)
+
+`/d/antioch/valley/val.lpc`, `/d/dagger/aketon/rooms/tree1/1one5.lpc` (2 objects) call `::create();`/`::init();` where the inherited bases have no such function. The old driver took such a call for a no-op returning 0; this one stops with `Unable to find the inherited function 'init'.`. These objects had only this error (it was uncovered once the others cleared); each call is deleted (`return ::fn(...)` becomes `return 0;`). (`scripts/lpc_fix_dangling_super.py`)

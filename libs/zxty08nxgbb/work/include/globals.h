@@ -180,6 +180,8 @@
 #define BUILD_ROOM               "/inherit/room/buildroom"
 #define F_GUARDER                "/feature/guarder"
 #define STICK                    "/inherit/weapon/stick"
+#define F_SILENTDEST "/feature/silentdest.lpc"
+#define LOOK_CMD "/cmds/std/look"
 
 // Profiling switches
 //
