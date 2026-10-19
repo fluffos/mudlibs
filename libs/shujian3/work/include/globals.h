@@ -193,5 +193,6 @@
 
 // Web
 #define BBS_ADDR "http://bbs.mymud.com"
+#define SHOP_DIR "/clone/shop/"
 
 #endif

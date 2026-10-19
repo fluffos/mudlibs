@@ -110,6 +110,7 @@
 #define F_QUEST			"/std/char/quest.lpc"
 #define F_MERCENARY             "/std/char/mercenary.lpc"
 #define F_UNIQUE                 "/feature/unique.lpc"
+#define MAILDIR "/data/mail/"
 // Profiling switches
 //
 // If you changed any of these defines, you'll need reboot to make it 

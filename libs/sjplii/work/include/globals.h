@@ -159,3 +159,6 @@
 #define RAKE                     "/std/weapon/rake"
 #define ARCHERY                  "/std/weapon/archery"
 #define BOW                      "/inherit/weapon/bow"
+#define RICH_B "铁血江湖十大富人排行榜"
+#define PKER_B "铁血江湖十大杀人狂排行榜"
+#define EXP_B "铁血江湖十大高手排行榜"

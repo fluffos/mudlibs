@@ -380,3 +380,11 @@ In total 335 files differ from the old names (249 `.C` -> `.lpc`, 83 files of re
 ## 技能基类丢了“预备武功”那一段（2026-10-19，KB 06 §7.262）
 
 `feature/skill.lpc` 有 `skill_map`/`map_skill()`，却没有预备武功（`prepare_skill`）这一块：变量 `skill_prepare`、`prepare_skill()`、`query_skill_prepared()`、`query_skill_prepare()`。来自 xkx 系列的 NPC 在 `create()` 里调用 `prepare_skill("cuff", ...)`，于是 `Undefined function prepare_skill` 整个 NPC 载入不了。从同系的 xkx100 把这一块原样补回（声明加在 `skill_map` 后面，函数加在文件末尾），受益 NPC 1 个：`d/wuguan/npc/master`。（`scripts/lpc_transplant_function.py`）
+
+## 全局头文件丢了 5 个宏（2026-10-19，KB 04 §6.16）
+
+`/include/globals.h` 里没有定义 `WEAPON_OB`、`MAILDIR`、`NEW_USER_LOCK`、`F_DISASTER`、`MUSIC_D`，用到它们的物件（名单里 6 个）编译时报 `Undefined variable`/`Undefined function`，整个物件载入不了（编译器在第一个未定义的名字上停下，后面的错误和警告都看不到）。同系的库在各自的头文件里都有这几行：照其中和本库共有文件最多的那个库，原样补到 `/include/globals.h` 最后一个 `#define` 之后，宏体里出现的路径在本库里都存在。补完后名单里有 2 个载入，其余还差别的东西。（`scripts/lpc_restore_defines.py`）
+
+## 同一个 init() 写了两遍、内容不同（2026-10-19，KB 06 §7.265）
+
+`d/nanhai/npc/maihuanu1`、`d/xuyi/npc/maihuanu1`、`d/youxia/npc/maihuanu1` 里 `init()` 定义了两次（一个加 `buy`/`work` 之类的指令，另一个再加 `list`/`block_cmd`），驱动报 `Redeclaration of function 'init'`，整个物件载入不了。两处作者本来都要：把第二个 `init()` 里的 `add_action(...)` 并到第一个 `init()` 末尾，删掉第二个。（`scripts/lpc_merge_dup_init.py`）

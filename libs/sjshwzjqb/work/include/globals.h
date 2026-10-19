@@ -171,3 +171,6 @@
 #define PILL                     "/std/medicine/pill"
 #define NEEDLE                   "/std/weapon/needle"
 #define SNAKE                    "/inherit/char/snake"
+#define WEAPON_OB "/d/obj/weapon/"
+#define F_DISASTER "/feature/disaster.lpc"
+#define MUSIC_D "/adm/daemons/musicd"

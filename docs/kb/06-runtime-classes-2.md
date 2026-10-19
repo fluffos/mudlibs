@@ -1487,3 +1487,21 @@ More of the same (2026-10-15): a `check_fight()` that declares `object weapon;` 
 **Cause:** an editor paste; the two copies are equal apart from white space. 200 other `Redeclaration` errors have one definition in the file and the second in an `#include`d header (decide per file); 29 have two different bodies (a stray half of another version: read before cutting).
 **Fix:** `scripts/lpc_fix_dup_functions.py --diag DIR --apply` deletes every copy after the first when all are equal; different bodies and include-caused ones are listed and left. The ES virtual-room templates (`_bed2.lpc`, three whole copies of the Roommaker output) are not touched: the virtual server loads them as they are. 26 copies in 19 files.
 **Detection:** the compile scan's `Redeclaration of function`; the tool's plan.
+Two more shapes, read by hand: hell's `clone/misc/bandage`, `clone/special/jindouyun`, `shunfenger` have the real `string query_autoload()` (the bandage's name or the amount, restored by `autoload(string arg)`) and, appended to the end of the file, `int query_autoload() { return 1; }`: the stub is deleted (the old driver let the later definition win, which made the object reload with the argument `1`). shujian2008/sjtx2/sjecl `d/city/npc/wushi` pastes the `nick_first`/`nick_second`/`create_nick()` of its own header `skills_pfm.h` and includes `r_name.h` a second time (the header already includes it): the copies are deleted.
+
+### 7.265 `init()` defined twice with different bodies (2026-10-19)
+**Symptom:** `Redeclaration of function 'init'.`: the wandering vendor `maihuanu1.lpc` of the Journey-to-the-West family (14 files in 8 libs: a first `init()` greets and adds `buy`, a second one further down is `::init(); add_action("do_vendor_list", "list");`), `shzs` `d/zuichen/huli`, `wuhanzhan` `d/city/liangdian2` (`work` and a `block_cmd` catch-all).
+**Cause:** two authors, two pastes; each wanted both sets of commands.
+**Fix:** `scripts/lpc_merge_dup_init.py --diag DIR --apply`: when the file holds exactly two `init()` and the second is nothing but `::init();` and `add_action(...)` statements, those `add_action` calls move to the end of the first and the second definition is deleted (15 files). Any other body (logic, three definitions, a definition that comes from an include: `d/gumu/tiao.h`, `smdian`) is listed and left.
+**Detection:** `Redeclaration of function 'init'` in the compile scan; the plan.
+
+### 7.266 Typos that keep a reachable NPC or room from loading (2026-10-19)
+Found by taking the objects a visitor meets (`scripts/lpc_reach_census.py` lists of the start-room walk), intersecting them with the compile failures and loading each again; each is a one-line archive typo, fixed in every lib that carries it:
+- `command("give yancao to", me);` (`d/heimuya/npc/laozhe`, the old man of the Black Wood Cliff; `Too many arguments to 'command'`) in xkx100, xkxlb, xiakexing3, xkxc98sj, xkxz2, xkxyb, niaoren, yxxcii: cctx and fys had already corrected it to `command("give yancao to " + ob->query("id"));`.
+- `query(environment(this_object()))->query("discussion_shen")` (`d/biancheng/npc/sanniang`): an extra `query(` around the environment; fengyun434, fysjmb, hy5, hymud, xsfyssjb.
+- `mapping ob;` for the loop variable that is then passed as an object to `query("online_time", ob)` (`d/city/kedian4`, hhsj, nitan170911, xfbhh); `is_killing(who)` where the lib's `is_killing(string id)` wants the id (wlqxcmudlib `guidao`); `return 1;` at the end of a `void` function (yhyxcs `engineer`); a closing quote eaten by the byte after `丐帮` (sje `guo`, `Illegal character 0xe6`).
+- `exert_function(10);` (an integer where the direct call wants a string; 30 files in 21 libs: `saveme.lpc`, `shengji.lpc`, `wizer.lpc`): deleted, as chidi did.
+- Truncated sources: `d/liangong/npc/muren.lpc`, `muren2.lpc` of ffxymud end inside `create()` (100 practice dummies per room; closed with `setup(); }`, no sibling has the file), hy and hyiishzdscbb `d/city/bite.lpc` (a sibling has the whole file).
+- BIG5 `功\"HIR"`: the extended `scripts/lpc_fix_big5_quote_backslash.py` also accepts a colour macro glued to the next string after the quote (44 sites in kxkj, kxkjii2, yxsj, yxzsj).
+**Detection:** the reach census (`FAIL slug depth path error` with `--load`), then the first error of each file.
+

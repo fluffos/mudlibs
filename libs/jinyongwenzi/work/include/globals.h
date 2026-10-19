@@ -145,5 +145,6 @@
 #define MIN(a, b)               ((a) < (b) ? (a) : (b))
 #define SGN(x)                  ((x) > 0 ? 1 : ((x) < 0 ? -1 : 0))
 #define SWAP(x, y)		(x ^= y ^= x ^= y)
+#define CLR ESC+"[2J" /* Clear the screen */
 
 #endif

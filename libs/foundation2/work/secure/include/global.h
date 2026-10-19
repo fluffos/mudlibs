@@ -27,6 +27,7 @@
 
 #ifdef DEBUG
 #define debug(x, y)      message("system", y, find_player(x))
+#define VT_WEAPON (1 << 2)
 #endif /* DEBUG */
 
 #endif /* GLOBAL_H */

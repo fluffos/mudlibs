@@ -148,6 +148,9 @@
 #define SAVE_EXTENSION		".o"
 #define STICK                    "/std/weapon/stick"
 #define UNARMED                  "/std/weapon/unarmed"
+#define STORY_DIR "/clone/gift/"
+#define TRANSFER_MODE 23
+#define MAILDIR "/data/mail/"
 // Profiling switches
 //
 // If you changed any of these defines, you'll need reboot to make it 

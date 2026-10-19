@@ -591,3 +591,7 @@ functionally re-tested live on this lib.
 ## 武功名拼错的 NPC（2026-10-19，KB 06 §7.258）
 
 `set_skill("kunlun-shnfa", …)`、`map_skill("dodge", "shaolin-shnfa")` 这样的调用把武功名拼错了：本库没有这个武功文件，有的是拼对的那个。以前这种 NPC 在 `create()` 里报 `No such skill` 载入不了；武功缺失时跳过之后它们能载入，可是少了那门武功（`set_skill` 被跳过，`map_skill` 映射不到，门派弟子用普通轻功/拳脚）。按核对过的对照表改正，共 1 处、1 个文件：`taiji-force`→`taijiforce`（1 处）。（`scripts/lpc_fix_skill_names.py`）
+
+## 全局头文件丢了 6 个宏（2026-10-19，KB 04 §6.16）
+
+`/include/globals.h` 里没有定义 `MUDLIB_UID`、`DOMAIN_UID`、`MAILDIR`、`TYPE_CAPE`、`TYPE_LEGGINGS`、`TYPE_PANTS`，用到它们的物件（名单里 5 个）编译时报 `Undefined variable`/`Undefined function`，整个物件载入不了（编译器在第一个未定义的名字上停下，后面的错误和警告都看不到）。同系的库在各自的头文件里都有这几行：照其中和本库共有文件最多的那个库，原样补到 `/include/globals.h` 最后一个 `#define` 之后，宏体里出现的路径在本库里都存在。补完后名单里有 1 个载入，其余还差别的东西。（`scripts/lpc_restore_defines.py`）

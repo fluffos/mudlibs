@@ -142,4 +142,5 @@
 #define AGE_B              "十大老手排行榜"
 #define KILLED_B           "十大悲情人物排行榜"
 #define TOPTEN_D		"/adm/daemons/toptend"
+#define MAILDIR "/data/mail/"
 #undef PROFILE_COMMANDS

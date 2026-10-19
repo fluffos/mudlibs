@@ -204,4 +204,5 @@
 #define NPC_TRAINEE              "/inherit/char/trainee"
 #define RAKE                     "/inherit/weapon/rake"
 #define ARCHERY                  "/std/weapon/archery"
+#define UNARMED_ATTACK 0
 #undef PROFILE_COMMANDS

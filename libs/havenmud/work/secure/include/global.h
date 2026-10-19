@@ -17,6 +17,8 @@
 
 #ifdef DEBUG
 #define debug(x, y)      (find_player(x) || master())->eventPrint(y)
+#define BLADE (1 << 2)
+#define KNIFE (1 << 3)
 #endif /* DEBUG */
 
 #endif /* GLOBAL_H */

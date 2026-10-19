@@ -263,3 +263,7 @@ drafts) minus the files its pass fixed, plus `cmds/std/practice_.lpc` and a save
 ## 武功名拼错的 NPC（2026-10-19，KB 06 §7.258）
 
 `set_skill("kunlun-shnfa", …)`、`map_skill("dodge", "shaolin-shnfa")` 这样的调用把武功名拼错了：本库没有这个武功文件，有的是拼对的那个。以前这种 NPC 在 `create()` 里报 `No such skill` 载入不了；武功缺失时跳过之后它们能载入，可是少了那门武功（`set_skill` 被跳过，`map_skill` 映射不到，门派弟子用普通轻功/拳脚）。按核对过的对照表改正，共 31 处、13 个文件：`dabei-trike`→`dabei-strike`（12 处）、`qingping-sword`→`qingpingsword`（10 处）、`fumotaff`→`fumostaff`（4 处）、`draginstrike`→`dragonstrike`（2 处）、`cloud-staff`→`cloudstaff`（2 处）、`qingfengsword`→`qingfeng-sword`（1 处）。（`scripts/lpc_fix_skill_names.py`）
+
+## sanniang 的 query(environment(...))->query（2026-10-19，KB 06 §7.266）
+
+`d/biancheng/npc/sanniang.lpc`（边城的三娘）里写成了 `query(environment(this_object()))->query("discussion_shen")`，多了外面一层 `query(`，驱动报 `Bad type for argument 1 of query ( string vs object )`，整个 NPC 载入不了；同一个文件另一处正确写成 `environment(ob)->query("discussion_shen")`。去掉多余的 `query(`。

@@ -375,3 +375,11 @@ blocking). No LPC change this pass.
 ## 通向不存在房间的出口，按对面房间的回头出口改正（2026-10-18，KB 06 §7.257）
 
 房间出口 `"west": __DIR__"xxx"` 指向的文件本库没有，玩家走过去就被卡住（笔误、改过名的房间，或者没带进档案的编号房间）。对面的房间存在、并且它相反方向的出口正好指回这个房间，说明出口原本就是通向它：`/d/geiersburg/cacr` 的 `south`：`/d/geiersburg/capass4` → `/d/geiersburg/cspass4`。改动后每个出口都能解析到本库的文件（`scripts/lpc_fix_dead_exits.py`；目标在运行时本来就能载入的库——虚拟房间——不动）。
+
+## 全局头文件丢了 1 个宏（2026-10-19，KB 04 §6.16）
+
+`/include/globals.h` 里没有定义 `MAILDIR`，用到它们的物件（名单里 1 个）编译时报 `Undefined variable`/`Undefined function`，整个物件载入不了（编译器在第一个未定义的名字上停下，后面的错误和警告都看不到）。同系的库在各自的头文件里都有这几行：照其中和本库共有文件最多的那个库，原样补到 `/include/globals.h` 最后一个 `#define` 之后，宏体里出现的路径在本库里都存在。名单里的物件除了这几个宏之外还有别的错误，暂时仍载入不了。（`scripts/lpc_restore_defines.py`）
+
+## engineer 的 void 函数 return 1（2026-10-19，KB 06 §7.266）
+
+`d/phezzan/npc/engineer.lpc` 的 `void make_mistake()`（闲聊动作，电力工程师“出错”）前面几处是 `return;`，末尾却是 `return 1;`，驱动报 `Type of returned value doesn't match function return type ( int vs void )`，整个 NPC 载入不了。闲聊回调不看返回值，删掉末尾的 `return 1;`。

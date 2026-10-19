@@ -208,3 +208,10 @@
 #define SPEAR                    "/inherit/weapon/spear"
 #define NPC_SAVE                 "/inherit/char/npcsave"
 #define RING                     "/inherit/weapon/ring"
+#define LANGUAGE_D "/adm/daemons/languaged"
+#define MUDLIB_ENCODING "GB"
+#define REMOTE_Q (AUX_PATH+"remote_q")
+#define INTERMUD_NAME "侠客行一百总站"
+#define MAILDIR "/data/mail/"
+#define BASE64_D "/adm/daemons/base64_d"
+#define COMPETE_D "/adm/daemons/competed"

@@ -605,3 +605,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply d
 ## simul_efun 丢了 unew()（2026-10-19，KB 06 §7.262）
 
 `adm/simul_efun/object.lpc` 没有 `unew()`（带“独一无二”次数限制的 `new()`：物件的 `unique` 值是允许同时存在的份数），而官府 NPC 和几件武器按 xkx 一系的写法调用 `unew(...)`，于是 `Undefined function unew`，连同它们赋值给 `object` 变量的那一行都报错，整个物件载入不了。从同系的 xkxz2 把这个函数原样补回 `object.lpc` 末尾（`scripts/lpc_transplant_function.py`），受益物件 4 个：`/clone/npc/guanfu/shi-qingshan`、`/clone/weapon/bestfalun`、`/clone/weapon/gold-falun`、`/clone/weapon/sword/jwqin`。
+
+## 全局头文件丢了 2 个宏（2026-10-19，KB 04 §6.16）
+
+`/include/globals.h` 里没有定义 `NAME_D`、`IP_D`，用到它们的物件（名单里 2 个）编译时报 `Undefined variable`/`Undefined function`，整个物件载入不了（编译器在第一个未定义的名字上停下，后面的错误和警告都看不到）。同系的库在各自的头文件里都有这几行：照其中和本库共有文件最多的那个库，原样补到 `/include/globals.h` 最后一个 `#define` 之后，宏体里出现的路径在本库里都存在。补完后名单里有 2 个载入，其余还差别的东西。（`scripts/lpc_restore_defines.py`）

@@ -271,4 +271,5 @@
 #define EVENT_DIR           "/system/event/"
 #define EVENT_LOOK          EVENT_DIR "look"
 #define EVENT_GIVE          EVENT_DIR "give"
+#define TASK_D DAEMON_DIR "taskd"
 #endif

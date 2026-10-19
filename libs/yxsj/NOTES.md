@@ -236,3 +236,11 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply y
 ## `set_skill()` 遇到本库没有文件的武功不再抛错（2026-10-18，KB 06 §7.256）
 
 `feature/skill.lpc` 里的 `set_skill()`、`map_skill()`、`prepare_skill()` 碰到没有武功文件的名字就 `error("F_SKILL: No such skill (…)")`，调用它们的 NPC `create()` 整个中断：NPC 载入不了，刷出它的房间也少一个人。本库有 2 个对象设了本库没有文件的武功（2 个名字，最多的是 `iceforce`、`icekill`）。三处都改成 `return`：这一门武功不给、不映射，对象照常载入，只是少了它（缺的武功本身仍是内容缺口）。抽样载入这些对象：2 个里 2 个通过。（`scripts/lpc_guard_set_skill.py`）
+
+## 删掉 exert_function(整数)（2026-10-19，KB 06 §7.266）
+
+`/d/school/npc/healtech.lpc` `create()` 里的 `exert_function(10);` 把整数传给了要字符串的直接调用（让 NPC 闲聊时自己运功），驱动报 `Bad type for argument 1 of exert_function ( string vs int )`，整个 NPC 载入不了。这是存档里的笔误，不知道作者想传哪个字符串，删掉这一句（只影响闲聊时的运功表现）。chidi 的同一个 NPC 早先就是这样处理的。
+
+## BIG5 的 0x5C 尾字节（扩展）（2026-10-19，KB 06 §7.266）
+
+BIG5 里 `功` 等字的第二个字节正好是 0x5C（反斜杠），作者在它后面多写了一个 `\`，转 UTF-8 后这个多出来的 `\` 跑到了收尾引号前面，把引号转义掉，字符串一直吃到文件后面。`scripts/lpc_fix_big5_quote_backslash.py` 原先只在引号后面跟 `, ) ; } ] +` 或行尾时才删；这次把“引号后面紧跟颜色宏再接字符串”（`HIY"功\"HIR"』"`）也算进去，删掉多余的 `\`。`u/d/daniel/npc/mastersu.lpc`、`daemon/class/sage/bullets/bullets.lpc` 等 4 个文件，共 21 处。

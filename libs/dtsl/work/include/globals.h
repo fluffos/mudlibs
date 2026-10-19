@@ -168,4 +168,6 @@
 #define HOOK                     "/inherit/weapon/hook"
 #define BRUSH                    "/inherit/weapon/brush"
 #define WEAPON_COMBO             "/inherit/weapon/weapon_combo"
+#define NAME_D "/adm/daemons/named"
+#define IP_D "/adm/daemons/ipd"
 

@@ -1107,3 +1107,7 @@ seeded admin account.
 ## `zuo` 和 `yuanyang-dao` 丢了收尾引号（2026-10-18，KB 03 §4.6）
 
 `d/menpai/wuliang/npc/zuo.lpc` 的 `"姓名" : "嗯，你既知我姓左，……左子穆？,` 和 `system/skill/misc/yuanyang-dao.lpc` 的 `"action":"又见$N高高跃起，……切向$n$l,` 行尾的引号没了（转码时跟半个汉字一起丢了），字符串一直连到下一行的开引号，后面的内容成了代码，两个文件都载入不了。补回 `",`。载入：两个都通过。
+
+## 全局头文件丢了 1 个宏（2026-10-19，KB 04 §6.16）
+
+`/include/globals.h` 里没有定义 `TASK_D`，用到它们的物件（名单里 2 个）编译时报 `Undefined variable`/`Undefined function`，整个物件载入不了（编译器在第一个未定义的名字上停下，后面的错误和警告都看不到）。同系的库在各自的头文件里都有这几行：照其中和本库共有文件最多的那个库，原样补到 `/include/globals.h` 最后一个 `#define` 之后，宏体里出现的路径在本库里都存在。补完后名单里有 2 个载入，其余还差别的东西。（`scripts/lpc_restore_defines.py`）

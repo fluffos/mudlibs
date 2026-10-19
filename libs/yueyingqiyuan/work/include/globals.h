@@ -177,4 +177,12 @@
 
 #define PROFILE_COMMANDS
 #define UNARMED                  "/std/weapon/unarmed"
+#define HOURLY "hourly"
+#define DAILY "daily"
+#define WEEKLY "weekly"
+#define MONTHLY "monthly"
+#define YEARLY "yearly"
+#define MAILDIR "/data/mail/"
+#define WEAPON_OB "/d/obj/weapon/"
+#define SET 8
 #undef PROFILE_COMMANDS

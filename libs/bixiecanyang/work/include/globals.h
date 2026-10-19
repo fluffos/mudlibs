@@ -143,4 +143,5 @@
 
 #define STORY_DIR       "/clone/gift/"
 #define STORY_D	        "/adm/daemons/storyd"
+#define MAILDIR "/data/mail/"
 #endif

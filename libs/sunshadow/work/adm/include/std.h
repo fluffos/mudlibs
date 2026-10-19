@@ -143,3 +143,4 @@
 #define MULTIPLE_WEAR ({"clothing","jewelry", "sheath"})
 #define PK_DAMAGE_PERCENTAGE 100
 #define ALLEY                    "/d/tharis/alley"
+#define MOON_DESC ({ "red moon", "blue moon", "green moon" })

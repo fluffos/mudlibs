@@ -779,3 +779,7 @@ functionally re-tested live on this lib.
 ## `for (int i ...)` 的循环变量在循环外还在用（2026-10-18，KB 04 §6.12）
 
 当铺／商店的 `do_buy()` 写成 `for (int i = 0; ...) if (...) break;`，循环一结束又读 `if (i == sizeof(inv))`。FluffOS 里 `for` 头里声明的变量只在循环内有效，所以 `Undefined variable 'i'`，整个房间（NPC）载入不了，当铺根本进不去。把 `i` 声明挪到函数开头（`int i, index;`），循环改成 `for (i = 0; ...)`：`std/room/shop.lpc`。改后用 `lpcc` 逐个载入这些对象：1 个通过。
+
+## 同一个 init() 写了两遍、内容不同（2026-10-19，KB 06 §7.265）
+
+`d/zuichen/huli` 里 `init()` 定义了两次（一个加 `buy`/`work` 之类的指令，另一个再加 `list`/`block_cmd`），驱动报 `Redeclaration of function 'init'`，整个物件载入不了。两处作者本来都要：把第二个 `init()` 里的 `add_action(...)` 并到第一个 `init()` 末尾，删掉第二个。（`scripts/lpc_merge_dup_init.py`）

@@ -181,6 +181,8 @@
 #define F_GUARDER                "/feature/guarder"
 #define STICK                    "/inherit/weapon/stick"
 #define RING                     "/inherit/weapon/ring"
+#define F_SILENTDEST "/feature/silentdest.lpc"
+#define LOOK_CMD "/cmds/std/look"
 
 // Profiling switches
 //

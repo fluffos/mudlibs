@@ -115,6 +115,12 @@
 #define F_UNIQUE                "/feature/unique.lpc"
 // added by Tie Yu
 #define F_QUEST			        "/feature/quest.lpc"
+#define MUDLIB_UID "Mudlib"
+#define DOMAIN_UID "Domain"
+#define MAILDIR "/data/mail/"
+#define TYPE_CAPE "cape"
+#define TYPE_LEGGINGS "leggings"
+#define TYPE_PANTS "pants"
 
 // Profiling switches
 //

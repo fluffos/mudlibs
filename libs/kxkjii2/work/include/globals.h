@@ -159,3 +159,4 @@
 #undef SEND_MONEY // 发钱系统
 #undef FIND_ROBBOT // 找机器人
 #define SAVEEQ	// 可以在 quit 时自动储三件装备，但是要先 wear + secure 才行
+#define MAILDIR "/data/mail/"

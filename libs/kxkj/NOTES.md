@@ -1086,3 +1086,11 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply k
 ## `set_skill()` 遇到本库没有文件的武功不再抛错（2026-10-18，KB 06 §7.256）
 
 `feature/skill.lpc` 里的 `set_skill()`、`map_skill()`、`prepare_skill()` 碰到没有武功文件的名字就 `error("F_SKILL: No such skill (…)")`，调用它们的 NPC `create()` 整个中断：NPC 载入不了，刷出它的房间也少一个人。本库有 1 个对象设了本库没有文件的武功（1 个名字，最多的是 `fonxanforce`）。三处都改成 `return`：这一门武功不给、不映射，对象照常载入，只是少了它（缺的武功本身仍是内容缺口）。抽样载入这些对象：1 个里 1 个通过。（`scripts/lpc_guard_set_skill.py`）
+
+## 全局头文件丢了 1 个宏（2026-10-19，KB 04 §6.16）
+
+`/include/globals.h` 里没有定义 `MAILDIR`，用到它们的物件（名单里 1 个）编译时报 `Undefined variable`/`Undefined function`，整个物件载入不了（编译器在第一个未定义的名字上停下，后面的错误和警告都看不到）。同系的库在各自的头文件里都有这几行：照其中和本库共有文件最多的那个库，原样补到 `/include/globals.h` 最后一个 `#define` 之后，宏体里出现的路径在本库里都存在。名单里的物件除了这几个宏之外还有别的错误，暂时仍载入不了。（`scripts/lpc_restore_defines.py`）
+
+## BIG5 的 0x5C 尾字节（扩展）（2026-10-19，KB 06 §7.266）
+
+BIG5 里 `功` 等字的第二个字节正好是 0x5C（反斜杠），作者在它后面多写了一个 `\`，转 UTF-8 后这个多出来的 `\` 跑到了收尾引号前面，把引号转义掉，字符串一直吃到文件后面。`scripts/lpc_fix_big5_quote_backslash.py` 原先只在引号后面跟 `, ) ; } ] +` 或行尾时才删；这次把“引号后面紧跟颜色宏再接字符串”（`HIY"功\"HIR"』"`）也算进去，删掉多余的 `\`。

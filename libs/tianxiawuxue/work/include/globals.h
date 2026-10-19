@@ -178,4 +178,7 @@
 #define XSWORD                   "/inherit/weapon/xsword"
 #define F_NOCLONE                "/feature/noclone"
 #define PIN                      "/inherit/weapon/pin"
+#define UNARMED_ATTACK 0
+#define WEAPON_ATTACK 1
+#define QUEST_CREATE "created" /* 任务创建 */
 #undef PROFILE_COMMANDS

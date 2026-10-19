@@ -188,3 +188,4 @@
 #define F_NOCLONE               "/feature/noclone.lpc"
 #define INSTALL_COMBAT_TEST     1
 #define NWEAPON_D               "/adm/daemons/nweapond"
+#define WEAPON_OB "/d/obj/weapon/"

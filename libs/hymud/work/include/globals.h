@@ -148,6 +148,7 @@
 #define S_ROBE			"/inherit/gems/robe.lpc"
 #define S_RING			"/inherit/gems/ring.lpc"
 #define F_ANA			  "/feature/anamichi.lpc"
+#define MAILDIR "/data/mail/"
 // Profiling switches
 //
 // If you changed any of these defines, you'll need reboot to make it

@@ -146,6 +146,7 @@
 #define F_VENDOR			"/feature/dealer.lpc"
 #define F_SSERVER			"/feature/sserver.lpc"
 #define F_UNIQUE			"/feature/unique.lpc"
+#define MAILDIR "/data/mail/"
 
 // Profiling switches
 //

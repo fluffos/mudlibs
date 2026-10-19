@@ -417,3 +417,11 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 ## NPCs that name a misspelled skill (2026-10-19, KB 06 7.258)
 
 `set_skill("kunlun-shnfa", ...)` and `map_skill("dodge", "shaolin-shnfa")` spell a skill the lib does not have; the lib has the right one. Such an NPC used to die in `create()` with `No such skill`; since a missing skill is skipped it loads, but without that skill. Corrected from a reviewed table, 12 names in 9 files: `changquana` -> `changquan` (4), `tiaji-jian` -> `taiji-jian` (2), `taiji-shenfong` -> `taiji-shengong` (1), `yan-fly` -> `yanfly` (1), `lingboweibu` -> `lingbo-weibu` (1), `jiahua-neigong` -> `jiaohua-neigong` (1), `zhoangnan-zhi` -> `zhongnan-zhi` (1), `jinggang-zhi` -> `jingang-zhi` (1) (`scripts/lpc_fix_skill_names.py`).
+
+## query_autoload() 后面又追加了一个空桩（2026-10-19，KB 06 §7.266）
+
+`clone/misc/bandage.lpc`、`clone/special/jindouyun.lpc`、`clone/special/shunfenger.lpc` 已经有真正的 `string query_autoload()`（返回绷带的名字或数量，配 `autoload(string arg)` 恢复），文件末尾却又追加了 `int query_autoload() { return 1; }`，驱动报 `Redeclaration of function 'query_autoload'`，整个物件载入不了。真正起作用的是字符串版本，删掉末尾那个追加的空桩。
+
+## 标准整理轮（2026-10-19，`scripts/toolkit_fix.sh`）
+
+本库在新驱动下重扫，机械修复：2 个函数补上 varargs（调用处少传参数）。修后与 HEAD 逐个物件对比载入，没有退步。

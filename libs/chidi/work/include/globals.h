@@ -195,4 +195,6 @@
 #define RING                     "/inherit/weapon/ring"
 #define RAKE                     "/inherit/weapon/rake"
 #define ARCHERY                  "/std/weapon/archery"
+#define UNARMED_ATTACK 0
+#define REMOTE_ATTACK 2
 #undef PROFILE_COMMANDS

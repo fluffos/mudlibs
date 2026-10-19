@@ -234,6 +234,7 @@
 #define F_UNIQUE            FEATURE_DIR "unique.lpc"
 #define F_FAMILY            FEATURE_DIR "family.lpc"
 #define F_ZUZHI             FEATURE_DIR "zuzhi.lpc"
+#define YIPIN_D MENPAI_DIR "yipind"
 
 // Profiling switches
 //

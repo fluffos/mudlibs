@@ -1032,3 +1032,11 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply c
 ## add_light() 空函数（2026-10-19，KB 06 §7.262）
 
 `d/temple/` 和 `d/chaoting/fuya/` 的房间调用 `add_light(this_object(), 1)`，这个房间照明效果在整个存档里从来没有实现过，所以这些房间 `Undefined function add_light` 载入不了。照 yxcs 的做法在 `adm/simul_efun/object.lpc` 里放一个空函数 `void add_light(object room, int level) {}`（效果本来就没有）。
+
+## 全局头文件丢了 2 个宏（2026-10-19，KB 04 §6.16）
+
+`/include/globals.h` 里没有定义 `UNARMED_ATTACK`、`REMOTE_ATTACK`，用到它们的物件（名单里 2 个）编译时报 `Undefined variable`/`Undefined function`，整个物件载入不了（编译器在第一个未定义的名字上停下，后面的错误和警告都看不到）。同系的库在各自的头文件里都有这几行：照其中和本库共有文件最多的那个库，原样补到 `/include/globals.h` 最后一个 `#define` 之后，宏体里出现的路径在本库里都存在。补完后名单里有 2 个载入，其余还差别的东西。（`scripts/lpc_restore_defines.py`）
+
+## 和包含文件同目录的头文件，改成引号形式（2026-10-19，KB 04 §6.17）
+
+1 个文件用尖括号写 `#include <hedi.h>` 这类头文件（`12gong.h` 等），头文件其实就放在它们自己的目录里。老驱动对尖括号名字也会先找包含文件所在目录，本驱动只找 include 路径，所以报 `Cannot #include ...`，整个物件载入不了。改成 `#include "hedi.h"`（引号形式相对包含文件解析，预加载、`lpcc` 和运行时编译都一样）。（`scripts/lpc_fix_local_include.py`）

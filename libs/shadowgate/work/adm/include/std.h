@@ -142,3 +142,4 @@
 #define raise_error                 error
 #define member(x, y)                member_array(y, x)
 #define to_string(x)                ("" + (x))
+#define MOON_DESC ({ "red moon", "blue moon", "green moon" })

@@ -13,6 +13,20 @@
 // config.fluffos's "name :" field (AGENTS.md §7.39) -- same value
 // ("Holy Mission"), the driver's version takes over transparently.
 #define MAX_NAME_LENGTH		13
+#define UDP_WARNING "warning"
+#define VT_TA_B CSI+"1m" /* text-attr bold */
+#define VT_TA_AO CSI+"0m" /* text-attr all out */
+#define UDP_GTELL "gtell"
+#define UDP_GWIZMSG "gwizmsg"
+#define WIZARD_I_BUSY_LEVEL "_wizard_i_busy_level"
+#define UDP_MUDLIST_Q "mudlist_q"
+#define UDP_MUDLIST_A "mudlist_a"
+#define UDP_PING_Q "ping_q"
+#define UDP_PING_A "ping_a"
+#define UDP_RWHO_Q "rwho_q"
+#define UDP_RWHO_A "rwho_a"
+#define UDP_SUPPORTED_Q "supported_q"
+#define UDP_SUPPORTED_A "supported_a"
 
 // Driver-compat shim, spliced into EVERY compiled object via this global
 // include file (real archive content -- see NOTES.md for why). This

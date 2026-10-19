@@ -967,3 +967,7 @@ is the same object with `LIB_MEAL` only. Making the draft warning-free means rew
 Load check (`lpc_listcheck.sh`, HEAD vs tree) over every changed file, all of `/lib`, every `npc/` object and every
 teller/shipseller/mayor/trainer leaf: 2432 objects, 2312 -> 2313 load (the new base), 0 regress.
 `lpc_audit_removed_locals.py HEAD`: nothing for havenmud.
+
+## Macros the global header lost (2026-10-19, KB 04 6.16)
+
+`/secure/include/global.h` did not define `BLADE`, `KNIFE`; the objects that use them (2 on the list) stopped at `Undefined variable`/`Undefined function`, and since the compiler stops at the first undefined name the errors and warnings behind it stayed hidden. The sibling libs of the same lineage carry these lines in their headers: the copy of the sibling with the most files in common was added after the last `#define` of `/secure/include/global.h`; every path in a macro body exists in this lib. the listed objects have other errors as well and still do not load. (`scripts/lpc_restore_defines.py`)

@@ -144,6 +144,7 @@
 #define F_SSERVER			"/feature/sserver.lpc"
 #define F_UNIQUE			"/feature/unique.lpc"
 #define F_COMPETE	"/feature/compete.lpc"
+#define MAILDIR "/data/mail/"
 // Profiling switches
 //
 // If you changed any of these defines, you'll need reboot to make it 

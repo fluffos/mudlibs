@@ -147,6 +147,9 @@
 #define MACE                     "/std/weapon/mace"
 #define RAKE                     "/std/weapon/rake"
 #define ARCHERY                  "/std/weapon/archery"
+#define RICH_B "十大富翁排行榜"
+#define PKER_B "十大魔头排行榜"
+#define EXP_B "十大高手排行榜"
 // Profiling switches
 //
 // If you changed any of these defines, you'll need reboot to make it 

@@ -191,4 +191,5 @@
 
 #define PROFILE_COMMANDS
 #define UNARMED                  "/std/weapon/unarmed"
+#define WEAPON_OB "/d/obj/weapon/"
 #undef PROFILE_COMMANDS

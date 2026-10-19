@@ -202,6 +202,7 @@
 #define F_SKILL                 "/feature/skill.lpc"
 #define F_TEAM                  "/feature/team.lpc"
 #define FORK                     "/inherit/weapon/fork"
+#define MAILDIR "/data/mail/"
 //#define F_TREEMAP               "/feature/treemap.lpc"
 
 // Profiling switches

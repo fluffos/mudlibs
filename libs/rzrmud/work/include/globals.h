@@ -167,3 +167,4 @@
 #undef PROFILE_COMMANDS
 #define PROFILE_COMMANDS
 #define UNARMED                  "/std/weapon/unarmed"
+#define NPC_D "/adm/daemons/npcd"

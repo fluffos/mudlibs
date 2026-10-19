@@ -124,4 +124,5 @@
 // in effect.
 
 #define PROFILE_COMMANDS
+#define MAILDIR "/data/mail/"
 #undef PROFILE_COMMANDS

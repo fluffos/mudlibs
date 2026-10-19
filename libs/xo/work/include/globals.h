@@ -236,6 +236,8 @@
 #define F_UNIQUE            FEATURE_DIR "item/unique.lpc"
 #define F_FAMILY            FEATURE_DIR "char/family.lpc"
 #define F_ZUZHI             FEATURE_DIR "char/zuzhi.lpc"
+#define TASK_D DAEMON_DIR "taskd"
+#define BET_D DAEMON_DIR "betd"
 
 // Profiling switches
 //

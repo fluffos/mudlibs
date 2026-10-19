@@ -143,6 +143,8 @@
 #define NEEDLE                   "/std/weapon/needle"
 #define F_DEALER                 "/feature/dealer"
 #define UNARMED                  "/std/weapon/unarmed"
+#define MAILDIR "/data/mail/"
+#define CITY_OB(city,room) ("/d/"+city+"/"+room)
 #undef PROFILE_COMMANDS
 
 

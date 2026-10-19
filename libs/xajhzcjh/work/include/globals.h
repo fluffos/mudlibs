@@ -142,4 +142,6 @@
 
 #define STORY_DIR       "/clone/gift/"
 #define STORY_D	        "/adm/daemons/storyd"
+#define WIELD_CMD "/cmds/std/wield"
+#define MAILDIR "/data/mail/"
 

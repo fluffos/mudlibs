@@ -127,3 +127,4 @@
 
 // for guild function
 #define F_FUNCTION "/feature/function"
+#define DEATH_ROOM "/open/death/"

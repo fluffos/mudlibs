@@ -1238,3 +1238,11 @@ These base classes are not in the lib, so every object that inherits them (rooms
 ## simul_efun 丢了 unew()（2026-10-19，KB 06 §7.262）
 
 `adm/simul_efun/object.lpc` 没有 `unew()`（带“独一无二”次数限制的 `new()`：物件的 `unique` 值是允许同时存在的份数），而官府 NPC 和几件武器按 xkx 一系的写法调用 `unew(...)`，于是 `Undefined function unew`，连同它们赋值给 `object` 变量的那一行都报错，整个物件载入不了。从同系的 xkxz2 把这个函数原样补回 `object.lpc` 末尾（`scripts/lpc_transplant_function.py`），受益物件 4 个：`/clone/npc/guanfu/shi-qingshan`、`/clone/weapon/bestfalun`、`/clone/weapon/gold-falun`、`/clone/weapon/sword/jwqin`。
+
+## Macros the global header lost (2026-10-19, KB 04 6.16)
+
+`/include/globals.h` did not define `NAME_D`, `IP_D`; the objects that use them (2 on the list) stopped at `Undefined variable`/`Undefined function`, and since the compiler stops at the first undefined name the errors and warnings behind it stayed hidden. The sibling libs of the same lineage carry these lines in their headers: the copy of the sibling with the most files in common was added after the last `#define` of `/include/globals.h`; every path in a macro body exists in this lib. 2 of the listed objects load now, the rest need something else. (`scripts/lpc_restore_defines.py`)
+
+## Headers next to the including file, quoted (2026-10-19, KB 04 6.17)
+
+2 files wrote `#include <area.h>` for a header that sits in their own directory (`map.h`, `qipu.h` ...). The old driver searched the includer's directory for an angle-bracket name; this one searches only the include path, so each stopped at `Cannot #include ...`. Rewritten to `#include "area.h"` (resolved against the includer everywhere: preload, `lpcc`, run-time compiles). (`scripts/lpc_fix_local_include.py`)

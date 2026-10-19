@@ -254,3 +254,11 @@ compile check (exit 0, no errors) against `feature/command.lpc`.
 ## 同一个函数原样贴了两遍（2026-10-19，KB 06 §7.264）
 
 同一个文件里同一个函数被原样贴了两遍（除空白外逐字相同），驱动报 `Redeclaration of function`，整个物件载入不了。删掉第二份及以后的副本，共 1 处：`/d/pkdao/room1.lpc` 的 `greeting()`。（`scripts/lpc_fix_dup_functions.py`）
+
+## 全局头文件丢了 3 个宏（2026-10-19，KB 04 §6.16）
+
+`/include/globals.h` 里没有定义 `MUSIC_D`、`WEAPON_OB`、`F_DISASTER`，用到它们的物件（名单里 5 个）编译时报 `Undefined variable`/`Undefined function`，整个物件载入不了（编译器在第一个未定义的名字上停下，后面的错误和警告都看不到）。同系的库在各自的头文件里都有这几行：照其中和本库共有文件最多的那个库，原样补到 `/include/globals.h` 最后一个 `#define` 之后，宏体里出现的路径在本库里都存在。补完后名单里有 3 个载入，其余还差别的东西。（`scripts/lpc_restore_defines.py`）
+
+## 同一个 init() 写了两遍、内容不同（2026-10-19，KB 06 §7.265）
+
+`d/nanhai/npc/maihuanu1` 里 `init()` 定义了两次（一个加 `buy`/`work` 之类的指令，另一个再加 `list`/`block_cmd`），驱动报 `Redeclaration of function 'init'`，整个物件载入不了。两处作者本来都要：把第二个 `init()` 里的 `add_action(...)` 并到第一个 `init()` 末尾，删掉第二个。（`scripts/lpc_merge_dup_init.py`）

@@ -172,3 +172,7 @@ Same as `discworld` (f5d0fff16f1): `secure/simul_efun.lpc` no longer inherits `/
 ## Base classes the lib did not ship, restored from sibling libs (2026-10-18, KB 04 6.15)
 
 These base classes are not in the lib, so every object that inherits them (rooms, NPCs, items) failed to load (`inherit XXX;` with no macro, or `inherit "/std/...";` with no file). A sibling lib carries the file and shares many files byte for byte with this one, so the file is copied as it stands: `/std/effects/healing/basic_cure` <- skylib, 1 object(s) inherit it, sample 1/1 load. Each base was loaded alone and a sample of its users after it; a base that did not load, or none of whose users did, was taken back (`scripts/lpc_restore_bases.py`).
+
+## Macros the global header lost (2026-10-19, KB 04 6.16)
+
+`/include/all_inc.h` did not define `C_TEMP`, `C_CLOUD`, `C_RAIN`; the objects that use them (4 on the list) stopped at `Undefined variable`/`Undefined function`, and since the compiler stops at the first undefined name the errors and warnings behind it stayed hidden. The sibling libs of the same lineage carry these lines in their headers: the copy of the sibling with the most files in common was added after the last `#define` of `/include/all_inc.h`; every path in a macro body exists in this lib. the listed objects have other errors as well and still do not load. (`scripts/lpc_restore_defines.py`)

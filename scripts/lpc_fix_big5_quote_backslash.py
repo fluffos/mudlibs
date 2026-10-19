@@ -12,7 +12,8 @@ quote, the string runs on, and the whole file fails to compile:
 Found by the corpus scan of 2026-10-04 (39 sites, 10 libs: `cmds/std/enable.lpc` of yxsj, yxzsj, kxkj1, dfgs2 -- the
 `enable` command never loaded --, NPC `set_name` lines, a skill book).
 This deletes the backslash when (a) the character before it encodes to two bytes in cp950 with 0x5C as the second one,
-(b) a `"` follows, and (c) the next thing after that quote ends an expression (`,` `)` `;` `}` `]` `+` or the line's end),
+(b) a `"` follows, and (c) the next thing after that quote ends an expression (`,` `)` `;` `}` `]` `+`, the line's end, or a colour macro glued to the
+next string as in `HIY"功\\"HIR"』"`),
 so a deliberately escaped quote inside a longer string is left alone.  Without --apply it only lists the files.
 Libs whose work/ is a gitlink (deadsouls_fluffos, fy2005, imud, lima, nightmare3, nt7, oxidus, residuum, sanguozhi,
 xkx100utf8) are refused: run on a copy of upstream and send a PR (KB 02 section 2.3).  Not handled: `功\\\\"` (two
@@ -37,7 +38,7 @@ def gitlink(slug):
 
 slugs = sorted(s for s in os.listdir(f"{REPO}/libs") if os.path.isdir(f"{REPO}/libs/{s}/work")) if args == ["--all"] else args
 RE = re.compile(r'([\u0080-\uffff])\\(?=")')
-AFTER = re.compile(r'"[ \t]*(?:[,);}\]+]|\r?$)', re.M)
+AFTER = re.compile(r'"[ \t]*(?:[,);}\]+]|\r?$|[A-Z][A-Z0-9_]+[ \t]*")', re.M)    # ... or a colour macro glued to the next string: HIY"功\\"HIR"』"
 cache = {}
 
 

@@ -150,6 +150,9 @@
 
 #define PROFILE_COMMANDS
 #define UNARMED                  "/std/weapon/unarmed"
+#define WEAPON_OB "/d/obj/weapon/"
+#define MAILDIR "/data/mail/"
+#define F_DISASTER "/feature/disaster.lpc"
 #undef PROFILE_COMMANDS
 
 

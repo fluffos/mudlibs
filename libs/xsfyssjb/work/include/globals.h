@@ -124,6 +124,9 @@
 #define F_BANKPAWNOWNER                 "/feature/bankpawnowner.lpc"
 #define F_FLOWERSELLER                  "/feature/flowerseller.lpc" 
 #define SAVE_EXTENSION                  ".o"
+#define ROOM_D "/adm/daemons/roomd"
+#define BACKUP_DIR "/backup/"
+#define MONEY_D "/adm/daemons/moneyd"
 // Profiling switches
 //
 // If you changed any of these defines, you'll need     reboot to make it 

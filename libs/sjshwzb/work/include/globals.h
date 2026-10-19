@@ -171,3 +171,8 @@
 #define PILL                     "/std/medicine/pill"
 #define NEEDLE                   "/std/weapon/needle"
 #define SNAKE                    "/inherit/char/snake"
+#define WEAPON_OB "/d/obj/weapon/"
+#define MAILDIR "/data/mail/"
+#define NEW_USER_LOCK 0
+#define F_DISASTER "/feature/disaster.lpc"
+#define MUSIC_D "/adm/daemons/musicd"

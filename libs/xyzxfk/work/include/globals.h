@@ -140,3 +140,4 @@
 #define S_ROBE			"/inherit/gems/robe.lpc"
 #define S_RING			"/inherit/gems/ring.lpc"
 #define RING                     "/inherit/weapon/ring"
+#define MAILDIR "/data/mail/"

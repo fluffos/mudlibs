@@ -317,3 +317,7 @@ Century/`adm-single` 形状）**：`adm/simul_efun/file.lpc` 的
 ## 武功名拼错的 NPC（2026-10-19，KB 06 §7.258）
 
 `set_skill("kunlun-shnfa", …)`、`map_skill("dodge", "shaolin-shnfa")` 这样的调用把武功名拼错了：本库没有这个武功文件，有的是拼对的那个。以前这种 NPC 在 `create()` 里报 `No such skill` 载入不了；武功缺失时跳过之后它们能载入，可是少了那门武功（`set_skill` 被跳过，`map_skill` 映射不到，门派弟子用普通轻功/拳脚）。按核对过的对照表改正，共 40 处、40 个文件：`shaolin-shnfa`→`shaolin-shenfa`（22 处）、`kunlun-shnfa`→`kunlun-shenfa`（15 处）、`qinmang-jian`→`qingmang-jian`（1 处）、`huashen-shenfa`→`huashan-shenfa`（1 处）、`weiituo-gun`→`weituo-gun`（1 处）。（`scripts/lpc_fix_skill_names.py`）
+
+## guo.lpc 的引号丢了（2026-10-19，KB 06 §7.266）
+
+`d/xiangyang/npc/guo.lpc`（郭靖）第 240 行 `(me->query("family/family_name") == "丐帮)&&(query("gbjob")>1)` 的收尾引号丢了（GBK 转 UTF-8 时被 `丐帮` 后面的字节吃掉），后面的汉字被当成代码，驱动报 `Illegal character 0xe6`。补回 `"`：`"丐帮")`。

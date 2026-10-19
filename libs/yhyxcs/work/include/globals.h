@@ -138,6 +138,7 @@
 #define QUEST_D(x)		("/daemon/quest/" + x )
 
 #define SAVE_EXTENSION		".o"
+#define MAILDIR "/data/mail/"
 //New Writen end
 
 

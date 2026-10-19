@@ -635,3 +635,7 @@ quit/reconnect 持久性**完全正常，没有数据丢失**。
 ## `set_skill()` skips a skill the lib has no file for (2026-10-18, KB 06 7.256)
 
 `set_skill()`, `map_skill()` and `prepare_skill()` of `feature/skill.lpc` raised `error("F_SKILL: No such skill (...)")` on a name without a skill file, which aborted the calling NPC's `create()`: the NPC never loaded and the room that spawns it lost it. No object of this lib sets a missing skill today; The three now `return`: the skill is not granted or mapped and the object loads without it (the missing skill itself stays a content gap).  (`scripts/lpc_guard_set_skill.py`)
+
+## Macros the global header lost (2026-10-19, KB 04 6.16)
+
+`/include/globals.h` did not define `MAILDIR`; the objects that use them (1 on the list) stopped at `Undefined variable`/`Undefined function`, and since the compiler stops at the first undefined name the errors and warnings behind it stayed hidden. The sibling libs of the same lineage carry these lines in their headers: the copy of the sibling with the most files in common was added after the last `#define` of `/include/globals.h`; every path in a macro body exists in this lib. the listed objects have other errors as well and still do not load. (`scripts/lpc_restore_defines.py`)

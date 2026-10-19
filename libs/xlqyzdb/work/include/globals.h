@@ -136,4 +136,6 @@
 
 #define PROFILE_COMMANDS
 #define UNARMED                  "/std/weapon/unarmed"
+#define WEAPON_OB "/d/obj/weapon/"
+#define LOG_HTTP_ERR "http_errors"
 #undef PROFILE_COMMANDS

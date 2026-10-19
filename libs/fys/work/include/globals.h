@@ -137,4 +137,8 @@
 #define RAKE                     "/std/weapon/rake"
 #define BOW                      "/inherit/weapon/bow"
 #define ARCHERY                  "/std/weapon/archery"
+#define TYPE_WRISTS "wrists"
+#define TYPE_WAIST "waist"
+#define TYPE_SHIELD "shield"
+#define TYPE_SURCOAT "surcoat"
 #undef PROFILE_COMMANDS

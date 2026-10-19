@@ -397,3 +397,7 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 ## 武功名拼错的 NPC（2026-10-19，KB 06 §7.258）
 
 `set_skill("kunlun-shnfa", …)`、`map_skill("dodge", "shaolin-shnfa")` 这样的调用把武功名拼错了：本库没有这个武功文件，有的是拼对的那个。以前这种 NPC 在 `create()` 里报 `No such skill` 载入不了；武功缺失时跳过之后它们能载入，可是少了那门武功（`set_skill` 被跳过，`map_skill` 映射不到，门派弟子用普通轻功/拳脚）。按核对过的对照表改正，共 11 处、8 个文件：`changquana`→`changquan`（4 处）、`tiaji-jian`→`taiji-jian`（2 处）、`taiji-shenfong`→`taiji-shengong`（1 处）、`yan-fly`→`yanfly`（1 处）、`lingboweibu`→`lingbo-weibu`（1 处）、`jiahua-neigong`→`jiaohua-neigong`（1 处）、`jinggang-zhi`→`jingang-zhi`（1 处）。（`scripts/lpc_fix_skill_names.py`）
+
+## 标准整理轮（2026-10-19，`scripts/toolkit_fix.sh`）
+
+本库在新驱动下重扫，机械修复：2 个函数补上 varargs（调用处少传参数）。修后与 HEAD 逐个物件对比载入，没有退步。
