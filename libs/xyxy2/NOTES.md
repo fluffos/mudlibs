@@ -713,3 +713,15 @@ applied -- would be redundant with the existing `enabled` guard.
 - `/d/luoyang/congming3.lpc` 的 `south` 出口：`yunmanlou` → `yinmanlou`
 
 改后房间照常载入（与 HEAD 逐个对比，没有退步），出口现在指向存在的房间。
+
+## enable_player() 重入保护（2026-10-19，KB 05 §7.19）
+
+`feature/command.lpc` 的 `enable_player()` 没有重入保护：门派掌门大弟子 `zhangmen.lpc` 的 `init()` 以 `me->setup();` 收尾，`setup()` 调 `enable_player()`，`enable_commands()` 又重跑 `init()`，第一个进房间的活物就触发 `Too deep recursion`。按 §7.19 加了标志变量（`scripts/lpc_fix_enable_player_guard.py`）。改后同样的测试（载入掌门房间，再克隆一个活物走进去）不再出错，没有退步。
+
+## RANK_D 对 0 的称呼（2026-10-19，KB 06 §7.273）
+
+`adm/daemons/rankd.lpc` 的 `query_respect()`、`query_rude()`、`query_self()`、`query_self_rude()` 里 6 个函数开头补上 `if (!objectp(ob)) ob = this_object();`。NPC 在 `create()` 里写 `"…" + RANK_D->query_respect(this_player()) + "…"`（`inquiry` 对话、`chat_msg`），驱动自己跑 `reset()` 时没有人在场，`this_player()` 是 0。旧驱动里 `0->query("age")` 返回 0，称呼走默认分支；新驱动直接报 `Bad argument 1 to EFUN call_other()`，房间的 `make_inventory()` 吞掉错误，被打死的 NPC 再也刷新不回来。用 `scripts/lpc_reach_census.py --walk` 找到（xkx100 的武当弟子、一灯、汴梁书生…）；修在守护程序里，不动 1,800 个 NPC 文件。
+
+## 被注释吞掉的 inherit / include（2026-10-19，KB 06 §7.274）
+
+`/cmds/wiz/gift.lpc`：`#include <ansi.h>`。这些指令接在上一行 `//` 注释的末尾（档案里丢了换行），成了注释的一部分，驱动看不到：缺 `inherit` 的技能报 `Undefined function offensive_target`，缺 `#include <weapon.h>` 的兵器报语法错误。`scripts/lpc_fix_swallowed_directive.py` 把换行放回去。载入检查 1 个文件，0 个原来编译不过、现在载入，没有退步。

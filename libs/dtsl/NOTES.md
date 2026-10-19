@@ -1246,3 +1246,7 @@ These base classes are not in the lib, so every object that inherits them (rooms
 ## Headers next to the including file, quoted (2026-10-19, KB 04 6.17)
 
 2 files wrote `#include <area.h>` for a header that sits in their own directory (`map.h`, `qipu.h` ...). The old driver searched the includer's directory for an angle-bracket name; this one searches only the include path, so each stopped at `Cannot #include ...`. Rewritten to `#include "area.h"` (resolved against the includer everywhere: preload, `lpcc`, run-time compiles). (`scripts/lpc_fix_local_include.py`)
+
+## RANK_D asked about nobody (2026-10-19, KB 06 §7.273)
+
+4 function(s) of `adm/daemons/rankd.lpc` (`query_respect()`, `query_rude()`, `query_self()`, `query_self_rude()`) now start with `if (!objectp(ob)) ob = this_object();`. NPCs build `"…" + RANK_D->query_respect(this_player()) + "…"` in `create()` (an `inquiry` mapping, a `chat_msg` array) and the driver's own `reset()` runs with no command giver, so `this_player()` is 0. The old driver answered `0->query("age")` with 0 and the title fell to its default branch; this driver raises `Bad argument 1 to EFUN call_other()`, the room's `make_inventory()` swallows it and a killed NPC never comes back. Found by `scripts/lpc_reach_census.py --walk`; fixed in the daemon, not in the 1,800 NPC files.

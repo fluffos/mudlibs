@@ -928,3 +928,11 @@ bug），最终靠"先用一次会被拒绝的真实 `bai`（这一步真实无�
 ## 标准整理轮（2026-10-19，`scripts/toolkit_fix.sh`）
 
 本库在新驱动下重扫，机械修复：9 处浮点数赋给 int 的地方改成 to_int()。修后与 HEAD 逐个物件对比载入，没有退步。另有 7 处浮点数赋值要手工改（`lpc_fix_float_hooks.py` 列出）。
+
+## RANK_D 对 0 的称呼（2026-10-19，KB 06 §7.273）
+
+`adm/daemons/rankd.lpc` 的 `query_respect()`、`query_rude()`、`query_self()`、`query_self_rude()` 里 4 个函数开头补上 `if (!objectp(ob)) ob = this_object();`。NPC 在 `create()` 里写 `"…" + RANK_D->query_respect(this_player()) + "…"`（`inquiry` 对话、`chat_msg`），驱动自己跑 `reset()` 时没有人在场，`this_player()` 是 0。旧驱动里 `0->query("age")` 返回 0，称呼走默认分支；新驱动直接报 `Bad argument 1 to EFUN call_other()`，房间的 `make_inventory()` 吞掉错误，被打死的 NPC 再也刷新不回来。用 `scripts/lpc_reach_census.py --walk` 找到（xkx100 的武当弟子、一灯、汴梁书生…）；修在守护程序里，不动 1,800 个 NPC 文件。
+
+## 技能的 `power_point()` 返回类型（2026-10-19，KB 04 §6.10）
+
+`kungfu/skill/` 下 6 个技能的 `int power_point(object me) { return 1.5; }` 返回的是浮点数，新驱动按 `int` 声明截成 1。声明改成 `float`，值回到设计的 1.1、1.5…。这个库里读 `power_point()` 的只有遗留的 `combatd.b`（二进制，不加载），`combatd.lpc` 不调用，所以对运行没有别的影响。

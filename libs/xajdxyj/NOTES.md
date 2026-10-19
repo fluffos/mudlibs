@@ -319,3 +319,11 @@ compile check (exit 0, no errors) against `feature/command.lpc`.
 ## 武功文件里混进了分页器的文字（2026-10-19，KB 06 §7.263）
 
 `daemon/skill/boxing.lpc` 第一行是 `> more boxing.c  // houquan.c 猴拳`，`daemon/skill/westsword.lpc` 两个数组元素中间有一行 `已 经 显 示 26 % (ENTER 继 续 下 一 页 ， q 离 开 ， b 前 一 页)`：这两个文件是从 `more` 分页器里复制出来的，命令行和分页提示留在了文本里，驱动报 `unexpected L_ORDER`、`Illegal character 0xe5`。前后的代码是完整的（与 chidi、yxjh 的同名文件逐记号对照，除了数值调整之外一致），删掉这两行就能载入。
+
+## RANK_D 对 0 的称呼（2026-10-19，KB 06 §7.273）
+
+`adm/daemons/rankd.lpc` 的 `query_respect()`、`query_rude()`、`query_self()`、`query_self_rude()` 里 4 个函数开头补上 `if (!objectp(ob)) ob = this_object();`。NPC 在 `create()` 里写 `"…" + RANK_D->query_respect(this_player()) + "…"`（`inquiry` 对话、`chat_msg`），驱动自己跑 `reset()` 时没有人在场，`this_player()` 是 0。旧驱动里 `0->query("age")` 返回 0，称呼走默认分支；新驱动直接报 `Bad argument 1 to EFUN call_other()`，房间的 `make_inventory()` 吞掉错误，被打死的 NPC 再也刷新不回来。用 `scripts/lpc_reach_census.py --walk` 找到（xkx100 的武当弟子、一灯、汴梁书生…）；修在守护程序里，不动 1,800 个 NPC 文件。
+
+## 被注释吞掉的 inherit / include（2026-10-19，KB 06 §7.274）
+
+`/daemon/class/moon/moonshentong/shiyue.lpc`：`inherit SSERVER;`；`/u/moonsky/nw/skill/shiyue.lpc`：`inherit SSERVER;`。这些指令接在上一行 `//` 注释的末尾（档案里丢了换行），成了注释的一部分，驱动看不到：缺 `inherit` 的技能报 `Undefined function offensive_target`，缺 `#include <weapon.h>` 的兵器报语法错误。`scripts/lpc_fix_swallowed_directive.py` 把换行放回去。载入检查 2 个文件，2 个原来编译不过、现在载入，没有退步。

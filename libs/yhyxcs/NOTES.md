@@ -383,3 +383,7 @@ blocking). No LPC change this pass.
 ## engineer 的 void 函数 return 1（2026-10-19，KB 06 §7.266）
 
 `d/phezzan/npc/engineer.lpc` 的 `void make_mistake()`（闲聊动作，电力工程师“出错”）前面几处是 `return;`，末尾却是 `return 1;`，驱动报 `Type of returned value doesn't match function return type ( int vs void )`，整个 NPC 载入不了。闲聊回调不看返回值，删掉末尾的 `return 1;`。
+
+## RANK_D 对 0 的称呼（2026-10-19，KB 06 §7.273）
+
+`adm/daemons/rankd.lpc` 的 `query_respect()`、`query_rude()`、`query_self()`、`query_self_rude()` 里 4 个函数开头补上 `if (!objectp(ob)) ob = this_object();`。NPC 在 `create()` 里写 `"…" + RANK_D->query_respect(this_player()) + "…"`（`inquiry` 对话、`chat_msg`），驱动自己跑 `reset()` 时没有人在场，`this_player()` 是 0。旧驱动里 `0->query("age")` 返回 0，称呼走默认分支；新驱动直接报 `Bad argument 1 to EFUN call_other()`，房间的 `make_inventory()` 吞掉错误，被打死的 NPC 再也刷新不回来。用 `scripts/lpc_reach_census.py --walk` 找到（xkx100 的武当弟子、一灯、汴梁书生…）；修在守护程序里，不动 1,800 个 NPC 文件。

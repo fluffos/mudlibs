@@ -822,3 +822,7 @@ wield()` 对缺失路径返回 `0`，立刻炸：
 ## 全局头文件丢了 2 个宏（2026-10-19，KB 04 §6.16）
 
 `/include/globals.h` 里没有定义 `TASK_D`、`BET_D`，用到它们的物件（名单里 3 个）编译时报 `Undefined variable`/`Undefined function`，整个物件载入不了（编译器在第一个未定义的名字上停下，后面的错误和警告都看不到）。同系的库在各自的头文件里都有这几行：照其中和本库共有文件最多的那个库，原样补到 `/include/globals.h` 最后一个 `#define` 之后，宏体里出现的路径在本库里都存在。补完后名单里有 2 个载入，其余还差别的东西。（`scripts/lpc_restore_defines.py`）
+
+## 被注释吞掉的 inherit / include（2026-10-19，KB 06 §7.274）
+
+`/d/city/yangzhou/npc/obj/guo.lpc`：`#include <ansi.h>`。这些指令接在上一行 `//` 注释的末尾（档案里丢了换行），成了注释的一部分，驱动看不到：缺 `inherit` 的技能报 `Undefined function offensive_target`，缺 `#include <weapon.h>` 的兵器报语法错误。`scripts/lpc_fix_swallowed_directive.py` 把换行放回去。载入检查 1 个文件，1 个原来编译不过、现在载入，没有退步。

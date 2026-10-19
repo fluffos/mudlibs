@@ -1094,3 +1094,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply k
 ## BIG5 的 0x5C 尾字节（扩展）（2026-10-19，KB 06 §7.266）
 
 BIG5 里 `功` 等字的第二个字节正好是 0x5C（反斜杠），作者在它后面多写了一个 `\`，转 UTF-8 后这个多出来的 `\` 跑到了收尾引号前面，把引号转义掉，字符串一直吃到文件后面。`scripts/lpc_fix_big5_quote_backslash.py` 原先只在引号后面跟 `, ) ; } ] +` 或行尾时才删；这次把“引号后面紧跟颜色宏再接字符串”（`HIY"功\"HIR"』"`）也算进去，删掉多余的 `\`。
+
+## RANK_D 对 0 的称呼（2026-10-19，KB 06 §7.273）
+
+`adm/daemons/rankd.lpc` 的 `query_respect()`、`query_rude()`、`query_self()`、`query_self_rude()` 里 4 个函数开头补上 `if (!objectp(ob)) ob = this_object();`。NPC 在 `create()` 里写 `"…" + RANK_D->query_respect(this_player()) + "…"`（`inquiry` 对话、`chat_msg`），驱动自己跑 `reset()` 时没有人在场，`this_player()` 是 0。旧驱动里 `0->query("age")` 返回 0，称呼走默认分支；新驱动直接报 `Bad argument 1 to EFUN call_other()`，房间的 `make_inventory()` 吞掉错误，被打死的 NPC 再也刷新不回来。用 `scripts/lpc_reach_census.py --walk` 找到（xkx100 的武当弟子、一灯、汴梁书生…）；修在守护程序里，不动 1,800 个 NPC 文件。

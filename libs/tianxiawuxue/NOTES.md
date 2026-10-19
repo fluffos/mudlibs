@@ -1207,3 +1207,15 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply t
 - 2 个 NPC 文件、2 处 `create()` 里的 `this_player()->carry_object(` 改成 `carry_object(`（没人在场时 `this_player()` 是 0，NPC 载入不了；有玩家在场时衣服武器落到玩家手里）
 
 逐个物件与 HEAD 对比载入，没有退步。
+
+## enable_player() 重入保护（2026-10-19，KB 05 §7.19）
+
+`feature/command.lpc` 的 `enable_player()` 没有重入保护：门派掌门大弟子 `zhangmen.lpc` 的 `init()` 以 `me->setup();` 收尾，`setup()` 调 `enable_player()`，`enable_commands()` 又重跑 `init()`，第一个进房间的活物就触发 `Too deep recursion`（`d/shushan/tianshi` 等）。按 §7.19 加了标志变量（`scripts/lpc_fix_enable_player_guard.py`）。改后同样的测试（载入掌门房间，再克隆一个活物走进去）不再出错，没有退步。
+
+## 开封擂台头文件的重复全局变量（2026-10-19，KB 04 §6.10）
+
+`d/kaifeng/ground.h` 里的 `modes`、`mode_hints`、`families` 三张表被 `ground0.lpc` 和继承它的 `ground1/2/3.lpc`、`ground.lpc` 各包含一次，每次 `inherit` 都报 `Redeclaration of global variable`。表只放在 `ground0.lpc` 里：头文件用 `#ifndef GROUND_TABLES_INHERITED` 包住表，继承的几个程序在 `#include "ground.h"` 前 `#define GROUND_TABLES_INHERITED`（与 xiyouji 系其余库同一改法）。改后警告消失，与 HEAD 逐个对比载入，没有退步。
+
+## RANK_D 对 0 的称呼（2026-10-19，KB 06 §7.273）
+
+`adm/daemons/rankd.lpc` 的 `query_respect()`、`query_rude()`、`query_self()`、`query_self_rude()` 里 4 个函数开头补上 `if (!objectp(ob)) ob = this_object();`。NPC 在 `create()` 里写 `"…" + RANK_D->query_respect(this_player()) + "…"`（`inquiry` 对话、`chat_msg`），驱动自己跑 `reset()` 时没有人在场，`this_player()` 是 0。旧驱动里 `0->query("age")` 返回 0，称呼走默认分支；新驱动直接报 `Bad argument 1 to EFUN call_other()`，房间的 `make_inventory()` 吞掉错误，被打死的 NPC 再也刷新不回来。用 `scripts/lpc_reach_census.py --walk` 找到（xkx100 的武当弟子、一灯、汴梁书生…）；修在守护程序里，不动 1,800 个 NPC 文件。

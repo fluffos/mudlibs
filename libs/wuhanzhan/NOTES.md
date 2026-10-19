@@ -959,3 +959,15 @@ functionally re-tested live on this lib.
 ## 同一个 init() 写了两遍、内容不同（2026-10-19，KB 06 §7.265）
 
 `d/city/liangdian2` 里 `init()` 定义了两次（一个加 `buy`/`work` 之类的指令，另一个再加 `list`/`block_cmd`），驱动报 `Redeclaration of function 'init'`，整个物件载入不了。两处作者本来都要：把第二个 `init()` 里的 `add_action(...)` 并到第一个 `init()` 末尾，删掉第二个。（`scripts/lpc_merge_dup_init.py`）
+
+## 一行写完的源文件还原（2026-10-19，KB 06 §7.272）
+
+下列 13 个文件的整个源码挤在开头的一行 `//` 注释里（档案的编辑器丢了换行），驱动只编译出一个空程序，物件载入后没有名字、没有 id、拿不到手上：`/d/shaolin/obj/basi-shanyao.lpc`、`/d/shaolin/obj/bocai-fentiao.lpc`、`/d/shaolin/obj/changjian.lpc`、`/d/shaolin/obj/furong-huagu.lpc`、`/d/shaolin/obj/hulu.lpc`、`/d/shaolin/obj/jiaxin-biji.lpc`、`/d/shaolin/obj/jiedao.lpc`、`/d/shaolin/obj/liuli-qiezi.lpc`、`/d/shaolin/obj/mala-doufu.lpc`、`/d/shaolin/obj/mizhi-tianou.lpc`、`/d/shaolin/obj/qimeigun.lpc`、`/d/shaolin/obj/shanhu-baicai.lpc`、`/u/bqt/quest/gift/yitianjian.lpc`。`scripts/lpc_uncollapse.py` 按语句、语句块、`#include` 重新分行，再过一遍格式化。还原后逐个载入没有退步，`new()` 出来的物件有名字和属性。
+
+## RANK_D 对 0 的称呼（2026-10-19，KB 06 §7.273）
+
+`adm/daemons/rankd.lpc` 的 `query_respect()`、`query_rude()`、`query_self()`、`query_self_rude()` 里 4 个函数开头补上 `if (!objectp(ob)) ob = this_object();`。NPC 在 `create()` 里写 `"…" + RANK_D->query_respect(this_player()) + "…"`（`inquiry` 对话、`chat_msg`），驱动自己跑 `reset()` 时没有人在场，`this_player()` 是 0。旧驱动里 `0->query("age")` 返回 0，称呼走默认分支；新驱动直接报 `Bad argument 1 to EFUN call_other()`，房间的 `make_inventory()` 吞掉错误，被打死的 NPC 再也刷新不回来。用 `scripts/lpc_reach_census.py --walk` 找到（xkx100 的武当弟子、一灯、汴梁书生…）；修在守护程序里，不动 1,800 个 NPC 文件。
+
+## 被注释吞掉的 inherit / include（2026-10-19，KB 06 §7.274）
+
+`/daemon/class/moon/moonshentong/shiyue.lpc`：`inherit SSERVER;`；`/u/moonr/sadboy/pansi/skill/zixia-force.lpc`：`inherit FORCE;`；`/u/sadboy/pansi/skill/zixia-force.lpc`：`inherit FORCE;`；`/u/test/class/moon/moonshentong/shiyue.lpc`：`inherit SSERVER;`。这些指令接在上一行 `//` 注释的末尾（档案里丢了换行），成了注释的一部分，驱动看不到：缺 `inherit` 的技能报 `Undefined function offensive_target`，缺 `#include <weapon.h>` 的兵器报语法错误。`scripts/lpc_fix_swallowed_directive.py` 把换行放回去。载入检查 4 个文件，2 个原来编译不过、现在载入，没有退步。

@@ -639,3 +639,7 @@ quit/reconnect 持久性**完全正常，没有数据丢失**。
 ## Macros the global header lost (2026-10-19, KB 04 6.16)
 
 `/include/globals.h` did not define `MAILDIR`; the objects that use them (1 on the list) stopped at `Undefined variable`/`Undefined function`, and since the compiler stops at the first undefined name the errors and warnings behind it stayed hidden. The sibling libs of the same lineage carry these lines in their headers: the copy of the sibling with the most files in common was added after the last `#define` of `/include/globals.h`; every path in a macro body exists in this lib. the listed objects have other errors as well and still do not load. (`scripts/lpc_restore_defines.py`)
+
+## RANK_D asked about nobody (2026-10-19, KB 06 §7.273)
+
+4 function(s) of `adm/daemons/rankd.lpc` (`query_respect()`, `query_rude()`, `query_self()`, `query_self_rude()`) now start with `if (!objectp(ob)) ob = this_object();`. NPCs build `"…" + RANK_D->query_respect(this_player()) + "…"` in `create()` (an `inquiry` mapping, a `chat_msg` array) and the driver's own `reset()` runs with no command giver, so `this_player()` is 0. The old driver answered `0->query("age")` with 0 and the title fell to its default branch; this driver raises `Bad argument 1 to EFUN call_other()`, the room's `make_inventory()` swallows it and a killed NPC never comes back. Found by `scripts/lpc_reach_census.py --walk`; fixed in the daemon, not in the 1,800 NPC files.
