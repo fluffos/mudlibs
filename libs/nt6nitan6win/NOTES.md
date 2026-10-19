@@ -589,3 +589,7 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 - `/d/baituo/obj/lingshezhang.lpc`：`set("wposition", "/d/baituo/obj/lingshezhang.lpc")` 被 `//***** ADDED BY SCATTER *****` 注释吞掉
 
 `scripts/lpc_fix_swallowed_statement.py` 把换行放回去。逐个载入与 HEAD 对比，没有退步。
+
+## 标准整理轮（2026-10-19，`scripts/toolkit_fix.sh`）
+
+本库在新驱动下重扫，机械修复：12 个未使用的局部变量。修后与 HEAD 逐个物件对比载入，没有退步。

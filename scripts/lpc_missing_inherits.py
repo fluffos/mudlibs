@@ -38,7 +38,7 @@ def norm(p):
 def scan(slug, files, fileset):
     defs = own_defs(slug, files)
     alldefs = R.lib_scan(slug, fileset)[0]
-    objs = {norm(f) for f in files if f.endswith(".lpc")}
+    objs = {norm(f) for f in files if f.endswith((".lpc", ".c"))}     # a lib that kept its `.c` names (the upstream-hosted English ones) counts too
     miss = collections.defaultdict(list)      # (kind, target) -> files
     for rel in files:
         if not rel.endswith(".lpc") or R.SKIP.search(rel) or re.search(r"/(tests?|doc|docs|help)/", rel):

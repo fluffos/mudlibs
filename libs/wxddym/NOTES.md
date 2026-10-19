@@ -826,3 +826,7 @@ No new errors after the shop commands. Demo `fluffos` save churn
 - 戒指基类 `inherit/gems/ring.lpc` 的 `init_sockets(object me)` 同样在没有人在场时对 0 调 `query()`，开头加了 `if (!objectp(me)) me = this_object();`；发簪和护身符基类要的 `TYPE_HAIRPIN`、`TYPE_CHARM` 补进 `include/globals.h`（`scripts/lpc_restore_defines.py`）。`d/kaifeng/business.lpc` 继承的仓库基类 `inherit/room/warehouse.lpc`（nt6nitan6win）也试过，基类载得进来，可是这个房间要 `/adm/daemons/businessd`，本库没有，一个用户也载不进来，所以撤掉了。
 
 逐个与 HEAD 对比载入，没有退步。
+
+## 标准整理轮（2026-10-19，`scripts/toolkit_fix.sh`）
+
+本库在新驱动下重扫，机械修复：9 个未使用的局部变量。修后与 HEAD 逐个物件对比载入，没有退步。另有 1 处浮点数赋值要手工改（`lpc_fix_float_hooks.py` 列出）。

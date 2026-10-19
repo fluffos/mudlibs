@@ -1195,3 +1195,7 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 ## 缺失的 unew()（2026-10-19，KB 06 §7.262）
 
 本库的 NPC 和兵器在 `create()` 里调用 xkx 一系的模拟函数 `unew(file)`（`new()`，但遵守物件的 `unique` 上限），`/adm/obj/simul_efun.lpc` 里没有，调用者全部报 `Undefined function unew`（以及接收结果那一行的 `Bad assignment ( object vs unknown )`），载入不了。补上和 dtsl、pkuxkx、sjpl2 等库一样的 `unew()`（文件不存在时返回 0，不会让调用者死在 `carry_object()` 里）。
+
+## 标准整理轮（2026-10-19，`scripts/toolkit_fix.sh`）
+
+本库在新驱动下重扫，机械修复：7 个未使用的局部变量。修后与 HEAD 逐个物件对比载入，没有退步。
