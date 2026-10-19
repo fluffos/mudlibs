@@ -1147,3 +1147,7 @@ timestamp-only churn.
 ## 留言板存档损坏时 `setup()` 不再抛错（2026-10-18）
 
 `data/board/*.o` 里有几个是外来的二进制数据（以 `?inh` 开头，`restore_object()` 报 `Illegal file format - 1`）。`inherit/misc/bboard.lpc` 的 `setup()` 里 `restore()` 直接抛，留言板对象（连带创建它的客店房间，比如 `d/city/kedian`）载入失败。改成 `catch(restore());`，留言板以空板启动（`xkx2017` 的同一个文件早就是这样写的）。上面「存档损坏」那一条里说的“`setup()` 已经包住了”并不准确。
+
+## `set_skill()` 遇到本库没有文件的武功不再抛错（2026-10-18，KB 06 §7.256）
+
+`feature/skill.lpc` 里的 `set_skill()`、`map_skill()`、`prepare_skill()` 碰到没有武功文件的名字就 `error("F_SKILL: No such skill (…)")`，调用它们的 NPC `create()` 整个中断：NPC 载入不了，刷出它的房间也少一个人。本库有 9 个对象设了本库没有文件的武功（3 个名字，最多的是 `changquan`、`xuanyuan-arrow`、`liangyi-jian`）。三处都改成 `return`：这一门武功不给、不映射，对象照常载入，只是少了它（缺的武功本身仍是内容缺口）。抽样载入这些对象：9 个里 9 个通过。（`scripts/lpc_guard_set_skill.py`）

@@ -390,3 +390,11 @@ HEAD 与工作树分别加载（新进程）：1653 -> 1653 通过，无回退�
 ## 去掉的预定义宏 `SAVE_EXTENSION`（2026-10-18，KB 04 §6.11）
 
 老版 MudOS 给每个 LPC 对象预先定义了 `SAVE_EXTENSION`（`".o"`）；FluffOS 的 ChangeLog（COMPAT_BUSTER 一条）把它删了，改用 `__SAVE_EXTENSION__`。本库没有自己 `#define` 这个宏，用到它的文件一律 `Undefined variable 'SAVE_EXTENSION'`，整个对象载入不了。改成 `__SAVE_EXTENSION__`（`scripts/lpc_fix_predefined_macro.py`）：`adm/daemons/network/netmail.lpc`、`obj/token.lpc`。`token` 是帮派领袖信物；`netmail` 是网络邮件守护进程（本库缺 `mailer.h` 等头文件，改后仍载入不了）。改后用 `lpcc` 逐个载入这些对象：1 个通过，1 个还有别的错误（`adm/daemons/network/netmail`：/adm/daemons/network/netmail.lpc:17: error: Cannot #include mailer.h）。
+
+## `move()` 的目标房间文件不存在时不再抛错（2026-10-18，KB 06 §7.96）
+
+`feature/move.lpc` 的 `move()` 把 `err = catch(dest = load_object(dest))` 当存在检查，可目标文件不存在时 `load_object()` 返回 0、`catch` 不触发，接着 `dest->receive_object()` 抛出 `Bad argument 1 to EFUN call_other()`。留言板 `std/bboard.lpc` 的 `setup()` 把自己 `move()` 到 `location` 房间，那是巫师的私人房间时（档案里没有这个文件），留言板连同刷出它的房间一起载入不了。`catch` 之后补上 `if (!objectp(dest)) return 0;`（kxkj 系是 `ob`），移动失败、对象留在原处。抽样（每库 300 个对象）里原先因此失败的 30 个对象，现在 21 个能载入。
+
+## `set_skill()` 遇到本库没有文件的武功不再抛错（2026-10-18，KB 06 §7.256）
+
+`feature/skill.lpc` 里的 `set_skill()`、`map_skill()`、`prepare_skill()` 碰到没有武功文件的名字就 `error("F_SKILL: No such skill (…)")`，调用它们的 NPC `create()` 整个中断：NPC 载入不了，刷出它的房间也少一个人。本库有 1 个对象设了本库没有文件的武功（1 个名字，最多的是 `fonxanforce`）。三处都改成 `return`：这一门武功不给、不映射，对象照常载入，只是少了它（缺的武功本身仍是内容缺口）。抽样载入这些对象：1 个里 1 个通过。（`scripts/lpc_guard_set_skill.py`）

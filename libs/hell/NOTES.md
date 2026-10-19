@@ -409,3 +409,7 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 ## 昆仑气法「流」编译失败（2026-10-15）
 
 从 xkx 系抄来的 `kunlun-qifa/liu` 引用 `/kungfu/skill/eff_msg.h`，本库没有这个头文件（只有这一个文件用它）。唯一用到的 `eff_status_msg()` 本库的 combatd 就有，改为 `COMBAT_D->eff_status_msg()`，去掉那行 include；现在能载入。
+
+## `set_skill()` skips a skill the lib has no file for (2026-10-18, KB 06 7.256)
+
+`set_skill()`, `map_skill()` and `prepare_skill()` of `feature/skill.lpc` raised `error("F_SKILL: No such skill (...)")` on a name without a skill file, which aborted the calling NPC's `create()`: the NPC never loaded and the room that spawns it lost it. No object of this lib sets a missing skill today; The three now `return`: the skill is not granted or mapped and the object loads without it (the missing skill itself stays a content gap).  (`scripts/lpc_guard_set_skill.py`)

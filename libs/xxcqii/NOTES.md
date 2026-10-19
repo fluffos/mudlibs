@@ -210,3 +210,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 ## 文良玉 NPC 重复继承（2026-10-18，KB 06 §7.240）
 
 `d/wenjia/wenjia/wenjia/npc/wenliangyu.lpc` 先 `inherit NPC;` 又 `inherit F_DEALER;`，而 `F_DEALER`（`/feature/dealer`）本身已经继承 `NPC`：`Illegal to redefine 'nomask' function 'command_hook'`（还有 `disable_player`、`enable_player`、`is_busy`、`query_busy`），整个 NPC 载入不了。去掉多余的 `inherit NPC;`，买东西（`do_buy`）和 `give_task` 都在，`init()` 能正常跑。
+
+## `set_skill()` 遇到本库没有文件的武功不再抛错（2026-10-18，KB 06 §7.256）
+
+`feature/skill.lpc` 里的 `set_skill()`、`map_skill()`、`prepare_skill()` 碰到没有武功文件的名字就 `error("F_SKILL: No such skill (…)")`，调用它们的 NPC `create()` 整个中断：NPC 载入不了，刷出它的房间也少一个人。本库有 16 个对象设了本库没有文件的武功（5 个名字，最多的是 `yanling-shenfa`、`shenyuan-gong`、`canhe-zhi`）。三处都改成 `return`：这一门武功不给、不映射，对象照常载入，只是少了它（缺的武功本身仍是内容缺口）。抽样载入这些对象：16 个里 15 个通过，其余 1 个停在别的错误上（`d/murong/npc/job-dizi`：*Bad argument 1 to EFUN call_other()）。（`scripts/lpc_guard_set_skill.py`）

@@ -721,3 +721,7 @@ issues encountered.
 ## 存档读不出来：BIG5/GBK 0x5C 字后的反斜杠（2026-10-15，KB 03 §4.4）
 
 `/data/board/propose.o`：第二字节为 0x5C 的字（功、许、么、俞、賊……）MudOS 存档时写成 `\\`，转成 GB 后字保留，多出的一个反斜杠转义了后面的引号（`成功\",` 字符串收不了尾），或反过来，MudOS 当作被 0x5C 转义的引号成了字符串的结尾（`出\"俞" >`）。`restore_object()` 报 `Illegal mapping format`，留言板等从空白开始。在出错处去掉或补上这一个反斜杠，直到能读回（`scripts/lpc_save_encoding.py --from-raw`），驱动核对全部能读回。
+
+## `move()` 的目标房间文件不存在时不再抛错（2026-10-18，KB 06 §7.96）
+
+`feature/move.lpc` 的 `move()` 把 `err = catch(dest = load_object(dest))` 当存在检查，可目标文件不存在时 `load_object()` 返回 0、`catch` 不触发，接着 `dest->receive_object()` 抛出 `Bad argument 1 to EFUN call_other()`。留言板 `std/bboard.lpc` 的 `setup()` 把自己 `move()` 到 `location` 房间，那是巫师的私人房间时（档案里没有这个文件），留言板连同刷出它的房间一起载入不了。`catch` 之后补上 `if (!objectp(dest)) return 0;`（kxkj 系是 `ob`），移动失败、对象留在原处。抽样的留言板原本就能载入，这一句只是防御。

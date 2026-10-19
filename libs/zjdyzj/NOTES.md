@@ -931,3 +931,7 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 ## 没有对手的绝招全部报错：message_combatd()（2026-10-15）
 
 指间版 `message_combatd(msg, me, you, ...)` 为客户端加了图标和伤害行，直接读 `you->query_temp("armor/armor")`、`you->query("qi")`。不对别人出手的招（混天气功、龙象功等的 `roar`，先天功 `shield`，金刚不坏体 `jingang` ……）只传 `msg, me`，`you` 是 0，每次使用都报错，绝招探测里本库有 28 个这样的招。照同系 zjmudhell、wxddym、wdxtym 的写法，伤害行包进 `if (you)`；28 个招全部能用了。
+
+## `set_skill()` 遇到本库没有文件的武功不再抛错（2026-10-18，KB 06 §7.256）
+
+`feature/skill.lpc` 里的 `set_skill()`、`map_skill()`、`prepare_skill()` 碰到没有武功文件的名字就 `error("F_SKILL: No such skill (…)")`，调用它们的 NPC `create()` 整个中断：NPC 载入不了，刷出它的房间也少一个人。本库目前没有对象设了缺失的武功；三处都改成 `return`：这一门武功不给、不映射，对象照常载入，只是少了它（缺的武功本身仍是内容缺口）。（`scripts/lpc_guard_set_skill.py`）

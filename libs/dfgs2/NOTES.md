@@ -1170,3 +1170,7 @@ A Big5 character whose second byte is 0x5C was written with one extra backslash 
 ## `for (int i ...)` 的循环变量在循环外还在用（2026-10-18，KB 04 §6.12）
 
 当铺／商店的 `do_buy()` 写成 `for (int i = 0; ...) if (...) break;`，循环一结束又读 `if (i == sizeof(inv))`。FluffOS 里 `for` 头里声明的变量只在循环内有效，所以 `Undefined variable 'i'`，整个房间（NPC）载入不了，当铺根本进不去。把 `i` 声明挪到函数开头（`int i, index;`），循环改成 `for (i = 0; ...)`：`std/room/hockshop.lpc`。
+
+## `move()` 的目标房间文件不存在时不再抛错（2026-10-18，KB 06 §7.96）
+
+`feature/move.lpc` 的 `move()` 把 `err = catch(dest = load_object(dest))` 当存在检查，可目标文件不存在时 `load_object()` 返回 0、`catch` 不触发，接着 `dest->receive_object()` 抛出 `Bad argument 1 to EFUN call_other()`。留言板 `std/bboard.lpc` 的 `setup()` 把自己 `move()` 到 `location` 房间，那是巫师的私人房间时（档案里没有这个文件），留言板连同刷出它的房间一起载入不了。`catch` 之后补上 `if (!objectp(dest)) return 0;`（kxkj 系是 `ob`），移动失败、对象留在原处。抽样（每库 300 个对象）里原先因此失败的 5 个对象，现在 4 个能载入。

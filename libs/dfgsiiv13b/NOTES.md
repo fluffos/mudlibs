@@ -466,3 +466,7 @@ finds nothing in this lib.
 `.c` 改名 `.lpc` 时只改了字符串没改切片宽度：`f[<2..] == ".lpc"` 拿两个字符比四个字符，永远不成立（`!=` 永远成立），按后缀筛文件、去后缀的代码因此从不运行或截成 `x.l`（KB 06 §7.238）。`scripts/lpc_lpc_suffix_slice.py --apply` 改了 1 处比较、0 处去后缀（如 `cmds/wiz/update.lpc`）；改动的文件 HEAD 与工作树分别加载（新进程），无回退。
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。1 个文件 1 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+
+## `move()` 的目标房间文件不存在时不再抛错（2026-10-18，KB 06 §7.96）
+
+`feature/move.lpc` 的 `move()` 把 `err = catch(dest = load_object(dest))` 当存在检查，可目标文件不存在时 `load_object()` 返回 0、`catch` 不触发，接着 `dest->receive_object()` 抛出 `Bad argument 1 to EFUN call_other()`。留言板 `std/bboard.lpc` 的 `setup()` 把自己 `move()` 到 `location` 房间，那是巫师的私人房间时（档案里没有这个文件），留言板连同刷出它的房间一起载入不了。`catch` 之后补上 `if (!objectp(dest)) return 0;`（kxkj 系是 `ob`），移动失败、对象留在原处。抽样的留言板原本就能载入，这一句只是防御。

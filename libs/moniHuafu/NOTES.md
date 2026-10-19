@@ -631,3 +631,7 @@ quit/reconnect 持久性**完全正常，没有数据丢失**。
 ## family 映射内联取下标（2026-10-15，KB 05 §7.30）
 
 `ob->query("family")["master_name"]`、`me->query("family")["family_name"]`（泥潭式为 `query("family", ob)[...]`）直接对门派映射取下标：没有门派的人（新玩家、叛师者、大多数 NPC）在 NPC 的打招呼和问话、绝招的门派判断、房间的 `valid_leave` 里报 `Value being indexed is zero`，而不是得到拒绝。1 处（1 个文件）改为 dbase 路径查询 `query("family/master_name")`：有门派时值相同，没有时得 0；原有的判断照常生效（`scripts/lpc_fix_family_index.py`）。给映射赋值的写法未动。
+
+## `set_skill()` skips a skill the lib has no file for (2026-10-18, KB 06 7.256)
+
+`set_skill()`, `map_skill()` and `prepare_skill()` of `feature/skill.lpc` raised `error("F_SKILL: No such skill (...)")` on a name without a skill file, which aborted the calling NPC's `create()`: the NPC never loaded and the room that spawns it lost it. No object of this lib sets a missing skill today; The three now `return`: the skill is not granted or mapped and the object loads without it (the missing skill itself stays a content gap).  (`scripts/lpc_guard_set_skill.py`)

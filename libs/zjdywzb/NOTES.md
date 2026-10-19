@@ -389,3 +389,7 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 ## 修罗刀「索命」不存在（2026-10-15，KB 02 §3）
 
 原档案里这个绝招放在一个名叫 `xiuluo-dao/jueming.c` 的目录里（`jueming.c/suoming.c`），改名 `.lpc` 之后成了 `jueming.lpc/suoming.c`：游戏里没有 `suoming`，而 `perform jueming` 会把这个目录当作虚拟对象去载入，报 `Inherit chain too deep`。同系五个库都是 `xiuluo-dao/suoming.lpc`。文件原样移到 `xiuluo-dao/suoming.lpc`（保留本库自己的旧版本：用 sword 技能计算，没有 `living()` 判断），现在能用。
+
+## `set_skill()` 遇到本库没有文件的武功不再抛错（2026-10-18，KB 06 §7.256）
+
+`feature/skill.lpc` 里的 `set_skill()`、`map_skill()`、`prepare_skill()` 碰到没有武功文件的名字就 `error("F_SKILL: No such skill (…)")`，调用它们的 NPC `create()` 整个中断：NPC 载入不了，刷出它的房间也少一个人。本库有 1 个对象设了本库没有文件的武功（1 个名字，最多的是 `freezing-force`）。三处都改成 `return`：这一门武功不给、不映射，对象照常载入，只是少了它（缺的武功本身仍是内容缺口）。抽样载入这些对象：1 个里 1 个通过。（`scripts/lpc_guard_set_skill.py`）

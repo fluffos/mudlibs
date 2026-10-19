@@ -919,3 +919,7 @@ compile check (exit 0, no errors) against `feature/command.lpc`.
 ## 蓬莱三星的 `ref()` 是保留字（2026-10-18，KB 04 §6.14）
 
 福星、禄星、寿星（`d/penglai/npc/`）里有一个函数叫 `int ref ()`，`call_out("ref", 20)` 去调它；`ref` 在 FluffOS 里是关键字（引用），`unexpected L_REF`，三个 NPC 都载入不了。函数和 `call_out` 都改叫 `reff`（本系里 dtxyzjb、zitengzhan 早就这么改，`call_out` 却没跟着改）：`d/penglai/npc/luxing.lpc`、`d/penglai/npc/shouxing.lpc`。改后载入：2/2 通过。
+
+## `set_skill()` 遇到本库没有文件的武功不再抛错（2026-10-18，KB 06 §7.256）
+
+`feature/skill.lpc` 里的 `set_skill()`、`map_skill()`、`prepare_skill()` 碰到没有武功文件的名字就 `error("F_SKILL: No such skill (…)")`，调用它们的 NPC `create()` 整个中断：NPC 载入不了，刷出它的房间也少一个人。本库有 9 个对象设了本库没有文件的武功（11 个名字，最多的是 `qin`、`strike`、`cuff`）。三处都改成 `return`：这一门武功不给、不映射，对象照常载入，只是少了它（缺的武功本身仍是内容缺口）。抽样载入这些对象：9 个里 6 个通过，其余 3 个停在别的错误上（`d/PANSI/NPC/ZIXIA`：*Bad argument 1 to EFUN call_other()；`d/city/obj/npc/zhong`：*No program in object '/d/city/obj/npc/zhong'!……）。（`scripts/lpc_guard_set_skill.py`）

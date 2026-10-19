@@ -736,3 +736,7 @@ No new errors after the shop commands. Demo `fluffos` save churn
 ## 迷宫首领 NPC 重复继承 NPC（2026-10-18，KB 06 §7.240）
 
 `d/maze/boss/npc/` 下这 8 个首领先 `inherit NPC;` 再 `inherit BOSS;`，而 `BOSS`（`/inherit/char/boss`）本身已经继承 `NPC`：全局变量 `busy`、`interrupt`、`perform_busy`、`override` 等一律 `Redeclaration of global variable`，后面还有 `nomask` 函数被重定义，NPC 载入不了。去掉多余的 `inherit NPC;`（文件里的 `::init()`、`::die()` 现在落到 `BOSS` 上，正是它们原来想调的）：`d/maze/boss/npc/0004/dragon.lpc`、`d/maze/boss/npc/0005/dragon.lpc`、`d/maze/boss/npc/0011/shujing.lpc`、`d/maze/boss/npc/0012/baihuaxianzi.lpc`、`d/maze/boss/npc/0013/leijiu.lpc`、`d/maze/boss/npc/0014/leishen.lpc`、`d/maze/boss/npc/0501/nielong.lpc`、`d/maze/boss/npc/0502/jinyinshe.lpc`。改后载入：8/8 通过。
+
+## `set_skill()` 遇到本库没有文件的武功不再抛错（2026-10-18，KB 06 §7.256）
+
+`feature/skill.lpc` 里的 `set_skill()`、`map_skill()`、`prepare_skill()` 碰到没有武功文件的名字就 `error("F_SKILL: No such skill (…)")`，调用它们的 NPC `create()` 整个中断：NPC 载入不了，刷出它的房间也少一个人。本库有 404 个对象设了本库没有文件的武功（170 个名字，最多的是 `magic-unarmed`、`magic-sword`、`magic-ice`）。三处都改成 `return`：这一门武功不给、不映射，对象照常载入，只是少了它（缺的武功本身仍是内容缺口）。抽样载入这些对象：30 个里 24 个通过，其余 6 个停在别的错误上（`clone/guard/baoer`：*No program in object '/clone/guard/baoer'!；`d/city/task1/hua`：*No program in object '/d/city/task1/hua'!……）。（`scripts/lpc_guard_set_skill.py`）

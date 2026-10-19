@@ -1078,3 +1078,7 @@ No code change. 拜师 not re-done.
 ## `for (int i ...)` 的循环变量在循环外还在用（2026-10-18，KB 04 §6.12）
 
 当铺／商店的 `do_buy()` 写成 `for (int i = 0; ...) if (...) break;`，循环一结束又读 `if (i == sizeof(inv))`。FluffOS 里 `for` 头里声明的变量只在循环内有效，所以 `Undefined variable 'i'`，整个房间（NPC）载入不了，当铺根本进不去。把 `i` 声明挪到函数开头（`int i, index;`），循环改成 `for (i = 0; ...)`：`std/room/hockshop.lpc`。
+
+## `set_skill()` 遇到本库没有文件的武功不再抛错（2026-10-18，KB 06 §7.256）
+
+`feature/skill.lpc` 里的 `set_skill()`、`map_skill()`、`prepare_skill()` 碰到没有武功文件的名字就 `error("F_SKILL: No such skill (…)")`，调用它们的 NPC `create()` 整个中断：NPC 载入不了，刷出它的房间也少一个人。本库有 35 个对象设了本库没有文件的武功（40 个名字，最多的是 `huashan-sword`、`liumai-shenjian`、`finger`）。三处都改成 `return`：这一门武功不给、不映射，对象照常载入，只是少了它（缺的武功本身仍是内容缺口）。抽样载入这些对象：30 个里 26 个通过，其余 4 个停在别的错误上（`d/city2/npc/liling2`：*No program in object '/d/city2/npc/liling2'!；`d/dali/npc/duanyanqing`：*No program in object '/d/dali/npc/duanyanqing'!……）。（`scripts/lpc_guard_set_skill.py`）

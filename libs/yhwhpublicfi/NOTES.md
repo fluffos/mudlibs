@@ -485,3 +485,7 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 ## 回龙杖「神龙摆尾」从来用不出（2026-10-15，KB 06 §7.246）
 
 `if (!objectp(me->query_temp("weapon") || weapon->query("skill_type") != "staff"))`：括号放错，`objectp()` 包住了整个 `||`，拿着兵器时 `objectp(1)` 为假，永远“双手应该持杖”；空手时又去读从未赋值的 `weapon`，报错。改为先存兵器再判断。
+
+## `set_skill()` 遇到本库没有文件的武功不再抛错（2026-10-18，KB 06 §7.256）
+
+`feature/skill.lpc` 里的 `set_skill()`、`map_skill()`、`prepare_skill()` 碰到没有武功文件的名字就 `error("F_SKILL: No such skill (…)")`，调用它们的 NPC `create()` 整个中断：NPC 载入不了，刷出它的房间也少一个人。本库目前没有对象设了缺失的武功；三处都改成 `return`：这一门武功不给、不映射，对象照常载入，只是少了它（缺的武功本身仍是内容缺口）。（`scripts/lpc_guard_set_skill.py`）

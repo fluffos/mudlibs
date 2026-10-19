@@ -249,6 +249,7 @@ The message is discarded. Return 0, i.e. `return notify_fail(...)`
 ### 7.96 `catch(load_object(path))` isn't an existence test
 `load_object` of a missing path returns 0 without throwing. Use
 `file_size(path + ".lpc") >= 0`, with chained fallbacks.
+A shared `move()` that does `err = catch(dest = load_object(dest)); if (err) error(...)` and then `dest->receive_object()` is the same mistake (2026-10-18): `move("/open/x/room")` to a room the archive lacks raised `Bad argument 1 to EFUN call_other()` (every bulletin board whose `location` is a wizard's room: `std/bboard.lpc setup()`; dfgs2, dfgsiiv13b, huoying, naruto, kxkj, kxkjii2 -> kxkj 31 of 31 sampled objects failed, 15 load now). `if (!objectp(dest)) return 0;` after the catch.
 
 ### 7.97 Multi-line `#define` with no `\` on the FIRST line
 The rest leaks as top-level statements, so `dns_master` fails to
@@ -1432,3 +1433,9 @@ More of the same (2026-10-15): a `check_fight()` that declares `object weapon;` 
 **Cause:** `inherit/misc/bboard.lpc setup()` calls `restore()` bare, and `restore_object()` raises on a file that is not a text save (a missing file returns 0). The board's `create()` aborts, and with it the room that clones the board.
 **Fix:** `catch(restore());`, the board starts empty (xkx2017's copy already read so).
 **Detection:** scan the first four bytes of every tracked `.o` for `?inh`; the census row `Illegal file format`.
+
+### 7.256 `set_skill()` of a skill the lib has no file for aborts the NPC's `create()` (2026-10-18)
+**Symptom:** an NPC, maze boss or sect master never loads and the room that spawns it is one short: `*F_SKILL: No such skill (magic-sword)`. 3,736 objects in 169 libs call `set_skill()` with a name no skill file of their lib carries (wxddym's 404 and zxty's 205 maze bosses: `magic-sword`, `magic-fire` ...; chidi's `dragon`; the Shaolin monks' `yijin-jing`); `map_skill("leg", ...)` raises the same when the lib has no `leg` (bixiecanyang) or `spells` (nitan6).
+**Cause:** the shared `feature/skill.lpc` `error()`s in `set_skill()`, `map_skill()` and `prepare_skill()` when `SKILL_D(skill)` is no file. The skill is content the archive never shipped (or a name the lib spells another way, see 7.249 for query sites); the NPC itself is intact. chidi and fyzfqyy already skipped the skill instead.
+**Fix:** `scripts/lpc_guard_set_skill.py --apply`: the three `error("F_SKILL ...")` become `return` (187 libs; sanjieshenhua, sjshv2578bb, xyj20032 by hand around their `check_skill()`; shzs and zzhj already `return notify_fail()`). The NPC loads without that skill; the missing skill stays a content gap. Restoring the skill itself needs a donor lib whose skill files are mostly byte-identical to this lib's (`lpc_scan_missing_skills.py --donors`): only 341 of the 3,749 (lib, skill) pairs have one, the rest are other versions of the game.
+**Detection:** `scripts/lpc_scan_missing_skills.py [--summary] [--files DIR]`; the census row `F_SKILL: No such skill`.

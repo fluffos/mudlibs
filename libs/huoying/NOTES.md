@@ -770,3 +770,7 @@ PID.
 ## 存档读不出来：字符串里的换行、空行（2026-10-15，KB 03 §4.4）
 
 `data/questd.o`、`world/area/wizard/hockshop.o`：字符串里有原样的换行（`save_object()` 存成 `\r`，`restore_object()` 逐行读，原样的换行让字符串收不了尾），或有空行（`Illegal file format`），读档的对象（留言板、NPC、玩家）从空白开始。换行改写成 `\r`、删去空行（`scripts/lpc_save_encoding.py --from-raw`），驱动核对全部能读回（`scripts/lpc_save_restore_check.py`）。
+
+## `move()` no longer raises on a destination file that does not exist (2026-10-18, KB 06 7.96)
+
+`move()` of `feature/move.lpc` used `err = catch(dest = load_object(dest))` as an existence test, but `load_object()` of a missing file returns 0 and the catch never fires; `dest->receive_object()` then raised `Bad argument 1 to EFUN call_other()`. A bulletin board whose `location` is a wizard's room the archive lacks died in `std/bboard.lpc setup()` and took the room that creates it along. `if (!objectp(dest)) return 0;` after the catch: the move fails and the object stays where it is. The sampled boards already loaded, so this is a safeguard.

@@ -455,3 +455,7 @@ quit cycle confirmed a clean `debug.log` throughout.
 ## `cmds/min/develop` 里 `"马厩\",`（2026-10-18，KB 03 §4.6）
 
 `"stable" : "马厩\",` 的收尾引号前多了一个反斜杠，把引号转义掉了，字符串连到下一行，命令载入不了。去掉反斜杠。载入：通过。
+
+## `set_skill()` 遇到本库没有文件的武功不再抛错（2026-10-18，KB 06 §7.256）
+
+`feature/skill.lpc` 里的 `set_skill()`、`map_skill()`、`prepare_skill()` 碰到没有武功文件的名字就 `error("F_SKILL: No such skill (…)")`，调用它们的 NPC `create()` 整个中断：NPC 载入不了，刷出它的房间也少一个人。本库有 1 个对象设了本库没有文件的武功（1 个名字，最多的是 `move`）。三处都改成 `return`：这一门武功不给、不映射，对象照常载入，只是少了它（缺的武功本身仍是内容缺口）。抽样载入这些对象：1 个里 1 个通过。（`scripts/lpc_guard_set_skill.py`）
