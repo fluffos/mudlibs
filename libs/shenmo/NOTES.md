@@ -1181,3 +1181,9 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 ## 被注释吞掉的 inherit / include（2026-10-19，KB 06 §7.274）
 
 `/feature/team.lpc`：`#include <command.h>`。这些指令接在上一行 `//` 注释的末尾（档案里丢了换行），成了注释的一部分，驱动看不到：缺 `inherit` 的技能报 `Undefined function offensive_target`，缺 `#include <weapon.h>` 的兵器报语法错误。`scripts/lpc_fix_swallowed_directive.py` 把换行放回去。载入检查 1 个文件，0 个原来编译不过、现在载入，没有退步。
+
+## 载入不了的零碎文件（2026-10-19，KB 03 §4.7、KB 04 §6.10）
+
+- `daemon/skill/dugu-jiujian.lpc` 两句出招描述里的乱码（`「\0唤Ｂ渚叛恪梗…飨?n的$l`、`$n\0?l`）按 cctx 等库里完整的同一个技能还原成 `「一剑落九雁」，削向$n的$l` 和 `$n的$l`；原来驱动报 `Illegal embedded NUL byte` / `Invalid UTF8 codepoint`，技能载入不了。
+
+逐个载入与 HEAD 对比，没有退步。

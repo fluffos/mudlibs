@@ -200,3 +200,9 @@ compile check (exit 0, no errors) against `feature/command.lpc`.
 ## 被注释吞掉的 inherit / include（2026-10-19，KB 06 §7.274）
 
 `/daemon/class/moon/moonshentong/shiyue.lpc`：`inherit SSERVER;`。这些指令接在上一行 `//` 注释的末尾（档案里丢了换行），成了注释的一部分，驱动看不到：缺 `inherit` 的技能报 `Undefined function offensive_target`，缺 `#include <weapon.h>` 的兵器报语法错误。`scripts/lpc_fix_swallowed_directive.py` 把换行放回去。载入检查 1 个文件，1 个原来编译不过、现在载入，没有退步。
+
+## 载入不了的零碎文件（2026-10-19，KB 03 §4.7、KB 04 §6.10）
+
+- `d/sky/npc/zz-tianwang.lpc`（增长天王）：文件末尾是转换工具的出错信息 `iconv: incomplete character or shift sequence at end of buffer`，`ask_me` 的最后一句 `return ("老夫脚正痒痒。。。` 没有收尾。照其余二十多个库里完整的同一个文件补上 `\n");` 和函数的 `}`（已转成 UTF-8），NPC 载入。
+
+逐个载入与 HEAD 对比，没有退步。

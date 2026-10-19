@@ -327,3 +327,9 @@ live `debug.log` 是 `libs/xkx100/log/debug.log`（Boot Time Fri Sep 4
 ## 被注释吞掉的 inherit / include（2026-10-19，KB 06 §7.274）
 
 `/d/shaolin/npc/obj/heisuo.lpc`：`#include <weapon.h>`；`/d/shaolin/obj/heisuo.lpc`：`#include <weapon.h>`。这些指令接在上一行 `//` 注释的末尾（档案里丢了换行），成了注释的一部分，驱动看不到：缺 `inherit` 的技能报 `Undefined function offensive_target`，缺 `#include <weapon.h>` 的兵器报语法错误。`scripts/lpc_fix_swallowed_directive.py` 把换行放回去。载入检查 2 个文件，2 个原来编译不过、现在载入，没有退步。
+
+## 载入不了的零碎文件（2026-10-19，KB 03 §4.7、KB 04 §6.10）
+
+- `d/shenlong/jushi.lpc`、`sea.lpc`、`sea2.lpc` 里 `me->name() + "\241\243\n"` 的 `\241\243`（GBK 的「。」写成八进制转义，旧驱动把这两个字节原样发给 GBK 客户端）改成「。」；新驱动报 `Invalid UTF8 codepoint in string literal`，三个房间（共 4 处）载入不了。
+
+逐个载入与 HEAD 对比，没有退步。

@@ -396,3 +396,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 ## 被注释吞掉的 inherit / include（2026-10-19，KB 06 §7.274）
 
 `/clone/cloth/red_cloth.lpc`：`#include <armor.h>`；`/clone/cloth/seng-xie.lpc`：`#include <ansi.h>`。这些指令接在上一行 `//` 注释的末尾（档案里丢了换行），成了注释的一部分，驱动看不到：缺 `inherit` 的技能报 `Undefined function offensive_target`，缺 `#include <weapon.h>` 的兵器报语法错误。`scripts/lpc_fix_swallowed_directive.py` 把换行放回去。载入检查 2 个文件，1 个原来编译不过、现在载入，没有退步。
+
+## 玩家打造兵器模板被 NPC 带上（2026-10-19，KB 06 §7.275）
+
+`/d/npc/m_weapon/weapon/m_axe.lpc`、`/d/npc/m_weapon/weapon/m_club.lpc`、`/d/npc/m_weapon/weapon/m_dagger.lpc`、`/d/npc/m_weapon/weapon/m_fork.lpc`、`/d/npc/m_weapon/weapon/m_spear.lpc`、`/d/npc/m_weapon/weapon/m_sword.lpc`（共 6 个）的 `create()` 用 `this_player()` 读打造数据（`me->query("weapon/lv")` 等）。NPC 的 `weapon` 属性是兵器文件名（字符串），NPC 在别的 NPC 的命令环境里 `carry_object()` 这个模板时，`set_desc()` 里 `switch (w_lv)` 拿到的是那个字符串，驱动报 `Bad argument 1 to switch`，房间和 NPC 都载入不了（旧驱动里 switch 落到 default）。把 `if (me) {` 改成 `if (me && mapp(me->query("weapon"))) {`，玩家打造的流程不变。
