@@ -372,3 +372,11 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 ## NPC 带着本库没有的物品，载入失败（2026-10-15，KB 06 §7.73）
 
 1 个文件、1 处在 `create()` 里 `carry_object("<本库没有的文件>")->wear()`（或 `wield()`、`set_amount()`）：`carry_object()` 得 0，接着的调用报 `Bad argument 1 to EFUN call_other()`，NPC 根本载入不了，该有它的房间里就少了这个人。多是从别的系统搬来的 NPC 用了原系统的物品路径（最常见：`/d/shushan/npc/obj/cloth`）。每处改为 `{ object carried_ob = carry_object(...); if (carried_ob) carried_ob->wear(); }`（`scripts/lpc_guard_carry_object.py`）：NPC 照常出现，只是不带这件东西；文件补回来（或是虚拟对象）照样会带上。载入检查：改动的文件改前能载入 1 个，改后 1 个（0 个原来载入不了），没有退步。
+
+## 自制兵器的 id：名字按字节数拆（2026-10-18，KB 07 §8.1）
+
+`feature/item_make` 的 `get_item_id()` 把自制物品的名字拆成一个或两个两字词，再到 `name_id_arg` 里查拼音（「失神」→ `shishen`）。原来按 GBK 字节数拆（`[0..3]`、`len > 4`），UTF-8 里一个汉字只占一个下标：四个字的名字 `[0..3]` 取走整个名字，表里查不到，id 只剩下 ` sword`（空的名字部分），玩家无法用名字指到自己做的兵器。改为按字符数拆（`[0..1]`、`[2..len-1]`、`len > 2`）：「失神炽日」得 `shishen zhiri sword`。
+
+## 物品清单把名字的第一个字吃掉（2026-10-18，KB 07 §8.1）
+
+`inventory`、房间的物品列表（`feature/move`）和部分 `look` 把同名物品合并计数，键是 `query("unit") + short()`，只有一件时按 `key[2..]` 去掉量词。量词是一个汉字，在原来的 GBK 里占 2 字节，`[2..]` 正好去掉量词；转成 UTF-8 以后一个汉字只占一个下标，这一刀把名字的第一个字也切掉了（「把长剑」只显示「剑」，带颜色的名字切掉的是转义序列开头）。改为 `[1..]`（`scripts/lpc_fix_unit_cut.py`）：`cmds/usr/inventory.lpc`、`feature/move.lpc`。

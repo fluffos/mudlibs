@@ -28,8 +28,11 @@ characters. Every check written against GBK bytes silently misbehaves.
   mapping keyed by `query("unit") + short()` and print `key[2..]` for a
   single item, to drop a one-hanzi unit. Here that also eats the first
   character of the name (「包子」 → 「子」) or the ESC of a coloured one. Use `[1..]`.
-  Detection: `grep -rE '== *1 *\? *\w+\[\w+\]\[2\.\.\] *:'`; live in 28
-  libs on 2026-10-15, fixed only in `longyunmeng_binary` (sweep candidate).
+  Detection: `grep -rE '== *1 *\? *\w+\[\w+\]\[2\.\.\] *:'`; live in 45
+  libs on 2026-10-18 (90 files: `feature/move`, `cmds/*/inventory`, `look`), swept with
+  `scripts/lpc_fix_unit_cut.py SLUG... --apply` (code only: copies inside an unclosed `/*`
+  block are skipped; `longyunmeng_binary` carries it in its patch). Proof at HEAD: the
+  `inventory` of an NPC holding one 长剑 listed `剑(Sword)`.
   Same family: `feature/item_make`'s `get_item_id()` splits names into
   two-hanzi words with `[0..3]` / `len > 4` (4 libs).
 

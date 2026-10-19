@@ -306,3 +306,7 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 ## 同一个基类继承两次（2026-10-18，KB 04 §6.10）
 
 `d/npc/xunpu`（巡捕）既 `inherit NPC;` 又 `inherit F_SKILL;`，而 NPC 本来就继承 F_SKILL：技能表变量声明了两份（`Redeclaration of global variable 'skills'`、`learned`、`skill_map`、`skill_prepare`），之前一轮为消除函数二义性加的 13 个 `skill::fn()` 转发函数也只是在维持这个重复。去掉多余的 `inherit F_SKILL;` 和那段转发函数。`d/quanzhou/npc/tang3`、`d/taishan/tang3` 同样把 NPC 已含的 `F_CLEAN_UP` 又继承了一次，同样去掉（`scripts/lpc_diamonds.py --fix-redundant`）。载入检查：改动的 14 个对象改前能载入 0 个，改后 12 个，没有退步，这几个文件不再有警告。
+
+## 物品清单把名字的第一个字吃掉（2026-10-18，KB 07 §8.1）
+
+`inventory`、房间的物品列表（`feature/move`）和部分 `look` 把同名物品合并计数，键是 `query("unit") + short()`，只有一件时按 `key[2..]` 去掉量词。量词是一个汉字，在原来的 GBK 里占 2 字节，`[2..]` 正好去掉量词；转成 UTF-8 以后一个汉字只占一个下标，这一刀把名字的第一个字也切掉了（「把长剑」只显示「剑」，带颜色的名字切掉的是转义序列开头）。改为 `[1..]`（`scripts/lpc_fix_unit_cut.py`）：`cmds/usr/inventory.lpc`、`feature/move.lpc`。
