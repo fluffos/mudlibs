@@ -530,3 +530,7 @@ lpc` 会调用双方 `kill_ob()`，NPC 真实反击），几回合后一次「�
 ## NPC 带着本库没有的物品，载入失败（2026-10-15，KB 06 §7.73）
 
 12 个文件、15 处在 `create()` 里 `carry_object("<本库没有的文件>")->wear()`（或 `wield()`、`set_amount()`）：`carry_object()` 得 0，接着的调用报 `Bad argument 1 to EFUN call_other()`，NPC 根本载入不了，该有它的房间里就少了这个人。多是从别的系统搬来的 NPC 用了原系统的物品路径（最常见：`/kungfu/class/gaibang/obj/blackcloth`、`/d/city/lanzhou/clone/obj/cloth1`、`/d/city/dali/npc/obj/yifu3`）。每处改为 `{ object carried_ob = carry_object(...); if (carried_ob) carried_ob->wear(); }`（`scripts/lpc_guard_carry_object.py`）：NPC 照常出现，只是不带这件东西；文件补回来（或是虚拟对象）照样会带上。载入检查：改动的文件改前能载入 12 个，改后 12 个（0 个原来载入不了），没有退步。
+
+## `tuzhong1` 里的全角逗号（2026-10-18，KB 03 §4.6）
+
+`d/zuzhi/yipin_tang/peacock/xuanwu_tang/npc/tuzhong1.lpc` 的 `set_name("徒众", ({ "tu zhong" ， "tuzhong" }))` 里一个逗号是全角的 `，`（`Illegal character 0xef`），NPC 载入不了。换成半角 `,`。载入：通过。

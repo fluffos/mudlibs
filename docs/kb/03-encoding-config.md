@@ -204,6 +204,12 @@ for the first time and may raise in `create()` (a skill file or a `carry_object(
 of their own. Computed paths (`"/d/" + zone + "/NPC/"`) are invisible to the tool; it prints the old upper-case directory names that
 still occur in string literals so they can be read. Commit with a pathspec: the moves are already staged (AGENTS.md section 13.3).
 
+### 4.6 A quote lost to a lone lead byte in a source file (2026-10-18)
+**Symptom:** `Illegal character 0xe5` (or `0xe6`, `0xef`) on a line of Chinese text, and the object never loads: `d/moon/obj/poem` (32 libs: `"...广寒宫阙。,` and `"...潇潇雨。,`), `kungfu/skill/qingyi-jian` (18 libs: `"skill_name" : "大悲式,`), `d/shendian/obj/niepan` (23 libs: `符号<U+E4D4>NOR);`).
+**Cause:** the original text held half a character (a lone lead byte) in front of the closing quote; `iconv -c` dropped both, or turned the pair into a private-use character (`U+E4D4`); the next line's opening quote then closes the string and its text is read as code. The same mechanism as the save-file case above.
+**Fix:** put the quote back: a string line that lost it before `,` (`。,` -> `。",`), the private-use character -> `"`; load the object (`scripts/lpc_listcheck.sh`). Full-width punctuation typed in code (`，` `；`) becomes its ASCII twin. When the file survives intact in a sibling lib, take the quote from there (`qingyi-jian` has six intact copies).
+**Detection:** `scripts/lpc_scan_high_bytes.py [SLUG...] [--summary]`; it masks `@TEXT` here-docs, because a `"` in ASCII art flips a plain mask for the rest of the file and makes every later string look like code. What is left after these families is damage every copy of the archive carries (`d/dntg/sky/npc/yuhuang1`: a file stripped of every quote and semicolon, 19 libs) or not code at all (ASCII maps, the encrypted `clone/obj/job.sav`, binary dumps named `.lpc`).
+
 ## 5. Config files
 
 ### 5.1 Format

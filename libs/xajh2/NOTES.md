@@ -1103,3 +1103,7 @@ seeded admin account.
 ## 去掉的预定义宏 `SAVE_EXTENSION`（2026-10-18，KB 04 §6.11）
 
 老版 MudOS 给每个 LPC 对象预先定义了 `SAVE_EXTENSION`（`".o"`）；FluffOS 的 ChangeLog（COMPAT_BUSTER 一条）把它删了，改用 `__SAVE_EXTENSION__`。本库没有自己 `#define` 这个宏，用到它的文件一律 `Undefined variable 'SAVE_EXTENSION'`，整个对象载入不了。改成 `__SAVE_EXTENSION__`（`scripts/lpc_fix_predefined_macro.py`）：`include/net/ftpdsupp.h`。
+
+## `zuo` 和 `yuanyang-dao` 丢了收尾引号（2026-10-18，KB 03 §4.6）
+
+`d/menpai/wuliang/npc/zuo.lpc` 的 `"姓名" : "嗯，你既知我姓左，……左子穆？,` 和 `system/skill/misc/yuanyang-dao.lpc` 的 `"action":"又见$N高高跃起，……切向$n$l,` 行尾的引号没了（转码时跟半个汉字一起丢了），字符串一直连到下一行的开引号，后面的内容成了代码，两个文件都载入不了。补回 `",`。载入：两个都通过。

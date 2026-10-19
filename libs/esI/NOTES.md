@@ -822,3 +822,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply e
 ## 去掉的预定义宏 `SAVE_EXTENSION`（2026-10-18，KB 04 §6.11）
 
 老版 MudOS 给每个 LPC 对象预先定义了 `SAVE_EXTENSION`（`".o"`）；FluffOS 的 ChangeLog（COMPAT_BUSTER 一条）把它删了，改用 `__SAVE_EXTENSION__`。本库没有自己 `#define` 这个宏，用到它的文件一律 `Undefined variable 'SAVE_EXTENSION'`，整个对象载入不了。改成 `__SAVE_EXTENSION__`（`scripts/lpc_fix_predefined_macro.py`）：`include/net/oldftp/ftpdsupp.h`。
+
+## `d/noden/asterism/monster/dwarf_healer` 的台词里引号错位（2026-10-18，KB 03 §4.6）
+
+台词那一行 `"……只记得那个东西叫" 优 波 罗 花 "。\n"`：“叫”和“花”两侧的引号把字符串断开，中间的 `优 波 罗 花` 成了代码（`Illegal character`），NPC 载入不了。改成 `'优波罗花'`。载入：通过。
