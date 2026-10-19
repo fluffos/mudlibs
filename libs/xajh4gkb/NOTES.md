@@ -412,3 +412,16 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 ## 玩家打造兵器模板没有打造者时（2026-10-19，KB 06 §7.275）
 
 `/d/npc/m_weapon/weapon/m_staff.lpc`、`/d/npc/m_weapon/weapon/m_whip.lpc`（共 2 个）的 `create()` 开头 `me = this_player();` 之后无条件读 `me->query("weapon/name")` 等打造数据。房间刷新时没有人在场（`me` 为 0），或者 NPC 在别的 NPC 的命令环境里 `carry_object()` 这个模板（NPC 的 `weapon` 属性是文件名字符串），旧驱动里读出来是 0 或字符串，`switch` 照样落到 default；新驱动报 `Bad argument 1 to EFUN call_other()` / `Bad argument 1 to switch`，NPC 和它所在的房间载入不了（`--walk` 普查里一个玩家走进房间就触发）。在 `//读入数据` 之后加 `if (!me || !mapp(me->query("weapon"))) { setup(); return; }`：没有打造者就留一个没有名字的空模板，玩家打造的流程不变。
+
+## 被注释吞掉的语句（2026-10-19，KB 06 §7.274）
+
+- `/d/gaochang/npc/tuying.lpc`：行末的注释（`//2016.5.22…` 的最后一个半字吃掉了换行）吞掉了下一行的 `set_name(...)`，NPC 没有名字，`setup()` 里报 `Bad argument 1 to set_living_name()`，载入不了
+- `/d/hangzhou/honghua/shi.lpc`：行末的注释（`//2016.5.22…` 的最后一个半字吃掉了换行）吞掉了下一行的 `set_name(...)`，NPC 没有名字，`setup()` 里报 `Bad argument 1 to set_living_name()`，载入不了
+- `/d/mr/npc/xiaotong.lpc`：行末的注释（`//2016.5.22…` 的最后一个半字吃掉了换行）吞掉了下一行的 `set_name(...)`，NPC 没有名字，`setup()` 里报 `Bad argument 1 to set_living_name()`，载入不了
+- `/d/tianlongsi/npc/xiaoshami.lpc`：行末的注释（`//2016.5.22…` 的最后一个半字吃掉了换行）吞掉了下一行的 `set_name(...)`，NPC 没有名字，`setup()` 里报 `Bad argument 1 to set_living_name()`，载入不了
+
+`scripts/lpc_fix_swallowed_statement.py` 把换行放回去。逐个载入与 HEAD 对比，没有退步。
+
+## userp(0)（2026-10-19，KB 06 §7.277）
+
+`adm/simul_efun/player.lpc` 的 `userp(object ob)` 先调 `efun::userp(ob)`，没有人在场时（房间刷新里 NPC 穿会员衣服，`wear()` 里 `userp(this_player())`）`ob` 是 0，驱动报 `Bad argument 1 to userp()  Expected: object  Got: 0`，NPC 和房间载入不了。函数开头加 `if (!objectp(ob)) return 0;`（旧驱动里 `userp(0)` 就是 0）。

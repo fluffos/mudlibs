@@ -155,6 +155,7 @@
 #define STICK                    "/std/weapon/stick"
 #define NPC_SAVE                 "/std/char/npcsave"
 #define UNARMED                  "/std/weapon/unarmed"
+#define BOOK                     "/std/item/book"
 // Profiling switches
 //
 // If you changed any of these defines, you'll need reboot to make it 

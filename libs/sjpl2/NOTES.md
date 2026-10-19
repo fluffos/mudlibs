@@ -807,3 +807,7 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 ## RANK_D 对 0 的称呼（2026-10-19，KB 06 §7.273）
 
 `adm/daemons/rankd.lpc` 的 `query_respect()`、`query_rude()`、`query_self()`、`query_self_rude()` 里 4 个函数开头补上 `if (!objectp(ob)) ob = this_object();`。NPC 在 `create()` 里写 `"…" + RANK_D->query_respect(this_player()) + "…"`（`inquiry` 对话、`chat_msg`），驱动自己跑 `reset()` 时没有人在场，`this_player()` 是 0。旧驱动里 `0->query("age")` 返回 0，称呼走默认分支；新驱动直接报 `Bad argument 1 to EFUN call_other()`，房间的 `make_inventory()` 吞掉错误，被打死的 NPC 再也刷新不回来。用 `scripts/lpc_reach_census.py --walk` 找到（xkx100 的武当弟子、一灯、汴梁书生…）；修在守护程序里，不动 1,800 个 NPC 文件。
+
+## 钱庄老板和客店留言板（2026-10-19，KB 06 §7.262）
+
+`d/hangzhou/npc/qzlaoban`、`d/suzhou/npc/laoban2`（钱庄老板）`inherit F_BANKER`（`/feature/banker`），档案里没有这个文件，NPC 载入不了；取 xkx100 的 `feature/banker.lpc`（`MONEY_D` 已在上一批补上）。`d/hangzhou/tianxianglou` 和 `d/suzhou/kedian` 开头的 `"/clone/board/kedian_b"->foo();` 指向一块档案里没有的留言板（整个 `clone/board/` 都不在），房间载入不了；这两行删掉（`u/kunlun` 下巫师目录里的留言板调用不动）。

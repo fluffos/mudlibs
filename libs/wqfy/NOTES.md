@@ -486,3 +486,14 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply w
 ## RANK_D 对 0 的称呼（2026-10-19，KB 06 §7.273）
 
 `adm/daemons/rankd.lpc` 的 `query_respect()`、`query_rude()`、`query_self()`、`query_self_rude()` 里 4 个函数开头补上 `if (!objectp(ob)) ob = this_object();`。NPC 在 `create()` 里写 `"…" + RANK_D->query_respect(this_player()) + "…"`（`inquiry` 对话、`chat_msg`），驱动自己跑 `reset()` 时没有人在场，`this_player()` 是 0。旧驱动里 `0->query("age")` 返回 0，称呼走默认分支；新驱动直接报 `Bad argument 1 to EFUN call_other()`，房间的 `make_inventory()` 吞掉错误，被打死的 NPC 再也刷新不回来。用 `scripts/lpc_reach_census.py --walk` 找到（xkx100 的武当弟子、一灯、汴梁书生…）；修在守护程序里，不动 1,800 个 NPC 文件。
+
+## 技能书的基类、F_UNIQUE、F_NOCLONE（2026-10-19，KB 04 §6.15、KB 06 §7.262）
+
+`obj/book/*.lpc` 的 40 本技能书（`blade_book_a`、`literate_book_c` ……）都是 `inherit BOOK;`，本库既没有 `BOOK` 这个宏，也没有它的基类，整批载入不了；`obj/npc/*` 里 10 个 NPC 要 `F_UNIQUE`，`include/npc/ultra/` 里 4 个要 `F_NOCLONE`，同样没有。2026-10-18 补基类那一轮试过把它们补回来，载不进来又撤掉了；这次先补上缺的前提，再补基类：
+
+- `/std/item/book.lpc`（宏 `BOOK`）←xkyx3b。xkyx3b 和 xkyxciii 里这 40 本书与本库逐字节相同，这个基类就是给它们写的：画一个带书名的彩色封面，颜色读书上的 `bcolor`/`lcolor`/`fcolor`/`tcolor`。
+- 基类调用 `space(n)`，而 `adm/simul_efun/atoi.lpc` 里只有 `atoi()`：补上 `itoa()` 和 `space()`，文字照 xkyx3b 的 `string.lpc`（`scripts/lpc_add_sefun.py space`）。
+- 40 本书的 `set("fcolor", BWHT)` 和基类都要背景色宏 `BWHT`，而 `include/ansi.h` 里这一行被注释掉了（`// #define BWHT ESC+"[47m"`，另外七个背景色都在）：恢复。
+- `/feature/unique.lpc`（宏 `F_UNIQUE`，10 个对象）←zzfy3，`/feature/noclone.lpc`（宏 `F_NOCLONE`，4 个对象）←sjshv150。
+
+57 个对象里 53 个现在载入（HEAD 上一个都不行），逐个与 HEAD 对比没有退步。剩下 4 个是 `include/npc/ultra/{dugu,huang,kuihua,shenni}.lpc`（大宗师 NPC）：它们要 `NPC_D` 守护进程和 `ultrap()`，本库没有这一套，不动。新载入的 NPC 带出的警告（`obj/npc/*-shi` 等的未用局部变量）留给标准一轮修复。（`scripts/lpc_restore_bases.py --evidence --retry`）

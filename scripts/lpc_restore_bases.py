@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""scripts/lpc_restore_bases.py [SLUG...] [--min-rel N] [--apply] [--list DIR] [--refresh]
+"""scripts/lpc_restore_bases.py [SLUG...] [--min-rel N] [--evidence K] [--retry] [--apply] [--list DIR] [--refresh]
 
 A base class the lib never shipped, restored from a sibling lib (KB 04 section 6.15).  `inherit INDOOR_ROOM;` where no header
 of the lib defines `INDOOR_ROOM`, or `inherit "/std/room/class_guild";` where the file is not in the lib, and every object that
@@ -8,14 +8,18 @@ handles the rest, where the file itself is missing (riftsds' 213 `INDOOR_ROOM` r
 
 The donor is a lib that has the file (for a macro: a lib whose header defines it as that path) and is a sibling of this one:
 relatedness is the number of files the two libs carry byte for byte (same path, same blob) that at most 60 libs carry, so
-shared boilerplate does not count; --min-rel (default 100) is the least a donor must share.  A macro line and the donor's
+shared boilerplate does not count; --min-rel (default 100) is the least a donor must share.  A donor that shares less is still taken when it carries
+the lib's own users of the base byte for byte (--evidence K, default 3: at least K of the files that inherit the base, and at least half of them,
+are the same blobs at the same paths in the donor): the 40 `/obj/book/*.lpc` of wqfy, zzfy and zzfy3 are identical in xkyx3b, whose `/std/item/book`
+is the class they were written for, while the two libs share fewer than 100 other files.  A macro line and the donor's
 file are added (the file at the same path, the donor's bytes, so the donor's line endings stay); a macro the lib already defines
 is left alone, and a path the lib already has is never overwritten.  Files this adds are untracked: run `git add -N` on them
 (the listcheck sees them), verify with scripts/lpc_listcheck.sh on the base and the objects that inherit it, and take back what
 does not load.  The base may itself inherit a base the lib lacks: run the tool again, it finds that one too.
 Without --apply the plan is printed (ADOPT lines); `--list DIR` writes DIR/bases-SLUG.list (the base files and their users,
 `/path.lpc` per line) for the load check; `--refresh` rebuilds the relatedness cache.
-`--skip SLUG,SLUG` leaves libs out (young hobby repos the museum does not restore).  --apply records what it added in
+`--retry` proposes the bases an earlier run took back as well (marked "was rejected"): a base that did not load then may load now that its own prerequisite
+(a sefun, a header) was restored.  `--skip SLUG,SLUG` leaves libs out (young hobby repos the museum does not restore).  --apply records what it added in
 $LPC_SCRATCH/bases-applied-SLUG.json; `--undo SLUG /path[ /path...]` takes a base back (the file, its macro line)."""
 import collections
 import json
@@ -36,7 +40,9 @@ INHL = re.compile(rb'(?m)^[ \t]*inherit[ \t]+"([^"\n]+)"[ \t]*;')
 
 def relatedness(refresh):
     if not refresh and os.path.exists(CACHE):
-        return pickle.load(open(CACHE, "rb"))
+        c = pickle.load(open(CACHE, "rb"))
+        if len(c) == 3:
+            return c
     out = subprocess.run(["git", "ls-files", "-s", "-z", "--", "libs"], cwd=REPO, capture_output=True).stdout.split(b"\0")
     by = collections.defaultdict(dict)
     for e in out:
@@ -62,7 +68,7 @@ def relatedness(refresh):
                 for b in libs:
                     if a != b:
                         rel[(a, b)] += 1
-    res = (dict(rel), {s: len(d) for s, d in by.items()})
+    res = (dict(rel), {s: len(d) for s, d in by.items()}, {s: dict(d) for s, d in by.items()})
     os.makedirs(SCRATCH, exist_ok=True)
     pickle.dump(res, open(CACHE, "wb"))
     return res
@@ -111,10 +117,17 @@ def main():
     apply = "--apply" in args
     refresh = "--refresh" in args
     min_rel = 100
+    evidence = 3
+    retry = "--retry" in args
+    args = [a for a in args if a != "--retry"]
     listdir = None
     if "--min-rel" in args:
         i = args.index("--min-rel")
         min_rel = int(args[i + 1])
+        del args[i:i + 2]
+    if "--evidence" in args:
+        i = args.index("--evidence")
+        evidence = int(args[i + 1])
         del args[i:i + 2]
     if "--list" in args:
         i = args.index("--list")
@@ -130,7 +143,17 @@ def main():
         undo(args[i + 1], args[i + 2:])
         return
     only = [a for a in args if not a.startswith("--") and a not in skip]
-    rel, _size = relatedness(refresh)
+    rel, _size, blob = relatedness(refresh)
+
+    def same_users(T, D, users):
+        """how many of T's files in `users` are the very same blob at the same path in D"""
+        n = 0
+        for u in users:
+            q = u.lstrip("/")
+            s = blob.get(T, {}).get(q)
+            if s is not None and blob.get(D, {}).get(q) == s:
+                n += 1
+        return n
     by = R.tracked()
     fileset = {s: set(f) for s, f in by.items()}
     scans = {s: R.lib_scan(s, fileset[s]) for s in (only or by) if s in by and s not in skip and not os.path.exists(f"{REPO}/libs/{s}/work/.git")}
@@ -156,7 +179,8 @@ def main():
             continue
         defs_T, miss, texts = scans[T]
         plan = []                                  # (macro or None, path, donor, rel, users)
-        rej = rejected(T)
+        rej = set() if retry else rejected(T)
+        was_rej = rejected(T)
         for ident, users in sorted(miss.items(), key=lambda kv: -len(kv[1])):
             if ident in defs_T:
                 continue
@@ -170,10 +194,13 @@ def main():
                     continue
                 if P in have_path and D in have_path[P] and T not in have_path[P]:
                     r = rel.get((T, D), 0)
-                    if best is None or r > best[0]:
-                        best = (r, D, P)
-            if best and best[0] >= min_rel:
-                plan.append((name, best[2], best[1], best[0], users))
+                    ev = same_users(T, D, users)
+                    ok = r >= min_rel or (ev >= evidence and ev * 2 >= len(users))
+                    key = (ok, ev if ev >= evidence and ev * 2 >= len(users) else 0, r)
+                    if best is None or key > best[0]:
+                        best = (key, D, P, r, ev)
+            if best and best[0][0]:
+                plan.append((name, best[2], best[1], best[3], users, best[4]))
         # literal inherits of files this lib lacks
         lit = collections.defaultdict(list)
         for rr in fileset[T]:
@@ -194,16 +221,19 @@ def main():
             for D in have_path.get(P, ()):
                 if D != T and P not in rej:
                     r = rel.get((T, D), 0)
-                    if best is None or r > best[0]:
-                        best = (r, D)
-            if best and best[0] >= min_rel:
-                plan.append((None, P, best[1], best[0], users))
+                    ev = same_users(T, D, users)
+                    ok = r >= min_rel or (ev >= evidence and ev * 2 >= len(users))
+                    key = (ok, ev if ev >= evidence and ev * 2 >= len(users) else 0, r)
+                    if best is None or key > best[0]:
+                        best = (key, D, r, ev)
+            if best and best[0][0]:
+                plan.append((None, P, best[1], best[2], users, best[3]))
         if not plan:
             continue
         hdr = R.global_header(T, fileset[T])
         add_macros, adopt = [], {}
-        for name, P, D, r, users in plan:
-            print(f"ADOPT {T} {name or '(literal)'} {P}.lpc <- {D} (rel {r}, {len(users)} user(s))")
+        for name, P, D, r, users, ev in plan:
+            print(f"ADOPT {T} {name or '(literal)'} {P}.lpc <- {D} (rel {r}, {len(users)} user(s), {ev} identical in the donor)" + (" was rejected" if P in was_rej else ""))
             adopt[P] = D
             if name:
                 add_macros.append((name, P))
@@ -213,7 +243,7 @@ def main():
             print(f"NOHDR {T}: no global include file to put " + ", ".join(m for m, _ in add_macros))
         if listdir:
             os.makedirs(listdir, exist_ok=True)
-            seen = sorted({u for *_, users in plan for u in users} | {P + ".lpc" for P in adopt})
+            seen = sorted({x[4][i] for x in plan for i in range(len(x[4]))} | {P + ".lpc" for P in adopt})
             open(f"{listdir}/bases-{T}.list", "w", encoding="utf-8").write("\n".join(seen) + "\n")
         if not apply:
             continue
@@ -225,7 +255,7 @@ def main():
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             open(dst, "wb").write(open(f"{REPO}/libs/{D}/work{P}.lpc", "rb").read())
             manifest.append({"path": P, "donor": D, "macro": next((m for m, q in add_macros if q == P), None),
-                             "users": sorted({u for _n, q, _d, _r, us in plan if q == P for u in us})[:60]})
+                             "users": sorted({u for _n, q, _d, _r, us, _e in plan if q == P for u in us})[:60]})
         if add_macros and hdr:
             p = f"{REPO}/libs/{T}/work{hdr}"
             b = open(p, "rb").read()

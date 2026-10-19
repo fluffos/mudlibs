@@ -613,3 +613,10 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 ## 玩家打造兵器模板没有打造者时（2026-10-19，KB 06 §7.275）
 
 `/d/npc/m_weapon/weapon/m_bian.lpc`、`/d/npc/m_weapon/weapon/m_hammer.lpc`、`/d/npc/m_weapon/weapon/m_staff.lpc`、`/d/npc/m_weapon/weapon/m_whip.lpc`、`/d/quanzhen/npc/obj/m_sword.lpc`、`/d/quanzhen_old/npc/obj/m_sword.lpc`（共 6 个）的 `create()` 开头 `me = this_player();` 之后无条件读 `me->query("weapon/name")` 等打造数据。房间刷新时没有人在场（`me` 为 0），或者 NPC 在别的 NPC 的命令环境里 `carry_object()` 这个模板（NPC 的 `weapon` 属性是文件名字符串），旧驱动里读出来是 0 或字符串，`switch` 照样落到 default；新驱动报 `Bad argument 1 to EFUN call_other()` / `Bad argument 1 to switch`，NPC 和它所在的房间载入不了（`--walk` 普查里一个玩家走进房间就触发）。在 `//读入数据` 之后加 `if (!me || !mapp(me->query("weapon"))) { setup(); return; }`：没有打造者就留一个没有名字的空模板，玩家打造的流程不变。
+
+## 被注释吞掉的语句（2026-10-19，KB 06 §7.274）
+
+- `/cmds/skill/learn.lpc`：`write("你觉得精神好了一些，继续进行学习。\n")` 被注释吞掉
+- `/cmds/skill/xue.lpc`：`write("你觉得精神好了一些，继续进行学习。\n")` 被注释吞掉
+
+`scripts/lpc_fix_swallowed_statement.py` 把换行放回去。逐个载入与 HEAD 对比，没有退步。

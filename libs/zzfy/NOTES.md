@@ -777,3 +777,7 @@ HEAD 与工作树分别加载（新进程）：745 -> 746 通过（多出的就�
 ## RANK_D 对 0 的称呼（2026-10-19，KB 06 §7.273）
 
 `adm/daemons/rankd.lpc` 的 `query_respect()`、`query_rude()`、`query_self()`、`query_self_rude()` 里 4 个函数开头补上 `if (!objectp(ob)) ob = this_object();`。NPC 在 `create()` 里写 `"…" + RANK_D->query_respect(this_player()) + "…"`（`inquiry` 对话、`chat_msg`），驱动自己跑 `reset()` 时没有人在场，`this_player()` 是 0。旧驱动里 `0->query("age")` 返回 0，称呼走默认分支；新驱动直接报 `Bad argument 1 to EFUN call_other()`，房间的 `make_inventory()` 吞掉错误，被打死的 NPC 再也刷新不回来。用 `scripts/lpc_reach_census.py --walk` 找到（xkx100 的武当弟子、一灯、汴梁书生…）；修在守护程序里，不动 1,800 个 NPC 文件。
+
+## 技能书的基类（2026-10-19，KB 04 §6.15、KB 06 §7.262）
+
+`obj/book/*.lpc` 的 40 本技能书（与 wqfy、xkyx3b 逐字节相同）都是 `inherit BOOK;`，本库没有这个宏，也没有它的基类，整批载入不了。补回：`/std/item/book.lpc`（宏 `BOOK`，xkyx3b 的同一份，经 wqfy 拷来），`adm/simul_efun/atoi.lpc` 补上基类要用的 `itoa()`、`space()`，`include/ansi.h` 里被注释掉的背景色宏 `BWHT` 恢复。41 个对象（40 本书和基类）全部载入，以前一个都不行，逐个与 HEAD 对比没有退步。（`scripts/lpc_restore_bases.py --evidence --retry`、`scripts/lpc_add_sefun.py space`）

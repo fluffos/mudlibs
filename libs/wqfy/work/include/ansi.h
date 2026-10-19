@@ -47,7 +47,7 @@
 #define BBLU ESC+"[44m"          /* Blue     */
 #define BMAG ESC+"[45m"          /* Magenta  */
 #define BCYN ESC+"[46m"          /* Cyan     */
-// #define BWHT ESC+"[47m"          /* White    */
+#define BWHT ESC+"[47m"          /* White    */
 
 #define NOR ESC+"[2;37;0m"      /* Puts everything back to normal */
  

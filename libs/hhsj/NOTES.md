@@ -931,3 +931,9 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## 丢失的 ARMOR_D(x)、BINGQI_D(x)（2026-10-19，KB 04 §6.16）
 
 `include/globals.h` 没有 `ARMOR_D(x)`（`("/clone/armor/" + x)`）和 `BINGQI_D(x)`（`("/clone/weapon/" + x)`），用它们的 NPC 报 `Undefined function ARMOR_D` / `BINGQI_D`，载入不了。照同一系 19 个库里相同的定义补上（`scripts/lpc_restore_defines.py`）。
+
+## 被注释吞掉的语句（2026-10-19，KB 06 §7.274）
+
+- `/d/baituo/obj/lingshezhang.lpc`：`set("wposition", "/d/baituo/obj/lingshezhang.lpc")` 被 `//***** ADDED BY SCATTER *****` 注释吞掉
+
+`scripts/lpc_fix_swallowed_statement.py` 把换行放回去。逐个载入与 HEAD 对比，没有退步。
