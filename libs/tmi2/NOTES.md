@@ -692,3 +692,8 @@ a fight with a cloned orc (and death), `help`, `help bug`/`praise`/`typo`/`idea`
 
 - 2026-10-10：`std/user.lpc` 的 `cmd_hook()`：上一轮把 `PROFILING` 用的 `before`/`after` 分开声明在第一个 `if` 里的 `#ifdef PROFILING` 中，而后面 `if` 之外的 `#ifdef PROFILING` 块也用它们——一旦启用 `PROFILING` 这个文件就编译不过。改为在函数开头的 `#ifdef PROFILING` 里一次声明（mortremains 同样处理）。
 - 2026-10-10（续）：启用 `PROFILING` 编译 `std/user.lpc` 时还会撞上 `rsuage()`（`rusage()` 的笔误），一并改正；现在开、关 `PROFILING` 都能编译。
+
+## Removed predefine `SAVE_EXTENSION` (2026-10-18, KB 04 6.11)
+
+Older MudOS predefined `SAVE_EXTENSION` (`".o"`) in every LPC object; the FluffOS ChangeLog (COMPAT_BUSTER) removed it in favour of `__SAVE_EXTENSION__`. This lib never `#define`s it, so each file that names it was `Undefined variable 'SAVE_EXTENSION'` and the object never loaded. Now `__SAVE_EXTENSION__` (`scripts/lpc_fix_predefined_macro.py`): `adm/daemons/network/netmail.lpc`, `adm/daemons/virtual/o_server.lpc`, `obj/shells/shsh.lpc`. Loaded one by one with `lpcc` after the change: 2 pass, 1 still stop on another error (`adm/daemons/network/netmail`: syntax error, unexpected L_BASIC_TYPE, expecting L_ASSIGN or ';' or '(' or ',').
+

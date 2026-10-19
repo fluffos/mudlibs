@@ -908,3 +908,7 @@ bug），最终靠"先用一次会被拒绝的真实 `bai`（这一步真实无�
 ## NPC 带着本库没有的物品，载入失败（2026-10-15，KB 06 §7.73）
 
 5 个文件、5 处在 `create()` 里 `carry_object("<本库没有的文件>")->wear()`（或 `wield()`、`set_amount()`）：`carry_object()` 得 0，接着的调用报 `Bad argument 1 to EFUN call_other()`，NPC 根本载入不了，该有它的房间里就少了这个人。多是从别的系统搬来的 NPC 用了原系统的物品路径（最常见：`/d/city/obj/tudao`、`/d/city2/obj/obj/diaopi`、`/d/yanziwu/npc/obj/green_cloth`）。每处改为 `{ object carried_ob = carry_object(...); if (carried_ob) carried_ob->wear(); }`（`scripts/lpc_guard_carry_object.py`）：NPC 照常出现，只是不带这件东西；文件补回来（或是虚拟对象）照样会带上。载入检查：改动的文件改前能载入 0 个，改后 4 个（4 个原来载入不了），没有退步；其余 1 个另有原因（多为 `set_skill()` 了本库没有的武功）。
+
+## 留言板存档损坏时 `setup()` 不再抛错（2026-10-18）
+
+`data/board/*.o` 里有几个是外来的二进制数据（以 `?inh` 开头，`restore_object()` 报 `Illegal file format - 1`）。`inherit/misc/bboard.lpc` 的 `setup()` 里 `restore()` 直接抛，留言板对象（连带创建它的客店房间，比如 `d/city/kedian`）载入失败。改成 `catch(restore());`，留言板以空板启动（`xkx2017` 的同一个文件早就是这样写的）。上面「存档损坏」那一条里说的“`setup()` 已经包住了”并不准确。

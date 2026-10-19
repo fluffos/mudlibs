@@ -575,3 +575,7 @@ live `debug.log` 是 `libs/es2/log/debug.log`（Boot Time Fri Sep 4
 另外 `adm/daemons/network/mail_serv.lpc` 的 `tmp[i] == EOT+".";`（上一行是 `=`，TMI-2 原有的笔误，语料里已普遍修过）改为赋值；该文件缺 `daemons.h`/`uid.h`/`post.h`，本来就编译不过，只是顺手改掉。
 
 验证：5 个改动对象 HEAD 与工作树各用新进程载入：4 -> 4 通过（mail_serv 两边都载不进），regress 0；删除声明审计 0 项待看。5 个对象载入无回退。
+
+## 去掉的预定义宏 `SAVE_EXTENSION`（2026-10-18，KB 04 §6.11）
+
+老版 MudOS 给每个 LPC 对象预先定义了 `SAVE_EXTENSION`（`".o"`）；FluffOS 的 ChangeLog（COMPAT_BUSTER 一条）把它删了，改用 `__SAVE_EXTENSION__`。本库没有自己 `#define` 这个宏，用到它的文件一律 `Undefined variable 'SAVE_EXTENSION'`，整个对象载入不了。改成 `__SAVE_EXTENSION__`（`scripts/lpc_fix_predefined_macro.py`）：`include/net/ftpdsupp.h`。

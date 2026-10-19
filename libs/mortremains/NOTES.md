@@ -894,3 +894,8 @@ Formatter not run (minimal edits).
 - 2026-10-14 (follow-up): functions retyped `int` above that still had a bare `return;` now `return 0;` (same value); `die()` overrides that the void-return fix had made `int` are `void` again, as in `std/body/attack.lpc`. `cmds/object/_qc.lpc`: `default : "[!] ILLEGAL BONUS VALUE!";` dropped the message; it now assigns `msg`.
 
 - 2026-10-14: 2 file(s) used `array` on its own as a type (`array names;`), which this driver reads as a plain name (`Illegal lvalue`); now `mixed *`, every declarator starred (`scripts/lpc_fix_array_type.py`) (KB 04 §6.1, §6.3). HEAD vs tree in fresh drivers: 2 objects, 1 newly loading, 0 regressions.
+
+## Removed predefine `SAVE_EXTENSION` (2026-10-18, KB 04 6.11)
+
+Older MudOS predefined `SAVE_EXTENSION` (`".o"`) in every LPC object; the FluffOS ChangeLog (COMPAT_BUSTER) removed it in favour of `__SAVE_EXTENSION__`. This lib never `#define`s it, so each file that names it was `Undefined variable 'SAVE_EXTENSION'` and the object never loaded. Now `__SAVE_EXTENSION__` (`scripts/lpc_fix_predefined_macro.py`): `adm/AFD/attic/save.lpc`, `adm/AFD/board/archive.lpc`, `adm/AFD/save.lpc`, `adm/daemons/network/netmail.lpc`, `adm/daemons/virtual/o_server.lpc`, `cmds/adm/_netmail.lpc`, `obj/shells/shsh.lpc`. Loaded one by one with `lpcc` after the change: 6 pass, 1 still stop on another error (`adm/daemons/network/netmail`: syntax error, unexpected L_BASIC_TYPE, expecting L_ASSIGN or ';' or '(' or ',').
+

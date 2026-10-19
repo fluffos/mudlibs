@@ -778,3 +778,7 @@ Save files updated/added this round:
 ## NPC 带着本库没有的物品，载入失败（2026-10-15，KB 06 §7.73）
 
 16 个文件、32 处在 `create()` 里 `carry_object("<本库没有的文件>")->wear()`（或 `wield()`、`set_amount()`）：`carry_object()` 得 0，接着的调用报 `Bad argument 1 to EFUN call_other()`，NPC 根本载入不了，该有它的房间里就少了这个人。多是从别的系统搬来的 NPC 用了原系统的物品路径（最常见：`/u/zhangm/fenghuang/obj/pixue`、`/u/zhangm/fenghuang/obj/junfu`、`/u/zhangm/fenghuang/obj/blade`）。每处改为 `{ object carried_ob = carry_object(...); if (carried_ob) carried_ob->wear(); }`（`scripts/lpc_guard_carry_object.py`）：NPC 照常出现，只是不带这件东西；文件补回来（或是虚拟对象）照样会带上。载入检查：改动的文件改前能载入 0 个，改后 11 个（11 个原来载入不了），没有退步；其余 5 个另有原因（多为 `set_skill()` 了本库没有的武功）。
+
+## 武林盟主类 NPC 的存档里 `weapon`／`armor` 是个 mapping（2026-10-18）
+
+盟主、`fa-e`、`shang-shan`、`tang3`/`tang2`/`xingtang` 这几个 NPC 在 `create()` 里 `restore()` 之后直接 `carry_object(query("weapon"))`。换盟主时 `do_recopy()` 把玩家整个 dbase 抄进来，玩家的 `weapon` 若是自制兵器的 mapping，存进 `data/npc/*.o` 以后下次载入就是 `new(mapping)`：`Bad argument 1 to EFUN new()`，NPC 载入失败。本库的存档里确实有这种 mapping。两行都加 `stringp()` 判断，mapping 时不拿武器（NPC 空手）：`clone/npc/fa-e.lpc`、`clone/npc/shang-shan.lpc`。改后用 `lpcc` 逐个载入这些对象：0 个通过，2 个还有别的错误（`clone/npc/fa-e`：执行时段错误：*restore_object(): Illegal file format - 1 (","potential":39,"race":"人类","default_a；`clone/npc/shang-shan`：执行时段错误：*restore_object(): Illegal file format - 1 (","attitude":"heroism","potential":6,"r）。

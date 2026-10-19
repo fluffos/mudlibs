@@ -512,3 +512,12 @@ preserved).
 ## NPC 带着本库没有的物品，载入失败（2026-10-15，KB 06 §7.73）
 
 1 个文件、1 处在 `create()` 里 `carry_object("<本库没有的文件>")->wear()`（或 `wield()`、`set_amount()`）：`carry_object()` 得 0，接着的调用报 `Bad argument 1 to EFUN call_other()`，NPC 根本载入不了，该有它的房间里就少了这个人。多是从别的系统搬来的 NPC 用了原系统的物品路径（最常见：`/obj/longsword`）。每处改为 `{ object carried_ob = carry_object(...); if (carried_ob) carried_ob->wear(); }`（`scripts/lpc_guard_carry_object.py`）：NPC 照常出现，只是不带这件东西；文件补回来（或是虚拟对象）照样会带上。载入检查：改动的文件改前能载入 0 个，改后 0 个（0 个原来载入不了），没有退步；其余 1 个另有原因（多为 `set_skill()` 了本库没有的武功）。
+
+## 去掉的预定义宏 `SAVE_EXTENSION`（2026-10-18，KB 04 §6.11）
+
+老版 MudOS 给每个 LPC 对象预先定义了 `SAVE_EXTENSION`（`".o"`）；FluffOS 的 ChangeLog（COMPAT_BUSTER 一条）把它删了，改用 `__SAVE_EXTENSION__`。本库没有自己 `#define` 这个宏，用到它的文件一律 `Undefined variable 'SAVE_EXTENSION'`，整个对象载入不了。改成 `__SAVE_EXTENSION__`（`scripts/lpc_fix_predefined_macro.py`）：`adm/daemons/network/netmail.lpc`、`obj/token.lpc`。`token` 是帮派领袖信物；`netmail` 是网络邮件守护进程（本库缺 `mailer.h` 等头文件，改后仍载入不了）。改后用 `lpcc` 逐个载入这些对象：1 个通过，1 个还有别的错误（`adm/daemons/network/netmail`：/adm/daemons/network/netmail.lpc:17: error: Cannot #include mailer.h）。
+
+
+## `for (int i ...)` 的循环变量在循环外还在用（2026-10-18，KB 04 §6.12）
+
+当铺／商店的 `do_buy()` 写成 `for (int i = 0; ...) if (...) break;`，循环一结束又读 `if (i == sizeof(inv))`。FluffOS 里 `for` 头里声明的变量只在循环内有效，所以 `Undefined variable 'i'`，整个房间（NPC）载入不了，当铺根本进不去。把 `i` 声明挪到函数开头（`int i, index;`），循环改成 `for (i = 0; ...)`：`std/room/shop.lpc`。改后用 `lpcc` 逐个载入这些对象：1 个通过。

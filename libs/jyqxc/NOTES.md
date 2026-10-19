@@ -327,3 +327,17 @@ AGENTS.md 已记录过这个坑），再让 `log_file()` 内部先
 ## NPC 带着本库没有的物品，载入失败（2026-10-15，KB 06 §7.73）
 
 3 个文件、4 处在 `create()` 里 `carry_object("<本库没有的文件>")->wear()`（或 `wield()`、`set_amount()`）：`carry_object()` 得 0，接着的调用报 `Bad argument 1 to EFUN call_other()`，NPC 根本载入不了，该有它的房间里就少了这个人。多是从别的系统搬来的 NPC 用了原系统的物品路径（最常见：`/d/city/obj/tudao`、`/d/city2/obj/obj/diaopi`、`/d/xueshan/npc/obj/senggun`）。每处改为 `{ object carried_ob = carry_object(...); if (carried_ob) carried_ob->wear(); }`（`scripts/lpc_guard_carry_object.py`）：NPC 照常出现，只是不带这件东西；文件补回来（或是虚拟对象）照样会带上。载入检查：改动的文件改前能载入 0 个，改后 3 个（3 个原来载入不了），没有退步。
+
+## 去掉的预定义宏 `SAVE_EXTENSION`（2026-10-18，KB 04 §6.11）
+
+老版 MudOS 给每个 LPC 对象预先定义了 `SAVE_EXTENSION`（`".o"`）；FluffOS 的 ChangeLog（COMPAT_BUSTER 一条）把它删了，改用 `__SAVE_EXTENSION__`。本库没有自己 `#define` 这个宏，用到它的文件一律 `Undefined variable 'SAVE_EXTENSION'`，整个对象载入不了。改成 `__SAVE_EXTENSION__`（`scripts/lpc_fix_predefined_macro.py`）：`adm/daemons/network/netmail.lpc`、`cmds/arch/purge.lpc`、`d/quanzhou/npc/tang.lpc`、`d/quanzhou/npc/tang3.lpc`、`d/taishan/tang3.lpc`、`include/net/ftpdsupp.h`。`tang3`/`tang`/`meng-zhu` 是武林盟主一类的 NPC，原来一个都载入不了；`purge` 是清除玩家档案的巫师指令；`netmail` 是网络邮件守护进程（本库缺 `mailer.h` 等头文件，改后仍载入不了）。改后用 `lpcc` 逐个载入这些对象：4 个通过，1 个还有别的错误（`adm/daemons/network/netmail`：/adm/daemons/network/netmail.lpc:17: error: Cannot #include mailer.h）。
+
+
+## 水潭里 `ging_cost` 是 `jing_cost` 的笔误（2026-10-18）
+
+`shuitan` 先算 `jing_cost`，倒水时却扣 `receive_damage("jing", ging_cost)`，`ging_cost` 从没声明过：`Undefined variable 'ging_cost'`，整个物件载入不了。改成 `jing_cost`：`d/shaolin/obj/shuitan.lpc`。改后用 `lpcc` 逐个载入这些对象：1 个通过。
+
+
+## 留言板存档损坏时 `setup()` 不再抛错（2026-10-18）
+
+`data/board/*.o` 里有几个是外来的二进制数据（以 `?inh` 开头，`restore_object()` 报 `Illegal file format - 1`）。`inherit/misc/bboard.lpc` 的 `setup()` 里 `restore()` 直接抛，留言板对象（连带创建它的客店房间，比如 `d/city/kedian`）载入失败。改成 `catch(restore());`，留言板以空板启动（`xkx2017` 的同一个文件早就是这样写的）。上面「存档损坏」那一条里说的“`setup()` 已经包住了”并不准确。

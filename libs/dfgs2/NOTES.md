@@ -1166,3 +1166,7 @@ A Big5 character whose second byte is 0x5C was written with one extra backslash 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。1 个文件 1 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
 
 - 2026-10-14：2 个文件因 `Type of returned value doesn't match function return type ( int vs void )` 整份不编译：声明为 `void`（或没写类型）的函数却返回值，旧驱动照样把值交给调用者。调用者要用返回值的（add_action 处理函数、命令、辅助函数）改为它实际返回的类型：`main()`、`notify_stat()`。新进程比对 HEAD 与工作树：2 个对象，新增载入 2，回退 0（`scripts/lpc_fix_void_return.py`，KB 04 §6.3）。
+
+## `for (int i ...)` 的循环变量在循环外还在用（2026-10-18，KB 04 §6.12）
+
+当铺／商店的 `do_buy()` 写成 `for (int i = 0; ...) if (...) break;`，循环一结束又读 `if (i == sizeof(inv))`。FluffOS 里 `for` 头里声明的变量只在循环内有效，所以 `Undefined variable 'i'`，整个房间（NPC）载入不了，当铺根本进不去。把 `i` 声明挪到函数开头（`int i, index;`），循环改成 `for (i = 0; ...)`：`std/room/hockshop.lpc`。

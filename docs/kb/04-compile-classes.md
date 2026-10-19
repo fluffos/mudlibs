@@ -348,3 +348,14 @@ time. (3) *Fewer arguments than parameters*: add `varargs` to the definition the
 (a blanket pass touched 12,000 `reset()`/`short()` heads). (4) `#'func` closures -> `(: func :)` (outside lambda code).
 (5) Reserved words as names: `class`, `new`, `ref`, `in` (`scripts/lpc_rename_ident.py`).
 
+### 6.11 A MudOS predefine FluffOS dropped: `SAVE_EXTENSION` (2026-10-18)
+**Symptom:** `Undefined variable 'SAVE_EXTENSION'`: the 武林盟主 NPCs (`d/quanzhou/npc/tang3`, `tang`, `tang2`, `clone/npc/meng-zhu`), the guild `token`, `cmds/*/suicide` and `cmds/arch/purge`, TMI-2's `o_server` and `shsh`, and every `netmail` daemon never compile (214 files in 90 libs).
+**Cause:** older MudOS imported `SAVE_EXTENSION` (`".o"`) into every LPC object. The FluffOS ChangeLog (`COMPAT_BUSTER`) removed it, with `USE_EUID`, `HAS_SOCKETS`, `HAS_SHADOWS`, `HAS_MUDLIB_STATS` and others: "use `__SAVE_EXTENSION__`". 90 libs `#define` it in `globals.h`/`config.h`/`options.h`; these never did. The rest of that list only guards `#ifdef` blocks of admin debug commands (`opcprof`, `debugmalloc`, `cache`): dead on this driver, left alone.
+**Fix:** `scripts/lpc_fix_predefined_macro.py [SLUG...] [--apply]` renames the macro to `__SAVE_EXTENSION__` in every file that reaches no `#define` of it (the file, its includes, the config's `global include file`; strings, comments and here-docs are masked). TMI-2's shim in `mudlib.h` (`#ifndef __SAVE_EXTENSION__` / `#define __SAVE_EXTENSION__ SAVE_EXTENSION`) is dead here and keeps its spelling. `netmail` still stops on a missing `mailer.h` (inter-mud mail); the ftp support headers only matter to a daemon that needs sockets.
+**Detection:** the census class `Undefined variable 'SAVE_EXTENSION'`; the script's plan.
+
+### 6.12 A `for (int i ...)` variable read after the loop (2026-10-18)
+**Symptom:** `Undefined variable 'i'` on the line after a loop and the whole object fails: the pawn-shop rooms (`std/room/hockshop` of dfgs2/fys/tiexuejianghu, `std/room/shop` of shzs/zzhj) and xbtxiii's `d/snow/npc/hocker` (nobody can buy from them).
+**Cause:** FluffOS scopes a variable declared in a `for` header to the loop; the idiom `for (...) if (match) break; if (i == sizeof(inv)) return ...;` reads it afterwards.
+**Fix:** `int i, index;` at the head of the function and `for (i = 0; ...)`.
+**Detection:** `scripts/lpc_scan_for_scope.py [SLUG...]` (report only; false positives are a loop body split by `#if/#else`; what is left on the corpus, 2026-10-18, is mortremains' dead `std/body/attic/attack.lpc`).

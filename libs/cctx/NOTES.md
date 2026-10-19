@@ -373,3 +373,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply c
 ## NPC 带着本库没有的物品，载入失败（2026-10-15，KB 06 §7.73）
 
 48 个文件、63 处在 `create()` 里 `carry_object("<本库没有的文件>")->wear()`（或 `wield()`、`set_amount()`）：`carry_object()` 得 0，接着的调用报 `Bad argument 1 to EFUN call_other()`，NPC 根本载入不了，该有它的房间里就少了这个人。多是从别的系统搬来的 NPC 用了原系统的物品路径（最常见：`/d/mingjiao/obj/baipao`、`/d/dali/huanggong/npc/bak1/obj/junfu`、`/d/tangmen/obj/zhuyebiao1`）。每处改为 `{ object carried_ob = carry_object(...); if (carried_ob) carried_ob->wear(); }`（`scripts/lpc_guard_carry_object.py`）：NPC 照常出现，只是不带这件东西；文件补回来（或是虚拟对象）照样会带上。载入检查：改动的文件改前能载入 0 个，改后 37 个（37 个原来载入不了），没有退步；其余 10 个另有原因（多为 `set_skill()` 了本库没有的武功）。
+
+## 水潭里 `ging_cost` 是 `jing_cost` 的笔误（2026-10-18）
+
+`shuitan` 先算 `jing_cost`，倒水时却扣 `receive_damage("jing", ging_cost)`，`ging_cost` 从没声明过：`Undefined variable 'ging_cost'`，整个物件载入不了。改成 `jing_cost`：`d/shaolin/obj/shuitan.lpc`。改后用 `lpcc` 逐个载入这些对象：1 个通过。

@@ -1420,3 +1420,15 @@ More of the same (2026-10-15): a `check_fight()` that declares `object weapon;` 
 **Cause:** `call_out("hebi", 1, me, target, env, i, j, o, p, count)` into `void hebi() { object me, target, env; int i, j, o, p, count; ...`: the arguments are dropped and the locals of the same names are 0, so `if (!me && !target) return;` returns every time. The perform's own call_out also passed `h, k` that the re-scheduling call inside `hebi()` does not.
 **Fix:** declare the parameters the re-scheduling call passes and drop the locals; make the first call_out pass the same list. xbtxiii's ultimate area has the same shape in `yangguo`/`xiaolongnv` `come_shuitan` but its chain also needs a 小龙女 NPC the archive never had, so it was left.
 **Detection:** compare each `call_out("f", delay, args...)` with `f`'s parameters in the same file and keep the targets that read a local they never assign (3,892 call_outs pass extra arguments, almost all harmlessly; 38 matched this, 2026-10-15); `lpc_unassigned_locals.py` lists the object-typed ones.
+
+### 7.254 A saved NPC whose `weapon`/`armor` is a mapping (2026-10-18)
+**Symptom:** the 武林盟主 NPCs (`clone/npc/meng-zhu`, `fa-e`, `shang-shan`, `d/quanzhou/npc/tang3`, `d/taishan/tang2`/`tang3`/`xingtang`: 89 files in 15 libs) die in `create()` with `Bad argument 1 to EFUN new()` once their saved data is restored.
+**Cause:** `do_recopy()` copies the crowned player's whole dbase into the NPC, including a crafted weapon stored as a mapping under `weapon`; the next `create()` runs `if (query("weapon")) carry_object(query("weapon"))->wield();` and `carry_object()` wants a path. Fifteen libs' `data/npc/*.o` really carry the mapping (jhfy3's holds `"weapon":(["id":"my sword", "make":1, ...])`).
+**Fix:** `if (stringp(this_object()->query("weapon"))) ...` (and `armor`); the champion comes up bare-handed.
+**Detection:** `git grep -F '"weapon":([' -- 'libs/*/work/data/npc/*.o'`, then the libs whose code reads the property as a path.
+
+### 7.255 A corrupt board save kills the room that creates it (2026-10-18)
+**Symptom:** `restore_object(): Illegal file format - 1 (?inh...` while a room such as `d/city/kedian` loads (the jqxz2008 family, jyqxc, xiakexing2017: 50 board saves under `data/board/` start with `?inh` and binary noise, foreign data that no driver reads).
+**Cause:** `inherit/misc/bboard.lpc setup()` calls `restore()` bare, and `restore_object()` raises on a file that is not a text save (a missing file returns 0). The board's `create()` aborts, and with it the room that clones the board.
+**Fix:** `catch(restore());`, the board starts empty (xkx2017's copy already read so).
+**Detection:** scan the first four bytes of every tracked `.o` for `?inh`; the census row `Illegal file format`.

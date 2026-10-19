@@ -25,13 +25,26 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 
-def code_mask(b):
+HEREDOC = re.compile(rb"@@?([A-Za-z_][A-Za-z0-9_]*)")
+
+
+def code_mask(b, heredoc=False):
     """1 for every byte that is code, 0 inside a string, char constant or comment.  Unlike the float fixer's mask, a
-    double-quoted string may run over several lines (the driver accepts that: `"wilted<newline>flowers"`)."""
+    double-quoted string may run over several lines (the driver accepts that: `"wilted<newline>flowers"`).  With
+    heredoc=True the text of an `@MARKER ... MARKER` block is masked too (the `@MARKER` token itself stays code); a block whose
+    marker line never comes masks to the end of the file."""
     m = bytearray(len(b))
     i, n = 0, len(b)
     while i < n:
         c = b[i:i + 1]
+        if heredoc and c == b"@":
+            h = HEREDOC.match(b, i)
+            if h:
+                for k in range(i, h.end()):
+                    m[k] = 1
+                end = re.compile(rb"(?m)^" + re.escape(h.group(1)) + rb"(?![A-Za-z0-9_])").search(b, h.end())
+                i = end.end() if end else n
+                continue
         if b[i:i + 2] == b"//":
             j = b.find(b"\n", i)
             i = n if j < 0 else j

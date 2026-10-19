@@ -553,3 +553,7 @@ functionally re-tested live on this lib.
 ## 达摩剑「达摩三绝剑」、反两仪刀「华岳三神峰」每次报错（2026-10-15，KB 06 §7.246）
 
 两个绝招都声明了 `object weapon, ob;` 却从不给 `ob` 赋值：结尾 `if (!ob->is_fighting(me))` 在内力扣完后报错，`sanshen` 的三刀甚至都砍向 `ob`（0）。改为 `target`，并先判断 `objectp(target)`（循环里可能取不到对手）。
+
+## 去掉的预定义宏 `SAVE_EXTENSION`（2026-10-18，KB 04 §6.11）
+
+老版 MudOS 给每个 LPC 对象预先定义了 `SAVE_EXTENSION`（`".o"`）；FluffOS 的 ChangeLog（COMPAT_BUSTER 一条）把它删了，改用 `__SAVE_EXTENSION__`。本库没有自己 `#define` 这个宏，用到它的文件一律 `Undefined variable 'SAVE_EXTENSION'`，整个对象载入不了。改成 `__SAVE_EXTENSION__`（`scripts/lpc_fix_predefined_macro.py`）：`d/jiaxing/npc/tang.lpc`、`d/jiaxing/npc/tang3.lpc`、`d/quanzhou/npc/tang.lpc`、`d/quanzhou/npc/tang3.lpc`、`include/net/ftpdsupp.h`。`tang3`/`tang`/`meng-zhu` 是武林盟主一类的 NPC，原来一个都载入不了。改后用 `lpcc` 逐个载入这些对象：4 个通过。

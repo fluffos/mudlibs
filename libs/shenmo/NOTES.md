@@ -1112,3 +1112,7 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 ## 清风的倭寇奖励：整数除以浮点数（2026-10-18，KB 04 §6.10 `Float value truncated to int`）
 
 `d/sunrise/npc/qingfeng` 的 `give_reward()` 按经验逐级缩减奖励：`mainexp /= 0.8`、`/= 0.9`、`/= 1.1`、`/= 1.2`、`/= 1.5`，`mainexp` 是 int，驱动先把右边的浮点数截成整数再运算：经验超过 15 亿时 `/= 0.9` 变成 `/= 0`（除以零，奖励发不出来），其余的 `/= 1.1`、`1.2`、`1.5` 都变成 `/= 1`，该缩减的奖励一点没缩减。改为 `mainexp = to_int(mainexp / 0.8)`（其余同），按原意先除后取整。
+
+## 去掉的预定义宏 `SAVE_EXTENSION`（2026-10-18，KB 04 §6.11）
+
+老版 MudOS 给每个 LPC 对象预先定义了 `SAVE_EXTENSION`（`".o"`）；FluffOS 的 ChangeLog（COMPAT_BUSTER 一条）把它删了，改用 `__SAVE_EXTENSION__`。本库没有自己 `#define` 这个宏，用到它的文件一律 `Undefined variable 'SAVE_EXTENSION'`，整个对象载入不了。改成 `__SAVE_EXTENSION__`（`scripts/lpc_fix_predefined_macro.py`）：`adm/daemons/network/netmail.lpc`、`clone/token.lpc`。`token` 是帮派领袖信物；`netmail` 是网络邮件守护进程（本库缺 `mailer.h` 等头文件，改后仍载入不了）。改后用 `lpcc` 逐个载入这些对象：1 个通过，1 个还有别的错误（`adm/daemons/network/netmail`：/adm/daemons/network/netmail.lpc:17: error: Cannot #include mailer.h）。

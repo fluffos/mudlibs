@@ -818,3 +818,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply e
 ## 储藏室东西过多时清不掉（2026-10-15，KB 06 §7.245）
 
 `std/room/std_storage` 的 `my_clean_func()` 在物品超过上限一半时从最后一件往前清：`for (i = number; ; --i)` 从 `inv[number]` 开始，第一次就越界，报 `Array index out of bounds`，储藏室从来没有被清过；循环也没有下界。改为 `for (i = number - 1; i >= 0; --i)`。跳过玩家的判断写成了 `->querry("npc")`，一并改为 `query`（原意是留下玩家、NPC 也清）。测试里六件物品、上限二：改前越界报错，改后剩两件。
+
+## 去掉的预定义宏 `SAVE_EXTENSION`（2026-10-18，KB 04 §6.11）
+
+老版 MudOS 给每个 LPC 对象预先定义了 `SAVE_EXTENSION`（`".o"`）；FluffOS 的 ChangeLog（COMPAT_BUSTER 一条）把它删了，改用 `__SAVE_EXTENSION__`。本库没有自己 `#define` 这个宏，用到它的文件一律 `Undefined variable 'SAVE_EXTENSION'`，整个对象载入不了。改成 `__SAVE_EXTENSION__`（`scripts/lpc_fix_predefined_macro.py`）：`include/net/oldftp/ftpdsupp.h`。

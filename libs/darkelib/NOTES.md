@@ -876,3 +876,8 @@ autoload::get(); }` for the warning it now showed.
 ## Save files `restore_object()` refused (2026-10-15, KB 03 §4.4)
 
 `d/excelsior/rooms/news.o`、`std/diewarzau/test.o`、`wizards/excelsior/rooms/news.o`: a raw newline inside a string (save_object() writes it as `\r`; restore reads line by line and the string never closes) or a blank line (`Illegal file format`), so the object started empty. Newlines written as `\r`, blank lines dropped (`scripts/lpc_save_encoding.py --from-raw`); the driver restores each one now (`scripts/lpc_save_restore_check.py`).
+
+## Removed predefine `SAVE_EXTENSION` (2026-10-18, KB 04 6.11)
+
+Older MudOS predefined `SAVE_EXTENSION` (`".o"`) in every LPC object; the FluffOS ChangeLog (COMPAT_BUSTER) removed it in favour of `__SAVE_EXTENSION__`. This lib never `#define`s it, so each file that names it was `Undefined variable 'SAVE_EXTENSION'` and the object never loaded. Now `__SAVE_EXTENSION__` (`scripts/lpc_fix_predefined_macro.py`): `adm/daemon/network/netmail.lpc`. Loaded one by one with `lpcc` after the change: 0 pass, 1 still stop on another error (`adm/daemon/network/netmail`: syntax error, unexpected L_BASIC_TYPE, expecting L_ASSIGN or ';' or '(' or ',').
+

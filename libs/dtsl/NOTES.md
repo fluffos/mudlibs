@@ -1214,3 +1214,8 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply d
 ## NPCs carrying items this lib never had (2026-10-15, KB 06 §7.73)
 
 68 statements in 45 files did `carry_object("<missing file>")->wear()` (or `wield()`, `set_amount()`) in `create()`: `carry_object()` returned 0, the call raised `Bad argument 1 to EFUN call_other()` and the NPC never loaded (most common: `/clone/misc/cloth`, `/u/smokes/junying/obj/blade`, `/d/city/obj/cloth`). Each is now a guarded block (`scripts/lpc_guard_carry_object.py`): the NPC loads without the item, and carries it again if the file comes back. Load check: 0 of the changed files loaded before, 18 after (18 newly), no regressions.
+
+## Removed predefine `SAVE_EXTENSION` (2026-10-18, KB 04 6.11)
+
+Older MudOS predefined `SAVE_EXTENSION` (`".o"`) in every LPC object; the FluffOS ChangeLog (COMPAT_BUSTER) removed it in favour of `__SAVE_EXTENSION__`. This lib never `#define`s it, so each file that names it was `Undefined variable 'SAVE_EXTENSION'` and the object never loaded. Now `__SAVE_EXTENSION__` (`scripts/lpc_fix_predefined_macro.py`): `adm/daemons/network/netmail.lpc`, `d/zhiye/obj/old-zhujianlu.lpc`, `obj/token.lpc`. Loaded one by one with `lpcc` after the change: 2 pass, 1 still stop on another error (`adm/daemons/network/netmail`: /adm/daemons/network/netmail.lpc:17: error: Cannot #include mailer.h).
+
