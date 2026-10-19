@@ -395,3 +395,7 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## set_name 的 id 参数传成字符串（2026-10-19，KB 06 §7.260）
 
 `set_name("海口大碗", "bowl");` 把物品的 id 写成了字符串，本库的 `set_name(string name, string *id)` 要的是数组，驱动在编译时报 `Bad type for argument 2 of set_name ( string * vs string )`，整个物件载入不了；旧驱动不检查参数类型，字符串里照样找得到这个词，物品能用 id 称呼。改成 `({ "bowl" })`，共 5 个文件：`/clone/gem/blade.lpc`、`/clone/gem/sword.lpc`、`/d/baituo/npc/obj/bowl.lpc`、`/d/baituo/obj/bowl.lpc`。（`scripts/lpc_fix_set_name_id.py`）
+
+## simul_efun 丢了 unew()（2026-10-19，KB 06 §7.262）
+
+`adm/simul_efun/object.lpc` 没有 `unew()`（带“独一无二”次数限制的 `new()`），`kungfu/class/dalunsi/laozu2` 按 xkx 一系的写法调用它，`Undefined function unew`。从同系的 xkxz2 把这个函数原样补回 `object.lpc` 末尾（`scripts/lpc_transplant_function.py`）。这个物件还差宏 `BINGQI_D`（本库的头文件没有定义），所以仍载入不了，属于未定义宏一类，另案处理。

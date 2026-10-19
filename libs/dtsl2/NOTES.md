@@ -778,3 +778,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply d
 ## 调用了父类没有的函数的对象（2026-10-19，KB 06 §7.259）
 
 `::create();`、`::init();`、`return ::buy_object(who, item);` 这类调用写的是父类里有这个函数的版本；本库的父类没有，旧驱动把它当空操作（返回 0），现在的驱动在编译时就报 `Unable to find the inherited function`，整个对象载入不了。单独成句的调用删掉，`return ::f(...)` 改成 `return 0;`（void 函数里是 `return;`），与旧驱动的行为一致。共 2 处、2 个文件：`::ob_hit()`（2 处）。只改了出错原因全是这一类的文件；还带着别的错误（多半是父类本身没了）的文件没动，等父类补回后再看。（`scripts/lpc_fix_dangling_super.py`）
+
+## simul_efun 丢了 unew()（2026-10-19，KB 06 §7.262）
+
+`adm/simul_efun/object.lpc` 没有 `unew()`（带“独一无二”次数限制的 `new()`：物件的 `unique` 值是允许同时存在的份数），而官府 NPC 和几件武器按 xkx 一系的写法调用 `unew(...)`，于是 `Undefined function unew`，连同它们赋值给 `object` 变量的那一行都报错，整个物件载入不了。从同系的 xkxz2 把这个函数原样补回 `object.lpc` 末尾（`scripts/lpc_transplant_function.py`），受益物件 4 个：`/clone/npc/guanfu/shi-qingshan`、`/clone/weapon/bestfalun`、`/clone/weapon/gold-falun`、`/clone/weapon/sword/jwqin`。

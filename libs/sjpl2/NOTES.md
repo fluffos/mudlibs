@@ -781,3 +781,7 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 ## feature/damage.lpc 丢了 set_ghost()（2026-10-19，KB 06 §7.262）
 
 `feature/damage.lpc` 里有 `int ghost` 和 `is_ghost()`，没有 `set_ghost(int i)`；木人、狼等 NPC 在 `create()` 里调用它，整个 NPC 报 `Undefined function set_ghost` 载入不了。从 xkx100 补回这一行函数，受益 NPC 1 个：`d/xiangyang/npc/muren`。（`scripts/lpc_transplant_function.py`）
+
+## simul_efun 丢了 unew()（2026-10-19，KB 06 §7.262）
+
+`adm/simul_efun/object.lpc` 没有 `unew()`（带“独一无二”次数限制的 `new()`），`d/jiaxing/npc/limochou` 按 xkx 一系的写法调用它，`Undefined function unew`。从同系的 xkxz2 把这个函数原样补回 `object.lpc` 末尾（`scripts/lpc_transplant_function.py`）。这个物件还差宏 `BINGQI_D`（本库的头文件没有定义），所以仍载入不了，属于未定义宏一类，另案处理。

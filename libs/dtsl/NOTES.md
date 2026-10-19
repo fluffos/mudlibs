@@ -1234,3 +1234,7 @@ These base classes are not in the lib, so every object that inherits them (rooms
 ## Objects that call an inherited function no parent has (2026-10-19, KB 06 7.259)
 
 `::create();`, `::init();` and `return ::buy_object(who, item);` were written against a parent that has the function; this lib's parents do not, the old driver took the call for a no-op returning 0, and the current driver stops at compile time with `Unable to find the inherited function`, so the object never loads. A call written as a statement is deleted, `return ::f(...)` becomes `return 0;` (`return;` in a void function), which is what the old driver did. 2 calls in 2 files: `::ob_hit()` (2). Only files whose every error was this one were edited; a file that also has another error (usually a parent that is itself missing) is left until the parent is restored. (`scripts/lpc_fix_dangling_super.py`)
+
+## simul_efun 丢了 unew()（2026-10-19，KB 06 §7.262）
+
+`adm/simul_efun/object.lpc` 没有 `unew()`（带“独一无二”次数限制的 `new()`：物件的 `unique` 值是允许同时存在的份数），而官府 NPC 和几件武器按 xkx 一系的写法调用 `unew(...)`，于是 `Undefined function unew`，连同它们赋值给 `object` 变量的那一行都报错，整个物件载入不了。从同系的 xkxz2 把这个函数原样补回 `object.lpc` 末尾（`scripts/lpc_transplant_function.py`），受益物件 4 个：`/clone/npc/guanfu/shi-qingshan`、`/clone/weapon/bestfalun`、`/clone/weapon/gold-falun`、`/clone/weapon/sword/jwqin`。
