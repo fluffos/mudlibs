@@ -113,6 +113,7 @@
 #define F_PAWNOWNER		"/feature/pawnowner.lpc"
 #define F_BANKOWNER		"/feature/bankowner.lpc"
 #define F_BANKPAWNOWNER		"/feature/bankpawnowner.lpc"
+#define F_DEALER                 "/feature/dealer"
 // Profiling switches
 //
 // If you changed any of these defines, you'll need reboot to make it 

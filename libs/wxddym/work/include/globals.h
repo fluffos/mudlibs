@@ -329,5 +329,7 @@
 
 // Install information
 #define INSTALL_COMBAT_TEST     1
+#define MEDAL                    "/inherit/armor/medal"
+#define RING                     "/inherit/weapon/ring"
 
 #undef PROFILE_COMMANDS

@@ -398,3 +398,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply f
 ## `for (int i ...)` 的循环变量在循环外还在用（2026-10-18，KB 04 §6.12）
 
 当铺／商店的 `do_buy()` 写成 `for (int i = 0; ...) if (...) break;`，循环一结束又读 `if (i == sizeof(inv))`。FluffOS 里 `for` 头里声明的变量只在循环内有效，所以 `Undefined variable 'i'`，整个房间（NPC）载入不了，当铺根本进不去。把 `i` 声明挪到函数开头（`int i, index;`），循环改成 `for (i = 0; ...)`：`std/room/hockshop.lpc`。
+
+## 补回丢掉的基类宏（2026-10-18，KB 04 §6.13）
+
+`inherit F_XXX;` 里的宏本库任何头文件都没有定义，报 `syntax error, unexpected L_IDENTIFIER, expecting L_STRING or '('`，整个对象载入不了；宏指向的基类文件本库其实有，别的库都把这个宏定义成同一个路径。在全局头文件 `include/globals.h` 里补上：`WAIST` → `/std/armor/waist`（9 个文件）、`WRISTS` → `/std/armor/wrists`（7 个文件）、`SURCOAT` → `/std/armor/surcoat`（5 个文件）、`SHIELD` → `/std/armor/shield`（5 个文件）、`GUN` → `/std/weapon/gun`（1 个文件）。（`scripts/lpc_restore_macros.py`）改后用 `lpcc` 逐个载入这些对象：27 个里 0 个通过，其余 27 个还有别的错误（`d/chengdu/npc/obj/huwan.lpc`：Undefined variable 'TYPE_WRISTS'；`d/chengdu/npc/obj/huyao.lpc`：Undefined variable 'TYPE_WAIST'；`d/chengdu/npc/obj/shield.lpc`：Undefined variable 'TYPE_SHIELD'……）。

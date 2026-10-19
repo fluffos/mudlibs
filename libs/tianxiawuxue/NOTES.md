@@ -1172,3 +1172,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply t
 ## 武林盟主类 NPC 的存档里 `weapon`／`armor` 是个 mapping（2026-10-18）
 
 盟主、`fa-e`、`shang-shan`、`tang3`/`tang2`/`xingtang` 这几个 NPC 在 `create()` 里 `restore()` 之后直接 `carry_object(query("weapon"))`。换盟主时 `do_recopy()` 把玩家整个 dbase 抄进来，玩家的 `weapon` 若是自制兵器的 mapping，存进 `data/npc/*.o` 以后下次载入就是 `new(mapping)`：`Bad argument 1 to EFUN new()`，NPC 载入失败。本库的存档里确实有这种 mapping。两行都加 `stringp()` 判断，mapping 时不拿武器（NPC 空手）：`clone/npc/fa-e.lpc`、`clone/npc/meng-zhu.lpc`、`clone/npc/shang-shan.lpc`。改后用 `lpcc` 逐个载入这些对象：3 个通过。
+
+## 补回丢掉的基类宏（2026-10-18，KB 04 §6.13）
+
+`inherit F_XXX;` 里的宏本库任何头文件都没有定义，报 `syntax error, unexpected L_IDENTIFIER, expecting L_STRING or '('`，整个对象载入不了；宏指向的基类文件本库其实有，别的库都把这个宏定义成同一个路径。在全局头文件 `include/globals.h` 里补上：`SSERVER` → `/inherit/sserver`（6 个文件）、`F_COAGENT` → `/feature/coagent`（2 个文件）。（`scripts/lpc_restore_macros.py`）改后用 `lpcc` 逐个载入这些对象：8 个里 6 个通过，其余 2 个还有别的错误（`kungfu/class/meizhuang/heibai.lpc`：syntax error, unexpected L_IDENTIFIER, expecting L_STRING or '('；`kungfu/class/meizhuang/huang.lpc`：/kungfu/class/meizhuang/huang.lpc:170:1: warning: Unused local variable 'purename'）。

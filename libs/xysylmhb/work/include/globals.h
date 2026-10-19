@@ -135,6 +135,7 @@
 #define SKILL_MODEL_WEAPON     "/meskill/skill_model_weapon.lpc"
 #define SKILL_MODEL_DEFAULT    "/meskill/skill_model_default.lpc"
 #define F_VENDOR_SALE		"/feature/vendor_sale.lpc"
+#define WQA_ROOM                 "/quest/game/wqa_room"
 
 // Profiling switches
 //

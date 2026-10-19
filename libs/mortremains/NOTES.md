@@ -899,3 +899,6 @@ Formatter not run (minimal edits).
 
 Older MudOS predefined `SAVE_EXTENSION` (`".o"`) in every LPC object; the FluffOS ChangeLog (COMPAT_BUSTER) removed it in favour of `__SAVE_EXTENSION__`. This lib never `#define`s it, so each file that names it was `Undefined variable 'SAVE_EXTENSION'` and the object never loaded. Now `__SAVE_EXTENSION__` (`scripts/lpc_fix_predefined_macro.py`): `adm/AFD/attic/save.lpc`, `adm/AFD/board/archive.lpc`, `adm/AFD/save.lpc`, `adm/daemons/network/netmail.lpc`, `adm/daemons/virtual/o_server.lpc`, `cmds/adm/_netmail.lpc`, `obj/shells/shsh.lpc`. Loaded one by one with `lpcc` after the change: 6 pass, 1 still stop on another error (`adm/daemons/network/netmail`: syntax error, unexpected L_BASIC_TYPE, expecting L_ASSIGN or ';' or '(' or ',').
 
+## Room `reset()` raised on a missing monster file (2026-10-18)
+
+`std/room.lpc` did `living(ob)` and `ob->move()` on the result of `new()` of a monster file the archive lacks: `Bad argument 1 to living()`, the room never loaded (24 rooms in the sample). Both lookups now `continue` on 0.

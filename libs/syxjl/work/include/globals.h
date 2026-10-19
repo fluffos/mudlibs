@@ -164,6 +164,7 @@
 #define F_SSERVER               "/feature/sserver.lpc"
 #define F_UNIQUE                "/feature/unique.lpc"
 #define F_VENDOR_SALE           "/feature/vendor_sale.lpc"
+#define SSERVER                  "/inherit/sserver"
 
 // Profiling switches
 //

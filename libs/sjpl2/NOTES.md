@@ -745,3 +745,7 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 ## NPC 带着本库没有的物品，载入失败（2026-10-15，KB 06 §7.73）
 
 95 个文件、122 处在 `create()` 里 `carry_object("<本库没有的文件>")->wear()`（或 `wield()`、`set_amount()`）：`carry_object()` 得 0，接着的调用报 `Bad argument 1 to EFUN call_other()`，NPC 根本载入不了，该有它的房间里就少了这个人。多是从别的系统搬来的 NPC 用了原系统的物品路径（最常见：`/clone/misc/cloth`、`/d/city2/obj/jinduan`、`/obj/armor/tiejia`）。每处改为 `{ object carried_ob = carry_object(...); if (carried_ob) carried_ob->wear(); }`（`scripts/lpc_guard_carry_object.py`）：NPC 照常出现，只是不带这件东西；文件补回来（或是虚拟对象）照样会带上。载入检查：改动的文件改前能载入 0 个，改后 58 个（58 个原来载入不了），没有退步；其余 37 个另有原因（多为 `set_skill()` 了本库没有的武功）。
+
+## 补回丢掉的基类宏（2026-10-18，KB 04 §6.13）
+
+`inherit F_XXX;` 里的宏本库任何头文件都没有定义，报 `syntax error, unexpected L_IDENTIFIER, expecting L_STRING or '('`，整个对象载入不了；宏指向的基类文件本库其实有，别的库都把这个宏定义成同一个路径。在全局头文件 `include/globals.h` 里补上：`F_DEALER` → `/feature/dealer`（28 个文件）、`F_UNIQUE` → `/feature/unique`（19 个文件）。（`scripts/lpc_restore_macros.py`）改后用 `lpcc` 逐个载入这些对象：47 个里 10 个通过，其余 37 个还有别的错误（`d/chengdu/boss.lpc`：Undefined variable 'MONEY_D'；`d/chengdu/cdjiulou2.lpc`：Undefined variable 'MONEY_D'；`d/chengdu/jiulou2.lpc`：Undefined variable 'MONEY_D'……）。

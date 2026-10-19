@@ -154,6 +154,7 @@
 #define F_HORSE       "/feature/horse.lpc" // add by tmr 2006/12/08 馬
 #define F_QUEST        "/feature/quest.lpc"
 #define F_DEPOT        "/feature/depot.lpc"  // add by tmr 2007/04/29 玩家個人倉庫
+#define F_LIQUID                 "/feature/liquid"
 // Profiling switches
 //
 // If you changed any of these defines, you'll need reboot to make it 

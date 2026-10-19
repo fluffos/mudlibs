@@ -820,3 +820,7 @@ HEAD 与工作树新进程分别载入改动的 58 个对象：regress 0。未�
 - Left failing on purpose: the newseneca tattoos (each file pasted several times) and `tecqumin/obj/table.lpc` (class diamond, see above). Making them compile only trades the error for dozens of redeclarations.
 
 - 2026-10-14: some monsters call `set_mlevel(39)` with only a level. A 2016 override in `std/monster.lpc` meant to handle that (the comment says so) was left commented out, because its `string` parameter made the `intp()` test impossible. It is back with a `mixed` parameter: a bare level goes to the monster's first class (or fighter), and calls with a class name are unchanged. 9 of the 11 callers newly load; 80 random monsters load the same at HEAD and in the tree.
+
+## Restored base-class macros (2026-10-18, KB 04 6.13)
+
+`inherit IDENT;` named a macro that no header of this lib defines (`syntax error, unexpected L_IDENTIFIER, expecting L_STRING or '('`), so the object never loaded; the base file is in the lib and other libs map the macro to it. Added to the global header `adm/include/std.h`: `ALLEY` -> `/d/tharis/alley` (23 file(s)) (`scripts/lpc_restore_macros.py`). Loaded one by one with `lpcc` afterwards: 23 of 23 pass.

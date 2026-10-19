@@ -136,4 +136,5 @@
 // in effect.
 
 #define PROFILE_COMMANDS
+#define HALBERD                  "/std/weapon/halberd"
 #undef PROFILE_COMMANDS

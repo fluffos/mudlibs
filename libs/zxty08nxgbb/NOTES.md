@@ -302,3 +302,7 @@ functionally re-tested live on this lib.
 ## 武林盟主类 NPC 的存档里 `weapon`／`armor` 是个 mapping（2026-10-18）
 
 盟主、`fa-e`、`shang-shan`、`tang3`/`tang2`/`xingtang` 这几个 NPC 在 `create()` 里 `restore()` 之后直接 `carry_object(query("weapon"))`。换盟主时 `do_recopy()` 把玩家整个 dbase 抄进来，玩家的 `weapon` 若是自制兵器的 mapping，存进 `data/npc/*.o` 以后下次载入就是 `new(mapping)`：`Bad argument 1 to EFUN new()`，NPC 载入失败。本库的存档里确实有这种 mapping。两行都加 `stringp()` 判断，mapping 时不拿武器（NPC 空手）：`clone/npc/fa-e.lpc`、`clone/npc/meng-zhu.lpc`、`clone/npc/shang-shan.lpc`、`d/quanzhou/npc/tang3.lpc`、`d/taishan/tang2.lpc`、`d/taishan/tang3.lpc`、`d/taishan/xingtang.lpc`。改后用 `lpcc` 逐个载入这些对象：7 个通过。
+
+## 补回丢掉的基类宏（2026-10-18，KB 04 §6.13）
+
+`inherit F_XXX;` 里的宏本库任何头文件都没有定义，报 `syntax error, unexpected L_IDENTIFIER, expecting L_STRING or '('`，整个对象载入不了；宏指向的基类文件本库其实有，别的库都把这个宏定义成同一个路径。在全局头文件 `include/globals.h` 里补上：`BUILD_ROOM` → `/inherit/room/buildroom`（20 个文件）、`STICK` → `/inherit/weapon/stick`（3 个文件）、`F_GUARDER` → `/feature/guarder`（3 个文件）。（`scripts/lpc_restore_macros.py`）改后用 `lpcc` 逐个载入这些对象：26 个里 23 个通过，其余 3 个还有别的错误（`clone/unique/kusang-bang.lpc`：Unable to find the inherited function 'create'.；`clone/unique/yuzhu-zhang.lpc`：Unable to find the inherited function 'create'.；`d/room/roomnpc/laopu.lpc`：Unable to find the inherited function 'accept_hit'.）。

@@ -219,5 +219,6 @@
 #define SHENGYI_DIR "/data/shengyi/"
 
 #define PROFILE_COMMANDS
+#define PILL                     "/std/medicine/pill"
 #undef PROFILE_COMMANDS
 

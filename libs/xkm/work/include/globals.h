@@ -184,4 +184,5 @@
 #define TOP_ID_NAMES		100
 #define TOP_ID_PROPS		200
 #define TOP_IDS			300
+#define HALBERD                  "/inherit/weapon/halberd"
 

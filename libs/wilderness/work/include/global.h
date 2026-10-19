@@ -35,4 +35,5 @@
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 #define ABS(a)    (((a) < 0) ? -(a) : (a))
 #define CLAMP(x, low, high) (((x) > (high)) ? (high) : (((x) < (low)) ? (low) : (x)))
+#define M_DRINK_SOURCE           "/std/modules/m_drink_source"
 #endif // __GLOBAL_H__

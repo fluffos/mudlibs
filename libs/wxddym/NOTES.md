@@ -727,3 +727,12 @@ No new errors after the shop commands. Demo `fluffos` save churn
 ## 物品清单把名字的第一个字吃掉（2026-10-18，KB 07 §8.1）
 
 `inventory`、房间的物品列表（`feature/move`）和部分 `look` 把同名物品合并计数，键是 `query("unit") + short()`，只有一件时按 `key[2..]` 去掉量词。量词是一个汉字，在原来的 GBK 里占 2 字节，`[2..]` 正好去掉量词；转成 UTF-8 以后一个汉字只占一个下标，这一刀把名字的第一个字也切掉了（「把长剑」只显示「剑」，带颜色的名字切掉的是转义序列开头）。改为 `[1..]`（`scripts/lpc_fix_unit_cut.py`）：`d/city2/look.lpc`、`quest/quest_jun/look.lpc`。
+
+## 补回丢掉的基类宏（2026-10-18，KB 04 §6.13）
+
+`inherit F_XXX;` 里的宏本库任何头文件都没有定义，报 `syntax error, unexpected L_IDENTIFIER, expecting L_STRING or '('`，整个对象载入不了；宏指向的基类文件本库其实有，别的库都把这个宏定义成同一个路径。在全局头文件 `include/globals.h` 里补上：`MEDAL` → `/inherit/armor/medal`（17 个文件）、`RING` → `/inherit/weapon/ring`（5 个文件）。（`scripts/lpc_restore_macros.py`）改后用 `lpcc` 逐个载入这些对象：22 个里 5 个通过，其余 17 个还有别的错误（`clone/medal/diamond_xunzhang.lpc`：Undefined variable 'TYPE_MEDAL'；`clone/medal/hero_xunzhang1.lpc`：Undefined variable 'TYPE_MEDAL'；`clone/medal/hero_xunzhang2.lpc`：Undefined variable 'TYPE_MEDAL'……）。
+
+
+## 迷宫首领 NPC 重复继承 NPC（2026-10-18，KB 06 §7.240）
+
+`d/maze/boss/npc/` 下这 8 个首领先 `inherit NPC;` 再 `inherit BOSS;`，而 `BOSS`（`/inherit/char/boss`）本身已经继承 `NPC`：全局变量 `busy`、`interrupt`、`perform_busy`、`override` 等一律 `Redeclaration of global variable`，后面还有 `nomask` 函数被重定义，NPC 载入不了。去掉多余的 `inherit NPC;`（文件里的 `::init()`、`::die()` 现在落到 `BOSS` 上，正是它们原来想调的）：`d/maze/boss/npc/0004/dragon.lpc`、`d/maze/boss/npc/0005/dragon.lpc`、`d/maze/boss/npc/0011/shujing.lpc`、`d/maze/boss/npc/0012/baihuaxianzi.lpc`、`d/maze/boss/npc/0013/leijiu.lpc`、`d/maze/boss/npc/0014/leishen.lpc`、`d/maze/boss/npc/0501/nielong.lpc`、`d/maze/boss/npc/0502/jinyinshe.lpc`。改后载入：8/8 通过。

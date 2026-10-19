@@ -143,6 +143,7 @@
 #define F_VI                "/feature/vi"
 #define F_FROZEN            "/feature/frozen.lpc"
 #define F_BACKUP            "/feature/backup.lpc"
+#define BULLETIN_JBOARD          "/inherit/misc/jboard"
 // Profiling switches
 //
 // If you changed any of these defines, you'll need reboot to make it 

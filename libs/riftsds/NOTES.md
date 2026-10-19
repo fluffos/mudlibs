@@ -851,3 +851,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply r
 ## Save files `restore_object()` refused (2026-10-15, KB 03 §4.4)
 
 `domains/campus/save/charles.o`、`domains/campus/save/charly.o`、`secure/save/mudinfo.o`: a raw newline inside a string (save_object() writes it as `\r`; restore reads line by line and the string never closes) or a blank line (`Illegal file format`), so the object started empty. Newlines written as `\r`, blank lines dropped (`scripts/lpc_save_encoding.py --from-raw`); the driver restores each one now (`scripts/lpc_save_restore_check.py`).
+
+## Restored base-class macros (2026-10-18, KB 04 6.13)
+
+`inherit IDENT;` named a macro that no header of this lib defines (`syntax error, unexpected L_IDENTIFIER, expecting L_STRING or '('`), so the object never loaded; the base file is in the lib and other libs map the macro to it. Added to the global header `secure/include/global.h`: `BOOK` -> `/obj/book` (2 file(s)) (`scripts/lpc_restore_macros.py`). Loaded one by one with `lpcc` afterwards: 0 of 2 pass, the other 2 stop on another error (`domains/common/item/quest_todo.lpc`: Undefined function set_proper_name; `domains/std/lima_guide.lpc`: Undefined function add_id).

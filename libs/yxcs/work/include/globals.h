@@ -201,4 +201,5 @@
 #define DUMP_DIR                                "/bak/dump/"
 #define TEMP_DIR                                "/temp/"
 #define SAVE_EXTENSION ".o"
+#define NPC_TRAINEE              "/inherit/char/trainee"
 #undef PROFILE_COMMANDS

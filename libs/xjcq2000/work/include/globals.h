@@ -204,3 +204,6 @@
 
 #define STUNT(x)		(STUNT_DIR   + x)
 #define SYS(x)			(SYS_DIR + x)
+#define SSERVER                  "/inherit/sserver"
+#define SPEAR                    "/inherit/weapon/spear"
+#define NPC_SAVE                 "/inherit/char/npcsave"

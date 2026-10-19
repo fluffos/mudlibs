@@ -168,3 +168,4 @@
 #define PER1_B		"十大白马王子"
 #define PER2_B		"十大梦中情人"
 #define AGE_B		"十大寿星"
+#define UNARMED                  "/std/weapon/unarmed"

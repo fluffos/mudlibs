@@ -126,4 +126,9 @@
 // in effect.
 
 #define SAVE_EXTENSION ".o"
+#define WAIST                    "/std/armor/waist"
+#define WRISTS                   "/std/armor/wrists"
+#define SURCOAT                  "/std/armor/surcoat"
+#define SHIELD                   "/std/armor/shield"
+#define GUN                      "/std/weapon/gun"
 #undef PROFILE_COMMANDS

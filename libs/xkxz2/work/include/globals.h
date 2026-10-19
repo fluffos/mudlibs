@@ -200,4 +200,5 @@
 #define MIN(a, b)               ((a) < (b) ? (a) : (b))
 #define ABS(x)                  ((x) >= 0 ? (x) : -(x))
 #define SGN(x)                  ((x) > 0 ? 1 : ((x) < 0 ? -1 : 0))
+#define F_COAGENT                "/feature/coagent"
 

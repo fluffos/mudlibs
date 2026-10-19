@@ -18,6 +18,7 @@
 #define SEFUN             "/secure/sefun/sefun"
 
 #define DEBUG
+#define BOOK                     "/obj/book"
 
 #ifdef debug
 #undef debug

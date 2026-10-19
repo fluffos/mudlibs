@@ -226,6 +226,7 @@
 
 // Install information
 #define INSTALL_COMBAT_TEST     1
+#define NPC_TRAINEE              "/inherit/char/trainee"
 
 #undef PROFILE_COMMANDS
 

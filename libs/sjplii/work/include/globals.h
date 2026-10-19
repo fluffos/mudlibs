@@ -153,3 +153,5 @@
 
 #undef PROFILE_COMMANDS
 #define F_SSERVER "/feature/sserver.lpc"
+#define F_DEALER                 "/feature/dealer"
+#define F_UNIQUE                 "/feature/unique"

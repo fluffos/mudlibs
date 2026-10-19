@@ -1106,3 +1106,7 @@ which is what upstream Lima already does. `error_handler()` still prints the err
 ## Deep test (§10.7, 2026-10-08) -- fixed-width `.lpc` suffix slices
 
 The `.c` -> `.lpc` rename changed the string but not the slice width: `f[<2..] == ".lpc"` compares two characters with four and is never true (`!=` always true), so suffix filters and strips never ran or cut `x.l` (KB 06 §7.238). `scripts/lpc_lpc_suffix_slice.py --apply` fixed 2 comparison(s) and 0 strip(s) (e.g. `trans/cmds/update.lpc`); the changed files load at HEAD and in the tree (fresh processes) with no regression.
+
+## Restored base-class macros (2026-10-18, KB 04 6.13)
+
+`inherit IDENT;` named a macro that no header of this lib defines (`syntax error, unexpected L_IDENTIFIER, expecting L_STRING or '('`), so the object never loaded; the base file is in the lib and other libs map the macro to it. Added to the global header `include/global.h`: `M_DRINK_SOURCE` -> `/std/modules/m_drink_source` (2 file(s)) (`scripts/lpc_restore_macros.py`). 

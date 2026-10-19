@@ -134,3 +134,4 @@
 // in effect.
 
 #define PROFILE_COMMANDS
+#define SSERVER                  "/std/sserver"

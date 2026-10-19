@@ -183,3 +183,5 @@
 #define F_NOCLONE               "/feature/noclone.lpc"
 #define INSTALL_COMBAT_TEST     1
 #define NWEAPON_D               "/adm/daemons/nweapond"
+#define OTHERS                   "/std/armor/others"
+#define FLOWER                   "/std/armor/flower"

@@ -177,6 +177,9 @@
 #define MIN(a, b)	((a) < (b) ? (a) : (b))
 #define SGN(x)		((x) > 0 ? 1 : ((x) < 0 ? -1 : 0))
 #define SWAP(x, y)	(x ^= y ^= x ^= y)
+#define BUILD_ROOM               "/inherit/room/buildroom"
+#define F_GUARDER                "/feature/guarder"
+#define STICK                    "/inherit/weapon/stick"
 
 // Profiling switches
 //

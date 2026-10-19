@@ -1024,3 +1024,7 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## 物品清单把名字的第一个字吃掉（2026-10-18，KB 07 §8.1）
 
 `inventory`、房间的物品列表（`feature/move`）和部分 `look` 把同名物品合并计数，键是 `query("unit") + short()`，只有一件时按 `key[2..]` 去掉量词。量词是一个汉字，在原来的 GBK 里占 2 字节，`[2..]` 正好去掉量词；转成 UTF-8 以后一个汉字只占一个下标，这一刀把名字的第一个字也切掉了（「把长剑」只显示「剑」，带颜色的名字切掉的是转义序列开头）。改为 `[1..]`（`scripts/lpc_fix_unit_cut.py`）：`quest/quest_jun/look.lpc`。
+
+## 补回丢掉的基类宏（2026-10-18，KB 04 §6.13）
+
+`inherit F_XXX;` 里的宏本库任何头文件都没有定义，报 `syntax error, unexpected L_IDENTIFIER, expecting L_STRING or '('`，整个对象载入不了；宏指向的基类文件本库其实有，别的库都把这个宏定义成同一个路径。在全局头文件 `include/globals.h` 里补上：`SKI_ZHEN` → `/inherit/skill/array`（4 个文件）。（`scripts/lpc_restore_macros.py`）改后用 `lpcc` 逐个载入这些对象：4 个里 0 个通过，其余 4 个还有别的错误（`kungfu/skill/dagou-zhen.lpc`：!= always true because of incompatible types ( string vs int ).；`kungfu/skill/hebi-jianzhen.lpc`：!= always true because of incompatible types ( string vs int ).；`kungfu/skill/quanzhen-jianzhen.lpc`：!= always true because of incompatible types ( string vs int ).……）。

@@ -143,6 +143,7 @@
 #define F_BANKOWNER		"/feature/bankowner.lpc"
 #define F_BANKPAWNOWNER		"/feature/bankpawnowner.lpc"
 #define SAVE_EXTENSION          __SAVE_EXTENSION__
+#define F_UNIQUE                 "/feature/unique"
 // Profiling switches
 //
 // If you changed any of these defines, you'll need reboot to make it 

@@ -173,4 +173,6 @@
 #define DUMP_DIR                                "/bak/dump/"
 #define TEMP_DIR                                "/temp/"
 #define SAVE_EXTENSION ".o"
+#define SSERVER                  "/inherit/sserver"
+#define F_COAGENT                "/feature/coagent"
 #undef PROFILE_COMMANDS
