@@ -826,3 +826,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply e
 ## `d/noden/asterism/monster/dwarf_healer` 的台词里引号错位（2026-10-18，KB 03 §4.6）
 
 台词那一行 `"……只记得那个东西叫" 优 波 罗 花 "。\n"`：“叫”和“花”两侧的引号把字符串断开，中间的 `优 波 罗 花` 成了代码（`Illegal character`），NPC 载入不了。改成 `'优波罗花'`。载入：通过。
+
+## 补回本库没有的基类文件（2026-10-18，KB 04 §6.15）
+
+下面这些基类本库没有，继承它们的对象（房间、NPC、物品）整批载入不了（`inherit XXX;` 的宏没定义，或者 `inherit "/std/…";` 的文件不在）。同系的库里有同名文件，两库有大量逐字节相同的文件（亲缘关系），所以从那边原样拷来，缺的宏补进全局头文件：`/d/translate/tmp/drink`←es1_win，3 个对象继承它，抽样 3/3 载入。每个基类补回后单独载入、再抽样载入使用它的对象，基类载不进来或者一个用户也载不进来的就撤掉（本库撤掉了它们，不再补）。（`scripts/lpc_restore_bases.py`）

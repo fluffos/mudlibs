@@ -149,6 +149,8 @@
 // in effect.
 
 #define PROFILE_COMMANDS
+#define QIN                      "/std/weapon/qin"
+#define UNARMED                  "/std/weapon/unarmed"
 #undef PROFILE_COMMANDS
 
 

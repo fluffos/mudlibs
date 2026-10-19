@@ -321,6 +321,8 @@
 #define INSTALL_COMBAT_TEST     1
 #define S_RING                   "/inherit/gems/ring"
 #define F_GEMS                   "/feature/gems"
+#define SSERVER                  "/std/sserver"
+#define F_RIDDING                "/feature/ridding"
 
 #undef PROFILE_COMMANDS
 #undef COUNT_COMMAND_TIMECOST

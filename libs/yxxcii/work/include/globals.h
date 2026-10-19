@@ -155,6 +155,7 @@
 #define F_VENDOR                "/feature/dealer.lpc"
 #define F_SSERVER               "/feature/sserver.lpc"
 #define F_UNIQUE                "/feature/unique.lpc"
+#define SPEAR                    "/inherit/weapon/spear"
 
 // Profiling switches
 //

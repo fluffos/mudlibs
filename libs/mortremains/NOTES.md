@@ -902,3 +902,7 @@ Older MudOS predefined `SAVE_EXTENSION` (`".o"`) in every LPC object; the FluffO
 ## Room `reset()` raised on a missing monster file (2026-10-18)
 
 `std/room.lpc` did `living(ob)` and `ob->move()` on the result of `new()` of a monster file the archive lacks: `Bad argument 1 to living()`, the room never loaded (24 rooms in the sample). Both lookups now `continue` on 0.
+
+## Base classes the lib did not ship, restored from sibling libs (2026-10-18, KB 04 6.15)
+
+These base classes are not in the lib, so every object that inherits them (rooms, NPCs, items) failed to load (`inherit XXX;` with no macro, or `inherit "/std/...";` with no file). A sibling lib carries the file and shares many files byte for byte with this one, so the file is copied as it stands: `/d/Conf/voting_room` <- tmi2, 1 object(s) inherit it, sample 1/1 load. Each base was loaded alone and a sample of its users after it; a base that did not load, or none of whose users did, was taken back (`scripts/lpc_restore_bases.py`).

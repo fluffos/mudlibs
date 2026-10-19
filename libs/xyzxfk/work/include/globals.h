@@ -139,3 +139,4 @@
 #define S_WEAPON		"/inherit/gems/weapon.lpc"
 #define S_ROBE			"/inherit/gems/robe.lpc"
 #define S_RING			"/inherit/gems/ring.lpc"
+#define RING                     "/inherit/weapon/ring"

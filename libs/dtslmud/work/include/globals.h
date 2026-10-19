@@ -169,4 +169,8 @@
 #define MIN(a, b)	((a) < (b) ? (a) : (b))
 #define SGN(x)		((x) > 0 ? 1 : ((x) < 0 ? -1 : 0))
 #define SWAP(x, y)	(x ^= y ^= x ^= y)
+#define CLUB                     "/inherit/weapon/club"
+#define HOOK                     "/inherit/weapon/hook"
+#define BRUSH                    "/inherit/weapon/brush"
+#define WEAPON_COMBO             "/inherit/weapon/weapon_combo"
 

@@ -137,4 +137,5 @@
 
 #define PROFILE_COMMANDS
 #define HALBERD                  "/std/weapon/halberd"
+#define UNARMED                  "/std/weapon/unarmed"
 #undef PROFILE_COMMANDS

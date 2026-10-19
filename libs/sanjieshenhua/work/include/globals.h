@@ -185,3 +185,5 @@
 #define NWEAPON_D               "/adm/daemons/nweapond"
 #define OTHERS                   "/std/armor/others"
 #define FLOWER                   "/std/armor/flower"
+#define KZZNPC                   "/std/char/kzznpc"
+#define MAGIC_ROOM               "/std/room/magicroom"

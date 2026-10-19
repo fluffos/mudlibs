@@ -152,5 +152,7 @@
 #define SAVE_EXTENSION ".o"
 #define SSERVER                  "/inherit/sserver"
 #define NPC_TRAINEE              "/inherit/char/trainee"
+#define RAKE                     "/inherit/weapon/rake"
+#define ARCHERY                  "/std/weapon/archery"
 // the end
 #undef PROFILE_COMMANDS

@@ -180,6 +180,7 @@
 #define BUILD_ROOM               "/inherit/room/buildroom"
 #define F_GUARDER                "/feature/guarder"
 #define STICK                    "/inherit/weapon/stick"
+#define RING                     "/inherit/weapon/ring"
 
 // Profiling switches
 //

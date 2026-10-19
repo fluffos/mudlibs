@@ -169,3 +169,5 @@
 #define PER2_B		"十大梦中情人"
 #define AGE_B		"十大寿星"
 #define PILL                     "/std/medicine/pill"
+#define NEEDLE                   "/std/weapon/needle"
+#define SNAKE                    "/inherit/char/snake"

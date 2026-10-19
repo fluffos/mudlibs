@@ -149,6 +149,7 @@
 // in effect.
 
 #define PROFILE_COMMANDS
+#define UNARMED                  "/std/weapon/unarmed"
 #undef PROFILE_COMMANDS
 
 

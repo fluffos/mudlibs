@@ -167,6 +167,7 @@
 #define F_VI                      "/feature/vi.lpc"
 #define F_SSERVER                 "/feature/sserver.lpc"
 #define F_UNIQUE                  "/feature/unique.lpc"
+#define RING                     "/inherit/weapon/ring"
 
 // Profiling switches
 //

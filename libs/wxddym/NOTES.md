@@ -740,3 +740,7 @@ No new errors after the shop commands. Demo `fluffos` save churn
 ## `set_skill()` 遇到本库没有文件的武功不再抛错（2026-10-18，KB 06 §7.256）
 
 `feature/skill.lpc` 里的 `set_skill()`、`map_skill()`、`prepare_skill()` 碰到没有武功文件的名字就 `error("F_SKILL: No such skill (…)")`，调用它们的 NPC `create()` 整个中断：NPC 载入不了，刷出它的房间也少一个人。本库有 404 个对象设了本库没有文件的武功（170 个名字，最多的是 `magic-unarmed`、`magic-sword`、`magic-ice`）。三处都改成 `return`：这一门武功不给、不映射，对象照常载入，只是少了它（缺的武功本身仍是内容缺口）。抽样载入这些对象：30 个里 24 个通过，其余 6 个停在别的错误上（`clone/guard/baoer`：*No program in object '/clone/guard/baoer'!；`d/city/task1/hua`：*No program in object '/d/city/task1/hua'!……）。（`scripts/lpc_guard_set_skill.py`）
+
+## 补回本库没有的基类文件（2026-10-18，KB 04 §6.15）
+
+下面这些基类本库没有，继承它们的对象（房间、NPC、物品）整批载入不了（`inherit XXX;` 的宏没定义，或者 `inherit "/std/…";` 的文件不在）。同系的库里有同名文件，两库有大量逐字节相同的文件（亲缘关系），所以从那边原样拷来，缺的宏补进全局头文件 `include/globals.h`：`/adm/daemons/wqa_room`（宏 `WQA_ROOM`）←chidi，79 个对象继承它，抽样 8/8 载入；`/inherit/weapon/pike`（宏 `PIKE`）←chidi，20 个对象继承它，抽样 8/8 载入；`/inherit/char/bhnpc`（宏 `BHNPC`）←chidi，3 个对象继承它，抽样 3/3 载入；`/feature/ridding`（宏 `F_RIDDING`）←chidi，2 个对象继承它，抽样 2/2 载入；`/inherit/char/bh_npc`（宏 `BH_NPC`）←tianxiawuxue，2 个对象继承它，抽样 2/2 载入。每个基类补回后单独载入、再抽样载入使用它的对象，基类载不进来或者一个用户也载不进来的就撤掉（本库撤掉了它们，不再补）。（`scripts/lpc_restore_bases.py`）

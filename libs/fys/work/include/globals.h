@@ -131,4 +131,10 @@
 #define SURCOAT                  "/std/armor/surcoat"
 #define SHIELD                   "/std/armor/shield"
 #define GUN                      "/std/weapon/gun"
+#define F_UNIQUE                 "/feature/unique"
+#define STICK                    "/inherit/weapon/stick"
+#define MACE                     "/inherit/weapon/mace"
+#define RAKE                     "/std/weapon/rake"
+#define BOW                      "/inherit/weapon/bow"
+#define ARCHERY                  "/std/weapon/archery"
 #undef PROFILE_COMMANDS

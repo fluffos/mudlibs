@@ -155,3 +155,7 @@
 #define F_SSERVER "/feature/sserver.lpc"
 #define F_DEALER                 "/feature/dealer"
 #define F_UNIQUE                 "/feature/unique"
+#define MACE                     "/std/weapon/mace"
+#define RAKE                     "/std/weapon/rake"
+#define ARCHERY                  "/std/weapon/archery"
+#define BOW                      "/inherit/weapon/bow"

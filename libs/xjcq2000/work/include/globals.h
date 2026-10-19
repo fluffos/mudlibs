@@ -207,3 +207,4 @@
 #define SSERVER                  "/inherit/sserver"
 #define SPEAR                    "/inherit/weapon/spear"
 #define NPC_SAVE                 "/inherit/char/npcsave"
+#define RING                     "/inherit/weapon/ring"

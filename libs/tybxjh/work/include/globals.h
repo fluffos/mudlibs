@@ -156,6 +156,7 @@
 #define SKILL_MODEL_DEFAULT    "/meskill/skill_model_default.lpc"
 #define F_VENDOR_SALE           "/feature/vendor_sale.lpc"
 #define F_BVENDOR        "/feature/vendor.lpc"
+#define STICK                    "/inherit/weapon/stick"
 
 // Profiling switches
 //

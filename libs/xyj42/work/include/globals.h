@@ -107,6 +107,7 @@
 #define F_TREEMAP		"/feature/treemap.lpc"
 #define F_UNIQUE		"/feature/unique.lpc"
 #define F_VENDOR		"/feature/vendor.lpc"
+#define UNARMED                  "/std/weapon/unarmed"
 
 // Profiling switches
 //

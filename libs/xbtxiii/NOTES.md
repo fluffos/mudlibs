@@ -342,3 +342,7 @@ definition, 2 `#undef` lines for macros that two headers define (`ROOM`, `STORY_
 ## 通向不存在房间的出口，按对面房间的回头出口改正（2026-10-18，KB 06 §7.257）
 
 房间出口 `"west": __DIR__"xxx"` 指向的文件本库没有，玩家走过去就被卡住（笔误、改过名的房间，或者没带进档案的编号房间）。对面的房间存在、并且它相反方向的出口正好指回这个房间，说明出口原本就是通向它：`/d/mingjiao/jmqshulin6` 的 `west`：`jmqjiguan` → `jmqshenmu`；`/d/ny/nroad0` 的 `west`：`/d/snow/nroad6` → `/d/ny/nroad5`。改动后每个出口都能解析到本库的文件（`scripts/lpc_fix_dead_exits.py`；目标在运行时本来就能载入的库——虚拟房间——不动）。
+
+## 补回本库没有的基类文件（2026-10-18，KB 04 §6.15）
+
+下面这些基类本库没有，继承它们的对象（房间、NPC、物品）整批载入不了（`inherit XXX;` 的宏没定义，或者 `inherit "/std/…";` 的文件不在）。同系的库里有同名文件，两库有大量逐字节相同的文件（亲缘关系），所以从那边原样拷来，缺的宏补进全局头文件 `include/globals.h`：`/feature/dealer`（宏 `F_DEALER`）←njhhdxdes2hx，8 个对象继承它，抽样 8/8 载入。每个基类补回后单独载入、再抽样载入使用它的对象，基类载不进来或者一个用户也载不进来的就撤掉（本库撤掉了它们，不再补）。（`scripts/lpc_restore_bases.py`）

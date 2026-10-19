@@ -162,3 +162,4 @@
 
 // others
 #define SAVE_EXTENSION ".o"
+#define F_JIEBAI                 "/feature/jiebai"

@@ -160,3 +160,4 @@
 
 
 #define SAVE_EXTENSION ".o"
+#define F_DEALER                 "/feature/dealer"

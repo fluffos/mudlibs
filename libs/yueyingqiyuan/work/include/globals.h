@@ -176,4 +176,5 @@
 #define MASTER_B	"TOP TEN 【 月影奇缘十大高手　　 】排行榜"
 
 #define PROFILE_COMMANDS
+#define UNARMED                  "/std/weapon/unarmed"
 #undef PROFILE_COMMANDS

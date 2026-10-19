@@ -150,6 +150,7 @@
 
 #define SKILL_MODEL_WEAPON     "/meskill/skill_model_weapon.lpc"
 #define SKILL_MODEL_DEFAULT    "/meskill/skill_model_default.lpc"
+#define SSERVER                  "/inherit/sserver"
 
 
 // Profiling switches

@@ -144,6 +144,9 @@
 #define F_BANKPAWNOWNER		"/feature/bankpawnowner.lpc"
 #define SAVE_EXTENSION          __SAVE_EXTENSION__
 #define F_UNIQUE                 "/feature/unique"
+#define MACE                     "/std/weapon/mace"
+#define RAKE                     "/std/weapon/rake"
+#define ARCHERY                  "/std/weapon/archery"
 // Profiling switches
 //
 // If you changed any of these defines, you'll need reboot to make it 

@@ -303,3 +303,7 @@ live `debug.log` 是 `libs/xkx100/log/debug.log`（Boot Time Fri Sep 4
 ## 宠物商人 `d/city/npc/oldman` 的变量叫 `class`（2026-10-18，KB 04 §6.14）
 
 `string *class = ({ "dragon", "phenix", ... })` 是全局变量，可 `class` 在 FluffOS 里是保留字（结构体），`syntax error, unexpected L_CLASS`，老头载入不了，城里的宠物买卖整个没了。变量改叫 `pet_class`（7 处；`pet->set("class", ...)` 里的是字符串，不动）。从起始房间沿出口走能到的房间和人物里，这是唯一一个载入失败的（`scripts/lpc_reach_census.py --load`：2,240 间房 2,240 间载入，786 个对象 785 个载入）。载入：通过。
+
+## 补回本库没有的基类文件（2026-10-18，KB 04 §6.15）
+
+下面这些基类本库没有，继承它们的对象（房间、NPC、物品）整批载入不了（`inherit XXX;` 的宏没定义，或者 `inherit "/std/…";` 的文件不在）。同系的库里有同名文件，两库有大量逐字节相同的文件（亲缘关系），所以从那边原样拷来，缺的宏补进全局头文件 `include/globals.h`：`/inherit/weapon/ring`（宏 `RING`）←haiyang2，2 个对象继承它，抽样 2/2 载入。每个基类补回后单独载入、再抽样载入使用它的对象，基类载不进来或者一个用户也载不进来的就撤掉（本库撤掉了它们，不再补）。（`scripts/lpc_restore_bases.py`）

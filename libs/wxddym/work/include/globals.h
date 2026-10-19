@@ -331,5 +331,10 @@
 #define INSTALL_COMBAT_TEST     1
 #define MEDAL                    "/inherit/armor/medal"
 #define RING                     "/inherit/weapon/ring"
+#define WQA_ROOM                 "/adm/daemons/wqa_room"
+#define PIKE                     "/inherit/weapon/pike"
+#define BHNPC                    "/inherit/char/bhnpc"
+#define F_RIDDING                "/feature/ridding"
+#define BH_NPC                   "/inherit/char/bh_npc"
 
 #undef PROFILE_COMMANDS

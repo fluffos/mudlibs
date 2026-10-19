@@ -226,5 +226,8 @@
 // Install information
 #define INSTALL_COMBAT_TEST     1
 #define BOSS                     "/inherit/char/boss"
+#define DEMONROOM                "/inherit/room/demonroom"
+#define BH_NPC                   "/inherit/char/bh_npc"
+#define RING                     "/inherit/weapon/ring"
 
 #undef PROFILE_COMMANDS

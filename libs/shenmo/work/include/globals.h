@@ -220,5 +220,12 @@
 
 #define PROFILE_COMMANDS
 #define PILL                     "/std/medicine/pill"
+#define F_DEALER                 "/feature/dealer"
+#define WORM                     "/inherit/char/worm"
+#define RING                     "/inherit/weapon/ring"
+#define F_BANKER                 "/feature/banker"
+#define RIVER                    "/inherit/room/river"
+#define F_COAGENT                "/feature/coagent"
+#define SNAKE                    "/inherit/char/snake"
 #undef PROFILE_COMMANDS
 

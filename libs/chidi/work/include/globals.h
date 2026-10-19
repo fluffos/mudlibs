@@ -192,4 +192,7 @@
 #define SAVE_EXTENSION ".o"
 #define SSERVER                  "/inherit/sserver"
 #define NPC_TRAINEE              "/inherit/char/trainee"
+#define RING                     "/inherit/weapon/ring"
+#define RAKE                     "/inherit/weapon/rake"
+#define ARCHERY                  "/std/weapon/archery"
 #undef PROFILE_COMMANDS

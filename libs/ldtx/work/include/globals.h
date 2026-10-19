@@ -131,6 +131,8 @@
 #define F_UNIQUE		"/feature/unique.lpc"
 #define F_VENDOR_SALE		"/feature/vendor_sale.lpc"
 #define SSERVER                  "/inherit/sserver"
+#define F_BANKER                 "/feature/banker"
+#define STICK                    "/inherit/weapon/stick"
 
 // Profiling switches
 //

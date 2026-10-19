@@ -175,4 +175,7 @@
 #define SAVE_EXTENSION ".o"
 #define SSERVER                  "/inherit/sserver"
 #define F_COAGENT                "/feature/coagent"
+#define XSWORD                   "/inherit/weapon/xsword"
+#define F_NOCLONE                "/feature/noclone"
+#define PIN                      "/inherit/weapon/pin"
 #undef PROFILE_COMMANDS

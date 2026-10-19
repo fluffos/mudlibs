@@ -133,6 +133,8 @@
 // in effect.
 
 #define PROFILE_COMMANDS
+#define F_DEALER                 "/feature/dealer"
+#define UNARMED                  "/std/weapon/unarmed"
 #undef PROFILE_COMMANDS
 
 

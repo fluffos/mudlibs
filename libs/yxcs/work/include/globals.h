@@ -202,4 +202,6 @@
 #define TEMP_DIR                                "/temp/"
 #define SAVE_EXTENSION ".o"
 #define NPC_TRAINEE              "/inherit/char/trainee"
+#define RAKE                     "/inherit/weapon/rake"
+#define ARCHERY                  "/std/weapon/archery"
 #undef PROFILE_COMMANDS

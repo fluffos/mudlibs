@@ -146,6 +146,8 @@
 #define F_BANKPAWNOWNER		"/feature/bankpawnowner.lpc"
 // added by tie@fy3 for mudosv22b9
 #define SAVE_EXTENSION		".o"
+#define STICK                    "/std/weapon/stick"
+#define UNARMED                  "/std/weapon/unarmed"
 // Profiling switches
 //
 // If you changed any of these defines, you'll need reboot to make it 
