@@ -1187,3 +1187,11 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 - `daemon/skill/dugu-jiujian.lpc` 两句出招描述里的乱码（`「\0唤Ｂ渚叛恪梗…飨?n的$l`、`$n\0?l`）按 cctx 等库里完整的同一个技能还原成 `「一剑落九雁」，削向$n的$l` 和 `$n的$l`；原来驱动报 `Illegal embedded NUL byte` / `Invalid UTF8 codepoint`，技能载入不了。
 
 逐个载入与 HEAD 对比，没有退步。
+
+## 两个斜杠开头的物件路径（2026-10-19，KB 06 §7.276）
+
+1 个文件、1 处物件路径写成 `//…`（如 `carry_object("//clone/cloth/hic_cloth")`）：`/d/youxia/npc/li.lpc`。当年的驱动不介意（路径先被规范化）；新驱动把原样的字符串交给 master 的 `valid_read()`，securityd 按 `//clone` 查目录，NPC 的 euid 没有权限，报 `Read access denied.`，NPC 载入不了。改成一个斜杠。
+
+## 缺失的 unew()（2026-10-19，KB 06 §7.262）
+
+本库的 NPC 和兵器在 `create()` 里调用 xkx 一系的模拟函数 `unew(file)`（`new()`，但遵守物件的 `unique` 上限），`/adm/obj/simul_efun.lpc` 里没有，调用者全部报 `Undefined function unew`（以及接收结果那一行的 `Bad assignment ( object vs unknown )`），载入不了。补上和 dtsl、pkuxkx、sjpl2 等库一样的 `unew()`（文件不存在时返回 0，不会让调用者死在 `carry_object()` 里）。

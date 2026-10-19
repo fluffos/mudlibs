@@ -480,3 +480,7 @@ Time Fri Sep 4 01:27:54 2026），无 `error:` / `Too deep recursion`。
 ## 技能的 `power_point()` 返回类型（2026-10-19，KB 04 §6.10）
 
 `kungfu/skill/` 下 11 个技能的 `int power_point(object me) { return 1.5; }` 返回的是浮点数，新驱动按 `int` 声明截成 1。声明改成 `float`，值回到设计的 1.1、1.5…。这个库里读 `power_point()` 的只有遗留的 `combatd.b`（二进制，不加载），`combatd.lpc` 不调用，所以对运行没有别的影响。
+
+## 玩家打造兵器模板没有打造者时（2026-10-19，KB 06 §7.275）
+
+`/d/npc/m_weapon/weapon/m_blade.lpc`、`/d/npc/m_weapon/weapon/m_club.lpc`、`/d/npc/m_weapon/weapon/m_staff.lpc`、`/d/npc/m_weapon/weapon/m_sword.lpc`、`/d/npc/m_weapon/weapon/m_whip.lpc`（共 5 个）的 `create()` 开头 `me = this_player();` 之后无条件读 `me->query("weapon/name")` 等打造数据。房间刷新时没有人在场（`me` 为 0），或者 NPC 在别的 NPC 的命令环境里 `carry_object()` 这个模板（NPC 的 `weapon` 属性是文件名字符串），旧驱动里读出来是 0 或字符串，`switch` 照样落到 default；新驱动报 `Bad argument 1 to EFUN call_other()` / `Bad argument 1 to switch`，NPC 和它所在的房间载入不了（`--walk` 普查里一个玩家走进房间就触发）。在 `//读入数据` 之后加 `if (!me || !mapp(me->query("weapon"))) { setup(); return; }`：没有打造者就留一个没有名字的空模板，玩家打造的流程不变。

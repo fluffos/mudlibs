@@ -666,3 +666,7 @@ A room exit named a file the lib does not have, so the player was stuck (a typo,
 ## Macros the global header lost (2026-10-19, KB 04 6.16)
 
 `/adm/include/std.h` did not define `MOON_DESC`; the objects that use them (1 on the list) stopped at `Undefined variable`/`Undefined function`, and since the compiler stops at the first undefined name the errors and warnings behind it stayed hidden. The sibling libs of the same lineage carry these lines in their headers: the copy of the sibling with the most files in common was added after the last `#define` of `/adm/include/std.h`; every path in a macro body exists in this lib. the listed objects have other errors as well and still do not load. (`scripts/lpc_restore_defines.py`)
+
+## Object paths with two leading slashes (2026-10-19, KB 06 §7.276)
+
+5 file(s), 5 site(s) wrote an object path as `//…` (like `carry_object("//clone/cloth/hic_cloth")`): `/d/azha/town/market2.lpc`, `/d/azha/town/market3.lpc`, `/d/azha/town/market4.lpc`, `/d/azha/town/market5.lpc`, `/d/azha/town/market6.lpc`. The driver these games ran on did not mind (the path was normalised first); this one hands the string to the master's `valid_read()` as written, securityd looks up `//clone`, the NPC's euid has no entry and the answer is `Read access denied.`: the NPC does not load. One slash now.

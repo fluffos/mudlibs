@@ -816,3 +816,7 @@ Verification: the edited files and the includers of the edited headers, 163 obje
 ## Macros the global header lost (2026-10-19, KB 04 6.16)
 
 `/include/include.h` did not define `UDP_WARNING`, `VT_TA_B`, `VT_TA_AO`, `UDP_GTELL`, `UDP_GWIZMSG`, `WIZARD_I_BUSY_LEVEL`, `UDP_MUDLIST_Q`, `UDP_MUDLIST_A` and 6 more; the objects that use them (8 on the list) stopped at `Undefined variable`/`Undefined function`, and since the compiler stops at the first undefined name the errors and warnings behind it stayed hidden. The sibling libs of the same lineage carry these lines in their headers: the copy of the sibling with the most files in common was added after the last `#define` of `/include/include.h`; every path in a macro body exists in this lib. 1 of the listed objects load now, the rest need something else. (`scripts/lpc_restore_defines.py`)
+
+## Object paths with two leading slashes (2026-10-19, KB 06 §7.276)
+
+4 file(s), 4 site(s) wrote an object path as `//…` (like `carry_object("//clone/cloth/hic_cloth")`): `/players/goldsun/nottingham/room/tower_ne2.lpc`, `/players/goldsun/nottingham/room/tower_nw2.lpc`, `/players/goldsun/nottingham/room/tower_se2.lpc`, `/players/goldsun/nottingham/room/tower_sw2.lpc`. The driver these games ran on did not mind (the path was normalised first); this one hands the string to the master's `valid_read()` as written, securityd looks up `//clone`, the NPC's euid has no entry and the answer is `Read access denied.`: the NPC does not load. One slash now.

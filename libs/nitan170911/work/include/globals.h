@@ -327,6 +327,8 @@
 #define CENTER_OB "/d/city/guangchang"
 #define EXIT_SIZE 2
 #define EXIT(n) n + EXIT_SIZE + 1
+#define ARMOR_D(x) ("/clone/armor/" + x)
+#define BINGQI_D(x) ("/clone/weapon/" + x)
 
 #undef PROFILE_COMMANDS
 #undef COUNT_COMMAND_TIMECOST

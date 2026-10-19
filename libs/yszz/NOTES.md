@@ -269,3 +269,7 @@ After reboot, `buy jitui` purchased 炸鸡腿 and changed 1 黄金 into 99
 ## 被注释吞掉的 inherit / include（2026-10-19，KB 06 §7.274）
 
 `/daemon/class/moon/moonshentong/shiyue.lpc`：`inherit SSERVER;`。这些指令接在上一行 `//` 注释的末尾（档案里丢了换行），成了注释的一部分，驱动看不到：缺 `inherit` 的技能报 `Undefined function offensive_target`，缺 `#include <weapon.h>` 的兵器报语法错误。`scripts/lpc_fix_swallowed_directive.py` 把换行放回去。载入检查 1 个文件，1 个原来编译不过、现在载入，没有退步。
+
+## 玩家打造兵器模板没有打造者时（2026-10-19，KB 06 §7.275）
+
+`/d/obj/m_weapon/weapon/m_blade.lpc`、`/d/obj/m_weapon/weapon/m_club.lpc`、`/d/obj/m_weapon/weapon/m_hammer.lpc`、`/d/obj/m_weapon/weapon/m_staff.lpc`、`/d/obj/m_weapon/weapon/m_sword.lpc`、`/d/obj/m_weapon/weapon/m_whip.lpc`（共 6 个）的 `create()` 开头 `me = this_player();` 之后无条件读 `me->query("weapon/name")` 等打造数据。房间刷新时没有人在场（`me` 为 0），或者 NPC 在别的 NPC 的命令环境里 `carry_object()` 这个模板（NPC 的 `weapon` 属性是文件名字符串），旧驱动里读出来是 0 或字符串，`switch` 照样落到 default；新驱动报 `Bad argument 1 to EFUN call_other()` / `Bad argument 1 to switch`，NPC 和它所在的房间载入不了（`--walk` 普查里一个玩家走进房间就触发）。在 `//读入数据` 之后加 `if (!me || !mapp(me->query("weapon"))) { setup(); return; }`：没有打造者就留一个没有名字的空模板，玩家打造的流程不变。

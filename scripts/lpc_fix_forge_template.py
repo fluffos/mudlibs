@@ -15,7 +15,16 @@ death-area gargoyles, ...) is created while some other living is the command giv
 `me->query("weapon/lv")` answers that string and `switch (w_lv)` in `set_desc()` dies with `Bad argument 1 to switch  Expected: int  Got: "/d/npc/..."`
 (the NPC and the room whose reset created it never load; KB 06 section 7.275).  The old driver let the switch fall through to its default.
 
-The fix tests what the code reads: `if (me && mapp(me->query("weapon"))) {`.  Binary-safe, line endings kept; without --apply the plan is printed
+The fix tests what the code reads: `if (me && mapp(me->query("weapon"))) {`.  Many libs' templates have no `if (me)` at all (`w_name = me->query("weapon/name");`
+straight after `//读入数据`, 333 files in 69 libs: hy, hy2000, xkx2001 ...): there `new()` outside a command raised `Bad argument 1 to EFUN call_other()`, and under an
+NPC the same `switch`; the tool inserts, after the `//读入数据` line,
+
+    if (!me || !mapp(me->query("weapon"))) {
+      setup();
+      return;
+    }
+
+(every one of them ends its create() with `setup();`).  Binary-safe, line endings kept; without --apply the plan is printed
 (FIX lines, one per file); idempotent."""
 import os
 import re
@@ -23,6 +32,7 @@ import subprocess
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PAT2 = re.compile(rb'(me = this_player\(\);[ \t]*(\r?\n)[ \t]*//\xe8\xaf\xbb\xe5\x85\xa5\xe6\x95\xb0\xe6\x8d\xae[ \t]*\r?\n)([ \t]*)(w_name = me->query\("weapon/name"\);)')
 PAT = re.compile(rb"(me = this_player\(\);[ \t]*\r?\n[ \t]*//\xe8\xaf\xbb\xe5\x85\xa5\xe6\x95\xb0\xe6\x8d\xae[ \t]*\r?\n[ \t]*)if[ \t]*\([ \t]*me[ \t]*\)([ \t]*\{)")
 
 
@@ -58,6 +68,12 @@ def main():
         if not has_m_weapon(slug):
             continue        # wuhanzhan: no M_WEAPON base at all, the templates never compiled (a lost-macro case, KB 04 section 6.16)
         new, k = PAT.subn(lambda m: m.group(1) + b'if (me && mapp(me->query("weapon")))' + m.group(2), b)
+        if not k:
+            def ins(m):
+                nl, ind = m.group(2), m.group(3)
+                return (m.group(1) + ind + b'if (!me || !mapp(me->query("weapon"))) {' + nl + ind + b"  setup();" + nl + ind + b"  return;" + nl + ind + b"}" + nl
+                        + ind + m.group(4))
+            new, k = PAT2.subn(ins, b)
         if not k:
             continue
         n += 1

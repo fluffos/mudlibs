@@ -400,3 +400,15 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 ## 玩家打造兵器模板被 NPC 带上（2026-10-19，KB 06 §7.275）
 
 `/d/npc/m_weapon/weapon/m_axe.lpc`、`/d/npc/m_weapon/weapon/m_club.lpc`、`/d/npc/m_weapon/weapon/m_dagger.lpc`、`/d/npc/m_weapon/weapon/m_fork.lpc`、`/d/npc/m_weapon/weapon/m_spear.lpc`、`/d/npc/m_weapon/weapon/m_sword.lpc`（共 6 个）的 `create()` 用 `this_player()` 读打造数据（`me->query("weapon/lv")` 等）。NPC 的 `weapon` 属性是兵器文件名（字符串），NPC 在别的 NPC 的命令环境里 `carry_object()` 这个模板时，`set_desc()` 里 `switch (w_lv)` 拿到的是那个字符串，驱动报 `Bad argument 1 to switch`，房间和 NPC 都载入不了（旧驱动里 switch 落到 default）。把 `if (me) {` 改成 `if (me && mapp(me->query("weapon"))) {`，玩家打造的流程不变。
+
+## 两个斜杠开头的物件路径（2026-10-19，KB 06 §7.276）
+
+32 个文件、32 处物件路径写成 `//…`（如 `carry_object("//clone/cloth/hic_cloth")`）：`/adm/daemons/logind.lpc`、`/d/dali/npc/liumang.lpc`、`/d/dali/npc/liumangtou.lpc`、`/d/gaochang/npc/jinxiangyu.lpc`、`/d/heimuya/zhaoze/npc/yinggu.lpc`、`/d/kunlun/npc/dizi.lpc` 等。当年的驱动不介意（路径先被规范化）；新驱动把原样的字符串交给 master 的 `valid_read()`，securityd 按 `//clone` 查目录，NPC 的 euid 没有权限，报 `Read access denied.`，NPC 载入不了。改成一个斜杠。载入检查：这批 NPC 在 HEAD 上都载入不了，现在都能载入。
+
+## d/lingjiu/jian.lpc 的 do_huode（2026-10-19，KB 04 §6.10）
+
+`do_huode()` 里用了没有声明的 `me`（`me->add("xyzx_sys/level", 1)`），驱动报 `Undefined variable 'me'`，整个房间（灵鹫宫的「剑」）载入不了；原档案里同样编不过。补上 `object me = this_player();`。注意：`huode 技能` 是本库作者自己写的命令——`xyzx_sys/level` +1、`score` +10000、全部技能 +10，没有任何限制；房间载入后这条命令按原样生效，是否保留由维护者决定。
+
+## 玩家打造兵器模板没有打造者时（2026-10-19，KB 06 §7.275）
+
+`/d/npc/m_weapon/weapon/m_staff.lpc`、`/d/npc/m_weapon/weapon/m_whip.lpc`（共 2 个）的 `create()` 开头 `me = this_player();` 之后无条件读 `me->query("weapon/name")` 等打造数据。房间刷新时没有人在场（`me` 为 0），或者 NPC 在别的 NPC 的命令环境里 `carry_object()` 这个模板（NPC 的 `weapon` 属性是文件名字符串），旧驱动里读出来是 0 或字符串，`switch` 照样落到 default；新驱动报 `Bad argument 1 to EFUN call_other()` / `Bad argument 1 to switch`，NPC 和它所在的房间载入不了（`--walk` 普查里一个玩家走进房间就触发）。在 `//读入数据` 之后加 `if (!me || !mapp(me->query("weapon"))) { setup(); return; }`：没有打造者就留一个没有名字的空模板，玩家打造的流程不变。

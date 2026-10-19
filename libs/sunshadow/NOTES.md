@@ -840,3 +840,7 @@ A room exit named a file the lib does not have, so the player was stuck (a typo,
 ## Calls to an inherited function no parent has (2026-10-19, KB 06 7.259)
 
 `/d/antioch/valley/val.lpc`, `/d/dagger/aketon/rooms/tree1/1one5.lpc` (2 objects) call `::create();`/`::init();` where the inherited bases have no such function. The old driver took such a call for a no-op returning 0; this one stops with `Unable to find the inherited function 'init'.`. These objects had only this error (it was uncovered once the others cleared); each call is deleted (`return ::fn(...)` becomes `return 0;`). (`scripts/lpc_fix_dangling_super.py`)
+
+## Object paths with two leading slashes (2026-10-19, KB 06 §7.276)
+
+5 file(s), 5 site(s) wrote an object path as `//…` (like `carry_object("//clone/cloth/hic_cloth")`): `/d/azha/town/market2.lpc`, `/d/azha/town/market3.lpc`, `/d/azha/town/market4.lpc`, `/d/azha/town/market5.lpc`, `/d/azha/town/market6.lpc`. The driver these games ran on did not mind (the path was normalised first); this one hands the string to the master's `valid_read()` as written, securityd looks up `//clone`, the NPC's euid has no entry and the answer is `Read access denied.`: the NPC does not load. One slash now.

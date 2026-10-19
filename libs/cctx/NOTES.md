@@ -415,3 +415,11 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply c
 - `d/city2/bingqiku.lpc`（东厂兵器库）把北面的出口注释掉了（`bingyin1` 这个房间不存在），却留着 `create_door("north", ...)`，驱动报 `Room: create_door: attempt to create a door without exit.`，房间载入不了。删掉那一行门。
 
 逐个载入与 HEAD 对比，没有退步。
+
+## 玉蜂的年龄（2026-10-19，KB 06 §7.273 同类）
+
+`d/gumu/npc/yufeng.lpc`（玉蜂）的 `create()` 写 `age = this_player()->query("age") + random(40);`：房间刷新时没有人在场，`this_player()` 是 0，旧驱动答 0，新驱动报 `Bad argument 1 to EFUN call_other()`，古墓密林 `d/gumu/milin2`–`milin4` 里的蜜蜂刷不出来，`--walk` 检查时这几个房间也走不进去。改成 `(this_player() ? this_player()->query("age") : 0) + random(40)`，有玩家在场时年龄仍随玩家。同类写法在别的库多半是玩家召唤物（`mind_beast` 等，在命令里创建），不是缺陷；只修了普查（reach census）报告的这一处。
+
+## 玩家打造兵器模板没有打造者时（2026-10-19，KB 06 §7.275）
+
+`/d/npc/m_weapon/weapon/m_blade.lpc`、`/d/npc/m_weapon/weapon/m_club.lpc`、`/d/npc/m_weapon/weapon/m_staff.lpc`、`/d/npc/m_weapon/weapon/m_sword.lpc`、`/d/npc/m_weapon/weapon/m_whip.lpc`（共 5 个）的 `create()` 开头 `me = this_player();` 之后无条件读 `me->query("weapon/name")` 等打造数据。房间刷新时没有人在场（`me` 为 0），或者 NPC 在别的 NPC 的命令环境里 `carry_object()` 这个模板（NPC 的 `weapon` 属性是文件名字符串），旧驱动里读出来是 0 或字符串，`switch` 照样落到 default；新驱动报 `Bad argument 1 to EFUN call_other()` / `Bad argument 1 to switch`，NPC 和它所在的房间载入不了（`--walk` 普查里一个玩家走进房间就触发）。在 `//读入数据` 之后加 `if (!me || !mapp(me->query("weapon"))) { setup(); return; }`：没有打造者就留一个没有名字的空模板，玩家打造的流程不变。

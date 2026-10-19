@@ -493,3 +493,7 @@ fresh driver boot plus the full long-sit idle window below.
 ## Save files the onboarding transcode broke (2026-10-15, KB 03 §4.4)
 
 `/adm/save/boards/spell_idea.o`, `/adm/save/letters/2/1249616752.o`, `/adm/save/users/rid/kenshiro.o`: the archive's Windows-1252 bytes (a `\x92` apostrophe, `¿`, `¡`) were run through `iconv -f gb18030 -c`, which dropped an undecodable byte together with the quote after it, so `restore_object()` stopped with `Illegal mapping format` and the object started empty. Re-decoded from raw/ as Windows-1252 (`scripts/lpc_save_encoding.py --from-raw`); the driver restores each one now (`scripts/lpc_save_restore_check.py`).
+
+## Object paths with two leading slashes (2026-10-19, KB 06 §7.276)
+
+2 file(s), 2 site(s) wrote an object path as `//…` (like `carry_object("//clone/cloth/hic_cloth")`): `/d/events/4thjuly2008/rooms/icystuff/final.lpc`, `/wizards/pyro/personal/fireball.lpc`. The driver these games ran on did not mind (the path was normalised first); this one hands the string to the master's `valid_read()` as written, securityd looks up `//clone`, the NPC's euid has no entry and the answer is `Read access denied.`: the NPC does not load. One slash now.

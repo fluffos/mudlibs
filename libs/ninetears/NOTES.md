@@ -841,3 +841,7 @@ These base classes are not in the lib, so every object that inherits them (rooms
 ## Objects that call an inherited function no parent has (2026-10-19, KB 06 7.259)
 
 `::create();`, `::init();` and `return ::buy_object(who, item);` were written against a parent that has the function; this lib's parents do not, the old driver took the call for a no-op returning 0, and the current driver stops at compile time with `Unable to find the inherited function`, so the object never loads. A call written as a statement is deleted, `return ::f(...)` becomes `return 0;` (`return;` in a void function), which is what the old driver did. 5 calls in 5 files: `::race_heartbeat()` (5). Only files whose every error was this one were edited; a file that also has another error (usually a parent that is itself missing) is left until the parent is restored. (`scripts/lpc_fix_dangling_super.py`)
+
+## Object paths with two leading slashes (2026-10-19, KB 06 §7.276)
+
+3 file(s), 3 site(s) wrote an object path as `//…` (like `carry_object("//clone/cloth/hic_cloth")`): `/d/faeleen/npc/braum_ormerod.lpc`, `/d/faeleen/npc/tabernero_rongrond.lpc`, `/d/keroon/keroon/keroon_pobre/armeria_guardias_keroon.lpc`. The driver these games ran on did not mind (the path was normalised first); this one hands the string to the master's `valid_read()` as written, securityd looks up `//clone`, the NPC's euid has no entry and the answer is `Read access denied.`: the NPC does not load. One slash now.
