@@ -1210,3 +1210,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply d
 ## 治疗/疗伤的属性名（2026-10-15，KB 06 §7.241）
 
 `receive_heal()`/`receive_curing()` 也只接受本库的种类。1 个文件（多为只调用 `receive_heal`/`receive_curing` 的药物、NPC）来自侠客行体系，按 qi→kee、jing→本库学习指令消耗的池、neili→force 改名（`scripts/lpc_port_es_props.py --any-file`）。
+
+## NPCs carrying items this lib never had (2026-10-15, KB 06 §7.73)
+
+68 statements in 45 files did `carry_object("<missing file>")->wear()` (or `wield()`, `set_amount()`) in `create()`: `carry_object()` returned 0, the call raised `Bad argument 1 to EFUN call_other()` and the NPC never loaded (most common: `/clone/misc/cloth`, `/u/smokes/junying/obj/blade`, `/d/city/obj/cloth`). Each is now a guarded block (`scripts/lpc_guard_carry_object.py`): the NPC loads without the item, and carries it again if the file comes back. Load check: 0 of the changed files loaded before, 18 after (18 newly), no regressions.

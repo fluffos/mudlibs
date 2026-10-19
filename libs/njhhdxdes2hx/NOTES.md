@@ -331,3 +331,7 @@ admin 登入时间戳漂移已在提交前用 `git checkout --` 撤销。
 原档在右引号前有一个孤立的 GBK 前导字节，转 UTF-8 时连引号一起丢了（如 `return name + HIM "发作身亡了;`），字符串一直延续到后面，文件编译失败：`/class/shaolin/du`、`/daemon/class/shaolin/du`。补回引号（`scripts/lpc_fix_eaten_quote.py`）。
 
 补（同日）：上面两份 `du.h` 的修改当时漏提交了（提交时只取了 `.lpc`），现补上；`du-e1` 两份没有 `#include <ansi.h>`，`du.h` 里的 `HIR`/`NOR` 成了未定义标识符，一并补上。HEAD 上 `du-*` 8 个文件一个都载入不了，伏魔圈（`/d/shaolin/fumoquan`）的渡难、渡厄、渡劫三僧从未出现；现在 8 个全部通过。
+
+## NPC 带着本库没有的物品，载入失败（2026-10-15，KB 06 §7.73）
+
+42 个文件、53 处在 `create()` 里 `carry_object("<本库没有的文件>")->wear()`（或 `wield()`、`set_amount()`）：`carry_object()` 得 0，接着的调用报 `Bad argument 1 to EFUN call_other()`，NPC 根本载入不了，该有它的房间里就少了这个人。多是从别的系统搬来的 NPC 用了原系统的物品路径（最常见：`/d/tangmen/obj/jinyi`、`/d/yueyang/npc/obj/tiejia`、`/d/tangmen/obj/skirt`）。每处改为 `{ object carried_ob = carry_object(...); if (carried_ob) carried_ob->wear(); }`（`scripts/lpc_guard_carry_object.py`）：NPC 照常出现，只是不带这件东西；文件补回来（或是虚拟对象）照样会带上。载入检查：改动的文件改前能载入 41 个，改后 41 个（0 个原来载入不了），没有退步；其余 1 个另有原因（多为 `set_skill()` 了本库没有的武功）。

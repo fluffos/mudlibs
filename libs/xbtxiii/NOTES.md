@@ -326,3 +326,7 @@ definition, 2 `#undef` lines for macros that two headers define (`ROOM`, `STORY_
 ## 绝情谷（d/ultimate/first）是没有完成的区域（2026-10-15，KB 06 §7.253）
 
 从 `d/ny/droad2` 往北可以走进去，但这条任务链在原档案里就走不通：`secret_house` 编译不过（`__DIR__"npc/xiaolongnv:1,` 少了引号，`greeting()` 里 `npc` 从未赋值、`thank_player(object me)`、`if(temp=0)`），而它是唯一放小龙女的地方；`npc/xiaolongnv.lpc` 其实是杨过的副本（`set_name("杨过", ({ "yang guo" ...`），`climb_up()` 要找的 `xiao long nv` 根本不存在；`come_shuitan()` 声明时只有 `me` 一个参数（call_out 传了 `me, yangguo, xiaolongnv`），区域搬进 `first/` 之后 `/d/ultimate/shuitan`、`gu_di1`、`jueqinggu` 这些路径也没改；最后挖出的奖励 `/d/ultimate/obj/first_stone` 不存在。补全要写新的内容（小龙女、奖励），超出修程序错误的范围，这次没有改动，记在这里。
+
+## NPC 带着本库没有的物品，载入失败（2026-10-15，KB 06 §7.73）
+
+191 个文件、233 处在 `create()` 里 `carry_object("<本库没有的文件>")->wear()`（或 `wield()`、`set_amount()`）：`carry_object()` 得 0，接着的调用报 `Bad argument 1 to EFUN call_other()`，NPC 根本载入不了，该有它的房间里就少了这个人。多是从别的系统搬来的 NPC 用了原系统的物品路径（最常见：`/clone/misc/cloth`、`/clone/weapon/changjian`、`/d/city/obj/duanjian`）。每处改为 `{ object carried_ob = carry_object(...); if (carried_ob) carried_ob->wear(); }`（`scripts/lpc_guard_carry_object.py`）：NPC 照常出现，只是不带这件东西；文件补回来（或是虚拟对象）照样会带上。载入检查：改动的文件改前能载入 1 个，改后 145 个（144 个原来载入不了），没有退步；其余 46 个另有原因（多为 `set_skill()` 了本库没有的武功）。

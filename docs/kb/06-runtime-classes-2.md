@@ -71,6 +71,29 @@ object c; c = carry_object(p); if (c) c->wear();
   NOT the driver; declare first.
 - **Mini-archive variant (`xo`):** the target was relocated locally;
   repath and keep the guard. Check `vendor_goods` paths too.
+- **Corpus sweep (2026-10-15):** `scripts/lpc_guard_carry_object.py SLUG... --apply` rewrote every
+  full statement `carry_object("<missing literal path>")->wear()/wield()/set_amount(...)` as
+  `{ object carried_ob = carry_object("..."); if (carried_ob) carried_ob->wear(); }` (no
+  function-level declaration needed; sibling blocks may reuse the name, a nested block may not:
+  `Illegal to redeclare local name`). 5,367 sites in 3,931 files, 164 libs: transplanted NPCs
+  carrying another lineage's paths (shenmo 679, hy 284, zzfy 240 ...) and wizard items
+  (`/u/wind/gun` in the xkx 李凌). The NPC now loads without the item; a virtual or restored path
+  is carried as before. NPCs that still fail usually `set_skill()` a skill the lib lacks.
+- **The base's own `carry_object()` can be the thrower (2026-10-15, `--base`).** The xyj / sjsh / mhxy lineage's `std/char/npc.lpc`
+  starts `carry_object(string file)` with `if (file->query_unique())`: a call_other on the path string, which on this driver
+  RAISES `call_other() couldn't find object` for a missing file before `new()` can return 0, so the call-site guard above
+  does nothing there. 449 of shenmo's NPCs -- every sect master in `kungfu/class/` and `daemon/class/` -- failed to load, in
+  the tree too. `if (!objectp(load_object(file))) return 0;` before that statement (36 files, 32 libs; `--base`) revived them;
+  sjshwzb and sjshwzjqb already had the `file_size()` form of the same guard (section 7.99). Test a sample NPC after either
+  fix: at HEAD the load error names the missing item, in a fixed tree it loads.
+- **Third thrower: the simul_efun `unew()` (`--unew`).** The xkx lineage's `carry_object()` calls `unew(file)` (new, but honour
+  `unique`), whose first lines are `object ob = new(str); int i = ob->query("unique"), ...`: `new()` of a missing file returns 0
+  and the query on it raises `Bad argument 1 to EFUN call_other()` inside `unew` (jh2006: 124 NPCs in 13 libs, all the
+  Miaojiang masters among them). `if (!ob) return ob;` before the first query, as fyzfqyy's copy already had (15 libs; the
+  declaration `int i = ob->query("unique"), j, k;` is split so the guard can precede the assignment).
+  **Detection order for a sample NPC that will not load:** read the first error line -- `call_other() couldn't find object
+  '<item>'` is `file->query_unique()` in the base's `carry_object()`; `Bad argument 1 to EFUN call_other()` with
+  `unew()` in the trace is this one; `Bad argument 1` at the NPC's own `->wear()` line is the call-site shape.
 
 ### 7.74 UNRESOLVED: `ob->move(REVIVE_ROOM)` never returns inside a `call_out` after `reincarnate()` (`wmkj`)
 Suspect `notify_fail` in `move()`'s equip guard. Instrument inside

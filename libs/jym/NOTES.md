@@ -552,3 +552,7 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## 移进不存在的巫师房间（2026-10-15，KB 06 §7.251）
 
 用完的物品、要“离开”的 NPC、掷在空中的兵器被移进巫师的工作室（`/u/aln/`、`/u/ryu/`、`/u/wsky/`），本库没有这些房间。本库的 `move()` 用 `call_other(dest, "???")` 载入目的地，找不到文件就报 `call_other() couldn't find object`，后面的语句都不执行：药（人参、狐狸皮、虎骨，`clone/drug/cb_renshen`、`clone/drug/hugu`、`clone/drug/hulipi`）吃下后药效已经生效，随后报错：`call_out("destroy", 31)` 没有排上，药一直留在身上，药效过去后可以再吃；逍遥三笑散（`d/xingxiu/npc/obj/sanxiao`）弹出之后报错，毒药留在身上，可以一再使用；疯魔杖法的掷杖绝招（`kungfu/skill/fengmo-zhang/fengmo`）：内力、精力已扣，杖已卸下，随后报错；接回杖的 `check_fight` 没有排上，`fengmo` 标记不再清除，重新登录之前不能再用；天山杖法「飞杖」（`kungfu/skill/tianshan-zhang/feizhang`）：杖“撞到山石上断成无数截”之后报错，杖仍留在身上。6 个文件改为移进本库的虚空房间 `VOID_OB`（`/clone/misc/void`），与原作把它们“停放”在巫师房间的用意相同。
+
+## NPC 带着本库没有的物品，载入失败（2026-10-15，KB 06 §7.73）
+
+23 个文件、25 处在 `create()` 里 `carry_object("<本库没有的文件>")->wear()`（或 `wield()`、`set_amount()`）：`carry_object()` 得 0，接着的调用报 `Bad argument 1 to EFUN call_other()`，NPC 根本载入不了，该有它的房间里就少了这个人。多是从别的系统搬来的 NPC 用了原系统的物品路径（最常见：`/d/kunlun/obj/pao3`、`/d/shenlong/obj/cloth`、`/d/xueshan/obj/yinlun`）。每处改为 `{ object carried_ob = carry_object(...); if (carried_ob) carried_ob->wear(); }`（`scripts/lpc_guard_carry_object.py`）：NPC 照常出现，只是不带这件东西；文件补回来（或是虚拟对象）照样会带上。载入检查：改动的文件改前能载入 1 个，改后 21 个（20 个原来载入不了），没有退步；其余 2 个另有原因（多为 `set_skill()` 了本库没有的武功）。

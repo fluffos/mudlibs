@@ -947,3 +947,7 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 ## 回龙杖「神龙摆尾」从来用不出（2026-10-15，KB 06 §7.246）
 
 `if (!objectp(me->query_temp("weapon") || weapon->query("skill_type") != "staff"))`：括号放错，`objectp()` 包住了整个 `||`，拿着兵器时 `objectp(1)` 为假，永远“双手应该持杖”；空手时又去读从未赋值的 `weapon`，报错。改为先存兵器再判断。
+
+## NPC 带着本库没有的物品，载入失败（2026-10-15，KB 06 §7.73）
+
+8 个文件、34 处在 `create()` 里 `carry_object("<本库没有的文件>")->wear()`（或 `wield()`、`set_amount()`）：`carry_object()` 得 0，接着的调用报 `Bad argument 1 to EFUN call_other()`，NPC 根本载入不了，该有它的房间里就少了这个人。多是从别的系统搬来的 NPC 用了原系统的物品路径（最常见：`/d/tangmen/obj/qinglianzi`、`/d/tangmen/obj/feidao`、`/d/tangmen/obj/fhshi`）。每处改为 `{ object carried_ob = carry_object(...); if (carried_ob) carried_ob->wear(); }`（`scripts/lpc_guard_carry_object.py`）：NPC 照常出现，只是不带这件东西；文件补回来（或是虚拟对象）照样会带上。载入检查：改动的文件改前能载入 0 个，改后 5 个（5 个原来载入不了），没有退步；其余 3 个另有原因（多为 `set_skill()` 了本库没有的武功）。

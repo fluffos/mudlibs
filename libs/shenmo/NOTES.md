@@ -1104,3 +1104,11 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 ## 燃木刀法「焚天」的效果一秒就消失（2026-10-15，KB 06 §7.246）
 
 每秒检查的 `check_fight()` 声明了 `object weapon;` 却从不赋值，条件里的 `!weapon` 永远为真，效果在第一次检查时就被撤掉。把这一项改为 `!objectp(weapon = me->query_temp("weapon"))`，先存兵器再判断刀的种类（本库 `SKILL_D` 指向 `daemon/skill/`，生效的是那一份；`kungfu/skill/` 里的旧副本一并改正）。
+
+## NPC 带着本库没有的物品，载入失败（2026-10-15，KB 06 §7.73）
+
+448 个文件、638 处在 `create()` 里 `carry_object("<本库没有的文件>")->wear()`（或 `wield()`、`set_amount()`），多是从别的系统搬来的 NPC 用了原系统的物品路径（最常见：`/clone/weapon/changjian`、`/clone/misc/cloth`、`/clone/cloth/cloth`）。本库 NPC 基类 `sjsh/std/char/npc.lpc`、`std/char/npc.lpc` 的 `carry_object()` 第一句是 `if (file->query_unique())`，对不存在的文件直接 call_other，驱动在这里报 `call_other() couldn't find object`，`new()` 来不及返回 0，所以只要 NPC 带着一件本库没有的物品就载入不了（调用处加判断对它无效）。在它前面补 `if (!objectp(load_object(file))) return 0;`（`--base`），缺的物品就跳过，NPC 照常载入；上面那些调用处同样改成带判断的块（基类以后改回去也不怕）。载入检查：改动的文件改前能载入 2 个，改后 412 个（410 个原来载入不了），没有退步；其余 39 个另有原因（多为 `set_skill()` 了本库没有的武功）。
+
+## 清风的倭寇奖励：整数除以浮点数（2026-10-18，KB 04 §6.10 `Float value truncated to int`）
+
+`d/sunrise/npc/qingfeng` 的 `give_reward()` 按经验逐级缩减奖励：`mainexp /= 0.8`、`/= 0.9`、`/= 1.1`、`/= 1.2`、`/= 1.5`，`mainexp` 是 int，驱动先把右边的浮点数截成整数再运算：经验超过 15 亿时 `/= 0.9` 变成 `/= 0`（除以零，奖励发不出来），其余的 `/= 1.1`、`1.2`、`1.5` 都变成 `/= 1`，该缩减的奖励一点没缩减。改为 `mainexp = to_int(mainexp / 0.8)`（其余同），按原意先除后取整。

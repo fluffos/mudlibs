@@ -224,3 +224,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply y
 ## 表情档读不出来（2026-10-15，KB 03 §4.4）
 
 `data/emoted.o` 中 `grin`（邪惡的笑）一条在原档里就坏了：`"target_res"$P指著自己。說道﹕就是我﹗","others_target":"$N指著$n。"`，一个键丢了后半截，后面接的是别的表情的文字；`restore_object()` 报 `Illegal mapping format`，整个表情系统一个表情都没有。按本条自己的字段补回：`target_rest` 取 `myself_rest` 把 `$P` 换成 `$N`（同档 groan 等表情都是这样），`others_target` 取 `target_self` 把 `$T` 换成 `$n`（同系各库 grin 的 others_target 就是这句）。丢失的那个表情无法恢复。驱动核对能读回。
+
+## NPC 带着本库没有的物品，载入失败（2026-10-15，KB 06 §7.73）
+
+1 个文件、2 处在 `create()` 里 `carry_object("<本库没有的文件>")->wear()`（或 `wield()`、`set_amount()`）：`carry_object()` 得 0，接着的调用报 `Bad argument 1 to EFUN call_other()`，NPC 根本载入不了，该有它的房间里就少了这个人。多是从别的系统搬来的 NPC 用了原系统的物品路径（最常见：`/u/e/eeman/eq/cloth`、`/u/e/eeman/weapon/sword`）。每处改为 `{ object carried_ob = carry_object(...); if (carried_ob) carried_ob->wear(); }`（`scripts/lpc_guard_carry_object.py`）：NPC 照常出现，只是不带这件东西；文件补回来（或是虚拟对象）照样会带上。载入检查：改动的文件改前能载入 0 个，改后 0 个（0 个原来载入不了），没有退步；其余 1 个另有原因（多为 `set_skill()` 了本库没有的武功）。

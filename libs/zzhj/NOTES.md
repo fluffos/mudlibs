@@ -508,3 +508,7 @@ preserved).
 ## 编译警告收尾（2026-10-13）
 
 `scripts/toolkit_fix.sh` 一轮去掉 `obj/example/dumpling.lpc` 重复的 `inherit ITEM`（它从没载入过，现在载入）；照 shzs（bb0751cc7d4）：`feature/container.lpc`、`std/equip.lpc`、`std/money.lpc`、`obj/bandage.lpc`、`obj/token.lpc` 的 `query_autoload()` 改 `mixed`，`obj/user.lpc` 没用的 `last_cmd`、`std/space_ship/space_ship_room.lpc` 没用的 `doors`（与 `F_DOOR` 的同名，九艘飞船 `obj/ss/*` 的警告都源自它）删去。能编译的文件警告清零；改动的 10 个对象在 HEAD 与工作树各载入一次：HEAD PASS 8，tree PASS 9，regress 0。
+
+## NPC 带着本库没有的物品，载入失败（2026-10-15，KB 06 §7.73）
+
+1 个文件、1 处在 `create()` 里 `carry_object("<本库没有的文件>")->wear()`（或 `wield()`、`set_amount()`）：`carry_object()` 得 0，接着的调用报 `Bad argument 1 to EFUN call_other()`，NPC 根本载入不了，该有它的房间里就少了这个人。多是从别的系统搬来的 NPC 用了原系统的物品路径（最常见：`/obj/longsword`）。每处改为 `{ object carried_ob = carry_object(...); if (carried_ob) carried_ob->wear(); }`（`scripts/lpc_guard_carry_object.py`）：NPC 照常出现，只是不带这件东西；文件补回来（或是虚拟对象）照样会带上。载入检查：改动的文件改前能载入 0 个，改后 0 个（0 个原来载入不了），没有退步；其余 1 个另有原因（多为 `set_skill()` 了本库没有的武功）。

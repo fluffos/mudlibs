@@ -774,3 +774,7 @@ Save files updated/added this round:
 ## 血刀刀法「祭血神刀」正神时报错（2026-10-15，KB 06 §7.241）
 
 `xue-dao/shendao` 的伤害是 `random(shen / -1000) + shen / -3000`，越邪恶伤害越高；正神的人算出负数，`receive_damage()` 报“伤害值为负值”。补 `if (damage < 0) damage = 0;`，设计不变（正派用不出伤害），不再报错。
+
+## NPC 带着本库没有的物品，载入失败（2026-10-15，KB 06 §7.73）
+
+16 个文件、32 处在 `create()` 里 `carry_object("<本库没有的文件>")->wear()`（或 `wield()`、`set_amount()`）：`carry_object()` 得 0，接着的调用报 `Bad argument 1 to EFUN call_other()`，NPC 根本载入不了，该有它的房间里就少了这个人。多是从别的系统搬来的 NPC 用了原系统的物品路径（最常见：`/u/zhangm/fenghuang/obj/pixue`、`/u/zhangm/fenghuang/obj/junfu`、`/u/zhangm/fenghuang/obj/blade`）。每处改为 `{ object carried_ob = carry_object(...); if (carried_ob) carried_ob->wear(); }`（`scripts/lpc_guard_carry_object.py`）：NPC 照常出现，只是不带这件东西；文件补回来（或是虚拟对象）照样会带上。载入检查：改动的文件改前能载入 0 个，改后 11 个（11 个原来载入不了），没有退步；其余 5 个另有原因（多为 `set_skill()` 了本库没有的武功）。

@@ -671,3 +671,7 @@ functionally re-tested live on this lib.
 - 药店 `u/cloud/drugstore.lpc` 用关键字 `in` 做局部变量名，房间从没编译成功；改名 `me` 后载入。
 - `obj/sbaa/` 六个物件多余的 `inherit F_CLEAN_UP` 去掉，`sbgod.lpc` 多余的 `;` 删去。
 - 未改：`obj/sbaa/sbgod.lpc`、`rong.lpc` 设了本库没有的武功，`set_skill()` 报错载入失败，HEAD 也一样，是内容缺口。
+
+## NPC 带着本库没有的物品，载入失败（2026-10-15，KB 06 §7.73）
+
+3 个文件、5 处在 `create()` 里 `carry_object("<本库没有的文件>")->wear()`（或 `wield()`、`set_amount()`）：`carry_object()` 得 0，接着的调用报 `Bad argument 1 to EFUN call_other()`，NPC 根本载入不了，该有它的房间里就少了这个人。多是从别的系统搬来的 NPC 用了原系统的物品路径（最常见：`/d/fy/npc/obj/raincoat`、`/d/fy/npc/obj/sandals`、`/d/tianfeng/npc/obj/obj/robe`）。每处改为 `{ object carried_ob = carry_object(...); if (carried_ob) carried_ob->wear(); }`（`scripts/lpc_guard_carry_object.py`）：NPC 照常出现，只是不带这件东西；文件补回来（或是虚拟对象）照样会带上。载入检查：改动的文件改前能载入 0 个，改后 2 个（2 个原来载入不了），没有退步；其余 1 个另有原因（多为 `set_skill()` 了本库没有的武功）。
