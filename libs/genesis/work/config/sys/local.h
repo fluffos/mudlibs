@@ -343,9 +343,11 @@
 /*
  * NPC_SOULS
  *
- * The array of sould that all mobiles should have
+ * The array of sould that all mobiles should have.  The original second entry,
+ * "/d/Genesis/cmd/misc", is domain content the archive does not ship: every mobile
+ * (the armageddon object when the first player logs in) raised a failed call_other.
  */
-#define NPC_SOULS ({ "/cmd/std/soul_cmd", "/d/Genesis/cmd/misc" })
+#define NPC_SOULS ({ "/cmd/std/soul_cmd" })
 
 /*
  * MAX_IDLE_TIME

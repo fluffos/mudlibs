@@ -14,6 +14,6 @@
 // socket_bind() Expected: int Got: \"10\"") the very first time
 // messaged.lpc's startup_udp() called this macro. to_int() performs
 // the actual coercion.
-#define LOCAL_PORT()            (to_int(get_config(__MUD_PORT__)))
+#define LOCAL_PORT()            __PORT__
 
 #endif

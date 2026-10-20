@@ -704,3 +704,17 @@ A room exit named a file the lib does not have, so the player was stuck (a typo,
 ## `call_out_info()` 的每一项只有 3 个元素（2026-10-20，KB 06 §7.287）
 
 驱动返回的是 `({ 物件, 函数, 延迟 })`，不带 call_out 的参数，旧代码读第 4 项 `info[i][3]`（`callouts` 指令、`calloutd`、`cod` 工具）一读就报 `Array index out of bounds`，指令从第一行起什么也打印不出来。改为 `(sizeof(info[i]) > 3 ? info[i][3] : 0)`（`scripts/lpc_fix_callout_info.py`）。改动：`/cmds/xtra/_callouts.lpc`（1 处）、`/obj/tools/aclock.lpc`（1 处）、`/obj/tools/cod.lpc`（3 处）。
+
+## 深度功能测试（§10.7，2026-10-20）— 指令参数扫描
+
+用 `scripts/playsweep.py`（KB 08 §10.16）把 `cmds/std` 的玩家指令按十种参数、再按十七种参数各跑一遍（880 + 1,760 行），再以种子管理员 `fluffos` 把 `cmds/{wiz,file,object,xtra,adm,ghost}` 的巫师指令跑两遍（1,350 + 2,700 行）：控制台上没有一条运行时错误；屏幕上只有三个真问题，都是原版 TMI-2 里有、这份压缩包里缺东西的指令：
+
+- `party <未知动作>`（KB 06 §7.292）：`string help()` 只 `write()` 文字、返回 0，三处出口 `return notify_fail(help());` 因此报 `Bad argument 1 to notify_fail()`。`help()` 改成返回文字（TMI-2 的 `help` 指令本来就期望 `string help() { return ...; }`）。
+- `show <频道> <mud>`（§7.293）：查询远端频道要用 Intermud-2 的名字服务器 `DNS_MASTER`（`/adm/daemons/network/dns_master`），压缩包里只有 Intermud-3，指令报 `call_other() couldn't find object`。先查文件在不在，不在就写 `Remote channel queries are not available on this mud.`。同名的 `DNS_MASTER` 另外只剩 `obj/shells/shsh.lpc`（shell 窗口里的 `telnet <mud>`）在用，没改；邮件的 `user@mud` 地址在 `mailer.lpc` 里先被 `Intermud mail is not yet supported` 挡住，到不了那里。
+- `boardcheck`（§7.299）：写死的 25 块留言板里有 19 块（`/d/TMI/boards/*`）不在这份压缩包里，第一块缺的（`Imudboard`）就让整条指令中断。检查前先用 `file_size()` 过滤掉不存在的板（现在查 `/d/Conf/boards/*` 的 6 块）。
+
+其余 `needed-escape`（`bug`、`describe`、`converse`、`mudlist`、`who`、`apropos` 的分页或编辑器提示，要 `q`、`~q`、`.` 才能关）是正常的。`dref me` 把管理员自己断开，也是它该做的。
+
+## 登录密码超过 255 字节：`crypt()` 抛错（2026-10-20，KB 06 §7.294）
+
+驱动的 `crypt()` 对超过 255 字节的密钥直接报错（`Error in crypt(), check your salt`），老驱动则按任意长度散列。在登录提示符下输入 256 字节以上的密码，密码检查那一行就抛错，连线停在一个裸的 `> ` 提示符上，登录走不完（`password` 指令的旧密码检查同样）；用 300 个 `x` 当参数的扫描发现的。`/adm/obj/simul_efun.lpc` 里补了一个同名的 simul_efun `crypt(key, salt)`：只有超长的密钥才被截短（先截到 255 个字符，再逐字符截到 `sizeof(to_buffer(key)) <= 255`，限制按字节算，一个汉字占三个字节），再交给 `efun::crypt()`；普通密码原样散列，已存的密码散列不受影响（`scripts/lpc_add_sefun.py crypt`）。

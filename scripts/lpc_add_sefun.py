@@ -16,6 +16,11 @@ A simulated efun a sibling lib has and this lib's sefun files never had (KB 06 s
           do not compile without it (KB 06 section 7.291).  Built from `socket_status()` under `#ifdef __PACKAGE_SOCKETS__` (the WASM build has no sockets: the
           table is just its header there, as in the Discworld stub).
 
+  crypt   `crypt(key, salt)` -- an override of the efun that cuts a key over 255 bytes: this driver's crypt() raises "Error in crypt(), check your salt" for a longer
+          key, so a 300-character password typed at the login prompt killed `logind`'s password check (xkx100: the connection was left at a bare `> ` prompt) and
+          `password <long>` threw an error (KB 06 section 7.294).  Every ordinary password passes unchanged, so the saved hashes still match.  A lib that defines
+          `crypt()` itself is skipped.
+
 `space` is appended to the sefun file that already defines `atoi` (the simulated efun object's own includes are searched), else to the
 `object.lpc` of the sefun directory or the single sefun file, like unew.  A lib that defines the name already is skipped.
 Binary-safe, line endings of the target kept; without --apply the plan is printed.  Idempotent."""
@@ -76,7 +81,19 @@ int tail(string fname) {
   return 1;
 }
 '''
+CRYPT = '''
+// crypt(): this driver's efun raises "Error in crypt(), check your salt" for a key longer than 255 bytes, so a long password typed at the login prompt left the
+// connection at a bare prompt.  A key over the limit is cut (the same cut at every call, so the hashes still match); every ordinary password is passed on unchanged.
+string crypt(string key, mixed salt) {
+  if (strlen(key) > 255)
+    key = key[0..254];
+  while (sizeof(to_buffer(key)) > 255)            // the limit is in bytes, a CJK character takes three
+    key = key[0..<2];
+  return efun::crypt(key, salt);
+}
+'''
 DEF = {
+    "crypt": re.compile(rb"(?m)^\s*(?:(?:varargs|static|private|protected|public|nomask)\s+)*(?:(?:string|mixed|int|void)\s+)?crypt\s*\([^;]*\)\s*(?:\{.*)?$"),
     "space": re.compile(rb"(?m)^\s*(?:varargs\s+)?string\s+space\s*\("),
     "itoa": re.compile(rb"(?m)^\s*(?:varargs\s+)?string\s+itoa\s*\("),
     "tail": re.compile(rb"(?m)^\s*(?:varargs\s+)?(?:int|string|void|mixed)\s+tail\s*\("),
@@ -110,14 +127,14 @@ def main():
     args = sys.argv[1:]
     apply = "--apply" in args
     pos = [a for a in args if not a.startswith("--")]
-    if len(pos) < 2 or pos[0] not in ("space", "unew", "dump_socket_status", "tail"):
+    if len(pos) < 2 or pos[0] not in ("space", "unew", "dump_socket_status", "tail", "crypt"):
         print(__doc__)
         return
     name, slugs = pos[0], pos[1:]
     if name == "unew":
         os.execv(sys.executable, [sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "lpc_add_unew.py")] + slugs + (["--apply"] if apply else []))
-    if name in ("dump_socket_status", "tail"):
-        TEXT = DSS if name == "dump_socket_status" else TAIL
+    if name in ("dump_socket_status", "tail", "crypt"):
+        TEXT = {"dump_socket_status": DSS, "tail": TAIL, "crypt": CRYPT}[name]
         for slug in slugs:
             files = sefun_files(slug)
             if not files:

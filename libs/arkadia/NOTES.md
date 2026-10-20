@@ -789,3 +789,7 @@ pass.
 ## Old-driver type slack: missing arguments, untyped parameters, array initializers, `class` variables (2026-10-19, KB 04 6.19, 6.20)
 
 MudOS filled the missing arguments of a call with 0, took an untyped parameter as `mixed`, never compared a declared type with its initializer and let a variable be named `class`; this driver refuses all of it at compile time and the whole object fails. 2 file(s) fixed: `/doc/examples/org/mobiles/alchemist.lpc`, `/doc/examples/org/spells/spell_book.lpc` (the repair rounds of `scripts/lpc_round_files.py`: zeros written out at the call, `mixed` for untyped parameters, `string X = ({...})` given its star, void functions returning values, and `class` variables renamed `pick_class`). Loaded at HEAD and in the tree, per file: 0 of them failed before and load now, none regressed.
+
+## 登录密码超过 255 字节：`crypt()` 抛错（2026-10-20，KB 06 §7.294）
+
+驱动的 `crypt()` 对超过 255 字节的密钥直接报错（`Error in crypt(), check your salt`），老驱动则按任意长度散列。在登录提示符下输入 256 字节以上的密码，密码检查那一行就抛错，连线停在一个裸的 `> ` 提示符上，登录走不完（`password` 指令的旧密码检查同样）；用 300 个 `x` 当参数的扫描发现的。`/secure/simul_efun.lpc` 里补了一个同名的 simul_efun `crypt(key, salt)`：只有超长的密钥才被截短（先截到 255 个字符，再逐字符截到 `sizeof(to_buffer(key)) <= 255`，限制按字节算，一个汉字占三个字节），再交给 `efun::crypt()`；普通密码原样散列，已存的密码散列不受影响（`scripts/lpc_add_sefun.py crypt`）。

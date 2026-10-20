@@ -1268,3 +1268,15 @@ verified live on `xyxyutf8`. See AGENTS.md §7.156.
 ## `socket` / `dumpsocket` 指令：`dump_socket_status()` 驱动里没有（2026-10-20，KB 06 §7.291）
 
 这些巫师指令 `write(dump_socket_status());`，MudOS 的 efun 在 FluffOS 里不存在，指令编译不过。在模拟 efun 文件里补了 `dump_socket_status()`：用 `socket_status()` 排出同样的表（没有 sockets 包的构建，比如 WASM，只有表头；`scripts/lpc_add_sefun.py dump_socket_status`）。
+
+## 登录密码超过 255 字节：`crypt()` 抛错（2026-10-20，KB 06 §7.294）
+
+驱动的 `crypt()` 对超过 255 字节的密钥直接报错（`Error in crypt(), check your salt`），老驱动则按任意长度散列。在登录提示符下输入 256 字节以上的密码，密码检查那一行就抛错，连线停在一个裸的 `> ` 提示符上，登录走不完（`password` 指令的旧密码检查同样）；用 300 个 `x` 当参数的扫描发现的。`/adm/obj/simul_efun.lpc` 里补了一个同名的 simul_efun `crypt(key, salt)`：只有超长的密钥才被截短（先截到 255 个字符，再逐字符截到 `sizeof(to_buffer(key)) <= 255`，限制按字节算，一个汉字占三个字节），再交给 `efun::crypt()`；普通密码原样散列，已存的密码散列不受影响（`scripts/lpc_add_sefun.py crypt`）。
+
+## 登录计数文件 `UserNumber` 缺失（2026-10-20，KB 06 §7.298）
+
+`logind.lpc` 的 `do_counter()` 读 `/adm/daemons/UserNumber`（访客计数，运行中的 mud 才会写）；`.gitignore` 把它排除在仓库之外，所以新检出的树里没有，`read_file()` 回 0，`sscanf(0, ...)` 报错。这份副本登录时不调用它，但同样会在调用时出错。加了 `if (stringp(file))` 的守卫（与 dtxywzxzb、rzrmud、xiyouji2006、zitengzhan 早先的做法相同）。
+
+## `get_config(__MUD_PORT__)` 经旧版 `runtime_config.h` 得到字符串（2026-10-20，KB 06 §7.302）
+
+本库的 `include/runtime_config.h` 是老 MudOS 的编号（整数设置从 15 起，本驱动从 256 起），`get_config(__MUD_PORT__)` 读到的是另一项设置（字符串），`(int)` 又只是编译期标注，于是 `socket_bind(fd, LOCAL_PORT())` 报 `Bad argument 2 to socket_bind()`，版本守护进程 `port = get_config(__MUD_PORT__) + VERSION_PORT` 是字符串相加。头文件自己的注释写明 `get_config(__MUD_PORT__) == __PORT__`，所以代码里的这个调用（连同外面的 `(int)` / `to_int()`）改成了驱动的预定义 `__PORT__`（`scripts/lpc_fix_mud_port.py`）。改动：`/cmds/adm/cfg.lpc`（1 处）、`/include/getconfig.h`（1 处）。

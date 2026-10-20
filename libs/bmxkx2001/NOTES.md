@@ -624,3 +624,11 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## `if (x = 常量)`：条件里写成赋值的比较（2026-10-20，KB 06 §7.290）
 
 `if (arg = "button" || arg = "按钮")`、`if (!arg || arg = "") return 0;`、`else if (check = 0 && tempB != "")`：把 `==` 写成了 `=`，条件的值就是那个常量，分支对所有非零数和任何字符串（连 `""` 都算）永远成立、对 0 永远不成立，变量还被覆盖；驱动对此没有任何警告。每一处 `=` 改成 `==`（`scripts/lpc_fix_cond_assign.py`，共 19 处）。改动：`/d/city/jiuguan2.lpc`（2 处）、`/d/city/npc/mj.lpc`（3 处）、`/d/city/npc/mjxiaosi.lpc`（3 处）、`/d/city/wumiao.lpc`（1 处）、`/d/city/zuixianlou.lpc`（1 处）、`/d/heimuya/jiudian.lpc`（1 处）、`/d/kunlun/luanshiduibak.lpc`（2 处）、`/d/quanzhou/qzkedian.lpc`（1 处）、`/d/quanzhou/wglou1.lpc`（1 处）、`/d/xiakedao/no_pk_room.lpc`（1 处）、`/kungfu/skill/kurong-changong/liaoshang.lpc`（3 处）。
+
+## 登录密码超过 255 字节：`crypt()` 抛错（2026-10-20，KB 06 §7.294）
+
+驱动的 `crypt()` 对超过 255 字节的密钥直接报错（`Error in crypt(), check your salt`），老驱动则按任意长度散列。在登录提示符下输入 256 字节以上的密码，密码检查那一行就抛错，连线停在一个裸的 `> ` 提示符上，登录走不完（`password` 指令的旧密码检查同样）；用 300 个 `x` 当参数的扫描发现的。`/adm/single/simul_efun.lpc` 里补了一个同名的 simul_efun `crypt(key, salt)`：只有超长的密钥才被截短（先截到 255 个字符，再逐字符截到 `sizeof(to_buffer(key)) <= 255`，限制按字节算，一个汉字占三个字节），再交给 `efun::crypt()`；普通密码原样散列，已存的密码散列不受影响（`scripts/lpc_add_sefun.py crypt`）。
+
+## 翻页器 `start_more(read_file(...))`：文件缺失时 `explode(0)`（2026-10-20，KB 06 §7.300）
+
+东方故事系的翻页器 `void start_more(string msg) { ... explode(msg, "\n") ... }` 被这样调用：`start_more(read_file(HELP_DIR + "help/topics"))`、`start_more(read_file(NEWS))`。压缩包没带的文件使 `read_file()` 回 0，`explode(0, ...)` 在本驱动里报 `Bad argument 1 to explode()`（不带参数的 `help` 指令就是这样出错的），老驱动把 0 当空文本。在 `start_more` 开头加了 `if (!stringp(msg)) return;`（`scripts/lpc_fix_start_more.py`）。改动：`/feature/more.lpc`。

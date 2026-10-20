@@ -1270,3 +1270,19 @@ The driver answers `({ object, function, delay })` without the call_out's argume
 ## `callouts`: the guard `sizeof(info[i]) == 4` hid every row (2026-10-20, KB 06 7.287)
 
 The driver's `call_out_info()` entries have three elements, so the guard in front of the output line was never true and the command printed only its header. Now `>= 3`. Changed: `/cmds/arch/callouts.lpc` (1).
+
+## A login password over 255 bytes: `crypt()` raises (2026-10-20, KB 06 7.294)
+
+The driver's `crypt()` raises (`Error in crypt(), check your salt`) for a key over 255 bytes, where the old driver hashed any length. A password of 256 bytes or more typed at the login prompt threw an error in the password check and left the connection at a bare `> ` prompt, so the login never completed (the old-password test of `password` the same); found by the sweep shape of 300 `x`. `/adm/obj/simul_efun.lpc` now defines a simulated efun `crypt(key, salt)` of the same name: only an over-long key is cut (to 255 characters, then character by character until `sizeof(to_buffer(key)) <= 255`: the limit is in bytes, a CJK character takes three) before it is handed to `efun::crypt()`; every ordinary password hashes as before and the saved hashes are untouched (`scripts/lpc_add_sefun.py crypt`).
+
+## `valid_read()` does not trust the simul_efun object's euid `"NONAME"` (2026-10-20, KB 06 7.295)
+
+`Too deep recursion.` twice at boot (`log_file()` -> `assure_file()` -> `file_size()` -> the master's `valid_read()` -> `SECURITY_D->valid_read()` denies the sefun object, whose euid is `"NONAME"`, and the denial is logged with `log_file()` again), and on every later `log_file()`: no log file was ever written. `valid_write()` already trusted `"NONAME"`; `valid_read()` now does too (`securityd.lpc`).
+
+## `howmany_visitor()` reads the visitor counter unguarded (2026-10-20, KB 06 7.301)
+
+`howmany_visitor()` reads the visitor counter file (`VISITORS` / `COUNTER` / `BBSVISITOR`, written only by a running mud; `.gitignore` keeps it out of the repository), a fresh tree has none, `read_file()` answers 0 and `sscanf(0, ...)` raises. This copy may not reach it at login, but raises when something calls it. `if (!stringp(content)) return 0;` after the read (the form xkx100, xiakexing100 and zzfy already had; `scripts/lpc_fix_visitor_count.py`). Changed: `/adm/daemons/logind.lpc`, `/adm/daemons/logind1.lpc`, `/feature/logind.lpc`.
+
+## `get_config(__MUD_PORT__)` through the old `runtime_config.h` is a string (2026-10-20, KB 06 7.302)
+
+This lib's `include/runtime_config.h` has the old MudOS numbering (integer settings from 15, this driver from 256), so `get_config(__MUD_PORT__)` reads another setting (a string) and `(int)` is only compile-time bookkeeping: `socket_bind(fd, LOCAL_PORT())` raises `Bad argument 2 to socket_bind()`, the version daemon's `port = get_config(__MUD_PORT__) + VERSION_PORT` is a string sum. The header's own comment says `get_config(__MUD_PORT__) == __PORT__`, so the call (with the `(int)` / `to_int()` around it) is now the driver's predefine `__PORT__` (`scripts/lpc_fix_mud_port.py`). Changed: `/include/getconfig.h` (1).

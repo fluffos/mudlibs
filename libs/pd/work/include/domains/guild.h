@@ -37,6 +37,7 @@
 
 #define SAVE "/d/guilds/save/"
 
+#undef ROOM
 #define ROOM "/std/guild/guild"
 #define ROOMS "/d/guilds/"
 #define ALL "/d/guilds/"

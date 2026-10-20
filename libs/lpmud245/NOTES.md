@@ -460,3 +460,9 @@ registration, a mortal's first commands, then the same character hand-promoted t
 - `create_wizard(owner)`：驱动内置函数，把请求交给主控的 `master_create_wizard(owner, domain, caller)` 并返回新城堡的文件名（`room/port_castle.lpc`）。补成 simul_efun 后，主控里“调用必须来自调用者本人”的检查（`caller != previous_object()`）会看到 simul_efun 而不是城堡，`obj/master.lpc` 里这一检查放行 `/obj/simul_efun`。
 
 另：`room/south/sforst19.lpc` 的 `east()` 写成 `this_palyer()`，已改 `this_player()`（那个出口一走就报错）。
+
+再用 level 21 的巫师账号在改后的树上把全部指令各按十种参数重跑（`scripts/playsweep.py`），控制台上只剩两类，都是巫师指令对文件不存在没有设防：`clone <不存在的文件>`（`clone_object()` 在本驱动里返回 0，随后 `ob->move_object()` 报 `Bad argument 1 to call_other`）加了 `if (!ob)` 就写 `Failed to clone it.`；`home`（没有 `players/<名字>/workroom.lpc` 的巫师，`move_object` 报 `could not find destination`，巫师什么也看不到）先查文件，没有就写 `You have no workroom.`。
+
+## 登录密码超过 255 字节：`crypt()` 抛错（2026-10-20，KB 06 §7.294）
+
+驱动的 `crypt()` 对超过 255 字节的密钥直接报错（`Error in crypt(), check your salt`），老驱动则按任意长度散列。在登录提示符下输入 256 字节以上的密码，密码检查那一行就抛错，连线停在一个裸的 `> ` 提示符上，登录走不完（`password` 指令的旧密码检查同样）；用 300 个 `x` 当参数的扫描发现的。`/obj/simul_efun.lpc` 里补了一个同名的 simul_efun `crypt(key, salt)`：只有超长的密钥才被截短（先截到 255 个字符，再逐字符截到 `sizeof(to_buffer(key)) <= 255`，限制按字节算，一个汉字占三个字节），再交给 `efun::crypt()`；普通密码原样散列，已存的密码散列不受影响（`scripts/lpc_add_sefun.py crypt`）。

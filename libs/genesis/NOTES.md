@@ -873,3 +873,15 @@ items, no shops exist to test against.
 ## Punctuation the conversion lost, put back (2026-10-19, KB 03 4.6)
 
 1 file(s) lost a semicolon, comma, quote or the closing `}` at the end of the file and did not load. The file stopped one or two `}` short (its last byte or two went missing); appended: `/lib/std_area/preamble.lpc`. Loaded at HEAD and in the tree: all 1 were failing before, none regressed (`scripts/lpc_restore_from_twin.py`, `lpc_fix_eaten_quote.py --comma`, `lpc_fix_eof_braces.py`).
+
+## 登录密码超过 255 字节：`crypt()` 抛错（2026-10-20，KB 06 §7.294）
+
+驱动的 `crypt()` 对超过 255 字节的密钥直接报错（`Error in crypt(), check your salt`），老驱动则按任意长度散列。在登录提示符下输入 256 字节以上的密码，密码检查那一行就抛错，连线停在一个裸的 `> ` 提示符上，登录走不完（`password` 指令的旧密码检查同样）；用 300 个 `x` 当参数的扫描发现的。`/secure/simul_efun.lpc` 里补了一个同名的 simul_efun `crypt(key, salt)`：只有超长的密钥才被截短（先截到 255 个字符，再逐字符截到 `sizeof(to_buffer(key)) <= 255`，限制按字节算，一个汉字占三个字节），再交给 `efun::crypt()`；普通密码原样散列，已存的密码散列不受影响（`scripts/lpc_add_sefun.py crypt`）。
+
+## 目录读出后的后缀截取宽度（2026-10-20，KB 06 §7.296）
+
+`.c` 改名成 `.lpc` 之后，`get_dir("*.lpc")` 读出的文件名还按两个字符截取（`$1[0..<3]`）：`baguadao.lpc` 变成 `baguadao.l`，用它拼出的路径加载不到对象（故事、战场、事件、帮助、自造物品数据、召唤列表等）。改成 `[0..<5]`（`scripts/lpc_fix_getdir_strip.py`）。改动：`/cmd/wiz/wizard.lpc`（1 处）、`/secure/map_central.lpc`（1 处）。
+
+## 压缩包没带的可选模块（2026-10-20，KB 06 §7.308）
+
+`/d/Genesis/` 和 `/d/Web/` 是压缩包里没有的领域内容：`armageddon` 加载 `NPC_SOULS` 时对 `/d/Genesis/cmd/misc` 的 call_other 失败（第一次登录打印 12 段回溯），`quit()` 里 `catch(WEBSTATS_CENTRAL->player_logout(...))` 对 `/d/Web/stats/webstats` 失败；`catch()` 吞掉了错误，但本驱动在 master 没有 `error_handler` 时仍把被捕获的错误打到控制台。`config/sys/local.h` 的 `NPC_SOULS` 去掉了缺失的那一项，`std/player/cmd_sec.lpc` 在调用前检查 `file_size(WEBSTATS_CENTRAL + ".lpc")`。

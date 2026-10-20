@@ -954,3 +954,11 @@ These wizard commands do `write(dump_socket_status());`, a MudOS efun FluffOS la
 ## `tail` command: `tail(file)` is not in this driver (2026-10-20, KB 06 7.291)
 
 `cmds/*/tail.lpc` calls the MudOS `tail()` efun, which FluffOS lacks, so the command did not compile. The simulated efun file now defines `tail(file)` (the compatible version of the Discworld family: the last 20 lines or so from a full line, 1 when the file exists; `scripts/lpc_add_sefun.py tail`).
+
+## 深度功能测试（§10.7，2026-10-20）— TMI-2 的 show / boardcheck
+
+`mortremains` 带着 TMI-2 的 `cmds/wiz/_show.lpc` 和 `cmds/xtra/_boardcheck.lpc`，与 tmi2 逐字节相同，缺的东西也相同（没有 `dns_master`，`boardcheck` 的 25 块留言板一块都不在）；改法同 tmi2（KB 06 §7.293、§7.299）。`cmds/std/attic/_party.lpc` 是备份目录里的 `party`，不是指令，没动（它的 `help()` 与 tmi2 的同样有问题，KB 06 §7.292）。
+
+## A login password over 255 bytes: `crypt()` raises (2026-10-20, KB 06 7.294)
+
+The driver's `crypt()` raises (`Error in crypt(), check your salt`) for a key over 255 bytes, where the old driver hashed any length. A password of 256 bytes or more typed at the login prompt threw an error in the password check and left the connection at a bare `> ` prompt, so the login never completed (the old-password test of `password` the same); found by the sweep shape of 300 `x`. `/adm/obj/simul_efun.lpc` now defines a simulated efun `crypt(key, salt)` of the same name: only an over-long key is cut (to 255 characters, then character by character until `sizeof(to_buffer(key)) <= 255`: the limit is in bytes, a CJK character takes three) before it is handed to `efun::crypt()`; every ordinary password hashes as before and the saved hashes are untouched (`scripts/lpc_add_sefun.py crypt`).

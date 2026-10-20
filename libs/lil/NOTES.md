@@ -320,3 +320,7 @@ operation plus one assignment, so its absolute numbers are a little higher. The 
 - 2026-10-14: 1 files did not compile with `Type of returned value doesn't match function return type ( int vs void )`: a function declared `void` (or with no type) returns a value, which the old driver passed to the caller. Functions whose value a caller reads (add_action handlers, commands, helpers) now carry the type they return: `foo()`. HEAD vs tree in fresh drivers: 1 objects, 1 newly loading, 0 regressions (`scripts/lpc_fix_void_return.py`, KB 04 §6.3).
 
 - 2026-10-14: 1 file(s) declared a function `int` (or `void`) that returns a string or object (`int query_seal() { return "…"; }`), which the old driver passed to the caller; it now has the type it returns (`scripts/lpc_fix_void_return.py`) (KB 04 §6.1, §6.3). HEAD vs tree in fresh drivers: 1 objects, 1 newly loading, 0 regressions.
+
+## sefun `cat()`: `write(0)` raises for a file that is not there (2026-10-20, KB 06 7.297)
+
+`void cat(string file) { write(read_file(file)); }`: a file the archive does not ship (a welcome or notice file, a log only a running mud writes) makes `read_file()` answer 0, `write(0)` raises `Bad argument 1 to receive()` in this driver and aborts the caller (the login dialogue, the `cat` command); the old driver printed nothing. Now `write(read_file(file) || "");` (`scripts/lpc_fix_cat_unchecked.py`). Changed: `/single/simul_efun.lpc`.

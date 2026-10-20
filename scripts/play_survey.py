@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""scripts/play_survey.py [--port 46300] [--cmds "look;score;i;who;help"] [--out FILE] [--skip "slug slug"] [--boot-timeout 240] [SLUG... | --all]
+"""scripts/play_survey.py [--port N] [--cmds "look;score;i;who;help"] [--out FILE] [--skip "slug slug"] [--boot-timeout 240] [SLUG... | --all]
 
 The login survey (KB 08 10.16): for each lib, boot it as a play unit (scripts/play_boot.sh: a pristine tree plus the working-tree edits of that lib), log in with the generic
 robot (scripts/play_login.py: register a character on the fresh tree, the first game commands, quit), read what the driver printed meanwhile, and stop the unit.  A sweep or a
@@ -42,7 +42,17 @@ def errors(text):
     return [ln.strip() for ln in text.split("\n") if ln.strip() and not BORING.match(ln.strip()) and DRIVER_BAD.search(ln)]
 
 
+def own_port(slug):
+    """the port the lib's config.fluffos names: a master whose connect() switches on MUD_PORT (ES2: dfgsiiv13b, huoying, naruto) refuses every other port"""
+    try:
+        m = re.search(r"(?m)^port number\s*:\s*(\d+)", open(os.path.join(REPO, "libs", slug, "config.fluffos"), encoding="utf-8", errors="replace").read())
+        return int(m.group(1)) if m else None
+    except OSError:
+        return None
+
+
 def survey_one(slug, port, cmds, boot_timeout):
+    port = port or own_port(slug) or 46300
     out = os.path.join(SCR, f"play-{slug}.out")
     t0 = time.time()
     try:
@@ -85,7 +95,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("slugs", nargs="*")
     ap.add_argument("--all", action="store_true")
-    ap.add_argument("--port", type=int, default=46300)
+    ap.add_argument("--port", type=int, default=0, help="one port for every lib (default: each lib's own `port number` of config.fluffos, which some masters hard-code in connect())")
     ap.add_argument("--cmds", default="look;score;i;who;help")
     ap.add_argument("--out", default=os.path.join(SCR, "play_survey.tsv"))
     ap.add_argument("--skip", default=os.environ.get("SURVEY_SKIP", ""))

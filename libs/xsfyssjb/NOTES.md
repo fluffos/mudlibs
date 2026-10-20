@@ -254,3 +254,15 @@ without headers, drafts).
 ## `if (x = 常量)`：条件里写成赋值的比较（2026-10-20，KB 06 §7.290）
 
 `if (arg = "button" || arg = "按钮")`、`if (!arg || arg = "") return 0;`、`else if (check = 0 && tempB != "")`：把 `==` 写成了 `=`，条件的值就是那个常量，分支对所有非零数和任何字符串（连 `""` 都算）永远成立、对 0 永远不成立，变量还被覆盖；驱动对此没有任何警告。每一处 `=` 改成 `==`（`scripts/lpc_fix_cond_assign.py`，共 24 处）。改动：`/d/damage1.lpc`（2 处）、`/d/eren2/npc/obj/key.lpc`（1 处）、`/d/for_martea/maze/wood-room.lpc`（1 处）、`/d/huangshan/jiusi.lpc`（2 处）、`/d/jinan/mjroom.lpc`（1 处）、`/d/jinan/mjroomBUG.lpc`（1 处）、`/d/resort/teagarden.lpc`（2 处）、`/d/shanliu/npc/xiucai.lpc`（1 处）、`/d/taiping/npc/obj/key.lpc`（1 处）、`/d/yinghe/irongate.lpc`（1 处）、`/d/yinghe/irongate2.lpc`（1 处）、`/d/zangbei/cave.lpc`（2 处） 等 16 个文件。
+
+## 登录密码超过 255 字节：`crypt()` 抛错（2026-10-20，KB 06 §7.294）
+
+驱动的 `crypt()` 对超过 255 字节的密钥直接报错（`Error in crypt(), check your salt`），老驱动则按任意长度散列。在登录提示符下输入 256 字节以上的密码，密码检查那一行就抛错，连线停在一个裸的 `> ` 提示符上，登录走不完（`password` 指令的旧密码检查同样）；用 300 个 `x` 当参数的扫描发现的。`/adm/obj/simul_efun.lpc` 里补了一个同名的 simul_efun `crypt(key, salt)`：只有超长的密钥才被截短（先截到 255 个字符，再逐字符截到 `sizeof(to_buffer(key)) <= 255`，限制按字节算，一个汉字占三个字节），再交给 `efun::crypt()`；普通密码原样散列，已存的密码散列不受影响（`scripts/lpc_add_sefun.py crypt`）。
+
+## sefun `cat()`：缺文件时 `write(0)` 报错（2026-10-20，KB 06 §7.297）
+
+`void cat(string file) { write(read_file(file)); }`：文件不存在（压缩包没带的欢迎/公告文件，或只有运行中的 mud 才会写的日志）时 `read_file()` 回 0，`write(0)` 在本驱动里报 `Bad argument 1 to receive()`，调用者（登录对话、`cat` 指令）被中断；老驱动什么也不打印。改成 `write(read_file(file) || "");`（`scripts/lpc_fix_cat_unchecked.py`）。改动：`/adm/simul_efun/file.lpc`。
+
+## 任务守护进程启动时崩溃（2026-10-20，KB 06 §7.303）
+
+`quest/dynamic_npc_quest` 列了 12 个 `/questnpc/` 下的 NPC，压缩包没有这个目录，`tasknpcd::create()` 里 `load_object()` 回 0，`item->query("name")` 报 `Bad argument 1 to EFUN call_other()`，`auto_reset_quest()` 永远没有启动。现在跳过加载不了的行，一行也没有时直接返回（`adm/daemons/tasknpcd.lpc`）。

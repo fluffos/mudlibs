@@ -473,3 +473,7 @@ and documented in KB 04 §6.10 rather than left in a half-fixed state.
 extension, not source; scanned with `--skip '^/doc/'`, not touched.
 
 - 2026-10-14: FluffOS 970d9f09 warns `Float value truncated to int` (#1426). 2 sites in 1 files: assignments, initializers and returns now spell the truncation `to_int(...)` (same value). Changed objects loaded before and after in fresh drivers, no regressions (`scripts/lpc_fix_float_trunc.py`, KB 04 §6.10).
+
+## A login password over 255 bytes: `crypt()` raises (2026-10-20, KB 06 7.294)
+
+The driver's `crypt()` raises (`Error in crypt(), check your salt`) for a key over 255 bytes, where the old driver hashed any length. A password of 256 bytes or more typed at the login prompt threw an error in the password check and left the connection at a bare `> ` prompt, so the login never completed (the old-password test of `password` the same); found by the sweep shape of 300 `x`. `/sefun/sefun.lpc` now defines a simulated efun `crypt(key, salt)` of the same name: only an over-long key is cut (to 255 characters, then character by character until `sizeof(to_buffer(key)) <= 255`: the limit is in bytes, a CJK character takes three) before it is handed to `efun::crypt()`; every ordinary password hashes as before and the saved hashes are untouched (`scripts/lpc_add_sefun.py crypt`).

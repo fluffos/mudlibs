@@ -635,3 +635,7 @@ fragment (`soul.lpc` and `wiz_soul.lpc` `#include` it and declare `cap_name`) an
 neither is meant to compile alone. Live on a pristine tree against HEAD: registration, `look`,
 `score`, `i`, `save`, a 70-step walk through 16 rooms (green, bridge, village road, yard, alley,
 pub, bank, post office, advancement hall) with nothing on the console.
+
+## A login password over 255 bytes: `crypt()` raises (2026-10-20, KB 06 7.294)
+
+The driver's `crypt()` raises (`Error in crypt(), check your salt`) for a key over 255 bytes, where the old driver hashed any length. A password of 256 bytes or more typed at the login prompt threw an error in the password check and left the connection at a bare `> ` prompt, so the login never completed (the old-password test of `password` the same); found by the sweep shape of 300 `x`. `/secure/simul_efun.lpc` now defines a simulated efun `crypt(key, salt)` of the same name: only an over-long key is cut (to 255 characters, then character by character until `sizeof(to_buffer(key)) <= 255`: the limit is in bytes, a CJK character takes three) before it is handed to `efun::crypt()`; every ordinary password hashes as before and the saved hashes are untouched (`scripts/lpc_add_sefun.py crypt`).

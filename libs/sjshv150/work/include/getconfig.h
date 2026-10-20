@@ -6,6 +6,6 @@
 #include "runtime_config.h"
 
 #define LOCAL_MUD_NAME()        ((string) get_config(__MUD_NAME__))
-#define LOCAL_PORT()            ((int) get_config(__MUD_PORT__))
+#define LOCAL_PORT()            __PORT__
 
 #endif
