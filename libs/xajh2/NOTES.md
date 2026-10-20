@@ -1115,3 +1115,7 @@ seeded admin account.
 ## 被注释吞掉的 inherit / include（2026-10-19，KB 06 §7.274）
 
 `/d/city/yangzhou/npc/obj/guo.lpc`：`#include <ansi.h>`。这些指令接在上一行 `//` 注释的末尾（档案里丢了换行），成了注释的一部分，驱动看不到：缺 `inherit` 的技能报 `Undefined function offensive_target`，缺 `#include <weapon.h>` 的兵器报语法错误。`scripts/lpc_fix_swallowed_directive.py` 把换行放回去。载入检查 1 个文件，1 个原来编译不过、现在载入，没有退步。
+
+## 补回丢失的标点（2026-10-19，KB 03 §4.6）
+
+转换时丢掉的分号、逗号、引号或文件末尾的 `}`，共 3 个文件，修前 HEAD 载入失败。一行文字在逗号前丢了结尾的引号（下一行是同一个表的下一项），补上：`/d/menpai/wuliang/west/npc/xin_bak_xli.lpc`、`/d/menpai/wuliang/west/npc/xin_shuangqing.lpc`、`/system/skill/shaolin/mohe-zhi.lpc`。修后与 HEAD 逐个对比载入：这 3 个物件全部载入，没有退步（`scripts/lpc_restore_from_twin.py`、`lpc_fix_eaten_quote.py --comma`、`lpc_fix_eof_braces.py`）。

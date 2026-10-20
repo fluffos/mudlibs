@@ -563,3 +563,14 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 ## 玩家打造兵器模板没有打造者时（2026-10-19，KB 06 §7.275）
 
 `/d/npc/m_weapon/weapon/m_blade.lpc`、`/d/npc/m_weapon/weapon/m_club.lpc`、`/d/npc/m_weapon/weapon/m_hammer.lpc`、`/d/npc/m_weapon/weapon/m_staff.lpc`、`/d/npc/m_weapon/weapon/m_sword.lpc`、`/d/npc/m_weapon/weapon/m_whip.lpc`（共 6 个）的 `create()` 开头 `me = this_player();` 之后无条件读 `me->query("weapon/name")` 等打造数据。房间刷新时没有人在场（`me` 为 0），或者 NPC 在别的 NPC 的命令环境里 `carry_object()` 这个模板（NPC 的 `weapon` 属性是文件名字符串），旧驱动里读出来是 0 或字符串，`switch` 照样落到 default；新驱动报 `Bad argument 1 to EFUN call_other()` / `Bad argument 1 to switch`，NPC 和它所在的房间载入不了（`--walk` 普查里一个玩家走进房间就触发）。在 `//读入数据` 之后加 `if (!me || !mapp(me->query("weapon"))) { setup(); return; }`：没有打造者就留一个没有名字的空模板，玩家打造的流程不变。
+
+## 手工收尾（2026-10-19，KB 04 §6.10）
+
+- 标准整理轮的第一轮删掉 5 个文件里 12 个未使用的局部变量：`d/marry/hunyin.h`、`d/pingan/marry/hunyin.h`、`d/pingan/pingan/marry/hunyin.h`（`do_lihun()` 的 `card`、`inv`、`i`，`do_jiehun()` 的 `card`、`mes1`；`d/pingan/` 里那份的 `diary_write` 等几行被注释掉，所以多出几个），`d/qujing/jingjiling/npc/allnpc.h`（`player_win()` 的 `obj`），`d/taoyuan/npc/kid.lpc`（`create()` 的 `i`、`amun`）。
+- 这个库有 5.9 万个文件，第二轮重扫要一个多小时，超过整理脚本的时限，没有等；第二轮要做的诊断驱动修复也不适用（扫描里没有那几类）。
+
+载入 include 这些头文件的 `d/marry/chen.lpc`、`CHENG.lpc`、`d/pingan/*/marry/chen.lpc`、`d/qujing/jingjiling/npc/` 的 bo、hui、song、zhu 和 `kid.lpc`：HEAD 通过 9 个，现在通过 9 个，没有退步。
+
+## 补回丢失的标点（2026-10-19，KB 03 §4.6）
+
+转换时丢掉的分号、逗号、引号或文件末尾的 `}`，共 8 个文件，修前 HEAD 载入失败。别的库里同路径的完好副本只比这里少几个标点，按它补回（括号里是那个库）：`/d/city2/npc/zhengmen.lpc`（jqxz2008）。一行文字在逗号前丢了结尾的引号（下一行是同一个表的下一项），补上：`/kungfu/skill/huanhe-dao.lpc`、`/kungfu/skill/kunlun-zhang.lpc`、`/quest/menpaijob/dali/quest.lpc`、`/quest/menpaijob/tiezhang/quest.lpc`、`/quest/newbie/qiandao/lagjobold.lpc`、`/quest/songhuo/quest.lpc`。文件末尾少了 `}`（最后一个或两个字节丢了），补上：`/kfedit/condition/wuhudu_poison.lpc`。修后与 HEAD 逐个对比载入：这 8 个物件全部载入，没有退步（`scripts/lpc_restore_from_twin.py`、`lpc_fix_eaten_quote.py --comma`、`lpc_fix_eof_braces.py`）。

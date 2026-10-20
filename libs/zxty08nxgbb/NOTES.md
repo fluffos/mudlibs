@@ -369,3 +369,7 @@ functionally re-tested live on this lib.
 - `d/quanzhou/npc/tang3.lpc`、`d/taishan/tang3.lpc` 的 `clean_up() inherited from both …` 只在整库扫描里出现：物件单独载入时不出现，它的四个 inherit 之间也没有第二条通往 `clean_up` 的路径；`clean_up::clean_up()` 编译不过，所以没有动，整库重扫后再看（`lpc_name_winner.py` 现在会跳过这种没有直接 inherit 的情形）。
 
 逐个与 HEAD 对比载入，没有退步。
+
+## 补回丢失的标点（2026-10-19，KB 03 §4.6）
+
+转换时丢掉的分号、逗号、引号或文件末尾的 `}`，共 5 个文件，修前 HEAD 载入失败。别的库里同路径的完好副本只比这里少几个标点，按它补回（括号里是那个库）：`/d/city2/npc/zhengmen.lpc`（jqxz2008）、`/d/quanzhen/hudi6.lpc`（bixiecanyang）、`/kungfu/skill/guxing-sword.lpc`（xyzx3）、`/quest/murong/qlist3.lpc`（bixiecanyang）。文件末尾少了 `}`（最后一个或两个字节丢了），补上：`/u/zjb/adm/combatd2.lpc`。修后与 HEAD 逐个对比载入：这 5 个物件全部载入，没有退步（`scripts/lpc_restore_from_twin.py`、`lpc_fix_eaten_quote.py --comma`、`lpc_fix_eof_braces.py`）。

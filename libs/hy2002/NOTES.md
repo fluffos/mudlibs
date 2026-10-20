@@ -366,3 +366,7 @@ functionally re-tested live on this lib.
 - `adm/roommaker.lpc`：`special_props` 声明了两遍（同 sjshv150 `data/group/obj/ling.lpc`），删掉前一个。
 
 逐个与 HEAD 对比载入，没有退步。
+
+## 补回丢失的标点（2026-10-19，KB 03 §4.6）
+
+转换时丢掉的分号、逗号、引号或文件末尾的 `}`，共 3 个文件，修前 HEAD 载入失败。别的库里同路径的完好副本只比这里少几个标点，按它补回（括号里是那个库）：`/d/city2/npc/zhengmen.lpc`（jqxz2008）。一行文字在逗号前丢了结尾的引号（下一行是同一个表的下一项），补上：`/kungfu/skill/emperor-unarmed.lpc`、`/kungfu/skill/kunlun-zhang.lpc`。修后与 HEAD 逐个对比载入：这 3 个物件全部载入，没有退步（`scripts/lpc_restore_from_twin.py`、`lpc_fix_eaten_quote.py --comma`、`lpc_fix_eof_braces.py`）。

@@ -747,3 +747,7 @@ These base classes are not in the lib, so every object that inherits them (rooms
 ## Macros the global header lost (2026-10-19, KB 04 6.16)
 
 `/include/all_inc.h` did not define `C_TEMP`, `C_CLOUD`, `C_RAIN`; the objects that use them (4 on the list) stopped at `Undefined variable`/`Undefined function`, and since the compiler stops at the first undefined name the errors and warnings behind it stayed hidden. The sibling libs of the same lineage carry these lines in their headers: the copy of the sibling with the most files in common was added after the last `#define` of `/include/all_inc.h`; every path in a macro body exists in this lib. the listed objects have other errors as well and still do not load. (`scripts/lpc_restore_defines.py`)
+
+## The unused `living.eff_shad.lpc` variant, finished (2026-10-19, KB 06 7.240)
+
+- `std/living/living.eff_shad.lpc` (the 33 warnings the earlier rounds left as archived) carried `/std/living/effects` beside `/std/container`, which already brings `/std/basic/effects` through `/std/object`. The variant now does what the live `living.lpc` does: the redundant `inherit`, the `effects::create()` call and the `add_effect()` wrapper are gone, and `stats()` no longer appends `effects::stats()` a second time (`object.lpc`'s `stats()` already ends with it, so the variant listed the effects twice). It loaded with 33 warnings at HEAD and loads with none in the tree (regress 0); nothing inherits it.

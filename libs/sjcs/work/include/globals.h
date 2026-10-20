@@ -151,6 +151,7 @@
 #define YEARLY "yearly"
 #define BJTIME_D "/cmds/usr/bjtime"
 #define F_DISASTER "/feature/disaster.lpc"
+#define UNARMED                  "/std/weapon/unarmed"
 #undef PROFILE_COMMANDS
 
 

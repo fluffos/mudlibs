@@ -782,3 +782,7 @@ Changed files loaded at HEAD and in the tree in fresh processes: no regression.
 ## Standard repair round (2026-10-19, `scripts/toolkit_fix.sh`)
 
 Rescanned with the current driver; mechanical fixes: 1 functions made varargs (callers pass fewer arguments). Every changed object was loaded at HEAD and in the tree: no regression.
+
+## Punctuation the conversion lost, put back (2026-10-19, KB 03 4.6)
+
+2 file(s) lost a semicolon, comma, quote or the closing `}` at the end of the file and did not load. The file stopped one or two `}` short (its last byte or two went missing); appended: `/wizards/torspo/stuff/flagon.lpc`, `/wizards/walla/testi/huone.lpc`. Loaded at HEAD and in the tree: all 2 were failing before, none regressed (`scripts/lpc_restore_from_twin.py`, `lpc_fix_eaten_quote.py --comma`, `lpc_fix_eof_braces.py`).

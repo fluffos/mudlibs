@@ -237,3 +237,7 @@ The `.c` -> `.lpc` rename changed the string but not the slice width: `f[<2..] =
 ## Objects that call an inherited function no parent has (2026-10-19, KB 06 7.259)
 
 `::create();`, `::init();` and `return ::buy_object(who, item);` were written against a parent that has the function; this lib's parents do not, the old driver took the call for a no-op returning 0, and the current driver stops at compile time with `Unable to find the inherited function`, so the object never loads. A call written as a statement is deleted, `return ::f(...)` becomes `return 0;` (`return;` in a void function), which is what the old driver did. 1 calls in 1 files: `::reset()` (1). Only files whose every error was this one were edited; a file that also has another error (usually a parent that is itself missing) is left until the parent is restored. (`scripts/lpc_fix_dangling_super.py`)
+
+## Warning scan residue (2026-10-19)
+
+- The fresh scan listed one warning outside a failing file, `Unused local variable 'index'` at `/secure/simul_efun/file_lines.lpc:12`. That file has no such variable and loads with no warning; the row belongs to its neighbour `secure/simul_efun/tail.lpc`, an LDMud-only sefun (`bytes` type, `b"\n"` literals) that does not compile here and is not in the `catalog/simul_efun` set the driver loads. Nothing to fix; the rest of the `secure/` and `std/` tree is LDMud code whose errors are expected (the lib is a catalog overlay, not a port).

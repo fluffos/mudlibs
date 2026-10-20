@@ -6,8 +6,8 @@ The fix-pass formatter step of KB 08 section 9, done safely.  Runs the corpus fo
 each changed .lpc/.h file:
   - HEAD copy normalized, working copy not: the edit broke the layout; with --apply the file is formatted (only the
     edited lines move);
-  - HEAD copy not normalized: the file was never formatted; left in its own style (formatting it would rewrite it
-    end to end and bury the fix);
+  - HEAD copy not normalized, or refused by the formatter (it did not parse): the file was never formatted; left in its own
+    style (formatting it would rewrite it end to end and bury the fix);
   - both normalized: nothing to do.
 Never writes a file the formatter would rewrite for reasons older than the edit.  Without --apply the plan is
 printed.  HEAD copies go to $LPC_SCRATCH/fmt-head (default ~/.cache/lpc-scratch)."""
@@ -22,11 +22,18 @@ SCR = os.path.join(os.environ.get("LPC_SCRATCH") or os.path.expanduser("~/.cache
 
 
 def would(paths):
-    """Paths the formatter's --check would reformat."""
+    """(paths the formatter's --check would reformat, paths it refuses: a parse error, a literal it would change)"""
     if not paths:
-        return set()
+        return set(), set()
     r = subprocess.run(["node", FMT, "--check"], input="\n".join(paths) + "\n", capture_output=True, text=True)
-    return {l[len("would reformat: "):] for l in r.stdout.splitlines() if l.startswith("would reformat: ")}
+    reform = {l[len("would reformat: "):] for l in r.stdout.splitlines() if l.startswith("would reformat: ")}
+    refused = set()
+    for l in r.stderr.splitlines():
+        if "refusing to write: " in l:
+            refused.add(l.split("refusing to write: ", 1)[1].split(": ")[0])
+        elif l.startswith(("READ ERROR ", "FORMAT ERROR ")):
+            refused.add(l.split(" ", 2)[2].split(": ")[0])
+    return reform, refused
 
 
 def main():
@@ -44,8 +51,9 @@ def main():
         os.makedirs(os.path.dirname(p), exist_ok=True)
         open(p, "wb").write(r.stdout)
         head[f] = p
-    h = would(list(head.values()))
-    t = would([os.path.join(REPO, f) for f in files])
+    h_reform, h_refused = would(list(head.values()))
+    h = h_reform | h_refused          # a HEAD copy the formatter refuses (it did not parse: lost quotes, a stray byte) was never formatted either
+    t, _ = would([os.path.join(REPO, f) for f in files])
     todo = []
     for f in files:
         if os.path.join(REPO, f) not in t:

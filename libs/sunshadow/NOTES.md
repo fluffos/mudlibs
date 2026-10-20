@@ -844,3 +844,7 @@ A room exit named a file the lib does not have, so the player was stuck (a typo,
 ## Object paths with two leading slashes (2026-10-19, KB 06 §7.276)
 
 5 file(s), 5 site(s) wrote an object path as `//…` (like `carry_object("//clone/cloth/hic_cloth")`): `/d/azha/town/market2.lpc`, `/d/azha/town/market3.lpc`, `/d/azha/town/market4.lpc`, `/d/azha/town/market5.lpc`, `/d/azha/town/market6.lpc`. The driver these games ran on did not mind (the path was normalised first); this one hands the string to the master's `valid_read()` as written, securityd looks up `//clone`, the NPC's euid has no entry and the answer is `Read access denied.`: the NPC does not load. One slash now.
+
+## The rebirther object: a second copy of the player class and a player it never touched (2026-10-19, KB 06 7.278)
+
+- `d/magic/obj/rebirther.lpc` is the same object as shadowgate's (see its NOTES): `<user.h>` (the player's inherit list) plus `inherit OBJECT;`, 100+ warnings, and death and rebirth code that called `save_player()` and the money functions on itself instead of the dying player. The same edit (no `<user.h>`, the calls go to `reborn`, `set_invis()` as the `set_hidden` / `set_magic_hidden` toggle, `query_invis()` kept); it loads with no warning (HEAD: 100+) and `do_rebirth()` / `do_death()` run to the end against a fake player in the shadowgate copy of the same code.

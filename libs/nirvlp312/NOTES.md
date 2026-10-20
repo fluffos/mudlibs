@@ -294,3 +294,8 @@ header-encrypted. Skip nitan.zip.
 - `/std/partymaster.lpc`: `#include "/players/beck/esc.h"` rewritten to `/obj/esc.h` (the wizard directory is not in the archive; the lib carries the one copy)
 
 Every changed object was loaded at HEAD and in the tree: no regression.
+
+## Kids lost their name, gender and age (2026-10-19, KB 04 6.10)
+
+- `obj/kid.lpc` inherits `obj/living.lpc` through `living.h` and `#include`s `obj/prego.lpc`, whose `#ifndef __LDMUD__` block declared `string name, gender, current_room; int age;` a second time (the MudOS branch of a fragment that was written for a player object without those variables). The driver gives the later declaration its own `nosave` slot, so the kid's own code (`set_gender`, `set_name`, `id`, `heart_beat`'s `age += 1`) used one set of variables and `living.lpc`'s code another. Live check on a clone, before the fix: after `set_name("tester")` and `set_gender("female")`, `query_name()` returned `""`, `query_gender_string()` returned 0 and `dumpa()` (`save_object`) wrote only `kidage`; after: `"Tester"`, `"female"`, and the save file has `name "tester"` and `gender "female"`.
+- `kid.lpc` defines `PREGO_VARS_INHERITED` before the include and `prego.lpc` skips the declarations then (the file still loads on its own, as before). Four `Redeclaration of global variable` rows gone; `obj/prego.lpc` and `obj/kid.lpc` load with no warning at HEAD and in the tree.

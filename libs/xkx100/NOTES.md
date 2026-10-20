@@ -349,3 +349,7 @@ live `debug.log` 是 `libs/xkx100/log/debug.log`（Boot Time Fri Sep 4
 ## 标准整理轮（2026-10-19，`scripts/toolkit_fix.sh`）
 
 本库在新驱动下重扫，机械修复：3 个未使用的局部变量。修后与 HEAD 逐个物件对比载入，没有退步。
+
+## 同名全局表（2026-10-19，KB 04 §6.10）
+
+`open/xiangyang/task/guo.lpc` 把 `zzzjob.lpc` 和 `teamjob.lpc` 两个片段 `#include` 进同一个对象，两个片段各有一张 `mixed names` 任务地点/人名表，后一张触发 `Redeclaration of global variable 'names'`。两个片段的函数按编译顺序各用各的那张，所以 `teamjob.lpc` 的表改名 `team_names`（`nosave`，一处引用同步），行为不变。`open/xiangyang/task/guo.lpc`、`teamjob.lpc` 修前修后都载入，警告消失。

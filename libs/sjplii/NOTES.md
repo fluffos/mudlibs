@@ -438,3 +438,7 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 ## 标准整理轮，第二轮（2026-10-19，`scripts/toolkit_fix.sh`）
 
 本库在新驱动下重扫，机械修复：8 个未使用的局部变量，2 个文件的 void 函数返回值，1 处 inherit 顺序。修后与 HEAD 逐个物件对比载入，没有退步。
+
+## 补回丢失的标点（2026-10-19，KB 03 §4.6）
+
+转换时丢掉的分号、逗号、引号或文件末尾的 `}`，共 2 个文件，修前 HEAD 载入失败。文件末尾少了 `}`（最后一个或两个字节丢了），补上：`/u/kyd/npc/obj/caidao.lpc`、`/u/kyd/obj/caidao.lpc`。修后与 HEAD 逐个对比载入：这 2 个物件全部载入，没有退步（`scripts/lpc_restore_from_twin.py`、`lpc_fix_eaten_quote.py --comma`、`lpc_fix_eof_braces.py`）。

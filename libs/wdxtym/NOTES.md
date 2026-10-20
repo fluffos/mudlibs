@@ -562,3 +562,7 @@ Too-deep-recursion) recurred at boot; no new error from shop/拜师.
 - `quest/shenshu/npc/man.lpc`：`int kill_ob(object ob)` 盖掉基类 `feature/attack.lpc` 的 `void kill_ob()`，函数里没有 `return`，改成 `void`。`u/redl/teleport/qiulao.lpc`：`int init()` 里 `return ::init();`，基类的 `init()` 是 void，改成 `void init()`、`return;`、`::init();`。
 
 逐个与 HEAD 对比载入，没有退步。
+
+## 补回丢失的标点（2026-10-19，KB 03 §4.6）
+
+转换时丢掉的分号、逗号、引号或文件末尾的 `}`，共 4 个文件，修前 HEAD 载入失败。一行文字在逗号前丢了结尾的引号（下一行是同一个表的下一项），补上：`/quest/menpaijob/dali/quest.lpc`、`/quest/menpaijob/tiezhang/quest.lpc`、`/quest/newbie/qiandao/lagjobold.lpc`、`/quest/songhuo/quest.lpc`。修后与 HEAD 逐个对比载入：这 4 个物件全部载入，没有退步（`scripts/lpc_restore_from_twin.py`、`lpc_fix_eaten_quote.py --comma`、`lpc_fix_eof_braces.py`）。

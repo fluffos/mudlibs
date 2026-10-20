@@ -233,5 +233,6 @@
 #define ZJBR "$br#"
 #define MAILDIR "/data/mail/"
 #define LOCATION_D "/adm/daemons/locationd"
+#define YUEQI                    "/std/item/yueqi"
 #undef PROFILE_COMMANDS
 

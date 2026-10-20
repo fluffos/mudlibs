@@ -914,3 +914,7 @@ These base classes are not in the lib, so every object that inherits them (rooms
 - `u/z/zur/priv/AC1.0/`: `base.lpc` inherits `make_room.lpc` and then includes `ac.h` again for its macros, so `ac.h`'s `nosave string fname; nosave string file;` were declared twice (`Redeclaration of global variable`). `base.lpc` defines `AC_INHERITED` before the include and `ac.h` skips the two declarations then (the pattern of xiyouji's `ground.h`).
 
 The seven objects were loaded at HEAD and in the tree: no regression.
+
+## Punctuation the conversion lost, put back (2026-10-19, KB 03 4.6)
+
+3 file(s) lost a semicolon, comma, quote or the closing `}` at the end of the file and did not load. The file stopped one or two `}` short (its last byte or two went missing); appended: `/d/class/rogue/bandit/cmds/_pick.lpc`, `/u/i/islair/ddagger.lpc`, `/u/m/moltar/volcano/monsters/caverat.lpc`. Loaded at HEAD and in the tree: all 3 were failing before, none regressed (`scripts/lpc_restore_from_twin.py`, `lpc_fix_eaten_quote.py --comma`, `lpc_fix_eof_braces.py`).

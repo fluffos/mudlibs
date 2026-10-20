@@ -845,3 +845,18 @@ These base classes are not in the lib, so every object that inherits them (rooms
 ## Object paths with two leading slashes (2026-10-19, KB 06 §7.276)
 
 3 file(s), 3 site(s) wrote an object path as `//…` (like `carry_object("//clone/cloth/hic_cloth")`): `/d/faeleen/npc/braum_ormerod.lpc`, `/d/faeleen/npc/tabernero_rongrond.lpc`, `/d/keroon/keroon/keroon_pobre/armeria_guardias_keroon.lpc`. The driver these games ran on did not mind (the path was normalised first); this one hands the string to the master's `valid_read()` as written, securityd looks up `//clone`, the NPC's euid has no entry and the answer is `Read access denied.`: the NPC does not load. One slash now.
+
+## Standard repair round (2026-10-19, `scripts/toolkit_fix.sh`)
+
+Rescanned with the current driver; mechanical fixes: 3 functions made varargs (callers pass fewer arguments), 33 unused local variables, 8 files with values returned from void functions. Every changed object was loaded at HEAD and in the tree: no regression.
+
+## Hand fixes after the round (2026-10-19, KB 04 6.10)
+
+- The three Duergar guild rooms (`d/newbie/duergar/rooms/guildrm.lpc`, `room/antiguo/start/duergar-fr.lpc`, `w/oldcreators/kaerf/duergar/rooms/guildrm.lpc`) declared `object board;` over the `board` of `/std/newbieguild` and never read it; the base's own functions clone and use theirs. The dead declaration is gone.
+- `std/living/dankequip/living.lpc` and `living_creator.lpc`: `int attack_by(object ob)` had no `return` and every caller (`ob->attack_by(...)`) uses it as a statement; it is `void` like `combat.lpc`'s.
+- `w/kivara/cavernas4/Sub4_71.lpc`, `Sub4_91.lpc`: `inherit SUB4+"sub4_main1.lpc";;` lost its second `;`.
+- The seven objects load at HEAD and in the tree with no warning; no other warning is left in a file that compiles. 4,347 files still do not compile: 2,469 of them `#include "/d/abarrach/path.h"` (and inherit `/d/abarrach/handler/base_abarrach.lpc`: the header and the base class of an area directory the archive lacks), several hundred more include a `path.h` / `tweaks.h` of a wizard directory it lacks, the rest are other errors (undefined names in about 450 files, syntax errors in about 400).
+
+## Punctuation the conversion lost, put back (2026-10-19, KB 03 4.6)
+
+2 file(s) lost a semicolon, comma, quote or the closing `}` at the end of the file and did not load. The file stopped one or two `}` short (its last byte or two went missing); appended: `/room/plaza/base_campo_discordia.lpc`, `/w/kryger/kryger/base_campo_discordia.lpc`. Loaded at HEAD and in the tree: all 2 were failing before, none regressed (`scripts/lpc_restore_from_twin.py`, `lpc_fix_eaten_quote.py --comma`, `lpc_fix_eof_braces.py`).

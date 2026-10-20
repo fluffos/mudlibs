@@ -430,3 +430,11 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply s
 - `adm/CL/YI.lpc`：`query_autoload()` 的返回类型改成 `mixed`（标准整理轮，基类声明 string）。
 
 逐个与 HEAD 对比载入，没有退步。
+
+## 补回缺失的基类 `UNARMED`（2026-10-19，KB 04 §6.15，`scripts/lpc_restore_bases.py --retry`）
+
+`inherit UNARMED;` 的基类文件 `/std/weapon/unarmed.lpc` 本库没有，宏也没有定义。从 hxxtjqb 取来文件，并在 `include/globals.h` 补上 `#define UNARMED`；`/d/city/obj/dami.lpc` 因此载入。同一轮里重试的其余几个基类（这个库的 JOBNPC / SUPER_NPC / QUEST_OB / F_GUARDER 等）载入时仍缺别的东西，已经撤回，没有留下文件或宏。
+
+## 补回丢失的标点（2026-10-19，KB 03 §4.6）
+
+转换时丢掉的分号、逗号、引号或文件末尾的 `}`，共 2 个文件，修前 HEAD 载入失败。别的库里同路径的完好副本只比这里少几个标点，按它补回（括号里是那个库）：`/d/obj/quest/quest_cl.lpc`（dtxywzxzb）。文件末尾少了 `}`（最后一个或两个字节丢了），补上：`/daemon/skill/unused/snowshade-force.lpc`。修后与 HEAD 逐个对比载入：这 2 个物件全部载入，没有退步（`scripts/lpc_restore_from_twin.py`、`lpc_fix_eaten_quote.py --comma`、`lpc_fix_eof_braces.py`）。

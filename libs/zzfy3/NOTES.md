@@ -403,3 +403,7 @@ HEAD 与工作树分别加载（新进程）：745 -> 746 通过（多出的就�
 ## 技能书的基类（2026-10-19，KB 04 §6.15、KB 06 §7.262）
 
 `obj/book/*.lpc` 的 40 本技能书（与 wqfy、xkyx3b 逐字节相同）都是 `inherit BOOK;`，本库没有这个宏，也没有它的基类，整批载入不了。补回：`/std/item/book.lpc`（宏 `BOOK`，xkyx3b 的同一份，经 wqfy 拷来），`adm/simul_efun/atoi.lpc` 补上基类要用的 `itoa()`、`space()`，`include/ansi.h` 里被注释掉的背景色宏 `BWHT` 恢复。41 个对象（40 本书和基类）全部载入，以前一个都不行，逐个与 HEAD 对比没有退步。（`scripts/lpc_restore_bases.py --evidence --retry`、`scripts/lpc_add_sefun.py space`）
+
+## 补回丢失的标点（2026-10-19，KB 03 §4.6）
+
+转换时丢掉的分号、逗号、引号或文件末尾的 `}`，共 3 个文件，修前 HEAD 载入失败。别的库里同路径的完好副本只比这里少几个标点，按它补回（括号里是那个库）：`/d/menggu/tadi1.lpc`（wqfy）。文件末尾少了 `}`（最后一个或两个字节丢了），补上：`/u/wiz/u/legato/obj/skeleton.lpc`（2 个）、`/u/wiz/u/xxy/city2/npc/zhengmen.lpc`（2 个）。修后与 HEAD 逐个对比载入：这 3 个物件全部载入，没有退步（`scripts/lpc_restore_from_twin.py`、`lpc_fix_eaten_quote.py --comma`、`lpc_fix_eof_braces.py`）。

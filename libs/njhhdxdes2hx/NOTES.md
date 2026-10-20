@@ -369,3 +369,7 @@ admin 登入时间戳漂移已在提交前用 `git checkout --` 撤销。
 - `d/suzhou/npc/kiss.lpc` 的 `set("vendor_goods", ([ "路径", ... ]))` 是只有键没有值的映射，语法错误；店主代码读的是数组，改成 `({ ... })`。
 
 逐个载入与 HEAD 对比，没有退步。
+
+## 补回丢失的标点（2026-10-19，KB 03 §4.6）
+
+转换时丢掉的分号、逗号、引号或文件末尾的 `}`，共 8 个文件，修前 HEAD 载入失败。文件末尾少了 `}`（最后一个或两个字节丢了），补上：`/class/shaolin/bak/dao-guo.lpc`、`/d/huashan/q.lpc`（2 个）、`/d/jingcheng/npc/obj/qin1.lpc`、`/d/taohua/yinggu.lpc`、`/d/taohua/zhaozhe.lpc`、`/daemon/class/shaolin/bak/dao-guo.lpc`、`/u/hacky/d/yueyang/npc/obj/box.lpc`、`/u/hacky/d/yueyang/npc/obj/guiyuan.lpc`。修后与 HEAD 逐个对比载入：这 8 个物件全部载入，没有退步（`scripts/lpc_restore_from_twin.py`、`lpc_fix_eaten_quote.py --comma`、`lpc_fix_eof_braces.py`）。

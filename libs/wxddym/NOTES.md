@@ -836,3 +836,7 @@ No new errors after the shop commands. Demo `fluffos` save churn
 - `kungfu/skill/xianglong-zhang.lpc`：`int power_point(object me)` 返回 0.8 / 1.0，新驱动编译时把小数截掉；改成 `float`（全库没有调用 `power_point()` 的地方，`scripts/lpc_fix_float_hooks.py`）。
 
 逐个与 HEAD 对比载入，没有退步。
+
+## 补回丢失的标点（2026-10-19，KB 03 §4.6）
+
+转换时丢掉的分号、逗号、引号或文件末尾的 `}`，共 2 个文件，修前 HEAD 载入失败。别的库里同路径的完好副本只比这里少几个标点，按它补回（括号里是那个库）：`/quest/murong/qlist3.lpc`（bixiecanyang）。文件末尾少了 `}`（最后一个或两个字节丢了），补上：`/u/jerry/obj/huwan.lpc`。修后与 HEAD 逐个对比载入：这 2 个物件全部载入，没有退步（`scripts/lpc_restore_from_twin.py`、`lpc_fix_eaten_quote.py --comma`、`lpc_fix_eof_braces.py`）。

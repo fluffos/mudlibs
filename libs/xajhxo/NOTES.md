@@ -921,3 +921,7 @@ Same convert-era byte corruption as the waiter `！”\n` / `！\n` →
 - `system/std/char/questnpc.lpc`、`d/nanyang/npc/guo.lpc`：`string *refuse_msg` 盖掉 NPC 基类 `system/std/char/npc.lpc` 里同名的 `nosave string *refuse_msg`（`Redeclaration of global variable 'refuse_msg'`），驱动给了它们第二个变量，基类的函数和它们自己的函数从不共用；改名 `questnpc_refuse_msg`、`guo_refuse_msg`（`scripts/lpc_rename_ident.py`），行为不变。
 
 逐个与 HEAD 对比载入，没有退步。
+
+## 补回丢失的标点（2026-10-19，KB 03 §4.6）
+
+转换时丢掉的分号、逗号、引号或文件末尾的 `}`，共 6 个文件，修前 HEAD 载入失败。别的库里同路径的完好副本只比这里少几个标点，按它补回（括号里是那个库）：`/d/city/capital/dxgs_yuan1.lpc`（xajh2）、`/d/menpai/wuliang/npc/obj/xing.lpc`（xajh2）、`/system/condition/deadlife.lpc`（xajh2）、`/system/condition/deadlife.lpc`（xo_final）。文件末尾少了 `}`（最后一个或两个字节丢了），补上：`/d/city/capital/obj/food/gourou_baozi.lpc`（2 个）、`/d/place/xkdao/npc/tu.lpc`。修后与 HEAD 逐个对比载入：这 6 个物件全部载入，没有退步（`scripts/lpc_restore_from_twin.py`、`lpc_fix_eaten_quote.py --comma`、`lpc_fix_eof_braces.py`）。

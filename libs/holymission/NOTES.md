@@ -820,3 +820,14 @@ Verification: the edited files and the includers of the edited headers, 163 obje
 ## Object paths with two leading slashes (2026-10-19, KB 06 §7.276)
 
 4 file(s), 4 site(s) wrote an object path as `//…` (like `carry_object("//clone/cloth/hic_cloth")`): `/players/goldsun/nottingham/room/tower_ne2.lpc`, `/players/goldsun/nottingham/room/tower_nw2.lpc`, `/players/goldsun/nottingham/room/tower_se2.lpc`, `/players/goldsun/nottingham/room/tower_sw2.lpc`. The driver these games ran on did not mind (the path was normalised first); this one hands the string to the master's `valid_read()` as written, securityd looks up `//clone`, the NPC's euid has no entry and the answer is `Read access denied.`: the NPC does not load. One slash now.
+
+## Hand pass after the repair round (2026-10-19, KB 04 6.10)
+
+- `players/brainsprain/guild/poison/pot.lpc`: `int sem, ..., value;` redeclared `obj/container`'s `value` (`Redeclaration of global variable 'value'`); the pot uses its own variable as the recipe accumulator (15 uses). Renamed `pot_value` and made `nosave`, which the driver had forced on the second declaration anyway (`scripts/lpc_rename_ident.py`).
+- `players/goldsun/mud/smith.lpc`: `if (flag == 0);` -- a stray semicolon, so the setup block ran on every reset (`Expression has no side effects`). The semicolon is gone; this driver's `reset()` passes 0 anyway, so nothing changes at run time. The room still does not load: its NPC `/players/tatsuo/guild/npc/sutaki.lpc` is not in the archive.
+
+Loaded at HEAD and in the tree: `pot.lpc` passes both times, `smith.lpc` fails the same way both times.
+
+## Punctuation the conversion lost, put back (2026-10-19, KB 03 4.6)
+
+18 file(s) lost a semicolon, comma, quote or the closing `}` at the end of the file and did not load. The file stopped one or two `}` short (its last byte or two went missing); appended: `/players/airborne/temple/entrance/bridge4.lpc`, `/players/baalthasar/shadows/bchapel.lpc` (2), `/players/baalthasar/shadows/monsters/wserpent.lpc` (2), `/players/blaarg/area/rooms/tendoa12.lpc`, `/players/borscht/carrot.lpc`, `/players/brainsprain/goldsun/7-islands/rooms/ridge11.lpc`, `/players/colossus/obj/black_book.lpc`, `/players/dice/quest/q.lpc`, `/players/goldsun/mud/amulet.lpc`, `/players/iishima/area/tst2/rabbit.lpc`, `/players/iishima/area/tst2/wolf.lpc`, `/players/jake/newbie/swim.lpc` (2), `/players/sargon/weapons/ds.lpc` (2), `/players/septian/area/b/entrance.lpc` (2), `/players/tinman/mguild/obj/keg.lpc`, `/players/tinman/mguild/obj/revanger.lpc`, `/players/whisky/guild/obj/keg.lpc`, `/players/whisky/guild/obj/revanger.lpc`. Loaded at HEAD and in the tree: all 18 were failing before, none regressed (`scripts/lpc_restore_from_twin.py`, `lpc_fix_eaten_quote.py --comma`, `lpc_fix_eof_braces.py`).

@@ -1205,3 +1205,11 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 - `daemon/skill/liangyi-jian.bak.lpc`、`kungfu/skill/liangyi-jian.bak.lpc`：`query_skill_name()` 开头 `int i; level;` 里的 `level;` 是个没有效果的表达式（`Expression has no side effects, and the value is unused`），删掉。
 
 逐个与 HEAD 对比载入，没有退步。
+
+## 补回缺失的基类 `YUEQI`（2026-10-19，KB 04 §6.15，`scripts/lpc_restore_bases.py --retry`）
+
+`inherit YUEQI;` 的基类文件 `/std/item/yueqi.lpc` 本库没有，宏也没有定义。从 sjshwzjqb 取来文件，并在 `include/globals.h` 补上 `#define YUEQI`；`/d/obj/misc/yaoqin.lpc` 因此载入。同一轮里重试的其余几个基类（这个库的 JOBNPC / SUPER_NPC / QUEST_OB / F_GUARDER 等）载入时仍缺别的东西，已经撤回，没有留下文件或宏。
+
+## 补回丢失的标点（2026-10-19，KB 03 §4.6）
+
+转换时丢掉的分号、逗号、引号或文件末尾的 `}`，共 26 个文件，修前 HEAD 载入失败。别的库里同路径的完好副本只比这里少几个标点，按它补回（括号里是那个库）：`/d/jz/npc/jiang.lpc`（dtxyzjb）、`/daemon/skill/beiming-shengong.lpc`（fy2mg）、`/daemon/skill/huashan-shenfa.lpc`（fy2mg）、`/daemon/skill/huashan-zhangfa.lpc`（fy2mg）、`/daemon/skill/qiankundanuoyi.lpc`（fy2mg）、`/daemon/skill/xiaowuxiang.lpc`（fy2mg）、`/daemon/skill/yunlong-shenfa.lpc`（fy2mg）、`/daemon/skill/yunlong-zhua.lpc`（fy2mg）。一行文字在逗号前丢了结尾的引号（下一行是同一个表的下一项），补上：`/daemon/skill/awenzhang-unarmed.lpc`、`/daemon/skill/emperor-unarmed.lpc`、`/daemon/skill/kunlun-zhang.lpc`、`/daemon/skill/qingyi-jian.lpc`、`/kungfu/skill/awenzhang-unarmed.lpc`、`/kungfu/skill/emperor-unarmed.lpc`、`/kungfu/skill/kunlun-zhang.lpc`。文件末尾少了 `}`（最后一个或两个字节丢了），补上：`/d/jjg/npc/erzhuan.lpc`（2 个）、`/d/jjg/npc/jjg/npc/erzhuan.lpc`（2 个）、`/daemon/skill/fanliangyi-dao.lpc`、`/daemon/skill/lingboweibu.lpc`、`/daemon/skill/taizuchangquan.lpc`、`/daemon/skill/unused/snowshade-force.lpc`、`/sjsh/u/stey/obj/putao.lpc`、`/sjsh/u/stey/obj/tao.lpc`、`/u/shulele/npc/nanren.lpc`、`/u/stey/obj/putao.lpc`、`/u/stey/obj/tao.lpc`。修后与 HEAD 逐个对比载入：这 26 个物件全部载入，没有退步（`scripts/lpc_restore_from_twin.py`、`lpc_fix_eaten_quote.py --comma`、`lpc_fix_eof_braces.py`）。
