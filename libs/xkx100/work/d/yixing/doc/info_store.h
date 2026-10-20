@@ -1,3 +1,5 @@
+#ifndef __YIXING_INFO_STORE_H__
+#define __YIXING_INFO_STORE_H__
 // /d/yixing/doc/info_store.h
 // Last Modified by winder on Jul. 12 2002
 
@@ -293,3 +295,4 @@ mapping *info_store = ({
         "place" : "/d/xixia/jiuguan",
 ]),
 });
+#endif

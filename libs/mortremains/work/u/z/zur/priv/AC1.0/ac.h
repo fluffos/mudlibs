@@ -1,6 +1,9 @@
 #ifndef __AUTOCODER__
+// make_room.lpc declares these; base.lpc inherits it and defines AC_INHERITED before it includes this header again (macros only)
+#ifndef AC_INHERITED
 nosave string fname;
 nosave string file;
+#endif
 int finish_up();
 int make_int(string str) {
    int num;

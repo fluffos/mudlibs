@@ -216,6 +216,7 @@ Classes the toolkit leaves to you on purpose:
 | `lpc_fix_macro_redef.py SLUG [--apply]` | `Macro 'X' redefined`: puts `#undef X` in front of the later `#define X` (the later body already won, nothing else changes) |
 | `lpc_fix_double_decl.py` | Drops the bare copy when one declaration statement names a variable twice (`string a, b, a = "x";`), the `Redeclaration of global variable` it causes |
 | `lpc_twin_port.py` | Ports fixes made in one lib to a sibling whose files carry the same code |
+| `lpc_boot_survey.sh [SLUG...]` | Boots each lib once on a pristine tree (HEAD) and counts the warnings and errors the driver prints while the master, the simul_efun file and the preload list compile: the first visitor's screen. TSV `slug warnings errors first-message` in `$LPC_SCRATCH/boot_survey.tsv` |
 | `lpc_listcheck.sh SLUG LIST` + `lpc_load_diff.py SLUG` | Loads a list of objects at HEAD and in the working tree, then reports regressions |
 | `lpc_audit_removed_locals.py BASE` | Finds deleted declarations whose function still reads the name |
 | `lpc_audit_shadow_globals.py` | Finds deleted `int g = N;` locals that were really meant to assign the global `g` |

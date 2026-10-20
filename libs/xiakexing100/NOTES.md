@@ -595,3 +595,17 @@ functionally re-tested live on this lib.
 ## 标准整理轮，第二轮（2026-10-19，`scripts/toolkit_fix.sh`）
 
 本库在新驱动下重扫，机械修复：1 个未使用的局部变量。修后与 HEAD 逐个物件对比载入，没有退步。
+
+## 手工收尾（2026-10-19，KB 04 §6.10）
+
+- `d/city/npc/oldman.lpc`：宠物店老人的 `int *weight = ({ … })`（宠物重量表）和 NPC 基类 `feature/move.lpc` 的 `nosave int weight`（物件自己的重量）同名（`Redeclaration of global variable 'weight'`），驱动给了它第二个变量；改名 `pet_weight`（`nosave`，3 处，`scripts/lpc_rename_ident.py`），行为不变。
+
+逐个与 HEAD 对比载入，没有退步。
+
+## 帮派文件里丢掉的引号（2026-10-19，KB 03 §4.6）
+
+- `d/yixing/doc/set_bang.h` 第 82、84 行：两句帮主的话，最后半个字连同结尾的引号一起丢了（`…景仰之情<乱码>);`），下一行的开头引号把它闭合，后面的汉字被当成代码（`Illegal character 0xe8`），宜兴帮主 `d/yixing/npc/bangzhu.lpc` 从来载入不了。字串照 nt7 里完好的拷贝补回（`犹如滔滔江水连绵不绝。`、`帮主的敬仰犹如黄河泛滥一发不可收拾。`），引号补上。
+- 同一文件第 45 行 `level = ceil( pow( … ) ) * 4 / 5;` 把浮点数存进 int，补 `to_int()`。
+- `d/yixing/doc/info_store.h`、`info_biao.h`、`info_guest.h` 没有重复包含的保护（本库其他拷贝有）：`bangzhu.lpc` 自己 include 一遍，`bangzhu_duty.h` → `guanjia.h` 又 include 一遍，四张表被声明两次；加上 `#ifndef __YIXING_INFO_*_H__`。`bangzhu.lpc` 同时继承 `NPC` 和 `F_SSERVER`，两条路都带来 `clean_up()`（`clean_up() inherited from both …`），写出 `int clean_up() { return sserver::clean_up(); }`，行为不变。
+
+载入 `d/yixing/npc/` 的 bangzhu、biaotou、bangzhu2、cl_bei：HEAD 通过 3 个，现在通过 4 个（`bangzhu.lpc` 现在载入），没有退步。

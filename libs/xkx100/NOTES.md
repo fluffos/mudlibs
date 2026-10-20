@@ -337,3 +337,15 @@ live `debug.log` 是 `libs/xkx100/log/debug.log`（Boot Time Fri Sep 4
 ## 玩家打造兵器模板没有打造者时（2026-10-19，KB 06 §7.275）
 
 `/last_modify/weapon/m_axe.lpc`、`/last_modify/weapon/m_blade.lpc`、`/last_modify/weapon/m_club.lpc`、`/last_modify/weapon/m_gou.lpc`、`/last_modify/weapon/m_hammer.lpc`、`/last_modify/weapon/m_staff.lpc` 等（共 8 个）的 `create()` 开头 `me = this_player();` 之后无条件读 `me->query("weapon/name")` 等打造数据。房间刷新时没有人在场（`me` 为 0），或者 NPC 在别的 NPC 的命令环境里 `carry_object()` 这个模板（NPC 的 `weapon` 属性是文件名字符串），旧驱动里读出来是 0 或字符串，`switch` 照样落到 default；新驱动报 `Bad argument 1 to EFUN call_other()` / `Bad argument 1 to switch`，NPC 和它所在的房间载入不了（`--walk` 普查里一个玩家走进房间就触发）。在 `//读入数据` 之后加 `if (!me || !mapp(me->query("weapon"))) { setup(); return; }`：没有打造者就留一个没有名字的空模板，玩家打造的流程不变。
+
+## 帮派文件里丢掉的引号（2026-10-19，KB 03 §4.6）
+
+- `d/yixing/doc/set_bang.h` 第 82、84 行：两句帮主的话，最后半个字连同结尾的引号一起丢了（`…景仰之情<乱码>);`），下一行的开头引号把它闭合，后面的汉字被当成代码（`Illegal character 0xe8`），宜兴帮主 `d/yixing/npc/bangzhu.lpc` 从来载入不了。字串照 nt7 里完好的拷贝补回（`犹如滔滔江水连绵不绝。`、`帮主的敬仰犹如黄河泛滥一发不可收拾。`），引号补上。
+- 同一文件第 45 行 `level = ceil( pow( … ) ) * 4 / 5;` 把浮点数存进 int，补 `to_int()`。
+- `d/yixing/doc/info_store.h`、`info_biao.h`、`info_guest.h` 没有重复包含的保护（本库其他拷贝有）：`bangzhu.lpc` 自己 include 一遍，`bangzhu_duty.h` → `guanjia.h` 又 include 一遍，四张表被声明两次；加上 `#ifndef __YIXING_INFO_*_H__`。`bangzhu.lpc` 同时继承 `NPC` 和 `F_SSERVER`，两条路都带来 `clean_up()`（`clean_up() inherited from both …`），写出 `int clean_up() { return sserver::clean_up(); }`，行为不变。
+
+载入 `d/yixing/npc/` 的 bangzhu、biaotou、bangzhu2、cl_bei：HEAD 通过 3 个，现在通过 4 个（`bangzhu.lpc` 现在载入），没有退步。
+
+## 标准整理轮（2026-10-19，`scripts/toolkit_fix.sh`）
+
+本库在新驱动下重扫，机械修复：3 个未使用的局部变量。修后与 HEAD 逐个物件对比载入，没有退步。

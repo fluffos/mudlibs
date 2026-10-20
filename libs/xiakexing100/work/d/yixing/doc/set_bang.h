@@ -42,7 +42,7 @@ void set_follower(object ob, object owner)
 
 	exp = (int)owner->query("combat_exp") / 2;
 	ob->set("combat_exp", exp);
-	level = ceil( pow( to_float(exp) * 10.0, 0.333333) ) * 4 / 5;
+	level = to_int(ceil( pow( to_float(exp) * 10.0, 0.333333) ) * 4 / 5);
 
 	ob->set("max_qi",    level * 8 + 100);
 	ob->set("eff_qi",    level * 8 + 100);
@@ -79,8 +79,8 @@ void set_follower(object ob, object owner)
 
 	ob->set("inquiry/" + fam, fam + "威震江湖，指日可待！！！");
 	name = (string)owner->query("name");
-	ob->set("inquiry/" + "帮主", "我对我们" + name[0..01] + "帮主的景仰之情腥缣咸辖嗖痪);
+	ob->set("inquiry/" + "帮主", "我对我们" + name[0..01] + "帮主的景仰之情犹如滔滔江水连绵不绝。");
 	ob->set("inquiry/" + name, "这几个字是你说的吗？");
-	ob->set("inquiry/" + name[0..01] + "帮主", "我对我们" + name[0..01] + "镏鞯木把鲋椋腥缣咸辖嗖痪);
+	ob->set("inquiry/" + name[0..01] + "帮主", "我对我们" + name[0..01] + "帮主的敬仰犹如黄河泛滥一发不可收拾。");
 }
 

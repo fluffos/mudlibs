@@ -778,3 +778,7 @@ Changed files loaded at HEAD and in the tree in fresh processes: no regression.
 ## Object paths with two leading slashes (2026-10-19, KB 06 §7.276)
 
 1 file(s), 2 site(s) wrote an object path as `//…` (like `carry_object("//clone/cloth/hic_cloth")`): `/wizards/yodin/areas/weird_land/vl1.lpc`. The driver these games ran on did not mind (the path was normalised first); this one hands the string to the master's `valid_read()` as written, securityd looks up `//clone`, the NPC's euid has no entry and the answer is `Read access denied.`: the NPC does not load. One slash now.
+
+## Standard repair round (2026-10-19, `scripts/toolkit_fix.sh`)
+
+Rescanned with the current driver; mechanical fixes: 1 functions made varargs (callers pass fewer arguments). Every changed object was loaded at HEAD and in the tree: no regression.

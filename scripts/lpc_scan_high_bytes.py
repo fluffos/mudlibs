@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lpc_fix_void_return import code_mask  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SKIP = re.compile(r"/(u|w|wiz|wizard|wizards|open|players|backup|backups|old|bak|log|data|doc|docs|example|examples)/|[-_.](bak|old)/|\.(bak|BAK|old|orig)\.lpc$")
+SKIP = re.compile(r"/(u|w|wiz|wizard|wizards|open|players|backup|backups|old|bak|log|data|example|examples)/|[-_.](bak|old)/|\.(bak|BAK|old|orig)\.lpc$")   # `doc/` is code in the xkx family (d/yixing/doc/set_bang.h, 9 libs), so it is scanned
 FW = set("，；（）：！？。、　「」『』“”‘’")
 
 

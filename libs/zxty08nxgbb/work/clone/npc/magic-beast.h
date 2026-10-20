@@ -38,9 +38,6 @@ mapping types = ([
         "soil"  : "土的厚实",
 ]);
 
-mapping skill_map;
-mapping skill_prepare;
-
 string chinese_s(mixed arg)
 {
       if (! stringp(arg)) return "无";

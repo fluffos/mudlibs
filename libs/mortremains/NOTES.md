@@ -906,3 +906,11 @@ Older MudOS predefined `SAVE_EXTENSION` (`".o"`) in every LPC object; the FluffO
 ## Base classes the lib did not ship, restored from sibling libs (2026-10-18, KB 04 6.15)
 
 These base classes are not in the lib, so every object that inherits them (rooms, NPCs, items) failed to load (`inherit XXX;` with no macro, or `inherit "/std/...";` with no file). A sibling lib carries the file and shares many files byte for byte with this one, so the file is copied as it stands: `/d/Conf/voting_room` <- tmi2, 1 object(s) inherit it, sample 1/1 load. Each base was loaded alone and a sample of its users after it; a base that did not load, or none of whose users did, was taken back (`scripts/lpc_restore_bases.py`).
+
+## Hand pass after the repair round (2026-10-19, KB 04 6.10)
+
+- `std/attic/monster.lpc` (retired; nothing inherits it): the prototype `protected int create_ghost();` named a function the file never defines and clashed with `std/body.lpc`'s `object create_ghost()` (`does not match current function in return type`): removed. `mapping alias;` redeclared the body's `alias`, and `create()` only writes `([ ])` into it: the declaration is removed so the body's variable is the one that gets set (the same line sat in esI's `std/npc.lpc`, KB 04).
+- `u/n/nsd/fair/room/mirrors10.lpc`, `moonwalk.lpc`, `u/t/tyran/spider/rooms/spcave20.lpc`: `int reset() { ...; return ::reset(); }` over the room base's `void reset()`: now `void reset()` with `::reset();`.
+- `u/z/zur/priv/AC1.0/`: `base.lpc` inherits `make_room.lpc` and then includes `ac.h` again for its macros, so `ac.h`'s `nosave string fname; nosave string file;` were declared twice (`Redeclaration of global variable`). `base.lpc` defines `AC_INHERITED` before the include and `ac.h` skips the two declarations then (the pattern of xiyouji's `ground.h`).
+
+The seven objects were loaded at HEAD and in the tree: no regression.

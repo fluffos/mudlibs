@@ -362,3 +362,10 @@ functionally re-tested live on this lib.
 ## 标准整理轮（2026-10-19，`scripts/toolkit_fix.sh`）
 
 本库在新驱动下重扫，机械修复：2 处重复的 inherit。修后与 HEAD 逐个物件对比载入，没有退步。
+
+## 手工收尾（2026-10-19，KB 04 §6.10）
+
+- `clone/npc/magic-beast.h`：开头的 `mapping skill_map; mapping skill_prepare;` 是从 NPC 基类抄来的，头文件里的代码一次也没读过（只调用基类的 `query_skill_map()`），删掉（`Redeclaration of global variable`）。
+- `d/quanzhou/npc/tang3.lpc`、`d/taishan/tang3.lpc` 的 `clean_up() inherited from both …` 只在整库扫描里出现：物件单独载入时不出现，它的四个 inherit 之间也没有第二条通往 `clean_up` 的路径；`clean_up::clean_up()` 编译不过，所以没有动，整库重扫后再看（`lpc_name_winner.py` 现在会跳过这种没有直接 inherit 的情形）。
+
+逐个与 HEAD 对比载入，没有退步。

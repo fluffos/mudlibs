@@ -1409,3 +1409,7 @@ The 53 files are 52 `.C` -> `.lpc` (the tea items of `d/city/npc/tea`, the Lingj
 ## 两个斜杠开头的物件路径（2026-10-19，KB 06 §7.276）
 
 1 个文件、1 处物件路径写成 `//…`（如 `carry_object("//clone/cloth/hic_cloth")`）：`/u/final/workroom.lpc`。当年的驱动不介意（路径先被规范化）；新驱动把原样的字符串交给 master 的 `valid_read()`，securityd 按 `//clone` 查目录，NPC 的 euid 没有权限，报 `Read access denied.`，NPC 载入不了。改成一个斜杠。
+
+## 帮派文件里丢掉的引号（2026-10-19，KB 03 §4.6）
+
+- `u/yujie/clb/set_bang.h`（巫师目录里的拷贝）第 94、96 行同样丢了引号，照 nt7 完好的拷贝补回；第 49 行 `level = ceil( … ) * 4 / 5;` 补 `to_int()`。没有载入检查（没有物件 include 它）。

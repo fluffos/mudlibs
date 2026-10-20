@@ -241,3 +241,7 @@ python3 scripts/mudclient.py 127.0.0.1 40276 --timeout 70 --idle 8 \
   - `daemon/ssh_d.lpc` 的 `send_msg()` 少了目标参数。
   - `item/armour/magic_ring.lpc` 调用了护甲没有的 `set_magic_level()`（只有武器有，也没有地方读护甲的这个值），删去。
   - 11 个对象：HEAD 上 0 个能载入，现在 11 个都能载入。
+
+## 剩下的编译警告（2026-10-19）
+
+整库扫描后只剩 `std/bag.lpc` 一个文件有警告（39 条）：它同时继承 `/std/item.lpc` 和 `/std/container.lpc`，两者都继承 `/std/object.lpc`，object 的 9 个变量被重复声明（`Redeclaration of global variable`），30 个函数每个都有一条 `inherited from both … using the definition in /std/container.lpc`。全库没有任何文件继承 `std/bag`，所以没有动：消掉这些警告要把 bag 改成只继承其中一个，再把另一个的函数抄进来，属于设计改动（KB 06 §7.213）。

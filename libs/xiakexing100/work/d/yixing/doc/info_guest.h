@@ -1,3 +1,5 @@
+#ifndef __YIXING_INFO_GUEST_H__
+#define __YIXING_INFO_GUEST_H__
 // /d/yixing/doc/info_guest.h
 #ifndef INFO_GUEST_H
 #define INFO_GUEST_H
@@ -284,4 +286,5 @@ mapping *info_guest = ({
         "bonus" : 60,
 ]),
 });
+#endif
 #endif
