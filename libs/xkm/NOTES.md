@@ -361,3 +361,7 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## 玩家打造兵器模板没有打造者时（2026-10-19，KB 06 §7.275）
 
 `/d/weapon/weapon/m_blade.lpc`、`/d/weapon/weapon/m_club.lpc`、`/d/weapon/weapon/m_hammer.lpc`、`/d/weapon/weapon/m_staff.lpc`、`/d/weapon/weapon/m_sword.lpc`、`/d/weapon/weapon/m_whip.lpc`（共 6 个）的 `create()` 开头 `me = this_player();` 之后无条件读 `me->query("weapon/name")` 等打造数据。房间刷新时没有人在场（`me` 为 0），或者 NPC 在别的 NPC 的命令环境里 `carry_object()` 这个模板（NPC 的 `weapon` 属性是文件名字符串），旧驱动里读出来是 0 或字符串，`switch` 照样落到 default；新驱动报 `Bad argument 1 to EFUN call_other()` / `Bad argument 1 to switch`，NPC 和它所在的房间载入不了（`--walk` 普查里一个玩家走进房间就触发）。在 `//读入数据` 之后加 `if (!me || !mapp(me->query("weapon"))) { setup(); return; }`：没有打造者就留一个没有名字的空模板，玩家打造的流程不变。
+
+## `x == "a" || "b"`：后面的字符串常量永远为真（2026-10-19，KB 06 §7.281）
+
+`if (arg == "yuyou" || "yu you")` 里的 `"yu you"` 是非空字符串，永远为真，整个条件对任何 `arg` 都成立；作者要的是每个字符串都和变量比较。在每个字符串前补上变量和运算符（`scripts/lpc_fix_literal_or.py`；`forrest2.lpc` 是 `dir == "north" && "south"`，手工改成 `(dir == "north" || dir == "south") && ...`）：`/d/bwdh/biwu.lpc`（1 处）、`/d/city/npc/obj/xitie.lpc`（2 处）、`/d/gaibang/ml.h`（1 处）、`/d/ruzhou/npc/obj/xitie.lpc`（1 处）。

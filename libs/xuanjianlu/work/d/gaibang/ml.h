@@ -15,7 +15,7 @@ int do_pick(string arg)
 
 	if ( !arg || arg == "") return 0;
 
-	if ( arg == "zhu sun" || arg == "bamboo shoot" || "竹笋"){
+	if ( arg == "zhu sun" || arg == "bamboo shoot" || arg == "竹笋"){
                	message_vision("$N折下一把竹笋，揣在怀里。\n", me);
 		ob->move(me);
 	        return 1;

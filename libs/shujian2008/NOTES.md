@@ -635,3 +635,7 @@ re-invoke `enable_player()` on this lib while the object is still
 - `/inherit/weapon/weapon_combo`←sje：2/2 个继承它的对象载入
 
 逐个与 HEAD 对比载入，没有退步。
+
+## `x == "a" || "b"`：后面的字符串常量永远为真（2026-10-19，KB 06 §7.281）
+
+`if (arg == "yuyou" || "yu you")` 里的 `"yu you"` 是非空字符串，永远为真，整个条件对任何 `arg` 都成立；作者要的是每个字符串都和变量比较。具体是：吃任何东西都会吃掉鱼油。在每个字符串前补上变量和运算符（`scripts/lpc_fix_literal_or.py`；`forrest2.lpc` 是 `dir == "north" && "south"`，手工改成 `(dir == "north" || dir == "south") && ...`）：`/clone/food/yuyou.lpc`（4 处）。

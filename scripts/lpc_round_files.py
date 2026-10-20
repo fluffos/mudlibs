@@ -10,8 +10,8 @@ on them, syncs the edited files into the scan tree and goes round again until a 
   --objects FILE   driver paths, one per line (`/d/foo/bar.lpc`), or `slug<TAB>/d/foo/bar.lpc` rows (those of SLUG only)
   --failing TSV    every .lpc named by an error row of a diagnostics file (what lpc_warnings.py / toolkit_fix.sh leave in
                    $LPC_SCRATCH/tkfix/diag/SLUG.tsv)
-  --fixers LIST    comma list, default `missing_args,untyped_params,init_array,void_return`: scripts/lpc_fix_missing_args.py,
-                   lpc_fix_untyped_params.py, lpc_fix_init_array.py, lpc_fix_void_return.py (each runs with --apply on the round's diagnostics)
+  --fixers LIST    comma list, default `missing_args,untyped_params,init_array,void_return,class_ident`: scripts/lpc_fix_missing_args.py,
+                   lpc_fix_untyped_params.py, lpc_fix_init_array.py, lpc_fix_void_return.py, lpc_fix_class_ident.py (each runs with --apply on the round's diagnostics)
 
 Prints, per round, how many of the objects compile and the fixes each fixer made, and at the end the files that still fail with their first error;
 the last round's diagnostics stay in $LPC_SCRATCH/lpcw-SLUG-round/diagnostics.tsv.  The repo edits are plain working-tree edits: load-check the changed files
@@ -36,6 +36,7 @@ FIXERS = {
     "untyped_params": ["lpc_fix_untyped_params.py", "--apply", "{slug}", "{tsv}"],
     "init_array": ["lpc_fix_init_array.py", "--apply", "{slug}", "{tsv}"],
     "void_return": ["lpc_fix_void_return.py", "{slug}", "--apply", "--diag", "{tsv}"],
+    "class_ident": ["lpc_fix_class_ident.py", "--apply", "--diag", "{tsv}", "{slug}"],
 }
 
 
@@ -46,7 +47,7 @@ def main():
     slug = a[0]
     dry = "--dry" in a
     rounds = int(a[a.index("--rounds") + 1]) if "--rounds" in a else 6
-    fixers = (a[a.index("--fixers") + 1].split(",") if "--fixers" in a else ["missing_args", "untyped_params", "init_array", "void_return"])
+    fixers = (a[a.index("--fixers") + 1].split(",") if "--fixers" in a else ["missing_args", "untyped_params", "init_array", "void_return", "class_ident"])
     objs = []
     if "--objects" in a:
         for ln in open(a[a.index("--objects") + 1], encoding="utf-8", errors="replace"):

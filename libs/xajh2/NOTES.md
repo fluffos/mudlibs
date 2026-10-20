@@ -1123,3 +1123,13 @@ seeded admin account.
 ## 补回丢失的标点，另一个版本的完好副本（2026-10-19，KB 03 §4.6 第四轮）
 
 `/system/menpai/wuliang/zuo_zimu.lpc`：`"姓名" : "嗯，你既知我姓左，……左子穆？,` 丢了收尾的引号，补回；多出来没用到的局部变量声明（`master_id`、`bonus`、`test`）删掉。文件仍然载入失败：`refuse_msg` 只在 `system/std/char/questnpc.lpc` 里声明，这个物件没有继承它（基类 `task.lpc` 里的叫 `quest_refuse_msg`），是另一处改名遗留，没有改。
+
+## 无量剑派掌门三人：补回 `refuse_msg`、`wl-shenfa` 改成 `wuliang-shenfa`、太祖长拳丢掉的两个引号（2026-10-19，KB 06 §7.258）
+
+上一节写到 `zuo_zimu.lpc` 仍然载入失败，原因一层一层往后看：
+- `refuse_msg` 没有声明：这个文件自带一份 `give_quest()`，里面引用 `refuse_msg`，文件头里的声明丢了（`d/menpai/wuliang/npc/zuo.lpc` 里那几行已经注释掉，那一份不再自带 `give_quest()`）。声明 `string *refuse_msg = ({ "左子穆说：“现在没什么事做，你先下去练功吧。\n", });` 取自旧版 `d/menpai/wuliang/npc/zuo_bak_xli.lpc`，补在 `#include "east_master.h"` 后面（xo 同样；xajhxo 的基类已经声明了它，不补，补了就是 `Redeclaration of global variable`）。
+- `system/menpai/wuliang/` 里 `zuo_zimu.lpc`、`qu_lianxing.lpc`、`rong_ziju.lpc` 授的是 `wl-shenfa`，这个库里只有 `system/skill/wuliang/wuliang-shenfa.lpc`（同目录的 `shang_yuqing.lpc`、`wuliang_d.lpc` 和旧版 `zuo_bak_xli.lpc` 都写 `wuliang-shenfa`）。`set_wugong()` → `check_skill()` 对不存在的技能 `error()`，`create()` 在第 52 行中止。三个文件都改成 `wuliang-shenfa`（xo、xajhxo 同样）。
+- `system/skill/misc/taizu-quan.lpc` 自己编译不过：183 行 `"zhaoshi": "「英 雄 独 立　,` 丢了 `」"`，721 行 `......,` 丢了结尾的引号，之后的汉字都被当成代码（`Illegal character 0xe5`）。补成 `"「英 雄 独 立」",` 和 `......",`，文本取自 xo、xo_final 的完好副本。技能不编译，`set_wugong("taizu-quan", ...)` 就是 `No program in object`，曲连兴、容子矩的 `create()` 都死在这里。
+- `qu_lianxing.lpc`、`rong_ziju.lpc`、`shang_yuqing.lpc` 授的 `parry` 这个库没有技能文件（作者在 `d/menpai/wuliang/npc/gan.lpc` 里已经把同样一行注释掉了）。`system/feature/char/skill.lpc` 的 `set_wugong()` 经 `set_jibie()` → `check_skill()` 对没有文件的技能 `error()`，物件在 `create()` 里中止。同一个文件里 `set_xiuwei()` 早就用 `if (!valid_skill(skill))` 绕开了这一情形，`set_wugong()` 开头加同样一行：`if (!valid_skill(skill)) return 0;`，物件照常载入，只缺这一项技能（缺的技能仍是内容缺口，KB 06 §7.256）。授了没有文件的技能的物件（活目录里）共 12 个。
+- `system/menpai/wuliang/obj/choushan.lpc`：`inherit CLOTH;` 但没有 `#include <armor.h>`（`CLOTH` 只在那个头文件里定义），补上。
+- 以上改完，在 `system/menpai/` 和授了缺失技能的物件上对比 HEAD 与工作树：载入 24 → 32（新载入 8 个：`zuo_zimu`、`qu_lianxing`、`rong_ziju`、`shang_yuqing`、`choushan`，以及授了 `qinglong-zhua`、`daojia-xinfa` 这两个没有文件的技能的 `d/city/capital/npc/soldier3`、`d/city/liangzhou/npc/qigai`、`d/city/yangzhou/biaoju/npc/zhou_furen`；`taizu-quan.lpc` 另外单独验证过，载入），没有回归，没有警告。仍然失败的：`system/menpai/autoresetd.lpc`（读 `/etc/roomreset`，存档里没有这个文件，`explode(0, ...)`），`d/city/capital/gao_laozhe.lpc`、`sikong_xuan.lpc`（`inherit __DIR__ "ShennongNpc.lpc"`，是从 `d/menpai/shennong/npc/` 拷错目录的残件，基类不在旁边）。

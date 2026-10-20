@@ -233,3 +233,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 - `d/murong/npc/dizi.h`：开头 `mapping skills; mapping learned;` 是从基类抄来的，`job-dizi.lpc` 一次也没用到，删掉（`Redeclaration of global variable 'skills'`、`'learned'`）。
 
 逐个与 HEAD 对比载入，没有退步。
+
+## `x == "a" || "b"`：后面的字符串常量永远为真（2026-10-19，KB 06 §7.281）
+
+`if (arg == "yuyou" || "yu you")` 里的 `"yu you"` 是非空字符串，永远为真，整个条件对任何 `arg` 都成立；作者要的是每个字符串都和变量比较。具体是：驿站把任何输入都当成合法的去处；`valid_enable()` 对任何 usage 都返回真。在每个字符串前补上变量和运算符（`scripts/lpc_fix_literal_or.py`；`forrest2.lpc` 是 `dir == "north" && "south"`，手工改成 `(dir == "north" || dir == "south") && ...`）：`/inherit/room/yizhan.lpc`（7 处）、`/kungfu/skill/tianyu-bufa.lpc`（1 处）。

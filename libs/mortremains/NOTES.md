@@ -926,3 +926,7 @@ Objects that did not compile until the lost punctuation was put back still carri
 ## Old-driver type slack: missing arguments, untyped parameters, array initializers, `class` variables (2026-10-19, KB 04 6.19, 6.20)
 
 MudOS filled the missing arguments of a call with 0, took an untyped parameter as `mixed`, never compared a declared type with its initializer and let a variable be named `class`; this driver refuses all of it at compile time and the whole object fails. 11 file(s) fixed: `/adm/AFD/attic/body.lpc`, `/adm/AFD/attic/connection.lpc`, `/adm/AFD/attic/smartmonster.lpc`, `/adm/AFD/body.lpc`, `/adm/AFD/connection.lpc`, `/adm/AFD/old/body.lpc`, `/adm/AFD/old/connection.lpc`, `/adm/AFD/old/smartmonster.lpc` ... (11 in all) (the repair rounds of `scripts/lpc_round_files.py`: zeros written out at the call, `mixed` for untyped parameters, `string X = ({...})` given its star, void functions returning values, and `class` variables renamed `pick_class`). Loaded at HEAD and in the tree, per file: 9 of them failed before and load now, none regressed.
+
+## `x == "a" || "b"`：后面的字符串常量永远为真（2026-10-19，KB 06 §7.281）
+
+`if (arg == "yuyou" || "yu you")` 里的 `"yu you"` 是非空字符串，永远为真，整个条件对任何 `arg` 都成立；作者要的是每个字符串都和变量比较。在每个字符串前补上变量和运算符（`scripts/lpc_fix_literal_or.py`；`forrest2.lpc` 是 `dir == "north" && "south"`，手工改成 `(dir == "north" || dir == "south") && ...`）：`/adm/AFD/Dark/Circus/rooms/c_3.lpc`（2 处）、`/adm/AFD/Dark/Keldros/rithik/obj/ledge.lpc`（1 处）。

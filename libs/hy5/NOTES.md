@@ -582,3 +582,11 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 ## 旧驱动的类型宽松：缺省参数、无类型形参、数组初始化、`class` 变量（2026-10-19，KB 04 §6.19、§6.20）
 
 原来的 MudOS 把调用少传的参数补 0、把没写类型的形参当 `mixed`、不检查变量的声明类型与初始值，也允许变量叫 `class`；这个驱动在编译时全部拒绝，整个物件载入失败。修了 5 个文件：`/u/dhxy/gem.lpc`、`/u/dhxy/gem2.lpc`、`/u/guaf/gem.lpc`、`/u/hxsd/gemw.lpc`、`/u/hxsd/hxsdm.lpc`（`scripts/lpc_round_files.py` 的修复轮：调用处补写 `0`、无类型形参补 `mixed`、`string X = ({...})` 补星号、void 函数的返回值，以及 `class` 变量改名 `pick_class`）。逐个文件在 HEAD 和改后载入对比：这些文件里 5 个原来载入失败、现在载入，没有退步。
+
+## `== !"字符串"` 多出来的 `!`（2026-10-19，KB 06 §7.280）
+
+`!"taoist"` 是整数 0，`x == !"taoist"` 就是“x 等于 0”，作者为其余所有人写的那一支永远走不到。具体是：龙女的 class 判断永远走不到“不是道士”那一支；龙女的 class 判断永远走不到“不是道士”那一支。全部改成 `!= "字符串"`（`scripts/lpc_fix_not_literal_cmp.py`）：`/d/gumu/npc/longnv.lpc`（3 处）、`/quest/menpaijob/gumu/zf/longnv.lpc`（3 处）。同样的行在 xkx 一系的 35 个库里都有。
+
+## `x == "a" || "b"`：后面的字符串常量永远为真（2026-10-19，KB 06 §7.281）
+
+`if (arg == "yuyou" || "yu you")` 里的 `"yu you"` 是非空字符串，永远为真，整个条件对任何 `arg` 都成立；作者要的是每个字符串都和变量比较。具体是：离开时清除“砍柴”标记只在往北走时才生效，往南不清。在每个字符串前补上变量和运算符（`scripts/lpc_fix_literal_or.py`；`forrest2.lpc` 是 `dir == "north" && "south"`，手工改成 `(dir == "north" || dir == "south") && ...`）：`/d/xiyou/lingtai/forrest2.lpc`（1 处）。

@@ -1413,3 +1413,7 @@ The 53 files are 52 `.C` -> `.lpc` (the tea items of `d/city/npc/tea`, the Lingj
 ## 帮派文件里丢掉的引号（2026-10-19，KB 03 §4.6）
 
 - `u/yujie/clb/set_bang.h`（巫师目录里的拷贝）第 94、96 行同样丢了引号，照 nt7 完好的拷贝补回；第 49 行 `level = ceil( … ) * 4 / 5;` 补 `to_int()`。没有载入检查（没有物件 include 它）。
+
+## `x == "a" || "b"`：后面的字符串常量永远为真（2026-10-19，KB 06 §7.281）
+
+`if (arg == "yuyou" || "yu you")` 里的 `"yu you"` 是非空字符串，永远为真，整个条件对任何 `arg` 都成立；作者要的是每个字符串都和变量比较。在每个字符串前补上变量和运算符（`scripts/lpc_fix_literal_or.py`；`forrest2.lpc` 是 `dir == "north" && "south"`，手工改成 `(dir == "north" || dir == "south") && ...`）：`/d/gaibang/ml.h`（1 处）、`/kungfu/skill/huashan-jianfa/kuaijian.lpc`（1 处）。

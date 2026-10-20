@@ -1571,3 +1571,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 ## 补回标点后新载入的物件里的未使用局部变量（2026-10-19，KB 04 §6.10）
 
 之前载入失败、补回丢失的标点后才载入的物件里还有未使用的局部变量警告，共 1 个文件：`/kungfu/skill/kunlun-zhang.lpc`。删掉没有用到的声明；用 `scripts/lpc_listcheck.sh` 对比 HEAD 和改后，物件仍然载入，没有警告。
+
+## `== !"字符串"` 多出来的 `!`（2026-10-19，KB 06 §7.280）
+
+`!"taoist"` 是整数 0，`x == !"taoist"` 就是“x 等于 0”，作者为其余所有人写的那一支永远走不到。具体是：龙女的 class 判断永远走不到“不是道士”那一支；龙女的 class 判断永远走不到“不是道士”那一支。全部改成 `!= "字符串"`（`scripts/lpc_fix_not_literal_cmp.py`）：`/d/gumu/npc/longnv.lpc`（3 处）、`/quest/menpaijob/gumu/zf/longnv.lpc`（3 处）。同样的行在 xkx 一系的 35 个库里都有。

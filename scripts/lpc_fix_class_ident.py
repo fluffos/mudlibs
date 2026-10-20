@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""scripts/lpc_fix_class_ident.py [--apply] (SLUG... | --all)
+"""scripts/lpc_fix_class_ident.py [--apply] [--diag TSV] (SLUG... | --all)
 
 `class` is a reserved word here (FluffOS structs), so a variable, parameter or global named `class` (`int bait, class;`, `string class = me->query("class");`,
 `void create(class)`) is `syntax error, unexpected L_CLASS` and the object never loads; every NPC / room / skill that inherits it goes with it.  The word was
@@ -42,7 +42,8 @@ def code_text(b):
 def main():
     a = sys.argv[1:]
     apply_ = "--apply" in a
-    slugs = [x for x in a if not x.startswith("--")]
+    diag = a[a.index("--diag") + 1] if "--diag" in a else None
+    slugs = [x for i, x in enumerate(a) if not x.startswith("--") and (i == 0 or a[i - 1] != "--diag")]
     if "--all" in a:
         slugs = sorted(os.path.basename(os.path.dirname(p)) for p in glob.glob(f"{REPO}/libs/*/work"))
     if not slugs:
@@ -51,7 +52,7 @@ def main():
     for slug in slugs:
         if slug in LDMUD:
             continue
-        d = newest_diag(slug)
+        d = diag or newest_diag(slug)
         if not d:
             continue
         files = []

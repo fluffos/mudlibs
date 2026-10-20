@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""scripts/lpc_restore_from_twin.py (SLUG... | --list FILE) [--any] [--refine] [--tail] [--apply] [--backup DIR] [--max-gap N] [--max-total N] [--any-run] [--extra N] [--diff] [--verbose]
+"""scripts/lpc_restore_from_twin.py (SLUG... | --list FILE) [--any] [--refine] [--tail] [--apply] [--backup DIR] [--max-gap N] [--max-total N] [--any-run] [--extra N] [--diff] [--by-name] [--verbose]
 
 Punctuation a conversion lost (KB 03 section 4.6), put back from an intact copy of the same file in another lib.
 
@@ -26,6 +26,10 @@ spans, so read them in the plan before `--apply`.
 
 `--diff` aligns the two with a diff (difflib on the white-space-free text) instead of the greedy resync: for files where lost runs sit too close
 together for the resync window (`els` + `e{`, `ms` + `g` + `]);`) and for `--extra` files.  A diff costs time quadratic in the file size: use it on a list of files.
+
+`--by-name` also looks for donors when no lib has a copy at the same path: a file with the same *base name* anywhere in another lib (the lineage moved it:
+xajh2's `system/skill/misc/taizu-quan.lpc` against xo_final's `system/skill/unarmed/level2/taizu-quan.lpc`), the twelve nearest in size, with the same acceptance
+rule as for a same-path donor (the donor's code minus short runs).  The donor column then reads `lib:/path`.
 
 `--tail` handles a file that ends in garbage (`locate_quest(this_player(), arg  厀) 鲦 ~m #  烎`: the end of the function went with a lone lead
 byte): when the file is the donor's code up to a point and at most 80 bytes of text with raw high bytes follow, the donor's text from that point
@@ -376,6 +380,7 @@ def main():
     mt = 4000
     mx = int(args[args.index("--extra") + 1]) if "--extra" in args else 0
     use_diff = "--diff" in args
+    by_name = "--by-name" in args
     if "--max-gap" in args:
         mg = int(args[args.index("--max-gap") + 1])
     if "--max-total" in args:
@@ -432,6 +437,17 @@ def main():
             for r in (rel, rel[:-4] + ".c" if rel.endswith(".lpc") else None):
                 if r and os.path.isfile(base + r) and not os.path.islink(base + r):
                     donors.setdefault(rel, []).append((lib, base + r))
+    byname = {}                                # base name -> [(lib, repo-relative path)]
+    if by_name:
+        wantb = {os.path.basename(rel) for _, rel, _ in cand if rel not in donors}
+        for f in subprocess.run(["git", "ls-files", "-z", "--", "libs"], cwd=REPO, capture_output=True).stdout.split(b"\0"):
+            try:
+                q = f.decode()
+            except UnicodeDecodeError:
+                continue
+            parts = q.split("/")
+            if len(parts) > 4 and parts[2] == "work" and parts[1] not in GENERATED and parts[-1] in wantb:
+                byname.setdefault(parts[-1], []).append((parts[1], q))
     cache = {}
     bad = failing_files()
     done = fail = 0
@@ -445,9 +461,15 @@ def main():
         best = None
         best_key = None
         best_ex = []
+        best_dp = rel
         tried = set()
         dsq = squeeze(d)
-        for lib, q in donors.get(rel, []):
+        dlist = donors.get(rel, [])
+        if not dlist and by_name:
+            near = sorted(((abs(os.path.getsize(f"{REPO}/{q}") - len(d)), lb, f"{REPO}/{q}") for lb, q in byname.get(os.path.basename(rel), [])
+                           if lb != slug and os.path.isfile(f"{REPO}/{q}") and not os.path.islink(f"{REPO}/{q}")))[:12]
+            dlist = [(lb, q) for _, lb, q in near]
+        for lib, q in dlist:
             if lib == slug:
                 continue
             dpath = q[len(f"{REPO}/libs/{lib}/work"):]
@@ -469,6 +491,7 @@ def main():
                 cut = plan_tail(d, c, dsq, csq)
                 if cut:
                     best = ((d[:cut[0]] + c[cut[1]:], 1), lib)
+                    best_dp = dpath
                     break
                 continue
             if refine:
@@ -476,6 +499,7 @@ def main():
                     r = refine_literals(d, c)
                     if r and r[1]:
                         best = (r, lib)
+                        best_dp = dpath
                         break
                 continue
             if not mx and (len(csq[0]) - len(dsq[0]) < 1 or len(csq[0]) - len(dsq[0]) > mt):
@@ -484,6 +508,7 @@ def main():
             ins = plan_inserts(d, c, mg, mt, dsq, csq, any_run, mx, ex, use_diff)
             if ins is not None and (ins or not mx) and (best is None or (len(ex), len(ins)) < best_key):
                 best = (ins, lib)
+                best_dp = dpath
                 best_key = (len(ex), len(ins))
                 best_ex = ex
                 if len(ins) == 1 and not ex:
@@ -499,7 +524,7 @@ def main():
             ins = [None] * ins[1]
         else:
             out = apply_inserts(d, ins)
-            dcache = cache[[q for l, q in donors.get(rel, []) if l == lib][0]][0]
+            dcache = cache[[q for l, q in dlist if l == lib][0]][0]
             r = refine_literals(out, dcache)
             if r and r[1]:
                 out = r[0]
@@ -509,7 +534,7 @@ def main():
                 print(f"-(still high)\t{slug}\t{rel}")
             continue
         done += 1
-        print(f"{slug}\t{rel}\t{len(ins)}\t{lib}" + (f"\t{len(best_ex)} extra" if mx else ""))
+        print(f"{slug}\t{rel}\t{len(ins)}\t{lib}" + (f":{best_dp}" if best_dp.rsplit(".", 1)[0] != rel.rsplit(".", 1)[0] else "") + (f"\t{len(best_ex)} extra" if mx else ""))
         if mx and best_ex and verbose:
             for a, b in best_ex:
                 print("\t\tkept: " + d[a:b][:90].decode("utf-8", "replace").replace("\n", " "))

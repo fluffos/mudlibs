@@ -21,9 +21,9 @@ from lpc_fix_void_return import code_mask  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SKIP = re.compile(r"/(u|w|wiz|wizard|wizards|open|players|backup|backups|old|bak|log|data|doc|docs|example|examples)/|[-_.](bak|old)/")
-SKDIR = re.compile(r"/(?:kungfu/skill|daemon/skill|skills|std/skill|adm/skill|system/skill|inherit/skill|d/skills|feature/skills?)/([^/]+?)\.lpc$")
+SKDIR = re.compile(r"/(?:kungfu/skill|daemon/skill|skills|std/skill|adm/skill|system/skill(?:/[^/]+)*|inherit/skill|d/skills|feature/skills?)/([^/]+?)\.lpc$")
 DOM = re.compile(r"/d/[^/]+/(?:skill|mjskill|skills)/([^/]+?)\.lpc$")
-SETS = re.compile(rb'\bset_skill\s*\(\s*"([A-Za-z0-9_-]+)"')
+SETS = re.compile(rb'\b(?:set_skill|set_wugong)\s*\(\s*"([A-Za-z0-9_-]+)"')
 
 
 def tracked():
@@ -73,7 +73,7 @@ def main():
                 b = open(f"{REPO}/libs/{slug}/work{rel}", "rb").read()
             except OSError:
                 continue
-            if b"set_skill" not in b:
+            if b"set_skill" not in b and b"set_wugong" not in b:
                 continue
             mask = None
             for m in SETS.finditer(b):

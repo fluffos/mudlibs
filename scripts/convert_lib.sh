@@ -42,6 +42,8 @@ fi
 echo "== copying $RAW -> $WORK"
 rm -rf "$WORK"
 cp -r "$RAW" "$WORK"
+# tar pax extended-header records that an archive maker stored as files (`PaxHeader/` directories, KB 02 2.2): metadata, not mudlib (13 libs had 364 of them in `work/`, 192 renamed to non-compiling `.lpc`)
+find "$WORK" -type d -name PaxHeader -prune -exec rm -rf {} +
 
 echo "== encoding: ${SRC_ENCODING} -> UTF-8 for every text file"
 find "$WORK" -type f > ${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}/convert_lib_filelist.$$.txt

@@ -497,3 +497,7 @@ fresh driver boot plus the full long-sit idle window below.
 ## Object paths with two leading slashes (2026-10-19, KB 06 §7.276)
 
 2 file(s), 2 site(s) wrote an object path as `//…` (like `carry_object("//clone/cloth/hic_cloth")`): `/d/events/4thjuly2008/rooms/icystuff/final.lpc`, `/wizards/pyro/personal/fireball.lpc`. The driver these games ran on did not mind (the path was normalised first); this one hands the string to the master's `valid_read()` as written, securityd looks up `//clone`, the NPC's euid has no entry and the answer is `Read access denied.`: the NPC does not load. One slash now.
+
+## `x == "a" || "b"`：后面的字符串常量永远为真（2026-10-19，KB 06 §7.281）
+
+`if (arg == "yuyou" || "yu you")` 里的 `"yu you"` 是非空字符串，永远为真，整个条件对任何 `arg` 都成立；作者要的是每个字符串都和变量比较。在每个字符串前补上变量和运算符（`scripts/lpc_fix_literal_or.py`；`forrest2.lpc` 是 `dir == "north" && "south"`，手工改成 `(dir == "north" || dir == "south") && ...`）：`/d/guildbak/newethereal/ethereal/mob/homer.lpc`（3 处）、`/d/guildbak/newethereal/mob/homer.lpc`（3 处）。

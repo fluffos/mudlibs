@@ -850,3 +850,7 @@ wield()` 对缺失路径返回 `0`，立刻炸：
 ## 补回丢失的标点，另一个版本的完好副本（2026-10-19，KB 03 §4.6 第四轮）
 
 `/system/menpai/wuliang/zuo_zimu.lpc`：`"姓名" : "嗯，你既知我姓左，……左子穆？,` 丢了收尾的引号，补回；多出来没用到的局部变量声明（`master_id`、`bonus`、`test`）删掉。文件仍然载入失败：`refuse_msg` 只在 `system/std/char/questnpc.lpc` 里声明，这个物件没有继承它，是另一处改名遗留，没有改。
+
+## 无量剑派掌门：补回 `refuse_msg`、`wl-shenfa` 改成 `wuliang-shenfa`、太祖长拳丢掉的引号（2026-10-19，KB 06 §7.258）
+
+同 xajh2 的同名一节：`system/menpai/wuliang/zuo_zimu.lpc` 丢了 `string *refuse_msg` 的声明（取自 xajh2 的 `d/menpai/wuliang/npc/zuo_bak_xli.lpc`，补在 `#include "east_master.h"` 之后）；`zuo_zimu.lpc`、`qu_lianxing.lpc`、`rong_ziju.lpc` 授的 `wl-shenfa` 是不存在的技能名，改成 `wuliang-shenfa`；`system/skill/misc/taizu-quan.lpc` 719 行 `......,` 丢了结尾的引号（补成 `......",`，文本取自 `xo_final/system/skill/unarmed/level2/taizu-quan.lpc`）。`system/menpai/wuliang/obj/choushan.lpc` 还写着 `inherit EQUIP;`，`EQUIP` 在 `globals.h` 里已经注释掉（xajh2 的同一个文件早已改成 `#include <armor.h>` + `inherit CLOTH;`，这里照改，两份现在逐字节相同）。`qu_lianxing.lpc`、`rong_ziju.lpc`、`shang_yuqing.lpc` 授的 `parry` 本库没有技能文件，`system/feature/char/skill.lpc` 的 `set_wugong()` 对没有文件的技能 `error()`，物件在 `create()` 里中止；`set_wugong()` 开头加 `if (!valid_skill(skill)) return 0;`（同文件的 `set_xiuwei()` 早已这样处理），物件照常载入，只缺这一项技能（KB 06 §7.256）。授了缺失技能的物件（活目录里）共 7 个。修后在 `system/menpai/` 和这些物件上对比 HEAD 与工作树：载入 9 → 15（`zuo_zimu`、`qu_lianxing`、`rong_ziju`、`shang_yuqing`、`choushan` 和 `pangzi`），没有回归，没有警告。

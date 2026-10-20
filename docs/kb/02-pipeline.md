@@ -52,7 +52,10 @@ grep -rn "ed_start\|ed_cmd\|query_ed_mode\|efun::set(\|efun::query(" .    # §6.
 grep -rn "switch\s*([^)]*)\s*{\s*default:" .                              # §6.3
 grep -rn 'replace_program(' --include='*.lpc' . | wc -l                   # §7.86/§7.100
 grep -rn 'maximum evaluation cost' config.fluffos                         # §7.90 (use >= 5000000)
+find . -type d -name PaxHeader                                            # tar pax records stored as files, below
 ```
+
+**`PaxHeader/` directories are tar metadata, not mudlib.** An archive made on macOS or with bsdtar, then tarred again, carries the pax extended-header records (`49 path = nitan / quest / ... / questdg0寻.c`, `20 ctime = ...`, at most 262 bytes) as files in `PaxHeader/` directories, sometimes nested (`PaxHeader/PaxHeader/`); the converter renames the `.c` ones to `.lpc` and they show up as non-compiling objects. 364 files in 13 libs (nitan3, nitan_ceshi, nitan_san 82 each, zjdy2008wzb 80, zsdsj 11, dtxyzjb 7, zitengzhan 7, wdxtym 4, hell, zjdyaryl, zjdyzj, zjmudhell 2, wxddym 1) were removed from `work/` on 2026-10-19 (`raw/` keeps them); `scripts/convert_lib.sh` drops the directories from a fresh work copy.
 
 **A `.gitignore` inside `work/` (an upstream repo's own) hides files the game needs from every git-built tree** (site zip, `pristine_tree.sh`, the warning-scan and listcheck trees) while the local working tree still has them. sunshadow (2026-10-10): `adm/db/access.db`, `groups.db` and `privs.db` were ignored, only the `.example` copies were tracked; the master's `load_access()` did `explode(read_file(ACCESS_DB))` on 0, every `check_access()` failed (the error handler's own `write_file()` too, so the real error was swallowed), and 38 of 40 NPCs in one area could not load. Detection: `git status --ignored --short libs/<slug>/work | grep -v '/save/\|/log/\|\.o$'`, and any tracked `X.example` whose `X` is untracked. Fix: `git add -f` the file (shadowgate tracks the same three).
 Also apply the WASM standards: §1.3b, §1.3e, and §1.5.

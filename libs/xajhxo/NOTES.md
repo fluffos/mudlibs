@@ -929,3 +929,7 @@ Same convert-era byte corruption as the waiter `！”\n` / `！\n` →
 ## 旧驱动的类型宽松：缺省参数、无类型形参、数组初始化、`class` 变量（2026-10-19，KB 04 §6.19、§6.20）
 
 原来的 MudOS 把调用少传的参数补 0、把没写类型的形参当 `mixed`、不检查变量的声明类型与初始值，也允许变量叫 `class`；这个驱动在编译时全部拒绝，整个物件载入失败。修了 2 个文件：`/d/zuzhi/yipin_tang/peacock/xuanwu_tang/develope/boat.lpc`、`/d/zuzhi/yipin_tang/xuanwu_tang/develope/boat.lpc`（`scripts/lpc_round_files.py` 的修复轮：调用处补写 `0`、无类型形参补 `mixed`、`string X = ({...})` 补星号、void 函数的返回值，以及 `class` 变量改名 `pick_class`）。逐个文件在 HEAD 和改后载入对比：这些文件里 0 个原来载入失败、现在载入，没有退步。
+
+## 无量剑派掌门：`wl-shenfa` 改成 `wuliang-shenfa`（2026-10-19，KB 06 §7.258）
+
+`system/menpai/wuliang/` 里 `zuo_zimu.lpc`、`qu_lianxing.lpc`、`rong_ziju.lpc` 授的 `wl-shenfa` 本库没有这个技能（只有 `system/skill/wuliang/wuliang-shenfa.lpc`，同目录 `shang_yuqing.lpc` 和 `wuliang_d.lpc` 写的都是它），`create()` 里 `F_SKILL: No such skill` 把物件中止。改成 `wuliang-shenfa` 后 `zuo_zimu.lpc` 载入（修前失败）。`qu_lianxing.lpc`、`rong_ziju.lpc`、`shang_yuqing.lpc` 往后一步因 `parry`（本库没有这个技能文件）失败：`system/feature/skill.lpc` 的 `set_wugong()` 对没有文件的技能 `error()`。`set_wugong()` 开头加 `if (!valid_skill(skill)) return 0;`（同文件的 `set_xiuwei()` 早已这样处理），物件照常载入，只缺这一项技能（KB 06 §7.256）。授了缺失技能的物件（活目录里）共 9 个，修后在 `system/menpai/` 和这些物件上对比 HEAD 与工作树：载入 29 → 34（`zuo_zimu`、`qu_lianxing`、`rong_ziju`、`shang_yuqing` 和 `weishi2`），没有回归，没有警告；`system/menpai/biaoju/ke.lpc` 仍失败（另一个原因，没有动）。

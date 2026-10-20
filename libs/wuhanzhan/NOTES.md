@@ -994,3 +994,7 @@ functionally re-tested live on this lib.
 ## 补回标点后新载入的物件里的未使用局部变量（2026-10-19，KB 04 §6.10）
 
 之前载入失败、补回丢失的标点后才载入的物件里还有未使用的局部变量警告，共 1 个文件：`/u/bqt/game/mj.lpc`。删掉没有用到的声明；用 `scripts/lpc_listcheck.sh` 对比 HEAD 和改后，物件仍然载入，没有警告。
+
+## `x == "a" || "b"`：后面的字符串常量永远为真（2026-10-19，KB 06 §7.281）
+
+`if (arg == "yuyou" || "yu you")` 里的 `"yu you"` 是非空字符串，永远为真，整个条件对任何 `arg` 都成立；作者要的是每个字符串都和变量比较。在每个字符串前补上变量和运算符（`scripts/lpc_fix_literal_or.py`；`forrest2.lpc` 是 `dir == "north" && "south"`，手工改成 `(dir == "north" || dir == "south") && ...`）：`/wizu/link/obj/citymaker.lpc`（1 处）。

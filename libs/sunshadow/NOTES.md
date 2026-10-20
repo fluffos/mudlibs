@@ -864,3 +864,15 @@ After the standard round 2,984 files still failed; the ones other files inherit 
 ## Old-driver type slack: missing arguments, untyped parameters, array initializers, `class` variables (2026-10-19, KB 04 6.19, 6.20)
 
 MudOS filled the missing arguments of a call with 0, took an untyped parameter as `mixed`, never compared a declared type with its initializer and let a variable be named `class`; this driver refuses all of it at compile time and the whole object fails. 22 file(s) fixed: `/cmds/skills/bak/_boost.lpc`, `/cmds/skills/bak/_cure.lpc`, `/cmds/skills/bak/_detect.lpc`, `/cmds/skills/bak/_feed.lpc`, `/cmds/skills/bak/_heal.lpc`, `/cmds/skills/bak/_lore.lpc`, `/cmds/skills/bak/_mend.lpc`, `/cmds/skills/bak/_offer.lpc` ... (22 in all) (the repair rounds of `scripts/lpc_round_files.py`: zeros written out at the call, `mixed` for untyped parameters, `string X = ({...})` given its star, void functions returning values, and `class` variables renamed `pick_class`). Loaded at HEAD and in the tree, per file: 15 of them failed before and load now, none regressed.
+
+## One stray backslash after an include (2026-10-19, KB 04 6.1)
+
+`d/antioch/valley/rooms/v6.lpc` began `#include <std.h>\`: the backslash joined the next line to the include directive, so `#include "../valley.h"` was swallowed and `inherit VALLEY;` was an undefined macro (the same file in shadowgate has it too; its siblings `v1`..`v5` have none). The backslash is removed: the room fails at HEAD and loads in the tree, no warning, no regression (its sibling `v5` loads in both).
+
+## An unused local in a file that loads since the type-slack rounds (2026-10-19, KB 04 6.10)
+
+`d/underdark/mines/spell/emgem.lpc`: `object obj;` in `die()` was never used, deleted (the final rescan found it; no other real warning is left in the compiling files except the two whole-class diamonds below the cap, `d/laerad/dojo/obj/shield.lpc` and `d/mine2/rooms/mine22.lpc`: two full classes inherited on purpose, see the shadowgate NOTES).
+
+## `x == "a" || "b"`：后面的字符串常量永远为真（2026-10-19，KB 06 §7.281）
+
+`if (arg == "yuyou" || "yu you")` 里的 `"yu you"` 是非空字符串，永远为真，整个条件对任何 `arg` 都成立；作者要的是每个字符串都和变量比较。具体是：`whisper` 的语言参数永远被改成 wizish。在每个字符串前补上变量和运算符（`scripts/lpc_fix_literal_or.py`；`forrest2.lpc` 是 `dir == "north" && "south"`，手工改成 `(dir == "north" || dir == "south") && ...`）：`/cmds/mortal/_whisper.lpc`（1 处）、`/d/dagger/phederia/rooms/v1.lpc`（2 处）、`/d/dagger/phederia/rooms/v15.lpc`（2 处）、`/d/darkwood/yntala/mon/centaur.lpc`（5 处）、`/d/darkwood/yntala/mon/centaurcl.lpc`（4 处）、`/d/darkwood/yntala/mon/centaurg.lpc`（3 处）、`/d/deku/hhouse/study.lpc`（1 处）、`/d/islands/giant/hill/rooms/r13.lpc`（1 处）、`/d/shadow/city/room/moffice.lpc`（1 处）、`/d/shadow/room/githyanki/27,17.desert.lpc`（1 处）、`/d/shadow/room/githyanki/rooms/0_0.lpc`（1 处）、`/d/shadow/virtual/desert/27,17.desert.lpc`（1 处）。

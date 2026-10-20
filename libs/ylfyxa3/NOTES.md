@@ -1043,3 +1043,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply y
 ## userp(0)（2026-10-19，KB 06 §7.277）
 
 `adm/simul_efun/player.lpc` 的 `userp(object ob)` 先调 `efun::userp(ob)`，没有人在场时（房间刷新里 NPC 穿会员衣服，`wear()` 里 `userp(this_player())`）`ob` 是 0，驱动报 `Bad argument 1 to userp()  Expected: object  Got: 0`，NPC 和房间载入不了。函数开头加 `if (!objectp(ob)) return 0;`（旧驱动里 `userp(0)` 就是 0）。
+
+## `== !"字符串"` 多出来的 `!`（2026-10-19，KB 06 §7.280）
+
+`!"taoist"` 是整数 0，`x == !"taoist"` 就是“x 等于 0”，作者为其余所有人写的那一支永远走不到。具体是：孙婆婆的“你去吧”只对 class 没设置的人生效。全部改成 `!= "字符串"`（`scripts/lpc_fix_not_literal_cmp.py`）：`/kungfu/class/gumu/sunpopo.lpc`（1 处）。同样的行在 xkx 一系的 35 个库里都有。

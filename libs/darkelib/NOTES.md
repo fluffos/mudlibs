@@ -892,3 +892,7 @@ Older MudOS predefined `SAVE_EXTENSION` (`".o"`) in every LPC object; the FluffO
 ## Punctuation the conversion lost, put back (2026-10-19, KB 03 4.6)
 
 2 file(s) lost a semicolon, comma, quote or the closing `}` at the end of the file and did not load. The file stopped one or two `}` short (its last byte or two went missing); appended: `/std/diewarzau/obj/misc/clone_soul.lpc`, `/wizards/diewarzau/obj/misc/clone_soul.lpc`. Loaded at HEAD and in the tree: all 2 were failing before, none regressed (`scripts/lpc_restore_from_twin.py`, `lpc_fix_eaten_quote.py --comma`, `lpc_fix_eof_braces.py`).
+
+## `x == "a" || "b"`: the bare string is always true (2026-10-19, KB 06 7.281)
+
+`if (arg == "yuyou" || "yu you")` is true whatever `arg` is, because `"yu you"` is a non-empty string; the author meant `arg == "yu you"`. The variable and operator are written in front of every bare literal (`scripts/lpc_fix_literal_or.py`): `/cmds/mortal/_unequip.lpc` (1).

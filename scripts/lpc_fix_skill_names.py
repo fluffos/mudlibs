@@ -15,7 +15,7 @@ in the table was read by a person: one letter dropped, doubled or swapped (`shnf
 dropped (`yan-fly`, `kongmingquan`), `_` for `-`, or the same skill under another transliteration (`yunu`/`yunv`,
 `pixie`/`bixie`); the neighbours that are a different skill (`taiji`/`taiyi`, `bihai-jianfa`/`bihai-bianfa`,
 `jueqing-bian`/`jueqing-jian`) are not in it.
-The name is replaced inside the string arguments of set_skill, map_skill, prepare_skill, query_skill, query_skill_mapped,
+The name is replaced inside the string arguments of set_skill, set_wugong (the xajh/xo family's create-time call), map_skill, prepare_skill, query_skill, query_skill_mapped,
 query_skill_prepared, improve_skill, add_skill, delete_skill and SKILL_D(...), in code only.  Binary-safe.  Without --apply
 the plan is printed (FIX lines: lib, file, `old->new xN`); --summary prints per-lib totals.  Idempotent."""
 import collections
@@ -29,9 +29,9 @@ from lpc_fix_void_return import code_mask  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SKIP = re.compile(r"/(u|w|wiz|wizard|wizards|open|players|backup|backups|old|bak|log|data|doc|docs|example|examples|test|tmp|attic)/|[-_.](bak|old|orphaned-driver-src)/|\.(bak|BAK|old|orig)(\.lpc)?$")
-SKDIR = re.compile(r"/(?:kungfu/skill|daemon/skill|skills|std/skill|adm/skill|system/skill|inherit/skill|d/skills|feature/skills?)/([^/]+?)\.lpc$")
+SKDIR = re.compile(r"/(?:kungfu/skill|daemon/skill|skills|std/skill|adm/skill|system/skill(?:/[^/]+)*|inherit/skill|d/skills|feature/skills?)/([^/]+?)\.lpc$")
 DOM = re.compile(r"/d/[^/]+/(?:skill|mjskill|skills)/([^/]+?)\.lpc$")
-CALL = re.compile(rb'\b(?:set_skill|map_skill|prepare_skill|query_skill|query_skill_mapped|query_skill_prepared|improve_skill|add_skill|delete_skill|SKILL_D)\s*\(\s*"([A-Za-z0-9_-]+)"(?:\s*,\s*"([A-Za-z0-9_-]+)")?')
+CALL = re.compile(rb'\b(?:set_skill|set_wugong|map_skill|prepare_skill|query_skill|query_skill_mapped|query_skill_prepared|improve_skill|add_skill|delete_skill|SKILL_D)\s*\(\s*"([A-Za-z0-9_-]+)"(?:\s*,\s*"([A-Za-z0-9_-]+)")?')
 
 PAIRS = {
     # shnfa for shenfa, tiaji for taiji and other letters dropped, doubled, swapped or mistyped
@@ -79,7 +79,7 @@ PAIRS = {
     "yunu-xinjing": "yunv-xinjing", "yunv-xinjing": "yunu-xinjing", "yunu-shenfa": "yunv-shenfa", "yunv-shenfa": "yunu-shenfa",
     "yunu-xinfa": "yunv-xinfa", "yunv-xinfa": "yunu-xinfa", "meinu-quan": "meinv-quan", "bixie-sword": "pixie-sword",
     "pixie-sword": "bixie-sword", "pixie-jian": "bixie-jian", "moshen-jianda": "moshen-jianfa", "guiyuan-tuanfa": "guiyuan-tunafa",
-    "jienanzhi": "jienan-zhi", "jinggang": "jingang", 
+    "jienanzhi": "jienan-zhi", "jinggang": "jingang", "wl-shenfa": "wuliang-shenfa",
 }
 assert all(k != v for k, v in PAIRS.items())
 
