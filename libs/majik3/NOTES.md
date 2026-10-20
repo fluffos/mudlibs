@@ -470,3 +470,7 @@ Verification: all 1456 objects at HEAD and in the tree in fresh processes: 1365 
 ## Calls to an inherited function no parent has (2026-10-19, KB 06 7.259)
 
 `/world/agriculture/guild/monsters/velinax.lpc`, `/world/agriculture/monsters/velinax.lpc` (2 objects) call `::create();`/`::init();` where the inherited bases have no such function. The old driver took such a call for a no-op returning 0; this one stops with `Unable to find the inherited function 'init'.`. These objects had only this error (it was uncovered once the others cleared); each call is deleted (`return ::fn(...)` becomes `return 0;`). (`scripts/lpc_fix_dangling_super.py`)
+
+## Comparison chains (2026-10-20, KB 06 7.282)
+
+`world/forest/rooms/bridge12.lpc`, `bridge31.lpc`: the fall-through `if (what != "tree" || what != "ladder") write("Climb what?")` is `&&` (no change in play: the branch above already returns for `tree` and `ladder`).

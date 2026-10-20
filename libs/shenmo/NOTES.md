@@ -1225,3 +1225,7 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 ## `x != "a" || x != "b"` 和 `x == "a" && x == "b"`：同一个值的比较链永远成立/永远不成立（2026-10-20，KB 06 §7.282）
 
 `if (arg != "wan" || arg != "丸") return notify_fail(...)` 对任何 `arg` 都为真，`dir == "south" && dir == "north"` 永远为假：条件下面的守卫要么永远拦、要么永远不拦。作者要的是“既不是 A 也不是 B”（`&&`）或“是 A 或 B”（`||`）。`!=` 链的 `||` 改成 `&&`（仅当条件下面是 `return` 的拒绝/守卫），`==` 链的 `&&` 改成 `||`（`scripts/lpc_fix_cmp_chain.py`）。改动：`/d/calvin/lanling/yuhuayuan.lpc`（1 处）、`/d/mingjiao/shanmen.lpc`（1 处）、`/daemon/class/mojie/liejiuquan/ball.lpc`（1 处）。另有 `/d/newborn/three/npc/juanlian.lpc`（1 处） 的条件下面做的是别的事（`==` 和 `||` 也可能是本意），保持原样。
+
+## 比较链的人工修正（2026-10-20，KB 06 §7.282）
+
+`d/newborn/three/npc/juanlian.lpc`：`accept_object()` 的检查 `id != 白琉璃 || ... || id != 紫琉璃 || !me->query(...) || id != "nver hong"` 永远为真，琉璃碎片一块也收不下，任务做不完。改成“不是这四块之一，或还没接任务”才拒绝；末尾的 `nver hong` 是多出来的第五项（函数里没有它的分支），去掉。

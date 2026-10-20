@@ -434,3 +434,7 @@ BIG5 里 `功` 等字的第二个字节正好是 0x5C（反斜杠），作者在
 ## 一个巫师目录里的 NPC 多出来的局部变量（2026-10-19，KB 04 §6.10）
 
 `u/w/wade/npc/lover.lpc` 的 `string who, dir, master, item;` 四个局部变量都没有用到（这个文件因为前面的修复才开始能载入，终局扫描才看到警告），删掉。
+
+## 比较链的人工修正（2026-10-20，KB 06 §7.282）
+
+`daemon/class/blademan/obj/mkblade.lpc`：注释写明 sharp 在 8 以上的武器和材质为 blacksteel / crimsonsteel 的刀剑（倚天剑、屠龙刀）不会被血气特攻溶毁，条件却写成 `material != "blacksteel" || material != "crimsonsteel"`（永远为真），这两把刀照样被毁；改成 `&&`（两处）。

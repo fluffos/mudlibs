@@ -365,3 +365,7 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## `x == "a" || "b"`：后面的字符串常量永远为真（2026-10-19，KB 06 §7.281）
 
 `if (arg == "yuyou" || "yu you")` 里的 `"yu you"` 是非空字符串，永远为真，整个条件对任何 `arg` 都成立；作者要的是每个字符串都和变量比较。在每个字符串前补上变量和运算符（`scripts/lpc_fix_literal_or.py`；`forrest2.lpc` 是 `dir == "north" && "south"`，手工改成 `(dir == "north" || dir == "south") && ...`）：`/d/bwdh/biwu.lpc`（1 处）、`/d/city/npc/obj/xitie.lpc`（2 处）、`/d/gaibang/ml.h`（1 处）、`/d/ruzhou/npc/obj/xitie.lpc`（1 处）。
+
+## 比较链的人工修正（2026-10-20，KB 06 §7.282）
+
+`d/hangzhou/huagang1.lpc`：挖泥的判断 `arg != "泥" || arg != "mud"` 永远为真，随便挖什么词都挖出湿泥，后面的“你要挖什么？”走不到；本意是参数是“泥”或 mud 时才挖，改成 `==` 和 `||`。

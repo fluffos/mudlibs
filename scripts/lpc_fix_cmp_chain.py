@@ -10,7 +10,7 @@ A chain of comparisons of one value that can never differ from always-true / alw
 An author who wanted "neither of these" wrote `!= a || != b` (the negation of `== a || == b`, De Morgan slipped), one who wanted "either of these" wrote
 `== a && == b`.  Both compile everywhere and no driver warns about them.  KB 06 section 7.282.
 
-  `!=` joined by `||` -> `&&`, only when the statement the condition guards is a `return` (a refusal `return notify_fail(...)` / `return 0;`, or a guard clause `return ::valid_leave(me, dir);`), or a block that starts with one or has a `return notify_fail(` in it: then "neither of
+  `!=` joined by `||` -> `&&`, only when the statement the condition guards is a `return` (a refusal `return notify_fail(...)` / `return 0;`, or a guard clause `return ::valid_leave(me, dir);`), or a block that starts with one, has a `return notify_fail(` in it or ends in `return 0;` / `return;` (`{ command("shake"); return 0; }`): then "neither of
                          these" is what the text under the test says.  A condition whose body does something instead (`if (arg != "mud" || arg != "泥") { dig(); }`) could as well
                          have meant `==` and `||`: listed, not touched.
   `==` joined by `&&` -> `||`, whatever the body: a value that equals two different literals at once cannot be what anyone meant.
@@ -39,6 +39,32 @@ def next_code(b, mask, i, step):
     while 0 <= i < len(b) and (not mask[i] or b[i] in b" \t\r\n"):
         i += step
     return i
+
+
+def last_statement_refuses(b, mask, k, j):
+    """True when the last top-level statement of the block b[k]=='{' .. b[j]=='}' is `return 0;`, `return -1;`, `return;` or `return notify_fail(...)`: the block ends the function
+    with a refusal whatever it did first (`command("shake"); return 0;`)"""
+    depth = 0
+    start = k + 1
+    last = None
+    i = k
+    while i <= j:
+        if mask[i]:
+            c = b[i]
+            if c in b"([{":
+                depth += 1
+            elif c in b")]}":
+                depth -= 1
+                if depth == 1 and c == 0x7d:        # a nested block closed: the next statement starts behind it
+                    start = i + 1
+            elif c == 0x3b and depth == 1:          # `;` at block level ends a statement
+                last = start
+                start = i + 1
+        i += 1
+    if last is None:
+        return False
+    s = next_code(b, mask, last, 1)
+    return bool(re.match(rb"return\s*(?:;|0\s*;|-\s*1\s*;|notify_fail\s*\()", b[s:s + 40]))
 
 
 def body_kind(b, mask, m_end):
@@ -102,7 +128,7 @@ def body_kind(b, mask, m_end):
                         break
             j += 1
         text = bytes(c if mask[k + x] else 0x20 for x, c in enumerate(b[k:j]))
-        return "return" if re.search(rb"\breturn\s*notify_fail\s*\(", text) or refusal.match(b, next_code(b, mask, k + 1, 1)) else "other"
+        return "return" if re.search(rb"\breturn\s*notify_fail\s*\(", text) or refusal.match(b, next_code(b, mask, k + 1, 1)) or last_statement_refuses(b, mask, k, j) else "other"
     return "return" if refusal.match(b, k) else "other"
 
 

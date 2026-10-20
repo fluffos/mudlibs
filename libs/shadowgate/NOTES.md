@@ -702,3 +702,7 @@ MudOS filled the missing arguments of a call with 0, took an untyped parameter a
 ## `query_guild`, `trunk.lpc` (2026-10-20, KB 04 6.21, 6.22)
 
 The 45 Fist troopers (`d/guilds/fist/oldfist/troopers/*.lpc`): `string *query_guild() { return "Iron Fist"; }` is `string query_guild()` (the callers take the string; the `*` was a copy of the player's line), the same edit as in sunshadow; with `old type behavior : 1` set here the declaration never mattered to the compile, and each `create()` still dies on a wizard-directory item the archive lacks (`new("/realms/bane/closed/bracers5")`). `d/tharis/obj/trunk.lpc`: `base_name(inven[i] == "/d/tharis/obj/treething")` is `base_name(inven[i]) == "/d/tharis/obj/treething"` (the misplaced parenthesis handed the result of a comparison to `base_name()`, so the check for the tree thing never worked). Loaded at HEAD and in the tree, per file: nothing regressed.
+
+## Comparison chains: hand fix (2026-10-20, KB 06 7.282)
+
+`d/player_houses/aunuit/gates.lpc`: `race != "drow" || race != "elf" || enemy` called the dragons for every visitor who had not the owner's authority; it is `(race != "drow" && race != "elf") || enemy`.

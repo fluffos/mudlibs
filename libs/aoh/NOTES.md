@@ -4925,3 +4925,7 @@ The `.c` -> `.lpc` rename changed the string but not the slice width: `f[<2..] =
 ## Unknown #pragma (2026-10-19, KB 04 6.10)
 
 `secure/kernel/file.ic` carried `#pragma no_range_check`, which this driver does not know (`Unknown #pragma, ignored`); the line is deleted, nothing else changes.
+
+## Comparison chains: tool and hand fixes (2026-10-20, KB 06 7.282)
+
+`p/houses/common/room/room.lpc` and `house_room.lpc`: `if (str && (str != "room" || str != "here")) { notify_fail("What do you want to describe?\n"); return 0; }` refused every argument, `room` and `here` included (the `is_private()` beside it has `&&`). `scripts/lpc_fix_cmp_chain.py`: `&&`.
