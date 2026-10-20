@@ -846,3 +846,7 @@ wield()` 对缺失路径返回 `0`，立刻炸：
 ## `set_name` 的 id 参数（2026-10-19，KB 06 §7.260）和没有修的 `delete()`
 
 `/clone/wizard/edit.lpc`（TMI-2 的行编辑器）里 `set_name("编辑器", "editor")` 改成 `({ "editor" })`。文件仍然载入失败：它用 TMI-2 的 simul_efun `delete(数组或字符串, 位置, 个数)`（8 处），本库没有这个函数，调用落到物件自己的 `delete(string)`（属性删除）上，类型不符。这是巫师工具，没有重写。
+
+## 补回丢失的标点，另一个版本的完好副本（2026-10-19，KB 03 §4.6 第四轮）
+
+`/system/menpai/wuliang/zuo_zimu.lpc`：`"姓名" : "嗯，你既知我姓左，……左子穆？,` 丢了收尾的引号，补回；多出来没用到的局部变量声明（`master_id`、`bonus`、`test`）删掉。文件仍然载入失败：`refuse_msg` 只在 `system/std/char/questnpc.lpc` 里声明，这个物件没有继承它，是另一处改名遗留，没有改。

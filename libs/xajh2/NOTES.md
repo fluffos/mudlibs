@@ -1119,3 +1119,7 @@ seeded admin account.
 ## 补回丢失的标点（2026-10-19，KB 03 §4.6）
 
 转换时丢掉的分号、逗号、引号或文件末尾的 `}`，共 3 个文件，修前 HEAD 载入失败。一行文字在逗号前丢了结尾的引号（下一行是同一个表的下一项），补上：`/d/menpai/wuliang/west/npc/xin_bak_xli.lpc`、`/d/menpai/wuliang/west/npc/xin_shuangqing.lpc`、`/system/skill/shaolin/mohe-zhi.lpc`。修后与 HEAD 逐个对比载入：这 3 个物件全部载入，没有退步（`scripts/lpc_restore_from_twin.py`、`lpc_fix_eaten_quote.py --comma`、`lpc_fix_eof_braces.py`）。
+
+## 补回丢失的标点，另一个版本的完好副本（2026-10-19，KB 03 §4.6 第四轮）
+
+`/system/menpai/wuliang/zuo_zimu.lpc`：`"姓名" : "嗯，你既知我姓左，……左子穆？,` 丢了收尾的引号，补回；多出来没用到的局部变量声明（`master_id`、`bonus`、`test`）删掉。文件仍然载入失败：`refuse_msg` 只在 `system/std/char/questnpc.lpc` 里声明，这个物件没有继承它（基类 `task.lpc` 里的叫 `quest_refuse_msg`），是另一处改名遗留，没有改。

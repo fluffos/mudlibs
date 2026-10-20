@@ -850,3 +850,7 @@ jitui`。`buy jitui from xiaoer` 成功（「你向店小二买下一根炸鸡�
 ## 补回丢失的标点（2026-10-19，KB 03 §4.6）
 
 转换时丢掉的分号、逗号、引号或文件末尾的 `}`，共 1 个文件，修前 HEAD 载入失败。别的库里同路径的完好副本只比这里少几个标点，按它补回（括号里是那个库）：`/d/obj/quest/quest_cl.lpc`（dtxywzxzb）。修后与 HEAD 逐个对比载入：这 1 个物件全部载入，没有退步（`scripts/lpc_restore_from_twin.py`、`lpc_fix_eaten_quote.py --comma`、`lpc_fix_eof_braces.py`）。
+
+## 补回丢失的标点，另一个版本的完好副本（2026-10-19，KB 03 §4.6 第四轮）
+
+`/daemon/class/yaomo/xueshan/dengxian-dafa/hufa2.lpc`：`inherit SSERVER;` 丢了开头的 `i`（`nherit`，注释行之后）；补回后载入，没有警告。同一个文件在 hxxtjqb 里完好，但那份少一个局部变量声明，所以用 `--diff --extra` 补，多出来的未使用声明 `lvl2` 删掉。

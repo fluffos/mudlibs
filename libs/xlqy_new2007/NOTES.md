@@ -663,3 +663,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 - `u/efflux/bf.lpc`、`u/jame/obj/flower.lpc`：`query_autoload()` 的返回类型改成 `mixed`（标准整理轮，基类声明 string）。
 
 逐个与 HEAD 对比载入，没有退步。
+
+## 补回丢失的标点，另一个版本的完好副本（2026-10-19，KB 03 §4.6 第四轮）
+
+`/d/jz/npc/jiang.lpc`：`set("daoxing", 1500000)` 丢了分号；补回后载入，没有警告。完好副本在 dtxyzjb，只有文件头的署名注释不同。
