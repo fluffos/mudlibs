@@ -1133,3 +1133,7 @@ seeded admin account.
 - `qu_lianxing.lpc`、`rong_ziju.lpc`、`shang_yuqing.lpc` 授的 `parry` 这个库没有技能文件（作者在 `d/menpai/wuliang/npc/gan.lpc` 里已经把同样一行注释掉了）。`system/feature/char/skill.lpc` 的 `set_wugong()` 经 `set_jibie()` → `check_skill()` 对没有文件的技能 `error()`，物件在 `create()` 里中止。同一个文件里 `set_xiuwei()` 早就用 `if (!valid_skill(skill))` 绕开了这一情形，`set_wugong()` 开头加同样一行：`if (!valid_skill(skill)) return 0;`，物件照常载入，只缺这一项技能（缺的技能仍是内容缺口，KB 06 §7.256）。授了没有文件的技能的物件（活目录里）共 12 个。
 - `system/menpai/wuliang/obj/choushan.lpc`：`inherit CLOTH;` 但没有 `#include <armor.h>`（`CLOTH` 只在那个头文件里定义），补上。
 - 以上改完，在 `system/menpai/` 和授了缺失技能的物件上对比 HEAD 与工作树：载入 24 → 32（新载入 8 个：`zuo_zimu`、`qu_lianxing`、`rong_ziju`、`shang_yuqing`、`choushan`，以及授了 `qinglong-zhua`、`daojia-xinfa` 这两个没有文件的技能的 `d/city/capital/npc/soldier3`、`d/city/liangzhou/npc/qigai`、`d/city/yangzhou/biaoju/npc/zhou_furen`；`taizu-quan.lpc` 另外单独验证过，载入），没有回归，没有警告。仍然失败的：`system/menpai/autoresetd.lpc`（读 `/etc/roomreset`，存档里没有这个文件，`explode(0, ...)`），`d/city/capital/gao_laozhe.lpc`、`sikong_xuan.lpc`（`inherit __DIR__ "ShennongNpc.lpc"`，是从 `d/menpai/shennong/npc/` 拷错目录的残件，基类不在旁边）。
+
+## `if (x = 常量)`：条件里写成赋值的比较（2026-10-20，KB 06 §7.290）
+
+`if (arg = "button" || arg = "按钮")`、`if (!arg || arg = "") return 0;`、`else if (check = 0 && tempB != "")`：把 `==` 写成了 `=`，条件的值就是那个常量，分支对所有非零数和任何字符串（连 `""` 都算）永远成立、对 0 永远不成立，变量还被覆盖；驱动对此没有任何警告。每一处 `=` 改成 `==`（`scripts/lpc_fix_cond_assign.py`，共 1 处）。改动：`/d/city/yangzhou/shufeng_guan.lpc`（1 处）。

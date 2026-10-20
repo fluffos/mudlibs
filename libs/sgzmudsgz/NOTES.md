@@ -195,3 +195,7 @@ hylib/dtxy) stay confirmed duplicates.
 ## `member_array('/', str)` 改为 `strsrch(str, "/")`：字符字面量的 member_array 按字节搜索（2026-10-20，KB 06 §7.283）
 
 `member_array('/', str)` 里的 `'/'` 是整数，驱动按 UTF-8 **字节**搜索，返回字节偏移（带第三个参数时起点也是字节）；最新的 FluffOS（923cdbc0）在字符串里有非 ASCII 文字时，对每个调用点警告一次（`Warning: member_array(int, string) searches BYTES`）。而 `str[0..idx-1]` 按字符切，中文字符串会在错误的位置截断。改为 `strsrch(str, "/")`（找不到同样返回 -1，按字符计数；`scripts/lpc_fix_member_array_char.py`，JSON 编码器等少数几处手改）。改动：`/daemons/channel_d.lpc`（2 处）、`/daemons/guild_d.lpc`（1 处）、`/daemons/help_d.lpc`（1 处）、`/daemons/news_d.lpc`（2 处）、`/daemons/sghelp_d.lpc`（1 处）、`/daemons/soul_d.lpc`（2 处）、`/obj/helpsys.lpc`（1 处）、`/secure/daemons/cmd_d.lpc`（2 处）、`/secure/daemons/secure_d.lpc`（5 处）、`/sgdomain/modules/war_grid.lpc`（1 处）、`/std/grid_server.lpc`（1 处）、`/std/modules/m_ansi.lpc`（1 处）、`/std/modules/m_glob.lpc`（1 处）、`/std/modules/m_set.lpc`（1 处）、`/std/room/parsedsc.lpc`（2 处）、`/trans/obj/admtool/security.lpc`（1 处）。
+
+## `if (x = 常量)`：条件里写成赋值的比较（2026-10-20，KB 06 §7.290）
+
+`if (arg = "button" || arg = "按钮")`、`if (!arg || arg = "") return 0;`、`else if (check = 0 && tempB != "")`：把 `==` 写成了 `=`，条件的值就是那个常量，分支对所有非零数和任何字符串（连 `""` 都算）永远成立、对 0 永远不成立，变量还被覆盖；驱动对此没有任何警告。每一处 `=` 改成 `==`（`scripts/lpc_fix_cond_assign.py`，共 11 处）。改动：`/cmds/verbs/money.lpc`（1 处）、`/sgdomain/troops/bowman.lpc`（2 处）、`/sgdomain/troops/cavalry.lpc`（2 处）、`/sgdomain/troops/commando.lpc`（2 处）、`/sgdomain/troops/footman.lpc`（2 处）、`/sgdomain/troops/infantry.lpc`（2 处）。

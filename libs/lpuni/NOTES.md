@@ -430,3 +430,7 @@ already confirmed `update`/`ls`/`more` live); see that section.
 ## 深度功能测试（§10.7，2026-10-05）— 主控 author_file()/domain_file()
 
 驱动的 mudlib_stats 包在主控载入时各调用一次 `author_file(<主控文件>)` 和 `domain_file("/")`。本库主控没有这两个 apply，所以每次启动都打印 `author_file() in the master file does not work, using root_uid as fallback` 和 `domain_file() in the master file does not work, using bb_ui as fallback` 两行，网页版每位访客的终端里都看得到。`adm/obj/master.lpc` 补上了这两个 apply：作者返回 `get_root_uid()`，域返回 `get_bb_uid()`，正是驱动缺少它们时所用的值。域名等于 backbone 域时，驱动让对象沿用创建者的域，与没有这个 apply 时相同（KB 06 §7.222）。用 `lpcc config.fluffos /nonexistent.lpc` 前后对比，主控载入段只少了这两行。
+
+## `if (x = CONST)`: a comparison written as an assignment (2026-10-20, KB 06 7.290)
+
+`if (arg = "button" || arg = "pill")`, `if (!arg || arg = "") return 0;`, `else if (check = 0 && tempB != "")`: `=` was typed for `==`, so the condition is the constant: the branch is always taken for a non-zero number or any string (even "") and never for 0, and the variable is overwritten; the driver does not warn. Every such `=` became `==` (`scripts/lpc_fix_cond_assign.py`, 4 terms). Changed: `/adm/daemons/lockdown_d.lpc` (4).

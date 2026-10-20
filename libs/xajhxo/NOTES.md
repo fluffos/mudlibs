@@ -933,3 +933,11 @@ Same convert-era byte corruption as the waiter `！”\n` / `！\n` →
 ## 无量剑派掌门：`wl-shenfa` 改成 `wuliang-shenfa`（2026-10-19，KB 06 §7.258）
 
 `system/menpai/wuliang/` 里 `zuo_zimu.lpc`、`qu_lianxing.lpc`、`rong_ziju.lpc` 授的 `wl-shenfa` 本库没有这个技能（只有 `system/skill/wuliang/wuliang-shenfa.lpc`，同目录 `shang_yuqing.lpc` 和 `wuliang_d.lpc` 写的都是它），`create()` 里 `F_SKILL: No such skill` 把物件中止。改成 `wuliang-shenfa` 后 `zuo_zimu.lpc` 载入（修前失败）。`qu_lianxing.lpc`、`rong_ziju.lpc`、`shang_yuqing.lpc` 往后一步因 `parry`（本库没有这个技能文件）失败：`system/feature/skill.lpc` 的 `set_wugong()` 对没有文件的技能 `error()`。`set_wugong()` 开头加 `if (!valid_skill(skill)) return 0;`（同文件的 `set_xiuwei()` 早已这样处理），物件照常载入，只缺这一项技能（KB 06 §7.256）。授了缺失技能的物件（活目录里）共 9 个，修后在 `system/menpai/` 和这些物件上对比 HEAD 与工作树：载入 29 → 34（`zuo_zimu`、`qu_lianxing`、`rong_ziju`、`shang_yuqing` 和 `weishi2`），没有回归，没有警告；`system/menpai/biaoju/ke.lpc` 仍失败（另一个原因，没有动）。
+
+## `if (x = 常量)`：条件里写成赋值的比较（2026-10-20，KB 06 §7.290）
+
+`if (arg = "button" || arg = "按钮")`、`if (!arg || arg = "") return 0;`、`else if (check = 0 && tempB != "")`：把 `==` 写成了 `=`，条件的值就是那个常量，分支对所有非零数和任何字符串（连 `""` 都算）永远成立、对 0 永远不成立，变量还被覆盖；驱动对此没有任何警告。每一处 `=` 改成 `==`（`scripts/lpc_fix_cond_assign.py`，共 1 处）。改动：`/d/city/yangzhou/shufeng_guan.lpc`（1 处）。
+
+## `tail` 指令：`tail(file)` 驱动里没有（2026-10-20，KB 06 §7.291）
+
+`cmds/*/tail.lpc` 调用 MudOS 的 `tail()` efun，FluffOS 没有，指令编译不过。模拟 efun 文件里补了 `tail(file)`（Discworld 家族的兼容版：文件最后约 20 行，从完整的一行开始，存在返回 1；`scripts/lpc_add_sefun.py tail`）。

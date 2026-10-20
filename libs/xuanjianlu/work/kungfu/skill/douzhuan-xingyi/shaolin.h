@@ -167,10 +167,10 @@ int shaolin(object me,object target)
 		msg = NOR "\n$N当下更不耽搁，轻飘飘拍出一掌，叫道：“施主，请接掌。”\n" NOR;
         	msg += HIY "这一掌招式寻常，但掌到中途，忽然微微摇晃，登时";
 
-		if(hit = 2)msg += "一掌变两掌";
-		if(hit = 4)msg += "，两掌变四掌";
-		if(hit = 8)msg += "，四掌变八掌";
-		if(hit = 16)msg += "，八掌变十六掌";
+		if(hit == 2)msg += "一掌变两掌";
+		if(hit == 4)msg += "，两掌变四掌";
+		if(hit == 8)msg += "，四掌变八掌";
+		if(hit == 16)msg += "，八掌变十六掌";
 	
 		msg += "！"+NOR+CYN+"\n$n脱口叫道：“千手如来掌！”知道只须迟得顷刻，$N便"+chinese_number(hit)+"掌变"+chinese_number(hit*2)+"掌，进而幻化为"+chinese_number(hit*4)+"掌！\n"NOR;
 

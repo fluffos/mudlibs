@@ -1262,3 +1262,11 @@ These base classes are not in the lib, so every object that inherits them (rooms
 ## Every `call_out_info()` entry has three elements (2026-10-20, KB 06 7.287)
 
 The driver answers `({ object, function, delay })` without the call_out's arguments, so code that reads the fourth element `info[i][3]` (the `callouts` command, `calloutd`, the `cod` tool) died with `Array index out of bounds` on the first line of the list. Now `(sizeof(info[i]) > 3 ? info[i][3] : 0)` (`scripts/lpc_fix_callout_info.py`). Changed: `/cmds/arch/callouts.lpc` (1).
+
+## `if (x = CONST)`: a comparison written as an assignment (2026-10-20, KB 06 7.290)
+
+`if (arg = "button" || arg = "pill")`, `if (!arg || arg = "") return 0;`, `else if (check = 0 && tempB != "")`: `=` was typed for `==`, so the condition is the constant: the branch is always taken for a non-zero number or any string (even "") and never for 0, and the variable is overwritten; the driver does not warn. Every such `=` became `==` (`scripts/lpc_fix_cond_assign.py`, 15 terms). Changed: `/adm/daemons/competed.lpc` (1), `/clone/npc/mj.lpc` (3), `/cmds/std/duanzao.lpc` (8), `/obj/mj.lpc` (3).
+
+## `callouts`: the guard `sizeof(info[i]) == 4` hid every row (2026-10-20, KB 06 7.287)
+
+The driver's `call_out_info()` entries have three elements, so the guard in front of the output line was never true and the command printed only its header. Now `>= 3`. Changed: `/cmds/arch/callouts.lpc` (1).

@@ -52,11 +52,11 @@ void SetType(string argType)
 
 void SetPlace(string argPlace)
 {
-    if(argPlace="gin")
+    if(argPlace=="gin")
         poison->damage_place=PLACE_GIN;
-    if(argPlace="kee")
+    if(argPlace=="kee")
         poison->damage_place=PLACE_KEE;
-    if(argPlace="sen")
+    if(argPlace=="sen")
         poison->damage_place=PLACE_SEN;
 }    
 

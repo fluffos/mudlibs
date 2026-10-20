@@ -848,3 +848,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply e
 ## `call_out_info()` 的每一项只有 3 个元素（2026-10-20，KB 06 §7.287）
 
 驱动返回的是 `({ 物件, 函数, 延迟 })`，不带 call_out 的参数，旧代码读第 4 项 `info[i][3]`（`callouts` 指令、`calloutd`、`cod` 工具）一读就报 `Array index out of bounds`，指令从第一行起什么也打印不出来。改为 `(sizeof(info[i]) > 3 ? info[i][3] : 0)`（`scripts/lpc_fix_callout_info.py`）。改动：`/cmds/xtra/_callouts.lpc`（1 处）、`/obj/tools/cod.lpc`（3 处）。
+
+## `if (x = 常量)`：条件里写成赋值的比较（2026-10-20，KB 06 §7.290）
+
+`if (arg = "button" || arg = "按钮")`、`if (!arg || arg = "") return 0;`、`else if (check = 0 && tempB != "")`：把 `==` 写成了 `=`，条件的值就是那个常量，分支对所有非零数和任何字符串（连 `""` 都算）永远成立、对 0 永远不成立，变量还被覆盖；驱动对此没有任何警告。每一处 `=` 改成 `==`（`scripts/lpc_fix_cond_assign.py`，共 7 处）。改动：`/cmds/xtra/_graph.lpc`（1 处）、`/d/adventurer/hall/obj/salt_bottle.lpc`（1 处）、`/d/adventurer/hall/obj/test.lpc`（1 处）、`/d/eastland/yogor/mob/paladin.lpc`（4 处）。

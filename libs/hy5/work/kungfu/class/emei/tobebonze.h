@@ -13,7 +13,7 @@ string ask_for_join()
 //         command("heng");
 //         return "本派法度严谨，象施主这样三心二意的人。善哉！善哉！贫尼不能给你剃度。\n";
 //    }
-    if( (string)me->query("class")=="bonze" &&  myfam["family_name"] = "峨嵋派")
+    if( (string)me->query("class")=="bonze" &&  myfam["family_name"] == "峨嵋派")
         return "阿弥陀佛！出家人不打诳语。你已经不是俗家人了。\n";
     if( (string)me->query("gender") != "女性" )
         return "阿弥陀佛！善哉！善哉！施主若真心皈依我佛，可去少林寺受戒。\n";

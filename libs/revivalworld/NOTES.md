@@ -889,3 +889,7 @@ README 里记载的"开机预载持续 2-3 分钟"配套的既有设计。
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。11 个文件 16 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）；`x op= 浮点` 先把浮点转成整数再运算（系数小于 1 时 x 直接变 0），改为 `x = to_int(x op ...)`：`/std/module/room/inherit/_heart_beat_store.lpc`（`productdesire +=`）、`/std/module/room/inherit/_heart_beat_store.lpc`（`productdesire -=`）、`/std/module/room/inherit/_heart_beat_store.lpc`（`desire +=`）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
 - 2026-10-14（同一次重扫，手工部分）：`cmds/std/ppl/grow.lpc`（收成）的产量倍率 `multiplicand = input_amount * harvest_percent * (growth_level+DEFAULT_GROW) / 1000.` 声明成 `int`，小数被截掉，`amount *= multiplicand` 只乘了整数部分。现改为 `float`，`amount = to_int(amount * multiplicand)`。**玩家可见**：收成量按原公式计算。`wiz/wizhall/room_wizhall_5.lpc` 的图表刻度写明 `to_int()`。改动的 11 个对象 HEAD 与工作树各载入一次，无回退。
+
+## `if (x = 常量)`：条件里写成赋值的比较（2026-10-20，KB 06 §7.290）
+
+`if (arg = "button" || arg = "按钮")`、`if (!arg || arg = "") return 0;`、`else if (check = 0 && tempB != "")`：把 `==` 写成了 `=`，条件的值就是那个常量，分支对所有非零数和任何字符串（连 `""` 都算）永远成立、对 0 永远不成立，变量还被覆盖；驱动对此没有任何警告。每一处 `=` 改成 `==`（`scripts/lpc_fix_cond_assign.py`，共 4 处）。改动：`/system/daemons/intermud2_d.lpc`（2 处）、`/system/daemons/ppl_login_d.lpc`（2 处）。

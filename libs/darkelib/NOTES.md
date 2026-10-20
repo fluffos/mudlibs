@@ -904,3 +904,7 @@ Older MudOS predefined `SAVE_EXTENSION` (`".o"`) in every LPC object; the FluffO
 ## Every `call_out_info()` entry has three elements (2026-10-20, KB 06 7.287)
 
 The driver answers `({ object, function, delay })` without the call_out's arguments, so code that reads the fourth element `info[i][3]` (the `callouts` command, `calloutd`, the `cod` tool) died with `Array index out of bounds` on the first line of the list. Now `(sizeof(info[i]) > 3 ? info[i][3] : 0)` (`scripts/lpc_fix_callout_info.py`). Changed: `/std/spells/link.lpc` (1).
+
+## `if (x = CONST)`: a comparison written as an assignment (2026-10-20, KB 06 7.290)
+
+`if (arg = "button" || arg = "pill")`, `if (!arg || arg = "") return 0;`, `else if (check = 0 && tempB != "")`: `=` was typed for `==`, so the condition is the constant: the branch is always taken for a non-zero number or any string (even "") and never for 0, and the variable is overwritten; the driver does not warn. Every such `=` became `==` (`scripts/lpc_fix_cond_assign.py`, 13 terms). Changed: `/adm/obj/master.lpc` (1), `/d/damned/guilds/cleric_new/avatar.lpc` (2), `/d/damned/guilds/cleric_new/avatar2.lpc` (1), `/d/excelsior/obj/mop.lpc` (2), `/d/excelsior/rooms/level3/road1.lpc` (1), `/d/khojem/nomad/obj/roulette_wheel.lpc` (2), `/d/mines/objects/etc/mcart.lpc` (1), `/d/nfd/obj/mop.lpc` (2), `/d/nfd/rooms/level3/road1.lpc` (1).

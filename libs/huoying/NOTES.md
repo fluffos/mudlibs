@@ -774,3 +774,7 @@ PID.
 ## `move()` no longer raises on a destination file that does not exist (2026-10-18, KB 06 7.96)
 
 `move()` of `feature/move.lpc` used `err = catch(dest = load_object(dest))` as an existence test, but `load_object()` of a missing file returns 0 and the catch never fires; `dest->receive_object()` then raised `Bad argument 1 to EFUN call_other()`. A bulletin board whose `location` is a wizard's room the archive lacks died in `std/bboard.lpc setup()` and took the room that creates it along. `if (!objectp(dest)) return 0;` after the catch: the move fails and the object stays where it is. The sampled boards already loaded, so this is a safeguard.
+
+## `if (x = 常量)`：条件里写成赋值的比较（2026-10-20，KB 06 §7.290）
+
+`if (arg = "button" || arg = "按钮")`、`if (!arg || arg = "") return 0;`、`else if (check = 0 && tempB != "")`：把 `==` 写成了 `=`，条件的值就是那个常量，分支对所有非零数和任何字符串（连 `""` 都算）永远成立、对 0 永远不成立，变量还被覆盖；驱动对此没有任何警告。每一处 `=` 改成 `==`（`scripts/lpc_fix_cond_assign.py`，共 3 处）。改动：`/world/item/mj.lpc`（3 处）。

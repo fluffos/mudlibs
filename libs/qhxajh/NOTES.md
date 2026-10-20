@@ -278,3 +278,7 @@ Same convert-era byte corruption as the waiter `！”\n` / `！\n` →
 - `system/std/char/questnpc.lpc`：`string *refuse_msg` 盖掉 NPC 基类 `system/std/char/npc.lpc` 里同名的变量（`Redeclaration of global variable 'refuse_msg'`），驱动给了它第二个变量，基类的函数和这个文件的函数从不共用；改名 `questnpc_refuse_msg`（3 处引用，`scripts/lpc_rename_ident.py`），行为不变。
 
 逐个与 HEAD 对比载入，没有退步。
+
+## `tail` 指令：`tail(file)` 驱动里没有（2026-10-20，KB 06 §7.291）
+
+`cmds/*/tail.lpc` 调用 MudOS 的 `tail()` efun，FluffOS 没有，指令编译不过。模拟 efun 文件里补了 `tail(file)`（Discworld 家族的兼容版：文件最后约 20 行，从完整的一行开始，存在返回 1；`scripts/lpc_add_sefun.py tail`）。

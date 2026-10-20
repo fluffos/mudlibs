@@ -554,3 +554,7 @@ Hand fixes; no warnings left in compiling files (the 4 files that did not compil
 - Signatures: `base.lpc`'s `move(dest)` is `varargs move(dest, int x, int y)` like gridobject's; `gridobject.lpc`'s `query_name`, `query_cap_name` and `query_short` take the optional observer `living.lpc`'s versions take; `secure/player.lpc`'s `remove()` is `void` like `base.lpc`'s.
 
 - 2026-10-14: FluffOS 970d9f09 warns `Float value truncated to int` (#1426). 6 sites in 3 files: assignments, initializers and returns now spell the truncation `to_int(...)` (same value). Changed objects loaded before and after in fresh drivers, no regressions (`scripts/lpc_fix_float_trunc.py`, KB 04 §6.10).
+
+## `if (x = 常量)`：条件里写成赋值的比较（2026-10-20，KB 06 §7.290）
+
+`if (arg = "button" || arg = "按钮")`、`if (!arg || arg = "") return 0;`、`else if (check = 0 && tempB != "")`：把 `==` 写成了 `=`，条件的值就是那个常量，分支对所有非零数和任何字符串（连 `""` 都算）永远成立、对 0 永远不成立，变量还被覆盖；驱动对此没有任何警告。每一处 `=` 改成 `==`（`scripts/lpc_fix_cond_assign.py`，共 1 处）。改动：`/inherit/gridmap.lpc`（1 处）。

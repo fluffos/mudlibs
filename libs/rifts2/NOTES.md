@@ -681,3 +681,7 @@ is off the list of non-compiling files above.
 ## `x == "a" || "b"`: the bare string is always true (2026-10-19, KB 06 7.281)
 
 `if (arg == "yuyou" || "yu you")` is true whatever `arg` is, because `"yu you"` is a non-empty string; the author meant `arg == "yu you"`. The variable and operator are written in front of every bare literal (`scripts/lpc_fix_literal_or.py`): `/cmds/mortal/_unequip.lpc` (1).
+
+## `if (x = CONST)`: a comparison written as an assignment (2026-10-20, KB 06 7.290)
+
+`if (arg = "button" || arg = "pill")`, `if (!arg || arg = "") return 0;`, `else if (check = 0 && tempB != "")`: `=` was typed for `==`, so the condition is the constant: the branch is always taken for a non-zero number or any string (even "") and never for 0, and the variable is overwritten; the driver does not warn. Every such `=` became `==` (`scripts/lpc_fix_cond_assign.py`, 1 terms). Changed: `/adm/obj/master.lpc` (1).

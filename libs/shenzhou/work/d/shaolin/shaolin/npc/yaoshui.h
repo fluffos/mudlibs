@@ -12,7 +12,7 @@ int do_yao(string arg)
      return notify_fail("你正忙着呢！\n");
   if (arg != "shui")
      return notify_fail("你要干什么？\n");
-  if (arg = "shui")
+  if (arg == "shui")
     {if (ob->query("full")
           return notify_fail("水瓢里已经有水了。\n");
      message_vision("你从河中舀起一瓢清澈的河水。\n",me);

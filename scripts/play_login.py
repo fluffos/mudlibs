@@ -28,7 +28,7 @@ RULES = [
     (r"(?i)(real ?name|your name in real|真实姓名)", "Test User"),
     (r"(?i)(chinese name|中文名字|中文姓名|您的中文名)", "测试员"),
     (r"(?i)(同意|接受|满意|agree|accept|satisfied)[^\n]{0,30}[?？:：]\s*$", "y"),
-    (r"(?i)(do you want|would you like|are you sure|create (a )?(new )?(character|player)|new (character|player)\?|确定吗|\(y/n\)|\[y/n\]|\(yes/no\)|yes or no|y/n)", "y"),
+    (r"(?i)(do you want|would you like|are you sure|create (a )?(new )?(character|player)|new (character|player)\?|确定吗|\(y/n\)|\[y/n\]|\(yes/no\)|yes or no|y\(es\) or n\(o\)|y or n|y/n)", "y"),
     (r"(?i)(press|hit)\s+(\[?enter\]?|\[?return\]?|any key)|\[more\]|--more--|continue\s*[:\.]?\s*$|按.{0,6}(回车|键)|任意键|<return>|\(return\)", ""),
     (r"(?i)(terminal|term type|screen|colou?r|ansi|vt100|client)\b.{0,50}[:?]\s*$", "{term}"),
     (r"(?i)(race|species)\b.{0,60}[:?]\s*$", "{first_of_race}"),
@@ -36,8 +36,9 @@ RULES = [
     (r"(?i)(enter|type|give|choose|select|input).{0,30}(number|choice|option)|^\s*\[?1\]?[\.\)]\s", "1"),
     (r"\((\d+)\s*(?:到|to|-|~|至)\s*(\d+)\)", "{range_mid}"),
     (r"(?i)(请选择|请输入.{0,10}(数字|号码|编号)|choose|select|pick).{0,60}[:：?？\)]\s*$", "1"),
-    (r"(?i)(what is|enter|give|type|input|tell me).{0,40}(your )?(character )?(name|id|handle)|login\s*:|name\s*:|name\?|名字|ID\s*[:：]|帐号|账号|new\)", "{name}"),
+    (r"(?i)(what is|enter|give|type|input|tell me).{0,40}(your )?(character )?(name|id|handle)|(by )?what (is your |do you wish )?name|name do you|known\s*\?|login\s*:|name\s*:|name\?|名字|ID\s*[:：]|帐号|账号|new\)", "{name}"),
 ]
+MENU_DONE = re.compile(r"(?i)(?:^|\s)\[?(\d+)\]?\s*[-.):]\s*(?:done|finish|finished|accept|continue|save|完成|结束|确定)\b")
 GAME = re.compile(r"(?i)(exit|obvious|you are|you see|north|south|east|west|here|room|出口|这里|你|inventory|hp|health)")
 NOT_GAME = re.compile(r"(?i)(password|passwd|name\s*:|login|密码|\(y/n\)|e-?mail|gender|press|return)")
 
@@ -90,7 +91,16 @@ def run(args):
         low = tail(buf, 400)
         last = low.rstrip().split("\n")[-1] if low.strip() else ""
         question = bool(re.search(r"([:：?？\)\]])\s*$", last)) or relaxed       # a prompt ends in a colon, a question mark, `(again)`, `[y/n]`
-        rule_id, reply = match_rule(low, question)
+        rule_id, reply = None, None
+        md = MENU_DONE.search(low)
+        if md and re.search(r"(?i)(choice|option|select|choose|pick|command)[^\n]*[:?]\s*$", last):       # a character-creation menu: its "Done" entry ends it
+            rule_id, reply = len(RULES), md.group(1)
+        if reply is None:
+            rule_id, reply = match_rule(last, question) if last else (None, None)        # the prompt itself first, then its paragraph, then the text above
+        if reply is None:
+            rule_id, reply = match_rule(low.rstrip().split("\n\n")[-1], question)
+        if reply is None:
+            rule_id, reply = match_rule(low, question)
         if reply is not None:
             reply = reply.replace("{first_of_race}", first_option(low, "race|species")).replace("{first_of_class}", first_option(low, "class|profession|guild|vocation"))
             for k, v in mapping.items():

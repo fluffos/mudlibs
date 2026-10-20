@@ -250,3 +250,7 @@ without headers, drafts).
 ## `member_array('/', str)` 改为 `strsrch(str, "/")`：字符字面量的 member_array 按字节搜索（2026-10-20，KB 06 §7.283）
 
 `member_array('/', str)` 里的 `'/'` 是整数，驱动按 UTF-8 **字节**搜索，返回字节偏移（带第三个参数时起点也是字节）；最新的 FluffOS（923cdbc0）在字符串里有非 ASCII 文字时，对每个调用点警告一次（`Warning: member_array(int, string) searches BYTES`）。而 `str[0..idx-1]` 按字符切，中文字符串会在错误的位置截断。改为 `strsrch(str, "/")`（找不到同样返回 -1，按字符计数；`scripts/lpc_fix_member_array_char.py`，JSON 编码器等少数几处手改）。改动：`/adm/daemons/vrm_server.lpc`（1 处）、`/d/for_martea/neon_playground/migong/adm/daemons/vrm_server.lpc`（1 处）、`/std/room/vrm_server.lpc`（1 处）。
+
+## `if (x = 常量)`：条件里写成赋值的比较（2026-10-20，KB 06 §7.290）
+
+`if (arg = "button" || arg = "按钮")`、`if (!arg || arg = "") return 0;`、`else if (check = 0 && tempB != "")`：把 `==` 写成了 `=`，条件的值就是那个常量，分支对所有非零数和任何字符串（连 `""` 都算）永远成立、对 0 永远不成立，变量还被覆盖；驱动对此没有任何警告。每一处 `=` 改成 `==`（`scripts/lpc_fix_cond_assign.py`，共 24 处）。改动：`/d/damage1.lpc`（2 处）、`/d/eren2/npc/obj/key.lpc`（1 处）、`/d/for_martea/maze/wood-room.lpc`（1 处）、`/d/huangshan/jiusi.lpc`（2 处）、`/d/jinan/mjroom.lpc`（1 处）、`/d/jinan/mjroomBUG.lpc`（1 处）、`/d/resort/teagarden.lpc`（2 处）、`/d/shanliu/npc/xiucai.lpc`（1 处）、`/d/taiping/npc/obj/key.lpc`（1 处）、`/d/yinghe/irongate.lpc`（1 处）、`/d/yinghe/irongate2.lpc`（1 处）、`/d/zangbei/cave.lpc`（2 处） 等 16 个文件。

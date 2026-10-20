@@ -876,3 +876,15 @@ The Lathander temple (`d/ss/daggerford/lathander/lath4.lpc`, `lath11.lpc`, `lath
 ## `member_array('/', str)` became `strsrch(str, "/")`: the character-literal member_array is a byte search (2026-10-20, KB 06 7.283)
 
 `'/'` in `member_array('/', str)` is an int, so the driver searches the UTF-8 **bytes** and answers a byte offset (a third argument is a byte offset too). FluffOS 923cdbc0 warns once per call site (`Warning: member_array(int, string) searches BYTES`) when the string holds non-ASCII text before the match, and `str[0..idx-1]` counts characters, so a non-ASCII string was cut in the wrong place. Now `strsrch(str, "/")` (-1 when absent, a character index; `scripts/lpc_fix_member_array_char.py`, the JSON encoders and a few other sites by hand). Changed: `/room/antiguo/castillo_drakull/npcs/same_obj.lpc` (2).
+
+## `if (x = CONST)`: a comparison written as an assignment (2026-10-20, KB 06 7.290)
+
+`if (arg = "button" || arg = "pill")`, `if (!arg || arg = "") return 0;`, `else if (check = 0 && tempB != "")`: `=` was typed for `==`, so the condition is the constant: the branch is always taken for a non-zero number or any string (even "") and never for 0, and the variable is overwritten; the driver does not warn. Every such `=` became `==` (`scripts/lpc_fix_cond_assign.py`, 22 terms). Changed: `/d/anduar/objetos/scroll.lpc` (1), `/d/newbie/duergar/rooms/dlev1_01.lpc` (1), `/d/newbie/duergar/rooms/dlev1_02.lpc` (1), `/d/newbie/duergar/rooms/dlev1_03.lpc` (1), `/d/newbie/duergar/rooms/dlev1_04.lpc` (2), `/d/newbie/duergar/rooms/dlev1_05.lpc` (1), `/d/newbie/duergar/rooms/dlev1_06.lpc` (2), `/d/newbie/duergar/rooms/dlev1_07.lpc` (2), `/d/newbie/duergar/rooms/dlev1_08.lpc` (1), `/d/newbie/duergar/rooms/dlev1_09.lpc` (2), `/d/newbie/duergar/rooms/dlev1_10.lpc` (1), `/d/newbie/duergar/rooms/pr.lpc` (2) and 5 more (17 files).
+
+## `socket` / `dumpsocket` commands: `dump_socket_status()` is not in this driver (2026-10-20, KB 06 7.291)
+
+These wizard commands do `write(dump_socket_status());`, a MudOS efun FluffOS lacks, so they did not compile. The simulated efun file now defines `dump_socket_status()`: the same table from `socket_status()` (a build without the sockets package, the WASM one, gets the header only; `scripts/lpc_add_sefun.py dump_socket_status`).
+
+## `tail` command: `tail(file)` is not in this driver (2026-10-20, KB 06 7.291)
+
+`cmds/*/tail.lpc` calls the MudOS `tail()` efun, which FluffOS lacks, so the command did not compile. The simulated efun file now defines `tail(file)` (the compatible version of the Discworld family: the last 20 lines or so from a full line, 1 when the file exists; `scripts/lpc_add_sefun.py tail`).

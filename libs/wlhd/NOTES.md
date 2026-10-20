@@ -593,3 +593,15 @@ correlated with the deletion in the same session.
 ## 任务 NPC 的 `random_move()`：目的地房间没载入时 `find_object(dest)->query(...)` 对 0 调用（2026-10-20）
 
 任务/豪杰 NPC 随机走动前先问目的地房间是否 `no_fight`，`find_object(dest)` 在房间还没载入时返回 0，`0->query()` 报 `Bad argument 1 to call_other()`，NPC 每次心跳报一次错、永远走不出第一个房间。改为 `(find_object(dest) || load_object(dest))->query("no_fight")`。改动：`/quest2/wenshu/task1/questnpc.lpc`（1 处）。
+
+## `if (x = 常量)`：条件里写成赋值的比较（2026-10-20，KB 06 §7.290）
+
+`if (arg = "button" || arg = "按钮")`、`if (!arg || arg = "") return 0;`、`else if (check = 0 && tempB != "")`：把 `==` 写成了 `=`，条件的值就是那个常量，分支对所有非零数和任何字符串（连 `""` 都算）永远成立、对 0 永远不成立，变量还被覆盖；驱动对此没有任何警告。每一处 `=` 改成 `==`（`scripts/lpc_fix_cond_assign.py`，共 15 处）。改动：`/adm/daemons/network/name_server.lpc`（1 处）、`/d/rock/liandan.lpc`（14 处）。
+
+## `socket` / `dumpsocket` 指令：`dump_socket_status()` 驱动里没有（2026-10-20，KB 06 §7.291）
+
+这些巫师指令 `write(dump_socket_status());`，MudOS 的 efun 在 FluffOS 里不存在，指令编译不过。在模拟 efun 文件里补了 `dump_socket_status()`：用 `socket_status()` 排出同样的表（没有 sockets 包的构建，比如 WASM，只有表头；`scripts/lpc_add_sefun.py dump_socket_status`）。
+
+## `mcheck`：`query_ip_rport()` 驱动里没有（2026-10-20，KB 06 §7.291）
+
+指令要显示连线的远端端口，MudOS 时代的 `query_ip_rport()` 在 FluffOS 里不存在（`query_ip_port()` 给的是本地端口），指令编译不过。文件里加了一个返回 `"?"` 的占位函数（dtsl 的同名指令早就这么做）。改动：`/cmds/wiz/mcheck2.lpc`。

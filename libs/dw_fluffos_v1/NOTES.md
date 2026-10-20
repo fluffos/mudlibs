@@ -251,3 +251,7 @@ MudOS filled the missing arguments of a call with 0, took an untyped parameter a
 ## `member_array('/', str)` became `strsrch(str, "/")`: the character-literal member_array is a byte search (2026-10-20, KB 06 7.283)
 
 `'/'` in `member_array('/', str)` is an int, so the driver searches the UTF-8 **bytes** and answers a byte offset (a third argument is a byte offset too). FluffOS 923cdbc0 warns once per call site (`Warning: member_array(int, string) searches BYTES`) when the string holds non-ASCII text before the match, and `str[0..idx-1]` counts characters, so a non-ASCII string was cut in the wrong place. Now `strsrch(str, "/")` (-1 when absent, a character index; `scripts/lpc_fix_member_array_char.py`, the JSON encoders and a few other sites by hand). Changed: `/obj/misc/housing_creator.lpc` (1).
+
+## `if (x = CONST)`: a comparison written as an assignment (2026-10-20, KB 06 7.290)
+
+`if (arg = "button" || arg = "pill")`, `if (!arg || arg = "") return 0;`, `else if (check = 0 && tempB != "")`: `=` was typed for `==`, so the condition is the constant: the branch is always taken for a non-zero number or any string (even "") and never for 0, and the variable is overwritten; the driver does not warn. Every such `=` became `==` (`scripts/lpc_fix_cond_assign.py`, 1 terms). Changed: `/cmds/theft_base.lpc` (1).

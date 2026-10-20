@@ -1126,3 +1126,7 @@ BIG5 里 `功` 等字的第二个字节正好是 0x5C（反斜杠），作者在
 ## 比较链的人工修正（2026-10-20，KB 06 §7.282）
 
 `daemon/class/blademan/obj/mkblade.lpc`：注释写明 sharp 在 8 以上的武器和材质为 blacksteel / crimsonsteel 的刀剑（倚天剑、屠龙刀）不会被血气特攻溶毁，条件却写成 `material != "blacksteel" || material != "crimsonsteel"`（永远为真），这两把刀照样被毁；改成 `&&`（两处）。
+
+## `if (x = 常量)`：条件里写成赋值的比较（2026-10-20，KB 06 §7.290）
+
+`if (arg = "button" || arg = "按钮")`、`if (!arg || arg = "") return 0;`、`else if (check = 0 && tempB != "")`：把 `==` 写成了 `=`，条件的值就是那个常量，分支对所有非零数和任何字符串（连 `""` 都算）永远成立、对 0 永远不成立，变量还被覆盖；驱动对此没有任何警告。每一处 `=` 改成 `==`（`scripts/lpc_fix_cond_assign.py`，共 2 处）。改动：`/daemon/skill/dragon-blade.lpc`（1 处）、`/daemon/skill/lungshan.lpc`（1 处）。

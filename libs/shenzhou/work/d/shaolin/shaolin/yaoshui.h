@@ -13,7 +13,7 @@ int do_yao(string arg)
      return notify_fail("你要干什么？\n");
   if( !(ob=present("shui piao", me)) )
      return notify_fail("没有水瓢，你怎么打水？\n");  
-  if ( arg = "shui" )  
+  if ( arg == "shui" )  
 {if (me->is_busy())
      return notify_fail("你正忙着呢！\n");
   if (ob->query("water_filled"))

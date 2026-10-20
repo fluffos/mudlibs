@@ -942,3 +942,15 @@ MudOS filled the missing arguments of a call with 0, took an untyped parameter a
 ## Every `call_out_info()` entry has three elements (2026-10-20, KB 06 7.287)
 
 The driver answers `({ object, function, delay })` without the call_out's arguments, so code that reads the fourth element `info[i][3]` (the `callouts` command, `calloutd`, the `cod` tool) died with `Array index out of bounds` on the first line of the list. Now `(sizeof(info[i]) > 3 ? info[i][3] : 0)` (`scripts/lpc_fix_callout_info.py`). Changed: `/cmds/xtra/_callouts.lpc` (1), `/obj/tools/aclock.lpc` (1), `/obj/tools/cod.lpc` (3).
+
+## `if (x = CONST)`: a comparison written as an assignment (2026-10-20, KB 06 7.290)
+
+`if (arg = "button" || arg = "pill")`, `if (!arg || arg = "") return 0;`, `else if (check = 0 && tempB != "")`: `=` was typed for `==`, so the condition is the constant: the branch is always taken for a non-zero number or any string (even "") and never for 0, and the variable is overwritten; the driver does not warn. Every such `=` became `==` (`scripts/lpc_fix_cond_assign.py`, 2 terms). Changed: `/adm/AFD/Dark/Keldros/rithik/rooms/fields.lpc` (1), `/adm/AFD/Dark/Prime/rooms/field.lpc` (1).
+
+## `socket` / `dumpsocket` commands: `dump_socket_status()` is not in this driver (2026-10-20, KB 06 7.291)
+
+These wizard commands do `write(dump_socket_status());`, a MudOS efun FluffOS lacks, so they did not compile. The simulated efun file now defines `dump_socket_status()`: the same table from `socket_status()` (a build without the sockets package, the WASM one, gets the header only; `scripts/lpc_add_sefun.py dump_socket_status`).
+
+## `tail` command: `tail(file)` is not in this driver (2026-10-20, KB 06 7.291)
+
+`cmds/*/tail.lpc` calls the MudOS `tail()` efun, which FluffOS lacks, so the command did not compile. The simulated efun file now defines `tail(file)` (the compatible version of the Discworld family: the last 20 lines or so from a full line, 1 when the file exists; `scripts/lpc_add_sefun.py tail`).

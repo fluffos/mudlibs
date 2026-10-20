@@ -617,3 +617,11 @@ functionally re-tested live on this lib.
 ## 深度功能测试（§10.7，2026-10-20）：实机指令扫描后同步 xkx100 的发现（KB 08 §10.16）
 
 xkx100 的实机指令扫描（见 `libs/xkx100/NOTES.md`）里和本库代码相同的几处，同样修复：`cmds/usr/boss.lpc`（`/open/shit.txt` 不存在，`write(0)`）、`cmds/usr/news.lpc` 和 `inherit/misc/bboard.lpc`（公告板房间 `/u/qingyun/workroom` 不存在）、`cmds/wiz/clone.lpc`（`if (msg = "none")`）、`cmds/wiz/cip.lpc`（无参数）、`cmds/wiz/w_lian.lpc`（`__DIR__ "enable"` 指向不存在的 `/cmds/wiz/enable`）、`clone/quest/*` 与 `clone/haojie/shashou.lpc` 的 `random_move()`（`find_object(dest)->query("no_fight")`，目的地没载入时对 0 调用）、`adm/daemons/disaster.lpc`（`lead->name()`，领头玩家离线时报错、戒严不解除）、`cmds/wiz/callouts.lpc`（`call_out_info()` 只有 3 项）。`exit.lpc` 的 `a == 1` 和 `npcd.lpc` 的 `string dest` 本库 7 月就是对的。
+
+## `if (x = 常量)`：条件里写成赋值的比较（2026-10-20，KB 06 §7.290）
+
+`if (arg = "button" || arg = "按钮")`、`if (!arg || arg = "") return 0;`、`else if (check = 0 && tempB != "")`：把 `==` 写成了 `=`，条件的值就是那个常量，分支对所有非零数和任何字符串（连 `""` 都算）永远成立、对 0 永远不成立，变量还被覆盖；驱动对此没有任何警告。每一处 `=` 改成 `==`（`scripts/lpc_fix_cond_assign.py`，共 16 处）。改动：`/d/changan/npc/majiang.lpc`（3 处）、`/d/changan/npc/matong.lpc`（3 处）、`/d/changan/puke-room.lpc`（4 处）、`/d/city/npc/matong.lpc`（3 处）、`/d/city/shufengguan.lpc`（1 处）、`/d/hangzhou/npc/meipo.lpc`（1 处）、`/quest/weixiaobao.lpc`（1 处）。
+
+## `callouts`：`sizeof(info[i]) == 4` 把每一行都挡掉了（2026-10-20，KB 06 §7.287）
+
+驱动的 `call_out_info()` 每项只有 3 个元素，输出行前的守卫 `if (sizeof(info[i]) == 4)` 永远不成立，指令只打印表头。改为 `>= 3`。改动：`/cmds/adm/callouts.lpc`（1 处）。

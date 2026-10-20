@@ -1255,3 +1255,15 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 ## `call_out_info()` 的每一项只有 3 个元素（2026-10-20，KB 06 §7.287）
 
 驱动返回的是 `({ 物件, 函数, 延迟 })`，不带 call_out 的参数，旧代码读第 4 项 `info[i][3]`（`callouts` 指令、`calloutd`、`cod` 工具）一读就报 `Array index out of bounds`，指令从第一行起什么也打印不出来。改为 `(sizeof(info[i]) > 3 ? info[i][3] : 0)`（`scripts/lpc_fix_callout_info.py`）。改动：`/cmds/arch/callouts.lpc`（1 处）。
+
+## `if (x = 常量)`：条件里写成赋值的比较（2026-10-20，KB 06 §7.290）
+
+`if (arg = "button" || arg = "按钮")`、`if (!arg || arg = "") return 0;`、`else if (check = 0 && tempB != "")`：把 `==` 写成了 `=`，条件的值就是那个常量，分支对所有非零数和任何字符串（连 `""` 都算）永远成立、对 0 永远不成立，变量还被覆盖；驱动对此没有任何警告。每一处 `=` 改成 `==`（`scripts/lpc_fix_cond_assign.py`，共 61 处）；其后 `x == "a" && x == "b"` / `x == "a" || "b"` 这类被 `==` 暴露出来的链也随之改成 `||` 或补全变量（`/d/hainan/npc/xiaohe.lpc`）。改动：`/adm/daemons/combatd.lpc`（11 处）、`/adm/daemons/combatdtest.lpc`（1 处）、`/clone/npc/man.lpc`（1 处）、`/cmds/usr/bangding.lpc`（1 处）、`/d/baiyun/shanliu/npc/xiucai.lpc`（1 处）、`/d/city/npc/matong.lpc`（3 处）、`/d/city/shufengguan.lpc`（1 处）、`/d/city4/mj/1mj.lpc`（3 处）、`/d/city4/mj/mj.lpc`（3 处）、`/d/city4/npc/majiang.lpc`（3 处）、`/d/city4/npc/matong.lpc`（3 处）、`/d/city4/obj/mj.lpc`（3 处） 等 29 个文件。
+
+## `callouts`：`sizeof(info[i]) == 4` 把每一行都挡掉了（2026-10-20，KB 06 §7.287）
+
+驱动的 `call_out_info()` 每项只有 3 个元素，输出行前的守卫 `if (sizeof(info[i]) == 4)` 永远不成立，指令只打印表头。改为 `>= 3`。改动：`/cmds/arch/callouts.lpc`（1 处）。
+
+## `mcheck`：`query_ip_rport()` 驱动里没有（2026-10-20，KB 06 §7.291）
+
+指令要显示连线的远端端口，MudOS 时代的 `query_ip_rport()` 在 FluffOS 里不存在（`query_ip_port()` 给的是本地端口），指令编译不过。文件里加了一个返回 `"?"` 的占位函数（dtsl 的同名指令早就这么做）。改动：`/cmds/imm/mcheck.lpc`。

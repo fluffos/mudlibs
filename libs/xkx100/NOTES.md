@@ -374,3 +374,15 @@ live `debug.log` 是 `libs/xkx100/log/debug.log`（Boot Time Fri Sep 4
 10. **浩劫 `adm/daemons/disaster.lpc` 的 `verdict_time()`**（KB 06 §7.289）：宣布战果的 `message()` 里 `lead->name()`，接战书的玩家若已离线 `lead` 是 0，报错后 `LOGIN_D->set_madlock(0)` 不再执行，戒严一直不解除，`cmds/usr/exit.lpc` 因此对所有人拒绝 `quit`。改为 `(lead ? lead->name() : "各派豪杰")`。
 
 已查、不是错误：`task`、`help`、`map`、`sos`、`edemote`、`converse`、`wizmap` 是翻页器 / 编辑器 / 对话提示，扫描器按“需要退出”记录；`boss` 之后屏蔽消息是设计（`bossgone` 解除）。修复后同一份扫描重跑：控制台无新错误。
+
+## `if (x = 常量)`：条件里写成赋值的比较（2026-10-20，KB 06 §7.290）
+
+`if (arg = "button" || arg = "按钮")`、`if (!arg || arg = "") return 0;`、`else if (check = 0 && tempB != "")`：把 `==` 写成了 `=`，条件的值就是那个常量，分支对所有非零数和任何字符串（连 `""` 都算）永远成立、对 0 永远不成立，变量还被覆盖；驱动对此没有任何警告。每一处 `=` 改成 `==`（`scripts/lpc_fix_cond_assign.py`，共 16 处）。改动：`/d/changan/npc/majiang.lpc`（3 处）、`/d/changan/npc/matong.lpc`（3 处）、`/d/changan/puke-room.lpc`（4 处）、`/d/city/npc/matong.lpc`（3 处）、`/d/city/shufengguan.lpc`（1 处）、`/d/hangzhou/npc/meipo.lpc`（1 处）、`/quest/weixiaobao.lpc`（1 处）。
+
+## `callouts`：`sizeof(info[i]) == 4` 把每一行都挡掉了（2026-10-20，KB 06 §7.287）
+
+驱动的 `call_out_info()` 每项只有 3 个元素，输出行前的守卫 `if (sizeof(info[i]) == 4)` 永远不成立，指令只打印表头。改为 `>= 3`。改动：`/cmds/adm/callouts.lpc`（1 处）。
+
+## `purge` 指令：`SAVE_EXTENSION` 未定义（2026-10-20，KB 04 §6.11）
+
+`cmds/wiz/purge.lpc` 用了 MudOS 的预定义宏 `SAVE_EXTENSION`（4 处），FluffOS 里叫 `__SAVE_EXTENSION__`，指令编译不过；`lpc_fix_predefined_macro.py` 之前因为 `cmds/wiz` 路径含 `/wiz/` 被跳过，现在只跳过顶层的巫师家目录。已改。

@@ -24,7 +24,7 @@ from lpc_fix_void_return import code_mask  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RENAMES = {b"SAVE_EXTENSION": b"__SAVE_EXTENSION__"}
-SKIP = re.compile(r"/(u|w|wiz|wizard|wizards|open|players|backup|backups|old|bak|log|doc|example|examples|bin)/|[-_.](bak|old|orphaned-driver-src)/")
+SKIP = re.compile(r"^/(u|w|wiz|wizard|wizards|open|players|realms|home)/|/(backup|backups|old|bak|log|doc|example|examples|bin)/|[-_.](bak|old|orphaned-driver-src)/")   # wizard HOMES at the top; cmds/wiz is code
 INC = re.compile(rb'(?m)^[ \t]*#[ \t]*include[ \t]*([<"])([^>"\r\n]+)[>"]')
 
 

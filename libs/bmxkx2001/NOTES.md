@@ -620,3 +620,7 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## 比较链的人工修正（2026-10-20，KB 06 §7.282）
 
 `d/hangzhou/huagang1.lpc`：挖泥的判断 `arg != "泥" || arg != "mud"` 永远为真，随便挖什么词都挖出湿泥，后面的“你要挖什么？”走不到；本意是参数是“泥”或 mud 时才挖，改成 `==` 和 `||`。
+
+## `if (x = 常量)`：条件里写成赋值的比较（2026-10-20，KB 06 §7.290）
+
+`if (arg = "button" || arg = "按钮")`、`if (!arg || arg = "") return 0;`、`else if (check = 0 && tempB != "")`：把 `==` 写成了 `=`，条件的值就是那个常量，分支对所有非零数和任何字符串（连 `""` 都算）永远成立、对 0 永远不成立，变量还被覆盖；驱动对此没有任何警告。每一处 `=` 改成 `==`（`scripts/lpc_fix_cond_assign.py`，共 19 处）。改动：`/d/city/jiuguan2.lpc`（2 处）、`/d/city/npc/mj.lpc`（3 处）、`/d/city/npc/mjxiaosi.lpc`（3 处）、`/d/city/wumiao.lpc`（1 处）、`/d/city/zuixianlou.lpc`（1 处）、`/d/heimuya/jiudian.lpc`（1 处）、`/d/kunlun/luanshiduibak.lpc`（2 处）、`/d/quanzhou/qzkedian.lpc`（1 处）、`/d/quanzhou/wglou1.lpc`（1 处）、`/d/xiakedao/no_pk_room.lpc`（1 处）、`/kungfu/skill/kurong-changong/liaoshang.lpc`（3 处）。

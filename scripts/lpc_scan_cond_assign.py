@@ -18,6 +18,9 @@ from lpc_fix_void_return import code_mask  # noqa: E402
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TOP = re.compile(r"^/(u|w|wiz|wizard|wizards|open|players|realms|home)/")
 ANY = re.compile(r"/(backup|backups|old|bak|log|data|example|examples|test|tests|tmp|attic|last_modify)/|[-_.](bak|old)/|\.(bak|BAK|old|orig)(\.lpc)?$")
+LDMUD = {"aoh", "morgengrauen", "nirvlp312", "simud", "sticklib", "skylib", "sluggymud", "swmud", "spacemud", "wilderness", "immaster", "amylaarmini", "mundoscuro",
+         "ageofelements", "acme", "scratch", "paomud", "sagenwelt", "xxsj"}      # LDMud ports: not run on this driver, so a change there cannot be checked; left out unless --all
+GENERATED = {"wllz3", "longyunmeng_binary"}
 COND = re.compile(rb"\b(?:if|while)\s*\(")
 TERM = re.compile(rb'^\(*\s*([A-Za-z_]\w*(?:\s*\[[^\[\]=]*\])?)\s*=(?!=)\s*("(?:[^"\\\n]|\\.)*"|-?\d+(?:\.\d+)?|0x[0-9a-fA-F]+)\s*\)*$')
 
@@ -42,7 +45,7 @@ def tracked(slugs):
             continue
         if len(parts) > 3 and parts[2] == "work" and p.endswith((".lpc", ".h")):
             by.setdefault(slug, []).append(p)
-    return {s: f for s, f in by.items() if s not in gitlinks and (not slugs or s in slugs)}
+    return {s: f for s, f in by.items() if s not in gitlinks and s not in GENERATED and (s not in LDMUD or slugs and s in slugs) and (not slugs or s in slugs)}
 
 
 def cond_span(b, mask, open_at):

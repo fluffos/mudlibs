@@ -448,3 +448,15 @@ registration, a mortal's first commands, then the same character hand-promoted t
 ## 深度功能测试（§10.7，2026-10-05）— 主控 author_file()/domain_file()
 
 驱动的 mudlib_stats 包在主控载入时各调用一次 `author_file(<主控文件>)` 和 `domain_file("/")`。本库主控没有这两个 apply，所以每次启动都打印 `author_file() in the master file does not work, using root_uid as fallback` 和 `domain_file() in the master file does not work, using bb_ui as fallback` 两行，网页版每位访客的终端里都看得到。`obj/master.lpc` 补上了这两个 apply：作者返回 `get_root_uid()`，域返回 `get_bb_uid()`，正是驱动缺少它们时所用的值。域名等于 backbone 域时，驱动让对象沿用创建者的域，与没有这个 apply 时相同（KB 06 §7.222）。用 `lpcc config.fluffos /nonexistent.lpc` 前后对比，主控载入段只少了这两行。
+\n
+## 深度功能测试（§10.7，2026-10-20）— 巫师指令用到的老 efun（KB 06 §7.291）
+
+用 level 21 的巫师账号把 `obj/player.lpc` 里的每条指令各按十种参数跑了一遍（`scripts/playsweep.py`，KB 08 §10.16），控制台上出现的全是同一类：这些指令和 `obj/living.lpc`、`room/shop.lpc` 调用了 1990 年驱动内置、FluffOS 没有的函数，运行时报 `Undefined function called: ...`。全部补在 `obj/simul_efun.lpc`：
+
+- `filter_objects()`：文件里本来有，被一个 `#if 0` 包着（“已更名为 `filter_array()`”），可 `obj/player.lpc` 的 `SHOUT` 宏（巫师的 `shout`、`echoall`）还在用旧名。去掉 `#if 0`。
+- `add_worth(amount, ob)`：老驱动在内部的巫师表里累计每位巫师的“财富”（商店成交、玩家得到的经验和钱），只在 `wizlist()` 里显示。`obj/living.lpc` 的 `add_money()`、`obj/player.lpc` 的 `add_exp()`、`room/shop.lpc` 每次得到钱或经验都调它，没有这个函数，每一点经验和每一笔买卖都以 `Undefined function called: add_worth` 收场。空函数（lpmud141 的做法）。
+- `wizlist([name])`、`localcmd()`：驱动内置的巫师表和玩家动作列表，这个移植没有数据，只写一行说明（`wizlist`、`localcmd` 指令不再报错）。
+- `tail(path)`：打印文件末尾约 20 行，文件存在返回 1（`obj/player.lpc` 的 `tail` 指令；与 Discworld 家族的兼容版相同）。
+- `create_wizard(owner)`：驱动内置函数，把请求交给主控的 `master_create_wizard(owner, domain, caller)` 并返回新城堡的文件名（`room/port_castle.lpc`）。补成 simul_efun 后，主控里“调用必须来自调用者本人”的检查（`caller != previous_object()`）会看到 simul_efun 而不是城堡，`obj/master.lpc` 里这一检查放行 `/obj/simul_efun`。
+
+另：`room/south/sforst19.lpc` 的 `east()` 写成 `this_palyer()`，已改 `this_player()`（那个出口一走就报错）。

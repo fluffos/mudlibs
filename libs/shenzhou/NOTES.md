@@ -1421,3 +1421,11 @@ The 53 files are 52 `.C` -> `.lpc` (the tea items of `d/city/npc/tea`, the Lingj
 ## 比较链的人工修正（2026-10-20，KB 06 §7.282）
 
 `d/hangzhou/huagang1.lpc`：挖泥的判断 `arg != "泥" || arg != "mud"` 永远为真，随便挖什么词都挖出湿泥，后面的“你要挖什么？”走不到；本意是参数是“泥”或 mud 时才挖，改成 `==` 和 `||`。
+
+## `if (x = 常量)`：条件里写成赋值的比较（2026-10-20，KB 06 §7.290）
+
+`if (arg = "button" || arg = "按钮")`、`if (!arg || arg = "") return 0;`、`else if (check = 0 && tempB != "")`：把 `==` 写成了 `=`，条件的值就是那个常量，分支对所有非零数和任何字符串（连 `""` 都算）永远成立、对 0 永远不成立，变量还被覆盖；驱动对此没有任何警告。每一处 `=` 改成 `==`（`scripts/lpc_fix_cond_assign.py`，共 43 处）。改动：`/d/changan/kezhan.lpc`（1 处）、`/d/city/jiuguan2.lpc`（2 处）、`/d/city/muoult.lpc`（1 处）、`/d/city/npc/mj.lpc`（3 处）、`/d/city/npc/mjxiaosi.lpc`（3 处）、`/d/city/npc/muou.lpc`（1 处）、`/d/city/wumiao.lpc`（1 处）、`/d/city/zuixianlou.lpc`（1 处）、`/d/heimuya/jiudian.lpc`（1 处）、`/d/jueqing/jianfang.lpc`（1 处）、`/d/jueqing/liguifeng.lpc`（1 处）、`/d/jueqing/maowu.lpc`（1 处） 等 24 个文件。
+
+## `socket` / `dumpsocket` 指令：`dump_socket_status()` 驱动里没有（2026-10-20，KB 06 §7.291）
+
+这些巫师指令 `write(dump_socket_status());`，MudOS 的 efun 在 FluffOS 里不存在，指令编译不过。在模拟 efun 文件里补了 `dump_socket_status()`：用 `socket_status()` 排出同样的表（没有 sockets 包的构建，比如 WASM，只有表头；`scripts/lpc_add_sefun.py dump_socket_status`）。

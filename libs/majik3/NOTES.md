@@ -474,3 +474,7 @@ Verification: all 1456 objects at HEAD and in the tree in fresh processes: 1365 
 ## Comparison chains (2026-10-20, KB 06 7.282)
 
 `world/forest/rooms/bridge12.lpc`, `bridge31.lpc`: the fall-through `if (what != "tree" || what != "ladder") write("Climb what?")` is `&&` (no change in play: the branch above already returns for `tree` and `ladder`).
+
+## `if (x = CONST)`: a comparison written as an assignment (2026-10-20, KB 06 7.290)
+
+`if (arg = "button" || arg = "pill")`, `if (!arg || arg = "") return 0;`, `else if (check = 0 && tempB != "")`: `=` was typed for `==`, so the condition is the constant: the branch is always taken for a non-zero number or any string (even "") and never for 0, and the variable is overwritten; the driver does not warn. Every such `=` became `==` (`scripts/lpc_fix_cond_assign.py`, 5 terms). Changed: `/obj/redit_ob.lpc` (1), `/world/hilltop/items/rwheel.lpc` (4).

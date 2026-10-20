@@ -983,3 +983,7 @@ MudOS filled the missing arguments of a call with 0, took an untyped parameter a
 ## `x != "a" || x != "b"` and `x == "a" && x == "b"`: comparison chains of one value that can never differ (2026-10-20, KB 06 7.282)
 
 `if (arg != "wan" || arg != "pill") return notify_fail(...)` is true whatever `arg` is, `dir == "south" && dir == "north"` is never true: the guard under the test never opens, or never closes. The author meant "neither of these" (`&&`) or "either of these" (`||`). `!=` chains joined by `||` became `&&` (only where the statement under the test is a `return`, a refusal or a guard clause), `==` chains joined by `&&` became `||` (`scripts/lpc_fix_cmp_chain.py`). Changed: `/lib/users/interface.lpc` (1).
+
+## `if (x = CONST)`: a comparison written as an assignment (2026-10-20, KB 06 7.290)
+
+`if (arg = "button" || arg = "pill")`, `if (!arg || arg = "") return 0;`, `else if (check = 0 && tempB != "")`: `=` was typed for `==`, so the condition is the constant: the branch is always taken for a non-zero number or any string (even "") and never for 0, and the variable is overwritten; the driver does not warn. Every such `=` became `==` (`scripts/lpc_fix_cond_assign.py`, 7 terms). Changed: `/lib/livings/lead.lpc` (1), `/verbs/actions/buckle.lpc` (1), `/verbs/actions/chomp.lpc` (1), `/verbs/actions/gouge.lpc` (1), `/verbs/actions/intercept.lpc` (1), `/verbs/actions/shiv.lpc` (1), `/verbs/actions/skewer.lpc` (1).

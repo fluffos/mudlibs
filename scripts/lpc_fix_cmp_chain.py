@@ -48,7 +48,7 @@ def last_statement_refuses(b, mask, k, j):
     start = k + 1
     last = None
     i = k
-    while i <= j:
+    while i <= j and i < len(b):       # an unbalanced block (no closing brace) ends at the end of the file
         if mask[i]:
             c = b[i]
             if c in b"([{":
