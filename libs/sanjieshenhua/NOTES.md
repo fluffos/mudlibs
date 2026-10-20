@@ -522,3 +522,7 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 - `/feature/encoding`←dtxyzjb：2/2 个继承它的对象载入
 
 逐个与 HEAD 对比载入，没有退步。
+
+## 标准整理轮，第二轮（2026-10-19，`scripts/toolkit_fix.sh`）
+
+本库在新驱动下重扫，机械修复：1 个函数补上 varargs（调用处少传参数），1 个未使用的局部变量。修后与 HEAD 逐个物件对比载入，没有退步。

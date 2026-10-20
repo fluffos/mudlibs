@@ -350,3 +350,7 @@ Century/`adm-single` 形状）**：`adm/simul_efun/file.lpc` 的
 - 玩家打造兵器的模板（1 个文件）这回有了基类，照 KB 06 §7.275 加上没有打造者时的保护（`scripts/lpc_fix_forge_template.py`）。
 
 逐个与 HEAD 对比载入，没有退步。
+
+## 标准整理轮，第二轮（2026-10-19，`scripts/toolkit_fix.sh`）
+
+本库在新驱动下重扫，机械修复：4 个未使用的局部变量。修后与 HEAD 逐个物件对比载入，没有退步。

@@ -473,3 +473,9 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply y
 - `/d/rock/paimai.lpc`：拍卖房的 `add("pnum",1)`（竞买者计数）被 `//归还前一个竞买者的钱` 注释吞掉，计数从不增加
 
 `scripts/lpc_fix_swallowed_statement.py` 把换行放回去。逐个载入与 HEAD 对比，没有退步。
+
+## 手工收尾（2026-10-19，KB 04 §6.10）
+
+- `clone/unique/fan.lpc`：同时继承 `STICK` 和 `SKILL`，两条路径都带来 `/feature/clean_up.lpc` 的 `clean_up()`（`clean_up() inherited from both …`），驱动用了后继承的 SKILL 那条；写出 `int clean_up() { return skill::clean_up(); }`，行为不变（`scripts/lpc_name_winner.py`）。
+
+逐个与 HEAD 对比载入，没有退步。

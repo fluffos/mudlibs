@@ -226,3 +226,10 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 ## 被注释吞掉的 inherit / include（2026-10-19，KB 06 §7.274）
 
 `/adm/daemons/securd.lpc`：`#include <login.h>`。这些指令接在上一行 `//` 注释的末尾（档案里丢了换行），成了注释的一部分，驱动看不到：缺 `inherit` 的技能报 `Undefined function offensive_target`，缺 `#include <weapon.h>` 的兵器报语法错误。`scripts/lpc_fix_swallowed_directive.py` 把换行放回去。载入检查 1 个文件，0 个原来编译不过、现在载入，没有退步。
+
+## 手工收尾（2026-10-19，KB 04 §6.10）
+
+- `d/murong/npc/skill.h`：`mapping *skills=({ … })` 是慕容复能传授的武功表，和 NPC 基类 `feature/skill.lpc` 的 `mapping skills`（本人的武功等级）同名；驱动让后声明的盖掉先声明的（`define_variable`），`murong-fu.lpc` 的 `ask_learn()` 读到的一直是这张表，后声明的这份还被强制成 `nosave`。把表改名 `skill_table` 并明写 `nosave`，`ask_learn()` 里 `mapping skills = skill_table[random(sizeof(skill_table))];` 一行跟着改（初始化表达式里的名字指全局表，局部的 `skills` 在初始化之后才进入作用域：`rule_new_local_def_with_init`）。
+- `d/murong/npc/dizi.h`：开头 `mapping skills; mapping learned;` 是从基类抄来的，`job-dizi.lpc` 一次也没用到，删掉（`Redeclaration of global variable 'skills'`、`'learned'`）。
+
+逐个与 HEAD 对比载入，没有退步。

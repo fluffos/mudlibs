@@ -554,3 +554,11 @@ Too-deep-recursion) recurred at boot; no new error from shop/拜师.
 ## 标准整理轮（2026-10-19，`scripts/toolkit_fix.sh`）
 
 本库在新驱动下重扫，机械修复：1 个覆盖基类 void 函数的函数改了类型，2 处重复的 inherit。修后与 HEAD 逐个物件对比载入，没有退步。
+
+## 手工收尾（2026-10-19，KB 04 §6.10）
+
+- `clone/aaa/1bt.lpc`、`clone/jifeng/1bt.lpc`：注释的结尾写成了 `/**/`（`/* found in comment`），改成 `*/`，注释范围不变。
+- `clone/box/gboxa.lpc`、`clone/lonely/badao.lpc`：已经在注释里的第二个 `/*`（`/*if( mapp(exit = …`、`/*   if (me->query_skill(…`）去掉；注释从第一个 `/*` 到第一个 `*/`，范围不变。
+- `quest/shenshu/npc/man.lpc`：`int kill_ob(object ob)` 盖掉基类 `feature/attack.lpc` 的 `void kill_ob()`，函数里没有 `return`，改成 `void`。`u/redl/teleport/qiulao.lpc`：`int init()` 里 `return ::init();`，基类的 `init()` 是 void，改成 `void init()`、`return;`、`::init();`。
+
+逐个与 HEAD 对比载入，没有退步。

@@ -572,3 +572,9 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## d/ailao/yuanjiang 的 59 个房间（2026-10-19，KB 04 §6.18）
 
 `d/ailao/yuanjiang/` 下 59 个房间开头是 `inherit __DIR__ "normal.lpc";`，也就是 `d/ailao/yuanjiang/normal.lpc`，档案里没有这个文件（有的是上一级的 `d/ailao/normal.lpc`，是这个区域的房间基类，`ailao.lpc` 继承的就是它）。编译扫描看不到这一类（`inherit` 的文件载入时才读），房间载入时报 `Inherited file '/d/ailao/yuanjiang/normal.lpc' does not exist!`。改成 `inherit "/d/ailao/normal";`，62 个对象（这 59 个房间加上目录里本来能载入的 3 个）全部载入，逐个与 HEAD 对比没有退步；`chuan71` 到 `chuan79` 能编译之后才露出的未用局部变量 `usr` 一并删掉。
+
+## 手工收尾（2026-10-19，KB 04 §6.10）
+
+- `maze/yanmen/npc/horse.lpc`：`inherit NPC; inherit F_RIDDING;`，NPC 一路带来 `feature/equip_liv.lpc` 的 `unequip(object ob, int ref status)`，`feature/ridding.lpc` 也有 `unequip()`（`unequip() inherited from both …`），驱动用了后继承的 ridding 那个；写出 `int unequip() { return ridding::unequip(); }`，行为不变（`scripts/lpc_name_winner.py`）。
+
+逐个与 HEAD 对比载入，没有退步。

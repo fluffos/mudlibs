@@ -915,3 +915,9 @@ Same convert-era byte corruption as the waiter `！”\n` / `！\n` →
 ## 全局头文件丢了 1 个宏（2026-10-19，KB 04 §6.16）
 
 `/include/globals.h` 里没有定义 `YIPIN_D`，用到它们的物件（名单里 2 个）编译时报 `Undefined variable`/`Undefined function`，整个物件载入不了（编译器在第一个未定义的名字上停下，后面的错误和警告都看不到）。同系的库在各自的头文件里都有这几行：照其中和本库共有文件最多的那个库，原样补到 `/include/globals.h` 最后一个 `#define` 之后，宏体里出现的路径在本库里都存在。补完后名单里有 2 个载入，其余还差别的东西。（`scripts/lpc_restore_defines.py`）
+
+## 手工收尾（2026-10-19，KB 04 §6.10）
+
+- `system/std/char/questnpc.lpc`、`d/nanyang/npc/guo.lpc`：`string *refuse_msg` 盖掉 NPC 基类 `system/std/char/npc.lpc` 里同名的 `nosave string *refuse_msg`（`Redeclaration of global variable 'refuse_msg'`），驱动给了它们第二个变量，基类的函数和它们自己的函数从不共用；改名 `questnpc_refuse_msg`、`guo_refuse_msg`（`scripts/lpc_rename_ident.py`），行为不变。
+
+逐个与 HEAD 对比载入，没有退步。

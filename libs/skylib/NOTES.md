@@ -838,3 +838,13 @@ These base classes are not in the lib, so every object that inherits them (rooms
 ## Objects that call an inherited function no parent has (2026-10-19, KB 06 7.259)
 
 `::create();`, `::init();` and `return ::buy_object(who, item);` were written against a parent that has the function; this lib's parents do not, the old driver took the call for a no-op returning 0, and the current driver stops at compile time with `Unable to find the inherited function`, so the object never loads. A call written as a statement is deleted, `return ::f(...)` becomes `return 0;` (`return;` in a void function), which is what the old driver did. 1 calls in 1 files: `::cmd()` (1). Only files whose every error was this one were edited; a file that also has another error (usually a parent that is itself missing) is left until the parent is restored. (`scripts/lpc_fix_dangling_super.py`)
+
+## Standard repair round，第二轮 (2026-10-19, `scripts/toolkit_fix.sh`)
+
+Rescanned with the current driver; mechanical fixes: 1 functions made varargs (callers pass fewer arguments). Every changed object was loaded at HEAD and in the tree: no regression.
+
+## Hand pass after the repair round (2026-10-19, KB 04 6.10)
+
+- `std/dom/cmn_mas.lpc`: the base of the domain common rooms has an `int do_list(string)` (the `list` command, called through a function pointer in its `init()`), and `d/liaison/common.lpc` defines another `do_list( object *indir, ... )`, the verb handler `add_command("list", this_object(), ...)` finds by name. The two disagree on the argument count (`Number of arguments to 'do_list' disagrees with previous definition`). The base function is now `list_domain` (3 sites); the verb handler keeps its name, the command system looks it up by it.
+
+Every object loaded at HEAD and in the tree: no regression (`d/liaison/common.lpc` does not load at HEAD either).

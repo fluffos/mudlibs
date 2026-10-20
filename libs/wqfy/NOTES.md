@@ -497,3 +497,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply w
 - `/feature/unique.lpc`（宏 `F_UNIQUE`，10 个对象）←zzfy3。`F_NOCLONE` 也试过（`/feature/noclone.lpc` ←sjshv150）：基类载得进来，但用它的 4 个大宗师 NPC 还要 `NPC_D`，一个也载不进来，所以又撤掉了。
 
 56 个对象里 52 个现在载入（HEAD 上一个都不行），逐个与 HEAD 对比没有退步。剩下 4 个是 `include/npc/ultra/{dugu,huang,kuihua,shenni}.lpc`（大宗师 NPC）：它们要 `NPC_D` 守护进程和 `ultrap()`，本库没有这一套，不动。新载入的 NPC 带出的警告（`obj/npc/*-shi` 等的未用局部变量）留给标准一轮修复。（`scripts/lpc_restore_bases.py --evidence --retry`）
+
+## 标准整理轮，第二轮（2026-10-19，`scripts/toolkit_fix.sh`）
+
+本库在新驱动下重扫，机械修复：15 个未使用的局部变量。修后与 HEAD 逐个物件对比载入，没有退步。

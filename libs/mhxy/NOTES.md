@@ -1172,3 +1172,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply m
 - `daemon/class/yaomo/xueshan/cuixin-zhang/cuixin.lpc` 的一句出招描述里夹着一个 NUL 字节（`接着\0:`），`d/lingtai/obj/yuanpinzhu.lpc` 的第一行注释里也有一个（`张天师\0,`）：驱动报 `Illegal embedded NUL byte (0x00) in source`，技能和物件都载入不了。删掉 NUL，其余文字不动。
 
 逐个载入与 HEAD 对比，没有退步。
+
+## 标准整理轮，第二轮（2026-10-19，`scripts/toolkit_fix.sh`）
+
+本库在新驱动下重扫，机械修复：3 个未使用的局部变量，1 处重复的 inherit。修后与 HEAD 逐个物件对比载入，没有退步。

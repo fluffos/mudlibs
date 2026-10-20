@@ -125,6 +125,15 @@ def main():
             direct = w
         qual = os.path.basename(direct)
         qual = qual[:-4] if qual.endswith(".lpc") else qual
+        # the scope must be a direct inherit of the leaf: a message without `via` for the new program does not prove it
+        # (zxty08nxgbb `d/quanzhou/npc/tang3.lpc` inherits NPC, F_MASTER, F_UNIQUE, F_SAVE and none of them is clean_up:
+        # `clean_up::clean_up()` failed to compile, `Unable to find the inherited function`)
+        leaf_src = read(W + f) or ""
+        norm = lambda s: re.sub(r"[^a-z0-9]", "", s.lower())
+        ops = [norm(x) for x in re.findall(r"(?m)^[ \t]*inherit[ \t]+([^;]+);", mask(leaf_src))]
+        if norm(qual) and not any(norm(qual) in o or o in norm(qual) for o in ops if o):
+            skipped.append((f, fn, f"no direct inherit of the file looks like '{qual}' (the message names {direct}); read the diamond by hand"))
+            continue
         sig, why = None, "no candidate"
         for cand in dict.fromkeys([w, m["a"], m["b"]]):      # the definition may sit in an ancestor of W
             sig, why = signature(W + cand, fn)

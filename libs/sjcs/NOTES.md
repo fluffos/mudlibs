@@ -422,3 +422,11 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply s
 ## 被注释吞掉的 inherit / include（2026-10-19，KB 06 §7.274）
 
 `/daemon/class/moon/moonshentong/shiyue.lpc`：`inherit SSERVER;`。这些指令接在上一行 `//` 注释的末尾（档案里丢了换行），成了注释的一部分，驱动看不到：缺 `inherit` 的技能报 `Undefined function offensive_target`，缺 `#include <weapon.h>` 的兵器报语法错误。`scripts/lpc_fix_swallowed_directive.py` 把换行放回去。载入检查 1 个文件，1 个原来编译不过、现在载入，没有退步。
+
+## 手工收尾（2026-10-19，KB 04 §6.10）
+
+- `daemon/skill/qishang-quan.lpc`：`valid_enable()` 的右花括号后面多了一个 `;`，删掉。
+- `d/longzhu/npc/long.lpc`、`d/wosshipg/long.lpc`：文件开头声明了 `int long();`，这个函数在文件里从没定义过，类型又和 `/feature/name.lpc` 的 `string long()` 对不上（`Function long inherited from … does not match current function in return type ( string vs int )`）；删掉这行声明。
+- `adm/CL/YI.lpc`：`query_autoload()` 的返回类型改成 `mixed`（标准整理轮，基类声明 string）。
+
+逐个与 HEAD 对比载入，没有退步。

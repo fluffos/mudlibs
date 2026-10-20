@@ -656,3 +656,10 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 ## RANK_D 对 0 的称呼（2026-10-19，KB 06 §7.273）
 
 `adm/daemons/rankd.lpc` 的 `query_respect()`、`query_rude()`、`query_self()`、`query_self_rude()` 里 4 个函数开头补上 `if (!objectp(ob)) ob = this_object();`。NPC 在 `create()` 里写 `"…" + RANK_D->query_respect(this_player()) + "…"`（`inquiry` 对话、`chat_msg`），驱动自己跑 `reset()` 时没有人在场，`this_player()` 是 0。旧驱动里 `0->query("age")` 返回 0，称呼走默认分支；新驱动直接报 `Bad argument 1 to EFUN call_other()`，房间的 `make_inventory()` 吞掉错误，被打死的 NPC 再也刷新不回来。用 `scripts/lpc_reach_census.py --walk` 找到（xkx100 的武当弟子、一灯、汴梁书生…）；修在守护程序里，不动 1,800 个 NPC 文件。
+
+## 手工收尾（2026-10-19，KB 04 §6.10）
+
+- `adm/daemons/ftpdd.lpc`：`read_connection()` 里的 `ret` 只在 `if (0) { … }` 的死分支里用（`socket_connect()` 那行早就注释掉了），声明和死分支里的 `socket_error(ret)` 一行删掉。
+- `u/efflux/bf.lpc`、`u/jame/obj/flower.lpc`：`query_autoload()` 的返回类型改成 `mixed`（标准整理轮，基类声明 string）。
+
+逐个与 HEAD 对比载入，没有退步。

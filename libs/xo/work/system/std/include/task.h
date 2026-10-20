@@ -24,8 +24,8 @@ void TaskSuccess( object );
 void TaskFail( object );
 varargs void TaskEnd( object );
 
-nosave void create();
-nosave void heart_beat();
+protected void create();
+protected void heart_beat();
 
 void AddProposer( object );
 void AddExecutor( object );

@@ -124,8 +124,19 @@ Classes the toolkit leaves to you on purpose:
 - **`Redeclaration of global variable`** across hundreds of files usually
   comes from one base class that inherits a file twice or redeclares a parent's
   variable (`scripts/lpc_diamonds.py`, KB 06 §7.213).
-- **A typed `?:` with two different types, `/*` inside a comment, and macro
-  redefinitions** are small hand edits.
+- **A typed `?:` with two different types and `/*` inside a comment** are small
+  hand edits (`/**/` written for `*/`, or a later `/*` inside a block that was
+  never closed: take the stray opener out, the lexer already ends the comment
+  where you leave the closer). **Macro redefinitions** have
+  `scripts/lpc_fix_macro_redef.py`.
+- **The structural fixers read a diagnostics list** (`lpc_name_winner.py`,
+  `lpc_fix_macro_redef.py`, `lpc_fix_float_hooks.py` ...): `toolkit_fix.sh` leaves
+  it in `$LPC_SCRATCH/lpcw-SLUG/diagnostics.tsv` only while it runs. To run one on
+  an earlier scan, `mkdir` that directory and copy the scan's `diagnostics.tsv`
+  into it, and **delete the directory afterwards**: a `lpcw-SLUG` without
+  `.pristine-tree` stops the next `lpc_warnings.py` / `toolkit_fix.sh` of the lib
+  with `exists and is not a pristine tree` (three libs lost a round to it on
+  2026-10-19).
 
 ## The tools
 
@@ -199,7 +210,10 @@ Classes the toolkit leaves to you on purpose:
 | `lpc_fix_unused_init.py` | Handles unused locals with an initializer: deletes a pure one, keeps a single call as a statement |
 | `lpc_move_decl.py` | Moves a declaration that only an inactive `#if` branch uses into that branch |
 | `lpc_diamonds.py [--fix-redundant]` | Finds inherits another inherit already contains (text in comments, here-documents and multi-line strings is skipped: generator templates carry `inherit` lines) |
-| `lpc_name_winner.py` | Writes down the function the driver already picks for an `inherited from both` overlap |
+| `lpc_name_winner.py` | Writes down the function the driver already picks for an `inherited from both` overlap; skips a file that has no direct inherit of the named one (`clean_up::clean_up()` did not compile in zxty08nxgbb `tang3.lpc`: the overlap belonged to another compile) |
+| `lpc_rename_ident.py SLUG OLD NEW FILE... [--apply]` | Renames one identifier in the code of the named files (comments, strings, preprocessor lines, `->OLD`, `::OLD` and `OLD(` stay): the leaf side of a `Redeclaration of global variable` private-name collision |
+| `lpc_apply_edits.py [--apply] EDITS.json SLUG...` | The same exact-text hand edit in the same file of every lib of a family; says per edit whether it applied, was already there or did not match |
+| `lpc_fix_macro_redef.py SLUG [--apply]` | `Macro 'X' redefined`: puts `#undef X` in front of the later `#define X` (the later body already won, nothing else changes) |
 | `lpc_fix_double_decl.py` | Drops the bare copy when one declaration statement names a variable twice (`string a, b, a = "x";`), the `Redeclaration of global variable` it causes |
 | `lpc_twin_port.py` | Ports fixes made in one lib to a sibling whose files carry the same code |
 | `lpc_listcheck.sh SLUG LIST` + `lpc_load_diff.py SLUG` | Loads a list of objects at HEAD and in the working tree, then reports regressions |

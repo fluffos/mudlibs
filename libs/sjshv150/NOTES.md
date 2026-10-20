@@ -348,3 +348,14 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 ## 被注释吞掉的 inherit / include（2026-10-19，KB 06 §7.274）
 
 `/daemon/class/moon/moonshentong/shiyue.lpc`：`inherit SSERVER;`。这些指令接在上一行 `//` 注释的末尾（档案里丢了换行），成了注释的一部分，驱动看不到：缺 `inherit` 的技能报 `Undefined function offensive_target`，缺 `#include <weapon.h>` 的兵器报语法错误。`scripts/lpc_fix_swallowed_directive.py` 把换行放回去。载入检查 1 个文件，1 个原来编译不过、现在载入，没有退步。
+
+## 手工收尾（2026-10-19，KB 04 §6.10）
+
+- `d/longzhu/npc/long.lpc`：同 sjcs，删掉从未定义的 `int long();` 声明。
+- `d/obj/cloth/jiasha.lpc`：同时继承 `CLOTH` 和 `F_UNIQUE`，两个都有 `init()`，驱动用了后继承的 F_UNIQUE 那个（检查所有者），布料的 `tear`（撕布条）命令从来加不上。写一个 `init()`，两个都调：`cloth::init(); unique::init();`。
+- `d/kaifeng/npc/reporting.lpc`：`reporting()` 里 `str` 只在被注释掉的调试代码里用，声明改成注释。
+- `d/dntg/lijing/lijing.lpc`、`d/moon/npc/yutu.lpc`：李靖的 `int die()`、`int unconcious()` 和玉兔的 `int kill_ob()` 盖掉基类的 `void` 函数（`does not match current function in return type ( void vs int )`）；全库没有任何地方读它们的返回值，改成 `void`，玉兔的 `return ::kill_ob(victim);` 改成语句。
+- `data/group/obj/ling.lpc`、`data/group/obj/ling-pai.lpc`：`special_props` 声明了两遍，先 `({ "short", "long" })`，后面又 `({ "short", "long", "file_name" })`；同名的后一次声明盖掉前一次（`compiler.cc` `define_variable`），代码用的一直是后者，删掉前一个。
+- 宏重复定义：`include/globals.h` 和 `d/quest/task/{cron,tu}.lpc` 的 `TASK_D`、`d/quest/task/questd.lpc` 的 `CRON_D`、`include/net/ftpdconf.h` 的 `VALID_READ`、`VALID_WRITE`，在后一个 `#define` 前加 `#undef`（`scripts/lpc_fix_macro_redef.py`）。
+
+逐个与 HEAD 对比载入，没有退步。

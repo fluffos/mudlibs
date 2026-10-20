@@ -464,3 +464,14 @@ functionally re-tested live on this lib.
 ## 玩家打造兵器模板没有打造者时（2026-10-19，KB 06 §7.275）
 
 `/d/npc/m_weapon/weapon/m_blade.lpc`、`/d/npc/m_weapon/weapon/m_club.lpc`、`/d/npc/m_weapon/weapon/m_hammer.lpc`、`/d/npc/m_weapon/weapon/m_staff.lpc`、`/d/npc/m_weapon/weapon/m_sword.lpc`、`/d/npc/m_weapon/weapon/m_whip.lpc` 等（共 12 个）的 `create()` 开头 `me = this_player();` 之后无条件读 `me->query("weapon/name")` 等打造数据。房间刷新时没有人在场（`me` 为 0），或者 NPC 在别的 NPC 的命令环境里 `carry_object()` 这个模板（NPC 的 `weapon` 属性是文件名字符串），旧驱动里读出来是 0 或字符串，`switch` 照样落到 default；新驱动报 `Bad argument 1 to EFUN call_other()` / `Bad argument 1 to switch`，NPC 和它所在的房间载入不了（`--walk` 普查里一个玩家走进房间就触发）。在 `//读入数据` 之后加 `if (!me || !mapp(me->query("weapon"))) { setup(); return; }`：没有打造者就留一个没有名字的空模板，玩家打造的流程不变。
+
+## 标准整理轮，第二轮（2026-10-19，`scripts/toolkit_fix.sh`）
+
+本库在新驱动下重扫，机械修复：22 个未使用的局部变量。修后与 HEAD 逐个物件对比载入，没有退步。
+
+## 手工收尾（2026-10-19，KB 04 §6.10）
+
+- `海洋2002/hy3/d/kaifeng/`（本库里又收了一份开封擂台）：`ground1/2/3.lpc` 继承 `ground0.lpc`，又各自 include `ground.h`，三张表（`modes`、`mode_hints`、`families`）在每个 inherit 之后又声明一遍（`Redeclaration of global variable`）；照 xiyouji 系各库 `d/kaifeng/ground.h` 的办法，派生程序在 include 前 `#define GROUND_TABLES_INHERITED`，头文件用 `#ifndef` 把三张表包起来。
+- 同目录的 `ground2.lpc`、`ground3.lpc`、`guanli.h` 写的是 `#include <ground.h>`，尖括号在 include 路径里找不到同目录的头文件（`Cannot #include ground.h`），这两个物件一直载入不了；改成 `#include "ground.h"`，现在载入得了，同时露出里面 21 个未使用的局部变量，留给下一轮标准整理。
+
+载入 14 个相关物件（含 `d/*/marry/chen.lpc` 一类 include `hunyin.h` 的）：HEAD 通过 12 个，现在通过 14 个，没有退步。

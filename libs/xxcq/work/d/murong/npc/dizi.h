@@ -1,7 +1,5 @@
 // dizi.h
 
-mapping skills;
-mapping learned;
 mapping valid_types = 
 ([
 	"finger":	"指法",

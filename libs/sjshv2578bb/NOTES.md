@@ -316,3 +316,9 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 ## RANK_D 对 0 的称呼（2026-10-19，KB 06 §7.273）
 
 `adm/daemons/rankd.lpc` 的 `query_respect()`、`query_rude()`、`query_self()`、`query_self_rude()` 里 4 个函数开头补上 `if (!objectp(ob)) ob = this_object();`。NPC 在 `create()` 里写 `"…" + RANK_D->query_respect(this_player()) + "…"`（`inquiry` 对话、`chat_msg`），驱动自己跑 `reset()` 时没有人在场，`this_player()` 是 0。旧驱动里 `0->query("age")` 返回 0，称呼走默认分支；新驱动直接报 `Bad argument 1 to EFUN call_other()`，房间的 `make_inventory()` 吞掉错误，被打死的 NPC 再也刷新不回来。用 `scripts/lpc_reach_census.py --walk` 找到（xkx100 的武当弟子、一灯、汴梁书生…）；修在守护程序里，不动 1,800 个 NPC 文件。
+
+## 手工收尾（2026-10-19，KB 04 §6.10）
+
+- `d/quest/fangzhudao/kezhan.lpc`：`int block_cmd(string);` 声明和后面定义的参数个数不一致，声明删掉；`d/quest/fangzhudao/shandong.lpc`：`int valid_leave()` 盖掉基类带参数的 `valid_leave(object me, string dir)`，改成 `varargs int valid_leave(object me, string dir)`，函数里的 `this_player()` 改读 `me`（没传时仍取 `this_player()`），`::valid_leave(me, dir)` 把参数传给基类（与 xyj20032 同一处修改）。
+
+逐个与 HEAD 对比载入，没有退步。

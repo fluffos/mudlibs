@@ -1150,3 +1150,9 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 - `/d/baituo/obj/lingshezhang.lpc`：`set("wposition", "/d/baituo/obj/lingshezhang.lpc")` 被 `//***** ADDED BY SCATTER *****` 注释吞掉
 
 `scripts/lpc_fix_swallowed_statement.py` 把换行放回去。逐个载入与 HEAD 对比，没有退步。
+
+## 手工收尾（2026-10-19，KB 04 §6.10）
+
+- `maze/yanmen/npc/horse.lpc`：`inherit NPC; inherit F_RIDDING;`，NPC 一路带来 `feature/equip_liv.lpc` 的 `unequip(object ob, int ref status)`，`feature/ridding.lpc` 也有 `unequip()`（`unequip() inherited from both …`），驱动用了后继承的 ridding 那个；写出 `int unequip() { return ridding::unequip(); }`，行为不变（`scripts/lpc_name_winner.py`）。
+
+逐个与 HEAD 对比载入，没有退步。

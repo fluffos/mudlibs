@@ -1199,3 +1199,9 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 ## 标准整理轮（2026-10-19，`scripts/toolkit_fix.sh`）
 
 本库在新驱动下重扫，机械修复：7 个未使用的局部变量。修后与 HEAD 逐个物件对比载入，没有退步。
+
+## 手工收尾（2026-10-19，KB 04 §6.10）
+
+- `daemon/skill/liangyi-jian.bak.lpc`、`kungfu/skill/liangyi-jian.bak.lpc`：`query_skill_name()` 开头 `int i; level;` 里的 `level;` 是个没有效果的表达式（`Expression has no side effects, and the value is unused`），删掉。
+
+逐个与 HEAD 对比载入，没有退步。

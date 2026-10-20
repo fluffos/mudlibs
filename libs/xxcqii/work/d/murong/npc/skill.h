@@ -1,4 +1,4 @@
-mapping *skills=({
+nosave mapping *skill_table=({
 /*cuff*/
        (["skill_id" :              "wudang-quan",
          "skill_type" :              "cuff",

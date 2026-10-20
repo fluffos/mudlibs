@@ -279,3 +279,7 @@ drafts) minus the files its pass fixed, plus `cmds/std/practice_.lpc` and a save
 ## 两个斜杠开头的物件路径（2026-10-19，KB 06 §7.276）
 
 4 个文件、4 处物件路径写成 `//…`（如 `carry_object("//clone/cloth/hic_cloth")`）：`/d/bat/npc/dizi.lpc`、`/d/cave2/npc/dizi.lpc`、`/d/eren2/npc/dizi.lpc`、`/d/eren2/npc/dizi_a.lpc`。当年的驱动不介意（路径先被规范化）；新驱动把原样的字符串交给 master 的 `valid_read()`，securityd 按 `//clone` 查目录，NPC 的 euid 没有权限，报 `Read access denied.`，NPC 载入不了。改成一个斜杠。
+
+## 标准整理轮，第二轮（2026-10-19，`scripts/toolkit_fix.sh`）
+
+本库在新驱动下重扫，机械修复：2 个未使用的局部变量。修后与 HEAD 逐个物件对比载入，没有退步。

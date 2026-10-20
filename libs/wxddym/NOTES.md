@@ -830,3 +830,9 @@ No new errors after the shop commands. Demo `fluffos` save churn
 ## 标准整理轮（2026-10-19，`scripts/toolkit_fix.sh`）
 
 本库在新驱动下重扫，机械修复：9 个未使用的局部变量。修后与 HEAD 逐个物件对比载入，没有退步。另有 1 处浮点数赋值要手工改（`lpc_fix_float_hooks.py` 列出）。
+
+## 手工收尾（2026-10-19，KB 04 §6.10）
+
+- `kungfu/skill/xianglong-zhang.lpc`：`int power_point(object me)` 返回 0.8 / 1.0，新驱动编译时把小数截掉；改成 `float`（全库没有调用 `power_point()` 的地方，`scripts/lpc_fix_float_hooks.py`）。
+
+逐个与 HEAD 对比载入，没有退步。
