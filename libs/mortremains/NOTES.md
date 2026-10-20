@@ -918,3 +918,7 @@ The seven objects were loaded at HEAD and in the tree: no regression.
 ## Punctuation the conversion lost, put back (2026-10-19, KB 03 4.6)
 
 3 file(s) lost a semicolon, comma, quote or the closing `}` at the end of the file and did not load. The file stopped one or two `}` short (its last byte or two went missing); appended: `/d/class/rogue/bandit/cmds/_pick.lpc`, `/u/i/islair/ddagger.lpc`, `/u/m/moltar/volcano/monsters/caverat.lpc`. Loaded at HEAD and in the tree: all 3 were failing before, none regressed (`scripts/lpc_restore_from_twin.py`, `lpc_fix_eaten_quote.py --comma`, `lpc_fix_eof_braces.py`).
+
+## Unused locals in objects that load since their punctuation came back (2026-10-19, KB 04 6.10)
+
+Objects that did not compile until the lost punctuation was put back still carried unused-local warnings: 2 file(s): `/d/class/rogue/bandit/cmds/_pick.lpc`, `/u/m/moltar/volcano/monsters/caverat.lpc`. The unused declarations are deleted; loaded at HEAD and in the tree, still loading, no warnings.

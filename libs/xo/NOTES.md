@@ -842,3 +842,7 @@ wield()` 对缺失路径返回 `0`，立刻炸：
 ## 补回丢失的标点（2026-10-19，KB 03 §4.6）
 
 转换时丢掉的分号、逗号、引号或文件末尾的 `}`，共 1 个文件，修前 HEAD 载入失败。一行文字在逗号前丢了结尾的引号（下一行是同一个表的下一项），补上：`/d/menpai/wuliang/west/npc/xin_shuangqing.lpc`。修后与 HEAD 逐个对比载入：这 1 个物件全部载入，没有退步（`scripts/lpc_restore_from_twin.py`、`lpc_fix_eaten_quote.py --comma`、`lpc_fix_eof_braces.py`）。
+
+## `set_name` 的 id 参数（2026-10-19，KB 06 §7.260）和没有修的 `delete()`
+
+`/clone/wizard/edit.lpc`（TMI-2 的行编辑器）里 `set_name("编辑器", "editor")` 改成 `({ "editor" })`。文件仍然载入失败：它用 TMI-2 的 simul_efun `delete(数组或字符串, 位置, 个数)`（8 处），本库没有这个函数，调用落到物件自己的 `delete(string)`（属性删除）上，类型不符。这是巫师工具，没有重写。

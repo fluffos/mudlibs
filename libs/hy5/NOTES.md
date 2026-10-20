@@ -574,3 +574,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 ## 补回丢失的标点（2026-10-19，KB 03 §4.6）
 
 转换时丢掉的分号、逗号、引号或文件末尾的 `}`，共 8 个文件，修前 HEAD 载入失败。别的库里同路径的完好副本只比这里少几个标点，按它补回（括号里是那个库）：`/d/city2/npc/zhengmen.lpc`（jqxz2008）。一行文字在逗号前丢了结尾的引号（下一行是同一个表的下一项），补上：`/kungfu/skill/huanhe-dao.lpc`、`/kungfu/skill/kunlun-zhang.lpc`、`/quest/menpaijob/dali/quest.lpc`、`/quest/menpaijob/tiezhang/quest.lpc`、`/quest/newbie/qiandao/lagjobold.lpc`、`/quest/songhuo/quest.lpc`。文件末尾少了 `}`（最后一个或两个字节丢了），补上：`/kfedit/condition/wuhudu_poison.lpc`。修后与 HEAD 逐个对比载入：这 8 个物件全部载入，没有退步（`scripts/lpc_restore_from_twin.py`、`lpc_fix_eaten_quote.py --comma`、`lpc_fix_eof_braces.py`）。
+
+## 补回标点后新载入的物件里的未使用局部变量（2026-10-19，KB 04 §6.10）
+
+之前载入失败、补回丢失的标点后才载入的物件里还有未使用的局部变量警告，共 2 个文件：`/kungfu/skill/huanhe-dao.lpc`、`/kungfu/skill/kunlun-zhang.lpc`。删掉没有用到的声明；用 `scripts/lpc_listcheck.sh` 对比 HEAD 和改后，物件仍然载入，没有警告。

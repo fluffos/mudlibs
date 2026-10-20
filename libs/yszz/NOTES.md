@@ -277,3 +277,7 @@ After reboot, `buy jitui` purchased 炸鸡腿 and changed 1 黄金 into 99
 ## 补回丢失的标点（2026-10-19，KB 03 §4.6）
 
 转换时丢掉的分号、逗号、引号或文件末尾的 `}`，共 4 个文件，修前 HEAD 载入失败。别的库里同路径的完好副本只比这里少几个标点，按它补回（括号里是那个库）：`/d/obj/book/baguatu.lpc`（fys）、`/daemon/skill/taizuchangquan.lpc`（fy2mg）。文件末尾少了 `}`（最后一个或两个字节丢了），补上：`/d/ourhome/room1.lpc`、`/daemon/skill/unused/snowshade-force.lpc`。修后与 HEAD 逐个对比载入：这 4 个物件全部载入，没有退步（`scripts/lpc_restore_from_twin.py`、`lpc_fix_eaten_quote.py --comma`、`lpc_fix_eof_braces.py`）。
+
+## `set_name` 的 id 参数（2026-10-19，KB 06 §7.260）
+
+`/d/qujing/wudidong/obj/baowu2.lpc`、`baowu3.lpc`、`baowu5.lpc`、`baowu6.lpc` 里 `set_name("墨台", ("mo tai"))`：括号里是字符串不是数组，`set_name` 要的是 id 数组，物件载入失败。改成 `({ "mo tai" })`，HEAD 上载入失败的 4 个物件全部载入，没有警告。

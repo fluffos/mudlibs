@@ -1213,3 +1213,7 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 ## 补回丢失的标点（2026-10-19，KB 03 §4.6）
 
 转换时丢掉的分号、逗号、引号或文件末尾的 `}`，共 26 个文件，修前 HEAD 载入失败。别的库里同路径的完好副本只比这里少几个标点，按它补回（括号里是那个库）：`/d/jz/npc/jiang.lpc`（dtxyzjb）、`/daemon/skill/beiming-shengong.lpc`（fy2mg）、`/daemon/skill/huashan-shenfa.lpc`（fy2mg）、`/daemon/skill/huashan-zhangfa.lpc`（fy2mg）、`/daemon/skill/qiankundanuoyi.lpc`（fy2mg）、`/daemon/skill/xiaowuxiang.lpc`（fy2mg）、`/daemon/skill/yunlong-shenfa.lpc`（fy2mg）、`/daemon/skill/yunlong-zhua.lpc`（fy2mg）。一行文字在逗号前丢了结尾的引号（下一行是同一个表的下一项），补上：`/daemon/skill/awenzhang-unarmed.lpc`、`/daemon/skill/emperor-unarmed.lpc`、`/daemon/skill/kunlun-zhang.lpc`、`/daemon/skill/qingyi-jian.lpc`、`/kungfu/skill/awenzhang-unarmed.lpc`、`/kungfu/skill/emperor-unarmed.lpc`、`/kungfu/skill/kunlun-zhang.lpc`。文件末尾少了 `}`（最后一个或两个字节丢了），补上：`/d/jjg/npc/erzhuan.lpc`（2 个）、`/d/jjg/npc/jjg/npc/erzhuan.lpc`（2 个）、`/daemon/skill/fanliangyi-dao.lpc`、`/daemon/skill/lingboweibu.lpc`、`/daemon/skill/taizuchangquan.lpc`、`/daemon/skill/unused/snowshade-force.lpc`、`/sjsh/u/stey/obj/putao.lpc`、`/sjsh/u/stey/obj/tao.lpc`、`/u/shulele/npc/nanren.lpc`、`/u/stey/obj/putao.lpc`、`/u/stey/obj/tao.lpc`。修后与 HEAD 逐个对比载入：这 26 个物件全部载入，没有退步（`scripts/lpc_restore_from_twin.py`、`lpc_fix_eaten_quote.py --comma`、`lpc_fix_eof_braces.py`）。
+
+## 补回标点后新载入的物件里的未使用局部变量（2026-10-19，KB 04 §6.10）
+
+之前载入失败、补回丢失的标点后才载入的物件里还有未使用的局部变量警告，共 4 个文件：`/d/jjg/npc/erzhuan.lpc`、`/d/jjg/npc/jjg/npc/erzhuan.lpc`、`/daemon/skill/kunlun-zhang.lpc`、`/kungfu/skill/kunlun-zhang.lpc`。删掉没有用到的声明；用 `scripts/lpc_listcheck.sh` 对比 HEAD 和改后，物件仍然载入，没有警告。

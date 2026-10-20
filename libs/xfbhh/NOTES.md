@@ -589,3 +589,7 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## 补回丢失的标点（2026-10-19，KB 03 §4.6）
 
 转换时丢掉的分号、逗号、引号或文件末尾的 `}`，共 1 个文件，修前 HEAD 载入失败。文件末尾少了 `}`（最后一个或两个字节丢了），补上：`/cmds/usr/heta.lpc`。修后与 HEAD 逐个对比载入：这 1 个物件全部载入，没有退步（`scripts/lpc_restore_from_twin.py`、`lpc_fix_eaten_quote.py --comma`、`lpc_fix_eof_braces.py`）。
+
+## 补回标点后新载入的物件里的未使用局部变量（2026-10-19，KB 04 §6.10）
+
+之前载入失败、补回丢失的标点后才载入的物件里还有未使用的局部变量警告，共 1 个文件：`/cmds/usr/heta.lpc`。删掉没有用到的声明；用 `scripts/lpc_listcheck.sh` 对比 HEAD 和改后，物件仍然载入，没有警告。

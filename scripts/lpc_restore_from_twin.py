@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""scripts/lpc_restore_from_twin.py (SLUG... | --list FILE) [--any] [--refine] [--tail] [--apply] [--backup DIR] [--max-gap N] [--max-total N] [--any-run] [--verbose]
+"""scripts/lpc_restore_from_twin.py (SLUG... | --list FILE) [--any] [--refine] [--tail] [--apply] [--backup DIR] [--max-gap N] [--max-total N] [--any-run] [--extra N] [--diff] [--verbose]
 
 Punctuation a conversion lost (KB 03 section 4.6), put back from an intact copy of the same file in another lib.
 
@@ -19,6 +19,14 @@ for the lines that end in text and `;`).
 After the runs are back, every one-line string literal that differs from the donor's only by white space (a formatter's `/ d / eastland / data` for
 `/d/eastland/data`) takes the donor's text; `--refine` does only that, for files already identical to a donor but for such spacing.
 
+`--extra N` is for a file that is another *variant* of the donor's: the donor's code minus lost punctuation, plus statements the author added that the
+donor lacks (a `string mesg;`, an announcement after a bid).  Text in the damaged file the donor does not have, up to N bytes at a time, is kept as it
+is (printed as the fifth column: how many such spans); only what the donor has and the file lacks is put back.  The result is the donor's code plus those
+spans, so read them in the plan before `--apply`.
+
+`--diff` aligns the two with a diff (difflib on the white-space-free text) instead of the greedy resync: for files where lost runs sit too close
+together for the resync window (`els` + `e{`, `ms` + `g` + `]);`) and for `--extra` files.  A diff costs time quadratic in the file size: use it on a list of files.
+
 `--tail` handles a file that ends in garbage (`locate_quest(this_player(), arg  厀) 鲦 ~m #  烎`: the end of the function went with a lone lead
 byte): when the file is the donor's code up to a point and at most 80 bytes of text with raw high bytes follow, the donor's text from that point
 on replaces them (the donor has at most 800 bytes there).
@@ -30,6 +38,7 @@ then takes every listed file as damaged).  Wizard, backup, data and `old`/`bak` 
 the original bytes of every file written.  Load-check the changed files afterwards (scripts/lpc_listcheck.sh, scripts/lpc_load_diff.py): HEAD
 fails, the tree loads; put a file back from the backup when it did not fail before or still fails.
 """
+import difflib
 import os
 import re
 import subprocess
@@ -88,6 +97,34 @@ def literal_spans(b):
     return spans
 
 
+def comment_mask(b):
+    """1 for every byte inside a `//` or `/* */` comment (strings and char constants skipped)"""
+    m = bytearray(len(b))
+    i, n = 0, len(b)
+    while i < n:
+        c = b[i:i + 1]
+        if b[i:i + 2] == b"//":
+            j = b.find(b"\n", i)
+            j = n if j < 0 else j
+            m[i:j] = b"\x01" * (j - i)
+            i = j
+            continue
+        if b[i:i + 2] == b"/*":
+            j = b.find(b"*/", i + 2)
+            j = n if j < 0 else j + 2
+            m[i:j] = b"\x01" * (j - i)
+            i = j
+            continue
+        if c == b'"' or (c == b"'" and (b[i + 2:i + 3] == b"'" or b[i + 1:i + 2] == b"\\")):
+            j = i + 1
+            while j < n and b[j:j + 1] != c and not (c == b"'" and b[j:j + 1] == b"\n"):
+                j += 2 if b[j:j + 1] == b"\\" else 1
+            i = j + 1
+            continue
+        i += 1
+    return m
+
+
 def refine_literals(d, c):
     """d with every one-line string literal that differs from the donor's only by white space (a formatter's `/ d / eastland / data` for
     `/d/eastland/data`) replaced by the donor's; (bytes, count), or None when the two do not have the same number of literals"""
@@ -130,39 +167,125 @@ KEYWORDS = {b"else", b"return", b"while", b"break", b"continue", b"switch", b"de
 
 
 def allowed_run(d, off, run):
-    """A run worth putting back: closing/opening punctuation a conversion drops, or the last letters of a keyword."""
+    """A run worth putting back: closing/opening punctuation a conversion drops, or the last letters of a keyword (and the punctuation after it)."""
     if all(b in PUNCT for b in run):
         return True
-    if run.isalpha():
+    k = len(run)
+    while k > 0 and run[k - 1] in PUNCT:                 # `e{` for the end of `els` + `e` and the brace after it
+        k -= 1
+    word = run[:k]
+    if word.isalpha() and all(b in PUNCT for b in run[k:]):
         a = off
         while a > 0 and (d[a - 1:a].isalpha() or d[a - 1:a] == b"_"):
             a -= 1
         e = off
         while e < len(d) and (d[e:e + 1].isalpha() or d[e:e + 1] == b"_"):
             e += 1
-        return d[a:off] + run + d[off:e] in KEYWORDS
+        return d[a:off] + word + d[off:e] in KEYWORDS
     return False
 
 
-def plan_inserts(d, c, max_gap, max_total, dsq=None, csq=None, any_run=False):
+def place_run(d, c, dn, dp, cn, cp, i, j, n, cmask_c):
+    """[(offset in d, bytes)] for the run cn[j:j+n] that goes before dn[i].  The donor decides where it belongs: text that is inside a comment in the
+    donor (the `;` of `// message(...);`) stays behind the character before it; code goes after the character before it when the donor has no white
+    space there (a `;` or `)` belongs to its line, a closing quote to its string), else right before dn[i] (an opening quote, a `}` on its own line),
+    and never behind a comment (a `}` that was a line of its own must not end up after `//`)."""
+    segs = []
+    a = 0
+    while a < n:
+        b = a + 1
+        while b < n and bool(cmask_c[cp[j + b]]) == bool(cmask_c[cp[j + a]]):
+            b += 1
+        segs.append((a, b))
+        a = b
+    out = []
+    for a, b in segs:
+        k = j + a
+        pc = cp[k]
+        before_ws = pc == 0 or c[pc - 1] in WS
+        in_c = bool(cmask_c[pc])
+        prev_in_c = k > 0 and bool(cmask_c[cp[k - 1]])
+        if i >= len(dn):
+            off = len(d)
+        elif i > 0 and (in_c or (not before_ws and not prev_in_c)):
+            off = dp[i - 1] + 1                    # attached to the character before it
+        else:
+            off = dp[i]                            # starts something: right before the next character
+        out.append((off, bytes(cn[k:j + b])))
+    return out
+
+
+def plan_diff(d, c, max_gap, max_total, dsq, csq, any_run, max_extra, extras):
+    """Like _plan, with the alignment taken from a diff: every run c has and d lacks (an `insert`) is at most max_gap bytes, all together at most
+    max_total, every stretch d has and c lacks (a `delete`) is at most max_extra bytes and stays; a `replace` is another version, not damage."""
+    dn, dp = dsq
+    cn, cp = csq
+    if abs(len(dn) - len(cn)) > max(max_total, 0.25 * len(cn)):
+        return None
+    a = 0                                           # the common beginning and end need no diff
+    m = min(len(dn), len(cn))
+    while a < m and dn[a] == cn[a]:
+        a += 1
+    z = 0
+    while z < m - a and dn[len(dn) - 1 - z] == cn[len(cn) - 1 - z]:
+        z += 1
+    cmask_c = comment_mask(c)
+    sm = difflib.SequenceMatcher(None, dn[a:len(dn) - z], cn[a:len(cn) - z], autojunk=False)
+    if sm.real_quick_ratio() < 0.9 or sm.quick_ratio() < 0.9:
+        return None
+    ins = []
+    total = 0
+    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+        i1, i2, j1, j2 = i1 + a, i2 + a, j1 + a, j2 + a
+        if tag == "equal":
+            continue
+        if tag == "delete":
+            if i2 - i1 > max_extra:
+                return None
+            extras.append((dp[i1], dp[i2 - 1] + 1))
+            continue
+        if tag == "replace":
+            return None
+        run = cn[j1:j2]
+        total += len(run)
+        if len(run) > max_gap or total > max_total:
+            return None
+        for off, seg in place_run(d, c, dn, dp, cn, cp, i1, j1, j2 - j1, cmask_c):
+            if not any_run and not allowed_run(d, off, seg):
+                return None
+            ins.append((off, seg))
+    return ins
+
+
+def plan_inserts(d, c, max_gap, max_total, dsq=None, csq=None, any_run=False, max_extra=0, extras_out=None, use_diff=False):
     dsq = dsq or squeeze(d)
     csq = csq or squeeze(c)
-    for window in (12, 5):
-        r = _plan(d, c, max_gap, max_total, dsq, csq, any_run, window)
+    if use_diff:
+        ex = []
+        r = plan_diff(d, c, max_gap, max_total, dsq, csq, any_run, max_extra, ex)
+        if r is not None and extras_out is not None:
+            extras_out.extend(ex)
+        return r
+    for window in (12, 5, 3) if max_extra else (12, 5):
+        ex = []
+        r = _plan(d, c, max_gap, max_total, dsq, csq, any_run, window, max_extra, ex)
         if r is not None:
+            if extras_out is not None:
+                extras_out.extend(ex)
             return r
     return None
 
 
-def _plan(d, c, max_gap, max_total, dsq, csq, any_run, window):
+def _plan(d, c, max_gap, max_total, dsq, csq, any_run, window, max_extra=0, extras=None):
     """Offsets in d at which bytes of c go (list of (offset, bytes)), or None.  d must be c's code with short runs missing:
     every run c has and d lacks is at most max_gap bytes long, all together at most max_total bytes, and the two agree everywhere else
     (white space ignored).  After a mismatch the next 12 bytes (fewer at the end; 5 when two gaps are close) decide which run was lost."""
     dn, dp = dsq
     cn, cp = csq
-    if len(cn) - len(dn) < 1 or len(cn) - len(dn) > max_total:
+    if not max_extra and (len(cn) - len(dn) < 1 or len(cn) - len(dn) > max_total):
         return None
     ins = []
+    cmask_c = comment_mask(c)
     i = j = 0
     total = 0
     while j < len(cn):
@@ -178,34 +301,43 @@ def _plan(d, c, max_gap, max_total, dsq, csq, any_run, window):
             if cn[j + g:j + g + k] == dn[i:i + k] and (k == window or j + g + k == len(cn)):
                 gap = g
                 break
+        if gap is None and max_extra:
+            k2 = min(window, len(cn) - j)
+            skip = 0
+            for e in range(1, max_extra + 1):
+                if i + e > len(dn):
+                    break
+                if k2 and dn[i + e:i + e + k2] == cn[j:j + k2] and (k2 == window or i + e + k2 == len(dn)):
+                    skip = e
+                    break
+            if skip:
+                extras.append((dp[i], dp[i + skip - 1] + 1))      # text the donor does not have: stays
+                i += skip
+                continue
         if gap is None:
             return None
-        run = cn[j:j + gap]
         total += gap
         if total > max_total:
             return None
-        pc = cp[j]
-        pe = cp[j + gap - 1]
-        before_ws = pc == 0 or c[pc - 1] in WS
-        if i >= len(dn):
-            off = len(d)
-        elif not before_ws and i > 0:
-            off = dp[i - 1] + 1                    # attached to the character before it (`)`, `;`, a closing quote)
-        else:
-            off = dp[i]                            # starts something (an opening quote, a `}` on its own line): right before the next character
-        if not any_run and not allowed_run(d, off, bytes(run)):
-            return None
-        ins.append((off, bytes(run)))
+        for off, seg in place_run(d, c, dn, dp, cn, cp, i, j, gap, cmask_c):
+            if not any_run and not allowed_run(d, off, seg):
+                return None
+            ins.append((off, seg))
         j += gap
     if i != len(dn):
-        return None
+        if not max_extra or len(dn) - i > max_extra:
+            return None
+        extras.append((dp[i], dp[-1] + 1))
     return ins
 
 
 def apply_inserts(d, ins):
+    at = {}
+    for off, run in ins:                           # runs at one offset go in as they come
+        at[off] = at.get(off, b"") + run
     out = bytearray(d)
-    for off, run in sorted(ins, key=lambda t: t[0], reverse=True):
-        out[off:off] = run
+    for off in sorted(at, reverse=True):
+        out[off:off] = at[off]
     return bytes(out)
 
 
@@ -242,6 +374,8 @@ def main():
     backup = args[args.index("--backup") + 1] if "--backup" in args else None
     mg = 4
     mt = 4000
+    mx = int(args[args.index("--extra") + 1]) if "--extra" in args else 0
+    use_diff = "--diff" in args
     if "--max-gap" in args:
         mg = int(args[args.index("--max-gap") + 1])
     if "--max-total" in args:
@@ -309,12 +443,15 @@ def main():
         if not anyfile and not raw_high_in_code(d):
             continue
         best = None
+        best_key = None
+        best_ex = []
+        tried = set()
         dsq = squeeze(d)
         for lib, q in donors.get(rel, []):
             if lib == slug:
                 continue
-            tail = q[len(f"{REPO}/libs/{lib}/work"):]
-            if tail in bad.get(lib, ()) or (tail[:-2] + ".lpc") in bad.get(lib, ()):
+            dpath = q[len(f"{REPO}/libs/{lib}/work"):]
+            if dpath in bad.get(lib, ()) or (dpath[:-2] + ".lpc") in bad.get(lib, ()):
                 continue                          # the donor's own scan did not compile it
             if q not in cache:
                 try:
@@ -325,6 +462,9 @@ def main():
             if cache[q] is None:
                 continue
             c, csq = cache[q]
+            if hash(c) in tried:
+                continue                          # byte-identical to a donor already tried for this file
+            tried.add(hash(c))
             if tail:
                 cut = plan_tail(d, c, dsq, csq)
                 if cut:
@@ -338,12 +478,15 @@ def main():
                         best = (r, lib)
                         break
                 continue
-            if len(csq[0]) - len(dsq[0]) < 1 or len(csq[0]) - len(dsq[0]) > mt:
+            if not mx and (len(csq[0]) - len(dsq[0]) < 1 or len(csq[0]) - len(dsq[0]) > mt):
                 continue
-            ins = plan_inserts(d, c, mg, mt, dsq, csq, any_run)
-            if ins is not None and (best is None or len(ins) < len(best[0])):
+            ex = []
+            ins = plan_inserts(d, c, mg, mt, dsq, csq, any_run, mx, ex, use_diff)
+            if ins is not None and (ins or not mx) and (best is None or (len(ex), len(ins)) < best_key):
                 best = (ins, lib)
-                if len(ins) == 1:
+                best_key = (len(ex), len(ins))
+                best_ex = ex
+                if len(ins) == 1 and not ex:
                     break
         if not best:
             fail += 1
@@ -366,7 +509,10 @@ def main():
                 print(f"-(still high)\t{slug}\t{rel}")
             continue
         done += 1
-        print(f"{slug}\t{rel}\t{len(ins)}\t{lib}")
+        print(f"{slug}\t{rel}\t{len(ins)}\t{lib}" + (f"\t{len(best_ex)} extra" if mx else ""))
+        if mx and best_ex and verbose:
+            for a, b in best_ex:
+                print("\t\tkept: " + d[a:b][:90].decode("utf-8", "replace").replace("\n", " "))
         if apply:
             if backup:
                 bp = os.path.join(backup, p)
