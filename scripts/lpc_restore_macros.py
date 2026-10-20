@@ -69,7 +69,7 @@ def lib_scan(slug, files):
             b = open(f"{REPO}/libs/{slug}/work{rel}", "rb").read()
         except OSError:
             continue
-        if b"#" in b:
+        if b"#" in b and not SKIP.search(rel):          # a macro a wizard directory's header defines is not defined for the live files
             for m in DEF.finditer(b):
                 defs.add(m.group(1))
         if rel.endswith(".lpc") and b"inherit" in b and not SKIP.search(rel):

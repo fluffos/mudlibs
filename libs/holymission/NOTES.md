@@ -835,3 +835,7 @@ Loaded at HEAD and in the tree: `pot.lpc` passes both times, `smith.lpc` fails t
 ## Unused locals in objects that load since their punctuation came back (2026-10-19, KB 04 6.10)
 
 Objects that did not compile until the lost punctuation was put back still carried unused-local warnings: 1 file(s): `/players/colossus/obj/black_book.lpc`. The unused declarations are deleted; loaded at HEAD and in the tree, still loading, no warnings.
+
+## Old-driver type slack: missing arguments, untyped parameters, array initializers, `class` variables (2026-10-19, KB 04 6.19, 6.20)
+
+MudOS filled the missing arguments of a call with 0, took an untyped parameter as `mixed`, never compared a declared type with its initializer and let a variable be named `class`; this driver refuses all of it at compile time and the whole object fails. 43 file(s) fixed: `/obj/shut.lpc`, `/players/airborne/arena/arena_functions.lpc`, `/players/archive/arthur/bkm.lpc`, `/players/archive/arthur/mystuf/ls.lpc`, `/players/archive/titan/quest/monsters/guildmasters/bm.lpc`, `/players/blade/guild/std.lpc`, `/players/blade/wiz/pdagger.lpc`, `/players/blade/wiz/wizdagger.lpc` ... (43 in all) (the repair rounds of `scripts/lpc_round_files.py`: zeros written out at the call, `mixed` for untyped parameters, `string X = ({...})` given its star, void functions returning values, and `class` variables renamed `pick_class`). Loaded at HEAD and in the tree, per file: 18 of them failed before and load now, none regressed.

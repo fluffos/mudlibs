@@ -227,6 +227,9 @@
 // Install information
 #define INSTALL_COMBAT_TEST     1
 #define NPC_TRAINEE              "/inherit/char/trainee"
+#define MACE                     "/inherit/weapon/mace"
+#define STICK                    "/inherit/weapon/stick"
+#define SPEAR                    "/inherit/weapon/spear"
 
 #undef PROFILE_COMMANDS
 

@@ -417,3 +417,7 @@ In total 335 files differ from the old names (249 `.C` -> `.lpc`, 83 files of re
 ## 补回丢失的标点（2026-10-19，KB 03 §4.6）
 
 转换时丢掉的分号、逗号、引号或文件末尾的 `}`，共 3 个文件，修前 HEAD 载入失败。别的库里同路径的完好副本只比这里少几个标点，按它补回（括号里是那个库）：`/d/jz/npc/jiang.lpc`（dtxyzjb）。文件末尾少了 `}`（最后一个或两个字节丢了），补上：`/u/stey/obj/putao.lpc`、`/u/stey/obj/tao.lpc`。修后与 HEAD 逐个对比载入：这 3 个物件全部载入，没有退步（`scripts/lpc_restore_from_twin.py`、`lpc_fix_eaten_quote.py --comma`、`lpc_fix_eof_braces.py`）。
+
+## 补回丢失的基类宏（2026-10-19，KB 04 §6.13、§6.16）
+
+`include/globals.h` 补回 `UNARMED` 指向 `/std/weapon/unarmed`：`clone/newitem/newweapon/` 或 `d/city/obj/` 里 `inherit` 这些宏的物件找不到宏，载入失败（一个只在巫师目录的头文件里定义的宏，对正式文件不算已定义，`scripts/lpc_restore_macros.py` 以前把它当成了已定义）。补完后这些物件载入，没有警告。

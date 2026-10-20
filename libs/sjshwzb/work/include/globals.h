@@ -177,3 +177,4 @@
 #define F_DISASTER "/feature/disaster.lpc"
 #define MUSIC_D "/adm/daemons/musicd"
 #define YUEQI                    "/std/item/yueqi"
+#define UNARMED                  "/std/weapon/unarmed"

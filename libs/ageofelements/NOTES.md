@@ -146,3 +146,7 @@ Listed `playable` only after the native village §10.7-shaped pass
 - 2026-10-10（续）：第二轮编译警告整理把 `light.lpc` 里未用的 `object env = (all_environment() || ...)[<1];` 留成了无意义的表达式语句，改为整行删去（`lpc_fix_unused_init.py` 现只在初始化式就是单个调用时保留调用）。
 
 - 2026-10-13: final compile-warning round (toolkit only): 8 files, `nosave` on functions became `protected` (the driver warns that `nosave` applies to variables only) and one unused local was dropped. HEAD vs tree in fresh drivers: 8 objects, 3 -> 3 pass, no regressions; zero warnings left in compiling files.
+
+## Old-driver type slack: missing arguments, untyped parameters, array initializers, `class` variables (2026-10-19, KB 04 6.19, 6.20)
+
+MudOS filled the missing arguments of a call with 0, took an untyped parameter as `mixed`, never compared a declared type with its initializer and let a variable be named `class`; this driver refuses all of it at compile time and the whole object fails. 2 file(s) fixed: `/obj/shut.lpc`, `/room/orc_vall.lpc` (the repair rounds of `scripts/lpc_round_files.py`: zeros written out at the call, `mixed` for untyped parameters, `string X = ({...})` given its star, void functions returning values, and `class` variables renamed `pick_class`). Loaded at HEAD and in the tree, per file: 1 of them failed before and load now, none regressed.

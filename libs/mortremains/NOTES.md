@@ -922,3 +922,7 @@ The seven objects were loaded at HEAD and in the tree: no regression.
 ## Unused locals in objects that load since their punctuation came back (2026-10-19, KB 04 6.10)
 
 Objects that did not compile until the lost punctuation was put back still carried unused-local warnings: 2 file(s): `/d/class/rogue/bandit/cmds/_pick.lpc`, `/u/m/moltar/volcano/monsters/caverat.lpc`. The unused declarations are deleted; loaded at HEAD and in the tree, still loading, no warnings.
+
+## Old-driver type slack: missing arguments, untyped parameters, array initializers, `class` variables (2026-10-19, KB 04 6.19, 6.20)
+
+MudOS filled the missing arguments of a call with 0, took an untyped parameter as `mixed`, never compared a declared type with its initializer and let a variable be named `class`; this driver refuses all of it at compile time and the whole object fails. 11 file(s) fixed: `/adm/AFD/attic/body.lpc`, `/adm/AFD/attic/connection.lpc`, `/adm/AFD/attic/smartmonster.lpc`, `/adm/AFD/body.lpc`, `/adm/AFD/connection.lpc`, `/adm/AFD/old/body.lpc`, `/adm/AFD/old/connection.lpc`, `/adm/AFD/old/smartmonster.lpc` ... (11 in all) (the repair rounds of `scripts/lpc_round_files.py`: zeros written out at the call, `mixed` for untyped parameters, `string X = ({...})` given its star, void functions returning values, and `class` variables renamed `pick_class`). Loaded at HEAD and in the tree, per file: 9 of them failed before and load now, none regressed.

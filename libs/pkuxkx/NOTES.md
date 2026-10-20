@@ -407,3 +407,7 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## 两个斜杠开头的物件路径（2026-10-19，KB 06 §7.276）
 
 1 个文件、1 处物件路径写成 `//…`（如 `carry_object("//clone/cloth/hic_cloth")`）：`/d/lingzhou/npc/yun.lpc`。当年的驱动不介意（路径先被规范化）；新驱动把原样的字符串交给 master 的 `valid_read()`，securityd 按 `//clone` 查目录，NPC 的 euid 没有权限，报 `Read access denied.`，NPC 载入不了。改成一个斜杠。
+
+## 旧驱动的类型宽松：缺省参数、无类型形参、数组初始化、`class` 变量（2026-10-19，KB 04 §6.19、§6.20）
+
+原来的 MudOS 把调用少传的参数补 0、把没写类型的形参当 `mixed`、不检查变量的声明类型与初始值，也允许变量叫 `class`；这个驱动在编译时全部拒绝，整个物件载入失败。修了 4 个文件：`/adm/daemons/ftaskd.lpc`、`/kungfu/skill/sword/jianyi.lpc`、`/u/vast/gems/cmds/combine.lpc`、`/u/whuan/vax/project.3.userlevel.huamanrace.sp/char.lpc`（`scripts/lpc_round_files.py` 的修复轮：调用处补写 `0`、无类型形参补 `mixed`、`string X = ({...})` 补星号、void 函数的返回值，以及 `class` 变量改名 `pick_class`）。逐个文件在 HEAD 和改后载入对比：这些文件里 2 个原来载入失败、现在载入，没有退步。

@@ -238,5 +238,8 @@
 #define INSTALL_COMBAT_TEST     1
 #define SKI_ZHEN                 "/inherit/skill/array"
 #define SKILL_USAGE_DODGE 3
+#define MACE                     "/inherit/weapon/mace"
+#define STICK                    "/inherit/weapon/stick"
+#define SPEAR                    "/inherit/weapon/spear"
 
 #undef PROFILE_COMMANDS

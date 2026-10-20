@@ -187,3 +187,7 @@ hylib/dtxy) stay confirmed duplicates.
 - 2026-10-14（同一次重扫，手工部分）：`sgdomain/jimou/hunluan.lpc`（计策「混乱」）的倍率 `x=1.8`、`z=1.5` 声明成 `int`，被截成 1。施计方的计策值本应乘 1.8，实际只乘 1。现改为 `float x, z;`，`kill = to_int(kill*x - kill1*y)`。**玩家可见**：混乱计策按原设计更容易成功。改动的 46 个对象 HEAD 与工作树各载入一次，无回退。
 
 - 2026-10-14：1 个文件因 `Type of returned value doesn't match function return type ( int vs void )` 整份不编译：声明为 `void`（或没写类型）的函数却返回值，旧驱动照样把值交给调用者。调用者要用返回值的（add_action 处理函数、命令、辅助函数）改为它实际返回的类型：`file_pos()`。新进程比对 HEAD 与工作树：1 个对象，新增载入 0，回退 0（`scripts/lpc_fix_void_return.py`，KB 04 §6.3）。
+
+## 旧驱动的类型宽松：缺省参数、无类型形参、数组初始化、`class` 变量（2026-10-19，KB 04 §6.19、§6.20）
+
+原来的 MudOS 把调用少传的参数补 0、把没写类型的形参当 `mixed`、不检查变量的声明类型与初始值，也允许变量叫 `class`；这个驱动在编译时全部拒绝，整个物件载入失败。修了 2 个文件：`/secure/modules/m_file.lpc`、`/wiz/flee/law/ev_judge.lpc`（`scripts/lpc_round_files.py` 的修复轮：调用处补写 `0`、无类型形参补 `mixed`、`string X = ({...})` 补星号、void 函数的返回值，以及 `class` 变量改名 `pick_class`）。逐个文件在 HEAD 和改后载入对比：这些文件里 0 个原来载入失败、现在载入，没有退步。
