@@ -11,7 +11,8 @@
 #      bitwise `&` in boolean tests, return types and prototypes, float truncated to int (to_int(); x op= <float>
 #      zeroed x and becomes x = to_int(x op ...)), NPC + F_UNIQUE
 #      init(), unused locals with an initializer, declarations used only inside
-#      an inactive #if branch;
+#      an inactive #if branch, `Macro 'X' redefined` (#undef in front of the later
+#      #define), the `;` after a class or function body (`Extra ';'. Ignored.`);
 #   3. drop inherits another inherit already contains (scripts/lpc_diamonds.py);
 #   4. load every changed object twice, from HEAD and from your working tree, in
 #      fresh driver processes, and report anything that loaded before and no
@@ -75,6 +76,8 @@ echo "   overrides:    $(python3 scripts/lpc_fix_void_override.py "$SLUG" --mixe
 echo "   unique init:  $(python3 scripts/lpc_fix_unique_init.py --apply "$SLUG" "$D" | tail -1)"
 echo "   unused init:  $(python3 scripts/lpc_fix_unused_init.py "$SLUG" --apply 2>/dev/null | grep -c '^FIX') declaration(s)"
 echo "   #if locals:   $(python3 scripts/lpc_move_decl.py "$SLUG" --apply 2>/dev/null | grep -c '^edited') file(s)"
+echo "   macro redef:  $(python3 scripts/lpc_fix_macro_redef.py "$SLUG" --apply 2>/dev/null | tail -1)"
+echo "   extra ';':    $(python3 scripts/lpc_fix_extra_semicolon.py "$SLUG" --apply 2>/dev/null | tail -1)"
 
 echo "== 3. redundant inherits"
 python3 scripts/lpc_diamonds.py "$SLUG" --fix-redundant --apply | tail -1

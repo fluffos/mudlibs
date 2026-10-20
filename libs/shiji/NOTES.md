@@ -755,3 +755,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply s
 ## 访客计数 `howmany_visitor()` 读文件不检查（2026-10-20，KB 06 §7.301）
 
 `howmany_visitor()` 读访客计数文件（`VISITORS` / `COUNTER` / `BBSVISITOR`，只有运行中的 mud 才会写；`.gitignore` 把它排除在仓库之外），新检出的树里没有，`read_file()` 回 0，`sscanf(0, ...)` 报错。这份副本登录时不一定走到它，但调用时同样会出错。在读文件之后加了 `if (!stringp(content)) return 0;`（xkx100、xiakexing100、zzfy 早先的写法，`scripts/lpc_fix_visitor_count.py`）。改动：`/adm/daemons/logind.lpc`。
+
+## 首次登录时 `cp()` 缺失的模板文件（2026-10-20，KB 06 §7.310）
+
+同 sj：`toptend::query_top()` 的 `cp(TOPTEN_SOURCE, TOPTEN_FILE)` 面对压缩包没带的 `topten/source` 会抛错（`lstat failed`）。在 `cp()` 前加了 `file_size(TOPTEN_SOURCE) < 0 ||`。

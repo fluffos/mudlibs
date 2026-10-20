@@ -7,7 +7,7 @@ command (`look`) answers like a game; then it runs the commands of --cmds and `q
 survey tool, not a test of the login: a lib with an unusual dialogue ends `STUCK` with the last prompt, and gets a hand-written login (KB 08 10.16).
 
 Exit status 0 when a game prompt was reached, 1 when stuck, 2 when the server closed the connection or never answered.  The verdict line is
-`RESULT <in|stuck|closed> steps=N last=<last prompt>`."""
+`RESULT <in|stuck|closed> steps=N last=<last prompt>`.  `login_session(port, name, pw)` returns the logged-in Mud for a sweep script."""
 import argparse
 import os
 import re
@@ -20,8 +20,10 @@ from mudplay import Mud, Timeout  # noqa: E402
 # (regex on the tail of the text, reply).  Order matters: the first match wins.  "{name}" "{pw}" "{email}" are filled in.
 RULES = [
     (r"(?i)(type|enter|input|输入|请输入|请键入|键入)\s*[`'\"“]?new[`'\"”]?\b", "{newword}"),
+    (r"(?i)\bor\s+[`'\"“]new[`'\"”]\s+to\s+create", "{newword}"),                # pd: 'Enter one of these names, or "new" to create a character'
     (r"(?i)throw (the )?other copy|already (logged|playing|connected)|reconnect|重复|另一个连线|取代|赶出去", "y"),
-    (r"(?i)(re-?type|again|confirm|verify|repeat|once more).{0,40}(password|passwd|pass)|(password|passwd).{0,40}(again|confirm|verify)|再输入一次|再输一次|确认密码|重新输入密码|(^|\n)\s*again\s*:\s*$", "{pw}"),
+    (r"(?i)(re-?type|again|confirm|verify|repeat|once more).{0,40}(password|passwd|pass)|(password|passwd).{0,40}(again|confirm|verify)|再输入一次|再输一次|确认密码|重新输入密码|(^|\n)\s*again\s*:\s*$", "{lastpw}"),
+    (r"(?i)(普通密码|normal password|not be the same|must be different|different from)[^\n]{0,80}[:：]\s*$", "{pw2}"),     # tybxjh: "管理密码和普通密码不能相同": the second password is another one
     (r"(?i)password|passwd|密码|口令", "{pw}"),
     (r"(?i)(e-?mail|email|电子邮件|邮箱|邮件地址)", "{email}"),
     (r"(?im)^[^\n]*(gbk|big5)[^\n]*utf-?8[^\n]*[:：]\s*$|^[^\n]*utf-?8[^\n]*(gbk|big5)[^\n]*[:：]\s*$", "utf-8"),            # the xkx family's encoding menu: "Select 国标码 GBK or 国际码 utf-8 (GBK/utf-8):"
@@ -29,26 +31,28 @@ RULES = [
     (r"(?i)(gender|sex|male or female|\(m\)ale|\bmale\b.*\bfemale\b|男.*女|性别|扮演男性)", "{gender}"),
     (r"(?i)(real ?name|your name in real|真实姓名)", "Test User"),
     (r"中文姓氏|您的姓氏|请输入.{0,6}姓[：:]?\s*$", "测"),                       # nitan: "您的中文姓氏(不要超过两个汉字)：" and then the given name
-    (r"(?i)(chinese name|中文名字|中文姓名|您的中文名)", "测试员"),
+    (r"(?i)(chinese name|中文名字|中文姓名|您的中文名)", "测试"),
     (r"(?i)(中小学|小学生|学生或|未成年|under ?age|or younger)[^\n]{0,30}(\(yes/no\)|\(y/n\)|[?？])\s*$", "no"),          # mhsj, sjcs ...: "您是否是中小学学生或年龄更小？(yes/no)": not a pupil
     (r"(?i)(同意|接受|满意|agree|accept|satisfied)[^\n]{0,30}[?？:：]\s*$", "y"),
     (r"(?i)(do you want|would you like|are you sure|create (a )?(new )?(character|player)|new (character|player)\?|确定吗|\(y/n\)|\[y/n\]|\(yes/no\)|yes or no|'yes' or 'no'|y\(es\) or n\(o\)|y or n|y/n)", "y"),
     (r"(?i)\(s/n\)|\[s/n\]", "s"),                                    # Spanish: "No entiendo... (s/n)"
     (r"(?i)(press|hit)\s+(\[?enter\]?|\[?return\]?|any key)|\[more\]|--more--|continue\s*[:\.]?\s*$|按.{0,6}(回车|键)|任意键|<return>|\(return\)", ""),
     (r"(?i)(terminal|term type|screen|colou?r|ansi|vt100|client)\b.{0,50}[:?]\s*$", "{term}"),
+    (r"例如[:：]\s*\d+(?:\s+\d+){2,}[\s\S]*[:：]\s*$", "{example_nums}"),                 # dtsl / dtsl2 / dtslmud: "请输入您想要的属性，四项之和必须等于八十点 ... 例如：20 20 20 20"
+    (r"(用英文|in english)[^\n]{0,20}[\)）:：]\s*[:：]?\s*$|请选择您的种族", "{human_or_first}"),            # es1 / es1_win: "请选择您的种族(用英文):" over `人类(human)  精灵(elf) ...`
     (r"你的选择[:：]\s*$|选择.{0,10}(种族|职业|门派)[^\n]{0,20}[:：]\s*$", "{first_of_list}"),            # a list of `name(name)  5 点业力` lines
     (r"(?i)(race|species)\b.{0,60}[:?]\s*$", "{first_of_race}"),
     (r"(?i)(class|profession|guild|vocation)\b.{0,60}[:?]\s*$", "{first_of_class}"),
     (r"(?i)(enter|type|give|choose|select|input).{0,30}(number|choice|option)|^\s*\[?1\]?[\.\)]\s", "1"),
     (r"(?i)(?:合法值是?|valid(?: values?)?(?: is| are)?|between|range)\s*(\d+)\s*(?:到|to|-|~|至|and)\s*(\d+)", "{range_mid}"),      # "合法值是 10-30"
-    (r"\((\d+)\s*(?:到|to|-|~|至)\s*(\d+)\)", "{range_mid}"),
+    (r"[\(\[](\d+)\s*(?:到|to|-|~|至)\s*(\d+)[\)\]]", "{range_mid}"),                 # "(10-30)", "[10-30]"
     (r"(?i)(请选择|请输入.{0,10}(数字|号码|编号)|choose|select|pick).{0,60}[:：?？\)]\s*$", "1"),
     (r"(?i)(what is|enter|give|type|input|tell me).{0,40}(your )?(character )?(name|id|handle)|(by )?what (is your |do you wish )?name|name do you|known\s*\?|login\s*:|name\s*:|name\?|名字|ID\s*[:：]|帐号|账号|new\)", "{name}"),
 ]
 RACE_PICK = re.compile(r"(?is)valid races?:\s*([A-Za-z][\w-]*)")
 NEW_CHAR = re.compile(r"(?im)^\s*N\s*-\s*New character")
 MENU_DONE = re.compile(r"(?i)(?:^|\s)\[?(\d+)\]?\s*[-.):]\s*(?:done|finish|finished|accept|continue|save|完成|结束|确定)\b")
-PATIENCE = re.compile(r"(?i)(may|will) pause|please wait|wait \d+ seconds|请稍候|请等待|一会儿")
+PATIENCE = re.compile(r"(?i)(may|will) pause|please wait|wait \d+ seconds|请稍候|请等待|一会儿|terms and conditions CAREFULLY")      # Discworld: the licence screen is a timed pause before its y/n
 GAME = re.compile(r"(?i)(exit|obvious|you are|you see|north|south|east|west|here|room|出口|这里|你|inventory|hp|health)")
 NOT_GAME = re.compile(r"(?i)(password|passwd|name\s*:|login|密码|\(y/n\)|e-?mail|gender|press|return)")
 
@@ -93,6 +97,11 @@ def password_of_length(lo, hi):
     return pw[:n]
 
 
+def last_line(text):
+    s = text.rstrip().split("\n")
+    return s[-1] if s else ""
+
+
 def tail(buf, n=500):
     return buf[-n:]
 
@@ -115,7 +124,7 @@ def match_rule(low, question):
 
 
 PRESS = next(i for i, (rx, _) in enumerate(RULES) if "press" in rx)
-PW_RULES = {i for i, (_, rep) in enumerate(RULES) if rep == "{pw}"}                  # the password prompts may repeat (type, retype, a lib that asks twice)
+PW_RULES = {i for i, (_, rep) in enumerate(RULES) if rep in ("{pw}", "{pw2}", "{lastpw}")}                  # the password prompts may repeat (type, retype, a lib that asks twice)
 
 
 def run(args):
@@ -131,6 +140,8 @@ def run(args):
     last_prompt = tail(buf, 120)
     steps = 0
     mapping = {"name": args.name, "pw": args.pw, "email": args.email, "gender": args.gender, "term": args.term}
+    mapping["pw2"] = "Other5678"
+    mapping["lastpw"] = args.pw
     used = {}
     relaxed_done = {}
     empties = 0
@@ -144,6 +155,8 @@ def run(args):
         need = password_length(low)                          # a rejected password says how long it must be: use that from now on
         if need:
             mapping["pw"] = password_of_length(*need)
+            mapping["pw2"] = "O" + mapping["pw"][1:][::-1]
+            mapping["lastpw"] = mapping["pw"]
         last = low.rstrip().split("\n")[-1] if low.strip() else ""
         question = bool(re.search(r"([:：?？\)\]])\s*$", last)) or relaxed       # a prompt ends in a colon, a question mark, `(again)`, `[y/n]`
         rule_id, reply = None, None
@@ -151,6 +164,9 @@ def run(args):
             used["newchar"] = 1
             rule_id, reply = "newchar", "N"
         pk = RACE_PICK.search(low) if reply is None else None
+        if pk is None and re.search(r"(?i)\bpick RACE\b", low) and re.search(r"(?i)race\s*:\s*$", last_line(low)) and used.get("racepick", 0) < 2:
+            used["racepick"] = used.get("racepick", 0) + 1        # Dead Souls I/II: "pick RACE - pick a particular race for yourself" and a bare "Race:" prompt; `human` is in every race list
+            rule_id, reply = "racepick", "pick human"
         if pk and re.search(r"(?i)\bpick\b", low) and used.get("racepick", 0) < 2:       # Dead Souls: "Valid races: dwarf elf ... Race:" and "pick RACE"
             used["racepick"] = used.get("racepick", 0) + 1
             rule_id, reply = "racepick", "pick " + pk.group(1)
@@ -170,13 +186,19 @@ def run(args):
             for k, v in mapping.items():
                 reply = reply.replace("{" + k + "}", v)
             reply = reply.replace("{newword}", "new")
+            if "{example_nums}" in reply:
+                me = re.search(r"例如[:：]\s*(\d+(?:\s+\d+){2,})", low)
+                reply = reply.replace("{example_nums}", me.group(1) if me else "20 20 20 20")
+            if "{human_or_first}" in reply:
+                mh = re.search(r"\(([A-Za-z][\w-]*)\)", low)
+                reply = reply.replace("{human_or_first}", "human" if re.search(r"(?i)\(human\)", low) else (mh.group(1) if mh else "human"))
             if "{first_of_list}" in reply:
                 ml = re.search(r"(?m)^\s*([A-Za-z][\w-]*)\s*[(（]", low)
                 reply = reply.replace("{first_of_list}", ml.group(1) if ml else "1")
             if reply == "y" and re.search(r"(?i)'yes' or 'no'|\(yes/no\)|\[yes/no\]|yes or no|enter yes", low):
                 reply = "yes"                                   # Discworld: "You must enter 'yes' or 'no':"
             if "{range_mid}" in reply:
-                mr = re.search(r"\((\d+)\s*(?:到|to|-|~|至)\s*(\d+)\)", low) or re.search(r"(?i)(?:合法值是?|valid(?: values?)?(?: is| are)?|between|range)\s*(\d+)\s*(?:到|to|-|~|至|and)\s*(\d+)", low)
+                mr = re.search(r"[\(\[](\d+)\s*(?:到|to|-|~|至)\s*(\d+)[\)\]]", low) or re.search(r"(?i)(?:合法值是?|valid(?: values?)?(?: is| are)?|between|range)\s*(\d+)\s*(?:到|to|-|~|至|and)\s*(\d+)", low)
                 reply = str((int(mr.group(1)) + int(mr.group(2))) // 2) if mr else "20"
             used[rule_id] = used.get(rule_id, 0) + 1
             if used[rule_id] > (6 if rule_id in PW_RULES else 4) or (rule_id == 0 and used[rule_id] > 1):     # a loop means a wrong guess
@@ -200,10 +222,14 @@ def run(args):
                 probe += m.read(2.5, 25)
             out(">>> look\n<<< " + probe.strip().replace("\n", "\n<<< ")[-300:])
             same = probe.strip()[-160:] == buf.strip()[-160:]          # a menu or a question redisplays itself when `look` is typed at it
+            if re.search(r"(?i)there (is|are) \w+ obvious exits?", probe) and not same:        # an LPC room description: the character is in the world (Discworld queues the next commands behind its intro)
+                buf = probe
+                break
             if len(probe.strip()) > 20 and not same and GAME.search(probe) and not NOT_GAME.search(tail(probe, 200)):
                 nonsense = m.cmd("zzqxk", idle=0.8, maxwait=5)              # a game answers an unknown verb in a line; a menu or a dialogue shows itself again
                 out(">>> zzqxk\n<<< " + nonsense.strip().replace("\n", "\n<<< ")[-200:])
-                if len(nonsense.strip()) < 200 and not re.search(r"\d\s*[\.\)〗]|选择|choose|select|请输入|please", nonsense, re.I):
+                same_tail = nonsense.strip().split("\n")[-1].strip() == probe.strip().split("\n")[-1].strip()       # a dialogue redisplays its prompt for any input; a game answers `look` and `zzqxk` differently
+                if len(nonsense.strip()) < 200 and not same_tail and not re.search(r"\d\s*[\.\)〗]|选择|choose|select|请输入|please", nonsense, re.I):
                     buf = probe
                     break
             empties += 1
@@ -218,6 +244,10 @@ def run(args):
             continue
         out(f">>> {reply!r}")
         buf = m.cmd(reply, idle=0.9, maxwait=10)
+        if not buf.strip() and not m.closed:                # a slow answer (Dead Souls compiles its player files on the first login): wait for it before probing
+            buf = m.read(3.0, 90)
+        if rule_id in PW_RULES and reply:
+            mapping["lastpw"] = reply                       # the "once more" prompt that follows repeats it
         out("<<< " + buf.strip().replace("\n", "\n<<< ")[-400:])
         if buf.strip():
             last_prompt = tail(buf, 120)
@@ -228,9 +258,23 @@ def run(args):
     for c in [x.strip() for x in args.cmds.split(";") if x.strip()]:
         t = m.cmd(c, idle=0.9, maxwait=8)
         out(f">>> {c}\n<<< " + t.strip().replace("\n", "\n<<< ")[-300:])
+    if getattr(args, "keep", False):                        # a sweep wants the logged-in session: no quit, the Mud object stays in args.session
+        args.session = m
+        print(f"RESULT in steps={steps} last={last_prompt!r} seconds={time.time() - t0:.0f}")
+        return 0
     m.cmd("quit", idle=0.8, maxwait=4)
     print(f"RESULT in steps={steps} last={last_prompt!r} seconds={time.time() - t0:.0f}")
     return 0
+
+
+def login_session(port, name="sweepzq", pw="Test1234", cmds="", steps=45, quiet=True):
+    """for a sweep script: walk the dialogue of a booted lib and return the logged-in `Mud` (None when the robot did not get in); the transcript stays quiet"""
+    a = argparse.Namespace(host="127.0.0.1", port=port, name=name, pw=pw, email="tester@example.com", gender="m", term="ansi", cmds=cmds, steps=steps, quiet=quiet, verbose=False, keep=True, session=None)
+    import io, contextlib
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = run(a)
+    return a.session if rc == 0 else None
 
 
 def main():
@@ -239,7 +283,7 @@ def main():
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--name", default="sweepzq")
     ap.add_argument("--pw", default="Test1234")      # eight characters: some libs accept five to eight
-    ap.add_argument("--email", default="a@b.cn")
+    ap.add_argument("--email", default="tester@example.com")
     ap.add_argument("--gender", default="m")
     ap.add_argument("--term", default="ansi")
     ap.add_argument("--cmds", default="look;score;i;who;help")

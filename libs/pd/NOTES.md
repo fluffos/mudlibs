@@ -525,3 +525,11 @@ fresh driver boot plus the full long-sit idle window below.
 ## `guild.h` 重新定义 `ROOM`（2026-10-20，KB 06 §7.306）
 
 `std.h` 定义 `ROOM "/std/room"`，`domains/guild.h` 又把它定义成行会房间基类（586 个文件包含 `<guild.h>`），首次登录时加载行会房间就打印 45 次 `warning: Macro 'ROOM' redefined`。`guild.h` 里在 `#define ROOM` 前加了 `#undef ROOM`（取值不变）。
+
+## 首次登录控制台与核心目录的警告清理（2026-10-20，KB 06 §7.306、KB 04 §6.10）
+
+登录体检（`scripts/play_survey.py`）里 pd 的控制台先是 45 条 `Macro 'ROOM' redefined`（`domains/guild.h` 重新定义 `std.h` 的 `ROOM`，已在前一段处理），去掉后露出下面这些。`scripts/toolkit_fix.sh pd`（跳过 `/d/`、`/wizards/`、`/tmp/`，核心目录 1,751 个文件）：float 赋给 int 的 152 处（多数是 `percent()` 的结果）改成 `to_int()`（98 个文件，其中 `std/living.lpc:604`、`cmds/mortal/_score.lpc:9` 登录就会编译到），3 处继承顺序、4 个 `void` 返回、2 个覆盖函数的返回类型、2 个多余的继承；加载检查 104 个对象，HEAD 通过 95、改后通过 103，无回退，新能加载 8 个。`lpc_fix_macro_redef.py` 给 22 处重复的 `#define`（`SKILLS`、`BALANCE3_D`、`TREASURY_D`、`STATIC_SHIPS`）前加了 `#undef`，`lpc_fix_extra_semicolon.py`（新）去掉 9 个类定义/函数体后多余的 `;`（`adm/include/death_cl.h`、`combo_cl.h`、`faction_cl.h`、`funccheck_cl.h`、`recipe_cl.h`、`adm/daemon/identity_d.lpc`、`cmds/skills/obj/netherlash_ob.lpc`）。
+
+真错误一处：`adm/daemon/identity_d.lpc:356` 的过滤函数写成 `if (n && c->name != c) return 0;`（拿名字和整个 `class ConnData` 比较，应为 `c->name != n`），驱动报 `!= always true because of incompatible types ( string vs class ConnData )`，身份守护进程根本编译不了，而 `std/user.lpc` 登录时就要用 `IDENTITY_D`。改正后能加载（本批 135 个对象的加载检查里新能加载 9 个）。
+
+还留着的：`std/user.lpc:1580` 的 `query_autoload()` 同时来自 `/std/user/autoload.lpc`（`mixed *`）和 `/std/object.lpc`（`int`），返回类型不同，做不了无副作用的覆盖，保持原样；`oldcrypt()` 的弃用提示；`std/backpack.lpc`（`ARMOUR` 与 `BAG` 两条路径各带一份 `nomask clear_euid`，没有任何文件继承它）；`adm/daemon/` 里几个老守护进程缺头文件或宏（`finger.lpc` 的 `FOLDERS_D`、`alchemist_d.lpc` 的 `materials.h`、`link_d.lpc` 的 `link_info.h`），`/d/` 与 `/wizards/` 的 3 万个区域文件没有扫。

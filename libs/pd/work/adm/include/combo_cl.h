@@ -18,7 +18,7 @@ class ComboProgress {
   string *moves;
   // times at which each move was executed
   int *times;
-};
+}
 
 #endif
 

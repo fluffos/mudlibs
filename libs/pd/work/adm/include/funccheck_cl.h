@@ -6,6 +6,6 @@ class FuncCheck {
   string func;
   mixed args;
   mixed value;
-};
+}
 
 #endif

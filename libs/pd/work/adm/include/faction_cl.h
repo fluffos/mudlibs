@@ -6,7 +6,7 @@
 class Faction {
   string name;
   class FuncCheck *member_criteria;
-};
+}
 
 class Alliance {
   string name;

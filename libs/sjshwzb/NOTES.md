@@ -457,3 +457,7 @@ In total 335 files differ from the old names (249 `.C` -> `.lpc`, 83 files of re
 ## `get_config(__MUD_PORT__)` 经旧版 `runtime_config.h` 得到字符串（2026-10-20，KB 06 §7.302）
 
 本库的 `include/runtime_config.h` 是老 MudOS 的编号（整数设置从 15 起，本驱动从 256 起），`get_config(__MUD_PORT__)` 读到的是另一项设置（字符串），`(int)` 又只是编译期标注，于是 `socket_bind(fd, LOCAL_PORT())` 报 `Bad argument 2 to socket_bind()`，版本守护进程 `port = get_config(__MUD_PORT__) + VERSION_PORT` 是字符串相加。头文件自己的注释写明 `get_config(__MUD_PORT__) == __PORT__`，所以代码里的这个调用（连同外面的 `(int)` / `to_int()`）改成了驱动的预定义 `__PORT__`（`scripts/lpc_fix_mud_port.py`）。改动：`/include/getconfig.h`（1 处）。
+
+## 日志子目录没有人建（2026-10-20，KB 06 §7.310）
+
+登录体检里 `write_file("/log/dlog/money", ...)` 报 `Wrong permissions for opening file /log/dlog/money for append.`：`log/dlog/` 没有任何东西创建，而 `scripts/wasm_keep_dirs.txt` 只列了这台机器上真实启动时建过的子目录。代码里写入 `/log/` 下的 `nosave`、`dlog`、`login`、`cmds`、`edit`，把 `log/cmds`、`log/dlog`、`log/edit`、`log/login` 补进了 `wasm_keep_dirs.txt`（试玩树和站点都会建出来）。

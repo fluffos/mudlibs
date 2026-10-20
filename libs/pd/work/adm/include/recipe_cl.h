@@ -8,7 +8,7 @@ class RecipeStep {
   string *prohibited_materials;
   string *allowed_temperatures;
   string failure_yield;
-};
+}
 
 class Recipe {
   string name;
@@ -16,6 +16,6 @@ class Recipe {
   string yield_file;
   mapping user_requirements;
   class RecipeStep *steps;
-};
+}
 
 #endif

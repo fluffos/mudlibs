@@ -521,3 +521,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply s
 ## 翻页器 `start_more(read_file(...))`：文件缺失时 `explode(0)`（2026-10-20，KB 06 §7.300）
 
 东方故事系的翻页器 `void start_more(string msg) { ... explode(msg, "\n") ... }` 被这样调用：`start_more(read_file(HELP_DIR + "help/topics"))`、`start_more(read_file(NEWS))`。压缩包没带的文件使 `read_file()` 回 0，`explode(0, ...)` 在本驱动里报 `Bad argument 1 to explode()`（不带参数的 `help` 指令就是这样出错的），老驱动把 0 当空文本。在 `start_more` 开头加了 `if (!stringp(msg)) return;`（`scripts/lpc_fix_start_more.py`）。改动：`/feature/more.lpc`。
+
+## 首次登录时 `cp()` 缺失的模板文件（2026-10-20，KB 06 §7.310）
+
+`enter_world()` 经 `toptend::query_top()` 在 `/topten/topten_file` 不存在时执行 `cp(TOPTEN_SOURCE, TOPTEN_FILE)`，而 `topten/` 是运行输出（`.gitignore` 排除），压缩包里没有 `topten/source` 模板，`cp()` 报 `*/topten/source: lstat failed`，首次登录控制台出错。在 `cp()` 前加了 `file_size(TOPTEN_SOURCE) < 0 ||`（原有的 `return ""` 即「还没有排行榜」）。

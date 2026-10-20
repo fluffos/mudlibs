@@ -11,6 +11,6 @@ class Death {
   string war;
   string desc;
   mapping penalties;
-};
+}
 
 #endif

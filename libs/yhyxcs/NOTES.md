@@ -399,3 +399,7 @@ blocking). No LPC change this pass.
 ## 翻页器 `start_more(read_file(...))`：文件缺失时 `explode(0)`（2026-10-20，KB 06 §7.300）
 
 东方故事系的翻页器 `void start_more(string msg) { ... explode(msg, "\n") ... }` 被这样调用：`start_more(read_file(HELP_DIR + "help/topics"))`、`start_more(read_file(NEWS))`。压缩包没带的文件使 `read_file()` 回 0，`explode(0, ...)` 在本驱动里报 `Bad argument 1 to explode()`（不带参数的 `help` 指令就是这样出错的），老驱动把 0 当空文本。在 `start_more` 开头加了 `if (!stringp(msg)) return;`（`scripts/lpc_fix_start_more.py`）。改动：`/feature/more.lpc`。
+
+## `valid_write()` 比较存档文件名时少了 `.o`，拒绝分支又调用自己：角色从来存不了盘（2026-10-20，KB 06 §7.309）
+
+第一次登录时控制台出现两对 `Too deep recursion.`（`obj/login.lpc:33`、`adm/daemons/securityd.lpc:137`），登录能完成，但 `data/login/<首字母>/<名字>.o` 和 `data/user/...` 都没有写出来。`securityd.lpc` 的 `save_object` 分支是 `file == (string)user->query_save_file()`，而驱动传给 `valid_write()` 的文件名带着 `save_object()` 补上的 `.o`，条件不成立，函数落到最后一行 `return valid_write(file, this_player(1), func);`：`this_player(1)` 就是同一个登录对象，同样被拒绝，一直递归到调用深度用完报错，写盘被拒（把 `maximum call depth` 调大没有用，这是真递归）。改成 `file == (string)user->query_save_file() + __SAVE_EXTENSION__`（另外 20 份 `securityd` 早就是这样写的）；实测登录后写出了 `data/login/s/sweepzq.o` 和 `data/user/s/sweepzq.o`。拒绝分支里自己调自己的写法没有动（只有被拒绝时才递归）。

@@ -7,11 +7,12 @@ mechanical fix that touched thousands of files leaves no trace in the load gates
 
 One tab-separated line per lib on stdout and in --out (default $LPC_SCRATCH/play_survey.tsv):
 
-  slug <TAB> result <TAB> steps <TAB> boot_errors <TAB> play_errors <TAB> first error line <TAB> last prompt
+  slug <TAB> result <TAB> steps <TAB> boot_errors <TAB> play_errors <TAB> first error line <TAB> last prompt <TAB> saved
 
 `result` is the robot's verdict (`in`: a game prompt was reached; `stuck`: it could not answer the dialogue; `closed`: the server closed the connection or never answered) or
 `noboot` (the port did not open).  `boot_errors` counts the driver's error lines before the first connection, `play_errors` those printed during the login (playsweep.DRIVER_BAD).
-A `stuck` lib is a lib with an unusual dialogue, not a verdict: look at it by hand (KB 08 10.16).  --all takes every vendored lib with a config.fluffos that is not a gitlink
+`saved` counts the files named `sweepzq*` (the robot's character) in the unit's tree after the login and the `quit`: 0 for an `in` row is a lib that did not persist the character -- a denied `save_object()`
+(yhyxcs: `valid_write()` compared the file without the `.o` and recursed, KB 06 7.309) or a lib that saves elsewhere / later: look.  A `stuck` lib is a lib with an unusual dialogue, not a verdict: look at it by hand (KB 08 10.16).  --all takes every vendored lib with a config.fluffos that is not a gitlink
 (`realms` needs MySQL, a lib with its own driver build is skipped: SURVEY_SKIP / --skip).  The unit is stopped after each lib; nothing else is killed."""
 import argparse
 import os
@@ -58,10 +59,10 @@ def survey_one(slug, port, cmds, boot_timeout):
     try:
         r = subprocess.run([os.path.join(REPO, "scripts/play_boot.sh"), slug, str(port)], cwd=REPO, capture_output=True, text=True, timeout=boot_timeout)
     except subprocess.TimeoutExpired:
-        return [slug, "noboot", "-", "-", "-", "play_boot.sh timed out", ""]
+        return [slug, "noboot", "-", "-", "-", "play_boot.sh timed out", "", "-"]
     try:
         if r.returncode != 0:
-            return [slug, "noboot", "-", "-", "-", (r.stderr.strip().splitlines() or ["port did not open"])[-1][:160], ""]
+            return [slug, "noboot", "-", "-", "-", (r.stderr.strip().splitlines() or ["port did not open"])[-1][:160], "", "-"]
         try:
             boot_text = open(out, encoding="utf-8", errors="replace").read()
         except OSError:
@@ -84,9 +85,11 @@ def survey_one(slug, port, cmds, boot_timeout):
             play_text = ""
         play_errs = errors(play_text)
         first = (play_errs or boot_errs or [""])[0][:200]
-        return [slug, result, steps, str(len(boot_errs)), str(len(play_errs)), first, last]
+        tree = os.path.join(SCR, f"play-{slug}", "libs", slug, "work")
+        found = subprocess.run(["find", tree, "-name", "sweepzq*", "-type", "f"], capture_output=True, text=True).stdout.split()
+        return [slug, result, steps, str(len(boot_errs)), str(len(play_errs)), first, last, str(len(found))]
     except subprocess.TimeoutExpired:
-        return [slug, "closed", "-", "-", "-", "play_login.py timed out", ""]
+        return [slug, "closed", "-", "-", "-", "play_login.py timed out", "", "-"]
     finally:
         subprocess.run([os.path.join(REPO, "scripts/play_stop.sh"), slug], cwd=REPO, capture_output=True)
 
