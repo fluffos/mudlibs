@@ -659,3 +659,7 @@ for a save`（`log/runtime`，14:50）。随后该字母目录出现，同一驱
 7. 验证：全新启动 0 警告 0 错误；管理员会话 `smell`、`look at me`、`finger`（信仰一栏）、`help tell`、`eval` 取 NPC 等级（12）、新建断肢对象、点燃火把后的光亮（火把 7，NPC 3+7=10）、jar 的 `GetSave()`、`GetId()`，全部正常。
 
 - 2026-10-14: FluffOS 970d9f09 warns `Float value truncated to int` (#1426). 7 sites in 5 files: assignments, initializers and returns now spell the truncation `to_int(...)` (same value). Changed objects loaded before and after in fresh drivers, no regressions (`scripts/lpc_fix_float_trunc.py`, KB 04 §6.10).
+
+## `x != "a" || x != "b"` 和 `x == "a" && x == "b"`：同一个值的比较链永远成立/永远不成立（2026-10-20，KB 06 §7.282）
+
+`if (arg != "wan" || arg != "丸") return notify_fail(...)` 对任何 `arg` 都为真，`dir == "south" && dir == "north"` 永远为假：条件下面的守卫要么永远拦、要么永远不拦。作者要的是“既不是 A 也不是 B”（`&&`）或“是 A 或 B”（`||`）。`!=` 链的 `||` 改成 `&&`（仅当条件下面是 `return` 的拒绝/守卫），`==` 链的 `&&` 改成 `||`（`scripts/lpc_fix_cmp_chain.py`）。改动：`/lib/interface.lpc`（1 处）。

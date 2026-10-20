@@ -65,7 +65,7 @@ def code_mask(b, heredoc=False):
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCRATCH = os.environ.get("LPC_SCRATCH") or os.path.expanduser("~/.cache/lpc-scratch")
-MSG = re.compile(r"Type of returned value doesn't match function return type \( (.+?) vs (void|int) \)")
+MSG = re.compile(r"Type of returned value doesn't match function return type \( (.+?) vs (void|int|string|string \*|object|object \*|mapping|mixed \*|int \*|float) \)")
 IGNORED = {"create", "init", "reset", "heart_beat", "setup"}
 NESTED = re.compile(rb"(?m)^[ \t]*(?:(?:static|nosave|private|protected|public|nomask|varargs)\s+)*"
                     rb"(?:void|int|string|object|mixed|mapping|float|status)\s+\*?\s*\w+\s*\([^;{}()]*\)\s*\{")
@@ -158,6 +158,7 @@ def fix_file(b, rows, synlines=frozenset()):
         f["rets"].append(off)
     edits = []
     retype = {}
+    declared_words = {}
     for (hs, brace), f in funcs.items():
         header = bytes(c if mask[hs + k] else 0x20 for k, c in enumerate(b[hs:brace]))   # comments blanked
         m = re.search(rb"([A-Za-z_]\w*)\s*\([^;{}]*\)\s*$", header)
@@ -196,6 +197,24 @@ def fix_file(b, rows, synlines=frozenset()):
             v = ints[0]
             edits.append((hs + v.start(), hs + v.end(), t.encode()))
             retype[name] = t
+            for r in re.finditer(rb"\breturn\s*;", b[brace:k]):
+                if mask[brace + r.start()]:
+                    edits.append((brace + r.start(), brace + r.end(), b"return 0;"))
+            continue
+        if len(f["decl"]) == 1 and next(iter(f["decl"])) not in ("void", "int"):
+            # any other declared type (`string *query_guild() { return "Iron Fist"; }`, `string f() { return 5; }`): the old driver never
+            # compared it with the value, so the function takes `mixed`, which is what its callers received; its bare `return;` is `return 0;`
+            if "unknown" in f["types"]:
+                notes.append("HAND %s: declared %s, returns a value of unknown type (an earlier error)" % (name, next(iter(f["decl"]))))
+                continue
+            tms = [x for x in re.finditer(rb"\b(?:string|object|mapping|float|status|int|mixed|function|buffer)\b(?:\s*\*)?", header[:m.start()]) if mask[hs + x.start()]]
+            if len(tms) != 1 or name in IGNORED:
+                notes.append("HAND %s: declared %s, returns %s" % (name, next(iter(f["decl"])), "/".join(sorted(f["types"]))))
+                continue
+            v = tms[0]
+            edits.append((hs + v.start(), hs + v.end(), b"mixed " if v.group(0).rstrip().endswith(b"*") else b"mixed"))
+            retype[name] = "mixed"
+            declared_words[name] = v.group(0).strip()
             for r in re.finditer(rb"\breturn\s*;", b[brace:k]):
                 if mask[brace + r.start()]:
                     edits.append((brace + r.start(), brace + r.end(), b"return 0;"))
@@ -244,6 +263,15 @@ def fix_file(b, rows, synlines=frozenset()):
                 edits.append((brace + r.start(), brace + r.end(), b"return 0;"))
     # same-file prototypes of the retyped functions
     for name, t in retype.items():
+        old_type = declared_words.get(name)
+        if old_type:
+            # a prototype of the retyped non-void function: `string *query_guild();`
+            for pm in re.finditer(rb"(?m)^([ \t]*(?:(?:static|nosave|private|protected|public|nomask|varargs)\s+)*)(" + re.escape(old_type).replace(rb"\ ", rb"\s*") + rb")(\s*\*?\s*"
+                                  + re.escape(name.encode()) + rb"\s*\([^;{}]*\)\s*;)", b):
+                p = pm.start() + len(pm.group(1))
+                if mask[p] and dep[p] == 0:
+                    edits.append((p, p + len(pm.group(2)), b"mixed " if pm.group(2).rstrip().endswith(b"*") else b"mixed"))
+            continue
         for pm in re.finditer(rb"(?m)^([ \t]*(?:(?:static|nosave|private|protected|public|nomask|varargs)\s+)*)void(\s+\*?\s*"
                               + re.escape(name.encode()) + rb"\s*\([^;{}]*\)\s*;)", b):
             p = pm.start() + len(pm.group(1))

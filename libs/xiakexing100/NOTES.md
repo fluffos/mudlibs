@@ -609,3 +609,7 @@ functionally re-tested live on this lib.
 - `d/yixing/doc/info_store.h`、`info_biao.h`、`info_guest.h` 没有重复包含的保护（本库其他拷贝有）：`bangzhu.lpc` 自己 include 一遍，`bangzhu_duty.h` → `guanjia.h` 又 include 一遍，四张表被声明两次；加上 `#ifndef __YIXING_INFO_*_H__`。`bangzhu.lpc` 同时继承 `NPC` 和 `F_SSERVER`，两条路都带来 `clean_up()`（`clean_up() inherited from both …`），写出 `int clean_up() { return sserver::clean_up(); }`，行为不变。
 
 载入 `d/yixing/npc/` 的 bangzhu、biaotou、bangzhu2、cl_bei：HEAD 通过 3 个，现在通过 4 个（`bangzhu.lpc` 现在载入），没有退步。
+
+## `x != "a" || x != "b"` 和 `x == "a" && x == "b"`：同一个值的比较链永远成立/永远不成立（2026-10-20，KB 06 §7.282）
+
+`if (arg != "wan" || arg != "丸") return notify_fail(...)` 对任何 `arg` 都为真，`dir == "south" && dir == "north"` 永远为假：条件下面的守卫要么永远拦、要么永远不拦。作者要的是“既不是 A 也不是 B”（`&&`）或“是 A 或 B”（`||`）。`!=` 链的 `||` 改成 `&&`（仅当条件下面是 `return` 的拒绝/守卫），`==` 链的 `&&` 改成 `||`（`scripts/lpc_fix_cmp_chain.py`）。改动：`/d/baihuagu/yangfeng.h`（1 处）、`/d/gumu/liangong1.lpc`（1 处）、`/d/mingjiao/shanmen.lpc`（1 处）。另有 `/d/city/npc/majiang.lpc`（2 处） 的条件下面做的是别的事（`==` 和 `||` 也可能是本意），保持原样。

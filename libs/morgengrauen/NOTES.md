@@ -256,3 +256,7 @@ The `.c` -> `.lpc` rename changed the string but not the slice width: `f[<2..] =
 - `nosave` functions -> `protected` (263), 2 bad escapes, 2 unused locals; LDMud pragmas FluffOS reports and ignores, including comma lists (`#pragma strong_types,rtt_checks`, ~480 lines; `lpc_warnings.py` now recognises the comma form).
 - `doc/beispiele/precompiler/konstanten.lpc` (a preprocessor tutorial): `#undef` before the two redefinitions it demonstrates (`BS`, `ROOM`), so the lesson stays and the example is correct C preprocessor usage.
 - 0 warnings left in files that compile. No load regression (101 checked objects); deleted-declaration audit clean. 635 of 663 files still do not compile (LDMud efuns and closures): a port, not a warning pass.
+
+## `x != "a" || x != "b"` and `x == "a" && x == "b"`: comparison chains of one value that can never differ (2026-10-20, KB 06 7.282)
+
+`if (arg != "wan" || arg != "pill") return notify_fail(...)` is true whatever `arg` is, `dir == "south" && dir == "north"` is never true: the guard under the test never opens, or never closes. The author meant "neither of these" (`&&`) or "either of these" (`||`). `!=` chains joined by `||` became `&&` (only where the statement under the test is a `return`, a refusal or a guard clause), `==` chains joined by `&&` became `||` (`scripts/lpc_fix_cmp_chain.py`). Changed: `/std/util/ex.lpc` (1).

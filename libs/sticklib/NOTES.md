@@ -241,3 +241,7 @@ The `.c` -> `.lpc` rename changed the string but not the slice width: `f[<2..] =
 ## Warning scan residue (2026-10-19)
 
 - The fresh scan listed one warning outside a failing file, `Unused local variable 'index'` at `/secure/simul_efun/file_lines.lpc:12`. That file has no such variable and loads with no warning; the row belongs to its neighbour `secure/simul_efun/tail.lpc`, an LDMud-only sefun (`bytes` type, `b"\n"` literals) that does not compile here and is not in the `catalog/simul_efun` set the driver loads. Nothing to fix; the rest of the `secure/` and `std/` tree is LDMud code whose errors are expected (the lib is a catalog overlay, not a port).
+
+## `x != "a" || x != "b"` 和 `x == "a" && x == "b"`：同一个值的比较链永远成立/永远不成立（2026-10-20，KB 06 §7.282）
+
+`if (arg != "wan" || arg != "丸") return notify_fail(...)` 对任何 `arg` 都为真，`dir == "south" && dir == "north"` 永远为假：条件下面的守卫要么永远拦、要么永远不拦。作者要的是“既不是 A 也不是 B”（`&&`）或“是 A 或 B”（`||`）。`!=` 链的 `||` 改成 `&&`（仅当条件下面是 `return` 的拒绝/守卫），`==` 链的 `&&` 改成 `||`（`scripts/lpc_fix_cmp_chain.py`）。改动：`/basic/curse.lpc`（1 处）。

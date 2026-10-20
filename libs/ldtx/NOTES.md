@@ -625,3 +625,7 @@ if ( party["party_name"] == HIG "明教" NOR ) {
 ## 补回丢失的标点（2026-10-19，KB 03 §4.6）
 
 转换时丢掉的分号、逗号、引号或文件末尾的 `}`，共 6 个文件，修前 HEAD 载入失败。别的库里同路径的完好副本只比这里少几个标点，按它补回（括号里是那个库）：`/d/quanzhen/hudi3.lpc`（syxjl）、`/d/quanzhen/hudi4.lpc`（hy3）、`/d/quanzhen/hudi6.lpc`（bixiecanyang）、`/kungfu/skill/yanxing-dao.lpc`（syxjl）、`/quest/baituo/qlist3.lpc`（xyzx3）、`/quest/xingxiu/qlist0.lpc`（ffxymud）。修后与 HEAD 逐个对比载入：这 6 个物件全部载入，没有退步（`scripts/lpc_restore_from_twin.py`、`lpc_fix_eaten_quote.py --comma`、`lpc_fix_eof_braces.py`）。
+
+## `x != "a" || x != "b"` 和 `x == "a" && x == "b"`：同一个值的比较链永远成立/永远不成立（2026-10-20，KB 06 §7.282）
+
+`if (arg != "wan" || arg != "丸") return notify_fail(...)` 对任何 `arg` 都为真，`dir == "south" && dir == "north"` 永远为假：条件下面的守卫要么永远拦、要么永远不拦。作者要的是“既不是 A 也不是 B”（`&&`）或“是 A 或 B”（`||`）。`!=` 链的 `||` 改成 `&&`（仅当条件下面是 `return` 的拒绝/守卫），`==` 链的 `&&` 改成 `||`（`scripts/lpc_fix_cmp_chain.py`）。改动：`/d/mingjiao/shanmen.lpc`（1 处）。

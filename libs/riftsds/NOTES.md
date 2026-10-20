@@ -855,3 +855,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply r
 ## Restored base-class macros (2026-10-18, KB 04 6.13)
 
 `inherit IDENT;` named a macro that no header of this lib defines (`syntax error, unexpected L_IDENTIFIER, expecting L_STRING or '('`), so the object never loaded; the base file is in the lib and other libs map the macro to it. Added to the global header `secure/include/global.h`: `BOOK` -> `/obj/book` (2 file(s)) (`scripts/lpc_restore_macros.py`). Loaded one by one with `lpcc` afterwards: 0 of 2 pass, the other 2 stop on another error (`domains/common/item/quest_todo.lpc`: Undefined function set_proper_name; `domains/std/lima_guide.lpc`: Undefined function add_id).
+
+## `x != "a" || x != "b"` and `x == "a" && x == "b"`: comparison chains of one value that can never differ (2026-10-20, KB 06 7.282)
+
+`if (arg != "wan" || arg != "pill") return notify_fail(...)` is true whatever `arg` is, `dir == "south" && dir == "north"` is never true: the guard under the test never opens, or never closes. The author meant "neither of these" (`&&`) or "either of these" (`||`). `!=` chains joined by `||` became `&&` (only where the statement under the test is a `return`, a refusal or a guard clause), `==` chains joined by `&&` became `||` (`scripts/lpc_fix_cmp_chain.py`). What it was: `prompt` / `editor` messages were never marked `MSG_NOWRAP` (`msg_class == "prompt" && msg_class == "editor"`). Changed: `/lib/interface.lpc` (1).

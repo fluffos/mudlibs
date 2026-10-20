@@ -483,3 +483,7 @@ functionally re-tested live on this lib.
 ## 标准整理轮（2026-10-19，`scripts/toolkit_fix.sh`）
 
 本库在新驱动下重扫，机械修复：17 个未使用的局部变量，4 个带初始化的未使用声明。修后与 HEAD 逐个物件对比载入，没有退步。
+
+## `x != "a" || x != "b"` 和 `x == "a" && x == "b"`：同一个值的比较链永远成立/永远不成立（2026-10-20，KB 06 §7.282）
+
+`if (arg != "wan" || arg != "丸") return notify_fail(...)` 对任何 `arg` 都为真，`dir == "south" && dir == "north"` 永远为假：条件下面的守卫要么永远拦、要么永远不拦。作者要的是“既不是 A 也不是 B”（`&&`）或“是 A 或 B”（`||`）。`!=` 链的 `||` 改成 `&&`（仅当条件下面是 `return` 的拒绝/守卫），`==` 链的 `&&` 改成 `||`（`scripts/lpc_fix_cmp_chain.py`）。改动：`/d/mingjiao/shanmen.lpc`（1 处）、`/海洋2002/hy3/d/changan/ca2.lpc`（1 处）、`/海洋2002/hy3/d/mingjiao/shanmen.lpc`（1 处）。

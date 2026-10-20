@@ -896,3 +896,7 @@ Older MudOS predefined `SAVE_EXTENSION` (`".o"`) in every LPC object; the FluffO
 ## `x == "a" || "b"`: the bare string is always true (2026-10-19, KB 06 7.281)
 
 `if (arg == "yuyou" || "yu you")` is true whatever `arg` is, because `"yu you"` is a non-empty string; the author meant `arg == "yu you"`. The variable and operator are written in front of every bare literal (`scripts/lpc_fix_literal_or.py`): `/cmds/mortal/_unequip.lpc` (1).
+
+## A `(string)` cast of a number (2026-10-20, KB 04 6.22)
+
+`std/skills/attic/_burn.lpc`: `if ((string)tp->query_level() < 2)` is `(int)` now. A cast never converts here, and the driver refuses to compare the typed string with a number, so the object never loaded (`scripts/lpc_fix_cast_cmp.py`). It loads, no warning.

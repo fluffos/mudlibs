@@ -64,7 +64,7 @@ void greeting1(object me,object env) {
 }
 int do_cast(string arg)
 {
-if ( arg !="qiankun on baicao xian"||arg!="qiankun") return 0;
+if ( arg !="qiankun on baicao xian"&&arg!="qiankun") return 0;
      else {write("用乾坤对付百草仙？不好吧？\n"); return 1;}
 }
 

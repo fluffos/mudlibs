@@ -861,3 +861,7 @@ are not in the archive).
 `secure/daemon/master.lpc` 的 `compile_object()` 用 `else if` 先建 `players` 目录、再建字母目录：父目录不存在时只建父目录，这位玩家第一次存档（设密码时）打开 `players/<字母>/<名字>.o.tmp` 失败。git 不跟踪这个目录下的文件，全新检出与网页版每位访客都会遇到。第二个 `else if` 改为 `if`（与 dsI 相同）。nightmare4 上用只含被跟踪文件的树实测注册→重登通过；本库主控编译通过。
 
 - 2026-10-14: FluffOS 970d9f09 warns `Float value truncated to int` (#1426). 8 sites in 5 files: assignments, initializers and returns now spell the truncation `to_int(...)` (same value); `x op= <float>` converted the float before the operation (zeroing `x` for a factor below 1) and is now `x = to_int(x op ...)`: `/lib/teller.lpc`（`total +=`）. Changed objects loaded before and after in fresh drivers, no regressions (`scripts/lpc_fix_float_trunc.py`, KB 04 §6.10).
+
+## `x != "a" || x != "b"` 和 `x == "a" && x == "b"`：同一个值的比较链永远成立/永远不成立（2026-10-20，KB 06 §7.282）
+
+`if (arg != "wan" || arg != "丸") return notify_fail(...)` 对任何 `arg` 都为真，`dir == "south" && dir == "north"` 永远为假：条件下面的守卫要么永远拦、要么永远不拦。作者要的是“既不是 A 也不是 B”（`&&`）或“是 A 或 B”（`||`）。`!=` 链的 `||` 改成 `&&`（仅当条件下面是 `return` 的拒绝/守卫），`==` 链的 `&&` 改成 `||`（`scripts/lpc_fix_cmp_chain.py`）。改动：`/lib/interface.lpc`（1 处）。

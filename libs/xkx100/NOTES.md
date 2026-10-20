@@ -353,3 +353,7 @@ live `debug.log` 是 `libs/xkx100/log/debug.log`（Boot Time Fri Sep 4
 ## 同名全局表（2026-10-19，KB 04 §6.10）
 
 `open/xiangyang/task/guo.lpc` 把 `zzzjob.lpc` 和 `teamjob.lpc` 两个片段 `#include` 进同一个对象，两个片段各有一张 `mixed names` 任务地点/人名表，后一张触发 `Redeclaration of global variable 'names'`。两个片段的函数按编译顺序各用各的那张，所以 `teamjob.lpc` 的表改名 `team_names`（`nosave`，一处引用同步），行为不变。`open/xiangyang/task/guo.lpc`、`teamjob.lpc` 修前修后都载入，警告消失。
+
+## `x != "a" || x != "b"` 和 `x == "a" && x == "b"`：同一个值的比较链永远成立/永远不成立（2026-10-20，KB 06 §7.282）
+
+`if (arg != "wan" || arg != "丸") return notify_fail(...)` 对任何 `arg` 都为真，`dir == "south" && dir == "north"` 永远为假：条件下面的守卫要么永远拦、要么永远不拦。作者要的是“既不是 A 也不是 B”（`&&`）或“是 A 或 B”（`||`）。`!=` 链的 `||` 改成 `&&`（仅当条件下面是 `return` 的拒绝/守卫），`==` 链的 `&&` 改成 `||`（`scripts/lpc_fix_cmp_chain.py`）。改动：`/d/baihuagu/yangfeng.h`（1 处）、`/d/gumu/liangong1.lpc`（1 处）、`/d/mingjiao/shanmen.lpc`（1 处）。另有 `/d/city/npc/majiang.lpc`（2 处） 的条件下面做的是别的事（`==` 和 `||` 也可能是本意），保持原样。

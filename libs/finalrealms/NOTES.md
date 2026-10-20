@@ -764,3 +764,7 @@ MudOS filled the missing arguments of a call with 0, took an untyped parameter a
 ## `x == "a" || "b"`：后面的字符串常量永远为真（2026-10-19，KB 06 §7.281）
 
 `if (arg == "yuyou" || "yu you")` 里的 `"yu you"` 是非空字符串，永远为真，整个条件对任何 `arg` 都成立；作者要的是每个字符串都和变量比较。在每个字符串前补上变量和运算符（`scripts/lpc_fix_literal_or.py`；`forrest2.lpc` 是 `dir == "north" && "south"`，手工改成 `(dir == "north" || dir == "south") && ...`）：`/d/newbie/goblin/rooms/ngob15.lpc`（1 处）、`/d/newbie/goblin/rooms/ngob20.lpc`（1 处）、`/d/newbie/goblin/rooms/ngob23.lpc`（1 处）、`/d/newbie/goblin/rooms/ngob36.lpc`（1 处）。
+
+## `x != "a" || x != "b"` and `x == "a" && x == "b"`: comparison chains of one value that can never differ (2026-10-20, KB 06 7.282)
+
+`if (arg != "wan" || arg != "pill") return notify_fail(...)` is true whatever `arg` is, `dir == "south" && dir == "north"` is never true: the guard under the test never opens, or never closes. The author meant "neither of these" (`&&`) or "either of these" (`||`). `!=` chains joined by `||` became `&&` (only where the statement under the test is a `return`, a refusal or a guard clause), `==` chains joined by `&&` became `||` (`scripts/lpc_fix_cmp_chain.py`). What it was: `push lever` always answered "You must push an existing lever." (`str == "levers" && str == "lever"`). Changed: `/obj/handlers/weather_room.lpc` (1), `/std/environ/weather_room.lpc` (1).

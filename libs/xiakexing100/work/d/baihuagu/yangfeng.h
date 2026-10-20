@@ -9,7 +9,7 @@ int do_yang(string arg)
 	seteuid(getuid());
 	if(!arg)
 		return notify_fail("你想养什么？\n");
-	if(arg != "yu bee" || arg != "yu bee")
+	if(arg != "yu bee" && arg != "yu bee")
 		return notify_fail("你只能养玉蜂。\n");
 	if(me->is_busy()||me->query_temp("marks/bee1"))
 		return notify_fail("你正忙着呢。\n");
