@@ -255,3 +255,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 ## 登录密码超过 255 字节：`crypt()` 抛错（2026-10-20，KB 06 §7.294）
 
 驱动的 `crypt()` 对超过 255 字节的密钥直接报错（`Error in crypt(), check your salt`），老驱动则按任意长度散列。在登录提示符下输入 256 字节以上的密码，密码检查那一行就抛错，连线停在一个裸的 `> ` 提示符上，登录走不完（`password` 指令的旧密码检查同样）；用 300 个 `x` 当参数的扫描发现的。`/adm/obj/simul_efun.lpc` 里补了一个同名的 simul_efun `crypt(key, salt)`：只有超长的密钥才被截短（先截到 255 个字符，再逐字符截到 `sizeof(to_buffer(key)) <= 255`，限制按字节算，一个汉字占三个字节），再交给 `efun::crypt()`；普通密码原样散列，已存的密码散列不受影响（`scripts/lpc_add_sefun.py crypt`）。
+
+## 简易 `cat()` 把 simul_efun 对象的 euid 改成了玩家：存档时 `Too deep recursion`（2026-10-20，KB 06 §7.313）
+
+`adm/simul_efun/file.lpc` 的 `cat()` 是 `seteuid(geteuid(this_player())); write(read_file(file));`，它在 simul_efun 对象里执行：玩家敲过一次 `help` 之后，这个对象的 euid 就一直是那个玩家的。它自己的 `log_file()` → `assure_file()` → `file_size(LOG_DIR + file)` 于是按玩家权限过 `valid_read()`，被拒绝，`securityd` 再用 `log_file()` 记一笔拒绝，又走回 `file_size()`……直到调用深度耗尽。第二次连线（角色已保存）时第一次被拒的是 `restore_object` 读 `/data/login/s/<id>.o`，之后控制台出现两条 `Too deep recursion.`（`securityd.lpc:173` 和 `:247`），`log/read_fail.log` 写满同一行，角色不再被保存。现在 `cat()` 先记下 simul_efun 自己的 euid，用调用者的权限读文件（`catch()` 里读），读完再还原，`read_file()` 返回 0 时不 `write()`。实测：第一次连线跑 `help`，立刻第二次连线，无递归、无 `read_fail.log`。xxcq 的 `securityd` 没有走到同一条路，同一份 `cat()` 一并改了（潜在的）。

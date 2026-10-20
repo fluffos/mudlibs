@@ -3,6 +3,8 @@
 Registration exercises the connection object, the ACL, lazy compiles,
 Chinese-name detection, and the player-body class in a single chain.
 
+**Finding them (2026-10-20):** a login that dies on a fresh tree is what the login survey walks (`scripts/play_survey.py`, KB 08 10.16: a robot registers a character in a booted pristine tree, reads the console, checks that the character was saved and, with `--relogin`, loads again). Its cases are in KB 06: a runtime counter file read unguarded (7.298, 7.301), `crypt()` over 255 bytes (7.294), the sefun's euid and `valid_read()` (7.295, 7.304), `valid_write()` and the `.o` of a save (7.309), the pager and a missing banner (7.297, 7.300), `get_config(__MUD_PORT__)` (7.302).
+
 ### 8.1 GBK byte-range Chinese detection (the most impactful bug in the project)
 On this driver, `str[i]` is a Unicode codepoint and `strlen()` counts
 characters. Every check written against GBK bytes silently misbehaves.

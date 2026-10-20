@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""scripts/play_login.py PORT [--name NAME] [--pw PW] [--cmds "look;score;i"] [--host 127.0.0.1] [--steps 45] [--quiet] [--verbose]
+"""scripts/play_login.py PORT [--name NAME] [--pw PW] [--cmds "look;score;i"] [--host 127.0.0.1] [--steps 30] [--quiet] [--verbose]
 
 A generic login robot for a booted lib (scripts/play_boot.sh): it answers the prompts of a registration or a login with defaults chosen by regex on the
 last text the server sent (name, password twice, e-mail, gender, y/n, "press return", the first entry of a numbered menu, race / class lists), until a probe
@@ -25,6 +25,7 @@ RULES = [
     (r"(?i)(re-?type|again|confirm|verify|repeat|once more).{0,40}(password|passwd|pass)|(password|passwd).{0,40}(again|confirm|verify)|再输入一次|再输一次|确认密码|重新输入密码|(^|\n)\s*again\s*:\s*$", "{lastpw}"),
     (r"(?i)(普通密码|normal password|not be the same|must be different|different from)[^\n]{0,80}[:：]\s*$", "{pw2}"),     # tybxjh: "管理密码和普通密码不能相同": the second password is another one
     (r"(?i)password|passwd|密码|口令", "{pw}"),
+    (r"(?i)(QQ号|QQ number|qq号码)", "12345678"),                                   # aoxiangtianji: "您的QQ号码："
     (r"(?i)(e-?mail|email|电子邮件|邮箱|邮件地址)", "{email}"),
     (r"(?im)^[^\n]*(gbk|big5)[^\n]*utf-?8[^\n]*[:：]\s*$|^[^\n]*utf-?8[^\n]*(gbk|big5)[^\n]*[:：]\s*$", "utf-8"),            # the xkx family's encoding menu: "Select 国标码 GBK or 国际码 utf-8 (GBK/utf-8):"
     (r"(?i)\(gb/big5\)|\(big5/gb\)|\(gbk?/big5\)", "gb"),                    # the older xkx family menu: "Select 国标码 GB or 大五码 BIG5 (gb/big5):"
@@ -46,6 +47,7 @@ RULES = [
     (r"(?i)(enter|type|give|choose|select|input).{0,30}(number|choice|option)|^\s*\[?1\]?[\.\)]\s", "1"),
     (r"(?i)(?:合法值是?|valid(?: values?)?(?: is| are)?|between|range)\s*(\d+)\s*(?:到|to|-|~|至|and)\s*(\d+)", "{range_mid}"),      # "合法值是 10-30"
     (r"[\(\[](\d+)\s*(?:到|to|-|~|至)\s*(\d+)[\)\]]", "{range_mid}"),                 # "(10-30)", "[10-30]"
+    (r"(?i)(select|choose|pick|enter|give)\s+(a|an|your)\s+(character\s+)?(name|handle|nickname)\s*[:?]?\s*$", "{name}"),          # lpuni: "Please select a name:" (the menu rule below would answer 1)
     (r"(?i)(请选择|请输入.{0,10}(数字|号码|编号)|choose|select|pick).{0,60}[:：?？\)]\s*$", "1"),
     (r"(?i)(what is|enter|give|type|input|tell me).{0,40}(your )?(character )?(name|id|handle)|(by )?what (is your |do you wish )?name|name do you|known\s*\?|login\s*:|name\s*:|name\?|名字|ID\s*[:：]|帐号|账号|new\)", "{name}"),
 ]
@@ -100,6 +102,15 @@ def password_of_length(lo, hi):
 def last_line(text):
     s = text.rstrip().split("\n")
     return s[-1] if s else ""
+
+
+def text_tail(t):
+    """the last line of an answer that is more than a bare prompt (`>`, `hp: 10/10 >`, `]`)"""
+    for ln in reversed(t.strip().split("\n")):
+        s = ln.strip().rstrip(">] ").strip()
+        if s:
+            return s
+    return ""
 
 
 def tail(buf, n=500):
@@ -158,7 +169,7 @@ def run(args):
             mapping["pw2"] = "O" + mapping["pw"][1:][::-1]
             mapping["lastpw"] = mapping["pw"]
         last = low.rstrip().split("\n")[-1] if low.strip() else ""
-        question = bool(re.search(r"([:：?？\)\]])\s*$", last)) or relaxed       # a prompt ends in a colon, a question mark, `(again)`, `[y/n]`
+        question = bool(re.search(r"([:：?？\)\]）】])\s*$", last)) or relaxed       # a prompt ends in a colon, a question mark, `(again)`, `[y/n]`
         rule_id, reply = None, None
         if NEW_CHAR.search(low) and not used.get("newchar"):                # Discworld: "F - Finger someone, N - New character, G - Guest character, or enter your character"
             used["newchar"] = 1
@@ -228,7 +239,7 @@ def run(args):
             if len(probe.strip()) > 20 and not same and GAME.search(probe) and not NOT_GAME.search(tail(probe, 200)):
                 nonsense = m.cmd("zzqxk", idle=0.8, maxwait=5)              # a game answers an unknown verb in a line; a menu or a dialogue shows itself again
                 out(">>> zzqxk\n<<< " + nonsense.strip().replace("\n", "\n<<< ")[-200:])
-                same_tail = nonsense.strip().split("\n")[-1].strip() == probe.strip().split("\n")[-1].strip()       # a dialogue redisplays its prompt for any input; a game answers `look` and `zzqxk` differently
+                same_tail = text_tail(nonsense) == text_tail(probe)       # a dialogue redisplays its prompt for any input; a game answers `look` and `zzqxk` differently
                 if len(nonsense.strip()) < 200 and not same_tail and not re.search(r"\d\s*[\.\)〗]|选择|choose|select|请输入|please", nonsense, re.I):
                     buf = probe
                     break
@@ -287,7 +298,7 @@ def main():
     ap.add_argument("--gender", default="m")
     ap.add_argument("--term", default="ansi")
     ap.add_argument("--cmds", default="look;score;i;who;help")
-    ap.add_argument("--steps", type=int, default=45)
+    ap.add_argument("--steps", type=int, default=30)
     ap.add_argument("--quiet", action="store_true")
     ap.add_argument("--verbose", action="store_true")
     sys.exit(run(ap.parse_args()))

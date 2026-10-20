@@ -224,6 +224,10 @@ Traps:
   the local tree no longer has (it dropped 9.5k lines at once on 2026-10-03),
   and the committed file is not slug-sorted because onboarding commits
   appended their own blocks, so the tool edits blocks in place.
+  A per-letter bucket (`save/players/<a-z>`) of a lib that does not make its
+  directories on demand needs all 26 letters, and the scan only knows the ones
+  the local tree had: `python3 scripts/lpc_keep_letters.py --apply SLUG BUCKET...`
+  completes them (the Discworld libs; KB 06 section 7.315).
 - **Persistence.** `persist.js` is an IndexedDB overlay of
   `/mudlib/work/data` only. `save-export.js` handles export, import, and
   reset; `safeRel()` blocks path traversal on both import and restore.

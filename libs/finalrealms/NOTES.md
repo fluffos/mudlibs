@@ -780,3 +780,7 @@ The driver's `crypt()` raises (`Error in crypt(), check your salt`) for a key ov
 ## `apply() with insufficient permission` at login (2026-10-20, known, harmless)
 
 Creating a character, `secure/login.lpc` calls `set_name` on `global/player`, which is `protected`: the console prints `apply() with insufficient permission ... function: set_name`. The name is set by `set_name(bong)` inside `player.lpc` anyway (`who` shows it), so the line is a dead call from upstream and was left alone.
+
+## `wer` and `whoami` did not compile: `efun::tell_object()` outside the allowed directories (2026-10-20, KB 06 7.311)
+
+`/cmds/player/wer.lpc:226:9: error: Invalid simulated efunction override` (twice) every time `wer` was typed, and the same in `whoami`: the master's `valid_override()` lets only `secure/`, `std/`, `obj/`, `simul_efun`, `global/` and a few more call `efun::` for a function the simul_efun object overrides, and a command file is none of them. Both commands now write through the player's `do_efun_write()`, as the Discworld mudlib they descend from does. `dump_socket_status()` (a MudOS efun this driver lacks) is a sefun built from `socket_status()`; a driver without the sockets package (the WASM build) prints the header of the table only.

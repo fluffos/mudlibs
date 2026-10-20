@@ -259,3 +259,15 @@ MudOS filled the missing arguments of a call with 0, took an untyped parameter a
 ## A login password over 255 bytes: `crypt()` raises (2026-10-20, KB 06 7.294)
 
 The driver's `crypt()` raises (`Error in crypt(), check your salt`) for a key over 255 bytes, where the old driver hashed any length. A password of 256 bytes or more typed at the login prompt threw an error in the password check and left the connection at a bare `> ` prompt, so the login never completed (the old-password test of `password` the same); found by the sweep shape of 300 `x`. `/secure/simul_efun.lpc` now defines a simulated efun `crypt(key, salt)` of the same name: only an over-long key is cut (to 255 characters, then character by character until `sizeof(to_buffer(key)) <= 255`: the limit is in bytes, a CJK character takes three) before it is handed to `efun::crypt()`; every ordinary password hashes as before and the saved hashes are untouched (`scripts/lpc_add_sefun.py crypt`).
+
+## `time` did not compile: `config.h` came after the `__DISTRIBUTION_LIB__` test (2026-10-20, KB 06 7.312)
+
+`cmds/player/time.lpc` had `#ifndef __DISTRIBUTION_LIB__ #include <special_day.h> #endif` before `#include <config.h>`, the header that defines `__DISTRIBUTION_LIB__`, so the test was always true and the file included `special_day.h`, which the distribution lib does not ship: the `time` command never compiled. `#include <config.h>` now stands before the test.
+
+## Heart beat every two seconds: the command queue never refilled (2026-10-20, KB 06 7.314)
+
+`psoul.lpc` `query_time_left()` refills the command budget with `time_left += ((time() - tl_updated) / 2) * ROUND_TIME` and then sets `tl_updated = time()`; the player's `heart_beat()` calls it every beat. The MudOS Discworld beat every two seconds. The driver's default `heartbeat interval msec` is 1000, so `time() - tl_updated` is 1, the integer division is 0 on almost every call, and `time_left` stays at -20: after the first command every other one answered `Queued command: ...` and nothing ran for minutes (`restart` and `stop` did not help; a reconnect to a net-dead body was the same). `config.fluffos` now has `heartbeat interval msec : 2000`; live, `i`, `score`, `date`, `who` and `look` answer at once in a first visit and after a reconnect.
+
+## Player saves need every letter directory (2026-10-20, KB 06 7.315)
+
+`save_object()` makes no directories, and the Discworld mudlib has no on-demand `mkdir` for `save/players/<letter>/`, `save/newsrc`, `save/mail` or `banish`: they existed in the archive only for the letters somebody had played with (not c, d, g, p, s, t), so a character whose name starts with another letter was never written (`Could not open /save/players/s/NAME.o.gz.tmp for a save` in `log/catch` at the quit and at every autosave; the login survey said `in`, `saved` 0). `scripts/lpc_keep_letters.py --apply` completed the four buckets in `scripts/wasm_keep_dirs.txt` (the site loader and `pristine_tree.sh` make them); live, `save/players/s/sweepzq.o.gz` is written at the quit. The mortal sweep also needs letters-only names (`sweepab`) and the `N` entry of the login menu.

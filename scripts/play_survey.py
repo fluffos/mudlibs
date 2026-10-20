@@ -7,11 +7,11 @@ mechanical fix that touched thousands of files leaves no trace in the load gates
 
 One tab-separated line per lib on stdout and in --out (default $LPC_SCRATCH/play_survey.tsv):
 
-  slug <TAB> result <TAB> steps <TAB> boot_errors <TAB> play_errors <TAB> first error line <TAB> last prompt <TAB> saved
+  slug <TAB> result <TAB> steps <TAB> boot_errors <TAB> play_errors <TAB> first error line <TAB> last prompt <TAB> saved [<TAB> relogin]
 
 `result` is the robot's verdict (`in`: a game prompt was reached; `stuck`: it could not answer the dialogue; `closed`: the server closed the connection or never answered) or
 `noboot` (the port did not open).  `boot_errors` counts the driver's error lines before the first connection, `play_errors` those printed during the login (playsweep.DRIVER_BAD).
-`saved` counts the files named `sweepzq*` (the robot's character) in the unit's tree after the login and the `quit`: 0 for an `in` row is a lib that did not persist the character -- a denied `save_object()`
+With --relogin the ninth column is the second visit of the same character (`in:0`, `stuck:0`, `closed:2:first console error`): a character that was saved and does not load again is a restore or password-check bug.  `saved` counts the files whose path has `sweepzq` in it (the robot's character: `data/user/s/sweepzq.o`, but also `data/user/s/sweepzq/login.o` of the per-user-directory libs) in the unit's tree after the login and the `quit`: 0 for an `in` row is a lib that did not persist the character -- a denied `save_object()`
 (yhyxcs: `valid_write()` compared the file without the `.o` and recursed, KB 06 7.309) or a lib that saves elsewhere / later: look.  A `stuck` lib is a lib with an unusual dialogue, not a verdict: look at it by hand (KB 08 10.16).  --all takes every vendored lib with a config.fluffos that is not a gitlink
 (`realms` needs MySQL, a lib with its own driver build is skipped: SURVEY_SKIP / --skip).  The unit is stopped after each lib; nothing else is killed."""
 import argparse
@@ -52,17 +52,17 @@ def own_port(slug):
         return None
 
 
-def survey_one(slug, port, cmds, boot_timeout):
+def survey_one(slug, port, cmds, boot_timeout, relogin=False):
     port = port or own_port(slug) or 46300
     out = os.path.join(SCR, f"play-{slug}.out")
     t0 = time.time()
     try:
         r = subprocess.run([os.path.join(REPO, "scripts/play_boot.sh"), slug, str(port)], cwd=REPO, capture_output=True, text=True, timeout=boot_timeout)
     except subprocess.TimeoutExpired:
-        return [slug, "noboot", "-", "-", "-", "play_boot.sh timed out", "", "-"]
+        return [slug, "noboot", "-", "-", "-", "play_boot.sh timed out", "", "-", "-"]
     try:
         if r.returncode != 0:
-            return [slug, "noboot", "-", "-", "-", (r.stderr.strip().splitlines() or ["port did not open"])[-1][:160], "", "-"]
+            return [slug, "noboot", "-", "-", "-", (r.stderr.strip().splitlines() or ["port did not open"])[-1][:160], "", "-", "-"]
         try:
             boot_text = open(out, encoding="utf-8", errors="replace").read()
         except OSError:
@@ -86,10 +86,29 @@ def survey_one(slug, port, cmds, boot_timeout):
         play_errs = errors(play_text)
         first = (play_errs or boot_errs or [""])[0][:200]
         tree = os.path.join(SCR, f"play-{slug}", "libs", slug, "work")
-        found = subprocess.run(["find", tree, "-name", "sweepzq*", "-type", "f"], capture_output=True, text=True).stdout.split()
-        return [slug, result, steps, str(len(boot_errs)), str(len(play_errs)), first, last, str(len(found))]
+        found = subprocess.run(["find", tree, "-ipath", "*sweepzq*", "-type", "f"], capture_output=True, text=True).stdout.split()
+        again = "-"
+        if relogin and found and result == "in":                    # the second visit: the saved character must load (restore_object, the password check, the first look)
+            mark2 = os.path.getsize(out) if os.path.exists(out) else 0
+            for wait in (25, 100, 0):                               # a second visit right after the quit is refused for 20 s (xkx), 120 s (jhfy3): wait and try again
+                p2 = subprocess.run([sys.executable, os.path.join(REPO, "scripts/play_login.py"), str(port), "--quiet", "--cmds", "look;score"], cwd=REPO, capture_output=True, text=True, timeout=300)
+                v2 = [ln for ln in p2.stdout.splitlines() if ln.startswith("RESULT")]
+                m2 = re.match(r"RESULT (\w+) steps=(\d+)(?: last=(.*))?", v2[-1]) if v2 else None
+                if not (m2 and m2.group(1) == "closed") or not wait:
+                    break
+                time.sleep(wait)                                      # the xkx family refuses a reconnect for 20 s after a quit ("您刚刚断线，20秒钟之内不能连线进入"), and an ES quit finishes a few seconds after the link closed: a reconnect before that meets the old body and its pending quit
+            time.sleep(0.5)
+            try:
+                with open(out, "rb") as f:
+                    f.seek(mark2)
+                    text2 = f.read().decode("utf-8", "replace")
+            except OSError:
+                text2 = ""
+            errs2 = errors(text2)
+            again = f"{m2.group(1) if m2 else 'closed'}:{len(errs2)}" + (f":{errs2[0][:120]}" if errs2 else "")
+        return [slug, result, steps, str(len(boot_errs)), str(len(play_errs)), first, last, str(len(found)), again]
     except subprocess.TimeoutExpired:
-        return [slug, "closed", "-", "-", "-", "play_login.py timed out", "", "-"]
+        return [slug, "closed", "-", "-", "-", "play_login.py timed out", "", "-", "-"]
     finally:
         subprocess.run([os.path.join(REPO, "scripts/play_stop.sh"), slug], cwd=REPO, capture_output=True)
 
@@ -104,6 +123,7 @@ def main():
     ap.add_argument("--skip", default=os.environ.get("SURVEY_SKIP", ""))
     ap.add_argument("--boot-timeout", type=int, default=240)
     ap.add_argument("--append", action="store_true", help="keep the lines already in --out (a resumed survey skips the slugs it holds)")
+    ap.add_argument("--relogin", action="store_true", help="after the first visit and its quit, log in again as the same character (only when files named sweepzq* were saved): the ninth column is `result:console errors[:first]`")
     a = ap.parse_args()
     slugs = a.slugs or (all_slugs() if a.all else [])
     if not slugs:
@@ -117,7 +137,7 @@ def main():
         for s in slugs:
             if s in skip or s in done:
                 continue
-            row = survey_one(s, a.port, a.cmds, a.boot_timeout)
+            row = survey_one(s, a.port, a.cmds, a.boot_timeout, a.relogin)
             line = "\t".join(row)
             print(line, flush=True)
             fo.write(line + "\n")
