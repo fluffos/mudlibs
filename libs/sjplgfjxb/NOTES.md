@@ -374,3 +374,7 @@ live-boot-tested.
 - 玩家打造兵器的模板（5 个文件）这回有了基类，照 KB 06 §7.275 加上没有打造者时的保护（`scripts/lpc_fix_forge_template.py`）。
 
 逐个与 HEAD 对比载入，没有退步。
+
+## `call_out_info()` 的每一项只有 3 个元素（2026-10-20，KB 06 §7.287）
+
+驱动返回的是 `({ 物件, 函数, 延迟 })`，不带 call_out 的参数，旧代码读第 4 项 `info[i][3]`（`callouts` 指令、`calloutd`、`cod` 工具）一读就报 `Array index out of bounds`，指令从第一行起什么也打印不出来。改为 `(sizeof(info[i]) > 3 ? info[i][3] : 0)`（`scripts/lpc_fix_callout_info.py`）。改动：`/cmds/arch/callouts.lpc`（1 处）。

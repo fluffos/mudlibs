@@ -357,3 +357,20 @@ live `debug.log` 是 `libs/xkx100/log/debug.log`（Boot Time Fri Sep 4
 ## `x != "a" || x != "b"` 和 `x == "a" && x == "b"`：同一个值的比较链永远成立/永远不成立（2026-10-20，KB 06 §7.282）
 
 `if (arg != "wan" || arg != "丸") return notify_fail(...)` 对任何 `arg` 都为真，`dir == "south" && dir == "north"` 永远为假：条件下面的守卫要么永远拦、要么永远不拦。作者要的是“既不是 A 也不是 B”（`&&`）或“是 A 或 B”（`||`）。`!=` 链的 `||` 改成 `&&`（仅当条件下面是 `return` 的拒绝/守卫），`==` 链的 `&&` 改成 `||`（`scripts/lpc_fix_cmp_chain.py`）。改动：`/d/baihuagu/yangfeng.h`（1 处）、`/d/gumu/liangong1.lpc`（1 处）、`/d/mingjiao/shanmen.lpc`（1 处）。另有 `/d/city/npc/majiang.lpc`（2 处） 的条件下面做的是别的事（`==` 和 `||` 也可能是本意），保持原样。
+
+## 深度功能测试（§10.7，2026-10-20）：实机指令扫描（KB 08 §10.16）
+
+在 FluffOS 923cdbc0 上用 `scripts/play_boot.sh` + `mudplay.py` + `playsweep.py` 起一个实例，对每条指令各发十种参数（空、`me`、`here`、`1`、`all`、三个词、`-h`、`?`、中文、300 个字符），同时看驱动控制台和玩家屏幕：普通玩家指令 147 条（1,470 行），巫师指令（`imm` / `wiz` / `arch` / `adm`）970 行。找到并修复的程序错误：
+
+1. **`exit` / `quit` 永远退不出去**（KB 06 §7.286）。`cmds/usr/exit.lpc` 的 `savequit()` 里 `a = link_ob->save()` 之后判断 `a == 1 && me->save()`；`save_object()` 返回写出的字节数，不是 1，所以每个玩家 `quit` 都先显示再见，再显示“警告：档案保存失败，无法退出游戏”，连接不断开。xiakexing100 在 7 月修过，xkx100 漏了：改为 `if (a && me->save())`。实机：`exit` 之后连接关闭，重新登录是新的身体，控制台无错误。
+2. **`adm/daemons/npcd.lpc` 从来没有编译过**。`random_move()` 里 `object dest;` 装的是 `exits[dir]` 的路径字符串，`find_object(dest)` / `load_object(dest)` 编译期就报 `Bad argument 1`，整个 NPC 精灵载入失败；`natured` 每天早晨的 `create_thief()` 因此报 `No program in object '/adm/daemons/npcd'`。改为 `string dest;`（xiakexing100 本来就是 `string`）。
+3. **`feature/damage.lpc` `heal_up()`**：`environment(this_object())->is_chat_room()` 对没有环境的 NPC 每个心跳报一次 `Bad argument 1 to call_other`；加 `environment(this_object()) &&`（xkx100utf8 已有）。
+4. **`boss 1`**（KB 06 §7.285）：`read_file("/open/shit.txt")` 的文件不在存档里，`write(0)` 报错，而屏幕已被清空、消息被屏蔽（`block_msg/all`）；改为 `if (stringp(msg)) write(msg);`。
+5. **`news`**（KB 06 §7.285）：指令先 `call_other("/u/qingyun/workroom", "???")`，`inherit/misc/bboard.lpc` 的 `setup()` 又把更新公告板 `move()` 到那里；这个巫师目录存档里没有，每次 `news` 都报 `call_other() couldn't find object`。两处都加 `file_size(路径 + ".lpc") > 0 &&`，板子留在原地，`news` 照常读公告。
+6. **`to`（`cmds/usr/to.lpc`、`cmds/wiz/to.lpc`）不能编译**（KB 06 §7.284）：`(: this_object(), ({ "do_to", me, arg }) :)` 里的局部变量让整个指令 `Illegal to use local variable in functional`。改为 `(: call_other, this_object(), "do_to", me, arg :)`。实机：`to say 第一行` / `这是第二行` / `.` 显示“你说道：第一行 这是第二行”。
+7. **`callouts`**（KB 06 §7.287）：`call_out_info()` 的每一项只有 3 个元素，`info[i][3]` 在第一行就 `Array index out of bounds`；改为 `(sizeof(info[i]) > 3 ? info[i][3] : 0)`。
+8. 其他巫师指令：`cip` 不带参数时 `sscanf(0, ...)`（加用法提示）；`w_lian` 无参数时 `(__DIR__ "enable")` 指向不存在的 `/cmds/wiz/enable`（改指 `/cmds/skill/enable`）；`clone` 里 `if (msg = "none") msg = "";`（赋值写成了比较，自定义复制讯息永远被清掉；改为 `==`）。
+9. **任务 NPC 的 `random_move()`**（KB 06 §7.288）：`clone/quest/questyinshi`、`questman`、`questjianxi`、`questxuncheng`、`bwdhnpc` 和 `clone/haojie/shashou` 走动前先问目的地房间 `no_fight`，`find_object(dest)` 在房间还没载入时是 0，每个心跳报一次 `Bad argument 1 to call_other`，NPC 走不出第一个房间；改为 `(find_object(dest) || load_object(dest))->query("no_fight")`。
+10. **浩劫 `adm/daemons/disaster.lpc` 的 `verdict_time()`**（KB 06 §7.289）：宣布战果的 `message()` 里 `lead->name()`，接战书的玩家若已离线 `lead` 是 0，报错后 `LOGIN_D->set_madlock(0)` 不再执行，戒严一直不解除，`cmds/usr/exit.lpc` 因此对所有人拒绝 `quit`。改为 `(lead ? lead->name() : "各派豪杰")`。
+
+已查、不是错误：`task`、`help`、`map`、`sos`、`edemote`、`converse`、`wizmap` 是翻页器 / 编辑器 / 对话提示，扫描器按“需要退出”记录；`boss` 之后屏蔽消息是设计（`bossgone` 解除）。修复后同一份扫描重跑：控制台无新错误。

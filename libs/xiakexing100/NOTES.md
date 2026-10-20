@@ -613,3 +613,7 @@ functionally re-tested live on this lib.
 ## `x != "a" || x != "b"` 和 `x == "a" && x == "b"`：同一个值的比较链永远成立/永远不成立（2026-10-20，KB 06 §7.282）
 
 `if (arg != "wan" || arg != "丸") return notify_fail(...)` 对任何 `arg` 都为真，`dir == "south" && dir == "north"` 永远为假：条件下面的守卫要么永远拦、要么永远不拦。作者要的是“既不是 A 也不是 B”（`&&`）或“是 A 或 B”（`||`）。`!=` 链的 `||` 改成 `&&`（仅当条件下面是 `return` 的拒绝/守卫），`==` 链的 `&&` 改成 `||`（`scripts/lpc_fix_cmp_chain.py`）。改动：`/d/baihuagu/yangfeng.h`（1 处）、`/d/gumu/liangong1.lpc`（1 处）、`/d/mingjiao/shanmen.lpc`（1 处）。另有 `/d/city/npc/majiang.lpc`（2 处） 的条件下面做的是别的事（`==` 和 `||` 也可能是本意），保持原样。
+
+## 深度功能测试（§10.7，2026-10-20）：实机指令扫描后同步 xkx100 的发现（KB 08 §10.16）
+
+xkx100 的实机指令扫描（见 `libs/xkx100/NOTES.md`）里和本库代码相同的几处，同样修复：`cmds/usr/boss.lpc`（`/open/shit.txt` 不存在，`write(0)`）、`cmds/usr/news.lpc` 和 `inherit/misc/bboard.lpc`（公告板房间 `/u/qingyun/workroom` 不存在）、`cmds/wiz/clone.lpc`（`if (msg = "none")`）、`cmds/wiz/cip.lpc`（无参数）、`cmds/wiz/w_lian.lpc`（`__DIR__ "enable"` 指向不存在的 `/cmds/wiz/enable`）、`clone/quest/*` 与 `clone/haojie/shashou.lpc` 的 `random_move()`（`find_object(dest)->query("no_fight")`，目的地没载入时对 0 调用）、`adm/daemons/disaster.lpc`（`lead->name()`，领头玩家离线时报错、戒严不解除）、`cmds/wiz/callouts.lpc`（`call_out_info()` 只有 3 项）。`exit.lpc` 的 `a == 1` 和 `npcd.lpc` 的 `string dest` 本库 7 月就是对的。

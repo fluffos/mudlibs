@@ -291,3 +291,7 @@ drafts) minus the files its pass fixed, plus `cmds/std/practice_.lpc` and a save
 ## `x == "a" || "b"`：后面的字符串常量永远为真（2026-10-19，KB 06 §7.281）
 
 `if (arg == "yuyou" || "yu you")` 里的 `"yu you"` 是非空字符串，永远为真，整个条件对任何 `arg` 都成立；作者要的是每个字符串都和变量比较。具体是：战斗精灵里只该对 hatred / vendetta 出现的追杀提示对所有类型都出现；战斗精灵里只该对 hatred / vendetta 出现的追杀提示对所有类型都出现。在每个字符串前补上变量和运算符（`scripts/lpc_fix_literal_or.py`；`forrest2.lpc` 是 `dir == "north" && "south"`，手工改成 `(dir == "north" || dir == "south") && ...`）：`/adm/daemons/combatd-4-17.lpc`（1 处）、`/adm/daemons/combatd-4-20.lpc`（1 处）、`/std/char/questnpc.lpc`（1 处）、`/std/char/questnpc2.lpc`（1 处）。
+
+## `member_array('/', str)` 改为 `strsrch(str, "/")`：字符字面量的 member_array 按字节搜索（2026-10-20，KB 06 §7.283）
+
+`member_array('/', str)` 里的 `'/'` 是整数，驱动按 UTF-8 **字节**搜索，返回字节偏移（带第三个参数时起点也是字节）；最新的 FluffOS（923cdbc0）在字符串里有非 ASCII 文字时，对每个调用点警告一次（`Warning: member_array(int, string) searches BYTES`）。而 `str[0..idx-1]` 按字符切，中文字符串会在错误的位置截断。改为 `strsrch(str, "/")`（找不到同样返回 -1，按字符计数；`scripts/lpc_fix_member_array_char.py`，JSON 编码器等少数几处手改）。改动：`/adm/daemons/vrm_server.lpc`（1 处）、`/d/neon_playground/migong/adm/daemons/vrm_server.lpc`（1 处）、`/std/room/vrm_server.lpc`（1 处）。

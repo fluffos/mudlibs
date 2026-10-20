@@ -535,3 +535,7 @@ the news pager. Fixed:
 ## Macros the global header lost (2026-10-19, KB 04 6.16)
 
 `/secure/include/global.h` did not define `VT_WEAPON`; the objects that use them (1 on the list) stopped at `Undefined variable`/`Undefined function`, and since the compiler stops at the first undefined name the errors and warnings behind it stayed hidden. The sibling libs of the same lineage carry these lines in their headers: the copy of the sibling with the most files in common was added after the last `#define` of `/secure/include/global.h`; every path in a macro body exists in this lib. the listed objects have other errors as well and still do not load. (`scripts/lpc_restore_defines.py`)
+
+## `call_out_info()` 的每一项只有 3 个元素（2026-10-20，KB 06 §7.287）
+
+驱动返回的是 `({ 物件, 函数, 延迟 })`，不带 call_out 的参数，旧代码读第 4 项 `info[i][3]`（`callouts` 指令、`calloutd`、`cod` 工具）一读就报 `Array index out of bounds`，指令从第一行起什么也打印不出来。改为 `(sizeof(info[i]) > 3 ? info[i][3] : 0)`（`scripts/lpc_fix_callout_info.py`）。改动：`/cmds/creator/callouts.lpc`（1 处）。

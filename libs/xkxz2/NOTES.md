@@ -1013,3 +1013,7 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 ## 比较链的人工修正（2026-10-20，KB 06 §7.282）
 
 `d/mingjiao/bhd/xbkai.lpc`：爬岩石的判断 `arg != "yanshi" || arg != "岩石"` 永远为真，爬什么词都爬上岩石；本意是参数是 yanshi 或“岩石”，改成 `==` 和 `||`。
+
+## `member_array('/', str)` 改为 `strsrch(str, "/")`：字符字面量的 member_array 按字节搜索（2026-10-20，KB 06 §7.283）
+
+`member_array('/', str)` 里的 `'/'` 是整数，驱动按 UTF-8 **字节**搜索，返回字节偏移（带第三个参数时起点也是字节）；最新的 FluffOS（923cdbc0）在字符串里有非 ASCII 文字时，对每个调用点警告一次（`Warning: member_array(int, string) searches BYTES`）。而 `str[0..idx-1]` 按字符切，中文字符串会在错误的位置截断。改为 `strsrch(str, "/")`（找不到同样返回 -1，按字符计数；`scripts/lpc_fix_member_array_char.py`，JSON 编码器等少数几处手改）。改动：`/cmds/adm/sameip.lpc`（1 处）、`/inherit/room/vrm_server.lpc`（1 处）。

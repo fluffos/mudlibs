@@ -643,3 +643,7 @@ quit/reconnect 持久性**完全正常，没有数据丢失**。
 ## RANK_D asked about nobody (2026-10-19, KB 06 §7.273)
 
 4 function(s) of `adm/daemons/rankd.lpc` (`query_respect()`, `query_rude()`, `query_self()`, `query_self_rude()`) now start with `if (!objectp(ob)) ob = this_object();`. NPCs build `"…" + RANK_D->query_respect(this_player()) + "…"` in `create()` (an `inquiry` mapping, a `chat_msg` array) and the driver's own `reset()` runs with no command giver, so `this_player()` is 0. The old driver answered `0->query("age")` with 0 and the title fell to its default branch; this driver raises `Bad argument 1 to EFUN call_other()`, the room's `make_inventory()` swallows it and a killed NPC never comes back. Found by `scripts/lpc_reach_census.py --walk`; fixed in the daemon, not in the 1,800 NPC files.
+
+## `member_array('/', str)` 改为 `strsrch(str, "/")`：字符字面量的 member_array 按字节搜索（2026-10-20，KB 06 §7.283）
+
+`member_array('/', str)` 里的 `'/'` 是整数，驱动按 UTF-8 **字节**搜索，返回字节偏移（带第三个参数时起点也是字节）；最新的 FluffOS（923cdbc0）在字符串里有非 ASCII 文字时，对每个调用点警告一次（`Warning: member_array(int, string) searches BYTES`）。而 `str[0..idx-1]` 按字符切，中文字符串会在错误的位置截断。改为 `strsrch(str, "/")`（找不到同样返回 -1，按字符计数；`scripts/lpc_fix_member_array_char.py`，JSON 编码器等少数几处手改）。改动：`/adm/daemons/vrm_server.lpc`（1 处）。

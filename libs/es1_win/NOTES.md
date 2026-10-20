@@ -847,3 +847,7 @@ Left, as content gaps, not invented: 16 inherits of files that are not in the ar
 - `std/npc.lpc` 的 `wield_weapon()`/`equip_armor()` 在 `new()` 找不到文件时不再对 0 调 `move()`（`d/noden/hawk/monster/elder` 拿的武器在巫师目录里，整个 NPC 载入不了）
 
 逐个物件与 HEAD 对比载入，没有退步。
+
+## `call_out_info()` 的每一项只有 3 个元素（2026-10-20，KB 06 §7.287）
+
+驱动返回的是 `({ 物件, 函数, 延迟 })`，不带 call_out 的参数，旧代码读第 4 项 `info[i][3]`（`callouts` 指令、`calloutd`、`cod` 工具）一读就报 `Array index out of bounds`，指令从第一行起什么也打印不出来。改为 `(sizeof(info[i]) > 3 ? info[i][3] : 0)`（`scripts/lpc_fix_callout_info.py`）。改动：`/cmds/xtra/_callouts.lpc`（1 处）、`/obj/tools/cod.lpc`（3 处）。

@@ -281,3 +281,7 @@ After reboot, `buy jitui` purchased 炸鸡腿 and changed 1 黄金 into 99
 ## `set_name` 的 id 参数（2026-10-19，KB 06 §7.260）
 
 `/d/qujing/wudidong/obj/baowu2.lpc`、`baowu3.lpc`、`baowu5.lpc`、`baowu6.lpc` 里 `set_name("墨台", ("mo tai"))`：括号里是字符串不是数组，`set_name` 要的是 id 数组，物件载入失败。改成 `({ "mo tai" })`，HEAD 上载入失败的 4 个物件全部载入，没有警告。
+
+## `call_out_info()` 的每一项只有 3 个元素（2026-10-20，KB 06 §7.287）
+
+驱动返回的是 `({ 物件, 函数, 延迟 })`，不带 call_out 的参数，旧代码读第 4 项 `info[i][3]`（`callouts` 指令、`calloutd`、`cod` 工具）一读就报 `Array index out of bounds`，指令从第一行起什么也打印不出来。改为 `(sizeof(info[i]) > 3 ? info[i][3] : 0)`（`scripts/lpc_fix_callout_info.py`）。改动：`/cmds/adm/callouts.lpc`（1 处）、`/cmds/arch/callouts.lpc`（1 处）。

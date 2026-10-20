@@ -415,3 +415,15 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## `x != "a" || x != "b"` 和 `x == "a" && x == "b"`：同一个值的比较链永远成立/永远不成立（2026-10-20，KB 06 §7.282）
 
 `if (arg != "wan" || arg != "丸") return notify_fail(...)` 对任何 `arg` 都为真，`dir == "south" && dir == "north"` 永远为假：条件下面的守卫要么永远拦、要么永远不拦。作者要的是“既不是 A 也不是 B”（`&&`）或“是 A 或 B”（`||`）。`!=` 链的 `||` 改成 `&&`（仅当条件下面是 `return` 的拒绝/守卫），`==` 链的 `&&` 改成 `||`（`scripts/lpc_fix_cmp_chain.py`）。改动：`/d/city/npc/boji.lpc`（1 处）、`/d/mingjiao/npc/obj/shenghuo-ling.lpc`（1 处）。
+
+## 深度功能测试（§10.7，2026-10-20）：实机指令扫描的第一批发现（KB 08 §10.16）
+
+用 `scripts/play_boot.sh` + `mudplay.py` + `playsweep.py` 起实例，注册新人物、对每条普通玩家指令发十种参数，同时看驱动控制台和 `log/debug.log`（本库的 `error_handler` 把运行时错误写在这里，玩家屏幕只显示“WARNING 这里发现了臭虫”）。找到并修复的程序错误：
+
+1. **`adm/daemons/toptend.lpc`**（排行榜）：`mapping topten_data;` 在第一条排行数据出现之前是 0，`topten_add()` 里 `topten_data[type]` 报 `Value being indexed is zero`；新人物进游戏时（`enter_world` → `topten_checkplayer`）和之后每个心跳的 `decrease_activity()` 都触发，全新安装的游戏里每个玩家都反复看到“WARNING 这里发现了臭虫”。改为 `mapping topten_data = ([]);`。
+2. **`adm/daemons/logind.lpc`、`logind2.lpc` 的 `check_legal_id()` / `check_legal_describe()`**：`i = strwidth(id)` 之后 `while(i--) id[i]`；`strwidth` 数的是显示宽度（一个汉字算 2），按字符下标就越界 `String index out of bounds`。在“英文名字”提示符下输入中文名字、或给 NPC / 物品设中文描述（`LOGIN_D->check_legal_describe()`，`adm/npc/wang.lpc`、`shopgirl.lpc`）都会报错。改为 `i = strlen(id)`。
+3. **`cmds/std/ask.lpc` 的 `check_en()`**（`ask 某人 about 某事` 在对方不懂这个话题时选择回答用）：同样是 `i = strwidth(id)` 加字符下标，中文话题就报错、玩家看到的是臭虫提示而不是“他不懂”；改为 `strlen`。同类的 `logind.lpc` 密码复杂度检查（`lp = strwidth(passwd)`）、`d/city/npc/huang.lpc`（取名字的后两个字，4 处）、`d/changan/npc/zhuangjia.lpc`（`chn_check()` 和 `odds_init()` 的字符下标循环）一并修了：长度限制仍用 `strwidth`（显示宽度），下标用 `strlen`。检测脚本：`~/.cache/lpc-scratch/probe/strwidth_index.py`，另有约 30 处同形代码（`createskill.lpc`、`player_hockshop.lpc`、`zongrenling.lpc` 等）按 GBK 字节语义写、改成字符语义会同时改变长度限制，留待以后逐个看。
+
+## `member_array('/', str)` 改为 `strsrch(str, "/")`：字符字面量的 member_array 按字节搜索（2026-10-20，KB 06 §7.283）
+
+`member_array('/', str)` 里的 `'/'` 是整数，驱动按 UTF-8 **字节**搜索，返回字节偏移（带第三个参数时起点也是字节）；最新的 FluffOS（923cdbc0）在字符串里有非 ASCII 文字时，对每个调用点警告一次（`Warning: member_array(int, string) searches BYTES`）。而 `str[0..idx-1]` 按字符切，中文字符串会在错误的位置截断。改为 `strsrch(str, "/")`（找不到同样返回 -1，按字符计数；`scripts/lpc_fix_member_array_char.py`，JSON 编码器等少数几处手改）。改动：`/d/ludingshan/vrm_server.lpc`（1 处）、`/inherit/room/virtualmaze.lpc`（1 处）、`/std/json.lpc`（10 处）。

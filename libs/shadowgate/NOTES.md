@@ -706,3 +706,7 @@ The 45 Fist troopers (`d/guilds/fist/oldfist/troopers/*.lpc`): `string *query_gu
 ## Comparison chains: hand fix (2026-10-20, KB 06 7.282)
 
 `d/player_houses/aunuit/gates.lpc`: `race != "drow" || race != "elf" || enemy` called the dragons for every visitor who had not the owner's authority; it is `(race != "drow" && race != "elf") || enemy`.
+
+## `member_array('/', str)` became `strsrch(str, "/")`: the character-literal member_array is a byte search (2026-10-20, KB 06 7.283)
+
+`'/'` in `member_array('/', str)` is an int, so the driver searches the UTF-8 **bytes** and answers a byte offset (a third argument is a byte offset too). FluffOS 923cdbc0 warns once per call site (`Warning: member_array(int, string) searches BYTES`) when the string holds non-ASCII text before the match, and `str[0..idx-1]` counts characters, so a non-ASCII string was cut in the wrong place. Now `strsrch(str, "/")` (-1 when absent, a character index; `scripts/lpc_fix_member_array_char.py`, the JSON encoders and a few other sites by hand). Changed: `/daemon/json.lpc` (11).

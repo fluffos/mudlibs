@@ -188,3 +188,7 @@ MudOS filled the missing arguments of a call with 0, took an untyped parameter a
 ## `x != "a" || x != "b"` and `x == "a" && x == "b"`: comparison chains of one value that can never differ (2026-10-20, KB 06 7.282)
 
 `if (arg != "wan" || arg != "pill") return notify_fail(...)` is true whatever `arg` is, `dir == "south" && dir == "north"` is never true: the guard under the test never opens, or never closes. The author meant "neither of these" (`&&`) or "either of these" (`||`). `!=` chains joined by `||` became `&&` (only where the statement under the test is a `return`, a refusal or a guard clause), `==` chains joined by `&&` became `||` (`scripts/lpc_fix_cmp_chain.py`). What it was: `push lever` always answered "You must push an existing lever." (`str == "levers" && str == "lever"`). Changed: `/std/environ/weather_room.lpc` (1).
+
+## `member_array('/', str)` became `strsrch(str, "/")`: the character-literal member_array is a byte search (2026-10-20, KB 06 7.283)
+
+`'/'` in `member_array('/', str)` is an int, so the driver searches the UTF-8 **bytes** and answers a byte offset (a third argument is a byte offset too). FluffOS 923cdbc0 warns once per call site (`Warning: member_array(int, string) searches BYTES`) when the string holds non-ASCII text before the match, and `str[0..idx-1]` counts characters, so a non-ASCII string was cut in the wrong place. Now `strsrch(str, "/")` (-1 when absent, a character index; `scripts/lpc_fix_member_array_char.py`, the JSON encoders and a few other sites by hand). Changed: `/obj/misc/housing_creator.lpc` (1).

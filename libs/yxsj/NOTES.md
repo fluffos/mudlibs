@@ -252,3 +252,7 @@ BIG5 里 `功` 等字的第二个字节正好是 0x5C（反斜杠），作者在
 ## 标准整理轮，第二轮（2026-10-19，`scripts/toolkit_fix.sh`）
 
 本库在新驱动下重扫，机械修复：2 个未使用的局部变量，14 处浮点数赋给 int 的地方改成 to_int()。修后与 HEAD 逐个物件对比载入，没有退步。
+
+## `call_out_info()` 的每一项只有 3 个元素（2026-10-20，KB 06 §7.287）
+
+驱动返回的是 `({ 物件, 函数, 延迟 })`，不带 call_out 的参数，旧代码读第 4 项 `info[i][3]`（`callouts` 指令、`calloutd`、`cod` 工具）一读就报 `Array index out of bounds`，指令从第一行起什么也打印不出来。改为 `(sizeof(info[i]) > 3 ? info[i][3] : 0)`（`scripts/lpc_fix_callout_info.py`）。改动：`/cmds/arch/callouts.lpc`（1 处）。

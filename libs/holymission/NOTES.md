@@ -853,3 +853,7 @@ Six guild-master monsters in wizard directories (`/players/archive/arthur/bkm.lp
 ## A `(string)` cast of a number, a `string` that holds one, a missing forward declaration (2026-10-20, KB 04 6.22)
 
 `players/moonchild/chapel/s2.lpc` (`(string)this_player()->query_alignment() > ...` is `(int)`) and `players/colossus/tool.lpc` (`string tmp` holds a number: `mixed tmp`; `clear_object()` is called above its definition and now has a prototype, which silences `Called function 'clear_object' not compiled with type testing`). Both are wizard-directory files; both load, no warning (`scripts/lpc_fix_cast_cmp.py`).
+
+## `member_array('/', str)` became `strsrch(str, "/")`: the character-literal member_array is a byte search (2026-10-20, KB 06 7.283)
+
+`'/'` in `member_array('/', str)` is an int, so the driver searches the UTF-8 **bytes** and answers a byte offset (a third argument is a byte offset too). FluffOS 923cdbc0 warns once per call site (`Warning: member_array(int, string) searches BYTES`) when the string holds non-ASCII text before the match, and `str[0..idx-1]` counts characters, so a non-ASCII string was cut in the wrong place. Now `strsrch(str, "/")` (-1 when absent, a character index; `scripts/lpc_fix_member_array_char.py`, the JSON encoders and a few other sites by hand). Changed: `/secure/backmaster.lpc` (2), `/secure/master.lpc` (2), `/secure/mmm.lpc` (2).

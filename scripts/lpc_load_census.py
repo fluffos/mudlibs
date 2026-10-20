@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""scripts/lpc_load_census.py [--n N] [--seed S] [--out DIR] SLUG...   |   scripts/lpc_load_census.py --report [--playable] [--out DIR]
+"""scripts/lpc_load_census.py [--n N] [--seed S] [--out DIR] [--cmds] SLUG...   |   scripts/lpc_load_census.py --report [--playable] [--out DIR]
 
 A runtime census: load a seeded random sample of N objects (default 300) of each vendored lib in its own pristine tree
 (tracked files plus the working-tree edits, like scripts/lpc_listcheck.sh) and classify the first error of each one that
@@ -11,6 +11,8 @@ boot order of their own) whose name is plain ASCII.  One result file per lib, `<
 $LPC_SCRATCH/census): the sample size, the number that loaded, and per failing object its first error line.  `--report`
 aggregates every result file (--playable: only libs whose meta.json says `playable`; the LDMud ports and
 non-booting archives would swamp it): error classes (numbers, quoted names and paths blurred) by objects and libs, with an example.
+--cmds loads every file of the wizard command directories (`/cmds/wiz`, `wizard`, `arch`, `adm`, `imm`, `creators`, ...) instead of a sample: the sample and the
+mechanical fixers skip `/wiz/` and `/adm/` paths, so those commands were never compiled by anything but the whole-lib scan (default output $LPC_SCRATCH/census-cmds).
 The driver runs under systemd-run with a 3 GB cap and a timeout; one lib takes about a minute plus the tree build."""
 import collections
 import json
@@ -25,9 +27,11 @@ SCR = os.environ.get("LPC_SCRATCH") or os.path.expanduser("~/.cache/lpc-scratch"
 LPCC = os.environ.get("LPCC") or os.path.expanduser("~/src/fluffos/build-debug/src/lpcc")
 SKIP = re.compile(r"/(u|w|wiz|wizard|wizards|open|players|backup|backups|old|bak|log|data|doc|docs|example|examples|include|adm|test|tests)/|[-_.](bak|old)/")
 SAFE = re.compile(r"^[A-Za-z0-9_./-]+$")
+# --cmds: the wizard command directories the sample leaves out (SKIP holds /wiz/, /wizard/ and /adm/): every one of them is loaded, none sampled
+WIZCMD = re.compile(r"^/cmds/(wiz|wizard|wizards|arch|adm|imm|admin|creators?|immortal|debug|sys|dev|god|gods|app|ad|elder|sage|lord)/")
 
 
-def sample(slug, n, seed):
+def sample(slug, n, seed, cmds=False):
     out = subprocess.run(["git", "ls-files", "-z", "--", f"libs/{slug}/work"], cwd=REPO, capture_output=True).stdout.split(b"\0")
     cand = []
     for f in out:
@@ -38,7 +42,10 @@ def sample(slug, n, seed):
         if not p.endswith(".lpc"):
             continue
         rel = p[len(f"libs/{slug}/work"):]
-        if SKIP.search(rel) or not SAFE.match(rel):
+        if cmds:
+            if not WIZCMD.match(rel) or not SAFE.match(rel) or re.search(r"/(bak|old|backup|backups|test|tmp)/|[-_.](bak|old)(\.|$)", rel):
+                continue
+        elif SKIP.search(rel) or not SAFE.match(rel):
             continue
         cand.append(rel[:-4])
     random.Random(f"{slug}:{seed}").shuffle(cand)
@@ -71,11 +78,11 @@ def parse(text):
     return res
 
 
-def census(slug, n, seed, out):
+def census(slug, n, seed, out, cmds=False):
     work = f"{REPO}/libs/{slug}/work"
     if slug == "longyunmeng_binary" or not os.path.isdir(work) or os.path.exists(f"{work}/.git"):
         return None
-    objs, total = sample(slug, n, seed)
+    objs, total = sample(slug, n, seed, cmds)
     if not objs:
         return None
     dest = f"{SCR}/census-tree-{slug}"
@@ -85,8 +92,10 @@ def census(slug, n, seed, out):
                        capture_output=True, text=True, errors="replace")
     res = parse(r.stdout)
     fails = {k: v for k, v in res.items() if v}
+    # the driver's own run-time warnings (`/file.lpc:12: Warning: member_array(int, string) searches BYTES ...`, once per call site per VM): kept per lib
+    warns = sorted({re.sub(r"^/", "", l.strip()) for l in r.stdout.split("\n") if ": Warning: " in l})[:60]
     data = {"slug": slug, "candidates": total, "sampled": len(objs), "answered": len(res), "loaded": sum(1 for v in res.values() if v is None),
-            "failed": fails}
+            "failed": fails, "warnings": warns}
     os.makedirs(out, exist_ok=True)
     json.dump(data, open(f"{out}/{slug}.json", "w", encoding="utf-8"), ensure_ascii=False, indent=0)
     subprocess.run(["rm", "-rf", dest])
@@ -127,6 +136,16 @@ def report(out, only_playable=False):
             libs[k].add(d["slug"])
             ex.setdefault(k, (d["slug"], obj, msg))
     print(f"{nlibs} libs, {tot} objects answered, {ok} loaded ({100 * ok // max(tot, 1)}%), {tot - ok} failed")
+    wc = collections.Counter()
+    for fn in sorted(os.listdir(out)):
+        if fn.endswith(".json"):
+            d = json.load(open(f"{out}/{fn}", encoding="utf-8"))
+            if only_playable and not playable(d["slug"]):
+                continue
+            for w in d.get("warnings", []):
+                wc[re.sub(r"^\S+?:\d+: ", "", w)[:100]] += 1
+    for k, n in wc.most_common(8):
+        print(f"{n:5d} run-time warnings | {k}")
     for k, n in c.most_common(30):
         print(f"{n:5d} {len(libs[k]):3d} libs | {k} | e.g. {ex[k][0]} {ex[k][1]}")
 
@@ -148,8 +167,13 @@ def main():
     if "--report" in args:
         report(out, "--playable" in args)
         return
+    cmds = "--cmds" in args
+    if cmds:
+        n = 10 ** 9
+        if out == f"{SCR}/census":
+            out = f"{SCR}/census-cmds"
     for slug in [a for a in args if not a.startswith("--")]:
-        d = census(slug, n, seed, out)
+        d = census(slug, n, seed, out, cmds)
         if d:
             print(f"{slug}: {d['loaded']}/{d['answered']} loaded ({d['sampled']} sampled of {d['candidates']})", flush=True)
         else:

@@ -309,3 +309,7 @@ autoload，quit 后不在身上，符合该血统普通物件惯例。
 ## 标准整理轮，第二轮（2026-10-19，`scripts/toolkit_fix.sh`）
 
 本库在新驱动下重扫，机械修复：5 个未使用的局部变量。修后与 HEAD 逐个物件对比载入，没有退步。
+
+## 行编辑器指令编译失败：`(: this_object(), ({ "do_to", me, arg }) :)`（2026-10-20，KB 06 §7.284）
+
+`Illegal to use local variable in functional.`：call_other 形式的函数指针 `(: ob, ({ "函数", 参数 }) :)` 的数组里只能是常量，写了局部变量 `me` / `arg` 整个指令就编译不过，`to` 这类先开编辑器、再回调自己的指令因此从未能用。改成 `(: call_other, this_object(), "do_to", me, arg :)`（参数在建立指针时绑定，编辑器再把输入的文字接在最后，`do_to(me, arg, text)` 收到全文；`scripts/lpc_fix_functional_locals.py`）。改动：`/cmds/wiz/to.lpc`（1 处）。

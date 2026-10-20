@@ -872,3 +872,7 @@ MudOS filled the missing arguments of a call with 0, took an untyped parameter a
 ## `(string)` casts of numbers, `string` variables that hold them (2026-10-20, KB 04 6.22)
 
 The Lathander temple (`d/ss/daggerford/lathander/lath4.lpc`, `lath11.lpc`, `lathander.lpc`: `(string)this_player()->query_level() < 5` is `(int)`) and the twelve backup copies of `wimpy.lpc` under `d/gremios/oldcomandos` and `std/antiguo/commands` (`string wimpy` holds what `sscanf` stored: `mixed wimpy`): 14 of the 15 objects load that never did, none regressed (`scripts/lpc_fix_cast_cmp.py`). `lathander.lpc` still fails: `set_teaching_person()` and `add_specialization()` are defined by no base the archive has.
+
+## `member_array('/', str)` became `strsrch(str, "/")`: the character-literal member_array is a byte search (2026-10-20, KB 06 7.283)
+
+`'/'` in `member_array('/', str)` is an int, so the driver searches the UTF-8 **bytes** and answers a byte offset (a third argument is a byte offset too). FluffOS 923cdbc0 warns once per call site (`Warning: member_array(int, string) searches BYTES`) when the string holds non-ASCII text before the match, and `str[0..idx-1]` counts characters, so a non-ASCII string was cut in the wrong place. Now `strsrch(str, "/")` (-1 when absent, a character index; `scripts/lpc_fix_member_array_char.py`, the JSON encoders and a few other sites by hand). Changed: `/room/antiguo/castillo_drakull/npcs/same_obj.lpc` (2).

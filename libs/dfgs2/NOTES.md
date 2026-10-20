@@ -1174,3 +1174,7 @@ A Big5 character whose second byte is 0x5C was written with one extra backslash 
 ## `move()` 的目标房间文件不存在时不再抛错（2026-10-18，KB 06 §7.96）
 
 `feature/move.lpc` 的 `move()` 把 `err = catch(dest = load_object(dest))` 当存在检查，可目标文件不存在时 `load_object()` 返回 0、`catch` 不触发，接着 `dest->receive_object()` 抛出 `Bad argument 1 to EFUN call_other()`。留言板 `std/bboard.lpc` 的 `setup()` 把自己 `move()` 到 `location` 房间，那是巫师的私人房间时（档案里没有这个文件），留言板连同刷出它的房间一起载入不了。`catch` 之后补上 `if (!objectp(dest)) return 0;`（kxkj 系是 `ob`），移动失败、对象留在原处。抽样（每库 300 个对象）里原先因此失败的 5 个对象，现在 4 个能载入。
+
+## `call_out_info()` 的每一项只有 3 个元素（2026-10-20，KB 06 §7.287）
+
+驱动返回的是 `({ 物件, 函数, 延迟 })`，不带 call_out 的参数，旧代码读第 4 项 `info[i][3]`（`callouts` 指令、`calloutd`、`cod` 工具）一读就报 `Array index out of bounds`，指令从第一行起什么也打印不出来。改为 `(sizeof(info[i]) > 3 ? info[i][3] : 0)`（`scripts/lpc_fix_callout_info.py`）。改动：`/cmds/arch/callouts.lpc`（1 处）。

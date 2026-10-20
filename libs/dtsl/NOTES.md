@@ -1258,3 +1258,7 @@ These base classes are not in the lib, so every object that inherits them (rooms
 ## `x != "a" || x != "b"` and `x == "a" && x == "b"`: comparison chains of one value that can never differ (2026-10-20, KB 06 7.282)
 
 `if (arg != "wan" || arg != "pill") return notify_fail(...)` is true whatever `arg` is, `dir == "south" && dir == "north"` is never true: the guard under the test never opens, or never closes. The author meant "neither of these" (`&&`) or "either of these" (`||`). `!=` chains joined by `||` became `&&` (only where the statement under the test is a `return`, a refusal or a guard clause), `==` chains joined by `&&` became `||` (`scripts/lpc_fix_cmp_chain.py`). Changed: `/cmds/adm/log.lpc` (1).
+
+## Every `call_out_info()` entry has three elements (2026-10-20, KB 06 7.287)
+
+The driver answers `({ object, function, delay })` without the call_out's arguments, so code that reads the fourth element `info[i][3]` (the `callouts` command, `calloutd`, the `cod` tool) died with `Array index out of bounds` on the first line of the list. Now `(sizeof(info[i]) > 3 ? info[i][3] : 0)` (`scripts/lpc_fix_callout_info.py`). Changed: `/cmds/arch/callouts.lpc` (1).

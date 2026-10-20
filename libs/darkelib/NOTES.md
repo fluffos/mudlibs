@@ -900,3 +900,7 @@ Older MudOS predefined `SAVE_EXTENSION` (`".o"`) in every LPC object; the FluffO
 ## A `(string)` cast of a number (2026-10-20, KB 04 6.22)
 
 `std/skills/attic/_burn.lpc`: `if ((string)tp->query_level() < 2)` is `(int)` now. A cast never converts here, and the driver refuses to compare the typed string with a number, so the object never loaded (`scripts/lpc_fix_cast_cmp.py`). It loads, no warning.
+
+## Every `call_out_info()` entry has three elements (2026-10-20, KB 06 7.287)
+
+The driver answers `({ object, function, delay })` without the call_out's arguments, so code that reads the fourth element `info[i][3]` (the `callouts` command, `calloutd`, the `cod` tool) died with `Array index out of bounds` on the first line of the list. Now `(sizeof(info[i]) > 3 ? info[i][3] : 0)` (`scripts/lpc_fix_callout_info.py`). Changed: `/std/spells/link.lpc` (1).

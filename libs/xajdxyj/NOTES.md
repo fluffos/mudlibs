@@ -331,3 +331,7 @@ compile check (exit 0, no errors) against `feature/command.lpc`.
 ## 补回丢失的标点（2026-10-19，KB 03 §4.6）
 
 转换时丢掉的分号、逗号、引号或文件末尾的 `}`，共 16 个文件，修前 HEAD 载入失败。别的库里同路径的完好副本只比这里少几个标点，按它补回（括号里是那个库）：`/daemon/class/huashan/ning.lpc`（fy2mg）、`/daemon/skill/beiming-shengong.lpc`（fy2mg）、`/daemon/skill/fanliangyi-dao.lpc`（fy2mg）、`/daemon/skill/hanbing-mianzhang.lpc`（fy2mg）、`/daemon/skill/huashan-shenfa.lpc`（fy2mg）、`/daemon/skill/huashan-zhangfa.lpc`（fy2mg）、`/daemon/skill/hunyuan-zhang.lpc`（fy2mg）、`/daemon/skill/lingboweibu.lpc`（fy2mg）、`/daemon/skill/liumai-shenjian.lpc`（fy2mg）、`/daemon/skill/longxiang.lpc`（fy2mg）、`/daemon/skill/poyu-quan.lpc`（fy2mg）、`/daemon/skill/taizuchangquan.lpc`（fy2mg）、`/daemon/skill/xiaowuxiang.lpc`（fy2mg）、`/daemon/skill/yunlong-shenfa.lpc`（fy2mg）、`/daemon/skill/yunlong-zhua.lpc`（fy2mg）。文件末尾少了 `}`（最后一个或两个字节丢了），补上：`/daemon/skill/unused/snowshade-force.lpc`。修后与 HEAD 逐个对比载入：这 16 个物件全部载入，没有退步（`scripts/lpc_restore_from_twin.py`、`lpc_fix_eaten_quote.py --comma`、`lpc_fix_eof_braces.py`）。
+
+## `call_out_info()` 的每一项只有 3 个元素（2026-10-20，KB 06 §7.287）
+
+驱动返回的是 `({ 物件, 函数, 延迟 })`，不带 call_out 的参数，旧代码读第 4 项 `info[i][3]`（`callouts` 指令、`calloutd`、`cod` 工具）一读就报 `Array index out of bounds`，指令从第一行起什么也打印不出来。改为 `(sizeof(info[i]) > 3 ? info[i][3] : 0)`（`scripts/lpc_fix_callout_info.py`）。改动：`/cmds/wiz/callouts.lpc`（1 处）。

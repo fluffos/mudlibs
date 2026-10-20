@@ -938,3 +938,7 @@ MudOS filled the missing arguments of a call with 0, took an untyped parameter a
 ## A `string` that holds a number (2026-10-20, KB 04 6.22)
 
 `u/j/jyd/tool.lpc`: `string tmp` holds an index (`tmp >= sizeof(u) || tmp < 0`): `mixed tmp` (`scripts/lpc_fix_cast_cmp.py`). A wizard tool; it still fails on the errors behind it (an `object` variable that holds an array, `assign()` and `disp()` defined nowhere).
+
+## Every `call_out_info()` entry has three elements (2026-10-20, KB 06 7.287)
+
+The driver answers `({ object, function, delay })` without the call_out's arguments, so code that reads the fourth element `info[i][3]` (the `callouts` command, `calloutd`, the `cod` tool) died with `Array index out of bounds` on the first line of the list. Now `(sizeof(info[i]) > 3 ? info[i][3] : 0)` (`scripts/lpc_fix_callout_info.py`). Changed: `/cmds/xtra/_callouts.lpc` (1), `/obj/tools/aclock.lpc` (1), `/obj/tools/cod.lpc` (3).

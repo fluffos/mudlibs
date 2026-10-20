@@ -558,3 +558,7 @@ lpc` 会调用双方 `kill_ob()`，NPC 真实反击），几回合后一次「�
 ## `set_wugong()` 对没有文件的技能不再中止物件（2026-10-19，KB 06 §7.256）
 
 `system/feature/char/skill.lpc` 的 `set_wugong()` 经 `set_jibie()` → `check_skill()` 对没有技能文件的名字 `error()`，授了这种技能的 NPC 在 `create()` 里中止（本库缺 `baidu-dao`、`lingshe-shenfa`、`pikong-zhang`、`panshe-dao`、`jumang-shenfa`、`qinglong-zhua`、`ny-bufa` 等，共 11 个物件授了它们）。同文件的 `set_xiuwei()` 早就用 `if (!valid_skill(skill))` 绕开这一情形，`set_wugong()` 开头加同样一行：`if (!valid_skill(skill)) return 0;`，物件照常载入，只缺这一项技能（缺的技能仍是内容缺口）。修后在这 11 个物件和 `system/menpai/` 的 9 个物件上对比 HEAD 与工作树：载入 18 → 19（`weishi2`），没有回归，没有警告；`system/menpai/autoresetd.lpc` 仍失败（读 `/etc/roomreset`，存档里没有这个文件）。
+
+## `member_array('/', str)` 改为 `strsrch(str, "/")`：字符字面量的 member_array 按字节搜索（2026-10-20，KB 06 §7.283）
+
+`member_array('/', str)` 里的 `'/'` 是整数，驱动按 UTF-8 **字节**搜索，返回字节偏移（带第三个参数时起点也是字节）；最新的 FluffOS（923cdbc0）在字符串里有非 ASCII 文字时，对每个调用点警告一次（`Warning: member_array(int, string) searches BYTES`）。而 `str[0..idx-1]` 按字符切，中文字符串会在错误的位置截断。改为 `strsrch(str, "/")`（找不到同样返回 -1，按字符计数；`scripts/lpc_fix_member_array_char.py`，JSON 编码器等少数几处手改）。改动：`/cmds/verb/mazemap.lpc`（1 处）。

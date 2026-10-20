@@ -245,3 +245,7 @@ python3 scripts/mudclient.py 127.0.0.1 40276 --timeout 70 --idle 8 \
 ## 剩下的编译警告（2026-10-19）
 
 整库扫描后只剩 `std/bag.lpc` 一个文件有警告（39 条）：它同时继承 `/std/item.lpc` 和 `/std/container.lpc`，两者都继承 `/std/object.lpc`，object 的 9 个变量被重复声明（`Redeclaration of global variable`），30 个函数每个都有一条 `inherited from both … using the definition in /std/container.lpc`。全库没有任何文件继承 `std/bag`，所以没有动：消掉这些警告要把 bag 改成只继承其中一个，再把另一个的函数抄进来，属于设计改动（KB 06 §7.213）。
+
+## `member_array('/', str)` 改为 `strsrch(str, "/")`：字符字面量的 member_array 按字节搜索（2026-10-20，KB 06 §7.283）
+
+`member_array('/', str)` 里的 `'/'` 是整数，驱动按 UTF-8 **字节**搜索，返回字节偏移（带第三个参数时起点也是字节）；最新的 FluffOS（923cdbc0）在字符串里有非 ASCII 文字时，对每个调用点警告一次（`Warning: member_array(int, string) searches BYTES`）。而 `str[0..idx-1]` 按字符切，中文字符串会在错误的位置截断。改为 `strsrch(str, "/")`（找不到同样返回 -1，按字符计数；`scripts/lpc_fix_member_array_char.py`，JSON 编码器等少数几处手改）。改动：`/secure/json.lpc`（11 处）。

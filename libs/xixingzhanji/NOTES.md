@@ -854,3 +854,7 @@ jitui`。`buy jitui from xiaoer` 成功（「你向店小二买下一根炸鸡�
 ## 补回丢失的标点，另一个版本的完好副本（2026-10-19，KB 03 §4.6 第四轮）
 
 `/daemon/class/yaomo/xueshan/dengxian-dafa/hufa2.lpc`：`inherit SSERVER;` 丢了开头的 `i`（`nherit`，注释行之后）；补回后载入，没有警告。同一个文件在 hxxtjqb 里完好，但那份少一个局部变量声明，所以用 `--diff --extra` 补，多出来的未使用声明 `lvl2` 删掉。
+
+## `call_out_info()` 的每一项只有 3 个元素（2026-10-20，KB 06 §7.287）
+
+驱动返回的是 `({ 物件, 函数, 延迟 })`，不带 call_out 的参数，旧代码读第 4 项 `info[i][3]`（`callouts` 指令、`calloutd`、`cod` 工具）一读就报 `Array index out of bounds`，指令从第一行起什么也打印不出来。改为 `(sizeof(info[i]) > 3 ? info[i][3] : 0)`（`scripts/lpc_fix_callout_info.py`）。改动：`/cmds/wiz/callouts.lpc`（1 处）。

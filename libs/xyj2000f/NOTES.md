@@ -457,3 +457,7 @@ compile check (exit 0, no errors) against `feature/command.lpc`.
 - `d/sky/npc/zz-tianwang.lpc`（增长天王）：整个文件是未转码的 GBK，末尾被截断，`ask_me` 的最后一句 `return ("老夫脚正痒痒。。。` 没有收尾。照其余二十多个库里完整的同一个文件补上 `\n");` 和函数的 `}`（已转成 UTF-8），NPC 载入。
 
 逐个载入与 HEAD 对比，没有退步。
+
+## `call_out_info()` 的每一项只有 3 个元素（2026-10-20，KB 06 §7.287）
+
+驱动返回的是 `({ 物件, 函数, 延迟 })`，不带 call_out 的参数，旧代码读第 4 项 `info[i][3]`（`callouts` 指令、`calloutd`、`cod` 工具）一读就报 `Array index out of bounds`，指令从第一行起什么也打印不出来。改为 `(sizeof(info[i]) > 3 ? info[i][3] : 0)`（`scripts/lpc_fix_callout_info.py`）。改动：`/cmds/wiz/callouts.lpc`（1 处）。

@@ -451,3 +451,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 ## `== !"字符串"` 多出来的 `!`（2026-10-19，KB 06 §7.280）
 
 `!"taoist"` 是整数 0，`x == !"taoist"` 就是“x 等于 0”，作者为其余所有人写的那一支永远走不到。具体是：“你是怎么混进来的？给我滚！”只对没有门派的人生效（方寸山三星洞以外的门派的人反而放进来）。全部改成 `!= "字符串"`（`scripts/lpc_fix_not_literal_cmp.py`）：`/d/lingtai/npc/puti.lpc`（1 处）。同样的行在 xkx 一系的 35 个库里都有。
+
+## `call_out_info()` 的每一项只有 3 个元素（2026-10-20，KB 06 §7.287）
+
+驱动返回的是 `({ 物件, 函数, 延迟 })`，不带 call_out 的参数，旧代码读第 4 项 `info[i][3]`（`callouts` 指令、`calloutd`、`cod` 工具）一读就报 `Array index out of bounds`，指令从第一行起什么也打印不出来。改为 `(sizeof(info[i]) > 3 ? info[i][3] : 0)`（`scripts/lpc_fix_callout_info.py`）。改动：`/cmds/wiz/callouts.lpc`（1 处）。
