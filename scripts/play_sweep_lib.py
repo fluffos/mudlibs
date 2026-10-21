@@ -46,7 +46,7 @@ def own_port(slug):
         return 46400
 
 
-def verbs_of(tree, dirs, wiz, roots=("cmds", "secure/cmds", "lib/cmds", "lib/secure/cmds")):
+def verbs_of(tree, dirs, wiz, roots=("cmds", "secure/cmds", "lib/cmds", "lib/secure/cmds", "verbs", "lib/verbs", "secure/verbs")):          # Dead Souls keeps its parser verbs in verbs/{common,items,players,rooms}
     out = set()
     for r in roots:
         root = f"{tree}/{r}"
