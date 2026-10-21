@@ -362,3 +362,7 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 ## `get_config(__MUD_PORT__)` 经旧版 `runtime_config.h` 得到字符串（2026-10-20，KB 06 §7.302）
 
 本库的 `include/runtime_config.h` 是老 MudOS 的编号（整数设置从 15 起，本驱动从 256 起），`get_config(__MUD_PORT__)` 读到的是另一项设置（字符串），`(int)` 又只是编译期标注，于是 `socket_bind(fd, LOCAL_PORT())` 报 `Bad argument 2 to socket_bind()`，版本守护进程 `port = get_config(__MUD_PORT__) + VERSION_PORT` 是字符串相加。头文件自己的注释写明 `get_config(__MUD_PORT__) == __PORT__`，所以代码里的这个调用（连同外面的 `(int)` / `to_int()`）改成了驱动的预定义 `__PORT__`（`scripts/lpc_fix_mud_port.py`）。改动：`/include/getconfig.h`（1 处）。
+
+## `hebing` 指令编译不过：字符串里多了一个引号（2026-10-20，KB 04 §6.25）
+
+`cmds/usr/hebing.lpc` 第 162 行 `tell_object(me, HIC "你利用手头的物品创造了探险通行证 "！\n" NOR);`：`证` 后面多出一个空格和一个 `"`，字符串在那里结束，后面的全角 `！` 就成了代码（`Illegal character 0xef`）。sjshv150 的 `hebing.lpc` 里同一句是 `"你利用手头的物品创造了探险通行证！\n"`，xyj20032 和 sjshv2578bb 照它改（去掉多出的空格和引号）。加载检查：各 1/1，HEAD FAIL → tree PASS。

@@ -1094,3 +1094,7 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## `get_config(__MUD_PORT__)` 经旧版 `runtime_config.h` 得到字符串（2026-10-20，KB 06 §7.302）
 
 本库的 `include/runtime_config.h` 是老 MudOS 的编号（整数设置从 15 起，本驱动从 256 起），`get_config(__MUD_PORT__)` 读到的是另一项设置（字符串），`(int)` 又只是编译期标注，于是 `socket_bind(fd, LOCAL_PORT())` 报 `Bad argument 2 to socket_bind()`，版本守护进程 `port = get_config(__MUD_PORT__) + VERSION_PORT` 是字符串相加。头文件自己的注释写明 `get_config(__MUD_PORT__) == __PORT__`，所以代码里的这个调用（连同外面的 `(int)` / `to_int()`）改成了驱动的预定义 `__PORT__`（`scripts/lpc_fix_mud_port.py`）。改动：`/adm/daemons/versiond.lpc`（1 处）、`/include/getconfig.h`（1 处）。
+
+## `quest_chinese.lpc` 从未编译：`set_skill("parry", "...")`（2026-10-20，KB 06 §7.328）
+
+`kungfu/class/generate/quest_chinese.lpc` 第 60、102、143 行写成 `set_skill("parry", "taiji-jian")`（另两处是 `damo-jian`、`huashan-sword`），应当是 `map_skill("parry", ...)`：`Bad type for argument 2 of set_skill ( int vs string )`，继承它的任务 NPC 也跟着加载不了。改为 `map_skill`。加载检查（这个文件和继承它的对象共 2 个）：HEAD 通过 1 个，tree 通过 2 个，回归 0。

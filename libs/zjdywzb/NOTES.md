@@ -425,3 +425,14 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 ## 目录读出后的后缀截取宽度（2026-10-20，KB 06 §7.296）
 
 `.c` 改名成 `.lpc` 之后，`get_dir("*.lpc")` 读出的文件名还按两个字符截取（`$1[0..<3]`）：`baguadao.lpc` 变成 `baguadao.l`，用它拼出的路径加载不到对象（故事、战场、事件、帮助、自造物品数据、召唤列表等）。改成 `[0..<5]`（`scripts/lpc_fix_getdir_strip.py`）。改动：`/adm/daemons/storyd.lpc`（1 处）。
+
+## 任务 NPC 的一条因果链：`virtuald` 递归、`chinese.lpc` 从未编译、两个基类档案里没有（2026-10-20，KB 06 §7.327 / §7.328，KB 04 §6.15）
+
+扫描里 `drink`、`put`、`quest`、`refuse` 这些无关指令后面都跟着同一条控制台错误：`Inherit chain too deep: > 60 when trying to load '/kungfu/class/generate/questnpc'`（`shennpc` 同样），出自任务守护的心跳，每隔几秒一次，调用栈是 60 层 `master::compile_object()` 和 `virtuald::compile_object()` 交替。
+
+1. `adm/daemons/virtuald.lpc` 的 `if (file_size(name + ".lpc"))`：文件不存在时 `file_size()` 是 -1，条件为真，于是对一个不存在的路径调 `name->query_virtual_room()`，驱动加载失败，又回头问 master 的 `compile_object()`，一直递归到深度上限。改为 `>= 0`（zhongjidiyu 早已这样改过）。
+2. 递归消失以后露出的是：`clone/quest/judge.lpc`、`search.lpc`、`shen.lpc` 要 `new(CLASS_D("generate") + "/questnpc")` 和 `/shennpc`，档案里没有这两个基类。同族的 zjdy2008wzb、zjdyaryl 带着，它们的 `clone/quest/judge.lpc`、`shen.lpc` 与本库逐字节相同，所以从 zjdy2008wzb 原样收入这两个文件。
+3. 这两个基类继承的 `generate/chinese.lpc` 在新驱动里从来没有编译过：三处 `set_skill("parry", "taiji-jian")`（另两处是 `damo-jian`、`huashan-sword`），应当是 `map_skill("parry", ...)`；同一个基类也挡着 `killed`、`receiver` 和 `d/room/roomnpc/shouwei`（住宅守卫）。
+4. 顺手清了 `receiver.lpc` 里没用的局部变量 `exp` 和 `shouwei.lpc` 的 `obn`。
+
+实测：重启后登录并停留约三分钟，任务守护不再产生任何控制台错误（修改前每隔几秒一条）；加载检查：依赖这些类的 9 个对象，HEAD 通过 4 个，tree 通过 9 个，回归 0。

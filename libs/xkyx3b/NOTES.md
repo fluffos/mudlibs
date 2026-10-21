@@ -451,3 +451,7 @@ functionally re-tested live on this lib.
 ## 翻页器 `start_more(read_file(...))`：文件缺失时 `explode(0)`（2026-10-20，KB 06 §7.300）
 
 东方故事系的翻页器 `void start_more(string msg) { ... explode(msg, "\n") ... }` 被这样调用：`start_more(read_file(HELP_DIR + "help/topics"))`、`start_more(read_file(NEWS))`。压缩包没带的文件使 `read_file()` 回 0，`explode(0, ...)` 在本驱动里报 `Bad argument 1 to explode()`（不带参数的 `help` 指令就是这样出错的），老驱动把 0 当空文本。在 `start_more` 开头加了 `if (!stringp(msg)) return;`（`scripts/lpc_fix_start_more.py`）。改动：`/feature/more.lpc`。
+
+## `teamkill` 指令编译不过：条件少了右括号（2026-10-20，KB 04 §6.25）
+
+`cmds/std/teamkill.lpc` 第 43 行 `if (userp(obj) && (int)obj->query("combat_exp") < LOWER_LIMIT && !me->query("licensed_to_kill")` 的条件没有收尾的 `)`，下一行的 `return notify_fail(...)` 就成了条件里的语法错误（`syntax error, unexpected L_RETURN`），指令从来没有加载过。补上 `)`，其余照原样（同一目录的 `kill.lpc` 里这个条件多一个 `|| obj->query("age") < 16` 分支，没有搬过来）。xkyx3b 和 xkyxciii 的同一行相同，同样修改。加载检查：各 1/1，HEAD FAIL → tree PASS。

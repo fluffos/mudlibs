@@ -838,3 +838,7 @@ Save files updated/added this round:
 ## 翻页器 `start_more(read_file(...))`：文件缺失时 `explode(0)`（2026-10-20，KB 06 §7.300）
 
 东方故事系的翻页器 `void start_more(string msg) { ... explode(msg, "\n") ... }` 被这样调用：`start_more(read_file(HELP_DIR + "help/topics"))`、`start_more(read_file(NEWS))`。压缩包没带的文件使 `read_file()` 回 0，`explode(0, ...)` 在本驱动里报 `Bad argument 1 to explode()`（不带参数的 `help` 指令就是这样出错的），老驱动把 0 当空文本。在 `start_more` 开头加了 `if (!stringp(msg)) return;`（`scripts/lpc_fix_start_more.py`）。改动：`/feature/more.lpc`。
+
+## `ccmd`、`cestablish` 直接 `write()` 档案里没有的 `/obj/CLAN`（2026-10-20，KB 06 §7.285）
+
+`write(read_file("/obj/CLAN"))`：`/obj/CLAN` 是建帮派时往里追加的清单，档案里没有（dfgsiiv13b 带了一份），`read_file()` 答 0，`write(0)` 就是 `Bad argument 1 to receive()`。不带参数的 `ccmd` 和 `cestablish` 在列出帮派之前出错。改为 `write(read_file("/obj/CLAN") || "")`。加载检查 2/2，回归 0。

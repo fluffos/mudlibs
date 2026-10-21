@@ -238,3 +238,6 @@ master 的 `error_handler` 一次也没有写 `/log/debug.log`（驱动自己的
 WASM（`scripts/wasm_client.js`，本机的 build-wasm）：注册、`look`、`score`、表情、`fly yz`、钱庄、买东西、`i`、
 `help` 都正常；管理员登录（效验码 → 密码）后 `update` 成功。`wasm_status` 设为 `playable`。
 
+## `partyinfo` 读不到 `/log/cmds/party` 就抛错（2026-10-20，KB 06 §7.326）
+
+`cmds/std/partyinfo.lpc` 把 `read_file("/log/cmds/party")` 直接交给 `explode()`。这个文件是运行中的 mud 才会写出来的帮会日志，克隆出来的目录、站点和全新启动的树里没有，`read_file()` 答 0，于是 `Bad argument 1 to explode()`。现在读不到时按空表处理，只打印表头。同一份文件在 ylfyxa3、xajh4gkb 里已先改过（那里有实测）；这里只做了加载检查（1/1，回归 0）。`u/wenwu/partyinfo.lpc` 是巫师目录里的同名副本，没有碰。

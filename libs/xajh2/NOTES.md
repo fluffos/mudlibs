@@ -1145,3 +1145,7 @@ seeded admin account.
 ## 翻页器 `start_more(read_file(...))`：文件缺失时 `explode(0)`（2026-10-20，KB 06 §7.300）
 
 东方故事系的翻页器 `void start_more(string msg) { ... explode(msg, "\n") ... }` 被这样调用：`start_more(read_file(HELP_DIR + "help/topics"))`、`start_more(read_file(NEWS))`。压缩包没带的文件使 `read_file()` 回 0，`explode(0, ...)` 在本驱动里报 `Bad argument 1 to explode()`（不带参数的 `help` 指令就是这样出错的），老驱动把 0 当空文本。在 `start_more` 开头加了 `if (!stringp(msg)) return;`（`scripts/lpc_fix_start_more.py`）。改动：`/system/feature/user/more.lpc`。
+
+## `join`、`accept` 对档案里没有的擂台房间调用函数（2026-10-20，KB 06 §7.270 / §7.288）
+
+`cmds/verb/join.lpc` 和 `accept.lpc` 开头是 `object tai = load_object("/d/place/biwu/biwutai"); if (!tai->query_temp(...))`。比武大会的擂台房间 `/d/place/biwu/biwutai` 不在档案里（`d/place/biwu/` 下的报名处、大厅、等候室和各门派擂台房都在，唯独缺它），`load_object()` 答 0，于是直接敲 `join` 或 `accept` 就是 `Bad argument 1 to call_other()`（本库的错误处理把它写进 `/log/runtime/cmds`，并对玩家说“运行时发生错误”）。两个命令现在先测 `objectp(tai)`，房间不存在就按原来的话回答“现在不是报名/比武时间”。比武大会本身（`vote ... start`、巫师命令 `biwu`、`reward_d` 的 `record()`）依赖同一个房间，仍然不工作，那是档案缺的内容，没有碰。xajh2 的这两个文件与 xo_final 的逐字节相同，同样修改，只做了加载检查（2/2，回归 0）。
