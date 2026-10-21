@@ -991,3 +991,7 @@ MudOS filled the missing arguments of a call with 0, took an untyped parameter a
 ## A login password over 255 bytes: `crypt()` raises (2026-10-20, KB 06 7.294)
 
 The driver's `crypt()` raises (`Error in crypt(), check your salt`) for a key over 255 bytes, where the old driver hashed any length. A password of 256 bytes or more typed at the login prompt threw an error in the password check and left the connection at a bare `> ` prompt, so the login never completed (the old-password test of `password` the same); found by the sweep shape of 300 `x`. `/secure/sefun/sefun.lpc` now defines a simulated efun `crypt(key, salt)` of the same name: only an over-long key is cut (to 255 characters, then character by character until `sizeof(to_buffer(key)) <= 255`: the limit is in bytes, a CJK character takes three) before it is handed to `efun::crypt()`; every ordinary password hashes as before and the saved hashes are untouched (`scripts/lpc_add_sefun.py crypt`).
+
+## `immortals` 和 `quote`（2026-10-21，KB 06 §7.336）
+
+`secure/cmds/common/immortals.lpc`：`foreach (string letter in unguarded((: get_dir, DIR_CRES "/" :)))`，archive 里没有创造者目录，`get_dir()` 对不存在的目录答 0，`foreach` 报 `Bad argument 2 to foreach`；两层 `get_dir()` 都改成 `... || ({})`。`daemon/quotes.lpc` 的 `eventDisplayQuote()`：没有存档，名言列表是空的，`Quotes[random(sizeof(Quotes))]` 越界；列表为空时对玩家说 `There are no quotes yet.`。屏幕上这两条都只显示 `A runtime error occurred, use "bug -r" to report it.`，驱动控制台是安静的，真正的错误在 `log/runtime`（play 树里）。实测：`immortals` 列出空的头衔表，`quote` 有回答，`quote 句子~作者` 添加后能显示。

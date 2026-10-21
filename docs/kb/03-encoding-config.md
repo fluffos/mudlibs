@@ -83,6 +83,7 @@ An explicit extension is resolved exactly. An extensionless path tries
    Run `find -name '*.C'`, then check macros whose case no longer
    matches; §4.5 for the tool that renames them and every wrong-case path.
 8. Orphaned non-LPC `.c` files (ASCII maps): rename them to `.txt`.
+9. Save files (`.o`) that name code files with `.c`: a table restored at boot (sgzmudsgz `data/daemons/obj.o`: `"file_name":"/sgdomain/obj/foodanddrink/mantou.c"`, `OBJ_D->clone_obj()` failed and answered its error string, whose `->move()` raised `call_other() couldn't find object 'this object files is an illegual file '`). Fixed there by `.c` -> `.lpc` in the three values. Census of the tracked `.o` files (2026-10-21): 6,558 files in 45 libs hold a `".../x.c"` string whose `x.lpc` exists and `x.c` does not: 5,668 are player saves, backups and boards, 890 are daemon / NPC / room data (fys and tiexuejianghu `data/npc`, the FY family's `p/residence` rooms, naruto `world/area`, pd `adm/save/boats`).
 
 A lib may keep non-critical `.c` files as long as the master and login
 path are `.lpc`.

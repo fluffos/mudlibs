@@ -629,3 +629,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 ## NPC 的 `chat()` 在 `chat_msg` 为空数组时下标越界（2026-10-21，KB 06 §7.334）
 
 NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < chance) { rnd = random(sizeof(msg)); if (stringp(msg[rnd])) ...`，不检查列表是否为空。本库现有的 NPC 文件里没有字面写成空 `chat_msg` 的（扫描只认 `set("chat_msg", ({ }))`）；守卫挡的是运行时才为空的列表和以后新增的 NPC。在 `random(100) < chance` 前面加 `sizeof(msg) &&`（`scripts/lpc_fix_chat_empty.py`；`if (random(100) > chance) return 0;` 的写法是 `!sizeof(msg) ||`）。改动：`/inherit/char/npc.lpc`、`/inherit/char/npcb.lpc`（共 2 个文件）。
+
+## `quit1`：`if (...)` 后面直接是 `else`，放空语句的那一行不见了（2026-10-21，KB 04 §6.27）
+
+`cmds/usr/quit1.lpc` 是 `quit.lpc` 的副本：`if (wizardp(me) && me->query("env/invisibility"))` 和 `else link_ob->save();` 之间原来有单独一行 `;`（`quit.lpc` 里还在），副本里没有：`syntax error, unexpected L_ELSE`，后面接着 `Illegal LHS`，命令不加载。补回那一行（HEAD 0、树 1）。没有改：`cmds/usr/whotest.lpc`（`who` 的实验版：`(ppl_cnt%4==3? "\n": "")` 后面直接粘着另一段 `for`，行被拼在了一起，`who.lpc` 才是正式命令）。

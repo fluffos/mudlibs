@@ -1069,3 +1069,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply s
 ## NPC 的 `chat()` 在 `chat_msg` 为空数组时下标越界（2026-10-21，KB 06 §7.334）
 
 NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < chance) { rnd = random(sizeof(msg)); if (stringp(msg[rnd])) ...`，不检查列表是否为空。本库现有的 NPC 文件里没有字面写成空 `chat_msg` 的（扫描只认 `set("chat_msg", ({ }))`）；守卫挡的是运行时才为空的列表和以后新增的 NPC。在 `random(100) < chance` 前面加 `sizeof(msg) &&`（`scripts/lpc_fix_chat_empty.py`；`if (random(100) > chance) return 0;` 的写法是 `!sizeof(msg) ||`）。改动：`/inherit/char/npc.lpc`（共 1 个文件）。
+
+## `news`：新闻版的 `location` 是 archive 里没有的 `/u/bsd/workroom`（2026-10-21，KB 06 §7.269 的同类）
+
+`cmds/usr/news.lpc` 是一块兼作命令的 `BULLETIN_BOARD`：`create()` 里 `set("location", "/u/bsd/workroom")`，`bboard.setup()` 就把它 `move()` 到那个房间；巫师 bsd 的工作室不在 archive 里（`log/static/editfile` 里还记着他编辑过 `/u/bsd/workroom.c`），每次载入这个命令都是 `call_other() couldn't find object '/u/bsd/workroom'`（第二遍扫描里 `news` 那一行）。命令本身不需要房间（`main()`、`do_post()` 都不看 `environment()`），所以只在房间文件存在时才设 `location`。实测：`news` 没有控制台输出。同一次重扫（`chat()` 守卫之后，KB 06 §7.334）里，原先几乎每个命令都带一行的 `Array index out of bounds`（35 行）没有了。

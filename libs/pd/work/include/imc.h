@@ -263,7 +263,7 @@ private int imc_wizard(object ob) {
 	if(ob->is_body()) ob = ob->query_link();	
 #endif
 	if(!ob) return 0;
-	if(!interactive(ob)) 0;
+	if(!interactive(ob)) return 0;
          return wizardp(ob);
 }
 	//NOTE: This should return the mud handle of the player object in question	

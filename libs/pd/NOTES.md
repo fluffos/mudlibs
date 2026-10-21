@@ -545,3 +545,7 @@ fresh driver boot plus the full long-sit idle window below.
 ## `_backstab` 的编译警告：`dmg *= 0.85`（2026-10-20，KB 04 §6.10）
 
 `cmds/skills/_backstab.lpc` 第 282 行 `dmg *= 0.85;`，`dmg` 是 int：驱动警告浮点被截成整数。改写成 `dmg = to_int(dmg * 0.85);`（结果与原来一样）。加载检查：通过，没有警告。
+
+## 三个编译警告（2026-10-21，KB 04 §6.10）
+
+`include/imc.h` 的 `imc_wizard()`：`if(!interactive(ob)) 0;` 缺了 `return`（上面的 `imc_archp()` 写的是 `return 0;`），改成 `return 0;`（非连线对象不再落到 `wizardp(ob)`）；`daemon/network.lpc` 的 `read_callback()`：`tmp + "";` 本意是 `tmp = "";`（`sscanf` 只匹配到第一段时 `tmp` 没被赋值，后面的 `explode(tmp, "||")` 会报错），改成赋值；`daemon/imc_d.lpc:404`：`if (split[2] == "accept") split[3] == "accept";`（注释写的是 “fixes autoconfigure”）把赋值写成了比较，改成 `=`。三条警告都消失（`imc`、`mudlist` 命令的控制台行）；`daemon/tmp/network.lpc` 是 `tmp/` 里的副本，没有改。

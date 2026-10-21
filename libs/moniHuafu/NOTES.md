@@ -663,3 +663,7 @@ quit/reconnect 持久性**完全正常，没有数据丢失**。
 ## NPC 的 `chat()` 在 `chat_msg` 为空数组时下标越界（2026-10-21，KB 06 §7.334）
 
 NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < chance) { rnd = random(sizeof(msg)); if (stringp(msg[rnd])) ...`，不检查列表是否为空。本库现有的 NPC 文件里没有字面写成空 `chat_msg` 的（扫描只认 `set("chat_msg", ({ }))`）；守卫挡的是运行时才为空的列表和以后新增的 NPC。在 `random(100) < chance` 前面加 `sizeof(msg) &&`（`scripts/lpc_fix_chat_empty.py`；`if (random(100) > chance) return 0;` 的写法是 `!sizeof(msg) ||`）。改动：`/std/char/npc.lpc`（共 1 个文件）。
+
+## 启动后第一个登录的玩家，在 0、25、50 分碰到 `Too deep recursion`（2026-10-21，KB 06 §7.335）
+
+`adm/daemons/upgraded.lpc`（`logind.lpc` 的 `UPGRADE_D->upgrade(user)` 在启动后第一次登录时才把它载入）的 `create()` 调 `ready_to_start()`：`localtime(time())[1] % 25 == 0`（0、25、50 分）就 `check_all()`，而 `check_all()` 末尾又 `ready_to_start()`，同一分钟里条件仍然成立，一路递归到控制栈满：`Too deep recursion. program: /feature/message.lpc, object: /obj/user#33, file: /feature/message.lpc:34`（栈顶刚好是 `check_all()` 里 `message("system", ...)` 发给玩家的那条）。每小时 3 分钟、每次启动后的第一个登录会撞上；战斗探针的登录控制台里 3–15 次出现一次。临时在 `receive_message()` 开头用 `call_stack()` 打出的调用链：`check_all` / `ready_to_start` 交替 109 层，再上面是 `create`、`logind.enter_world`。04:25 整点对 HEAD 和修好的树各登录一次，HEAD 报错、修好的没有。wqfy / zzfy / zzfy3 里同名文件是原版（`ready_to_start()` 里 `call_out("check_all", 500)`，`check_all()` 末尾重新挂上）；这里的 localtime 改写去掉了定时器，留下了递归的尾巴。删去 `check_all()` 末尾的 `ready_to_start();`（到点检查一轮，和原意一致）。archive 里没有任何地方在 `create()` 之后再调 `ready_to_start()`，所以每 25 分钟一次的检测本来就没有跑过，没有补回（升级仍在每次登录时由 `upgrade()` 检查）。

@@ -210,3 +210,7 @@ hylib/dtxy) stay confirmed duplicates.
 - `cmds/player/tell.lpc`、`stell.lpc` 的 `string muds;` 要装 `IMUD_D->query_up_muds()` 返回的数组，再交给 `find_best_match_or_complete(string, string *)`：改成 `string *muds;`。
 
 加载检查：依赖 `M_INPUT` 的 51 个对象，HEAD 通过 46 个，tree 通过 49 个，回归 0（还不通过的两个：`trans/obj/ed_session.lpc` 需要驱动没有的 `ed_cmd`，`secure/obj/mailers/mailer.lpc` 没有诊断，HEAD 也一样）。
+
+## `data/daemons/obj.o`：三个对象的文件名带 `.c`（2026-10-21，KB 03 §4.2 第 9 项）
+
+`OBJ_D`（`daemons/obj_d.lpc`）的表里 `buyi`、`mantou`、`wotou` 的 `file_name` 是 `/sgdomain/obj/.../xxx.c`，archive 里这三个文件是 `.lpc`：`clone_obj()` 里的 `new()` 失败，函数返回错误串 `this object files is an illegual file`，调用方把它当对象去 `->move()`：`call_other() couldn't find object 'this object files is an illegual file '`（第二遍扫描里 `look` 那一行）。表里的三个名字改成 `.lpc`。
