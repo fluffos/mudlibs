@@ -459,3 +459,7 @@ In total 376 files differ from the old names (288 `.C` -> `.lpc`, 86 files of re
 ## `get_config(__MUD_PORT__)` 经旧版 `runtime_config.h` 得到字符串（2026-10-20，KB 06 §7.302）
 
 本库的 `include/runtime_config.h` 是老 MudOS 的编号（整数设置从 15 起，本驱动从 256 起），`get_config(__MUD_PORT__)` 读到的是另一项设置（字符串），`(int)` 又只是编译期标注，于是 `socket_bind(fd, LOCAL_PORT())` 报 `Bad argument 2 to socket_bind()`，版本守护进程 `port = get_config(__MUD_PORT__) + VERSION_PORT` 是字符串相加。头文件自己的注释写明 `get_config(__MUD_PORT__) == __PORT__`，所以代码里的这个调用（连同外面的 `(int)` / `to_int()`）改成了驱动的预定义 `__PORT__`（`scripts/lpc_fix_mud_port.py`）。改动：`/include/getconfig.h`（1 处）。
+
+## `heall` 指令的条件被存档弄坏了：编译不过（2026-10-20，KB 04 §6.25）
+
+`cmds/std/heall.lpc` 第 13 行是 `if (!me)->query_skill("medical", 1) < 1000`，后面一行单独一个 `)`，再多一个 `}`：`syntax error, unexpected L_ARROW` / `Illegal LHS`，`main()` 在第一条用到 `force` 的语句之前就结束了，指令从来没加载过（指令扫描里 `heall` 打印出这些错误）。损坏出在存档本身，不是转档造成的；sjsh、sjshwzb、sjshwzjqb 三个库的这个文件逐字节相同，别的库没有这一行。按提示语 `你还不会医术,不能疗伤。` 的意思，把条件还原成检查施救者（`ob`）的医术：`if ((int)ob->query_skill("medical", 1) < 1000) return notify_fail(...)`，去掉多余的 `}`（这是对原意的推断）。加载检查：HEAD 0 通过 / 1 失败，工作树 1 通过。

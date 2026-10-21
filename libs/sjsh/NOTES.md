@@ -324,3 +324,7 @@ compile check (exit 0, no errors) against `feature/command.lpc`.
 ## sefun `cat()`：缺文件时 `write(0)` 报错（2026-10-20，KB 06 §7.297）
 
 `void cat(string file) { write(read_file(file)); }`：文件不存在（压缩包没带的欢迎/公告文件，或只有运行中的 mud 才会写的日志）时 `read_file()` 回 0，`write(0)` 在本驱动里报 `Bad argument 1 to receive()`，调用者（登录对话、`cat` 指令）被中断；老驱动什么也不打印。改成 `write(read_file(file) || "");`（`scripts/lpc_fix_cat_unchecked.py`）。改动：`/adm/simul_efun/file.lpc`。
+
+## `heall` 指令的条件被存档弄坏了：编译不过（2026-10-20，KB 04 §6.25）
+
+`cmds/std/heall.lpc` 第 13 行是 `if (!me)->query_skill("medical", 1) < 1000`，后面一行单独一个 `)`，再多一个 `}`：`syntax error, unexpected L_ARROW` / `Illegal LHS`，`main()` 在第一条用到 `force` 的语句之前就结束了，指令从来没加载过（指令扫描里 `heall` 打印出这些错误）。损坏出在存档本身，不是转档造成的；sjsh、sjshwzb、sjshwzjqb 三个库的这个文件逐字节相同，别的库没有这一行。按提示语 `你还不会医术,不能疗伤。` 的意思，把条件还原成检查施救者（`ob`）的医术：`if ((int)ob->query_skill("medical", 1) < 1000) return notify_fail(...)`，去掉多余的 `}`（这是对原意的推断）。加载检查：HEAD 0 通过 / 1 失败，工作树 1 通过。

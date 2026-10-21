@@ -461,3 +461,7 @@ In total 335 files differ from the old names (249 `.C` -> `.lpc`, 83 files of re
 ## 日志子目录没有人建（2026-10-20，KB 06 §7.310）
 
 登录体检里 `write_file("/log/dlog/money", ...)` 报 `Wrong permissions for opening file /log/dlog/money for append.`：`log/dlog/` 没有任何东西创建，而 `scripts/wasm_keep_dirs.txt` 只列了这台机器上真实启动时建过的子目录。代码里写入 `/log/` 下的 `nosave`、`dlog`、`login`、`cmds`、`edit`，把 `log/cmds`、`log/dlog`、`log/edit`、`log/login` 补进了 `wasm_keep_dirs.txt`（试玩树和站点都会建出来）。
+
+## `heall` 指令的条件被存档弄坏了：编译不过（2026-10-20，KB 04 §6.25）
+
+`cmds/std/heall.lpc` 第 13 行是 `if (!me)->query_skill("medical", 1) < 1000`，后面一行单独一个 `)`，再多一个 `}`：`syntax error, unexpected L_ARROW` / `Illegal LHS`，`main()` 在第一条用到 `force` 的语句之前就结束了，指令从来没加载过（指令扫描里 `heall` 打印出这些错误）。损坏出在存档本身，不是转档造成的；sjsh、sjshwzb、sjshwzjqb 三个库的这个文件逐字节相同，别的库没有这一行。按提示语 `你还不会医术,不能疗伤。` 的意思，把条件还原成检查施救者（`ob`）的医术：`if ((int)ob->query_skill("medical", 1) < 1000) return notify_fail(...)`，去掉多余的 `}`（这是对原意的推断）。加载检查：HEAD 0 通过 / 1 失败，工作树 1 通过。
