@@ -148,6 +148,7 @@ def main():
 
         sw = Sweep(state["m"], con, prompt_probe=a.probe, prompt_rx=r".", relogin=relogin, idle=a.idle, maxwait=max(4.0, 6 * a.idle), probe_idle=a.idle,
                    out=lambda s: print(s, flush=True))
+        sw.use_sig = not a.burst        # a queued lib answers the first `look` with `Queued command`: no room signature to compare
         print(f"{len(vs)} verbs, {len(shapes)} shapes, port {port}", flush=True)
         for i, v in enumerate(vs):
             if v in skip:

@@ -11,7 +11,10 @@ For each `verb shape` line it sends the line, reads the answer, takes the driver
 trace, `insufficient permission`) and the answer's own error text, and records the pair when either looks wrong.  After every line it checks the session is
 still in the normal command loop (the probe command, default `look`, must answer with something that matches prompt_rx): a verb that opens a prompt
 (an editor, a password dialog, a mail mode) is closed with a list of escape lines (`~q`, `q`, `.`, `**`, empty lines) and the session is reopened by
-`relogin()` (it returns the new Mud) when that does not help or the connection was closed (a crash or a kick is itself a finding).  Nothing here knows a lib: the caller supplies
+`relogin()` (it returns the new Mud) when that does not help or the connection was closed (a crash or a kick is itself a finding).  "Answers like the normal command
+loop" is: the probe's answer holds one of the two longest lines of the first probe's answer (the room description, letters and Chinese characters only), the baseline taken
+before the first verb and again after every relogin.  A bare `matches anything` test passed a session that a verb had left at a lock-screen or password prompt, which answers
+every line (xbtxiii `lockscreen`: the rest of the verb list, `practice`, `study`, `learn` ..., ran into the prompt and was never tested).  Nothing here knows a lib: the caller supplies
 the verbs (from `add_action` calls, from the command directories, from the help index) and the login routine.
 """
 import re
@@ -25,6 +28,13 @@ DRIVER_BAD = re.compile(r"(?i)(^\*|\berror\b|bad argument|too many|too few|warni
 SCREEN_BAD = re.compile(r"(?i)(error in|runtime error|bad argument|\*\*\* |trace[:=]|line \d+: |call_other|object ?\d+ ?\(|0x[0-9a-f]{6,}|"
                         r"Failed to load|Too long evaluation|Too deep recursion|无法载入|读取错误|执行时段错误|\bNULL\b|\(null\)|<unknown>)")
 ESCAPES = ["~q", "q", ".", "**", "", "", "no", "n", "x", "end", "quit"]
+SIGJUNK = re.compile(r"[^A-Za-z\u4e00-\u9fff]")
+
+
+def signature(txt):
+    """the letters and Chinese characters of the two longest lines of a probe answer (the room description): they survive a live clock, an arriving NPC, a changed exit list"""
+    lines = sorted((SIGJUNK.sub("", ln) for ln in txt.splitlines()), key=len, reverse=True)
+    return [s[:20] for s in lines[:2] if len(s) >= 8]
 
 
 class Sweep:
@@ -37,6 +47,8 @@ class Sweep:
         self.out = out
         self.findings = []        # (kind, line, screen tail, console lines)
         self.n = 0
+        self.sig = None           # signature() of the first probe answer; None = take it at the next probe (relogin, first verb); [] = nothing to compare with
+        self.use_sig = True       # off for a lib that queues commands (Discworld's burst mode: the first answer to `look` is `Queued command`)
 
     def _record(self, kind, line, screen, cons):
         self.findings.append((kind, line, screen.strip()[-400:], cons[:12]))
@@ -45,11 +57,22 @@ class Sweep:
     def _alive(self):
         """True when the probe command is answered like the normal command loop"""
         txt = self.m.cmd(self.probe, idle=self.probe_idle, maxwait=max(3.0, 4 * self.probe_idle))
-        return bool(self.prx.search(txt)), txt
+        ok = bool(self.prx.search(txt))
+        if ok and self.use_sig:
+            if self.sig is None:
+                self.sig = signature(txt)
+            elif self.sig and not any(s in SIGJUNK.sub("", txt) for s in self.sig):
+                txt += self.m.read(0.6, 2.5)      # the room description may arrive in a second flush
+                ok = any(s in SIGJUNK.sub("", txt) for s in self.sig)
+        return ok, txt
 
     def _back_to_loop(self, line):
         """True when the session answers the probe like the normal command loop; closes prompts with the escape lines one by one (probing after each, so
         a stray `quit` is never sent once the loop is back); False when the connection is gone or nothing helps"""
+        ok, txt = self._alive()
+        if ok:
+            return True
+        self.m.read(1.0, 4.0)      # the verb's own answer may still be arriving (a long `news`, a slow `map`) and polluted the probe's
         ok, txt = self._alive()
         if ok:
             return True
@@ -64,8 +87,17 @@ class Sweep:
                 return True
         return False
 
+    def _rebaseline(self):
+        self.sig = None
+        if self.use_sig:
+            self._alive()          # thrown away: the first `look` of a fresh character can carry a newbie guide, which is not in the second
+            self.sig = None
+            self._alive()
+
     def one(self, line):
         self.n += 1
+        if self.n == 1:
+            self._rebaseline()
         txt = self.m.cmd(line, idle=self.idle, maxwait=self.maxwait)
         cons = [c for c in self.con.new() if c.strip()]
         bad_cons = [c for c in cons if DRIVER_BAD.search(c)]
@@ -73,6 +105,7 @@ class Sweep:
             self._record("connection-closed", line, txt, cons)
             if self.relogin:
                 self.m = self.relogin()
+                self._rebaseline()
             return txt, cons
         if bad_cons:
             self._record("console", line, txt, bad_cons)
@@ -86,6 +119,7 @@ class Sweep:
                 pass
             if self.relogin:
                 self.m = self.relogin()
+                self._rebaseline()
         self.con.new()    # whatever the probe printed
         return txt, cons
 

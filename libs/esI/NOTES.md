@@ -856,3 +856,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply e
 ## 登录密码超过 255 字节：`crypt()` 抛错（2026-10-20，KB 06 §7.294）
 
 驱动的 `crypt()` 对超过 255 字节的密钥直接报错（`Error in crypt(), check your salt`），老驱动则按任意长度散列。在登录提示符下输入 256 字节以上的密码，密码检查那一行就抛错，连线停在一个裸的 `> ` 提示符上，登录走不完（`password` 指令的旧密码检查同样）；用 300 个 `x` 当参数的扫描发现的。`/adm/obj/simul_efun.lpc` 里补了一个同名的 simul_efun `crypt(key, salt)`：只有超长的密钥才被截短（先截到 255 个字符，再逐字符截到 `sizeof(to_buffer(key)) <= 255`，限制按字节算，一个汉字占三个字节），再交给 `efun::crypt()`；普通密码原样散列，已存的密码散列不受影响（`scripts/lpc_add_sefun.py crypt`）。
+
+## `advance`：5 级以上时 `check_explore()` 除以零（2026-10-21，KB 06 §7.331）
+
+公会的 `advance` 在等级 5 以上要问 `EXPLORE_D->check_explore(me)`，它对每个区域算 `探险点 * 100 / query_total_explore(区域)`。区域总数是巫师用命令 `explored` 登记的探险点数，登记数据（存档）不在归档里；公会自己的 `explore` 指令对 `max < 1` 的区域写了 `continue`，`check_explore()` 没有，所以新树里只要有一个区域没有登记点数，`advance` 就抛 `Division by zero`。先取总数，总数小于 1 的区域当作没有可探索的东西（`mark++; continue;`），与 `explore` 指令一致。三个库（es1、es1_win、esI）的 `explore_d.lpc` 逐 token 相同，同一处改法。只做了加载检查（没有 5 级的角色可测）。

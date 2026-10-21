@@ -797,3 +797,7 @@ Found by the live pair afterwards: `d/noden/hawk/monster/adolph.lpc` had `#inclu
 ## `<daemons .h>` 和 `<money .h>`：头文件名中间多了一个空格（2026-10-20，KB 04 §6.25）
 
 `cmds/std/_orglv.lpc` 和 `adm/daemons/network/services/gchannel.lpc` 的 `#include <daemons .h>`，`d/island/samurai/room/shop.lpc` 的 `#include <money .h>`（那几行是 CRLF，别的行是 LF）：`Cannot #include daemons .h`。`include/daemons.h`、`include/money.h` 都在，去掉空格。`_orglv` 和 `gchannel`（全球频道服务）现在加载；`shop.lpc` 还缺同目录的 `farwind.h`（本库只有 `d/noden/farwind/farwind.h`），那是内容问题，没有动。
+
+## `advance`：5 级以上时 `check_explore()` 除以零（2026-10-21，KB 06 §7.331）
+
+公会的 `advance` 在等级 5 以上要问 `EXPLORE_D->check_explore(me)`，它对每个区域算 `探险点 * 100 / query_total_explore(区域)`。区域总数是巫师用命令 `explored` 登记的探险点数，登记数据（存档）不在归档里；公会自己的 `explore` 指令对 `max < 1` 的区域写了 `continue`，`check_explore()` 没有，所以新树里只要有一个区域没有登记点数，`advance` 就抛 `Division by zero`。先取总数，总数小于 1 的区域当作没有可探索的东西（`mark++; continue;`），与 `explore` 指令一致。三个库（es1、es1_win、esI）的 `explore_d.lpc` 逐 token 相同，同一处改法。只做了加载检查（没有 5 级的角色可测）。

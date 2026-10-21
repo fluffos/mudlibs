@@ -392,3 +392,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 ## `partyinfo` 读不到 `/log/cmds/party` 就抛错（2026-10-20，KB 06 §7.326）
 
 `cmds/std/partyinfo.lpc` 把 `read_file("/log/cmds/party")` 直接交给 `explode()`。这个文件是运行中的 mud 才会写出来的帮会日志，克隆出来的目录、站点和全新启动的树里没有，`read_file()` 答 0，于是 `Bad argument 1 to explode()`。现在读不到时按空表处理，只打印表头。同一份文件在 ylfyxa3、xajh4gkb 里已先改过（那里有实测）；这里只做了加载检查（1/1，回归 0）。`u/wenwu/partyinfo.lpc` 是巫师目录里的同名副本，没有碰。
+
+## `passwd`、`jiadian`、`abandon`：`md5crypt()` 不存在（2026-10-21，KB 06 §7.323）
+
+三个命令用 `crypt(pass, old) != old && md5crypt(pass, old) != old` 验旧密码（旧驱动里存档可能是 DES 也可能是 MD5，两种都要认）。这个驱动没有 `md5crypt` efun，`adm/simul_efun/config.lpc` 的 `crypt()` 包装器只在定义了 `MD5_CRYPT` 时才用 `efun::md5crypt`（没有定义），所以三个命令都是 `Undefined function md5crypt`：玩家改不了密码，`abandon` 和 `jiadian` 也打不开。在 `config.lpc` 补 `string md5crypt(string str, string seed) { return efun::crypt(str, seed); }`（这个驱动的 `crypt()` 自己认 `$1$` 盐）。加载检查：HEAD 1、树 4，三个命令新加载。

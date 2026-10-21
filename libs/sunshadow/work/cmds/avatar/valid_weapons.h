@@ -1,6 +1,6 @@
 #define CWP "/d/common/obj/weapon/"+
 
-static mapping VALID_WP_TYPES = ([
+nosave mapping VALID_WP_TYPES = ([
 "awlpike" : CWP"awlpike",
 "bardiche" : CWP"bardiche",
 "bastard sword" : CWP"bastard",
@@ -49,7 +49,7 @@ static mapping VALID_WP_TYPES = ([
 "bill-guisarme" : CWP"bill-guisarme",
 ]);
 
-static mapping VALID_WP_SUBTYPES = ([
+nosave mapping VALID_WP_SUBTYPES = ([
 "bastard sword" : ([ 3 : CWP"bastard_two", 4 : CWP"giant_bastard"]),
 "club" : ([ 2 : CWP"mclub", 3 : CWP"club_lg", 4 : CWP"giant_club"]),
 "battle axe" : ([ 3 : CWP"large_battle_axe", 4 : CWP"giant_battle_axe"]),

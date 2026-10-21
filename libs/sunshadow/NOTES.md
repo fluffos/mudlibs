@@ -904,3 +904,82 @@ The driver's `crypt()` raises (`Error in crypt(), check your salt`) for a key ov
 ## `darkrobe` keeps a name in an `object` variable (2026-10-20, KB 06 7.305)
 
 `d/attaya/senund/obj/darkrobe.lpc` declares `object OWNER;` but stores the player's name (a string) in it and compares against it: `error: != always true because of incompatible types ( string vs object )`, the robe (and the NPC that carries it) never loaded. The declaration is `string OWNER;` now.
+
+## 玩家命令 /cmds/mortal 与 refs_d：旧驱动的类型松弛、前向调用、保留字（2026-10-20, KB 04 6.21, 6.19, 6.14, 6.24）
+
+load 检查在 cmds/、adm/、daemon/、std/ 下找到 252 个失败对象，其中 136 个是真对象；这是第一优先组（玩家每天打的命令）。HEAD 上 24 个文件全部加载失败，现在 23 个加载，没有 warning；`cmds/mortal/make/m_monster.lpc` 因存档损坏仍失败（见末节）。MudOS 对声明类型、前向调用和 `(object)` 强转都不检查，这个驱动全部拒绝，整个命令对所有访客都不存在。
+
+- `(object)TP->query_attackers() != ({})`（数组与强转成 object 的值比较，编译器看来永远为真，旧驱动里靠共享的空数组碰巧成立）改成 `sizeof(TP->query_attackers())`：`_eavesdrop`（1）、`_forage`（2）、`_heal`（1）、`_hunt`（2）、`_study`（1）。`_bury` 的 `object attacker` 其实装数组，改成 `object *attacker` + `sizeof(attacker)`。
+- `return 1 + write(...)`（write() 现在是 void）改成 `write(...); return 1;`：`_blindfold`（2）、`_gag`（2）。`_gag` 给自己戴口塞的分支没有 `return 1`（`_blindfold` 的对应分支有），命令会返回 0 再多打一句 "What?"，补上 `return 1;`。
+- 声明类型与实际内容不符：`_actions` 的 `mapping* itemmap, * searchmap` 装的是 `query_items()` / `query_searches()` 的映射，`keys()` 拒绝数组，改成 `mapping`；`_buff` 的 `string special` 装 `parse_special()` 的 0 / -1 / 字符串，`special == -1` 永远假，改成 `mixed special`；`_skin` 的 `string what` 装 `present()` 的对象，改成 `object what`；`obj/enchant_ob` 的 `string bonuses` 是映射，改成 `mapping bonuses`；`obj/buffob` 四处 `(object)` 强转的是法术对象数组，改成 `(object *)`。
+- `_follower`：`string *retinue_keys_string = ([])` 再 `retinue_keys_string[i] = ...`，旧驱动里它其实是个整数键的映射，调用方用 `sizeof()` 和 `[i]` 当数组读；现在是真数组 `({})`，用 `+= ({ ... })` 追加。
+- 没有类型的旧式函数定义写在第一次调用之后，这个驱动对前向调用报 `Undefined function`：`_passwd` 的 `adm_pass()` / `adm_confirm_pass()` / `adm_pw_entry()` / `adm_pw_verify()` 加上类型（`passwd` 参数是 `string`），再加一行 `void adm_pass();` 原型；`_gossip` 的 `report_wrong_type(int, int, ob)` 改成 `void report_wrong_type(int s_type, int rum_type, object ob)`，原型补进头部的原型表。
+- `_craft`：原型 `varargs void help(string str);` 与 `varargs int help();` 互相矛盾，命令里 6 处 `return help();` 把 void 当 int 返回；现在 `help()` 答 1（`varargs int help(string str)`），三个 void 函数里的 4 处 `return help();` 改成 `help(); return;`，`return 1;`（2 处）改成 `return;`；`list_crafted` 的 `num` 先装 `stat()` 的大小再装文件名后面的数字串，改成 `mixed num`；`remake_item` 的 `mymap` 是映射；两处 int 函数里的裸 `return;` 写成 `return 0;`（旧驱动给的就是 0）；删掉没用的局部变量 `file`、`short_desc`。
+- `adm/daemon/refs_d`（`_craft`、`_usercall`、`_call` 的基类）：`ref` 是保留字（KB 04 6.14），参数和局部变量 `ref` 改名 `rname`（6 处）。
+- `cmds/mortal/make/m_armour`、`m_room`、`m_weapon`、`m_monster`：`#include "/cmds/creator/make/..."` 指向旧位置，头文件其实在 `cmds/mortal/make/`（KB 04 6.24），改成绝对路径 `/cmds/mortal/make/...`。`m_weapon` 另有 `wvalue()` / `wclass()` 的 `int arg`（`input_to` 交来的是字符串，其余函数都是 `string arg`）改成 `string arg`，局部变量 `class` 改名 `pick_class`（KB 04 6.20）。
+- `obj/spellbook`：`keys((mixed *)MAGIC_D->query_mage_index())`，`magic_d` 里没有 `query_mage_index()`，同目录的兄弟 `d/magic/spellbook.lpc` 用 `keys(MAGIC_D->query_index("mage"))`，照改；`d/magic/spellbookx.lpc` 是同一行，一并改（`addall` 是 avatar 命令，原来一调用就 `keys(0)`）。
+
+验证：`lpc_listcheck.sh` 对这组文件 HEAD 0 个加载，树 23 个加载（只有 `m_monster` 仍失败），`lpc_load_diff.py` regress 0。`scripts/play_boot.sh` 起的真驱动里（`play-sunshadow-xq`，机器人 `xqaab`）实际打了：`actions`、`blindfold`（对自己、不带目标）、`buff`（无参、`list`、`diff`、`add magic missile`）、`gag`、`heal`（无参、对自己）、`hunt`、`study`（无参、`study sword`）、`forage`（无参、`for herbs`、`for food`）、`bury`（`corpse`）、`eavesdrop`、`spells mage`、`spells cleric`、`cast`（无参、`cast fighter x`、`cast mage ...`）、`craft`（`crafted`、`items weaponsmith`）、`follower`（无参、`list`）、`skin`、`passwd`（再输一个错的旧密码，答 `Permission denied.`）、`gossip`：每个命令都有自己的回答，驱动控制台和 `log/debug.log` 都没有新错误（下面两条除外）。`spells mage` 是新启动后第一次用 `magic_d`，它要加载880 个法术文件建索引，调试驱动里 32 秒才答，之后几秒；索引存进 `/daemon/save/magic_d.o`，以后的启动不再重建（lpcc 里同样的首次加载 28 秒）。`skin <活物>`（例如 `skin xqaab`）会走到 `do_live()`，这个函数只有一行原型 `int do_live(object corpse);`，shadowgate 也一样，哪里都没有定义，`log/debug.log` 是 `Undefined function called: do_live`；没有这个函数的原文，没有改。
+
+## 法术文件 cmds/spells：类型松弛（2026-10-20, KB 04 6.21）
+
+8 个文件，HEAD 全部失败，现在全部加载，没有 warning：`a/_aura_of_healing`（全局 `flag;` 没有类型，`flag = 1` 是 `Bad assignment ( unknown vs int )`，改成 `int flag;`）；`b/_blasphemy`、`h/_holy_orb`、`h/_holy_word`、`u/_unholy_orb`（`object limb` 装 `return_target_limb()` 的字符串，`damage_targ(object, string, int, string)` 拒绝，改成 `string limb`）；`d/_dictum`、`w/_word_of_chaos`（`string align` 装 `query_true_align()` 的整数，再和 1 / 2 / 3、7 / 8 / 9 比较，永远假，改成 `int align`）；`d/_dissolving_touch`（基类的 `set_immunities(string* arr)` 要数组，其余法术都写 `({ "acid" })`，这一个传了字符串，改成 `({ "acid" })`）。没有改的：`_word_of_chaos` 的 `preSpell()` 里 `align == 7 || align == 8 || align == 8`，第三项看起来是 9（十行之后的过滤器用的是 7、8、9），是一个不影响加载的手误，留给人判断。
+
+## 守护进程 /daemon、/adm/daemon：类型松弛、缺少的函数、第一次启动没有存档（2026-10-20, KB 04 6.21, 6.19, 7.259, 7.298）
+
+HEAD 失败、现在加载（没有 warning）的 15 个：`magic_d`、`bboard_d`、`party_d`、`screen_d`、`crayon_d`、`destinations_d`、`item_level_d`、`letter`、`localpost`、`map_maker_d`、`news_d`、`rumours_d`、`save_area_lists_d`、`templefunds_d`、`treesave_d`；另有 `monster_d`（编译一直通过，启动预加载时报错，见下）。
+
+- `magic_d`：`mapping *query_global_index()` 与 `filter_global_index()` 返回的是 `spellIndex`（映射），调用方 `_spells`、`d/magic/spellbook` 用 `filter_mapping()` 和 `speccache[name]["sphere"]` 读它，改成 `mapping`。
+- `bboard_d`：`mapping *query_posts()` 在没有存档时 `return ([])`，调用方（`std/bboard`、`_bboard`）当数组用，改成 `return ({})`；另有两处 `?:` 一支是整数一支是字符串（warning），整数那支写成 `""+...`。
+- `party_d`：`calculate_exp()` 里 `manage_party(my_party)` 传的是成员数组，函数要组名；旧驱动里 `party[数组]` 查不到，等于什么也没做。改成 `manage_party(group)`（其余 12 处调用都传组名，推测是笔误；效果是计算经验时顺手清掉已被销毁的成员）。
+- `screen_d`：`redeem_user()` 的日志里把整个 `bad_user` 映射拼进字符串，改成刚被删除的 `lower_case(str)`（推测）。
+- `crayon_d`：`color_word()` 里 `int ..., *colors, color` 装的是颜色代码字符串，改成 `string *colors, color`；`sizeof(keys(scheme) != 4)` 括号放错，是 `sizeof(keys(scheme)) != 4`（原来 `scheme` 的检查从来不起作用）。
+- `destinations_d`：`generate_maze_waystations()` 调用的 `add_maze_waystations()` 在哪里都不存在（shadowgate 也没有），这个函数没有调用方，而且 `dest_room` 是字符串，`if (!objectp(dest_room)) return;` 在循环之前就返回了，是没写完的 `generate_waystations()` 副本。只加一行原型让守护进程加载（`map`、`lmap`、`pathfinder_d` 都靠它），调用本身没动。
+- `item_level_d`：`get_bonus_value(string bonus_name, string num, ...)` 里 `num * 8`，调用方传的都是数字，改成 `int num`。
+- `letter`：`string tmp` 装 `get_dir()`，改成 `string *tmp`。
+- `localpost`：`notify_online()`、`remote_post()` 没有类型，定义在第一次调用之后，改成 `protected void` 并补原型。
+- `map_maker_d`：`generate_new_exit_map(rm)` 的参数是房间文件名，`rm` 是对象，旧驱动里每次都走 "roomname passed is not a string" 分支，返回空映射；改成 `generate_new_exit_map(base_name(rm))`（推测，键 `rooms[base_name(rm)]` 就是这个名字）。
+- `news_d`、`std/news/rn`：`unguarded()` 是 Nightmare 的 sefun，这个库没有，`news_d` 的 `save_me()` 直接 `save_object(SAVE_FILE)`；`rn.lpc` 的 `exit()` 里 `unguarded(...)` 后面紧跟着同样内容的普通 `write_file(...)`，删掉前一行。`rn.lpc` 另有 `show_article()` 的 `string tmp`（数组）和没有类型的 `syntax_error()`。
+- `rumours_d`：`get_next_num_from_array(int nums)` 遍历数组，改成 `int *nums`；`set_feedback(subject, fb, st, inst, adj)` 把传闻发起人的数组传给要名字的参数（之后 `give_feedback()` 用 `ob->isKnown(sub_name)`，唯一的调用方 `_gossip` 的数组是 `({instigator, instigator, instigator})`），改成 `sizeof(inst) ? inst[0] : "no-one"`（推测；"no-one" 是这个函数里没有发起人时的默认值）。
+- `save_area_lists_d`：`send_error()` 永远答 0，却被 `string`、`mapping`、`string *` 函数 `return send_error(...)`，同一个文件里别的查询函数早就是 `mixed`；把 `send_error()` 声明成 `mixed`（两个原型和定义）。
+- `templefunds_d`：`create()` 调 `clear_data()`，它对第一次启动还不存在的 `pDonations` / `tAccounts`（存档 `/daemon/save/templefunds.o` 没有入库）做 `keys()`，整个守护进程加载失败；先把两个映射初始化（其余访问函数本来就是这样做的）。
+- `treesave_d`：`error(-1)` 八处，`error()` 要字符串，改成 `error("-1")`（旧驱动里这个调用本来也只会抛错）。
+- `monster_d`（编译通过，每次启动预加载时报 `Bad argument 1 to explode()`，`log/debug.log` 里是第一行）：`load_mons_db()` 读运行时才产生的 `/daemon/save/monsters_unique.db`、`monsters_cloned.db`，文件不存在时 `read_file()` 答 0；在 `explode()` 之前加 `file_size(fromfile) < 0` 就返回空映射（文件存在但是空的，仍走作者原来的提示）。
+
+验证：这 16 个对象 HEAD 失败（`monster_d` 是 HEAD 通过、预加载报错），树加载，regress 0；重新启动 `play-sunshadow-xq`，`log/debug.log` 里没有 `monster_d` 那一行。
+
+## 其余命令与管理对象（2026-10-20, KB 04 6.21, 6.14, 6.20, 7.287）
+
+- avatar：`_addnwp`（`string nwps` 装 `keys()`，改成 `string *nwps`）；`_alterobj`（`enter_loreskill(int myval, ...)` 收到的是输入的文字，却和 `""` 比较；改成收 `string input`，`int myval = to_int(input)`。"lore difficulty" 在别处都是数字，旧代码存进去的是字符串）；`_goto`（`mixed *rooms` 装 `query_rem_rooms()` 的映射，改成 `mixed rooms`；`ob ? ob : str` 一支对象一支字符串，对象那支写成 `(mixed)ob`）；`item`、`item2`（`check_stat_add(int mybonus, ...)` 的 `mybonus` 是 `input_to` 交来的文字，又和 `"0"` 比较，改成 `string mybonus`）；`valid_weapons.h`（两处 `static mapping`，`static` 已不是修饰符，改成 `nosave mapping`）；`avitem`（11 个菜单数组声明成 `string`，改成 `string *`；`hl()` 答字符串；60 个 `input_to` 回调声明成 `void` 却 `return 1`，改成 `int`，里面的裸 `return;` 写成 `return 0;`；`str = bnum` 把整数赋给字符串，改成 `str = "" + bnum`，行为不变（0 仍然重新提问）；删掉没用的 `rs`）；`avsay`（`hl()` 答字符串，7 个回调改 `int`，删掉没用的 `tmp`、`tmp_msg`、`rs`、`set_str`、`unset_str`、`default_str`、`de`）。
+- creator：`_acheck`（`string wear_string, unwear_string` 装 `query_wear()` 的字符串或整数，改成 `mixed`；`functionp()` 分支是死的，`set_wear()` 存的是函数值调用后的结果）；`_callout`（`call_out_info()` 的行只有三个元素，KB 06 7.287：`sizeof(element) < 3` 才算异常，参数取 `element[3]` 只在有的时候，"Size problem" 那行里把数组拼进字符串，改成 `identify(element)`）。
+- system / over：`_clog`（参数 `ref` 改名 `idx`，删掉没用的 `tmp`）；`_rgrep2`（`regexp(".+/"+exp, all_files)` 参数顺序反了，是 `regexp(all_files, ".+/"+exp)`）；`_call`、`over/_usercall`（只是 `refs_d` 的继承者，基类修好后加载，各删掉两个没用的局部变量：`temp`、`f` / `temp`、`i`）。
+- adm：`_dir`（`neww("/cmds/system/_"+cmd)` 是 `new(...)`，一次全局改名把变量 `new` 改成 `neww` 时连 efun 一起改了）；`_whoprisoned`（`each()` 已不是这个驱动的 efun，改成 `foreach (string prisoner in keys(prison_list))`）。
+- adm/obj、adm/simul_efun：`listener`（变量名 `buffer` 是类型名，改成 `msg_buffer`）；`pacct`（`set_password()` 里的 `query_name()` 在这个对象里不存在，是 `this_object()->query_name()`，`save_pacct()` 自己也这样写）；`sum_array`（`sizoef` 手误）。
+- 德鲁伊：`d/priest/abilities/is_druid.lpc`（`{ who = TP}` 少一个分号，是 `cmds/druid/druids/*` 的共同基类）；`dlevel.lpc`（`is_allowed_wizard(who)` 的参数是玩家名，改成 `(string)who->query_true_name()`）；`cmds/druid/druids/_druids`（全局 `string class`，保留字，改成 `int pick_class`，它装的是等级整数；删掉 5 组没用的局部变量）；`_spell_list`（删掉没用的局部变量）。`std/class/druid.lpc` 的命令搜索路径是 `/cmds/druids`（"temporary"），`cmds/druid/druids/*` 不在任何命令路径上。
+- `std/adt/iqueue`：`inherit LIST_ADT;` 的宏从来没定义过，`adt_defs.h` 里的列表 ADT 是 `ILIST_ADT`（`iqueue` 用的 `insert`、`set_tail`、`prev`、`query_tail`、`set_next`、`value` 都在 `ilist` 里），改成 `inherit ILIST_ADT;`（推测，没有调用方）。
+- `std/user/retinue.lpc`（编译通过）：打 `follower` 时 `init_retinue()` 抛 `Bad argument 2 to foreach`：`mkdir("/d/save/retainers/<名字>/")` 的父目录 `/d/save/retainers/` 在新检出的树里不存在（`/d/save` 整个在 `.gitignore` 里），`mkdir()` 不递归，失败后 `get_dir()` 答 0。先 `mkdir("/d/save/retainers/")`。没有改的：同一个函数里的校验循环写成 `next_slot_to_fill < sizeof(next_slot_to_fill)`（`sizeof` 一个整数，循环从不执行，作者要的大概是 `sizeof(retinue)`），改它会让一段从没跑过的代码开始跑。
+
+验证：这些文件 HEAD 失败，树加载，没有 warning，regress 0。`refs_d` 修好之后，九个 `old/` 目录里继承 `REFS_D` 的对象也能加载了（`cmds/adm/old/_cref`、`cmds/creator/old/_unmove`、`_unref`、`cmds/system/old/_dref`、`_eref`、`_move`、`_ref`、`_refs`、`_tref`），按规矩没有动它们；其中 `_unmove`、`_unref`、`_move` 各有一个没用的局部变量的 warning。
+
+最后一次全量 `lpc_listcheck.sh`（cmds、adm、daemon、std 下的全部 2934 个对象）：HEAD 2682 个加载 / 252 个失败，树 2759 / 175，`lpc_load_diff.py` regress 0，新加载 77 个（todo 里的 68 个，加上上面九个 `old/` 对象）。
+
+## 留下的对象（2026-10-20）
+
+第一次 todo 的 136 个对象里还有 68 个没有加载，靠改类型修不了，或者本来就没有问题：
+- 存档没有的头文件或实现：`/realms/grendel/grendel.h`（`adm/daemon/dm_npc_d`、avatar 的 `_aclist` `_alignchange` `_newrp` `_peo` `_poses` `_rolld`、`cmds/creator/_channels`、`cmds/law/_jailbirds`、`cmds/over/_chkalign` `_guilds` `_talk`）；`/d/shadowgate/diety.h`（`cmds/druid/druids/_dieties`，宏 `DIETYS` 哪里也没有）；`definitions.h`（`std/adt/istack`）；`/adm/simul_efun/exclude_array.lpc`、`idle.lpc`、`distinct_array.lpc`（`adm/include/simul_efun.lpc` 是一份旧的 sefun 清单，真正的清单是 `/adm/obj/simul_efun.lpc`）；`NETWORK_D`（Intermud-2 网络守护进程从没随库发布：`adm/daemon/services`、`cmds/adm/_netstats`）。
+- 这个驱动没有的 efun / sefun：`opcprof()`（`cmds/adm/_opcprof`）、`cat()` 与 `extract()`（`cmds/system/_less`；`cmds/guild/philosopher/_cmd` 还 `cat` 一个 `/realms/descartes` 的文件）。
+- 没写完、没有任何引用的开发者半成品：`daemon/charisma_d`（`fnord`、缺分号）、`daemon/pk_d`（`save_pk_log()` 从没存在过）、`daemon/player_skills_d` 与 `daemon/tax_d`（从别的库粘来的经验税片段：`_IRS`、`LEVEL_LIMIT`、`init_IRS()`、`query_lowest_level()`）、`adm/daemon/titles`（`MALE_MAGE` / `FEMALE_MAGE` 在任何头文件里都没有，真正的称号来自 `ADVANCE_D->get_new_title()`）。
+- 存档损坏：`cmds/mortal/make/m_monster.lpc` 第 741 行 `case  "se: do_query("chat"); break;`，随后是 6 段被截断重复的 `casee spells"...` 残片（约 741-890 行），上游文件就是这样（`raw/` 里的原文件和 shadowgate 的副本相同），缺的文字只能靠原作者；include 路径已经改对。
+- 老法术接口（`set_spell_level(3)` 传整数）：`cmds/druid/druids/_monster_summoning_1` 至 `_3`、`cmds/wizard/holding/*`（14 个，其中 `_detect_invis`、`_taunt` 还有语法错误）。
+- `adm/failsafe/*`（22 个）：std 文件的应急副本，`static private` 等修饰符是语法错误，后面是整套没改过的老类型松弛；不会被启动，没有动。
+- `cmds/mortal/room.lpc`：`/std/room` 的一份游离副本，继承 `/realms/saide/traps/container.lpc`。
+- `d/priest/mistletoe.lpc`、`obj/d_amulet`、`books/book_ranks`、`docs/book_ranks`（1997 年的德鲁伊圣徽和书，用到 `is_druid.lpc`）：原来死在 `is_druid.lpc` 的语法错误上，现在越过了它，各自还有自己的类型松弛和一个 `class` 变量（`mistletoe.lpc:251`）；不在 todo 里，只有创作者工具 `d/priest/abilities/fix.lpc` 会创建它们，没有动。
+- 加载检查的假失败，对象本身没有问题：`cmds/feats/r/_rending_blows`（全局初始化 `FEATTIMER` 调用 `FEATS_D`，`feat_d` 的 `create()` 又把每个 feat 都加载一遍，在一个全新的 VM 里第一个加载它会递归进自己并被销毁；`feat_d` 先加载就正常）；`cmds/druid/druids/_compare`（文件级 `string name = TP->query_name()` 需要玩家）；`std/caravan`（`create()` 里 `TO->remove()`，故意自毁）；`std/newuser`（没人引用的另一份玩家身体，`create()` 调用存档里没有的 `/daemon/userchain/useruc_d`）。
+
+## 真驱动里碰到、但编译正常因此没有动的问题（2026-10-20）
+
+- `cmds/mortal/_map.lpc:12`：不带参数的 `map` 走 `if (!stringp(str)) { TP->force_me("map"); return 1; }`，强迫玩家再打一次不带参数的 `map`，无限递归，控制台是 `Too deep recursion.`（`std/user/tsh.lpc:333`），访客看到 `Error: you should probably contact a dev.`。shadowgate 的副本相同；该显示帮助还是地图列表是作者的决定。
+- `cmds/mortal/_skin.lpc:76`：`skin <活物>` 调用的 `do_live()` 只有原型，没有定义（见上）。
+- `std/user/retinue.lpc:161`：校验循环的 `sizeof(next_slot_to_fill)`（见上）。
+- `cmds/spells/w/_word_of_chaos.lpc:70`：`align == 8 || align == 8`（见上）。
+- `magic_d` 在每次全新启动后的第一次 `spells` / `cast` 要建法术索引（880 个法术文件），调试驱动里 30 多秒；之后 `/daemon/save/magic_d.o` 在，不再重建。

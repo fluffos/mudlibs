@@ -420,3 +420,7 @@ definition, 2 `#undef` lines for macros that two headers define (`ROOM`, `STORY_
 ## 翻页器 `start_more(read_file(...))`：文件缺失时 `explode(0)`（2026-10-20，KB 06 §7.300）
 
 东方故事系的翻页器 `void start_more(string msg) { ... explode(msg, "\n") ... }` 被这样调用：`start_more(read_file(HELP_DIR + "help/topics"))`、`start_more(read_file(NEWS))`。压缩包没带的文件使 `read_file()` 回 0，`explode(0, ...)` 在本驱动里报 `Bad argument 1 to explode()`（不带参数的 `help` 指令就是这样出错的），老驱动把 0 当空文本。在 `start_more` 开头加了 `if (!stringp(msg)) return;`（`scripts/lpc_fix_start_more.py`）。改动：`/feature/more.lpc`。
+
+## `learn`、`practice`、`study`、`selflearn`、`research`、`steal` 除以零（2026-10-21，KB 06 §7.331）
+
+这六个命令一开头就算 `100 * me->query_explore_points() / EXPLORE_D->query_total_explore()`（`steal` 对双方各算一次）。`explored` 守护进程的存档 `/data/explored.o` 不在归档里，`explores` 是空映射，`query_total_explore()` 恒答 0；探索点只能由巫师登记（`log_explore()`，库里没有调用它的命令），所以新树里每个玩家敲这几个命令都是 `*Division by zero`（实测：`learn`、`practice`、`study`、`selflearn`、`research` 全部抛错）。`score` 对同一个除数早就写了 `EXPLORE_D->query_total_explore() ? ... : 0`，六个命令照改（共 7 处），总数为 0 时探索度按 0 算（它在熟练度上限公式里只是 `explore * 2` 一项）。实测：六个命令都给出各自的提示，控制台没有错误。逐个命令扫描时只有 `learn` 报了错：它后面的 `lockscreen` 把会话留在密码提示上，`practice` 之后的命令没有真正执行，见 KB 08 §10.16。
