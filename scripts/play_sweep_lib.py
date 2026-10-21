@@ -60,6 +60,21 @@ def verbs_of(tree, dirs, wiz, roots=("cmds", "secure/cmds", "lib/cmds", "lib/sec
     return sorted(out)
 
 
+def born_if_needed(m):
+    """the nitan family keeps a new character in the Valley of Life until it chooses a personality, rolls its talents and picks a birthplace (`score` answers
+    `还没有出生呐`, nearly every verb answers the same): do that, then leave the rules pager.  Nothing happens in a lib whose `score` answers anything else."""
+    try:
+        if "还没有出生" not in m.cmd("score", idle=0.8, maxwait=5):
+            return False
+        for line in ("choose 1", "washto 20 20 20 20", "born 扬州人氏"):
+            m.cmd(line, idle=1.0, maxwait=8)
+        for _ in range(4):
+            m.cmd("q", idle=0.6, maxwait=3)
+        return True
+    except Exception:
+        return False
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("slug")
@@ -107,6 +122,8 @@ def main():
             if m is None:
                 raise SystemExit("the robot did not get in")
             m.read(0.5, 2)
+            if born_if_needed(m):
+                print("(born: the nitan family's first steps done)", flush=True)
             return m
 
         state = {"m": login()}
