@@ -470,3 +470,7 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 ## NPC 的 `chat()` 在 `chat_msg` 为空数组时下标越界（2026-10-21，KB 06 §7.334）
 
 NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < chance) { rnd = random(sizeof(msg)); if (stringp(msg[rnd])) ...`，不检查列表是否为空。本库现有的 NPC 文件里没有字面写成空 `chat_msg` 的（扫描只认 `set("chat_msg", ({ }))`）；守卫挡的是运行时才为空的列表和以后新增的 NPC。在 `random(100) < chance` 前面加 `sizeof(msg) &&`（`scripts/lpc_fix_chat_empty.py`；`if (random(100) > chance) return 0;` 的写法是 `!sizeof(msg) ||`）。改动：`/cmds/std/char/npc.lpc`、`/feature/newvendor.lpc`、`/std/char/new_npc.lpc`、`/std/char/newvendor.lpc`、`/std/char/npc.lpc`、`/std/char/vendor.lpc`（等共 7 个文件）。
+
+## 巫师命令不带参数时对 0 调用 efun（2026-10-21，KB 06 §7.336）
+
+巫师（管理员）把命令敲成不带参数时，驱动把 0 传给字符串参数；下面的命令第一句就把这个 0 交给 efun，运行时报 `Bad argument 1 to ...`，这条指令从来没有用过。用 `scripts/lpcc_bare.py` 不登录、在一次 `lpcc` 求值里以 0 调用 `main()` 逐个确认后，由 `scripts/lpc_fix_bare_arg.py` 在第一处使用参数的语句前加守卫：没有 `help()` 的是 `return notify_fail("…\n");`。改动（2 个文件，括号里是接住 0 的 efun）：`/cmds/adm/cmaterial.lpc`（`sscanf`）、`/cmds/adm/cpall.lpc`（`read_file`）。加载检查 HEAD 与工作树对照，没有退步。

@@ -995,3 +995,7 @@ The driver's `crypt()` raises (`Error in crypt(), check your salt`) for a key ov
 ## `immortals` 和 `quote`（2026-10-21，KB 06 §7.336）
 
 `secure/cmds/common/immortals.lpc`：`foreach (string letter in unguarded((: get_dir, DIR_CRES "/" :)))`，archive 里没有创造者目录，`get_dir()` 对不存在的目录答 0，`foreach` 报 `Bad argument 2 to foreach`；两层 `get_dir()` 都改成 `... || ({})`。`daemon/quotes.lpc` 的 `eventDisplayQuote()`：没有存档，名言列表是空的，`Quotes[random(sizeof(Quotes))]` 越界；列表为空时对玩家说 `There are no quotes yet.`。屏幕上这两条都只显示 `A runtime error occurred, use "bug -r" to report it.`，驱动控制台是安静的，真正的错误在 `log/runtime`（play 树里）。实测：`immortals` 列出空的头衔表，`quote` 有回答，`quote 句子~作者` 添加后能显示。
+
+## Creator commands with no argument: the 0 goes straight into an efun (2026-10-21, KB 06 7.336)
+
+Typed with no argument, a creator command gets 0 in its string parameter, and these commands hand it to an efun in their first statement: `Bad argument 1 to ...` at run time; nobody had run them. Each was confirmed without a login by calling `main()` with 0 inside one `lpcc` eval (`scripts/lpcc_bare.py`), then `scripts/lpc_fix_bare_arg.py` put a guard in front of the first use: a file with `GetHelp()` prints it and `return 1;`; one with no `help()` gets `return notify_fail("...\n");`. Changed (2 files, the efun that took the 0 in brackets): `/cmds/admins/furry.lpc` (`explode`), `/cmds/creators/move.lpc` (`sscanf`). Load check HEAD against the tree: no regression.

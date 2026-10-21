@@ -647,3 +647,7 @@ xkx100 的原文是 `vc = victim->add("vote/count", 1);`，nitan 系把它写成
 ## `mroom`（帮会房间生成）读不到 `dir_pre`（2026-10-21，KB 04 §6.16）
 
 `cmds/bunch/mroom.lpc` 的 `valid_room_position()` 和建房流程用 `dir_pre` 当帮会目录前缀，库里没有任何头文件或变量声明它（`include/bunch.h` 只剩 `room_desc_l`、`max_exits`、`r_dir`、`vdirs`，整个语料里也没有 `dir_pre` 的定义），整个命令编译失败：`Undefined variable 'dir_pre'`。`adm/daemons/bunchd.lpc` 里 `BUNCH_HOME "/data/bunch/"`（`BUNCH_HOME + id + "/center.lpc"`，模板目录 `/d/room/bunch/` 复制到那里）和 `valid_room_position()` 的路径算术（前缀 `explode()` 三段、房间路径五段，差 2，返回第四段即帮会 id）对得上，所以在 `mroom.lpc` 里加 `#define dir_pre "/data/bunch/"`。nt6、nitan170911、nitan6、hhsj、xfbhh 的 `mroom.lpc` 逐字节相同，同一处改法；加载检查 HEAD 0、树 1。没有改：nt7（gitlink）同一文件；tianxia 的 `cmds/bangzhu/mroom.lpc` 用的是 `BANGHUI_DIR`，但那里的 `banghui_d` 自己就有类型错误和未声明的变量加载不了。
+
+## `ability`：继承的 `/feature/ability` 档案里没有（2026-10-21，KB 04 §6.18）
+
+管理员扫描里 `ability`（玩家指令 `cmds/usr/ability.lpc`）报 `Inherited file '/feature/ability' does not exist!`：指令 `inherit F_ABILITY`（`#define F_ABILITY "/feature/ability"`），而档案只带 `feature/ability.txt`（家族能力的设计笔记），没有源码，这条指令从来加载不了（`bas_ability`、`fam_ability`、`valid_ability_improve()`、`do_ability_cost()`、`improve_ability()`、`get_ability_info()` 都该在那个文件里，本库别处没有人用）。nitan170911、nt7、hhsj、wdxtym 把同一套接口放在可继承的 `/adm/daemons/abilityd.lpc`（947 行，指令里 `F_ABILITY` 指向它），但那是后一版：能力编号改成 1-35、消耗加了潜能、门派能力由 5 项变 30 项，不是本库当年的表。没有补，留在 `scratchpad/librarian-next.txt` 里等用户决定。

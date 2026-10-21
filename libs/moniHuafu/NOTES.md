@@ -667,3 +667,11 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 启动后第一个登录的玩家，在 0、25、50 分碰到 `Too deep recursion`（2026-10-21，KB 06 §7.335）
 
 `adm/daemons/upgraded.lpc`（`logind.lpc` 的 `UPGRADE_D->upgrade(user)` 在启动后第一次登录时才把它载入）的 `create()` 调 `ready_to_start()`：`localtime(time())[1] % 25 == 0`（0、25、50 分）就 `check_all()`，而 `check_all()` 末尾又 `ready_to_start()`，同一分钟里条件仍然成立，一路递归到控制栈满：`Too deep recursion. program: /feature/message.lpc, object: /obj/user#33, file: /feature/message.lpc:34`（栈顶刚好是 `check_all()` 里 `message("system", ...)` 发给玩家的那条）。每小时 3 分钟、每次启动后的第一个登录会撞上；战斗探针的登录控制台里 3–15 次出现一次。临时在 `receive_message()` 开头用 `call_stack()` 打出的调用链：`check_all` / `ready_to_start` 交替 109 层，再上面是 `create`、`logind.enter_world`。04:25 整点对 HEAD 和修好的树各登录一次，HEAD 报错、修好的没有。wqfy / zzfy / zzfy3 里同名文件是原版（`ready_to_start()` 里 `call_out("check_all", 500)`，`check_all()` 末尾重新挂上）；这里的 localtime 改写去掉了定时器，留下了递归的尾巴。删去 `check_all()` 末尾的 `ready_to_start();`（到点检查一轮，和原意一致）。archive 里没有任何地方在 `create()` 之后再调 `ready_to_start()`，所以每 25 分钟一次的检测本来就没有跑过，没有补回（升级仍在每次登录时由 `upgrade()` 检查）。
+
+## 巫师命令不带参数时对 0 调用 efun（2026-10-21，KB 06 §7.336）
+
+巫师（管理员）把命令敲成不带参数时，驱动把 0 传给字符串参数；下面的命令第一句就把这个 0 交给 efun，运行时报 `Bad argument 1 to ...`，这条指令从来没有用过。用 `scripts/lpcc_bare.py` 不登录、在一次 `lpcc` 求值里以 0 调用 `main()` 逐个确认后，由 `scripts/lpc_fix_bare_arg.py` 在第一处使用参数的语句前加守卫：没有 `help()` 的是 `return notify_fail("…\n");`。改动（1 个文件，括号里是接住 0 的 efun）：`/cmds/arch/coordinate.lpc`（`sscanf`）。加载检查 HEAD 与工作树对照，没有退步。
+
+## `refresh`（`retask`）：动词函数不返回 1，搬动或销毁带动作的物件时报错（2026-10-21，KB 06 §7.339）
+
+管理员扫描里 `refresh` 在重新分布使命之后报 `Illegal to move or destruct an object (/questobj/...) defining actions from a verb function(refresh) in object(/obj/user#...) which returns zero.`：`main()` 以第二条 `message()` 结尾、没有 `return`，答 0，而 `TASK_D->init_dynamic_quest(1)` 销毁了给玩家定义过动作（`init()` 里的 `add_action`）的使命物件：驱动只在动词答非 0 时才允许这样搬动或销毁，否则它接着遍历的动作表会悬空；答 0 还会让解析器在指令做完之后再补一句“什么？”。`main()` 末尾加 `return 1;`（同系已经返回 1 的 11 个同名文件没有动）。

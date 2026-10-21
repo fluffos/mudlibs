@@ -547,3 +547,7 @@ the news pager. Fixed:
 ## `no_colours()`：FluffOS 的 `terminal_colour()` 会给空的 `RESET` 换上 ANSI 复位序列（2026-10-21，KB 06 §7.337）
 
 `/daemon/terminal` 的 `no_colours()` 把 `RESET` 为空串的表交给 `terminal_colour()`，FluffOS 把空的 `RESET` 换成 `ESC[49;49m ESC[0;10m` 并写回映射，所以"去掉颜色"的文本里仍有转义序列（`no_colours("%^CYAN%^[1]%^RESET%^ abc")` 得到 `[1]\e[49;49m\e[0;10m abc`，用 `scripts/lpcc_eval.py foundation2 --at /open/zzeval.lpc` 验证），`strip_colours()` 少算宽度，`arrange_string()` 与 `format_page()` 会把含颜色码的格子截短。Foundation II 自带的菜单屏幕里格子大多不含颜色码，没有观察到可见症状；现在 `RESET` 先映射为退格符再删掉。修改：`/daemon/terminal.lpc`。
+
+## 巫师命令不带参数时对 0 调用 efun（2026-10-21，KB 06 §7.336）
+
+巫师（管理员）把命令敲成不带参数时，驱动把 0 传给字符串参数；下面的命令第一句就把这个 0 交给 efun，运行时报 `Bad argument 1 to ...`，这条指令从来没有用过。用 `scripts/lpcc_bare.py` 不登录、在一次 `lpcc` 求值里以 0 调用 `main()` 逐个确认后，由 `scripts/lpc_fix_bare_arg.py` 在第一处使用参数的语句前加守卫：没有 `help()` 的是 `return notify_fail("…\n");`。改动（1 个文件，括号里是接住 0 的 efun）：`/secure/cmds/creator/banish.lpc`（`lower_case`）。加载检查 HEAD 与工作树对照，没有退步。

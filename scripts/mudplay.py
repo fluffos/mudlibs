@@ -141,8 +141,13 @@ class Mud:
         self.sock.setblocking(True)
         try:
             self.sock.sendall(data)
+        except OSError:                 # the peer closed first (a kick, a crash, a copy taken over): the session is gone, not the sweep
+            self.closed = True
         finally:
-            self.sock.setblocking(False)
+            try:
+                self.sock.setblocking(False)
+            except OSError:
+                pass
 
     def cmd(self, line, idle=0.6, maxwait=6.0):
         self.send(line)

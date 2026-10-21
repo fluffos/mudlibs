@@ -21,6 +21,7 @@
 #define CHINESE_D               "/adm/daemons/chinesed"
 #define COMBAT_D                "/adm/daemons/combatd"
 #define COMMAND_D               "/adm/daemons/cmd_d"
+#define DAEMON_D                "/adm/daemons/daemond"
 #define EMOTE_D                 "/adm/daemons/emoted"
 #define FINGER_D                "/adm/daemons/fingerd"
 #define INQUIRY_D               "/adm/daemons/inquiryd"

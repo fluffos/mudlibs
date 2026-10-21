@@ -406,3 +406,11 @@ functionally re-tested live on this lib.
 ## NPC 的 `chat()` 在 `chat_msg` 为空数组时下标越界（2026-10-21，KB 06 §7.334）
 
 NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < chance) { rnd = random(sizeof(msg)); if (stringp(msg[rnd])) ...`，不检查列表是否为空。本库现有的 NPC 文件里没有字面写成空 `chat_msg` 的（扫描只认 `set("chat_msg", ({ }))`）；守卫挡的是运行时才为空的列表和以后新增的 NPC。在 `random(100) < chance` 前面加 `sizeof(msg) &&`（`scripts/lpc_fix_chat_empty.py`；`if (random(100) > chance) return 0;` 的写法是 `!sizeof(msg) ||`）。改动：`/clone/guard/baoer.lpc`、`/clone/guard/long2.lpc`、`/d/migong/obj/npc1.lpc`、`/inherit/char/npc.lpc`（共 4 个文件）。
+
+## `home`：模板 `/clone/misc/wizroom.lpc` 档案里没有（2026-10-21，KB 06 §7.310）
+
+管理员扫描里 `home` 报 `Bad argument 1 to EFUN replace_string() Got: int(0)`（`cmds/imm/home.lpc` 第 30 行）：巫师还没有工作室时，`home` 从 `/clone/misc/wizroom.lpc` 读模板，把 `NAME` 换成名字写进 `/u/<id>/workroom.lpc`；本库没有这个模板，`read_file()` 答 0，第一次敲 `home` 的巫师就是系统错误。`wizroom.lpc` 是这一系的公用文件（hy3、chidi、wmkj、yxcs 等 28 个库都带，内容相同，只差换行符：“没有建造工作室的巫师的临时住处”，出口 `north` 通 `/d/wizard/wizard_room`，本库有这个房间），从 hy3 原样复制过来，加载检查通过。
+
+## `lsusers`：用档案里没有的 `/clone/misc/player`（2026-10-21，KB 06 §7.299）
+
+管理员扫描里 `lsusers` 报 `Bad argument 1 to EFUN call_other() Got: int(0)`（`cmds/adm/lsusers.lpc`）：指令 `new("/clone/misc/player")` 一个对象，用它的 `new_object(name)` 逐个还原玩家存档；本库没有 `/clone/misc/player.lpc`（同系的 hy3、jhfy、xyzx 等 27 个库带着它，`new_object()` 只定义在那里），`new()` 答 0，后面就是对 0 的调用。`new()` 之后加 `if (!ob) return notify_fail(...)`，指令回一句话而不是系统错误；文件本身补不上，那个旧的玩家对象已经不是本库的用户对象了。

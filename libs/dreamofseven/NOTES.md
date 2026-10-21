@@ -959,3 +959,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 存档里的 `.c` 文件名改成 `.lpc`（2026-10-21，KB 03 §4.2 第 9 项）
 
 存档里写着 `"/d/city/npc/wei.c"` 这样的文件名；extract 时源文件已经全部改成 `.lpc`，而驱动对带扩展名的路径只认字面，`new()` / `load_object()` / `move()` 都找不到它，调用方多半把失败当成「没有这个东西」悄悄跳过。本库 5 个存档共 167 处按 `scripts/lpc_fix_save_dotc.py` 改成 `.lpc`（只改 `.lpc` 存在而 `.c` 不存在的字符串；玩家存档、备份、留言板、巫师目录和文件索引缓存不动）。`data/questd.o`（`newquestd.lpc` 的 `assigner`，NPC 文件当键、任务文件当值）两边都改成 `.lpc`。改动：`/data/club_bank/dragon.o`（1 处）、`/data/club_bank/god.o`（1 处）、`/data/game/ma_game.o`（5 处）、`/data/questd.o`（158 处）（等共 5 个存档）。
+
+## 巫师命令不带参数时对 0 调用 efun（2026-10-21，KB 06 §7.336）
+
+巫师（管理员）把命令敲成不带参数时，驱动把 0 传给字符串参数；下面的命令第一句就把这个 0 交给 efun，运行时报 `Bad argument 1 to ...`，这条指令从来没有用过。用 `scripts/lpcc_bare.py` 不登录、在一次 `lpcc` 求值里以 0 调用 `main()` 逐个确认后，由 `scripts/lpc_fix_bare_arg.py` 在第一处使用参数的语句前加守卫：没有 `help()` 的是 `return notify_fail("…\n");`。改动（1 个文件，括号里是接住 0 的 efun）：`/cmds/adm/destusr.lpc`（`find_player`）。加载检查 HEAD 与工作树对照，没有退步。

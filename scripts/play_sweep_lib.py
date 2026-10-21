@@ -20,6 +20,7 @@ The unit is stopped at the end (a unit this script booted).  Nothing here knows 
 import argparse
 import glob
 import os
+import re
 import subprocess
 import sys
 import time
@@ -36,7 +37,7 @@ WIZ_DIRS = {"wiz", "wizard", "wizards", "adm", "admin", "arch", "archwiz", "crea
 QUICK = ["", "me", "x" * 300, "你好 世界"]
 SKIP = {"quit", "suicide", "password", "passwd", "chfn", "email", "shutdown", "reboot", "halt", "restart", "destruct", "dest", "exit", "logout", "bye", "kill_self", "retire",
         "delete", "rm", "quitgame", "disconnect",
-        "removeraces"}                 # Dead Souls' admin command that empties the race table: every NPC created afterwards fails in its heart beat (a sweep artifact, 1,084 console rows)
+        "removeraces", "resetall", "warmboot", "blockade", "boss"}                 # Dead Souls' admin commands: `removeraces` empties the race table (every NPC created afterwards fails in its heart beat, a sweep artifact: 1,084 console rows), `resetall` resets every room for minutes and the character cannot be taken over meanwhile, `warmboot` reloads the whole mud, the xkx family's `boss` is a boss-key (clears the screen and keeps a fake screen that eats the next verbs), its `blockade` locks the game against logins until `recover` (the sweep's own relogin then fails)
 
 
 def own_port(slug):
@@ -85,6 +86,7 @@ def main():
     ap.add_argument("--verbs-file", default="", help="one verb per line, instead of the file names under cmds/ (a lib whose commands are a table: Genesis' query_cmdlist(), a flat command list)")
     ap.add_argument("--dirs", default="")
     ap.add_argument("--wiz", action="store_true")
+    ap.add_argument("--no-sig", action="store_true", help="liveness by the prompt only (the screen of `look` must end in `>`): an administrator who moves between rooms never matches the room signature of the first `look`, and every `home` / `goto` / `arch` would end in a relogin")
     ap.add_argument("--shapes", default="quick", choices=["one", "two", "quick", "full"])
     ap.add_argument("--burst", type=float, default=0.0)
     ap.add_argument("--start", type=int, default=0)
@@ -153,9 +155,17 @@ def main():
             state["m"] = login()
             return state["m"]
 
-        sw = Sweep(state["m"], con, prompt_probe=a.probe, prompt_rx=r".", relogin=relogin, idle=a.idle, maxwait=max(4.0, 6 * a.idle), probe_idle=a.idle,
+        prx = r"."
+        if a.no_sig:
+            try:
+                t0 = state["m"].cmd(a.probe, idle=0.8, maxwait=6)
+                if re.search(r">\s*$", t0.rstrip()):
+                    prx = r">\s*$"
+            except Exception:
+                pass
+        sw = Sweep(state["m"], con, prompt_probe=a.probe, prompt_rx=prx, relogin=relogin, idle=a.idle, maxwait=max(4.0, 6 * a.idle), probe_idle=a.idle,
                    out=lambda s: print(s, flush=True))
-        sw.use_sig = not a.burst        # a queued lib answers the first `look` with `Queued command`: no room signature to compare
+        sw.use_sig = not (a.burst or a.no_sig)        # a queued lib answers the first `look` with `Queued command`: no room signature to compare
         print(f"{len(vs)} verbs, {len(shapes)} shapes, port {port}", flush=True)
         for i, v in enumerate(vs):
             if v in skip:

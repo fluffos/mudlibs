@@ -738,3 +738,7 @@ sunshadow 第十七批改的 75 个文件里 74 个对象在 shadowgate 也有�
 ## `map`（不带参数）无限自我强制，`skin <活物>` 调用没有函数体的 `do_live()`（2026-10-21，KB 06 §7.333）
 
 `cmds/mortal/_map.lpc`：`if (!stringp(str)) { TP->force_me("map"); return 1; }`：不带参数的 `map` 强迫玩家再敲一次不带参数的 `map`，一直到 `Too deep recursion`，玩家收到 "contact a dev"（实测）。下面 `switch` 的 `default:` 分支对不认识的参数调用 `help()`，所以不带参数也走 `help()`（`<map view>` 等用法说明）。`cmds/mortal/_skin.lpc`：`skin <活物>` 走 `return do_live(corpse);`，`do_live()` 只有一条原型，归档里没有函数体，调用会出错；活物和其他剥不了皮的东西一样回答 `You can't skin that.`，原型删掉。sunshadow 和 shadowgate 同一处，实测：`map` 打出用法，`map list` 正常，控制台没有错误。
+
+## 战斗探针的孪生问题：Stormbringer 的 `object owned` 和 Freloc 的匕首（2026-10-21，KB 06 §7.305 / §7.269）
+
+sunshadow 的战斗探针找到五个怪物里的 `(string)TO->query_current_attacker() != targ` 在那边编译不了（基类有类型）；shadowgate 的基类没有声明类型，副本能编译，没有动。两处同样的失误这里也有：`d/dagger/marsh/tower/obj/storm.lpc`（与 sunshadow 的字节相同）把 `object owned;` 用来存 `TPQN`：改 `string owned;`；`d/common/assassins/freloc.lpc` 在 `create()` 里两次克隆 `/realms/grazzt/assassins/dagger.lpc`，这个巫师目录档案里没有，`0->move()` 让 NPC 加载就中止（六个文件里唯一失败的一个）：克隆和两条 `wield` 放在 `file_size(...) > 0` 后面。改动：`/d/dagger/marsh/tower/obj/storm.lpc`、`/d/common/assassins/freloc.lpc`。

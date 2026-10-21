@@ -995,3 +995,7 @@ HEAD 失败、现在加载（没有 warning）的 15 个：`magic_d`、`bboard_d
 ## `Word of Chaos`：混乱阵营的判断重复了 `8`（2026-10-21）
 
 `cmds/spells/w/_word_of_chaos.lpc` 的 `preSpell()` 写 `if(align == 7 || align == 8 || align == 8)` 来拒绝混乱阵营的目标（"Word of Chaos only affects non-chaotic targets!"）：阵营按 3×3 编号（1-3 守序、4-6 中立、7-9 混乱），混乱是 7、8、9，同系的 `_dictum`（守序之言）写的是 `1 || 2 || 3`。最后一个 `8` 是 `9` 的笔误，混乱邪恶（9）的目标没有被拒绝。改成 `align == 9`。shadowgate 的这个法术是另一份实现，没有这一段。
+
+## 战斗探针：五个怪物、Stormbringer 和卓尔面具编译不了，Freloc 死在巫师目录的匕首上（2026-10-21，KB 04 §6.22，KB 06 §7.305 / §7.269）
+
+战斗探针登录时的控制台报 `d/dagger/marsh/tower/mon/grimmy.lpc:311: != always true because of incompatible types ( string vs object )`：`if((string)TO->query_current_attacker() != targ)`。本库的基类把 `query_current_attacker()` 声明为 `object`，所以这个 `(string)` 转换在五个怪物里是编译错误（`d/common/assassins/dryzil.lpc`、`freloc.lpc`，`d/dagger/drow/mon/shadow.lpc`，`d/dagger/marsh/tower/mon/grimmy.lpc`，`d/darkwood/mon/malgoroth.lpc`），作者要的是 `(object)`。`d/dagger/marsh/tower/obj/storm.lpc` 把 `object owned;` 用来存 `TPQN`（一个名字）：改 `string owned;`。卓尔 `shadow` 和 Grimmy 带的 `d/dagger/drow/obj/mask.lpc` 的 `scry_func()` 里有 `this_player(realName(target) != 0)`，调用了文件里没有定义的函数（`Undefined function realName`）：删掉多出来的这一半条件，前面的 `(string)this_player()->realName(target) != ""` 才是条件。`freloc` 在 `create()` 里两次克隆 `/realms/grazzt/assassins/dagger.lpc`，这个巫师目录档案里没有，`new()` 答 0，`0->move()` 让 NPC 加载就中止：克隆和两条 `wield` 放在 `file_size(...) > 0` 后面。这 7 个对象 HEAD 加载 0 个，工作树 7 个。改动：上面列出的文件。

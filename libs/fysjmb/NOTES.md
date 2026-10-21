@@ -327,3 +327,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 存档里的 `.c` 文件名改成 `.lpc`（2026-10-21，KB 03 §4.2 第 9 项）
 
 存档里写着 `"/d/city/npc/wei.c"` 这样的文件名；extract 时源文件已经全部改成 `.lpc`，而驱动对带扩展名的路径只认字面，`new()` / `load_object()` / `move()` 都找不到它，调用方多半把失败当成「没有这个东西」悄悄跳过。本库 41 个存档共 41 处按 `scripts/lpc_fix_save_dotc.py` 改成 `.lpc`（只改 `.lpc` 存在而 `.c` 不存在的字符串；玩家存档、备份、留言板、巫师目录和文件索引缓存不动）。改动：`/p/residence/amine1027580822.o`（1 处）、`/p/residence/amine1027587616.o`（1 处）、`/p/residence/amine1027594915.o`（1 处）、`/p/residence/baby1032108114.o`（1 处）（等共 41 个存档）。
+
+## `questnpc`：悬赏榜守护进程 `/adm/daemons/questnpcd` 档案里没有（2026-10-21，KB 06 §7.299）
+
+玩家指令 `questnpc`（`cmds/std/questnpc.lpc`）调用 `QUESTNPC_D->dyn_evil_quest_list()` 和 `dyn_good_quest_list()`，`globals.h` 里有这个宏，指向的 `/adm/daemons/questnpcd` 哪个档案里都没有，敲这条指令是 `call_other() couldn't find object '/adm/daemons/questnpcd'`（管理员扫描发现；同系的 fengyun434 和 xsfyssjb 里同名的指令是另一条，用 `TASK_D`）。指令开头加 `file_size(QUESTNPC_D + ".lpc") <= 0` 的判断，回一句“目前没有悬赏中的 NPC。”；NPC `d/shanliu/npc/qinge.lpc` 的 `quest_reward()` 调用同一个守护进程，没有动。

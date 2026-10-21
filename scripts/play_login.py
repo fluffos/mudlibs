@@ -118,7 +118,7 @@ PRIORITY = [
     (r"(?is)User Menu.*Enter the game.*\[spcrwq\]\s*$", "p", "prio_lima_menu"),                                         # lima: "s Select character to play  p Enter the game ... [spcrwq]" (autologin after 10 s otherwise)
     (r"(?is)Select a character first\.\s*\n?\s*\[spcrwq\]\s*$", "s", "prio_lima_select"),                            # lima family: a new account has no selected character; `s` lists them
     (r"(?is)Selected character '[^']+' for playing\.\s*\[spcrwq\]\s*$", "p", "prio_lima_play"),                      # lima family: the character is selected, enter the game
-    (r"(?is)If you want to be a player, enter: player.*What is your choice\?\s*$", "player", "prio_ds_player"),                # Dead Souls 2.x: `player` or `creator` (the first creator is the administrator)
+    (r"(?is)If you want to be a player, enter: player.*What is your choice\?\s*$", "{ds_role}", "prio_ds_player"),                # Dead Souls 2.x: `player` or `creator` (the first creator is the administrator)
     (r"(?is)Create a character to select one\.\s*\[spcrwq\]\s*$", "c", "prio_lima_create"),                                # spacemud: the account has no character yet
     (r"(?is)Gender for your character.*Gender:\s*$", "1", "prio_lima_gender"),                                              # spacemud: 1. Male 2. Female 3. Non-binary
     (r"(?is)Please select a race from the following list:.*Race\?\s*$", "human", "prio_lima_race2"),                        # spacemud: `elf documentation human orc troll`
@@ -329,6 +329,8 @@ def run(args):
             if "{merentha_ans}" in reply:
                 mq = re.search(r"Question (\d+) of", low)
                 reply = "abcd"[((int(mq.group(1)) - 1) if mq else used.get("prio_merentha_answer", 1)) % 4]       # the same letter three times is refused: one letter per question
+            if "{ds_role}" in reply:
+                reply = os.environ.get("PLAY_DS_ROLE", "player")        # PLAY_DS_ROLE=creator: the first creator of a Dead Souls 2.x mud is its administrator (a sweep with --wiz needs one)
             if "{brass_skill}" in reply:
                 k = used.get("brass_k", 0)                      # its own counter: `used[rule]` is bumped twice per answer, which would skip every other name and pick one twice
                 used["brass_k"] = k + 1

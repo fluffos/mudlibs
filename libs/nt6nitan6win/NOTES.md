@@ -636,3 +636,7 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## `vote` 的 `jail`、`unjail`、`unchblk` 编译不过：计票被改坏了（2026-10-20，KB 04 §6.21）
 
 xkx100 的原文是 `vc = victim->add("vote/count", 1);`，nitan 系把它写成了 `addn("vote/count", 1, vc = victim);`：`vc` 是 `int` 票数，却被赋成了对象 `victim`（`Bad assignment ( int vs object )`），`addn()` 的返回值（新的票数）丢掉了，后面的 `df = vv - vv / 2 - vc` 因此没有意义。改回 `vc = addn("vote/count", 1, victim);`（循环里的 `-1` 也一样，共 5 处）；`addn()` 是本库 sefun，返回 `ob->add(prop, data)`。加载检查：三个文件 HEAD FAIL → tree PASS。nt7 是 gitlink 库，没有改。
+
+## `ability`：继承的 `/feature/ability` 档案里没有（2026-10-21，KB 04 §6.18）
+
+管理员扫描里 `ability`（玩家指令 `cmds/usr/ability.lpc`）报 `Inherited file '/feature/ability' does not exist!`：指令 `inherit F_ABILITY`（`#define F_ABILITY "/feature/ability"`），而档案只带 `feature/ability.txt`（家族能力的设计笔记），没有源码，这条指令从来加载不了（`bas_ability`、`fam_ability`、`valid_ability_improve()`、`do_ability_cost()`、`improve_ability()`、`get_ability_info()` 都该在那个文件里，本库别处没有人用）。nitan170911、nt7、hhsj、wdxtym 把同一套接口放在可继承的 `/adm/daemons/abilityd.lpc`（947 行，指令里 `F_ABILITY` 指向它），但那是后一版：能力编号改成 1-35、消耗加了潜能、门派能力由 5 项变 30 项，不是本库当年的表。没有补，留在 `scratchpad/librarian-next.txt` 里等用户决定。

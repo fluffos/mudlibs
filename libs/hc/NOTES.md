@@ -633,3 +633,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## `quit1`：`if (...)` 后面直接是 `else`，放空语句的那一行不见了（2026-10-21，KB 04 §6.27）
 
 `cmds/usr/quit1.lpc` 是 `quit.lpc` 的副本：`if (wizardp(me) && me->query("env/invisibility"))` 和 `else link_ob->save();` 之间原来有单独一行 `;`（`quit.lpc` 里还在），副本里没有：`syntax error, unexpected L_ELSE`，后面接着 `Illegal LHS`，命令不加载。补回那一行（HEAD 0、树 1）。没有改：`cmds/usr/whotest.lpc`（`who` 的实验版：`(ppl_cnt%4==3? "\n": "")` 后面直接粘着另一段 `for`，行被拼在了一起，`who.lpc` 才是正式命令）。
+
+## 巫师命令不带参数时对 0 调用 efun（2026-10-21，KB 06 §7.336）
+
+巫师（管理员）把命令敲成不带参数时，驱动把 0 传给字符串参数；下面的命令第一句就把这个 0 交给 efun，运行时报 `Bad argument 1 to ...`，这条指令从来没有用过。用 `scripts/lpcc_bare.py` 不登录、在一次 `lpcc` 求值里以 0 调用 `main()` 逐个确认后，由 `scripts/lpc_fix_bare_arg.py` 在第一处使用参数的语句前加守卫：没有 `help()` 的是 `return notify_fail("…\n");`。改动（1 个文件，括号里是接住 0 的 efun）：`/cmds/imm/pp.lpc`（`sscanf`）。加载检查 HEAD 与工作树对照，没有退步。

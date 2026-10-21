@@ -1149,3 +1149,7 @@ seeded admin account.
 ## `join`、`accept` 对档案里没有的擂台房间调用函数（2026-10-20，KB 06 §7.270 / §7.288）
 
 `cmds/verb/join.lpc` 和 `accept.lpc` 开头是 `object tai = load_object("/d/place/biwu/biwutai"); if (!tai->query_temp(...))`。比武大会的擂台房间 `/d/place/biwu/biwutai` 不在档案里（`d/place/biwu/` 下的报名处、大厅、等候室和各门派擂台房都在，唯独缺它），`load_object()` 答 0，于是直接敲 `join` 或 `accept` 就是 `Bad argument 1 to call_other()`（本库的错误处理把它写进 `/log/runtime/cmds`，并对玩家说“运行时发生错误”）。两个命令现在先测 `objectp(tai)`，房间不存在就按原来的话回答“现在不是报名/比武时间”。比武大会本身（`vote ... start`、巫师命令 `biwu`、`reward_d` 的 `record()`）依赖同一个房间，仍然不工作，那是档案缺的内容，没有碰。xajh2 的这两个文件与 xo_final 的逐字节相同，同样修改，只做了加载检查（2/2，回归 0）。
+
+## 巫师命令不带参数时对 0 调用 efun（2026-10-21，KB 06 §7.336）
+
+巫师（管理员）把命令敲成不带参数时，驱动把 0 传给字符串参数；下面的命令第一句就把这个 0 交给 efun，运行时报 `Bad argument 1 to ...`，这条指令从来没有用过。用 `scripts/lpcc_bare.py` 不登录、在一次 `lpcc` 求值里以 0 调用 `main()` 逐个确认后，由 `scripts/lpc_fix_bare_arg.py` 在第一处使用参数的语句前加守卫：文件自带 `int help(object me)` 的，守卫是 `if (!arg) return help(me);`（`help()` 定义在 `main()` 之后的 1 个文件补了原型 `int help(object me);`，否则编译报 `Undefined function help`）；没有 `help()` 的是 `return notify_fail("…\n");`。改动（2 个文件，括号里是接住 0 的 efun）：`/cmds/admin/empty.lpc`（`find_player`）、`/cmds/imm/hbless.lpc`（`find_player`）。加载检查 HEAD 与工作树对照，没有退步。

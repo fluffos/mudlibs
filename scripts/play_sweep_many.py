@@ -55,7 +55,7 @@ def one(slug, shapes, timeout, out, tag, port=0, probe="sweep", wiz=False):
             if not acct:
                 open(log, "w", encoding="utf-8").write("no seeded administrator with a password in the README\n")
                 return "noadmin", "", 0.0
-            cmd += ["--wiz", "--account", f"{acct[0]}:{acct[1]}"]
+            cmd += ["--wiz", "--no-sig", "--account", f"{acct[0]}:{acct[1]}"]          # --no-sig: a wizard who moves between rooms never matches the room signature
     if port:
         cmd += ["--port", str(port)]
     env = dict(os.environ, PLAY_TAG=tag) if tag else os.environ
@@ -103,6 +103,7 @@ def main():
     ap.add_argument("--out", default=f"{SCR}/sweep_all")
     ap.add_argument("--tag", default="sa")
     ap.add_argument("--wiz", action="store_true")
+    ap.add_argument("--port-base", type=int, default=47000, help="the first port of this lane (lane N: 47000 + 100 N): two lanes started with the same base collide when they reach the same index")
     a = ap.parse_args()
     slugs = []
     for s in a.slugs:
@@ -114,7 +115,7 @@ def main():
     for i, slug in enumerate(slugs):
         status, text, secs = one(slug, a.shapes, a.timeout, a.out, a.tag, 0, a.probe, a.wiz)
         if status == "noboot":
-            status, text, secs2 = one(slug, a.shapes, a.timeout, a.out, a.tag, 47000 + i, a.probe, a.wiz)
+            status, text, secs2 = one(slug, a.shapes, a.timeout, a.out, a.tag, a.port_base + i, a.probe, a.wiz)
             secs += secs2
         if a.probe == "combat":
             cands = re.search(r"^CANDIDATES (\[.*\])", text, re.M)
