@@ -541,3 +541,7 @@ Left alone: `update.patch`/`update.blank` still name `.c` files in a few `cp`/`r
 pre-rename tree); the config has three obsolete lines the driver reports (`address server ip`, `address server port`,
 `binary directory`).
 - 2026-10-14: FluffOS 970d9f09 `Float value truncated to int`, 20 sites fixed upstream (fluffos/dead-souls PR #19, squash-merged; pin `f1c492e`). `lib/teller.lpc` `int GetExchangeFee()` returned the `float ExchangeFee`, so a fractional exchange fee lost its fraction (below 1% it read as 0 and was not charged); it returns a float now. The rest spell their truncation `to_int()` (same value). Overlay files untouched.
+
+## 深度游玩测试（2026-10-21）：`telnet`、`setreboot` 的无参数调用（上游待改，KB 06 §7.336）
+
+裸动词扫描发现 `telnet` 不带参数时 `sscanf(args, "%s %s", ...)` 因 `args` 为 0 抛 `Bad argument 1 to sscanf() Expected: string Got: 0`，屏幕上是 `A runtime error occurred`；它本想打印用法的 `this_object()->help()` 是没有任何对象定义的函数（命令用 `GetHelp()` 作答），所以即使不出错也什么都不打印。管理员命令 `setreboot` 调用同一个不存在的 `help()`，并且缺 `return`（继续执行 `SetRebootInterval(0)`，该函数对 `x <= 1` 保持旧值，所以无害）。本仓库里 dsIII、ds386、dshakkard、riftsds、brassring 的同一文件已改（`if (!args || sscanf(...) != 2)`、`write(this_object()->GetHelp() + "\n")`、`setreboot` 补上 `return 1;`）。`fluffos/dead-souls` 是 gitlink 库，改动需要上游 PR（`lib/secure/cmds/players/telnet.lpc`、`lib/secure/cmds/admins/setreboot.lpc`），本会话的 GitHub 范围只有 fluffos/mudlibs，未提交。上游的 `help` 守护进程不受影响：`verbs/spells`、`verbs/undead` 在子模块里作为空目录存在，`strip_colours()` 也已经带着 `\b` 的做法。

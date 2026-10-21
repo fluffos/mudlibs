@@ -873,3 +873,7 @@ are not in the archive).
 ## 登录密码超过 255 字节：`crypt()` 抛错（2026-10-20，KB 06 §7.294）
 
 驱动的 `crypt()` 对超过 255 字节的密钥直接报错（`Error in crypt(), check your salt`），老驱动则按任意长度散列。在登录提示符下输入 256 字节以上的密码，密码检查那一行就抛错，连线停在一个裸的 `> ` 提示符上，登录走不完（`password` 指令的旧密码检查同样）；用 300 个 `x` 当参数的扫描发现的。`/secure/sefun/sefun.lpc` 里补了一个同名的 simul_efun `crypt(key, salt)`：只有超长的密钥才被截短（先截到 255 个字符，再逐字符截到 `sizeof(to_buffer(key)) <= 255`，限制按字节算，一个汉字占三个字节），再交给 `efun::crypt()`；普通密码原样散列，已存的密码散列不受影响（`scripts/lpc_add_sefun.py crypt`）。
+
+## `help <话题>` 在直接 clone 的树上、`help` 菜单的列宽（2026-10-21，KB 06 §7.212、§7.337）
+
+`help <话题>` 会加载 `/daemon/help`，它的 `LoadIndices()` 把一串 `get_dir()` 的结果用 `+` 相加：`secure/cmds/common`、`verbs/spells`、`verbs/undead` 是存档里自带的空目录，git 不保存空目录，直接 `git clone` 出来的树里没有（站点靠 `scripts/wasm_keep_dirs.txt` 重建）。没有这些目录时第一次 `help <话题>` 就是 `A runtime error occurred`（`Bad type argument to +. Had array and int`），之后每个话题都"找不到"。现在每个目录都经 `DirList()` 读取（`get_dir(pattern) || ({})`），去掉这四个目录后 `help look` 正常。`help` 的编号菜单也被截坏（`help races` 每格只剩 `[1RESET%`）：`/daemon/terminal` 的 `no_colours()` 把 `RESET` 映射为空串，FluffOS 的 `terminal_colour()` 会把空的 `RESET` 换成 ANSI 复位序列（15 字节）并写回映射，`strip_colours()` 因此带着转义序列，`arrange_string()` 把每格截短。`no_colours()` 现在用退格符代替空 `RESET` 再删掉（与 Dead Souls 3.x 的 `strip_colours()` 相同做法），`help races` 与 `skills` 的列都对齐了。修改：`/daemon/help.lpc`、`/daemon/terminal.lpc`。

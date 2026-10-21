@@ -130,8 +130,10 @@ PRIORITY = [
     (r"(?is)\[str\]:\s*\d+\s*/\s*\d+.*Type 'help' for more info\s*>\s*$", "{lima_attr}", "prio_lima_attr"),                    # swmud: point-buy `a <stat> <n>` until nothing is left, then `done`
     (r"(?i)Type 'left' or 'right' to continue", "right", "prio_lima_hand"),                                            # swmud: dominant hand
     (r"(?i)Type 'imperial', 'rebel' or 'neutral' to continue", "neutral", "prio_lima_team"),                           # swmud: team
+    (r"(?is)Pick a skill or type the word help for help on skills\s*$", "{brass_skill}", "prio_brass_skill"),             # brassring: 6 primary, 4 secondary and 4 minor skill slots, one skill name per line, a picked one leaves the list
 ]
-PRIO_LIMIT = {"prio_lima_attr": 16, "prio_lima_menu": 6, "prio_lima_play": 6, "prio_merentha_answer": 12}        # a priority rule answers at most this often (3 by default): swmud's point-buy takes one line per attribute
+BRASS_SKILLS = ["bargaining", "blade attack", "fishing", "concealment", "conjuring", "detection", "faith", "healing", "knife attack", "knife defense", "magic attack", "magic defense", "melee attack", "melee defense"]
+PRIO_LIMIT = {"prio_lima_attr": 16, "prio_lima_menu": 6, "prio_lima_play": 6, "prio_merentha_answer": 12, "prio_brass_skill": 30}        # a priority rule answers at most this often (3 by default; a use is counted twice, so the number is twice the answers): swmud's point-buy takes one line per attribute, brassring's skill picker 14
 RACE_PICK = re.compile(r"(?is)valid races?:\s*([A-Za-z][\w-]*)")
 NEW_CHAR = re.compile(r"(?im)^\s*N\s*-\s*New character")
 MENU_DONE = re.compile(r"(?i)(?:^|\s)\[?(\d+)\]?\s*[-.):]\s*(?:done|finish|finished|accept|continue|save|完成|结束|确定)\b")
@@ -327,6 +329,10 @@ def run(args):
             if "{merentha_ans}" in reply:
                 mq = re.search(r"Question (\d+) of", low)
                 reply = "abcd"[((int(mq.group(1)) - 1) if mq else used.get("prio_merentha_answer", 1)) % 4]       # the same letter three times is refused: one letter per question
+            if "{brass_skill}" in reply:
+                k = used.get("brass_k", 0)                      # its own counter: `used[rule]` is bumped twice per answer, which would skip every other name and pick one twice
+                used["brass_k"] = k + 1
+                reply = BRASS_SKILLS[k % len(BRASS_SKILLS)]      # the 14 names in turn: none is picked twice
             if "{lima_race}" in reply:
                 seg = low.split("Type 'help stats'")[0]
                 mr = re.search(r"(?m)^\s*([a-z][a-z']+)\s{2,}[a-z]", seg)

@@ -543,3 +543,7 @@ the news pager. Fixed:
 ## 登录密码超过 255 字节：`crypt()` 抛错（2026-10-20，KB 06 §7.294）
 
 驱动的 `crypt()` 对超过 255 字节的密钥直接报错（`Error in crypt(), check your salt`），老驱动则按任意长度散列。在登录提示符下输入 256 字节以上的密码，密码检查那一行就抛错，连线停在一个裸的 `> ` 提示符上，登录走不完（`password` 指令的旧密码检查同样）；用 300 个 `x` 当参数的扫描发现的。`/secure/sefun/sefun.lpc` 里补了一个同名的 simul_efun `crypt(key, salt)`：只有超长的密钥才被截短（先截到 255 个字符，再逐字符截到 `sizeof(to_buffer(key)) <= 255`，限制按字节算，一个汉字占三个字节），再交给 `efun::crypt()`；普通密码原样散列，已存的密码散列不受影响（`scripts/lpc_add_sefun.py crypt`）。
+
+## `no_colours()`：FluffOS 的 `terminal_colour()` 会给空的 `RESET` 换上 ANSI 复位序列（2026-10-21，KB 06 §7.337）
+
+`/daemon/terminal` 的 `no_colours()` 把 `RESET` 为空串的表交给 `terminal_colour()`，FluffOS 把空的 `RESET` 换成 `ESC[49;49m ESC[0;10m` 并写回映射，所以"去掉颜色"的文本里仍有转义序列（`no_colours("%^CYAN%^[1]%^RESET%^ abc")` 得到 `[1]\e[49;49m\e[0;10m abc`，用 `scripts/lpcc_eval.py foundation2 --at /open/zzeval.lpc` 验证），`strip_colours()` 少算宽度，`arrange_string()` 与 `format_page()` 会把含颜色码的格子截短。Foundation II 自带的菜单屏幕里格子大多不含颜色码，没有观察到可见症状；现在 `RESET` 先映射为退格符再删掉。修改：`/daemon/terminal.lpc`。

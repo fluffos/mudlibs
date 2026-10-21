@@ -25,6 +25,12 @@ import lpc_warnings as lw
 print("synced", lw.sync_changes(sys.argv[1], f"{sys.argv[2]}/libs/{sys.argv[1]}"), "working-tree file(s)")
 PY
 fi
+# PLAY_RMDIRS="secure/cmds/common verbs/spells": remove these EMPTY directories (paths inside the mudlib) from the tree: the state of a plain `git clone`, which holds no empty
+# directory (the tree above recreates the ones scripts/wasm_keep_dirs.txt lists, as the site does; KB 06 7.212)
+if [ -n "${PLAY_RMDIRS:-}" ]; then
+  ML=$(sed -n 's/^mudlib directory *: *//p' "$DEST/libs/$SLUG/config.fluffos" | head -1)
+  for d in $PLAY_RMDIRS; do rmdir "$ML/${d#/}" 2>/dev/null || echo "PLAY_RMDIRS: cannot rmdir $d" >&2; done
+fi
 OUT=$SCR/play-$SLUG$TAG.out
 : > "$OUT"
 systemd-run --user --quiet --unit="play-$SLUG$TAG" -p MemoryMax=3G -p MemorySwapMax=0 \

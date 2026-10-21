@@ -671,3 +671,7 @@ for a save`（`log/runtime`，14:50）。随后该字母目录出现，同一驱
 ## 登录密码超过 255 字节：`crypt()` 抛错（2026-10-20，KB 06 §7.294）
 
 驱动的 `crypt()` 对超过 255 字节的密钥直接报错（`Error in crypt(), check your salt`），老驱动则按任意长度散列。在登录提示符下输入 256 字节以上的密码，密码检查那一行就抛错，连线停在一个裸的 `> ` 提示符上，登录走不完（`password` 指令的旧密码检查同样）；用 300 个 `x` 当参数的扫描发现的。`/secure/sefun/sefun.lpc` 里补了一个同名的 simul_efun `crypt(key, salt)`：只有超长的密钥才被截短（先截到 255 个字符，再逐字符截到 `sizeof(to_buffer(key)) <= 255`，限制按字节算，一个汉字占三个字节），再交给 `efun::crypt()`；普通密码原样散列，已存的密码散列不受影响（`scripts/lpc_add_sefun.py crypt`）。
+
+## `help` 菜单的列宽：FluffOS 的 `terminal_colour()` 会给空的 `RESET` 换上 ANSI 复位序列（2026-10-21，KB 06 §7.337）
+
+`help commands`、`help races` 的编号菜单每格只剩一个字母（`[1] a[2] a[3] b[4] b`）：`/daemon/terminal` 的 `no_colours()` 把整张表（`RESET` 也是空串）交给 `terminal_colour()`，FluffOS 会把空的 `RESET` 换成 `ESC[49;49m ESC[0;10m`（15 字节）并写回映射，`strip_colours()` 带着转义序列返回，`arrange_string()` 少算了这部分宽度，把每格截短。`no_colours()` 现在把 `RESET` 映射为退格符再删掉（Dead Souls 3.x `strip_colours()` 的做法）；`help races` 按列列出 `[1] artrell [2] dwarf ...`。修改：`/daemon/terminal.lpc`。
