@@ -363,3 +363,11 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 ## NPC 的 `chat()` 在 `chat_msg` 为空数组时下标越界（2026-10-21，KB 06 §7.334）
 
 NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < chance) { rnd = random(sizeof(msg)); if (stringp(msg[rnd])) ...`，不检查列表是否为空。本库现有的 NPC 文件里没有字面写成空 `chat_msg` 的（扫描只认 `set("chat_msg", ({ }))`）；守卫挡的是运行时才为空的列表和以后新增的 NPC。在 `random(100) < chance` 前面加 `sizeof(msg) &&`（`scripts/lpc_fix_chat_empty.py`；`if (random(100) > chance) return 0;` 的写法是 `!sizeof(msg) ||`）。改动：`/std/char/jobnpc.lpc`、`/std/char/npc.lpc`（共 2 个文件）。
+
+## 监狱 `d/wiz/jail`：`quit` 调用不存在的 `/cmds/eld/quit`（2026-10-21，KB 06 §7.344）
+
+`do_quit()` 调 `"/cmds/eld/quit"->main(this_player(), "")`，本库没有 `eld` 目录。被关进监狱的玩家（`tojail`、红包、彩蛋都会把人送进来）敲 `quit` 只得到一条运行时错误，退不出游戏。改成标准的 `/cmds/std/quit`。
+
+## 观礼台 `d/city/under.lpc`：`wait_and_start()` 里的 `fan` 没赋值，比武开不了（2026-10-21，KB 06 §7.346）
+
+接受挑战（`defend`）两秒后 `wait_and_start()` 调用 `fan->command("chat ...比武开始")`，`object fan;` 声明了却没有 `fan = load_object(__DIR__ "npc/fan");`（dtxywzxzb 的同一份文件有），抛错之后两条 `kill` 和 `call_out("finish_match", 300)` 都不执行，比赛不开始。补上这一句（`npc/fan.lpc`、`ground.lpc` 本库都有）。

@@ -1281,3 +1281,11 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## `update` 不带参数：`valid_read(0)` 先于 `cwf` 缺省（2026-10-21，KB 06 §7.342）
 
 管理员扫描里 `update` 不带参数报 `Bad argument 1 to sscanf() Expected: string Got: 0.`（`/adm/daemons/securityd.lpc` 的 `valid_read()`，第一句 `sscanf(file, "/c/%*s")`）：`main(me, file)` 先 `SECURITY_D->valid_read(file, me, "read")`，之后才 `if (!file) file = me->query("cwf")`。把“缺省取 `cwf`、仍为空就拒绝”这两句移到权限检查前面（是移动，不是复制）。改动：`/cmds/wiz/update.lpc`。
+
+## `full`（`cmds/arch`）：`else` 写了两遍，`help()` 里塞进了整个旧文件（2026-10-21，KB 04 §6.28）
+
+`/cmds/arch/full.lpc` 编译不了（`unexpected L_ELSE`，修掉之后是 `End of file in text block`）：`main()` 里 `if (wizard) {...} else { if (!arg) ob = me; } else { ... }` 多了一段 `else`，`help()` 的 `@HELP` 文本里贴着整份旧版文件，没有结束符。去掉第一段 `else`，帮助文字只留 `指令格式 : full` 和一句说明（兄弟库的 `full` 写着“这个指令让你加满精气神。”），补上 `HELP`、`);`、`return 1;`、`}`。
+
+## 观礼台 `d/city/under.lpc`：`wait_and_start()` 里的 `fan` 没赋值，比武开不了（2026-10-21，KB 06 §7.346）
+
+接受挑战（`defend`）两秒后 `wait_and_start()` 调用 `fan->command("chat ...比武开始")`，`object fan;` 声明了却没有 `fan = load_object(__DIR__ "npc/fan");`（dtxywzxzb 的同一份文件有），抛错之后两条 `kill` 和 `call_out("finish_match", 300)` 都不执行，比赛不开始。补上这一句（`npc/fan.lpc`、`ground.lpc` 本库都有）。

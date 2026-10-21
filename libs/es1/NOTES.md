@@ -809,3 +809,7 @@ Found by the live pair afterwards: `d/noden/hawk/monster/adolph.lpc` had `#inclu
 ## 存档里的 `.c` 文件名改成 `.lpc`（2026-10-21，KB 03 §4.2 第 9 项）
 
 存档里写着 `"/d/city/npc/wei.c"` 这样的文件名；extract 时源文件已经全部改成 `.lpc`，而驱动对带扩展名的路径只认字面，`new()` / `load_object()` / `move()` 都找不到它，调用方多半把失败当成「没有这个东西」悄悄跳过。本库 3 个存档共 3 处按 `scripts/lpc_fix_save_dotc.py` 改成 `.lpc`（只改 `.lpc` 存在而 `.c` 不存在的字符串；玩家存档、备份、留言板、巫师目录和文件索引缓存不动）。改动：`/data/std/user_ob/elf/c/cach.o`（1 处）、`/data/std/user_ob/gnome/a/aha.o`（1 处）、`/data/std/user_ob/orc/c/creative.o`（1 处）（共 3 个存档）。
+
+## 当铺 `hochshop`：赎回物品后“记住的物品”往前挪的循环用错了下标（2026-10-21，KB 06 §7.347）
+
+当铺在玩家身上记着最多十件当出去的东西（`REM_ITEM_PROP_` + `DIGITS[n]`），赎回一件之后后面的往前挪一位：`for (j = i; j < my_item_num - 1; j++) me->set(REM_ITEM_PROP_+DIGITS[i], me->query(REM_ITEM_PROP_+DIGITS[i+1]));`，循环变量 `j` 没用上，一直在写第 `i` 格，后面的格子根本没动，记录就乱了。改成 `DIGITS[j]` / `DIGITS[j+1]`。

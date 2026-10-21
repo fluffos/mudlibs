@@ -858,3 +858,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 不带参数的指令对 0 调用 efun：不在 wiz / adm 目录里的指令（2026-10-21，KB 06 §7.336）
 
 指令敲成不带参数时，驱动把 0 传给字符串参数；下面的指令第一句就把这个 0 交给 efun，运行时报 `Bad argument 1 to ...`。它们在 `cmds/std`、`cmds/usr`、`cmds/bos`、`cmds/app` 这类目录里，上一轮的扫描只看巫师目录。用 `scripts/lpcc_bare.py` 不登录、在一次 `lpcc` 求值里以 0 调用 `main()` 逐个确认后，由 `scripts/lpc_fix_bare_arg.py --all-dirs` 在第一处使用参数的语句前加守卫：没有 `help()` 的是 `return notify_fail("…\n");`。改动（1 个文件，括号里是接住 0 的 efun）：`/cmds/std/actionavailable.lpc`（`sscanf`）。加载检查 HEAD 与工作树对照，没有退步。
+
+## `who -l`、`who -w`：`/cmds/usr/score.lpc` 不存在（2026-10-21，KB 06 §7.344）
+
+加入了势力的玩家（`shili` 有值）在长列表里走 `"/cmds/usr/score.lpc"->get_shili(list[j])`。dtsl2 的 `score` 在 `cmds/std/`、里面也没有 `get_shili()`，所以只要有一个玩家在势力里，`who -l` 对所有人都报错。dtsl 的 `cmds/usr/score.lpc` 里这个函数只是转发 `ORG_D->get_shili(ob)`，改成直接调用 `ORG_D->get_shili(list[j])`（`include/org.h`，`adm/daemons/orgd.lpc`）。

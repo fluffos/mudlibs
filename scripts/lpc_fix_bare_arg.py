@@ -2,7 +2,7 @@
 """scripts/lpc_fix_bare_arg.py [--apply] [--libs a,b] [--all-dirs] [--files F...]
 
 Commands that raise when typed with no argument (KB 06 7.336).  A command called bare gets 0 in its string parameter, and `main(object me, string arg)` /
-`cmd(string args)` that opens with `sscanf(arg, ..)`, `lower_case(arg)`, `present(arg, ..)`, `read_file(arg)`, `new(arg)`, `explode(arg, ..)`, `arg[0]`... kills
+`cmd(string args)` that opens with `sscanf(arg, ..)`, `lower_case(arg)`, `present(arg, ..)`, `read_file(arg)`, `new(arg)`, `explode(arg, ..)`, `find_object(arg)`, `strcmp(arg, ..)`, `arg[0]`... kills
 the command with a runtime trace (`Bad argument 1 to sscanf() Expected: string Got: 0.`); the old driver let most of them pass.  The first statement of the entry
 function that mentions the parameter decides: when it is one of those calls, at the top level of the function body and with no test of the parameter before it, a
 guard goes in front of it, at its indentation:
@@ -30,8 +30,8 @@ PATTERN_BASED = {"discworld", "dw_fluffos_v1", "dw_fluffos_v2", "skylib", "final
 WIZ = re.compile(r"(^|/)(wiz|wizard|adm|admin|admins|arch|archwiz|creator|creators|immortal|immortals|god|gods|lord|lords|elder|domain|imm|builders|builder|cres)(/|$)", re.I)
 SKIPDIR = re.compile(r"(^|/)(old|bak|backup|attic|antiguo|oldcomandos|raw|u|wizards|w|realms|test|tmp)(/|$)")
 ENTRY = re.compile(rb"(?m)^[ \t]*(?:varargs[ \t]+)?(?:static[ \t]+|nomask[ \t]+)?(?:int|mixed|void)[ \t]+(main|cmd)[ \t]*\(([^)]*)\)[ \t]*(\r?\n)?[ \t]*\{")
-RISKY = r"\b(sscanf|lower_case|upper_case|capitalize|explode|strsrch|replace_string|read_file|file_size|file_exists|find_player|find_living|present|restore_object|load_object|new|clone_object|crypt|implode|get_dir|keys|values|write_file|rm|mkdir|rmdir|cp|rename|read_bytes|cat)\s*\(\s*{p}\b|\b{p}\s*\["
-GUARD = r"(!\s*{p}\b|\b{p}\s*(==|!=)|stringp\s*\(\s*{p}|\bif\s*\(\s*{p}\s*\)|\bif\s*\(\s*{p}\s*&&|\b{p}\s*\?|\b{p}\s*\|\||\b{p}\s*&&|\bsizeof\s*\(\s*{p}\s*\)\s*(<|==)|!\s*sizeof\s*\(\s*{p}|{p}\s*=\s*\"\"|{p}\s*=\s*{p}\s*\|\|)"
+RISKY = r"\b(sscanf|lower_case|upper_case|capitalize|explode|strsrch|replace_string|read_file|file_size|file_exists|find_player|find_living|present|restore_object|load_object|new|clone_object|crypt|implode|get_dir|keys|values|write_file|rm|mkdir|rmdir|cp|rename|read_bytes|cat|find_object|children|strcmp|trim|sha1|regexp|reg_assoc|terminal_colour|pluralize|function_exists|read_buffer)\s*\(\s*{p}\b|\b{p}\s*\["
+GUARD = r"(\bstrlen\s*\(\s*{p}\s*\)|\bsizeof\s*\(\s*{p}\s*\)|!\s*{p}\b|\b{p}\s*(==|!=)|stringp\s*\(\s*{p}|\bif\s*\(\s*{p}\s*\)|\bif\s*\(\s*{p}\s*&&|\b{p}\s*\?|\b{p}\s*\|\||\b{p}\s*&&|\bsizeof\s*\(\s*{p}\s*\)\s*(<|==)|!\s*sizeof\s*\(\s*{p}|{p}\s*=\s*\"\"|{p}\s*=\s*{p}\s*\|\|)"
 CJK = re.compile(rb"[\xe4-\xe9][\x80-\xbf][\x80-\xbf]")
 HELPDEF = re.compile(rb"(?m)^(?:int|mixed)[ \t]+help[ \t]*\(\s*object[^)]*\)")        # `return help(me);` needs a function that answers an int
 HELPCALL = re.compile(r"if \(!\w+\) return help\(\w+\);")
@@ -117,6 +117,8 @@ def plan_file(data):
                     g = b'if (!' + p.encode() + b') return notify_fail("' + msg + b'\\n");'
                 out.append((abs_pos, indent, s, g + nl))
                 break
+            if re.search(r"\b" + re.escape(p) + r"\s*=[^=]", s) and at_depth == 1:
+                break                                              # `arg = dir;`: the parameter holds something else from here on (ls: `dir = resolve_path(cwd, arg); arg = dir;`)
             # a mention that is neither a test nor a risky call (`log_file(.., arg)`, `write(arg)`, a mention inside a nested block) does not decide: look on
     return out, nl
 

@@ -1279,3 +1279,15 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## `quest/dynamic_room` 的 `.c` 行：任务守护进程加载不了（2026-10-21，KB 06 §7.341）
 
 任务守护进程（`adm/daemons/taskd.lpc`）的 `create()` 读 `/quest/dynamic_room`（琉璃庄的 19 个房间，`/d/llzhuang/lou0.c` ……），`clear_room()` 对每一行 `load_object()` 再 `room->reset()`：显式的 `.c` 按原样解析（KB 03 §4.2），档案里的房间是 `.lpc`，`load_object()` 答 0，`0->reset()` 让 `create()` 中止，守护进程没有加载（HEAD 加载失败，改后通过）。2026-10-05 的 `.c` 行扫描只认 `dynamic_location*` 和 `dynamic_quest*` 两种表，`dynamic_room` 和 `dynamic_npc_quest` 没有扫到；`scripts/lpc_dynamic_rows.py` 现在认四种，这 19 行改成 `.lpc`（本库档案里没有的行照旧不动）。
+
+## `findob`：不带参数（2026-10-21，KB 06 §7.336）
+
+`ob = find_object(arg);` 在第一句：不带参数时 `Bad argument 1 to find_object() Expected: string Got: 0.`。加了 `if (!arg) return notify_fail("指令格式 : findob <物件路径>\n");`。
+
+## `cof`：`info[count][2]` 越界（2026-10-21，KB 06 §7.347）
+
+`call_out_info()` 之后的循环 `for (i = 0; i < count; i++) if (max_eval < info[count][2])` 下标写成 `count`（比最后一个元素大一）：每次都越界。改成 `info[i][2]`，没有延迟函数时先答一句（`info[0][2]` 也会越界）。
+
+## 蜀山厨子 `chuzi`：给食物的两行 `new()` 被注释掉了（2026-10-21，KB 06 §7.346）
+
+`do_yao()` 里 `m = new("d/obj/food/dishes/dish10");` / `mm = ...` 两行是注释，后面的 `m->move(this_player()); mm->move(this_player());` 还在：向厨子要东西一律抛错。本库没有 `dish10`，按 chidi 的同一份文件改成 `clone/food/baozi` 和 `clone/food/jiudai`（本库都有）。

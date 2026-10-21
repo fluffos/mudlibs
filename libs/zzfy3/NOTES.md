@@ -467,3 +467,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## `doc`：整份指令被编辑器弄坏，编译不了（2026-10-21，KB 04 §6.25）
 
 管理员扫描里 `doc`（`cmds/adm/doc.lpc`，整理 NPC / 房间 / 物品档案的指令）报 `Illegal character 0xef`：源文件被中文编辑器改过又被排版器整理过，每个 `->` 成了全角的 `-＞`（40 处），`>`、`<` 成了 `＞`、`＜`，每个 `||` 成了 `//` 并吞掉了该行的其余部分：`if (!arg) {  // sscanf(arg, "%s %s", path, var) != 2){`（用法检查丢了 `sscanf`，`path` 和 `var` 从来没有被赋值），`if (prop[i] == "armor"  //prop[i]=="damage")`（`continue` 成了语法错误）。按原意恢复（`||`、被注释掉的 `sscanf`），`MONEY_D->price_str()`（同系没有这个守护进程）改成直接输出 `value`，删去 9 个没用的局部变量。编译没有警告，不带参数时打印用法。wqfy、zzfy、zzfy3 三个库的这个文件是同一份。
+
+## 观礼台 `d/city/under.lpc`：`wait_and_start()` 里的 `fan` 没赋值，比武开不了（2026-10-21，KB 06 §7.346）
+
+接受挑战（`defend`）两秒后 `wait_and_start()` 调用 `fan->command("chat ...比武开始")`，`object fan;` 声明了却没有 `fan = load_object(__DIR__ "npc/fan");`（dtxywzxzb 的同一份文件有），抛错之后两条 `kill` 和 `call_out("finish_match", 300)` 都不执行，比赛不开始。补上这一句（`npc/fan.lpc`、`ground.lpc` 本库都有）。

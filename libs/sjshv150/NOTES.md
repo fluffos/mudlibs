@@ -411,3 +411,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## `wheremoney`：没有 `/adm/daemons/money`（2026-10-21，KB 06 §7.308）
 
 `cmds/std/wheremoney.lpc` 对 `"/adm/daemons/money"->show_msg()`；这个 daemon（寻宝发钱的事件）在 sjsh、sjshwzb、sjshwzjqb、shenmo、xlqy 系里有，v1.50 没有带：`call_other() couldn't find object '/adm/daemons/money'`（第二遍扫描的 `wheremoney` 一行）。命令先检查 `file_size("/adm/daemons/money.lpc") < 1`，走原来 “现在没有发放任何钱财。” 的那一支。没有搬 daemon（它连着挖宝的物品）。
+
+## 观礼台 `d/city/under.lpc`：`wait_and_start()` 里的 `fan` 没赋值，比武开不了（2026-10-21，KB 06 §7.346）
+
+接受挑战（`defend`）两秒后 `wait_and_start()` 调用 `fan->command("chat ...比武开始")`，`object fan;` 声明了却没有 `fan = load_object(__DIR__ "npc/fan");`（dtxywzxzb 的同一份文件有），抛错之后两条 `kill` 和 `call_out("finish_match", 300)` 都不执行，比赛不开始。补上这一句（`npc/fan.lpc`、`ground.lpc` 本库都有）。

@@ -675,3 +675,7 @@ re-invoke `enable_player()` on this lib while the object is still
 ## `bwscore`：比武大会的广场房间档案里没有（2026-10-21，KB 06 §7.299）
 
 玩家指令 `bwscore`（`cmds/usr/bwscore.lpc`）不带参数时打印 `/d/bwdh/sjsz/square.lpc` 的描述，本库没有 `d/bwdh`（只有 xkm、xkx2000zxb、shenzhou 带着），`new()` 答 0，`0->long_desc()` 就是玩家看到的系统错误。改成 `(square ? square->long_desc() : "")`，用法提示照常。
+
+## 苗疆山谷 `shangu1`：第二条蛇写成了 `jinshe = new(..yinshe)`（2026-10-21，KB 06 §7.346）
+
+烧灵芝兰（`do_shao`）引出两条蛇：`jinshe = new(__DIR__ "npc/jinshe"); jinshe = new(__DIR__ "npc/yinshe");`，第二句把第一条覆盖了，`yinshe` 一直是 0，后面的 `yinshe->move(...)` 抛错。第二句改成 `yinshe = new(...)`（sje、jym 的同一份文件是对的）。

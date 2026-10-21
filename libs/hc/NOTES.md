@@ -649,3 +649,15 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## `cn`：`replace_string(0)` 在 `!arg` 检查之前（2026-10-21，KB 06 §7.336）
 
 `cn`（`cmds/imm/cn.lpc`）不带参数时报 `Bad argument 1 to EFUN replace_string() Got: int(0)`：`arg = replace_string(arg, " ", "")` 在两行之后的 `if (!arg || arg == "")` 检查之前。把用法检查提到 `replace_string` 前面。
+
+## `findob`：不带参数（2026-10-21，KB 06 §7.336）
+
+`ob = find_object(arg);` 在第一句：不带参数时 `Bad argument 1 to find_object() Expected: string Got: 0.`。加了 `if (!arg) return notify_fail("指令格式 : findob <物件路径>\n");`。
+
+## `cof`：`info[count][2]` 越界（2026-10-21，KB 06 §7.347）
+
+`call_out_info()` 之后的循环 `for (i = 0; i < count; i++) if (max_eval < info[count][2])` 下标写成 `count`（比最后一个元素大一）：每次都越界。改成 `info[i][2]`，没有延迟函数时先答一句（`info[0][2]` 也会越界）。
+
+## 任务分配 `quest`：按顺序找目标的备用循环用了 `living[j]`（2026-10-21，KB 06 §7.347）
+
+`/d/xingxiu/obj/quest.h`：先随机挑目标（`j = random(sizeof(living))`），挑不中再“按顺序找”：`for (i = 0; i < sizeof(living); i++) if (check(living[j], ...)) { target = living[j]; break; }`。下标写成了 `j`（上一个循环最后一次的随机下标），备用循环把同一个 NPC 检查 `sizeof(living)` 遍，世界小的时候任务就分不出去。xkx100 的原文就是这样，派生库照抄。改成 `living[i]`。

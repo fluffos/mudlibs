@@ -451,3 +451,7 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## 巫师命令不带参数时对 0 调用 efun（2026-10-21，KB 06 §7.336）
 
 巫师（管理员）把命令敲成不带参数时，驱动把 0 传给字符串参数；下面的命令第一句就把这个 0 交给 efun，运行时报 `Bad argument 1 to ...`，这条指令从来没有用过。用 `scripts/lpcc_bare.py` 不登录、在一次 `lpcc` 求值里以 0 调用 `main()` 逐个确认后，由 `scripts/lpc_fix_bare_arg.py` 在第一处使用参数的语句前加守卫：文件自带 `int help(object me)` 的，守卫是 `if (!arg) return help(me);`；没有 `help()` 的是 `return notify_fail("…\n");`。改动（3 个文件，括号里是接住 0 的 efun）：`/cmds/adm/kickout_room.lpc`（`find_object`）、`/cmds/arch/srl.lpc`（`get_dir`）、`/cmds/wiz/telnet.lpc`（`strsrch`）。加载检查 HEAD 与工作树对照，没有退步。
+
+## 九阴真经上篇：`/cmds/skill/du.lpc` 本库叫 `study`（2026-10-21，KB 06 §7.344）
+
+`/d/bwdh/sjsz/obj/obj/unique/jiuyin_force_book.lpc` 的 `do_read()`：`9yin == "granted"` 的玩家读书时 `"/cmds/skill/du.lpc"->main(me, arg)`。本库把这条指令改了名（`cmds/skill/study.lpc`，代码和别的库的 `du.lpc` 相同，用法行写着 `study|du`），`du.lpc` 不存在，读书就是一条 `couldn't find object`。改成 `"/cmds/skill/study.lpc"`。

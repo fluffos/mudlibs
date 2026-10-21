@@ -999,3 +999,7 @@ HEAD 失败、现在加载（没有 warning）的 15 个：`magic_d`、`bboard_d
 ## 战斗探针：五个怪物、Stormbringer 和卓尔面具编译不了，Freloc 死在巫师目录的匕首上（2026-10-21，KB 04 §6.22，KB 06 §7.305 / §7.269）
 
 战斗探针登录时的控制台报 `d/dagger/marsh/tower/mon/grimmy.lpc:311: != always true because of incompatible types ( string vs object )`：`if((string)TO->query_current_attacker() != targ)`。本库的基类把 `query_current_attacker()` 声明为 `object`，所以这个 `(string)` 转换在五个怪物里是编译错误（`d/common/assassins/dryzil.lpc`、`freloc.lpc`，`d/dagger/drow/mon/shadow.lpc`，`d/dagger/marsh/tower/mon/grimmy.lpc`，`d/darkwood/mon/malgoroth.lpc`），作者要的是 `(object)`。`d/dagger/marsh/tower/obj/storm.lpc` 把 `object owned;` 用来存 `TPQN`（一个名字）：改 `string owned;`。卓尔 `shadow` 和 Grimmy 带的 `d/dagger/drow/obj/mask.lpc` 的 `scry_func()` 里有 `this_player(realName(target) != 0)`，调用了文件里没有定义的函数（`Undefined function realName`）：删掉多出来的这一半条件，前面的 `(string)this_player()->realName(target) != ""` 才是条件。`freloc` 在 `create()` 里两次克隆 `/realms/grazzt/assassins/dagger.lpc`，这个巫师目录档案里没有，`new()` 答 0，`0->move()` 让 NPC 加载就中止：克隆和两条 `wield` 放在 `file_size(...) > 0` 后面。这 7 个对象 HEAD 加载 0 个，工作树 7 个。改动：上面列出的文件。
+
+## `study room <东西>`：`obj` 没有赋值（2026-10-21，KB 06 §7.346）
+
+`cmds/mortal/_study.lpc` 在检查完房间里确有这件东西之后读 `obj->query_obvious_short()`，`obj` 从没赋过值，所以 `study room <东西>` 一律抛 `Bad argument 1 to call_other()`。shadowgate 的原版只打印 `what`；这里把重写过的两段消息换回原版的两句（`tell_object(TP, "You carefully begin studying the " + what + " here.")` 和对房间的那句）。

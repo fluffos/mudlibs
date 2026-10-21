@@ -555,3 +555,11 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## `ad`：`efun::shout()` 通不过 `valid_override`（2026-10-21，KB 06 §7.311）
 
 管理员扫描里 `ad`（`cmds/adm/ad.lpc`）编译失败：`23:9: error: Invalid simulated efunction override`，指令里的 `efun::shout(...)` 不在 master 允许的目录里。本库的 sefun `shout(str)` 就是 `message("shout", str, users(), this_player())`，与 efun 的行为相同，改成直接调用 `shout(`。同系的 bxsj、bxsj1、shujian3、jinyongwenzi 的 master 放行，没有动。
+
+## 昆仑派 `banshuxian`、`hetaichong`、血刀门 `laozu` 的 `ask_me()`：`ob` 从来没赋值（2026-10-21，KB 06 §7.346）
+
+`/kungfu/class/kunlun/banshuxian.lpc`、`/kungfu/class/kunlun/hetaichong.lpc`：`object ob;` 之后直接 `ob->query("gender")` / `ob->query_skill(..)`，根上的 xkx100 在声明后有一句 `ob = this_player();`，这个派生库把它丢了，`ask <师傅> about <秘籍>` 一律抛 `call_other() ... Got: int(0)`。补上这句。
+
+## 苗疆山谷 `shangu1`：第二条蛇写成了 `jinshe = new(..yinshe)`（2026-10-21，KB 06 §7.346）
+
+烧灵芝兰（`do_shao`）引出两条蛇：`jinshe = new(__DIR__ "npc/jinshe"); jinshe = new(__DIR__ "npc/yinshe");`，第二句把第一条覆盖了，`yinshe` 一直是 0，后面的 `yinshe->move(...)` 抛错。第二句改成 `yinshe = new(...)`（sje、jym 的同一份文件是对的）。
