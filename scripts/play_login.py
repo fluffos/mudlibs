@@ -29,6 +29,7 @@ RULES = [
     (r"(?is)choose a race[^\n]*:\s*\n[^\n]*\bhuman\b[^\n]*$", "human"),                                         # nirvlp312: "Choose a race for your character, you may select: human elf dwarf custom <race>"
     (r"(?i)throw (the )?other copy|already (logged|playing|connected)|reconnect|重复|另一个连线|取代|赶出去", "y"),
     (r"(?i)(re-?type|again|confirm|verify|repeat|once more).{0,40}(password|passwd|pass)|(password|passwd).{0,40}(again|confirm|verify)|再输入一次|再输一次|再次核对|核对密码|再核对一次|确认密码|重新输入密码|(^|\n)\s*again(\s+to\s+verify)?\s*:\s*$", "{lastpw}"),
+    (r"(?i)^again to confirm\s*[:：]?\s*$", "{pw}"),                                                                         # lima, swmud, spacemud: "Password:" then "Again to confirm:"
     (r"(?i)(普通密码|normal password|not be the same|must be different|different from)[^\n]{0,80}[:：]\s*$", "{pw2}"),     # tybxjh: "管理密码和普通密码不能相同": the second password is another one
     (r"(?:不能|不可|不得|不要)(?:和|与|跟|同)[^\n]{0,15}(?:一样|相同|一致)[^\n]{0,30}[:：]\s*$", "{pw2}"),       # dtxywzxzb: "您的登陆密码不能和管理密码一样，请重设您的密码："
     (r"选择\s*[\[\(（]?\d+[\]\)）]?\s*则(?:接受|完成|确认|结束)", "{accept_num}"),       # sjsh family: "请选择你想重新设置哪一项天赋的取值[0-3]，选择[9]则接受当前的设置："
@@ -114,8 +115,15 @@ PRIORITY = [
     (r"(?s)([A-Za-z0-9])\s*键\s*接受此?天赋[^\n]*$", "{accept_key}", "prio_accept_key"),                              # sgzmudsgz: "以下天赋值满意吗 ... r键接受此天赋，h键帮助，m键返回上级选单，q键退出。" (no colon, so no rule sees a question)
     (r"(?s)例如(?:输入|輸入)?[:：]\s*\d+(?:\s+\d+){2,}[\s\S]*(?:属性|屬性)[^\n]*[:：]\s*$", "{example_nums}", "prio_attr_example"),         # shzs: the help text of the attribute prompt shows `15 10 10 6 17 2`; the prompt line alone only says `h`
     (r"(?is)\[c\]\s*create new character.*(?:command or name|\bname)[^\n]*:\s*$", "c", "prio_create"),                 # questmud: a menu whose last line is the generic `Command or Name:`
-    (r"(?s)User Menu.*Enter the game.*\[spcrwq\]\s*$", "p", "prio_lima_menu"),                                         # lima: "s Select character to play  p Enter the game ... [spcrwq]" (autologin after 10 s otherwise)
+    (r"(?is)User Menu.*Enter the game.*\[spcrwq\]\s*$", "p", "prio_lima_menu"),                                         # lima: "s Select character to play  p Enter the game ... [spcrwq]" (autologin after 10 s otherwise)
+    (r"(?is)Select a character first\.\s*\n?\s*\[spcrwq\]\s*$", "s", "prio_lima_select"),                            # lima family: a new account has no selected character; `s` lists them
+    (r"(?is)Selected character '[^']+' for playing\.\s*\[spcrwq\]\s*$", "p", "prio_lima_play"),                      # lima family: the character is selected, enter the game
+    (r"(?is)Type the name of a race to select it.*Race\?\s*$", "{lima_race}", "prio_lima_race"),                          # swmud, spacemud: the race list is a table of words, `Race?` alone is no help
+    (r"(?is)\[str\]:\s*\d+\s*/\s*\d+.*Type 'help' for more info\s*>\s*$", "{lima_attr}", "prio_lima_attr"),                    # swmud: point-buy `a <stat> <n>` until nothing is left, then `done`
+    (r"(?i)Type 'left' or 'right' to continue", "right", "prio_lima_hand"),                                            # swmud: dominant hand
+    (r"(?i)Type 'imperial', 'rebel' or 'neutral' to continue", "neutral", "prio_lima_team"),                           # swmud: team
 ]
+PRIO_LIMIT = {"prio_lima_attr": 16, "prio_lima_menu": 6, "prio_lima_play": 6}        # a priority rule answers at most this often (3 by default): swmud's point-buy takes one line per attribute
 RACE_PICK = re.compile(r"(?is)valid races?:\s*([A-Za-z][\w-]*)")
 NEW_CHAR = re.compile(r"(?im)^\s*N\s*-\s*New character")
 MENU_DONE = re.compile(r"(?i)(?:^|\s)\[?(\d+)\]?\s*[-.):]\s*(?:done|finish|finished|accept|continue|save|完成|结束|确定)\b")
@@ -282,7 +290,7 @@ def run(args):
             rule_id, reply = len(RULES), md.group(1)
         if reply is None:
             for prx, prep, pkey in PRIORITY:
-                if used.get(pkey, 0) < 3 and re.search(prx, low):
+                if used.get(pkey, 0) < PRIO_LIMIT.get(pkey, 3) and re.search(prx, low):
                     used[pkey] = used.get(pkey, 0) + 1
                     rule_id, reply = pkey, (args.name if prep == "new" and getattr(args, "existing", False) else prep)
                     break
@@ -306,6 +314,19 @@ def run(args):
             if "{accept_key}" in reply:
                 mk = re.search(r"([A-Za-z0-9])\s*键\s*接受", low)
                 reply = mk.group(1) if mk else "r"
+            if "{lima_race}" in reply:
+                seg = low.split("Type 'help stats'")[0]
+                mr = re.search(r"(?m)^\s*([a-z][a-z']+)\s{2,}[a-z]", seg)
+                reply = reply.replace("{lima_race}", mr.group(1) if mr else "human")
+            if "{lima_attr}" in reply:
+                mp = re.search(r"(?i)emaining Points:\s*(\d+)", low)           # the screen can start in the middle of the word
+                left = int(mp.group(1)) if mp else 0
+                reply = "done"
+                if left > 0:
+                    for stat, cur, mx in re.findall(r"\[([a-z]{3})\]:\s*(\d+)\s*/\s*(\d+)", low):
+                        if int(cur) < int(mx):
+                            reply = f"a {stat} {min(left, int(mx) - int(cur))}"
+                            break
             if "{example_nums}" in reply:
                 me = re.search(r"例如(?:输入|輸入)?[:：]\s*(\d+(?:\s+\d+){2,})", low)
                 reply = reply.replace("{example_nums}", me.group(1) if me else "20 20 20 20")

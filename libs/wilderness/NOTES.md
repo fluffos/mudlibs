@@ -1110,3 +1110,7 @@ The `.c` -> `.lpc` rename changed the string but not the slice width: `f[<2..] =
 ## Restored base-class macros (2026-10-18, KB 04 6.13)
 
 `inherit IDENT;` named a macro that no header of this lib defines (`syntax error, unexpected L_IDENTIFIER, expecting L_STRING or '('`), so the object never loaded; the base file is in the lib and other libs map the macro to it. Added to the global header `include/global.h`: `M_DRINK_SOURCE` -> `/std/modules/m_drink_source` (2 file(s)) (`scripts/lpc_restore_macros.py`). 
+
+## 深度功能测试（2026-10-21，play 扫描）：129 个命令 0 条发现
+
+用 wilderness 专用驱动（`PLAY_DRIVER=~/src/fluffos-wilderness/build-debug/src/driver scripts/play_sweep_lib.py wilderness --shapes one --tag wl`）：通用登录机器人进得去（`score` 回答 `0 out of the 40 points`），129 行没有控制台、屏幕、卡住的发现。

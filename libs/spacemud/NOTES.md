@@ -717,3 +717,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply s
   - The 18 changed objects load, with no regressions.
 
 - 2026-10-14: `std/behaviour/test.lpc` declared `string s` above its `inherit` (`Illegal to inherit after defining global variables`); the declaration now follows the inherit (`scripts/lpc_fix_inherit_order.py`). Checked with the Lima-configured lpcc: no regressions.
+
+## 深度功能测试（2026-10-21，play 扫描）：以第一个注册的管理员跑 160 个命令，控制台一条已记录的
+
+用 lima 专用驱动启动，注册流程（姓名、`y`、密码两遍、`male`、邮箱、真名、主页、来源问题）之后菜单里 `c` 创建角色（姓名、性别 `1`、种族 `human`），`s` 选中，`p` 进游戏；`scripts/play_sweep_lib.py spacemud --no-boot --account NAME:Test1234`：158 行，17 条发现，控制台一条：`mail` 载入 `/obj/secure/mailers/mailer.lpc` 时 `Undefined variable 'trim_spaces'` 和 “Illegal to use local variable in a functional”，就是上面记录的与 `libs/lima` 相同的邮件程序问题（整个仓库没有 `trim_spaces`），没有改。其余是 `needed-escape` 和一条 `stuck-reconnect`。

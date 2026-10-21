@@ -784,3 +784,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply s
   - The 31 changed objects load, with no regressions.
 
 - 2026-10-14: `std/behaviour/test.lpc` declared `string s` above its `inherit` (`Illegal to inherit after defining global variables`); the declaration now follows the inherit (`scripts/lpc_fix_inherit_order.py`). Checked with the Lima-configured lpcc: no regressions.
+
+## 深度功能测试（2026-10-21，play 扫描）：以第一个注册的管理员跑 264 个命令，控制台只剩两条已记录的
+
+用 lima 专用驱动（`PLAY_DRIVER=~/src/fluffos-lima/build-debug/src/driver scripts/play_boot.sh swmud 40227`；`scripts/pristine_tree.sh` 把没有补丁的子模块工作树也搭成测试树）启动，按 README 的注册流程手工走一遍创建（姓名、`y`、密码两遍、性别、邮箱、真名、种族、颜色 `n`、属性点买满 45 点、`done`、`right`、`neutral`；第一个注册的就是管理员），再 `scripts/play_sweep_lib.py swmud --no-boot --account NAME:Test1234`：261 行，16 条发现，控制台两条，都是上面“Lima 原版演示内容被 swmud 改写后失去对应 API”和 `daemons/imud/finger.lpc` 的 `class finger` 成员问题（`materials` 载入 `/domains/std/crafting/*` 时 `/std/armour` 编译失败，`mudlist` 载入 imud 的 finger 服务），两条本来就记在前面的“没有修”里。其余是 `needed-escape`（分页器、编辑器、对话）。

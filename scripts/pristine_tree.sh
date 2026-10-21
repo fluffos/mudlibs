@@ -35,10 +35,10 @@ LIB="libs/$SLUG"
 SUBMODULE=0
 if [ -n "$(git -C "$REPO_ROOT" ls-files -s -- "$LIB/work" | awk '$1==160000' | head -1)" ]; then
   # a `submodule-patch` lib (lima, swmud, spacemud): upstream's checked-out worktree + libs/<slug>/patches + libs/<slug>/overlay, as make_source_zips.sh stages it
-  if [ -d "$REPO_ROOT/$LIB/patches" ] && [ -d "$REPO_ROOT/$LIB/work/.git" -o -f "$REPO_ROOT/$LIB/work/.git" ]; then
+  if [ -d "$REPO_ROOT/$LIB/work/.git" ] || [ -f "$REPO_ROOT/$LIB/work/.git" ]; then
     SUBMODULE=1
   else
-    echo "error: $LIB/work is a submodule without catalog patches; apply its patches/overlay by hand" >&2
+    echo "error: $LIB/work is a submodule that is not checked out (git submodule update --init libs/$SLUG/work)" >&2
     exit 1
   fi
 fi
@@ -59,7 +59,9 @@ if [ "$SUBMODULE" = 1 ]; then
   mkdir -p "$DEST/$LIB/work"
   rsync -a --exclude='/.git' --exclude='/.git/' "$REPO_ROOT/$LIB/work/" "$DEST/$LIB/work/"
   git -C "$REPO_ROOT" archive "${REV:-HEAD}" "$LIB/config.fluffos" | tar -x -C "$DEST"
-  python3 "$SELF_DIR/apply_lib_patches.py" "$SLUG" --work "$DEST/$LIB/work" > /dev/null
+  if compgen -G "$REPO_ROOT/$LIB/patches/*.patch" > /dev/null; then
+    python3 "$SELF_DIR/apply_lib_patches.py" "$SLUG" --work "$DEST/$LIB/work" > /dev/null
+  fi
 else
   git -C "$REPO_ROOT" archive "${REV:-HEAD}" "$LIB/work" "$LIB/config.fluffos" | tar -x -C "$DEST"
 fi
