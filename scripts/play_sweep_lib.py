@@ -118,7 +118,11 @@ def main():
                 acc, _, accpw = a.account.partition(":")
                 m = play_login.login_session(port, name=acc, pw=accpw or "Test1234", steps=45, existing=True)
             else:
-                m = play_login.login_session(port, name="sweep" + chr(97 + n // 26 % 26) + chr(97 + n % 26), steps=45)
+                m = None
+                if n > 1:                      # a second visit as the first character first: a lib that rations new accounts (nitan: per IP) would refuse a fresh name
+                    m = play_login.login_session(port, name="sweep" + chr(97 + 1 // 26 % 26) + chr(97 + 1 % 26), steps=45, existing=True)
+                if m is None:
+                    m = play_login.login_session(port, name="sweep" + chr(97 + n // 26 % 26) + chr(97 + n % 26), steps=45)
             if m is None:
                 raise SystemExit("the robot did not get in")
             m.read(0.5, 2)
@@ -127,6 +131,12 @@ def main():
             return m
 
         state = {"m": login()}
+        for probe in ("score", "i"):                     # a pre-game character answers these with a refusal: the summary of a lane shows the first of them
+            try:
+                t = state["m"].cmd(probe, idle=0.8, maxwait=6)
+                print("DEPTH", probe, "|", " ".join(t.split())[:140], flush=True)
+            except Exception:
+                pass
 
         def relogin():
             try:

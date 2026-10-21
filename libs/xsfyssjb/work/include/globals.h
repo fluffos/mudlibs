@@ -42,7 +42,7 @@
 #define QUESTS_D                                "/adm/daemons/questd"
 //added by suu for quest npc
 #define QUESTNPC_D                              "/adm/daemons/questnpcd" 
-#define TASKNPC_D				"/adm/daemon/tasknpcd"
+#define TASKNPC_D				"/adm/daemons/tasknpcd"
 // added by     Tie     for     questing 
 #define QUEST_D(x)                              ("/quest/qlist" + x)
 #define CLASS_D(x)                              ("/daemon/class/" +     x)

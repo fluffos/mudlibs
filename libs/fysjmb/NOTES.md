@@ -311,3 +311,11 @@ drafts) minus the files its pass fixed, plus `cmds/std/practice_.lpc` and a save
 ## 任务守护进程启动时崩溃（2026-10-20，KB 06 §7.303）
 
 `quest/dynamic_npc_quest` 有两行写成 `/questnpc/gong.c`、`/questnpc/yannantian.c`，而文件是 `.lpc`（2026-10-05 的 `.c` 行扫荡只处理了 `dynamic_location` / `dynamic_quest`）：`tasknpcd::create()` 启动时报 `Bad argument 1 to EFUN call_other()`。两行改成 `.lpc`。
+
+## `TASKNPC_D` 的路径少了一个 s：`/adm/daemon/tasknpcd`（2026-10-20，KB 06 §7.325）
+
+`include/globals.h` 里 `#define TASKNPC_D "/adm/daemon/tasknpcd"`，守护进程文件是 `/adm/daemons/tasknpcd.lpc`：裸指令 `enroll` 在扫描里打印了 24 次 `call_other() couldn't find object '/adm/daemon/tasknpcd'`（任务 NPC 每次心跳问这个守护进程都是同样的错误）。同一棵树里 `d/for_suu/globals.h` 的写法是对的。改成 `/adm/daemons/tasknpcd`（fengyun434、fysjmb、xsfyssjb 三个飞扬系库同一处）。实测：`enroll` 显示用法，控制台无报错。`QUESTNPC_D`（`/adm/daemons/questnpcd`，`questnpc` 指令用）指向一个所有库都没带的守护进程，属于内容缺失，没动。
+
+## 任务 NPC 逃跑时 `*Undefined function called: do_flee`（2026-10-20，KB 06 §7.259）
+
+`std/char/questnpc.lpc` 和 `questnpc2.lpc` 声明了 `int do_flee();` 并在八处调用，却从来没有定义它（`cmds/std/go.lpc` 里的同名函数带一个 `object me` 参数，是另一个函数）：任务 NPC 在战斗中血量低于逃跑线时，每次心跳都是一条 `Undefined function called: do_flee`（扫描里 42 条，分散在一串无关的指令名下）。同一个文件在 fy2005 里有定义：随机走 3–7 步，`return !is_fighting();`，原样补到两个文件末尾。两个基类和 `d/shanliu/npc/qinge`、`yang` 的加载检查 HEAD 与工作树都通过；`do_flee` 只在战斗逃跑时才会被调用，没有做实战验证。

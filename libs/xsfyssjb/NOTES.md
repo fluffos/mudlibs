@@ -266,3 +266,7 @@ without headers, drafts).
 ## 任务守护进程启动时崩溃（2026-10-20，KB 06 §7.303）
 
 `quest/dynamic_npc_quest` 列了 12 个 `/questnpc/` 下的 NPC，压缩包没有这个目录，`tasknpcd::create()` 里 `load_object()` 回 0，`item->query("name")` 报 `Bad argument 1 to EFUN call_other()`，`auto_reset_quest()` 永远没有启动。现在跳过加载不了的行，一行也没有时直接返回（`adm/daemons/tasknpcd.lpc`）。
+
+## `TASKNPC_D` 的路径少了一个 s：`/adm/daemon/tasknpcd`（2026-10-20，KB 06 §7.325）
+
+`include/globals.h` 里 `#define TASKNPC_D "/adm/daemon/tasknpcd"`，守护进程文件是 `/adm/daemons/tasknpcd.lpc`：裸指令 `enroll` 在扫描里打印了 24 次 `call_other() couldn't find object '/adm/daemon/tasknpcd'`（任务 NPC 每次心跳问这个守护进程都是同样的错误）。同一棵树里 `d/for_suu/globals.h` 的写法是对的。改成 `/adm/daemons/tasknpcd`（fengyun434、fysjmb、xsfyssjb 三个飞扬系库同一处）。实测：`enroll` 显示用法，控制台无报错。`QUESTNPC_D`（`/adm/daemons/questnpcd`，`questnpc` 指令用）指向一个所有库都没带的守护进程，属于内容缺失，没动。

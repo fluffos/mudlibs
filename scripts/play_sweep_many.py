@@ -4,7 +4,7 @@
 One lane of a corpus-wide play sweep (KB 08 10.16): runs scripts/play_sweep_lib.py over the libs one after another, a TSV and a log per lib in DIR
 (default $LPC_SCRATCH/sweep_all) and one summary line per lib on stdout:
 
-    SLUG <TAB> verbs <TAB> findings <TAB> console <TAB> screen <TAB> closed <TAB> stuck <TAB> seconds <TAB> status
+    SLUG <TAB> verbs <TAB> findings <TAB> console <TAB> screen <TAB> closed <TAB> stuck <TAB> seconds <TAB> status <TAB> first `score` answer
 
 `status` is `done`, `timeout`, `noboot` (the unit did not open its port: a boot that failed on its own port is retried once on port 47000+N, an
 ephemeral source port of the host can hold a lib's own) or `norobot` (the login robot did not get in).  A `console` row is the signal: the driver printed
@@ -81,7 +81,9 @@ def main():
             secs += secs2
         verbs, n, by = summary(text)
         kinds = {k: by.get(k, 0) for k in ("console", "screen", "connection-closed", "stuck-reconnect")}
-        print("\t".join(map(str, [slug, verbs, n, kinds["console"], kinds["screen"], kinds["connection-closed"], kinds["stuck-reconnect"], int(secs), status])), flush=True)
+        d = re.search(r"^DEPTH score \| (.*)$", text, re.M)
+        depth = d.group(1)[:50] if d else ""
+        print("\t".join(map(str, [slug, verbs, n, kinds["console"], kinds["screen"], kinds["connection-closed"], kinds["stuck-reconnect"], int(secs), status, depth])), flush=True)
 
 
 if __name__ == "__main__":

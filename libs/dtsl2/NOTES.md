@@ -834,3 +834,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply d
 ## `get_config(__MUD_PORT__)` 经旧版 `runtime_config.h` 得到字符串（2026-10-20，KB 06 §7.302）
 
 本库的 `include/runtime_config.h` 是老 MudOS 的编号（整数设置从 15 起，本驱动从 256 起），`get_config(__MUD_PORT__)` 读到的是另一项设置（字符串），`(int)` 又只是编译期标注，于是 `socket_bind(fd, LOCAL_PORT())` 报 `Bad argument 2 to socket_bind()`，版本守护进程 `port = get_config(__MUD_PORT__) + VERSION_PORT` 是字符串相加。头文件自己的注释写明 `get_config(__MUD_PORT__) == __PORT__`，所以代码里的这个调用（连同外面的 `(int)` / `to_int()`）改成了驱动的预定义 `__PORT__`（`scripts/lpc_fix_mud_port.py`）。改动：`/include/getconfig.h`（1 处）。
+
+## 十大排行榜守护进程缺少 11 个数据路径宏和 6 个榜单名宏（2026-10-20，KB 04 §6.16）
+
+`adm/daemons/toptend.lpc` 用到 `TOPTEN_RICH`、`TOPTEN_PKER`、`TOPTEN_EXP`、`TOPTEN_DAOXING`、`TOPTEN_SHEN1`、`TOPTEN_SHEN2`、`TOPTEN_neili`、`TOPTEN_PER1`、`TOPTEN_PER2`、`TOPTEN_AGE`、`TOPTEN_POTENTIAL`（数据文件路径）和 `SHEN2_B`、`neili_B`、`PER1_B`、`PER2_B`、`AGE_B`、`POTENTIAL_B`（榜单名），`include/globals.h` 只有 `TOPTEN_D` 和五个榜单名：守护进程从来编译不过，`topten` 指令报 `Undefined variable 'neili_B'`。同系的 dtxyzjb 的 `globals.h` 有完整的一组，照抄进来（路径 `/data/topten/<名>.o`）；存档里没有 `data/topten` 目录，已写入 `scripts/wasm_keep_dirs.txt`。加载检查：HEAD 0 通过 / 1 失败，工作树 1 通过。另外两个同扫描的指令没动：`quests`（`#include "/d/kaifeng/npc/colors.h"`，这个库没有 `d/kaifeng` 区域）和 `prompt`（`get_prompt()` 在 `feature/message1.lpc`，而 `F_MESSAGE` 指向的 `message.lpc` 是另一个版本，没有这个函数；dtsl、dtslmud 的 `message.lpc` 有，两种提示符设计不一致，不是一行能改对的）。
