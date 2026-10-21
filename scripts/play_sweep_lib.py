@@ -35,7 +35,8 @@ WIZ_DIRS = {"wiz", "wizard", "wizards", "adm", "admin", "arch", "archwiz", "crea
             "dev", "developer", "sage", "sages", "wizzes", "imm", "wiztool", "admins", "builders", "arches", "cres"}
 QUICK = ["", "me", "x" * 300, "你好 世界"]
 SKIP = {"quit", "suicide", "password", "passwd", "chfn", "email", "shutdown", "reboot", "halt", "restart", "destruct", "dest", "exit", "logout", "bye", "kill_self", "retire",
-        "delete", "rm", "quitgame", "disconnect"}
+        "delete", "rm", "quitgame", "disconnect",
+        "removeraces"}                 # Dead Souls' admin command that empties the race table: every NPC created afterwards fails in its heart beat (a sweep artifact, 1,084 console rows)
 
 
 def own_port(slug):

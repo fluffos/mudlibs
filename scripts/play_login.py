@@ -27,7 +27,7 @@ RULES = [
     (r"(?i)\[c\]\s*create new character[\s\S]*(command or name|\[c\])[^\n]*:\s*$", "c"),                        # questmud: "[c] Create new character  [g] Enter as a guest ... Command or Name:"
     (r"(?is)\bpick TOWN\b.*Town:\s*$", "pick haven"),                                                         # havenmud: "pick TOWN - pick a particular town for yourself ... Town:"
     (r"(?is)choose a race[^\n]*:\s*\n[^\n]*\bhuman\b[^\n]*$", "human"),                                         # nirvlp312: "Choose a race for your character, you may select: human elf dwarf custom <race>"
-    (r"(?i)throw (the )?other copy|already (logged|playing|connected)|reconnect|重复|另一个连线|取代|赶出去", "y"),
+    (r"(?i)throw (the )?other copy|take over (this|the) copy|already (logged|playing|connected)|reconnect|重复|另一个连线|取代|赶出去", "y"),
     (r"(?i)(re-?type|again|confirm|verify|repeat|once more).{0,40}(password|passwd|pass)|(password|passwd).{0,40}(again|confirm|verify)|再输入一次|再输一次|再次核对|核对密码|再核对一次|确认密码|重新输入密码|(^|\n)\s*again(\s+to\s+verify)?\s*:\s*$", "{lastpw}"),
     (r"(?i)^again to confirm\s*[:：]?\s*$", "{pw}"),                                                                         # lima, swmud, spacemud: "Password:" then "Again to confirm:"
     (r"(?i)(普通密码|normal password|not be the same|must be different|different from)[^\n]{0,80}[:：]\s*$", "{pw2}"),     # tybxjh: "管理密码和普通密码不能相同": the second password is another one
