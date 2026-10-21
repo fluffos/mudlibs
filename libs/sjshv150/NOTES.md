@@ -403,3 +403,7 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 ## 本机回环地址只放巫师：新玩家无法注册（2026-10-20，KB 01 §1.3b/e 的补充）
 
 `adm/daemons/sited.lpc` 的 `is_valid(id, ip)` 对 127.0.0.1 只放行巫师、`allenc` 和字面的 `new`。`logind` 在新玩家输入英文名字之后（`get_new_id()`）和老玩家登录时（`get_id()`）还会以真实的 id 再调一次，所以只给 `new` 开例外不够：站点的访客永远是回环连线，除管理员 `fluffos` 外每个 id 都被 `Sorry,This id can not login from this address.` 拒绝，登录调查记作 `closed`。以前的说明里把这一点当成"范围很窄的测试限制、真实的远程部署不受影响"，这对博物馆站点不成立。现在回环地址一律放行（和同族的 sje、sjshv2578bb、sanjieshenhua 一样，KB 01 §1.3b）；别的地址的 `valid_login` 限制不变。实测：新角色从 `new` 一直走到进入世界，`look`、`score` 正常。
+
+## NPC 的 `chat()` 在 `chat_msg` 为空数组时下标越界（2026-10-21，KB 06 §7.334）
+
+NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < chance) { rnd = random(sizeof(msg)); if (stringp(msg[rnd])) ...`，不检查列表是否为空。本库现有的 NPC 文件里没有字面写成空 `chat_msg` 的（扫描只认 `set("chat_msg", ({ }))`）；守卫挡的是运行时才为空的列表和以后新增的 NPC。在 `random(100) < chance` 前面加 `sizeof(msg) &&`（`scripts/lpc_fix_chat_empty.py`；`if (random(100) > chance) return 0;` 的写法是 `!sizeof(msg) ||`）。改动：`/std/char/npc.lpc`（共 1 个文件）。

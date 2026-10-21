@@ -355,3 +355,7 @@ compile check (exit 0, no errors) against `feature/command.lpc`.
 ## 启动后 180 秒内拒绝一切登录：站点访客第一次连线被关掉（2026-10-20，KB 06 §7.320）
 
 `adm/daemons/logind.lpc` 的 `encoding()` 在 `time() - CONTROL_CENTER->query("MUD_SRART_TIME") < 180` 时对所有人写 `xajdxyj服务器正在进行启动前事务处理，请稍候再来。` 并 `destruct(ob)`，只有输入 `let me join ok`（运维的后门）才放行。控制中心 `d/wiz/control_center.lpc` 的 `create()` 只记一下 `time()`，这三分钟里并没有任何启动前的工作；而站点的加载器在 mud 启动后几秒内就连线，访客的第一次连线就被关掉（登录调查记作 `closed`，只走了 1 步）。现在这段限制已去掉（连带不再用的局部变量 `control_center`）；实测：连线后立刻出现英文名字提示，新角色可以注册并进入世界。`u/moonsky/` 下的两份 `logind` 副本是巫师目录里的旧稿，没动。
+
+## NPC 的 `chat()` 在 `chat_msg` 为空数组时下标越界（2026-10-21，KB 06 §7.334）
+
+NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < chance) { rnd = random(sizeof(msg)); if (stringp(msg[rnd])) ...`，不检查列表是否为空。本库有 3 个 NPC 文件写成 `set("chat_msg", ({ }))`（或 `chat_msg_combat`）并带正的 `chat_chance`（例如 `/daemon/class/oldstuff/ronin/master.lpc`、`/daemon/class/ronin/master.lpc`），每次心跳有 `chat_chance`% 的概率 `random(0)` 为 0、`msg[0]` 报 `Array index out of bounds`（驱动捕获，心跳继续，但每次一条运行时错误），这个 NPC 在内存里就一直发生。在 `random(100) < chance` 前面加 `sizeof(msg) &&`（`scripts/lpc_fix_chat_empty.py`；`if (random(100) > chance) return 0;` 的写法是 `!sizeof(msg) ||`）。改动：`/d/obj/inherit/char/npc.lpc`、`/std/char/npc.lpc`、`/std/char/npcc.lpc`（共 3 个文件）。

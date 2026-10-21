@@ -264,3 +264,7 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 ## 房间文件结尾的 `replace_program(ROOM);`（2026-10-20，KB 06 §7.100）
 
 3,467 个房间在 `create()` 末尾 `replace_program(ROOM);`：房间一旦在这之前建了闭包（`(: ... :)`）就是 `cannot replace a program with function references, ignored`（扫描里 `d/lingxiao/sroad6.lpc`），没建的则留下一个以后绑闭包就崩的地雷（KB 06 §7.86/§7.100）。本库在 191 库的清扫之后才入库，`scripts/lpc_drop_replace_program.py --apply wlqxcmudlib` 删掉这些整行（只删整行，3,467 行）；继承 `BUILD_ROOM` 却 `replace_program(ROOM)` 的 5 个 `d/hangzhou/shanlu*` 保留（它们加载正常）。抽样 300 个房间 HEAD 与 tree 都通过，回归 0；实测从起点走了几个房间，控制台没有错误。
+
+## NPC 的 `chat()` 在 `chat_msg` 为空数组时下标越界（2026-10-21，KB 06 §7.334）
+
+NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < chance) { rnd = random(sizeof(msg)); if (stringp(msg[rnd])) ...`，不检查列表是否为空。本库现有的 NPC 文件里没有字面写成空 `chat_msg` 的（扫描只认 `set("chat_msg", ({ }))`）；守卫挡的是运行时才为空的列表和以后新增的 NPC。在 `random(100) < chance` 前面加 `sizeof(msg) &&`（`scripts/lpc_fix_chat_empty.py`；`if (random(100) > chance) return 0;` 的写法是 `!sizeof(msg) ||`）。改动：`/inherit/char/npc.lpc`（共 1 个文件）。

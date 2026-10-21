@@ -394,3 +394,7 @@ Century/`adm-single` 形状）**：`adm/simul_efun/file.lpc` 的
 - `cmds/usr/group.lpc`：对 `/open/` 下每个目录 `load_object(dir + "/kingdom")` 再 `->query("king")`；`/open/freeze_list`、`/open/topten` 不是帮派（没有 kingdom 文件），`call_other` 对 0 报错。先测 `file_size(kingdom_file + ".lpc") <= 0`，是就 `continue`。
 
 实测（sje 的全新树，机器人登录）：`group` 打出表头和分隔线（没有帮派），`scoreold` 打出个人资料，`zhaohuan` 答“凭你现在的条件，还没有资格拥有随从呢！”，控制台没有错误；加载检查 2/2，回归 0。
+
+## NPC 的 `chat()` 在 `chat_msg` 为空数组时下标越界（2026-10-21，KB 06 §7.334）
+
+NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < chance) { rnd = random(sizeof(msg)); if (stringp(msg[rnd])) ...`，不检查列表是否为空。本库现有的 NPC 文件里没有字面写成空 `chat_msg` 的（扫描只认 `set("chat_msg", ({ }))`）；守卫挡的是运行时才为空的列表和以后新增的 NPC。在 `random(100) < chance` 前面加 `sizeof(msg) &&`（`scripts/lpc_fix_chat_empty.py`；`if (random(100) > chance) return 0;` 的写法是 `!sizeof(msg) ||`）。改动：`/inherit/char/npc.lpc`（共 1 个文件）。

@@ -319,3 +319,7 @@ drafts) minus the files its pass fixed, plus `cmds/std/practice_.lpc` and a save
 ## 任务 NPC 逃跑时 `*Undefined function called: do_flee`（2026-10-20，KB 06 §7.259）
 
 `std/char/questnpc.lpc` 和 `questnpc2.lpc` 声明了 `int do_flee();` 并在八处调用，却从来没有定义它（`cmds/std/go.lpc` 里的同名函数带一个 `object me` 参数，是另一个函数）：任务 NPC 在战斗中血量低于逃跑线时，每次心跳都是一条 `Undefined function called: do_flee`（扫描里 42 条，分散在一串无关的指令名下）。同一个文件在 fy2005 里有定义：随机走 3–7 步，`return !is_fighting();`，原样补到两个文件末尾。两个基类和 `d/shanliu/npc/qinge`、`yang` 的加载检查 HEAD 与工作树都通过；`do_flee` 只在战斗逃跑时才会被调用，没有做实战验证。
+
+## NPC 的 `chat()` 在 `chat_msg` 为空数组时下标越界（2026-10-21，KB 06 §7.334）
+
+NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < chance) { rnd = random(sizeof(msg)); if (stringp(msg[rnd])) ...`，不检查列表是否为空。本库有 88 个 NPC 文件写成 `set("chat_msg", ({ }))`（或 `chat_msg_combat`）并带正的 `chat_chance`（例如 `/d/biancheng/npc/bandit.lpc`、`/d/biancheng/npc/tulaohu.lpc`），每次心跳有 `chat_chance`% 的概率 `random(0)` 为 0、`msg[0]` 报 `Array index out of bounds`（驱动捕获，心跳继续，但每次一条运行时错误），这个 NPC 在内存里就一直发生。在 `random(100) < chance` 前面加 `sizeof(msg) &&`（`scripts/lpc_fix_chat_empty.py`；`if (random(100) > chance) return 0;` 的写法是 `!sizeof(msg) ||`）。改动：`/d/for_suu/questnpc.lpc`、`/d/for_suu/tasknpc.lpc`、`/std/char/questnpc.lpc`、`/std/char/questnpc2.lpc`、`/std/char/tasknpc.lpc`（共 5 个文件）。

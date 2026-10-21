@@ -396,3 +396,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 ## `passwd`、`jiadian`、`abandon`：`md5crypt()` 不存在（2026-10-21，KB 06 §7.323）
 
 三个命令用 `crypt(pass, old) != old && md5crypt(pass, old) != old` 验旧密码（旧驱动里存档可能是 DES 也可能是 MD5，两种都要认）。这个驱动没有 `md5crypt` efun，`adm/simul_efun/config.lpc` 的 `crypt()` 包装器只在定义了 `MD5_CRYPT` 时才用 `efun::md5crypt`（没有定义），所以三个命令都是 `Undefined function md5crypt`：玩家改不了密码，`abandon` 和 `jiadian` 也打不开。在 `config.lpc` 补 `string md5crypt(string str, string seed) { return efun::crypt(str, seed); }`（这个驱动的 `crypt()` 自己认 `$1$` 盐）。加载检查：HEAD 1、树 4，三个命令新加载。
+
+## NPC 的 `chat()` 在 `chat_msg` 为空数组时下标越界（2026-10-21，KB 06 §7.334）
+
+NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < chance) { rnd = random(sizeof(msg)); if (stringp(msg[rnd])) ...`，不检查列表是否为空。本库现有的 NPC 文件里没有字面写成空 `chat_msg` 的（扫描只认 `set("chat_msg", ({ }))`）；守卫挡的是运行时才为空的列表和以后新增的 NPC。在 `random(100) < chance` 前面加 `sizeof(msg) &&`（`scripts/lpc_fix_chat_empty.py`；`if (random(100) > chance) return 0;` 的写法是 `!sizeof(msg) ||`）。改动：`/inherit/char/npc.lpc`、`/inherit/char/npc_bf.lpc`（共 2 个文件）。

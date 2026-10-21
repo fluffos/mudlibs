@@ -366,3 +366,7 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 ## `hebing` 指令编译不过：字符串里多了一个引号（2026-10-20，KB 04 §6.25）
 
 `cmds/usr/hebing.lpc` 第 162 行 `tell_object(me, HIC "你利用手头的物品创造了探险通行证 "！\n" NOR);`：`证` 后面多出一个空格和一个 `"`，字符串在那里结束，后面的全角 `！` 就成了代码（`Illegal character 0xef`）。sjshv150 的 `hebing.lpc` 里同一句是 `"你利用手头的物品创造了探险通行证！\n"`，xyj20032 和 sjshv2578bb 照它改（去掉多出的空格和引号）。加载检查：各 1/1，HEAD FAIL → tree PASS。
+
+## NPC 的 `chat()` 在 `chat_msg` 为空数组时下标越界（2026-10-21，KB 06 §7.334）
+
+NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < chance) { rnd = random(sizeof(msg)); if (stringp(msg[rnd])) ...`，不检查列表是否为空。本库现有的 NPC 文件里没有字面写成空 `chat_msg` 的（扫描只认 `set("chat_msg", ({ }))`）；守卫挡的是运行时才为空的列表和以后新增的 NPC。在 `random(100) < chance` 前面加 `sizeof(msg) &&`（`scripts/lpc_fix_chat_empty.py`；`if (random(100) > chance) return 0;` 的写法是 `!sizeof(msg) ||`）。改动：`/std/char/jobnpc.lpc`、`/std/char/npc.lpc`（共 2 个文件）。

@@ -842,3 +842,7 @@ Save files updated/added this round:
 ## `ccmd`、`cestablish` 直接 `write()` 档案里没有的 `/obj/CLAN`（2026-10-20，KB 06 §7.285）
 
 `write(read_file("/obj/CLAN"))`：`/obj/CLAN` 是建帮派时往里追加的清单，档案里没有（dfgsiiv13b 带了一份），`read_file()` 答 0，`write(0)` 就是 `Bad argument 1 to receive()`。不带参数的 `ccmd` 和 `cestablish` 在列出帮派之前出错。改为 `write(read_file("/obj/CLAN") || "")`。加载检查 2/2，回归 0。
+
+## NPC 的 `chat()` 在 `chat_msg` 为空数组时下标越界（2026-10-21，KB 06 §7.334）
+
+NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < chance) { rnd = random(sizeof(msg)); if (stringp(msg[rnd])) ...`，不检查列表是否为空。本库现有的 NPC 文件里没有字面写成空 `chat_msg` 的（扫描只认 `set("chat_msg", ({ }))`）；守卫挡的是运行时才为空的列表和以后新增的 NPC。在 `random(100) < chance` 前面加 `sizeof(msg) &&`（`scripts/lpc_fix_chat_empty.py`；`if (random(100) > chance) return 0;` 的写法是 `!sizeof(msg) ||`）。改动：`/inherit/char/npc.lpc`（共 1 个文件）。

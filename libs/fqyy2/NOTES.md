@@ -397,3 +397,7 @@ HEAD 与工作树分别加载（新进程）：895 -> 895 通过，无回退；�
 ## `wizwhatdo`、`setmission`：`explode(read_file("/adm/daemons/wizmission"))`（2026-10-21，KB 06 §7.326）
 
 巫师名单命令 `wizwhatdo`（在 `cmds/std`，玩家能敲）和 `cmds/imm/setmission` 都先 `explode(read_file("/adm/daemons/wizmission"), "\n")`；这个文件由 `setmission` 写，归档里没有，`read_file()` 答 0，`explode(0)` 抛 `Bad argument 1 to explode()`：玩家敲 `wizwhatdo` 是运行时错误，巫师也没法用 `setmission` 建出这个文件（读在写之前）。读不到按空文本处理（`read_file(...) || ""`，`explode("", "\n")` 是空数组，名单里每个人显示 "(任务未定)"，`setmission` 走 `write_file()` 新建的分支）。hy 系的其余库（hy、hy2000、hy2002、hy5、hymud、haiyang2、hyiishzdscbb）带着这个文件，没有问题。实测：`wizwhatdo` 打出巫师名单。
+
+## NPC 的 `chat()` 在 `chat_msg` 为空数组时下标越界（2026-10-21，KB 06 §7.334）
+
+NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < chance) { rnd = random(sizeof(msg)); if (stringp(msg[rnd])) ...`，不检查列表是否为空。本库现有的 NPC 文件里没有字面写成空 `chat_msg` 的（扫描只认 `set("chat_msg", ({ }))`）；守卫挡的是运行时才为空的列表和以后新增的 NPC。在 `random(100) < chance` 前面加 `sizeof(msg) &&`（`scripts/lpc_fix_chat_empty.py`；`if (random(100) > chance) return 0;` 的写法是 `!sizeof(msg) ||`）。改动：`/clone/guard/baoer.lpc`、`/clone/guard/long2.lpc`、`/inherit/char/npc.lpc`（共 3 个文件）。

@@ -270,3 +270,7 @@ without headers, drafts).
 ## `TASKNPC_D` 的路径少了一个 s：`/adm/daemon/tasknpcd`（2026-10-20，KB 06 §7.325）
 
 `include/globals.h` 里 `#define TASKNPC_D "/adm/daemon/tasknpcd"`，守护进程文件是 `/adm/daemons/tasknpcd.lpc`：裸指令 `enroll` 在扫描里打印了 24 次 `call_other() couldn't find object '/adm/daemon/tasknpcd'`（任务 NPC 每次心跳问这个守护进程都是同样的错误）。同一棵树里 `d/for_suu/globals.h` 的写法是对的。改成 `/adm/daemons/tasknpcd`（fengyun434、fysjmb、xsfyssjb 三个飞扬系库同一处）。实测：`enroll` 显示用法，控制台无报错。`QUESTNPC_D`（`/adm/daemons/questnpcd`，`questnpc` 指令用）指向一个所有库都没带的守护进程，属于内容缺失，没动。
+
+## NPC 的 `chat()` 在 `chat_msg` 为空数组时下标越界（2026-10-21，KB 06 §7.334）
+
+NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < chance) { rnd = random(sizeof(msg)); if (stringp(msg[rnd])) ...`，不检查列表是否为空。本库有 93 个 NPC 文件写成 `set("chat_msg", ({ }))`（或 `chat_msg_combat`）并带正的 `chat_chance`（例如 `/d/biancheng/npc/bandit1.lpc`、`/d/biancheng/npc/tuozi.lpc`），每次心跳有 `chat_chance`% 的概率 `random(0)` 为 0、`msg[0]` 报 `Array index out of bounds`（驱动捕获，心跳继续，但每次一条运行时错误），这个 NPC 在内存里就一直发生。在 `random(100) < chance` 前面加 `sizeof(msg) &&`（`scripts/lpc_fix_chat_empty.py`；`if (random(100) > chance) return 0;` 的写法是 `!sizeof(msg) ||`）。改动：`/d/for_martea/for_suu/tasknpc.lpc`、`/std/char/quest_npc.lpc`、`/std/char/tasknpc.lpc`（共 3 个文件）。

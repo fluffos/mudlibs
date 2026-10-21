@@ -424,3 +424,7 @@ definition, 2 `#undef` lines for macros that two headers define (`ROOM`, `STORY_
 ## `learn`、`practice`、`study`、`selflearn`、`research`、`steal` 除以零（2026-10-21，KB 06 §7.331）
 
 这六个命令一开头就算 `100 * me->query_explore_points() / EXPLORE_D->query_total_explore()`（`steal` 对双方各算一次）。`explored` 守护进程的存档 `/data/explored.o` 不在归档里，`explores` 是空映射，`query_total_explore()` 恒答 0；探索点只能由巫师登记（`log_explore()`，库里没有调用它的命令），所以新树里每个玩家敲这几个命令都是 `*Division by zero`（实测：`learn`、`practice`、`study`、`selflearn`、`research` 全部抛错）。`score` 对同一个除数早就写了 `EXPLORE_D->query_total_explore() ? ... : 0`，六个命令照改（共 7 处），总数为 0 时探索度按 0 算（它在熟练度上限公式里只是 `explore * 2` 一项）。实测：六个命令都给出各自的提示，控制台没有错误。逐个命令扫描时只有 `learn` 报了错：它后面的 `lockscreen` 把会话留在密码提示上，`practice` 之后的命令没有真正执行，见 KB 08 §10.16。
+
+## NPC 的 `chat()` 在 `chat_msg` 为空数组时下标越界（2026-10-21，KB 06 §7.334）
+
+NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < chance) { rnd = random(sizeof(msg)); if (stringp(msg[rnd])) ...`，不检查列表是否为空。本库现有的 NPC 文件里没有字面写成空 `chat_msg` 的（扫描只认 `set("chat_msg", ({ }))`）；守卫挡的是运行时才为空的列表和以后新增的 NPC。在 `random(100) < chance` 前面加 `sizeof(msg) &&`（`scripts/lpc_fix_chat_empty.py`；`if (random(100) > chance) return 0;` 的写法是 `!sizeof(msg) ||`）。改动：`/std/char/npc.lpc`、`/std/charr/npc.lpc`、`/std/charr/npcc.lpc`（共 3 个文件）。

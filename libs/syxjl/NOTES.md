@@ -1065,3 +1065,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply s
 ## `skills1`、`cha1`（cmds/skill）：一个少掉的分号和一个多出来的 `x`（2026-10-21，KB 04 §6.25）
 
 `skills1.lpc` 是 `skills.lpc` 的改版（加了 `LDJ.NEW` 横幅）：横幅那句 `str += "\n━━━...LDJ.NEW" NOR "━━━━━━\n"` 后面没有 `;`，下一行 `str += ...` 成了语法错误；`cha1.lpc` 同一位置有 `x str += ...`（`skills.lpc` 里没有那个 `x`）。补分号、删 `x`，两个命令都加载（HEAD 0/2、树 2/2）。没有改：`cmds/app/qadd`、`qlist`（`QUEST_OB` 和 `chinese_time()` 都不存在）、`cmds/std/shoot`（`ROOM_D`、`ARROW_D` 不存在），都是没写完的功能。
+
+## NPC 的 `chat()` 在 `chat_msg` 为空数组时下标越界（2026-10-21，KB 06 §7.334）
+
+NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < chance) { rnd = random(sizeof(msg)); if (stringp(msg[rnd])) ...`，不检查列表是否为空。本库现有的 NPC 文件里没有字面写成空 `chat_msg` 的（扫描只认 `set("chat_msg", ({ }))`）；守卫挡的是运行时才为空的列表和以后新增的 NPC。在 `random(100) < chance` 前面加 `sizeof(msg) &&`（`scripts/lpc_fix_chat_empty.py`；`if (random(100) > chance) return 0;` 的写法是 `!sizeof(msg) ||`）。改动：`/inherit/char/npc.lpc`（共 1 个文件）。

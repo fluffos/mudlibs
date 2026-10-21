@@ -951,3 +951,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply d
 ## `multi_arrow`、`mindkill`、`mk`：变量名 `in` 是保留字（2026-10-20，KB 04 §6.26）
 
 `daemon/skill/multi_arrow.lpc`、`u/h/hack/skill/multi_arrow.lpc`、`u/m/morral/mindkill.lpc`、`mk.lpc` 里有叫 `in` 的变量或参数：`syntax error, unexpected L_IN`。`scripts/lpc_fix_in_ident.py` 改名为 `in_var`。加载检查 4/4，HEAD FAIL → tree PASS。
+
+## NPC 的 `chat()` 在 `chat_msg` 为空数组时下标越界（2026-10-21，KB 06 §7.334）
+
+NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < chance) { rnd = random(sizeof(msg)); if (stringp(msg[rnd])) ...`，不检查列表是否为空。本库有 9 个 NPC 文件写成空 `chat_msg`（例如 `/daemon/class.es/ronin/master.lpc`、`/open/world1/sdo/christmas/awardmiss.lpc`），它们走的基类 `chat()` 本来已经检查了列表大小（或碰巧不出错），不受影响；下面这些文件各自带着一份没有检查的 `chat()`（NPC 里的副本、旧版基类），一并加上守卫。在 `random(100) < chance` 前面加 `sizeof(msg) &&`（`scripts/lpc_fix_chat_empty.py`；`if (random(100) > chance) return 0;` 的写法是 `!sizeof(msg) ||`）。改动：`/u/l/linjack/npc.lpc`（共 1 个文件）。

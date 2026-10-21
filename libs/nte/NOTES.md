@@ -709,3 +709,7 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## `ctell`：`MTEXT` 在没选中的头文件分支里（2026-10-21，KB 04 §6.16）
 
 `include/globals.h` 末尾 `#ifdef DOING_IMPROVED #include "ntsql.h" #else #include "tomud.h" #endif`；`DOING_IMPROVED`（带数据库的版本）没有定义，用的是 `tomud.h`，它没有 `MTEXT`（`ntsql.h` 里有：`#define MTEXT(x) TMI("ptext "+x)`，和 `PTEXT` 同形，同系的 dtsl2、xyzx3、xyj2006zzzhx 的 `tomud.h` 都有这一行）。`cmds/std/ctell.lpc` 四处用 `MTEXT(...)`：`Undefined function MTEXT`，整个命令加载失败。在 `tomud.h` 补上这一行。nte 和 ntii 的 `ctell.lpc` 逐字节相同，同一处改法；加载检查 HEAD 0、树 1。没有改：`fee`（`DB_STR` 和 `DATABASE_D` 只在数据库版本里，没有数据库，整个命令是死功能）。
+
+## NPC 的 `chat()` 在 `chat_msg` 为空数组时下标越界（2026-10-21，KB 06 §7.334）
+
+NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < chance) { rnd = random(sizeof(msg)); if (stringp(msg[rnd])) ...`，不检查列表是否为空。本库现有的 NPC 文件里没有字面写成空 `chat_msg` 的（扫描只认 `set("chat_msg", ({ }))`）；守卫挡的是运行时才为空的列表和以后新增的 NPC。在 `random(100) < chance` 前面加 `sizeof(msg) &&`（`scripts/lpc_fix_chat_empty.py`；`if (random(100) > chance) return 0;` 的写法是 `!sizeof(msg) ||`）。改动：`/inherit/char/npc.lpc`（共 1 个文件）。

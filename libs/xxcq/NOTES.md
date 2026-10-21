@@ -371,3 +371,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply x
 ## 简易 `cat()` 把 simul_efun 对象的 euid 改成了玩家：存档时 `Too deep recursion`（2026-10-20，KB 06 §7.313）
 
 `adm/simul_efun/file.lpc` 的 `cat()` 是 `seteuid(geteuid(this_player())); write(read_file(file));`，它在 simul_efun 对象里执行：玩家敲过一次 `help` 之后，这个对象的 euid 就一直是那个玩家的。它自己的 `log_file()` → `assure_file()` → `file_size(LOG_DIR + file)` 于是按玩家权限过 `valid_read()`，被拒绝，`securityd` 再用 `log_file()` 记一笔拒绝，又走回 `file_size()`……直到调用深度耗尽。第二次连线（角色已保存）时第一次被拒的是 `restore_object` 读 `/data/login/s/<id>.o`，之后控制台出现两条 `Too deep recursion.`（`securityd.lpc:173` 和 `:247`），`log/read_fail.log` 写满同一行，角色不再被保存。现在 `cat()` 先记下 simul_efun 自己的 euid，用调用者的权限读文件（`catch()` 里读），读完再还原，`read_file()` 返回 0 时不 `write()`。实测：第一次连线跑 `help`，立刻第二次连线，无递归、无 `read_fail.log`。xxcq 的 `securityd` 没有走到同一条路，同一份 `cat()` 一并改了（潜在的）。
+
+## NPC 的 `chat()` 在 `chat_msg` 为空数组时下标越界（2026-10-21，KB 06 §7.334）
+
+NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < chance) { rnd = random(sizeof(msg)); if (stringp(msg[rnd])) ...`，不检查列表是否为空。本库现有的 NPC 文件里没有字面写成空 `chat_msg` 的（扫描只认 `set("chat_msg", ({ }))`）；守卫挡的是运行时才为空的列表和以后新增的 NPC。在 `random(100) < chance` 前面加 `sizeof(msg) &&`（`scripts/lpc_fix_chat_empty.py`；`if (random(100) > chance) return 0;` 的写法是 `!sizeof(msg) ||`）。改动：`/inherit/char/npc.lpc`（共 1 个文件）。

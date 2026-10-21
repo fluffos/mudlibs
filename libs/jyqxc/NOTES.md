@@ -405,3 +405,7 @@ AGENTS.md 已记录过这个坑），再让 `log_file()` 内部先
 ## 存档里的乱码文件：`restore_object()` 报 `Illegal file format`（2026-10-20，KB 06 §7.316）
 
 存档里有一批数据文件是乱码：开头是 `?adm`、`?inh`、`?clo`、`?obj`（`#/adm/…` 的第一个字节被换成了 `?`），后面是随机字节，没有任何驱动读得了。`adm/daemons/chinesed` 在预载时 `restore()` 读 `data/e2c_dict.o`，首次登录时起始房间的留言板 `/clone/board/kedian_b` 读 `data/board/*_b.o`；`restore_object()` 对不是文本的文件抛 `Illegal file format`，调用处的 `catch()`（KB 06 §7.255）保住了房间和精灵，但本库 master 的 `error_handler()` 把调用栈返回给驱动，每次启动和首次登录都在控制台打印一次或两次 `错误讯息被拦截`。现在共用的 `feature/save.lpc` 的 `restore()` 先读文件第一个字节，不是 `#` 就返回 0（读被 master 拒绝时 `read_bytes()` 返回 0，仍由 `restore_object()` 决定，和以前一样）；留言板和字典从空开始，第一次 `save()` 写出合法文件，乱码文件原样留在树里。实测：启动和登录都没有报错，已保存的角色重新连线照常加载。
+
+## NPC 的 `chat()` 在 `chat_msg` 为空数组时下标越界（2026-10-21，KB 06 §7.334）
+
+NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < chance) { rnd = random(sizeof(msg)); if (stringp(msg[rnd])) ...`，不检查列表是否为空。本库现有的 NPC 文件里没有字面写成空 `chat_msg` 的（扫描只认 `set("chat_msg", ({ }))`）；守卫挡的是运行时才为空的列表和以后新增的 NPC。在 `random(100) < chance` 前面加 `sizeof(msg) &&`（`scripts/lpc_fix_chat_empty.py`；`if (random(100) > chance) return 0;` 的写法是 `!sizeof(msg) ||`）。改动：`/inherit/char/npc.lpc`（共 1 个文件）。

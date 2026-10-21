@@ -403,3 +403,7 @@ blocking). No LPC change this pass.
 ## `valid_write()` 比较存档文件名时少了 `.o`，拒绝分支又调用自己：角色从来存不了盘（2026-10-20，KB 06 §7.309）
 
 第一次登录时控制台出现两对 `Too deep recursion.`（`obj/login.lpc:33`、`adm/daemons/securityd.lpc:137`），登录能完成，但 `data/login/<首字母>/<名字>.o` 和 `data/user/...` 都没有写出来。`securityd.lpc` 的 `save_object` 分支是 `file == (string)user->query_save_file()`，而驱动传给 `valid_write()` 的文件名带着 `save_object()` 补上的 `.o`，条件不成立，函数落到最后一行 `return valid_write(file, this_player(1), func);`：`this_player(1)` 就是同一个登录对象，同样被拒绝，一直递归到调用深度用完报错，写盘被拒（把 `maximum call depth` 调大没有用，这是真递归）。改成 `file == (string)user->query_save_file() + __SAVE_EXTENSION__`（另外 20 份 `securityd` 早就是这样写的）；实测登录后写出了 `data/login/s/sweepzq.o` 和 `data/user/s/sweepzq.o`。拒绝分支里自己调自己的写法没有动（只有被拒绝时才递归）。
+
+## NPC 的 `chat()` 在 `chat_msg` 为空数组时下标越界（2026-10-21，KB 06 §7.334）
+
+NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < chance) { rnd = random(sizeof(msg)); if (stringp(msg[rnd])) ...`，不检查列表是否为空。本库现有的 NPC 文件里没有字面写成空 `chat_msg` 的（扫描只认 `set("chat_msg", ({ }))`）；守卫挡的是运行时才为空的列表和以后新增的 NPC。在 `random(100) < chance` 前面加 `sizeof(msg) &&`（`scripts/lpc_fix_chat_empty.py`；`if (random(100) > chance) return 0;` 的写法是 `!sizeof(msg) ||`）。改动：`/std/char/npc.lpc`（共 1 个文件）。

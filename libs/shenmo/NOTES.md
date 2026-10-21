@@ -1265,3 +1265,7 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 ## `closed` 守护的心跳每秒调一次不存在的 `versiond`（2026-10-20，KB 01 §1.3(c)）
 
 `closed.lpc` 的 `heart_beat()` 以 `if (! VERSION_D->is_version_ok()) return;` 开头，本库没有 `/adm/daemons/versiond`：有人在闭关时，控制台每秒一条 `call_other() couldn't find object '/adm/daemons/versiond'`，闭关的后续处理（`load_all_users()`）也永远走不到。改成 `if (find_object(VERSION_D) && !VERSION_D->is_version_ok())`（KB 01 的写法：没有版本守护就当版本正常）。shenmo 里 `cmds/usr/closed.lpc` 还有一份守护代码的副本（敲 `closed` 就把它加载成指令对象，它的心跳每秒一条错误：扫描里一个动词 41 行），同样改了。实测：敲 `closed`、`look`、`score`、`hp` 之后单元输出里没有 `versiond`。加载检查 OK。
+
+## NPC 的 `chat()` 在 `chat_msg` 为空数组时下标越界（2026-10-21，KB 06 §7.334）
+
+NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < chance) { rnd = random(sizeof(msg)); if (stringp(msg[rnd])) ...`，不检查列表是否为空。本库现有的 NPC 文件里没有字面写成空 `chat_msg` 的（扫描只认 `set("chat_msg", ({ }))`）；守卫挡的是运行时才为空的列表和以后新增的 NPC。在 `random(100) < chance` 前面加 `sizeof(msg) &&`（`scripts/lpc_fix_chat_empty.py`；`if (random(100) > chance) return 0;` 的写法是 `!sizeof(msg) ||`）。改动：`/sjsh/std/char/npc.lpc`、`/std/char/npc.lpc`、`/u/xdao/npc.lpc`（共 3 个文件）。

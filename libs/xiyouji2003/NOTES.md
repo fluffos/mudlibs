@@ -1020,3 +1020,7 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 ## `taskd` 的 `create()` 读不到任务表就加载失败（2026-10-20，KB 06 §7.326）
 
 `/adm/daemons/taskd.lpc` 的 `create()` 把 `/d/obj/quest/dynamic_location`、`dynamic_quest` 和 `/adm/daemons/find.map` 直接 `explode()`；本库没有 `/d/obj/quest/`，`job` 指令一加载守护就 `Bad argument 1 to explode()`。三处改成 `read_file(...) || ""`：任务表为空，`job` 列出空榜，其余循环（`sizeof(quests) / 2`）本来就按空表处理。加载检查：HEAD FAIL → tree PASS。wuhanzhan 的 `qqzqqjob.lpc` 是同一份代码，那里加了以后下一步是缺 `/adm/daemons/cron.lpc`，所以没有动。
+
+## NPC 的 `chat()` 在 `chat_msg` 为空数组时下标越界（2026-10-21，KB 06 §7.334）
+
+NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < chance) { rnd = random(sizeof(msg)); if (stringp(msg[rnd])) ...`，不检查列表是否为空。本库现有的 NPC 文件里没有字面写成空 `chat_msg` 的（扫描只认 `set("chat_msg", ({ }))`）；守卫挡的是运行时才为空的列表和以后新增的 NPC。在 `random(100) < chance` 前面加 `sizeof(msg) &&`（`scripts/lpc_fix_chat_empty.py`；`if (random(100) > chance) return 0;` 的写法是 `!sizeof(msg) ||`）。改动：`/std/char/npc.lpc`（共 1 个文件）。

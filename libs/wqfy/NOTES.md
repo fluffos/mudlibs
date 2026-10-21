@@ -549,3 +549,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply w
 ## `register` 指令编译不过：`main()` 里粘进了登录流程的代码（2026-10-20，KB 04 §6.25）
 
 `main()` 开头有两段 `if (yn == "") { ... input_to("confirm_id", ob); }` 和 `if (yn[0] != 'y' ...) { ... input_to("get_id", ob); }`：`yn` 和 `ob` 是登录程序里 `confirm_id()` 的变量，这里没有声明（`Undefined variable 'yn'`），登记表指令从来没有加载过。删掉这两段，留下 `display()` 和对代号的提问（后面的 `a()`……`g()` 逐项提问本来就是这条流程）。加载检查：HEAD FAIL → tree PASS。
+
+## NPC 的 `chat()` 在 `chat_msg` 为空数组时下标越界（2026-10-21，KB 06 §7.334）
+
+NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < chance) { rnd = random(sizeof(msg)); if (stringp(msg[rnd])) ...`，不检查列表是否为空。本库有 4 个 NPC 文件写成 `set("chat_msg", ({ }))`（或 `chat_msg_combat`）并带正的 `chat_chance`（例如 `/d/fy/npc/oldgun.lpc`、`/d/xgchen/shounao.lpc`），每次心跳有 `chat_chance`% 的概率 `random(0)` 为 0、`msg[0]` 报 `Array index out of bounds`（驱动捕获，心跳继续，但每次一条运行时错误），这个 NPC 在内存里就一直发生。在 `random(100) < chance` 前面加 `sizeof(msg) &&`（`scripts/lpc_fix_chat_empty.py`；`if (random(100) > chance) return 0;` 的写法是 `!sizeof(msg) ||`）。改动：`/std/char/npc.lpc`（共 1 个文件）。

@@ -372,3 +372,7 @@ HEAD 与工作树分别加载（新进程）：941 -> 941 通过，无回退；�
 ## `look1` 指令编译不过：`ansi.h` 丢了 `DELLINE`（2026-10-20，KB 04 §6.16）
 
 `cmds/std/look1.lpc` 第 198 行用到 `DELLINE`（VT100 的删除行转义码），本库的 `include/ansi.h` 有 `CLR`、`HOME`、`SAVEC`、`REST` 这一组，唯独没有这个宏（同系的 dtxyzjb 有 `#define DELLINE ESC+"[K"`）：指令加载时 `Undefined variable 'DELLINE'`，敲 `look1` 是 `*No program in object '/cmds/std/look1'!`（裸指令扫描）。补上同样的一行。加载检查：HEAD 0 通过 / 1 失败，工作树 1 通过。
+
+## NPC 的 `chat()` 在 `chat_msg` 为空数组时下标越界（2026-10-21，KB 06 §7.334）
+
+NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < chance) { rnd = random(sizeof(msg)); if (stringp(msg[rnd])) ...`，不检查列表是否为空。本库现有的 NPC 文件里没有字面写成空 `chat_msg` 的（扫描只认 `set("chat_msg", ({ }))`）；守卫挡的是运行时才为空的列表和以后新增的 NPC。在 `random(100) < chance` 前面加 `sizeof(msg) &&`（`scripts/lpc_fix_chat_empty.py`；`if (random(100) > chance) return 0;` 的写法是 `!sizeof(msg) ||`）。改动：`/std/char/npc.lpc`（共 1 个文件）。

@@ -241,3 +241,7 @@ WASM（`scripts/wasm_client.js`，本机的 build-wasm）：注册、`look`、`s
 ## `partyinfo` 读不到 `/log/cmds/party` 就抛错（2026-10-20，KB 06 §7.326）
 
 `cmds/std/partyinfo.lpc` 把 `read_file("/log/cmds/party")` 直接交给 `explode()`。这个文件是运行中的 mud 才会写出来的帮会日志，克隆出来的目录、站点和全新启动的树里没有，`read_file()` 答 0，于是 `Bad argument 1 to explode()`。现在读不到时按空表处理，只打印表头。同一份文件在 ylfyxa3、xajh4gkb 里已先改过（那里有实测）；这里只做了加载检查（1/1，回归 0）。`u/wenwu/partyinfo.lpc` 是巫师目录里的同名副本，没有碰。
+
+## NPC 的 `chat()` 在 `chat_msg` 为空数组时下标越界（2026-10-21，KB 06 §7.334）
+
+NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < chance) { rnd = random(sizeof(msg)); if (stringp(msg[rnd])) ...`，不检查列表是否为空。本库有 1 个 NPC 文件写成 `set("chat_msg", ({ }))`（或 `chat_msg_combat`）并带正的 `chat_chance`（例如 `/d/quanzhen_old/npc/tanchuduan.lpc`），每次心跳有 `chat_chance`% 的概率 `random(0)` 为 0、`msg[0]` 报 `Array index out of bounds`（驱动捕获，心跳继续，但每次一条运行时错误），这个 NPC 在内存里就一直发生。在 `random(100) < chance` 前面加 `sizeof(msg) &&`（`scripts/lpc_fix_chat_empty.py`；`if (random(100) > chance) return 0;` 的写法是 `!sizeof(msg) ||`）。改动：`/d/migong/obj/npc1.lpc`、`/inherit/char/npc.lpc`（共 2 个文件）。

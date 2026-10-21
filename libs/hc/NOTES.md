@@ -625,3 +625,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 ## `bipin` 指令编译不过：文件末尾的注释没有收尾（2026-10-20，KB 04 §6.25）
 
 `cmds/skill/bipin.lpc` 第 268 行的 `/*` 把一个注释掉的旧函数 `start_huoqiang()` 一直注释到文件末尾，没有 `*/`：`End of file in a comment`，整个对象加载失败，`bipin`（比拼内力）指令不能用。在文件末尾补上 `*/`（被注释的是不用的旧代码，行为不变）。加载检查：HEAD FAIL → tree PASS。
+
+## NPC 的 `chat()` 在 `chat_msg` 为空数组时下标越界（2026-10-21，KB 06 §7.334）
+
+NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < chance) { rnd = random(sizeof(msg)); if (stringp(msg[rnd])) ...`，不检查列表是否为空。本库现有的 NPC 文件里没有字面写成空 `chat_msg` 的（扫描只认 `set("chat_msg", ({ }))`）；守卫挡的是运行时才为空的列表和以后新增的 NPC。在 `random(100) < chance` 前面加 `sizeof(msg) &&`（`scripts/lpc_fix_chat_empty.py`；`if (random(100) > chance) return 0;` 的写法是 `!sizeof(msg) ||`）。改动：`/inherit/char/npc.lpc`、`/inherit/char/npcb.lpc`（共 2 个文件）。

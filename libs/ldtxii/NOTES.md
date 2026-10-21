@@ -440,3 +440,7 @@ lpc`/`pigd.lpc` 里搜不到任何 `money`/`balance` 相关调用——它不是
 ## `news`：`/clone/misc/reporter` 归档里没有（2026-10-21，KB 06 §7.326）
 
 `cmds/usr/news.lpc` 先 `load_object("/clone/misc/reporter")`，再 `b->restore()`、`b->query("notes")`；归档里没有这个对象（同系的 dtxyzjb、zitengzhan 只带着它存的 `data/sldh/reporter.o`），`load_object()` 答 0，`0->restore()` 抛 `Bad argument 1 to EFUN call_other()  Expected: object, string, array,  Got: int(0)`：玩家敲 `news` 是运行时错误。取不到对象就当没有消息：命令原有的 "现在没有新的没有最新的消息。" 照常显示。ldtx 和 ldtxii 同一处（ldtxii 是 CRLF）。实测：`news` 打出公布栏和 "没有最新的消息"。
+
+## NPC 的 `chat()` 在 `chat_msg` 为空数组时下标越界（2026-10-21，KB 06 §7.334）
+
+NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < chance) { rnd = random(sizeof(msg)); if (stringp(msg[rnd])) ...`，不检查列表是否为空。本库现有的 NPC 文件里没有字面写成空 `chat_msg` 的（扫描只认 `set("chat_msg", ({ }))`）；守卫挡的是运行时才为空的列表和以后新增的 NPC。在 `random(100) < chance` 前面加 `sizeof(msg) &&`（`scripts/lpc_fix_chat_empty.py`；`if (random(100) > chance) return 0;` 的写法是 `!sizeof(msg) ||`）。改动：`/inherit/char/npc.lpc`（共 1 个文件）。

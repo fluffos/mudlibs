@@ -1098,3 +1098,7 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## `quest_chinese.lpc` 从未编译：`set_skill("parry", "...")`（2026-10-20，KB 06 §7.328）
 
 `kungfu/class/generate/quest_chinese.lpc` 第 60、102、143 行写成 `set_skill("parry", "taiji-jian")`（另两处是 `damo-jian`、`huashan-sword`），应当是 `map_skill("parry", ...)`：`Bad type for argument 2 of set_skill ( int vs string )`，继承它的任务 NPC 也跟着加载不了。改为 `map_skill`。加载检查（这个文件和继承它的对象共 2 个）：HEAD 通过 1 个，tree 通过 2 个，回归 0。
+
+## NPC 的 `chat()` 在 `chat_msg` 为空数组时下标越界（2026-10-21，KB 06 §7.334）
+
+NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < chance) { rnd = random(sizeof(msg)); if (stringp(msg[rnd])) ...`，不检查列表是否为空。本库现有的 NPC 文件里没有字面写成空 `chat_msg` 的（扫描只认 `set("chat_msg", ({ }))`）；守卫挡的是运行时才为空的列表和以后新增的 NPC。在 `random(100) < chance` 前面加 `sizeof(msg) &&`（`scripts/lpc_fix_chat_empty.py`；`if (random(100) > chance) return 0;` 的写法是 `!sizeof(msg) ||`）。改动：`/adm/daemons/npc.lpc`、`/inherit/char/npc.lpc`、`/inherit/char/npc1.lpc`、`/inherit/char/npc2.lpc`（共 4 个文件）。

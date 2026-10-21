@@ -1002,3 +1002,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply m
 ## `setmission`：`explode(read_file("/adm/daemons/wizmission"))`（2026-10-21，KB 06 §7.326）
 
 巫师命令 `cmds/wiz/setmission` 读 `/adm/daemons/wizmission`（归档里没有，由这条命令自己写），`explode(0)` 抛错，读在写之前所以这个文件永远建不出来。`read_file(...) || ""`，第一次用时走 `write_file()` 新建的分支。mhxy 和 mhxyqd 同一处。
+
+## NPC 的 `chat()` 在 `chat_msg` 为空数组时下标越界（2026-10-21，KB 06 §7.334）
+
+NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < chance) { rnd = random(sizeof(msg)); if (stringp(msg[rnd])) ...`，不检查列表是否为空。本库现有的 NPC 文件里没有字面写成空 `chat_msg` 的（扫描只认 `set("chat_msg", ({ }))`）；守卫挡的是运行时才为空的列表和以后新增的 NPC。在 `random(100) < chance` 前面加 `sizeof(msg) &&`（`scripts/lpc_fix_chat_empty.py`；`if (random(100) > chance) return 0;` 的写法是 `!sizeof(msg) ||`）。改动：`/std/char/npc.lpc`（共 1 个文件）。

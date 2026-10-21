@@ -1286,3 +1286,7 @@ The driver's `crypt()` raises (`Error in crypt(), check your salt`) for a key ov
 ## `get_config(__MUD_PORT__)` through the old `runtime_config.h` is a string (2026-10-20, KB 06 7.302)
 
 This lib's `include/runtime_config.h` has the old MudOS numbering (integer settings from 15, this driver from 256), so `get_config(__MUD_PORT__)` reads another setting (a string) and `(int)` is only compile-time bookkeeping: `socket_bind(fd, LOCAL_PORT())` raises `Bad argument 2 to socket_bind()`, the version daemon's `port = get_config(__MUD_PORT__) + VERSION_PORT` is a string sum. The header's own comment says `get_config(__MUD_PORT__) == __PORT__`, so the call (with the `(int)` / `to_int()` around it) is now the driver's predefine `__PORT__` (`scripts/lpc_fix_mud_port.py`). Changed: `/include/getconfig.h` (1).
+
+## NPC 的 `chat()` 在 `chat_msg` 为空数组时下标越界（2026-10-21，KB 06 §7.334）
+
+NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < chance) { rnd = random(sizeof(msg)); if (stringp(msg[rnd])) ...`，不检查列表是否为空。本库现有的 NPC 文件里没有字面写成空 `chat_msg` 的（扫描只认 `set("chat_msg", ({ }))`）；守卫挡的是运行时才为空的列表和以后新增的 NPC。在 `random(100) < chance` 前面加 `sizeof(msg) &&`（`scripts/lpc_fix_chat_empty.py`；`if (random(100) > chance) return 0;` 的写法是 `!sizeof(msg) ||`）。改动：`/std/char/fighter.lpc`、`/std/char/jobnpc.lpc`、`/std/char/npc.lpc`、`/std/char/npcbak.lpc`（共 4 个文件）。
