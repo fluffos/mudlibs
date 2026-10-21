@@ -14,8 +14,8 @@
 #   does not start anything, so the caller owns (and kills, by PID) the driver:
 #     cd <dest>/libs/<slug> && setsid nohup <driver> config.fluffos > out 2>&1 &
 #
-# Only vendored libs (work/ tracked in this repo) are supported; submodule and
-# upstream-hosted trees need their patches applied first.
+# Vendored libs (work/ tracked in this repo) and `submodule-patch` libs (lima, swmud, spacemud: the submodule's worktree + patches/ + overlay/) are supported;
+# upstream-hosted trees without catalog patches need their patches applied first.
 
 set -euo pipefail
 
@@ -32,9 +32,15 @@ DEST=${3:-${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}/pristine-$SLUG}
 LIB="libs/$SLUG"
 
 [ -f "$REPO_ROOT/$LIB/config.fluffos" ] || { echo "error: $LIB/config.fluffos not found" >&2; exit 1; }
+SUBMODULE=0
 if [ -n "$(git -C "$REPO_ROOT" ls-files -s -- "$LIB/work" | awk '$1==160000' | head -1)" ]; then
-  echo "error: $LIB/work is a submodule; apply its patches/overlay by hand" >&2
-  exit 1
+  # a `submodule-patch` lib (lima, swmud, spacemud): upstream's checked-out worktree + libs/<slug>/patches + libs/<slug>/overlay, as make_source_zips.sh stages it
+  if [ -d "$REPO_ROOT/$LIB/patches" ] && [ -d "$REPO_ROOT/$LIB/work/.git" -o -f "$REPO_ROOT/$LIB/work/.git" ]; then
+    SUBMODULE=1
+  else
+    echo "error: $LIB/work is a submodule without catalog patches; apply its patches/overlay by hand" >&2
+    exit 1
+  fi
 fi
 case "$DEST" in
   ${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}/*|/var/tmp/*) ;;
@@ -48,7 +54,15 @@ if [ -e "$DEST" ] && [ ! -f "$DEST/.pristine-tree" ]; then
 fi
 rm -rf -- "$DEST"
 mkdir -p "$DEST"
-git -C "$REPO_ROOT" archive "${REV:-HEAD}" "$LIB/work" "$LIB/config.fluffos" | tar -x -C "$DEST"
+if [ "$SUBMODULE" = 1 ]; then
+  # REV does not apply: the submodule's own checked-out commit is what is staged
+  mkdir -p "$DEST/$LIB/work"
+  rsync -a --exclude='/.git' --exclude='/.git/' "$REPO_ROOT/$LIB/work/" "$DEST/$LIB/work/"
+  git -C "$REPO_ROOT" archive "${REV:-HEAD}" "$LIB/config.fluffos" | tar -x -C "$DEST"
+  python3 "$SELF_DIR/apply_lib_patches.py" "$SLUG" --work "$DEST/$LIB/work" > /dev/null
+else
+  git -C "$REPO_ROOT" archive "${REV:-HEAD}" "$LIB/work" "$LIB/config.fluffos" | tar -x -C "$DEST"
+fi
 touch "$DEST/.pristine-tree"
 # The site zip lays libs/<slug>/overlay/ over work/ (make_source_zips.sh); so does this tree.  oxidus keeps the
 # driver headers its global.h includes there, and nothing of it compiles without them.
@@ -58,8 +72,10 @@ if git -C "$REPO_ROOT" cat-file -e "${REV:-HEAD}:$LIB/overlay" 2>/dev/null; then
 fi
 
 CFG="$DEST/$LIB/config.fluffos"
-sed -i "s|^mudlib directory.*|mudlib directory : $DEST/$LIB/work|; s|^port number.*|port number : $PORT|" "$CFG"
-mkdir -p "$DEST/$LIB/work/log"
+# a mudlib that lives in a subdirectory of work/ (lima: work/lib) keeps that suffix
+SUFFIX=$(sed -n 's|^mudlib directory *: *.*/libs/[^/]*/work||p' "$CFG" | head -1)
+sed -i "s|^mudlib directory.*|mudlib directory : $DEST/$LIB/work$SUFFIX|; s|^port number.*|port number : $PORT|" "$CFG"
+mkdir -p "$DEST/$LIB/work$SUFFIX/log"
 
 # The site loader also recreates every dir wasm_keep_dirs.txt records for this
 # slug (the zip carries none of them); do the same so this tree is what a

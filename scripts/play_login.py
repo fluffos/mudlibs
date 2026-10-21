@@ -114,6 +114,7 @@ PRIORITY = [
     (r"(?s)([A-Za-z0-9])\s*键\s*接受此?天赋[^\n]*$", "{accept_key}", "prio_accept_key"),                              # sgzmudsgz: "以下天赋值满意吗 ... r键接受此天赋，h键帮助，m键返回上级选单，q键退出。" (no colon, so no rule sees a question)
     (r"(?s)例如(?:输入|輸入)?[:：]\s*\d+(?:\s+\d+){2,}[\s\S]*(?:属性|屬性)[^\n]*[:：]\s*$", "{example_nums}", "prio_attr_example"),         # shzs: the help text of the attribute prompt shows `15 10 10 6 17 2`; the prompt line alone only says `h`
     (r"(?is)\[c\]\s*create new character.*(?:command or name|\bname)[^\n]*:\s*$", "c", "prio_create"),                 # questmud: a menu whose last line is the generic `Command or Name:`
+    (r"(?s)User Menu.*Enter the game.*\[spcrwq\]\s*$", "p", "prio_lima_menu"),                                         # lima: "s Select character to play  p Enter the game ... [spcrwq]" (autologin after 10 s otherwise)
 ]
 RACE_PICK = re.compile(r"(?is)valid races?:\s*([A-Za-z][\w-]*)")
 NEW_CHAR = re.compile(r"(?im)^\s*N\s*-\s*New character")
@@ -352,7 +353,7 @@ def run(args):
                 probe += m.read(2.5, 25)
             out(">>> look\n<<< " + probe.strip().replace("\n", "\n<<< ")[-300:])
             same = probe.strip()[-160:] == buf.strip()[-160:]          # a menu or a question redisplays itself when `look` is typed at it
-            if re.search(r"(?i)there (is|are) \w+ obvious exits?", probe) and not same:        # an LPC room description: the character is in the world (Discworld queues the next commands behind its intro)
+            if re.search(r"(?i)there (is|are) \w+ obvious exits?|^obvious exits:", probe, re.M) and not same:        # an LPC room description: the character is in the world (Discworld queues the next commands behind its intro)
                 buf = probe
                 break
             if len(probe.strip()) > 20 and (GAME.search(probe) or probe.count("\n") >= 3) and not NOT_GAME.search(tail(probe, 200)):

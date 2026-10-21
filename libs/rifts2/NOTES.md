@@ -689,3 +689,7 @@ is off the list of non-compiling files above.
 ## A login password over 255 bytes: `crypt()` raises (2026-10-20, KB 06 7.294)
 
 The driver's `crypt()` raises (`Error in crypt(), check your salt`) for a key over 255 bytes, where the old driver hashed any length. A password of 256 bytes or more typed at the login prompt threw an error in the password check and left the connection at a bare `> ` prompt, so the login never completed (the old-password test of `password` the same); found by the sweep shape of 300 `x`. `/adm/obj/simul_efun.lpc` now defines a simulated efun `crypt(key, salt)` of the same name: only an over-long key is cut (to 255 characters, then character by character until `sizeof(to_buffer(key)) <= 255`: the limit is in bytes, a CJK character takes three) before it is handed to `efun::crypt()`; every ordinary password hashes as before and the saved hashes are untouched (`scripts/lpc_add_sefun.py crypt`).
+
+## `title`：没有职业的角色（2026-10-21，KB 06 §7.336）
+
+`cmds/mortal/_title.lpc`：`_class = lower_case(this_player()->query_class());`，新角色没有职业时 `query_class()` 是 0，`lower_case(0)` 报 `Bad argument 1 to lower_case()`（第二遍扫描的 `title` 一行）；改成 `stringp(_class) ? lower_case(_class) : ""`（`/data/pretitles//xxx.pt` 不存在，走 `capitalize(rank)` 的分支）。`title reset` 里的 `capitalize(this_player()->query_race())` 对没有种族的角色同样报错：种族是创建流程里设的，扫描机器人的角色走的是不完整的创建（`score` 里 HP 1），没有改。

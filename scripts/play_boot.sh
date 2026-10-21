@@ -4,10 +4,10 @@
 # Boot one vendored lib for a play test (KB 08 10.7, 10.16): a pristine copy of the tracked files (scripts/pristine_tree.sh: its own config and port, the site's
 # keep dirs) and the real driver as a transient systemd user unit `play-SLUG` with a 3 GB memory cap, its stdout and stderr in
 # ${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}/play-SLUG.out.  DRIVER defaults to ~/src/fluffos/build-debug/src/driver (a lib with its own driver build, lima or
-# wilderness, passes that one).  Waits until the port answers.  Stop it with `scripts/play_stop.sh SLUG`: the unit is the exact process group, never a pkill.
+# wilderness, passes that one, or sets PLAY_DRIVER for the sweep / combat / walk / soak scripts).  Waits until the port answers.  Stop it with `scripts/play_stop.sh SLUG`: the unit is the exact process group, never a pkill.
 set -euo pipefail
 [ $# -ge 2 ] || { echo "usage: $0 SLUG PORT [DRIVER]" >&2; exit 2; }
-SLUG=$1; PORT=$2; DRIVER=${3:-$HOME/src/fluffos/build-debug/src/driver}
+SLUG=$1; PORT=$2; DRIVER=${3:-${PLAY_DRIVER:-$HOME/src/fluffos/build-debug/src/driver}}     # PLAY_DRIVER: the lib's own build for a probe script that cannot pass a third argument (lima: ~/src/fluffos-lima/build-debug/src/driver)
 SCR=${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}
 TAG=${PLAY_TAG:+-$PLAY_TAG}     # PLAY_TAG=old: a second instance (own unit, tree and output) for an A/B run with another driver
 DEST=$SCR/play-$SLUG$TAG

@@ -32,6 +32,9 @@ def main():
     subprocess.run(["rm", "-rf", dest])
     subprocess.run([f"{REPO}/scripts/pristine_tree.sh", slug, "45993", dest], cwd=REPO, capture_output=True)
     work = f"{dest}/libs/{slug}/work"
+    for ln in open(f"{dest}/libs/{slug}/config.fluffos", encoding="utf-8", errors="replace"):          # a mudlib below work/ (lima: work/lib)
+        if ln.startswith("mudlib directory"):
+            work = ln.split(":", 1)[1].strip()
     os.makedirs(f"{work}/log", exist_ok=True)
     if not head:
         sys.path.insert(0, f"{REPO}/scripts")
