@@ -100,6 +100,8 @@ def trad_expand(pat):
 RULES = [(trad_expand(rx), rep) for rx, rep in RULES]
 # rules that read the whole screen before the prompt line is looked at: the line says only "What is your character's name?" and the instruction is above it
 PRIORITY = [
+    (r"版本验证成功\s*$", "{name},{pw},x,{email}", "prio_hhsj_handshake"),                                                     # hhsj family (nitan170911, xfbhh): the server writes `ver1.0,KEY` / 版本验证成功 and waits for one line `id,password,x,email`
+    (r"0008\s*$", "男性║1║路客", "prio_hhsj_char"),                                                                          # hhsj family: `0008` = a new account, the next line is `gender║img║Chinese name`
     (r"(?is)palabra resuena en tu conciencia: ['\"“]nacer['\"”]", "nacer", "prio_nacer"),                              # ninetears: the first word of the Spanish birth
     (r"(?is)enter your current character's name.*your choice:\s*$", "{name}", "prio_dwname"),                              # Discworld: the menu after N (new) was used up, or --existing
     (r"(?s)(还没有登录过|没有这个玩家|不存在)[^\n]*请(用|使用)\s*[`'\"“]?new.*[:：；;]\s*$", "{newword}", "prio_new_cn"),                  # xo, xajh2: "这个id还没有登录过，请用new来起用这个id.\n您的英文名字；"
