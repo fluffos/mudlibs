@@ -983,3 +983,7 @@ HEAD 失败、现在加载（没有 warning）的 15 个：`magic_d`、`bboard_d
 - `std/user/retinue.lpc:161`：校验循环的 `sizeof(next_slot_to_fill)`（见上）。
 - `cmds/spells/w/_word_of_chaos.lpc:70`：`align == 8 || align == 8`（见上）。
 - `magic_d` 在每次全新启动后的第一次 `spells` / `cast` 要建法术索引（880 个法术文件），调试驱动里 30 多秒；之后 `/daemon/save/magic_d.o` 在，不再重建。
+
+## `daemon/letter`：`if` 没有花括号（2026-10-21，KB 06 §7.298）
+
+`create()` 的循环 `if(file_size(DIR_LETTERS+"/"+i) == -2) y += ...;` 后面还有 `if(y > 9999) break;` 和 `__LettersDir += get_dir(DIR_LETTERS+"/"+i+"/");`，缩进像在 `if` 里面，实际总会执行。`/secure/save/letters/N/` 目录不存在时 `get_dir()` 答 0，`+= 0` 抛 `Bad argument 2 to (void)+=`。sunshadow 的检查树带这些目录所以没有出现，shadowgate 的新树没有，邮件守护进程加载失败。补上花括号，目录都在时行为不变。

@@ -726,3 +726,11 @@ The driver's `crypt()` raises (`Error in crypt(), check your salt`) for a key ov
 ## 药水文件的属性变量叫 `in`（2026-10-20，KB 04 §6.26）
 
 `d/darkwood/tabor/obj/potions/weaken.lpc` 和 `d/shadow/obj/potion/weaken.lpc` 的 `int st,in,wi,de,co,ch;`（力量、智力、感知……的缩写，`in` 是智力）：保留字，`syntax error, unexpected L_IN`，药水加载不了。`scripts/lpc_fix_in_ident.py` 改名为 `in_var`（各 4 处）。加载检查 2/2，HEAD FAIL → tree PASS。
+
+## 移植 sunshadow 的命令、法术、守护进程修复（2026-10-21，KB 04 §6.21，KB 06 §7.329–7.330）
+
+sunshadow 第十七批改的 75 个文件里 74 个对象在 shadowgate 也有同名文件（`lpc_twin_port.py classify`）：13 个逐 token 相同，用 `adopt --apply` 整体采用（`listener`、`_addnwp`、`_alterobj`、`_acheck`、`_callout`、`_blindfold`、`_bury`、`_passwd`、`_skin`、`_rgrep2`、`dlevel`、`treesave_d`、`iqueue`）；60 个有各自的代码，其中仍然加载失败的用补丁逐个移植（`pacct`、`_druids`、`_spell_list`、`letter`、`templefunds_d`、`rn`、`is_druid`、`m_armour`、`m_monster`、`m_room`、`m_weapon`）。shadowgate 自己的归档损伤另有三处：`adm/obj/pacct.lpc` 的 `save_file_name()` 少一个 `}`、`save_pacct()` 的 `actually_save_pacct(name)` 少 `;`；`std/news/rn.lpc` 的 `sprintf("%d-%d", GetLeft(...),num;` 少一个 `)`（都对照 sunshadow 的同一段）；`rn.exit()` 里三个没用的局部变量去掉（warning）。
+
+`daemon/letter`：`for` 循环里的 `if(file_size(DIR_LETTERS+"/"+i) == -2)` 没有花括号，只管下一行 `y += ...`，后面的 `__LettersDir += get_dir(...)` 总会执行；`/secure/save/letters/N/` 不存在时 `get_dir()` 答 0，`+= 0` 抛 `Bad argument 2 to (void)+=`，整个邮件守护进程加载失败（sunshadow 的检查树里有这些目录所以没暴露；两个库一起补了花括号，目录都在时行为不变）。
+
+验证：74 个对象 HEAD 加载 58 个、树 71 个，regress 0，新加载 13 个，没有 warning（`make/m_monster` 的三条是归档损坏，见下）；实机（`play-shadowgate-xq`，机器人）`blindfold`、`bury`、`skin`、`passwd`、`gossip`、`mail`、`news`、`actions`、`buff` 都有正常回答，控制台没有错误。仍然失败的三个：`make/m_monster`（第 741–890 行在归档里损坏，sunshadow 同样）、`adm/simul_efun/sum_array` 和 `std/user/retinue`（shadowgate 没有这两个文件）。
