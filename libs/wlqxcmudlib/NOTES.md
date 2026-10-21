@@ -260,3 +260,7 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 ## `get_config(__MUD_PORT__)` 经旧版 `runtime_config.h` 得到字符串（2026-10-20，KB 06 §7.302）
 
 本库的 `include/runtime_config.h` 是老 MudOS 的编号（整数设置从 15 起，本驱动从 256 起），`get_config(__MUD_PORT__)` 读到的是另一项设置（字符串），`(int)` 又只是编译期标注，于是 `socket_bind(fd, LOCAL_PORT())` 报 `Bad argument 2 to socket_bind()`，版本守护进程 `port = get_config(__MUD_PORT__) + VERSION_PORT` 是字符串相加。头文件自己的注释写明 `get_config(__MUD_PORT__) == __PORT__`，所以代码里的这个调用（连同外面的 `(int)` / `to_int()`）改成了驱动的预定义 `__PORT__`（`scripts/lpc_fix_mud_port.py`）。改动：`/adm/daemons/network/messaged.lpc`（1 处）、`/adm/daemons/versiond.lpc`（1 处）、`/include/getconfig.h`（1 处）。
+
+## 房间文件结尾的 `replace_program(ROOM);`（2026-10-20，KB 06 §7.100）
+
+3,467 个房间在 `create()` 末尾 `replace_program(ROOM);`：房间一旦在这之前建了闭包（`(: ... :)`）就是 `cannot replace a program with function references, ignored`（扫描里 `d/lingxiao/sroad6.lpc`），没建的则留下一个以后绑闭包就崩的地雷（KB 06 §7.86/§7.100）。本库在 191 库的清扫之后才入库，`scripts/lpc_drop_replace_program.py --apply wlqxcmudlib` 删掉这些整行（只删整行，3,467 行）；继承 `BUILD_ROOM` 却 `replace_program(ROOM)` 的 5 个 `d/hangzhou/shanlu*` 保留（它们加载正常）。抽样 300 个房间 HEAD 与 tree 都通过，回归 0；实测从起点走了几个房间，控制台没有错误。

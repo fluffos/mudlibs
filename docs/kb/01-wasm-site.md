@@ -80,7 +80,8 @@ byte-preserving the original behavior.
     copy expanded in `channeld`: `find_object(DNS_MASTER) ?
     DNS_MASTER->query_mud_name() : "<the mud's name>"`.
   - A `VERSION_D->is_version_ok()` gate (中华英雄/终极地狱 lineage): guard
-    with `find_object(VERSION_D) &&`; absent means allow.
+    with `find_object(VERSION_D) &&`; absent means allow. The `closed` daemon's `heart_beat()` of fyzfqyy, shenmo, tybxjh, wlhd, xo_final and yxjh
+    calls it with no version daemon in the lib at all: one `couldn't find object '/adm/daemons/versiond'` a second while anyone is in closed-door cultivation (2026-10-20).
   - `MESSAGE_D->find_chatter()` in `check_ok()`. MESSAGE_D can't compile
     under WASM, so the unguarded call drops every login. Guard it with
     `find_object`.

@@ -722,3 +722,7 @@ The driver's `crypt()` raises (`Error in crypt(), check your salt`) for a key ov
 ## `darkrobe` keeps a name in an `object` variable (2026-10-20, KB 06 7.305)
 
 `d/attaya/senund/obj/darkrobe.lpc` declares `object OWNER;` but stores the player's name (a string) in it and compares against it: `error: != always true because of incompatible types ( string vs object )`, the robe (and the NPC that carries it) never loaded. The declaration is `string OWNER;` now.
+
+## 药水文件的属性变量叫 `in`（2026-10-20，KB 04 §6.26）
+
+`d/darkwood/tabor/obj/potions/weaken.lpc` 和 `d/shadow/obj/potion/weaken.lpc` 的 `int st,in,wi,de,co,ch;`（力量、智力、感知……的缩写，`in` 是智力）：保留字，`syntax error, unexpected L_IN`，药水加载不了。`scripts/lpc_fix_in_ident.py` 改名为 `in_var`（各 4 处）。加载检查 2/2，HEAD FAIL → tree PASS。

@@ -574,3 +574,7 @@ lpc` 会调用双方 `kill_ob()`，NPC 真实反击），几回合后一次「�
 ## `join`、`accept` 对档案里没有的擂台房间调用函数（2026-10-20，KB 06 §7.270 / §7.288）
 
 `cmds/verb/join.lpc` 和 `accept.lpc` 开头是 `object tai = load_object("/d/place/biwu/biwutai"); if (!tai->query_temp(...))`。比武大会的擂台房间 `/d/place/biwu/biwutai` 不在档案里（`d/place/biwu/` 下的报名处、大厅、等候室和各门派擂台房都在，唯独缺它），`load_object()` 答 0，于是直接敲 `join` 或 `accept` 就是 `Bad argument 1 to call_other()`（本库的错误处理把它写进 `/log/runtime/cmds`，并对玩家说“运行时发生错误”）。两个命令现在先测 `objectp(tai)`，房间不存在就按原来的话回答“现在不是报名/比武时间”。比武大会本身（`vote ... start`、巫师命令 `biwu`、`reward_d` 的 `record()`）依赖同一个房间，仍然不工作，那是档案缺的内容，没有碰。实测（xo_final）：`join` 答“现在不是报名时间，你不能去报名。”，`accept` 答“现在不是比武时间，你不能接收邀请。”，控制台没有错误；加载检查 2/2，回归 0。
+
+## `closed` 守护的心跳每秒调一次不存在的 `versiond`（2026-10-20，KB 01 §1.3(c)）
+
+`closed.lpc` 的 `heart_beat()` 以 `if (! VERSION_D->is_version_ok()) return;` 开头，本库没有 `/adm/daemons/versiond`：有人在闭关时，控制台每秒一条 `call_other() couldn't find object '/adm/daemons/versiond'`，闭关的后续处理（`load_all_users()`）也永远走不到。改成 `if (find_object(VERSION_D) && !VERSION_D->is_version_ok())`（KB 01 的写法：没有版本守护就当版本正常）。加载检查 OK。

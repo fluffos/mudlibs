@@ -541,3 +541,7 @@ fresh driver boot plus the full long-sit idle window below.
 ## `query_autoload()` 同时来自 autoload 模块和物件基类（2026-10-20，KB 06 §7.318）
 
 `/std/user/autoload.lpc` 有 `mixed *query_autoload()`（要恢复的物品清单），`/std/object.lpc` 经 `/std/living` 带来 `int query_autoload()`（物品的 autoload 级别），玩家身体两个都继承：驱动取第一个并在每次编译玩家身体时警告 `query_autoload() inherited from both … using the definition in /std/user/autoload.lpc`（首次登录控制台就有）。驱动的选择本来就是想要的，所以在 `std/user.lpc` 末尾显式定义 `mixed *query_autoload() { return autoload::query_autoload(); }`，运行时行为不变，警告消失。
+
+## `_backstab` 的编译警告：`dmg *= 0.85`（2026-10-20，KB 04 §6.10）
+
+`cmds/skills/_backstab.lpc` 第 282 行 `dmg *= 0.85;`，`dmg` 是 int：驱动警告浮点被截成整数。改写成 `dmg = to_int(dmg * 0.85);`（结果与原来一样）。加载检查：通过，没有警告。

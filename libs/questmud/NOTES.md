@@ -806,3 +806,7 @@ The driver's `crypt()` raises (`Error in crypt(), check your salt`) for a key ov
 ## `get`、`eq`、`ntell`、`pwho` 编译不过：局部变量类型（2026-10-20，KB 04 §6.21）
 
 `cmds/std/_get.lpc`：`object item_o` 装 `EQ_FILTER` 返回的对象数组，再交给 `get_all(object *, ...)`；`string *livings` 里放的是 `all_inventory()` 的对象。`_eq.lpc`：`string slots` 其实是数组（`valid_slot(string slots, ...)` 的参数也是）。`_ntell.lpc`：两处 `string ignore_list` 装的是 `query_ignored()` 的名字数组。`_pwho.lpc`：`object *members` 先接 `query_members()` 的映射、再接 `keys()` 的结果，改 `mixed`。各按真实内容改类型。加载检查：四个都是 HEAD FAIL → tree PASS。没有动的：`_calc`（浮点和字符串混着传给 `potenssi()`）、`_look2`（`get_env_color` 哪里都没有）、`_sshout`（缺花括号、变量没声明、`tail()`，整个文件是残片）、`daemons/warlock_d.lpc`（`is_demon`、`invite` 从没声明）。
+
+## `copy_file(string in, string out)`：参数名 `in` 是保留字（2026-10-20，KB 04 §6.26）
+
+巫师的 `cp`、`rn`、`mv` 系列文件（`cmds/wiz/_cp.lpc`、`_rn.lpc`，`castle/kk.lpc`、`castle/sh/daemons/copier.lpc`，`wizards/*/` 下的几份）把 `string in` 当参数名：`syntax error, unexpected L_IN`。`scripts/lpc_fix_in_ident.py` 改名为 `in_var`。加载检查 11/11，HEAD FAIL → tree PASS。

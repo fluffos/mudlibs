@@ -519,3 +519,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply y
 ## `beat`（充穴）指令编译不过：局部变量的类型写错（2026-10-20，KB 04 §6.21）
 
 `cmds/skill/beat.lpc` 的 `do_score()` 声明了 `string strin`，而 `query_xue()` 返回 `string *`、下面按 `strin[i]` 取穴位名；又把 `baoji` 声明成 `int`，却拿它存字符串、做 `baoji += "穴"`：`Bad assignment ( int vs string )`、`( string vs int )`，指令从来没有加载过。改为 `string *strin` 和 `string baoji`。加载检查：HEAD FAIL → tree PASS。
+
+## `closed` 守护的心跳每秒调一次不存在的 `versiond`（2026-10-20，KB 01 §1.3(c)）
+
+`closed.lpc` 的 `heart_beat()` 以 `if (! VERSION_D->is_version_ok()) return;` 开头，本库没有 `/adm/daemons/versiond`：有人在闭关时，控制台每秒一条 `call_other() couldn't find object '/adm/daemons/versiond'`，闭关的后续处理（`load_all_users()`）也永远走不到。改成 `if (find_object(VERSION_D) && !VERSION_D->is_version_ok())`（KB 01 的写法：没有版本守护就当版本正常）。加载检查 OK。

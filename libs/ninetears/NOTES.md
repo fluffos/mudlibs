@@ -892,3 +892,7 @@ These wizard commands do `write(dump_socket_status());`, a MudOS efun FluffOS la
 ## A login password over 255 bytes: `crypt()` raises (2026-10-20, KB 06 7.294)
 
 The driver's `crypt()` raises (`Error in crypt(), check your salt`) for a key over 255 bytes, where the old driver hashed any length. A password of 256 bytes or more typed at the login prompt threw an error in the password check and left the connection at a bare `> ` prompt, so the login never completed (the old-password test of `password` the same); found by the sweep shape of 300 `x`. `/secure/simul_efun.lpc` now defines a simulated efun `crypt(key, salt)` of the same name: only an over-long key is cut (to 255 characters, then character by character until `sizeof(to_buffer(key)) <= 255`: the limit is in bytes, a CJK character takes three) before it is handed to `efun::crypt()`; every ordinary password hashes as before and the saved hashes are untouched (`scripts/lpc_add_sefun.py crypt`).
+
+## 旧法术目录里的变量名 `in`（2026-10-20，KB 04 §6.26）
+
+`d/gremios/hechizos/combined/*`、`wizard/*` 等 46 个法术文件把 `in` 当变量名（`syntax error, unexpected L_IN`，法术加载不了）。`scripts/lpc_fix_in_ident.py` 改名为 `in_var`；名字里带 `old`、`bak` 的备份目录没有动（另有 82 个文件在那里，是死副本）。加载检查 46/46，HEAD FAIL → tree PASS。

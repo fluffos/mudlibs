@@ -290,6 +290,7 @@ program… ignored".
   anyway.
 - **Never `git stash` mid-sweep** (§10.5). Use `git add -u` plus
   explicit `NOTES.md` paths.
+**Later (2026-10-20):** wlqxcmudlib, added after the sweep, carried 3,467 of them (`scripts/lpc_drop_replace_program.py --apply`, 5 left: `inherit BUILD_ROOM` with `replace_program(ROOM)`, they load); found by the console row `cannot replace a program with function references, ignored` of a bare-verb sweep.
 
 ### 7.101 `valid_leave()` handles directions that `exits` omits
 `go` rejects anything not in `exits` before `valid_leave` runs, so the

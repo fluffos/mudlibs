@@ -919,3 +919,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply k
 ## 登录密码超过 255 字节：`crypt()` 抛错（2026-10-20，KB 06 §7.294）
 
 驱动的 `crypt()` 对超过 255 字节的密钥直接报错（`Error in crypt(), check your salt`），老驱动则按任意长度散列。在登录提示符下输入 256 字节以上的密码，密码检查那一行就抛错，连线停在一个裸的 `> ` 提示符上，登录走不完（`password` 指令的旧密码检查同样）；用 300 个 `x` 当参数的扫描发现的。`/adm/obj/simul_efun.lpc` 里补了一个同名的 simul_efun `crypt(key, salt)`：只有超长的密钥才被截短（先截到 255 个字符，再逐字符截到 `sizeof(to_buffer(key)) <= 255`，限制按字节算，一个汉字占三个字节），再交给 `efun::crypt()`；普通密码原样散列，已存的密码散列不受影响（`scripts/lpc_add_sefun.py crypt`）。
+
+## `do` 指令编译不过：变量名 `in` 是保留字（2026-10-20，KB 04 §6.26）
+
+`cmds/std/do.lpc` 的 `parse()` 里 `int i, in, n;`（“在引号里”的标志）：`in` 在这个驱动里是 `foreach (x in y)` 的关键字，`syntax error, unexpected L_IN`，`do` 指令（一行里连发几条命令）从来没有加载过。`scripts/lpc_fix_in_ident.py` 把变量改名为 `in_var`（5 处）；`u/f/fund/mud/cmds/usr/do.lpc` 是同一份。加载检查 2/2，HEAD FAIL → tree PASS。

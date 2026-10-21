@@ -947,3 +947,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply d
 ## 翻页器 `start_more(read_file(...))`：文件缺失时 `explode(0)`（2026-10-20，KB 06 §7.300）
 
 东方故事系的翻页器 `void start_more(string msg) { ... explode(msg, "\n") ... }` 被这样调用：`start_more(read_file(HELP_DIR + "help/topics"))`、`start_more(read_file(NEWS))`。压缩包没带的文件使 `read_file()` 回 0，`explode(0, ...)` 在本驱动里报 `Bad argument 1 to explode()`（不带参数的 `help` 指令就是这样出错的），老驱动把 0 当空文本。在 `start_more` 开头加了 `if (!stringp(msg)) return;`（`scripts/lpc_fix_start_more.py`）。改动：`/feature/more.lpc`。
+
+## `multi_arrow`、`mindkill`、`mk`：变量名 `in` 是保留字（2026-10-20，KB 04 §6.26）
+
+`daemon/skill/multi_arrow.lpc`、`u/h/hack/skill/multi_arrow.lpc`、`u/m/morral/mindkill.lpc`、`mk.lpc` 里有叫 `in` 的变量或参数：`syntax error, unexpected L_IN`。`scripts/lpc_fix_in_ident.py` 改名为 `in_var`。加载检查 4/4，HEAD FAIL → tree PASS。
