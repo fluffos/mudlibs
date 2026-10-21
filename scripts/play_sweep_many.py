@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""scripts/play_sweep_many.py [--shapes one|two|quick] [--timeout SECONDS] [--out DIR] [--tag TAG] LISTFILE | SLUG [SLUG...]
+"""scripts/play_sweep_many.py [--probe sweep|combat|walk] [--shapes one|two|quick] [--timeout SECONDS] [--out DIR] [--tag TAG] LISTFILE | SLUG [SLUG...]
 
 One lane of a corpus-wide play sweep (KB 08 10.16): runs scripts/play_sweep_lib.py over the libs one after another, a TSV and a log per lib in DIR
 (default $LPC_SCRATCH/sweep_all) and one summary line per lib on stdout:
@@ -10,6 +10,11 @@ One lane of a corpus-wide play sweep (KB 08 10.16): runs scripts/play_sweep_lib.
 ephemeral source port of the host can hold a lib's own) or `norobot` (the login robot did not get in).  A `console` row is the signal: the driver printed
 an error while the verb ran (read the log, reproduce by hand, KB 08 10.16).  Start two lanes (two lists) at most; a lane that runs longer than two hours is
 killed by the tool that tracks it, so give each lane a list of about eight libs.  LISTFILE has one slug per line (`#` comments allowed).
+`--probe combat` runs scripts/play_combat_probe.py instead (a fight with the NPCs of the start room: KB 08 10.16); its summary line is
+    SLUG <TAB> candidates <TAB> fights <TAB> findings <TAB> console <TAB> stuck <TAB> closed <TAB> seconds <TAB> status <TAB> the ids found in the start room
+`--probe walk` runs scripts/play_walk_probe.py (a depth-first walk of the rooms a visitor reaches from the start room, at most 50 moves: what the code does when a
+player ENTERS a room); its summary line is
+    SLUG <TAB> rooms <TAB> moves <TAB> findings <TAB> console <TAB> screen <TAB> closed <TAB> seconds <TAB> status <TAB> the first room
 The unit of a lib is stopped by play_sweep_lib.py itself; this script never touches a unit it did not start."""
 import argparse
 import os
@@ -23,9 +28,14 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCR = os.environ.get("LPC_SCRATCH") or os.path.expanduser("~/.cache/lpc-scratch")
 
 
-def one(slug, shapes, timeout, out, tag, port=0):
+def one(slug, shapes, timeout, out, tag, port=0, probe="sweep"):
     tsv, log = f"{out}/{slug}.tsv", f"{out}/{slug}.log"
-    cmd = [sys.executable, f"{REPO}/scripts/play_sweep_lib.py", slug, "--shapes", shapes, "--out", tsv]
+    if probe == "combat":
+        cmd = [sys.executable, f"{REPO}/scripts/play_combat_probe.py", slug, "--tag", tag, "--seconds", "20", "--targets", "2", "--out", tsv]
+    elif probe == "walk":
+        cmd = [sys.executable, f"{REPO}/scripts/play_walk_probe.py", slug, "--tag", tag, "--moves", "50", "--out", tsv]
+    else:
+        cmd = [sys.executable, f"{REPO}/scripts/play_sweep_lib.py", slug, "--shapes", shapes, "--out", tsv]
     if port:
         cmd += ["--port", str(port)]
     env = dict(os.environ, PLAY_TAG=tag) if tag else os.environ
@@ -67,6 +77,7 @@ def summary(text):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("slugs", nargs="+")
+    ap.add_argument("--probe", default="sweep", choices=["sweep", "combat", "walk"])
     ap.add_argument("--shapes", default="one", choices=["one", "two", "quick"])
     ap.add_argument("--timeout", type=int, default=1500)
     ap.add_argument("--out", default=f"{SCR}/sweep_all")
@@ -80,10 +91,24 @@ def main():
             slugs.append(s)
     os.makedirs(a.out, exist_ok=True)
     for i, slug in enumerate(slugs):
-        status, text, secs = one(slug, a.shapes, a.timeout, a.out, a.tag)
+        status, text, secs = one(slug, a.shapes, a.timeout, a.out, a.tag, 0, a.probe)
         if status == "noboot":
-            status, text, secs2 = one(slug, a.shapes, a.timeout, a.out, a.tag, 47000 + i)
+            status, text, secs2 = one(slug, a.shapes, a.timeout, a.out, a.tag, 47000 + i, a.probe)
             secs += secs2
+        if a.probe == "combat":
+            cands = re.search(r"^CANDIDATES (\[.*\])", text, re.M)
+            ids = cands.group(1) if cands else ""
+            kinds = {k: len(re.findall(rf"^FINDING \[{k}\]", text, re.M)) for k in ("console", "stuck", "connection-closed", "login")}
+            print("\t".join(map(str, [slug, ids.count(",") + 1 if ids not in ("", "[]") else 0, len(re.findall(r"^COMBAT ", text, re.M)), len(re.findall(r"^FINDING ", text, re.M)),
+                                       kinds["console"] + kinds["login"], kinds["stuck"], kinds["connection-closed"], int(secs), status, ids[:80]])), flush=True)
+            continue
+        if a.probe == "walk":
+            first = re.search(r"^ROOM 0 (.*?) exits=", text, re.M)
+            visited = re.search(r"^VISITED (\d+) rooms in (\d+) moves", text, re.M)
+            kinds = {k: len(re.findall(rf"^FINDING \[{k}\]", text, re.M)) for k in ("console", "screen", "closed", "login")}
+            print("\t".join(map(str, [slug, visited.group(1) if visited else 0, visited.group(2) if visited else 0, len(re.findall(r"^FINDING ", text, re.M)),
+                                       kinds["console"] + kinds["login"], kinds["screen"], kinds["closed"], int(secs), status, (first.group(1) if first else "")[:50]])), flush=True)
+            continue
         verbs, n, by = summary(text)
         kinds = {k: by.get(k, 0) for k in ("console", "screen", "connection-closed", "stuck-reconnect")}
         d = re.search(r"^DEPTH score \| (.*)$", text, re.M)
