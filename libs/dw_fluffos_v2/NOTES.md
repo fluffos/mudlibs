@@ -216,3 +216,7 @@ The driver's `crypt()` raises (`Error in crypt(), check your salt`) for a key ov
 ## Timed reboot: the mud asked everybody to leave 25 minutes after the boot (2026-10-20, KB 06 7.319)
 
 `obj/handlers/garbage.lpc` `check_reboot()` shuts the mud down when `uptime() > max_time`; `max_time` is saved in `save/garbage.o` and shrinks by a sixth at every boot that follows a crash. The committed file had been shrunk by earlier boots to 1491 s, so `log/REBOOT` said `Shutdown requested automatically` about 25 minutes after the boot, Offler announced the reboot, logins were refused (`It is too close to the shut-down`) and the driver exited: on the site nothing starts the mud again. `NO_TIMED_REBOOT` is now defined (the original ran 61 hours between reboots; the museum has no supervisor). Do not commit the churn of `save/garbage.o`.
+
+## `std/shops/print_shop.lpc`: a parameter named `nosave` (2026-10-20, KB 03 4.3)
+
+`add_auto_load_info(string nosave, string dynamic)` (and the `$(nosave)` in its body) is a syntax error on this driver (`unexpected L_TYPE_MODIFIER`): `nosave` is a variable modifier here, so the print shop base and the shops that inherit it never compiled. The `temperature` verb of the mortal sweep printed the line (it goes through the shop handler). The parameter is `nosave_arg`, as discworld (v3) already had it; the three files are identical again.

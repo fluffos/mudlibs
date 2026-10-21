@@ -28,7 +28,7 @@ RULES = [
     (r"(?is)\bpick TOWN\b.*Town:\s*$", "pick haven"),                                                         # havenmud: "pick TOWN - pick a particular town for yourself ... Town:"
     (r"(?is)choose a race[^\n]*:\s*\n[^\n]*\bhuman\b[^\n]*$", "human"),                                         # nirvlp312: "Choose a race for your character, you may select: human elf dwarf custom <race>"
     (r"(?i)throw (the )?other copy|already (logged|playing|connected)|reconnect|重复|另一个连线|取代|赶出去", "y"),
-    (r"(?i)(re-?type|again|confirm|verify|repeat|once more).{0,40}(password|passwd|pass)|(password|passwd).{0,40}(again|confirm|verify)|再输入一次|再输一次|确认密码|重新输入密码|(^|\n)\s*again\s*:\s*$", "{lastpw}"),
+    (r"(?i)(re-?type|again|confirm|verify|repeat|once more).{0,40}(password|passwd|pass)|(password|passwd).{0,40}(again|confirm|verify)|再输入一次|再输一次|再次核对|核对密码|再核对一次|确认密码|重新输入密码|(^|\n)\s*again\s*:\s*$", "{lastpw}"),
     (r"(?i)(普通密码|normal password|not be the same|must be different|different from)[^\n]{0,80}[:：]\s*$", "{pw2}"),     # tybxjh: "管理密码和普通密码不能相同": the second password is another one
     (r"(?:不能|不可|不得|不要)(?:和|与|跟|同)[^\n]{0,15}(?:一样|相同|一致)[^\n]{0,30}[:：]\s*$", "{pw2}"),       # dtxywzxzb: "您的登陆密码不能和管理密码一样，请重设您的密码："
     (r"选择\s*[\[\(（]?\d+[\]\)）]?\s*则(?:接受|完成|确认|结束)", "{accept_num}"),       # sjsh family: "请选择你想重新设置哪一项天赋的取值[0-3]，选择[9]则接受当前的设置："
@@ -62,6 +62,10 @@ RULES = [
     (r"[\(\[](\d+)\s*(?:到|to|-|~|至)\s*(\d+)[\)\]]", "{range_mid}"),                 # "(10-30)", "[10-30]"
     (r"(?i)(select|choose|pick|enter|give)\s+(a|an|your)\s+(character\s+)?(name|handle|nickname)\s*[:?]?\s*$", "{name}"),          # lpuni: "Please select a name:" (the menu rule below would answer 1)
     (r"只能输入数字|请重新设定.{0,8}的值", "{range_mid}"),                                                   # xuanjianlu: "对不起，你只能输入数字。请重新设定膂力的值："
+    (r"未完继续|\(\s*(?:n 或 )?<?ENTER>?\s*继续", ""),                                                             # xkm, xyj451: "== 未完继续 43% == (n 或 <ENTER> 继续下一页，q 离开，b 前一页)"
+    (r"如果希望由游戏帮助你随机分配请输入\s*0", "0"),                                                              # tianxia: the point-allocation prompt: let the game roll
+    (r"选择一种人物类型[^\n]*\(\s*([A-Z])\s*[-－–]+\s*[A-Z]\s*\)|\(\s*([A-Z])\s*[-－–]+\s*[A-Z]\s*\)\s*中选择", "{first_letter}"),    # xbtxiii: "你只能在(A--L)中选择一种人物类型:"
+    (r"(?is)(select|choose|enter)\s+a\s+(height|weight|age)[^\n]*:\s*\n.*\d+\s+to\s+\d+\s*(ft|feet|cm|kg|years)", "{range_mid}"),                          # nirvlp312: "please select a height within race limits: human & custom, 4 to 7 ft."
     (r"(?i)(请选择|请输入.{0,10}(数字|号码|编号)|choose|select|pick).{0,60}[:：?？\)]\s*$", "1"),
     (r"(?i)(what is|enter|give|type|input|tell me).{0,40}(your )?(character )?(name|id|handle)|(by )?what (is your |do you wish )?name|name do you|known\s*\?|login\s*:|name\s*:|name\?|名字|使用者代号|用户名|道号|ID\s*[:：]|帐号|账号|new\)", "{name}"),
 ]
@@ -97,13 +101,14 @@ RULES = [(trad_expand(rx), rep) for rx, rep in RULES]
 PRIORITY = [
     (r"(?is)palabra resuena en tu conciencia: ['\"“]nacer['\"”]", "nacer", "prio_nacer"),                              # ninetears: the first word of the Spanish birth
     (r"(?is)enter your current character's name.*your choice:\s*$", "{name}", "prio_dwname"),                              # Discworld: the menu after N (new) was used up, or --existing
+    (r"(?s)(还没有登录过|没有这个玩家|不存在)[^\n]*请(用|使用)\s*[`'\"“]?new.*[:：；;]\s*$", "{newword}", "prio_new_cn"),                  # xo, xajh2: "这个id还没有登录过，请用new来起用这个id.\n您的英文名字；"
     (r"(?is)No character with that name exists.*login as\s*[`'\"“]new[`'\"”]", "new", "prio_new"),                    # majik3/4
     (r"(?is)\[c\]\s*create new character.*(?:command or name|\bname)[^\n]*:\s*$", "c", "prio_create"),                 # questmud: a menu whose last line is the generic `Command or Name:`
 ]
 RACE_PICK = re.compile(r"(?is)valid races?:\s*([A-Za-z][\w-]*)")
 NEW_CHAR = re.compile(r"(?im)^\s*N\s*-\s*New character")
 MENU_DONE = re.compile(r"(?i)(?:^|\s)\[?(\d+)\]?\s*[-.):]\s*(?:done|finish|finished|accept|continue|save|完成|结束|确定)\b")
-PATIENCE = re.compile(r"(?i)(may|will) pause|please wait|wait \d+ seconds|请稍候|请等待|一会儿|terms and conditions CAREFULLY")      # Discworld: the licence screen is a timed pause before its y/n
+PATIENCE = re.compile(r"(?i)(may|will) pause|please wait|wait \d+ seconds|请稍候|请等待|一会儿|terms and conditions CAREFULLY|载入中|載入中")      # Discworld: the licence screen is a timed pause before its y/n
 GAME = re.compile(r"(?i)(exit|obvious|you are|you see|north|south|east|west|here|room|出口|这里|你|inventory|hp|health)")
 NOT_GAME = re.compile(r"(?i)(password|passwd|name\s*:|login|密码|\(y/n\)|e-?mail|gender|press|return)")
 
@@ -196,6 +201,8 @@ def run(args):
         print(f"RESULT closed steps=0 last=connect failed: {e}")
         return 2
     buf = m.read(2.0, 15)
+    if not buf.strip():
+        buf = m.read(3.0, 90)                 # a driver busy with a boot-time load (nt1 restores ~140 users) greets late: do not answer a screen that has not come
     out("<<< " + buf.replace("\n", "\n<<< ")[-600:])
     last_prompt = tail(buf, 120)
     steps = 0
@@ -218,7 +225,7 @@ def run(args):
             mapping["pw2"] = "O" + mapping["pw"][1:][::-1]
             mapping["lastpw"] = mapping["pw"]
         last = low.rstrip().split("\n")[-1] if low.strip() else ""
-        question = bool(re.search(r"([:：?？\)\]）】])\s*$", last)) or relaxed       # a prompt ends in a colon, a question mark, `(again)`, `[y/n]`
+        question = bool(re.search(r"([:：?？\)\]）】；;])\s*$", last)) or relaxed       # a prompt ends in a colon, a question mark, `(again)`, `[y/n]`
         rule_id, reply = None, None
         if NEW_CHAR.search(low) and not used.get("newchar") and not getattr(args, "existing", False):                # Discworld: "F - Finger someone, N - New character, G - Guest character, or enter your character"
             used["newchar"] = 1
@@ -263,11 +270,14 @@ def run(args):
                 reply = reply.replace("{first_of_list}", ml.group(1) if ml else "1")
             if reply == "y" and re.search(r"(?i)'yes' or 'no'|\(yes/no\)|\[yes/no\]|yes or no|enter yes", low):
                 reply = "yes"                                   # Discworld: "You must enter 'yes' or 'no':"
+            if "{first_letter}" in reply:
+                mf = re.search(r"\(\s*([A-Z])\s*[-－–]+\s*[A-Z]\s*\)", low)
+                reply = mf.group(1) if mf else "A"
             if "{accept_num}" in reply:
                 ma = re.search(r"选择\s*[\[\(（]?(\d+)[\]\)）]?\s*则(?:接受|完成|确认|结束)", low)
                 reply = ma.group(1) if ma else "9"
             if "{range_mid}" in reply:
-                mr = re.search(r"[\(\[](\d+)\s*(?:到|to|-|~|至)\s*(\d+)[\)\]]", low) or re.search(r"(?i)(?:合法的?值是?|valid(?: values?)?(?: is| are)?|between|range)\s*(\d+)\s*(?:到|to|-|~|至|and)\s*(\d+)", low)
+                mr = re.search(r"[\(\[](\d+)\s*(?:到|to|-|~|至)\s*(\d+)[\)\]]", low) or re.search(r"(?:数字|數字)\s*(\d+)\s*[~～-]\s*(\d+)", low) or re.search(r"(?i)\b(\d+)\s+to\s+(\d+)\s*(?:ft|feet|cm|kg|years)", low) or re.search(r"(?i)(?:合法的?值是?|valid(?: values?)?(?: is| are)?|between|range)\s*(\d+)\s*(?:到|to|-|~|至|and)\s*(\d+)", low)
                 reply = str((int(mr.group(1)) + int(mr.group(2))) // 2) if mr else "20"
             used[rule_id] = used.get(rule_id, 0) + 1
             if used[rule_id] > (6 if rule_id in PW_RULES else 12 if reply.isdigit() else 4) or (rule_id == 0 and used[rule_id] > 1):     # a loop means a wrong guess (a series of attribute prompts is not one)
@@ -336,9 +346,9 @@ def run(args):
     return 0
 
 
-def login_session(port, name="sweepzq", pw="Test1234", cmds="", steps=45, quiet=True):
+def login_session(port, name="sweepzq", pw="Test1234", cmds="", steps=45, quiet=True, existing=False):
     """for a sweep script: walk the dialogue of a booted lib and return the logged-in `Mud` (None when the robot did not get in); the transcript stays quiet"""
-    a = argparse.Namespace(host="127.0.0.1", port=port, name=name, pw=pw, email="tester@example.com", gender="m", term="ansi", cmds=cmds, steps=steps, quiet=quiet, verbose=False, keep=True, session=None)
+    a = argparse.Namespace(host="127.0.0.1", port=port, name=name, pw=pw, email="tester@example.com", gender="m", term="ansi", cmds=cmds, steps=steps, quiet=quiet, verbose=False, keep=True, session=None, existing=existing)
     import io, contextlib
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):

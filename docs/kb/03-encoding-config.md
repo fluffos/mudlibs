@@ -108,6 +108,10 @@ function", hundreds per lib); `scripts/lpc_warnings.py --fix` repairs it (KB 04
 - **Compat shims.** `#define nosave static` / `#define protected static`
   become aliases after the sed. Neutralize them; both keywords are real
   on this driver.
+- **A parameter or local named `nosave`.** `string nosave` is a syntax error on this driver (`unexpected L_TYPE_MODIFIER`) because `nosave` is a
+  modifier here: Discworld v1/v2 `std/shops/print_shop.lpc` (`add_auto_load_info(string nosave, string dynamic)`, v3 had already renamed it to
+  `nosave_arg`) never compiled, and the sweep saw it only through the `temperature` command's console line. `rg '(string|int|mixed|object) nosave\b'`
+  finds the declaration; the kxkj family's `!(nosave)` is a global int and compiles.
 
 ### 4.4 BIG5 characters whose second byte is `0x5C` (`\`)
 

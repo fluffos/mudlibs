@@ -11,6 +11,7 @@ is reopened with a new character.  A finding is a console error / warning, a bad
                  two-second heart beat), the console is read once per verb, and only a verb that printed something wrong is re-run line by line to find the shape.
   --shapes       `quick` (4 shapes: none, `me`, a 300-character word, `你好 世界`; default) or `full` (the ten of playsweep.SHAPES).
   --dirs         comma-separated subdirectories of cmds/ (default: all but the wizard ones).
+  --account      NAME:PASSWORD of a seeded account (discworld: fluffos:Mud@2026, an administrator; add --wiz to sweep the creator commands).
   --start/--end  slice of the sorted verb list, for a run in chunks of about an hour (a tracked job dies at two hours).
 
 Output: `VERB n name` progress lines, `FINDING [kind] 'line': console=[...] screen='...'`, and a summary; --out also writes the findings as TSV (kind, line, console, screen).
@@ -75,6 +76,7 @@ def main():
     ap.add_argument("--probe", default="look")
     ap.add_argument("--out", default="")
     ap.add_argument("--tag", default=os.environ.get("PLAY_TAG", ""))
+    ap.add_argument("--account", default="", help="NAME:PASSWORD of an account the lib already has (an admin seeded in the tree): the sweep logs in as it, and again after a reconnect")
     a = ap.parse_args()
     port = a.port or own_port(a.slug)
     suf = f"-{a.tag}" if a.tag else ""
@@ -97,7 +99,11 @@ def main():
         def login():
             names[0] += 1
             n = names[0]
-            m = play_login.login_session(port, name="sweep" + chr(97 + n // 26 % 26) + chr(97 + n % 26), steps=45)
+            if a.account:
+                acc, _, accpw = a.account.partition(":")
+                m = play_login.login_session(port, name=acc, pw=accpw or "Test1234", steps=45, existing=True)
+            else:
+                m = play_login.login_session(port, name="sweep" + chr(97 + n // 26 % 26) + chr(97 + n % 26), steps=45)
             if m is None:
                 raise SystemExit("the robot did not get in")
             m.read(0.5, 2)

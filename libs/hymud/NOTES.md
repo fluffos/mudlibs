@@ -1275,3 +1275,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 ## 访客计数 `howmany_visitor()` 读文件不检查（2026-10-20，KB 06 §7.301）
 
 `howmany_visitor()` 读访客计数文件（`VISITORS` / `COUNTER` / `BBSVISITOR`，只有运行中的 mud 才会写；`.gitignore` 把它排除在仓库之外），新检出的树里没有，`read_file()` 回 0，`sscanf(0, ...)` 报错。这份副本登录时不一定走到它，但调用时同样会出错。在读文件之后加了 `if (!stringp(content)) return 0;`（xkx100、xiakexing100、zzfy 早先的写法，`scripts/lpc_fix_visitor_count.py`）。改动：`/adm/daemons/logind.lpc`。
+
+## 缺少的 `men.h`：楚州四个城门房间不能加载（2026-10-20，KB 04 §6.23）
+
+`d/zhongyuan/chuzhou/` 的 `nan_men.lpc`、`bei_men.lpc`、`dong_men.lpc`、`matou.lpc` 从自己的目录 `#include <men.h>`（xkx 城门榜文的辅助函数），存档里没有这个文件，启动预载时每个房间报 `Cannot #include men.h`（共 5 次）。兄弟库 hy5 在同一路径放着一个空的 `men.h`，这四个房间也没有用到里面的任何东西，所以补一个只有注释的 `men.h`。加载检查：HEAD 0 通过 / 4 失败，工作树 4 通过。
