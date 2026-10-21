@@ -389,3 +389,7 @@ HEAD 与工作树分别加载（新进程）：895 -> 895 通过，无回退；�
 ## 访客计数 `howmany_visitor()` 读文件不检查（2026-10-20，KB 06 §7.301）
 
 `howmany_visitor()` 读访客计数文件（`VISITORS` / `COUNTER` / `BBSVISITOR`，只有运行中的 mud 才会写；`.gitignore` 把它排除在仓库之外），新检出的树里没有，`read_file()` 回 0，`sscanf(0, ...)` 报错。这份副本登录时不一定走到它，但调用时同样会出错。在读文件之后加了 `if (!stringp(content)) return 0;`（xkx100、xiakexing100、zzfy 早先的写法，`scripts/lpc_fix_visitor_count.py`）。改动：`/adm/daemons/logind2.lpc`。
+
+## 华山论剑排行榜：第一场比武就读不到 `/data/ladder.txt`（2026-10-20，KB 06 §7.326）
+
+比武裁判在一场比武结束时先 `list = explode(read_file("/data/ladder.txt"), "\n")`，读完再 `rm` 并 `write_file` 写回；`/data/ladder.txt` 是比武本身写出来的，全新的树里没有，第一场比武结束就是 `Bad argument 1 to explode()`，排行榜永远建不起来。把写回之前的那一次读改成 `read_file(...) || ""`（空表走原来的 `lost == -1 && win == -1` 分支，把第一对名字写进去）；写回之后的第二次读文件已经存在，没有动。加载检查各 1/1。

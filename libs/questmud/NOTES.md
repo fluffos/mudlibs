@@ -802,3 +802,7 @@ The driver's `crypt()` raises (`Error in crypt(), check your salt`) for a key ov
 ## `who` did not compile: `invis_color()` is called before its definition (2026-10-20, KB 04 6.5)
 
 `cmds/std/_who.lpc:249:99: error: Undefined function invis_color`: the command calls `invis_color()` (the yellow `(I2)` of an invisible wizard) 49 lines above its definition, which LDMud allowed; this driver wants a declaration first, so the `who` command never loaded (the login survey printed it as a play-time console error). The file already had prototypes for `bold_color` and `give_bcolor` with the comment `Called before their definitions (LDMud allowed that)`; `invis_color` was the one it missed (`scripts/lpc_forward_undefined.py questmud --compile /cmds/std/_who.lpc --apply`). HEAD 0 PASS, tree 1 PASS.
+
+## `get`、`eq`、`ntell`、`pwho` 编译不过：局部变量类型（2026-10-20，KB 04 §6.21）
+
+`cmds/std/_get.lpc`：`object item_o` 装 `EQ_FILTER` 返回的对象数组，再交给 `get_all(object *, ...)`；`string *livings` 里放的是 `all_inventory()` 的对象。`_eq.lpc`：`string slots` 其实是数组（`valid_slot(string slots, ...)` 的参数也是）。`_ntell.lpc`：两处 `string ignore_list` 装的是 `query_ignored()` 的名字数组。`_pwho.lpc`：`object *members` 先接 `query_members()` 的映射、再接 `keys()` 的结果，改 `mixed`。各按真实内容改类型。加载检查：四个都是 HEAD FAIL → tree PASS。没有动的：`_calc`（浮点和字符串混着传给 `potenssi()`）、`_look2`（`get_env_color` 哪里都没有）、`_sshout`（缺花括号、变量没声明、`tail()`，整个文件是残片）、`daemons/warlock_d.lpc`（`is_demon`、`invite` 从没声明）。

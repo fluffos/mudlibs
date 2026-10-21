@@ -304,3 +304,7 @@ recursion"。驱动按精确 PID kill。
 ## 翻页器 `start_more(read_file(...))`：文件缺失时 `explode(0)`（2026-10-20，KB 06 §7.300）
 
 东方故事系的翻页器 `void start_more(string msg) { ... explode(msg, "\n") ... }` 被这样调用：`start_more(read_file(HELP_DIR + "help/topics"))`、`start_more(read_file(NEWS))`。压缩包没带的文件使 `read_file()` 回 0，`explode(0, ...)` 在本驱动里报 `Bad argument 1 to explode()`（不带参数的 `help` 指令就是这样出错的），老驱动把 0 当空文本。在 `start_more` 开头加了 `if (!stringp(msg)) return;`（`scripts/lpc_fix_start_more.py`）。改动：`/feature/more.lpc`。
+
+## `setbak` 指令编译不过：文件末尾粘了半截 `help()`（2026-10-20，KB 06 §7.264）
+
+`cmds/usr/setbak.lpc` 在完整的 `help()` 之后又重复了帮助文字的结尾（`取消变数设定请用 unset 指令。……TEXT ); return 1; }`，没有函数头）：`Illegal character 0xe5`。在第一个完整函数结尾处截断（去掉 8 行）。加载检查：HEAD FAIL → tree PASS。

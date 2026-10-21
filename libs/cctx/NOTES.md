@@ -463,3 +463,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply c
 ## 翻页器 `start_more(read_file(...))`：文件缺失时 `explode(0)`（2026-10-20，KB 06 §7.300）
 
 东方故事系的翻页器 `void start_more(string msg) { ... explode(msg, "\n") ... }` 被这样调用：`start_more(read_file(HELP_DIR + "help/topics"))`、`start_more(read_file(NEWS))`。压缩包没带的文件使 `read_file()` 回 0，`explode(0, ...)` 在本驱动里报 `Bad argument 1 to explode()`（不带参数的 `help` 指令就是这样出错的），老驱动把 0 当空文本。在 `start_more` 开头加了 `if (!stringp(msg)) return;`（`scripts/lpc_fix_start_more.py`）。改动：`/feature/more.lpc`。
+
+## 华山论剑排行榜：第一场比武就读不到 `/data/ladder.txt`（2026-10-20，KB 06 §7.326）
+
+比武裁判在一场比武结束时先 `list = explode(read_file("/data/ladder.txt"), "\n")`，读完再 `rm` 并 `write_file` 写回；`/data/ladder.txt` 是比武本身写出来的，全新的树里没有，第一场比武结束就是 `Bad argument 1 to explode()`，排行榜永远建不起来。把写回之前的那一次读改成 `read_file(...) || ""`（空表走原来的 `lost == -1 && win == -1` 分支，把第一对名字写进去）；写回之后的第二次读文件已经存在，没有动。加载检查各 1/1。

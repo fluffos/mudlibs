@@ -439,3 +439,7 @@ HEAD 与工作树分别加载（新进程）：745 -> 746 通过（多出的就�
 ## `get_config(__MUD_PORT__)` 经旧版 `runtime_config.h` 得到字符串（2026-10-20，KB 06 §7.302）
 
 本库的 `include/runtime_config.h` 是老 MudOS 的编号（整数设置从 15 起，本驱动从 256 起），`get_config(__MUD_PORT__)` 读到的是另一项设置（字符串），`(int)` 又只是编译期标注，于是 `socket_bind(fd, LOCAL_PORT())` 报 `Bad argument 2 to socket_bind()`，版本守护进程 `port = get_config(__MUD_PORT__) + VERSION_PORT` 是字符串相加。头文件自己的注释写明 `get_config(__MUD_PORT__) == __PORT__`，所以代码里的这个调用（连同外面的 `(int)` / `to_int()`）改成了驱动的预定义 `__PORT__`（`scripts/lpc_fix_mud_port.py`）。改动：`/adm/daemons/network/getconfig.h`（1 处）、`/include/getconfig.h`（1 处）。
+
+## `pettrainer` 的 `say_news()` 读不到 `/log/news` 就抛错（2026-10-20，KB 06 §7.326）
+
+`str = read_file("/log/news"); flag = sizeof(explode(str, "\n"));`：`/log/news` 是运行中写出来的新闻频道记录，全新的树里没有，`explode(0)` 报错；宠物训练师的 `chat_msg` 调它，每次都出错。读不到时 `flag = 0`，读出的 `news` 不是字符串就直接返回。三份相同。加载检查各 1/1。

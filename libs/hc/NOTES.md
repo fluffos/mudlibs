@@ -621,3 +621,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply h
 ## 翻页器 `start_more(read_file(...))`：文件缺失时 `explode(0)`（2026-10-20，KB 06 §7.300）
 
 东方故事系的翻页器 `void start_more(string msg) { ... explode(msg, "\n") ... }` 被这样调用：`start_more(read_file(HELP_DIR + "help/topics"))`、`start_more(read_file(NEWS))`。压缩包没带的文件使 `read_file()` 回 0，`explode(0, ...)` 在本驱动里报 `Bad argument 1 to explode()`（不带参数的 `help` 指令就是这样出错的），老驱动把 0 当空文本。在 `start_more` 开头加了 `if (!stringp(msg)) return;`（`scripts/lpc_fix_start_more.py`）。改动：`/feature/more.lpc`。
+
+## `bipin` 指令编译不过：文件末尾的注释没有收尾（2026-10-20，KB 04 §6.25）
+
+`cmds/skill/bipin.lpc` 第 268 行的 `/*` 把一个注释掉的旧函数 `start_huoqiang()` 一直注释到文件末尾，没有 `*/`：`End of file in a comment`，整个对象加载失败，`bipin`（比拼内力）指令不能用。在文件末尾补上 `*/`（被注释的是不用的旧代码，行为不变）。加载检查：HEAD FAIL → tree PASS。

@@ -294,3 +294,7 @@ functionally re-tested live on this lib.
 ## `valid_read()` 不信任 sefun 对象的 euid `"NONAME"`（2026-10-20，KB 06 §7.304）
 
 第一次登录时 `Too deep recursion.`（`program: /adm/obj/simul_efun.lpc ... file: /adm/simul_efun/wizard.lpc:4`）：`valid_write()` 信任 `"NONAME"`，`valid_read()` 不信任，sefun 对象的读被拒绝，拒绝记录又经 `wizhood()` / `log_file()` 读取，如此递归。`securityd.lpc` 的 `valid_read()` 补上 `euid == "NONAME"` 的判断。
+
+## 华山论剑排行榜：第一场比武就读不到 `/data/ladder.txt`（2026-10-20，KB 06 §7.326）
+
+比武裁判在一场比武结束时先 `list = explode(read_file("/data/ladder.txt"), "\n")`，读完再 `rm` 并 `write_file` 写回；`/data/ladder.txt` 是比武本身写出来的，全新的树里没有，第一场比武结束就是 `Bad argument 1 to explode()`，排行榜永远建不起来。把写回之前的那一次读改成 `read_file(...) || ""`（空表走原来的 `lost == -1 && win == -1` 分支，把第一对名字写进去）；写回之后的第二次读文件已经存在，没有动。加载检查各 1/1。

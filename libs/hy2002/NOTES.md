@@ -398,3 +398,7 @@ functionally re-tested live on this lib.
 ## sefun `cat()`：缺文件时 `write(0)` 报错（2026-10-20，KB 06 §7.297）
 
 `void cat(string file) { write(read_file(file)); }`：文件不存在（压缩包没带的欢迎/公告文件，或只有运行中的 mud 才会写的日志）时 `read_file()` 回 0，`write(0)` 在本驱动里报 `Bad argument 1 to receive()`，调用者（登录对话、`cat` 指令）被中断；老驱动什么也不打印。改成 `write(read_file(file) || "");`（`scripts/lpc_fix_cat_unchecked.py`）。改动：`/adm/simul_efun/file.lpc`。
+
+## `setbak` 指令编译不过：文件末尾粘了半截 `help()`（2026-10-20，KB 06 §7.264）
+
+`cmds/usr/setbak.lpc` 在完整的 `help()` 之后又重复了帮助文字的结尾（`取消变数设定请用 unset 指令。……TEXT ); return 1; }`，没有函数头）：`Illegal character 0xe5`。在第一个完整函数结尾处截断（去掉 8 行）。加载检查：HEAD FAIL → tree PASS。

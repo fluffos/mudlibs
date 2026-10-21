@@ -203,3 +203,10 @@ hylib/dtxy) stay confirmed duplicates.
 ## 登录密码超过 255 字节：`crypt()` 抛错（2026-10-20，KB 06 §7.294）
 
 驱动的 `crypt()` 对超过 255 字节的密钥直接报错（`Error in crypt(), check your salt`），老驱动则按任意长度散列。在登录提示符下输入 256 字节以上的密码，密码检查那一行就抛错，连线停在一个裸的 `> ` 提示符上，登录走不完（`password` 指令的旧密码检查同样）；用 300 个 `x` 当参数的扫描发现的。`/secure/simul_efun.lpc` 里补了一个同名的 simul_efun `crypt(key, salt)`：只有超长的密钥才被截短（先截到 255 个字符，再逐字符截到 `sizeof(to_buffer(key)) <= 255`，限制按字节算，一个汉字占三个字节），再交给 `efun::crypt()`；普通密码原样散列，已存的密码散列不受影响（`scripts/lpc_add_sefun.py crypt`）。
+
+## `tell`、`stell`、`passwd` 编译不过：Lima 模块的两处类型笔误（2026-10-20，KB 04 §6.21）
+
+- `std/modules/m_input.lpc` 的 `modal_push(function input_func, mixed prompt_func, function secure, function return_to_func)`：第三个参数 `secure` 写成了 `function`，调用者（`passwd`）按 `int secure` 传 `1`（`secure/user/login.lpc`、`userinfo.lpc` 里同名原型都是 `int secure`）：`Bad type for argument 3 of modal_push ( function vs int )`。改成 `int secure`。
+- `cmds/player/tell.lpc`、`stell.lpc` 的 `string muds;` 要装 `IMUD_D->query_up_muds()` 返回的数组，再交给 `find_best_match_or_complete(string, string *)`：改成 `string *muds;`。
+
+加载检查：依赖 `M_INPUT` 的 51 个对象，HEAD 通过 46 个，tree 通过 49 个，回归 0（还不通过的两个：`trans/obj/ed_session.lpc` 需要驱动没有的 `ed_cmd`，`secure/obj/mailers/mailer.lpc` 没有诊断，HEAD 也一样）。

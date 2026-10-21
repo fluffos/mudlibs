@@ -386,3 +386,11 @@ Century/`adm-single` 形状）**：`adm/simul_efun/file.lpc` 的
 ## 任务守护进程启动时崩溃（2026-10-20，KB 06 §7.303）
 
 `adm/daemons/questd.lpc` 的 `spread_quest()` 在启动时找不到合格的活物（新树里还没有活物），`target` 仍是 0，`environment(target)` 报 `Bad argument 1 to environment()`（启动时 42 次）。加了 `if (!target) return 0;`。
+
+## `zhaohuan`、`scoreold`、`group` 三个指令（2026-10-20，KB 04 §6.25，KB 06 §7.263）
+
+- `cmds/usr/zhaohuan.lpc`：第一行开头多了终端粘贴来的颜色码文字 `[0; 1; 34 m[1 m[0 m  `（ESC 字节丢了），`syntax error, unexpected '['`。去掉以后露出第二层：文件最后 17 行的分号和花括号都丢了，语句连在一起（`weapon->move(ob) if (!i) weapon->wield() i = 1`、`HEL`、`zhaohua`）。照本文件前面两个完整的武器段（sword、blade）和 hymud 的同名文件，把 whip、hammer、staff、axe 四段、`ob->change_combat_mode(me, ob->query("combat_mode"));`、`return ob;` 和 `help()` 重建（hymud 的版本多一个 throwing 段，sje 原来没有，没有加）。
+- `cmds/usr/scoreold.lpc`：`sprintf(... "上次遇害：%s%s" ..., 值)` 格式要两个参数，只给了一个（`(s)printf(): More arguments specified than passed`）。补上上一行算好的 `color`，和同目录 `score.lpc` 里这一行的写法一致。
+- `cmds/usr/group.lpc`：对 `/open/` 下每个目录 `load_object(dir + "/kingdom")` 再 `->query("king")`；`/open/freeze_list`、`/open/topten` 不是帮派（没有 kingdom 文件），`call_other` 对 0 报错。先测 `file_size(kingdom_file + ".lpc") <= 0`，是就 `continue`。
+
+实测（sje 的全新树，机器人登录）：`group` 打出表头和分隔线（没有帮派），`scoreold` 打出个人资料，`zhaohuan` 答“凭你现在的条件，还没有资格拥有随从呢！”，控制台没有错误；加载检查 2/2，回归 0。
