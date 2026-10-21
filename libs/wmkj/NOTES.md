@@ -1127,3 +1127,7 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 ## NPC 的 `chat()` 在 `chat_msg` 为空数组时下标越界（2026-10-21，KB 06 §7.334）
 
 NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < chance) { rnd = random(sizeof(msg)); if (stringp(msg[rnd])) ...`，不检查列表是否为空。本库现有的 NPC 文件里没有字面写成空 `chat_msg` 的（扫描只认 `set("chat_msg", ({ }))`）；守卫挡的是运行时才为空的列表和以后新增的 NPC。在 `random(100) < chance` 前面加 `sizeof(msg) &&`（`scripts/lpc_fix_chat_empty.py`；`if (random(100) > chance) return 0;` 的写法是 `!sizeof(msg) ||`）。改动：`/inherit/char/npc.lpc`（共 1 个文件）。
+
+## `yaoqing`：`#include "/data/npc/npcneed.h"` 的头文件不在存档里（2026-10-21，KB 06 §7.270 的同类）
+
+`cmds/usr/yaoqing.lpc`（帮会邀请 NPC 入伙的命令；tiexuejianghu 的与 fys 逐字节相同，wmkj 的是它的 `qi`/`xiha` 改写版）第四行 `#include "/data/npc/npcneed.h"`，那是一个数据头文件（`mapping npcneed = ([ "shedan gao": "蛇胆膏", ... ])`，NPC 向玩家索要的东西），fys、tianxiawuxue、tybxjh、wlhd、xiyouji2003、yxcs、yxjh、zxty、zxty08nxgbb 都带着，这两个存档没有：`Cannot #include /data/npc/npcneed.h`、`Undefined variable 'npcneed'`，整条命令不加载。从 fys 复制（6,473 字节）。实测 `yaoqing` 回答 “你没有参加任何帮会，无法邀请他人加入。”。表里的东西是 fys 世界里的物品，在这个库里能不能找到没有核对（只影响这个任务的内容，不影响命令）。没有改：`xhcii` 的 `whotest`（`who` 的半成品实验版，行被拼在一起）、`xianlvqiyuan` 的 `pperform`（`obj` 没有声明的手改副本）。

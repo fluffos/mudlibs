@@ -1532,6 +1532,7 @@ Found by taking the objects a visitor meets (`scripts/lpc_reach_census.py` lists
 **Cause:** the archive carries the xkx lineage's `dealer.lpc` (byte-equal to jqxz2008's) but neither `adm/daemons/moneyd.lpc` nor the `MONEY_D` line of `globals.h`.
 **Fix:** `adm/daemons/moneyd.lpc` copied from the sibling that shares the dealer (jqxz2008, 2,778 bytes; its `COIN_OB`/`SILVER_OB`/`GOLD_OB` are in the lib's header) and `#define MONEY_D "/adm/daemons/moneyd"` after the last `#define` of `include/globals.h` (`scripts/lpc_restore_defines.py` refuses it until the file is in the git index).
 **Detection:** the compile scan's `Undefined variable 'MONEY_D'`; the restore tool's `SKIP ... is not in the lib`.
+**Also (2026-10-21):** a data header: tiexuejianghu and wmkj `cmds/usr/yaoqing.lpc` `#include "/data/npc/npcneed.h"` (`mapping npcneed`), which the two archives lack and nine siblings ship; copied from fys (the one whose command is byte-equal), `Cannot #include` gone, the command answers.
 
 ### 7.271 A saved exit with an explicit `.c` and a destination that is gone (2026-10-19)
 **Symptom:** the player-house entrance rooms of wxddym (`d/city/jiaowai7`, `d/huanghe/caodi1`, 4 more) die in `setup()` with `call_other() couldn't find object '/data/room/qazzaq/dayuan.c'`.

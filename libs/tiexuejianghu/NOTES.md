@@ -1152,3 +1152,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 存档里的 `.c` 文件名改成 `.lpc`（2026-10-21，KB 03 §4.2 第 9 项）
 
 存档里写着 `"/d/city/npc/wei.c"` 这样的文件名；extract 时源文件已经全部改成 `.lpc`，而驱动对带扩展名的路径只认字面，`new()` / `load_object()` / `move()` 都找不到它，调用方多半把失败当成「没有这个东西」悄悄跳过。本库 68 个存档共 82 处按 `scripts/lpc_fix_save_dotc.py` 改成 `.lpc`（只改 `.lpc` 存在而 `.c` 不存在的字符串；玩家存档、备份、留言板、巫师目录和文件索引缓存不动）。改动：`/data/npc/京千灵.o`（8 处）、`/data/npc/何红药.o`（1 处）、`/data/npc/刘一小.o`（1 处）、`/data/npc/刘麻子.o`（1 处）（等共 68 个存档）。
+
+## `yaoqing`：`#include "/data/npc/npcneed.h"` 的头文件不在存档里（2026-10-21，KB 06 §7.270 的同类）
+
+`cmds/usr/yaoqing.lpc`（帮会邀请 NPC 入伙的命令；tiexuejianghu 的与 fys 逐字节相同，wmkj 的是它的 `qi`/`xiha` 改写版）第四行 `#include "/data/npc/npcneed.h"`，那是一个数据头文件（`mapping npcneed = ([ "shedan gao": "蛇胆膏", ... ])`，NPC 向玩家索要的东西），fys、tianxiawuxue、tybxjh、wlhd、xiyouji2003、yxcs、yxjh、zxty、zxty08nxgbb 都带着，这两个存档没有：`Cannot #include /data/npc/npcneed.h`、`Undefined variable 'npcneed'`，整条命令不加载。从 fys 复制（6,473 字节）。实测 `yaoqing` 回答 “你没有参加任何帮会，无法邀请他人加入。”。表里的东西是 fys 世界里的物品，在这个库里能不能找到没有核对（只影响这个任务的内容，不影响命令）。没有改：`xhcii` 的 `whotest`（`who` 的半成品实验版，行被拼在一起）、`xianlvqiyuan` 的 `pperform`（`obj` 没有声明的手改副本）。
