@@ -1292,3 +1292,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 巫师命令不带参数时对 0 调用 efun（2026-10-21，KB 06 §7.336）
 
 巫师（管理员）把命令敲成不带参数时，驱动把 0 传给字符串参数；下面的命令第一句就把这个 0 交给 efun，运行时报 `Bad argument 1 to ...`，这条指令从来没有用过。用 `scripts/lpcc_bare.py` 不登录、在一次 `lpcc` 求值里以 0 调用 `main()` 逐个确认后，由 `scripts/lpc_fix_bare_arg.py` 在第一处使用参数的语句前加守卫：文件自带 `int help(object me)` 的，守卫是 `if (!arg) return help(me);`（`help()` 定义在 `main()` 之后的 1 个文件补了原型 `int help(object me);`，否则编译报 `Undefined function help`）；没有 `help()` 的是 `return notify_fail("…\n");`。改动（3 个文件，括号里是接住 0 的 efun）：`/cmds/adm/baiban.lpc`（`sscanf`）、`/cmds/adm/dumpprog.lpc`（`new`）、`/cmds/imm/setskill2.lpc`（`sscanf`）。加载检查 HEAD 与工作树对照，没有退步。
+
+## `update` 不带参数：`valid_read(0)` 先于 `cwf` 缺省（2026-10-21，KB 06 §7.342）
+
+管理员扫描里 `update` 不带参数报 `Bad argument 1 to sscanf() Expected: string Got: 0.`（`/adm/daemons/securityd.lpc` 的 `valid_read()`，第一句 `sscanf(file, "/c/%*s")`）：`main(me, file)` 先 `SECURITY_D->valid_read(file, me, "read")`，之后才 `if (!file) file = me->query("cwf")`。把“缺省取 `cwf`、仍为空就拒绝”这两句移到权限检查前面（是移动，不是复制）。改动：`/cmds/arch/update.lpc`、`/cmds/wiz/update.lpc`。

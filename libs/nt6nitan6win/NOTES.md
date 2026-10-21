@@ -640,3 +640,7 @@ xkx100 的原文是 `vc = victim->add("vote/count", 1);`，nitan 系把它写成
 ## `ability`：继承的 `/feature/ability` 档案里没有（2026-10-21，KB 04 §6.18）
 
 管理员扫描里 `ability`（玩家指令 `cmds/usr/ability.lpc`）报 `Inherited file '/feature/ability' does not exist!`：指令 `inherit F_ABILITY`（`#define F_ABILITY "/feature/ability"`），而档案只带 `feature/ability.txt`（家族能力的设计笔记），没有源码，这条指令从来加载不了（`bas_ability`、`fam_ability`、`valid_ability_improve()`、`do_ability_cost()`、`improve_ability()`、`get_ability_info()` 都该在那个文件里，本库别处没有人用）。nitan170911、nt7、hhsj、wdxtym 把同一套接口放在可继承的 `/adm/daemons/abilityd.lpc`（947 行，指令里 `F_ABILITY` 指向它），但那是后一版：能力编号改成 1-35、消耗加了潜能、门派能力由 5 项变 30 项，不是本库当年的表。没有补，留在 `scratchpad/librarian-next.txt` 里等用户决定。
+
+## `blockade` / `recover`：`data/keep` 不存在，解封之后世界仍然锁着（2026-10-21，KB 06 §7.340）
+
+管理员扫描里 `blockade` 报 `Error copying file from /data/user/f/fluffos.o to /data/keep/fluffos, Error: No such file or directory`，随后的 `recover` 在第一个 `cp()` 上死于 `*/data/keep/fluffos: lstat failed`，来不及执行最后的 `LOGIN_D->set_madlock(0)`：封锁解不开。`data/keep/` 是运行时目录，git 克隆里没有空目录。`blockade` 在第一次写之前 `if (file_size("/data/keep") != -2) mkdir("/data/keep");`（`mkdir()` 失败答 0，不抛错），`recover` 对没有保存档的玩家 `if (file_size(src) < 0) continue;`，其余照常恢复、照常解锁（`scripts/lpc_fix_keep_dir.py`，hy5 上实测：没有保存档时 `recover` 答“时空解封完毕”，`blockade` 建出 `data/keep` 并保存，`recover` 取回并删除）。改动（1 个文件）：`/cmds/arch/recovermud.lpc`。

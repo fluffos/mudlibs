@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """scripts/lpc_dynamic_rows.py [--apply] [SLUG...]      (no SLUG: every vendored lib)
 
-The `dynamic_location` / `dynamic_quest` tables of the xkx / Fengyun / Haiyang / Journey-to-the-West room-quest daemons
+The `dynamic_location` / `dynamic_quest` / `dynamic_room` / `dynamic_npc_quest` tables of the xkx / Fengyun / Haiyang / Journey-to-the-West room-quest daemons
 (`adm/daemons/questd.lpc`, `taskd.lpc`, `natured.lpc`, `teamjob.lpc` ...) are plain text, one source path per line:
 
     /d/baihuagu/baihuagu.c            (a room pool; the daemon does `load_object(roomlines[random(sizeof(roomlines))])`)
@@ -46,7 +46,7 @@ def referenced():
     """{(slug, work-relative path)} of the tables a lib's code reads with a literal read_file() / read_table()"""
     ref = set()
     out = subprocess.run(["git", "-C", REPO, "grep", "-I", "-o", "-E", "--no-color", "-e",
-                          r'read_(file|table)[ \t]*\([ \t]*"[^"]*dynamic_(location|quest)[^"]*"', "--", "libs/"],
+                          r'read_(file|table)[ \t]*\([ \t]*"[^"]*dynamic_(location|quest|room|npc_quest)[^"]*"', "--", "libs/"],
                          capture_output=True).stdout
     for line in out.split(b"\n"):
         m = re.match(rb"libs/([^/]+)/work/[^:]*:.*?\"([^\"]+)\"", line)
@@ -68,7 +68,7 @@ for slug in slugs:
     dead_ex = []
     for rel in files:
         base = os.path.basename(rel)
-        if not (base.startswith("dynamic_location") or base.startswith("dynamic_quest")) or base.endswith(SOURCE_EXT):
+        if not base.startswith(("dynamic_location", "dynamic_quest", "dynamic_room", "dynamic_npc_quest")) or base.endswith(SOURCE_EXT):
             continue
         path = f"{REPO}/{rel}"
         if not os.path.isfile(path) or (slug, rel.split("/work/", 1)[1]) not in REF:

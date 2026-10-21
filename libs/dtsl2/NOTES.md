@@ -846,3 +846,15 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 巫师命令不带参数时对 0 调用 efun（2026-10-21，KB 06 §7.336）
 
 巫师（管理员）把命令敲成不带参数时，驱动把 0 传给字符串参数；下面的命令第一句就把这个 0 交给 efun，运行时报 `Bad argument 1 to ...`，这条指令从来没有用过。用 `scripts/lpcc_bare.py` 不登录、在一次 `lpcc` 求值里以 0 调用 `main()` 逐个确认后，由 `scripts/lpc_fix_bare_arg.py` 在第一处使用参数的语句前加守卫：文件自带 `int help(object me)` 的，守卫是 `if (!arg) return help(me);`（`help()` 定义在 `main()` 之后的 1 个文件补了原型 `int help(object me);`，否则编译报 `Undefined function help`）；没有 `help()` 的是 `return notify_fail("…\n");`。改动（3 个文件，括号里是接住 0 的 efun）：`/cmds/adm/admove.lpc`（`present`）、`/cmds/adm/baiban.lpc`（`sscanf`）、`/cmds/adm/dumpprog.lpc`（`new`）。加载检查 HEAD 与工作树对照，没有退步。
+
+## `quests`：`/d/kaifeng/npc/colors.h` 档案里没有（2026-10-21，KB 06 §7.269）
+
+玩家指令 `quests`（`cmds/usr/quests.lpc`，与 dtxywzxzb 的同名文件字节相同）`#include "/d/kaifeng/npc/colors.h"`（`color_code` 映射：猪八戒“红”、陈光蕊“绿”……），本库没有 `d/kaifeng`，指令编译不了（`Cannot #include`）。把 dtxywzxzb 带着的这个 351 字节的头文件原样复制到 `d/kaifeng/npc/colors.h`，指令加载通过。
+
+## `prompt`、`examine`：别的血统的指令（2026-10-21）
+
+管理员扫描里 `prompt`（玩家指令）和 `examine`（`cmds/arch`）编译不了：`prompt.lpc` 调用 `get_prompt()`，它在 dtsl 的 `feature/message.lpc` 里，本库的 `message.lpc` 是另一套实现（`prompt()` 按 `time` / `date` / `mud` / `hp` / `path` 这些关键字生成提示符，没有 `get_prompt()`；`message1.lpc` 里有但没有人继承它）；`examine.lpc` 调用的 `process_bar()`、`log_time()` 整个库里都没有。这两条指令是别的库的，补不上，没有动。
+
+## 不带参数的指令对 0 调用 efun：不在 wiz / adm 目录里的指令（2026-10-21，KB 06 §7.336）
+
+指令敲成不带参数时，驱动把 0 传给字符串参数；下面的指令第一句就把这个 0 交给 efun，运行时报 `Bad argument 1 to ...`。它们在 `cmds/std`、`cmds/usr`、`cmds/bos`、`cmds/app` 这类目录里，上一轮的扫描只看巫师目录。用 `scripts/lpcc_bare.py` 不登录、在一次 `lpcc` 求值里以 0 调用 `main()` 逐个确认后，由 `scripts/lpc_fix_bare_arg.py --all-dirs` 在第一处使用参数的语句前加守卫：没有 `help()` 的是 `return notify_fail("…\n");`。改动（1 个文件，括号里是接住 0 的 efun）：`/cmds/std/actionavailable.lpc`（`sscanf`）。加载检查 HEAD 与工作树对照，没有退步。

@@ -1033,3 +1033,19 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 ## NPC 的 `chat()` 在 `chat_msg` 为空数组时下标越界（2026-10-21，KB 06 §7.334）
 
 NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < chance) { rnd = random(sizeof(msg)); if (stringp(msg[rnd])) ...`，不检查列表是否为空。本库现有的 NPC 文件里没有字面写成空 `chat_msg` 的（扫描只认 `set("chat_msg", ({ }))`）；守卫挡的是运行时才为空的列表和以后新增的 NPC。在 `random(100) < chance` 前面加 `sizeof(msg) &&`（`scripts/lpc_fix_chat_empty.py`；`if (random(100) > chance) return 0;` 的写法是 `!sizeof(msg) ||`）。改动：`/adm/daemons/npc.lpc`、`/inherit/char/npc.lpc`、`/inherit/char/npc1.lpc`、`/inherit/char/npc2.lpc`（共 4 个文件）。
+
+## `blockade` / `recover`：`data/keep` 不存在，解封之后世界仍然锁着（2026-10-21，KB 06 §7.340）
+
+管理员扫描里 `blockade` 报 `Error copying file from /data/user/f/fluffos.o to /data/keep/fluffos, Error: No such file or directory`，随后的 `recover` 在第一个 `cp()` 上死于 `*/data/keep/fluffos: lstat failed`，来不及执行最后的 `LOGIN_D->set_madlock(0)`：封锁解不开。`data/keep/` 是运行时目录，git 克隆里没有空目录。`blockade` 在第一次写之前 `if (file_size("/data/keep") != -2) mkdir("/data/keep");`（`mkdir()` 失败答 0，不抛错），`recover` 对没有保存档的玩家 `if (file_size(src) < 0) continue;`，其余照常恢复、照常解锁（`scripts/lpc_fix_keep_dir.py`，hy5 上实测：没有保存档时 `recover` 答“时空解封完毕”，`blockade` 建出 `data/keep` 并保存，`recover` 取回并删除）。改动（2 个文件）：`/cmds/arch/blockade.lpc`、`/cmds/arch/recovermud.lpc`。
+
+## 任务守护进程的 `clear_room()` 加载档案里没有的房间（2026-10-21，KB 06 §7.299）
+
+管理员扫描里 `task1`（玩家指令；同系的库里还有别的入口）在 `/adm/daemons/taskd.lpc` 的 `clear_room()` 里报 `Bad argument 1 to EFUN call_other() Got: int(0)`：守护进程写死的 19 个房间里有 19 个本库没有，`room = load_object(localroom);` 答 0，下一句 `room->reset();` 就是对 0 的调用。`load_object()` 之后加 `if (!room) continue;`，有的房间照常重置。
+
+## `board` 把 `/clone/board/` 里的数据文件当成留言板（2026-10-21，KB 06 §7.299）
+
+管理员扫描里 `board`（`cmds/arch/board.lpc`）报 `call_other() couldn't find object '/clone/board/Answer.txt'`：指令把 `get_dir("/clone/board/")` 的每个名字都当成留言板对象去 `->short()`，目录里有一个 `Answer.txt`，不是对象。改成 `get_dir("/clone/board/*.lpc")`。
+
+## `dual` 不带参数：`evaluate_shell()` 对 0 取下标（2026-10-21，KB 06 §7.336）
+
+`dual`（`cmds/arch/dual.lpc`）把参数原样交给 `me->evaluate_shell(arg, flag)`，那里第一件事是 `arg[<1] == ';'`，参数为 0 时报 `Value being indexed is zero.`（`feature/shell.lpc`）；静态扫描只认直接传给 efun 的参数，看不见这种经过 `call_other` 的。命令开头加 `if (!arg) return notify_fail("指令格式 : dual [detail]\n");`（同系 16 个 `dual` 里另外 7 个本来就有这个检查）。

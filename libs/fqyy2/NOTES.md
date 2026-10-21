@@ -413,3 +413,15 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## `lsusers`：用档案里没有的 `/clone/misc/player`（2026-10-21，KB 06 §7.299）
 
 管理员扫描里 `lsusers` 报 `Bad argument 1 to EFUN call_other() Got: int(0)`（`cmds/adm/lsusers.lpc`）：指令 `new("/clone/misc/player")` 一个对象，用它的 `new_object(name)` 逐个还原玩家存档；本库没有 `/clone/misc/player.lpc`（同系的 hy3、jhfy、xyzx 等 27 个库带着它，`new_object()` 只定义在那里），`new()` 答 0，后面就是对 0 的调用。`new()` 之后加 `if (!ob) return notify_fail(...)`，指令回一句话而不是系统错误；文件本身补不上，那个旧的玩家对象已经不是本库的用户对象了。
+
+## `blockade` / `recover`：`data/keep` 不存在，解封之后世界仍然锁着（2026-10-21，KB 06 §7.340）
+
+管理员扫描里 `blockade` 报 `Error copying file from /data/user/f/fluffos.o to /data/keep/fluffos, Error: No such file or directory`，随后的 `recover` 在第一个 `cp()` 上死于 `*/data/keep/fluffos: lstat failed`，来不及执行最后的 `LOGIN_D->set_madlock(0)`：封锁解不开。`data/keep/` 是运行时目录，git 克隆里没有空目录。`blockade` 在第一次写之前 `if (file_size("/data/keep") != -2) mkdir("/data/keep");`（`mkdir()` 失败答 0，不抛错），`recover` 对没有保存档的玩家 `if (file_size(src) < 0) continue;`，其余照常恢复、照常解锁（`scripts/lpc_fix_keep_dir.py`，hy5 上实测：没有保存档时 `recover` 答“时空解封完毕”，`blockade` 建出 `data/keep` 并保存，`recover` 取回并删除）。改动（4 个文件）：`/cmds/adm/blockade.lpc`、`/cmds/adm/recover.lpc`、`/cmds/arch/blockade.lpc`、`/cmds/arch/recover.lpc`。
+
+## `bangnick`：对字符串参数调用 `->query()`（2026-10-21）
+
+管理员扫描里 `bangnick`（玩家指令 `cmds/usr/bangnick.lpc`，wmkj、yxcs 同一份）报 `Bad argument 1 to EFUN call_other() Got: int(0)`：`main(me, arg)` 的头两行 `int bangzong = arg->query("bangzong"); int bangpai2 = arg->query("bangpai");` 对字符串参数调用函数，不带参数时是对 0，带参数时是 `call_other() couldn't find object '<参数>'`：这条指令对任何输入都不工作。作者要的大概是 `me` 的 `bangzong` 和目标的 `bangpai`（目标要等 `sscanf` 解析出 `dest` 才知道），但哪一边是谁只能猜，没有改。
+
+## `obj.h.es2`：`blockade` / `recover` 包含的头文件档案里没有（2026-10-21，KB 04 §6.23）
+
+`blockade.lpc`、`recover*.lpc` `#include <obj.h.es2>`（`OBJ_*`、`NPC_*` 路径的 ES2 头文件，hy5、xkx100 等 33 个库带着），本库的 include 目录没有它，这些指令从来编译不了（`Cannot #include obj.h.es2`），`data/keep` 的修补也无从生效。指令本身不用里面的宏；从同系的 hy5 复制一份头文件，加载检查 HEAD 与工作树对照：2 个对象原来加载失败，现在通过，没有退步。

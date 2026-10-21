@@ -463,3 +463,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 巫师命令不带参数时对 0 调用 efun（2026-10-21，KB 06 §7.336）
 
 巫师（管理员）把命令敲成不带参数时，驱动把 0 传给字符串参数；下面的命令第一句就把这个 0 交给 efun，运行时报 `Bad argument 1 to ...`，这条指令从来没有用过。用 `scripts/lpcc_bare.py` 不登录、在一次 `lpcc` 求值里以 0 调用 `main()` 逐个确认后，由 `scripts/lpc_fix_bare_arg.py` 在第一处使用参数的语句前加守卫：文件自带 `int help(object me)` 的，守卫是 `if (!arg) return help(me);`（`help()` 定义在 `main()` 之后的 1 个文件补了原型 `int help(object me);`，否则编译报 `Undefined function help`）。改动（1 个文件，括号里是接住 0 的 efun）：`/cmds/adm/sleepwith.lpc`（`present`）。加载检查 HEAD 与工作树对照，没有退步。
+
+## `doc`：整份指令被编辑器弄坏，编译不了（2026-10-21，KB 04 §6.25）
+
+管理员扫描里 `doc`（`cmds/adm/doc.lpc`，整理 NPC / 房间 / 物品档案的指令）报 `Illegal character 0xef`：源文件被中文编辑器改过又被排版器整理过，每个 `->` 成了全角的 `-＞`（40 处），`>`、`<` 成了 `＞`、`＜`，每个 `||` 成了 `//` 并吞掉了该行的其余部分：`if (!arg) {  // sscanf(arg, "%s %s", path, var) != 2){`（用法检查丢了 `sscanf`，`path` 和 `var` 从来没有被赋值），`if (prop[i] == "armor"  //prop[i]=="damage")`（`continue` 成了语法错误）。按原意恢复（`||`、被注释掉的 `sscanf`），`MONEY_D->price_str()`（同系没有这个守护进程）改成直接输出 `value`，删去 9 个没用的局部变量。编译没有警告，不带参数时打印用法。wqfy、zzfy、zzfy3 三个库的这个文件是同一份。
