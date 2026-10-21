@@ -788,3 +788,7 @@ Creating a character, `secure/login.lpc` calls `set_name` on `global/player`, wh
 ## 每次登录控制台一条 `apply() with insufficient permission ... set_name`（2026-10-21，KB 06 §7.322）
 
 `secure/login.lpc` 和 `secure/new_login.lpc` 的 `begin2()` 里 `new_copy -> set_name(name);` 调用的 `global/player.lpc` 的 `set_name()` 是 `protected`（原版 MudOS 里是 `static`，call_other 到不了它，调用一直是空操作）；这个驱动对这种调用在控制台打印 `apply() with insufficient permission: cob: secure/login#2, ob: global/player#8, function: set_name, origin: call_other, needs: public, has: protected`，每个访客登录一次。名字其实由 `move_player_to_start()` 里本地的 `set_name(bong)` 设置（`who` 里是 `Xqaab`），所以删掉这两处死调用（留一行注释），行为不变。ninetears 的同名函数是 `nomask`（公开），没有这个问题。扫描时这条错误记在了字母序第一个命令 `allinv` 上：登录时的控制台输出被第一个命令吃掉，见 KB 08 §10.16。实测：登录后控制台没有这一行，`who`、`score` 正常。
+
+## 存档里的 `.c` 文件名改成 `.lpc`（2026-10-21，KB 03 §4.2 第 9 项）
+
+存档里写着 `"/d/city/npc/wei.c"` 这样的文件名；extract 时源文件已经全部改成 `.lpc`，而驱动对带扩展名的路径只认字面，`new()` / `load_object()` / `move()` 都找不到它，调用方多半把失败当成「没有这个东西」悄悄跳过。本库 6 个存档共 15 处按 `scripts/lpc_fix_save_dotc.py` 改成 `.lpc`（只改 `.lpc` 存在而 `.c` 不存在的字符串；玩家存档、备份、留言板、巫师目录和文件索引缓存不动）。改动：`/d/newbie/dwarf/newrooms/shop.o`（2 处）、`/d/newbie/dwarf/rooms/shop.o`（2 处）、`/d/newbie/lizard/rooms/shop.o`（2 处）、`/d/newbie/lizard/rooms/store.o`（2 处）（等共 6 个存档）。

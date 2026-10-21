@@ -864,3 +864,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply e
 ## `idea`：`CMD_PRAISE` 指向不存在的 `_praise`（2026-10-21，KB 06 §7.325）
 
 `include/commands.h` 的 `#define CMD_PRAISE "/cmds/std/_praise"`，而归档里（`raw/` 也是）这个基类文件叫 `praise.c`，没有下划线（`typo.c` 也没有）。`_idea.lpc` 和 `typo.lpc` 都 `inherit CMD_PRAISE;`，敲 `idea` 时命令守护进程按 `/_` + 命令名找到 `_idea`，编译时 `Inherited file '/cmds/std/_praise' does not exist!`，玩家的命令作废。宏改成 `"/cmds/std/praise"`，`_idea`、`typo`、`praise`、`_bug` 四个都加载（HEAD 2、树 4），实测 `idea` 打开编辑器（"Begin writing your idea report."）。`typo.lpc` 没有下划线，守护进程的命令表只认 `_命令名`，`typo` 仍然是 "什麽？"，和归档一致，没有改文件名。
+
+## 存档里的 `.c` 文件名改成 `.lpc`（2026-10-21，KB 03 §4.2 第 9 项）
+
+存档里写着 `"/d/city/npc/wei.c"` 这样的文件名；extract 时源文件已经全部改成 `.lpc`，而驱动对带扩展名的路径只认字面，`new()` / `load_object()` / `move()` 都找不到它，调用方多半把失败当成「没有这个东西」悄悄跳过。本库 2 个存档共 2 处按 `scripts/lpc_fix_save_dotc.py` 改成 `.lpc`（只改 `.lpc` 存在而 `.c` 不存在的字符串；玩家存档、备份、留言板、巫师目录和文件索引缓存不动）。改动：`/adm/daemons/languages/normal.o`（1 处）、`/data/std/user_ob/human/p/pdyx.o`（1 处）（共 2 个存档）。

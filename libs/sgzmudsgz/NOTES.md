@@ -214,3 +214,7 @@ hylib/dtxy) stay confirmed duplicates.
 ## `data/daemons/obj.o`：三个对象的文件名带 `.c`（2026-10-21，KB 03 §4.2 第 9 项）
 
 `OBJ_D`（`daemons/obj_d.lpc`）的表里 `buyi`、`mantou`、`wotou` 的 `file_name` 是 `/sgdomain/obj/.../xxx.c`，archive 里这三个文件是 `.lpc`：`clone_obj()` 里的 `new()` 失败，函数返回错误串 `this object files is an illegual file`，调用方把它当对象去 `->move()`：`call_other() couldn't find object 'this object files is an illegual file '`（第二遍扫描里 `look` 那一行）。表里的三个名字改成 `.lpc`。
+
+## 存档里的 `.c` 文件名改成 `.lpc`（2026-10-21，KB 03 §4.2 第 9 项）
+
+存档里写着 `"/d/city/npc/wei.c"` 这样的文件名；extract 时源文件已经全部改成 `.lpc`，而驱动对带扩展名的路径只认字面，`new()` / `load_object()` / `move()` 都找不到它，调用方多半把失败当成「没有这个东西」悄悄跳过。本库 4 个存档共 9 处按 `scripts/lpc_fix_save_dotc.py` 改成 `.lpc`（只改 `.lpc` 存在而 `.c` 不存在的字符串；玩家存档、备份、留言板、巫师目录和文件索引缓存不动）。改动：`/data/area/changan.o`（5 处）、`/data/area/wuling.o`（2 处）、`/data/daemons/areas.o`（1 处）、`/data/daemons/char.o`（1 处）（共 4 个存档）。

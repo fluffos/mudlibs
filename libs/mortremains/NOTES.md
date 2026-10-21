@@ -962,3 +962,7 @@ These wizard commands do `write(dump_socket_status());`, a MudOS efun FluffOS la
 ## A login password over 255 bytes: `crypt()` raises (2026-10-20, KB 06 7.294)
 
 The driver's `crypt()` raises (`Error in crypt(), check your salt`) for a key over 255 bytes, where the old driver hashed any length. A password of 256 bytes or more typed at the login prompt threw an error in the password check and left the connection at a bare `> ` prompt, so the login never completed (the old-password test of `password` the same); found by the sweep shape of 300 `x`. `/adm/obj/simul_efun.lpc` now defines a simulated efun `crypt(key, salt)` of the same name: only an over-long key is cut (to 255 characters, then character by character until `sizeof(to_buffer(key)) <= 255`: the limit is in bytes, a CJK character takes three) before it is handed to `efun::crypt()`; every ordinary password hashes as before and the saved hashes are untouched (`scripts/lpc_add_sefun.py crypt`).
+
+## 存档里的 `.c` 文件名改成 `.lpc`（2026-10-21，KB 03 §4.2 第 9 项）
+
+存档里写着 `"/d/city/npc/wei.c"` 这样的文件名；extract 时源文件已经全部改成 `.lpc`，而驱动对带扩展名的路径只认字面，`new()` / `load_object()` / `move()` 都找不到它，调用方多半把失败当成「没有这个东西」悄悄跳过。本库 1 个存档共 1 处按 `scripts/lpc_fix_save_dotc.py` 改成 `.lpc`（只改 `.lpc` 存在而 `.c` 不存在的字符串；玩家存档、备份、留言板、巫师目录和文件索引缓存不动）。改动：`/data/adm/daemons/doc_d/Root.o`（1 处）（共 1 个存档）。

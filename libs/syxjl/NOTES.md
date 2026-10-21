@@ -1073,3 +1073,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## `news`：新闻版的 `location` 是 archive 里没有的 `/u/bsd/workroom`（2026-10-21，KB 06 §7.269 的同类）
 
 `cmds/usr/news.lpc` 是一块兼作命令的 `BULLETIN_BOARD`：`create()` 里 `set("location", "/u/bsd/workroom")`，`bboard.setup()` 就把它 `move()` 到那个房间；巫师 bsd 的工作室不在 archive 里（`log/static/editfile` 里还记着他编辑过 `/u/bsd/workroom.c`），每次载入这个命令都是 `call_other() couldn't find object '/u/bsd/workroom'`（第二遍扫描里 `news` 那一行）。命令本身不需要房间（`main()`、`do_post()` 都不看 `environment()`），所以只在房间文件存在时才设 `location`。实测：`news` 没有控制台输出。同一次重扫（`chat()` 守卫之后，KB 06 §7.334）里，原先几乎每个命令都带一行的 `Array index out of bounds`（35 行）没有了。
+
+## 存档里的 `.c` 文件名改成 `.lpc`（2026-10-21，KB 03 §4.2 第 9 项）
+
+存档里写着 `"/d/city/npc/wei.c"` 这样的文件名；extract 时源文件已经全部改成 `.lpc`，而驱动对带扩展名的路径只认字面，`new()` / `load_object()` / `move()` 都找不到它，调用方多半把失败当成「没有这个东西」悄悄跳过。本库 2 个存档共 2 处按 `scripts/lpc_fix_save_dotc.py` 改成 `.lpc`（只改 `.lpc` 存在而 `.c` 不存在的字符串；玩家存档、备份、留言板、巫师目录和文件索引缓存不动）。改动：`/d/shaolin/npc/obj/kat.o`（1 处）、`/d/shaolin/obj/kat.o`（1 处）（共 2 个存档）。

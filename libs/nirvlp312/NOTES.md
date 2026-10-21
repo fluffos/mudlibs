@@ -307,3 +307,7 @@ Every changed object was loaded at HEAD and in the tree: no regression.
 ## `(string)` casts of numbers (2026-10-20, KB 04 6.22)
 
 `bin/wiz/secure/_mkall.lpc`, `_rm.lpc`, `_rmdir.lpc`: `(string)this_player()->query_level() < CREATE` is `(int)` (`scripts/lpc_fix_cast_cmp.py`). An LDMud lib: the objects do not load under this driver either way; the text is right for the driver they were written for.
+
+## 存档里的 `.c` 文件名改成 `.lpc`（2026-10-21，KB 03 §4.2 第 9 项）
+
+存档里写着 `"/d/city/npc/wei.c"` 这样的文件名；extract 时源文件已经全部改成 `.lpc`，而驱动对带扩展名的路径只认字面，`new()` / `load_object()` / `move()` 都找不到它，调用方多半把失败当成「没有这个东西」悄悄跳过。本库 1 个存档共 1 处按 `scripts/lpc_fix_save_dotc.py` 改成 `.lpc`（只改 `.lpc` 存在而 `.c` 不存在的字符串；玩家存档、备份、留言板、巫师目录和文件索引缓存不动）。改动：`/banish/maeron.o`（1 处）（共 1 个存档）。

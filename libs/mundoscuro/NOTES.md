@@ -308,3 +308,7 @@ nested `/*`).
 5. 验证：全新启动 0 警告；新建角色（男/人类/战士）→ `mirar`、`score`、`ficha`、`who`、`inventario`、`comun`、`salir`（`Ficha grabada.`）→ 重新登录 → `historial` 正常。测试角色 `qatestb` 的存档和数据库行已删除。`fluffos` 管理员账号不在当前容器的数据库里（容器数据早于该账号），这是本机数据库状态，不是代码问题。
 
 - 2026-10-14: FluffOS 970d9f09 warns `Float value truncated to int`. `global/comandos/ajustar.lpc` stores `ceil(maxact * pciento / 100)` (an integer division, so the value is whole) into an int twice; both now spell it `to_int(...)`, same value. The scan needs the `mundoscuro_mysql` container running (`docker start mundoscuro_mysql`), or `initd` shuts the driver down at boot and every object reads as failing.
+
+## 存档里的 `.c` 文件名改成 `.lpc`（2026-10-21，KB 03 §4.2 第 9 项）
+
+存档里写着 `"/d/city/npc/wei.c"` 这样的文件名；extract 时源文件已经全部改成 `.lpc`，而驱动对带扩展名的路径只认字面，`new()` / `load_object()` / `move()` 都找不到它，调用方多半把失败当成「没有这个东西」悄悄跳过。本库 8 个存档共 19 处按 `scripts/lpc_fix_save_dotc.py` 改成 `.lpc`（只改 `.lpc` 存在而 `.c` 不存在的字符串；玩家存档、备份、留言板、巫师目录和文件索引缓存不动）。改动：`/fichas/c/cain.o`（6 处）、`/fichas/c/calsh.o`（2 处）、`/fichas/e/eladar.o`（1 处）、`/fichas/h/herumir.o`（1 处）（等共 8 个存档）。

@@ -867,3 +867,7 @@ Left, as content gaps, not invented: 16 inherits of files that are not in the ar
 ## `CMD_PRAISE` 指向不存在的 `_praise`（2026-10-21，KB 06 §7.325）
 
 `include/commands.h` 的 `CMD_PRAISE "/cmds/std/_praise"`，实际文件是 `praise.lpc`（归档里就没有下划线）；`idea.lpc`、`typo.lpc` 都 `inherit CMD_PRAISE;` 编译失败。这两个文件也没有下划线，`CMD_D->find_cmd()` 找的是 `/_` + 命令名，所以 `idea`、`typo` 在这个库里本来就是 "什麽？"，不报错。宏改成 `"/cmds/std/praise"`，两个文件加载（HEAD 1、树 3），命令仍然不可达（与归档一致）。esI 的同一处改法见 esI 的 NOTES（那里 `_idea.lpc` 有下划线，命令可达，错误可见）。
+
+## 存档里的 `.c` 文件名改成 `.lpc`（2026-10-21，KB 03 §4.2 第 9 项）
+
+存档里写着 `"/d/city/npc/wei.c"` 这样的文件名；extract 时源文件已经全部改成 `.lpc`，而驱动对带扩展名的路径只认字面，`new()` / `load_object()` / `move()` 都找不到它，调用方多半把失败当成「没有这个东西」悄悄跳过。本库 4 个存档共 4 处按 `scripts/lpc_fix_save_dotc.py` 改成 `.lpc`（只改 `.lpc` 存在而 `.c` 不存在的字符串；玩家存档、备份、留言板、巫师目录和文件索引缓存不动）。改动：`/adm/daemons/languages/normal.o`（1 处）、`/data/std/user_ob/elf/c/cach.o`（1 处）、`/data/std/user_ob/gnome/a/aha.o`（1 处）、`/data/std/user_ob/orc/c/creative.o`（1 处）（共 4 个存档）。

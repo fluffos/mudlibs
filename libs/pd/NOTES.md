@@ -549,3 +549,7 @@ fresh driver boot plus the full long-sit idle window below.
 ## 三个编译警告（2026-10-21，KB 04 §6.10）
 
 `include/imc.h` 的 `imc_wizard()`：`if(!interactive(ob)) 0;` 缺了 `return`（上面的 `imc_archp()` 写的是 `return 0;`），改成 `return 0;`（非连线对象不再落到 `wizardp(ob)`）；`daemon/network.lpc` 的 `read_callback()`：`tmp + "";` 本意是 `tmp = "";`（`sscanf` 只匹配到第一段时 `tmp` 没被赋值，后面的 `explode(tmp, "||")` 会报错），改成赋值；`daemon/imc_d.lpc:404`：`if (split[2] == "accept") split[3] == "accept";`（注释写的是 “fixes autoconfigure”）把赋值写成了比较，改成 `=`。三条警告都消失（`imc`、`mudlist` 命令的控制台行）；`daemon/tmp/network.lpc` 是 `tmp/` 里的副本，没有改。
+
+## 存档里的 `.c` 文件名改成 `.lpc`（2026-10-21，KB 03 §4.2 第 9 项）
+
+存档里写着 `"/d/city/npc/wei.c"` 这样的文件名；extract 时源文件已经全部改成 `.lpc`，而驱动对带扩展名的路径只认字面，`new()` / `load_object()` / `move()` 都找不到它，调用方多半把失败当成「没有这个东西」悄悄跳过。本库 32 个存档共 61 处按 `scripts/lpc_fix_save_dotc.py` 改成 `.lpc`（只改 `.lpc` 存在而 `.c` 不存在的字符串；玩家存档、备份、留言板、巫师目录和文件索引缓存不动）。改动：`/adm/save/boats/aerion.o`（2 处）、`/adm/save/boats/amria.o`（2 处）、`/adm/save/boats/amun.o`（2 处）、`/adm/save/boats/arial.o`（2 处）（等共 32 个存档）。

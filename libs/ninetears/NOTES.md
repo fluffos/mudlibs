@@ -896,3 +896,7 @@ The driver's `crypt()` raises (`Error in crypt(), check your salt`) for a key ov
 ## 旧法术目录里的变量名 `in`（2026-10-20，KB 04 §6.26）
 
 `d/gremios/hechizos/combined/*`、`wizard/*` 等 46 个法术文件把 `in` 当变量名（`syntax error, unexpected L_IN`，法术加载不了）。`scripts/lpc_fix_in_ident.py` 改名为 `in_var`；名字里带 `old`、`bak` 的备份目录没有动（另有 82 个文件在那里，是死副本）。加载检查 46/46，HEAD FAIL → tree PASS。
+
+## 存档里的 `.c` 文件名改成 `.lpc`（2026-10-21，KB 03 §4.2 第 9 项）
+
+存档里写着 `"/d/city/npc/wei.c"` 这样的文件名；extract 时源文件已经全部改成 `.lpc`，而驱动对带扩展名的路径只认字面，`new()` / `load_object()` / `move()` 都找不到它，调用方多半把失败当成「没有这个东西」悄悄跳过。本库 2 个存档共 4 处按 `scripts/lpc_fix_save_dotc.py` 改成 `.lpc`（只改 `.lpc` 存在而 `.c` 不存在的字符串；玩家存档、备份、留言板、巫师目录和文件索引缓存不动）。改动：`/d/newbie/duergar/rooms/store.o`（2 处）、`/w/oldcreators/kaerf/duergar/rooms/store.o`（2 处）（共 2 个存档）。
