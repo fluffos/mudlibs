@@ -100,6 +100,7 @@ def main():
     unit_out = f"{SCR}/play-{a.slug}{suf}.out"
     tree = f"{SCR}/play-{a.slug}{suf}/libs/{a.slug}/work"
     booted = False
+    sw = None
     if not a.no_boot:
         env = dict(os.environ, PLAY_TAG=a.tag) if a.tag else os.environ
         r = subprocess.run([f"{REPO}/scripts/play_boot.sh", a.slug, str(port)], cwd=REPO, capture_output=True, text=True, env=env, timeout=400)
@@ -191,12 +192,12 @@ def main():
                 sw._record("stuck-reconnect", v, t, [])
                 sw.m = relogin()
         by = sw.report()
-        if a.out:
+        print("FINAL", {k: len(x) for k, x in by.items()}, flush=True)
+    finally:
+        if a.out and sw is not None:        # also when the sweep died (a relogin the robot could not do): the findings so far are the result
             with open(a.out, "w", encoding="utf-8") as f:
                 for kind, line, scr, cons in sw.findings:
                     f.write("\t".join([kind, line[:120].replace("\t", " "), " | ".join(cons[:3]).replace("\t", " ").replace("\n", " ")[:300], scr.replace("\t", " ").replace("\n", " ")[:200]]) + "\n")
-        print("FINAL", {k: len(x) for k, x in by.items()}, flush=True)
-    finally:
         if booted:
             subprocess.run([f"{REPO}/scripts/play_stop.sh", a.slug + (f"-{a.tag}" if a.tag else "")], cwd=REPO, capture_output=True)
 

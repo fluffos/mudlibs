@@ -18,13 +18,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import play_login  # noqa: E402
 from mudplay import Console  # noqa: E402
 from play_sweep_lib import born_if_needed, own_port  # noqa: E402
-from playsweep import DRIVER_BAD  # noqa: E402
+from playsweep import DRIVER_BAD, SCREEN_BAD  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCR = os.environ.get("LPC_SCRATCH") or os.path.expanduser("~/.cache/lpc-scratch")
 ID_RX = re.compile(r"[\(（]([A-Za-z][A-Za-z0-9 _'\-]{1,30})[\)）]")
 SELF = re.compile(r"^(fight|sweep)[a-z]{2}$")
-REFUSAL = re.compile(r"(?i)(what\?|don'?t see|no such|cannot|can't|not here|找不到|没有这个|不能|无法|什么\？|你要|whom|who\b)")
+REFUSAL = re.compile(r"(?i)(what\?|don'?t see|no such|cannot|can't|not here|找不到|没有这个|不能|无法|什么\？|你要|whom|who\b|禁止|不允许|不准|forbid|not allowed|no fighting|peace)")
 
 
 NOUNS = ("guard", "guardian", "soldier", "knight", "man", "woman", "boy", "girl", "child", "citizen", "peasant", "merchant", "shopkeeper", "bartender", "barkeep", "waiter",
@@ -130,16 +130,31 @@ def main():
         print("CANDIDATES", cands, flush=True)
         if not cands:
             print("no ids in the start room: nothing to fight", flush=True)
-        for tgt in cands[:a.targets]:
+        fights = 0
+        for tgt in cands[:10]:
+            if fights >= a.targets or m.closed:
+                break
             lines, screen, first = [], "", ""
+            refused = True
             for verb in ("kill", "fight"):
                 txt = m.cmd(f"{verb} {tgt}", idle=1.0, maxwait=6)
                 first = first or " ".join(txt.split())[:110]
                 screen += txt
                 if m.closed:
                     break
-                if not REFUSAL.search(txt[-200:]) or "fight" in verb:
+                refused = bool(REFUSAL.search(txt[-200:]))
+                if not refused:
                     break
+            if refused and not m.closed:           # a sign, a board, a door: not a living thing here
+                lines += [c for c in con.new() if c.strip()]
+                bad = [c for c in lines if DRIVER_BAD.search(c)]
+                if bad:
+                    findings.append(("console", tgt, " | ".join(x[:160] for x in bad[:4]), screen.strip()[-200:]))
+                    print(f"REFUSED {tgt} bad={len(bad)}", flush=True)
+                    for c in bad[:4]:
+                        print("    ", c[:200], flush=True)
+                continue
+            fights += 1
             t0 = time.time()
             while time.time() - t0 < a.seconds and not m.closed:
                 screen += m.read(1.5, 3.0)
@@ -161,6 +176,9 @@ def main():
                 print("    ", c[:200], flush=True)
             if bad:
                 findings.append(("console", tgt, " | ".join(x[:160] for x in bad[:4]), screen.strip()[-200:]))
+            elif SCREEN_BAD.search(screen):
+                mm = SCREEN_BAD.search(screen)
+                findings.append(("screen", tgt, "", " ".join(screen[max(0, mm.start() - 80):mm.end() + 80].split())))
             # a dead character: a ghost or a respawn is fine, a stuck session is not
             try:
                 ok = m.cmd("look", idle=0.8, maxwait=5)

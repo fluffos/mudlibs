@@ -98,9 +98,9 @@ def main():
         if a.probe == "combat":
             cands = re.search(r"^CANDIDATES (\[.*\])", text, re.M)
             ids = cands.group(1) if cands else ""
-            kinds = {k: len(re.findall(rf"^FINDING \[{k}\]", text, re.M)) for k in ("console", "stuck", "connection-closed", "login")}
+            kinds = {k: len(re.findall(rf"^FINDING \[{k}\]", text, re.M)) for k in ("console", "stuck", "screen", "connection-closed", "login")}
             print("\t".join(map(str, [slug, ids.count(",") + 1 if ids not in ("", "[]") else 0, len(re.findall(r"^COMBAT ", text, re.M)), len(re.findall(r"^FINDING ", text, re.M)),
-                                       kinds["console"] + kinds["login"], kinds["stuck"], kinds["connection-closed"], int(secs), status, ids[:80]])), flush=True)
+                                       kinds["console"] + kinds["login"], kinds["stuck"] + kinds["screen"], kinds["connection-closed"], int(secs), status, ids[:80]])), flush=True)
             continue
         if a.probe == "walk":
             first = re.search(r"^ROOM 0 (.*?) exits=", text, re.M)

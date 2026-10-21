@@ -436,3 +436,7 @@ lpc`/`pigd.lpc` 里搜不到任何 `money`/`balance` 相关调用——它不是
 ## 翻页器 `start_more(read_file(...))`：文件缺失时 `explode(0)`（2026-10-20，KB 06 §7.300）
 
 东方故事系的翻页器 `void start_more(string msg) { ... explode(msg, "\n") ... }` 被这样调用：`start_more(read_file(HELP_DIR + "help/topics"))`、`start_more(read_file(NEWS))`。压缩包没带的文件使 `read_file()` 回 0，`explode(0, ...)` 在本驱动里报 `Bad argument 1 to explode()`（不带参数的 `help` 指令就是这样出错的），老驱动把 0 当空文本。在 `start_more` 开头加了 `if (!stringp(msg)) return;`（`scripts/lpc_fix_start_more.py`）。改动：`/feature/more.lpc`。
+
+## `news`：`/clone/misc/reporter` 归档里没有（2026-10-21，KB 06 §7.326）
+
+`cmds/usr/news.lpc` 先 `load_object("/clone/misc/reporter")`，再 `b->restore()`、`b->query("notes")`；归档里没有这个对象（同系的 dtxyzjb、zitengzhan 只带着它存的 `data/sldh/reporter.o`），`load_object()` 答 0，`0->restore()` 抛 `Bad argument 1 to EFUN call_other()  Expected: object, string, array,  Got: int(0)`：玩家敲 `news` 是运行时错误。取不到对象就当没有消息：命令原有的 "现在没有新的没有最新的消息。" 照常显示。ldtx 和 ldtxii 同一处（ldtxii 是 CRLF）。实测：`news` 打出公布栏和 "没有最新的消息"。

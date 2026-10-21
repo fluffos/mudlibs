@@ -92,7 +92,7 @@ def sites(path, work, forms):
             ctx = "\n".join(ls[max(0, n - 9):n + 1])
             if re.search(r"\b(stringp|file_size|file_exists?|catch)\b", ctx):
                 continue
-            if re.search(r"\b(while|if|for)\s*\(\s*\(?\s*" + re.escape(var) + r"\s*=\s*read_file", line):
+            if re.search(r"\b(while|if|for)\s*\(\s*!?\s*\(?\s*" + re.escape(var) + r"\s*=\s*read_file", line):
                 continue   # the read is the loop / branch test itself
             if re.search(r"\bif\s*\(\s*!?\s*" + re.escape(var) + r"\b", "\n".join(ls[n - 1:n + 3])) or re.search(r"\b" + re.escape(var) + r"\b\s*(\|\||\?)", "\n".join(ls[n - 1:n + 2])):
                 continue
