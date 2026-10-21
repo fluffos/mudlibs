@@ -404,3 +404,11 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 巫师命令不带参数时对 0 调用 efun（2026-10-21，KB 06 §7.336）
 
 巫师（管理员）把命令敲成不带参数时，驱动把 0 传给字符串参数；下面的命令第一句就把这个 0 交给 efun，运行时报 `Bad argument 1 to ...`，这条指令从来没有用过。用 `scripts/lpcc_bare.py` 不登录、在一次 `lpcc` 求值里以 0 调用 `main()` 逐个确认后，由 `scripts/lpc_fix_bare_arg.py` 在第一处使用参数的语句前加守卫：文件自带 `int help(object me)` 的，守卫是 `if (!arg) return help(me);`（`help()` 定义在 `main()` 之后的 3 个文件补了原型 `int help(object me);`，否则编译报 `Undefined function help`）。改动（3 个文件，括号里是接住 0 的 efun）：`/cmds/adm/dallowip.lpc`（`find_player`）、`/cmds/adm/dbiaoshi-md5.lpc`（`find_player`）、`/cmds/adm/dbiaoshi.lpc`（`find_player`）。加载检查 HEAD 与工作树对照，没有退步。
+
+## `socket`：`dump_socket_status()` 在本库没有（2026-10-21，KB 06 §7.291）
+
+管理员扫描里 `socket` 指令（`/cmds/bos/socket2.lpc`）编译不了：`write(dump_socket_status());` 用的是 MudOS 有、本驱动没有的 efun。2026-10-20 的补丁只按名字找了巫师目录里的同名指令，这一条在 `cmds/bos`、`cmds/hufa`、`cmds/island`、`cmds/ser` 这类目录里；用 `scripts/lpc_add_sefun.py dump_socket_status` 在 `/adm/obj/simul_efun.lpc` 末尾补了一个由 `socket_status()` 构造表格的 simul_efun（没有 sockets 包的构建，比如 WASM，只打印表头）。指令 HEAD 编译失败，现在通过。
+
+## `findfile`、`updir`：不带参数（2026-10-21，KB 06 §7.336）
+
+ToMud 升级用的两条指令（`cmds/bos/findfile.lpc`、`updir.lpc`）不带参数时报 `Bad argument 1 to sscanf() Expected: string Got: 0.`：`findfile` 的 `sscanf(arg, "%s,%s", dir, str)` 前面是一段注释掉的代码，`updir` 的 `sscanf(arg, "%s -debug", arg)` 在 `if (playerp(previous_object()))` 里面。`findfile` 补了 `if (!arg) return help(me);`（`help()` 在 `main()` 之后，补了原型），`updir` 在开头 `if (!arg) arg = "";`，不带参数就列出当前目录。

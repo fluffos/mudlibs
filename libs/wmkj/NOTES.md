@@ -1131,3 +1131,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## `yaoqing`：`#include "/data/npc/npcneed.h"` 的头文件不在存档里（2026-10-21，KB 06 §7.270 的同类）
 
 `cmds/usr/yaoqing.lpc`（帮会邀请 NPC 入伙的命令；tiexuejianghu 的与 fys 逐字节相同，wmkj 的是它的 `qi`/`xiha` 改写版）第四行 `#include "/data/npc/npcneed.h"`，那是一个数据头文件（`mapping npcneed = ([ "shedan gao": "蛇胆膏", ... ])`，NPC 向玩家索要的东西），fys、tianxiawuxue、tybxjh、wlhd、xiyouji2003、yxcs、yxjh、zxty、zxty08nxgbb 都带着，这两个存档没有：`Cannot #include /data/npc/npcneed.h`、`Undefined variable 'npcneed'`，整条命令不加载。从 fys 复制（6,473 字节）。实测 `yaoqing` 回答 “你没有参加任何帮会，无法邀请他人加入。”。表里的东西是 fys 世界里的物品，在这个库里能不能找到没有核对（只影响这个任务的内容，不影响命令）。没有改：`xhcii` 的 `whotest`（`who` 的半成品实验版，行被拼在一起）、`xianlvqiyuan` 的 `pperform`（`obj` 没有声明的手改副本）。
+
+## `socket`：`dump_socket_status()` 在本库没有（2026-10-21，KB 06 §7.291）
+
+管理员扫描里 `socket` 指令（`/cmds/bos/socket.lpc`）编译不了：`write(dump_socket_status());` 用的是 MudOS 有、本驱动没有的 efun。2026-10-20 的补丁只按名字找了巫师目录里的同名指令，这一条在 `cmds/bos`、`cmds/hufa`、`cmds/island`、`cmds/ser` 这类目录里；用 `scripts/lpc_add_sefun.py dump_socket_status` 在 `/adm/obj/simul_efun.lpc` 末尾补了一个由 `socket_status()` 构造表格的 simul_efun（没有 sockets 包的构建，比如 WASM，只打印表头）。指令 HEAD 编译失败，现在通过。

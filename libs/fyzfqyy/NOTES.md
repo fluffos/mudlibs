@@ -501,3 +501,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## `refresh`（`retask`）：动词函数不返回 1，搬动或销毁带动作的物件时报错（2026-10-21，KB 06 §7.339）
 
 管理员扫描里 `refresh` 在重新分布使命之后报 `Illegal to move or destruct an object (/questobj/...) defining actions from a verb function(refresh) in object(/obj/user#...) which returns zero.`：`main()` 以第二条 `message()` 结尾、没有 `return`，答 0，而 `TASK_D->init_dynamic_quest(1)` 销毁了给玩家定义过动作（`init()` 里的 `add_action`）的使命物件：驱动只在动词答非 0 时才允许这样搬动或销毁，否则它接着遍历的动作表会悬空；答 0 还会让解析器在指令做完之后再补一句“什么？”。`main()` 末尾加 `return 1;`（同系已经返回 1 的 11 个同名文件没有动）。
+
+## `socket`：`dump_socket_status()` 在本库没有（2026-10-21，KB 06 §7.291）
+
+管理员扫描里 `socket` 指令（`/cmds/island/socket.lpc`）编译不了：`write(dump_socket_status());` 用的是 MudOS 有、本驱动没有的 efun。2026-10-20 的补丁只按名字找了巫师目录里的同名指令，这一条在 `cmds/bos`、`cmds/hufa`、`cmds/island`、`cmds/ser` 这类目录里；用 `scripts/lpc_add_sefun.py dump_socket_status` 在 `/adm/obj/simul_efun.lpc` 末尾补了一个由 `socket_status()` 构造表格的 simul_efun（没有 sockets 包的构建，比如 WASM，只打印表头）。指令 HEAD 编译失败，现在通过。

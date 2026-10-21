@@ -741,3 +741,7 @@ issues encountered.
 ## 存档里的 `.c` 文件名改成 `.lpc`（2026-10-21，KB 03 §4.2 第 9 项）
 
 存档里写着 `"/d/city/npc/wei.c"` 这样的文件名；extract 时源文件已经全部改成 `.lpc`，而驱动对带扩展名的路径只认字面，`new()` / `load_object()` / `move()` 都找不到它，调用方多半把失败当成「没有这个东西」悄悄跳过。本库 155 个存档共 1032 处按 `scripts/lpc_fix_save_dotc.py` 改成 `.lpc`（只改 `.lpc` 存在而 `.c` 不存在的字符串；玩家存档、备份、留言板、巫师目录和文件索引缓存不动）。`data/questd.o` 的 `assigner` 有 66 个 NPC 文件当键：改前一个都不存在（`getItemFile()` 本来就返回 `.lpc`），改后 66 个全部存在；`world/area/*` 里各建筑存档的 `filename` 指向地图房间 `muye.c` 之类，同样改成 `.lpc`。改动：`/data/questd.o`（314 处）、`/data/ward.o`（5 处）、`/world/area/bone/sell.o`（1 处）、`/world/area/bone/sell_s.o`（1 处）（等共 155 个存档）。
+
+## `chpass`：先把参数写进日志，再对它 `sscanf`（2026-10-21，KB 06 §7.336）
+
+管理员扫描里 `chpass` 不带参数报 `Bad argument 1 to sscanf() Expected: string Got: 0.`（`cmds/adm/chpass.lpc`）：指令先 `log_file("nosave/CHPASS", ... arg)`（`%s` 吃得下 0），再 `sscanf(arg, "%s %s", userid, new_passwd)`。静态扫描只看第一次提到参数的语句，现在会越过这种只是打印或记录的提及；在记录之前加 `if (!arg) return notify_fail("指令格式：chpass <使用者代号> <密码>\n");`。

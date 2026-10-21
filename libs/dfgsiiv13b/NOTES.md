@@ -478,3 +478,7 @@ finds nothing in this lib.
 ## 翻页器 `start_more(read_file(...))`：文件缺失时 `explode(0)`（2026-10-20，KB 06 §7.300）
 
 东方故事系的翻页器 `void start_more(string msg) { ... explode(msg, "\n") ... }` 被这样调用：`start_more(read_file(HELP_DIR + "help/topics"))`、`start_more(read_file(NEWS))`。压缩包没带的文件使 `read_file()` 回 0，`explode(0, ...)` 在本驱动里报 `Bad argument 1 to explode()`（不带参数的 `help` 指令就是这样出错的），老驱动把 0 当空文本。在 `start_more` 开头加了 `if (!stringp(msg)) return;`（`scripts/lpc_fix_start_more.py`）。改动：`/feature/user/more.lpc`。
+
+## `chpass`：先把参数写进日志，再对它 `sscanf`（2026-10-21，KB 06 §7.336）
+
+管理员扫描里 `chpass` 不带参数报 `Bad argument 1 to sscanf() Expected: string Got: 0.`（`cmds/adm/chpass.lpc`）：指令先 `log_file("nosave/CHPASS", ... arg)`（`%s` 吃得下 0），再 `sscanf(arg, "%s %s", userid, new_passwd)`。静态扫描只看第一次提到参数的语句，现在会越过这种只是打印或记录的提及；在记录之前加 `if (!arg) return notify_fail("指令格式：chpass <使用者代号> <密码>\n");`。

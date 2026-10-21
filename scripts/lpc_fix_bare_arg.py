@@ -30,7 +30,7 @@ PATTERN_BASED = {"discworld", "dw_fluffos_v1", "dw_fluffos_v2", "skylib", "final
 WIZ = re.compile(r"(^|/)(wiz|wizard|adm|admin|admins|arch|archwiz|creator|creators|immortal|immortals|god|gods|lord|lords|elder|domain|imm|builders|builder|cres)(/|$)", re.I)
 SKIPDIR = re.compile(r"(^|/)(old|bak|backup|attic|antiguo|oldcomandos|raw|u|wizards|w|realms|test|tmp)(/|$)")
 ENTRY = re.compile(rb"(?m)^[ \t]*(?:varargs[ \t]+)?(?:static[ \t]+|nomask[ \t]+)?(?:int|mixed|void)[ \t]+(main|cmd)[ \t]*\(([^)]*)\)[ \t]*(\r?\n)?[ \t]*\{")
-RISKY = r"\b(sscanf|lower_case|upper_case|capitalize|explode|strsrch|replace_string|read_file|file_size|file_exists|find_player|find_living|present|restore_object|load_object|new|clone_object|crypt|implode|get_dir|keys|values)\s*\(\s*{p}\b|\b{p}\s*\["
+RISKY = r"\b(sscanf|lower_case|upper_case|capitalize|explode|strsrch|replace_string|read_file|file_size|file_exists|find_player|find_living|present|restore_object|load_object|new|clone_object|crypt|implode|get_dir|keys|values|write_file|rm|mkdir|rmdir|cp|rename|read_bytes|cat)\s*\(\s*{p}\b|\b{p}\s*\["
 GUARD = r"(!\s*{p}\b|\b{p}\s*(==|!=)|stringp\s*\(\s*{p}|\bif\s*\(\s*{p}\s*\)|\bif\s*\(\s*{p}\s*&&|\b{p}\s*\?|\b{p}\s*\|\||\b{p}\s*&&|\bsizeof\s*\(\s*{p}\s*\)\s*(<|==)|!\s*sizeof\s*\(\s*{p}|{p}\s*=\s*\"\"|{p}\s*=\s*{p}\s*\|\|)"
 CJK = re.compile(rb"[\xe4-\xe9][\x80-\xbf][\x80-\xbf]")
 HELPDEF = re.compile(rb"(?m)^(?:int|mixed)[ \t]+help[ \t]*\(\s*object[^)]*\)")        # `return help(me);` needs a function that answers an int
@@ -116,7 +116,8 @@ def plan_file(data):
                     msg = "指令格式有误，请参考 help。".encode("utf-8") if CJK.search(data) else b"Argument needed."
                     g = b'if (!' + p.encode() + b') return notify_fail("' + msg + b'\\n");'
                 out.append((abs_pos, indent, s, g + nl))
-            break
+                break
+            # a mention that is neither a test nor a risky call (`log_file(.., arg)`, `write(arg)`, a mention inside a nested block) does not decide: look on
     return out, nl
 
 
