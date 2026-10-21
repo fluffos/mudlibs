@@ -1061,3 +1061,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply s
 ## 翻页器 `start_more(read_file(...))`：文件缺失时 `explode(0)`（2026-10-20，KB 06 §7.300）
 
 东方故事系的翻页器 `void start_more(string msg) { ... explode(msg, "\n") ... }` 被这样调用：`start_more(read_file(HELP_DIR + "help/topics"))`、`start_more(read_file(NEWS))`。压缩包没带的文件使 `read_file()` 回 0，`explode(0, ...)` 在本驱动里报 `Bad argument 1 to explode()`（不带参数的 `help` 指令就是这样出错的），老驱动把 0 当空文本。在 `start_more` 开头加了 `if (!stringp(msg)) return;`（`scripts/lpc_fix_start_more.py`）。改动：`/feature/more.lpc`。
+
+## `skills1`、`cha1`（cmds/skill）：一个少掉的分号和一个多出来的 `x`（2026-10-21，KB 04 §6.25）
+
+`skills1.lpc` 是 `skills.lpc` 的改版（加了 `LDJ.NEW` 横幅）：横幅那句 `str += "\n━━━...LDJ.NEW" NOR "━━━━━━\n"` 后面没有 `;`，下一行 `str += ...` 成了语法错误；`cha1.lpc` 同一位置有 `x str += ...`（`skills.lpc` 里没有那个 `x`）。补分号、删 `x`，两个命令都加载（HEAD 0/2、树 2/2）。没有改：`cmds/app/qadd`、`qlist`（`QUEST_OB` 和 `chinese_time()` 都不存在）、`cmds/std/shoot`（`ROOM_D`、`ARROW_D` 不存在），都是没写完的功能。

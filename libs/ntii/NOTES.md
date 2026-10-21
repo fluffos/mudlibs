@@ -535,3 +535,7 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## 登录密码超过 255 字节：`crypt()` 抛错（2026-10-20，KB 06 §7.294）
 
 驱动的 `crypt()` 对超过 255 字节的密钥直接报错（`Error in crypt(), check your salt`），老驱动则按任意长度散列。在登录提示符下输入 256 字节以上的密码，密码检查那一行就抛错，连线停在一个裸的 `> ` 提示符上，登录走不完（`password` 指令的旧密码检查同样）；用 300 个 `x` 当参数的扫描发现的。`/adm/single/simul_efun.lpc` 里补了一个同名的 simul_efun `crypt(key, salt)`：只有超长的密钥才被截短（先截到 255 个字符，再逐字符截到 `sizeof(to_buffer(key)) <= 255`，限制按字节算，一个汉字占三个字节），再交给 `efun::crypt()`；普通密码原样散列，已存的密码散列不受影响（`scripts/lpc_add_sefun.py crypt`）。
+
+## `ctell`：`MTEXT` 在没选中的头文件分支里（2026-10-21，KB 04 §6.16）
+
+`include/globals.h` 末尾 `#ifdef DOING_IMPROVED #include "ntsql.h" #else #include "tomud.h" #endif`；`DOING_IMPROVED`（带数据库的版本）没有定义，用的是 `tomud.h`，它没有 `MTEXT`（`ntsql.h` 里有：`#define MTEXT(x) TMI("ptext "+x)`，和 `PTEXT` 同形，同系的 dtsl2、xyzx3、xyj2006zzzhx 的 `tomud.h` 都有这一行）。`cmds/std/ctell.lpc` 四处用 `MTEXT(...)`：`Undefined function MTEXT`，整个命令加载失败。在 `tomud.h` 补上这一行。nte 和 ntii 的 `ctell.lpc` 逐字节相同，同一处改法；加载检查 HEAD 0、树 1。没有改：`fee`（`DB_STR` 和 `DATABASE_D` 只在数据库版本里，没有数据库，整个命令是死功能）。

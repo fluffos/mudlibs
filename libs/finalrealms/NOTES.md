@@ -784,3 +784,7 @@ Creating a character, `secure/login.lpc` calls `set_name` on `global/player`, wh
 ## `wer` and `whoami` did not compile: `efun::tell_object()` outside the allowed directories (2026-10-20, KB 06 7.311)
 
 `/cmds/player/wer.lpc:226:9: error: Invalid simulated efunction override` (twice) every time `wer` was typed, and the same in `whoami`: the master's `valid_override()` lets only `secure/`, `std/`, `obj/`, `simul_efun`, `global/` and a few more call `efun::` for a function the simul_efun object overrides, and a command file is none of them. Both commands now write through the player's `do_efun_write()`, as the Discworld mudlib they descend from does. `dump_socket_status()` (a MudOS efun this driver lacks) is a sefun built from `socket_status()`; a driver without the sockets package (the WASM build) prints the header of the table only.
+
+## 每次登录控制台一条 `apply() with insufficient permission ... set_name`（2026-10-21，KB 06 §7.322）
+
+`secure/login.lpc` 和 `secure/new_login.lpc` 的 `begin2()` 里 `new_copy -> set_name(name);` 调用的 `global/player.lpc` 的 `set_name()` 是 `protected`（原版 MudOS 里是 `static`，call_other 到不了它，调用一直是空操作）；这个驱动对这种调用在控制台打印 `apply() with insufficient permission: cob: secure/login#2, ob: global/player#8, function: set_name, origin: call_other, needs: public, has: protected`，每个访客登录一次。名字其实由 `move_player_to_start()` 里本地的 `set_name(bong)` 设置（`who` 里是 `Xqaab`），所以删掉这两处死调用（留一行注释），行为不变。ninetears 的同名函数是 `nomask`（公开），没有这个问题。扫描时这条错误记在了字母序第一个命令 `allinv` 上：登录时的控制台输出被第一个命令吃掉，见 KB 08 §10.16。实测：登录后控制台没有这一行，`who`、`score` 正常。

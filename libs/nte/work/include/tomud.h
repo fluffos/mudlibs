@@ -7,6 +7,7 @@
 
 #define PTEXT(x) TMI("ptext "+x)
 #define ALERT(x) TMI("alert "+x)
+#define MTEXT(x) TMI("ptext "+x)
 #define L_ITEM(x) RANK_D->new_short(x)
 #define L_ICON(x) TMI("licon "+x)
 #define CLEAN0  TMI("lbclear0")
