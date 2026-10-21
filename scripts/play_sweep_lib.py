@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""scripts/play_sweep_lib.py SLUG [--port P] [--no-boot] [--dirs d1,d2] [--wiz] [--shapes quick|full] [--burst PACE] [--start N] [--end M] [--skip v1,v2] [--out F]
+"""scripts/play_sweep_lib.py SLUG [--port P] [--no-boot] [--dirs d1,d2] [--wiz] [--shapes quick|full] [--burst PACE] [--start N] [--end M] [--skip v1,v2] [--verbs-file F] [--out F]
 
 A mortal-verb sweep of one lib (KB 08 10.16): boots the lib as a play unit (`play_boot.sh`, unless --no-boot), registers a character with the login robot
 (`play_login.py`), takes the verbs from the file names under `work/cmds/` (and `secure/cmds/`, `lib/cmds/`: Dead Souls keeps its player commands there) (a leading or inner `_` is dropped: Discworld's `l_ook` is `look`, xkx's `_less` is `less`;
@@ -13,6 +13,7 @@ is reopened with a new character.  A finding is a console error / warning, a bad
   --dirs         comma-separated subdirectories of cmds/ (default: all but the wizard ones).
   --account      NAME:PASSWORD of a seeded account (discworld: fluffos:Mud@2026, an administrator; add --wiz to sweep the creator commands).
   --start/--end  slice of the sorted verb list, for a run in chunks of about an hour (a tracked job dies at two hours).
+  --verbs-file   the verbs come from this file (one per line) and not from the file names under cmds/: Genesis keeps its commands in `query_cmdlist()` tables of cmd/live/*.lpc.
 
 Output: `VERB n name` progress lines, `FINDING [kind] 'line': console=[...] screen='...'`, and a summary; --out also writes the findings as TSV (kind, line, console, screen).
 The unit is stopped at the end (a unit this script booted).  Nothing here knows a lib: its login is the robot's, its verbs are file names."""
@@ -80,6 +81,7 @@ def main():
     ap.add_argument("slug")
     ap.add_argument("--port", type=int, default=0)
     ap.add_argument("--no-boot", action="store_true")
+    ap.add_argument("--verbs-file", default="", help="one verb per line, instead of the file names under cmds/ (a lib whose commands are a table: Genesis' query_cmdlist(), a flat command list)")
     ap.add_argument("--dirs", default="")
     ap.add_argument("--wiz", action="store_true")
     ap.add_argument("--shapes", default="quick", choices=["one", "two", "quick", "full"])
@@ -105,7 +107,10 @@ def main():
             sys.exit(f"boot failed: {r.stderr.strip()[-200:]}")
         booted = True
     try:
-        vs = verbs_of(tree, [d for d in a.dirs.split(",") if d], a.wiz)[a.start:a.end]
+        if a.verbs_file:
+            vs = sorted({l.strip() for l in open(a.verbs_file, encoding="utf-8") if l.strip() and not l.startswith("#")})[a.start:a.end]
+        else:
+            vs = verbs_of(tree, [d for d in a.dirs.split(",") if d], a.wiz)[a.start:a.end]
         skip = SKIP | {s for s in a.skip.split(",") if s}
         shapes = SHAPES if a.shapes == "full" else QUICK if a.shapes == "quick" else QUICK[:1] if a.shapes == "one" else QUICK[:2]
         con = Console(unit_out)

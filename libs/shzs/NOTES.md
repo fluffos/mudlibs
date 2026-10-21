@@ -808,3 +808,7 @@ functionally re-tested live on this lib.
 ## 翻页器 `start_more(read_file(...))`：文件缺失时 `explode(0)`（2026-10-20，KB 06 §7.300）
 
 东方故事系的翻页器 `void start_more(string msg) { ... explode(msg, "\n") ... }` 被这样调用：`start_more(read_file(HELP_DIR + "help/topics"))`、`start_more(read_file(NEWS))`。压缩包没带的文件使 `read_file()` 回 0，`explode(0, ...)` 在本驱动里报 `Bad argument 1 to explode()`（不带参数的 `help` 指令就是这样出错的），老驱动把 0 当空文本。在 `start_more` 开头加了 `if (!stringp(msg)) return;`（`scripts/lpc_fix_start_more.py`）。改动：`/feature/more.lpc`。
+
+## `disembark`：在船舰以外的地方对 0 调用函数（2026-10-21，KB 06 §7.332）
+
+`cmds/std/disembark.lpc` 只有人在船舱房间里才给 `env`（船舰对象）赋值，否则 `env` 是 0，接着 `if (!env->is_space_ship() && !env->is_shuttle()) return notify_fail("你不在任何船舰中。\n");` 对 0 调用函数：原驱动答 0，于是走到提示；这个驱动抛 `Bad argument 1 to EFUN call_other()  Expected: object, string, array,  Got: int(0)`，玩家在任何普通房间敲 `disembark` 都是运行时错误。条件前面加 `!objectp(env) ||`，提示文字不变。加载检查通过；扫描时是 `disembark` 的裸命令触发的。shzs 和 zzhj 同一处（前者简体、后者繁体）。
