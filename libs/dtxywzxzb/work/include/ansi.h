@@ -104,6 +104,7 @@
 #define BIGBOT ESC+"#4"         /* Dbl height characters, bottem half */
 #define SAVEC ESC+"[s"           /* Save cursor position */
 #define REST ESC+"[u"            /* Restore cursor to saved position */
+#define DELLINE ESC+"[K"                /* delete from the cursor to the end of the line */
 //#define REVINDEX ESC+"M"        /* Scroll screen in opposite direction */
 #define SINGW ESC+"#5"          /* Normal, single-width characters */
 #define DBL ESC+"#6"            /* Creates double-width characters */

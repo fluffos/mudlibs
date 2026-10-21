@@ -1063,3 +1063,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply y
 ## `get_config(__MUD_PORT__)` 经旧版 `runtime_config.h` 得到字符串（2026-10-20，KB 06 §7.302）
 
 本库的 `include/runtime_config.h` 是老 MudOS 的编号（整数设置从 15 起，本驱动从 256 起），`get_config(__MUD_PORT__)` 读到的是另一项设置（字符串），`(int)` 又只是编译期标注，于是 `socket_bind(fd, LOCAL_PORT())` 报 `Bad argument 2 to socket_bind()`，版本守护进程 `port = get_config(__MUD_PORT__) + VERSION_PORT` 是字符串相加。头文件自己的注释写明 `get_config(__MUD_PORT__) == __PORT__`，所以代码里的这个调用（连同外面的 `(int)` / `to_int()`）改成了驱动的预定义 `__PORT__`（`scripts/lpc_fix_mud_port.py`）。改动：`/adm/daemons/network/fileserver.lpc`（1 处）、`/adm/daemons/network/server.lpc`（1 处）。
+
+## `chglog`、`jnlog`、`partyinfo` 读不到运行日志就抛错（2026-10-20，KB 06 §7.326）
+
+`chglog` 和 `jnlog` 把 `/log/chglog.txt`、`/log/jnlog.txt` 交给 `trans_color(read_file(file))`，`partyinfo` 把 `read_file("/log/cmds/party")` 直接 `explode()`。这三个文件都是运行中的 mud 才会写出来的日志，克隆出来的目录、站点和全新启动的树里没有，`read_file()` 答 0，于是 `Bad argument 1 to replace_string()`（在 `trans_color()` 里）和 `Bad argument 1 to explode()`。前两个现在先测 `file_size(file) <= 0`，用原来那句 `没有找到/log/....txt。` 回答；`partyinfo` 读不到时按空表处理，只打印表头。实测（ylfyxa3 的全新树，机器人登录）：三条指令都答出上面的结果，控制台没有错误；加载检查 3/3，回归 0。

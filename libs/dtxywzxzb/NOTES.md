@@ -368,3 +368,7 @@ HEAD 与工作树分别加载（新进程）：941 -> 941 通过，无回退；�
 ## 访客计数 `howmany_visitor()` 读文件不检查（2026-10-20，KB 06 §7.301）
 
 `howmany_visitor()` 读访客计数文件（`VISITORS` / `COUNTER` / `BBSVISITOR`，只有运行中的 mud 才会写；`.gitignore` 把它排除在仓库之外），新检出的树里没有，`read_file()` 回 0，`sscanf(0, ...)` 报错。这份副本登录时不一定走到它，但调用时同样会出错。在读文件之后加了 `if (!stringp(content)) return 0;`（xkx100、xiakexing100、zzfy 早先的写法，`scripts/lpc_fix_visitor_count.py`）。改动：`/www/relative/logind.lpc`。
+
+## `look1` 指令编译不过：`ansi.h` 丢了 `DELLINE`（2026-10-20，KB 04 §6.16）
+
+`cmds/std/look1.lpc` 第 198 行用到 `DELLINE`（VT100 的删除行转义码），本库的 `include/ansi.h` 有 `CLR`、`HOME`、`SAVEC`、`REST` 这一组，唯独没有这个宏（同系的 dtxyzjb 有 `#define DELLINE ESC+"[K"`）：指令加载时 `Undefined variable 'DELLINE'`，敲 `look1` 是 `*No program in object '/cmds/std/look1'!`（裸指令扫描）。补上同样的一行。加载检查：HEAD 0 通过 / 1 失败，工作树 1 通过。

@@ -14,6 +14,7 @@ The unit of a lib is stopped by play_sweep_lib.py itself; this script never touc
 import argparse
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -38,6 +39,10 @@ def one(slug, shapes, timeout, out, tag, port=0):
         # play_sweep_lib.py was killed before its `finally`: stop the unit it started (exact name)
         subprocess.run([f"{REPO}/scripts/play_stop.sh", slug + (f"-{tag}" if tag else "")], cwd=REPO, capture_output=True)
     text = open(log, encoding="utf-8", errors="replace").read()
+    # the unit is stopped; its tree (a full copy of the lib: hundreds of MB) is not needed any more -- the log and the TSV stay.  Exact path, our own scratch tree.
+    tree = f"{SCR}/play-{slug}" + (f"-{tag}" if tag else "")
+    if os.path.isdir(tree) and os.path.dirname(tree) == SCR and os.path.basename(tree).startswith("play-"):
+        shutil.rmtree(tree, ignore_errors=True)
     if status == "failed":
         if re.search(r"boot failed|did not open port", text):
             status = "noboot"
