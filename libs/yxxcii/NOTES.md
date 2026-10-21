@@ -257,3 +257,7 @@ autoload 随身物（鸡腿、袍子），人物档本身保存。
 ## 翻页器 `start_more(read_file(...))`：文件缺失时 `explode(0)`（2026-10-20，KB 06 §7.300）
 
 东方故事系的翻页器 `void start_more(string msg) { ... explode(msg, "\n") ... }` 被这样调用：`start_more(read_file(HELP_DIR + "help/topics"))`、`start_more(read_file(NEWS))`。压缩包没带的文件使 `read_file()` 回 0，`explode(0, ...)` 在本驱动里报 `Bad argument 1 to explode()`（不带参数的 `help` 指令就是这样出错的），老驱动把 0 当空文本。在 `start_more` 开头加了 `if (!stringp(msg)) return;`（`scripts/lpc_fix_start_more.py`）。改动：`/feature/more.lpc`、`/feature/more2.lpc`。
+
+## `trade` 指令编译不过：孤零零的 `#define`（2026-10-20，KB 04 §6.25）
+
+`cmds/usr/trade.lpc` 第 8 行是一行没有名字的 `#define`（`#define: missing name`），整个文件加载失败。删掉这一行（它前面有三个完整的 `#define`，后面是 `#include <ansi.h>`）。加载检查：HEAD FAIL → tree PASS。

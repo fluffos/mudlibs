@@ -1195,3 +1195,7 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 ## `d/luoyang/obj/xiang.lpc`：`chuangli` 先 `explode(read_file("/log/PARTY"))`（2026-10-20，KB 06 §7.326）
 
 关帝像的 `chuangli`（`kaibang`）指令在检查年龄和经验之前就读 `/log/PARTY`，那是运行中的 mud 记录已创立帮派的文件，全新的树里没有，`explode(0)` 报 `Bad argument 1 to explode()`：任何人敲 `chuangli 什么` 都是系统错误，而不是“你还嫩着呢”。改成 `file = read_file("/log/PARTY") || "";`（空串的 `explode` 是空数组）。xkx100utf8 和 nt7 是 gitlink 库（fluffos-org 上游），同一行在那里没有改。加载检查各 1/1。
+
+## `semote` 编译不过：函数指针里用了局部变量（2026-10-20，KB 06 §7.284）
+
+`emotions = sort_array(emotions, (: emotion_sort[$1] > emotion_sort[$2] ? -1 : 1 :));`（`#else` 分支，因为 `__PACKAGE_ARITH_OPERATOR__` 在这个驱动里没有）里 `emotion_sort` 是局部变量：`Illegal to use local variable in functional`。按驱动的写法用 `$(emotion_sort)` 捕获。加载检查：HEAD FAIL → tree PASS。

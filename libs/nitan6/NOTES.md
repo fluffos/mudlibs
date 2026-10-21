@@ -1342,3 +1342,7 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## `d/luoyang/obj/xiang.lpc`：`chuangli` 先 `explode(read_file("/log/PARTY"))`（2026-10-20，KB 06 §7.326）
 
 关帝像的 `chuangli`（`kaibang`）指令在检查年龄和经验之前就读 `/log/PARTY`，那是运行中的 mud 记录已创立帮派的文件，全新的树里没有，`explode(0)` 报 `Bad argument 1 to explode()`：任何人敲 `chuangli 什么` 都是系统错误，而不是“你还嫩着呢”。改成 `file = read_file("/log/PARTY") || "";`（空串的 `explode` 是空数组）。xkx100utf8 和 nt7 是 gitlink 库（fluffos-org 上游），同一行在那里没有改。加载检查各 1/1。
+
+## `vote` 的 `jail`、`unjail`、`unchblk` 编译不过：计票被改坏了（2026-10-20，KB 04 §6.21）
+
+xkx100 的原文是 `vc = victim->add("vote/count", 1);`，nitan 系把它写成了 `addn("vote/count", 1, vc = victim);`：`vc` 是 `int` 票数，却被赋成了对象 `victim`（`Bad assignment ( int vs object )`），`addn()` 的返回值（新的票数）丢掉了，后面的 `df = vv - vv / 2 - vc` 因此没有意义。改回 `vc = addn("vote/count", 1, victim);`（循环里的 `-1` 也一样，共 5 处）；`addn()` 是本库 sefun，返回 `ob->add(prop, data)`。加载检查：三个文件 HEAD FAIL → tree PASS。nt7 是 gitlink 库，没有改。

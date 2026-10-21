@@ -545,3 +545,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply w
 ## `pettrainer` 的 `say_news()` 读不到 `/log/news` 就抛错（2026-10-20，KB 06 §7.326）
 
 `str = read_file("/log/news"); flag = sizeof(explode(str, "\n"));`：`/log/news` 是运行中写出来的新闻频道记录，全新的树里没有，`explode(0)` 报错；宠物训练师的 `chat_msg` 调它，每次都出错。读不到时 `flag = 0`，读出的 `news` 不是字符串就直接返回。三份相同。加载检查各 1/1。
+
+## `register` 指令编译不过：`main()` 里粘进了登录流程的代码（2026-10-20，KB 04 §6.25）
+
+`main()` 开头有两段 `if (yn == "") { ... input_to("confirm_id", ob); }` 和 `if (yn[0] != 'y' ...) { ... input_to("get_id", ob); }`：`yn` 和 `ob` 是登录程序里 `confirm_id()` 的变量，这里没有声明（`Undefined variable 'yn'`），登记表指令从来没有加载过。删掉这两段，留下 `display()` 和对代号的提问（后面的 `a()`……`g()` 逐项提问本来就是这条流程）。加载检查：HEAD FAIL → tree PASS。
