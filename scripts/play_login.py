@@ -20,10 +20,20 @@ from mudplay import Mud, Timeout  # noqa: E402
 # (regex on the tail of the text, reply).  Order matters: the first match wins.  "{name}" "{pw}" "{email}" are filled in.
 RULES = [
     (r"(?i)(type|enter|input|输入|请输入|请键入|键入)\s*[`'\"“]?new[`'\"”]?\b", "{newword}"),
-    (r"(?i)\bor\s+[`'\"“]new[`'\"”]\s+to\s+create", "{newword}"),                # pd: 'Enter one of these names, or "new" to create a character'
+    (r"(?i)\bor\s+[`'\"“]new[`'\"”]\s+to\s+create", "{newword}"),
+    (r"(?i)(请用|请使用|使用|用)\s*[`'\"“]?new[`'\"”]?\s*(来|注册|起用|创建)", "{newword}"),                           # xo, xajh2, wllz3: "这个id还没有登录过，请用new来起用这个id", "[新玩家请使用 new 注册]"                # pd: 'Enter one of these names, or "new" to create a character'
+    (r"(?i)(入|type|enter)\s*[：:]?\s*register\s*(?:\S+@\S+|您的?\s*e-?mail)", "register {email}"),                      # nte, the nitan family: "输入： register player@me.com 即可正确注册"
+    (r"(?i)login as\s*[`'\"“]new[`'\"”]", "{newword}"),                                                    # majik3/4: "To create a new character: please login as 'new'."
+    (r"(?i)\[c\]\s*create new character[\s\S]*(command or name|\[c\])[^\n]*:\s*$", "c"),                        # questmud: "[c] Create new character  [g] Enter as a guest ... Command or Name:"
+    (r"(?is)\bpick TOWN\b.*Town:\s*$", "pick haven"),                                                         # havenmud: "pick TOWN - pick a particular town for yourself ... Town:"
+    (r"(?is)choose a race[^\n]*:\s*\n[^\n]*\bhuman\b[^\n]*$", "human"),                                         # nirvlp312: "Choose a race for your character, you may select: human elf dwarf custom <race>"
     (r"(?i)throw (the )?other copy|already (logged|playing|connected)|reconnect|重复|另一个连线|取代|赶出去", "y"),
     (r"(?i)(re-?type|again|confirm|verify|repeat|once more).{0,40}(password|passwd|pass)|(password|passwd).{0,40}(again|confirm|verify)|再输入一次|再输一次|确认密码|重新输入密码|(^|\n)\s*again\s*:\s*$", "{lastpw}"),
     (r"(?i)(普通密码|normal password|not be the same|must be different|different from)[^\n]{0,80}[:：]\s*$", "{pw2}"),     # tybxjh: "管理密码和普通密码不能相同": the second password is another one
+    (r"(?:不能|不可|不得|不要)(?:和|与|跟|同)[^\n]{0,15}(?:一样|相同|一致)[^\n]{0,30}[:：]\s*$", "{pw2}"),       # dtxywzxzb: "您的登陆密码不能和管理密码一样，请重设您的密码："
+    (r"选择\s*[\[\(（]?\d+[\]\)）]?\s*则(?:接受|完成|确认|结束)", "{accept_num}"),       # sjsh family: "请选择你想重新设置哪一项天赋的取值[0-3]，选择[9]则接受当前的设置："
+    (r"(?:身份标识|身份识别码|身份识别)[^\n]{0,30}[:：]\s*$", "{pw}"),                                    # wuhanzhan, longyunmeng, ylfyxa3 ...: "请重设您的身份标识："
+    (r"(?im)^[^\n]*(电子邮件|邮箱|邮件地址|e-?mail)[^\n]*[:：]\s*$", "{email}"),                                   # pkuxkx: "您的电子邮件地址（……以便在密码丢失或忘记时确认你的身份）："
     (r"(?i)password|passwd|密码|口令", "{pw}"),
     (r"(?i)(QQ号|QQ number|qq号码)", "12345678"),                                   # aoxiangtianji: "您的QQ号码："
     (r"(?i)(e-?mail|email|电子邮件|邮箱|邮件地址)", "{email}"),
@@ -33,10 +43,13 @@ RULES = [
     (r"(?i)(real ?name|your name in real|真实姓名)", "Test User"),
     (r"中文姓氏|您的姓氏|请输入.{0,6}姓[：:]?\s*$", "测"),                       # nitan: "您的中文姓氏(不要超过两个汉字)：" and then the given name
     (r"(?i)(chinese name|中文名字|中文姓名|您的中文名)", "测试"),
+    (r"(名字|姓名|人物名|大名)[^\n]{0,24}(汉字|漢字|中文)[^\n]{0,12}[:：]\s*$", "测试"),                       # immaster: "您的名字(不要超过10个汉字)："
     (r"(?i)(中小学|小学生|学生或|未成年|under ?age|or younger)[^\n]{0,30}(\(yes/no\)|\(y/n\)|[?？])\s*$", "no"),          # mhsj, sjcs ...: "您是否是中小学学生或年龄更小？(yes/no)": not a pupil
     (r"(?i)(同意|接受|满意|agree|accept|satisfied)[^\n]{0,30}[?？:：]\s*$", "y"),
+    (r"(?i)(同意|接受|满意|agree|accept|satisfied)[^\n]{0,30}[?？]?\s*[\(\[（［][^\n]{1,20}[\)\]）］]\s*$", "y"),                  # xiyouji family: "您同意这组天赋数值吗？[n]", jinyongwenzi: "(y 或 n)"
     (r"(?i)(do you want|would you like|are you sure|create (a )?(new )?(character|player)|new (character|player)\?|确定吗|\(y/n\)|\[y/n\]|\(yes/no\)|yes or no|'yes' or 'no'|y\(es\) or n\(o\)|y or n|y/n)", "y"),
     (r"(?i)\(s/n\)|\[s/n\]", "s"),                                    # Spanish: "No entiendo... (s/n)"
+    (r"(?i)\(default:\s*[^)\n]*\)\s*[:：]?\s*$", ""),                                                  # foundation1/2: "Please choose a display name (default: sweepzq):"
     (r"(?i)(press|hit)\s+(\[?enter\]?|\[?return\]?|any key)|\[more\]|--more--|continue\s*[:\.]?\s*$|按.{0,6}(回车|键)|任意键|<return>|\(return\)", ""),
     (r"(?i)(terminal|term type|screen|colou?r|ansi|vt100|client)\b.{0,50}[:?]\s*$", "{term}"),
     (r"例如[:：]\s*\d+(?:\s+\d+){2,}[\s\S]*[:：]\s*$", "{example_nums}"),                 # dtsl / dtsl2 / dtslmud: "请输入您想要的属性，四项之和必须等于八十点 ... 例如：20 20 20 20"
@@ -45,11 +58,47 @@ RULES = [
     (r"(?i)(race|species)\b.{0,60}[:?]\s*$", "{first_of_race}"),
     (r"(?i)(class|profession|guild|vocation)\b.{0,60}[:?]\s*$", "{first_of_class}"),
     (r"(?i)(enter|type|give|choose|select|input).{0,30}(number|choice|option)|^\s*\[?1\]?[\.\)]\s", "1"),
-    (r"(?i)(?:合法值是?|valid(?: values?)?(?: is| are)?|between|range)\s*(\d+)\s*(?:到|to|-|~|至|and)\s*(\d+)", "{range_mid}"),      # "合法值是 10-30"
+    (r"(?i)(?:合法的?值是?|valid(?: values?)?(?: is| are)?|between|range)\s*(\d+)\s*(?:到|to|-|~|至|and)\s*(\d+)", "{range_mid}"),      # "合法值是 10-30"
     (r"[\(\[](\d+)\s*(?:到|to|-|~|至)\s*(\d+)[\)\]]", "{range_mid}"),                 # "(10-30)", "[10-30]"
     (r"(?i)(select|choose|pick|enter|give)\s+(a|an|your)\s+(character\s+)?(name|handle|nickname)\s*[:?]?\s*$", "{name}"),          # lpuni: "Please select a name:" (the menu rule below would answer 1)
+    (r"只能输入数字|请重新设定.{0,8}的值", "{range_mid}"),                                                   # xuanjianlu: "对不起，你只能输入数字。请重新设定膂力的值："
     (r"(?i)(请选择|请输入.{0,10}(数字|号码|编号)|choose|select|pick).{0,60}[:：?？\)]\s*$", "1"),
-    (r"(?i)(what is|enter|give|type|input|tell me).{0,40}(your )?(character )?(name|id|handle)|(by )?what (is your |do you wish )?name|name do you|known\s*\?|login\s*:|name\s*:|name\?|名字|ID\s*[:：]|帐号|账号|new\)", "{name}"),
+    (r"(?i)(what is|enter|give|type|input|tell me).{0,40}(your )?(character )?(name|id|handle)|(by )?what (is your |do you wish )?name|name do you|known\s*\?|login\s*:|name\s*:|name\?|名字|使用者代号|用户名|道号|ID\s*[:：]|帐号|账号|new\)", "{name}"),
+]
+
+# the BIG5 libs print the same prompts in traditional characters (`請設定您的密碼`, `您的使用者代號`): every simplified character below that a pattern uses also matches its traditional one
+TRAD = dict(zip("码个输请选择电邮确键认设统进这们体样为吗别识门读钮开级员发来汉标连线务续随则须时话齐联络资总满应该复让页间头现关见观触问题处约传条届开边专东丢书买单对头显将尽还远种范围乐"
+                "护实让场术战斗击创际带满态数断气灵觉资摆击号户帐账国", "碼個輸請選擇電郵確鍵認設統進這們體樣為嗎別識門讀鈕開級員發來漢標連線務續隨則須時話齊聯絡資總滿應該復讓頁間頭現關見觀觸問題處約傳條屆開邊專東丟書買單對頭顯將盡還遠種範圍樂"
+                "護實讓場術戰鬥擊創際帶滿態數斷氣靈覺資擺擊號戶帳賬國"[:len("码个输请选择电邮确键认设统进这们体样为吗别识门读钮开级员发来汉标连线务续随则须时话齐联络资总满应该复让页间头现关见观触问题处约传条届开边专东丢书买单对头显将尽还远种范围乐护实让场术战斗击创际带满态数断气灵觉资摆击号户帐账国")]))
+
+
+def trad_expand(pat):
+    out, depth, i = [], 0, 0
+    while i < len(pat):
+        ch = pat[i]
+        if ch == "\\":
+            out.append(pat[i:i + 2])
+            i += 2
+            continue
+        if ch == "[":
+            depth += 1
+        elif ch == "]":
+            depth = max(0, depth - 1)
+        if ch in TRAD:
+            out.append(ch + TRAD[ch] if depth else "[" + ch + TRAD[ch] + "]")
+        else:
+            out.append(ch)
+        i += 1
+    return "".join(out)
+
+
+RULES = [(trad_expand(rx), rep) for rx, rep in RULES]
+# rules that read the whole screen before the prompt line is looked at: the line says only "What is your character's name?" and the instruction is above it
+PRIORITY = [
+    (r"(?is)palabra resuena en tu conciencia: ['\"“]nacer['\"”]", "nacer", "prio_nacer"),                              # ninetears: the first word of the Spanish birth
+    (r"(?is)enter your current character's name.*your choice:\s*$", "{name}", "prio_dwname"),                              # Discworld: the menu after N (new) was used up, or --existing
+    (r"(?is)No character with that name exists.*login as\s*[`'\"“]new[`'\"”]", "new", "prio_new"),                    # majik3/4
+    (r"(?is)\[c\]\s*create new character.*(?:command or name|\bname)[^\n]*:\s*$", "c", "prio_create"),                 # questmud: a menu whose last line is the generic `Command or Name:`
 ]
 RACE_PICK = re.compile(r"(?is)valid races?:\s*([A-Za-z][\w-]*)")
 NEW_CHAR = re.compile(r"(?im)^\s*N\s*-\s*New character")
@@ -79,7 +128,7 @@ def password_length(text):
     m = re.search(num + r"\s*(?:到|至|-|~)\s*" + num + r"\s*(?:个|個)?\s*(?:字元|字符|字母|位|个字|characters?)", text)
     if m and cn_int(m.group(1)) and cn_int(m.group(2)):
         return cn_int(m.group(1)), cn_int(m.group(2))
-    m = re.search(r"(?:至少(?:要|需要|得)?|不少于|最少)\s*" + num + r"\s*(?:个|個)?\s*(?:字元|字符|字母|位|个字)", text)
+    m = re.search(r"(?:至少(?:要由|要|需要|得|由)?|不少于|最少)\s*" + num + r"\s*(?:个|個)?\s*(?:字元|字符|字母|位|个字)", text)
     if m and cn_int(m.group(1)):
         return cn_int(m.group(1)), None
     m = re.search(r"(?i)at least\s+(\d+)\s+char", text)
@@ -106,9 +155,9 @@ def last_line(text):
 
 def text_tail(t):
     """the last line of an answer that is more than a bare prompt (`>`, `hp: 10/10 >`, `]`)"""
-    for ln in reversed(t.strip().split("\n")):
+    for ln in reversed(t.replace("\x00", "").strip().split("\n")):
         s = ln.strip().rstrip(">] ").strip()
-        if s:
+        if s and (len(s) > 2 or s.isalnum()) and not re.fullmatch(r"(?:\w+\s*[:：]\s*\d+(?:/\d+)?\s*)+", s):          # Dead Souls: `hp: 1020/1020  mp: 350/350  sp: 822/822 >` is the prompt
             return s
     return ""
 
@@ -171,7 +220,7 @@ def run(args):
         last = low.rstrip().split("\n")[-1] if low.strip() else ""
         question = bool(re.search(r"([:：?？\)\]）】])\s*$", last)) or relaxed       # a prompt ends in a colon, a question mark, `(again)`, `[y/n]`
         rule_id, reply = None, None
-        if NEW_CHAR.search(low) and not used.get("newchar"):                # Discworld: "F - Finger someone, N - New character, G - Guest character, or enter your character"
+        if NEW_CHAR.search(low) and not used.get("newchar") and not getattr(args, "existing", False):                # Discworld: "F - Finger someone, N - New character, G - Guest character, or enter your character"
             used["newchar"] = 1
             rule_id, reply = "newchar", "N"
         pk = RACE_PICK.search(low) if reply is None else None
@@ -185,6 +234,12 @@ def run(args):
         if md and re.search(r"(?i)(choice|option|select|choose|pick|command)[^\n]*[:?]\s*$", last):       # a character-creation menu: its "Done" entry ends it
             rule_id, reply = len(RULES), md.group(1)
         if reply is None:
+            for prx, prep, pkey in PRIORITY:
+                if used.get(pkey, 0) < 3 and re.search(prx, low):
+                    used[pkey] = used.get(pkey, 0) + 1
+                    rule_id, reply = pkey, (args.name if prep == "new" and getattr(args, "existing", False) else prep)
+                    break
+        if reply is None:
             rule_id, reply = match_rule(last, question) if last else (None, None)        # the prompt itself first, then its paragraph, then the text above
         if reply is None:
             rule_id, reply = match_rule(low.rstrip().split("\n\n")[-1], question)
@@ -196,7 +251,7 @@ def run(args):
             reply = reply.replace("{first_of_race}", first_option(low, "race|species")).replace("{first_of_class}", first_option(low, "class|profession|guild|vocation"))
             for k, v in mapping.items():
                 reply = reply.replace("{" + k + "}", v)
-            reply = reply.replace("{newword}", "new")
+            reply = reply.replace("{newword}", args.name if getattr(args, "existing", False) else "new")
             if "{example_nums}" in reply:
                 me = re.search(r"例如[:：]\s*(\d+(?:\s+\d+){2,})", low)
                 reply = reply.replace("{example_nums}", me.group(1) if me else "20 20 20 20")
@@ -208,11 +263,14 @@ def run(args):
                 reply = reply.replace("{first_of_list}", ml.group(1) if ml else "1")
             if reply == "y" and re.search(r"(?i)'yes' or 'no'|\(yes/no\)|\[yes/no\]|yes or no|enter yes", low):
                 reply = "yes"                                   # Discworld: "You must enter 'yes' or 'no':"
+            if "{accept_num}" in reply:
+                ma = re.search(r"选择\s*[\[\(（]?(\d+)[\]\)）]?\s*则(?:接受|完成|确认|结束)", low)
+                reply = ma.group(1) if ma else "9"
             if "{range_mid}" in reply:
-                mr = re.search(r"[\(\[](\d+)\s*(?:到|to|-|~|至)\s*(\d+)[\)\]]", low) or re.search(r"(?i)(?:合法值是?|valid(?: values?)?(?: is| are)?|between|range)\s*(\d+)\s*(?:到|to|-|~|至|and)\s*(\d+)", low)
+                mr = re.search(r"[\(\[](\d+)\s*(?:到|to|-|~|至)\s*(\d+)[\)\]]", low) or re.search(r"(?i)(?:合法的?值是?|valid(?: values?)?(?: is| are)?|between|range)\s*(\d+)\s*(?:到|to|-|~|至|and)\s*(\d+)", low)
                 reply = str((int(mr.group(1)) + int(mr.group(2))) // 2) if mr else "20"
             used[rule_id] = used.get(rule_id, 0) + 1
-            if used[rule_id] > (6 if rule_id in PW_RULES else 4) or (rule_id == 0 and used[rule_id] > 1):     # a loop means a wrong guess
+            if used[rule_id] > (6 if rule_id in PW_RULES else 12 if reply.isdigit() else 4) or (rule_id == 0 and used[rule_id] > 1):     # a loop means a wrong guess (a series of attribute prompts is not one)
                 reply = None
         relaxed = False
         if reply is None and question and not relaxed_done.get(last):
@@ -236,11 +294,11 @@ def run(args):
             if re.search(r"(?i)there (is|are) \w+ obvious exits?", probe) and not same:        # an LPC room description: the character is in the world (Discworld queues the next commands behind its intro)
                 buf = probe
                 break
-            if len(probe.strip()) > 20 and not same and GAME.search(probe) and not NOT_GAME.search(tail(probe, 200)):
+            if len(probe.strip()) > 20 and (GAME.search(probe) or probe.count("\n") >= 3) and not NOT_GAME.search(tail(probe, 200)):
                 nonsense = m.cmd("zzqxk", idle=0.8, maxwait=5)              # a game answers an unknown verb in a line; a menu or a dialogue shows itself again
                 out(">>> zzqxk\n<<< " + nonsense.strip().replace("\n", "\n<<< ")[-200:])
                 same_tail = text_tail(nonsense) == text_tail(probe)       # a dialogue redisplays its prompt for any input; a game answers `look` and `zzqxk` differently
-                if len(nonsense.strip()) < 200 and not same_tail and not re.search(r"\d\s*[\.\)〗]|选择|choose|select|请输入|please", nonsense, re.I):
+                if len(nonsense.strip()) < 200 and not same_tail and not re.search(r"\d\s*[\.\)〗]|选择|choose|select|请输入|please", nonsense, re.I) and not (same and re.search(r"(?i)invalid|incorrect|illegal|choose again|重新|无效|错误", nonsense)):
                     buf = probe
                     break
             empties += 1
@@ -300,6 +358,7 @@ def main():
     ap.add_argument("--cmds", default="look;score;i;who;help")
     ap.add_argument("--steps", type=int, default=30)
     ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--existing", action="store_true", help="the character exists: type its name where a new one would be created (no `new`, no `N - New character`)")
     ap.add_argument("--verbose", action="store_true")
     sys.exit(run(ap.parse_args()))
 

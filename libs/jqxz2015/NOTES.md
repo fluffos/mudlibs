@@ -928,3 +928,7 @@ functionally re-tested live on this lib.
 ## 翻页器 `start_more(read_file(...))`：文件缺失时 `explode(0)`（2026-10-20，KB 06 §7.300）
 
 东方故事系的翻页器 `void start_more(string msg) { ... explode(msg, "\n") ... }` 被这样调用：`start_more(read_file(HELP_DIR + "help/topics"))`、`start_more(read_file(NEWS))`。压缩包没带的文件使 `read_file()` 回 0，`explode(0, ...)` 在本驱动里报 `Bad argument 1 to explode()`（不带参数的 `help` 指令就是这样出错的），老驱动把 0 当空文本。在 `start_more` 开头加了 `if (!stringp(msg)) return;`（`scripts/lpc_fix_start_more.py`）。改动：`/feature/more.lpc`。
+
+## 存档里的乱码文件：`restore_object()` 报 `Illegal file format`（2026-10-20，KB 06 §7.316）
+
+存档里有一批数据文件是乱码：开头是 `?adm`、`?inh`、`?clo`、`?obj`（`#/adm/…` 的第一个字节被换成了 `?`），后面是随机字节，没有任何驱动读得了。`adm/daemons/chinesed` 在预载时 `restore()` 读 `data/e2c_dict.o`，首次登录时起始房间的留言板 `/clone/board/kedian_b` 读 `data/board/*_b.o`；`restore_object()` 对不是文本的文件抛 `Illegal file format`，调用处的 `catch()`（KB 06 §7.255）保住了房间和精灵，但本库 master 的 `error_handler()` 把调用栈返回给驱动，每次启动和首次登录都在控制台打印一次或两次 `错误讯息被拦截`。现在共用的 `feature/save.lpc` 的 `restore()` 先读文件第一个字节，不是 `#` 就返回 0（读被 master 拒绝时 `read_bytes()` 返回 0，仍由 `restore_object()` 决定，和以前一样）；留言板和字典从空开始，第一次 `save()` 写出合法文件，乱码文件原样留在树里。实测：启动和登录都没有报错，已保存的角色重新连线照常加载。

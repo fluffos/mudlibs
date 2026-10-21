@@ -533,3 +533,11 @@ fresh driver boot plus the full long-sit idle window below.
 真错误一处：`adm/daemon/identity_d.lpc:356` 的过滤函数写成 `if (n && c->name != c) return 0;`（拿名字和整个 `class ConnData` 比较，应为 `c->name != n`），驱动报 `!= always true because of incompatible types ( string vs class ConnData )`，身份守护进程根本编译不了，而 `std/user.lpc` 登录时就要用 `IDENTITY_D`。改正后能加载（本批 135 个对象的加载检查里新能加载 9 个）。
 
 还留着的：`std/user.lpc:1580` 的 `query_autoload()` 同时来自 `/std/user/autoload.lpc`（`mixed *`）和 `/std/object.lpc`（`int`），返回类型不同，做不了无副作用的覆盖，保持原样；`oldcrypt()` 的弃用提示；`std/backpack.lpc`（`ARMOUR` 与 `BAG` 两条路径各带一份 `nomask clear_euid`，没有任何文件继承它）；`adm/daemon/` 里几个老守护进程缺头文件或宏（`finger.lpc` 的 `FOLDERS_D`、`alchemist_d.lpc` 的 `materials.h`、`link_d.lpc` 的 `link_info.h`），`/d/` 与 `/wizards/` 的 3 万个区域文件没有扫。
+
+## 吟游诗人的三首歌不能编译：`function(object t, …)` 里写了 `$1`（2026-10-20，KB 06 §7.317）
+
+`cmds/song/fools_ballad.lpc`、`noxious_chorus.lpc`、`wracking_reel.lpc` 里有 LDMud 风格的内联闭包 `function(object t, string p) { … }`，函数体里却用 `$1` 取第一个参数：`$N` 只属于 `(: … :)` 简写，`/cmds/song/wracking_reel.lpc:61:7: error: $var illegal inside anonymous function pointer.` 一共四处，随后一条语句 `Undefined variable 'tp'` 和语法错误，三首歌从来没有编译过。现在函数体用声明的参数名 `t`（三个文件各 4 处）；加载检查 HEAD 21 通过 / 3 失败，工作树 24 通过。
+
+## `query_autoload()` 同时来自 autoload 模块和物件基类（2026-10-20，KB 06 §7.318）
+
+`/std/user/autoload.lpc` 有 `mixed *query_autoload()`（要恢复的物品清单），`/std/object.lpc` 经 `/std/living` 带来 `int query_autoload()`（物品的 autoload 级别），玩家身体两个都继承：驱动取第一个并在每次编译玩家身体时警告 `query_autoload() inherited from both … using the definition in /std/user/autoload.lpc`（首次登录控制台就有）。驱动的选择本来就是想要的，所以在 `std/user.lpc` 末尾显式定义 `mixed *query_autoload() { return autoload::query_autoload(); }`，运行时行为不变，警告消失。

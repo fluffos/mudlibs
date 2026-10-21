@@ -61,12 +61,29 @@ def survey_one(slug, port, cmds, boot_timeout, relogin=False):
     except subprocess.TimeoutExpired:
         return [slug, "noboot", "-", "-", "-", "play_boot.sh timed out", "", "-", "-"]
     try:
+        mp = re.search(r"listening on port (\d+)", r.stdout or "")
+        if mp:
+            port = int(mp.group(1))          # the port the driver really listens on (a lib that sets it outside `port number`)
         if r.returncode != 0:
             return [slug, "noboot", "-", "-", "-", (r.stderr.strip().splitlines() or ["port did not open"])[-1][:160], "", "-", "-"]
         try:
             boot_text = open(out, encoding="utf-8", errors="replace").read()
         except OSError:
             boot_text = ""
+        # a daemon that loads thousands of saved players on its first heart beat (nt1's `closed`, KB 06 7.107) keeps the driver busy for a minute after the port
+        # opened: wait until the console has been quiet for 8 s (at most 150 s) before the robot logs in, or its first answers are "silence" and the row says stuck
+        quiet_since, last_size, t_wait = time.time(), -1, time.time()
+        while time.time() - t_wait < 150:
+            size = os.path.getsize(out) if os.path.exists(out) else 0
+            if size != last_size:
+                last_size, quiet_since = size, time.time()
+            elif time.time() - quiet_since >= 8:
+                break
+            time.sleep(1)
+        try:
+            boot_text = open(out, encoding="utf-8", errors="replace").read()
+        except OSError:
+            pass
         mark = len(boot_text.encode("utf-8", "replace"))
         i = boot_text.find("Loading simul_efun")
         if i < 0:
@@ -91,7 +108,7 @@ def survey_one(slug, port, cmds, boot_timeout, relogin=False):
         if relogin and found and result == "in":                    # the second visit: the saved character must load (restore_object, the password check, the first look)
             mark2 = os.path.getsize(out) if os.path.exists(out) else 0
             for wait in (25, 100, 0):                               # a second visit right after the quit is refused for 20 s (xkx), 120 s (jhfy3): wait and try again
-                p2 = subprocess.run([sys.executable, os.path.join(REPO, "scripts/play_login.py"), str(port), "--quiet", "--cmds", "look;score"], cwd=REPO, capture_output=True, text=True, timeout=300)
+                p2 = subprocess.run([sys.executable, os.path.join(REPO, "scripts/play_login.py"), str(port), "--quiet", "--existing", "--cmds", "look;score"], cwd=REPO, capture_output=True, text=True, timeout=300)
                 v2 = [ln for ln in p2.stdout.splitlines() if ln.startswith("RESULT")]
                 m2 = re.match(r"RESULT (\w+) steps=(\d+)(?: last=(.*))?", v2[-1]) if v2 else None
                 if not (m2 and m2.group(1) == "closed") or not wait:

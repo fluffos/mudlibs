@@ -30,7 +30,11 @@ OUT=$SCR/play-$SLUG$TAG.out
 systemd-run --user --quiet --unit="play-$SLUG$TAG" -p MemoryMax=3G -p MemorySwapMax=0 \
   -p "StandardOutput=file:$OUT" -p "StandardError=file:$OUT" -p "WorkingDirectory=$DEST/libs/$SLUG" "$DRIVER" config.fluffos
 for _ in $(seq 1 180); do
-  if (exec 3<>"/dev/tcp/127.0.0.1/$PORT") 2>/dev/null; then echo "unit play-$SLUG$TAG listening on port $PORT; output $OUT; tree $DEST"; exit 0; fi
+  # a lib whose config names its port some other way (shadowgate: `external_port_1`) listens elsewhere: the driver says where
+  REAL=$(sed -n 's/^Accepting telnet connections on [0-9.]*:\([0-9][0-9]*\).*/\1/p' "$OUT" 2>/dev/null | head -1)
+  for P in "$PORT" ${REAL:+"$REAL"}; do
+    if (exec 3<>"/dev/tcp/127.0.0.1/$P") 2>/dev/null; then echo "unit play-$SLUG$TAG listening on port $P; output $OUT; tree $DEST"; exit 0; fi
+  done
   sleep 1
 done
 echo "play-$SLUG$TAG did not open port $PORT in 180 s; see $OUT" >&2
