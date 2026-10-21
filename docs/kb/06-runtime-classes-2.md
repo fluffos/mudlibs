@@ -1906,3 +1906,9 @@ Found by taking the objects a visitor meets (`scripts/lpc_reach_census.py` lists
 **Cause:** `object env;` is assigned only `if (environment(me)->is_space_ship_room()) env = environment(environment(me));`; the next test, `!env->is_space_ship() && !env->is_shuttle()`, was written to catch the other case ("you are not in a ship") and relied on `0->f()` answering 0.
 **Fix:** `if (!objectp(env) || (!env->is_space_ship() && !env->is_shuttle()))`; the refusal text is the command's own. The same relied-on-zero shape is KB 7.273/7.277/7.288/7.289 in other clothes.
 **Detection:** the bare-verb sweep's `Bad argument 1 to EFUN call_other()` rows; statically a local `object` that is assigned inside one `if` and called through `->` right after it.
+
+### 7.333 A command that forces itself for the no-argument case: `TP->force_me("map")` inside `cmd_map()` (sunshadow, shadowgate, 2026-10-21)
+**Symptom:** a bare `map` ends in `Too deep recursion` and the player is told to contact a developer.
+**Cause:** `if (!stringp(str)) { TP->force_me("map"); return 1; }`: the forced `map` has the same missing argument and takes the same branch. The author meant `force_me("map view")` or the syntax text; the default branch of the `switch` below already calls `help()` for an argument it does not know.
+**Fix:** `help(); return 1;` for the bare command. The same shape in the corpus: only this one (`rg 'force_me\("<verb>"\)'` in a file named after the verb: 5 hits, 4 are `obj->force_me("stats")` on another object and wdxtym's `life sell`, which forces `life` once after toggling a flag).
+**Detection:** the bare-verb sweep's `Too deep recursion` rows. A prototype with no body behind it, `int do_live(object corpse);` in `_skin.lpc`, is the same kind of leftover: the call raises at run time and the compiler does not complain.

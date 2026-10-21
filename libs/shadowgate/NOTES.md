@@ -734,3 +734,7 @@ sunshadow 第十七批改的 75 个文件里 74 个对象在 shadowgate 也有�
 `daemon/letter`：`for` 循环里的 `if(file_size(DIR_LETTERS+"/"+i) == -2)` 没有花括号，只管下一行 `y += ...`，后面的 `__LettersDir += get_dir(...)` 总会执行；`/secure/save/letters/N/` 不存在时 `get_dir()` 答 0，`+= 0` 抛 `Bad argument 2 to (void)+=`，整个邮件守护进程加载失败（sunshadow 的检查树里有这些目录所以没暴露；两个库一起补了花括号，目录都在时行为不变）。
 
 验证：74 个对象 HEAD 加载 58 个、树 71 个，regress 0，新加载 13 个，没有 warning（`make/m_monster` 的三条是归档损坏，见下）；实机（`play-shadowgate-xq`，机器人）`blindfold`、`bury`、`skin`、`passwd`、`gossip`、`mail`、`news`、`actions`、`buff` 都有正常回答，控制台没有错误。仍然失败的三个：`make/m_monster`（第 741–890 行在归档里损坏，sunshadow 同样）、`adm/simul_efun/sum_array` 和 `std/user/retinue`（shadowgate 没有这两个文件）。
+
+## `map`（不带参数）无限自我强制，`skin <活物>` 调用没有函数体的 `do_live()`（2026-10-21，KB 06 §7.333）
+
+`cmds/mortal/_map.lpc`：`if (!stringp(str)) { TP->force_me("map"); return 1; }`：不带参数的 `map` 强迫玩家再敲一次不带参数的 `map`，一直到 `Too deep recursion`，玩家收到 "contact a dev"（实测）。下面 `switch` 的 `default:` 分支对不认识的参数调用 `help()`，所以不带参数也走 `help()`（`<map view>` 等用法说明）。`cmds/mortal/_skin.lpc`：`skin <活物>` 走 `return do_live(corpse);`，`do_live()` 只有一条原型，归档里没有函数体，调用会出错；活物和其他剥不了皮的东西一样回答 `You can't skin that.`，原型删掉。sunshadow 和 shadowgate 同一处，实测：`map` 打出用法，`map list` 正常，控制台没有错误。

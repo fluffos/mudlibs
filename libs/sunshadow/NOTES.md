@@ -987,3 +987,7 @@ HEAD 失败、现在加载（没有 warning）的 15 个：`magic_d`、`bboard_d
 ## `daemon/letter`：`if` 没有花括号（2026-10-21，KB 06 §7.298）
 
 `create()` 的循环 `if(file_size(DIR_LETTERS+"/"+i) == -2) y += ...;` 后面还有 `if(y > 9999) break;` 和 `__LettersDir += get_dir(DIR_LETTERS+"/"+i+"/");`，缩进像在 `if` 里面，实际总会执行。`/secure/save/letters/N/` 目录不存在时 `get_dir()` 答 0，`+= 0` 抛 `Bad argument 2 to (void)+=`。sunshadow 的检查树带这些目录所以没有出现，shadowgate 的新树没有，邮件守护进程加载失败。补上花括号，目录都在时行为不变。
+
+## `map`（不带参数）无限自我强制，`skin <活物>` 调用没有函数体的 `do_live()`（2026-10-21，KB 06 §7.333）
+
+`cmds/mortal/_map.lpc`：`if (!stringp(str)) { TP->force_me("map"); return 1; }`：不带参数的 `map` 强迫玩家再敲一次不带参数的 `map`，一直到 `Too deep recursion`，玩家收到 "contact a dev"（实测）。下面 `switch` 的 `default:` 分支对不认识的参数调用 `help()`，所以不带参数也走 `help()`（`<map view>` 等用法说明）。`cmds/mortal/_skin.lpc`：`skin <活物>` 走 `return do_live(corpse);`，`do_live()` 只有一条原型，归档里没有函数体，调用会出错；活物和其他剥不了皮的东西一样回答 `You can't skin that.`，原型删掉。sunshadow 和 shadowgate 同一处，实测：`map` 打出用法，`map list` 正常，控制台没有错误。
