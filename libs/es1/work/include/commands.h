@@ -36,7 +36,7 @@
 #define CMD_LS          "/cmds/file/_ls"
 #define CMD_MAKEWIZ     "/cmds/adm/_makewiz"
 #define CMD_MEM         "/cmds/xtra/_mem"
-#define CMD_PRAISE      "/cmds/std/_praise"
+#define CMD_PRAISE      "/cmds/std/praise"
 #define CMD_SAY         "/cmds/std/_say"
 #define CMD_SHUTDOWN    "/cmds/adm/_shutdown"
 #define CMD_SNOOP       "/cmds/wiz/_snoop"

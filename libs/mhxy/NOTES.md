@@ -1216,3 +1216,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply m
 ## 访客计数 `howmany_visitor()` 读文件不检查（2026-10-20，KB 06 §7.301）
 
 `howmany_visitor()` 读访客计数文件（`VISITORS` / `COUNTER` / `BBSVISITOR`，只有运行中的 mud 才会写；`.gitignore` 把它排除在仓库之外），新检出的树里没有，`read_file()` 回 0，`sscanf(0, ...)` 报错。这份副本登录时不一定走到它，但调用时同样会出错。在读文件之后加了 `if (!stringp(content)) return 0;`（xkx100、xiakexing100、zzfy 早先的写法，`scripts/lpc_fix_visitor_count.py`）。改动：`/www/cgi-bin/logind.lpc`、`/www/relative/logind.lpc`。
+
+## `setmission`：`explode(read_file("/adm/daemons/wizmission"))`（2026-10-21，KB 06 §7.326）
+
+巫师命令 `cmds/wiz/setmission` 读 `/adm/daemons/wizmission`（归档里没有，由这条命令自己写），`explode(0)` 抛错，读在写之前所以这个文件永远建不出来。`read_file(...) || ""`，第一次用时走 `write_file()` 新建的分支。mhxy 和 mhxyqd 同一处。

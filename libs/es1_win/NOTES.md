@@ -863,3 +863,7 @@ Left, as content gaps, not invented: 16 inherits of files that are not in the ar
 ## `advance`：5 级以上时 `check_explore()` 除以零（2026-10-21，KB 06 §7.331）
 
 公会的 `advance` 在等级 5 以上要问 `EXPLORE_D->check_explore(me)`，它对每个区域算 `探险点 * 100 / query_total_explore(区域)`。区域总数是巫师用命令 `explored` 登记的探险点数，登记数据（存档）不在归档里；公会自己的 `explore` 指令对 `max < 1` 的区域写了 `continue`，`check_explore()` 没有，所以新树里只要有一个区域没有登记点数，`advance` 就抛 `Division by zero`。先取总数，总数小于 1 的区域当作没有可探索的东西（`mark++; continue;`），与 `explore` 指令一致。三个库（es1、es1_win、esI）的 `explore_d.lpc` 逐 token 相同，同一处改法。只做了加载检查（没有 5 级的角色可测）。
+
+## `CMD_PRAISE` 指向不存在的 `_praise`（2026-10-21，KB 06 §7.325）
+
+`include/commands.h` 的 `CMD_PRAISE "/cmds/std/_praise"`，实际文件是 `praise.lpc`（归档里就没有下划线）；`idea.lpc`、`typo.lpc` 都 `inherit CMD_PRAISE;` 编译失败。这两个文件也没有下划线，`CMD_D->find_cmd()` 找的是 `/_` + 命令名，所以 `idea`、`typo` 在这个库里本来就是 "什麽？"，不报错。宏改成 `"/cmds/std/praise"`，两个文件加载（HEAD 1、树 3），命令仍然不可达（与归档一致）。esI 的同一处改法见 esI 的 NOTES（那里 `_idea.lpc` 有下划线，命令可达，错误可见）。

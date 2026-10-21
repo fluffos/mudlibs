@@ -393,3 +393,7 @@ HEAD 与工作树分别加载（新进程）：895 -> 895 通过，无回退；�
 ## 华山论剑排行榜：第一场比武就读不到 `/data/ladder.txt`（2026-10-20，KB 06 §7.326）
 
 比武裁判在一场比武结束时先 `list = explode(read_file("/data/ladder.txt"), "\n")`，读完再 `rm` 并 `write_file` 写回；`/data/ladder.txt` 是比武本身写出来的，全新的树里没有，第一场比武结束就是 `Bad argument 1 to explode()`，排行榜永远建不起来。把写回之前的那一次读改成 `read_file(...) || ""`（空表走原来的 `lost == -1 && win == -1` 分支，把第一对名字写进去）；写回之后的第二次读文件已经存在，没有动。加载检查各 1/1。
+
+## `wizwhatdo`、`setmission`：`explode(read_file("/adm/daemons/wizmission"))`（2026-10-21，KB 06 §7.326）
+
+巫师名单命令 `wizwhatdo`（在 `cmds/std`，玩家能敲）和 `cmds/imm/setmission` 都先 `explode(read_file("/adm/daemons/wizmission"), "\n")`；这个文件由 `setmission` 写，归档里没有，`read_file()` 答 0，`explode(0)` 抛 `Bad argument 1 to explode()`：玩家敲 `wizwhatdo` 是运行时错误，巫师也没法用 `setmission` 建出这个文件（读在写之前）。读不到按空文本处理（`read_file(...) || ""`，`explode("", "\n")` 是空数组，名单里每个人显示 "(任务未定)"，`setmission` 走 `write_file()` 新建的分支）。hy 系的其余库（hy、hy2000、hy2002、hy5、hymud、haiyang2、hyiishzdscbb）带着这个文件，没有问题。实测：`wizwhatdo` 打出巫师名单。
