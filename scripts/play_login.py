@@ -28,15 +28,15 @@ RULES = [
     (r"(?is)\bpick TOWN\b.*Town:\s*$", "pick haven"),                                                         # havenmud: "pick TOWN - pick a particular town for yourself ... Town:"
     (r"(?is)choose a race[^\n]*:\s*\n[^\n]*\bhuman\b[^\n]*$", "human"),                                         # nirvlp312: "Choose a race for your character, you may select: human elf dwarf custom <race>"
     (r"(?i)throw (the )?other copy|already (logged|playing|connected)|reconnect|重复|另一个连线|取代|赶出去", "y"),
-    (r"(?i)(re-?type|again|confirm|verify|repeat|once more).{0,40}(password|passwd|pass)|(password|passwd).{0,40}(again|confirm|verify)|再输入一次|再输一次|再次核对|核对密码|再核对一次|确认密码|重新输入密码|(^|\n)\s*again\s*:\s*$", "{lastpw}"),
+    (r"(?i)(re-?type|again|confirm|verify|repeat|once more).{0,40}(password|passwd|pass)|(password|passwd).{0,40}(again|confirm|verify)|再输入一次|再输一次|再次核对|核对密码|再核对一次|确认密码|重新输入密码|(^|\n)\s*again(\s+to\s+verify)?\s*:\s*$", "{lastpw}"),
     (r"(?i)(普通密码|normal password|not be the same|must be different|different from)[^\n]{0,80}[:：]\s*$", "{pw2}"),     # tybxjh: "管理密码和普通密码不能相同": the second password is another one
     (r"(?:不能|不可|不得|不要)(?:和|与|跟|同)[^\n]{0,15}(?:一样|相同|一致)[^\n]{0,30}[:：]\s*$", "{pw2}"),       # dtxywzxzb: "您的登陆密码不能和管理密码一样，请重设您的密码："
     (r"选择\s*[\[\(（]?\d+[\]\)）]?\s*则(?:接受|完成|确认|结束)", "{accept_num}"),       # sjsh family: "请选择你想重新设置哪一项天赋的取值[0-3]，选择[9]则接受当前的设置："
     (r"(?:身份标识|身份识别码|身份识别)[^\n]{0,30}[:：]\s*$", "{pw}"),                                    # wuhanzhan, longyunmeng, ylfyxa3 ...: "请重设您的身份标识："
-    (r"(?im)^[^\n]*(电子邮件|邮箱|邮件地址|e-?mail)[^\n]*[:：]\s*$", "{email}"),                                   # pkuxkx: "您的电子邮件地址（……以便在密码丢失或忘记时确认你的身份）："
+    (r"(?im)^[^\n]*(电子邮件|電子郵件|邮箱|信箱|邮件地址|郵件地址|邮件位址|郵件位址|e-?mail)[^\n]*[:：]\s*$", "{email}"),                                   # pkuxkx: "您的电子邮件地址（……以便在密码丢失或忘记时确认你的身份）："
     (r"(?i)password|passwd|密码|口令", "{pw}"),
     (r"(?i)(QQ号|QQ number|qq号码)", "12345678"),                                   # aoxiangtianji: "您的QQ号码："
-    (r"(?i)(e-?mail|email|电子邮件|邮箱|邮件地址)", "{email}"),
+    (r"(?i)(e-?mail|email|电子邮件|電子郵件|邮箱|信箱|邮件地址|郵件地址)", "{email}"),
     (r"(?im)^[^\n]*(gbk|big5)[^\n]*utf-?8[^\n]*[:：]\s*$|^[^\n]*utf-?8[^\n]*(gbk|big5)[^\n]*[:：]\s*$", "utf-8"),            # the xkx family's encoding menu: "Select 国标码 GBK or 国际码 utf-8 (GBK/utf-8):"
     (r"(?i)\(gb/big5\)|\(big5/gb\)|\(gbk?/big5\)", "gb"),                    # the older xkx family menu: "Select 国标码 GB or 大五码 BIG5 (gb/big5):"
     (r"(?i)(gender|sex|male or female|\(m\)ale|\bmale\b.*\bfemale\b|男.*女|性别|扮演男性)", "{gender}"),
@@ -44,16 +44,17 @@ RULES = [
     (r"中文姓氏|您的姓氏|请输入.{0,6}姓[：:]?\s*$", "测"),                       # nitan: "您的中文姓氏(不要超过两个汉字)：" and then the given name
     (r"(?i)(chinese name|中文名字|中文姓名|您的中文名)", "测试"),
     (r"(名字|姓名|人物名|大名)[^\n]{0,24}(汉字|漢字|中文)[^\n]{0,12}[:：]\s*$", "测试"),                       # immaster: "您的名字(不要超过10个汉字)："
-    (r"(?i)(中小学|小学生|学生或|未成年|under ?age|or younger)[^\n]{0,30}(\(yes/no\)|\(y/n\)|[?？])\s*$", "no"),          # mhsj, sjcs ...: "您是否是中小学学生或年龄更小？(yes/no)": not a pupil
-    (r"(?i)(同意|接受|满意|agree|accept|satisfied)[^\n]{0,30}[?？:：]\s*$", "y"),
-    (r"(?i)(同意|接受|满意|agree|accept|satisfied)[^\n]{0,30}[?？]?\s*[\(\[（［][^\n]{1,20}[\)\]）］]\s*$", "y"),                  # xiyouji family: "您同意这组天赋数值吗？[n]", jinyongwenzi: "(y 或 n)"
+    (r"(?i)(中小学|小学生|学生或|未成年|under ?age|or younger|还有好多工作|工作.{0,6}没有做完)[^\n]{0,30}(\(yes/no\)|\(y/n\)|[?？﹖])\s*$", "no"),          # mhsj, sjcs ...: "您是否是中小学学生或年龄更小？(yes/no)": not a pupil
+    (r"(?i)(同意|接受|满意|agree|accept|satisfied)[^\n]{0,30}[?？﹖:：﹕]\s*$", "y"),
+    (r"(?i)(同意|接受|满意|agree|accept|satisfied)[^\n]{0,30}[?？﹖]?\s*[\(\[（［][^\n]{1,20}[\)\]）］]\s*$", "y"),                  # xiyouji family: "您同意这组天赋数值吗？[n]", jinyongwenzi: "(y 或 n)"
     (r"(?i)(do you want|would you like|are you sure|create (a )?(new )?(character|player)|new (character|player)\?|确定吗|\(y/n\)|\[y/n\]|\(yes/no\)|yes or no|'yes' or 'no'|y\(es\) or n\(o\)|y or n|y/n)", "y"),
     (r"(?i)\(s/n\)|\[s/n\]", "s"),                                    # Spanish: "No entiendo... (s/n)"
     (r"(?i)\(default:\s*[^)\n]*\)\s*[:：]?\s*$", ""),                                                  # foundation1/2: "Please choose a display name (default: sweepzq):"
     (r"(?i)(press|hit)\s+(\[?enter\]?|\[?return\]?|any key)|\[more\]|--more--|continue\s*[:\.]?\s*$|按.{0,6}(回车|键)|任意键|<return>|\(return\)", ""),
     (r"(?i)(terminal|term type|screen|colou?r|ansi|vt100|client)\b.{0,50}[:?]\s*$", "{term}"),
-    (r"例如[:：]\s*\d+(?:\s+\d+){2,}[\s\S]*[:：]\s*$", "{example_nums}"),                 # dtsl / dtsl2 / dtslmud: "请输入您想要的属性，四项之和必须等于八十点 ... 例如：20 20 20 20"
-    (r"(用英文|in english)[^\n]{0,20}[\)）:：]\s*[:：]?\s*$|请选择您的种族", "{human_or_first}"),            # es1 / es1_win: "请选择您的种族(用英文):" over `人类(human)  精灵(elf) ...`
+    (r"例如(?:输入|輸入)?[:：]\s*\d+(?:\s+\d+){2,}[\s\S]*[:：]\s*$", "{example_nums}"),                 # dtsl / dtsl2 / dtslmud: "请输入您想要的属性，四项之和必须等于八十点 ... 例如：20 20 20 20"; shzs: "例如输入: 15 10 10 6 17 2"
+    (r"(?:属性|屬性|attributes?)\s*\[[^\]\n]*(?:显示说明|顯示說明|help)[^\]\n]*\]\s*[:：]\s*$", "h"),                   # shzs: "请决定您的人物属性 [输入 ?或 h 显示说明]:" -- the help text holds the example the rule above uses
+    (r"(用英文|in english)[^\n]{0,20}[\)）:：]\s*[:：]?\s*$|请选择您的种族|请(?:您)?选择[你您]的职业", "{human_or_first}"),            # es1 / es1_win: "请选择您的种族(用英文):" over `人类(human)  精灵(elf) ...`
     (r"你的选择[:：]\s*$|选择.{0,10}(种族|职业|门派)[^\n]{0,20}[:：]\s*$", "{first_of_list}"),            # a list of `name(name)  5 点业力` lines
     (r"(?i)(race|species)\b.{0,60}[:?]\s*$", "{first_of_race}"),
     (r"(?i)(class|profession|guild|vocation)\b.{0,60}[:?]\s*$", "{first_of_class}"),
@@ -66,8 +67,8 @@ RULES = [
     (r"如果希望由游戏帮助你随机分配请输入\s*0", "0"),                                                              # tianxia: the point-allocation prompt: let the game roll
     (r"选择一种人物类型[^\n]*\(\s*([A-Z])\s*[-－–]+\s*[A-Z]\s*\)|\(\s*([A-Z])\s*[-－–]+\s*[A-Z]\s*\)\s*中选择", "{first_letter}"),    # xbtxiii: "你只能在(A--L)中选择一种人物类型:"
     (r"(?is)(select|choose|enter)\s+a\s+(height|weight|age)[^\n]*:\s*\n.*\d+\s+to\s+\d+\s*(ft|feet|cm|kg|years)", "{range_mid}"),                          # nirvlp312: "please select a height within race limits: human & custom, 4 to 7 ft."
-    (r"(?i)(请选择|请输入.{0,10}(数字|号码|编号)|choose|select|pick).{0,60}[:：?？\)]\s*$", "1"),
-    (r"(?i)(what is|enter|give|type|input|tell me).{0,40}(your )?(character )?(name|id|handle)|(by )?what (is your |do you wish )?name|name do you|known\s*\?|login\s*:|name\s*:|name\?|名字|使用者代号|用户名|道号|ID\s*[:：]|帐号|账号|new\)", "{name}"),
+    (r"(?i)(请选择|请输入.{0,10}(数字|号码|编号)|choose|select|pick).{0,60}[:：﹕?？﹖\)]\s*$", "1"),
+    (r"(?i)(what is|enter|give|type|input|tell me).{0,40}(your )?(character )?(name|id|handle)|(by )?what (is your |do you wish )?name|name do you|known\s*\?|login\s*:|name\s*:|name\?|名字|使用者代号|用户名|道号|ID\s*[:：]|帐号|账号|new\)|名[稱称]\s*\(Name\)", "{name}"),
 ]
 
 # the BIG5 libs print the same prompts in traditional characters (`請設定您的密碼`, `您的使用者代號`): every simplified character below that a pattern uses also matches its traditional one
@@ -102,15 +103,23 @@ PRIORITY = [
     (r"(?is)palabra resuena en tu conciencia: ['\"“]nacer['\"”]", "nacer", "prio_nacer"),                              # ninetears: the first word of the Spanish birth
     (r"(?is)enter your current character's name.*your choice:\s*$", "{name}", "prio_dwname"),                              # Discworld: the menu after N (new) was used up, or --existing
     (r"(?s)(还没有登录过|没有这个玩家|不存在)[^\n]*请(用|使用)\s*[`'\"“]?new.*[:：；;]\s*$", "{newword}", "prio_new_cn"),                  # xo, xajh2: "这个id还没有登录过，请用new来起用这个id.\n您的英文名字；"
+    (r"(?is)(?:新玩家|new players?)[^\n]{0,12}(?:键入|输入|请键|type|enter)\s*[`'\"“]?new(?![a-z])[^\n]*$", "new", "prio_new_kb"),                 # xixingzhanji: "您的英文名字：（新玩家请键入New注册）"
+    (r"(?is)1[.)、]\s*(?:登录|登入|login).*2[.)、]\s*(?:注册|註冊|register|new).*[:：]\s*$", "{reg_or_login}", "prio_reg_menu"),     # xxsj: "1. 登录  2. 注册  请输入选项 (1/2):"
+    (r"(?s)(?:这种名字会造成|不合适的名字|名字.{0,6}(?:不当|不雅|不可用|不能使用)).*(?:中文名字|姓名|名字)[^\n]*[:：]\s*$", "路客", "prio_cname2"),             # yxxcii: its banned-name list holds `测试`
+    (r"(?s)(?:创造|創造|建立|注册|註冊)[^\n]{0,12}(?:请输入|請輸入|请键入|請鍵入|请用|請用)\s*[`'\"“]?new[`'\"”]?[^\n]*\n[^\n]*[:：]\s*$", "new", "prio_new_create"),     # revivalworld: "創造新的遊戲角色請輸入 'new'。(允許玩家登入)\n您的英文名字："
     (r"(?is)No character with that name exists.*login as\s*[`'\"“]new[`'\"”]", "new", "prio_new"),                    # majik3/4
+    (r"(?s)id@ccb[^\n]*格式[^\n]*\n[^\n]*[:：]\s*$", "tester@ccb", "prio_email_ccb"),                                  # yueyingqiyuan: "电子邮件地址需要是 id@ccb 的格式。"
+    (r"(?s)([A-Za-z0-9])\s*键\s*接受此?天赋[^\n]*$", "{accept_key}", "prio_accept_key"),                              # sgzmudsgz: "以下天赋值满意吗 ... r键接受此天赋，h键帮助，m键返回上级选单，q键退出。" (no colon, so no rule sees a question)
+    (r"(?s)例如(?:输入|輸入)?[:：]\s*\d+(?:\s+\d+){2,}[\s\S]*(?:属性|屬性)[^\n]*[:：]\s*$", "{example_nums}", "prio_attr_example"),         # shzs: the help text of the attribute prompt shows `15 10 10 6 17 2`; the prompt line alone only says `h`
     (r"(?is)\[c\]\s*create new character.*(?:command or name|\bname)[^\n]*:\s*$", "c", "prio_create"),                 # questmud: a menu whose last line is the generic `Command or Name:`
 ]
 RACE_PICK = re.compile(r"(?is)valid races?:\s*([A-Za-z][\w-]*)")
 NEW_CHAR = re.compile(r"(?im)^\s*N\s*-\s*New character")
 MENU_DONE = re.compile(r"(?i)(?:^|\s)\[?(\d+)\]?\s*[-.):]\s*(?:done|finish|finished|accept|continue|save|完成|结束|确定)\b")
-PATIENCE = re.compile(r"(?i)(may|will) pause|please wait|wait \d+ seconds|请稍候|请等待|一会儿|terms and conditions CAREFULLY|载入中|載入中")      # Discworld: the licence screen is a timed pause before its y/n
+LOADING = re.compile(r"\d{3} - (?:载入|載入) |(?:载入|載入)中")
+PATIENCE = re.compile(r"(?i)(may|will) pause|please wait|wait \d+ seconds|请稍候|请等待|一会儿|terms and conditions CAREFULLY|载入中|載入中|\d{3} - (?:载入|載入) ")      # Discworld: the licence screen is a timed pause before its y/n
 GAME = re.compile(r"(?i)(exit|obvious|you are|you see|north|south|east|west|here|room|出口|这里|你|inventory|hp|health)")
-NOT_GAME = re.compile(r"(?i)(password|passwd|name\s*:|login|密码|\(y/n\)|e-?mail|gender|press|return)")
+NOT_GAME = re.compile(r"(?i)(password|passwd|name\s*:|login|密码|\(y/n\)|e-?mail|gender|press (?:enter|return|any)|\[return\]|\(return\)|return (?:to|key)|英文名字|名字\s*[:：]|代号|道号|帐号|账号|用户名)")
 
 
 CN_NUM = {"一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10}
@@ -161,9 +170,21 @@ def last_line(text):
 def text_tail(t):
     """the last line of an answer that is more than a bare prompt (`>`, `hp: 10/10 >`, `]`)"""
     for ln in reversed(t.replace("\x00", "").strip().split("\n")):
-        s = ln.strip().rstrip(">] ").strip()
-        if s and (len(s) > 2 or s.isalnum()) and not re.fullmatch(r"(?:\w+\s*[:：]\s*\d+(?:/\d+)?\s*)+", s):          # Dead Souls: `hp: 1020/1020  mp: 350/350  sp: 822/822 >` is the prompt
+        if re.search(r"#BB[0-9A-F]{6}", ln):
+            continue                                       # the ZJ protocol repeats its status line (气血.400:400/400:#BBFF0000║...) after every answer
+        s = ln.strip().rstrip(">] ").strip().lstrip("[ ").strip()
+        if s and (len(s) > 2 or s.isalnum()) and not re.fullmatch(r"(?:\w+\s*[:：]?\s*\d+(?:/\d+)?%?\s*)+", s):          # Dead Souls: `hp: 1020/1020  mp: 350/350  sp: 822/822 >` is the prompt; shzs: `[ 时间 10 精神 100% 移动 100% ]`
             return s
+    return ""
+
+
+def slow_read(m, first_wait=60.0, idle=1.5):
+    """wait up to `first_wait` seconds for the first byte of a slow answer (Mud.read gives up after `idle` seconds of silence from the start), then read until it goes quiet"""
+    t_end = time.time() + first_wait
+    while time.time() < t_end and not m.closed:
+        s = m.read(3.0, 3.0)
+        if s.strip():
+            return s + m.read(idle, 6.0)
     return ""
 
 
@@ -213,9 +234,25 @@ def run(args):
     relaxed_done = {}
     empties = 0
     waited = 0
+    patience_end = None
     relaxed = False
+    saw_loader, reconnects, slow_waits = False, 0, 0
     while steps < args.steps:
+        if LOADING.search(buf):
+            saw_loader = True
         if m.closed:
+            if saw_loader and reconnects < 1:
+                reconnects += 1                         # revivalworld: the daemons load while the first visitor watches, and the lib closes every connection when it is done
+                out("[the start-up loader closed the connection: reconnecting]")
+                time.sleep(2)
+                try:
+                    m = Mud(args.host, args.port, log=False)
+                except OSError as e:
+                    print(f"RESULT closed steps={steps} last=connect failed: {e}")
+                    return 2
+                saw_loader = False
+                buf = m.read(2.0, 15) or m.read(3.0, 90)
+                continue
             print(f"RESULT closed steps={steps} last={last_prompt!r}")
             return 2
         low = tail(buf, 400)
@@ -225,7 +262,7 @@ def run(args):
             mapping["pw2"] = "O" + mapping["pw"][1:][::-1]
             mapping["lastpw"] = mapping["pw"]
         last = low.rstrip().split("\n")[-1] if low.strip() else ""
-        question = bool(re.search(r"([:：?？\)\]）】；;])\s*$", last)) or relaxed       # a prompt ends in a colon, a question mark, `(again)`, `[y/n]`
+        question = bool(re.search(r"([:：﹕?？﹖\)\]）】；;﹔])\s*$", last)) or relaxed       # a prompt ends in a colon, a question mark, `(again)`, `[y/n]`
         rule_id, reply = None, None
         if NEW_CHAR.search(low) and not used.get("newchar") and not getattr(args, "existing", False):                # Discworld: "F - Finger someone, N - New character, G - Guest character, or enter your character"
             used["newchar"] = 1
@@ -252,6 +289,8 @@ def run(args):
             rule_id, reply = match_rule(low.rstrip().split("\n\n")[-1], question)
         if reply is None:
             rule_id, reply = match_rule(low, question)
+        if reply is not None and LOADING.search(last):
+            reply = None                                        # a loader's progress line (`053 - 載入 房地產系統(ESTATE_D) ...Done`) looks like a menu entry: wait, do not answer
         if reply is not None:
             if reply == "{gender}" and re.search(r"(?i)\bmale\b", low) and re.search(r"(?i)\bfemale\b", low):
                 reply = "male"                                  # Dead Souls, rifts: "pretend to be male, female, neutral, or none", "Gender: "
@@ -259,8 +298,13 @@ def run(args):
             for k, v in mapping.items():
                 reply = reply.replace("{" + k + "}", v)
             reply = reply.replace("{newword}", args.name if getattr(args, "existing", False) else "new")
+            if "{reg_or_login}" in reply:
+                reply = "1" if getattr(args, "existing", False) else "2"
+            if "{accept_key}" in reply:
+                mk = re.search(r"([A-Za-z0-9])\s*键\s*接受", low)
+                reply = mk.group(1) if mk else "r"
             if "{example_nums}" in reply:
-                me = re.search(r"例如[:：]\s*(\d+(?:\s+\d+){2,})", low)
+                me = re.search(r"例如(?:输入|輸入)?[:：]\s*(\d+(?:\s+\d+){2,})", low)
                 reply = reply.replace("{example_nums}", me.group(1) if me else "20 20 20 20")
             if "{human_or_first}" in reply:
                 mh = re.search(r"\(([A-Za-z][\w-]*)\)", low)
@@ -283,18 +327,23 @@ def run(args):
             if used[rule_id] > (6 if rule_id in PW_RULES else 12 if reply.isdigit() else 4) or (rule_id == 0 and used[rule_id] > 1):     # a loop means a wrong guess (a series of attribute prompts is not one)
                 reply = None
         relaxed = False
-        if reply is None and question and not relaxed_done.get(last):
+        if reply is None and question and not relaxed_done.get(last) and not LOADING.search(last):
             relaxed_done[last] = 1
-            reply = "y" if re.search(r"[?？]\s*$", last) else "1"           # an unknown question: yes, or the first entry
-        if reply is None and PATIENCE.search(low) and waited < 3:        # "Login may pause for 30 seconds or so": wait it out before probing
+            reply = "y" if re.search(r"[?？﹖]\s*$", last) else "1"           # an unknown question: yes, or the first entry
+        if reply is None and PATIENCE.search(low) and (waited < 3 or (patience_end and time.time() < patience_end)):        # "Login may pause for 30 seconds or so": wait it out before probing
+            if patience_end is None:
+                patience_end = time.time() + 240                                   # revivalworld, zsdsj: the first visitor sees the daemons load one by one (a minute); wait while it goes on
             waited += 1
             more, t_end = "", time.time() + 45
             while time.time() < t_end and not more.strip() and not m.closed:
                 more = m.read(3.0, 3.0)
+            out(f"[patience {waited}: {len(more)} bytes more]")
             if more.strip():
                 buf = more
                 last_prompt = tail(buf, 120)
                 continue
+            if time.time() < patience_end and not m.closed:
+                continue                                                           # a silent stretch of the loader (revivalworld's html_d takes a minute on the debug driver)
         if reply is None:
             probe = m.cmd("look", idle=0.8, maxwait=6)
             if "Queued command" in probe:                       # Discworld queues commands while the character is busy: wait for the real answer
@@ -308,7 +357,7 @@ def run(args):
                 nonsense = m.cmd("zzqxk", idle=0.8, maxwait=5)              # a game answers an unknown verb in a line; a menu or a dialogue shows itself again
                 out(">>> zzqxk\n<<< " + nonsense.strip().replace("\n", "\n<<< ")[-200:])
                 same_tail = text_tail(nonsense) == text_tail(probe)       # a dialogue redisplays its prompt for any input; a game answers `look` and `zzqxk` differently
-                if len(nonsense.strip()) < 200 and not same_tail and not re.search(r"\d\s*[\.\)〗]|选择|choose|select|请输入|please", nonsense, re.I) and not (same and re.search(r"(?i)invalid|incorrect|illegal|choose again|重新|无效|错误", nonsense)):
+                if len(nonsense.strip()) < 200 and not same_tail and not re.search(r"\d\s*[\.\)〗]|选择|choose|select|请输入(?!\s*help)|please", nonsense, re.I) and not (same and re.search(r"(?i)invalid|incorrect|illegal|choose again|重新|无效|错误", nonsense)):
                     buf = probe
                     break
             empties += 1
@@ -323,8 +372,9 @@ def run(args):
             continue
         out(f">>> {reply!r}")
         buf = m.cmd(reply, idle=0.9, maxwait=10)
-        if not buf.strip() and not m.closed:                # a slow answer (Dead Souls compiles its player files on the first login): wait for it before probing
-            buf = m.read(3.0, 90)
+        if not buf.strip() and not m.closed and slow_waits < 6:                # a slow answer (Dead Souls compiles its player files on the first login; nt1 answers every line 10-30 s late while its first heart beat restores 139 users): wait for it before probing
+            slow_waits += 1
+            buf = slow_read(m)
         if rule_id in PW_RULES and reply:
             mapping["lastpw"] = reply                       # the "once more" prompt that follows repeats it
         out("<<< " + buf.strip().replace("\n", "\n<<< ")[-400:])

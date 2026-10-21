@@ -1129,3 +1129,7 @@ eval/lpcc 觸發之異常一貫的存疑處理原則，未在本輪確認為真�
 ## `get_config(__MUD_PORT__)` 经旧版 `runtime_config.h` 得到字符串（2026-10-20，KB 06 §7.302）
 
 本库的 `include/runtime_config.h` 是老 MudOS 的编号（整数设置从 15 起，本驱动从 256 起），`get_config(__MUD_PORT__)` 读到的是另一项设置（字符串），`(int)` 又只是编译期标注，于是 `socket_bind(fd, LOCAL_PORT())` 报 `Bad argument 2 to socket_bind()`，版本守护进程 `port = get_config(__MUD_PORT__) + VERSION_PORT` 是字符串相加。头文件自己的注释写明 `get_config(__MUD_PORT__) == __PORT__`，所以代码里的这个调用（连同外面的 `(int)` / `to_int()`）改成了驱动的预定义 `__PORT__`（`scripts/lpc_fix_mud_port.py`）。改动：`/cmds/std/guest/config.lpc`（1 处）。
+
+## 所有玩家指令都用不了：`*Undefined function called: command`（2026-10-20，KB 06 §7.321）
+
+和 revivalworld（#936，同一款游戏的 git 版本）完全相同：`std/inherit/feature/command/_command.lpc` 的 `private void do_command()` 包装函数和 `private void command()` 原型，83 个指令文件（`look`、`score`、`who`、`help`、`quit`……）自己定义 `private void do_command()`，92 个定义 `command()`；`private` 函数不会被继承者覆盖，进入世界后的第一条指令就是 `*Undefined function called: command`（`log/run`），页面上先出现 `指令使用权限不足` 的调用栈，再是 `WARNING 这个程式作业执行无效即将关闭`，之后这条连线的输入全部丢失（登录调查里这一行是 `stuck`，机器人把加载画面当成了菜单，加载结束后又被踢掉）。`_command.lpc` 和 `_personal_command.lpc` 的这两处 `private` 改成 `protected`。加载检查：`cmds/`、`system/daemons/`、指令特性共 252 个对象，HEAD 与工作树都 252 通过，无退化；实测 `look`、`score` 正常。第一个访客要看着守护进程一个个载入（调试版驱动约两分钟），载完后被踢，重新连线才能登录；`scripts/play_login.py` 现在会等加载结束并自动重连一次。

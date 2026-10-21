@@ -9,7 +9,7 @@ is reopened with a new character.  A finding is a console error / warning, a bad
 
   --burst PACE   for a lib that throttles commands (Discworld's queue: `Queued command: i`): every verb's shapes are sent PACE seconds apart (1.3 for Discworld at a
                  two-second heart beat), the console is read once per verb, and only a verb that printed something wrong is re-run line by line to find the shape.
-  --shapes       `quick` (4 shapes: none, `me`, a 300-character word, `你好 世界`; default) or `full` (the ten of playsweep.SHAPES).
+  --shapes       `quick` (4 shapes: none, `me`, a 300-character word, `你好 世界`; default), `two` (none and `me`), `one` (the bare verb: a corpus-wide pass) or `full` (the ten of playsweep.SHAPES).
   --dirs         comma-separated subdirectories of cmds/ (default: all but the wizard ones).
   --account      NAME:PASSWORD of a seeded account (discworld: fluffos:Mud@2026, an administrator; add --wiz to sweep the creator commands).
   --start/--end  slice of the sorted verb list, for a run in chunks of about an hour (a tracked job dies at two hours).
@@ -67,7 +67,7 @@ def main():
     ap.add_argument("--no-boot", action="store_true")
     ap.add_argument("--dirs", default="")
     ap.add_argument("--wiz", action="store_true")
-    ap.add_argument("--shapes", default="quick", choices=["quick", "full"])
+    ap.add_argument("--shapes", default="quick", choices=["one", "two", "quick", "full"])
     ap.add_argument("--burst", type=float, default=0.0)
     ap.add_argument("--start", type=int, default=0)
     ap.add_argument("--end", type=int, default=100000)
@@ -92,7 +92,7 @@ def main():
     try:
         vs = verbs_of(tree, [d for d in a.dirs.split(",") if d], a.wiz)[a.start:a.end]
         skip = SKIP | {s for s in a.skip.split(",") if s}
-        shapes = SHAPES if a.shapes == "full" else QUICK
+        shapes = SHAPES if a.shapes == "full" else QUICK if a.shapes == "quick" else QUICK[:1] if a.shapes == "one" else QUICK[:2]
         con = Console(unit_out)
         names = [0]
 

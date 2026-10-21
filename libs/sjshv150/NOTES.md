@@ -399,3 +399,7 @@ simul_efun 的 `filter_player()` 加上 `environment(ob)`：注册中途断线�
 ## `get_config(__MUD_PORT__)` 经旧版 `runtime_config.h` 得到字符串（2026-10-20，KB 06 §7.302）
 
 本库的 `include/runtime_config.h` 是老 MudOS 的编号（整数设置从 15 起，本驱动从 256 起），`get_config(__MUD_PORT__)` 读到的是另一项设置（字符串），`(int)` 又只是编译期标注，于是 `socket_bind(fd, LOCAL_PORT())` 报 `Bad argument 2 to socket_bind()`，版本守护进程 `port = get_config(__MUD_PORT__) + VERSION_PORT` 是字符串相加。头文件自己的注释写明 `get_config(__MUD_PORT__) == __PORT__`，所以代码里的这个调用（连同外面的 `(int)` / `to_int()`）改成了驱动的预定义 `__PORT__`（`scripts/lpc_fix_mud_port.py`）。改动：`/include/getconfig.h`（1 处）。
+
+## 本机回环地址只放巫师：新玩家无法注册（2026-10-20，KB 01 §1.3b/e 的补充）
+
+`adm/daemons/sited.lpc` 的 `is_valid(id, ip)` 对 127.0.0.1 只放行巫师、`allenc` 和字面的 `new`。`logind` 在新玩家输入英文名字之后（`get_new_id()`）和老玩家登录时（`get_id()`）还会以真实的 id 再调一次，所以只给 `new` 开例外不够：站点的访客永远是回环连线，除管理员 `fluffos` 外每个 id 都被 `Sorry,This id can not login from this address.` 拒绝，登录调查记作 `closed`。以前的说明里把这一点当成"范围很窄的测试限制、真实的远程部署不受影响"，这对博物馆站点不成立。现在回环地址一律放行（和同族的 sje、sjshv2578bb、sanjieshenhua 一样，KB 01 §1.3b）；别的地址的 `valid_login` 限制不变。实测：新角色从 `new` 一直走到进入世界，`look`、`score` 正常。

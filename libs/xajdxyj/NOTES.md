@@ -351,3 +351,7 @@ compile check (exit 0, no errors) against `feature/command.lpc`.
 ## sefun `cat()`：缺文件时 `write(0)` 报错（2026-10-20，KB 06 §7.297）
 
 `void cat(string file) { write(read_file(file)); }`：文件不存在（压缩包没带的欢迎/公告文件，或只有运行中的 mud 才会写的日志）时 `read_file()` 回 0，`write(0)` 在本驱动里报 `Bad argument 1 to receive()`，调用者（登录对话、`cat` 指令）被中断；老驱动什么也不打印。改成 `write(read_file(file) || "");`（`scripts/lpc_fix_cat_unchecked.py`）。改动：`/adm/simul_efun/file.lpc`。
+
+## 启动后 180 秒内拒绝一切登录：站点访客第一次连线被关掉（2026-10-20，KB 06 §7.320）
+
+`adm/daemons/logind.lpc` 的 `encoding()` 在 `time() - CONTROL_CENTER->query("MUD_SRART_TIME") < 180` 时对所有人写 `xajdxyj服务器正在进行启动前事务处理，请稍候再来。` 并 `destruct(ob)`，只有输入 `let me join ok`（运维的后门）才放行。控制中心 `d/wiz/control_center.lpc` 的 `create()` 只记一下 `time()`，这三分钟里并没有任何启动前的工作；而站点的加载器在 mud 启动后几秒内就连线，访客的第一次连线就被关掉（登录调查记作 `closed`，只走了 1 步）。现在这段限制已去掉（连带不再用的局部变量 `control_center`）；实测：连线后立刻出现英文名字提示，新角色可以注册并进入世界。`u/moonsky/` 下的两份 `logind` 副本是巫师目录里的旧稿，没动。

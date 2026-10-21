@@ -33,7 +33,22 @@ for _ in $(seq 1 180); do
   # a lib whose config names its port some other way (shadowgate: `external_port_1`) listens elsewhere: the driver says where
   REAL=$(sed -n 's/^Accepting telnet connections on [0-9.]*:\([0-9][0-9]*\).*/\1/p' "$OUT" 2>/dev/null | head -1)
   for P in "$PORT" ${REAL:+"$REAL"}; do
-    if (exec 3<>"/dev/tcp/127.0.0.1/$P") 2>/dev/null; then echo "unit play-$SLUG$TAG listening on port $P; output $OUT; tree $DEST"; exit 0; fi
+    if (exec 3<>"/dev/tcp/127.0.0.1/$P") 2>/dev/null; then
+      # the port answers before the driver is done with its own start-up work (nt1's `closed` daemon restores 139 users at the first heart beat: every line a visitor
+      # types is answered 10-30 s late until then; a loader that runs on the first connection is the lib's own business): wait until the driver's CPU has been quiet
+      # for two samples two seconds apart, at most PLAY_QUIET_WAIT (default 45) seconds: nt1's driver is never quiet and the 3 GB cap kills it 2m15s after the boot, so a long wait would only connect to a corpse
+      PID=$(systemctl --user show -p MainPID --value "play-$SLUG$TAG" 2>/dev/null || echo 0)
+      if [ "${PID:-0}" -gt 0 ] 2>/dev/null; then
+        quiet=0; prev=-1; waited=0
+        while [ "$waited" -lt "${PLAY_QUIET_WAIT:-45}" ] && [ -r "/proc/$PID/stat" ]; do
+          cur=$(awk '{print $14+$15}' "/proc/$PID/stat" 2>/dev/null || echo -1)
+          if [ "$prev" -ge 0 ] && [ "$cur" -ge 0 ] && [ $((cur - prev)) -lt 30 ]; then quiet=$((quiet + 1)); else quiet=0; fi
+          [ "$quiet" -ge 2 ] && break
+          prev=$cur; sleep 2; waited=$((waited + 2))
+        done
+      fi
+      echo "unit play-$SLUG$TAG listening on port $P; output $OUT; tree $DEST"; exit 0
+    fi
   done
   sleep 1
 done

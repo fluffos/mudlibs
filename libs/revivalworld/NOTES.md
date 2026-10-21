@@ -901,3 +901,15 @@ README 里记载的"开机预载持续 2-3 分钟"配套的既有设计。
 ## `get_config(__MUD_PORT__)` 经旧版 `runtime_config.h` 得到字符串（2026-10-20，KB 06 §7.302）
 
 本库的 `include/runtime_config.h` 是老 MudOS 的编号（整数设置从 15 起，本驱动从 256 起），`get_config(__MUD_PORT__)` 读到的是另一项设置（字符串），`(int)` 又只是编译期标注，于是 `socket_bind(fd, LOCAL_PORT())` 报 `Bad argument 2 to socket_bind()`，版本守护进程 `port = get_config(__MUD_PORT__) + VERSION_PORT` 是字符串相加。头文件自己的注释写明 `get_config(__MUD_PORT__) == __PORT__`，所以代码里的这个调用（连同外面的 `(int)` / `to_int()`）改成了驱动的预定义 `__PORT__`（`scripts/lpc_fix_mud_port.py`）。改动：`/cmds/std/guest/config.lpc`（1 处）。
+
+## 所有玩家指令都用不了：`*Undefined function called: command`（2026-10-20，KB 06 §7.321）
+
+`std/inherit/feature/command/_command.lpc` 有一个 `private void do_command(me, arg)` 包装函数（先检查调用栈，再调 `command(me, arg)`），`query_fp()` 返回指向它的函数指针；指令文件要么自己定义 `command()`（91 个），要么自己定义 `private void do_command()`（83 个，包括 `look`、`score`、`who`、`help`、`quit`）。`private` 函数不会被继承者覆盖，所以那 83 个文件里的 `do_command` 是另一个函数，函数指针跑的仍是包装函数，它调用的 `command()` 只有一个原型、哪里都没有函数体：进入世界后的第一条指令就是 `*Undefined function called: command`（`log/run` 的错误报告），页面上先是一段 `指令使用权限不足` 的调用栈，然后 `WARNING 这个程式作业执行无效即将关闭`，那条连线之后的输入全部丢失。以前的验证只走到进入世界，没有敲过指令。`_command.lpc` 和 `_personal_command.lpc` 里这两处 `private` 改成 `protected`（继承者可以覆盖，外部仍然不能 `call_other`）。加载检查：`cmds/`、`system/daemons/`、指令特性共 252 个对象，HEAD 与工作树都 252 通过，无退化；实测 `look`、`score` 正常。
+
+## `LOGIN_D->is_repeat_login()` 是 `private`，两个登录守护进程调用它时 `apply() with insufficient permission`（2026-10-20，KB 06 §7.322）
+
+`login_d.lpc` 的 `private nomask int is_repeat_login(string arg)` 被 `ppl_login_d`（两处）和 `wiz_login_d`（一处）用 `LOGIN_D->` 调用：`private` 不能被 `call_other`，控制台第一次登录就是 `apply() with insufficient permission ... function: is_repeat_login ... needs: public, has: private`，重复登录检查永远得 0。改成 `nomask int is_repeat_login(string arg)`。
+
+## 第一个访客看到的启动加载（2026-10-20）
+
+`system_d` 在驱动开始接受连线之后才用 `call_out` 一个接一个地载入 74 个守护进程，并把进度广播给已连线的人（`載入中，請稍後 ...`）；载完后把所有已连线的人踢掉（`啟動完畢，重新連線中...`），要重新连线才能登录。调试版驱动上这要约 128 秒，其中 `html_d.lpc` 的地图渲染占 72 秒（旧说明里的 2–3 分钟）。登录机器人（`scripts/play_login.py`）现在会等加载结束、被踢后自动重连一次。

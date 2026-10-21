@@ -97,7 +97,10 @@ byte-preserving the original behavior.
     so the gate always fires.
   - Per-IP registration throttles.
   - Wizard-only-loopback gates that block the literal `"new"` keyword:
-    exempt the keyword narrowly.
+    exempt the keyword narrowly. If `logind` calls the gate again with the chosen id (a new name, every
+    later visit), the keyword exemption is not enough: every ordinary id is refused from loopback and
+    the site's visitor never registers (sjshv150, 2026-10-20: `sited.lpc` `is_valid()` now returns 1
+    for loopback, as sje / sjshv2578bb / sanjieshenhua do; the survey row was `closed`).
   - Keep in-game timers: quit-retention windows, save gates, cooldowns.
   ```lpc
   if (query_ip_number(ob) != "127.0.0.1" && uptime() < 30) { ...original... }
