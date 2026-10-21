@@ -118,12 +118,19 @@ PRIORITY = [
     (r"(?is)User Menu.*Enter the game.*\[spcrwq\]\s*$", "p", "prio_lima_menu"),                                         # lima: "s Select character to play  p Enter the game ... [spcrwq]" (autologin after 10 s otherwise)
     (r"(?is)Select a character first\.\s*\n?\s*\[spcrwq\]\s*$", "s", "prio_lima_select"),                            # lima family: a new account has no selected character; `s` lists them
     (r"(?is)Selected character '[^']+' for playing\.\s*\[spcrwq\]\s*$", "p", "prio_lima_play"),                      # lima family: the character is selected, enter the game
+    (r"(?is)Create a character to select one\.\s*\[spcrwq\]\s*$", "c", "prio_lima_create"),                                # spacemud: the account has no character yet
+    (r"(?is)Gender for your character.*Gender:\s*$", "1", "prio_lima_gender"),                                              # spacemud: 1. Male 2. Female 3. Non-binary
+    (r"(?is)Please select a race from the following list:.*Race\?\s*$", "human", "prio_lima_race2"),                        # spacemud: `elf documentation human orc troll`
+    (r"(?is)Character '[^']+' has been created\.\s*\[spcrwq\]\s*$", "s", "prio_lima_created"),                           # spacemud: select it, then `p`
+    (r"(?is)race selection room, you will now choose.*\n\s*>\s*$", "become male human", "prio_merentha_race"),                # merentha: a sign lists the races, `become [gender] [race]` picks one
+    (r"(?is)\n\s*b\)\s[^\n]*\n\s*c\)\s[^\n]*\n[\s\S]*Answer:\s*$", "{merentha_ans}", "prio_merentha_answer"),                                               # merentha: five multiple-choice questions after `begin`
+    (r"(?is)character creation room(?!.*Question \d+ of)", "begin", "prio_merentha_begin"),                                  # merentha: `begin` starts the questions
     (r"(?is)Type the name of a race to select it.*Race\?\s*$", "{lima_race}", "prio_lima_race"),                          # swmud, spacemud: the race list is a table of words, `Race?` alone is no help
     (r"(?is)\[str\]:\s*\d+\s*/\s*\d+.*Type 'help' for more info\s*>\s*$", "{lima_attr}", "prio_lima_attr"),                    # swmud: point-buy `a <stat> <n>` until nothing is left, then `done`
     (r"(?i)Type 'left' or 'right' to continue", "right", "prio_lima_hand"),                                            # swmud: dominant hand
     (r"(?i)Type 'imperial', 'rebel' or 'neutral' to continue", "neutral", "prio_lima_team"),                           # swmud: team
 ]
-PRIO_LIMIT = {"prio_lima_attr": 16, "prio_lima_menu": 6, "prio_lima_play": 6}        # a priority rule answers at most this often (3 by default): swmud's point-buy takes one line per attribute
+PRIO_LIMIT = {"prio_lima_attr": 16, "prio_lima_menu": 6, "prio_lima_play": 6, "prio_merentha_answer": 12}        # a priority rule answers at most this often (3 by default): swmud's point-buy takes one line per attribute
 RACE_PICK = re.compile(r"(?is)valid races?:\s*([A-Za-z][\w-]*)")
 NEW_CHAR = re.compile(r"(?im)^\s*N\s*-\s*New character")
 MENU_DONE = re.compile(r"(?i)(?:^|\s)\[?(\d+)\]?\s*[-.):]\s*(?:done|finish|finished|accept|continue|save|完成|结束|确定)\b")
@@ -294,6 +301,8 @@ def run(args):
                     used[pkey] = used.get(pkey, 0) + 1
                     rule_id, reply = pkey, (args.name if prep == "new" and getattr(args, "existing", False) else prep)
                     break
+        if os.environ.get("PLAY_LOGIN_DEBUG"):
+            print("[debug] priority:", rule_id, repr(reply), repr(low[-160:]), file=sys.stderr)
         if reply is None:
             rule_id, reply = match_rule(last, question) if last else (None, None)        # the prompt itself first, then its paragraph, then the text above
         if reply is None:
@@ -314,6 +323,9 @@ def run(args):
             if "{accept_key}" in reply:
                 mk = re.search(r"([A-Za-z0-9])\s*键\s*接受", low)
                 reply = mk.group(1) if mk else "r"
+            if "{merentha_ans}" in reply:
+                mq = re.search(r"Question (\d+) of", low)
+                reply = "abcd"[((int(mq.group(1)) - 1) if mq else used.get("prio_merentha_answer", 1)) % 4]       # the same letter three times is refused: one letter per question
             if "{lima_race}" in reply:
                 seg = low.split("Type 'help stats'")[0]
                 mr = re.search(r"(?m)^\s*([a-z][a-z']+)\s{2,}[a-z]", seg)
@@ -348,7 +360,7 @@ def run(args):
                 mr = re.search(r"[\(\[](\d+)\s*(?:到|to|-|~|至)\s*(\d+)[\)\]]", low) or re.search(r"(?:数字|數字)\s*(\d+)\s*[~～-]\s*(\d+)", low) or re.search(r"(?i)\b(\d+)\s+to\s+(\d+)\s*(?:ft|feet|cm|kg|years)", low) or re.search(r"(?i)(?:合法的?值是?|valid(?: values?)?(?: is| are)?|between|range)\s*(\d+)\s*(?:到|to|-|~|至|and)\s*(\d+)", low)
                 reply = str((int(mr.group(1)) + int(mr.group(2))) // 2) if mr else "20"
             used[rule_id] = used.get(rule_id, 0) + 1
-            if used[rule_id] > (6 if rule_id in PW_RULES else 12 if reply.isdigit() else 4) or (rule_id == 0 and used[rule_id] > 1):     # a loop means a wrong guess (a series of attribute prompts is not one)
+            if used[rule_id] > (2 * PRIO_LIMIT[rule_id] if rule_id in PRIO_LIMIT else 6 if rule_id in PW_RULES else 12 if reply.isdigit() else 4) or (rule_id == 0 and used[rule_id] > 1):       # a priority rule is counted twice (here and where it is picked)     # a loop means a wrong guess (a series of attribute prompts is not one)
                 reply = None
         relaxed = False
         if reply is None and question and not relaxed_done.get(last) and not LOADING.search(last):

@@ -477,3 +477,7 @@ extension, not source; scanned with `--skip '^/doc/'`, not touched.
 ## A login password over 255 bytes: `crypt()` raises (2026-10-20, KB 06 7.294)
 
 The driver's `crypt()` raises (`Error in crypt(), check your salt`) for a key over 255 bytes, where the old driver hashed any length. A password of 256 bytes or more typed at the login prompt threw an error in the password check and left the connection at a bare `> ` prompt, so the login never completed (the old-password test of `password` the same); found by the sweep shape of 300 `x`. `/sefun/sefun.lpc` now defines a simulated efun `crypt(key, salt)` of the same name: only an over-long key is cut (to 255 characters, then character by character until `sizeof(to_buffer(key)) <= 255`: the limit is in bytes, a CJK character takes three) before it is handed to `efun::crypt()`; every ordinary password hashes as before and the saved hashes are untouched (`scripts/lpc_add_sefun.py crypt`).
+
+## 深度功能测试（2026-10-21，play 扫描）：机器人学会了创建流程，27 个 mortal 命令 0 条发现
+
+创建流程：起名、`y`、密码两遍、名字格式之后进“种族选择室”（`become male human`），再到“角色定制室”（`begin`，五个选择题 a 到 d，同一个字母连着三次会被拒绝，所以每题一个字母），然后落在 Cabeiri Castle 的庭院。`scripts/play_login.py` 现在认得这三步（`prio_merentha_*`）。`scripts/play_sweep_lib.py merentha --shapes one`：27 行（`cmds/` 下 66 个文件，`admin` 目录是巫师命令，没有扫），只有一条 `needed-escape`，控制台、屏幕、卡住都没有。
