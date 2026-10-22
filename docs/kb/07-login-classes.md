@@ -44,6 +44,10 @@ characters. Every check written against GBK bytes silently misbehaves.
   (`scripts/lpc_fix_gbk_slice.py`, not idempotent, ledger `scripts/gbk_slice_converted.txt`; the
   oracle is `xkx100utf8`, the community's UTF-8 port). A Chinese literal compared with a slice twice
   its length can never match: `rg '\[ *0 *\.\. *1 *\] *(==|!=) *"[^\x00-\x7f]'`.
+- **Every other name gate (2026-10-22, KB 06 7.362).** House (`luban`), gang (`nicai`), group, IRC,
+  title and board-title gates (`strlen(name) < 4 || strlen(name) > 12`, `i < 4 || i > 24 || i % 2`)
+  beside a message that says `2 到 6 个中文字`: the message is the oracle, `scripts/lpc_fix_strlen_gate.py`
+  halves the gates that are exactly twice what it states (1,813 edits in 173 libs).
 
 **Standing rule:** registration isn't verified until a REAL Chinese name
 (e.g. 秦风) has been accepted into the next stage.

@@ -721,7 +721,7 @@ string check_legal_name(string name,object ob)
 
 	i = strlen(name);
 
-	if( (strlen(name) < 2) || (strlen(name) > 8 ) || i % 2) {
+	if( (strlen(name) < 1) || (strlen(name) > 4 ) || i % 2) {
 		write_ob(ob,"对不起，你的中文名字必须是 1 到 4 个中文字。\n");
 		return 0;
 	}

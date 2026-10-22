@@ -558,3 +558,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 黑木崖脚下的老者：`init()` 里留着调试语句，每个走进 `/d/heimuya/road1` 的人都触发运行时错误（2026-10-22，KB 06 §7.361）
 
 `d/heimuya/npc/laozhe.lpc` 的 `init()` 在 `::init()` 之后有 `what = new(__DIR__ "obj/yancao"); sprintf("%s aaa\n", what);`：调试遗留，`%s` 收字符串或数字、不收对象，于是 `(s)printf(): Incorrect argument to type %s. (arg: 0)` 每次有人进入乱石坡都抛一次，后面的 `call_out("greeting", ...)` 永远不执行，老者不再搭话（还每次白克隆一个烟草）。两行都注释掉（同系的 haiyang2 / hy / hy5 / cctx / fqyy2 早就注释了）。证明：`scripts/lpc_reach_census.py xiakexing2017 --load --walk`（一个普通 NPC 访客走进每个加载成功的房间）：HEAD 336/337，改后 337/337。
+
+## 长度检查按字节写，旁边的提示按汉字写：2 处（2026-10-22，KB 06 §7.362）
+
+老档的 `strlen()` 数字节（一个汉字 2 字节），转成 UTF-8 后它数字符：提示写「必须是 2 到 6 个中文字」的检查还是 `strlen(name) < 4 || strlen(name) > 12`，于是两三个字的房名、帮会名、群名、聊天室名、称号被提示自己说允许的那句话拒绝，上限却是提示的两倍；留言板的标题检查 `i < 4 || i > 24 || i % 2` 还会拒绝所有奇数个字的标题（`post 你好吗`）。本库 2 处（1 个文件）：`if ((strlen(name) < 2) || (strlen(name) > 12)) {`（`/adm/daemons/logind.lpc:512`）。`scripts/lpc_fix_strlen_gate.py` 以提示为准：条件里每个 `strlen` 门槛都恰是提示所说数字的两倍才折半，存长度的变量（`i = strlen(arg);`）的门槛和 `|| i % 2` 奇偶项、其后循环的 `i % 2 == 0 &&` 一并处理；提示里有英文 / 字母 / 字节的不动。证明（`scripts/lpcc_eval.py`，bxsj 的留言板，求值对象继承 NPC 并重写 `edit()` 记录调用，`command("post 标题")`）：HEAD 拒绝「你好」和「你好吗」、放行 23 个字的标题；改后接受前两个、拒绝第三个；shenmo 的 `named.lpc invalid_new_name("张三")`：HEAD 回 `名字只能是2-4个中文字。`，改后回 0。抽样 24 + 15 个库的 HEAD / 工作树加载对比 0 退步。

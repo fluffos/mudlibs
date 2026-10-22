@@ -706,3 +706,7 @@ xkx100 的原文是 `vc = victim->add("vote/count", 1);`，nitan 系把它写成
 ## 全局头文件里的宏，`carry_object` 守卫以前看不见：44 处（2026-10-22，KB 06 §7.361）
 
 `config.fluffos` 的 `global include file` 会被驱动塞进每个对象，文件里没有写 `#include` 也能用 `ARMOR_D("shoes")` / `BINGQI_D("langya-bang")` 这类宏；`lpc_guard_carry_object.py` 的宏表只读文件自己写出来的 `#include`，认不出它们，第 46 批 `--macro` 把这些行整个跳过了——NPC 在 `create()` 里 `carry_object(ARMOR_D("shoes"))->wear()`，文件不存在，`new()` 答 0，`->wear()` 抛 `Bad argument 1 to EFUN call_other()`，NPC 加载不了。宏表现在加上全局头文件；本库 44 处改成守卫块（缺文件就不穿，文件回来照旧穿）。证明（HEAD / 工作树加载对比，只含改过的 `.lpc`）：HEAD 加载失败的对象里有 10 个现在能加载，0 退步（quest11 的镖师、金蛇、九阴、葵花、天龙八部各路 NPC 等）。其余仍失败的文件失败在别的原因（`Unable to find the inherited function`、`Undefined variable 'RNAME_D'`），不属于这一类。
+
+## 长度检查按字节写，旁边的提示按汉字写：14 处（2026-10-22，KB 06 §7.362）
+
+老档的 `strlen()` 数字节（一个汉字 2 字节），转成 UTF-8 后它数字符：提示写「必须是 2 到 6 个中文字」的检查还是 `strlen(name) < 4 || strlen(name) > 12`，于是两三个字的房名、帮会名、群名、聊天室名、称号被提示自己说允许的那句话拒绝，上限却是提示的两倍；留言板的标题检查 `i < 4 || i > 24 || i % 2` 还会拒绝所有奇数个字的标题（`post 你好吗`）。本库 14 处（7 个文件）：`if ((strlen(name) < 4) || (strlen(name) > 12)) {`（`/adm/npc/luban.lpc:1765`）；`if ((strlen(name) < 2) || (strlen(name) > 10)) {`（`/d/city/npc/petseller.lpc:184`）。`scripts/lpc_fix_strlen_gate.py` 以提示为准：条件里每个 `strlen` 门槛都恰是提示所说数字的两倍才折半，存长度的变量（`i = strlen(arg);`）的门槛和 `|| i % 2` 奇偶项、其后循环的 `i % 2 == 0 &&` 一并处理；提示里有英文 / 字母 / 字节的不动。证明（`scripts/lpcc_eval.py`，bxsj 的留言板，求值对象继承 NPC 并重写 `edit()` 记录调用，`command("post 标题")`）：HEAD 拒绝「你好」和「你好吗」、放行 23 个字的标题；改后接受前两个、拒绝第三个；shenmo 的 `named.lpc invalid_new_name("张三")`：HEAD 回 `名字只能是2-4个中文字。`，改后回 0。抽样 24 + 15 个库的 HEAD / 工作树加载对比 0 退步。
