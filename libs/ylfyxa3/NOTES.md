@@ -1079,3 +1079,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## `findfile`、`updir`：不带参数（2026-10-21，KB 06 §7.336）
 
 ToMud 升级用的两条指令（`cmds/bos/findfile.lpc`、`updir.lpc`）不带参数时报 `Bad argument 1 to sscanf() Expected: string Got: 0.`：`findfile` 的 `sscanf(arg, "%s,%s", dir, str)` 前面是一段注释掉的代码，`updir` 的 `sscanf(arg, "%s -debug", arg)` 在 `if (playerp(previous_object()))` 里面。`findfile` 补了 `if (!arg) return help(me);`（`help()` 在 `main()` 之后，补了原型），`updir` 在开头 `if (!arg) arg = "";`，不带参数就列出当前目录。
+
+## 丘处机、觉远的 `accept_object()`：参数和局部变量的名字对不上（2026-10-21，KB 06 §7.348）
+
+yxxcii 的 `qiu.lpc`、`qiu1.lpc`：`accept_object(object me, object ob)` 里判断的是 `obj->query("name")`，`obj` 是没赋值的局部，交上药材一律抛错。ylfyxa3 的 `jueyuan.lpc` 把参数表丢了（`int accept_object()`），函数里读 `obj`（xajh4gkb 的同一份文件是 `accept_object(object me, object ob)`）。把参数名改回来。改动：`/d/shaolin/npc/jueyuan.lpc`。

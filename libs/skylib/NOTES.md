@@ -848,3 +848,7 @@ Rescanned with the current driver; mechanical fixes: 1 functions made varargs (c
 - `std/dom/cmn_mas.lpc`: the base of the domain common rooms has an `int do_list(string)` (the `list` command, called through a function pointer in its `init()`), and `d/liaison/common.lpc` defines another `do_list( object *indir, ... )`, the verb handler `add_command("list", this_object(), ...)` finds by name. The two disagree on the argument count (`Number of arguments to 'do_list' disagrees with previous definition`). The base function is now `list_domain` (3 sites); the verb handler keeps its name, the command system looks it up by it.
 
 Every object loaded at HEAD and in the tree: no regression (`d/liaison/common.lpc` does not load at HEAD either).
+
+## Club control room `do_transfer()`: `obj->dest_me()` on a local nobody set (2026-10-21, KB 06 §7.348)
+
+`do_transfer()` ends its failure branch with `obj->dest_me();`, pasted from `do_withdrawl()` (which created a money object that must be destroyed when the withdrawal fails). `do_transfer()` creates nothing and `object obj;` is never assigned, so a failed transfer raised `Bad argument 1 to call_other() ... Got: int(0)` instead of printing "Unable to remove the money from the account.". The declaration and the call are removed. Changed: `/std/room/club_control_room.lpc`.

@@ -1289,3 +1289,15 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 观礼台 `d/city/under.lpc`：`wait_and_start()` 里的 `fan` 没赋值，比武开不了（2026-10-21，KB 06 §7.346）
 
 接受挑战（`defend`）两秒后 `wait_and_start()` 调用 `fan->command("chat ...比武开始")`，`object fan;` 声明了却没有 `fan = load_object(__DIR__ "npc/fan");`（dtxywzxzb 的同一份文件有），抛错之后两条 `kill` 和 `call_out("finish_match", 300)` 都不执行，比赛不开始。补上这一句（`npc/fan.lpc`、`ground.lpc` 本库都有）。
+
+## 七龙珠 `combine`：六次 `present()` 都存进了 `b`（2026-10-21，KB 06 §7.348）
+
+每颗龙珠的 `do_combine()` 先检查身上有另外六颗：`if (!(b = present("liang longzhu", me))) ... if (!(b = present("fen longzhu", me))) ...`，六句都写成 `b =`，后面 `destruct(b); destruct(c); ... destruct(g)` 的 `c` 到 `g` 一直是 0。这几个库的 `destruct()` sefun 对 0 不抛错（原始 efun 也不抛），结果是合成神龙时只消耗了最后一颗和合成者自己，另外五颗还留在身上，可以反复合成。改成 `b, c, d, e, f, g`（shenmo 的 `/d/longzhu/obj/*` 是对的）。sjsh 上实测：HEAD 合成之后背包里还剩青、黄、蓝、粉、亮五颗，改后只剩神龙。改动：`/d/newjob/longzhu/obj/1.lpc`、`/d/newjob/longzhu/obj/2.lpc`、`/d/newjob/longzhu/obj/3.lpc`、`/d/newjob/longzhu/obj/4.lpc`、`/d/newjob/longzhu/obj/5.lpc`、`/d/newjob/longzhu/obj/6.lpc`、`/d/newjob/longzhu/obj/7.lpc`。
+
+## 金箍咒 `cast()`：`ob` 没赋值（2026-10-21，KB 06 §7.348）
+
+`name = "“" + ob->query("name") + "”"` 前面的 `ob = present("jingu zhou", me)` 被注释掉，NPC（观音、大士）念咒时抛错。改成取身上的咒物，没有就用“紧箍咒”（完整效果）；成功时的 `destruct(ob)` 仍然只销毁真正的咒物。改动：`/daemon/class/bonze/jinguzhou.lpc`。
+
+## 独孤九剑「八剑齐飞」「缠剑诀」：对手没赋值（2026-10-21，KB 06 §7.348）
+
+`bajian.lpc`：`target = offensive_target(me)` 被注释掉，`environment(target)` 抛错，整招用不出来；改成 `target = me->select_opponent()`（同库 `chan.lpc` 的写法）并判空。`chan.lpc`：消息里读 `weapon2->name()`，`weapon2`（对手的武器）从没赋值，补 `weapon2 = target->query_temp("weapon")`，对手空手时提示一句。改动：`/daemon/class/jwm/dajiang-jianfa/bajian.lpc`、`/daemon/class/public/dugu-jiujian/chan.lpc`。

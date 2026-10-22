@@ -425,3 +425,11 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## `obj.h.es2`：`blockade` / `recover` 包含的头文件档案里没有（2026-10-21，KB 04 §6.23）
 
 `blockade.lpc`、`recover*.lpc` `#include <obj.h.es2>`（`OBJ_*`、`NPC_*` 路径的 ES2 头文件，hy5、xkx100 等 33 个库带着），本库的 include 目录没有它，这些指令从来编译不了（`Cannot #include obj.h.es2`），`data/keep` 的修补也无从生效。指令本身不用里面的宏；从同系的 hy5 复制一份头文件，加载检查 HEAD 与工作树对照：2 个对象原来加载失败，现在通过，没有退步。
+
+## `selfthinking`、`qlian`：缺乏实战经验的提示读了不存在的老师（2026-10-21，KB 06 §7.348）
+
+自创武功的自习指令在“技能等级³/10 大于实战经验”时打印 `printf("也许是缺乏实战经验，你对%s的回答总是无法领会。\n", ob->name())`。这一句是从 `learn` 抄来的，`ob` 是老师；自习没有老师，`object ob;` 从没赋值，`ob->name()` 抛 `call_other() ... Got: int(0)`。改成 `你对「%s」的疑问总是无法领会` 加 `to_chinese(skillname)`，去掉没用的 `object ob;`。改动：`/cmds/skill/selfthinking.lpc`。
+
+## 瓦耳拉齐 `ask_back`：送回去的是没赋值的 `ob`（2026-10-21，KB 06 §7.348）
+
+带着地图问“回去”时 `ob->move(__DIR__ "entrance")`：`ob` 没赋值，路径也错成了 `/d/gaochang/npc/entrance`。xkx100 的原文是 `me->move("/d/gaochang/entrance");`，照改，去掉 `object ob;`。改动：`/d/gaochang/npc/wuaer.lpc`。

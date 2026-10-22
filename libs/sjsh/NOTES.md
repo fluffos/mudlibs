@@ -352,3 +352,11 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## `ccast`、`ssteal`、`jji`、`pperform`：新手保护检查贴在目标赋值之前（2026-10-21，KB 06 §7.346）
 
 `/cmds/std/jji.lpc`、`/cmds/std/pperform.lpc`、`/cmds/std/ssteal.lpc`：vikee 加的“本站暂时保护新手”检查 `if (userp(target) && target->query("age") < 16)`（以及后面两句 `... && userp(target)`）贴在 `target = present(...)` 之前。老驱动里 `userp(0)` 是 0，这几句从来不会触发；这里 `userp(0)` 抛错，指令一用就死。保持原来的（不触发）效果：赋值之前的 `userp(target)` 改成 `objectp(target) && userp(target)`。`pperform` 的检查还写着没声明的 `obj->query("target")`（整条指令编译不了），改成 `target->query("age")`，和其他几条一致。
+
+## 七龙珠 `combine`：六次 `present()` 都存进了 `b`（2026-10-21，KB 06 §7.348）
+
+每颗龙珠的 `do_combine()` 先检查身上有另外六颗：`if (!(b = present("liang longzhu", me))) ... if (!(b = present("fen longzhu", me))) ...`，六句都写成 `b =`，后面 `destruct(b); destruct(c); ... destruct(g)` 的 `c` 到 `g` 一直是 0。这几个库的 `destruct()` sefun 对 0 不抛错（原始 efun 也不抛），结果是合成神龙时只消耗了最后一颗和合成者自己，另外五颗还留在身上，可以反复合成。改成 `b, c, d, e, f, g`（shenmo 的 `/d/longzhu/obj/*` 是对的）。sjsh 上实测：HEAD 合成之后背包里还剩青、黄、蓝、粉、亮五颗，改后只剩神龙。改动：`/d/longzhu/obj/1.lpc`、`/d/longzhu/obj/2.lpc`、`/d/longzhu/obj/3.lpc`、`/d/longzhu/obj/4.lpc`、`/d/longzhu/obj/5.lpc`、`/d/longzhu/obj/6.lpc`、`/d/longzhu/obj/7.lpc`。
+
+## 六道轮回 `ldlh`：`check_fight()` 里的 `weapon` 没赋值（2026-10-21，KB 06 §7.348）
+
+施展后每秒的 `call_out("check_fight", 1, me)` 第一轮就在 `weapon->query("apply/skill_type")` 抛错，`remove_effect()` 永远不执行，`ldlh` 和 `lunhui` 两个标记一直留在身上。补 `weapon = me->query_temp("weapon");`（`perform()` 里同样的写法）。武器类型的判断原来是 `apply/skill_type != "stick" || (apply/skill_type != "stick" && skill_type != "stick")`，第一项恒真（本库没有任何武器设过 `apply/skill_type`），补上赋值后效果会在一秒后结束；去掉第一项，改成“两个属性都不是 stick 才结束”，并加 `!weapon ||`（卸了武器视同效果结束）。改动：`/daemon/class/ghost/kusang-bang/ldlh.lpc`。

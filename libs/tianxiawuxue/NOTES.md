@@ -1291,3 +1291,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 蜀山厨子 `chuzi`：给食物的两行 `new()` 被注释掉了（2026-10-21，KB 06 §7.346）
 
 `do_yao()` 里 `m = new("d/obj/food/dishes/dish10");` / `mm = ...` 两行是注释，后面的 `m->move(this_player()); mm->move(this_player());` 还在：向厨子要东西一律抛错。本库没有 `dish10`，按 chidi 的同一份文件改成 `clone/food/baozi` 和 `clone/food/jiudai`（本库都有）。
+
+## 谷物加工厂 `goldwork2/3/4`：工作太久被赶出去时 `ob->move(..)`（2026-10-21，KB 06 §7.348）
+
+`working()` 在连续工作次数超过 60+random(100) 时，运气低于 25 的人被送回广场：`if ((int)me->query("kar") < 25) ob->move("/d/city/guangchang");`，`ob` 声明了没赋值（同一目录的 `goldwork.lpc`、`goldwork5.lpc` 写的是 `me->move`）。抛错在 `me->set_temp("working", 0)` 和 `cot--` 之前，房间里的工人计数漏掉一个，三次之后“人手已经够了”永远不再收人。改成 `me->move(..)`，去掉 `object ob;`。改动：`/d/city/goldwork2.lpc`、`/d/city/goldwork3.lpc`、`/d/city/goldwork4.lpc`。

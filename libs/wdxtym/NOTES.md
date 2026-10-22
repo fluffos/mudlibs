@@ -618,3 +618,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 蜀山厨子 `chuzi`：给食物的两行 `new()` 被注释掉了（2026-10-21，KB 06 §7.346）
 
 `do_yao()` 里 `m = new("d/obj/food/dishes/dish10");` / `mm = ...` 两行是注释，后面的 `m->move(this_player()); mm->move(this_player());` 还在：向厨子要东西一律抛错。本库没有 `dish10`，按 chidi 的同一份文件改成 `clone/food/baozi` 和 `clone/food/jiudai`（本库都有）。
+
+## wdxtym：宠物心跳、金兵、葵花宝典（2026-10-21，KB 06 §7.348）
+
+`clone/pet/{pet,kaijia,zhanhun}.lpc` 的 `heart_beat()`（`set_heart_beat(1)`）每秒读一次没赋值的 `ob`（宠物的主人）并抛错；主人存在 `query("possessed")`（`petowner.lpc` 创建宠物时设置），改成 `ob = query("possessed")` 并判空。`quest/weiguo/jinbing/jin4.lpc` 的 `die()`：`obn = new("/clone/money/gold")` 被注释掉，`obn->set_amount(..); obn->move(me)` 还在，金兵特务一死就抛错（jin1~3 已经没有这段），去掉这两句。`clone/book/kuihua.lpc`、`kuihuabaodian.lpc`：读书时精不够就找护心丹 `present("huxin dan", obj)`，`obj` 没赋值，改成 `me`。改动：`/clone/book/kuihua.lpc`、`/clone/book/kuihuabaodian.lpc`、`/clone/pet/kaijia.lpc`、`/clone/pet/pet.lpc`、`/clone/pet/zhanhun.lpc`、`/quest/weiguo/jinbing/jin4.lpc`。

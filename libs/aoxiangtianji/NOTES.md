@@ -729,3 +729,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## `xupdate`：`file[sizeof(file)] != '/'` 永远为真（2026-10-21，KB 06 §7.343）
 
 管理员扫描里 `xupdate`（xyj2000）从根目录 `/` 开始递归时报 `Bad argument 2 to foreach Expected: array Got: 0.`：`UpdateDir()` 用 `file[sizeof(file)] != '/'` 判断路径是否已经以 `/` 结尾，下标等于长度读到的是 0，条件永远成立，`/` 变成 `//`，`get_dir("//")` 答 0。改成 `file[<1] != '/'`。同一个写法在 `xrm`、`rm`、`rmdir1`、`rmhir` 里有 55 处，没有动：对普通路径新旧写法的行为相同，唯一改变的是 `xrm /`，旧写法让它死在第一个 `get_dir("//")`，改了它就能递归删光整个游戏目录。
+
+## aoxiangtianji `teamwar`：领军者撤出战场的广播读没赋值的 `ob`（2026-10-21，KB 06 §7.348）
+
+`check_teamjob()` 在领军者不是玩家或没有环境时广播 `ob->name() + "从战场撤退了，宣告本次任务失败了！"`，`ob` 到后面的 `foreach` 才赋值；改成领军者的名字（没有就写“领军者”）。改动：`/obj/quest/teamjob/teamwar.lpc`。

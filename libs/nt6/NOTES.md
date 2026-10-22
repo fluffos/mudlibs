@@ -659,3 +659,7 @@ xkx100 的原文是 `vc = victim->add("vote/count", 1);`，nitan 系把它写成
 ## 任务分配 `quest`：按顺序找目标的备用循环用了 `living[j]`（2026-10-21，KB 06 §7.347）
 
 `/feature/quest.lpc`：先随机挑目标（`j = random(sizeof(living))`），挑不中再“按顺序找”：`for (i = 0; i < sizeof(living); i++) if (check(living[j], ...)) { target = living[j]; break; }`。下标写成了 `j`（上一个循环最后一次的随机下标），备用循环把同一个 NPC 检查 `sizeof(living)` 遍，世界小的时候任务就分不出去。xkx100 的原文就是这样，派生库照抄。改成 `living[i]`。
+
+## `combatd.lpc` 的阵法防御：先问 `ob->is_busy()`，后给 `ob` 赋值（2026-10-21，KB 06 §7.348）
+
+对手在阵里、气或精低于 40% 时执行 `!ob->is_busy() && objectp(ob = victim->query_array_obstructor())`，`ob` 此时是 0，`do_attack()` 在战斗中途抛错。hhsj、nitan170911、nitan3、nitan_ceshi、nitan_san 是 `objectp(ob = ...) && !ob->is_busy()`，对调回来。`u/lonely/combatd.lpc` 是巫师的开发副本，不动。改动：`/adm/daemons/combatd.lpc`。

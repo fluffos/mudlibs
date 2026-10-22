@@ -1602,3 +1602,7 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## 巫师命令不带参数时对 0 调用 efun（2026-10-21，KB 06 §7.336）
 
 巫师（管理员）把命令敲成不带参数时，驱动把 0 传给字符串参数；下面的命令第一句就把这个 0 交给 efun，运行时报 `Bad argument 1 to ...`，这条指令从来没有用过。用 `scripts/lpcc_bare.py` 不登录、在一次 `lpcc` 求值里以 0 调用 `main()` 逐个确认后，由 `scripts/lpc_fix_bare_arg.py` 在第一处使用参数的语句前加守卫：文件自带 `int help(object me)` 的，守卫是 `if (!arg) return help(me);`（`help()` 定义在 `main()` 之后的 1 个文件补了原型 `int help(object me);`，否则编译报 `Undefined function help`）。改动（1 个文件，括号里是接住 0 的 efun）：`/cmds/wiz/test.lpc`（`present`）。加载检查 HEAD 与工作树对照，没有退步。
+
+## 玄剑录华山台阶 `valid_leave()`：`living(obj)`（2026-10-21，KB 06 §7.348）
+
+`object obj;` 从未赋值，`living(obj)` 抛错，离开这间房一律失败。别的库的同一个房间没有这个函数；判断的是走的人，改成 `living(me)`，去掉 `obj`。改动：`/d/huashan/stair.lpc`。

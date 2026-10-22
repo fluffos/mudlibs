@@ -1433,3 +1433,7 @@ The 53 files are 52 `.C` -> `.lpc` (the tea items of `d/city/npc/tea`, the Lingj
 ## 登录密码超过 255 字节：`crypt()` 抛错（2026-10-20，KB 06 §7.294）
 
 驱动的 `crypt()` 对超过 255 字节的密钥直接报错（`Error in crypt(), check your salt`），老驱动则按任意长度散列。在登录提示符下输入 256 字节以上的密码，密码检查那一行就抛错，连线停在一个裸的 `> ` 提示符上，登录走不完（`password` 指令的旧密码检查同样）；用 300 个 `x` 当参数的扫描发现的。`/adm/single/simul_efun.lpc` 里补了一个同名的 simul_efun `crypt(key, salt)`：只有超长的密钥才被截短（先截到 255 个字符，再逐字符截到 `sizeof(to_buffer(key)) <= 255`，限制按字节算，一个汉字占三个字节），再交给 `efun::crypt()`；普通密码原样散列，已存的密码散列不受影响（`scripts/lpc_add_sefun.py crypt`）。
+
+## shenzhou：武当知客 `greeting()`、西夏使者 `assign_job()`（2026-10-21，KB 06 §7.348）
+
+`zhike.lpc`：提前返回的判断 `!living(ob) || strsrch(file_name(where), ..)` 读 `ob`、`where`，赋值在判断下面：每个来客都抛错，知客的问候从未出现。把赋值提到前面并判 `where` 为空。`xixiashizhe.lpc`：派任务的最后一句 `ob->set("owner", ..)`，`ob` 没赋值（xkx2001 的原文那里发的是 `ypling` 令牌，shenzhou 的这个使者不发令牌），删掉这一句和 `object ob`。改动：`/d/qilian/npc/xixiashizhe.lpc`、`/kungfu/class/wudang/zhike.lpc`。

@@ -966,3 +966,7 @@ The driver's `crypt()` raises (`Error in crypt(), check your salt`) for a key ov
 ## 存档里的 `.c` 文件名改成 `.lpc`（2026-10-21，KB 03 §4.2 第 9 项）
 
 存档里写着 `"/d/city/npc/wei.c"` 这样的文件名；extract 时源文件已经全部改成 `.lpc`，而驱动对带扩展名的路径只认字面，`new()` / `load_object()` / `move()` 都找不到它，调用方多半把失败当成「没有这个东西」悄悄跳过。本库 1 个存档共 1 处按 `scripts/lpc_fix_save_dotc.py` 改成 `.lpc`（只改 `.lpc` 存在而 `.c` 不存在的字符串；玩家存档、备份、留言板、巫师目录和文件索引缓存不动）。改动：`/data/adm/daemons/doc_d/Root.o`（1 处）（共 1 个存档）。
+
+## `std/body/attack.lpc` 的 `die()`：“坏死亡调用”的日志读了还没赋值的 `killer`（2026-10-21，KB 06 §7.348）
+
+`hit_points >= 0` 时 `die()` 被误调用，日志要写 "bad death call by ..." 和 `file_name(killer)`，但 `killer` 要到几行之后才赋值（`last_attacker` 或 `previous_object()`）。这一处改成 `file_name(previous_object())`（调用者就是“坏调用”的来源），后面真正的死亡记录不动。改动：`/std/body/attack.lpc`。

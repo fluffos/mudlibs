@@ -1018,3 +1018,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 观礼台 `d/city/under.lpc`：`wait_and_start()` 里的 `fan` 没赋值，比武开不了（2026-10-21，KB 06 §7.346）
 
 接受挑战（`defend`）两秒后 `wait_and_start()` 调用 `fan->command("chat ...比武开始")`，`object fan;` 声明了却没有 `fan = load_object(__DIR__ "npc/fan");`（dtxywzxzb 的同一份文件有），抛错之后两条 `kill` 和 `call_out("finish_match", 300)` 都不执行，比赛不开始。补上这一句（`npc/fan.lpc`、`ground.lpc` 本库都有）。
+
+## 忆如鞭「天地同泣」：`weapon` 没赋值（2026-10-21，KB 06 §7.348）
+
+招式描述里读 `weapon->query("name")`，`weapon` 从未赋值，每次使用都抛错。补 `weapon = me->query_temp("weapon");`，没装备武器时提示一句（同目录的 `yue.lpc` 要求拿鞭子，这里不加类型限制）。改动：`/daemon/class/shushan/yirubian/tiandi.lpc`。

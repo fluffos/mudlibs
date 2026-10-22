@@ -673,3 +673,11 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## `cp`：第一条日志的 `sprintf(...)` 参数表丢了（2026-10-21，KB 04 §6.28）
 
 `/cmds/wiz/cp.lpc` 编译不了（`syntax error, unexpected '}'`）：单个文件复制成功后写日志的 `sprintf("%s(%s) copy (%s) to (%s) on %s at %s.\n", me->name(),` 之后紧接着就是 `if` 的 `}`，参数表的下半截丢了（同一个文件里另外两处同样的调用是完整的）。按那两处补上 `me->query("id"), src, dst, query_ip_name(me), ctime(time())));`。
+
+## `selfthinking`、`qlian`：缺乏实战经验的提示读了不存在的老师（2026-10-21，KB 06 §7.348）
+
+自创武功的自习指令在“技能等级³/10 大于实战经验”时打印 `printf("也许是缺乏实战经验，你对%s的回答总是无法领会。\n", ob->name())`。这一句是从 `learn` 抄来的，`ob` 是老师；自习没有老师，`object ob;` 从没赋值，`ob->name()` 抛 `call_other() ... Got: int(0)`。改成 `你对「%s」的疑问总是无法领会` 加 `to_chinese(skillname)`，去掉没用的 `object ob;`。改动：`/cmds/skill/selfthinking.lpc`。
+
+## `persuade`（渡世济人）：`ob->query("no_fight")` 的 `ob` 没赋值（2026-10-21，KB 06 §7.348）
+
+峨嵋弟子用 `persuade` 一律在第三个判断抛错；其余 146 份同类指令写的是 `environment(me)->query("no_fight")`。这里的 `ob` 还是后面 `call_out("compelete_dushi", 3, me, victim, ob, ..)` 传下去的第三个参数（`compelete_dushi` 没用它），所以在判断前加 `ob = environment(me);`。改动：`/cmds/std/persuade.lpc`。

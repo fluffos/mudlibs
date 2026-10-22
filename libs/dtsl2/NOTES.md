@@ -862,3 +862,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## `who -l`、`who -w`：`/cmds/usr/score.lpc` 不存在（2026-10-21，KB 06 §7.344）
 
 加入了势力的玩家（`shili` 有值）在长列表里走 `"/cmds/usr/score.lpc"->get_shili(list[j])`。dtsl2 的 `score` 在 `cmds/std/`、里面也没有 `get_shili()`，所以只要有一个玩家在势力里，`who -l` 对所有人都报错。dtsl 的 `cmds/usr/score.lpc` 里这个函数只是转发 `ORG_D->get_shili(ob)`，改成直接调用 `ORG_D->get_shili(list[j])`（`include/org.h`，`adm/daemons/orgd.lpc`）。
+
+## 房屋管理员 `do_apply()`：`spouse` 没赋值（2026-10-21，KB 06 §7.348）
+
+检查配偶是否在场的几行被注释掉，下面 `!me->query_temp("rental_paid") && !spouse->query_temp("rental_paid")` 照用：没交租金的人申请房子时抛错，而不是 "世上只怕没有便宜的房子哦。"。补 `if (stringp(partner)) spouse = present(partner, environment(me));`，判断改成 `!(spouse && spouse->query_temp(..))`。改动：`/d/slwg/npc/officer.lpc`。

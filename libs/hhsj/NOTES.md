@@ -1010,3 +1010,11 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 任务分配 `quest`：按顺序找目标的备用循环用了 `living[j]`（2026-10-21，KB 06 §7.347）
 
 `/feature/quest.lpc`：先随机挑目标（`j = random(sizeof(living))`），挑不中再“按顺序找”：`for (i = 0; i < sizeof(living); i++) if (check(living[j], ...)) { target = living[j]; break; }`。下标写成了 `j`（上一个循环最后一次的随机下标），备用循环把同一个 NPC 检查 `sizeof(living)` 遍，世界小的时候任务就分不出去。xkx100 的原文就是这样，派生库照抄。改成 `living[i]`。
+
+## 华山密室 `stage3()`：重新登录那段被注释掉，`obj` 没赋值（2026-10-21，KB 06 §7.348）
+
+练成之后 `obj = LOGIN_D->make_body(link_ob); ... exec(link_ob, me); destruct(me); ...` 整段在注释里，下面的 `obj->move(place); obj->write_prompt(); set(.., obj); obj->save();` 还在：属性已经加完，抛错发生在“恢复气血、存盘”之前。xkx100 系的库里这段是启用的；这里补 `obj = me;`，下面几句直接作用在玩家本人身上。改动：`/d/huashan/mishi.lpc`。
+
+## hhsj 金灵巨兽 `die()`：广播里的 `ob->query("name")`（2026-10-21，KB 06 §7.348）
+
+杀死金灵巨兽的人是 `enemy`，广播 “大道之音.<名字>干掉了金灵巨兽” 读的却是后面才赋值的 `ob`：每次被击杀都在 `::die()` 之前抛错。改成 `query("name", enemy)`。改动：`/d/hunduntian/npc/u.lpc`、`/d/u.lpc`。

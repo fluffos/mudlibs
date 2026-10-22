@@ -1299,3 +1299,27 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 富贵山庄裁缝 `clothlady`：一行丢了换行，`obj = new(..)` 成了注释（2026-10-21，KB 06 §7.346）
 
 `//    say (...);                    obj = new(__DIR__"obj/notecase");` 在文件里是一行（档案丢了换行），`new()` 被 `//` 吞掉，`obj->move(this_player())` 对 0 调用。拆回两行（fengyun434 的同一份文件是两行）。
+
+## `selfthinking`、`qlian`：缺乏实战经验的提示读了不存在的老师（2026-10-21，KB 06 §7.348）
+
+自创武功的自习指令在“技能等级³/10 大于实战经验”时打印 `printf("也许是缺乏实战经验，你对%s的回答总是无法领会。\n", ob->name())`。这一句是从 `learn` 抄来的，`ob` 是老师；自习没有老师，`object ob;` 从没赋值，`ob->name()` 抛 `call_other() ... Got: int(0)`。改成 `你对「%s」的疑问总是无法领会` 加 `to_chinese(skillname)`，去掉没用的 `object ob;`。改动：`/cmds/skill/selfthinking.lpc`。
+
+## 黄蓉 `ask_husband`：找优胜者的那段被注释掉，`user` 没赋值（2026-10-21，KB 06 §7.348）
+
+`ask rong about 丈夫` 对谁都抛 `Bad argument 1 to call_other() ... Got: int(0)`：优胜者（`nvxu->query("winner")`）不是提问的人时，原来先 `find_player(id)`，找不到就 `new(USER_OB, id)->restore()` 把离线的人读出来；这段被注释掉，下面的 `user->query("death_count")` 照用。默认没有优胜者（`winner` 为 0）。改成只找在线的优胜者（`user = stringp(id) ? find_player(id) : 0`），没有优胜者或优胜者离线时直接回答“我的丈夫就是”加女婿 NPC 的名字。hy5 上实测：HEAD 抛错，改后 “黄蓉说道：我的丈夫就是精确！”。改动：`/kungfu/class/taohua/rong.lpc`。
+
+## `xue`：禁学技能的检查读了还没有赋值的 `ob`（2026-10-21，KB 06 §7.348）
+
+`cmds/skill/xue.lpc` 在解析参数、找老师之前就判断 `ob->query_temp("no_kill") || userp(ob)`，`ob` 是 0，进来就抛错（`lpcc_bare.py`：HEAD `Bad argument 1 to EFUN call_other()`，改后正常；游戏里 `xue` 这个动词在 hy5 上走的是 `learn`，敲 `xue` 看不出来，直接调用文件才暴露）。同一段在 `learn.lpc` 里没有 `ob`。加 `objectp(ob) &&`，效果和 `learn.lpc` 一样（这一段在解析之前永远不触发）。改动：`/cmds/skill/xue.lpc`。
+
+## 铁扇公主 `unconcious()`：声明里的 `present("tie shan", me)`（2026-10-21，KB 06 §7.348）
+
+`object tieshan = present("tie shan", me);` 写在 `me = query_temp("last_damage_from")` 之前，`present(.., 0)` 抛错：公主一昏迷就抛错，火焰山的铁扇交不出来。铁扇是公主身上的（`give_tieshan()` 里同样是 `present("tie shan", me)`，那里的 `me` 是公主），改成先 `ob = this_object();`，再 `tieshan = present("tie shan", ob);`。hy5 上 `call princess->unconcious()`：HEAD 抛错，改后返回。改动：`/d/qujing/firemount/npc/princess.lpc`。
+
+## 岳飞 `imbue_event()`：`obj = me->query_temp("weapon")` 却读 `weapon`（2026-10-21，KB 06 §7.348）
+
+梦醒之后给武器“附红缨”的事件：赋值写给了 `obj`，消息里读的是没赋值的 `weapon->name()`，每次都抛错。改成 `weapon = ...`，没拿武器的返回 0（`imbue/yuefei` 没设，下次还能触发）。改动：`/d/tieflag/dreamland/npc/yue.lpc`。
+
+## 黑玉石门 `stonedoor.lpc`：第五块玉 `white` 从没赋值（2026-10-21，KB 06 §7.348）
+
+`check_needles()` 只检查绿、黑、黄、红四块玉，最后却 `white->move(env); destruct(white);`：四块玉对上之后红、绿、黄先被销毁，再在 `white` 抛错，门打不开，玉也没了。风云的上游把整段注释掉了；这里去掉 `white` 这一句和声明，四块玉对上门就开。改动：`/d/eren/eren2/obj/stonedoor.lpc`、`/d/eren/obj/stonedoor.lpc`。

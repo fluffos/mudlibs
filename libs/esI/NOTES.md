@@ -872,3 +872,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply e
 ## 当铺 `hochshop`：赎回物品后“记住的物品”往前挪的循环用错了下标（2026-10-21，KB 06 §7.347）
 
 当铺在玩家身上记着最多十件当出去的东西（`REM_ITEM_PROP_` + `DIGITS[n]`），赎回一件之后后面的往前挪一位：`for (j = i; j < my_item_num - 1; j++) me->set(REM_ITEM_PROP_+DIGITS[i], me->query(REM_ITEM_PROP_+DIGITS[i+1]));`，循环变量 `j` 没用上，一直在写第 `i` 格，后面的格子根本没动，记录就乱了。改成 `DIGITS[j]` / `DIGITS[j+1]`。
+
+## 工匠 `artisan.lpc`：`my_tactic(int damage)` 里的 `victim` 没赋值（2026-10-21，KB 06 §7.348）
+
+`attack_d` 每回合调用 `tactic_function(victim)`（`call_other(this_object(), tactic, victim)`）。工匠的 `my_tactic(int damage)` 把对手声明成了 `int`，局部的 `object victim` 从未赋值，`random(20)>10` 的那几回合 `victim->query("armor/shield")` 抛错。改成 `int my_tactic(object victim)`，开头 `if (!(victim = query_attacker())) return 0;`（本库 `teacher.lpc`、`mob_special.lpc` 的写法）。改动：`/d/eastland/mumar/monster/artisan.lpc`。

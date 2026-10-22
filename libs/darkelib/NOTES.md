@@ -912,3 +912,7 @@ The driver answers `({ object, function, delay })` without the call_out's argume
 ## A login password over 255 bytes: `crypt()` raises (2026-10-20, KB 06 7.294)
 
 The driver's `crypt()` raises (`Error in crypt(), check your salt`) for a key over 255 bytes, where the old driver hashed any length. A password of 256 bytes or more typed at the login prompt threw an error in the password check and left the connection at a bare `> ` prompt, so the login never completed (the old-password test of `password` the same); found by the sweep shape of 300 `x`. `/adm/obj/simul_efun.lpc` now defines a simulated efun `crypt(key, salt)` of the same name: only an over-long key is cut (to 255 characters, then character by character until `sizeof(to_buffer(key)) <= 255`: the limit is in bytes, a CJK character takes three) before it is handed to `efun::crypt()`; every ordinary password hashes as before and the saved hashes are untouched (`scripts/lpc_add_sefun.py crypt`).
+
+## `ritual cast`: `spell_ob` read before it exists (2026-10-21, KB 06 §7.348)
+
+In `_ritual.lpc` the test `(this_player()->query_cant_attack() == 1) && (spell_ob->query_property("combat spell") == 1)` reads `spell_ob`, which is only created some forty lines later for the dud spell: a player under a no-attack effect got `Bad argument 1 to call_other() ... Got: int(0)`. The test now asks `find_object_or_load(file)`, the object the command already queries a few lines above. Changed: `/cmds/mortal/_ritual.lpc`.

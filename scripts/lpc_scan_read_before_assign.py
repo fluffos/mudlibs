@@ -2,7 +2,7 @@
 """scripts/lpc_scan_read_before_assign.py [--twins] [SLUG...]
 
 An `object` local whose FIRST mention after the declaration is a read that raises on 0 (KB 06 section 7.346): `userp(v)`, `living(v)`, `v->f()`,
-`present(x, v)`, `environment(v)`, `wizardp(v)`, `destruct(v)` ...  The assignment is missing, comes later, or a line was lost from the copy:
+`present(x, v)`, `environment(v)`, `wizardp(v)`, `file_name(v)` ...  The assignment is missing, comes later, or a line was lost from the copy:
 the `if (userp(target) && target->query("age") < 18)` a coder pasted above the line that fetches `target` (ccast, ssteal, jji, pperform of the
 sjsh family), `ob = this_player();` gone from the `ask_me()` of four derived libs, `fan = load_object(...)` gone from the duel stand `under.lpc`
 of 16 libs.  The old driver answered 0 for `0->f()` and `userp(0)`; this one raises.
@@ -27,7 +27,7 @@ GITLINKS = {"nt7", "xkx100utf8", "fy2005", "nightmare3", "residuum", "sanguozhi"
 SKIP = re.compile(r"/(u|w|wiz|wizard|wizards|open|players|backup|backups|old|bak|log|data|doc|example|examples|realms|test|tmp|raw)/|[-_.](bak|old)/")
 FUNC = re.compile(rb"(?m)^[ \t]*(?:[a-z]+[ \t*]+)*([A-Za-z_]\w*)[ \t]*\(([^)]*)\)[ \t\r\n]*\{")
 DECL = re.compile(rb"(?m)^[ \t]*object[ \t]+([^;(=]*?(?:,[^;(]*?)*);")
-RD = r"(?:userp|living|interactive|wizardp|environment|file_name|base_name|all_inventory|first_inventory|query_idle|destruct|geteuid|getuid)"
+RD = r"(?:userp|living|interactive|wizardp|environment|file_name|base_name|all_inventory|first_inventory|query_idle|geteuid|getuid)"
 NOT_FUNC = (b"if", b"while", b"for", b"switch", b"foreach", b"catch", b"return", b"sizeof")
 
 

@@ -721,3 +721,11 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## `obj.h.es2`：`blockade` / `recover` 包含的头文件档案里没有（2026-10-21，KB 04 §6.23）
 
 `blockade.lpc`、`recover*.lpc` `#include <obj.h.es2>`（`OBJ_*`、`NPC_*` 路径的 ES2 头文件，hy5、xkx100 等 33 个库带着），本库的 include 目录没有它，这些指令从来编译不了（`Cannot #include obj.h.es2`），`data/keep` 的修补也无从生效。指令本身不用里面的宏；从同系的 hy5 复制一份头文件（`blockade.lpc` 还把 `<obj.h.es2>` 写成了 `<obj.h>`，改成与同目录的 `recover*.lpc` 一致），加载检查 HEAD 与工作树对照：3 个对象原来加载失败，现在通过，没有退步。
+
+## `selfthinking`、`qlian`：缺乏实战经验的提示读了不存在的老师（2026-10-21，KB 06 §7.348）
+
+自创武功的自习指令在“技能等级³/10 大于实战经验”时打印 `printf("也许是缺乏实战经验，你对%s的回答总是无法领会。\n", ob->name())`。这一句是从 `learn` 抄来的，`ob` 是老师；自习没有老师，`object ob;` 从没赋值，`ob->name()` 抛 `call_other() ... Got: int(0)`。改成 `你对「%s」的疑问总是无法领会` 加 `to_chinese(skillname)`，去掉没用的 `object ob;`。改动：`/cmds/skill/qlian.lpc`、`/cmds/skill/selfthinking.lpc`。
+
+## `persuade`（渡世济人）：`ob->query("no_fight")` 的 `ob` 没赋值（2026-10-21，KB 06 §7.348）
+
+峨嵋弟子用 `persuade` 一律在第三个判断抛错；其余 146 份同类指令写的是 `environment(me)->query("no_fight")`。这里的 `ob` 还是后面 `call_out("compelete_dushi", 3, me, victim, ob, ..)` 传下去的第三个参数（`compelete_dushi` 没用它），所以在判断前加 `ob = environment(me);`。改动：`/cmds/std/persuade.lpc`。
