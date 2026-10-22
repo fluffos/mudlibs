@@ -683,3 +683,7 @@ for a save`（`log/runtime`，14:50）。随后该字母目录出现，同一驱
 ## 注册到不存在函数的 `add_action`，第二轮：宏路径父类和静态解析不了的对象（2026-10-21，KB 06 §7.349）
 
 第一轮的静态解析读不了经宏路径继承父类的对象（`#define ROOM STD_DIR "room/room"` 这类定义的正文以另一个宏开头）和它解析不了的继承，这些对象当作 `UNSURE` 没有扫；第二轮修了解析器，重扫并对这些对象在运行时问 `function_exists()`。`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 1 条注册（1 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/lib/bboard.lpc`（`cmd_save`）。最多的函数名：`cmd_save` 1 处。
+
+## `log/` 下的日志子目录没有人建：写日志的 `write_file()` / `log_file()` 报错（2026-10-22，KB 06 §7.358）
+
+这个库的代码往 `log/` 的 2 个子目录写日志：`log/adm`（`secure/cmds/creators/call.lpc`）、`log/harass`（`lib/interface.lpc`）。压缩包、`git clone` 和站点包里都没有这些目录（本地启动没有写过它们，`gen_keep_dirs.py` 没记），`write_file()` 对不存在的目录抛 `*Wrong permissions for opening file /log/dlog/money for append. "No such file or directory"`，调用它的函数在写日志那一行中断，后面的奖励、标志、步骤都没有执行。本库的 `log_file()` 是 `write_file(LOG_DIR + file, text)`，目录不存在就抛同样的错误（实测）。把 `log/adm`、`log/harass` 记进 `scripts/wasm_keep_dirs.txt`（`scripts/lpc_keep_log_dirs.py`；站点和 pristine 树按它建空目录）。证明（`scripts/lpcc_eval.py`，在 `/adm/daemons` 这类目录下的求值对象里写 `/log/zzdirprobe/...`，新进程）见 KB 06 §7.358 的实测表。

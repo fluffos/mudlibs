@@ -1135,3 +1135,23 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## `(: 函数 :)` 指针指向对象自己没有定义的函数（2026-10-22，KB 06 §7.355）
 
 `item_desc` / `inquiry` / `chat_msg_combat` 里的 `(: 函数名 :)` 指向本对象（含包含文件、继承的父类）没有函数体的函数：编译不报错，用到时驱动报 `*Undefined lfun pointer called: 函数名`（`look 某物`、`ask NPC about 话题` 直接出错，战斗 / 闲聊里的指针在 NPC 的 `chat()` 里出错，这一拍心跳的后半段被跳过）。`scripts/lpc_scan_callout_targets.py --kinds=lfun`。 还剩 17 个函数没有补（inquiry 9, item_desc 6, chat_msg 1, other 1）：原型还在函数体丢了、或者根本没写过，没有可以直接补回的捐赠（别的库同一路径的文件里没有这个函数，或者它还要用本库没有的辅助函数、签名不同），不编造：`/d/chaoting/bingying/npc/zhiqin_bing.lpc`:`back_home`、`/d/city/npc/hua_girl.lpc`:`ask_me`、`/d/feitian/npc/shiren.lpc`:`away`、`/d/goathill/npc/obj/dead_leech.lpc`:`eat_tonic`、`/d/npc/guojing.lpc`:`ask_job`、`/d/npc/guojing.lpc`:`ask_gonglao`、`/d/npc/guojing.lpc`:`ask_fangqi`、`/d/npc/guojing.lpc`:`ask_jianxi`、`/d/wuguan/lianhuachi.lpc`:`look_CAI`、`/d/wuguan/lianhuachi1.lpc`:`look_CAI` 等另外 7 个。
+
+## 不带前导斜杠的物品路径：缺失物品的 `new()` / `carry_object()` 调用链加了保护（2026-10-22，KB 06 §7.73 补充）
+
+`carry_object("d/city/obj/jiasha")->wear();` 这类路径不带前导斜杠的写法在这个驱动里按根目录解析（`new("d/city/obj/changjian")` 能加载 `/d/city/obj/changjian`），所以和带斜杠的一样：文件不在压缩包里时 `new()` 返回 0，`->wear()` 在 0 上报 `Bad argument 1 to EFUN call_other()`，整个 NPC 加载不了。此前的保护工具把这种写法当作「相对当前目录，没法判断」跳过了。2 个文件里 4 处（`obj/weapon/sixhammer`、`obj/weapon/stick`）改成带保护的块（`scripts/lpc_guard_carry_object.py`）。 对这 2 个改动文件做加载检查（HEAD 与工作区对比）：HEAD 能加载 1 个，现在 2 个（新增可加载 1 个，回归 0 个）。
+
+## `#include` 路径里的一个笔误让黄蓉整个加载不了（2026-10-22，KB 04 §6.1 补充）
+
+`/quest/huang/huang.lpc`（黄蓉）第 4 行 `#include "/quset/huang/huangjobhy.lpc"`：`quset` 是 `quest` 的笔误，文件在 `/quest/huang/huangjobhy.lpc`。`Cannot #include` 之后，定义在那个文件里的 `ask_job` / `ask_gonglao` / `ask_fangqi`（`inquiry` 里的三个函数）全部成了未定义变量，NPC 编译不过。改成 `quest`。证明（`scripts/lpcc_eval.py`，HEAD 与工作区各一个新进程）：HEAD 的 `load_object("/quest/huang/huang")` 编译失败（`Cannot #include /quset/huang/huangjobhy.lpc`、`Undefined variable 'ask_job'` ...），工作区加载成功（黄蓉）。全库 11 处找不到的 `#include`（一次性静态扫描，找同名文件）里只有这一处是笔误；`/d/npc/guojing.lpc` 的 `#include "zzzjob.lpc"` / `"teamjob.lpc"` 找不到，是因为这两个文件在 `/quest/guojob/`（`/quest/guojob/guo.lpc` 是后来的郭靖，房间里对旧版 `/d/npc/guojing` 的引用都被作者注释掉了），没动。
+
+## `log/` 下的日志子目录没有人建：写日志的 `write_file()` / `log_file()` 报错（2026-10-22，KB 06 §7.358）
+
+这个库的代码往 `log/` 的 1 个子目录写日志：`log/doc/register`（`cmds/usr/helpbbs.lpc`）。压缩包、`git clone` 和站点包里都没有这些目录（本地启动没有写过它们，`gen_keep_dirs.py` 没记），`write_file()` 对不存在的目录抛 `*Wrong permissions for opening file /log/dlog/money for append. "No such file or directory"`，调用它的函数在写日志那一行中断，后面的奖励、标志、步骤都没有执行。本库的 `log_file()` 会自己建目录（实测，或读源码：nitan 系的 `assure_file()`），所以这里只记了直接用 `write_file()` / `save_object()` 写的目录。把 `log/doc/register` 记进 `scripts/wasm_keep_dirs.txt`（`scripts/lpc_keep_log_dirs.py`；站点和 pristine 树按它建空目录）。证明（`scripts/lpcc_eval.py`，在 `/adm/daemons` 这类目录下的求值对象里写 `/log/zzdirprobe/...`，新进程）见 KB 06 §7.358 的实测表。
+
+## `(: 函数名 :)` 指针指向本库没有的函数：只含这个指针的行加了注释（2026-10-22，KB 06 §7.355 补充）
+
+`inquiry` / `item_desc` / `chat_msg*` 里的 `(: 函数名 :)` 指向本对象（含包含文件、继承的父类）没有函数体的函数：用到时（`ask`、`look`、NPC 闲聊）驱动抛 `*Undefined lfun pointer called: 函数名`，这一拍心跳的后半段被跳过。这些函数没有可以补回的来源（别的库同一路径的文件里没有，或者它还要用本库没有的东西），所以 9 个文件里 9 行只含这个指针的行（`"回去": (: back_home :),` `"song": (: ask_me :),` `(: away :),`）加了注释，原文保留并写明原因，这一项当作没有这个话题 / 物品 / 闲聊条目（`scripts/lpc_fix_dangling_lfun.py`；`#include` 的文件在库里缺失的对象、指针不在整行上的写法没动）。 前提（`function_exists()`）和加载检查（HEAD 与工作区对比，本库改动的 `.lpc` 文件）的结果见 KB 06 §7.355：没有一个回归。
+
+## 写死的 `"/路径"->函数()` 指向库里没有的文件：改成现存的同名文件（2026-10-22，KB 06 §7.359）
+
+2 处语句级的 `call_other` 字面量路径，库里没有这个文件（区域改了名 / 大小写不对 / 差一个字母 / 文件挪了地方）：`"/cmds/skill/skills"->skill_level()`（`/quest/quest_jun/look.lpc`）→ `"/cmds/usr/skills"`；`"/d/mj/obj/baihong-jian"->move()`（`/d/mingjiao/npc/yingwang.lpc`）→ `"/d/mingjiao/obj/baihong-jian"`。`call_other()` 对不存在的对象抛 `couldn't find object`，所在函数当场中断。改成库里现存、并且定义了被调用函数的文件（`scripts/lpc_fix_call_path.py`；巫师目录、备份目录、名字不同的兄弟文件都不算候选）。 其中殷天正（白眉鹰王）的 `do_answer()`：玩家念对暗语（`answer 怜我世人，忧患实多；保护教主，同抗外敌`）时把白虹剑 `move` 给玩家，区域目录改名 `mingjiao` 之后这个路径没跟着改，回答暗语只得到 `couldn't find object`，剑永远发不出来。 证明（`scripts/cmd_probe`，新进程）：HEAD `answer ...` 打印 `*call_other() couldn't find object '/d/mj/obj/baihong-jian'`（`yingwang.lpc` 第 92 行），物品栏里没有剑。

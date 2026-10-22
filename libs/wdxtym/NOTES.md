@@ -650,3 +650,15 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 读不到的留言板：`"/clone/board/x"->foo();` 在 `create()` 里报错（2026-10-22，KB 06 §7.357）
 
 xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来加载留言板（`foo()` 本来就没有定义，只为了触发加载）。这个库没有这个文件，`call_other()` 报 `*call_other() couldn't find object '/clone/board/gaibang_r'`，对象留在内存里、`load_object()` 却抛错：玩家第一次走进房间就看到错误，写在 `create()` 中间的还会切掉后半段。`scripts/lpc_fix_missing_foo.py` 把 2 条单独成行的语句（`/clone/board/feitian_b`、`/clone/board/huanhua_b`；`/d/feitian/daochang.lpc`、`/d/huanhua/dating.lpc`）注释掉并写明原因（别的房间里同样的语句本来就是作者自己注释掉的）。证明和 45 个库的整体加载检查见 KB 06 §7.357。
+
+## 不带前导斜杠的物品路径：缺失物品的 `new()` / `carry_object()` 调用链加了保护（2026-10-22，KB 06 §7.73 补充）
+
+`carry_object("d/city/obj/jiasha")->wear();` 这类路径不带前导斜杠的写法在这个驱动里按根目录解析（`new("d/city/obj/changjian")` 能加载 `/d/city/obj/changjian`），所以和带斜杠的一样：文件不在压缩包里时 `new()` 返回 0，`->wear()` 在 0 上报 `Bad argument 1 to EFUN call_other()`，整个 NPC 加载不了。此前的保护工具把这种写法当作「相对当前目录，没法判断」跳过了。10 个文件里 13 处（`d/gumu/npc/obj/tiesword`、`d/wudujiao/npc/obj/jiandao`、`kungfu/class/taohua/obj/bupao`等）改成带保护的块（`scripts/lpc_guard_carry_object.py`）。 对这 10 个改动文件做加载检查（HEAD 与工作区对比）：HEAD 能加载 0 个，现在 10 个（新增可加载 10 个，回归 0 个）。
+
+## 任务副本城的出口写成不带斜杠的 `d/...` 路径，目标房间不在库里（2026-10-22，KB 06 §7.257 补充）
+
+`/quest/skills2/wunon/jiujia.lpc` 的 `north` 出口是 `"d/beijing/dongcha1"`（不带前导斜杠的路径在这个驱动里按根目录解析），这个库没有 `/d/beijing/dongcha1`；任务副本里的 `/quest/skills2/wunon/city2/dongcha1` 存在，它的 `south` 出口回到 `jiujia`（地图是对称的）：改成 `"/quest/skills2/wunon/city2/dongcha1"`。`scripts/lpc_fix_dead_exits.py` 此前只读 `__DIR__"x"` 和 `"/绝对路径"` 两种写法，现在也读不带斜杠的路径。证明（`scripts/lpcc_eval.py`，新进程）：HEAD 出口目标的 `load_object()` 返回 0，工作区加载成功。
+
+## `(: 函数名 :)` 指针指向本库没有的函数：只含这个指针的行加了注释（2026-10-22，KB 06 §7.355 补充）
+
+`inquiry` / `item_desc` / `chat_msg*` 里的 `(: 函数名 :)` 指向本对象（含包含文件、继承的父类）没有函数体的函数：用到时（`ask`、`look`、NPC 闲聊）驱动抛 `*Undefined lfun pointer called: 函数名`，这一拍心跳的后半段被跳过。这些函数没有可以补回的来源（别的库同一路径的文件里没有，或者它还要用本库没有的东西），所以 3 个文件里 8 行只含这个指针的行（`"CAI": (: look_CAI :),` `"逆刃刀": (: ask_me :),` `"铸刀": (: ask_dao :),`）加了注释，原文保留并写明原因，这一项当作没有这个话题 / 物品 / 闲聊条目（`scripts/lpc_fix_dangling_lfun.py`；`#include` 的文件在库里缺失的对象、指针不在整行上的写法没动）。 前提（`function_exists()`）和加载检查（HEAD 与工作区对比，本库改动的 `.lpc` 文件）的结果见 KB 06 §7.355：没有一个回归。

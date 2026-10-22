@@ -41,6 +41,7 @@ from lpc_fix_void_return import code_mask  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SKIP = re.compile(r"/(u|w|wiz|wizard|wizards|open|players|backup|backups|old|bak|log|data|doc|example|examples)/|[-_.](bak|old)/")
+RELPATH = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.+/-]*$")
 CALL = re.compile(rb'carry_object\(\s*(__DIR__\s*)?"([^"\n]+)"\s*\)\s*->\s*(\w+)\s*\(')
 VAR = b"carried_ob"
 
@@ -104,7 +105,9 @@ def missing(work, rel_file, dirflag, path):
     if dirflag:
         p = os.path.dirname(rel_file) + "/" + p
     if not p.startswith("/"):
-        return False                          # relative to the cwd at run time: cannot tell
+        if not RELPATH.match(p):
+            return False
+        p = "/" + p                           # a literal object path is root-relative in this driver: new("d/city/obj/changjian") loads /d/city/obj/changjian (KB 06 7.73 addendum)
     if p.endswith(".c"):                       # an explicit extension is resolved exactly (KB 03 4.2, KB 06 7.356): `y.c` finds no file when the archive's file is `y.lpc`
         return not os.path.isfile(work + p)
     p = re.sub(r"\.lpc$", "", p)
@@ -112,8 +115,7 @@ def missing(work, rel_file, dirflag, path):
 
 
 def fix(work, rel, b):
-    if re.search(rb"\b" + VAR + rb"\b", b):
-        return b, [], "uses " + VAR.decode()
+    var = fresh(b, VAR)                       # carried_ob, or carried_ob2 ... when the file has a guard block already: the blocks are siblings, never nested
     mask = code_mask(b)
     out, last, sites = [], 0, []
     for m in CALL.finditer(b):
@@ -134,14 +136,14 @@ def fix(work, rel, b):
         call = b[m.start(3):end]                                      # wear(), wield(), set_amount(10)
         out.append(b[last:m.start()])
         ls = b.rfind(b"\n", 0, m.start()) + 1
-        out.append(block(b[ls:m.start()], eol_of(b, m.start()), arg.strip(), call))
+        out.append(block(b[ls:m.start()], eol_of(b, m.start()), arg.strip(), call, var))
         last = k + 1
         sites.append(path)
     out.append(b[last:])
     return b"".join(out), sites, ""
 
 
-MACRO_EXPR = rb'(?:[A-Za-z_]\w*[ \t]*(?:\([^()\n]*\))?|"[^"\n]*")(?:[ \t]*\+?[ \t]*(?:[A-Za-z_]\w*[ \t]*(?:\([^()\n]*\))?|"[^"\n]*"))*'
+MACRO_EXPR = rb'(?:[A-Za-z_]\w*\b[ \t]*(?:\([^()\n]*\))?|"[^"\n]*")(?:[ \t]*\+?[ \t]*(?:[A-Za-z_]\w*\b[ \t]*(?:\([^()\n]*\))?|"[^"\n]*"))*'
 CALLM = re.compile(rb"carry_object\(\s*(" + MACRO_EXPR + rb")\s*\)\s*->\s*(\w+)\s*\(")
 CALLN = re.compile(rb"(?<![A-Za-z_0-9>])(carry_object|new|clone_object|unew)\(\s*(" + MACRO_EXPR + rb")\s*\)\s*->\s*(\w+)\s*\(")
 
@@ -251,8 +253,12 @@ def fix_chain(lib, work, rel, b, new_mode=False):
             if tables is None:
                 tables = macro_tables(lib, rel)
             v = resolve_here(lib, rel, expr, tables)
-            if v is None or not v.startswith("/"):
+            if v is None:
                 continue
+            if not v.startswith("/"):
+                if not RELPATH.match(v):
+                    continue
+                v = "/" + v                          # root-relative literal (see missing())
             p = re.sub(r"\.(lpc|c)$", "", v)
             if os.path.isfile(work + p + ".lpc") or os.path.isdir(work + p):
                 continue

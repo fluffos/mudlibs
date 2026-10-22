@@ -798,3 +798,7 @@ PID.
 ## `chpass`：先把参数写进日志，再对它 `sscanf`（2026-10-21，KB 06 §7.336）
 
 管理员扫描里 `chpass` 不带参数报 `Bad argument 1 to sscanf() Expected: string Got: 0.`（`cmds/adm/chpass.lpc`）：指令先 `log_file("nosave/CHPASS", ... arg)`（`%s` 吃得下 0），再 `sscanf(arg, "%s %s", userid, new_passwd)`。静态扫描只看第一次提到参数的语句，现在会越过这种只是打印或记录的提及；在记录之前加 `if (!arg) return notify_fail("指令格式：chpass <使用者代号> <密码>\n");`。
+
+## `log/` 下的日志子目录没有人建：写日志的 `write_file()` / `log_file()` 报错（2026-10-22，KB 06 §7.358）
+
+这个库的代码往 `log/` 的 2 个子目录写日志：`log/http`（`obj/http.lpc`）、`log/intermud`（`adm/intermud/i2d.lpc`）。压缩包、`git clone` 和站点包里都没有这些目录（本地启动没有写过它们，`gen_keep_dirs.py` 没记），`write_file()` 对不存在的目录抛 `*Wrong permissions for opening file /log/dlog/money for append. "No such file or directory"`，调用它的函数在写日志那一行中断，后面的奖励、标志、步骤都没有执行。本库的 `log_file()` 是 `write_file(LOG_DIR + file, text)`，目录不存在就抛同样的错误（实测）。把 `log/http`、`log/intermud` 记进 `scripts/wasm_keep_dirs.txt`（`scripts/lpc_keep_log_dirs.py`；站点和 pristine 树按它建空目录）。证明（`scripts/lpcc_eval.py`，在 `/adm/daemons` 这类目录下的求值对象里写 `/log/zzdirprobe/...`，新进程）见 KB 06 §7.358 的实测表。

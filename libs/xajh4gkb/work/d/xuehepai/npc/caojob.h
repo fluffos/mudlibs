@@ -6,7 +6,7 @@ int ask_job()
         me=this_player();
 
         myfam=(mapping)me->query("family");
-        quest = "/d/Xuehepai/quest/xhquest"->query_quest();
+        quest = "/d/xuehepai/quest/xhquest"->query_quest();
         killer=me->query_temp("last_damage_from");
         
         if (  !myfam || myfam["family_name"]!="血河派" ) 

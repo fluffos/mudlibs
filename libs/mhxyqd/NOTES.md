@@ -1050,3 +1050,19 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 运行期目录 `log/nosave` 不存在，写日志的 `write_file()` 直接报错（2026-10-22，KB 03 §4.3 补充）
 
 这个库的 35 个文件里有 53 处 `write_file("/log/nosave/...")` / `log_file("nosave/...")`（`static` 改 `nosave` 时连字符串里的日志路径一起改了，原来是 `log/static/`）：`nosave/CRASHES`、`nosave/PURGE`、`nosave/using` 等。压缩包和站点包里没有这个目录，`write_file()` 在目录不存在时抛 `*Wrong permissions for opening file /log/nosave/... for append. "No such file or directory"`，调用它的函数（杀人记录、重启记录、`call` 日志……）当场中断。把 `log/nosave` 记进 `scripts/wasm_keep_dirs.txt`（站点和 pristine 树都按它建空目录）；没有把字符串改回 `static`。证明（`scripts/lpcc_eval.py`，`catch(write_file("/log/nosave/ZZTEST", ...))`，fqyy2 / hy5 / bmxkx2001 的新进程）：补目录前报上面的错误，补后写成功。
+
+## 家丁 NPC 用了库里没有的函数式宏 `CLOTH_OB()` / `WEAPON_OB()`，加载不了（2026-10-22，KB 04 §6.16 补充）
+
+`d/wuguan/npc/jiading.lpc` 和 `jiading1.lpc`（武馆前院 `qianyuan` 的守卫）写 `carry_object(CLOTH_OB("cloth"))->wear(); carry_object(WEAPON_OB("changjian"))->wield();`：`CLOTH_OB` 在这个库里没有定义（`Undefined function CLOTH_OB`），`WEAPON_OB` 在 `include/globals.h` 里是一个裸路径字符串 `"/d/obj/weapon/"` 而不是带参数的宏，`WEAPON_OB("changjian")` 展开后是 `"/d/obj/weapon/"("changjian")`，语法错误：两个 NPC 都没有程序。同目录的别的 NPC 用的是 `__DIR__ "obj/cloth"`（区域自己的布衣）和 `/d/obj/weapon/sword/changjian`（`dongfangying`）。改成这两条路径。证明（`scripts/lpcc_eval.py`）：HEAD 两个 NPC 编译失败，工作区两个都能 `new()`，各带 2 件物品并且都已装备。
+
+## 不带前导斜杠的物品路径：缺失物品的 `new()` / `carry_object()` 调用链加了保护（2026-10-22，KB 06 §7.73 补充）
+
+`carry_object("d/city/obj/jiasha")->wear();` 这类路径不带前导斜杠的写法在这个驱动里按根目录解析（`new("d/city/obj/changjian")` 能加载 `/d/city/obj/changjian`），所以和带斜杠的一样：文件不在压缩包里时 `new()` 返回 0，`->wear()` 在 0 上报 `Bad argument 1 to EFUN call_other()`，整个 NPC 加载不了。此前的保护工具把这种写法当作「相对当前目录，没法判断」跳过了。4 个文件里 4 处（`obj/weapon/sword`）改成带保护的块（`scripts/lpc_guard_carry_object.py`）。 对这 6 个改动文件做加载检查（HEAD 与工作区对比）：HEAD 能加载 0 个，现在 6 个（新增可加载 6 个，回归 0 个）。
+
+## `log/` 下的日志子目录没有人建：写日志的 `write_file()` / `log_file()` 报错（2026-10-22，KB 06 §7.358）
+
+这个库的代码往 `log/` 的 1 个子目录写日志：`log/vote`（`d/wiz/votebox.lpc`）。压缩包、`git clone` 和站点包里都没有这些目录（本地启动没有写过它们，`gen_keep_dirs.py` 没记），`write_file()` 对不存在的目录抛 `*Wrong permissions for opening file /log/dlog/money for append. "No such file or directory"`，调用它的函数在写日志那一行中断，后面的奖励、标志、步骤都没有执行。本库的 `log_file()` 是 `write_file(LOG_DIR + file, text)`，目录不存在就抛同样的错误（实测）。把 `log/vote` 记进 `scripts/wasm_keep_dirs.txt`（`scripts/lpc_keep_log_dirs.py`；站点和 pristine 树按它建空目录）。证明（`scripts/lpcc_eval.py`，在 `/adm/daemons` 这类目录下的求值对象里写 `/log/zzdirprobe/...`，新进程）见 KB 06 §7.358 的实测表。
+
+## `(: 函数名 :)` 指针指向本库没有的函数：只含这个指针的行加了注释（2026-10-22，KB 06 §7.355 补充）
+
+`inquiry` / `item_desc` / `chat_msg*` 里的 `(: 函数名 :)` 指向本对象（含包含文件、继承的父类）没有函数体的函数：用到时（`ask`、`look`、NPC 闲聊）驱动抛 `*Undefined lfun pointer called: 函数名`，这一拍心跳的后半段被跳过。这些函数没有可以补回的来源（别的库同一路径的文件里没有，或者它还要用本库没有的东西），所以 3 个文件里 4 行只含这个指针的行（`"茶": (: ask_tea :),` `"tea": (: ask_tea :),` `"cancel": (: ask_cancel :),`）加了注释，原文保留并写明原因，这一项当作没有这个话题 / 物品 / 闲聊条目（`scripts/lpc_fix_dangling_lfun.py`；`#include` 的文件在库里缺失的对象、指针不在整行上的写法没动）。 前提（`function_exists()`）和加载检查（HEAD 与工作区对比，本库改动的 `.lpc` 文件）的结果见 KB 06 §7.355：没有一个回归。

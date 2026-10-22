@@ -39,8 +39,10 @@ OPP = {"north": "south", "south": "north", "east": "west", "west": "east", "nort
        "eastup": "westdown", "westdown": "eastup", "westup": "eastdown", "eastdown": "westup"}
 LONG = {"n": "north", "s": "south", "e": "east", "w": "west", "ne": "northeast", "sw": "southwest", "nw": "northwest", "se": "southeast", "u": "up", "d": "down"}
 DIRS = "|".join(sorted(OPP, key=len, reverse=True))
-PAIR = re.compile(rb'"(' + DIRS.encode() + rb')"\s*:\s*(?:(__DIR__)\s*"([^"\n]+)"|"(/[^"\n]+)")\s*(?=[,)\]}])')
-ADDX = re.compile(rb'add_exit\s*\(\s*"(' + DIRS.encode() + rb')"\s*,\s*(?:(__DIR__)\s*"([^"\n]+)"|"(/[^"\n]+)")')
+# a literal object path without the leading slash (`"north" : "d/city/kedian"`) is root-relative in this driver (KB 06 7.73 addendum): group 5, only under a directory name a lib keeps its rooms in
+REL = rb"(?:d|domains|world|areas|realms|rooms|quest|maps|lib|std|u|players)/[^\"\n]+"
+PAIR = re.compile(rb'"(' + DIRS.encode() + rb')"\s*:\s*(?:(__DIR__)\s*"([^"\n]+)"|"(/[^"\n]+)"|"(' + REL + rb')")\s*(?=[,)\]}])')
+ADDX = re.compile(rb'add_exit\s*\(\s*"(' + DIRS.encode() + rb')"\s*,\s*(?:(__DIR__)\s*"([^"\n]+)"|"(/[^"\n]+)"|"(' + REL + rb')")')
 
 
 _STARTS = {}
@@ -166,10 +168,14 @@ def parse_exits(slug, rel):
                 full = os.path.normpath(fdir + "/" + (name[1:] if name.startswith("/") else name))
                 s, e = m.start(2), m.end(3) + 1   # from __DIR__ to the closing quote
                 out.append((d, stem(full), s, e, "dir", name))
-            else:
+            elif m.group(4):
                 path = m.group(4).decode("utf-8", "replace")
                 s, e = m.start(4) - 1, m.end(4) + 1
                 out.append((d, stem(os.path.normpath(path)), s, e, "abs", path))
+            else:             # root-relative literal: the fix writes the absolute path
+                path = m.group(5).decode("utf-8", "replace")
+                s, e = m.start(5) - 1, m.end(5) + 1
+                out.append((d, stem(os.path.normpath("/" + path)), s, e, "abs", path))
     return out, b
 
 

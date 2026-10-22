@@ -481,3 +481,7 @@ The driver's `crypt()` raises (`Error in crypt(), check your salt`) for a key ov
 ## 深度功能测试（2026-10-21，play 扫描）：机器人学会了创建流程，27 个 mortal 命令 0 条发现
 
 创建流程：起名、`y`、密码两遍、名字格式之后进“种族选择室”（`become male human`），再到“角色定制室”（`begin`，五个选择题 a 到 d，同一个字母连着三次会被拒绝，所以每题一个字母），然后落在 Cabeiri Castle 的庭院。`scripts/play_login.py` 现在认得这三步（`prio_merentha_*`）。`scripts/play_sweep_lib.py merentha --shapes one`：27 行（`cmds/` 下 66 个文件，`admin` 目录是巫师命令，没有扫），只有一条 `needed-escape`，控制台、屏幕、卡住都没有。
+
+## `log/` subdirectories nobody created: the logging `write_file()` / `log_file()` raises (2026-10-22, KB 06 §7.358)
+
+The code of this lib writes logs into 1 subdirectory of `log/`: `log/errors` (`daemon/services/error.lpc`). Neither the archive, a `git clone` nor the site pack has them (no local boot wrote into them, so `gen_keep_dirs.py` never recorded them), and `write_file()` raises `*Wrong permissions for opening file /log/dlog/money for append. "No such file or directory"` for a missing directory: the function that logs stops on that line and what came after it (the reward, the flag, the next step) never runs. This lib's `log_file()` is `write_file(LOG_DIR + file, text)` and raises the same error for a missing directory (measured). `log/errors` are now in `scripts/wasm_keep_dirs.txt` (`scripts/lpc_keep_log_dirs.py`; the site and the pristine tree create the empty directories from it). Proof (`scripts/lpcc_eval.py`, an eval object under `/adm/daemons` or similar writes `/log/zzdirprobe/...`, fresh processes): the measured table in KB 06 §7.358.
