@@ -3,7 +3,7 @@
 // here were redeclared by every spell that inherits it (and must come after the inherit).
 
 #define MAGES "/d/class/wizard/"
-#define M_OBJ(X) MAGES+"obj/"+"X"
+#define M_OBJ(X) MAGES+"obj/"+#X
 
 // This is the message given when a mage lacks suficiant sp's to
 // cast a specific spell.

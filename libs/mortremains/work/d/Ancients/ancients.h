@@ -1,1 +1,1 @@
-#define ANCIENTS(x) "/d/Ancients/rooms/x"
+#define ANCIENTS(x) "/d/Ancients/rooms/" #x

@@ -3,6 +3,6 @@
 #include "../defs.h"
 
 #undef ROOMS
-#define ROOMS(x) BASE + "catacombs/rooms/" + "x"
+#define ROOMS(x) BASE + "catacombs/rooms/" + #x
 #undef MON
-#define MON(x) BASE + "catacombs/mon/" + "x"
+#define MON(x) BASE + "catacombs/mon/" + #x

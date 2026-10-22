@@ -1,9 +1,9 @@
 #define BASE_TOWN "/d/Prime/Petzoo/"
-#define ROOMS(x) BASE_TOWN + "rooms/" + "x"
-#define MON(x) BASE_TOWN + "mon/" + "x"
-#define OBJ(x) BASE_TOWN + "obj/" + "x"
-#define WEAPONS(x) BASE_TOWN + "weapons/" + "x"
-#define ARM(x) BASE_TOWN + "armor/" + "x"
+#define ROOMS(x) BASE_TOWN + "rooms/" + #x
+#define MON(x) BASE_TOWN + "mon/" + #x
+#define OBJ(x) BASE_TOWN + "obj/" + #x
+#define WEAPONS(x) BASE_TOWN + "weapons/" + #x
+#define ARM(x) BASE_TOWN + "armor/" + #x
 
 void fill_room(int p);
 string get_animal();
