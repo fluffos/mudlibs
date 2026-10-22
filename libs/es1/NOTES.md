@@ -817,3 +817,11 @@ Found by the live pair afterwards: `d/noden/hawk/monster/adolph.lpc` had `#inclu
 ## 工匠 `artisan.lpc`：`my_tactic(int damage)` 里的 `victim` 没赋值（2026-10-21，KB 06 §7.348）
 
 `attack_d` 每回合调用 `tactic_function(victim)`（`call_other(this_object(), tactic, victim)`）。工匠的 `my_tactic(int damage)` 把对手声明成了 `int`，局部的 `object victim` 从未赋值，`random(20)>10` 的那几回合 `victim->query("armor/shield")` 抛错。改成 `int my_tactic(object victim)`，开头 `if (!(victim = query_attacker())) return 0;`（本库 `teacher.lpc`、`mob_special.lpc` 的写法）。改动：`/d/eastland/mumar/monster/artisan.lpc`。
+
+## 拼错的 `call_out()` / `input_to()` 目标（KB 06 §7.349，2026-10-21）
+
+计时器或输入提示给驱动的函数名和文件里定义的差一个字母；驱动对不存在的函数静默不理，所以对应的计时从来没有触发过。调用和配套的 `remove_call_out()` 改成已定义的拼法：`idle_teme` → `idle_time`。改动：`/d/monk/guild/inner_room.lpc`。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 8 条注册（7 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/d/eastland/liang_shan/monster/fish11.lpc`（`kill_me`）、`/d/eastland/saulin_temple/brass/zeng7.lpc`（`do_auction`）、`/d/eastland/story/monster/elder1.lpc`（`do_embattle`）、`/d/eastland/story/weapon/elder1.lpc`（`do_embattle`）、`/d/noden/hawk/obj/tape.lpc`（`do_cast`、`do_tear`）、`/d/noden/mj/emsd.lpc`（`do_gongxian`）、`/std/npc2.lpc`（`quit`）。最多的函数名：`do_embattle` 2 处、`kill_me` 1 处、`do_auction` 1 处、`do_cast` 1 处、`do_tear` 1 处。没有动（读过）：`/d/erosmia/ekravia/object/chain_fw.lpc` 的 `do_light`（对象本身编译不过，登记留着，等对象能加载再处理）、`/d/erosmia/ekravia/object/chain_fw.lpc` 的 `write_message`（对象本身编译不过，登记留着，等对象能加载再处理）。

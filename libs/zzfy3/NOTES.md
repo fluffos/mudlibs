@@ -471,3 +471,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 观礼台 `d/city/under.lpc`：`wait_and_start()` 里的 `fan` 没赋值，比武开不了（2026-10-21，KB 06 §7.346）
 
 接受挑战（`defend`）两秒后 `wait_and_start()` 调用 `fan->command("chat ...比武开始")`，`object fan;` 声明了却没有 `fan = load_object(__DIR__ "npc/fan");`（dtxywzxzb 的同一份文件有），抛错之后两条 `kill` 和 `call_out("finish_match", 300)` 都不执行，比赛不开始。补上这一句（`npc/fan.lpc`、`ground.lpc` 本库都有）。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 24 条注册（23 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/d/city/npc/duguoyin.lpc`（`do_vendor_list`）、`/d/dali/npc/pker.lpc`（`give_quest`）、`/d/death/npc/kkking.lpc`（`give_quest`）、`/d/fy/npc/kijy.lpc`（`give_quest`）、`/d/fy/npc/oldgun.lpc`（`give_quest`）、`/d/fy/npc/renkuang.lpc`（`give_quest`）、`/d/fy/npc/smith.lpc`（`do_buy`、`do_list`）、`/d/fy/npc/sqx.lpc`（`give_quest`）、`/d/fy/npc/tiandi.lpc`（`give_quest`）、`/d/huangshan/npc/xiangke.lpc`（`do_vendor_list`） 等共 23 个文件。最多的函数名：`give_quest` 16 处、`do_vendor_list` 3 处、`do_buy` 3 处、`do_list` 1 处、`do_jump` 1 处。

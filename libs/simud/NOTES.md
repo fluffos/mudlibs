@@ -215,3 +215,7 @@ The `.c` -> `.lpc` rename changed the string but not the slice width: `f[<2..] =
 - 2026-10-14 (FluffOS 970d9f09 rescan): `test/quote.lpc` drops a local it never used (the macro test only stringifies the literal `"x"`). The file loads.
 
 - 2026-10-14: 1 files did not compile with `Type of returned value doesn't match function return type ( int vs void )`: a function declared `void` (or with no type) returns a value, which the old driver passed to the caller. Functions whose value a caller reads (add_action handlers, commands, helpers) now carry the type they return: `on_action()`. HEAD vs tree in fresh drivers: 1 objects, 0 newly loading, 0 regressions (`scripts/lpc_fix_void_return.py`, KB 04 §6.3).
+
+## `sizeof(x == n)`: the comparison inside the parentheses (KB 06 §7.350, 2026-10-21)
+
+`sizeof(tmp != 2)`, `sizeof(casualties ==1)`, `sizeof(arr==1)`, `sizeof(file_list == 0)` evaluate the comparison first and take `sizeof()` of the 0 or 1 it gives (`sizeof(1)` is 0 in this driver), so the guard or message branch never runs; in the poker dealer, where `hand` is `string *`, the typed comparison is a compile error and the dealer never loaded. Rewritten as `sizeof(x) == n`. Left alone: `/std/living.lpc` and `/std/user.lpc` `query_prestige_level()`, `/std/living/body.lpc` "one handed" (the same typo, but enabling the branch changes class and weapon rules). Changed: `/bin/wiz/mv.lpc`.

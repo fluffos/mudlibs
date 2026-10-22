@@ -487,3 +487,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 华山比武裁判 `observe()`（cctx）：残留的 `ob->set_amount(2)`（2026-10-21，KB 06 §7.348）
 
 别的库里裁判给胜者发银子：`ob = new("clone/money/silver"); ob->set_amount(2); ob->move(ob2);`。cctx 把发钱的几行删了，只剩 `ob->set_amount(2);`：第一名选手输的那几场（一半）裁判抛错。去掉这一句和没用的 `object ob;`。改动：`/d/huashan/npc/referee.lpc`。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 10 条注册（4 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/d/city2/fotang.lpc`（`do_qiao`、`do_unlock`）、`/d/shenlong/npc/byw.lpc`（`do_buy`、`do_list`、`do_sell`、`do_value`）、`/d/shenlong/npc/haiw.lpc`（`do_buy`）、`/inherit/misc/fboard.lpc`（`do_list`）。最多的函数名：`do_qiao` 2 处、`do_unlock` 2 处、`do_buy` 2 处、`do_list` 2 处、`do_sell` 1 处。

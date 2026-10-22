@@ -410,3 +410,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 天龙寺宝殿 `do_ketou()`：`me` 在赋值之前就被用来初始化 `i`（2026-10-21，KB 06 §7.346）
 
 `object me; int i = me->query_skill("buddhism", 1); ... me = this_player();`：磕头一律抛错。`object me = this_player();` 提到前面，去掉后面那句。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 14 条注册（11 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/d/dali/wuliang/anbian.lpc`（`do_tiao`）、`/d/dali/wuliang/muwu1.lpc`（`do_tiao`）、`/d/dali/wuliang/yubi.lpc`（`do_jump`）、`/d/huashan/jinshe/obj/haigu.lpc`（`do_move`）、`/d/huashan/jinshe/obj/tiexia.lpc`（`do_move`）、`/d/huashan/npc/yaba.lpc`（`do_follow`、`do_kill`）、`/d/mr/shuichi.lpc`（`do_strike`）、`/d/mr1/shuichi.lpc`（`do_strike`）、`/d/sld/npc/obj/yaolu.lpc`（`do_look`）、`/d/wudang/xiaolu4.lpc`（`do_ci`） 等共 11 个文件。最多的函数名：`do_strike` 4 处、`do_tiao` 2 处、`do_move` 2 处、`do_jump` 1 处、`do_follow` 1 处。没有动（读过）：`/d/city/npc/obj/h_cloth.lpc` 的 `do_log`（对象本身编译不过，登记留着，等对象能加载再处理）、`/d/city/npc/obj/h_cloth.lpc` 的 `do_shutdown`（对象本身编译不过，登记留着，等对象能加载再处理）、`/d/city/npc/obj/h_cloth.lpc` 的 `do_goto`（对象本身编译不过，登记留着，等对象能加载再处理）、`/d/city/npc/obj/h_cloth.lpc` 的 `do_more`（对象本身编译不过，登记留着，等对象能加载再处理）、`/d/huanghe/npc/mafu.lpc` 的 `do_rideyz`（对象本身编译不过，登记留着，等对象能加载再处理）、`/d/huanghe/npc/mafu.lpc` 的 `do_ridelz`（对象本身编译不过，登记留着，等对象能加载再处理）。

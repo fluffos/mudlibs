@@ -729,3 +729,11 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## `persuade`（渡世济人）：`ob->query("no_fight")` 的 `ob` 没赋值（2026-10-21，KB 06 §7.348）
 
 峨嵋弟子用 `persuade` 一律在第三个判断抛错；其余 146 份同类指令写的是 `environment(me)->query("no_fight")`。这里的 `ob` 还是后面 `call_out("compelete_dushi", 3, me, victim, ob, ..)` 传下去的第三个参数（`compelete_dushi` 没用它），所以在判断前加 `ob = environment(me);`。改动：`/cmds/std/persuade.lpc`。
+
+## 妙手回春 `valid_learn()`：先读 `ob->query_temp("weapon")` 再给 `ob` 赋值（2026-10-21，KB 06 §7.348）
+
+学这门暗器技能时 `valid_learn()` 第一个武器检查读的是没赋值的 `ob`，`xue` / `learn` 在这里抛错；后面 `ob = me->query_temp("weapon")` 的检查才是对的。有两种写法：`if (!ob->query_temp("weapon"))` 改成 `me->query_temp("weapon")`；`if ((string)ob->query_temp("weapon") != "银针")`（拿一个对象和字符串比较，永远不等，补上 `ob` 之后这门技能也学不成）改成后一种写法里的 `!objectp(ob = me->query_temp("weapon")) || !(ob->id("yin zhen") || ob->id("yinzhen"))`。改动：`/d/city2/shenzhen/skills/miaoshouhuichun.lpc`。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 65 条注册（50 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/clone/book/skybook.lpc`（`cloud_goto`）、`/clone/music/cd01.lpc`（`do_start`、`do_stop`）、`/clone/music/cd02.lpc`（`do_start`、`do_stop`）、`/clone/music/cd03.lpc`（`do_start`、`do_stop`）、`/clone/music/cd04.lpc`（`do_start`、`do_stop`）、`/clone/music/cd05.lpc`（`do_start`、`do_stop`）、`/clone/music/cd06.lpc`（`do_start`、`do_stop`）、`/clone/music/cd07.lpc`（`do_start`、`do_stop`）、`/clone/music/cd08.lpc`（`do_start`、`do_stop`）、`/clone/music/cd10.lpc`（`do_start`、`do_stop`） 等共 50 个文件。最多的函数名：`do_send` 15 处、`do_start` 13 处、`do_stop` 13 处、`do_decide` 8 处、`blk_cmds` 3 处。

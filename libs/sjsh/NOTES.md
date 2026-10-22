@@ -360,3 +360,11 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 六道轮回 `ldlh`：`check_fight()` 里的 `weapon` 没赋值（2026-10-21，KB 06 §7.348）
 
 施展后每秒的 `call_out("check_fight", 1, me)` 第一轮就在 `weapon->query("apply/skill_type")` 抛错，`remove_effect()` 永远不执行，`ldlh` 和 `lunhui` 两个标记一直留在身上。补 `weapon = me->query_temp("weapon");`（`perform()` 里同样的写法）。武器类型的判断原来是 `apply/skill_type != "stick" || (apply/skill_type != "stick" && skill_type != "stick")`，第一项恒真（本库没有任何武器设过 `apply/skill_type`），补上赋值后效果会在一秒后结束；去掉第一项，改成“两个属性都不是 stick 才结束”，并加 `!weapon ||`（卸了武器视同效果结束）。改动：`/daemon/class/ghost/kusang-bang/ldlh.lpc`。
+
+## 拼错的 `call_out()` / `input_to()` 目标（KB 06 §7.349，2026-10-21）
+
+计时器或输入提示给驱动的函数名和文件里定义的差一个字母；驱动对不存在的函数静默不理，所以对应的计时从来没有触发过。调用和配套的 `remove_call_out()` 改成已定义的拼法：`find_seal`：`disapprear` → `disappear`（法术产生的封印十分钟后从不消失）。改动：`/d/jjf/obj/find_seal.lpc`。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 34 条注册（18 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/clone/drug/guiyuan.lpc`（`do_pour`）、`/clone/drug/huiyang-san.lpc`（`do_pour`）、`/clone/drug/shedan.lpc`（`do_pour`）、`/clone/drug/yangxin.lpc`（`do_pour`）、`/clone/drug/yulu-wan.lpc`（`do_pour`）、`/d/calvin/lanling/npc/guard1.lpc`（`do_bian`）、`/d/calvin/lanling/npc/gurad1.lpc`（`do_bian`）、`/d/calvin/lanling/x.lpc`（`do_swim`）、`/d/changan/pinqiting.lpc`（`do_pass`、`do_resign`）、`/d/city/npc/duguoyin.lpc`（`do_vendor_list`） 等共 18 个文件。最多的函数名：`do_swim` 10 处、`do_pour` 5 处、`do_bian` 5 处、`do_cost` 2 处、`do_list` 2 处。没有动（读过）：`/d/wizz/stey/npc/rulai1.lpc` 的 `do_cancel`（对象本身编译不过，登记留着，等对象能加载再处理）。

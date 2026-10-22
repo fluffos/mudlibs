@@ -482,3 +482,7 @@ finds nothing in this lib.
 ## `chpass`：先把参数写进日志，再对它 `sscanf`（2026-10-21，KB 06 §7.336）
 
 管理员扫描里 `chpass` 不带参数报 `Bad argument 1 to sscanf() Expected: string Got: 0.`（`cmds/adm/chpass.lpc`）：指令先 `log_file("nosave/CHPASS", ... arg)`（`%s` 吃得下 0），再 `sscanf(arg, "%s %s", userid, new_passwd)`。静态扫描只看第一次提到参数的语句，现在会越过这种只是打印或记录的提及；在记录之前加 `if (!arg) return notify_fail("指令格式：chpass <使用者代号> <密码>\n");`。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 1 条注册（1 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/obj/clan_symbol.lpc`（`help`）。最多的函数名：`help` 1 处。

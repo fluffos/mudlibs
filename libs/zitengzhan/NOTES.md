@@ -811,3 +811,11 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 巫师命令不带参数时对 0 调用 efun（2026-10-21，KB 06 §7.336）
 
 巫师（管理员）把命令敲成不带参数时，驱动把 0 传给字符串参数；下面的命令第一句就把这个 0 交给 efun，运行时报 `Bad argument 1 to ...`，这条指令从来没有用过。用 `scripts/lpcc_bare.py` 不登录、在一次 `lpcc` 求值里以 0 调用 `main()` 逐个确认后，由 `scripts/lpc_fix_bare_arg.py` 在第一处使用参数的语句前加守卫：文件自带 `int help(object me)` 的，守卫是 `if (!arg) return help(me);`（`help()` 定义在 `main()` 之后的 4 个文件补了原型 `int help(object me);`，否则编译报 `Undefined function help`）；没有 `help()` 的是 `return notify_fail("…\n");`。改动（6 个文件，括号里是接住 0 的 efun）：`/cmds/adm/add.lpc`（`sscanf`）、`/cmds/adm/admove.lpc`（`present`）、`/cmds/adm/baiban.lpc`（`sscanf`）、`/cmds/adm/giveu.lpc`（`sscanf`）、`/cmds/adm/query.lpc`（`sscanf`）、`/cmds/wiz/info.lpc`（`sscanf`）。加载检查 HEAD 与工作树对照，没有退步。
+
+## 拼错的 `call_out()` / `input_to()` 目标（KB 06 §7.349，2026-10-21）
+
+计时器或输入提示给驱动的函数名和文件里定义的差一个字母；驱动对不存在的函数静默不理，所以对应的计时从来没有触发过。调用和配套的 `remove_call_out()` 改成已定义的拼法：`find_seal`：`disapprear` → `disappear`（法术产生的封印十分钟后从不消失）。改动：`/d/jjf/obj/find_seal.lpc`。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 28 条注册（16 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/d/changan/pinqiting.lpc`（`do_pass`、`do_resign`）、`/d/city/duchang5.lpc`（`cloud_goto`、`cloud_update`、`detect`、`int`等）、`/d/city/fangzhang1.lpc`（`do_get`）、`/d/city/npc/duguoyin.lpc`（`do_vendor_list`）、`/d/eastway/npc/petboss.lpc`（`do_cost`、`do_list`、`do_upgrade`）、`/d/leitai/wizroom.lpc`（`do_life`）、`/d/pansi/npc/qingxia.lpc`（`do_yes`）、`/d/qujing/baoxiang/obj/baxianzhu.lpc`（`do_zhengzhi`）、`/d/qujing/jisaiguo/obj/luche.lpc`（`do_get`、`do_put`）、`/d/qujing/wudidong/cave2.lpc`（`do_push`） 等共 16 个文件。最多的函数名：`do_get` 2 处、`do_cost` 2 处、`do_list` 2 处、`do_upgrade` 2 处、`do_push` 2 处。没有动（读过）：`/d/game/biao/biao.lpc` 的 `do_none`（对象本身编译不过，登记留着，等对象能加载再处理）、`/death/npc/heiwuchang.lpc` 的 `doAgree`（对象本身编译不过，登记留着，等对象能加载再处理）、`/d/shengdoushi/7hai/shendian/npc/haihuangnpc.lpc` 的 `do_shoot8`（不是单独一行的语句（`obj->add_action()`、宏或没有分号的写法））。

@@ -382,3 +382,11 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 七龙珠 `combine`：六次 `present()` 都存进了 `b`（2026-10-21，KB 06 §7.348）
 
 每颗龙珠的 `do_combine()` 先检查身上有另外六颗：`if (!(b = present("liang longzhu", me))) ... if (!(b = present("fen longzhu", me))) ...`，六句都写成 `b =`，后面 `destruct(b); destruct(c); ... destruct(g)` 的 `c` 到 `g` 一直是 0。这几个库的 `destruct()` sefun 对 0 不抛错（原始 efun 也不抛），结果是合成神龙时只消耗了最后一颗和合成者自己，另外五颗还留在身上，可以反复合成。改成 `b, c, d, e, f, g`（shenmo 的 `/d/longzhu/obj/*` 是对的）。sjsh 上实测：HEAD 合成之后背包里还剩青、黄、蓝、粉、亮五颗，改后只剩神龙。改动：`/d/longzhu/obj/1.lpc`、`/d/longzhu/obj/2.lpc`、`/d/longzhu/obj/3.lpc`、`/d/longzhu/obj/4.lpc`、`/d/longzhu/obj/5.lpc`、`/d/longzhu/obj/6.lpc`、`/d/longzhu/obj/7.lpc`、`/d/quest/longzhu/obj/1.lpc`、`/d/quest/longzhu/obj/2.lpc`、`/d/quest/longzhu/obj/3.lpc`、`/d/quest/longzhu/obj/4.lpc`、`/d/quest/longzhu/obj/5.lpc`、`/d/quest/longzhu/obj/6.lpc`、`/d/quest/longzhu/obj/7.lpc`。
+
+## 拼错的 `call_out()` / `input_to()` 目标（KB 06 §7.349，2026-10-21）
+
+计时器或输入提示给驱动的函数名和文件里定义的差一个字母；驱动对不存在的函数静默不理，所以对应的计时从来没有触发过。调用和配套的 `remove_call_out()` 改成已定义的拼法：`find_seal`：`disapprear` → `disappear`（法术产生的封印十分钟后从不消失）。改动：`/d/jjf/obj/find_seal.lpc`。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 80 条注册（35 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/d/calvin/lanling/npc/guard1.lpc`（`do_bian`）、`/d/calvin/lanling/npc/gurad1.lpc`（`do_bian`）、`/d/calvin/lanling/x.lpc`（`do_swim`）、`/d/changan/pinqiting.lpc`（`do_pass`、`do_resign`）、`/d/eastway/npc/petboss.lpc`（`do_cost`、`do_list`、`do_upgrade`）、`/d/eastway/petboss.lpc`（`do_cost`、`do_list`、`do_upgrade`）、`/d/gumu/huo.lpc`（`do_chop`）、`/d/gumu/jin.lpc`（`do_chop`）、`/d/gumu/mu.lpc`（`do_chop`）、`/d/gumu/shui.lpc`（`do_chop`） 等共 35 个文件。最多的函数名：`do_swim` 30 处、`do_no` 10 处、`do_bian` 9 处、`do_chop` 9 处、`do_list` 3 处。没有动（读过）：`/d/gumu/npc/zhangmen.lpc` 的 `do_comfirm`（对象本身编译不过，登记留着，等对象能加载再处理）、`/d/wizz/stey/npc/rulai1.lpc` 的 `do_cancel`（对象本身编译不过，登记留着，等对象能加载再处理）、`/d/wizz/stey/npc/rulaim.lpc` 的 `do_cancel`（对象本身编译不过，登记留着，等对象能加载再处理）。

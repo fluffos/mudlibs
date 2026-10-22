@@ -771,3 +771,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 不带参数的指令对 0 调用 efun：不在 wiz / adm 目录里的指令（2026-10-21，KB 06 §7.336）
 
 指令敲成不带参数时，驱动把 0 传给字符串参数；下面的指令第一句就把这个 0 交给 efun，运行时报 `Bad argument 1 to ...`。它们在 `cmds/std`、`cmds/usr`、`cmds/bos`、`cmds/app` 这类目录里，上一轮的扫描只看巫师目录。用 `scripts/lpcc_bare.py` 不登录、在一次 `lpcc` 求值里以 0 调用 `main()` 逐个确认后，由 `scripts/lpc_fix_bare_arg.py --all-dirs` 在第一处使用参数的语句前加守卫：文件自带 `int help(object me)` 的，守卫是 `if (!arg) return help(me);`（`help()` 定义在 `main()` 之后的 1 个文件补了原型 `int help(object me);`，否则编译报 `Undefined function help`）；没有 `help()` 的是 `return notify_fail("…\n");`。改动（1 个文件，括号里是接住 0 的 efun）：`/cmds/app/test.lpc`（`present`）。加载检查 HEAD 与工作树对照，没有退步。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 9 条注册（6 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/clone/misc/bm.lpc`（`do_bselect`）、`/d/budui/obj/topless.lpc`（`do_people`）、`/d/city/npc/jiashen.lpc`（`do_chanhui`）、`/d/shendian/npc/baoyi.lpc`（`do_ban`、`do_gan`、`super_die`、`wave`）、`/inherit/misc/fboard.lpc`（`do_list`）、`/inherit/misc2/fboard.lpc`（`do_list`）。最多的函数名：`do_list` 2 处、`do_bselect` 1 处、`do_people` 1 处、`do_chanhui` 1 处、`do_ban` 1 处。改名：`/d/shendian/npc/wushi2.lpc` 的注册 `do_guozao` → `do_guozhao`（文件里定义的是 `do_guozhao`）。

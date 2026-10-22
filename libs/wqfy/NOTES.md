@@ -565,3 +565,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## `doc`：整份指令被编辑器弄坏，编译不了（2026-10-21，KB 04 §6.25）
 
 管理员扫描里 `doc`（`cmds/adm/doc.lpc`，整理 NPC / 房间 / 物品档案的指令）报 `Illegal character 0xef`：源文件被中文编辑器改过又被排版器整理过，每个 `->` 成了全角的 `-＞`（40 处），`>`、`<` 成了 `＞`、`＜`，每个 `||` 成了 `//` 并吞掉了该行的其余部分：`if (!arg) {  // sscanf(arg, "%s %s", path, var) != 2){`（用法检查丢了 `sscanf`，`path` 和 `var` 从来没有被赋值），`if (prop[i] == "armor"  //prop[i]=="damage")`（`continue` 成了语法错误）。按原意恢复（`||`、被注释掉的 `sscanf`），`MONEY_D->price_str()`（同系没有这个守护进程）改成直接输出 `value`，删去 9 个没用的局部变量。编译没有警告，不带参数时打印用法。wqfy、zzfy、zzfy3 三个库的这个文件是同一份。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 26 条注册（25 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/d/bat/npc/chu.lpc`（`do_look`）、`/d/dali/npc/pker.lpc`（`give_quest`）、`/d/death/npc/kkking.lpc`（`give_quest`）、`/d/fy/npc/kijy.lpc`（`give_quest`）、`/d/fy/npc/oldgun.lpc`（`give_quest`）、`/d/fy/npc/renkuang.lpc`（`give_quest`）、`/d/fy/npc/smith.lpc`（`do_buy`、`do_list`）、`/d/fy/npc/sqx.lpc`（`give_quest`）、`/d/fy/npc/tiandi.lpc`（`give_quest`）、`/d/huangshan/npc/xiangke.lpc`（`do_vendor_list`） 等共 25 个文件。最多的函数名：`give_quest` 18 处、`do_buy` 3 处、`do_vendor_list` 2 处、`do_look` 1 处、`do_list` 1 处。

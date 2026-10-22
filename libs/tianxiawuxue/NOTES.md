@@ -1295,3 +1295,15 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 谷物加工厂 `goldwork2/3/4`：工作太久被赶出去时 `ob->move(..)`（2026-10-21，KB 06 §7.348）
 
 `working()` 在连续工作次数超过 60+random(100) 时，运气低于 25 的人被送回广场：`if ((int)me->query("kar") < 25) ob->move("/d/city/guangchang");`，`ob` 声明了没赋值（同一目录的 `goldwork.lpc`、`goldwork5.lpc` 写的是 `me->move`）。抛错在 `me->set_temp("working", 0)` 和 `cot--` 之前，房间里的工人计数漏掉一个，三次之后“人手已经够了”永远不再收人。改成 `me->move(..)`，去掉 `object ob;`。改动：`/d/city/goldwork2.lpc`、`/d/city/goldwork3.lpc`、`/d/city/goldwork4.lpc`。
+
+## 香烟 `smoke.lpc`：`do_smoking()` 读没赋值的 `me`（2026-10-21，KB 06 §7.348）
+
+`smoke` 指令的第一句是 `jing = me->query("jing")`，`me` 声明了没赋值，每次抽烟都抛 `Bad argument 1 to call_other()`。补 `me = this_player();`（后面的 `this_player()` 调用不变）。改动：`/d/emei/user-room/melodies/smoke.lpc`。
+
+## 妙手回春 `valid_learn()`：先读 `ob->query_temp("weapon")` 再给 `ob` 赋值（2026-10-21，KB 06 §7.348）
+
+学这门暗器技能时 `valid_learn()` 第一个武器检查读的是没赋值的 `ob`，`xue` / `learn` 在这里抛错；后面 `ob = me->query_temp("weapon")` 的检查才是对的。有两种写法：`if (!ob->query_temp("weapon"))` 改成 `me->query_temp("weapon")`；`if ((string)ob->query_temp("weapon") != "银针")`（拿一个对象和字符串比较，永远不等，补上 `ob` 之后这门技能也学不成）改成后一种写法里的 `!objectp(ob = me->query_temp("weapon")) || !(ob->id("yin zhen") || ob->id("yinzhen"))`。改动：`/kungfu/skill/miaoshouhuichun.lpc`。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 43 条注册（38 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/d/biwu/chen.lpc`（`do_join`）、`/d/city/chatroom2.lpc`（`do_jump`）、`/d/city/giftroom.lpc`（`do_jump`）、`/d/city/mingren/giftroom.lpc`（`do_jump`）、`/d/city/npc/wei.lpc`（`do_sell`）、`/d/city2/qishi.lpc`（`do_pass`）、`/d/city3/npc/sister.lpc`（`do_vendor_list`）、`/d/fengxue/shandong1.lpc`（`do_swim`）、`/d/player/yysz/hupan.lpc`（`do_han`）、`/d/quanzhen/npc/haodatong.lpc`（`do_decide`） 等共 38 个文件。最多的函数名：`do_send` 15 处、`do_decide` 7 处、`do_faint` 5 处、`do_vendor_list` 4 处、`do_jump` 3 处。

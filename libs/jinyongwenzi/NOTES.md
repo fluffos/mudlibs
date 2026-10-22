@@ -1043,3 +1043,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 昆仑派 `banshuxian`、`hetaichong`、血刀门 `laozu` 的 `ask_me()`：`ob` 从来没赋值（2026-10-21，KB 06 §7.346）
 
 `/kungfu/class/kunlun/banshuxian.lpc`、`/kungfu/class/kunlun/hetaichong.lpc`：`object ob;` 之后直接 `ob->query("gender")` / `ob->query_skill(..)`，根上的 xkx100 在声明后有一句 `ob = this_player();`，这个派生库把它丢了，`ask <师傅> about <秘籍>` 一律抛 `call_other() ... Got: int(0)`。补上这句。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 8 条注册（7 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/d/dali/wuliang/anbian.lpc`（`do_tiao`）、`/d/dali/wuliang/muwu1.lpc`（`do_tiao`）、`/d/dali/wuliang/shanlin-6.lpc`（`do_tiao`）、`/d/huashan/jinshe/obj/haigu.lpc`（`do_move`）、`/d/huashan/npc/yaba.lpc`（`do_follow`、`do_kill`）、`/d/mr/obj/chahua3.lpc`（`do_chu`）、`/inherit/misc/fboard.lpc`（`do_list`）。最多的函数名：`do_tiao` 3 处、`do_move` 1 处、`do_follow` 1 处、`do_kill` 1 处、`do_chu` 1 处。

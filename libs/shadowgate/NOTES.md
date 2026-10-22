@@ -742,3 +742,23 @@ sunshadow 第十七批改的 75 个文件里 74 个对象在 shadowgate 也有�
 ## 战斗探针的孪生问题：Stormbringer 的 `object owned` 和 Freloc 的匕首（2026-10-21，KB 06 §7.305 / §7.269）
 
 sunshadow 的战斗探针找到五个怪物里的 `(string)TO->query_current_attacker() != targ` 在那边编译不了（基类有类型）；shadowgate 的基类没有声明类型，副本能编译，没有动。两处同样的失误这里也有：`d/dagger/marsh/tower/obj/storm.lpc`（与 sunshadow 的字节相同）把 `object owned;` 用来存 `TPQN`：改 `string owned;`；`d/common/assassins/freloc.lpc` 在 `create()` 里两次克隆 `/realms/grazzt/assassins/dagger.lpc`，这个巫师目录档案里没有，`0->move()` 让 NPC 加载就中止（六个文件里唯一失败的一个）：克隆和两条 `wield` 放在 `file_size(...) > 0` 后面。改动：`/d/dagger/marsh/tower/obj/storm.lpc`、`/d/common/assassins/freloc.lpc`。
+
+## 兽人小队、树屋平台和扑克荷官：三个拼错的局部变量（KB 06 §7.348，KB 06 §7.350，2026-10-21）
+
+`orog.lpc` 的 `swing_in()` 问的是没赋值的 `critter`（循环变量是 `critters[i]`）；`t_house_base.lpc` 的 `fly_platform()` 问 `rooms->query_spiked()`，对象是 `room`；扑克荷官 `deal()` 对离开的玩家播报 `absentee->QCN`，应是 `player`（同一个文件里 `sizeof(hand !=2)` 还让它根本编译不了，见下）。改动：`/d/atoyatl/tecqumin/mons/orog.lpc`、`/d/atoyatl/tecqumin/treehouse/rooms/t_house_base.lpc`、`/d/shadow/mon/dealer.lpc`。
+
+## 魔怪 `fiend.lpc`：`a != b != c` 的比较链编译不了（KB 06 §7.282，2026-10-21）
+
+心跳里的 `if (base_name(att[i]) != base_name(TO) != base_name("klauth"))` 先比出一个 int 再和字符串比，类型检查报 `!= always true because of incompatible types ( int vs string )`，这个怪物整个加载不了；改成两个比较用 `&&` 连接。改动：`/d/islands/common/mon/fiend.lpc`。
+
+## `sizeof(x == n)`：括号里放了比较（KB 06 §7.350，2026-10-21）
+
+`sizeof(tmp != 2)`、`sizeof(casualties ==1)`、`sizeof(file_list == 0)` 先算比较再取 0 / 1 的 `sizeof`（本驱动里 `sizeof(1)` 是 0），守卫或提示的分支永远不执行；扑克荷官的 `hand` 是 `string *`，类型检查直接报错，荷官根本加载不了。改成 `sizeof(x) == n`。改动：`/d/atoyatl/tecqumin/tabaxi/obj/catapult.lpc`、`/d/atoyatl/vis_climb_d.lpc`、`/d/shadow/mon/dealer.lpc`、`/d/token_hunt/token_vendor.lpc`。
+
+## 账号登录和 IPC 监视：两个拼错的调用目标（KB 06 §7.349，2026-10-21）
+
+`pacct_login.lpc` 的 `input_to("get__pacct_password", ..)`（双下划线）名字对不上 `get_pacct_password`，输入的密码被吞掉；`ipc.lpc` 的 `call_out("ip_monitor_self", ..)` 对应的函数是 `ipc_monitor_self`。改动：`/adm/daemon/ipc.lpc`、`/adm/obj/pacct_login.lpc`。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 82 条注册（53 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/cmds/guild/philosopher/_cmd.lpc`（`relsoul`）、`/d/antioch/antioch2/d_animal.lpc`（`get_off`）、`/d/antioch/greaterantioch/mon/zathon.lpc`（`ask_em`）、`/d/antioch/wiz_hall/wizard_rm1.lpc`（`peruse_titles`）、`/d/atoyatl/tecqumin/base_files/ropebridge_base.lpc`（`jump_off`）、`/d/atoyatl/tecqumin/city/rooms/balcony.lpc`（`address_city`）、`/d/atoyatl/tecqumin/jungle/rooms/ropebridge_base.lpc`（`jump_off`）、`/d/atoyatl/tecqumin/rooms/t_house_middle.lpc`（`climb`、`fly_platform`、`shoot_rope`、`throw_rope`）、`/d/atoyatl/tecqumin/rooms/treetop_base.lpc`（`swing`）、`/d/atoyatl/tecqumin/rooms/zigzenith.lpc`（`release`） 等共 53 个文件。最多的函数名：`no_kill` 16 处、`dive_func` 5 处、`ask_em` 3 处、`throw_rope` 3 处、`jump_off` 2 处。没有动（读过）：`/d/antioch/greaterantioch/obj/healring.lpc` 的 `use_ring`（对象本身编译不过，登记留着，等对象能加载再处理）、`/d/atoyatl/tecqumin/obj/jung_maze.lpc` 的 `place`（对象本身编译不过，登记留着，等对象能加载再处理）、`/d/atoyatl/tecqumin/obj/tec_maze.lpc` 的 `clear_maze`（对象本身编译不过，登记留着，等对象能加载再处理）、`/d/atoyatl/tecqumin/obj/tec_maze.lpc` 的 `place`（对象本身编译不过，登记留着，等对象能加载再处理）、`/d/atoyatl/tecqumin/rooms/ropebridge_base.lpc` 的 `jump_off`（对象本身编译不过，登记留着，等对象能加载再处理）、`/d/mine2/sandy/room/boat.lpc` 的 `buy`（对象本身编译不过，登记留着，等对象能加载再处理）。

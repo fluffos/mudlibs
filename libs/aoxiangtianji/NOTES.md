@@ -733,3 +733,11 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## aoxiangtianji `teamwar`：领军者撤出战场的广播读没赋值的 `ob`（2026-10-21，KB 06 §7.348）
 
 `check_teamjob()` 在领军者不是玩家或没有环境时广播 `ob->name() + "从战场撤退了，宣告本次任务失败了！"`，`ob` 到后面的 `foreach` 才赋值；改成领军者的名字（没有就写“领军者”）。改动：`/obj/quest/teamjob/teamwar.lpc`。
+
+## 拼错的 `call_out()` / `input_to()` 目标（KB 06 §7.349，2026-10-21）
+
+计时器或输入提示给驱动的函数名和文件里定义的差一个字母；驱动对不存在的函数静默不理，所以对应的计时从来没有触发过。调用和配套的 `remove_call_out()` 改成已定义的拼法：`find_seal`：`disapprear` → `disappear`（法术产生的封印十分钟后从不消失）。改动：`/d/jjf/obj/find_seal.lpc`。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 7 条注册（5 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/d/18hell/16/songlin.lpc`（`do_make`）、`/d/changan-s/pinqiting.lpc`（`do_pass`、`do_resign`）、`/d/yaomo/milin.lpc`（`do_quit`）、`/obj/npc/zongguan.lpc`（`do_jiaochai`、`do_renwu`）、`/std/char/smith.lpc`（`do_buy`）。最多的函数名：`do_make` 1 处、`do_pass` 1 处、`do_resign` 1 处、`do_quit` 1 处、`do_jiaochai` 1 处。

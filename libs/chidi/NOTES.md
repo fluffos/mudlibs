@@ -1111,3 +1111,11 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## `mapp`：全局变量不能写 `varargs`（2026-10-21，KB 04 §6.28）
 
 `varargs mixed m;` 和 `varargs string *rfile;` 是 `mapp` 指令的两个全局变量，本驱动只允许函数用 `varargs`（`Illegal to declare varargs variable.`），指令编译不了。去掉两处 `varargs`。
+
+## 香烟 `smoke.lpc`：`do_smoking()` 读没赋值的 `me`（2026-10-21，KB 06 §7.348）
+
+`smoke` 指令的第一句是 `jing = me->query("jing")`，`me` 声明了没赋值，每次抽烟都抛 `Bad argument 1 to call_other()`。补 `me = this_player();`（后面的 `this_player()` 调用不变）。改动：`/d/emei/user-room/melodies/smoke.lpc`。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 70 条注册（58 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/clone/wx/hecheng/item/boots.lpc`（`do_rename`）、`/clone/wx/hecheng/item/finger.lpc`（`do_rename`）、`/clone/wx/hecheng/item/hands.lpc`（`do_rename`）、`/clone/wx/hecheng/item/head.lpc`（`do_rename`）、`/clone/wx/hecheng/item/neck.lpc`（`do_rename`）、`/clone/wx/hecheng/item/pifeng.lpc`（`do_rename`）、`/clone/wx/hecheng/item/waist.lpc`（`do_rename`）、`/d/banghui/npc/nicai.lpc`（`create_banghui`、`delate_banghui`）、`/d/city/21_room.lpc`（`do_climb`、`do_jump`）、`/d/city/chatroom2.lpc`（`do_jump`） 等共 58 个文件。最多的函数名：`do_send` 15 处、`do_rename` 7 处、`do_jump` 7 处、`do_decide` 7 处、`do_climb` 6 处。

@@ -693,3 +693,7 @@ The driver's `crypt()` raises (`Error in crypt(), check your salt`) for a key ov
 ## `title`：没有职业的角色（2026-10-21，KB 06 §7.336）
 
 `cmds/mortal/_title.lpc`：`_class = lower_case(this_player()->query_class());`，新角色没有职业时 `query_class()` 是 0，`lower_case(0)` 报 `Bad argument 1 to lower_case()`（第二遍扫描的 `title` 一行）；改成 `stringp(_class) ? lower_case(_class) : ""`（`/data/pretitles//xxx.pt` 不存在，走 `capitalize(rank)` 的分支）。`title reset` 里的 `capitalize(this_player()->query_race())` 对没有种族的角色同样报错：种族是创建流程里设的，扫描机器人的角色走的是不完整的创建（`score` 里 HP 1），没有改。
+
+## `add_action()` registrations of functions nobody defines (2026-10-21, KB 06 §7.349)
+
+An `add_action("fn", "verb")` whose function is defined neither by the object, nor by its headers, nor by its parents, nor by any object derived from it (`scripts/lpc_scan_callout_targets.py`, descendants checked transitively, then `function_exists()` in a running driver, `scripts/lpc_verify_handlers.py`). The driver walks the actor's sentences from the newest one: when that sentence's function does not exist it raises `*Function for verb 'drop' not found.` and tries no other handler of the verb (an older dead sentence is passed over silently). Removed 4 registrations in 1 files (`scripts/lpc_fix_dead_add_action.py`), the verbs are left to their other handlers: `/std/diewarzau/obj/misc/clone_soul.lpc` (`my_combat`, `my_skill`, `my_spell`, `my_talk`). Most frequent: `my_combat` x1, `my_skill` x1, `my_spell` x1, `my_talk` x1. 

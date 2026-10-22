@@ -622,3 +622,11 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## wdxtym：宠物心跳、金兵、葵花宝典（2026-10-21，KB 06 §7.348）
 
 `clone/pet/{pet,kaijia,zhanhun}.lpc` 的 `heart_beat()`（`set_heart_beat(1)`）每秒读一次没赋值的 `ob`（宠物的主人）并抛错；主人存在 `query("possessed")`（`petowner.lpc` 创建宠物时设置），改成 `ob = query("possessed")` 并判空。`quest/weiguo/jinbing/jin4.lpc` 的 `die()`：`obn = new("/clone/money/gold")` 被注释掉，`obn->set_amount(..); obn->move(me)` 还在，金兵特务一死就抛错（jin1~3 已经没有这段），去掉这两句。`clone/book/kuihua.lpc`、`kuihuabaodian.lpc`：读书时精不够就找护心丹 `present("huxin dan", obj)`，`obj` 没赋值，改成 `me`。改动：`/clone/book/kuihua.lpc`、`/clone/book/kuihuabaodian.lpc`、`/clone/pet/kaijia.lpc`、`/clone/pet/pet.lpc`、`/clone/pet/zhanhun.lpc`、`/quest/weiguo/jinbing/jin4.lpc`。
+
+## 拼错的 `call_out()` / `input_to()` 目标（KB 06 §7.349，2026-10-21）
+
+计时器或输入提示给驱动的函数名和文件里定义的差一个字母；驱动对不存在的函数静默不理，所以对应的计时从来没有触发过。调用和配套的 `remove_call_out()` 改成已定义的拼法：`ruanweijia` / `yuxiao`：`return_to_zhang` → `return_to_huang`（携带者在战斗时的重试从不发生，宝物一直留在玩家手里）。改动：`/clone/lonely/ruanweijia.lpc`、`/clone/lonely/yuxiao.lpc`。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 2701 条注册（908 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/Aboss1/GW1/Gzb/bg1.lpc`（`do_duanlian`、`do_hui`、`do_levelup`）、`/Aboss1/GW1/Gzb/bg11.lpc`（`do_duanlian`、`do_hui`、`do_levelup`）、`/Aboss1/GW1/Gzb/bg12.lpc`（`do_duanlian`、`do_hui`、`do_levelup`）、`/Aboss1/GW1/Gzb/bg2.lpc`（`do_duanlian`、`do_hui`、`do_levelup`）、`/Aboss1/GW1/Gzb/bg3.lpc`（`do_duanlian`、`do_hui`、`do_levelup`）、`/Aboss1/GW1/Gzb/bg4.lpc`（`do_duanlian`、`do_hui`、`do_levelup`）、`/Aboss1/GW1/Gzb/bg6.lpc`（`do_duanlian`、`do_hui`、`do_levelup`）、`/Aboss1/GW1/Gzb/bg7.lpc`（`do_duanlian`、`do_hui`、`do_levelup`）、`/Aboss1/GW1/Gzb/bg8.lpc`（`do_duanlian`、`do_hui`、`do_levelup`）、`/Aboss1/GW1/JL/bg1.lpc`（`do_duanlian`、`do_hui`、`do_levelup`） 等共 908 个文件。最多的函数名：`do_duanlian` 891 处、`do_levelup` 891 处、`do_hui` 879 处、`do_qiongqii` 12 处、`do_vendor_list` 3 处。没有动（读过）：`/adm/npc/wenqin.lpc` 的 `show_baowu`（对象本身编译不过，登记留着，等对象能加载再处理）。

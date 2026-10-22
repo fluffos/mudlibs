@@ -39,7 +39,7 @@ def functions(code):
 
 
 def hits(b):
-    mask = code_mask(b)
+    mask = code_mask(b, heredoc=True)
     code = bytes(c if mask[i] else 32 for i, c in enumerate(b))
     for name, params, body in functions(code):
         pnames = set(re.findall(rb"([A-Za-z_]\w*)\s*(?:,|$)", params.strip()))

@@ -461,3 +461,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## `findfile`、`updir`：不带参数（2026-10-21，KB 06 §7.336）
 
 ToMud 升级用的两条指令（`cmds/bos/findfile.lpc`、`updir.lpc`）不带参数时报 `Bad argument 1 to sscanf() Expected: string Got: 0.`：`findfile` 的 `sscanf(arg, "%s,%s", dir, str)` 前面是一段注释掉的代码，`updir` 的 `sscanf(arg, "%s -debug", arg)` 在 `if (playerp(previous_object()))` 里面。`findfile` 补了 `if (!arg) return help(me);`（`help()` 在 `main()` 之后，补了原型），`updir` 在开头 `if (!arg) arg = "";`，不带参数就列出当前目录。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 17 条注册（17 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/d/city/chatroom2.lpc`（`do_jump`）、`/d/city/warehousenew.lpc`（`do_zhuan`）、`/d/city2/qishi.lpc`（`do_pass`）、`/d/flypproom/npc/flypp.lpc`（`do_sell`）、`/d/mingjiao/npc/changjinpeng.lpc`（`do_join`）、`/d/mingjiao/npc/chengchaofeng.lpc`（`do_join`）、`/d/mingjiao/npc/fenggongying.lpc`（`do_join`）、`/d/mingjiao/npc/gaoshanwang.lpc`（`do_join`）、`/d/quanzhen/npc/haodatong.lpc`（`do_decide`）、`/d/quanzhen/npc/mayu.lpc`（`do_decide`） 等共 17 个文件。最多的函数名：`do_decide` 7 处、`do_join` 4 处、`do_jump` 1 处、`do_zhuan` 1 处、`do_pass` 1 处。

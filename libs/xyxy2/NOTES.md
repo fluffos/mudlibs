@@ -773,3 +773,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## `update` 不带参数：`valid_read(0)` 先于 `cwf` 缺省（2026-10-21，KB 06 §7.342）
 
 管理员扫描里 `update` 不带参数报 `Bad argument 1 to sscanf() Expected: string Got: 0.`（`/adm/daemons/securityd.lpc` 的 `valid_read()`，第一句 `sscanf(file, "/c/%*s")`）：`main(me, file)` 先 `SECURITY_D->valid_read(file, me, "read")`，之后才 `if (!file) file = me->query("cwf")`。把“缺省取 `cwf`、仍为空就拒绝”这两句移到权限检查前面（是移动，不是复制）。改动：`/cmds/arch/update.lpc`、`/cmds/wiz/update.lpc`。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 10 条注册（6 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/d/changan/pinqiting.lpc`（`do_pass`、`do_resign`）、`/d/city/npc/duguoyin.lpc`（`do_vendor_list`）、`/d/city/npc/vikee.lpc`（`do_list`）、`/d/eastway/npc/petboss.lpc`（`do_cost`、`do_list`、`do_upgrade`）、`/d/qujing/village/npc/oldwoman.lpc`（`do_yes`）、`/d/qujing/wudidong/cave2.lpc`（`do_push`）。最多的函数名：`do_list` 2 处、`do_push` 2 处、`do_pass` 1 处、`do_resign` 1 处、`do_vendor_list` 1 处。

@@ -95,6 +95,9 @@ fi
 echo "== 5. deleted declarations still read (look at each)"
 python3 scripts/lpc_audit_removed_locals.py HEAD "libs/$SLUG/work" | tail -15
 
+echo "== 6. verbs bound to a function nobody defines (report only; read them, KB 06 7.349)"
+python3 scripts/lpc_scan_callout_targets.py --kinds=add_action "$SLUG" 2>&1 | awk -F'\t' '$1=="HIT"{n++; if (n<=15) print "   " $4 "  " $5 "  (line " $6 ")"} END{print "   " n+0 " registration(s); the fix is scripts/lpc_fix_dead_add_action.py after scripts/lpc_verify_handlers.py and scripts/lpc_check_descendants.py"}'
+
 echo
 echo "Left for you: python3 scripts/lpc_warnings.py $SLUG --list 20   (TOOLKIT.md, \"Reading what is left\")"
 echo "Scan output: $OUT/scan.txt"

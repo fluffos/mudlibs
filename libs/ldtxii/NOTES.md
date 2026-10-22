@@ -464,3 +464,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## `persuade`（渡世济人）：`ob->query("no_fight")` 的 `ob` 没赋值（2026-10-21，KB 06 §7.348）
 
 峨嵋弟子用 `persuade` 一律在第三个判断抛错；其余 146 份同类指令写的是 `environment(me)->query("no_fight")`。这里的 `ob` 还是后面 `call_out("compelete_dushi", 3, me, victim, ob, ..)` 传下去的第三个参数（`compelete_dushi` 没用它），所以在判断前加 `ob = environment(me);`。改动：`/cmds/std/persuade.lpc`。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 23 条注册（19 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/d/biwu/wudao.lpc`（`do_heal`、`do_life`）、`/d/dali/npc/zhou.lpc`（`do_check`、`do_pawn`、`do_redeem`）、`/d/kunlun/npc/banshuxian.lpc`（`do_decide`）、`/d/kunlun/npc/hetaichong.lpc`（`do_decide`）、`/d/kunlun/npc/hezudao.lpc`（`do_decide`）、`/d/kunlun/zhongt.lpc`（`do_ci`）、`/d/quanzhen/npc/haodatong.lpc`（`do_decide`）、`/d/quanzhen/npc/mayu.lpc`（`do_decide`）、`/d/quanzhen/npc/qizhicheng.lpc`（`do_decide`）、`/d/quanzhen/npc/sunbuer.lpc`（`do_decide`） 等共 19 个文件。最多的函数名：`do_decide` 10 处、`do_jingdun` 2 处、`do_heal` 1 处、`do_life` 1 处、`do_check` 1 处。没有动（读过）：`/d/dali/npc/gamester.lpc` 的 `do_kill`（对象本身编译不过，登记留着，等对象能加载再处理）。

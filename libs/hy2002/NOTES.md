@@ -430,3 +430,15 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 黄蓉 `ask_husband`：找优胜者的那段被注释掉，`user` 没赋值（2026-10-21，KB 06 §7.348）
 
 `ask rong about 丈夫` 对谁都抛 `Bad argument 1 to call_other() ... Got: int(0)`：优胜者（`nvxu->query("winner")`）不是提问的人时，原来先 `find_player(id)`，找不到就 `new(USER_OB, id)->restore()` 把离线的人读出来；这段被注释掉，下面的 `user->query("death_count")` 照用。默认没有优胜者（`winner` 为 0）。改成只找在线的优胜者（`user = stringp(id) ? find_player(id) : 0`），没有优胜者或优胜者离线时直接回答“我的丈夫就是”加女婿 NPC 的名字。hy5 上实测：HEAD 抛错，改后 “黄蓉说道：我的丈夫就是精确！”。hy2002 保留了读离线玩家的原段，只补上 `winner` 为 0 时的一支（`find_player(0)` 抛错）。改动：`/kungfu/class/taohua/rong.lpc`。
+
+## 妙手回春 `valid_learn()`：先读 `ob->query_temp("weapon")` 再给 `ob` 赋值（2026-10-21，KB 06 §7.348）
+
+学这门暗器技能时 `valid_learn()` 第一个武器检查读的是没赋值的 `ob`，`xue` / `learn` 在这里抛错；后面 `ob = me->query_temp("weapon")` 的检查才是对的。有两种写法：`if (!ob->query_temp("weapon"))` 改成 `me->query_temp("weapon")`；`if ((string)ob->query_temp("weapon") != "银针")`（拿一个对象和字符串比较，永远不等，补上 `ob` 之后这门技能也学不成）改成后一种写法里的 `!objectp(ob = me->query_temp("weapon")) || !(ob->id("yin zhen") || ob->id("yinzhen"))`。改动：`/d/hxsd/pingan/shenzhen/skills/miaoshouhuichun.lpc`、`/d/pingan/pingan/shenzhen/skills/miaoshouhuichun.lpc`、`/d/pingan/shenzhen/skills/miaoshouhuichun.lpc`。
+
+## 守卫 `clone/guard/baoer.lpc`：`do_send()` 里丢了收尾引号，整个文件从来没编译过（2026-10-21，KB 03 §4.6 第五轮、KB 06 §7.349）
+
+`new_id=ob->query("id")+"'s bao er;` 少了字符串结尾的引号：字符串一直读到下一行的引号，后面的汉字全成了 `Illegal character 0xe5`（几千行错误，批量验证器里的表现是“没有答案”）。补成 `"'s bao er";`。文件第一次能编译后带出 11 个 `Unused local variable` 警告（`host_id`、`i`、`obj`、`shape`、`emotes`、`inv`、`msg`、`same_place`、`couple_id`、`couple_name`、`couple`），按 KB 04 §6.10 删掉。文件里的 `do_heji` / `do_lian` / `do_order` / `do_title` / `do_ticks` / `do_sha` / `do_shape` / `do_hulian` / `do_quit` 等处理函数都有定义（静态扫描因为引号没闭合把它们当成字符串里的文字，补引号后运行时 `function_exists()` 全部证实存在），所以这个文件的 `add_action` 不属于死登记，没有动。改动：`/clone/guard/baoer.lpc`。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 17 条注册（7 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/d/city/leitai.lpc`（`do_quit`）、`/d/city4/qishi.lpc`（`do_pass`、`do_resign`）、`/d/hxsd/pingan/npc/sighmoon.lpc`（`do_vendor_list`）、`/d/mr/shuichi.lpc`（`do_strike`）、`/d/pingan/npc/sighmoon.lpc`（`do_vendor_list`）、`/d/pingan/pingan/npc/sighmoon.lpc`（`do_vendor_list`）、`/inherit/misc/fboard.lpc`（`do_list`）。最多的函数名：`do_quit` 9 处、`do_vendor_list` 3 处、`do_strike` 2 处、`do_pass` 1 处、`do_resign` 1 处。

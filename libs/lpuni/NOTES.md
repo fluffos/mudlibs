@@ -438,3 +438,7 @@ already confirmed `update`/`ls`/`more` live); see that section.
 ## A login password over 255 bytes: `crypt()` raises (2026-10-20, KB 06 7.294)
 
 The driver's `crypt()` raises (`Error in crypt(), check your salt`) for a key over 255 bytes, where the old driver hashed any length. A password of 256 bytes or more typed at the login prompt threw an error in the password check and left the connection at a bare `> ` prompt, so the login never completed (the old-password test of `password` the same); found by the sweep shape of 300 `x`. `/adm/obj/simul_efun.lpc` now defines a simulated efun `crypt(key, salt)` of the same name: only an over-long key is cut (to 255 characters, then character by character until `sizeof(to_buffer(key)) <= 255`: the limit is in bytes, a CJK character takes three) before it is handed to `efun::crypt()`; every ordinary password hashes as before and the saved hashes are untouched (`scripts/lpc_add_sefun.py crypt`).
+
+## Misspelled `call_out()` / `input_to()` targets (KB 06 §7.349, 2026-10-21)
+
+The timer or prompt named a function one letter off the one the file defines (`idle_teme` for `idle_time`, ...): the call is silent for a missing function, so the idle check of the monk guild's inner room never fired. The call and its `remove_call_out()` now use the defined spelling. Changed: `/cmds/adm/wms.lpc`.

@@ -455,3 +455,11 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## 九阴真经上篇：`/cmds/skill/du.lpc` 本库叫 `study`（2026-10-21，KB 06 §7.344）
 
 `/d/bwdh/sjsz/obj/obj/unique/jiuyin_force_book.lpc` 的 `do_read()`：`9yin == "granted"` 的玩家读书时 `"/cmds/skill/du.lpc"->main(me, arg)`。本库把这条指令改了名（`cmds/skill/study.lpc`，代码和别的库的 `du.lpc` 相同，用法行写着 `study|du`），`du.lpc` 不存在，读书就是一条 `couldn't find object`。改成 `"/cmds/skill/study.lpc"`。
+
+## 拼错的 `call_out()` / `input_to()` 目标（KB 06 §7.349，2026-10-21）
+
+计时器或输入提示给驱动的函数名和文件里定义的差一个字母；驱动对不存在的函数静默不理，所以对应的计时从来没有触发过。调用和配套的 `remove_call_out()` 改成已定义的拼法：`chck_me` → `check_me`；`destory` → `destroy`；`destory` → `destroy`；`disappear1` → 文件里定义的 `disapper1`。改动：`/clone/npc/camel1.lpc`、`/d/changjiang/npc/shaogong.lpc`、`/d/gift/rsbb.lpc`、`/d/huanghe/npc/shaogong.lpc`、`/d/huashan/npc/newdizi.lpc`。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 52 条注册（39 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/clone/drug/guiyuan.lpc`（`do_pour`）、`/clone/drug/huiyang-san.lpc`（`do_pour`）、`/clone/drug/shedan.lpc`（`do_pour`）、`/clone/drug/yangxin.lpc`（`do_pour`）、`/clone/drug/yulu-wan.lpc`（`do_pour`）、`/clone/medicine/nostrum/gaoyao.lpc`（`do_eat`）、`/d/beijing/qishi.lpc`（`do_pass`、`do_resign`）、`/d/changan/doujichang.lpc`（`do_bet`）、`/d/city/changjiang.lpc`（`do_xiang`、`do_zhan`）、`/d/city/idleroom.lpc`（`do_none`） 等共 39 个文件。最多的函数名：`do_none` 7 处、`do_pour` 5 处、`do_decide` 4 处、`do_rehash` 2 处、`do_test` 2 处。没有动（读过）：`/clone/npc/sellern.lpc` 的 `do_ding`（对象本身编译不过，登记留着，等对象能加载再处理）、`/clone/npc/sellern.lpc` 的 `do_fuhuo`（对象本身编译不过，登记留着，等对象能加载再处理）、`/d/bwdh/sjsz/obj/obj/weapon/yaoqin.lpc` 的 `do_lianxi`（对象本身编译不过，登记留着，等对象能加载再处理）、`/d/yingtianfu/neicheng/fengtiandian.lpc` 的 `do_join`（对象本身编译不过，登记留着，等对象能加载再处理）、`/d/yingtianfu/neicheng/obj/guanyin.bak.lpc` 的 `do_repair_daming`（对象本身编译不过，登记留着，等对象能加载再处理）、`/kungfu/class/xiakedao/mujianfeng.lpc` 的 `do_dismiss`（对象本身编译不过，登记留着，等对象能加载再处理）。

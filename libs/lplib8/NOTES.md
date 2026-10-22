@@ -629,3 +629,7 @@ mudlib bug.
 ## Compile warnings (2026-10-13)
 
 `scripts/toolkit_fix.sh` round: `nosave` on functions (not allowed in FluffOS) became `protected` in `basic/living/physical.lpc`, `basic/player/trace.lpc`, `basic/player/wiz.lpc` and two more files, and unused locals were removed. No warnings left in compiling files; the 5 changed objects load the same at HEAD and in the tree (regress 0).
+
+## `add_action()` registrations of functions nobody defines (2026-10-21, KB 06 §7.349)
+
+An `add_action("fn", "verb")` whose function is defined neither by the object, nor by its headers, nor by its parents, nor by any object derived from it (`scripts/lpc_scan_callout_targets.py`, descendants checked transitively, then `function_exists()` in a running driver, `scripts/lpc_verify_handlers.py`). The driver walks the actor's sentences from the newest one: when that sentence's function does not exist it raises `*Function for verb 'drop' not found.` and tries no other handler of the verb (an older dead sentence is passed over silently). Removed 12 registrations in 1 files (`scripts/lpc_fix_dead_add_action.py`), the verbs are left to their other handlers: `/basic/player/wiz.lpc` (`Call`, `Clean`, `Destruct`, `Dump`, ...). Most frequent: `Call` x1, `Clean` x1, `Destruct` x1, `Dump` x1, `Goto` x1. 

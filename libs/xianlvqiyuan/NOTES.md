@@ -761,3 +761,19 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## `cast1`：宏 `SYNTAX` 带着分号（2026-10-21，KB 04 §6.28）
 
 `#define SYNTAX "指令格式：cast <法术> [<参数>| on <目标>]\n";` 的 `;` 属于宏展开，`notify_fail(SYNTAX);` 变成 `notify_fail("..." ;);`，整个指令编译不了（`unexpected ';'`）。去掉宏里的分号，并删掉没用到的局部变量 `dest`（编译警告）。本库的 `valid_kill(killer, victim, no_list)` 要三个参数，调用只给两个，补了 `, 0`（和同库 `ccast.lpc` 一样，KB 04 §6.19）。
+
+## 新手保护块 `added by vikee`：目标还没找到就 `userp(target)`（2026-10-21，KB 06 §7.348）
+
+施法、祭法宝、偷窃指令在查找目标之前就判断 `userp(target)` / `userp(victim)`，参数是 0 时抛错；改成 `objectp(..) && userp(..)`（和 sjsh、mohuanshiji 的同一批文件一致，这一块在目标找到之前永远不会触发）。改动：`/cmds/std/ccast.lpc`、`/cmds/std/jji.lpc`、`/cmds/std/ssteal.lpc`。
+
+## 比武场 `wait_and_start()`：裁判 `fan` 没有赋值（2026-10-21，KB 06 §7.348）
+
+比武开始时 `fan->command("chat ...")` 抛错，后面的两句 `kill` 和 `finish_match` 的计时都没机会执行。补 `fan = load_object(...)`（sjsh 的同一份文件是 `__DIR__ "npc/fan"`）。改动：`/d/city/under.lpc`。
+
+## 拼错的 `call_out()` / `input_to()` 目标（KB 06 §7.349，2026-10-21）
+
+计时器或输入提示给驱动的函数名和文件里定义的差一个字母；驱动对不存在的函数静默不理，所以对应的计时从来没有触发过。调用和配套的 `remove_call_out()` 改成已定义的拼法：`find_seal`：`disapprear` → `disappear`（法术产生的封印十分钟后从不消失）。改动：`/d/jjf/obj/find_seal.lpc`。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 14 条注册（7 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/d/changan/pinqiting.lpc`（`do_pass`、`do_resign`）、`/d/city/npc/duguoyin.lpc`（`do_vendor_list`）、`/d/eastway/npc/petboss.lpc`（`do_cost`、`do_list`、`do_upgrade`）、`/d/eastway/petboss.lpc`（`do_cost`、`do_list`、`do_upgrade`）、`/d/pansi/npc/qingxia.lpc`（`do_yes`）、`/d/qujing/jisaiguo/obj/luche.lpc`（`do_get`、`do_put`）、`/d/qujing/wudidong/cave2.lpc`（`do_push`）。最多的函数名：`do_cost` 2 处、`do_list` 2 处、`do_upgrade` 2 处、`do_push` 2 处、`do_pass` 1 处。

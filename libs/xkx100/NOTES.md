@@ -422,3 +422,15 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 任务分配 `quest`：按顺序找目标的备用循环用了 `living[j]`（2026-10-21，KB 06 §7.347）
 
 `/feature/quest.lpc`：先随机挑目标（`j = random(sizeof(living))`），挑不中再“按顺序找”：`for (i = 0; i < sizeof(living); i++) if (check(living[j], ...)) { target = living[j]; break; }`。下标写成了 `j`（上一个循环最后一次的随机下标），备用循环把同一个 NPC 检查 `sizeof(living)` 遍，世界小的时候任务就分不出去。xkx100 的原文就是这样，派生库照抄。改成 `living[i]`。
+
+## 追杀任务 `killer1.lpc`：奖励循环里的 `me` 从没赋值（2026-10-21，KB 06 §7.348）
+
+黑衣人 `die()` 对每个在场的追杀者发经验和潜能，循环里写的是 `me->add("combat_exp", exp)`（nitan 系是 `addn("combat_exp", exp, me)`），`me` 要到循环之后才被 `find_player(owner)` 赋值：xkx100 系抛 `Bad argument 1 to call_other()`，nitan 系把奖励悄悄记到 0 上，追杀者什么也拿不到。循环里先 `me = obs[i];`。改动：`/clone/quest/killer1.lpc`。
+
+## 马钰 `waiting()`：等了 300 秒没等到的惩罚落在没赋值的 `ob` 上（2026-10-21，KB 06 §7.348）
+
+七星阵的等待超时分支写的是 `ob->add("score", -5000)`（nitan6 系 `addn("score", -5000, ob)`），`ob` 在这个分支里还是 0：超时那一刻抛错，之后的 `do_back` 已经排好了所以只是少了惩罚。hhsj、nitan170911、xfbhh 里同一处写的是 `me`（带着任务的玩家），照改。改动：`/kungfu/class/quanzhen/ma.lpc`。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 12 条注册（9 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/clone/medicine/nostrum/gaoyao.lpc`（`do_eat`）、`/clone/misc/city/city.lpc`（`do_chakan`）、`/d/changan/qishi.lpc`（`do_pass`、`do_resign`）、`/d/city/weiqishi.lpc`（`do_pass`、`do_resign`）、`/d/shenlong/obj/sg_mianzhao.lpc`（`do_open`）、`/d/wudujiao/huxue2.lpc`（`do_train`）、`/inherit/misc/fboard.lpc`（`do_list`）、`/kungfu/class/yunlong/xutianchuan.lpc`（`do_skills`）、`/last_modify/questobj/yinzhen.lpc`（`do_bawan`）。最多的函数名：`do_pass` 2 处、`do_resign` 2 处、`do_skills` 2 处、`do_eat` 1 处、`do_chakan` 1 处。

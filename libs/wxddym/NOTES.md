@@ -888,3 +888,23 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 帮会税 `/cmds/adm/ctom.lpc`：档案里没有帮会地盘模块（2026-10-21，KB 06 §7.344）
 
 `/d/jerry/npc/xiaye.lpc`、`/d/jerry/wei.lpc` 在收钱的 `accept_object()` / 兑换函数里调用 `"/cmds/adm/ctom.lpc"->save_money(..)`（把一半钱记给占着地盘的帮会）。本库没有 `ctom`，也没有 `/clone/misc/area`、`lingpai` 这套帮会地盘模块，玩家付住店钱或兑换时在 `return 1` 之前抛错（客栈老板那一支连 `rent_paid` 都有时来不及设）。调用前加 `file_size("/cmds/adm/ctom.lpc") > 0` 的判断（KB 06 §7.308 的写法），模块以后补上就自然生效。
+
+## 卫国任务的敌兵 `die()`：杀手那一行丢了（2026-10-21，KB 06 §7.348）
+
+日本兵、金兵、蒙古兵、西夏兵的 `die()` 开头 `ob = this_object();` 之后直接 `me->add("combat_exp", ..)`，`me` 没赋值；其他库的同一批文件是 `me = query_temp("last_damage_from");`，补回。改动：`/quest/weiguo/japan/japan1.lpc`、`/quest/weiguo/japan/japan3.lpc`、`/quest/weiguo/jinbing/jin1.lpc`、`/quest/weiguo/jinbing/jin3.lpc`、`/quest/weiguo/menggu/mengu1.lpc`、`/quest/weiguo/menggu/mengu3.lpc`、`/quest/weiguo/xixiabing/xixia1.lpc`、`/quest/weiguo/xixiabing/xixia3.lpc`。
+
+## 干将 `do_finish()`：数据不一致分支里的 `moye` 没赋值（2026-10-21，KB 06 §7.348）
+
+`if (objectp(present("mo ye", environment(this_object())))) moye->delete_temp("item");` 把查到的莫邪丢掉了，`moye` 一直是 0：改成 `objectp(moye = present(..))`。改动：`/adm/npc/ganjiang.lpc`。
+
+## 拼错的 `call_out()` / `input_to()` 目标（KB 06 §7.349，2026-10-21）
+
+计时器或输入提示给驱动的函数名和文件里定义的差一个字母；驱动对不存在的函数静默不理，所以对应的计时从来没有触发过。调用和配套的 `remove_call_out()` 改成已定义的拼法：`ruanweijia` / `yuxiao`：`return_to_zhang` → `return_to_huang`（携带者在战斗时的重试从不发生，宝物一直留在玩家手里）；张无忌：`destrory` → `destroy`。改动：`/clone/lonely/ruanweijia.lpc`、`/clone/lonely/yuxiao.lpc`、`/kungfu/class/mingjiao/zhangwuji.lpc`。
+
+## 守卫 `clone/guard/baoer.lpc`：`do_send()` 里丢了收尾引号，整个文件从来没编译过（2026-10-21，KB 03 §4.6 第五轮、KB 06 §7.349）
+
+`new_id=ob->query("id")+"'s bao er;` 少了字符串结尾的引号：字符串一直读到下一行的引号，后面的汉字全成了 `Illegal character 0xe5`（几千行错误，批量验证器里的表现是“没有答案”）。补成 `"'s bao er";`。文件第一次能编译后带出 11 个 `Unused local variable` 警告（`host_id`、`i`、`obj`、`shape`、`emotes`、`inv`、`msg`、`same_place`、`couple_id`、`couple_name`、`couple`），按 KB 04 §6.10 删掉。wxddym 的 `feature/attribute.lpc` 里 `query_per(string arg)` 要一个参数，`baoer` 里的 `query_per()` 改成 `query_per(0)`（同库的 `clone/misc/pet.lpc` 已经这样写）。文件里的 `do_heji` / `do_lian` / `do_order` / `do_title` / `do_ticks` / `do_sha` / `do_shape` / `do_hulian` / `do_quit` 等处理函数都有定义（静态扫描因为引号没闭合把它们当成字符串里的文字，补引号后运行时 `function_exists()` 全部证实存在），所以这个文件的 `add_action` 不属于死登记，没有动。改动：`/clone/guard/baoer.lpc`。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 80 条注册（59 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/adm/npc/buddha.lpc`（`do_zhuanshide`）、`/adm/npc/referee.lpc`（`do_halt`）、`/clone/drug/guiyuan.lpc`（`do_pour`）、`/clone/drug/huiyang-san.lpc`（`do_pour`）、`/clone/drug/shedan.lpc`（`do_pour`）、`/clone/drug/yangxin.lpc`（`do_pour`）、`/clone/drug/yulu-wan.lpc`（`do_pour`）、`/clone/shimne.lpc`（`do_level_up`、`do_up_skills`、`do_up_tianfu`）、`/clone/巫师.lpc`（`detect`、`int`、`letdie`、`quanjia`）、`/d/beijing/hg_w.lpc`（`do_body`） 等共 59 个文件。最多的函数名：`do_send` 15 处、`do_value` 9 处、`do_buy` 7 处、`do_list` 7 处、`do_pour` 5 处。

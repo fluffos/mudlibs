@@ -1301,3 +1301,27 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 独孤九剑「八剑齐飞」「缠剑诀」：对手没赋值（2026-10-21，KB 06 §7.348）
 
 `bajian.lpc`：`target = offensive_target(me)` 被注释掉，`environment(target)` 抛错，整招用不出来；改成 `target = me->select_opponent()`（同库 `chan.lpc` 的写法）并判空。`chan.lpc`：消息里读 `weapon2->name()`，`weapon2`（对手的武器）从没赋值，补 `weapon2 = target->query_temp("weapon")`，对手空手时提示一句。改动：`/daemon/class/jwm/dajiang-jianfa/bajian.lpc`、`/daemon/class/public/dugu-jiujian/chan.lpc`。
+
+## 妙手回春 `valid_learn()`：先读 `ob->query_temp("weapon")` 再给 `ob` 赋值（2026-10-21，KB 06 §7.348）
+
+学这门暗器技能时 `valid_learn()` 第一个武器检查读的是没赋值的 `ob`，`xue` / `learn` 在这里抛错；后面 `ob = me->query_temp("weapon")` 的检查才是对的。有两种写法：`if (!ob->query_temp("weapon"))` 改成 `me->query_temp("weapon")`；`if ((string)ob->query_temp("weapon") != "银针")`（拿一个对象和字符串比较，永远不等，补上 `ob` 之后这门技能也学不成）改成后一种写法里的 `!objectp(ob = me->query_temp("weapon")) || !(ob->id("yin zhen") || ob->id("yinzhen"))`。改动：`/d/pingan/pingan/shenzhen/skills/miaoshouhuichun.lpc`、`/d/pingan/shenzhen/skills/miaoshouhuichun.lpc`、`/kungfu/skill/miaoshouhuichun.lpc`。
+
+## 比武场 `wait_and_start()`：裁判 `fan` 没有赋值（2026-10-21，KB 06 §7.348）
+
+比武开始时 `fan->command("chat ...")` 抛错，后面的两句 `kill` 和 `finish_match` 的计时都没机会执行。补 `fan = load_object(...)`（sjsh 的同一份文件是 `__DIR__ "npc/fan"`）。改动：`/d/sfighter/biwuchang.lpc`。
+
+## 兵器架 `create()`：断剑那一句赋给 `d`、移动的却是 `b`，路径写成 `/b/obj`（2026-10-21，KB 06 §7.348）
+
+`if (d = new("/b/obj/weapon/sword/duanjian")) b->move(this_object());`：路径是 `/d/obj/...`，赋值和移动用的是同一个变量 `b`（`d` 是后面铁剑的）。兵器架缺一把断剑。改动：`/d/lingjian/obj/rack.lpc`。
+
+## 黄蓉 `ask_husband`：找优胜者的那段被注释掉，`user` 没赋值（2026-10-21，KB 06 §7.348）
+
+同 hy5 / haiyang2 / hymud / hy2002 的写法：`user = stringp(id) ? find_player(id) : 0; if (user && ...)`。改动：`/daemon/class/taohua/rong.lpc`、`/kungfu/class/taohua/rong.lpc`。
+
+## 拼错的 `call_out()` / `input_to()` 目标（KB 06 §7.349，2026-10-21）
+
+计时器或输入提示给驱动的函数名和文件里定义的差一个字母；驱动对不存在的函数静默不理，所以对应的计时从来没有触发过。调用和配套的 `remove_call_out()` 改成已定义的拼法：`find_seal`：`disapprear` → `disappear`（法术产生的封印十分钟后从不消失）。改动：`/d/jjf/obj/find_seal.lpc`。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 171 条注册（98 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/clone/drug/guiyuan.lpc`（`do_pour`）、`/clone/drug/huiyang-san.lpc`（`do_pour`）、`/clone/drug/shedan.lpc`（`do_pour`）、`/clone/drug/yangxin.lpc`（`do_pour`）、`/clone/drug/yulu-wan.lpc`（`do_pour`）、`/d/calvin/lanling/npc/guard1.lpc`（`do_bian`）、`/d/calvin/lanling/npc/gurad1.lpc`（`do_bian`）、`/d/calvin/lanling/x.lpc`（`do_swim`）、`/d/changan/pinqiting.lpc`（`do_pass`、`do_resign`）、`/d/city/npc/duguoyin.lpc`（`do_vendor_list`） 等共 98 个文件。最多的函数名：`do_none` 43 处、`do_qiecuo` 15 处、`do_give` 12 处、`do_swim` 10 处、`do_chop` 9 处。没有动（读过）：`/d/sh-jing/lishui.lpc` 的 `do_dig`（对象本身编译不过，登记留着，等对象能加载再处理）、`/d/sh-jing/zhaoyao1.lpc` 的 `do_dig`（对象本身编译不过，登记留着，等对象能加载再处理）、`/d/sh-jing/zhaoyao1.lpc` 的 `do_swim`（对象本身编译不过，登记留着，等对象能加载再处理）。

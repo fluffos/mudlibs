@@ -245,3 +245,7 @@ The `.c` -> `.lpc` rename changed the string but not the slice width: `f[<2..] =
 ## `x != "a" || x != "b"` 和 `x == "a" && x == "b"`：同一个值的比较链永远成立/永远不成立（2026-10-20，KB 06 §7.282）
 
 `if (arg != "wan" || arg != "丸") return notify_fail(...)` 对任何 `arg` 都为真，`dir == "south" && dir == "north"` 永远为假：条件下面的守卫要么永远拦、要么永远不拦。作者要的是“既不是 A 也不是 B”（`&&`）或“是 A 或 B”（`||`）。`!=` 链的 `||` 改成 `&&`（仅当条件下面是 `return` 的拒绝/守卫），`==` 链的 `&&` 改成 `||`（`scripts/lpc_fix_cmp_chain.py`）。改动：`/basic/curse.lpc`（1 处）。
+
+## `add_action()` registrations of functions nobody defines (2026-10-21, KB 06 §7.349)
+
+An `add_action("fn", "verb")` whose function is defined neither by the object, nor by its headers, nor by its parents, nor by any object derived from it (`scripts/lpc_scan_callout_targets.py`, descendants checked transitively, then `function_exists()` in a running driver, `scripts/lpc_verify_handlers.py`). The driver walks the actor's sentences from the newest one: when that sentence's function does not exist it raises `*Function for verb 'drop' not found.` and tries no other handler of the verb (an older dead sentence is passed over silently). Removed 5 registrations in 2 files (`scripts/lpc_fix_dead_add_action.py`), the verbs are left to their other handlers: `/areas/tristeza/shops/lords_shop.lpc` (`read`), `/areas/tristeza/virtual/jail/cavern1.lpc` (`east`, `north`, `south`, `west`). Most frequent: `read` x1, `east` x1, `north` x1, `south` x1, `west` x1. 

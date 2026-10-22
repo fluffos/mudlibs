@@ -590,3 +590,7 @@ The driver's `crypt()` raises (`Error in crypt(), check your salt`) for a key ov
 ## The suffix strip after a directory read (2026-10-20, KB 06 7.296)
 
 After the `.c` -> `.lpc` rename the names read with `get_dir("*.lpc")` were still cut by two characters (`$1[0..<3]`): `baguadao.lpc` became `baguadao.l`, and every path built from it failed to load (stories, battlefields, events, help indexes, player-made item data, summon lists). Now `[0..<5]` (`scripts/lpc_fix_getdir_strip.py`). Changed: `/adm/daemons/chmodules/i3.lpc` (2), `/adm/daemons/chmodules/i3services/mod_oob.lpc` (2).
+
+## Misspelled `call_out()` / `input_to()` targets (KB 06 §7.349, 2026-10-21)
+
+The timer or prompt named a function one letter off the one the file defines (`idle_teme` for `idle_time`, ...): the call is silent for a missing function, so the idle check of the monk guild's inner room never fired. The call and its `remove_call_out()` now use the defined spelling. Changed: `/cmds/adm/wms.lpc`.

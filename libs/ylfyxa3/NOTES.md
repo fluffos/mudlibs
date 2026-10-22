@@ -1083,3 +1083,7 @@ ToMud 升级用的两条指令（`cmds/bos/findfile.lpc`、`updir.lpc`）不带�
 ## 丘处机、觉远的 `accept_object()`：参数和局部变量的名字对不上（2026-10-21，KB 06 §7.348）
 
 yxxcii 的 `qiu.lpc`、`qiu1.lpc`：`accept_object(object me, object ob)` 里判断的是 `obj->query("name")`，`obj` 是没赋值的局部，交上药材一律抛错。ylfyxa3 的 `jueyuan.lpc` 把参数表丢了（`int accept_object()`），函数里读 `obj`（xajh4gkb 的同一份文件是 `accept_object(object me, object ob)`）。把参数名改回来。改动：`/d/shaolin/npc/jueyuan.lpc`。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 19 条注册（19 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/d/city/chatroom2.lpc`（`do_jump`）、`/d/city/npc/counter.lpc`（`do_killing`）、`/d/city/warehousenew.lpc`（`do_zhuan`）、`/d/city2/qishi.lpc`（`do_pass`）、`/d/flypproom/npc/flypp.lpc`（`do_sell`）、`/d/kunlun/obj/jwqin.lpc`（`do_play`）、`/d/mingjiao/npc/changjinpeng.lpc`（`do_join`）、`/d/mingjiao/npc/chengchaofeng.lpc`（`do_join`）、`/d/mingjiao/npc/fenggongying.lpc`（`do_join`）、`/d/mingjiao/npc/gaoshanwang.lpc`（`do_join`） 等共 19 个文件。最多的函数名：`do_decide` 7 处、`do_join` 4 处、`do_jump` 1 处、`do_killing` 1 处、`do_zhuan` 1 处。

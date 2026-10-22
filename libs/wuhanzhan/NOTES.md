@@ -1050,3 +1050,19 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## `blockade` / `recover`：`data/keep` 不存在，解封之后世界仍然锁着（2026-10-21，KB 06 §7.340）
 
 管理员扫描里 `blockade` 报 `Error copying file from /data/user/f/fluffos.o to /data/keep/fluffos, Error: No such file or directory`，随后的 `recover` 在第一个 `cp()` 上死于 `*/data/keep/fluffos: lstat failed`，来不及执行最后的 `LOGIN_D->set_madlock(0)`：封锁解不开。`data/keep/` 是运行时目录，git 克隆里没有空目录。`blockade` 在第一次写之前 `if (file_size("/data/keep") != -2) mkdir("/data/keep");`（`mkdir()` 失败答 0，不抛错），`recover` 对没有保存档的玩家 `if (file_size(src) < 0) continue;`，其余照常恢复、照常解锁（`scripts/lpc_fix_keep_dir.py`，hy5 上实测：没有保存档时 `recover` 答“时空解封完毕”，`blockade` 建出 `data/keep` 并保存，`recover` 取回并删除）。改动（1 个文件）：`/cmds/adm/blockade.lpc`。
+
+## 新手保护块 `added by vikee`：目标还没找到就 `userp(target)`（2026-10-21，KB 06 §7.348）
+
+施法、祭法宝、偷窃指令在查找目标之前就判断 `userp(target)` / `userp(victim)`，参数是 0 时抛错；改成 `objectp(..) && userp(..)`（和 sjsh、mohuanshiji 的同一批文件一致，这一块在目标找到之前永远不会触发）。改动：`/wizu/focus/cmd/cast.lpc`、`/wizu/focus/cmd/steal.lpc`。
+
+## 兵器架 `create()`：断剑那一句赋给 `d`、移动的却是 `b`，路径写成 `/b/obj`（2026-10-21，KB 06 §7.348）
+
+`if (d = new("/b/obj/weapon/sword/duanjian")) b->move(this_object());`：路径是 `/d/obj/...`，赋值和移动用的是同一个变量 `b`（`d` 是后面铁剑的）。兵器架缺一把断剑。改动：`/d/lingjian/obj/rack.lpc`。
+
+## 拼错的 `call_out()` / `input_to()` 目标（KB 06 §7.349，2026-10-21）
+
+计时器或输入提示给驱动的函数名和文件里定义的差一个字母；驱动对不存在的函数静默不理，所以对应的计时从来没有触发过。调用和配套的 `remove_call_out()` 改成已定义的拼法：`find_seal`：`disapprear` → `disappear`（法术产生的封印十分钟后从不消失）。改动：`/d/jjf/obj/find_seal.lpc`。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 14 条注册（9 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/d/changan/pinqiting.lpc`（`do_pass`、`do_resign`）、`/d/city/npc/duguoyin.lpc`（`do_vendor_list`）、`/d/city/npc/petboss.lpc`（`do_cost`、`do_list`、`do_upgrade`）、`/d/lingtai/npc/kancai.lpc`（`do_vendor_list`）、`/d/obj/inherit/misc/fboard.lpc`（`do_list`）、`/d/qujing/jisaiguo/obj/luche.lpc`（`do_get`、`do_put`）、`/d/qujing/wudidong/cave2.lpc`（`do_push`）、`/d/qujing/wuzhuang/renshenguo-yuan.lpc`（`do_none`）、`/wizu/link/obj/donkey.lpc`（`do_unride`）。最多的函数名：`do_vendor_list` 2 处、`do_list` 2 处、`do_push` 2 处、`do_pass` 1 处、`do_resign` 1 处。

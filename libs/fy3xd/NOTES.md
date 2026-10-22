@@ -663,3 +663,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## `refresh`（`retask`）：动词函数不返回 1，搬动或销毁带动作的物件时报错（2026-10-21，KB 06 §7.339）
 
 管理员扫描里 `refresh` 在重新分布使命之后报 `Illegal to move or destruct an object (/questobj/...) defining actions from a verb function(refresh) in object(/obj/user#...) which returns zero.`：`main()` 以第二条 `message()` 结尾、没有 `return`，答 0，而 `TASK_D->init_dynamic_quest(1)` 销毁了给玩家定义过动作（`init()` 里的 `add_action`）的使命物件：驱动只在动词答非 0 时才允许这样搬动或销毁，否则它接着遍历的动作表会悬空；答 0 还会让解析器在指令做完之后再补一句“什么？”。`main()` 末尾加 `return 1;`（同系已经返回 1 的 11 个同名文件没有动）。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 2 条注册（2 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/d/huangshan/npc/xiangke.lpc`（`do_vendor_list`）、`/d/songshan/npc/xiangke.lpc`（`do_vendor_list`）。最多的函数名：`do_vendor_list` 2 处。

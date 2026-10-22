@@ -44,7 +44,7 @@ def functions(code):
 
 
 def masked(b):
-    mask = code_mask(b)
+    mask = code_mask(b, heredoc=True)
     return bytes(c if mask[i] else 32 for i, c in enumerate(b))
 
 

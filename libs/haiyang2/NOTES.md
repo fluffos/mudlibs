@@ -1643,3 +1643,15 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## haiyang2 `enter_world()`：自动二转/三转写给了没赋值的 `obj`（2026-10-21，KB 06 §7.348）
 
 实战经验到 5000 万（三转 6000 万）还没转生的角色登录时，`obj->set("guard/flag", 1); obj->set("tforceok", 2); obj->set("zhuanshen", 1);` 抛错，登录失败；同一个文件后面几处同样的写法都是 `user->set(..)`，`obj` 声明了没赋过值。5 处 `obj->set` 改成 `user->set`，去掉 `object obj;`。改动：`/adm/daemons/logind.lpc`。
+
+## 妙手回春 `valid_learn()`：先读 `ob->query_temp("weapon")` 再给 `ob` 赋值（2026-10-21，KB 06 §7.348）
+
+学这门暗器技能时 `valid_learn()` 第一个武器检查读的是没赋值的 `ob`，`xue` / `learn` 在这里抛错；后面 `ob = me->query_temp("weapon")` 的检查才是对的。有两种写法：`if (!ob->query_temp("weapon"))` 改成 `me->query_temp("weapon")`；`if ((string)ob->query_temp("weapon") != "银针")`（拿一个对象和字符串比较，永远不等，补上 `ob` 之后这门技能也学不成）改成后一种写法里的 `!objectp(ob = me->query_temp("weapon")) || !(ob->id("yin zhen") || ob->id("yinzhen"))`。改动：`/d/pingan/pingan/shenzhen/skills/miaoshouhuichun.lpc`、`/d/pingan/shenzhen/skills/miaoshouhuichun.lpc`、`/kungfu/skill/miaoshouhuichun.lpc`。
+
+## 守卫 `clone/guard/baoer.lpc`：`do_send()` 里丢了收尾引号，整个文件从来没编译过（2026-10-21，KB 03 §4.6 第五轮、KB 06 §7.349）
+
+`new_id=ob->query("id")+"'s bao er;` 少了字符串结尾的引号：字符串一直读到下一行的引号，后面的汉字全成了 `Illegal character 0xe5`（几千行错误，批量验证器里的表现是“没有答案”）。补成 `"'s bao er";`。文件第一次能编译后带出 11 个 `Unused local variable` 警告（`host_id`、`i`、`obj`、`shape`、`emotes`、`inv`、`msg`、`same_place`、`couple_id`、`couple_name`、`couple`），按 KB 04 §6.10 删掉。文件里的 `do_heji` / `do_lian` / `do_order` / `do_title` / `do_ticks` / `do_sha` / `do_shape` / `do_hulian` / `do_quit` 等处理函数都有定义（静态扫描因为引号没闭合把它们当成字符串里的文字，补引号后运行时 `function_exists()` 全部证实存在），所以这个文件的 `add_action` 不属于死登记，没有动。改动：`/clone/guard/baoer.lpc`。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 70 条注册（58 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/clone/medicine/nostrum/gaoyao.lpc`（`do_eat`）、`/d/baling/npc/zhou.lpc`（`do_redeem`）、`/d/beijing/npc/guanfuzi.lpc`（`do_join`）、`/d/beijing/npc/xutianchuan.lpc`（`do_skills`）、`/d/changsha/npc/qiao.lpc`（`do_redeem`）、`/d/chengdu/npc/obj/nostrum/gaoyao.lpc`（`do_eat`）、`/d/city/leitai.lpc`（`do_quit`）、`/d/city/npc/ake.lpc`（`do_pawn`）、`/d/city/weiqishi.lpc`（`do_pass`、`do_resign`）、`/d/city4/qishi.lpc`（`do_pass`、`do_resign`） 等共 58 个文件。最多的函数名：`do_send` 15 处、`do_redeem` 12 处、`do_qiecuo` 11 处、`do_quit` 9 处、`do_vendor_list` 4 处。

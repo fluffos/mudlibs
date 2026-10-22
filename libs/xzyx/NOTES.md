@@ -858,3 +858,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## `wrt`、`wrt1`：不带参数（2026-10-21，KB 06 §7.336）
 
 巫师指令 `wrt`、`wrt1`（`cmds/wiz`）整条指令就是 `write_file(arg, <欢迎词>)`，不带参数时报 `Bad argument 1 to write_file() Expected: string Got: 0.`。加了 `if (!arg) return notify_fail(...)`（`write_file`、`rm`、`mkdir`、`cp` 等文件 efun 对 0 都会抛错，已用 `lpcc_eval.py` 逐个测过，扫描现在也认它们）。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 7 条注册（4 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/d/budui/obj/topless.lpc`（`do_people`）、`/d/city/npc/jiashen.lpc`（`do_chanhui`）、`/d/shendian/npc/baoyi.lpc`（`do_ban`、`do_gan`、`super_die`、`wave`）、`/inherit/misc/fboard.lpc`（`do_list`）。最多的函数名：`do_people` 1 处、`do_chanhui` 1 处、`do_ban` 1 处、`do_gan` 1 处、`super_die` 1 处。改名：`/d/shendian/npc/wushi2.lpc` 的注册 `do_guozao` → `do_guozhao`（文件里定义的是 `do_guozhao`）。

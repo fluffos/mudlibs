@@ -273,3 +273,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 丘处机、觉远的 `accept_object()`：参数和局部变量的名字对不上（2026-10-21，KB 06 §7.348）
 
 yxxcii 的 `qiu.lpc`、`qiu1.lpc`：`accept_object(object me, object ob)` 里判断的是 `obj->query("name")`，`obj` 是没赋值的局部，交上药材一律抛错。ylfyxa3 的 `jueyuan.lpc` 把参数表丢了（`int accept_object()`），函数里读 `obj`（xajh4gkb 的同一份文件是 `accept_object(object me, object ob)`）。把参数名改回来。改动：`/d/quanzhen/npc/qiu.lpc`、`/d/quanzhen/npc/qiu1.lpc`。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 4 条注册（3 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/d/city4/qishi.lpc`（`do_pass`、`do_resign`）、`/d/taishan/npc/mengzhu.lpc`（`do_recover`）、`/inherit/misc/fboard.lpc`（`do_list`）。最多的函数名：`do_pass` 1 处、`do_resign` 1 处、`do_recover` 1 处、`do_list` 1 处。

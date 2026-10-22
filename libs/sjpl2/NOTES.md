@@ -857,3 +857,11 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 帮会税 `/cmds/adm/ctom.lpc`：档案里没有帮会地盘模块（2026-10-21，KB 06 §7.344）
 
 `/d/chengdu/npc/qiuwa.lpc`、`/d/chengdu/npc/wenlaoban.lpc` 在收钱的 `accept_object()` / 兑换函数里调用 `"/cmds/adm/ctom.lpc"->save_money(..)`（把一半钱记给占着地盘的帮会）。本库没有 `ctom`，也没有 `/clone/misc/area`、`lingpai` 这套帮会地盘模块，玩家付住店钱或兑换时在 `return 1` 之前抛错（客栈老板那一支连 `rent_paid` 都有时来不及设）。调用前加 `file_size("/cmds/adm/ctom.lpc") > 0` 的判断（KB 06 §7.308 的写法），模块以后补上就自然生效。
+
+## 拼错的 `call_out()` / `input_to()` 目标（KB 06 §7.349，2026-10-21）
+
+计时器或输入提示给驱动的函数名和文件里定义的差一个字母；驱动对不存在的函数静默不理，所以对应的计时从来没有触发过。调用和配套的 `remove_call_out()` 改成已定义的拼法：`find_seal`：`disapprear` → `disappear`（法术产生的封印十分钟后从不消失）。改动：`/daemon/class/taoist/scratmancy/obj/find_seal.lpc`。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 24 条注册（11 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/d/city/famous.lpc`（`do_bian`、`do_upadm`、`do_upboot`、`do_uplock`）、`/d/city/piggy.lpc`（`do_bian`）、`/d/city/qiyuan.lpc`（`do_pass`、`do_resign`）、`/d/suzhou/liang3.lpc`（`do_jump`、`lingwu`）、`/d/village/npc/seller.lpc`（`do_buy`）、`/d/wuhan/hankou/npc/xiaoboss.lpc`（`do_buy`）、`/std/qitem.lpc`（`do_sing`）、`/std/qitem1.lpc`（`do_cures`、`do_defend`、`do_lookfor`、`do_sing`等）、`/y/city/famous.lpc`（`do_bian`、`do_upadm`、`do_upboot`、`do_uplock`）、`/y/city/piggy.lpc`（`do_bian`） 等共 11 个文件。最多的函数名：`do_bian` 4 处、`do_upadm` 2 处、`do_upboot` 2 处、`do_uplock` 2 处、`do_pass` 2 处。

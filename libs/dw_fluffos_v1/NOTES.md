@@ -291,3 +291,7 @@ The creator sweep as the seeded admin (`play_sweep_lib.py dw_fluffos_v1 --accoun
 ## 俱乐部控制室 `do_transfer()`：失败分支销毁没赋值的 `obj`（2026-10-21，KB 06 §7.348）
 
 `do_transfer()` 在 `remove_money()` 失败时执行 `obj->dest_me();`：这是从 `do_withdrawl()` 抄来的（那里先造了一笔钱 `obj`，失败时销毁它），`do_transfer()` 里什么也没造，`object obj;` 从未赋值。转账失败时抛错，而不是提示 "Unable to remove the money from the account."。去掉声明和那一句。改动：`/std/room/inherit/club_control_room.lpc`。
+
+## `add_action()` registrations of functions nobody defines (2026-10-21, KB 06 §7.349)
+
+An `add_action("fn", "verb")` whose function is defined neither by the object, nor by its headers, nor by its parents, nor by any object derived from it (`scripts/lpc_scan_callout_targets.py`, descendants checked transitively, then `function_exists()` in a running driver, `scripts/lpc_verify_handlers.py`). The driver walks the actor's sentences from the newest one: when that sentence's function does not exist it raises `*Function for verb 'drop' not found.` and tries no other handler of the verb (an older dead sentence is passed over silently). Removed 5 registrations in 1 files (`scripts/lpc_fix_dead_add_action.py`), the verbs are left to their other handlers: `/obj/roommak.lpc` (`do_add`, `do_map`, `do_modify`, `do_set`, ...). Most frequent: `do_add` x1, `do_map` x1, `do_modify` x1, `do_set` x1, `do_setup` x1. 

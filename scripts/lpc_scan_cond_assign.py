@@ -100,7 +100,7 @@ def split_terms(cond):
 
 def scan(b):
     """[(line, term text, absolute offset of the `=`, keyword)] for every constant assignment used as a condition"""
-    mask = code_mask(b)
+    mask = code_mask(b, heredoc=True)
     hits = []
     for m in COND.finditer(b):
         if not mask[m.start()]:

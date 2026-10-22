@@ -518,3 +518,11 @@ re-invoke `enable_player()` on this lib while the object is still
 ## 张三丰 `ask_me_6`：`who->query("id")`（2026-10-21，KB 06 §7.348）
 
 非武当弟子问“太极道袍”时先 `command("shake " + (string)who->query("id"))`，`who` 声明了没赋值，应是 `this_player()`；抛错在拒绝的 `say` 之前，什么也说不出来。改成 `this_player()`，去掉 `who`。改动：`/kungfu/skill/zhang.lpc`。
+
+## 保护任务的商人 `clone/obj/job/job_protect_npc.lpc`：两处笔误让整个文件从来没编译过（2026-10-21，KB 04 §6.29）
+
+`clone/obj/job/protect.h`（保护商人的任务）克隆这个 NPC，但文件有两处笔误：`int baohu(string age)` 的函数体用的是 `arg`（`Undefined variable 'arg'`），而 `init()` 登记的是 `do_baohu`，函数名也对不上；`query->("id")` 多了一个 `->`。改成 `int do_baohu(string arg)` 和 `query("id")`（`if (!player = find_player(...))` 报的 `Illegal LHS` 只是前面语法错误引出来的连锁错误，这种写法本身是对的，没有动）；文件第一次能编译后带出 7 个 `Unused local variable` 警告（`sacrifice`、`exp_rate`、`skill_rate`、`lmt`、`menpai`、`killer`、`kill_num`），按 KB 04 §6.10 删掉。`baohu` / `protect` 两个动词现在有处理函数，任务的商人也第一次能出现。改动：`/clone/obj/job/job_protect_npc.lpc`。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 19 条注册（14 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/adm/daemons/robot-judge.lpc`（`do_test`）、`/d/city/pinqiting.lpc`（`do_pass`、`do_resign`）、`/d/dali/wuliang/muwu1.lpc`（`do_tiao`）、`/d/dali/wuliang/shanlin-6.lpc`（`do_tiao`）、`/d/huanghe/npc/mafu.lpc`（`do_rideyz`）、`/d/huashan/jinshe/obj/haigu.lpc`（`do_move`）、`/d/huashan/npc/yaba.lpc`（`do_follow`、`do_kill`）、`/d/mr/obj/chahua3.lpc`（`do_chu`）、`/d/plummanor/hall.lpc`（`do_answer`）、`/d/songshan/fengchantai.lpc`（`do_decide`、`do_jieti`） 等共 14 个文件。最多的函数名：`do_tiao` 2 处、`do_learn` 2 处、`do_test` 1 处、`do_pass` 1 处、`do_resign` 1 处。没有动（读过）：`/clone/obj/job/job_protect_npc.lpc` 的 `do_baohu`（对象本身编译不过，登记留着，等对象能加载再处理）、`/cmds/leitai/dzd/dzd_flag.lpc` 的 `do_check`（对象本身编译不过，登记留着，等对象能加载再处理）。

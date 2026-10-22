@@ -1366,3 +1366,19 @@ xkx100 的原文是 `vc = victim->add("vote/count", 1);`，nitan 系把它写成
 ## `combatd.lpc` 的阵法防御：先问 `ob->is_busy()`，后给 `ob` 赋值（2026-10-21，KB 06 §7.348）
 
 对手在阵里、气或精低于 40% 时执行 `!ob->is_busy() && objectp(ob = victim->query_array_obstructor())`，`ob` 此时是 0，`do_attack()` 在战斗中途抛错。hhsj、nitan170911、nitan3、nitan_ceshi、nitan_san 是 `objectp(ob = ...) && !ob->is_busy()`，对调回来。`u/lonely/combatd.lpc` 是巫师的开发副本，不动。改动：`/adm/daemons/combatd.lpc`。
+
+## 追杀任务 `killer1.lpc`：奖励循环里的 `me` 从没赋值（2026-10-21，KB 06 §7.348）
+
+黑衣人 `die()` 对每个在场的追杀者发经验和潜能，循环里写的是 `me->add("combat_exp", exp)`（nitan 系是 `addn("combat_exp", exp, me)`），`me` 要到循环之后才被 `find_player(owner)` 赋值：xkx100 系抛 `Bad argument 1 to call_other()`，nitan 系把奖励悄悄记到 0 上，追杀者什么也拿不到。循环里先 `me = obs[i];`。改动：`/clone/quest/killer1.lpc`。
+
+## 马钰 `waiting()`：等了 300 秒没等到的惩罚落在没赋值的 `ob` 上（2026-10-21，KB 06 §7.348）
+
+七星阵的等待超时分支写的是 `ob->add("score", -5000)`（nitan6 系 `addn("score", -5000, ob)`），`ob` 在这个分支里还是 0：超时那一刻抛错，之后的 `do_back` 已经排好了所以只是少了惩罚。hhsj、nitan170911、xfbhh 里同一处写的是 `me`（带着任务的玩家），照改。改动：`/kungfu/class/quanzhen/ma.lpc`。
+
+## 拼错的 `call_out()` / `input_to()` 目标（KB 06 §7.349，2026-10-21）
+
+计时器或输入提示给驱动的函数名和文件里定义的差一个字母；驱动对不存在的函数静默不理，所以对应的计时从来没有触发过。调用和配套的 `remove_call_out()` 改成已定义的拼法：`ruanweijia` / `yuxiao`：`return_to_zhang` → `return_to_huang`（携带者在战斗时的重试从不发生，宝物一直留在玩家手里）；张无忌：`destrory` → `destroy`。改动：`/clone/lonely/ruanweijia.lpc`、`/clone/lonely/yuxiao.lpc`、`/kungfu/class/mingjiao/zhangwuji.lpc`。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 27 条注册（17 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/adm/npc/beichou.lpc`（`do_join`）、`/adm/npc/jierishizhe.lpc`（`do_vendor_list`）、`/adm/npc/referee.lpc`（`do_halt`）、`/clone/medicine/nostrum/gaoyao.lpc`（`do_eat`）、`/clone/misc/city/city.lpc`（`do_chakan`）、`/d/beijing/npc/tiegongji.lpc`（`do_bcheck`、`do_bcun`、`do_bqu`）、`/d/changan/npc/tiegongji.lpc`（`do_audit`、`do_bcheck`、`do_bcun`、`do_bqu`）、`/d/city/npc/qian.lpc`（`do_bcheck`、`do_bcun`、`do_bqu`）、`/d/city/npc/tang.lpc`（`do_check`）、`/d/gumu/npc/obj/qingci-ping.lpc`（`do_add`） 等共 17 个文件。最多的函数名：`do_bcheck` 3 处、`do_bcun` 3 处、`do_bqu` 3 处、`do_halt` 2 处、`do_audit` 2 处。没有动（读过）：`/d/kongdong/npc/mu.lpc` 的 `give_quest`（对象本身编译不过，登记留着，等对象能加载再处理）、`/d/kongdong/npc/mu_bak_xli.lpc` 的 `give_quest`（对象本身编译不过，登记留着，等对象能加载再处理）、`/quest11/jiuyin/zhou.lpc` 的 `do_answer`（对象本身编译不过，登记留着，等对象能加载再处理）、`/quest11/jiuyin/zhou.lpc` 的 `do_learn`（对象本身编译不过，登记留着，等对象能加载再处理）、`/quest11/tlbb/murong-fu.lpc` 的 `do_lingwu`（对象本身编译不过，登记留着，等对象能加载再处理）。

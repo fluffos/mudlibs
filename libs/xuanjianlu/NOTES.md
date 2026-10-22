@@ -1606,3 +1606,15 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## 玄剑录华山台阶 `valid_leave()`：`living(obj)`（2026-10-21，KB 06 §7.348）
 
 `object obj;` 从未赋值，`living(obj)` 抛错，离开这间房一律失败。别的库的同一个房间没有这个函数；判断的是走的人，改成 `living(me)`，去掉 `obj`。改动：`/d/huashan/stair.lpc`。
+
+## 拼错的 `call_out()` / `input_to()` 目标（KB 06 §7.349，2026-10-21）
+
+计时器或输入提示给驱动的函数名和文件里定义的差一个字母；驱动对不存在的函数静默不理，所以对应的计时从来没有触发过。调用和配套的 `remove_call_out()` 改成已定义的拼法：药炉：`burning2` / `burning3` → 文件里定义的 `buring2` / `buring3`；`do_destroy` → 文件里定义的 `do_destory`。改动：`/d/huanghe/npc/tc_wang.lpc`、`/d/xingxiu/npc/obj/yaolu.lpc`、`/d/xingxiu/obj/yaolu.lpc`。
+
+## 保护任务的商人 `clone/obj/job/job_protect_npc.lpc`：两处笔误让整个文件从来没编译过（2026-10-21，KB 04 §6.29）
+
+`clone/obj/job/protect.h`（保护商人的任务）克隆这个 NPC，但文件有两处笔误：`int baohu(string age)` 的函数体用的是 `arg`（`Undefined variable 'arg'`），而 `init()` 登记的是 `do_baohu`，函数名也对不上；`query->("id")` 多了一个 `->`。改成 `int do_baohu(string arg)` 和 `query("id")`（`if (!player = find_player(...))` 报的 `Illegal LHS` 只是前面语法错误引出来的连锁错误，这种写法本身是对的，没有动）；文件第一次能编译后带出 7 个 `Unused local variable` 警告（`sacrifice`、`exp_rate`、`skill_rate`、`lmt`、`menpai`、`killer`、`kill_num`），按 KB 04 §6.10 删掉。`baohu` / `protect` 两个动词现在有处理函数，任务的商人也第一次能出现。改动：`/clone/obj/job/job_protect_npc.lpc`。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 17 条注册（12 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/d/beijing/npc/duolong.lpc`（`do_jobwith`）、`/d/beijing/obj/kuanglu.lpc`（`do_look`）、`/d/changan/npc/zhangsan.lpc`（`do_vendor_buy`）、`/d/kunlun/npc/mingjiao_npc.lpc`（`do_qingjiao`）、`/d/murong/mrjob/mrnpc/mr_obj/mr_lingpai.lpc`（`do_zhuo`）、`/d/quanzhou/npc/gongping-zi.lpc`（`do_bihua`、`do_halt`）、`/d/xiakedao/obj/car.lpc`（`do_hire`）、`/d/xingxiu/npc/feng.lpc`（`do_ketou`）、`/d/xingxiu/obj/sanxiao.lpc`（`throw_ob2`）、`/inherit/misc/fboard.lpc`（`do_list`） 等共 12 个文件。最多的函数名：`do_bihua` 3 处、`do_qingjiao` 2 处、`do_halt` 2 处、`do_hire` 2 处、`do_jobwith` 1 处。没有动（读过）：`/clone/obj/job/job_protect_npc.lpc` 的 `do_baohu`（对象本身编译不过，登记留着，等对象能加载再处理）。

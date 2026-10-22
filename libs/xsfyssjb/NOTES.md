@@ -278,3 +278,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 存档里的 `.c` 文件名改成 `.lpc`（2026-10-21，KB 03 §4.2 第 9 项）
 
 存档里写着 `"/d/city/npc/wei.c"` 这样的文件名；extract 时源文件已经全部改成 `.lpc`，而驱动对带扩展名的路径只认字面，`new()` / `load_object()` / `move()` 都找不到它，调用方多半把失败当成「没有这个东西」悄悄跳过。本库 41 个存档共 41 处按 `scripts/lpc_fix_save_dotc.py` 改成 `.lpc`（只改 `.lpc` 存在而 `.c` 不存在的字符串；玩家存档、备份、留言板、巫师目录和文件索引缓存不动）。改动：`/p/residence/amine1027580822.o`（1 处）、`/p/residence/amine1027587616.o`（1 处）、`/p/residence/amine1027594915.o`（1 处）、`/p/residence/baby1032108114.o`（1 处）（等共 41 个存档）。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 12 条注册（12 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/d/baiyun/beach1.lpc`（`do_dive`）、`/d/biancheng/npc/oldman.lpc`（`do_vendor_list`）、`/d/fugui/npc/dashuai.lpc`（`do_accept`）、`/d/fugui/npc/robleader.lpc`（`do_accept`）、`/d/huashan/npc/obj/bamboo_cont.lpc`（`do_use`）、`/d/shanliu/npc/taoist1.lpc`（`do_answer`）、`/d/shanliu/npc/yang.lpc`（`do_answer`）、`/d/shaolin/fangnan.lpc`（`do_look`）、`/d/songshan/damocave.lpc`（`do_look`）、`/d/wanmei/woodhouse.lpc`（`do_fillwater`） 等共 12 个文件。最多的函数名：`do_accept` 2 处、`do_answer` 2 处、`do_look` 2 处、`do_dive` 1 处、`do_vendor_list` 1 处。没有动（读过）：`/d/huashan/npc/snake.lpc` 的 `do_train`（不是单独一行的语句（`obj->add_action()`、宏或没有分号的写法））。

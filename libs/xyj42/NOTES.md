@@ -246,3 +246,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## `pk`、`rget`、`tianfu`（2026-10-21，KB 06 §7.336、KB 04 §6.28）
 
 `pk`、`rget`（巫师指令）不带参数时 `Bad argument 1 to sscanf() Expected: string Got: 0.`（管理员扫描的控制台行）：在 `if (sscanf(arg, ...) == 2);` 前面加了 `if (!arg) return help(me);`（并补上 `int help(object me);` 原型）。`tianfu` 编译不了：原型 `string display_attr(int gift, int value);` 和定义 `varargs string display_attr(string gift, int value, int effective)` 对不上，原型改成和定义一致（兄弟库的原型本来就对）。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 8 条注册（5 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/d/changan/pinqiting.lpc`（`do_pass`、`do_resign`）、`/d/city/npc/duguoyin.lpc`（`do_vendor_list`）、`/d/lingtai/npc/kancai.lpc`（`do_vendor_list`）、`/d/qujing/jisaiguo/obj/luche.lpc`（`do_get`、`do_put`）、`/d/qujing/wudidong/cave2.lpc`（`do_push`）。最多的函数名：`do_vendor_list` 2 处、`do_push` 2 处、`do_pass` 1 处、`do_resign` 1 处、`do_get` 1 处。

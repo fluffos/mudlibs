@@ -1223,3 +1223,15 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 华山密室 `stage3()`：重新登录那段被注释掉，`obj` 没赋值（2026-10-21，KB 06 §7.348）
 
 练成之后 `obj = LOGIN_D->make_body(link_ob); ... exec(link_ob, me); destruct(me); ...` 整段在注释里，下面的 `obj->move(place); obj->write_prompt(); set(.., obj); obj->save();` 还在：属性已经加完，抛错发生在“恢复气血、存盘”之前。xkx100 系的库里这段是启用的；这里补 `obj = me;`，下面几句直接作用在玩家本人身上。改动：`/d/huashan/mishi.lpc`。
+
+## 追杀任务 `killer1.lpc`：奖励循环里的 `me` 从没赋值（2026-10-21，KB 06 §7.348）
+
+黑衣人 `die()` 对每个在场的追杀者发经验和潜能，循环里写的是 `me->add("combat_exp", exp)`（nitan 系是 `addn("combat_exp", exp, me)`），`me` 要到循环之后才被 `find_player(owner)` 赋值：xkx100 系抛 `Bad argument 1 to call_other()`，nitan 系把奖励悄悄记到 0 上，追杀者什么也拿不到。循环里先 `me = obs[i];`。改动：`/clone/quest/killer1.lpc`。
+
+## 拼错的 `call_out()` / `input_to()` 目标（KB 06 §7.349，2026-10-21）
+
+计时器或输入提示给驱动的函数名和文件里定义的差一个字母；驱动对不存在的函数静默不理，所以对应的计时从来没有触发过。调用和配套的 `remove_call_out()` 改成已定义的拼法：`ruanweijia` / `yuxiao`：`return_to_zhang` → `return_to_huang`（携带者在战斗时的重试从不发生，宝物一直留在玩家手里）；张无忌：`destrory` → `destroy`。改动：`/clone/lonely/ruanweijia.lpc`、`/clone/lonely/yuxiao.lpc`、`/kungfu/class/mingjiao/zhangwuji.lpc`。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 34 条注册（22 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/adm/npc/beichou.lpc`（`do_join`）、`/adm/npc/ganjiang.lpc`（`do_merge`）、`/adm/npc/jierishizhe.lpc`（`do_vendor_list`）、`/adm/npc/referee.lpc`（`do_halt`）、`/clone/medicine/nostrum/gaoyao.lpc`（`do_eat`）、`/clone/misc/city/city.lpc`（`do_chakan`）、`/d/beijing/npc/tiegongji.lpc`（`do_bcheck`、`do_bcun`、`do_bqu`）、`/d/changan/npc/tiegongji.lpc`（`do_audit`、`do_bcheck`、`do_bcun`、`do_bqu`）、`/d/city/npc/huoji4.lpc`（`do_check`）、`/d/city/npc/qian.lpc`（`do_bcheck`、`do_bcun`、`do_bqu`） 等共 22 个文件。最多的函数名：`do_bcheck` 3 处、`do_bcun` 3 处、`do_bqu` 3 处、`do_tiao` 3 处、`do_vendor_list` 2 处。没有动（读过）：`/quest/skybook/jiuyin/zhou.lpc` 的 `do_answer`（对象本身编译不过，登记留着，等对象能加载再处理）、`/quest/skybook/jiuyin/zhou.lpc` 的 `do_learn`（对象本身编译不过，登记留着，等对象能加载再处理）、`/quest/skybook/tlbb/murong-fu.lpc` 的 `do_lingwu`（对象本身编译不过，登记留着，等对象能加载再处理）。

@@ -432,3 +432,11 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 存档里的 `.c` 文件名改成 `.lpc`（2026-10-21，KB 03 §4.2 第 9 项）
 
 存档里写着 `"/d/city/npc/wei.c"` 这样的文件名；extract 时源文件已经全部改成 `.lpc`，而驱动对带扩展名的路径只认字面，`new()` / `load_object()` / `move()` 都找不到它，调用方多半把失败当成「没有这个东西」悄悄跳过。本库 1 个存档共 1 处按 `scripts/lpc_fix_save_dotc.py` 改成 `.lpc`（只改 `.lpc` 存在而 `.c` 不存在的字符串；玩家存档、备份、留言板、巫师目录和文件索引缓存不动）。改动：`/d/green/k.o`（1 处）（共 1 个存档）。
+
+## xbtxiii：谢剑的 `init()`、杨过和小龙女的两个 call_out（2026-10-21，KB 06 §7.348）
+
+`xiejian.lpc` 的 `init()` 读没赋值的 `me` 和 `ob`：每个进房间的人都抛错，`add_action("do_name", "杀")` 也没执行；补 `ob = this_player(); me = this_object();`。`xiaolongnv.lpc` / `yangguo.lpc` 的 `dest_it()` 对没赋值的 `object *npc` 取下标（补 `npc = all_inventory(environment(this_object()))`）；`come_shuitan(object me)` 声明了 `xiaolongnv`、`yangguo` 两个局部，而 `call_out("come_shuitan", 3, me, yangguo, xiaolongnv)` 把它们当参数传：参数表补上，局部去掉。改动：`/d/ultimate/first/npc/xiaolongnv.lpc`、`/d/ultimate/first/npc/yangguo.lpc`、`/d/village/npc/xiejian.lpc`。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 46 条注册（25 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/d/baituo/npc/snaker.lpc`（`do_buy`、`do_vendor_list`）、`/d/biao/gmaster.lpc`（`do_accept`）、`/d/city2/npc/cheng.lpc`（`do_buy`、`do_vendor_list`）、`/d/city2/npc/hu.lpc`（`do_buy`、`do_list`）、`/d/city2/npc/jia.lpc`（`do_buy`、`do_list`、`do_sell`、`do_value`）、`/d/city2/npc/smith.lpc`（`do_buy`、`do_list`）、`/d/city2/npc/xiaofan.lpc`（`do_buy`、`do_list`）、`/d/fy/gamebox22.lpc`（`do_flee`）、`/d/fy/gamebox23.lpc`（`do_flee`）、`/d/fy/npc/governor.lpc`（`give_quest`） 等共 25 个文件。最多的函数名：`do_buy` 10 处、`do_list` 8 处、`give_quest` 5 处、`do_sell` 3 处、`do_vendor_list` 2 处。改名：`/obj/prize/pet.lpc` 的注册 `do_order` → `do_oxrder`（文件里定义的是 `do_oxrder`）。没有动（读过）：`/d/ny/npc/a_book.lpc` 的 `do_query`（对象本身编译不过，登记留着，等对象能加载再处理）、`/d/ny/npc/a_book.lpc` 的 `do_bank`（对象本身编译不过，登记留着，等对象能加载再处理）、`/d/shenlong/npc/zhang3.lpc` 的 `do_join`（对象本身编译不过，登记留着，等对象能加载再处理）、`/d/snow/npc/a_book.lpc` 的 `do_query`（对象本身编译不过，登记留着，等对象能加载再处理）、`/d/snow/npc/a_book.lpc` 的 `do_bank`（对象本身编译不过，登记留着，等对象能加载再处理）。

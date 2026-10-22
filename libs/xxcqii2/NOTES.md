@@ -279,3 +279,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## `socket`：`dump_socket_status()` 在本库没有（2026-10-21，KB 06 §7.291）
 
 管理员扫描里 `socket` 指令（`/cmds/hufa/socket.lpc`）编译不了：`write(dump_socket_status());` 用的是 MudOS 有、本驱动没有的 efun。2026-10-20 的补丁只按名字找了巫师目录里的同名指令，这一条在 `cmds/bos`、`cmds/hufa`、`cmds/island`、`cmds/ser` 这类目录里；用 `scripts/lpc_add_sefun.py dump_socket_status` 在 `/adm/obj/simul_efun.lpc` 末尾补了一个由 `socket_status()` 构造表格的 simul_efun（没有 sockets 包的构建，比如 WASM，只打印表头）。指令 HEAD 编译失败，现在通过。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 30 条注册（26 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/clone/wizmisc/zhihuan.lpc`（`test`）、`/d/bianliang/npc/tiejiang.lpc`（`do_buy`、`do_list`）、`/d/huafu/obj/gaoliang.lpc`（`do_bann`）、`/d/moto.lpc`（`do_list`）、`/d/murong/npc/murong-fu.lpc`（`do_jiaoliang`）、`/d/quanli/npc/dujue.lpc`（`do_join`）、`/d/quanli/npc/futianyi.lpc`（`do_join`）、`/d/quanli/npc/guan.lpc`（`do_join`）、`/d/quanli/npc/kang.lpc`（`do_join`）、`/d/quanli/npc/kong.lpc`（`do_join`） 等共 26 个文件。最多的函数名：`do_join` 19 处、`do_list` 2 处、`test` 1 处、`do_buy` 1 处、`do_bann` 1 处。没有动（读过）：`/d/quanli/npc/hua.lpc` 的 `do_join`（对象本身编译不过，登记留着，等对象能加载再处理）。

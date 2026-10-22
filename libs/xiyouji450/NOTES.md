@@ -865,3 +865,11 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## `cast1`：宏 `SYNTAX` 带着分号（2026-10-21，KB 04 §6.28）
 
 `#define SYNTAX "指令格式：cast <法术> [<参数>| on <目标>]\n";` 的 `;` 属于宏展开，`notify_fail(SYNTAX);` 变成 `notify_fail("..." ;);`，整个指令编译不了（`unexpected ';'`）。去掉宏里的分号，并删掉没用到的局部变量 `dest`（编译警告）。这份文件在 `return notify_fail("对方正在断线中，不能对其施法` 这句字符串中间就断了（档案丢了后半截），后半截（`。\n");` 之后的 `main()` 余下部分、`destruct_flag()`、`help()`）按 xyj42 的同一份文字补全。
+
+## 拼错的 `call_out()` / `input_to()` 目标（KB 06 §7.349，2026-10-21）
+
+计时器或输入提示给驱动的函数名和文件里定义的差一个字母；驱动对不存在的函数静默不理，所以对应的计时从来没有触发过。调用和配套的 `remove_call_out()` 改成已定义的拼法：`find_seal`：`disapprear` → `disappear`（法术产生的封印十分钟后从不消失）。改动：`/d/jjf/obj/find_seal.lpc`。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 7 条注册（4 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/d/changan/pinqiting.lpc`（`do_pass`、`do_resign`）、`/d/lingtai/npc/kancai.lpc`（`do_vendor_list`）、`/d/qujing/jisaiguo/obj/luche.lpc`（`do_get`、`do_put`）、`/d/qujing/wudidong/cave2.lpc`（`do_push`）。最多的函数名：`do_push` 2 处、`do_pass` 1 处、`do_resign` 1 处、`do_vendor_list` 1 处、`do_get` 1 处。

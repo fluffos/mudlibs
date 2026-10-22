@@ -58,7 +58,7 @@ def body_after(code, pos):
 
 
 def hits(b):
-    mask = code_mask(b)
+    mask = code_mask(b, heredoc=True)
     code = bytes(c if mask[i] else 32 for i, c in enumerate(b))
     fors = [(m, *body_after(code, m.end())) for m in FOR.finditer(code)]
     for m, body, bstart in fors:

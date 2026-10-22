@@ -1057,3 +1057,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 苗疆山谷 `shangu1`：第二条蛇写成了 `jinshe = new(..yinshe)`（2026-10-21，KB 06 §7.346）
 
 烧灵芝兰（`do_shao`）引出两条蛇：`jinshe = new(__DIR__ "npc/jinshe"); jinshe = new(__DIR__ "npc/yinshe");`，第二句把第一条覆盖了，`yinshe` 一直是 0，后面的 `yinshe->move(...)` 抛错。第二句改成 `yinshe = new(...)`（sje、jym 的同一份文件是对的）。
+
+## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
+
+`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 29 条注册（20 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/adm/npc/mdc.lpc`（`do_all`、`do_link`、`do_new`、`do_save`等）、`/adm/npc/referee.lpc`（`do_halt`）、`/d/city/leitai12.lpc`（`do_action`）、`/d/city/pinqiting.lpc`（`do_pass`、`do_resign`）、`/d/dali/anbian.lpc`（`do_tiao`）、`/d/dali/muwu1.lpc`（`do_tiao`）、`/d/dali/npc/duan2.lpc`（`do_vendor_list`）、`/d/dali/shanlin-6.lpc`（`do_tiao`）、`/d/gumu/gmqs.lpc`（`do_play`）、`/d/jinshe/husun1.lpc`（`do_pa`） 等共 20 个文件。最多的函数名：`do_tiao` 3 处、`do_strike` 3 处、`do_halt` 2 处、`do_all` 1 处、`do_link` 1 处。没有动（读过）：`/clone/misc/bargain.lpc` 的 `do_sign`（对象本身编译不过，登记留着，等对象能加载再处理）。
