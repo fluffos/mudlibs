@@ -881,3 +881,7 @@ are not in the archive).
 ## 注册到不存在函数的 `add_action`，第二轮：宏路径父类和静态解析不了的对象（2026-10-21，KB 06 §7.349）
 
 第一轮的静态解析读不了经宏路径继承父类的对象（`#define ROOM STD_DIR "room/room"` 这类定义的正文以另一个宏开头）和它解析不了的继承，这些对象当作 `UNSURE` 没有扫；第二轮修了解析器，重扫并对这些对象在运行时问 `function_exists()`。`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 5 条注册（3 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/domains/campus/npc/jennybot.lpc`（`get_p`）、`/secure/obj/machine.lpc`（`check_it`）、`/secure/obj/memo.lpc`（`clean_memo`、`erase_memo`、`help_memo`）。最多的函数名：`get_p` 1 处、`check_it` 1 处、`clean_memo` 1 处、`erase_memo` 1 处、`help_memo` 1 处。
+
+## 战斗探针（管理员克隆 NPC，2026-10-22）：干净
+
+`scripts/play_combat_probe.py dsII --account ... --clone ...`：用库里预置的管理员账号把 `/domains/default/npc/quarantine/edmund`, `/domains/Ylsrim/npc/balrog`, `/domains/default/npc/fighter`, `/domains/town/npc/orc`, `/domains/campus/npc/charly`, `/shadows/drone` 逐个克隆到自己所在的房间并各攻击 20 秒（读了 6 场战斗）：驱动没有输出，战斗画面里没有错误文字。（KB 08 §10.16）

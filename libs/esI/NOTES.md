@@ -884,3 +884,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply e
 ## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
 
 `add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 7 条注册（6 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/d/eastland/liang_shan/monster/fish11.lpc`（`kill_me`）、`/d/eastland/saulin_temple/brass/zeng7.lpc`（`do_auction`）、`/d/eastland/story/monster/elder1.lpc`（`do_embattle`）、`/d/eastland/story/weapon/elder1.lpc`（`do_embattle`）、`/d/noden/hawk/obj/tape.lpc`（`do_cast`、`do_tear`）、`/std/npc2.lpc`（`quit`）。最多的函数名：`do_embattle` 2 处、`kill_me` 1 处、`do_auction` 1 处、`do_cast` 1 处、`do_tear` 1 处。没有动（读过）：`/d/noden/mj/emsd.lpc` 的 `do_gongxian`（对象本身编译不过，登记留着，等对象能加载再处理）。
+
+## 战斗探针（管理员克隆 NPC，2026-10-22）：干净
+
+`scripts/play_combat_probe.py esI --account ... --clone ...`：用库里预置的管理员账号把 `/d/eastland/liang_shan/monster/test`, `/d/noden/ruin/monster/deltazeus`, `/d/island/monster/lady`, `/d/island/samurai/mob/ekars`, `/d/eastland/volcano/monster/wjailor`, `/d/island/forest/monster/older` 逐个克隆到自己所在的房间并各攻击 20 秒（读了 6 场战斗）：驱动没有输出，战斗画面里没有错误文字。（KB 08 §10.16）

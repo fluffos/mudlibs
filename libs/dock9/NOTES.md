@@ -594,3 +594,7 @@ After the `.c` -> `.lpc` rename the names read with `get_dir("*.lpc")` were stil
 ## Misspelled `call_out()` / `input_to()` targets (KB 06 §7.349, 2026-10-21)
 
 The timer or prompt named a function one letter off the one the file defines (`idle_teme` for `idle_time`, ...): the call is silent for a missing function, so the idle check of the monk guild's inner room never fired. The call and its `remove_call_out()` now use the defined spelling. Changed: `/cmds/adm/wms.lpc`.
+
+## Combat probe with the seeded administrator (2026-10-22): clean
+
+`scripts/play_combat_probe.py dock9 --account ... --clone ...`: the administrator cloned `/areas/lpuni/mobiles/greeter`, `/areas/trepi/docks/npc/greeter_sailor`, `/areas/trepi/docks/npc/high_sailor` into its room without a driver line; these greeters refuse `kill`, so no fight started. (KB 08 §10.16)

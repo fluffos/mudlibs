@@ -465,3 +465,7 @@ ToMud 升级用的两条指令（`cmds/bos/findfile.lpc`、`updir.lpc`）不带�
 ## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
 
 `add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 17 条注册（17 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/d/city/chatroom2.lpc`（`do_jump`）、`/d/city/warehousenew.lpc`（`do_zhuan`）、`/d/city2/qishi.lpc`（`do_pass`）、`/d/flypproom/npc/flypp.lpc`（`do_sell`）、`/d/mingjiao/npc/changjinpeng.lpc`（`do_join`）、`/d/mingjiao/npc/chengchaofeng.lpc`（`do_join`）、`/d/mingjiao/npc/fenggongying.lpc`（`do_join`）、`/d/mingjiao/npc/gaoshanwang.lpc`（`do_join`）、`/d/quanzhen/npc/haodatong.lpc`（`do_decide`）、`/d/quanzhen/npc/mayu.lpc`（`do_decide`） 等共 17 个文件。最多的函数名：`do_decide` 7 处、`do_join` 4 处、`do_jump` 1 处、`do_zhuan` 1 处、`do_pass` 1 处。
+
+## 对象路径里的 `..`：`new(__DIR__ "../obj/x")` 报 `Read access denied`（2026-10-22，KB 06 §7.351）
+
+`__DIR__` 是当前文件所在目录（带结尾斜杠），`__DIR__ "../obj/x"` 就是 `/d/zhiye/npc/../obj/x`；驱动的 `legal_path()` 不接受带 `..` 的路径，`new()` / `load_object()` 直接抛 `*Read access denied.`（实测，`find_object()` 对它答 0）。走库自己的 `carry_object()` / 房间 `objects` 表的路径，库的基类会先规范化，能用；直接把路径交给 `new()` / `clone_object()` / `load_object()` / `move()` 的不行，调用到那一步才报错。改成规范化后的绝对路径（`scripts/lpc_fix_dotdot_dir.py --direct`）：`/d/wudang/npc/xiaocui.lpc`（`__DIR__ "../obj/nuerxiang"` → `"/d/wudang/obj/nuerxiang"`）。

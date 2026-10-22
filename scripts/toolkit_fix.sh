@@ -78,6 +78,7 @@ echo "   unused init:  $(python3 scripts/lpc_fix_unused_init.py "$SLUG" --apply 
 echo "   #if locals:   $(python3 scripts/lpc_move_decl.py "$SLUG" --apply 2>/dev/null | grep -c '^edited') file(s)"
 echo "   macro redef:  $(python3 scripts/lpc_fix_macro_redef.py "$SLUG" --apply 2>/dev/null | tail -1)"
 echo "   extra ';':    $(python3 scripts/lpc_fix_extra_semicolon.py "$SLUG" --apply 2>/dev/null | tail -1)"
+echo "   ../ paths:    $(python3 scripts/lpc_fix_dotdot_dir.py --direct --apply "$SLUG" 2>&1 | tail -1)"        # new(__DIR__ "../x"): the driver refuses a `..` component (KB 06 7.351)
 
 echo "== 3. redundant inherits"
 python3 scripts/lpc_diamonds.py "$SLUG" --fix-redundant --apply | tail -1

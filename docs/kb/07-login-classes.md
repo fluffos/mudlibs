@@ -64,6 +64,13 @@ Once inherited, `private` is demoted to DECL_HIDDEN, and
 ORIGIN_DRIVER bypasses the check. NPC `command()` self-calls
 (movement auto-look, recruit, registration NPC dialogue) still fail, so
 test at least one NPC `command()`.
+- **Where the driver checks (read in `packages/core/add_action.cc` and `vm/internal/apply.cc`, FluffOS 923cdbc0; measured with `lpcc_eval.py`, 2026-10-22).**
+  A command typed at the prompt has no `current_object`: `where = ORIGIN_DRIVER`, the access it needs is `DECL_HIDDEN`, the lowest, so every handler runs,
+  `protected`, `private` and the hidden `private` of an ancestor included. `command()` called from LPC is `ORIGIN_EFUN`: a handler of ANOTHER object has to be
+  public (`protected` / `private` answer 0 and the log says `apply() with insufficient permission`), a handler of the caller itself needs `private` or above
+  (a hidden ancestor `private` fails). `call_out` / `input_to` need `private` too, which is why the hidden ancestors below fail. So a `private` / `protected`
+  `add_action` target is not a dead handler for a player (measured through `command()` in a test object it looks like one: do not sweep it); it is dead for an NPC
+  and for anything that goes through `command()`. A function that does not exist at all (KB 06 7.349) fails from every origin.
 - Grep (uncommented declarations only):
   ```
   rg -n --glob '*.lpc' '^[ \t]*(nomask[ \t]+)?(private|static)[ \t]+(nomask[ \t]+)?int[ \t]+(command_hook|cmd_hook)\s*\('

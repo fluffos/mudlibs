@@ -445,3 +445,11 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
 
 `add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 34 条注册（31 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/clone/board/hy2news_b.lpc`（`do_discard`）、`/cmds/usr/news.lpc`（`do_discard`）、`/d/city/chatroom2.lpc`（`do_jump`）、`/d/city3/npc/sister.lpc`（`do_vendor_list`）、`/d/city4/qishi.lpc`（`do_pass`、`do_resign`）、`/d/mr/shuichi.lpc`（`do_strike`）、`/d/pingan/pingan/npc/sighmoon.lpc`（`do_vendor_list`）、`/d/quanzhen/npc/haodatong.lpc`（`do_decide`）、`/d/quanzhen/npc/mayu.lpc`（`do_decide`）、`/d/quanzhen/npc/qizhicheng.lpc`（`do_decide`） 等共 31 个文件。最多的函数名：`do_send` 15 处、`do_decide` 6 处、`do_discard` 2 处、`do_vendor_list` 2 处、`do_strike` 2 处。
+
+## 对象路径里的 `..`：`new(__DIR__ "../obj/x")` 报 `Read access denied`（2026-10-22，KB 06 §7.351）
+
+`__DIR__` 是当前文件所在目录（带结尾斜杠），`__DIR__ "../obj/x"` 就是 `/d/zhiye/npc/../obj/x`；驱动的 `legal_path()` 不接受带 `..` 的路径，`new()` / `load_object()` 直接抛 `*Read access denied.`（实测，`find_object()` 对它答 0）。走库自己的 `carry_object()` / 房间 `objects` 表的路径，库的基类会先规范化，能用；直接把路径交给 `new()` / `clone_object()` / `load_object()` / `move()` 的不行，调用到那一步才报错。改成规范化后的绝对路径（`scripts/lpc_fix_dotdot_dir.py --direct`）：`/d/wudang/npc/xiaocui.lpc`（`__DIR__ "../obj/nuerxiang"` → `"/d/wudang/obj/nuerxiang"`）。
+
+## 商人的 `list` 命令：登记的是另一个血统的函数名（2026-10-22，KB 06 §7.349）
+
+第 42 批把 `add_action("do_vendor_list", "list");` 当成死登记删掉了（这些文件里没有 `do_vendor_list`，输入 `list` 只会得到 `*Function for verb 'list' not found.`），但它们的商人基类里同一个工作的函数叫 `do_list`，`list` 动词就此没了：`/d/city3/npc/sister.lpc`。按真正存在的函数名放回 `add_action("do_list", "list");`；用库的管理员账号克隆 NPC 再输入 `list` 实测（`/d/city3/npc/sister.lpc`：`您想看哪一种货物(armor, book, misc, weapon)？ ⊙`），每个文件都列出商品或问要看哪一类。同一批里放回去后仍答 `什麼？`、没有商品或者列表时报错（货品文件缺失）的商人没有动。

@@ -722,3 +722,7 @@ A room exit named a file the lib does not have, so the player was stuck (a typo,
 ## 存档里的 `.c` 文件名改成 `.lpc`（2026-10-21，KB 03 §4.2 第 9 项）
 
 存档里写着 `"/d/city/npc/wei.c"` 这样的文件名；extract 时源文件已经全部改成 `.lpc`，而驱动对带扩展名的路径只认字面，`new()` / `load_object()` / `move()` 都找不到它，调用方多半把失败当成「没有这个东西」悄悄跳过。本库 1 个存档共 1 处按 `scripts/lpc_fix_save_dotc.py` 改成 `.lpc`（只改 `.lpc` 存在而 `.c` 不存在的字符串；玩家存档、备份、留言板、巫师目录和文件索引缓存不动）。改动：`/data/adm/daemons/doc_d/Root.o`（1 处）（共 1 个存档）。
+
+## 战斗探针（2026-10-22）：`obj/tools/barney.lpc` 的 `inherit` 在全局变量之后
+
+`scripts/play_combat_probe.py tmi2 --account fluffos:... --clone ...` 克隆 `/obj/tools/barney` 时报 `10:9: Illegal to inherit after defining global variables`（`string *list; int which, lalala;` 写在 `inherit MONSTER;` 前面，老驱动不管）。把 `inherit MONSTER ;` 挪到全局变量前面，文件现在能加载。`googol` 一出来就走，`bozo` 不能被攻击（`You are not permitted to attack that.`），没有控制台错误。

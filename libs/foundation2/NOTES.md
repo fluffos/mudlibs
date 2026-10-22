@@ -555,3 +555,7 @@ the news pager. Fixed:
 ## 注册到不存在函数的 `add_action`，第二轮：宏路径父类和静态解析不了的对象（2026-10-21，KB 06 §7.349）
 
 第一轮的静态解析读不了经宏路径继承父类的对象（`#define ROOM STD_DIR "room/room"` 这类定义的正文以另一个宏开头）和它解析不了的继承，这些对象当作 `UNSURE` 没有扫；第二轮修了解析器，重扫并对这些对象在运行时问 `function_exists()`。`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 1 条注册（1 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/lib/bboard.lpc`（`cmd_save`）。最多的函数名：`cmd_save` 1 处。
+
+## 战斗探针（2026-10-22，KB 08 §10.16）：`domains/Examples/npc/` 的两个示例 NPC 编译不过
+
+`scripts/play_combat_probe.py foundation2 --account ... --clone ...` 克隆 `/domains/Examples/npc/smiley` 和 `centaur`，两个文件都是 `inherit LIB_NPC;`（`9:9: syntax error`）：这个压缩包里没有 NPC 基类（`lib/` 里没有 `npc.lpc`，`lib.h` 没有 `LIB_NPC`），示例 NPC 没法加载。没动（缺的是基类，不是笔误）。

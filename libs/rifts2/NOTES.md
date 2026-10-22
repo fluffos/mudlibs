@@ -697,3 +697,7 @@ The driver's `crypt()` raises (`Error in crypt(), check your salt`) for a key ov
 ## `add_action()` registrations of functions nobody defines (2026-10-21, KB 06 §7.349)
 
 An `add_action("fn", "verb")` whose function is defined neither by the object, nor by its headers, nor by its parents, nor by any object derived from it (`scripts/lpc_scan_callout_targets.py`, descendants checked transitively, then `function_exists()` in a running driver, `scripts/lpc_verify_handlers.py`). The driver walks the actor's sentences from the newest one: when that sentence's function does not exist it raises `*Function for verb 'drop' not found.` and tries no other handler of the verb (an older dead sentence is passed over silently). Removed 4 registrations in 1 files (`scripts/lpc_fix_dead_add_action.py`), the verbs are left to their other handlers: `/std/diewarzau/obj/misc/clone_soul.lpc` (`my_combat`, `my_skill`, `my_spell`, `my_talk`). Most frequent: `my_combat` x1, `my_skill` x1, `my_spell` x1, `my_talk` x1. 
+
+## Combat probe with the seeded administrator (2026-10-22): clean
+
+`scripts/play_combat_probe.py rifts2 --account ... --clone ...`: the administrator cloned `/d/standard/obj/mon/armageddon`, `/d/damned/world/obj/mon/will_o_wisp` into its room and attacked each for 20 s (2 fights read): no driver line and no error text on the screen. (KB 08 §10.16)

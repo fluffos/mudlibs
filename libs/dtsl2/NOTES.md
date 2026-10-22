@@ -874,3 +874,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 基类的 `add_action` 登记：处理函数只在后代里定义，基类自己被加载时报错（2026-10-21，KB 06 §7.349）
 
 房间、NPC、公告板这类基类，`init()` 里登记的 `add_action("函数", "动词")` 的函数只由继承它的后代定义；基类对象自己被直接加载（房间可以走进去、NPC 可以克隆）时，访客输入这个动词，驱动报 `*Function for verb 'x' not found.`（第一轮扫描把这些当成“有后代定义，是活的”放过了，`scripts/lpc_verify_handlers.py` 在基类对象上跑 `function_exists()` 才看出来）。登记前加 `if (function_exists("函数", this_object(), 1))`（第三个参数 1：默认 `function_exists()` 把 `protected` / `private` 函数当作没有定义），后代照常登记。共 1 处、1 个文件（`scripts/lpc_fix_dead_add_action.py --guard`）：`/obj/sboard/sboard.lpc`（`do_appoint`）。
+
+## 对象路径里的 `..`：`new(__DIR__ "../obj/x")` 报 `Read access denied`（2026-10-22，KB 06 §7.351）
+
+`__DIR__` 是当前文件所在目录（带结尾斜杠），`__DIR__ "../obj/x"` 就是 `/d/zhiye/npc/../obj/x`；驱动的 `legal_path()` 不接受带 `..` 的路径，`new()` / `load_object()` 直接抛 `*Read access denied.`（实测，`find_object()` 对它答 0）。这个库的 NPC / 房间基类不先把路径规范化，调用它们的 NPC 在 `create()` 里就失败，克隆不出来（房间的 `objects` 表悄悄少了这些 NPC）。改成规范化后的绝对路径（`scripts/lpc_fix_dotdot_dir.py`）：`/d/zhiye/npc/caikuang-shi.lpc`（`__DIR__ "../obj/tieqiao"` → `"/d/zhiye/obj/tieqiao"`）, `/d/zhiye/npc/caiyao-ren.lpc`（`__DIR__ "../obj/yaochu"` → `"/d/zhiye/obj/yaochu"`）, `/d/zhiye/npc/fangzhi-nu.lpc`（`__DIR__ "../obj/fangsuo"` → `"/d/zhiye/obj/fangsuo"`）, `/d/zhiye/npc/yangcan-popo.lpc`（`__DIR__ "../obj/jiandao"` → `"/d/zhiye/obj/jiandao"`） 等共 6 处。
