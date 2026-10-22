@@ -148,6 +148,26 @@ CALLM = re.compile(rb"carry_object\(\s*(" + MACRO_EXPR + rb")\s*\)\s*->\s*(\w+)\
 CALLN = re.compile(rb"(?<![A-Za-z_0-9>])(carry_object|new|clone_object|unew)\(\s*(" + MACRO_EXPR + rb")\s*\)\s*->\s*(\w+)\s*\(")
 
 
+def global_includes(lib):
+    """the lib's `global include file : <x.h>` (config.fluffos) as the lib paths that exist"""
+    got = getattr(lib, "_global_inc", None)
+    if got is not None:
+        return got
+    got = []
+    try:
+        cfg = open(os.path.join(REPO, "libs", lib.slug, "config.fluffos"), encoding="utf-8", errors="replace").read()
+    except OSError:
+        cfg = ""
+    for m in re.finditer(r"(?m)^\s*global include file\s*:\s*[<\"]([^>\"\n]+)[>\"]", cfg):
+        name = m.group(1).strip()
+        for c in [os.path.normpath(d + "/" + name) for d in lib.incdirs] + [os.path.normpath("/" + name)]:
+            if c in lib.files:
+                got.append(c)
+                break
+    lib._global_inc = got
+    return got
+
+
 def local_macros(lib, rel, seen=None, depth=0):
     """the macros the file REL sees: its own `#define`s and those of the headers it includes (relative `"x.h"`, the lib's include directories, absolute), as
     (object-like {name: [(expr, header)]}, function-like {name: [(params, body)]}).  The resolver's global table keeps the FIRST definition of a name in the whole lib, and an area
@@ -161,6 +181,16 @@ def local_macros(lib, rel, seen=None, depth=0):
     seen.add(rel)
     b = resolver.strip_comments(lib.read(rel))
     fdir = os.path.dirname(rel) + "/"
+    if depth == 0:
+        # the driver includes the config's `global include file` into every object: its macros (`BINGQI_D(x)`, `ARMOR_D(x)`, `CLASS_D(x)` of xjcq2000's globals.h) are seen
+        # by a file that never writes the #include (xjcq2000 d/city/npc/shi.lpc: `carry_object(BINGQI_D("langya-bang"))->wield()` named a missing weapon and was skipped)
+        for g in global_includes(lib):
+            if g not in seen:
+                o2, f2 = local_macros(lib, g, seen, depth + 1)
+                for k, v in o2.items():
+                    objs.setdefault(k, []).extend(v)
+                for k, v in f2.items():
+                    funcs.setdefault(k, []).extend(v)
     for m in resolver.INCLUDE.finditer(b):
         name = m.group(2).decode("utf-8", "replace")
         if name.startswith("/"):

@@ -61,7 +61,7 @@ void attempt_apprentice(object ob)
 		command("say 貧僧又得一可塑之才，真是可喜可賀 !");
 
 		name = ob->query("name");
-		new_name = "玄" + name[2..3];
+		new_name = "玄" + name[1..1];
 		ob->set("name", new_name);
 		ob->set("family/generation",36);
 

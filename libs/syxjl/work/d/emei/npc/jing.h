@@ -270,7 +270,7 @@ void attempt_apprentice(object ob)
 
 	}
 
-	if ( ob_fam["generation"] == (my_fam["generation"] + 1) && name[0..1] == "文")
+	if ( ob_fam["generation"] == (my_fam["generation"] + 1) && name[0..0] == "文")
 
 	{
 
@@ -300,7 +300,7 @@ void attempt_apprentice(object ob)
 
                         if(ob->query("class") == "bonze" )
 
-			{new_name = "文" + name[2..3];
+			{new_name = "文" + name[1..1];
 
 			ob->set("name", new_name);
 

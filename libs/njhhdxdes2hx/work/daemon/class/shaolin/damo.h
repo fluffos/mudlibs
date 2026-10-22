@@ -97,7 +97,7 @@ void attempt_apprentice(object ob)
 吧，哈哈哈 !");
                         command("say 我佛又得传人，真是可喜可贺 !");
 
-                        new_name = "渡" + name[2..3];
+                        new_name = "渡" + name[1..1];
                         ob->set("name", new_name+"长老");
 //			ob->set("combat_exp", ob->query("combat_exp") + 300000);
 

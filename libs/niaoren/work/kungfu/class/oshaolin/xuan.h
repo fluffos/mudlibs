@@ -79,7 +79,7 @@ void attempt_apprentice(object ob)
 			command("say 貧僧又得一可塑之才，真是可喜可賀 !");
 
 			name = ob->query("name");
-			new_name = "澄" + name[2..3];
+			new_name = "澄" + name[1..1];
 			ob->set("name", new_name);
 	
 			command("say 從今以后你的法名叫做" + new_name + "，恭喜你榮升為少林派澄字輩弟子 !");

@@ -39,7 +39,7 @@ void attempt_apprentice(object ob)
 		if( ob->query("class") == "bonze")
 		{
 			name = ob->query("name");
-			new_name = "元" + name[2..3];
+			new_name = "元" + name[1..1];
 			ob->set("name", new_name);
 			command("say 今后你的法名叫做"+new_name+"。\n");
 		}

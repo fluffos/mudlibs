@@ -67,7 +67,7 @@ void check(object ob)
 		if( ob->query("class") == "bonze")
 		{
 			new_name=ob->query("name");
-			new_name[0..1] = "天";
+			new_name[0..0] = "天";
 			ob->set("name", new_name);
 			command("say 从今以后你的法名叫做"+new_name+ "，恭喜你荣升为我南少林派天字辈圣僧！\n");
 		}

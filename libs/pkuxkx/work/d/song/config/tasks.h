@@ -193,7 +193,7 @@ int ask_tasks()
 		title="";
         me->set("song/taskstime",me->query("mud_age"));
 		me->set_temp("songtasks/"+give_task["id"]+"/start",1);
-		name=COLOR_D->uncolor(me->query("name"))[0..1];
+		name=COLOR_D->uncolor(me->query("name"))[0..0];
 		if (DASONG_D->get_my_pin(me)<give_task["pin"])
 		new_title="判"+give_task["name"]+"事";
 		else if (DASONG_D->get_my_pin(me)==give_task["pin"])

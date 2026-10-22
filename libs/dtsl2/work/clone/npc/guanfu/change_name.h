@@ -35,7 +35,7 @@ private int change_name(string arg)
 	switch(me->query("family/family_name")){
 		case "桃花岛":
 			if (f_gen == 2) {
-				if (strlen(arg) != 6 || arg[4..5] != "风")
+				if (strlen(arg) != 3 || arg[2..2] != "风")
 					return notify_fail("你的名字必须是三个字，而且以风结尾。\n");
 			}
 			break;
@@ -43,86 +43,86 @@ private int change_name(string arg)
 		case "天龙寺":
 		case "少林派":
 			if (f_class == "bonze" || f_class == "huanxi") {	// 给敌人一个花钱去掉 huanxi 的机会
-				if (strlen(arg) != 4)
+				if (strlen(arg) != 2)
 					return notify_fail("你的名字必须是两个字。\n");
 				switch (f_gen) {
 					case 40:
-						if (arg[0..1] == "清")
+						if (arg[0..0] == "清")
 							break;
 						return notify_fail("辈分不对，重来！\n");
 					case 39:
-						if (arg[0..1] == "道")
+						if (arg[0..0] == "道")
 							break;
 						return notify_fail("辈分不对，重来！\n");
 					case 38:
-						if (arg[0..1] == "慧")
+						if (arg[0..0] == "慧")
 							break;
 						return notify_fail("辈分不对，重来！\n");
 					case 37:
-						if (arg[0..1] == "澄")
+						if (arg[0..0] == "澄")
 							break;
 						return notify_fail("辈分不对，重来！\n");
 					case 36:
-						if (arg[0..1] == "玄")
+						if (arg[0..0] == "玄")
 							break;
 						return notify_fail("辈分不对，重来！\n");
 					case 35:
-						if (arg[0..1] == "渡")
+						if (arg[0..0] == "渡")
 							break;
 						return notify_fail("辈分不对，重来！\n");
 					case 14:
-						if (arg[0..1] == "了")
+						if (arg[0..0] == "了")
 							break;
 						return notify_fail("辈分不对，重来！\n");
 					case 13:
-						if (arg[0..1] == "本")
+						if (arg[0..0] == "本")
 							break;
 						return notify_fail("辈分不对，重来！\n");
 					case 5:
-						if (arg[0..1] == "文")
+						if (arg[0..0] == "文")
 							break;
 						return notify_fail("辈分不对，重来！\n");
 					case 4:
-						if (arg[0..1] == "静")
+						if (arg[0..0] == "静")
 							break;
 						return notify_fail("辈分不对，重来！\n");
 					case 3:
-						if (arg[0..1] == "灭")
+						if (arg[0..0] == "灭")
 							break;
 						return notify_fail("辈分不对，重来！\n");
 					default:
-						if (name[0..1] != arg[0..1])
+						if (name[0..0] != arg[0..0])
 							return notify_fail("你的法号必须是两个字，而且第一个字不能变。\n");
 				}
 				if (f_class == "huanxi")
 					me->set("class", "bonze");
 			} else if (f_mname == "段正明")
-				if (strlen(arg) > 6 || arg[0..1] != "段")
+				if (strlen(arg) > 3 || arg[0..0] != "段")
 					return notify_fail("你的姓名必须是两或三个字，而且第一个字必须为段。\n");
 			break;
 		case "星宿派":
 			if (f_gen == 2) {
-				if (strlen(arg) != 6 || arg[4..5] != "子")
+				if (strlen(arg) != 3 || arg[2..2] != "子")
 					return notify_fail("你的名字必须是三个字，而且以子结尾。\n");
 			}
 			break;
 		case "姑苏慕容":
 			if (f_gen == 2) {
-				if (strlen(arg) < 6 || arg[0..3] != "慕容")
+				if (strlen(arg) < 3 || arg[0..1] != "慕容")
 					return notify_fail("你的名字必须至少三个字，而且以慕容开头。\n");
 			}
 	}
 
 	i = strlen(new_name);
 
-	if (i < 4 || i > 8 || i%2) {
+	if (i < 2 || i > 4) {
 		command("say “"+new_name+"”？");
 		command("say 你的中文名字必须是 2 到 4 个中文字才行。");
 		return 1;
 	}
 
 	while(i--)
-		if( i%2==0 && !is_chinese(new_name[i..<1]) ) {
+		if( !is_chinese(new_name[i..<1]) ) {
 			command("say 你得用「中文」取名字，本官我可不认识西洋字。");
 			return 1;
 		}

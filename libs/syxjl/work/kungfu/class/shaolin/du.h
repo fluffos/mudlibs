@@ -124,7 +124,7 @@ void attempt_apprentice(object ob)
 
 		name = ob->query("name");
 
-		new_name = "玄" + name[2..3];
+		new_name = "玄" + name[1..1];
 
 		ob->set("name", new_name);
 

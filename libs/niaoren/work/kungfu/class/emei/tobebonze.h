@@ -37,7 +37,7 @@ int do_kneel()
         "$n伸出手掌，在$N頭頂輕輕地摩挲了几下，將$N的頭發盡數剃去。\n\n",
         me, this_object() );
         name = me->query("name");
-        new_name = prename[random(sizeof(prename))] + name[0..1];
+        new_name = prename[random(sizeof(prename))] + name[0..0];
         command("say 從今以后你的法名叫做" + new_name + "。");
         command("chat "+name+"削發為尼，在峨嵋山修行，取法名"+new_name+"。");
         command("smile");

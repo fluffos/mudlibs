@@ -27,7 +27,7 @@ int do_kneel() {
   );
   name = query("purename", me);
   if (!name) name = query("name", me);
-  new_name = "容" + name[0..1]; ;
+  new_name = "容" + name[0..0]; ;
   command("say 从今以后你的法名叫做" + new_name + "。");
   command("chat " + name + "削发为尼，在恒山修行，取法名" + new_name + "。");
   command("smile");

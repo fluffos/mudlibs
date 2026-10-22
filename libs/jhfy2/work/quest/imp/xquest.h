@@ -94,7 +94,7 @@ int do_flatter(string arg)
                 command("say 这还差不多。\n");
                 command("recruit " + this_player()->query("id"));
                 name = this_player()->query("name");
-                new_name = name[0..3] + "子";
+                new_name = name[0..1] + "子";
                 this_player()->set("name", new_name);
         }
         else

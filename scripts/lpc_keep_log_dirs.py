@@ -33,6 +33,33 @@ WIZSEG = {"w", "d", "u", "players", "open", "realms", "home", "homes", "wizards"
 GOODSEG = re.compile(r"^[A-Za-z0-9_.+-]+$")
 
 
+def code_only(t):
+    """t with the text of every comment blanked (a string literal is walked, so `"//"` in one is not a comment): a `write_file("/data/x/y", ..)` that a lib commented out is not a writer"""
+    out, i, n = [], 0, len(t)
+    while i < n:
+        c = t[i]
+        if c == '"':
+            j = i + 1
+            while j < n and t[j] != '"' and t[j] != "\n":
+                j += 2 if t[j] == "\\" else 1
+            out.append(t[i:j + 1])
+            i = j + 1
+        elif c == "/" and t[i + 1:i + 2] == "/":
+            j = t.find("\n", i)
+            j = n if j < 0 else j
+            out.append(" " * (j - i))
+            i = j
+        elif c == "/" and t[i + 1:i + 2] == "*":
+            j = t.find("*/", i + 2)
+            j = n if j < 0 else j + 2
+            out.append("".join("\n" if ch == "\n" else " " for ch in t[i:j]))
+            i = j
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
+
+
 def keep_rows():
     out = {}
     if gen_keep_dirs.OUT.is_file():
@@ -81,6 +108,7 @@ def scan(slug, tracked, kept, root="log", skip_log_file=False):
             t = f.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
+        t = code_only(t)
         texts[f] = t
         if f.suffix == ".h":
             for m in DEF.finditer(t):

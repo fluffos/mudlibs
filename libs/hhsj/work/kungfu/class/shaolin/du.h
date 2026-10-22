@@ -48,7 +48,7 @@ void attempt_apprentice(object ob) {
         command("say 贫僧又得一可塑之才，可喜可贺！");
 
         name = query("name", ob);
-        new_name = "玄" + name[2..3];
+        new_name = "玄" + name[1..1];
         set("name", new_name, ob);
 
         command("say 从今以后你的法名叫做" +

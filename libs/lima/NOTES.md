@@ -920,3 +920,7 @@ user: virtual rooms, menus, mailers, `contrib/bboard/news_d`).
 ## 深度功能测试（2026-10-21，play 扫描）：以种子管理员 `fluffos` 跑 mortal 和 wizard 命令，`clone` 补了一条（patches/0008）
 
 用 lima 专用驱动登录（`PLAY_DRIVER=~/src/fluffos-lima/build-debug/src/driver`；`scripts/pristine_tree.sh` 现在能把子模块工作树 + `patches/` + `overlay/` 搭成测试树，`scripts/play_login.py` 认得 `[spcrwq]` 菜单并选 `p`），`scripts/play_sweep_lib.py lima --account fluffos:Mud@2026`：mortal 命令 160 个（157 行），`--wiz` 再加 235 行，控制台只有两条。`clone`（wiz）：没有参数又没有 `cwf` 时 `new(arg[0])` 的参数是 0，FluffOS 报 `Bad argument 1 to EFUN new() Expected: string, Got: int(0)`（上游依赖旧驱动里 `new(0)` 答 0 再走 “Failed to load file.”）；`patches/0008-wiz-clone-without-a-file-name.patch` 先检查 `stringp(arg[0])`，没有时打印 `clone [filename]`，实测 0 条发现。`treefor`：是扫描喂给 `eval` 的垃圾输入编译出的警告（`/tmp/EVAL.c`），不是 lib 的问题。其余 `needed-escape`（分页器、编辑器、对话）和 1–2 条 `stuck-reconnect` 不是错误。
+
+## `data/secure/` 没有人建：master 的 `valid_write()` / `valid_read()` 拒绝分支往 `ACCESS_LOG` 写日志（2026-10-22，KB 06 §7.358）
+
+`lib/secure/master.c` 每次拒绝一个路径（`valid_write()` / `valid_read()`）都往 `ACCESS_LOG`（`/data/secure/LOG`）写一行；干净的 `git clone` 里没有 `data/secure/`，拒绝分支里的 `write_file()` 就抛错。`data/secure` 已记进 `scripts/wasm_keep_dirs.txt`（`lpc_keep_log_dirs.py --root=data`；该扫描列出的另外 29 个 `data/` 目录都读过了：留言板和彩票精灵在 `save()` / `assure_file()` 里自己建目录，`passwordd` 用 `assure_file()`，`votebox` 在巫师大厅，`rwho_a` 只在联网时写）。

@@ -368,14 +368,14 @@ int ob_menpai_newname(object ob, string menpai)
 	switch (menpai){
 		case "dali":
 			name = ob->query("name");
-		    new_name = "段" + name[2..3];
+		    new_name = "段" + name[1..1];
 			if ( new_name ) ob->set("name", new_name);
 			break;
 		case "emei":
 			name = ob->query("name");
 		    if ((int)ob->query_skill("linji-zhuang", 1) < 90 ) 
-				new_name = em_names[random(sizeof(em_names))] + name[0..1];
-			else new_name = "静" + name[0..1];
+				new_name = em_names[random(sizeof(em_names))] + name[0..0];
+			else new_name = "静" + name[0..0];
 			if ( new_name ) ob->set("name", new_name);
 			ob->set("class", "bonze");
 			break;
@@ -383,15 +383,15 @@ int ob_menpai_newname(object ob, string menpai)
 			name = ob->query("name");
 			if( ob->query("gender") == "男性") str = th_m_names[random(sizeof(th_m_names))];
 			else str = th_f_names[random(sizeof(th_f_names))];
-			new_name = name[0..01] + str + "风";
+			new_name = name[0..0] + str + "风";
 			if ( new_name ) ob->set("name", new_name);
 			break;
 		case "quanzhen":
 			name = ob->query("name");
 			me_force = (int)ob->query_skill("xiantian-gong", 1);
-			if ( me_force < 60 ) new_name = name[0..01]+ "净" + name[4..5];
-			if ( me_force > 60 && me_force < 100 ) new_name = name[0..01]+ "清" + name[4..5];
-			if ( me_force > 100 ) new_name = name[0..01]+ "志" + name[4..5];
+			if ( me_force < 60 ) new_name = name[0..0]+ "净" + name[2..2];
+			if ( me_force > 60 && me_force < 100 ) new_name = name[0..0]+ "清" + name[2..2];
+			if ( me_force > 100 ) new_name = name[0..0]+ "志" + name[2..2];
 			if ( new_name ) ob->set("name",new_name);
 			ob->set("class", "taoist");
 			break;
@@ -401,25 +401,25 @@ int ob_menpai_newname(object ob, string menpai)
 			name = ob->query("name");
 			x=random(3);
             if (x==3)             	
-                new_name =  name[0..01] + name[2..3] + "子";
+                new_name =  name[0..0] + name[1..1] + "子";
             else if (x==2) 
-				new_name =  name[2..3] + name[0..01] +  "子";
+				new_name =  name[1..1] + name[0..0] +  "子";
 			else if (x==1)
-				new_name =  name[0..01]+ "玄" + "子";
+				new_name =  name[0..0]+ "玄" + "子";
 			else 
-				new_name =  name[0..01]+ "凡" + "子";
+				new_name =  name[0..0]+ "凡" + "子";
 	        if ( new_name ) ob->set("name", new_name);
 			}
 			break;
 		case "shaolin":
 			name = ob->query("name");
 		    me_force = (int)ob->query_skill("hunyuan-yiqi", 1);
-			if ( me_force < 60 ) new_name = sl_names[random(sizeof(sl_names))] + name[0..1];
-			if ( me_force > 60 && me_force < 100 ) new_name = "清" + name[2..3];
-			if ( me_force > 100 && me_force < 150 ) new_name = "慧" + name[2..3];
-			if ( me_force > 150 && me_force < 190 ) new_name = "澄" + name[2..3];
-			if ( me_force > 190 && me_force < 250 ) new_name = "玄" + name[2..3];
-			if ( me_force > 250 ) new_name = "渡" + name[2..3];
+			if ( me_force < 60 ) new_name = sl_names[random(sizeof(sl_names))] + name[0..0];
+			if ( me_force > 60 && me_force < 100 ) new_name = "清" + name[1..1];
+			if ( me_force > 100 && me_force < 150 ) new_name = "慧" + name[1..1];
+			if ( me_force > 150 && me_force < 190 ) new_name = "澄" + name[1..1];
+			if ( me_force > 190 && me_force < 250 ) new_name = "玄" + name[1..1];
+			if ( me_force > 250 ) new_name = "渡" + name[1..1];
 			if ( new_name ) ob->set("name", new_name);
 			break;
 	}

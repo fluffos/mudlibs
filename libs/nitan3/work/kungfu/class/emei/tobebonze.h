@@ -38,7 +38,7 @@ int do_kneel()
 
         name = me->query("purename");
         if (! name) name = me->query("name");
-        new_name = prename[random(sizeof(prename))] + name[0..1];
+        new_name = prename[random(sizeof(prename))] + name[0..0];
         command("say 从今以后你的法名叫做" + new_name + "。");
         command("nod");
         me->set("marks/old_name", name);

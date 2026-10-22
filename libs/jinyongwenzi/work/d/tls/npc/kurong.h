@@ -63,8 +63,8 @@ void attempt_apprentice(object ob)
         command("smile");
         old_name = ob->query("name");
         if (ob->query("tls") && (string)ob->query("class") =="bonze")
-		{new_name="本"+old_name[2..3]; } else
-		{new_name="本"+old_name[0..1]; }
+		{new_name="本"+old_name[1..1]; } else
+		{new_name="本"+old_name[0..0]; }
 
 
        if (!ob->query("tls") || (string)ob->query("class")!="bonze")

@@ -37,6 +37,13 @@ characters. Every check written against GBK bytes silently misbehaves.
   `inventory` of an NPC holding one 长剑 listed `剑(Sword)`.
   Same family: `feature/item_make`'s `get_item_id()` splits names into
   two-hanzi words with `[0..3]` / `len > 4` (4 libs).
+- **Sect code (2026-10-22, KB 06 7.360).** The masters' `attempt_apprentice()` renamed a disciple
+  `"澄" + name[2..3]` (the second character of the old name) and tested the generation with
+  `name[0..1] == "澄"`; the rename registrar `zhuce` (`change_name.h` / `zhao.lpc`) gated on
+  `strlen(arg) != 4` and `i < 4 || i > 8 || i%2`. All of it counted bytes: 4,416 edits in 189 libs
+  (`scripts/lpc_fix_gbk_slice.py`, not idempotent, ledger `scripts/gbk_slice_converted.txt`; the
+  oracle is `xkx100utf8`, the community's UTF-8 port). A Chinese literal compared with a slice twice
+  its length can never match: `rg '\[ *0 *\.\. *1 *\] *(==|!=) *"[^\x00-\x7f]'`.
 
 **Standing rule:** registration isn't verified until a REAL Chinese name
 (e.g. 秦风) has been accepted into the next stage.

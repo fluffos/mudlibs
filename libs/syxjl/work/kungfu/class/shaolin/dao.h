@@ -268,7 +268,7 @@ void attempt_apprentice(object ob)
 
 
 
-	if ( ob_fam["generation"] == (my_fam["generation"] + 1) && name[0..1] == "清")
+	if ( ob_fam["generation"] == (my_fam["generation"] + 1) && name[0..0] == "清")
 
 	{
 
@@ -300,7 +300,7 @@ void attempt_apprentice(object ob)
 
 
 
-			new_name = "清" + name[2..3];
+			new_name = "清" + name[1..1];
 
 			ob->set("name", new_name);
 

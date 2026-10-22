@@ -605,7 +605,7 @@ mapping ob_fam, my_fam;
 
 
 
-	if ( ob_fam["generation"] == (my_fam["generation"] + 1) && name[0..1] == "澄")
+	if ( ob_fam["generation"] == (my_fam["generation"] + 1) && name[0..0] == "澄")
 
 	{
 
@@ -631,7 +631,7 @@ mapping ob_fam, my_fam;
 
 			name = ob->query("name");
 
-			new_name = "澄" + name[2..3];
+			new_name = "澄" + name[1..1];
 
 			ob->set("name", new_name);
 

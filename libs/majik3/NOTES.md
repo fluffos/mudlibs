@@ -486,3 +486,7 @@ The driver's `crypt()` raises (`Error in crypt(), check your salt`) for a key ov
 ## `new(MISSING)->move()` / `carry_object(MACRO(..))->wear()` chains guarded (2026-10-22, KB 06 §7.73 addendum)
 
 A statement `new(PATH)->move(...);` / `carry_object(ARMOR_D("x"))->wear();` whose path names no file of this archive: `new()` answers 0 and `->move()` on it raises `Bad argument 1 to EFUN call_other()`. In `create()` the object never loads, in `reset()` every spawn below the first missing one is skipped on every reset. 22 statement(s) in 17 file(s) (`clone_object`) are now `{ object new_ob = new(PATH); if (new_ob) new_ob->move(...); }` (`scripts/lpc_guard_carry_object.py --new`: the path is resolved with the macros the file itself sees, an ambiguous macro or a virtual-object path is left). Load check of the 17 changed files, HEAD vs tree: 17 load at HEAD, 17 load now (0 newly loading, 0 regress).
+
+## `data/application`, `data/ban`, `data/scroll` nobody creates (2026-10-22, KB 06 §7.358)
+
+`world/hilltop/items/wizapp.lpc` writes `/data/application/wizapp.<name>`, `command/immortal/ban.lpc` `/data/ban/ban.o` and `world/hilltop/items/scroll.lpc` `save_object("/data/scroll/..")`; none of them makes the directory, and `write_file()` / `save_object()` into a missing directory raise (`Wrong permissions for opening file ..`, `Could not open ..o.tmp for a save`). The three directories are in `scripts/wasm_keep_dirs.txt` now (`lpc_keep_log_dirs.py --root=data`); verified in a staged tree: all three are directories (`file_size` -2).

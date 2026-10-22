@@ -120,7 +120,7 @@ void attempt_apprentice(object ob) {
     return;
   }
 
-  if (ob_fam["generation"] == (my_fam["generation"] + 1) && name[0..1] == "清") {
+  if (ob_fam["generation"] == (my_fam["generation"] + 1) && name[0..0] == "清") {
     command("say " + ob_fam["master_name"] + "的徒弟怎么跑到我这儿来了，哈哈哈！");
     command("recruit " + ob->query("id"));
     return;
@@ -134,7 +134,7 @@ void attempt_apprentice(object ob) {
       command("say 是" + ob_fam["master_name"] + "叫你来找我的吧，哈哈哈！");
       command("say 贫僧又得一可塑之才，真是可喜可贺！");
 
-      new_name = "清" + name[2..3];
+      new_name = "清" + name[1..1];
       ob->set("name", new_name);
 
       command("say 从今以后你的法名叫做" + new_name + "，恭喜你荣升为少林派清字辈弟子！");

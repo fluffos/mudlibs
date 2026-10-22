@@ -37,7 +37,7 @@ int do_kneel()
 		me, this_object());
 	name = me->query("purename");
 	if (! name) name = me->query("name");
-	new_name = prename[random(sizeof(prename))] + name[0..1];
+	new_name = prename[random(sizeof(prename))] + name[0..0];
 	command("say 从今以后你的法名叫做" + new_name + "。");
 	command("chat " + name + "削发为尼，在峨嵋山修行，取法名" + new_name + "。");
 	command("smile");

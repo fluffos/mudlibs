@@ -165,7 +165,7 @@ void attempt_apprentice(object ob)
 
 			if( me->query("class") == "bonze" )
 			{ 
-				new_name = "清" + name[2..3];
+				new_name = "清" + name[1..1];
 				ob->set("name", new_name);
 				command("say 从今以后你的法名叫做" + new_name + "，恭喜你荣升为少林派清字辈弟子 !");
 			}

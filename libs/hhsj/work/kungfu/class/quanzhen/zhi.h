@@ -128,7 +128,7 @@ void attempt_apprentice(object ob) {
       command("say 是" + ob_fam["master_name"] + "叫你来找我的？好，好。");
       command("say 贫道看你是可塑之才，你就安心学艺吧！");
       if (query("class", ob) == "quanzhen") {
-        new_name = name[0..1] + "清" + name[4..5];
+        new_name = name[0..0] + "清" + name[2..2];
         set("name", new_name, ob);
         command("say 从今以后你的道号叫做" + new_name + "，你现在是全真教清字辈弟子了。");
       } else command("say 你没有出家，我虽可以收你，以后你可别后悔了。");

@@ -129,7 +129,7 @@ void attempt_apprentice(object ob)
                 return;
         }
 
-        if ( ob_fam["generation"] == (my_fam["generation"] + 1) && name[0..1] ==
+        if ( ob_fam["generation"] == (my_fam["generation"] + 1) && name[0..0] ==
  "玄")
         {
                 command("say " + ob_fam["master_name"] + "的徒弟怎麽跑到我这儿来
@@ -167,7 +167,7 @@ void attempt_apprentice(object ob)
 吧，哈哈哈 !");
                         command("say 贫僧又得一可塑之才，真是可喜可贺 !");
 
-                        new_name = "玄" + name[2..3];
+                        new_name = "玄" + name[1..1];
                         ob->set("name", new_name+"大师");
 			ob->set("combat_exp", ob->query("combat_exp") + 100000);
 

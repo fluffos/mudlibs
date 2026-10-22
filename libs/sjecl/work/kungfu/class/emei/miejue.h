@@ -48,7 +48,7 @@ void attempt_apprentice(object ob) {
   }
 
   name = ob->query("name");
-  new_name = prename[random(sizeof(prename))] + name[2..3];
+  new_name = prename[random(sizeof(prename))] + name[1..1];
   command("say 从今以后你的法名叫做" + new_name + "。");
   command("say 阿弥陀佛，善哉！善哉！");
   command("smile");

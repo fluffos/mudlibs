@@ -114,7 +114,7 @@ int do_kneel()
 		"$N右手捏着莲花指，恭恭敬敬地磕下头去。\n\n"
 		"$n伸出双手，将$N头顶长发挽成一个道髻。\n\n",me,this_object());
 	name = me->query("name");
-	new_name = name[0..1] + "静" + name[2..3];
+	new_name = name[0..0] + "静" + name[1..1];
 	command("say 从今以后你的道法号就叫做" + new_name + "。");
 	command("smile");
 	me->delete_temp("pending/join_quanzhen");

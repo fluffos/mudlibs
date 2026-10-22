@@ -144,7 +144,7 @@ void attempt_apprentice(object ob)
 	}
 
 	if (ob_fam["generation"] == (my_fam["generation"] + 1) &&
-	    name[0..1] == "慧")
+	    name[0..0] == "慧")
 	{
 		command("say " + ob_fam["master_name"] +
 			"的徒弟怎麽跑到我这儿来了，哈哈哈 !");
@@ -162,7 +162,7 @@ void attempt_apprentice(object ob)
 				"叫你来找我的吧，哈哈哈 !");
 			command("say 贫僧又得一可塑之才，真是可喜可贺 !");
 
-			new_name = "慧" + name[2..3];
+			new_name = "慧" + name[1..1];
 			ob->set("name", new_name);
 
 			command("say 从今以后你的法名叫做" + new_name +

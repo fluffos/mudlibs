@@ -52,7 +52,7 @@ void attempt_apprentice(object me)
                        "$n伸出手掌，在$N头顶轻轻地摩挲了几下，将$N的头发尽数剃去。\n\n",
                        me, ob);
              name = me->query("name");
-             new_name = prename[random(sizeof(prename))] + name[0..1];
+             new_name = prename[random(sizeof(prename))] + name[0..0];
 
 			 command("chat " + me->query("title") + name + 
                 "于今日" + NATURE_D->game_time() + "在天龙寺剃度出家，取法名" + new_name + "！\n");
