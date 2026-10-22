@@ -106,6 +106,11 @@ function", hundreds per lib); `scripts/lpc_warnings.py --fix` repairs it (KB 04
   - Also harden `log_file()` with `assure_file()` (§7.11).
   - Confirmed across 3+ lineages (`yxsj`/`yxzsj`, `hxxtjqb`,
     `jyqxc2013fwq`), so a corpus sweep is warranted.
+  - **Swept 2026-10-22 (keep dirs, not the strings):** 75 libs write into `/log/nosave/...` (`write_file("/log/nosave/KILLRECORD")` in `combatd`'s kill record, `log_file("nosave/CRASHES")`, the `call` log ...)
+    and neither the archive nor the site pack has `log/nosave`: `write_file()` raises `*Wrong permissions for opening file /log/nosave/X for append. "No such file or directory"` (fqyy2 / hy5 / bmxkx2001: measured with
+    `catch(write_file("/log/nosave/ZZTEST", ..))`) and the function that logs stops. `log/nosave` (and `log/nosave/guilei` for 8 libs) is now a row of `scripts/wasm_keep_dirs.txt` for every lib that writes there; the
+    strings stay `nosave` (reading and writing are renamed alike, the shipped `log/static/` history is not needed on a fresh install).
+    Detection: `git grep -E '(write_file|log_file)[ \t]*\([^;]*(/log/nosave|"nosave/)' -- libs/SLUG/work`, then the lib's keep rows.
 - **Compat shims.** `#define nosave static` / `#define protected static`
   become aliases after the sed. Neutralize them; both keywords are real
   on this driver.

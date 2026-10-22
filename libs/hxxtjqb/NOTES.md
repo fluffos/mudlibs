@@ -495,3 +495,19 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
 
 `add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 11 条注册（6 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/d/changan/pinqiting.lpc`（`do_pass`、`do_resign`）、`/d/city/npc/duguoyin.lpc`（`do_vendor_list`）、`/d/eastway/npc/petboss.lpc`（`do_cost`、`do_list`、`do_upgrade`）、`/d/pansi/npc/qingxia.lpc`（`do_yes`）、`/d/qujing/jisaiguo/obj/luche.lpc`（`do_get`、`do_put`）、`/d/qujing/wudidong/cave2.lpc`（`do_push`）。最多的函数名：`do_push` 2 处、`do_pass` 1 处、`do_resign` 1 处、`do_vendor_list` 1 处、`do_cost` 1 处。没有动（读过）：`/d/qujing/chechi/wugu.lpc` 的 `do_kan`（不是单独一行的语句（`obj->add_action()`、宏或没有分号的写法））。
+
+## 调用了、但这个库自己的守护进程里没有的函数（2026-10-22，KB 06 §7.354）
+
+`MACRO->函数()` 调用的函数在这个库的守护进程里不存在：`call_other()` 对不存在的函数不报错、只返回 0，所以这些功能（时间显示、昼夜事件、名字检查、价格文字……）一直没起作用。同一血统另一个库的同名守护进程里有这些函数，原文照抄到本库守护进程末尾（`scripts/lpc_port_function.py`；调用处传的参数个数、函数体用到的函数 / 全局变量 / 宏 / 字符串键都在本库里有，已核对；守护进程在 HEAD 和工作区都能加载，每个函数用固定参数各调用一次：HEAD 返回 0，现在返回正常的值）：`/adm/daemons/chinesed.lpc` ← aoxiangtianji：`chinese_period()`（1 处调用）；`/adm/daemons/moneyd.lpc` ← aoxiangtianji：`price_str()`（3 处调用）。
+
+## `/d/qujing/kusong/obj/WEAPON4` 大写文件名，随机兵器取不到（2026-10-22）
+
+`/d/qujing/kusong/npc/yao1` 用 `str = "/d/qujing/kusong/obj/weapon0"; str[strlen(str)-1] = '0' + random(5); carry_object(str)->wield()` 随机挑一件兵器，`weapon0` 到 `weapon3` 是小写文件名，第五件存成了大写的 `WEAPON4.C`（压缩包来自不分大小写的系统，路径是运行时拼出来的，`scripts/lpc_case_paths.py` 看不到）：抽到 `weapon4` 时 `carry_object()` 返回 0，`->wield()` 报 `Bad argument 1 to EFUN call_other() Got int(0)`，五分之一的妖怪刷不出来（goto 探测在同系的 sjcs 里碰到，这个库的 `yao1` 写法一样）。`git mv` 成小写的 `weapon4.lpc`（`.C` 后缀的文件不会被无后缀的 `.lpc` / `.c` 查找命中；同系其他库里同一个文件是小写的 `weapon4.lpc`，内容一致）。证明（`scripts/lpcc_eval.py`，HEAD 与工作区各一个新进程）：`load_object("/d/qujing/kusong/obj/weapon4")` 在 HEAD 返回 0，改名后得到对象。
+
+## `(: 函数 :)` 指针指向对象自己没有定义的函数（2026-10-22，KB 06 §7.355）
+
+`item_desc` / `inquiry` / `chat_msg_combat` 里的 `(: 函数名 :)` 指向本对象（含包含文件、继承的父类）没有函数体的函数：编译不报错，用到时驱动报 `*Undefined lfun pointer called: 函数名`（`look 某物`、`ask NPC about 话题` 直接出错，战斗 / 闲聊里的指针在 NPC 的 `chat()` 里出错，这一拍心跳的后半段被跳过）。`scripts/lpc_scan_callout_targets.py --kinds=lfun`。 还剩 2 个函数没有补（other 1, inquiry 1）：原型还在函数体丢了、或者根本没写过，没有可以直接补回的捐赠（别的库同一路径的文件里没有这个函数，或者它还要用本库没有的辅助函数、签名不同），不编造：`/cmds/usr/bbs.lpc`:`confirm_l_choice`、`/d/city/npc/job.lpc`:`give_dan`。 另有 3 处函数体被作者整段注释掉（指针没跟着删），是有意关掉的，没动。
+
+## 运行期目录 `log/nosave` 不存在，写日志的 `write_file()` 直接报错（2026-10-22，KB 03 §4.3 补充）
+
+这个库的 9 个文件里有 9 处 `write_file("/log/nosave/...")` / `log_file("nosave/...")`（`static` 改 `nosave` 时连字符串里的日志路径一起改了，原来是 `log/static/`）：`nosave/using`、`nosave/addobj`、`nosave/full` 等。压缩包和站点包里没有这个目录，`write_file()` 在目录不存在时抛 `*Wrong permissions for opening file /log/nosave/... for append. "No such file or directory"`，调用它的函数（杀人记录、重启记录、`call` 日志……）当场中断。把 `log/nosave` 记进 `scripts/wasm_keep_dirs.txt`（站点和 pristine 树都按它建空目录）；没有把字符串改回 `static`。证明（`scripts/lpcc_eval.py`，`catch(write_file("/log/nosave/ZZTEST", ...))`，fqyy2 / hy5 / bmxkx2001 的新进程）：补目录前报上面的错误，补后写成功。

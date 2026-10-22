@@ -473,3 +473,11 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 `__DIR__` 是当前文件所在目录（带结尾斜杠），`__DIR__ "../obj/x"` 就是 `/d/zhiye/npc/../obj/x`；驱动的 `legal_path()` 不接受带 `..` 的路径，`new()` / `load_object()` 直接抛 `*Read access denied.`（实测，`find_object()` 对它答 0）。走库自己的 `carry_object()` / 房间 `objects` 表的路径，库的基类会先规范化，能用；直接把路径交给 `new()` / `clone_object()` / `load_object()` / `move()` 的不行，调用到那一步才报错。改成规范化后的绝对路径（`scripts/lpc_fix_dotdot_dir.py --direct`）：`/d/city/npc/lver.lpc`（`__DIR__ "../obj/nuerxiang"` → `"/d/wudang/obj/nuerxiang"`）。
 
 目标文件的位置也改了：`d/city/npc/lver.lpc` 不在 `d/wudang/npc/` 里，`../obj/nuerxiang` 指向它自己区域下的一个不存在的路径；女儿香茶杯在 `/d/wudang/obj/nuerxiang`，所以改成 `"/d/wudang/obj/nuerxiang"`。
+
+## 调用了、但这个库自己的守护进程里没有的函数（2026-10-22，KB 06 §7.354）
+
+`MACRO->函数()` 调用的函数在这个库的守护进程里不存在：`call_other()` 对不存在的函数不报错、只返回 0，所以这些功能（时间显示、昼夜事件、名字检查、价格文字……）一直没起作用。同一血统另一个库的同名守护进程里有这些函数，原文照抄到本库守护进程末尾（`scripts/lpc_port_function.py`；调用处传的参数个数、函数体用到的函数 / 全局变量 / 宏 / 字符串键都在本库里有，已核对；守护进程在 HEAD 和工作区都能加载，每个函数用固定参数各调用一次：HEAD 返回 0，现在返回正常的值）：`/adm/daemons/chinesed.lpc` ← fengyun434：`check_control()`（3 处调用）、`check_length()`（3 处调用）。
+
+## `(: 函数 :)` 指针指向对象自己没有定义的函数（2026-10-22，KB 06 §7.355）
+
+`item_desc` / `inquiry` / `chat_msg_combat` 里的 `(: 函数名 :)` 指向本对象（含包含文件、继承的父类）没有函数体的函数：编译不报错，用到时驱动报 `*Undefined lfun pointer called: 函数名`（`look 某物`、`ask NPC about 话题` 直接出错，战斗 / 闲聊里的指针在 NPC 的 `chat()` 里出错，这一拍心跳的后半段被跳过）。`scripts/lpc_scan_callout_targets.py --kinds=lfun`。 还剩 12 个函数没有补（inquiry 11, chat_msg 1）：原型还在函数体丢了、或者根本没写过，没有可以直接补回的捐赠（别的库同一路径的文件里没有这个函数，或者它还要用本库没有的辅助函数、签名不同），不编造：`/d/jinyang/npc/guanyuan.lpc`:`ask_job`、`/d/jinyang/npc/guanyuan.lpc`:`askforhelp`、`/d/luoyang/npc/huang.lpc`:`ask_finish`、`/d/parties/public/npc/niwajiang.lpc`:`ask_build`、`/d/quanzhen/npc/yueru.lpc`:`ask_bf`、`/d/xiakedao/npc/zhangsan.lpc`:`ask_me`、`/kungfu/class/huashan/job/killer.lpc`:`ask_surrender`、`/kungfu/class/huashan/job/killer2.lpc`:`ask_surrender`、`/kungfu/class/niwajiang.lpc`:`ask_build`、`/kungfu/class/xiakedao/longyifan.lpc`:`ask_me` 等另外 2 个。 另有 3 处函数体被作者整段注释掉（指针没跟着删），是有意关掉的，没动。

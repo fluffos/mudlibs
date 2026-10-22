@@ -339,3 +339,15 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
 
 `add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 16 条注册（9 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/d/city/npc/aqingsao.lpc`（`do_buy`、`do_list`、`do_sell`）、`/d/city/npc/huoji.lpc`（`do_buy`、`do_list`）、`/d/city/npc/huoji2.lpc`（`do_buy`、`do_list`）、`/d/city/npc/smith.lpc`（`do_buy`、`do_list`）、`/d/city/npc/xian.lpc`（`do_buy`）、`/d/city/npc/xiaoer2.lpc`（`do_buy`、`do_list`）、`/d/city/npc/yang.lpc`（`do_buy`、`do_list`）、`/d/village/npc/seller.lpc`（`do_buy`）、`/d/village/npc/smith.lpc`（`do_buy`）。最多的函数名：`do_buy` 9 处、`do_list` 6 处、`do_sell` 1 处。没有动（读过）：`/d/city/npc/old-qian.lpc` 的 `do_withdraw`（对象本身编译不过，登记留着，等对象能加载再处理）、`/d/city/npc/tang.lpc` 的 `do_list`（对象本身编译不过，登记留着，等对象能加载再处理）、`/d/city/npc/tang.lpc` 的 `do_buy`（对象本身编译不过，登记留着，等对象能加载再处理）、`/d/city/npc/tang.lpc` 的 `do_sell`（对象本身编译不过，登记留着，等对象能加载再处理）、`/d/city/npc/tang.lpc` 的 `do_value`（对象本身编译不过，登记留着，等对象能加载再处理）。
+
+## `(: 函数 :)` 指针指向对象自己没有定义的函数（2026-10-22，KB 06 §7.355）
+
+`item_desc` / `inquiry` / `chat_msg_combat` 里的 `(: 函数名 :)` 指向本对象（含包含文件、继承的父类）没有函数体的函数：编译不报错，用到时驱动报 `*Undefined lfun pointer called: 函数名`（`look 某物`、`ask NPC about 话题` 直接出错，战斗 / 闲聊里的指针在 NPC 的 `chat()` 里出错，这一拍心跳的后半段被跳过）。`scripts/lpc_scan_callout_targets.py --kinds=lfun`。 还剩 1 个函数没有补（inquiry 1）：原型还在函数体丢了、或者根本没写过，没有可以直接补回的捐赠（别的库同一路径的文件里没有这个函数，或者它还要用本库没有的辅助函数、签名不同），不编造：`/d/huashan/npc/teller.lpc`:`tell_fortune`。
+
+## 运行期目录 `log/nosave` 不存在，写日志的 `write_file()` 直接报错（2026-10-22，KB 03 §4.3 补充）
+
+这个库的 6 个文件里有 9 处 `write_file("/log/nosave/...")` / `log_file("nosave/...")`（`static` 改 `nosave` 时连字符串里的日志路径一起改了，原来是 `log/static/`）：`nosave/CRASHES`、`nosave/promotion`、`nosave/PURGE` 等。压缩包和站点包里没有这个目录，`write_file()` 在目录不存在时抛 `*Wrong permissions for opening file /log/nosave/... for append. "No such file or directory"`，调用它的函数（杀人记录、重启记录、`call` 日志……）当场中断。把 `log/nosave` 记进 `scripts/wasm_keep_dirs.txt`（站点和 pristine 树都按它建空目录）；没有把字符串改回 `static`。证明（`scripts/lpcc_eval.py`，`catch(write_file("/log/nosave/ZZTEST", ...))`，fqyy2 / hy5 / bmxkx2001 的新进程）：补目录前报上面的错误，补后写成功。
+
+## 读不到的留言板：`"/clone/board/x"->foo();` 在 `create()` 里报错（2026-10-22，KB 06 §7.357）
+
+xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来加载留言板（`foo()` 本来就没有定义，只为了触发加载）。这个库没有这个文件，`call_other()` 报 `*call_other() couldn't find object '/clone/board/gaibang_r'`，对象留在内存里、`load_object()` 却抛错：玩家第一次走进房间就看到错误，写在 `create()` 中间的还会切掉后半段。`scripts/lpc_fix_missing_foo.py` 把 3 条单独成行的语句（`/clone/board/gaibang_r`、`/clone/board/kedian_b`、`/clone/board/gaibang_b`；`/d/city/gbxiaowu.lpc`、`/d/city/kedian.lpc`、`/d/city/pomiao.lpc`）注释掉并写明原因（别的房间里同样的语句本来就是作者自己注释掉的）。证明和 45 个库的整体加载检查见 KB 06 §7.357。

@@ -8,6 +8,10 @@ know (`safe_apply`): the timer fires into nothing (the buff that `check_fight` w
 `*Function for verb 'drop' not found.` and the verb's other handlers are never tried (one Guiyuan pill in the inventory and nothing can be dropped).  A renamed
 or lost function is invisible to a compile pass.
 
+`--kinds=lfun` adds the function pointer `(: name :)` / `(: name, arg :)` of an `item_desc`, a `call_out`-less callback or a sort: a pointer to a function the object
+does not define raises `*Undefined lfun pointer called: name` only when it is used (chidi's `lianhuachi*`: `look CAI` with a prototype `string look_CAI();` and no body); efun and
+simul_efun names are not hits.  Not in the default set.
+
 Static resolver (no boot): per lib the tracked files are indexed, `#define NAME "/path"` macros are collected from every header of the lib, and each
 object's definitions are the function definitions (a body, comments and strings masked) of the file, of the headers it includes (relative to the file or
 in the lib's include dirs) and, recursively, of every file named by its `inherit` lines (a string, a macro, `__DIR__ "x"`).  A target that none of these
@@ -34,7 +38,134 @@ KINDS = collections.OrderedDict([
     ("call_out", re.compile(rb'(?<![A-Za-z_])call_out\(\s*"([A-Za-z_]\w*)"(?=\s*[,)])')),
     ("add_action", re.compile(rb'(?<![A-Za-z_])add_action\(\s*"([A-Za-z_]\w*)"(?=\s*[,)])')),
     ("input_to", re.compile(rb'(?<![A-Za-z_])(?:input_to|get_char)\(\s*"([A-Za-z_]\w*)"(?=\s*[,)])')),
+    ("lfun", re.compile(rb'\(:\s*([A-Za-z_]\w*)\s*(?=:\)|,)')),            # `(: look_CAI :)`: a function pointer to a function of this object (`--kinds=lfun`, not in the default set)
 ])
+DEFAULT_KINDS = ["call_out", "add_action", "input_to"]
+_EFUNS = []
+
+
+def efun_names():
+    """the efun names of the FluffOS manual (docs/efun/**/NAME.md) as bytes: a `(: sizeof :)` pointer is not a missing lfun"""
+    if not _EFUNS:
+        names = set()
+        for dp, dn, fn in os.walk(os.path.expanduser("~/src/fluffos/docs/efun")):
+            names |= {f[:-3].encode() for f in fn if f.endswith(".md")}
+        _EFUNS.append(names)
+    return _EFUNS[0]
+
+
+VARDECL = re.compile(rb"\b(?:int|string|object|mixed|mapping|float|function|status|buffer|class[ \t]+\w+)\b[ \t]*\**[ \t]*([A-Za-z_]\w*)(?![ \t]*\()")
+VARMORE = re.compile(rb"[ \t\r\n]*(?:\[[^\]\n]*\])?[ \t]*(?:=[^,;(){}]*)?,[ \t\r\n]*\**[ \t]*([A-Za-z_]\w*)(?![ \t]*\()")
+
+
+def var_names(lib, f, seen=None):
+    """names declared as variables or parameters in file f, its headers' text and its inherit closure: `(: look_globalval :)` is an expression pointer, not an lfun"""
+    seen = seen if seen is not None else set()
+    if f in seen:
+        return set()
+    seen.add(f)
+    cache = lib.__dict__.setdefault("_vars", {})
+    if f in cache:
+        return cache[f]
+    code = masked(lib.read(f))
+    names = set()
+    for m in VARDECL.finditer(code):
+        names.add(m.group(1))
+        i = m.end()
+        while True:
+            mm = VARMORE.match(code, i)
+            if not mm:
+                break
+            names.add(mm.group(1))
+            i = mm.end()
+    for i in lib.info(f)[1]:
+        names |= var_names(lib, i, seen)
+    for m in INCLUDE.finditer(strip_comments(lib.read(f))):
+        c = os.path.normpath(os.path.dirname(f) + "/" + m.group(2).decode("utf-8", "replace"))
+        if c in lib.files and c.endswith(".h"):
+            names |= var_names(lib, c, seen)
+    cache[f] = names
+    return names
+
+
+def macro_names(lib, f):
+    """names the lib `#define`s (every header, plus the file's own text): `(: TO :)` / `(: TP :)` is a macro that expands to an expression, not an lfun"""
+    names = lib.__dict__.get("_macro_names")
+    if names is None:
+        names = set()
+        for g in lib.files:
+            if g.endswith(".h") and not SKIP.search(g):
+                names |= {m.group(1) for m in re.finditer(rb"(?m)^[ \t]*#[ \t]*define[ \t]+([A-Za-z_]\w*)", lib.read(g))}
+        lib._macro_names = names
+    return names | {m.group(1) for m in re.finditer(rb"(?m)^[ \t]*#[ \t]*define[ \t]+([A-Za-z_]\w*)", lib.read(f))}
+
+
+def inactive_lines(lib, f):
+    """the 1-based lines of file f that sit inside an `#ifdef NAME` (or `#ifndef` / `#if 0` / `#else`) region the preprocessor skips because NAME is defined by no header and no file of the lib
+    (`#ifdef SERVICE_UCACHE` of Dead Souls' services daemon, whose `(: eventCompactUcache :)` is not compiled); a `#if EXPR` other than `0` counts as active"""
+    defined = macro_names(lib, f)
+    stack, out = [], set()
+    for i, ln in enumerate(lib.read(f).split(b"\n"), 1):
+        m = re.match(rb"[ \t]*#[ \t]*(ifdef|ifndef|if|else|elif|endif)\b[ \t]*([A-Za-z_0-9]*)", ln)
+        if m:
+            d, name = m.group(1), m.group(2)
+            if d == b"ifdef":
+                stack.append(name in defined)
+            elif d == b"ifndef":
+                stack.append(name not in defined)
+            elif d == b"if":
+                stack.append(name != b"0")
+            elif d == b"else" and stack:
+                stack[-1] = not stack[-1]
+            elif d == b"elif" and stack:
+                stack[-1] = True
+            elif d == b"endif" and stack:
+                stack.pop()
+            continue
+        if stack and not all(stack):
+            out.add(i)
+    return out
+
+
+def includers(lib):
+    """file -> the files that `#include` it (a fragment such as `romnpcboss.lpc` is spliced into an object that inherits the base defining what the fragment's `(: perform_action :)` names)"""
+    if getattr(lib, "_includers", None) is None:
+        inc = collections.defaultdict(list)
+        for g in lib.files:
+            if not g.endswith((".lpc", ".c", ".h", ".inc")) or SKIP.search(g):
+                continue
+            b = lib.read(g)
+            if b"#" not in b or b"include" not in b:
+                continue
+            gdir = os.path.dirname(g) + "/"
+            for m in INCLUDE.finditer(strip_comments(b)):
+                name = m.group(2).decode("utf-8", "replace")
+                cands = [os.path.normpath(name)] if name.startswith("/") else ([os.path.normpath(gdir + name)] if m.group(1) == b'"' else [])
+                if not name.startswith("/"):
+                    cands += [os.path.normpath(d + "/" + name) for d in lib.incdirs] + [os.path.normpath("/" + name)]
+                for c in cands:
+                    if c in lib.files:
+                        inc[c].append(g)
+                        break
+        lib._includers = inc
+    return lib._includers
+
+
+def sefun_names(lib):
+    """the functions of the lib's simul_efun file(s), headers folded in"""
+    if getattr(lib, "_sefuns", None) is None:
+        names = set()
+        try:
+            for ln in open(f"{REPO}/libs/{lib.slug}/config.fluffos", encoding="utf-8", errors="replace"):
+                m = re.match(r"\s*simulated efun file\s*:\s*(\S+)", ln)
+                if m:
+                    f = lib.real("/" + m.group(1).lstrip("/"))
+                    if f:
+                        names |= lib.all_defs(f)[0]
+        except OSError:
+            pass
+        lib._sefuns = names
+    return lib._sefuns
 DEFINE = re.compile(rb'(?m)^[ \t]*#[ \t]*define[ \t]+([A-Za-z_]\w*)[ \t]+((?:(?:__DIR__|[A-Za-z_]\w*)(?!\w)[ \t]*|"[^"\n]*"[ \t]*)+)[ \t]*(?://.*)?\r?$')      # a path: strings, `__DIR__` and other macros (`FEATURE_DIR "item/fruit"`); `(?!\w)` keeps a word from being split, so a failing line costs one pass
 INHERIT = re.compile(rb"(?m)(?:^|(?<=[;}]))[ \t]*inherit[ \t]+([^;]+);")      # `inherit NPC;inherit F_DEALER;` on one line is two inherits
 INCLUDE = re.compile(rb'(?m)^[ \t]*#[ \t]*include[ \t]+([<"])([^>"\n]+)[>"]')
@@ -308,7 +439,7 @@ class Lib:
 def main():
     argv = sys.argv[1:]
     show_unsure = "--unsure" in argv
-    kinds = list(KINDS)
+    kinds = list(DEFAULT_KINDS)
     for a in argv:
         if a.startswith("--kinds="):
             kinds = a.split("=", 1)[1].split(",")
@@ -322,7 +453,7 @@ def main():
             if not f.endswith((".lpc", ".c")) or SKIP.search(f):
                 continue
             b = lib.read(f)
-            if not any(k.encode() in b for k in kinds):
+            if not any((b"(:" if k == "lfun" else k.encode()) in b for k in kinds):
                 continue
             text = strip_comments(b)
             targets = collections.OrderedDict()
@@ -332,10 +463,19 @@ def main():
             if not targets:
                 continue
             defs, unsure, hidden = lib.all_defs(f)
+            skipped = None
             for (kind, t), line in targets.items():
                 if t in defs:
                     continue
+                if skipped is None:
+                    skipped = inactive_lines(lib, f) if b"#if" in b else set()
+                if line in skipped:
+                    continue
+                if kind == "lfun" and (t in efun_names() or t in sefun_names(lib) or t in var_names(lib, f) or t in macro_names(lib, f)):
+                    continue
                 if lib.derived_defines(f, t):
+                    continue
+                if kind == "lfun" and any(t in lib.all_defs(g)[0] for g in includers(lib).get(f, [])):
                     continue
                 if t in hidden:
                     hits += 1

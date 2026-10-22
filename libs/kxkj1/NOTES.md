@@ -923,3 +923,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply k
 ## `do` 指令编译不过：变量名 `in` 是保留字（2026-10-20，KB 04 §6.26）
 
 `cmds/std/do.lpc` 的 `parse()` 里 `int i, in, n;`（“在引号里”的标志）：`in` 在这个驱动里是 `foreach (x in y)` 的关键字，`syntax error, unexpected L_IN`，`do` 指令（一行里连发几条命令）从来没有加载过。`scripts/lpc_fix_in_ident.py` 把变量改名为 `in_var`（5 处）；`u/f/fund/mud/cmds/usr/do.lpc` 是同一份。加载检查 2/2，HEAD FAIL → tree PASS。
+
+## `(: 函数 :)` 指针指向对象自己没有定义的函数（2026-10-22，KB 06 §7.355）
+
+`item_desc` / `inquiry` / `chat_msg_combat` 里的 `(: 函数名 :)` 指向本对象（含包含文件、继承的父类）没有函数体的函数：编译不报错，用到时驱动报 `*Undefined lfun pointer called: 函数名`（`look 某物`、`ask NPC about 话题` 直接出错，战斗 / 闲聊里的指针在 NPC 的 `chat()` 里出错，这一拍心跳的后半段被跳过）。`scripts/lpc_scan_callout_targets.py --kinds=lfun`。 还剩 3 个函数没有补（other 3）：原型还在函数体丢了、或者根本没写过，没有可以直接补回的捐赠（别的库同一路径的文件里没有这个函数，或者它还要用本库没有的辅助函数、签名不同），不编造：`/daemon/skill/blackforce.lpc`:`force_damage`、`/daemon/skill/shakill.lpc`:`reversek`、`/daemon/skill/windforce.lpc`:`force_damage`。

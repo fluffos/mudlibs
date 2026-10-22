@@ -971,3 +971,11 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 对象路径里的 `..`：`new(__DIR__ "../obj/x")` 报 `Read access denied`（2026-10-22，KB 06 §7.351）
 
 `__DIR__` 是当前文件所在目录（带结尾斜杠），`__DIR__ "../obj/x"` 就是 `/d/zhiye/npc/../obj/x`；驱动的 `legal_path()` 不接受带 `..` 的路径，`new()` / `load_object()` 直接抛 `*Read access denied.`（实测，`find_object()` 对它答 0）。走库自己的 `carry_object()` / 房间 `objects` 表的路径，库的基类会先规范化，能用；直接把路径交给 `new()` / `clone_object()` / `load_object()` / `move()` 的不行，调用到那一步才报错。改成规范化后的绝对路径（`scripts/lpc_fix_dotdot_dir.py --direct`）：`/open/world1/kkeenn/love/npc/master_1.lpc`（`__DIR__ "../room30"` → `"/open/world1/kkeenn/love/room30"`）, `/open/world1/kkeenn/love/npc/master_2.lpc`（`__DIR__ "../room1.lpc"` → `"/open/world1/kkeenn/love/room1.lpc"`）, `/open/world1/kkeenn/love/npc/master_2.lpc`（`__DIR__ "../room8"` → `"/open/world1/kkeenn/love/room8"`）, `/open/world1/kkeenn/love/npc/master_2.lpc`（`__DIR__ "../room9"` → `"/open/world1/kkeenn/love/room9"`） 等共 63 处。
+
+## `/example` 目录里缺失物品的 `carry_object()`（2026-10-22，KB 06 §7.73 补充）
+
+`scripts/lpc_guard_carry_object.py` 跳过名叫 `example` 的目录，而这个库的 `/example` 是真正的区域（婚礼区 `/example/marry`、样板 NPC 和房间），goto 探测进了 `/example/marry/yamen-datang`，控制台报 `*Bad argument 1 to EFUN call_other() Got int(0)`：`/example/marry/npc/jiang-yaoting.lpc` 第 39 行 `carry_object("/clone/misc/cloth")->wear()`，这个库没有 `/clone/misc/`。10 个文件里 22 处（衙役、月老、媒婆、`/example/ka` 等）改成 `{ object carried_ob = carry_object(..); if (carried_ob) carried_ob->wear(); }`。证明（`scripts/lpcc_eval.py`，对 10 个 NPC 各 `new()` 一次，HEAD 与工作区各一个新进程）：HEAD 只有 1 个能克隆，现在 9 个；剩下的 `xi-laifu` 在 HEAD 和工作区都不能编译：它调用 `MONEY_D->price_str()`，这个库既没有 `MONEY_D` 宏也没有钱庄守护进程（内容缺失，没动）。
+
+## `(: 函数 :)` 指针指向对象自己没有定义的函数（2026-10-22，KB 06 §7.355）
+
+`item_desc` / `inquiry` / `chat_msg_combat` 里的 `(: 函数名 :)` 指向本对象（含包含文件、继承的父类）没有函数体的函数：编译不报错，用到时驱动报 `*Undefined lfun pointer called: 函数名`（`look 某物`、`ask NPC about 话题` 直接出错，战斗 / 闲聊里的指针在 NPC 的 `chat()` 里出错，这一拍心跳的后半段被跳过）。`scripts/lpc_scan_callout_targets.py --kinds=lfun`。 另有 1 处函数体被作者整段注释掉（指针没跟着删），是有意关掉的，没动。

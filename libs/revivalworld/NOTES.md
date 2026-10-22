@@ -913,3 +913,7 @@ README 里记载的"开机预载持续 2-3 分钟"配套的既有设计。
 ## 第一个访客看到的启动加载（2026-10-20）
 
 `system_d` 在驱动开始接受连线之后才用 `call_out` 一个接一个地载入 74 个守护进程，并把进度广播给已连线的人（`載入中，請稍後 ...`）；载完后把所有已连线的人踢掉（`啟動完畢，重新連線中...`），要重新连线才能登录。调试版驱动上这要约 128 秒，其中 `html_d.lpc` 的地图渲染占 72 秒（旧说明里的 2–3 分钟）。登录机器人（`scripts/play_login.py`）现在会等加载结束、被踢后自动重连一次。
+
+## `(: 函数 :)` 指针指向对象自己没有定义的函数（2026-10-22，KB 06 §7.355）
+
+`item_desc` / `inquiry` / `chat_msg_combat` 里的 `(: 函数名 :)` 指向本对象（含包含文件、继承的父类）没有函数体的函数：编译不报错，用到时驱动报 `*Undefined lfun pointer called: 函数名`（`look 某物`、`ask NPC about 话题` 直接出错，战斗 / 闲聊里的指针在 NPC 的 `chat()` 里出错，这一拍心跳的后半段被跳过）。`scripts/lpc_scan_callout_targets.py --kinds=lfun`。 还剩 2 个函数没有补（other 2）：原型还在函数体丢了、或者根本没写过，没有可以直接补回的捐赠（别的库同一路径的文件里没有这个函数，或者它还要用本库没有的辅助函数、签名不同），不编造：`/obj/etc/train.lpc`:`do_lookout`、`/system/daemons/intermud2_d.lpc`:`receive_support_answer`。

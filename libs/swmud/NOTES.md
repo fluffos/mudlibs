@@ -788,3 +788,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply s
 ## 深度功能测试（2026-10-21，play 扫描）：以第一个注册的管理员跑 264 个命令，控制台只剩两条已记录的
 
 用 lima 专用驱动（`PLAY_DRIVER=~/src/fluffos-lima/build-debug/src/driver scripts/play_boot.sh swmud 40227`；`scripts/pristine_tree.sh` 把没有补丁的子模块工作树也搭成测试树）启动，按 README 的注册流程手工走一遍创建（姓名、`y`、密码两遍、性别、邮箱、真名、种族、颜色 `n`、属性点买满 45 点、`done`、`right`、`neutral`；第一个注册的就是管理员），再 `scripts/play_sweep_lib.py swmud --no-boot --account NAME:Test1234`：261 行，16 条发现，控制台两条，都是上面“Lima 原版演示内容被 swmud 改写后失去对应 API”和 `daemons/imud/finger.lpc` 的 `class finger` 成员问题（`materials` 载入 `/domains/std/crafting/*` 时 `/std/armour` 编译失败，`mudlist` 载入 imud 的 finger 服务），两条本来就记在前面的“没有修”里。其余是 `needed-escape`（分页器、编辑器、对话）。
+
+## `(: 函数 :)` 指针指向对象自己没有定义的函数（2026-10-22，KB 06 §7.355）
+
+`item_desc` / `inquiry` / `chat_msg_combat` 里的 `(: 函数名 :)` 指向本对象（含包含文件、继承的父类）没有函数体的函数：编译不报错，用到时驱动报 `*Undefined lfun pointer called: 函数名`（`look 某物`、`ask NPC about 话题` 直接出错，战斗 / 闲聊里的指针在 NPC 的 `chat()` 里出错，这一拍心跳的后半段被跳过）。`scripts/lpc_scan_callout_targets.py --kinds=lfun`。 还剩 2 个函数没有补（other 2）：原型还在函数体丢了、或者根本没写过，没有可以直接补回的捐赠（别的库同一路径的文件里没有这个函数，或者它还要用本库没有的辅助函数、签名不同），不编造：`/obj/mudlib/nicknamemenu.lpc`:`new_template`、`/obj/mudlib/nicknamemenu.lpc`:`rcv_new_alias_name`。

@@ -31,7 +31,10 @@ def admin_of(slug):
     name, pw = mod.parse_admin(slug)
     if name and pw:
         return name, pw
-    readme = open(os.path.join(REPO, "libs", slug, "README.md"), encoding="utf-8", errors="replace").read()
+    try:
+        readme = open(os.path.join(REPO, "libs", slug, "README.md"), encoding="utf-8", errors="replace").read()
+    except OSError:
+        return None, None
     mm = re.search(r"(?mi)^[ \t]*[-*][ \t]+\*\*(?:id|账号|帐号|用户名)\*\*[ \t]*[:：][ \t]*`([^`]+)`.*?^[ \t]*[-*][ \t]+\*\*(?:password|密码)\*\*[ \t]*[:：][ \t]*`([^`]+)`", readme, re.S)
     if mm:
         return mm.group(1), mm.group(2)

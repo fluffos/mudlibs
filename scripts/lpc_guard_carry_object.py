@@ -105,7 +105,9 @@ def missing(work, rel_file, dirflag, path):
         p = os.path.dirname(rel_file) + "/" + p
     if not p.startswith("/"):
         return False                          # relative to the cwd at run time: cannot tell
-    p = re.sub(r"\.(lpc|c)$", "", p)
+    if p.endswith(".c"):                       # an explicit extension is resolved exactly (KB 03 4.2, KB 06 7.356): `y.c` finds no file when the archive's file is `y.lpc`
+        return not os.path.isfile(work + p)
+    p = re.sub(r"\.lpc$", "", p)
     return not os.path.isfile(work + p + ".lpc") and not os.path.isdir(work + p)
 
 

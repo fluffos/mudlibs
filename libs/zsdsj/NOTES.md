@@ -1133,3 +1133,7 @@ eval/lpcc 觸發之異常一貫的存疑處理原則，未在本輪確認為真�
 ## 所有玩家指令都用不了：`*Undefined function called: command`（2026-10-20，KB 06 §7.321）
 
 和 revivalworld（#936，同一款游戏的 git 版本）完全相同：`std/inherit/feature/command/_command.lpc` 的 `private void do_command()` 包装函数和 `private void command()` 原型，83 个指令文件（`look`、`score`、`who`、`help`、`quit`……）自己定义 `private void do_command()`，92 个定义 `command()`；`private` 函数不会被继承者覆盖，进入世界后的第一条指令就是 `*Undefined function called: command`（`log/run`），页面上先出现 `指令使用权限不足` 的调用栈，再是 `WARNING 这个程式作业执行无效即将关闭`，之后这条连线的输入全部丢失（登录调查里这一行是 `stuck`，机器人把加载画面当成了菜单，加载结束后又被踢掉）。`_command.lpc` 和 `_personal_command.lpc` 的这两处 `private` 改成 `protected`。加载检查：`cmds/`、`system/daemons/`、指令特性共 252 个对象，HEAD 与工作树都 252 通过，无退化；实测 `look`、`score` 正常。第一个访客要看着守护进程一个个载入（调试版驱动约两分钟），载完后被踢，重新连线才能登录；`scripts/play_login.py` 现在会等加载结束并自动重连一次。
+
+## `(: 函数 :)` 指针指向对象自己没有定义的函数（2026-10-22，KB 06 §7.355）
+
+`item_desc` / `inquiry` / `chat_msg_combat` 里的 `(: 函数名 :)` 指向本对象（含包含文件、继承的父类）没有函数体的函数：编译不报错，用到时驱动报 `*Undefined lfun pointer called: 函数名`（`look 某物`、`ask NPC about 话题` 直接出错，战斗 / 闲聊里的指针在 NPC 的 `chat()` 里出错，这一拍心跳的后半段被跳过）。`scripts/lpc_scan_callout_targets.py --kinds=lfun`。 还剩 3 个函数没有补（other 3）：原型还在函数体丢了、或者根本没写过，没有可以直接补回的捐赠（别的库同一路径的文件里没有这个函数，或者它还要用本库没有的辅助函数、签名不同），不编造：`/obj/etc/oldmj/mj_broken.lpc`:`AI_da`、`/obj/etc/train.lpc`:`do_lookout`、`/system/daemons/intermud2_d.lpc`:`receive_support_answer`。

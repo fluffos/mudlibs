@@ -933,3 +933,7 @@ The first round's static scan could not read objects that inherit through a macr
 ## Combat probe with the seeded administrator (2026-10-22): clean
 
 `scripts/play_combat_probe.py dsI --account ... --clone ...`: the administrator cloned `/obj/friend`, `/domains/Ylsrim/npc/balrog` into its room and attacked each for 20 s (2 fights read): no driver line and no error text on the screen. (KB 08 §10.16)
+
+## Pointers `(: name :)` to functions the object never defines (2026-10-22, KB 06 §7.355)
+
+A `(: name :)` in an `item_desc` / `inquiry` / `chat_msg_combat` names a function that neither the object, its headers nor its parents have a body for: it compiles, and the use raises `*Undefined lfun pointer called: name` (`look THING` / `ask NPC about TOPIC` fail on the spot, a combat or idle chat pointer fails inside the NPC's `chat()` and the rest of that heart beat is skipped). `scripts/lpc_scan_callout_targets.py --kinds=lfun`. 1 more function(s) stay missing (other 1): the prototype is there and the body is lost, or it was never written, and no sibling lib's copy of the file can be copied as it is (it lacks the function, needs helpers this lib does not have, or has another signature); nothing invented: `/secure/lib/net/ftp.lpc`:`eventCmdPass`.
