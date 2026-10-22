@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""scripts/lpc_guard_carry_object.py SLUG... [--apply] [--list] [--base | --unew]
+"""scripts/lpc_guard_carry_object.py SLUG... [--apply] [--list] [--base | --unew | --macro | --new]
 
 An NPC that carries an item this archive never shipped (KB 06 section 7.73): `carry_object("/d/city/obj/cloth/jinpao")->wear();`
 gets 0 back and `->wear()` raises `Bad argument 1 to EFUN call_other()` in create(), so the NPC never loads -- the room
@@ -19,6 +19,15 @@ xyj / sjsh / mhxy lineage, ~30 libs).  `file->query_unique()` is a call_other on
 there and every NPC naming a missing item fails to load.  The fix puts `if (!objectp(load_object(file))) return 0;` before
 that statement (sjshwzb and sjshwzjqb already carry a `file_size()` version of it, KB 06 section 7.99); a base that already
 tests the file first is left alone.
+
+--macro is the first shape again with a path that is not a string literal: `carry_object(ARMOR_D("cloth"))->wear();`, `carry_object(CLOTH_DIR "x")->wear();`,
+`carry_object(ARMOR_DIR + "x")->wield();` (the nitan family's quest NPCs, the hubiao escort, jinshe, jiuyin).  The expression is resolved with the macro resolver of
+`lpc_scan_callout_targets.py` (`Lib.literal()`: the lib's `#define`s, function-like macros with literal arguments, `__DIR__`, `+`); a path that names no file of the
+lib gets the same guarded block, and an expression the resolver cannot settle is left alone.
+
+--new is the same guard for `new(PATH)->move(TO);` / `clone_object(..)->..` / `unew(..)->..` (shadowgate's rooms spawn their monsters that way in `reset()`; 4,476 sites of one
+lib name a monster the archive never shipped): `new()` of a missing file returns 0, `->move()` on it raises `Bad argument 1 to EFUN call_other()`, and in `create()` the object never
+loads, in `reset()` every spawn below the first missing one is skipped on every reset.  A literal path and a macro expression are both resolved (`Lib.literal()`).
 
 --unew fixes the third shape: the simul_efun `unew(str)` (xkx lineage, "new, but honour `unique`") that `carry_object()` calls does
 `object ob = new(str); ... ob->query("unique")`.  `new()` of a missing file returns 0 and the query on it raises `Bad argument 1
@@ -78,15 +87,16 @@ def eol_of(b, i):
     return b"\r\n" if j > 0 and b[j - 1:j] == b"\r" else b"\n"
 
 
-def block(prefix, eol, arg, call):
+def block(prefix, eol, arg, call, var=None, fn=b"carry_object"):
     """the guarded statement in the layout the formatter keeps (so a lib normalized at HEAD stays normalized):
          {                                  prefix is what precedes the statement on its line, an `if (...)`, an `else`
            object carried_ob = carry_object(ARG);   or nothing; the opening brace joins it, the body is indented two
            if (carried_ob) carried_ob->CALL;        beyond the line's own indent
          }"""
+    var = var or VAR
     indent = prefix[:len(prefix) - len(prefix.lstrip(b" \t"))]
-    return (b"{" + eol + indent + b"  object " + VAR + b" = carry_object(" + arg + b");" + eol +
-            indent + b"  if (" + VAR + b") " + VAR + b"->" + call + b";" + eol + indent + b"}")
+    return (b"{" + eol + indent + b"  object " + var + b" = " + fn + b"(" + arg + b");" + eol +
+            indent + b"  if (" + var + b") " + var + b"->" + call + b";" + eol + indent + b"}")
 
 
 def missing(work, rel_file, dirflag, path):
@@ -127,6 +137,148 @@ def fix(work, rel, b):
         sites.append(path)
     out.append(b[last:])
     return b"".join(out), sites, ""
+
+
+MACRO_EXPR = rb'(?:[A-Za-z_]\w*[ \t]*(?:\([^()\n]*\))?|"[^"\n]*")(?:[ \t]*\+?[ \t]*(?:[A-Za-z_]\w*[ \t]*(?:\([^()\n]*\))?|"[^"\n]*"))*'
+CALLM = re.compile(rb"carry_object\(\s*(" + MACRO_EXPR + rb")\s*\)\s*->\s*(\w+)\s*\(")
+CALLN = re.compile(rb"(?<![A-Za-z_0-9>])(carry_object|new|clone_object|unew)\(\s*(" + MACRO_EXPR + rb")\s*\)\s*->\s*(\w+)\s*\(")
+
+
+def local_macros(lib, rel, seen=None, depth=0):
+    """the macros the file REL sees: its own `#define`s and those of the headers it includes (relative `"x.h"`, the lib's include directories, absolute), as
+    (object-like {name: [(expr, header)]}, function-like {name: [(params, body)]}).  The resolver's global table keeps the FIRST definition of a name in the whole lib, and an area
+    header such as `#define MON "/d/shadow/room/muuldaan/mon/"` exists once per area: reading the global table resolved `MON"guard1"` against another area's directory and
+    called a monster that exists missing (the guard went in for nothing).  A name defined differently along the closure is ambiguous and left to the caller to skip."""
+    import lpc_scan_callout_targets as resolver
+    seen = seen if seen is not None else set()
+    objs, funcs = {}, {}
+    if rel in seen or depth > 6:
+        return objs, funcs
+    seen.add(rel)
+    b = resolver.strip_comments(lib.read(rel))
+    fdir = os.path.dirname(rel) + "/"
+    for m in resolver.INCLUDE.finditer(b):
+        name = m.group(2).decode("utf-8", "replace")
+        if name.startswith("/"):
+            cands = [os.path.normpath(name)]
+        else:
+            cands = [os.path.normpath(fdir + name)] if m.group(1) == b'"' else []
+            cands += [os.path.normpath(d + "/" + name) for d in lib.incdirs] + [os.path.normpath("/" + name)]
+        for c in cands:
+            if c in lib.files:
+                o2, f2 = local_macros(lib, c, seen, depth + 1)
+                for k, v in o2.items():
+                    objs.setdefault(k, []).extend(v)
+                for k, v in f2.items():
+                    funcs.setdefault(k, []).extend(v)
+                break
+    for m in resolver.DEFINE.finditer(b):
+        objs.setdefault(m.group(1).decode(), []).append((m.group(2), rel))
+    for m in resolver.FDEFINE.finditer(b):
+        funcs.setdefault(m.group(1).decode(), []).append(([a.strip().decode() for a in m.group(2).split(b",") if a.strip()], m.group(3).strip()))
+    return objs, funcs
+
+
+def macro_tables(lib, rel):
+    """({name: (expr, header)}, {name: (params, body)}) the file sees, a name that is defined two different ways along the include closure left out"""
+    objs, funcs = local_macros(lib, rel)
+    table, ftable = {}, {}
+    for k, v in objs.items():
+        if len({e for e, _ in v}) == 1:
+            table[k] = (v[-1][0], v[-1][1])
+    for k, v in funcs.items():
+        if len({(tuple(p), body) for p, body in v}) == 1:
+            ftable[k] = v[-1]
+    return table, ftable
+
+
+def resolve_here(lib, rel, expr, tables=None):
+    """lib.literal(expr) against the macros the file sees, None when a macro is unknown there or defined in two different ways"""
+    table, ftable = tables or macro_tables(lib, rel)
+    save = (lib.macros, lib.fmacros)
+    lib.macros, lib.fmacros = table, ftable
+    try:
+        return lib.literal(expr, os.path.dirname(rel) + "/")
+    finally:
+        lib.macros, lib.fmacros = save
+
+
+def lib_macro_names(lib):
+    """every name `#define`d in a header of the lib (object-like or function-like): a local variable called like a macro is expanded or breaks the line (the Shujian family's
+    globals.h has `#define new_ob(str) new(resolve_path(__DIR__, str))`: `new_ob->move(me)` died with `unexpected L_ORDER`)"""
+    if getattr(lib, "_macro_names", None) is None:
+        names = set()
+        for f in lib.files:
+            if f.endswith(".h"):
+                names |= set(re.findall(rb"(?m)^[ \t]*#[ \t]*define[ \t]+([A-Za-z_]\w*)", lib.read(f)))
+        lib._macro_names = names
+    return lib._macro_names
+
+
+def fresh(b, base, taken=()):
+    """base, base2, base3 ... the first name that is not a macro of the lib and does not occur in the file"""
+    var, n = base, 1
+    while re.search(rb"\b" + var + rb"\b", b) or var in taken:
+        n += 1
+        var = base + str(n).encode()
+    return var
+
+
+def fix_chain(lib, work, rel, b, new_mode=False):
+    """like fix() for a statement `carry_object(EXPR)->fn(...)` where EXPR is a macro expression (the plain literal is fix()'s); new_mode (`--new`) takes every chain: `carry_object(MACRO..)`,
+    `new(EXPR)->fn(...)`, `clone_object(..)`, `unew(..)`, a plain string too.  EXPR must resolve, with the macros THE FILE sees, to a path no file of the lib answers.  A file that already
+    has guard blocks gets a fresh variable name (`carried_ob2`, `new_ob2`, ...): the blocks are siblings, never nested"""
+    if not new_mode:
+        pats = [(CALLM, False)]
+    else:
+        pats = [(CALLN, True)]
+    mask = None
+    tables = None
+    out, last, sites = [], 0, []
+    taken = lib_macro_names(lib)
+    names = {b"carry_object": fresh(b, VAR, taken), b"new": fresh(b, b"new_ob", taken), b"clone_object": fresh(b, b"new_ob", taken), b"unew": fresh(b, b"new_ob", taken)}
+    for pat, is_new in pats:
+        for m in pat.finditer(b):
+            fn, expr, name_i = (m.group(1), m.group(2), 3) if is_new else (b"carry_object", m.group(1), 2)
+            if fn == b"carry_object" and re.fullmatch(rb'\s*"[^"\n]*"\s*', expr):
+                continue                             # a plain literal: fix() reads those
+            if mask is None:
+                mask = code_mask(b, heredoc=True)
+            if not mask[m.start()] or not statement_start(b, m.start()):
+                continue
+            if tables is None:
+                tables = macro_tables(lib, rel)
+            v = resolve_here(lib, rel, expr, tables)
+            if v is None or not v.startswith("/"):
+                continue
+            p = re.sub(r"\.(lpc|c)$", "", v)
+            if os.path.isfile(work + p + ".lpc") or os.path.isdir(work + p):
+                continue
+            if re.search(r"/virtual/|\.[A-Za-z]+$", p):
+                continue                             # a virtual object (`/d/damned/virtual/great-axe_6.weapon`): the lib's virtual server makes it, no file is the normal case
+            end = close_paren(b, m.end())
+            if end < 0:
+                continue
+            k = end
+            while k < len(b) and b[k:k + 1] in b" \t":
+                k += 1
+            if b[k:k + 1] != b";":
+                continue                             # the result is used in an expression: leave it
+            call = b[m.start(name_i):end]
+            out.append((m.start(), b[last:m.start()] if False else None, end, k, expr.strip(), call, fn, v))
+    # the matches are collected first (one pass of one regex), then written from the start so the pieces stay in order
+    out.sort(key=lambda t: t[0])
+    pieces, last = [], 0
+    for start, _, end, k, expr, call, fn, v in out:
+        if start < last:
+            continue
+        ls = b.rfind(b"\n", 0, start) + 1
+        pieces.append(b[last:start])
+        pieces.append(block(b[ls:start], eol_of(b, start), expr, call, names[fn], fn))
+        last = k + 1
+        sites.append(v)
+    pieces.append(b[last:])
+    return b"".join(pieces), sites, ""
 
 
 BASE = re.compile(rb"(?m)^[ \t]*(?:varargs[ \t]+)?object[ \t]+carry_object[ \t]*\([ \t]*string[ \t]+(\w+)[ \t]*\)[ \t\r\n]*\{")
@@ -209,13 +361,18 @@ def fix_unew(b):
 
 def main():
     args = sys.argv[1:]
-    apply, listing, base, unew = "--apply" in args, "--list" in args, "--base" in args, "--unew" in args
+    apply, listing, base, unew, macro, newm = "--apply" in args, "--list" in args, "--base" in args, "--unew" in args, "--macro" in args, "--new" in args
+    macro = macro or newm
     tot = files = 0
     for slug in [a for a in args if not a.startswith("--")]:
         work = f"{REPO}/libs/{slug}/work"
         if slug == "longyunmeng_binary" or not os.path.isdir(work) or os.path.exists(f"{work}/.git"):
             continue
         n_lib = 0
+        lib = None
+        if macro:
+            import lpc_scan_callout_targets as resolver            # noqa: E402  (the macro resolver: Lib.literal())
+            lib = resolver.Lib(slug)
         for dp, dn, fn in os.walk(work):
             dn.sort()
             if SKIP.search(dp[len(work):] + "/"):
@@ -225,7 +382,9 @@ def main():
                     continue
                 p = os.path.join(dp, f)
                 b = open(p, "rb").read()
-                if not (base or unew) and b"carry_object" not in b:
+                if not (base or unew) and b"carry_object" not in b and not newm:
+                    continue
+                if newm and b"->" not in b:
                     continue
                 rel = p[len(work):]
                 if base or unew:
@@ -241,8 +400,11 @@ def main():
                     elif listing and why.startswith("HAND"):
                         print(f"HAND  {slug} {rel}  ({why})")
                     continue
-                out, sites, why = fix(work, rel, b)
-                if why and CALL.search(b):
+                if macro:
+                    out, sites, why = fix_chain(lib, work, rel, b, newm)
+                else:
+                    out, sites, why = fix(work, rel, b)
+                if not macro and why and CALL.search(b):
                     if listing:
                         print(f"LEFT  {slug} {rel}  ({why})")
                     continue

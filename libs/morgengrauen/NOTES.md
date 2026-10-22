@@ -260,3 +260,7 @@ The `.c` -> `.lpc` rename changed the string but not the slice width: `f[<2..] =
 ## `x != "a" || x != "b"` and `x == "a" && x == "b"`: comparison chains of one value that can never differ (2026-10-20, KB 06 7.282)
 
 `if (arg != "wan" || arg != "pill") return notify_fail(...)` is true whatever `arg` is, `dir == "south" && dir == "north"` is never true: the guard under the test never opens, or never closes. The author meant "neither of these" (`&&`) or "either of these" (`||`). `!=` chains joined by `||` became `&&` (only where the statement under the test is a `return`, a refusal or a guard clause), `==` chains joined by `&&` became `||` (`scripts/lpc_fix_cmp_chain.py`). Changed: `/std/util/ex.lpc` (1).
+
+## `new(MISSING)->move()` / `carry_object(MACRO(..))->wear()` chains guarded (2026-10-22, KB 06 §7.73 addendum)
+
+A statement `new(PATH)->move(...);` / `carry_object(ARMOR_D("x"))->wear();` whose path names no file of this archive: `new()` answers 0 and `->move()` on it raises `Bad argument 1 to EFUN call_other()`. In `create()` the object never loads, in `reset()` every spawn below the first missing one is skipped on every reset. 1 statement(s) in 1 file(s) (`clone_object`) are now `{ object new_ob = new(PATH); if (new_ob) new_ob->move(...); }` (`scripts/lpc_guard_carry_object.py --new`: the path is resolved with the macros the file itself sees, an ambiguous macro or a virtual-object path is left). Load check of the 1 changed files, HEAD vs tree: 0 load at HEAD, 0 load now (0 newly loading, 0 regress).

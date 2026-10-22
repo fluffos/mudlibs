@@ -690,3 +690,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 商人的 `list` 命令：登记的是另一个血统的函数名（2026-10-22，KB 06 §7.349）
 
 第 42 批把 `add_action("do_vendor_list", "list");` 当成死登记删掉了（这些文件里没有 `do_vendor_list`，输入 `list` 只会得到 `*Function for verb 'list' not found.`），但它们的商人基类里同一个工作的函数叫 `do_list`，`list` 动词就此没了：`/d/death/npc/waiter.lpc`, `/d/huangshan/npc/xiaofan.lpc`, `/d/jinling/npc/armorseller.lpc`。按真正存在的函数名放回 `add_action("do_list", "list");`；用库的管理员账号克隆 NPC 再输入 `list` 实测（`/d/death/npc/waiter.lpc`：`您想看哪一种货物(armor, book, misc, weapon)？ ⊙马老四咳道：这位小兄弟，进来喝几盅小店的还阳`），每个文件都列出商品或问要看哪一类。同一批里放回去后仍答 `什麼？`、没有商品或者列表时报错（货品文件缺失）的商人没有动。
+
+## 缺失物品的 `new()` / `carry_object()` 调用链加了保护（2026-10-22，KB 06 §7.73 补充）
+
+`new(路径)->move(...);` / `carry_object(宏("x"))->wear();` 这类语句，路径指向的文件在这个压缩包里没有：`new()` 返回 0，`->move()` 在 0 上报 `Bad argument 1 to EFUN call_other()`。在 `create()` 里这个对象永远加载不了，在 `reset()` 里第一个缺失物品之后的刷新每次 reset 都被跳过。3 个文件里 7 处（`new`）改成 `{ object new_ob = new(路径); if (new_ob) new_ob->move(...); }`（`scripts/lpc_guard_carry_object.py --new`：路径按这个文件自己看到的宏解析，宏名冲突、虚拟对象路径一律跳过）。 对这 3 个改动文件做加载检查（HEAD 与工作区对比）：HEAD 能加载 3 个，现在 3 个（新增可加载 0 个，回归 0 个）。

@@ -565,3 +565,7 @@ fresh driver boot plus the full long-sit idle window below.
 ## 守护进程里 `int clean_up()` 盖在基类 `void clean_up()` 上的警告（2026-10-21，KB 04 §6.10）
 
 `/d/events/dragonaug2008/rooms/instance_d.lpc`、`/adm/daemon/instance_d.lpc`、`/daemon/door_d.lpc`、`/wizards/pyro/sandbox/queue_d.lpc`、`/wizards/pyro/assgn/implemented/door_d.lpc` 的 `int clean_up()` 覆盖 `/std/daemon.lpc` 的 `void clean_up()`，驱动编译时警告 `Function clean_up inherited from '/std/daemon.lpc' does not match current function in return type ( void vs int )`（共 7 处）。`clean_up()` 的返回值驱动会读（返回 0 就不再被询问，`void` 函数就是返回 0）：这几个守护进程靠 `return 1` 让驱动下次再来，数据清空后 `return ::clean_up()` 才销毁自己，所以不能改成 `void`；pd 里覆盖 `std/daemon` 的 `clean_up()` 是 `int` 和 `void` 各 6 个，基类也不好改。覆盖函数改声明为 `mixed clean_up()`：返回值不变，类型检查不再触发。重新加载这 5 个文件（连同本轮其他改动的文件共 15 个）：0 警告，无回退。
+
+## 缺失物品的 `new()` / `carry_object()` 调用链加了保护（2026-10-22，KB 06 §7.73 补充）
+
+`new(路径)->move(...);` / `carry_object(宏("x"))->wear();` 这类语句，路径指向的文件在这个压缩包里没有：`new()` 返回 0，`->move()` 在 0 上报 `Bad argument 1 to EFUN call_other()`。在 `create()` 里这个对象永远加载不了，在 `reset()` 里第一个缺失物品之后的刷新每次 reset 都被跳过。95 个文件里 287 处（`new`）改成 `{ object new_ob = new(路径); if (new_ob) new_ob->move(...); }`（`scripts/lpc_guard_carry_object.py --new`：路径按这个文件自己看到的宏解析，宏名冲突、虚拟对象路径一律跳过）。 对这 95 个改动文件做加载检查（HEAD 与工作区对比）：HEAD 能加载 15 个，现在 71 个（新增可加载 56 个，回归 0 个）。

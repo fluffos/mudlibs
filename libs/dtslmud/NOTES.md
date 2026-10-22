@@ -669,3 +669,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 对象路径里的 `..`：`new(__DIR__ "../obj/x")` 报 `Read access denied`（2026-10-22，KB 06 §7.351）
 
 `__DIR__` 是当前文件所在目录（带结尾斜杠），`__DIR__ "../obj/x"` 就是 `/d/zhiye/npc/../obj/x`；驱动的 `legal_path()` 不接受带 `..` 的路径，`new()` / `load_object()` 直接抛 `*Read access denied.`（实测，`find_object()` 对它答 0）。这个库的 NPC / 房间基类不先把路径规范化，调用它们的 NPC 在 `create()` 里就失败，克隆不出来（房间的 `objects` 表悄悄少了这些 NPC）。改成规范化后的绝对路径（`scripts/lpc_fix_dotdot_dir.py`）：`/d/zhiye/npc/caikuang-shi.lpc`（`__DIR__ "../obj/tieqiao"` → `"/d/zhiye/obj/tieqiao"`）, `/d/zhiye/npc/caiyao-ren.lpc`（`__DIR__ "../obj/yaochu"` → `"/d/zhiye/obj/yaochu"`）, `/d/zhiye/npc/fangzhi-nu.lpc`（`__DIR__ "../obj/fangsuo"` → `"/d/zhiye/obj/fangsuo"`）, `/d/zhiye/npc/yangcan-popo.lpc`（`__DIR__ "../obj/jiandao"` → `"/d/zhiye/obj/jiandao"`） 等共 6 处。
+
+## 缺失物品的 `new()` / `carry_object()` 调用链加了保护（2026-10-22，KB 06 §7.73 补充）
+
+`new(路径)->move(...);` / `carry_object(宏("x"))->wear();` 这类语句，路径指向的文件在这个压缩包里没有：`new()` 返回 0，`->move()` 在 0 上报 `Bad argument 1 to EFUN call_other()`。在 `create()` 里这个对象永远加载不了，在 `reset()` 里第一个缺失物品之后的刷新每次 reset 都被跳过。2 个文件里 3 处（`new`）改成 `{ object new_ob = new(路径); if (new_ob) new_ob->move(...); }`（`scripts/lpc_guard_carry_object.py --new`：路径按这个文件自己看到的宏解析，宏名冲突、虚拟对象路径一律跳过）。 对这 2 个改动文件做加载检查（HEAD 与工作区对比）：HEAD 能加载 1 个，现在 1 个（新增可加载 0 个，回归 0 个）。

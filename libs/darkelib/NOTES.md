@@ -928,3 +928,7 @@ The first round's static scan could not read objects that inherit through a macr
 ## Combat probe with the seeded administrator (2026-10-22): clean
 
 `scripts/play_combat_probe.py darkelib --account ... --clone ...`: the administrator cloned `/d/nocte/grounds/mon/skeleton4`, `/d/damned/akkad/obj/mon/sentinal`, `/d/khojem/port/mon/captain`, `/d/camps/catacombs/mon/skelgrd`, `/d/damned/guilds/enchanter/t_guard`, `/d/camps/ruins/mon/rat_warrior2` into its room and attacked each for 20 s (5 fights read): no driver line and no error text on the screen. The four `[screen]` rows of the run are the administrator's status panel (negative health: an immortal does not die), not findings. (KB 08 §10.16)
+
+## `new(MISSING)->move()` / `carry_object(MACRO(..))->wear()` chains guarded (2026-10-22, KB 06 §7.73 addendum)
+
+A statement `new(PATH)->move(...);` / `carry_object(ARMOR_D("x"))->wear();` whose path names no file of this archive: `new()` answers 0 and `->move()` on it raises `Bad argument 1 to EFUN call_other()`. In `create()` the object never loads, in `reset()` every spawn below the first missing one is skipped on every reset. 39 statement(s) in 19 file(s) (`new`) are now `{ object new_ob = new(PATH); if (new_ob) new_ob->move(...); }` (`scripts/lpc_guard_carry_object.py --new`: the path is resolved with the macros the file itself sees, an ambiguous macro or a virtual-object path is left). Load check of the 19 changed files, HEAD vs tree: 0 load at HEAD, 15 load now (15 newly loading, 0 regress).

@@ -496,3 +496,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
 
 `add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 13 条注册（8 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/d/obj/inherit/misc/fboard.lpc`（`do_list`）、`/d/taishan/npc/xiao-fan.lpc`（`do_buy`、`do_list`）、`/d/yandang/npc/kongmin.lpc`（`do_sell`）、`/d/yangzhou/npc/aqingsao.lpc`（`do_sell`）、`/d/yangzhou/npc/xiaofan.lpc`（`do_sell`）、`/d/zhongzhou/biwuchang.lpc`（`do_close`、`do_open`、`do_take`）、`/d/zhongzhou/biwufall.lpc`（`do_close`、`do_open`、`do_take`）、`/d/zhongzhou/npc/xiaofan.lpc`（`do_sell`）。最多的函数名：`do_sell` 4 处、`do_list` 2 处、`do_close` 2 处、`do_open` 2 处、`do_take` 2 处。
+
+## 缺失物品的 `new()` / `carry_object()` 调用链加了保护（2026-10-22，KB 06 §7.73 补充）
+
+`new(路径)->move(...);` / `carry_object(宏("x"))->wear();` 这类语句，路径指向的文件在这个压缩包里没有：`new()` 返回 0，`->move()` 在 0 上报 `Bad argument 1 to EFUN call_other()`。在 `create()` 里这个对象永远加载不了，在 `reset()` 里第一个缺失物品之后的刷新每次 reset 都被跳过。1 个文件里 1 处（`clone_object`）改成 `{ object new_ob = new(路径); if (new_ob) new_ob->move(...); }`（`scripts/lpc_guard_carry_object.py --new`：路径按这个文件自己看到的宏解析，宏名冲突、虚拟对象路径一律跳过）。 对这 1 个改动文件做加载检查（HEAD 与工作区对比）：HEAD 能加载 1 个，现在 1 个（新增可加载 0 个，回归 0 个）。

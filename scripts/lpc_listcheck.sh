@@ -7,6 +7,7 @@
 # scripts/lpc_load_diff.py.  `REV=<commit> scripts/lpc_listcheck.sh ...` makes the first run use an older commit (a change that is
 # already committed has no diff against HEAD).  One VM nests at most about 1000 `call_out(f, 0)` rooms before every later object prints
 # `Nesting call_out(0) level limit exceeded`: hence the chunks.  Needs the debug driver (~/src/fluffos/build-debug/src/lpcc).
+# The staged tree $LPC_SCRATCH/listchunk-SLUG is removed when the run ends (KEEP_TREE=1 keeps it): the outputs are the .out files.
 # A PASS at HEAD can be spurious when an earlier object of the batch left a half-built one loaded (docs/kb/08-formatter-testing.md
 # section 10.13): load a surprising regression alone before believing it.
 set -uo pipefail
@@ -37,4 +38,5 @@ import lpc_warnings as lw
 print("synced", lw.sync_changes(sys.argv[1], f"{sys.argv[2]}/libs/{sys.argv[1]}"), "files")
 PY
 run work
+[ "${KEEP_TREE:-0}" = 1 ] || rm -rf "$DEST"      # the staged tree is only needed during the run (the .out files are the result); 500 left-over trees used up the disk's inodes on 2026-10-22
 echo done > ${LPC_SCRATCH:-$HOME/.cache/lpc-scratch}/listchunk-$SLUG.done

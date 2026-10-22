@@ -1065,3 +1065,7 @@ The first round's static scan could not read objects that inherit through a macr
 ## Combat probe with the seeded administrator (2026-10-22): clean
 
 `scripts/play_combat_probe.py dsIII --account ... --clone ...`: the administrator cloned `/domains/default/npc/tree`, `/domains/Praxis/cemetery/mon/ghosta`, `/domains/Praxis/obj/mon/balrog`, `/domains/campus/npc/charly`, `/domains/town/npc/thief`, `/domains/Ylsrim/npc/balrog` into its room and attacked each for 20 s (6 fights read): no driver line and no error text on the screen. (KB 08 §10.16)
+
+## `new(MISSING)->move()` / `carry_object(MACRO(..))->wear()` chains guarded (2026-10-22, KB 06 §7.73 addendum)
+
+A statement `new(PATH)->move(...);` / `carry_object(ARMOR_D("x"))->wear();` whose path names no file of this archive: `new()` answers 0 and `->move()` on it raises `Bad argument 1 to EFUN call_other()`. In `create()` the object never loads, in `reset()` every spawn below the first missing one is skipped on every reset. 2 statement(s) in 2 file(s) (`new`) are now `{ object new_ob = new(PATH); if (new_ob) new_ob->move(...); }` (`scripts/lpc_guard_carry_object.py --new`: the path is resolved with the macros the file itself sees, an ambiguous macro or a virtual-object path is left). Load check of the 2 changed files, HEAD vs tree: 2 load at HEAD, 2 load now (0 newly loading, 0 regress).

@@ -885,3 +885,7 @@ are not in the archive).
 ## 战斗探针（管理员克隆 NPC，2026-10-22）：干净
 
 `scripts/play_combat_probe.py dsII --account ... --clone ...`：用库里预置的管理员账号把 `/domains/default/npc/quarantine/edmund`, `/domains/Ylsrim/npc/balrog`, `/domains/default/npc/fighter`, `/domains/town/npc/orc`, `/domains/campus/npc/charly`, `/shadows/drone` 逐个克隆到自己所在的房间并各攻击 20 秒（读了 6 场战斗）：驱动没有输出，战斗画面里没有错误文字。（KB 08 §10.16）
+
+## 缺失物品的 `new()` / `carry_object()` 调用链加了保护（2026-10-22，KB 06 §7.73 补充）
+
+`new(路径)->move(...);` / `carry_object(宏("x"))->wear();` 这类语句，路径指向的文件在这个压缩包里没有：`new()` 返回 0，`->move()` 在 0 上报 `Bad argument 1 to EFUN call_other()`。在 `create()` 里这个对象永远加载不了，在 `reset()` 里第一个缺失物品之后的刷新每次 reset 都被跳过。1 个文件里 1 处（`new`）改成 `{ object new_ob = new(路径); if (new_ob) new_ob->move(...); }`（`scripts/lpc_guard_carry_object.py --new`：路径按这个文件自己看到的宏解析，宏名冲突、虚拟对象路径一律跳过）。 对这 1 个改动文件做加载检查（HEAD 与工作区对比）：HEAD 能加载 1 个，现在 1 个（新增可加载 0 个，回归 0 个）。

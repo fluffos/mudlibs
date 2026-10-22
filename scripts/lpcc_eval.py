@@ -10,7 +10,7 @@ a shop that restores its stock (`object b = load_object("/d/city/dangpu")->findb
 --rmdir DIR (repeatable, a path inside the mudlib: `/verbs/spells`) removes that EMPTY directory from the staged tree before the run: the state of a plain `git clone`, which has no
 empty directories (the staged tree recreates the ones `scripts/wasm_keep_dirs.txt` lists, as the site does; KB 06 7.212).
 --at PATH (a path inside the mudlib, default `/tmp/zzeval.lpc`) puts the snippet there: a master that refuses to load objects from `/tmp` (Dead Souls: `valid_object()` denies `/tmp`, `/ftp`, `/log`, `/secure/save`) needs `--at /open/zzeval.lpc`.
-The tree is `${LPC_SCRATCH:-~/.cache/lpc-scratch}/evaltree-SLUG`, rebuilt on every run.  Nothing in the repository is touched."""
+The tree is `${LPC_SCRATCH:-~/.cache/lpc-scratch}/evaltree-SLUG`, rebuilt on every run and removed when the run ends (`KEEP_TREE=1` keeps it).  Nothing in the repository is touched."""
 import os
 import subprocess
 import sys
@@ -67,6 +67,8 @@ def main():
     out = subprocess.run(["bash", "-c", cmd], capture_output=True, text=True, errors="replace").stdout
     i = out.find("===== " + at)
     print(out[i:i + 6000] if i >= 0 else out[-3000:])
+    if os.environ.get("KEEP_TREE") != "1":
+        subprocess.run(["rm", "-rf", dest])      # rebuilt on every run anyway; a left-over tree per lib used up the disk's inodes (2026-10-22)
 
 
 if __name__ == "__main__":

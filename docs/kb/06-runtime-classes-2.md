@@ -94,6 +94,18 @@ object c; c = carry_object(p); if (c) c->wear();
   **Detection order for a sample NPC that will not load:** read the first error line -- `call_other() couldn't find object
   '<item>'` is `file->query_unique()` in the base's `carry_object()`; `Bad argument 1 to EFUN call_other()` with
   `unew()` in the trace is this one; `Bad argument 1` at the NPC's own `->wear()` line is the call-site shape.
+- **The chain form `new(PATH)->move(...)` and the macro paths `carry_object(ARMOR_D("x"))->wear()`, `new(MON(x))->move(...)` (2026-10-22, `--macro` / `--new`).**
+  `new(missing)` answers 0 and `->move()` on it raises `Bad argument 1 to EFUN call_other()`: in a `create()` the object never finishes loading, in a
+  `reset()` every spawn after the first missing one is skipped. `--new` rewrites a statement `new | clone_object | unew | carry_object (PATH or MACRO(..))->fn(..);`
+  whose path names no file as `{ object new_ob2 = new(PATH); if (new_ob2) new_ob2->move(..); }`: 2,257 sites in 1,189 files of 114 libs (shadowgate 707 in 358
+  files, sunshadow 636 in 319, pd 287, ninetears 168, darkelib 39 ...); of the changed files HEAD loaded 652 and the tree loads 917 (265 newly loading: shadowgate
+  +68, sunshadow +70, pd +56, ninetears +44, darkelib +15), no regression. Traps found on the way: (1) **resolve a macro per file**: a lib-wide macro table is
+  first-definition-wins and `MON(x)` of one area's header names another area's directory (shadowgate showed 4,978 sites where 707 are real), so the tool reads the
+  file's own `#define`s and its include closure and skips an ambiguous name; (2) **the guard's variable must not be a lib macro**: `new_ob` is a function-like macro of the
+  Shujian family's `globals.h` (bxsj: `unexpected L_ORDER` in the listcheck), the tool takes `new_ob2`, `new_ob3` ... from the lib's macro names; (3) virtual paths
+  (`/virtual/...`, a suffix other than `.lpc` / `.c`) and a result used inside an expression are left alone; (4) a REGRESS row of the load check can be a random branch
+  (`!random(3)` -> `new("/d/magic/scroll")`, which did not compile in sunshadow: fixed the same day, see its NOTES): re-load in fresh processes before believing it.
+  Edits in a lib's nested archive copy (`hy`: `work/海洋2002/hy3/`) or in a driver-override lib the listcheck cannot boot (`wilderness`) prove nothing and were reverted.
 
 ### 7.74 UNRESOLVED: `ob->move(REVIVE_ROOM)` never returns inside a `call_out` after `reincarnate()` (`wmkj`)
 Suspect `notify_fail` in `move()`'s equip guard. Instrument inside
