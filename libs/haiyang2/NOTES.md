@@ -1655,3 +1655,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
 
 `add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 70 条注册（58 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/clone/medicine/nostrum/gaoyao.lpc`（`do_eat`）、`/d/baling/npc/zhou.lpc`（`do_redeem`）、`/d/beijing/npc/guanfuzi.lpc`（`do_join`）、`/d/beijing/npc/xutianchuan.lpc`（`do_skills`）、`/d/changsha/npc/qiao.lpc`（`do_redeem`）、`/d/chengdu/npc/obj/nostrum/gaoyao.lpc`（`do_eat`）、`/d/city/leitai.lpc`（`do_quit`）、`/d/city/npc/ake.lpc`（`do_pawn`）、`/d/city/weiqishi.lpc`（`do_pass`、`do_resign`）、`/d/city4/qishi.lpc`（`do_pass`、`do_resign`） 等共 58 个文件。最多的函数名：`do_send` 15 处、`do_redeem` 12 处、`do_qiecuo` 11 处、`do_quit` 9 处、`do_vendor_list` 4 处。
+
+## 基类的 `add_action` 登记：处理函数只在后代里定义，基类自己被加载时报错（2026-10-21，KB 06 §7.349）
+
+房间、NPC、公告板这类基类，`init()` 里登记的 `add_action("函数", "动词")` 的函数只由继承它的后代定义；基类对象自己被直接加载（房间可以走进去、NPC 可以克隆）时，访客输入这个动词，驱动报 `*Function for verb 'x' not found.`（第一轮扫描把这些当成“有后代定义，是活的”放过了，`scripts/lpc_verify_handlers.py` 在基类对象上跑 `function_exists()` 才看出来）。登记前加 `if (function_exists("函数", this_object(), 1))`（第三个参数 1：默认 `function_exists()` 把 `protected` / `private` 函数当作没有定义），后代照常登记。共 6 处、1 个文件（`scripts/lpc_fix_dead_add_action.py --guard`）：`/d/bwdh/kantai.lpc`（`do_abandon`、`do_practice`、`do_study`）。

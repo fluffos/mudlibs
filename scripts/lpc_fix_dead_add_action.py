@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""scripts/lpc_fix_dead_add_action.py [--apply] [--pairs FILE [--trust]] [--libs a,b] [--hits FILE] [--twins] [SLUG...]
+"""scripts/lpc_fix_dead_add_action.py [--apply] [--guard] [--pairs FILE [--trust]] [--libs a,b] [--hits FILE] [--twins] [SLUG...]
 
 Takes out the `add_action("handler", "verb")` statements whose handler nobody defines (KB 06 section 7.349).  The driver answers a verb bound to a function it
 cannot find with `*Function for verb 'drop' not found.` and does not try the verb's other handlers: a player who carries one Guiyuan pill (26 libs) cannot
@@ -13,7 +13,9 @@ end a braceless `if (..)` / `else` / `for` / `while` header or an unfinished exp
 or that has a NEAR name in the object (a rename: `get` for `do_get`) are printed as TWIN / NEAR and left alone: read them, the handler is usually a stub that
 would take the verb away from everybody.  --pairs FILE (`slug<TAB>file<TAB>handler` lines, e.g. the MISSING rows of `lpc_verify_handlers.py`) restricts the
 work to confirmed pairs.  --hits FILE takes the candidates from the HIT add_action rows of a `lpc_scan_callout_targets.py` run instead of rescanning every
-file; --twins also looks in the other libs for the same file (TWIN: the file itself defines the handler there, BASE: an ancestor does; slow: it loads every lib that has the file).  --trust (with --pairs) takes the pairs as proven (no resolver, no NEAR / TWIN look: for the final run over pairs that `lpc_verify_handlers.py` answered MISSING).  Binary mode, the file's own line ending, idempotent; gitlink libs are never touched.  Dry run by default."""
+file; --twins also looks in the other libs for the same file (TWIN: the file itself defines the handler there, BASE: an ancestor does; slow: it loads every lib that has the file).  --trust (with --pairs) takes the pairs as proven (no resolver, no NEAR / TWIN look: for the final run over pairs that `lpc_verify_handlers.py` answered MISSING).  --guard (KB 06 section 7.349, the ALIVE rows) does not delete a whole-line statement but puts `if (function_exists("h", this_object(), 1))` in front of it: for an object that is a BASE and is also loaded
+directly (a room, an NPC, a board whose descendants define the handler) the dead registration of the base raises for its own visitors, while the descendants, which define the handler, keep registering it exactly as before;
+the other shapes (a cut statement, a braceless `if`) are printed as MANUAL.  Binary mode, the file's own line ending, idempotent; gitlink libs are never touched.  Dry run by default."""
 import collections
 import difflib
 import os
@@ -147,6 +149,14 @@ def plan(b, handlers):
     return out
 
 
+def guarded(seg, handler):
+    """the whole-line statement `seg` behind an `if (function_exists(..))` header at its indent, in the file's own line ending"""
+    m = re.match(rb"([ \t]*)", seg)
+    ind = m.group(1)
+    nl = b"\r\n" if b"\r\n" in seg else b"\n"
+    return ind + b'if (function_exists("' + handler.encode() + b'", this_object(), 1))' + nl + ind + b"  " + seg[len(ind):]
+
+
 class Reader:
     """the part of sc.Lib that main() needs for a trusted pair: the file's bytes (no header / macro scan of the whole lib)"""
 
@@ -165,6 +175,7 @@ def main():
     apply = "--apply" in argv
     want_twins = "--twins" in argv
     trust = "--trust" in argv
+    guard = "--guard" in argv
     pairs = None
     only_libs = None
     hits_file = None
@@ -296,15 +307,19 @@ def main():
                 continue
             for s, e, kind, h in edits:
                 line = b[:s].count(b"\n") + 1
-                if kind == "MANUAL":
+                if kind == "MANUAL" or (guard and kind != "REMOVE"):
                     n_manual += 1
                     print(f"MANUAL\t{slug}\t{f}\t{h}\t{line}")
                 else:
                     n_rm += 1
-                    print(f"{kind}\t{slug}\t{f}\t{h}\t{line}")
+                    print(f"{'GUARD' if guard else kind}\t{slug}\t{f}\t{h}\t{line}")
             if apply:
                 data = b
                 for s, e, kind, h in sorted(edits, reverse=True):
+                    if guard:
+                        if kind == "REMOVE":
+                            data = data[:s] + guarded(data[s:e], h) + data[e:]
+                        continue
                     if kind in ("REMOVE", "CUT", "IFREMOVE"):
                         data = data[:s] + data[e:]
                     if kind == "CUT":
