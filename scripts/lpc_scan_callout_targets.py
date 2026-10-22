@@ -35,7 +35,7 @@ KINDS = collections.OrderedDict([
     ("add_action", re.compile(rb'(?<![A-Za-z_])add_action\(\s*"([A-Za-z_]\w*)"(?=\s*[,)])')),
     ("input_to", re.compile(rb'(?<![A-Za-z_])(?:input_to|get_char)\(\s*"([A-Za-z_]\w*)"(?=\s*[,)])')),
 ])
-DEFINE = re.compile(rb'(?m)^[ \t]*#[ \t]*define[ \t]+([A-Za-z_]\w*)[ \t]+((?:__DIR__[ \t]*)?"[^"\n]*"(?:[ \t]*"[^"\n]*")*)[ \t]*(?://.*)?\r?$')
+DEFINE = re.compile(rb'(?m)^[ \t]*#[ \t]*define[ \t]+([A-Za-z_]\w*)[ \t]+((?:(?:__DIR__|[A-Za-z_]\w*)(?!\w)[ \t]*|"[^"\n]*"[ \t]*)+)[ \t]*(?://.*)?\r?$')      # a path: strings, `__DIR__` and other macros (`FEATURE_DIR "item/fruit"`); `(?!\w)` keeps a word from being split, so a failing line costs one pass
 INHERIT = re.compile(rb"(?m)(?:^|(?<=[;}]))[ \t]*inherit[ \t]+([^;]+);")      # `inherit NPC;inherit F_DEALER;` on one line is two inherits
 INCLUDE = re.compile(rb'(?m)^[ \t]*#[ \t]*include[ \t]+([<"])([^>"\n]+)[>"]')
 INCLUDE_MACRO = re.compile(rb'(?m)^[ \t]*#[ \t]*include[ \t]+([A-Za-z_][^\r\n]*)')       # `#include ED_DIR "buffer.lpc"`, `#include ROOM_FUNCTS`, `#include __DIR__"x.lpc"`
@@ -60,6 +60,7 @@ class Lib:
         pre = f"libs/{slug}/work"
         self.files = set(p.decode("utf-8", "surrogateescape")[len(pre):] for p in out.split(b"\0") if p)
         self.cache = {}
+        self.expanding = set()
         self.macros = {}
         for f in sorted(self.files):
             if f.endswith(".h") and not SKIP.search(f):
@@ -158,9 +159,13 @@ class Lib:
                 rest = rest[i + 1:]
                 continue
             hit = self.macros.get(name)
-            if not hit:
+            if not hit or name in self.expanding:           # unknown, or `#define A B` / `#define B A`
                 return None
-            v = self.literal(hit[0], fdir)
+            self.expanding.add(name)
+            try:
+                v = self.literal(hit[0], fdir)
+            finally:
+                self.expanding.discard(name)
             if v is None:
                 return None
             s += v

@@ -1087,3 +1087,11 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
 
 `add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 14 条注册（9 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/d/beijing/obj/kuanglu.lpc`（`do_look`）、`/d/kunlun/npc/mingjiao_npc.lpc`（`do_qingjiao`）、`/d/quanzhou/npc/gongping-zi.lpc`（`do_bihua`、`do_halt`）、`/d/shenlong/obj/sg_mianzhao.lpc`（`do_open`）、`/d/xiakedao/obj/car.lpc`（`do_hire`）、`/d/xingxiu/npc/feng.lpc`（`do_ketou`）、`/d/xingxiu/obj/sanxiao.lpc`（`throw_ob2`）、`/inherit/misc/fboard.lpc`（`do_list`）、`/kungfu/class/mingjiao/mingjiao_npc.lpc`（`do_qingjiao`）。最多的函数名：`do_bihua` 3 处、`do_qingjiao` 2 处、`do_halt` 2 处、`do_hire` 2 处、`do_look` 1 处。
+
+## 注册到不存在函数的 `add_action`，第二轮：宏路径父类和静态解析不了的对象（2026-10-21，KB 06 §7.349）
+
+第一轮的静态解析读不了经宏路径继承父类的对象（`#define ROOM STD_DIR "room/room"` 这类定义的正文以另一个宏开头）和它解析不了的继承，这些对象当作 `UNSURE` 没有扫；第二轮修了解析器，重扫并对这些对象在运行时问 `function_exists()`。`add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 11 条注册（2 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/d/xingxiu/xueling/exit1.lpc`（`do_ling`）、`/kungfu/class/gaibang/zhulin3.lpc`（`do_bake`、`do_cut`、`do_kao`、`do_remove`等）。最多的函数名：`do_cut` 2 处、`do_remove` 2 处、`do_wash` 2 处、`do_wrap` 2 处、`do_ling` 1 处。
+
+## 基类的 `add_action` 登记：处理函数只在后代里定义，基类自己被加载时报错（2026-10-21，KB 06 §7.349）
+
+房间、NPC、公告板这类基类，`init()` 里登记的 `add_action("函数", "动词")` 的函数只由继承它的后代定义；基类对象自己被直接加载（房间可以走进去、NPC 可以克隆）时，访客输入这个动词，驱动报 `*Function for verb 'x' not found.`（第一轮扫描把这些当成“有后代定义，是活的”放过了，`scripts/lpc_verify_handlers.py` 在基类对象上跑 `function_exists()` 才看出来）。登记前加 `if (function_exists("函数", this_object(), 1))`（第三个参数 1：默认 `function_exists()` 把 `protected` / `private` 函数当作没有定义），后代照常登记。共 6 处、1 个文件（`scripts/lpc_fix_dead_add_action.py --guard`）：`/d/bwdh/kantai.lpc`（`do_abandon`、`do_practice`、`do_study`）。
