@@ -2168,6 +2168,8 @@ Found by taking the objects a visitor meets (`scripts/lpc_reach_census.py` lists
 **Proof:** `lpcc_eval.py hhsj`: HEAD `score->tribar_graph(6, 9, 12, "")` is twelve `■`; tree is six `■` + three `□`. Emote pad for `"笑"`: HEAD-style `13`, tree `12`. `xzyx` `none_string[(eff * 17 / max) * 2..34]` unchanged. Key `score` / `hp` / `edemote` objects load.
 **Detection:** `lpc_fix_display_pad.py --list SLUG`; `rg '\) \* 2 - 1\]' libs --glob '**/score*.lpc'`; `rg 'strlen\(emotion\) / 2'`.
 
+**Also (2026-10-23):** SKIP treated `/open/` as a wizard home. kxkj / kxkjii2 `open/killer/obj/two.lpc` kept GBK `* 2` on `bar_string` / `blank_string` / `bmin_string` (○). Dropped `open` from SKIP; taught the fixer `bmin_string` (same CJK pad family). Proof: `lpcc_eval.py kxkj` `tribar_graph(10,15,20,"")` HEAD twenty `●`, tree ten `●` + five `⊙` + five `○`.
+
 ### 7.366 Mudring `creator_file` euid `Domain` cannot `read_file` under `/d/` (xyj20032 / sjshv2578bb clubpoem, 2026-10-23)
 **Symptom:** `/d/city/clubpoem` never finishes `create()` / `init()`: `new_poem()` does `read_file("/d/ourhome/honglou/poem/poemN")`, gets 0, then `sscanf(0, …)` raises `*Bad argument 1 to sscanf`.
 **Cause:** mudring's `creator_file()` returns `"Domain"` for every `/d|/obj|/daemon` object. `securityd`'s `default_trusted_read` only lists `(admin)/(arch)/(wizard)` on `"/"`. Working siblings (sjshv150) carry `"/d": ({ "Domain" })` in a saved `extend_trusted_read` (`data/securityd.o`); xyj20032 / sjshv2578bb save under `data/nosave/securityd` and ship no such file, so Domain is never trusted. (`#define DEBUG 1` in those two is unrelated noise.)

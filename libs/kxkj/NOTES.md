@@ -1179,3 +1179,13 @@ BIG5 里 `功` 等字的第二个字节正好是 0x5C（反斜杠），作者在
 
 15 文件：`gring` 的 `str = "guard ring"`、密道 `arg = "water"/"light"`、麻将 `check = 0` 等 → `==`。
 证明：`gring` / `waterm` / `mj` 可加载。
+
+## /open/ 上丢失引号的 shout/say（2026-10-23，KB 03 §4.6 Also）
+
+`open/poison/npc/low.lpc`（庄静柔）里 `command("shout …)` / `say` 在 GBK 转换后丢了引号，机械 closer 仍留下非法中文拼接，对象无法加载。手改为 `command("shout 好！" + me->query("name") + "能成功寻回月石，看来本教复兴有望了。");`（say 同形）。`lpc_fix_eaten_quote.py` 的 SKIP 不再把 `/open/` 当巫师家。证明：`lpcc_eval` 加载 NPC，`name()` 为庄静柔（HEAD FAIL）。
+
+## /open/ 上残留的 score/HP 条 *2（2026-10-23，KB 06 §7.365 Also）
+
+`lpc_fix_display_pad.py` 曾把 `/open/` 当巫师家跳过；本库可玩世界在 `open/`。
+`open/killer/obj/two.lpc` 的 `tribar_graph`：`bar_string` / `blank_string` / `bmin_string`（○）上的 `* 2` 在字符区间下把半条画满。SKIP 去掉 open，并教会识别 `bmin_string`。证明：`lpcc_eval` `tribar_graph(10,15,20)` HEAD 二十个●，改后十个●+五个⊙+五个○。
+

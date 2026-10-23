@@ -9,8 +9,8 @@ byte index doubles the slice and a half-full score bar prints full.
             (wizard emote detail header).
 
   scorebar  `bar_string[0..(val * N / max) * 2 - 1]` and the matching
-            `blank_string[(val * N / max) * 2..(eff * N / max) * 2 - 1]` on
-            fullwidth / CJK pad strings (■□　●〓—…): drop each `* 2`.
+            `blank_string` / `bmin_string` slices on fullwidth / CJK pad
+            strings (■□　●○⊙〓—…): drop each `* 2`.
             `jings = (eff * 12 / max) * 2` + `blank_string3[0..(23 - a)]`
             (23 = 12*2-1) → drop `* 2` and rewrite 23 → 11.
             `n = strlen(full_string) / 2` with slices on full_string / blank_string
@@ -29,9 +29,10 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SKIP = re.compile(
+    # `/open/` is playable world in Taiwanese / dreamofseven-style libs (not a wizard home).
     # wizard homes at the lib root only — not cmds/std/wiz/
     r"^/(u|w|wiz|wizard|wizards)/|"
-    r"/(open|players|backup|backups|bak|old|test|tests|"
+    r"/(players|backup|backups|bak|old|test|tests|"
     r"tmp|data|log|realms|doc|docs|example|examples|orphaned-dir)/|[-_.](bak|old)|"
     r"class_bak|orphaned-dir|/海洋2002/"
 )
@@ -56,7 +57,7 @@ GRAPH_IDX = re.compile(
 
 STRDEF = re.compile(
     r"(?:^|\n)\s*(?:nosave\s+|private\s+|protected\s+|static\s+)*string\s+"
-    r"(?P<v>bar_string\w*|blank_string\w*|none_string\w*|empty_string\w*|full_string\w*)"
+    r"(?P<v>bar_string\w*|blank_string\w*|bmin_string\w*|none_string\w*|empty_string\w*|full_string\w*)"
     r"\s*=\s*\"(?P<lit>[^\"]*)\"",
 )
 
@@ -184,20 +185,20 @@ def edits_scorebar(t: str):
 
     # VAR[ body with * 2 ]
     for m in re.finditer(
-        r"(?P<v>bar_string\w*|blank_string\w*|none_string\w*|empty_string\w*|full_string\w*)"
+        r"(?P<v>bar_string\w*|blank_string\w*|bmin_string\w*|none_string\w*|empty_string\w*|full_string\w*)"
         r"\s*\[\s*(?P<body>[^\]]+)\]",
         t,
     ):
         v = m.group("v")
         # Only rewrite when the variable is known wide, or undefined but looks like
-        # a bar (bar_/blank_/full_) — never none_/empty_ without a wide def.
+        # a bar (bar_/blank_/bmin_/full_) — never none_/empty_ without a wide def.
         wide = defs.get(v)
         if wide is False:
             continue
         if wide is None:
             if v.startswith("none_") or v.startswith("empty_"):
                 continue
-            # bar_/blank_/full_ without a local def: only if file has ■ somewhere
+            # bar_/blank_/bmin_/full_ without a local def: only if file has ■ somewhere
             if not WIDE.search(t):
                 continue
         body = m.group("body")
@@ -274,6 +275,7 @@ def main():
                 for s in (
                     b"bar_string",
                     b"blank_string",
+                    b"bmin_string",
                     b"full_string",
                     b"emotion",
                     b"edemote",

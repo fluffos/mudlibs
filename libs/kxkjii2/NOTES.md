@@ -498,3 +498,12 @@ BIG5 里 `功` 等字的第二个字节正好是 0x5C（反斜杠），作者在
 ## `/open/` 上残留的条件赋值（2026-10-23，KB 06 §7.290 Also）
 
 与 kxkj 同源 15 文件（§7.290 Also）。
+
+## /open/ 上丢失引号的 shout/say（2026-10-23，KB 03 §4.6 Also）
+
+与 kxkj 同源：`open/poison/npc/low.lpc`（庄静柔）。见 §4.6 Also。
+
+## /open/ 上残留的 score/HP 条 *2（2026-10-23，KB 06 §7.365 Also）
+
+与 kxkj 同源：`open/killer/obj/two.lpc`（§7.365 Also）。
+
