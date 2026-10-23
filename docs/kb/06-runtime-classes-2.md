@@ -2170,3 +2170,10 @@ Found by taking the objects a visitor meets (`scripts/lpc_reach_census.py` lists
 **Fix:** add `"/d": ({ "Domain" })` to `default_trusted_read` in `adm/daemons/securityd.lpc` (source, not a save). Oracle: sjshv150's live trusted_read table.
 **Proof:** `lpcc_eval.py xyj20032` / `sjshv2578bb`: HEAD load raises on `sscanf`; tree loads `/d/city/clubpoem` with euid `Domain` and `valid_read(...poem1...) == 1`.
 **Detection:** Domain euid + `valid_read("/d/…", room, "read_file") == 0` while `file_size` is > 0; clubpoem `read_file` of `/d/ourhome/honglou/poem/poem*`.
+
+### 7.367 Lanling exits still point at `/u/calvin/兰陵/地区/…`, and the palace `dadian` north to `/u/fly/…` (284 edits in 12 libs, 2026-10-23)
+**Symptom:** walking Lanling streets (`/d/lanling/lldj*`) tries `/u/calvin/兰陵/地区/兰陵大街N` (wizard dir absent → dead exit); Tang palace `/d/huanggong/dadian` offers north to `/u/fly/doublesword/houdian` (missing).
+**Cause:** the playable Lanling tree was copied under `/d/lanling/` (pinyin stems `lldj1`, `beijiao4`, …) but exit strings kept the author's `/u/calvin/…` paths. The fly doublesword area was never shipped.
+**Fix:** `scripts/lpc_fix_calvin_lanling.py [--apply] [--list] SLUG..|--all`: map Chinese suffixes to existing `/d/lanling/<stem>` when the file exists; delete the dadian north line (`(?m)^` so a match cannot start at the quote inside `//"north"` and glue `//` onto the next exit — xlqy_early). Left unmapped when no file: `书局`, `钦陵宫`. Binary mode. Skip libs whose only hit is already commented (`xlqy_early` / `xlqy_new2007` keep a live `/d/huanggong/houdian`).
+**Proof:** `lpcc_eval.py sjshv2578bb`: `lldj1` exits north → `/d/lanling/beijiao4` (loads). `xianlvqiyuan` dadian: HEAD has north `/u/fly/…`, tree three exits only.
+**Detection:** `rg '/u/calvin/兰陵' libs/*/work/d/lanling`; `rg '/u/fly/doublesword/houdian'`.

@@ -433,3 +433,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 mudring 的 `creator_file()` 给所有 `/d`/`/obj`/`/daemon` 对象 euid `Domain`；`securityd` 的 `default_trusted_read` 却只有根上的巫师级，工作树又没有 sjshv150 那种带 `"/d": ({ "Domain" })` 的 `extend_trusted_read` 存档（本库存到 `data/nosave/securityd`）。于是茶馆 `/d/city/clubpoem` 的 `new_poem()` 对 `/d/ourhome/honglou/poem/poemN` 的 `read_file` 得到 0，接着 `sscanf(0, …)` 抛错，房间加载不完。在 `default_trusted_read` 里加上 `"/d": ({ "Domain" })`。证明：HEAD 加载抛错；改后房间加载且 `valid_read(...poem1...) == 1`。
 
+
+## 兰陵出口仍指向 /u/calvin、大殿北去 /u/fly（2026-10-23，KB 06 §7.367）
+
+可玩的兰陵已在 `/d/lanling/`（`lldj1`、`beijiao4` 等），出口字符串还写着作者目录 `/u/calvin/兰陵/地区/…`，走动即死出口；皇宫大殿北向 `/u/fly/doublesword/houdian` 同样不存在。`scripts/lpc_fix_calvin_lanling.py` 在目标 `.lpc` 存在时改写为 `/d/lanling/<stem>`，并删掉大殿那条北向。本库 63 处。证明：sjshv2578bb 的 `lldj1` 北向加载 `beijiao4`；xianlvqiyuan 大殿 HEAD 有北向、改后没有。未映射：`书局`、`钦陵宫`（库内无对应文件）。
+
