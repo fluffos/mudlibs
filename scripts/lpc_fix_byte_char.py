@@ -32,7 +32,8 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SKIP = re.compile(
-    r"/(u|w|wiz|wizard|wizards|open|players|backup|backups|bak|old|test|tests|"
+    # `/open/` is playable world in Taiwanese / dreamofseven-style libs
+    r"/(u|w|wiz|wizard|wizards|players|backup|backups|bak|old|test|tests|"
     r"tmp|data|log|realms|doc|docs|example|examples|orphaned-dir)/|[-_.](bak|old)|"
     r"class_bak|orphaned-dir|/海洋2002/"
 )

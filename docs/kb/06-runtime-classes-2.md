@@ -2158,6 +2158,8 @@ Found by taking the objects a visitor meets (`scripts/lpc_reach_census.py` lists
 **Proof:** `lpcc_eval.py sjplii`: HEAD `check_legal_name("张a")` = 1, tree = 0; both accept `张三`. `lpcc_eval.py xkx100`: `clubpoem->mixup("离离原上草")` = `"离离原草上"` (a real character swap), every character from the original. `lpcc_eval.py nitan_san`: a 2-character league name pads to `【 兄  弟 】`, a 3-character one to `【 桃花园 】`. Key objects load (logind, chinesed, clubpoem, channeld, taibailou).
 **Detection:** `lpc_fix_byte_char.py --list SLUG`; `rg 'i % 2 == 0 && !is_chinese'` / `rg 'strlen\(str\) / 2'` next to `mixup` / `rg 'case 10:'` next to `fname\[0\.\.7\]`.
 
+**Also (2026-10-23):** SKIP treated `/open/` as a wizard home. xkm `open/logind.lpc` kept `j % 2 == 0 && !is_chinese(name[j..j+1])` after §7.362 halved the gate. Dropped `open` from SKIP; 2 edits. Proof: loop-hit count on「张a」HEAD 0 / tree 1 (Latin `a` seen).
+
 ### 7.364 From-end ranges that still meant one or two Chinese characters (`[<2..<1]` / `[<4..<1]`), and the Shujian `gcreate` length gate (132 edits in 93 files of 25 libs, 2026-10-23)
 **Symptom:** `gcreate 斧头帮 futou …` fails the length check and the last-character check against `({ "帮", "会", … })` (`gname2[<2..<1]` is `"头帮"`, never equal to `"帮"`); Shaolin / Emei / Dali renames build `"明" + name[<2..<1]` as a two-character tail; death messages always append `死了。` because `killer[<2..<1] != "。"` compares two characters to one; weapon renames never match `can_name` keys.
 **Cause:** §7.360 halved only numeric `[a..b]` slices. From-end `[<2..<1]` (one GBK character) and `[<4..<1]` (two) stayed. `gcreate`'s own help says `二至六个汉字` / `3到8个英文字母` while the gate was `(strlen%2)==1 || <4 || >12` and `gid < 4`.
