@@ -32,7 +32,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lpc_fix_void_return import code_mask  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SKIP = re.compile(r"/(u|w|open|players|backup|old|bak|log|data|doc|wiz|test)/|[-_.](bak|old)/")
+SKIP = re.compile(
+    r"/(u|w|players|backup|old|bak|log|data|doc|wiz|test)/|[-_.](bak|old)/"
+)  # `/open/` is playable world in Taiwanese / dreamofseven-style libs
 CALL = re.compile(rb'query_skill\s*\(\s*"([\w-]+)"')
 BASE = {"force", "dodge", "parry", "unarmed", "sword", "blade", "staff", "club", "whip", "axe", "hammer", "dagger",
         "fork", "throwing", "stick", "spear", "halberd", "hook", "cuff", "strike", "finger", "hand", "claw", "leg",
