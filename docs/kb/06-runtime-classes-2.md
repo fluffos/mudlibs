@@ -2177,3 +2177,10 @@ Found by taking the objects a visitor meets (`scripts/lpc_reach_census.py` lists
 **Fix:** `scripts/lpc_fix_calvin_lanling.py [--apply] [--list] SLUG..|--all`: map Chinese suffixes to existing `/d/lanling/<stem>` when the file exists; delete the dadian north line (`(?m)^` so a match cannot start at the quote inside `//"north"` and glue `//` onto the next exit — xlqy_early). Left unmapped when no file: `书局`, `钦陵宫`. Binary mode. Skip libs whose only hit is already commented (`xlqy_early` / `xlqy_new2007` keep a live `/d/huanggong/houdian`).
 **Proof:** `lpcc_eval.py sjshv2578bb`: `lldj1` exits north → `/d/lanling/beijiao4` (loads). `xianlvqiyuan` dadian: HEAD has north `/u/fly/…`, tree three exits only.
 **Detection:** `rg '/u/calvin/兰陵' libs/*/work/d/lanling`; `rg '/u/fly/doublesword/houdian'`.
+
+### 7.368 Beyond wizard-tree exits `/u/beyond/<area>/…` after the rooms moved under `/d/` (140 edits in 46 libs, 2026-10-23)
+**Symptom:** Ningbo/`xikou` west/south and Suzhou lakeside exits still name `/u/beyond/ningbo/…`, `/u/beyond/murong/hubian`, `/u/beyond/suzhou/…` — wizard dir absent → dead exit / failed `load_object` of quest items (`mudao`, `paper1`).
+**Cause:** Beyond's areas were vendored into `/d/ningbo`, `/d/suzhou`, `/d/mr`, `/d/hz` but string paths kept the author tree. `murong` was filed as `mr`.
+**Fix:** `scripts/lpc_fix_beyond_exits.py [--apply] [--list] SLUG..|--all`: rewrite `/u/beyond/<area>/<rest>` → `/d/<area>/<rest>` when that `.lpc` exists; map `murong` → `mr`. Skip commented lines. Left unmapped when no file (e.g. `yunhe`, `yangzhou/matou`, libs without `/d/mr`).
+**Proof:** `lpcc_eval.py sjplii`: HEAD `xikou` west `/u/beyond/ningbo/aywsi`; tree `/d/ningbo/aywsi` loads. `bxsj` `hubian1` → `/d/mr/hubian` + `/d/suzhou/qingshidadao` load.
+**Detection:** `rg '/u/beyond/' libs/*/work/d`.
