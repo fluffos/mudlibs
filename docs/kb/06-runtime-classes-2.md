@@ -2184,3 +2184,10 @@ Found by taking the objects a visitor meets (`scripts/lpc_reach_census.py` lists
 **Fix:** `scripts/lpc_fix_beyond_exits.py [--apply] [--list] SLUG..|--all`: rewrite `/u/beyond/<area>/<rest>` → `/d/<area>/<rest>` when that `.lpc` exists; map `murong` → `mr`. Skip commented lines. Left unmapped when no file (e.g. `yunhe`, `yangzhou/matou`, libs without `/d/mr`).
 **Proof:** `lpcc_eval.py sjplii`: HEAD `xikou` west `/u/beyond/ningbo/aywsi`; tree `/d/ningbo/aywsi` loads. `bxsj` `hubian1` → `/d/mr/hubian` + `/d/suzhou/qingshidadao` load.
 **Detection:** `rg '/u/beyond/' libs/*/work/d`.
+
+### 7.369 Asura-realm exits still point at `/u/tianlin/阿修罗界/…` (92 edits in 5 libs, 2026-10-23)
+**Symptom:** `/d/xiuluo/diyu5` down → `/u/tianlin/阿修罗界/diyu6` (wizard dir gone); same for `/d/axiuluo/lu1` enter → `…/lu2`.
+**Cause:** the playable Asura tree was copied under `/d/xiuluo/` (and sibling spellings `/d/axiuluo/`, `/d/axlj/`) but exit/object strings kept the author's `/u/tianlin/阿修罗界/` prefix.
+**Fix:** `scripts/lpc_fix_tianlin_xiuluo.py [--apply] [--list] SLUG..|--all`: rewrite when `/d/{xiuluo,axiuluo,axlj}/<rest>.lpc` exists; prefer the area that already owns the source file. Skip `//` comments. Leaves the pristine `/u/tianlin/…` copies alone (SKIP).
+**Proof:** `lpcc_eval.py shenmo`: HEAD `diyu5` down `/u/tianlin/…/diyu6`; tree `/d/xiuluo/diyu6` loads. `sjshwzb` `lu1` enter → `/d/axiuluo/lu2` loads.
+**Detection:** `rg '/u/tianlin/阿修罗界' libs/*/work/d`.

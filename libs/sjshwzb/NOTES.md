@@ -561,3 +561,8 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 
 可玩的兰陵已在 `/d/lanling/`（`lldj1`、`beijiao4` 等），出口字符串还写着作者目录 `/u/calvin/兰陵/地区/…`，走动即死出口；皇宫大殿北向 `/u/fly/doublesword/houdian` 同样不存在。`scripts/lpc_fix_calvin_lanling.py` 在目标 `.lpc` 存在时改写为 `/d/lanling/<stem>`，并删掉大殿那条北向。本库 9 处。证明：sjshv2578bb 的 `lldj1` 北向加载 `beijiao4`；xianlvqiyuan 大殿 HEAD 有北向、改后没有。未映射：`书局`、`钦陵宫`（库内无对应文件）。
 
+
+## 阿修罗界出口仍指向 /u/tianlin（2026-10-23，KB 06 §7.369）
+
+可玩的阿修罗区域已在 `/d/xiuluo/`（或 `/d/axiuluo/`、`/d/axlj/`），出口仍写作者目录 `/u/tianlin/阿修罗界/…`。`scripts/lpc_fix_tianlin_xiuluo.py` 在目标存在时改写，并优先跟源文件所在区名。本库 8 处。证明：shenmo `diyu5` HEAD 下向 `/u/tianlin/…/diyu6`，改后 `/d/xiuluo/diyu6` 可加载；sjshwzb `lu1` enter → `/d/axiuluo/lu2`。
+

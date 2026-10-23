@@ -1085,3 +1085,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 老档把汉字当两字节：`bar_string[0..(val * N / max) * 2 - 1]` 把「格数」换成字节下标，半格血条在本驱动（按字符算区间）上会整条画满；巫师表情 `edemote` 的 `repeat_string("─", 13 - (strlen(emotion) / 2))` 也会少减汉字宽度。`scripts/lpc_fix_display_pad.py`：去掉 CJK 血条 / 空白条上的 `* 2`（`jings`/`qis` 赋值和 `blank_string3[0..(23-a)]` 的 23→11 一并改），表情标题去掉 `/ 2`；ASCII 空格的 `none_string` / `empty_string` 仍保留 `* 2`（一格两个空格）。本库 8 处（4 个文件）。证明（`lpcc_eval.py` hhsj）：`tribar_graph(6,9,12)` 在 HEAD 画出整条 12 个■，改后为 6 个■+3 个□；麻将 `strlen(tempB)/2` 是两字符牌码，未改。
 
+
+## 阿修罗界出口仍指向 /u/tianlin（2026-10-23，KB 06 §7.369）
+
+可玩的阿修罗区域已在 `/d/xiuluo/`（或 `/d/axiuluo/`、`/d/axlj/`），出口仍写作者目录 `/u/tianlin/阿修罗界/…`。`scripts/lpc_fix_tianlin_xiuluo.py` 在目标存在时改写，并优先跟源文件所在区名。本库 24 处。证明：shenmo `diyu5` HEAD 下向 `/u/tianlin/…/diyu6`，改后 `/d/xiuluo/diyu6` 可加载；sjshwzb `lu1` enter → `/d/axiuluo/lu2`。
+
