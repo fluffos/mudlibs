@@ -51,7 +51,7 @@ void attempt_apprentice(object me)
 		message_vision("$N双手合十，恭恭敬敬地跪了下来。\n\n"
 			"$n伸出手掌，在$N头顶轻轻地摩挲了几下，将$N的头发尽数剃去。\n\n",me, ob);
 		name = me->query("name");
-		new_name = "心" + name[<2..<1];
+		new_name = "心" + name[<1..<1];
 
 		command("chat " + name + "于今日" + NATURE_D->game_time() + "在天龙寺剃度出家，取法名" + new_name + "！\n");
 		command("say 从今以后你的法名叫做" + new_name + "。");

@@ -34,7 +34,7 @@ int do_kneel()
 		"$n伸出手掌，在$N头顶轻轻地摩挲了几下，将$N的一缕青丝尽数剃去。\n\n",
 		me, this_object() );
 	name = me->query("name");
-	new_name = "文" + name[<2..<1];
+	new_name = "文" + name[<1..<1];
 	command("say 从今以后你的法名叫做" + new_name + "。");
 	command("smile");
 	command("recruit " + me->query("id"));

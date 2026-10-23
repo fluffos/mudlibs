@@ -55,6 +55,9 @@ characters. Every check written against GBK bytes silently misbehaves.
   an odd index of `"张a"` was accepted. `scripts/lpc_fix_byte_char.py`
   drops the parity and rewrites the range to `name[i..i]` (3,203 edits
   in 195 libs, with clubpoem `mixup` and the nitan `channeld` league header).
+- **From-end slices (2026-10-23, KB 06 7.364).** `name[<2..<1]` still meant one
+  GBK character after §7.360; `gcreate`'s help (`二至六个汉字`) disagreed with
+  its `(strlen%2)==1 || <4 || >12` gate. `scripts/lpc_fix_tail_slice.py`.
 
 
 **Standing rule:** registration isn't verified until a REAL Chinese name
