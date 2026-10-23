@@ -2191,3 +2191,10 @@ Found by taking the objects a visitor meets (`scripts/lpc_reach_census.py` lists
 **Fix:** `scripts/lpc_fix_tianlin_xiuluo.py [--apply] [--list] SLUG..|--all`: rewrite when `/d/{xiuluo,axiuluo,axlj}/<rest>.lpc` exists; prefer the area that already owns the source file. Skip `//` comments. Leaves the pristine `/u/tianlin/…` copies alone (SKIP).
 **Proof:** `lpcc_eval.py shenmo`: HEAD `diyu5` down `/u/tianlin/…/diyu6`; tree `/d/xiuluo/diyu6` loads. `sjshwzb` `lu1` enter → `/d/axiuluo/lu2` loads.
 **Detection:** `rg '/u/tianlin/阿修罗界' libs/*/work/d`.
+
+### 7.370 Dead wizard exits with no in-tree room: gold/dock, sunrise, mei (115 edits in 41 libs, 2026-10-23)
+**Symptom:** `/d/wanjiegu/road4` east → `/u/g/gold/dock`; `/d/emei/user-room/sunrise` south → `/u/xinyue/sunrise_room`; `/d/player/mei_room1` north/down → `/u/mei/…` — all missing.
+**Cause:** author workrooms never shipped; exits left in public rooms.
+**Fix:** `scripts/lpc_fix_drop_dead_u_exits.py [--apply] [--list] SLUG..|--all`: delete line-start exit entries for those four paths when the destination `.lpc` is absent; also drop `create_door("dir", …)` for a removed direction (`mei_room1` otherwise raises `*Room: create_door: attempt to create a door without exit.`). `(?m)^` so commented exits stay.
+**Proof:** `lpcc_eval.py zxty08nxgbb`: HEAD road4 has east `/u/g/gold/dock`, mei has north/down; tree road4 two exits, mei loads with empty exits, sunrise keeps west→home.
+**Detection:** `rg '/u/g/gold/dock|/u/xinyue/sunrise_room|/u/mei/workroom' libs/*/work/d`.
