@@ -19,7 +19,8 @@ import re
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SKIP = re.compile(r"/(u|w|open|players|backup|old|bak|log|data)/")   # `doc/` is code in the xkx family (d/yixing/doc/set_bang.h), so it is not skipped
+# `/open/` is playable world in Taiwanese / dreamofseven-style libs (not a wizard home).
+SKIP = re.compile(r"/(u|w|players|backup|old|bak|log|data)/")   # `doc/` is code in the xkx family (d/yixing/doc/set_bang.h), so it is not skipped
 END = re.compile(r'([　-鿿＀-￯])(\s*\)?\s*;\s*(?://.*)?)$')
 END_COMMA = re.compile(r'([　-鿿＀-￯])(\s*,\s*(?://.*)?)$')
 
