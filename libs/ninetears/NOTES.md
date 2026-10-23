@@ -916,3 +916,9 @@ A statement `new(PATH)->move(...);` / `carry_object(ARMOR_D("x"))->wear();` whos
 ## `log/` subdirectories nobody created: the logging `write_file()` / `log_file()` raises (2026-10-22, KB 06 §7.358)
 
 The code of this lib writes logs into 1 subdirectory of `log/`: `log/save/board` (`global/line_ed.lpc`). Neither the archive, a `git clone` nor the site pack has them (no local boot wrote into them, so `gen_keep_dirs.py` never recorded them), and `write_file()` raises `*Wrong permissions for opening file /log/dlog/money for append. "No such file or directory"` for a missing directory: the function that logs stops on that line and what came after it (the reward, the flag, the next step) never runs. In the eval probe this lib's `log_file()` wrote nothing (the probe object has no write access and the sefun does not make the directory itself), so what a real caller gets was not measured. `log/save/board` are now in `scripts/wasm_keep_dirs.txt` (`scripts/lpc_keep_log_dirs.py`; the site and the pristine tree create the empty directories from it). Proof (`scripts/lpcc_eval.py`, an eval object under `/adm/daemons` or similar writes `/log/zzdirprobe/...`, fresh processes): the measured table in KB 06 §7.358.
+
+## Filo Celestial / Infernal 所有者判定恒真（2026-10-23，KB 06 §7.281 Also）
+
+`this_player()->query_name() == "shimmer" || "honny" || …`：裸字符串恒真，非所有者也吃到神力 buff。
+`lpc_fix_literal_or.py` 的左侧现识别 `name()->…`；两把武器各补全比较。
+证明：`lpcc_eval.py ninetears --at /secure/zzeval.lpc` 加载武器；visitor 链为 0，shimmer 为 1。

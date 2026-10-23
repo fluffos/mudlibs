@@ -1162,3 +1162,10 @@ BIG5 里 `功` 等字的第二个字节正好是 0x5C（反斜杠），作者在
 
 `/u/f/faceoff/`、`/u/r/rence/`、`/u/onskyer/niulang/`、`/u/skinys/yihua/` 对应区域已在 `/open/world1/faceoff/bird/`、`/open/prayer/`、`/d/niulang/`、`/d/yihua/`。`scripts/lpc_fix_wizard_area_exits.py` 在目标存在时改写，仍缺失的出口行删除。本库 12 处。证明：dreamofseven wood5 四向可加载；xlqy_new2007 天河东西向 niulang；kxkj kitchen7 → prayer。
 
+
+## `/open/` 上残留的 `== !"…"` / `|| "…"`（2026-10-23，KB 06 §7.280 / §7.281 Also）
+
+机械修复器曾把 `/open/` 当成巫师家目录跳过；本库的可玩世界就在 `open/`。
+`open/badman/ride/deserter.lpc`：`class == !"bandit"`（实为 `== 0`）使非山贼驯驼奖励永不触发 → `!= "bandit"`。
+`open/killer/room/doorm.lpc`：`str == "all" || "corpse"` 恒真，任意 `sac` 抽干气血 → `str == "corpse"`。
+证明：`lpcc_eval.py kxkj` 加载 doorm；`fighter != "bandit"` 为 1。

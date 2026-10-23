@@ -24,11 +24,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lpc_fix_void_return import code_mask  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SKIP = re.compile(r"^/(u|w|wiz|wizard|wizards|open|players|realms|home)/|/(backup|backups|old|bak|log|data|doc|docs|example|examples|test|tests|tmp|attic)/|[-_.](bak|old)/|\.(bak|BAK|old|orig)(\.lpc)?$")   # wizard HOMES at the top; cmds/wiz is code (KB 06 7.290 note)
+# `/open/` is playable world in Taiwanese / dreamofseven-style libs (not a wizard home).
+SKIP = re.compile(r"^/(u|w|wiz|wizard|wizards|players|realms|home)/|/(backup|backups|old|bak|log|data|doc|docs|example|examples|test|tests|tmp|attic)/|[-_.](bak|old)/|\.(bak|BAK|old|orig)(\.lpc)?$")   # wizard HOMES at the top; cmds/wiz is code (KB 06 7.290 note)
 GENERATED = {"wllz3", "longyunmeng_binary"}
 STR = rb'"(?:[^"\\\n]|\\.)*"'
 ARG = rb'(?:\s*(?:"[^"\n]*"|[A-Za-z_]\w*|\d+)\s*)?'
-LHS = rb'(?<![\w>.\]"])[A-Za-z_]\w*(?:\[[^\]\n]*\])?(?:->[A-Za-z_]\w*\(' + ARG + rb'\))*'
+# `arg`, `me->query("id")`, and `this_player()->query_name()` (empty-arg efun before `->`)
+LHS = rb'(?<![\w>.\]"])[A-Za-z_]\w*(?:\(\s*\))?(?:\[[^\]\n]*\])?(?:->[A-Za-z_]\w*\(' + ARG + rb'\))*'
 # `LHS == "a"` or `LHS != "a"` followed by `|| "b"` / `&& "b"` chains of bare literals
 HEAD = re.compile(rb'(?P<lhs>' + LHS + rb')(?P<ws1>\s*)(?P<op>==|!=)(?P<ws2>\s*)' + STR)
 BARE = re.compile(rb'(?P<pre>\s*(?P<conj>\|\||&&)\s*)(?P<lit>' + STR + rb')(?=\s*(?:[)|&{;,?:]|$))')
