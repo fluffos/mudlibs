@@ -2198,3 +2198,10 @@ Found by taking the objects a visitor meets (`scripts/lpc_reach_census.py` lists
 **Fix:** `scripts/lpc_fix_drop_dead_u_exits.py [--apply] [--list] SLUG..|--all`: delete line-start exit entries for those four paths when the destination `.lpc` is absent; also drop `create_door("dir", …)` for a removed direction (`mei_room1` otherwise raises `*Room: create_door: attempt to create a door without exit.`). `(?m)^` so commented exits stay.
 **Proof:** `lpcc_eval.py zxty08nxgbb`: HEAD road4 has east `/u/g/gold/dock`, mei has north/down; tree road4 two exits, mei loads with empty exits, sunrise keeps west→home.
 **Detection:** `rg '/u/g/gold/dock|/u/xinyue/sunrise_room|/u/mei/workroom' libs/*/work/d`.
+
+### 7.371 Gsword exits still point at `/u/b/bigcat/…` (110 edits in 3 libs, 2026-10-23)
+**Symptom:** `/open/gsword/room/forest3` north → `/u/b/bigcat/room/forest4` (wizard gone); `tree1` fans out to missing `ntree`/`wtree`/`etree`.
+**Cause:** the gsword area was vendored under `/open/gsword/` but exit/mob paths kept `/u/b/bigcat/`.
+**Fix:** `scripts/lpc_fix_bigcat_gsword.py [--apply] [--list] SLUG..|--all`: rewrite `/u/b/bigcat/<rest>` → `/open/gsword/<rest>` when that `.lpc` exists; delete line-start exits to missing stems. Skip `//` comments.
+**Proof:** `lpcc_eval.py kxkjii2`: HEAD `forest3` north `/u/b/bigcat/room/forest4`; tree `/open/gsword/room/forest4` loads. `tree1` keeps only south→tree.
+**Detection:** `rg '/u/b/bigcat/' libs/*/work/open`.
