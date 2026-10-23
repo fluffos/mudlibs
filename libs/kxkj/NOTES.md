@@ -1169,3 +1169,8 @@ BIG5 里 `功` 等字的第二个字节正好是 0x5C（反斜杠），作者在
 `open/badman/ride/deserter.lpc`：`class == !"bandit"`（实为 `== 0`）使非山贼驯驼奖励永不触发 → `!= "bandit"`。
 `open/killer/room/doorm.lpc`：`str == "all" || "corpse"` 恒真，任意 `sac` 抽干气血 → `str == "corpse"`。
 证明：`lpcc_eval.py kxkj` 加载 doorm；`fighter != "bandit"` 为 1。
+
+## 小火龙学者/毒师闪避分支恒假（2026-10-23，KB 06 §7.282 Also）
+
+`open/fire-hole/npc/small-dragon.lpc`：`class == "scholar" && class == "poisoner"` 恒假 → `||`。
+与 kxkjii2 同源；`/open/` 不再被 cmp_chain SKIP。

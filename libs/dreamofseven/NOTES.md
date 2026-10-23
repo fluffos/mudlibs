@@ -998,3 +998,9 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 `/u/f/faceoff/`、`/u/r/rence/`、`/u/onskyer/niulang/`、`/u/skinys/yihua/` 对应区域已在 `/open/world1/faceoff/bird/`、`/open/prayer/`、`/d/niulang/`、`/d/yihua/`。`scripts/lpc_fix_wizard_area_exits.py` 在目标存在时改写，仍缺失的出口行删除。本库 24 处。证明：dreamofseven wood5 四向可加载；xlqy_new2007 天河东西向 niulang；kxkj kitchen7 → prayer。
 
+
+## `/open/` 上残留的恒真/恒假比较链（2026-10-23，KB 06 §7.282 Also）
+
+`cominging/.../ravager.lpc`：`arg != "man" || arg != "revage man"` 恒真 → `&&`（`kill man` 才进战斗）。
+`acme/area/l2.lpc`：`arg=="south" && arg=="north"` 恒假 → `||`（游泳临时标记才能清掉）。
+证明：两对象可加载；visitor/`man` 形状求值正确。
