@@ -158,10 +158,18 @@ to the player.)
 - crashes;
 - missing guards;
 - wrong object references;
-- broken state transitions.
+- broken state transitions;
+- path arithmetic / encoding bugs (GBK byte slices, wrong `.c` vs `.lpc`);
+- exits that still name a wizard prefix after the area was vendored under
+  `/d/` or `/open/` (remap to the in-tree path — the code is wrong, not
+  missing).
 
-Do NOT fix balance, prices, or internally consistent design. If you're
-unsure, document the observation and leave the code.
+Do NOT fix **content**: missing areas the archive never shipped, dead
+`/u/` (or other) exits with no relocated tree under `/d/` or `/open/`,
+quest text, NPC dialogue, balance, prices, or internally consistent
+design. Dropping an exit because its destination file is absent is a
+content edit — leave it. If you're unsure, document the observation and
+leave the code.
 
 Checklist:
 1. Read the lib's own newbie help first.

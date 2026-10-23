@@ -223,7 +223,7 @@ mandates with no completion target:
   fork. `git fetch` and check ancestry; never force.
 
 ### 13.6 Sweeps and picking what's next
-- **One programming class per wake (user, 2026-10-23).** Each librarian timer wake finishes one mechanical **programming** bug class across the corpus, commits, `git push origin main`, then watches Pages CI until it is green. Do not end the turn mid-class. **Content** (missing areas, dead wizard exits with no relocated tree, quest text) is out of scope (§10.7).
+- **One programming class per wake (user, 2026-10-23).** Each librarian timer wake finishes one mechanical **programming** bug class across the corpus, commits, `git push origin main`, then watches Pages CI until it is green. Do not end the turn mid-class. **Content is out of scope (§10.7):** missing areas, dead `/u/` (or other) exits with no relocated tree under `/d/` or `/open/`, quest text, dialogue, balance. Remap an exit only when the destination file exists in-tree under a vendored path; never drop an exit solely because its destination is absent.
 - A bug confirmed independently in **3+ unrelated lineages** gets a
   mechanical corpus sweep:
   1. Grep the exact shape.
