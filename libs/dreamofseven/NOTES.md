@@ -1009,3 +1009,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 `lpc_scan_cond_assign.TOP` 曾跳过 `/open/`。本批：`acme/area2/may*`、`faceoff/sky/ten*`、`cominging/wh_1`、麻将 NPC 等共 34 文件，`if (arg = "")` 等改为 `==`。
 证明：`may1` 可加载；空串比较求值正确。
+
+## /open/ 上残留的法名切片（2026-10-23，KB 06 §7.360 Also）
+
+`lpc_fix_gbk_slice.py` 曾把 `/open/` 当巫师家跳过。`open/world1/acme/bonze/npc/master.lpc` 的 `do_kneel`：`new_name = prename[...] + name[0..1]` 在字符区间下取了两个汉字。改为 `name[0..0]`。证明：`lpcc_eval` 对「王小明」拼出 HEAD「空王小」、改后「空王」。
+

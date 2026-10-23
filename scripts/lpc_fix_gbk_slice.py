@@ -26,7 +26,8 @@ import subprocess
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SKIP = re.compile(r"/(u|w|wiz|wizard|wizards|open|players|backup|backups|bak|old|test|tests|tmp|data|log|realms|doc|docs|example|examples|orphaned-dir)/|[-_.](bak|old)|class_bak|orphaned-dir|/海洋2002/")
+SKIP = re.compile(  # `/open/` is playable world in Taiwanese / dreamofseven-style libs
+    r"/(u|w|wiz|wizard|wizards|players|backup|backups|bak|old|test|tests|tmp|data|log|realms|doc|docs|example|examples|orphaned-dir)/|[-_.](bak|old)|class_bak|orphaned-dir|/海洋2002/")
 NV = r"(?:name|old_name|newname|new_name|v4)"
 IDX = r"\[\s*(\d+)\s*\.\.\s*(\d+)\s*\]"
 NONASCII = re.compile(r"^[^\x00-\x7f]+$")
