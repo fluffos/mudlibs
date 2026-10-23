@@ -1189,3 +1189,7 @@ BIG5 里 `功` 等字的第二个字节正好是 0x5C（反斜杠），作者在
 `lpc_fix_display_pad.py` 曾把 `/open/` 当巫师家跳过；本库可玩世界在 `open/`。
 `open/killer/obj/two.lpc` 的 `tribar_graph`：`bar_string` / `blank_string` / `bmin_string`（○）上的 `* 2` 在字符区间下把半条画满。SKIP 去掉 open，并教会识别 `bmin_string`。证明：`lpcc_eval` `tribar_graph(10,15,20)` HEAD 二十个●，改后十个●+五个⊙+五个○。
 
+## /open/ 上残留的 force 当 wound（2026-10-23，KB 06 §7.241 Also）
+
+`open/steeple/obj/npc/npc48.lpc`：`receive_wound("force", 10000)` 而本库 wound 只认 gin/kee/sen → `add("force", -10000)`。证明：`lpcc_eval` `receive_wound("force",…)` 报错，`add` 正常；NPC 可加载。
+

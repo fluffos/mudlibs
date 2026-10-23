@@ -1014,3 +1014,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 `lpc_fix_gbk_slice.py` 曾把 `/open/` 当巫师家跳过。`open/world1/acme/bonze/npc/master.lpc` 的 `do_kneel`：`new_name = prename[...] + name[0..1]` 在字符区间下取了两个汉字。改为 `name[0..0]`。证明：`lpcc_eval` 对「王小明」拼出 HEAD「空王小」、改后「空王」。
 
+## /open/ 上残留的负伤害（2026-10-23，KB 06 §7.241 Also）
+
+`lpc_fix_damage_calls.py` 曾跳过 `/open/`。`open/world1/tmr/north_forest/class/skill/2.lpc`：`receive_damage("ap",-200)` 在本库 `damage.lpc` 上会 `error`。改为正数 200。证明：对象可加载。
+

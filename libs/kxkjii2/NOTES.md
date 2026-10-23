@@ -507,3 +507,7 @@ BIG5 里 `功` 等字的第二个字节正好是 0x5C（反斜杠），作者在
 
 与 kxkj 同源：`open/killer/obj/two.lpc`（§7.365 Also）。
 
+## /open/ 上残留的 force 当 wound（2026-10-23，KB 06 §7.241 Also）
+
+与 kxkj 同源：`open/steeple/obj/npc/npc48.lpc`（§7.241 Also）。
+

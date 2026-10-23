@@ -36,7 +36,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lpc_fix_void_return import code_mask  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SKIP = re.compile(r"/(u|w|open|players|backup|old|bak|log|data|doc)/")
+SKIP = re.compile(r"/(u|w|players|backup|old|bak|log|data|doc)/")  # `/open/` playable in Taiwanese libs
 RESOURCE = {b"neili", b"jingli", b"force", b"mana", b"atman", b"max_neili", b"max_jingli"}
 CALL = re.compile(rb'receive_(damage|wound)\((\s*)"([a-z_]+)"(\s*,\s*)(-[^;]*?)(\)\s*;)')
 LIT = re.compile(rb"-\s*(\d+)(\s*[-+].*)?\s*$", re.S)
