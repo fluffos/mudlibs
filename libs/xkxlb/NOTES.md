@@ -385,3 +385,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 黑木崖脚下的老者：`init()` 里留着调试语句，每个走进 `/d/heimuya/road1` 的人都触发运行时错误（2026-10-22，KB 06 §7.361）
 
 `d/heimuya/npc/laozhe.lpc` 的 `init()` 在 `::init()` 之后有 `what = new(__DIR__ "obj/yancao"); sprintf("%s aaa\n", what);`：调试遗留，`%s` 收字符串或数字、不收对象，于是 `(s)printf(): Incorrect argument to type %s. (arg: 0)` 每次有人进入乱石坡都抛一次，后面的 `call_out("greeting", ...)` 永远不执行，老者不再搭话（还每次白克隆一个烟草）。两行都注释掉（同系的 haiyang2 / hy / hy5 / cctx / fqyy2 早就注释了）。证明：`scripts/lpc_reach_census.py xiakexing2017 --load --walk`（一个普通 NPC 访客走进每个加载成功的房间）：HEAD 336/337，改后 337/337。
+
+## 血条 / 表情标题按字节算显示宽度（2026-10-23，KB 06 §7.365）
+
+老档把汉字当两字节：`bar_string[0..(val * N / max) * 2 - 1]` 把「格数」换成字节下标，半格血条在本驱动（按字符算区间）上会整条画满；巫师表情 `edemote` 的 `repeat_string("─", 13 - (strlen(emotion) / 2))` 也会少减汉字宽度。`scripts/lpc_fix_display_pad.py`：去掉 CJK 血条 / 空白条上的 `* 2`（`jings`/`qis` 赋值和 `blank_string3[0..(23-a)]` 的 23→11 一并改），表情标题去掉 `/ 2`；ASCII 空格的 `none_string` / `empty_string` 仍保留 `* 2`（一格两个空格）。本库 4 处（2 个文件）。证明（`lpcc_eval.py` hhsj）：`tribar_graph(6,9,12)` 在 HEAD 画出整条 12 个■，改后为 6 个■+3 个□；麻将 `strlen(tempB)/2` 是两字符牌码，未改。
+
