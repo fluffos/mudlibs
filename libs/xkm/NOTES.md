@@ -452,3 +452,7 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 
 与 §7.360 Also 同源：`open/qiu.lpc` `attempt_apprentice` 的 `name[0..01] + "志" + name[4..5]` → `name[0..0] + "志" + name[2..2]`。证明：`lpcc_eval` 「张三丰」HEAD「张三志」、改后「张志丰」。
 
+## /open/ 上残留的中文名长度门（2026-10-23，KB 06 §7.362 Also）
+
+`lpc_fix_strlen_gate.py` 曾把 `/open/` 当巫师家跳过。`open/logind.lpc` `check_legal_name`：消息写「1 到 4 个中文字」却用 `< 2` / `> 8` / `|| i % 2`（字节门）。SKIP 去掉 open；并教会在 `strlen()` 门已折半时去掉 `|| i % 2`（原先只在 `i <`/`i >` 形上剥奇偶）。证明：`lpcc_eval` HEAD 拒「王」、改后接受；「王小明五六」两边都拒。循环里的 `j % 2 == 0 && is_chinese(name[j..j+1])` 留给 byte_char。
+

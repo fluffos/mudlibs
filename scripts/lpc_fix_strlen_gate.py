@@ -15,7 +15,8 @@ import subprocess
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SKIP = re.compile(r"/(u|w|wiz|wizard|wizards|open|players|backup|backups|bak|old|test|tests|tmp|data|log|realms|doc|docs|example|examples|orphaned-dir)/|[-_.](bak|old)|class_bak|orphaned-dir|/海洋2002/")
+SKIP = re.compile(  # `/open/` is playable world in Taiwanese / dreamofseven-style libs
+    r"/(u|w|wiz|wizard|wizards|players|backup|backups|bak|old|test|tests|tmp|data|log|realms|doc|docs|example|examples|orphaned-dir)/|[-_.](bak|old)|class_bak|orphaned-dir|/海洋2002/")
 CN = {"一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10, "十一": 11, "十二": 12, "十三": 13, "十四": 14, "十五": 15, "十六": 16, "十七": 17, "十八": 18, "十九": 19, "二十": 20, "三十": 30, "四十": 40, "五十": 50}
 NUM = r"(?:[0-9]+|二十|三十|四十|五十|十[一二三四五六七八九]|[一二两三四五六七八九十])"
 UNIT = r"\s*个?\s*(?:汉字|中文字|中文|字符|字)"
@@ -158,15 +159,21 @@ def edits(t):
             continue
         for a, b, nv in new:
             out.append((a, b, nv, t[a:b]))
-        # the parity term of a length variable (an odd byte count was half a character) goes, and so does the parity test of the loop that follows
+        # the parity term of a length variable (an odd byte count was half a character) goes, and so does the parity test of the loop that follows.
+        # Trigger when the length var is gated as `i <` / `i >`, OR when strlen() gates were halved and `i = strlen(...)` sits above (same `|| i % 2` shape under /open/logind).
         for v in lenvars:
-            if any(True for _ in re.finditer(r"(?<![\w.])" + re.escape(v) + r"\s*(?:<|>)", cond)):
-                for pm in re.finditer(PARITY.pattern % re.escape(v), cond):
-                    out.append((s + pm.start(), s + pm.end(), "", t[s + pm.start():s + pm.end()]))
-                tail = c[e:e + 700]
-                lm = re.search(r"\b" + re.escape(v) + r"\s*%\s*2\s*==\s*0\s*&&\s*", tail)
-                if lm and "is_chinese" in tail[lm.end():lm.end() + 80]:
-                    out.append((e + lm.start(), e + lm.end(), "", t[e + lm.start():e + lm.end()]))
+            used_as_gate = any(
+                True
+                for _ in re.finditer(r"(?<![\w.])" + re.escape(v) + r"\s*(?:<|>)", cond)
+            )
+            if not used_as_gate and not gates:
+                continue
+            for pm in re.finditer(PARITY.pattern % re.escape(v), cond):
+                out.append((s + pm.start(), s + pm.end(), "", t[s + pm.start():s + pm.end()]))
+            tail = c[e:e + 700]
+            lm = re.search(r"\b" + re.escape(v) + r"\s*%\s*2\s*==\s*0\s*&&\s*", tail)
+            if lm and "is_chinese" in tail[lm.end():lm.end() + 80]:
+                out.append((e + lm.start(), e + lm.end(), "", t[e + lm.start():e + lm.end()]))
     # overlapping edits (nested ifs found twice) are dropped, the first one wins
     out.sort()
     res, last = [], -1
