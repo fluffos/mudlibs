@@ -1174,3 +1174,8 @@ BIG5 里 `功` 等字的第二个字节正好是 0x5C（反斜杠），作者在
 
 `open/fire-hole/npc/small-dragon.lpc`：`class == "scholar" && class == "poisoner"` 恒假 → `||`。
 与 kxkjii2 同源；`/open/` 不再被 cmp_chain SKIP。
+
+## `/open/` 上残留的条件赋值（2026-10-23，KB 06 §7.290 Also）
+
+15 文件：`gring` 的 `str = "guard ring"`、密道 `arg = "water"/"light"`、麻将 `check = 0` 等 → `==`。
+证明：`gring` / `waterm` / `mj` 可加载。

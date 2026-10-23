@@ -944,3 +944,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply k
 
 剑客区已在 `/open/gsword/`，出口与 mob 路径仍写 `/u/b/bigcat/…`。`scripts/lpc_fix_bigcat_gsword.py` 在目标存在时改写；无对应文件的 `ntree`/`wtree`/`etree` 出口删除。本库 38 处。证明：kxkjii2 的 `forest3` HEAD 北向 `/u/b/bigcat/room/forest4`，改后 `/open/gsword/room/forest4` 可加载；`tree1` 只剩南向回 `tree`。
 
+
+## `/open/` 上残留的条件赋值（2026-10-23，KB 06 §7.290 Also）
+
+3 文件（`j3`、`r5`、`r7`）：与 kxkj 同形的 `arg = "light"/"water"` → `==`（§7.290 Also）。

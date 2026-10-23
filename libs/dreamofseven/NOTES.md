@@ -1004,3 +1004,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 `cominging/.../ravager.lpc`：`arg != "man" || arg != "revage man"` 恒真 → `&&`（`kill man` 才进战斗）。
 `acme/area/l2.lpc`：`arg=="south" && arg=="north"` 恒假 → `||`（游泳临时标记才能清掉）。
 证明：两对象可加载；visitor/`man` 形状求值正确。
+
+## `/open/` 上残留的条件赋值（2026-10-23，KB 06 §7.290 Also）
+
+`lpc_scan_cond_assign.TOP` 曾跳过 `/open/`。本批：`acme/area2/may*`、`faceoff/sky/ten*`、`cominging/wh_1`、麻将 NPC 等共 34 文件，`if (arg = "")` 等改为 `==`。
+证明：`may1` 可加载；空串比较求值正确。
