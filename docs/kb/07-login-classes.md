@@ -48,6 +48,14 @@ characters. Every check written against GBK bytes silently misbehaves.
   title and board-title gates (`strlen(name) < 4 || strlen(name) > 12`, `i < 4 || i > 24 || i % 2`)
   beside a message that says `2 到 6 个中文字`: the message is the oracle, `scripts/lpc_fix_strlen_gate.py`
   halves the gates that are exactly twice what it states (1,813 edits in 173 libs).
+- **Leftover parity loops (2026-10-23, KB 06 7.363).** 7.362 only removed
+  `i % 2 == 0 &&` when it also halved a gate. Login and other
+  `while (i--) if (i % 2 == 0 && !is_chinese(name[i..<0]))` sites whose
+  gates were already character-sized kept the parity: a Latin letter at
+  an odd index of `"张a"` was accepted. `scripts/lpc_fix_byte_char.py`
+  drops the parity and rewrites the range to `name[i..i]` (3,203 edits
+  in 195 libs, with clubpoem `mixup` and the nitan `channeld` league header).
+
 
 **Standing rule:** registration isn't verified until a REAL Chinese name
 (e.g. 秦风) has been accepted into the next stage.

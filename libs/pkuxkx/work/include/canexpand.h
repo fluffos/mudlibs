@@ -170,7 +170,7 @@ int get_itemname(string arg)
 			input_to("get_itemname",me);
 			return 1;
 		}
-		if(  !is_chinese(arg[i..<0]) ) {
+		if(  !is_chinese(arg[i..i]) ) {
 			tell_object(me,HIW"对不起，请您用「中文」取名字。\n"NOR);
 			input_to("get_itemname",me);
 			return 1;
@@ -282,7 +282,7 @@ int get_itemunit(string arg)
 			input_to("get_itemunit",me);
 			return 1;
 		}
-		if( !is_chinese(arg[i..<0]) ) {
+		if( !is_chinese(arg[i..i]) ) {
 			tell_object(me,HIW"对不起，请您用「中文」做单位。\n"NOR);
 			input_to("get_itemunit",me);
 			return 1;
@@ -372,7 +372,7 @@ int get_npcname(string arg)
 			input_to("get_npcname",me);
 			return 1;
 		}
-		if( !is_chinese(arg[i..<0]) ) {
+		if( !is_chinese(arg[i..i]) ) {
 			tell_object(me,HIW"对不起，请您用「中文」取名字。\n"NOR);
 			input_to("get_npcname",me);
 			return 1;
@@ -473,7 +473,7 @@ int get_npctitle(string arg)
 			input_to((:get_npctitle:));
 			return 1;
 		}
-		if( !is_chinese(arg[i..<0]) ) {
+		if( !is_chinese(arg[i..i]) ) {
 			tell_object(me,HIW"对不起，请您用「中文」取头衔。\n"NOR);
 			input_to((:get_npctitle:));
 			return 1;
@@ -508,7 +508,7 @@ int get_npcnickname(string arg)
 			input_to("get_npcnickname",me);
 			return 1;
 		}
-		if( !is_chinese(arg[i..<0]) ) {
+		if( !is_chinese(arg[i..i]) ) {
 			tell_object(me,HIW"对不起，请您用「中文」取昵称。\n"NOR);
 			input_to("get_npcnickname",me);
 			return 1;
@@ -1610,7 +1610,7 @@ int get_shortname(string arg)
 			input_to((:get_shortname:));
 			return 1;
 		}
-		if(  !is_chinese(arg[namelength..<0]) ) {
+		if(  !is_chinese(arg[namelength..namelength]) ) {
 			tell_object(me,HIW"对不起，请您用「中文」取名字。\n"NOR);
 			input_to((:get_shortname:));
 			return 1;

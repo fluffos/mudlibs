@@ -1160,3 +1160,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 黑木崖脚下的老者：`init()` 里留着调试语句，每个走进 `/d/heimuya/road1` 的人都触发运行时错误（2026-10-22，KB 06 §7.361）
 
 `d/heimuya/npc/laozhe.lpc` 的 `init()` 在 `::init()` 之后有 `what = new(__DIR__ "obj/yancao"); sprintf("%s aaa\n", what);`：调试遗留，`%s` 收字符串或数字、不收对象，于是 `(s)printf(): Incorrect argument to type %s. (arg: 0)` 每次有人进入乱石坡都抛一次，后面的 `call_out("greeting", ...)` 永远不执行，老者不再搭话（还每次白克隆一个烟草）。两行都注释掉（同系的 haiyang2 / hy / hy5 / cctx / fqyy2 早就注释了）。证明：`scripts/lpc_reach_census.py xiakexing2017 --load --walk`（一个普通 NPC 访客走进每个加载成功的房间）：HEAD 336/337，改后 337/337。
+
+## 按字节写的汉字循环、茶馆猜诗和同盟频道标题（2026-10-23，KB 06 §7.363）
+
+老档按字节做「一个汉字」：`while (i--) if (i % 2 == 0 && !is_chinese(name[i..<0]))` 只检查偶数下标，奇数位上的拉丁字母（`张a`）会过；茶馆猜诗 `mixup()` 用 `strlen(str)/2` 再 `j=j+j`、`str[k..k+1]` 交换两字节；泥潭系 `channeld` 的 `switch (strlen(fname)) case 4/6/8/10` 和 `strlen(family)==4/6` 按字节长度给同盟 / 门派名加空格。本驱动的 `strlen()` 和区间都按字符算。`scripts/lpc_fix_byte_char.py`：去掉奇偶项、把区间改成 `name[i..i]`，按字符重写 `mixup()` 并把 `strlen(first)>=14` 折成 7，频道标题的 case / 门派长度改成字符数（对照 aoxiangtianji）。本库 汉字循环 / `is_chinese` 区间 1 个文件。证明（`scripts/lpcc_eval.py`）：sjplii 的 `check_legal_name` 在 HEAD 接受「张a」、改后拒绝，两边都接受「张三」；xkx100 的 `clubpoem->mixup("离离原上草")` 得到「离离原草上」（真交换汉字）；nitan_san 两字同盟名得到 `【 兄  弟 】`。关键对象加载通过。
