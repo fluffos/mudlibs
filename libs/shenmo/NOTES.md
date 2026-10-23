@@ -1398,3 +1398,8 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 
 可玩的阿修罗区域已在 `/d/xiuluo/`（或 `/d/axiuluo/`、`/d/axlj/`），出口仍写作者目录 `/u/tianlin/阿修罗界/…`。`scripts/lpc_fix_tianlin_xiuluo.py` 在目标存在时改写，并优先跟源文件所在区名。本库 28 处。证明：shenmo `diyu5` HEAD 下向 `/u/tianlin/…/diyu6`，改后 `/d/xiuluo/diyu6` 可加载；sjshwzb `lu1` enter → `/d/axiuluo/lu2`。
 
+
+## 巫师区出口 faceoff / rence / niulang / yihua（2026-10-23，KB 06 §7.372）
+
+`/u/f/faceoff/`、`/u/r/rence/`、`/u/onskyer/niulang/`、`/u/skinys/yihua/` 对应区域已在 `/open/world1/faceoff/bird/`、`/open/prayer/`、`/d/niulang/`、`/d/yihua/`。`scripts/lpc_fix_wizard_area_exits.py` 在目标存在时改写，仍缺失的出口行删除。本库 4 处。证明：dreamofseven wood5 四向可加载；xlqy_new2007 天河东西向 niulang；kxkj kitchen7 → prayer。
+

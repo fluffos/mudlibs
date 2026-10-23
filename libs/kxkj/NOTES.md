@@ -1157,3 +1157,8 @@ BIG5 里 `功` 等字的第二个字节正好是 0x5C（反斜杠），作者在
 
 剑客区已在 `/open/gsword/`，出口与 mob 路径仍写 `/u/b/bigcat/…`。`scripts/lpc_fix_bigcat_gsword.py` 在目标存在时改写；无对应文件的 `ntree`/`wtree`/`etree` 出口删除。本库 36 处。证明：kxkjii2 的 `forest3` HEAD 北向 `/u/b/bigcat/room/forest4`，改后 `/open/gsword/room/forest4` 可加载；`tree1` 只剩南向回 `tree`。
 
+
+## 巫师区出口 faceoff / rence / niulang / yihua（2026-10-23，KB 06 §7.372）
+
+`/u/f/faceoff/`、`/u/r/rence/`、`/u/onskyer/niulang/`、`/u/skinys/yihua/` 对应区域已在 `/open/world1/faceoff/bird/`、`/open/prayer/`、`/d/niulang/`、`/d/yihua/`。`scripts/lpc_fix_wizard_area_exits.py` 在目标存在时改写，仍缺失的出口行删除。本库 12 处。证明：dreamofseven wood5 四向可加载；xlqy_new2007 天河东西向 niulang；kxkj kitchen7 → prayer。
+

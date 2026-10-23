@@ -752,3 +752,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 `/d/huanggong/dadian` 的 `north` 指向未随档的 `/u/fly/doublesword/houdian`。删除该出口。证明：HEAD 出口含 north，改后只剩南东西。
 
+
+## 巫师区出口 faceoff / rence / niulang / yihua（2026-10-23，KB 06 §7.372）
+
+`/u/f/faceoff/`、`/u/r/rence/`、`/u/onskyer/niulang/`、`/u/skinys/yihua/` 对应区域已在 `/open/world1/faceoff/bird/`、`/open/prayer/`、`/d/niulang/`、`/d/yihua/`。`scripts/lpc_fix_wizard_area_exits.py` 在目标存在时改写，仍缺失的出口行删除。本库 4 处。证明：dreamofseven wood5 四向可加载；xlqy_new2007 天河东西向 niulang；kxkj kitchen7 → prayer。
+

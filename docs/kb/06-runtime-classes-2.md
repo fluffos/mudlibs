@@ -2205,3 +2205,10 @@ Found by taking the objects a visitor meets (`scripts/lpc_reach_census.py` lists
 **Fix:** `scripts/lpc_fix_bigcat_gsword.py [--apply] [--list] SLUG..|--all`: rewrite `/u/b/bigcat/<rest>` → `/open/gsword/<rest>` when that `.lpc` exists; delete line-start exits to missing stems. Skip `//` comments.
 **Proof:** `lpcc_eval.py kxkjii2`: HEAD `forest3` north `/u/b/bigcat/room/forest4`; tree `/open/gsword/room/forest4` loads. `tree1` keeps only south→tree.
 **Detection:** `rg '/u/b/bigcat/' libs/*/work/open`.
+
+### 7.372 More wizard-area exits: faceoff / rence / niulang / yihua (76 edits in 17 libs, 2026-10-23)
+**Symptom:** `dreamofseven` wood/school rooms still exit to `/u/f/faceoff/…`; prayer kitchens to `/u/r/rence/room/…`; cowherd bridge to `/u/onskyer/niulang/…`; xiaoyao gate to `/u/skinys/yihua/shandao`.
+**Cause:** areas vendored under `/open/world1/faceoff/bird/`, `/open/prayer/`, `/d/niulang/`, `/d/yihua/` but strings kept the wizard prefixes.
+**Fix:** `scripts/lpc_fix_wizard_area_exits.py [--apply] [--list] SLUG..|--all`: rewrite when the destination `.lpc` exists; delete line-start exits that still miss (rence `road`/`floor5`). Skip `//` comments.
+**Proof:** `lpcc_eval.py dreamofseven`: HEAD wood5 → `/u/f/faceoff/…`; tree all four exits load under `/open/world1/faceoff/bird/`. `xlqy_new2007` tianhe → `/d/niulang/yinhe*`. `kxkj` kitchen7 → prayer rooms.
+**Detection:** `rg '/u/f/faceoff/|/u/r/rence/|/u/onskyer/niulang/|/u/skinys/yihua/' libs/*/work`.
