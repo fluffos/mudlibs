@@ -1715,3 +1715,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 
 `/d/wanjiegu/road4` 东向 `/u/g/gold/dock`、峨眉寿星居南向 `/u/xinyue/sunrise_room`、玩家卧室通往 `/u/mei/…` 均无对应房间。`scripts/lpc_fix_drop_dead_u_exits.py` 删除这些出口行，并去掉同方向的 `create_door`（否则 `create_door` 无出口会炸）。本库 1 处。证明：zxty08nxgbb 的 road4 HEAD 有东向，改后没有；mei_room1 可加载。
 
+## family 映射门残留（2026-10-24，KB 05 §7.30 Also）
+
+`kungfu/skill/kunlun-zhang.lpc` `valid_learn`：无门派时 `fam["family_name"]` 报错。同 §7.30 Also 守卫。
+

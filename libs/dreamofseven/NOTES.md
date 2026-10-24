@@ -1022,3 +1022,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 `lpc_fix_skill_typo.py` 曾跳过 `/open/`。`open/world1/uchimaha/bird/bird22.lpc`：`query_skill("birdeight")` 恒为 0（技能文件是 `bird-eight`），练步入口永远 return 0。改为 `bird-eight`。证明：`lpcc_eval` 对已学会的 `bird-eight` 查询非 0，`birdeight` 为 0；房间可加载。
 
+## /open/ 上残留的 family 映射门（2026-10-24，KB 05 §7.30 Also）
+
+`lpc_fix_family_guard.py` 曾跳过 `/open/`。`open/world1/tmr/xiangyang/task/scjob.lpc`：`mapping my_fam = me->query("family");` 后直接 `my_fam["family_name"]`，无门派玩家触发 `Value being indexed is zero`。同文件加 `if (!mapp(my_fam)) my_fam = ([ ]);`。证明：`lpcc_eval` 无 family 时 HEAD 索引报错，改后为 0；对象可加载。
+

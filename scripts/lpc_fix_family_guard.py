@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lpc_fix_void_return import code_mask  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SKIP = re.compile(r"/(u|w|open|players|backup|old|bak|log|data|doc)/")
+SKIP = re.compile(r"/(u|w|players|backup|old|bak|log|data|doc)/")  # `/open/` playable in Taiwanese libs
 DECL = re.compile(rb'(?:(mapping)\s+)?([A-Za-z_]\w*)\s*=\s*(?:\(\s*mapping\s*\)\s*)?'
                   rb'(?:(?:([\w\[\]]+)\s*->\s*)?query\s*\(\s*"family"\s*\)|query\s*\(\s*"family"\s*,\s*([\w\[\]]+)\s*\))\s*;')
 

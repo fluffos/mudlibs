@@ -483,3 +483,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 `pname = pname[(random(sizeof(pname)) & 0xFFFE)..<1]; pname = pname[0..1];` 在按字符计下标时会取出两个汉字。`scripts/lpc_fix_pname_slice.py` 去掉掩码并把收尾改成 `[0..0]`（`pname`/`pname2`/`sec_name`/`str`/`str1`）。本库 4 处。证明：nt1 生成名长度 2–4；HEAD 常见 3–5。
 
+## /open/ 上残留的 family 映射门（2026-10-24，KB 05 §7.30 Also）
+
+`open/xiangyang/task/pi1..pi4.lpc`：同 §7.30 Also（`my_fam = ob->query("family")`）。
+

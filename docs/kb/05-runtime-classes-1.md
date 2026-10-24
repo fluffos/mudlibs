@@ -453,6 +453,8 @@ exists, 0 when it does not, and an existing guard keeps working (504 reads,
 into the mapping is left (a path query is no lvalue).
 **Regression risk:** §7.156.
 
+**Also (2026-10-24):** SKIP treated `/open/` as a wizard home. dreamofseven `open/.../scjob.lpc`, xkx100 / xiakexing100 `open/xiangyang/task/pi*.lpc` kept unguarded `my_fam["family_name"]`; haiyang2 / hy5 `kunlun-zhang` `valid_learn` the same. Dropped `open` from SKIP; 11 declarations. Proof: unfamilied `my_fam["family_name"]` HEAD raises `Value being indexed is zero`, tree returns 0 after `if (!mapp(my_fam)) my_fam = ([ ]);`.
+
 ### 7.31 `enter_world()` copies stale login-object flags onto the restored body
 `user->set("registered", ob->query("registered"))` resets a persistent
 flag on every login. Make the flag monotonic, or stop copying it.
