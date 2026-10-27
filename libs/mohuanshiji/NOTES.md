@@ -1083,3 +1083,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 `/d/huanggong/dadian` 的 `north` 指向未随档的 `/u/fly/doublesword/houdian`。删除该出口。证明：HEAD 出口含 north，改后只剩南东西。
 
+
+## vikee 新手门在 present 之前（2026-10-27，KB 06 §7.348 Also）
+
+`ssteal` / `pperform` / `jji` / `ccast`（及同族 `steal`/`cast`）里 vikee 加的年龄 / 经验 / 道行门用 `objectp(victim|target)`，却写在 `present()` 赋值之前：局部仍是 0，门永远不进。挪到 `present` 与空指针检查之后，并去掉多余的 `objectp`。证明：HEAD `ssteal` 仍在 `present` 前有 `objectp(victim)`；改后在其后且对象加载成功。

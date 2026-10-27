@@ -573,3 +573,8 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## xupdate 多一个 } 编不过（2026-10-27，KB 04 §6.28 Also）
 
 `cmds/adm/xupdate.lpc`（与 sjsh / sjshwzb / sjshwzjqb 三份字节相同）在列目录后缀的 `while` 后又多了一个 `}`，提前关掉了 `main`，`write("目录…")` 落在函数外（`unexpected L_STRING`）；`updatefile` 里 `destruct(obj)` 前同样多了一个 `}`；且只声明了 `int i` 却在 `for` 里用 `j`。同族 mhxy / shenmo 的副本完好。去掉两处多余 `}` 并补上 `j`。证明：HEAD `load_object("/cmds/adm/xupdate")` 失败；改后加载成功。
+
+
+## vikee 新手门在 present 之前（2026-10-27，KB 06 §7.348 Also）
+
+`ssteal` / `pperform` / `jji` / `ccast`（及同族 `steal`/`cast`）里 vikee 加的年龄 / 经验 / 道行门用 `objectp(victim|target)`，却写在 `present()` 赋值之前：局部仍是 0，门永远不进。挪到 `present` 与空指针检查之后，并去掉多余的 `objectp`。证明：HEAD `ssteal` 仍在 `present` 前有 `objectp(victim)`；改后在其后且对象加载成功。
