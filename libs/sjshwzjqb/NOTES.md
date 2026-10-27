@@ -618,3 +618,8 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## toy 旁缺 message.h（2026-10-27，KB 04 §6.23 Also）
 
 `obj/toy/*.lpc`（及少数 `obj/obj/toy`、嵌套副本）写 `#include "message.h"`，引号 include 只解析同目录；本 lib 的 `d/obj/misc/message.h` 有同内容副本，toy 目录没有。玩具对象无法编译（`Cannot #include message.h`）。从本 lib 的 `d/obj/misc/message.h` 复制到缺失的 toy 目录旁。证明：HEAD `buwawa` 加载失败；改后加载成功。
+
+
+## medical-book 缺 sefun filter_color（2026-10-27，KB 04 §6.16 Also）
+
+`std/item/medical-book.lpc` 用 `filter_color(...)` 比药名，但本 lib 的 `adm/obj/simul_efun.lpc` 未纳入 util/color（同系 shenmo / sjshv2578bb 有）。对象无法编译（`Undefined function filter_color`）。新增 `adm/simul_efun/color.lpc`（`#include <ansi.h>` + 去色 `replace_string`），并在 simul_efun 中 `#include`。证明：HEAD 加载失败；改后加载成功。
