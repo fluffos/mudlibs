@@ -1109,3 +1109,6 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 
 `pname = pname[(random(sizeof(pname)) & 0xFFFE)..<1]; pname = pname[0..1];` 在按字符计下标时会取出两个汉字。`scripts/lpc_fix_pname_slice.py` 去掉掩码并把收尾改成 `[0..0]`（`pname`/`pname2`/`sec_name`/`str`/`str1`）。本库 4 处。证明：nt1 生成名长度 2–4；HEAD 常见 3–5。
 
+## 天地会义士 yi 无法加载（2026-10-27，KB 04 §6.25 Also）
+
+`d/tdh/job1/yi.lpc`：保留字 `int do`（驱动期望 `while`）、`query_temp("tdhbh_qiekou_ok)` 缺引号、未声明 `me`、第二个 `void init`、以及无引号中文的残缺 `do_say`。同目录手足 `yis.lpc` 是干净重写（inquiry 口令、`d` 非 `do`、`me = this_object()`、`ask_ok` / `ask_qiekou_*`）。用 `yis` 的字节覆盖 `yi`（xkxz2 / xkxc98sj 两份相同）。证明：HEAD 加载失败；改后加载成功。
