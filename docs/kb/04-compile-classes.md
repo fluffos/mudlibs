@@ -501,6 +501,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, fabao `EXAMPLE` present guard):** nine copies of `d/obj/fabao/EXAMPLE` never loaded: `if (objectp(victim = present(target, environment()))` lost both the `!` and the closing `)` (`unexpected L_RETURN`). Restored `if (!objectp(victim = present(target, environment(me))))` to match `kunxian-suo`. Proof: HEAD fys fail; tree loads.
 
+**Also (2026-10-27, fabao EXAMPLE under `d/city/obj`):** sjpl2 / sjplii keep a second copy at `d/city/obj/fabao/EXAMPLE` with the same missing `!`/`)`. Same fix. Proof: HEAD fail; tree loads.
+
+
 
 
 
