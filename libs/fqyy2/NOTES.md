@@ -519,3 +519,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## tianluo-diwang 知识武功引号剥离（2026-10-27，KB 04 §6.25 Also）
 
 `kungfu/skill/tianluo-diwang.lpc`（Kayin 古墓知识武功短桩）丢了 `inherit SKILL` 后的 `;` 以及几乎所有引号（`return knowledge`、`query(dex)`、汉字通知里字间插空格）。按原意重写成可加载的 knowledge skill（未并入带招式的战斗版手足）。证明：HEAD 加载失败；改后加载成功。
+
+## yinsuo-jinling 引号剥离 ← xkxyb（2026-10-27，KB 04 §6.25 Also）
+
+`kungfu/skill/yinsuo-jinling` 与 `feng`/`dian` 招式丢了引号与分号（`inherit SKILL`、`([ action: 劲 贯 $w,...`、perform 里 `query(weapon)`）。用同系完好的 xkxyb 三份覆盖。证明：HEAD 技能加载失败；改后技能与两招均加载成功。

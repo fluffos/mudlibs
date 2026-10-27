@@ -517,6 +517,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, Kayin `tianluo-diwang` knowledge stub):** five libs (fqyy2 / cctx / niaoren / xkxyb / yxxcii) ship a ~630-byte Kayin knowledge skill that lost every quote and the `;` after `inherit SKILL` (`return knowledge`, `query(dex)`, spaced Chinese in `notify_fail`). Reconstructed the knowledge stub (not the larger combat-action sibling). Proof: HEAD fail; tree loads.
 
+**Also (2026-10-27, fqyy2 `yinsuo-jinling` quote-strip):** fqyy2's `kungfu/skill/yinsuo-jinling` plus `feng`/`dian` lost quotes and `;` (`inherit SKILL`, spaced Chinese in `action` / `notify_fail`). Replaced with the intact Kayin copies from xkxyb. Proof: HEAD skill fail; tree skill+feng+dian load.
+
+
 
 
 
