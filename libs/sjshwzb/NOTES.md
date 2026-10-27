@@ -566,3 +566,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 
 可玩的阿修罗区域已在 `/d/xiuluo/`（或 `/d/axiuluo/`、`/d/axlj/`），出口仍写作者目录 `/u/tianlin/阿修罗界/…`。`scripts/lpc_fix_tianlin_xiuluo.py` 在目标存在时改写，并优先跟源文件所在区名。本库 8 处。证明：shenmo `diyu5` HEAD 下向 `/u/tianlin/…/diyu6`，改后 `/d/xiuluo/diyu6` 可加载；sjshwzb `lu1` enter → `/d/axiuluo/lu2`。
 
+
+## kill1 未赋值就读 obj、双 else 编不过（2026-10-27，KB 06 §7.348 Also）
+
+`cmds/std/kill1.lpc` 在 `present(arg)` 之前调用 `obj->is_character()`（obj 仍为 0），且 `just_issued` 消息后有连续两个 `} else {`，驱动报 `unexpected L_ELSE`，对象从未加载。按同库 `kill.lpc` 重排为先 `!arg`、再 `present`、再 `is_character`；补上 `can_kill` 分支的 `do_kill`/`return`，把原误挂的第二段 `else` 收成 `can_kill` 的 else，并在 `do_kill` 定义前关闭 `main`。证明：HEAD `load_object("/cmds/std/kill1")` 失败；改后加载成功。

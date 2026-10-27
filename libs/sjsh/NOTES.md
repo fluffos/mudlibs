@@ -408,3 +408,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 可玩的兰陵已在 `/d/lanling/`（`lldj1`、`beijiao4` 等），出口字符串还写着作者目录 `/u/calvin/兰陵/地区/…`，走动即死出口；皇宫大殿北向 `/u/fly/doublesword/houdian` 同样不存在。`scripts/lpc_fix_calvin_lanling.py` 在目标 `.lpc` 存在时改写为 `/d/lanling/<stem>`，并删掉大殿那条北向。本库 9 处。证明：sjshv2578bb 的 `lldj1` 北向加载 `beijiao4`；xianlvqiyuan 大殿 HEAD 有北向、改后没有。未映射：`书局`、`钦陵宫`（库内无对应文件）。
 
+
+## kill1 未赋值就读 obj、双 else 编不过（2026-10-27，KB 06 §7.348 Also）
+
+`cmds/std/kill1.lpc` 在 `present(arg)` 之前调用 `obj->is_character()`（obj 仍为 0），且 `just_issued` 消息后有连续两个 `} else {`，驱动报 `unexpected L_ELSE`，对象从未加载。按同库 `kill.lpc` 重排为先 `!arg`、再 `present`、再 `is_character`；补上 `can_kill` 分支的 `do_kill`/`return`，把原误挂的第二段 `else` 收成 `can_kill` 的 else，并在 `do_kill` 定义前关闭 `main`。证明：HEAD `load_object("/cmds/std/kill1")` 失败；改后加载成功。
