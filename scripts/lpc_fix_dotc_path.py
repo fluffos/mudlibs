@@ -17,7 +17,7 @@ import subprocess
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SKIP = re.compile(r"/(u|w|wiz|wizard|wizards|open|players|backup|backups|bak|old|test|tests|tmp|data|log|realms)/|[-_.](bak|old)|orphaned-dir|class_bak")
+SKIP = re.compile(r"/(u|w|wiz|wizard|wizards|players|backup|backups|bak|old|test|tests|tmp|data|log|realms)/|[-_.](bak|old)|orphaned-dir|class_bak")  # `/open/` is playable world (Taiwanese / dreamofseven-style libs), not a wizard home
 PATH = re.compile(rb"^/[A-Za-z0-9_/.+\- ]+\.c$")
 HEREDOC = re.compile(rb"@@?([A-Za-z_][A-Za-z_0-9]*)[ \t]*\r?\n")
 

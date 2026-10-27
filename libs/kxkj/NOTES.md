@@ -1193,3 +1193,7 @@ BIG5 里 `功` 等字的第二个字节正好是 0x5C（反斜杠），作者在
 
 `open/steeple/obj/npc/npc48.lpc`：`receive_wound("force", 10000)` 而本库 wound 只认 gin/kee/sen → `add("force", -10000)`。证明：`lpcc_eval` `receive_wound("force",…)` 报错，`add` 正常；NPC 可加载。
 
+
+## /open/ 上残留的 .c 路径字面量（2026-10-27，KB 06 §7.356 Also）
+
+`lpc_fix_dotc_path.py` 曾把 `/open/` 当巫师家跳过。`open/killer/home/r0u.lpc` 的货物表仍写 `"/open/killer/npc/train_a.c"`，档案是 `train_a.lpc`；显式扩展名按原样解析，`new()` 得 0。改为 `.lpc`。证明：`lpcc_eval` HEAD `new(...train_a.c)` 为 0，改后 `new(...train_a.lpc)` 为对象。
