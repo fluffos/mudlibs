@@ -1117,3 +1117,7 @@ sufficient. Verified via a single-file `lpcc --batch` compile check
 ## 无参数时命令对 0 的调用（玩家/--all-dirs 残留，2026-10-27，KB 06 §7.336 Also）
 
 无参数命令把 0 交给 `present` / `sscanf` / `file_exists` 等会运行时报错。`lpc_fix_bare_arg.py --all-dirs` 在首次使用参数前加守卫。多行 `if (arg && !sscanf)`（吐纳默认消耗）与已有 `can_learn`/`get_object` 守卫的误报已回退；本库本批改动见该提交。
+
+## 丐帮长老 gb_nz 无法加载（2026-10-27，KB 04 §6.25 Also）
+
+`d/gb/npc/gb_nz.lpc`：`mixed wherei=({` 少了内层 `({`（手足 xkxz2 / xkxc98sj 的 `d/gaibang/npc/gb_nz` 有），`query_temp("promotion_target)` 缺收尾引号，`accept_object` 在注释掉的备用奖励块前多了一个 `}`。补内层数组、补引号、去掉多余 `}`，并删掉未用的 `fam`。`/u/hunthu/` 路径未动（内容）。证明：HEAD 加载失败；改后加载成功。

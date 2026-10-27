@@ -457,3 +457,6 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 
 宁波 / 苏州 / 慕容等区域已进 `/d/ningbo`、`/d/suzhou`、`/d/mr`、`/d/hz`，出口与任务物路径仍写 `/u/beyond/…`。`scripts/lpc_fix_beyond_exits.py` 在目标 `.lpc` 存在时改写（`murong`→`mr`）。本库 54 处。证明：sjplii `xikou` HEAD 西向 `/u/beyond/ningbo/aywsi`，改后 `/d/ningbo/aywsi` 可加载；bxsj `hubian1` 三向均可加载。
 
+## 丐帮长老 gb_nz 无法加载（2026-10-27，KB 04 §6.25 Also）
+
+`d/gb/npc/gb_nz.lpc`：`mixed wherei=({` 少了内层 `({`（手足 xkxz2 / xkxc98sj 的 `d/gaibang/npc/gb_nz` 有），`query_temp("promotion_target)` 缺收尾引号，`accept_object` 在注释掉的备用奖励块前多了一个 `}`。补内层数组、补引号、去掉多余 `}`，并删掉未用的 `fam`。`/u/hunthu/` 路径未动（内容）。证明：HEAD 加载失败；改后加载成功。
