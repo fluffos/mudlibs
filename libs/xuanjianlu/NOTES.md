@@ -1665,3 +1665,6 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 
 老档把汉字当两字节：`bar_string[0..(val * N / max) * 2 - 1]` 把「格数」换成字节下标，半格血条在本驱动（按字符算区间）上会整条画满；巫师表情 `edemote` 的 `repeat_string("─", 13 - (strlen(emotion) / 2))` 也会少减汉字宽度。`scripts/lpc_fix_display_pad.py`：去掉 CJK 血条 / 空白条上的 `* 2`（`jings`/`qis` 赋值和 `blank_string3[0..(23-a)]` 的 23→11 一并改），表情标题去掉 `/ 2`；ASCII 空格的 `none_string` / `empty_string` 仍保留 `* 2`（一格两个空格）。本库 3 处（1 个文件）。证明（`lpcc_eval.py` hhsj）：`tribar_graph(6,9,12)` 在 HEAD 画出整条 12 个■，改后为 6 个■+3 个□；麻将 `strlen(tempB)/2` 是两字符牌码，未改。
 
+## 段延庆 yanqing 空格污染无法加载（2026-10-27，KB 04 §6.25 Also）
+
+`kungfu/class/dali/yanqing.lpc`：汉字与 dbase 键都被插空格（`" id "`、`" family / master_id "`、空格版 `say`），另有 `query("PKS)` 缺引号和嵌套 `void init`。无法就地修补；用同系已修好的 xkm 副本覆盖（bmxkx2001 / xkx2001 / xuanjianlu 三份原相同）。证明：HEAD 加载失败；改后加载成功。
