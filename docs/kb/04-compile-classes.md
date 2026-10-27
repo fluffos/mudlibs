@@ -507,6 +507,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, thd `medicine` `DAEMON_D`):** fys / tiexuejianghu `d/thd/skills/medicine` call `DAEMON_D->register_skill_daemon` but this lineage never ships the Aug `daemond` (`Undefined variable 'DAEMON_D'`). Dropped the register line from `create()` (seteuid kept). `skill_improved`'s `advance_skill`/`gain_score` remain Aug-only and are unused until a study path calls them. Proof: HEAD fail; tree loads.
 
+**Also (2026-10-27, `doc/build/devil` glued inherit):** thirteen copies of `doc/build/devil` (fys / hy3 / jqxz2008{,dlx,std} / jqxz2015 / jyqxc{,2,2013fwq} / syxjl / xiakexing{3,2017} / xkx2017) never loaded: a formatter glued `inherit NPC void create()` and stripped every statement `;`, plus a nested `set("con", set("con", 10)`. Reconstructed a valid NPC with `setup()`; dropped the archive's `/obj/blade` and `/obj/cloth` carries (those paths exist only in fys). Proof: HEAD fail; tree loads (fys, hy3, xkx2017, jqxz2008).
+
+
 
 
 

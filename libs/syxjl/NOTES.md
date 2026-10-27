@@ -1151,3 +1151,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 
 `pname = pname[(random(sizeof(pname)) & 0xFFFE)..<1]; pname = pname[0..1];` 在按字符计下标时会取出两个汉字。`scripts/lpc_fix_pname_slice.py` 去掉掩码并把收尾改成 `[0..0]`（`pname`/`pname2`/`sec_name`/`str`/`str1`）。本库 4 处。证明：nt1 生成名长度 2–4；HEAD 常见 3–5。
 
+
+## doc/build devil 丢分号／粘连 inherit（2026-10-27，KB 04 §6.25 Also）
+
+`doc/build/devil.lpc`（建档示例倭寇）被格式化弄坏：`inherit NPC void create()` 粘在一起，语句之间的 `;` 全丢，还有嵌套坏掉的 `set("con", set("con", 10)`。按原意重写成带 `setup()` 的完好 NPC（原 `/obj/blade`、`/obj/cloth` 在多数库不存在，示例里去掉携带以免 create 炸）。证明：HEAD 加载失败；改后加载成功。
