@@ -28,7 +28,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lpc_fix_void_return import code_mask  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SKIP = re.compile(r"/(u|w|wiz|wizard|wizards|open|players|backup|backups|old|bak|log|data|doc|docs|example|examples|test|tmp|attic)/|[-_.](bak|old|orphaned-driver-src)/|\.(bak|BAK|old|orig)(\.lpc)?$")
+SKIP = re.compile(r"/(u|w|wiz|wizard|wizards|players|backup|backups|old|bak|log|data|doc|docs|example|examples|test|tmp|attic)/|[-_.](bak|old|orphaned-driver-src)/|\.(bak|BAK|old|orig)(\.lpc)?$")  # `/open/` is playable world (Taiwanese / dreamofseven-style libs), not a wizard home
 SKDIR = re.compile(r"/(?:kungfu/skill|daemon/skill|skills|std/skill|adm/skill|system/skill(?:/[^/]+)*|inherit/skill|d/skills|feature/skills?)/([^/]+?)\.lpc$")
 DOM = re.compile(r"/d/[^/]+/(?:skill|mjskill|skills)/([^/]+?)\.lpc$")
 CALL = re.compile(rb'\b(?:set_skill|set_wugong|map_skill|prepare_skill|query_skill|query_skill_mapped|query_skill_prepared|improve_skill|add_skill|delete_skill|SKILL_D)\s*\(\s*"([A-Za-z0-9_-]+)"(?:\s*,\s*"([A-Za-z0-9_-]+)")?')

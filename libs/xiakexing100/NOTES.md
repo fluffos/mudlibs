@@ -726,3 +726,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 与 xkx100 同源：`open/xiangyang/task/pi1..pi4.lpc`（§7.30 Also）。
 
+
+## /open/ 上残留的武功授予拼写（2026-10-27，KB 06 §7.258 Also）
+
+`lpc_fix_skill_names.py` 曾把 `/open/` 当巫师家跳过。`open/task1/` 的 `cao`/`caokou`/`eseng`/`meng`/`zhu` 已 `set_skill("shaolin-shenfa", …)`，却 `map_skill("dodge", "shaolin-shnfa")`；`quan` 同理 `kunlun-shnfa`。映射失败，轻功仍是普通 `dodge`。改为正确名。证明：`lpcc_eval` HEAD 上 `query_skill_mapped("dodge")` 为 0，改后为 `"shaolin-shenfa"`；`quan` 为 `"kunlun-shenfa"`。
