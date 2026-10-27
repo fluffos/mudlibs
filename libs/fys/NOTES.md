@@ -546,3 +546,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 更夫 gengfu sym_dee 缺戌无法加载（2026-10-27，KB 04 §6.25 Also）
 
 `d/jinling|suzhou|suzhou/qinyun/npc/gengfu.lpc` 的地支数组写成 `"酉",","亥"`，丢了 `戌`，驱动在「亥」上报 `Illegal character`。改回 `"酉","戌","亥"`（手足 tiexuejianghu 已正确）。证明：HEAD 加载失败；改后三处均加载成功。
+
+## wife inquiry ask_me 前置声明（2026-10-27，KB 04 §6.25 Also）
+
+`d/chengdu/npc/wife.lpc` 在 `create()` 里写 `"参茶": (: ask_me :)`，但 `int ask_me` 定义在后面，驱动报 `Undefined variable 'ask_me'`。在 inherit 后补 `int ask_me(object me);`。证明：HEAD 加载失败；改后加载成功。

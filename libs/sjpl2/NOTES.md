@@ -906,3 +906,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## wei #me->move 无法加载（2026-10-27，KB 04 §6.25 Also）
 
 踢人分支写成了 shell 风格的 `#me->move("/d/city/...")`，驱动报 `Unknown preprocessor directive: #me`，对象无法编译。改回 `me->move(...)`。本库改动：`d/chengdu/npc/wei.lpc`。证明：HEAD 加载失败；改后加载成功。
+
+## wife inquiry ask_me 前置声明（2026-10-27，KB 04 §6.25 Also）
+
+`d/chengdu/npc/wife.lpc` 在 `create()` 里写 `"参茶": (: ask_me :)`，但 `int ask_me` 定义在后面，驱动报 `Undefined variable 'ask_me'`。在 inherit 后补 `int ask_me(object me);`。证明：HEAD 加载失败；改后加载成功。
