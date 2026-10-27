@@ -489,6 +489,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, gao `obj/pen`):** `is_container()` does `set("objects", ([ "/u/bula/gao/obj/kaoji" ]));` — a mapping with a key and no value (`unexpected ']'`), so the laundry basin never loads. Sibling hy5 / xyj2000 already comment the body out. Rewrote the active form to `return 1;` in 26 libs (commented copies left). Proof: HEAD load fails; tree loads.
 
+**Also (2026-10-27, qujing `start/24/1`):** `check()` calls `stop_fight(who)` before `int stop_fight(object who)` is defined (`Undefined function stop_fight`), and `call_out("lost", 1 who)` lacks the comma (`unexpected L_DEFINED_NAME`). Moved `stop_fight` above `check` and fixed the `call_out` in 24 libs. Proof: HEAD load fails; tree loads.
+
+
 
 
 ### 6.29 Two typos of the original source that kept a job NPC from ever compiling (`job_protect_npc`, 11 libs; 2026-10-21)
