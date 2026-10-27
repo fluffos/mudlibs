@@ -44,7 +44,7 @@
 #define LO(x)       load_object(x)
 #define MO(x,y)     x->move_object(resolve_ob(y))
 #define MP(x)       move_player(x)
-#define FP(x)       find_player("x")
+#define FP(x)       find_player(#x)
 #define FO(x)       find_object(x)
 #define ENV         environment
 #define QRN         query_real_name()
