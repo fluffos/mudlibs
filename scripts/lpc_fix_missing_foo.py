@@ -15,7 +15,7 @@ import subprocess
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SKIP = re.compile(r"/(u|w|wiz|wizard|wizards|open|players|backup|backups|bak|old|test|tests|tmp|data|log|realms|doc|docs|example|examples)/|[-_.](bak|old)/")
+SKIP = re.compile(r"/(u|w|wiz|wizard|wizards|players|backup|backups|bak|old|test|tests|tmp|data|log|realms|doc|docs|example|examples)/|[-_.](bak|old)/")
 LINE = re.compile(rb'(?m)^([ \t]*)("(/[A-Za-z0-9_/.+-]+)"[ \t]*->[ \t]*foo[ \t]*\([ \t]*\)[ \t]*;)([ \t]*(?://[^\r\n]*)?)(\r?)$')
 
 

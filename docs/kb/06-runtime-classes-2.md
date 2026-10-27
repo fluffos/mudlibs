@@ -1493,6 +1493,8 @@ More of the same (2026-10-15): a `check_fight()` that declares `object weapon;` 
 **Fix:** `scripts/lpc_fix_set_name_id.py --diag DIR --apply`: the second argument becomes `({ "bowl" })` when it is a plain id literal or an indexed name (86 calls in 46 libs). Left: `d/linghai/footprint` of xyj20032 and sjshv2578bb, whose author wrote `set_name("short", "...")` and `set_name("long", @LONG ... LONG)` for `set()`; the item has no name to give.
 **Detection:** the compile scan; the tool's plan.
 
+**Also (2026-10-27):** SKIP treated `/open/` as a wizard home. dreamofseven `open/world1/tmr/...` kept `set_name("名", "id1", "id2")` (varargs strings) while `feature/name.lpc` takes `string *id`: Bad type / never loads. Dropped `open` from SKIP in `lpc_fix_set_name_id.py` and `lpc_fix_missing_foo.py`; hand-wrapped 8 multi-literal calls to `({ ... })`. Proof: HEAD book still has three string args; tree has `({ "haha book", "book" })`.
+
 ### 7.261 `NewRandom()` missing from the lib's skill base (2026-10-19)
 **Symptom:** `Undefined function NewRandom` and the basic martial arts never compile: `daemon/skill/boxing`, `houquan`, `westsword`, `taiji-quan`, `jueqingbian` ... 154 skill files in 28 libs (the Journey-to-the-West family xyj/sjsh/xiyouji, dtxy, fy2mg 52, zzfy, wqfy ...). The characters that have the skill fall back to bare hands.
 **Cause:** the moves are picked with `action[NewRandom(i, 20, level/5)]`; `NewRandom()` and the `sum()` under it live in the skill base of the 115 libs where those skills were written (`inherit/skill/skill.lpc`), and these libs' `/std/skill.lpc` is the lighter ES base without them.

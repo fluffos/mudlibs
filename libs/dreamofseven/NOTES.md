@@ -1026,3 +1026,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 `lpc_fix_family_guard.py` 曾跳过 `/open/`。`open/world1/tmr/xiangyang/task/scjob.lpc`：`mapping my_fam = me->query("family");` 后直接 `my_fam["family_name"]`，无门派玩家触发 `Value being indexed is zero`。同文件加 `if (!mapp(my_fam)) my_fam = ([ ]);`。证明：`lpcc_eval` 无 family 时 HEAD 索引报错，改后为 0；对象可加载。
 
+
+## open 下 set_name 多段字符串 id（2026-10-27，KB 06 §7.260 Also）
+
+`feature/name.lpc` 的 `set_name(string name, string *id)` 要数组，但 `open/world1/tmr/...` 八处写成 `set_name("名", "id1", "id2")`。`lpc_fix_set_name_id` / `missing_foo` 的 SKIP 不再把 `/open/` 当巫师目录；本批把这八处收成 `({ ... })`。证明：HEAD `book.lpc` 仍是三字符串参数，改后为数组。

@@ -11,7 +11,7 @@ object answered to its id.
             string )` rows name the call; the second argument becomes `({ ... })` when it is a plain string literal (letters, digits,
             blanks, `_ . ' -`) or an indexed name (`blade_id[type - 1]`).  Anything else (`set_name("short", @LONG ... LONG)`, where the
             author took set_name for set) is listed and left.
-Comments, strings and here-docs are masked; the file's own line endings are kept; wizard, backup and example dirs are skipped.
+Comments, strings and here-docs are masked; the file's own line endings are kept; wizard, backup and example dirs are skipped (`/open/` is playable world, not skipped).
 Without --apply the plan is printed (FIX lines).  Idempotent: the array form is no longer reported."""
 import collections
 import glob
@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lpc_fix_void_return import code_mask  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SKIP = re.compile(r"/(u|w|wiz|wizard|wizards|open|players|backup|backups|old|bak|log|data|doc|docs|example|examples|test|tmp|attic)/|[-_.](bak|old|orphaned-driver-src)/|\.(bak|BAK|old|orig)(\.lpc)?$")
+SKIP = re.compile(r"/(u|w|wiz|wizard|wizards|players|backup|backups|old|bak|log|data|doc|docs|example|examples|test|tmp|attic)/|[-_.](bak|old|orphaned-driver-src)/|\.(bak|BAK|old|orig)(\.lpc)?$")
 MSG = "Bad type for argument 2 of set_name ( string * vs string )"
 LIT = re.compile(rb'"[A-Za-z0-9_ .\'-]*"')
 IDX = re.compile(rb"[A-Za-z_]\w*\[[^\[\]]*\]")
