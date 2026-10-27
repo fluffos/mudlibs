@@ -527,6 +527,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, `F_CLOTH` without macro):** dreamofseven seven tmr clothes and demonangel / gjzddmudda `blue_cloth` used Aug `inherit F_CLOTH` / `setup_cloth()` with no `#define F_CLOTH`. Rewrote dreamofseven to `inherit CLOTH` (armor from `apply_armor/cloth`); the two nitan copies to `inherit BODY`. Proof: HEAD fail; tree loads.
 
+**Also (2026-10-27, dreamofseven Aug `F_*` armor):** ~45 tmr armors used `inherit F_ARMOR` / `F_HEAD_EQ` / `F_HAND_EQ` / `F_FEET_EQ` / `F_FINGER_EQ` / `F_NECK_EQ` / `F_WAIST_EQ` with no macros. Rewrote to the lib's `ARMOR`/`HEAD`/`HANDS`/`BOOTS`/`FINGER`/`NECK`/`WAIST`, mapping `apply_armor/...` into `armor_prop/*`. Proof: HEAD fail; tree sample of 10 loads.
+
+
 
 
 

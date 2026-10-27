@@ -1034,3 +1034,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## F_CLOTH → CLOTH（2026-10-27，KB 04 §6.25 Also）
 
 七件 tmr 区衣物写 `inherit F_CLOTH` / `setup_cloth()`，本库 `armor.h` 无该宏（手足多用 `CLOTH`），驱动报 `unexpected L_IDENTIFIER`。改为 `inherit CLOTH`，把 `apply_armor/cloth` 的护甲值写入 `armor_prop/armor`。证明：HEAD guard-cloth 失败；改后七件均加载。
+
+## Aug F_* 防具宏 → 本库 ARMOR/BOOTS/…（2026-10-27，KB 04 §6.25 Also）
+
+tmr 区约 45 件防具写 `inherit F_ARMOR` / `F_HEAD_EQ` / `F_HAND_EQ` / `F_FEET_EQ` / `F_FINGER_EQ` / `F_NECK_EQ` / `F_WAIST_EQ` 并调用 `setup_*()`，本库无这些宏。一律改为 `armor.h` 已有的 `ARMOR`/`HEAD`/`HANDS`/`BOOTS`/`FINGER`/`NECK`/`WAIST`，把 `apply_armor/...` 里的数值写入 `armor_prop/*`。证明：HEAD guard-armor 失败；改后抽样 10 件均加载。
