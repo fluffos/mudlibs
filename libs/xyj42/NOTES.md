@@ -290,3 +290,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## dami 误调 init_unarmed（2026-10-27，KB 04 §6.25 Also）
 
 `d/obj/food/dami.lpc` 继承 `ITEM`+`F_FOOD` 却调用 `init_unarmed(5)`（并 `#include <weapon.h>`），未继承空手兵器基类，驱动报 `Undefined function init_unarmed`。手足 hymud 已注释该行。删掉该调用与无用的 weapon 头。证明：HEAD 加载失败；改后加载成功。
+
+## fabao EXAMPLE 缺 ) 与 !（2026-10-27，KB 04 §6.25 Also）
+
+`d/obj/fabao/EXAMPLE.lpc` 写 `if (objectp(victim = present(target, environment()))`，丢了 `!` 和右括号，驱动报 `unexpected L_RETURN`。按手足 `kunxian-suo` 改为 `if (!objectp(victim = present(target, environment(me))))`。证明：HEAD 加载失败；改后加载成功。

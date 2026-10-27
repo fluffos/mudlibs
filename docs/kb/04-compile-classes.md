@@ -499,6 +499,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, `set_encumbrance` typo):** fys / tiexuejianghu `d/suzhou/npc/obj/test` (香烟壳) calls `set_encumbrance(100)`; this lineage's `feature/move` only has `set_max_encumbrance` (`Undefined function set_encumbrance`). Renamed the call. Proof: HEAD fail; tree loads with max_encumbrance 100.
 
+**Also (2026-10-27, fabao `EXAMPLE` present guard):** nine copies of `d/obj/fabao/EXAMPLE` never loaded: `if (objectp(victim = present(target, environment()))` lost both the `!` and the closing `)` (`unexpected L_RETURN`). Restored `if (!objectp(victim = present(target, environment(me))))` to match `kunxian-suo`. Proof: HEAD fys fail; tree loads.
+
+
 
 
 
