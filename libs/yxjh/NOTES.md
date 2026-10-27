@@ -621,3 +621,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 炼丹室 liandan 无法加载（2026-10-27，KB 04 §6.25 Also）
 
 `d/zjb/liandan.lpc`（wlhd / yxjh 为 `d/rock/liandan`）：14 处 `delete_temp("zhuyao)` 缺收尾引号，1 处 `new(/d/.../obj/yao")` 缺开引号，后续中文 `notify_fail` 被吞成 `Illegal character`。补齐引号。`if (shoubi = 27&&zhuyao=3)` 一类赋值当条件、以及 `/u/.../yao/` 目标未动。证明：HEAD 加载失败；改后加载成功。
+
+## 炼丹室 liandan 赋值当条件（2026-10-27，KB 06 §7.290 Also）
+
+接 §6.25 补引号之后：`if (shoubi = 27&&zhuyao=3)` 等 8 处（`tui` / `all` 同形）把 `=` 写成了 `==` 的意思，非零局部变量时分支恒真，配方判断乱套。`lpc_fix_cond_assign.py --apply` 改成 `==`（zxty / zxty08nxgbb / tybxjh 的 `d/zjb/liandan`，wlhd / yxjh 的 `d/rock/liandan`；共 40 处，残留 0）。证明：HEAD 源码仍是赋值；改后是比较；对象仍可加载。
