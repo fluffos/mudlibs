@@ -1250,3 +1250,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## book-qujing 缺 obstacle.h（2026-10-27，KB 04 §6.23 Also）
 
 `d/obj/books-nonskill/book-qujing.lpc` `#include "/d/qujing/obstacle.h"`，档案未带该头，驱动报 `Cannot #include`。从手足 sjsh 拷入同内容 mapping。证明：HEAD 加载失败；改后加载成功。
+
+## daemon-skill.lpc 残片改名（2026-10-27，KB 03 §4.2 item 8 Also）
+
+`open/azhou/skill/daemon-skill.lpc` 仅余 `xixi` 六字节，无法编译；库内无引用。改名为 `.txt`。
