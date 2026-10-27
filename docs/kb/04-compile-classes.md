@@ -531,6 +531,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, dreamofseven `F_PANTS`):** three pants used `inherit F_PANTS` / `setup_pants()` with no macro. Rewrote to `PANTS`. Proof: HEAD fail; tree loads.
 
+**Also (2026-10-27, dreamofseven `F_BLADE`/`F_PIKE`/`F_BLUNT`):** twenty tmr weapons used Aug `inherit F_BLADE` (broken `_blade` feature: no `EQUIP::setup`/`weight`) or undefined `F_PIKE`/`F_BLUNT` with `setup_*()`. Rewrote to `BLADE`/`FORK`/`HAMMER`/`STAFF` and `init_*` (damage = Aug range); `apply_weapon/...` → `weapon_prop/*`. Proof: HEAD wood-blade fails; tree 20/20 load.
+
 
 
 

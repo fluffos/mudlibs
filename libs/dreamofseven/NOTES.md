@@ -1042,3 +1042,7 @@ tmr 区约 45 件防具写 `inherit F_ARMOR` / `F_HEAD_EQ` / `F_HAND_EQ` / `F_FE
 ## F_PANTS → PANTS（2026-10-27，KB 04 §6.25 Also）
 
 三件裤子写 `inherit F_PANTS` / `setup_pants()`，本库无该宏（已有 `PANTS`）。改为 `inherit PANTS`，护甲写入 `armor_prop/armor`。证明：HEAD 失败；改后三件均加载。
+
+## F_BLADE / F_PIKE / F_BLUNT → BLADE/FORK/HAMMER/STAFF（2026-10-27，KB 04 §6.25 Also）
+
+tmr 区 20 件武器写 Aug `inherit F_BLADE`（本库 `_blade` 作 feature 缺 `EQUIP::setup`/`weight`）或未定义的 `F_PIKE`/`F_BLUNT`，并调用 `setup_blade`/`setup_pike`/`setup_blunt`。改为本库 `BLADE`/`FORK`（枪）/`HAMMER`（棒）/`STAFF`（钓竿），`init_*` 伤害取 Aug 的 range；`apply_weapon/...` 写入 `weapon_prop/*`。证明：HEAD wood-blade 失败；改后 20/20 加载。
