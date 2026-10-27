@@ -513,6 +513,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, wuhanzhan `officer` glued inherit):** `d/wiz/officer/officer` glued `inherit ROOM void create()` and stripped every `;` between `set`/`setup`/`replace_program`. Reconstructed the room (exits kept as archived). Sibling `kenofficer` is more damaged; left. Proof: HEAD fail; tree loads.
 
+**Also (2026-10-27, mohuanshiji `center2` quote-strip):** `d/city/center2` lost the `;` after `inherit ROOM` and nearly every `set("...")` quote/`;`, plus a broken `call_other(/cmds/usr/news, ???)`. Rewrote from the intact same-dir `center.lpc` style, keeping the archived objects list (libai/table/vikee/score/zhangguolao). Proof: HEAD fail; tree loads.
+
+
 
 
 

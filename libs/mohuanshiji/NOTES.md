@@ -1139,3 +1139,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## dami 误调 init_unarmed（2026-10-27，KB 04 §6.25 Also）
 
 `d/obj/food/dami.lpc` 继承 `ITEM`+`F_FOOD` 却调用 `init_unarmed(5)`（并 `#include <weapon.h>`），未继承空手兵器基类，驱动报 `Undefined function init_unarmed`。手足 hymud 已注释该行。删掉该调用与无用的 weapon 头。证明：HEAD 加载失败；改后加载成功。
+
+## d/city/center2 引号／分号剥离（2026-10-27，KB 04 §6.25 Also）
+
+`d/city/center2.lpc`（十字街头副本）丢了 `inherit ROOM` 后的 `;` 以及几乎所有 `set("...")` 引号与分号，另有坏掉的 `call_other(/cmds/usr/news, ???)`。按同目录完好的 `center.lpc` 风格重写，物件表保留档案里的 libai/table/vikee/score/zhangguolao。证明：HEAD 加载失败；改后加载成功。
