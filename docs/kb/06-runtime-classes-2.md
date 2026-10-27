@@ -1491,6 +1491,9 @@ More of the same (2026-10-15): a `check_fight()` that declares `object weapon;` 
 
 **Also (2026-10-27):** Journey-to-the-West `kugu-1/2/3` + `kunxian-suo` still had bare `::init();`, and `tianyi` had `unique::init();` next to a live `cloth::init()`. The near-line window saw two `::init(` and SKIP'd tianyi; the driver's `in file 'unique'` now selects the scoped call, and exact-line match is tried before SKIP. 191 calls in 191 files of 39 libs. Proof: HEAD `fys` kugu-1 / tianyi / kunxian-suo fail to load; tree loads all three.
 
+**Also (2026-10-27, FY `force` renamed `hit_ob`→`force_action`):** fys / tiexuejianghu `std/force.lpc` defines `force_action` only; `daemon/skill/old/jiuyin-shengong` and `xiake-shengong` still call `::hit_ob(...)` (`Unable to find the inherited function 'hit_ob'`). Added a `hit_ob` stub that returns 0 (old-driver empty-parent value) so the skills compile; the FY combat path keeps using `force_action`. Proof: HEAD jiuyin fail; tree loads both skills.
+
+
 ### 7.260 `set_name(name, "id")`: the ids passed as a string where the lib wants an array (2026-10-19)
 **Symptom:** `Bad type for argument 2 of set_name ( string * vs string )` and the object never compiles: the Baituo bowl `d/baituo/npc/obj/bowl` (`set_name("海口大碗", "bowl");`) in 46 libs of the Eastern Story family, pkuxkx's gem blades and swords (`set_name(blade_name[type - 1], blade_id[type - 1])`).
 **Cause:** the old driver checked no argument types, and `member_array("bowl", "bowl")` still finds the word in a string, so the item answered to its id; the lib's `set_name(string name, string *id)` declares the array.

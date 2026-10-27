@@ -582,3 +582,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## dou_peng inherit F_CLOTH（2026-10-27，KB 04 §6.25 Also）
 
 `d/thd/obj/dou_peng.lpc` 写 `inherit F_CLOTH` / `setup_cloth()`，但本库 `armor.h` 没有 `F_CLOTH`（那是 dfgs2 的 feature 装甲 API），驱动报 `unexpected L_IDENTIFIER`。改为本库的 `inherit CLOTH`，保留名称与护甲 5。证明：HEAD 加载失败；改后加载成功。
+
+## force 缺 hit_ob 桩（2026-10-27，KB 06 §7.259 Also）
+
+本库 `std/force.lpc` 把内功钩子叫 `force_action`，但 `daemon/skill/old/jiuyin-shengong`、`xiake-shengong` 仍写 `::hit_ob(...)`，驱动报找不到父类 `hit_ob`。补 `hit_ob` 返回 0（老驱动空父调用的值）；战斗仍走 `force_action`。证明：HEAD 加载失败；改后两技能均加载成功。
