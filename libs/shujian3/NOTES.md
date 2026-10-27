@@ -434,3 +434,7 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 
 宁波 / 苏州 / 慕容等区域已进 `/d/ningbo`、`/d/suzhou`、`/d/mr`、`/d/hz`，出口与任务物路径仍写 `/u/beyond/…`。`scripts/lpc_fix_beyond_exits.py` 在目标 `.lpc` 存在时改写（`murong`→`mr`）。本库 5 处。证明：sjplii `xikou` HEAD 西向 `/u/beyond/ningbo/aywsi`，改后 `/d/ningbo/aywsi` 可加载；bxsj `hubian1` 三向均可加载。
 
+
+## 无参数时命令对 0 的调用（玩家/--all-dirs 残留，2026-10-27，KB 06 §7.336 Also）
+
+无参数命令把 0 交给 `present` / `sscanf` / `file_exists` 等会运行时报错。`lpc_fix_bare_arg.py --all-dirs` 在首次使用参数前加守卫。多行 `if (arg && !sscanf)`（吐纳默认消耗）与已有 `can_learn`/`get_object` 守卫的误报已回退；本库本批改动见该提交。

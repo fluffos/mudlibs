@@ -777,3 +777,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 无参数时命令对 0 的调用（2026-10-27，KB 06 §7.336 Also）
 
 巫师/管理员命令在通过权限门之后仍会把 0 交给 `sscanf` / `read_file` / `find_living` 等。`lpc_fix_bare_arg.py` 在首次使用参数前加上 `if (!arg)`（或 `help(me)` / `GetHelp()`）。本库本批改动见该提交。
+
+## 无参数时命令对 0 的调用（玩家/--all-dirs 残留，2026-10-27，KB 06 §7.336 Also）
+
+无参数命令把 0 交给 `present` / `sscanf` / `file_exists` 等会运行时报错。`lpc_fix_bare_arg.py --all-dirs` 在首次使用参数前加守卫。多行 `if (arg && !sscanf)`（吐纳默认消耗）与已有 `can_learn`/`get_object` 守卫的误报已回退；本库本批改动见该提交。

@@ -15,6 +15,8 @@ guard goes in front of it, at its indentation:
 
 Efuns that take a 0 without complaint (`strlen`, `sizeof`, `to_int`, `write`, `sprintf("%s")`) are not candidates; a pattern-based command system (Discworld's
 `add_command`, Lima's argv) never passes 0 and is not scanned (`--libs` names what to scan; Discworld, Lima and their families are skipped by default).
+A multiline truthy test `if (arg\\n    && !sscanf(...))` (exercise / meditate / respirate default cost) ends the look on the `if (arg` line: a guard there
+would break the syntax and the bare-default path. Block comments are skipped so a commented-out `sscanf(arg)` is not a candidate.
 `--files` takes repo-relative paths (`libs/<slug>/work/cmds/wiz/test.lpc`, no listing of every lib: fast) or names inside the lib.
 Dry run by default: one line per file (`slug path line statement -> guard`), the totals on stderr.  Binary mode, the file's own line ending, idempotent; the gitlink
 libs are never touched.  Check afterwards with `scripts/lpcc_eval.py` (call the entry with 0) or a bare-verb sweep (KB 08 10.16)."""
@@ -86,6 +88,7 @@ def plan_file(data):
         lines = body.split(b"\n")
         depth = lines[0].count(b"{") - lines[0].count(b"}")           # the line with the opening brace itself
         pos = len(lines[0]) + 1
+        in_block = False
         for ln in lines[1:]:
             line = ln.decode("utf-8", "replace")
             s = line.strip()
@@ -93,10 +96,21 @@ def plan_file(data):
             pos += len(ln) + 1
             at_depth = depth
             depth += line.count("{") - line.count("}")
+            # track /* */ so a commented-out sscanf(arg) is not a candidate (xo cmds/app/test.lpc)
+            if in_block:
+                if "*/" in line:
+                    in_block = False
+                continue
+            if "/*" in line and "*/" not in line[line.find("/*") + 2:]:
+                in_block = True
+                continue
             if not s or s.startswith(("//", "/*", "*")):
                 continue
             if not re.search(r"\b" + re.escape(p) + r"\b", s):
                 continue
+            # multiline `if (arg` / `if (arg\n    && !sscanf...)`: the bare default cost path is intentional
+            if re.match(r"if\s*\(\s*" + re.escape(p) + r"\s*$", s):
+                break
             if guard.search(s):
                 if m.group(1) == b"main" and HELPCALL.fullmatch(s) and proto_needed:
                     out.append((m.start(), b"", "(prototype)", help_proto + nl))

@@ -446,3 +446,7 @@ The timer or prompt named a function one letter off the one the file defines (`i
 ## Combat probe with the seeded administrator (2026-10-22): clean
 
 `scripts/play_combat_probe.py lpuni --account ... --clone ...`: the administrator cloned `/areas/lpuni/mobiles/greeter` into its room without a driver line; these greeters refuse `kill`, so no fight started. (KB 08 §10.16)
+
+## 无参数时命令对 0 的调用（玩家/--all-dirs 残留，2026-10-27，KB 06 §7.336 Also）
+
+无参数命令把 0 交给 `present` / `sscanf` / `file_exists` 等会运行时报错。`lpc_fix_bare_arg.py --all-dirs` 在首次使用参数前加守卫。多行 `if (arg && !sscanf)`（吐纳默认消耗）与已有 `can_learn`/`get_object` 守卫的误报已回退；本库本批改动见该提交。
