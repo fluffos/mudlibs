@@ -788,3 +788,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## yuanwai 孤儿 call_out announce_success（2026-10-27，KB 06 §7.349 Also）
 
 `d/changan/npc/yuanwai.lpc`（及 aoxiangtianji 的 `d/city` 副本）在 `check_daughter` 里 `call_out("announce_success", …)`，但本文件从未定义该函数；同系也无实现。到点会 *Undefined function*。`cry_daughter` 已完成认亲与赠书，删除这对 `remove_call_out`/`call_out`。证明：扫描 HIT call_out→announce_success 且无定义；改后残渣 0。
+
+## book-qujing 缺 obstacle.h（2026-10-27，KB 04 §6.23 Also）
+
+`d/obj/books-nonskill/book-qujing.lpc` `#include "/d/qujing/obstacle.h"`，档案未带该头，驱动报 `Cannot #include`。从手足 sjsh 拷入同内容 mapping。证明：HEAD 加载失败；改后加载成功。
