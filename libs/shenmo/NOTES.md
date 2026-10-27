@@ -1442,3 +1442,6 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 
 `quest/flower/{flower,seed}.lpc`、`sjsh/quest/flower/{flower,seed}.lpc`、`quest/shijienan/item/flower.lpc` 写 `#include "message.h"`，同目录无头文件（在 `d/obj/misc/`）。从本库 `d/obj/misc/message.h` 拷入上述三个目录。证明：HEAD `Cannot #include message.h`；改后加载成功。
 
+## 玉皇 yuhuang1 去引号无法加载（2026-10-27，KB 04 §6.25 Also）
+
+`d/dntg/sky/npc/yuhuang1.lpc`：字符串与路径几乎全部丢掉引号（`set_name(玉皇大帝,…)`、`carry_object(/d/obj/cloth/mangpao)`、`setup()` 后无 `;`），下一句 `int promote_me()` 成语法错误。同目录手足 `yuhuang.lpc` 完好；用本库 `yuhuang` 字节覆盖 `yuhuang1`。证明：HEAD 加载失败；改后加载成功。

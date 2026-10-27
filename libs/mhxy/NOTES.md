@@ -1356,3 +1356,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 对象路径残留 .c 后缀（2026-10-27，KB 06 §7.356 Also）
 
 `set("objects"/"exits", …)` 与 `__DIR__"….c"` 在改名为 `.lpc` 后仍带 `.c` 时，`new`/`load_object`/房间 reset 找不到文件（血池房 `inv=0`）。凡旁有对应 `.lpc` 的，去掉 `.c` 后缀。证明：HEAD `stone2` reset 后 inv=0；改后 inv=1（`/d/youxia/obj/blood`）。
+
+## 玉皇 yuhuang1 去引号无法加载（2026-10-27，KB 04 §6.25 Also）
+
+`d/dntg/sky/npc/yuhuang1.lpc`：字符串与路径几乎全部丢掉引号（`set_name(玉皇大帝,…)`、`carry_object(/d/obj/cloth/mangpao)`、`setup()` 后无 `;`），下一句 `int promote_me()` 成语法错误。同目录手足 `yuhuang.lpc` 完好；用本库 `yuhuang` 字节覆盖 `yuhuang1`。证明：HEAD 加载失败；改后加载成功。
