@@ -331,3 +331,7 @@ The code of this lib writes logs into 6 subdirectories of `log/`: `log/MAIN` (`i
 ## /open/ 上残留的宏参数字面量（2026-10-27，KB 06 §7.352 Also）
 
 `lpc_fix_macro_strparam.py` 曾把 `/open/` 当巫师家跳过。`open/cobain/vital.h` 与 `open/vital/hmm/bleh.h`：`#define FP(x) find_player("x")`，FluffOS 不在字符串里替换参数，`FP(某人)` 永远找名叫 `x` 的玩家。改为 `find_player(#x)`。证明：`lpcc_eval` HEAD 头文件仍是 `find_player("x")`，改后为 `#x`；语言对照 `"x"` 宏得 `x`，`#x` 得实参名。
+
+## /open/ 上残留的条件赋值（2026-10-27，KB 06 §7.290 Also）
+
+上一轮台湾系扫过后本库仍有 7 处 `if (x = CONST)`：`open/maledicta/dusan/t12|t16` 的 `str = "sign"`、`open/tallos/mishtell2` 的 `what = "scale"`、`open/wren/items/pouch` 的 `str="pouch"`，以及 bankserver / grammar / new_pub。一律改为 `==`。证明：`lpcc_eval` HEAD 上 `str="other"` 仍走进 `if (str = "sign")`；改后 `==` 对 other 跳过、对 sign 进入。

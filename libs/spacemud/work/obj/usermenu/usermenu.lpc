@@ -225,7 +225,7 @@ private
 int confirm_decision(string dec)
 {
    dec = lower_case(dec);
-   if (dec == "yes" || dec = "y")
+   if (dec == "yes" || dec == "y")
       return 1;
    return 0;
 }

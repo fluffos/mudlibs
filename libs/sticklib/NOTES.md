@@ -253,3 +253,7 @@ An `add_action("fn", "verb")` whose function is defined neither by the object, n
 ## `log/` subdirectories nobody created: the logging `write_file()` / `log_file()` raises (2026-10-22, KB 06 §7.358)
 
 The code of this lib writes logs into 1 subdirectory of `log/`: `log/lords` (`areas/tristeza/bank/bank_back.lpc`). Neither the archive, a `git clone` nor the site pack has them (no local boot wrote into them, so `gen_keep_dirs.py` never recorded them), and `write_file()` raises `*Wrong permissions for opening file /log/dlog/money for append. "No such file or directory"` for a missing directory: the function that logs stops on that line and what came after it (the reward, the flag, the next step) never runs. This lib's `log_file()` is `write_file(LOG_DIR + file, text)` and raises the same error for a missing directory (measured). `log/lords` are now in `scripts/wasm_keep_dirs.txt` (`scripts/lpc_keep_log_dirs.py`; the site and the pristine tree create the empty directories from it). Proof (`scripts/lpcc_eval.py`, an eval object under `/adm/daemons` or similar writes `/log/zzdirprobe/...`, fresh processes): the measured table in KB 06 §7.358.
+
+## Remaining constant assignments used as conditions (2026-10-27, KB 06 §7.290 Also)
+
+`thief_mark_new` `else if(type = 8)` became `==` (`lpc_fix_cond_assign.py`; KB 06 §7.290 Also).
