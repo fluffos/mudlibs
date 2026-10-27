@@ -494,6 +494,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, `dou_peng` `inherit F_CLOTH`):** fys / tiexuejianghu `d/thd/obj/dou_peng` never loaded: `inherit F_CLOTH` with no `#define F_CLOTH` in this lib's `armor.h` (`syntax error, unexpected L_IDENTIFIER`). The Aug/FY feature form (`setup_cloth`, `wear_as`) lives in dfgs2 where `armor.h` itself inherits `F_EQUIP`. Rewrote to the lib's real `inherit CLOTH` + `armor_prop/armor` 5 (same protection). Wizard `u/aug_old` copy left. Proof: HEAD fail; tree loads.
 
+**Also (2026-10-27, `set_encumbrance` typo):** fys / tiexuejianghu `d/suzhou/npc/obj/test` (香烟壳) calls `set_encumbrance(100)`; this lineage's `feature/move` only has `set_max_encumbrance` (`Undefined function set_encumbrance`). Renamed the call. Proof: HEAD fail; tree loads with max_encumbrance 100.
+
+
 
 
 

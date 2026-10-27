@@ -586,3 +586,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## force 缺 hit_ob 桩（2026-10-27，KB 06 §7.259 Also）
 
 本库 `std/force.lpc` 把内功钩子叫 `force_action`，但 `daemon/skill/old/jiuyin-shengong`、`xiake-shengong` 仍写 `::hit_ob(...)`，驱动报找不到父类 `hit_ob`。补 `hit_ob` 返回 0（老驱动空父调用的值）；战斗仍走 `force_action`。证明：HEAD 加载失败；改后两技能均加载成功。
+
+## set_encumbrance 笔误（2026-10-27，KB 04 §6.25 Also）
+
+`d/suzhou/npc/obj/test.lpc`（香烟壳）写 `set_encumbrance(100)`，本库 move 只有 `set_max_encumbrance`。改为后者。证明：HEAD 加载失败；改后加载成功，max=100。
