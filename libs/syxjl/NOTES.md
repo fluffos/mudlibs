@@ -1155,3 +1155,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## doc/build devil 丢分号／粘连 inherit（2026-10-27，KB 04 §6.25 Also）
 
 `doc/build/devil.lpc`（建档示例倭寇）被格式化弄坏：`inherit NPC void create()` 粘在一起，语句之间的 `;` 全丢，还有嵌套坏掉的 `set("con", set("con", 10)`。按原意重写成带 `setup()` 的完好 NPC（原 `/obj/blade`、`/obj/cloth` 在多数库不存在，示例里去掉携带以免 create 炸）。证明：HEAD 加载失败；改后加载成功。
+
+## d/city/obj/book 引号剥离 ← xiandan（2026-10-27，KB 04 §6.25 Also）
+
+`d/city/obj/book.lpc`（注释仍写 xiandan）丢了几乎所有引号与分号（`set_name(HIY 仙丹 NOR, ({ dan, ...})`），驱动报 `unexpected L_BASIC_TYPE`。用本库完好的 `clone/gift/xiandan.lpc` 覆盖（含 `u/aeolus` 同内容副本）。证明：HEAD 加载失败；改后加载成功。

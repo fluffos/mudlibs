@@ -509,6 +509,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, `doc/build/devil` glued inherit):** thirteen copies of `doc/build/devil` (fys / hy3 / jqxz2008{,dlx,std} / jqxz2015 / jyqxc{,2,2013fwq} / syxjl / xiakexing{3,2017} / xkx2017) never loaded: a formatter glued `inherit NPC void create()` and stripped every statement `;`, plus a nested `set("con", set("con", 10)`. Reconstructed a valid NPC with `setup()`; dropped the archive's `/obj/blade` and `/obj/cloth` carries (those paths exist only in fys). Proof: HEAD fail; tree loads (fys, hy3, xkx2017, jqxz2008).
 
+**Also (2026-10-27, syxjl `d/city/obj/book` quote-strip):** syxjl's `d/city/obj/book` (comment still says `xiandan`) lost nearly every quote and `;` (`set_name(HIY 仙丹 NOR, ({ dan, ...})`, `inherit ITEM` without `;`). Replaced with the lib's intact `clone/gift/xiandan` (and the matching `u/aeolus/.../book` copy). Proof: HEAD fail; tree loads.
+
+
 
 
 
