@@ -579,3 +579,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 `d/pipip/ssl.lpc`（或本库 `d/system_2/ssl.lpc`）的 `do_xi` 有一行 `if me->("neili") > ("maxneili)*2)`：缺 `if (`，且 `"maxneili` 未闭合，下一行中文 `notify_fail` 被当成源码（`Illegal character`），物件无法加载。同库 `d/ygbz/obj/ssl.lpc` 完好。上面两行已取了局部变量 `neili`/`maxneili`，改为 `if (neili > maxneili * 2)`。证明：HEAD 加载失败；改后加载成功。
 
+
+## jinyong 丢了 query 字符串收尾引号（2026-10-27，KB 04 §6.25 Also）
+
+`quest/quest2/jinyong.lpc` 两行 `who->query("max_jingli))`：`"max_jingli` 未闭合，字符串吃掉下一句，怪的 jingli 未按玩家 max 设置。改为 `query("max_jingli")`。证明：HEAD 源码为破引号；改后为正确键；物件两端均可加载。
+
