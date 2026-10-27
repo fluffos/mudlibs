@@ -460,3 +460,8 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 
 接 §7.362 Also：`open/logind.lpc` `check_legal_name` 循环仍是 `j % 2 == 0 && !is_chinese(name[j..j+1])`（按字节跳格）。`lpc_fix_byte_char.py` SKIP 去掉 open → `!is_chinese(name[j..j])`。拒绝路径已注释，只改高位；证明：对「张a」HEAD 循环命中 0 次、改后命中 1 次（检出拉丁字母「a」）。
 
+
+
+## find 缺 sefun message_system（2026-10-27，KB 04 §6.16 Also）
+
+`cmds/adm/find.lpc` 调用 `message_system(...)`，但 `adm/simul_efun/message.lpc` 没有定义（同系 jym 有：`message("system", ..., users(), 0)`）。对象无法编译。在 `notify_fail` 前补上同形函数。证明：HEAD 加载失败；改后加载成功。
