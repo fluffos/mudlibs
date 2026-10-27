@@ -19,6 +19,8 @@ import sys
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SKIP = re.compile(r"/(u|w|wiz|wizard|wizards|players|backup|backups|bak|old|test|tests|tmp|data|log|realms)/|[-_.](bak|old)|orphaned-dir|class_bak")  # `/open/` is playable world (Taiwanese / dreamofseven-style libs), not a wizard home
 PATH = re.compile(rb"^/[A-Za-z0-9_/.+\- ]+\.c$")
+# Relative path used after __DIR__ (no leading slash): obj/blood.c, guandao.c
+REL_PATH = re.compile(rb"^[A-Za-z0-9_/.+\- ]+\.c$")
 HEREDOC = re.compile(rb"@@?([A-Za-z_][A-Za-z_0-9]*)[ \t]*\r?\n")
 
 
@@ -64,23 +66,47 @@ def literals(b):
     return out
 
 
-def fix(b, root):
-    """returns (new bytes, [(old, new)], [missing paths])"""
+def fix(b, root, src_path=None):
+    """returns (new bytes, [(old, new)], [missing paths]).
+
+    Absolute "/x/y.c" uses root+path. Relative "x/y.c" only when the
+    literal is preceded by __DIR__ (optional space) and src_path is set:
+    resolve beside the source file (KB 06 7.356 Also 2026-10-27).
+    """
     out, pos, changes, missing = [], 0, [], []
+    src_dir = os.path.dirname(src_path) if src_path else None
     for s, e in literals(b):
         inner = b[s + 1:e - 1]
-        if not PATH.match(inner):
+        # Absolute
+        if PATH.match(inner):
+            p = inner.decode("utf-8", "replace")
+            if os.path.isfile(root + p):
+                continue
+            if os.path.isfile(root + p[:-2] + ".lpc"):
+                out.append(b[pos:s])
+                out.append(b'"' + inner[:-2] + b'.lpc"')
+                pos = e
+                changes.append((p, p[:-2] + ".lpc"))
+            elif not os.path.isdir(root + p[:-2]) and not os.path.isfile(root + p[:-2]):
+                missing.append(p)
             continue
-        p = inner.decode("utf-8", "replace")
-        if os.path.isfile(root + p):
+        # Relative after __DIR__
+        if not REL_PATH.match(inner) or not src_dir:
             continue
-        if os.path.isfile(root + p[:-2] + ".lpc"):
+        pre = b[max(0, s - 16):s]
+        if not re.search(rb"__DIR__\s*$", pre):
+            continue
+        rel = inner.decode("utf-8", "replace")
+        cand_c = os.path.normpath(os.path.join(src_dir, rel))
+        cand_lpc = os.path.normpath(os.path.join(src_dir, rel[:-2] + ".lpc"))
+        if os.path.isfile(cand_c):
+            continue
+        if os.path.isfile(cand_lpc):
             out.append(b[pos:s])
-            out.append(b'"' + inner[:-2] + b'.lpc"')
+            # strip .c (bare path; matches the 2026-10-27 corpus fix)
+            out.append(b'"' + inner[:-2] + b'"')
             pos = e
-            changes.append((p, p[:-2] + ".lpc"))
-        elif not os.path.isdir(root + p[:-2]) and not os.path.isfile(root + p[:-2]):
-            missing.append(p)
+            changes.append((rel, rel[:-2]))
     out.append(b[pos:])
     return b"".join(out), changes, missing
 
@@ -94,7 +120,7 @@ def main():
     slug, files = args[0], args[1:]
     root = os.path.join(REPO, "libs", slug, "work")
     if not files:
-        out = subprocess.run(["git", "grep", "-l", "-E", r'"/[A-Za-z0-9_/.+-]+\.c"', "--", f"libs/{slug}/work"], cwd=REPO, capture_output=True).stdout.split(b"\n")
+        out = subprocess.run(["git", "grep", "-l", "-E", r'(__DIR__\s*"[^"]+\.c"|"/[A-Za-z0-9_/.+-]+\.c")', "--", f"libs/{slug}/work"], cwd=REPO, capture_output=True).stdout.split(b"\n")
         files = []
         for f in out:
             try:
@@ -107,7 +133,7 @@ def main():
     for f in sorted(files):
         p = f if os.path.isabs(f) else os.path.join(REPO, f)
         b = open(p, "rb").read()
-        nb, ch, miss = fix(b, root)
+        nb, ch, miss = fix(b, root, p)
         rel = p[len(root):] if p.startswith(root) else f
         for m in miss:
             print(f"MISSING {rel}: {m} (the file exists in neither spelling: a content gap, left)")
