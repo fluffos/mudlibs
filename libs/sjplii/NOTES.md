@@ -528,3 +528,6 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 宁波 / 苏州 / 慕容等区域已进 `/d/ningbo`、`/d/suzhou`、`/d/mr`、`/d/hz`，出口与任务物路径仍写 `/u/beyond/…`。`scripts/lpc_fix_beyond_exits.py` 在目标 `.lpc` 存在时改写（`murong`→`mr`）。本库 7 处。证明：sjplii `xikou` HEAD 西向 `/u/beyond/ningbo/aywsi`，改后 `/d/ningbo/aywsi` 可加载；bxsj `hubian1` 三向均可加载。
 
+## wei #me->move 无法加载（2026-10-27，KB 04 §6.25 Also）
+
+踢人分支写成了 shell 风格的 `#me->move("/d/city/...")`，驱动报 `Unknown preprocessor directive: #me`，对象无法编译。改回 `me->move(...)`。本库改动：`d/chengdu/npc/wei.lpc`。证明：HEAD 加载失败；改后加载成功。

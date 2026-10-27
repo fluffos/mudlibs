@@ -538,3 +538,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 金毛鼠 mouse 缺分号无法加载（2026-10-27，KB 04 §6.25 Also）
 
 `open/wjw/mouse.lpc`：`inherit NPC` 与 `set_name(...)` 之后每句丢了 `;`（`) set("race"`、`setup()`、`set_leader(who) message(...)`）。同目录手足 `haozi.lpc` 完好；用 `haozi` 覆盖并把首 id 改回 `"mouse"`（fys / tiexuejianghu）。证明：HEAD 加载失败；改后加载成功，id 为 mouse/laoshu/lao shu。
+
+## wei/duanyanqing #me->move 无法加载（2026-10-27，KB 04 §6.25 Also）
+
+踢人分支写成了 shell 风格的 `#me->move("/d/city/...")`，驱动报 `Unknown preprocessor directive: #me`，对象无法编译。改回 `me->move(...)`（踢出门外的提示需要这次 move）。本库改动：`d/chengdu/npc/wei.lpc`、`d/dali/npc/duanyanqing.lpc`。证明：HEAD 加载失败；改后加载成功。
