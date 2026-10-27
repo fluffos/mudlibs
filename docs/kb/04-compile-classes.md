@@ -503,6 +503,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, fabao EXAMPLE under `d/city/obj`):** sjpl2 / sjplii keep a second copy at `d/city/obj/fabao/EXAMPLE` with the same missing `!`/`)`. Same fix. Proof: HEAD fail; tree loads.
 
+**Also (2026-10-27, example book comment wrap):** eleven libs' `obj/example/book` never loaded: a formatter broke `// name of the skill` (and sibling comment lines) so `the skill` became a bare identifier (`unexpected L_IDENTIFIER`). Replaced with the intact sjsh copy. Proof: HEAD fys fail; tree loads.
+
+
 
 
 
