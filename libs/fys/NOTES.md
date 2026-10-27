@@ -566,3 +566,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## yangzhou waiter vendor_goods 多余冒号（2026-10-27，KB 04 §6.25 Also）
 
 `d/yangzhou/npc/waiter.lpc` 的 `vendor_goods` 写成 `"包子": __DIR__ "obj/baozi": 1`，第二个 `:` 非法，驱动报 `syntax error, unexpected ':'`。`F_VENDOR` 要的是名→路径（手足 aqingsao）。去掉五个货品末尾的 `: 1`。证明：HEAD 加载失败；改后加载成功，goods 五键。
+
+## old kuaihuo/songyang 缺右括号（2026-10-27，KB 04 §6.25 Also）
+
+`daemon/skill/old/kuaihuo-zhang.lpc`、`songyang-zhang.lpc`：`if (ob = me->query_temp("weapon")` 丢了 `)`，后面多一个 `}` 把后续函数嵌进去，驱动报 `unexpected L_RETURN`。用同库 `daemon/skill/<name>.lpc` 的 `valid_learn` 起至文件尾覆盖。证明：HEAD 加载失败；改后加载成功。
