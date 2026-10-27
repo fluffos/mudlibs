@@ -523,6 +523,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, pd `deatblade` + wep `terra.h`):** three `wizards/**/wep/deatblade` copies lost every `;` and broke `set_short` across a line. Restored terminators. Their `wep/terra.h` (and matching wrong `item/terra.h`) pointed `WEP`/`ARM` at missing `weapons/`/`armour/`; retargeted to existing `wep/`/`arm/` (darktown: local prefix). Proof: HEAD fail; tree loads.
 
+**Also (2026-10-27, pd `manex/tower8`):** `wizards/manex/tower8` lost the `;` after `inherit ROOM`. Restored. Proof: HEAD fail; tree loads.
+
+
 
 
 
