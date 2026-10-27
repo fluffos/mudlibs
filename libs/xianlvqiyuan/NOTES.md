@@ -817,3 +817,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## vikee 新手门在 present 之前（2026-10-27，KB 06 §7.348 Also）
 
 `ssteal` / `pperform` / `jji` / `ccast`（及同族 `steal`/`cast`）里 vikee 加的年龄 / 经验 / 道行门用 `objectp(victim|target)`，却写在 `present()` 赋值之前：局部仍是 0，门永远不进。挪到 `present` 与空指针检查之后，并去掉多余的 `objectp`。证明：HEAD `ssteal` 仍在 `present` 前有 `objectp(victim)`；改后在其后且对象加载成功。
+
+
+## pperform 的 vikee 门写成 obj->query("target")（2026-10-27，KB 06 §7.348 Also）
+
+`cmds/std/pperform.lpc` 年龄门写成 `userp(target) && obj->query("target") < 16`，文件里没有 `obj`，驱动报 `Undefined variable 'obj'`，对象从不加载。改回 `target->query("age")`，并与 sjsh / yueying 同族一样挪到 `present` 之后。证明：HEAD 加载失败；改后成功。
