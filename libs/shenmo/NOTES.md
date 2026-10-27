@@ -1437,3 +1437,8 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## toy 旁缺 message.h（2026-10-27，KB 04 §6.23 Also）
 
 `obj/toy/*.lpc`（及少数 `obj/obj/toy`、嵌套副本）写 `#include "message.h"`，引号 include 只解析同目录；本 lib 的 `d/obj/misc/message.h` 有同内容副本，toy 目录没有。玩具对象无法编译（`Cannot #include message.h`）。从本 lib 的 `d/obj/misc/message.h` 复制到缺失的 toy 目录旁。证明：HEAD `buwawa` 加载失败；改后加载成功。
+
+## quest/flower 与 shijienan 缺旁边的 message.h（2026-10-27，KB 04 §6.23 Also）
+
+`quest/flower/{flower,seed}.lpc`、`sjsh/quest/flower/{flower,seed}.lpc`、`quest/shijienan/item/flower.lpc` 写 `#include "message.h"`，同目录无头文件（在 `d/obj/misc/`）。从本库 `d/obj/misc/message.h` 拷入上述三个目录。证明：HEAD `Cannot #include message.h`；改后加载成功。
+

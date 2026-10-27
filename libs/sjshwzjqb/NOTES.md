@@ -628,3 +628,8 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 对象路径残留 .c 后缀（2026-10-27，KB 06 §7.356 Also）
 
 `set("objects"/"exits", …)` 与 `__DIR__"….c"` 在改名为 `.lpc` 后仍带 `.c` 时，`new`/`load_object`/房间 reset 找不到文件（血池房 `inv=0`）。凡旁有对应 `.lpc` 的，去掉 `.c` 后缀。证明：HEAD `stone2` reset 后 inv=0；改后 inv=1（`/d/youxia/obj/blood`）。
+
+## quest/flower 缺旁边的 message.h（2026-10-27，KB 04 §6.23 Also）
+
+`quest/flower/{flower,seed}.lpc` 写 `#include "message.h"`，引号包含只看同目录；档案把头文件留在 `d/obj/misc/`。从本库 `d/obj/misc/message.h` 拷入 `quest/flower/`。证明：HEAD `Cannot #include message.h`；改后加载成功。
+
