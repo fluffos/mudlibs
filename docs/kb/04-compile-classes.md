@@ -487,6 +487,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, xueshan `obj/hufabird`):** `set_level` lacks the `}` after its `setup();`, so `int heal_up()` / `leave` / `invocation` / `die` nest inside it (`unexpected '('`, `Type of returned value ... int vs void`). Sibling `npc/hufabird.lpc` closes the function. Same files also carry `messege_vision` → `message_vision`, `return : die()` → `return ::die()`, and live `(: saysth :)` with no `saysth` (KB 06 7.355; already commented in some copies). Closed the brace and applied the three cleanups in 23 libs' `d/xueshan/obj/hufabird.lpc`. Proof: HEAD load fails; tree loads.
 
+**Also (2026-10-27, gao `obj/pen`):** `is_container()` does `set("objects", ([ "/u/bula/gao/obj/kaoji" ]));` — a mapping with a key and no value (`unexpected ']'`), so the laundry basin never loads. Sibling hy5 / xyj2000 already comment the body out. Rewrote the active form to `return 1;` in 26 libs (commented copies left). Proof: HEAD load fails; tree loads.
+
+
 
 ### 6.29 Two typos of the original source that kept a job NPC from ever compiling (`job_protect_npc`, 11 libs; 2026-10-21)
 **Symptom:** the dead-handler verifier of KB 06 §7.349 reported objects as `NOCOMPILE` / `CRASH`; the first compiler error of each (`scripts/lpc_first_errors.py`, one lpcc eval per lib) names the typo. `clone/obj/job/job_protect_npc.lpc`, the merchant the `protect` job of the xkx family clones (bxsj, bxsj1, jym, shenzhou, shujian2008, shujian3, sjecl, sjtx2, xkm, xkx2000zxb, xuanjianlu), printed `Undefined variable 'arg'`, `syntax error, unexpected '('` and `Illegal LHS`: the job had no NPC to protect.
