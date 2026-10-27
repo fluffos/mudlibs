@@ -910,3 +910,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## wife inquiry ask_me 前置声明（2026-10-27，KB 04 §6.25 Also）
 
 `d/chengdu/npc/wife.lpc` 在 `create()` 里写 `"参茶": (: ask_me :)`，但 `int ask_me` 定义在后面，驱动报 `Undefined variable 'ask_me'`。在 inherit 后补 `int ask_me(object me);`。证明：HEAD 加载失败；改后加载成功。
+
+## 铁罗汉 tie-luohan 下标丢失无法加载（2026-10-27，KB 06 §7.348 Also）
+
+`d/chengdu/obj/tie-luohan.lpc`：`snamei` / `skill_statussname` / `hp_statusstr` 等下标括号丢失，缺 `sname = keys(...)`，`me` 未赋值，另有多余的 `return notify_fail` 使技能复制不可达。按手足技能复制形重写 `accept_fight` / `renewing`（保留 FY 的 kee/gin/force）。证明：改前加载失败；改后加载成功。
