@@ -584,3 +584,6 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 `quest/quest2/jinyong.lpc` 两行 `who->query("max_jingli))`：`"max_jingli` 未闭合，字符串吃掉下一句，怪的 jingli 未按玩家 max 设置。改为 `query("max_jingli")`。证明：HEAD 源码为破引号；改后为正确键；物件两端均可加载。
 
+## 炼丹室 liandan 无法加载（2026-10-27，KB 04 §6.25 Also）
+
+`d/zjb/liandan.lpc`（wlhd / yxjh 为 `d/rock/liandan`）：14 处 `delete_temp("zhuyao)` 缺收尾引号，1 处 `new(/d/.../obj/yao")` 缺开引号，后续中文 `notify_fail` 被吞成 `Illegal character`。补齐引号。`if (shoubi = 27&&zhuyao=3)` 一类赋值当条件、以及 `/u/.../yao/` 目标未动。证明：HEAD 加载失败；改后加载成功。

@@ -712,3 +712,6 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 `d/system_2/ssl.lpc` 的 `do_xi` 有一行 `if me->("neili") > ("maxneili)*2)`：缺 `if (`，且 `"maxneili` 未闭合，下一行中文 `notify_fail` 被当成源码（`Illegal character`），物件无法加载。同系 `d/ygbz/obj/ssl.lpc` 完好。上面两行已取了局部变量 `neili`/`maxneili`，改为 `if (neili > maxneili * 2)`。证明：HEAD 加载失败；改后加载成功。
 
+## 炼丹室 liandan 无法加载（2026-10-27，KB 04 §6.25 Also）
+
+`d/zjb/liandan.lpc`（wlhd / yxjh 为 `d/rock/liandan`）：14 处 `delete_temp("zhuyao)` 缺收尾引号，1 处 `new(/d/.../obj/yao")` 缺开引号，后续中文 `notify_fail` 被吞成 `Illegal character`。补齐引号。`if (shoubi = 27&&zhuyao=3)` 一类赋值当条件、以及 `/u/.../yao/` 目标未动。证明：HEAD 加载失败；改后加载成功。
