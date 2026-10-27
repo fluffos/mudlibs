@@ -623,3 +623,8 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## medical-book 缺 sefun filter_color（2026-10-27，KB 04 §6.16 Also）
 
 `std/item/medical-book.lpc` 用 `filter_color(...)` 比药名，但本 lib 的 `adm/obj/simul_efun.lpc` 未纳入 util/color（同系 shenmo / sjshv2578bb 有）。对象无法编译（`Undefined function filter_color`）。新增 `adm/simul_efun/color.lpc`（`#include <ansi.h>` + 去色 `replace_string`），并在 simul_efun 中 `#include`。证明：HEAD 加载失败；改后加载成功。
+
+
+## 对象路径残留 .c 后缀（2026-10-27，KB 06 §7.356 Also）
+
+`set("objects"/"exits", …)` 与 `__DIR__"….c"` 在改名为 `.lpc` 后仍带 `.c` 时，`new`/`load_object`/房间 reset 找不到文件（血池房 `inv=0`）。凡旁有对应 `.lpc` 的，去掉 `.c` 后缀。证明：HEAD `stone2` reset 后 inv=0；改后 inv=1（`/d/youxia/obj/blood`）。

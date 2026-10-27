@@ -1351,3 +1351,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## updatei 缺 playerp / TEMP_OB / message_system（2026-10-27，KB 04 §6.16 Also）
 
 `cmds/adm/updatei.lpc` 用 `playerp`、`TEMP_OB`、`message_system`，本 lib 的 sefun/globals 没有（同系 sjshv2578bb 有 user.lpc / message_system，并把 TEMP_OB 行注释掉）。对象无法编译。新增 `adm/simul_efun/user.lpc`（`playerp`≈`userp`）、在 `message.lpc` 补 `message_system`，并在 `globals.h` 的 `VOID_OB` 旁定义 `TEMP_OB` 为 `"/obj/void"`（本 lib 无独立 temp 房间）。证明：HEAD 加载失败；改后加载成功。
+
+
+## 对象路径残留 .c 后缀（2026-10-27，KB 06 §7.356 Also）
+
+`set("objects"/"exits", …)` 与 `__DIR__"….c"` 在改名为 `.lpc` 后仍带 `.c` 时，`new`/`load_object`/房间 reset 找不到文件（血池房 `inv=0`）。凡旁有对应 `.lpc` 的，去掉 `.c` 后缀。证明：HEAD `stone2` reset 后 inv=0；改后 inv=1（`/d/youxia/obj/blood`）。

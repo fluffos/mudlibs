@@ -686,3 +686,8 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 
 `pname = pname[(random(sizeof(pname)) & 0xFFFE)..<1]; pname = pname[0..1];` 在按字符计下标时会取出两个汉字。`scripts/lpc_fix_pname_slice.py` 去掉掩码并把收尾改成 `[0..0]`（`pname`/`pname2`/`sec_name`/`str`/`str1`）。本库 8 处。证明：nt1 生成名长度 2–4；HEAD 常见 3–5。
 
+
+
+## 对象路径残留 .c 后缀（2026-10-27，KB 06 §7.356 Also）
+
+`set("objects"/"exits", …)` 与 `__DIR__"….c"` 在改名为 `.lpc` 后仍带 `.c` 时，`new`/`load_object`/房间 reset 找不到文件（血池房 `inv=0`）。凡旁有对应 `.lpc` 的，去掉 `.c` 后缀。证明：HEAD `stone2` reset 后 inv=0；改后 inv=1（`/d/youxia/obj/blood`）。

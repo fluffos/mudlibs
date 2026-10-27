@@ -519,3 +519,8 @@ BIG5 里 `功` 等字的第二个字节正好是 0x5C（反斜杠），作者在
 ## open 下死出口由对侧房间修好（2026-10-27，KB 06 §7.257 Also）
 
 `lpc_fix_dead_exits` 的 SKIP 曾把 `/open/` 当巫师目录。本库本批出口改写见该提交（大小写/错名，由对侧出口回指判定）。证明见 KB。
+
+
+## 对象路径残留 .c 后缀（2026-10-27，KB 06 §7.356 Also）
+
+`set("objects"/"exits", …)` 与 `__DIR__"….c"` 在改名为 `.lpc` 后仍带 `.c` 时，`new`/`load_object`/房间 reset 找不到文件（血池房 `inv=0`）。凡旁有对应 `.lpc` 的，去掉 `.c` 后缀。证明：HEAD `stone2` reset 后 inv=0；改后 inv=1（`/d/youxia/obj/blood`）。
