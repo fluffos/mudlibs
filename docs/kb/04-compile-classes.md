@@ -525,6 +525,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, pd `manex/tower8`):** `wizards/manex/tower8` lost the `;` after `inherit ROOM`. Restored. Proof: HEAD fail; tree loads.
 
+**Also (2026-10-27, `F_CLOTH` without macro):** dreamofseven seven tmr clothes and demonangel / gjzddmudda `blue_cloth` used Aug `inherit F_CLOTH` / `setup_cloth()` with no `#define F_CLOTH`. Rewrote dreamofseven to `inherit CLOTH` (armor from `apply_armor/cloth`); the two nitan copies to `inherit BODY`. Proof: HEAD fail; tree loads.
+
+
 
 
 

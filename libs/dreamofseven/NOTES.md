@@ -1030,3 +1030,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## open 下 set_name 多段字符串 id（2026-10-27，KB 06 §7.260 Also）
 
 `feature/name.lpc` 的 `set_name(string name, string *id)` 要数组，但 `open/world1/tmr/...` 八处写成 `set_name("名", "id1", "id2")`。`lpc_fix_set_name_id` / `missing_foo` 的 SKIP 不再把 `/open/` 当巫师目录；本批把这八处收成 `({ ... })`。证明：HEAD `book.lpc` 仍是三字符串参数，改后为数组。
+
+## F_CLOTH → CLOTH（2026-10-27，KB 04 §6.25 Also）
+
+七件 tmr 区衣物写 `inherit F_CLOTH` / `setup_cloth()`，本库 `armor.h` 无该宏（手足多用 `CLOTH`），驱动报 `unexpected L_IDENTIFIER`。改为 `inherit CLOTH`，把 `apply_armor/cloth` 的护甲值写入 `armor_prop/armor`。证明：HEAD guard-cloth 失败；改后七件均加载。
