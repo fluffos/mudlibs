@@ -23,7 +23,7 @@ from lpc_fix_void_return import code_mask, depth_map  # noqa: E402
 from lpc_fix_bad_assign import decl_for  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SKIP = re.compile(r"/(u|w|wiz|wizard|wizards|open|players|backup|backups|old|bak|log|data|doc|docs|example|examples|test|tests|tmp|attic)/|[-_.](bak|old)/|\.(bak|BAK|old|orig)(\.lpc)?$")
+SKIP = re.compile(r"/(u|w|wiz|wizard|wizards|players|backup|backups|old|bak|log|data|doc|docs|example|examples|test|tests|tmp|attic)/|[-_.](bak|old)/|\.(bak|BAK|old|orig)(\.lpc)?$")
 GENERATED = {"wllz3", "longyunmeng_binary"}
 LDMUD = {"aoh", "morgengrauen", "nirvlp312", "simud", "sticklib", "skylib", "sluggymud", "swmud", "spacemud", "wilderness", "immaster", "amylaarmini", "mundoscuro",
          "ageofelements", "acme", "scratch", "paomud", "sagenwelt", "xxsj"}

@@ -16,7 +16,7 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HDR = re.compile(rb"^(?:(?:varargs|static|nomask|private|protected|public|nosave)\s+)*(?:void|int|string|object|mixed|mapping|float|status)\b[\s*]*(\w+)\s*\(")
-SKIP = re.compile(r"/work/(u|w|wiz|wizard|wizards|open|players|backup|backups|old|bak|test|tests)/|/(bak|old|backup|test)/|[-_.](bak|old)\.lpc$")
+SKIP = re.compile(r"/work/(u|w|wiz|wizard|wizards|players|backup|backups|old|bak|test|tests)/|/(bak|old|backup|test)/|[-_.](bak|old)\.lpc$")
 NEEDLE = b"this_player()->carry_object("
 
 

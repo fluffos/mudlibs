@@ -30,7 +30,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lpc_fix_void_return import code_mask  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SKIP = re.compile(r"/(u|w|open|players|backup|old|bak|log|data|doc)/")
+SKIP = re.compile(r"/(u|w|players|backup|old|bak|log|data|doc)/")
 POOLS = {"neili", "max_neili", "jingli", "max_jingli", "jing", "max_jing", "eff_jing", "qi", "max_qi", "eff_qi",
          "kee", "max_kee", "eff_kee", "gin", "max_gin", "eff_gin", "sen", "max_sen", "eff_sen", "mana", "max_mana",
          "atman", "max_atman"}

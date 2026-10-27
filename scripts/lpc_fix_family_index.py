@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lpc_fix_void_return import code_mask  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SKIP = re.compile(r"/(u|w|open|players|backup|old|bak|log|data|doc)/|[-_.](bak|old)/")
+SKIP = re.compile(r"/(u|w|players|backup|old|bak|log|data|doc)/|[-_.](bak|old)/")
 READ = re.compile(rb'query\(\s*"family"\s*(,\s*([A-Za-z_][A-Za-z0-9_]*(?:\(\))?)\s*)?\)\s*\[\s*"([a-z_]+)"\s*\]')
 LVALUE = re.compile(rb"\s*(=[^=]|\+=|-=|\*=|/=|\+\+|--)")
 

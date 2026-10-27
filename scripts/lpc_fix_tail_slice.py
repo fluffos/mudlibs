@@ -37,7 +37,8 @@ import sys
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LEDGER = os.path.join(REPO, "scripts", "tail_slice_converted.txt")
 SKIP = re.compile(
-    r"/(u|w|wiz|wizard|wizards|open|players|backup|backups|bak|old|test|tests|"
+    # `/open/` is playable world (Taiwanese / dreamofseven-style libs), not a wizard home
+    r"/(u|w|wiz|wizard|wizards|players|backup|backups|bak|old|test|tests|"
     r"tmp|data|log|realms|doc|docs|example|examples|orphaned-dir)/|[-_.](bak|old)|"
     r"class_bak|orphaned-dir|/海洋2002/"
 )

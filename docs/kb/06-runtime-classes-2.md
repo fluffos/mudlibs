@@ -2180,6 +2180,8 @@ Found by taking the objects a visitor meets (`scripts/lpc_reach_census.py` lists
 **Proof:** `lpcc_eval.py bxsj`: HEAD `斧头帮[<2..<1]` matches no entry of `({ "帮","会","门" })` (i=3); tree `[<1..<1]` matches `"帮"`. Lengths accept `斧头帮`/`fut`, refuse a one-character name. `"明" + "张三"[<1..<1]` = `"明三"`. `killer[<1..<1] != "。"` distinguishes a bare name from one ending in `。`.
 **Detection:** `lpc_fix_tail_slice.py --list SLUG`; `rg '\[<2\.\.<1\]'` next to Chinese literals / `can_name` / `valid_group_name`.
 
+**Also (2026-10-27):** SKIP still listed `/open/` as a wizard home after the Taiwanese pass. sgzmudsgz `open/pos.lpc` kept `nam[<2..<1]!="国"` (country rename). Dropped `open` from SKIP; 1 slice. Also dropped `open` from SKIP in tp_carry / vision_env / pool_as_skill / family_index / unit_cut / dangling_super / member_array_char / local_include / predefined_macro (0 open residue on those). Proof: HEAD `nam[<2..<1]!="国"`; tree `[<1..<1]`.
+
 ### 7.365 Score / HP bars and emote headers that still used a GBK `* 2` display index (706 edits in 293 files of 152 libs, 2026-10-23)
 **Symptom:** `score` / `hp` bars drawn with `■`/`□` show full when the pool is half (or otherwise wrong proportions); wizard `edemote` detail headers pad with too many `─` for a Chinese emote name.
 **Cause:** archives counted bytes. `(val * N / max) * 2 - 1` converted a cell count into a byte index for a two-byte Chinese pad character; `13 - (strlen(emotion) / 2)` halved the name width the same way. This driver's ranges and `strlen()` count characters, so the `* 2` doubles the slice (half health → whole bar).
