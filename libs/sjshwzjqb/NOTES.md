@@ -568,3 +568,8 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## kill1 未赋值就读 obj、双 else 编不过（2026-10-27，KB 06 §7.348 Also）
 
 `cmds/std/kill1.lpc` 在 `present(arg)` 之前调用 `obj->is_character()`（obj 仍为 0），且 `just_issued` 消息后有连续两个 `} else {`，驱动报 `unexpected L_ELSE`，对象从未加载。按同库 `kill.lpc` 重排为先 `!arg`、再 `present`、再 `is_character`；补上 `can_kill` 分支的 `do_kill`/`return`，把原误挂的第二段 `else` 收成 `can_kill` 的 else，并在 `do_kill` 定义前关闭 `main`。证明：HEAD `load_object("/cmds/std/kill1")` 失败；改后加载成功。
+
+
+## xupdate 多一个 } 编不过（2026-10-27，KB 04 §6.28 Also）
+
+`cmds/adm/xupdate.lpc`（与 sjsh / sjshwzb / sjshwzjqb 三份字节相同）在列目录后缀的 `while` 后又多了一个 `}`，提前关掉了 `main`，`write("目录…")` 落在函数外（`unexpected L_STRING`）；`updatefile` 里 `destruct(obj)` 前同样多了一个 `}`；且只声明了 `int i` 却在 `for` 里用 `j`。同族 mhxy / shenmo 的副本完好。去掉两处多余 `}` 并补上 `j`。证明：HEAD `load_object("/cmds/adm/xupdate")` 失败；改后加载成功。
