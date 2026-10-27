@@ -581,3 +581,7 @@ fresh driver boot plus the full long-sit idle window below.
 ## 写死的 `"/路径"->函数()` 指向库里没有的文件：改成现存的同名文件（2026-10-22，KB 06 §7.359）
 
 4 处语句级的 `call_other` 字面量路径，库里没有这个文件（区域改了名 / 大小写不对 / 差一个字母 / 文件挪了地方）：`"/d/standard/quest_room"->list_quests()`（`/d/freepk/merkkerri/jungle/gcity/gcity29.lpc`、`/d/nopk/arlon/room/fighter_hall.lpc`）→ `"/d/nopk/standard/quest_room"`。`call_other()` 对不存在的对象抛 `couldn't find object`，所在函数当场中断。改成库里现存、并且定义了被调用函数的文件（`scripts/lpc_fix_call_path.py`；巫师目录、备份目录、名字不同的兄弟文件都不算候选）。
+
+## wizards volcano1 丢分号（2026-10-27，KB 04 §6.25 Also）
+
+三份 `wizards/**/room/volcano1.lpc`（leviathas / nested leviathas / levi aciri）写成 `inherit ROOM` 后无 `;`，且 `::create()` / `set_*` 全无分号，驱动报 `unexpected L_BASIC_TYPE`。补回分号后可加载。同作者 `deatblade` 更残，未动。证明：HEAD catch 失败；改后加载并 `query_short` 正常。

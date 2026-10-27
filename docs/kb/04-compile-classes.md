@@ -519,6 +519,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, fqyy2 `yinsuo-jinling` quote-strip):** fqyy2's `kungfu/skill/yinsuo-jinling` plus `feng`/`dian` lost quotes and `;` (`inherit SKILL`, spaced Chinese in `action` / `notify_fail`). Replaced with the intact Kayin copies from xkxyb. Proof: HEAD skill fail; tree skill+feng+dian load.
 
+**Also (2026-10-27, pd `volcano1` missing `;`):** three wizard copies of `wizards/**/room/volcano1` lost every statement `;` after `inherit ROOM` / `::create()` / `set_*`. Restored terminators. `deatblade` more damaged; left. Proof: HEAD fail; tree loads (`--at /cmds/zzeval.lpc`).
+
+
 
 
 
