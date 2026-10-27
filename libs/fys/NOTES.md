@@ -570,3 +570,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## old kuaihuo/songyang 缺右括号（2026-10-27，KB 04 §6.25 Also）
 
 `daemon/skill/old/kuaihuo-zhang.lpc`、`songyang-zhang.lpc`：`if (ob = me->query_temp("weapon")` 丢了 `)`，后面多一个 `}` 把后续函数嵌进去，驱动报 `unexpected L_RETURN`。用同库 `daemon/skill/<name>.lpc` 的 `valid_learn` 起至文件尾覆盖。证明：HEAD 加载失败；改后加载成功。
+
+## set_max_items 补进 move（2026-10-27，KB 04 §6.16 Also）
+
+`d/obj/misc/hualan.lpc`、`vase.lpc` 调用 `set_max_items`，但本库 `feature/move.lpc` 没有该函数（手足 sjsh / aoxiangtianji 有），物件无法编译。在 `set_max_encumbrance` 旁补上 `max_items` 默认 10 与 `set_max_items` / `query_max_items`。证明：HEAD 加载失败；改后花篮与花瓶均加载成功。
