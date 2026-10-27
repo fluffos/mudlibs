@@ -916,3 +916,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 从末尾按字节取汉字、书剑开帮长度（2026-10-23，KB 06 §7.364）
 
 §7.360 只折了数字下标的 `[a..b]`，从末尾取的 `[<2..<1]`（GBK 下一个汉字）和 `[<4..<1]`（两个字）还留着：开帮 `gcreate` 的帮助写「二至六个汉字 / 3到8个英文字母」，检查却是 `(strlen%2)==1 || <4 || >12`，末字对 `({ "帮","会",… })` 用 `gname2[<2..<1]` 永远对不上；少林 / 峨嵋法名 `"明" + name[<2..<1]`、死讯 `killer[<2..<1] != "。"`、兵器改名的 `can_name` 同样坏掉。`scripts/lpc_fix_tail_slice.py` 只改汉字语境（对照非 ASCII 字面量、`can_name` / `valid_group_name`、拼名字），ASCII 补零 / ctime / 复数词尾 / `.lpc` 不动；`[<2..<1]`→`[<1..<1]`，`[<4..<1]`→`[<2..<1]`，开帮门槛按帮助改写。本库 从末尾切片 2 个文件。证明（`scripts/lpcc_eval.py` bxsj）：HEAD 上 `斧头帮[<2..<1]` 对不上「帮」；改后 `[<1..<1]` 对上；长度放行 `斧头帮`/`fut`；`"明"+"张三"[<1..<1]` 得「明三」。
+
+
+## examine 缺 sefun process_bar/log_time/filter_color/all_interactive（2026-10-27，KB 04 §6.16 Also）
+
+`cmds/arch/examine.lpc` 调用 `process_bar` / `log_time` / `filter_color` / `all_interactive`，本 lib 的 simul_efun 未纳入 util（同系 zjdy2008wzb 有）。对象无法编译。新增 `adm/simul_efun/util.lpc`（`#include <ansi.h>` + 上述四个函数，`all_interactive` 为 `efun::users()`），并在 `adm/obj/simul_efun.lpc` 中 `#include`。证明：HEAD 加载失败；改后加载成功。
