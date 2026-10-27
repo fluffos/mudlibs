@@ -542,3 +542,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## wei/duanyanqing #me->move 无法加载（2026-10-27，KB 04 §6.25 Also）
 
 踢人分支写成了 shell 风格的 `#me->move("/d/city/...")`，驱动报 `Unknown preprocessor directive: #me`，对象无法编译。改回 `me->move(...)`（踢出门外的提示需要这次 move）。本库改动：`d/chengdu/npc/wei.lpc`、`d/dali/npc/duanyanqing.lpc`。证明：HEAD 加载失败；改后加载成功。
+
+## 更夫 gengfu sym_dee 缺戌无法加载（2026-10-27，KB 04 §6.25 Also）
+
+`d/jinling|suzhou|suzhou/qinyun/npc/gengfu.lpc` 的地支数组写成 `"酉",","亥"`，丢了 `戌`，驱动在「亥」上报 `Illegal character`。改回 `"酉","戌","亥"`（手足 tiexuejianghu 已正确）。证明：HEAD 加载失败；改后三处均加载成功。
