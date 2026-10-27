@@ -1197,3 +1197,7 @@ BIG5 里 `功` 等字的第二个字节正好是 0x5C（反斜杠），作者在
 ## /open/ 上残留的 .c 路径字面量（2026-10-27，KB 06 §7.356 Also）
 
 `lpc_fix_dotc_path.py` 曾把 `/open/` 当巫师家跳过。`open/killer/home/r0u.lpc` 的货物表仍写 `"/open/killer/npc/train_a.c"`，档案是 `train_a.lpc`；显式扩展名按原样解析，`new()` 得 0。改为 `.lpc`。证明：`lpcc_eval` HEAD `new(...train_a.c)` 为 0，改后 `new(...train_a.lpc)` 为对象。
+
+## open 下死出口由对侧房间修好（2026-10-27，KB 06 §7.257 Also）
+
+`lpc_fix_dead_exits` 的 SKIP 曾把 `/open/` 当巫师目录。本库本批出口改写见该提交（大小写/错名，由对侧出口回指判定）。证明见 KB。

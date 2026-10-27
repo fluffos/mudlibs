@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lpc_fix_void_return import code_mask  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SKIP = re.compile(r"/(u|w|wiz|wizard|wizards|open|players|backup|backups|old|bak|log|data|doc|docs|example|examples|test|tests|tmp|attic)/|[-_.](bak|old|orphaned-driver-src)/|\.(bak|BAK|old|orig)(\.lpc)?$|_old\.lpc$|\.dat_old|/test[_-][^/]*\.lpc$")
+SKIP = re.compile(r"/(u|w|wiz|wizard|wizards|players|backup|backups|old|bak|log|data|doc|docs|example|examples|test|tests|tmp|attic)/|[-_.](bak|old|orphaned-driver-src)/|\.(bak|BAK|old|orig)(\.lpc)?$|_old\.lpc$|\.dat_old|/test[_-][^/]*\.lpc$")
 VIRTUAL = {"es1", "es1_win", "esI", "pd"}   # a virtual server compiles their `_name.lpc` templates its own way (the three copies of _bed2.lpc load fine)
 MSG = re.compile(r"Redeclaration of function '([^']+)'")
 

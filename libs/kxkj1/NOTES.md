@@ -948,3 +948,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply k
 ## `/open/` 上残留的条件赋值（2026-10-23，KB 06 §7.290 Also）
 
 3 文件（`j3`、`r5`、`r7`）：与 kxkj 同形的 `arg = "light"/"water"` → `==`（§7.290 Also）。
+
+## open 下死出口由对侧房间修好（2026-10-27，KB 06 §7.257 Also）
+
+`lpc_fix_dead_exits` 的 SKIP 曾把 `/open/` 当巫师目录。本库本批出口改写见该提交（大小写/错名，由对侧出口回指判定）。证明见 KB。

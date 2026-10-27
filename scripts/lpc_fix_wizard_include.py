@@ -19,9 +19,9 @@ import re
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-WIZ = re.compile(r"^/(u|w|wiz|wizard|wizards|open|players)/")
-SKIP = re.compile(r"/(u|w|wiz|wizard|wizards|open|players|backup|backups|old|bak|log|data|doc|docs|example|examples|test|tests|tmp|attic)/|[-_.](bak|old|orphaned-driver-src)/|\.(bak|BAK|old|orig)(\.lpc)?$")
-MSG = re.compile(r"Cannot #include (/(?:u|w|wiz|wizard|wizards|open|players)/\S+)$")
+WIZ = re.compile(r"^/(u|w|wiz|wizard|wizards|players)/")
+SKIP = re.compile(r"/(u|w|wiz|wizard|wizards|players|backup|backups|old|bak|log|data|doc|docs|example|examples|test|tests|tmp|attic)/|[-_.](bak|old|orphaned-driver-src)/|\.(bak|BAK|old|orig)(\.lpc)?$")
+MSG = re.compile(r"Cannot #include (/(?:u|w|wiz|wizard|wizards|players)/\S+)$")
 
 
 def index(work):

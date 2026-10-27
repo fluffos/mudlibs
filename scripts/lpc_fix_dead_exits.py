@@ -31,7 +31,8 @@ from lpc_fix_void_return import code_mask  # noqa: E402
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GENERATED = {"wllz3", "longyunmeng_binary"}   # trees rebuilt from a decompile plus a patch: edit the patch, not work/
 VIRTUAL = {"es1", "es1_win", "esI", "pd"}   # a virtual server answers for rooms that have no file: es1's `_westgate`/`8,5.east`, pd's `22,30,0`
-SKIP = re.compile(r"/(u|w|wiz|wizard|wizards|open|players|backup|backups|old|bak|log|data|doc|docs|example|examples|test|tmp|attic)/|[-_.](bak|old|orphaned-driver-src)/|\.(bak|BAK|old|orig)(\.lpc)?$")
+SKIP = re.compile(  # `/open/` is playable world, not a wizard home
+    r"/(u|w|wiz|wizard|wizards|players|backup|backups|old|bak|log|data|doc|docs|example|examples|test|tmp|attic)/|[-_.](bak|old|orphaned-driver-src)/|\.(bak|BAK|old|orig)(\.lpc)?$")
 OPP = {"north": "south", "south": "north", "east": "west", "west": "east", "northeast": "southwest", "southwest": "northeast",
        "northwest": "southeast", "southeast": "northwest", "up": "down", "down": "up",
        "n": "s", "s": "n", "e": "w", "w": "e", "ne": "sw", "sw": "ne", "nw": "se", "se": "nw", "u": "d", "d": "u",
