@@ -505,6 +505,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, example book comment wrap):** eleven libs' `obj/example/book` never loaded: a formatter broke `// name of the skill` (and sibling comment lines) so `the skill` became a bare identifier (`unexpected L_IDENTIFIER`). Replaced with the intact sjsh copy. Proof: HEAD fys fail; tree loads.
 
+**Also (2026-10-27, thd `medicine` `DAEMON_D`):** fys / tiexuejianghu `d/thd/skills/medicine` call `DAEMON_D->register_skill_daemon` but this lineage never ships the Aug `daemond` (`Undefined variable 'DAEMON_D'`). Dropped the register line from `create()` (seteuid kept). `skill_improved`'s `advance_skill`/`gain_score` remain Aug-only and are unused until a study path calls them. Proof: HEAD fail; tree loads.
+
+
 
 
 

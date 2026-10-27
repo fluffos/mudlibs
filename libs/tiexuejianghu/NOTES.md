@@ -1262,3 +1262,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## example/book 注释折行无法加载（2026-10-27，KB 04 §6.25 Also）
 
 `obj/example/book.lpc` 的 `// name of the skill` 等注释被折行，下一行 `the skill` 成了裸标识符，驱动报 `unexpected L_IDENTIFIER`。用手足 sjsh 完好副本覆盖。证明：HEAD 加载失败；改后加载成功。
+
+## thd medicine 缺 DAEMON_D（2026-10-27，KB 04 §6.16 Also）
+
+`d/thd/skills/medicine.lpc` 的 `create()` 调用 `DAEMON_D->register_skill_daemon`，本库无 Aug 的 daemond。删掉该行（保留 seteuid）。证明：HEAD 加载失败；改后加载成功。
