@@ -743,3 +743,8 @@ xkx100 的原文是 `vc = victim->add("vote/count", 1);`，nitan 系把它写成
 ## 无参数时命令对 0 的调用（2026-10-27，KB 06 §7.336 Also）
 
 巫师/管理员命令在通过权限门之后仍会把 0 交给 `sscanf` / `read_file` / `find_living` 等。`lpc_fix_bare_arg.py` 在首次使用参数前加上 `if (!arg)`（或 `help(me)` / `GetHelp()`）。本库本批改动见该提交。
+
+
+## yuanwai 孤儿 call_out announce_success（2026-10-27，KB 06 §7.349 Also）
+
+`d/changan/npc/yuanwai.lpc`（及 aoxiangtianji 的 `d/city` 副本）在 `check_daughter` 里 `call_out("announce_success", …)`，但本文件从未定义该函数；同系也无实现。到点会 *Undefined function*。`cry_daughter` 已完成认亲与赠书，删除这对 `remove_call_out`/`call_out`。证明：扫描 HIT call_out→announce_success 且无定义；改后残渣 0。

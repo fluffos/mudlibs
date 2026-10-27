@@ -783,3 +783,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 无参数时命令对 0 的调用（玩家/--all-dirs 残留，2026-10-27，KB 06 §7.336 Also）
 
 无参数命令把 0 交给 `present` / `sscanf` / `file_exists` 等会运行时报错。`lpc_fix_bare_arg.py --all-dirs` 在首次使用参数前加守卫。多行 `if (arg && !sscanf)`（吐纳默认消耗）与已有 `can_learn`/`get_object` 守卫的误报已回退；本库本批改动见该提交。
+
+
+## yuanwai 孤儿 call_out announce_success（2026-10-27，KB 06 §7.349 Also）
+
+`d/changan/npc/yuanwai.lpc`（及 aoxiangtianji 的 `d/city` 副本）在 `check_daughter` 里 `call_out("announce_success", …)`，但本文件从未定义该函数；同系也无实现。到点会 *Undefined function*。`cry_daughter` 已完成认亲与赠书，删除这对 `remove_call_out`/`call_out`。证明：扫描 HIT call_out→announce_success 且无定义；改后残渣 0。
