@@ -585,3 +585,7 @@ fresh driver boot plus the full long-sit idle window below.
 ## wizards volcano1 丢分号（2026-10-27，KB 04 §6.25 Also）
 
 三份 `wizards/**/room/volcano1.lpc`（leviathas / nested leviathas / levi aciri）写成 `inherit ROOM` 后无 `;`，且 `::create()` / `set_*` 全无分号，驱动报 `unexpected L_BASIC_TYPE`。补回分号后可加载。同作者 `deatblade` 更残，未动。证明：HEAD catch 失败；改后加载并 `query_short` 正常。
+
+## deatblade 丢分号 + wep/terra.h 错路径（2026-10-27，KB 04 §6.25 / KB 06 §7.359 Also）
+
+三份 `wizards/**/wep/deatblade.lpc` 同样丢光分号，且 `set_short` 颜色串被折行。补回 `;` 并接好 short。另：`wep/terra.h`（及同错的 `item/terra.h`）把 `WEP`/`ARM` 指到不存在的 `weapons/`/`armour/`，`new(WEP "deathblade.lpc")` 得 0 后 `->move` 炸；改为与 `room/terra.h` 一致的 `wep/`/`arm/`（darktown 用本地前缀）。证明：HEAD 语法失败；改后三份均加载。

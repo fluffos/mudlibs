@@ -521,6 +521,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, pd `volcano1` missing `;`):** three wizard copies of `wizards/**/room/volcano1` lost every statement `;` after `inherit ROOM` / `::create()` / `set_*`. Restored terminators. `deatblade` more damaged; left. Proof: HEAD fail; tree loads (`--at /cmds/zzeval.lpc`).
 
+**Also (2026-10-27, pd `deatblade` + wep `terra.h`):** three `wizards/**/wep/deatblade` copies lost every `;` and broke `set_short` across a line. Restored terminators. Their `wep/terra.h` (and matching wrong `item/terra.h`) pointed `WEP`/`ARM` at missing `weapons/`/`armour/`; retargeted to existing `wep/`/`arm/` (darktown: local prefix). Proof: HEAD fail; tree loads.
+
+
 
 
 
