@@ -554,3 +554,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 铁罗汉 tie-luohan 下标丢失无法加载（2026-10-27，KB 06 §7.348 Also）
 
 `d/chengdu/obj/tie-luohan.lpc`：`snamei` / `skill_statussname` / `hp_statusstr` 等下标括号丢失，缺 `sname = keys(...)`，`me` 未赋值，另有多余的 `return notify_fail` 使技能复制不可达。按手足技能复制形重写 `accept_fight` / `renewing`（保留 FY 的 kee/gin/force）。证明：改前加载失败；改后加载成功。
+
+## 悬空 ::init / unique::init（2026-10-27，KB 06 §7.259 Also）
+
+`kugu-1/2/3`、`kunxian-suo` 写 `::init();`，`tianyi` 写 `unique::init();`，而 `F_UNIQUE` / `ITEM` / `feature/unique` 没有 `init`；本驱动编译报 `Unable to find the inherited function 'init'`（tianyi 带 `in file 'unique'`），物件无法加载。老驱动把空父调用当返回 0。`lpc_fix_dangling_super.py` 删掉这些语句；`cloth::init()` 保留。证明：HEAD 加载失败；改后加载成功。
