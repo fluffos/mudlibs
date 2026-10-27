@@ -1090,3 +1090,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 可玩的阿修罗区域已在 `/d/xiuluo/`（或 `/d/axiuluo/`、`/d/axlj/`），出口仍写作者目录 `/u/tianlin/阿修罗界/…`。`scripts/lpc_fix_tianlin_xiuluo.py` 在目标存在时改写，并优先跟源文件所在区名。本库 24 处。证明：shenmo `diyu5` HEAD 下向 `/u/tianlin/…/diyu6`，改后 `/d/xiuluo/diyu6` 可加载；sjshwzb `lu1` enter → `/d/axiuluo/lu2`。
 
+
+## 黑风山 pusa1 用未声明的 ob 且函数外残留 call_out（2026-10-27，KB 06 §7.348 Also）
+
+`d/qujing/heifeng/npc/pusa1.lpc` 的 `announce_success(object who)` 写成 `if (!ob->query("obstacle/hf"))`（`Undefined variable 'ob'`），同目录 `pusa.lpc` 是 `who->query("obstacle/hf") == "done"`；`who->save(); }` 之后还残留 `call_out("die"...); return; }`，落在函数外（`unexpected L_STRING`），对象无程序。改成与 `pusa` 相同的门，并删掉残留语句。证明：HEAD 加载失败；改后加载成功。
