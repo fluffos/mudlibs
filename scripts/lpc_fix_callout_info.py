@@ -22,7 +22,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lpc_fix_void_return import code_mask  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TOP = re.compile(r"^/(u|w|wiz|wizard|wizards|open|players|realms|home)/")
+TOP = re.compile(  # `/open/` is playable world (Taiwanese / dreamofseven-style libs), not a wizard home
+    r"^/(u|w|wiz|wizard|wizards|players|realms|home)/")
 ANY = re.compile(r"/(backup|backups|old|bak|log|data|example|examples|test|tests|tmp|attic|last_modify)/|[-_.](bak|old)/|\.(bak|BAK|old|orig)(\.lpc)?$")
 GENERATED = {"wllz3", "longyunmeng_binary"}
 LDMUD = {"aoh", "morgengrauen", "nirvlp312", "simud", "sticklib", "skylib", "sluggymud", "swmud", "spacemud", "wilderness", "immaster", "amylaarmini", "mundoscuro",

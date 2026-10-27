@@ -1654,6 +1654,8 @@ Found by taking the objects a visitor meets (`scripts/lpc_reach_census.py` lists
 **Fix:** that efun-pointer form: the arguments are bound when the pointer is made, and what the caller passes (the editor's `(* callback)(text)`) is appended, so `do_to(me, arg, text)` gets the text. `scripts/lpc_fix_functional_locals.py --apply` (42 sites; every callback's parameter count is bound arguments + 1). Live in xkx100: `to say 第一行` / `这是第二行` / `.` answers `你说道：第一行 这是第二行`. Wizard directories, `last_modify/` copies and the commented-out lines stay.
 **Detection:** `grep -rnE "\(:\s*this_object\(\)\s*,\s*\(\{\s*\"\w+\"\s*,\s*[A-Za-z_]"`; census text `Illegal to use local variable in functional`.
 
+**Also (2026-10-27):** SKIP/`TOP` still listed `/open/` as a wizard home. Dropped `open` from `lpc_fix_functional_locals.py` TOP (0 residue under `/open/`).
+
 ### 7.285 A command writes the result of `read_file()` of a file the archive does not ship (`boss`, 9 xkx libs, 2026-10-20)
 **Symptom:** `Bad argument 1 to receive()  Expected: string or buffer Got: 0.` from `write(msg)` in `cmds/usr/boss.lpc` (`boss 1` shows a fake document, `msg = read_file("/open/shit.txt")`). The screen had been cleared and `block_msg/all` set first, so the session is left muted until `bossgone`.
 **Cause:** `read_file()` of a missing file answers 0 and `write(0)` is a bad argument in this driver; `/open/` is a wizard-owned directory the archive does not carry.
@@ -1672,6 +1674,8 @@ Found by taking the objects a visitor meets (`scripts/lpc_reach_census.py` lists
 **Fix:** `(sizeof(info[i]) > 3 ? info[i][3] : 0)` (`scripts/lpc_fix_callout_info.py`: the name must be assigned from `call_out_info()` in the same file, or be the variable of a `foreach` over it); the alarm clock shows `"..."` for the message. Left: the intermud `pingd.lpc` / `pingtcp.lpc` (the same access inside `for (loop = 0; loop < sizeof(loop); loop++)`, a loop that never runs) and the Praxis `sage_room.lpc` (it re-schedules the call_outs whose argument is not `ob`: without the argument nothing can be kept). The missing argument element is a driver gap, not a lib bug.
 **Detection:** `grep -rn "call_out_info" ... | grep "\[3\]"`; a wizard sweep (KB 08 10.16) of `callouts`.
 **Second shape (70 files in 53 libs, 71 guards, 2026-10-20):** the row is printed only `if (sizeof(info[i]) == 4)` (`calloutd.lpc`, `cmds/*/callouts.lpc`); with three elements the guard never holds and the command prints its header only. `>= 3`, same tool (`lpc_fix_callout_info.py`, rule `sizeof(V[I]) == 4`).
+
+**Also (2026-10-27):** dropped `open` from `lpc_fix_callout_info.py` TOP (0 residue under `/open/`).
 
 ### 7.288 `find_object(dest)->query("no_fight")` in a random walk: the destination is not loaded yet (xkx lineage quest NPCs, 15 files in 6 libs, 2026-10-20)
 **Symptom:** `Bad argument 1 to EFUN call_other()  Expected: object, string, array  Got: int(0)` from `random_move()` of every quest / haojie NPC (`clone/quest/questyinshi`, `questman`, `questjianxi`, `questxuncheng`, `bwdhnpc`, `clone/haojie/shashou`), once per heart beat, and the NPC never leaves its first room.
@@ -2253,3 +2257,5 @@ Found by taking the objects a visitor meets (`scripts/lpc_reach_census.py` lists
 **Proof:** `lpcc_eval.py nt1`: 50 names length 2–4 (surname 1–2 + one or two given chars); HEAD mixed 3–5+. `hhsj` one-char extract `"乙"`.
 **Detection:** `rg '& 0xFFFE' libs/*/work --glob '*chinese*' '*robot*' '*x_pointd*'`.
 **Not content:** mechanical index arithmetic left over from encoding; not removing rooms or rewriting game text.
+**Also (2026-10-27):** dropped `open` from `lpc_fix_pname_slice.py` SKIP and from the `/u/`-remapper SKIP lists (`beyond_exits` / `calvin_lanling` / `tianlin_xiuluo` / `drop_dead_u_exits`); 0 open residue on those shapes.
+

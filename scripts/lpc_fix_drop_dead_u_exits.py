@@ -20,9 +20,10 @@ import subprocess
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SKIP = re.compile(
+SKIP = re.compile(  # `/open/` is playable world, not skipped
+    
     r"^/(u|w|wiz|wizard|wizards)/|"
-    r"/(open|players|backup|backups|bak|old|test|tests|"
+    r"/(players|backup|backups|bak|old|test|tests|"
     r"tmp|data|log|realms|doc|docs|example|examples|orphaned-dir)/|"
     r"[-_.](bak|old)|class_bak|orphaned-dir|/海洋2002/"
 )
