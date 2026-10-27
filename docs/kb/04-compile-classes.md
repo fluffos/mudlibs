@@ -492,6 +492,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, `dami` `init_unarmed`):** thirty-six Journey/FY copies of `d/obj/food/dami` inherit `ITEM`+`F_FOOD` but call `init_unarmed(5)` (and `#include <weapon.h>`) without inheriting `/std/weapon/unarmed`, so `Undefined function init_unarmed` and the sack never loads. hymud / hy5 already comment the call out. Deleted the active call and the unused weapon include. Proof: HEAD fys fail; tree loads (fys, sjsh).
 
+**Also (2026-10-27, `dou_peng` `inherit F_CLOTH`):** fys / tiexuejianghu `d/thd/obj/dou_peng` never loaded: `inherit F_CLOTH` with no `#define F_CLOTH` in this lib's `armor.h` (`syntax error, unexpected L_IDENTIFIER`). The Aug/FY feature form (`setup_cloth`, `wear_as`) lives in dfgs2 where `armor.h` itself inherits `F_EQUIP`. Rewrote to the lib's real `inherit CLOTH` + `armor_prop/armor` 5 (same protection). Wizard `u/aug_old` copy left. Proof: HEAD fail; tree loads.
+
+
 
 
 **Also (2026-10-21, `doc`, wqfy / zzfy / zzfy3 `cmds/adm/doc.lpc`):** the whole NPC / room / item documenter was damaged by a Chinese editor and then run through a formatter: every `->` is `-＞` (full-width, 40 sites), `>` and `<` are `＞` / `＜`, and every `||` became `//`, which swallowed the rest of the line: `if (!arg) {  // sscanf(arg, "%s %s", path, var) != 2){` (the usage test lost its `sscanf`, `path` and `var` were never set), `if (prop[i] == "armor"  //prop[i]=="damage")` (the `continue` became a syntax error). `Illegal character 0xef` was the first error of the compile; restored by reading the intent (`||`, the lost `sscanf`), `MONEY_D->price_str()` (no such daemon in the family) became the raw `value`, nine unused locals removed. Compiles with no warning and answers bare. The other 62 `doc.lpc` of the corpus are intact (`git grep -l '＞'`).
