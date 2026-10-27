@@ -515,6 +515,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, mohuanshiji `center2` quote-strip):** `d/city/center2` lost the `;` after `inherit ROOM` and nearly every `set("...")` quote/`;`, plus a broken `call_other(/cmds/usr/news, ???)`. Rewrote from the intact same-dir `center.lpc` style, keeping the archived objects list (libai/table/vikee/score/zhangguolao). Proof: HEAD fail; tree loads.
 
+**Also (2026-10-27, Kayin `tianluo-diwang` knowledge stub):** five libs (fqyy2 / cctx / niaoren / xkxyb / yxxcii) ship a ~630-byte Kayin knowledge skill that lost every quote and the `;` after `inherit SKILL` (`return knowledge`, `query(dex)`, spaced Chinese in `notify_fail`). Reconstructed the knowledge stub (not the larger combat-action sibling). Proof: HEAD fail; tree loads.
+
+
 
 
 
