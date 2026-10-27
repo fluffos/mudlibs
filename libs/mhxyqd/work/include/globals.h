@@ -78,6 +78,7 @@
 #define SIMUL_EFUN_OB           "/adm/obj/simul_efun"
 #define USER_OB                 "/obj/user"
 #define VOID_OB                 "/obj/void"
+#define TEMP_OB                 "/obj/void"
 
 // Inheritable Standard Objects
 

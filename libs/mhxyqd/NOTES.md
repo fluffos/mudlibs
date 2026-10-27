@@ -1119,3 +1119,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 雷神 check 在 stop_fight 定义之前调用且 call_out 缺逗号（2026-10-27，KB 04 §6.28 Also）
 
 `d/qujing/start/24/1.lpc` 的 `check()` 里调用 `stop_fight(who)`，函数却写在后面（`Undefined function stop_fight`）；`call_out("lost", 1 who)` 少了逗号（`unexpected L_DEFINED_NAME`）。把 `stop_fight` 挪到 `check` 之前，并改成 `call_out("lost", 1, who)`。证明：HEAD 加载失败；改后加载成功。
+
+
+## updatei 缺 playerp / TEMP_OB / message_system（2026-10-27，KB 04 §6.16 Also）
+
+`cmds/adm/updatei.lpc` 用 `playerp`、`TEMP_OB`、`message_system`，本 lib 的 sefun/globals 没有（同系 sjshv2578bb 有 user.lpc / message_system，并把 TEMP_OB 行注释掉）。对象无法编译。新增 `adm/simul_efun/user.lpc`（`playerp`≈`userp`）、在 `message.lpc` 补 `message_system`，并在 `globals.h` 的 `VOID_OB` 旁定义 `TEMP_OB` 为 `"/obj/void"`（本 lib 无独立 temp 房间）。证明：HEAD 加载失败；改后加载成功。
