@@ -465,3 +465,8 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## find 缺 sefun message_system（2026-10-27，KB 04 §6.16 Also）
 
 `cmds/adm/find.lpc` 调用 `message_system(...)`，但 `adm/simul_efun/message.lpc` 没有定义（同系 jym 有：`message("system", ..., users(), 0)`）。对象无法编译。在 `notify_fail` 前补上同形函数。证明：HEAD 加载失败；改后加载成功。
+
+## 段延庆 yanqing 无法加载（2026-10-27，KB 04 §6.25 Also）
+
+`kungfu/class/dali/yanqing.lpc`（jym 为 `class_all`）`attempt_apprentice`：`query("PKS)` 缺收尾引号、`query_respect(ob)` 无 ob、`recruit` 后嵌套第二个 `void init()` 未闭合函数。按 pkuxkx：补引号、ob→me、return 闭合，并把叛师检查并入第一个 `init()`。jym 另有 `!==`→`!=`。证明：HEAD 加载失败；改后加载成功。
+

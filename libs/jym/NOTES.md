@@ -691,3 +691,8 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## 对象路径残留 .c 后缀（2026-10-27，KB 06 §7.356 Also）
 
 `set("objects"/"exits", …)` 与 `__DIR__"….c"` 在改名为 `.lpc` 后仍带 `.c` 时，`new`/`load_object`/房间 reset 找不到文件（血池房 `inv=0`）。凡旁有对应 `.lpc` 的，去掉 `.c` 后缀。证明：HEAD `stone2` reset 后 inv=0；改后 inv=1（`/d/youxia/obj/blood`）。
+
+## 段延庆 yanqing 无法加载（2026-10-27，KB 04 §6.25 Also）
+
+`kungfu/class_all/dali/yanqing.lpc`：`query("PKS)` 缺引号、`query_respect(ob)`、嵌套 `void init()`，另有 `gender) !==` 笔误。按 pkuxkx 闭合 `attempt_apprentice`、并入 `init` 叛师检查，`!==`→`!=`。证明：HEAD 加载失败；改后加载成功。
+
