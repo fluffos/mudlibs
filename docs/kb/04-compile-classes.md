@@ -529,6 +529,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, dreamofseven Aug `F_*` armor):** ~45 tmr armors used `inherit F_ARMOR` / `F_HEAD_EQ` / `F_HAND_EQ` / `F_FEET_EQ` / `F_FINGER_EQ` / `F_NECK_EQ` / `F_WAIST_EQ` with no macros. Rewrote to the lib's `ARMOR`/`HEAD`/`HANDS`/`BOOTS`/`FINGER`/`NECK`/`WAIST`, mapping `apply_armor/...` into `armor_prop/*`. Proof: HEAD fail; tree sample of 10 loads.
 
+**Also (2026-10-27, dreamofseven `F_PANTS`):** three pants used `inherit F_PANTS` / `setup_pants()` with no macro. Rewrote to `PANTS`. Proof: HEAD fail; tree loads.
+
+
 
 
 

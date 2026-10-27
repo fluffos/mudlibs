@@ -1038,3 +1038,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## Aug F_* 防具宏 → 本库 ARMOR/BOOTS/…（2026-10-27，KB 04 §6.25 Also）
 
 tmr 区约 45 件防具写 `inherit F_ARMOR` / `F_HEAD_EQ` / `F_HAND_EQ` / `F_FEET_EQ` / `F_FINGER_EQ` / `F_NECK_EQ` / `F_WAIST_EQ` 并调用 `setup_*()`，本库无这些宏。一律改为 `armor.h` 已有的 `ARMOR`/`HEAD`/`HANDS`/`BOOTS`/`FINGER`/`NECK`/`WAIST`，把 `apply_armor/...` 里的数值写入 `armor_prop/*`。证明：HEAD guard-armor 失败；改后抽样 10 件均加载。
+
+## F_PANTS → PANTS（2026-10-27，KB 04 §6.25 Also）
+
+三件裤子写 `inherit F_PANTS` / `setup_pants()`，本库无该宏（已有 `PANTS`）。改为 `inherit PANTS`，护甲写入 `armor_prop/armor`。证明：HEAD 失败；改后三件均加载。
