@@ -1218,3 +1218,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 悬空 unique::init（2026-10-27，KB 06 §7.259 Also）
 
 `d/obj/cloth/tianyi.lpc` 的 `unique::init();`：`feature/unique` 无 `init`，驱动报 `Unable to find the inherited function 'init' in file 'unique'`。与邻行 `cloth::init()` 并存时旧 fixer 会 SKIP；本次按 `in file` 作用域只删 `unique::init()`。证明：HEAD 加载失败；改后加载成功。
+
+## yangzhou waiter vendor_goods 多余冒号（2026-10-27，KB 04 §6.25 Also）
+
+`d/yangzhou/npc/waiter.lpc` 的 `vendor_goods` 写成 `"包子": __DIR__ "obj/baozi": 1`，第二个 `:` 非法，驱动报 `syntax error, unexpected ':'`。`F_VENDOR` 要的是名→路径（手足 aqingsao）。去掉五个货品末尾的 `: 1`。证明：HEAD 加载失败；改后加载成功，goods 五键。

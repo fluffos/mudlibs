@@ -562,3 +562,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## sandboy/map.lpc 非 LPC 地图改名（2026-10-27，KB 03 §4.2 item 8 Also）
 
 `d/sandboy/map.lpc` 是纯框线房间示意图，没有一行 LPC；`.c`→`.lpc` 批量改名时带进来，驱动报 `Illegal character`。手足 tiexuejianghu 已改为 `.txt`，库内无引用。改名为 `map.txt`。证明：`file_size("/d/sandboy/map.txt")`>0，`.lpc` 为 -1。
+
+## yangzhou waiter vendor_goods 多余冒号（2026-10-27，KB 04 §6.25 Also）
+
+`d/yangzhou/npc/waiter.lpc` 的 `vendor_goods` 写成 `"包子": __DIR__ "obj/baozi": 1`，第二个 `:` 非法，驱动报 `syntax error, unexpected ':'`。`F_VENDOR` 要的是名→路径（手足 aqingsao）。去掉五个货品末尾的 `: 1`。证明：HEAD 加载失败；改后加载成功，goods 五键。
