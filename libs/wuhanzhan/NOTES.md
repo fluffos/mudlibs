@@ -1132,3 +1132,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## fabao EXAMPLE 缺 ) 与 !（2026-10-27，KB 04 §6.25 Also）
 
 `d/obj/fabao/EXAMPLE.lpc` 写 `if (objectp(victim = present(target, environment()))`，丢了 `!` 和右括号，驱动报 `unexpected L_RETURN`。按手足 `kunxian-suo` 改为 `if (!objectp(victim = present(target, environment(me))))`。证明：HEAD 加载失败；改后加载成功。
+
+## d/wiz/officer 粘连 inherit（2026-10-27，KB 04 §6.25 Also）
+
+`d/wiz/officer/officer.lpc` 写成 `inherit ROOM void create()`，语句间分号全丢，驱动无法编译。按原文重写为带 `setup()` / `replace_program(ROOM)` 的房间（出口仍指向档案里的 `/d/xyj/kezhan` 与 `/u/power/doorroom`）。同目录 `kenofficer.lpc` 更残，未动。证明：HEAD 加载失败；改后加载成功。

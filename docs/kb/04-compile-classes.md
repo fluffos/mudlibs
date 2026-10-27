@@ -511,6 +511,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, syxjl `d/city/obj/book` quote-strip):** syxjl's `d/city/obj/book` (comment still says `xiandan`) lost nearly every quote and `;` (`set_name(HIY 仙丹 NOR, ({ dan, ...})`, `inherit ITEM` without `;`). Replaced with the lib's intact `clone/gift/xiandan` (and the matching `u/aeolus/.../book` copy). Proof: HEAD fail; tree loads.
 
+**Also (2026-10-27, wuhanzhan `officer` glued inherit):** `d/wiz/officer/officer` glued `inherit ROOM void create()` and stripped every `;` between `set`/`setup`/`replace_program`. Reconstructed the room (exits kept as archived). Sibling `kenofficer` is more damaged; left. Proof: HEAD fail; tree loads.
+
+
 
 
 
