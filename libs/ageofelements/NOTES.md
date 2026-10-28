@@ -174,3 +174,7 @@ Strategy A catalog 缺 `command(cmd,who)`、`m_allocate`、`regreplace`、`json_
 ## 深度功能测试（2026-10-27，§6.25 chest apply(#'call_other)）
 
 `obj/chest.lpc` 的 `for (int i, int s)` 与 `apply(#'call_other)` 改为分拆声明 + `call_other(ob, ({fun})+args[1..])`。证明：HEAD 语法错/Illegal #；树 chest 可加载。
+
+## 深度功能测试（2026-10-28，§6.25/§6.26/§6.10 player 加载）
+
+Strategy A catalog 补 `filter_objects`/`map_objects`/`ls`/`tail`/`wizlist`/`snoop`/`localcmd`；`living.move_player` 改为 `varargs`；`trace`/`trace2` 的 `int in` 改名 `trace_in`（§6.26）；player/master_ldmud 的函数级 `nosave` → `protected`。证明：HEAD player 因 Undefined filter_objects/ls/tail、move_player 元数、trace L_IN 失败；树 `/obj/trace`/`trace2`/`player` 均可加载（ZZT e=0 ok=1）。

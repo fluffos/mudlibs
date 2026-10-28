@@ -763,6 +763,15 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, ageofelements chest `apply(#'call_other)` + for-decl):** `obj/chest.lpc` used LDMud `for (int i = 1, int s = …)` and `apply(#'call_other, …)`. Split declarations; `call_other(ob, ({ fun }) + args[1..])`. Proof: HEAD unexpected `,` / Illegal #; tree chest loads.
 
+**Also (2026-10-28, ageofelements catalog `filter_objects`/`map_objects`/`ls`/`tail`/`wizlist`/`snoop`/`localcmd`):** Strategy A catalog lacked the LDMud/classic efuns `/obj/player` needs (`Undefined function filter_objects` / `ls` / `tail`). Added call_other-on-element `map_objects`/`filter_objects`, classic `ls`/`tail`, stub `wizlist`/`localcmd`, and varargs `snoop`. Proof: HEAD player Undefined filter_objects/ls/tail; tree `/obj/player` loads.
+
+**Also (2026-10-28, ageofelements `varargs move_player`):** `/obj/living` declared two-arg `move_player` while player calls it with one (`Wrong number of arguments … got: 1`). `varargs void move_player(...)`. Proof: HEAD player arity error; tree loads.
+
+**Also (2026-10-28, ageofelements `trace`/`trace2` `L_IN`):** reserved-word function `int in(string)` (§6.26). Renamed to `trace_in` (add_action still binds `In`). Proof: HEAD unexpected L_IN; tree trace/trace2 load.
+
+**Also (2026-10-28, ageofelements player/master_ldmud `nosave` functions):** `lpc_warnings --fix` shape — `nosave` on function decls → `protected` (player ~60; master_ldmud `_auto_include_hook`). Proof: HEAD Illegal to declare nosave function warnings; tree player loads clean of those.
+
+
 **Also (2026-10-27, master_ldmud `#'fn` residue):** leftover simple quotes on `call_out`/`set_driver_hook`/`funcall`/`filter` lines in aoh/morgengrauen/nirvlp312/sticklib masters (~64 sites / 8 files); still skip `({#'…` unbound_lambda soup. Proof: HEAD morgengrauen master still had `#'configure_driver` / `#'autoincludehook`; tree uses `(: … :)`.
 
 **Also (2026-10-27, sticklib `lpc_warnings --fix`):** mechanical pass: unused locals dropped, `nosave` functions → `protected` (34 files). No-side-effects residue (~119) left for a dedicated pass. Proof: thief_mark_new `nosave int rank_no` → `protected`; bboard unused locals gone.
