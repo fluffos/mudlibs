@@ -905,3 +905,7 @@ Left, as content gaps, not invented: 16 inherits of files that are not in the ar
 ## samurai dagger MSPECIAL 指向缺失 /u/（2026-10-27，KB 06 §7.359 Also）
 
 `d/island/samurai/obj/dagger.lpc` 写 `#define MSPECIAL "/u/m/mercury/obj/special"`，档案无该巫师路径，驱动报 `Inherited file ... does not exist`。改为本库已有的特殊攻击基类 `/d/eastland/goomay/obj/special`（同文件头注释所述用途）。证明：HEAD 加载失败；改后加载成功。
+
+## 深度功能测试（2026-10-27，§6.25 death_echoall 截断）
+
+`std/fun/death_echoall` 同 es1 截断；同样收成空循环。证明：改后加载。

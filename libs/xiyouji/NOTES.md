@@ -1236,3 +1236,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## fabao EXAMPLE 缺 ) 与 !（2026-10-27，KB 04 §6.25 Also）
 
 `d/obj/fabao/EXAMPLE.lpc` 写 `if (objectp(victim = present(target, environment()))`，丢了 `!` 和右括号，驱动报 `unexpected L_RETURN`。按手足 `kunxian-suo` 改为 `if (!objectp(victim = present(target, environment(me))))`。证明：HEAD 加载失败；改后加载成功。
+
+## 深度功能测试（2026-10-27，§6.25 jingji6 message_vision 截断）
+
+`d/qujing/jingjiling/jingji6` 在 `message_vision("$N想` 处截断。用 xlqy_new2007 完好本覆盖。证明：HEAD 失败；改后加载。

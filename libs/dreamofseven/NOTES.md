@@ -1055,3 +1055,7 @@ tmr 区 112 个 NPC `#include <npc.h>` 并调用 Aug 的 `set_race`/`set_attr`/`
 ## 深度功能测试（2026-10-27，§6.25 star_necklace tell_object 引号错位）
 
 `…/star_necklace` 的 `tell_object("me, …")` 同形，改为 `tell_object(me, "…")`。证明：改后加载。
+
+## 深度功能测试（2026-10-27，§6.25 ddl message_vision 截断）
+
+`u/r/romeo/area/npc/wp/ddl` 的 `message_vision` 丢了收尾 `"NOR, me, victim);`。补上。证明：HEAD 失败；改后加载。

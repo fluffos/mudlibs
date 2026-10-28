@@ -843,3 +843,7 @@ Found by the live pair afterwards: `d/noden/hawk/monster/adolph.lpc` had `#inclu
 ## samurai dagger MSPECIAL 指向缺失 /u/（2026-10-27，KB 06 §7.359 Also）
 
 `d/island/samurai/obj/dagger.lpc` 写 `#define MSPECIAL "/u/m/mercury/obj/special"`，档案无该巫师路径，驱动报 `Inherited file ... does not exist`。改为本库已有的特殊攻击基类 `/d/eastland/goomay/obj/special`（同文件头注释所述用途）。证明：HEAD 加载失败；改后加载成功。
+
+## 深度功能测试（2026-10-27，§6.25 death_echoall 截断）
+
+`std/fun/death_echoall` 在 `can_read_chinese(all[i],` 处截断。收成空循环体（广播原文已失）。证明：HEAD 失败；改后加载（`--at /std/zzeval.lpc`）。

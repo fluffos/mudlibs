@@ -996,3 +996,7 @@ Same convert-era byte corruption as the waiter `！”\n` / `！\n` →
 ## estate ROOM_HEAD 宏引号 / #inherit / dir / retrun（2026-10-27，KB 04 §6.25 Also）
 
 `system/daemon/estate` 的 `ROOM_HEAD`/`EXIT_STRING` 宏里裸双引号打断 `#define`，模板写成 `#inherit AREA`，`CreateRoom` 用未定义的 `dir`，`AddItem` 写 `retrun` 且参数 `class Location` 本库无此类型。改为转义引号、`inherit AREA`、`out_dir`、`return`、`mixed location`。证明：HEAD 失败；改后加载。
+
+## 深度功能测试（2026-10-27，§6.25 mooncake2 do_write 截断）
+
+`u/xli/mooncake2` 同 xo：`do_write` 截断。用本库 `mooncake` 覆盖。证明：HEAD 失败；改后加载。
