@@ -645,6 +645,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, one-arg `tell_object("…")` with local `me`):** 44 city/city1 copies of the fangqi line `tell_object("你自动放弃了对"+…)` (me already `this_player()`); xbtxiii `xiaolongnv`/`yangguo` yes/no prompts; bahuang `throw` "不是枪" line. Inserted `me, `. Proof: zxty city + xiaolongnv load.
 
+**Also (2026-10-27, one-arg `tell_object("…")` residue):** live residue of efun `tell_object` with only a string (no target object): ~70 sites across 15 libs. Inserted the in-scope target (`me`/`who`/`ob`/`TP`/`ETO`/`this_player()`/`player`/`criminal`/`v1`). sjcs `cmds/adm/skirt` was a truncated snoop twin (`tell_object(". \n")`) restored from the lineage snoop text. Commented-out and path-as-first-arg forms left alone. Live one-arg residue 0. Proof: loads (wuzitianshu, tianzun, skirt, wdt, treeking, ouyangfeng).
+
+
 **Also (2026-10-27, throw/cakepiece/fayu-f):** bahuang `throw` one-arg `tell_object` → `tell_object(me,…)` (xbtxiii/yxcs/chidi/yxjh); wuhanzhan `cakepiece` flattened mid-`do_eat` ← xlqy_new2007 food copy; shenmo/sjsh* `u/stey/u/fayu/f` mid-function fragment ← `d/obj/misc/buwawa` with absolute `message.h`. Proof: HEAD fail; tree loads.
 
 **Also (2026-10-27, LDMud `foreach (T x : arr)`):** sticklib used the LDMud colon form; FluffOS wants `foreach (T x in arr)`. Converted ~80 sites in 27+ files (flower_man, bag, room_ldmud, …). Proof: HEAD flower_man fail; tree loads.

@@ -786,3 +786,8 @@ sunshadow 的战斗探针找到五个怪物里的 `(string)TO->query_current_att
 ## 写死的 `"/路径"->函数()` 指向库里没有的文件：改成现存的同名文件（2026-10-22，KB 06 §7.359）
 
 6 处语句级的 `call_other` 字面量路径，库里没有这个文件（区域改了名 / 大小写不对 / 差一个字母 / 文件挪了地方）：`"/realms/lujke/daemons/destinations_d.lpc"->add_waystations()`（`/d/atoyatl/tecqumin/obj/far_scanner3.lpc`、`/d/atoyatl/tecqumin/rooms/destination_room.lpc`、`/d/atoyatl/tecqumin/rooms/destination_room2.lpc`）→ `"/daemon/destinations_d.lpc"`。`call_other()` 对不存在的对象抛 `couldn't find object`，所在函数当场中断。改成库里现存、并且定义了被调用函数的文件（`scripts/lpc_fix_call_path.py`；巫师目录、备份目录、名字不同的兄弟文件都不算候选）。
+
+## 深度功能测试（2026-10-27，§6.25 one-arg tell_object 残渣）
+
+gossip / rumours_d / cape / smithy / bloodlust / lair / map / silver_plate / snakestomach：补 `TP`/`ob`/`ETO`。
+

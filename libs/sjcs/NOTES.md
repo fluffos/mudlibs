@@ -615,3 +615,8 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 深度功能测试（2026-10-27，§6.25 tell_object 缺 me（自动放弃/愿否））
 
 一参 `tell_object("…")` 在已有 `me` 时改为 `tell_object(me, "…")`（city.lpc）。证明：抽样 city / xiaolongnv 加载。
+
+## 深度功能测试（2026-10-27，§6.25 one-arg tell_object / skirt 截断）
+
+`cmds/adm/skirt` 的 `tell_object(". \n")` 按同系 snoop 补回停止/开始监听文案与 `ob`。
+

@@ -1071,3 +1071,8 @@ tmr 区 112 个 NPC `#include <npc.h>` 并调用 Aug 的 `set_race`/`set_attr`/`
 ## 深度功能测试（2026-10-27，§6.25 tell_object 参数顺序）
 
 `tell_object("…", me/who)` 参数颠倒（消息当对象）；改为 `tell_object(me/who, "…")`（test.lpc）。证明：残渣 0；抽样 guest/rukou/forest_c 加载。
+
+## 深度功能测试（2026-10-27，§6.25 one-arg tell_object 残渣）
+
+jialermi / random / treeking：`tell_object("…")` 补 `me` 或 `this_player()`。
+

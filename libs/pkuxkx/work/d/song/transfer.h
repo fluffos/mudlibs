@@ -95,7 +95,7 @@ int do_choose(string arg)
 		{
 			tell_object(me,me->query_temp("song/lower_transfer_titles")[i]+"■");
 		}
-		tell_object("\n");
+		tell_object(me, "\n");
 		return 1;
 	}
 	if (member_array(arg,me->query_temp("song/lower_transfer_titles"))==-1)
@@ -105,7 +105,7 @@ int do_choose(string arg)
 		{
 			tell_object(me,me->query_temp("song/lower_transfer_titles")[i]+"■");
 		}
-		tell_object("\n");
+		tell_object(me, "\n");
 		return 1;
 	}
 	me->delete_temp("song/lower_transfer_titles");

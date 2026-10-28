@@ -934,3 +934,8 @@ The code of this lib writes logs into 1 subdirectory of `log/`: `log/save/board`
 ## 深度功能测试（2026-10-27，§6.25 bibliotecario inherit 路径）
 
 `w/valar/pruebas/bibliotecario` 写成无引号的 `inherit /std/monster`（syntax error）；本库怪物基类是 `/obj/monster`。改为 `inherit "/obj/monster";`。证明：HEAD 失败；改后加载（`--at /secure/zzeval.lpc`）。
+
+## 深度功能测试（2026-10-27，§6.25 one-arg tell_object 残渣）
+
+score / access_control / vault_room：补 `me` / `this_player()` / `TP`。注释块内 golpear/bash 未动。
+

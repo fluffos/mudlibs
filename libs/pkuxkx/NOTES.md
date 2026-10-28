@@ -525,3 +525,8 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## 深度功能测试（2026-10-27，§6.25 notify_fail 去引号 / `=<`）
 
 `u/chui/baby/train` 的一处 `notify_fail` 丢了开引号（`Illegal character`），另有 `cost*2=<1` 应为 `<=`。补引号并改正比较符。证明：HEAD 失败；改后加载。
+
+## 深度功能测试（2026-10-27，§6.25 one-arg tell_object 残渣）
+
+`d/song/transfer.h` 两处 `tell_object("\n")` → `tell_object(me, …)`。
+

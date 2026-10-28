@@ -1485,3 +1485,8 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 深度功能测试（2026-10-27，§6.25 fayu/f 截断）
 
 `u/stey/u/fayu/f`（及 sjsh 副本）只剩 `delayed_reaction` 残片。用本库 `d/obj/misc/buwawa` 覆盖并把 `#include "message.h"` 改成 `/d/obj/misc/message.h`。证明：HEAD 失败；改后加载。
+
+## 深度功能测试（2026-10-27，§6.25 one-arg tell_object 残渣）
+
+tianzun → `ob`；shenxiang → `me`。
+

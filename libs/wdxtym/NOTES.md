@@ -703,3 +703,8 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 深度功能测试（2026-10-27，§6.25 123 tell_object 缺目标）
 
 `adm/npc/123` 的 `ask_shimen` 四处 `tell_object("你…")` 少了对象；改为 `tell_object(me, …)`。证明：改后加载。
+
+## 深度功能测试（2026-10-27，§6.25 one-arg tell_object 残渣）
+
+wdt / guangchang / qianmu workroom+board：补 `me`/`who`。
+
