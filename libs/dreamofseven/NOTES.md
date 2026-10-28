@@ -1091,3 +1091,7 @@ jialermi / random / treeking：`tell_object("…")` 补 `me` 或 `this_player()`
 
 删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
 
+
+## 深度功能测试（2026-10-27，§6.25 create_door 缺 inherit DOOR）
+
+19 个房间只 `inherit ROOM` 却调用 `create_door()`（定义在 `/std/door`）。在 `inherit ROOM;` 后补上 `inherit DOOR;`。证明：HEAD zoo17 报 Undefined create_door；树 zoo17/room1/god1 可加载。

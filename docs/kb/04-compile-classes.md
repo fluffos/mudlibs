@@ -709,6 +709,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, sticklib Strategy A combat/follow stubs):** NPCs call `set_follow`/`add_block` (npc_ldmud) and `add_hp`/`stop_fight`/`query_condition`/`set_condition`/`attacker_ob` (living_ldmud). Added storage stubs on `/lib/npc` and `/lib/living` (conditions mapping; `attacker_ob` synced from attack). Proof: HEAD demon Undefined set_follow; tree demon/golem/fists/wandering_guard/bdragon/caretaker load.
 
+**Also (2026-10-27, dreamofseven `create_door` without `inherit DOOR`):** 19 rooms call `create_door(...)` after `inherit ROOM` only; `create_door` lives on `/std/door` (`#define DOOR`). Added `inherit DOOR;` after `inherit ROOM;`. Proof: HEAD zoo17 Undefined create_door; tree zoo17/room1/god1 load.
+
 **Also (2026-10-27, master_ldmud `#'fn` residue):** leftover simple quotes on `call_out`/`set_driver_hook`/`funcall`/`filter` lines in aoh/morgengrauen/nirvlp312/sticklib masters (~64 sites / 8 files); still skip `({#'…` unbound_lambda soup. Proof: HEAD morgengrauen master still had `#'configure_driver` / `#'autoincludehook`; tree uses `(: … :)`.
 
 **Also (2026-10-27, sticklib `lpc_warnings --fix`):** mechanical pass: unused locals dropped, `nosave` functions → `protected` (34 files). No-side-effects residue (~119) left for a dedicated pass. Proof: thief_mark_new `nosave int rank_no` → `protected`; bboard unused locals gone.
