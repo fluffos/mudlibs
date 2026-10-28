@@ -709,3 +709,7 @@ The code of this lib writes logs into 2 subdirectories of `log/`: `log/secure` (
 ## locker_hash #inherit → #include（2026-10-27，KB 04 §6.25 Also）
 
 `d|std|wizards/.../locker_hash` 用 MudOS `#inherit "save_items.h"`（本驱动未知指令），并有 cast 优先级、`delete_locker_room` 缺 `i`、缺 `<security.h>`/`<dirs.h>`。改为 `#include`，修 cast 为 `((class locker_room)...)`，补 `int i` 与头文件；rifts2 std 补上缺失的 `save_items.h`。证明：HEAD `#inherit` 失败；改后各副本加载。`save_items2` 另有路径/残缺问题，未改。
+
+## save_items2 嵌套残稿（2026-10-27，KB 04 §6.25 Also）
+
+`d/diewarzau/save_items2` 同 darkelib：缺 `;` 的 inherit + 嵌套函数。改为 `inherit "/adm/daemon/save_items_d";`。证明：HEAD 失败；改后加载。

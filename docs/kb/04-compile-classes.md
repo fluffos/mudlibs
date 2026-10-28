@@ -571,6 +571,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, RTF-wrapped source):** sgzmudsgz `wiz/emperor/baby/offspring.lpc` was an RTF document (`{\rtf1…`), not LPC. Stripped to the embedded source; declared `master`/`is_busy` like sibling `free.lpc`; dropped the dress line that named undefined `NAME`/`typ`. Same directory `base_offspring` returned undeclared `ret` → `info`. Proof: HEAD RTF syntax error; tree both load.
 
+**Also (2026-10-27, `save_items2` nested WIP):** darkelib (3 copies) / rifts2 `save_items2` inherited missing `/adm/daemon/locker_hash.lpc` without `;`, then nested function defs inside `find_uid_list`. Live daemon is `save_items_d`. Replaced each copy with `#include`s + `inherit "/adm/daemon/save_items_d";`. Proof: HEAD fail; tree loads.
+
 
 
 
