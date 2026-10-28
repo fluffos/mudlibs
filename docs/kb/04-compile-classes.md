@@ -561,6 +561,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, xkxz2/xkxc98sj skill `F_SSERVER`):** same shape — five skills each (`yunu-jianfa`, `zhemei-shou`, `xianglong-zhang`, `xiaohun-zhang`, `baituo-shezhang`) call `offensive_target` with no local def. Switched skill base to `F_SSERVER`. Residue of the call-without-local-def pattern: 0 among bases that still lack it (comment-only hits left). Proof: HEAD yunu-jianfa fail; tree 5/5 each.
 
+**Also (2026-10-27, `jmqshenmu` truncated `init`):** eight libs' `d/mingjiao/jmqshenmu` ended at an open `void init() {` (EOF). Closed the brace so the room loads (climb body never shipped in those archives; siblings that have `jmqdating` already keep a full `do_climb`). Proof: HEAD fail; tree loads.
+
 
 
 

@@ -464,3 +464,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## doc/build devil 丢分号／粘连 inherit（2026-10-27，KB 04 §6.25 Also）
 
 `doc/build/devil.lpc`（建档示例倭寇）被格式化弄坏：`inherit NPC void create()` 粘在一起，语句之间的 `;` 全丢，还有嵌套坏掉的 `set("con", set("con", 10)`。按原意重写成带 `setup()` 的完好 NPC（原 `/obj/blade`、`/obj/cloth` 在多数库不存在，示例里去掉携带以免 create 炸）。证明：HEAD 加载失败；改后加载成功。
+
+## jmqshenmu 截断 init（2026-10-27，KB 04 §6.25 Also）
+
+`d/mingjiao/jmqshenmu` 在 `void init() {` 处文件结束。补上 `}` 使房间可加载（本库未收齐 climb/`jmqdating` 时不做内容补写）。证明：HEAD 失败；改后加载。

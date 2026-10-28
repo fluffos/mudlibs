@@ -725,3 +725,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## huoba / flute2（2026-10-27，KB 04 §6.25 Also）
 
 与 syxjl 同形：`d/xingxiu/obj/huoba` 的 `"remaining" : 1,` → `set("remaining", 1);`；`npc/obj/flute2` 补 `message_vision(..., this_player());`。证明：HEAD 失败；改后加载。
+
+## jmqshenmu 截断 init（2026-10-27，KB 04 §6.25 Also）
+
+`d/mingjiao/jmqshenmu` 在 `void init() {` 处文件结束。补上 `}` 使房间可加载（本库未收齐 climb/`jmqdating` 时不做内容补写）。证明：HEAD 失败；改后加载。

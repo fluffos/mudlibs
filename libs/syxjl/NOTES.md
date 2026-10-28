@@ -1171,3 +1171,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## skill 基类补 F_SSERVER（2026-10-27，KB 04 §6.16 Also）
 
 `inherit/skill/skill` 只 `inherit F_CLEAN_UP`，`kungfu/skill/baituo-shezhang` 等调用 `offensive_target` 时报未定义。书剑系手足基类写 `inherit F_SSERVER`（其内再继 `F_CLEAN_UP`）。照改。证明：HEAD 失败；改后加载。
+
+## jmqshenmu 截断 init（2026-10-27，KB 04 §6.25 Also）
+
+`d/mingjiao/jmqshenmu` 在 `void init() {` 处文件结束。补上 `}` 使房间可加载（本库未收齐 climb/`jmqdating` 时不做内容补写）。证明：HEAD 失败；改后加载。
