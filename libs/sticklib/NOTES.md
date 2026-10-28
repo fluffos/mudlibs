@@ -321,3 +321,7 @@ Strategy A catalog 缺 `file_lines` / `interactive_info`。从档案 sefun 移�
 ## 深度功能测试（2026-10-27，§6.25 equipped_npc add_* varargs）
 
 `add_object("/path", 0, 1)` 在 FluffOS 上对五参原型报参数个数/类型错误。给 `add_weapon`/`add_armour`/`add_object` 加 `varargs`，并把 `init_data` 扩成 `mixed`（体内已有 `pointerp` 判断）。证明：HEAD portsari 失败；树可加载。
+
+## 深度功能测试（2026-10-27，§6.25 Strategy A set_guild/set_group_message）
+
+圣堂群组 NPC 调用 `set_guild`（LDMud living/guild）和 `set_group_message`（`group_npc_ldmud` 宽映射）；Strategy A 两边都没有。在 `/lib/living` 补 `set_guild`/`query_guild`，在 `/lib/group_npc` 用普通 mapping 存消息。证明：HEAD saint 失败；树可加载（guild=priest）。
