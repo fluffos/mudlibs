@@ -589,6 +589,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, zxcd_yongshi missing `;`):** sj / shiji `u/ZXCDZXCD/NPC/zxcd_yongshi` had `inherit NPC` without `;` before `inherit F_MASTER`, almost every statement terminator gone, and `({yong shi"})`. Restored terminators/ids and added `#include <ansi.h>`. Proof: HEAD fail; tree loads.
 
+**Also (2026-10-27, `#inherit` leftover):** dreamofseven `tako.tmp/man` and kxkj1 `mndance` used `#inherit` (Unknown preprocessor directive). Switched to `inherit`. man also had `dele`/`te_temp` split across a line; mndance lost the closing `"`/`,` on one action string and declared no `object ob` in `valid_learn`. Residue of live `#inherit` directives: 0 (comment/string hits left). Proof: HEAD fail; tree loads both.
+
 
 
 
