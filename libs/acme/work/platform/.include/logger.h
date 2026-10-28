@@ -69,7 +69,7 @@
 #define FMT_CATEGORY  ({ "0", "%s", ({                           \
   ({ #'?,                                                        \
      'arg,                                                       \
-     ({ #'implode,                                               \
+     ({ (: implode :),                                               \
         ({ #'[<.., ({ #'explode, ''category, "." }), 'arg }),    \
         "."                                                      \
      }),                                                         \
@@ -79,9 +79,9 @@
 #define FMT_OBJECT    ({ "0", "%s", ({                           \
   ({ #'?,                                                        \
      'arg,                                                       \
-     ({ #'implode,                                               \
+     ({ (: implode :),                                               \
         ({ #'[<..,                                               \
-           ({ #'explode,                                         \
+           ({ (: explode :),                                         \
               ({ #'?,                                            \
                  ''caller,                                       \
                  ({ #'[, ''caller, TRACE_PROGRAM }),             \
@@ -106,7 +106,7 @@
 #define FMT_LOCATION  ({ 0, "%s", ({                             \
   ({ #'?,                                                        \
      ''caller,                                                   \
-     ({ #'sprintf,                                               \
+     ({ (: sprintf :),                                               \
         "%s->%s(%s:%d)",                                         \
         ({ #'[, ''caller, TRACE_OBJECT }),                       \
         ({ #'[, ''caller, TRACE_NAME }),                         \

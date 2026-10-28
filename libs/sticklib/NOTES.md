@@ -265,3 +265,7 @@ LDMud 的 `foreach (object you : arr)` / `foreach (x : arr)` 在本驱动要写�
 ## 深度功能测试（2026-10-27，§6.25 LDMud mapping foreach）
 
 接着把 `foreach (k, v : map)` 改成 `in`，并修掉无类型替换时 `in` 与标识符粘在一起（`inansi_codes`）。证明：`ansid` 加载。
+
+## 深度功能测试（2026-10-27，§6.25 LDMud `#'fn` 闭包）
+
+简单 `#'ident` → `(: ident :)`；`sort_array(..., #'>/#'<)` → `1`/`-1`。含 `#'?` / `'symbol` 的 unbound_lambda 行未动。`boss_d` / `_channel` / `druids/mark` 可加载（HEAD 为 Illegal character '#'）。

@@ -661,6 +661,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, unknown LDMud `#pragma` residue):** FluffOS knows only `strict_types` / `save_types` / `warnings` / `optimize` / `show_error_context` (and `no_*`). LDMud leftovers (`strong_types`, `rtt_checks`, `range_check`, `no_clone`, `pedantic`, `combine_strings`, `no_shadow`, `no_inherit`, `warn_*`, comma lists mixing those with known names, `#pragma strict_types;`) warn as unknown. Deleted or reduced to a single known pragma per line across aoh/holymission/morgengrauen/nirvlp312/realms/simud (plus closed `/*#pragma optimize…save_binary*/` comment blocks in xkxc98sj/xkxz2 `newsd`). Live residue of those forms: 0. Proof: nirvlp312 `/obj/simul_efun` + xkxc98sj `/adm/daemons/newsd` load.
 
+**Also (2026-10-27, LDMud `#'fn` quotes → `(: fn :)`):** FluffOS rejects `#'ident` (`Illegal character '#'`). Convert simple quotes on non-lambda-soup lines (`filter`/`map`/`call_out`/`funs =` / mapping hooks / `({ #'a, #'b })` of only function quotes); `sort_array(..., #'>/#'<)` → `1`/`-1` (KB 06 7.234). Skip lines with `#'?` / `#',` / `'symbol` unbound_lambda soup (master_ldmud, closures). sticklib ~270, acme ~38, simud ~78. Proof: HEAD boss_d Illegal character; tree loads boss_d + _channel + druids/mark.
+
 
 
 

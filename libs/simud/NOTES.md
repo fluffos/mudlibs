@@ -231,3 +231,7 @@ The code of this lib writes logs into 2 subdirectories of `log/`: `log/chat` (`d
 ## 深度功能测试（2026-10-27，§6.10 LDMud 未知 pragma）
 
 `master_security.lpc` / `world.lpc` 的 LDMud-only pragma 已删。
+
+## 深度功能测试（2026-10-27，§6.25 LDMud `#'fn` 闭包）
+
+同 sticklib：`#'ident` → `(: ident :)`（跳过 `#'?` / `'symbol` 行）。
