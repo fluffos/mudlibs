@@ -353,3 +353,7 @@ Strategy A catalog 缺 `do_find_object`/`get_object`/`m_allocate`/`get_eval_cost
 ## 深度功能测试（2026-10-27，§6.25 catalog telopt/GMCP sefuns）
 
 `telopt` 需要 LDMud `to_bytes`/`binary_message`/`json_parse`/`json_serialize`/`hash(TLS_HASH_*,…)`。补上 `to_bytes`、`binary_message`；引入 formosasaga 版 FluffOS `catalog/json.lpc` 并做 parse/serialize 别名；`hash` 整数算法号转 `efun::hash("sha1",…)`。证明：HEAD 失败；树 telopt 可加载。
+
+## 深度功能测试（2026-10-27，§6.25 Strategy A combat/follow stubs）
+
+NPC 要 `set_follow`/`add_block`，战斗要 `add_hp`/`stop_fight`/`query_condition`/`set_condition`/`attacker_ob`。在 `/lib/npc` 与 `/lib/living` 补存储型 stub（conditions 用 mapping；`attacker_ob` 与 attack 同步）。证明：HEAD demon 报 Undefined set_follow；树 demon/golem/拳头/wandering_guard/bdragon/caretaker 可加载。
