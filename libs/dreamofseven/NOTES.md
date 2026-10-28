@@ -349,27 +349,12 @@ content reachable from within world1), not a conversion artifact.
 
 ## Confirmed content gaps (NOT fixed, per project policy)
 
-- **SEVERE-scale but confined: wizard "tmr"'s entire personal
-  multi-zone questing area (275 NPC/item files, ~15 sub-areas:
-  `batogiya_dtl`, `barbarian_island`, `beast_base`, `crush_bone`,
-  `dead_forest`, `down_cave`, `duli_forest`, `duli_port`,
-  `duli_village`, `mist_forest`, `quanzhen`, `whale_forest`,
-  `whale_river`) `#include <npc.h>`, a local convention header that
-  does not exist ANYWHERE in this 32,946-file archive (`find . -iname
-  npc.h` returns zero hits, checked archive-wide before concluding
-  this). This collapses to ONE shared root cause (AGENTS.md §6.4), not
-  275 independent bugs -- confirmed by reading several of the
-  `#include`-failing files and finding no other defect once the
-  missing header is accounted for. A genuine, pre-existing upstream
-  completeness gap (this wizard's own header apparently never made it
-  into the pushed archive), not a conversion artifact and not
-  fabricated. **Not on the registration/starting-room path** -- the
-  actual start room (`/open/world1/tmr/area/hotel`, "朝天樓") and its
-  two NPCs (`Master`/`Waiter`) live directly under `tmr/area/`, a
-  sibling of these broken sub-zones, and compile/load cleanly on their
-  own. The `make_inventory()`/`reset_room()` fix above ensures none of
-  this cascades into crashing unrelated rooms that happen to reference
-  this content.
+- **(Resolved 2026-10-27)** wizard "tmr"'s multi-zone questing area
+  `#include <npc.h>` gap: header + `feature/npc/*` + Aug compat shims
+  now ship (see Aug npc.h section below). Rooms that only failed
+  because their NPCs could not load should load again; remaining
+  content-level skill/feature gaps in those zones are unchanged.
+
 - **`F_SKILL: No such skill` gaps** -- several NPCs (mostly in the
   `tmr` zones above, but not exclusively) `set_skill()` a skill name
   with no corresponding file under `daemon/skill/` (e.g.
@@ -1054,3 +1039,7 @@ tmr 区 20 件武器写 Aug `inherit F_BLADE`（本库 `_blade` 作 feature 缺 
 ## F_STUDY 宏 + feature/study（2026-10-27，KB 04 §6.16 Also）
 
 四处 tmr 书籍 `inherit F_STUDY`，本库无宏且无 `/feature/study.lpc`。自 dfgsiiv13b 采纳 `feature/study.lpc`，并在 `globals.h` 增加 `#define F_STUDY`。证明：HEAD book 失败；改后四本均加载。
+
+## Aug npc.h + set_race 栈（2026-10-27，KB 04 §6.16 Also）
+
+tmr 区 112 个 NPC `#include <npc.h>` 并调用 Aug 的 `set_race`/`set_attr`/`set_stat_*`/`carry_money` 等，档案从未带入该头与 `feature/npc/*`。补上 `include/npc.h`、自 dfgs2 采纳 reaction 模块，并加 `aug_compat.lpc` 把 Aug 属性映射到本库 `hp`/`mp`/`ap`/`str`…；`beast_base/.../action.lpc` 的未定义 `HIK` 改为本库 `HBK`。证明：HEAD `Cannot #include npc.h`；改后 112/112 加载。

@@ -567,7 +567,7 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, flute1 / sheep):** syxjl/ldtx/ldtxii `d/xingxiu/npc/obj/flute1` lost the closing `", this_player());` on the multi-line `message_vision` (same shape as flute2); ldtx/ldtxii `d/xingxiu/obj/sheep` had a pager banner pasted over `set_temp("apply/attack", …)` (`Illegal character`). Restored. Proof: HEAD fail; tree loads.
 
-
+**Also (2026-10-27, dreamofseven Aug `npc.h` stack):** 112 tmr NPCs `#include <npc.h>` and call Aug APIs (`set_race`/`set_attr`/`set_stat_maximum`/`advance_stat`/`carry_money`/…) that this archive never shipped. Added `include/npc.h` (F_BANDIT/FIGHTER/SOLDIER/VILLAGER; Aug `F_VENDOR` override; `SKILL_MAX_POINT`), `feature/npc/{bandit,fighter,soldier,villager,vendor}.lpc` from dfgs2, and `feature/npc/aug_compat.lpc` shims mapping Aug stats onto this lib’s `hp`/`mp`/`ap`/`str`… Also `HIK`→`HBK` in beast `action.lpc` (HIK undefined here). Proof: HEAD `Cannot #include npc.h`; tree 112/112 load.
 
 
 

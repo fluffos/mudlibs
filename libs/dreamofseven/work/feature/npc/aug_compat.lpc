@@ -1,0 +1,184 @@
+// aug_compat.lpc -- thin shims so Aug tmr NPCs load on dreamofseven CHARACTER stack
+
+#include <dbase.h>
+
+void set_race(string new_race)
+{
+        if (member_array(new_race, ({ "strength", "operation", "special" })) >= 0)
+                new_race = "human";
+        set("race", new_race);
+}
+
+void set_class(string new_class) { set("class", new_class); }
+string query_class() { return query("class"); }
+string query_race() { return query("race"); }
+
+void set_level(int lvl)
+{
+        if (lvl < 1) lvl = 1;
+        set("level", lvl);
+}
+
+int query_level() { return query("level"); }
+
+int set_attr(string what, int value)
+{
+        if (member_array(what, ({ "str", "con", "dex", "int" })) >= 0)
+                return set(what, value);
+        return set("attribute/" + what, value);
+}
+
+varargs int query_attr(string what, int raw)
+{
+        int attr;
+        if (member_array(what, ({ "str", "con", "dex", "int" })) >= 0) {
+                attr = query(what);
+                if (raw) return attr;
+                return attr + query_temp("apply/" + what);
+        }
+        attr = (int)query("attribute/" + what);
+        if (raw) return attr;
+        return attr + query_temp("apply/" + what);
+}
+
+string _stat_key(string what)
+{
+        if (what == "hp") return "hp";
+        if (what == "gin") return "ap";
+        if (what == "kee") return "hp";
+        if (what == "sen" || what == "nina") return "mp";
+        return "";
+}
+
+int set_stat_maximum(string what, int val)
+{
+        string k = _stat_key(what);
+        if (k) {
+                set("max_" + k, val);
+                if (undefinedp(query(k))) set(k, val);
+                return val;
+        }
+        set("statistic/maximum/" + what, val);
+        return val;
+}
+
+int query_stat_maximum(string what)
+{
+        string k = _stat_key(what);
+        if (k) return query("max_" + k);
+        return query("statistic/maximum/" + what);
+}
+
+int query_stat(string what)
+{
+        string k = _stat_key(what);
+        if (k) return query(k);
+        return query("statistic/current/" + what);
+}
+
+int set_stat_current(string what, int val)
+{
+        string k = _stat_key(what);
+        if (k) return set(k, val);
+        return set("statistic/current/" + what, val);
+}
+
+int advance_stat(string what, int val)
+{
+        string k = _stat_key(what);
+        if (k) {
+                add("max_" + k, val);
+                add(k, val);
+                return query("max_" + k);
+        }
+        return add("statistic/maximum/" + what, val);
+}
+
+int heal_stat(string what, int val)
+{
+        string k = _stat_key(what);
+        int cur, maxv;
+        if (!k) {
+                add("statistic/current/" + what, val);
+                return query("statistic/current/" + what);
+        }
+        cur = query(k) + val;
+        maxv = query("max_" + k);
+        if (maxv && cur > maxv) cur = maxv;
+        set(k, cur);
+        return cur;
+}
+
+int damage_stat(string what, int val)
+{
+        string k = _stat_key(what);
+        int cur;
+        if (!k) {
+                add("statistic/current/" + what, -val);
+                return query("statistic/current/" + what);
+        }
+        cur = query(k) - val;
+        if (cur < 0) cur = 0;
+        set(k, cur);
+        return cur;
+}
+
+void do_heal()
+{
+        if (query("max_hp")) set("hp", query("max_hp"));
+        if (query("max_mp")) set("mp", query("max_mp"));
+        if (query("max_ap")) set("ap", query("max_ap"));
+}
+
+object carry_money(string type, int amount)
+{
+        object ob;
+        // This lib only ships coin/dollar/gamechip as .lpc; map Aug gold/silver.
+        // Use new()+move: this feature is compiled without NPC's carry_object in scope.
+        if (type == "gold" || type == "silver") type = "coin";
+        ob = new("/obj/money/" + type);
+        if (!ob) return 0;
+        ob->set_amount(amount);
+        ob->move(this_object());
+        return ob;
+}
+
+
+
+int set_stat_notify(string what, int val)
+{
+        return set("statistic/notify/" + what, val);
+}
+
+object last_damage_giver()
+{
+        return query_temp("last_damage_from");
+}
+
+int consume_stat(string what, int val)
+{
+        return damage_stat(what, val);
+}
+
+void gain_score(string course, int xp) { add("score/" + course, xp); }
+
+int is_chatting() { return 0; }
+
+varargs void do_chat(mixed c)
+{
+        if (stringp(c)) {
+                if (environment())
+                        message("vision", c, environment(), this_object());
+                return;
+        }
+        if (functionp(c)) evaluate(c);
+}
+
+varargs string rank(string politeness, object who)
+{
+        switch (politeness) {
+        case "self": return "在下";
+        case "respectful": return "朋友";
+        default: return "";
+        }
+}
