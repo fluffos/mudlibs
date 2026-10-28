@@ -614,3 +614,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-10-27，§6.25 set_name 缺开头引号）
 
 `lx_cloth` / `jugeng` 的 `set_name(` 缺开头引号（已有收尾 `"`）；补上。
+
+## 深度功能测试（2026-10-27，§6.25 tell_object 参数顺序）
+
+`tell_object("…", me/who)` 参数颠倒（消息当对象）；改为 `tell_object(me/who, "…")`（rukou.lpc）。证明：残渣 0；抽样 guest/rukou/forest_c 加载。

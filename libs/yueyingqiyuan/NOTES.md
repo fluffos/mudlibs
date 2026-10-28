@@ -1273,3 +1273,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## book-qujing 缺 obstacle.h（2026-10-27，KB 04 §6.23 Also）
 
 `d/obj/books-nonskill/book-qujing.lpc` `#include "/d/qujing/obstacle.h"`，档案未带该头，驱动报 `Cannot #include`。从手足 sjsh 拷入同内容 mapping。证明：HEAD 加载失败；改后加载成功。
+
+## 深度功能测试（2026-10-27，§6.25 tell_object 参数顺序）
+
+`tell_object("…", me/who)` 参数颠倒（消息当对象）；改为 `tell_object(me/who, "…")`（guest.lpc）。证明：残渣 0；抽样 guest/rukou/forest_c 加载。

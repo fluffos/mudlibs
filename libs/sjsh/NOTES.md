@@ -478,3 +478,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-10-27，§6.25 bare set("long" 残渣）
 
 书局老板 `set("long"` 缺开头引号 → Illegal character；补 `"`.
+
+## 深度功能测试（2026-10-27，§6.25 tell_object 参数顺序）
+
+`tell_object("…", me/who)` 参数颠倒（消息当对象）；改为 `tell_object(me/who, "…")`（guest.lpc）。证明：残渣 0；抽样 guest/rukou/forest_c 加载。

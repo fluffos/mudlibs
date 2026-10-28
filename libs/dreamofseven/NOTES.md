@@ -1067,3 +1067,7 @@ tmr 区 112 个 NPC `#include <npc.h>` 并调用 Aug 的 `set_race`/`set_attr`/`
 ## 深度功能测试（2026-10-27，§6.25 tmr master 缺头/截断）
 
 `u/t/tmr/room/npc/master` 含不存在的 `#include "/u/a/anfernee/anfernee.h"`、`inherit GUILDMASTER` 而宏路径未进编译单元，且 `greeting` 的 `say` 字符串截断。用完好的 `open/world2/anfernee/start/npc/master` 覆盖。证明：HEAD 失败；改后加载。
+
+## 深度功能测试（2026-10-27，§6.25 tell_object 参数顺序）
+
+`tell_object("…", me/who)` 参数颠倒（消息当对象）；改为 `tell_object(me/who, "…")`（test.lpc）。证明：残渣 0；抽样 guest/rukou/forest_c 加载。

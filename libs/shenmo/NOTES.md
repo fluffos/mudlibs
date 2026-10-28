@@ -1473,3 +1473,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 深度功能测试（2026-10-27，§6.25 xueying-xianfa 去引号）
 
 `u/tom/skill/xueying-xianfa` 整文件去引号；用同库完好的 `u/fang/skill/xueying-xianfa` 覆盖。证明：HEAD 失败；改后加载。
+
+## 深度功能测试（2026-10-27，§6.25 tell_object 参数顺序）
+
+`tell_object("…", me/who)` 参数颠倒（消息当对象）；改为 `tell_object(me/who, "…")`（guest.lpc, mishi2.lpc）。证明：残渣 0；抽样 guest/rukou/forest_c 加载。

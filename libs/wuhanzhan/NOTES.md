@@ -1136,3 +1136,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## d/wiz/officer 粘连 inherit（2026-10-27，KB 04 §6.25 Also）
 
 `d/wiz/officer/officer.lpc` 写成 `inherit ROOM void create()`，语句间分号全丢，驱动无法编译。按原文重写为带 `setup()` / `replace_program(ROOM)` 的房间（出口仍指向档案里的 `/d/xyj/kezhan` 与 `/u/power/doorroom`）。同目录 `kenofficer.lpc` 更残，未动。证明：HEAD 加载失败；改后加载成功。
+
+## 深度功能测试（2026-10-27，§6.25 tell_object 参数顺序）
+
+`tell_object("…", me/who)` 参数颠倒（消息当对象）；改为 `tell_object(me/who, "…")`（guest.lpc）。证明：残渣 0；抽样 guest/rukou/forest_c 加载。
