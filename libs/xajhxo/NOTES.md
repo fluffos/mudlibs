@@ -992,3 +992,7 @@ Same convert-era byte corruption as the waiter `！”\n` / `！\n` →
 ## 无参数时命令对 0 的调用（2026-10-27，KB 06 §7.336 Also）
 
 巫师/管理员命令在通过权限门之后仍会把 0 交给 `sscanf` / `read_file` / `find_living` 等。`lpc_fix_bare_arg.py` 在首次使用参数前加上 `if (!arg)`（或 `help(me)` / `GetHelp()`）。本库本批改动见该提交。
+
+## estate ROOM_HEAD 宏引号 / #inherit / dir / retrun（2026-10-27，KB 04 §6.25 Also）
+
+`system/daemon/estate` 的 `ROOM_HEAD`/`EXIT_STRING` 宏里裸双引号打断 `#define`，模板写成 `#inherit AREA`，`CreateRoom` 用未定义的 `dir`，`AddItem` 写 `retrun` 且参数 `class Location` 本库无此类型。改为转义引号、`inherit AREA`、`out_dir`、`return`、`mixed location`。证明：HEAD 失败；改后加载。

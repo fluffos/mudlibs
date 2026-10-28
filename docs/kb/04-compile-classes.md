@@ -541,6 +541,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, darkelib/rifts2 `locker_hash` `#inherit`):** five `locker_hash.lpc` used MudOS `#inherit "save_items.h"` (unknown directive here), plus cast precedence on `(class locker_room)(x)->field`, missing `int i` in `delete_locker_room`, and missing `<security.h>`/`<dirs.h>`. `#include`, fix casts, declare `i`, add headers; copied `save_items.h` into rifts2 `std/diewarzau/`. Proof: HEAD fail; tree loads. (`save_items2` still broken separately.)
 
+**Also (2026-10-27, xo-family `estate` macros):** xajh2 / xajhxo / xo / xo_final `system/daemon/estate` never compiled: `#define ROOM_HEAD` / `EXIT_STRING` held raw `"` inside the macro string (preprocessor ate the rest), the template used `#inherit AREA`, `CreateRoom` referenced undefined `dir`, and `AddItem` had `retrun` plus `class Location` (undefined). Escaped quotes, `inherit AREA`, `out_dir`, `return`, `mixed location`. Proof: HEAD fail; tree loads.
+
+
 
 
 
