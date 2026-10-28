@@ -557,6 +557,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, huoba/flute2/liuyun):** syxjl/ldtx/ldtxii `d/xingxiu/obj/huoba` had a bare `"remaining" : 1,` mapping fragment; three `flute2` lost `;` and `this_player()` on `message_vision`; syxjl `liuyun`/`lunyun` lost the `//` on the first line and `lunyun` was pasted twice. Restored. Proof: HEAD fail; tree loads.
 
+**Also (2026-10-27, syxjl skill `F_SSERVER`):** `inherit/skill/skill` only inherited `F_CLEAN_UP`, so skills that call `offensive_target` (e.g. `baituo-shezhang`) failed with `Undefined function`. Sibling Shujian bases inherit `F_SSERVER` (which itself inherits `F_CLEAN_UP`). Switched. Proof: HEAD fail; tree loads.
+
 
 
 

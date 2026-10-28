@@ -1167,3 +1167,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## huoba / flute2 / liuyun·lunyun（2026-10-27，KB 04 §6.25 Also）
 
 `d/xingxiu/obj/huoba` 把 `set("remaining", 1)` 写成了 mapping 碎片 `"remaining" : 1,`；`npc/obj/flute2` 的 `message_vision` 缺分号与 `this_player()`；`kungfu/skill/liuyun` 与 `kunlun-zhang/lunyun` 首行丢了 `//`，且 `lunyun` 整文件粘贴了两遍。与 ldtx/ldtxii 同形一并修。证明：HEAD 失败；改后均加载。
+
+## skill 基类补 F_SSERVER（2026-10-27，KB 04 §6.16 Also）
+
+`inherit/skill/skill` 只 `inherit F_CLEAN_UP`，`kungfu/skill/baituo-shezhang` 等调用 `offensive_target` 时报未定义。书剑系手足基类写 `inherit F_SSERVER`（其内再继 `F_CLEAN_UP`）。照改。证明：HEAD 失败；改后加载。
