@@ -685,6 +685,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, sticklib Strategy A NPC spell stubs):** NPCs call `set_chance`/`set_spell_mess1`/`set_spell_mess2`/`set_spell_dam`/`set_breath_attack` from LDMud `npc_ldmud`; thin `/lib/npc` lacked them. Added storage + setters (casting still thin). Proof: HEAD leo Undefined set_chance; tree loads leo.
 
+**Also (2026-10-27, sticklib catalog sefun `apply`/`mkmapping`):** Strategy A `/catalog/simul_efun` lacked LDMud `apply` and 2-arg `mkmapping`, so `/lib/equipped_npc` and `dueld` failed compile. Added `apply` (evaluate + call_other array explode) and pair-array `mkmapping` (wide multi-value casino form still unsupported). Proof: HEAD equipped_npc/dueld Undefined; tree both load; eval `mkmapping`+`apply((: call_other :),…)` OK.
+
 **Also (2026-10-27, master_ldmud `#'fn` residue):** leftover simple quotes on `call_out`/`set_driver_hook`/`funcall`/`filter` lines in aoh/morgengrauen/nirvlp312/sticklib masters (~64 sites / 8 files); still skip `({#'…` unbound_lambda soup. Proof: HEAD morgengrauen master still had `#'configure_driver` / `#'autoincludehook`; tree uses `(: … :)`.
 
 **Also (2026-10-27, sticklib `lpc_warnings --fix`):** mechanical pass: unused locals dropped, `nosave` functions → `protected` (34 files). No-side-effects residue (~119) left for a dedicated pass. Proof: thief_mark_new `nosave int rank_no` → `protected`; bboard unused locals gone.

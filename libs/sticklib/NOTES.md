@@ -309,3 +309,7 @@ Strategy A 的 `/catalog/simul_efun` 缺少 LDMud 的 `present4` / `object_info`
 ## 深度功能测试（2026-10-27，§6.25 Strategy A NPC spell stubs）
 
 NPC 的 `set_chance`/`set_spell_mess1`/`set_spell_mess2`/`set_spell_dam`/`set_breath_attack` 在 `npc_ldmud`；薄 `/lib/npc` 没有。补上存储与 setter（施法心跳仍薄）。证明：HEAD leo 报 Undefined set_chance；树可加载 leo。
+
+## 深度功能测试（2026-10-27，§6.25 catalog sefun apply/mkmapping）
+
+Strategy A `/catalog/simul_efun` 缺 LDMud `apply` 与双参 `mkmapping`，`equipped_npc` / `dueld` 编不过。补上 `apply`（`evaluate` + `call_other` 数组展开）和配对数组 `mkmapping`（赌场多值宽映射仍不支持）。证明：HEAD 报 Undefined；树均可加载。
