@@ -948,3 +948,8 @@ The code of this lib writes logs into 5 subdirectories of `log/`: `log/archive` 
 ## save_items2 嵌套残稿（2026-10-27，KB 04 §6.25 Also）
 
 `std|d|wizards/.../save_items2` 继承不存在的 `/adm/daemon/locker_hash.lpc` 且缺 `;`，又把函数定义嵌进 `find_uid_list`。正式守护进程是 `save_items_d`。三处改为 `inherit "/adm/daemon/save_items_d";`。证明：HEAD 失败；改后加载。
+
+## 深度功能测试（2026-10-27，§6.10 未知 pragma save_binary/optimize）
+
+删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
+

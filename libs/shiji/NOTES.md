@@ -828,3 +828,8 @@ fuyunke telnet：同上。
 
 `message_vision("…")` 补第二参（`me` / `TP` / `this_player()`）。
 
+
+## 深度功能测试（2026-10-27，§6.10 未知 pragma save_binary/optimize）
+
+删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
+

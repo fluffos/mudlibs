@@ -432,3 +432,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 bingbu：`tell_object("ob")`→`tell_room(ob)`；`tell_room("where")`→`tell_room(where)`。
 
+
+## 深度功能测试（2026-10-27，§6.10 未知 pragma save_binary/optimize）
+
+删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
+

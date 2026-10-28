@@ -946,3 +946,8 @@ bingbu/lark 的 `tell_object("ob")` / `tell_room("where")` 改为房间 `tell_ro
 
 `tell_room("…")` 补房间参数（`this_object()` / `ETO` / `place` / `environment(this_object())` 等）。
 
+
+## 深度功能测试（2026-10-27，§6.10 未知 pragma save_binary/optimize）
+
+删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
+

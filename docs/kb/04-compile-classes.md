@@ -657,6 +657,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, one-arg `tell_room("…")`):** message with no room: rooms/NPCs/spells used `tell_room("…")` alone. Inserted `this_object()` / `ETO` / `place` / `environment(this_object())` / `TO` / `ENV(TO)` from local style (altar/lunar_veil/lightobj/dongfang/wbedroom/unfettered/…). Also caught string+`+` one-arg forms in shadowgate/sunshadow spell cast strings. Live residue 0. Proof: stn7, wbedroom, dongfang load.
 
+**Also (2026-10-27, unknown `#pragma save_binary` / `optimize`):** FluffOS ignores these MudOS pragmas and warns. Deleted 3001 lines across 2984 files / 191 libs (nitan-family daemons/features heavy). Residue of those two forms: 0.
+
+
 
 
 

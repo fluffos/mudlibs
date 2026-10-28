@@ -269,3 +269,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 无参数时命令对 0 的调用（2026-10-27，KB 06 §7.336 Also）
 
 巫师/管理员命令在通过权限门之后仍会把 0 交给 `sscanf` / `read_file` / `find_living` 等。`lpc_fix_bare_arg.py` 在首次使用参数前加上 `if (!arg)`（或 `help(me)` / `GetHelp()`）。本库本批改动见该提交。
+
+## 深度功能测试（2026-10-27，§6.10 未知 pragma save_binary/optimize）
+
+删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
+

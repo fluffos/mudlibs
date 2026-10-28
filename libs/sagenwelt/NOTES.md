@@ -113,3 +113,8 @@ The `.c` -> `.lpc` rename changed the string but not the slice width: `f[<2..] =
 ## Compile warnings (2026-10-13)
 
 `scripts/toolkit_fix.sh` removed `#pragma save_binary` from `secure/include/pragmas.h` (FluffOS has no such pragma) and turned the bare `return;` in an `int` function of `secure/obj/master_feature.lpc` and `master_orig.lpc` into `return 0;`. By hand: `secure/include/mud_info.h` defined `MI_EMAIL_INVALID` twice, `"@inv@"` and then `"@reg@"`, so the later value won; the second line is renamed `MI_EMAIL_REGISTERED`, leaving `MI_EMAIL_INVALID` as `"@inv@"` (the same sentinel as `MI_PWD_INVALID`). `get_name_email()` in `secure/daemons/mud_info.lpc` is still an empty stub, so no comparison changes at run time. No warnings left in compiling files.
+
+## 深度功能测试（2026-10-27，§6.10 未知 pragma save_binary/optimize）
+
+删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
+

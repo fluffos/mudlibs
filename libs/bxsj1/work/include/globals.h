@@ -4,7 +4,6 @@
 // globals.h
 // this file will be automatically included by the driver
 #define SAVE_EXTENSION __SAVE_EXTENSION__
-#pragma optimize 
 
 //这里是修改mudlib达到兼容性
 #define crypt oldcrypt 

@@ -713,3 +713,8 @@ The code of this lib writes logs into 2 subdirectories of `log/`: `log/secure` (
 ## save_items2 嵌套残稿（2026-10-27，KB 04 §6.25 Also）
 
 `d/diewarzau/save_items2` 同 darkelib：缺 `;` 的 inherit + 嵌套函数。改为 `inherit "/adm/daemon/save_items_d";`。证明：HEAD 失败；改后加载。
+
+## 深度功能测试（2026-10-27，§6.10 未知 pragma save_binary/optimize）
+
+删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
+

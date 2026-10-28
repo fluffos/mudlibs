@@ -735,3 +735,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## blue_cloth F_CLOTH → BODY（2026-10-27，KB 04 §6.25 Also）
 
 `d/obj/npc/wp/blue_cloth` 写 `inherit F_CLOTH`，本库无该宏。改为本库的 `inherit BODY`，护甲 2 写入 `armor_prop/armor`。证明：HEAD 失败；改后加载成功。
+
+## 深度功能测试（2026-10-27，§6.10 未知 pragma save_binary/optimize）
+
+删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
+

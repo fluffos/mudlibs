@@ -324,3 +324,8 @@ Same convert-era byte corruption as the waiter `！”\n` / `！\n` →
 
 xinfang：`tell_object("ob", …)`→`tell_object(ob, …)`。
 
+
+## 深度功能测试（2026-10-27，§6.10 未知 pragma save_binary/optimize）
+
+删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
+

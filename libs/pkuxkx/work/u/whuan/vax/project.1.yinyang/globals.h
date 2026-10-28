@@ -3,7 +3,6 @@
 // for XKX mudlib, by Xiang
 // Important directories
 
-#pragma save_binary
 #define INC_DIR		"/include/"
 #define COMMAND_DIR	"/cmds/"
 #define CONFIG_DIR	"/adm/etc/"

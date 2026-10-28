@@ -1086,3 +1086,8 @@ jialermi / random / treeking：`tell_object("…")` 补 `me` 或 `this_player()`
 
 `tell_room("…")` 补房间参数（`this_object()` / `ETO` / `place` / `environment(this_object())` 等）。
 
+
+## 深度功能测试（2026-10-27，§6.10 未知 pragma save_binary/optimize）
+
+删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
+

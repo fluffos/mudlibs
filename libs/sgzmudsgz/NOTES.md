@@ -234,3 +234,8 @@ hylib/dtxy) stay confirmed duplicates.
 ## 深度功能测试（2026-10-27，§6.25 ziguang/test/ff 去分号）
 
 `wiz/ziguang/test/ff` 丢了 `inherit` 后的 `;` 与几乎所有语句终结符。用同库完好的 `wiz/fire/obj/huoba` 覆盖。证明：HEAD 失败；改后加载。
+
+## 深度功能测试（2026-10-27，§6.10 未知 pragma save_binary/optimize）
+
+删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
+

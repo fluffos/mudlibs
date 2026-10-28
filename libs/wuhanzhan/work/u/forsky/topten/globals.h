@@ -9,7 +9,6 @@
 
 // Directories
 
-#pragma save_binary
 #define COMMAND_DIR     "/cmds/"
 #define CONFIG_DIR     "/adm/etc/"
 #define DATA_DIR     "/data/"

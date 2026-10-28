@@ -1,6 +1,5 @@
 // file: globals.h
 
-#pragma save_binary
 
 #define DRUG_D(x)               ("/clone/drug/" + x)
 #define HERB_D(x)               ("/clone/herb/" + x)

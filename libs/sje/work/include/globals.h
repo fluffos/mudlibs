@@ -9,7 +9,6 @@
 #define F_VI "/feature/vi"
 #define SAVE_EXTENSION __SAVE_EXTENSION__ 
 #define save_binary
-#pragma optimize
 
 // Important directories
 #define private
