@@ -365,3 +365,7 @@ FluffOS 的 `command` 只有一参，LDMud 的 `command(cmd, who)` 与 MudOS `tr
 ## 深度功能测试（2026-10-27，§6.25 Strategy A init/heart_beat）
 
 NPC 写 `::init()`，虚拟房间写 `::heart_beat()`，薄 living/room 没有。补上空 stub。证明：HEAD teller/lordbuster 报 Unable to find inherited init；树均可加载。
+
+## 深度功能测试（2026-10-27，§6.10 sticklib lpc_warnings --fix 第二轮）
+
+未用局部变量（lords_guild `cost`、lordbuster `ob`、telopt/mapper/login）、`nosave` 函数改为 `protected`（player/login）、demon/trapped_demon 里非法 `\'` 转义。证明：HEAD lordbuster 有 Unused local；树无该警告，lordbuster 与 lords_guild 可加载。
