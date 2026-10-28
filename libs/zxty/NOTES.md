@@ -595,3 +595,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## set("long" 丢引号（2026-10-27，KB 04 §6.25 Also）
 
 `set("long",` 后直接跟汉字（无 `"` / `@LONG`），驱动报 Illegal character。用同路径完好手足覆盖（fyue_room←jhfy；hudi5/6←zxty08nxgbb；quanzhen_old/hudi*←xyzxfy2）。证明：HEAD 失败；改后加载。
+
+## 深度功能测试（2026-10-27，§6.25 zmud/dan 去引号）
+
+`u/zmud/dan` 整文件去引号；按 `clone/misc/dan` 重写（保留档案的 exp/40 与「小刀」日志）。

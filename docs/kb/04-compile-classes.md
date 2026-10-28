@@ -595,6 +595,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, dongmen quote-strip):** sjplii / sjpl2 `u/lark/luoyang/dongmen` lost quotes and `;` (`inherit ROOM`, `set (short, 春明门)`). Rewrote from intact `d/city/dongmen`, keeping the east exit to `/u/lark/luoyang/road1`. Proof: HEAD fail; tree loads.
 
+**Also (2026-10-27, zmud dan quote-strip):** zxty `u/zmud/dan` lost every quote and `;` (`set_name(还魂丹, ({huanhun dan…})`, `all_skillsskills`). Rewrote from intact `clone/misc/dan`, keeping the archive's `/40` exp gain and 小刀 log line. Proof: HEAD fail; tree loads.
+
 
 
 
