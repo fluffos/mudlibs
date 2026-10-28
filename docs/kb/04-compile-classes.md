@@ -787,6 +787,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-28, corpus sort_array #'>/#'< → 1/-1):** leftover LDMud sort direction quotes after the earlier #'fn pass (KB 06 7.234). 208 sites / 101 files across sticklib/aoh/morgengrauen/nirvlp312/…. Left lambda-soup / ternary reverse?#'<:#'> comparators. Proof: HEAD sticklib `_who_old` Illegal # / cascade Illegal LHS; tree loads.
 
+**Also (2026-10-28, sticklib room `add_object(file, int)`):** Strategy A `/lib/room` typed 2nd arg as `string appearmsg` while bank (and LDMud) pass reset chance as 2nd. `mixed appearmsg` + treat `intp` 2nd as chance. Proof: HEAD bank Bad type add_object; tree loads.
+
+
 
 
 

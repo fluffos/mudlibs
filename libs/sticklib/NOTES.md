@@ -448,3 +448,7 @@ Catalog 补 `master_object`/`wizlist`/`localcmd`/`unshadow`/`varargs snoop`；`/
 ## 深度功能测试（2026-10-28，sort_array 方向闭包）
 
 剩余 LDMud sort_array 的 #'> / #'< 改为 1 / -1（KB 06 7.234）。
+
+## 深度功能测试（2026-10-28，room add_object 第二参 mixed）
+
+`add_object`/`add_monster` 第二参改为 `mixed`，整型时当作 reset_chance。证明：HEAD bank Bad type；树 bank 可加载。
