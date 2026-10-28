@@ -1063,3 +1063,7 @@ tmr 区 112 个 NPC `#include <npc.h>` 并调用 Aug 的 `set_race`/`set_attr`/`
 ## 深度功能测试（2026-10-27，§6.25 dsword 引号/截断）
 
 `u/r/romeo/area/npc/wp/dsword` 多处截断（`set_name(... ({;`、`message_vision` 无收尾、`init_blade` 对 SWORD）。按残片重写：补 ids、收尾字符串、改 `init_sword`。证明：HEAD 失败；改后加载。
+
+## 深度功能测试（2026-10-27，§6.25 tmr master 缺头/截断）
+
+`u/t/tmr/room/npc/master` 含不存在的 `#include "/u/a/anfernee/anfernee.h"`、`inherit GUILDMASTER` 而宏路径未进编译单元，且 `greeting` 的 `say` 字符串截断。用完好的 `open/world2/anfernee/start/npc/master` 覆盖。证明：HEAD 失败；改后加载。
