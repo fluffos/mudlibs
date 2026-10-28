@@ -649,3 +649,63 @@ hash(mixed algo, string data)
     }
     return efun::hash(name, data);
 }
+
+
+/* LDMud command(cmd, who) / transfer — Strategy A catalog */
+
+varargs int
+command(string cmd, object who)
+{
+    mixed err;
+    int r;
+
+    if (!stringp(cmd))
+        return 0;
+    if (!who || who == this_object())
+        return efun::command(cmd);
+    /* Run the efun in the target object's context (FluffOS has no 2-arg command). */
+    err = catch(r = evaluate(bind((: efun::command, cmd :), who)));
+    return err ? 0 : r;
+}
+
+/* MudOS/LDMud transfer(); 0 = success. */
+int
+transfer(object item, object dest)
+{
+    int weight;
+    object from;
+
+    if (!item || !dest)
+        return 3;
+    weight = item->query_weight();
+    if (!item)
+        return 3;
+    from = environment(item);
+    if (from) {
+        if (living(from)) {
+            if (item->drop() || !item)
+                return 2;
+        } else if (environment(from)) {
+            if (!from->can_put_and_get() || !from)
+                return 3;
+        }
+    }
+    if (environment(dest) && !living(dest)) {
+        if (item->prevent_insert())
+            return 4;
+        if (!dest->can_put_and_get() || !dest)
+            return 5;
+    }
+    if (living(dest)) {
+        if (!item->get() || !item)
+            return 6;
+    }
+    if (environment(dest) && weight) {
+        if (!dest->add_weight(weight) || !dest)
+            return 1;
+    }
+    if (from && environment(from) && weight)
+        from->add_weight(-weight);
+    move_object(item, dest);
+    return 0;
+}

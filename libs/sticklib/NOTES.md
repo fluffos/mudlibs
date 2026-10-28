@@ -357,3 +357,7 @@ Strategy A catalog 缺 `do_find_object`/`get_object`/`m_allocate`/`get_eval_cost
 ## 深度功能测试（2026-10-27，§6.25 Strategy A combat/follow stubs）
 
 NPC 要 `set_follow`/`add_block`，战斗要 `add_hp`/`stop_fight`/`query_condition`/`set_condition`/`attacker_ob`。在 `/lib/npc` 与 `/lib/living` 补存储型 stub（conditions 用 mapping；`attacker_ob` 与 attack 同步）。证明：HEAD demon 报 Undefined set_follow；树 demon/golem/拳头/wandering_guard/bdragon/caretaker 可加载。
+
+## 深度功能测试（2026-10-27，§6.25 catalog sefun command/transfer）
+
+FluffOS 的 `command` 只有一参，LDMud 的 `command(cmd, who)` 与 MudOS `transfer` 在 Strategy A catalog 里没有。用 `bind((: efun::command, cmd :), who)` 做远程 command；`transfer` 按 ageofelements 形状补上。证明：HEAD bountyshop 报 Too many arguments；树 bountyshop/fill_bag/void 可加载。
