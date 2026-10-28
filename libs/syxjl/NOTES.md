@@ -1183,3 +1183,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## flute1 message_vision（2026-10-27，KB 04 §6.25 Also）
 
 `d/xingxiu/npc/obj/flute1` 的多行 `message_vision` 缺结尾 `", this_player());`（与 flute2 同形）。补上。证明：HEAD 失败；改后加载。
+
+## 深度功能测试（2026-10-27，§6.25 ZHAOSHI 截断玩家技能）
+
+玩家自创武功在 `// ZHAOSHI : 0` 处截断（EOF），无法加载。按同系完整 `moming-blade` 补一招 + valid_*/query_*/practice（2）：`kungfu/skill/fuhu-unarmed.lpc`, `kungfu/skill/fulong-unarmed.lpc`。

@@ -1381,3 +1381,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## set("long" 丢引号（2026-10-27，KB 04 §6.25 Also）
 
 `set("long",` 后直接跟汉字（无 `"` / `@LONG`），驱动报 Illegal character。用同路径完好手足覆盖（fyue_room←jhfy；hudi5/6←zxty08nxgbb；quanzhen_old/hudi*←xyzxfy2）。证明：HEAD 失败；改后加载。
+
+## 深度功能测试（2026-10-27，§6.25 ZHAOSHI 截断玩家技能）
+
+玩家自创武功在 `// ZHAOSHI : 0` 处截断（EOF），无法加载。按同系完整 `moming-blade` 补一招 + valid_*/query_*/practice（6）：`kungfu/skill/killkillkill-sword.lpc`, `kungfu/skill/love-sword.lpc`, `kungfu/skill/papaquan-unarmed.lpc`, `kungfu/skill/shangxin-sword.lpc`, `kungfu/skill/hahasword-sword.lpc`, `kungfu/skill/tianxiawuxue-sword.lpc`。

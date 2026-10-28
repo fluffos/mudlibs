@@ -579,6 +579,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, bare `set("long"` residue):** the five left without a room donor (sjsh / sjshwzb / sjshwzjqb `书局老板`, shenmo mojibake twin, xkm `specialroom`) plus two `foodmaker` `@ROOM_CODE` templates (sj / shiji) had `set("long",` then raw Chinese. Inserted the opening `"`. `specialroom` also had `inherit room` (want `ROOM`) and an unquoted `short`. Residue of CJK-bare `set("long"`: 0. Proof: HEAD fail; tree loads.
 
+**Also (2026-10-27, ZHAOSHI truncated player skills):** thirty-seven maxim@nju_fengxue (and zzfy forks) player-own skills ended at `mapping *action = ({` / `// ZHAOSHI : 0` (EOF), so the driver saw `unexpected end of file`. Completed each with one starter action plus `valid_learn` / `valid_enable` / `query_skill_name` / `query_action` / `practice_skill` after the intact `moming-blade` shape (weapon check when the type is armed). Residue of the EOF-at-ZHAOSHI-0 shape: 0. Proof: HEAD ldtx `moming-sword` fails; tree loads (ldtx sword+unarmed, hy3 finger, syxjl fuhu, tianxiawuxue love-sword, wqfy wujoysword).
+
 
 
 

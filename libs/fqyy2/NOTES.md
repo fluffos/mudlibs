@@ -523,3 +523,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## yinsuo-jinling 引号剥离 ← xkxyb（2026-10-27，KB 04 §6.25 Also）
 
 `kungfu/skill/yinsuo-jinling` 与 `feng`/`dian` 招式丢了引号与分号（`inherit SKILL`、`([ action: 劲 贯 $w,...`、perform 里 `query(weapon)`）。用同系完好的 xkxyb 三份覆盖。证明：HEAD 技能加载失败；改后技能与两招均加载成功。
+
+## 深度功能测试（2026-10-27，§6.25 ZHAOSHI 截断玩家技能）
+
+玩家自创武功在 `// ZHAOSHI : 0` 处截断（EOF），无法加载。按同系完整 `moming-blade` 补一招 + valid_*/query_*/practice（1）：`kungfu/skill/xssword-sword.lpc`。

@@ -803,3 +803,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## hanbing `random 反引号（2026-10-27，KB 04 §6.25 Also）
 
 `hanbing-mianzhang` / `hanbing-mianzhang2` 在 `random(` 前多了一个反引号，驱动按模板字面量读到 EOF。删掉。证明：HEAD 失败；改后加载。
+
+## 深度功能测试（2026-10-27，§6.25 ZHAOSHI 截断玩家技能）
+
+玩家自创武功在 `// ZHAOSHI : 0` 处截断（EOF），无法加载。按同系完整 `moming-blade` 补一招 + valid_*/query_*/practice（5）：`kungfu/skill/badknife-sword.lpc`, `kungfu/skill/wujifinger-finger.lpc`, `kungfu/skill/zmyzzz-unarmed.lpc`, `kungfu/skill/wuqing-sword.lpc`, `kungfu/skill/qimai-finger.lpc`。

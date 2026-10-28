@@ -616,3 +616,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 无参数时命令对 0 的调用（2026-10-27，KB 06 §7.336 Also）
 
 巫师/管理员命令在通过权限门之后仍会把 0 交给 `sscanf` / `read_file` / `find_living` 等。`lpc_fix_bare_arg.py` 在首次使用参数前加上 `if (!arg)`（或 `help(me)` / `GetHelp()`）。本库本批改动见该提交。
+
+## 深度功能测试（2026-10-27，§6.25 ZHAOSHI 截断玩家技能）
+
+玩家自创武功在 `// ZHAOSHI : 0` 处截断（EOF），无法加载。按同系完整 `moming-blade` 补一招 + valid_*/query_*/practice（3）：`daemon/skill/dianwen-unarmed.lpc`, `daemon/skill/dushen-unarmed.lpc`, `daemon/skill/wujoysword-sword.lpc`。

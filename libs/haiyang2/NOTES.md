@@ -1719,3 +1719,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 
 `kungfu/skill/kunlun-zhang.lpc` `valid_learn`：无门派时 `fam["family_name"]` 报错。同 §7.30 Also 守卫。
 
+
+## 深度功能测试（2026-10-27，§6.25 ZHAOSHI 截断玩家技能）
+
+玩家自创武功在 `// ZHAOSHI : 0` 处截断（EOF），无法加载。按同系完整 `moming-blade` 补一招 + valid_*/query_*/practice（1）：`kungfu/skill/rulaizhang-unarmed.lpc`。
