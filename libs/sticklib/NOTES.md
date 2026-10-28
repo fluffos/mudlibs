@@ -337,3 +337,7 @@ Strategy A catalog 缺 `do_find_object`/`get_object`/`m_allocate`/`get_eval_cost
 ## 深度功能测试（2026-10-27，§6.25 catalog sefun query_once_interactive）
 
 祭司房间/守护程序调用 LDMud `query_once_interactive`；Strategy A catalog 没有。映射为 `interactive(ob)`。证明：HEAD earth_meld_room/storage_room 失败；树均可加载。
+
+## 深度功能测试（2026-10-27，§6.25 catalog sefun regreplace）
+
+帮助命令用 LDMud `regreplace` 做 `_`↔空格；Strategy A catalog 没有。用 `replace_string` 做字面替换。证明：HEAD `_help2` 失败；树 `_help2` 与 druids `_help` 可加载。
