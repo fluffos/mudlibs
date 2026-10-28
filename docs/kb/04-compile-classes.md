@@ -585,6 +585,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, `set_name` missing opening quote):** three files had `set_name(中文…"` / `set_name(WHT 中文…"` (closing quote present, opening lost). Inserted the opening `"`. Residue of that shape: 0. Proof: HEAD lx_cloth Illegal character; tree loads lx_cloth+jugeng+w_lunhui2.
 
+**Also (2026-10-27, panshi_dan quote-strip):** four `u/stey/u/jie/panshi_dan` copies lost every quote and `;` (`inherit ITEM` then bare `int do_eat`, `set_name(HIC 叛师丹 NOR, ({panshi dan…})`). Reconstructed from the archived logic (eat clears family/class/title; rumor announce). Residue 0. Proof: HEAD fail; tree loads (shenmo, sjshwzb).
+
 
 
 

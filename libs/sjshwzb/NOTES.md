@@ -654,3 +654,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 深度功能测试（2026-10-27，§6.25 glued inherit / 粘贴残片）
 
 `u/stey/u/jie/npc/mm`：同上，去掉粘贴残片。
+
+## 深度功能测试（2026-10-27，§6.25 panshi_dan 去引号）
+
+`u/stey/u/jie/panshi_dan`：同上，重写为可加载版。
