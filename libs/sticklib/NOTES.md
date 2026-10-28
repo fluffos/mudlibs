@@ -305,3 +305,7 @@ Strategy A 的 `/catalog/simul_efun` 缺少 LDMud 的 `present4` / `object_info`
 ## 深度功能测试（2026-10-27，§6.25 Strategy A drink potion API）
 
 薄 `/lib/drink` 只够酒吧 `set_value`/`set_id`；药水的 `create_drink()` 还要 `set_strength`/`set_soft`/`set_info`/`set_empty_container`/`set_drinker_mess`/`set_liquid`/`full` 等（完整版在 `drink_ldmud.lpc`）。补上这些 setter，继承 `/basic/object/dimensions`，并在 `create()` 里调用 `create_drink()`。证明：HEAD potion_heal 报 Undefined set_info；树 6/6 药水与 finnclub 酒水可加载。
+
+## 深度功能测试（2026-10-27，§6.25 Strategy A NPC spell stubs）
+
+NPC 的 `set_chance`/`set_spell_mess1`/`set_spell_mess2`/`set_spell_dam`/`set_breath_attack` 在 `npc_ldmud`；薄 `/lib/npc` 没有。补上存储与 setter（施法心跳仍薄）。证明：HEAD leo 报 Undefined set_chance；树可加载 leo。
