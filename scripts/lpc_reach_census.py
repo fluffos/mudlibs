@@ -179,7 +179,7 @@ def load_paths(slug, paths):
     dest = f"{SCRATCH}/reach-tree-{slug}"
     C.build_tree(slug, dest)
     res = {}
-    cmd = ["systemd-run", "--user", "--scope", "-q", "-p", "MemoryMax=3G", "-p", "MemorySwapMax=0", "timeout", "1800", C.LPCC, "--batch", "config.fluffos"]
+    cmd = C._lpcc_cmd(1800, C.LPCC, "--batch", "config.fluffos")
     cwd = f"{dest}/libs/{slug}"
     # a lib whose master asks SECURITY_D for valid_write() gets it only after the (asynchronous) preload: load it first, or every object
     # that saves in create() (nitan warehouse rooms: `Denied write permission in save_object()`) fails here and nowhere else
@@ -248,7 +248,7 @@ def walk_paths(slug, rooms):
     work = f"{cwd}/work"
     os.makedirs(f"{work}/zz_rt", exist_ok=True)
     open(f"{work}/zz_rt/visitor.lpc", "w", encoding="utf-8").write(VISITOR_T)
-    cmd = ["systemd-run", "--user", "--scope", "-q", "-p", "MemoryMax=3G", "-p", "MemorySwapMax=0", "timeout", "1800", C.LPCC, "--batch", "config.fluffos"]
+    cmd = C._lpcc_cmd(1800, C.LPCC, "--batch", "config.fluffos")
     pre = [p for p in ("/adm/daemons/securityd.lpc",) if os.path.exists(f"{work}{p}")]
     res = {}
     novisitor = False

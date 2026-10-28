@@ -13,7 +13,7 @@ aggregates every result file (--playable: only libs whose meta.json says `playab
 non-booting archives would swamp it): error classes (numbers, quoted names and paths blurred) by objects and libs, with an example.
 --cmds loads every file of the wizard command directories (`/cmds/wiz`, `wizard`, `arch`, `adm`, `imm`, `creators`, ...) instead of a sample: the sample and the
 mechanical fixers skip `/wiz/` and `/adm/` paths, so those commands were never compiled by anything but the whole-lib scan (default output $LPC_SCRATCH/census-cmds).
-The driver runs under systemd-run with a 3 GB cap and a timeout; one lib takes about a minute plus the tree build."""
+The driver runs under systemd-run with a 3 GB cap and a timeout when a user bus is available; otherwise plain `timeout` (Cloud Agent images without systemd). One lib takes about a minute plus the tree build."""
 import collections
 import json
 import os
@@ -29,6 +29,16 @@ SKIP = re.compile(r"/(u|w|wiz|wizard|wizards|open|players|backup|backups|old|bak
 SAFE = re.compile(r"^[A-Za-z0-9_./-]+$")
 # --cmds: the wizard command directories the sample leaves out (SKIP holds /wiz/, /wizard/ and /adm/): every one of them is loaded, none sampled
 WIZCMD = re.compile(r"^/cmds/(wiz|wizard|wizards|arch|adm|imm|admin|creators?|immortal|debug|sys|dev|god|gods|app|ad|elder|sage|lord)/")
+
+
+def _lpcc_cmd(timeout_s, *args):
+    """Prefer a MemoryMax scope; fall back when no systemd user bus (Cloud Agent)."""
+    capped = ["systemd-run", "--user", "--scope", "-q", "-p", "MemoryMax=3G", "-p", "MemorySwapMax=0",
+              "timeout", str(timeout_s), *args]
+    probe = subprocess.run(["systemd-run", "--user", "--scope", "-q", "true"], capture_output=True)
+    if probe.returncode == 0:
+        return capped
+    return ["timeout", str(timeout_s), *args]
 
 
 def sample(slug, n, seed, cmds=False):
@@ -87,8 +97,8 @@ def census(slug, n, seed, out, cmds=False):
         return None
     dest = f"{SCR}/census-tree-{slug}"
     build_tree(slug, dest)
-    r = subprocess.run(["systemd-run", "--user", "--scope", "-q", "-p", "MemoryMax=3G", "-p", "MemorySwapMax=0", "timeout", "900",
-                        LPCC, "--batch", "config.fluffos"], cwd=f"{dest}/libs/{slug}", input="\n".join(o.lstrip("/") for o in objs) + "\n",
+    r = subprocess.run(_lpcc_cmd(900, LPCC, "--batch", "config.fluffos"), cwd=f"{dest}/libs/{slug}",
+                       input="\n".join(o.lstrip("/") for o in objs) + "\n",
                        capture_output=True, text=True, errors="replace")
     res = parse(r.stdout)
     fails = {k: v for k, v in res.items() if v}
