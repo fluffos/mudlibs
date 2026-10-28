@@ -393,3 +393,11 @@ NPC 写 `::init()`，虚拟房间写 `::heart_beat()`，薄 living/room 没有�
 ## 深度功能测试（2026-10-27，§6.25 query_tax varargs）
 
 `thief_mark_new` 声明 `query_tax(int x)` 却无参调用。定义与 `thief.h` 原型加 `varargs`。证明：HEAD 参数个数错误；树 thief_mark_new 可加载。
+
+## 深度功能测试（2026-10-27，§6.25 Strategy A set_move_msg/reset）
+
+决斗兽人/`bat` 调用 `set_move_msg`（LDMud moving），并 `::reset(arg)`；Strategy A living/npc 没有。补上移动消息（含 msgin/msgout 别名）和空 `reset`。证明：HEAD corc Undefined set_move_msg；树 corc/worc 可加载。
+
+## 深度功能测试（2026-10-27，§6.25 cremate LDMud lambda）
+
+`cremate.lpc` 用 `lambda`+`#'move_object`（Illegal character #）。改成对 `all_inventory` 的 `for`。证明：HEAD Illegal character #；树 cremate 可加载。
