@@ -591,6 +591,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, `#inherit` leftover):** dreamofseven `tako.tmp/man` and kxkj1 `mndance` used `#inherit` (Unknown preprocessor directive). Switched to `inherit`. man also had `dele`/`te_temp` split across a line; mndance lost the closing `"`/`,` on one action string and declared no `object ob` in `valid_learn`. Residue of live `#inherit` directives: 0 (comment/string hits left). Proof: HEAD fail; tree loads both.
 
+**Also (2026-10-27, traveler quote-strip):** dreamofseven `u/t/tako.tmp/traveler` lost every quote (`set_name(路人,({ walk man,man }))`). Rewrote from the intact same-dir `traveller` (kept `walk man` / level 5). Proof: HEAD fail; tree loads.
+
 
 
 

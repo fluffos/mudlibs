@@ -1047,3 +1047,7 @@ tmr 区 112 个 NPC `#include <npc.h>` 并调用 Aug 的 `set_race`/`set_attr`/`
 ## 深度功能测试（2026-10-27，§6.25 #inherit）
 
 `u/t/tako.tmp/man`：`#inherit NPC` → `inherit`；`delete_temp` 被折行成 `dele`/`te_temp` 一并修。
+
+## 深度功能测试（2026-10-27，§6.25 traveler 去引号）
+
+`u/t/tako.tmp/traveler` 整文件去引号；按同目录完整 `traveller` 重写（保留 walk man / level 5）。
