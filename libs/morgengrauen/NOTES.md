@@ -284,3 +284,6 @@ The code of this lib writes logs into 10 subdirectories of `log/`: `log/ARCH/bbm
 ## 深度功能测试（2026-10-27，§6.25 master_ldmud `#'fn` 残渣）
 
 `call_out`/`set_driver_hook` 等行上剩余的简单 `#'ident` → `(: ident :)`（仍跳过 `({#'` lambda 汤）。
+## 深度功能测试（2026-10-28，remove_call_out 闭包→字符串）
+
+`envchk`/`attributes`/`news`/`eventd`/`losa` 的简单 `(:fn:)` 形式改为字符串。

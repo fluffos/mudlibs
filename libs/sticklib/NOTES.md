@@ -441,3 +441,6 @@ Catalog 补 `master_object`/`wizlist`/`localcmd`/`unshadow`/`varargs snoop`；`/
 ## 深度功能测试（2026-10-28，living API + angel remove_call_out）
 
 `transfer_all_to(mixed)`、`varargs set_wimpy`、`set_frog`/`frog_curse`、`query_can_move`；angel 的 `remove_call_out((:inform_owner:))` 改为字符串名。证明：chimpanzee/frog/angel 可加载。
+## 深度功能测试（2026-10-28，corpus remove_call_out 闭包）
+
+`moving.lpc` 的 `remove_call_out((:clean_queue:))` 改为字符串；同批 corpus 扫 aoh/morgengrauen/nirvlp312/simud。证明：HEAD moving Bad argument；树可加载。

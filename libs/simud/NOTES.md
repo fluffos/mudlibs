@@ -235,3 +235,6 @@ The code of this lib writes logs into 2 subdirectories of `log/`: `log/chat` (`d
 ## 深度功能测试（2026-10-27，§6.25 LDMud `#'fn` 闭包）
 
 同 sticklib：`#'ident` → `(: ident :)`（跳过 `#'?` / `'symbol` 行）。
+## 深度功能测试（2026-10-28，remove_call_out 闭包→字符串）
+
+`telnet_ob` 的 `remove_call_out((:timeout:))` 改为字符串。

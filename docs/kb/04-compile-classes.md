@@ -783,6 +783,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-28, sticklib angel `remove_call_out((: … :))`):** FluffOS `remove_call_out` takes a string name, not a function pointer. `while (remove_call_out("inform_owner") >= 0)`. Proof: HEAD Bad argument remove_call_out; tree angel loads.
 
+**Also (2026-10-28, corpus `remove_call_out((: name :))`):** FluffOS `remove_call_out` takes a string; LDMud accepted a closure. Mechanical rewrite of simple `remove_call_out((: ident :))` → `remove_call_out("ident")` in sticklib/aoh/morgengrauen/nirvlp312/simud (17 sites / 16 files). Left complex `(: call_other, … :)` (kxkj/jym). Proof: HEAD sticklib moving Bad argument remove_call_out; tree moving loads.
+
+
 
 
 
