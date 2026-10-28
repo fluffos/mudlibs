@@ -640,3 +640,7 @@ guest：`tell_object("…", who)`→`tell_object(who, …)`。
 
 删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
 
+
+## 深度功能测试（2026-10-27，§6.13 JOB_OB 宏）
+
+`globals.h` 补上 `#define JOB_OB(x) ("/d/job/"+x+"/job")`（与 sjsh 一致）。`/d/wuguan/chaifang` 可加载。

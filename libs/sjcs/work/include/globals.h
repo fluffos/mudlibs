@@ -17,6 +17,7 @@
 #define DUMP_DIR                "/dump/"
 #define HELP_DIR                "/doc/"
 #define LOG_DIR                 "/log/"
+#define JOB_OB(x)               ("/d/job/"+x+"/job")
 // Daemons
 #define ALIAS_D                 "/adm/daemons/aliasd"
 #define CHANNEL_D               "/adm/daemons/channeld"

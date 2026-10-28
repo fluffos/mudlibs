@@ -685,6 +685,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, sticklib `lpc_warnings --fix`):** mechanical pass: unused locals dropped, `nosave` functions → `protected` (34 files). No-side-effects residue (~119) left for a dedicated pass. Proof: thief_mark_new `nosave int rank_no` → `protected`; bboard unused locals gone.
 
+**Also (2026-10-27, sjcs `JOB_OB`):** wuguan rooms call `JOB_OB("wuguan")->…` but `globals.h` never defined the macro (sjsh has `#define JOB_OB(x) ("/d/job/"+x+"/job")`). Archive ships `/d/job/wuguan/job`. Added the macro. Residue: only sjcs among JOB_OB callers lacked it. Proof: HEAD chaifang Undefined function JOB_OB; tree loads.
+
 
 
 
