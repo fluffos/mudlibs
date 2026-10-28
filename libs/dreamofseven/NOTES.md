@@ -1051,3 +1051,7 @@ tmr 区 112 个 NPC `#include <npc.h>` 并调用 Aug 的 `set_race`/`set_attr`/`
 ## 深度功能测试（2026-10-27，§6.25 traveler 去引号）
 
 `u/t/tako.tmp/traveler` 整文件去引号；按同目录完整 `traveller` 重写（保留 walk man / level 5）。
+
+## 深度功能测试（2026-10-27，§6.25 star_necklace tell_object 引号错位）
+
+`…/star_necklace` 的 `tell_object("me, …")` 同形，改为 `tell_object(me, "…")`。证明：改后加载。
