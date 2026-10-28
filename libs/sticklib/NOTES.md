@@ -261,3 +261,7 @@ The code of this lib writes logs into 1 subdirectory of `log/`: `log/lords` (`ar
 ## 深度功能测试（2026-10-27，§6.25 LDMud foreach 冒号）
 
 LDMud 的 `foreach (object you : arr)` / `foreach (x : arr)` 在本驱动要写成 `in`。本库 27+ 个文件约 80+ 处冒号改成 `in`（含 `flower_man`）。证明：HEAD `flower_man` 失败；改后加载。
+
+## 深度功能测试（2026-10-27，§6.25 LDMud mapping foreach）
+
+接着把 `foreach (k, v : map)` 改成 `in`，并修掉无类型替换时 `in` 与标识符粘在一起（`inansi_codes`）。证明：`ansid` 加载。
