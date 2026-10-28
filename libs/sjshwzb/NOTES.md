@@ -690,3 +690,7 @@ tianzun：`tell_object("…")` → `tell_object(me, …)`。
 
 删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
 
+
+## 深度功能测试（2026-10-27，§6.10 pusa1 die varargs）
+
+`d/qujing/heifeng/npc/pusa1`：`void die(object me)` → `varargs void die(object me)`，与角色基类一致。

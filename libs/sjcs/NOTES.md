@@ -644,3 +644,7 @@ guest：`tell_object("…", who)`→`tell_object(who, …)`。
 ## 深度功能测试（2026-10-27，§6.13 JOB_OB 宏）
 
 `globals.h` 补上 `#define JOB_OB(x) ("/d/job/"+x+"/job")`（与 sjsh 一致）。`/d/wuguan/chaifang` 可加载。
+
+## 深度功能测试（2026-10-27，§6.10 pusa1 die varargs）
+
+`d/qujing/heifeng/npc/pusa1`：`void die(object me)` → `varargs void die(object me)`，与角色基类一致。

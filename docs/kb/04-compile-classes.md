@@ -687,6 +687,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, sjcs `JOB_OB`):** wuguan rooms call `JOB_OB("wuguan")->…` but `globals.h` never defined the macro (sjsh has `#define JOB_OB(x) ("/d/job/"+x+"/job")`). Archive ships `/d/job/wuguan/job`. Added the macro. Residue: only sjcs among JOB_OB callers lacked it. Proof: HEAD chaifang Undefined function JOB_OB; tree loads.
 
+**Also (2026-10-27, qujing `pusa1` `die(object me)`):** heifeng `pusa1` overrode `die` with a required `object me` while the char base uses a zero-arg / varargs `die`, so FluffOS warned/failed the override. `varargs void die(object me)` in 22 Journey/FY copies. Also dropped a few unused locals from `lpc_warnings --fix` on sjcs/fys/mhxy/sjsh. Proof: sjsh pusa1 loads.
+
 
 
 
