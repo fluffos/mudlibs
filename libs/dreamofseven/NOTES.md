@@ -1043,3 +1043,7 @@ tmr 区 20 件武器写 Aug `inherit F_BLADE`（本库 `_blade` 作 feature 缺 
 ## Aug npc.h + set_race 栈（2026-10-27，KB 04 §6.16 Also）
 
 tmr 区 112 个 NPC `#include <npc.h>` 并调用 Aug 的 `set_race`/`set_attr`/`set_stat_*`/`carry_money` 等，档案从未带入该头与 `feature/npc/*`。补上 `include/npc.h`、自 dfgs2 采纳 reaction 模块，并加 `aug_compat.lpc` 把 Aug 属性映射到本库 `hp`/`mp`/`ap`/`str`…；`beast_base/.../action.lpc` 的未定义 `HIK` 改为本库 `HBK`。证明：HEAD `Cannot #include npc.h`；改后 112/112 加载。
+
+## 深度功能测试（2026-10-27，§6.25 #inherit）
+
+`u/t/tako.tmp/man`：`#inherit NPC` → `inherit`；`delete_temp` 被折行成 `dele`/`te_temp` 一并修。

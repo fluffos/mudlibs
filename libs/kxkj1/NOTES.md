@@ -952,3 +952,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply k
 ## open 下死出口由对侧房间修好（2026-10-27，KB 06 §7.257 Also）
 
 `lpc_fix_dead_exits` 的 SKIP 曾把 `/open/` 当巫师目录。本库本批出口改写见该提交（大小写/错名，由对侧出口回指判定）。证明见 KB。
+
+## 深度功能测试（2026-10-27，§6.25 #inherit）
+
+`u/h/hitler/skill/mndance`：`#inherit` → `inherit`；招式字符串缺收尾引号与逗号；`valid_learn` 补 `object ob`。
