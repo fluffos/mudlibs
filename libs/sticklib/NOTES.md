@@ -437,3 +437,7 @@ Catalog 补 `master_object`/`wizlist`/`localcmd`/`unshadow`/`varargs snoop`；`/
 ## 深度功能测试（2026-10-28，§6.21 find_player 形参类型）
 
 `guild_room.calculate_average_rank` 的形参从 `object` 改为 `mixed`，经 `object pl = find_player(...)` 再取公会物件。证明：HEAD Bad argument find_player；树 guild_room 可加载。
+
+## 深度功能测试（2026-10-28，living API + angel remove_call_out）
+
+`transfer_all_to(mixed)`、`varargs set_wimpy`、`set_frog`/`frog_curse`、`query_can_move`；angel 的 `remove_call_out((:inform_owner:))` 改为字符串名。证明：chimpanzee/frog/angel 可加载。

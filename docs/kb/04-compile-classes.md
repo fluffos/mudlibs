@@ -779,6 +779,11 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-28, sticklib `find_player` on object-typed param):** `calculate_average_rank(object sym)` called `find_player(sym)` after `stringp(sym)` — compile-time Bad argument (declared object). Param → `mixed`; assign through `object pl`. shield_d same shape is blocked by wide-map. Proof: HEAD guild_room Bad argument find_player; tree loads.
 
+**Also (2026-10-28, sticklib living transfer_all_to/set_wimpy/frog/query_can_move):** (1) `transfer_all_to` took `object` but angel passes a path string — `mixed` + `load_object`. (2) `set_wimpy()` zero-arg (chimpanzee) → `varargs` default 20. (3) `set_frog`/`frog_curse`/`query_frog` stubs. (4) `query_can_move` stub returns 1. Proof: HEAD chimpanzee Wrong number set_wimpy / frog Undefined set_frog / angel Bad type transfer_all_to; tree chimpanzee/frog/angel load.
+
+**Also (2026-10-28, sticklib angel `remove_call_out((: … :))`):** FluffOS `remove_call_out` takes a string name, not a function pointer. `while (remove_call_out("inform_owner") >= 0)`. Proof: HEAD Bad argument remove_call_out; tree angel loads.
+
+
 
 
 
