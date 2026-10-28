@@ -995,3 +995,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## yuanwai 孤儿 call_out announce_success（2026-10-27，KB 06 §7.349 Also）
 
 `d/changan/npc/yuanwai.lpc`（及 aoxiangtianji 的 `d/city` 副本）在 `check_daughter` 里 `call_out("announce_success", …)`，但本文件从未定义该函数；同系也无实现。到点会 *Undefined function*。`cry_daughter` 已完成认亲与赠书，删除这对 `remove_call_out`/`call_out`。证明：扫描 HIT call_out→announce_success 且无定义；改后残渣 0。
+
+## 深度功能测试（2026-10-27，§6.25 zhongling tell_object 引号错位）
+
+`d/wanjiegu/npc/zhongling`（及同路径副本）的 `tell_object("who, 钟灵脱下一双绣花鞋。\n")` 把对象参数写进了字符串；改为 `tell_object(who, "…")`。证明：原文错位；改后加载，语料残渣 0。

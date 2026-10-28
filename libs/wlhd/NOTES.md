@@ -719,3 +719,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 炼丹室 liandan 赋值当条件（2026-10-27，KB 06 §7.290 Also）
 
 接 §6.25 补引号之后：`if (shoubi = 27&&zhuyao=3)` 等 8 处（`tui` / `all` 同形）把 `=` 写成了 `==` 的意思，非零局部变量时分支恒真，配方判断乱套。`lpc_fix_cond_assign.py --apply` 改成 `==`（zxty / zxty08nxgbb / tybxjh 的 `d/zjb/liandan`，wlhd / yxjh 的 `d/rock/liandan`；共 40 处，残留 0）。证明：HEAD 源码仍是赋值；改后是比较；对象仍可加载。
+
+## 深度功能测试（2026-10-27，§6.25 zhongling tell_object 引号错位）
+
+`d/wanjiegu/npc/zhongling`（及同路径副本）的 `tell_object("who, 钟灵脱下一双绣花鞋。\n")` 把对象参数写进了字符串；改为 `tell_object(who, "…")`。证明：原文错位；改后加载，语料残渣 0。

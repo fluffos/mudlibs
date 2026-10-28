@@ -1187,3 +1187,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-10-27，§6.25 dream 技能去引号（2））
 
 `u/dream/kuaidao-daofa`、`u/dream/douzhuan-xingyi` 整文件去引号。分别用 zhyx 同作者完好本、本库 `kungfu/skill/douzhuanxingyi` 覆盖。证明：HEAD 失败；改后均加载。
+
+## 深度功能测试（2026-10-27，§6.25 zhongling tell_object 引号错位）
+
+`d/wanjiegu/npc/zhongling`（及同路径副本）的 `tell_object("who, 钟灵脱下一双绣花鞋。\n")` 把对象参数写进了字符串；改为 `tell_object(who, "…")`。证明：原文错位；改后加载，语料残渣 0。

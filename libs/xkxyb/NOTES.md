@@ -370,3 +370,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## tianluo-diwang 知识武功引号剥离（2026-10-27，KB 04 §6.25 Also）
 
 `kungfu/skill/tianluo-diwang.lpc`（Kayin 古墓知识武功短桩）丢了 `inherit SKILL` 后的 `;` 以及几乎所有引号（`return knowledge`、`query(dex)`、汉字通知里字间插空格）。按原意重写成可加载的 knowledge skill（未并入带招式的战斗版手足）。证明：HEAD 加载失败；改后加载成功。
+
+## 深度功能测试（2026-10-27，§6.25 zhongling tell_object 引号错位）
+
+`d/wanjiegu/npc/zhongling`（及同路径副本）的 `tell_object("who, 钟灵脱下一双绣花鞋。\n")` 把对象参数写进了字符串；改为 `tell_object(who, "…")`。证明：原文错位；改后加载，语料残渣 0。

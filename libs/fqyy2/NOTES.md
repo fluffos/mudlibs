@@ -527,3 +527,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 深度功能测试（2026-10-27，§6.25 ZHAOSHI 截断玩家技能）
 
 玩家自创武功在 `// ZHAOSHI : 0` 处截断（EOF），无法加载。按同系完整 `moming-blade` 补一招 + valid_*/query_*/practice（1）：`kungfu/skill/xssword-sword.lpc`。
+
+## 深度功能测试（2026-10-27，§6.25 zhongling tell_object 引号错位）
+
+`d/wanjiegu/npc/zhongling`（及同路径副本）的 `tell_object("who, 钟灵脱下一双绣花鞋。\n")` 把对象参数写进了字符串；改为 `tell_object(who, "…")`。证明：原文错位；改后加载，语料残渣 0。
