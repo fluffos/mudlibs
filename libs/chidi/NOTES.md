@@ -1200,3 +1200,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-10-27，§6.25 d/city/sj 去引号残渣）
 
 `d/city/sj` 仍有去引号的 `message_vision`（上次只修了带引号的 `add_action` 副本）；按 jhfy 替换。
+
+## 深度功能测试（2026-10-27，§6.25 tell_object 缺 me（自动放弃/愿否））
+
+一参 `tell_object("…")` 在已有 `me` 时改为 `tell_object(me, "…")`（city.lpc, city1.lpc）。证明：抽样 city / xiaolongnv 加载。

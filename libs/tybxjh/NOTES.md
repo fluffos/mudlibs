@@ -685,3 +685,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-10-27，§6.25 zhongling tell_object 引号错位）
 
 `d/wanjiegu/npc/zhongling`（及同路径副本）的 `tell_object("who, 钟灵脱下一双绣花鞋。\n")` 把对象参数写进了字符串；改为 `tell_object(who, "…")`。证明：原文错位；改后加载，语料残渣 0。
+
+## 深度功能测试（2026-10-27，§6.25 tell_object 缺 me（自动放弃/愿否））
+
+一参 `tell_object("…")` 在已有 `me` 时改为 `tell_object(me, "…")`（city.lpc）。证明：抽样 city / xiaolongnv 加载。

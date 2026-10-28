@@ -522,3 +522,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 深度功能测试（2026-10-27，§6.25 ZHAOSHI 截断玩家技能）
 
 玩家自创武功在 `// ZHAOSHI : 0` 处截断（EOF），无法加载。按同系完整 `moming-blade` 补一招 + valid_*/query_*/practice（2）：`daemon/skill/dianwen-unarmed.lpc`, `daemon/skill/wujoysword-sword.lpc`。
+
+## 深度功能测试（2026-10-27，§6.25 tell_object 缺 me（自动放弃/愿否））
+
+一参 `tell_object("…")` 在已有 `me` 时改为 `tell_object(me, "…")`（city.lpc）。证明：抽样 city / xiaolongnv 加载。

@@ -495,3 +495,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## jmqshenmu 截断 init（2026-10-27，KB 04 §6.25 Also）
 
 `d/mingjiao/jmqshenmu` 在 `void init() {` 处文件结束。补上 `}` 使房间可加载（本库未收齐 climb/`jmqdating` 时不做内容补写）。证明：HEAD 失败；改后加载。
+
+## 深度功能测试（2026-10-27，§6.25 tell_object 缺 me（自动放弃/愿否））
+
+一参 `tell_object("…")` 在已有 `me` 时改为 `tell_object(me, "…")`（xiaolongnv.lpc, yangguo.lpc）。证明：抽样 city / xiaolongnv 加载。

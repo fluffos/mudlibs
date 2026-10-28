@@ -611,3 +611,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 深度功能测试（2026-10-27，§6.25 gif-shizhe 字符串截断）
 
 `d/city/npc/gif-shizhe` 与 `u/xot/gif-shizhe` 在 `tell_object(HIR"飞霞礼物使告诉你,你得到了` 处文件截断（`End of file in string`）。按同目录完好的 `gift-shizhe2` 收尾补上 `who` 参数、完整字符串、`command(chat*)` 与 `return 1;`。证明：HEAD 失败；改后两处均加载。
+
+## 深度功能测试（2026-10-27，§6.25 tell_object 缺 me（自动放弃/愿否））
+
+一参 `tell_object("…")` 在已有 `me` 时改为 `tell_object(me, "…")`（city.lpc）。证明：抽样 city / xiaolongnv 加载。

@@ -1668,3 +1668,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 段延庆 yanqing 空格污染无法加载（2026-10-27，KB 04 §6.25 Also）
 
 `kungfu/class/dali/yanqing.lpc`：汉字与 dbase 键都被插空格（`" id "`、`" family / master_id "`、空格版 `say`），另有 `query("PKS)` 缺引号和嵌套 `void init`。无法就地修补；用同系已修好的 xkm 副本覆盖（bmxkx2001 / xkx2001 / xuanjianlu 三份原相同）。证明：HEAD 加载失败；改后加载成功。
+
+## 深度功能测试（2026-10-27，§6.25 tell_object 缺 me（自动放弃/愿否））
+
+一参 `tell_object("…")` 在已有 `me` 时改为 `tell_object(me, "…")`（city.lpc）。证明：抽样 city / xiaolongnv 加载。
