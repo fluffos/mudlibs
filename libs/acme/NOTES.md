@@ -238,3 +238,7 @@ load. Do not invent rooms.
 - `platform/.lib/exception.lpc`, `player.lpc`, `program.lpc`: `struct X { ... };` -> no `;` after the struct body.
 - Three redundant inherits another inherit already contains (`lpc_diamonds.py`).
 - 59 changed objects: HEAD 6 load, tree 6 load, no regression. The other 118 of 152 files do not compile at all (LDMud closures, `#'` syntax, missing efuns such as `variable_list`/`set_extra_wizinfo`): their warnings are not reachable until that port is done.
+
+## 深度功能测试（2026-10-27，§6.25 LDMud foreach 冒号）
+
+与 sticklib/simud 同形：`foreach (… : …)` 改为 `in`（约 27 文件）。对象仍因 `inherit CommandCode` 等本库环境问题无法单独加载；冒号写法残渣 0。
