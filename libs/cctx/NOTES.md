@@ -544,3 +544,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## tianluo-diwang 知识武功引号剥离（2026-10-27，KB 04 §6.25 Also）
 
 `kungfu/skill/tianluo-diwang.lpc`（Kayin 古墓知识武功短桩）丢了 `inherit SKILL` 后的 `;` 以及几乎所有引号（`return knowledge`、`query(dex)`、汉字通知里字间插空格）。按原意重写成可加载的 knowledge skill（未并入带招式的战斗版手足）。证明：HEAD 加载失败；改后加载成功。
+
+## jmqshenmu 截断 init（2026-10-27，KB 04 §6.25 Also）
+
+`d/mj/temp/jmqshenmu` 在 `void init() {` 处结束。补 `}`。证明：HEAD 失败；改后加载。

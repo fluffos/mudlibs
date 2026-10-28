@@ -799,3 +799,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## doc/build devil 丢分号／粘连 inherit（2026-10-27，KB 04 §6.25 Also）
 
 `doc/build/devil.lpc`（建档示例倭寇）被格式化弄坏：`inherit NPC void create()` 粘在一起，语句之间的 `;` 全丢，还有嵌套坏掉的 `set("con", set("con", 10)`。按原意重写成带 `setup()` 的完好 NPC（原 `/obj/blade`、`/obj/cloth` 在多数库不存在，示例里去掉携带以免 create 炸）。证明：HEAD 加载失败；改后加载成功。
+
+## hanbing `random 反引号（2026-10-27，KB 04 §6.25 Also）
+
+`hanbing-mianzhang` / `hanbing-mianzhang2` 在 `random(` 前多了一个反引号，驱动按模板字面量读到 EOF。删掉。证明：HEAD 失败；改后加载。
