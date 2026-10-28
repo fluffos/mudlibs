@@ -517,3 +517,7 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 
 `d/jinyang/obj/flower.lpc` 写 `#include "message.h"`，同目录无头文件。本库可玩区无 `d/obj/misc` 副本，从 `d/wizard/obj/misc/message.h` 拷入（与玩具批同形）。证明：HEAD `Cannot #include message.h`；改后加载成功。
 
+
+## u/male/test glued inherit（2026-10-27，KB 04 §6.25 Also）
+
+`u/male/test/test` 的 `inherit NPC` 缺分号。补上。证明：HEAD 失败；改后加载。

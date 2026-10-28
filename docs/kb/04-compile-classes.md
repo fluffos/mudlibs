@@ -553,6 +553,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, questmud glued inherit):** `wizards/walla/area/extension/entrance` and `wizards/yodin/ball` had `inherit "room/room"` / `inherit "obj/armour" /*…*/` without `;`. Entrance also left its description string as a no-op expression: assigned `long_desc`. Proof: HEAD fail; tree loads both.
 
+**Also (2026-10-27, glued `inherit`+decl):** syxjl `d/wudujiao/npc/shaqianli` had `inherit NPC string ask_job();` on one line; pkuxkx `u/male/test/test` had `inherit NPC` without `;`. Split / restore the semicolon. Proof: HEAD fail; tree loads.
+
 
 
 

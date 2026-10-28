@@ -1159,3 +1159,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## d/city/obj/book 引号剥离 ← xiandan（2026-10-27，KB 04 §6.25 Also）
 
 `d/city/obj/book.lpc`（注释仍写 xiandan）丢了几乎所有引号与分号（`set_name(HIY 仙丹 NOR, ({ dan, ...})`），驱动报 `unexpected L_BASIC_TYPE`。用本库完好的 `clone/gift/xiandan.lpc` 覆盖（含 `u/aeolus` 同内容副本）。证明：HEAD 加载失败；改后加载成功。
+
+## shaqianli glued inherit+decl（2026-10-27，KB 04 §6.25 Also）
+
+`d/wudujiao/npc/shaqianli` 一行写成 `inherit NPC string ask_job();`。拆成 `inherit NPC;` 与原型。证明：HEAD 失败；改后加载。
