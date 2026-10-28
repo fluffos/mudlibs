@@ -533,6 +533,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, dreamofseven `F_BLADE`/`F_PIKE`/`F_BLUNT`):** twenty tmr weapons used Aug `inherit F_BLADE` (broken `_blade` feature: no `EQUIP::setup`/`weight`) or undefined `F_PIKE`/`F_BLUNT` with `setup_*()`. Rewrote to `BLADE`/`FORK`/`HAMMER`/`STAFF` and `init_*` (damage = Aug range); `apply_weapon/...` → `weapon_prop/*`. Proof: HEAD wood-blade fails; tree 20/20 load.
 
+**Also (2026-10-27, `jiguang-dao` inherit `.h`):** shiji / sj / xzyx `d/budui/obj/jiguang-dao` had `inherit "inherit/weapon/blade.h"` (no such object) while calling `init_gun(50)`. Sibling `jiguangqiang` uses `inherit "/inherit/weapon/gun"`. Rewrote to that. Proof: HEAD fail; tree loads.
+
 
 
 
