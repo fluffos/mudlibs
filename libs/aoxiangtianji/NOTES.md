@@ -792,3 +792,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## book-qujing 缺 obstacle.h（2026-10-27，KB 04 §6.23 Also）
 
 `d/obj/books-nonskill/book-qujing.lpc` `#include "/d/qujing/obstacle.h"`，档案未带该头，驱动报 `Cannot #include`。从手足 sjsh 拷入同内容 mapping。证明：HEAD 加载失败；改后加载成功。
+
+## 深度功能测试（2026-10-27，§6.25 one-arg message_vision）
+
+`message_vision("…")` 补第二参（`me` / `TP` / `this_player()`）。
+

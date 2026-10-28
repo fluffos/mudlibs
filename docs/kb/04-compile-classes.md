@@ -653,6 +653,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, `tell_object("/path", msg)` room announce):** steamer / wuhan NPC / vir copies used a filesystem path as the tell_object target (`"/d/city/kezhan.lpc"`, `"/d/wuhan/lou4"`). Replaced with `tell_room(load_object("/path"), msg)` (strip `.lpc`/`.c`). 84 sites / 43 files / 36 libs. Residue 0. Proof: mhxy steamer + sjpl2 ssleader load.
 
+**Also (2026-10-27, one-arg `message_vision("…")`):** 1273 live sites / 970 files / 162 libs had `message_vision` with only the format string (no actor). Inserted `me` when in scope, else `TP` / `this_player()` (and nearby existing second-arg preference). Commented residue left. Proof: aoxiangtianji longwang + bixiecanyang long load.
+
+
 
 
 

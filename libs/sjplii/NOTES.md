@@ -561,3 +561,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 `tell_object("/…", …)` → `tell_room(load_object("/…"), …)`（去掉 `.lpc`）。
 
+
+## 深度功能测试（2026-10-27，§6.25 one-arg message_vision）
+
+`message_vision("…")` 补第二参（`me` / `TP` / `this_player()`）。
+

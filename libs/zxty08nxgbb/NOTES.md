@@ -532,3 +532,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-10-27，§6.25 tell_object 缺 me（自动放弃/愿否））
 
 一参 `tell_object("…")` 在已有 `me` 时改为 `tell_object(me, "…")`（city.lpc）。证明：抽样 city / xiaolongnv 加载。
+
+## 深度功能测试（2026-10-27，§6.25 one-arg message_vision）
+
+`message_vision("…")` 补第二参（`me` / `TP` / `this_player()`）。
+

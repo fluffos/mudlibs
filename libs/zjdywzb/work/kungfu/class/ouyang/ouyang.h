@@ -8,7 +8,7 @@ int permit_recruit(object ob)
     if (ob->query("name") == "欧阳锋" ||
         ob->query("name") == "欧阳克")
     {
-        message_vision("$N大怒：我操！你起这个名字是什么意思啊？\n");
+        message_vision("$N大怒：我操！你起这个名字是什么意思啊？\n", me);
         return 0;
     }
 

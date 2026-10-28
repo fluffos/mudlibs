@@ -468,3 +468,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## jmqshenmu 截断 init（2026-10-27，KB 04 §6.25 Also）
 
 `d/mingjiao/jmqshenmu` 在 `void init() {` 处文件结束。补上 `}` 使房间可加载（本库未收齐 climb/`jmqdating` 时不做内容补写）。证明：HEAD 失败；改后加载。
+
+## 深度功能测试（2026-10-27，§6.25 one-arg message_vision）
+
+`message_vision("…")` 补第二参（`me` / `TP` / `this_player()`）。
+

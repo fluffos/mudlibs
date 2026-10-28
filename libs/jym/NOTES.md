@@ -696,3 +696,8 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 
 `kungfu/class_all/dali/yanqing.lpc`：`query("PKS)` 缺引号、`query_respect(ob)`、嵌套 `void init()`，另有 `gender) !==` 笔误。按 pkuxkx 闭合 `attempt_apprentice`、并入 `init` 叛师检查，`!==`→`!=`。证明：HEAD 加载失败；改后加载成功。
 
+
+## 深度功能测试（2026-10-27，§6.25 one-arg message_vision）
+
+`message_vision("…")` 补第二参（`me` / `TP` / `this_player()`）。
+

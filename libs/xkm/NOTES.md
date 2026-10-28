@@ -474,3 +474,8 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## 深度功能测试（2026-10-27，§6.25 bare set("long" 残渣）
 
 `u/snow/new/specialroom`：`inherit room` → `ROOM`，short/long 补引号。
+
+## 深度功能测试（2026-10-27，§6.25 one-arg message_vision）
+
+`message_vision("…")` 补第二参（`me` / `TP` / `this_player()`）。
+

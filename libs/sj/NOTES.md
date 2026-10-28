@@ -589,3 +589,8 @@ foodmaker 内嵌 `@ROOM_CODE` 模板 `set("long"` 缺开头引号；补 `"`.
 
 fuyunke telnet：消息/目标对调（含 `(string)message`）。
 
+
+## 深度功能测试（2026-10-27，§6.25 one-arg message_vision）
+
+`message_vision("…")` 补第二参（`me` / `TP` / `this_player()`）。
+

@@ -626,3 +626,8 @@ lpc` 会调用双方 `kill_ob()`，NPC 真实反击），几回合后一次「�
 
 pplroomd：`tell_object("ob", …)`→`tell_object(ob, …)`。
 
+
+## 深度功能测试（2026-10-27，§6.25 one-arg message_vision）
+
+`message_vision("…")` 补第二参（`me` / `TP` / `this_player()`）。
+

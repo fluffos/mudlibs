@@ -1266,3 +1266,8 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## thd medicine 缺 DAEMON_D（2026-10-27，KB 04 §6.16 Also）
 
 `d/thd/skills/medicine.lpc` 的 `create()` 调用 `DAEMON_D->register_skill_daemon`，本库无 Aug 的 daemond。删掉该行（保留 seteuid）。证明：HEAD 加载失败；改后加载成功。
+
+## 深度功能测试（2026-10-27，§6.25 one-arg message_vision）
+
+`message_vision("…")` 补第二参（`me` / `TP` / `this_player()`）。
+

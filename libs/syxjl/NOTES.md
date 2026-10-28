@@ -1191,3 +1191,8 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 深度功能测试（2026-10-27，§6.25 haoshu 粘贴损坏）
 
 `u/ybl/honghua/npc/haoshu` 本应是红花心法书（同目录完好的 `force_book`），却被粘成半截书 + 房间残片，驱动报 `unexpected L_STRING`；`room/haoshu` 同形，以本库 `d/shaolin/beilin3` 为骨架重写并保留本地出口与 `npc/haoshu` 物件。NPC 侧用 `force_book` 覆盖。证明：HEAD 加载失败；改后书与房间均加载。
+
+## 深度功能测试（2026-10-27，§6.25 one-arg message_vision）
+
+`message_vision("…")` 补第二参（`me` / `TP` / `this_player()`）。
+

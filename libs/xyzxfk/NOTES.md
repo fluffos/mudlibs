@@ -766,3 +766,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-10-27，§6.25 intdan tell_object 缺目标）
 
 `clone/gift/intdan` 的 `tell_object("你聪明绝顶…")` 少了对象参数；改为 `tell_object(me, …)`。证明：改后加载；`do_eat` 可跑通。
+
+## 深度功能测试（2026-10-27，§6.25 one-arg message_vision）
+
+`message_vision("…")` 补第二参（`me` / `TP` / `this_player()`）。
+

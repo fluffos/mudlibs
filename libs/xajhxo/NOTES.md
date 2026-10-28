@@ -1005,3 +1005,8 @@ Same convert-era byte corruption as the waiter `！”\n` / `！\n` →
 
 xinfang/chatroom：`tell_object("ob", …)`→`tell_object(ob, …)`。
 
+
+## 深度功能测试（2026-10-27，§6.25 one-arg message_vision）
+
+`message_vision("…")` 补第二参（`me` / `TP` / `this_player()`）。
+

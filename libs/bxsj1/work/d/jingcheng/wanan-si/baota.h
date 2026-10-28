@@ -6,7 +6,7 @@ void init()
         add_action("do_jiejiu", "jiejiu");
         if (!me->query_temp("was_job") && userp(me) && !wizardp(me))
         {
-                message_vision("什么人竟然擅闯万安寺？快放箭！\n");
+                message_vision("什么人竟然擅闯万安寺？快放箭！\n", me);
                 message_vision("一阵乱箭射来，$N连中数箭，落荒而逃。\n", me);
                 me->move("/d/nanyang/kedian1");
                 me->unconcious();

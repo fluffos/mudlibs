@@ -9,7 +9,7 @@ init()
                 {
                         remove_call_out("do_killing");
                         call_out("do_killing",2,ob);
-                        message_vision("大胆畜生，这是你乱闯的地方吗!!!");
+                        message_vision("大胆畜生，这是你乱闯的地方吗!!!", this_player());
                 }
         }
 }

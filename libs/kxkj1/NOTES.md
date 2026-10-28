@@ -960,3 +960,8 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply k
 ## 深度功能测试（2026-10-27，§6.25 pkroom tell_room 缺房间）
 
 `open/gblade/room/PKR/pkroom` 的 `tell_room(HIY "…")` 少了房间参数；改为 `tell_room(this_object(), …)`。证明：改后加载。
+
+## 深度功能测试（2026-10-27，§6.25 one-arg message_vision）
+
+`message_vision("…")` 补第二参（`me` / `TP` / `this_player()`）。
+

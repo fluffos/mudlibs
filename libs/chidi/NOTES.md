@@ -1208,3 +1208,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-10-27，§6.25 bahuang throw 缺 me）
 
 `kungfu/skill/bahuang-qiangfa/throw` 一参 `tell_object` 补 `me`。证明：改后加载。
+
+## 深度功能测试（2026-10-27，§6.25 one-arg message_vision）
+
+`message_vision("…")` 补第二参（`me` / `TP` / `this_player()`）。
+

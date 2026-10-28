@@ -708,3 +708,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## examine 缺 sefun process_bar/log_time/filter_color/all_interactive（2026-10-27，KB 04 §6.16 Also）
 
 `cmds/arch/examine.lpc` 调用 `process_bar` / `log_time` / `filter_color` / `all_interactive`，本 lib 的 simul_efun 未纳入 util（同系 zjdy2008wzb 有）。对象无法编译。新增 `adm/simul_efun/util.lpc`（`#include <ansi.h>` + 上述四个函数，`all_interactive` 为 `efun::users()`），并在 `adm/obj/simul_efun.lpc` 中 `#include`。证明：HEAD 加载失败；改后加载成功。
+
+## 深度功能测试（2026-10-27，§6.25 one-arg message_vision）
+
+`message_vision("…")` 补第二参（`me` / `TP` / `this_player()`）。
+

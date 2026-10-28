@@ -530,3 +530,8 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 
 `d/song/transfer.h` 两处 `tell_object("\n")` → `tell_object(me, …)`。
 
+
+## 深度功能测试（2026-10-27，§6.25 one-arg message_vision）
+
+`message_vision("…")` 补第二参（`me` / `TP` / `this_player()`）。
+

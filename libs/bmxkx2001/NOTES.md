@@ -694,3 +694,8 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 段延庆 yanqing 空格污染无法加载（2026-10-27，KB 04 §6.25 Also）
 
 `kungfu/class/dali/yanqing.lpc`：汉字与 dbase 键都被插空格（`" id "`、`" family / master_id "`、空格版 `say`），另有 `query("PKS)` 缺引号和嵌套 `void init`。无法就地修补；用同系已修好的 xkm 副本覆盖（bmxkx2001 / xkx2001 / xuanjianlu 三份原相同）。证明：HEAD 加载失败；改后加载成功。
+
+## 深度功能测试（2026-10-27，§6.25 one-arg message_vision）
+
+`message_vision("…")` 补第二参（`me` / `TP` / `this_player()`）。
+
