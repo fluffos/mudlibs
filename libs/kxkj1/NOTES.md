@@ -956,3 +956,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply k
 ## 深度功能测试（2026-10-27，§6.25 #inherit）
 
 `u/h/hitler/skill/mndance`：`#inherit` → `inherit`；招式字符串缺收尾引号与逗号；`valid_learn` 补 `object ob`。
+
+## 深度功能测试（2026-10-27，§6.25 pkroom tell_room 缺房间）
+
+`open/gblade/room/PKR/pkroom` 的 `tell_room(HIY "…")` 少了房间参数；改为 `tell_room(this_object(), …)`。证明：改后加载。
