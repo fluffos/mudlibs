@@ -1187,3 +1187,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 深度功能测试（2026-10-27，§6.25 ZHAOSHI 截断玩家技能）
 
 玩家自创武功在 `// ZHAOSHI : 0` 处截断（EOF），无法加载。按同系完整 `moming-blade` 补一招 + valid_*/query_*/practice（2）：`kungfu/skill/fuhu-unarmed.lpc`, `kungfu/skill/fulong-unarmed.lpc`。
+
+## 深度功能测试（2026-10-27，§6.25 haoshu 粘贴损坏）
+
+`u/ybl/honghua/npc/haoshu` 本应是红花心法书（同目录完好的 `force_book`），却被粘成半截书 + 房间残片，驱动报 `unexpected L_STRING`；`room/haoshu` 同形，以本库 `d/shaolin/beilin3` 为骨架重写并保留本地出口与 `npc/haoshu` 物件。NPC 侧用 `force_book` 覆盖。证明：HEAD 加载失败；改后书与房间均加载。
