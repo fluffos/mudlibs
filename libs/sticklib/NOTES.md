@@ -429,3 +429,7 @@ Strategy A catalog 缺这些 LDMud efun。补 sefun。证明：HEAD nature_d Und
 ## 深度功能测试（2026-10-27，§6.25 light env + WC formula + grapevine）
 
 `/lib/light` 的未定义 `env` 改为 `environment() || this_object()`。npc/player `set_n_query` 的 WC `lambda`+`#'` 改为 `(: $1 :)` / `function(…)`。grapevine 回调改为 `(: kill_reply($1, 0) :)`，catalog 补 `send_erq` 垫片。证明：HEAD light Undefined env、set_n_query/grapevine Illegal #；树 light、set_n_query、grapevine_d 可加载。
+
+## 深度功能测试（2026-10-28，§6.25 catalog efuns + living stubs + drink mixed）
+
+Catalog 补 `master_object`/`wizlist`/`localcmd`/`unshadow`/`varargs snoop`；`/lib/living` 补 SP/money/`query_race_stat`/`set_resistance`/`transfer_all_to`；`/lib/drink` 的 `set_short`/`set_long` 改为 `mixed`（含 `evaluate`）并补 `id_name`/`invis_level`。证明：HEAD title_shadow/demon/priest_bottle/coder_cmds 失败；树上述对象均可加载。

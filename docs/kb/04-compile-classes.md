@@ -771,6 +771,13 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-28, ageofelements player/master_ldmud `nosave` functions):** `lpc_warnings --fix` shape — `nosave` on function decls → `protected` (player ~60; master_ldmud `_auto_include_hook`). Proof: HEAD Illegal to declare nosave function warnings; tree player loads clean of those.
 
+**Also (2026-10-28, sticklib catalog `master_object`/`wizlist`/`localcmd`/`unshadow`/`snoop`):** Strategy A catalog lacked LDMud/classic efuns login/coder tools and shadows need. `master_object` → `master()`; stub `wizlist`/`localcmd`; `unshadow` via `remove_shadow(previous_object())`; varargs `snoop` (bare `snoop()` stops). Proof: HEAD title_shadow Undefined unshadow / coder_cmds Too few args to snoop; tree title_shadow/pretitle/coder_cmds/demontemple load.
+
+**Also (2026-10-28, sticklib Strategy A living SP/money/race/resist/transfer):** thin `/lib/living` lacked `set_sp`/`add_sp`/`query_sp`, `add_money`, `query_race_stat`, `set_resistance`, `transfer_all_to` (LDMud modules not inherited). Added stubs + human-ish race defaults. Proof: HEAD demon Undefined set_sp; tree demon/dildo/zagyg/set_n_query load.
+
+**Also (2026-10-28, sticklib drink `set_short(mixed)` + id/invis):** Strategy A `/lib/drink` typed `set_short`/`set_long` as `string` while priest_bottle passes `(: … :)` closures; also lacked `id_name`/`invis_level` from `/basic/id`. `mixed` setters + `evaluate` in query_*; vars + `set_name` sync. Proof: HEAD priest_bottle Bad type set_short; tree loads.
+
+
 
 **Also (2026-10-27, master_ldmud `#'fn` residue):** leftover simple quotes on `call_out`/`set_driver_hook`/`funcall`/`filter` lines in aoh/morgengrauen/nirvlp312/sticklib masters (~64 sites / 8 files); still skip `({#'…` unbound_lambda soup. Proof: HEAD morgengrauen master still had `#'configure_driver` / `#'autoincludehook`; tree uses `(: … :)`.
 
