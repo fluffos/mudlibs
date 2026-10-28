@@ -1196,3 +1196,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## hanbing `random 反引号（2026-10-27，KB 04 §6.25 Also）
 
 `hanbing-mianzhang` / `hanbing-mianzhang2` 在 `random(` 前多了一个反引号，驱动按模板字面量读到 EOF。删掉。证明：HEAD 失败；改后加载。
+
+## 深度功能测试（2026-10-27，§6.25 d/city/sj 去引号残渣）
+
+`d/city/sj` 仍有去引号的 `message_vision`（上次只修了带引号的 `add_action` 副本）；按 jhfy 替换。
