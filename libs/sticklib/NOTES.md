@@ -361,3 +361,7 @@ NPC 要 `set_follow`/`add_block`，战斗要 `add_hp`/`stop_fight`/`query_condit
 ## 深度功能测试（2026-10-27，§6.25 catalog sefun command/transfer）
 
 FluffOS 的 `command` 只有一参，LDMud 的 `command(cmd, who)` 与 MudOS `transfer` 在 Strategy A catalog 里没有。用 `bind((: efun::command, cmd :), who)` 做远程 command；`transfer` 按 ageofelements 形状补上。证明：HEAD bountyshop 报 Too many arguments；树 bountyshop/fill_bag/void 可加载。
+
+## 深度功能测试（2026-10-27，§6.25 Strategy A init/heart_beat）
+
+NPC 写 `::init()`，虚拟房间写 `::heart_beat()`，薄 living/room 没有。补上空 stub。证明：HEAD teller/lordbuster 报 Unable to find inherited init；树均可加载。

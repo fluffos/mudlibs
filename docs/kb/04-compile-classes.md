@@ -713,6 +713,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, sticklib catalog sefun `command`/`transfer`):** LDMud `command(cmd, who)` (FluffOS is 1-arg) and MudOS `transfer(item, dest)` were missing from Strategy A catalog — bountyshop/void/fill_bag etc. failed compile. Added `command` via `bind((: efun::command, cmd :), who)` and `transfer` (ageofelements shape). Proof: HEAD bountyshop Too many arguments; tree bountyshop/fill_bag/void load.
 
+**Also (2026-10-27, sticklib Strategy A `init`/`heart_beat`):** NPCs call `::init()` and virtual rooms call `::heart_beat()`, but thin `/lib/living` lacked `init` and `/lib/room` lacked `heart_beat`. Added empty stubs. Proof: HEAD teller/lordbuster Unable to find inherited init; tree both load.
+
 **Also (2026-10-27, master_ldmud `#'fn` residue):** leftover simple quotes on `call_out`/`set_driver_hook`/`funcall`/`filter` lines in aoh/morgengrauen/nirvlp312/sticklib masters (~64 sites / 8 files); still skip `({#'…` unbound_lambda soup. Proof: HEAD morgengrauen master still had `#'configure_driver` / `#'autoincludehook`; tree uses `(: … :)`.
 
 **Also (2026-10-27, sticklib `lpc_warnings --fix`):** mechanical pass: unused locals dropped, `nosave` functions → `protected` (34 files). No-side-effects residue (~119) left for a dedicated pass. Proof: thief_mark_new `nosave int rank_no` → `protected`; bboard unused locals gone.
