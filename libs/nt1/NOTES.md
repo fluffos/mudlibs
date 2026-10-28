@@ -566,3 +566,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-10-27，§6.25 glued inherit / 粘贴残片）
 
 `u/lovet/gaibang`：`inherit NPC` 缺 `;`，`ghost.h` 改为 `/d/death/HellZhen/ghost.h`，档案在 `prepare_skill` 后截断则补 `setup(); }`。
+
+## 深度功能测试（2026-10-27，§6.25 set_name 缺开头引号）
+
+`u/tsunade/w_lunhui2`：`set_name(WHT 轮回剑"` 缺中文前引号；改为 `WHT "轮回剑"`。

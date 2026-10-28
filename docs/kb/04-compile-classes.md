@@ -583,6 +583,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, glued `inherit` / paste tail):** `inherit "…"\n#include` without `;` (arkadia `small_beer`, holymission `blaarg/sword`, ninetears `multi`); holymission also pointed at a missing `/players/blaarg/cool` (retargeted to `/obj/weapon`). nt1 `gaibang` lacked `;`, a local `ghost.h`, and the rest of `create()` after `prepare_skill` (closed with `setup(); }`). Four `jie/npc/mm` copies had a second quote-stripped `inherit NPC` paste after a complete object (truncated to the first `}`). Proof: HEAD fail; tree loads (mm, gaibang, sword); small_beer reaches the missing-`/std/drink` error after the `;`.
 
+**Also (2026-10-27, `set_name` missing opening quote):** three files had `set_name(中文…"` / `set_name(WHT 中文…"` (closing quote present, opening lost). Inserted the opening `"`. Residue of that shape: 0. Proof: HEAD lx_cloth Illegal character; tree loads lx_cloth+jugeng+w_lunhui2.
+
 
 
 
