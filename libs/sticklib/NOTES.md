@@ -349,3 +349,7 @@ Strategy A catalog 缺 `do_find_object`/`get_object`/`m_allocate`/`get_eval_cost
 ## 深度功能测试（2026-10-27，§6.25 catalog sefun implode3/extern_call/driver_info/version）
 
 `_man`/`mchard`/`_sysinfo` 需要 LDMud `implode3`、`extern_call`、`driver_info`、`version`。从档案移植 implode3；`extern_call` 用 `previous_object()`；`driver_info` 的负载项映射 `query_load_average()`；`version`→`__VERSION__`。并补上 `_sysinfo` 里 `version()` 那行缺的 `;`。证明：HEAD Undefined；树 `_sysinfo`/`mchard` 可加载。
+
+## 深度功能测试（2026-10-27，§6.25 catalog telopt/GMCP sefuns）
+
+`telopt` 需要 LDMud `to_bytes`/`binary_message`/`json_parse`/`json_serialize`/`hash(TLS_HASH_*,…)`。补上 `to_bytes`、`binary_message`；引入 formosasaga 版 FluffOS `catalog/json.lpc` 并做 parse/serialize 别名；`hash` 整数算法号转 `efun::hash("sha1",…)`。证明：HEAD 失败；树 telopt 可加载。

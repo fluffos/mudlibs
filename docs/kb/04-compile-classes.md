@@ -705,6 +705,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, sticklib catalog sefun implode3/extern_call/driver_info/version):** `_man`/`mchard`/`_sysinfo` needed LDMud `implode3`, `extern_call`, `driver_info`, `version`. Ported implode3 from archive; `extern_call`→`previous_object()` check; `driver_info(DI_LOAD_AVERAGE_*)`→`query_load_average()`; `version`→`__VERSION__`. Also restored missing `;` after `_sysinfo` `version()` write. Proof: HEAD Undefined; tree `_sysinfo`+`mchard` load (`_man` compiles; get_dir 0x23 runtime separate).
 
+**Also (2026-10-27, sticklib catalog telopt/GMCP sefuns):** `/basic/player/telopt` needed LDMud `to_bytes`/`binary_message`/`json_parse`/`json_serialize`/`hash(TLS_HASH_*,…)`. Added `to_bytes` (identity), `binary_message` (int-array→`tell_object`), FluffOS `catalog/json.lpc` (formosasaga) with parse/serialize aliases, and `hash` wrapping `efun::hash("sha1",…)`. Proof: HEAD `hash(1,…)`/json Undefined; tree telopt loads.
+
 **Also (2026-10-27, master_ldmud `#'fn` residue):** leftover simple quotes on `call_out`/`set_driver_hook`/`funcall`/`filter` lines in aoh/morgengrauen/nirvlp312/sticklib masters (~64 sites / 8 files); still skip `({#'…` unbound_lambda soup. Proof: HEAD morgengrauen master still had `#'configure_driver` / `#'autoincludehook`; tree uses `(: … :)`.
 
 **Also (2026-10-27, sticklib `lpc_warnings --fix`):** mechanical pass: unused locals dropped, `nosave` functions → `protected` (34 files). No-side-effects residue (~119) left for a dedicated pass. Proof: thief_mark_new `nosave int rank_no` → `protected`; bboard unused locals gone.
