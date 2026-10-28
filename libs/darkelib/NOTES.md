@@ -940,3 +940,7 @@ The code of this lib writes logs into 5 subdirectories of `log/`: `log/archive` 
 ## A literal `"/path"->fn()` to a file the lib does not have: pointed at the file that exists (2026-10-22, KB 06 §7.359)
 
 1 statement-level literal `call_other` path(s) name no file of this lib (a renamed area, the wrong case, one letter off, a moved file): `"/d/khojem/port/shop/shipwrigth"->remove_invis_exit()` (`/d/khojem/port/shop/ship_store.lpc`) -> `"/d/khojem/port/shop/shipwright"`. `call_other()` of a missing object raises `couldn't find object` and the function stops on the spot. The literal now names the file the lib has and that defines the called function (`scripts/lpc_fix_call_path.py`; a wizard's directory, a backup or a differently named sibling is no candidate).
+
+## locker_hash #inherit → #include（2026-10-27，KB 04 §6.25 Also）
+
+`d|std|wizards/.../locker_hash` 用 MudOS `#inherit "save_items.h"`（本驱动未知指令），并有 cast 优先级、`delete_locker_room` 缺 `i`、缺 `<security.h>`/`<dirs.h>`。改为 `#include`，修 cast 为 `((class locker_room)...)`，补 `int i` 与头文件；rifts2 std 补上缺失的 `save_items.h`。证明：HEAD `#inherit` 失败；改后各副本加载。`save_items2` 另有路径/残缺问题，未改。

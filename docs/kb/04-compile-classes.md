@@ -539,6 +539,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, dreamofseven `F_STUDY`):** four tmr books used `inherit F_STUDY` with no macro and no `/feature/study.lpc`. Adopted the ES2 `feature/study.lpc` from dfgsiiv13b and `#define F_STUDY` in `globals.h`. Proof: HEAD fail; tree 4/4 load.
 
+**Also (2026-10-27, darkelib/rifts2 `locker_hash` `#inherit`):** five `locker_hash.lpc` used MudOS `#inherit "save_items.h"` (unknown directive here), plus cast precedence on `(class locker_room)(x)->field`, missing `int i` in `delete_locker_room`, and missing `<security.h>`/`<dirs.h>`. `#include`, fix casts, declare `i`, add headers; copied `save_items.h` into rifts2 `std/diewarzau/`. Proof: HEAD fail; tree loads. (`save_items2` still broken separately.)
+
+
 
 
 
