@@ -1469,3 +1469,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 深度功能测试（2026-10-27，§6.25 panshi_dan 去引号）
 
 `u/stey/u/jie/panshi_dan`（及 `sjsh/` 副本）整文件去引号/缺 `;`；按原逻辑重写成可加载的叛师丹（吃后清 family/class）。
+
+## 深度功能测试（2026-10-27，§6.25 xueying-xianfa 去引号）
+
+`u/tom/skill/xueying-xianfa` 整文件去引号；用同库完好的 `u/fang/skill/xueying-xianfa` 覆盖。证明：HEAD 失败；改后加载。
