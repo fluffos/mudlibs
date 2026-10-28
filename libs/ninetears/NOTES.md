@@ -944,3 +944,8 @@ score / access_control / vault_room：补 `me` / `this_player()` / `TP`。注释
 
 rnd_caus*：`tell_object("at the top\n", attackboy)`→`tell_object(attackboy, …)`。
 
+
+## 深度功能测试（2026-10-27，§6.25 one-arg tell_room）
+
+`tell_room("…")` 补房间参数（`this_object()` / `ETO` / `place` / `environment(this_object())` 等）。
+

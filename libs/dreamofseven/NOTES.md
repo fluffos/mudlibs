@@ -1081,3 +1081,8 @@ jialermi / random / treeking：`tell_object("…")` 补 `me` 或 `this_player()`
 
 `message_vision("…")` 补第二参（`me` / `TP` / `this_player()`）。
 
+
+## 深度功能测试（2026-10-27，§6.25 one-arg tell_room）
+
+`tell_room("…")` 补房间参数（`this_object()` / `ETO` / `place` / `environment(this_object())` 等）。
+

@@ -941,3 +941,8 @@ bingbu/lark 的 `tell_object("ob")` / `tell_room("where")` 改为房间 `tell_ro
 
 `message_vision("…")` 补第二参（`me` / `TP` / `this_player()`）。
 
+
+## 深度功能测试（2026-10-27，§6.25 one-arg tell_room）
+
+`tell_room("…")` 补房间参数（`this_object()` / `ETO` / `place` / `environment(this_object())` 等）。
+

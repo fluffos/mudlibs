@@ -1061,3 +1061,8 @@ HEAD 失败、现在加载（没有 warning）的 15 个：`magic_d`、`bboard_d
 
 crushing_hand：`tell_object("target", …)`→`tell_object(target, …)`。
 
+
+## 深度功能测试（2026-10-27，§6.25 one-arg tell_room）
+
+`tell_room("…")` 补房间参数（`this_object()` / `ETO` / `place` / `environment(this_object())` 等）。
+

@@ -881,3 +881,8 @@ A path written without the leading slash (`carry_object("d/city/obj/jiasha")->we
 ## 深度功能测试（2026-10-27，§6.25 glued inherit / 粘贴残片）
 
 `players/blaarg/sword`：`inherit` 缺 `;`，且目标 `/players/blaarg/cool` 不存在；改为 `inherit "/obj/weapon";`。
+
+## 深度功能测试（2026-10-27，§6.25 one-arg tell_room）
+
+`tell_room("…")` 补房间参数（`this_object()` / `ETO` / `place` / `environment(this_object())` 等）。
+

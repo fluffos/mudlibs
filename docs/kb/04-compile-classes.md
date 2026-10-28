@@ -655,6 +655,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, one-arg `message_vision("…")`):** 1273 live sites / 970 files / 162 libs had `message_vision` with only the format string (no actor). Inserted `me` when in scope, else `TP` / `this_player()` (and nearby existing second-arg preference). Commented residue left. Proof: aoxiangtianji longwang + bixiecanyang long load.
 
+**Also (2026-10-27, one-arg `tell_room("…")`):** message with no room: rooms/NPCs/spells used `tell_room("…")` alone. Inserted `this_object()` / `ETO` / `place` / `environment(this_object())` / `TO` / `ENV(TO)` from local style (altar/lunar_veil/lightobj/dongfang/wbedroom/unfettered/…). Also caught string+`+` one-arg forms in shadowgate/sunshadow spell cast strings. Live residue 0. Proof: stn7, wbedroom, dongfang load.
+
+
 
 
 
