@@ -11,15 +11,17 @@
 #define F_ROOM_RESET_USED  1
 #define F_ROOM_INIT_USED   2
 
-private nosave int flags;
-private nosave int outdoorness;
-private nosave int light_level;
-private nosave int room_flags;
-private nosave mixed short_desc;
-private nosave mixed long_desc;
-private nosave mapping Exits;
-private nosave mapping Items;
-private nosave mapping commands;
+nosave int flags;
+nosave int outdoorness;
+nosave int light_level;
+nosave int room_flags;
+/* Terrains and rooms assign short_desc/long_desc directly; private blocks them. */
+nosave mixed short_desc;
+nosave mixed long_desc;
+nosave mapping Exits;
+nosave mapping Items;
+nosave mapping commands;
+nosave mixed *room_effects;
 
 void _apply_calls(object ob, mixed *spec);
 
@@ -251,6 +253,34 @@ add_permanent(string filename)
     return 1;
 }
 
+/*
+ * LDMud rooms use add(ROOM_EFFECT|ROOM_EXIT|ROOM_ITEM, …) from
+ * basic/room/set_n_query. Strategy A never shipped that; virtual_room
+ * set_effects() and any room calling add(ROOM_*) failed Undefined.
+ */
+status
+add(int what, mixed arg1, mixed arg2)
+{
+    switch (what) {
+    case ROOM_EFFECT:
+	if (!room_effects || !sizeof(room_effects)) {
+	    room_effects = ({ arg1, arg1, arg2 });
+	} else {
+	    room_effects += ({ arg1, arg2 });
+	    room_effects[0] += arg1;
+	}
+	return 1;
+
+    case ROOM_EXIT:
+	add_exit(arg1, arg2);
+	return 1;
+
+    case ROOM_ITEM:
+	return add_item(arg1, arg2);
+    }
+    return 0;
+}
+
 int
 add_command(string cmd_name, mixed cmd_func)
 {
@@ -373,4 +403,21 @@ long(mixed what, mixed who)
     return 0;
 }
 
-void heart_beat() { }
+void
+heart_beat()
+{
+    int i, r;
+
+    if (!pointerp(room_effects) || !sizeof(room_effects))
+	return;
+    if ((r = random(100)) >= room_effects[0])
+	return;
+    i = 1;
+    while (i < sizeof(room_effects)) {
+	if (r < room_effects[i]) {
+	    tell_here(room_effects[i + 1]);
+	    break;
+	}
+	i += 2;
+    }
+}

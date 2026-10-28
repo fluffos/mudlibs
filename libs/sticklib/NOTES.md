@@ -373,3 +373,7 @@ NPC 写 `::init()`，虚拟房间写 `::heart_beat()`，薄 living/room 没有�
 ## 深度功能测试（2026-10-27，§6.20 unique class 参数）
 
 `/lib/unique` 的 `set_unique(string class, …)` 撞上 FluffOS 保留字 `class`。改为 `uniq_class`。证明：HEAD L_CLASS；树 unique 与 demon 可加载。
+
+## 深度功能测试（2026-10-27，§6.25 Strategy A room add）
+
+虚拟房间 `set_effects()` 调用 `add(ROOM_EFFECT, …)`，该函数在 LDMud 的 `set_n_query` 里，Strategy A `/lib/room` 没有。补上 `ROOM_EFFECT`/`ROOM_EXIT`/`ROOM_ITEM` 的 `add()`，并在 `heart_beat` 里触发效果。证明：HEAD virtual_room 报 Undefined add；树 virtual_room 可加载，`set_effects`/`add` 成功。

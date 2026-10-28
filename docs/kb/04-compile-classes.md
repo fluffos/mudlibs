@@ -719,6 +719,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, sticklib `unique` `class` param):** `/lib/unique` `set_unique(string class, …)` hits FluffOS reserved `class` (§6.20). Renamed to `uniq_class`. Proof: HEAD L_CLASS; tree unique+demon load.
 
+**Also (2026-10-27, sticklib Strategy A room `add`):** virtual_room `set_effects()` calls `add(ROOM_EFFECT, chance, msg)` from LDMud `basic/room/set_n_query`, which Strategy A `/lib/room` never shipped (`Undefined function add`). Added `add()` for `ROOM_EFFECT`/`ROOM_EXIT`/`ROOM_ITEM` plus effect firing in `heart_beat`. Proof: HEAD virtual_room Undefined add; tree virtual_room loads and `set_effects`/`add` succeed.
+
 **Also (2026-10-27, master_ldmud `#'fn` residue):** leftover simple quotes on `call_out`/`set_driver_hook`/`funcall`/`filter` lines in aoh/morgengrauen/nirvlp312/sticklib masters (~64 sites / 8 files); still skip `({#'…` unbound_lambda soup. Proof: HEAD morgengrauen master still had `#'configure_driver` / `#'autoincludehook`; tree uses `(: … :)`.
 
 **Also (2026-10-27, sticklib `lpc_warnings --fix`):** mechanical pass: unused locals dropped, `nosave` functions → `protected` (34 files). No-side-effects residue (~119) left for a dedicated pass. Proof: thief_mark_new `nosave int rank_no` → `protected`; bboard unused locals gone.
