@@ -158,3 +158,15 @@ Strategy A catalog 缺 `command(cmd,who)`、`m_allocate`、`regreplace`、`json_
 ## 深度功能测试（2026-10-27，§6.25 gmcp LDMud foreach）
 
 `obj/login/gmcp.lpc` 的 `foreach (T x : arr)`（10 处）改为 `in`。证明：HEAD 编不过；树 gmcp 可加载。
+
+## 深度功能测试（2026-10-27，§6.10 `\/` 转义）
+
+`gmcp.h`/`mssp.h`/`msp.lpc` 的 `https:\/\` 改为普通 `/`。
+
+## 深度功能测试（2026-10-27，§6.25 剩余 foreach + light env）
+
+其余 `foreach (… : …)`（含 light/msp/mssp）改为 `in`；`light.lpc` 的未定义 `env` 改为 `environment() || this_object()`。证明：HEAD light/msp 失败；树 light/msp/mssp 可加载。
+
+## 深度功能测试（2026-10-27，§6.25 MSSP driver_info/version）
+
+补 `include/sys/driver_info.h` 与 catalog `driver_info`/`version` 垫片。证明：树 mssp 可加载。

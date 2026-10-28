@@ -749,6 +749,18 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, ageofelements gmcp LDMud foreach):** `obj/login/gmcp.lpc` used `foreach (T x : arr)` (10 sites). Converted to `in`. Proof: HEAD Cannot #include / Undefined json_parse (and foreach after shims); tree gmcp loads.
 
+**Also (2026-10-27, ageofelements `\/` escapes):** `gmcp.h`/`mssp.h`/`msp.lpc` used `https:\/\` (Unknown escape `\/`). Replaced with plain `/`. Proof: warning class gone after fix; gmcp still loads.
+
+**Also (2026-10-27, ageofelements leftover LDMud foreach):** `light`/`msp`/`mssp`/`chest`/`player`/`master_ldmud` still had `foreach (… : …)`. Converted to `in` (incl. tight `foreach(object ob:`). Proof: HEAD light/msp fail on `:`; tree light/msp/mssp load.
+
+**Also (2026-10-27, light.lpc undefined `env`):** AoE + sticklib `set_light` used bare `env` (Undefined variable). Set `env = environment() || this_object()` before the foreach. Proof: HEAD Undefined env; tree both lights load.
+
+**Also (2026-10-27, sticklib LIV_WC_FORMULA lambdas):** npc/player `set_n_query` returned LDMud `lambda`+`#'` WC formulas. Rewrote to `(: $1 :)` and a FluffOS `function(int wc,…)`. Proof: HEAD Illegal character #; tree both set_n_query load.
+
+**Also (2026-10-27, sticklib grapevine `#'kill_reply` + `send_erq`):** kill path used `lambda`+`#'`; FluffOS has no `send_erq`. Rewrote callback to `(: kill_reply($1, 0) :)` and stubbed catalog `send_erq`. Proof: HEAD Illegal character #; tree grapevine_d loads.
+
+**Also (2026-10-27, ageofelements `driver_info`/`version` for MSSP):** mssp needed `<sys/driver_info.h>`, `driver_info()`, `version()`. Added include shim + catalog stubs. Proof: HEAD mssp Cannot #include; tree mssp loads.
+
 **Also (2026-10-27, master_ldmud `#'fn` residue):** leftover simple quotes on `call_out`/`set_driver_hook`/`funcall`/`filter` lines in aoh/morgengrauen/nirvlp312/sticklib masters (~64 sites / 8 files); still skip `({#'…` unbound_lambda soup. Proof: HEAD morgengrauen master still had `#'configure_driver` / `#'autoincludehook`; tree uses `(: … :)`.
 
 **Also (2026-10-27, sticklib `lpc_warnings --fix`):** mechanical pass: unused locals dropped, `nosave` functions → `protected` (34 files). No-side-effects residue (~119) left for a dedicated pass. Proof: thief_mark_new `nosave int rank_no` → `protected`; bboard unused locals gone.

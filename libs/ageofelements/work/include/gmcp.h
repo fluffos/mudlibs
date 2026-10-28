@@ -5,11 +5,11 @@
 #define GMCP_KEY_CLIENT_GUI_VERSION                     "version"
 #define GMCP_VALUE_CLIENT_GUI_VERSION                   "39"
 #define GMCP_KEY_CLIENT_GUI_URL                         "url"
-#define GMCP_VALUE_CLIENT_GUI_URL                       sprintf("https:/\/www.ageofelements.org/mudlet/AOEv%s.mpackage", GMCP_VALUE_CLIENT_GUI_VERSION)
+#define GMCP_VALUE_CLIENT_GUI_URL                       sprintf("https://www.ageofelements.org/mudlet/AOEv%s.mpackage", GMCP_VALUE_CLIENT_GUI_VERSION)
 
 #define GMCP_PKG_CLIENT_MAP                             "Client.Map"
 #define GMCP_KEY_CLIENT_MAP_URL                         "url"
-#define GMCP_VALUE_CLIENT_MAP_URL                       "https:/\/www.ageofelements.org/maps/map.xml"
+#define GMCP_VALUE_CLIENT_MAP_URL                       "https://www.ageofelements.org/maps/map.xml"
 
 #define GMCP_PKG_CLIENT_MEDIA_DEFAULT                   "Client.Media.Default"
 #define GMCP_PKG_CLIENT_MEDIA_LOAD                      "Client.Media.Load"
@@ -17,7 +17,7 @@
 #define GMCP_PKG_CLIENT_MEDIA_STOP                      "Client.Media.Stop"
 #define GMCP_KEY_CLIENT_MEDIA_NAME                      "name"
 #define GMCP_KEY_CLIENT_MEDIA_URL                       "url"
-#define GMCP_VALUE_CLIENT_MEDIA_URL                     "https:/\/www.ageofelements.org/sounds/"
+#define GMCP_VALUE_CLIENT_MEDIA_URL                     "https://www.ageofelements.org/sounds/"
 #define GMCP_KEY_CLIENT_MEDIA_TAG                       "tag"
 #define GMCP_KEY_CLIENT_MEDIA_KEY                       "key"
 #define GMCP_KEY_CLIENT_MEDIA_TARGET                    "target"
@@ -74,7 +74,7 @@
 #define GMCP_KEY_EXTERNAL_DISCORD_STATUS_GAME		"game"
 #define GMCP_VALUE_EXTERNAL_DISCORD_STATUS_GAME		"Age of Elements"
 #define GMCP_KEY_EXTERNAL_DISCORD_STATUS_STARTTIME	"starttime"
-#define GMCP_VALUE_EXTERNAL_DISCORD_INFO_INVITEURL	"https:/\/discord.gg/-------"
+#define GMCP_VALUE_EXTERNAL_DISCORD_INFO_INVITEURL	"https://discord.gg/-------"
 
 #define GMCP_PKG_CHAR					"Char"
 #define GMCP_PKG_CHAR_LOGIN				"Char.Login"

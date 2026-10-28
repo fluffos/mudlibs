@@ -425,3 +425,7 @@ Strategy A catalog 缺这些 LDMud efun。补 sefun。证明：HEAD nature_d Und
 ## 深度功能测试（2026-10-27，§6.25 简单 LDMud lambda 改写）
 
 `_logouts`/`lord_crown`/`_appraise` 的 `lambda`+`#'` 改为 FluffOS `(: … :)`。set_n_query WC 公式与 grapevine `send_erq` 仍留着。证明：HEAD `_logouts` Illegal character #；树 `_logouts`/`_appraise` 可加载。
+
+## 深度功能测试（2026-10-27，§6.25 light env + WC formula + grapevine）
+
+`/lib/light` 的未定义 `env` 改为 `environment() || this_object()`。npc/player `set_n_query` 的 WC `lambda`+`#'` 改为 `(: $1 :)` / `function(…)`。grapevine 回调改为 `(: kill_reply($1, 0) :)`，catalog 补 `send_erq` 垫片。证明：HEAD light Undefined env、set_n_query/grapevine Illegal #；树 light、set_n_query、grapevine_d 可加载。
