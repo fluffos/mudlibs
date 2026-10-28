@@ -249,3 +249,8 @@ python3 scripts/mudclient.py 127.0.0.1 40276 --timeout 70 --idle 8 \
 ## `member_array('/', str)` 改为 `strsrch(str, "/")`：字符字面量的 member_array 按字节搜索（2026-10-20，KB 06 §7.283）
 
 `member_array('/', str)` 里的 `'/'` 是整数，驱动按 UTF-8 **字节**搜索，返回字节偏移（带第三个参数时起点也是字节）；最新的 FluffOS（923cdbc0）在字符串里有非 ASCII 文字时，对每个调用点警告一次（`Warning: member_array(int, string) searches BYTES`）。而 `str[0..idx-1]` 按字符切，中文字符串会在错误的位置截断。改为 `strsrch(str, "/")`（找不到同样返回 -1，按字符计数；`scripts/lpc_fix_member_array_char.py`，JSON 编码器等少数几处手改）。改动：`/secure/json.lpc`（11 处）。
+
+## 深度功能测试（2026-10-27，§7.209 负下标区间残渣）
+
+`[0..-N]` / `[1..-1]` 等改为 `[0..<N]` / `[1..<1]`。
+

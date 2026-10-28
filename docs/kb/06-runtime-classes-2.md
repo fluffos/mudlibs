@@ -918,6 +918,9 @@ so `scripts/lpc_warnings.py` sees those; negative *start* indexes need a grep
 247 sites in 149 libs (2026-10-03; `genesis` 39, `arkadia` 22, `nirvlp312` 9,
 `es1` 6, `sticklib` 5, ...): a sweep is queued, history libs first.
 
+**Also (2026-10-27, negative range `..-N` / `[-N..` residue):** live slices still using a negative literal (`[0..-1]`, `[1..-1]`). Rewrote to from-end form (`[0..<1]`, `[1..<1]`) (nirvlp312 shop/colour/misc; mortremains alucard comment twin; formosasaga test labels). `options.h` docs left alone.
+
+
 ### 7.210 `lib.h` redefines a `LIB_*` macro to a path that does not exist
 **Symptom:** `warning: Macro 'LIB_LIMB' redefined`; in `dsI` severing a limb prints
 "X's fourth hand is severed!" and then dies at `new(LIB_LIMB)` (`Bad argument 1 to

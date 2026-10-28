@@ -339,3 +339,8 @@ The code of this lib writes logs into 6 subdirectories of `log/`: `log/MAIN` (`i
 ## fakir ftell 缺 define.h / inherit 次序（2026-10-27，KB 04 §6.25 Also）
 
 `open/fakir/ftell` 包含不存在的 `/players/vertebraker/define.h`，且 `inherit TREASURE` 缺分号并写在全局变量之后。自 `open/pestilence/define.h` 采纳该头；补 `;` 并把 inherit 挪到变量声明前。证明：HEAD 失败；改后加载。
+
+## 深度功能测试（2026-10-27，§7.209 负下标区间残渣）
+
+`[0..-N]` / `[1..-1]` 等改为 `[0..<N]` / `[1..<1]`。
+
