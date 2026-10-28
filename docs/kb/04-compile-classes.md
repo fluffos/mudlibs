@@ -723,6 +723,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, sticklib death `player_kills << 1`):** `basic/living/death.lpc` had a bare left-shift statement (`Expression has no side effects`); comment says kills are forgotten slowly → `player_kills >>= 1`. Sole hit in the corpus. Proof: HEAD living_ldmud warns at death:568; tree warning gone.
 
+**Also (2026-10-27, sticklib `std/`/`sys/` include shims):** priests `#include <std/npc.h>` / `<std/container.h>` and thieves `<sys/configuration.h>` / `<sys/interactive_info.h>`, but the archive only ships `/include/npc.h`, `/include/container.h`, and `/sys/*.h` (angle-bracket `sys/` does not resolve under `include directories : /sys:/include:/secure`). Added thin wrappers under `/include/std/` and `/include/sys/`. Proof: HEAD alchemist/thief_guard Cannot #include; tree alchemist/carpenter/priest/chest/thief_guard/guildmaster load.
+
 **Also (2026-10-27, master_ldmud `#'fn` residue):** leftover simple quotes on `call_out`/`set_driver_hook`/`funcall`/`filter` lines in aoh/morgengrauen/nirvlp312/sticklib masters (~64 sites / 8 files); still skip `({#'…` unbound_lambda soup. Proof: HEAD morgengrauen master still had `#'configure_driver` / `#'autoincludehook`; tree uses `(: … :)`.
 
 **Also (2026-10-27, sticklib `lpc_warnings --fix`):** mechanical pass: unused locals dropped, `nosave` functions → `protected` (34 files). No-side-effects residue (~119) left for a dedicated pass. Proof: thief_mark_new `nosave int rank_no` → `protected`; bboard unused locals gone.

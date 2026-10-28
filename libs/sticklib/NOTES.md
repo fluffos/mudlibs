@@ -381,3 +381,7 @@ NPC 写 `::init()`，虚拟房间写 `::heart_beat()`，薄 living/room 没有�
 ## 深度功能测试（2026-10-27，§6.10 death player_kills 移位）
 
 `basic/living/death.lpc` 写了无赋值的 `player_kills << 1`（无副作用警告）；注释是“慢慢遗忘”→ `>>= 1`。全库仅此一处。证明：HEAD living_ldmud 在 death:568 有警告；树无该警告。
+
+## 深度功能测试（2026-10-27，§6.25 std/sys include 垫片）
+
+祭司 `#include <std/npc.h>`/`<std/container.h>`、盗贼 `<sys/configuration.h>`/`<sys/interactive_info.h>`，档案只在 `/include/npc.h`、`/include/container.h`、`/sys/*.h`。在 `/include/std/` 与 `/include/sys/` 加薄垫片。证明：HEAD alchemist/thief_guard Cannot #include；树 alchemist/carpenter/priest/chest/thief_guard/guildmaster 可加载。
