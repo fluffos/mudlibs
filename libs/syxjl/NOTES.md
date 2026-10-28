@@ -1179,3 +1179,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## hanbing `random 反引号（2026-10-27，KB 04 §6.25 Also）
 
 `hanbing-mianzhang` / `hanbing-mianzhang2` 在 `random(` 前多了一个反引号，驱动按模板字面量读到 EOF。删掉。证明：HEAD 失败；改后加载。
+
+## flute1 message_vision（2026-10-27，KB 04 §6.25 Also）
+
+`d/xingxiu/npc/obj/flute1` 的多行 `message_vision` 缺结尾 `", this_player());`（与 flute2 同形）。补上。证明：HEAD 失败；改后加载。

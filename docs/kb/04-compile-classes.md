@@ -565,7 +565,7 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, `` `random `` template typo):** 22 `hanbing-mianzhang` / `hanbing-mianzhang2` files had a stray backtick before `random(...)` (`End of file in template literal`). Dropped the backtick. Proof: HEAD fail; tree loads.
 
-
+**Also (2026-10-27, flute1 / sheep):** syxjl/ldtx/ldtxii `d/xingxiu/npc/obj/flute1` lost the closing `", this_player());` on the multi-line `message_vision` (same shape as flute2); ldtx/ldtxii `d/xingxiu/obj/sheep` had a pager banner pasted over `set_temp("apply/attack", …)` (`Illegal character`). Restored. Proof: HEAD fail; tree loads.
 
 
 

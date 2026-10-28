@@ -516,3 +516,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## hanbing `random 反引号（2026-10-27，KB 04 §6.25 Also）
 
 `hanbing-mianzhang` / `hanbing-mianzhang2` 在 `random(` 前多了一个反引号，驱动按模板字面量读到 EOF。删掉。证明：HEAD 失败；改后加载。
+
+## flute1 / sheep（2026-10-27，KB 04 §6.25 Also）
+
+`d/xingxiu/npc/obj/flute1` 补 `message_vision(..., this_player());`；`d/xingxiu/obj/sheep` 删掉粘贴在 `set_temp` 前的分页器横幅。证明：HEAD 失败；改后均加载。
