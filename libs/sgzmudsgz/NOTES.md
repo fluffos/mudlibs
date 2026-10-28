@@ -230,3 +230,7 @@ hylib/dtxy) stay confirmed duplicates.
 ## offspring RTF 外壳（2026-10-27，KB 04 §6.25 Also）
 
 `wiz/emperor/baby/offspring.lpc` 整文件是 RTF（`{\rtf1…`），不是 LPC。剥出内嵌源码；按同系 `free.lpc` 补 `master`/`is_busy`；去掉引用未定义 `NAME`/`typ` 的换装行。同目录 `base_offspring` 的 `get_info` 误写 `return ret` → `return info`。证明：HEAD RTF 语法错；改后两文件均可加载。
+
+## 深度功能测试（2026-10-27，§6.25 ziguang/test/ff 去分号）
+
+`wiz/ziguang/test/ff` 丢了 `inherit` 后的 `;` 与几乎所有语句终结符。用同库完好的 `wiz/fire/obj/huoba` 覆盖。证明：HEAD 失败；改后加载。

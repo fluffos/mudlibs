@@ -547,3 +547,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-10-27，§6.25 dongmen 去引号）
 
 `u/lark/luoyang/dongmen` 去引号/缺 `;`；按 `d/city/dongmen` 重写并保留东向洛阳出口。
+
+## 深度功能测试（2026-10-27，§6.25 adm/tmp/test glued inherit）
+
+`adm/tmp/test` 写成 `inherit SSERVER int perform…`，且 `if (!target; ||`。拆成 `inherit SSERVER;` 并去掉误写的分号。证明：HEAD 失败；改后加载。
