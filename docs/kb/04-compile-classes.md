@@ -533,6 +533,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, dreamofseven `F_BLADE`/`F_PIKE`/`F_BLUNT`):** twenty tmr weapons used Aug `inherit F_BLADE` (broken `_blade` feature: no `EQUIP::setup`/`weight`) or undefined `F_PIKE`/`F_BLUNT` with `setup_*()`. Rewrote to `BLADE`/`FORK`/`HAMMER`/`STAFF` and `init_*` (damage = Aug range); `apply_weapon/...` → `weapon_prop/*`. Proof: HEAD wood-blade fails; tree 20/20 load.
 
+**Also (2026-10-27, dreamofseven `F_SWORD`/`F_AXE`/`F_WHIP`/`F_DAGGER`):** twenty-three more tmr weapons used the same broken `_sword`/`_axe`/`_whip`/`_dagger` feature bases (`setup_*` + `apply_weapon/...`). Rewrote to `SWORD`/`AXE`/`WHIP`/`DAGGER` and `init_*` (damage = Aug range); `apply_weapon` → `weapon_prop/*`. Residue 0. Proof: HEAD white-sword fails; tree 23/23 load.
+
 **Also (2026-10-27, `jiguang-dao` inherit `.h`):** shiji / sj / xzyx `d/budui/obj/jiguang-dao` had `inherit "inherit/weapon/blade.h"` (no such object) while calling `init_gun(50)`. Sibling `jiguangqiang` uses `inherit "/inherit/weapon/gun"`. Rewrote to that. Proof: HEAD fail; tree loads.
 
 **Also (2026-10-27, ninetears `set_school(ESCUELA)`):** Spanish spells pass `({"alteracion",...})` arrays into `hechizos/base` `set_school`/`set_sphere` typed `string` (`Bad type ... string vs mixed *`); `meteoros_diminutos` also lacked `;` after `inherit`. Widened the four base copies to `mixed` (use first element); restored three missing semicolons. Proof: HEAD fail; tree loads.

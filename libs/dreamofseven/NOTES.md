@@ -1047,6 +1047,10 @@ tmr 区约 45 件防具写 `inherit F_ARMOR` / `F_HEAD_EQ` / `F_HAND_EQ` / `F_FE
 
 tmr 区 20 件武器写 Aug `inherit F_BLADE`（本库 `_blade` 作 feature 缺 `EQUIP::setup`/`weight`）或未定义的 `F_PIKE`/`F_BLUNT`，并调用 `setup_blade`/`setup_pike`/`setup_blunt`。改为本库 `BLADE`/`FORK`（枪）/`HAMMER`（棒）/`STAFF`（钓竿），`init_*` 伤害取 Aug 的 range；`apply_weapon/...` 写入 `weapon_prop/*`。证明：HEAD wood-blade 失败；改后 20/20 加载。
 
+## F_SWORD / F_AXE / F_WHIP / F_DAGGER → 本库基类（2026-10-27，KB 04 §6.25 Also）
+
+续上批：23 件 tmr 武器仍写 Aug `inherit F_SWORD`/`F_AXE`/`F_WHIP`/`F_DAGGER`（指向 `_sword` 等 feature，同样缺 `EQUIP::setup`/`weight`）。改为 `SWORD`/`AXE`/`WHIP`/`DAGGER`，`init_*` 伤害取 Aug range；`apply_weapon/...` → `weapon_prop/*`。残渣 0。证明：HEAD white-sword 失败；改后 23/23 加载。
+
 ## F_STUDY 宏 + feature/study（2026-10-27，KB 04 §6.16 Also）
 
 四处 tmr 书籍 `inherit F_STUDY`，本库无宏且无 `/feature/study.lpc`。自 dfgsiiv13b 采纳 `feature/study.lpc`，并在 `globals.h` 增加 `#define F_STUDY`。证明：HEAD book 失败；改后四本均加载。
