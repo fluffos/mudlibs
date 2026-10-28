@@ -1,5 +1,9 @@
-#ifndef _TUNE_H
-#define _TUNE_H
+#ifndef _THIEF_TUNE_H
+#define _THIEF_TUNE_H
+
+/* Do not claim _TUNE_H: that guard belongs to /include/tune.h
+ * (TUNE_THIEF_DAMAGE etc.). This file is guild-local stab/steal knobs. */
+#include <tune.h>
 
 // Chance that stab fails regardless of skill or situation
 #define _STAB_FAILURE		(random(1000) < 27)
@@ -60,4 +64,4 @@
 #define _STEAL_T_RND		(random(100) < 28)
 
 
-#endif /* _TUNE_H */
+#endif /* _THIEF_TUNE_H */

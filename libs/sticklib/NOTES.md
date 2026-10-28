@@ -385,3 +385,11 @@ NPC 写 `::init()`，虚拟房间写 `::heart_beat()`，薄 living/room 没有�
 ## 深度功能测试（2026-10-27，§6.25 std/sys include 垫片）
 
 祭司 `#include <std/npc.h>`/`<std/container.h>`、盗贼 `<sys/configuration.h>`/`<sys/interactive_info.h>`，档案只在 `/include/npc.h`、`/include/container.h`、`/sys/*.h`。在 `/include/std/` 与 `/include/sys/` 加薄垫片。证明：HEAD alchemist/thief_guard Cannot #include；树 alchemist/carpenter/priest/chest/thief_guard/guildmaster 可加载。
+
+## 深度功能测试（2026-10-27，§6.25 thieves tune.h 守卫）
+
+公会本地 `tune.h` 占了 `_TUNE_H` 却没有 `TUNE_THIEF_DAMAGE`，挡住全局 `/include/tune.h`。改守卫为 `_THIEF_TUNE_H` 并 `#include <tune.h>`。证明：HEAD thief_mark Undefined TUNE_THIEF_DAMAGE；树宏已解析。
+
+## 深度功能测试（2026-10-27，§6.25 query_tax varargs）
+
+`thief_mark_new` 声明 `query_tax(int x)` 却无参调用。定义与 `thief.h` 原型加 `varargs`。证明：HEAD 参数个数错误；树 thief_mark_new 可加载。

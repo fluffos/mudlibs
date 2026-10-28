@@ -130,7 +130,7 @@ mixed query_last_steal();
 mixed query_tth();
 string query_tattoo_desc();
 nomask string query_pretitle();
-int query_tax(int x);
+varargs int query_tax(int x);
 int query_tax_time();
 int query_steal_tax();
 int query_delay_stab();
