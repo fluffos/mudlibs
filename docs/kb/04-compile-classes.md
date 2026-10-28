@@ -777,6 +777,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-28, sticklib drink `set_short(mixed)` + id/invis):** Strategy A `/lib/drink` typed `set_short`/`set_long` as `string` while priest_bottle passes `(: … :)` closures; also lacked `id_name`/`invis_level` from `/basic/id`. `mixed` setters + `evaluate` in query_*; vars + `set_name` sync. Proof: HEAD priest_bottle Bad type set_short; tree loads.
 
+**Also (2026-10-28, sticklib `find_player` on object-typed param):** `calculate_average_rank(object sym)` called `find_player(sym)` after `stringp(sym)` — compile-time Bad argument (declared object). Param → `mixed`; assign through `object pl`. shield_d same shape is blocked by wide-map. Proof: HEAD guild_room Bad argument find_player; tree loads.
+
+
 
 
 **Also (2026-10-27, master_ldmud `#'fn` residue):** leftover simple quotes on `call_out`/`set_driver_hook`/`funcall`/`filter` lines in aoh/morgengrauen/nirvlp312/sticklib masters (~64 sites / 8 files); still skip `({#'…` unbound_lambda soup. Proof: HEAD morgengrauen master still had `#'configure_driver` / `#'autoincludehook`; tree uses `(: … :)`.

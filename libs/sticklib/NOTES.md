@@ -433,3 +433,7 @@ Strategy A catalog 缺这些 LDMud efun。补 sefun。证明：HEAD nature_d Und
 ## 深度功能测试（2026-10-28，§6.25 catalog efuns + living stubs + drink mixed）
 
 Catalog 补 `master_object`/`wizlist`/`localcmd`/`unshadow`/`varargs snoop`；`/lib/living` 补 SP/money/`query_race_stat`/`set_resistance`/`transfer_all_to`；`/lib/drink` 的 `set_short`/`set_long` 改为 `mixed`（含 `evaluate`）并补 `id_name`/`invis_level`。证明：HEAD title_shadow/demon/priest_bottle/coder_cmds 失败；树上述对象均可加载。
+
+## 深度功能测试（2026-10-28，§6.21 find_player 形参类型）
+
+`guild_room.calculate_average_rank` 的形参从 `object` 改为 `mixed`，经 `object pl = find_player(...)` 再取公会物件。证明：HEAD Bad argument find_player；树 guild_room 可加载。
