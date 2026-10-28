@@ -543,6 +543,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, xo-family `estate` macros):** xajh2 / xajhxo / xo / xo_final `system/daemon/estate` never compiled: `#define ROOM_HEAD` / `EXIT_STRING` held raw `"` inside the macro string (preprocessor ate the rest), the template used `#inherit AREA`, `CreateRoom` referenced undefined `dir`, and `AddItem` had `retrun` plus `class Location` (undefined). Escaped quotes, `inherit AREA`, `out_dir`, `return`, `mixed location`. Proof: HEAD fail; tree loads.
 
+**Also (2026-10-27, nirvlp312 `ftell`):** `open/fakir/ftell` included missing `/players/vertebraker/define.h`, had `inherit TREASURE` without `;` after globals (`Illegal to inherit after defining global variables`). Adopted `open/pestilence/define.h` as that header; semicolon; move inherit above the globals. Proof: HEAD fail; tree loads.
+
+
 
 
 
