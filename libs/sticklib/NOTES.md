@@ -297,3 +297,7 @@ Strategy A 的 `/catalog/simul_efun` 缺少 LDMud 的 `present4` / `object_info`
 ## 深度功能测试（2026-10-27，§6.25 master_ldmud `#'fn` 残渣）
 
 `call_out`/`set_driver_hook` 等行上剩余的简单 `#'ident` → `(: ident :)`（仍跳过 `({#'` lambda 汤）。
+
+## 深度功能测试（2026-10-27，§6.10 sticklib lpc_warnings --fix）
+
+机械修复：未用局部变量删除、`nosave` 函数改为 `protected`（34 文件）。约 119 处「无副作用表达式」留给专批。
