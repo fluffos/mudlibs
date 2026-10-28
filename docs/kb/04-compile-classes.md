@@ -535,6 +535,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, `jiguang-dao` inherit `.h`):** shiji / sj / xzyx `d/budui/obj/jiguang-dao` had `inherit "inherit/weapon/blade.h"` (no such object) while calling `init_gun(50)`. Sibling `jiguangqiang` uses `inherit "/inherit/weapon/gun"`. Rewrote to that. Proof: HEAD fail; tree loads.
 
+**Also (2026-10-27, ninetears `set_school(ESCUELA)`):** Spanish spells pass `({"alteracion",...})` arrays into `hechizos/base` `set_school`/`set_sphere` typed `string` (`Bad type ... string vs mixed *`); `meteoros_diminutos` also lacked `;` after `inherit`. Widened the four base copies to `mixed` (use first element); restored three missing semicolons. Proof: HEAD fail; tree loads.
+
+
 
 
 

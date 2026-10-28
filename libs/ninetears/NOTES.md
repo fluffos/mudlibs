@@ -922,3 +922,7 @@ The code of this lib writes logs into 1 subdirectory of `log/`: `log/save/board`
 `this_player()->query_name() == "shimmer" || "honny" || …`：裸字符串恒真，非所有者也吃到神力 buff。
 `lpc_fix_literal_or.py` 的左侧现识别 `name()->…`；两把武器各补全比较。
 证明：`lpcc_eval.py ninetears --at /secure/zzeval.lpc` 加载武器；visitor 链为 0，shimmer 为 1。
+
+## set_school/sphere 接受数组 + meteoros 缺分号（2026-10-27，KB 04 §6.25 Also）
+
+`d/gremios/hechizos/base`（及 examples / antiguo 副本）的 `set_school`/`set_sphere` 只收 `string`，而西班牙语法用 `ESCUELA ({...})` / `ESFERA ({...})` 数组调用，`meteoros_diminutos` 等无法编译；同文件还缺 inherit 后的 `;`。改为 `mixed`（取首元素），并补上 wizard/mmm 三处分号。证明：HEAD meteoros 失败；改后 meteoros 与 mmm 加载。
