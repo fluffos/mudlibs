@@ -593,6 +593,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, traveler quote-strip):** dreamofseven `u/t/tako.tmp/traveler` lost every quote (`set_name(路人,({ walk man,man }))`). Rewrote from the intact same-dir `traveller` (kept `walk man` / level 5). Proof: HEAD fail; tree loads.
 
+**Also (2026-10-27, dongmen quote-strip):** sjplii / sjpl2 `u/lark/luoyang/dongmen` lost quotes and `;` (`inherit ROOM`, `set (short, 春明门)`). Rewrote from intact `d/city/dongmen`, keeping the east exit to `/u/lark/luoyang/road1`. Proof: HEAD fail; tree loads.
+
 
 
 

@@ -918,3 +918,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## fabao EXAMPLE（city/obj）缺 ) 与 !（2026-10-27，KB 04 §6.25 Also）
 
 `d/city/obj/fabao/EXAMPLE.lpc` 与 `d/obj/fabao/EXAMPLE` 同病：`if (objectp(victim = present(target, environment()))`。改为 `if (!objectp(victim = present(target, environment(me))))`。证明：HEAD 加载失败；改后加载成功。
+
+## 深度功能测试（2026-10-27，§6.25 dongmen 去引号）
+
+`u/lark/luoyang/dongmen` 去引号/缺 `;`；按 `d/city/dongmen` 重写并保留东向洛阳出口。
