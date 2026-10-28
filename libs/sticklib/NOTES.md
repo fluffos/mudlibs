@@ -289,3 +289,7 @@ Strategy A 的 `/catalog/simul_efun` 缺少 LDMud 的 `present4` / `object_info`
 ## 深度功能测试（2026-10-27，§6.25 Strategy A pick_any_obj/weight）
 
 `/lib/living` 补 `local_weight`/`experience`/`add_weight`/`recount_weight`/`wield`/`wear`/`unwear`；`/lib/npc` 补 `pick_any_obj`。janitor 可加载。
+
+## 深度功能测试（2026-10-27，§6.25 Strategy A is_fighting/dead）
+
+`is_fighting` 改为 `varargs`；补 `dead` 与 `heart_beat`。guard / guard_captain / janitor 均可加载。

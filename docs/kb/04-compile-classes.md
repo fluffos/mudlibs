@@ -679,6 +679,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, sticklib Strategy A NPC weight/`pick_any_obj`):** city NPCs call `::pick_any_obj()` and read `local_weight`/`experience` from the LDMud living/npc bases Strategy A never shipped. Added `local_weight`/`experience`/`cap_name`/`add_weight`/`recount_weight`/`wield`/`wear`/`unwear` on `/lib/living` and `pick_any_obj` on `/lib/npc`. Proof: HEAD janitor fail; tree loads janitor.
 
+**Also (2026-10-27, sticklib Strategy A `is_fighting`/`dead`):** city guards call `is_fighting()` with no argument and read `dead`; Strategy A living required one arg and lacked `dead`. Made `is_fighting` `varargs`, added `dead`/`query_dead`/`set_dead`, and a `heart_beat` chain. Proof: guard + guard_captain + janitor load.
+
 
 
 
