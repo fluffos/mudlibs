@@ -317,3 +317,7 @@ Strategy A `/catalog/simul_efun` 缺 LDMud `apply` 与双参 `mkmapping`，`equi
 ## 深度功能测试（2026-10-27，§6.25 catalog sefun file_lines/interactive_info）
 
 Strategy A catalog 缺 `file_lines` / `interactive_info`。从档案 sefun 移植 `file_lines`；`interactive_info` 映射到 FluffOS `query_ip_*`/`query_idle`/`in_edit`/`query_snoop*`。证明：HEAD Undefined；树 `_line` 与 mud_guide 可加载。
+
+## 深度功能测试（2026-10-27，§6.25 equipped_npc add_* varargs）
+
+`add_object("/path", 0, 1)` 在 FluffOS 上对五参原型报参数个数/类型错误。给 `add_weapon`/`add_armour`/`add_object` 加 `varargs`，并把 `init_data` 扩成 `mixed`（体内已有 `pointerp` 判断）。证明：HEAD portsari 失败；树可加载。

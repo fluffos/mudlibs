@@ -689,6 +689,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, sticklib catalog sefun `file_lines`/`interactive_info`):** Strategy A catalog lacked LDMud `file_lines` and `interactive_info` (wizard `_line`/`_changelog`, mud_guide, player login IP checks). Ported `file_lines` from archive sefun; shimmed `interactive_info` to FluffOS `query_ip_*`/`query_idle`/`in_edit`/`query_snoop*`. Proof: HEAD Undefined; tree `_line`+mud_guide load.
 
+**Also (2026-10-27, sticklib equipped_npc `add_*` varargs):** FluffOS requires every formal; `add_object("/path", 0, 1)` (fname, id, pick_delay) failed arity/type against `(…, mixed *init_data, int pick_delay, …)`. Marked `add_weapon`/`add_armour`/`add_object` `varargs` and widened `init_data` to `mixed` (body already `pointerp`-guards). Proof: HEAD portsari arity error; tree loads portsari.
+
 **Also (2026-10-27, master_ldmud `#'fn` residue):** leftover simple quotes on `call_out`/`set_driver_hook`/`funcall`/`filter` lines in aoh/morgengrauen/nirvlp312/sticklib masters (~64 sites / 8 files); still skip `({#'…` unbound_lambda soup. Proof: HEAD morgengrauen master still had `#'configure_driver` / `#'autoincludehook`; tree uses `(: … :)`.
 
 **Also (2026-10-27, sticklib `lpc_warnings --fix`):** mechanical pass: unused locals dropped, `nosave` functions → `protected` (34 files). No-side-effects residue (~119) left for a dedicated pass. Proof: thief_mark_new `nosave int rank_no` → `protected`; bboard unused locals gone.
