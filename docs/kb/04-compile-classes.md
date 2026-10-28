@@ -733,6 +733,10 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, sticklib cremate LDMud lambda):** `cremate.lpc` used `lambda(({'foo}),({#'move_object,'foo,here}))` (`Illegal character #`). Rewrote to a `for` over `all_inventory`. Proof: HEAD Illegal character #; tree cremate loads.
 
+**Also (2026-10-27, sticklib Strategy A `tell_here` arity):** priest rooms call LDMud `tell_here(({msg…}), sense, flags, skip, me, him, it)` while Strategy A took `string` only (`Bad type … mixed *`). Widened to `mixed` msg + full varargs (array → first string). Proof: HEAD inquisitor Bad type; tree inquisitor/nave load.
+
+**Also (2026-10-27, sticklib Strategy A `remove_exit`):** `wine_cellar` calls `remove_exit` from LDMud room; Strategy A only had `add_exit`. Added `remove_exit`. Proof: HEAD Undefined remove_exit; tree wine_cellar loads.
+
 **Also (2026-10-27, master_ldmud `#'fn` residue):** leftover simple quotes on `call_out`/`set_driver_hook`/`funcall`/`filter` lines in aoh/morgengrauen/nirvlp312/sticklib masters (~64 sites / 8 files); still skip `({#'…` unbound_lambda soup. Proof: HEAD morgengrauen master still had `#'configure_driver` / `#'autoincludehook`; tree uses `(: … :)`.
 
 **Also (2026-10-27, sticklib `lpc_warnings --fix`):** mechanical pass: unused locals dropped, `nosave` functions → `protected` (34 files). No-side-effects residue (~119) left for a dedicated pass. Proof: thief_mark_new `nosave int rank_no` → `protected`; bboard unused locals gone.

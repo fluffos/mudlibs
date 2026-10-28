@@ -401,3 +401,11 @@ NPC 写 `::init()`，虚拟房间写 `::heart_beat()`，薄 living/room 没有�
 ## 深度功能测试（2026-10-27，§6.25 cremate LDMud lambda）
 
 `cremate.lpc` 用 `lambda`+`#'move_object`（Illegal character #）。改成对 `all_inventory` 的 `for`。证明：HEAD Illegal character #；树 cremate 可加载。
+
+## 深度功能测试（2026-10-27，§6.25 Strategy A tell_here 参数）
+
+祭司房间调用 LDMud 多参 `tell_here(({msg}), …)`，Strategy A 只收 `string`。放宽为 `mixed` + 完整 varargs（数组取首串）。证明：HEAD inquisitor Bad type；树 inquisitor/nave 可加载。
+
+## 深度功能测试（2026-10-27，§6.25 Strategy A remove_exit）
+
+`wine_cellar` 调 `remove_exit`，Strategy A 只有 `add_exit`。补上。证明：HEAD Undefined；树 wine_cellar 可加载。
