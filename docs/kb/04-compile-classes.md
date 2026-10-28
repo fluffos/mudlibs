@@ -697,6 +697,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, sticklib Strategy A `attack` return type):** `/lib/living` declared `void attack()` while NPCs override with `status attack()` (`void vs int` warning, 9 files). Changed living to `status attack()` returning 0/1. Proof: asmodeus loads without the inherit warning.
 
+**Also (2026-10-27, sticklib catalog sefun `query_once_interactive`):** LDMud `query_once_interactive` (priest rooms/daemons) missing from Strategy A catalog. Shimmed to `interactive(ob)`. Proof: HEAD earth_meld_room/storage_room Undefined; tree both load.
+
 **Also (2026-10-27, master_ldmud `#'fn` residue):** leftover simple quotes on `call_out`/`set_driver_hook`/`funcall`/`filter` lines in aoh/morgengrauen/nirvlp312/sticklib masters (~64 sites / 8 files); still skip `({#'…` unbound_lambda soup. Proof: HEAD morgengrauen master still had `#'configure_driver` / `#'autoincludehook`; tree uses `(: … :)`.
 
 **Also (2026-10-27, sticklib `lpc_warnings --fix`):** mechanical pass: unused locals dropped, `nosave` functions → `protected` (34 files). No-side-effects residue (~119) left for a dedicated pass. Proof: thief_mark_new `nosave int rank_no` → `protected`; bboard unused locals gone.

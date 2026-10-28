@@ -333,3 +333,7 @@ Strategy A catalog 缺 `do_find_object`/`get_object`/`m_allocate`/`get_eval_cost
 ## 深度功能测试（2026-10-27，§6.10 Strategy A attack 返回类型）
 
 `/lib/living` 的 `void attack()` 与 NPC 的 `status attack()` 冲突（`void vs int` 警告）。改为 `status` 并返回 0/1。证明：asmodeus 加载且无该继承警告。
+
+## 深度功能测试（2026-10-27，§6.25 catalog sefun query_once_interactive）
+
+祭司房间/守护程序调用 LDMud `query_once_interactive`；Strategy A catalog 没有。映射为 `interactive(ob)`。证明：HEAD earth_meld_room/storage_room 失败；树均可加载。
