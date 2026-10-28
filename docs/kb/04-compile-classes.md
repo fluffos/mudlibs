@@ -537,6 +537,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, ninetears `set_school(ESCUELA)`):** Spanish spells pass `({"alteracion",...})` arrays into `hechizos/base` `set_school`/`set_sphere` typed `string` (`Bad type ... string vs mixed *`); `meteoros_diminutos` also lacked `;` after `inherit`. Widened the four base copies to `mixed` (use first element); restored three missing semicolons. Proof: HEAD fail; tree loads.
 
+**Also (2026-10-27, dreamofseven `F_STUDY`):** four tmr books used `inherit F_STUDY` with no macro and no `/feature/study.lpc`. Adopted the ES2 `feature/study.lpc` from dfgsiiv13b and `#define F_STUDY` in `globals.h`. Proof: HEAD fail; tree 4/4 load.
+
+
 
 
 

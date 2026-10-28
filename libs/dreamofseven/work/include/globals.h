@@ -135,6 +135,7 @@
 #define F_EQUIP			"/feature/equip.lpc"
 #define F_FINANCE		"/feature/finance.lpc"
 #define F_FOOD			"/feature/food.lpc"	//add by Luky
+#define F_STUDY			"/feature/study.lpc"	// Aug study books
 #define F_PILL			"/feature/pill.lpc"	//add by Luky
 #define F_WATER			"/feature/water.lpc"	//add by Luky
 //#define F_LIQUID		"/feature/liquid.lpc"
