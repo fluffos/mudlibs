@@ -745,6 +745,10 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, sticklib simple LDMud lambda sorts/filters):** `_logouts`/`lord_crown`/`_appraise` used `lambda`+`#'` soup (`Illegal character #`). Rewrote to FluffOS `(: $1… :)` (`sort_array` ascending via `$1 > $2`; filter `!$1->query_coder_level()`). Left set_n_query WC formulas and grapevine `send_erq` lambdas. Proof: HEAD `_logouts` Illegal character #; tree `_logouts`/`_appraise` load (lord_crown compiles).
 
+**Also (2026-10-27, ageofelements catalog LDMud sefuns):** Strategy A catalog lacked `command(cmd,who)`, `m_allocate`, `regreplace`, `json_parse`/`json_serialize` (via copied `/catalog/json.lpc`), `to_bytes`/`binary_message`, and `<sys/…>` wrappers under `include/sys/`. Proof: HEAD quicktyper/orc_vall Too many arguments to command, terminal Undefined regreplace; tree quicktyper/orc_vall/terminal load.
+
+**Also (2026-10-27, ageofelements gmcp LDMud foreach):** `obj/login/gmcp.lpc` used `foreach (T x : arr)` (10 sites). Converted to `in`. Proof: HEAD Cannot #include / Undefined json_parse (and foreach after shims); tree gmcp loads.
+
 **Also (2026-10-27, master_ldmud `#'fn` residue):** leftover simple quotes on `call_out`/`set_driver_hook`/`funcall`/`filter` lines in aoh/morgengrauen/nirvlp312/sticklib masters (~64 sites / 8 files); still skip `({#'…` unbound_lambda soup. Proof: HEAD morgengrauen master still had `#'configure_driver` / `#'autoincludehook`; tree uses `(: … :)`.
 
 **Also (2026-10-27, sticklib `lpc_warnings --fix`):** mechanical pass: unused locals dropped, `nosave` functions → `protected` (34 files). No-side-effects residue (~119) left for a dedicated pass. Proof: thief_mark_new `nosave int rank_no` → `protected`; bboard unused locals gone.

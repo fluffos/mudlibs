@@ -150,3 +150,11 @@ Listed `playable` only after the native village §10.7-shaped pass
 ## Old-driver type slack: missing arguments, untyped parameters, array initializers, `class` variables (2026-10-19, KB 04 6.19, 6.20)
 
 MudOS filled the missing arguments of a call with 0, took an untyped parameter as `mixed`, never compared a declared type with its initializer and let a variable be named `class`; this driver refuses all of it at compile time and the whole object fails. 2 file(s) fixed: `/obj/shut.lpc`, `/room/orc_vall.lpc` (the repair rounds of `scripts/lpc_round_files.py`: zeros written out at the call, `mixed` for untyped parameters, `string X = ({...})` given its star, void functions returning values, and `class` variables renamed `pick_class`). Loaded at HEAD and in the tree, per file: 1 of them failed before and load now, none regressed.
+
+## 深度功能测试（2026-10-27，§6.25 catalog LDMud sefuns）
+
+Strategy A catalog 缺 `command(cmd,who)`、`m_allocate`、`regreplace`、`json_parse`（含 `/catalog/json.lpc`）、`to_bytes`/`binary_message`，以及 `include/sys/` 垫片。证明：HEAD quicktyper/orc_vall Too many arguments、terminal Undefined regreplace；树 quicktyper/orc_vall/terminal 可加载。
+
+## 深度功能测试（2026-10-27，§6.25 gmcp LDMud foreach）
+
+`obj/login/gmcp.lpc` 的 `foreach (T x : arr)`（10 处）改为 `in`。证明：HEAD 编不过；树 gmcp 可加载。
