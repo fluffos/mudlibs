@@ -313,3 +313,7 @@ NPC 的 `set_chance`/`set_spell_mess1`/`set_spell_mess2`/`set_spell_dam`/`set_br
 ## 深度功能测试（2026-10-27，§6.25 catalog sefun apply/mkmapping）
 
 Strategy A `/catalog/simul_efun` 缺 LDMud `apply` 与双参 `mkmapping`，`equipped_npc` / `dueld` 编不过。补上 `apply`（`evaluate` + `call_other` 数组展开）和配对数组 `mkmapping`（赌场多值宽映射仍不支持）。证明：HEAD 报 Undefined；树均可加载。
+
+## 深度功能测试（2026-10-27，§6.25 catalog sefun file_lines/interactive_info）
+
+Strategy A catalog 缺 `file_lines` / `interactive_info`。从档案 sefun 移植 `file_lines`；`interactive_info` 映射到 FluffOS `query_ip_*`/`query_idle`/`in_edit`/`query_snoop*`。证明：HEAD Undefined；树 `_line` 与 mud_guide 可加载。
