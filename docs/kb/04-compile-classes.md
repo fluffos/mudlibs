@@ -669,6 +669,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, nirvlp312 `#'fn`):** same simple-quote sweep as sticklib (~1224 sites / 283 files); master copies converted on non-soup lines only. Proof: HEAD `/basic/alias` Illegal character `#` on `map(..., #'lower_case)`; tree drops that error (still fails later on missing `closurep`/`funcall` sefuns).
 
+**Also (2026-10-27, morgengrauen/realms `#'fn`):** same simple-quote sweep with a guard against Realms `##Name##'s` possessives (`(?<!#)#'ident`). morgengrauen ~584 sites / 152 files; realms 1 real site (`apply(#'call_direct,...)`). Proof: HEAD `/p/daemon/sastatd` Illegal character `#` on `map(..., #'FormatLogEntry)`; tree replaces that error.
+
 
 
 

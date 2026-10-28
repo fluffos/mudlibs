@@ -907,3 +907,7 @@ rooms.
 ## 深度功能测试（2026-10-27，§6.10 LDMud 未知 pragma）
 
 `secure/auto.h` 与 `priviledgedObjects.lpc` 中 FluffOS 不识别的 pragma 行已删。
+
+## 深度功能测试（2026-10-27，§6.25 LDMud `#'fn` 闭包）
+
+`testing.lpc`：`apply(#'call_direct,...)` → `apply((: call_direct :),...)`。其余多为 `##Name##'s` 字符串，未改。

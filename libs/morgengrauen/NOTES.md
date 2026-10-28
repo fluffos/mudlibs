@@ -276,3 +276,7 @@ The code of this lib writes logs into 10 subdirectories of `log/`: `log/ARCH/bbm
 ## 深度功能测试（2026-10-27，§6.10 LDMud 未知 pragma）
 
 逗号列表与 `rtt_checks` / `range_check` / `no_clone` / `pedantic` 等：删未知项，已知的 `strict_types` / `save_types` 各占一行（busch、path.h、container/room light、welcome/std 等）。
+
+## 深度功能测试（2026-10-27，§6.25 LDMud `#'fn` 闭包）
+
+简单 `#'ident` → `(: ident :)`（约 584 处）。避开 `##'s` 所有格。HEAD `sastatd` Illegal character `#`；树中该错误消失。
