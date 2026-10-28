@@ -826,3 +826,7 @@ A path written without the leading slash (`carry_object("d/city/obj/jiasha")->we
 ## glued inherit entrance + ball（2026-10-27，KB 04 §6.25 Also）
 
 `wizards/walla/area/extension/entrance` 的 `inherit "room/room"`、`wizards/yodin/ball` 的 `inherit "obj/armour" /*…*/` 均缺分号。entrance 的房间描述字符串原先是无副作用表达式，改为 `long_desc =`。证明：HEAD 失败；改后两件均加载。
+
+## 深度功能测试（2026-10-27，§6.25 question_d 截断）
+
+`daemons/question_d` 的 `ask_questions` 在 `if(question` / `tell_object(ob, question` 处截断。按 `input_data` 的 mapping 用法补完（`m_sizeof` + `random` 出题）。证明：HEAD 失败；改后加载。

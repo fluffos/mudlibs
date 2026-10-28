@@ -1059,3 +1059,7 @@ tmr 区 112 个 NPC `#include <npc.h>` 并调用 Aug 的 `set_race`/`set_attr`/`
 ## 深度功能测试（2026-10-27，§6.25 ddl message_vision 截断）
 
 `u/r/romeo/area/npc/wp/ddl` 的 `message_vision` 丢了收尾 `"NOR, me, victim);`。补上。证明：HEAD 失败；改后加载。
+
+## 深度功能测试（2026-10-27，§6.25 dsword 引号/截断）
+
+`u/r/romeo/area/npc/wp/dsword` 多处截断（`set_name(... ({;`、`message_vision` 无收尾、`init_blade` 对 SWORD）。按残片重写：补 ids、收尾字符串、改 `init_sword`。证明：HEAD 失败；改后加载。
