@@ -667,6 +667,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, sticklib catalog sefun `present4`/`object_info`):** Strategy A `/catalog/simul_efun` never shipped LDMud `present4` or `object_info`, so `_si` and `buster_bag` (and every `OI_ONCE_INTERACTIVE` caller) failed `Undefined function`. Added `present4` (from the archive sefun) and a minimal `object_info` (`OI_ONCE_INTERACTIVE` → `interactive()`; shadow/list queries → 0) plus `raise_error`→`error`. Proof: tree loads buster_bag + `_si`.
 
+**Also (2026-10-27, nirvlp312 `#'fn`):** same simple-quote sweep as sticklib (~1224 sites / 283 files); master copies converted on non-soup lines only. Proof: HEAD `/basic/alias` Illegal character `#` on `map(..., #'lower_case)`; tree drops that error (still fails later on missing `closurep`/`funcall` sefuns).
+
 
 
 

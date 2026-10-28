@@ -348,3 +348,7 @@ The code of this lib writes logs into 6 subdirectories of `log/`: `log/MAIN` (`i
 ## 深度功能测试（2026-10-27，§6.10 LDMud 未知 pragma）
 
 master / simul_efun / workfiles / define.h 等处的 `strong_types` / `pedantic` / `no_shadow` / `no_inherit` / `no_clone` / `no_warn_missing_return` 已删。`/obj/simul_efun` 可加载。
+
+## 深度功能测试（2026-10-27，§6.25 LDMud `#'fn` 闭包）
+
+简单 `#'ident` → `(: ident :)`（跳过 `#'?` / `'symbol` 行）。约 1224 处 / 283 文件。HEAD `/basic/alias` 报 Illegal character `#`；树中该错误消失。

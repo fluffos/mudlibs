@@ -13,7 +13,7 @@
  */
 
 #define IS_REGEXP(proband,rgxp) sizeof(regexp(({ proband }),"^"+(rgxp)+"$"))
-#define REGEXP_OK(rgxp) (!!with_player(0,(#'regexp),({ ({ "" }),rgxp })))
+#define REGEXP_OK(rgxp) (!!with_player(0,((: regexp :)),({ ({ "" }),rgxp })))
 
 // this is useful to quote any string to be interpreted literally by the
 // regexp functions

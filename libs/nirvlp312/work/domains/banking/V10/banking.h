@@ -18,7 +18,7 @@
 #define BANKING "domains/banking/V10/"
 
 #define BANKING_LOGFILE "/"BANKING"log"
-#define BANKING_LOG(x) unguarded(1,#'write_file,({ BANKING_LOGFILE, \
+#define BANKING_LOG(x) unguarded(1,(: write_file :),({ BANKING_LOGFILE, \
                                                    ctime()+": "+x+"\n" }))
 
 /* These are the standard objects */
