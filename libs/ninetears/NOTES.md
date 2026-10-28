@@ -939,3 +939,8 @@ The code of this lib writes logs into 1 subdirectory of `log/`: `log/save/board`
 
 score / access_control / vault_room：补 `me` / `this_player()` / `TP`。注释块内 golpear/bash 未动。
 
+
+## 深度功能测试（2026-10-27，§6.25 tell_object 参数顺序残渣）
+
+rnd_caus*：`tell_object("at the top\n", attackboy)`→`tell_object(attackboy, …)`。
+

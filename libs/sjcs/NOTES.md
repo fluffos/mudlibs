@@ -620,3 +620,8 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 
 `cmds/adm/skirt` 的 `tell_object(". \n")` 按同系 snoop 补回停止/开始监听文案与 `ob`。
 
+
+## 深度功能测试（2026-10-27，§6.25 tell_object 参数顺序残渣）
+
+guest：`tell_object("…", who)`→`tell_object(who, …)`。
+

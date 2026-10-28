@@ -584,3 +584,8 @@ foodmaker 内嵌 `@ROOM_CODE` 模板 `set("long"` 缺开头引号；补 `"`.
 ## 深度功能测试（2026-10-27，§6.25 zxcd_yongshi 缺分号）
 
 `u/ZXCDZXCD/NPC/zxcd_yongshi`：`inherit NPC` 缺 `;`、语句缺 `;`、id 引号残缺；补 `#include <ansi.h>` 并重写为可加载。
+
+## 深度功能测试（2026-10-27，§6.25 tell_object 参数顺序残渣）
+
+fuyunke telnet：消息/目标对调（含 `(string)message`）。
+

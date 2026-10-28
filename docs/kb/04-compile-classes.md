@@ -649,6 +649,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, `tell_object`/`tell_room` string-id target):** first argument was the identifier as a string (`tell_object("ob", …)`, `tell_room("where", …)`, `tell_object("target", …)`). Player kicks → bare `ob`/`target`; room `find_object` destinations → `tell_room(ob|where, …)` (sjpl* bingbu/lark; chatroom/xinfang/pplroomd; shadowgate/sunshadow crushing_hand). Residue 0. Proof: sjpl2 caoliao + mnhf chatroom load.
 
+**Also (2026-10-27, `tell_object("…", target)` arg-order residue):** 25+ sites still had the message first (guest "迎客厅"; ninetears rnd_caus `attackboy`; sj/shiji telnet including `(string)message`). Swapped to `tell_object(target, msg)`. Residue 0. Proof: sjcs guest + sj telnet load.
+
+
 
 
 **Also (2026-10-27, throw/cakepiece/fayu-f):** bahuang `throw` one-arg `tell_object` → `tell_object(me,…)` (xbtxiii/yxcs/chidi/yxjh); wuhanzhan `cakepiece` flattened mid-`do_eat` ← xlqy_new2007 food copy; shenmo/sjsh* `u/stey/u/fayu/f` mid-function fragment ← `d/obj/misc/buwawa` with absolute `message.h`. Proof: HEAD fail; tree loads.
