@@ -409,3 +409,11 @@ NPC 写 `::init()`，虚拟房间写 `::heart_beat()`，薄 living/room 没有�
 ## 深度功能测试（2026-10-27，§6.25 Strategy A remove_exit）
 
 `wine_cellar` 调 `remove_exit`，Strategy A 只有 `add_exit`。补上。证明：HEAD Undefined；树 wine_cellar 可加载。
+
+## 深度功能测试（2026-10-27，§6.25 mapping -= ([key])）
+
+FluffOS 不接受仅键的 mapping 字面量，`m -= ([k])` 报 unexpected `]`。24 处 / 11 文件改为 `map_delete`。证明：HEAD vesper_d 语法错；树 clan_d/officer_d/voting_d/armour_set_d 可加载。
+
+## 深度功能测试（2026-10-27，§6.25 walk_mapping/map_objects/filter_objects）
+
+Strategy A catalog 缺这些 LDMud efun。补 sefun。证明：HEAD nature_d Undefined map_objects；树 nature_d/vesper_d/peaced 可加载。
