@@ -417,3 +417,7 @@ FluffOS 不接受仅键的 mapping 字面量，`m -= ([k])` 报 unexpected `]`�
 ## 深度功能测试（2026-10-27，§6.25 walk_mapping/map_objects/filter_objects）
 
 Strategy A catalog 缺这些 LDMud efun。补 sefun。证明：HEAD nature_d Undefined map_objects；树 nature_d/vesper_d/peaced 可加载。
+
+## 深度功能测试（2026-10-27，§6.25 deep_copy/file_time/to_text/tilde_path）
+
+`_set`/`_lhelp`/`_I`/channel_d 调用这些 LDMud efun，Strategy A catalog 没有。补薄垫片。证明：HEAD 均 Undefined；树四者可加载。
