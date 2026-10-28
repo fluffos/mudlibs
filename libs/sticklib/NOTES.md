@@ -257,3 +257,7 @@ The code of this lib writes logs into 1 subdirectory of `log/`: `log/lords` (`ar
 ## Remaining constant assignments used as conditions (2026-10-27, KB 06 §7.290 Also)
 
 `thief_mark_new` `else if(type = 8)` became `==` (`lpc_fix_cond_assign.py`; KB 06 §7.290 Also).
+
+## 深度功能测试（2026-10-27，§6.25 LDMud foreach 冒号）
+
+LDMud 的 `foreach (object you : arr)` / `foreach (x : arr)` 在本驱动要写成 `in`。本库 27+ 个文件约 80+ 处冒号改成 `in`（含 `flower_man`）。证明：HEAD `flower_man` 失败；改后加载。
