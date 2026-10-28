@@ -597,6 +597,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, zmud dan quote-strip):** zxty `u/zmud/dan` lost every quote and `;` (`set_name(还魂丹, ({huanhun dan…})`, `all_skillsskills`). Rewrote from intact `clone/misc/dan`, keeping the archive's `/40` exp gain and 小刀 log line. Proof: HEAD fail; tree loads.
 
+**Also (2026-10-27, arkadia `/std/drink`):** example beers inherited a drink base the archive never shipped. Added a minimal `/std/drink` (heap `create_heap` → `create_drink`, soft/alco amounts). Arkadia's object layer `#if 0`'d English `set_adj`; drink provides a `dodaj_przym` shim. Proof: HEAD Inherited file missing; tree loads drink + small_beer + dutch_beer.
+
 
 
 

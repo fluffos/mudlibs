@@ -797,3 +797,7 @@ MudOS filled the missing arguments of a call with 0, took an untyped parameter a
 ## 深度功能测试（2026-10-27，§6.25 glued inherit / 粘贴残片）
 
 `doc/examples/org/obj/small_beer`：`inherit "/std/drink"` 缺 `;`（补上）。`/std/drink` 本馆未随包，加载仍会缺基类。
+
+## 深度功能测试（2026-10-27，§6.16 arkadia /std/drink）
+
+档案未带 `/std/drink`，`small_beer`/`dutch_beer` 无法继承。补最小 drink（food 同形的 create_heap→create_drink + soft/alco），并对波兰分支已 `#if 0` 掉的 `set_adj` 做 `dodaj_przym` 垫片。
