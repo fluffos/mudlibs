@@ -741,3 +741,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## jiuyang / kurong 空格 RTF（2026-10-27，KB 04 §6.25 Also）
 
 `kungfu/skill/jiuyang-force` 与 `kurong-changong` 是带空格的 RTF（`\\ rtf1`），不是 LPC。中文无法从该编码剥回；用同系 syxjl 完好副本覆盖。证明：HEAD `{` 语法错；改后均加载。
+
+## set("long" 丢引号（2026-10-27，KB 04 §6.25 Also）
+
+`set("long",` 后直接跟汉字（无 `"` / `@LONG`），驱动报 Illegal character。用同路径完好手足覆盖（fyue_room←jhfy；hudi5/6←zxty08nxgbb；quanzhen_old/hudi*←xyzxfy2）。证明：HEAD 失败；改后加载。

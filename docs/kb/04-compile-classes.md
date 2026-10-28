@@ -575,6 +575,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, spaced-RTF skills):** ldtx/ldtxii `kungfu/skill/jiuyang-force` and `kurong-changong` were RTF with spaces after every backslash (`{ \\ rtf1 \\ ansi…}`), so a plain `{\\rtf` grep misses them. Chinese does not survive striprtf on that encoding; replaced each with the intact syxjl sibling of the same lineage. Residue of the spaced-RTF shape: 0. Proof: HEAD `{` syntax error; tree both skills load in both libs.
 
+**Also (2026-10-27, bare `set("long"`):** 32 rooms had `set("long",` followed by raw Chinese (no `"` / `@LONG`), so the driver saw `Illegal character`. Replaced from intact same-path siblings (`fyue_room`←jhfy, `hudi5/6`←zxty08nxgbb, `quanzhen_old/hudi*`←xyzxfy2). Residue without a donor (书局老板, specialroom, mojibake path): 5. Proof: HEAD fail; tree loads (ldtx hudi5, zxty fyue_room, xhcii hudi6, xyzx hudi5).
+
 
 
 

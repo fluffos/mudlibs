@@ -460,3 +460,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 丐帮长老 gb_nz 无法加载（2026-10-27，KB 04 §6.25 Also）
 
 `d/gb/npc/gb_nz.lpc`：`mixed wherei=({` 少了内层 `({`（手足 xkxz2 / xkxc98sj 的 `d/gaibang/npc/gb_nz` 有），`query_temp("promotion_target)` 缺收尾引号，`accept_object` 在注释掉的备用奖励块前多了一个 `}`。补内层数组、补引号、去掉多余 `}`，并删掉未用的 `fam`。`/u/hunthu/` 路径未动（内容）。证明：HEAD 加载失败；改后加载成功。
+
+## set("long" 丢引号（2026-10-27，KB 04 §6.25 Also）
+
+`set("long",` 后直接跟汉字（无 `"` / `@LONG`），驱动报 Illegal character。用同路径完好手足覆盖（fyue_room←jhfy；hudi5/6←zxty08nxgbb；quanzhen_old/hudi*←xyzxfy2）。证明：HEAD 失败；改后加载。
