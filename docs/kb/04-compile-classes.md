@@ -677,6 +677,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, sticklib Strategy A `Pronoun`):** NPCs call `Pronoun()`/`Possessive()`/`Objective()` from `basic/living/gender`, which Strategy A living never inherited. Added the three plus `query_*` wrappers. Proof: eval male → he/his/him; janitor no longer reports Pronoun.
 
+**Also (2026-10-27, sticklib Strategy A NPC weight/`pick_any_obj`):** city NPCs call `::pick_any_obj()` and read `local_weight`/`experience` from the LDMud living/npc bases Strategy A never shipped. Added `local_weight`/`experience`/`cap_name`/`add_weight`/`recount_weight`/`wield`/`wear`/`unwear` on `/lib/living` and `pick_any_obj` on `/lib/npc`. Proof: HEAD janitor fail; tree loads janitor.
+
 
 
 

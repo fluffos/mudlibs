@@ -285,3 +285,7 @@ Strategy A 的 `/catalog/simul_efun` 缺少 LDMud 的 `present4` / `object_info`
 ## 深度功能测试（2026-10-27，§6.25 Strategy A Pronoun）
 
 `/lib/living.lpc` 补上 `Pronoun`/`Possessive`/`Objective`（及 query_*）。janitor 不再报 Undefined function Pronoun。
+
+## 深度功能测试（2026-10-27，§6.25 Strategy A pick_any_obj/weight）
+
+`/lib/living` 补 `local_weight`/`experience`/`add_weight`/`recount_weight`/`wield`/`wear`/`unwear`；`/lib/npc` 补 `pick_any_obj`。janitor 可加载。
