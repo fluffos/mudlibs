@@ -301,3 +301,7 @@ Strategy A 的 `/catalog/simul_efun` 缺少 LDMud 的 `present4` / `object_info`
 ## 深度功能测试（2026-10-27，§6.10 sticklib lpc_warnings --fix）
 
 机械修复：未用局部变量删除、`nosave` 函数改为 `protected`（34 文件）。约 119 处「无副作用表达式」留给专批。
+
+## 深度功能测试（2026-10-27，§6.25 Strategy A drink potion API）
+
+薄 `/lib/drink` 只够酒吧 `set_value`/`set_id`；药水的 `create_drink()` 还要 `set_strength`/`set_soft`/`set_info`/`set_empty_container`/`set_drinker_mess`/`set_liquid`/`full` 等（完整版在 `drink_ldmud.lpc`）。补上这些 setter，继承 `/basic/object/dimensions`，并在 `create()` 里调用 `create_drink()`。证明：HEAD potion_heal 报 Undefined set_info；树 6/6 药水与 finnclub 酒水可加载。
