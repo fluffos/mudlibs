@@ -793,3 +793,7 @@ MudOS filled the missing arguments of a call with 0, took an untyped parameter a
 ## 登录密码超过 255 字节：`crypt()` 抛错（2026-10-20，KB 06 §7.294）
 
 驱动的 `crypt()` 对超过 255 字节的密钥直接报错（`Error in crypt(), check your salt`），老驱动则按任意长度散列。在登录提示符下输入 256 字节以上的密码，密码检查那一行就抛错，连线停在一个裸的 `> ` 提示符上，登录走不完（`password` 指令的旧密码检查同样）；用 300 个 `x` 当参数的扫描发现的。`/secure/simul_efun.lpc` 里补了一个同名的 simul_efun `crypt(key, salt)`：只有超长的密钥才被截短（先截到 255 个字符，再逐字符截到 `sizeof(to_buffer(key)) <= 255`，限制按字节算，一个汉字占三个字节），再交给 `efun::crypt()`；普通密码原样散列，已存的密码散列不受影响（`scripts/lpc_add_sefun.py crypt`）。
+
+## 深度功能测试（2026-10-27，§6.25 glued inherit / 粘贴残片）
+
+`doc/examples/org/obj/small_beer`：`inherit "/std/drink"` 缺 `;`（补上）。`/std/drink` 本馆未随包，加载仍会缺基类。

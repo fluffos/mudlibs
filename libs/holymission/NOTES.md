@@ -877,3 +877,7 @@ A path written without the leading slash (`carry_object("d/city/obj/jiasha")->we
 ## fire 房间 glued inherit + walkman（2026-10-27，KB 04 §6.25 Also）
 
 `players/tamina/castle/planes/fire/rm{14,16,17}` 的 `inherit "…/hostiles/fire"` 缺分号，随后 `#include` 被吞；`rm17` 的 `bridge` 条件还丢了 `||`。`players/aaa/lab/walkman` 同样缺 inherit 分号，另有 `int nosave`→`nosave int`、`void init {`→`init()`。证明：HEAD 失败；改后四件均加载。
+
+## 深度功能测试（2026-10-27，§6.25 glued inherit / 粘贴残片）
+
+`players/blaarg/sword`：`inherit` 缺 `;`，且目标 `/players/blaarg/cool` 不存在；改为 `inherit "/obj/weapon";`。

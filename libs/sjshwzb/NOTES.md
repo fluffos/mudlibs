@@ -650,3 +650,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 深度功能测试（2026-10-27，§6.25 bare set("long" 残渣）
 
 书局老板 `set("long"` 缺开头引号 → Illegal character；补 `"`.
+
+## 深度功能测试（2026-10-27，§6.25 glued inherit / 粘贴残片）
+
+`u/stey/u/jie/npc/mm`：同上，去掉粘贴残片。

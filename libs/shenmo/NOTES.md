@@ -1461,3 +1461,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 深度功能测试（2026-10-27，§6.25 ZHAOSHI 截断玩家技能）
 
 玩家自创武功在 `// ZHAOSHI : 0` 处截断（EOF），无法加载。按同系完整 `moming-blade` 补一招 + valid_*/query_*/practice（2）：`daemon/skill/rulaizhang-unarmed.lpc`, `kungfu/skill/rulaizhang-unarmed.lpc`。
+
+## 深度功能测试（2026-10-27，§6.25 glued inherit / 粘贴残片）
+
+`u/stey/u/jie/npc/mm`（及 `sjsh/` 副本）完整 NPC 后粘贴了第二段缺 `;`/去引号残片；截到第一个 `}`。

@@ -581,6 +581,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, ZHAOSHI truncated player skills):** thirty-seven maxim@nju_fengxue (and zzfy forks) player-own skills ended at `mapping *action = ({` / `// ZHAOSHI : 0` (EOF), so the driver saw `unexpected end of file`. Completed each with one starter action plus `valid_learn` / `valid_enable` / `query_skill_name` / `query_action` / `practice_skill` after the intact `moming-blade` shape (weapon check when the type is armed). Residue of the EOF-at-ZHAOSHI-0 shape: 0. Proof: HEAD ldtx `moming-sword` fails; tree loads (ldtx sword+unarmed, hy3 finger, syxjl fuhu, tianxiawuxue love-sword, wqfy wujoysword).
 
+**Also (2026-10-27, glued `inherit` / paste tail):** `inherit "…"\n#include` without `;` (arkadia `small_beer`, holymission `blaarg/sword`, ninetears `multi`); holymission also pointed at a missing `/players/blaarg/cool` (retargeted to `/obj/weapon`). nt1 `gaibang` lacked `;`, a local `ghost.h`, and the rest of `create()` after `prepare_skill` (closed with `setup(); }`). Four `jie/npc/mm` copies had a second quote-stripped `inherit NPC` paste after a complete object (truncated to the first `}`). Proof: HEAD fail; tree loads (mm, gaibang, sword); small_beer reaches the missing-`/std/drink` error after the `;`.
+
 
 
 

@@ -926,3 +926,7 @@ The code of this lib writes logs into 1 subdirectory of `log/`: `log/save/board`
 ## set_school/sphere 接受数组 + meteoros 缺分号（2026-10-27，KB 04 §6.25 Also）
 
 `d/gremios/hechizos/base`（及 examples / antiguo 副本）的 `set_school`/`set_sphere` 只收 `string`，而西班牙语法用 `ESCUELA ({...})` / `ESFERA ({...})` 数组调用，`meteoros_diminutos` 等无法编译；同文件还缺 inherit 后的 `;`。改为 `mixed`（取首元素），并补上 wizard/mmm 三处分号。证明：HEAD meteoros 失败；改后 meteoros 与 mmm 加载。
+
+## 深度功能测试（2026-10-27，§6.25 glued inherit / 粘贴残片）
+
+`w/leviathan/multi`：`inherit "/obj/armour"` 缺 `;`；补上。
