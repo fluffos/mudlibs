@@ -272,3 +272,7 @@ The code of this lib writes logs into 10 subdirectories of `log/`: `log/ARCH/bbm
 ## 深度功能测试（2026-10-27，§6.25 LDMud foreach 冒号）
 
 与 sticklib/simud/acme 同形：`foreach (… : …)` → `in`（约 124 文件 / 456 处）。证明：HEAD `/room/netztot` 报 `unexpected ':', expecting L_IN`；改后该错误消失（仍有其他 LDMud efun 缺口）。
+
+## 深度功能测试（2026-10-27，§6.10 LDMud 未知 pragma）
+
+逗号列表与 `rtt_checks` / `range_check` / `no_clone` / `pedantic` 等：删未知项，已知的 `strict_types` / `save_types` 各占一行（busch、path.h、container/room light、welcome/std 等）。

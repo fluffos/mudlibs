@@ -7,7 +7,6 @@
  */
  
 
-#pragma combine_strings
 
 
 

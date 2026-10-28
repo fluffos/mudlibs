@@ -4937,3 +4937,7 @@ The code of this lib writes logs into 11 subdirectories of `log/`: `log/ARCH` (`
 ## Remaining constant assignments used as conditions (2026-10-27, KB 06 §7.290 Also)
 
 Four files still had `if (x = CONST)` after earlier sweeps: pirate `troom` pedestals (`large=1` / `small=1`), editor `searching` (`arg=""`), dartboard `dblout1=1`, money designer `str = "money"||"design"`. Became `==` (`lpc_fix_cond_assign.py`).
+
+## 深度功能测试（2026-10-27，§6.10 LDMud 未知 pragma）
+
+`kernel.lpc` / `master_ldmud.lpc` / `.lpchdr.h` 里的 `rtt_checks` / `range_check` 等 FluffOS 不识别的 LDMud pragma 已删；行为不变。

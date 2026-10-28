@@ -558,3 +558,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 
 删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
 
+
+## 深度功能测试（2026-10-27，§6.10 注释掉的 pragma 块）
+
+`newsd.lpc` 里未闭合的 `/*#pragma optimize…save_binary*/` 整块去掉（原先已被注释，无行为变化）。对象可加载。

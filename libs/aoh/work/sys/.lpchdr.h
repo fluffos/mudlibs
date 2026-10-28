@@ -1,4 +1,3 @@
-#pragma verbose_errors
 
 #include "config.h"
 #include "properties.h"

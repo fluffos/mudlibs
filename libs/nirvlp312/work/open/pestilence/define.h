@@ -1,4 +1,3 @@
-#pragma combine_strings
 #include <ansi.h>
 
 

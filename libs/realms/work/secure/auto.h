@@ -5,7 +5,6 @@
 // compile. That hook doesn't exist on this driver (see sys/driver_hook.h),
 // so the pragma is applied directly here instead, which every compile
 // picks up automatically via FluffOS's "global include file" mechanism.
-#pragma pedantic
 
 // FluffOS PORT: the handful of files that need /secure/simulated-efuns/
 // portability.lpc's helpers before simul_efun.lpc itself is ready (see

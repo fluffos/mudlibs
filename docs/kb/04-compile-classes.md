@@ -659,6 +659,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, unknown `#pragma save_binary` / `optimize`):** FluffOS ignores these MudOS pragmas and warns. Deleted 3001 lines across 2984 files / 191 libs (nitan-family daemons/features heavy). Residue of those two forms: 0.
 
+**Also (2026-10-27, unknown LDMud `#pragma` residue):** FluffOS knows only `strict_types` / `save_types` / `warnings` / `optimize` / `show_error_context` (and `no_*`). LDMud leftovers (`strong_types`, `rtt_checks`, `range_check`, `no_clone`, `pedantic`, `combine_strings`, `no_shadow`, `no_inherit`, `warn_*`, comma lists mixing those with known names, `#pragma strict_types;`) warn as unknown. Deleted or reduced to a single known pragma per line across aoh/holymission/morgengrauen/nirvlp312/realms/simud (plus closed `/*#pragma optimize…save_binary*/` comment blocks in xkxc98sj/xkxz2 `newsd`). Live residue of those forms: 0. Proof: nirvlp312 `/obj/simul_efun` + xkxc98sj `/adm/daemons/newsd` load.
+
 
 
 

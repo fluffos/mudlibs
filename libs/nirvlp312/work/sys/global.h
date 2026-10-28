@@ -1,7 +1,6 @@
 #ifndef _GLOBAL_H
 #define _GLOBAL_H
 
-#pragma combine_strings
 // #pragma no_warn_missing_return
 
 #include "switches.h"

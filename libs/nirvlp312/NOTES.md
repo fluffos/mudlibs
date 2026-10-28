@@ -344,3 +344,7 @@ The code of this lib writes logs into 6 subdirectories of `log/`: `log/MAIN` (`i
 
 `[0..-N]` / `[1..-1]` 等改为 `[0..<N]` / `[1..<1]`。
 
+
+## 深度功能测试（2026-10-27，§6.10 LDMud 未知 pragma）
+
+master / simul_efun / workfiles / define.h 等处的 `strong_types` / `pedantic` / `no_shadow` / `no_inherit` / `no_clone` / `no_warn_missing_return` 已删。`/obj/simul_efun` 可加载。

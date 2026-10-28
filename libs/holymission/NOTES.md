@@ -886,3 +886,7 @@ A path written without the leading slash (`carry_object("d/city/obj/jiasha")->we
 
 `tell_room("…")` 补房间参数（`this_object()` / `ETO` / `place` / `environment(this_object())` 等）。
 
+
+## 深度功能测试（2026-10-27，§6.10 LDMud 未知 pragma）
+
+`#pragma strict_types;`（尾部分号）改为 `#pragma strict_types`（wizrock / temp3 / vamp_mist）。

@@ -227,3 +227,7 @@ The code of this lib writes logs into 2 subdirectories of `log/`: `log/chat` (`d
 ## 深度功能测试（2026-10-27，§6.25 LDMud foreach 冒号）
 
 与 sticklib 同形：`foreach (T x : arr)` / `foreach (k, v : map)` 改为 `in`（约 291 文件 / 677 处）。证明：HEAD `/ai/beast` 因冒号失败；改后加载。
+
+## 深度功能测试（2026-10-27，§6.10 LDMud 未知 pragma）
+
+`master_security.lpc` / `world.lpc` 的 LDMud-only pragma 已删。
