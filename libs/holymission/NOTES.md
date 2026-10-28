@@ -873,3 +873,7 @@ A path written without the leading slash (`carry_object("d/city/obj/jiasha")->we
 ## waldo fs #inherit / guilds defs / end_shadow（2026-10-27，KB 04 §6.25 Also）
 
 `players/waldo/guild/bin/shadows/fs` 写 `#inherit "obj/std_shadow"`、包含不存在的 `guilds/defs.h`、`void end_shadow();` 后单独 `{`，以及 `!TP != owner`。手足 `saffrin/.../fshield.lpc` 完好。按该文件改写。证明：HEAD 失败；改后加载。
+
+## fire 房间 glued inherit + walkman（2026-10-27，KB 04 §6.25 Also）
+
+`players/tamina/castle/planes/fire/rm{14,16,17}` 的 `inherit "…/hostiles/fire"` 缺分号，随后 `#include` 被吞；`rm17` 的 `bridge` 条件还丢了 `||`。`players/aaa/lab/walkman` 同样缺 inherit 分号，另有 `int nosave`→`nosave int`、`void init {`→`init()`。证明：HEAD 失败；改后四件均加载。
