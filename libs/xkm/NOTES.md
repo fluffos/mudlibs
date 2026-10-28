@@ -470,3 +470,7 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 
 `kungfu/class/dali/yanqing.lpc`（jym 为 `class_all`）`attempt_apprentice`：`query("PKS)` 缺收尾引号、`query_respect(ob)` 无 ob、`recruit` 后嵌套第二个 `void init()` 未闭合函数。按 pkuxkx：补引号、ob→me、return 闭合，并把叛师检查并入第一个 `init()`。jym 另有 `!==`→`!=`。证明：HEAD 加载失败；改后加载成功。
 
+
+## 深度功能测试（2026-10-27，§6.25 bare set("long" 残渣）
+
+`u/snow/new/specialroom`：`inherit room` → `ROOM`，short/long 补引号。

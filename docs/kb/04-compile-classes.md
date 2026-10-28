@@ -577,6 +577,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, bare `set("long"`):** 32 rooms had `set("long",` followed by raw Chinese (no `"` / `@LONG`), so the driver saw `Illegal character`. Replaced from intact same-path siblings (`fyue_room`←jhfy, `hudi5/6`←zxty08nxgbb, `quanzhen_old/hudi*`←xyzxfy2). Residue without a donor (书局老板, specialroom, mojibake path): 5. Proof: HEAD fail; tree loads (ldtx hudi5, zxty fyue_room, xhcii hudi6, xyzx hudi5).
 
+**Also (2026-10-27, bare `set("long"` residue):** the five left without a room donor (sjsh / sjshwzb / sjshwzjqb `书局老板`, shenmo mojibake twin, xkm `specialroom`) plus two `foodmaker` `@ROOM_CODE` templates (sj / shiji) had `set("long",` then raw Chinese. Inserted the opening `"`. `specialroom` also had `inherit room` (want `ROOM`) and an unquoted `short`. Residue of CJK-bare `set("long"`: 0. Proof: HEAD fail; tree loads.
+
 
 
 

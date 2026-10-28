@@ -644,3 +644,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## dami 误调 init_unarmed（2026-10-27，KB 04 §6.25 Also）
 
 `d/obj/food/dami.lpc` 继承 `ITEM`+`F_FOOD` 却调用 `init_unarmed(5)`（并 `#include <weapon.h>`），未继承空手兵器基类，驱动报 `Undefined function init_unarmed`。手足 hymud 已注释该行。删掉该调用与无用的 weapon 头。证明：HEAD 加载失败；改后加载成功。
+
+## 深度功能测试（2026-10-27，§6.25 bare set("long" 残渣）
+
+书局老板 `set("long"` 缺开头引号 → Illegal character；补 `"`.

@@ -576,3 +576,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## jiguang-dao inherit .h → gun（2026-10-27，KB 04 §6.25 Also）
 
 `d/budui/obj/jiguang-dao` 写 `inherit "inherit/weapon/blade.h"`（无此对象）却调用 `init_gun(50)`，无法加载。同目录 `jiguangqiang` 用 `inherit "/inherit/weapon/gun"`。改为后者。证明：HEAD 失败；改后加载。
+
+## 深度功能测试（2026-10-27，§6.25 bare set("long" 残渣）
+
+foodmaker 内嵌 `@ROOM_CODE` 模板 `set("long"` 缺开头引号；补 `"`.
