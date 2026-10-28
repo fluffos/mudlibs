@@ -341,3 +341,7 @@ Strategy A catalog 缺 `do_find_object`/`get_object`/`m_allocate`/`get_eval_cost
 ## 深度功能测试（2026-10-27，§6.25 catalog sefun regreplace）
 
 帮助命令用 LDMud `regreplace` 做 `_`↔空格；Strategy A catalog 没有。用 `replace_string` 做字面替换。证明：HEAD `_help2` 失败；树 `_help2` 与 druids `_help` 可加载。
+
+## 深度功能测试（2026-10-27，§6.26/§6.25 sticklib L_IN 残渣 + strrstr）
+
+`lords_guild` 局部变量叫 `in`（§6.26）改为 `intel`；`telopt`/`mapper_d` 的 foreach 被写成 `in fo`/`in t` 错字。mapper 还要 LDMud `strrstr`，catalog 用 `strsrch(..., 1)` 补上。证明：HEAD lords_guild L_IN；树 lords_guild 与 mapper_d 可加载。

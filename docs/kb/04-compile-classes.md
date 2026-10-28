@@ -701,6 +701,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, sticklib catalog sefun `regreplace`):** help commands use LDMud `regreplace(str, lit, lit, flags)` for `_`↔space; Strategy A catalog lacked it. Shimmed with `replace_string` (literal). Proof: HEAD `_help2` Undefined; tree `_help2` + druids `_help` load.
 
+**Also (2026-10-27, sticklib `L_IN` residue + `strrstr`):** (1) `lords_guild` declared `int st, in, dx, co` (§6.26). Renamed to `intel`. (2) `telopt` `foreach (string in fo in` typo → `info`; `mapper_d` `foreach (…, in t exit_value in` → `mixed exit_value`. (3) mapper needed LDMud `strrstr` — catalog sefun via `strsrch(..., 1)`. Proof: HEAD lords_guild L_IN; tree lords_guild + mapper_d load.
+
 **Also (2026-10-27, master_ldmud `#'fn` residue):** leftover simple quotes on `call_out`/`set_driver_hook`/`funcall`/`filter` lines in aoh/morgengrauen/nirvlp312/sticklib masters (~64 sites / 8 files); still skip `({#'…` unbound_lambda soup. Proof: HEAD morgengrauen master still had `#'configure_driver` / `#'autoincludehook`; tree uses `(: … :)`.
 
 **Also (2026-10-27, sticklib `lpc_warnings --fix`):** mechanical pass: unused locals dropped, `nosave` functions → `protected` (34 files). No-side-effects residue (~119) left for a dedicated pass. Proof: thief_mark_new `nosave int rank_no` → `protected`; bboard unused locals gone.
