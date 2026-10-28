@@ -569,6 +569,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, dreamofseven Aug `npc.h` stack):** 112 tmr NPCs `#include <npc.h>` and call Aug APIs (`set_race`/`set_attr`/`set_stat_maximum`/`advance_stat`/`carry_money`/…) that this archive never shipped. Added `include/npc.h` (F_BANDIT/FIGHTER/SOLDIER/VILLAGER; Aug `F_VENDOR` override; `SKILL_MAX_POINT`), `feature/npc/{bandit,fighter,soldier,villager,vendor}.lpc` from dfgs2, and `feature/npc/aug_compat.lpc` shims mapping Aug stats onto this lib’s `hp`/`mp`/`ap`/`str`… Also `HIK`→`HBK` in beast `action.lpc` (HIK undefined here). Proof: HEAD `Cannot #include npc.h`; tree 112/112 load.
 
+**Also (2026-10-27, RTF-wrapped source):** sgzmudsgz `wiz/emperor/baby/offspring.lpc` was an RTF document (`{\rtf1…`), not LPC. Stripped to the embedded source; declared `master`/`is_busy` like sibling `free.lpc`; dropped the dress line that named undefined `NAME`/`typ`. Same directory `base_offspring` returned undeclared `ret` → `info`. Proof: HEAD RTF syntax error; tree both load.
+
 
 
 

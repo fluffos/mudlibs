@@ -226,3 +226,7 @@ hylib/dtxy) stay confirmed duplicates.
 ## open/pos 国名尾字切片（2026-10-27，KB 06 §7.364 Also）
 
 `open/pos.lpc` 改国名时用 `nam[<2..<1]!="国"`（GBK 两字节），本驱动按字符算会多吃一字。`lpc_fix_tail_slice` 的 SKIP 去掉 `/open/` 后改为 `[<1..<1]`。证明：HEAD 仍是 `[<2..<1]`，改后是 `[<1..<1]`。
+
+## offspring RTF 外壳（2026-10-27，KB 04 §6.25 Also）
+
+`wiz/emperor/baby/offspring.lpc` 整文件是 RTF（`{\rtf1…`），不是 LPC。剥出内嵌源码；按同系 `free.lpc` 补 `master`/`is_busy`；去掉引用未定义 `NAME`/`typ` 的换装行。同目录 `base_offspring` 的 `get_info` 误写 `return ret` → `return info`。证明：HEAD RTF 语法错；改后两文件均可加载。
