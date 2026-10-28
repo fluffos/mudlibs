@@ -269,3 +269,7 @@ LDMud 的 `foreach (object you : arr)` / `foreach (x : arr)` 在本驱动要写�
 ## 深度功能测试（2026-10-27，§6.25 LDMud `#'fn` 闭包）
 
 简单 `#'ident` → `(: ident :)`；`sort_array(..., #'>/#'<)` → `1`/`-1`。含 `#'?` / `'symbol` 的 unbound_lambda 行未动。`boss_d` / `_channel` / `druids/mark` 可加载（HEAD 为 Illegal character '#'）。
+
+## 深度功能测试（2026-10-27，§6.25 living `private nosave`）
+
+FluffOS 兼容层 `/lib/living.lpc` 把 `level`/`gender`/`liv_Flags` 等标成 `private nosave`，子物件直接读会 `Illegal to use private variable`。改为普通 `nosave`（与 LDMud living 可见性一致）。

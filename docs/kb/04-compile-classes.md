@@ -663,6 +663,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, LDMud `#'fn` quotes → `(: fn :)`):** FluffOS rejects `#'ident` (`Illegal character '#'`). Convert simple quotes on non-lambda-soup lines (`filter`/`map`/`call_out`/`funs =` / mapping hooks / `({ #'a, #'b })` of only function quotes); `sort_array(..., #'>/#'<)` → `1`/`-1` (KB 06 7.234). Skip lines with `#'?` / `#',` / `'symbol` unbound_lambda soup (master_ldmud, closures). sticklib ~270, acme ~38, simud ~78. Proof: HEAD boss_d Illegal character; tree loads boss_d + _channel + druids/mark.
 
+**Also (2026-10-27, sticklib living `private nosave`):** FluffOS Strategy A `/lib/living.lpc` marked `level`/`gender`/`liv_Flags`/… as `private nosave`, so every inheriting NPC that reads them fails with `Illegal to use private variable` (beggar/guard/janitor; `basic/npc/set_n_query`). LDMud living kept them file-visible. Dropped `private` → plain `nosave`. Proof: open eval inherit reading `level`/`gender`/`liv_Flags` loads.
+
 
 
 
