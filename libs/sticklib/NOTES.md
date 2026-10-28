@@ -421,3 +421,7 @@ Strategy A catalog 缺这些 LDMud efun。补 sefun。证明：HEAD nature_d Und
 ## 深度功能测试（2026-10-27，§6.25 deep_copy/file_time/to_text/tilde_path）
 
 `_set`/`_lhelp`/`_I`/channel_d 调用这些 LDMud efun，Strategy A catalog 没有。补薄垫片。证明：HEAD 均 Undefined；树四者可加载。
+
+## 深度功能测试（2026-10-27，§6.25 简单 LDMud lambda 改写）
+
+`_logouts`/`lord_crown`/`_appraise` 的 `lambda`+`#'` 改为 FluffOS `(: … :)`。set_n_query WC 公式与 grapevine `send_erq` 仍留着。证明：HEAD `_logouts` Illegal character #；树 `_logouts`/`_appraise` 可加载。

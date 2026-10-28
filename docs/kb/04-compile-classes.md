@@ -743,6 +743,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, sticklib catalog `deep_copy`/`file_time`/`to_text`/`tilde_path`):** wizard/`_set`/channel tools call these LDMud efuns missing from Strategy A catalog. Ported thin shims (`deep_copy` recursive map/array; `file_time` via `get_dir(path,-1)`; `to_text` buffer→string; `tilde_path` for `/home/`). Proof: HEAD `_set`/`_lhelp`/`_I`/channel_d Undefined; tree all four load.
 
+**Also (2026-10-27, sticklib simple LDMud lambda sorts/filters):** `_logouts`/`lord_crown`/`_appraise` used `lambda`+`#'` soup (`Illegal character #`). Rewrote to FluffOS `(: $1… :)` (`sort_array` ascending via `$1 > $2`; filter `!$1->query_coder_level()`). Left set_n_query WC formulas and grapevine `send_erq` lambdas. Proof: HEAD `_logouts` Illegal character #; tree `_logouts`/`_appraise` load (lord_crown compiles).
+
 **Also (2026-10-27, master_ldmud `#'fn` residue):** leftover simple quotes on `call_out`/`set_driver_hook`/`funcall`/`filter` lines in aoh/morgengrauen/nirvlp312/sticklib masters (~64 sites / 8 files); still skip `({#'…` unbound_lambda soup. Proof: HEAD morgengrauen master still had `#'configure_driver` / `#'autoincludehook`; tree uses `(: … :)`.
 
 **Also (2026-10-27, sticklib `lpc_warnings --fix`):** mechanical pass: unused locals dropped, `nosave` functions → `protected` (34 files). No-side-effects residue (~119) left for a dedicated pass. Proof: thief_mark_new `nosave int rank_no` → `protected`; bboard unused locals gone.
