@@ -693,6 +693,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, sticklib Strategy A `set_guild`/`set_group_message`):** group NPCs (`#include <group_npc.h>`) call `set_guild` (LDMud `basic/living/guild`) and `set_group_message` (wide-map `group_npc_ldmud`); Strategy A living/group_npc lacked both. Added `set_guild`/`query_guild` on `/lib/living` and a mapping-of-arrays `set_group_message` on `/lib/group_npc`. Proof: HEAD saint Undefined; tree loads (guild="priest").
 
+**Also (2026-10-27, sticklib catalog sefun object-lookup + cost):** Strategy A catalog lacked `do_find_object`/`get_object`/`m_allocate`/`get_eval_cost`/`query_uptime`/`tail` (who3, `_goto`, cmdd, wizard tools). Ported the archive shapes; `m_allocate` returns `([])` (wide multi-value maps still unsupported); `get_eval_cost`→`eval_cost()`, `query_uptime`→`uptime()`. Proof: HEAD who3/goto/cmdd Undefined; tree all three load.
+
 **Also (2026-10-27, master_ldmud `#'fn` residue):** leftover simple quotes on `call_out`/`set_driver_hook`/`funcall`/`filter` lines in aoh/morgengrauen/nirvlp312/sticklib masters (~64 sites / 8 files); still skip `({#'…` unbound_lambda soup. Proof: HEAD morgengrauen master still had `#'configure_driver` / `#'autoincludehook`; tree uses `(: … :)`.
 
 **Also (2026-10-27, sticklib `lpc_warnings --fix`):** mechanical pass: unused locals dropped, `nosave` functions → `protected` (34 files). No-side-effects residue (~119) left for a dedicated pass. Proof: thief_mark_new `nosave int rank_no` → `protected`; bboard unused locals gone.

@@ -371,3 +371,114 @@ interactive_info(object ob, int what)
         return 0;
     }
 }
+
+
+/* LDMud do_find_object / get_object — Strategy A catalog sefun */
+
+object
+do_find_object(string fname)
+{
+    object ob;
+
+    if (!stringp(fname))
+        error("do_find_object: non-string argument\n");
+    if (ob = find_object(fname))
+        return ob;
+    catch(call_other(fname, "???"));
+    return find_object(fname);
+}
+
+varargs object
+get_object(string str, object player)
+{
+    string *obpath;
+    object what;
+    mixed tmp;
+    int i;
+
+    if (!str)
+        return 0;
+    if (!player)
+        player = this_player();
+
+    if (sizeof(obpath = explode(str, ":")) > 1)
+        str = obpath[0];
+    else
+        obpath = ({ str });
+
+    do {
+        if (player) {
+            if (str == "me") { what = player; break; }
+            if (what = present(str, player)) break;
+            if (what = environment(player)) {
+                if (str == "here" || str == "env") break;
+                if (what = present(str, what)) break;
+            }
+        }
+        if (what = find_player(str)) break;
+        if (what = find_living(str)) break;
+        if (what = find_object(str)) break;
+        if (!sscanf(str, "%s#", str)
+          && (file_size(str) >= 0 || file_size(str + ".lpc") >= 0)) {
+            catch(call_other(str, "???"));
+            what = find_object(str);
+        }
+    } while (0);
+
+    while (what && sizeof(obpath) > 1) {
+        obpath = obpath[1..];
+        str = obpath[0];
+        if (str == "e" || str == "env") {
+            what = environment(what);
+            continue;
+        }
+        if ((sscanf(str, "i%d", i) || sscanf(str, "%d", i))
+          && i >= 1 && sizeof(tmp = all_inventory(what)) >= i) {
+            what = tmp[i - 1];
+            continue;
+        }
+        what = present(str, what);
+    }
+    return what;
+}
+
+/* LDMud m_allocate(width[, values]) — 1-value maps only; wide maps → empty. */
+varargs mapping
+m_allocate(int width, int values)
+{
+    return ([]);
+}
+
+int
+get_eval_cost()
+{
+    return eval_cost();
+}
+
+int
+query_uptime()
+{
+    return uptime();
+}
+
+varargs int
+tail(string file)
+{
+    string txt;
+    int index;
+
+    if (!stringp(file) || !this_player())
+        return 0;
+    txt = read_bytes(file, -1080, 1080);
+    if (!stringp(txt))
+        return 0;
+    index = strsrch(txt, "\n");
+    if (index > -1) {
+        if (index + 1 < sizeof(txt))
+            txt = txt[index + 1..];
+        else
+            txt = "";
+    }
+    tell_object(this_player(), txt);
+    return 1;
+}
