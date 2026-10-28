@@ -559,6 +559,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, syxjl skill `F_SSERVER`):** `inherit/skill/skill` only inherited `F_CLEAN_UP`, so skills that call `offensive_target` (e.g. `baituo-shezhang`) failed with `Undefined function`. Sibling Shujian bases inherit `F_SSERVER` (which itself inherits `F_CLEAN_UP`). Switched. Proof: HEAD fail; tree loads.
 
+**Also (2026-10-27, xkxz2/xkxc98sj skill `F_SSERVER`):** same shape — five skills each (`yunu-jianfa`, `zhemei-shou`, `xianglong-zhang`, `xiaohun-zhang`, `baituo-shezhang`) call `offensive_target` with no local def. Switched skill base to `F_SSERVER`. Residue of the call-without-local-def pattern: 0 among bases that still lack it (comment-only hits left). Proof: HEAD yunu-jianfa fail; tree 5/5 each.
+
 
 
 

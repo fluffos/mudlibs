@@ -1112,3 +1112,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 天地会义士 yi 无法加载（2026-10-27，KB 04 §6.25 Also）
 
 `d/tdh/job1/yi.lpc`：保留字 `int do`（驱动期望 `while`）、`query_temp("tdhbh_qiekou_ok)` 缺引号、未声明 `me`、第二个 `void init`、以及无引号中文的残缺 `do_say`。同目录手足 `yis.lpc` 是干净重写（inquiry 口令、`d` 非 `do`、`me = this_object()`、`ask_ok` / `ask_qiekou_*`）。用 `yis` 的字节覆盖 `yi`（xkxz2 / xkxc98sj 两份相同）。证明：HEAD 加载失败；改后加载成功。
+
+## skill 基类补 F_SSERVER（2026-10-27，KB 04 §6.16 Also）
+
+`inherit/skill/skill` 只 `inherit F_CLEAN_UP`，`yunu-jianfa` / `zhemei-shou` / `xianglong-zhang` / `xiaohun-zhang` / `baituo-shezhang` 调用 `offensive_target` 未定义。改为 `inherit F_SSERVER`（同 syxjl / 书剑手足）。证明：HEAD yunu-jianfa 失败；改后五件均加载。
