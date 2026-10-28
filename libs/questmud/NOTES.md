@@ -822,3 +822,7 @@ A statement `new(PATH)->move(...);` / `carry_object(ARMOR_D("x"))->wear();` whos
 ## Object paths without a leading slash: guarded chains for a missing item (2026-10-22, KB 06 §7.73 addendum)
 
 A path written without the leading slash (`carry_object("d/city/obj/jiasha")->wear();`) is root-relative in this driver (`new("d/city/obj/changjian")` loads `/d/city/obj/changjian`), so it behaves like the absolute spelling: when the file is not in the archive `new()` answers 0 and `->wear()` on it raises `Bad argument 1 to EFUN call_other()`, and the whole object does not load. The earlier guard pass skipped these paths as "relative to the cwd at run time: cannot tell". 1 statement(s) in 1 file(s) (`world/mage/mag/ld_preventer`) are now guarded blocks (`scripts/lpc_guard_carry_object.py`). Load check of the 1 changed files, HEAD vs tree: 1 load at HEAD, 1 load now (0 newly loading, 0 regress).
+
+## glued inherit entrance + ball（2026-10-27，KB 04 §6.25 Also）
+
+`wizards/walla/area/extension/entrance` 的 `inherit "room/room"`、`wizards/yodin/ball` 的 `inherit "obj/armour" /*…*/` 均缺分号。entrance 的房间描述字符串原先是无副作用表达式，改为 `long_desc =`。证明：HEAD 失败；改后两件均加载。

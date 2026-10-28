@@ -551,6 +551,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, holymission glued inherit / walkman):** fire `rm14`/`rm16`/`rm17` had `inherit "…/hostiles/fire"` without `;` before `#include` (parser ate the includes); `rm17` also lost `||` before `str == "over the bridge"`. `players/aaa/lab/walkman` had the same missing `;`, plus `int nosave` (want `nosave int`) and `void init {` (want `init()`). Proof: HEAD fail; tree loads all four.
 
+**Also (2026-10-27, questmud glued inherit):** `wizards/walla/area/extension/entrance` and `wizards/yodin/ball` had `inherit "room/room"` / `inherit "obj/armour" /*…*/` without `;`. Entrance also left its description string as a no-op expression: assigned `long_desc`. Proof: HEAD fail; tree loads both.
+
 
 
 
