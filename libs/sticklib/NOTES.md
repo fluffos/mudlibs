@@ -345,3 +345,7 @@ Strategy A catalog 缺 `do_find_object`/`get_object`/`m_allocate`/`get_eval_cost
 ## 深度功能测试（2026-10-27，§6.26/§6.25 sticklib L_IN 残渣 + strrstr）
 
 `lords_guild` 局部变量叫 `in`（§6.26）改为 `intel`；`telopt`/`mapper_d` 的 foreach 被写成 `in fo`/`in t` 错字。mapper 还要 LDMud `strrstr`，catalog 用 `strsrch(..., 1)` 补上。证明：HEAD lords_guild L_IN；树 lords_guild 与 mapper_d 可加载。
+
+## 深度功能测试（2026-10-27，§6.25 catalog sefun implode3/extern_call/driver_info/version）
+
+`_man`/`mchard`/`_sysinfo` 需要 LDMud `implode3`、`extern_call`、`driver_info`、`version`。从档案移植 implode3；`extern_call` 用 `previous_object()`；`driver_info` 的负载项映射 `query_load_average()`；`version`→`__VERSION__`。并补上 `_sysinfo` 里 `version()` 那行缺的 `;`。证明：HEAD Undefined；树 `_sysinfo`/`mchard` 可加载。

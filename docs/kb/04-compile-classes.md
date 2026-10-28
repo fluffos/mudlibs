@@ -703,6 +703,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, sticklib `L_IN` residue + `strrstr`):** (1) `lords_guild` declared `int st, in, dx, co` (§6.26). Renamed to `intel`. (2) `telopt` `foreach (string in fo in` typo → `info`; `mapper_d` `foreach (…, in t exit_value in` → `mixed exit_value`. (3) mapper needed LDMud `strrstr` — catalog sefun via `strsrch(..., 1)`. Proof: HEAD lords_guild L_IN; tree lords_guild + mapper_d load.
 
+**Also (2026-10-27, sticklib catalog sefun implode3/extern_call/driver_info/version):** `_man`/`mchard`/`_sysinfo` needed LDMud `implode3`, `extern_call`, `driver_info`, `version`. Ported implode3 from archive; `extern_call`→`previous_object()` check; `driver_info(DI_LOAD_AVERAGE_*)`→`query_load_average()`; `version`→`__VERSION__`. Also restored missing `;` after `_sysinfo` `version()` write. Proof: HEAD Undefined; tree `_sysinfo`+`mchard` load (`_man` compiles; get_dir 0x23 runtime separate).
+
 **Also (2026-10-27, master_ldmud `#'fn` residue):** leftover simple quotes on `call_out`/`set_driver_hook`/`funcall`/`filter` lines in aoh/morgengrauen/nirvlp312/sticklib masters (~64 sites / 8 files); still skip `({#'…` unbound_lambda soup. Proof: HEAD morgengrauen master still had `#'configure_driver` / `#'autoincludehook`; tree uses `(: … :)`.
 
 **Also (2026-10-27, sticklib `lpc_warnings --fix`):** mechanical pass: unused locals dropped, `nosave` functions → `protected` (34 files). No-side-effects residue (~119) left for a dedicated pass. Proof: thief_mark_new `nosave int rank_no` → `protected`; bboard unused locals gone.
