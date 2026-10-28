@@ -454,3 +454,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## set("long" 丢引号（2026-10-27，KB 04 §6.25 Also）
 
 `set("long",` 后直接跟汉字（无 `"` / `@LONG`），驱动报 Illegal character。用同路径完好手足覆盖（fyue_room←jhfy；hudi5/6←zxty08nxgbb；quanzhen_old/hudi*←xyzxfy2）。证明：HEAD 失败；改后加载。
+
+## 深度功能测试（2026-10-27，§6.25 d/city/sj 去引号）
+
+`d/city/sj` 整文件去引号（`add_action(do_out, out)` 等）；按 jhfy 完整副本替换。

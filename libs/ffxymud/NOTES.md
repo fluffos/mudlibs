@@ -444,3 +444,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-10-27，§6.25 ZHAOSHI 截断玩家技能）
 
 玩家自创武功在 `// ZHAOSHI : 0` 处截断（EOF），无法加载。按同系完整 `moming-blade` 补一招 + valid_*/query_*/practice（1）：`kungfu/skill/xycn-sword.lpc`。
+
+## 深度功能测试（2026-10-27，§6.25 d/city/sj 去引号）
+
+`d/city/sj` 整文件去引号（`add_action(do_out, out)` 等）；按 jhfy 完整副本替换。

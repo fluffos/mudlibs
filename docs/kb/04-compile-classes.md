@@ -599,6 +599,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, arkadia `/std/drink`):** example beers inherited a drink base the archive never shipped. Added a minimal `/std/drink` (heap `create_heap` → `create_drink`, soft/alco amounts). Arkadia's object layer `#if 0`'d English `set_adj`; drink provides a `dodaj_przym` shim. Proof: HEAD Inherited file missing; tree loads drink + small_beer + dutch_beer.
 
+**Also (2026-10-27, `d/city/sj` quote-strip):** twelve libs' world-peak room lost every quote (`add_action(do_out, out)`, bare Chinese in `message_vision`). Replaced with the intact jhfy copy. Residue of `add_action(do_out, out)` in `d/city/sj`: 0. Proof: HEAD fail; tree loads (zxty, jhfy2, tianxiawuxue).
+
 
 
 

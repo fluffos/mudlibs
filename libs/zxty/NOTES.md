@@ -599,3 +599,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-10-27，§6.25 zmud/dan 去引号）
 
 `u/zmud/dan` 整文件去引号；按 `clone/misc/dan` 重写（保留档案的 exp/40 与「小刀」日志）。
+
+## 深度功能测试（2026-10-27，§6.25 d/city/sj 去引号）
+
+`d/city/sj` 整文件去引号（`add_action(do_out, out)` 等）；按 jhfy 完整副本替换。
