@@ -1163,3 +1163,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## shaqianli glued inherit+decl（2026-10-27，KB 04 §6.25 Also）
 
 `d/wudujiao/npc/shaqianli` 一行写成 `inherit NPC string ask_job();`。拆成 `inherit NPC;` 与原型。证明：HEAD 失败；改后加载。
+
+## huoba / flute2 / liuyun·lunyun（2026-10-27，KB 04 §6.25 Also）
+
+`d/xingxiu/obj/huoba` 把 `set("remaining", 1)` 写成了 mapping 碎片 `"remaining" : 1,`；`npc/obj/flute2` 的 `message_vision` 缺分号与 `this_player()`；`kungfu/skill/liuyun` 与 `kunlun-zhang/lunyun` 首行丢了 `//`，且 `lunyun` 整文件粘贴了两遍。与 ldtx/ldtxii 同形一并修。证明：HEAD 失败；改后均加载。

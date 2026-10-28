@@ -555,6 +555,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, glued `inherit`+decl):** syxjl `d/wudujiao/npc/shaqianli` had `inherit NPC string ask_job();` on one line; pkuxkx `u/male/test/test` had `inherit NPC` without `;`. Split / restore the semicolon. Proof: HEAD fail; tree loads.
 
+**Also (2026-10-27, huoba/flute2/liuyun):** syxjl/ldtx/ldtxii `d/xingxiu/obj/huoba` had a bare `"remaining" : 1,` mapping fragment; three `flute2` lost `;` and `this_player()` on `message_vision`; syxjl `liuyun`/`lunyun` lost the `//` on the first line and `lunyun` was pasted twice. Restored. Proof: HEAD fail; tree loads.
+
 
 
 
