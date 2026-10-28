@@ -671,6 +671,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, morgengrauen/realms `#'fn`):** same simple-quote sweep with a guard against Realms `##Name##'s` possessives (`(?<!#)#'ident`). morgengrauen ~584 sites / 152 files; realms 1 real site (`apply(#'call_direct,...)`). Proof: HEAD `/p/daemon/sastatd` Illegal character `#` on `map(..., #'FormatLogEntry)`; tree replaces that error.
 
+**Also (2026-10-27, aoh `#'fn`):** same guarded sweep (~2344 sites / 1013 files). Proof: HEAD `/std/room/restrictions` Illegal character `#`; tree replaces it (next error `filter_indices`).
+
 
 
 

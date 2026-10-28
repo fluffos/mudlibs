@@ -4941,3 +4941,7 @@ Four files still had `if (x = CONST)` after earlier sweeps: pirate `troom` pedes
 ## 深度功能测试（2026-10-27，§6.10 LDMud 未知 pragma）
 
 `kernel.lpc` / `master_ldmud.lpc` / `.lpchdr.h` 里的 `rtt_checks` / `range_check` 等 FluffOS 不识别的 LDMud pragma 已删；行为不变。
+
+## 深度功能测试（2026-10-27，§6.25 LDMud `#'fn` 闭包）
+
+简单 `#'ident` → `(: ident :)`（约 2344 处 / 1013 文件）；避开 `##'s` 与 unbound_lambda 汤。HEAD `restrictions` Illegal character `#`；树中该错误消失。

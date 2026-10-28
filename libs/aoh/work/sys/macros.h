@@ -39,7 +39,7 @@
 #endif
 
 #ifndef SF
-#define SF(x)             #'x
+#define SF(x)             (: x :)
 #endif
 
 #ifndef SYM
@@ -58,15 +58,15 @@
 #define SF_BITWISE_AND    #'&
 #define SF_BITWISE_OR     #'|
 #define SF_NEGATE         #'!
-#define SF_UNARY_NEGATE   #'negate
+#define SF_UNARY_NEGATE   (: negate :)
 #define SF_ADD            #'+
 #define SF_SUB            #'-
 
 #define SF_IF             #'?
 #define SF_IF_NOT         #'?!
-#define SF_WHILE          #'while
-#define SF_DO             #'do
-#define SF_SWITCH         #'switch
+#define SF_WHILE          (: while :)
+#define SF_DO             (: do :)
+#define SF_SWITCH         (: switch :)
 
 #ifndef HISHER
 #define HISHER(x) ({string})x->QueryPossessive()

@@ -58,8 +58,8 @@ void create() {
         AddRoomCmd("kill",  "no_kill");
         AddRoomCmd("read", "read");
         AddRoomCmd("open", "open");
-        AddDetail("doors", #'doors); 
-        AddDetail("window", #'window);
+        AddDetail("doors", (: doors :)); 
+        AddDetail("window", (: window :));
         Set(P_TRANSPARENT,0);
         doors_open = 0;
         stationnr = 1;

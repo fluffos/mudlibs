@@ -7,6 +7,6 @@
 #define BASICXCMD BASE+"std/basicxcmd"
 
 #ifndef SF
-#define SF(x) #'x
+#define SF(x) (: x :)
 #endif
 

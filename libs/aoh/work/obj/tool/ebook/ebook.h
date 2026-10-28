@@ -27,7 +27,7 @@
 #define EBOOK(x) ("/obj/tool/ebook/"+x)
 #define TP this_player()
 #define ME this_object()
-#define SF(x) #'x //' For Emacs
+#define SF(x) (: x :) //' For Emacs
 #define D(x,y) "/players/thragor/lib/debug"->debug("thragor",x,y)
 
 #define ERRORBASE EBOOK("errorbase")
