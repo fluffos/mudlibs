@@ -869,3 +869,7 @@ An `add_action("fn", "verb")` whose function is defined neither by the object, n
 ## Object paths without a leading slash: guarded chains for a missing item (2026-10-22, KB 06 §7.73 addendum)
 
 A path written without the leading slash (`carry_object("d/city/obj/jiasha")->wear();`) is root-relative in this driver (`new("d/city/obj/changjian")` loads `/d/city/obj/changjian`), so it behaves like the absolute spelling: when the file is not in the archive `new()` answers 0 and `->wear()` on it raises `Bad argument 1 to EFUN call_other()`, and the whole object does not load. The earlier guard pass skipped these paths as "relative to the cwd at run time: cannot tell". 2 statement(s) in 2 file(s) (`obj/party`, `open/followme`) are now guarded blocks (`scripts/lpc_guard_carry_object.py`). Load check of the 2 changed files, HEAD vs tree: 2 load at HEAD, 2 load now (0 newly loading, 0 regress).
+
+## waldo fs #inherit / guilds defs / end_shadow（2026-10-27，KB 04 §6.25 Also）
+
+`players/waldo/guild/bin/shadows/fs` 写 `#inherit "obj/std_shadow"`、包含不存在的 `guilds/defs.h`、`void end_shadow();` 后单独 `{`，以及 `!TP != owner`。手足 `saffrin/.../fshield.lpc` 完好。按该文件改写。证明：HEAD 失败；改后加载。

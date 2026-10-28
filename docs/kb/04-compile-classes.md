@@ -545,6 +545,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, nirvlp312 `ftell`):** `open/fakir/ftell` included missing `/players/vertebraker/define.h`, had `inherit TREASURE` without `;` after globals (`Illegal to inherit after defining global variables`). Adopted `open/pestilence/define.h` as that header; semicolon; move inherit above the globals. Proof: HEAD fail; tree loads.
 
+**Also (2026-10-27, holymission `fs` shadow):** waldo `guild/bin/shadows/fs` used `#inherit "obj/std_shadow"`, missing `guilds/defs.h`, `void end_shadow();` then a bare `{`, and `!TP != owner`. Adopted the intact saffrin `fshield.lpc` sibling. Proof: HEAD fail; tree loads.
+
+
 
 
 
