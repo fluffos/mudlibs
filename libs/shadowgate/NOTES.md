@@ -791,3 +791,8 @@ sunshadow 的战斗探针找到五个怪物里的 `(string)TO->query_current_att
 
 gossip / rumours_d / cape / smithy / bloodlust / lair / map / silver_plate / snakestomach：补 `TP`/`ob`/`ETO`。
 
+
+## 深度功能测试（2026-10-27，§6.25 tell_object 字符串目标）
+
+crushing_hand：`tell_object("target", …)`→`tell_object(target, …)`。
+

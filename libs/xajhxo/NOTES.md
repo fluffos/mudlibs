@@ -1000,3 +1000,8 @@ Same convert-era byte corruption as the waiter `！”\n` / `！\n` →
 ## 深度功能测试（2026-10-27，§6.25 mooncake2 do_write 截断）
 
 `u/xli/mooncake2` 同 xo：`do_write` 截断。用本库 `mooncake` 覆盖。证明：HEAD 失败；改后加载。
+
+## 深度功能测试（2026-10-27，§6.25 tell_object 字符串目标）
+
+xinfang/chatroom：`tell_object("ob", …)`→`tell_object(ob, …)`。
+

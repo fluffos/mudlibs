@@ -551,3 +551,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-10-27，§6.25 adm/tmp/test glued inherit）
 
 `adm/tmp/test` 写成 `inherit SSERVER int perform…`，且 `if (!target; ||`。拆成 `inherit SSERVER;` 并去掉误写的分号。证明：HEAD 失败；改后加载。
+
+## 深度功能测试（2026-10-27，§6.25 tell_object/tell_room 字符串目标）
+
+同 sjpl2：草料/柴房/槐树 `tell_room(ob|where)`。
+

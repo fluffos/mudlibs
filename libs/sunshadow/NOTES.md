@@ -1056,3 +1056,8 @@ HEAD 失败、现在加载（没有 warning）的 15 个：`magic_d`、`bboard_d
 
 与 shadowgate 同形：gossip / rumours / cape / smithy / bloodlust / lair / map / spyglass / snakestomach。
 
+
+## 深度功能测试（2026-10-27，§6.25 tell_object 字符串目标）
+
+crushing_hand：`tell_object("target", …)`→`tell_object(target, …)`。
+

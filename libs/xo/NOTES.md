@@ -903,3 +903,8 @@ wield()` 对缺失路径返回 `0`，立刻炸：
 ## 深度功能测试（2026-10-27，§6.25 mooncake2 do_write 截断）
 
 `u/xli/mooncake2` 的 `do_write` 在 `tell_object(me,"你将祝福写在` 处截断，且 `if` 缺 `)`。用同目录完好的 `mooncake` 的 `do_write` 覆盖。证明：HEAD 失败；改后加载。
+
+## 深度功能测试（2026-10-27，§6.25 tell_object 字符串目标）
+
+xinfang/chatroom/pplroomd：`tell_object("ob", …)`→`tell_object(ob, …)`。
+
