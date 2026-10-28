@@ -273,3 +273,7 @@ LDMud 的 `foreach (object you : arr)` / `foreach (x : arr)` 在本驱动要写�
 ## 深度功能测试（2026-10-27，§6.25 living `private nosave`）
 
 FluffOS 兼容层 `/lib/living.lpc` 把 `level`/`gender`/`liv_Flags` 等标成 `private nosave`，子物件直接读会 `Illegal to use private variable`。改为普通 `nosave`（与 LDMud living 可见性一致）。
+
+## 深度功能测试（2026-10-27，§6.25 catalog sefun present4/object_info）
+
+Strategy A 的 `/catalog/simul_efun` 缺少 LDMud 的 `present4` / `object_info`。已补上（`OI_ONCE_INTERACTIVE` → `interactive()`）。`buster_bag` 与 `_si` 可加载。

@@ -665,6 +665,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, sticklib living `private nosave`):** FluffOS Strategy A `/lib/living.lpc` marked `level`/`gender`/`liv_Flags`/… as `private nosave`, so every inheriting NPC that reads them fails with `Illegal to use private variable` (beggar/guard/janitor; `basic/npc/set_n_query`). LDMud living kept them file-visible. Dropped `private` → plain `nosave`. Proof: open eval inherit reading `level`/`gender`/`liv_Flags` loads.
 
+**Also (2026-10-27, sticklib catalog sefun `present4`/`object_info`):** Strategy A `/catalog/simul_efun` never shipped LDMud `present4` or `object_info`, so `_si` and `buster_bag` (and every `OI_ONCE_INTERACTIVE` caller) failed `Undefined function`. Added `present4` (from the archive sefun) and a minimal `object_info` (`OI_ONCE_INTERACTIVE` → `interactive()`; shadow/list queries → 0) plus `raise_error`→`error`. Proof: tree loads buster_bag + `_si`.
+
 
 
 
