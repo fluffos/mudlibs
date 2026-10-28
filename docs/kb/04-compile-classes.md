@@ -673,6 +673,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, aoh `#'fn`):** same guarded sweep (~2344 sites / 1013 files). Proof: HEAD `/std/room/restrictions` Illegal character `#`; tree replaces it (next error `filter_indices`).
 
+**Also (2026-10-27, sticklib Strategy A `set_stat`):** `/lib/living.lpc` lacked `set_stat`/`query_stat` (they live in LDMud `basic/living/abilities`), so NPCs like janitor failed `Undefined function set_stat`. Added a minimal ST_* switch plus `set_keep_hb` stub. Proof: open eval `set_stat(1,20)` → 20; janitor no longer reports set_stat.
+
 
 
 

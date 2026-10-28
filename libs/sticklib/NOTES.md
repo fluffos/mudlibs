@@ -277,3 +277,7 @@ FluffOS 兼容层 `/lib/living.lpc` 把 `level`/`gender`/`liv_Flags` 等标成 `
 ## 深度功能测试（2026-10-27，§6.25 catalog sefun present4/object_info）
 
 Strategy A 的 `/catalog/simul_efun` 缺少 LDMud 的 `present4` / `object_info`。已补上（`OI_ONCE_INTERACTIVE` → `interactive()`）。`buster_bag` 与 `_si` 可加载。
+
+## 深度功能测试（2026-10-27，§6.25 Strategy A set_stat）
+
+`/lib/living.lpc` 补上 `set_stat`/`query_stat`（及空 `set_keep_hb`）。janitor 不再报 Undefined function set_stat。
