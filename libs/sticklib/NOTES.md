@@ -329,3 +329,7 @@ Strategy A catalog 缺 `file_lines` / `interactive_info`。从档案 sefun 移�
 ## 深度功能测试（2026-10-27，§6.25 catalog sefun object-lookup/cost）
 
 Strategy A catalog 缺 `do_find_object`/`get_object`/`m_allocate`/`get_eval_cost`/`query_uptime`/`tail`。从档案 sefun 移植；`m_allocate` 只返回空 mapping（宽映射仍不支持）；代价类映射到 `eval_cost()`/`uptime()`。证明：HEAD who3/goto/cmdd 失败；树三者均可加载。
+
+## 深度功能测试（2026-10-27，§6.10 Strategy A attack 返回类型）
+
+`/lib/living` 的 `void attack()` 与 NPC 的 `status attack()` 冲突（`void vs int` 警告）。改为 `status` 并返回 0/1。证明：asmodeus 加载且无该继承警告。
