@@ -352,3 +352,7 @@ master / simul_efun / workfiles / define.h 等处的 `strong_types` / `pedantic`
 ## 深度功能测试（2026-10-27，§6.25 LDMud `#'fn` 闭包）
 
 简单 `#'ident` → `(: ident :)`（跳过 `#'?` / `'symbol` 行）。约 1224 处 / 283 文件。HEAD `/basic/alias` 报 Illegal character `#`；树中该错误消失。
+
+## 深度功能测试（2026-10-27，§6.25 master_ldmud `#'fn` 残渣）
+
+`call_out`/`set_driver_hook` 等行上剩余的简单 `#'ident` → `(: ident :)`（仍跳过 `({#'` lambda 汤）。

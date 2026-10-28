@@ -681,6 +681,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, sticklib Strategy A `is_fighting`/`dead`):** city guards call `is_fighting()` with no argument and read `dead`; Strategy A living required one arg and lacked `dead`. Made `is_fighting` `varargs`, added `dead`/`query_dead`/`set_dead`, and a `heart_beat` chain. Proof: guard + guard_captain + janitor load.
 
+**Also (2026-10-27, master_ldmud `#'fn` residue):** leftover simple quotes on `call_out`/`set_driver_hook`/`funcall`/`filter` lines in aoh/morgengrauen/nirvlp312/sticklib masters (~64 sites / 8 files); still skip `({#'…` unbound_lambda soup. Proof: HEAD morgengrauen master still had `#'configure_driver` / `#'autoincludehook`; tree uses `(: … :)`.
+
 
 
 

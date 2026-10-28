@@ -293,3 +293,7 @@ Strategy A 的 `/catalog/simul_efun` 缺少 LDMud 的 `present4` / `object_info`
 ## 深度功能测试（2026-10-27，§6.25 Strategy A is_fighting/dead）
 
 `is_fighting` 改为 `varargs`；补 `dead` 与 `heart_beat`。guard / guard_captain / janitor 均可加载。
+
+## 深度功能测试（2026-10-27，§6.25 master_ldmud `#'fn` 残渣）
+
+`call_out`/`set_driver_hook` 等行上剩余的简单 `#'ident` → `(: ident :)`（仍跳过 `({#'` lambda 汤）。
