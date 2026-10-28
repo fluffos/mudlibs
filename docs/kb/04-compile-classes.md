@@ -761,6 +761,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, ageofelements `driver_info`/`version` for MSSP):** mssp needed `<sys/driver_info.h>`, `driver_info()`, `version()`. Added include shim + catalog stubs. Proof: HEAD mssp Cannot #include; tree mssp loads.
 
+**Also (2026-10-27, ageofelements chest `apply(#'call_other)` + for-decl):** `obj/chest.lpc` used LDMud `for (int i = 1, int s = …)` and `apply(#'call_other, …)`. Split declarations; `call_other(ob, ({ fun }) + args[1..])`. Proof: HEAD unexpected `,` / Illegal #; tree chest loads.
+
 **Also (2026-10-27, master_ldmud `#'fn` residue):** leftover simple quotes on `call_out`/`set_driver_hook`/`funcall`/`filter` lines in aoh/morgengrauen/nirvlp312/sticklib masters (~64 sites / 8 files); still skip `({#'…` unbound_lambda soup. Proof: HEAD morgengrauen master still had `#'configure_driver` / `#'autoincludehook`; tree uses `(: … :)`.
 
 **Also (2026-10-27, sticklib `lpc_warnings --fix`):** mechanical pass: unused locals dropped, `nosave` functions → `protected` (34 files). No-side-effects residue (~119) left for a dedicated pass. Proof: thief_mark_new `nosave int rank_no` → `protected`; bboard unused locals gone.

@@ -170,3 +170,7 @@ Strategy A catalog 缺 `command(cmd,who)`、`m_allocate`、`regreplace`、`json_
 ## 深度功能测试（2026-10-27，§6.25 MSSP driver_info/version）
 
 补 `include/sys/driver_info.h` 与 catalog `driver_info`/`version` 垫片。证明：树 mssp 可加载。
+
+## 深度功能测试（2026-10-27，§6.25 chest apply(#'call_other)）
+
+`obj/chest.lpc` 的 `for (int i, int s)` 与 `apply(#'call_other)` 改为分拆声明 + `call_other(ob, ({fun})+args[1..])`。证明：HEAD 语法错/Illegal #；树 chest 可加载。
