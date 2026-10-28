@@ -890,3 +890,7 @@ A path written without the leading slash (`carry_object("d/city/obj/jiasha")->we
 ## 深度功能测试（2026-10-27，§6.10 LDMud 未知 pragma）
 
 `#pragma strict_types;`（尾部分号）改为 `#pragma strict_types`（wizrock / temp3 / vamp_mist）。
+
+## 深度功能测试（2026-10-28，sort_array 方向闭包）
+
+剩余 LDMud sort_array 的 #'> / #'< 改为 1 / -1（KB 06 7.234）。

@@ -359,3 +359,7 @@ master / simul_efun / workfiles / define.h 等处的 `strong_types` / `pedantic`
 ## 深度功能测试（2026-10-28，remove_call_out 闭包→字符串）
 
 `corpse`/`kernel/simul/lpc` 简单形式改为字符串。
+
+## 深度功能测试（2026-10-28，sort_array 方向闭包）
+
+剩余 LDMud sort_array 的 #'> / #'< 改为 1 / -1（KB 06 7.234）。

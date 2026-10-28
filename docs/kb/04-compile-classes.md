@@ -785,6 +785,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-28, corpus `remove_call_out((: name :))`):** FluffOS `remove_call_out` takes a string; LDMud accepted a closure. Mechanical rewrite of simple `remove_call_out((: ident :))` → `remove_call_out("ident")` in sticklib/aoh/morgengrauen/nirvlp312/simud (17 sites / 16 files). Left complex `(: call_other, … :)` (kxkj/jym). Proof: HEAD sticklib moving Bad argument remove_call_out; tree moving loads.
 
+**Also (2026-10-28, corpus sort_array #'>/#'< → 1/-1):** leftover LDMud sort direction quotes after the earlier #'fn pass (KB 06 7.234). 208 sites / 101 files across sticklib/aoh/morgengrauen/nirvlp312/…. Left lambda-soup / ternary reverse?#'<:#'> comparators. Proof: HEAD sticklib `_who_old` Illegal # / cascade Illegal LHS; tree loads.
+
+
 
 
 

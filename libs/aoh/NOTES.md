@@ -4952,3 +4952,7 @@ Four files still had `if (x = CONST)` after earlier sweeps: pirate `troom` pedes
 ## 深度功能测试（2026-10-28，remove_call_out 闭包→字符串）
 
 简单 `remove_call_out((:fn:))` 改为字符串名（login/loadlogger/elevator/telnet_neg/restrictions/inetd/sling）。
+
+## 深度功能测试（2026-10-28，sort_array 方向闭包）
+
+剩余 LDMud sort_array 的 #'> / #'< 改为 1 / -1（KB 06 7.234）。

@@ -830,3 +830,7 @@ A path written without the leading slash (`carry_object("d/city/obj/jiasha")->we
 ## 深度功能测试（2026-10-27，§6.25 question_d 截断）
 
 `daemons/question_d` 的 `ask_questions` 在 `if(question` / `tell_object(ob, question` 处截断。按 `input_data` 的 mapping 用法补完（`m_sizeof` + `random` 出题）。证明：HEAD 失败；改后加载。
+
+## 深度功能测试（2026-10-28，sort_array 方向闭包）
+
+剩余 LDMud sort_array 的 #'> / #'< 改为 1 / -1（KB 06 7.234）。

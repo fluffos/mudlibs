@@ -444,3 +444,7 @@ Catalog 补 `master_object`/`wizlist`/`localcmd`/`unshadow`/`varargs snoop`；`/
 ## 深度功能测试（2026-10-28，corpus remove_call_out 闭包）
 
 `moving.lpc` 的 `remove_call_out((:clean_queue:))` 改为字符串；同批 corpus 扫 aoh/morgengrauen/nirvlp312/simud。证明：HEAD moving Bad argument；树可加载。
+
+## 深度功能测试（2026-10-28，sort_array 方向闭包）
+
+剩余 LDMud sort_array 的 #'> / #'< 改为 1 / -1（KB 06 7.234）。
