@@ -931,3 +931,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 bingbu/lark 的 `tell_object("ob")` / `tell_room("where")` 改为房间 `tell_room(ob|where, …)`。
 
+
+## 深度功能测试（2026-10-27，§6.25 tell_object 路径当房间）
+
+`tell_object("/…", …)` → `tell_room(load_object("/…"), …)`（去掉 `.lpc`）。
+

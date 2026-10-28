@@ -995,3 +995,8 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 深度功能测试（2026-10-27，§6.25 tell_object 缺 me（自动放弃/愿否））
 
 一参 `tell_object("…")` 在已有 `me` 时改为 `tell_object(me, "…")`（city.lpc）。证明：抽样 city / xiaolongnv 加载。
+
+## 深度功能测试（2026-10-27，§6.25 tell_object 路径当房间）
+
+`tell_object("/…", …)` → `tell_room(load_object("/…"), …)`（去掉 `.lpc`）。
+

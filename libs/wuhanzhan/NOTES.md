@@ -1144,3 +1144,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-10-27，§6.25 cakepiece 截断）
 
 `u/bqt/obj/cakepiece` 丢了文件头，只剩 `do_eat` 数组残片（`Illegal character`）。用 xlqy_new2007 `d/obj/food/cakepiece` 覆盖。证明：HEAD 失败；改后加载。
+
+## 深度功能测试（2026-10-27，§6.25 tell_object 路径当房间）
+
+`tell_object("/…", …)` → `tell_room(load_object("/…"), …)`（去掉 `.lpc`）。
+

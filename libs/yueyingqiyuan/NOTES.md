@@ -1286,3 +1286,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 yuzu：`tell_object("钟馗…")` → `tell_object(criminal, …)`。
 
+
+## 深度功能测试（2026-10-27，§6.25 tell_object 路径当房间）
+
+`tell_object("/…", …)` → `tell_room(load_object("/…"), …)`（去掉 `.lpc`）。
+

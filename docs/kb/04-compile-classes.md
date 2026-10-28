@@ -651,6 +651,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, `tell_object("…", target)` arg-order residue):** 25+ sites still had the message first (guest "迎客厅"; ninetears rnd_caus `attackboy`; sj/shiji telnet including `(string)message`). Swapped to `tell_object(target, msg)`. Residue 0. Proof: sjcs guest + sj telnet load.
 
+**Also (2026-10-27, `tell_object("/path", msg)` room announce):** steamer / wuhan NPC / vir copies used a filesystem path as the tell_object target (`"/d/city/kezhan.lpc"`, `"/d/wuhan/lou4"`). Replaced with `tell_room(load_object("/path"), msg)` (strip `.lpc`/`.c`). 84 sites / 43 files / 36 libs. Residue 0. Proof: mhxy steamer + sjpl2 ssleader load.
+
+
 
 
 
