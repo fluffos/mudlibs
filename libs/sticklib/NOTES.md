@@ -376,4 +376,8 @@ NPC 写 `::init()`，虚拟房间写 `::heart_beat()`，薄 living/room 没有�
 
 ## 深度功能测试（2026-10-27，§6.25 Strategy A room add）
 
-虚拟房间 `set_effects()` 调用 `add(ROOM_EFFECT, …)`，该函数在 LDMud 的 `set_n_query` 里，Strategy A `/lib/room` 没有。补上 `ROOM_EFFECT`/`ROOM_EXIT`/`ROOM_ITEM` 的 `add()`，并在 `heart_beat` 里触发效果。证明：HEAD virtual_room 报 Undefined add；树 virtual_room 可加载，`set_effects`/`add` 成功。
+虚拟房间 `set_effects()` 调用 `add(ROOM_EFFECT, …)`，该函数在 LDMud 的 `set_n_query` 里，Strategy A `/lib/room` 没有。补上 `ROOM_EFFECT`/`ROOM_EXIT`/`ROOM_ITEM` 的 `add()`，并在 `heart_beat` 里触发效果。同时去掉 room 上 `short_desc`/`long_desc` 等的 `private`（地形直接赋值）。证明：HEAD virtual_room 报 Undefined add；树 virtual_room 可加载，`set_effects`/`add` 成功。
+
+## 深度功能测试（2026-10-27，§6.10 death player_kills 移位）
+
+`basic/living/death.lpc` 写了无赋值的 `player_kills << 1`（无副作用警告）；注释是“慢慢遗忘”→ `>>= 1`。全库仅此一处。证明：HEAD living_ldmud 在 death:568 有警告；树无该警告。
