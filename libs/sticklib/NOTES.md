@@ -281,3 +281,7 @@ Strategy A 的 `/catalog/simul_efun` 缺少 LDMud 的 `present4` / `object_info`
 ## 深度功能测试（2026-10-27，§6.25 Strategy A set_stat）
 
 `/lib/living.lpc` 补上 `set_stat`/`query_stat`（及空 `set_keep_hb`）。janitor 不再报 Undefined function set_stat。
+
+## 深度功能测试（2026-10-27，§6.25 Strategy A Pronoun）
+
+`/lib/living.lpc` 补上 `Pronoun`/`Possessive`/`Objective`（及 query_*）。janitor 不再报 Undefined function Pronoun。

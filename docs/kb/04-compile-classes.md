@@ -675,6 +675,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, sticklib Strategy A `set_stat`):** `/lib/living.lpc` lacked `set_stat`/`query_stat` (they live in LDMud `basic/living/abilities`), so NPCs like janitor failed `Undefined function set_stat`. Added a minimal ST_* switch plus `set_keep_hb` stub. Proof: open eval `set_stat(1,20)` → 20; janitor no longer reports set_stat.
 
+**Also (2026-10-27, sticklib Strategy A `Pronoun`):** NPCs call `Pronoun()`/`Possessive()`/`Objective()` from `basic/living/gender`, which Strategy A living never inherited. Added the three plus `query_*` wrappers. Proof: eval male → he/his/him; janitor no longer reports Pronoun.
+
 
 
 
