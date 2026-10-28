@@ -587,6 +587,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, panshi_dan quote-strip):** four `u/stey/u/jie/panshi_dan` copies lost every quote and `;` (`inherit ITEM` then bare `int do_eat`, `set_name(HIC 叛师丹 NOR, ({panshi dan…})`). Reconstructed from the archived logic (eat clears family/class/title; rumor announce). Residue 0. Proof: HEAD fail; tree loads (shenmo, sjshwzb).
 
+**Also (2026-10-27, zxcd_yongshi missing `;`):** sj / shiji `u/ZXCDZXCD/NPC/zxcd_yongshi` had `inherit NPC` without `;` before `inherit F_MASTER`, almost every statement terminator gone, and `({yong shi"})`. Restored terminators/ids and added `#include <ansi.h>`. Proof: HEAD fail; tree loads.
+
 
 
 

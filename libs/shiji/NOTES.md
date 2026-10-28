@@ -814,3 +814,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-10-27，§6.25 bare set("long" 残渣）
 
 foodmaker 内嵌 `@ROOM_CODE` 模板 `set("long"` 缺开头引号；补 `"`.
+
+## 深度功能测试（2026-10-27，§6.25 zxcd_yongshi 缺分号）
+
+`u/ZXCDZXCD/NPC/zxcd_yongshi`：`inherit NPC` 缺 `;`、语句缺 `;`、id 引号残缺；补 `#include <ansi.h>` 并重写为可加载。
