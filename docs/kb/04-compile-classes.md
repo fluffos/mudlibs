@@ -573,6 +573,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-27, `save_items2` nested WIP):** darkelib (3 copies) / rifts2 `save_items2` inherited missing `/adm/daemon/locker_hash.lpc` without `;`, then nested function defs inside `find_uid_list`. Live daemon is `save_items_d`. Replaced each copy with `#include`s + `inherit "/adm/daemon/save_items_d";`. Proof: HEAD fail; tree loads.
 
+**Also (2026-10-27, spaced-RTF skills):** ldtx/ldtxii `kungfu/skill/jiuyang-force` and `kurong-changong` were RTF with spaces after every backslash (`{ \\ rtf1 \\ ansi…}`), so a plain `{\\rtf` grep misses them. Chinese does not survive striprtf on that encoding; replaced each with the intact syxjl sibling of the same lineage. Residue of the spaced-RTF shape: 0. Proof: HEAD `{` syntax error; tree both skills load in both libs.
+
 
 
 

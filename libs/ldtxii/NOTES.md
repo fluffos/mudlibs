@@ -520,3 +520,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## flute1 / sheep（2026-10-27，KB 04 §6.25 Also）
 
 `d/xingxiu/npc/obj/flute1` 补 `message_vision(..., this_player());`；`d/xingxiu/obj/sheep` 删掉粘贴在 `set_temp` 前的分页器横幅。证明：HEAD 失败；改后均加载。
+
+## jiuyang / kurong 空格 RTF（2026-10-27，KB 04 §6.25 Also）
+
+与 ldtx 同形：两技能为带空格 RTF。用 syxjl 完好副本覆盖。证明：HEAD 失败；改后均加载。
