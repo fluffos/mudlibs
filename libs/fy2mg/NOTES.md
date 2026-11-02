@@ -374,3 +374,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 
 删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
 
+
+## 钱档在 `/obj/money/`，代码写的是 `/clone/money/`：慈善钱箱 / 兑换 NPC / NPC 现金拿不到钱，11 处（5 个文件）（2026-11-02，KB 06 §7.375）
+
+xkx 家族把钱放在 `/clone/money/`，ES2 家族放在 `/obj/money/`；本库的代码沿用前者，文件（连同自己的 `SILVER_OB` 宏）却是后者，于是 `new()` 回 0：慈善钱箱发新手礼品的 `init()` 抛错、兑换 NPC 对任何钱币都回「你想兑换哪一种钱？」、带现金的 NPC 两手空空。本库 11 处（5 个文件）：`ob = new("/obj/money/silver");`（`/d/city/npc/obj/box.lpc:33`）; `if (!to_ob && file_size("/obj/money/" + to + ".lpc") < 0)`（`/d/city/npc/old-qian.lpc:82`）。`scripts/lpc_fix_money_path.py` 以本库自己的 `obj/money/silver.lpc` 为准，把 `.lpc` / `.h` 里的 `/clone/money/` 改成 `/obj/money/`（wizard / 备份 / 测试树不动；带名字的字面量只有当 `obj/money/<名>.lpc` 存在时才改，其余列 KEEP）。证明：旧路径 `/clone/money/` 在本库没有钱档（目录不存在，静态可查），改后引用的 `/obj/money/silver.lpc` 单独加载并可 `set_amount()`；HEAD / 工作树加载对比 0 退步。
