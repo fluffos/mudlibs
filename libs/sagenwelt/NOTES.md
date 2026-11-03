@@ -130,3 +130,7 @@ FluffOS 保留 `buffer` 为类型；`string buffer` 局部/参数改为 `buf`。
 ## 深度功能测试（2026-11-03，默认参数）
 
 FluffOS 不接受函数声明里的 `int x = CONST`（`unexpected L_ASSIGN`）。已从 `simul_efun.h`/`inp_sys.h` 原型与 `modal_push_char`/`syslogd::log` 定义上去掉默认值；`string array`→`string *`。证明：诊断中不再出现该 L_ASSIGN。
+
+## 深度功能测试（2026-11-03，inherit 宏 / 缺头文件）
+
+`globals_catalog.h` 补上 `P_INPUT`/`MOVE`/`LIVING`/`TO` 等路径与快捷宏（不拉坏掉的 `simul_efun.h`）；`playes/inp_sys.h` 拼写改为 `player/`；补空 stub：`connection.h`/`shell_sys.h`/`menus.h`/`std_defs.h`；`__ADMIN_EMAIL` 相邻字符串改为 `+`。证明：inherit 的 `expecting L_STRING` 诊断消失。

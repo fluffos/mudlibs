@@ -13,7 +13,7 @@ struct menu_item
     // can be chosen.  Therefore, action, choice_name, and
     // prompt_after_selection are meaningless if this is non-zero.
     int       seperator;
-}
+};
 
 struct menu
 {
@@ -30,7 +30,7 @@ struct menu
     int       num_columns;
     int       dont_complete;
     string   *current_choices;
-}
+};
 
 #define MENU		struct menu
 #define MENU_ITEM	struct menu_item
