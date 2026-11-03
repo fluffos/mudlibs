@@ -55,7 +55,7 @@ detection.
   one path; here it is `Cannot read #include file`. Rewrite to a single absolute
   string (`#include "/guilds/priests/lib/fill_bag.lpc"`). Same shape:
   `PRIEST_GARDENS "push_cmd.lpc"`, `AREA_* "DEFS.h"` (AREA_* often still undefined).
-  Detection: `grep -rnE '#include [A-Z_][A-Z0-9_]* "' libs/<slug>/work`.
+  Detection: `grep -rnE '#include [A-Z_][A-Z0-9_]* "' libs/<slug>/work`. sticklib `tower_14x0` AREA_TRISTEZA (2026-11-03): absolute `/areas/tristeza/DEFS.h`.
 - **Case sensitivity.** `<Action.h>` vs `action.h`. One wrong-case
   include can dominate a sweep. Use `find -iname`.
 - **`inherit` after globals is fatal**, including globals pulled in from
