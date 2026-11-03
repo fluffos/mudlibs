@@ -135,6 +135,8 @@ detection.
 
 **Also (2026-11-03, sticklib order_change_d):** `object coef_required` holding an int from a mapping → `int` (Bad left argument to `<=`). Proof: HEAD FAIL; tree loads.
 
+**Also (2026-11-03, sticklib vg_off knock):** `tell_here(..., who, …)` with `string who` → resolve to object via `find_player`/`present` (arg 5 is `object me`). Proof: HEAD Bad type; tree loads.
+
 
   - `command(str, ob)`, `transfer()`, `add_verb()`: see
     §7.172–§7.174.
