@@ -607,3 +607,8 @@ Strategy A `/lib/living` 的 `varargs void set(...)` 与 NPC/player 的 `varargs
 ## 深度功能测试（2026-11-03，prototype void vs int）
 
 祭司：`void end_smash`/`gen_begin_spell`/`bless_it` 原型与 `status` 定义不符——原型改为 status。`lord_handling` 在 `command_driver` 的 include 链里（先有 void tell_me 桩）声明 `varargs int tell_me`，与同链桩冲突；改为 `varargs void` 与兄弟桩一致（真定义仍在 tell_me.lpc 的 int）。证明：priests 三文件与 command_driver/player PASS；prototype 警告清零（21→17 diags）。
+
+## 深度功能测试（2026-11-03，thief_mark THIEF_NO_INHERIT）
+
+`thief_mark_new` 在 `inherit criticals` 之后再 `#include "thief.h"`，而 criticals 已拉过 mark 辅助；未像 `_stab`/`_tth`/`tumble` 那样 `#define THIEF_NO_INHERIT`，触发 `f() inherited from both …`（双 inherit）。补守卫。证明：该类双 inherit 警告清零；warnings 17→15 diags（余 redeclaration + voter long）。
+

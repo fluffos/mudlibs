@@ -226,15 +226,18 @@ detection.
   SLUG --apply` does this from the diagnostics, and it is in
   `toolkit_fix.sh`. 2026-10-14: 220 files in mortremains (187 newly
   loading), and the same error in 30+ other libs.
-  **Also (2026-11-03, sticklib equipped_group / tumble):** diagnostics name
+  **Also (2026-11-03, sticklib equipped_group / tumble / thief_mark):** diagnostics name
   the header's `inherit` line (`/include/npc.h`, `thief.h`), but the
   includer already defined globals. Strategy A `/lib/group_npc.lpc` dropped
   the LDMud `#ifndef EQUIPPED_GROUP_NPC` around `#include <npc.h>`, so
   `/lib/equipped_group_npc.lpc` (which includes equipped_npc then group_npc)
   hits inherit-after-globals; restore the guard. `skills/tumble.lpc` includes
   `thief.h` after its own globals without `#define THIEF_NO_INHERIT` (same
-  switch `_stab`/`_tth` already use). Proof: HEAD equipped_group_npc/tumble
-  FAIL; tree PASS.
+  switch `_stab`/`_tth` already use). `thief_mark_new.lpc` inherits
+  `criticals` then includes `thief.h` without the guard, so mark helpers
+  arrive twice (`f() inherited from both`); define `THIEF_NO_INHERIT` before
+  the include. Proof: HEAD equipped_group_npc/tumble FAIL / mark double-inherit
+  warnings; tree PASS / class cleared.
 - **`Type of returned value doesn't match function return type ( int vs
   void )`**: a `void` function (or one with no type, which this driver reads
   as void) returns a value. MudOS compiled it and passed the value on, and
