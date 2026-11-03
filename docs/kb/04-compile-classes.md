@@ -172,6 +172,13 @@ detection.
 
 **Also (2026-11-03, sticklib `Types in ?:`):** three shapes. (1) `modify_command` `return s ? s : FAIL` (string vs int 1) -> `if (!s) return FAIL; return s;`. (2) `telopt_d` GMCP `items ? items : ""` / `room_players ? ... : ""` (mixed * vs string) -> empty array `({})`. (3) `room_ldmud` `map_private_key ? ... : this_object()` (string vs object) into `mixed map_key` then `register_map_room`. Proof: three PASS; ?: diags gone (41->35). **Also (2026-11-03, sagenwelt master ?: password):** `valid_database` `(action == "connect") ? "password" : 1` -> split returns; missing `;` after explode. Proof: ?: and Unused cleared.
   **Also (2026-11-03, sagenwelt move ROOM stubs):** `move.lpc` needs `ROOM`/`STD_OBJECT`/`CONTAINER` path macros; add `STD_LIB "room"|"object"|"container"` beside `LIVING` in the catalog global include. Proof: Undefined cleared; move compiles.
+  **Also (2026-11-03, sagenwelt catalog std macros):** replacing
+  `std.h` with `globals_catalog.h` dropped `I_*` / `LOG_*` /
+  `MSGCLASS_*` / `TERM_D` / `SEFUN_DIR`. Restore them (and include
+  `syslog.h`/`message.h`) in the catalog; spell `INPUT_AUTO_POP` and
+  `LOG_ERR` as the headers do; type `receive_message`'s class as `int`
+  and use the `message` parameter. Proof: those Undefined rows cleared;
+  compile 10→13.
 
 **Also (2026-11-03, sticklib living `set` void vs int):** Strategy A `/lib/living` had `varargs void set(...)` while npc/player `set_n_query` and `/lib/player` declare `varargs int set(...)` (`Function set inherited ... void vs int`, 3 files). Same shape as the earlier `attack` fix: living becomes `varargs int` returning 0. Proof: living/player/set_n_query/beggar PASS; those three warnings gone.
 
