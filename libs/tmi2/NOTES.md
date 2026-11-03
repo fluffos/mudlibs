@@ -743,3 +743,11 @@ A room exit named a file the lib does not have, so the player was stuck (a typo,
 
 `channels0505` 在 `#else` 分支对 `flag`/`channel`/`stat` 做 sscanf/赋值却未声明，报 Illegal lvalue / Bad assignment。在 `cmd_channels` 顶部补 `string flag, channel; int stat;`。证明：该类错误清零。
 
+## 深度功能测试（2026-11-03，I3-0505 缺 socket.h）
+
+归档里的 `I3-0505.lpc` 用 `SKT_STYLE_CONNECT_M`/`LISTEN_M` 却未 include `<socket.h>`（现行 `I3.lpc` 有）。补上。证明：Undefined SKT_STYLE_* 清零。
+
+## 深度功能测试（2026-11-03，_go replace_string 类型）
+
+`_go.lpc` 把 `tmp` 声明为 `mapping`，却把 `query("exit_msg/"+dir)` 的字符串塞进去再交给 `replace_string`——FluffOS 报 Bad argument 1。改为 `mixed tmp`。证明：_go 可编译。
+
