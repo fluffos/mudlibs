@@ -20,7 +20,9 @@
 #define DAEMON_DIR      SECURE_DIR "daemons/"               ///< daemons
 #define SECURE_OBJ_DIR  SECURE_DIR "obj/"                   ///< security relevant std objects
 #define SECURE_LIB_DIR  SECURE_DIR "lib/"                   ///< security relevant std library
+#ifndef SEFUN_DIR
 #define SEFUN_DIR       SECURE_DIR "sefuns/"                ///< simul_efun-modules
+#endif
 
 #define __HOME_DIR(x)   "/players/" x[0..0] "/" x "/"       ///< create home directory name
 

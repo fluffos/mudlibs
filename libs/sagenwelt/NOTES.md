@@ -184,3 +184,7 @@ Catalog `simul_efun`：§7.231 双参 `move_object` shim；`syslog`/`creatorp`/`
 
 master 调用 `elderp`/`archp`/`adminp`/`Dlordp`/`done_startup`；menu 调用 `trim_spaces`/`more`/`reg_pat_translate`/`insensitive_regexp`——活 sefun 是 catalog，原先无这些。补桩（权限类委托 `creatorp`；正则类返回 `string *`）。证明：master/menu 上对应 Undefined 清零；compile 14→15。
 
+## 深度功能测试（2026-11-03，char_gen/login/master 档案残渣）
+
+`char_gen_menu`：缺分号、`#include <menu.h>`/`mud_info.h`、宽映射 `races[race][RD_RACE_GENDER]`、档案未写的 `name_menu`/`password`/`email`/`homepage` 用 `modal_simple` 桩补齐；`MI_PI_RACE`/`MI_PI_HOMEPAGE`。login/player：`receive(msg)`（原误用 `message`）、`login_handler(START,0,"")`、`PASSWD_PROMPT`→`PWD_PROMPT`、player 底部粘贴的第二份 login.c 删掉、`env`/`_env` 初始化、`START` 宏、去掉未定义的 `setup_connection`。master `flag()`：`switch (driver_flag)` + `case`；`crash` 参数拼写；`case "move_object"`；`object *anc`→`string *`（`deep_inherit_list`）；`ORIGIN_DIVER`→`ORIGIN_DRIVER`；`*uids` 缺逗号；`sizeof(sp)`→`path`；`connect()` 不再用会展开成 `get_config(...)` 的 `case __MUD_PORT__`。catalog sefun 补 `init_eids`/`simul_efun()`/`file_name(ob,flag)`/`getegid`/`distinct_array`/`m_syslog`/`get_cwd`/`canonical_path`；`globals_catalog` 补 `DFLT_SCR_*`/`RACES_D`/`MAP_D`/`INPUT_SYSTEM`/`__MASTER_FILE__`/`ORIGIN_DRIVER`；`LOG_WARN` 别名；`MSGCLASS_LOGON`；`std_paths` 的 `SEFUN_DIR` 加 ifndef。证明：char_gen/login/player/master_feature/master_orig/catalog simul_efun 错误清零；剩余 FAIL 仅为单独扫描的 sefun 片段（预期）。
+

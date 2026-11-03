@@ -47,6 +47,7 @@ varargs void syslog(int priority, string format, mixed a0, mixed a1, mixed a2, m
 // user defined objects to log corresponding conditions
 #define LOG_ERR             ( 4 << LOG_SHIFT)       ///< error
 #define LOG_WARNING         ( 5 << LOG_SHIFT)       ///< warnings
+#define LOG_WARN            LOG_WARNING             ///< archive alias
 
 // logging for these levels can be suppressed
 #define LOG_NOTICE          ( 6 << LOG_SHIFT)       ///< notices

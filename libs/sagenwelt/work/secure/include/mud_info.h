@@ -20,6 +20,8 @@
 #define MI_PI_NAME      5       ///< name for new players                   (string)
 #define MI_PI_GENDER    6       ///< gender for new players                 (string)
 #define MI_PI_EMAIL     7       ///< email for new players                  (string)
+#define MI_PI_RACE      8       ///< race for new players                   (string)
+#define MI_PI_HOMEPAGE  9       ///< homepage for new players               (string)
 
 // email handling
 #define MI_EMAIL_INVALID    "@inv@"

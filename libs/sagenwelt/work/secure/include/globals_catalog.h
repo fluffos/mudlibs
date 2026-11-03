@@ -8,6 +8,13 @@
 #define FALSE 0
 #define TRUE  1
 
+#define __LIB_VERSION "0.0.0"
+
+/* Archive std.h screen defaults (catalog replaces std.h) */
+#define DFLT_SCR_WIDTH  79
+#define DFLT_SCR_HEIGHT 24
+#define DFLT_SCR_INDENT 4
+
 #define TO this_object
 #define TI this_interactive
 #define TP this_player
@@ -38,7 +45,13 @@
 
 #define SYSLOG_D  DAEMON_DIR "syslogd"
 #define MUD_INFO_D DAEMON_DIR "mud_info"
+#define RACES_D    DAEMON_DIR "racesd"
+#define MAP_D      DAEMON_DIR "mapd"
 #define TERM_D     DAEMON_DIR "termd"
+
+#ifndef __MASTER_FILE__
+#define __MASTER_FILE__ "/secure/obj/master"
+#endif
 
 #define WIZ_SHELL  SECURE_OBJ_DIR "player/shell"
 #define PLYR_SHELL SECURE_OBJ_DIR "player/shell"
@@ -57,6 +70,12 @@
 #define ORIGIN_CALL_OTHER "call_other"
 #define ORIGIN_SIMUL_EFUN "simul"
 #define ORIGIN_EFUN "efun"
+#define ORIGIN_DRIVER "driver"
+#endif
+
+/* Archive valid_override special-file path for input efuns */
+#ifndef INPUT_SYSTEM
+#define INPUT_SYSTEM M_INPUT
 #endif
 
 /* Pieces archive std.h would have provided (catalog replaces std.h) */
