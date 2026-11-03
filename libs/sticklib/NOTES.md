@@ -591,3 +591,7 @@ Strategy A `/lib/living` 的 `varargs void set(...)` 与 NPC/player 的 `varargs
 ## 深度功能测试（2026-11-03，Types in ?:）
 
 `modify_command` 的 `s ? s : FAIL`（string vs int）拆成 `if (!s) return FAIL`；`telopt_d` 的 `items ? items : ""` / `room_players ? ... : ""`（mixed * vs string）改为空数组 `({})`；`room_ldmud` 的 `map_private_key ? ... : this_object()`（string vs object）用 `mixed map_key` 分支。证明：三文件 PASS；该类警告清零（41→35 diags）。
+
+## 深度功能测试（2026-11-03，poker 宽映射）
+
+同 blackjack：`hand = mkmapping(..., tmp×5)` 与 `hand[player, j]` 在 FluffOS 下变成逗号运算符，触发 `Expression has no side effects` 且牌面写错。改为玩家→`allocate(HAND_SIZE)` 数组映射，`hand[k][j]`。证明：poker PASS；该类 side-effects 警告清零（35→27 diags）。
