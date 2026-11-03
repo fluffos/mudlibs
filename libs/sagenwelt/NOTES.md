@@ -138,3 +138,7 @@ FluffOS 不接受函数声明里的 `int x = CONST`（`unexpected L_ASSIGN`）�
 ## 深度功能测试（2026-11-03，move_object/syslog sefun）
 
 Catalog `simul_efun`：§7.231 双参 `move_object` shim；`syslog`/`creatorp`/`cred_cmp`/`HOME_DIR`/`set_this_player` 桩。`deep_inherit_list` 结果改为 `string *`；`efun::move_object` 改走 sefun；`start_shell()` 改为 `call_other`。证明：`move.lpc` / shell 相关诊断清除。
+
+## 深度功能测试（2026-11-03，syslogd/mud_info）
+
+映射字面量内非法 `;`（`]);`→`])`）；`syslogd` 补 `privs.h`/`syslog.h`，`PO() =`→`==`，`iLOG_NOTICE`/`brewk`/`get_uid` 修正；`mud_info` 含 `privs.h` + `is_wiz` 桩；catalog sefun 补 `itoa`/`query_host_port`（安全、无 bind）。证明：两 daemon 不再因 BB_UID/映射 `;` 失败。

@@ -9,7 +9,7 @@
 #ifndef __SEC_SYSLOG_H
 #define __SEC_SYSLOG_H
 
-varargs void syslog(int priority, string format, mixed *args...);
+varargs void syslog(int priority, string format, mixed a0, mixed a1, mixed a2, mixed a3, mixed a4);
 
 #define LOG_SHIFT             8                     // internal use only
 

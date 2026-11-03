@@ -34,6 +34,13 @@
 #define MUD_INFO_D DAEMON_DIR "mud_info"
 
 #include "config.h"
+#ifndef __MUD_NAME__
+#define __MUD_NAME__ "Sagenwelt"
+#endif
+#ifndef __MUD_IP__
+#define __MUD_IP__ "127.0.0.1"
+#endif
+
 
 #define WIZ_SHELL  SECURE_OBJ_DIR "player/shell"
 #define PLYR_SHELL SECURE_OBJ_DIR "player/shell"
