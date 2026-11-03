@@ -166,6 +166,13 @@ get_full_player_data(object x)
 // is defined so that Kelgath has both read and write access (like the
 // coders on level 200+ had), and Foobar has the read access.
 
+/* FluffOS stubs for LDMud-only master efuns / hooks. */
+varargs mixed rename_object(mixed a, mixed b) { return 0; }
+varargs mixed set_driver_hook(mixed a, mixed b) { return 0; }
+varargs mixed unbound_lambda(mixed a, mixed b) { return 0; }
+varargs mixed symbol_function(mixed a, mixed b) { return 0; }
+varargs mixed attach_erq_demon(mixed a, mixed b) { return 0; }
+
 nomask status
 load_access_data(string dir)
 {
@@ -849,7 +856,7 @@ protected string _auto_include_hook (string base_file, string current_file, int 
     if(base_file[0] != '/')
 	base_file = "/" + base_file;
 
-    if(member((["/lib/light.lpc", "/secure/simul_efun.lpc", "/secure/simul_efun/amylaar.lpc", "/secure/master.lpc" ]), base_file))
+    if (member_array(base_file, ({ "/lib/light.lpc", "/secure/simul_efun.lpc", "/secure/simul_efun/amylaar.lpc", "/secure/master.lpc" })) >= 0)
 	return 0;
 
     return "virtual inherit \"/lib/light\";\n";
@@ -876,133 +883,12 @@ protected string _auto_include_hook (string base_file, string current_file, int 
 nomask void
 inaugurate_master(int arg)
 {
-    if (arg == 0) {
+    /* FluffOS: LDMud set_driver_hook / unbound_lambda / #\' not ported.
+     * Live master is /catalog/master. Keep reboot time only. */
+    if (arg == 0)
 	_reboot_time = time();
-    } else {
-	_reboot_time = (int) "/secure/simul_efun"
-	-> query_uptime();
-    }
-
-    // Updated efun308 to set_environment
-
-    set_driver_hook(
-      H_MOVE_OBJECT0,
-      unbound_lambda( ({'item, 'dest}), ({#',,
-	  ({#'efun::set_environment, 'item, 'dest}),
-	  ({#'?, ({#'living, 'item}), ({#',,
-	      ({#'efun::set_this_player, 'item}),
-	      ({#'call_other, 'dest, "init"}),
-	      ({#'?, ({#'!=, ({#'environment, 'item}), 'dest}), ({#'return})}),
-	    }) }),
-	  ({#'=, 'others, ({#'all_inventory, 'dest}) }),
-	  ({#'=, ({#'[, 'others, ({#'member, 'others, 'item}) }), 0}),
-	  ({#'filter, 'others,
-	    ({#'bind_lambda,
-	      unbound_lambda( ({'ob, 'item}),
-		({#'?, ({#'living, 'ob}), ({#',,
-		    ({#'efun::set_this_player, 'ob}),
-		    ({#'call_other, 'item, "init"}),
-		  }) })
-	      )
-	    }),
-	    'item,
-	  }),
-	  ({#'?, ({#'living, 'item}), ({#',,
-	      ({#'efun::set_this_player, 'item}),
-	      ({#'filter_objects, 'others, "init"}),
-	    }) }),
-	  ({#'?, ({#'living, 'dest}), ({#',,
-	      ({#'efun::set_this_player, 'dest}),
-	      ({#'call_other, 'item, "init"}),
-	    }) }),
-	}) )
-    );
-
-    // Stick-specific; don't care about flags here. -+ Doomdark +-
-
-    set_driver_hook(
-      H_LOAD_UIDS,
-      unbound_lambda( ({'object_name}),
-	({#'?,
-	  ({#'==,
-	    ({#'sscanf, 'object_name, "home/%s", 'wiz_name}),
-	    1,
-	  }),
-	  ({#'?,
-	    ({#'==,
-	      ({#'sscanf, 'wiz_name, "%s/%s", 'start, 'trailer}),
-	      2,
-	    }),
-	    ({#'&&, ({#'sizeof, 'start}), 'start}),
-	    'wiz_name
-	  }),
-
-	  ({#'==,
-	    ({#'sscanf, 'object_name, "areas/%s", 'area_name}),
-	    1,
-	  }),
-	  ({#'?,
-	    ({#'==,
-	      ({#'sscanf, 'area_name, "%s/%s", 'start, 'trailer}),
-	      2,
-	    }),
-	    ({#'&&, ({#'sizeof, 'start}), 'start}),
-	    'area_name
-	  }),
-
-	  ({#'&&,
-	    ({#'!=, ({#'[..], 'object_name, 0, 3}), "www/"}),
-	    ({#'!=, ({#'[..], 'object_name, 0, 4}), "open/"}),
-	  })
-	})
-      )
-    );
-    set_driver_hook(
-      H_CLONE_UIDS,
-      unbound_lambda( ({'blueprint, 'new_name}), ({
-	  #'||,
-	  ({#'creator, 'blueprint}),
-	  ({#'creator, ({#'previous_object})}),
-	  1
-	}) )
-    );
-
-    // Note; no arguments here; this way will call lfuns of the object in
-    // question?
-    // These lambdas will call "create()" if it's defined, otherwise "reset(0)".
-
-    set_driver_hook(H_CREATE_SUPER, 0);
-    // What would we need that for? Idea of masking create is to block it,
-    // right??
-    set_driver_hook(H_CREATE_OB, unbound_lambda( ({ 'x }),
-	({ #'?, ({ #'function_exists, "create", 'x }),
-	  ({ #'call_other, 'x, "create" }),
-	  ({ #'call_other, 'x, "reset", 0 }) }) ));
-    set_driver_hook(H_CREATE_CLONE, unbound_lambda( ({ 'x }),
-	({ #'?, ({ #'function_exists, "create", 'x }),
-	  ({ #'call_other, 'x, "create" }),
-	  ({ #'call_other, 'x, "reset", 0 }) }) ));
-
-    set_driver_hook(H_RESET,        "reset");
-    set_driver_hook(H_CLEAN_UP,     "clean_up");
-
-    set_driver_hook(H_MODIFY_COMMAND, "modify_command");
-    set_driver_hook(H_MODIFY_COMMAND_FNAME, "modify_command");
-
-    set_driver_hook(H_NOTIFY_FAIL, unbound_lambda( ({ 'cmd }),
-	({ #'call_other, "/bin/daemons/remarks",
-	  "query_random_notify_fail", 'cmd }) ));
-
-    set_driver_hook(H_PRINT_PROMPT, "print_prompt");
-
-    set_driver_hook(H_INCLUDE_DIRS, (: _include_dirs_hook :));
-
-    set_driver_hook(H_AUTO_INCLUDE, (: _auto_include_hook :));
-
-    set_driver_hook(H_TELNET_NEG, "telopt_negotiate");
-
-    if (!_access) create();
 }
+
 
 /*
  * Function name:   get_root_uid
