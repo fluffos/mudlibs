@@ -1366,6 +1366,8 @@ the rooms, more than a 2-5 s `maximum evaluation cost` for its cold first load (
 
 **Also (2026-10-23):** SKIP treated `/open/` as a wizard home. dreamofseven `open/.../skill/2.lpc` kept `receive_damage("ap",-200)` (error policy); kxkj / kxkjii2 `open/steeple/obj/npc/npc48.lpc` kept `receive_wound("force", 10000)` (force not in gin/kee/sen). Dropped `open` from SKIP; 3 calls. Proof: skill/NPC load; `receive_wound("force",…)` catches, `add("force", -10000)` ok.
 
+
+**Also (2026-11-03, xkx100utf8 receive_damage pools):** upstream branch `cursor/receive-damage-pools-2548` rewrites fota2/muding/13jiasha `receive_damage("neili"|"jingli",…)` → `add(…,-N)` (damage.lpc jing/qi only). PR open blocked for this agent (403); pin after merge.
 ### 7.242 `message_vision(msg, environment(me), me)`: the room as the actor (poison conditions, 2026-10-15)
 **Symptom:** `Bad argument 3 to EFUN replace_string() Expected: string, Got: int(0)` from `sanpoison`, `emerald_poison`, `xianglu-du`, `laugh` and a few NPCs, on every heart beat while the condition lasts.
 **Cause:** the argument order of `message("vision", msg, environment(me), me)` carried over to `message_vision()`, whose first object is the actor: it calls the room's `name()`, gets 0, and `replace_string(msg, "$N", 0)` errors. In a condition the error comes before `apply_condition(name, duration - 1)`, so the condition never runs out, and the rest of the heart beat (healing) is skipped every tick; conditions are saved, so it survives a relogin.
