@@ -143,6 +143,8 @@ detection.
 
 **Also (2026-11-03, sticklib catalog LDMud probes + find_name varargs + FOCUS_STONE):** `functionlist`→`functions`, `creator`→`getuid`, `query_next_reset` approx, charset no-ops; `find_name` 2nd arg optional; `GENERIC_FOCUS_STONE` → duel crystal. Proof: HEAD _wear/_flist/_stat/_predict/dragon_corpse/tell_me FAIL; tree loads.
 
+**Also (2026-11-03, sticklib amhd last_attacker):** assign without declaration → `object last_attacker;`. Proof: HEAD Undefined; tree loads.
+
 
   - `command(str, ob)`, `transfer()`, `add_verb()`: see
     §7.172–§7.174.

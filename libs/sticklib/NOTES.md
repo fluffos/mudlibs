@@ -524,3 +524,7 @@ FluffOS 的 `localtime` 必须带时间戳。`timezone_d` 的 `localtime()[8]` �
 ## 深度功能测试（2026-11-03，find_name/functionlist/creator/charset/FOCUS）
 
 `find_name` 第二参改为 varargs（`_wear` 只传对象）。catalog 补 `functionlist`→`functions`、`creator`→`getuid`、`query_next_reset` 近似、`get/set_connection_charset` 空操作。`GENERIC_FOCUS_STONE` 指向 duel crystal。证明：HEAD 各宿主失败；树 _wear/_flist/_stat/_predict/dragon_corpse/tell_me 可加载。
+
+## 深度功能测试（2026-11-03，amhd last_attacker）
+
+`hit_player` 写 `last_attacker` 但未声明。补 `object last_attacker`。证明：HEAD Undefined；树 amhd 可加载。
