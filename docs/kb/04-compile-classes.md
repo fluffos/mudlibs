@@ -238,6 +238,10 @@ detection.
   arrive twice (`f() inherited from both`); define `THIEF_NO_INHERIT` before
   the include. Proof: HEAD equipped_group_npc/tumble FAIL / mark double-inherit
   warnings; tree PASS / class cleared.
+  **Also (2026-11-03, sticklib voter `long` arity):** thieves
+  `obj/voter.lpc` overrides `id.lpc`'s `mixed long(mixed, mixed)` with
+  `void long(string what)`. Add `varargs` on the override (KB table).
+  Proof: arity warning gone; tree voter compiles.
 - **`Type of returned value doesn't match function return type ( int vs
   void )`**: a `void` function (or one with no type, which this driver reads
   as void) returns a value. MudOS compiled it and passed the value on, and

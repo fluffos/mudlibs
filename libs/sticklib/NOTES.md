@@ -612,3 +612,7 @@ Strategy A `/lib/living` 的 `varargs void set(...)` 与 NPC/player 的 `varargs
 
 `thief_mark_new` 在 `inherit criticals` 之后再 `#include "thief.h"`，而 criticals 已拉过 mark 辅助；未像 `_stab`/`_tth`/`tumble` 那样 `#define THIEF_NO_INHERIT`，触发 `f() inherited from both …`（双 inherit）。补守卫。证明：该类双 inherit 警告清零；warnings 17→15 diags（余 redeclaration + voter long）。
 
+## 深度功能测试（2026-11-03，voter long 形参个数）
+
+`guilds/thieves/obj/voter.lpc` 的 `void long(string what)` 覆盖 `id.lpc` 的 `mixed long(mixed, mixed)`，FluffOS 报形参数量不符。给覆盖加 `varargs`（KB 04 表项）。证明：voter 该类警告清零；warnings 15→14 diags（仅剩 redeclaration）。
+
