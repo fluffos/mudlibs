@@ -147,6 +147,8 @@ detection.
 
 **Also (2026-11-03, sticklib tail sefun + update_attackers):** drop LDMud `bytes`/`__VERSION__` branch of `tail`; stub `update_attackers` on Strategy A living. Proof: HEAD tail unexpected L_IDENTIFIER; tree loads.
 
+**Also (2026-11-03, sticklib nosave on functions):** FluffOS forbids `nosave` on functions (`Illegal to declare nosave function`). Strip from function decls only (keep on variables): virtual_server, player, amylaar. Proof: those warnings gone; virtual_server still loads.
+
 
   - `command(str, ob)`, `transfer()`, `add_verb()`: see
     §7.172–§7.174.

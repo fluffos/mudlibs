@@ -532,3 +532,7 @@ FluffOS 的 `localtime` 必须带时间戳。`timezone_d` 的 `localtime()[8]` �
 ## 深度功能测试（2026-11-03，tail sefun + update_attackers）
 
 `secure/simul_efun/tail` 的 LDMud `bytes`/`__VERSION__` 分支在 FluffOS 下选错路径；改成字符串版并用 `strsrch`。`/lib/living` 补 `update_attackers` 空实现。证明：HEAD tail 语法错；树 tail 可加载。
+
+## 深度功能测试（2026-11-03，nosave 函数修饰）
+
+FluffOS 禁止函数上的 `nosave`。从 `virtual_server`/`player`/`amylaar` 的函数声明去掉；变量上的 `nosave` 保留。证明：警告从 virtual_server/player 消失；virtual_server 仍可加载。
