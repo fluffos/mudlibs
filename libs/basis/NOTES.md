@@ -629,3 +629,7 @@ the console.
 ## 深度功能测试（2026-11-03，communications mc_* include）
 
 `adm/obj/simul_efun/communications.lpc` 使用 `mc_say`/`mc_shout`/`mc_tell` 却未包含定义它们的 `<message.h>`。补 `#include <message.h>`。证明：HEAD `Undefined variable mc_say` FAIL；tree PASS。`history.lpc`/`tsh.lpc` 仍为既有未完成 shell 残片（NOTES 已记）。
+
+## 深度功能测试（2026-11-03，existence PLAYER_D include）
+
+`existence.lpc` 的 `user_exists()` 使用 `PLAYER_D` 却未包含 `<daemons.h>`。补 include。证明：HEAD `Undefined variable PLAYER_D` FAIL；tree PASS。

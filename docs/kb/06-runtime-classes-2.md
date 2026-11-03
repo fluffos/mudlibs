@@ -1304,6 +1304,10 @@ an error; the driver flags each one as `Expression has no side effects`, so read
 **Also (2026-11-03, nirv quests how_sorted + map #'[,):** nosave `_stat_sort_key`/`_stat_sort_asc` + `_stat_row_cmp` replace lambdas that closed over `how_sorted`; `map(arr, #'[, KEY)` → `(: $1[KEY] :)`. Proof shape: same Illegal `#` class.
 
 **Also (2026-11-03, basis communications mc_*):** missing `#include <message.h>` for `mc_say`/`mc_shout`/`mc_tell`. Proof: HEAD FAIL Undefined variable mc_say; tree PASS.
+
+**Also (2026-11-03, basis existence PLAYER_D):** `#include <daemons.h>`. Proof: HEAD FAIL Undefined PLAYER_D; tree PASS.
+
+**Also (2026-11-03, dynamic sort locals via nosave):** morg `_dump_wizlist(sortby)`, aoh `sort_mapping(sort_fun,to_sort)`, nirv `array.lpc` sort closures — stash in nosave + named cmp/`evaluate` (FluffOS forbids locals in functionals).
 ### 7.235 A master guard on `SIMUL_EFUN_OB` gives every object uid `""` when the config loads another simul_efun file (hy, hy5, 2026-10-06)
 **Symptom:** a link-dead player is never removed: `quit` after a disconnect errors `你()不能摧毁其他的使用者` from `feature/move.lpc`
 `remove()` and prints the leave message twice; `getuid()`/`geteuid()` of every object, `/cmds` included, is `""`. **Cause:** the

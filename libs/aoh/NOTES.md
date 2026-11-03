@@ -4964,3 +4964,7 @@ Four files still had `if (x = CONST)` after earlier sweeps: pirate `troom` pedes
 ## 深度功能测试（2026-11-03，#'ident on sort/map lines）
 
 `froffice`/`room05`/`moneytool`/`inetd`：`#'capitalize`/`#'mt_stats`/`#'do_match` → `(: … :)`。`guild/member` 动态 `sort_fun` lambda 仍留。
+
+## 深度功能测试（2026-11-03，guild sort_mapping）
+
+`std/guild/member` 与 `p/guilds/.../member`：`sort_mapping` 用 nosave `_sm_fun`/`_sm_map` + `_sm_cmp`/`evaluate`；参数类型 `closure`→`mixed`。对象仍被文件前部其它 LDMud 语法挡住。

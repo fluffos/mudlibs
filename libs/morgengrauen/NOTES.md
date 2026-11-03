@@ -299,3 +299,7 @@ The code of this lib writes logs into 10 subdirectories of `log/`: `log/ARCH/bbm
 ## 深度功能测试（2026-11-03，sort 行内 #'ident + teller lambda）
 
 `materialdb`/`wahlmaschine`/`sinmaster`/`dancetool`/`channel`：`map`/`filter` 上的 `#'ident` → `(: ident :)`。`teller/t_cmds`/`t_base`：按 IP / `object_name` 的 LDMud lambda → `strcmp` 方向（`#'<`=降序）。剩余：`simul_efun` 含 `sortby` 局部变量的 lambda、动态 `sort_fun`。
+
+## 深度功能测试（2026-11-03，_dump_wizlist sortby）
+
+`simul_efun`（及 spare）`_dump_wizlist`：nosave `_wizlist_sortby` + `_wizlist_cmp` 取代闭包局部 `sortby` 的 LDMud lambda（`#'<`=降序）。
