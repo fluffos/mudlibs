@@ -1257,6 +1257,8 @@ The same onboarding rewrote `move_object(m = clone_object(f), dest)` as `m = clo
 most NPC spawners): `m` got the efun's 0 and the next `m->set_name()` failed. The shim returns the moved object; check the
 rewrite against raw (`grep -rn '= *clone_object([^;]*)->move_object('`).
 
+**Also (2026-11-03, sagenwelt):** catalog sefun `varargs move_object(item, dest)` + `syslog`/`creatorp` stubs; `object *` from `deep_inherit_list` → `string *`; drop `efun::` so the shim runs.
+
 ### 7.232 A fragment rebuilt as a standalone class (holymission player, 2026-10-06)
 
 **Symptom:** the player has no `attack()`/`run_away()`/`query_level()`; `this_object()->attack()` in its heart_beat returns 0,

@@ -134,3 +134,7 @@ FluffOS 不接受函数声明里的 `int x = CONST`（`unexpected L_ASSIGN`）�
 ## 深度功能测试（2026-11-03，inherit 宏 / 缺头文件）
 
 `globals_catalog.h` 补上 `P_INPUT`/`MOVE`/`LIVING`/`TO` 等路径与快捷宏（不拉坏掉的 `simul_efun.h`）；`playes/inp_sys.h` 拼写改为 `player/`；补空 stub：`connection.h`/`shell_sys.h`/`menus.h`/`std_defs.h`；`__ADMIN_EMAIL` 相邻字符串改为 `+`。证明：inherit 的 `expecting L_STRING` 诊断消失。
+
+## 深度功能测试（2026-11-03，move_object/syslog sefun）
+
+Catalog `simul_efun`：§7.231 双参 `move_object` shim；`syslog`/`creatorp`/`cred_cmp`/`HOME_DIR`/`set_this_player` 桩。`deep_inherit_list` 结果改为 `string *`；`efun::move_object` 改走 sefun；`start_shell()` 改为 `call_other`。证明：`move.lpc` / shell 相关诊断清除。

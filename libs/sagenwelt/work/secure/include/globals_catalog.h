@@ -35,4 +35,7 @@
 
 #include "config.h"
 
+#define WIZ_SHELL  SECURE_OBJ_DIR "player/shell"
+#define PLYR_SHELL SECURE_OBJ_DIR "player/shell"
+
 #endif
