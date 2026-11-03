@@ -512,3 +512,7 @@ FluffOS 的 `localtime` 必须带时间戳。`timezone_d` 的 `localtime()[8]` �
 ## 深度功能测试（2026-11-03，vg_off knock tell_here）
 
 `knock(string who)` 把名字串塞进 `tell_here` 的 me 位（要 object）。先 `find_player`/`present`。证明：HEAD Bad type；树 vg_off 可加载。
+
+## 深度功能测试（2026-11-03，area_poison lambda）
+
+`call_out(lambda(…destruct…))` 改为命名 `expire_poison`。证明：HEAD Undefined lambda；树可加载。

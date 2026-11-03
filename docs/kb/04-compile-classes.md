@@ -137,6 +137,8 @@ detection.
 
 **Also (2026-11-03, sticklib vg_off knock):** `tell_here(..., who, …)` with `string who` → resolve to object via `find_player`/`present` (arg 5 is `object me`). Proof: HEAD Bad type; tree loads.
 
+**Also (2026-11-03, sticklib area_poison):** `call_out(lambda(…destruct…))` → named `expire_poison` (no LDMud `lambda()`). Proof: HEAD Undefined; tree loads.
+
 
   - `command(str, ob)`, `transfer()`, `add_verb()`: see
     §7.172–§7.174.
