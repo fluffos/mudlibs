@@ -4980,3 +4980,7 @@ FluffOS 保留 `buffer` 为类型；`string buffer` 局部/参数改为 `buf`。
 ## 深度功能测试（2026-11-03，#'Ident → (: Ident :)）
 
 AddDetail/AddSpell/AddRoomCmd 等处的裸 `#'IntLong`/`#'MyCast`/`#'cmd_join` 改为 `(: … :)`。`({ #'call_other, …})` 等 LDMud 数组闭包留给后续。证明：16+1 文件改写。
+
+## 深度功能测试（2026-11-03，lambda/#' alist）
+
+`store`/`description`/`equipment`/`socketd`/`raceportal`/`home`/`money_d`/`mail` 等处的 `lambda(({'x}), ({#'fn,…}))` 改为 `(: … :)`；`map(#'&)`/`#'>`/`#'>=` 等同改。留下 `CL_PROGN #',` 宏与 `quest_control`/`trading`/`money` 复杂闭包。证明：目标文件无 `Illegal #` 于已改调用点。

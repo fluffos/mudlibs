@@ -269,17 +269,17 @@ public object New(int type, mixed host, int port, closure cb, int opts) {
 
   switch (type) {
     case TCP_OPEN:
-      lookup(host, lambda(({ 'msg }), ({ #'looked_up, 'msg, ufd })));
+      lookup(host, (: looked_up($1, ufd) :));
       break;
 
     case TCP_LISTEN:
       send_erq(ERQ_LISTEN, ({ port/256, port&255 }),
-        lambda(({ 'msg }), ({ #'socket_cb, 'msg, ufd })));
+        (: socket_cb($1, ufd) :));
       break;
 
     case UDP:
       send_erq(ERQ_OPEN_UDP, ({ port/256, port&255 }),
-        lambda(({ 'msg }), ({ #'socket_cb, 'msg, ufd }))); /*'*/
+        (: socket_cb($1, ufd) :));
   }
 
   return so;
@@ -363,7 +363,7 @@ object socket_accept(int ufd, closure cb) {
   }
 
   send_erq(ERQ_ACCEPT, sockets[fd, S_TICKET],
-    lambda(({ 'msg /*'*/}), ({ #'accept_cb /*'*/, 'msg /*'*/, UNIQUE_ID(so) })));
+    (: accept_cb($1, UNIQUE_ID(so)) :));
 
   return so;
 }
@@ -382,12 +382,9 @@ int udp_write(int ufd, string host, int port, mixed umsg) {
   if (sockets[fd, S_TYPE] != UDP)
     RAISE_ERROR("udp_write() on a non-udp socket\n");
 
-  lookup(host, lambda(({ 'msg }),
-    ({ (: socket_write :), ufd, umsg,
-      ({ #'+, ({ #'[..], 'msg, 1, 4 }),
-              ({ #'({, port / 256, port & 255 })
-      })
-    }) ));
+  lookup(host, (: socket_write(ufd, umsg,
+      $1[1..4] + ({ port / 256, port & 255 })
+    ) :));
   return 1;
 }
 
@@ -416,7 +413,7 @@ int socket_close(int ufd) {
     // never kill twice
     sockets[fd, S_STATE] = S_CLOSING;
     send_erq(ERQ_KILL, sockets[fd, S_TICKET] + ({ 0, 0, 0, 0 }),
-      lambda(({ 'msg /*'*/ }), ({ #'socket_cb /*'*/, 'msg /*'*/, ufd })));
+      (: socket_cb($1, ufd) :));
   }
   else {
     so = sockets[fd, S_SOCKOBJ];
@@ -458,7 +455,7 @@ nosave void looked_up(int* msg, int ufd) {
 
   send_erq(ERQ_OPEN_TCP, msg[1..4] +
     ({ sockets[fd, S_PORT] / 256, sockets[fd, S_PORT] & 255 }),
-    lambda(({ 'mess /*'*/}), ({ #'socket_cb /*'*/, 'mess /*'*/, ufd })));
+    (: socket_cb($1, ufd) :));
 }
 
 // most of data gets here from the erq (see write_cb)
@@ -469,7 +466,7 @@ nosave void socket_cb(int* msg, int ufd) {
 
   debug("sockD::socket_cb(%O, %O)", msg, ufd);
   if (!m_contains(&fd, used_fd, ufd)) return; // should not happen
-  msg   = map(msg, #'& /*'*/, 255);
+  msg   = map(msg, (: $1 & 255 :));
   type  = sockets[fd, S_TYPE];
   state = sockets[fd, S_STATE];
   opts  = sockets[fd, S_OPTS];
@@ -611,7 +608,7 @@ nosave void write_cb(int* msg, int ufd, int offset) {
     case ERQ_E_INCOMPLETE:
       debug("ERQ_E_INCOMPLETE");
       sockets[fd, S_WAITS] = S_WAITS_INCOM;
-      msg = map(msg, #'& /*'*/, 255);
+      msg = map(msg, (: $1 & 255 :));
       x = (((msg[1] << 8) + msg[2] << 8) + msg[3] << 8) + msg[4];
       callback(ufd, SOCKET_INCOMPLETE, ({ x, offset + x }) );
       return;
@@ -785,7 +782,7 @@ nosave void flush(int ufd) {
   data = sockets[fd, S_TICKET] + output[i][OUT_DATA];
   debug("sending");
   ret = send_erq(ERQ_SEND, data,
-    lambda(({ 'msg /*'*/}), ({ #'write_cb /*'*/, 'msg /*'*/, ufd, output[i][OUT_SIZE] })));
+    (: write_cb($1, ufd, output[i][OUT_SIZE]) :));
   if (!ret) {
     debug("got send_erg() error, retry in 1 second");
     call_out("flush", 1, ufd);
