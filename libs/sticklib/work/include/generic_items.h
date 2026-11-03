@@ -23,6 +23,7 @@
 #define	GENERIC_FAKE_DEATH              "/std/obj/fake_death"
 #define	GENERIC_FINGER_TOOL             "/std/obj/finger"
 #define	GENERIC_FLOWERS                 "/std/obj/flowers"
+#define	GENERIC_FOCUS_STONE             "/areas/tristeza/duel/obj/crystal"
 #define	GENERIC_FROBOZZ_STATUE          "/std/obj/frobozz_statue"
 #define	GENERIC_HEAL_OBJECT             "/std/obj/heal_object"
 #define	GENERIC_HEAL_POTION             "/std/obj/heal_potion"

@@ -141,6 +141,8 @@ detection.
 
 **Also (2026-11-03, sticklib AREA_TRISTEZA_FNAME):** `generic_rooms.h` references undefined `AREA_TRISTEZA_FNAME` → unexpected L_STRING at `GENERIC_ROOM_SHOP_FNAME` uses. Alias in `areas.h` to `"/areas/tristeza/"`. Proof: HEAD collector FAIL; tree loads.
 
+**Also (2026-11-03, sticklib catalog LDMud probes + find_name varargs + FOCUS_STONE):** `functionlist`→`functions`, `creator`→`getuid`, `query_next_reset` approx, charset no-ops; `find_name` 2nd arg optional; `GENERIC_FOCUS_STONE` → duel crystal. Proof: HEAD _wear/_flist/_stat/_predict/dragon_corpse/tell_me FAIL; tree loads.
+
 
   - `command(str, ob)`, `transfer()`, `add_verb()`: see
     §7.172–§7.174.

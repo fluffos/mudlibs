@@ -520,3 +520,7 @@ FluffOS 的 `localtime` 必须带时间戳。`timezone_d` 的 `localtime()[8]` �
 ## 深度功能测试（2026-11-03，AREA_TRISTEZA_FNAME）
 
 `generic_rooms.h` 用 `AREA_TRISTEZA_FNAME`，`areas.h` 未定义 → collector 的 `== GENERIC_ROOM_SHOP_FNAME` 变 unexpected L_STRING。补同路径别名。证明：HEAD 语法错；树 collector 可加载。
+
+## 深度功能测试（2026-11-03，find_name/functionlist/creator/charset/FOCUS）
+
+`find_name` 第二参改为 varargs（`_wear` 只传对象）。catalog 补 `functionlist`→`functions`、`creator`→`getuid`、`query_next_reset` 近似、`get/set_connection_charset` 空操作。`GENERIC_FOCUS_STONE` 指向 duel crystal。证明：HEAD 各宿主失败；树 _wear/_flist/_stat/_predict/dragon_corpse/tell_me 可加载。
