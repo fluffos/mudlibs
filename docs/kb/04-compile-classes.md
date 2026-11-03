@@ -128,6 +128,8 @@ detection.
     `secure/master/log_file`, `lib/player` login; `cat`'s LDMud `txt & "\n"` →
     `sizeof(explode(txt, "\n")) - 1`. Proof: HEAD Unknown/Undefined efun; tree loads.
 
+**Also (2026-11-03, sticklib living query_max_hp):** Strategy A `/lib/living` had `query_mhp` only; priests/thieves/score call `query_max_hp`. Alias → `max_hp`. Proof: HEAD outer_guard Undefined; tree loads max=3500.
+
   - `command(str, ob)`, `transfer()`, `add_verb()`: see
     §7.172–§7.174.
 - **`new` and `class` are always reserved words.** Rename parameters or

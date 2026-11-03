@@ -492,3 +492,7 @@ Catalog 补 `master_object`/`wizlist`/`localcmd`/`unshadow`/`varargs snoop`；`/
 ## 深度功能测试（2026-11-03，blackjack/restore/basement 宽映射）
 
 黑杰克 `hand` 从 LDMud `mkmapping` 宽映射改为玩家→数组；`restore` 的 `stats`、`basement` 的 `blocked` 同改。证明：HEAD restore/basement 宽映射语法错、blackjack 侧效警告；树均可加载且 blackjack 无 side-effects 警告。
+
+## 深度功能测试（2026-11-03，living query_max_hp）
+
+Strategy A `/lib/living` 只有 `query_mhp`，祭司 outer_guard 等调用 `query_max_hp`。补别名返回 `max_hp`。证明：HEAD Undefined；树 outer_guard 可加载且 max=3500。
