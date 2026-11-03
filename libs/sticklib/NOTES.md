@@ -488,3 +488,7 @@ Catalog 补 `master_object`/`wizlist`/`localcmd`/`unshadow`/`varargs snoop`；`/
 ## 深度功能测试（2026-11-03，tower AREA_TRISTEZA include）
 
 `#include AREA_TRISTEZA "DEFS.h"` 在 FluffOS 不拼接。两处 tower 改为绝对路径。证明：HEAD Cannot read #include；树两处可加载。
+
+## 深度功能测试（2026-11-03，blackjack/restore/basement 宽映射）
+
+黑杰克 `hand` 从 LDMud `mkmapping` 宽映射改为玩家→数组；`restore` 的 `stats`、`basement` 的 `blocked` 同改。证明：HEAD restore/basement 宽映射语法错、blackjack 侧效警告；树均可加载且 blackjack 无 side-effects 警告。

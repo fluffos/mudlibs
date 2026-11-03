@@ -1307,6 +1307,8 @@ an error; the driver flags each one as `Expression has no side effects`, so read
 
 **Also (2026-11-03, basis existence PLAYER_D):** `#include <daemons.h>`. Proof: HEAD FAIL Undefined PLAYER_D; tree PASS.
 
+**Also (2026-11-03, sticklib blackjack/restore/basement):** blackjack `mkmapping` wide hands → map-of-arrays; restore `stats` / basement `blocked` writers. Proof: HEAD restore/basement `;`; tree loads, blackjack side-effect warnings gone.
+
 **Also (2026-11-03, sticklib smoked/voter/druids slave):** smoke daemon 8-col map + missing-key guard; voter type-0 arrays / type-1 int tallies; druids `temp_data` like priests. Proof: HEAD unexpected `;`; tree loads.
 
 **Also (2026-11-03, sticklib priests delay/skill_saver/slave/target/_log):** nested + flat wide maps → arrays; `correct_time` takes array row from FluffOS `walk_mapping`; `allocate_mapping(0,2)`→`([])`. Proof: HEAD unexpected `;`; tree loads.
