@@ -182,3 +182,7 @@ Strategy A catalog 补 `filter_objects`/`map_objects`/`ls`/`tail`/`wizlist`/`sno
 ## 深度功能测试（2026-11-03，bind_lambda）
 
 spare/simul_efun_ldmud/master_ldmud 的 bind_lambda(#'…) → bind((: … :), …)。
+
+## 深度功能测试（2026-11-03，LDMud efun stubs）
+
+`simul_efun_ldmud`/`spare`/`master_ldmud`：去掉 `efun::set_this_player/object`，文件顶部 FluffOS 空桩；`raise_error`→`error`；`object_name`→`file_name`。证明：set_this_*/get_extra_wizinfo 诊断清除。

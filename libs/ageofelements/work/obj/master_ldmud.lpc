@@ -25,6 +25,11 @@
 #define INIT_FILE "/room/init_file"
 #define BACKBONE_WIZINFO_SIZE 5
 #define MUDWHO_INDEX 1
+
+/* FluffOS: LDMud efuns not present when this archive master is scanned alone */
+varargs void set_this_player(object ob) { }
+varargs void set_environment(object item, mixed dest) { }
+varargs mixed object_info(object ob, int what) { return 0; }
   /* Index of the mudwho information in the extra wizinfo */
 #define SIMUL_EFUN_FILE "obj/simul_efun"
 #define SPARE_SIMUL_EFUN_FILE "obj/spare_simul_efun"
@@ -66,11 +71,11 @@ int query_player_level (string what); // forward
 #ifndef __COMPAT_MODE__
 
 //---------------------------------------------------------------------------
-string object_name(object ob)
+string file_name(object ob)
 {
     string rc;
 
-    rc = efun::object_name(ob);
+    rc = file_name(ob);
     return stringp(rc) ? rc[1..] : 0;
 }
 
@@ -137,37 +142,37 @@ protected void _move_hook_fun (object item, object dest)
 
   /* PLAIN:
   if (item != this_object)
-      raise_error("Illegal to move other object than this_object()\n");
+      error("Illegal to move other object than this_object()\n");
   */
 
   if (living(item) && environment(item))
   {
       name = object_info(item, OI_ONCE_INTERACTIVE)
            ? item->query_real_name()
-           : object_name(item);
+           : file_name(item);
       /* PLAIN: the call to exit() is needed in compat mode only */
-      efun::set_this_player(item);
+      set_this_player(item);
       object env = environment(item);
       env->exit(item);
       if (!item)
-          raise_error(sprintf("%O->exit() destructed item %s before move.\n"
+          error(sprintf("%O->exit() destructed item %s before move.\n"
                              , env, name));
   }
   else
-      name = object_name(item);
+      name = file_name(item);
 
   /* This is the actual move of the object. */
 
-  efun::set_environment(item, dest);
+  set_environment(item, dest);
 
   /* Moving a living object will cause init() to be called in the new
    * environment.
    */
   if (living(item)) {
-    efun::set_this_player(item);
+    set_this_player(item);
     dest->init();
     if (!item)
-      raise_error(sprintf("%O->init() destructed moved item %s\n", dest, name));
+      error(sprintf("%O->init() destructed moved item %s\n", dest, name));
     if (environment(item) != dest)
       return;
   }
@@ -179,11 +184,11 @@ protected void _move_hook_fun (object item, object dest)
   foreach (object obj in others)
   {
     if (living(obj) && environment(obj) == environment(item)) {
-      efun::set_this_player(obj);
+      set_this_player(obj);
       item->init();
     }
     if (!item)
-      raise_error(sprintf("item->init() for %O destructed moved item %s\n", obj, name));
+      error(sprintf("item->init() for %O destructed moved item %s\n", obj, name));
   }
 
   /* Call init() in each of the  objects themselves, but only if item
@@ -192,7 +197,7 @@ protected void _move_hook_fun (object item, object dest)
   if (living(item)) {
     foreach (object obj in others)
     {
-        efun::set_this_player(item); // In case something new was cloned
+        set_this_player(item); // In case something new was cloned
         if (environment(obj) == environment(item))
             obj->init();
     }
@@ -200,7 +205,7 @@ protected void _move_hook_fun (object item, object dest)
 
   /* If the destination is alive as well, call item->init() for it. */
   if (living(dest) && item && environment(item) == dest) {
-    efun::set_this_player(dest);
+    set_this_player(dest);
     item->init();
   }
 }
@@ -621,8 +626,8 @@ mixed get_simul_efun ()
 // Load the simul_efun object(s) and return one or more paths of it.
 //
 // Result:
-//   Either a single string with the object_name() of the simul_efun object,
-//   or an array of strings which has to start with that object_name().
+//   Either a single string with the file_name() of the simul_efun object,
+//   or an array of strings which has to start with that file_name().
 //   Return 0 if this feature isn't wanted.
 //
 // Note that the object(s) must be loaded by this function!
@@ -834,7 +839,7 @@ string get_wiz_name (string file)
 //   A string with the objects name, or 0.
 //
 // This function is called by sprintf() to print a meaningful name
-// in addition to the normal object_name().
+// in addition to the normal file_name().
 // If this functions returns a string, the object will be printed
 // as "<obj_name> (<printf_obj_name>)".
 
@@ -1133,7 +1138,7 @@ void dangling_lfun_closure ()
 //   and skip the call to the vanished lfun.
 
 {
-  raise_error("dangling lfun closure\n");
+  error("dangling lfun closure\n");
 }
 
 //---------------------------------------------------------------------------
@@ -1430,7 +1435,7 @@ int valid_exec (string name, object ob, object obfrom)
 //
 // Arguments:
 //    name  : The name of the _program_ attempting to rebind the connection.
-//            This is not the object_name() of the object, and has no leading
+//            This is not the file_name() of the object, and has no leading
 //            slash.
 //    ob    : The object to receive the connection.
 //    obfrom: The object giving the connection away.
@@ -1494,7 +1499,7 @@ int valid_snoop (object snoopee, object snooper)
     if (!geteuid(previous_object()))
         return 0;
     */
-    if (object_name(previous_object()) == get_simul_efun())
+    if (file_name(previous_object()) == get_simul_efun())
         return 1;
 }
 
@@ -1671,7 +1676,7 @@ mixed valid_write (string path, string euid, string fun, object caller)
              &&  sscanf(path, ".%s", user) == 0)
                 return ADD_SLASH(path);
         } else {
-            user = efun::object_name(previous_object());
+            user = file_name(previous_object());
 #ifndef __COMPAT_MODE__
             user = user[1..];
 #endif
@@ -1699,8 +1704,8 @@ mixed valid_write (string path, string euid, string fun, object caller)
         break;
     case "rename_from":
     case "rename_to":
-        if ((   efun::object_name(caller) == SIMUL_EFUN_FILE
-             || efun::object_name(caller) == SPARE_SIMUL_EFUN_FILE)
+        if ((   file_name(caller) == SIMUL_EFUN_FILE
+             || file_name(caller) == SPARE_SIMUL_EFUN_FILE)
          && path[0..3] == "log/"
          && !(   sizeof(regexp(({path[4..33]}), "/"))
               || path[4] == '.'
@@ -1969,7 +1974,7 @@ nosave void mudwho_connect (object ob)
 {
     mudwho_info[ob] = sprintf("A\t%.20s\t%.20s\t%.20s\t%:010d\t0\tlogin"
                              , MUDWHO_NAME, MUDWHO_PASSWORD, MUDWHO_NAME
-                             , explode(object_name(ob), "#")[<1]
+                             , explode(file_name(ob), "#")[<1]
                                + "@" MUDWHO_NAME
                              , time()
                              );
@@ -2073,8 +2078,8 @@ int verify_create_wizard (object ob)
 {
     int dummy;
 
-    if (sscanf(object_name(ob), "room/port_castle#%d", dummy) == 1
-      || sscanf(object_name(ob), "global/port_castle#%d", dummy) == 1)
+    if (sscanf(file_name(ob), "room/port_castle#%d", dummy) == 1
+      || sscanf(file_name(ob), "global/port_castle#%d", dummy) == 1)
 	return 1;
     return 0;
 }
@@ -2115,7 +2120,7 @@ string master_create_wizard(string owner, string domain, object caller)
 		    wizard + "\n");
 	mkdir(wizard);
     }
-    dest = object_name(environment(player));
+    dest = file_name(environment(player));
     def_castle = "#define NAME \"" + owner + "\"\n#define DEST \"" +
 	dest + "\"\n" + read_file("/room/def_castle.lpc");
     if (file_size(castle) > 0) {

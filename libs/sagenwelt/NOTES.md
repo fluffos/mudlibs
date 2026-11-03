@@ -142,3 +142,7 @@ Catalog `simul_efun`：§7.231 双参 `move_object` shim；`syslog`/`creatorp`/`
 ## 深度功能测试（2026-11-03，syslogd/mud_info）
 
 映射字面量内非法 `;`（`]);`→`])`）；`syslogd` 补 `privs.h`/`syslog.h`，`PO() =`→`==`，`iLOG_NOTICE`/`brewk`/`get_uid` 修正；`mud_info` 含 `privs.h` + `is_wiz` 桩；catalog sefun 补 `itoa`/`query_host_port`（安全、无 bind）。证明：两 daemon 不再因 BB_UID/映射 `;` 失败。
+
+## 深度功能测试（2026-11-03，mud_info mssp）
+
+`mssp_telopt` 返回类型改为 `mapping`；`foreach` 标注 `string val`；去重 `get_player_info`；`save_obiect`→`save_object`；引入 `mud_info.h`/`syslog.h`；`init_eids`/`ORIGIN_*` 桩。证明：mssp 相关类型诊断清除。
