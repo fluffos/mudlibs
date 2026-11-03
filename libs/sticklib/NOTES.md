@@ -583,3 +583,7 @@ member 列表改为 member_array；跨行 call_other 合并；inaugurate_master 
 ## 深度功能测试（2026-11-03，/* found in comment）
 
 三处嵌套块注释警告清零：`cmd_files` 注释里的 `/ftp/*.c` 含 `/*` 序列（改为 `/ftp/ + *.c`）；`fingerd` 盗贼公会指尖死代码用嵌套 `/*`，改为 `#if 0`；`telopt_d` 文档块双开 `/*`。证明：三文件 PASS，warnings 中该类消失（47→44 diags）。
+
+## 深度功能测试（2026-11-03，living set void vs int）
+
+Strategy A `/lib/living` 的 `varargs void set(...)` 与 NPC/player 的 `varargs int set(...)` 冲突（`Function set inherited ... void vs int`，3 处）。同 `attack` 先例，改为 `varargs int` 并 `return 0`。证明：living/player/set_n_query/beggar PASS；该类警告清零（44→41 diags）。
