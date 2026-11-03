@@ -149,6 +149,14 @@ detection.
 
 **Also (2026-11-03, sticklib nosave on functions):** FluffOS forbids `nosave` on functions (`Illegal to declare nosave function`). Strip from function decls only (keep on variables): virtual_server, player, amylaar. Proof: those warnings gone; virtual_server still loads.
 
+**Also (2026-11-03, `buffer` as identifier):** FluffOS reserves `buffer` as a type. A local/parameter `string buffer` / `string *buffer` → `syntax error, unexpected L_BASIC_TYPE`. Rename to `buf` (sticklib `_indent`/`_grep`; drop unused decl in `_more`). Stub `cindent` in catalog sefun for `_indent`. Same shape elsewhere (aoh editor, sagenwelt, …) left for a later sweep. Proof: HEAD `_indent`/`_more`/`_grep` FAIL; tree PASS.
+
+**Also (2026-11-03, sticklib missing AREA_* / DT_MAGIC):** `areas.h` lacked `AREA_WEST`/`AREA_ISLANDS`/`AREA_FARAWAY`/`AREA_SUE` (trees not in archive). Define path macros. `DT_MAGIC` → alias of `DT_MAGICAL`. Proof: HEAD closet/bat/9_0/_manifest Undefined; tree PASS.
+
+**Also (2026-11-03, sticklib foreach `:` + ARMOUR_SET_D):** LDMud `foreach (T x : arr)` → FluffOS `in`. `daemons.h` `ARMOUR_SET_D` had a stray trailing `"` so expansion broke every windweaver include. Proof: HEAD boots FAIL; tree PASS.
+
+**Also (2026-11-03, sticklib attackers / gate open / tilde_path):** Strategy A living lacked `attackers` (player_ghost); gate NPC used undeclared `open`; `tilde_path` used `PATH_USER` without `#include <config.h>` (unexpected L_STRING). Proof: HEAD FAIL; tree PASS.
+
 
   - `command(str, ob)`, `transfer()`, `add_verb()`: see
     §7.172–§7.174.

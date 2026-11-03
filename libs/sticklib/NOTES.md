@@ -536,3 +536,19 @@ FluffOS 的 `localtime` 必须带时间戳。`timezone_d` 的 `localtime()[8]` �
 ## 深度功能测试（2026-11-03，nosave 函数修饰）
 
 FluffOS 禁止函数上的 `nosave`。从 `virtual_server`/`player`/`amylaar` 的函数声明去掉；变量上的 `nosave` 保留。证明：警告从 virtual_server/player 消失；virtual_server 仍可加载。
+
+## 深度功能测试（2026-11-03，buffer 标识符 / cindent）
+
+FluffOS 把 `buffer` 保留为类型；`string buffer` 报 unexpected L_BASIC_TYPE。`_indent`/`_grep` 改名为 `buf`，`_more` 去掉未用声明。catalog sefun 补 `cindent` 空实现。证明：HEAD 三命令 FAIL；树 PASS。
+
+## 深度功能测试（2026-11-03，AREA_* / DT_MAGIC）
+
+`areas.h` 补 `AREA_WEST`/`ISLANDS`/`FARAWAY`/`SUE`（目录未随档案）；`attack.h` 增加 `DT_MAGIC`→`DT_MAGICAL`。证明：HEAD closet/bat/9_0/_manifest Undefined；树 PASS。
+
+## 深度功能测试（2026-11-03，foreach / ARMOUR_SET_D）
+
+`armour_set.h` 的 `foreach (T x : …)` 改为 `in`；`daemons.h` 中 `ARMOUR_SET_D` 宏多了一个尾部 `"`。证明：HEAD windweaver boots FAIL；树 PASS。
+
+## 深度功能测试（2026-11-03，attackers / gate open / tilde_path）
+
+Strategy A `/lib/living` 补 `nosave int attackers`；gate 补 `nosave int open`；`tilde_path` `#include <config.h>`。证明：HEAD FAIL；树 PASS。
