@@ -599,3 +599,7 @@ Strategy A `/lib/living` 的 `varargs void set(...)` 与 NPC/player 的 `varargs
 ## 深度功能测试（2026-11-03，empty-if / TELL_UPDATE）
 
 `bboard` 读帖：仅含注释的 `if (!F_BBOARD_NO_NOTIFY)` 触发 `Expression has no side effects`（报在下一行 `return 1`）；删空壳，并把 `if (temp = _topfive[num]); else if` 写成先赋值再判断。`tell_me` 的 `if (tell_flags == TELL_UPDATE); tell_flags = 0;` 误加分号导致永远清零——去掉分号。证明：bboard/tell_me/player PASS；side-effects 与 conditional-unused 警告清零（27→25 diags）。
+
+## 深度功能测试（2026-11-03，unused locals / OLD_GOVERNMENT）
+
+`thief_mark_new`：`current_gm`/`current_co_gm`/`killer_mark` 只在 `#ifdef OLD_GOVERNMENT` 中使用，声明却在外——FluffOS 报 Unused。声明移进 ifdef。`/lib/player` `query_short` 未用的 `object ob` 删除。证明：thief_mark/player PASS；Unused local 警告清零（25→21 diags）。
