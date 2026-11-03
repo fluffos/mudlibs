@@ -145,6 +145,8 @@ detection.
 
 **Also (2026-11-03, sticklib amhd last_attacker):** assign without declaration → `object last_attacker;`. Proof: HEAD Undefined; tree loads.
 
+**Also (2026-11-03, sticklib tail sefun + update_attackers):** drop LDMud `bytes`/`__VERSION__` branch of `tail`; stub `update_attackers` on Strategy A living. Proof: HEAD tail unexpected L_IDENTIFIER; tree loads.
+
 
   - `command(str, ob)`, `transfer()`, `add_verb()`: see
     §7.172–§7.174.

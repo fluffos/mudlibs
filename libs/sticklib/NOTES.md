@@ -528,3 +528,7 @@ FluffOS 的 `localtime` 必须带时间戳。`timezone_d` 的 `localtime()[8]` �
 ## 深度功能测试（2026-11-03，amhd last_attacker）
 
 `hit_player` 写 `last_attacker` 但未声明。补 `object last_attacker`。证明：HEAD Undefined；树 amhd 可加载。
+
+## 深度功能测试（2026-11-03，tail sefun + update_attackers）
+
+`secure/simul_efun/tail` 的 LDMud `bytes`/`__VERSION__` 分支在 FluffOS 下选错路径；改成字符串版并用 `strsrch`。`/lib/living` 补 `update_attackers` 空实现。证明：HEAD tail 语法错；树 tail 可加载。
