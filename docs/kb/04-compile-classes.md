@@ -255,6 +255,12 @@ detection.
   move `set_n_query`'s `damage_type` into the `#ifndef PLAYER_C` stub
   block so the real player uses living's copy. Proof: four Redeclaration
   rows cleared; hosts still compile.
+  **Also (2026-11-03, sticklib pet `InitFunc` / priest `attacker`):**
+  `pet.lpc` redeclares `InitFunc` already inherited via `treasure.h` —
+  drop the leaf decl. Priest `monsies/priest.lpc` uses a private
+  `object attacker` over living's `object *attacker`; rename the leaf
+  tracker to `alerted_attacker`. Proof: sticklib warnings scan at 0
+  distinct diagnostics.
 - **`Type of returned value doesn't match function return type ( int vs
   void )`**: a `void` function (or one with no type, which this driver reads
   as void) returns a value. MudOS compiled it and passed the value on, and

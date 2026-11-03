@@ -624,3 +624,11 @@ Strategy A `/lib/living` 的 `varargs void set(...)` 与 NPC/player 的 `varargs
 
 Strategy A `/lib/living` 已有 `dead_ob`/`random_pick`/`wander`/`damage_type`。`npc_ldmud` 再声明前三者；`set_n_query` 在 `PLAYER_C` 外声明 `damage_type`，与 living 冲突。删掉 npc_ldmud 重复项（保留 `init_ob`）；`damage_type` 移进 `#ifndef PLAYER_C` 桩块。证明：四条 Redeclaration 清零；set_n_query/npc_ldmud 仍可编译。
 
+## 深度功能测试（2026-11-03，pet InitFunc 重声明）
+
+`pet.lpc` 经 `treasure.h` 已 inherit treasure 的 `InitFunc`，又再声明 `closure InitFunc`。删掉重复声明，沿用 treasure 的。证明：pet/pet.h Redeclaration 清零。
+
+## 深度功能测试（2026-11-03，priest attacker 重声明）
+
+祭司 `monsies/priest.lpc` 的 `object attacker` 与 living 的 `object *attacker` 撞名；叶本意是独立喊话追踪变量。改名为 `alerted_attacker`。证明：最后一条 Redeclaration 清零；sticklib warnings 0 diags。
+
