@@ -472,3 +472,7 @@ Catalog 补 `master_object`/`wizlist`/`localcmd`/`unshadow`/`varargs snoop`；`/
 ## 深度功能测试（2026-11-03，sshop/skills 宽映射）
 
 烟草店 `sshop` 库存与 `basic/player/skills` 的 LDMud 宽映射改为数组值；`reset` 用 `keys()` 迭代。`_gskills` 已可加载。证明：HEAD 宽映射语法错；树 sshop/skills 可加载。
+
+## 深度功能测试（2026-11-03，thieves poison_d/bleed_d 宽映射）
+
+`poison_d`/`bleed_d` 的 `p_things`/`p_livings`/`bleed` 宽映射改为数组值；`m_sizeof`→`sizeof`；`_gskills` 补 `SKILL_POS_VAL`/`LEV` 列读。证明：HEAD 宽映射语法错；树 poison_d/bleed_d/_gskills 可加载。

@@ -1307,6 +1307,8 @@ an error; the driver flags each one as `Expression has no side effects`, so read
 
 **Also (2026-11-03, basis existence PLAYER_D):** `#include <daemons.h>`. Proof: HEAD FAIL Undefined PLAYER_D; tree PASS.
 
+**Also (2026-11-03, sticklib thieves poison/bleed + _gskills):** wide maps → arrays; `m_sizeof`→`sizeof`; `_gskills` nested `skills[indc[i], LEV]` → `[i][LEV]` / VAL for ranks. Proof: HEAD unexpected `;`; tree loads.
+
 **Also (2026-11-03, sticklib sshop/skills wide maps):** tobacco `sshop` stock + `basic/player/skills` → array values; bare `Skills[name]` value column → `[SKILL_POS_VAL]`. Proof: HEAD unexpected `;`; tree loads.
 
 **Also (2026-11-03, sticklib virtual_server terrains):** `([:3])` + `m_terrains[k, TERRA_*]` → `([])` / array values. Proof: HEAD unexpected `:`; tree loads.
