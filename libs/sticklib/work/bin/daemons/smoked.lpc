@@ -16,6 +16,13 @@ mapping smokers;
 
 string *pipe_out_msg;
 
+/* FluffOS: missing key must not index 0 (§7.234). */
+mixed *_smoker_row(object who) {
+    if (!smokers || undefinedp(smokers[who]))
+	return 0;
+    return smokers[who];
+}
+
 status check_smokers();
 void create_monster(object who);
 
@@ -32,28 +39,30 @@ void reset_smokers() { smokers=([]); }
 
 /* QUERY FUNCTIONS */
 
-int     query_addiction(object who) { return smokers[who, ADDICTION]; }
-int     query_strength(object who) { return smokers[who, STRENGTH]; }
-int     query_fuel(object who) { return smokers[who, FUEL]; }
+int     query_addiction(object who) { mixed *r; return (r=_smoker_row(who)) ? r[ADDICTION] : 0; }
+int     query_strength(object who) { mixed *r; return (r=_smoker_row(who)) ? r[STRENGTH] : 0; }
+int     query_fuel(object who) { mixed *r; return (r=_smoker_row(who)) ? r[FUEL] : 0; }
 
-status  query_filled(object who) { return smokers[who, FILLED]; }
-int     query_chewing(object who) { return smokers[who, CHEWING]; }
-status  query_smoking(object who) { return smokers[who, SMOKING]; }
+status  query_filled(object who) { mixed *r; return (r=_smoker_row(who)) ? r[FILLED] : 0; }
+int     query_chewing(object who) { mixed *r; return (r=_smoker_row(who)) ? r[CHEWING] : 0; }
+status  query_smoking(object who) { mixed *r; return (r=_smoker_row(who)) ? r[SMOKING] : 0; }
 status  set(object who,int what,int value) {
-    smokers[who,what] = value;
+    mixed *r;
+    if (!(r = _smoker_row(who))) return 0;
+    r[what] = value;
     return 1;
 }
 
-int     query_fit(object who) { return smokers[who, FIT]; }
-int     query_sweat(object who) { return smokers[who, SWEAT]; }
+int     query_fit(object who) { mixed *r; return (r=_smoker_row(who)) ? r[FIT] : 0; }
+int     query_sweat(object who) { mixed *r; return (r=_smoker_row(who)) ? r[SWEAT] : 0; }
 object  *query_smokers() { return m_indices(smokers); }
 
 status add_smoker(object who, int addiction, int sweat) {
     /* This function is called whenever a new smoker enters the game, or when we
        get a new victim :) */
 
-    if (!smokers) smokers = ([ who: addiction; 0; 0; 0; 0; 0; 0; sweat ]);
-    else smokers += ([ who : addiction; 0; 0; 0; 0; 0; 0; sweat ]);
+    if (!smokers) smokers = ([ who: ({ addiction, 0, 0, 0, 0, 0, 0, sweat }) ]);
+    else smokers[who] = ({ addiction, 0, 0, 0, 0, 0, 0, sweat });
     return 1;
 }
 
@@ -64,21 +73,21 @@ void remove_smoker(object who) { m_delete(smokers, who); }
 void fill_pipe(object who, int strength, int fuel) {
     /* This function is called when the player actually fills his pipe. */
 
-    smokers[who, STRENGTH] = strength;
-    smokers[who, FUEL] = fuel;
-    smokers[who, FILLED] = YES;
+    smokers[who][STRENGTH] = strength;
+    smokers[who][FUEL] = fuel;
+    smokers[who][FILLED] = YES;
 }
 
 void light_pipe(object who) {
     /* This function is called when the player decides to light his pipe. */
 
-    smokers[who, SMOKING] = YES;
+    smokers[who][SMOKING] = YES;
 }
 
 void add_addiction(object who, int amount) {
     /* This function is called when adding more addiction to the smoker. */
 
-    smokers[who, ADDICTION] += amount;
+    smokers[who][ADDICTION] += amount;
 }
 
 void reduce(object who, int amount) {
@@ -90,14 +99,14 @@ void reduce(object who, int amount) {
     if ((int)who->query_sp() > (amount / 2)) who->add_sp(-(amount/2));
     if ((int)who->query_fp() > (amount / 4)) who->add_fp(-(amount/4));
 
-    smokers[who, ADDICTION] -= (10 * amount);
+    smokers[who][ADDICTION] -= (10 * amount);
 }
 
 void stop_chewing(object who) {
     /* This function is called when the player spits the gum out or when it
        becomes tasteless. */
 
-    smokers[who, CHEWING] = NO;
+    smokers[who][CHEWING] = NO;
     TELLM("Grimacing, you finally spit the tasteless lump out.");
     TELLH(MY_NAME+" spit out "+HIS+" chewing gum and grimaces.");
 }
@@ -105,8 +114,8 @@ void stop_chewing(object who) {
 void chew(object who) {
     /* This function is called when the player keeps on chewing. */
 
-    smokers[who, CHEWING] -= 1;
-    if(smokers[who, SWEAT] > 10) reduce(who,1);
+    smokers[who][CHEWING] -= 1;
+    if(smokers[who][SWEAT] > 10) reduce(who,1);
     if (!random(5)) {
 	switch(random(3)) {
 	case 0: TELLM("You masticate your gum with perverse gusto.");
@@ -125,7 +134,7 @@ void chew(object who) {
 	    break;
 	}
     }
-    if(smokers[who, CHEWING] < 1) {
+    if(smokers[who][CHEWING] < 1) {
 	stop_chewing(who);
     }
 }
@@ -134,37 +143,37 @@ void start_chewing(object who) {
     /* This function is called when the player tries to quit smoking and decides
        to chew a gum. */
 
-    smokers[who, CHEWING] = 20;
+    smokers[who][CHEWING] = 20;
 }
 
 void smoker_died(object who) {
     /* This function is called when the player dies in cancer. */
 
-    smokers[who, ADDICTION]     = 0;
-    smokers[who, STRENGTH]      = 0;
-    smokers[who, FUEL]          = 0;
-    smokers[who, FILLED]        = NO;
-    smokers[who, SMOKING]       = NO;
-    smokers[who, CHEWING]       = 0;
-    smokers[who, FIT]           = 0;
-    smokers[who, SWEAT]         = 0;
+    smokers[who][ADDICTION]     = 0;
+    smokers[who][STRENGTH]      = 0;
+    smokers[who][FUEL]          = 0;
+    smokers[who][FILLED]        = NO;
+    smokers[who][SMOKING]       = NO;
+    smokers[who][CHEWING]       = 0;
+    smokers[who][FIT]           = 0;
+    smokers[who][SWEAT]         = 0;
 }
 
 void empty_pipe(object who) {
     /* This function is called when the player empties his pipe */
 
-    smokers[who, STRENGTH]      = 0;
-    smokers[who, FUEL]          = 0;
-    smokers[who, FILLED]        = NO;
-    smokers[who, SMOKING]       = NO;
+    smokers[who][STRENGTH]      = 0;
+    smokers[who][FUEL]          = 0;
+    smokers[who][FILLED]        = NO;
+    smokers[who][SMOKING]       = NO;
 }
 
 void pipe_out(object who) {
     /* This function is called when the pipe goes out (tobacco runs out) */
 
     TELLM(pipe_out_msg[random(sizeof(pipe_out_msg))]);
-    smokers[who, SMOKING] = NO;
-    smokers[who, FUEL] == 0;
+    smokers[who][SMOKING] = NO;
+    smokers[who][FUEL] = 0;
 }
 
 void increase(object who, int amount) {
@@ -183,15 +192,15 @@ void cough(mixed who,int fmsg) {
     if(smokers == 0 || sizeof(smokers) == 0) return;
     //fit_stun = m_indices(smokers)[who];
     fit_stun = who;
-    if(smokers[who, FIT] < 1) {
+    if(smokers[who][FIT] < 1) {
 	TELLM("The fit passes. You draw a shaky breath.");
 	TELLH(sprintf("%s draws a shaky breath. The fit passes.", MY_NAME));
 	who->set_condition(C_STUNNED, 0, fit_stun);
 	return;
     }
-    if(smokers[who, FIT] > 0) {
+    if(smokers[who][FIT] > 0) {
 	who->set_condition(C_STUNNED, -1, fit_stun);
-	smokers[who, FIT] --;
+	smokers[who][FIT] --;
 	fmsg++;
 	switch(fmsg) {
 	case 0:
@@ -267,14 +276,14 @@ void cough(mixed who,int fmsg) {
 void smoke(object who) {     /* This function is called when player smokes. */
     int heal,i;
     if(who->query_ghost()) return;
-    if(smokers[who, FUEL] < 1) {
+    if(smokers[who][FUEL] < 1) {
 	pipe_out(who);
 	return;
     }
 
-    if(smokers[who, SMOKING] = YES) {
-	smokers[who, FUEL] -= 1;
-	heal = smokers[who, STRENGTH] + random(smokers[who, STRENGTH]);
+    if(smokers[who][SMOKING] = YES) {
+	smokers[who][FUEL] -= 1;
+	heal = smokers[who][STRENGTH] + random(smokers[who][STRENGTH]);
 
 	if ((string)who->query_race() == "hobbit") heal += random(heal);
 	if (heal < 3) heal = 3;
@@ -284,9 +293,9 @@ void smoke(object who) {     /* This function is called when player smokes. */
 
 	increase(who, heal);
 
-	smokers[who, ADDICTION] += 20;
+	smokers[who][ADDICTION] += 20;
 
-	if (smokers[who,SWEAT] > 2) smokers[who,SWEAT] -= 3;
+	if (smokers[who][SWEAT] > 2) smokers[who][SWEAT] -= 3;
 
 	if (!random(10)) {
 	    TELLM("You puff your pipe contendely.");
@@ -294,16 +303,16 @@ void smoke(object who) {     /* This function is called when player smokes. */
 	}
 
 	if (!random(10)) {
-	    for(i=0;i < (smokers[who, ADDICTION] - 7680) / 1000; i++)
-		smokers[who, FIT] += random(2);
-	    if(smokers[who, FIT] > 0) {
+	    for(i=0;i < (smokers[who][ADDICTION] - 7680) / 1000; i++)
+		smokers[who][FIT] += random(2);
+	    if(smokers[who][FIT] > 0) {
 		TELLM("You become aware of a strange itch in your chest.");
 		TELLH(MY_NAME+" hesitates, wearing a strangely bemused expression.");
 		cough(who, 0);
 	    }
 	}
 
-	if (smokers[who, STRENGTH] > 6) {
+	if (smokers[who][STRENGTH] > 6) {
 	    if (!random(5)) {
 		switch(random(4)) {
 		case 0: TELLM("You start to giggle incoherently.");
@@ -335,8 +344,8 @@ void smoke(object who) {     /* This function is called when player smokes. */
 	    }
 	}
     }
-    else if(smokers[who, SMOKING] == NO) pipe_out(who);
-    else if(smokers[who, FUEL] < 0) pipe_out(who);
+    else if(smokers[who][SMOKING] == NO) pipe_out(who);
+    else if(smokers[who][FUEL] < 0) pipe_out(who);
 }
 
 void sweat(object who) {
@@ -345,13 +354,13 @@ void sweat(object who) {
     int sweat;
     if(who->query_ghost()) return;
     if(!interactive(who)) return;
-    smokers[who, SWEAT] ++;
-    smokers[who, ADDICTION] --;
-    if (smokers[who, CHEWING] > 0) {
+    smokers[who][SWEAT] ++;
+    smokers[who][ADDICTION] --;
+    if (smokers[who][CHEWING] > 0) {
 	chew(who);
     }
     else {
-	sweat = (int) smokers[who,SWEAT];
+	sweat = (int) smokers[who][SWEAT];
 	if (!random(3)) {
 	    if(sweat > 50) TELLM("You could kill for a smoke!");
 	    else if(sweat > 30) TELLM("You need a smoke quite badly now.");

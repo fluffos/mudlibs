@@ -480,3 +480,7 @@ Catalog 补 `master_object`/`wizlist`/`localcmd`/`unshadow`/`varargs snoop`；`/
 ## 深度功能测试（2026-11-03，priests delay/skill_saver/slave/target/_log 宽映射）
 
 `delay_d` 内层宽映射与 `walk_mapping` 回调、`skill_saver`/`slave_d`/`target_d`/`_log` 的多列映射改为数组值；`allocate_mapping(0,2)`→`([])`。证明：HEAD 宽映射语法错；树上述对象均可加载。
+
+## 深度功能测试（2026-11-03，smoked + voter + druids slave_d 宽映射）
+
+`smoked` 八列吸烟者映射改数组值并护缺失键；顺带把 `FUEL == 0` 改成赋值。`voter` 杀票宽映射 / 普选整型计数分开改；`druids/slave_d` 同祭司 `temp_data`。证明：HEAD 宽映射语法错；树 smoked/voter/druids slave_d 可加载。
