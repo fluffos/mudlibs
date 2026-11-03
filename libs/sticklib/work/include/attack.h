@@ -70,6 +70,7 @@
 #define DT_POSITIVE	80
 #define	DT_FALL		90
 #define DT_MAGICAL	100
+#define DT_MAGIC	DT_MAGICAL
 
 // Added 13-Aug-98, Doomdark: These _should_ be ORed (DT_xxx | DT_yy)
 #define DT_AREA	0x0100

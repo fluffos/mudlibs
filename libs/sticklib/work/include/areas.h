@@ -11,4 +11,10 @@
 #define	AREA_TRISTEZA_FNAME	"/areas/tristeza/"
 #define	AREA_WESTHORN		"/areas/westhorn/"
 
+/* Paths referenced by rooms/guilds; area trees not in this archive. */
+#define	AREA_WEST		"/areas/west/"
+#define	AREA_ISLANDS		"/areas/islands/"
+#define	AREA_FARAWAY		"/areas/faraway/"
+#define	AREA_SUE		"/areas/sue/"
+
 #endif // _AREAS_H
