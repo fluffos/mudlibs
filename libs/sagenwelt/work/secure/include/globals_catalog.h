@@ -26,6 +26,9 @@
 #define M_MENU    SECURE_LIB_DIR "menu"
 #define MOVE      SECURE_LIB_DIR "move"
 #define LIVING    STD_LIB "living"
+#define ROOM      STD_LIB "room"
+#define STD_OBJECT STD_LIB "object"
+#define CONTAINER STD_LIB "container"
 
 #define LOGIN_OB  SECURE_OBJ_DIR "player/login"
 #define PLAYER_OB SECURE_OBJ_DIR "player/player"

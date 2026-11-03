@@ -156,3 +156,7 @@ Catalog `simul_efun`：§7.231 双参 `move_object` shim；`syslog`/`creatorp`/`
 `master_feature`/`master_orig`：`valid_database` 的 `(action == "connect") ? "password" : 1` 触发 Types in ?:（string vs int）——拆成两次 return。配置解析 `explode(...)
  ret[...]` 缺分号，导致 `t` 被报 Unused。补分号。证明：?: 与 Unused 警告清零（36→33 diags）。
 
+## 深度功能测试（2026-11-03，move ROOM/STD_OBJECT/CONTAINER）
+
+`secure/lib/move.lpc` 用 `ROOM`/`STD_OBJECT`/`CONTAINER` 做 `member_array(deep_inherit_list(...))`，档案未定义这些宏。在 `globals_catalog.h` 按 `LIVING` 同款补 `STD_LIB "room"|"object"|"container"`。证明：三条 Undefined 清零；move 可编译（10 files compile）。
+
