@@ -430,3 +430,13 @@ twice, gender `m`. Arrived in 茅草屋, `south` to 前院, `quit` printed
 (unknown password). Shop/combat/death were not exercised this pass.
 
 - 2026-10-14：新驱动（FluffOS 970d9f09）报 `Float value truncated to int`（#1426）。1 个文件 1 处：赋值、初始化、return 改写成 `to_int(...)`（值不变，只是写明截断）。改动的对象新进程各载入一次，无回退（`scripts/lpc_fix_float_trunc.py`，KB 04 §6.10）。
+
+## 深度功能测试（§10.7，2026-11-03）
+
+重测（此前有英文 round-two 2026-08-27，缺中文标题）。原生驱动，端口 40242。
+
+- GBK 问 `n` → 字母 ID `deepx` → 新号 `y` → 中文名 → 密码 → 性别 `m` → 茅草屋。
+- `look` / `north` / `south` 往返正常；`score`/`east`/`west` 仍为引擎 `什么？`（无对应 cmds，内容层，见既有记录）。
+- `quit` → Bye；重登同 ID/密码回到茅草屋。驱动 stdout 无编程错误。
+
+无新编程缺陷。`trail2` 的 `northeast` 拼写修复与孤立子图观察仍成立。

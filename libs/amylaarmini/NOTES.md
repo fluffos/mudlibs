@@ -246,3 +246,16 @@ final session (native + WASM), zero errors in the driver's own
 captured stdout throughout (this native build's `debug.log` is dead
 for the process's whole life per AGENTS.md §10.9, so stdout is the
 only reliable error channel).
+
+## 深度功能测试（§10.7，2026-11-03）
+
+重测（此前英文 §7 有 2026-08-31 记录，缺中文 `深度功能测试` 标题）。原生 `build-debug` 驱动，端口 40264。
+
+- 任意名登录 → `/room/start`；`look` / `say` / `who` / `ls` / `rehash` 正常。
+- `eval write("EVAL_OK\n");` 经 `mudclient.py` 保留分号，输出 `EVAL_OK`（§10.2）。
+- `update /cmds/who` → Ok，随后 `who` 仍可用。
+- `update /room/start` 断开本连接；**新连接**立刻进入 startroom（§7.188 回归：无永久卡登录）。
+- 自占房间 `update` 仍硬断连（wizard footgun，范围外）。`quit` 仍未实现（`What?`）。
+- 驱动 stdout 无新编程错误（§10.9 debug.log 对本 boot 仍死）。
+
+无新编程缺陷。

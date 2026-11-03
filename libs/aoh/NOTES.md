@@ -4956,3 +4956,7 @@ Four files still had `if (x = CONST)` after earlier sweeps: pirate `troom` pedes
 ## 深度功能测试（2026-10-28，sort_array 方向闭包）
 
 剩余 LDMud sort_array 的 #'> / #'< 改为 1 / -1（KB 06 7.234）。
+
+## 深度功能测试（2026-11-03，autodoc sort_array lambda）
+
+`obj/tool/autodoc.lpc`：`lambda(({'a,'b}), ({#'>,'a,'b}))` → `sort_array(..., 1)`（KB 06 7.234）。对象仍被 `/std/thing/restrictions` 等先序错误挡住。

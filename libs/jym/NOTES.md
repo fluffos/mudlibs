@@ -706,3 +706,7 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 
 删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
 
+
+## 深度功能测试（2026-11-03，longhe2 多余 remove_call_out）
+
+`longhe2.lpc` 在已会清 `eval_function` 的 `start_call_out` 前还有 `me->remove_call_out((: call_other…:), 18)`（FluffOS 参数形态不对且箭头空操作）。删该行。

@@ -785,6 +785,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-10-28, corpus `remove_call_out((: name :))`):** FluffOS `remove_call_out` takes a string; LDMud accepted a closure. Mechanical rewrite of simple `remove_call_out((: ident :))` → `remove_call_out("ident")` in sticklib/aoh/morgengrauen/nirvlp312/simud (17 sites / 16 files). Left complex `(: call_other, … :)` (kxkj/jym). Proof: HEAD sticklib moving Bad argument remove_call_out; tree moving loads.
 
+**Also (2026-11-03, kxkj/jym `me->remove_call_out((: call_other…:))`):** arrow form is `call_other` to a missing lfun (returns 0); never hits the efun. `start_call_out` schedules `call_out("eval_function",…)`, so clear with bare `remove_call_out("eval_function")` inside `start_call_out` (jym already had it; ported to kxkj/kxkjii2). Drop the dead `me->remove_call_out((:…:))` lines (dreamwings, longhe2). Proof: `lpcc_eval` two `start_call_out`s — HEAD stacks 2 `call_out_info` rows on the user, tree keeps 1.
+
 **Also (2026-10-28, corpus sort_array #'>/#'< → 1/-1):** leftover LDMud sort direction quotes after the earlier #'fn pass (KB 06 7.234). 208 sites / 101 files across sticklib/aoh/morgengrauen/nirvlp312/…. Left lambda-soup / ternary reverse?#'<:#'> comparators. Proof: HEAD sticklib `_who_old` Illegal # / cascade Illegal LHS; tree loads.
 
 **Also (2026-10-28, sticklib room `add_object(file, int)`):** Strategy A `/lib/room` typed 2nd arg as `string appearmsg` while bank (and LDMud) pass reset chance as 2nd. `mixed appearmsg` + treat `intp` 2nd as chance. Proof: HEAD bank Bad type add_object; tree loads.

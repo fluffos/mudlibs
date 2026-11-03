@@ -291,3 +291,7 @@ The code of this lib writes logs into 10 subdirectories of `log/`: `log/ARCH/bbm
 ## 深度功能测试（2026-10-28，sort_array 方向闭包）
 
 剩余 LDMud sort_array 的 #'> / #'< 改为 1 / -1（KB 06 7.234）。
+
+## 深度功能测试（2026-11-03，sort_array 残留 #'<= / 三元）
+
+`krautmaster`：`#'<=` → `1`；`MGtool/toolcmd`：`reverse?#'<:#'>` → `reverse?-1:1`（KB 06 7.234）。对象仍被更早的 inherit/LDMud 错误挡住，未能单独 load 证明；形态与已扫 corpus 一致。
