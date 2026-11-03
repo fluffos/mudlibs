@@ -151,3 +151,8 @@ Catalog `simul_efun`：§7.231 双参 `move_object` shim；`syslog`/`creatorp`/`
 
 `globals_catalog.h` 里先前补的 `ORIGIN_*` 桩是整数，而 FluffOS `origin()` 返回字符串（KB 05 §7.47），导致 `origin() != ORIGIN_EFUN` 报 string vs int / always true。改成与 `driver/origin.h` 一致的 `"local"`/`"call_other"`/`"simul"`/`"efun"`。证明：三条 always-true 诊断清零（39→36 diags）。
 
+## 深度功能测试（2026-11-03，master ?: 与缺分号）
+
+`master_feature`/`master_orig`：`valid_database` 的 `(action == "connect") ? "password" : 1` 触发 Types in ?:（string vs int）——拆成两次 return。配置解析 `explode(...)
+ ret[...]` 缺分号，导致 `t` 被报 Unused。补分号。证明：?: 与 Unused 警告清零（36→33 diags）。
+
