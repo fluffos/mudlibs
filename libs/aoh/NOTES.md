@@ -4972,3 +4972,7 @@ Four files still had `if (x = CONST)` after earlier sweeps: pirate `troom` pedes
 ## 深度功能测试（2026-11-03，buffer 标识符）
 
 FluffOS 保留 `buffer` 为类型；`string buffer` 局部/参数改为 `buf`。证明：声明层语法错消除（与 sticklib `_indent` 同类）。
+
+## 深度功能测试（2026-11-03，aoh editor buffer）
+
+`obj/tool/wizbelt/editor` 的 `string *buffer` 参数改为 `buf`。证明：声明层不再撞 FluffOS `buffer` 类型。
