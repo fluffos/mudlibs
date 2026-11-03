@@ -367,3 +367,7 @@ master / simul_efun / workfiles / define.h 等处的 `strong_types` / `pedantic`
 ## 深度功能测试（2026-11-03，quests/intermud/misc sort）
 
 `intermud`/`misc`：`#'capitalize` → `(: capitalize :)`。`quests` 四处按 `[0]` 的 `#'>` lambda → FluffOS 三元比较。剩余：`print_*_statistics` 里依赖 `how_sorted` 局部量的 lambda，以及 `kernel/simul/array` 动态闭包。
+
+## 深度功能测试（2026-11-03，quests how_sorted 动态排序）
+
+`print_statistics` / `print_sc_statistics`（两套）依赖局部 `how_sorted` 的 LDMud lambda 无法在 FluffOS functional 里闭包。用 nosave `_stat_sort_key`/`_stat_sort_asc` + `_stat_row_cmp`。`map(quests, #'[, Q_NAME)` → `(: $1[Q_NAME] :)`。
