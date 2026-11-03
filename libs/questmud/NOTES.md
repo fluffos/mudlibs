@@ -838,3 +838,7 @@ A path written without the leading slash (`carry_object("d/city/obj/jiasha")->we
 ## 深度功能测试（2026-11-03，bind_lambda）
 
 siki master/simuli 与 secure/simul_* 活文件的 bind_lambda(#'…) → bind((: … :))；跳过 baks。
+
+## 深度功能测试（2026-11-03，master_skeleton 文档桩）
+
+同 amylaarmini：注释无体签名与 `parse_command_*`（efun 名冲突），`raise_error`→`error`。证明：warnings 诊断中不再出现 `/secure/master_skeleton`。
