@@ -1298,6 +1298,8 @@ an error; the driver flags each one as `Expression has no side effects`, so read
 **Also (2026-10-28, corpus leftover sort_array #'>/#'<):** 208 sites / 101 files rewritten to 1/-1; lambda-soup comparators left. Proof: sticklib `_who_old` HEAD fails, tree loads.
 
 **Also (2026-11-03, sort_array ternary / #'<= / autodoc lambda):** morgengrauen `reverse?#'<:#'>` → `reverse?-1:1`, `#'<=` → `1`; aoh autodoc `lambda(…({#'>…}))` → `1`. Wizard-tool hosts still fail earlier inherits; shape matches 7.234.
+
+**Also (2026-11-03, #'ident on sort/map lines + strcmp lambdas):** leftover `map`/`filter` `#'ident` beside already-converted `sort_array(..., 1)` → `(: ident :)` (morg/nirv/aoh). Fixed-key LDMud sort lambdas (`query_ip_number` / `object_name` / pair `[0]`) → `strcmp` or `$1[0]` cmp. Left dynamic `sortby`/`sort_fun`/`how_sorted` locals (Illegal in FluffOS functionals). Proof: `lpcc_eval` HEAD `sort_array(map(a, #'capitalize), 1)` Illegal `#`; tree `(: capitalize :)` PASS.
 ### 7.235 A master guard on `SIMUL_EFUN_OB` gives every object uid `""` when the config loads another simul_efun file (hy, hy5, 2026-10-06)
 **Symptom:** a link-dead player is never removed: `quit` after a disconnect errors `你()不能摧毁其他的使用者` from `feature/move.lpc`
 `remove()` and prints the leave message twice; `getuid()`/`geteuid()` of every object, `/cmds` included, is `""`. **Cause:** the

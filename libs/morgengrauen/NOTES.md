@@ -295,3 +295,7 @@ The code of this lib writes logs into 10 subdirectories of `log/`: `log/ARCH/bbm
 ## 深度功能测试（2026-11-03，sort_array 残留 #'<= / 三元）
 
 `krautmaster`：`#'<=` → `1`；`MGtool/toolcmd`：`reverse?#'<:#'>` → `reverse?-1:1`（KB 06 7.234）。对象仍被更早的 inherit/LDMud 错误挡住，未能单独 load 证明；形态与已扫 corpus 一致。
+
+## 深度功能测试（2026-11-03，sort 行内 #'ident + teller lambda）
+
+`materialdb`/`wahlmaschine`/`sinmaster`/`dancetool`/`channel`：`map`/`filter` 上的 `#'ident` → `(: ident :)`。`teller/t_cmds`/`t_base`：按 IP / `object_name` 的 LDMud lambda → `strcmp` 方向（`#'<`=降序）。剩余：`simul_efun` 含 `sortby` 局部变量的 lambda、动态 `sort_fun`。

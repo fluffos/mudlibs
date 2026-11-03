@@ -4960,3 +4960,7 @@ Four files still had `if (x = CONST)` after earlier sweeps: pirate `troom` pedes
 ## 深度功能测试（2026-11-03，autodoc sort_array lambda）
 
 `obj/tool/autodoc.lpc`：`lambda(({'a,'b}), ({#'>,'a,'b}))` → `sort_array(..., 1)`（KB 06 7.234）。对象仍被 `/std/thing/restrictions` 等先序错误挡住。
+
+## 深度功能测试（2026-11-03，#'ident on sort/map lines）
+
+`froffice`/`room05`/`moneytool`/`inetd`：`#'capitalize`/`#'mt_stats`/`#'do_match` → `(: … :)`。`guild/member` 动态 `sort_fun` lambda 仍留。

@@ -894,3 +894,7 @@ A path written without the leading slash (`carry_object("d/city/obj/jiasha")->we
 ## 深度功能测试（2026-10-28，sort_array 方向闭包）
 
 剩余 LDMud sort_array 的 #'> / #'< 改为 1 / -1（KB 06 7.234）。
+
+## 深度功能测试（2026-11-03，po.lpc IP sort lambda）
+
+`players/sauron/bin/po.lpc`：`lambda #'> query_ip_number` → `strcmp(query_ip_number($1), …)` 升序。

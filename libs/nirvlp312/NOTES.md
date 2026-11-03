@@ -363,3 +363,7 @@ master / simul_efun / workfiles / define.h 等处的 `strong_types` / `pedantic`
 ## 深度功能测试（2026-10-28，sort_array 方向闭包）
 
 剩余 LDMud sort_array 的 #'> / #'< 改为 1 / -1（KB 06 7.234）。
+
+## 深度功能测试（2026-11-03，quests/intermud/misc sort）
+
+`intermud`/`misc`：`#'capitalize` → `(: capitalize :)`。`quests` 四处按 `[0]` 的 `#'>` lambda → FluffOS 三元比较。剩余：`print_*_statistics` 里依赖 `how_sorted` 局部量的 lambda，以及 `kernel/simul/array` 动态闭包。
