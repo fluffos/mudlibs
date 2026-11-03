@@ -4984,3 +4984,7 @@ AddDetail/AddSpell/AddRoomCmd 等处的裸 `#'IntLong`/`#'MyCast`/`#'cmd_join` �
 ## 深度功能测试（2026-11-03，lambda/#' alist）
 
 `store`/`description`/`equipment`/`socketd`/`raceportal`/`home`/`money_d`/`mail` 等处的 `lambda(({'x}), ({#'fn,…}))` 改为 `(: … :)`；`map(#'&)`/`#'>`/`#'>=` 等同改。留下 `CL_PROGN #',` 宏与 `quest_control`/`trading`/`money` 复杂闭包。证明：目标文件无 `Illegal #` 于已改调用点。
+
+## 深度功能测试（2026-11-03，money/#' map）
+
+`money`/`cbteller`/`designer`/`shopwizfuns`/`mastermind` 的 `#'[`/`#'=` 映射闭包改为 `(: … :)`。证明：`p/money` 与 mastermind 无 `#'` 调用点。
