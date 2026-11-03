@@ -149,7 +149,7 @@ detection.
 
 **Also (2026-11-03, sticklib nosave on functions):** FluffOS forbids `nosave` on functions (`Illegal to declare nosave function`). Strip from function decls only (keep on variables): virtual_server, player, amylaar. Proof: those warnings gone; virtual_server still loads.
 
-**Also (2026-11-03, `buffer` as identifier):** FluffOS reserves `buffer` as a type. A local/parameter `string buffer` / `string *buffer` → `syntax error, unexpected L_BASIC_TYPE`. Rename to `buf` (sticklib `_indent`/`_grep`; drop unused decl in `_more`). Stub `cindent` in catalog sefun for `_indent`. Same shape elsewhere (aoh editor, sagenwelt, …) left for a later sweep. Proof: HEAD `_indent`/`_more`/`_grep` FAIL; tree PASS.
+**Also (2026-11-03, `buffer` as identifier):** FluffOS reserves `buffer` as a type. A local/parameter `string buffer` / `string *buffer` → `syntax error, unexpected L_BASIC_TYPE`. Rename to `buf` (sticklib `_indent`/`_grep`; drop unused decl in `_more`). Stub `cindent` in catalog sefun for `_indent`. Also renamed in aoh `in_voting`, sagenwelt telnet_suboption, nirvlp312 filer/copy_file/events, morgengrauen `ex` (aoh editor left). Proof: HEAD `_indent`/`_more`/`_grep` FAIL; tree PASS.
 
 **Also (2026-11-03, sticklib missing AREA_* / DT_MAGIC):** `areas.h` lacked `AREA_WEST`/`AREA_ISLANDS`/`AREA_FARAWAY`/`AREA_SUE` (trees not in archive). Define path macros. `DT_MAGIC` → alias of `DT_MAGICAL`. Proof: HEAD closet/bat/9_0/_manifest Undefined; tree PASS.
 

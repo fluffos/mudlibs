@@ -319,3 +319,7 @@ The code of this lib writes logs into 10 subdirectories of `log/`: `log/ARCH/bbm
 ## 深度功能测试（2026-11-03，localtime() 缺参）
 
 `std/player/base` 的裸 `localtime()` 改为 `localtime(time())`。宿主仍被更早的 hook.h 语法挡住。
+
+## 深度功能测试（2026-11-03，buffer 标识符）
+
+FluffOS 保留 `buffer` 为类型；`string buffer` 局部/参数改为 `buf`。证明：声明层语法错消除（与 sticklib `_indent` 同类）。

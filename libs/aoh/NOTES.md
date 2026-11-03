@@ -4968,3 +4968,7 @@ Four files still had `if (x = CONST)` after earlier sweeps: pirate `troom` pedes
 ## 深度功能测试（2026-11-03，guild sort_mapping）
 
 `std/guild/member` 与 `p/guilds/.../member`：`sort_mapping` 用 nosave `_sm_fun`/`_sm_map` + `_sm_cmp`/`evaluate`；参数类型 `closure`→`mixed`。对象仍被文件前部其它 LDMud 语法挡住。
+
+## 深度功能测试（2026-11-03，buffer 标识符）
+
+FluffOS 保留 `buffer` 为类型；`string buffer` 局部/参数改为 `buf`。证明：声明层语法错消除（与 sticklib `_indent` 同类）。
