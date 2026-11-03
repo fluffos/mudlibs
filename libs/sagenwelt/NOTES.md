@@ -172,3 +172,11 @@ Catalog `simul_efun`：§7.231 双参 `move_object` shim；`syslog`/`creatorp`/`
 
 `menu.lpc` 的 `new(MENJ)` 笔误（同文件别处已是 `new(MENU)`）。`login` 缺 `NP_MENU`→`char_gen_menu`；`__PLAYER_DOMAIN__` 应为 `privs.h` 的 `PLAYER_DOMAIN`（缺宏导致 `":" __PLAYER_DOMAIN__` 语法错）。`player.lpc` 补 `#include <player/login.h>`（带出 `mud_info.h`/`NPWD_PROMPT`），并在本文件定义 `NEW_PASSWD` 等状态；`login.h` 补 `EMAIL_PROMPT`。证明：MENJ/NP_MENU/MI_PI_PWD/PLAYER_DOMAIN 类诊断清零。
 
+## 深度功能测试（2026-11-03，player crypt/return/GET_NAME）
+
+`player.lpc`：`NEW_PASSWD` 分支 `return` 缺分号引发连锁语法错；`crypt(input)` 在 FluffOS 需盐→`crypt(input, 0)`；补 `GET_NAME` 状态；`get_name_email(arg)`→`input`；`__ADMIN_MAIL`→`__ADMIN_EMAIL`；`mud_info.h` 补 `MI_PI_EMAIL`。证明：crypt/GET_NAME/缺分号类诊断清零。
+
+## 深度功能测试（2026-11-03，master init_acl 返回类型）
+
+`init_acl` 声明返回 `mapping`，出错路径却 `return ({})`（数组）。改为 `allocate_mapping(0)`；并为同文件稍后定义的 `author_file`/`domain_file` 补前置原型（否则 check_acl 报 Undefined）。证明：mixed* vs mapping 与 author_file Undefined 清零。
+

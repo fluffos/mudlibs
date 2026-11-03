@@ -19,6 +19,7 @@
 #define MI_PI_REG       4       ///< registered email supplied              (int)
 #define MI_PI_NAME      5       ///< name for new players                   (string)
 #define MI_PI_GENDER    6       ///< gender for new players                 (string)
+#define MI_PI_EMAIL     7       ///< email for new players                  (string)
 
 // email handling
 #define MI_EMAIL_INVALID    "@inv@"

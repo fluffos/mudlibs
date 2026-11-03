@@ -190,6 +190,11 @@ detection.
   `__PLAYER_DOMAIN__` → `PLAYER_DOMAIN` from privs.h; player includes
   login.h for MI_PI_*/prompts and local NEW_PASSWD states. Proof: those
   Undefined/syntax rows cleared.
+  **Also (2026-11-03, sagenwelt player crypt / master init_acl):**
+  `return` without `;` after NEW_PASSWD; `crypt(input)` → `crypt(input, 0)`;
+  `GET_NAME` state; `init_acl` error paths return `allocate_mapping(0)`
+  not `({})`; forward-declare `author_file`/`domain_file`. Proof: crypt
+  and mapping-return diags cleared.
 
 **Also (2026-11-03, sticklib living `set` void vs int):** Strategy A `/lib/living` had `varargs void set(...)` while npc/player `set_n_query` and `/lib/player` declare `varargs int set(...)` (`Function set inherited ... void vs int`, 3 files). Same shape as the earlier `attack` fix: living becomes `varargs int` returning 0. Proof: living/player/set_n_query/beggar PASS; those three warnings gone.
 
