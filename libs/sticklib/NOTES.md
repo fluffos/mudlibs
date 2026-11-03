@@ -476,3 +476,7 @@ Catalog 补 `master_object`/`wizlist`/`localcmd`/`unshadow`/`varargs snoop`；`/
 ## 深度功能测试（2026-11-03，thieves poison_d/bleed_d 宽映射）
 
 `poison_d`/`bleed_d` 的 `p_things`/`p_livings`/`bleed` 宽映射改为数组值；`m_sizeof`→`sizeof`；`_gskills` 补 `SKILL_POS_VAL`/`LEV` 列读。证明：HEAD 宽映射语法错；树 poison_d/bleed_d/_gskills 可加载。
+
+## 深度功能测试（2026-11-03，priests delay/skill_saver/slave/target/_log 宽映射）
+
+`delay_d` 内层宽映射与 `walk_mapping` 回调、`skill_saver`/`slave_d`/`target_d`/`_log` 的多列映射改为数组值；`allocate_mapping(0,2)`→`([])`。证明：HEAD 宽映射语法错；树上述对象均可加载。
