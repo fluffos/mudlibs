@@ -2,7 +2,7 @@
 #define _DAEMONS_H
 
 #define ANSI_D          "/bin/daemons/ansid"
-#define ARMOUR_SET_D    "/bin/daemons/armour_set_d""
+#define ARMOUR_SET_D    "/bin/daemons/armour_set_d"
 #define BALANCE_D       "/bin/daemons/balance_d"
 #define BANISH_D        "/bin/daemons/banish_d"
 #define BBOARD_D        "/bin/daemons/bboard_d"

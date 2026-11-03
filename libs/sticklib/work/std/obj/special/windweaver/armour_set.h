@@ -24,7 +24,7 @@ status wear_me(object who) {
 	armour_set[10] = present("#windweaver ring#", who);
 	armour_set[11] = present("#windweaver shield#", who);
 
-	foreach (object armour : armour_set) {
+	foreach (object armour in armour_set) {
 	    if (objectp(armour) && armour != this_object()
 	      && armour->query_worn()) {
 		count++;
@@ -94,7 +94,7 @@ status unwear_me(object who) {
 	armour_set[10] = present("#windweaver ring#", who);
 	armour_set[11] = present("#windweaver shield#", who);
 
-	foreach (object armour : armour_set) {
+	foreach (object armour in armour_set) {
 	    if (objectp(armour) && armour != this_object()
 	      && armour->query_worn()) {
 		count++;
@@ -118,7 +118,7 @@ status unwear_me(object who) {
 		break;
 	    case 9:
 		if (who->query_condition(RESISTANCE(C_POISONED))) {
-		    foreach (object armour : ARMOUR_SET_D->query_armour_set("windweaver")) {
+		    foreach (object armour in ARMOUR_SET_D->query_armour_set("windweaver")) {
 			who->set_condition(RESISTANCE(C_POISONED), 0, armour);
 		    }
 
@@ -127,7 +127,7 @@ status unwear_me(object who) {
 		break;
 	    case 8:
 		if (who->query_condition(RESISTANCE(C_UNCONSCIOUS))) {
-		    foreach (object armour : ARMOUR_SET_D->query_armour_set("windweaver")) {
+		    foreach (object armour in ARMOUR_SET_D->query_armour_set("windweaver")) {
 			who->set_condition(RESISTANCE(C_UNCONSCIOUS), 0, armour);
 		    }
 
@@ -136,7 +136,7 @@ status unwear_me(object who) {
 		break;
 	    case 7:
 		if (who->query_condition(RESISTANCE(C_STUNNED))) {
-		    foreach (object armour : ARMOUR_SET_D->query_armour_set("windweaver")) {
+		    foreach (object armour in ARMOUR_SET_D->query_armour_set("windweaver")) {
 			who->set_condition(RESISTANCE(C_STUNNED), 0, armour);
 		    }
 
@@ -145,7 +145,7 @@ status unwear_me(object who) {
 		break;
 	    case 6:
 		if (who->query_condition(RESISTANCE(C_BLIND))) {
-		    foreach (object armour : ARMOUR_SET_D->query_armour_set("windweaver")) {
+		    foreach (object armour in ARMOUR_SET_D->query_armour_set("windweaver")) {
 			who->set_condition(RESISTANCE(C_BLIND), 0, armour);
 		    }
 
@@ -195,7 +195,7 @@ tears up large chunks of debris.  The whirlwind completely demolishes %<him.name
 		target->hit_player(target->query_max_hp() / 12, DT_AIR, 7, wearer);
 	    }
 
-	    foreach (object attacker : wearer->query_attackers()) {
+	    foreach (object attacker in wearer->query_attackers()) {
 		if (!attacker || attacker == target) {
 		    continue;
 		}
