@@ -560,3 +560,7 @@ charset/ftp 的 `__EFUN_DEFINED__` 触发 Condition too complex；改为 stub/`#
 ## 深度功能测试（2026-11-03，Strategy A living 字段）
 
 `PLAYER_C` 下 set_n_query 不声明字段；living 补 age/attacker/dirty_stamp 等与常用 stub；`is_fighting` 返回 object。证明：HEAD `/lib/player` FAIL；树 PASS。
+
+## 深度功能测试（2026-11-03，questd/group_npc _ldmud）
+
+`questd_ldmud` 宽 mapping 改为与 `questd` 相同的数组行；`group_npc_ldmud` 去掉宽 mapping/`make_format_string`。证明：HEAD FAIL；树 PASS。

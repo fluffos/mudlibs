@@ -161,6 +161,8 @@ detection.
 
 **Also (2026-11-03, sticklib Strategy A living fields for player):** `PLAYER_C` skips set_n_query's local decls; living lacked `age`/`attacker`/`dirty_stamp`/`infravision`/`time_to_heal`/guild hooks and stubs (`query_intoxication`, `is_fighting`→object, …). Proof: HEAD `/lib/player` FAIL; tree PASS.
 
+**Also (2026-11-03, sticklib questd/group_npc _ldmud):** `questd_ldmud` wide-map `([k: a; b; c; d])` → same map-of-arrays as Strategy A `questd.lpc`. `group_npc_ldmud` `m_allocate`/`[k,N]`/`make_format_string` → array values. Proof: HEAD FAIL; tree PASS.
+
 
   - `command(str, ob)`, `transfer()`, `add_verb()`: see
     §7.172–§7.174.
