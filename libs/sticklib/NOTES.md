@@ -564,3 +564,7 @@ charset/ftp 的 `__EFUN_DEFINED__` 触发 Condition too complex；改为 stub/`#
 ## 深度功能测试（2026-11-03，questd/group_npc _ldmud）
 
 `questd_ldmud` 宽 mapping 改为与 `questd` 相同的数组行；`group_npc_ldmud` 去掉宽 mapping/`make_format_string`。证明：HEAD FAIL；树 PASS。
+
+## 深度功能测试（2026-11-03，warnings --fix）
+
+`scripts/lpc_warnings.py sticklib --fix`：清未用局部变量等机械警告。证明：player/bboard/mailbox/attack_d 等仍 PASS。
