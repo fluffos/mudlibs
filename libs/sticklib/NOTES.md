@@ -575,3 +575,7 @@ Strategy A living 补 `kill_ob`/`set_master`/`query_master`/`query_defend_master
 ## 深度功能测试（2026-11-03，master_ldmud FluffOS）
 
 member 列表改为 member_array；跨行 call_other 合并；inaugurate_master 去掉 unbound_lambda；补 rename_object stub。活 master 仍是 catalog/master。证明：HEAD FAIL；树 PASS。
+
+## 深度功能测试（2026-11-03，equipped_group_npc / tumble inherit-after-globals）
+
+`lpc_warnings` 把错误报到 `/include/npc.h` 与 `thief.h` 的 inherit 行，根因是 include 链：Strategy A `/lib/group_npc.lpc` 丢了 LDMud 版的 `#ifndef EQUIPPED_GROUP_NPC` 守卫，于是 `/lib/equipped_group_npc.lpc` 先 include `equipped_npc`（已 inherit 并声明全局），再 include `group_npc` 再次 `#include <npc.h>` → `Illegal to inherit after defining global variables`（assassin/employee/bvl guard 等一并挂）。补回守卫。`skills/tumble.lpc` 在 globals 之后 `#include "../thief.h"`，却未像 `_stab`/`_tth` 那样 `#define THIEF_NO_INHERIT`。证明：HEAD equipped_group_npc/tumble/assassin/employee FAIL；树均 PASS；warnings 1195→1201 compile、inherit error 清零。
