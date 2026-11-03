@@ -195,6 +195,10 @@ detection.
   `GET_NAME` state; `init_acl` error paths return `allocate_mapping(0)`
   not `({})`; forward-declare `author_file`/`domain_file`. Proof: crypt
   and mapping-return diags cleared.
+  **Also (2026-11-03, sagenwelt catalog privilege/menu sefuns):**
+  stub `elderp`/`archp`/`adminp`/`Dlordp`/`done_startup` and menu helpers
+  `trim_spaces`/`more`/`reg_pat_translate`/`insensitive_regexp` on the
+  catalog simul_efun. Proof: those Undefined rows cleared; compile 14→15.
 
 **Also (2026-11-03, sticklib living `set` void vs int):** Strategy A `/lib/living` had `varargs void set(...)` while npc/player `set_n_query` and `/lib/player` declare `varargs int set(...)` (`Function set inherited ... void vs int`, 3 files). Same shape as the earlier `attack` fix: living becomes `varargs int` returning 0. Proof: living/player/set_n_query/beggar PASS; those three warnings gone.
 

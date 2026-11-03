@@ -180,3 +180,7 @@ Catalog `simul_efun`：§7.231 双参 `move_object` shim；`syslog`/`creatorp`/`
 
 `init_acl` 声明返回 `mapping`，出错路径却 `return ({})`（数组）。改为 `allocate_mapping(0)`；并为同文件稍后定义的 `author_file`/`domain_file` 补前置原型（否则 check_acl 报 Undefined）。证明：mixed* vs mapping 与 author_file Undefined 清零。
 
+## 深度功能测试（2026-11-03，catalog sefun 权限/菜单桩）
+
+master 调用 `elderp`/`archp`/`adminp`/`Dlordp`/`done_startup`；menu 调用 `trim_spaces`/`more`/`reg_pat_translate`/`insensitive_regexp`——活 sefun 是 catalog，原先无这些。补桩（权限类委托 `creatorp`；正则类返回 `string *`）。证明：master/menu 上对应 Undefined 清零；compile 14→15。
+
