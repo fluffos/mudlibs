@@ -579,3 +579,7 @@ member 列表改为 member_array；跨行 call_other 合并；inaugurate_master 
 ## 深度功能测试（2026-11-03，equipped_group_npc / tumble inherit-after-globals）
 
 `lpc_warnings` 把错误报到 `/include/npc.h` 与 `thief.h` 的 inherit 行，根因是 include 链：Strategy A `/lib/group_npc.lpc` 丢了 LDMud 版的 `#ifndef EQUIPPED_GROUP_NPC` 守卫，于是 `/lib/equipped_group_npc.lpc` 先 include `equipped_npc`（已 inherit 并声明全局），再 include `group_npc` 再次 `#include <npc.h>` → `Illegal to inherit after defining global variables`（assassin/employee/bvl guard 等一并挂）。补回守卫。`skills/tumble.lpc` 在 globals 之后 `#include "../thief.h"`，却未像 `_stab`/`_tth` 那样 `#define THIEF_NO_INHERIT`。证明：HEAD equipped_group_npc/tumble/assassin/employee FAIL；树均 PASS；warnings 1195→1201 compile、inherit error 清零。
+
+## 深度功能测试（2026-11-03，/* found in comment）
+
+三处嵌套块注释警告清零：`cmd_files` 注释里的 `/ftp/*.c` 含 `/*` 序列（改为 `/ftp/ + *.c`）；`fingerd` 盗贼公会指尖死代码用嵌套 `/*`，改为 `#if 0`；`telopt_d` 文档块双开 `/*`。证明：三文件 PASS，warnings 中该类消失（47→44 diags）。

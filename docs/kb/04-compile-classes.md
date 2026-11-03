@@ -164,6 +164,8 @@ detection.
 **Also (2026-11-03, sticklib questd/group_npc _ldmud):** `questd_ldmud` wide-map `([k: a; b; c; d])` → same map-of-arrays as Strategy A `questd.lpc`. `group_npc_ldmud` `m_allocate`/`[k,N]`/`make_format_string` → array values. Proof: HEAD FAIL; tree PASS.
 **Also (2026-11-03, sticklib warnings --fix):** unused-local mechanical strip via `lpc_warnings.py --fix`. Proof: player/bboard/attack_d still PASS.
 **Also (2026-11-03, sticklib npc_ldmud living stubs):** `kill_ob`/`set_master`/`query_master`/`query_defend_master`/`test_if_any_here` on Strategy A living. Proof: HEAD npc_ldmud FAIL; tree PASS.
+**Also (2026-11-03, sticklib `/* found in comment`):** three sites. (1) `cmd_files` comment text `/ftp/*.c` embeds `/*` inside an open block comment; rewrite the glob wording. (2) `fingerd` dead guild-finger block nested `/*` inside `/*`; use `#if 0`. (3) `telopt_d` doc header doubled `/*`; drop the stray opener. Proof: three PASS; nested-comment diags gone.
+
 **Also (2026-11-03, sticklib master_ldmud):** member alist to member_array; fix split call_other; stub inaugurate_master (no unbound_lambda); stub rename_object. Live master remains catalog/master. Proof: HEAD FAIL; tree PASS.
 
 
