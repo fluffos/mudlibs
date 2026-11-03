@@ -571,3 +571,7 @@ charset/ftp 的 `__EFUN_DEFINED__` 触发 Condition too complex；改为 stub/`#
 ## 深度功能测试（2026-11-03，npc_ldmud living stubs）
 
 Strategy A living 补 `kill_ob`/`set_master`/`query_master`/`query_defend_master`/`test_if_any_here` 等，使 `/lib/npc_ldmud` 可加载。证明：HEAD FAIL；树 PASS；player/npc 仍 PASS。
+
+## 深度功能测试（2026-11-03，master_ldmud FluffOS）
+
+member 列表改为 member_array；跨行 call_other 合并；inaugurate_master 去掉 unbound_lambda；补 rename_object stub。活 master 仍是 catalog/master。证明：HEAD FAIL；树 PASS。
