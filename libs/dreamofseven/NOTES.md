@@ -1099,3 +1099,7 @@ jialermi / random / treeking：`tell_object("…")` 补 `me` 或 `this_player()`
 ## 深度功能测试（2026-11-03，§7.19 enable_player 重入）
 
 `feature/command.lpc` 的 `enable_player()` 加 `in_enable_player_now` 守卫（`scripts/lpc_fix_enable_player_guard.py`，KB 05 7.19）：门派 NPC `init()`→`setup()`→`enable_player()`→`enable_commands()` 再跑 `init()` 时直接返回，避免 Too deep recursion。
+
+## 深度功能测试（2026-11-03，AS_FEATURE 武器 weight/set_durable/::setup）
+
+`std/weapon/*.lpc` 在 `#define AS_FEATURE` 的 `_*.lpc` 包含下没有 `inherit EQUIP`，却调用 `weight()`/`set_durable()`/`::setup()`，FluffOS 编译失败。补：AS_FEATURE 分支声明宿主提供的 `weight`/`set_durable`/`query_durable`；`::setup()` 用 `#ifndef AS_FEATURE` 包住；`weapon_damage` 参数 `weight`→`wt` 避免遮蔽。证明：HEAD `_sword` 等 9/9 FAIL；tree 9/9 PASS。

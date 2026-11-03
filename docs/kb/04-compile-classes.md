@@ -789,6 +789,10 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-11-03, #'+ / #'write / #'efun::destruct):** morg krautmaster map/filter operator quotes and simul_efun `filter(obs, #'efun::destruct)` → `(: $1 + … :)` / `(: write :)` / `(: destruct :)`. Left `bind_lambda(#'efun::…)` privilege wrappers. Proof: HEAD `filter(map(a, #'+, …), #'write)` Illegal `#`; tree PASS.
 
+**Also (2026-11-03, morph_shadow sprintf + apply call_out):** `(: sprintf($1,$2) :)` and `apply((: call_out :), args)`. Proof: HEAD `apply(#'efun::call_out` Illegal `#`; tree PASS.
+
+**Also (2026-11-03, dreamofseven AS_FEATURE weapons):** `_sword.lpc` etc. `#define AS_FEATURE` + `#include "sword.lpc"` without EQUIP; declare host `weight`/`set_durable`/`query_durable`, guard `::setup()`, rename `weapon_damage` param `weight`→`wt`. Proof: HEAD 9/9 `_*.lpc` FAIL; tree 9/9 PASS.
+
 **Also (2026-10-28, corpus sort_array #'>/#'< → 1/-1):** leftover LDMud sort direction quotes after the earlier #'fn pass (KB 06 7.234). 208 sites / 101 files across sticklib/aoh/morgengrauen/nirvlp312/…. Left lambda-soup / ternary reverse?#'<:#'> comparators. Proof: HEAD sticklib `_who_old` Illegal # / cascade Illegal LHS; tree loads.
 
 **Also (2026-10-28, sticklib room `add_object(file, int)`):** Strategy A `/lib/room` typed 2nd arg as `string appearmsg` while bank (and LDMud) pass reset chance as 2nd. `mixed appearmsg` + treat `intp` 2nd as chance. Proof: HEAD bank Bad type add_object; tree loads.
