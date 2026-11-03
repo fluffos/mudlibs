@@ -18,7 +18,7 @@
 #define SECURE_OBJ_DIR SECURE_DIR "obj/"
 #define SECURE_LIB_DIR SECURE_DIR "lib/"
 #define STD_LIB        "/std/lib/"
-#define SEFUN_DIR      SECURE_DIR "sefuns/"
+#define SEFUN_DIR      "/secure/sefuns/"
 
 #define P_INPUT   SECURE_LIB_DIR "player/inp_sys"
 #define P_MESSAGE SECURE_LIB_DIR "player/messages"

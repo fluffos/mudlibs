@@ -164,3 +164,7 @@ Catalog `simul_efun`：§7.231 双参 `move_object` shim；`syslog`/`creatorp`/`
 
 用 `globals_catalog.h` 替换 `std.h` 后，`I_*`/`LOG_*`/`MSGCLASS_*`/`TERM_D`/`SEFUN_DIR`/`INPUT_AUTO_POP` 不再自动进入每个对象。整理 catalog：补 `I_*`、`SEFUN_DIR`、`TERM_D`、`INPUT_AUTO_POP`，并 `#include` `syslog.h`/`message.h`；修好被提前 `#endif` 切断的结构。`input.lpc` 的 `INPUT_AUTOPOP` 改为头文件里的 `INPUT_AUTO_POP`；`inp_sys` 的 `LOG_ERROR` 改为 `LOG_ERR`；`messages::receive_message` 第一参改为 `int`，并用参数名 `message`（原先 `string msg_class` 与位运算冲突，且误用未定义的 `msg`）。证明：原 LOG_/I_/MSGCLASS_/TERM_D/INPUT_ 类 Undefined 清零；compile 10→13。
 
+## 深度功能测试（2026-11-03，sefuns 无扩展名 → .lpc）
+
+档案 `secure/sefuns/*` 无后缀；FluffOS `#include` 读不到。全部 `git mv` 为 `.lpc`；`simul_efun_orig` 的 `#include SEFUN_DIR "name"`（宏拼接）改为绝对路径 `"/secure/sefuns/name.lpc"`。活 sefun 仍是 catalog `simul_efun.lpc`；这些片段单独扫描会 FAIL（仅被 include），属预期。证明：`simul_efun_orig` 的 Cannot read #include 清零。
+
