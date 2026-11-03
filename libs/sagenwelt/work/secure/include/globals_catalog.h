@@ -37,20 +37,22 @@
 #ifndef __MUD_NAME__
 #define __MUD_NAME__ "Sagenwelt"
 #ifndef ORIGIN_EFUN
-#define ORIGIN_LOCAL 1
-#define ORIGIN_CALL_OTHER 2
-#define ORIGIN_SIMUL_EFUN 3
-#define ORIGIN_EFUN 4
+/* FluffOS origin() returns strings (KB 05 7.47) */
+#define ORIGIN_LOCAL "local"
+#define ORIGIN_CALL_OTHER "call_other"
+#define ORIGIN_SIMUL_EFUN "simul"
+#define ORIGIN_EFUN "efun"
 #endif
 
 #endif
 #ifndef __MUD_IP__
 #define __MUD_IP__ "127.0.0.1"
 #ifndef ORIGIN_EFUN
-#define ORIGIN_LOCAL 1
-#define ORIGIN_CALL_OTHER 2
-#define ORIGIN_SIMUL_EFUN 3
-#define ORIGIN_EFUN 4
+/* FluffOS origin() returns strings (KB 05 7.47) */
+#define ORIGIN_LOCAL "local"
+#define ORIGIN_CALL_OTHER "call_other"
+#define ORIGIN_SIMUL_EFUN "simul"
+#define ORIGIN_EFUN "efun"
 #endif
 
 #endif
@@ -60,10 +62,11 @@
 #define PLYR_SHELL SECURE_OBJ_DIR "player/shell"
 
 #ifndef ORIGIN_EFUN
-#define ORIGIN_LOCAL 1
-#define ORIGIN_CALL_OTHER 2
-#define ORIGIN_SIMUL_EFUN 3
-#define ORIGIN_EFUN 4
+/* FluffOS origin() returns strings (KB 05 7.47) */
+#define ORIGIN_LOCAL "local"
+#define ORIGIN_CALL_OTHER "call_other"
+#define ORIGIN_SIMUL_EFUN "simul"
+#define ORIGIN_EFUN "efun"
 #endif
 
 #endif

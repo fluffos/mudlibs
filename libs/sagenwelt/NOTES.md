@@ -146,3 +146,8 @@ Catalog `simul_efun`：§7.231 双参 `move_object` shim；`syslog`/`creatorp`/`
 ## 深度功能测试（2026-11-03，mud_info mssp）
 
 `mssp_telopt` 返回类型改为 `mapping`；`foreach` 标注 `string val`；去重 `get_player_info`；`save_obiect`→`save_object`；引入 `mud_info.h`/`syslog.h`；`init_eids`/`ORIGIN_*` 桩。证明：mssp 相关类型诊断清除。
+
+## 深度功能测试（2026-11-03，ORIGIN_* 字符串）
+
+`globals_catalog.h` 里先前补的 `ORIGIN_*` 桩是整数，而 FluffOS `origin()` 返回字符串（KB 05 §7.47），导致 `origin() != ORIGIN_EFUN` 报 string vs int / always true。改成与 `driver/origin.h` 一致的 `"local"`/`"call_other"`/`"simul"`/`"efun"`。证明：三条 always-true 诊断清零（39→36 diags）。
+

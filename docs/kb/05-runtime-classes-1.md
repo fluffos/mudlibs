@@ -554,6 +554,8 @@ The mapping:
 
 Grep `origin()\s*==\s*ORIGIN_` and replace with the string compare.
 
+**Also (2026-11-03, sagenwelt ORIGIN stubs):** catalog global include defined `ORIGIN_*` as ints so `origin() != ORIGIN_EFUN` was string vs int (always true). Point the stubs at the FluffOS strings (`"efun"` etc., same as `driver/origin.h`). Proof: three always-true rows cleared.
+
 ### 7.48 A `private` member called from an inheriting program
 This is illegal here (old MudOS `private` ≈ today's `protected`).
 Change it to `protected` where the error is reported. Leave a
