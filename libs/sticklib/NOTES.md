@@ -568,3 +568,6 @@ charset/ftp 的 `__EFUN_DEFINED__` 触发 Condition too complex；改为 stub/`#
 ## 深度功能测试（2026-11-03，warnings --fix）
 
 `scripts/lpc_warnings.py sticklib --fix`：清未用局部变量等机械警告。证明：player/bboard/mailbox/attack_d 等仍 PASS。
+## 深度功能测试（2026-11-03，npc_ldmud living stubs）
+
+Strategy A living 补 `kill_ob`/`set_master`/`query_master`/`query_defend_master`/`test_if_any_here` 等，使 `/lib/npc_ldmud` 可加载。证明：HEAD FAIL；树 PASS；player/npc 仍 PASS。
