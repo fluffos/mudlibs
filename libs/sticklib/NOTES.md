@@ -552,3 +552,11 @@ FluffOS 把 `buffer` 保留为类型；`string buffer` 报 unexpected L_BASIC_TY
 ## 深度功能测试（2026-11-03，attackers / gate open / tilde_path）
 
 Strategy A `/lib/living` 补 `nosave int attackers`；gate 补 `nosave int open`；`tilde_path` `#include <config.h>`。证明：HEAD FAIL；树 PASS。
+
+## 深度功能测试（2026-11-03，LDMud sefun 残件）
+
+charset/ftp 的 `__EFUN_DEFINED__` 触发 Condition too complex；改为 stub/`#if 0`。json `mixed array`→`mixed *`；command 单参；amylaar 补 wizinfo/wizlist/map_delete 等。证明：树各宿主 PASS。
+
+## 深度功能测试（2026-11-03，Strategy A living 字段）
+
+`PLAYER_C` 下 set_n_query 不声明字段；living 补 age/attacker/dirty_stamp 等与常用 stub；`is_fighting` 返回 object。证明：HEAD `/lib/player` FAIL；树 PASS。

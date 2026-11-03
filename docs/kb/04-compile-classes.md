@@ -157,6 +157,10 @@ detection.
 
 **Also (2026-11-03, sticklib attackers / gate open / tilde_path):** Strategy A living lacked `attackers` (player_ghost); gate NPC used undeclared `open`; `tilde_path` used `PATH_USER` without `#include <config.h>` (unexpected L_STRING). Proof: HEAD FAIL; tree PASS.
 
+**Also (2026-11-03, sticklib LDMud sefun residue):** `__EFUN_DEFINED__(…)` → Condition too complex (charset/ftp); LDMud union types `int *|string`; `mixed array` → `mixed *` in json; `command(cmd,x)` → 1-arg efun; amylaar stubs (`get/set_extra_wizinfo`, `wizlist_info`, `m_delete`→`map_delete`, `commands()`). Proof: HEAD FAIL; tree charset/ftp/command/json/amylaar PASS.
+
+**Also (2026-11-03, sticklib Strategy A living fields for player):** `PLAYER_C` skips set_n_query's local decls; living lacked `age`/`attacker`/`dirty_stamp`/`infravision`/`time_to_heal`/guild hooks and stubs (`query_intoxication`, `is_fighting`→object, …). Proof: HEAD `/lib/player` FAIL; tree PASS.
+
 
   - `command(str, ob)`, `transfer()`, `add_verb()`: see
     §7.172–§7.174.
