@@ -303,3 +303,7 @@ The code of this lib writes logs into 10 subdirectories of `log/`: `log/ARCH/bbm
 ## 深度功能测试（2026-11-03，_dump_wizlist sortby）
 
 `simul_efun`（及 spare）`_dump_wizlist`：nosave `_wizlist_sortby` + `_wizlist_cmp` 取代闭包局部 `sortby` 的 LDMud lambda（`#'<`=降序）。
+
+## 深度功能测试（2026-11-03，krautmaster #'+ / #'write + destruct）
+
+`krautmaster`：`map(..., #'+, suffix)` / `filter(..., #'write)` → `(: $1 + suffix :)` / `(: write :)`。`simul_efun`：`filter(obs, #'efun::destruct)` → `(: destruct :)`。`#'efun::`+`bind_lambda` 特权封装仍留。
