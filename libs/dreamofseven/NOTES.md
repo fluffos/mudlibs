@@ -1095,3 +1095,7 @@ jialermi / random / treeking：`tell_object("…")` 补 `me` 或 `this_player()`
 ## 深度功能测试（2026-10-27，§6.25 create_door 缺 inherit DOOR）
 
 19 个房间只 `inherit ROOM` 却调用 `create_door()`（定义在 `/std/door`）。在 `inherit ROOM;` 后补上 `inherit DOOR;`。证明：HEAD zoo17 报 Undefined create_door；树 zoo17/room1/god1 可加载。
+
+## 深度功能测试（2026-11-03，§7.19 enable_player 重入）
+
+`feature/command.lpc` 的 `enable_player()` 加 `in_enable_player_now` 守卫（`scripts/lpc_fix_enable_player_guard.py`，KB 05 7.19）：门派 NPC `init()`→`setup()`→`enable_player()`→`enable_commands()` 再跑 `init()` 时直接返回，避免 Too deep recursion。

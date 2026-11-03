@@ -1023,3 +1023,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## doc/build devil 丢分号／粘连 inherit（2026-10-27，KB 04 §6.25 Also）
 
 `doc/build/devil.lpc`（建档示例倭寇）被格式化弄坏：`inherit NPC void create()` 粘在一起，语句之间的 `;` 全丢，还有嵌套坏掉的 `set("con", set("con", 10)`。按原意重写成带 `setup()` 的完好 NPC（原 `/obj/blade`、`/obj/cloth` 在多数库不存在，示例里去掉携带以免 create 炸）。证明：HEAD 加载失败；改后加载成功。
+
+## 深度功能测试（2026-11-03，§7.19 enable_player 重入）
+
+`feature/command.lpc` 的 `enable_player()` 加 `in_enable_player_now` 守卫（`scripts/lpc_fix_enable_player_guard.py`，KB 05 7.19）：门派 NPC `init()`→`setup()`→`enable_player()`→`enable_commands()` 再跑 `init()` 时直接返回，避免 Too deep recursion。

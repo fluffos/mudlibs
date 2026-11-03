@@ -325,6 +325,8 @@ legitimate sleep/revive/disable flows re-enable while already living
 (`mhxy`).
 **Status:** corpus sweep done (73 libs). Five stragglers found 2026-10-19 (dtxyzjb `d/tianmo/door` in the reach census: the sect elder `zhangmen.lpc` ends `init()` with `me->setup();`, and the first living that walks in re-enters it; tianxiawuxue, xiaoyuxiyou, xyxy2, xyxyutf8 the same): `scripts/lpc_fix_enable_player_guard.py [SLUG...] --apply` adds the flag (after the leading local declarations; a `living()` guard like wuhanzhan's, or a `return` in the middle, is listed and left). Test before trusting it: load each `create_identity(..., ROOM)` room, then `new()` another living and `move()` it in (`Too deep recursion` at HEAD in 6 dtxyzjb rooms and tianxiawuxue's `d/shushan/tianshi`, none after).
 
+**Also (2026-11-03):** another 117 libs still lacked the flag (es2/fy*/jqxz*/hy*/… Journey and Fengyun families). Same fixer `--apply`. Proof: HEAD `feature/command.lpc` has no `in_enable_player_now`; tree has the nosave flag + early return; post-apply plan is 0 FIX.
+
 ### 7.20 Net-dead void-parking without location restore
 **Symptom:** no log signal at all. After an unclean disconnect, the
 player starts every future session in the void.
