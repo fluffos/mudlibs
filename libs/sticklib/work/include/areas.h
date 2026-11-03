@@ -8,6 +8,7 @@
 #define AREA_KANDAWEN           "/areas/kandawen/"
 #define AREA_PRACTICE           "/areas/practice/"
 #define	AREA_TRISTEZA		"/areas/tristeza/"
+#define	AREA_TRISTEZA_FNAME	"/areas/tristeza/"
 #define	AREA_WESTHORN		"/areas/westhorn/"
 
 #endif // _AREAS_H

@@ -516,3 +516,7 @@ FluffOS 的 `localtime` 必须带时间戳。`timezone_d` 的 `localtime()[8]` �
 ## 深度功能测试（2026-11-03，area_poison lambda）
 
 `call_out(lambda(…destruct…))` 改为命名 `expire_poison`。证明：HEAD Undefined lambda；树可加载。
+
+## 深度功能测试（2026-11-03，AREA_TRISTEZA_FNAME）
+
+`generic_rooms.h` 用 `AREA_TRISTEZA_FNAME`，`areas.h` 未定义 → collector 的 `== GENERIC_ROOM_SHOP_FNAME` 变 unexpected L_STRING。补同路径别名。证明：HEAD 语法错；树 collector 可加载。
