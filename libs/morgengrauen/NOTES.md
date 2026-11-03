@@ -311,3 +311,7 @@ The code of this lib writes logs into 10 subdirectories of `log/`: `log/ARCH/bbm
 ## 深度功能测试（2026-11-03，morph_shadow sprintf + apply call_out）
 
 `morph_shadow`：`lambda #'sprintf` → `(: sprintf($1,$2) :)`。`simul_efun`：`apply(#'efun::call_out, args)` → `apply((: call_out :), args)`。`bind_lambda(#'efun::…)` 仍留。
+
+## 深度功能测试（2026-11-03，life ::die limited）
+
+`std/player/life.lpc`：`limited(#'::die, …)` → `limited(function(int pd, int ec) { ::die(pd, ec); }, …)`（`(: ::die :)` 非法）。

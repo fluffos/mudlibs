@@ -238,3 +238,7 @@ The code of this lib writes logs into 2 subdirectories of `log/`: `log/chat` (`d
 ## 深度功能测试（2026-10-28，remove_call_out 闭包→字符串）
 
 `telnet_ob` 的 `remove_call_out((:timeout:))` 改为字符串。
+
+## 深度功能测试（2026-11-03，harry give_coin 闭包）
+
+`monsters/harry.lpc`：`add_talk_response` 末项 `#'give_coin` → `(: give_coin :)`。对象仍被 `inherit/desc` 其它 LDMud 缺口挡住。
