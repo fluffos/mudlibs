@@ -126,3 +126,7 @@ The `.c` -> `.lpc` rename changed the string but not the slice width: `f[<2..] =
 ## 深度功能测试（2026-11-03，buffer 标识符）
 
 FluffOS 保留 `buffer` 为类型；`string buffer` 局部/参数改为 `buf`。证明：声明层语法错消除（与 sticklib `_indent` 同类）。
+
+## 深度功能测试（2026-11-03，默认参数）
+
+FluffOS 不接受函数声明里的 `int x = CONST`（`unexpected L_ASSIGN`）。已从 `simul_efun.h`/`inp_sys.h` 原型与 `modal_push_char`/`syslogd::log` 定义上去掉默认值；`string array`→`string *`。证明：诊断中不再出现该 L_ASSIGN。

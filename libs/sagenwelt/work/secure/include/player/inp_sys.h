@@ -13,7 +13,7 @@
 
 public varargs nomask void      modal_push(function input_func, mixed prompt, int secure, function return_to_func, int lock );
 public varargs nomask void      modal_simple(function input_func, mixed prompt, int secure, int lock);
-public         nomask void      modal_push_char(function input_func, int type = INPUT_NORMAL);
+public         nomask void      modal_push_char(function input_func, int type);
 public varargs nomask void      modal_func(function input_func, mixed prompt, int secure, int lock);
 public         nomask void      modal_pop(void);
 public         nomask void      modal_pass(string str);

@@ -44,11 +44,11 @@ public          mixed   *scramble_array(mixed *arr);
 public varargs  mapping  unique_mapping(mixed *arr, mixed sep, mixed skip);
 // communication
 public          void     printf(string format, mixed *args...);
-public          void     say(string msg, mixed *exclude, int msg_class = MSGCLASS_SYSTEM);
-public          void     shout(string msg, int msg_class = MSGCLASS_SYSTEM);
-public          void     tell_object(object ob, string msg, int msg_class = MSGCLASS_SYSTEM);
-public          void     tell_room(mixed ob, string msg, object *exclude, int msg_class = MSGCLASS_SYSTEM);
-public          void     write(string msg, int msg_class = MSGCLASS_SYSTEM);
+public          void     say(string msg, mixed *exclude, int msg_class);
+public          void     shout(string msg, int msg_class);
+public          void     tell_object(object ob, string msg, int msg_class);
+public          void     tell_room(mixed ob, string msg, object *exclude, int msg_class);
+public          void     write(string msg, int msg_class);
 // driver
 public varargs  mixed    debug_info(int req, mixed *args...);
 public          int      exec(object to, object from);
@@ -75,28 +75,28 @@ public          int      lcm(int a, int b);
 public          string   author_of(string file);
 public          string   domain_of(string file);
 public varargs  void     destruct(object ob);
-public          string   file_name(object who = 0, int flag = 0);
+public          string   file_name(object who, int flag);
 public varargs  int      move_object(object ob1, object ob2);
 public          object   simul_efun(void);
 // passwd
 public          int      check_valid_pwd(string pwd);
-public          string   crypt(string pwd, string salt = "", string hash = PWD_CRYPT_DFLT);
+public          string   crypt(string pwd, string salt, string hash);
 public          string   oldcrypt(string pwd, mixed salt);
 // regex_globbing
 public          int      fnmatch(string name, string pattern);
 public          string  *glob(mixed pathname);
 public          string   gsub(string s, string pat, string repl);
 public          int      has_magic(string s);
-public          string   insensitive_pattern(string pat = "");
-public          string  *insensitive_regexp(string* arr, string pat, int flag = 0);
-public          string   reg_pat_translate(string pat, int flag = 0);
+public          string   insensitive_pattern(string pat);
+public          string  *insensitive_regexp(string* arr, string pat, int flag);
+public          string   reg_pat_translate(string pat, int flag);
 public          string  *regexplode(string str, string pat);
 public          int      rsearch(string s, string pat);
 public          int      search(string s, string pat);
 public          string  *split(string str, string pattern);
 public          string   sub(string s, string pat, string repl);
 // room
-public          string   opposite_dir(string str, int article = 0);
+public          string   opposite_dir(string str, int article);
 // security
 public          int      init_eids(void);
 public          string   getgid(mixed who);
@@ -109,8 +109,8 @@ public          int      cred_cmp(object cred1, object cred2);
 
 public          int      archp(object ob);
 public          int      creatorp(object ob);
-public          int      Dcreatorp(object ob, string domain = "@any@");
-public          int      Dlordp(object ob, string domain = "@any@");
+public          int      Dcreatorp(object ob, string domain);
+public          int      Dlordp(object ob, string domain);
 public          int      elder(object ob);
 public          int      playerp(object ob);
 
@@ -118,20 +118,20 @@ public          int      check_pwd(string pwd);
 // strings
 public          int      atoi(string arg);
 public          string   itoa(int arg);
-public          string   add_article(string text, int flag = 0);
-public          string   i_wrap(string text, int width = DFLT_SCR_WIDTH, int indent = DFLT_SCR_INDENT);
-public          void     more(mixed arg, int height = DFLT_SCR_HEIGHT, string input = "");
+public          string   add_article(string text, int flag);
+public          string   i_wrap(string text, int width, int indent);
+public          void     more(mixed arg, int height, string input);
 public          string   remove_article(string text);
 // terminal
 public          string   blink(string str);
 public          string   bold(string str);
 public          string   clear_line(void);
-public          string   clear_screen(int flag = 0);
+public          string   clear_screen(int flag);
 public          string   erase_line(void);
 public          string   inverse(string str);
 public          string   normal(void);
-public          string   set_bg_color(int color = COL_BLACK, int bright = 0);
-public          string   set_fg_color(int color = COL_WHITE, int bright = 0);
+public          string   set_bg_color(int color, int bright);
+public          string   set_fg_color(int color, int bright);
 public          string   underscore(string str);
 public          string   up_line(void);
 #endif // __SEC_SIMUL_EFUN_H
