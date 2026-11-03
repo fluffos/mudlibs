@@ -468,3 +468,7 @@ Catalog 补 `master_object`/`wizlist`/`localcmd`/`unshadow`/`varargs snoop`；`/
 ## 深度功能测试（2026-11-03，virtual_server 宽映射）
 
 `m_terrains` 用 LDMud `([:3])` 与 `([crd:file;ansi;desc])`。改成 `([])` / 数组值。证明：HEAD `([:3])` 语法错；树 `/lib/virtual_server` 可加载。
+
+## 深度功能测试（2026-11-03，sshop/skills 宽映射）
+
+烟草店 `sshop` 库存与 `basic/player/skills` 的 LDMud 宽映射改为数组值；`reset` 用 `keys()` 迭代。`_gskills` 已可加载。证明：HEAD 宽映射语法错；树 sshop/skills 可加载。
