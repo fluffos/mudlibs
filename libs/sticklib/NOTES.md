@@ -500,3 +500,7 @@ Strategy A `/lib/living` 只有 `query_mhp`，祭司 outer_guard 等调用 `quer
 ## 深度功能测试（2026-11-03，living add_alignment）
 
 Strategy A living 缺 `add_alignment`；麻风病人/乞丐调用它。补增量形式。证明：HEAD leper Undefined；树 leper/beggar 可加载。
+
+## 深度功能测试（2026-11-03，localtime() 缺参）
+
+FluffOS 的 `localtime` 必须带时间戳。`timezone_d` 的 `localtime()[8]` 改为 `localtime(time())[8]`。证明：HEAD Too few arguments；树 timezone_d 可加载。

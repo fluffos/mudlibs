@@ -242,3 +242,7 @@ The code of this lib writes logs into 2 subdirectories of `log/`: `log/chat` (`d
 ## 深度功能测试（2026-11-03，harry give_coin 闭包）
 
 `monsters/harry.lpc`：`add_talk_response` 末项 `#'give_coin` → `(: give_coin :)`。对象仍被 `inherit/desc` 其它 LDMud 缺口挡住。
+
+## 深度功能测试（2026-11-03，localtime() 缺参）
+
+`nolife`/`cryo`/`spawn` 的裸 `localtime()` 改为 `localtime(time())`（FluffOS 必参）。与 sticklib timezone_d 同类。

@@ -315,3 +315,7 @@ The code of this lib writes logs into 10 subdirectories of `log/`: `log/ARCH/bbm
 ## 深度功能测试（2026-11-03，life ::die limited）
 
 `std/player/life.lpc`：`limited(#'::die, …)` → `limited(function(int pd, int ec) { ::die(pd, ec); }, …)`（`(: ::die :)` 非法）。
+
+## 深度功能测试（2026-11-03，localtime() 缺参）
+
+`std/player/base` 的裸 `localtime()` 改为 `localtime(time())`。宿主仍被更早的 hook.h 语法挡住。
