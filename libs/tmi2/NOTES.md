@@ -751,3 +751,15 @@ A room exit named a file the lib does not have, so the player was stuck (a typo,
 
 `_go.lpc` 把 `tmp` 声明为 `mapping`，却把 `query("exit_msg/"+dir)` 的字符串塞进去再交给 `replace_string`——FluffOS 报 Bad argument 1。改为 `mixed tmp`。证明：_go 可编译。
 
+## 深度功能测试（2026-11-03，missile_spell_j 字符串截断）
+
+`missile_spell_j.lpc` 的 `tell_object` 丢了收尾引号，下一行再开了一段未写完的字符串（非法 `\`）。补上引号、去掉残段，并删未用 `hp`。证明：syntax/illegal-char 清零。
+
+## 深度功能测试（2026-11-03，usage float trunc）
+
+`usage_d`/`usage_i` 把 float `data[i]`/`max/scale` 赋给 int `max`/`limit`。`to_int()`（KB 04）。证明：Float truncated 警告清零。
+
+## 深度功能测试（2026-11-03，istack LISTOBJFILE）
+
+`istack.lpc` 仍写已更名的 `LISTOBJFILE`；`adt_defs.h` 现为 `ILIST_ADT`。改用宏。证明：Undefined LISTOBJFILE 清零。
+

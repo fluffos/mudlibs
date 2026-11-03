@@ -272,6 +272,11 @@ detection.
   lacked `#include <socket.h>` for `SKT_STYLE_*_M`. `_go.lpc` typed
   `tmp` as `mapping` then passed a string exit_msg to `replace_string`
   — use `mixed tmp`. Proof: both hosts compile.
+  **Also (2026-11-03, tmi2 missile / usage trunc / istack):**
+  `missile_spell_j` lost a closing quote and left a truncated string
+  (illegal `\`). `usage_d`/`usage_i` assign floats into int `max`/`limit`
+  — `to_int()`. `istack` still named `LISTOBJFILE`; use `ILIST_ADT`.
+  Proof: those diags cleared.
 - **`Type of returned value doesn't match function return type ( int vs
   void )`**: a `void` function (or one with no type, which this driver reads
   as void) returns a value. MudOS compiled it and passed the value on, and
