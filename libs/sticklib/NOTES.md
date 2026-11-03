@@ -587,3 +587,7 @@ member 列表改为 member_array；跨行 call_other 合并；inaugurate_master 
 ## 深度功能测试（2026-11-03，living set void vs int）
 
 Strategy A `/lib/living` 的 `varargs void set(...)` 与 NPC/player 的 `varargs int set(...)` 冲突（`Function set inherited ... void vs int`，3 处）。同 `attack` 先例，改为 `varargs int` 并 `return 0`。证明：living/player/set_n_query/beggar PASS；该类警告清零（44→41 diags）。
+
+## 深度功能测试（2026-11-03，Types in ?:）
+
+`modify_command` 的 `s ? s : FAIL`（string vs int）拆成 `if (!s) return FAIL`；`telopt_d` 的 `items ? items : ""` / `room_players ? ... : ""`（mixed * vs string）改为空数组 `({})`；`room_ldmud` 的 `map_private_key ? ... : this_object()`（string vs object）用 `mixed map_key` 分支。证明：三文件 PASS；该类警告清零（41→35 diags）。
