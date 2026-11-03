@@ -133,6 +133,8 @@ detection.
 
 **Also (2026-11-03, bare `localtime()`):** FluffOS requires a timestamp; LDMud allowed `localtime()`. Rewrite `localtime()` → `localtime(time())` (sticklib `timezone_d`; simud `nolife`/`cryo`/`spawn`; morgengrauen `std/player/base`). Proof: HEAD timezone_d Too few arguments; tree loads.
 
+**Also (2026-11-03, sticklib order_change_d):** `object coef_required` holding an int from a mapping → `int` (Bad left argument to `<=`). Proof: HEAD FAIL; tree loads.
+
 
   - `command(str, ob)`, `transfer()`, `add_verb()`: see
     §7.172–§7.174.

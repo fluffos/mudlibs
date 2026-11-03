@@ -504,3 +504,7 @@ Strategy A living 缺 `add_alignment`；麻风病人/乞丐调用它。补增量
 ## 深度功能测试（2026-11-03，localtime() 缺参）
 
 FluffOS 的 `localtime` 必须带时间戳。`timezone_d` 的 `localtime()[8]` 改为 `localtime(time())[8]`。证明：HEAD Too few arguments；树 timezone_d 可加载。
+
+## 深度功能测试（2026-11-03，order_change_d 形参类型）
+
+`coef_required` 误标为 `object`，与 mapping 里存的 int 比较触发 Bad left argument。改为 `int`。证明：HEAD Bad left argument；树可加载。
