@@ -50,6 +50,12 @@ detection.
     (`kxkjii2` already answered for an absolute name and `xyxy2` still does; one function can do both.) Detection:
     `grep -rlE '#[ \t]*include[ \t]*<\.\./' libs/<slug>/work`, or a scan whose top error is *Cannot #include ../x.h*
     in dozens of files. `lpcc --batch` runs `create()`, so feeding it those files proves they load.
+- **`#include MACRO "suffix"` does not concatenate on FluffOS** (sticklib
+  priests, 2026-11-03). LDMud joined `#include PRIEST_DIR "lib/fill_bag.lpc"` into
+  one path; here it is `Cannot read #include file`. Rewrite to a single absolute
+  string (`#include "/guilds/priests/lib/fill_bag.lpc"`). Same shape:
+  `PRIEST_GARDENS "push_cmd.lpc"`, `AREA_* "DEFS.h"` (AREA_* often still undefined).
+  Detection: `grep -rnE '#include [A-Z_][A-Z0-9_]* "' libs/<slug>/work`.
 - **Case sensitivity.** `<Action.h>` vs `action.h`. One wrong-case
   include can dominate a sweep. Use `find -iname`.
 - **`inherit` after globals is fatal**, including globals pulled in from
@@ -117,6 +123,11 @@ detection.
   - `indices()` → `keys()`.
   - `set_this_object()` → just drop it when the ACL doesn't depend on
     caller identity.
+  - **Also (2026-11-03, sticklib):** drop `set_this_object` /
+    `efun::set_this_player` in `secure/simul_efun/{cat,log_file,shout,amylaar}`,
+    `secure/master/log_file`, `lib/player` login; `cat`'s LDMud `txt & "\n"` →
+    `sizeof(explode(txt, "\n")) - 1`. Proof: HEAD Unknown/Undefined efun; tree loads.
+
   - `command(str, ob)`, `transfer()`, `add_verb()`: see
     §7.172–§7.174.
 - **`new` and `class` are always reserved words.** Rename parameters or

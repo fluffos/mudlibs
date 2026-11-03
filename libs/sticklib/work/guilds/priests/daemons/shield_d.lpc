@@ -61,17 +61,21 @@ int end_shield(object pl);
 
 
 create() {
-    players = allocate_mapping(0, 5);
+    /* FluffOS: 1-value maps; columns live in arrays (§7.234). */
+    players = ([]);
 }
 
 
 void
 update_pl(object pl) {
     int d;
+    mixed *row;
 
-    d = time() - players[pl, K_TIME];
-    players[pl, K_TIME] = time();
-    players[pl, K_DURATION] -= d;
+    if (!(row = players[pl]))
+	return;
+    d = time() - row[K_TIME];
+    row[K_TIME] = time();
+    row[K_DURATION] -= d;
 }
 
 
@@ -85,21 +89,24 @@ remove_pl(object pl) {
 // his/her current shield type matches.
 void
 add_shield(object pl, int dur, int skill, int type, int sps) {
+    mixed *row;
+
     if(dur<WARNING_TIME)
 	dur = WARNING_TIME + 1;
     if(!member(players,pl)) {
-	players += ([pl: dur; skill; time(); type; sps]);
+	players[pl] = ({ dur, skill, time(), type, sps });
 	pl->set_guild_hook(
 	  G_HOOK_HIT_PLAYER,(: query_guild_hit_player :));
 	call_out((: end_shield :), dur-WARNING_TIME, pl);
     }
     else {
 	update_pl(pl);
-	if((players[pl, K_DURATION]+= dur) > MAX_SHIELD_DUR)
-	    players[pl, K_DURATION] = MAX_SHIELD_DUR;
-	players[pl, K_SKILL] = skill;
-	if((players[pl, K_SPS_STORED] += sps) > MAX_SPS)
-	    players[pl, K_SPS_STORED] = MAX_SPS;
+	row = players[pl];
+	if((row[K_DURATION]+= dur) > MAX_SHIELD_DUR)
+	    row[K_DURATION] = MAX_SHIELD_DUR;
+	row[K_SKILL] = skill;
+	if((row[K_SPS_STORED] += sps) > MAX_SPS)
+	    row[K_SPS_STORED] = MAX_SPS;
 
     }
 }
@@ -107,15 +114,23 @@ add_shield(object pl, int dur, int skill, int type, int sps) {
 
 int
 query_shield(mixed pl, int type, int sps_stored) {
-    if(stringp(pl)) pl = find_player(pl);
+    string pname;
+    mixed *row;
+
+    /* find_player wants a string; mixed pl trips Bad argument (KB 04). */
+    if (stringp(pl)) {
+	pname = pl;
+	pl = find_player(pname);
+    }
     if(!pl || !member(players,pl)) {
 	type = sps_stored = 0;
 	return 0;
     }
     update_pl(pl);
-    type = players[pl, K_TYPE];
-    sps_stored = players[pl, K_SPS_STORED];
-    return players[pl, K_DURATION];
+    row = players[pl];
+    type = row[K_TYPE];
+    sps_stored = row[K_SPS_STORED];
+    return row[K_DURATION];
 }
 
 
@@ -132,7 +147,7 @@ end_shield(object pl) {
 	return;
     }
     update_pl(pl);
-    dur_left = players[pl, K_DURATION];
+    dur_left = players[pl][K_DURATION];
 
     if(dur_left>WARNING_TIME) {
 	call_out((: end_shield :), dur_left - WARNING_TIME, pl);
@@ -159,17 +174,17 @@ void fireshield_damage(object pl, object hitter, int skill)
     if(!hitter || !pl) return;
     if(environment(pl) != environment(hitter)) return;
 
-    if(players[pl, K_SPS_STORED] < MIN_SPS) return;
+    if(players[pl][K_SPS_STORED] < MIN_SPS) return;
 
     if (!random(10) && !present("on_fire", hitter)) {
 	move_object(clone_object(PRIEST_OBJ_DIR "on_fire"), hitter);
     }
 
-    dmg = BALANCE_D->damage(skill, GN_PRIEST, players[pl, K_SPS_STORED], 0) / 2;
+    dmg = BALANCE_D->damage(skill, GN_PRIEST, players[pl][K_SPS_STORED], 0) / 2;
     if(query_once_interactive(hitter))
 	dmg = 60 * dmg / 100;
     dmg -= random(dmg / 2);
-    players[pl, K_SPS_STORED] = 3*players[pl, K_SPS_STORED]/4;
+    players[pl][K_SPS_STORED] = 3*players[pl][K_SPS_STORED]/4;
 
     hitter->tell_me(&(messages[M_FIRESHIELD_HITTER]),0,0,pl,0,0);
     pl->tell_me(&(messages[M_FIRESHIELD_ME]),0,0,pl,hitter,0);
@@ -202,7 +217,7 @@ query_guild_hit_player(int dmg, int dt, int hc, object hitter) {
     // No protection against traps etc
     // unless damage type is DT_CRUSH
 
-    skill = players[pl, K_SKILL];
+    skill = players[pl][K_SKILL];
 
     if(pl->query_sp() < SP_COST) {
 	pl->tell_me("You become too tired to maintain your shield spell. \
@@ -224,7 +239,7 @@ much longer anymore.");
     // at max skill average is 37.5%  (was 45%)
     // too much, too little? any comments?
 
-    switch(players[pl, K_TYPE]) {
+    switch(players[pl][K_TYPE]) {
     case ST_FIRE:
 	switch(dt) {
 	case DT_FIRE:
@@ -250,7 +265,7 @@ it didn't exist.");
 
     // is 3*hc too much or too little?
     if((dmg + 3*hc) > random(DAMAGE_LIMIT)) {
-	players[pl, K_SKILL] -= SHIELD_WEAKENING_PERCENTAGE*skill/100;
+	players[pl][K_SKILL] -= SHIELD_WEAKENING_PERCENTAGE*skill/100;
 	pl->tell_me("You feel slight weakening in the protective flux \
 surrounding you.");
     }

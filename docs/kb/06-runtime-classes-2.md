@@ -1307,6 +1307,8 @@ an error; the driver flags each one as `Expression has no side effects`, so read
 
 **Also (2026-11-03, basis existence PLAYER_D):** `#include <daemons.h>`. Proof: HEAD FAIL Undefined PLAYER_D; tree PASS.
 
+**Also (2026-11-03, sticklib wide map + mapping_contains):** priests `alchemy_chamber`/`attack_d`/`shield_d` — `([k: a; b])` + `mapping_contains(&…)` + `m[k, N]` → array values `m[k][N]`; `allocate_mapping(0,5)` → `([])`. Proof: HEAD Undefined mapping_contains / wide-map `;`; tree loads.
+
 **Also (2026-11-03, dynamic sort locals via nosave):** morg `_dump_wizlist(sortby)`, aoh `sort_mapping(sort_fun,to_sort)`, nirv `array.lpc` sort closures — stash in nosave + named cmp/`evaluate` (FluffOS forbids locals in functionals).
 ### 7.235 A master guard on `SIMUL_EFUN_OB` gives every object uid `""` when the config loads another simul_efun file (hy, hy5, 2026-10-06)
 **Symptom:** a link-dead player is never removed: `quit` after a disconnect errors `你()不能摧毁其他的使用者` from `feature/move.lpc`

@@ -452,3 +452,11 @@ Catalog 补 `master_object`/`wizlist`/`localcmd`/`unshadow`/`varargs snoop`；`/
 ## 深度功能测试（2026-10-28，room add_object 第二参 mixed）
 
 `add_object`/`add_monster` 第二参改为 `mixed`，整型时当作 reset_chance。证明：HEAD bank Bad type；树 bank 可加载。
+
+## 深度功能测试（2026-11-03，宽映射 mapping_contains + set_this_*）
+
+祭司 `alchemy_chamber` / `attack_d` / `shield_d` 用 LDMud 宽映射（`([k: a; b; …])`、`m[k, N]`、`mapping_contains`）。改成数组值 `m[k] = ({…})` / `m[k][N]`；`shield_d` 的 `allocate_mapping(0,5)` 改为 `([])`，`find_player(mixed)` 经 string 局部再查。`#include PRIEST_DIR "lib/fill_bag.lpc"` 在 FluffOS 不拼接，改为绝对路径。
+
+`secure/simul_efun` 的 `cat`/`log_file`/`shout`/`amylaar` 与 `master/log_file`、`lib/player`：丢掉 `set_this_object` / `efun::set_this_player`（KB 04）；`cat` 的 `txt & "\n"` 改为 `sizeof(explode(txt, "\n")) - 1`。
+
+证明（`lpcc_eval`）：HEAD alchemy/attack_d `mapping_contains` 失败、shield_d 宽映射语法/find_player、cat/shout `set_this_*`；树 attack_d/shield_d/alchemy_chamber/cat/shout/log_file 可加载。留言板/邮箱宽映射仍留。
