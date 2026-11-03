@@ -620,3 +620,7 @@ Strategy A `/lib/living` 的 `varargs void set(...)` 与 NPC/player 的 `varargs
 
 `command_driver` 在 `#ifndef PLAYER_C` 下依次 include `player_cmds`/`coder_cmds`/`lord_handling`/`desc`，各文件各自声明 `coder_level`/`name`/`cap_name`/`partyId` 桩，FluffOS 报 Redeclaration。`player_cmds` 声明后 `#define STICKLIB_PLAYER_STUB_VARS`；后续文件与 `command_driver` 自身的重复声明用该守卫包起来（或删掉）。证明：该类 7 条警告清零；warnings 14→7 diags。
 
+## 深度功能测试（2026-11-03，Strategy A living 字段重声明）
+
+Strategy A `/lib/living` 已有 `dead_ob`/`random_pick`/`wander`/`damage_type`。`npc_ldmud` 再声明前三者；`set_n_query` 在 `PLAYER_C` 外声明 `damage_type`，与 living 冲突。删掉 npc_ldmud 重复项（保留 `init_ob`）；`damage_type` 移进 `#ifndef PLAYER_C` 桩块。证明：四条 Redeclaration 清零；set_n_query/npc_ldmud 仍可编译。
+

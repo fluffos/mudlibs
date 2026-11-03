@@ -249,6 +249,12 @@ detection.
   file's stubs, `#define STICKLIB_PLAYER_STUB_VARS` and wrap later
   copies (drop `command_driver`'s own `int coder_level`). Proof: those
   seven Redeclaration rows cleared.
+  **Also (2026-11-03, sticklib Strategy A living field redecls):**
+  `/lib/living` already owns `dead_ob` / `random_pick` / `wander` /
+  `damage_type`. Drop the first three from `npc_ldmud` (keep `init_ob`);
+  move `set_n_query`'s `damage_type` into the `#ifndef PLAYER_C` stub
+  block so the real player uses living's copy. Proof: four Redeclaration
+  rows cleared; hosts still compile.
 - **`Type of returned value doesn't match function return type ( int vs
   void )`**: a `void` function (or one with no type, which this driver reads
   as void) returns a value. MudOS compiled it and passed the value on, and
