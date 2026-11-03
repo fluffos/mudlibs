@@ -379,3 +379,7 @@ master / simul_efun / workfiles / define.h 等处的 `strong_types` / `pedantic`
 ## 深度功能测试（2026-11-03，buffer 标识符）
 
 FluffOS 保留 `buffer` 为类型；`string buffer` 局部/参数改为 `buf`。证明：声明层语法错消除（与 sticklib `_indent` 同类）。
+
+## 深度功能测试（2026-11-03，bind_lambda #'efun）
+
+kernel/simul 与 save_object_filter 的 `bind_lambda(#'efun::…)` 改为 FluffOS `bind((: efun::… :), ob)`。证明：源中该类调用点清除。
