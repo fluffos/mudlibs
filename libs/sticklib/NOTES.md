@@ -603,3 +603,7 @@ Strategy A `/lib/living` 的 `varargs void set(...)` 与 NPC/player 的 `varargs
 ## 深度功能测试（2026-11-03，unused locals / OLD_GOVERNMENT）
 
 `thief_mark_new`：`current_gm`/`current_co_gm`/`killer_mark` 只在 `#ifdef OLD_GOVERNMENT` 中使用，声明却在外——FluffOS 报 Unused。声明移进 ifdef。`/lib/player` `query_short` 未用的 `object ob` 删除。证明：thief_mark/player PASS；Unused local 警告清零（25→21 diags）。
+
+## 深度功能测试（2026-11-03，prototype void vs int）
+
+祭司：`void end_smash`/`gen_begin_spell`/`bless_it` 原型与 `status` 定义不符——原型改为 status。`lord_handling` 在 `command_driver` 的 include 链里（先有 void tell_me 桩）声明 `varargs int tell_me`，与同链桩冲突；改为 `varargs void` 与兄弟桩一致（真定义仍在 tell_me.lpc 的 int）。证明：priests 三文件与 command_driver/player PASS；prototype 警告清零（21→17 diags）。
