@@ -211,6 +211,11 @@ detection.
   `evalute`→`evaluate`, `cmd`→`cmp`, LDMud `param = dflt` →
   `varargs`+`undefinedp`, `file_name` prototype varargs, logging
   `facility`→`priority`. Proof: compile 17→25; fragment residue remains.
+  **Also (2026-11-03, sagenwelt sefun fragment includes/typos):**
+  privs/std_paths/config includes; ansi.h `CSI`/`CLR`/`HOME` + ANSK guard
+  typo; `BG_DOMAIN`→`BB_DOMAIN`; authors_of/domains_of; strings semicolon;
+  passwd SEC_PWD_*/PWD_CRYPT_*; creator_file `sprintf`; setegid/seteuid
+  prototypes `int`. Proof: error diagnostics cleared; compile 25→31.
 
 **Also (2026-11-03, sticklib living `set` void vs int):** Strategy A `/lib/living` had `varargs void set(...)` while npc/player `set_n_query` and `/lib/player` declare `varargs int set(...)` (`Function set inherited ... void vs int`, 3 files). Same shape as the earlier `attack` fix: living becomes `varargs int` returning 0. Proof: living/player/set_n_query/beggar PASS; those three warnings gone.
 

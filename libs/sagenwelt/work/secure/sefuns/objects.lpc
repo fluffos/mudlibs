@@ -6,6 +6,23 @@
 /// @version 0.1.0
 /// @date 2016-01-23
 
+#include <privs.h>
+#include <std_paths.h>
+#include <syslog.h>
+
+#ifndef __SAGENWELT_STARTUP_FINISHED__
+#define __SAGENWELT_STARTUP_FINISHED__
+private int startup_finished;
+#endif
+
+private varargs void log_msg(object caller, string uid, string gid,
+                             int priority, string format,
+                             mixed a0, mixed a1, mixed a2, mixed a3)
+{
+    syslog(priority, format, a0, a1, a2, a3);
+}
+
+
 private mapping authors_of;
 private mapping domains_of;
 
@@ -63,8 +80,8 @@ private void init_object_sefuns(void)
                 "/secure/"        :  BB_DOMAIN,
                 MAIL_D            :  MAIL_DOMAIN,
                 NEWS_D            :  NEWS_DOMAIN,
-                "/std"            :  BG_DOMAIN,
-                "/std/"           :  BG_DOMAIN,
+                "/std"            :  BB_DOMAIN,
+                "/std/"           :  BB_DOMAIN,
                 "/tmp"            :  BB_DOMAIN,
                 "/tmp"            :  (: tmpd_domain :),
                 ]);
@@ -141,7 +158,7 @@ private string tmpd_domain(string file)
 // --------------------------------------------------------------------------
 public object simul_efun()
 {
-    return find_object(__SIMUL_EFUN_FILE__);
+    return find_object("/secure/obj/simul_efun");
 }
 
 // file_name
@@ -181,7 +198,7 @@ public string author_of(string file)
     else if(file == "/")
         return BB_UID;
 
-    ret = match_path(authors, file);
+    ret = match_path(authors_of, file);
     if(functionp(ret))
         ret = evaluate(ret, file);
     if(stringp(ret) && sizeof(ret))
@@ -200,7 +217,7 @@ public string domain_of(string file)
     else if(file == "/")
         return BB_DOMAIN;
 
-    ret = match_path(authors, file);
+    ret = match_path(domains_of, file);
     if(functionp(ret))
         ret = evaluate(ret, file);
     if(stringp(ret) && sizeof(ret))
@@ -224,7 +241,7 @@ public varargs void destruct(object ob)
     object who = TO();
 
     // where we called with some argument?
-    if(!nullp(ob))
+    if(!undefinedp(ob))
     {
         string euid = geteuid(who);
         string egid = getegid(who);
@@ -232,7 +249,7 @@ public varargs void destruct(object ob)
         if((ob != who) && (euid != ROOT_UID) && (geteuid(ob) != euid))
         {
 
-            _syslog(who, euid, egid, LOG_AUTH|LOG_ERR,
+            log_msg(who, euid, egid, LOG_AUTH|LOG_ERR,
                     "illegal call to destruct(%O) by %O[%s:%s]",
                     ob, who, euid, egid);
             error("illegal call to destruct");
@@ -241,7 +258,7 @@ public varargs void destruct(object ob)
         else        // allowed to destruct(ob), let's give it a chance to terminate nicely
         {
             event(({ob}), "destruct", who);
-            _syslog(who, euid, egid, LOG_DESTRUCT|LOG_INFO,
+            log_msg(who, euid, egid, LOG_DESTRUCT|LOG_INFO,
                     "%O[%s:%s]->destruct(%O)", who, euid, egid, ob);
         }
     }

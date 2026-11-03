@@ -101,10 +101,10 @@ public          string   opposite_dir(string str, int article);
 public          int      init_eids(void);
 public          string   getgid(mixed who);
 public          string   getegid(mixed who);
-public          string   setegid(string egid);
+public          int      setegid(string egid);
 public          string   getuid(mixed who);
 public          string   getugid(mixed who);
-public          string   seteuid(string euid);
+public          int      seteuid(string euid);
 public          int      cred_cmp(object cred1, object cred2);
 
 public          int      archp(object ob);

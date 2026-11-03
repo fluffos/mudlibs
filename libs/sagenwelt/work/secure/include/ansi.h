@@ -12,7 +12,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 #ifndef __SEC_ANSI_H
-#define __SEC_ANSK_H
+#define __SEC_ANSI_H
 
 #ifndef ESC
 #define ESC         ""                // ANSI ESC
@@ -22,6 +22,9 @@
 #endif
 
 #define VT100_CSI           ESC + "["           // ANSI control sequence start
+#ifndef CSI
+#define CSI                 VT100_CSI
+#endif
 
 #define VT100_NOR           CSI+"2;37;0m"       // Puts everything back to normal
 
@@ -70,6 +73,12 @@
 #define VT100_BOLD          CSI+"1m"            // Turn on bold mode
 #define VT100_CLR           CSI+"2J"            // Clear the screen
 #define VT100_HOME          CSI+"H"             // Send cursor to home position
+#ifndef CLR
+#define CLR                 VT100_CLR
+#endif
+#ifndef HOME
+#define HOME                VT100_HOME
+#endif
 #define VT100_REF           CLR+HOME            // Clear screen and home cursor
 #define VT100_BIGTOP        ESC+"#3"            // Dbl height characters, top half
 #define VT100_BIGBOT        ESC+"#4"            // Dbl height characters, bottem half
@@ -102,4 +111,4 @@
                         VT100_UNFR, VT100_BLINK, VT100_U, VT100_REV,    \
                         VT100_HIREV })
 
-#endif // __SEC_ANSK_H
+#endif // __SEC_ANSI_H

@@ -192,3 +192,7 @@ master 调用 `elderp`/`archp`/`adminp`/`Dlordp`/`done_startup`；menu 调用 `t
 
 单独扫描的 `secure/sefuns/*.lpc`：`evalute`→`evaluate`；`cmd`→`cmp`；`nullp`→`undefinedp`；缺分号；`TYPE_ERROR` 改 `sprintf`；LDMud `int x = 0` 默认参改为 `varargs`+`undefinedp`（communication/file_system/regex/room/security/strings/terminal/passwd/objects）；`simul_efun.h` 的 `file_name` 标 varargs；driver 补 `privs.h`/`_syslog` 桩；logging `facility`→`priority`、`SYSLOG_D`；room 补 `string ret`；security `cred_cmp` 声明逗号/`a2`。证明：compile 17→25；仍 FAIL 的片段（objects MAIL_D、strings remove_article、security cred_cmp 残、logging `_syslog` 重声明、passwd/terminal）下次继续。
 
+## 深度功能测试（2026-11-03，sefun 片段缺头文件/笔误收尾）
+
+片段补 `#include <privs.h>`/`std_paths`/`config`；`ansi.h` 补 `CSI`/`CLR`/`HOME` 别名并修正 include guard 笔误 `ANSK`；`BG_DOMAIN`→`BB_DOMAIN`；`authors`→`authors_of`/`domains_of`；strings 缺分号与 `remove_article` 前置声明；passwd `SEC_PWD_*`/`PWD_CRYPT_*`；logging 内部 `_syslog` 改名避免冲突；`simul_efun_orig` `init_*_sefuns`；`creator_file` 的 `return(fmt,…)`→`sprintf`；`setegid`/`seteuid` 原型改为 `int`。证明：错误诊断清零；compile 25→31（仅剩 unused-local 警告）。
+
