@@ -726,3 +726,12 @@ A room exit named a file the lib does not have, so the player was stuck (a typo,
 ## 战斗探针（2026-10-22）：`obj/tools/barney.lpc` 的 `inherit` 在全局变量之后
 
 `scripts/play_combat_probe.py tmi2 --account fluffos:... --clone ...` 克隆 `/obj/tools/barney` 时报 `10:9: Illegal to inherit after defining global variables`（`string *list; int which, lalala;` 写在 `inherit MONSTER;` 前面，老驱动不管）。把 `inherit MONSTER ;` 挪到全局变量前面，文件现在能加载。`googol` 一出来就走，`bozo` 不能被攻击（`You are not permitted to attack that.`），没有控制台错误。
+
+## 深度功能测试（2026-11-03，www inherit-after-globals）
+
+`obj/net/www.lpc` 在声明 nosave 全局之后才 `inherit OBJECT`，FluffOS 报 Illegal to inherit after defining global variables。把 inherit 挪到 include 之后、全局之前。证明：该类错误清零；www 可编译（余 Unused local）。
+
+## 深度功能测试（2026-11-03，二参 move_object）
+
+`adm/priv/blah`/`doh` 与 `u/l/leto/blah` 写 `move_object(this_object(), find_player(...))`；FluffOS 的 efun 只接受目标一参（§7.231）。改为 `move_object(find_player(...))`。证明：Too many arguments / 相关 side-effects 警告清零。
+

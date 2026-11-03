@@ -261,6 +261,10 @@ detection.
   `object attacker` over living's `object *attacker`; rename the leaf
   tracker to `alerted_attacker`. Proof: sticklib warnings scan at 0
   distinct diagnostics.
+  **Also (2026-11-03, tmi2 www inherit-after-globals):**
+  `obj/net/www.lpc` declared nosave globals then `inherit OBJECT`.
+  Move the inherit above the globals. Proof: inherit-after-globals error
+  cleared.
 - **`Type of returned value doesn't match function return type ( int vs
   void )`**: a `void` function (or one with no type, which this driver reads
   as void) returns a value. MudOS compiled it and passed the value on, and

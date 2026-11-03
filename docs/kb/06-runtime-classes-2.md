@@ -1259,6 +1259,8 @@ rewrite against raw (`grep -rn '= *clone_object([^;]*)->move_object('`).
 
 **Also (2026-11-03, sagenwelt):** catalog sefun `varargs move_object(item, dest)` + `syslog`/`creatorp` stubs; `object *` from `deep_inherit_list` → `string *`; drop `efun::` so the shim runs.
 
+**Also (2026-11-03, tmi2 blah/doh two-arg move_object):** wizard toys used `move_object(this_object(), find_player("leto"))`. One-arg `move_object(find_player("leto"))`. Proof: Too many arguments cleared.
+
 ### 7.232 A fragment rebuilt as a standalone class (holymission player, 2026-10-06)
 
 **Symptom:** the player has no `attack()`/`run_away()`/`query_level()`; `this_object()->attack()` in its heart_beat returns 0,
