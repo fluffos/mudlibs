@@ -735,3 +735,11 @@ A room exit named a file the lib does not have, so the player was stuck (a typo,
 
 `adm/priv/blah`/`doh` 与 `u/l/leto/blah` 写 `move_object(this_object(), find_player(...))`；FluffOS 的 efun 只接受目标一参（§7.231）。改为 `move_object(find_player(...))`。证明：Too many arguments / 相关 side-effects 警告清零。
 
+## 深度功能测试（2026-11-03，MACRO.0 浮点拼接）
+
+`usage_d`/`usage_i` 写 `AVERAGING_NUM.0`（旧驱动把宏与 `.0` 拼成浮点）；FluffOS 当成成员访问。改为 `(AVERAGING_NUM * 1.0)`（KB 04）。证明：syntax error 清零；两文件可编译（余 float trunc 警告）。
+
+## 深度功能测试（2026-11-03，channels0505 未声明局部）
+
+`channels0505` 在 `#else` 分支对 `flag`/`channel`/`stat` 做 sscanf/赋值却未声明，报 Illegal lvalue / Bad assignment。在 `cmd_channels` 顶部补 `string flag, channel; int stat;`。证明：该类错误清零。
+

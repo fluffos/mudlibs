@@ -208,7 +208,7 @@ detection.
   shape.
 - **`switch` with only `default:`** is a parse error, fatal in
   `master::connect()`. Rewrite it as a plain block.
-- **`MACRO.0` float trick**: rewrite as `(MACRO * 1.0)`.
+- **`MACRO.0` float trick**: rewrite as `(MACRO * 1.0)`. **Also (2026-11-03, tmi2 usage_d/i):** `AVERAGING_NUM.0` → `(AVERAGING_NUM * 1.0)`. Proof: syntax errors cleared; hosts compile.
 - **Multi-character char literals**: `case '''` → `case '\''`;
   `'25'` is invalid.
 - **`TYPE array NAME`** (needs `ARRAY_RESERVED_WORD`, which is off here):
@@ -265,6 +265,9 @@ detection.
   `obj/net/www.lpc` declared nosave globals then `inherit OBJECT`.
   Move the inherit above the globals. Proof: inherit-after-globals error
   cleared.
+  **Also (2026-11-03, tmi2 channels0505 undeclared locals):**
+  `sscanf`/`stat =` used `flag`/`channel`/`stat` with no decls → Illegal
+  lvalue. Declare them in `cmd_channels`. Proof: errors cleared.
 - **`Type of returned value doesn't match function return type ( int vs
   void )`**: a `void` function (or one with no type, which this driver reads
   as void) returns a value. MudOS compiled it and passed the value on, and
