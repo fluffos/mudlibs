@@ -464,3 +464,7 @@ Catalog 补 `master_object`/`wizlist`/`localcmd`/`unshadow`/`varargs snoop`；`/
 ## 深度功能测试（2026-11-03，bboard/mailbox 宽映射）
 
 `/std/obj/bboard`、`mailbox` 草稿映射用 LDMud 宽映射字面量与 `m[k, N]`。改成数组值；`mailbox` 的 `m_allocate`/`!x = expr` 改为 `([])` / `!(x = expr)`。证明：HEAD 宽映射语法错；树 bboard/mailbox 可加载。
+
+## 深度功能测试（2026-11-03，virtual_server 宽映射）
+
+`m_terrains` 用 LDMud `([:3])` 与 `([crd:file;ansi;desc])`。改成 `([])` / 数组值。证明：HEAD `([:3])` 语法错；树 `/lib/virtual_server` 可加载。
