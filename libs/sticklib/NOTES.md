@@ -496,3 +496,7 @@ Catalog 补 `master_object`/`wizlist`/`localcmd`/`unshadow`/`varargs snoop`；`/
 ## 深度功能测试（2026-11-03，living query_max_hp）
 
 Strategy A `/lib/living` 只有 `query_mhp`，祭司 outer_guard 等调用 `query_max_hp`。补别名返回 `max_hp`。证明：HEAD Undefined；树 outer_guard 可加载且 max=3500。
+
+## 深度功能测试（2026-11-03，living add_alignment）
+
+Strategy A living 缺 `add_alignment`；麻风病人/乞丐调用它。补增量形式。证明：HEAD leper Undefined；树 leper/beggar 可加载。
