@@ -834,3 +834,7 @@ A path written without the leading slash (`carry_object("d/city/obj/jiasha")->we
 ## 深度功能测试（2026-10-28，sort_array 方向闭包）
 
 剩余 LDMud sort_array 的 #'> / #'< 改为 1 / -1（KB 06 7.234）。
+
+## 深度功能测试（2026-11-03，bind_lambda）
+
+siki master/simuli 与 secure/simul_* 活文件的 bind_lambda(#'…) → bind((: … :))；跳过 baks。
