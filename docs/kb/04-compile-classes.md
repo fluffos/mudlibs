@@ -207,6 +207,10 @@ detection.
   catalog sefun `init_eids`/`simul_efun()`/`file_name`/`getegid`/
   `distinct_array`/`m_syslog`/`get_cwd`. Proof: those objects error-clean;
   sefun-fragment-alone FAILs remain expected.
+  **Also (2026-11-03, sagenwelt sefun fragment defaults/typos):**
+  `evalute`→`evaluate`, `cmd`→`cmp`, LDMud `param = dflt` →
+  `varargs`+`undefinedp`, `file_name` prototype varargs, logging
+  `facility`→`priority`. Proof: compile 17→25; fragment residue remains.
 
 **Also (2026-11-03, sticklib living `set` void vs int):** Strategy A `/lib/living` had `varargs void set(...)` while npc/player `set_n_query` and `/lib/player` declare `varargs int set(...)` (`Function set inherited ... void vs int`, 3 files). Same shape as the earlier `attack` fix: living becomes `varargs int` returning 0. Proof: living/player/set_n_query/beggar PASS; those three warnings gone.
 

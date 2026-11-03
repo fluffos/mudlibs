@@ -75,7 +75,7 @@ public          int      lcm(int a, int b);
 public          string   author_of(string file);
 public          string   domain_of(string file);
 public varargs  void     destruct(object ob);
-public          string   file_name(object who, int flag);
+public varargs  string   file_name(object who, int flag);
 public varargs  int      move_object(object ob1, object ob2);
 public          object   simul_efun(void);
 // passwd
