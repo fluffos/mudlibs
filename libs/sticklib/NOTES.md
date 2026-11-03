@@ -595,3 +595,7 @@ Strategy A `/lib/living` 的 `varargs void set(...)` 与 NPC/player 的 `varargs
 ## 深度功能测试（2026-11-03，poker 宽映射）
 
 同 blackjack：`hand = mkmapping(..., tmp×5)` 与 `hand[player, j]` 在 FluffOS 下变成逗号运算符，触发 `Expression has no side effects` 且牌面写错。改为玩家→`allocate(HAND_SIZE)` 数组映射，`hand[k][j]`。证明：poker PASS；该类 side-effects 警告清零（35→27 diags）。
+
+## 深度功能测试（2026-11-03，empty-if / TELL_UPDATE）
+
+`bboard` 读帖：仅含注释的 `if (!F_BBOARD_NO_NOTIFY)` 触发 `Expression has no side effects`（报在下一行 `return 1`）；删空壳，并把 `if (temp = _topfive[num]); else if` 写成先赋值再判断。`tell_me` 的 `if (tell_flags == TELL_UPDATE); tell_flags = 0;` 误加分号导致永远清零——去掉分号。证明：bboard/tell_me/player PASS；side-effects 与 conditional-unused 警告清零（27→25 diags）。
