@@ -259,3 +259,7 @@ only reliable error channel).
 - 驱动 stdout 无新编程错误（§10.9 debug.log 对本 boot 仍死）。
 
 无新编程缺陷。
+
+## 深度功能测试（2026-11-03，master_skeleton 文档桩）
+
+文档用 `master_skeleton` 的无体函数签名（含双 `reset`/`epilog`、半注释的 `heart_beat_error`）会当代码编译；`parse_command_*` 与 efun 名冲突。已注释文档桩、`raise_error`→`error`，去掉 `parse_command_*` 实现。证明：`lpc_warnings.py amylaarmini` 15/0、0 diagnostics。
