@@ -763,3 +763,7 @@ A room exit named a file the lib does not have, so the player was stuck (a typo,
 
 `istack.lpc` 仍写已更名的 `LISTOBJFILE`；`adt_defs.h` 现为 `ILIST_ADT`。改用宏。证明：Undefined LISTOBJFILE 清零。
 
+## 深度功能测试（2026-11-03，www 未用 alttmp）
+
+`obj/net/www.lpc` 声明 `alttmp`，唯一用法在已注释掉的 ALT 解析块内。从声明去掉。证明：Unused local 清零。
+
