@@ -616,3 +616,7 @@ Strategy A `/lib/living` 的 `varargs void set(...)` 与 NPC/player 的 `varargs
 
 `guilds/thieves/obj/voter.lpc` 的 `void long(string what)` 覆盖 `id.lpc` 的 `mixed long(mixed, mixed)`，FluffOS 报形参数量不符。给覆盖加 `varargs`（KB 04 表项）。证明：voter 该类警告清零；warnings 15→14 diags（仅剩 redeclaration）。
 
+## 深度功能测试（2026-11-03，command_driver stub 变量重声明）
+
+`command_driver` 在 `#ifndef PLAYER_C` 下依次 include `player_cmds`/`coder_cmds`/`lord_handling`/`desc`，各文件各自声明 `coder_level`/`name`/`cap_name`/`partyId` 桩，FluffOS 报 Redeclaration。`player_cmds` 声明后 `#define STICKLIB_PLAYER_STUB_VARS`；后续文件与 `command_driver` 自身的重复声明用该守卫包起来（或删掉）。证明：该类 7 条警告清零；warnings 14→7 diags。
+

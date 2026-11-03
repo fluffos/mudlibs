@@ -242,6 +242,13 @@ detection.
   `obj/voter.lpc` overrides `id.lpc`'s `mixed long(mixed, mixed)` with
   `void long(string what)`. Add `varargs` on the override (KB table).
   Proof: arity warning gone; tree voter compiles.
+  **Also (2026-11-03, sticklib player stub redeclarations):**
+  `command_driver` includes `player_cmds` then `coder_cmds` /
+  `lord_handling` / `desc`, each declaring the same `#ifndef PLAYER_C`
+  stubs (`coder_level`, `name`, `cap_name`, `partyId`). After the first
+  file's stubs, `#define STICKLIB_PLAYER_STUB_VARS` and wrap later
+  copies (drop `command_driver`'s own `int coder_level`). Proof: those
+  seven Redeclaration rows cleared.
 - **`Type of returned value doesn't match function return type ( int vs
   void )`**: a `void` function (or one with no type, which this driver reads
   as void) returns a value. MudOS compiled it and passed the value on, and
