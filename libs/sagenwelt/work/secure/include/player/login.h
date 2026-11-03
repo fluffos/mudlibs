@@ -21,4 +21,7 @@
 // Please don't change this one
 #define MSSP_USER       "___MSSP-REQUEST___"    ///< login name to get MSSP-info via login prompt
 
+#define NP_MENU         SECURE_OBJ_DIR "char_gen_menu"  ///< new-player character generation menu
+#define EMAIL_PROMPT    "Email address   : "
+
 #endif  // __SEC_PLAYER_LOGIN_H

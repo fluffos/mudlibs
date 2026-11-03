@@ -168,3 +168,7 @@ Catalog `simul_efun`：§7.231 双参 `move_object` shim；`syslog`/`creatorp`/`
 
 档案 `secure/sefuns/*` 无后缀；FluffOS `#include` 读不到。全部 `git mv` 为 `.lpc`；`simul_efun_orig` 的 `#include SEFUN_DIR "name"`（宏拼接）改为绝对路径 `"/secure/sefuns/name.lpc"`。活 sefun 仍是 catalog `simul_efun.lpc`；这些片段单独扫描会 FAIL（仅被 include），属预期。证明：`simul_efun_orig` 的 Cannot read #include 清零。
 
+## 深度功能测试（2026-11-03，MENJ/NP_MENU/PLAYER_DOMAIN）
+
+`menu.lpc` 的 `new(MENJ)` 笔误（同文件别处已是 `new(MENU)`）。`login` 缺 `NP_MENU`→`char_gen_menu`；`__PLAYER_DOMAIN__` 应为 `privs.h` 的 `PLAYER_DOMAIN`（缺宏导致 `":" __PLAYER_DOMAIN__` 语法错）。`player.lpc` 补 `#include <player/login.h>`（带出 `mud_info.h`/`NPWD_PROMPT`），并在本文件定义 `NEW_PASSWD` 等状态；`login.h` 补 `EMAIL_PROMPT`。证明：MENJ/NP_MENU/MI_PI_PWD/PLAYER_DOMAIN 类诊断清零。
+

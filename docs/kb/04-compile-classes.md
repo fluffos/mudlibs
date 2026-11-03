@@ -179,6 +179,17 @@ detection.
   `LOG_ERR` as the headers do; type `receive_message`'s class as `int`
   and use the `message` parameter. Proof: those Undefined rows cleared;
   compile 10→13.
+  **Also (2026-11-03, sagenwelt sefuns `.lpc`):** extensionless
+  `secure/sefuns/*` were unreadable to `#include`; rename to `.lpc` and
+  use absolute `#include "/secure/sefuns/name.lpc"` in `simul_efun_orig`
+  (macro-concat `#include SEFUN_DIR "x"` failed). Live sefun remains
+  catalog `simul_efun.lpc`; fragment-alone scan FAILs expected.
+  Proof: orig Cannot-read cleared.
+  **Also (2026-11-03, sagenwelt MENJ/NP_MENU/PLAYER_DOMAIN):**
+  `new(MENJ)` typo for `new(MENU)`; define `NP_MENU` to char_gen_menu;
+  `__PLAYER_DOMAIN__` → `PLAYER_DOMAIN` from privs.h; player includes
+  login.h for MI_PI_*/prompts and local NEW_PASSWD states. Proof: those
+  Undefined/syntax rows cleared.
 
 **Also (2026-11-03, sticklib living `set` void vs int):** Strategy A `/lib/living` had `varargs void set(...)` while npc/player `set_n_query` and `/lib/player` declare `varargs int set(...)` (`Function set inherited ... void vs int`, 3 files). Same shape as the earlier `attack` fix: living becomes `varargs int` returning 0. Proof: living/player/set_n_query/beggar PASS; those three warnings gone.
 
