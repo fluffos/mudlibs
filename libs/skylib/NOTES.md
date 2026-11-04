@@ -883,3 +883,6 @@ The code of this lib writes logs into 2 subdirectories of `log/`: `log/save/boar
 
 地形 iroom/milestone/area 的 outside 继承 `/std/outside`，实文件在 `/std/room/outside`（与 discworld 同形）。薄别名。证明：HEAD `/std/outside` 与三处 topography outside FAIL；树五对象 PASS。
 
+## 深度功能测试（2026-11-04，/std/room 薄别名 §6.15）
+
+topography 的 iroom/milestone/area 继承 `/std/room`，本体在 `basic_room`。薄别名。证明：HEAD 1 PASS / 4 FAIL；树 5 PASS。

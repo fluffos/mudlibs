@@ -1013,3 +1013,6 @@ oldwitch ostir/cmmix/fmix 继承 `/std/spells/witch/m/brew`，本体在 antiguo 
 
 bard/cleric 包装继承 `/std/spells/wizard/{mirror,inaud,scloud,read_magic}`；本体在 antiguo（read_magic→read_mag）。另补 gremios read_magic。证明：HEAD 10 FAIL；树 10 PASS。
 
+## 深度功能测试（2026-11-04，gremios/camino/summon/item-shop/inventory §6.15）
+
+薄别名：`/d/gremios/comandos/base_command`、`/room/camino_avalon/camino_avalon`、两处 `summon_base`→`summon_b`；收养 `inventory`（antiguo `.c.old`）与 FR 孪生的 `item-shop`+`shop_con`。证明：HEAD 2 PASS / 13 FAIL；树 15 PASS。
