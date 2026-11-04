@@ -660,3 +660,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
 
+
+## 深度功能测试（2026-11-04，F_DEALER/F_FUNCTION/F_GUILDCMDS §6.15）
+
+`F_DEALER`/`F_FUNCTION`/`F_GUILDCMDS` 未定义且 feature 缺失。从 fy2mg 收养 `dealer.lpc`，从 kxkj 收养 `function.lpc`/`guildcmds.lpc`；dealer 依赖 `MONEY_D`，从 hc 收养 `moneyd` 并定义宏。证明：HEAD 0 PASS / 6 FAIL → 树 6 PASS。

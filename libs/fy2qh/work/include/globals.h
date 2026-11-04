@@ -71,6 +71,7 @@
 #define ITEM                    "/std/item"
 #define LIQUID                  "/std/liquid"
 #define MONEY                   "/std/money"
+#define MONEY_D			"/adm/daemons/moneyd"
 #define NPC                             "/std/char/npc"
 #define POWDER                  "/std/medicine/powder"
 #define ROOM                    "/std/room"
@@ -114,6 +115,9 @@
 #define F_PAWNOWNER             "/feature/pawnowner.lpc"
 #define F_BANKPAWNOWNER         "/feature/bankpawnowner.lpc"
 #define F_UNIQUE                "/feature/unique.lpc"
+#define F_DEALER			"/feature/dealer.lpc"
+#define F_FUNCTION			"/feature/function.lpc"
+#define F_GUILDCMDS			"/feature/guildcmds.lpc"
 // added by Tie Yu
 #define F_QUEST			        "/feature/quest.lpc"
 #define MUDLIB_UID "Mudlib"

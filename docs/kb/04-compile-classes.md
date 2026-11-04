@@ -676,6 +676,9 @@ time. (3) *Fewer arguments than parameters*: add `varargs` to the definition the
 
 **Also (2026-11-04, es2 `F_MERCENARY`):** snow mercenary `inherit F_MERCENARY` with no define and no `/std/char/mercenary`. Adopted njhhdxdes2hx's feature and defined the macro. Proof: HEAD 0 PASS / 2 FAIL → tree 2 PASS.
 
+**Also (2026-11-04, fy2/fy2qh `F_DEALER`/`F_FUNCTION`/`F_GUILDCMDS`):** three features undefined and missing. Adopted `dealer` from fy2mg, `function`/`guildcmds` from kxkj, plus hc's `moneyd` as `MONEY_D` (dealer and the banker NPC call it). Proof: HEAD 0 PASS / 6 FAIL → tree 6 PASS each.
+
+
 
 
 
