@@ -1093,3 +1093,6 @@ old 洞穴/骷髅道继承 `/d/deku/open/cave_r3i` 与 `skull`，本体在 old�
 
 old 下水道继承 `/d/dragon/sewer/sewer_room`，本体在 old；字节拷贝（薄别名破坏 room::create）并补 statues_d。证明：sewer_room+statues_d HEAD FAIL → 树 PASS。
 
+## 深度功能测试（2026-11-04，newmasters 薄别名 + treetop 改写 §6.15）
+
+补 shadowgate 已有的 `newmasters/masters` 薄别名；`masters`/`class_stuff` 的 `<dieties.h>` 改为本地 `"/d/shadowgate/dieties.h"`。tecqumin 16 房 treetop 继承改写同 shadowgate。证明：newmasters HEAD FAIL → 树 PASS；treetop HEAD 1/4 → 树 5 PASS。
