@@ -965,3 +965,8 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，player_craft_shop DISTRIBUTION §6.16）
 
 `__DISTRIBUTION_LIB__` 已在 config/all_inc 定义，店铺走薄 `/std/room`，但 `dest_me()` 仍在 ifdef 外调用 `player_housing::dest_me()`；`event_exit`/`set_save_file` 也依赖 housing。档案有 player_housing，去掉 DISTRIBUTION 分支，始终 inherit housing。同改 v1/v2。证明：三库 HEAD FAIL；树 PASS。
+
+
+## 深度功能测试（2026-11-03，sefun am_time 别名 §6.16）
+
+`p_library` 调用 `am_time(t)`，simul_efun 只有 `amtime()`（CVS 曾记审美别名）。在 `secure/simul_efun/amtime.lpc` 补 `am_time` → `amtime`。同改 v1/v2。证明：三库 HEAD FAIL；树 PASS。
