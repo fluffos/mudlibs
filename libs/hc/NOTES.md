@@ -761,3 +761,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-11-03，§7.19 enable_player 重入）
 
 `feature/command.lpc` 的 `enable_player()` 加 `in_enable_player_now` 守卫（`scripts/lpc_fix_enable_player_guard.py`，KB 05 7.19）：门派 NPC `init()`→`setup()`→`enable_player()`→`enable_commands()` 再跑 `init()` 时直接返回，避免 Too deep recursion。
+
+## 深度功能测试（2026-11-04，PEN 武器基类 §6.15/§6.16）
+
+`clone/weapon/panguanbi` `inherit PEN` / `init_pen()`，但 `weapon.h` 无 `PEN` 宏、也无 `/inherit/weapon/pen`。按本库 `dagger.lpc` 风格补 `inherit/weapon/pen.lpc`，并在 `weapon.h` 的 SWORD 后加 `#define PEN`。证明：pen + panguanbi HEAD FAIL → PASS（chidi / bixiecanyang / hc / ffxymud 同改）。
+

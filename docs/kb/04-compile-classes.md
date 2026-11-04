@@ -1233,3 +1233,6 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-11-04, gjzddmudda POWDER+CLOTH twin of demonangel):** Same nitan-China gap: `POWDER` → missing `/std/medicine/powder`; `inherit CLOTH` with no `/std/armor/cloth` and no `CLOTH`/`TYPE_CLOTH` in `armor.h`. Copy powder+cloth from demonangel (dtxyzjb lineage) and add the two armor macros. Proof: 4 paths HEAD FAIL → PASS (powder, slumber_drug, cloth, black_vest).
 
+
+**Also (2026-11-04, PEN weapon type on chidi/bixiecanyang/hc/ffxymud):** `inherit PEN` / `init_pen()` with no `#define PEN` and no `/inherit/weapon/pen`. Add `#define PEN "/inherit/weapon/pen"` after SWORD and ship `pen.lpc` modeled on local `dagger.lpc` (EDGED|SECONDARY). Proof: pen + `clone/weapon/panguanbi` HEAD FAIL → PASS on all four hosts.
+

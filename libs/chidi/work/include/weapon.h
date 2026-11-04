@@ -17,6 +17,7 @@
 #define PIKE            "/inherit/weapon/pike"       // 枪
 #define SPEAR                   "/inherit/weapon/spear"         //枪
 #define SWORD       "/inherit/weapon/sword"     // 剑
+#define PEN         "/inherit/weapon/pen"       // pen
 #define STAFF       "/inherit/weapon/staff"     // 杖
 #define CLUB        "/inherit/weapon/club"      // 棍
 #define STICK           "/inherit/weapon/stick"         // 棒
