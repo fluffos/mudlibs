@@ -948,5 +948,9 @@ The code of this lib writes logs into 2 subdirectories of `log/`: `log/chan` (`s
 
 ## 深度功能测试（2026-11-03，combat.lpc BLADES 截断）
 
-`daemon/combat.lpc` 的 BLADES 在 damage<50 的半截字符串处截断（同 raw），后续 `$agent_name` 被解析成 `$var illegal outside of function pointer`。按 nightmare4 同点收束：在 damage<30 段末补 `}) });` 关闭数组并丢掉残缺段；`mixed array`→`mixed *`。证明：HEAD combat FAIL（$var×3）；树 PASS。remote/war/bugs 仍按 NOTES 搁置（API 错代 / 未完成内容 / PACKAGE_DB）。
+`daemon/combat.lpc` 的 BLADES 在 damage<50 的半截字符串处截断（同 raw），后续 `$agent_name` 被解析成 `$var illegal outside of function pointer`。按 nightmare4 同点收束：在 damage<30 段末补 `}) });` 关闭数组并丢掉残缺段；`mixed array`→`mixed *`。证明：HEAD combat FAIL（$var×3）；树仍 FAIL（Undefined BLUNTS/KNIVES/PROJECTILES + GetMove `list` Illegal lvalue）。
+
+## 深度功能测试（2026-11-03，combat.lpc GetMessages/#if 0）
+
+收口后的尾与 nightmare4 一致：`GetMessages`（仍引用未随截断保留的 BLUNTS/KNIVES/PROJECTILES）整段 `#if 0`；`GetMove` 声明 `mixed list`。证明：先前 FAIL；树 `PASS /daemon/combat`。remote/war/bugs 仍按 NOTES 搁置。
 
