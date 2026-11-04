@@ -1077,4 +1077,7 @@ old_hm_quest 怪物继承 `/d/hm_quest/mon/hmmob`，本体在 old_hm_quest。薄
 ## 深度功能测试（2026-11-03，hm_quest/rooms/quest1 薄别名 §6.15）
 
 oldrooms 继承 `/d/hm_quest/rooms/quest1`，本体在 oldrooms/quest1。薄别名。证明：HEAD 4 FAIL；树 5 PASS。
+## 深度功能测试（2026-11-03，deku keep towerE1i/E2i 薄别名 §6.15）
+
+new_closed_area 塔房继承 `/d/deku/keep/towerE1i|E2i`，本体在 new_closed_area。薄别名。证明：HEAD 5 FAIL；树 7 PASS。
 
