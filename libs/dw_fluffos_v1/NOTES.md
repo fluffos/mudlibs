@@ -507,3 +507,7 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 
 `/secure/simul_efun/find_match.lpc` 在迁到 obj_parser 后删掉了 `find_match` 本体，只留助手；sefun 对象仍 inherit 该文件，故全库 `find_match(...)` 编译为 Undefined（如 learning/kess）。补 `varargs object *find_match` 转调 `match_objects_for_existence`。同改 v1/v2。证明：HEAD `Undefined function find_match`；树 `lpcc_eval --at /secure/zzeval.lpc` 得 `({})` PASS。
 
+## 深度功能测试（2026-11-03，/std/rooftop 别名 §6.15）
+
+四居屋顶模板 `inherit "/std/rooftop"`，实文件在 `/std/room/rooftop`（与 outside 同形）。薄别名。同改 v1/v2。证明：三库 HEAD FAIL `/std/rooftop`；树 PASS（含 room/rooftop、shop-ledge）。
+
