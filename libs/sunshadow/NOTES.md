@@ -1086,4 +1086,7 @@ new_closed_area 塔房继承 `/d/deku/keep/towerE1i|E2i`，本体在 new_closed_
 ## 深度功能测试（2026-11-03，deku open/forest42i 薄别名 §6.15）
 
 open/old 森林房继承 `/d/deku/open/forest42i`，本体在 old。薄别名。证明：forest42i/47/41 HEAD FAIL → 树 PASS。
+## 深度功能测试（2026-11-03，deku open cave_r3i/skull 薄别名 §6.15）
+
+old 洞穴/骷髅道继承 `/d/deku/open/cave_r3i` 与 `skull`，本体在 old。薄别名。证明：HEAD 4 FAIL；树 6 PASS。
 
