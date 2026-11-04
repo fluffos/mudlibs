@@ -935,3 +935,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-11-03，§7.19 enable_player 重入）
 
 `feature/command.lpc` 的 `enable_player()` 加 `in_enable_player_now` 守卫（`scripts/lpc_fix_enable_player_guard.py`，KB 05 7.19）：门派 NPC `init()`→`setup()`→`enable_player()`→`enable_commands()` 再跑 `init()` 时直接返回，避免 Too deep recursion。
+
+## 深度功能测试（2026-11-04，BBS_BOARD 收养 §6.15）
+
+三块板 `inherit BBS_BOARD`，宏与 `/std/bbsboard` 皆缺。补宏并收养 xiyouji 的 `bbsboard.lpc`。证明：基类 HEAD FAIL → 树 PASS；板在 `create` 里 `move` 到缺失的 `/d/wiz/*` 房间（内容缺口）另案。

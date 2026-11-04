@@ -663,3 +663,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-11-03，§7.19 enable_player 重入）
 
 `feature/command.lpc` 的 `enable_player()` 加 `in_enable_player_now` 守卫（`scripts/lpc_fix_enable_player_guard.py`，KB 05 7.19）：门派 NPC `init()`→`setup()`→`enable_player()`→`enable_commands()` 再跑 `init()` 时直接返回，避免 Too deep recursion。
+
+## 深度功能测试（2026-11-04，F_UNIQUE 收养 §6.15）
+
+`globals.h` 缺 `F_UNIQUE`，三件物品 `inherit F_UNIQUE`。补上宏并收养 fy2 的 `/feature/unique.lpc`。证明：HEAD 0 PASS / 4 FAIL → 树 4 PASS。`F_MERCENARY` 另案。

@@ -601,3 +601,7 @@ fresh driver boot plus the full long-sit idle window below.
 
 `/std/hall`→`/std/room/hall`，`/std/obj/quiver`→`/std/quiver`。薄别名。证明：hall 链与 quiver 路径 HEAD FAIL → 树 PASS（diran quiver 的 set_size/set_material 另案）。
 
+
+## 深度功能测试（2026-11-04，ethereal inherit 薄别名 §6.15）
+
+`include/domains/ether.h` 的 `ETHERSTD`/`ETHERWEP`/`ETHERRIDE`/`ETHERARM`（及 `ETHERPACK`）指向 `/d/guilds/newethereal/ethereal/inherit/*`，本体在 `guildbak` 同名目录。在历史路径下加薄别名指向 guildbak。证明：别名 + 房间/武器样本 HEAD 0 PASS / 7 FAIL → 树 7 PASS。`etherealride` 供体自身 `status` 语法错误另案；`tahn_tat` 的 `set_element` 另案。

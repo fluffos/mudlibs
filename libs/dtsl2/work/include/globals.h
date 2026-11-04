@@ -76,6 +76,7 @@
 // Inheritable Standard Objects
 #define DAEMON          "/std/cmd_m"
 #define BULLETIN_BOARD  "/std/bboard"
+#define BBS_BOARD		"/std/bbsboard"
 #define CHARACTER               "/std/char"
 #define CLASS_GUILD             "/std/room/class_guild"
 #define COMBINED_ITEM   "/std/item/combined"
