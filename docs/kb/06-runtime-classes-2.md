@@ -714,6 +714,8 @@ bug".
 `command()` runs as `current_object`. Add `do_command(str){return
 command(str);}` and call `target->do_command(str)`.
 
+**Also (2026-11-03, finalrealms srelay):** `force_foo` used `command(cmd, target)`; sefun is 1-arg via `queue_action`. Call `target->queue_action(cmd)`.
+
 ### 7.173 `transfer(a, b)` doesn't exist
 Use `a->move_object(b)` via the §7.158 shim. Return values are no
 longer meaningful.

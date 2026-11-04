@@ -817,3 +817,11 @@ elf smith / smithr：`tell_object("Eldevan…")` → `tell_object(this_player(),
 ## 深度功能测试（2026-11-03，mudinfo / __OPTIMIZATION__）
 
 `cmds/creator/mudinfo.lpc` 把 `__OPTIMIZATION__` 的缺省放在 `#ifndef __COMPILER__` 里；FluffOS 预定义了 `__COMPILER__` 却没有 `__OPTIMIZATION__`，所以缺省从不生效，alone-scan `Undefined variable '__OPTIMIZATION__'`。拆成独立的 `#ifndef __OPTIMIZATION__`（与 discworld / skylib 相同）。`creator.old` 副本一并改。证明：HEAD FAIL；树 PASS。
+
+## 深度功能测试（2026-11-03，board_mas / label / srelay）
+
+1. **`obj/misc/board.lpc`**：父类把 `int action_pri` 改成了未使用的 `#define ACTION_PRI 0`，子类 `board_mas.lpc` 仍写变量 → `Undefined variable action_pri`。恢复 `int action_pri` 并在 `setup()` 置 0（与 discworld / ninetears 相同）。
+2. **`obj/label.lpc`**：继承 `/std/object`，调用 `int_query_static_auto_load()`；基类链断点先前只补在 `/std/item`（武器/防具），label 吃不到。本文件补空映射基例。
+3. **`obj/soul/srelay.lpc`**：`command(str, ob)` 是旧 MudOS 两参形式（KB 06 §7.172）；改为 `data[0]->queue_action(data[1])`（与本库 sefun `command` 对当前物件的做法一致）。
+
+证明：三文件 HEAD FAIL；树 PASS。
