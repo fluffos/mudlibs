@@ -648,3 +648,7 @@ Strategy A `/lib/living` 已有 `dead_ob`/`random_pick`/`wander`/`damage_type`�
 
 `_man` create 调用 `get_dir(dir, 0x23)`（NAMES|SIZES|UNSORTED），按 LDMud 期待 name/size 交错数组；FluffOS 仅在 `flags==-1` 时给出 `({name,size,mtime})` 行，其它标志只返回文件名。奇数长度下 `x[i]` 落到 0，`x[i][<1]` 报 `Bad argument 2 to >=`。catalog sefun：含 `GETDIR_SIZES` 时用 `efun::get_dir(path,-1)` 并展平为 name/size 对；`-1` 原样转发（`file_time`）。证明：HEAD `_man` FAIL；树 `_man`/`_ls` PASS；`get_dir("/doc/",0x23)` sizeof 18。
 
+## 深度功能测试（2026-11-03，herb functions_used 重命名）
+
+`herb` inherit `/lib/food` 后与 food 的 `private nosave int functions_used` 重名警告。改名为 `herb_functions_used`。证明：warnings 2→0 diags；herb/lefren 仍 PASS。
+
