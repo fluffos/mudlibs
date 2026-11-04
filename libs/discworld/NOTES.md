@@ -890,3 +890,7 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 2. **`std/effects/object/talker.lpc`**：无条件 `#include <deity.h>`，本库未带该头；实际只用 `query_deity()` 方法与 `path.h` 的 `SHADOWS`。去掉该 include（勿采纳 skylib 的 deity.h：它会 `#undef SHADOWS` 改成仪式路径）。
 
 同改 `dw_fluffos_v1` / `v2`。证明：两文件三库 HEAD FAIL；树 PASS。
+
+## 深度功能测试（2026-11-03，marry_shadow 补 marry.h §6.23）
+
+`std/shadows/misc/marry_shadow.lpc` `#include "/cmds/guild-race/masters/marry.h"`，该路径整树缺失，alone-scan 不编译。在 `include/marry.h` 按文件内用法重建 `MARRYPROP` / `ASKFIRST` / `ASKSECOND` / `DONEASK` 字符串宏，并把 include 改为 `<marry.h>`。同改 `dw_fluffos_v1` / `v2`。证明：三库 HEAD FAIL；树 PASS。
