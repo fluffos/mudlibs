@@ -771,3 +771,7 @@ A room exit named a file the lib does not have, so the player was stuck (a typo,
 
 `obj/net/www.lpc` 声明 `alttmp`，唯一用法在已注释掉的 ALT 解析块内。从声明去掉。证明：Unused local 清零。
 
+## 深度功能测试（2026-11-03，create 无人 geteuid / objects 序）
+
+四宿主 alone-scan 静默 FAIL：`terminal`/`memopad` 的 `geteuid(this_player())` 在无人时抛错；`sbsh` `initialize` 对 `OWNER=0` 调 `query_env`；virtual `template/room` 在 `::create()`（立刻 `reset`→`keys(objects)`）之后才 `objects=([])`。守卫 TP / 提前初始化 objects。证明：HEAD 四者 FAIL（runtime geteuid/call_other/keys Got 0）；树均 PASS。
+
