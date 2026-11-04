@@ -407,3 +407,7 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，outside/shop/surface 别名与收养 §6.15）
 
 与 `/std/room` 同模式：档案缺 `/std/outside`（实为 `/std/room/outside`）、`/std/shop`（实为 `general_shop`）；`/std/surface` 从 skylib 收养并改用 discworld 宏。解锁 pub_shop/counter/plate、pawn_shop、iroom outside、room/air。同改 v1/v2。证明：三库 HEAD FAIL；树 PASS。
+
+## 深度功能测试（2026-11-03，player_shop lists do_list 未赋值 ob §7.348）
+
+`office_code/lists.lpc` 退休经理循环写了 `find_player(word);` 却用 `ob`，办公室整文件编不过。改为 `object ob = find_player(word);`；`badge_list` 里 foreach 后再声明 `ob` 改为 `creator_ob`。同改 v1/v2。证明：三库 HEAD FAIL；树 office 及相关 PASS。
