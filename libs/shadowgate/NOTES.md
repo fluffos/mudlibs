@@ -806,4 +806,7 @@ cleric/barbarian/paladin/bard 仍继承 `newmasters/masters`，本体在 `master
 ## 深度功能测试（2026-11-03，road/cemetery1 薄别名 §6.15）
 
 road/old 公墓房继承 `/d/newbie/rooms/road/cemetery1`，本体已迁 graveyard。薄别名。证明：路径 HEAD FAIL → 树 PASS。
+## 深度功能测试（2026-11-03，deku open/forest2i 薄别名 §6.15）
+
+open/old 森林房继承 `/d/deku/open/forest2i`，本体已迁 `/d/deku/forest/forest2i`。薄别名。证明：HEAD 3 FAIL；树 4 PASS。
 
