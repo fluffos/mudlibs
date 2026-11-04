@@ -714,6 +714,8 @@ bug".
 `command()` runs as `current_object`. Add `do_command(str){return
 command(str);}` and call `target->do_command(str)`.
 
+**Also (2026-11-03, finalrealms vegetation/container):** (1) `basic.lpc` `move_object(this_object(), dest)` -> one-arg `move_object(dest)` (KB 06 7.231 / tmi2 shape). (2) `set_prevent_insert` lived only on `chest`; added flag + move gate to `std/container` for bag/container. pine/container/bag PASS.
+
 **Also (2026-11-03, Discworld leg_trap):** `setup()` baked `this_player()->query_short()` into the spectator string -> `Bad argument 1 to call_other` with nobody acting. Guard with `this_player() ? ... : "someone"`. 3 hosts PASS: discworld, dw_fluffos_v1, dw_fluffos_v2.
 
 **Also (2026-11-03, finalrealms water/card):** (1) `water.create` skipped `::create()` so `id.plurals` stayed 0 and `add_plural` raised on `+=`; call `::create()` and guard `add_plural`/`add_plurals` when plurals is 0 (ninetears twin). (2) birthday `card.setup` used `this_player()->query_cap_name()` with nobody acting -> fallback name Someone. PASS.

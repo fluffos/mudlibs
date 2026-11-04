@@ -836,3 +836,10 @@ elf smith / smithr：`tell_object("Eldevan…")` → `tell_object(this_player(),
 2. **`obj/b_day/card.lpc`**：`setup()` 用 `this_player()->query_cap_name()`，alone-load 无人时报 Bad argument。无玩家时用 `"Someone"`。
 
 证明：两文件 HEAD FAIL；树 PASS。
+
+## 深度功能测试（2026-11-03，vegetation move_object；container prevent_insert）
+
+1. **`obj/vegetation/basic.lpc`**：`move_object(this_object(), dest)` 是旧两参形式；FluffOS efun 只收目的地。改为 `move_object(dest)`。`pine` 因此可加载。
+2. **`std/container.lpc`**：`obj/container` / `obj/misc/bag` 调用 `set_prevent_insert()`，该 API 原先只在 `chest` 上。补上标志位与 `move()` 检查（有内容且目标是嵌套容器时拒绝），与 chest 语义一致。
+
+证明：pine / container / bag HEAD FAIL；树 PASS。
