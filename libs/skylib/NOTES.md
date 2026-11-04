@@ -886,3 +886,7 @@ The code of this lib writes logs into 2 subdirectories of `log/`: `log/save/boar
 ## 深度功能测试（2026-11-04，/std/room 薄别名 §6.15）
 
 topography 的 iroom/milestone/area 继承 `/std/room`，本体在 `basic_room`。薄别名。证明：HEAD 1 PASS / 4 FAIL；树 5 PASS。
+
+## 深度功能测试（2026-11-04，generic_solid.ob 薄别名 §6.15）
+
+试剂植物继承 `/obj/reagents/generic_solid.ob`，本体是 `generic_solid.lpc`。薄别名 `generic_solid.ob.lpc`。证明：HEAD 1 PASS / 2 FAIL；树 3 PASS。

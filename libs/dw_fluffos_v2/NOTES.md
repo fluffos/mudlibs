@@ -455,3 +455,6 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 
 Pinkfish quarto/mancala 仍继承旧路径 `/obj/furnitures/misc/games/multiplayer_base`，本体在 `/std/room/furniture/games/multiplayer_base`。三孪生薄别名。证明：HEAD FAIL；树 PASS。
 
+## 深度功能测试（2026-11-04，PLAYER_HOUSE 继承改写 §6.15）
+
+同 discworld：房屋模板 `PLAYER_HOUSE` 改写为 `/std/room/player_housing{,_outside}`。证明：missing_inherits PLAYER_HOUSE 清零。

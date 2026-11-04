@@ -37,5 +37,6 @@
 #define WANDER4       "/d/dagger/aketon/mon/wander/wander4"
 
 #define ARTIFACT_D    "/d/dagger/aketon/daemon/artifact_d"
+#define ARTIFACT      "/d/dagger/aketon/obj/artifact/artiweapon"
 #define ASSASSIN_D    "/d/dagger/aketon/daemon/assassin_d"
 #define COUNCILOR_D   "/d/dagger/aketon/daemon/councilor_d"
