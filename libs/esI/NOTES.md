@@ -910,3 +910,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply e
 ## 深度功能测试（2026-10-27，§6.25 death_echoall 截断）
 
 `std/fun/death_echoall` 同 es1 截断；同样收成空循环。证明：改后加载。
+
+## 深度功能测试（2026-11-04，/std/char/npc 薄别名 §6.15）
+
+`NPC` 宏指向 `/std/char/npc`，本体在 `/std/npc`。薄别名。证明：HEAD char/npc FAIL；树 PASS（amphibia 仍缺 race-body API，另案）。

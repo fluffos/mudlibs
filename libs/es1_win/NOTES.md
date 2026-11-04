@@ -909,3 +909,7 @@ Left, as content gaps, not invented: 16 inherits of files that are not in the ar
 ## 深度功能测试（2026-10-27，§6.25 death_echoall 截断）
 
 `std/fun/death_echoall` 同 es1 截断；同样收成空循环。证明：改后加载。
+
+## 深度功能测试（2026-11-04，IRC drink 继承改写 §6.15）
+
+同 es1：IRC drink 改写为 `/d/island/obj/drink`。证明：HEAD 1 PASS / 2 FAIL；树 3 PASS。

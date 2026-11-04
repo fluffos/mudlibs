@@ -847,3 +847,7 @@ Found by the live pair afterwards: `d/noden/hawk/monster/adolph.lpc` had `#inclu
 ## 深度功能测试（2026-10-27，§6.25 death_echoall 截断）
 
 `std/fun/death_echoall` 在 `can_read_chinese(all[i],` 处截断。收成空循环体（广播原文已失）。证明：HEAD 失败；改后加载（`--at /std/zzeval.lpc`）。
+
+## 深度功能测试（2026-11-04，IRC drink 继承改写 §6.15）
+
+IRC vodka/water 继承 wizard `/u/e/elon/drink`，接口在 `/d/island/obj/drink`。改写 inherit。证明：HEAD 1 PASS / 2 FAIL；树 3 PASS。

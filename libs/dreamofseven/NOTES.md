@@ -1122,3 +1122,6 @@ alone-scan 15 个 `End of file` / `End of file in string`：
 
 同形 `@SKILL_HELP` 终结符仍粘在 `SKILL_HELP\t);`：`daemon/skill/moon_force`、`u/h/hack/skill/moon_force`、`u/c/cominging/moon_force_v101`。改为列首 `SKILL_HELP` 换行后再 `);`。库内 `SKILL_HELP\t` 残渣 0。证明：三文件 + moon_forcea alone-load PASS。
 
+## 深度功能测试（2026-11-04，/std/force 从 .es 恢复 §6.15）
+
+内力技能继承 `FORCE`→`/std/force`，档案只有 `force.es`。拷为 `force.lpc`。证明：HEAD 0 PASS / 3 FAIL；树 3 PASS。
