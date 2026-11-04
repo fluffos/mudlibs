@@ -969,3 +969,7 @@ rnd_caus*：`tell_object("at the top\n", attackboy)`→`tell_object(attackboy, �
 ## 深度功能测试（2026-11-03，adnd ability query_stat_string 重载 §6.21）
 
 同 finalrealms：`antiguo/adnd/ability` 的 protected `query_stat_string` 改名为 `format_stat_string`。证明：HEAD FAIL；树 PASS。
+
+## 深度功能测试（2026-11-03，std/races 中间种族镜像 §6.15）
+
+同 finalrealms：自 `baseobs/races/` 镜像 bird/amphibian/fish/insect/animal 到 `std/races/`。本库精简版 `standard.lpc` 无 `bits` 全局，bird/amphibian/fish 另补 `mixed *bits;`（与已有 insect 一致），baseobs 与 std 两份同步。证明：15 FAIL→0 PASS。

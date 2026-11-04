@@ -863,3 +863,7 @@ elf smith / smithr：`tell_object("Eldevan…")` → `tell_object(this_player(),
 ## 深度功能测试（2026-11-03，adnd ability query_stat_string 重载 §6.21）
 
 `std/adnd/ability.lpc` 同时有公开的 `string query_stat_string(int ab)` 与 `protected string query_stat_string(int sc)`，FluffOS 报 `Redeclaration of function`。将格式化分数的 protected 函数改名为 `format_stat_string`，两处 `actual`/`effect` 调用一并改。同改 `ninetears` 的 `std/antiguo/adnd/ability.lpc`。证明：两库 HEAD FAIL；树 PASS。
+
+## 深度功能测试（2026-11-03，std/races 中间种族镜像 §6.15）
+
+`baseobs/races` 下 chicken/duck/penguin 等 inherit `/std/races/bird`（以及 amphibian/fish/insect/animal），但这些中间种族文件只存在于 `baseobs/races/`，`std/races/` 缺失（人型种族本就双树各一份）。自同库 `baseobs/races/` 复制到 `std/races/`。证明：listcheck 相关 15 FAIL→0，连同 std 副本共 20 PASS。仍 OOS：`testrace`（`/w/shaper/...`）、`baseobs/traps/*`（缺 `/std/spells/trap`）。
