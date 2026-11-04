@@ -1015,3 +1015,8 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，theft_base QUOTA/THEFT_INSURANCE 宏 §6.16）
 
 `theft_base` 使用未定义的 `QUOTA`/`THEFT_INSURANCE`。按 related_files/statthief 路径补 `#define`。处理器本体仍缺档（运行时 call_other 软失败）。同改 v1/v2。证明：三库 HEAD FAIL；树 PASS。
+
+## 深度功能测试（2026-11-03，find_match sefun 空壳 §7.376）
+
+`/secure/simul_efun/find_match.lpc` 在迁到 obj_parser 后删掉了 `find_match` 本体，只留助手；sefun 对象仍 inherit 该文件，故全库 `find_match(...)` 编译为 Undefined（如 learning/kess）。补 `varargs object *find_match` 转调 `match_objects_for_existence`。同改 v1/v2。证明：HEAD `Undefined function find_match`；树 `lpcc_eval --at /secure/zzeval.lpc` 得 `({})` PASS。
+
