@@ -813,3 +813,7 @@ The code of this lib writes logs into 1 subdirectory of `log/`: `log/save/board`
 
 elf smith / smithr：`tell_object("Eldevan…")` → `tell_object(this_player(), …)`。
 
+
+## 深度功能测试（2026-11-03，mudinfo / __OPTIMIZATION__）
+
+`cmds/creator/mudinfo.lpc` 把 `__OPTIMIZATION__` 的缺省放在 `#ifndef __COMPILER__` 里；FluffOS 预定义了 `__COMPILER__` 却没有 `__OPTIMIZATION__`，所以缺省从不生效，alone-scan `Undefined variable '__OPTIMIZATION__'`。拆成独立的 `#ifndef __OPTIMIZATION__`（与 discworld / skylib 相同）。`creator.old` 副本一并改。证明：HEAD FAIL；树 PASS。
