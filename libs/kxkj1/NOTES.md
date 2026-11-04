@@ -970,3 +970,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply k
 
 删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
 
+
+## 深度功能测试（2026-11-04，ARMOR/SURCOAT 收养 §6.15）
+
+同 kxkj：补 `ARMOR`/`SURCOAT` 宏并收养基类。证明：battle_armor HEAD FAIL → 树 PASS。

@@ -538,3 +538,7 @@ BIG5 里 `功` 等字的第二个字节正好是 0x5C（反斜杠），作者在
 ## 深度功能测试（2026-11-03，start_call_out 清 eval_function）
 
 同 kxkj：`feature/action.lpc` 补 `remove_call_out("eval_function")`；`dreamwings` 去掉无效的 `me->remove_call_out((: call_other…:))`。
+
+## 深度功能测试（2026-11-04，ARMOR/SURCOAT 收养 §6.15）
+
+`armor.h` 缺 `ARMOR`/`SURCOAT`（及 TYPE_*），`std/armor` 也无对应基类。从 sjpl2 收养 `armor.lpc`/`surcoat.lpc` 并补宏。证明：HEAD 全 FAIL → 树 PASS（battle_armor；raincoat 在有该文件的库）。

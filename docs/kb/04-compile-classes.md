@@ -678,6 +678,9 @@ time. (3) *Fewer arguments than parameters*: add `varargs` to the definition the
 
 **Also (2026-11-04, fy2/fy2qh `F_DEALER`/`F_FUNCTION`/`F_GUILDCMDS`):** three features undefined and missing. Adopted `dealer` from fy2mg, `function`/`guildcmds` from kxkj, plus hc's `moneyd` as `MONEY_D` (dealer and the banker NPC call it). Proof: HEAD 0 PASS / 6 FAIL → tree 6 PASS each.
 
+**Also (2026-11-04, kxkj/kxkj1/kxkjii2 `ARMOR`/`SURCOAT`):** `armor.h` lacked the macros and `std/armor` lacked the bases. Adopted sjpl2's `armor.lpc`/`surcoat.lpc` and added `ARMOR`/`SURCOAT`/`TYPE_*` on all three hosts. Proof: HEAD FAIL → tree PASS (battle_armor; raincoat where present).
+
+
 
 
 
