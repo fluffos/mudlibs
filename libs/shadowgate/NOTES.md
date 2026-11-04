@@ -812,4 +812,7 @@ open/old 森林房继承 `/d/deku/open/forest2i`，本体已迁 `/d/deku/forest/
 ## 深度功能测试（2026-11-03，hm_quest/mon/hmmob 薄别名 §6.15）
 
 old_hm_quest 怪物继承 `/d/hm_quest/mon/hmmob`，本体在 old_hm_quest。薄别名。证明：HEAD 4 FAIL；树 5 PASS。
+## 深度功能测试（2026-11-03，hm_quest/rooms/quest1 薄别名 §6.15）
+
+oldrooms 继承 `/d/hm_quest/rooms/quest1`，本体在 oldrooms/quest1。薄别名。证明：HEAD 4 FAIL；树 5 PASS。
 
