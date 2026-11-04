@@ -94,6 +94,7 @@
 #define F_DBASE              "/feature/dbase.lpc"
 #define F_EQUIP              "/feature/equip.lpc"
 #define F_FOOD               "/feature/food.lpc"
+#define F_DRINK			"/feature/drink.lpc"
 #define F_MOVE               "/feature/move.lpc"
 #define F_NAME               "/feature/name.lpc"
 #define F_SAVE               "/feature/save.lpc"

@@ -1236,3 +1236,6 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-11-04, PEN weapon type on chidi/bixiecanyang/hc/ffxymud):** `inherit PEN` / `init_pen()` with no `#define PEN` and no `/inherit/weapon/pen`. Add `#define PEN "/inherit/weapon/pen"` after SWORD and ship `pen.lpc` modeled on local `dagger.lpc` (EDGED|SECONDARY). Proof: pen + `clone/weapon/panguanbi` HEAD FAIL → PASS on all four hosts.
 
+
+**Also (2026-11-04, huoying F_DRINK):** `obj/water.lpc` inherits `F_DRINK` but `globals.h` only had `F_FOOD`; `/feature/drink.lpc` missing. Adopt drink from dfgs2 (same `query_stat`/`supplement_stat` ES2 style) and `#define F_DRINK`. Proof: drink + water HEAD FAIL → PASS. (fys `F_FIGHTER`/`npc.h` adopt reached compile but `set_race("human")` dies in chard — deferred.)
+

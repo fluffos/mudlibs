@@ -811,3 +811,7 @@ PID.
 
 删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
 
+## 深度功能测试（2026-11-04，F_DRINK 领养 §6.15/§6.16）
+
+`obj/water` `inherit F_DRINK`，但 `globals.h` 只有 `F_FOOD`、没有 `/feature/drink.lpc`。从 dfgs2 领养 drink（`query_stat`/`supplement_stat` 与本库 ES2 一致），并补 `#define F_DRINK`。证明：drink + water HEAD FAIL → PASS。
+
