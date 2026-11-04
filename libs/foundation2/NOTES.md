@@ -564,3 +564,7 @@ the news pager. Fixed:
 
 `secure/cmds/creator/move.lpc` 是 Nightmare 导入：`#include <move.h>`（MOVE_* 返回码）且 `inherit REFS_D`，但本库 include 路径下没有该头（`lib/move.h` 是 LIB_MOVE 接口），`daemons.h` 也无 REFS_D，refs 守护进程未随压缩包。alone-scan `Cannot #include move.h`。改写为 Foundation II 语义：`get_object()` 解析参数，`eventMove()` 的 1/0 成败，去掉 REFS_D。证明：HEAD FAIL；树 PASS。
 
+
+## 深度功能测试（2026-11-03，memcheck / check_memory efun）
+
+`secure/cmds/creator/memcheck.lpc` 直接调用 `check_memory()`。该 efun 只在 DEBUGMALLOC + develop 包下存在；本馆 FluffOS build-debug 未开，alone-scan `Undefined function check_memory`（creator 指令 56 PASS / 1 FAIL）。改为 `#if efun_defined(check_memory)`，否则提示 efun 不可用。证明：HEAD FAIL；树 PASS。同形：`dsI` / `dsII` 的 `secure/cmds/creators/memcheck.lpc`（较新的 DS 系已用 `efun_exists` + `#ifdef __DEBUGMALLOC__*` 包住）。

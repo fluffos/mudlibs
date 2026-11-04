@@ -954,3 +954,7 @@ The code of this lib writes logs into 2 subdirectories of `log/`: `log/chan` (`s
 
 收口后的尾与 nightmare4 一致：`GetMessages`（仍引用未随截断保留的 BLUNTS/KNIVES/PROJECTILES）整段 `#if 0`；`GetMove` 声明 `mixed list`。证明：先前 FAIL；树 `PASS /daemon/combat`。remote/war/bugs 仍按 NOTES 搁置。
 
+
+## 深度功能测试（2026-11-03，memcheck / check_memory efun）
+
+`secure/cmds/creators/memcheck.lpc` 裸调 `check_memory()`；FluffOS build-debug 无此 efun（需 DEBUGMALLOC），alone-scan `Undefined function check_memory`。`#if efun_defined(check_memory)` 包住，否则提示不可用。证明：HEAD FAIL；树 PASS。

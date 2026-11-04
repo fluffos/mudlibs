@@ -901,3 +901,7 @@ are not in the archive).
 ## Bare wizard command with a 0 argument (2026-10-27, KB 06 §7.336 Also)
 
 After the permission gate, the command still handed 0 to `sscanf` / `read_file` / `find_living`. `lpc_fix_bare_arg.py` adds `if (!arg)` (or `help(me)` / `GetHelp()`) before the first use. See this commit for the files touched in this lib.
+
+## 深度功能测试（2026-11-03，memcheck / check_memory efun）
+
+`secure/cmds/creators/memcheck.lpc` 无条件 `check_memory(1)`；同 dsI / foundation2。`#if efun_defined(check_memory)`。证明：HEAD FAIL；树 PASS。
