@@ -978,3 +978,8 @@ rnd_caus*：`tell_object("at the top\n", attackboy)`→`tell_object(attackboy, �
 ## 深度功能测试（2026-11-03，trap max_time 撞名 §6.10）
 
 `std/antiguo/spells/trap.lpc` 与 `d/gremios/hechizos/trap.lpc` 的 `int max_time` 与 `living/action_queue` 的 `max_time` 重名（Redeclaration 警告）。改名 `trap_max_time`。同改 finalrealms 新采纳的 `/std/spells/trap`。证明：相关对象 PASS，告警清零。
+
+## 深度功能测试（2026-11-03，/std/spells/patch 别名 §6.15）
+
+`focus`/`turn` 等 inherit `/std/spells/patch`，实文件在 `/std/antiguo/spells/bases/patch`。薄别名。证明：HEAD patch+focus+turn FAIL；树 PASS。
+
