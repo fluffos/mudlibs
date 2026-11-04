@@ -11,6 +11,7 @@
 #define RING		"/std/armor/ring"
 #define GLOVES		"/std/armor/gloves"
 #define BOOTS		"/std/armor/boots"
+#define CLOTH		"/std/armor/cloth"
 
 // armor type
 #define TYPE_HEAD		"head"
@@ -23,6 +24,7 @@
 #define TYPE_RING		"ring"
 #define TYPE_GLOVES		"gloves"
 #define TYPE_BOOTS		"boots"
+#define TYPE_CLOTH		"cloth"
 
 #define EQ_TYPES ({"head","necklace","body","cloak","armor","gloves","boots","ring","leggings","shield"})
 

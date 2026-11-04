@@ -1227,3 +1227,6 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-11-04, dtsl JOB + dtxywzxzb F_CLOTHNAME + demonangel POWDER):** (1) `JOB` is `/std/give_jobd` while the daemon lives at `/adm/daemons/give_jobd` — thin alias on dtsl/dtsl2/dtslmud. (2) dtxywzxzb ships `/feature/clothname.lpc` but never `#define F_CLOTHNAME` — add the macro (§6.16). (3) demonangel `POWDER` → `/std/medicine/powder` missing; adopt from dtxyzjb. Proof: each host listcheck HEAD FAIL → tree PASS; newly loading JOB consumers + skirt1 + slumber_drug.
 
+
+**Also (2026-11-04, dtsl poison killer_reward + demonangel CLOTH):** (1) `d/quest/poison/target` inherits `__DIR__ killer_reward` missing; thin-alias to `/d/job/killerjob/killer_reward` on dtsl/dtsl2/dtslmud. Once resolved, `target` redeclared `random_place` already provided by `job_money.h` — delete the local copy (killerjob targets never redefined it). (2) demonangel `inherit CLOTH` with no macro/file; adopt `/std/armor/cloth` from dtxyzjb and `#define CLOTH`/`TYPE_CLOTH` in `armor.h`. Proof: poison target + killer_reward HEAD FAIL → PASS on three hosts; cloth+black_vest newly load.
+

@@ -748,3 +748,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-11-04，POWDER 从 dtxyzjb 领养 §6.15）
 
 `POWDER` → `/std/medicine/powder` 本库没有；从 dtxyzjb 领养。证明：powder + `obj/slumber_drug` HEAD FAIL → PASS。
+
+## 深度功能测试（2026-11-04，CLOTH 领养 + armor.h 宏 §6.15/§6.16）
+
+`inherit CLOTH` 时 `armor.h` 无 `CLOTH`/`TYPE_CLOTH`，也无 `/std/armor/cloth`。从 dtxyzjb 领养 cloth.lpc，并补宏。证明：cloth + `obj/prize/black_vest` HEAD FAIL → PASS。

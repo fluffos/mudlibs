@@ -943,3 +943,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-11-04，JOB→give_jobd 薄别名 §6.15）
 
 同 dtsl：`std/give_jobd.lpc` → `/adm/daemons/give_jobd`。证明：zhangtian HEAD FAIL → PASS。
+
+## 深度功能测试（2026-11-04，poison killer_reward 薄别名 + 去重 random_place §6.15）
+
+`d/quest/poison/target` 继承 `__DIR__ "killer_reward"`，文件缺失；薄别名指向 `/d/job/killerjob/killer_reward`。别名接通后，`target` 自身又定义了 `job_money.h` 已提供的 `random_place` → Redeclaration；删掉本地副本（同库 killerjob/target 从不重定义）。证明：killer_reward + target HEAD FAIL → PASS。
