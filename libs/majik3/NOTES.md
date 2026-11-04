@@ -490,3 +490,8 @@ A statement `new(PATH)->move(...);` / `carry_object(ARMOR_D("x"))->wear();` whos
 ## `data/application`, `data/ban`, `data/scroll` nobody creates (2026-10-22, KB 06 §7.358)
 
 `world/hilltop/items/wizapp.lpc` writes `/data/application/wizapp.<name>`, `command/immortal/ban.lpc` `/data/ban/ban.o` and `world/hilltop/items/scroll.lpc` `save_object("/data/scroll/..")`; none of them makes the directory, and `write_file()` / `save_object()` into a missing directory raise (`Wrong permissions for opening file ..`, `Could not open ..o.tmp for a save`). The three directories are in `scripts/wasm_keep_dirs.txt` now (`lpc_keep_log_dirs.py --root=data`); verified in a staged tree: all three are directories (`file_size` -2).
+
+## 深度功能测试（2026-11-04，skill_system 薄别名 §6.15）
+
+`inherit/battle` 继承 `/inherit/skill_system`，文件在 `/inherit/living/skill_system`。薄别名。证明：别名 + battle HEAD FAIL → PASS。
+

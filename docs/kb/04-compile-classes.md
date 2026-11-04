@@ -1251,3 +1251,6 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-11-04, kxkj/kxkjii2 m_bow thin alias):** `obj/mm` inherits `/std/weapon/m_bow` missing; AceLan bow API lives in `/std/weapon/bow`. Thin-alias `m_bow.lpc` → `bow`. Proof: m_bow PASS (mm still dies in `create()` with no `this_player()` — AceLan design, separate).
 
+
+**Also (2026-11-04, majik3 skill_system thin alias):** `inherit/battle` inherits `/inherit/skill_system` while the file is `/inherit/living/skill_system`. Thin alias. Proof: skill_system + battle HEAD FAIL → PASS. (GRIDMAP/money/holymission UDP adopts need more headers — deferred.)
+
