@@ -439,3 +439,7 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，www/boards $1 与 restore catch §7.317/§7.298）
 
 `function(string board,…)` 内误用 `$1`；`create` 对缺失 `/save/www/boards.o` 的 restore 未 catch 导致加载失败。`$1`→`board`，`catch(unguarded(restore…))`。同改 v1/v2。证明：三库 HEAD FAIL；树 PASS。
+
+## 深度功能测试（2026-11-03，theft_base QUOTA/THEFT_INSURANCE 宏 §6.16）
+
+`theft_base` 使用未定义的 `QUOTA`/`THEFT_INSURANCE`。按 related_files/statthief 路径补 `#define`。处理器本体仍缺档（运行时 call_other 软失败）。同改 v1/v2。证明：三库 HEAD FAIL；树 PASS。
