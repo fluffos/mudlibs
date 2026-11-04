@@ -869,3 +869,8 @@ The code of this lib writes logs into 2 subdirectories of `log/`: `log/save/boar
 ## 深度功能测试（2026-11-03，we_care club_room_controller §6.21）
 
 同 discworld：`set_save_directory` + `ownership.name` 改为 `mixed`。证明：HEAD FAIL；树 PASS。
+
+
+## 深度功能测试（2026-11-03，we_care club_room 重建 §6.15）
+
+同 discworld：补 `/std/room/club_room`；修正 `owned_room1`。证明：HEAD FAIL；树 PASS。
