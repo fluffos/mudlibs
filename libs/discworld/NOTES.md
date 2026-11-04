@@ -960,3 +960,8 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，carriage testcar foreach np §6.19）
 
 `make_stop()` 声明了 `string np` 供 `foreach(np in name_parts)`，但 `move_on()`/`dest_me()` 同样循环却未声明。两处补 `string np;`。同改 v1/v2。证明：三库 HEAD FAIL；树 PASS。
+
+
+## 深度功能测试（2026-11-03，player_craft_shop DISTRIBUTION §6.16）
+
+`__DISTRIBUTION_LIB__` 已在 config/all_inc 定义，店铺走薄 `/std/room`，但 `dest_me()` 仍在 ifdef 外调用 `player_housing::dest_me()`；`event_exit`/`set_save_file` 也依赖 housing。档案有 player_housing，去掉 DISTRIBUTION 分支，始终 inherit housing。同改 v1/v2。证明：三库 HEAD FAIL；树 PASS。

@@ -447,3 +447,8 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，carriage testcar foreach np §6.19）
 
 同 discworld：`move_on`/`dest_me` 补 `string np`。证明：HEAD FAIL；树 PASS。
+
+
+## 深度功能测试（2026-11-03，player_craft_shop DISTRIBUTION §6.16）
+
+同 discworld：去掉 DISTRIBUTION 分支，始终 inherit player_housing。证明：HEAD FAIL；树 PASS。
