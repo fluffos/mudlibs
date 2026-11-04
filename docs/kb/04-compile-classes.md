@@ -1248,3 +1248,6 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-11-04, fyue npcskill+name.h + FR /obj/dragon):** (1) `questguai` inherits `/u/fyue/npcskill` and includes `/u/fyue/name.h` while the real files live under `/quest/` on jhfy/jhfy2/jhfy3/ffxymud — thin-alias npcskill and copy `name.h`. hy3 had neither under `/quest/` — adopt both from ffxymud. (2) finalrealms `/obj/dragon` missing; thin-alias to `/baseobs/monsters/dragon`. Proof: questguai newly loads on five hosts; dragon alias PASS.
 
+
+**Also (2026-11-04, kxkj/kxkjii2 m_bow thin alias):** `obj/mm` inherits `/std/weapon/m_bow` missing; AceLan bow API lives in `/std/weapon/bow`. Thin-alias `m_bow.lpc` → `bow`. Proof: m_bow PASS (mm still dies in `create()` with no `this_player()` — AceLan design, separate).
+

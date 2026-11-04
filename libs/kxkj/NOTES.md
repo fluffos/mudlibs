@@ -1224,3 +1224,8 @@ BIG5 里 `功` 等字的第二个字节正好是 0x5C（反斜杠），作者在
 ## 深度功能测试（2026-11-04，ARMOR/SURCOAT 收养 §6.15）
 
 `armor.h` 缺 `ARMOR`/`SURCOAT`（及 TYPE_*），`std/armor` 也无对应基类。从 sjpl2 收养 `armor.lpc`/`surcoat.lpc` 并补宏。证明：HEAD 全 FAIL → 树 PASS（battle_armor；raincoat 在有该文件的库）。
+
+## 深度功能测试（2026-11-04，m_bow 薄别名 §6.15）
+
+`obj/mm` `inherit "/std/weapon/m_bow"`，本库只有 `bow.lpc`。薄别名 `m_bow`→`bow`。证明：m_bow HEAD FAIL → PASS；mm 在无 `this_player()` 时 create 仍失败（AceLan 万用武器设计）另案。
+
