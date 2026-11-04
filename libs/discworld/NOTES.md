@@ -1003,3 +1003,7 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，sit create this_player 守卫 §7.277）
 
 `cmds/living/sit` 在 `create()` 里无条件 `this_player()->query_position()`，单独加载无人 acting 时炸掉。加 `this_player() &&`。同改 v1/v2。证明：三库 HEAD FAIL；树 PASS。
+
+## 深度功能测试（2026-11-03，gatherables handler.dat_* 误加 .lpc §4.2）
+
+`.c`→`.lpc` 把 `handler.dat_old`/`handler.dat_dc` 也改成可编译源，数据堆叠导致 Redeclaration。改回无 `.lpc` 后缀；真正 INIT 仍是 `handler.dat`。同改 v1/v2。证明：误名文件 HEAD FAIL；改名后 gathering/plant/rock PASS。
