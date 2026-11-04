@@ -925,3 +925,8 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，furniture dividor 缺括号 §6.25）
 
 `create_room()` 拼模板时写成 `base_name(environment() + "\", \"door\");\n"`，`environment()` 缺右括号，字符串被吃进 `base_name`，后文连锁语法错。按同函数 `set_main_room` 行改为 `base_name(environment()) + ...`。同改 v1/v2。证明：三库 HEAD FAIL；树 PASS。
+
+
+## 深度功能测试（2026-11-03，all_inc C_TEMP 越出 SENSIBLE 守卫 §6.16）
+
+`include/all_inc.h` 把气候下标 `C_TEMP`/`C_CLOUD`/`C_RAIN` 与旧驱动的 `nosave`/`protected` 别名一起放在 `#ifndef __SENSIBLE_MODIFIERS__` 内；FluffOS 定义了该探测宏，weather 因而 `Undefined variable 'C_TEMP'`。三宏挪到守卫外。同改 v1/v2。证明：三库 HEAD weather FAIL；树 PASS。残留：auction/council/weather_room 静默 FAIL；demon/imp 缺 `/std/races/demonic`（skylib 有）；venomous_snake 缺 `POISON_EFFECT`。

@@ -19,12 +19,13 @@
 #define m_values(map) (values(map))
 //#define mapp(x) (mapp(x))
 
-#ifndef __SENSIBLE_MODIFIERS__
-#define nosave nosave
-#define protected nosave
 #define C_TEMP 0
 #define C_CLOUD 1
 #define C_RAIN 2
+
+#ifndef __SENSIBLE_MODIFIERS__
+#define nosave nosave
+#define protected nosave
 #endif
 
 #endif
