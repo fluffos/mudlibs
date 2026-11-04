@@ -250,6 +250,8 @@ detection.
   non-call `new` of such a file to `new_ob` (2026-10-06: 0 -> 159 of them load; the rest fail for other reasons).
 - **`get_dir(dir, 2)`** (Amylaar's "detailed" flag) is `-1` here. Index
   `[1]` for size and `[2]` for mtime.
+**Also (2026-11-03, sticklib catalog `get_dir` LDMud sizes):** LDMud `GETDIR_NAMES|GETDIR_SIZES` (`0x03` / `0x23`) returns a flat `name, size, name, size, …` array; FluffOS only does that shape via `get_dir(path, -1)` as `({ ({name,size,mtime}), … })`, and any other flags return names only. `_man` / `_ls` stepped `i += 2` on a names-only array, then `x[i][<1]` hit `0` (`Bad argument 2 to >=`). Catalog sefun: if `flags & 0x02`, call `efun::get_dir(path, -1)` and flatten to pairs; pass `flags == -1` through for `file_time`.
+
 
 ### 6.3 Grammar strictness
 

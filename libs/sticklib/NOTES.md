@@ -644,3 +644,7 @@ Strategy A `/lib/living` 已有 `dead_ob`/`random_pick`/`wander`/`damage_type`�
 
 `cash_d` create 写 `SHOPLOG`（`/guilds/priests/log/shoplog`），目录未入仓也未在 keep 列表。`gen_keep_dirs.py --merge sticklib` 记入 `wasm_keep_dirs.txt`。证明：无目录时 FAIL（Wrong permissions … No such file）；有目录后 PASS。
 
+## 深度功能测试（2026-11-03，get_dir LDMud 尺寸标志）
+
+`_man` create 调用 `get_dir(dir, 0x23)`（NAMES|SIZES|UNSORTED），按 LDMud 期待 name/size 交错数组；FluffOS 仅在 `flags==-1` 时给出 `({name,size,mtime})` 行，其它标志只返回文件名。奇数长度下 `x[i]` 落到 0，`x[i][<1]` 报 `Bad argument 2 to >=`。catalog sefun：含 `GETDIR_SIZES` 时用 `efun::get_dir(path,-1)` 并展平为 name/size 对；`-1` 原样转发（`file_time`）。证明：HEAD `_man` FAIL；树 `_man`/`_ls` PASS；`get_dir("/doc/",0x23)` sizeof 18。
+
