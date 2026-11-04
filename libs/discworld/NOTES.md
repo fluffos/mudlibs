@@ -915,3 +915,8 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，virtual server2 add_method §6.21）
 
 实验性 `/global/virtual/server2.lpc` 的 `add_method` 第二参声明为 `object`，但 `create()` 传入编译器路径字符串；同目录正式版 `server.lpc` 已是 `mixed ob`。两处原型/定义改为 `mixed`。同改 `dw_fluffos_v1` / `v2`。证明：三库 HEAD FAIL；树 PASS。
+
+
+## 深度功能测试（2026-11-03，virtual handler 类型 §6.21）
+
+`#pragma strict_types` 下 `create`/`self_dest`/`destruct_virtual_object` 无返回类型；按 `;` 拆行时 `line[0..i] + line[i][j+1..] + line[i+1..]` 把 `string *` 与裸 `string` 相加。补 `void`，中间段包成 `({ ... })`。同改 v1/v2。证明：三库 HEAD FAIL；树 PASS。

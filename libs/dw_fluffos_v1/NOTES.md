@@ -402,3 +402,8 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，virtual server2 add_method §6.21）
 
 同 discworld：`add_method` 第二参 `object`→`mixed`。证明：HEAD FAIL；树 PASS。
+
+
+## 深度功能测试（2026-11-03，virtual handler 类型 §6.21）
+
+同 discworld：补 `void`；`;` 拆行中间段包成数组。证明：HEAD FAIL；树 PASS。
