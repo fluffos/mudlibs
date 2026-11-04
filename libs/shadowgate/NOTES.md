@@ -827,4 +827,7 @@ open/old 森林房继承 `/d/deku/open/forest42i`，本体在 old。薄别名。
 ## 深度功能测试（2026-11-03，deku open cave_r3i/skull 薄别名 §6.15）
 
 old 洞穴/骷髅道继承 `/d/deku/open/cave_r3i` 与 `skull`，本体在 old。薄别名。证明：HEAD 4 FAIL；树 6 PASS。
+## 深度功能测试（2026-11-03，dragon sewer_room 收养 §6.15）
+
+old 下水道继承 `/d/dragon/sewer/sewer_room`，本体在 old；字节拷贝（薄别名破坏 room::create）并补 statues_d。证明：sewer_room+statues_d HEAD FAIL → 树 PASS。
 
