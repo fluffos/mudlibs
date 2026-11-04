@@ -1006,4 +1006,7 @@ wizard.old `web` 缺 `/std/spells/basic`（别名到 antiguo old/basic，非 eff
 ## 深度功能测试（2026-11-03，guilds/sacerdote 薄别名 §6.15）
 
 `nigromante` 继承 `/std/guilds/sacerdote`；薄别名到已有 `/std/guilds/cleric`（非 rol/clases）。证明：sacerdote HEAD FAIL → 树 PASS。
+## 深度功能测试（2026-11-03，witch/m/brew 薄别名 §6.15）
+
+oldwitch ostir/cmmix/fmix 继承 `/std/spells/witch/m/brew`，本体在 antiguo wizard.old/oldwitch。薄别名。证明：HEAD 4 FAIL；树 5 PASS。
 
