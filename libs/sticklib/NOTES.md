@@ -652,3 +652,7 @@ Strategy A `/lib/living` 已有 `dead_ob`/`random_pick`/`wander`/`damage_type`�
 
 `herb` inherit `/lib/food` 后与 food 的 `private nosave int functions_used` 重名警告。改名为 `herb_functions_used`。证明：warnings 2→0 diags；herb/lefren 仍 PASS。
 
+## 深度功能测试（2026-11-03，object_name 去首斜杠）
+
+`/secure/login` create 要求 `object_name() == "secure/login"`（无首 `/`）；catalog sefun 原样转发 FluffOS `file_name`（`"/secure/login"`），自 destruct，alone-scan 静默 FAIL（catch/debug 皆空）。sefun 去掉前导 `/`（LDMud 习惯）；无参时用 `this_object()`。证明：HEAD login FAIL o=0；树 PASS，`object_name` 为 `secure/login`。
+
