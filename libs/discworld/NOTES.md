@@ -944,4 +944,9 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 
 ## 深度功能测试（2026-11-03，/std/room.lpc 别名 §6.15）
 
-大量对象仍 `inherit "/std/room"`，档案只有 `std/room/` 目录与 `basic_room.lpc`（注释称 standard room）。补薄文件 `/std/room.lpc` → inherit basic_room（与目录可并存）。解锁 auction/council_treasury/topography/hospital/interview 等。残留：weather_room 现报无类型函数；council_document 仍缺 `document_handler`。同改 v1/v2。证明：三库 HEAD FAIL；树 PASS。
+大量对象仍 `inherit "/std/room"`，档案只有 `std/room/` 目录与 `basic_room.lpc`（注释称 standard room）。补薄文件 `/std/room.lpc` → inherit basic_room（与目录可并存）。解锁 auction/council_treasury/topography/hospital/interview 等。残留：council_document 仍缺 `document_handler`。同改 v1/v2。证明：三库 HEAD FAIL；树 PASS。
+
+
+## 深度功能测试（2026-11-03，weather_room 类型与 add_exit §6.19/§6.21）
+
+`/std/room` 别名之后露出：`reset`/`init`/`pull`/`push` 无类型；`lever` 实为数组行（`mixed`）；`return;`；旧式两参 `add_exit` 补 `"path"` 与路径前导 `/`。同改 v1/v2。证明：三库 HEAD FAIL；树 PASS。
