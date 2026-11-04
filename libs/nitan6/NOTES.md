@@ -1469,3 +1469,7 @@ xkx100 的原文是 `vc = victim->add("vote/count", 1);`，nitan 系把它写成
 ## 深度功能测试（2026-11-04，COMMAND + feature.h §6.16/§6.23）
 
 `cmds/adm/fgrep` 继承 `COMMAND` 未定义；`F_COMMAND` 已指向 `/feature/command.lpc`。补 `#define COMMAND F_COMMAND`，并空壳 `include/feature.h`（档案丢失）。证明：HEAD 1 PASS / 1 FAIL；树 2 PASS。nt6 同修。
+
+## 深度功能测试（2026-11-04，DOOR_ROOM→ROOM §6.16）
+
+崆峒 `d/kongdong/*` 继承 `DOOR_ROOM`；`create_door` 已在 `ROOM`（`/inherit/room/room`）。`room.h` 补 `#define DOOR_ROOM ROOM`。证明：lianhua_tai HEAD FAIL → PASS；lingzhi/tingyuan 仍因 NPC `set_xiuwei` 失败（与 DOOR_ROOM 无关）。nt6/nt6nitan6win 同补。

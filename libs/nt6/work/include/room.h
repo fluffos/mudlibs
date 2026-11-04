@@ -4,6 +4,8 @@
 #define DOOR_CLOSED                1
 #define DOOR_LOCKED                2
 #define DOOR_SMASHED                4
+/* Historical alias: kongdong rooms inherit DOOR_ROOM; create_door lives on ROOM. */
+#define DOOR_ROOM                   ROOM
 
 #define CHAT_ROOM               "/inherit/room/chatroom"
 #define CREATE_CHAT_ROOM        "/inherit/room/create"

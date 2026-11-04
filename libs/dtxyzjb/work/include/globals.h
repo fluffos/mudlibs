@@ -171,6 +171,7 @@
 #define F_EQUIP			"/feature/equip.lpc"
 #define F_FINANCE		"/feature/finance.lpc"
 #define F_FOOD			"/feature/food.lpc"
+#define F_GEMS			"/feature/gems.lpc"
 #define F_LIQUID		"/feature/liquid.lpc"
 #define F_MASTER		"/std/char/master.lpc"
 #define F_MESSAGE		"/feature/message.lpc"

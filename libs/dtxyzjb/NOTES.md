@@ -445,3 +445,7 @@ guest：`tell_object("…", who)`→`tell_object(who, …)`。
 ## 深度功能测试（2026-11-04，SKI_ZHEN 收养 §6.15）
 
 四门阵法 `inherit SKI_ZHEN`，宏与 `/inherit/skill/array` 皆缺。从 nt7 收养 `array.lpc`，在 `globals.h` 补 `#define SKI_ZHEN "/inherit/skill/array"`；本库无 nitan 双参 `query(key, ob)` sefun，三处改为 `ob->query(key)`。证明：HEAD 0 PASS / 5 FAIL → 树 5 PASS。
+
+## 深度功能测试（2026-11-04，F_GEMS 收养 §6.15/§6.16）
+
+`clone/gem/gem` 继承 `F_GEMS` 未定义。`globals.h` 补 `#define F_GEMS "/feature/gems.lpc"`，并从 nitan6 收养 `feature/gems.lpc`+`gems.h`。证明：HEAD 0 PASS / 2 FAIL；树 2 PASS。

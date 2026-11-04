@@ -766,3 +766,7 @@ xkx100 的原文是 `vc = victim->add("vote/count", 1);`，nitan 系把它写成
 ## 深度功能测试（2026-11-04，COMMAND + feature.h §6.16/§6.23）
 
 同 nitan6：`COMMAND` → `F_COMMAND`，空壳 `feature.h`。证明：HEAD 1 PASS / 1 FAIL；树 2 PASS。
+
+## 深度功能测试（2026-11-04，DOOR_ROOM→ROOM §6.16）
+
+崆峒 `d/kongdong/*` 继承 `DOOR_ROOM`；`create_door` 已在 `ROOM`（`/inherit/room/room`）。`room.h` 补 `#define DOOR_ROOM ROOM`。同 nitan6：`DOOR_ROOM` → `ROOM`。证明：lianhua_tai HEAD FAIL → PASS。

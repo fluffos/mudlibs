@@ -1270,3 +1270,5 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-11-04, nitan6/nt6 COMMAND + chidi KZZNPC):** (1) nitan6/nt6 `fgrep` inherits undef `COMMAND` while `F_COMMAND` already names `/feature/command.lpc` — `#define COMMAND F_COMMAND`, plus empty `include/feature.h` the archive lost (§6.23). (2) chidi yandang NPCs inherit undef `KZZNPC`; define `/std/char/kzznpc` and adopt `kzznpc.lpc` from fys. Proof: fgrep HEAD 1/1 → 2 PASS on both; kzznpc HEAD FAIL → PASS (yandang still missing `get_npc_data`, same on fys).
 
+**Also (2026-11-04, nitan DOOR_ROOM + dtxyzjb F_GEMS):** (1) nitan6/nt6/nt6nitan6win kongdong rooms inherit undef `DOOR_ROOM` while `create_door` already lives on `ROOM` — `#define DOOR_ROOM ROOM` in `room.h`. (2) dtxyzjb `clone/gem/gem` inherits undef `F_GEMS`; define `/feature/gems.lpc` and adopt `gems.lpc`+`gems.h` from nitan6. Proof: lianhua_tai newly loads on nitan6/nt6; gems HEAD 0/2 → 2 PASS.
+

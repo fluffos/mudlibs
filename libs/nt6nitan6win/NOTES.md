@@ -751,3 +751,7 @@ xkx100 的原文是 `vc = victim->add("vote/count", 1);`，nitan 系把它写成
 ## 深度功能测试（2026-11-03，§7.19 enable_player 重入）
 
 `feature/command.lpc` 的 `enable_player()` 加 `in_enable_player_now` 守卫（`scripts/lpc_fix_enable_player_guard.py`，KB 05 7.19）：门派 NPC `init()`→`setup()`→`enable_player()`→`enable_commands()` 再跑 `init()` 时直接返回，避免 Too deep recursion。
+
+## 深度功能测试（2026-11-04，DOOR_ROOM→ROOM §6.16）
+
+崆峒 `d/kongdong/*` 继承 `DOOR_ROOM`；`create_door` 已在 `ROOM`（`/inherit/room/room`）。`room.h` 补 `#define DOOR_ROOM ROOM`。同 nitan6：`DOOR_ROOM` → `ROOM`。证明：继承语法错误消除；房间仍可能因 NPC `set_wugong` 噪声 FAIL。
