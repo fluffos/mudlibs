@@ -1009,4 +1009,7 @@ wizard.old `web` 缺 `/std/spells/basic`（别名到 antiguo old/basic，非 eff
 ## 深度功能测试（2026-11-03，witch/m/brew 薄别名 §6.15）
 
 oldwitch ostir/cmmix/fmix 继承 `/std/spells/witch/m/brew`，本体在 antiguo wizard.old/oldwitch。薄别名。证明：HEAD 4 FAIL；树 5 PASS。
+## 深度功能测试（2026-11-03，wizard mirror/inaud/scloud/read_magic §6.15）
+
+bard/cleric 包装继承 `/std/spells/wizard/{mirror,inaud,scloud,read_magic}`；本体在 antiguo（read_magic→read_mag）。另补 gremios read_magic。证明：HEAD 10 FAIL；树 10 PASS。
 
