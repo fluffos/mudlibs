@@ -632,3 +632,7 @@ Strategy A `/lib/living` 已有 `dead_ob`/`random_pick`/`wander`/`damage_type`�
 
 祭司 `monsies/priest.lpc` 的 `object attacker` 与 living 的 `object *attacker` 撞名；叶本意是独立喊话追踪变量。改名为 `alerted_attacker`。证明：最后一条 Redeclaration 清零；sticklib warnings 0 diags。
 
+## 深度功能测试（2026-11-03，create 无 this_player）
+
+赌场机 `create_treasure` 的 `TP->query_coder_level()`、面包店/酒馆 `create_shop`/`create_pub` 经 `list_*`→`modify_cost` 的 `this_player()->query_crime_level()`、以及 `lord_crown` 的性别查询，在房间 reset/预载无人扮演时 `this_player()` 为 0，FluffOS 对 `0->f()` 抛错，对象无法加载（旧驱动返回 0）。守卫 `TP`/`this_player()`；`modify_cost` 无人时原价返回。证明：HEAD 15 对象 FAIL（catch `Bad argument 1 to call_other` Got int(0)）；树均 PASS。
+
