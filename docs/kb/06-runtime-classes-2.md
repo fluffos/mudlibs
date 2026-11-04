@@ -714,6 +714,8 @@ bug".
 `command()` runs as `current_object`. Add `do_command(str){return
 command(str);}` and call `target->do_command(str)`.
 
+**Also (2026-11-03, board_handler `create_board`):** `security[board] = ({ this_player()->query_name() })` raises `Bad argument 1 to call_other` when a board's `setup()` creates the board with nobody acting (finalrealms `board_xmas`, ninetears rooms `set_datafile`). Use `this_player() ? ...->query_name() : "system"`. 2 hosts PASS.
+
 **Also (2026-11-03, finalrealms srelay):** `force_foo` used `command(cmd, target)`; sefun is 1-arg via `queue_action`. Call `target->queue_action(cmd)`.
 
 ### 7.173 `transfer(a, b)` doesn't exist

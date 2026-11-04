@@ -825,3 +825,7 @@ elf smith / smithr：`tell_object("Eldevan…")` → `tell_object(this_player(),
 3. **`obj/soul/srelay.lpc`**：`command(str, ob)` 是旧 MudOS 两参形式（KB 06 §7.172）；改为 `data[0]->queue_action(data[1])`（与本库 sefun `command` 对当前物件的做法一致）。
 
 证明：三文件 HEAD FAIL；树 PASS。
+
+## 深度功能测试（2026-11-03，board_handler create_board / this_player）
+
+`obj/misc/board_xmas` 在 `setup()` 里 `set_datafile` → `create_board`；`board_handler` 第 118 行 `this_player()->query_name()` 在无人时对 0 做 call_other，报 `Bad argument 1`，物件加载失败。改为有玩家用其名，否则 `"system"`。证明：HEAD FAIL；树 PASS。同改 `ninetears`（多处房间 `set_datafile`）。
