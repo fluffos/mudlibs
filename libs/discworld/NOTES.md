@@ -883,3 +883,10 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，paper_file query_read_mess §6.21）
 
 `obj/misc/papers/paper_file.lpc` 声明 `mixed *query_read_mess()` 却 `return read_file(file_name)`（string），FluffOS 报返回类型不符，物件不编译。按同树 `nroff_paper` 包成 `({ ({ str, 0, "common", 0 }) })`。同改 `dw_fluffos_v1` / `v2`。证明：三库 HEAD FAIL；树 PASS。
+
+## 深度功能测试（2026-11-03，fighting path.h；talker 去 deity.h）
+
+1. **`std/effects/fighting/bob.lpc`**：目录缺 `path.h`（`SHADOWS`），alone-scan 不编译。自 skylib 采纳 `fighting/path.h`（同先前 ingested/poisons 做法，§7.353）。
+2. **`std/effects/object/talker.lpc`**：无条件 `#include <deity.h>`，本库未带该头；实际只用 `query_deity()` 方法与 `path.h` 的 `SHADOWS`。去掉该 include（勿采纳 skylib 的 deity.h：它会 `#undef SHADOWS` 改成仪式路径）。
+
+同改 `dw_fluffos_v1` / `v2`。证明：两文件三库 HEAD FAIL；树 PASS。

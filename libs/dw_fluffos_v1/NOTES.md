@@ -374,3 +374,7 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，paper_file query_read_mess §6.21）
 
 同 discworld：`paper_file` 的 `query_read_mess` 把 `read_file` 字符串包成 read_mess 行。证明：HEAD FAIL；树 PASS。
+
+## 深度功能测试（2026-11-03，fighting path.h；talker 去 deity.h）
+
+同 discworld：采纳 `effects/fighting/path.h`；talker 去掉未随库的 `deity.h`。证明：HEAD FAIL；树 PASS。
