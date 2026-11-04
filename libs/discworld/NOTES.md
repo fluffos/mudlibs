@@ -899,3 +899,9 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，admin common CONFIG_START_LOCATION §6.16）
 
 `d/admin/common.lpc` 出口用 `CONFIG_START_ROOM`，但 `include/config.h` 只定义 `CONFIG_START_LOCATION`（南瓜 squash5）。改为 `CONFIG_START_LOCATION`。同改 `dw_fluffos_v1` / `v2`。证明：三库 HEAD common FAIL；树 PASS。
+
+
+## 深度功能测试（2026-11-03，we_care club_room_controller §6.21）
+
+1. `set_save_file(...)` 已改名为基类的 `set_save_directory`（存档路径再拼 `CLUB_ROOM_CONTROLLER_SAVE_FILE`）。
+2. `class ownership` 的 `name` 原为 `string`，但 `add_controlled_ownership` 存入 function 指针且 `set_club` 用 `functionp`/`evaluate`；FluffOS 赋值时报错，alone-scan 静默 FAIL。改为 `mixed name`。同改 dw_fluffos_v1/v2 与 skylib（skylib 参数亦改回 `mixed default_name`）。证明：四库 HEAD we_care controller FAIL；树 PASS。

@@ -328,3 +328,8 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，admin common CONFIG_START_LOCATION §6.16）
 
 同 discworld：`CONFIG_START_ROOM` → `CONFIG_START_LOCATION`。证明：HEAD FAIL；树 PASS。
+
+
+## 深度功能测试（2026-11-03，we_care club_room_controller §6.21）
+
+同 discworld：`set_save_directory` + `ownership.name` 改为 `mixed`。证明：HEAD FAIL；树 PASS。
