@@ -1,3 +1,3 @@
-#define DRINK_FILE "/obj/drink"
+#define DRINK_FILE "/lib/drink"
 
 inherit DRINK_FILE;

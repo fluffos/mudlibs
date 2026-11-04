@@ -636,3 +636,7 @@ Strategy A `/lib/living` 已有 `dead_ob`/`random_pick`/`wander`/`damage_type`�
 
 赌场机 `create_treasure` 的 `TP->query_coder_level()`、面包店/酒馆 `create_shop`/`create_pub` 经 `list_*`→`modify_cost` 的 `this_player()->query_crime_level()`、以及 `lord_crown` 的性别查询，在房间 reset/预载无人扮演时 `this_player()` 为 0，FluffOS 对 `0->f()` 抛错，对象无法加载（旧驱动返回 0）。守卫 `TP`/`this_player()`；`modify_cost` 无人时原价返回。证明：HEAD 15 对象 FAIL（catch `Bad argument 1 to call_other` Got int(0)）；树均 PASS。
 
+## 深度功能测试（2026-11-03，/obj/food|drink → /lib）
+
+祭司 `priest_drink.h` 把 `DRINK_FILE` 覆写为不存在的 `/obj/drink`；`herb` inherit `/obj/food`；盗贼 `psilocybe` inherit `"obj/food"`；厨房 `clone_object("/obj/food|drink")`。本库标准基类在 `/lib/food` 与 `/lib/drink`（`food_defs.h` / `drink_defs.h`）。全部改到 `/lib/…`。证明：HEAD herb/lefren/amaretto/anthallas/heather/psilocybe FAIL（`Inherited file '/obj/…' does not exist`）；树与 kitchen 均 PASS。
+
