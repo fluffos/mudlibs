@@ -994,4 +994,7 @@ antiguo 仍引用 `/std/spells/bases/*` 与 `/std/spells/base`，文件只在 an
 ## 深度功能测试（2026-11-03，commands/base_command 薄别名 §6.15）
 
 `/std/commands/base_command` 与 `/d/gremios/comandos/target` 历史路径缺失；薄别名到 antiguo。证明：target+base_command HEAD FAIL → 树 PASS。
+## 深度功能测试（2026-11-03，guilds/cleric 薄别名 §6.15）
+
+`tempus` 继承 `/std/guilds/cleric`，本体在 antiguo。薄别名。证明：cleric HEAD FAIL → 树 PASS（tempus 自身的 add_command/add_main_skill 为既有噪声，FR 同样）。
 
