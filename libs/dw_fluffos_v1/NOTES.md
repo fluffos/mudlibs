@@ -437,3 +437,8 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，weather_room 类型与 add_exit §6.19/§6.21）
 
 同 discworld：补函数类型、`mixed lever`、三参 `add_exit`。证明：HEAD FAIL；树 PASS。
+
+
+## 深度功能测试（2026-11-03，room document_handler 重建 §6.15）
+
+同 discworld：补 `/std/room/document_handler`。证明：HEAD FAIL；树 PASS。

@@ -950,3 +950,8 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，weather_room 类型与 add_exit §6.19/§6.21）
 
 `/std/room` 别名之后露出：`reset`/`init`/`pull`/`push` 无类型；`lever` 实为数组行（`mixed`）；`return;`；旧式两参 `add_exit` 补 `"path"` 与路径前导 `/`。同改 v1/v2。证明：三库 HEAD FAIL；树 PASS。
+
+
+## 深度功能测试（2026-11-03，room document_handler 重建 §6.15）
+
+`council_document` inherit `/std/room/document_handler`，档案无此文件；家具侧有 `furniture/inherit/document_handler` 并提供 `init_room()`。按 newspaper_office 模式重建：basic_room + 该 inherit + auto_load，`init()` 调 `init_room()`，桩 `query_save_dir`/`save_me`/`is_open_for`。同改 v1/v2。证明：三库 HEAD FAIL；树 document_handler+council_document PASS。
