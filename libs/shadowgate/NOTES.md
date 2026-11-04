@@ -842,3 +842,7 @@ old 下水道继承 `/d/dragon/sewer/sewer_room`，本体在 old；字节拷贝�
 ## 深度功能测试（2026-11-04，hm_quest maze 改写 §6.15）
 
 `common/room` 与 `old_hm_quest/common/room` 继承 gitignored 的 `/realms/firedragon/obj/rooms/maze/maze`，本体在 `/d/hm_quest/{,old_hm_quest/}maze`。改写 include/inherit 到本地路径。证明：HEAD 2 PASS / 2 FAIL → 树 4 PASS。
+
+## 深度功能测试（2026-11-04，deku open/dforest2i 薄别名 §6.15）
+
+`keep/forest/dforest7` 与 `open/old/dforest*` 继承 `/d/deku/open/dforest2i`，本体与 `forest2i` 同迁 `/d/deku/forest/forest2i`。薄别名。证明：HEAD 3 FAIL；树 3 PASS。
