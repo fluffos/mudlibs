@@ -961,3 +961,7 @@ rnd_caus*：`tell_object("at the top\n", attackboy)`→`tell_object(attackboy, �
 ## 深度功能测试（2026-11-03，id add_plural 空数组）
 
 与 finalrealms 同：`std/basic/id.lpc` 的 `add_plural`/`add_plurals` 在 `plurals` 仍为 0 时先初始化为空数组。
+
+## 深度功能测试（2026-11-03，wanderer set_plurals 类型 §6.21）
+
+同 finalrealms：`wanderer` 的 `set_plurals("…")` 改为 `set_main_plural`。证明：HEAD FAIL；树 PASS。
