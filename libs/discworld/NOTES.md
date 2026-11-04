@@ -871,3 +871,7 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，pstatus 残留 broken 标识）
 
 `cmds/player/pstatus.lpc` 在 `#include` 前多了一行孤立标识符 `broken`（压缩包残留），解析器带着未完成语句读到 `top_ten_tables.h` 的 `class` 定义时报 `syntax error, unexpected L_CLASS`。删掉该行。证明：HEAD FAIL；树 PASS。同改 `dw_fluffos_v1` / `v2`。
+
+## 深度功能测试（2026-11-03，leg_trap setup / this_player）
+
+`obj/misc/traps/leg_trap.lpc` 在 `setup()` 拼旁观消息时调用 `this_player()->query_short()`；alone-load 无人时报 Bad argument，物件不加载。改为有玩家用短名，否则 `"someone"`。证明：HEAD FAIL；树 PASS。同改 `dw_fluffos_v1` / `v2`。
