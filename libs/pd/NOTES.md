@@ -597,3 +597,7 @@ fresh driver boot plus the full long-sit idle window below.
 ## switch 只有 `default:` 一个标号，不编译：case 分支被注释掉了，3 处（3 个文件）（2026-11-02，KB 04 §6.30）
 
 `switch (EXPR) { default: BODY break; }` 只有 `default` 一个标号：这个驱动要 `case` 语句（`need case statements in switch/case, not just default:`），整个文件不编译，对象永远加载不了——归档时有人把 case 分支注释掉了、`default` 就是全部。本库 3 处（3 个文件）：。`scripts/lpc_fix_default_switch.py` 把它改成裸块 `{ BODY }`（尾部的 `break;` 去掉；`EXPR` 只有有副作用时留作一条语句；注释保持原位）。证明：改前该文件编译失败，改后加载 PASS；HEAD / 工作树加载对比 0 退步。
+## 深度功能测试（2026-11-03，hall/quiver 薄别名 §6.15）
+
+`/std/hall`→`/std/room/hall`，`/std/obj/quiver`→`/std/quiver`。薄别名。证明：hall 链与 quiver 路径 HEAD FAIL → 树 PASS（diran quiver 的 set_size/set_material 另案）。
+
