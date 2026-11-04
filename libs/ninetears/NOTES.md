@@ -1016,3 +1016,7 @@ bard/cleric 包装继承 `/std/spells/wizard/{mirror,inaud,scloud,read_magic}`�
 ## 深度功能测试（2026-11-04，gremios/camino/summon/item-shop/inventory §6.15）
 
 薄别名：`/d/gremios/comandos/base_command`、`/room/camino_avalon/camino_avalon`、两处 `summon_base`→`summon_b`；收养 `inventory`（antiguo `.c.old`）与 FR 孪生的 `item-shop`+`shop_con`。证明：HEAD 2 PASS / 13 FAIL；树 15 PASS。
+
+## 深度功能测试（2026-11-04，/obj/armor 薄别名 §6.15）
+
+oldsys 锁甲继承 `/obj/armor`，本体是 `/obj/armour`。薄别名。证明：HEAD 缺 inherit；树 armor+armour PASS（callers 仍缺旧 add_ac API，另案）。

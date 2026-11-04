@@ -914,3 +914,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply e
 ## 深度功能测试（2026-11-04，/std/char/npc 薄别名 §6.15）
 
 `NPC` 宏指向 `/std/char/npc`，本体在 `/std/npc`。薄别名。证明：HEAD char/npc FAIL；树 PASS（amphibia 仍缺 race-body API，另案）。
+
+## 深度功能测试（2026-11-04，yogor y_war + IRC drink 改写 §6.15）
+
+攻城兵继承 wizard `/u/i/innocence/yogor/war/y_war`，本体在 `/d/eastland/yogor/war/y_war`；IRC drink 同 es1 改写。证明：两处 HEAD 1 PASS / 2 FAIL → 树 3 PASS。
