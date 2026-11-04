@@ -975,3 +975,7 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，real_estate_auction 去 morpork.h）
 
 `#include <morpork.h>` 档案无此头；文件未用其符号（HOUSING/AGREEMENT/BOOK 已在 housing.h）。删除该 include。同改 v1/v2。证明：三库 HEAD FAIL；树 PASS。残留：scripting.lpc 仍有更深错误（`evaluate_expresion`、`_running_script` 单复数、`class*` 等）。
+
+## 深度功能测试（2026-11-03，outside/shop/surface 别名与收养 §6.15）
+
+与 `/std/room` 同模式：档案缺 `/std/outside`（实为 `/std/room/outside`）、`/std/shop`（实为 `general_shop`）；`/std/surface` 从 skylib 收养并改用 discworld 宏。解锁 pub_shop/counter/plate、pawn_shop、iroom outside、room/air。同改 v1/v2。证明：三库 HEAD FAIL；树 PASS。

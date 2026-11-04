@@ -1,0 +1,197 @@
+/**
+ * Basic surface: things sit on it (plates, trays, pub counters).
+ * Adopted from skylib /std/surface for the discworld archive gap (§6.15).
+ */
+#include <player.h>
+
+inherit "/std/object";
+inherit "/std/basic/cute_look";
+
+nosave int loc_weight, max_weight;
+
+/**
+ * This method sets our maximum capacity.
+ * @param arg the maximum weight to set
+ */
+void set_max_weight( int arg ) { max_weight = arg; }
+
+/**
+ * This method return the maximum weight of things that can fit in us.
+ * @return the maximum weight
+ */
+int query_max_weight() { return max_weight; }
+
+/**
+ * This method returns the weight of all things in us.
+ * @return the weight of all things within us
+ */
+int query_loc_weight() { return loc_weight; }
+
+/**
+ * This method queries whether or not we are a surface.
+ * @return always returns 1
+ */
+int query_has_surface() { return 1; }
+
+/** @ignore yes */
+void update_loc_weight() {
+    loc_weight = 0;
+
+    foreach( object ob in all_inventory( this_object() ) )
+        loc_weight += ob->query_complete_weight();
+
+} /* update_loc_weight() */
+
+/** @ignore yes */
+int query_complete_weight() {
+    return ::query_complete_weight() + query_loc_weight();
+} /* query_complete_weight() */
+
+/** @ignore yes */
+int add_weight( int i ) {
+    if( !max_weight )
+        return 1;
+
+    if( i + loc_weight > max_weight )
+        return 0;
+
+    if( !environment() ) {
+        loc_weight += i;
+        return 1;
+    }
+
+    if( !environment()->add_weight( i ) )
+        return 0;
+
+    loc_weight += i;
+    return 1;
+
+} /* add_weight() */
+
+/** @ignore yes */
+string long( string word, int dark ) {
+    object *things;
+
+    if( !sizeof( things = this_object()->find_inv_match("all", this_player() ) ) )
+        return object::long( word, dark )+"There is nothing on "+
+            the_short()+".\n";
+
+    return object::long( word, dark )+query_contents("On "+
+        the_short()+" there "+( sizeof( things ) == 1 ? "is" : "are")+" ",
+        things );
+
+} /* long() */
+
+/** @ignore yes */
+int test_remove( object ob, int flag ) { return 1; }
+
+/** @ignore yes */
+int test_add( object ob, int flag ) { return 1; }
+
+/** @ignore yes */
+object *find_inv_match( string words, object looker ) {
+    object *things;
+
+    things = filter( all_inventory( this_object() ), (: $1->short(0) &&
+             ( !$2 || $1->query_visible($2) ) :), looker );
+
+    return things;
+
+} /* find_inv_match() */
+
+/** @ignore yes */
+mixed stats() {
+    return ::stats() + ({
+        ({"loc_weight", query_loc_weight() }),
+        ({"max_weight", query_max_weight() }),
+    });
+} /* stats() */
+
+/** @ignore yes */
+mapping int_query_static_auto_load() {
+    return ([
+        "::" : ::int_query_static_auto_load(),
+        "max weight" : max_weight,
+    ]);
+} /* int_query_static_auto_load() */
+
+/** @ignore yes */
+mapping query_dynamic_auto_load() {
+    mixed inventory;
+
+    // Check the player's object.
+    if( this_player() )
+        catch( inventory = this_player()->create_auto_load( all_inventory( this_object() ) ) );
+
+    // Try the autoload object.
+    if( !inventory )
+        catch( inventory = AUTO_LOAD_OB->create_auto_load( all_inventory( this_object() ) ) );
+
+    // Try the main player object.
+    if( !inventory )
+        catch( inventory = "/global/player"->create_auto_load( all_inventory( this_object() ) ) );
+
+    return ([
+        "::" : object::query_dynamic_auto_load(),
+        "inv" : inventory,
+    ]);
+
+} /* query_dynamic_auto_load() */
+
+/**
+ * This method handles moving objects into the inventory from an auto
+ * load.
+ * @param ob the object to move into ourselves
+ */
+protected int handle_restore_inventory( object ob ) {
+    int move_flag;
+
+    ob->disable_item_tracking();
+    move_flag = ob->move(this_object());
+    ob->enable_item_tracking();
+
+    return move_flag;
+
+} /* handle_restore_inventory() */
+
+/** @ignore yes */
+void init_dynamic_arg( mapping bing ) {
+    function f;
+
+    if( bing["::"] )
+        ::init_dynamic_arg( bing["::"] );
+
+    if( bing["inv"] ) {
+        f = (: handle_restore_inventory($1) :);
+        if( !player )
+            player = this_player();
+        if( player )
+            player->load_auto_load_to_inventory( bing["inv"], this_object(), player, f );
+        else
+            "/global/player"->load_auto_load_to_inventory( bing["inv"], this_object(), this_player(), f );
+    }
+
+} /* init_dynamic_arg() */
+
+/** @ignore yes */
+void init_static_arg( mapping bing ) {
+    if( bing["::"] )
+        ::init_static_arg( bing["::"] );
+
+    if( !undefinedp( bing["max weight"] ) )
+        max_weight = bing["max weight"];
+
+} /* init_static_arg() */
+
+/** @ignore yes */
+mapping query_static_auto_load() {
+    if( base_name(this_object()) != __FILE__[0..<5] )
+        return 0;
+    return int_query_static_auto_load();
+} /* query_static_auto_load() */
+
+/** @ignore yes */
+void dest_me() {
+    all_inventory( this_object() )->dest_me();
+    object::dest_me();
+} /* dest_me() */
