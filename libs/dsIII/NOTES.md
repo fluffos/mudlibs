@@ -1081,3 +1081,8 @@ The code of this lib writes logs into 3 subdirectories of `log/`: `log/harass` (
 ## Bare wizard command with a 0 argument (2026-10-27, KB 06 §7.336 Also)
 
 After the permission gate, the command still handed 0 to `sscanf` / `read_file` / `find_living`. `lpc_fix_bare_arg.py` adds `if (!arg)` (or `help(me)` / `GetHelp()`) before the first use. See this commit for the files touched in this lib.
+
+## 深度功能测试（2026-11-03，trace 与 __TRACE__ 预定义）
+
+FluffOS 编译器无条件预定义空的 `__TRACE__`（`lexer_utils.cc`），但没有 `trace()` efun。`#ifdef __TRACE__` 仍编译进 `trace(x)`，alone-scan 报 `Undefined function trace`。改为 `#if efun_defined(trace)`（命令体与 GetHelp）。同系 ds386 / dshakkard / brassring / riftsds。证明：HEAD FAIL；树 PASS。
+
