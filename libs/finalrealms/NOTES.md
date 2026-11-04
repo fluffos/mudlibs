@@ -829,3 +829,10 @@ elf smith / smithr：`tell_object("Eldevan…")` → `tell_object(this_player(),
 ## 深度功能测试（2026-11-03，board_handler create_board / this_player）
 
 `obj/misc/board_xmas` 在 `setup()` 里 `set_datafile` → `create_board`；`board_handler` 第 118 行 `this_player()->query_name()` 在无人时对 0 做 call_other，报 `Bad argument 1`，物件加载失败。改为有玩家用其名，否则 `"system"`。证明：HEAD FAIL；树 PASS。同改 `ninetears`（多处房间 `set_datafile`）。
+
+## 深度功能测试（2026-11-03，water create / id plurals；生日卡 this_player）
+
+1. **`obj/misc/water.lpc`**：`create()` 只 `set_name` 不调 `::create()`，`id` 的 `plurals` 仍是 0，`add_plural` 里 `+=` 报类型错。补上 `::create()`；并在 `std/basic/id.lpc` 的 `add_plural`/`add_plurals` 对空数组做初始化（ninetears 同步）。
+2. **`obj/b_day/card.lpc`**：`setup()` 用 `this_player()->query_cap_name()`，alone-load 无人时报 Bad argument。无玩家时用 `"Someone"`。
+
+证明：两文件 HEAD FAIL；树 PASS。

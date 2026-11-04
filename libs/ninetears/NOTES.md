@@ -957,3 +957,7 @@ rnd_caus*：`tell_object("at the top\n", attackboy)`→`tell_object(attackboy, �
 ## 深度功能测试（2026-11-03，board_handler create_board / this_player）
 
 同 finalrealms：`create_board` 在无人时不调用 `this_player()->query_name()`。证明：`/room/admin/quests` HEAD FAIL；树 PASS。
+
+## 深度功能测试（2026-11-03，id add_plural 空数组）
+
+与 finalrealms 同：`std/basic/id.lpc` 的 `add_plural`/`add_plurals` 在 `plurals` 仍为 0 时先初始化为空数组。
