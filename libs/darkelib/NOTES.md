@@ -956,3 +956,8 @@ The code of this lib writes logs into 5 subdirectories of `log/`: `log/archive` 
 ## 深度功能测试（2026-11-04，cleric med_room 薄别名 §6.15）
 
 cleric_new 的战斗/训练/冥想房继承 `/d/damned/guilds/cleric/med_room`，本体在 cleric_new。薄别名。证明：HEAD 1 PASS / 2 FAIL；树 3 PASS。
+
+## 深度功能测试（2026-11-04，shadows/excelsior/thrace 薄别名 §6.15）
+
+三处历史路径缺失：(1) `inherit "/std/spells/shadows"` 把目录当文件，加 `shadows.lpc`→`shadows/shadow`；(2) `/wizards/excelsior/weapon`→`/std/weapon`；(3) `/wizards/thrace/long_term`→`/std/skills/long_term`。证明：三别名 + `d/excelsior/slong_sword` + `std/skills/testforge_weapon` HEAD FAIL → PASS；`attacker_shadow` 的 `create` 另案。
+

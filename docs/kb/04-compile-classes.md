@@ -1254,3 +1254,6 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-11-04, majik3 skill_system thin alias):** `inherit/battle` inherits `/inherit/skill_system` while the file is `/inherit/living/skill_system`. Thin alias. Proof: skill_system + battle HEAD FAIL → PASS. (GRIDMAP/money/holymission UDP adopts need more headers — deferred.)
 
+
+**Also (2026-11-04, darkelib path thin aliases):** (1) `inherit "/std/spells/shadows"` (dir) → `shadows.lpc` alias to `shadows/shadow`. (2) `/wizards/excelsior/weapon` → `/std/weapon`. (3) `/wizards/thrace/long_term` → `/std/skills/long_term`. Proof: aliases + `slong_sword` + `testforge_weapon` newly load (`attacker_shadow` still misses inherited `create` — separate).
+
