@@ -640,3 +640,7 @@ Strategy A `/lib/living` 已有 `dead_ob`/`random_pick`/`wander`/`damage_type`�
 
 祭司 `priest_drink.h` 把 `DRINK_FILE` 覆写为不存在的 `/obj/drink`；`herb` inherit `/obj/food`；盗贼 `psilocybe` inherit `"obj/food"`；厨房 `clone_object("/obj/food|drink")`。本库标准基类在 `/lib/food` 与 `/lib/drink`（`food_defs.h` / `drink_defs.h`）。全部改到 `/lib/…`。证明：HEAD herb/lefren/amaretto/anthallas/heather/psilocybe FAIL（`Inherited file '/obj/…' does not exist`）；树与 kitchen 均 PASS。
 
+## 深度功能测试（2026-11-03，priests/log keep）
+
+`cash_d` create 写 `SHOPLOG`（`/guilds/priests/log/shoplog`），目录未入仓也未在 keep 列表。`gen_keep_dirs.py --merge sticklib` 记入 `wasm_keep_dirs.txt`。证明：无目录时 FAIL（Wrong permissions … No such file）；有目录后 PASS。
+
