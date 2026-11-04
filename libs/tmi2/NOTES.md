@@ -763,6 +763,10 @@ A room exit named a file the lib does not have, so the player was stuck (a typo,
 
 `istack.lpc` 仍写已更名的 `LISTOBJFILE`；`adt_defs.h` 现为 `ILIST_ADT`。改用宏。证明：Undefined LISTOBJFILE 清零。
 
+## 深度功能测试（2026-11-03，netmail DISABALED 裸标识符）
+
+`adm/daemons/network/netmail.lpc` 在 `#include <net/macros.h>` 前有裸标识符 `DISABALED`（本意 DISABLED）。FluffOS 把它当成待赋值名，随后头文件里的 `string htonn(...){...}` 函数体就报 `unexpected L_BASIC_TYPE`（原先误记为 macros.h 自身语法错）。删掉该标识符并注明。证明：netmail 单独加载 PASS；macros.h 诊断消失（697→698 compile）。
+
 ## 深度功能测试（2026-11-03，www 未用 alttmp）
 
 `obj/net/www.lpc` 声明 `alttmp`，唯一用法在已注释掉的 ALT 解析块内。从声明去掉。证明：Unused local 清零。

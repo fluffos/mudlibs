@@ -223,6 +223,11 @@ detection.
   `function_exists("syslog", sefun)` is true). Drop the prototype; keep
   LOG_* macros. Also: empty racesd stubs → minimal maps; Privs.cfg
   tab-split guarded. Proof: char_gen/master_feature/master_orig load PASS.
+  **Also (2026-11-03, tmi2 netmail `DISABALED`):** a bare identifier
+  before `#include <net/macros.h>` put the parser in assignment context, so
+  the header's `string htonn(...) { ... }` looked like `unexpected
+  L_BASIC_TYPE` (blamed on macros.h). Remove the stray token. Proof:
+  netmail PASS; macros.h diag gone.
 
 **Also (2026-11-03, sticklib living `set` void vs int):** Strategy A `/lib/living` had `varargs void set(...)` while npc/player `set_n_query` and `/lib/player` declare `varargs int set(...)` (`Function set inherited ... void vs int`, 3 files). Same shape as the earlier `attack` fix: living becomes `varargs int` returning 0. Proof: living/player/set_n_query/beggar PASS; those three warnings gone.
 
