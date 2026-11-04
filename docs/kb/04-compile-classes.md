@@ -1056,6 +1056,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-11-03, `__TRACE__` without `trace` efun):** FluffOS always predefines empty `__TRACE__` (`lexer_utils.cc`) but does not ship `trace()`. Dead Souls family `secure/cmds/creators/trace.lpc` used `#ifdef __TRACE__` around `trace(x)` → `Undefined function trace`. Switch to `#if efun_defined(trace)` (cmd + GetHelp). 5 hosts PASS: dsIII, ds386, dshakkard, brassring, riftsds.
 
+**Also (2026-11-03, `lsed` under OLD_ED):** `ed_start` / `ed_cmd` / `query_ed_mode` exist only when the driver is built without OLD_ED; FluffOS build-debug defines OLD_ED (interactive `ed()` only). nightmare4 `secure/cmds/creators/lsed.lpc` still called them -> `Undefined function ed_start`. Stub `LsedFile` with the unavailable message (same as foundation2 / Dead Souls family). PASS.
+
 **Also (2026-11-03, `check_memory` without DEBUGMALLOC):** `check_memory()` is only an efun when DEBUGMALLOC + develop extensions are on; FluffOS build-debug does not ship it. Bare callers `Undefined function check_memory` at compile. Guard with `#if efun_defined(check_memory)` (else a short unavailable message). 3 hosts PASS: foundation2, dsI, dsII. Later DS trees already nest the call under `#ifdef __DEBUGMALLOC__*` / `efun_exists`.
 
 **Also (2026-11-03, foundation2 creator move):** Nightmare-imported `secure/cmds/creator/move.lpc` `#include <move.h>` for `MOVE_*` codes and `inherit REFS_D`, but Foundation II never shipped that header on the include path (`lib/move.h` is the LIB_MOVE interface) nor `REFS_D`/refs daemon. `eventMove()` answers boolean 1/0. Rewrite: `get_object()` + truthy `eventMove()`, drop REFS. PASS.
