@@ -779,3 +779,7 @@ A room exit named a file the lib does not have, so the player was stuck (a typo,
 
 `adm/priv/{bird,dog,blah,doh,tk,cat,elephant}` 在 create 里对 `find_player("leto")` 为 0 时仍 `shadow`/`move_object`/`->process_input`，FluffOS 抛错。先取 `p` 再守卫；`elephant` 的 `call_other("open/bird")` 缺对象用 `catch`。证明：HEAD 七文件 FAIL；树均 PASS。
 
+## 深度功能测试（2026-11-03，I3 socket bind catch + leto blah）
+
+`I3`/`I3-0505` create 里 `clone_object(SOCKET, LISTEN…)` 在端口占用时 `error()`，alone-scan 整对象 FAIL；`catch` 包住两处 clone，仅有 router 时才 `send_startup_req_1`。`u/l/leto/blah` 同 adm/priv 的 `find_player("leto")` 守卫。证明：HEAD I3-0505/leto blah FAIL；树 PASS。余 intentional：www !TP、ed_guide previous_object、doc/func_spec、leto/nntp 缺头。
+
