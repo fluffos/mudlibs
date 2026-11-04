@@ -860,3 +860,7 @@ Every object loaded at HEAD and in the tree: no regression (`d/liaison/common.lp
 ## `log/` subdirectories nobody created: the logging `write_file()` / `log_file()` raises (2026-10-22, KB 06 §7.358)
 
 The code of this lib writes logs into 2 subdirectories of `log/`: `log/save/board` (`global/player/line_ed.lpc`), `log/secure/log` (`cmds/creator/playerinfo.lpc`). Neither the archive, a `git clone` nor the site pack has them (no local boot wrote into them, so `gen_keep_dirs.py` never recorded them), and `write_file()` raises `*Wrong permissions for opening file /log/dlog/money for append. "No such file or directory"` for a missing directory: the function that logs stops on that line and what came after it (the reward, the flag, the next step) never runs. In the eval probe this lib's `log_file()` wrote nothing (the probe object has no write access and the sefun does not make the directory itself), so what a real caller gets was not measured. `log/save/board`, `log/secure/log` are now in `scripts/wasm_keep_dirs.txt` (`scripts/lpc_keep_log_dirs.py`; the site and the pristine tree create the empty directories from it). Proof (`scripts/lpcc_eval.py`, an eval object under `/adm/daemons` or similar writes `/log/zzdirprobe/...`, fresh processes): the measured table in KB 06 §7.358.
+
+## 深度功能测试（2026-11-03，creator trace / efun_defined）
+
+同 discworld：`cmds/creator/trace.lpc` 用 `#if efun_defined(trace)`。证明：HEAD FAIL；树 PASS。

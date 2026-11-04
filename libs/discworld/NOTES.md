@@ -863,3 +863,7 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，force / class obj_match 强转）
 
 `secure/force.lpc` 把 `match_objects_in_environments()` 的返回值赋给 `class obj_match omatch` 时未强转；FluffOS 跨编译单元的 class 标签不一致，报 `Bad assignment ( class obj_match vs class am_time )`，alone-scan FAIL。改为 `(class obj_match)`，与 `global/new_parse.lpc`、`cmds/player/recover.lpc` 相同。证明：HEAD FAIL；树 PASS。同改 `dw_fluffos_v1` / `dw_fluffos_v2`。
+
+## 深度功能测试（2026-11-03，creator trace / efun_defined）
+
+`cmds/creator/trace.lpc` 裸调 `trace()`；本馆 FluffOS 无该 efun（与 DS 系 `__TRACE__` 假特征同类），alone-scan `Undefined function trace`。`#if efun_defined(trace)` 包住命令体，否则 `notify_fail`。证明：HEAD FAIL；树 PASS。同改 `dw_fluffos_v1` / `v2` / `skylib`。
