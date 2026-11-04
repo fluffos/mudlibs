@@ -478,3 +478,7 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，net nhttp compression / tell_demon move / oob 注释）
 
 `nhttp` 误写 `req->compressed`（类只有 `compression`）；`tell_demon` 的 `move_player` 改为 `move`；`oob.lpc` 块注释提前闭合导致语法错。同改 v1/v2。证明：三库 HEAD FAIL；树 nhttp+tell_demon PASS。
+
+## 深度功能测试（2026-11-03，thief.h 与 /std/guilds/thief §6.15/§6.16）
+
+档案缺 `thief.h`（从 skylib 收养）与 `/std/guilds/thief`（race 已映射；fence `basic_setup` 找不到对象）。按 standard 重建盗贼公会。同改 v1/v2。证明：三库 HEAD FAIL；树 thief+fence+storeroom PASS。残留：theft_base 仍缺 QUOTA/THEFT_INSURANCE。
