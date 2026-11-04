@@ -91,7 +91,7 @@ An explicit extension is resolved exactly. An extensionless path tries
 A lib may keep non-critical `.c` files as long as the master and login
 path are `.lpc`.
 
-**Also (2026-11-03, Discworld gatherables `handler.dat_*.lpc`):** the `.c`→`.lpc` rename also hit save/data siblings `handler.dat_old` / `handler.dat_dc`, so the driver tried to compile concatenated class dumps (`Redeclaration of function 'dest_me'`). Live init file is `handler.dat` (`gathering.lpc` `INIT_FILE`). `git mv` off the `.lpc` suffix. Proof: alone-scan of `*.dat_old.lpc` HEAD FAIL; after rename gathering/plant/rock PASS and the dumps are no longer compiled.
+**Also (2026-11-03, Discworld gatherables `handler.dat_*.lpc`):** the `.c`→`.lpc` rename also hit save/data siblings `handler.dat_old` / `handler.dat_dc`, so the driver tried to compile concatenated class dumps (`Redeclaration of function 'dest_me'`). Live init file is `handler.dat` (`gathering.lpc` `INIT_FILE`). `git mv` off the `.lpc` suffix. Proof: alone-scan of `*.dat_old.lpc` HEAD FAIL; after rename gathering/plant/rock PASS and the dumps are no longer compiled. Same misrename on skylib; renamed there too.
 
 ### 4.3 `static` → `nosave`, and its collisions
 

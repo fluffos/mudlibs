@@ -1007,3 +1007,7 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，gatherables handler.dat_* 误加 .lpc §4.2）
 
 `.c`→`.lpc` 把 `handler.dat_old`/`handler.dat_dc` 也改成可编译源，数据堆叠导致 Redeclaration。改回无 `.lpc` 后缀；真正 INIT 仍是 `handler.dat`。同改 v1/v2。证明：误名文件 HEAD FAIL；改名后 gathering/plant/rock PASS。
+
+## 深度功能测试（2026-11-03，www/boards $1 与 restore catch §7.317/§7.298）
+
+`function(string board,…)` 内误用 `$1`；`create` 对缺失 `/save/www/boards.o` 的 restore 未 catch 导致加载失败。`$1`→`board`，`catch(unguarded(restore…))`。同改 v1/v2。证明：三库 HEAD FAIL；树 PASS。

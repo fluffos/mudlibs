@@ -1936,6 +1936,8 @@ Found by taking the objects a visitor meets (`scripts/lpc_reach_census.py` lists
 **Fix:** the declared name (`t`) instead of `$1` (12 sites, 3 files). Gate: `lpc_listcheck.sh` HEAD 21 PASS / 3 FAIL, tree 24 PASS.
 **Detection:** `scripts/lpc_warnings.py SLUG` (`$var illegal`); a scan for typed `function(...) {` literals whose body has `$digit` matches 36 files in 20 libs, but only pd's three are real (the rest are `$1` in a nested `(: :)` or in a string).
 
+**Also (2026-11-03, Discworld `www/boards`):** (1) `board_summary`/`complete_board_summary` used `$1` inside `function(string board, …)` (`$var illegal inside anonymous function pointer`; §7.317) — use `board`. (2) `create()` `unguarded( (: restore_object(SAVE_FILE) :) )` raised `**restore_object: read permission denied: /save/www/boards.o` when the keep dir/save was absent and aborted the load; wrap `catch(unguarded(…))` so a missing save starts empty. Proof: 3 hosts HEAD FAIL; tree PASS.
+
 ### 7.318 One function from two parents with different meanings: say which one the leaf wants (pd `/std/user.lpc` `query_autoload()`, 2026-10-20)
 **Symptom:** `/std/user.lpc:1580:1: warning: query_autoload() inherited from both /std/user/autoload.lpc and /std/object.lpc (via /std/living.lpc); using the definition in /std/user/autoload.lpc.` at every compile of the player body (the first login prints it).
 **Cause:** the user's autoload module has `mixed *query_autoload()` (the list of objects to restore) and the object base has `int query_autoload()` (an item's autoload level); the user inherits both. The old driver took the later inherit silently; this one takes the first and says so. The warning is the diamond of 7.279 in miniature: here the driver's pick was already the wanted one.
