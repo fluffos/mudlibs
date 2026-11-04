@@ -818,4 +818,7 @@ oldrooms 继承 `/d/hm_quest/rooms/quest1`，本体在 oldrooms/quest1。薄别�
 ## 深度功能测试（2026-11-03，deku keep towerE1i/E2i 薄别名 §6.15）
 
 new_closed_area 塔房继承 `/d/deku/keep/towerE1i|E2i`，本体在 new_closed_area。薄别名。证明：HEAD 5 FAIL；树 7 PASS。
+## 深度功能测试（2026-11-03，marsh/swamp/Mrooms 薄别名 §6.15）
+
+沼泽房继承 `/d/dagger/marsh/swamp/Mrooms`，本体在 old/Mrooms。薄别名。证明：Mrooms+f1/f6 HEAD FAIL → 树 PASS。
 
