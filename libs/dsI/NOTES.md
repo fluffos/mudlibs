@@ -941,3 +941,8 @@ A `(: name :)` in an `item_desc` / `inquiry` / `chat_msg_combat` names a functio
 ## `log/` subdirectories nobody created: the logging `write_file()` / `log_file()` raises (2026-10-22, KB 06 §7.358)
 
 The code of this lib writes logs into 2 subdirectories of `log/`: `log/chan` (`secure/daemon/chat.lpc`), `log/harass` (`lib/interface.lpc`). Neither the archive, a `git clone` nor the site pack has them (no local boot wrote into them, so `gen_keep_dirs.py` never recorded them), and `write_file()` raises `*Wrong permissions for opening file /log/dlog/money for append. "No such file or directory"` for a missing directory: the function that logs stops on that line and what came after it (the reward, the flag, the next step) never runs. This lib's `log_file()` is `write_file(LOG_DIR + file, text)` and raises the same error for a missing directory (measured). `log/chan`, `log/harass` are now in `scripts/wasm_keep_dirs.txt` (`scripts/lpc_keep_log_dirs.py`; the site and the pristine tree create the empty directories from it). Proof (`scripts/lpcc_eval.py`, an eval object under `/adm/daemons` or similar writes `/log/zzdirprobe/...`, fresh processes): the measured table in KB 06 §7.358.
+
+## 深度功能测试（2026-11-03，values.lpc 截断）
+
+`secure/sefun/values.lpc` 在 `convert_value` 的 `switch(val[1])` 处截断（EOF），sefun 无法编译。同系 dsII/ds386 等已将 `convert_value` 收成 `return 1` 并保留 `round()`；从 dsII 整文件恢复。证明：HEAD values FAIL unexpected EOF；树 PASS。
+
