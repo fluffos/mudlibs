@@ -423,3 +423,7 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，thief.h 与 /std/guilds/thief §6.15/§6.16）
 
 档案缺 `thief.h`（从 skylib 收养）与 `/std/guilds/thief`（race 已映射；fence `basic_setup` 找不到对象）。按 standard 重建盗贼公会。同改 v1/v2。证明：三库 HEAD FAIL；树 thief+fence+storeroom PASS。残留：theft_base 仍缺 QUOTA/THEFT_INSURANCE。
+
+## 深度功能测试（2026-11-03，补齐 race 映射的其余 /std/guilds §6.15）
+
+`race.lpc` 映射 priest/witch/wizard/monk/assassin，档案仅有 standard/warrior（及已补 thief）。按 standard 重建五会；priest/wizard 技能取自 skylib old。同改 v1/v2。证明：三库 HEAD FAIL；树五会 + advanced_npc PASS。
