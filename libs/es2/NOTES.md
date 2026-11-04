@@ -667,3 +667,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-11-04，F_UNIQUE 收养 §6.15）
 
 `globals.h` 缺 `F_UNIQUE`，三件物品 `inherit F_UNIQUE`。补上宏并收养 fy2 的 `/feature/unique.lpc`。证明：HEAD 0 PASS / 4 FAIL → 树 4 PASS。`F_MERCENARY` 另案。
+
+## 深度功能测试（2026-11-04，F_MERCENARY 收养 §6.15）
+
+`d/snow/npc/mercenary` `inherit F_MERCENARY`，宏与 `/std/char/mercenary` 皆缺。从 njhhdxdes2hx 收养 feature 并定义宏。证明：HEAD 0 PASS / 2 FAIL → 树 2 PASS。

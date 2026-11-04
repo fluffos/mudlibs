@@ -672,6 +672,11 @@ time. (3) *Fewer arguments than parameters*: add `varargs` to the definition the
 
 **Also (2026-11-04, es1/es1_win/esI `/std/room`):** `grid_server` inherits `/std/room` while the body is `/std/room/room`. Thin alias on all three hosts. Proof: HEAD 1 PASS / 2 FAIL → tree 3 PASS each.
 
+**Also (2026-11-04, es1/es1_win/esI wild_card + `SECURE_OBJECT`):** archive shipped `wild_card.x` (not `.lpc`); `SECURE_OBJECT` pointed at missing `/std/object/sec_ob`. Copied to `.lpc` and adopted tmi2's `sec_ob` on all three hosts. Proof: wild_card+sec_ob HEAD FAIL → tree PASS (`card.lpc` still has a separate return-type error; `adt/body` still needs link/message/command).
+
+**Also (2026-11-04, es2 `F_MERCENARY`):** snow mercenary `inherit F_MERCENARY` with no define and no `/std/char/mercenary`. Adopted njhhdxdes2hx's feature and defined the macro. Proof: HEAD 0 PASS / 2 FAIL → tree 2 PASS.
+
+
 
 
 

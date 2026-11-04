@@ -855,3 +855,7 @@ IRC vodka/water 继承 wizard `/u/e/elon/drink`，接口在 `/d/island/obj/drink
 ## 深度功能测试（2026-11-04，/std/room 薄别名 §6.15）
 
 `grid_server` 等继承 `/std/room`，本体在 `/std/room/room`。薄别名。证明：HEAD 1 PASS / 2 FAIL → 树 3 PASS。
+
+## 深度功能测试（2026-11-04，wild_card.x + SECURE_OBJECT §6.15）
+
+`/std/body/wild_card` 归档为 `wild_card.x`；`SECURE_OBJECT` 指向缺失的 `/std/object/sec_ob`。复制为 `.lpc`，并从 tmi2 收养 `sec_ob.lpc`。证明：wild_card+sec_ob HEAD FAIL → 树 PASS（`card.lpc` 另有返回类型问题；`adt/body` 仍缺 link/message/command）。

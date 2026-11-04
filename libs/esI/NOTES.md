@@ -922,3 +922,7 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply e
 ## 深度功能测试（2026-11-04，/std/room 薄别名 §6.15）
 
 同 es1：`/std/room` → `/std/room/room`。证明：HEAD 1 PASS / 2 FAIL → 树 3 PASS。
+
+## 深度功能测试（2026-11-04，wild_card.x + SECURE_OBJECT §6.15）
+
+同 es1：`wild_card.x`→`.lpc`，收养 tmi2 `sec_ob`。证明：wild_card+sec_ob PASS（card 返回类型另案）。
