@@ -139,6 +139,7 @@
 #define QUEST			"/std/quest"
 #define ROOM			"/std/room"
 #define SKILL			"/std/skill"
+#define SKI_ZHEN		"/inherit/skill/array"
 #define SSERVER			"/std/sserver"
 #define SSSERVER                   "/std/ssserver"
 #define WARPLACE                "/d/zhanchang/warplace"

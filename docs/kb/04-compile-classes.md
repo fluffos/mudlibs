@@ -666,6 +666,9 @@ time. (3) *Fewer arguments than parameters*: add `varargs` to the definition the
 
 **Also (2026-11-04, sjpl2/sjplii `PANTS`):** six pants items `inherit PANTS` with no macro and no `/std/armor/pants`. Added `PANTS`/`TYPE_PANTS` to `armor.h` and a `pants.lpc` matching local `cloth.lpc`. Proof: HEAD 0 PASS / 7 FAIL → tree 7 PASS each.
 
+**Also (2026-11-04, dtxyzjb `SKI_ZHEN`):** four formation skills `inherit SKI_ZHEN` with no define and no `/inherit/skill/array`. Adopted nt7's array, `#define SKI_ZHEN "/inherit/skill/array"`, and rewrote three `query(key, ob)` calls to `ob->query(key)` (this lib has no nitan two-arg query sefun). Proof: HEAD 0 PASS / 5 FAIL → tree 5 PASS.
+
+
 
 
 **Also (2026-11-03, Discworld setup_compiler Room.inc / uwater):** `global/virtual/setup_compiler/Room.inc` (included by Room/Outside/UWater) had untyped `create`/`setup`/`reset`/`dest_me`/`event_*`/`RunFuncsOnObjects`/`QueryResetObjects` under `#pragma strict_types`; `event_exit(object ob)` also disagreed with basic_room's three-arg `event_exit(ob, message, to)`. Add return types and the full exit signature. `UWater.lpc` inherited missing `/std/uwater`; thin alias → `/std/room/water_outside` (same pattern as `/std/outside` → `room/outside`). Proof: 3 hosts HEAD FAIL; tree Room/Outside/UWater+uwater PASS.

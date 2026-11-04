@@ -441,3 +441,7 @@ guest：`tell_object("…", who)`→`tell_object(who, …)`。
 
 删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
 
+
+## 深度功能测试（2026-11-04，SKI_ZHEN 收养 §6.15）
+
+四门阵法 `inherit SKI_ZHEN`，宏与 `/inherit/skill/array` 皆缺。从 nt7 收养 `array.lpc`，在 `globals.h` 补 `#define SKI_ZHEN "/inherit/skill/array"`；本库无 nitan 双参 `query(key, ob)` sefun，三处改为 `ob->query(key)`。证明：HEAD 0 PASS / 5 FAIL → 树 5 PASS。
