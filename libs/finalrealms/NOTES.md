@@ -872,3 +872,8 @@ elf smith / smithr：`tell_object("Eldevan…")` → `tell_object(this_player(),
 ## 深度功能测试（2026-11-03，std/spells/trap 采纳 §6.15）
 
 `baseobs/traps/{acid,cold,fire,rock}trap` inherit `/std/spells/trap.lpc`，档案未带该基类。自 ninetears `std/antiguo/spells/trap.lpc` 采纳（默认 myzot 已是 `/std/spells/wizard/...` 路径）。与 `living/action_queue` 的 `max_time` 撞名告警，改名为 `trap_max_time`（ninetears antiguo/gremios 两份同步）。证明：HEAD 5 FAIL（trap+四元素阱）；树 9 PASS、无 Redeclaration 警告。刺客阱/atrap 本就走 atrap 基类，原本 PASS。
+
+## 深度功能测试（2026-11-03，/std/rooma 别名 §6.15）
+
+`undergrounda` 继承不存在的 `/std/rooma`（应为 `/std/room`）。薄别名。证明：HEAD rooma+undergrounda FAIL；树 PASS。
+
