@@ -605,3 +605,8 @@ fresh driver boot plus the full long-sit idle window below.
 ## 深度功能测试（2026-11-04，ethereal inherit 薄别名 §6.15）
 
 `include/domains/ether.h` 的 `ETHERSTD`/`ETHERWEP`/`ETHERRIDE`/`ETHERARM`（及 `ETHERPACK`）指向 `/d/guilds/newethereal/ethereal/inherit/*`，本体在 `guildbak` 同名目录。在历史路径下加薄别名指向 guildbak。证明：别名 + 房间/武器样本 HEAD 0 PASS / 7 FAIL → 树 7 PASS。`etherealride` 供体自身 `status` 语法错误另案；`tahn_tat` 的 `set_element` 另案。
+
+## 深度功能测试（2026-11-04，OLD_SPELL→bak1 + `/std/Object` 薄别名 §6.15）
+
+`OLD_SPELL`（`/std/bak/spell`）路径上曾是 `spell.daos`（注释写明 new spell daemon），与 `cmds/oldskills` / `venenum` 所需的 Seeker API（`set_min_mp`、`set_class`、`set_skills`…）不一致；该 API 在 `/std/bak1/spell`。在 `std/bak/spell.lpc` 做薄别名指向 bak1。另：`inherit "/std/Object"` 大小写路径本库只有 `object.lpc`，加 `std/Object.lpc` 薄别名。证明：`lpc_listcheck` 对 bak/spell + 6 个 OLD_SPELL 继承者 HEAD 0 PASS → 树 7 PASS；Object 别名 PASS；`philosop/_cmd` 的 `query_auto_load` 返回类型与 `/std/object` 不一致另案。
+

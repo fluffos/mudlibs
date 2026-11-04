@@ -1222,3 +1222,5 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-11-03, foundation2 creator move):** Nightmare-imported `secure/cmds/creator/move.lpc` `#include <move.h>` for `MOVE_*` codes and `inherit REFS_D`, but Foundation II never shipped that header on the include path (`lib/move.h` is the LIB_MOVE interface) nor `REFS_D`/refs daemon. `eventMove()` answers boolean 1/0. Rewrite: `get_object()` + truthy `eventMove()`, drop REFS. PASS.
 
+**Also (2026-11-04, pd OLD_SPELL + `/std/Object`):** `OLD_SPELL` is `/std/bak/spell` but Seeker's API (`set_min_mp` / `set_class` / …) lives in `/std/bak1/spell`; `spell.daos` at bak was the newer daemon and does not match `cmds/oldskills`. Thin-alias `bak/spell.lpc` → `bak1/spell`. Separately, Nightmare-style `inherit "/std/Object"` had no capital file; thin-alias to `/std/object`. Proof: bak/spell + 6 OLD_SPELL consumers HEAD FAIL → PASS; Object.lpc PASS (`philosop/_cmd` still fails on `query_auto_load` return-type vs object — separate).
+
