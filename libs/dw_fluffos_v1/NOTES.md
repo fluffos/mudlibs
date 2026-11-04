@@ -521,3 +521,7 @@ Pinkfish quarto/mancala 仍继承旧路径 `/obj/furnitures/misc/games/multiplay
 ## 深度功能测试（2026-11-04，global/play_parse_com 收养 §6.15）
 
 同 Discworld：从 Final Realms 收养 `/global/play_parse_com`。证明：HEAD FAIL；树 PASS。
+
+## 深度功能测试（2026-11-04，stay_alive→basic + BASE_GOAL §6.15/§6.16）
+
+旧版 `stay_alive.lpc` 仍 `#include <goals.h>` / `inherit BASE_GOAL`；现行正文是 `stay_alive_basic`（`<npc/goals.h>` + `GOAL_BASE_INHERIT`）。薄别名。`goals.h` 补 `BASE_GOAL`/`GOAL_PLAN_DIR` 历史别名。证明：HEAD 2 PASS / 1 FAIL；树 3 PASS。

@@ -56,6 +56,12 @@
 #define GOAL_BASE_INHERIT (GOALS_DIR "base")
 
 /**
+ * Historical aliases used by stay_alive.lpc (newer goals use GOAL_BASE_INHERIT / GOALS_DIR).
+ */
+#define BASE_GOAL GOAL_BASE_INHERIT
+#define GOAL_PLAN_DIR GOALS_DIR
+
+/**
  * The class used to keep track of the data passed into a goal.
  */
 class goal_control {

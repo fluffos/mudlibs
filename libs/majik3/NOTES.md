@@ -499,3 +499,7 @@ A statement `new(PATH)->move(...);` / `carry_object(ARMOR_D("x"))->wear();` whos
 ## 深度功能测试（2026-11-04，inherit/living/money 薄别名 §6.15）
 
 `inherit/monster` 继承 `/inherit/living/money`，钱袋 API 在 `/inherit/player/money`（`inherit/money` 是硬币堆对象）。薄别名。证明：HEAD 1 PASS / 2 FAIL；树 3 PASS。
+
+## 深度功能测试（2026-11-04，madrid obj/guild 薄别名 §6.15）
+
+`world/cult/rooms/wiz101` 继承 `/home/madrid/obj/guild`，正文在 `/inherit/guild`。薄别名。证明：HEAD 1 PASS / 1 FAIL；树 2 PASS（wiz101 仍另有加载失败，与缺失继承无关）。

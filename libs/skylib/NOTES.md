@@ -898,3 +898,7 @@ topography 的 iroom/milestone/area 继承 `/std/room`，本体在 `basic_room`�
 ## 深度功能测试（2026-11-04，global/auto_load 薄别名 §6.15）
 
 `std/shops/auction_room` 继承 `/global/auto_load`，正文在 `/global/player/auto_load`（Discworld 仍用根路径）。薄别名。证明：HEAD auto_load FAIL；树 PASS（auction_room 另有 `loc` 未定义，与继承无关）。
+
+## 深度功能测试（2026-11-04，stay_alive→basic + BASE_GOAL §6.15/§6.16）
+
+旧版 `stay_alive.lpc` 仍 `#include <goals.h>` / `inherit BASE_GOAL`；现行正文是 `stay_alive_basic`（`<npc/goals.h>` + `GOAL_BASE_INHERIT`）。薄别名。`goals.h` 补 `BASE_GOAL`/`GOAL_PLAN_DIR` 历史别名。证明：HEAD 2 PASS / 1 FAIL；树 3 PASS。
