@@ -22,6 +22,7 @@
 #define MACE                   "/std/weapon/mace"
 #define RAKE                   "/std/weapon/rake"
 #define SWORD			"/std/weapon/sword"
+#define HALBER			"/std/weapon/halberd"
 #define STAFF			"/std/weapon/staff"
 #define STICK			"/std/weapon/stick"
 #define THROWING		"/std/weapon/throwing"

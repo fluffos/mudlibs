@@ -1166,3 +1166,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-10-27，§6.10 pusa1 die varargs）
 
 `d/qujing/heifeng/npc/pusa1`：`void die(object me)` → `varargs void die(object me)`，与角色基类一致。
+
+## 深度功能测试（2026-11-04，HALBER 宏笔误 §6.16）
+
+戟类 `inherit HALBER`，本库只有 `/std/weapon/halberd`、宏名通常是 `HALBERD`。在 `weapon.h` 补 `#define HALBER "/std/weapon/halberd"`。证明：`d/obj/weapon/halberd/ji` 等 HEAD FAIL → PASS。
+

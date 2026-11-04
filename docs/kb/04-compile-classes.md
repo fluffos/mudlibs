@@ -1242,3 +1242,6 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-11-04, PEN twin on jhfy/jhfy2/jhfy3):** Same gap as chidi: `panguanbi` inherits `PEN` with no macro/file. Copy `inherit/weapon/pen.lpc` and `#define PEN` after SWORD. Proof: each host pen+panguanbi HEAD FAIL → PASS (jhfy already had pen path? newly loads panguanbi).
 
+
+**Also (2026-11-04, mohuanshiji HALBER typo):** `inherit HALBER` on halberd items while only `/std/weapon/halberd` exists (no `HALBER` macro; lineage usually spells `HALBERD`). `#define HALBER "/std/weapon/halberd"` in `weapon.h`. Proof: `d/obj/weapon/halberd/ji` (and the rest of that dir) HEAD FAIL → PASS.
+
