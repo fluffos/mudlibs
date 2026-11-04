@@ -1708,6 +1708,8 @@ Found by taking the objects a visitor meets (`scripts/lpc_reach_census.py` lists
 
 **Also (2026-10-27):** SKIP/`TOP` still listed `/open/` as a wizard home. Dropped `open` from `lpc_fix_functional_locals.py` TOP (0 residue under `/open/`).
 
+**Also (2026-11-03, discworld source_browser nested functional):** `unguarded((: implode($(funcs), (:make_func, $(expand), $(can_read):), ""):))` — FluffOS rejects locals in the *inner* functional even with `$()`. Helper `browser_func_list(expand, can_read, funcs)` with `(: make_func, $(expand), $(can_read) :)` at one level; call site captures via `$()`. discworld + dw_fluffos_v1/v2 PASS.
+
 ### 7.285 A command writes the result of `read_file()` of a file the archive does not ship (`boss`, 9 xkx libs, 2026-10-20)
 **Symptom:** `Bad argument 1 to receive()  Expected: string or buffer Got: 0.` from `write(msg)` in `cmds/usr/boss.lpc` (`boss 1` shows a fake document, `msg = read_file("/open/shit.txt")`). The screen had been cleared and `block_msg/all` set first, so the session is left muted until `bossgone`.
 **Cause:** `read_file()` of a missing file answers 0 and `write(0)` is a bad argument in this driver; `/open/` is a wizard-owned directory the archive does not carry.

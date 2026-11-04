@@ -345,3 +345,8 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，relayd/mrelayd C 误标 .lpc）
 
 同 discworld：`www/external/java/telnet/tools/{relayd,mrelayd}.lpc` 实为 C，改回 `.c`。
+
+## 深度功能测试（2026-11-03，source_browser 嵌套 functional 局部）
+
+`www/secure/source_browser.lpc` 在 `unguarded((: implode(..., (:make_func, $(expand), $(can_read):), ...) :))` 嵌套 functional 里使用局部（`Illegal to use local variable in functional`，KB 06 §7.284 同族）。抽出 `browser_func_list`，调用处 `unguarded((: browser_func_list($(expand), $(can_read), $(funcs)) :))`。证明：HEAD FAIL；树 PASS（discworld / dw_fluffos_v1 / v2）。
+
