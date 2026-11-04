@@ -282,3 +282,7 @@ The section above counts 56 `/std/effects/...` paths that objects of this lib na
 ## `log/` subdirectories nobody created: the logging `write_file()` / `log_file()` raises (2026-10-22, KB 06 §7.358)
 
 The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (`net/intermud3/services/error.lpc`), `log/http` (`net/daemon/http.lpc`), `log/log/secure/playtesters` (`obj/handlers/library.lpc`) .... Neither the archive, a `git clone` nor the site pack has them (no local boot wrote into them, so `gen_keep_dirs.py` never recorded them), and `write_file()` raises `*Wrong permissions for opening file /log/dlog/money for append. "No such file or directory"` for a missing directory: the function that logs stops on that line and what came after it (the reward, the flag, the next step) never runs. In the eval probe this lib's `log_file()` wrote nothing (the probe object has no write access and the sefun does not make the directory itself), so what a real caller gets was not measured. `log/errors`, `log/http`, `log/log/secure/playtesters`, `log/secure` are now in `scripts/wasm_keep_dirs.txt` (`scripts/lpc_keep_log_dirs.py`; the site and the pristine tree create the empty directories from it). Proof (`scripts/lpcc_eval.py`, an eval object under `/adm/daemons` or similar writes `/log/zzdirprobe/...`, fresh processes): the measured table in KB 06 §7.358.
+
+## 深度功能测试（2026-11-03，relayd/mrelayd C 误标 .lpc）
+
+同 discworld：`www/external/java/telnet/tools/{relayd,mrelayd}.lpc` 实为 C，改回 `.c`。
