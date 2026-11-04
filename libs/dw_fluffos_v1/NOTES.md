@@ -366,3 +366,7 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，leg_trap setup / this_player）
 
 同 discworld：`leg_trap` 旁观消息容忍无人。证明：HEAD FAIL；树 PASS。
+
+## 深度功能测试（2026-11-03，clusters get_dir / foreach §7.336）
+
+同 discworld：`clusters` create 的 OLD 清目录路径容忍缺失 `/save/clusters/`。证明：HEAD FAIL；树 PASS。

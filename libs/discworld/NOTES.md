@@ -875,3 +875,7 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，leg_trap setup / this_player）
 
 `obj/misc/traps/leg_trap.lpc` 在 `setup()` 拼旁观消息时调用 `this_player()->query_short()`；alone-load 无人时报 Bad argument，物件不加载。改为有玩家用短名，否则 `"someone"`。证明：HEAD FAIL；树 PASS。同改 `dw_fluffos_v1` / `v2`。
+
+## 深度功能测试（2026-11-03，clusters get_dir / foreach §7.336）
+
+`obj/handlers/clusters.lpc` 在无 `db_exec` 的 OLD 路径下，`create()` 里 `get_dir("/save/clusters/")` 对缺失目录返回 0，随即 `foreach` 报 `Bad argument 2 to foreach Expected: array Got: 0`，alone-scan 加载失败。改为 `get_dir(...) || ({})`。同改 `dw_fluffos_v1` / `v2`。证明：三库 HEAD FAIL；树 PASS。
