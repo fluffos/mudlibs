@@ -991,4 +991,7 @@ antiguo 仍引用 `/std/spells/bases/*` 与 `/std/spells/base`，文件只在 an
 ## 深度功能测试（2026-11-03，guilds/mage 薄别名与 set_main_skill §6.15/§7.262）
 
 九处 wizard 继承 `/std/guilds/mage`（本体 antiguo）；Vilat 2002 的 `/std/guild` 丢失 `set_main_skill`，从 FR 孪生恢复。证明：HEAD 6 FAIL；树 6 PASS。
+## 深度功能测试（2026-11-03，commands/base_command 薄别名 §6.15）
+
+`/std/commands/base_command` 与 `/d/gremios/comandos/target` 历史路径缺失；薄别名到 antiguo。证明：target+base_command HEAD FAIL → 树 PASS。
 
