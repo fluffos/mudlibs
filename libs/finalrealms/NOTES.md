@@ -859,3 +859,7 @@ elf smith / smithr：`tell_object("Eldevan…")` → `tell_object(this_player(),
 ## 深度功能测试（2026-11-03，wanderer set_plurals 类型 §6.21）
 
 `baseobs/monsters/wanderer.lpc` 调用 `set_plurals("wanderers")`，而 `id.lpc` 的 `set_plurals` 要 `string *`；同目录其它怪物用 `set_main_plural(string)`。改为 `set_main_plural("wanderers")`。同改 `ninetears`。证明：两库 HEAD FAIL；树 PASS。
+
+## 深度功能测试（2026-11-03，adnd ability query_stat_string 重载 §6.21）
+
+`std/adnd/ability.lpc` 同时有公开的 `string query_stat_string(int ab)` 与 `protected string query_stat_string(int sc)`，FluffOS 报 `Redeclaration of function`。将格式化分数的 protected 函数改名为 `format_stat_string`，两处 `actual`/`effect` 调用一并改。同改 `ninetears` 的 `std/antiguo/adnd/ability.lpc`。证明：两库 HEAD FAIL；树 PASS。

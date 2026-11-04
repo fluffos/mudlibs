@@ -965,3 +965,7 @@ rnd_caus*：`tell_object("at the top\n", attackboy)`→`tell_object(attackboy, �
 ## 深度功能测试（2026-11-03，wanderer set_plurals 类型 §6.21）
 
 同 finalrealms：`wanderer` 的 `set_plurals("…")` 改为 `set_main_plural`。证明：HEAD FAIL；树 PASS。
+
+## 深度功能测试（2026-11-03，adnd ability query_stat_string 重载 §6.21）
+
+同 finalrealms：`antiguo/adnd/ability` 的 protected `query_stat_string` 改名为 `format_stat_string`。证明：HEAD FAIL；树 PASS。
