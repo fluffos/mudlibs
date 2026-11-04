@@ -935,3 +935,8 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，venomous_snake POISON_EFFECT §6.16）
 
 `poison()` 用 `POISON_EFFECT` 却未定义；同目录 `spider`/`scorpion` 为 `#define POISON_EFFECT "/std/effects/poisons/spider_venom"`。照抄。同改 v1/v2。证明：三库 HEAD FAIL；树 PASS（含 spider_venom）。
+
+
+## 深度功能测试（2026-11-03，races/demonic 采纳 §6.15）
+
+`demon`/`imp` inherit `/std/races/demonic`，档案无此基类。从 skylib 采纳 hide 体型副本；去掉 discworld `base.lpc` 没有的 `add_attackable_area`；`TO->setup()` 改为 `this_object()->setup()`。同改 v1/v2。证明：三库 HEAD demon/imp FAIL；树 demonic+demon+imp PASS。
