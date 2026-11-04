@@ -13,6 +13,7 @@
 #define FORK        "/inherit/weapon/fork"      // 叉
 #define HAMMER      "/inherit/weapon/hammer"    // 锤
 #define SWORD       "/inherit/weapon/sword"     // 剑
+#define PEN         "/inherit/weapon/pen"       // pen
 #define STAFF       "/inherit/weapon/staff"     // 杖
 #define CLUB        "/inherit/weapon/club"      // 棍
 #define THROWING    "/inherit/weapon/throwing"  // 暗器

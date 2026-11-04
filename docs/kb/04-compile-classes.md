@@ -1239,3 +1239,6 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-11-04, huoying F_DRINK):** `obj/water.lpc` inherits `F_DRINK` but `globals.h` only had `F_FOOD`; `/feature/drink.lpc` missing. Adopt drink from dfgs2 (same `query_stat`/`supplement_stat` ES2 style) and `#define F_DRINK`. Proof: drink + water HEAD FAIL → PASS. (fys `F_FIGHTER`/`npc.h` adopt reached compile but `set_race("human")` dies in chard — deferred.)
 
+
+**Also (2026-11-04, PEN twin on jhfy/jhfy2/jhfy3):** Same gap as chidi: `panguanbi` inherits `PEN` with no macro/file. Copy `inherit/weapon/pen.lpc` and `#define PEN` after SWORD. Proof: each host pen+panguanbi HEAD FAIL → PASS (jhfy already had pen path? newly loads panguanbi).
+
