@@ -370,3 +370,7 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，clusters get_dir / foreach §7.336）
 
 同 discworld：`clusters` create 的 OLD 清目录路径容忍缺失 `/save/clusters/`。证明：HEAD FAIL；树 PASS。
+
+## 深度功能测试（2026-11-03，paper_file query_read_mess §6.21）
+
+同 discworld：`paper_file` 的 `query_read_mess` 把 `read_file` 字符串包成 read_mess 行。证明：HEAD FAIL；树 PASS。

@@ -879,3 +879,7 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，clusters get_dir / foreach §7.336）
 
 `obj/handlers/clusters.lpc` 在无 `db_exec` 的 OLD 路径下，`create()` 里 `get_dir("/save/clusters/")` 对缺失目录返回 0，随即 `foreach` 报 `Bad argument 2 to foreach Expected: array Got: 0`，alone-scan 加载失败。改为 `get_dir(...) || ({})`。同改 `dw_fluffos_v1` / `v2`。证明：三库 HEAD FAIL；树 PASS。
+
+## 深度功能测试（2026-11-03，paper_file query_read_mess §6.21）
+
+`obj/misc/papers/paper_file.lpc` 声明 `mixed *query_read_mess()` 却 `return read_file(file_name)`（string），FluffOS 报返回类型不符，物件不编译。按同树 `nroff_paper` 包成 `({ ({ str, 0, "common", 0 }) })`。同改 `dw_fluffos_v1` / `v2`。证明：三库 HEAD FAIL；树 PASS。
