@@ -847,3 +847,11 @@ elf smith / smithr：`tell_object("Eldevan…")` → `tell_object(this_player(),
 ## 深度功能测试（2026-11-03，whopaged 继承路径）
 
 `cmds/player/whopaged.lpc` 继承已不存在的 `/global/player/cmds/who.lpc`。改为继承现行 `/cmds/player/who`，并按 `who_string(..., me)` 四参调用。证明：HEAD FAIL；树 PASS。
+
+## 深度功能测试（2026-11-03，item_misc 与 quiver §7.278）
+
+`std/basic/item_misc.lpc` 顶部有 `inherit "/std/object"`，却被 `quiver.lpc` 以 `#include` 贴进已经经 `obj/container` 继承了 object 的对象：FluffOS 报 `Illegal to redefine 'nomask' function 'dwep'/'query_create_me'`，quiver / fl_quiver 无法加载。ninetears 同文件无该 inherit（作 `#include` 片段）。删掉 item_misc 的 inherit；`std/item.lpc` 改为先 `inherit "/std/object"` 再 `#include` item_misc（保留 chat/condition 与 auto_load 基例）。证明：HEAD quiver/fl_quiver FAIL；树 PASS；weapon/armour/item 仍 PASS。item_misc alone-FAIL 为片段预期行为（KB 06 §7.278）。
+
+## 深度功能测试（2026-11-03，item_misc 与 quiver §7.278）
+
+`std/basic/item_misc.lpc` 顶部有 `inherit "/std/object"`，却被 `quiver.lpc` 以 `#include` 贴进已经经 `obj/container` 继承了 object 的对象：FluffOS 报 `Illegal to redefine 'nomask' function 'dwep'/'query_create_me'`，quiver / fl_quiver 无法加载。ninetears 同文件无该 inherit（作 `#include` 片段）。删掉 item_misc 的 inherit；`std/item.lpc` 改为先 `inherit "/std/object"` 再 `#include` item_misc（保留 chat/condition 与 auto_load 基例）。证明：HEAD quiver/fl_quiver FAIL；树 PASS；weapon/armour/item 仍 PASS。item_misc alone-FAIL 为片段预期行为（KB 06 §7.278）。
