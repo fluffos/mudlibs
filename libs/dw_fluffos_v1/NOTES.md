@@ -486,3 +486,7 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，补齐 race 映射的其余 /std/guilds §6.15）
 
 `race.lpc` 映射 priest/witch/wizard/monk/assassin，档案仅有 standard/warrior（及已补 thief）。按 standard 重建五会；priest/wizard 技能取自 skylib old。同改 v1/v2。证明：三库 HEAD FAIL；树五会 + advanced_npc PASS。
+
+## 深度功能测试（2026-11-03，sit create this_player 守卫 §7.277）
+
+`cmds/living/sit` 在 `create()` 里无条件 `this_player()->query_position()`，单独加载无人 acting 时炸掉。加 `this_player() &&`。同改 v1/v2。证明：三库 HEAD FAIL；树 PASS。
