@@ -867,3 +867,8 @@ elf smith / smithr：`tell_object("Eldevan…")` → `tell_object(this_player(),
 ## 深度功能测试（2026-11-03，std/races 中间种族镜像 §6.15）
 
 `baseobs/races` 下 chicken/duck/penguin 等 inherit `/std/races/bird`（以及 amphibian/fish/insect/animal），但这些中间种族文件只存在于 `baseobs/races/`，`std/races/` 缺失（人型种族本就双树各一份）。自同库 `baseobs/races/` 复制到 `std/races/`。证明：listcheck 相关 15 FAIL→0，连同 std 副本共 20 PASS。仍 OOS：`testrace`（`/w/shaper/...`）、`baseobs/traps/*`（缺 `/std/spells/trap`）。
+
+
+## 深度功能测试（2026-11-03，std/spells/trap 采纳 §6.15）
+
+`baseobs/traps/{acid,cold,fire,rock}trap` inherit `/std/spells/trap.lpc`，档案未带该基类。自 ninetears `std/antiguo/spells/trap.lpc` 采纳（默认 myzot 已是 `/std/spells/wizard/...` 路径）。与 `living/action_queue` 的 `max_time` 撞名告警，改名为 `trap_max_time`（ninetears antiguo/gremios 两份同步）。证明：HEAD 5 FAIL（trap+四元素阱）；树 9 PASS、无 Redeclaration 警告。刺客阱/atrap 本就走 atrap 基类，原本 PASS。

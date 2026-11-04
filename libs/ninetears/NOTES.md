@@ -973,3 +973,8 @@ rnd_caus*：`tell_object("at the top\n", attackboy)`→`tell_object(attackboy, �
 ## 深度功能测试（2026-11-03，std/races 中间种族镜像 §6.15）
 
 同 finalrealms：自 `baseobs/races/` 镜像 bird/amphibian/fish/insect/animal 到 `std/races/`。本库精简版 `standard.lpc` 无 `bits` 全局，bird/amphibian/fish 另补 `mixed *bits;`（与已有 insect 一致），baseobs 与 std 两份同步。证明：15 FAIL→0 PASS。
+
+
+## 深度功能测试（2026-11-03，trap max_time 撞名 §6.10）
+
+`std/antiguo/spells/trap.lpc` 与 `d/gremios/hechizos/trap.lpc` 的 `int max_time` 与 `living/action_queue` 的 `max_time` 重名（Redeclaration 警告）。改名 `trap_max_time`。同改 finalrealms 新采纳的 `/std/spells/trap`。证明：相关对象 PASS，告警清零。
