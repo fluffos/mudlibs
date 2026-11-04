@@ -417,3 +417,8 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，all_inc C_TEMP 越出 SENSIBLE 守卫 §6.16）
 
 同 discworld：`C_TEMP`/`C_CLOUD`/`C_RAIN` 移出 `__SENSIBLE_MODIFIERS__` 守卫。证明：HEAD weather FAIL；树 PASS。
+
+
+## 深度功能测试（2026-11-03，venomous_snake POISON_EFFECT §6.16）
+
+同 discworld：补 `POISON_EFFECT` → spider_venom。证明：HEAD FAIL；树 PASS。
