@@ -8,7 +8,7 @@ mixed *reset_obs;
  /* the above stored as ({ ob1, instance1, ob2, instance2 })  */
 
 
-create() 
+void create() 
 {
 reset_funcs = ({});
 dest_funcs = ({});
@@ -18,7 +18,7 @@ death_funcs = ({});
 reset_obs = ({});
  ::create();
 } 
-setup()
+void setup()
 {
 	  set_short("A room");
     set_long("A room");
@@ -70,7 +70,7 @@ int AddFuncsToMixed( mixed *array, object obj, mixed func )
   return 1;
 }	
 
-RunFuncsOnObjects( mixed *array , object arg )
+void RunFuncsOnObjects( mixed *array , object arg )
 {	
    int i;
    for( i = 0 ; i < sizeof(array) ; i +=2 ) 
@@ -110,10 +110,10 @@ void add_clone_on_reset( string fname )
    if( sizeof(reset_obs) )  reset_obs += ({ fname , 0 });
    else                     reset_obs =  ({ fname , 0 });
 }
-QueryResetObjects() { printf("Reset OBS: %O\n",reset_obs); }
+void QueryResetObjects() { printf("Reset OBS: %O\n",reset_obs); }
 
 
-reset()
+void reset()
 {
    int i;
 
@@ -129,7 +129,7 @@ reset()
 
 }
 
-dest_me()
+void dest_me()
 {
    int i;
 
@@ -143,19 +143,19 @@ dest_me()
 }
 
 
-event_death( object ob )
+void event_death( object ob )
 {
    if( sizeof( death_funcs ) )
           RunFuncsOnObjects( death_funcs  , ob );
 }
 
-event_enter( object ob )
+void event_enter( object ob )
 {
    if( sizeof( enter_funcs ) )
           RunFuncsOnObjects( enter_funcs  , ob );
 }
 
-void event_exit( object ob )
+void event_exit( object ob, string message, object to )
 {
    if( sizeof( exit_funcs ) )
           RunFuncsOnObjects( exit_funcs  , ob );
