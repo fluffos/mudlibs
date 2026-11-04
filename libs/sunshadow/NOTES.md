@@ -1065,4 +1065,7 @@ crushing_hand：`tell_object("target", …)`→`tell_object(target, …)`。
 ## 深度功能测试（2026-10-27，§6.25 one-arg tell_room）
 
 `tell_room("…")` 补房间参数（`this_object()` / `ETO` / `place` / `environment(this_object())` 等）。
+## 深度功能测试（2026-11-03，road/cemetery1 薄别名 §6.15）
+
+road/old 公墓房继承 `/d/newbie/rooms/road/cemetery1`，本体已迁 graveyard。薄别名。证明：路径 HEAD FAIL → 树 PASS。
 
