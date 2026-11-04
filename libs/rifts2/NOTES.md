@@ -718,3 +718,7 @@ The code of this lib writes logs into 2 subdirectories of `log/`: `log/secure` (
 
 删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
 
+## 深度功能测试（2026-11-04，/std/poison 领养 §6.15）
+
+`d/standard/obj/misc/vial` 继承 `/std/poison`，本库没有。从 pd（Nightmare）领养。证明：poison + vial HEAD FAIL → PASS。
+

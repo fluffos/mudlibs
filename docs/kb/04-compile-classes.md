@@ -1257,3 +1257,6 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-11-04, darkelib path thin aliases):** (1) `inherit "/std/spells/shadows"` (dir) → `shadows.lpc` alias to `shadows/shadow`. (2) `/wizards/excelsior/weapon` → `/std/weapon`. (3) `/wizards/thrace/long_term` → `/std/skills/long_term`. Proof: aliases + `slong_sword` + `testforge_weapon` newly load (`attacker_shadow` still misses inherited `create` — separate).
 
+
+**Also (2026-11-04, rifts2 /std/poison):** `d/standard/obj/misc/vial` inherits `/std/poison` missing. Adopt Nightmare `poison.lpc` from pd. Proof: poison + vial HEAD FAIL → PASS.
+
