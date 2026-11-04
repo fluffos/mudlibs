@@ -15,6 +15,7 @@
 #define NO_SURRENDER
 
 #define LOGIN_OBJ      SECURE_DIR "/login"
+#define SCABBARD_OBJ   "/obj/scabbard"
 
 #define PLAYER_OBJ     "/global/player"
 #define CREATOR_OBJ    "/global/creator"

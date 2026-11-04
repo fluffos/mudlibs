@@ -953,3 +953,6 @@ The code of this lib writes logs into 5 subdirectories of `log/`: `log/archive` 
 
 删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
 
+## 深度功能测试（2026-11-04，cleric med_room 薄别名 §6.15）
+
+cleric_new 的战斗/训练/冥想房继承 `/d/damned/guilds/cleric/med_room`，本体在 cleric_new。薄别名。证明：HEAD 1 PASS / 2 FAIL；树 3 PASS。

@@ -890,3 +890,7 @@ topography 的 iroom/milestone/area 继承 `/std/room`，本体在 `basic_room`�
 ## 深度功能测试（2026-11-04，generic_solid.ob 薄别名 §6.15）
 
 试剂植物继承 `/obj/reagents/generic_solid.ob`，本体是 `generic_solid.lpc`。薄别名 `generic_solid.ob.lpc`。证明：HEAD 1 PASS / 2 FAIL；树 3 PASS。
+
+## 深度功能测试（2026-11-04，SCABBARD_OBJ 收养 §6.15）
+
+三件鞘继承未定义的 `SCABBARD_OBJ`；从 Discworld 收养 `/obj/scabbard`，在 global.h 定义宏，并补 virtual.h 的 VIRTUAL_*。证明：HEAD 0 PASS / 3 FAIL；树 3 PASS。
