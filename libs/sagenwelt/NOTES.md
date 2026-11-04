@@ -196,3 +196,7 @@ master 调用 `elderp`/`archp`/`adminp`/`Dlordp`/`done_startup`；menu 调用 `t
 
 片段补 `#include <privs.h>`/`std_paths`/`config`；`ansi.h` 补 `CSI`/`CLR`/`HOME` 别名并修正 include guard 笔误 `ANSK`；`BG_DOMAIN`→`BB_DOMAIN`；`authors`→`authors_of`/`domains_of`；strings 缺分号与 `remove_article` 前置声明；passwd `SEC_PWD_*`/`PWD_CRYPT_*`；logging 内部 `_syslog` 改名避免冲突；`simul_efun_orig` `init_*_sefuns`；`creator_file` 的 `return(fmt,…)`→`sprintf`；`setegid`/`seteuid` 原型改为 `int`。证明：错误诊断清零；compile 25→31（仅剩 unused-local 警告）。
 
+## 深度功能测试（2026-11-03，syslog 原型遮罩 sefun / racesd / PRIVS_CFG）
+
+`globals_catalog` 拉入的 `syslog.h` 里有 `varargs void syslog(...)` 原型，FluffOS 把对象里的 `syslog()` 编成对本对象的 call_other，运行时报 Undefined（sefun 对象上函数其实在）。去掉该原型，只留 LOG_* 宏。`racesd` 原先只有 `get_*_map` 原型无实现，char_gen `keys(0)` 炸；补最小 human 种族表，并对 `get_*` 结果做 `mapp` 守卫。`init_privileges` 解析 `Privs.cfg` 时 `explode(line,"\t")` 无第二段越界——加 `sizeof` 检查。catalog `syslog` 写到 `/var/log/syslog`。去掉 driver/security 未用局部。证明：char_gen/master_feature/master_orig 单独加载 PASS；错误诊断仍为 0。
+

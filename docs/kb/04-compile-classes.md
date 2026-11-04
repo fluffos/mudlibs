@@ -216,6 +216,13 @@ detection.
   typo; `BG_DOMAIN`→`BB_DOMAIN`; authors_of/domains_of; strings semicolon;
   passwd SEC_PWD_*/PWD_CRYPT_*; creator_file `sprintf`; setegid/seteuid
   prototypes `int`. Proof: error diagnostics cleared; compile 25→31.
+  **Also (2026-11-03, sagenwelt syslog prototype shadows sefun):**
+  a file-scope `syslog()` prototype in the global include makes FluffOS
+  compile `syslog(...)` as call_other on the caller, not the simul_efun
+  (`*Undefined function called: syslog` at load while
+  `function_exists("syslog", sefun)` is true). Drop the prototype; keep
+  LOG_* macros. Also: empty racesd stubs → minimal maps; Privs.cfg
+  tab-split guarded. Proof: char_gen/master_feature/master_orig load PASS.
 
 **Also (2026-11-03, sticklib living `set` void vs int):** Strategy A `/lib/living` had `varargs void set(...)` while npc/player `set_n_query` and `/lib/player` declare `varargs int set(...)` (`Function set inherited ... void vs int`, 3 files). Same shape as the earlier `attack` fix: living becomes `varargs int` returning 0. Proof: living/player/set_n_query/beggar PASS; those three warnings gone.
 

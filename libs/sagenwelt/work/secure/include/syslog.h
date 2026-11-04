@@ -9,7 +9,9 @@
 #ifndef __SEC_SYSLOG_H
 #define __SEC_SYSLOG_H
 
-varargs void syslog(int priority, string format, mixed a0, mixed a1, mixed a2, mixed a3, mixed a4);
+/* Do not prototype syslog() here: globals_catalog includes this header in
+ * every object, and a file-scope prototype makes FluffOS compile syslog(...)
+ * as a local call_other instead of the catalog simul_efun. */
 
 #define LOG_SHIFT             8                     // internal use only
 

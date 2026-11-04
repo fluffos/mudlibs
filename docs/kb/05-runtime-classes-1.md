@@ -538,6 +538,13 @@ Check with `find -iname "global*.h"` (`global.h` vs `globals.h`).
 driver. `LPCC=` overrides `lpcc_check.sh`'s binary. Check each new
 LIMA-lineage lib's `check_config.lpc`.
 
+### 7.47a Global-include prototype shadows a sefun (sagenwelt `syslog`, 2026-11-03)
+
+**Symptom:** `*Undefined function called: syslog` when an object loads, even though `function_exists("syslog", find_object(sefun))` is true and `call_other(sefun, "syslog", ...)` works.
+**Cause:** the global include pulls a header that contains a file-scope prototype `varargs void syslog(...)`. FluffOS then compiles bare `syslog(...)` as a call on the current object, not as the simul_efun.
+**Fix:** remove the prototype from the globally included header; leave macros only. Do not reintroduce sefun names as prototypes in `globals_catalog` / `std.h` replacements.
+**Detection:** runtime Undefined for a name that exists on the sefun object; confirm with a one-line probe object.
+
 ### 7.47 `origin()` returns a string here
 The mapping:
 
