@@ -1262,3 +1262,5 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-11-04, shadowgate/sunshadow dforest2i + scroll_storage):** (1) `keep/forest/dforest7` + `open/old/dforest*` inherit `/d/deku/open/dforest2i` while the body lives at `/d/deku/forest/forest2i` (same move as `open/forest2i`). Thin alias on both libs. (2) sunshadow `noma_storage` inherits `/d/common/inherit/scroll_storage` while Chernobog's scroll-shop body is `magic_storage`. Thin alias. Proof: shadowgate HEAD 3 FAIL → 3 PASS; sunshadow HEAD 1/5 → 6 PASS.
 
+**Also (2026-11-04, majik3 living/money + ninetears gremios stun):** (1) majik3 `inherit/monster` inherits `/inherit/living/money` while the purse API is `/inherit/player/money` (`inherit/money` is the coin-stack object). Thin alias. (2) ninetears `hechizos/shadows/stun` inherits `/d/gremios/comandos/shadows/stun` while the Spanish body lives at `/std/antiguo/commands/shadows/stun`. Thin alias. Proof: majik3 HEAD 1/2 → 3 PASS; ninetears HEAD 1/2 → 3 PASS.
+

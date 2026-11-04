@@ -495,3 +495,7 @@ A statement `new(PATH)->move(...);` / `carry_object(ARMOR_D("x"))->wear();` whos
 
 `inherit/battle` 继承 `/inherit/skill_system`，文件在 `/inherit/living/skill_system`。薄别名。证明：别名 + battle HEAD FAIL → PASS。
 
+
+## 深度功能测试（2026-11-04，inherit/living/money 薄别名 §6.15）
+
+`inherit/monster` 继承 `/inherit/living/money`，钱袋 API 在 `/inherit/player/money`（`inherit/money` 是硬币堆对象）。薄别名。证明：HEAD 1 PASS / 2 FAIL；树 3 PASS。

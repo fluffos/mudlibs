@@ -1020,3 +1020,7 @@ bard/cleric 包装继承 `/std/spells/wizard/{mirror,inaud,scloud,read_magic}`�
 ## 深度功能测试（2026-11-04，/obj/armor 薄别名 §6.15）
 
 oldsys 锁甲继承 `/obj/armor`，本体是 `/obj/armour`。薄别名。证明：HEAD 缺 inherit；树 armor+armour PASS（callers 仍缺旧 add_ac API，另案）。
+
+## 深度功能测试（2026-11-04，gremios comandos/shadows/stun 薄别名 §6.15）
+
+`hechizos/shadows/stun` 继承 `/d/gremios/comandos/shadows/stun`，西语正文在 `/std/antiguo/commands/shadows/stun`（同系 `base_command`/`target` 迁路径）。薄别名。证明：HEAD 1 PASS / 2 FAIL；树 3 PASS。
