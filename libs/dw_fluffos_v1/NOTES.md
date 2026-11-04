@@ -474,3 +474,7 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，setup_compiler Room.inc 类型与 uwater 别名 §6.19/§6.15）
 
 `Room.inc` 在 strict_types 下缺返回类型；`event_exit` 需三参对齐 basic_room。`/std/uwater` 薄别名到 `water_outside`。同改 v1/v2。证明：三库 HEAD FAIL；树 Room/Outside/UWater PASS。
+
+## 深度功能测试（2026-11-03，net nhttp compression / tell_demon move / oob 注释）
+
+`nhttp` 误写 `req->compressed`（类只有 `compression`）；`tell_demon` 的 `move_player` 改为 `move`；`oob.lpc` 块注释提前闭合导致语法错。同改 v1/v2。证明：三库 HEAD FAIL；树 nhttp+tell_demon PASS。
