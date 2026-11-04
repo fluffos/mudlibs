@@ -1103,3 +1103,17 @@ jialermi / random / treeking：`tell_object("…")` 补 `me` 或 `this_player()`
 ## 深度功能测试（2026-11-03，AS_FEATURE 武器 weight/set_durable/::setup）
 
 `std/weapon/*.lpc` 在 `#define AS_FEATURE` 的 `_*.lpc` 包含下没有 `inherit EQUIP`，却调用 `weight()`/`set_durable()`/`::setup()`，FluffOS 编译失败。补：AS_FEATURE 分支声明宿主提供的 `weight`/`set_durable`/`query_durable`；`::setup()` 用 `#ifndef AS_FEATURE` 包住；`weapon_damage` 参数 `weight`→`wt` 避免遮蔽。证明：HEAD `_sword` 等 9/9 FAIL；tree 9/9 PASS。
+
+## 深度功能测试（2026-11-03，EOF/@ 截断与误粘）
+
+alone-scan 15 个 `End of file` / `End of file in string`：
+- `@SKILL_HELP\t);` / 缩进终结符 → 列首 `SKILL_HELP`（moon_forcea）
+- `@LONGpromote用` / `@LONGsummon` → `@LONG` 与正文分行（promise pro/sum）
+- `@Help` 无终结 → 补 `Help`（force_item）
+- `HIC"…"\NOR` → `"NOR`（ankle）
+- 半截字符串 / `carry_object` 缺引号 / 注释半开（pearl、ee/evil say、battle）
+- chen_chi 三份残本从同树 `npc/chen_chi` 恢复
+- sword 中段串与函数尾按可编译最小收口
+- `change_time_scale(time())` → 本库 summon 同形的 `ctime(time())`
+
+证明：15/15 alone-load PASS（含 log/nosave keep）。
