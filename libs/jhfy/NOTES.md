@@ -1092,3 +1092,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 同 chidi：`panguanbi` 要 `PEN`/`init_pen`，补 `inherit/weapon/pen.lpc` 与 `weapon.h` 宏。证明：pen + panguanbi HEAD FAIL → PASS。
 
+## 深度功能测试（2026-11-04，fyue npcskill/name.h 薄别名 §6.15）
+
+`d/fyue/questguai` 继承 `/u/fyue/npcskill`、包含 `/u/fyue/name.h`，本体在 `/quest/`。薄别名 npcskill，并复制 name.h。证明：npcskill + questguai HEAD FAIL → PASS。
+

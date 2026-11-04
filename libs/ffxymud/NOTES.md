@@ -471,3 +471,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 `clone/weapon/panguanbi` `inherit PEN` / `init_pen()`，但 `weapon.h` 无 `PEN` 宏、也无 `/inherit/weapon/pen`。按本库 `dagger.lpc` 风格补 `inherit/weapon/pen.lpc`，并在 `weapon.h` 的 SWORD 后加 `#define PEN`。证明：pen + panguanbi HEAD FAIL → PASS（chidi / bixiecanyang / hc / ffxymud 同改）。
 
+## 深度功能测试（2026-11-04，fyue npcskill/name.h 薄别名 §6.15）
+
+`d/fyue/questguai` 继承 `/u/fyue/npcskill`、包含 `/u/fyue/name.h`，本体在 `/quest/`。薄别名 npcskill，并复制 name.h。证明：npcskill + questguai HEAD FAIL → PASS。
+

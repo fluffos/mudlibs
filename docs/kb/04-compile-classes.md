@@ -1245,3 +1245,6 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-11-04, mohuanshiji HALBER typo):** `inherit HALBER` on halberd items while only `/std/weapon/halberd` exists (no `HALBER` macro; lineage usually spells `HALBERD`). `#define HALBER "/std/weapon/halberd"` in `weapon.h`. Proof: `d/obj/weapon/halberd/ji` (and the rest of that dir) HEAD FAIL → PASS.
 
+
+**Also (2026-11-04, fyue npcskill+name.h + FR /obj/dragon):** (1) `questguai` inherits `/u/fyue/npcskill` and includes `/u/fyue/name.h` while the real files live under `/quest/` on jhfy/jhfy2/jhfy3/ffxymud — thin-alias npcskill and copy `name.h`. hy3 had neither under `/quest/` — adopt both from ffxymud. (2) finalrealms `/obj/dragon` missing; thin-alias to `/baseobs/monsters/dragon`. Proof: questguai newly loads on five hosts; dragon alias PASS.
+

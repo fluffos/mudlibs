@@ -884,3 +884,7 @@ elf smith / smithr：`tell_object("Eldevan…")` → `tell_object(this_player(),
 
 `balefire` 与 examples 继承 `/std/spells/base`，本体在 examples/base。薄别名。证明：HEAD 4 FAIL；树 6 PASS。
 
+## 深度功能测试（2026-11-04，/obj/dragon 薄别名 §6.15）
+
+`/obj/dragon` 缺失，本体在 `/baseobs/monsters/dragon`。薄别名。证明：别名 PASS（gopher 的 inherit/object 与 globals.h 另案）。
+
