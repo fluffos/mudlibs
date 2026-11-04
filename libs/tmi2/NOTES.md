@@ -775,3 +775,7 @@ A room exit named a file the lib does not have, so the player was stuck (a typo,
 
 四宿主 alone-scan 静默 FAIL：`terminal`/`memopad` 的 `geteuid(this_player())` 在无人时抛错；`sbsh` `initialize` 对 `OWNER=0` 调 `query_env`；virtual `template/room` 在 `::create()`（立刻 `reset`→`keys(objects)`）之后才 `objects=([])`。守卫 TP / 提前初始化 objects。证明：HEAD 四者 FAIL（runtime geteuid/call_other/keys Got 0）；树均 PASS。
 
+## 深度功能测试（2026-11-03，adm/priv find_player(0)）
+
+`adm/priv/{bird,dog,blah,doh,tk,cat,elephant}` 在 create 里对 `find_player("leto")` 为 0 时仍 `shadow`/`move_object`/`->process_input`，FluffOS 抛错。先取 `p` 再守卫；`elephant` 的 `call_other("open/bird")` 缺对象用 `catch`。证明：HEAD 七文件 FAIL；树均 PASS。
+
