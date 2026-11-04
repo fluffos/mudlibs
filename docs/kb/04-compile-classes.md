@@ -662,6 +662,11 @@ time. (3) *Fewer arguments than parameters*: add `varargs` to the definition the
 
 **Also (2026-11-04, dtsl2 `BBS_BOARD`):** three boards `inherit BBS_BOARD` with no define and no `/std/bbsboard`. Added the macro and adopted xiyouji's bbsboard. Proof: base HEAD FAIL → tree PASS (board `create` still moves into missing `/d/wiz/*` rooms — content).
 
+**Also (2026-11-04, shadowgate/sunshadow hm_quest maze):** `common/room` and `old_hm_quest/common/room` inherit gitignored `/realms/firedragon/obj/rooms/maze/maze` while the bodies live at `/d/hm_quest/{,old_hm_quest/}maze`. Rewrote includes/inherits on both hosts. Proof: HEAD 2 PASS / 2 FAIL → tree 4 PASS each.
+
+**Also (2026-11-04, sjpl2/sjplii `PANTS`):** six pants items `inherit PANTS` with no macro and no `/std/armor/pants`. Added `PANTS`/`TYPE_PANTS` to `armor.h` and a `pants.lpc` matching local `cloth.lpc`. Proof: HEAD 0 PASS / 7 FAIL → tree 7 PASS each.
+
+
 
 **Also (2026-11-03, Discworld setup_compiler Room.inc / uwater):** `global/virtual/setup_compiler/Room.inc` (included by Room/Outside/UWater) had untyped `create`/`setup`/`reset`/`dest_me`/`event_*`/`RunFuncsOnObjects`/`QueryResetObjects` under `#pragma strict_types`; `event_exit(object ob)` also disagreed with basic_room's three-arg `event_exit(ob, message, to)`. Add return types and the full exit signature. `UWater.lpc` inherited missing `/std/uwater`; thin alias → `/std/room/water_outside` (same pattern as `/std/outside` → `room/outside`). Proof: 3 hosts HEAD FAIL; tree Room/Outside/UWater+uwater PASS.
 **Also (2026-11-03, Discworld net nhttp/tell_demon/oob):** `nhttp.lpc` set `req->compressed` but `class http_request` only has `string compression` (sibling `http.lpc` assigns `req->compression = comp_type`) → `req->compression = "gzip"`. `tell_demon.lpc` called removed MudOS `move_player("X", dest)` → `move(dest)`. `services/oob.lpc` had a closed-then-continued block comment (`*/` then `* By… */`) that broke the include fragment's parse; re-open the comment (still only meaningful under `services.lpc` + `network.h`, like the other i3 service includes). Proof: 3 hosts HEAD FAIL; tree nhttp+tell_demon PASS; oob syntax clean.

@@ -1100,3 +1100,7 @@ old 下水道继承 `/d/dragon/sewer/sewer_room`，本体在 old；字节拷贝�
 ## 深度功能测试（2026-11-04，aketon ARTIFACT 宏 §6.15）
 
 同 shadowgate：`short.h` 定义 `ARTIFACT` → `artiweapon`。证明：HEAD 1 PASS / 2 FAIL；树 3 PASS。
+
+## 深度功能测试（2026-11-04，hm_quest maze 改写 §6.15）
+
+同 shadowgate：`common/room` 与 `old_hm_quest/common/room` 从 `/realms/firedragon/.../maze` 改写到 `/d/hm_quest/{,old_hm_quest/}maze`。证明：HEAD 2 PASS / 2 FAIL → 树 4 PASS。

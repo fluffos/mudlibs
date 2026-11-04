@@ -838,3 +838,7 @@ old 下水道继承 `/d/dragon/sewer/sewer_room`，本体在 old；字节拷贝�
 ## 深度功能测试（2026-11-04，aketon ARTIFACT 宏 §6.15）
 
 四件神器武器 `inherit ARTIFACT`，宏缺失；本体是 `artiweapon`。在 `short.h` 定义。证明：HEAD 1 PASS / 2 FAIL；树 3 PASS。
+
+## 深度功能测试（2026-11-04，hm_quest maze 改写 §6.15）
+
+`common/room` 与 `old_hm_quest/common/room` 继承 gitignored 的 `/realms/firedragon/obj/rooms/maze/maze`，本体在 `/d/hm_quest/{,old_hm_quest/}maze`。改写 include/inherit 到本地路径。证明：HEAD 2 PASS / 2 FAIL → 树 4 PASS。
