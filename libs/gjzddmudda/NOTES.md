@@ -516,3 +516,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-11-03，§7.19 enable_player 重入）
 
 `feature/command.lpc` 的 `enable_player()` 加 `in_enable_player_now` 守卫（`scripts/lpc_fix_enable_player_guard.py`，KB 05 7.19）：门派 NPC `init()`→`setup()`→`enable_player()`→`enable_commands()` 再跑 `init()` 时直接返回，避免 Too deep recursion。
+
+## 深度功能测试（2026-11-04，POWDER+CLOTH 双胞胎 demonangel §6.15/§6.16）
+
+与 demonangel 同缺：`/std/medicine/powder`、`/std/armor/cloth`，且 `armor.h` 无 `CLOTH`/`TYPE_CLOTH`。从 demonangel（源自 dtxyzjb）拷贝两文件并补宏。证明：powder、slumber_drug、cloth、black_vest HEAD FAIL → PASS。
+

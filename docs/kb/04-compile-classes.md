@@ -1230,3 +1230,6 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-11-04, dtsl poison killer_reward + demonangel CLOTH):** (1) `d/quest/poison/target` inherits `__DIR__ killer_reward` missing; thin-alias to `/d/job/killerjob/killer_reward` on dtsl/dtsl2/dtslmud. Once resolved, `target` redeclared `random_place` already provided by `job_money.h` — delete the local copy (killerjob targets never redefined it). (2) demonangel `inherit CLOTH` with no macro/file; adopt `/std/armor/cloth` from dtxyzjb and `#define CLOTH`/`TYPE_CLOTH` in `armor.h`. Proof: poison target + killer_reward HEAD FAIL → PASS on three hosts; cloth+black_vest newly load.
 
+
+**Also (2026-11-04, gjzddmudda POWDER+CLOTH twin of demonangel):** Same nitan-China gap: `POWDER` → missing `/std/medicine/powder`; `inherit CLOTH` with no `/std/armor/cloth` and no `CLOTH`/`TYPE_CLOTH` in `armor.h`. Copy powder+cloth from demonangel (dtxyzjb lineage) and add the two armor macros. Proof: 4 paths HEAD FAIL → PASS (powder, slumber_drug, cloth, black_vest).
+
