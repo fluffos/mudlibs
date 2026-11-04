@@ -1274,3 +1274,5 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-11-04, xiyouji2003 UNARMED/F_OBSAVE + hy5 WEAPONTYPE):** (1) xiyouji2003 `dami` inherits undef `UNARMED`, `itemmake` inherits undef `F_OBSAVE` — define both in `globals.h`, adopt `unarmed.lpc` from xiyouji2006 and `obsave.lpc` from nitan6. (2) hy5 crafted `obj/weapon`/`armor` inherit undef `WEAPONTYPE` — `#define WEAPONTYPE "/inherit/weapon/weapon"` in `globals.h`. Proof: xiyouji2003 HEAD 0/4 → 4 PASS; hy5 inherit syntax error cleared (template `weighttext` noise remains).
 
+**Also (2026-11-04, DAEMON corpus → /std/cmd_m):** twenty-three ES/xkx-lineage libs (`jhfy*`/`fys`/`hy5`/`dreamofseven`/`pkuxkx`/…): network `pingd`/`pingtcp` inherit undef `DAEMON`. `#define DAEMON "/std/cmd_m"` in `mudlib.h`, adopt a config.h-free `std/cmd_m.lpc` (TMI create/clean_up/prevent_shadow), and restore missing `include/uid.h` from tmi2. Proof: six-lib sample HEAD 0/3 → 3 PASS each.
+

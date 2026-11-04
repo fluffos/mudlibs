@@ -10,4 +10,5 @@
 #define MUDLIB_ENCODING "GB"
 #define MUD_ADMIN               "snow@JHFY"
 #define MUD_WEB                 "http://mud.dec.cn/bbs"
+#define DAEMON                  "/std/cmd_m"
 #endif

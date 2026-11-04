@@ -781,3 +781,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 深度功能测试（2026-11-04，WEAPONTYPE §6.16）
 
 `obj/weapon`/`obj/armor` 继承 `WEAPONTYPE`（订作模板）。`globals.h` 补 `#define WEAPONTYPE "/inherit/weapon/weapon"`。证明：HEAD 继承语法错；树继承已解析（仍有模板变量 `weighttext` 等噪声，另案）。
+
+## 深度功能测试（2026-11-04，DAEMON→cmd_m 语料扫 §6.16/§6.15）
+
+`adm/daemons/network/pingd|pingtcp` 继承未定义的 `DAEMON`（TMI 惯例）。`mudlib.h` 补 `#define DAEMON "/std/cmd_m"`，收养精简 `std/cmd_m.lpc`（无 `config.h`），并补档案缺失的 `include/uid.h`。证明：抽样 jhfy/hy5/dreamofseven/fys/pkuxkx/xiyouji2003 HEAD 0/3 → 3 PASS。

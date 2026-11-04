@@ -19,4 +19,5 @@
 #define	MUD_LOCATION 		"Taiwan"
 #define	MUD_GROUP 		"台灣泥巴聯盟"
 
+#define DAEMON                  "/std/cmd_m"
 #endif

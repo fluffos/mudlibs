@@ -1098,3 +1098,7 @@ xkx 家族把钱放在 `/clone/money/`，ES2 家族放在 `/obj/money/`；本库
 ## 深度功能测试（2026-11-04，UNARMED + F_OBSAVE §6.15/§6.16）
 
 `d/city/obj/dami` 继承 `UNARMED`，`feature/itemmake` 继承 `F_OBSAVE`，均未定义。`globals.h` 补宏；从 xiyouji2006 收养 `std/weapon/unarmed.lpc`，从 nitan6 收养 `feature/obsave.lpc`。证明：HEAD 0 PASS / 4 FAIL；树 4 PASS。
+
+## 深度功能测试（2026-11-04，DAEMON→cmd_m 语料扫 §6.16/§6.15）
+
+`adm/daemons/network/pingd|pingtcp` 继承未定义的 `DAEMON`（TMI 惯例）。`mudlib.h` 补 `#define DAEMON "/std/cmd_m"`，收养精简 `std/cmd_m.lpc`（无 `config.h`），并补档案缺失的 `include/uid.h`。证明：抽样 jhfy/hy5/dreamofseven/fys/pkuxkx/xiyouji2003 HEAD 0/3 → 3 PASS。

@@ -544,3 +544,7 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## 深度功能测试（2026-11-03，§7.19 enable_player 重入）
 
 `feature/command.lpc` 的 `enable_player()` 加 `in_enable_player_now` 守卫（`scripts/lpc_fix_enable_player_guard.py`，KB 05 7.19）：门派 NPC `init()`→`setup()`→`enable_player()`→`enable_commands()` 再跑 `init()` 时直接返回，避免 Too deep recursion。
+
+## 深度功能测试（2026-11-04，DAEMON→cmd_m 语料扫 §6.16/§6.15）
+
+`adm/daemons/network/pingd|pingtcp` 继承未定义的 `DAEMON`（TMI 惯例）。`mudlib.h` 补 `#define DAEMON "/std/cmd_m"`，收养精简 `std/cmd_m.lpc`（无 `config.h`），并补档案缺失的 `include/uid.h`。证明：抽样 jhfy/hy5/dreamofseven/fys/pkuxkx/xiyouji2003 HEAD 0/3 → 3 PASS。

@@ -9,4 +9,5 @@
 
 #define INTERMUD_MUD_NAME		"Tsinghua"
 
+#define DAEMON                  "/std/cmd_m"
 #endif

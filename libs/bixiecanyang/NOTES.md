@@ -1255,3 +1255,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 `clone/weapon/panguanbi` `inherit PEN` / `init_pen()`，但 `weapon.h` 无 `PEN` 宏、也无 `/inherit/weapon/pen`。按本库 `dagger.lpc` 风格补 `inherit/weapon/pen.lpc`，并在 `weapon.h` 的 SWORD 后加 `#define PEN`。证明：pen + panguanbi HEAD FAIL → PASS（chidi / bixiecanyang / hc / ffxymud 同改）。
 
+
+## 深度功能测试（2026-11-04，DAEMON→cmd_m 语料扫 §6.16/§6.15）
+
+`adm/daemons/network/pingd|pingtcp` 继承未定义的 `DAEMON`（TMI 惯例）。`mudlib.h` 补 `#define DAEMON "/std/cmd_m"`，收养精简 `std/cmd_m.lpc`（无 `config.h`），并补档案缺失的 `include/uid.h`。证明：抽样 jhfy/hy5/dreamofseven/fys/pkuxkx/xiyouji2003 HEAD 0/3 → 3 PASS。

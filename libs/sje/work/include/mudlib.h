@@ -10,4 +10,5 @@
 #define INTERMUD_MUD_NAME   "HB"
 #define CHINESE_MUD_NAME        "「书剑贰」湖北站"
 
+#define DAEMON                  "/std/cmd_m"
 #endif

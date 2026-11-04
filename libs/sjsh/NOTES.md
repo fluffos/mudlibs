@@ -505,3 +505,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-10-27，§6.10 pusa1 die varargs）
 
 `d/qujing/heifeng/npc/pusa1`：`void die(object me)` → `varargs void die(object me)`，与角色基类一致。
+
+## 深度功能测试（2026-11-04，DAEMON→cmd_m 语料扫 §6.16/§6.15）
+
+`adm/daemons/network/pingd|pingtcp` 继承未定义的 `DAEMON`（TMI 惯例）。`mudlib.h` 补 `#define DAEMON "/std/cmd_m"`，收养精简 `std/cmd_m.lpc`（无 `config.h`），并补档案缺失的 `include/uid.h`。证明：抽样 jhfy/hy5/dreamofseven/fys/pkuxkx/xiyouji2003 HEAD 0/3 → 3 PASS。

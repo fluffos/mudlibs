@@ -449,3 +449,7 @@ guest：`tell_object("…", who)`→`tell_object(who, …)`。
 ## 深度功能测试（2026-11-04，F_GEMS 收养 §6.15/§6.16）
 
 `clone/gem/gem` 继承 `F_GEMS` 未定义。`globals.h` 补 `#define F_GEMS "/feature/gems.lpc"`，并从 nitan6 收养 `feature/gems.lpc`+`gems.h`。证明：HEAD 0 PASS / 2 FAIL；树 2 PASS。
+
+## 深度功能测试（2026-11-04，DAEMON→cmd_m 语料扫 §6.16/§6.15）
+
+`adm/daemons/network/pingd|pingtcp` 继承未定义的 `DAEMON`（TMI 惯例）。`mudlib.h` 补 `#define DAEMON "/std/cmd_m"`，收养精简 `std/cmd_m.lpc`（无 `config.h`），并补档案缺失的 `include/uid.h`。证明：抽样 jhfy/hy5/dreamofseven/fys/pkuxkx/xiyouji2003 HEAD 0/3 → 3 PASS。

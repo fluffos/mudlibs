@@ -11,4 +11,5 @@
 //#define MUD_ADMIN               "SNOW@JHFY"
 #define MUD_ADMIN               "chaiyang@263.net"
 #define MUD_WEB                 "http://mud.hi.hk.cn"
+#define DAEMON                  "/std/cmd_m"
 #endif

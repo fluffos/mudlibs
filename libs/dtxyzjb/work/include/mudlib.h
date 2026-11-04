@@ -21,6 +21,7 @@
 #define PURGE_TIMES                     "永久"
 #define MUDLIB_ENCODING                 "GB"
 
+#define DAEMON                  "/std/cmd_m"
 #endif
 
 // mon 4/27/98 for "vote" command and the piggy room.

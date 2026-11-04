@@ -760,3 +760,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-11-04，F_DEALER/F_FUNCTION/F_GUILDCMDS §6.15）
 
 `F_DEALER`/`F_FUNCTION`/`F_GUILDCMDS` 未定义且 feature 缺失。从 fy2mg 收养 `dealer.lpc`，从 kxkj 收养 `function.lpc`/`guildcmds.lpc`；dealer 依赖 `MONEY_D`，从 hc 收养 `moneyd` 并定义宏。证明：HEAD 0 PASS / 6 FAIL → 树 6 PASS。
+
+## 深度功能测试（2026-11-04，DAEMON→cmd_m 语料扫 §6.16/§6.15）
+
+`adm/daemons/network/pingd|pingtcp` 继承未定义的 `DAEMON`（TMI 惯例）。`mudlib.h` 补 `#define DAEMON "/std/cmd_m"`，收养精简 `std/cmd_m.lpc`（无 `config.h`），并补档案缺失的 `include/uid.h`。证明：抽样 jhfy/hy5/dreamofseven/fys/pkuxkx/xiyouji2003 HEAD 0/3 → 3 PASS。

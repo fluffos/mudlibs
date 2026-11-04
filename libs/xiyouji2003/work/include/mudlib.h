@@ -23,6 +23,7 @@
 #define PURGE_TIMES                     	"普通用户90天"
 #define LOCALHOST           		"211.97.195.127"
 
+#define DAEMON                  "/std/cmd_m"
 #endif
 
 #define MAX_VOTES_PER_SITE   2

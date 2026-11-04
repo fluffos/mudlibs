@@ -1229,3 +1229,7 @@ BIG5 里 `功` 等字的第二个字节正好是 0x5C（反斜杠），作者在
 
 `obj/mm` `inherit "/std/weapon/m_bow"`，本库只有 `bow.lpc`。薄别名 `m_bow`→`bow`。证明：m_bow HEAD FAIL → PASS；mm 在无 `this_player()` 时 create 仍失败（AceLan 万用武器设计）另案。
 
+
+## 深度功能测试（2026-11-04，DAEMON→cmd_m 语料扫 §6.16/§6.15）
+
+`adm/daemons/network/pingd|pingtcp` 继承未定义的 `DAEMON`（TMI 惯例）。`mudlib.h` 补 `#define DAEMON "/std/cmd_m"`，收养精简 `std/cmd_m.lpc`（无 `config.h`），并补档案缺失的 `include/uid.h`。证明：抽样 jhfy/hy5/dreamofseven/fys/pkuxkx/xiyouji2003 HEAD 0/3 → 3 PASS。

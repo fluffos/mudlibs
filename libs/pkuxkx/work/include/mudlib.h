@@ -14,5 +14,6 @@
 #define MUD_WEB                 "http://www.youhui008.net"
 #define MUD_EDU_WEB							"无"
 
+#define DAEMON                  "/std/cmd_m"
 #endif
 

@@ -9,4 +9,5 @@
 
 #define INTERMUD_MUD_NAME		"Fantasy Space"
 
+#define DAEMON                  "/std/cmd_m"
 #endif
