@@ -867,3 +867,7 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，creator trace / efun_defined）
 
 `cmds/creator/trace.lpc` 裸调 `trace()`；本馆 FluffOS 无该 efun（与 DS 系 `__TRACE__` 假特征同类），alone-scan `Undefined function trace`。`#if efun_defined(trace)` 包住命令体，否则 `notify_fail`。证明：HEAD FAIL；树 PASS。同改 `dw_fluffos_v1` / `v2` / `skylib`。
+
+## 深度功能测试（2026-11-03，pstatus 残留 broken 标识）
+
+`cmds/player/pstatus.lpc` 在 `#include` 前多了一行孤立标识符 `broken`（压缩包残留），解析器带着未完成语句读到 `top_ten_tables.h` 的 `class` 定义时报 `syntax error, unexpected L_CLASS`。删掉该行。证明：HEAD FAIL；树 PASS。同改 `dw_fluffos_v1` / `v2`。

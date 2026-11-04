@@ -299,3 +299,7 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，creator trace / efun_defined）
 
 同 discworld：`cmds/creator/trace.lpc` 用 `#if efun_defined(trace)`。证明：HEAD FAIL；树 PASS。
+
+## 深度功能测试（2026-11-03，pstatus 残留 broken 标识）
+
+同 discworld：删除 `cmds/player/pstatus.lpc` 的孤立 `broken`。证明：HEAD FAIL；树 PASS。
