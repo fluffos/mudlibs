@@ -809,4 +809,7 @@ road/old 公墓房继承 `/d/newbie/rooms/road/cemetery1`，本体已迁 graveya
 ## 深度功能测试（2026-11-03，deku open/forest2i 薄别名 §6.15）
 
 open/old 森林房继承 `/d/deku/open/forest2i`，本体已迁 `/d/deku/forest/forest2i`。薄别名。证明：HEAD 3 FAIL；树 4 PASS。
+## 深度功能测试（2026-11-03，hm_quest/mon/hmmob 薄别名 §6.15）
+
+old_hm_quest 怪物继承 `/d/hm_quest/mon/hmmob`，本体在 old_hm_quest。薄别名。证明：HEAD 4 FAIL；树 5 PASS。
 
