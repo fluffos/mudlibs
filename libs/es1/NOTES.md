@@ -851,3 +851,7 @@ Found by the live pair afterwards: `d/noden/hawk/monster/adolph.lpc` had `#inclu
 ## 深度功能测试（2026-11-04，IRC drink 继承改写 §6.15）
 
 IRC vodka/water 继承 wizard `/u/e/elon/drink`，接口在 `/d/island/obj/drink`。改写 inherit。证明：HEAD 1 PASS / 2 FAIL；树 3 PASS。
+
+## 深度功能测试（2026-11-04，/std/room 薄别名 §6.15）
+
+`grid_server` 等继承 `/std/room`，本体在 `/std/room/room`。薄别名。证明：HEAD 1 PASS / 2 FAIL → 树 3 PASS。

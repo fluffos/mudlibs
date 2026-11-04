@@ -1160,3 +1160,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
 
+
+## 深度功能测试（2026-11-04，F_REMOVEANSI 收养 §6.15）
+
+同 mhxy：收养 `/feature/removeansi.lpc` 并定义 `F_REMOVEANSI`。证明：样本 HEAD 0 PASS / 7 FAIL → 树 7 PASS。

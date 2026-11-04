@@ -135,6 +135,7 @@
 #define F_NAME                  "/feature/name.lpc"
 #define F_ONEOWNER              "/feature/oneowner.lpc"
 #define F_SAVE                  "/feature/save.lpc"
+#define F_REMOVEANSI		"/feature/removeansi.lpc"
 #define F_BACKUP                "/feature/backup.lpc"
 #define F_SKILL                 "/feature/skill.lpc"
 #define F_TEAM                  "/feature/team.lpc"

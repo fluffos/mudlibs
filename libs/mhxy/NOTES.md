@@ -1391,3 +1391,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-10-27，§6.10 pusa1 die varargs）
 
 `d/qujing/heifeng/npc/pusa1`：`void die(object me)` → `varargs void die(object me)`，与角色基类一致。
+
+## 深度功能测试（2026-11-04，F_REMOVEANSI 收养 §6.15）
+
+www/cgi-bin 下 13 个对象 `inherit F_REMOVEANSI` 并调用 `remove_ansi()`，宏与 feature 皆缺。从本库 `cmds/usr/map.lpc` 抽出实现为 `/feature/removeansi.lpc`，并在 `globals.h` 定义宏。证明：样本 HEAD 0 PASS / 7 FAIL → 树 7 PASS。

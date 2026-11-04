@@ -913,3 +913,7 @@ Left, as content gaps, not invented: 16 inherits of files that are not in the ar
 ## 深度功能测试（2026-11-04，IRC drink 继承改写 §6.15）
 
 同 es1：IRC drink 改写为 `/d/island/obj/drink`。证明：HEAD 1 PASS / 2 FAIL；树 3 PASS。
+
+## 深度功能测试（2026-11-04，/std/room 薄别名 §6.15）
+
+同 es1：`/std/room` → `/std/room/room`。证明：HEAD 1 PASS / 2 FAIL → 树 3 PASS。

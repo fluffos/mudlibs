@@ -668,6 +668,11 @@ time. (3) *Fewer arguments than parameters*: add `varargs` to the definition the
 
 **Also (2026-11-04, dtxyzjb `SKI_ZHEN`):** four formation skills `inherit SKI_ZHEN` with no define and no `/inherit/skill/array`. Adopted nt7's array, `#define SKI_ZHEN "/inherit/skill/array"`, and rewrote three `query(key, ob)` calls to `ob->query(key)` (this lib has no nitan two-arg query sefun). Proof: HEAD 0 PASS / 5 FAIL → tree 5 PASS.
 
+**Also (2026-11-04, mhxy/mhxyqd `F_REMOVEANSI`):** thirteen cgi-bin objects `inherit F_REMOVEANSI` and call `remove_ansi()`. Extracted the local `cmds/usr/map.lpc` implementation into `/feature/removeansi.lpc` and defined the macro on both hosts. Proof: sample HEAD 0 PASS / 7 FAIL → tree 7 PASS each.
+
+**Also (2026-11-04, es1/es1_win/esI `/std/room`):** `grid_server` inherits `/std/room` while the body is `/std/room/room`. Thin alias on all three hosts. Proof: HEAD 1 PASS / 2 FAIL → tree 3 PASS each.
+
+
 
 
 
