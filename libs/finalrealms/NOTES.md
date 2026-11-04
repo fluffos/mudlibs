@@ -843,3 +843,7 @@ elf smith / smithr：`tell_object("Eldevan…")` → `tell_object(this_player(),
 2. **`std/container.lpc`**：`obj/container` / `obj/misc/bag` 调用 `set_prevent_insert()`，该 API 原先只在 `chest` 上。补上标志位与 `move()` 检查（有内容且目标是嵌套容器时拒绝），与 chest 语义一致。
 
 证明：pine / container / bag HEAD FAIL；树 PASS。
+
+## 深度功能测试（2026-11-03，whopaged 继承路径）
+
+`cmds/player/whopaged.lpc` 继承已不存在的 `/global/player/cmds/who.lpc`。改为继承现行 `/cmds/player/who`，并按 `who_string(..., me)` 四参调用。证明：HEAD FAIL；树 PASS。
