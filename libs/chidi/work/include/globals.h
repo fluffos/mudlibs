@@ -124,6 +124,7 @@
 #define SELL_SALT       "/inherit/char/sell_salt"
 #define NPC_SAVE        "/inherit/char/npcsave"
 #define BHNPC           "/inherit/char/bhnpc"
+#define KZZNPC          "/std/char/kzznpc"
 #define F_BH            "/feature/banghui.lpc"
 #define QUEST           "/inherit/quest"
 #define GUANFU          "/u/lonely/inherit/guanfu"

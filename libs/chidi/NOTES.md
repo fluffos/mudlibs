@@ -1227,3 +1227,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 `clone/weapon/panguanbi` `inherit PEN` / `init_pen()`，但 `weapon.h` 无 `PEN` 宏、也无 `/inherit/weapon/pen`。按本库 `dagger.lpc` 风格补 `inherit/weapon/pen.lpc`，并在 `weapon.h` 的 SWORD 后加 `#define PEN`。证明：pen + panguanbi HEAD FAIL → PASS（chidi / bixiecanyang / hc / ffxymud 同改）。
 
+
+## 深度功能测试（2026-11-04，KZZNPC 收养 §6.15/§6.16）
+
+雁荡 `npc/yandang/*` 继承 `KZZNPC` 未定义。按 fys 补 `#define KZZNPC "/std/char/kzznpc"`，并从 fys 收养 `std/char/kzznpc.lpc`。证明：kzznpc HEAD FAIL → PASS（yandang 仍缺 `get_npc_data`，fys 同缺，另案）。

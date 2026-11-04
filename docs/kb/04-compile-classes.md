@@ -1268,3 +1268,5 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-11-04, majik3 madrid guild + DW stay_alive):** (1) majik3 `wiz101` inherits `/home/madrid/obj/guild` while the body is `/inherit/guild`. Thin alias. (2) discworld+dw_fluffos_v1/v2+skylib obsolete `stay_alive.lpc` still uses `<goals.h>`/`BASE_GOAL`; current body is `stay_alive_basic` — thin alias; `include/npc/goals.h` also gains `BASE_GOAL`/`GOAL_PLAN_DIR` aliases for `GOAL_BASE_INHERIT`/`GOALS_DIR`. Proof: guild HEAD 1/1 → 2 PASS; stay_alive HEAD 2/1 → 3 PASS on four stacks.
 
+**Also (2026-11-04, nitan6/nt6 COMMAND + chidi KZZNPC):** (1) nitan6/nt6 `fgrep` inherits undef `COMMAND` while `F_COMMAND` already names `/feature/command.lpc` — `#define COMMAND F_COMMAND`, plus empty `include/feature.h` the archive lost (§6.23). (2) chidi yandang NPCs inherit undef `KZZNPC`; define `/std/char/kzznpc` and adopt `kzznpc.lpc` from fys. Proof: fgrep HEAD 1/1 → 2 PASS on both; kzznpc HEAD FAIL → PASS (yandang still missing `get_npc_data`, same on fys).
+
