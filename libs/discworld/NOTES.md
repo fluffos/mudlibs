@@ -920,3 +920,8 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，virtual handler 类型 §6.21）
 
 `#pragma strict_types` 下 `create`/`self_dest`/`destruct_virtual_object` 无返回类型；按 `;` 拆行时 `line[0..i] + line[i][j+1..] + line[i+1..]` 把 `string *` 与裸 `string` 相加。补 `void`，中间段包成 `({ ... })`。同改 v1/v2。证明：三库 HEAD FAIL；树 PASS。
+
+
+## 深度功能测试（2026-11-03，furniture dividor 缺括号 §6.25）
+
+`create_room()` 拼模板时写成 `base_name(environment() + "\", \"door\");\n"`，`environment()` 缺右括号，字符串被吃进 `base_name`，后文连锁语法错。按同函数 `set_main_room` 行改为 `base_name(environment()) + ...`。同改 v1/v2。证明：三库 HEAD FAIL；树 PASS。
