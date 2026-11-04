@@ -955,3 +955,8 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，room document_handler 重建 §6.15）
 
 `council_document` inherit `/std/room/document_handler`，档案无此文件；家具侧有 `furniture/inherit/document_handler` 并提供 `init_room()`。按 newspaper_office 模式重建：basic_room + 该 inherit + auto_load，`init()` 调 `init_room()`，桩 `query_save_dir`/`save_me`/`is_open_for`。同改 v1/v2。证明：三库 HEAD FAIL；树 document_handler+council_document PASS。
+
+
+## 深度功能测试（2026-11-03，carriage testcar foreach np §6.19）
+
+`make_stop()` 声明了 `string np` 供 `foreach(np in name_parts)`，但 `move_on()`/`dest_me()` 同样循环却未声明。两处补 `string np;`。同改 v1/v2。证明：三库 HEAD FAIL；树 PASS。

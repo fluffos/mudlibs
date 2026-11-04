@@ -383,3 +383,8 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，room document_handler 重建 §6.15）
 
 同 discworld：补 `/std/room/document_handler`。证明：HEAD FAIL；树 PASS。
+
+
+## 深度功能测试（2026-11-03，carriage testcar foreach np §6.19）
+
+同 discworld：`move_on`/`dest_me` 补 `string np`。证明：HEAD FAIL；树 PASS。
