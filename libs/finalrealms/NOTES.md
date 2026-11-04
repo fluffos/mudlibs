@@ -877,3 +877,7 @@ elf smith / smithr：`tell_object("Eldevan…")` → `tell_object(this_player(),
 
 `undergrounda` 继承不存在的 `/std/rooma`（应为 `/std/room`）。薄别名。证明：HEAD rooma+undergrounda FAIL；树 PASS。
 
+## 深度功能测试（2026-11-03，/std/spells/patch 别名 §6.15）
+
+`turn`/`focus` inherit `/std/spells/patch`，英语本体在 `examples/patch`（ninetears antiguo 版与本库 spells.h 不兼容）。薄别名。证明：HEAD patch+turn+focus FAIL；树 PASS。
+
