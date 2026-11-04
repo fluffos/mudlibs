@@ -994,4 +994,7 @@ The code of this lib writes logs into 2 subdirectories of `log/`: `log/adm/haras
 ## 深度功能测试（2026-10-27，§7.209 负下标区间残渣）
 
 `[0..-N]` / `[1..-1]` 等改为 `[0..<N]` / `[1..<1]`。
+## 深度功能测试（2026-11-03，priest learnspell 薄别名 §6.15）
+
+公会房继承 `/d/class/priest/std/learnspell`，本体在 `…/daemons/learnspell`。薄别名。证明：路径 HEAD FAIL → 树 PASS。
 
