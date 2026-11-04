@@ -368,3 +368,8 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，races/demonic 采纳 §6.15）
 
 同 discworld：采纳 skylib demonic（去 add_attackable_area）。证明：HEAD FAIL；树 PASS。
+
+
+## 深度功能测试（2026-11-03，/std/room.lpc 别名 §6.15）
+
+同 discworld：补 `/std/room.lpc` → basic_room。证明：HEAD FAIL；树 PASS。

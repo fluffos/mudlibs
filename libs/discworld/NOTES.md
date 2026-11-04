@@ -940,3 +940,8 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，races/demonic 采纳 §6.15）
 
 `demon`/`imp` inherit `/std/races/demonic`，档案无此基类。从 skylib 采纳 hide 体型副本；去掉 discworld `base.lpc` 没有的 `add_attackable_area`；`TO->setup()` 改为 `this_object()->setup()`。同改 v1/v2。证明：三库 HEAD demon/imp FAIL；树 demonic+demon+imp PASS。
+
+
+## 深度功能测试（2026-11-03，/std/room.lpc 别名 §6.15）
+
+大量对象仍 `inherit "/std/room"`，档案只有 `std/room/` 目录与 `basic_room.lpc`（注释称 standard room）。补薄文件 `/std/room.lpc` → inherit basic_room（与目录可并存）。解锁 auction/council_treasury/topography/hospital/interview 等。残留：weather_room 现报无类型函数；council_document 仍缺 `document_handler`。同改 v1/v2。证明：三库 HEAD FAIL；树 PASS。
