@@ -910,3 +910,8 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 ## 深度功能测试（2026-11-03，we_care club_room 重建 §6.15）
 
 档案未带 `/std/room/club_room`（`club_room.h` 仍引用）。按 `club_control_room` 双继承模式重建：`basic_room` + `inherit/club_owned_room`，`set_leave_exit` 转调 `set_front_door`。`owned_room1` 改为 inherit `club_room`，`CLUB_CONTROLLER`→`CONTROLLER`，`set_club_owned_id`→`set_owned_id`。同改 dw_fluffos_v1/v2、skylib。证明：四库 HEAD main/owned/club_room FAIL；树四对象 PASS。
+
+
+## 深度功能测试（2026-11-03，virtual server2 add_method §6.21）
+
+实验性 `/global/virtual/server2.lpc` 的 `add_method` 第二参声明为 `object`，但 `create()` 传入编译器路径字符串；同目录正式版 `server.lpc` 已是 `mixed ob`。两处原型/定义改为 `mixed`。同改 `dw_fluffos_v1` / `v2`。证明：三库 HEAD FAIL；树 PASS。
