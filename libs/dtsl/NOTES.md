@@ -1356,3 +1356,6 @@ The archive's `strlen()` counts bytes (a Chinese character is two), this driver'
 
 删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
 
+## 深度功能测试（2026-11-04，JOB→give_jobd 薄别名 §6.15）
+
+`#define JOB "/std/give_jobd.lpc"`，本体在 `/adm/daemons/give_jobd`。`std/give_jobd.lpc` 薄别名。证明：别名 + `d/junying/npc/zhangtian` HEAD FAIL → 树 PASS（dtsl2/dtslmud 同改）。

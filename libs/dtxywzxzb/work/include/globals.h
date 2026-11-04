@@ -126,6 +126,7 @@
 #define F_ATTRIBUTE		"/feature/attribute.lpc"
 #define F_AUTOLOAD		"/feature/autoload.lpc"
 #define F_CLEAN_UP		"/feature/clean_up.lpc"
+#define F_CLOTHNAME		"/feature/clothname.lpc"
 #define F_COMMAND		"/feature/command.lpc"
 #define F_CONDITION		"/feature/condition.lpc"
 #define F_DAMAGE		"/feature/damage.lpc"

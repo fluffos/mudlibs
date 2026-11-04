@@ -939,3 +939,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-11-04，BBS_BOARD 收养 §6.15）
 
 三块板 `inherit BBS_BOARD`，宏与 `/std/bbsboard` 皆缺。补宏并收养 xiyouji 的 `bbsboard.lpc`。证明：基类 HEAD FAIL → 树 PASS；板在 `create` 里 `move` 到缺失的 `/d/wiz/*` 房间（内容缺口）另案。
+
+## 深度功能测试（2026-11-04，JOB→give_jobd 薄别名 §6.15）
+
+同 dtsl：`std/give_jobd.lpc` → `/adm/daemons/give_jobd`。证明：zhangtian HEAD FAIL → PASS。
