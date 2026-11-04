@@ -885,3 +885,8 @@ items, no shops exist to test against.
 ## 压缩包没带的可选模块（2026-10-20，KB 06 §7.308）
 
 `/d/Genesis/` 和 `/d/Web/` 是压缩包里没有的领域内容：`armageddon` 加载 `NPC_SOULS` 时对 `/d/Genesis/cmd/misc` 的 call_other 失败（第一次登录打印 12 段回溯），`quit()` 里 `catch(WEBSTATS_CENTRAL->player_logout(...))` 对 `/d/Web/stats/webstats` 失败；`catch()` 吞掉了错误，但本驱动在 master 没有 `error_handler` 时仍把被捕获的错误打到控制台。`config/sys/local.h` 的 `NPC_SOULS` 去掉了缺失的那一项，`std/player/cmd_sec.lpc` 在调用前检查 `file_size(WEBSTATS_CENTRAL + ".lpc")`。
+
+
+## 深度功能测试（2026-11-03，corpse obj_pshort 类型 §6.21）
+
+`std/object.lpc` 里 `obj_pshort` 仍声明为 `string`，而同文件的 `obj_short`/`obj_long` 已是 `mixed`。`std/corpse` 的 `create_container()` 调用 `set_pshort(pshort_func)` 时 FluffOS 运行时报 `*Trying to put function in string`，alone-scan 无法加载。把 `obj_pshort` 挪到 `mixed` 声明组。证明：HEAD corpse FAIL；树 PASS。
