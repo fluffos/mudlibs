@@ -1003,4 +1003,7 @@ quake 等继承 `/std/spells/cleric/UD_query`，本体在 antiguo。薄别名。
 ## 深度功能测试（2026-11-03，spells/basic 与 multiple_short §6.15）
 
 wizard.old `web` 缺 `/std/spells/basic`（别名到 antiguo old/basic，非 effects/basic）与 `/std/basic/multiple_short`（从 sefun 收养为 mixin）。证明：HEAD 3 FAIL；树 4 PASS。
+## 深度功能测试（2026-11-03，guilds/sacerdote 薄别名 §6.15）
+
+`nigromante` 继承 `/std/guilds/sacerdote`；薄别名到已有 `/std/guilds/cleric`（非 rol/clases）。证明：sacerdote HEAD FAIL → 树 PASS。
 
