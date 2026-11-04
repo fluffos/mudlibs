@@ -997,4 +997,7 @@ antiguo 仍引用 `/std/spells/bases/*` 与 `/std/spells/base`，文件只在 an
 ## 深度功能测试（2026-11-03，guilds/cleric 薄别名 §6.15）
 
 `tempus` 继承 `/std/guilds/cleric`，本体在 antiguo。薄别名。证明：cleric HEAD FAIL → 树 PASS（tempus 自身的 add_command/add_main_skill 为既有噪声，FR 同样）。
+## 深度功能测试（2026-11-03，spells/cleric/UD_query 薄别名 §6.15）
+
+quake 等继承 `/std/spells/cleric/UD_query`，本体在 antiguo。薄别名。证明：UD_query+quake HEAD FAIL → 树 PASS。
 
