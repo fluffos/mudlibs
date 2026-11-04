@@ -1094,3 +1094,7 @@ xkx 家族把钱放在 `/clone/money/`，ES2 家族放在 `/obj/money/`；本库
 
 `wizard_j` 继承 `/std/jboard`，本体在 `/std/item/jboard`。薄别名。证明：HEAD 2 FAIL；树 3 PASS。
 
+
+## 深度功能测试（2026-11-04，UNARMED + F_OBSAVE §6.15/§6.16）
+
+`d/city/obj/dami` 继承 `UNARMED`，`feature/itemmake` 继承 `F_OBSAVE`，均未定义。`globals.h` 补宏；从 xiyouji2006 收养 `std/weapon/unarmed.lpc`，从 nitan6 收养 `feature/obsave.lpc`。证明：HEAD 0 PASS / 4 FAIL；树 4 PASS。

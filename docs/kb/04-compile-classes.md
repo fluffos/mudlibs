@@ -1272,3 +1272,5 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-11-04, nitan DOOR_ROOM + dtxyzjb F_GEMS):** (1) nitan6/nt6/nt6nitan6win kongdong rooms inherit undef `DOOR_ROOM` while `create_door` already lives on `ROOM` — `#define DOOR_ROOM ROOM` in `room.h`. (2) dtxyzjb `clone/gem/gem` inherits undef `F_GEMS`; define `/feature/gems.lpc` and adopt `gems.lpc`+`gems.h` from nitan6. Proof: lianhua_tai newly loads on nitan6/nt6; gems HEAD 0/2 → 2 PASS.
 
+**Also (2026-11-04, xiyouji2003 UNARMED/F_OBSAVE + hy5 WEAPONTYPE):** (1) xiyouji2003 `dami` inherits undef `UNARMED`, `itemmake` inherits undef `F_OBSAVE` — define both in `globals.h`, adopt `unarmed.lpc` from xiyouji2006 and `obsave.lpc` from nitan6. (2) hy5 crafted `obj/weapon`/`armor` inherit undef `WEAPONTYPE` — `#define WEAPONTYPE "/inherit/weapon/weapon"` in `globals.h`. Proof: xiyouji2003 HEAD 0/4 → 4 PASS; hy5 inherit syntax error cleared (template `weighttext` noise remains).
+
