@@ -859,3 +859,7 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 
 `www/secure/source_browser.lpc` 在 `unguarded((: implode(..., (:make_func, $(expand), $(can_read):), ...) :))` 嵌套 functional 里使用局部（`Illegal to use local variable in functional`，KB 06 §7.284 同族）。抽出 `browser_func_list`，调用处 `unguarded((: browser_func_list($(expand), $(can_read), $(funcs)) :))`。证明：HEAD FAIL；树 PASS（discworld / dw_fluffos_v1 / v2）。
 
+
+## 深度功能测试（2026-11-03，force / class obj_match 强转）
+
+`secure/force.lpc` 把 `match_objects_in_environments()` 的返回值赋给 `class obj_match omatch` 时未强转；FluffOS 跨编译单元的 class 标签不一致，报 `Bad assignment ( class obj_match vs class am_time )`，alone-scan FAIL。改为 `(class obj_match)`，与 `global/new_parse.lpc`、`cmds/player/recover.lpc` 相同。证明：HEAD FAIL；树 PASS。同改 `dw_fluffos_v1` / `dw_fluffos_v2`。

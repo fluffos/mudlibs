@@ -291,3 +291,7 @@ The code of this lib writes logs into 4 subdirectories of `log/`: `log/errors` (
 
 `www/secure/source_browser.lpc` 在 `unguarded((: implode(..., (:make_func, $(expand), $(can_read):), ...) :))` 嵌套 functional 里使用局部（`Illegal to use local variable in functional`，KB 06 §7.284 同族）。抽出 `browser_func_list`，调用处 `unguarded((: browser_func_list($(expand), $(can_read), $(funcs)) :))`。证明：HEAD FAIL；树 PASS（discworld / dw_fluffos_v1 / v2）。
 
+
+## 深度功能测试（2026-11-03，force / class obj_match 强转）
+
+同 discworld：`secure/force.lpc` 对 `match_objects_in_environments()` 加 `(class obj_match)`。证明：HEAD FAIL；树 PASS。
