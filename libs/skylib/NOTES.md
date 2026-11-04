@@ -878,3 +878,8 @@ The code of this lib writes logs into 2 subdirectories of `log/`: `log/save/boar
 ## 深度功能测试（2026-11-03，gatherables handler.dat_* 误加 .lpc §4.2）
 
 与 discworld 同：`handler.dat_old`/`handler.dat_dc` 误带 `.lpc`，改回数据后缀。
+
+## 深度功能测试（2026-11-03，/std/outside 别名 §6.15）
+
+地形 iroom/milestone/area 的 outside 继承 `/std/outside`，实文件在 `/std/room/outside`（与 discworld 同形）。薄别名。证明：HEAD `/std/outside` 与三处 topography outside FAIL；树五对象 PASS。
+
