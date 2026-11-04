@@ -458,3 +458,7 @@ Pinkfish quarto/mancala 仍继承旧路径 `/obj/furnitures/misc/games/multiplay
 ## 深度功能测试（2026-11-04，PLAYER_HOUSE 继承改写 §6.15）
 
 同 discworld：房屋模板 `PLAYER_HOUSE` 改写为 `/std/room/player_housing{,_outside}`。证明：missing_inherits PLAYER_HOUSE 清零。
+
+## 深度功能测试（2026-11-04，global/play_parse_com 收养 §6.15）
+
+同 Discworld：从 Final Realms 收养 `/global/play_parse_com`。证明：HEAD FAIL；树 PASS。

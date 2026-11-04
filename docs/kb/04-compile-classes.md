@@ -1264,3 +1264,5 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-11-04, majik3 living/money + ninetears gremios stun):** (1) majik3 `inherit/monster` inherits `/inherit/living/money` while the purse API is `/inherit/player/money` (`inherit/money` is the coin-stack object). Thin alias. (2) ninetears `hechizos/shadows/stun` inherits `/d/gremios/comandos/shadows/stun` while the Spanish body lives at `/std/antiguo/commands/shadows/stun`. Thin alias. Proof: majik3 HEAD 1/2 → 3 PASS; ninetears HEAD 1/2 → 3 PASS.
 
+**Also (2026-11-04, skylib auto_load + FR scimitar + DW play_parse_com):** (1) skylib `auction_room` inherits `/global/auto_load` while the body is `/global/player/auto_load`. Thin alias. (2) finalrealms drow `scimitar` inherits missing `/d/bf/banefall/weapons/rot`; in-file comment retargets to `/obj/weapon`. (3) discworld + dw_fluffos_v1/v2 `events` inherit `/global/play_parse_com` absent from the archive — adopt from finalrealms (skylib twin needs `m_delete`/`find_match` sefuns FR has — deferred). Proof: auto_load PASS; scimitar HEAD 1 FAIL → 2 PASS; play_parse_com PASS on three DW stacks.
+

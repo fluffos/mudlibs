@@ -888,3 +888,7 @@ elf smith / smithr：`tell_object("Eldevan…")` → `tell_object(this_player(),
 
 `/obj/dragon` 缺失，本体在 `/baseobs/monsters/dragon`。薄别名。证明：别名 PASS（gopher 的 inherit/object 与 globals.h 另案）。
 
+
+## 深度功能测试（2026-11-04，drow scimitar rot 改指向 §6.15）
+
+`d/newbie/drow/weapons/scimitar` 继承缺失的 `/d/bf/banefall/weapons/rot`；文件内注释写明本应 `/obj/weapon`。改指向。证明：HEAD 1 FAIL；树 2 PASS。

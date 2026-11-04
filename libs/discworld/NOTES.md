@@ -1030,3 +1030,7 @@ Pinkfish quarto/mancala 仍继承旧路径 `/obj/furnitures/misc/games/multiplay
 ## 深度功能测试（2026-11-04，PLAYER_HOUSE 继承改写 §6.15）
 
 房屋模板继承未定义的 `PLAYER_HOUSE`/`PLAYER_HOUSE_OUTSIDE`，本体在 `/std/room/player_housing{,_outside}`。改写 inherit（模板仍需生成的 path.h 才能单独加载）。证明：missing_inherits 的 PLAYER_HOUSE 清零。
+
+## 深度功能测试（2026-11-04，global/play_parse_com 收养 §6.15）
+
+`global/events` 仍继承 `/global/play_parse_com`，档案未带该文件。从 Final Realms（同系 add_command 解析器）收养。证明：HEAD FAIL；树 PASS（dw_fluffos_v1/v2 同证）。

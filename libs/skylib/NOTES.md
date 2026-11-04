@@ -894,3 +894,7 @@ topography 的 iroom/milestone/area 继承 `/std/room`，本体在 `basic_room`�
 ## 深度功能测试（2026-11-04，SCABBARD_OBJ 收养 §6.15）
 
 三件鞘继承未定义的 `SCABBARD_OBJ`；从 Discworld 收养 `/obj/scabbard`，在 global.h 定义宏，并补 virtual.h 的 VIRTUAL_*。证明：HEAD 0 PASS / 3 FAIL；树 3 PASS。
+
+## 深度功能测试（2026-11-04，global/auto_load 薄别名 §6.15）
+
+`std/shops/auction_room` 继承 `/global/auto_load`，正文在 `/global/player/auto_load`（Discworld 仍用根路径）。薄别名。证明：HEAD auto_load FAIL；树 PASS（auction_room 另有 `loc` 未定义，与继承无关）。
