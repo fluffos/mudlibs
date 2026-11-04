@@ -1056,3 +1056,5 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-11-03, `__TRACE__` without `trace` efun):** FluffOS always predefines empty `__TRACE__` (`lexer_utils.cc`) but does not ship `trace()`. Dead Souls family `secure/cmds/creators/trace.lpc` used `#ifdef __TRACE__` around `trace(x)` → `Undefined function trace`. Switch to `#if efun_defined(trace)` (cmd + GetHelp). 5 hosts PASS: dsIII, ds386, dshakkard, brassring, riftsds.
 
+**Also (2026-11-03, foundation2 creator move):** Nightmare-imported `secure/cmds/creator/move.lpc` `#include <move.h>` for `MOVE_*` codes and `inherit REFS_D`, but Foundation II never shipped that header on the include path (`lib/move.h` is the LIB_MOVE interface) nor `REFS_D`/refs daemon. `eventMove()` answers boolean 1/0. Rewrite: `get_object()` + truthy `eventMove()`, drop REFS. PASS.
+

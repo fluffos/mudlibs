@@ -559,3 +559,8 @@ the news pager. Fixed:
 ## 战斗探针（2026-10-22，KB 08 §10.16）：`domains/Examples/npc/` 的两个示例 NPC 编译不过
 
 `scripts/play_combat_probe.py foundation2 --account ... --clone ...` 克隆 `/domains/Examples/npc/smiley` 和 `centaur`，两个文件都是 `inherit LIB_NPC;`（`9:9: syntax error`）：这个压缩包里没有 NPC 基类（`lib/` 里没有 `npc.lpc`，`lib.h` 没有 `LIB_NPC`），示例 NPC 没法加载。没动（缺的是基类，不是笔误）。
+
+## 深度功能测试（2026-11-03，creator move 缺 move.h / REFS_D）
+
+`secure/cmds/creator/move.lpc` 是 Nightmare 导入：`#include <move.h>`（MOVE_* 返回码）且 `inherit REFS_D`，但本库 include 路径下没有该头（`lib/move.h` 是 LIB_MOVE 接口），`daemons.h` 也无 REFS_D，refs 守护进程未随压缩包。alone-scan `Cannot #include move.h`。改写为 Foundation II 语义：`get_object()` 解析参数，`eventMove()` 的 1/0 成败，去掉 REFS_D。证明：HEAD FAIL；树 PASS。
+
