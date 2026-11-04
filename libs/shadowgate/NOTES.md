@@ -800,4 +800,7 @@ crushing_hand：`tell_object("target", …)`→`tell_object(target, …)`。
 ## 深度功能测试（2026-10-27，§6.25 one-arg tell_room）
 
 `tell_room("…")` 补房间参数（`this_object()` / `ETO` / `place` / `environment(this_object())` 等）。
+## 深度功能测试（2026-11-03，newmasters/masters 薄别名 §6.15）
+
+cleric/barbarian/paladin/bard 仍继承 `newmasters/masters`，本体在 `masters/masters`。薄别名。证明：HEAD FAIL；树 PASS。
 
