@@ -1117,3 +1117,8 @@ alone-scan 15 个 `End of file` / `End of file in string`：
 - `change_time_scale(time())` → 本库 summon 同形的 `ctime(time())`
 
 证明：15/15 alone-load PASS（含 log/nosave keep）。
+
+## 深度功能测试（2026-11-03，moon_force SKILL_HELP\t 残渣）
+
+同形 `@SKILL_HELP` 终结符仍粘在 `SKILL_HELP\t);`：`daemon/skill/moon_force`、`u/h/hack/skill/moon_force`、`u/c/cominging/moon_force_v101`。改为列首 `SKILL_HELP` 换行后再 `);`。库内 `SKILL_HELP\t` 残渣 0。证明：三文件 + moon_forcea alone-load PASS。
+
