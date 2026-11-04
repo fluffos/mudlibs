@@ -985,4 +985,7 @@ rnd_caus*：`tell_object("at the top\n", attackboy)`→`tell_object(attackboy, �
 ## 深度功能测试（2026-11-03，spells/bases 收养与 base 修复 §6.15）
 
 antiguo 仍引用 `/std/spells/bases/*` 与 `/std/spells/base`，文件只在 antiguo 下。同库拷贝 14 个 bases 到 `/std/spells/bases/`；`/std/spells/base` 薄别名；`base.lpc` 的 `#include patch` 改为 inherit，并补 `RANGE_HANDLER`。证明：HEAD 7 FAIL；树 7 PASS（含 bash/drain/oscuridad）。
+## 深度功能测试（2026-11-03，spells/trapbase 薄别名 §6.15）
+
+十一处 wizthief trap 继承 `/std/spells/trapbase`，本体在 antiguo。薄别名。证明：HEAD 5 FAIL；树 6 PASS。
 
