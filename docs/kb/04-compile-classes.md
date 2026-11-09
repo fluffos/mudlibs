@@ -1336,3 +1336,5 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 **Also (2026-11-09, SKI_ZHEN zitengzhan):** formation skills inherit undef `SKI_ZHEN`. Adopt dtxyzjb `/inherit/skill/array` + define. Proof: 0/5→5 PASS.
 
 **Also (2026-11-09, BHNPC yxcs/wmkj):** (1) yxcs: uncomment `#define BHNPC` to existing `/u/lonely/banghui/bhnpc`. Proof: 1/3→3 PASS. (2) wmkj: define points at missing `/u/xiha/banghui/bhnpc` — adopt yxcs body there. Proof: 0/3→3 PASS.
+
+**Also (2026-11-09, F_BVENDOR wmkj):** same `/u/xiha/banghui/` hole as BHNPC; adopt yxcs `/u/lonely/banghui/vendor.lpc` → `/u/xiha/banghui/vendor.lpc`. Proof: HEAD 0/6 → 6 PASS (base + 5 merchants).
