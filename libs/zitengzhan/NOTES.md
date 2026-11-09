@@ -903,3 +903,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 `clone/gem/gem` 继承未定义的 `F_GEMS`。从手足 dtxyzjb 收养 `feature/gems.lpc` + 同目录 `gems.h`，并补 `#define F_GEMS`。证明：HEAD 0/2 → 2 PASS。
 
+
+## SKI_ZHEN 收养（2026-11-09，KB 04 §6.15/§6.16）
+
+`daemon/skill/*-zhen` 继承未定义的 `SKI_ZHEN`。从手足 dtxyzjb 收养 `/inherit/skill/array.lpc`，并补 `#define SKI_ZHEN`（同 hhsj/dtxyzjb）。证明：HEAD 0/5 → 5 PASS。
+

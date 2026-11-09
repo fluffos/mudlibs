@@ -1332,3 +1332,5 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 **Also (2026-11-09, CHIBANG/FABAO wdxtym):** gems wrappers inherit undef `CHIBANG`/`FABAO`. Same-lib twin of `surcoat` as armor chibang/fabao + `TYPE_*` macros. Proof: 0/4→4 PASS.
 
 **Also (2026-11-09, F_GEMS zitengzhan):** gem inherits undef `F_GEMS`. Adopt dtxyzjb `feature/gems.lpc`+`gems.h` + define. Proof: 0/2→2 PASS.
+
+**Also (2026-11-09, SKI_ZHEN zitengzhan):** formation skills inherit undef `SKI_ZHEN`. Adopt dtxyzjb `/inherit/skill/array` + define. Proof: 0/5→5 PASS.
