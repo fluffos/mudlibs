@@ -1288,3 +1288,5 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-11-09, pkuxkx /std/jboard):** `wizard_j` inherits missing `/std/jboard` while `/inherit/misc/jboard` exists (`PLAN_BOARD`). Thin alias; add stub `/d/wiz/jobroom` so `setup()->move()` does not abort load. Proof: HEAD 1/3 → 4 PASS (plan_b already). pkuxkx `M_WEAPON`/`M_CLOTH` still deferred (zero-arg `set_desc()`; no corpus donor).
 
+**Also (2026-11-09, PEN corpus + yxxcii CHAT_ROOM):** (1) sixteen libs (`xyzx*`/`zxty*`/`yxjh`/`wlhd`/…): `panguanbi` inherits undef `PEN` — adopt jhfy2 `/inherit/weapon/pen` and `#define PEN`. Proof: sample HEAD 0/2 → 2 PASS each. (2) yxxcii `CHAT_ROOM` → missing `/inherit/room/chat_room` while body is `/feature/chat_room` — thin alias. Proof: HEAD 1/5 → 6 PASS.
+

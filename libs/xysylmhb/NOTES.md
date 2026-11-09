@@ -606,3 +606,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-11-09，DAEMON→cmd_m 残余语料扫 §6.16/§6.15）
 
 `adm/daemons/network/pingd|pingtcp`（或同族路径）继承 `DAEMON`：补 `#define DAEMON "/std/cmd_m"`（若缺），收养精简 `std/cmd_m.lpc`，并在需要时补 `include/uid.h`。本轮为 2026-11-04 二十三库扫的残余。
+
+## 深度功能测试（2026-11-09，PEN 判官笔基类 §6.16/§6.15）
+
+`clone/weapon/panguanbi` 继承未定义的 `PEN`，且无 `/inherit/weapon/pen`。从 jhfy2 收养 `pen.lpc`（`init_pen`），并在 `weapon.h` 补 `#define PEN "/inherit/weapon/pen"`。证明：pen + panguanbi HEAD FAIL → 树 PASS。
