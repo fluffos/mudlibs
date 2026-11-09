@@ -1113,3 +1113,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-11-03，§7.19 enable_player 重入）
 
 `feature/command.lpc` 的 `enable_player()` 加 `in_enable_player_now` 守卫（`scripts/lpc_fix_enable_player_guard.py`，KB 05 7.19）：门派 NPC `init()`→`setup()`→`enable_player()`→`enable_commands()` 再跑 `init()` 时直接返回，避免 Too deep recursion。
+
+## COMMAND + feature.h（2026-11-09，KB 04 §6.16/§6.23）
+
+`cmds/adm/fgrep` 继承未定义的 `COMMAND`；`F_COMMAND` 已指向 `/feature/command.lpc`。补 `#define COMMAND F_COMMAND`，并空壳 `include/feature.h`（档案丢失，§6.23）。证明：HEAD 0/1 → 1 PASS。与 nitan6/nt6 同修。

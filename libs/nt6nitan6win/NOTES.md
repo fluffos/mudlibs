@@ -755,3 +755,7 @@ xkx100 的原文是 `vc = victim->add("vote/count", 1);`，nitan 系把它写成
 ## 深度功能测试（2026-11-04，DOOR_ROOM→ROOM §6.16）
 
 崆峒 `d/kongdong/*` 继承 `DOOR_ROOM`；`create_door` 已在 `ROOM`（`/inherit/room/room`）。`room.h` 补 `#define DOOR_ROOM ROOM`。同 nitan6：`DOOR_ROOM` → `ROOM`。证明：继承语法错误消除；房间仍可能因 NPC `set_wugong` 噪声 FAIL。
+
+## COMMAND + feature.h（2026-11-09，KB 04 §6.16/§6.23）
+
+`cmds/adm/fgrep` 继承未定义的 `COMMAND`；`F_COMMAND` 已指向 `/feature/command.lpc`。补 `#define COMMAND F_COMMAND`，并空壳 `include/feature.h`（档案丢失，§6.23）。证明：HEAD 0/1 → 1 PASS。与 nitan6/nt6 同修。

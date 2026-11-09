@@ -1344,3 +1344,5 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 **Also (2026-11-09, BULETIN_BOARD wmkj):** typo-macro points at missing `/u/xiha/inherit/bboard`; adopt yxcs `/u/lonely/inherit/bboard.lpc` (byte-identical to local `/inherit/misc/bboard.lpc`). Proof: HEAD 0/2 → 2 PASS.
 
 **Also (2026-11-09, F_BH wmkj):** adopt yxcs `/u/lonely/banghui/banghui.lpc` → `/u/xiha/banghui/banghui.lpc` (near-twin of local `feature/banghui.lpc`). Proof: base FAIL→PASS; sole user still blocked on undef `KZZNPC`.
+
+**Also (2026-11-09, COMMAND hhsj/nitan170911/xfbhh/nt6nitan6win):** same nitan6/nt6 shape: `#define COMMAND F_COMMAND` + empty `include/feature.h` (§6.23). Proof: each fgrep HEAD 0/1 → 1 PASS.
