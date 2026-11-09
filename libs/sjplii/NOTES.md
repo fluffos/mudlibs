@@ -593,3 +593,8 @@ xkx 家族把钱放在 `/clone/money/`，ES2 家族放在 `/obj/money/`；本库
 ## 深度功能测试（2026-11-09，BREAST §6.16/§6.15）
 
 肚兜继承未定义的 `BREAST`（`PANTS` 已有）。`armor.h` 补 `BREAST`/`TYPE_BREAST`，新增 `std/armor/breast.lpc`。证明：breast + woman-neiyi 新载。
+
+## UNARMED 收养（2026-11-09，KB 04 §6.15/§6.16）
+
+`d/city/obj/dami` 继承未定义的 `UNARMED` 并调用 `init_unarmed(5)`。从手足 sjplgfjxb 收养 `std/weapon/unarmed.lpc`，并在 `weapon.h` 补 `#define UNARMED`。证明：HEAD 0/2 → 2 PASS。
+

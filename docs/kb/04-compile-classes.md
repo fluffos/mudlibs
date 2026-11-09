@@ -1316,3 +1316,5 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 **Also (2026-11-09, FACE tianxia):** mask inherits undef `FACE`. Same-lib twin of `std/armor/head` as `face` + `#define FACE`/`TYPE_FACE`. CLAW still deferred (no ES-style `init_claw` donor; dreamofseven uses beast_weapon_prop). Proof: 0/2→2 PASS.
 
 **Also (2026-11-09, F_DEALER sjcs):** huoji inherits undef `F_DEALER`; moneyd already present. Adopt xkyx3b `feature/dealer` + define. BANKER/HOCKOWNER (tianlongbabu) deferred (needs do_check/do_load donors + TECASH macros; fy bankowner uses balance/withdraw). Proof: 0/2→2 PASS.
+
+**Also (2026-11-09, UNARMED sjpl2/sjplii):** dami inherits undef `UNARMED` + `init_unarmed(5)`. Adopt sjplgfjxb `std/weapon/unarmed` + `#define UNARMED` (same as prior sjplgfjxb). Proof: 0/2→2 PASS each.

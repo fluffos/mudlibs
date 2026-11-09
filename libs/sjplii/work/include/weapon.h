@@ -19,6 +19,7 @@
 #define SWORD			"/std/weapon/sword"
 #define STAFF			"/std/weapon/staff"
 #define THROWING		"/std/weapon/throwing"
+#define UNARMED			"/std/weapon/unarmed"
 #define WHIP			"/std/weapon/whip"
 #define STICK			"/std/weapon/stick"
 #define SPEAR			"/std/weapon/spear"
