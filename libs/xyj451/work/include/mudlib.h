@@ -12,5 +12,6 @@
 
 #define INTERMUD_MUD_NAME     "XYJ"
 #define INTERMUD_NAME                   "西游记"
+#define DAEMON                  "/std/cmd_m"
 
 #endif

@@ -9,5 +9,6 @@
 
 #define INTERMUD_MUD_NAME	"CD"
 #define CHINESE_MUD_NAME	"江湖2005"
+#define DAEMON                  "/std/cmd_m"
 
 #endif

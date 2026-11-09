@@ -39,3 +39,4 @@
 #define MUDLIST_DNS3            "unknow"
 #define MUDLIST_DNS4            "unknow"
 #define MUDLIST_DNS5            "unknow"
+#define DAEMON                  "/std/cmd_m"

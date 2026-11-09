@@ -11,5 +11,6 @@
 
 #define INTERMUD_MUD_NAME     "TXJH"
 #define INTERMUD_NAME                   "铁血江湖"
+#define DAEMON                  "/std/cmd_m"
 
 #endif

@@ -12,5 +12,6 @@
 #define MUDLIB_ENCODING         "GB"
 #define MUD_ADMIN		"lywin@21cn.com"
 #define MUD_WEB			"http://www.lywin.com"
+#define DAEMON                  "/std/cmd_m"
 
 #endif

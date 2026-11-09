@@ -9,5 +9,6 @@
 
 #define INTERMUD_MUD_NAME	"Shu Jian"
 #define CHINESE_MUD_NAME    	"[1;37m《仙剑狂侠2000》[0;37;0m"
+#define DAEMON                  "/std/cmd_m"
 
 #endif

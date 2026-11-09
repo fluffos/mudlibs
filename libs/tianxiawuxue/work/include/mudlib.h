@@ -10,4 +10,5 @@
 #define MUDLIB_ENCODING "GB"
 #define MUD_ADMIN               "dream@TXWX"
 #define MUD_WEB                 "http://txwx.3322.org"
+#define DAEMON                  "/std/cmd_m"
 #endif

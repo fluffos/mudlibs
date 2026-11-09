@@ -13,5 +13,6 @@
 #define MUDLIB_ENCODING "GB"
 #define MUD_ADMIN               "xiha@game.com.cn"
 #define MUD_WEB                 ""
+#define DAEMON                  "/std/cmd_m"
 #endif
 

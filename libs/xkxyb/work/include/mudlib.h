@@ -10,5 +10,6 @@
 #define INTERMUD_MUD_NAME	"xkx100"
 #define CHINESE_MUD_NAME	"侠客行一百"
 #define MUDLIB_ENCODING "GB"
+#define DAEMON                  "/std/cmd_m"
 
 #endif

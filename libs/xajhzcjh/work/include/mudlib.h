@@ -10,4 +10,5 @@
 #define MUDLIB_ENCODING "GB"
 #define MUD_ADMIN               "AFEI@XYZX"
 #define MUD_WEB                 "http://akai.isme.net"
+#define DAEMON                  "/std/cmd_m"
 #endif

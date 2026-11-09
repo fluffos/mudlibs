@@ -24,6 +24,7 @@
 // 1: use the full 4 fileds of numerical IP as a site.
 
 #define GB_AND_BIG5
+#define DAEMON                  "/std/cmd_m"
 // define this to allow both GB and BIG5 players.
 // undefine will only allow GB players.
 

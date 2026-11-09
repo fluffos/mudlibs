@@ -12,4 +12,5 @@
 #define MUDLIB_ENCODING         "GB"
 #define MUD_ADMIN		"gzjjgod@163.net"
 #define MUD_WEB			"http://wizworld.go.163.com"
+#define DAEMON                  "/std/cmd_m"
 #endif

@@ -1278,3 +1278,6 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 
 **Also (2026-11-09, pkuxkx BOW/HOOK/PIKE/STICK + shadowgate POCKETARMOUR):** (1) pkuxkx sjsz weapons inherit undef `BOW`/`HOOK`/`PIKE`/`STICK` — adopt the four bases (+ `F_*`) from bmxkx2001 and define them in both `weapon.h` copies. Proof: HEAD 0/18 → 16 PASS (`kusang-bang`/`yuzhu-zhang` still `::create()` vs `F_UNIQUE` order; `M_WEAPON` deferred). (2) shadowgate avatar `pocket` inherits undef `POCKETARMOUR` while `PARMOUR` already names `/std/pocketarmour` — `#define POCKETARMOUR`; close the truncated `create()`. Proof: HEAD 1/3 → 3 PASS.
+
+
+**Also (2026-11-09, DAEMON residual corpus):** 116 further ES/xkx-lineage libs still had undef or file-missing `DAEMON` after the 23-lib pass — same recipe (`#define DAEMON "/std/cmd_m"`, stripped `std/cmd_m.lpc`, `uid.h` when `#include <uid.h>`). Spot proof: bxsj/haiyang2/xkx2001/dtsl/hymud/zzfy/dtxywzxzb HEAD 0/3 → 3 PASS each. Skipped nested-only `hy`, backup-only `shenzhou`, `xajhxo` system path, and LIB_DAEMON hosts. LIB_ISQL alone-scan hits are false positives (`#ifdef __PACKAGE_DATABASE_DB__`, FluffOS only defines `__PACKAGE_DB__`).

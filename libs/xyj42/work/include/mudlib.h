@@ -9,5 +9,6 @@
 
 #define INTERMUD_MUD_NAME		"ZH"
 #define INTERMUD_NAME                   "西游记珠海站"
+#define DAEMON                  "/std/cmd_m"
 
 #endif

@@ -9,5 +9,6 @@
 
 #define INTERMUD_MUD_NAME	"Gone with the Hero"
 #define CHINESE_MUD_NAME        "侠客英雄传"
+#define DAEMON                  "/std/cmd_m"
 
 #endif

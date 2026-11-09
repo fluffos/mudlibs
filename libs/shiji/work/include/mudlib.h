@@ -12,6 +12,7 @@
 #define MUDLIB_ENCODING         "GB"
 #define MUD_ADMIN               "sjmud@email.com.cn"
 #define MUD_WEB                 "http://sjmud.myrice.com";
+#define DAEMON                  "/std/cmd_m"
 
 #endif
 

@@ -974,3 +974,8 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply k
 ## 深度功能测试（2026-11-04，ARMOR/SURCOAT 收养 §6.15）
 
 同 kxkj：补 `ARMOR`/`SURCOAT` 宏并收养基类。证明：battle_armor HEAD FAIL → 树 PASS。
+
+
+## 深度功能测试（2026-11-09，DAEMON→cmd_m 残余语料扫 §6.16/§6.15）
+
+`adm/daemons/network/pingd|pingtcp`（或同族路径）继承 `DAEMON`：补 `#define DAEMON "/std/cmd_m"`（若缺），收养精简 `std/cmd_m.lpc`，并在需要时补 `include/uid.h`。本轮为 2026-11-04 二十三库扫的残余。
