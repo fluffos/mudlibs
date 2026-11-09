@@ -1517,3 +1517,8 @@ tianzun → `ob`；shenxiang → `me`。
 ## 深度功能测试（2026-11-09，SUPER_NPC 薄别名 §6.16/§6.15）
 
 百花谷等 NPC 继承未定义的 `SUPER_NPC`。`globals.h` 定义 `/std/char/super_npc`，薄别名至本库 `/d/snowtu/npc/super_npc`。证明：别名 PASS；接引 NPC 续缺 `set_level`/`FAMILY_D` 另案。JOBNPC 需 `NPC_D`，未收。
+
+## SSSERVER 收养（2026-11-09，KB 04 §6.15/§6.16）
+
+`daemon/class/jwm/.../jianhun` 与 `daemon/skill/godsword` 继承未定义的 `SSSERVER`（仅 `u/xdao/globals.h` 有宏，全局头没有，文件也缺）。从手足 dtxyzjb 收养 `/std/ssserver.lpc`，并在 `globals.h` 补 `#define SSSERVER`。证明：`/std/ssserver` HEAD FAIL → PASS（newly loading）；consumers 仍缺 `F_FUNCTION` / `sp_attack*`（另案）。BI/DHAMMER 本轮未做（无干净 `init_bi` 供体；DHAMMER→HAMMER 别名后 dhammer 仍因 `%n`/self.h 语法失败）。
+

@@ -1322,3 +1322,5 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 **Also (2026-11-09, F_REMOVEANSI sjshv150):** passwd inherits undef `F_REMOVEANSI`. Adopt mhxy `feature/removeansi` + define (yueying twin). Proof: 0/2→2 PASS.
 
 **Also (2026-11-09, F_MERCENARY tianlongbabu/xyj451):** snow mercenary inherits undef `F_MERCENARY`. Adopt es2 `/std/char/mercenary` + define. Proof: 0/2→2 PASS each.
+
+**Also (2026-11-09, SSSERVER shenmo):** skill/PFM inherits undef `SSSERVER` (define only in `u/xdao/globals.h`, no file). Adopt dtxyzjb `/std/ssserver` + globals define. Proof: ssserver newly loads; jianhun still needs `F_FUNCTION`; godsword still needs `sp_attack*`. BI deferred (no `init_bi` donor); DHAMMER→HAMMER alias does not newly load dhammer (self.h/`%n` bugs).

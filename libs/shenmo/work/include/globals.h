@@ -81,6 +81,7 @@
 #define MAILBOX_OB              "/obj/mailbox"
 #define SILVER_OB               "/obj/money/silver"
 #define SIMUL_EFUN_OB           "/adm/obj/simul_efun"
+#define SSSERVER			"/std/ssserver"
 #define USER_OB                 "/obj/user"
 #define VOID_OB                 "/obj/void"
 
