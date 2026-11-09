@@ -544,3 +544,8 @@ xkx 家族把钱放在 `/clone/money/`，ES2 家族放在 `/obj/money/`；本库
 ## 深度功能测试（2026-11-09，DAEMON→cmd_m 残余语料扫 §6.16/§6.15）
 
 `adm/daemons/network/pingd|pingtcp`（或同族路径）继承 `DAEMON`：补 `#define DAEMON "/std/cmd_m"`（若缺），收养精简 `std/cmd_m.lpc`，并在需要时补 `include/uid.h`。本轮为 2026-11-04 二十三库扫的残余。
+
+## F_REMOVEANSI 收养（2026-11-09，KB 04 §6.15/§6.16）
+
+`www/cgi-bin/passwd` 继承未定义的 `F_REMOVEANSI`。从手足 mhxy（同 yueyingqiyuan）收养 `feature/removeansi.lpc`，并补 `#define F_REMOVEANSI`。证明：HEAD 0/2 → 2 PASS。
+

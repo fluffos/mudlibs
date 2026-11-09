@@ -131,6 +131,7 @@
 #define F_MOVE			"/feature/move.lpc"
 #define F_NAME			"/feature/name.lpc"
 #define F_ONEOWNER		"/feature/oneowner.lpc"
+#define F_REMOVEANSI		"/feature/removeansi.lpc"
 #define F_SAVE			"/feature/save.lpc"
 #define F_SSERVER                  "/feature/sserver.lpc"
 #define F_BACKUP		"/feature/backup.lpc"
