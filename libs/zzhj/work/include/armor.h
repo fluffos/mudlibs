@@ -3,6 +3,7 @@
 
 // Standard inheritable armor objects.
 #define BELT		"/std/armor/belt"
+#define WAIST		"/std/armor/waist"
 #define BOOTS		"/std/armor/boots"
 #define CLOAK		"/std/armor/cloak"
 #define COAT		"/std/armor/coat"
@@ -21,6 +22,7 @@
 
 // Standard armor types
 #define TYPE_BELT		"belt"
+#define TYPE_WAIST		"waist"
 #define TYPE_BOOTS		"boots"
 #define TYPE_CLOAK		"cloak"
 #define TYPE_COAT		"coat"

@@ -1513,3 +1513,7 @@ tianzun → `ob`；shenxiang → `me`。
 ## 深度功能测试（2026-11-09，NEEDLE §6.16/§6.15）
 
 `clone/weapon/needle` 继承未定义的 `NEEDLE`。从 mhxy 收养 `/std/weapon/needle`（`init_needle`），`weapon.h` 补宏。证明：needle + clone HEAD FAIL → 树 PASS。
+
+## 深度功能测试（2026-11-09，SUPER_NPC 薄别名 §6.16/§6.15）
+
+百花谷等 NPC 继承未定义的 `SUPER_NPC`。`globals.h` 定义 `/std/char/super_npc`，薄别名至本库 `/d/snowtu/npc/super_npc`。证明：别名 PASS；接引 NPC 续缺 `set_level`/`FAMILY_D` 另案。JOBNPC 需 `NPC_D`，未收。

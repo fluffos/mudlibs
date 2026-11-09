@@ -991,3 +991,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 深度功能测试（2026-11-09，NECKLACE 薄别名 §6.15/§6.16）
 
 多项项链继承未定义的 `NECKLACE`；颈部本体在 `/inherit/armor/neck`。薄别名 `necklace.lpc` 并补宏。证明：6/6 PASS。
+
+## 深度功能测试（2026-11-09，WAREHOUSE 收养 §6.15）
+
+`d/kaifeng/business` 继承缺失的 `/inherit/room/warehouse`。从 nt6 收养 `warehouse.lpc` 与 `price.h`。证明：warehouse PASS；business 续缺 `businessd` 另案。

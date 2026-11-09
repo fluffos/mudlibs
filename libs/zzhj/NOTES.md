@@ -602,3 +602,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-11-09，CLOTH + F_LIQUID §6.16/§6.15）
 
 (1) `icy_cloth` 等继承未定义的 `CLOTH`：补宏/`TYPE_CLOTH`，按本库 `coat` 形制写 `std/armor/cloth.lpc`。(2) 酒类继承未定义的 `F_LIQUID`：从 zzfy 收养 `feature/liquid.lpc` 并定义宏。证明：5/5 PASS。
+
+## 深度功能测试（2026-11-09，DAEMON + WHIP/FORK/WAIST §6.16/§6.15）
+
+(1) `pingd`/`pingtcp` 继承未定义的 `DAEMON`：本库已有 `std/cmd_m` 与 `uid.h`，`globals.h` 补 `#define DAEMON "/std/cmd_m"`。(2) `echowhip`/`steel_fork`/`icy_girth` 缺 `WHIP`/`FORK`/`WAIST`：按本库 blade/belt 形制补基类与宏。证明：9/9 PASS。

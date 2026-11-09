@@ -90,6 +90,7 @@
 #define BULLETIN_BOARD          "/std/bboard"
 #define BBS_BOARD               "/std/bbsboard"
 #define CHARACTER               "/std/char"
+#define SUPER_NPC		"/std/char/super_npc"
 #define CLASS_GUILD             "/std/room/class_guild"
 #define COMBINED_ITEM           "/std/item/combined"
 #define EQUIP                   "/std/equip"
