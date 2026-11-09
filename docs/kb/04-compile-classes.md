@@ -1328,3 +1328,5 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 **Also (2026-11-09, F_FUNCTION shenmo):** jianhun/ai-sword inherit undef `F_FUNCTION`. Adopt kxkj `feature/function` + define (follows SSSERVER). Proof: 2/4→4 PASS, newly loading 2.
 
 **Also (2026-11-09, YIZHAN wmkj):** tangmen station inherits undef `YIZHAN`. Adopt xxcq `mache` vehicle+ini; ship `yizhan.lpc` from `mache.h` with `inherit ROOM` (FluffOS will not inherit a `.h`); `#define YIZHAN`. Proof: 0/2→2 PASS. H_MAGIC_ITEM no donor; BOARD_OB needs LIMA lpcc; F_QUESTER blocked by `QUEST_D(x)` vs `QUEST_D->` on tianxiawuxue.
+
+**Also (2026-11-09, CHIBANG/FABAO wdxtym):** gems wrappers inherit undef `CHIBANG`/`FABAO`. Same-lib twin of `surcoat` as armor chibang/fabao + `TYPE_*` macros. Proof: 0/4→4 PASS.

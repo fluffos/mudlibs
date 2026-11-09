@@ -713,3 +713,8 @@ wdt / guangchang / qianmu workroom+board：补 `me`/`who`。
 
 删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
 
+
+## CHIBANG/FABAO 同库孪生（2026-11-09，KB 04 §6.15/§6.16）
+
+`inherit/gems/chibang|fabao` 继承未定义的 `CHIBANG`/`FABAO`（需 `TYPE_CHIBANG`/`TYPE_FABAO`）。以本库 `inherit/armor/surcoat.lpc` 为模板写出翅膀/法宝防具基类，并在 `armor.h` 补宏。证明：HEAD 0/4 → 4 PASS（newly loading 4）。
+
