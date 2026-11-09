@@ -548,3 +548,7 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## 深度功能测试（2026-11-04，DAEMON→cmd_m 语料扫 §6.16/§6.15）
 
 `adm/daemons/network/pingd|pingtcp` 继承未定义的 `DAEMON`（TMI 惯例）。`mudlib.h` 补 `#define DAEMON "/std/cmd_m"`，收养精简 `std/cmd_m.lpc`（无 `config.h`），并补档案缺失的 `include/uid.h`。证明：抽样 jhfy/hy5/dreamofseven/fys/pkuxkx/xiyouji2003 HEAD 0/3 → 3 PASS。
+
+## 深度功能测试（2026-11-09，BOW/HOOK/PIKE/STICK §6.15/§6.16）
+
+`d/bwdh/sjsz` 武器继承未定义的 `BOW`/`HOOK`/`PIKE`/`STICK`，`weapon.h` 也缺宏与基类文件。从 `bmxkx2001` 收养 `inherit/weapon/{bow,hook,pike,stick}.lpc` 及 `_*.lpc`，并在两份 `weapon.h` 补宏（含 `F_*`）。证明：18 路径 HEAD 0 PASS → 树 16 PASS（新加载 16）；`kusang-bang`/`yuzhu-zhang` 在 STICK 解决后暴露 `::create()` 无父（与 `F_UNIQUE` 秩序）—剩余。`M_WEAPON` 延迟（`set_desc()` 无参与基类三参不匹）。

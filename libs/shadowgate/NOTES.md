@@ -846,3 +846,8 @@ old 下水道继承 `/d/dragon/sewer/sewer_room`，本体在 old；字节拷贝�
 ## 深度功能测试（2026-11-04，deku open/dforest2i 薄别名 §6.15）
 
 `keep/forest/dforest7` 与 `open/old/dforest*` 继承 `/d/deku/open/dforest2i`，本体与 `forest2i` 同迁 `/d/deku/forest/forest2i`。薄别名。证明：HEAD 3 FAIL；树 3 PASS。
+
+
+## 深度功能测试（2026-11-09，POCKETARMOUR §6.16）
+
+avatar `pocket` 继承未定义的 `POCKETARMOUR`，而 `std.h` 仅有 `PARMOUR`→`/std/pocketarmour`。补 `#define POCKETARMOUR "/std/pocketarmour"`；两份截断的 `pocket.lpc` 补上 `set_value(1);` 与收尾 `}`。证明：HEAD 1/3 PASS → 树 3 PASS（新加载 2）。

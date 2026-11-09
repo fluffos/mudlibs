@@ -1276,3 +1276,5 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-11-04, DAEMON corpus → /std/cmd_m):** twenty-three ES/xkx-lineage libs (`jhfy*`/`fys`/`hy5`/`dreamofseven`/`pkuxkx`/…): network `pingd`/`pingtcp` inherit undef `DAEMON`. `#define DAEMON "/std/cmd_m"` in `mudlib.h`, adopt a config.h-free `std/cmd_m.lpc` (TMI create/clean_up/prevent_shadow), and restore missing `include/uid.h` from tmi2. Proof: six-lib sample HEAD 0/3 → 3 PASS each.
 
+
+**Also (2026-11-09, pkuxkx BOW/HOOK/PIKE/STICK + shadowgate POCKETARMOUR):** (1) pkuxkx sjsz weapons inherit undef `BOW`/`HOOK`/`PIKE`/`STICK` — adopt the four bases (+ `F_*`) from bmxkx2001 and define them in both `weapon.h` copies. Proof: HEAD 0/18 → 16 PASS (`kusang-bang`/`yuzhu-zhang` still `::create()` vs `F_UNIQUE` order; `M_WEAPON` deferred). (2) shadowgate avatar `pocket` inherits undef `POCKETARMOUR` while `PARMOUR` already names `/std/pocketarmour` — `#define POCKETARMOUR`; close the truncated `create()`. Proof: HEAD 1/3 → 3 PASS.
