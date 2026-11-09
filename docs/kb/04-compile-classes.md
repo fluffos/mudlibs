@@ -1294,6 +1294,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-11-09, RAKE + UNARMED + NECKLACE + CLOTH/F_LIQUID):** (1) xxcq/xxcqii/xxcqii2 `RAKE` — adopt sjplii rake + define. Proof: 3/3 PASS each. (2) sjplgfjxb `UNARMED` — mhxy unarmed + define. Proof: 2/2 PASS. (3) wxddym `NECKLACE` — thin alias to `neck` + define. Proof: 6/6 PASS. (4) zzhj `CLOTH` + `F_LIQUID` — cloth.lpc + zzfy liquid. Proof: 5/5 PASS. MEDICAL_BOOK (tianxiawuxue) still deferred (sort_string/filter_color sefuns).
 
+**Also (2026-11-09, F_CLOTHNAME xiyouji2006/xyj2006n/xyj2006zzzhx):** file `/feature/clothname.lpc` present; `#define F_CLOTHNAME` missing. Restore next to other `F_*` (dtxywzxzb). Proof: skirt1 newly loads in all three, 0 regress.
+
 **Also (2026-11-09, wxddym INLAID):** `clone/enchase/*` inherited undef `INLAID` (80). Adopt yhwhckdm `/inherit/item/inlaid` + `#define INLAID` next to existing `TESSERA` (distinct `is_inlaid` vs `is_tessera`). Proof: 81/81 PASS, 0 regress.
 
 **Also (2026-11-09, zzhj DAEMON/WHIP/FORK/WAIST + WAREHOUSE + SUPER_NPC):** (1) zzhj: `#define DAEMON "/std/cmd_m"` (cmd_m already present) + zzhj-style whip/fork + waist. Proof: 9/9 PASS. (2) wxddym: adopt nt6 warehouse+price.h. Proof: warehouse PASS (business needs businessd). (3) shenmo: define SUPER_NPC thin-alias to `/d/snowtu/npc/super_npc`. Proof: alias PASS. JOBNPC deferred (NPC_D).
