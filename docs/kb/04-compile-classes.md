@@ -1347,4 +1347,4 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-11-09, COMMAND hhsj/nitan170911/xfbhh/nt6nitan6win):** same nitan6/nt6 shape: `#define COMMAND F_COMMAND` + empty `include/feature.h` (§6.23). Proof: each fgrep HEAD 0/1 → 1 PASS.
 
-**Also (2026-11-09, F_NOCLONE shujian3):** define points at missing `/feature/noclone.lpc`; adopt sjshv150 body (`me->query` form). Proof: base FAIL→PASS; pet still blocked on undef `F_OBSAVE`.
+**Also (2026-11-09, F_NOCLONE shujian3):** undef `F_NOCLONE` — `#define F_NOCLONE "/feature/noclone.lpc"` + adopt sjshv150 body (`me->query` form). Proof: base FAIL→PASS; pet then blocked on undef `F_OBSAVE` (`DBASE_D`).

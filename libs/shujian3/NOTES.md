@@ -459,4 +459,4 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 
 ## F_NOCLONE 收养（2026-11-09，KB 04 §6.15/§6.16）
 
-`F_NOCLONE` 已指向 `/feature/noclone.lpc`，文件缺失。从手足 sjshv150 收养（`me->query` 风格与本库一致）。证明：基类 HEAD FAIL → PASS；唯一用户 `inherit/char/pet` 仍因未定义 `F_OBSAVE` 失败（跳过项）。
+`inherit/char/pet` 继承未定义的 `F_NOCLONE`。补 `#define F_NOCLONE "/feature/noclone.lpc"`，并从手足 sjshv150 收养该文件（`me->query` 风格与本库一致）。证明：基类 FAIL→PASS；pet 进而卡在未定义的 `F_OBSAVE`（需 `DBASE_D`，跳过项）。
