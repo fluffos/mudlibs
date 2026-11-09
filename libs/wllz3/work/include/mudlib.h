@@ -11,4 +11,5 @@
 #define MUD_ADMIN               "蝴蝶君[Robert]"
 #define MUD_WEB                 "http://www.mud.nanhai.net"
 #define MUDLIB_MAIL             "robert_st@sina.com"
+#define DAEMON                  "/std/cmd_m"
 #endif
