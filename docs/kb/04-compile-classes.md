@@ -1340,3 +1340,5 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 **Also (2026-11-09, F_BVENDOR wmkj):** same `/u/xiha/banghui/` hole as BHNPC; adopt yxcs `/u/lonely/banghui/vendor.lpc` → `/u/xiha/banghui/vendor.lpc`. Proof: HEAD 0/6 → 6 PASS (base + 5 merchants).
 
 **Also (2026-11-09, MI_XIAO zxty08nxgbb):** missing `music.h` + `/inherit/misc/_xiao`; sibling zxty already ships both. Proof: HEAD 0/2 → 2 PASS.
+
+**Also (2026-11-09, BULETIN_BOARD wmkj):** typo-macro points at missing `/u/xiha/inherit/bboard`; adopt yxcs `/u/lonely/inherit/bboard.lpc` (byte-identical to local `/inherit/misc/bboard.lpc`). Proof: HEAD 0/2 → 2 PASS.

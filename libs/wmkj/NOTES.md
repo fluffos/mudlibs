@@ -1265,3 +1265,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## F_BVENDOR 收养（2026-11-09，KB 04 §6.15/§6.16）
 
 `F_BVENDOR` 已指向 `/u/xiha/banghui/vendor`，文件缺失。从手足 yxcs `/u/lonely/banghui/vendor.lpc` 收养到该路径（与 BHNPC 同一帮会目录）。证明：HEAD 0/6 → 6 PASS（`vendor` + 5 个 `inherit F_BVENDOR` 商人）。
+
+## BULETIN_BOARD 收养（2026-11-09，KB 04 §6.15/§6.16）
+
+`cmds/usr/news` 继承 `BULETIN_BOARD`（指向 `/u/xiha/inherit/bboard`），文件缺失。从手足 yxcs `/u/lonely/inherit/bboard.lpc` 收养到该路径（与本库 `/inherit/misc/bboard.lpc` 同文）。证明：HEAD 0/2 → 2 PASS。
