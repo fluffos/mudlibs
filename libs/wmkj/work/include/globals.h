@@ -71,6 +71,7 @@
 #define SIMUL_EFUN_OB   "/adm/obj/simul_efun"
 #define USER_OB     "/clone/user/user"
 #define VOID_OB     "/clone/misc/void"
+#define YIZHAN		"/clone/room/yizhan"
 // Inheritable Standard Objects
 #define BULLETIN_BOARD  "/inherit/misc/bbsboard"
 #define BULETIN_BOARD  "/u/xiha/inherit/bboard.lpc"
