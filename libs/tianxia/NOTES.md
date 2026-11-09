@@ -1158,3 +1158,8 @@ functionally re-tested live on this lib.
 ## 深度功能测试（2026-11-09，DAEMON→cmd_m 残余语料扫 §6.16/§6.15）
 
 `adm/daemons/network/pingd|pingtcp`（或同族路径）继承 `DAEMON`：补 `#define DAEMON "/std/cmd_m"`（若缺），收养精简 `std/cmd_m.lpc`，并在需要时补 `include/uid.h`。本轮为 2026-11-04 二十三库扫的残余。
+
+## FACE 同库孪生（2026-11-09，KB 04 §6.15/§6.16）
+
+`d/houjizhen/npc/obj/mask` 继承未定义的 `FACE`。以本库 `std/armor/head.lpc` 为模板写出 `std/armor/face.lpc`（`TYPE_FACE`），并在 `armor.h` 补 `#define FACE` / `TYPE_FACE`。证明：HEAD 0/2 → 2 PASS。
+

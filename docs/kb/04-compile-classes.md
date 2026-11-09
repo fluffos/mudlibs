@@ -1312,3 +1312,5 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 
 **Also (2026-11-09, F_UNIQUE tianlongbabu/yxsj/yxzsj):** three ES-lineage hosts inherit undef `F_UNIQUE` with no `/feature/unique`. Adopt es2 `unique.lpc` + `#define F_UNIQUE`. (xo*/xajh* already ship the file — alone-scan false positives when FEATURE_DIR expands.) Deferred: wilderness Lima `DAEMON` (debug lpcc lacks LIMA options); xo_final `F_FIRST` (nt6 first needs `full_self`/`competition_with`/`query_competitor`). Proof: tlbb 0/4→4 PASS; yxsj/yxzsj 0/3→3 PASS each.
+
+**Also (2026-11-09, FACE tianxia):** mask inherits undef `FACE`. Same-lib twin of `std/armor/head` as `face` + `#define FACE`/`TYPE_FACE`. CLAW still deferred (no ES-style `init_claw` donor; dreamofseven uses beast_weapon_prop). Proof: 0/2→2 PASS.
