@@ -1294,6 +1294,8 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-11-09, RAKE + UNARMED + NECKLACE + CLOTH/F_LIQUID):** (1) xxcq/xxcqii/xxcqii2 `RAKE` — adopt sjplii rake + define. Proof: 3/3 PASS each. (2) sjplgfjxb `UNARMED` — mhxy unarmed + define. Proof: 2/2 PASS. (3) wxddym `NECKLACE` — thin alias to `neck` + define. Proof: 6/6 PASS. (4) zzhj `CLOTH` + `F_LIQUID` — cloth.lpc + zzfy liquid. Proof: 5/5 PASS. MEDICAL_BOOK (tianxiawuxue) still deferred (sort_string/filter_color sefuns).
 
+**Also (2026-11-09, wllz3 NEWS_BOARD):** undef NEWS_BOARD aliased to existing BULLETIN_BOARD path /inherit/misc/bboard; retarget location to existing wizard_room. Proof: news_b newly loads.
+
 **Also (2026-11-09, FINGER zhonghua2/zhyx):** TYPE_FINGER present, macro/file missing. Same-lib twin of `neck.lpc` as `/inherit/armor/finger` + `init_finger()` for jade-ring; `#define FINGER`. Proof: 5/5 and 6/6 PASS.
 
 **Also (2026-11-09, DAEMON residual hy/wllz3/xajhxo):** same recipe as prior corpus sweep: `#define DAEMON "/std/cmd_m"` + stripped `cmd_m.lpc`/`uid.h` where missing (wllz3 define-only). Proof: pingd/pingtcp newly load; telnetd/userid still need member_group/priv.h. wilderness deferred (Lima DAEMON -> /std/daemon).

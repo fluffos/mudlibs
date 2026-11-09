@@ -171,3 +171,7 @@ ouyangfeng：`tell_object("…推天式…")` → `tell_object(v1, …)`。
 ## 深度功能测试（2026-11-09，DAEMON→cmd_m 残余语料扫 §6.16/§6.15）
 
 `adm/daemons/network/pingd|pingtcp` 继承未定义的 `DAEMON`；`std/cmd_m.lpc` 与 `uid.h` 先前已在，仅缺宏。补 `#define DAEMON "/std/cmd_m"`。证明：pingd/pingtcp newly load；telnetd 仍缺 `member_group`，另案。
+
+## 深度功能测试（2026-11-09，NEWS_BOARD 薄别名 §6.16）
+
+`clone/board/news_b` 继承未定义的 `NEWS_BOARD`；本库已有 `BULLETIN_BOARD`->`/inherit/misc/bboard`。补 `#define NEWS_BOARD "/inherit/misc/bboard"`。另：`location` 指向缺失的 `/d/wizard/news_room`，改挂已有的 `wizard_room`（与 wiz_b 同室）。证明：news_b newly load，0 regress。
