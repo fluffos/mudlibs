@@ -1522,3 +1522,8 @@ tianzun → `ob`；shenxiang → `me`。
 
 `daemon/class/jwm/.../jianhun` 与 `daemon/skill/godsword` 继承未定义的 `SSSERVER`（仅 `u/xdao/globals.h` 有宏，全局头没有，文件也缺）。从手足 dtxyzjb 收养 `/std/ssserver.lpc`，并在 `globals.h` 补 `#define SSSERVER`。证明：`/std/ssserver` HEAD FAIL → PASS（newly loading）；consumers 仍缺 `F_FUNCTION` / `sp_attack*`（另案）。BI/DHAMMER 本轮未做（无干净 `init_bi` 供体；DHAMMER→HAMMER 别名后 dhammer 仍因 `%n`/self.h 语法失败）。
 
+
+## F_FUNCTION 收养（2026-11-09，KB 04 §6.15/§6.16）
+
+`jianhun` / `ai-sword` 等继承未定义的 `F_FUNCTION`（`query_function` / `function_improved`）。从手足 kxkj 收养 `feature/function.lpc`，并补 `#define F_FUNCTION`。证明：HEAD 2 PASS / 2 FAIL → tree 4 PASS（newly loading 2）。
+
