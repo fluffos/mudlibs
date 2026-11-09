@@ -552,3 +552,7 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## 深度功能测试（2026-11-09，BOW/HOOK/PIKE/STICK §6.15/§6.16）
 
 `d/bwdh/sjsz` 武器继承未定义的 `BOW`/`HOOK`/`PIKE`/`STICK`，`weapon.h` 也缺宏与基类文件。从 `bmxkx2001` 收养 `inherit/weapon/{bow,hook,pike,stick}.lpc` 及 `_*.lpc`，并在两份 `weapon.h` 补宏（含 `F_*`）。证明：18 路径 HEAD 0 PASS → 树 16 PASS（新加载 16）；`kusang-bang`/`yuzhu-zhang` 在 STICK 解决后暴露 `::create()` 无父（与 `F_UNIQUE` 秩序）—剩余。`M_WEAPON` 延迟（`set_desc()` 无参与基类三参不匹）。
+
+## 深度功能测试（2026-11-09，/std/jboard 薄别名 §6.15）
+
+`obj/board/wizard_j` 继承缺失的 `/std/jboard`，本体在 `/inherit/misc/jboard`（`PLAN_BOARD` 已指向此处）。薄别名 `std/jboard.lpc`；档案亦无 `/d/wiz/jobroom`，`setup()` 里 `move()` 会令留言板加载失败——补最小 jobroom（无外连出口）。证明：jboard/jobroom/wizard_j HEAD 未载 → 树 PASS（plan_b 本已 PASS）。
