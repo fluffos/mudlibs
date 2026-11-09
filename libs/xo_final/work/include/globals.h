@@ -237,6 +237,7 @@
 #define SKILL_LONG          STD_DIR "skill/long"
 #define SKILL_SHORT         STD_DIR "skill/short"
 #define SKILL_FORCE         STD_DIR "skill/force"
+#define FORCE               STD_DIR "skill/force"
 #define FORCE_YANG          STD_DIR "skill/force_yang"
 #define FORCE_YIN           STD_DIR "skill/force_yin"
 #define ART                 STD_DIR "skill/art"

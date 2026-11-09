@@ -636,3 +636,7 @@ pplroomd：`tell_object("ob", …)`→`tell_object(ob, …)`。
 
 删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
 
+
+## FORCE 别名（2026-11-09，KB 04 §6.16）
+
+`system/skill/notuse/huashan-xinfa` 继承未定义的 `FORCE`；`SKILL_FORCE` 已指向现成的 `/system/std/skill/force`。按手足 xo/xajh2 补 `#define FORCE STD_DIR "skill/force"`。证明：HEAD 1 PASS / 1 FAIL → 2 PASS。
