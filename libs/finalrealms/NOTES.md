@@ -892,3 +892,7 @@ elf smith / smithr：`tell_object("Eldevan…")` → `tell_object(this_player(),
 ## 深度功能测试（2026-11-04，drow scimitar rot 改指向 §6.15）
 
 `d/newbie/drow/weapons/scimitar` 继承缺失的 `/d/bf/banefall/weapons/rot`；文件内注释写明本应 `/obj/weapon`。改指向。证明：HEAD 1 FAIL；树 2 PASS。
+
+## 深度功能测试（2026-11-09，elf gloom shops/restock 收养 §6.15）
+
+十个 newbie elf gloom/fo 房间继承缺失的 `/d/hoerk/belaern/s_jung/city/shops/restock.lpc`（本库 `/d/hoerk` 树整区未随档）。同库 goblin `rooms/restock.lpc` 已是 Taniwha 的 restock() mixin，按路径收养一份。证明：8 gloom + fo3 共 9 个消费方 HEAD FAIL → PASS；mixin 单独 load 在孤儿 `/d/hoerk` 路径上仍 Fail to load（inherit 编译可用）；`randomcre` 另有未声明 `char`/`t`/`p`，不在本类。

@@ -139,6 +139,7 @@
 #define F_TREEMAP		"/feature/treemap.lpc"
 #define F_UNIQUE		"/feature/unique.lpc"
 #define F_VENDOR		"/feature/vendor.lpc"
+#define F_REMOVEANSI		"/feature/removeansi.lpc"
 #define F_VENDOR_SALE   "/feature/vendor_sale.lpc"
 #define F_FROZEN        "/feature/frozen.lpc"
 // Profiling switches

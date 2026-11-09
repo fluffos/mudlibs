@@ -1284,3 +1284,5 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 
 **Also (2026-11-09, WEAPONTYPE/AMULET/ARMOR aliases):** (1) hymud twin of hy5: `#define WEAPONTYPE "/inherit/weapon/weapon"` — inherit syntax cleared; template `valuetext` residue remains. (2) xiaoyuxiyou/xyxyutf8: define `AMULET`/`TYPE_AMULET` and ship `std/armor/amulet.lpc` — 6/6 newly load each. (3) seven libs whose `globals.h` points `ARMOR` at missing `/std/armor` while `/inherit/armor/armor` exists — thin-alias `std/armor.lpc`; ruanwei-jia newly loads on sampled hosts.
+**Also (2026-11-09, yueying F_REMOVEANSI + yszz M_WEAPON + FR restock):** (1) yueyingqiyuan cgi-bin inherits undef `F_REMOVEANSI` — adopt mhxy `/feature/removeansi.lpc` and define the macro (mhxy twin). Proof: HEAD 0/14 → 14 PASS. (2) yszz `M_WEAPON` → missing `/std/weapon/weapon`; adopt xiyouji2003 body (init_* + set_desc). Proof: weapon + six m_* HEAD 0/7 → 7 PASS. (3) finalrealms elf gloom rooms inherit missing `/d/hoerk/.../shops/restock`; adopt same-lib goblin restock mixin. Proof: 9 consumers newly load (randomcre still has undeclared locals — separate).
+
