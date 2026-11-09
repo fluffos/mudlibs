@@ -173,6 +173,7 @@
 #define SMITHSHOP           STD_DIR "room/smithshop"
 #define SHOP                STD_DIR "room/shop"
 #define MARRIAGEROOM        STD_DIR "room/mroom"
+#define PPLROOM             STD_DIR "room/pplroom"
 #define SOLDIER             "/d/city/capital/npc/soldier0"
 #define ROAD                STD_DIR "room/road"
 #define SKILL               STD_DIR "skill"

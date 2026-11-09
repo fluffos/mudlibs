@@ -1350,3 +1350,5 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 **Also (2026-11-09, F_NOCLONE shujian3):** undef `F_NOCLONE` — `#define F_NOCLONE "/feature/noclone.lpc"` + adopt sjshv150 body (`me->query` form). Proof: base FAIL→PASS; pet then blocked on undef `F_OBSAVE` (`DBASE_D`).
 
 **Also (2026-11-09, FORCE xo_final):** `#define FORCE STD_DIR "skill/force"` (file already present; matches xo/xajh2). Proof: HEAD 1/2 → 2 PASS.
+
+**Also (2026-11-09, PPLROOM xajhxo):** missing `#define PPLROOM STD_DIR "room/pplroom"` (siblings have it; template in pplroom writes `inherit PPLROOM`). Alone-scan undef cleared; base still PASS.

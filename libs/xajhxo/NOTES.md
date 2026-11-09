@@ -1018,3 +1018,7 @@ xinfang/chatroom：`tell_object("ob", …)`→`tell_object(ob, …)`。
 ## 深度功能测试（2026-11-09，DAEMON→cmd_m 残余语料扫 §6.16/§6.15）
 
 `system/daemon/**/network/services/pingd|pingtcp` 继承未定义的 `DAEMON`。补 `#define DAEMON "/std/cmd_m"`，收养精简 `std/cmd_m.lpc` 与 `include/uid.h`。证明：两套 pingd/pingtcp 与 cmd_m newly load；userid 仍缺 `priv.h`/`config.h`，另案。
+
+## PPLROOM 宏（2026-11-09，KB 04 §6.16）
+
+`pplroom.lpc` 生成玩家住房源码时写入 `inherit PPLROOM`，但 `globals.h` 从未定义该宏（手足 xo/xajh2/xo_final 均有 `#define PPLROOM STD_DIR "room/pplroom"`）。按同形补上。alone-scan 的 undef PPLROOM 消失；`/system/std/room/pplroom` 本身仍 PASS。
