@@ -94,6 +94,7 @@
 // Inheritable Standard Objects
 #define BOOK                    "/inherit/item/book"
 #define BULLETIN_BOARD          "/inherit/misc/bboard"
+#define NEWS_BOARD              "/inherit/misc/bboard"
 #define CHARACTER               "/inherit/char/char"
 #define COMBINED_ITEM           "/inherit/item/combined"
 #define EQUIP                   "/inherit/misc/equip"
