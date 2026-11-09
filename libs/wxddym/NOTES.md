@@ -987,3 +987,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## securityd 的存档 read 表丢了：`Domain` 身份读 `/d/` 下的文件回 0，1 处（2026-11-02，KB 06 §7.374）
 
 老驱动时代管理员把 `securityd.lpc` 的 read 规则存进了 `data/static/securityd.o`，档案里没有这个存档：凡不是 wizard / room / NPC / item 的对象（euid 是 `Domain`，来自 `/d`、`/obj`、`/clone` 的 `creator_file()`）现在什么都读不到——`read_file()` 直接回 0（读被拒绝不报错，只是回 0）。红楼梦 / 西游记的书章（`d/obj/books-nonskill/hmeng*.lpc` 的 `start_more(read_file(..))`）空白，诗社连加载都过不去，迷宫房间拿不到地图。本库 1 处（1 个文件）：`adm/daemons/securityd.lpc`。`scripts/lpc_fix_read_trust.py` 在 `valid_read()` 的 `if (!euid) return 0;` 之前加一条带标记的规则：`Domain` 对象可以读 `/d/` 下的文件，每个对象可以读自己旁边的文件（`__DIR__ "maze.map"`）；`/data`、`/adm`、`/log`、`/u` 照旧。证明：求值对象放在 `/d/` 下的目录（euid `Domain`），改前 `read_file` 回 0，改后回文件首行；HEAD / 工作树加载对比 0 退步。
+
+## 深度功能测试（2026-11-09，NECKLACE 薄别名 §6.15/§6.16）
+
+多项项链继承未定义的 `NECKLACE`；颈部本体在 `/inherit/armor/neck`。薄别名 `necklace.lpc` 并补宏。证明：6/6 PASS。

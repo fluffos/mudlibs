@@ -5,6 +5,7 @@
 #define HEAD		"/inherit/armor/head"       //头
 #define FACE 	"/inherit/armor/face"       //脸
 #define NECK		"/inherit/armor/neck"       //脖子
+#define NECKLACE		"/inherit/armor/necklace"	//项链
 #define CLOTH		"/inherit/armor/cloth"      //衣服
 #define ARMOR		"/inherit/armor/armor"      //装甲
 #define SURCOAT		"/inherit/armor/surcoat"     //外套

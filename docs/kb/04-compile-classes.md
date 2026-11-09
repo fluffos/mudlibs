@@ -1292,3 +1292,5 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-11-09, F_NOCLONE + NEEDLE + PANTS/BREAST):** (1) zzfy/zzfy3/wqfy ultra NPCs inherit undef `F_NOCLONE` — adopt hell `noclone.lpc` (one-arg `query`) and define the macro. Proof: noclone PASS; ultrap/NPC_D residual. (2) shenmo `NEEDLE` — adopt mhxy `/std/weapon/needle` and define. Proof: 0/2 → 2 PASS. (3) sjplgfjxb/sjplii/sjpl2 `PANTS`/`BREAST` — define + `std/armor/{pants,breast}`. Proof: cloth consumers PASS.
 
+**Also (2026-11-09, RAKE + UNARMED + NECKLACE + CLOTH/F_LIQUID):** (1) xxcq/xxcqii/xxcqii2 `RAKE` — adopt sjplii rake + define. Proof: 3/3 PASS each. (2) sjplgfjxb `UNARMED` — mhxy unarmed + define. Proof: 2/2 PASS. (3) wxddym `NECKLACE` — thin alias to `neck` + define. Proof: 6/6 PASS. (4) zzhj `CLOTH` + `F_LIQUID` — cloth.lpc + zzfy liquid. Proof: 5/5 PASS. MEDICAL_BOOK (tianxiawuxue) still deferred (sort_string/filter_color sefuns).
+

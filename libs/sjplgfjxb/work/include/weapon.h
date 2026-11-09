@@ -14,6 +14,7 @@
 #define AXE				"/std/weapon/axe"
 #define BLADE			"/std/weapon/blade"
 #define DAGGER			"/std/weapon/dagger"
+#define UNARMED			"/std/weapon/unarmed"
 #define FORK			"/std/weapon/fork"
 #define HAMMER 			"/std/weapon/hammer"
 #define SWORD			"/std/weapon/sword"

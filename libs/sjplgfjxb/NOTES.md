@@ -445,3 +445,7 @@ bingbu：`tell_object("ob")`→`tell_room(ob)`；`tell_room("where")`→`tell_ro
 ## 深度功能测试（2026-11-09，PANTS/BREAST §6.16/§6.15）
 
 `obj/cloth` 裤/肚兜继承未定义的 `PANTS`/`BREAST`。`armor.h` 补宏与 `TYPE_*`，收养 `std/armor/pants`（sjplii）并新增同形 `breast.lpc`。证明：6/6 PASS。
+
+## 深度功能测试（2026-11-09，UNARMED §6.16/§6.15）
+
+`d/city/obj/dami` 继承未定义的 `UNARMED`。从 mhxy 收养 `/std/weapon/unarmed`，`weapon.h` 补宏。证明：2/2 PASS。
