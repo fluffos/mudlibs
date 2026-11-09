@@ -17,6 +17,7 @@
 #define BLADE                   "/std/weapon/blade"
 #define BOW                     "/std/weapon/bow"
 #define DAGGER                  "/std/weapon/dagger"
+#define NEEDLE                  "/std/weapon/needle"
 #define FORK                    "/std/weapon/fork"
 #define HAMMER                  "/std/weapon/hammer"
 #define MACE                   "/std/weapon/mace"
