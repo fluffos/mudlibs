@@ -634,3 +634,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 深度功能测试（2026-11-03，§7.19 enable_player 重入）
 
 `feature/command.lpc` 的 `enable_player()` 加 `in_enable_player_now` 守卫（`scripts/lpc_fix_enable_player_guard.py`，KB 05 7.19）：门派 NPC `init()`→`setup()`→`enable_player()`→`enable_commands()` 再跑 `init()` 时直接返回，避免 Too deep recursion。
+
+## 深度功能测试（2026-11-09，DAEMON→cmd_m 残余语料扫 §6.16/§6.15）
+
+`adm/daemons/network/pingd|pingtcp`（及 `海洋2002/hy3` 副本）继承未定义的 `DAEMON`。补 `#define DAEMON "/std/cmd_m"`，收养精简 `std/cmd_m.lpc` 与 `include/uid.h`（hy5 同源）。证明：pingd/pingtcp（主树+副本）与 cmd_m newly load；telnetd/te/userid 仍缺 `member_group`/`priv.h`/`config.h`，另案。

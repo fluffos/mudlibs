@@ -1015,3 +1015,6 @@ xinfang/chatroom：`tell_object("ob", …)`→`tell_object(ob, …)`。
 
 删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
 
+## 深度功能测试（2026-11-09，DAEMON→cmd_m 残余语料扫 §6.16/§6.15）
+
+`system/daemon/**/network/services/pingd|pingtcp` 继承未定义的 `DAEMON`。补 `#define DAEMON "/std/cmd_m"`，收养精简 `std/cmd_m.lpc` 与 `include/uid.h`。证明：两套 pingd/pingtcp 与 cmd_m newly load；userid 仍缺 `priv.h`/`config.h`，另案。
