@@ -456,3 +456,7 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## 深度功能测试（2026-11-09，DAEMON→cmd_m 残余语料扫 §6.16/§6.15）
 
 `adm/daemons/network/pingd|pingtcp`（或同族路径）继承 `DAEMON`：补 `#define DAEMON "/std/cmd_m"`（若缺），收养精简 `std/cmd_m.lpc`，并在需要时补 `include/uid.h`。本轮为 2026-11-04 二十三库扫的残余。
+
+## F_NOCLONE 收养（2026-11-09，KB 04 §6.15/§6.16）
+
+`F_NOCLONE` 已指向 `/feature/noclone.lpc`，文件缺失。从手足 sjshv150 收养（`me->query` 风格与本库一致）。证明：基类 HEAD FAIL → PASS；唯一用户 `inherit/char/pet` 仍因未定义 `F_OBSAVE` 失败（跳过项）。
