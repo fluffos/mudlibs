@@ -1342,3 +1342,5 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 **Also (2026-11-09, MI_XIAO zxty08nxgbb):** missing `music.h` + `/inherit/misc/_xiao`; sibling zxty already ships both. Proof: HEAD 0/2 → 2 PASS.
 
 **Also (2026-11-09, BULETIN_BOARD wmkj):** typo-macro points at missing `/u/xiha/inherit/bboard`; adopt yxcs `/u/lonely/inherit/bboard.lpc` (byte-identical to local `/inherit/misc/bboard.lpc`). Proof: HEAD 0/2 → 2 PASS.
+
+**Also (2026-11-09, F_BH wmkj):** adopt yxcs `/u/lonely/banghui/banghui.lpc` → `/u/xiha/banghui/banghui.lpc` (near-twin of local `feature/banghui.lpc`). Proof: base FAIL→PASS; sole user still blocked on undef `KZZNPC`.

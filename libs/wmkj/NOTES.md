@@ -1269,3 +1269,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## BULETIN_BOARD 收养（2026-11-09，KB 04 §6.15/§6.16）
 
 `cmds/usr/news` 继承 `BULETIN_BOARD`（指向 `/u/xiha/inherit/bboard`），文件缺失。从手足 yxcs `/u/lonely/inherit/bboard.lpc` 收养到该路径（与本库 `/inherit/misc/bboard.lpc` 同文）。证明：HEAD 0/2 → 2 PASS。
+
+## F_BH 收养（2026-11-09，KB 04 §6.15/§6.16）
+
+`F_BH` 已指向 `/u/xiha/banghui/banghui`，文件缺失。从手足 yxcs `/u/lonely/banghui/banghui.lpc` 收养到该路径（与本库 `/feature/banghui.lpc` 仅作者注释不同）。证明：基类 HEAD FAIL → PASS；唯一用户 `npc/yeyangzai/dazaizhu` 仍因未定义 `KZZNPC`/`get_npc_data` 失败（同 yandang 跳过项）。
