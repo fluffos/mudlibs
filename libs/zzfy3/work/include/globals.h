@@ -84,6 +84,7 @@
 #define SILVER_OB               "/obj/money/silver"
 #define GOLD_OB                 "/obj/money/gold"
 #define THCASH_OB               "/obj/money/thousand-cash"
+#define THGOLD_OB               "/obj/money/thousand-gold"
 #define TECASH_OB               "/obj/money/tenthousand-cash"
 #define SIMUL_EFUN_OB   "/adm/obj/simul_efun"
 #define USER_OB                 "/obj/user"
@@ -102,6 +103,7 @@
 #define ITEM                    "/std/item"
 #define LIQUID                  "/std/liquid"
 #define MONEY                   "/std/money"
+#define MONEY_D                 "/adm/daemons/moneyd"
 #define NPC                             "/std/char/npc"
 #define POWDER                  "/std/medicine/powder"
 #define ROOM                    "/std/room"
@@ -141,6 +143,7 @@
 #define F_SKILL                 "/feature/skill.lpc"
 #define F_TEAM                  "/feature/team.lpc"
 #define F_TREEMAP               "/feature/treemap.lpc"
+#define F_DEALER                "/feature/dealer.lpc"
 #define F_VENDOR                "/feature/vendor.lpc"
 #define F_NOCLONE		"/feature/noclone.lpc"
 // added by Tie Yu@fengyun 4/96

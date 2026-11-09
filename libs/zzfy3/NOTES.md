@@ -553,3 +553,7 @@ xkx 家族把钱放在 `/clone/money/`，ES2 家族放在 `/obj/money/`；本库
 ## 深度功能测试（2026-11-09，F_NOCLONE §6.16）
 
 `include/npc/ultra/*` 继承未定义的 `F_NOCLONE`。从 hell 收养 `/feature/noclone.lpc`，`globals.h` 补宏。证明：noclone PASS；ultra 续暴露 `NPC_D`/`ultrap` 另案。
+
+## 深度功能测试（2026-11-09，F_DEALER 收养 §6.15/§6.16）
+
+`d/xiakedao/npc/xiaoer2` 等继承未定义的 `F_DEALER`。从同系 xkyx3b 收养 `feature/dealer.lpc` 与 `adm/daemons/moneyd.lpc`，并补 `#define F_DEALER`、`#define MONEY_D`、`#define THGOLD_OB`（千两黄金档本库已有）。证明：moneyd/dealer/xiaoer2 3/3 PASS，0 regress。
