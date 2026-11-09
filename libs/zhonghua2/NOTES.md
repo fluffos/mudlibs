@@ -1209,3 +1209,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-11-03，§7.19 enable_player 重入）
 
 `feature/command.lpc` 的 `enable_player()` 加 `in_enable_player_now` 守卫（`scripts/lpc_fix_enable_player_guard.py`，KB 05 7.19）：门派 NPC `init()`→`setup()`→`enable_player()`→`enable_commands()` 再跑 `init()` 时直接返回，避免 Too deep recursion。
+
+## 深度功能测试（2026-11-09，FINGER 收养 §6.15/§6.16）
+
+`clone/newitem/newarmor/finger`、`questobj/jade-ring` 等继承未定义的 `FINGER`；`armor.h` 已有 `TYPE_FINGER` 但无宏、无 `/inherit/armor/finger`。按本库 `neck.lpc` 同款写出 `finger.lpc`（含 `init_finger()`→`setup()`，供 jade-ring），并补 `#define FINGER "/inherit/armor/finger"`。证明：全部 FINGER 消费者 newly load，0 regress。

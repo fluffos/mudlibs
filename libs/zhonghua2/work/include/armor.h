@@ -11,6 +11,7 @@
 #define WRISTS		"/inherit/armor/wrists"
 #define SHIELD		"/inherit/armor/shield"
 #define HANDS		"/inherit/armor/hands"
+#define FINGER		"/inherit/armor/finger"
 #define BOOTS		"/inherit/armor/boots"
 
 // Standard armor types

@@ -1128,3 +1128,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-11-09，DAEMON→cmd_m 残余语料扫 §6.16/§6.15）
 
 `adm/daemons/network/pingd|pingtcp`（或同族路径）继承 `DAEMON`：补 `#define DAEMON "/std/cmd_m"`（若缺），收养精简 `std/cmd_m.lpc`，并在需要时补 `include/uid.h`。本轮为 2026-11-04 二十三库扫的残余。
+
+## 深度功能测试（2026-11-09，FINGER 收养 §6.15/§6.16）
+
+`clone/newitem/newarmor/finger`、`questobj/jade-ring` 等继承未定义的 `FINGER`；`armor.h` 已有 `TYPE_FINGER` 但无宏、无 `/inherit/armor/finger`。按本库 `neck.lpc` 同款写出 `finger.lpc`（含 `init_finger()`→`setup()`，供 jade-ring），并补 `#define FINGER "/inherit/armor/finger"`。证明：全部 FINGER 消费者 newly load，0 regress。
