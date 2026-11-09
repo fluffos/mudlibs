@@ -1310,3 +1310,5 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-11-09, zzhj DAEMON/WHIP/FORK/WAIST + WAREHOUSE + SUPER_NPC):** (1) zzhj: `#define DAEMON "/std/cmd_m"` (cmd_m already present) + zzhj-style whip/fork + waist. Proof: 9/9 PASS. (2) wxddym: adopt nt6 warehouse+price.h. Proof: warehouse PASS (business needs businessd). (3) shenmo: define SUPER_NPC thin-alias to `/d/snowtu/npc/super_npc`. Proof: alias PASS. JOBNPC deferred (NPC_D).
 
+
+**Also (2026-11-09, F_UNIQUE tianlongbabu/yxsj/yxzsj):** three ES-lineage hosts inherit undef `F_UNIQUE` with no `/feature/unique`. Adopt es2 `unique.lpc` + `#define F_UNIQUE`. (xo*/xajh* already ship the file — alone-scan false positives when FEATURE_DIR expands.) Deferred: wilderness Lima `DAEMON` (debug lpcc lacks LIMA options); xo_final `F_FIRST` (nt6 first needs `full_self`/`competition_with`/`query_competitor`). Proof: tlbb 0/4→4 PASS; yxsj/yxzsj 0/3→3 PASS each.
