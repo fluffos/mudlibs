@@ -114,6 +114,7 @@
 #define F_CONDITION             "/feature/condition.lpc"
 #define F_DAMAGE                "/feature/damage.lpc"
 #define F_DBASE                 "/feature/dbase.lpc"
+#define F_DEALER		"/feature/dealer.lpc"
 #define F_EDIT                  "/feature/edit.lpc"
 #define F_ENCODING              "/feature/encoding.lpc"
 #define F_EQUIP                 "/feature/equip.lpc"
