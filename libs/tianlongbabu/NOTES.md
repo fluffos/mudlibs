@@ -268,3 +268,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 `d/canyon/bamboo/obj/parry_book`、`d/green/obj/jade`、`d/snow/npc/obj/old_book` 等 `inherit F_UNIQUE`，但 `globals.h` 无宏、`/feature/unique.lpc` 缺失。从手足 es2 收养 `unique.lpc`，并补 `#define F_UNIQUE "/feature/unique.lpc"`。证明：HEAD 0 PASS / 4 FAIL → tree 4 PASS（newly loading 4）。
 
+
+## F_MERCENARY 收养（2026-11-09，KB 04 §6.15/§6.16）
+
+`d/snow/npc/mercenary` 继承未定义的 `F_MERCENARY`。从手足 es2 收养 `/std/char/mercenary.lpc`（`accept_order`/`accept_info`），并补 `#define F_MERCENARY`。证明：HEAD 0/2 → 2 PASS。
+

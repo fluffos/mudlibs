@@ -1320,3 +1320,5 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 **Also (2026-11-09, UNARMED sjpl2/sjplii):** dami inherits undef `UNARMED` + `init_unarmed(5)`. Adopt sjplgfjxb `std/weapon/unarmed` + `#define UNARMED` (same as prior sjplgfjxb). Proof: 0/2→2 PASS each.
 
 **Also (2026-11-09, F_REMOVEANSI sjshv150):** passwd inherits undef `F_REMOVEANSI`. Adopt mhxy `feature/removeansi` + define (yueying twin). Proof: 0/2→2 PASS.
+
+**Also (2026-11-09, F_MERCENARY tianlongbabu/xyj451):** snow mercenary inherits undef `F_MERCENARY`. Adopt es2 `/std/char/mercenary` + define. Proof: 0/2→2 PASS each.

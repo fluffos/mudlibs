@@ -116,6 +116,7 @@
 #define F_LIQUID     "/feature/liquid.lpc"
 #define F_MASTER     "/std/char/master.lpc"
 #define F_MESSAGE     "/feature/message.lpc"
+#define F_MERCENARY		"/std/char/mercenary.lpc"
 #define F_MORE        "/feature/more.lpc"
 #define F_MOVE        "/feature/move.lpc"
 #define F_NAME        "/feature/name.lpc"
