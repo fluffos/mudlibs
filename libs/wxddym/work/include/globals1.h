@@ -228,6 +228,7 @@
 #define SNAKE                   "/inherit/char/snake"
 #define TASK                    "/inherit/item/task"
 #define TESSERA                 "/inherit/item/tessera"
+#define INLAID                  "/inherit/item/inlaid"
 #define WAREHOUSE               "/inherit/room/warehouse"
 #define WORM                    "/inherit/char/worm"
 #define SKILL_MODEL_UNARMED     "/inherit/meskill/skill_model_unarmed.lpc"
