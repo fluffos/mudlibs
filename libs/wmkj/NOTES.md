@@ -1255,3 +1255,8 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 
 `d/tangmen/tmyizhan` 继承未定义的 `YIZHAN`。从手足 xxcq 收养驿站套件：`clone/room/mache.lpc`/`mache.ini`，并把 `mache.h` 落成可继承的 `yizhan.lpc`（补 `inherit ROOM`，因本驱动不能把 `.h` 当 inherit 基类），`#define YIZHAN "/clone/room/yizhan"`。证明：HEAD 0/2 → 2 PASS（newly loading 2）。H_MAGIC_ITEM / BOARD_OB（Lima lpcc）/ F_QUESTER（`QUEST_D(x)` 宏冲突）本轮未做。
 
+
+## BHNPC 收养（2026-11-09，KB 04 §6.15/§6.16）
+
+`BHNPC` 已指向 `/u/xiha/banghui/bhnpc`，文件缺失。从手足 yxcs 收养同名基类到该路径。证明：HEAD 0/3 → 3 PASS。
+

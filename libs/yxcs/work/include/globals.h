@@ -123,7 +123,7 @@
 #define MAGIC          "/inherit/magic/magic.lpc"
 #define SELL_SALT   "/inherit/char/sell_salt"
 #define NPC_SAVE	"/inherit/char/npcsave"
-// #define BHNPC       "/u/lonely/banghui/bhnpc"
+#define BHNPC		"/u/lonely/banghui/bhnpc"
 #define BH_NPC       "/inherit/char/bh_npc"
 #define F_BH                    "/feature/banghui.lpc"
 #define QUEST            "/inherit/quest"
