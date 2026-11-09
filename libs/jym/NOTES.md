@@ -715,3 +715,8 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## 深度功能测试（2026-11-09，DAEMON→cmd_m 残余语料扫 §6.16/§6.15）
 
 `adm/daemons/network/pingd|pingtcp`（或同族路径）继承 `DAEMON`：补 `#define DAEMON "/std/cmd_m"`（若缺），收养精简 `std/cmd_m.lpc`，并在需要时补 `include/uid.h`。本轮为 2026-11-04 二十三库扫的残余。
+
+
+## 深度功能测试（2026-11-09，ARMOR→/std/armor 薄别名 §6.15）
+
+`globals.h` 将 `ARMOR` 定为 `/std/armor` 而文件缺失（`armor.h` 另有 `/inherit/armor/armor`）。薄别名 `std/armor.lpc` → `inherit "/inherit/armor/armor"`。证明：`ruanwei-jia` 等 HEAD FAIL → PASS。

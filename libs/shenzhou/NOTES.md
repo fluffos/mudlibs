@@ -1506,3 +1506,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 
 删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
 
+
+## 深度功能测试（2026-11-09，ARMOR→/std/armor 薄别名 §6.15）
+
+`globals.h` 将 `ARMOR` 定为 `/std/armor` 而文件缺失（`armor.h` 另有 `/inherit/armor/armor`）。薄别名 `std/armor.lpc` → `inherit "/inherit/armor/armor"`。证明：`ruanwei-jia` 等 HEAD FAIL → PASS。

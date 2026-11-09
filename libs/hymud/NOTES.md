@@ -1426,3 +1426,8 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 深度功能测试（2026-11-09，DAEMON→cmd_m 残余语料扫 §6.16/§6.15）
 
 `adm/daemons/network/pingd|pingtcp`（或同族路径）继承 `DAEMON`：补 `#define DAEMON "/std/cmd_m"`（若缺），收养精简 `std/cmd_m.lpc`，并在需要时补 `include/uid.h`。本轮为 2026-11-04 二十三库扫的残余。
+
+
+## 深度功能测试（2026-11-09，WEAPONTYPE §6.16）
+
+`obj/armor|weapon` 继承未定义的 `WEAPONTYPE`（与 hy5 同形）。`globals.h` 在 `S_WEAPON` 后补 `#define WEAPONTYPE "/inherit/weapon/weapon"`（本体已有）。证明：inherit 语法错误清除；模板 `valuetext`/`weighttext` 残留同 hy5。

@@ -145,6 +145,7 @@
 // for gem system(by xbd)
 #define F_GEMS			"/feature/gems.lpc"
 #define S_WEAPON		"/inherit/gems/weapon.lpc"
+#define WEAPONTYPE		"/inherit/weapon/weapon"
 #define S_ROBE			"/inherit/gems/robe.lpc"
 #define S_RING			"/inherit/gems/ring.lpc"
 #define F_ANA			  "/feature/anamichi.lpc"

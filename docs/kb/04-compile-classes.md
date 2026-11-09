@@ -1281,3 +1281,6 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 
 **Also (2026-11-09, DAEMON residual corpus):** 116 further ES/xkx-lineage libs still had undef or file-missing `DAEMON` after the 23-lib pass — same recipe (`#define DAEMON "/std/cmd_m"`, stripped `std/cmd_m.lpc`, `uid.h` when `#include <uid.h>`). Spot proof: bxsj/haiyang2/xkx2001/dtsl/hymud/zzfy/dtxywzxzb HEAD 0/3 → 3 PASS each. Skipped nested-only `hy`, backup-only `shenzhou`, `xajhxo` system path, and LIB_DAEMON hosts. LIB_ISQL alone-scan hits are false positives (`#ifdef __PACKAGE_DATABASE_DB__`, FluffOS only defines `__PACKAGE_DB__`).
+
+
+**Also (2026-11-09, WEAPONTYPE/AMULET/ARMOR aliases):** (1) hymud twin of hy5: `#define WEAPONTYPE "/inherit/weapon/weapon"` — inherit syntax cleared; template `valuetext` residue remains. (2) xiaoyuxiyou/xyxyutf8: define `AMULET`/`TYPE_AMULET` and ship `std/armor/amulet.lpc` — 6/6 newly load each. (3) seven libs whose `globals.h` points `ARMOR` at missing `/std/armor` while `/inherit/armor/armor` exists — thin-alias `std/armor.lpc`; ruanwei-jia newly loads on sampled hosts.
