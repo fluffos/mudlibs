@@ -859,3 +859,7 @@ avatar `pocket` 继承未定义的 `POCKETARMOUR`，而 `std.h` 仅有 `PARMOUR`
 ## 深度功能测试（2026-11-10，mine2 realms 路径 §6.15）
 
 `d/mine2/rooms/mine3` 继承 gitignored `/realms/zeek/mine`；本体在 `/d/mine2/mine`。改写 inherit。证明：listcheck 2 对象 HEAD 1 PASS / 1 FAIL → 树 2 PASS。
+
+## 深度功能测试（2026-11-10，saide scribe realms 路径 §6.15）
+
+`d/shadow/npc/scribe` 继承 gitignored `/realms/saide/scribe`；本体在 `/std/scribe`。改写 inherit。证明：listcheck HEAD 1 PASS / 2 FAIL → 树 2 PASS（`/realms/...` 仍 FAIL，预期）。

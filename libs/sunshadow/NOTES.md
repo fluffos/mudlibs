@@ -1116,3 +1116,7 @@ old 下水道继承 `/d/dragon/sewer/sewer_room`，本体在 old；字节拷贝�
 ## 深度功能测试（2026-11-10，mine2 realms 路径 §6.15）
 
 与 shadowgate 同改：`mine3` inherit → `/d/mine2/mine`。证明：listcheck 2 对象 HEAD 1 PASS / 1 FAIL → 树 2 PASS。
+
+## 深度功能测试（2026-11-10，saide scribe realms 路径 §6.15）
+
+与 shadowgate 同改：`npc/scribe` inherit → `/std/scribe`。证明：listcheck HEAD 1 PASS / 2 FAIL → 树 2 PASS。
