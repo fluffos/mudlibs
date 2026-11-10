@@ -758,3 +758,13 @@ issues encountered.
 
 删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
 
+
+## 深度功能测试（§10.7，2026-11-10）— 重测
+
+手启：`build-debug`；端口 40235。
+
+覆盖：注册 `fluffos`/`Mud@2026`/浮浮 → 巫師神殿 `look`/`score`/`inventory`/`who`/`say` →
+`east` 白魔法陣 / `west` 回神殿 → `quit` → 重连再进神殿/`score`/`quit`。
+
+驱动 stdout：无 compile warning、无 runtime Error。无新编程缺陷。
+（`data/login`/`data/user` 在本库 `.gitignore` 内，管理员档未入库。）
