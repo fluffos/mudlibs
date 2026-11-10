@@ -7,7 +7,7 @@ varargs string query_introduce(object knower, object who);
 varargs int    can_know_by(object knower);
 varargs int    can_rumor_by(object knower);
 // 功能函数
-varargs void   set_information(string key, string info);
+varargs void   set_information(string key, mixed info);
 varargs void   set_name(string name);
 // 状态机函数
 string  query_status();

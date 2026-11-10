@@ -42,3 +42,9 @@
 - `process_bar` 写 `"…" NOR` / `HIY` / `BBLU`，文件未 include `ansi.h`，且 `globals.h` 也不拉它 → `unexpected L_IDENTIFIER`。
 - 补 `#include <ansi.h>`。同形语料扫：44 个 `*/simul_efun/util.lpc`（含 `adm/kernel/`）。
 - 证明：本库 util 错误消失；手足 `yhyxs` 诊断 3→0。
+
+## §6.10 `set_information` 第二参 `string`→`mixed`（2026-11-10）
+
+- `inherit/misc/quest.lpc` / `include/quest.h` 把包装收窄为 `string`，任务文件传 `(: ask_npc :)` 时报 Bad type for argument 2；`QUEST_D` 本体已是 `mixed`。
+- 改为 `mixed`；语料同形 39 处（quest.h / quest.lpc 包装）。手足 `yhyxs` 的 `.lpc` 早已改过，本轮补其 `.h`。
+- 证明：yhlib `set_information` 诊断 36→0；可编 10942→10950。
