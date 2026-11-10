@@ -310,3 +310,12 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 `message_vision("…")` 补第二参（`me` / `TP` / `this_player()`）。
 
+
+## 深度功能测试（§10.7，2026-11-10）— 重测
+
+手启：`build-debug`；端口 40391。
+
+覆盖：`fluffos` → 巫师效验码(`Mud@2026`) → 密码 → 北京客店 `look`/`inventory`/`score`/`who`/`hp`/`time`/`save` →
+`fly yz` 扬州客栈 → `quit` → 重连仍在扬州/`score`/`quit`。
+
+驱动 stdout：无 compile warning、无 runtime Error。无新编程缺陷。
