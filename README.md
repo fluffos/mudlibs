@@ -148,7 +148,7 @@ libs for local convenience, and grants full in-game wizard/admin power
 
 ## The collection — numbering, lineage, and status
 
-Each **unique game/codebase** has a sequential number (`001`–`185`, still
+Each **unique game/codebase** has a sequential number (`001`–`187`, still
 growing as new archives get dropped in). Confirmed derivatives — later
 snapshots, rebrands, site builds, and close forks of the *same* codebase —
 share the base number with a `-1`/`-2`/`-3` suffix (e.g. `031`

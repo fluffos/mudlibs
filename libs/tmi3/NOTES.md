@@ -2,20 +2,19 @@
 
 ## 来源
 
-- Archive: `tmi-3-0.1a.tar.gz`（`fluffos/mudlib-archives` release `v1.0.0`）
+- Archive: `tmi-3-0.1a.tar.gz`（`fluffos/mudlib-archives` release `v1.0.0`；本地 `archives/tmi3-a01a.tar.gz`）
 - 上游历史：SourceForge `tmi-3` / LPCommunity；MudOS 时代 TMI-2 后继骨架
 - Issue 线索：GitHub `#16`（MudOS mudlibs 批量建议）
 
 ## Bring-up（2026-11-10）
 
-1. 解包后 `config.fluffos`：port `40392`，`mudlib directory` → `./`，global include `include/mudlib.h`，`default error message` 设为 `What?`
-2. 全树 `.c` → `.lpc`；`include/config.h` 的 `SAVE_EXTENSION` 由 `".c"` 改为 `".o"`（§6.11）
-3. `bin/mudlib` 里两处硬编码 `/tmi/` 路径改为相对 `./`（driver / mudlib 根）
-4. `cmds/std/look.lpc`：去掉函数名旁的 `nomask`（FluffOS 不允许）
-5. `adm/daemons/command.lpc`：`valid_cmd_path` 增加 `/cmds/std/`、`/cmds/file/`、`/cmds/object/`（原仅信任 `/cmds/admin/`，玩家 `look`/`quit` 被拒）
-6. `adm/daemons/virtual.lpc`：`compile_object` 对缺失文件先 `file_size` 再 `load_object`，避免 virtual fallback 对不存在路径递归（§7.327）
-7. `std/user/save.lpc`：`restore`/`save` 增加 `catch`，坏/空存档不炸登录
-8. `log/`、`data/users/{a..z}/`、`data/connection/` 建齐；`adm/daemons/log.lpc` 的 `assure_file` 用 `mkdir` 代替不存在的 `make_dir` efun
+1. 解包 `lib/` → `work/`；`config.fluffos`：port `40392`，mudlib → `work/`，global include `/include/global.h`，`default error message` → `What?`
+2. 全树 `.c` → `.lpc`；同步改：
+   - `include/global.h`：`OBJECT`/`CLEAN_UP`/`OB_E`/`ROOM` 路径后缀；无 `__SENSIBLE_MODIFIERS__` 时 `staticf`/`staticv` → `nosave`（FluffOS 保留字）
+   - `std/user.lpc`：`commandHook` 里 `file_exists(...+".c")` → `.lpc`
+   - `adm/obj/master.lpc`：`epilog` 预载 `file_size(file+".c")` → `.lpc`；`string array` → `string *`
+3. `adm/obj/master.lpc`：补 FluffOS `PACKAGE_UIDS` 所需 `get_root_uid` / `get_bb_uid` / `creator_file` / `author_file` / `domain_file`（Alpha 原档无）
+4. `log/`、`data/users/{a..z}/`、`data/connection/` 建齐（`debug.log` / 存档字母桶）
 
 ## 验证
 
