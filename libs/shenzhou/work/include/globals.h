@@ -32,6 +32,7 @@
 #define DOORS           "/std/doors"
 #define BOARD           "/std/board/bboard"
 */
+#define DAEMON          "/std/cmd_m"
 // The next is to make save extension work for v20.*and v21.*
 #ifndef __SAVE_EXTENSION__
 #define __SAVE_EXTENSION__ SAVE_EXTENSION

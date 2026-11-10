@@ -1354,3 +1354,5 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 **Also (2026-11-09, PPLROOM xajhxo):** missing `#define PPLROOM STD_DIR "room/pplroom"` (siblings have it; template in pplroom writes `inherit PPLROOM`). Alone-scan undef cleared; base still PASS.
 
 **Also (2026-11-09, newitems zhonghua2/zhyx):** literal `/clone/newitem/newitems` missing; same-lib copy from `/u/yuchang/zhuangbei/obj/newitem/{newitems,newitemname}.lpc`. Proof: zhonghua2 0/4→4 PASS; zhyx 0/3→3 PASS.
+
+**Also (2026-11-09, DAEMON shzs/shenzhou):** (1) shzs: live `#define DAEMON "/std/cmd_m"` (file present). Proof: pingd/pingtcp FAIL→PASS. (2) shenzhou: DAEMON only inside `/* */` — add live define + adopt shzs `cmd_m.lpc`/`uid.h`. Proof: 0/5→3 PASS (pingd/pingtcp/cmd_m).

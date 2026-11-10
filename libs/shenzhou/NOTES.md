@@ -1510,3 +1510,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 深度功能测试（2026-11-09，ARMOR→/std/armor 薄别名 §6.15）
 
 `globals.h` 将 `ARMOR` 定为 `/std/armor` 而文件缺失（`armor.h` 另有 `/inherit/armor/armor`）。薄别名 `std/armor.lpc` → `inherit "/inherit/armor/armor"`。证明：`ruanwei-jia` 等 HEAD FAIL → PASS。
+
+## DAEMON + cmd_m（2026-11-09，KB 04 §6.15/§6.16）
+
+`globals.h` 里 `DAEMON` 只写在注释块中，编译期仍未定义；`/std/cmd_m` 文件也缺。补活的 `#define DAEMON "/std/cmd_m"`，从手足 shzs 收养 `cmd_m.lpc` 与 `include/uid.h`。证明：HEAD 0/5 → 3 PASS（`cmd_m`/`pingd`/`pingtcp`）；`userid`/`telnetd` 另缺 `priv.h`/`member_group` 等。
