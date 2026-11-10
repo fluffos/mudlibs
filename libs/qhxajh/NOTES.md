@@ -329,3 +329,12 @@ xinfang：`tell_object("ob", …)`→`tell_object(ob, …)`。
 
 删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
 
+
+## 深度功能测试（§10.7，2026-11-10）— 重测
+
+手启：`build-debug`；端口 40195。
+
+覆盖：`fluffos`/`Mud@2026` → 南阳商号 `look`/`inventory`/`score`/`who` →
+`east` 大街 / `west` 回商号 → `save`/`quit` → 重连再进商号/`score`/`quit`。
+
+驱动 stdout：无 compile warning、无 runtime Error。无新编程缺陷。
