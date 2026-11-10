@@ -1352,3 +1352,5 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 **Also (2026-11-09, FORCE xo_final):** `#define FORCE STD_DIR "skill/force"` (file already present; matches xo/xajh2). Proof: HEAD 1/2 → 2 PASS.
 
 **Also (2026-11-09, PPLROOM xajhxo):** missing `#define PPLROOM STD_DIR "room/pplroom"` (siblings have it; template in pplroom writes `inherit PPLROOM`). Alone-scan undef cleared; base still PASS.
+
+**Also (2026-11-09, newitems zhonghua2/zhyx):** literal `/clone/newitem/newitems` missing; same-lib copy from `/u/yuchang/zhuangbei/obj/newitem/{newitems,newitemname}.lpc`. Proof: zhonghua2 0/4→4 PASS; zhyx 0/3→3 PASS.
