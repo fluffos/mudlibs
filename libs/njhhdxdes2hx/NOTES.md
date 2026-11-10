@@ -482,3 +482,8 @@ xkx 家族把钱放在 `/clone/money/`，ES2 家族放在 `/obj/money/`；本库
 ## 深度功能测试（2026-11-09，DAEMON→cmd_m 残余语料扫 §6.16/§6.15）
 
 `adm/daemons/network/pingd|pingtcp`（或同族路径）继承 `DAEMON`：补 `#define DAEMON "/std/cmd_m"`（若缺），收养精简 `std/cmd_m.lpc`，并在需要时补 `include/uid.h`。本轮为 2026-11-04 二十三库扫的残余。
+
+
+## 深度功能测试（2026-11-09，master_yue 薄别名 §6.15）
+
+`class/huashan/yue` 继承缺失的 `/std/char/master_yue`；同目录 FAT 8.3 截断残留 `master~1.lpc`（`prevent_learn` + `huiyue`，岳不群专用）即其本体。薄别名。证明：HEAD 1 PASS / 2 FAIL → 树 3 PASS。
