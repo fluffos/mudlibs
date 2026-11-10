@@ -1426,3 +1426,9 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 帮众 NPC 继承 `BHNPC`，但 `globals.h` 里 `#define BHNPC "/u/lonely/banghui/bhnpc"` 被注释，文件本身仍在。取消注释。证明：HEAD 1 PASS / 2 FAIL → tree 3 PASS（newly loading 2）。
 
+
+## §6.10 indian/masia 镜像残留（2026-11-10）
+
+- 正式 `#include` 路径上的 `indian.lpc` 已在 2026-10-06 扫过（`in_*` / `mai_*`），无 live 撞名。
+- 本轮同步未挂在 `include directories` 上的镜像副本：`inherit/include/npc/indian.lpc` 或 `u/lonely/include/npc/indian.lpc` 仍写 `ma_sname`/`ma_pname`，与同树 `masia.lpc` 撞名。
+- 命名与本库正式副本对齐（`mai_*` 或 `in_*`）。证明：语料 live include 路径 `ma_sname` 撞名 = 0。

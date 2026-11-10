@@ -1416,3 +1416,9 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 深度功能测试（2026-11-09，npcskill 薄别名 §6.15）
 
 questguai 继承缺失的 npcskill 路径；同库另有可用本体。薄别名：/u/fyue/npcskill → /quest/npcskill。证明：别名路径 HEAD FAIL → 树 PASS（questguai 本身仍可能缺 name.h，另案）。
+
+## §6.10 indian/masia 镜像残留（2026-11-10）
+
+- 正式 `#include` 路径上的 `indian.lpc` 已在 2026-10-06 扫过（`in_*` / `mai_*`），无 live 撞名。
+- 本轮同步未挂在 `include directories` 上的镜像副本：`inherit/include/npc/indian.lpc` 或 `u/lonely/include/npc/indian.lpc` 仍写 `ma_sname`/`ma_pname`，与同树 `masia.lpc` 撞名。
+- 命名与本库正式副本对齐（`mai_*` 或 `in_*`）。证明：语料 live include 路径 `ma_sname` 撞名 = 0。
