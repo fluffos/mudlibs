@@ -130,3 +130,7 @@
 ## §7.349 死 `add_action` 残留（2026-11-10）
 
 `adm/npc/referee.lpc` 的 `do_halt`、`clone/megazine/obj/maikaren.lpc` 的 `do_drop`、`d/tianlongsi/munitang.lpc` 的 `do_exit`、`d/wudu/huxue2.lpc` 的 `do_train`、`inherit/misc/fboard.lpc` 的 `do_list`：注册的处理函数本对象与继承链均无定义。删除整行 `add_action`。
+
+## §7.19 `enable_player` 重入（2026-11-10）
+
+`feature/command.lpc` 的 `enable_player()` 无重入标志；NPC `init()` → `setup()` → `enable_commands()` 再进 `init()` 会 `Too deep recursion`。加上 `nosave private int in_enable_player_now`。对象可载入。
