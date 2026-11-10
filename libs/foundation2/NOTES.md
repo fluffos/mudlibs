@@ -583,3 +583,6 @@ the news pager. Fixed:
 
 陷阱：`help` 进入分页后方向词被当成帮助主题；先 `q` 退出帮助。
 
+## `log/` keep 行补回（2026-11-10，KB 06 §7.358）
+
+`scripts/wasm_keep_dirs.txt` 里本库的 `log/*` 行曾丢失；`lpc_keep_log_dirs.py --apply` 与 `gen_keep_dirs.py --merge` 已补回父目录与子目录。

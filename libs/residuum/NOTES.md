@@ -592,3 +592,7 @@ base as `"/std/object.c"`; the builder now rewrites such `.c` path strings in th
 `look`/`inventory`/`score`/`who`/`help` → `northeast`/`southwest` → quit 回账号菜单 → 重连选角回 Origin Point。
 
 驱动 stdout：无 compile warning、无 runtime Error。无新编程缺陷。
+
+## `log/` keep 行补回（2026-11-10，KB 06 §7.358）
+
+`scripts/wasm_keep_dirs.txt` 里本库的 `log/*` 行曾丢失；`lpc_keep_log_dirs.py --apply` 与 `gen_keep_dirs.py --merge` 已补回父目录与子目录。

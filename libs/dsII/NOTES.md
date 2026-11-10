@@ -909,3 +909,7 @@ After the permission gate, the command still handed 0 to `sscanf` / `read_file` 
 ## KB 06 §7.379 — 空信箱 save_letter（2026-11-10）
 
 IIPS `save_letter` 空箱索引（KB 06 §7.379，2026-11-10）。
+
+## `log/` keep 行补回与 environment() 空指针守卫（2026-11-10，KB 06 §7.358）
+
+与 nightmare4 同族：`wasm_keep_dirs.txt` 里本库的 `log/*` 行曾全部丢失；已 `--apply`/`--merge` 补回。`lib/interactive.lpc` / `lib/talk.lpc` 对空 `environment()` 的 `call_other` 加了守卫（与 nightmare4 同一处）。
