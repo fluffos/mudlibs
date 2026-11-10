@@ -644,5 +644,5 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 `lpc_fix_missing_foo.py --apply hy`：内嵌副本四间房仍裸调缺失公告板（`jail_b` /
 `lingxiao_b` / `tangmen_b` / `wudujiao_b`），`create()` 里
 `*call_other() couldn't find object`。主树对应处此前已注释。本轮注释这四行。
-证明：`lpcc_eval` HEAD 加载 `/海洋2002/hy3/d/city2/jail` FAIL；工作树四房 PASS。
+证明：`lpcc_eval` HEAD 加载 `/海洋2002/hy3/d/city2/jail` FAIL；工作树四房 PASS。嵌套树仍可按绝对路径加载。
 
