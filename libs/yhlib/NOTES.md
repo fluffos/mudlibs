@@ -106,3 +106,7 @@
 ## `if (per = 30)` 相貌描述恒真（2026-11-10，KB 06 §7.290）
 
 `cmds/adm/watch.lpc`（及已跟踪的 `admBAK` 副本）女性分支 `if (per = 30)` 把相貌改成 30 且恒进「倾国倾城」句。改为 `per == 30`。对象可载入。
+
+## `wasm_keep_dirs` 里 915 条空目录拖垮 Pages 部署（2026-11-10，KB 06 §7.358）
+
+`gen_keep_dirs` 把本库磁盘上大量无跟踪文件的空目录（`kungfu/skill/<名>`、`d/`、`clone/` 等）都记进了 keep 表，共 915 行；打进 WASM `keepDirs` 后 GitHub Pages 的 `deploy-pages` 在 `syncing_files` 超时。裁成仅 `log/*`、`data/*`、`adm/log`。
