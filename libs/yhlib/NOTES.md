@@ -74,3 +74,13 @@
 - 地图 look 函数里 `NOR` 后多余的 `"\n";`：若上一行已是 `NOR;` 则删；若是无分号的 `NOR` 则改为 `NOR;`（该 `"\n";` 其实是整句的终止分号）。语料同形清理。
 - 另：`combatd` 无意义的 `your_temp["guarding"];`；`swear`/`team/swear` 中 `$N";` 误终止导致下一串字面量悬空。
 - 证明：yhlib 诊断 18→8；无副作用类仅剩 dns_master 的 `return;`。
+
+## §6.10 残留警告清扫（2026-11-10）
+
+- `indian.lpc`：`ma_sname`/`ma_pname` → `in_sname`/`in_pname`（与 `masia.lpc` 同编时不撞名）。
+- `duka_3b`（及 `duka_3a`）：删重复的 `int peis=3` 行，留 `peis=4`。
+- `swmuding`：`insects` → `sw_insects`，`create()` 里 `insects = sw_insects`。
+- `qianzhenglun`：`count` → `my_count`。
+- `ultra_questd`：`lvl = to_int(pow(...)-50)`。
+- `dns_master`：去掉 void 函数末尾多余 `return;`（仍余 1 条无副作用，疑预处理空语句，另查）。
+- 证明：诊断 8→1。
