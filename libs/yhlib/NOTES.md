@@ -122,3 +122,7 @@
 ## §7.302 旧 `runtime_config.h` 下 `get_config(__MUD_PORT__)` 是字符串（2026-11-10）
 
 本库 `include/runtime_config.h` 仍是 `BASE_CONFIG_INT` 旧编号。`include/getconfig.h` 的 `LOCAL_PORT()` 与 `adm/daemons/versiond.lpc` 的 `get_config(__MUD_PORT__) + VERSION_PORT` 会得到字符串，`socket_bind` 报 Bad argument 2。改为 `__PORT__`。`lpcc_eval`：`LOCAL_PORT()` 为 int 45993；`versiond` 可载入。
+
+## §7.283 `member_array('.', arg)` 字节搜索（2026-11-10）
+
+`cmds/arch/sameip.lpc`（及跟踪的 `archBAK` 副本）用 `member_array('.', arg)` 区分 IP 与名字；对含非 ASCII 的串会告警且偏移按字节。改为 `strsrch(arg, ".")`。对象可载入；点分 IP 得正下标、纯名字得 -1。
