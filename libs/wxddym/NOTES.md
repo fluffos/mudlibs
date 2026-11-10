@@ -1009,3 +1009,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 深度功能测试（2026-11-09，npcskill 薄别名 §6.15）
 
 questguai 继承缺失的 npcskill 路径；同库另有可用本体。薄别名：/quest2/npcskill → /quest/npcskill。证明：别名路径 HEAD FAIL → 树 PASS（questguai 本身仍可能缺 name.h，另案）。
+
+## §7.61 `message()` exclude 默认 0（2026-11-10）
+
+根包装 `efun::message(..., exclude)` 在三参呼叫时把 `exclude` 默认成整数 0，驱动拒收。改为 `exclude || ({})`（KB 06 §7.61）。

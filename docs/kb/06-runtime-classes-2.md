@@ -4,6 +4,10 @@
 3-arg calls from `channeld` and `questd` leave `exclude` as int 0. Fix
 the root wrapper with `exclude || ({})`.
 
+**Also (2026-11-10, remaining root wrappers):** nineteen live `adm/**/simul_efun/message.lpc` still passed bare `exclude` into `efun::message` (yhlib quit/channel raised `Bad argument 4 … Got: int(0)`). `exclude || ({})` on those roots; skipped `u/mudring` copies. Proof: yhlib fresh boot + quit, 0 arg-4 errors.
+
+
+
 ### 7.62 `check_legal_id`'s `while (i--)` accepts `""`
 The empty id later crashes `sprintf("%c", id[0])`. Reject `!strlen(id)`
 explicitly.

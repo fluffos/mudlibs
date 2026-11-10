@@ -1136,3 +1136,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## newitems 收养（2026-11-09，KB 04 §6.15）
 
 `clone/newitem/newarmor/boots` 继承缺失的 `/clone/newitem/newitems`。从本库 `/u/yuchang/zhuangbei/obj/newitem/` 同名文件连同 `newitemname.lpc` 拷到 `clone/newitem/`。证明：HEAD 0/3 → 3 PASS。
+
+## §7.61 `message()` exclude 默认 0（2026-11-10）
+
+根包装 `efun::message(..., exclude)` 在三参呼叫时把 `exclude` 默认成整数 0，驱动拒收。改为 `exclude || ({})`（KB 06 §7.61）。

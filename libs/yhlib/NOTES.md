@@ -22,7 +22,7 @@
 
 ## 深度功能测试
 
-未做完整 §10.7；登录/重登/起点 look 已过。手足 `yhyxs` 的更多补丁可按需 twin-port。
+（见下方 2026-11-10 重测。）
 
 ## §6.10 未知 `#pragma save_binary`（2026-11-10）
 
@@ -90,3 +90,14 @@
 - `query_services`：`PREF_TELL` 为 `SVC_UDP` 时 `#if PREF_TELL & SVC_TCP` 为假，留下空 `if (...) { }`，报无副作用。
 - 与 `PREF_MAIL` 同形：把 `if` 放进 `#if TCP / #elif UDP`，UDP 分支发 `send_support_q(..., "tell")`。
 - 证明：`lpc_boot_survey` yhlib warnings 1→0。
+
+## 深度功能测试（§10.7，2026-11-10）— 重测 + §7.61
+
+手启：`build-debug`；端口 40393。
+
+覆盖：注册 `fluffos` → `y` → 姓「张」名「三」→ 管理 `Adm@2026`×2 → 普通 `Mud@2026`×2 →
+类型 `5` → `m` → 世外桃源（水笙、狄云）`look`/`inventory`/`who` → `east` 桃源竹屋 /
+`west` 回桃源 → `quit` → 重连/`look`/`quit`。
+
+同轮修：`adm/simul_efun/message.lpc` §7.61（quit/channel 的 `Bad argument 4 to EFUN message()`）。
+修复后 quit 干净。驱动仍有 NPC `command_hook` 的 apply 权限提示与 socket_bind（另轮）。

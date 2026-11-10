@@ -1120,3 +1120,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 - 与 `yhlib` 同病：`adm/simul_efun/util.lpc` 的 `process_bar` 用色宏但无 `#include <ansi.h>`。
 - 已补；全库 `lpc_warnings` 诊断 3→0。
+
+## §7.61 `message()` exclude 默认 0（2026-11-10）
+
+根包装 `efun::message(..., exclude)` 在三参呼叫时把 `exclude` 默认成整数 0，驱动拒收。改为 `exclude || ({})`（KB 06 §7.61）。

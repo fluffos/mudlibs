@@ -752,3 +752,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## COMMAND + feature.h（2026-11-09，KB 04 §6.16/§6.23）
 
 `cmds/adm/fgrep` 继承未定义的 `COMMAND`；`F_COMMAND` 已指向 `/feature/command.lpc`。补 `#define COMMAND F_COMMAND`，并空壳 `include/feature.h`（档案丢失，§6.23）。证明：HEAD 0/1 → 1 PASS。与 nitan6/nt6 同修。
+
+## §7.61 `message()` exclude 默认 0（2026-11-10）
+
+根包装 `efun::message(..., exclude)` 在三参呼叫时把 `exclude` 默认成整数 0，驱动拒收。改为 `exclude || ({})`（KB 06 §7.61）。

@@ -1473,3 +1473,7 @@ xkx100 的原文是 `vc = victim->add("vote/count", 1);`，nitan 系把它写成
 ## 深度功能测试（2026-11-04，DOOR_ROOM→ROOM §6.16）
 
 崆峒 `d/kongdong/*` 继承 `DOOR_ROOM`；`create_door` 已在 `ROOM`（`/inherit/room/room`）。`room.h` 补 `#define DOOR_ROOM ROOM`。证明：lianhua_tai HEAD FAIL → PASS；lingzhi/tingyuan 仍因 NPC `set_xiuwei` 失败（与 DOOR_ROOM 无关）。nt6/nt6nitan6win 同补。
+
+## §7.61 `message()` exclude 默认 0（2026-11-10）
+
+根包装 `efun::message(..., exclude)` 在三参呼叫时把 `exclude` 默认成整数 0，驱动拒收。改为 `exclude || ({})`（KB 06 §7.61）。

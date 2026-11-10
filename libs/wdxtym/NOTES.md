@@ -730,3 +730,7 @@ wdt / guangchang / qianmu workroom+board：补 `me`/`who`。
 - `adm/daemons/questd.lpc` `assign_quest_by_letter` 的 `msg = "…暗器…" "" "\n";` 缺终止行 → `unexpected L_DEFINED_NAME`。
 - 语料恢复 a632 中该形约 74 处；`lpc_fix_no_effect.py` 跳过 `prev` 以未收尾 `"` 结尾。
 - 证明：wdxtym `lpcc --batch` questd 错误 2→0。
+
+## §7.61 `message()` exclude 默认 0（2026-11-10）
+
+根包装 `efun::message(..., exclude)` 在三参呼叫时把 `exclude` 默认成整数 0，驱动拒收。改为 `exclude || ({})`（KB 06 §7.61）。
