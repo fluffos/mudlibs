@@ -1112,3 +1112,7 @@ old 下水道继承 `/d/dragon/sewer/sewer_room`，本体在 old；字节拷贝�
 ## 深度功能测试（2026-11-10，tecqumin hunt_mon realms 路径 §6.15）
 
 与 shadowgate 同改：`orchevid` inherit 与 `far_scanner3` 路径改到 `/d/atoyatl/…`；去掉裸 `d` 与遮蔽 efun 的本地 `present()`（本 lib 未开 `old type behavior`，遮蔽会直接让 `orchevid` 编译失败）。证明：listcheck 3 对象 HEAD 1 PASS / 2 FAIL → 树 3 PASS。
+
+## 深度功能测试（2026-11-10，mine2 realms 路径 §6.15）
+
+与 shadowgate 同改：`mine3` inherit → `/d/mine2/mine`。证明：listcheck 2 对象 HEAD 1 PASS / 1 FAIL → 树 2 PASS。

@@ -1012,3 +1012,7 @@ The code of this lib writes logs into 2 subdirectories of `log/`: `log/adm/haras
 ## 深度功能测试（2026-11-10，AFD armor_class 薄别名 §6.15）
 
 `adm/AFD/living` 继承缺失的 `/std/living/armor_class`；本体在 `/adm/AFD/living/armor_class`。薄别名。证明：listcheck 3 对象 HEAD 1 PASS / 2 FAIL → 树 3 PASS（别名与 `living.lpc` 新载入）。
+
+## 深度功能测试（2026-11-10，chronos_doll / factionhall 薄别名 §6.15）
+
+`/d/attic/Outer/Sigil/toys/chronos_doll` 继承缺失的 `/u/c/chronos/toys/chronos_doll`，本体是同目录 `doll`；`foundry1` 继承 `/u/i/ilzarion/factionhall`，本体在 attic `factionhall`。薄别名。`factionhall2` / `clapper` / `watch` 仍无同库本体，暂留。证明：listcheck 6 对象 HEAD 2 PASS / 4 FAIL → 树 6 PASS。

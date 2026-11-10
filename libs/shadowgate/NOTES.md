@@ -855,3 +855,7 @@ avatar `pocket` 继承未定义的 `POCKETARMOUR`，而 `std.h` 仅有 `PARMOUR`
 ## 深度功能测试（2026-11-10，tecqumin hunt_mon realms 路径 §6.15）
 
 `orchevid` 继承 gitignored 的 `/realms/lujke/tecqumin/mons/hunt_mon`；本体在 `/d/atoyatl/tecqumin/mons/hunt_mon`。改写 inherit，并把 `far_scanner3` 的 `new()` 路径一并改到 `/d/atoyatl/…`。顺带去掉 `hunt_mon` 里误入的裸 `d` 行，以及会遮蔽 efun `present()` 的本地 `present(string, object)`（否则子孙里 `present(object, room)` 在未开 `old type behavior` 的 twin 上类型失败）。证明：listcheck 3 对象 HEAD 1 PASS / 2 FAIL → 树 3 PASS。
+
+## 深度功能测试（2026-11-10，mine2 realms 路径 §6.15）
+
+`d/mine2/rooms/mine3` 继承 gitignored `/realms/zeek/mine`；本体在 `/d/mine2/mine`。改写 inherit。证明：listcheck 2 对象 HEAD 1 PASS / 1 FAIL → 树 2 PASS。
