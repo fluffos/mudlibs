@@ -706,6 +706,8 @@ time. (3) *Fewer arguments than parameters*: add `varargs` to the definition the
 **Also (2026-11-10, xajhxo biaoju/funiu):** thin alias `system/menpai/biaoju/funiu`→`/d/nanyang/npc/funiu` (same shape as nanyang `ke`). Proof: 4 objects HEAD 2/2 → 4 PASS.
 **Also (2026-11-10, shadowgate/sunshadow shar_symbol):** archive never shipped `/d/magic/symbols/shar_symbol`; `newsymbol` inherits it and newbie `p_shar` clones it. Same thin deity wrapper as every other `*_symbol.lpc` beside `holy_symbol` (eldath/lord_shadow pattern). Proof: shadowgate 4 objects HEAD 1/3 → 4 PASS; sunshadow 2 objects HEAD 1/1 → 2 PASS.
 
+**Also (2026-11-10, xajhxo amber command1):** `clone/user/amber` inherited missing `/system/feature/command1` while `CHARACTER` already brings `F_COMMAND` → `feature/command.lpc`. A thin alias to `command.lpc` would double-inherit `nomask enable_player`. Drop the redundant inherit. Proof: amber HEAD FAIL → PASS (user already PASS).
+
 **Also (2026-11-10, shenmo zizhulin2/room):** adopt from xyxy2; host lacks `REMOVE_D` so `add_obj`→delayed `destruct`. Proof: 3 objects HEAD 0/3 → 3 PASS.
 
 ### 6.16 A macro the lib's global header lost, restored from the siblings (2026-10-19)

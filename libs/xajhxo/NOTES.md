@@ -1026,3 +1026,9 @@ xinfang/chatroom：`tell_object("ob", …)`→`tell_object(ob, …)`。
 ## 深度功能测试（2026-11-10，biaoju/funiu 薄别名 §6.15）
 
 `system/menpai/biaoju/ke` 继承缺失的 `__DIR__ "funiu"`；同库 `/d/nanyang/npc/funiu`（及 city 副本）可载入，且 `/d/nanyang/npc/ke` 用同一形状。薄别名。证明：listcheck 4 对象 HEAD 2 PASS / 2 FAIL → 树 4 PASS。
+
+## §6.15 amber command1（2026-11-10）
+
+`clone/user/amber` 继承缺失的 `/system/feature/command1`；`CHARACTER` 已有 `F_COMMAND`→`command.lpc`。薄别名会与 `nomask enable_player` 双继承冲突。删掉多余 inherit。
+
+验证：listcheck amber HEAD FAIL → PASS。
