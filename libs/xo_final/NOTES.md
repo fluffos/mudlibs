@@ -640,3 +640,8 @@ pplroomd：`tell_object("ob", …)`→`tell_object(ob, …)`。
 ## FORCE 别名（2026-11-09，KB 04 §6.16）
 
 `system/skill/notuse/huashan-xinfa` 继承未定义的 `FORCE`；`SKILL_FORCE` 已指向现成的 `/system/std/skill/force`。按手足 xo/xajh2 补 `#define FORCE STD_DIR "skill/force"`。证明：HEAD 1 PASS / 1 FAIL → 2 PASS。
+
+
+## 深度功能测试（2026-11-09，TASK 宏改指向 §6.16）
+
+`group_task` 继承未定义的 `TASK`（原 `#define` 已注释且路径缺 `todo/`）。改为 `#define TASK STD_DIR "todo/task"`。证明：task+group_task listcheck HEAD 1 PASS / 1 FAIL → 树 2 PASS。

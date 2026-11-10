@@ -1216,3 +1216,8 @@ pplroomd：`tell_object("ob", …)`→`tell_object(ob, …)`。
 ## 深度功能测试（2026-11-09，capital ShennongNpc 薄别名 §6.15）
 
 `d/city/capital/{gao_laozhe,sikong_xuan}` 继承同目录缺失的 `ShennongNpc`；本体在 `/d/menpai/shennong/npc/ShennongNpc`。薄别名。证明：HEAD 1 PASS / 3 FAIL → 树 4 PASS。
+
+
+## 深度功能测试（2026-11-09，TASK 宏改指向 §6.16）
+
+`group_task` 继承未定义的 `TASK`（原 `#define` 已注释且路径缺 `todo/`）。改为 `#define TASK STD_DIR "todo/task"`。证明：task+group_task listcheck HEAD 1 PASS / 1 FAIL → 树 2 PASS。

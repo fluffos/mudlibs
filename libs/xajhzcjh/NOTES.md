@@ -1364,3 +1364,8 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 深度功能测试（2026-11-09，PEN 判官笔基类 §6.16/§6.15）
 
 `clone/weapon/panguanbi` 继承未定义的 `PEN`，且无 `/inherit/weapon/pen`。从 jhfy2 收养 `pen.lpc`（`init_pen`），并在 `weapon.h` 补 `#define PEN "/inherit/weapon/pen"`。证明：pen + panguanbi HEAD FAIL → 树 PASS。
+
+
+## 深度功能测试（2026-11-09，quest/npcskill+name.h 收养 §6.15）
+
+`d/fyue/questguai` 继承缺失的 `/quest/npcskill` 并 `#include /quest/name.h`。从手足 wxddym 收养二者。证明：npcskill+questguai listcheck HEAD 0 PASS → npcskill/questguai 树 PASS（name.h 非对象）。

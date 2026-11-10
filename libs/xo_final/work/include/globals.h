@@ -243,7 +243,7 @@
 #define ART                 STD_DIR "skill/art"
 // #define SSERVER             STD_DIR "sserver"
 #define ZUZHI               STD_DIR "zuzhi"
-// #define TASK                STD_DIR "task"
+#define TASK                STD_DIR "todo/task"
 // #define GROUP_TASK          STD_DIR "group_task"
 #define ZUOJI               STD_DIR "char/zuoji"
 #define HALL                "/d/place/wiz/inn_hall"
