@@ -421,6 +421,7 @@ classes it's found.
 | 185 | `dshakkard` | ds-hakkard | `git clone https://github.com/hakkard-dev-team/ds-hakkard (commit 06cb87d3cf026ec393cb40969ab14e2426df7f7b, cloned 2026-08-26)` | 40230 | WASM playable |
 | 186 | `wllz3` | 武林列传Ⅲ | `wllz.rar` | 40322 | WASM playable |
 | 187 | `tmi3` | TMI-3 | `https://github.com/fluffos/mudlib-archives/releases/download/v1.0.0/tmi-3-0.1a.tar.gz` | 40392 | WASM playable |
+| 188 | `yhlib` | 炎黄2003 | `git clone https://github.com/MudRen/YHLib` | 40393 | WASM playable |
 | 901 | `discworld` | Discworld MUD lib (v3) | `dw_fluffos_v3.zip` | 40206 | WASM playable |
 | 901-1 | `dw_fluffos_v1` | Discworld MUD lib (v1) | `dw_fluffos_v1.tar.gz` | 40271 | WASM playable |
 | 901-2 | `dw_fluffos_v2` | Discworld MUD lib (v2) | `dw_fluffos_v2.zip` | 40272 | WASM playable |
