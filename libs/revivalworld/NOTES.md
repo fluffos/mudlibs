@@ -936,3 +936,11 @@ README 里记载的"开机预载持续 2-3 分钟"配套的既有设计。
 ## EQUIP + OBJECT_ACTION_MOD（2026-11-09，KB 04 §6.15/§6.16）
 
 `ring` 继承未定义的 `EQUIP` 与 `OBJECT_ACTION_MOD`。补 `#define EQUIP EQUIPMENT`；从手足 zsdsj 收养 `_object_action_mod.lpc` 并补宏。证明：HEAD 1 PASS / 1 FAIL → 2 PASS。
+
+## 深度功能測試（§10.7，2026-11-10）— log/system 卡住啟動 + 重測
+
+原生樹手啟，端口 40238。
+
+編程缺陷（已修，§7.358）：`system_d` 填完 `preload_list` 後 `log_file("system/preload")`，缺 `/log/system` 時 `write_file` 拋錯中斷 `create()`，`distributed_preload()` 永不啟動，連線永久停在「載入中，請稍後」。`simul_efun/log.lpc` 寫前 `assure_log_dir()`；同形修到 `zsdsj`；`wasm_keep_dirs` 補 log 子目錄。
+
+覆蓋：等分散式預載完畢並被踢 → 重連 `fluffos`/`Mud@2026` → 巫師神殿 `look`/`inventory`/`quit`。驅動無 Wrong permissions。

@@ -1156,3 +1156,7 @@ eval/lpcc 觸發之異常一貫的存疑處理原則，未在本輪確認為真�
 ## EQUIP 别名（2026-11-09，KB 04 §6.16）
 
 `std/module/object/tools/ring` 继承未定义的 `EQUIP`；`EQUIPMENT` 已指向 `/std/inherit/feature/object/_equipment.lpc`。补 `#define EQUIP EQUIPMENT`。证明：HEAD 1 PASS / 1 FAIL → 2 PASS。
+
+## 同源修复（2026-11-10）— log_file assure_log_dir（§7.358）
+
+与 `revivalworld` 同形：`system/kernel/simul_efun/log.lpc` 写前建父目录；keep dirs。详见 revivalworld 同日 §10.7。
