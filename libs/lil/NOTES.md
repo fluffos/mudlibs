@@ -324,3 +324,12 @@ operation plus one assignment, so its absolute numbers are a little higher. The 
 ## sefun `cat()`: `write(0)` raises for a file that is not there (2026-10-20, KB 06 7.297)
 
 `void cat(string file) { write(read_file(file)); }`: a file the archive does not ship (a welcome or notice file, a log only a running mud writes) makes `read_file()` answer 0, `write(0)` raises `Bad argument 1 to receive()` in this driver and aborts the caller (the login dialogue, the `cat` command); the old driver printed nothing. Now `write(read_file(file) || "");` (`scripts/lpc_fix_cat_unchecked.py`). Changed: `/single/simul_efun.lpc`.
+
+## 深度功能测试（§10.7，2026-11-10）— 重测
+
+原生树手启（无 systemd user bus），端口 40226。
+
+覆盖：欢迎语 → `who` → `say` → `dest`/`update` 无参用法提示 → `eval return 1+1`（Result = 2）→
+`look`/`help` 兜底 `What?`（设计如此）→ `quit` → 重连再 `who`/`quit`。
+
+驱动 stdout：无 compile warning、无 runtime Error。无新编程缺陷。
