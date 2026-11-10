@@ -665,3 +665,12 @@ The driver's `crypt()` raises (`Error in crypt(), check your salt`) for a key ov
 ## Combat probe with the seeded administrator (2026-10-22): `obj/clone/reinzombie.lpc` does not compile
 
 `scripts/play_combat_probe.py openlib --account ... --clone ...`: cloning `/obj/clone/reinzombie` (the zombie a corpse turns into, `corpse.lpc` clones it) fails with `43:1: Illegal to redefine 'nomask' function 'create'` after a warning at 30:8 (`Number of arguments to 'create' disagrees with previous definition`): the file defines `create()` over a base whose `create` is `nomask`. Not changed (which hook the monster base wants is a read of its documentation, queued).
+
+## 深度功能测试（§10.7，2026-11-10）— 重测
+
+原生树手启（无 systemd user bus），端口 40245。
+
+覆盖：`root`/`RootPass2026!` 登录 → `/d/base/start` → `look`/`score`/`who`/`pwd`/`ls`/`alias`/`tell`/`save`；
+新号 `opentester` 注册（密码、显示名、email、real name、性别）→ 东西两间起始房 → `save`/`quit`。
+
+驱动 stdout：无 compile warning、无 runtime Error（仅终端类型回退到 default 的提示）。无新编程缺陷。内容天花板仍为两间起始房（档案本色）。
