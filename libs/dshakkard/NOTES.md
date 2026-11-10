@@ -910,3 +910,7 @@ After the permission gate, the command still handed 0 to `sscanf` / `read_file` 
 
 FluffOS 编译器无条件预定义空的 `__TRACE__`（`lexer_utils.cc`），但没有 `trace()` efun。`#ifdef __TRACE__` 仍编译进 `trace(x)`，alone-scan 报 `Undefined function trace`。改为 `#if efun_defined(trace)`（命令体与 GetHelp）。同系 ds386 / dshakkard / brassring / riftsds。证明：HEAD FAIL；树 PASS。
 
+
+## KB 06 §7.379 — 空信箱 save_letter（2026-11-10）
+
+IIPS `save_letter` 空箱索引（KB 06 §7.379，2026-11-10）。

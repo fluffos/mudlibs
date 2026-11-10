@@ -958,3 +958,7 @@ The code of this lib writes logs into 2 subdirectories of `log/`: `log/chan` (`s
 ## 深度功能测试（2026-11-03，memcheck / check_memory efun）
 
 `secure/cmds/creators/memcheck.lpc` 裸调 `check_memory()`；FluffOS build-debug 无此 efun（需 DEBUGMALLOC），alone-scan `Undefined function check_memory`。`#if efun_defined(check_memory)` 包住，否则提示不可用。证明：HEAD FAIL；树 PASS。
+
+## KB 06 §7.379 — 空信箱 save_letter（2026-11-10）
+
+IIPS `save_letter` 空箱索引（KB 06 §7.379，2026-11-10）。

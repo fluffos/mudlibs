@@ -905,3 +905,7 @@ After the permission gate, the command still handed 0 to `sscanf` / `read_file` 
 ## 深度功能测试（2026-11-03，memcheck / check_memory efun）
 
 `secure/cmds/creators/memcheck.lpc` 无条件 `check_memory(1)`；同 dsI / foundation2。`#if efun_defined(check_memory)`。证明：HEAD FAIL；树 PASS。
+
+## KB 06 §7.379 — 空信箱 save_letter（2026-11-10）
+
+IIPS `save_letter` 空箱索引（KB 06 §7.379，2026-11-10）。

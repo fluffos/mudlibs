@@ -1019,3 +1019,7 @@ After the permission gate, the command still handed 0 to `sscanf` / `read_file` 
 ## 无参数时命令对 0 的调用（玩家/--all-dirs 残留，2026-10-27，KB 06 §7.336 Also）
 
 无参数命令把 0 交给 `present` / `sscanf` / `file_exists` 等会运行时报错。`lpc_fix_bare_arg.py --all-dirs` 在首次使用参数前加守卫。多行 `if (arg && !sscanf)`（吐纳默认消耗）与已有 `can_learn`/`get_object` 守卫的误报已回退；本库本批改动见该提交。
+
+## KB 06 §7.379 — 空信箱 save_letter（2026-11-10）
+
+IIPS `save_letter` 空箱索引（KB 06 §7.379，2026-11-10）。

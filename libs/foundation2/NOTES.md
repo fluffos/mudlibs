@@ -568,3 +568,7 @@ the news pager. Fixed:
 ## 深度功能测试（2026-11-03，memcheck / check_memory efun）
 
 `secure/cmds/creator/memcheck.lpc` 直接调用 `check_memory()`。该 efun 只在 DEBUGMALLOC + develop 包下存在；本馆 FluffOS build-debug 未开，alone-scan `Undefined function check_memory`（creator 指令 56 PASS / 1 FAIL）。改为 `#if efun_defined(check_memory)`，否则提示 efun 不可用。证明：HEAD FAIL；树 PASS。同形：`dsI` / `dsII` 的 `secure/cmds/creators/memcheck.lpc`（较新的 DS 系已用 `efun_exists` + `#ifdef __DEBUGMALLOC__*` 包住）。
+
+## KB 06 §7.379 — 空信箱 save_letter（2026-11-10）
+
+与 foundation1 同形的 IIPS `save_letter` 空信箱 `__BoxInfo[-1]`（KB 06 §7.379，2026-11-10）：加范围守卫。

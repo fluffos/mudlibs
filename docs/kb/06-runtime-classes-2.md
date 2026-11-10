@@ -2393,3 +2393,15 @@ Found by taking the objects a visitor meets (`scripts/lpc_reach_census.py` lists
 **Fix:** `base_name(previous_object()) != LOGIN_OB` (or `file_name` without the `#id` suffix).
 
 **Detection:** a gate that uses `previous_object() != SOME_PATH_MACRO`; connect and get no logon text despite a clean boot.
+
+### 7.379 Empty mailbox `s`/`S` indexes `__BoxInfo[-1]` (Descartes IIPS / Dead Souls post, 11 libs, 2026-11-10)
+
+**Symptom:** in the Imaginary Intermud Postal Service menu on an empty folder, `s` (save to folder) or `S` (save to file) raises `*Array index must be positive or zero` (`save_letter` → `__BoxInfo[letter]`), logged under `/log/runtime`.
+
+**Cause:** an empty box sets `__Current = -1`. `save_letter` does `if (!letter) letter = __Current;` then indexes `__BoxInfo[letter]` with no range check. `delete_letter` already rejects `from < 0`; save did not.
+
+**Fix:** after resolving `letter`, `if (letter < 0 || letter >= sizeof(__BoxInfo)) { postal_error("No letter to save."); return; }`. Same guard in the 11 Descartes/Nightmare/Dead Souls `post.lpc` copies that share the shape (`foundation1`/`foundation2`, `nightmare4`, `dsI`/`dsII`/`dsIII`/`ds386`, `dshakkard`, `riftsds`, `brassring`, `havenmud`).
+
+**Proof:** foundation1 pristine play: empty `mail` → `s` / `S` print `No letter to save.` and stay in the menu; `/log/runtime` has no `Array index` row; player `save` outside mail still works.
+
+**Detection:** `rg -n 'if\(!letter\) letter = __Current' libs/*/work --glob 'post.lpc'` without a following `letter < 0` guard; live empty-folder `s`.

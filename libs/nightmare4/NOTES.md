@@ -691,3 +691,7 @@ for a save`（`log/runtime`，14:50）。随后该字母目录出现，同一驱
 ## 深度功能测试（2026-11-03，lsed / OLD_ED）
 
 `secure/cmds/creators/lsed.lpc` 调用 `ed_start` / `ed_cmd` / `query_ed_mode`；本馆 FluffOS 开了 OLD_ED，没有这些可编程编辑 efun。alone-scan `Undefined function ed_start`（creators 33 PASS / 1 FAIL）。`LsedFile` 改为与 foundation2 / DS 系相同的不可用提示。证明：HEAD FAIL；树 PASS。
+
+## KB 06 §7.379 — 空信箱 save_letter（2026-11-10）
+
+Dead Souls/Nightmare 系 `secure/obj/post.lpc` 空信箱 `s`/`S`（KB 06 §7.379，2026-11-10）。
