@@ -453,3 +453,7 @@ guest：`tell_object("…", who)`→`tell_object(who, …)`。
 ## 深度功能测试（2026-11-04，DAEMON→cmd_m 语料扫 §6.16/§6.15）
 
 `adm/daemons/network/pingd|pingtcp` 继承未定义的 `DAEMON`（TMI 惯例）。`mudlib.h` 补 `#define DAEMON "/std/cmd_m"`，收养精简 `std/cmd_m.lpc`（无 `config.h`），并补档案缺失的 `include/uid.h`。证明：抽样 jhfy/hy5/dreamofseven/fys/pkuxkx/xiyouji2003 HEAD 0/3 → 3 PASS。
+
+## npc/ground→ground3 改指（2026-11-09，KB 04 §6.15）
+
+`d/kaifeng/npc/ground` 继承 `__DIR__"ground3"`（即缺失的 `/d/kaifeng/npc/ground3`）。同目录上层已有完整的 `/d/kaifeng/ground3`；改为 `inherit "/d/kaifeng/ground3"`，`#include` 改为绝对路径 `/d/kaifeng/ground.h`。alone-scan 的该 literal 消失。该 npc 副本本身仍缺 `ground1.h` 一套宏，未能完整载入（可玩的赛场是 `/d/kaifeng/ground`）。
