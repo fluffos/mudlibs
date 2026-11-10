@@ -638,3 +638,11 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 深度功能测试（2026-11-09，DAEMON→cmd_m 残余语料扫 §6.16/§6.15）
 
 `adm/daemons/network/pingd|pingtcp`（及 `海洋2002/hy3` 副本）继承未定义的 `DAEMON`。补 `#define DAEMON "/std/cmd_m"`，收养精简 `std/cmd_m.lpc` 与 `include/uid.h`（hy5 同源）。证明：pingd/pingtcp（主树+副本）与 cmd_m newly load；telnetd/te/userid 仍缺 `member_group`/`priv.h`/`config.h`，另案。
+
+## §7.357 嵌套 `海洋2002/hy3/` 缺板 `->foo()`（2026-11-10）
+
+`lpc_fix_missing_foo.py --apply hy`：内嵌副本四间房仍裸调缺失公告板（`jail_b` /
+`lingxiao_b` / `tangmen_b` / `wudujiao_b`），`create()` 里
+`*call_other() couldn't find object`。主树对应处此前已注释。本轮注释这四行。
+证明：`lpcc_eval` HEAD 加载 `/海洋2002/hy3/d/city2/jail` FAIL；工作树四房 PASS。
+
