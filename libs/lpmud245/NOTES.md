@@ -470,3 +470,14 @@ registration, a mortal's first commands, then the same character hand-promoted t
 ## 注册到不存在函数的 `add_action`（2026-10-21，KB 06 §7.349）
 
 `add_action("函数", "动词")` 绑定的函数，在对象本身、它包含的头文件、它继承的父类和继承它的子类里都没有定义（`scripts/lpc_scan_callout_targets.py` 静态解析，子类用传递闭包复核，`scripts/lpc_verify_handlers.py` 运行时 `function_exists()` 复核）。驱动从玩家最新的一条动作往回找，遇到这样的句子就报 `*Function for verb 'drop' not found.`，同一个动词的其他处理函数不再尝试（不是最新的一条就悄悄跳过）。删除了 1 条注册（1 个文件，`scripts/lpc_fix_dead_add_action.py`），动词留给别的处理函数：`/room/wiz_hall.lpc`（`south`）。最多的函数名：`south` 1 处。
+
+## 深度功能测试（§10.7，2026-11-10）— 重测
+
+原生树手启（无 systemd user bus），端口 40262。
+
+覆盖：注册 `lpmtwtb`（email/`none`、性别 `m`）→ 教堂 → 村绿/`e` 进村（Harry 打招呼）→
+桥 `get all`（10 gold + stick）→ 冒险者公会/`list` → 商店 `list`/`buy torch`（金币不足提示正常）→
+电梯：`open door`/`west`/`close door`/`push 1` 到巫师厅见 Leo → `push 2` 回教堂 → `save`/`quit`。
+
+驱动 stdout：仅 §10.9 `Unable to open log file: "log/debug.log"`（启动路径）。无 compile warning、无 runtime Error。
+电梯门开着时 `push N` 显示 `Nothing happens` 为原设计（须先 `close door`）。无新编程缺陷。
