@@ -291,3 +291,12 @@ this lib (live I3).
 ## 深度功能测试（§10.7，2026-10-05）— 主控 author_file()/domain_file()（上游 #3）
 
 驱动的 mudlib_stats 包在主控载入时各调用一次 `author_file(<主控文件>)` 和 `domain_file("/")`，主控没有这两个 apply，所以每次启动都打印 `author_file() in the master file does not work, using root_uid as fallback` 和 `domain_file() ... using bb_ui as fallback` 两行。上游 PR fluffos/imud#3（已合并，ba915a2）在 `secure/master.lpc` 补上两者，返回 `get_root_uid()` / `get_bb_uid()`，正是驱动缺省时用的值（KB 06 §7.222）。pin 已用 `rebase_upstreams.py` 升到 ba915a2；`lpcc config.fluffos /nonexistent.lpc` 前后对比只少了这两行。
+
+## 深度功能测试（§10.7，2026-11-10）— 重测
+
+原生树手启（submodule `ba915a2`；无 systemd user bus），端口 40209。
+
+覆盖：连接欢迎/`IMUD STAT`（router socket 已连）→ `mudlist`（真实公网 I3 列表）→
+`update`（无参 → `update what?`）→ `update /secure/commands/mudlist` → 未知命令 `look`/`quit` 兜底 `What?`（设计如此）→ 重连再 `mudlist`。
+
+驱动 stdout：无 compile warning、无 runtime Error。无新编程缺陷。
