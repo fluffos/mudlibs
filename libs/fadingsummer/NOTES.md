@@ -25,4 +25,14 @@
 
 ## 深度功能测试
 
-未做 §10.7。可玩范围仅 void + 注册/存档；无区域与战斗。`wasm_status=playable` 表示能登录，不是成品 mud。
+（见下方 2026-11-10 重测。可玩范围仍仅 void + 注册/存档。）
+
+## 深度功能测试（§10.7，2026-11-10）— 重测
+
+手启：`build-debug`；端口 40395。
+
+覆盖：注册 `fluffos` → `y` → passkey `Mud@2026`×2 → email → real name → void
+`look`/`quit` → 重连再进/`look`/`quit`。
+
+本库仍是未完成 Lil alpha：无区域、无 `inventory`/`score`/`who`（回 What?）。
+驱动 stdout：无 compile warning、无 runtime Error。无新编程缺陷。
