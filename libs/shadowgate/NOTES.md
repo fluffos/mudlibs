@@ -881,3 +881,7 @@ avatar `pocket` 继承未定义的 `POCKETARMOUR`，而 `std.h` 仅有 `PARMOUR`
 - `object *dependencies` 上写 `dependencies += ob`（标量）→ `Bad assignment ( object * vs object )`（sunshadow 的 `std/room` 已是 `+= ({ ob })`）。
 - 同形修复：`shadowgate` `std/room` 与两边 `d/deku/hhouse/inherits/test/room`；`cmds/mortal/room` 上轮已改。
 - 证明：`/std/room.lpc` listcheck 仍 PASS（HEAD/树）。
+
+## §7.282 `_fixlevels` 职位链（2026-11-10）
+
+`cmds/adm/_fixlevels.lpc`：`position != "god" || != "arch"` 恒真，xmote 降级分支对谁都 return 0。同文件后一段已是 `&&`；前段改为 `&&`。`sunshadow` 同改。对象可载入；god neither→0 / mortal→1。

@@ -830,3 +830,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 `quest/quest/questguai` 需要 `/quest/npcskill` 与 `/quest/name.h`，本库没有。从 ffxymud 领养。证明：两者 + questguai HEAD FAIL → PASS。
 
+
+## §7.282 吸焰令武器类型（2026-11-10）
+
+`kungfu/skill/shenghuo-lingfa/xiyanling.lpc`：`skill_type != "tieling" || != "shenghuo-ling"` 恒真，perform 永远「武器不对」。改 `&&` 并加括号。对象可载入。

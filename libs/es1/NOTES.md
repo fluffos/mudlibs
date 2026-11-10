@@ -864,3 +864,7 @@ IRC vodka/water 继承 wizard `/u/e/elon/drink`，接口在 `/d/island/obj/drink
 
 `adm/simul_efun/message.lpc` 把缺省的 `exclude`（int 0）原样传给 `efun::message`；`tell_room`/`write`/`say` 等三参调用会触发 `Bad argument 4`。改为 `exclude || ({})`。跳过 `u/m/moon` 副本（同 mudring 策略）。证明：本轮 boot + `fluffos` 登录 `look`/`who`/`say`/`quit`，驱动无 arg-4。
 
+
+## §7.282 矮人武器加成恒拒（2026-11-10）
+
+`std/races/dwarf.lpc`：`type != "axe" || != "blunt"` 恒真，WC/伤害加成永远 return 0。改 `&&`。`es1_win` / `esI` 同改。`lpcc_eval --at /open/zzeval.lpc` 表达式：斧不拒、剑拒。

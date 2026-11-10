@@ -1119,3 +1119,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-11-09，DAEMON→cmd_m 残余语料扫 §6.16/§6.15）
 
 `adm/daemons/network/pingd|pingtcp`（或同族路径）继承 `DAEMON`：补 `#define DAEMON "/std/cmd_m"`（若缺），收养精简 `std/cmd_m.lpc`，并在需要时补 `include/uid.h`。本轮为 2026-11-04 二十三库扫的残余。
+
+## §7.282 `(string)` 比较链（2026-11-10）
+
+`kungfu/skill/huanxi-chan.lpc`：`(string)family != "雪山派" || != "血刀门"` 恒真，高等级外人永远被拒学。`wuhu-gun.lpc`：`skill_type != "stick" || != "club"` 恒真，武器检查永不通过。LHS 带 `(string)` 时旧版 fixer 看不见；扩 CAST 后改 `&&`。`lpcc_eval` 载入 + 门派/武器类型表达式验证。

@@ -383,3 +383,7 @@ FluffOS 保留 `buffer` 为类型；`string buffer` 局部/参数改为 `buf`。
 ## 深度功能测试（2026-11-03，bind_lambda #'efun）
 
 kernel/simul 与 save_object_filter 的 `bind_lambda(#'efun::…)` 改为 FluffOS `bind((: efun::… :), ob)`。证明：源中该类调用点清除。
+
+## §7.282 Letter/fighter 比较链（2026-11-10）
+
+`open/Letter/fighter.lpc`：带 `(string)` 的同值 `!= || !=` / `== && ==` 链（CAST 扩写后可见）。`lpc_fix_cmp_chain.py --apply`。

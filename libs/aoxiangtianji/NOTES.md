@@ -806,3 +806,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-11-03，§7.19 enable_player 重入）
 
 `feature/command.lpc` 的 `enable_player()` 加 `in_enable_player_now` 守卫（`scripts/lpc_fix_enable_player_guard.py`，KB 05 7.19）：门派 NPC `init()`→`setup()`→`enable_player()`→`enable_commands()` 再跑 `init()` 时直接返回，避免 Too deep recursion。
+
+## §7.282 `luniang` 门派 `== && ==`（2026-11-10）
+
+`d/qujing/bibotan/npc/luniang.lpc`：`family == "陷空山无底洞" && == "火云洞" && == "大雪山"` 恒假，友好分支永不走、见谁打谁。改 `||`。同文件在西游系约 35 库一并修。对象可载入；火云洞友方 / 少林非友方表达式验证。

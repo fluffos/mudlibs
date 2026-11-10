@@ -1107,3 +1107,7 @@ xkx 家族把钱放在 `/clone/money/`，ES2 家族放在 `/obj/money/`；本库
 ## 深度功能测试（2026-11-09，yaoguai / anqi-jian 收养 §6.15）
 
 `peijian` 继承缺失的 `/d/xueshan/obj/anqi-jian`；`city/npc/yg/*` 继承缺失的 `/d/dntg/yunlou/npc/yaoguai`（含 `yaoguai_reward`）。从同系 xixingzhanji 收养三档。证明：HEAD 0/4 → 4 PASS（yaoguai / reward / city yg / anqi-jian）。
+
+## §7.282 冰刀 outdoors 链（2026-11-10）
+
+`obj/weapon/hongse.lpc`：`outdoors != "xueshan" || != "大雪山"` 恒真，冰刀立刻化。改 `&&`。对象可载入。

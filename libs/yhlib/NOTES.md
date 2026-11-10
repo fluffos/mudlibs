@@ -110,3 +110,7 @@
 ## `wasm_keep_dirs` 里 915 条空目录拖垮 Pages 部署（2026-11-10，KB 06 §7.358）
 
 `gen_keep_dirs` 把本库磁盘上大量无跟踪文件的空目录（`kungfu/skill/<名>`、`d/`、`clone/` 等）都记进了 keep 表，共 915 行；打进 WASM `keepDirs` 后 GitHub Pages 的 `deploy-pages` 在 `syncing_files` 超时。裁成仅 `log/*`、`data/*`、`adm/log`。
+
+## §7.282 比较链恒真/恒假（2026-11-10）
+
+`d/mingjiao/shanmen.lpc`：`family != "明教" || != "武当派"` 恒真，上山持械检查对所有人触发。`d/tiezhang/hhyuan-3.lpc`：`arg != "瀑布" || != "pubu"` 恒真，`cross` 穿瀑布永远被拒。`lpc_fix_cmp_chain.py` 改为 `&&`。对象可载入。

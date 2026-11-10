@@ -556,3 +556,7 @@ genmap 第一次载入时 `if (!restore()) save();` 会在地图建好之前写�
 ## 深度功能测试（2026-11-09，/std/jboard 薄别名 §6.15）
 
 `obj/board/wizard_j` 继承缺失的 `/std/jboard`，本体在 `/inherit/misc/jboard`（`PLAN_BOARD` 已指向此处）。薄别名 `std/jboard.lpc`；档案亦无 `/d/wiz/jobroom`，`setup()` 里 `move()` 会令留言板加载失败——补最小 jobroom（无外连出口）。证明：jboard/jobroom/wizard_j HEAD 未载 → 树 PASS（plan_b 本已 PASS）。
+
+## §7.282 阴阳倒乱刃武器检查（2026-11-10）
+
+`kungfu/skill/yinyang-luanren.lpc`：`skill_type != "sword" || != "blade"` 恒真，`valid_learn` 永远拒。改 `&&`。对象可载入；剑/鞭表达式验证。
