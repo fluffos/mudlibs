@@ -707,3 +707,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-11-09，PEN 判官笔基类 §6.16/§6.15）
 
 `clone/weapon/panguanbi` 继承未定义的 `PEN`，且无 `/inherit/weapon/pen`。从 jhfy2 收养 `pen.lpc`（`init_pen`），并在 `weapon.h` 补 `#define PEN "/inherit/weapon/pen"`。证明：pen + panguanbi HEAD FAIL → 树 PASS。
+
+
+## 深度功能测试（2026-11-09，npcskill 薄别名 §6.15）
+
+questguai 继承缺失的 npcskill 路径；同库另有可用本体。薄别名：/u/fyue/npcskill → /quest/npcskill；/kungfu/class/wudang/npcskill_n → /quest2/npcskill_n。证明：别名路径 HEAD FAIL → 树 PASS（questguai 本身仍可能缺 name.h，另案）。

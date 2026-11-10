@@ -554,3 +554,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## MI_XIAO 收养（2026-11-09，KB 04 §6.15/§6.16）
 
 `inherit/weapon/xsword.lpc` 继承未定义的 `MI_XIAO`，且缺 `include/music.h`。从手足 zxty 收养 `music.h` 与 `/inherit/misc/_xiao.lpc`。证明：HEAD 0/2 → 2 PASS。
+
+
+## 深度功能测试（2026-11-09，npcskill 薄别名 §6.15）
+
+questguai 继承缺失的 npcskill 路径；同库另有可用本体。薄别名：/u/fyue/npcskill → /quest2/npcskill；/kungfu/class/wudang/npcskill_n → /quest2/npcskill_n。证明：别名路径 HEAD FAIL → 树 PASS（questguai 本身仍可能缺 name.h，另案）。

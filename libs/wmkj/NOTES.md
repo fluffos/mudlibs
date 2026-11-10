@@ -1273,3 +1273,8 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## F_BH 收养（2026-11-09，KB 04 §6.15/§6.16）
 
 `F_BH` 已指向 `/u/xiha/banghui/banghui`，文件缺失。从手足 yxcs `/u/lonely/banghui/banghui.lpc` 收养到该路径（与本库 `/feature/banghui.lpc` 仅作者注释不同）。证明：基类 HEAD FAIL → PASS；唯一用户 `npc/yeyangzai/dazaizhu` 仍因未定义 `KZZNPC`/`get_npc_data` 失败（同 yandang 跳过项）。
+
+
+## 深度功能测试（2026-11-09，npcskill 薄别名 §6.15）
+
+questguai 继承缺失的 npcskill 路径；同库另有可用本体。薄别名：/u/fyue/npcskill → /quest/npcskill。证明：别名路径 HEAD FAIL → 树 PASS（questguai 本身仍可能缺 name.h，另案）。

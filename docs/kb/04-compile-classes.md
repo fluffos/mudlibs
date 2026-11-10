@@ -1376,3 +1376,5 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 **Also (2026-11-09, new/bow wxddym):** thin alias `clone/weapon/new/bow` → `/clone/weapon/bow` (same-lib). Proof: HEAD 1/4 → 4 PASS.
 
 **Also (2026-11-09, capital ShennongNpc xajh2):** thin alias `d/city/capital/ShennongNpc` → `/d/menpai/shennong/npc/ShennongNpc` (same-lib). Proof: HEAD 1/4 → 4 PASS.
+
+**Also (2026-11-09, npcskill path aliases):** thin-alias missing `/u/fyue/npcskill`, `/u/system_1/npcskill`, `/kungfu/class/wudang/npcskill_n`, `/quest2/npcskill` to same-lib `quest/` or `quest2/` bodies (12 libs: xyzx3/yzxiiizylfy/xyzxiiylzymh/tianxiawuxue/tybxjh/xysylmhb/wmkj/zxty/zxty08nxgbb/wlhd/yxjh/wxddym). Proof: each alias HEAD FAIL → PASS; questguai may still need name.h.
