@@ -844,3 +844,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-11-09，REGROOM 宏补回 §6.16）
 
 `d/welcome/wel1` 继承未定义的 `REGROOM`，但 `/std/room/regroom.lpc` 本库已有。补 `#define REGROOM "/std/room/regroom"`，并补注册房所需的 `IDUSER`/`EMAIL_D`（`emaild` 本库已有；`iduser` 为运行时计数文件）。证明：regroom/wel1 2/2 PASS，0 regress。
+
+
+## 深度功能测试（2026-11-09，stey/guai 收养 §6.15）
+
+`d/wizz/stey/yg-*` 继承同目录缺失的 `guai`；本体在 `kill1/guai`。同库收养到 `stey/guai`。证明：guai+yg-ba listcheck HEAD 1 PASS / 2 FAIL → 树 3 PASS。

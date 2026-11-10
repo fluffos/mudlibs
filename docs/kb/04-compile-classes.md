@@ -1396,3 +1396,7 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 **Also (2026-11-09, TASK xajh2/xo_final):** uncomment `#define TASK` as `STD_DIR "todo/task"` (body present). Proof: each HEAD 1/2 → 2 PASS.
 
 **Also (2026-11-09, npcskill+name.h xajhzcjh):** adopt wxddym `/quest/npcskill` + `/quest/name.h` (sibling). Proof: questguai HEAD FAIL → PASS.
+
+**Also (2026-11-09, AFD living shards mortremains):** thin alias `/std/living/{experience,magic,kill_reward}` → `/adm/AFD/living/…`. Proof: 3 aliases HEAD FAIL → PASS.
+
+**Also (2026-11-09, stey/guai xlqyzdb):** adopt `kill1/guai` → `d/wizz/stey/guai` (same-lib `__DIR__`). Proof: HEAD 1/3 → 3 PASS.
