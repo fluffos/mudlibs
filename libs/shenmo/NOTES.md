@@ -1544,3 +1544,7 @@ tianzun → `ob`；shenxiang → `me`。
 - 供体：`xiaoyuxiyou` / `xyxyutf8` 同名基类（111 行；`xyxy2` 版依赖 `MyArmorFile`/`MyWeaponFile`，神魔无）
 - 修复：采纳 `d/obj/equip/equip_bd.lpc`；`adm/simul_efun/message.lpc` 补手足同有的 `err_msg()` sefun
 - 验证：`lpcc_eval` `load_object("/d/maze/dayan-ta/obj/bangding")` → 须弥石
+
+## 深度功能测试（2026-11-10，zizhulin2/room 采纳 §6.15）
+
+`d/maze/bhg-baihua/{enter,out}` 继承缺失的 `/d/maze/zizhulin2/room`；从同系 `xyxy2` 采纳。宿主无 `REMOVE_D`/`removed` 守护进程，两处 `REMOVE_D->add_obj` 改为 `call_out((: destruct, … :), 1)`。证明：listcheck 3 对象 HEAD 0 PASS / 3 FAIL → 树 3 PASS。
