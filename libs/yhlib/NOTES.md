@@ -84,3 +84,9 @@
 - `ultra_questd`：`lvl = to_int(pow(...)-50)`。
 - `dns_master`：去掉 void 函数末尾多余 `return;`（仍余 1 条无副作用，疑预处理空语句，另查）。
 - 证明：诊断 8→1。
+
+## §6.10 dns_master PREF_TELL 空 if（2026-11-10）
+
+- `query_services`：`PREF_TELL` 为 `SVC_UDP` 时 `#if PREF_TELL & SVC_TCP` 为假，留下空 `if (...) { }`，报无副作用。
+- 与 `PREF_MAIL` 同形：把 `if` 放进 `#if TCP / #elif UDP`，UDP 分支发 `send_support_q(..., "tell")`。
+- 证明：`lpc_boot_survey` yhlib warnings 1→0。
