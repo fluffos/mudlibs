@@ -1018,6 +1018,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-11-10, shadowgate/sunshadow `cmds/mortal/room`):** orphan copy of `/std/room` inherited missing `/realms/saide/traps/container.lpc`. Retarget to `/std/container.lpc` (same as live `std/room.lpc`); `status id`→`int id`; `dependencies += ob`→`+= ({ ob })`. Proof: each listcheck 0→1 PASS.
 
+**Also (2026-11-10, `dependencies += ob`):** `object *` array `+=` a bare `object` is `Bad assignment ( object * vs object )`. sunshadow `std/room` already used `+= ({ ob })`; shadowgate `std/room` and both libs' `d/deku/hhouse/inherits/test/room` still had the scalar form. Fixed. Detection: `dependencies += ob;` (no `({`).
+
+
 
 
 

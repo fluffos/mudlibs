@@ -1132,3 +1132,9 @@ old 下水道继承 `/d/dragon/sewer/sewer_room`，本体在 old；字节拷贝�
 - 游离的 `cmds/mortal/room.lpc`（`/std/room` 旧副本）继承缺失的 `/realms/saide/traps/container.lpc`。
 - 与现行 `std/room.lpc` 对齐：`inherit "/std/container.lpc"`；`status id`→`int id`；`dependencies += ob`→`+= ({ ob })`。
 - 同改 shadowgate / sunshadow。证明：listcheck 各 0→1 PASS。
+
+## §6.10 `dependencies += ob`（2026-11-10）
+
+- `object *dependencies` 上写 `dependencies += ob`（标量）→ `Bad assignment ( object * vs object )`（sunshadow 的 `std/room` 已是 `+= ({ ob })`）。
+- 同形修复：`shadowgate` `std/room` 与两边 `d/deku/hhouse/inherits/test/room`；`cmds/mortal/room` 上轮已改。
+- 证明：`/std/room.lpc` listcheck 仍 PASS（HEAD/树）。
