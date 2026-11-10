@@ -1108,3 +1108,7 @@ old 下水道继承 `/d/dragon/sewer/sewer_room`，本体在 old；字节拷贝�
 ## 深度功能测试（2026-11-04，dforest2i + scroll_storage 薄别名 §6.15）
 
 同 ShadowGate：`/d/deku/open/dforest2i` → `/d/deku/forest/forest2i`。另 `noma_storage` 继承 `/d/common/inherit/scroll_storage`，正文已是 Chernobog 的 `magic_storage`（Scroll Shop Inherit）。薄别名。证明：HEAD 1 PASS / 5 FAIL；树 6 PASS。
+
+## 深度功能测试（2026-11-10，tecqumin hunt_mon realms 路径 §6.15）
+
+与 shadowgate 同改：`orchevid` inherit 与 `far_scanner3` 路径改到 `/d/atoyatl/…`；去掉裸 `d` 与遮蔽 efun 的本地 `present()`（本 lib 未开 `old type behavior`，遮蔽会直接让 `orchevid` 编译失败）。证明：listcheck 3 对象 HEAD 1 PASS / 2 FAIL → 树 3 PASS。

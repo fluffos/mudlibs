@@ -1008,3 +1008,7 @@ The code of this lib writes logs into 2 subdirectories of `log/`: `log/adm/haras
 ## 深度功能测试（2026-11-09，AFD living 碎片薄别名 §6.15）
 
 `adm/AFD/living` 继承缺失的 `/std/living/{experience,magic,kill_reward}`；本体在 `/adm/AFD/living/…`。薄别名。证明：三别名 HEAD FAIL → 树 PASS；`living.lpc` 仍有其他缺失基类。
+
+## 深度功能测试（2026-11-10，AFD armor_class 薄别名 §6.15）
+
+`adm/AFD/living` 继承缺失的 `/std/living/armor_class`；本体在 `/adm/AFD/living/armor_class`。薄别名。证明：listcheck 3 对象 HEAD 1 PASS / 2 FAIL → 树 3 PASS（别名与 `living.lpc` 新载入）。

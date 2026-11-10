@@ -851,3 +851,7 @@ old 下水道继承 `/d/dragon/sewer/sewer_room`，本体在 old；字节拷贝�
 ## 深度功能测试（2026-11-09，POCKETARMOUR §6.16）
 
 avatar `pocket` 继承未定义的 `POCKETARMOUR`，而 `std.h` 仅有 `PARMOUR`→`/std/pocketarmour`。补 `#define POCKETARMOUR "/std/pocketarmour"`；两份截断的 `pocket.lpc` 补上 `set_value(1);` 与收尾 `}`。证明：HEAD 1/3 PASS → 树 3 PASS（新加载 2）。
+
+## 深度功能测试（2026-11-10，tecqumin hunt_mon realms 路径 §6.15）
+
+`orchevid` 继承 gitignored 的 `/realms/lujke/tecqumin/mons/hunt_mon`；本体在 `/d/atoyatl/tecqumin/mons/hunt_mon`。改写 inherit，并把 `far_scanner3` 的 `new()` 路径一并改到 `/d/atoyatl/…`。顺带去掉 `hunt_mon` 里误入的裸 `d` 行，以及会遮蔽 efun `present()` 的本地 `present(string, object)`（否则子孙里 `present(object, room)` 在未开 `old type behavior` 的 twin 上类型失败）。证明：listcheck 3 对象 HEAD 1 PASS / 2 FAIL → 树 3 PASS。
