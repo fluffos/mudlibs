@@ -101,3 +101,4 @@
 
 同轮修：`adm/simul_efun/message.lpc` §7.61（quit/channel 的 `Bad argument 4 to EFUN message()`）。
 修复后 quit 干净。驱动仍有 NPC `command_hook` 的 apply 权限提示与 socket_bind（另轮）。
+部署 tip：`2655786aeb0`（同 sweep；scratchpad 后续 tip 仅路径过滤外）。
