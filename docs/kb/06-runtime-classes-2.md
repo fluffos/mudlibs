@@ -2430,3 +2430,14 @@ Found by taking the objects a visitor meets (`scripts/lpc_reach_census.py` lists
 **Fix:** rename the local (`string home = home_path(...)`; `cp(..., home)`). Guard `if (objectp(room))` before `move_living(room, ...)`. Catalog patch `libs/oxidus/patches/0006-first-admin-home-path-shadow.patch`.
 
 **Detection:** a local whose name matches a sefun used later in the same function as `name(...)`; first-admin boot with empty home and a `call_if` Bad argument 1 in `/log/catch`.
+
+### 7.381 Bootstrap `enter_new_player()` saves an empty clone over a returning player's `.o` (genesis, 2026-11-10)
+
+**Symptom:** every login prints `Last login at: … 1970` / `Last login from: 0`, and wizards also get `SERIOUS PROBLEM with your start location`, even though the on-disk `.o` has real `login_time` / `login_from` / `default_start_location`. `restore_object()` returns 1. Mid-login, `file_size` of the playerfile briefly matches a truncated living-only prefix (~362 bytes) while the host file is full again after quit.
+
+**Cause:** with no race body in the save (`player_file` unset) — or with it reset to `LOGIN_NEW_PLAYER` (death) — `validate_playerfile()` always routes through `enter_new_player()`. The bootstrap `ghost_player` does `SECURITY->save_player()` *before* `enter_game()` so a brand-new character has a file to restore. For a returning player that save writes the still-empty clone over the real `.o`; `setup_player()` then restores the truncated file.
+
+**Fix:** (1) in `validate_playerfile()`, if `PLAYER_FILE(name)+".o"` already exists, `swap_to_player()` instead of `enter_new_player()`. (2) in `enter_new_player()`, only `save_player()` when the file does not exist yet.
+
+**Detection:** CD/Genesis-style login with a bootstrap `ghost_player` that saves before enter; saves lacking `player_file`; live login where Last-login is epoch despite a non-epoch `.o`.
+

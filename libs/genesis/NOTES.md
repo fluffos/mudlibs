@@ -687,7 +687,7 @@ alarm errors (only the two already-documented, benign missing-content
 catch()-wrapped errors remain: `/d/Genesis/cmd/misc` at object
 creation time, `/d/Web/stats/webstats` on quit).
 
-### Unresolved observation: `login_time`/`login_from`/(for wizards only) `default_start_location` never actually restore from a correctly-saved value, despite `restore_object()` reporting success
+### RESOLVED 2026-11-10 (was: Unresolved observation): `login_time`/`login_from`/`default_start_location` looked unrestored — actually `enter_new_player()` truncated the `.o` before load
 
 Confirmed live, root cause NOT confirmed within this pass's time
 budget — documented honestly per this project's own testing standard
@@ -754,6 +754,9 @@ than leaving it alone. Worth a focused follow-up pass specifically
 tracing `restore_object()`'s behavior against a deliberately
 constructed minimal test object with the same "sparse gap in a
 multi-variable declaration" shape.
+
+
+**Resolution (2026-11-10):** not a driver restore bug. Returning logins with an empty/`LOGIN_NEW_PLAYER` `player_file` always hit `ghost_player->enter_new_player()`, whose first-save of the empty clone truncated the real playerfile to ~362 bytes before `setup_player()`/`load_player()`. Fixed in `secure/login.lpc` (existing `.o` → `swap_to_player`) and `secure/login/ghost_player.lpc` (save only if the file is absent). Live: Last login shows the previous wall-clock time, no SERIOUS PROBLEM, start room is `bootstrap_room`. KB 06 §7.381.
 
 ### Standing cross-cutting patterns checked systematically
 
@@ -890,3 +893,8 @@ items, no shops exist to test against.
 ## 深度功能测试（2026-11-03，corpse obj_pshort 类型 §6.21）
 
 `std/object.lpc` 里 `obj_pshort` 仍声明为 `string`，而同文件的 `obj_short`/`obj_long` 已是 `mixed`。`std/corpse` 的 `create_container()` 调用 `set_pshort(pshort_func)` 时 FluffOS 运行时报 `*Trying to put function in string`，alone-scan 无法加载。把 `obj_pshort` 挪到 `mixed` 声明组。证明：HEAD corpse FAIL；树 PASS。
+
+## 深度功能测试（2026-11-10，§7.381 enter_new_player 截断存档）
+
+返回登录时若存档没有种族躯体 `player_file`（本移植没有 `/d/Genesis/race/*`），`validate_playerfile()` 会走 `ghost_player->enter_new_player()`。该函数在 `enter_game()` 之前 `SECURITY->save_player()`，把仍是空的 clone 写进玩家 `.o`，把完整存档截成约 362 字节；随后 `load_player()` 读到的就是这份残档，所以 `login_time`/`login_from`/`default_start_location` 全是默认值，向导每次都看到 SERIOUS PROBLEM，凡人则被 `enter_game()` 里的凡人重置路径掩盖。`secure/login.lpc`：已有 `.o` 时改走 `swap_to_player()`；`ghost_player.lpc`：仅在文件不存在时才首次保存。证明：`fluffos`/`Mud@2026` 登录显示上次真实时间与 `localhost`，进入 `bootstrap_room`，无 SERIOUS PROBLEM；登录全程 `.o` 保持完整大小。
+
