@@ -96,7 +96,6 @@ void remove()
 void die(object killer)
 {
         object ob;
-        string msg;
 
         if ((objectp(ob = killer)
            || objectp(ob = query_last_damage_from()))

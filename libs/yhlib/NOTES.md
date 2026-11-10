@@ -29,3 +29,10 @@
 - Boot 普查：94 条 `Unknown #pragma, ignored`（`globals.h` 与各 daemon/feature 顶行）。
 - 删除 60 个文件中的活动 `#pragma save_binary`（FluffOS 忽略该 MudOS 语用，无行为变化）。
 - 证明：工作树 `lpcc --batch` 启动后 0 条 Unknown #pragma；仍有 nosave 函数 / 未用局部等其它类，另轮处理。
+
+## §6.10 机械警告清理（2026-11-10）
+
+- `lpc_warnings.py yhlib --fix`：1530 → 78 诊断（10941 可编 / 60 仍失败）。
+- 本轮：`nosave` 函数 32→`protected`；未用局部 1369；`varargs` 补 50；裸 `return` 1。
+- 启动证明：`lpcc --batch` 仅剩 1 条「Expression has no side effects」（dns_master），无 Unused local / nosave / Unknown pragma。
+- 残留（另轮）：`set_information` 参数类型、questd11/util/damo 语法、`is_killing` 类型、无副作用表达式、全局重声明等。

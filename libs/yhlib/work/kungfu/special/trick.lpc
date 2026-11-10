@@ -10,7 +10,6 @@ string name() { return HIM "鬼话连篇" NOR; }
 
 int perform(object me, string skill)
 {
-        int heal;
         int ap, dp;
         object target;
 

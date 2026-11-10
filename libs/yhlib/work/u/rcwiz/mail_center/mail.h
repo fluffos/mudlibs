@@ -6,7 +6,7 @@ mixed get_info(string user, string info, string flag, int num)
 {
         int i = 0, n_temp = 0;
         string str_temp, msg;
-        string who_send, topic, time, is_new, msg_txt;
+        string who_send, topic, time, is_new;
         
         switch(info)
         {    
