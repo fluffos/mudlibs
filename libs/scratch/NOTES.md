@@ -81,3 +81,11 @@ Logs this boot:
   `/clone/echochamber` produced
   `CAUGHT /single/master.lpc:42 *No program in object...` then
   reverted. No code fixes this pass.
+
+## 深度功能测试（§10.7，2026-11-10）— 重测
+
+原生树手启（无 systemd user bus），端口 40280。
+
+覆盖：连接欢迎 → `look`/`score` → 未知输入 `hello`/`who` 回显 `%O` → `quit` → 重连再 `look`/`quit`。
+
+无房间/账号/战斗（三文件 starter，设计如此）。驱动 stdout：无 warning、无 Error。无新编程缺陷。
