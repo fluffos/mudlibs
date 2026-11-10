@@ -1160,3 +1160,13 @@ eval/lpcc 觸發之異常一貫的存疑處理原則，未在本輪確認為真�
 ## 同源修复（2026-11-10）— log_file assure_log_dir（§7.358）
 
 与 `revivalworld` 同形：`system/kernel/simul_efun/log.lpc` 写前建父目录；keep dirs。详见 revivalworld 同日 §10.7。
+
+## 深度功能測試（§10.7，2026-11-10）— 重測
+
+手啟：`build-debug`；端口 40081。分散式預載約一分鐘後踢線（`啟動完畢，重新連線中`）。
+
+覆蓋：重連 → `fluffos`（本機巫師轉入）→ 再輸入 `fluffos` → `Mud@2026` → 公怖欄 Enter →
+巫師大廳 `look`/`inventory`/`score`/`who`/`help` → `down` 正北殿 / `up` 回大廳 → `quit` →
+重連再進廳/`score`/`quit`。
+
+驅動 stdout：無 compile warning、無 Wrong permissions。同日 §7.358 `assure_log_dir` 後預載不再卡死。無新編程缺陷。
