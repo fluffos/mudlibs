@@ -1211,3 +1211,8 @@ pplroomd：`tell_object("ob", …)`→`tell_object(ob, …)`。
 
 删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
 
+
+
+## 深度功能测试（2026-11-09，capital ShennongNpc 薄别名 §6.15）
+
+`d/city/capital/{gao_laozhe,sikong_xuan}` 继承同目录缺失的 `ShennongNpc`；本体在 `/d/menpai/shennong/npc/ShennongNpc`。薄别名。证明：HEAD 1 PASS / 3 FAIL → 树 4 PASS。
