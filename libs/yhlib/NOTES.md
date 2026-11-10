@@ -114,3 +114,7 @@
 ## §7.282 比较链恒真/恒假（2026-11-10）
 
 `d/mingjiao/shanmen.lpc`：`family != "明教" || != "武当派"` 恒真，上山持械检查对所有人触发。`d/tiezhang/hhyuan-3.lpc`：`arg != "瀑布" || != "pubu"` 恒真，`cross` 穿瀑布永远被拒。`lpc_fix_cmp_chain.py` 改为 `&&`。对象可载入。
+
+## §7.296 `get_dir("*.lpc")` 后仍按 `.c` 剥后缀（2026-11-10）
+
+`adm/daemons/eventd.lpc` / `storyd.lpc`：`map_array(..., (: $1[0..<3] :))` 只剥 2 字符，事件/故事名留下 `.l`，后续 `EVENT_DIR + event` 载入失败。改为 `[0..<5]`。`lpcc_eval`：`query_all_event()` 得 `emei` 等干净名。
