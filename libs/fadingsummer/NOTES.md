@@ -36,3 +36,7 @@
 
 本库仍是未完成 Lil alpha：无区域、无 `inventory`/`score`/`who`（回 What?）。
 驱动 stdout：无 compile warning、无 runtime Error。无新编程缺陷。
+
+## §7.297 sefun `cat()` 未检查 `read_file`（2026-11-10）
+
+`system/simul_efun/simul_efun.lpc`：`write(read_file(file))` 在档案缺失时把 0 交给 `write`，登录横幅等会中断。改为 `write(read_file(file) || "")`。缺失路径不再报 Bad argument。

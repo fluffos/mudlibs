@@ -1827,6 +1827,9 @@ Found by taking the objects a visitor meets (`scripts/lpc_reach_census.py` lists
 **Fix:** `scripts/lpc_fix_cat_unchecked.py --apply`: `write(read_file(file) || "");` in the sefun `cat()` of 74 libs. Left: about 480 other `write(read_file(...))` statements in 440 files (MOTDs, notices, help topics); each needs its own look at what a missing file should say.
 **Detection:** the login survey; `git grep -n 'write(read_file('`.
 
+**Also (2026-11-10, three sefun leftovers):** cistoms `/single/simul_efun.lpc`, fadingsummer `/system/simul_efun/simul_efun.lpc`, tmi3 `/adm/simul_efun/cat.lpc` still had bare `write(read_file(file))`. `lpc_fix_cat_unchecked.py --apply` → `write(read_file(file) || "")`. Proof: `lpcc_eval` of a missing path prints nothing and continues (cistoms / fadingsummer; tmi3 `--at /www/zzeval.lpc`).
+
+
 ### 7.298 A runtime state file that `.gitignore` excludes is read unguarded: `do_counter()` kills every login (xyj2006n, xyj2006zzzhx; six libs, 2026-10-20)
 **Symptom:** every connection to xyj2006n and xyj2006zzzhx ends `Bad argument 1 to sscanf  Expected: string Got: 0.` in `logind::do_counter()` and `new_conn_handler: logon() ... has failed, the user is disconnected`; dtxyzjb, xiaoyuxiyou, xyxy2 and xyxyutf8 carry the same function but do not call it at login.
 **Cause:** `/adm/daemons/UserNumber` is the visitor counter the running mud writes; `.gitignore` (`libs/*/work/adm/daemons/UserNumber`) keeps it out of the repository, so a clone, a pristine tree and the site have none, and `sscanf(read_file(FileName), "%d", number)` raises. dtxywzxzb, rzrmud, xiyouji2006 and zitengzhan had the guard (`if (stringp(file))`), found earlier; the six others work only in a tree that has run before.

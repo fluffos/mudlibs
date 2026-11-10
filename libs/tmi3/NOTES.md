@@ -35,3 +35,7 @@
 `inventory`/`score` 回 `What?`（alpha 未实现，预期）。
 
 驱动 stdout：无 LPC compile warning、无 runtime Error（仅有 config 里两条 obsolete line 提示与旧 crypt 口令升级提示）。无新编程缺陷。
+
+## §7.297 sefun `cat()` 未检查 `read_file`（2026-11-10）
+
+`adm/simul_efun/cat.lpc`：`write(read_file(file))` 在档案缺失时把 0 交给 `write`，登录横幅等会中断。改为 `write(read_file(file) || "")`。缺失路径不再报 Bad argument。

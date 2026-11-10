@@ -46,3 +46,7 @@
 - `base.lpc`：`listids` 原型 `void`，定义是 `string`（原型改 `string`）
 
 冷启动重测：stdout 无 compile warning、无 runtime Error。无其它新编程缺陷。
+
+## §7.297 sefun `cat()` 未检查 `read_file`（2026-11-10）
+
+`single/simul_efun.lpc`：`write(read_file(file))` 在档案缺失时把 0 交给 `write`，登录横幅等会中断。改为 `write(read_file(file) || "")`。缺失路径不再报 Bad argument。
