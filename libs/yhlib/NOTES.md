@@ -134,3 +134,7 @@
 ## §7.19 `enable_player` 重入（2026-11-10）
 
 `feature/command.lpc` 的 `enable_player()` 无重入标志；NPC `init()` → `setup()` → `enable_commands()` 再进 `init()` 会 `Too deep recursion`。加上 `nosave private int in_enable_player_now`。对象可载入。
+
+## §7.334 空 `chat_msg` 下标（2026-11-10）
+
+`inherit/char/npc.lpc`：`chat()` 在空数组上 `random(sizeof(msg))` 得 0 再取 `msg[0]`，`Array index out of bounds`。骰子前加 `sizeof(msg) &&`。HEAD 空表 20 次必炸；tree 50 次仍过。
