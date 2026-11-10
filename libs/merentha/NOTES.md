@@ -485,3 +485,12 @@ The driver's `crypt()` raises (`Error in crypt(), check your salt`) for a key ov
 ## `log/` subdirectories nobody created: the logging `write_file()` / `log_file()` raises (2026-10-22, KB 06 §7.358)
 
 The code of this lib writes logs into 1 subdirectory of `log/`: `log/errors` (`daemon/services/error.lpc`). Neither the archive, a `git clone` nor the site pack has them (no local boot wrote into them, so `gen_keep_dirs.py` never recorded them), and `write_file()` raises `*Wrong permissions for opening file /log/dlog/money for append. "No such file or directory"` for a missing directory: the function that logs stops on that line and what came after it (the reward, the flag, the next step) never runs. This lib's `log_file()` is `write_file(LOG_DIR + file, text)` and raises the same error for a missing directory (measured). `log/errors` are now in `scripts/wasm_keep_dirs.txt` (`scripts/lpc_keep_log_dirs.py`; the site and the pristine tree create the empty directories from it). Proof (`scripts/lpcc_eval.py`, an eval object under `/adm/daemons` or similar writes `/log/zzdirprobe/...`, fresh processes): the measured table in KB 06 §7.358.
+## 深度功能测试（§10.7，2026-11-10）— 重测
+
+手启：`build-debug`；端口 40223。
+
+覆盖：已有管理员 `fluffos`/`Mud2026` → 种族选择室 `become male human` → 角色定制室
+`begin` + 五题 a/b/c/d/a → Cabeiri 庭院 `look`/`inventory`/`score`/`who` →
+`east`/`west`/`north`(Simon 商店)/`south` → `help`/`q` → `save`/`quit` → 重连再进庭院。
+
+驱动 stdout：无 compile warning、无 runtime Error / Wrong permissions。无新编程缺陷。
