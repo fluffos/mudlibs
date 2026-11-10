@@ -22,3 +22,8 @@
 ## 深度功能测试
 
 未做完整 §10.7；登录/Void/城堡路径已过。
+
+## §6.10 未用局部（2026-11-10）
+
+- Boot 普查：`/single/simul_efun.lpc` `resolve_path` 声明 `t1,t2,t3,t4`，仅 `t1` 参与 `sscanf`。
+- 改为 `string t1;`。证明：`lpcc --batch` 启动 0 warning / 0 error。

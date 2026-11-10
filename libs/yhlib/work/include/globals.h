@@ -1,7 +1,6 @@
 // globals.h
 // this file will be automatically included by the driver
 
-#pragma save_binary
 
 // Important directories
 #define BACKUP_DIR      "/backup/"

@@ -23,3 +23,9 @@
 ## 深度功能测试
 
 未做完整 §10.7；登录/重登/起点 look 已过。手足 `yhyxs` 的更多补丁可按需 twin-port。
+
+## §6.10 未知 `#pragma save_binary`（2026-11-10）
+
+- Boot 普查：94 条 `Unknown #pragma, ignored`（`globals.h` 与各 daemon/feature 顶行）。
+- 删除 60 个文件中的活动 `#pragma save_binary`（FluffOS 忽略该 MudOS 语用，无行为变化）。
+- 证明：工作树 `lpcc --batch` 启动后 0 条 Unknown #pragma；仍有 nosave 函数 / 未用局部等其它类，另轮处理。
