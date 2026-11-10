@@ -24,4 +24,14 @@
 
 ## 深度功能测试
 
-未做完整 §10.7（内容仅 void 骨架）；登录/重登/基础 look 已过。
+（见下方 2026-11-10 重测。内容仍是 void 骨架。）
+
+## 深度功能测试（§10.7，2026-11-10）— 重测
+
+手启：`build-debug`；端口 40392。
+
+覆盖：注册 `fluffos` → `y` → `Mud@2026`×2 → void
+`look`/`who` → `void2` / `void` 回 void → `quit` → 重连再进/`look`/`quit`。
+`inventory`/`score` 回 `What?`（alpha 未实现，预期）。
+
+驱动 stdout：无 LPC compile warning、无 runtime Error（仅有 config 里两条 obsolete line 提示与旧 crypt 口令升级提示）。无新编程缺陷。
