@@ -531,3 +531,12 @@ ToMud 升级用的两条指令（`cmds/bos/findfile.lpc`、`updir.lpc`）不带�
 
 删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
 
+
+## 深度功能测试（§10.7，2026-11-10）— 重测
+
+手启：`build-debug`；端口 40154。
+
+覆盖：`fluffos`/`testpass123` → 假日客店 `look`/`inventory`/`score`/`who` →
+`south` 东大街 / `north` 回客店 → `save`/`quit` → 重连再进客店/`score`/`quit`。
+
+驱动 stdout：无 compile warning、无 runtime Error。无新编程缺陷。
