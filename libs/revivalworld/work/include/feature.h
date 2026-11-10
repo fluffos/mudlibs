@@ -44,6 +44,7 @@
 #define COMMAND_PPL                              "/std/inherit/feature/living/usr/ppl/_command_ppl.lpc"
 #define COMMAND_WIZ                              "/std/inherit/feature/living/usr/wiz/_command_wiz.lpc"
 #define NPC_MOD                                  "/std/inherit/feature/module/npc/_npc_mod.lpc"
+#define OBJECT_ACTION_MOD                        "/std/inherit/feature/module/object/_object_action_mod.lpc"
 #define PRODUCT_ACTION_MOD                       "/std/inherit/feature/module/product/_product_action_mod.lpc"
 #define PRODUCT_MOD                              "/std/inherit/feature/module/product/_product_mod.lpc"
 #define ROOM_ACTION_MOD                          "/std/inherit/feature/module/room/_room_action_mod.lpc"
@@ -53,6 +54,7 @@
 #define CLEAN_UP                                 "/std/inherit/feature/object/_clean_up.lpc"
 #define DATABASE                                 "/std/inherit/feature/object/_database.lpc"
 #define EQUIPMENT                                "/std/inherit/feature/object/_equipment.lpc"
+#define EQUIP                                    EQUIPMENT
 #define IDNAME                                   "/std/inherit/feature/object/_idname.lpc"
 #define KEEP                                     "/std/inherit/feature/object/_keep.lpc"
 #define MOVE                                     "/std/inherit/feature/object/_move.lpc"

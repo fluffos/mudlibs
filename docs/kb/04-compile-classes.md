@@ -1362,3 +1362,5 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 **Also (2026-11-09, baoshi/newitemname zitengzhan):** `__DIR__ "newitemname"` under `baoshi/`; copy parent `d/obj/newitem/newitemname.lpc`. Proof: HEAD 0/2 → 2 PASS.
 
 **Also (2026-11-09, ground3 dtxyzjb):** `npc/ground` inherited missing `__DIR__"ground3"`; retarget to existing `/d/kaifeng/ground3`. Alone-scan cleared; npc copy still incomplete vs working `/d/kaifeng/ground`.
+
+**Also (2026-11-09, EQUIP zsdsj/revivalworld):** `#define EQUIP EQUIPMENT` (file present). revivalworld also lacked `OBJECT_ACTION_MOD` define+file — adopt zsdsj `_object_action_mod.lpc`. Proof: each ring HEAD 1/2 → 2 PASS.
