@@ -454,3 +454,12 @@ The timer or prompt named a function one letter off the one the file defines (`i
 ## 同源修复（2026-11-10）— log/archive + guest 数据目录
 
 与 `dock9` 同形（Sapidlib）：`master::log_file` 旋转前 `mkdir(LOG_DIR+"/archive")`；guest 登录补 `/data/users/g/guest/`；`wasm_keep_dirs` + `.gitkeep`。见 dock9 §10.7 同日条与 KB 06 §7.358 Also。
+
+## 深度功能测试（§10.7，2026-11-10）— 重测（含当日 §7.358 修复验证）
+
+原生树手启，端口 40224。
+
+覆盖：guest → cafe 入口/`north` 进 cozy cafe → `news`/`q`（写出 `data/users/g/guest/std_newsclient.o`，验证 guest 目录 mkdir）→
+注册新号 → 管理员 `fluffos`/`testpass123` 进 workroom → quit。
+
+驱动：无 compile warning、无 Wrong permissions / cannot move。`old crypt()` 为驱动对旧口令哈希的提示，非本库编程缺陷。无新编程缺陷。
