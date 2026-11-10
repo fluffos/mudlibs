@@ -61,3 +61,9 @@
 - 同文件后部仍有多处中文串被换行切断（约 896+），另轮处理；勿用“奇数引号就拼接下行”的盲修（会切断 UTF-8）。
 - `d/city/npc/guidao.lpc`：`is_killing(who)` → `is_killing(who->query("id"))`（原型为 `string`）。
 - 证明：guidao 类型错误消失；questd11 不再在 300 行一带报错；可编 10950→10952。
+
+## §6.10 damo 括号/缺引号 + questd11 ASCII 换行切断（2026-11-10）
+
+- `inherit/condition/damo.lpc`：`! intp(cnd["remain"] || ! stringp(...))` 缺 `)`（语料 23 库同修）；另本库 `die_reason` 缺收尾 `"`，词法失步后表现为 224/277 假错误。
+- `questd11.lpc`：ASCII 标识切断 `db\nase`、`fami\nly_name`、`experien\nce`、`["i\nd"]` 等 9 处（`zhonghua2` 同步）。
+- 证明：damo 错误清零；可编 10953→10957。新露 `die_reason` 参数个数警告（叶子与基类），另轮。
