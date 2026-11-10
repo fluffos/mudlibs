@@ -7,7 +7,9 @@ the scan flagged (the line the driver reports is the *next* token's, so the shap
 
   `for (times; times > 0; times--)`   an init clause that is a bare variable does nothing: `for (; times > 0; times--)`
   `"\\n";` (nothing but newlines/blanks) on a line of its own right after a statement that ended with `;`, `{` or `}`: a string statement left behind after
-                                       the `return "...";` it was meant to continue (xkx `look_lingwei()`): deleted
+                                       the `return "...";` it was meant to continue (xkx `look_lingwei()`): deleted. Never delete one that follows a
+                                       line ending in `+` — that is the final operand of a string concat (discworld `compiler.lpc` `#include` + `"\\n";`;
+                                       a 2026-11-10 orphan-NOR sweep that ignored this broke 495 sites / discworld boot)
   `if (!(mud_svc[mud]["tell"] & SVC_KNOWN)) {` whose whole body is `#if PREF_TELL & SVC_TCP ... #endif` (the TMI-2
                                        `dns_master.lpc` query_services()): with the option off the `if` is empty and its test an
                                        expression with no effect; the `#if` / `#endif` pair moves outside the braces (same code)
@@ -135,6 +137,10 @@ for path in sorted(flagged):
             while j >= 0 and not lines[j].strip():
                 j -= 1
             prev = lines[j].rstrip("\r").rstrip() if j >= 0 else ""
+            # Never touch a "\n"; that finishes a concat: prev ending in + is the other operand.
+            if prev.endswith("+"):
+                k += 1
+                continue
             if prev.endswith((";", "{", "}")) and not prev.lstrip().startswith("//"):
                 print(f"  {path}:{k + 1}: delete the string statement {lines[k].strip()[:30]!r} after `{prev.strip()[-30:]}`")
                 del lines[k]
