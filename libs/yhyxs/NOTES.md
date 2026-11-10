@@ -1115,3 +1115,8 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-11-03，§7.19 enable_player 重入）
 
 `feature/command.lpc` 的 `enable_player()` 加 `in_enable_player_now` 守卫（`scripts/lpc_fix_enable_player_guard.py`，KB 05 7.19）：门派 NPC `init()`→`setup()`→`enable_player()`→`enable_commands()` 再跑 `init()` 时直接返回，避免 Too deep recursion。
+
+## §6.10 `util.lpc` 缺 `<ansi.h>`（2026-11-10）
+
+- 与 `yhlib` 同病：`adm/simul_efun/util.lpc` 的 `process_bar` 用色宏但无 `#include <ansi.h>`。
+- 已补；全库 `lpc_warnings` 诊断 3→0。

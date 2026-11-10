@@ -36,3 +36,9 @@
 - 本轮：`nosave` 函数 32→`protected`；未用局部 1369；`varargs` 补 50；裸 `return` 1。
 - 启动证明：`lpcc --batch` 仅剩 1 条「Expression has no side effects」（dns_master），无 Unused local / nosave / Unknown pragma。
 - 残留（另轮）：`set_information` 参数类型、questd11/util/damo 语法、`is_killing` 类型、无副作用表达式、全局重声明等。
+
+## §6.10 `util.lpc` 缺 `<ansi.h>`（2026-11-10）
+
+- `process_bar` 写 `"…" NOR` / `HIY` / `BBLU`，文件未 include `ansi.h`，且 `globals.h` 也不拉它 → `unexpected L_IDENTIFIER`。
+- 补 `#include <ansi.h>`。同形语料扫：44 个 `*/simul_efun/util.lpc`（含 `adm/kernel/`）。
+- 证明：本库 util 错误消失；手足 `yhyxs` 诊断 3→0。
