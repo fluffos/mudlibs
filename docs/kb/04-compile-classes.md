@@ -1382,3 +1382,5 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 **Also (2026-11-09, d/game/pai shenmo):** thin alias `d/game/pai` → garbled-name base `榄旀硶鐗_pai` (encoding-lost original). Proof: HEAD 1/8 → 8 PASS.
 
 **Also (2026-11-09, suoha2 zxty):** thin alias `/d/suoha/suoha2` → `/u/zjb/suoha/suoha2` (same-lib). Proof: HEAD 1/5 → 5 PASS.
+
+**Also (2026-11-09, inherit/tests xkx100/xiakexing100):** thin alias `/inherit/tests` → `/mudlib/testsuite/inherit/tests` (same-lib). Leave `/inherit/master/valid` (body needs OVERRIDES_FILE/BASE). Proof: each HEAD 1/3 → 3 PASS.
