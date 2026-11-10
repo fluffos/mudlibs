@@ -48,3 +48,9 @@
 - `inherit/misc/quest.lpc` / `include/quest.h` 把包装收窄为 `string`，任务文件传 `(: ask_npc :)` 时报 Bad type for argument 2；`QUEST_D` 本体已是 `mixed`。
 - 改为 `mixed`；语料同形 39 处（quest.h / quest.lpc 包装）。手足 `yhyxs` 的 `.lpc` 早已改过，本轮补其 `.h`。
 - 证明：yhlib `set_information` 诊断 36→0；可编 10942→10950。
+
+## §6.10 `do_effect` 签名 `void`→`varargs int`（2026-11-10）
+
+- `feature/{food,liquid}.lpc`（及 `feature/feature/` 副本）基类是 `void do_effect()`，叶子如 `fengmi`/`pigpart` 重载为 `varargs int do_effect(object me)` → 返回类型不符警告。
+- 与手足 `yhyxs` 对齐：改为 `varargs int do_effect(object me)` 并 `return 1`。语料同形 23 文件（另修 wllz3 前向声明）。
+- 证明：yhlib do_effect 警告消失（诊断 39→37）。
