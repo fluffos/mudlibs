@@ -553,3 +553,11 @@ pre-rename tree); the config has three obsolete lines the driver reports (`addre
 ## `log/` 下的日志子目录没有人建：写日志的 `write_file()` / `log_file()` 报错（2026-10-22，KB 06 §7.358）
 
 这个库的代码往 `log/` 的 7 个子目录写日志：`log/adm`（`lib/lib/command.lpc`）、`log/harass`（`lib/lib/interface.lpc`）、`log/imc2_server`（`lib/secure/daemon/imc2server/server_log.h`）等。压缩包、`git clone` 和站点包里都没有这些目录（本地启动没有写过它们，`gen_keep_dirs.py` 没记），`write_file()` 对不存在的目录抛 `*Wrong permissions for opening file /log/dlog/money for append. "No such file or directory"`，调用它的函数在写日志那一行中断，后面的奖励、标志、步骤都没有执行。本库的 `log_file()` 是 `write_file(LOG_DIR + file, text)`，目录不存在就抛同样的错误（实测）。把 `log/adm`、`log/harass`、`log/imc2_server`、`log/reports`、`log/router`、`log/secure/log`、`log/watch` 记进 `scripts/wasm_keep_dirs.txt`（`scripts/lpc_keep_log_dirs.py`；站点和 pristine 树按它建空目录）。证明（`scripts/lpcc_eval.py`，在 `/adm/daemons` 这类目录下的求值对象里写 `/log/zzdirprobe/...`，新进程）见 KB 06 §7.358 的实测表。
+
+## 深度功能测试（§10.7，2026-11-10）— 重测 + float trunc
+
+原生树手启（submodule `f1c492e` + overlay；无 systemd user bus），端口 40207。
+
+覆盖：AUTO_WIZ 注册玩家 `dstestpm` → start room → `enter town` → 东路商店 Otik `list` → 冒险者公会 Dirk → `save`/`quit`/`relogin`。
+
+**编程缺陷（§6.10 / KB 04 float trunc）：** 首次加载 `/lib/player.lpc` 时 `eventDisplayStatus` 的 `max_sp = GetMaxStaminaPoints()` 报 `Float value truncated to int`（同系 ds* 已是 `to_int(...)`）。overlay 改为 `to_int(GetMaxStaminaPoints())` 后重编无 warning。无其它新编程缺陷。
