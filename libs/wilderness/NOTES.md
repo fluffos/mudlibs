@@ -1122,3 +1122,8 @@ The `.c` -> `.lpc` rename changed the string but not the slice width: `f[<2..] =
 ## Remaining constant assignments used as conditions (2026-10-27, KB 06 §7.290 Also)
 
 `std/container` `relation="#CLONE#"` and `m_set` `if(set="")` became `==` (`lpc_fix_cond_assign.py`; KB 06 §7.290 Also).
+
+
+## 深度功能测试（2026-11-09，hiccups/bboard 薄别名 §6.15）
+
+`contrib/bboard/exampleboard` 继承缺失的 `/open/hiccups/bboard`；本体在同目录 `contrib/bboard/bboard`（Hiccups@RoE）。薄别名 `open/hiccups/bboard.lpc` → `inherit "/contrib/bboard/bboard"`。证明（LIMA 系专用 lpcc）：HEAD 1 PASS / 2 FAIL → 树 3 PASS（bboard / exampleboard / 别名）。

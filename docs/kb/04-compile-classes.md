@@ -1366,3 +1366,5 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 **Also (2026-11-09, EQUIP zsdsj/revivalworld):** `#define EQUIP EQUIPMENT` (file present). revivalworld also lacked `OBJECT_ACTION_MOD` define+file — adopt zsdsj `_object_action_mod.lpc`. Proof: each ring HEAD 1/2 → 2 PASS.
 
 **Also (2026-11-09, yaoguai/anqi-jian xiyouji2003/zzfy/zzfy3):** (1) xiyouji2003: adopt xixingzhanji `d/dntg/yunlou/npc/yaoguai(+_reward)` + `d/xueshan/obj/anqi-jian`. Proof: HEAD 0/4 → 4 PASS. (2) zzfy/zzfy3: same yaoguai adopt + `#define MISC_D`/`MONITOR_D` + adopt `miscd`/`monitord`/`find.map`. Proof: 0/5 → 5 PASS.
+
+**Also (2026-11-09, hiccups/bboard spacemud/swmud/wilderness):** thin alias `/open/hiccups/bboard` → `/contrib/bboard/bboard` (same-lib). Proof: each HEAD 1/3 → 3 PASS (LIMA/wilderness lpcc).
