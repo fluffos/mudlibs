@@ -570,3 +570,8 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 深度功能测试（2026-11-03，§7.19 enable_player 重入）
 
 `feature/command.lpc` 的 `enable_player()` 加 `in_enable_player_now` 守卫（`scripts/lpc_fix_enable_player_guard.py`，KB 05 7.19）：门派 NPC `init()`→`setup()`→`enable_player()`→`enable_commands()` 再跑 `init()` 时直接返回，避免 Too deep recursion。
+
+
+## 深度功能测试（2026-11-09，gb_budai 薄别名 §6.15）
+
+`d/job/obj/gb_budai9` 继承同目录缺失的 `gb_budai`；本体在 `/d/gaibang/obj/gb_budai`（同库）。薄别名。证明：HEAD 1 PASS / 2 FAIL → 树 3 PASS。
