@@ -104,6 +104,8 @@
 #define LIQUID                  "/std/liquid"
 #define MONEY                   "/std/money"
 #define MONEY_D                 "/adm/daemons/moneyd"
+#define MISC_D		"/adm/daemons/miscd"
+#define MONITOR_D		"/adm/daemons/monitord"
 #define NPC                             "/std/char/npc"
 #define POWDER                  "/std/medicine/powder"
 #define ROOM                    "/std/room"

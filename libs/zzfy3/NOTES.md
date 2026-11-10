@@ -557,3 +557,8 @@ xkx 家族把钱放在 `/clone/money/`，ES2 家族放在 `/obj/money/`；本库
 ## 深度功能测试（2026-11-09，F_DEALER 收养 §6.15/§6.16）
 
 `d/xiakedao/npc/xiaoer2` 等继承未定义的 `F_DEALER`。从同系 xkyx3b 收养 `feature/dealer.lpc` 与 `adm/daemons/moneyd.lpc`，并补 `#define F_DEALER`、`#define MONEY_D`、`#define THGOLD_OB`（千两黄金档本库已有）。证明：moneyd/dealer/xiaoer2 3/3 PASS，0 regress。
+
+
+## 深度功能测试（2026-11-09，yaoguai + MISC_D/MONITOR_D §6.15/§6.16）
+
+`city/npc/yg/yaoguai` 继承缺失的 `/d/dntg/yunlou/npc/yaoguai`（含 `yaoguai_reward`）。从同系 xixingzhanji 收养基类与奖励；本库缺 `MISC_D`/`MONITOR_D` 宏与 daemon——`globals.h` 补宏，并收养 `miscd.lpc`/`monitord.lpc`/`find.map`。证明：yaoguai 链 + miscd/monitord HEAD 0/5 → 5 PASS。

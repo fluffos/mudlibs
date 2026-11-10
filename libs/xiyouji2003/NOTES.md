@@ -1102,3 +1102,8 @@ xkx 家族把钱放在 `/clone/money/`，ES2 家族放在 `/obj/money/`；本库
 ## 深度功能测试（2026-11-04，DAEMON→cmd_m 语料扫 §6.16/§6.15）
 
 `adm/daemons/network/pingd|pingtcp` 继承未定义的 `DAEMON`（TMI 惯例）。`mudlib.h` 补 `#define DAEMON "/std/cmd_m"`，收养精简 `std/cmd_m.lpc`（无 `config.h`），并补档案缺失的 `include/uid.h`。证明：抽样 jhfy/hy5/dreamofseven/fys/pkuxkx/xiyouji2003 HEAD 0/3 → 3 PASS。
+
+
+## 深度功能测试（2026-11-09，yaoguai / anqi-jian 收养 §6.15）
+
+`peijian` 继承缺失的 `/d/xueshan/obj/anqi-jian`；`city/npc/yg/*` 继承缺失的 `/d/dntg/yunlou/npc/yaoguai`（含 `yaoguai_reward`）。从同系 xixingzhanji 收养三档。证明：HEAD 0/4 → 4 PASS（yaoguai / reward / city yg / anqi-jian）。
