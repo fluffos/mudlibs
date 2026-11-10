@@ -998,3 +998,8 @@ The code of this lib writes logs into 2 subdirectories of `log/`: `log/adm/haras
 
 公会房继承 `/d/class/priest/std/learnspell`，本体在 `…/daemons/learnspell`。薄别名。证明：路径 HEAD FAIL → 树 PASS。
 
+
+
+## 深度功能测试（2026-11-09，AFD 路径薄别名 §6.15）
+
+若干对象继承 `/std/raise_stats`、`/std/living/{healing,alignment}`、`/d/Conf/conf_room`，本体在 `/adm/AFD/…` 与 `/d/attic/Conf/conf_room`。薄别名。`/d/Dark/Prime/obj/monolith` 本体仍有类型错误，暂不别名。证明：四别名 listcheck HEAD FAIL → 树 PASS。

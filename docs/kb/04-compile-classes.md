@@ -1384,3 +1384,5 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 **Also (2026-11-09, suoha2 zxty):** thin alias `/d/suoha/suoha2` → `/u/zjb/suoha/suoha2` (same-lib). Proof: HEAD 1/5 → 5 PASS.
 
 **Also (2026-11-09, inherit/tests xkx100/xiakexing100):** thin alias `/inherit/tests` → `/mudlib/testsuite/inherit/tests` (same-lib). Leave `/inherit/master/valid` (body needs OVERRIDES_FILE/BASE). Proof: each HEAD 1/3 → 3 PASS.
+
+**Also (2026-11-09, AFD path aliases mortremains):** thin alias `/std/raise_stats` → `/adm/AFD/raise_stats`, `/std/living/{healing,alignment}` → `/adm/AFD/living/…`, `/d/Conf/conf_room` → `/d/attic/Conf/conf_room` (same-lib). Leave monolith (body type error). Proof: 4 aliases HEAD FAIL → PASS.
