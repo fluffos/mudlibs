@@ -2410,3 +2410,13 @@ Found by taking the objects a visitor meets (`scripts/lpc_reach_census.py` lists
 **Proof:** foundation1 pristine play: empty `mail` → `s` / `S` print `No letter to save.` and stay in the menu; `/log/runtime` has no `Array index` row; player `save` outside mail still works.
 
 **Detection:** `rg -n 'if\(!letter\) letter = __Current' libs/*/work --glob 'post.lpc'` without a following `letter < 0` guard; live empty-folder `s`.
+
+### 7.380 A local named like a sefun shadows it: `home_path(privs)` becomes a call on a string (oxidus, 2026-11-10)
+
+**Symptom:** first admin login prints `Unable to move you to your start location` and `/log/catch` has `*Bad argument 1 to call_if()` from `item.lpc` `move()`; the player falls through to `ROOM_START`. `/home/<letter>/<name>/` is empty — no `workroom.lpc`.
+
+**Cause:** `first_admin_login()` declares `string home_path = home_path(...)`, which shadows the `home_path` sefun for the whole function. `cp("/d/std/workroom.lpc", home_path(privs))` then tries to call that string; the `catch` swallows it, so the workroom is never copied. `enter_world` still does `load_object(home_path(body)+"workroom")` → 0 (no raise) → `move_living(0)` → `call_if(0, "ignore_capacity")` → Bad argument 1.
+
+**Fix:** rename the local (`string home = home_path(...)`; `cp(..., home)`). Guard `if (objectp(room))` before `move_living(room, ...)`. Catalog patch `libs/oxidus/patches/0006-first-admin-home-path-shadow.patch`.
+
+**Detection:** a local whose name matches a sefun used later in the same function as `name(...)`; first-admin boot with empty home and a `call_if` Bad argument 1 in `/log/catch`.
