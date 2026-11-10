@@ -655,3 +655,14 @@ Bugs behind the warnings:
 ## `log/` subdirectories nobody created: the logging `write_file()` / `log_file()` raises (2026-10-22, KB 06 §7.358)
 
 The code of this lib writes logs into 5 subdirectories of `log/`: `log/adm` (`lib/secure/cmds/creator/_call.lpc`), `log/chan` (`lib/secure/daemon/chat.lpc`), `log/errors` (`lib/daemon/services/error.lpc`) .... Neither the archive, a `git clone` nor the site pack has them (no local boot wrote into them, so `gen_keep_dirs.py` never recorded them), and `write_file()` raises `*Wrong permissions for opening file /log/dlog/money for append. "No such file or directory"` for a missing directory: the function that logs stops on that line and what came after it (the reward, the flag, the next step) never runs. What this lib's `log_file()` does for a missing directory could not be measured (the eval object does not load). `log/adm`, `log/chan`, `log/errors`, `log/reports`, `log/watch` are now in `scripts/wasm_keep_dirs.txt` (`scripts/lpc_keep_log_dirs.py`; the site and the pristine tree create the empty directories from it). Proof (`scripts/lpcc_eval.py`, an eval object under `/adm/daemons` or similar writes `/log/zzdirprobe/...`, fresh processes): the measured table in KB 06 §7.358.
+
+## 深度功能测试（§10.7，2026-11-10）— 重测 + log/open
+
+原生树手启（submodule `d249a7e` + overlay；无 systemd user bus），端口 40208。
+
+覆盖：注册 `nmtester`（纯字母名；含数字被拒）→ 选种族 `pick human` → Monument Square →
+`e`/`w`/`n`/`s`（别名，非裸 `east`）→ 教堂/市政厅/冒险者大厅 → Horace 补给店。
+
+**编程缺陷（KB 06 §7.358）：** 进 `/domains/Praxis/supply` 时 Horace `create`→`set_level`→`set_stats` 对非特权对象 `log_file("stats")`，sefun 改写为 `/log/open/stats`；缺 `log/open/` 目录则 `write_file` 抛错，房间加载失败，玩家停在街上并看到权限错误。已把 `log/open`（及 NOTES 曾列的其它 log/tmp/postal 空目录）写回 `scripts/wasm_keep_dirs.txt`，并在 `overlay/lib/` 放 `.gitkeep`。修复后：进店、`list`/`cost vial` 正常，`save`/`quit`/`relogin` 正常。
+
+观察：步行后 stamina 可为负（`score` 显示 `-13 (84)`）；`move_player` 每次 `add_sp(-1)` 且未见下限。未在本轮单独修。`/daemon/soul` 启动时仍有既有 parse 噪音。
