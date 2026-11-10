@@ -345,3 +345,8 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 深度功能测试（2026-11-09，RAKE §6.16/§6.15）
 
 成都钢耙/木耙继承未定义的 `RAKE`。从 sjplii 收养 `/inherit/weapon/rake`（`init_rake`），`weapon.h` 补宏。证明：3/3 PASS。
+
+
+## 深度功能测试（2026-11-09，YIZHAN 宏改指向 §6.16）
+
+`#define YIZHAN "/clone/room/mache.h"` 把驿站基类指到头文件；本体在 `/inherit/room/yizhan`。改为该路径。证明：bjyizhan/hyyizhan listcheck HEAD 2 PASS / 2 FAIL → 树 4 PASS。

@@ -14,7 +14,7 @@
 #define VRM_SERVER		"/adm/daemons/vrm_server"
 
 //added for SNOW
-#define YIZHAN	"/clone/room/mache.h"
+#define YIZHAN	"/inherit/room/yizhan"
 #define MATOU		"/inherit/room/matou"
 
 //added by Doing @ CCTX

@@ -718,3 +718,8 @@ wdt / guangchang / qianmu workroom+board：补 `me`/`who`。
 
 `inherit/gems/chibang|fabao` 继承未定义的 `CHIBANG`/`FABAO`（需 `TYPE_CHIBANG`/`TYPE_FABAO`）。以本库 `inherit/armor/surcoat.lpc` 为模板写出翅膀/法宝防具基类，并在 `armor.h` 补宏。证明：HEAD 0/4 → 4 PASS（newly loading 4）。
 
+
+
+## 深度功能测试（2026-11-09，COMBINED_ITEM_BANG 薄别名 §6.15）
+
+酒/道具继承 `COMBINED_ITEM_BANG`（`/inherit/item/combined_bang`），本体为 `/inherit/item/combined`。薄别名。证明：alias+longyuan+酒 listcheck HEAD 1 PASS / 4 FAIL → 树 5 PASS。

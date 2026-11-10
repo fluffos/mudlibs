@@ -1386,3 +1386,7 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 **Also (2026-11-09, inherit/tests xkx100/xiakexing100):** thin alias `/inherit/tests` → `/mudlib/testsuite/inherit/tests` (same-lib). Leave `/inherit/master/valid` (body needs OVERRIDES_FILE/BASE). Proof: each HEAD 1/3 → 3 PASS.
 
 **Also (2026-11-09, AFD path aliases mortremains):** thin alias `/std/raise_stats` → `/adm/AFD/raise_stats`, `/std/living/{healing,alignment}` → `/adm/AFD/living/…`, `/d/Conf/conf_room` → `/d/attic/Conf/conf_room` (same-lib). Leave monolith (body type error). Proof: 4 aliases HEAD FAIL → PASS.
+
+**Also (2026-11-09, YIZHAN xxcq/xxcqii/xxcqii2):** `#define YIZHAN` `/clone/room/mache.h` → `/inherit/room/yizhan` (same-lib body). Proof: each HEAD 2/4 → 4 PASS.
+
+**Also (2026-11-09, COMBINED_ITEM_BANG wdxtym):** thin alias `/inherit/item/combined_bang` → `/inherit/item/combined` (same-lib). Proof: HEAD 1/5 → 5 PASS.
