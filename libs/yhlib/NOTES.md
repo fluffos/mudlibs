@@ -126,3 +126,7 @@
 ## §7.283 `member_array('.', arg)` 字节搜索（2026-11-10）
 
 `cmds/arch/sameip.lpc`（及跟踪的 `archBAK` 副本）用 `member_array('.', arg)` 区分 IP 与名字；对含非 ASCII 的串会告警且偏移按字节。改为 `strsrch(arg, ".")`。对象可载入；点分 IP 得正下标、纯名字得 -1。
+
+## §7.349 死 `add_action` 残留（2026-11-10）
+
+`adm/npc/referee.lpc` 的 `do_halt`、`clone/megazine/obj/maikaren.lpc` 的 `do_drop`、`d/tianlongsi/munitang.lpc` 的 `do_exit`、`d/wudu/huxue2.lpc` 的 `do_train`、`inherit/misc/fboard.lpc` 的 `do_list`：注册的处理函数本对象与继承链均无定义。删除整行 `add_action`。
