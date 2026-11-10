@@ -246,3 +246,12 @@ load. Do not invent rooms.
 ## 深度功能测试（2026-10-27，§6.25 LDMud `#'fn` 闭包）
 
 同 sticklib：非 lambda 汤行的 `#'ident` → `(: ident :)`。`master_ldmud` 等汤文件未整文件改写。
+## 深度功能测试（§10.7，2026-11-10）— 重测
+
+手启：`build-debug`；端口 40278。
+
+覆盖：`fluffos`/`Mud@2026` → The Void `look`/`score`/`inventory` → `north` workshop →
+`south` 回 Void → `quit` → 重连再进 Void/`score`/`quit`。
+
+`who`/`help`/`save` 仍为 `What?`（目录叠层未接原 MessageLib/XML 指令栈，与既有 NOTES 一致，非新缺陷）。
+驱动 stdout：无 compile warning、无 runtime Error。无新编程缺陷。
