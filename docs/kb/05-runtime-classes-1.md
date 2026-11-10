@@ -327,6 +327,8 @@ legitimate sleep/revive/disable flows re-enable while already living
 
 **Also (2026-11-03):** another 117 libs still lacked the flag (es2/fy*/jqxz*/hy*/… Journey and Fengyun families). Same fixer `--apply`. Proof: HEAD `feature/command.lpc` has no `in_enable_player_now`; tree has the nosave flag + early return; post-apply plan is 0 FIX.
 
+**Also (2026-11-10, yhlib):** yhlib `feature/command.lpc` still lacked the flag. `lpc_fix_enable_player_guard.py --apply`. Proof: object loads; post-apply plan 0 FIX for yhlib.
+
 ### 7.20 Net-dead void-parking without location restore
 **Symptom:** no log signal at all. After an unclean disconnect, the
 player starts every future session in the void.
