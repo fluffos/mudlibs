@@ -138,3 +138,7 @@
 ## §7.334 空 `chat_msg` 下标（2026-11-10）
 
 `inherit/char/npc.lpc`：`chat()` 在空数组上 `random(sizeof(msg))` 得 0 再取 `msg[0]`，`Array index out of bounds`。骰子前加 `sizeof(msg) &&`。HEAD 空表 20 次必炸；tree 50 次仍过。
+
+## §7.340 `blockade`/`recovermud` 缺 `data/keep/`（2026-11-10）
+
+`cmds/arch/blockade.lpc` 向不存在的 `data/keep/` `cp`；`recovermud.lpc` 对缺失 keep 文件 `cp` 失败且可能在解锁前中断。`blockade` 前 `mkdir("/data/keep")`，`recovermud` 对缺失 `src` `continue`（`archBAK` 同）。两命令可载入。
