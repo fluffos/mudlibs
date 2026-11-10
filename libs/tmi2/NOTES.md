@@ -783,3 +783,7 @@ A room exit named a file the lib does not have, so the player was stuck (a typo,
 
 `I3`/`I3-0505` create 里 `clone_object(SOCKET, LISTEN…)` 在端口占用时 `error()`，alone-scan 整对象 FAIL；`catch` 包住两处 clone，仅有 router 时才 `send_startup_req_1`。`u/l/leto/blah` 同 adm/priv 的 `find_player("leto")` 守卫。证明：HEAD I3-0505/leto blah FAIL；树 PASS。余 intentional：www !TP、ed_guide previous_object、doc/func_spec、leto/nntp 缺头。
 
+## 深度功能测试（2026-11-10，§7.358 log/ keep 行缺失）
+
+`work/log/` 被 gitignore，`wasm_keep_dirs.txt` 里本库原先没有任何 `log` 行。直接开驱动时 `log/` 不存在：HTTP 守护进程 `create()` 写 `/log/http_errors`、登录 `complete_setup()` 写 `LOGIN_LOG`（`/log/USAGE`）、以及主控 `error_handler` 写 `/log/runtime` 全部因目录缺失抛错（错误处理器自己再写 runtime 二次失败）。玩法仍可进四方院子并走动，但登录日志与错误日志全断。`lpc_keep_log_dirs.py --apply` 加上 `log/adm/harass`，`gen_keep_dirs.py --merge` 补上父目录 `log`（及 `log/adm`）。证明：重建后零条 `/log` 权限错误，`/log/USAGE` 有登录行；`fluffos`/`FluffOS2026Admin` 进四方院子，`down` 到 Fooland，quit/relogin 正常。
+
