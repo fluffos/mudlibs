@@ -577,3 +577,11 @@ committing -- only the 8 genuine `.lpc` fixture fixes remain staged.
 - 2026-10-14: 1 files did not compile with `Type of returned value doesn't match function return type ( int vs void )`: a function declared `void` (or with no type) returns a value, which the old driver passed to the caller. Functions whose value a caller reads (add_action handlers, commands, helpers) now carry the type they return: `foo()`. HEAD vs tree in fresh drivers: 1 objects, 1 newly loading, 0 regressions (`scripts/lpc_fix_void_return.py`, KB 04 §6.3).
 
 - 2026-10-14: 1 file(s) declared a function `int` (or `void`) that returns a string or object (`int query_seal() { return "…"; }`), which the old driver passed to the caller; it now has the type it returns (`scripts/lpc_fix_void_return.py`) (KB 04 §6.1, §6.3). HEAD vs tree in fresh drivers: 1 objects, 1 newly loading, 0 regressions.
+
+## 深度功能测试（§10.7，2026-11-10）— 重测
+
+原生树手启，端口 40250。裸引擎骨架（设计如此，无 look/score/账号）。
+
+覆盖：欢迎语 → `who` → `eval return 2+2` → `say` → `look` 兜底 `Beg your pardon?` → `quit` → 重连。
+
+驱动 stdout：无 warning、无 Error。无新编程缺陷。
