@@ -598,3 +598,15 @@ The timer or prompt named a function one letter off the one the file defines (`i
 ## Combat probe with the seeded administrator (2026-10-22): clean
 
 `scripts/play_combat_probe.py dock9 --account ... --clone ...`: the administrator cloned `/areas/lpuni/mobiles/greeter`, `/areas/trepi/docks/npc/greeter_sailor`, `/areas/trepi/docks/npc/high_sailor` into its room without a driver line; these greeters refuse `kill`, so no fight started. (KB 08 §10.16)
+
+## 深度功能测试（§10.7，2026-11-10）— log/archive + guest 数据目录
+
+原生树手启，端口 40266。
+
+覆盖：guest 登录 → Trepi 南/东走 → `news`/`q` → `save`/`quit` → 重连；另注册新号走 Pier。
+
+编程缺陷（已修）：
+1. `master::log_file` 在日志 ≥200KB 时 `rename` 到 `/log/archive/...`，但 archive 目录无人创建（§7.358）：错误处理器连环 `*cannot move /log/log`。`mkdir(LOG_DIR+"/archive")` 后再 rename；同形修到 `lpuni`。
+2. guest 不走 `setupNew()`，`/data/users/g/guest/` 不存在；`news` 退出写 `std_newsclient.o` 报 `*Wrong permissions…`。guest 登录路径补 letter-bucket + user dir；keep dirs + `.gitkeep`。
+
+证明：垫高 `/log/log` 至 200000B 后 guest `news`：`log/archive/log-*` 生成，`data/users/g/guest/std_newsclient.o` 写出；驱动无 cannot move / Wrong permissions。

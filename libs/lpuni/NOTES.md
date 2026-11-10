@@ -450,3 +450,7 @@ The timer or prompt named a function one letter off the one the file defines (`i
 ## 无参数时命令对 0 的调用（玩家/--all-dirs 残留，2026-10-27，KB 06 §7.336 Also）
 
 无参数命令把 0 交给 `present` / `sscanf` / `file_exists` 等会运行时报错。`lpc_fix_bare_arg.py --all-dirs` 在首次使用参数前加守卫。多行 `if (arg && !sscanf)`（吐纳默认消耗）与已有 `can_learn`/`get_object` 守卫的误报已回退；本库本批改动见该提交。
+
+## 同源修复（2026-11-10）— log/archive + guest 数据目录
+
+与 `dock9` 同形（Sapidlib）：`master::log_file` 旋转前 `mkdir(LOG_DIR+"/archive")`；guest 登录补 `/data/users/g/guest/`；`wasm_keep_dirs` + `.gitkeep`。见 dock9 §10.7 同日条与 KB 06 §7.358 Also。
