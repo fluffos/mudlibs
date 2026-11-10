@@ -699,6 +699,8 @@ time. (3) *Fewer arguments than parameters*: add `varargs` to the definition the
 **Also (2026-11-03, Discworld `/std/rooftop`):** house templates inherit `/std/rooftop` while the file lives at `/std/room/rooftop` (same shape as `/std/outside`). Thin alias `inherit "/std/room/rooftop"`. 3 hosts PASS: discworld, dw_fluffos_v1, dw_fluffos_v2.
 
 
+**Also (2026-11-10, equip_bd shenmo):** adopt `d/obj/equip/equip_bd` from xiaoyuxiyou (xyxy2 needs `MyArmorFile`); add `err_msg` sefun. Proof: bangding HEAD FAIL → load PASS.
+
 ### 6.16 A macro the lib's global header lost, restored from the siblings (2026-10-19)
 **Symptom:** `Undefined variable 'MAILDIR'`, `Undefined function ARMOR_D` / `BINGQI_D`, `Undefined variable 'NAME_D'`: an all-caps name the object uses and no header of the lib defines. The object never loads, and the compiler stops at the first undefined name, so the errors and warnings behind it stay hidden. 324 macros in 108 libs for 471 listed objects: `MAILDIR "/data/mail/"` (about 30 xkx-lineage libs), the `ARMOR_D(x)` / `BINGQI_D(x)` weapon and armor path macros (nitan6, fqyy2), `NAME_D`/`IP_D`/`TOPTEN_D` of the dtsl family, the `pic*` room macros of mohuanshiji (49), `TYPE_*` armor types, `EVENT_D`.
 **Cause:** the lib's `include/globals.h` is an older or trimmed copy; the sibling libs of the lineage carry the lines. KB 04 section 6.13 is the base-class macro, section 6.15 the file that is missing; this is any other macro.

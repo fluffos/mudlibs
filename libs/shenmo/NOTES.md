@@ -1537,3 +1537,10 @@ tianzun → `ob`；shenxiang → `me`。
 ## 深度功能测试（2026-11-09，baohu killer1 收养 §6.15）
 
 `d/quest/baohu/yaoguai{2,3}/yg-*` 继承同目录缺失的 `killer1`；本体在 `/d/wizz/stey/kill2/killer1`。同库收养到两目录。证明：killer1+yg sample listcheck HEAD 1 PASS / 6 FAIL → 树 7 PASS。
+
+## §6.15 adopt `equip_bd`（2026-11-10）
+
+- 症状：`d/maze/dayan-ta/obj/bangding.lpc` `inherit "/d/obj/equip/equip_bd.lpc"`，本馆缺文件 → `*No program`
+- 供体：`xiaoyuxiyou` / `xyxyutf8` 同名基类（111 行；`xyxy2` 版依赖 `MyArmorFile`/`MyWeaponFile`，神魔无）
+- 修复：采纳 `d/obj/equip/equip_bd.lpc`；`adm/simul_efun/message.lpc` 补手足同有的 `err_msg()` sefun
+- 验证：`lpcc_eval` `load_object("/d/maze/dayan-ta/obj/bangding")` → 须弥石
