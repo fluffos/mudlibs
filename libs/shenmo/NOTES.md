@@ -1527,3 +1527,8 @@ tianzun → `ob`；shenxiang → `me`。
 
 `jianhun` / `ai-sword` 等继承未定义的 `F_FUNCTION`（`query_function` / `function_improved`）。从手足 kxkj 收养 `feature/function.lpc`，并补 `#define F_FUNCTION`。证明：HEAD 2 PASS / 2 FAIL → tree 4 PASS（newly loading 2）。
 
+
+
+## 深度功能测试（2026-11-09，d/game/pai 薄别名 §6.15）
+
+`榄旀硶鐗_pai[1-6]` 继承同目录缺失的 `pai`；本体因编码损坏落在 `榄旀硶鐗_pai.lpc`。薄别名 `pai.lpc` → 该档。证明：HEAD 1 PASS / 7 FAIL → 树 8 PASS。

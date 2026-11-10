@@ -1378,3 +1378,5 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 **Also (2026-11-09, capital ShennongNpc xajh2):** thin alias `d/city/capital/ShennongNpc` → `/d/menpai/shennong/npc/ShennongNpc` (same-lib). Proof: HEAD 1/4 → 4 PASS.
 
 **Also (2026-11-09, npcskill path aliases):** thin-alias missing `/u/fyue/npcskill`, `/u/system_1/npcskill`, `/kungfu/class/wudang/npcskill_n`, `/quest2/npcskill` to same-lib `quest/` or `quest2/` bodies (12 libs: xyzx3/yzxiiizylfy/xyzxiiylzymh/tianxiawuxue/tybxjh/xysylmhb/wmkj/zxty/zxty08nxgbb/wlhd/yxjh/wxddym). Proof: each alias HEAD FAIL → PASS; questguai may still need name.h.
+
+**Also (2026-11-09, d/game/pai shenmo):** thin alias `d/game/pai` → garbled-name base `榄旀硶鐗_pai` (encoding-lost original). Proof: HEAD 1/8 → 8 PASS.
