@@ -54,3 +54,10 @@
 - `feature/{food,liquid}.lpc`（及 `feature/feature/` 副本）基类是 `void do_effect()`，叶子如 `fengmi`/`pigpart` 重载为 `varargs int do_effect(object me)` → 返回类型不符警告。
 - 与手足 `yhyxs` 对齐：改为 `varargs int do_effect(object me)` 并 `return 1`。语料同形 23 文件（另修 wllz3 前向声明）。
 - 证明：yhlib do_effect 警告消失（诊断 39→37）。
+
+## §6.10 换行切断标识符 / `is_killing`（2026-11-10）
+
+- `questd11.lpc`：`message_vision(...太差\n，" ... me, w\nho)` 与 `ob->na\nme()` / `ob->name(\n)+` 换行切断；与 `zhonghua2` 同修。首段语法错误已消。
+- 同文件后部仍有多处中文串被换行切断（约 896+），另轮处理；勿用“奇数引号就拼接下行”的盲修（会切断 UTF-8）。
+- `d/city/npc/guidao.lpc`：`is_killing(who)` → `is_killing(who->query("id"))`（原型为 `string`）。
+- 证明：guidao 类型错误消失；questd11 不再在 300 行一带报错；可编 10950→10952。

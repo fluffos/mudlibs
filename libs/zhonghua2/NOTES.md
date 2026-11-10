@@ -1217,3 +1217,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## newitems 收养（2026-11-09，KB 04 §6.15）
 
 `clone/newitem/newarmor/boots` 与 `/u/workroom` 继承缺失的 `/clone/newitem/newitems`。从本库 `/u/yuchang/zhuangbei/obj/newitem/` 同名文件连同 `newitemname.lpc` 拷到 `clone/newitem/`。证明：HEAD 0/4 → 4 PASS。
+
+## §6.10 questd11 换行切断（2026-11-10）
+
+- 与 `yhlib` 同形：`message_vision` 的 `me, w`/`ho)`、`ob->na`/`me()`、`ob->name(\n)+`。已修。
