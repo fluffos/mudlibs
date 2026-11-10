@@ -908,3 +908,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 `daemon/skill/*-zhen` 继承未定义的 `SKI_ZHEN`。从手足 dtxyzjb 收养 `/inherit/skill/array.lpc`，并补 `#define SKI_ZHEN`（同 hhsj/dtxyzjb）。证明：HEAD 0/5 → 5 PASS。
 
+
+## baoshi/newitemname 收养（2026-11-09，KB 04 §6.15）
+
+`d/obj/newitem/baoshi/newitems` 继承 `__DIR__ "newitemname"`，该目录缺文件。从同库 `/d/obj/newitem/newitemname.lpc` 拷入。证明：HEAD 0/2 → 2 PASS。

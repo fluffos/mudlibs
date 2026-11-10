@@ -1358,3 +1358,5 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 **Also (2026-11-09, DAEMON shzs/shenzhou):** (1) shzs: live `#define DAEMON "/std/cmd_m"` (file present). Proof: pingd/pingtcp FAIL→PASS. (2) shenzhou: DAEMON only inside `/* */` — add live define + adopt shzs `cmd_m.lpc`/`uid.h`. Proof: 0/5→3 PASS (pingd/pingtcp/cmd_m).
 
 **Also (2026-11-09, /inherit/object FR/ninetears):** retarget `inherit "/inherit/object"` → `"/std/object"` (same-lib). Alone-scan literal cleared; gopher still needs local `globals.h`.
+
+**Also (2026-11-09, baoshi/newitemname zitengzhan):** `__DIR__ "newitemname"` under `baoshi/`; copy parent `d/obj/newitem/newitemname.lpc`. Proof: HEAD 0/2 → 2 PASS.
