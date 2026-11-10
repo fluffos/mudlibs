@@ -583,3 +583,12 @@ no patch needed. The 3 files that do not compile need efuns this driver build la
 compiled nothing because the sefun inherits its parts as `inherit "/secure/sefun/array.c"` and `global.h` names every
 base as `"/std/object.c"`; the builder now rewrites such `.c` path strings in the `.lpc` copy (KB 02 §2.3).
 
+
+## 深度功能测试（§10.7，2026-11-10）— 重测
+
+手启：`rsync`/`cp` 子模块后去掉 `.git`，`apply_lib_patches.py` 四补丁齐全；mudlib=`work/lib`，端口 40237。
+
+覆盖：注册账号（screenreader n）→ 建角/`human` → intro story → tank `download warrior`/`done` → Origin Point →
+`look`/`inventory`/`score`/`who`/`help` → `northeast`/`southwest` → quit 回账号菜单 → 重连选角回 Origin Point。
+
+驱动 stdout：无 compile warning、无 runtime Error。无新编程缺陷。
