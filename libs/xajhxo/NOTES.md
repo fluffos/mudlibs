@@ -1022,3 +1022,7 @@ xinfang/chatroom：`tell_object("ob", …)`→`tell_object(ob, …)`。
 ## PPLROOM 宏（2026-11-09，KB 04 §6.16）
 
 `pplroom.lpc` 生成玩家住房源码时写入 `inherit PPLROOM`，但 `globals.h` 从未定义该宏（手足 xo/xajh2/xo_final 均有 `#define PPLROOM STD_DIR "room/pplroom"`）。按同形补上。alone-scan 的 undef PPLROOM 消失；`/system/std/room/pplroom` 本身仍 PASS。
+
+## 深度功能测试（2026-11-10，biaoju/funiu 薄别名 §6.15）
+
+`system/menpai/biaoju/ke` 继承缺失的 `__DIR__ "funiu"`；同库 `/d/nanyang/npc/funiu`（及 city 副本）可载入，且 `/d/nanyang/npc/ke` 用同一形状。薄别名。证明：listcheck 4 对象 HEAD 2 PASS / 2 FAIL → 树 4 PASS。
