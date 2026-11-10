@@ -1,0 +1,106 @@
+//chan_d.c
+
+//Tacitus @ Tmi-3
+//07-JULY-05
+//An extensible channel daemon
+
+//This is an idea of mine -- A channel daemon with
+//a modular design that takes the pain out of
+//accessing different intermud networks. It allows
+//plugins to be installed that can allow for access
+//to the different daemons. Basically the module registers
+//it's self and this object will pass the data to it.
+
+//See: /doc/mudlib/daemons/chan_d 
+
+//Last edited on July 8th, 2005
+
+int register(string name, string abrev, string module, string *ch_list);
+int snd_msg(string chan, string usr, string msg);
+void rec_msg(string chan, string msg);
+void tune(string chan, string name, int flag);
+
+mapping channels;
+
+void create()
+{
+     channels = ([]);
+}
+
+int register(string name, string abrev, string module, string *ch_list)
+{
+     string *keys;
+     int i;
+
+     if(!name || !abrev || !module || !ch_list) return 0;
+     keys = keys(channels);
+     for(i = 0; i < sizeof(ch_list); i++)
+     {
+          if(member_array(keys, ch_list[i]) != -1)
+          {
+               previous_object()->ch_name(ch_list[i], abrev + "_" + ch_list[i]);
+               ch_list[i] = abrev + "_" + ch_list[i];
+          }
+     channels += ([ch_list[i] : (["name" : name, "module" : module, "listeners" : ({}) ]) ]);
+     }
+     return 1;
+}
+
+int snd_msg(string chan, string usr, string msg)
+{
+     string *keys;
+     object module;
+     mapping data;
+     
+     keys = keys(channels);
+     if(member_array(keys, chan) == -1) return 0;
+     data = channels[chan];
+     if(!find_object(data["module"])) load_object(data["module"]);
+     module = find_object(data["module"]);
+     if(!module) return 0;
+     if(module->rec_msg(chan, usr, msg)) return 1;
+     else return 0;
+}
+
+void tune(string chan, string name, int flag)
+{
+     string *keys;
+     mapping data;
+     
+     keys = keys(channels);
+     if(member_array(keys, chan) == -1) return;
+     data = channels[chan];
+     
+     if(flag == 1 )
+     {
+          if(member_array(data["listeners"], name) == -1) data["listeners"] += ({ name });
+     }
+     
+     if(flag == 0)
+     {
+          if(member_array(data["listeners"], name) != -1) data["listeners"] -= ({ name });
+     }
+     
+     channels[chan] = data;
+}
+
+void rec_msg(string chan, string msg)
+{
+     string *keys, *user_list;
+     int i;
+     object ob;
+     mapping data;
+     
+     keys = keys(channels);
+     if(member_array(keys, chan) == -1) return;
+     data = channels[chan];
+     
+     user_list = data["listeners"];
+     
+     for(i = 0; i < sizeof(user_list); i ++)
+     {
+          ob = find_player(user_list[i]);
+          if(!ob) continue;
+          tell_object(ob, msg);
+     }
+}

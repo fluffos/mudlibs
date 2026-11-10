@@ -1,0 +1,577 @@
+//valid.c
+
+//Tacitus @ Tmi-3
+//23-APR-05
+//Security, Inherited by Master Object
+
+#include <config.h>
+
+#define G_FILE "/adm/etc/groups"
+#define A_FILE "/adm/etc/access"
+
+//#define DEBUG /*Will spam the hell out of ya if defined!*/
+
+string *parse(string str);
+string *query_group(string group);
+int query_member(string user, string group);
+int query_access(string directory, string gu, int type);
+string *track_member(string gu, string directory);
+
+mapping access;
+mapping groups;
+
+void create()
+{
+     string *arr, directory, gu, permissions, arguments, temp, *arr2, *temp2;
+     mapping data;
+     int i, n;
+
+     access = ([]);
+     groups = ([]);
+     data = ([]);
+     arr = ({});
+     arr2 = ({});
+     temp2 = ({});
+
+
+     //Proccess groups
+     arr = parse(read_file(G_FILE));
+
+     for(i = 0; i < sizeof(arr); i++)
+     {
+          arr2 = ({});
+          temp2 = ({});
+          
+#ifdef DEBUG
+          write("\nSecurity Debug: Parsing group data.\n");
+#endif
+
+          if(!sscanf(arr[i], "(%s)%s", gu, temp))
+          {
+               write("Security Alert: Error in parsing group file.\n");
+               write("Diagnostic Data: Stage 1, Element " + i + ", String: " + arr[i] + " (Invalid format)\n");
+               write("Security Alert: Ignoring group...\n");
+               continue;
+          }
+          
+#ifdef DEBUG
+          write("Security Debug: Exploding data into array for group " + gu + ".\n");
+#endif          
+          arr2 = explode(temp, ":");
+#ifdef DEBUG
+
+          write("Security Debug: Adding following users to group " + gu + ".\n");
+                   
+          for(n = 0; n < sizeof(arr2); n++)
+          {
+               write(arr2[n] + "\n");
+          }
+#endif
+          groups += ([gu : arr2]);
+     }
+
+     //Proccess access
+     
+     arr = parse(read_file(A_FILE));
+#ifdef DEBUG
+          write("\nSecurity Debug: Parsing access data.\n");
+#endif    
+     for(i = 0; i < sizeof(arr); i ++)
+     {
+          arr2 = ({});
+          temp2 = allocate(8);
+          data = ([]);
+          
+          if(!stringp(arr[i])) continue;
+          
+          
+          if(!sscanf(arr[i], "(%s)%s", directory, arguments))
+          {
+               write("Security Alert: Error in parsing access file.\n");
+               write("Diagnostic Data: Stage 1, Element " + i + ", String: " + arr[i] + " (Invalid format)\n");
+               error("Security Alert: Security compromised (unable to parse permissions).\n");
+          }
+          
+#ifdef DEBUG
+               write("Security Debug: Stage 1, Element " + i + ", String: " + arr[i] + "\n");
+               write("Security Debug: Now attempting to explode string.\n");
+#endif
+          
+          if(arguments[<1..< 1] == ":")
+          {
+               write("Security Alert: Error in parsing access file.\n");
+               write("Diagnostic Data: Stage 1.5, Element " + i + ", Directory " + directory + ", String " + arr[i] + " (Extra : found at end of line)\n");
+               error("Security Alert: Security compromised (unable to parse permissions).\n");
+          }
+          
+          arr2 = explode(arguments, ":");
+          
+#ifdef DEBUG
+               write("Security Debug: Stage 1.5,  Element " + i + ", String: <array>\n");
+               write("Security Debug: Now entering loop to parse string exploded to array.\n");
+#endif
+          
+          for(n = 0; n < sizeof(arr2); n ++)
+          {
+                         temp2 = allocate(8);
+#ifdef DEBUG
+                    write("Security Debug: Stage 2, Element " + i + " " + n + ", String: " + arr2[n] + "\n");
+                    write("Security Debug: Not attempting to extract permission data.\n");
+#endif
+
+               if(!sscanf(arr2[n], "%s[%s]", gu, permissions))
+               {                        
+                         write("Security Alert: Error in parsing access file.\n");
+                         write("Diagnostic Data: Stage 2, Element " + i + " " + n + ", Directory " + directory + ", String " + arr2[n] + " (Invalid format)\n");
+                         error("Security Alert: Security compromised (unable to parse permissions).\n");
+               }
+#ifdef DEBUG
+                    write("Security Debug: Data extracted...\n");
+                    write("  Group/User: " + gu + " Permissions: " + permissions + " Directory: " + directory + "\n");
+                    write("Security Debug: Now interpreting and assigning data.\n");
+#endif
+               //read, write, network, shadow, link, execute, bind, ownership
+               if(strsrch(permissions, "r") != -1) temp2[0] = "r";
+               if(strsrch(permissions, "w") != -1) temp2[1] = "w";
+               if(strsrch(permissions, "n") != -1) temp2[2] = "n";
+               if(strsrch(permissions, "s") != -1) temp2[3] = "s";
+               if(strsrch(permissions, "l") != -1) temp2[4] = "l";
+               if(strsrch(permissions, "e") != -1) temp2[5] = "e";
+               if(strsrch(permissions, "b") != -1) temp2[6] = "b";
+               if(strsrch(permissions, "o") != -1) temp2[7] = "o";
+
+               data += ([gu : temp2]);
+               
+          }
+          
+#ifdef DEBUG
+               write("Security Debug: Exiting inner-loop.\n");
+               write("Security Debug: Adding directory (" + directory + ") data to permission mapping.\n");
+#endif
+          
+          access += ([directory : data]);
+          
+     }
+}
+
+int valid_shadow(object ob)
+{
+     string location, name;
+     location = get_base(ob);
+     name = query_privs(ob);
+     if(query_access(location, name, 4)) return 1;     
+     return 0;
+}
+
+int valid_bind(object obj, object owner, object victim)
+{
+     string name;
+     name = query_privs(previous_object());
+     if(query_access(get_base(owner), name, 7) && query_access(get_base(victim), name, 7)) return 1;
+     return 0;
+}
+
+int valid_compile_to_c()
+{
+     return 0;
+}
+
+int valid_hide(object ob)
+{
+     return 0;
+}
+
+int valid_link(string from, string to)
+{
+     string name;
+     name = query_privs(previous_object());
+     if(query_access(from, name, 5) && query_access(to, name, 5)) return 1;     
+     return 0;
+}
+
+int valid_object(object ob)
+{
+     string location, name;
+     location = file_name(ob);
+     if(this_player()) name = query_privs(this_player());
+     else name = query_privs(ob);
+     if(!name) name = "noname";
+     if(file_name(ob) == "/adm/daemons/login") return 1;
+     if(query_access(location, name, 6)) return 1;     
+     return 0;
+}
+
+int valid_override(string file, string efun_name, string mainfile)
+{
+	
+     if (mainfile == "/adm/obj/simul_efun.lpc") {
+          return 1;
+     }
+     if(efun_name == "destruct" && mainfile == "/std/object.lpc") return 1;
+     if (efun_name == "destruct")
+          return 0;
+     if (efun_name == "shutdown")
+          return 0;
+     if (efun_name == "snoop")
+          return 0;
+     if (efun_name == "exec")
+          return 0;
+     return 1;
+}
+
+int valid_socket(object caller, string func, mixed *info)
+{
+     //We might code a daemon or something that allows
+     //us to ban connections to certain ports/connections
+     string name;
+     name = query_privs(caller);
+     if(query_access(get_base(info[2]), name, 3)) return 1;
+     return 0;     
+}
+
+int valid_save_binary(string file)
+{
+     string temp;
+     if(sscanf("/adm/%*/%s", temp)) return 1;
+     return 0;
+}
+
+int valid_read(string file, object user, string func)
+{     
+     string name, tmp, tmp2;
+     if(this_player() && query_privs(user) != "[daemon]") name = query_privs(this_player());
+     else name = query_privs(user);
+     if(!name) name = "noname";
+     /* FluffOS boot: sefun/master need world-readable etc before login */
+     if (user == master() || file_name(user) == "/adm/obj/simul_efun")
+          return 1;
+     if (name == "Root" || name == "noname" || name == "NONAME")
+          return 1;
+     
+     if(interactive(user)) {
+          if(file == user_data_file(user->query_name()) + ".o") return 1;
+     }
+     
+     if(file && sscanf(file, "/home/%*s/%s/%s", tmp, tmp2))
+     {
+          if(name == tmp) return 1;
+          if(tmp2 && tmp2[0..5] == "public") return 1;
+          if(tmp2 && tmp2[0..6] == "private" && name == tmp) return 1;
+          if(tmp2 && tmp2[0..6] == "private" && name != tmp && !query_member(name, "admin")) return 0;
+     }
+     if(func == "file_size") return 1;     
+#ifdef DEBUG
+     write("Debug [valid_read]: File: " + file + " Name: " + name + "\n");
+#endif     
+         
+     if(query_access(file, name, 1)) return 1;     
+     return 0;
+}
+
+int valid_write(string file, object user, string func)
+{
+     string name, tmp, tmp2;
+     if(this_player() && query_privs(user) != "[daemon]") name = query_privs(this_player());
+     else name = query_privs(user);
+     if(!name) name = "noname";
+     
+     if(user == this_object() || user == master()) return 1;
+     
+     if(interactive(user)) {
+          if(file == user_data_file(user->query_name()) + ".o") return 1;
+     }
+     
+     if(file && sscanf(file, "/home/%*s/%s/%s", tmp, tmp2))
+     {
+          if(name == tmp) return 1;
+          if(tmp2 && tmp2[0..5] == "public") return 1;
+          if(tmp2 && tmp2[0..6] == "private" && name == tmp) return 1;
+     }
+     
+     
+#ifdef DEBUG
+     write("Debug [valid_write]: File: " + file + " Name: " + name + "\n");
+#endif   
+     if(query_access(file, name, 2)) return 1;
+     return 0;
+}
+
+string *parse(string str)
+{
+     string *arr;
+     int i;
+
+     if (!str) {
+          return ({});
+     }
+
+     arr = explode(str, "\n");
+
+     for (i = 0; i < sizeof(arr); i++) {
+          if (arr[i][0] == '#') {
+               arr[i] = 0;
+               continue;
+          }
+            arr[i] = replace_string(arr[i], " ", "");
+            arr[i] = replace_string(arr[i], "\t", "");
+     }
+     return arr;
+}
+
+int query_member(string user, string group)
+{     
+     string *data;
+     
+     if(!user || !group) return 0;
+     
+     data = groups[group];
+     
+     if(!arrayp(data)) return 0;
+     
+     if(member_array(user, data) != -1) return 1;
+     
+     else return 0;
+}
+
+int query_access(string directory, string gu, int type)
+{
+     mapping data;
+     string *perms, *exp;
+     int size, i;
+ 
+     if(gu == "[master]" || gu == "[admin]" || query_member(gu, "admin")) return 1;
+
+     sscanf(gu, "%s#%*s", gu);
+     
+     if(directory[<1] != '/') directory += "/";
+     
+     if(!access[directory])
+     {
+#ifdef DEBUG
+          write("Debug [query_access]: " + directory + " not in mapping. Moving up.\n");
+#endif          
+          exp = explode(directory, "/");
+          size = sizeof(exp);
+          while(!access[directory] && size --)
+          {
+#ifdef DEBUG 
+               write("Debug [query_access]: Directory now at " + directory + "\n\n");
+               write("Debug [query_access]: " + i + " " + size + "\n\n");
+#endif         
+               directory = "/";
+               for(i = 0; i < size; i ++)
+               {
+                    directory += exp[i] + "/"; 
+               }              
+          }
+#ifdef DEBUG
+          write("Debug [query_access]: Defaulting directory to /\n");
+#endif                   
+          if(!access[directory]) directory = "/";
+     }
+
+#ifdef DEBUG
+     write("Debug [query_access]: Directory permissions found for " + directory + "\n");
+#endif
+          
+     data = access[directory];
+     
+     if(!mapp(data)) return 0;     
+     perms = ({});
+     if(!data[gu])
+     {
+#ifdef DEBUG
+          write("Debug [query_access]: " + gu + " not found. Tracking member...\n");
+#endif    
+          perms = ({});                
+          perms = track_member(gu, directory);
+     }
+     
+     else
+     {
+          perms = ({});
+          perms = data[gu];
+     }
+
+     if(sizeof(perms) < 1)
+     {
+          if(data["(all)"])
+          {
+#ifdef DEBUG
+               write("Debug [query_access]: Permission data not avaiable. Attempting to use default.\n");
+#endif         
+               perms = ({});                      
+               perms = data["(all)"];
+               gu = "(all)";
+               if(!arrayp(perms))
+               {
+#ifdef DEBUG
+                    write("Error [query_access]: Default permissions not found. Denying request.\n");
+#endif
+                    perms = ({});   
+                    return 0;
+               }
+
+          }
+          if(!arrayp(perms))
+               {
+#ifdef DEBUG
+                    write("Error [query_access]: Permissions not found. Denying request.\n");
+#endif
+                    perms = ({});
+                    return 0;
+               }
+         
+     }         
+    
+     
+#ifdef DEBUG
+          write("Debug [query_access]: Now detecting permissions...\n");
+          
+               for(i = 0; i < sizeof(perms); i++)
+     {
+          write("DEBUG [query_access]: " + perms[i] + "\n");
+     }
+
+#endif
+    
+     switch(type)
+     {
+          //read, write, network, shadow, link, execute, bind, ownership
+          case 1 : if(member_array("r", perms) != -1)
+          {
+#ifdef DEBUG
+               write("Debug [query_access]: Permission granted to read for " + directory + "\n");
+#endif
+               return 1;
+          }
+          break;
+          case 2 : if(member_array("w", perms) != -1)
+          {
+#ifdef DEBUG
+               write("Debug [query_access]: Permission granted to write for " + directory + "\n");
+#endif
+                return 1;
+          }
+          break;
+          case 3 : if(member_array("n", perms) != -1)
+          {
+#ifdef DEBUG
+               write("Debug [query_access]: Permission granted to access network for " + directory + "\n");
+#endif
+                return 1;
+          }
+          break;
+          case 4 : if(member_array("s", perms) != -1) 
+          {
+#ifdef DEBUG
+               write("Debug [query_access]: Permission granted to shadow for " + directory + "\n");
+#endif
+               return 1;
+          }
+          break;
+          case 5 : if(member_array("l", perms) != -1) 
+          {
+#ifdef DEBUG
+               write("Debug [query_access]: Permission granted to link for " + directory + "\n");
+#endif
+               return 1;
+          }
+          break;
+          case 6 : if(member_array("e", perms) != -1) 
+          {
+#ifdef DEBUG
+               write("Debug [query_access]: Permission granted to execute for " + directory + "\n");
+#endif
+               return 1;
+          }
+          break;
+          case 7 : if(member_array("b", perms) != -1) 
+          {
+#ifdef DEBUG
+               write("Debug [query_access]: Permission granted to bind for " + directory + "\n");
+#endif
+               return 1;
+          }
+          break;
+          case 8 : if(member_array("o", perms) != -1) 
+          {
+#ifdef DEBUG
+               write("Debug [query_access]: Permission granted as ownership for " + directory + "\n");
+#endif
+               return 1;
+          }
+          break;
+          default : 
+               {
+#ifdef DEBUG
+                    write("Debug [query_access]: Returning 0 on permission check (" + type + " " + gu +  ")" + ".\n");
+#endif                    
+                    return 0;
+               }                    
+     }
+#ifdef DEBUG
+          write("Debug [query_access]: Permission denied (" + type + ").\n");
+#endif
+     return 0;
+}
+
+string *query_group(string group)
+{
+     string *arr, temp;     
+     if(!groups[group])
+     {
+         sscanf(group, "(%s)", temp);
+         sscanf(group, "[%s]", temp);
+#ifdef DEBUG
+          write("Debug [*query_group]: Group " + group + " not found. Attempting data extraction.\n");
+          write("Debug [*query_group]: String " + temp + " was extracted.\n");
+#endif 
+
+          arr = groups[temp];
+          return arr;
+     }           
+           
+#ifdef DEBUG
+     write("Debug [*query_group]: Returning group information for group " + group + "\n");
+#endif          
+     arr = groups[group];
+     return arr;
+}
+
+string *track_member(string gu, string directory)
+{
+     mapping data;
+     string *keys, *gud;
+     int i;
+     
+     data = access[directory];
+     keys = keys(data);
+     
+#ifdef DEBUG
+     write("Debug [*track_member]: Now attempting to track " + gu + " for " + directory + "\n");
+#endif
+          
+     for(i = 0; i < sizeof(keys); i ++)
+     {
+#ifdef DEBUG
+          write("Debug [*track_member]: String " + keys[i] + "\n");
+#endif
+          gud = query_group(keys[i]);
+          if(!arrayp(gud)) continue;
+#ifdef DEBUG
+          write("Debug [*track_member]: Now scanning group data...\n");
+#endif                    
+          if(member_array(gu, gud) != -1)
+          {
+#ifdef DEBUG   
+                write("Debug [*track_member]: Tracking member succesful... returning permissions (" + gu + " in " + keys[i] + ") .\n");
+#endif               
+                return data[keys[i]];
+          }
+     }
+#ifdef DEBUG
+     write("Debug [*track_member]: Member track failed.\n");
+#endif
+     return ({});
+}

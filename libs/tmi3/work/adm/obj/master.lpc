@@ -1,0 +1,192 @@
+//master.c
+
+//Tacitus @ Tmi-3
+//April 15th, 2005
+//master object
+
+//Includes:
+
+#include <config.h>
+#include <logs.h>
+
+//Inheritables:
+
+inherit "/adm/obj/master/valid";
+
+
+// FluffOS PACKAGE_UIDS applies (TMI-3 Alpha lacked these)
+string get_root_uid() { return "Root"; }
+string get_bb_uid() { return "Backbone"; }
+string creator_file(string filename) {
+  string *parts;
+  if (!filename || filename[0] != '/') return get_root_uid();
+  parts = explode(filename[1..], "/");
+  if (sizeof(parts) < 2) return get_root_uid();
+  if (parts[0] == "adm" || parts[0] == "std" || parts[0] == "obj")
+    return get_root_uid();
+  if (parts[0] == "home" && sizeof(parts) > 1) return parts[1];
+  return parts[0];
+}
+string author_file(string filename) { return creator_file(filename); }
+string domain_file(string filename) { return creator_file(filename); }
+
+
+void flag(string str)
+{
+     write("Flags disabled.\n");
+}
+
+staticf object connect()
+{
+     object login_ob;
+     mixed err;
+
+     err = catch(login_ob = new(LOGIN_OB));
+
+     if (err) {
+          write("I'm sorry, but it appears that mud is not functional at the moment.\n");
+          write(err);
+          destruct(this_object());
+     }
+     return login_ob;
+}
+
+staticf string *epilog(int load_empty)
+{
+     string str, *arr;
+     int i;
+     
+     str = read_file(str);
+     
+     if (!str) {
+          return ({});
+     }
+     
+     arr = explode(str, "\n");
+     
+     for (i = 0; i < sizeof(arr); i++) {
+          if (arr[i][0] == '#') {
+               arr[i] = 0;
+          }
+     }     
+}
+
+staticf void preload(string file)
+{
+     int time;
+     string err;
+
+     if (file_size(file + ".lpc") == -1)
+     return;
+
+     time = time();
+     write("Preloading : " + file + "...");
+     err = catch(call_other(file, "??"));
+     if (err != 0) {
+          write("\nError " + err + " when loading " + file + "\n");
+     } else {
+          time = time() - time;
+          write("(" + time/60 + "." + time % 60 + ")\n");
+     }
+}
+
+staticf void log_error(string file, string message)
+{
+     log_file("compile", "Object: " + file + "\n" + message + "\n-----\n");
+}
+
+//error_handler needs to be rewritten
+staticf void error_handler(mapping map, int flag) {
+     object ob;
+     string str;
+
+     ob = this_interactive() || this_player();
+     if (flag) str = "*Error caught\n";
+     else str = "";
+     str += sprintf("Error: %s\nCurrent object: %O\nCurrent program: %s\nFile: %O Line: %d\n%O\n",
+     map["error"], (map["object"] || "No current object"),
+     (map["program"] || "No current program"),
+     map["file"], map["line"],
+     implode(map_array(map["trace"],
+     (: sprintf("Line: %O  File: %O Object: %O Program: %O", $1["line"], $1["file"], $1["object"] || "No object", $1["program"] ||
+     "No program") :)), "\n"));
+     write_file("/log/log", str);
+     if (!flag && ob) tell_object(ob, str);
+}    
+
+staticf void crash(string crash_message, object command_giver, object current_object)
+{
+     foreach (object ob in users())
+     {
+          tell_object(ob, "Master object shouts: Damn!\nMaster object tells you: The game is crashing.\n");
+     }
+     
+     log_file("crashes", MUD_NAME + " crashed on: " + ctime(time()) +
+     ", error: " + crash_message + "\n");
+     
+     if (command_giver) {
+          log_file("crashes", "this_player: " + file_name(command_giver) + " :: " + command_giver->query_name() + "\n");
+     }
+     
+     if (current_object) {
+          log_file("crashes", "this_object: " + file_name(current_object) + "\n");
+     }
+     
+}
+
+string get_save_file_name(string file, object who)
+{
+     return "/tmp/ed_SAVE_" + who->query_name() + "#" + file + random(100);
+}     
+
+string privs_file(string filename)
+{
+     string temp;
+     if(sscanf(filename, "/adm/daemons/%s", temp)) return "[daemon]";
+     if(sscanf(filename, "/adm/obj/%s", temp)) return "[master]";
+     if(sscanf(filename, "/adm/%s", temp)) return "[admin]";
+     if(sscanf(filename, "/cmds/adm/%s", temp)) return "[cmd_admin]";
+     if(sscanf(filename, "/cmds/file/%s", temp)) return "[cmd_file]";
+     if(sscanf(filename, "/cmds/object/%s", temp)) return "[cmd_object]";
+     if(sscanf(filename, "/cmds/wiz/%s", temp))return "[cmd_wiz]";
+     if(sscanf(filename, "/cmds/%s", temp)) return "[cmd]";
+     if(sscanf(filename, "/home/%*s/%s/%*s", temp)) return "[home_" + temp + "]";
+     if(sscanf(filename, "/open/%s", temp)) return "[open]";
+     if(sscanf(filename, "/std/%s", temp)) return "[std_object]";
+     if(sscanf(filename, "/obj/%s", temp)) return "[gen_obj]";
+     else return "object";
+}
+
+string object_name(object ob)
+{
+     if(ob->query_name()) return ob->query_name();
+     return file_name(ob);     
+}
+
+mixed compile_object(string pathname)
+{
+     return 0;
+}
+
+string make_path_absolute(string file)
+{
+      file = resolve_path((string)this_player()->query_cwd(), file);
+      return file;
+}
+
+void destruct_environment_of(object ob)
+{
+     if (!interactive(ob)) {
+          return;
+     }
+     tell_object(ob, "The object containing you was destroyed.\n");
+     load_object(VOID_OB);
+     ob->move(VOID_OB);
+}
+
+void log_file(string file, string msg)
+{
+     write_file(LOG_DIR + "/" + file, msg);
+}
+
+

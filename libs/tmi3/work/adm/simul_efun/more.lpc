@@ -1,0 +1,213 @@
+//more.c
+
+//Gwegster @ Tmi-3
+//30-JUNE-05
+//A simple file pager command
+
+//Last edited on July 1st, 2005 by Gwegster
+
+// define variables
+int morelines = 20;
+int startline = 1;
+int totallines;
+int currentline;
+string moreversion = "1.0b";
+string thefile;
+object ob;
+
+// define functions
+void next_line(string str); // parses input
+void display_more_line(int filesize, int current_line); // displays a more line and hands user input over to next_line()
+void write_read_file(int start_line, int end_line); //writes file to display
+int more(string file, object user); 
+string get_more_version();
+
+// function: more
+// returns: -1 for no such file, 0 for no input, and 1 if it worked
+
+int more(string file, object user)
+{
+  // if they didn't input a user
+  if(!user)
+    user = this_player();
+
+  ob = user;
+
+  if(!file) // didn't type anything
+  {
+    return 0;
+  }
+
+  file = resolve_path(ob->query("cwd"), file);
+
+  if(!file_exists(file)) // can't find file
+  {
+    return -1;
+  }
+   
+  // check if player has any settings; if none, set them automatically
+  if(!user->query("morelines") || user->query("morelines") < 1)
+  {
+    user->set("morelines", morelines);
+  }
+
+  morelines = user->query("morelines"); // set the amount of lines to show
+  totallines = file_lines(file); // get the total number of lines of the file
+  thefile = file;
+  write_read_file(startline, morelines); // display the file
+  currentline = morelines + startline; // set the current line
+  return 1;
+}
+
+void next_line(string str) // command parser
+{
+  // variables
+  int i, j;
+  string str2;
+  i = 0;
+
+  if(!str || str == "\r" || str == "") // if they just pressed enter
+  {
+    write_read_file(currentline, morelines); // read file, fixed..  don't add currentline.
+    if( (currentline + morelines) >= totallines ) 
+    {
+        return;
+    }
+    else
+    {
+        currentline = currentline + morelines;
+        display_more_line(totallines, currentline); // show a more line
+    }
+  }
+
+  // display help
+  else if(str == "h" || str == "help" || str == "Help")
+  {
+    tell_object(ob, "\nMore version "+moreversion+" help file:\n");
+    tell_object(ob, "  !<command>         - allows a user to perform a command while inside more\n");
+    tell_object(ob, "  set_lines <number> - changes the amount of lines to show at one time (default " + morelines + ")\n");
+    tell_object(ob, "  <line number>      - display the specified line number\n");
+    tell_object(ob, "  <line1> to <line1> - displays from line1 to line2\n"); 
+    tell_object(ob, "  line               - display current line number\n");
+    tell_object(ob, "  q, quit            - quits more\n");
+    tell_object(ob, "  v, version         - displays version info\n");
+    tell_object(ob, "  h, help            - displays this!\n");
+    tell_object(ob, "\n");
+    display_more_line(totallines, currentline);
+  }
+
+  // quit
+  else if(str == "q" || str == "quit" || str == "exit")
+  {
+    tell_object(ob, "\n");
+    return;
+  }
+
+  // version info
+  else if(str == "v" || str == "version")
+  {
+    tell_object(ob, "\nMore version: "+moreversion+"\n");
+    display_more_line(totallines, currentline);
+  }
+
+  // display current line
+  else if(str == "line")
+  {
+    tell_object(ob, "Line "+currentline+"\n");
+    display_more_line(totallines, currentline);
+  }
+
+  //display from line to line
+  else if(sscanf(str, "%d to %d", i, j))
+  {
+    sscanf(str, "%d to %d", i, j);
+    startline = i;
+    write_read_file(startline, j);
+    currentline = j+1;
+    display_more_line(totallines, currentline);
+  }
+
+  // display line
+  else if(sscanf(str, "%d", i))
+  {
+    sscanf(str, "%d", i); //check if they entered only one number
+    startline = i; // set startline
+    write_read_file(startline, startline+1);
+    currentline = i; // set currentline to startline
+    display_more_line(totallines, currentline);
+  }
+
+  // set the amount of lines to show
+  else if(sscanf(str, "set_lines %d", i))
+  {
+    sscanf(str, "set_lines %d", i);
+
+    if(i > 0)
+    {
+      ob->set("morelines", i);
+      morelines = i;
+      tell_object(ob, "\nYou set your morelines to "+morelines+".\n");
+    }
+
+    else
+    {
+      tell_object(ob, "\nYou cannon set the amount of lines to less than 1.\n");
+    }
+    
+    display_more_line(totallines, currentline);
+  }
+
+  else if(sscanf(str, "!%s", str2))
+  {
+    sscanf(str, "!%s", str2);
+    tell_object(ob, "\n");
+    ob->force_me(str2);
+    input_to("next_line");
+    display_more_line(totallines, currentline);
+  }
+    
+  else
+  {
+    tell_object(ob, "Unknown command. Please type \"help\" for more info.\n");
+    display_more_line(totallines, currentline);
+  }
+}
+
+void display_more_line(int filesize, int current_line)
+{
+  int f;
+  f = (current_line*100)/(filesize); 
+  if(f > 100)
+  {
+    tell_object(ob, "\n");
+    return;
+  }
+
+  tell_object(ob, "-=-= More [");
+  tell_object(ob, (string)f);
+  tell_object(ob, " %] =-=- > ");
+  input_to("next_line");
+}
+
+void write_read_file(int start_line, int end_line)
+{
+  string more;
+  if(end_line > totallines)
+    more = read_file(thefile, start_line, totallines + 1);
+  else
+    more = read_file(thefile, start_line, end_line);
+
+  if(more == 0)
+    return;
+  else
+  {
+    tell_object(ob, more);
+    display_more_line(totallines, currentline);
+  }
+}
+
+string get_more_version()
+{
+  return moreversion;
+}
+

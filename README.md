@@ -209,7 +209,7 @@ classes it's found.
 | 008 | `es1_win` | 东方故事（蓝天） — es1_win | `es1_win.rar` | 40009 | WASM playable |
 | 008-1 | `esI` | 东方故事 — esI（"屠龙之战"） | `esI.rar` | 40010 | WASM playable |
 | 009 | `fengyun434` | 风云Ⅳ — fengyun434 | `fengyun4-3-4.rar` | 40011 | WASM playable |
-| 009-1 | `fy2005` | 风云Ⅳ（2005 国内经典版）— fy2005 | `fy2005.rar; upstream https://github.com/seikichin/-mud (commit 7eb61c0e4d5c670b42f3efdcf13882fe7785a8d2, pinned 2026-09-13); repo root is the mudlib` | 40013 | WASM playable |
+| 009-1 | `fy2005` | 风云Ⅳ（2005 国内经典版）— fy2005 | `fy2005.rar; upstream https://github.com/seikichin/-mud (commit 8dfe6d5a282cdb02e25d92602dd1f0e14a9afa31, pinned 2026-09-13); repo root is the mudlib` | 40013 | WASM playable |
 | 010 | `xiyouji` | 西游记 (A Journey to the West) | `西游记.rar` | 40079 | WASM playable |
 | 010-1 | `xyj2000f` | 西游记 2000 — xyj2000f | `fluffos(西游记2000).tar.gz` | 40012 | WASM playable |
 | 010-2 | `xiyouji2003` | 西游记[光辉岁月] | `西游记2003.rar` | 40075 | WASM playable |
@@ -420,6 +420,7 @@ classes it's found.
 | 184 | `dtxy` | 大唐西游 | `git clone https://github.com/MudRen/dtxy (commit 6d3c609, cloned 2026-08-26)` | — | pending |
 | 185 | `dshakkard` | ds-hakkard | `git clone https://github.com/hakkard-dev-team/ds-hakkard (commit 06cb87d3cf026ec393cb40969ab14e2426df7f7b, cloned 2026-08-26)` | 40230 | WASM playable |
 | 186 | `wllz3` | 武林列传Ⅲ | `wllz.rar` | 40322 | WASM playable |
+| 187 | `tmi3` | TMI-3 | `https://github.com/fluffos/mudlib-archives/releases/download/v1.0.0/tmi-3-0.1a.tar.gz` | 40392 | WASM playable |
 | 901 | `discworld` | Discworld MUD lib (v3) | `dw_fluffos_v3.zip` | 40206 | WASM playable |
 | 901-1 | `dw_fluffos_v1` | Discworld MUD lib (v1) | `dw_fluffos_v1.tar.gz` | 40271 | WASM playable |
 | 901-2 | `dw_fluffos_v2` | Discworld MUD lib (v2) | `dw_fluffos_v2.zip` | 40272 | WASM playable |
