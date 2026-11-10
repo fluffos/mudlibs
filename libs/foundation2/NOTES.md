@@ -579,7 +579,7 @@ the news pager. Fixed:
 
 覆盖：登录 `fluffos` / `Mud@2026` → 新闻回车 → `look`（`/domains/Standard/center`）/
 `inventory`/`who` → 方向/go 均 “nowhere”（洞穴无出口，既有）→ `quit` → 重登/`look`/`quit`。
-驱动安静，无编程缺陷。
+驱动安静，无编程缺陷。重测通过。
 
 陷阱：`help` 进入分页后方向词被当成帮助主题；先 `q` 退出帮助。
 
