@@ -67,3 +67,10 @@
 - `inherit/condition/damo.lpc`：`! intp(cnd["remain"] || ! stringp(...))` 缺 `)`（语料 23 库同修）；另本库 `die_reason` 缺收尾 `"`，词法失步后表现为 224/277 假错误。
 - `questd11.lpc`：ASCII 标识切断 `db\nase`、`fami\nly_name`、`experien\nce`、`["i\nd"]` 等 9 处（`zhonghua2` 同步）。
 - 证明：damo 错误清零；可编 10953→10957。新露 `die_reason` 参数个数警告（叶子与基类），另轮。
+
+## §6.10 die_reason varargs + 无副作用 `"\n";`（2026-11-10）
+
+- `kungfu/condition/damo_{luanqi,shangshen,zheyuan}.lpc`：`string die_reason()` → `varargs string die_reason()`（对齐基类 `die_reason(string)`，同手足 yhyxs）。
+- 地图 look 函数里 `NOR` 后多余的 `"\n";`：若上一行已是 `NOR;` 则删；若是无分号的 `NOR` 则改为 `NOR;`（该 `"\n";` 其实是整句的终止分号）。语料同形清理。
+- 另：`combatd` 无意义的 `your_temp["guarding"];`；`swear`/`team/swear` 中 `$N";` 误终止导致下一串字面量悬空。
+- 证明：yhlib 诊断 18→8；无副作用类仅剩 dns_master 的 `return;`。
