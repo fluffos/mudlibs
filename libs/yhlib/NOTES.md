@@ -102,3 +102,7 @@
 同轮修：`adm/simul_efun/message.lpc` §7.61（quit/channel 的 `Bad argument 4 to EFUN message()`）。
 修复后 quit 干净。驱动仍有 NPC `command_hook` 的 apply 权限提示与 socket_bind（另轮）。
 部署 tip：`2655786aeb0`（§7.61 sweep 本体；本 NOTES 触达 Pages `libs/**` 路径过滤）。
+
+## `if (per = 30)` 相貌描述恒真（2026-11-10，KB 06 §7.290）
+
+`cmds/adm/watch.lpc`（及已跟踪的 `admBAK` 副本）女性分支 `if (per = 30)` 把相貌改成 30 且恒进「倾国倾城」句。改为 `per == 30`。对象可载入。

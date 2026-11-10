@@ -16,3 +16,7 @@
 ## 验证
 
 - Boot 失败于 simul_efun 加载（缺头文件）；未进入监听
+
+## `if (bits[0] = "player")` 条件里的赋值（2026-11-10，KB 06 §7.290）
+
+`secure/handlers/bank.lpc` 的 `query_account()` 写成 `if (bits[0] = "player" && …)`，赋值恒真，任何 `acct` 前缀都当玩家账户解析。`lpc_fix_cond_assign.py` 改为 `==`。`lpc_fix_cond_assign` 扫后残留为 0。
