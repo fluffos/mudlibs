@@ -896,3 +896,7 @@ elf smith / smithr：`tell_object("Eldevan…")` → `tell_object(this_player(),
 ## 深度功能测试（2026-11-09，elf gloom shops/restock 收养 §6.15）
 
 十个 newbie elf gloom/fo 房间继承缺失的 `/d/hoerk/belaern/s_jung/city/shops/restock.lpc`（本库 `/d/hoerk` 树整区未随档）。同库 goblin `rooms/restock.lpc` 已是 Taniwha 的 restock() mixin，按路径收养一份。证明：8 gloom + fo3 共 9 个消费方 HEAD FAIL → PASS；mixin 单独 load 在孤儿 `/d/hoerk` 路径上仍 Fail to load（inherit 编译可用）；`randomcre` 另有未声明 `char`/`t`/`p`，不在本类。
+
+## /inherit/object 改指（2026-11-09，KB 04 §6.15）
+
+`net/obj/gopher` 继承缺失的 `/inherit/object`；本库标准基类在 `/std/object`。改为 `inherit "/std/object"`。alone-scan 的该 literal 消失。gopher 仍因同目录缺 `globals.h`（以及 `VOID_OB`）未能载入。

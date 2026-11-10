@@ -1024,3 +1024,7 @@ oldsys 锁甲继承 `/obj/armor`，本体是 `/obj/armour`。薄别名。证明�
 ## 深度功能测试（2026-11-04，gremios comandos/shadows/stun 薄别名 §6.15）
 
 `hechizos/shadows/stun` 继承 `/d/gremios/comandos/shadows/stun`，西语正文在 `/std/antiguo/commands/shadows/stun`（同系 `base_command`/`target` 迁路径）。薄别名。证明：HEAD 1 PASS / 2 FAIL；树 3 PASS。
+
+## /inherit/object 改指（2026-11-09，KB 04 §6.15）
+
+`net/obj/gopher` 继承缺失的 `/inherit/object`；本库标准基类在 `/std/object`。改为 `inherit "/std/object"`。alone-scan 的该 literal 消失。gopher 仍因同目录缺 `globals.h`（以及 `VOID_OB`）未能载入。
