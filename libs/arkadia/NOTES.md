@@ -801,3 +801,11 @@ MudOS filled the missing arguments of a call with 0, took an untyped parameter a
 ## 深度功能测试（2026-10-27，§6.16 arkadia /std/drink）
 
 档案未带 `/std/drink`，`small_beer`/`dutch_beer` 无法继承。补最小 drink（food 同形的 create_heap→create_drink + soft/alco），并对波兰分支已 `#if 0` 掉的 `set_adj` 做 `dodaj_przym` 垫片。
+
+## 深度功能测试（§10.7，2026-11-10）— 邮局 mail_reader 编不过 + 重测
+
+手启：`build-debug`；端口 40244。
+
+编程缺陷（已修）：进 `/d/Standard/start/mailroom` 时 `clone_object("/secure/mail_reader")` 失败——`mail_reader.lpc` 编不过。`#define STRING(arr) (map(arr, &operator(+)("")))` 仍是 CD 偏应用，展开进 `WRITE(...)` 后 `syntax error, unexpected '+'`（KB 06 §7.223 Also）。改成 genesis 同形 `(: ("") + ($1) :)`。同文件 `from()` 用 `string *tmp` 装主题再 `tmp[0..32] + "..."`（`string * vs string`），改 `string subject`；`int *double` 改名 `dupes`；`nosave` 函数改 `protected`；清未用局部。
+
+覆盖：`fluffos`/`Mud@2026x` → 教堂 `spojrz`/`stan`/`inwentarz`/`kto`/`nagraj` → `poludnie` 邮局（提示 `?poczta`、空信箱文案）→ `?poczta` 帮助 → `polnoc` 回教堂 → `zakoncz`；重连再进教堂。驱动无 compile error / Wrong permissions。无新编程缺陷。

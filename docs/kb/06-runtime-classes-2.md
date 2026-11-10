@@ -1177,6 +1177,7 @@ efun (§7.221). Neither lib had FluffOS-style `$2` code to break. **Detection:**
 `m_indexes()`. Companion trap: CD partial application (`&operator(==)(x) @ &operator([])(, F)`, `&f(, a)`, a bare `@` that
 the lexer reads as a here-document start: `End of file in text block`) is rewritten by `scripts/lpc_cd_closures.py`, capturing
 lowercase locals with `$(...)`; a `(: f :) @ (: g :)` composition needs a hand rewrite.
+**Also (2026-11-10, arkadia mail_reader STRING):** a leftover `#define STRING(arr) (map(arr, &operator(+)("")))` still used CD partial application; FluffOS rejects the expand inside `WRITE(...)` (`syntax error, unexpected '+'`), so `/secure/mail_reader` never compiled and entering the start-area post office raised `*No program in object '/secure/mail_reader'`. Same shape as genesis: `(: ("") + ($1) :)`. Companion in the same file: `from()` declared `string *tmp` then did `tmp = subject; tmp[0..32] + "..."` (`string * vs string`); use a `string subject` local. `int *double` renamed `dupes` while there (keyword-adjacent noise once the macro broke parsing).
 
 ### 7.224 CD-driver ports: a `set_alarm()` shim must keep alarms per object
 
