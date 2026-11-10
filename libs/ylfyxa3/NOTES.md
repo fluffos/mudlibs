@@ -1157,3 +1157,13 @@ yxxcii 的 `qiu.lpc`、`qiu1.lpc`：`accept_object(object me, object ob)` 里判
 
 删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
 
+
+## 深度功能测试（§10.7，2026-11-10）— 重测
+
+手启：`build-debug`；端口 40062。
+
+覆盖：`fluffos`/`Mud@2026` → `/d/huashan/square` 练武场
+`look`/`inventory`/`score`/`who` → `west` 山顶小店 / `east` 回练武场 → `save`/`quit` →
+重连再进/`score`/`quit`。
+
+驱动 stdout：无 compile warning、无 runtime Error。无新编程缺陷。
