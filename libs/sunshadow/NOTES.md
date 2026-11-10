@@ -1120,3 +1120,9 @@ old 下水道继承 `/d/dragon/sewer/sewer_room`，本体在 old；字节拷贝�
 ## 深度功能测试（2026-11-10，saide scribe realms 路径 §6.15）
 
 与 shadowgate 同改：`npc/scribe` inherit → `/std/scribe`。证明：listcheck HEAD 1 PASS / 2 FAIL → 树 2 PASS。
+
+## §6.15 shar_symbol（2026-11-10）
+
+档案未带 `/d/magic/symbols/shar_symbol`；`newsymbol` inherit 之，新手庙 `p_shar` `new()` 之。按同目录其它神祇 `*_symbol.lpc`（eldath / lord_shadow）补薄包装 → `holy_symbol`。
+
+验证：listcheck 消费者 HEAD FAIL → tree PASS。

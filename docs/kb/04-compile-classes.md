@@ -704,6 +704,8 @@ time. (3) *Fewer arguments than parameters*: add `varargs` to the definition the
 **Also (2026-11-10, mortremains chronos_doll/factionhall + sg/ss mine2):** (1) thin aliases `/u/c/chronos/toys/chronos_doll`→`doll`, `/u/i/ilzarion/factionhall`→attic Sigil body. Proof: 6 objects HEAD 2/4 → 6 PASS. (2) rewrite `mine3` inherit `/realms/zeek/mine`→`/d/mine2/mine` on shadowgate+sunshadow. Proof: each 2 objects HEAD 1/1 → 2 PASS.
 **Also (2026-11-10, shadowgate/sunshadow saide scribe):** rewrite `d/shadow/npc/scribe` inherit `/realms/saide/scribe`→`/std/scribe` (body PASSes). Proof: each HEAD 1/2 → tree 2 PASS (realms path still FAIL).
 **Also (2026-11-10, xajhxo biaoju/funiu):** thin alias `system/menpai/biaoju/funiu`→`/d/nanyang/npc/funiu` (same shape as nanyang `ke`). Proof: 4 objects HEAD 2/2 → 4 PASS.
+**Also (2026-11-10, shadowgate/sunshadow shar_symbol):** archive never shipped `/d/magic/symbols/shar_symbol`; `newsymbol` inherits it and newbie `p_shar` clones it. Same thin deity wrapper as every other `*_symbol.lpc` beside `holy_symbol` (eldath/lord_shadow pattern). Proof: shadowgate 4 objects HEAD 1/3 → 4 PASS; sunshadow 2 objects HEAD 1/1 → 2 PASS.
+
 **Also (2026-11-10, shenmo zizhulin2/room):** adopt from xyxy2; host lacks `REMOVE_D` so `add_obj`→delayed `destruct`. Proof: 3 objects HEAD 0/3 → 3 PASS.
 
 ### 6.16 A macro the lib's global header lost, restored from the siblings (2026-10-19)

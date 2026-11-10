@@ -863,3 +863,9 @@ avatar `pocket` 继承未定义的 `POCKETARMOUR`，而 `std.h` 仅有 `PARMOUR`
 ## 深度功能测试（2026-11-10，saide scribe realms 路径 §6.15）
 
 `d/shadow/npc/scribe` 继承 gitignored `/realms/saide/scribe`；本体在 `/std/scribe`。改写 inherit。证明：listcheck HEAD 1 PASS / 2 FAIL → 树 2 PASS（`/realms/...` 仍 FAIL，预期）。
+
+## §6.15 shar_symbol（2026-11-10）
+
+档案未带 `/d/magic/symbols/shar_symbol`；`newsymbol` inherit 之，新手庙 `p_shar` `new()` 之。按同目录其它神祇 `*_symbol.lpc`（eldath / lord_shadow）补薄包装 → `holy_symbol`。
+
+验证：listcheck 消费者 HEAD FAIL → tree PASS。
