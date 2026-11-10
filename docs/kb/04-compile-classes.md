@@ -1390,3 +1390,5 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 **Also (2026-11-09, YIZHAN xxcq/xxcqii/xxcqii2):** `#define YIZHAN` `/clone/room/mache.h` → `/inherit/room/yizhan` (same-lib body). Proof: each HEAD 2/4 → 4 PASS.
 
 **Also (2026-11-09, COMBINED_ITEM_BANG wdxtym):** thin alias `/inherit/item/combined_bang` → `/inherit/item/combined` (same-lib). Proof: HEAD 1/5 → 5 PASS.
+
+**Also (2026-11-09, baohu killer1 shenmo):** adopt `/d/wizz/stey/kill2/killer1` into `d/quest/baohu/yaoguai{2,3}/killer1` (same-lib; `__DIR__` inherit). Proof: HEAD 1/7 → 7 PASS.

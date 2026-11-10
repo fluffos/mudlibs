@@ -1532,3 +1532,8 @@ tianzun → `ob`；shenxiang → `me`。
 ## 深度功能测试（2026-11-09，d/game/pai 薄别名 §6.15）
 
 `榄旀硶鐗_pai[1-6]` 继承同目录缺失的 `pai`；本体因编码损坏落在 `榄旀硶鐗_pai.lpc`。薄别名 `pai.lpc` → 该档。证明：HEAD 1 PASS / 7 FAIL → 树 8 PASS。
+
+
+## 深度功能测试（2026-11-09，baohu killer1 收养 §6.15）
+
+`d/quest/baohu/yaoguai{2,3}/yg-*` 继承同目录缺失的 `killer1`；本体在 `/d/wizz/stey/kill2/killer1`。同库收养到两目录。证明：killer1+yg sample listcheck HEAD 1 PASS / 6 FAIL → 树 7 PASS。
