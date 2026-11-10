@@ -1,0 +1,336 @@
+// this handler provides a central place to put things that
+// are governement related -- such as tax collection from
+// player shops...
+// actual control of events is done in /w/luggage/secure/hyperion/tc2/admin
+
+inherit HANDLER_BASE;
+
+#define SAVE_FILE SECURE_DIR SAVE_DIR HANDLER_DIR "/government"
+
+mapping tax_rates;
+string  *registered_taverns;
+mapping guild_masters;
+mapping high_priests;
+mapping positions;
+mapping spouses;
+mapping fees;
+int     newbie_amt;
+
+#define POS_TITLE   0
+#define POS_PAY     1
+#define POS_HOLDERS 2
+
+void create() {
+    tax_rates = ([ ]);
+    registered_taverns = ({ });
+    guild_masters = ([ ]);     
+    high_priests = ([ ]); 
+    positions = ([ ]);   
+    spouses = ([ ]);  
+    fees = ([ ]);   
+                 
+    ::create();
+}
+ 
+void load_me() {
+  if(unguarded( (: file_exists, SAVE_FILE ".o" :)))
+    unguarded( (: restore_object, SAVE_FILE :) );  
+}
+
+void save_me() {
+  unguarded( (: save_object, SAVE_FILE :) );
+}
+
+int query_tax_rate(string type) { return tax_rates[type]; }
+
+int set_tax_rate(string type, int rate) {
+    if(!adminp(TP))
+        return 0;
+
+    tax_rates[type] = rate;
+    call_out("save_me", 0);
+    return 1;
+}
+
+mixed query_tax_rates() { return copy(tax_rates); }
+
+int query_fee(string fee) {
+  if(undefinedp(fees[fee]))
+    return 0;
+  return fees[fee];
+}
+
+void set_fee(string fee, int amt) {
+  if(!adminp(TP))
+    return;
+
+  if(amt < 1)
+    map_delete(fees, fee);
+  else
+    fees[fee] = amt;
+
+  call_out("save_me", 0);
+}
+
+object request_alcohol_reimbursement(int intox) {
+    if(!FESTIVAL_H -> query_festival())
+        return 0;
+
+    if(creatorp(TP))
+        return 0;
+
+    if(member_array(base_name(PO), registered_taverns) == -1)
+        return 0;
+
+    return CBANK_H -> create_money(({ intox, 0, 0, 0, 0, 0, 0 }), "mud:festival:alcohol");
+}
+
+int register_tavern(string tavern) {
+    if(member_array(tavern, registered_taverns) != -1)
+        return notify_fail("The tavern is already registered.\n");
+
+    if(base_name(PO) != "/secure/std/objects/tavern_register")
+        return 0;
+    if(!creatorp(TP))
+        return 0;
+
+    registered_taverns += ({ tavern });
+    return 1;
+}
+
+int remove_tavern(string tavern) {
+    if(member_array(tavern, registered_taverns) == -1)
+        return notify_fail("The tavern is not registered.\n");
+
+    if(base_name(PO) != "/secure/std/objects/tavern_register" &&
+       !adminp(TP))
+        return 0;
+
+    registered_taverns -= ({ tavern });
+    return 1;
+}
+
+void register_high_priest(string order, string player) {
+    high_priests[order] = player;
+    call_out("save_me", 0);
+  if(!adminp(TP))
+    return;
+
+}
+
+void register_guild_master(string guild, string player) {
+    guild_masters[guild] = player;
+    call_out("save_me", 0);
+}
+
+string query_high_priest(string order) {
+    return high_priests[order];
+}
+
+string query_guild_master(string guild) {
+    return guild_masters[guild];
+}
+
+int is_high_priest(mixed player) {
+    if(objectp(player))
+        player = player -> query_name();
+    return member_array(player, values(high_priests)) != -1;
+}
+
+int is_guild_master(mixed player) {
+    if(objectp(player))
+        player = player -> query_name();
+    return member_array(player, values(guild_masters)) != -1;
+}
+
+int is_clan_head(mixed player) {
+    if(objectp(player))
+        player = player -> query_name();
+    if(CLAN_H -> query_clan_name(player) == "None")
+        return 0;
+    return CLAN_H -> query_clan_head(player) == player;
+}
+
+int is_clan_leader(mixed player) {
+    if(objectp(player))
+        player = player -> query_name();
+    if(CLAN_H -> query_clan_name(player) == "None")
+        return 0;
+    return CLAN_H -> query_clan_leader(player) == player;
+}
+
+int is_allowed_into_palace(mixed player) {
+    if(creatorp(player) ||
+       is_high_priest(player) ||
+       is_guild_master(player) ||
+       is_clan_head(player))
+        return 1;
+    return 0;
+}
+
+int create_position(string pos, string title, int *pay) {
+    if(!adminp(TP))
+        return 0;
+
+    if(!undefinedp(positions[pos]))
+        return notify_fail("That position already exists.\n");
+    positions[pos] = ({ title, copy(pay), ({ }) });
+    call_out("save_me", 0);
+    return 1;
+}
+
+int add_person_to_position(string pos, string player) {
+    if(undefinedp(positions[pos]))
+        return 0;
+
+    if(member_array(player, positions[pos][POS_HOLDERS]) != -1)
+        return 0;
+
+    positions[pos][POS_HOLDERS] += ({ player });
+    call_out("save_me", 0);
+    return 1;
+}
+
+int remove_person_from_position(string pos, string player) {
+    if(undefinedp(positions[pos]))
+        return 0;
+
+    if(member_array(player, positions[pos][POS_HOLDERS]) == -1)
+        return 0;
+
+    positions[pos][POS_HOLDERS] -= ({ player });
+    call_out("save_me", 0);
+    return 1;
+}
+
+string *query_position_holders(string pos) {
+    if(undefinedp(positions[pos]))
+        return ({ });
+    return copy(positions[pos][POS_HOLDERS]);
+}
+
+int *query_position_pay(string pos) {
+    if(undefinedp(positions[pos]))
+        return ({ 0, 0, 0, 0, 0, 0, 0 });
+    return copy(positions[pos][POS_PAY]);
+}
+
+int set_position_pay(string pos, int *coins) {
+    if(undefinedp(positions[pos]))
+        return 0;
+
+    positions[pos][POS_PAY] = copy(coins);
+    call_out("save_me", 0);
+}
+
+string query_position_title(string pos) {
+    if(undefinedp(positions[pos]))
+        return "";
+    return positions[pos][POS_TITLE];
+}
+
+int set_position_title(string pos, string title) {
+    if(undefinedp(positions[pos]))
+        return 0;
+    positions[pos][POS_TITLE] = title;
+    call_out("save_me", 0);
+}
+
+string *query_positions() {
+    return keys(positions);
+}
+
+varargs int run_payroll(string pos) {
+    string *poss, *users;
+    int     i, j, k, *payed, *created, *pay;
+    object  mob;
+
+    if(!adminp(TP))
+        return 0;
+
+    if(!pos || pos == "")
+        poss = query_positions();
+    else
+        poss = ({ pos });
+
+    created = ({ 0, 0, 0, 0, 0, 0, 0 });
+    payed   = ({ 0, 0, 0, 0, 0, 0, 0 });
+
+    for(i = 0; i < sizeof(poss); i++) {
+        users = query_position_holders(poss[i]);
+        pay   = query_position_pay(poss[i]);
+        for(j = 0; j < sizeof(users); j++) {
+            mob = CBANK_H -> create_money(pay, "mud:payroll");
+            if(!mob || !mob -> query_value()) {
+                // create money so we can meet payroll :/
+                CBANK_H -> add_money("mud:payroll", pay);
+                for(k = 0; k < 6; k++)
+                   created[k] += pay[k];
+                mob = CBANK_H -> create_money(pay, "mud:payroll");
+            }
+            tell_object(TP, "Payed " + mob -> short() + " to " + users[j] + " for position " + poss[i] + ".\n");
+            mob -> transfer_money("user:" + users[j]);
+            for(k = 0; k < 6; k++)
+                payed[k] += pay[k];
+        }
+    }
+
+    tell_object(TP, "Payed a total of " + MONEY_H -> coins_string(payed, 1) + "\n");
+    tell_object(TP, "We had to create " + MONEY_H -> coins_string(created, 1) + "\n");
+    return 1;
+}
+
+int set_newbie_amount(int amt) {
+    if(!adminp(TP))
+        return 0;
+
+    newbie_amt = amt;
+    call_out("save_me", 0);
+    return 1;
+}
+
+int query_newbie_amount() { return newbie_amt; }
+
+object get_newbie_money() {
+    object money;
+
+    if(base_name(PO) != "/secure/login")
+        return 0;
+
+    money = CBANK_H -> create_money(({ newbie_amt, 0, 0, 0, 0, 0, 0 }), "mud:newbie");
+    if(money -> query_value())
+        return money;
+    return 0;
+}
+
+string query_spouse(string nom) {
+    if(undefinedp(spouses[nom]))
+        return "";
+    return spouses[nom];
+}
+
+int is_married(string nom) {
+    if(undefinedp(spouses[nom]))
+        return 0;
+    return spouses[nom] != "";
+}
+
+int set_married(string nom1, string nom2) {
+    if(!undefinedp(spouses[nom1]) || !undefinedp(spouses[nom2]))
+        return 0;
+
+    spouses[nom1] = nom2;
+    spouses[nom2] = nom1;
+    call_out("save_me", 0);
+    return 1;
+}
+
+int set_divorce(string nom) {
+    if(undefinedp(spouses[nom]))
+        return 0;
+
+    map_delete(spouses, spouses[nom]);
+    map_delete(spouses, nom);
+    call_out("save_me", 0);
+    return 1;
+}

@@ -1,0 +1,287 @@
+// handles finger data (whatever is in mysql)
+inherit HANDLER_BASE;
+
+#include <driver.h>
+
+mapping read_cache = ([ ]);
+mapping write_cache= ([ ]);
+mapping ltree_cache= ([ ]);
+
+#define INFO_ST(X) DB_H -> escape(info[X])
+#define INFO_D(X) info[X]
+
+#define INFO_EMAIL    0
+#define INFO_REALNAME 1
+#define INFO_URL      2
+#define INFO_LOCATION 3
+#define INFO_I        4
+#define INFO_B        5
+#define INFO_C        6
+#define INFO_S        7
+#define INFO_G        8
+#define INFO_P        9
+#define INFO_M       10
+#define INFO_XP      11
+#define INFO_SCORE   12
+#define INFO_LIEGE   13
+#define INFO_LIEGEF  14
+#define INFO_RANK    15
+
+void create() {
+  CACHE_H -> register_object();
+  ::create();
+}
+
+varargs void clear_cache(string player) {
+  mixed *info;
+
+  if(!(base_name(PO) == CACHE_H || origin() == ORIGIN_LOCAL))
+    return;
+
+  if(player && player != "") {
+    if(undefinedp(write_cache[player]))
+      return;
+    info = write_cache[player];
+    DB_H -> exec(sprintf("UPDATE users SET email=\"%s\", realname=\"%s\","
+                         " url=\"%s\", location=\"%s\", mithril=%d,"
+                         " plat=%d, gold=%d, silver=%d, brass=%d, copper=%d,"
+                         " iron=%d, experience=%d, score=%d, liege=\"%s\","
+                         " liege_factor=%d, ranking=%d"
+                         " WHERE name=\"%s\"",
+                         INFO_ST(INFO_EMAIL), INFO_ST(INFO_REALNAME),
+                         INFO_ST(INFO_URL), INFO_ST(INFO_LOCATION),
+                         INFO_D(INFO_M), INFO_D(INFO_P), INFO_D(INFO_G), 
+                         INFO_D(INFO_S), INFO_D(INFO_B), INFO_D(INFO_C), 
+                         INFO_D(INFO_I), INFO_D(INFO_XP), INFO_D(INFO_SCORE), 
+                         INFO_ST(INFO_LIEGE), INFO_D(INFO_LIEGEF), 
+                         INFO_D(INFO_RANK),
+                         DB_H -> escape(player)));
+    read_cache[player] = info;
+    map_delete(write_cache, player);
+    return;
+  }
+    
+  foreach(player,info in write_cache) {
+    DB_H -> exec(sprintf("UPDATE users SET email=\"%s\", realname=\"%s\","
+                         " url=\"%s\", location=\"%s\", mithril=%d,"
+                         " plat=%d, gold=%d, silver=%d, brass=%d, copper=%d,"
+                         " iron=%d, experience=%d, score=%d, liege=\"%s\","
+                         " liege_factor=%d, ranking=%d"
+                         " WHERE name=\"%s\"",
+                         INFO_ST(INFO_EMAIL), INFO_ST(INFO_REALNAME),
+                         INFO_ST(INFO_URL), INFO_ST(INFO_LOCATION),
+                         INFO_D(INFO_M), INFO_D(INFO_P), INFO_D(INFO_G), 
+                         INFO_D(INFO_S), INFO_D(INFO_B), INFO_D(INFO_C), 
+                         INFO_D(INFO_I), INFO_D(INFO_XP), INFO_D(INFO_SCORE), 
+                         INFO_ST(INFO_LIEGE), INFO_D(INFO_LIEGEF), 
+                         INFO_D(INFO_RANK),
+                         DB_H -> escape(player)));
+  }
+
+  read_cache = write_cache;
+  write_cache = ([ ]);
+  ltree_cache = ([ ]);
+}
+
+private mixed *get_record(string player) {
+  mixed res;
+  mixed *rec;
+
+  if(arrayp(write_cache[player]))
+    return write_cache[player];
+  if(arrayp(read_cache[player]))
+    return read_cache[player];
+
+  res = DB_H -> exec("SELECT email, realname, url, location, mithril, plat,"
+                           " gold, silver, brass, copper, iron, experience,"
+                           " score, liege, liege_factor, ranking FROM users"
+                           " WHERE name=\"" + DB_H -> escape(player) + "\"");
+
+  if(stringp(res) || res != 1) return 0;
+
+  rec = DB_H -> fetch(1);
+  if(arrayp(rec)) {
+    read_cache[player] = copy(rec);
+    return rec;
+  }
+  return 0;
+}
+
+private void put_record(string player, mixed *rec) {
+  write_cache[player] = rec;
+}
+
+int *query_money(string player) {
+  mixed *rec = get_record(player);
+  if(!rec)
+    return ({ 0, 0, 0, 0, 0, 0, 0 });
+
+  return copy(rec[INFO_I..INFO_M]);
+}
+
+void set_money(string player, int *coins) {
+  int i;
+  mixed *rec;
+
+  if(base_name(PO) != CBANK_H)
+    return;
+
+  rec = get_record(player);
+
+  for(i = 0; i < 7; i++)
+    rec[INFO_I+i] = coins[i];
+
+  put_record(player, rec);
+  clear_cache(player); // commit immediately
+}
+
+private string query_str_item(string player, int i) {
+  mixed *rec = get_record(player);
+  if(!rec) return "";
+  return rec[i];
+}
+
+private int query_int_item(string player, int i) {
+  mixed *rec = get_record(player);
+  if(!rec) return 0;
+  return rec[i];
+}
+
+private void set_int_item(string player, int i, int v) {
+  mixed *rec;
+
+  if(TP->NAME != player && !adminp(TP))
+    return;
+
+  rec = get_record(player);
+  if(!rec) return;
+  rec[i] = v;
+  put_record(player, rec);
+}
+
+private void set_str_item(string player, int i, string v) {
+  mixed *rec;
+
+  if(TP->NAME != player && !adminp(TP))
+    return;
+
+  rec = get_record(player);
+  if(!rec) return;
+  rec[i] = v;
+  put_record(player, rec);
+}
+
+string query_email(string player) { 
+  return query_str_item(player, INFO_EMAIL);
+}
+
+void set_email(string player, string email) {
+  set_str_item(player, INFO_EMAIL, email);
+}
+
+string query_realname(string player) {
+  return query_str_item(player, INFO_REALNAME);
+}
+
+void set_realname(string player, string rn) {
+  set_str_item(player, INFO_REALNAME, rn);
+}
+
+int query_xp(string player) {
+  return query_int_item(player, INFO_XP);
+}
+
+void set_xp(string player, int xp) {
+  mixed *rec;
+  if(base_name(PO) != SCORE_H)
+    return;
+  rec = get_record(player);
+  if(!arrayp(rec)) return;
+  rec[INFO_XP] = xp;
+  put_record(player, rec);
+}
+
+int query_score(string player) {
+   return query_int_item(player, INFO_SCORE);
+}
+
+void set_score(string player, int sc) {
+  mixed *rec;
+  if(base_name(PO) != SCORE_H)
+    return;
+  
+  rec = get_record(player);
+  if(!rec) return;
+  rec[INFO_SCORE] = sc;
+  put_record(player, rec);
+}
+
+string query_liege(string player) {
+  return query_str_item(player, INFO_LIEGE);
+}
+
+void set_liege(string player, string liege) {
+  mixed *rec;
+  if(base_name(PO) != CLAN_H)
+    return;
+
+  rec = get_record(player);
+  if(!rec) return;
+  rec[INFO_LIEGE] = liege;
+  put_record(player, rec);
+}
+
+int query_liege_factor(string player) {
+  return query_int_item(player, INFO_LIEGEF);
+}
+
+void set_liege_factor(string player, int lf) {
+  mixed *rec;
+  if(base_name(PO) != SCORE_H)
+    return;
+  
+  rec = get_record(player);
+  if(!rec) return;
+  rec[INFO_LIEGEF] = lf;
+  put_record(player, rec);
+}
+
+int query_rank(string player) {
+  return query_int_item(player, INFO_RANK);
+}
+
+void set_rank(string player, int rank) {
+  mixed *rec;
+  if(base_name(PO) != SCORE_H)
+    return;
+
+  rec = get_record(player);
+  if(!rec) return;
+  rec[INFO_RANK] = rank;
+  put_record(player, rec);
+}
+
+string *query_liegence_tree(string top) {
+  string *players, player;
+  string *sec;
+  mixed rows, *res;
+  int  i;
+
+  if(!undefinedp(ltree_cache[top]))
+    return ltree_cache[top];
+
+  rows = DB_H -> exec("SELECT name FROM users WHERE liege=\"" + DB_H -> escape(top) + "\"");
+  if(stringp(rows) || !rows) return ({ });
+
+  players = ({ });
+  sec = ({ });
+  for(i = 1; i <= rows; i++) {
+    res = DB_H -> fetch(i);
+    players += res;
+  }
+  foreach(player in players) {
+    sec += query_liegence_tree(player);
+  }
+  ltree_cache[top] = sec + players;
+  return ltree_cache[top];
+}

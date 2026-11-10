@@ -1,0 +1,259 @@
+// quest handler
+
+/*
+Quests have:
+  title
+  description/hint
+  owner
+  initial suggested level
+
+quests obtain:
+  list of players completing quest
+  levels of those players
+
+quest level: average of the levels of the players completing the quest
+suggested level of play: average +- 1 std. dev.
+*/
+
+inherit HANDLER_BASE;
+
+#define QUEST_TITLE  0
+#define QUEST_HINT   1
+#define QUEST_OWNER  2
+#define QUEST_LVL    3
+#define QUEST_CMPLT  4
+#define QUEST_FLAGS  5
+
+// OPEN means it shows up on quest lists and allows new completions
+#define QUEST_F_OPEN 1
+
+// maps text mnemonic -> info
+mapping quests;
+
+// maps player -> mapping of handle -> qp
+mapping histories;
+
+void create() {
+  quests = ([ ]);
+  histories = ([ ]);
+  ::create();
+}
+
+void load_me() {
+  restore_object("/secure/save/handlers/quest", 1);
+}
+
+void save_me() {
+  save_object("/secure/save/handlers/quest");
+}
+
+int add_quest(string handle, string title, string hint, int lvl) {
+  if(!undefinedp(quests[handle]))
+    return 0;
+
+  if(!TP)
+    return 0;
+
+  quests[handle] = ({
+    title,
+    hint,
+    TP -> query_name(),
+    lvl,
+    ([ ]),
+    0
+  });
+
+  unguarded( (: save_me :) );
+  return 1;
+}
+
+string query_quest_title(string handle) {
+  if(undefinedp(quests[handle]))
+    return "";
+  return quests[handle];
+}
+
+string query_owner(string handle) {
+  if(undefinedp(quests[handle]))
+    return 0;
+
+  return quests[handle][QUEST_OWNER];
+}
+
+int set_owner(string handle, string owner) {
+  if(undefinedp(quests[handle]))
+    return 0;
+
+  if(!creatorp(owner))
+    return 0;
+
+  if(quests[handle][QUEST_OWNER] == TP -> query_name() || adminp(TP)) {
+    quests[handle][QUEST_OWNER] = owner;
+    unguarded( (: save_me :) );
+    return 1;
+  }
+
+  return 0;
+}
+
+int remove_quest(string handle) {
+  if(undefinedp(quests[handle]))
+    return 0;
+
+  if(query_owner(handle) == TP -> query_name() || adminp(TP)) {
+    map_delete(quests, handle);
+    return 1;
+  }
+
+  return 0;
+}
+
+int query_quest_level(string handle) {
+  int tlvl, n;
+  string p, *ps;
+
+  if(undefinedp(quests[handle]))
+    return 0;
+
+  if(!mapp(quests[handle][QUEST_CMPLT]))
+    return quests[handle][QUEST_LVL];
+
+  ps = keys(quests[handle][QUEST_CMPLT]);
+  foreach(p in ps) {
+    tlvl += quests[handle][QUEST_CMPLT][p];
+    n++;
+  }
+
+  if(!n)
+    return quests[handle][QUEST_LVL];
+
+  if(n < 10)
+    return( (quests[handle][QUEST_LVL] * (10-n) + tlvl) / n);
+
+  return ( tlvl / n );
+}
+
+int query_level_std_dev(string handle) {
+  int tlvl, n;
+
+  if(undefinedp(quests[handle]))
+    return 0;
+
+  if(!mapp(quests[handle][QUEST_CMPLT]))
+    return 0;
+
+  tlvl = query_quest_level(handle);
+
+  // do a simple poisson distribution (std. dev. == sqrt(mean))
+  n = 1;
+  while(n*n < tlvl)
+    n++;
+
+  return n--;
+}
+
+int set_quest_level(string handle, int l) {
+  if(undefinedp(quests[handle]))
+    return 0;
+  if(query_owner(handle) == TP -> query_name() || adminp(TP)) {
+    quests[handle][QUEST_LVL] = l;
+    unguarded( (: save_me :) );
+    return query_quest_level(handle);
+  }
+
+  return 0;
+}
+
+string query_hint(string handle) {
+  if(undefinedp(quests[handle]))
+    return 0;
+
+  return quests[handle][QUEST_HINT];
+}
+
+int set_hint(string handle, string hint) {
+  if(undefinedp(quests[handle]))
+    return 0;
+  if(query_owner(handle) == TP -> query_name() || adminp(TP)) {
+    quests[handle][QUEST_HINT] = hint;
+    unguarded( (: save_me :) );
+    return 1;
+  }
+
+  return 0;
+}
+
+int quest_completed(string player, string handle, object po) {
+  object tp;
+
+  if(base_name(PO) != LIBRARY_H)
+    return 0;
+
+  tp = find_player(player);
+
+  if(!tp)
+    return 0;
+
+  if(undefinedp(quests[handle]))
+    return 0;
+
+  if(master() -> author_file(po) != query_owner(handle))
+    return 0;
+
+  if(!(quests[handle][QUEST_FLAGS] & QUEST_F_OPEN))
+    return 0;
+
+  if(undefinedp(histories[player]))
+    histories[player] = ([ ]);
+
+  if(!undefinedp(histories[player][handle]))
+    return 0;
+
+  histories[player][handle] = query_quest_level(handle);
+  quests[handle][QUEST_CMPLT][player] = tp -> query_level();
+  unguarded( (: save_me :) );
+  return 1;
+}
+
+mapping query_player_quests(string player) {
+  if(undefinedp(histories[player]))
+    return ([ ]);
+  return copy(histories[player]);
+}
+
+int query_quest_points(string player) {
+  string h, *hs;
+  int    l;
+
+  if(undefinedp(histories[player]))
+    return 0;
+
+  hs = keys(histories[player]);
+  l = 0;
+  foreach(h in hs) {
+    l += histories[player][h];
+  }
+
+  return l;
+}
+
+int query_total_points() {
+  string q, *qs;
+  int    l;
+
+  qs = keys(quests);
+  l  = 0;
+  foreach(q in qs) {
+    if(!(quests[q][QUEST_FLAGS] & QUEST_F_OPEN))
+      continue;
+    l += query_quest_level(q);
+  }
+
+  return l;
+}
+
+int query_quest_status(string handle) {
+  if(undefinedp(quests[handle]))
+    return 0;
+  return quests[handle][QUEST_FLAGS] & QUEST_F_OPEN != 0;
+}

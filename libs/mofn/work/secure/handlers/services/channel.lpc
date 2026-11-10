@@ -1,0 +1,219 @@
+// Provide channel support for Intermud 3
+
+// from dw-wibble-r8.88
+
+#include <access.h>
+
+string get_local_channel(string ch);
+
+mapping get_services() {
+  return ([
+    "channel" : 1,
+  ]);
+}
+
+void event_receive_channel_who_reply(mixed *packet) {
+  object ob;
+
+  if(file_name(PO) != IMUD_H) return;
+
+  if(!(ob = find_player(packet[5]))) return;
+
+  packet[6] = get_local_channel(packet[6]);
+
+  if(!sizeof(packet[7])) {
+    tell_object(ob, "No one is listening to " + packet[6] + " at " +
+                    packet[2] + ".\n");
+    return;
+  }
+  tell_object(ob, "Listening to " + packet[6] + " at " + packet[2] + ": ");
+  tell_object(ob, implode(packet[7], " ") + "\n");
+}
+
+int filter_listeners(object ob, string localchan) {
+  if(!creatorp(ob) || ob -> query_invis() ||
+     ob -> check_earmuffs("intermud-all") ||
+     ob -> check_earmuffs(localchan)) {
+    return 0;
+  }
+
+  return 1;
+}
+
+void even_receive_channel_who_request(mixed *packet) {
+  string *who;
+  string localchan;
+
+  if (file_name(PO) != IMUD_H) return;
+  if (localchan = get_local_channel(packet[6])) {
+     who = (string *)filter_array(CHAT_H -> query_listeners(localchan), 
+                                  "filter_listeners", 
+                                  TO, localchan)->query_cap_name();
+  } else {
+     who = ({ });
+  }
+  IMUD_H->event_write(({ "chan-who-reply", 5, mud_name(), 0, packet[2],
+                            packet[3], packet[6], who }));                
+}
+
+void event_receive_channel_user_request(mixed *packet) {
+  object ob;
+  string visname;
+  int gender;
+    
+  if (file_name(PO) != IMUD_H) return;
+  if (!(ob = find_player(packet[6]))) {
+    IMUD_H->event_write(({ "error", 5, mud_name(), 0, packet[2], 0,
+                              "unk-user", packet[6] + " is not a valid "
+                              "player.", packet }) );
+    return;
+  }
+  visname = (string)ob->query_cap_name();
+  switch ((string)ob->query_gender_string()) {
+  case "male":
+    gender = 0;
+    break;
+  case "female":
+    gender = 1;
+    break;
+  default:
+    gender = 2;
+    break;
+  }
+  IMUD_H->event_write( ({ "chan-user-reply", 5, mud_name(), 0,
+                             packet[2], 0, packet[6], visname, gender }));
+}
+
+void event_receive_channel_message(mixed *packet) {
+  if (file_name(PO) != IMUD_H) {
+    return;
+  }
+  if (!(packet[6] = get_local_channel(packet[6]))) {
+    return;
+  }
+
+  packet[8] = replace(packet[8], ({ sprintf("%c", 7), "!",
+                                    sprintf("%c", 27), "ESC" }));
+
+  CHAT_H->event_send_channel(packet[7] + "@" + packet[2], packet[6],
+           packet[8]);
+}
+
+void event_receive_channel_emote(mixed *packet) {
+  if (file_name(PO) != IMUD_H) {
+    return;
+  }
+  if (!(packet[6] = get_local_channel(packet[6]))) {
+    return;
+  }
+
+  packet[8] = replace(packet[8], ({ sprintf("%c", 7), "!",
+                                    sprintf("%c", 27), "ESC" }));
+  CHAT_H->event_send_channel(packet[7] + "@" + packet[2], packet[6],
+           packet[8], 1, 0, 0);
+}
+
+varargs void event_send_channel(string who, string ch, string msg, int emote, 
+                                string target, string targmsg) {
+  mixed *packet;
+  string targpl, where;
+
+  if (emote) {
+    if (target && targmsg) {
+      if (sscanf(target, "%s@%s", targpl, where) != 2) {
+        targpl = target;
+      }
+      where = mud_name();
+    } else {
+      targpl = where = targmsg = 0;
+    }
+    packet = ({ "channel-e", 5, mud_name(), lower_case(who), 0, 0, ch,
+                who, msg });
+  } else {
+    packet = ({ "channel-m", 5, mud_name(), lower_case(who), 0, 0, ch,
+                who, msg });
+  }
+  IMUD_H->event_write(packet);
+}
+
+void event_send_channel_who_request(string channel, string mud) {
+  string pl;
+
+  pl = this_player(1) -> query_name();
+
+  IMUD_H -> event_write(({ "chan-who-req", 5, mud_name(), pl, mud, 0,
+                           channel }));
+}
+
+string get_local_channel(string channel) {
+  switch(channel) {
+    case "imud_code" :
+      return "intercre";
+    case "imud_gossip":
+      return "interchat";
+    case "mofn-cre":
+      return "mcre";
+    case "mofn-chat":
+      return "mchat";
+  }
+  return 0;
+}
+
+int event_register_channels(mapping list) {
+  mixed *val;
+  string channel, ns, local;
+
+  if (file_name(PO) != IMUD_H) {
+    return 0;
+  }
+  ns = (string)IMUD_H->get_nameserver();
+  foreach (channel, val in list) {
+    if (!val) {
+      continue;
+    }
+    if (!(local = get_local_channel(channel))) {
+      //IMUD_H->event_write(({ "channel-listen", 5, mud_name(), 0, ns,
+                             //0, channel, 0 }));
+//      log_file("channels", "New channel: " + local + " recognized " +
+//         ctime(time()) + "\nValue: " + sprintf("%O", val) + "\n\n");
+    } else {
+      IMUD_H->event_write(({ "channel-listen", 5, mud_name(), 0, ns,
+                                0, channel, 1 }));
+    }
+  }
+  return 1;
+}
+
+int event_administer_channel(string channel, string *additions, string *subs) {
+  if(!ACCESS_H -> has_permission(TP, "channel", "/" + channel + "/", 
+                                 PERM_WRITE | PERM_DELETE)) return 0;
+  if(member_array(channel, IMUD_H -> get_channels()) == -1) return 0;
+  IMUD_H -> event_write(({ "channel-admin", 5, mud_name(),
+                            (string)this_player(1)->query_cap_name(),
+                            (string)IMUD_H->get_nameserver(),
+                            0, channel, additions, subs }));
+  return 1;
+}
+
+int add_channel(string channel, int privee) {
+  if(!ACCESS_H -> has_permission(TP, "channel", "/" + channel, 
+                                               PERM_WRITE)) return 0;
+  if(member_array(channel, IMUD_H -> get_channels()) == -1) return 0;
+
+  IMUD_H -> event_write(({ "channel-add", 5, mud_name(),
+                            (string)this_player(1)->query_cap_name(),
+                            (string)IMUD_H->get_nameserver(), 0,
+                            channel, privee }));
+  return 1;
+}
+
+int remove_channel(string channel, int privee) {
+  if(!ACCESS_H -> has_permission(TP, "channel", "/" + channel, 
+                                              PERM_DELETE)) return 0;
+  if(member_array(channel, IMUD_H -> get_channels()) == -1) return 0;
+  IMUD_H -> event_write(({ "channel-remove", 5, mud_name(),
+                            (string)this_player(1)->query_cap_name(),
+                            (string)IMUD_H->get_nameserver(), 0,
+                            channel }));
+  return 1;
+}

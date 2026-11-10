@@ -422,6 +422,9 @@ classes it's found.
 | 186 | `wllz3` | 武林列传Ⅲ | `wllz.rar` | 40322 | WASM playable |
 | 187 | `tmi3` | TMI-3 | `https://github.com/fluffos/mudlib-archives/releases/download/v1.0.0/tmi-3-0.1a.tar.gz` | 40392 | WASM playable |
 | 188 | `yhlib` | 炎黄2003 | `git clone https://github.com/MudRen/YHLib` | 40393 | WASM playable |
+| 189 | `cistoms` | CISTOMS | `archives/cistoms-cvs.zip (SourceForge CVS snapshot)` | 40394 | WASM playable |
+| 190 | `fadingsummer` | Lore of the Fading Summer | `archives/fadingsummer-0.2.tgz (SourceForge fadingsummer 0.2)` | 40395 | WASM playable |
+| 191 | `mofn` | Middle of Nowhere | `archives/mofn-cvs.zip (SourceForge CVS snapshot)` | 40396 | noboot |
 | 901 | `discworld` | Discworld MUD lib (v3) | `dw_fluffos_v3.zip` | 40206 | WASM playable |
 | 901-1 | `dw_fluffos_v1` | Discworld MUD lib (v1) | `dw_fluffos_v1.tar.gz` | 40271 | WASM playable |
 | 901-2 | `dw_fluffos_v2` | Discworld MUD lib (v2) | `dw_fluffos_v2.zip` | 40272 | WASM playable |

@@ -1,0 +1,129 @@
+#include <network.h>
+#include "client.h"
+
+// from dw-wibble-r8.88
+
+private nosave int destruct_on_close, socket_type = -1;
+private nosave string _log_file;
+private nosave function read_f;
+private nosave mapping sockets_m;
+
+void create() {
+  sockets_m = ([ ]);
+}
+
+int event_create_socket(string host, int port) {
+  int x;
+  class client socket;
+
+  socket = new(class client);
+  socket->blocking = 1;
+  if( socket_type == -1 ) socket_type = STREAM;
+  x = socket_create(socket_type, "event_read_callback", "event_abort_callback");
+  if( x < 0 ) {
+    event_socket_error("Error in socket_create().", x);
+    return x;
+  }
+  socket -> descriptor = x;
+  if( x != EESUCCESS ) {
+    event_close(socket);
+    event_socket_error("Error in socket_bind().", x);
+    return x;
+  }
+  x = socket_connect(socket->descriptor, host + " " + port,
+           "event_read_callback", "event_write_callback");
+  if( x != EESUCCESS ) {
+    event_close(socket);
+    event_socket_error("Error in socket_connect().", x);
+    return x;
+  }
+  sockets_m[socket->descriptor] = socket;
+  return socket->descriptor;
+}
+
+protected void event_abort_callback(int fd) {
+  if(!sockets_m[fd]) return;
+  ((class client)sockets_m[fd]) -> closed = 1;
+  event_close((class client)sockets_m[fd]);
+}
+
+protected void event_read_callback(int fd, mixed val) {
+  if( functionp(read_f) ) evaluate(read_f, fd, val);
+  else event_read(fd, val);
+}
+
+protected void event_read(int fd, mixed val) { }
+
+protected void event_write_callback(int fd) {
+  int x;
+  class client socket;
+
+  if( !sockets_m[fd] ) return;
+  socket = (class client)sockets_m[fd];
+  socket->blocking = 0;
+  x = EESUCCESS;
+  while( socket->bufferp && x == EESUCCESS ) {
+    switch( x = socket_write(fd, socket->bufferp[0]) ) {
+    case EESUCCESS:
+      break;
+    case EECALLBACK:
+      socket->blocking = 1;
+      break;
+    case EEWOULDBLOCK:
+      call_out( (: event_write_callback($(fd)) :), 0);
+      return;
+    case EEALREADY:
+      socket->blocking = 1;
+      return;
+    default:
+      event_close(socket);
+      event_socket_error("Error in socket_write().", x);
+      return;
+    }
+    if( sizeof(socket->bufferp) == 1 ) socket->bufferp = 0;
+    else socket->bufferp = socket->bufferp[1..];
+  }
+}
+
+void event_write(int fd, mixed val) {
+  class client socket;
+
+  if( !sockets_m[fd] ) return;
+  socket = (class client)sockets_m[fd];
+  if( socket->bufferp ) socket->bufferp += ({ val });
+  else socket->bufferp = ({ val });
+  if( socket->blocking ) return;
+  else event_write_callback(fd);
+}
+
+protected void event_close(class client sock) {
+  if (!sock) return;
+  //if (!sock->closed && (socket_clone(sock->descriptor) != EESUCCESS))
+  //  return;
+  if (!undefinedp(sockets_m[sock->descriptor]))
+    map_delete(sockets_m, sock->descriptor);
+  event_socket_close(sock -> descriptor);
+  sock = 0;
+  if(destruct_on_close && !sizeof(keys(sockets_m))) destruct(TO);
+}
+
+protected void event_socket_close(int fd) { }
+
+int dest_me() {
+  class client socket;
+
+  foreach (socket in (class client *)values(sockets_m))
+    event_close(socket);
+  return 1;
+}
+
+protected void event_socket_error(string str, int x) {
+  if(_log_file)
+    log_file(_log_file, ctime(time()) + "\n" + socket_error(x) + "\n");
+}
+
+function set_read(function f) { return (read_f = f); }
+
+int set_socket_type(int type) { return (socket_type = type); }
+
+int set_destruct_on_close(int x) { return (destruct_on_close = x); }

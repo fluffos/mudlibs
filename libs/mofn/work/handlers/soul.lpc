@@ -1,0 +1,213 @@
+// soul handler - does all the things that don't do anything :/
+#include <parser.h>
+
+inherit HANDLER_BASE;
+
+mapping souls;
+
+// jump
+// -> you jump; luggage jumps
+// ({ you_result, he_results })
+class soul {
+  string  cmd;  // cmd player uses
+  int     c_time; // compilation time
+  mixed *patterns; // prioritized list of patterns
+  mapping results;
+}
+
+// results maps patterns to results
+//  "" : ({ "you $V", "$N $Vs" })  (for example)
+//  "<word|modifier>" : ({ "you $V $M", "$N $Vs $M" })
+//  etc.
+// if the value it maps to is a single string, it is an error string
+//   this allows for things like
+//    ``how would you like to jump?  quickly, crazily, etc.''
+//
+// allowed substitutions:
+//  $[0-9]+ => the string matched by that element of the pattern
+//  $N => person issuing the command
+//  $V => verb
+//  $I => indirect object
+//  $D => direct object
+//  $s => '' if directed to command giver, 's' otherwise
+//
+// file format:
+// name of file: <cmd>.s
+// location: /std/souls/<c>/<cmd>.s
+// contents:
+//  pattern string :: return1 :: return 2
+//  pattern string :: return
+//  pattern string :: "error:" string
+
+void create() {
+  souls = ([ ]);
+  ::create();
+}
+
+/*
+// we really don't need to save the compiled souls :/
+#define SAVE_FILE "/save/handlers/soul"
+
+void save_me() {
+  unguarded( (: save_object, SAVE_FILE :) );
+}
+
+void load_me() {
+  if(file_size(SAVE_FILE + ".o") > 0)
+    unguarded( (: restore_object, SAVE_FILE :) );
+}
+*/
+
+int compile_command(string cmd) {
+  string fname, line, *bits;
+  mixed  *stat_info;
+  class soul tsoul;
+  int   i;
+
+  if(!cmd || cmd == "") return 0;
+
+  stat_info = stat(fname = "/std/souls/" + cmd[0..0] + "/" + cmd + ".s");
+  if(!sizeof(stat_info)) return 0;
+  if(!intp(stat_info[0]) || stat_info[0] <= 0) return 0;
+
+  // we want to return 1 if the file is older than the compilation time
+  if(souls[cmd] && souls[cmd]->c_time > stat_info[1]) return 1;
+
+  tsoul = new(class soul);
+
+  tsoul -> cmd = cmd;
+  tsoul -> c_time = time();
+  tsoul -> patterns = ({ });
+  tsoul -> results = ([ ]);
+  
+  i = 0;
+  while(line = read_file(fname, i++, 1)) {
+    if(line[0] != '#' && sizeof(line) > 2) {
+      if(line[sizeof(line)-1] == '\n')
+        line = line[0..sizeof(line)-2];
+      bits = explode(line, "::");
+      if(line[0..1] == "::")
+        bits = ({ "" }) + bits;
+      if(sizeof(bits) == 3) {
+        tsoul -> patterns += ({ bits[0] });
+        tsoul -> results[bits[0]] = ({ bits[1], bits[2] });
+      } else if(sizeof(bits) == 2) {
+        if(bits[1][0..5] == "Error:") {
+          tsoul -> patterns += ({ bits[0] });
+          tsoul -> results[bits[0]] = bits[1][6..];
+        } else {
+          tsoul -> patterns += ({ bits[0] });
+          tsoul -> results[bits[0]] = ({ bits[1] });
+        }
+      }
+    }
+  }
+
+  souls[cmd] = tsoul;
+  //call_out("save_me", 0);
+  return 1;
+}
+
+int handle_command(object user, class soul cmd, string *bits, int *pos, 
+                   mixed *pat, mixed pattern) {
+  mixed ob_matches;
+  string dir_match;
+  mixed indirect_obs;
+  class obj_match direct_obs;
+  mixed indir_match;
+  string *add_comm_bit;
+  int   start, j;
+  string t, tt;
+  object l;
+
+// pattern tells us which strings to use for the reply
+//  cmd -> results[pattern] = ({ user_reply, other_reply })
+  if(!arrayp(cmd->results[pattern])) {
+    // we have an error message
+    // only $V is available
+    t = cmd->results[pattern];
+    t = replace_string(t, "$V", bits[0]);
+    return notify_fail(t + "\n");
+  }
+
+  ob_matches = PARSER_H -> objects_from_pattern(pat, bits, pos, user);
+  if(intp(ob_matches)) return 0;
+
+  dir_match   = ob_matches[0];
+  direct_obs  = ob_matches[1];
+  indir_match = ob_matches[2];
+  indirect_obs= ob_matches[3];
+
+  add_comm_bit = ({ });
+  start = 1;
+  for (j = 0; j < sizeof(pos); j++) {
+    add_comm_bit += ({ implode(bits[start..pos[j]], " ") });
+    start = pos[j]+1;
+  }
+
+  t = cmd->results[pattern][0];
+  for(j = 0; j < sizeof(add_comm_bit); j++) {
+    t = replace_string(t, "$" + j, add_comm_bit[j]);
+  }
+  t = replace_string(t, "$V", bits[0]);
+  t = replace_string(t, "$s", "");
+  t = replace_string(t, "$N", "you");
+  t = replace_string(t, "$I", query_multiple_short(indirect_obs));
+  t = replace_string(t, "$D", query_multiple_short(direct_obs -> objects));
+
+  user -> receive_message("emote", CAP(t) + "\n");
+
+  if(sizeof(cmd->results[pattern]) > 1)
+    t = cmd->results[pattern][1];
+  else
+    t = cmd->results[pattern][0];
+
+  for(j = 0; j < sizeof(add_comm_bit); j++) {
+    tt = replace_string(t, "$" + j, add_comm_bit[j]);
+  }
+  tt = replace_string(t, "$V", bits[0]);
+  tt = replace_string(t, "$s", "s");
+  tt = replace_string(t, "$N", user -> NAME);
+  foreach(l in filter(INV(ENV(user)), (: living($1) :)) - ({ user })) {
+    t = tt;
+    if(member_array(l, direct_obs -> objects) == -1)
+      t = replace_string(t, "$D", query_multiple_short(direct_obs -> objects));
+    else
+      t = replace_string(t, "$D", query_multiple_short(direct_obs -> objects 
+                                                   - ({ l }) + ({ "you" })));
+    if(member_array(l, indirect_obs) == -1)
+      t = replace_string(t, "$I", query_multiple_short(indirect_obs));
+    else
+      t = replace_string(t, "$I", query_multiple_short(indirect_obs 
+                                                   - ({ l }) + ({ "you" })));
+    if(objectp(l))
+      l -> receive_message("emote", CAP(tt) + "\n");
+  }
+  
+  return 1;
+}
+
+int parse(object owner, string *bits, string *paths) {
+  mixed *patterns, pattern;
+  mixed *pat;
+  int   *pos;
+  class soul cmd;
+
+  if(!TO -> compile_command(bits[0]))
+    return 0;
+
+  if(!(cmd = souls[bits[0]])) return 0;
+
+  foreach(pattern in cmd->patterns) {
+    if(stringp(pattern))
+      pat = PARSER_H -> query_pattern(pattern);
+    else
+      pat = pattern;
+    pos = PARSER_H -> pattern_match(bits, pat);
+    if(arrayp(pos)) {
+      if(TO -> handle_command(owner, cmd, bits, pos, pat, pattern))
+        return 1;
+    }
+  }
+  return 0;
+}

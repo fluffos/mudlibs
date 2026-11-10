@@ -2373,3 +2373,23 @@ Found by taking the objects a visitor meets (`scripts/lpc_reach_census.py` lists
 **Fix:** a thin `varargs object *find_match(string input, mixed env_list, object player)` that wraps a single env in `({ env })` and returns `match_objects_for_existence(...)`. Same edit on discworld, dw_fluffos_v1, dw_fluffos_v2.
 **Proof:** `lpcc_eval.py SLUG --at /secure/zzeval.lpc --code '…find_match("x", this_object())…'`: HEAD `Undefined function find_match`; tree `ZZT ({ })` PASS. Alone-scan of `kess`: HEAD compile error; tree the compile error is gone (create may still fail on armoury content — OOS).
 **Detection:** `function_exists("find_match", find_object("/secure/simul_efun"))` is 0 while the inherit is present; `rg -n 'find_match\(' libs/*/work --glob '*.lpc'` outside comments.
+
+### 7.377 Path macros built with `+` then used as `MACRO->fn()`: only the last literal is the call_other target (fadingsummer, 2026-11-10)
+
+**Symptom:** `call_other() couldn't find object '/logon_d'` (or another bare basename) while the macro is clearly defined as `DAEMON_DIR+"/logon_d"`.
+
+**Cause:** `#define LOGON_D DAEMON_DIR+"/logon_d"` expands inside `LOGON_D->logon(user)` to `"/system"+"/daemons"+"/logon_d"->logon(user)`. `->` binds tighter than `+`, so the driver looks up object `"/logon_d"`. The same trap hits `(void) LOGON_D->…`: the cast applies to the first primary and the next `+` becomes `void + string`.
+
+**Fix:** define the path as one string literal (`"/system/daemons/logon_d"`), or write `call_other(LOGON_D, "logon", user)` / `(LOGON_D)->logon(user)`.
+
+**Detection:** runtime "couldn't find object '/basename'"; grep `->[a-z_]+\(` next to macros that concatenate with `+`.
+
+### 7.378 `previous_object() != "/path/obj"` is always true (fadingsummer, 2026-11-10)
+
+**Symptom:** a daemon's entry function returns immediately; the caller sees silence after `exec()` (no banner, no prompt).
+
+**Cause:** `if (previous_object() != LOGIN_OB)` compares an object to a string path. They never match, so the security gate always fires.
+
+**Fix:** `base_name(previous_object()) != LOGIN_OB` (or `file_name` without the `#id` suffix).
+
+**Detection:** a gate that uses `previous_object() != SOME_PATH_MACRO`; connect and get no logon text despite a clean boot.

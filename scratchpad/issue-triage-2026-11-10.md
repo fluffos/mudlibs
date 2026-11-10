@@ -12,10 +12,10 @@ Decisions below are verified in-tree; human must close/comment on GitHub.
 | 21 | txmud / 天下MUD | **Duplicate** of `tianxia` (034) | NOTES: identical master ACL, 47-entry `d/`, wizard list. |
 | 20 | ZHLib / 中华英雄 | **Superseded** by `zhyx` (931) | ZHLib = older/smaller 2006 snapshot; zhyx is live FluffOS line. |
 | 19 | YHLib / 炎黄2003 | **Onboarded** `libs/yhlib/` (188, port 40393) | Boot + register(张三) → 世外桃源 + look + quit + relogin. §8.1/MESSAGE_D/is_killing fixes. |
-| 17 | Fading Summer | **Decline** unfinished Lil alpha | Archive verified. Boot reaches Accepting connections after stubs, but login requires inventing SHELL_D, fixing original syntax bugs in logon_d/newuser_d, missing banners/daemons. Not museum-complete without rewriting the lib. Distinct-from-lil layout exists but content is incomplete. |
+| 17 | Fading Summer | **Onboarded** `libs/fadingsummer/` (190, port 40395) | Boot + register → void + look + quit. Museum stubs for missing SHELL_D/BANISH_D/globals; syntax/precedence fixes. Alpha-only (no world). |
 | 18 | OSB | **Covered in spirit** by `aoh` (976) | aoh is OSB-based LDMud→FluffOS playable. Full 2003 OSB tarball verified (5.3 MB); defer full second OSB row unless user wants the historic parent as its own number. |
-| 14 | CISTOMS | **Decline for now** | SF CVS snapshot is RCS `,v` only (checked out 121 `.c` under testsuite/). Abandoned MudOS testsuite fork; low museum value vs effort. |
-| 25 | MofN | **Defer** | CVS snapshot verified; MudOS+MySQL auth design → likely `noboot` without MySQL (realms precedent). |
+| 14 | CISTOMS | **Onboarded** `libs/cistoms/` (189, port 40394) | Boot + name → Void; Casimir castle reachable. CVS checkout of testsuite tree. User-named lead. |
+| 25 | MofN | **Onboarded as noboot** `libs/mofn/` (191, port 40396) | CVS tree converted; empty `include/` + MySQL `db_connect` auth → `wasm_status=noboot`. |
 | 29 | SWLPC 0.9.1 | **Defer (LDMud)** | Archive verified (341 `.lpc`). Amylaar-style (`array`, `reset(arg)`). Needs LDMud→FluffOS campaign, not a quick MudOS bring-up. |
 | 22 | NannyMUD lib | **Defer (historic LDMud/Amylaar)** | `nannylib.tgz` from lysator verified. Classic; queue with other Amylaar ports. |
 | 28 | Heaven7 | **Defer (compat/Amylaar)** | Inner mudbytes archive fetched & verified (470 `.c`, readme: Amylaar 3.2 compat / 2.4.5 root). Prefer Amylaar/compat port campaign; not a same-day FluffOS native bring-up. |
@@ -47,4 +47,4 @@ Museum driver is FluffOS. These need DGD; do not onboard as playable FluffOS row
 
 ## Token note
 
-Ask a human with write scope to close #16/#7/#21/#20/#19/#17/#14 and the DGD set with the table rationale above.
+Ask a human with write scope to close #16/#7/#21/#20/#19/#17/#14/#25 and the DGD set with the table rationale above.

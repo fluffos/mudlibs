@@ -1,0 +1,577 @@
+// central bank object
+
+/*
+ * central bank handler - not visible to players
+ * luggage - 26 Aug 2001
+ */
+
+/*
+
+we track money owned by people -- objects have money, but it is
+in escrow and still owned by the person.
+
+escrow clears on game boots
+
+objects get money by putting it in escrow.  Objects can transfer
+money from escrow to another player, but lose it in the process.
+
+Things like gold bars are objects with no intrinsic value.  They are
+bought by jewelers to make jewlery just like other shops buy raw
+materials.
+
+Gold bars are made by mining ore and smelting it or by finding gold
+nuggets. (?)
+
+*/
+
+/*
+  need:
+    mapping of player -> money
+    mapping of ticket -> escrow cache
+*/
+
+/*
+    Money (with initial exchange rates):
+      Mithril  = 10000 Platinum
+      Platinum = 10000 Gold
+      Gold   = 1000 Silver
+      Silver = 1000 Bronze
+      Bronze = 100 Copper
+      Copper = 100 Iron
+      Iron
+
+numbers are log(ratio)
+
+   I    C   B   S   G   P   M
+
+I  0
+C  2    0
+B  4    2   0
+S  7    5   3   0
+G 10    8   6   3   0
+P 14   12  10   7   4   0
+M 18   16  14  11   8   4   0
+
+ICBSGPM
+array: ({ iron, copper, bronze, silver, gold, platinum, mithril })
+*/
+
+#include <money.h>
+
+inherit HANDLER_BASE;
+
+#define SAVE_FILE SECURE_DIR SAVE_DIR HANDLER_DIR "/bank"
+
+mapping escrow;
+mapping guests;
+int *money_supply;
+
+void create() {
+    escrow = ([ ]);
+    guests = ([ ]);
+
+    money_supply = ({ 0, 0, 0, 0, 0, 0, 0 });
+    ::create();
+}
+
+void load_me() {
+  if(unguarded( (: file_size, SAVE_FILE ".o" :)) > 0)
+    unguarded( (: restore_object, SAVE_FILE :) );
+}
+
+void save_me() {
+  unguarded( (: save_object, SAVE_FILE :) );
+}
+
+int *query_account(string acct) {
+  // if a user account, then look up in database
+  string *bits;
+  object ob;
+  mixed res, *ret;
+
+  bits = explode(acct, ":");
+
+  if(bits[0] = "player" && sizeof(bits) == 2) {
+    if(!ACCESS_H -> query_is_user(bits[1])) {
+        ob = find_player(bits[0]);
+        if(!objectp(ob) || !ob->query_guest())
+          return 0;  // what about guests?
+        if(undefinedp(guests[bits[1]]))
+          return ({ 0, 0, 0, 0, 0, 0, 0 });
+        else
+          return guests[bits[1]];
+    }
+    return USER_H -> query_money(bits[1]);
+  }
+
+  if(sizeof(bits) > 3)
+    acct = implode(bits[2..], ":");
+  else if(sizeof(bits) > 2)
+    acct = bits[2];
+  else
+    acct = "";
+  res = DB_H -> exec("SELECT iron, brass, copper, silver, gold, plat, mithril FROM money  WHERE type=\"" + DB_H -> escape(bits[0]) + "\" AND name=\"" + DB_H -> escape(bits[1]) + "\" AND account=\"" + DB_H -> escape(acct) + "\"");
+  if(stringp(res))
+    return ({ 0, 0, 0, 0, 0, 0, 0 });
+  ret = DB_H -> fetch(1);
+  if(sizeof(ret) == 7)
+    return(ret[0..6]);
+  else
+    return ({ 0, 0, 0, 0, 0, 0, 0 });
+}
+
+int set_account(string acct, int *coins) {
+  string *bits;
+  object ob;
+
+  bits = explode(acct, ":");
+
+  if(sizeof(bits) < 2)
+    return 0;
+
+  if(sizeof(bits) > 3)
+    acct = implode(bits[2..], ":");
+  else if(sizeof(bits) > 2)
+    acct = bits[2];
+  else
+    acct = "";
+
+  coins = MONEY_H -> standardize_values(coins);
+
+  switch(bits[0]) {
+    case "player" :
+      if(!ACCESS_H -> query_is_user(bits[1])) {
+        ob = find_player(bits[0]);
+        if(!objectp(ob) || !ob->query_guest())
+          return 0;  // what about guests?
+      }
+      if(sizeof(bits) == 2) {
+        if(ob && ob -> query_guest()) {
+          guests[bits[1]] = copy(coins);
+          return 1;
+        }
+        USER_H -> set_money(bits[1], coins);
+        return 1;
+      } else if(ob && ob -> query_guest())
+        return 0;
+      break;
+    case "guild"  :
+      if(!GUILD_H -> query_is_guild(bits[1]))
+        return 0;
+    case "clan"   :
+      if(!CLAN_H -> query_is_clan(bits[1]))
+        return 0;
+    case "order"  :
+      if(!ORDER_H -> query_is_order(bits[1]))
+        return 0;
+    case "org"    :
+      if(!ORG_H -> query_is_org(bits[1]))
+        return 0;
+    case "mud"    :
+      break;
+    default:
+      return 0;
+  }
+ 
+  return !stringp(DB_H -> exec(sprintf(
+    "REPLACE money (type,name,account,iron,brass,copper,silver,gold,plat,mithril) VALUES (\"%s\",\"%s\",\"%s\",%d,%d,%d,%d,%d,%d,%d)",
+    DB_H->escape(bits[0]), DB_H -> escape(bits[1]), DB_H -> escape(acct),
+    coins[0], coins[1], coins[2], coins[3], coins[4], coins[5], coins[6])));
+}
+
+int add_money(string acct, int *coins) {
+  object *obs;
+  int     i, *scoins;
+
+  obs = filter( previous_object(-1), (: adminp($1) :) );
+  if(!sizeof(obs))
+      return 0;
+
+  if(!acct || acct == "")
+      return 0;
+
+  scoins = query_account(acct);
+
+  for(i = 0; i < 7; i++) {
+      scoins[i] += coins[i];
+      money_supply[i] += coins[i];
+  }
+
+  if(!set_account(acct, scoins)) {
+    for(i = 0; i < 7; i++)
+      money_supply[i] -= coins[i];
+    return 0;
+  }
+
+  money_supply = MONEY_H -> standardize_values(money_supply);
+
+  call_out("save_me", 0);
+
+  return 1;
+}
+
+int remove_money(string acct, int *coins) {
+    object *obs;
+    int     i;
+    int    *acoins;
+
+    obs = filter( previous_object(-1), (: adminp($1) :) );
+    if(!sizeof(obs))
+        return 0;
+
+    if(!acct || acct == "")
+        return 0;
+
+    acoins = query_account(acct);
+
+    for(i = 0; i < 7; i++) {
+        acoins[i] -= coins[i];
+        money_supply[i] -= coins[i];
+    }
+
+    acoins = MONEY_H -> standardize_values(acoins);
+    if(TO->compare_coins(acoins, 0) < 0) {
+        for(i = 0; i < 7; i++) {
+            money_supply[i] -= acoins[i];
+        }
+        acoins = ({ 0, 0, 0, 0, 0, 0, 0 });
+    }
+
+    money_supply = MONEY_H -> standardize_values(money_supply);
+    if(TO->compare_coins(money_supply, 0) < 0)
+        money_supply = ({ 0, 0, 0, 0, 0, 0, 0 });
+
+    set_account(acct, acoins);
+
+    call_out("save_me", 0);
+
+    return 1;
+}
+
+int remove_acct(string acct) {
+    object *obs;
+
+    obs = filter( previous_object(-1), (: adminp($1) :) );
+    if(!sizeof(obs))
+        return 0;
+
+    if(!acct || acct == "")
+        return 0;
+
+    TO -> remove_money(acct, query_account(acct));
+
+    call_out("save_me", 0);
+
+    return 1;
+}
+
+varargs object create_money(int *coins, string acct) {
+    /*
+  basic security:
+    trace back through call stack... if one of the objects is a creator,
+    get the money from the creator's accounts... otherwise, if mortal,
+    get the money from the creator that created the environment at the
+    bottom of the call stack, if possible
+    */
+
+    object *obs, *cobs, mob, env, nenv;
+    string ticket, t;
+    int i, *acoins;
+    string account;
+
+    mob = new(MONEY_OBJ);
+
+    if(file_name(PO) == GOVERNMENT_H ||
+       file_name(PO)[0..10] == "/room/bank/") {
+        account = acct;
+    } else {
+        obs = previous_object(-1);
+
+        if(sizeof(cobs = filter( obs, (: creatorp($1) :) ))) {
+            t = "user:" + cobs[0] -> query_name() + ":";
+            if(t == acct[0..sizeof(t)-1])
+                acct = acct[sizeof(t)..];
+            account = "user:" + cobs[0] -> query_name();
+        } else {
+            if(userp(PO)) {
+                account = "user:" + PO -> query_name();
+            } else {
+                acct = PO -> query_account();
+                env = PO;
+                while(objectp(nenv = ENV(env))) {
+                    env = nenv;
+                }
+                t = base_name(env);
+                if(t[0..2] == "/w/") {
+                  account = "user:" + (explode(t, "/"))[1];
+                } else if(t[0..2] == "/p/") {
+                  account = "project:" + (explode(t, "/"))[1];
+                } else {
+                  // the town of Moffin - the tavern there is rented from
+                  // the mud admin as well as the other stores there
+                  account = "mud:entrance";
+                }
+            }
+        }
+        if(acct && acct != "")
+           account += ":" + acct;
+    }
+
+    coins = MONEY_H -> standardize_values(coins);
+
+    acoins = query_account(account);
+
+    if(MONEY_H -> compare_coins(coins, 0) <= 0)
+        return mob;
+
+    if(MONEY_H -> compare_coins(coins, acoins) > 0)
+        return 0;
+
+    do {
+      ticket = crypt(implode(map( coins, (: ""+$1+"" :) ), ":"), 0);
+    } while(arrayp(escrow[ticket]));
+
+    mob -> set_ticket(ticket);
+
+    escrow[ticket] = ({ file_name(mob), ({ ({ account, coins }) }) });
+
+    for(i = 0; i < 7; i++)
+        acoins[i] -= coins[i];
+
+    set_account(account, acoins);
+
+    mob -> set_coins(coins);
+
+    call_out("save_me", 0);
+
+    return mob;
+}
+
+string query_ob_account(object ob) {
+    object *obs, env, nenv;
+    string t, acct, account;
+
+    obs = previous_object(-1);
+
+    if(userp(ob)) {
+        account = "user:" + ob -> query_name();
+    } else {
+        acct = ob -> query_account();
+        env = ob;
+        while(objectp(nenv = ENV(env))) {
+            env = nenv;
+        }
+        t = base_name(env);
+        if(t[0..2] == "/w/") {
+          account = "user:" + (explode(t, "/"))[1];
+        } else if(t[0..2] == "/p/") {
+          account = "project:" + (explode(t, "/"))[1];
+        } else {
+          // the town of Moffin - the tavern there is rented from
+          // the mud admin as well as the other stores there
+          account = "mud:entrance";
+        }
+        acct = ob -> query_account();
+    }
+    if(acct && acct != "")
+       account += ":" + acct;
+    return account;
+}
+
+int transfer_money(mixed acct) {
+    object mob;
+    int i,j;
+    string ticket;
+    int *coins;
+
+    mob = PO;
+    if(base_name(mob) != MONEY_OBJ)
+        return 0;
+
+    ticket = mob -> query_ticket();
+
+    if(!arrayp(escrow[ticket]))
+        return 0;
+
+    if(escrow[ticket][0] != file_name(mob))
+        return 0;
+
+    if(objectp(acct))
+        acct = query_ob_account(acct);
+
+    coins = query_account(acct);
+
+    for(j = 0; j < sizeof(escrow[ticket][1]); j++)
+        for(i = 0; i < 7; i++)
+            coins += escrow[ticket][1][j][1][i];
+
+    mob -> set_coins( ({ 0, 0, 0, 0, 0, 0, 0 }) );
+    mob -> set_ticket( "" );
+
+    map_delete(escrow, ticket);
+
+    set_account(acct, coins);
+
+    call_out("save_me", 0);
+
+    return 1;
+}
+
+object combine_money(object mob1, object mob2) {
+     /* take two money objects and combine them into one */
+     /* we can recycle one of the tickets and mobs :) */
+
+    string ticket1, ticket2;
+    int *coins, i, j;
+
+    ticket1 = mob1 -> query_ticket();
+    ticket2 = mob2 -> query_ticket();
+
+    if(!arrayp(escrow[ticket1]) || !arrayp(escrow[ticket2]))
+        return 0;
+
+    if(escrow[ticket1][0] != file_name(mob1) || escrow[ticket2][0] != file_name(mob2))
+        return 0;
+
+    if(mob1 == mob2 || ticket1 == ticket2)
+        return 0;
+
+    escrow[ticket1][1] += escrow[ticket2][1];
+    map_delete(escrow, ticket2);
+    mob2 -> set_coins( ({ 0, 0, 0, 0, 0, 0, 0 }) );
+    mob2 -> set_ticket( "" );
+
+    coins = ({ 0, 0, 0, 0, 0, 0, 0 });
+
+    for(j = 0; j < sizeof(escrow[ticket1][1]); j++)
+        for(i = 0; i < 7; i++)
+            coins[i] += escrow[ticket1][1][j][1][i];
+
+    mob1 -> set_coins(MONEY_H -> standardize_values(coins));
+
+    call_out("save_me", 0);
+
+    return mob1;
+}
+
+object break_money(int *coins) {
+    object mob = PO;
+    object nmob;
+    string ticket, nticket;
+    int    *wcoins = copy(coins);
+    int    i, j;
+
+    nmob = new(MONEY_OBJ);
+
+    if(base_name(mob) != MONEY_OBJ)
+        return 0;
+
+    ticket = mob -> query_ticket();
+
+    if(!arrayp(escrow[ticket]))
+        return 0;
+
+    if(TO -> compare_coins(mob -> query_coins(), coins) <= 0)
+        return 0;
+
+// we will need to go through the various escrow stuff and see which accounts
+// we take over to the new one - start with the first and keep on until
+// we satisfy the requirements
+
+    do {
+      nticket = crypt(implode(map( coins, (: ""+$1+"" :) ), ":"), 0);
+    } while(arrayp(escrow[nticket]));
+
+    nmob -> set_ticket(nticket);
+
+    escrow[nticket] = ({ file_name(nmob), ({ }) });
+
+    for(j = 0; j < sizeof(escrow[ticket][1])
+               && MONEY_H -> compare_coins(wcoins, 0) > 0; j++) {
+        if(MONEY_H -> compare_coins(wcoins, escrow[ticket][1][j][1]) > 0) {
+            escrow[nticket][1] += escrow[ticket][1][j];
+            for(i = 0; i < 7; i++) {
+                wcoins[i] -= escrow[ticket][1][j][1][i];
+            }
+        } else {
+            // this is our last...
+            escrow[nticket][1] += ({ escrow[ticket][1][j][0], copy(wcoins)
+});
+            for(i = 0; i < 7; i++) {
+                escrow[ticket][1][j][1][i] -= wcoins[i];
+                wcoins[i] = 0;
+            }
+            escrow[ticket][1] = escrow[ticket][1][j..];
+        }
+    }
+    wcoins = ({ 0,0,0,0,0,0,0 });
+
+    for(j = 0; j < sizeof(escrow[ticket][1]); j++)
+        for(i = 0; i < 7; i++)
+            wcoins[i] += escrow[ticket][1][j][1][i];
+
+    mob -> set_coins(MONEY_H -> standardize_values(wcoins));
+
+    wcoins = ({ 0,0,0,0,0,0,0 });
+
+    for(j = 0; j < sizeof(escrow[nticket][1]); j++)
+        for(i = 0; i < 7; i++)
+            wcoins[i] += escrow[nticket][1][j][1][i];
+
+    nmob -> set_coins(MONEY_H -> standardize_values(wcoins));
+
+    call_out("save_me", 0);
+    return nmob;
+}
+
+string *query_escrow() {
+    return copy(escrow);
+}
+
+varargs void clear_escrow(object mob) {
+    object *obs;
+    string ticket, *tickets;
+    int ie, je, i, j, k;
+    int *coins;
+
+    if(!!mob && objectp(mob)) {
+        tickets = ({ mob -> query_ticket() });
+    } else {
+        obs = filter( previous_object(-1), (: adminp($1) :) );
+        if(!sizeof(obs))
+            return 0;
+
+        tickets = keys(escrow);
+    }
+    ie = sizeof(tickets);
+    for(i = 0; i < ie; i++) {
+        ticket = tickets[i];
+        if(!undefinedp(escrow[ticket])) {
+            je = sizeof(escrow[ticket][1]);
+            for(j = 0; j < je; j++) {
+                coins = query_account(escrow[ticket][1][j][0]);
+                for(k = 0; k < 7; k++) {
+                    coins[k] += escrow[ticket][1][j][1][k];
+                }
+                set_account(escrow[ticket][1][j][0], coins);
+            }
+            if(objectp(escrow[ticket][0])) {
+                escrow[ticket][0] -> set_coins(({0, 0, 0, 0, 0, 0, 0}));
+                if(!(!!mob && objectp(mob)))
+                    call_out("dest_mob", 0, escrow[ticket][0]);
+            }
+        }
+    }
+    if(!mob || !objectp(mob))
+        escrow = ([ ]);
+    call_out("save_me", 0);
+}
+
+void dest_mob(string mob) {
+    call_other(mob, "dest_me");
+}
+
+int *query_money_supply() {
+    return copy(money_supply);
+}
+

@@ -1,0 +1,411 @@
+inherit COMMAND_BASE;
+
+// from dw-wibble-r8.88
+
+#include <player.h>
+#include <dirs.h>
+
+int cmd_look_room();
+int cmd_string(string);
+int cmd_object(object *, string);
+string weather_long(string);
+string look_around();
+int check_exists(string);
+
+void setup() {
+  set_patterns(([
+    4 : ({ "" }),
+    3 : ({ "around" }),
+    0 : ({ "<string'direction'>" }),
+    2 : ({ "<indirect:object>" }),
+    1 : ({ "at <indirect:object>", 
+           "in <indirect:object>",
+           "inside <indirect:object>" })
+  ]));
+  set_synonyms(({ "l" }));
+  set_pattern_handlers( ([
+    "" : (: cmd_look_room() :),
+    "around" : (: cmd_string("around") :),
+    "<string'direction'>" : (: cmd_string($7[0]) :),
+    "<indirect:object>" : (: cmd_object($4, $7[0]) :),
+    "at <indirect:object>" : (: cmd_object($4, $7[0]) :),
+    "in <indirect:object>" : (: cmd_object($4, $7[0]) :),
+    "inside <indirect:object>" : (: cmd_object($4, $7[0]) :),
+  ]));
+}
+
+/**
+ * This method returns the 'look' description of the object.  This should
+ * be used for anyone want to do look like capabilities for their
+ * objects.
+ * @param thing the object to look at
+ * @param player the player doing the looking
+ * @param dark the darkness modifier
+ * @param verb the verb to use when telling the player their item is being
+ * looked at
+ * @param arg the string used for the look
+ * @return the look string
+ */
+string query_look_thing( object thing, object player, int dark, string verb,
+                         string arg  )
+{
+   string ret;
+   object env;
+   string other;
+
+   ret = "";
+   if ( living( thing ) ) {
+      if ( thing == player ) {        
+         ret += "Looking at yourself again?  What a narcissist!\n";
+      } else {                                                     
+         tell_object( thing, "$one_short:"+ file_name( player ) +
+                     "$ $V$0=looks,look$V$ at you.\n" );
+      }
+   } else {
+      env = environment(thing);
+      while (env &&
+            !living(env)) {
+         env = environment(env);
+      }
+   }
+   if (env &&
+      env != player) {
+      tell_object(env, player->the_short() + " " + verb + " "
+                 "at your " + thing->pretty_short() + ".\n");
+      other = thing->query_long();
+      if (other) {
+         ret += other;
+      }
+      other = thing->query_long_details(arg, dark, player);
+      if (other) {
+         ret += other;
+      }
+   } else {
+      ret += thing->long(arg, dark);
+   }
+   return ret;
+}
+
+
+int cmd_look_room() {
+   object room;
+   int dark;
+   string ret;
+   mixed *coords;
+
+   room = environment(TP);
+   if (!room) {
+      add_failed_mess("You are in limbo... sorry you can't look at "+
+                       "anything.\n");
+      return 0;
+   }
+
+   if (!TP->query_property("dead")) {
+      dark = (int)TP->check_dark((int)room->query_light());
+   }
+
+   if ( creatorp(TP) ) {
+      coords = room->query_co_ord();
+      if (sizeof(coords)) {
+         ret = sprintf("(%d,%d,%d) in area %s in world %s",
+                 coords[0], coords[1], coords[2], coords[3], coords[4]);
+      } else {
+         ret = "no coordinate";
+      }
+      TP -> receive_message("room.info", "%^CYAN%^File: "+ file_name(room) + "%^RESET%^\n%^CYAN%^Area: " + ret+"%^RESET%^\n" );
+   }
+
+   TP -> receive_message("room.name", "\n" + (string)room->short(0, dark) + "\n\n");
+   TP -> receive_message("room.description", "$P$Look$P$" + (string)room->long( 0, dark ));
+
+   if(dark && TP->query_creator()) {
+      TP -> receive_message("room.description", "$P$Look$P$" + "%^YELLOW%^As a creator, you can see:%^RESET%^\n"+ (string)room->long( 0, 0 ) );
+   }
+
+   return 1;
+}
+
+mixed cmd_object(object* obs, string arg) {
+  object thing;
+  object room;
+  int dark;
+  int retval;
+  string ret;
+
+  room = environment(TP);
+
+  if (!room) {
+     add_failed_mess("You are in limbo... sorry you can't look at "+
+                       "anything.\n");
+     return 0;
+  }
+
+
+  if (!TP->query_property("dead")) {
+    dark = (int)TP->check_dark((int)room->query_light());
+  }
+   
+  if (dark == 2) {    
+     add_failed_mess("It is way too bright to see anything at all.\n");
+     return 0;
+  }
+  if (dark == -2) {
+     add_failed_mess("It is way too dark to see anything at all.\n");
+     return 0; 
+  }
+
+  ret = "";
+  foreach (thing in obs) {
+      ret += query_look_thing(thing, this_player(), dark, "looks", arg);
+  }
+
+  if (ret != "") {
+    write( "$P$Look$P$" + ret );
+    retval = 1;
+  }
+
+  // Doors are a direction.
+  if ( room->query_exit( arg ) )
+    cmd_string(arg);
+
+  return 1;
+}
+
+mixed cmd_string(string arg) {
+  object room;
+  int dark;
+  int retval;
+  string ret;
+  string other;
+  string orig_arg;
+  mixed *func;
+
+  room = environment(TP);
+
+  if (!room) {
+     add_failed_mess("You are in limbo... sorry you can't look at "+
+                       "anything.\n");
+     return 0;
+  }
+
+  switch(arg) {
+/*
+  case "soul":
+    write((string)"/obj/handlers/new_soul"->help_list());
+    return 1;
+*/
+  case "sun":
+  case "moon":
+  case "weather":
+  case "sky":
+    write(weather_long(arg));
+    return 1;
+   case "around" :
+      write( look_around() );
+      return 1;
+  }
+
+  orig_arg = arg;
+ 
+  if (!TP->query_property("dead")) {
+    dark = (int)TP->check_dark((int)room->query_light());
+  }
+
+  if (dark == 2) {
+     add_failed_mess("It is way too bright to see anything at all.\n");
+     return 0;
+  }
+  if (dark == -2) {
+     add_failed_mess("It is way too dark to see anything at all.\n");
+     return 0;
+  }
+ 
+  arg = EXPAND_EXIT(arg);
+
+  if (room->query_mirror_room()) {
+    room = room->query_mirror_room();
+  }
+
+  if ( room->query_relative( arg ) && !retval) {
+     add_failed_mess( "You do not think that the "+ arg +" is here.\n" );
+     return 0;
+  }
+
+  if (!room->query_exit(arg)) {
+     arg = (string)this_player()->find_abs(arg);
+  }
+
+  if ( room->query_exit( arg ) ) {
+    int tmp_ret_val;
+
+    // got knows what this is for, as far as I know set_destination doesn't
+    // even exist.
+    room->set_destination( arg );
+    other = (string)room->query_destination( arg );
+
+    ret = room->query_look(arg);
+    if (ret && ret != "") {
+      write(ret+"\n");
+      retval = 1;
+      tmp_ret_val = 1;
+    }
+
+    func = room->query_look_func(arg);
+    if(pointerp(func) && sizeof(func)) {
+      if(call_other(func[0], func[1], 1)) {
+        retval = 1;
+        tmp_ret_val = 1;
+      }
+    } else if (functionp(func)) {
+      if (evaluate(func, 1)) {
+        retval = 1;
+        tmp_ret_val = 1;
+      }
+    }
+
+    if ( check_exists( other ) && !tmp_ret_val) {
+      object door;
+  
+      door = room->query_door_control(arg);
+  
+      if(room->query_door_open(arg) ||
+         door->query_transparent()) {
+        // it mustn't be dark in the destination room.
+        other->force_load();
+        this_player()->set_looked( find_object( other ) );
+        dark = (int)TP->check_dark((int)other->query_light());
+        write( (string)other->long( 0, dark ) );
+        retval = 1;
+      } else {
+        add_failed_mess(door->the_short() +
+                        " is closed and not transparent.\n");
+        retval = 0;
+      }
+    }
+  }
+ 
+  //notify_fail("You do not think that the "+orig_arg+" is here.\n");
+  return retval;
+}
+
+int check_exists(string file) {
+  int retval;
+
+  if ( objectp( find_object( file ) ) )
+    return 1;
+  if (file_size(file+".lpc") > 0) {
+    retval = 1;
+  } else {
+    retval = 0;
+  }
+  return retval;
+}
+
+string weather_long(string str) {
+  object env;
+ 
+  env = environment(TP);
+  if ((string)env->query_property("location") == "inside") {
+    return "You are not outside.\n";
+  }
+ 
+  if(str == "sun") {
+    if (WEATHER_H->query_day(env)) {
+      return "Ouch that hurts.\n";
+    } else {
+      return "The sun is not up, sorry.\n";
+    }
+  }
+ 
+  if(str == "moon") {
+    if (WEATHER_H->query_day(env)) {
+      return "The moon is not up, try at night.\n";
+    } else if (WEATHER_H->query_moon_string(env)) {
+      return WEATHER_H->query_moon_string(env);
+    } else {
+      return "The moon is not up at the moment, try again later.\n";
+    }
+  }
+ 
+  return "You look up at the sky.  " + WEATHER_H->weather_string(env) + ".\n";
+}
+
+string look_around() {
+   int i;
+   int j;
+   string prep;
+   string room;
+   string *parts;
+   string *rooms;
+   object place;
+   object thing;
+   object *contents;
+   mixed *locations;
+
+   place = environment( this_player() );
+   if ( place->query_linked() ) {
+      rooms = (string *)place->query_rooms();
+   } else {
+      rooms = ({ });
+   }
+   locations = ({ });
+   say( (string)this_player()->one_short() +" $V$0=looks,look$V$ around.\n");
+   foreach ( room in rooms ) {
+      if ( !find_object( room ) ) {
+         continue;
+      }
+      if ( this_player()->check_dark( (int)room->query_light() ) ) {
+         continue;
+      }
+      contents = ({ });
+      foreach ( thing in all_inventory( find_object( room ) ) ) {
+         if ( living( thing ) && thing->query_visible( this_player() ) )
+            contents += ({ thing });
+      }
+      if ( !sizeof( contents ) ) {
+         continue;
+      }
+      prep = (string)room->query_static_preposition();
+      if ( prep != "" ) {
+         prep += " ";
+      }
+      locations += ({ ({
+         contents, prep +
+         (string)this_player()->convert_message( (string)room->the_short())
+      }) });
+   }
+   if ( !sizeof( locations ) ) {
+      contents = ({ });
+      if ( this_player()->check_dark( (int)place->query_light() ) ) {
+         return "You can't see well enough to look around here.\n";
+      }
+      foreach ( thing in all_inventory( place ) ) {
+         if ( living( thing ) && thing->query_visible( this_player() ) &&
+               ( thing != this_player() ) )
+            contents += ({ thing });
+      }
+      if ( !sizeof( contents ) ) {
+         return "You do not see anyone else about.\n";
+      }
+      return "$C$"+ query_multiple_short( contents ) +
+            " $V$0=is,are$V$ here.\n";
+   }
+   for ( i = 0; i < sizeof( locations ) - 1; i++ ) {
+      for ( j = i + 1; j < sizeof( locations ); j++ ) {
+         if ( locations[ i ][ 1 ] == locations[ j ][ 1 ] ) {
+            locations[ i ][ 0 ] += locations[ j ][ 0 ];
+            locations = delete( locations, j, 1 );
+            j--;
+         }
+      }
+   }
+   parts = ({ });
+   for ( i = 0; i < sizeof( locations ); i++ ) {
+      parts += ({ query_multiple_short( locations[ i ][ 0 ] ) +" "+
+            locations[ i ][ 1 ] });
+   }
+   if ( sizeof( parts ) == 1 ) {
+      return "You can see "+ parts[ 0 ] +".\n";
+   }
+   return "You can see "+ query_multiple_short( parts ) +".\n";
+}

@@ -1,0 +1,167 @@
+// mudlib: Fading Summer
+// file:   update.c
+// author: Lontau
+// date:   18-6-2001
+
+/* Synopsis: This file contains the rules for the update and the renew
+   commands.
+*/
+
+inherit COMMAND_OB;
+
+protected int    filter_player (object);
+protected mixed  update_this   (string);
+
+// function: create()
+// purpose:  This function adds the rules to the parser and refreshes its
+//           cache on this object.
+
+void create()
+{
+   command::create();
+   parse_add_rule("update","");
+   parse_add_rule("update","STR");
+   parse_add_rule("renew","OBJ");
+   parse_add_rule("renew","OBS");
+   parse_refresh();
+}
+
+// function: can_*
+// purpose: These applies are called by the driver to verify that this
+//          object supports these rules.
+
+int can_update()     { return 1; }
+int can_update_str() { return 1; }
+int can_renew_obj()  { return 1; }
+
+// function: do_*
+// purpose: These functions carry out the work for the rule they are
+//          named for.
+
+void do_update() // update with no arguments
+{
+   string current_file;
+
+   current_file = (string) this_player()->query("cwf");
+
+   if(!current_file) 
+   {
+      message(M_SYSTEM, "You do not have a current working file set.\n"+
+                        "Please specify a filename.\n", this_player());
+      return;
+   }
+
+   if(!file_exists(current_file))
+   {
+      message(M_SYSTEM, "Your current working file no longer exists.\n"+
+                        "Please specify a filename.\n", this_player());
+      return;
+   }
+
+   update_this(current_file);
+}
+
+void do_update_str(string filename) // update with a string (any text that
+{                                   // follows the command is the argument)
+   if(!file_exists(filename))
+   {
+      filename = filename + ".lpc";
+      if(!file_exists(filename))
+      {
+         message(M_SYSTEM, "The filename you specified could not be found.\n"+
+                           "Please verify your filename and try again.\n", this_player());
+         return;
+      }
+   }
+
+   update_this(filename);
+}
+
+void do_renew_obj(object ob, string ob_text) // renew is called with an
+{                                            // object that the driver
+   object old_env, new_ob;                   // can find.
+
+   if(environment(ob)) 
+      old_env = environment(ob);
+
+   new_ob = update_this(file_name(ob));
+
+   if(!new_ob)
+   {
+      message(M_SYSTEM, "Renew: This object could not be updated, therefore it cannot be renewed.\n", this_player());
+      return;
+   }
+
+   if(old_env)
+      new_ob->move(old_env);
+
+   message(M_SYSTEM, ob_text+": Renewed successfully.\n", this_player());
+   this_player()->set("cwf", c_name(new_ob));
+}
+
+void do_renew_obs(object *obs, string *obs_text)
+{
+   foreach(object ob in obs)
+   {
+      do_renew_obj(ob, obs_text[member_array(ob, obs)]);
+   }
+}
+
+// function: filter_player(object)
+// purpose: This function is here to support the filter efun used in the
+//          next function.  It returns 1 if the object it is passed is
+//          interactive, 0 otherwise.
+
+protected int filter_player(object ob)
+{
+   return userp(ob);
+}
+
+// function: update_this(string)
+// purpose: This function takes care of all the checks necessary and catches
+//          any errors that occur when trying to load a file.
+
+protected mixed update_this(string filename)
+{
+   object *obs, ob;
+   mixed result;
+
+   seteuid(getuid(this_player()));
+   ob = find_object(filename);
+
+   if(ob)
+   {
+      obs = all_inventory(ob);
+      obs = filter(obs, "filter_player", this_object());
+
+      if(sizeof(obs) && ob == find_object(VOID_OB))
+      {
+         message(M_SYSTEM, "The void cannot be updated while it is occupied.\n", this_player());
+         return 0;
+      }
+
+      obs->move(VOID_OB);
+
+      if(function_exists("remove", ob) && result = catch(ob->remove()))
+      {
+         message(M_SYSTEM, "Error in remove().\nError: " + result + "\n", this_player());
+         return 0;
+      }
+
+      if(ob)
+         destruct(ob);
+   }
+
+   if (result = catch((void) filename->apply_load()))
+   {
+      message(M_SYSTEM, "Error in loading object.\nError: "+result+"\n", this_player());
+      return 0;
+   }
+
+   if(obs)
+      obs->move(find_object(filename));
+
+   message(M_SYSTEM, filename+": Updated and loaded.\n", this_player());
+   this_player()->set("cwf", filename);
+   return ob;
+}
