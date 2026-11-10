@@ -1372,3 +1372,5 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 **Also (2026-11-09, gb_budai xkxc98sj/xkxz2):** thin alias `d/job/obj/gb_budai` → `/d/gaibang/obj/gb_budai` (same-lib). Proof: each HEAD 1/3 → 3 PASS.
 
 **Also (2026-11-09, master_yue njhhdxdes2hx):** thin alias `/std/char/master_yue` → `/std/char/master~1` (FAT 8.3 twin; Yue-specific `huiyue` gate). Proof: HEAD 1/3 → 3 PASS.
+
+**Also (2026-11-09, new/bow wxddym):** thin alias `clone/weapon/new/bow` → `/clone/weapon/bow` (same-lib). Proof: HEAD 1/4 → 4 PASS.

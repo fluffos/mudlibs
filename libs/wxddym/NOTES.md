@@ -999,3 +999,8 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 深度功能测试（2026-11-09，INLAID 收养 §6.15/§6.16）
 
 `clone/enchase/*` 共 80 个镶嵌物 `inherit INLAID;`，宏与 `/inherit/item/inlaid` 均缺失（本库已有更完整的 `TESSERA`/`tessera.lpc`，但宝石/符文/骷髅仍走 `is_inlaid()` 路径）。从 yhwhckdm 收养 `inlaid.lpc`，并在 `globals.h`/`globals1.h` 补 `#define INLAID "/inherit/item/inlaid"`。证明：`lpc_listcheck` 81/81 PASS（含本体），HEAD 0 → 树 81 newly loading，0 regress。
+
+
+## 深度功能测试（2026-11-09，new/bow 薄别名 §6.15）
+
+`clone/weapon/new/{pangu,tianshen}-gong` 继承同目录缺失的 `bow`；本体在 `/clone/weapon/bow`。薄别名。证明：HEAD 1 PASS / 3 FAIL → 树 4 PASS。
