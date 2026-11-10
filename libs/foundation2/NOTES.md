@@ -572,3 +572,14 @@ the news pager. Fixed:
 ## KB 06 §7.379 — 空信箱 save_letter（2026-11-10）
 
 与 foundation1 同形的 IIPS `save_letter` 空信箱 `__BoxInfo[-1]`（KB 06 §7.379，2026-11-10）：加范围守卫。
+
+## 深度功能测试（2026-11-10）
+
+手启：`build-debug`；端口 40221。
+
+覆盖：登录 `fluffos` / `Mud@2026` → 新闻回车 → `look`（`/domains/Standard/center`）/
+`inventory`/`who` → 方向/go 均 “nowhere”（洞穴无出口，既有）→ `quit` → 重登/`look`/`quit`。
+驱动安静，无编程缺陷。
+
+陷阱：`help` 进入分页后方向词被当成帮助主题；先 `q` 退出帮助。
+
