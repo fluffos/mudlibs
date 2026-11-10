@@ -571,3 +571,14 @@ Hand fixes; no warnings left in compiling files (the 4 files that did not compil
 
 删除本库中 FluffOS 不认的 `#pragma save_binary` / `#pragma optimize…` 行。
 
+
+## 深度功能测试（§10.7，2026-11-10）— 重测
+
+手启：`build-debug`；端口 40253。
+
+覆盖：文字终端 `fluffos`/`Mud2026x` → `race human` → Hilltop Village 中央广场
+`look`/`score` → `quit` → 重连仍在广场/`look`/`score`/`quit`。
+
+驱动 stdout：无 compile warning、无 runtime Error。无新编程缺陷。
+文字模式本就只特判 `look`/`score`/`quit`/`race`/`i`；`who`/`help`/`east` 走命令队列或 MCP 帧，
+不作为本轮缺陷（与 2026-09-11 文字终端说明一致）。
