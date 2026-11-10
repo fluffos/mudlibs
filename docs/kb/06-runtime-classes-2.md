@@ -7,6 +7,8 @@ the root wrapper with `exclude || ({})`.
 **Also (2026-11-10, remaining root wrappers):** nineteen live `adm/**/simul_efun/message.lpc` still passed bare `exclude` into `efun::message` (yhlib quit/channel raised `Bad argument 4 … Got: int(0)`). `exclude || ({})` on those roots; skipped `u/mudring` copies. Proof: yhlib fresh boot + quit, 0 arg-4 errors.
 
 
+**Also (2026-11-10, es1/esI/darkelib leftovers):** four more live root wrappers (`es1`, `es1_win`, `esI`, `darkelib`) still passed bare `exclude`; `es1` 3-arg `tell_room`/`write`/`say` paths. `exclude || ({})`; skipped `u/m/moon` copies (same policy as `u/mudring`). Proof: es1 boot + login look/who/say/quit, 0 arg-4.
+
 
 ### 7.62 `check_legal_id`'s `while (i--)` accepts `""`
 The empty id later crashes `sprintf("%c", id[0])`. Reject `!strlen(id)`

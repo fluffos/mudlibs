@@ -921,3 +921,8 @@ Left, as content gaps, not invented: 16 inherits of files that are not in the ar
 ## 深度功能测试（2026-11-04，wild_card.x + SECURE_OBJECT §6.15）
 
 同 es1：`wild_card.x`→`.lpc`，收养 tmi2 `sec_ob`。证明：wild_card+sec_ob PASS（card 返回类型另案）。
+
+## §7.61 message() exclude || ({})（2026-11-10）
+
+与 `es1` 同源根 sefun：`exclude || ({})`。跳过 `u/m/moon` 副本。
+

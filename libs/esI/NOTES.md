@@ -931,3 +931,8 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply e
 
 - 语料扫到 `std/body/wild_card.lpc` 残留一行活动 `#pragma save_binary`（2026-10-27 大扫后的漏网）。
 - 已删；活动 `save_binary` 语料残留现为 0。
+
+## §7.61 message() exclude || ({})（2026-11-10）
+
+根 `adm/simul_efun/message.lpc`：`exclude || ({})`（同 es1 家族）。
+

@@ -859,3 +859,8 @@ IRC vodka/water 继承 wizard `/u/e/elon/drink`，接口在 `/d/island/obj/drink
 ## 深度功能测试（2026-11-04，wild_card.x + SECURE_OBJECT §6.15）
 
 `/std/body/wild_card` 归档为 `wild_card.x`；`SECURE_OBJECT` 指向缺失的 `/std/object/sec_ob`。复制为 `.lpc`，并从 tmi2 收养 `sec_ob.lpc`。证明：wild_card+sec_ob HEAD FAIL → 树 PASS（`card.lpc` 另有返回类型问题；`adt/body` 仍缺 link/message/command）。
+
+## §7.61 message() exclude || ({})（2026-11-10）
+
+`adm/simul_efun/message.lpc` 把缺省的 `exclude`（int 0）原样传给 `efun::message`；`tell_room`/`write`/`say` 等三参调用会触发 `Bad argument 4`。改为 `exclude || ({})`。跳过 `u/m/moon` 副本。证明：本轮 boot + `fluffos` 登录 `look`/`who`/`say`/`quit`，驱动无 arg-4。
+
