@@ -1126,3 +1126,9 @@ old 下水道继承 `/d/dragon/sewer/sewer_room`，本体在 old；字节拷贝�
 档案未带 `/d/magic/symbols/shar_symbol`；`newsymbol` inherit 之，新手庙 `p_shar` `new()` 之。按同目录其它神祇 `*_symbol.lpc`（eldath / lord_shadow）补薄包装 → `holy_symbol`。
 
 验证：listcheck 消费者 HEAD FAIL → tree PASS。
+
+## §6.15 cmds/mortal/room 继承 saide traps（2026-11-10）
+
+- 游离的 `cmds/mortal/room.lpc`（`/std/room` 旧副本）继承缺失的 `/realms/saide/traps/container.lpc`。
+- 与现行 `std/room.lpc` 对齐：`inherit "/std/container.lpc"`；`status id`→`int id`；`dependencies += ob`→`+= ({ ob })`。
+- 同改 shadowgate / sunshadow。证明：listcheck 各 0→1 PASS。

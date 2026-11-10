@@ -1016,6 +1016,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-11-10, orphan `"\\n";` after adjacent-string concat):** LPC joins adjacent string literals without `+`. The orphan-NOR pass also deleted `"\\n";` after a line ending in `"` (no `;`), e.g. wdxtym `questd.lpc` `msg = "…" \n "" \n "\\n";` → `unexpected L_DEFINED_NAME`. Restored 74 a632 sites; `lpc_fix_no_effect.py` skips when `prev.endswith('"')` and not `'";'`. Detection: boot survey; or a string assign whose next token is another identifier.
 
+**Also (2026-11-10, shadowgate/sunshadow `cmds/mortal/room`):** orphan copy of `/std/room` inherited missing `/realms/saide/traps/container.lpc`. Retarget to `/std/container.lpc` (same as live `std/room.lpc`); `status id`→`int id`; `dependencies += ob`→`+= ({ ob })`. Proof: each listcheck 0→1 PASS.
+
+
 
 
 **Also (2026-11-10, yhlib residual warnings):** renamed colliding globals (`indian` `ma_*`→`in_*` vs `masia`; `swmuding` `insects`→`sw_insects` assigned in `create`; `qianzhenglun` `count`→`my_count`); dropped duplicate `peis=` in `duka_3*`; `to_int(pow(...))` in `ultra_questd`. Diagnostics 8→1 (dns_master empty-statement noise after preprocessor remains).
