@@ -723,3 +723,10 @@ wdt / guangchang / qianmu workroom+board：补 `me`/`who`。
 ## 深度功能测试（2026-11-09，COMBINED_ITEM_BANG 薄别名 §6.15）
 
 酒/道具继承 `COMBINED_ITEM_BANG`（`/inherit/item/combined_bang`），本体为 `/inherit/item/combined`。薄别名。证明：alias+longyuan+酒 listcheck HEAD 1 PASS / 4 FAIL → 树 5 PASS。
+
+## §6.10 误删隐式拼接尾 `"\n";`（2026-11-10）
+
+- LPC 相邻字符串字面量可无 `+` 拼接；orphan-NOR 扫把上一行以 `"` 结尾（无 `;`）后的 `"\n";` 也删了。
+- `adm/daemons/questd.lpc` `assign_quest_by_letter` 的 `msg = "…暗器…" "" "\n";` 缺终止行 → `unexpected L_DEFINED_NAME`。
+- 语料恢复 a632 中该形约 74 处；`lpc_fix_no_effect.py` 跳过 `prev` 以未收尾 `"` 结尾。
+- 证明：wdxtym `lpcc --batch` questd 错误 2→0。

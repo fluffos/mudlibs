@@ -1014,6 +1014,9 @@ A third group, read in the census of failing mortal commands (2026-10-20): hc `c
 
 **Also (2026-11-10, orphan `"\\n";` after string-concat `+`):** a corpus pass that deleted whole-line `"\\n";` (meant for dead map/`NOR` leftovers) also removed the final operand of multi-line string concats whose previous line ends in `+`. Symptom: discworld `/global/virtual/compiler.lpc` `file_data += "#include " + replace(...) +` then `}` → `syntax error, unexpected '}'` (and cascade). Oracle: same lib `obj/handlers/data.lpc` kept `+ "\\n";`. Restored every a632 deletion after a `+` continuation (~495 sites). `lpc_fix_no_effect.py` now skips when `prev.endswith("+")`. Detection: boot survey `: error:` on a line that used to compile; or `+\n\s*\}` in sources.
 
+**Also (2026-11-10, orphan `"\\n";` after adjacent-string concat):** LPC joins adjacent string literals without `+`. The orphan-NOR pass also deleted `"\\n";` after a line ending in `"` (no `;`), e.g. wdxtym `questd.lpc` `msg = "…" \n "" \n "\\n";` → `unexpected L_DEFINED_NAME`. Restored 74 a632 sites; `lpc_fix_no_effect.py` skips when `prev.endswith('"')` and not `'";'`. Detection: boot survey; or a string assign whose next token is another identifier.
+
+
 
 **Also (2026-11-10, yhlib residual warnings):** renamed colliding globals (`indian` `ma_*`→`in_*` vs `masia`; `swmuding` `insects`→`sw_insects` assigned in `create`; `qianzhenglun` `count`→`my_count`); dropped duplicate `peis=` in `duka_3*`; `to_int(pow(...))` in `ultra_questd`. Diagnostics 8→1 (dns_master empty-statement noise after preprocessor remains).
 

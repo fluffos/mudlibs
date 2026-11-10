@@ -137,8 +137,9 @@ for path in sorted(flagged):
             while j >= 0 and not lines[j].strip():
                 j -= 1
             prev = lines[j].rstrip("\r").rstrip() if j >= 0 else ""
-            # Never touch a "\n"; that finishes a concat: prev ending in + is the other operand.
-            if prev.endswith("+"):
+            # Never touch a "\n"; that finishes a concat: prev ending in + is the other operand,
+            # or a string literal without its own ";" (LPC adjacent-string concat, e.g. "" then "\n";).
+            if prev.endswith("+") or (prev.endswith('"') and not prev.endswith('";')):
                 k += 1
                 continue
             if prev.endswith((";", "{", "}")) and not prev.lstrip().startswith("//"):
