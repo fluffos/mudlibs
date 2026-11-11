@@ -167,6 +167,8 @@ mkdir(<dir>)` + `assure_file(f_name)` and `wasm_keep_dirs` (82 libs;
 `hhsj`/`nitan_ceshi` already fixed). Spot-boot `xfbhh` without the keep
 dir: login wrote `rich.txt` et al., no `debug.log`. Follow-up leftovers (2026-11-10): decompiled `topten_save(mixed)` / `top_save` (longyunmeng_binary, wllz3), existing-create `DATA_DIR "topten/"` save_object (aoxiangtianji, xiyouji2003), shiji/sj/syxjl `/topten/`, tianlongbabu `data/site`. Still skips `/open/topten` single-file lists and `DATA_DIR "toptend"` single-file saves (mhxy/pkuxkx).
 
+**Also (2026-11-10, xfbhh):** `emote_d.create()` does `restore_object(/data/emotion/emotion.o)` and `destruct(this_object())` on failure. The archive had only an empty `data/emotion/` (`.gitkeep`), so the daemon never stayed loaded; `commandd` then raised `*call_other() couldn't find object '/adm/daemons/emote_d'` and `score` printed `WARNING 这里发现了臭虫`. Adopted `emotion.o` from sibling `hhsj` (+ keep `data/emotion`). Proof: ZJ register→zz/xuan/choose/washto→世界之树; score clean; debug.log quiet.
+
 **Detection:** grep `log_file(` and `write_file(` in each lib's
 simul_efun and in the daemons that run on common player actions. The
 pairing "`log_file()` sits two functions above its own unused
