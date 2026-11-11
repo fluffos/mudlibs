@@ -440,3 +440,10 @@ twice, gender `m`. Arrived in 茅草屋, `south` to 前院, `quit` printed
 - `quit` → Bye；重登同 ID/密码回到茅草屋。驱动 stdout 无编程错误。
 
 无新编程缺陷。`trail2` 的 `northeast` 拼写修复与孤立子图观察仍成立。
+
+## 深度功能测试（§10.7，2026-11-10，茅草屋↔前院）
+
+pristine + build-debug，port 40242。
+
+- **流程**：GBK `n` → ID → 新号 `y` → 中文名 → 密码×2 → 性别 `m` → 茅草屋；`look`/`south` 前院/`north` 回屋；`quit`；同 ID 重登回茅草屋。
+- `score`/`i` 仍为引擎「什么？」（无对应 cmds，既有记录）。驱动 stdout / `debug.log` 无新编程错误。本轮无新编程缺陷。
