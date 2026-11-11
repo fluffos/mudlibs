@@ -1090,3 +1090,11 @@ FluffOS 编译器无条件预定义空的 `__TRACE__`（`lexer_utils.cc`），�
 ## KB 06 §7.379 — 空信箱 save_letter（2026-11-10）
 
 IIPS `save_letter` 空箱索引（KB 06 §7.379，2026-11-10）。
+
+## 深度功能测试（§10.7，2026-11-10，注册 abort + `/log/open/`）
+
+pristine + build-debug，port 40229。
+
+- **缺陷**：`pick human` 后进 `eventCompleteChar` → `AddCurrency` → `log_file("currency")`；sefun 把无特权写改到 `/log/open/currency`，目录缺失则 raise，角色半完成：只有 `>`，一切命令 `What?`（`log/runtime` 有 `*Wrong permissions…/log/open/currency`）。同缺 `secure/log/intermud`、`tmp`（imc2/i3，不挡注册）。
+- **修复**：`wasm_keep_dirs.txt` 为 dsIII / ds386 / brassring / dshakkard / riftsds / deadsouls_fluffos 补 `log/open`、`secure/log/intermud`、`tmp`（KB 06 §7.358）。
+- **证明**：无 keep 复现；有 keep 后 news → start room → `look`/`score`/`read index in handbook`（真章节）正常。

@@ -1135,3 +1135,7 @@ FluffOS 编译器无条件预定义空的 `__TRACE__`（`lexer_utils.cc`），�
 ## KB 06 §7.379 — 空信箱 save_letter（2026-11-10）
 
 IIPS `save_letter` 空箱索引（KB 06 §7.379，2026-11-10）。
+
+## `log/open keep（注册 currency 日志）`（2026-11-10，KB 06 §7.358）
+
+与 dsIII 同型：`log_file("currency")` 被 sefun 改写到 `/log/open/currency`；缺目录会在 `eventCompleteChar` 中断注册。本轮为家族补 keep：`log/open`、`secure/log/intermud`、`tmp`。实测与 NOTES 见 dsIII。

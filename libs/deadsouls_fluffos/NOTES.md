@@ -565,3 +565,7 @@ pre-rename tree); the config has three obsolete lines the driver reports (`addre
 ## `generate_tmp` 的 `/open/` keep（2026-11-10，KB 06 §7.358）
 
 与 dsII 同型：`generate_tmp()` 写 `/open/<time>.lpc`，本库 mudlib 根 `work/lib` 下没有 `open/`，keep 表也没有。补 `scripts/wasm_keep_dirs.txt` 的 `deadsouls_fluffos`/`open` 行（站点 / pristine 建空目录）。同轮 dsII 实测 `read handbook` 依赖该目录。
+
+## `log/open` keep（注册 currency 日志）（2026-11-10，KB 06 §7.358）
+
+与 dsIII 同型 sefun 改写；本库虽已有部分 `log/open` 目录，补 keep 行并加 `secure/log/intermud`、`tmp`，保证站点/pristine 一致。
