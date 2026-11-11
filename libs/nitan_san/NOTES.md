@@ -1038,3 +1038,10 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 - 正式 `#include` 路径上的 `indian.lpc` 已在 2026-10-06 扫过（`in_*` / `mai_*`），无 live 撞名。
 - 本轮同步未挂在 `include directories` 上的镜像副本：`inherit/include/npc/indian.lpc` 或 `u/lonely/include/npc/indian.lpc` 仍写 `ma_sname`/`ma_pname`，与同树 `masia.lpc` 撞名。
 - 命名与本库正式副本对齐（`mai_*` 或 `in_*`）。证明：语料 live include 路径 `ma_sname` 撞名 = 0。
+
+## 深度功能测试（§10.7，2026-11-10，注册→生命之谷→扬州客店）
+
+pristine + build-debug，port 40055。
+
+- **流程**：`gb` → ID → `y` → 姓「秦」名「岭」→ 管理/普通密码×2 → `m` → 注册房 `register` → 生命之谷 `choose 1`/`washto 20 20 20 20`/`born 扬州人氏`（规则 more 页完）→ 客店；`east` 马厩/`west` 回店；新建号 `quit` 半小时门闸选 `n` 留下。
+- `data/topten` 写入正常；驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`。本轮无新编程缺陷。
