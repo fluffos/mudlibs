@@ -554,3 +554,14 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 深度功能测试（2026-11-09，DAEMON→cmd_m 残余语料扫 §6.16/§6.15）
 
 `adm/daemons/network/pingd|pingtcp`（或同族路径）继承 `DAEMON`：补 `#define DAEMON "/std/cmd_m"`（若缺），收养精简 `std/cmd_m.lpc`，并在需要时补 `include/uid.h`。本轮为 2026-11-04 二十三库扫的残余。
+
+## `log/mud` 缺目录：登录写 MUDVISITOR 抛错（2026-11-11，KB 06 §7.358 Also）
+
+`logind` 的 `#define VISITORS "/log/mud/MUDVISITOR"` 在登录统计里 `write_file(VISITORS, …)`。keep 表原先没有 `log/mud`，pristine / 站点第一写抛 `*Wrong permissions … /log/mud/MUDVISITOR`，登录链断在裸 `>`。九个同写 `/log/mud/` 的 hy 系库一并补上 keep 行（`fqyy2` / `haiyang2` / `hy` / `hy2000` / `hy2002` / `hy5` / `hyiishzdscbb` / `hymud` / `xjcq2000`）。
+
+## 深度功能测试（§10.7，2026-11-11，侠客使者房）
+
+pristine + build-debug，port 40197（补 `log/mud` 后）。`scripts/play_login.py` 注册。
+
+- **流程**：`gb` → id/确认 → 中文名 → 强密码×2 → 天赋 → email/性别 → 侠客使者房（`oldplayer`/`newbie`）；`look`/`score`/`i`；`quit`。
+- 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`/`执行时段错误`。

@@ -646,3 +646,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 `*call_other() couldn't find object`。主树对应处此前已注释。本轮注释这四行。
 证明：`lpcc_eval` HEAD 加载 `/海洋2002/hy3/d/city2/jail` FAIL；工作树四房 PASS。嵌套树仍可按绝对路径加载。
 
+
+## `log/mud` keep 行（2026-11-11，KB 06 §7.358 Also）
+
+与 fqyy2 同：`VISITORS`/`GIFTCARD` 写 `/log/mud/…`；补 keep `log/mud`（见 fqyy2 NOTES）。

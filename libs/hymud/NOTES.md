@@ -1431,3 +1431,7 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 深度功能测试（2026-11-09，WEAPONTYPE §6.16）
 
 `obj/armor|weapon` 继承未定义的 `WEAPONTYPE`（与 hy5 同形）。`globals.h` 在 `S_WEAPON` 后补 `#define WEAPONTYPE "/inherit/weapon/weapon"`（本体已有）。证明：inherit 语法错误清除；模板 `valuetext`/`weighttext` 残留同 hy5。
+
+## `log/mud` keep 行（2026-11-11，KB 06 §7.358 Also）
+
+与 fqyy2 同：`VISITORS`/`GIFTCARD` 写 `/log/mud/…`；补 keep `log/mud`（见 fqyy2 NOTES）。
