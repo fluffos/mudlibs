@@ -936,3 +936,12 @@ not an `.lpc` file; KB 03 §4.5). `scripts/lpc_case_paths.py --convert --apply e
 
 根 `adm/simul_efun/message.lpc`：`exclude || ({})`（同 es1 家族）。
 
+
+## 深度功能测试（§10.7，2026-11-10，冒险者公会再测）
+
+pristine + build-debug，port 40010。
+
+- **注册**：英文名 → 中文名 → 密码 → 性别 → 种族 human → email → RETURN 入局；落点冒险者公会（亚默长老 / 训练营北）。AUTO_WIZ 提示出现（测试环境）。
+- **玩法**：`look` / `score` / `i` / `north`（东方学园）/`south` 回公会 / `east`/`west` 大街；控制台安静，无 `*Error` / Wrong permissions。
+- **观察**：部分应答相对指令慢一拍（mudplay 读窗与 ES 回显节奏），非本轮新缺陷。
+- 本轮无新编程缺陷。
