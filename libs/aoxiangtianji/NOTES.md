@@ -810,3 +810,10 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## §7.282 `luniang` 门派 `== && ==`（2026-11-10）
 
 `d/qujing/bibotan/npc/luniang.lpc`：`family == "陷空山无底洞" && == "火云洞" && == "大雪山"` 恒假，友好分支永不走、见谁打谁。改 `||`。同文件在西游系约 35 库一并修。对象可载入；火云洞友方 / 少林非友方表达式验证。
+
+## 深度功能测试（§10.7，2026-11-10，南城客栈再测）
+
+pristine + build-debug，port 40101。
+
+- **流程**：utf-8 → new → 英文 id → 中文名 → 管理密码×2 → 普通密码×2 → 天赋 y → QQ → email → 性别 → 天性 1 → 帮助 pager → 南城客栈；`look`/`score`/`i`/`north` 朱雀街/`south` 回客栈；`quit` 触发新建号半小时保留确认（答 y 删档，设计行为）。
+- 控制台无 `*Error` / Wrong permissions / Too deep。本轮无新编程缺陷。
