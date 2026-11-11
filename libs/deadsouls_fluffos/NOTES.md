@@ -561,3 +561,7 @@ pre-rename tree); the config has three obsolete lines the driver reports (`addre
 覆盖：AUTO_WIZ 注册玩家 `dstestpm` → start room → `enter town` → 东路商店 Otik `list` → 冒险者公会 Dirk → `save`/`quit`/`relogin`。
 
 **编程缺陷（§6.10 / KB 04 float trunc）：** 首次加载 `/lib/player.lpc` 时 `eventDisplayStatus` 的 `max_sp = GetMaxStaminaPoints()` 报 `Float value truncated to int`（同系 ds* 已是 `to_int(...)`）。overlay 改为 `to_int(GetMaxStaminaPoints())` 后重编无 warning。无其它新编程缺陷。
+
+## `generate_tmp` 的 `/open/` keep（2026-11-10，KB 06 §7.358）
+
+与 dsII 同型：`generate_tmp()` 写 `/open/<time>.lpc`，本库 mudlib 根 `work/lib` 下没有 `open/`，keep 表也没有。补 `scripts/wasm_keep_dirs.txt` 的 `deadsouls_fluffos`/`open` 行（站点 / pristine 建空目录）。同轮 dsII 实测 `read handbook` 依赖该目录。
