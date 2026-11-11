@@ -559,3 +559,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-11-09，npcskill 薄别名 §6.15）
 
 questguai 继承缺失的 npcskill 路径；同库另有可用本体。薄别名：/u/fyue/npcskill → /quest2/npcskill；/kungfu/class/wudang/npcskill_n → /quest2/npcskill_n。证明：别名路径 HEAD FAIL → 树 PASS（questguai 本身仍可能缺 name.h，另案）。
+
+## toptend 缺目录：enter_world 写排行榜抛错（2026-11-10，KB 05 §7.11）
+
+`adm/daemons/toptend.lpc` 的 `topten_save` 对 `/data/topten` 或 `/topten` 做 overwrite `write_file`，目录 gitignore 未入档；新人 `enter_world` 触发时抛 *Wrong permissions … No such file or directory*，master 刷「臭虫」WARNING。`scripts/lpc_fix_topten_dir.py`：补 `create()`（`seteuid(ROOT_UID); mkdir(...)`）+ `assure_file(f_name)`，并写入 `wasm_keep_dirs`。xfbhh 抽检：无 keep 目录冷启动后登录写出 rich/exp/…，无 debug.log。

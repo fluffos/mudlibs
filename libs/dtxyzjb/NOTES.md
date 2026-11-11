@@ -457,3 +457,7 @@ guest：`tell_object("…", who)`→`tell_object(who, …)`。
 ## npc/ground→ground3 改指（2026-11-09，KB 04 §6.15）
 
 `d/kaifeng/npc/ground` 继承 `__DIR__"ground3"`（即缺失的 `/d/kaifeng/npc/ground3`）。同目录上层已有完整的 `/d/kaifeng/ground3`；改为 `inherit "/d/kaifeng/ground3"`，`#include` 改为绝对路径 `/d/kaifeng/ground.h`。alone-scan 的该 literal 消失。该 npc 副本本身仍缺 `ground1.h` 一套宏，未能完整载入（可玩的赛场是 `/d/kaifeng/ground`）。
+
+## toptend 缺目录：enter_world 写排行榜抛错（2026-11-10，KB 05 §7.11）
+
+`adm/daemons/toptend.lpc` 的 `topten_save` 对 `/data/topten` 或 `/topten` 做 overwrite `write_file`，目录 gitignore 未入档；新人 `enter_world` 触发时抛 *Wrong permissions … No such file or directory*，master 刷「臭虫」WARNING。`scripts/lpc_fix_topten_dir.py`：补 `create()`（`seteuid(ROOT_UID); mkdir(...)`）+ `assure_file(f_name)`，并写入 `wasm_keep_dirs`。xfbhh 抽检：无 keep 目录冷启动后登录写出 rich/exp/…，无 debug.log。

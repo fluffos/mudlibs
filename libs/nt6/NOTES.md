@@ -770,3 +770,7 @@ xkx100 的原文是 `vc = victim->add("vote/count", 1);`，nitan 系把它写成
 ## 深度功能测试（2026-11-04，DOOR_ROOM→ROOM §6.16）
 
 崆峒 `d/kongdong/*` 继承 `DOOR_ROOM`；`create_door` 已在 `ROOM`（`/inherit/room/room`）。`room.h` 补 `#define DOOR_ROOM ROOM`。同 nitan6：`DOOR_ROOM` → `ROOM`。证明：lianhua_tai HEAD FAIL → PASS。
+
+## toptend 缺目录：enter_world 写排行榜抛错（2026-11-10，KB 05 §7.11）
+
+`adm/daemons/toptend.lpc` 的 `topten_save` 对 `/data/topten` 或 `/topten` 做 overwrite `write_file`，目录 gitignore 未入档；新人 `enter_world` 触发时抛 *Wrong permissions … No such file or directory*，master 刷「臭虫」WARNING。`scripts/lpc_fix_topten_dir.py`：补 `create()`（`seteuid(ROOT_UID); mkdir(...)`）+ `assure_file(f_name)`，并写入 `wasm_keep_dirs`。xfbhh 抽检：无 keep 目录冷启动后登录写出 rich/exp/…，无 debug.log。

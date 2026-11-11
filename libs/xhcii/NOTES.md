@@ -480,3 +480,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-11-09，PEN 判官笔基类 §6.16/§6.15）
 
 `clone/weapon/panguanbi` 继承未定义的 `PEN`，且无 `/inherit/weapon/pen`。从 jhfy2 收养 `pen.lpc`（`init_pen`），并在 `weapon.h` 补 `#define PEN "/inherit/weapon/pen"`。证明：pen + panguanbi HEAD FAIL → 树 PASS。
+
+## toptend 缺目录：enter_world 写排行榜抛错（2026-11-10，KB 05 §7.11）
+
+`adm/daemons/toptend.lpc` 的 `topten_save` 对 `/data/topten` 或 `/topten` 做 overwrite `write_file`，目录 gitignore 未入档；新人 `enter_world` 触发时抛 *Wrong permissions … No such file or directory*，master 刷「臭虫」WARNING。`scripts/lpc_fix_topten_dir.py`：补 `create()`（`seteuid(ROOT_UID); mkdir(...)`）+ `assure_file(f_name)`，并写入 `wasm_keep_dirs`。xfbhh 抽检：无 keep 目录冷启动后登录写出 rich/exp/…，无 debug.log。

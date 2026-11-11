@@ -1123,3 +1123,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## §7.282 `(string)` 比较链（2026-11-10）
 
 `kungfu/skill/huanxi-chan.lpc`：`(string)family != "雪山派" || != "血刀门"` 恒真，高等级外人永远被拒学。`wuhu-gun.lpc`：`skill_type != "stick" || != "club"` 恒真，武器检查永不通过。LHS 带 `(string)` 时旧版 fixer 看不见；扩 CAST 后改 `&&`。`lpcc_eval` 载入 + 门派/武器类型表达式验证。
+
+## toptend 缺目录：enter_world 写排行榜抛错（2026-11-10，KB 05 §7.11）
+
+`adm/daemons/toptend.lpc` 的 `topten_save` 对 `/data/topten` 或 `/topten` 做 overwrite `write_file`，目录 gitignore 未入档；新人 `enter_world` 触发时抛 *Wrong permissions … No such file or directory*，master 刷「臭虫」WARNING。`scripts/lpc_fix_topten_dir.py`：补 `create()`（`seteuid(ROOT_UID); mkdir(...)`）+ `assure_file(f_name)`，并写入 `wasm_keep_dirs`。xfbhh 抽检：无 keep 目录冷启动后登录写出 rich/exp/…，无 debug.log。
