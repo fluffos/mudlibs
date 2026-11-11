@@ -514,3 +514,10 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## §7.61 `message()` exclude 默认 0（2026-11-10）
 
 根包装 `efun::message(..., exclude)` 在三参呼叫时把 `exclude` 默认成整数 0，驱动拒收。改为 `exclude || ({})`（KB 06 §7.61）。
+
+## 深度功能测试（§10.7，2026-11-11，扬州客店）
+
+pristine + build-debug，port 40204。指间 ZJ 握手（`crypt(ZJKEY,"zj")` 挑战 → `crypt(ZJKEY,chal[2:4])` → `id║pw║crypt…║email` → `m║1║赵云`）。
+
+- **流程**：落地世外桃源 → `east`/`out` 阎罗殿 → `pianshu msx` → `wash` → `born 扬州人氏` → 客店；`look`/`score`；`quit`「欢迎下次再来！」。
+- 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`/`执行时段错误`。本轮无新编程缺陷。
