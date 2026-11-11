@@ -920,3 +920,10 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-11-09，DAEMON→cmd_m 残余语料扫 §6.16/§6.15）
 
 `adm/daemons/network/pingd|pingtcp`（或同族路径）继承 `DAEMON`：补 `#define DAEMON "/std/cmd_m"`（若缺），收养精简 `std/cmd_m.lpc`，并在需要时补 `include/uid.h`。本轮为 2026-11-04 二十三库扫的残余。
+
+## 深度功能测试（§10.7，2026-11-11，沉香镇中心）
+
+pristine + build-debug，port 40090。`scripts/play_login.py` 注册。
+
+- **流程**：字母 id → 中文名/性别 → 民族 `1`（苗族）→ 沉香镇中心（典藏版注册不强制密码/email）；`look`/`score`/`i`；`quit`「欢迎下次再来！」。
+- 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`/`执行时段错误`。本轮无新编程缺陷。
