@@ -1121,3 +1121,12 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## §7.61 `message()` exclude 默认 0（2026-11-10）
 
 根包装 `efun::message(..., exclude)` 在三参呼叫时把 `exclude` 默认成整数 0，驱动拒收。改为 `exclude || ({})`（KB 06 §7.61）。
+
+## 深度功能测试（§10.7，2026-11-10，泥潭注册室→生命之谷→世界之树）
+
+pristine + build-debug，port 40106。自连握手：`id,password,x,email` → `gender║img║中文名`。
+
+- **缺陷**：`enter_world` → `TOP_D->topten_checkplayer` → `topten_save("/data/topten/rich.txt")` 在缺目录时 `write_file(...,1)` 抛 *Wrong permissions … No such file or directory*，master 给每个新人刷「这里发现了臭虫」WARNING（KB 05 §7.11 / §7.44；同系 nitan_ceshi 已修）。
+- **修复**：`adm/daemons/toptend.lpc` 补 `create()`：`seteuid(ROOT_UID); mkdir("/data/topten");`，`topten_save` 写前 `assure_file(f_name)`；`scripts/wasm_keep_dirs.txt` 加 `hhsj data/topten`。
+- **证明**：改前 `debug.log` 有 rich.txt 权限错；改后登录写出 `rich/exp/neili/jingli/dushu.txt`，无 debug.log，无 WARNING。
+- **流程**：`register` → `zz 1`/`xuan 1`/`choose 1`/`washto 20 20 20 20` → 世界之树；`look`/`score`/`i`/`quit` 干净。

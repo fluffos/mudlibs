@@ -159,6 +159,14 @@ void log_file(string file, string text) {
   code. `.gitignore`d log trees never survive a fresh clone, so assure
   them in code.
 
+**Also:** `hhsj` `toptend` (2026-11-10): no `create()` / no
+`assure_file` before overwrite `write_file` into `/data/topten/*.txt`;
+every `enter_world` threw and the master printed the 臭虫 WARNING.
+`seteuid(ROOT_UID); mkdir("/data/topten");` in `create()`,
+`assure_file(f_name)` in `topten_save`, plus `wasm_keep_dirs` —
+same shape as `nitan_ceshi`. Corpus leftovers that still lack
+`mkdir`/`assure_file` on `data/topten` are queued for a twin sweep.
+
 **Detection:** grep `log_file(` and `write_file(` in each lib's
 simul_efun and in the daemons that run on common player actions. The
 pairing "`log_file()` sits two functions above its own unused
