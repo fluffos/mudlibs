@@ -1046,3 +1046,11 @@ Pinkfish quarto/mancala 仍继承旧路径 `/obj/furnitures/misc/games/multiplay
 - 语料恢复 a632 中所有「上一行以 `+` 结尾」的 `"\n";`（约 495 处 / 461 文件；含 discworld / dw_fluffos_v1 / v2）。
 - `scripts/lpc_fix_no_effect.py` 加显式 `prev.endswith("+")` 跳过。
 - 证明：discworld `lpcc --batch` compile diagnostics 6→0。
+
+## 深度功能测试（§10.7，2026-11-10，newbie 大厅再测）
+
+机械扫描空；本轮 pristine + build-debug（port 40206，`heartbeat interval msec : 2000`，`NO_TIMED_REBOOT`）。
+
+- **注册**：`N` → letters-only 名 → 密码 → 大小写 → 性别 → 等 TOS 提示后再 `yes`（过早 `yes` 会被吃掉；TOS 前有约数秒延迟）。入场有一次 `Queued command: look`（首进编译），之后按 ≥2.2s 间隔发令不再排队。
+- **玩法**：大厅 `look`/`i`/`score`/`who`；`helpme` 进帮助室（出口是 `foyer` 不是 `out`）；`quit` 经 Departure Gecko。控制台安静，无新 runtime/`*Error`。
+- **已知非本轮**：未满 30 分钟的角色不落盘；命令预算仍依赖 2s heartbeat（KB 06 §7.314）。本轮无新编程缺陷。
