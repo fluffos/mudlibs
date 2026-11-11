@@ -898,3 +898,11 @@ A path written without the leading slash (`carry_object("d/city/obj/jiasha")->we
 ## 深度功能测试（2026-11-03，po.lpc IP sort lambda）
 
 `players/sauron/bin/po.lpc`：`lambda #'> query_ip_number` → `strcmp(query_ip_number($1), …)` 升序。
+
+## 深度功能测试（§10.7，2026-11-10，§7.315 p/ 字母桶）
+
+pristine + build-debug，port 40260。
+
+- **发现**：新角 `getgender` 后拟迁入 `race/room` 时 `save_me` 抛 `*Could not open /p/h/NAME.o.tmp for a save.`；移动中断，落在黑暗处（Race: 0，`look` → It's too dark，`quit` 亦不存盘，重登 “Your player file has expired.”）。`work/p/{a..z}` 曾手工建过，但空目录不进 git，`wasm_keep_dirs` 未收录。
+- **修复**：`scripts/lpc_keep_letters.py --apply holymission p`（+27：`p` 与 a–z）。语料内仅本库用 `p/<letter>/`。
+- **复测**：菜单 `1` → `m` → Race room `list`/`choose human` → 教堂五出口 → `south` 绿地 → `quit`「Saving …」写 `p/h/<name>.o`；同密重登教堂，`score` Race human。无 Could not open。
