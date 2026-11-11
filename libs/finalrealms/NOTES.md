@@ -900,3 +900,11 @@ elf smith / smithr：`tell_object("Eldevan…")` → `tell_object(this_player(),
 ## /inherit/object 改指（2026-11-09，KB 04 §6.15）
 
 `net/obj/gopher` 继承缺失的 `/inherit/object`；本库标准基类在 `/std/object`。改为 `inherit "/std/object"`。alone-scan 的该 literal 消失。gopher 仍因同目录缺 `globals.h`（以及 `VOID_OB`）未能载入。
+
+## 深度功能测试（§10.7，2026-11-10，种族大厅→新手家）
+
+pristine + build-debug，port 40216。
+
+- **流程**：英文名→确认→密码×2→性别 → 种族雕像大厅 → `become human` 入新手家（torch/cloak/dagger；出口 leave/south/west）；`look`/`score`/`i`/`west` 储藏室/`east` 回/`quit`。
+- **存档**：`players/f/frtestb.o` 落盘（字母桶 a–z 已由 `.gitignore` 跟踪，本轮无需补 keep）。
+- 控制台无 `*Error` / Wrong permissions。本轮无新编程缺陷。
