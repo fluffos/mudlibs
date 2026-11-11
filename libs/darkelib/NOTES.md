@@ -965,3 +965,10 @@ cleric_new 的战斗/训练/冥想房继承 `/d/damned/guilds/cleric/med_room`�
 
 `varargs message(...)` 缺省 `exclude` 为 int 0，原样进 `efun::message`。改为 `exclude || ({})`。
 
+
+## 深度功能测试（§10.7，2026-11-11，Newbieville town square）
+
+pristine + build-debug，port 40258。
+
+- **流程**：新角名/密码×2 → 性别/唯一 email → news pager → `read list` → `pick high-man` → 加点 `q`/`yes` → ANSI「Is this line red」`y` → Newbieville 广场；`look`/`score`/`i`/`who`；`quit`「Saving...Successful.」。
+- 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`。本轮无新编程缺陷。
