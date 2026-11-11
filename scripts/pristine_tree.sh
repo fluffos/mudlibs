@@ -74,6 +74,10 @@ if git -C "$REPO_ROOT" cat-file -e "${REV:-HEAD}:$LIB/overlay" 2>/dev/null; then
 fi
 
 CFG="$DEST/$LIB/config.fluffos"
+# CRLF configs: a bare $'\r' survives the /work strip as SUFFIX, so mkdir creates
+# work$'\r'/log while the driver (path trimmed) uses work/ — every log_file() then
+# raises *Wrong permissions ... /log/... No such file (es1_win / esI, 2026-11-10).
+sed -i 's/\r$//' "$CFG"
 # a mudlib that lives in a subdirectory of work/ (lima: work/lib) keeps that suffix
 SUFFIX=$(sed -n 's|^mudlib directory *: *.*/libs/[^/]*/work||p' "$CFG" | head -1)
 sed -i "s|^mudlib directory.*|mudlib directory : $DEST/$LIB/work$SUFFIX|; s|^port number.*|port number : $PORT|" "$CFG"

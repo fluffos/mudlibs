@@ -926,3 +926,10 @@ Left, as content gaps, not invented: 16 inherits of files that are not in the ar
 
 与 `es1` 同源根 sefun：`exclude || ({})`。跳过 `u/m/moon` 副本。
 
+## 深度功能测试（§10.7，2026-11-10，冒险者公会再测）
+
+pristine + build-debug，port 40009。
+
+- **工具陷阱**：本库 `config.fluffos` 是 CRLF。旧版 `pristine_tree.sh` 从 mudlib 行剥 `/work` 后 SUFFIX 剩 `$'\r'`，`mkdir` 建出 `work$'\r'/log`，驱动（路径已裁掉 CR）却写 `work/log/` → 预载每条 `log_file()` 报 `*Wrong permissions ... /log/... No such file`。脚本现先剥行尾 `\r`（KB 08 §10.7）。证明：修前 play 树旁有 `work\r/`、boot 十余条 Wrong permissions；修后 `work/log` 就位、0 条。
+- **玩法**：注册（英文名→中文名→密码→性别→种族 human→email→RETURN）入冒险者公会；`look`/`score`/`i`/`east`（大街）/`west` 回公会；无 `aadsa`；控制台无 `*Error` / Wrong permissions。
+- 观察：部分应答相对指令慢一拍（同 esI），非本轮新缺陷。本轮无新库内编程缺陷。
