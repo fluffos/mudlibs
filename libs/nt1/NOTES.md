@@ -596,3 +596,10 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## §7.61 `message()` exclude 默认 0（2026-11-10）
 
 根包装 `efun::message(..., exclude)` 在三参呼叫时把 `exclude` 默认成整数 0，驱动拒收。改为 `exclude || ({})`（KB 06 §7.61）。
+
+## 深度功能测试（§10.7，2026-11-10，注册→生命之谷→扬州客店）
+
+pristine + build-debug，port 40185。
+
+- **流程**：`gb` → 纯字母 ID → `y` → 姓「秦」名「风」→ 管理/普通密码×2 → 性格 `1` → 类型 `5` → `m` → 注册房 `register` → 生命之谷 `wash`/`born 扬州人氏`（规则 more `q`）→ 客店；`east` 马厩/`west` 回店；新建号 `quit` 半小时门闸选 `n`。
+- 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`。本轮无新编程缺陷。
