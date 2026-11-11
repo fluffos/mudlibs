@@ -966,3 +966,16 @@ IIPS `save_letter` 空箱索引（KB 06 §7.379，2026-11-10）。
 ## `log/` keep 行补回与 environment() 空指针守卫（2026-11-10，KB 06 §7.358）
 
 与 nightmare4 同族：`wasm_keep_dirs.txt` 里本库的 `log/*` 行曾全部丢失；已 `--apply`/`--merge` 补回。`lib/interactive.lpc` / `lib/talk.lpc` 对空 `environment()` 的 `call_other` 加了守卫（与 nightmare4 同一处）。
+
+## 深度功能测试（§10.7，2026-11-10，Ylsrim 再测）
+
+机械扫描（chat_empty / enable_player / mud_port / getdir_strip / member_array_char / cat_unchecked / keep_dir / cmp_chain FIX / cond_assign / literal_or / not_literal）对本库已空；本轮对 Dead Souls I 做 §10.7 再测（`scripts/pristine_tree.sh` + build-debug driver，port 40225）。
+
+- **注册 / 重登**：`testaa` 新建（name→confirm→password→gender→email→race `pick human`→news）与既有角色重连均入局，控制台无 runtime error。
+- **移动**：`start` → `d` → bazaar → kaliid → fighters hall / church；方向仍仅 `go <word>` 或单字母别名（`lib/nmsh.lpc`），与 2026-10-03 NOTES 一致，非 bug。
+- **职业**：`ask roshd to join fighters` → score 变为 Newbie Fighter / Human Fighter；skills 列出 fighter 主副技能。
+- **教堂门**：`press button` 只切换 `SetLocked`（听见 click），仍须 `open door` 再 `enter church` 才进得去——示例门设计，非锁死。进堂见 Ix'Tala；`s` 可出。
+- **常用命令**：`look` / `i` / `inventory` / `score` / `who` / `say` / `help commands`（pager `q` 退出）/ `quit` 正常；全程 `debug`/`driver` 控制台安静（无 `*Error` / `Warning:` / Bad argument）。
+- **lpc_warnings**：与既有 NOTES 一致——`mraces` / `war` / `bugs` / `remote` / `A_WEARON` / `ucache` 等 creator/daemon 残件仍 FAIL，玩家可达路径未触及；未新增可修告警。
+
+本轮无新编程缺陷。NEXT：alone leftovers（cmp_chain `body:other` 等）仍 skip-heavy；下一 thin 可挑 dsII / Discworld / Nightmare 栈中较早的 2026-11 条目。
