@@ -246,3 +246,10 @@ The code of this lib writes logs into 2 subdirectories of `log/`: `log/chat` (`d
 ## 深度功能测试（2026-11-03，localtime() 缺参）
 
 `nolife`/`cryo`/`spawn` 的裸 `localtime()` 改为 `localtime(time())`（FluffOS 必参）。与 sticklib timezone_d 同类。
+
+## 深度功能测试（§10.7，2026-11-10，Temple↔Oldtown）
+
+pristine + build-debug，port 40287。
+
+- **流程**：新角名/密码×2 → Temple of All Gods；`look`/`score`/`inventory`；`north` Temple hall → `north` Oldtown street（Further streets closed）→ `south`×2 回 shrine；`quit`「Saving …」。重连同角回 shrine，`look`/`quit` 正常。
+- 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`。本轮无新编程缺陷。
