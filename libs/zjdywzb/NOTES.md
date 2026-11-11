@@ -520,3 +520,10 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## 深度功能测试（2026-11-03，§7.19 enable_player 重入）
 
 `feature/command.lpc` 的 `enable_player()` 加 `in_enable_player_now` 守卫（`scripts/lpc_fix_enable_player_guard.py`，KB 05 7.19）：门派 NPC `init()`→`setup()`→`enable_player()`→`enable_commands()` 再跑 `init()` 时直接返回，避免 Too deep recursion。
+
+## 深度功能测试（§10.7，2026-11-10，扬州客店）
+
+pristine + build-debug，port 40109。
+
+- **流程**：双密码 → 类型 5 → `m` → 世外桃源；`register`/`decide` → `west`/`out` 阎罗殿 → `wash` → `born 扬州人氏`（规则 pager）→ 客店（店小二）；`look`/`score`；`quit`「欢迎下次再来！」。任务心跳旁听约 25s 无 `*Error`/`执行时段错误`。
+- 本轮无新编程缺陷。
