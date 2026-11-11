@@ -186,3 +186,10 @@ spare/simul_efun_ldmud/master_ldmud 的 bind_lambda(#'…) → bind((: … :), �
 ## 深度功能测试（2026-11-03，LDMud efun stubs）
 
 `simul_efun_ldmud`/`spare`/`master_ldmud`：去掉 `efun::set_this_player/object`，文件顶部 FluffOS 空桩；`raise_error`→`error`；`object_name`→`file_name`。证明：set_this_*/get_extra_wizinfo 诊断清除。
+
+## 深度功能测试（§10.7，2026-11-10，教堂↔村绿）
+
+pristine + build-debug，port 40284。
+
+- **流程**：新号 `aoeplay` / `Mud@2026`×2 → 教堂（`look` 见坑/西门/south）；`score` level 1 hp 20/20 gold 50；`south` 村绿 / `north` 回教堂；`quit`「Saving …」写 `data/a/<name>.o`；同密重登教堂。
+- 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`。本轮无新编程缺陷。
