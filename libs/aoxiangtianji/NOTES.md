@@ -817,3 +817,7 @@ pristine + build-debug，port 40101。
 
 - **流程**：utf-8 → new → 英文 id → 中文名 → 管理密码×2 → 普通密码×2 → 天赋 y → QQ → email → 性别 → 天性 1 → 帮助 pager → 南城客栈；`look`/`score`/`i`/`north` 朱雀街/`south` 回客栈；`quit` 触发新建号半小时保留确认（答 y 删档，设计行为）。
 - 控制台无 `*Error` / Wrong permissions / Too deep。本轮无新编程缺陷。
+
+## toptend 遗漏形状补 mkdir（2026-11-10，KB 05 §7.11）
+
+create 已有；补 mkdir(DATA_DIR "topten")+keep。

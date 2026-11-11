@@ -273,3 +273,6 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 
 `d/snow/npc/mercenary` 继承未定义的 `F_MERCENARY`。从手足 es2 收养 `/std/char/mercenary.lpc`（`accept_order`/`accept_info`），并补 `#define F_MERCENARY`。证明：HEAD 0/2 → 2 PASS。
 
+## toptend 遗漏形状补 mkdir（2026-11-10，KB 05 §7.11）
+
+create 已有；补 mkdir(DATA_DIR + "site")+keep data/site。

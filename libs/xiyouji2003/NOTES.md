@@ -1111,3 +1111,7 @@ xkx 家族把钱放在 `/clone/money/`，ES2 家族放在 `/obj/money/`；本库
 ## §7.282 冰刀 outdoors 链（2026-11-10）
 
 `obj/weapon/hongse.lpc`：`outdoors != "xueshan" || != "大雪山"` 恒真，冰刀立刻化。改 `&&`。对象可载入。
+
+## toptend 遗漏形状补 mkdir（2026-11-10，KB 05 §7.11）
+
+create 已有；补 mkdir(DATA_DIR "topten")+keep。

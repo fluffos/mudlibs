@@ -76,7 +76,12 @@ def is_target(text: str) -> bool:
         return False
     if "/open/topten" in text:
         return False
-    if not re.search(r"\btopten_save\s*\(\s*string", text):
+    # JackyBoy source, or decompiled mixed/arg signatures (topten_save /
+    # top_save) that still write /topten/*.txt
+    if not (
+        re.search(r"\btopten_save\s*\(\s*(?:string|mixed)", text)
+        or re.search(r"\btop_save\s*\(\s*(?:string|mixed)", text)
+    ):
         return False
     if "write_file" not in text:
         return False

@@ -179,3 +179,7 @@ ouyangfeng：`tell_object("…推天式…")` → `tell_object(v1, …)`。
 ## §7.61 `message()` exclude 默认 0（2026-11-10）
 
 根包装 `efun::message(..., exclude)` 在三参呼叫时把 `exclude` 默认成整数 0，驱动拒收。改为 `exclude || ({})`（KB 06 §7.61）。
+
+## toptend 遗漏形状补 mkdir（2026-11-10，KB 05 §7.11）
+
+反编译 top_save；补 create mkdir("/topten")+assure_file(arg1)+keep。抽检注册进客店写出榜文件，无 debug.log。

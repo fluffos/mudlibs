@@ -319,3 +319,7 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 `fly yz` 扬州客栈 → `quit` → 重连仍在扬州/`score`/`quit`。
 
 驱动 stdout：无 compile warning、无 runtime Error。无新编程缺陷。
+
+## toptend 遗漏形状补 mkdir（2026-11-10，KB 05 §7.11）
+
+反编译 topten_save(mixed)；补 create mkdir("/topten")+assure_file(arg1)+keep。

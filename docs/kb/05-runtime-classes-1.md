@@ -165,8 +165,7 @@ void log_file(string file, string text) {
 WARNING. `scripts/lpc_fix_topten_dir.py` adds `seteuid(ROOT_UID);
 mkdir(<dir>)` + `assure_file(f_name)` and `wasm_keep_dirs` (82 libs;
 `hhsj`/`nitan_ceshi` already fixed). Spot-boot `xfbhh` without the keep
-dir: login wrote `rich.txt` et al., no `debug.log`. Skips save_object
-mapping daemons and `/open/topten` single-file lists.
+dir: login wrote `rich.txt` et al., no `debug.log`. Follow-up leftovers (2026-11-10): decompiled `topten_save(mixed)` / `top_save` (longyunmeng_binary, wllz3), existing-create `DATA_DIR "topten/"` save_object (aoxiangtianji, xiyouji2003), shiji/sj/syxjl `/topten/`, tianlongbabu `data/site`. Still skips `/open/topten` single-file lists and `DATA_DIR "toptend"` single-file saves (mhxy/pkuxkx).
 
 **Detection:** grep `log_file(` and `write_file(` in each lib's
 simul_efun and in the daemons that run on common player actions. The
