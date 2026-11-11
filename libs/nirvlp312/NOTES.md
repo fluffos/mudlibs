@@ -387,3 +387,11 @@ kernel/simul 与 save_object_filter 的 `bind_lambda(#'efun::…)` 改为 FluffO
 ## §7.282 Letter/fighter 比较链（2026-11-10）
 
 `open/Letter/fighter.lpc`：带 `(string)` 的同值 `!= || !=` / `== && ==` 链（CAST 扩写后可见）。`lpc_fix_cmp_chain.py --apply`。
+
+## 深度功能测试（§10.7，2026-11-10，§7.315 pfiles 字母桶）
+
+pristine + build-debug，port 40277。
+
+- **发现**：新角色 `quit` 答 `What?`，`log/catch`：`*Could not open /pfiles/n/NAME.o.tmp for a save.`（`player.lpc` `save_me`）。档案/`gen_keep_dirs` 只留下玩过的字母（仅 `pfiles/f`），其它字母桶缺失；本库无 on-demand `mkdir`。
+- **修复**：`scripts/lpc_keep_letters.py --apply nirvlp312 pfiles`（补 a–z，缺 25 个）。语料内仅本库用 `pfiles/<letter>/`。
+- **复测**：chargen（hint/male/human/5/10/150/y/none）→ Adventurers' guild → `north` 村路 Harry → `south` 回会所 → `quit`「Saving …」写 `pfiles/n/<name>.o`；重登 Village Green，`score`/`quit` 正常。catch 静音。
