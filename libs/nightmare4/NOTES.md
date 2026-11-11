@@ -700,3 +700,10 @@ Dead Souls/Nightmare 系 `secure/obj/post.lpc` 空信箱 `s`/`S`（KB 06 §7.379
 
 本库 `work/log/` 被 `.gitignore`，站点靠 `scripts/wasm_keep_dirs.txt` 建空目录。先前记过的 `log/adm` 等行已不在该文件里（`nightmare4`/`dsI`/`dsII`/`foundation2`/`residuum` 整族为 0），本地直接开驱动时连父目录 `log/` 都没有：`Setup()` 里第一行 `log_file("enter", …)` 就因 `write_file(/log/enter)` 抛错中断，后面的 `eventMove(LoginSite)` 从不执行，创作者停在虚空（`look` → "You are nowhere"），随后 `say` 对 `environment()` 做 `call_other` 报 `Bad argument 1`。`scripts/lpc_keep_log_dirs.py --apply` 加回扫描到的子目录，`gen_keep_dirs.py --merge` 补上父目录 `log` 与 `open`/`debug`/`personal`；`lib/interactive.lpc` 登录后的 `environment()->eventPrint` 与 `lib/talk.lpc` 的三处 `eventHearTalk` 在空环境时跳过（同修 dsI/dsII）。证明：`fluffos`/`Mud@2026` 登录进 Ylsrim bazaar，`say` 正常，`log/enter` 有写入，无 `/log` 权限错误。
 
+
+## 深度功能测试（§10.7，2026-11-11，Ylsrim bazaar）
+
+pristine + build-debug，port 40234。`scripts/play_login.py` 注册。
+
+- **流程**：名/确认/密码×2/性别/显示名/email/真名 → `pick human` → news pager → Ylsrim 中央集市；`look`/`score`/`i`；`quit`「Please come back another time!」。
+- 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`。本轮无新编程缺陷。
