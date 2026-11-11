@@ -20,3 +20,7 @@
 ## `if (bits[0] = "player")` 条件里的赋值（2026-11-10，KB 06 §7.290）
 
 `secure/handlers/bank.lpc` 的 `query_account()` 写成 `if (bits[0] = "player" && …)`，赋值恒真，任何 `acct` 前缀都当玩家账户解析。`lpc_fix_cond_assign.py` 改为 `==`。`lpc_fix_cond_assign` 扫后残留为 0。
+
+## nroff 缓存目录：`create_nroff` 先 mkdir（2026-11-10，KB 06 §7.358 同形）
+
+`help` 把 nroff 缓存 `save_object` 到 `/doc/helpnr/`（及 creatornr/mannr）；目录缺时抛错。`create_nroff()` 在保存前 `mkdir` 父目录；keep dirs 已补。同修于 skylib 深度测试。

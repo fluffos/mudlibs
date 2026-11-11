@@ -1028,3 +1028,7 @@ oldsys 锁甲继承 `/obj/armor`，本体是 `/obj/armour`。薄别名。证明�
 ## /inherit/object 改指（2026-11-09，KB 04 §6.15）
 
 `net/obj/gopher` 继承缺失的 `/inherit/object`；本库标准基类在 `/std/object`。改为 `inherit "/std/object"`。alone-scan 的该 literal 消失。gopher 仍因同目录缺 `globals.h`（以及 `VOID_OB`）未能载入。
+
+## nroff 缓存目录：`create_nroff` 先 mkdir（2026-11-10，KB 06）
+
+同 skylib：`save_object` 到 `/doc/helpnr|creatornr|mannr/` 前补 `mkdir` 父目录；keep dirs 同步。

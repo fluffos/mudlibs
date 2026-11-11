@@ -908,3 +908,7 @@ pristine + build-debug，port 40216。
 - **流程**：英文名→确认→密码×2→性别 → 种族雕像大厅 → `become human` 入新手家（torch/cloak/dagger；出口 leave/south/west）；`look`/`score`/`i`/`west` 储藏室/`east` 回/`quit`。
 - **存档**：`players/f/frtestb.o` 落盘（字母桶 a–z 已由 `.gitignore` 跟踪，本轮无需补 keep）。
 - 控制台无 `*Error` / Wrong permissions。本轮无新编程缺陷。
+
+## nroff 缓存目录：`create_nroff` 先 mkdir（2026-11-10，KB 06）
+
+同 skylib：`save_object` 到 `/doc/helpnr|creatornr|mannr/` 前补 `mkdir` 父目录；keep dirs 同步。

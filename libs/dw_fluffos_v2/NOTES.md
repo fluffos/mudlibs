@@ -481,3 +481,7 @@ pristine + build-debug，port 40272（`heartbeat interval msec : 2000`）。
 
 - **注册 / 玩法**：与 dw_fluffos_v1 / discworld 同形态；TOS 后入场，首 `look` 可 Queued 一次，其后 ≥2.2s 间隔正常；`helpme`↔`foyer`；`quit` 经 Departure Gecko。控制台安静。
 - 本轮无新编程缺陷。
+
+## nroff 缓存目录：`create_nroff` 先 mkdir（2026-11-10，KB 06）
+
+同 skylib：`save_object` 到 `/doc/helpnr|creatornr|mannr/` 前补 `mkdir` 父目录；keep dirs 同步。

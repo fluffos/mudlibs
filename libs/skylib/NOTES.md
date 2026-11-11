@@ -911,3 +911,10 @@ pristine + build-debug，port 40222。
 - **缺陷 2（§7.358）**：`handlers/login_handler.lpc` 写 `/secure/log/ENTER`，keep 里没有 `secure/log`（只有 `log/secure/log`），每次进出报 `*Wrong permissions ... /secure/log/ENTER`（catch 吞掉，不影响进游戏但污染 runtime）。补 `skylib\tsecure/log`。
 - **证明**：修后 pristine 注册 `alphatester`，等满 `MIN_TIME_TO_SAVE`（60 秒）后 `look`/`score`/`quit`；`save/players/a/alphatester.o` 落盘；`secure/log/ENTER` 有 Enter 行；控制台无 Wrong permissions。
 - **观察**：登录后仍有一次已知的裸 `What?`（NOTES 旧记）；新角未满 60 秒 quit 不存档（本库设计，非缺陷）；start room `/room/tavern` 无出口（内容范围）。
+
+## 深度功能测试（§10.7，2026-11-10，help nroff 缺目录）
+
+pristine + build-debug，port 40222。
+
+- **流程**：菜单 `N` → 名确认 → 密码×2 → gender → 起始裸房；`look`/`score`/`i`；`help quit` 先前因 `save_object(/doc/helpnr/...)` 无目录抛错并令后续指令全变 `What?`。`create_nroff()` 在 `save_object` 前 `mkdir` 父目录（`[0..<1]`）；`wasm_keep_dirs` 补 `doc/helpnr`/`creatornr`/`mannr`。同形：`mofn`、`discworld`/`dw_fluffos_v1`/`v2`、`finalrealms`、`ninetears`。
+- 修后：`help quit` 出正文，随后 `look`/`score`/`i`/`quit`（「Thanks for Playing!」）正常；`doc/helpnr/.doc.helpdir.quit.o` 已写出。本轮登录后偶发 `What?`（newbie_junk / 既有 cosmetic）仍在。

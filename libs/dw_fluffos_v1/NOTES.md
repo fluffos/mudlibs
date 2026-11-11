@@ -541,3 +541,7 @@ pristine + build-debug，port 40271（`heartbeat interval msec : 2000`，`NO_TIM
 - **注册**：`N` → letters-only → TOS 提示后再 `yes`；入场首条 `look` 仍可能 `Queued` 一次（编译），`stop`/`restart` 后按 ≥2.2s 间隔无再排队。
 - **玩法**：`look`/`i`/`score`/`who`；`helpme`↔`foyer`；`quit` 经 Departure Gecko。控制台安静。
 - 本轮无新编程缺陷（与 discworld 2026-11-10 同形态）。
+
+## nroff 缓存目录：`create_nroff` 先 mkdir（2026-11-10，KB 06）
+
+同 skylib：`save_object` 到 `/doc/helpnr|creatornr|mannr/` 前补 `mkdir` 父目录；keep dirs 同步。

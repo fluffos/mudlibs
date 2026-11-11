@@ -1054,3 +1054,7 @@ Pinkfish quarto/mancala 仍继承旧路径 `/obj/furnitures/misc/games/multiplay
 - **注册**：`N` → letters-only 名 → 密码 → 大小写 → 性别 → 等 TOS 提示后再 `yes`（过早 `yes` 会被吃掉；TOS 前有约数秒延迟）。入场有一次 `Queued command: look`（首进编译），之后按 ≥2.2s 间隔发令不再排队。
 - **玩法**：大厅 `look`/`i`/`score`/`who`；`helpme` 进帮助室（出口是 `foyer` 不是 `out`）；`quit` 经 Departure Gecko。控制台安静，无新 runtime/`*Error`。
 - **已知非本轮**：未满 30 分钟的角色不落盘；命令预算仍依赖 2s heartbeat（KB 06 §7.314）。本轮无新编程缺陷。
+
+## nroff 缓存目录：`create_nroff` 先 mkdir（2026-11-10，KB 06）
+
+同 skylib：`save_object` 到 `/doc/helpnr|creatornr|mannr/` 前补 `mkdir` 父目录；keep dirs 同步。
