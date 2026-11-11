@@ -1024,3 +1024,7 @@ pristine + build-debug，port 40236。
 
 - **流程**：英文 ID → y → 空姓 → 中文名 → 管理/普通密码（须不同）→ 资质 3 → `m` → 世外桃源（水笙/狄云）；`look`/`i`；未 `register` 时 `east`/`west` 被水笙拦住；`quit`「欢迎下次再来！」。
 - 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`/`执行时段错误`。本轮无新编程缺陷。
+
+## 任务 generate NPC 基类（2026-11-10，KB 04 §6.15）
+
+同 zhongjidiyu：骨架档缺 `kungfu/class/generate/{chinese,questnpc,shennpc}`，自 zjdywzb 收入；`supply`/`explore` 对缺房 `get_object` 先 `objectp(env)`。

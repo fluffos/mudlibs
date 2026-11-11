@@ -941,3 +941,10 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## 深度功能测试（2026-11-03，§7.19 enable_player 重入）
 
 `feature/command.lpc` 的 `enable_player()` 加 `in_enable_player_now` 守卫（`scripts/lpc_fix_enable_player_guard.py`，KB 05 7.19）：门派 NPC `init()`→`setup()`→`enable_player()`→`enable_commands()` 再跑 `init()` 时直接返回，避免 Too deep recursion。
+
+## 深度功能测试（§10.7，2026-11-10，阎罗殿 wash + 任务心跳）
+
+pristine + build-debug，port 40072。
+
+- **流程**：双密码注册 → `register`/`decide` → `east`/`out` 阎罗殿 → `wash` → `born 扬州人氏`（骨架档缺城池，牛头提示失败，状态不落盘）→ `look`/`quit`；重连仍在阎罗殿。
+- **真 bug**：任务守护心跳 `new(.../questnpc|shennpc)` 时本档无 `kungfu/class/generate/`，`call_other(0)`；`supply`/`explore` 对缺房 `get_object` 得 0 后 `present(..., 0)`。自 zjdywzb 收入 `chinese`/`questnpc`/`shennpc`；`init_quest` 加 `objectp`；`supply`/`explore` 先判 `objectp(env)`（同形扫过 50+ 库）。修后心跳静默 ≥30s。
