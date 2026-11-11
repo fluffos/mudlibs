@@ -716,3 +716,10 @@ xkx 家族把钱放在 `/clone/money/`，ES2 家族放在 `/obj/money/`；本库
 ## 深度功能测试（2026-11-09，DAEMON→cmd_m 残余语料扫 §6.16/§6.15）
 
 `adm/daemons/network/pingd|pingtcp`（或同族路径）继承 `DAEMON`：补 `#define DAEMON "/std/cmd_m"`（若缺），收养精简 `std/cmd_m.lpc`，并在需要时补 `include/uid.h`。本轮为 2026-11-04 二十三库扫的残余。
+
+## 深度功能测试（§10.7，2026-11-11，南城客栈）
+
+pristine + build-debug，port 40098。`scripts/play_login.py` 注册。
+
+- **流程**：`gb` → `new` → 字母 id → 管理密码×2 / 普通密码×2 → 中文名/email → 类型 1（刀剑侠）→ 性别 → 天赋 `9`/`y` → 南城客栈；`look`/`score`/`i`；`quit`「欢迎下次再来！」。
+- 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`/`执行时段错误`。本轮无新编程缺陷。
