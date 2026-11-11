@@ -633,3 +633,10 @@ the console.
 ## 深度功能测试（2026-11-03，existence PLAYER_D include）
 
 `existence.lpc` 的 `user_exists()` 使用 `PLAYER_D` 却未包含 `<daemons.h>`。补 include。证明：HEAD `Undefined variable PLAYER_D` FAIL；tree PASS。
+
+## 深度功能测试（§10.7，2026-11-10，/room/start → virtual west）
+
+pristine + build-debug，port 40261。
+
+- **流程**：英文名确认 → 密码×2 → `/room/start`；`look`/`inventory`/`who`；`west` 进入 virtual 演示房（dictionary/internet terminal）；`news`/`help`/`quit`。
+- 控制台与 `debug.log` 无 `*Error` / Wrong permissions。本轮无新编程缺陷。
