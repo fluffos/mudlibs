@@ -474,3 +474,10 @@ Pinkfish quarto/mancala 仍继承旧路径 `/obj/furnitures/misc/games/multiplay
 - 语料恢复 a632 中所有「上一行以 `+` 结尾」的 `"\n";`（约 495 处 / 461 文件；含 discworld / dw_fluffos_v1 / v2）。
 - `scripts/lpc_fix_no_effect.py` 加显式 `prev.endswith("+")` 跳过。
 - 证明：discworld `lpcc --batch` compile diagnostics 6→0。
+
+## 深度功能测试（§10.7，2026-11-10，newbie 大厅再测）
+
+pristine + build-debug，port 40272（`heartbeat interval msec : 2000`）。
+
+- **注册 / 玩法**：与 dw_fluffos_v1 / discworld 同形态；TOS 后入场，首 `look` 可 Queued 一次，其后 ≥2.2s 间隔正常；`helpme`↔`foyer`；`quit` 经 Departure Gecko。控制台安静。
+- 本轮无新编程缺陷。
