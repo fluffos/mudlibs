@@ -722,3 +722,10 @@ The code of this lib writes logs into 2 subdirectories of `log/`: `log/secure` (
 
 `d/standard/obj/misc/vial` 继承 `/std/poison`，本库没有。从 pd（Nightmare）领养。证明：poison + vial HEAD FAIL → PASS。
 
+
+## 深度功能测试（§10.7，2026-11-11，city center square）
+
+pristine + build-debug，port 40255。
+
+- **流程**：新角 → `help races`/`pick human` → 低属性 `iq` → `y` → `choose`/`1`（Coalition Grunt）→ `ready` → ANSI「Is this line red」`n` → Square；`look`/`score`/`i`；`quit`「Saving...Successful.」。
+- 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`。本轮无新编程缺陷。（`lima` 本轮跳过：无 `~/src/fluffos-lima` 驱动。）
