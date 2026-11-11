@@ -200,3 +200,9 @@ master 调用 `elderp`/`archp`/`adminp`/`Dlordp`/`done_startup`；menu 调用 `t
 
 `globals_catalog` 拉入的 `syslog.h` 里有 `varargs void syslog(...)` 原型，FluffOS 把对象里的 `syslog()` 编成对本对象的 call_other，运行时报 Undefined（sefun 对象上函数其实在）。去掉该原型，只留 LOG_* 宏。`racesd` 原先只有 `get_*_map` 原型无实现，char_gen `keys(0)` 炸；补最小 human 种族表，并对 `get_*` 结果做 `mapp` 守卫。`init_privileges` 解析 `Privs.cfg` 时 `explode(line,"\t")` 无第二段越界——加 `sizeof` 检查。catalog `syslog` 写到 `/var/log/syslog`。去掉 driver/security 未用局部。证明：char_gen/master_feature/master_orig 单独加载 PASS；错误诊断仍为 0。
 
+## 深度功能测试（§10.7，2026-11-10，The Void catalog）
+
+pristine + build-debug，port 40282。
+
+- **流程**：直连 catalog → `look`/`l` The Void；`score` Guest；`xyzzy` → What?；`quit`「Goodbye.»；重连同样 look/score/quit。无账号、无存档（骨架）。
+- 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`。本轮无新编程缺陷。不发明 Domains 房间。
