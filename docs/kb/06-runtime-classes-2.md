@@ -2291,6 +2291,8 @@ Found by taking the objects a visitor meets (`scripts/lpc_reach_census.py` lists
 
 Also (2026-11-11): hy 系 `logind` 的 `#define VISITORS "/log/mud/MUDVISITOR"`（及 `GIFTCARD`）经 `write_file(VISITORS, …)` 在登录时写访问计数；`lpc_keep_log_dirs.py` 未展开这个单独的宏名，九个库（`fqyy2` / `haiyang2` / `hy` / `hy2000` / `hy2002` / `hy5` / `hyiishzdscbb` / `hymud` / `xjcq2000`）的 keep 表没有 `log/mud`。缺目录时第一次写抛 `*Wrong permissions … /log/mud/MUDVISITOR`，`howmany_visitor()` 中断，登录的 `input_to` 链断掉，玩家停在裸 `>`（`什么？`）。已把 `log/mud` 记进各库 keep 行。证明：fqyy2 pristine 无 `log/mud` 时 GB 选码后即裸提示符；有目录后完整注册进侠客使者房，`look`/`score`/`quit` 正常。
 
+Also (2026-11-11): hy3 `logind` 在选码后立刻 `write_file("/topten/login/users", …)`（及 `iduser`/`maxonline` 读取）。keep 表原先只有 `topten`，没有子目录 `topten/login`；pristine 下第一次写抛权限错误，`logon_in` 中断，玩家停在裸 `>`（`什麼？`）。已把 `topten/login` 记进 hy3 keep 行。证明：无目录时 GB 后即裸提示符；有目录后完整注册进武庙，`look`/`score`/`i`/`quit` 正常。
+
 
 ### 7.359 A literal `"/path"->fn()` to a file the lib does not have: the area was renamed, the case is wrong, a letter is off (51 sites in 29 libs, 2026-10-22)
 **Symptom:** `*call_other() couldn't find object '/d/mj/obj/baihong-jian'` from `/d/mingjiao/npc/yingwang.lpc` line 92: answering the Eagle King (`answer 怜我世人，忧患实多；保护教主，同抗外敌`) prints the error instead of the sword, the function stops, the reward is never given. Found by walking the quest in a live session after the static scan below listed it; the same statement is in 20 libs of the Ming Cult lineage (the area directory was renamed `mj` -> `mingjiao`, the NPC's literal was not).
