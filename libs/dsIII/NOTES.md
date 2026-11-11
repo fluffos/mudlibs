@@ -1098,3 +1098,7 @@ pristine + build-debug，port 40229。
 - **缺陷**：`pick human` 后进 `eventCompleteChar` → `AddCurrency` → `log_file("currency")`；sefun 把无特权写改到 `/log/open/currency`，目录缺失则 raise，角色半完成：只有 `>`，一切命令 `What?`（`log/runtime` 有 `*Wrong permissions…/log/open/currency`）。同缺 `secure/log/intermud`、`tmp`（imc2/i3，不挡注册）。
 - **修复**：`wasm_keep_dirs.txt` 为 dsIII / ds386 / brassring / dshakkard / riftsds / deadsouls_fluffos 补 `log/open`、`secure/log/intermud`、`tmp`（KB 06 §7.358）。
 - **证明**：无 keep 复现；有 keep 后 news → start room → `look`/`score`/`read index in handbook`（真章节）正常。
+
+## handbook `stat()` 四元组（2026-11-10，KB 06 §7.382）
+
+与 ds386 同型：`BOOKS_D` `sizeof(statinfo) != 3` 跳过全部章节；handbook 先 `SetTitle` 后 `SetSource`。本轮已改 `books.lpc` + handbook 顺序。实测见 ds386。

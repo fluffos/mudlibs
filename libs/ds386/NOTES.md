@@ -1139,3 +1139,12 @@ IIPS `save_letter` 空箱索引（KB 06 §7.379，2026-11-10）。
 ## `log/open keep（注册 currency 日志）`（2026-11-10，KB 06 §7.358）
 
 与 dsIII 同型：`log_file("currency")` 被 sefun 改写到 `/log/open/currency`；缺目录会在 `eventCompleteChar` 中断注册。本轮为家族补 keep：`log/open`、`secure/log/intermud`、`tmp`。实测与 NOTES 见 dsIII。
+
+## 深度功能测试（§10.7，2026-11-10，handbook `stat()` 四元组）
+
+pristine + build-debug，port 40205（含先前 `log/open` keep）。
+
+- **注册**：多一步 screen-reader（`n`）；`log/open` 后入局正常（start room → `enter town`）。
+- **缺陷**：`read index in handbook` 只有 `Untitled` 空目录；`read chapter 1` → `You can't read that in that.`。`BOOKS_D->LoadChapters` 要求 `sizeof(stat(file)) == 3`（MudOS）；FluffOS 为 4，章全部 `continue`。另 `SetTitle` 在 `SetSource("/doc/hbook")` 之前，标题记在默认 `/obj/book_source` 下。
+- **修复**：家族 `books.lpc` 改为 `sizeof(statinfo) < 3`；handbook 先 `SetSource` 再 `SetTitle`（KB 06 §7.382）。deadsouls_fluffos 走 overlay。
+- **证明**：修后 index 列出 Chapter 1–8，chapter 1 有正文；控制台安静。

@@ -2468,3 +2468,9 @@ Found by taking the objects a visitor meets (`scripts/lpc_reach_census.py` lists
 
 **Detection:** CD/Genesis-style login with a bootstrap `ghost_player` that saves before enter; saves lacking `player_file`; live login where Last-login is epoch despite a non-epoch `.o`.
 
+### 7.382 FluffOS `stat()` is a 4-tuple; Dead Souls `books.lpc` required MudOS's 3 (6 libs, 2026-11-10)
+**Symptom:** a new character's Player's Handbook answers `Untitled` for `read index in handbook` and `You can't read that in that.` for `read chapter 1 in handbook`, while `/doc/hbook/chapter01` is on disk and starts with `chapter 1 "Introduction"`. The news screen still tells the player to read the handbook.
+**Cause:** `BOOKS_D->LoadChapters()` skips every file when `sizeof(statinfo) != 3`. MudOS `stat(file)` was `({ size, mtime, atime })`; FluffOS returns four ints (`size`, `mtime`, `atime`, `ctime`), so every chapter is skipped. Separately, `handbook.lpc` called `SetTitle` before `SetSource("/doc/hbook")`, so `BOOKS_D` stored the title under the default `/obj/book_source` and `GetBookTitle("/doc/hbook")` answered `Untitled` even after chapters load.
+**Fix:** `sizeof(statinfo) < 3` (mtime still at `[1]`) in `daemon/books.lpc` (brassring / dsIII / ds386 / dshakkard / riftsds; deadsouls_fluffos via `overlay/lib/daemon/books.lpc`). Swap to `SetSource` then `SetTitle` in `domains/default/obj/handbook.lpc` (same libs + dsII + overlay). Proof: pristine ds386 — before: empty Untitled index; after: full chapter list and chapter 1 text.
+**Detection:** `stat("/doc/hbook/chapter01")` sizeof 4; live `read index in handbook` on a fresh character after the book's `call_out(LoadBook, 1)`.
+

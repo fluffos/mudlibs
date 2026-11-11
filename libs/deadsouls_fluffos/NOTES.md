@@ -569,3 +569,7 @@ pre-rename tree); the config has three obsolete lines the driver reports (`addre
 ## `log/open` keep（注册 currency 日志）（2026-11-10，KB 06 §7.358）
 
 与 dsIII 同型 sefun 改写；本库虽已有部分 `log/open` 目录，补 keep 行并加 `secure/log/intermud`、`tmp`，保证站点/pristine 一致。
+
+## handbook / BOOKS_D `stat()`（2026-11-10，KB 06 §7.382）
+
+overlay：`sizeof(statinfo) < 3` 与 `SetSource`→`SetTitle` 顺序。详见 ds386 NOTES。
