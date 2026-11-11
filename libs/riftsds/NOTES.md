@@ -916,3 +916,10 @@ IIPS `save_letter` 空箱索引（KB 06 §7.379，2026-11-10）。
 ## handbook `stat()` 四元组（2026-11-10，KB 06 §7.382）
 
 与 ds386 同型：`BOOKS_D` `sizeof(statinfo) != 3` 跳过全部章节；handbook 先 `SetTitle` 后 `SetSource`。本轮已改 `books.lpc` + handbook 顺序。实测见 ds386。
+
+## 深度功能测试（§10.7，2026-11-10，start room → town）
+
+pristine + build-debug，port 40257（submodule-patch）。
+
+- **流程**：名确认 → 年满 13 → 非读屏 → 密码×2 → 性别 → email → `pick human`（无技能槽）→ news → start room；`look`/`score`/`i`；`read index in handbook` 真章节；`enter town`；`quit`。
+- 控制台无 `*Error` / Wrong permissions。本轮无新编程缺陷。种族表含 `greathorneddragon`（内容差异，非缺陷）。
