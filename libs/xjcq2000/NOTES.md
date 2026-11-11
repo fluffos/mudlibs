@@ -1131,3 +1131,10 @@ NPC 基类的 `chat()` 是 `if (arrayp(msg = query(...))) { if (random(100) < ch
 ## `log/mud` keep 行（2026-11-11，KB 06 §7.358 Also）
 
 与 fqyy2 同：`VISITORS`/`GIFTCARD` 写 `/log/mud/…`；补 keep `log/mud`（见 fqyy2 NOTES）。
+
+## 深度功能测试（§10.7，2026-11-11，中央广场）
+
+pristine + build-debug，port 40034。`scripts/play_login.py` 注册。
+
+- **流程**：BIG5 选单 → 字母 id → 密码×2 → 中文名 → 天赋 → email → 性别 → 中央广场；`look`/`score`/`i`；`quit` 存盘退出。
+- 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`/`执行时段错误`。本轮无新编程缺陷。
