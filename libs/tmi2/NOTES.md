@@ -787,3 +787,11 @@ A room exit named a file the lib does not have, so the player was stuck (a typo,
 
 `work/log/` 被 gitignore，`wasm_keep_dirs.txt` 里本库原先没有任何 `log` 行。直接开驱动时 `log/` 不存在：HTTP 守护进程 `create()` 写 `/log/http_errors`、登录 `complete_setup()` 写 `LOGIN_LOG`（`/log/USAGE`）、以及主控 `error_handler` 写 `/log/runtime` 全部因目录缺失抛错（错误处理器自己再写 runtime 二次失败）。玩法仍可进四方院子并走动，但登录日志与错误日志全断。`lpc_keep_log_dirs.py --apply` 加上 `log/adm/harass`，`gen_keep_dirs.py --merge` 补上父目录 `log`（及 `log/adm`）。证明：重建后零条 `/log` 权限错误，`/log/USAGE` 有登录行；`fluffos`/`FluffOS2026Admin` 进四方院子，`down` 到 Fooland，quit/relogin 正常。
 
+
+## 深度功能测试（§10.7，2026-11-11，TMI-2 quad→Fooland）
+
+pristine + build-debug，port 40220。`scripts/play_login.py` 注册。
+
+- **流程**：名/确认/密码×2/性别/种族 dwarf/email/真名 → news → TMI-2 四方院子；`look`/`score`/`i`；`down` 进 Fooland；`quit`。
+- 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`。本轮无新编程缺陷。
+- 本轮跳过：`wilderness`/`spacemud`/`lima`（本机无 `~/src/fluffos-wilderness` / `fluffos-lima`）。
