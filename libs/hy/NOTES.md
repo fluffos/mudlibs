@@ -650,3 +650,10 @@ xkx 系的房间在 `setup()` 之后写 `"/clone/board/gaibang_r"->foo();` 来�
 ## `log/mud` keep 行（2026-11-11，KB 06 §7.358 Also）
 
 与 fqyy2 同：`VISITORS`/`GIFTCARD` 写 `/log/mud/…`；补 keep `log/mud`（见 fqyy2 NOTES）。
+
+## 深度功能测试（§10.7，2026-11-11，海洋之初）
+
+pristine + build-debug，port 40182。`scripts/play_login.py` 注册。
+
+- **流程**：BIG5 选单选 N（GB）→ 字母 id → 中文名 → 密码×2 → 天赋 → email → 性别 → 海洋之初（newbie/oldplayer）；`look`/`score`/`i`；`quit`「欢迎下次再来！」。
+- 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`/`执行时段错误`。本轮无新编程缺陷。
