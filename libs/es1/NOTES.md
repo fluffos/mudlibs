@@ -868,3 +868,11 @@ IRC vodka/water 继承 wizard `/u/e/elon/drink`，接口在 `/d/island/obj/drink
 ## §7.282 矮人武器加成恒拒（2026-11-10）
 
 `std/races/dwarf.lpc`：`type != "axe" || != "blunt"` 恒真，WC/伤害加成永远 return 0。改 `&&`。`es1_win` / `esI` 同改。`lpcc_eval --at /open/zzeval.lpc` 表达式：斧不拒、剑拒。
+
+## 深度功能测试（§10.7，2026-11-10，冒险者公会再测）
+
+pristine + build-debug，port 40239。
+
+- **缺陷**：`std/user.lpc` 的 `setup()` 在「上次连线」提示前有一行残留调试 `write("aadsaaaaaaaaaaaaaaaaaaaa\n\n")`，每次登录都打到玩家屏幕。不在 `raw/`；`es1_win` / `esI` 早先已删。本库删掉该行。
+- **证明**：删前注册可见 `aadsa…`；删后同流程注册（英文名→中文名→密码→性别→种族→email→RETURN）入冒险者公会，`look`/`score`/`quit` 正常，回显无 `aadsa`，控制台无 `*Error`。
+- 本轮其余玩法无新编程缺陷。
