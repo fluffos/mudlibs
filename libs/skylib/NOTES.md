@@ -902,3 +902,12 @@ topography 的 iroom/milestone/area 继承 `/std/room`，本体在 `basic_room`�
 ## 深度功能测试（2026-11-04，stay_alive→basic + BASE_GOAL §6.15/§6.16）
 
 旧版 `stay_alive.lpc` 仍 `#include <goals.h>` / `inherit BASE_GOAL`；现行正文是 `stay_alive_basic`（`<npc/goals.h>` + `GOAL_BASE_INHERIT`）。薄别名。`goals.h` 补 `BASE_GOAL`/`GOAL_PLAN_DIR` 历史别名。证明：HEAD 2 PASS / 1 FAIL；树 3 PASS。
+
+## 深度功能测试（§10.7，2026-11-10，tavern 再测）+ §7.315/§7.358
+
+pristine + build-debug，port 40222。
+
+- **缺陷 1（§7.315）**：`save/players` / `save/mail` 字母桶档案只带了 `d`/`f`/`s`（players），其余字母在 checkout / 站点 / pristine 上不存在，`save_object()` 不会建目录。`lpc_keep_letters.py --apply skylib save/players save/mail`，并把已有 tracked 的 `d`/`f`/`s` 一并写入 keep。
+- **缺陷 2（§7.358）**：`handlers/login_handler.lpc` 写 `/secure/log/ENTER`，keep 里没有 `secure/log`（只有 `log/secure/log`），每次进出报 `*Wrong permissions ... /secure/log/ENTER`（catch 吞掉，不影响进游戏但污染 runtime）。补 `skylib\tsecure/log`。
+- **证明**：修后 pristine 注册 `alphatester`，等满 `MIN_TIME_TO_SAVE`（60 秒）后 `look`/`score`/`quit`；`save/players/a/alphatester.o` 落盘；`secure/log/ENTER` 有 Enter 行；控制台无 Wrong permissions。
+- **观察**：登录后仍有一次已知的裸 `What?`（NOTES 旧记）；新角未满 60 秒 quit 不存档（本库设计，非缺陷）；start room `/room/tavern` 无出口（内容范围）。
