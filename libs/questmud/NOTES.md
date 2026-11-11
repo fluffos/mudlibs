@@ -842,3 +842,10 @@ siki master/simuli 与 secure/simul_* 活文件的 bind_lambda(#'…) → bind((
 ## 深度功能测试（2026-11-03，master_skeleton 文档桩）
 
 同 amylaarmini：注释无体签名与 `parse_command_*`（efun 名冲突），`raise_error`→`error`。证明：warnings 诊断中不再出现 `/secure/master_skeleton`。
+
+## 深度功能测试（§10.7，2026-11-10，Fighter guild↔Central Square）
+
+pristine + build-debug，port 40247。
+
+- **流程**：菜单 `c` → 名/密码×2 → `m` → `select human`/`continue` → traits `continue` → `select fighter` → Fighter guild（五出口）；`east` Gold street（citizen/guard）→ `south` Central Square → `north` 回街；`quit`「Saving …」。另测 guest `g` look/score/`safe_quit` 路径干净。
+- 驱动 stdout 无 `*Error`/`Wrong permissions`/`Could not open`。本轮无新编程缺陷。
