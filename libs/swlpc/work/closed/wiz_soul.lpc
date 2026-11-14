@@ -1,0 +1,3056 @@
+/*
+ * Shattered World's wiz-soul - heavily modified from the US original.
+ *                              - some bits taken from The Tracer (Genesis).
+ * by - geoff@bruce.cs.monash.edu.au   (Dredd)
+ *    - mmcg@bruce.cs.monash.edu.au    (Gandalf)
+ *    - zik@bruce.cs.monash.edu.au     (Billy)
+ *    - rendell@bruce.cs.monash.edu.au (Rhys)
+ *    - wigs@yoyo.cc.monash.edu.au     (Hunter)
+ *    - paulbr@mullauna.cs.mu.oz.au    (Calthron)
+ *    - twilight@yoyo.cc.monash.edu.au (Llati)
+ * (not necessarily in the above order either! :) )
+ *
+ * This soul contains all wizard related functions that require
+ * the object to have a suid level of greater than 0.
+ * All other functions are in the wiz_effects.c soul,
+ * in /obj/souls/ (which should be suid 0)
+ *
+ * Security Note:
+ *   This object is trusted (potentially) to GOD. Be carefull what you
+ *   #include into this file. Likewise, consider what security aspects
+ *   you may change when you modify this file.
+ *
+ *   Also, be careful what you call from this object in processing commands.
+ *   Other objects (such as STRINGS and COMARGS) have the potential to
+ *   modify the command typed by a wizard. Those other objects should
+ *   also be secure.
+ */
+
+/*
+ * 921002 Hunter            added makefiles
+ * 940615 Hunter            added SERVLIST support to find_item()
+ * 940620 Hunter            added "clone X onto W"
+ * 941215 Hunter            added wildcards to find_item()
+ * 941215 Hunter            added support for desting wildcards
+ * 950104 Hunter            added last_object ("it") to find_item()
+ * 950109 Hunter            changed all call_other() to X->Y() or X->(Y)()
+ * 950123 Hunter            added auto-backup ability to edits
+ * 950202 Hunter            added prompt change on cd()
+ * 950527 Hunter            added "me" to find_item()
+ * 950528 Hunter            added remote object supprt to find_item()
+ * 950529 Hunter            added support for rcall for call command.
+ *                          moved sdesc from being global variable to local 
+ *                            to short().
+ * 950530 Hunter            cleaned up code. added comments to global stuff.
+ *                          commented out 'muffled' global variable to see if 
+ *                            anything breaks. :-). Added #include <errors.h>.
+ * 950605 Hunter            added #include <types.h> 
+ * 950618 Hunter            finally got rcall support for 'call' working.
+ *                            added remote filesystem support for 'ls'
+ * 950722 Hunter            added 'set' and 'unset' commands.
+ * 950802 Ivory             fixed crappy 'update_object'.
+ * 950808 Hunter            fixed 'trust' bug
+ * 950809 Hunter            clone action: "it" set to last thing cloned
+ * 950819 Hunter            removed 'cleanroom' action ('dest env:*' does the 
+ *                            same thing). Added ACTION_* flags to commands.
+ *                            Added strong type-checking where obviously needed.
+ * 950819 Hunter            Added test to 'destruct' so that your wiz_soul will
+ *                             dest itself if /closed/wiz_soul cannot be loaded.
+ * 950915 Hunter        find_item(), and other code required by it,
+ *                        shifted to separate file (/closed/find_item).
+ * 950916 Hunter        removed all code dealing with 'muffled'. It doesn't
+ *                        appear to be used anywhere (see note 950530).
+ * 950930 Hunter        added display of '.message' to 'cd' command
+ * 980702 Dredd         Couple of external program fixes.
+ * 990611 Jenna		fill_in_extension to defaul to .lpc files (lazy Jen)
+ * 000229 Jenna		Allowed snooping of monsters
+ * 000802 Jenna		Altered vi, ed, more cautions
+ * 001208 Jenna		Added 'exec' fun
+ * 010220 Jenna		Added 'err'
+ * 010719 Jenna		Moved in_room() from wiz_effects soul, since
+ *			changes to command() left that without enough
+ *			permissions to execute
+ */
+
+/*
+ * To Do/Wishlist:
+ *  - add remote namespace support (//ShatteredNorth/, etc)
+ *  - add remote file system support (//ShatteredNorth/std/foo.c)
+ *  - add remote object supprt (//ShatteredNorth/std/foo->bar(*))
+ */
+
+/*
+ * inherit's
+ */
+/* inherit "RO/Servers"; */
+inherit "closed/find_item";
+
+/*
+ * #include's
+ */
+#include <Config.h>
+#include <security.h>
+#include <handshake.h>
+#include <errors.h>
+
+
+/*
+ * Debuging defines
+ */
+
+
+/*
+ * Global Macros
+ */
+
+/* what is the Real Time where we are? */
+#define TIME ("<"+DATE->packed()+" "+explode(query_host_name(),".")[0]+"> ")
+
+/* what machine are we running it on? */
+#define MACHINE ("<"+explode(query_host_name(),".")[0]+"> ")
+
+#define LOG_FILESYSTEM( f, a, m ) ("closed/log/commands"->log_filesystem( \
+        myself->query_real_name(), f, a, m ) )
+
+/* types of each command/action, for if we need to split out
+ * code to reduce size of wiz_soul. These are simply #define's
+ * that evaluate to nothing, and are meant for human-readability.
+ *  - Hunter 950819
+ */
+#define ACTION                /* simple action, unknown type */
+#define ACTION_PLAYER        /* action that affects players */
+#define ACTION_FS        /* action that affects the filesystem */
+#define ACTION_GD        /* action that affects game driver, either by */
+                        /* loading/desting/changing an object, or changes */
+                        /* security level */
+#define ACTION_SECURE         /* action that requires this_object() to be suid */
+
+#define CHECK_SECURE    if (caller() != myself) return 0
+
+                        /* non-zero */
+
+/*
+ * Constants: values returned by backup_file()
+ */
+#define BACKUP_FAILED (-1)
+#define BACKUP_SUCCESS (1)
+#define BACKUP_NONE (0)
+
+/*
+ * Constants: Misc
+ */
+const CONFIRM_TIME = 10;        /* try again in 10 heart beats = confirm */
+const MAX_CHAR = 5000;                /* how many chars to grab at once for cat */
+
+/* game driver directories */
+/* should be const */
+nosave array GDdirs = ({
+        "closed", "RO", "guilds", "std", "obj", "room", "lib", "doc", "S"
+        });
+
+/*
+ * Global Variables:
+ */
+nosave object busy_player;        /* last player who was busy when we tried */
+nosave int busy_check_time;        /* last time we tried to goto them */
+
+/* MORE->more() state variables */
+nosave int Ticket;                /* security ticket for more_file */
+nosave int start, len;                        /* for more */
+nosave string more_file;                /* for more */
+
+nosave object myself;                /* the wizard connection object */
+nosave object effsoul;                /* the wizard effects soul */
+int wiz_level;                        /* wizard security level */
+string name;                        /* the wizard's name */
+nosave object grantee;                /* used for wizard promotion */
+nosave string log;                /* what log file are we looking at? */
+nosave string pwd;                /* current working directory */
+nosave string ud_where;
+nosave object ud_bag;
+
+/*
+ * Cautions - Jenna August 2000
+ */
+#define VI_CAUTION	"creating things"
+#define MORE_CAUTION	"reading things"
+
+/*
+ * Functions Follow:
+ */
+reset(arg)
+{
+    if (arg) return;
+    if (myself) return;                /* no spoofing! once only. */
+
+    myself = caller();                 /* get the cloner */
+    if (!myself) return;               /* base object */
+    name = myself->query_real_name();
+    if (!name) return;
+    Ticket = (-1);                     /* guaranteed invalid */
+    last_object = 0;
+}
+
+query_soul() {  return this_object();  }
+query_soul_type() {  return "wizard/wiz_soul";  }
+query_myself() { return myself; }
+
+get() {  return 1;  }
+drop() {  return 1;  }
+
+id(str)
+{
+    return str == "wiz_soul" || str == "soul" || str == "ND";
+}
+
+query_ids()
+{
+    return ({ "wiz_soul", "soul", "ND" });
+}
+
+(int|string)
+short()
+{
+    string sdesc;
+
+    if (!myself || !name) return 0;
+    sdesc = getenv("soulname");
+    if (sdesc && stringp(sdesc)) return sdesc;
+    return "A heart of gold";
+}
+
+long()
+{
+    write( query_long() );
+}
+
+query_long()
+{
+    return ("A malleable magical soul.  Neat huh?  "
+        +"Try \"set soul <blah>\".\n");
+}
+
+init()
+{
+#if 0
+    object c;
+    /* mention incoming invisible objects given you by other people */
+    /* actually, this only picks up enable_commanded() objects */
+    c = previous_object();
+
+    if (!(c->query_short()))
+    {
+        if (myself && (myself != this_player()))
+          {
+            tell_object(myself, "You have been given " + file_name(c) + " by "
+                + (this_player()? this_player()->query_real_name() 
+                : "<unknown>") + ".\n");
+        }
+    }
+#endif
+    if (myself != this_player() || !query_ip_number(myself)) return 0;
+    wiz_level = myself->query_wiz();
+
+    pwd = PlayerHome(myself->query_real_name()) + "/";
+    log = name;
+    if (wiz_level >= APPRENTICE)
+    {
+        add_action("action_set", "set");
+        add_action("action_unset", "unset");
+        add_action("list_files", "ls");
+        add_action("cat_file", "cat");
+        add_action("set_pager", "pager");
+        add_action("more_file","more");
+        add_action("tail_file", "tail");
+        add_action("view_file", "view");
+        add_action("page_file", "page");
+        add_action("cd", "cd");
+        add_action("pwd", "pwd");
+        add_action("snoop_trace", "strace", 2);
+    }
+
+        add_action("epi", "epi", 3); /* undocumented :) */
+
+    if (wiz_level >= CREATE)
+    {
+/* edit stuff - stays in wiz_soul */
+        add_action("work", "work");
+        add_action("clone","clone",2);
+        add_action("snoop_on", "snoop", 0);
+        add_action("destruct_local_object","destruct",3);
+        add_action("load","load",3);
+        add_action("update_object","update",3);
+        add_action("update_object","ud",0);
+        add_action("make_file","make");
+        add_action("action_remove_file", "rm");
+        add_action("edit", "ed");
+        add_action("visual_edit", "vi");
+        add_action("nslookup", "nslookup", 3);
+        add_action("make_dir", "mkdir");
+        add_action("remove_dir", "rmdir");
+        add_action("action_copy_file", "cp");
+        add_action("su_file", "suid");
+        add_action("action_rename_file", "mv");
+        add_action("trust", "trust", 5);
+        add_action("exec", "execute", 4);
+        add_action("in_room", "in");
+        add_action("in_room", "at");
+
+        add_action("call", "call");
+        add_action("call", "call!");
+        add_action("call", "callall", 4);
+        add_action("call", "callall!");
+
+        add_action("rmlog", "rmlog");
+        add_action("rmrep", "rmrep");
+        add_action("rmerr", "rmerr");
+
+	add_action("read_err", "err");
+
+        add_action("file_string_replace", "sr");
+
+/* possible effects */
+        add_action("snapshot", "snapshot", 4);
+        add_action("origin_object","origin",3);
+        add_action("stat","stat",3);
+    }
+    if (wiz_level >= SENIOR)
+    {
+        add_action ("disass","disassemble", 4);
+    }
+    if (wiz_level >= SHUTDOWN)
+    {
+        add_action("shut_down_game", "shutdown");
+        add_action("grant_wiz_level", "promote");
+        add_action("grep","grep");
+    }
+
+    if (wiz_level >= GOD)
+    {
+        add_action ("diff","diff");
+        add_action ("rmplayer","rmplayer");
+        add_action ("switchinto","switch");
+                        /* Sort of the same syntax as rmdir:) */
+    }
+}
+
+soul_init(who)
+{
+    effsoul = who->query_soul("wizard/effects");
+    if ( !objectp(effsoul) )
+        tell_object( myself, "! You have no wiz_effects soul !\n" );
+    else
+        effsoul->set_owner(this_object());
+}
+
+int 
+switchinto(str)
+{
+    object o;
+
+    CHECK_SECURE;
+    notify_fail("switch <what>.\n");
+    if (!str) return 0;
+
+    o = find_item(str);
+    if (arrayp(o)) o = o[0];
+    if (!o)
+    {
+        notify_fail("Unable to find "+str+".\n");
+        return 0;
+    }
+    if (!o->query_npc())
+    {
+        notify_fail("switch to non-players only.\n");
+        return 0;
+    }
+    
+    switch_interactive(o);
+    write("You have now switched bodies.\n");
+    return 1;
+}
+
+/*
+ * A command that confers extra powers on an object.
+ * Works with SW security kernal.  Use it carefully!
+ * syntax: trust item level (level is an integer)
+ * kernal ensures you can't give out more power than you have.
+ */
+ACTION_GD ACTION_SECURE
+trust(s)
+{
+    object o;
+    string oname;
+    int lev;
+    string na;
+    string oldsu;
+    array allargs;
+    
+    CHECK_SECURE;
+    na = name;
+    if (!stringp(s)) return 0;
+
+    allargs = explode(s, " ");
+    if (sizeof(allargs) < 2) return 0;
+
+    oname = allargs[0];
+    lev = atoi(allargs[1]);
+
+    if (sizeof(allargs) > 2) na = implode(allargs[2..], " ");
+
+    o = find_item(oname);
+    if (intp(o)) 
+    {
+        notify_fail("Can't find " + oname + "\n");
+        return 0;
+    }
+    o = o[0];
+    oldsu = show_su(o);
+    set_uid_me(o, lev, na);
+    write_stdout(oname + ": was suid " + oldsu + ", now " +
+        show_su(o) + "\n");
+    return 1;
+}
+
+/* show_su() used by lfun/trust() and lfun/stat() */
+nosave string
+show_su( object o )
+{
+string s;
+    /*CHECK_SECURE;*/
+    s = query_su_name(o);
+    if (!s)
+        s = "Game driver";
+    s = s + "(" + query_su_level(o) + ")";
+    return s;
+}
+
+/*
+ * A command to set the uid bit on one of your files - when the
+ * object is loaded, it'll be incremented one level, which is
+ * enough to allow it to do file writes other than log() and
+ * save_object().
+ */
+ACTION_FS ACTION_SECURE
+su_file(s)
+{
+    array ex;
+    string file, mode;
+    int m;
+    m = 0;
+    string ret;
+
+    CHECK_SECURE;
+    notify_fail("suid file [on/off]\n");
+    if (!s) return 0;
+    if (!(ex = STRINGS->split_first(s, " "))) return 0;
+    if (!(file = valid_write(file))) return 0;
+
+    file = ex[0];
+    mode = ex[1];
+    if (mode == "on")
+    {
+        m = 1;
+        ret = ("Enhancing");
+    }
+    else
+        ret = ("Resetting");
+    notify_fail("failed.\n");
+    write_stdout(ret + " capabilities of " + file + "\n");
+    return set_uid_file(file, m);
+}
+
+ACTION_FS
+pwd()
+{
+    CHECK_SECURE;
+    write_stdout("pwd : "+pwd+"\n");
+    return 1;
+}
+
+ACTION_GD
+stat(str)
+{
+object ob;
+string it;
+(string|int) arg;
+(int|string|array) ret;
+array cml;
+    CHECK_SECURE;
+    notify_fail(query_verb()+" what?\n");
+    if (!name)
+         return 0;
+    cml = COMARGS -> split_args (str, ({ }), ({ }));
+    if (!sizeof(cml[0]))
+        return 0;
+    it = cml[0][0];
+    if (sizeof(cml[0]) > 1)
+        arg = cml[0][1];
+    str = it;
+    it = lower_case(it);
+#if 0
+    ob = find_player(it);
+    if (!ob) ob = find_living(it);        /* find_item() does this for us */
+#endif
+    if (!ob)
+        ob = find_item(str);        /* don't lowercase it */
+    if (intp(ob)) 
+    {
+        notify_fail("No such person/item exists at the moment.\n");
+        return 0;
+    }
+    if (pointerp(ob))
+        ob = ob[0];
+    if (ob->is_player())
+        log_action("stats", ob->query_real_name());
+    write_stdout("Ob: " + file_name(ob) + "; " + show_su(ob) + "\n");
+    ret = STAT_SERV->show_stats(ob, arg);
+    if (stringp(ret) || pointerp(ret))
+    {
+        MORE->more(ret);
+    }
+    else
+    {
+        OLDCODE->add( "show_stats", explode(file_name(ob), "#")[0] );
+        if (myself->query_real_name() == "hunter")        /* G */
+            write("Notice: this object did not return it's show_stats info "
+                +"as an array\n");
+    }
+    return 1;
+}
+
+array
+show_stats()
+{
+    return ({ "No stats available on the wiz_soul." });
+}
+
+ACTION_PLAYER ACTION_SECURE
+rmplayer (arg) 
+{
+    object pl;
+    CHECK_SECURE;
+    if (!arg) {
+        notify_fail("remove who?\n");
+           return 0;
+        }
+    arg = lower_case (arg);
+    if (!(pl = PLAYER_SERV -> load_player(arg)))
+    {
+        write_stderr("No such player.\n");
+        return 1;
+    }
+   if (query_su_level (pl) <= GOD) { /* They arnt logged in */
+     set_uid_me (pl,GOD+1, arg);
+     pl -> restart_player();
+     }
+   move_object(pl, environment(myself));
+   pl -> add_stat ("pow",-(pl->query_stat ("pow")));
+   pl -> ultimate_death();
+   write_stdout("Power deathed the bugger.\n");
+   return 1;
+}
+
+ACTION_GD ACTION_SECURE
+disass(s) 
+{
+    object ob;
+    string func, it, rest, oname;
+    int lines, start, x;
+    array allargs;
+
+
+    CHECK_SECURE;
+    notify_fail(query_verb()+" <ob> <func> [start] [nlines]\n");
+    if (!s) return 0;
+
+    allargs = explode(s, " ");
+    if (sizeof(allargs) < 2) return 0;
+    func = allargs[1];
+
+    if (sizeof(allargs) == 2) rest = "";
+    it = lower_case(allargs[0]);
+    ob = find_item(allargs[0]);
+    if (intp(ob)) 
+    {
+        notify_fail("No such person/item exists at the moment.\n");
+        return 0;
+    }
+    if (pointerp(ob)) ob = ob[0];
+    if (!"modules/disass"->function_exists(func, ob)) 
+    {
+        notify_fail(file_name(ob) + ": no function \"" + func + "\".\n");
+        return 0;
+    }
+
+    if (sizeof(allargs) == 4)
+    {
+        start = atoi(allargs[2]);
+        lines = atoi(allargs[3]);
+    }
+
+    if (x < 2) lines = 200;
+    if (x < 1) start = 0;
+#if 0
+    if (ob->is_player())
+                log_action("disass", ob->query_real_name());
+#endif
+    write("Ob: " + file_name(ob) + "func: \"" + func + "\"\n");
+#if 0
+    MORE->more(disassemble(ob, func, start, lines));
+#endif
+    return 1;
+}
+
+ACTION_GD
+shut_down_game(arg) 
+{
+string str, tmp;
+int time_left;
+    CHECK_SECURE;
+    if (wiz_level < SHUTDOWN) {        /* low level chars can shut it if its been up 5 hours */
+        if (SHUT_DAEMON->query_uptime() < (5*3600)) {
+            return 0;
+            }
+        }
+    if (arg == "now") {        /* just in case - G */
+        shutdown();
+        return 1;
+        }
+    if (stringp(arg)) {
+        if (arg == "stop" || arg == "halt") {
+            SHUT_DAEMON->stop_shut();
+            return 1;
+        }
+        time_left = atoi( arg );
+        SHUT_DAEMON->shut( time_left );
+        return 1;
+    }
+    return 0;
+}
+
+
+int ACTION_GD
+clone(str) 
+{
+    object ob;
+    string x;
+    string template;
+    string sht, nam;
+    string what, who;
+    object target;
+    int count = 1;
+    array switches;
+
+    CHECK_SECURE;
+
+    notify_fail("Clone what object?\n");
+    if (!str) return 0;
+
+    switches = COMARGS->split_args( str, ({ "q" }), ({ "n", "o" }) );
+    what = switches[0][0];
+    who = 0;
+    if ( sizeof(switches[0]) == 3 )
+    {
+        if ( switches[0][1] == "onto" )
+        {
+            what = switches[0][0];
+            who = switches[0][2];
+          }
+        else
+        {
+            notify_fail("clone <x> onto <y>\n");
+            return 0;
+        }
+    }
+    else if ( stringp(switches[2][1]) )
+    {
+        who = switches[2][1];
+    }
+    if ( stringp(switches[2][0]) )
+    {
+        count = atoi(switches[2][0]);
+    }
+    if (stringp(who))
+    {
+        target = find_item(who);
+        if (intp(target))
+        {
+            notify_fail("Can't find "+who+" to receive "+what+"\n");
+            return 0;
+        }
+        else
+        {
+            target = target[0];
+        }
+    }
+    what = valid_read(what);
+    if (!what) {
+        write("Invalid file.\n");
+        return 1;
+    }
+    while ( count > 0 )
+    {
+        x = catch( ob = clone_object(what));;
+        if (x || !ob) 
+        {
+            write("Error Cloning \""+what+"\":  "+x+"\n");
+            return 1;
+        }
+        catch (sht = ob->short());;
+        catch (nam = ob->query_name());;
+        if (!switches[1][0])
+        {
+            template = getenv( "clonemsg" );
+            if (!stringp(template))
+                template = "$w fetches something from another dimension.";
+            template = STRINGS->format_string(
+                        template, ({ "w", myself->query_name(),
+                                "s", (sht?sht:"A Something"),
+                                "n", (nam?nam:"Something") }) );
+            if (!stringp(template))
+                template = myself->query_name()+" fetches something from "+
+                        "another dimension.";
+    /* template wildcards :
+                '$s' == object short()
+                '$n' == object query_name()
+                '$w' == wizards name
+        */
+            myself->checked_say(template+"\n");
+        }
+        if (target)                /* "clone X onto Y" ? */
+        {
+            move_object(ob, target);
+        }
+        else
+        {
+            if (ob->get()) {
+                move_object(ob, myself);
+            }
+            else {
+                move_object(ob, environment(myself));
+            }
+        }
+        last_object = ob;        /* set "it" */
+        count --;
+    }
+    tell_object(myself,"Ok.\n");
+    return 1;
+}
+
+/*
+ * 941215 Hunter             added support for desting wildcards
+ * 950819 Hunter        added check for wiz_soul desting itself if
+ *                        "closed/wiz_soul" cannot be loaded to replace it.
+ */
+ACTION_GD ACTION_SECURE
+destruct_local_object(str) 
+{
+    (array|object) ob;
+    string x;
+    int Living;
+    string msg;
+    string template;
+    string filename;
+    int i;
+    int many;
+
+    CHECK_SECURE;
+
+    notify_fail("Destruct what?\n");
+    if (!str) return 0;
+
+    if (str == "all") str = "*";
+    ob = find_item(str);
+    if (intp(ob))
+        ob = find_item(lower_case(str));
+    if (intp(ob)) 
+    {
+        notify_fail("No " + str + " visible.\n");
+        return 0;
+    }
+
+    if ( !pointerp(ob) )
+        ob = ({ ob });
+
+    many = (sizeof(ob) > 1);
+
+    for (i = 0; i < sizeof(ob); i ++)
+    {
+        filename = file_name(ob[i]);
+        if ( ob[i] == this_object() && !find_object("closed/wiz_soul"))
+        {
+            write("!\n! Refused to dest your wiz_soul as the core wiz_soul "
+                +"cannot be loaded!\n"
+                +"! If I did dest your wiz_soul, you would be stuffed, even "
+                +"if you tried to\n! 'soul on'\n!\n");
+        }
+        else if (many && ob[i]->id("ND"))
+        {
+            write("Refused to dest "+filename+" (\"ND\" id)\n");
+        }
+        else
+        {
+            msg = Catch(x = ob[i]->short());
+            if (msg) {
+                write("Err on ob->short - " + msg);
+            }
+            msg = Catch(Living = ob[i]->query_living());
+            if (msg) {
+                    write("Err on ob->query_living - " + msg);
+            }
+            template = getenv("destmsg");
+            if (!stringp(template))
+                template = "$s is disintegrated by $w";
+            template = STRINGS->format_string(
+                        template, ({ "w", myself->query_name(),
+                        "s", (stringp(x)?x:"Something")
+                }) );
+            if (destruct(ob[i]))
+            {
+                myself->checked_say(template+"\n");
+                if (Living)
+                    log_action("dests",x);
+                write("Destructed "+filename+" ok\n");
+            }
+            else
+                write("Failed to dest "+filename+"\n");
+        }
+    }
+    return 1;
+}
+
+
+// nosave ACTION_GD ACTION_SECURE
+load(str)
+{
+    object env;
+    string err;
+
+    CHECK_SECURE;
+
+    notify_fail("Load what?\n");
+    if (!str) return 0;
+
+    str = valid_read(str);
+    if (!str) {
+        write("Invalid file name.\n");
+        return 1;
+    }
+    err = catch str->stupid_fucking_load_up_func();;
+#if 0
+    env = environment(myself);
+    move_object(myself, str);
+    move_object(myself, env);
+#endif
+    if (err) write("Loading error: "+err+"\n");
+    else write("Ok.\n");
+    return 1;
+}
+
+object mob_snoop;
+ACTION_PLAYER ACTION_SECURE
+snoop_on(str) 
+{
+    object target;
+
+    CHECK_SECURE;
+    if (wiz_level < CREATE)
+	return 0;
+    if (!str && mob_snoop) {
+	destruct(mob_snoop);
+	write("Ok.\n");
+	return 1;
+	}
+    if (str) {
+	target = present(str, environment(myself));
+	if (target && target->query_npc()) {
+	    if (mob_snoop) 
+		destruct(mob_snoop);
+	    mob_snoop = clone_object("closed/msnooper");
+	    move_object(mob_snoop, target);
+	    mob_snoop->go(myself);
+	    return 1;
+	    }
+	}
+    if (wiz_level < SNOOP) return 0;
+
+    SET_HANDSHAKE(str)
+    myself->remote_snoop(handshake);
+    return 1;
+}
+
+// Jenna Feb 2001
+read_err()
+{
+    return tail_file("/bad.log");
+}
+
+ACTION_FS ACTION_SECURE
+rmlog(str)
+{
+    CHECK_SECURE;
+    if (!log) log = "/log/"+myself->query_real_name();
+    if (!str) return simple_remove_file("/log/"+log);
+    return simple_remove_file("/log/" + str);
+}
+
+ACTION_FS ACTION_SECURE
+rmerr(str) {
+    CHECK_SECURE;
+    if (!log) log = myself->query_real_name();
+    if (!str) return simple_remove_file("/log/" + log + ".err");
+    return simple_remove_file("/log/" + str + ".err");
+}
+
+ACTION_FS ACTION_SECURE
+rmrep(str) {
+    CHECK_SECURE;
+    if (!log) log = myself->query_real_name();
+    if (!str) return simple_remove_file("/log/" + log + ".rep");
+    return simple_remove_file("/log/" + str + ".rep");
+}
+
+/* required by ACTION_FS commands */
+nosave simple_remove_file(string str) 
+{
+    if (!(str = valid_write(str))) return 0;
+    if (rm(str))
+    {
+        LOG_FILESYSTEM( str, "deleted", 0 );
+        write("Removed "+str+"\n");
+    }
+    else write("Failed to remove " + str + ".\n");
+    return 1;
+}
+
+
+ACTION_FS ACTION_SECURE
+action_remove_file(str)
+{
+    array switches;
+    int recurse;
+
+    CHECK_SECURE;
+    notify_fail ("Remove [-r] file[s]\n");
+    if (!str) return;
+
+    switches = COMARGS -> split_args (str, ({ "r" }), ({ }));
+    recurse = switches[1][0];
+    str = switches[0][0];
+    str = compute_path(str);
+    return remove_file(str, recurse);
+}
+
+/* required by ACTION_FS commands */
+/*SPLIT*/
+nosave remove_file(string str,int recurse)
+{
+    int size,i;
+    array file,match;
+
+    size = file_size (str);
+    if (size >= 0) return simple_remove_file ("/" + str);
+
+    /* Got a directory remove */
+    if (size == EISDIR)
+    { 
+        string nstr;
+        if (!recurse) {
+            write("You cant remove directories using rm, except when "
+                +"the -r flag is used. Single directories can be removed "
+                +"using rmdir.\n");
+            return 1;
+        }
+        if (wiz_level < SENIOR && sizeof (file))
+        {
+            write ("Only wizards of level " + SENIOR
+                + " can do file operations on more than one file at once.\n");
+            return 1;
+        }
+        file = ls (str)[0];
+        nstr = str + "/";
+        for (i = 0 ; i < sizeof (file);i ++)
+            remove_file (nstr +file[i],recurse);
+        if (rmdir(str))
+            write ("Removed directory " + str + "\n");
+        else
+            write ("Could not remove the directory " + str + "\n");
+        return 1;
+    }
+
+    match = split_path (str);
+    file = ls (match[0]);
+    file = file[0]; /* Just the file names */
+    if (recurse)
+    {
+        for (i = sizeof (file); i--; )
+        {
+            if (file [i][sizeof(file[i])-1] == '/')
+            { /* A directory */
+                remove_file (match[0] + "/" + file[i] + match[1], recurse);
+            }
+        }
+    }
+    match [1] = fix_pattern (match[1]);
+    file = M_REGEXP->match(match[1],file); /* Files is 1D now */
+    if (!sizeof(file))
+    {
+        write ("No matching files.\n");
+        return 1;
+    }
+    str = match[0] + "/";
+    for (i=0; i< sizeof (file); i++ )
+    {
+        if (file[i][sizeof (file[i])-1] != '/')   /* not a directory */
+            simple_remove_file ( "/" +str + file[i]);
+        else {
+            if (recurse)
+                remove_dir ("/" +str + file[i]);
+            else
+                write ("Directory /" + str + file[i] + " ignored.\n");
+        }
+    }
+    return 1;
+}
+
+ACTION_FS ACTION_SECURE
+make_dir(str)
+{
+    CHECK_SECURE;
+    if (!(str = valid_write(str))) /* like making a file; no slash */
+        return 0;
+    if (file_size (str) == EISDIR)
+    {
+        write ("The directory  " + str + " already exists!\n");
+        return 0;
+    }
+    mkdir(str);
+    LOG_FILESYSTEM( str+"/", "made", 0 );
+    write ("Made new directory " + str + "\n");
+    return 1;
+}
+
+ACTION_FS ACTION_SECURE
+remove_dir(str) 
+{
+array files;
+
+    CHECK_SECURE;
+    if (!(str = valid_write(str))) return 0;
+    if (file_size (str) != EISDIR) {
+            write (str + " is not a directory.\n");
+            return 1;
+            }
+    files = ls (str);
+    if (sizeof (files[0])) {
+            write ("You can not remove a directory with files in it.\n");
+            return 1;
+            }
+    if (rmdir(str))
+    {
+        LOG_FILESYSTEM( str+"/", "deleted", 0 );
+        write("Removed /"+str+"\n");
+    }
+    else write("Failed to remove /" + str + "\n");
+    return 1;
+}
+
+/* Clean the command up a bit, and normalise it */
+ACTION_FS ACTION_SECURE
+action_copy_file(str)
+{
+string src, dst;
+array args;
+int x;
+    CHECK_SECURE;
+    notify_fail("Copy what to where?\n");
+    if (!stringp(str))
+        return 0;
+    args = explode (str," ");
+    if ((x = sizeof (args)) == 2) {
+        src = args[0];
+        dst = args[1];
+    }
+    else if (x ==1) {
+        src = args[0]; 
+        /* Perhaps should also set dst = 0, but not necessary */
+    }
+    else
+        return 0;
+    src = compute_path (src);
+    if (dst) {
+        dst = compute_path(dst);
+    }
+    else {
+        dst = remove_trailing_slash( pwd );
+    }
+    return copy_file (src,dst);
+}
+
+/* required by ACTION_FS commands */
+/*SPLIT*/
+copy_file (src, dst)
+{
+int x, s_size,d_size;
+array match,files;
+    s_size = file_size (src);
+    d_size = file_size (dst);
+
+    /* Do the case of a single simple file copy */
+    if (s_size >= 0) {
+        if (d_size == EISDIR) { /* dst is a directory */
+            match = split_path (src);
+            dst += "/" +  match[1];
+        }
+        simple_copy (src,dst);
+        return 1;
+    }
+    if (wiz_level < SENIOR) {
+        write ("Only wizards of level " + SENIOR
+                + " can do file operations on more than one file at once.\n");
+        return 1;
+    }
+    /* Directory copies. Copies the directory recursively,
+     * down the whole tree */
+    if (s_size == EISDIR && d_size == EISDIR) {
+        if (index (dst,src) >= 0) {
+            write ("You cant set up recursive loops! Thats BAD!!!\n");
+            return 1;
+        }
+        files = ls (src);
+        files = files[0];
+        if (src[sizeof(src)-1] != '/')
+            src = src + "/";
+        if (dst[sizeof(dst)-1] != '/')
+            dst = dst + "/";
+        for (x = 0; x < sizeof (files) ; x++ )
+        {
+            if (files[x][sizeof (files[x])-1] == '/')  {
+                        /* Need a bloody leading slash */
+                make_dir ("/" + dst + files[x]);
+            }
+            copy_file (src + files[x], dst + files[x]);
+        }
+        return 1;
+    }
+    /* regexp matching. DOESNT (and shouldnt!) do recursive copies */
+    if (d_size != EISDIR) {
+        write ("You must specify a directory for the destination.\n");
+        return 1;
+    }
+    match = split_path (src);
+    match [1] = fix_pattern (match[1]);
+    if (file_size (match[0]) == ENOFILE) {
+        write ("Invalid source path.\n");
+        return 1;
+    }
+    files = ls (match[0]);
+    files = M_REGEXP->match(match[1],files[0]); /* Files is 1D now */
+    if (!sizeof (files)) {
+        write ("No matching source file.\n");
+        return 1;
+    }
+    src = match[0] + "/";
+    dst = dst + "/";
+    for (x=0; x< sizeof (files); x++ ) {
+        if (files[x][sizeof (files[x])-1] != '/' )
+            simple_copy (src + files[x], dst + files[x]);
+    }
+    return 1;
+}
+
+/* required by ACTION_FS commands */
+/*SPLIT*/
+simple_copy (string src, string dst)
+{
+    if (!(src = valid_read("/" + src))) {
+        write("Illegal source file\n");
+        return 1;
+    }
+    if (!(dst = valid_write("/" + dst))) {
+        write("Illegal destination\n");
+        return 1;
+    }
+    if ((src != dst) && cp(src, dst)) 
+    {
+        LOG_FILESYSTEM( dst, "created", "copied from "+dst );
+        write("Copied "+src+" to "+dst+"\n");
+    }
+    else
+        write("Failed to copy "+src+" to "+dst+".\n");
+    return 1;
+}
+
+ /* Clean the command up a bit, and normalise it */
+ACTION_FS ACTION_SECURE 
+action_rename_file(str) 
+{
+    string src, dst;
+    array args;
+    int x;
+
+    CHECK_SECURE;
+
+    notify_fail("Move what to where?\n");
+
+    if (!stringp(str)) return 0;
+    args = explode (str," ");
+
+    if ((x = sizeof (args)) == 2) 
+    {
+        src = args[0];
+        dst = args[1];
+    }
+    else if (x ==1) 
+    {
+        /* Perhaps should also set dst = 0, but not necessary */
+        src = args[0]; 
+    }
+    else return 0;
+
+    src = compute_path (src);
+    if (dst) 
+    {
+        dst = compute_path(dst);
+    }
+    else 
+    {
+        dst = pwd;
+        dst = remove_trailing_slash( pwd );
+    }
+
+    return rename_file (src,dst);
+}
+
+
+ACTION_FS ACTION_SECURE
+nosave rename_file (src, dst) 
+{
+    int x, s_size,d_size;
+    array match,files;
+
+    s_size = file_size (src);
+    d_size = file_size (dst);
+
+    /* Do the case of a single simple file rename */
+    if (s_size >= 0) 
+    {
+        /* dst is a directory */
+        if (d_size == EISDIR) 
+        { 
+            match = split_path (src);
+            dst += "/" +match[1];
+        }
+        simple_rename (src,dst);
+        return 1;
+    }
+
+    if (wiz_level < SENIOR) {
+        write ("Only wizards of level " + SENIOR 
+                + " can do file operations on " +
+                "more than one file at once.\n");
+        return 1;
+    }
+
+        /* Directory renames. */
+        if (s_size == -2 && d_size < 0) {  
+        /* Could be an invalid destination, but simple_rename will 
+         * pick that up */
+                simple_rename (src, dst);
+                return 1;
+        }
+
+        /* regexp matching. DOESNT (and shouldnt!) do recursive renames */
+        if (d_size != EISDIR) {
+                write ("You must specify a directory for the destination.\n");
+                return 1;
+                }
+        match = split_path (src);
+        match [1] = fix_pattern (match[1]);
+        if (file_size (match[0]) == ENOFILE) {
+                write ("Invalid source path.\n");
+                return 1;
+                }
+        files = ls (match[0]);
+        files = M_REGEXP->match(match[1],files[0]); /* Files is 1D now */
+        if (!sizeof (files)) {
+                write ("No matching source file.\n");
+                return 1;
+                }
+        src = match[0] + "/";
+        dst = dst + "/";
+        for (x=0; x< sizeof (files); x++ ) {
+                        if (files[x][sizeof (files[x])-1] != '/')
+                    simple_rename (src + files[x], dst + files[x]);
+                        }
+        return 1;
+}
+
+/* required by ACTION_FS commands */
+/*SPLIT*/
+nosave simple_rename (string src, string dst)
+{
+    if (!(src = valid_read("/" + src))) 
+    {
+        write("Illegal source file\n");
+        return 1;
+    }
+    if (!(dst = valid_write("/" + dst))) {
+        write("Illegal destination\n");
+        return 1;
+    }
+    if ((src != dst) && rename(src, dst)) 
+    {
+        write("Renamed "+src+" to "+dst+"\n");
+        LOG_FILESYSTEM( src, "created", "moved from "+dst);
+    }
+    else write("Failed to rename "+src+" to "+dst+".\n");
+    return 1;
+}
+
+ACTION_GD ACTION_SECURE
+snapshot(arg) 
+{
+    array ex;
+    string str, dest;
+    object ob;
+
+    CHECK_SECURE;
+    notify_fail("snapshot <object> [ <destination of .o file> ]\n");
+    if (!arg) return 0;
+    if (!(ex = STRINGS->split_first(arg, " "))) 
+    {
+        str = arg;
+            dest = "open/snapshot";
+        }
+    else 
+    {
+        str = ex[0];
+            dest = compute_path(ex[1]);
+        }
+    ob = find_item(str);
+    if (intp(ob)) {
+        notify_fail("Unable to find "+str+".\n");
+        return 0;
+    }
+    ob = ob[0];
+    if (ob->query_no_external_save()) {
+        notify_fail("object \""+arg+"\" cannot be dumped to a .o file\n");
+        return 0;
+    }
+    save_object(dest, ob);
+    write(file_name(ob) + " dumped to " + dest + ".o\n");
+    return 1;
+}
+
+ACTION_GD 
+update_object(str)
+{
+    /* changes to this and update_file()  ivory 950802 */
+    CHECK_SECURE;
+
+    if (!str) str = "env";
+    if (update_file(str)) write("Done.\n");
+
+    return 1;
+}
+
+
+int
+update_file(str)
+{
+(object|array) ob;  
+object bag;
+array inv;
+int item;
+string x;
+    ob = find_object( compute_path( str ) );
+    /* check so that a "wiz_soul" in the current directory will be found
+     * before the wiz_soul in your inventory.
+     */
+    if(intp(ob))   
+        ob = find_item(str);
+    if (intp(ob)) 
+    {
+        tell_object(myself,"No such object: "+str+"\n");
+        return 0;
+    }
+    if(objectp(ob)) ob = ({ ob });
+    str = file_name(ob[0]);
+    if( is_cloned( ob[0] )) {
+        tell_object(myself,"Not updating a clone.\n");
+        return 0;
+        }
+    tell_object(myself,"Attempting to update : "+file_name(ob[0]) + "\n");
+    /* save everything in the room first... */
+    bag = clone_object("std/object");
+    bag -> add_property ("CONTAINER",0,100000);
+    inv = contents(ob[0]);
+    for (item = 0; item < sizeof(inv); item++)
+        move_object(inv[item], bag);
+    destruct(ob[0]);        /* this will take .1 secs.. */
+    ud_where = str;
+    ud_bag = bag;
+    call_out("move_back", 0.5,inv);
+    return 0;
+}
+
+move_back(inv)
+{
+string x;
+int item;
+    /* need to reload ob after destructing it! */
+    /* destructs take time! */
+    x = catch ud_where->stupid_fucking_load_up_func();;
+    if (x) {
+        tell_object(myself,"Reload failed: "+x+".\n");
+        return 0;
+    }
+    tell_object(myself, "Reloaded "+ud_where+"\n");
+    for (item = 0; item < sizeof(inv); item++)
+        move_object(inv[item], ud_where);
+    destruct(ud_bag);
+    return 1;
+}
+
+/* makefile added by Hunter, 2nd Oct 1992 */
+ACTION_FS ACTION_SECURE
+make_file(str) {
+array files;
+int i;
+string t;
+    CHECK_SECURE;
+        if (!str)
+                str = "makefile";
+            if (!(str = valid_read(str))) {
+                notify_fail("Illegal path in \"make\".\n");
+                return 0;
+            }
+        files = SCRIPTS->filterscript(grab_file(str));
+        for (i = 0; i < sizeof(files); i ++)
+        {
+                t = strip_whitespace(files[i]);
+                if ((t[0..0] != "#") /* not a remark */ &&
+                        (sizeof(t) >= 1))
+                        call_out("update_file", 0,t);
+        }
+        call_out("make_ud",0,0);
+        return 1;
+}
+
+/*
+ * Though we *could* let them edit any filename (and leave it to ed
+ * to do the security checks), it's nicer not to.
+ */
+#if 0
+ACTION_FS ACTION_SECURE
+edit(file) 
+{
+    CHECK_SECURE;
+    if (wiz_level < CREATE) return 0;
+    if (!file) {
+        write("Edit what file ?\n");
+        return 1;
+    }
+    file = valid_read(file);
+    if (!file) {
+        write("Permission denied.\n");
+        return 1;
+    }
+    tell_object(myself,"editing: "+file +"\n");
+    ed(file);
+    return 1;
+}
+#endif
+
+ACTION_FS ACTION_SECURE
+edit(file)
+{
+    CHECK_SECURE;
+    if (wiz_level < CREATE) return 0;
+    if (!file) {
+        write("Edit what file ?\n");
+        return 1;
+    }
+    file = valid_read(file);
+    if (!file) {
+        write("Permission denied.\n");
+        return 1;
+    }
+    tell_object(myself,"editing: "+file +"\n");
+    "modules/ed"->ed_start(file, this_object(), "finish_ed");
+    this_player()->redirect_input(this_object(), "catch_ed");
+    return 1;
+}
+
+catch_ed(s)
+{
+
+    if ("modules/ed"->ed_cmd(myself, s))
+        this_player()->redirect_input(this_object(), "catch_ed");
+    return 1;
+}
+
+finish_ed()
+{
+    myself->set_prompt(myself->query_store("ed_prompt"));
+    myself->add_store("ed_prompt", 0);
+    return 1;
+}
+
+
+ACTION_FS
+set_pager(NewPager)
+{
+    CHECK_SECURE;
+    if (NewPager == "more" || NewPager == "view")
+        myself->add_store("wiz_pager", NewPager);
+    else
+        write("The pager must be either \"more\" or \"view\".\n");
+    return 1;
+}
+
+ACTION_FS ACTION_SECURE
+page_file(file)
+{
+    string wpage = myself->query_store("wiz_pager");
+    CHECK_SECURE;
+    if (wpage == 0)
+    {
+    write("Please set your pager first, using either: \"pager more\" "
+        +"or \"pager view\"\n");
+    }
+    else if (wpage == "more")
+        more_file(file);
+    else if (wpage == "view")
+        view_file(file);
+    return 1;
+}
+
+ACTION_FS ACTION_SECURE
+view_file(file)
+{
+    int argc, i;
+    array argv;
+    string FileName;
+
+    CHECK_SECURE;
+    if (this_player()->query_term_type() == "vt100")
+        write("Remember, your correct terminal type can be set "
+                +"using: terminal <type>\n");
+    this_player()->push_caution(MORE_CAUTION);
+    argc = 0;
+    argv = allocate(0);
+    if (file != 0)
+    {
+        array Wotcha;
+        Wotcha = explode(file, " ");
+        for (i = 0; i < sizeof(Wotcha); i++)
+        {
+            FileName = "/" + valid_read(Wotcha[i]);
+            if (FileName)
+            {
+                argv = (argv+ ({ argc }));
+                argv[argc-1] = FileName;
+            }
+        }
+        
+#if 0
+        FileName = "/" + valid_read(WotsLeft);
+        argv = argv+ ({ argc });
+        argv[argc-1] = FileName;
+#endif
+    }
+    external_program("view", "visual_edit_done", argv);
+    write("View is starting...");
+    return 1;
+}
+
+
+ACTION_FS ACTION_SECURE
+visual_edit(file)
+{
+    int argc;
+    array cwd;
+    array argv;
+    string WotsLeft;
+    string WotchaGot;
+    string FileName;
+
+    CHECK_SECURE;
+    if (this_player()->query_term_type() == "vt100")
+        write("Remember, your correct terminal type can be set "
+                +"using: terminal <type>\n");
+
+    argc = 1;
+    argv = allocate(0);
+    if (file != 0)
+    {
+        array Wotcha;
+        int i;
+        string subpath = "";
+
+        Wotcha = explode(file, " ");
+        for (i = 0; i < sizeof(Wotcha); i++)
+        {
+            FileName = valid_read(Wotcha[i]); 
+	    FileName = "/" + fill_in_extension(FileName);
+            cwd = explode(FileName, "/");
+            if (sizeof(cwd) > 1 && cwd[1] != myself->query_real_name())
+            {
+                write("You can only edit in your home directory.\n");
+                return 1;
+            }
+            if (sizeof(cwd) > 2)
+                FileName = implode(cwd[2..], "/");
+
+            if (FileName)
+            {
+                if (Wotcha[i][0] != '/') FileName = "/" + FileName;
+                argv = (argv+ ({ argc }));
+                argv[argc-1] = FileName;
+            }
+            argc++;
+        }
+    }
+    if ( backup_file( FileName ) == BACKUP_FAILED )
+    {
+        write("Aborting edit!\n");
+    }
+    else
+    {
+	string msg = getenv("vimsg");
+
+	if (msg)
+	    myself->checked_say(myself->query_name() + " " + msg+".\n");
+        if (stringp(FileName))
+            LOG_FILESYSTEM( FileName, "edited", 0 );
+        this_player()->push_caution(VI_CAUTION);
+        external_program("elvis", "visual_edit_done", argv);
+        write("vi is starting...");
+    }
+    return 1;
+}
+
+fill_in_extension(FileName) {
+    if (FileName &&
+	index(FileName, ".") == -1 &&
+	file_size(FileName) == -1 &&
+	file_size(FileName + ".lpc") != -1)
+		return FileName + ".lpc";
+	return FileName;
+	} 
+
+ACTION_GD
+nslookup(s) 
+{
+    int i;
+    object ob;
+
+    CHECK_SECURE;
+
+    notify_fail("Usage: nslookup a.b.c.d e.f.g.h i.j.k.l ...\n");
+    if (!stringp(s)) return 0;
+
+    array args = explode(s, " ")[..10];
+    for (i = 0; i < sizeof(args); i ++)
+    {
+        ob = find_living(args[i]);
+        if (ob)
+            args[i] = query_ip_number(ob);
+    }
+    external_program("nslookup", "nslookup_done", args, 1, 1, 1);
+    write("Looking...\n");
+    return 1;
+}
+
+nslookup_done() { write("done\n"); return 1; }
+
+ACTION_FS ACTION_SECURE
+diff(s) 
+{
+    string f1,f2,out;
+    array args;
+
+    CHECK_SECURE;
+    if (!stringp(s)) 
+    {
+        notify_fail( "Usage: diff <file1> <file2> <outputfile>\n" );
+        return 0;
+    }
+    args = explode(s, " ");
+    if (sizeof(args) != 3) return 0;
+    f1 = pwd + args[0];
+    f2 = pwd + args[1];
+    out = pwd + args[2];
+    if (!valid_read (f1) || !valid_read (f2)) 
+    {
+        notify_fail("diff: You can not read the input files.\n");
+        return 0;
+    }
+    if (!valid_write (out)) 
+    {
+        notify_fail("diff: You can not write to " + out + ".\n");
+        return 0;
+    }
+    if (file_size (out) != ENOFILE) 
+    {
+        notify_fail("diff: "+ out + " already exists.\n");
+        return 0;
+    }
+    external_program("diff", "diff_done", ({f1,f2}), 1, out, 1);
+    write ("Starting diff...\n");
+    return 1;
+}
+
+diff_done () 
+{
+    tell_object(myself,"Diff complete.\n");
+    return 1;
+}
+
+ACTION_GD
+epi(s) 
+{
+    string prog, in, out, err;
+    array onearg;
+    array allargs;
+    int x;
+
+    CHECK_SECURE;
+    notify_fail("Usage: epi prog arg in out err\n");
+    if (!stringp(s)) 
+    {
+        return 0;
+    }
+    allargs = explode(s, " ");
+    if (sizeof(allargs) < 5) return 0;
+
+    prog = allargs[0];
+    onearg = allargs[1];
+    in = allargs[2];
+    out = allargs[3];
+    err = allargs[4];
+
+    if (!stringp(prog)) return 0;
+
+    if (!stringp(onearg))
+        onearg = ({ });
+    else
+        onearg = ({ onearg });
+
+    if (in == "-") in = 0;
+    if (out == "-") out = 0;
+    if (err == "-") err = 0;
+
+    write("Prog: \"" + prog + "\"; in: \"" + in + "\"; out = \"" 
+        + out + "\"; err = \"" + err + "\"\n");
+/*
+    if (!stringp(in)) 
+    {
+        notify_fail("epi: Won't take input from a terminal; you currently "
+                +"have no way to send EOF\n");
+        return 0;
+    }
+*/
+    external_program(prog, "epi_done", onearg, in, out, err);
+    write("Starting\n");
+    return 1;
+}
+
+epi_done(ret) 
+{
+    write("Exit code: " + ret + "\n");
+}
+
+
+visual_edit_done(ret)
+{
+    myself->pop_caution();
+    tell_object(myself, "> ");
+}
+
+
+ACTION_FS ACTION_SECURE
+list_files( (int|string) strn) 
+{
+array ret,match,switches;
+int size,show_size = 0,show_time = 0;
+string path=0;
+/* The -s flag is the same as with the unix ls command. means show 
+ * file sizes
+ * The -l flag means show both the file size and the last time the file was
+ * modified.
+ */
+    CHECK_SECURE;
+    if ( stringp(strn) ) 
+    {
+          switches = COMARGS -> split_args (strn, ({ "s","l" }), ({ }));
+        show_size = switches[1][0];
+        show_time = switches[1][1];
+        if (sizeof(switches[0]))
+            path = switches [0][0];
+    }
+    if (!path)
+        path = "/" + pwd;
+    if (path[0..1] == "//")         /* remote directory? */
+    {
+    int j = index(path, "/", 2);
+    string servername = path[2..j-1];
+        RCALL->remote_call( servername, "list_files_remote", "lib/ls", 
+                "query_ls", path[j+1..], ({ path, show_size, show_time }) );
+        return 1;
+    }
+    if (!(path = valid_dir_read(path))) 
+    {
+        notify_fail("Illegal path in \"ls\". Path was " + path + ".\n");
+        return 0;
+    }
+    size = file_size (path + "/");
+    if (size >= 0) 
+    { 
+        /* Dredd loves doing this... */
+        match = split_path (path);
+        ret = ls (match[0]);
+        size = index (ret[0], match[1]); /* Find the bugger */
+        ret[0] = ({ ret[0][size] });
+        ret[1] = ({ ret[1][size] });
+        ret[2] = ({ ret[2][size] });
+        write ("ls : /" + path + "\n" +
+             OUTPUT_FILE -> format_ls (ret,78,show_size,show_time)+"\n");
+        return 1;
+    }
+    if (size == ENOFILE) 
+    {
+        match = split_path (path);
+        if (query_valid_file(match[0] + "/", "r")) 
+        {
+            path = match [0];
+        }
+        else 
+        {
+            write(path + " doesn't exist.\n" + match[0] + " is unreadable.\n");
+            return 1;
+        }
+        size = file_size (path + "/");
+        if (size == ENOFILE) 
+        {
+            write (path + " is unreadable.\n");
+            return 1;
+        }
+        if (size != EISDIR) 
+           {
+             write (path + " is not a directory.\n");
+             return 1;
+        }
+    }
+    if (pointerp (match)) 
+    {
+            write("ls : "+path+ "/" + match[1] +"\n");
+        ret = ls_match (match[1], ls(path));
+    }
+    else 
+    {
+          ret = ls(path);
+          write ("ls : " +path +"\n");
+    }
+/* Hunter wanted it piped into more. I will give it a go and see if
+ * I like it :L */
+/* Aparently he liked it, because it is still there :-) -H */
+    if (ret)
+        MORE -> more (OUTPUT_FILE -> format_ls (ret,78,show_size,show_time));
+    else 
+        write("No matching files.\n");
+    return 1;
+}
+
+list_files_remote( ret, info )
+{
+array result;
+    if (pointerp(ret))
+    {
+        result = ({ "", "ls : " + info[0] })
+        + explode(OUTPUT_FILE->format_ls( ret, 78, info[1], info[2]), "\n");
+    }
+    else
+    {
+        result = ({ "", "ls : " + info[0] , "is unreadable" });
+    }
+    if (this_player())
+        MORE->more( result );
+    else
+        tell_object(myself, implode(result, "\n") + "\n");
+}
+
+pls(foo) { return ls(foo); }
+
+array ls_match (string pattern, array ls_files)
+{
+array matched,ret = ({ ({}), ({}), ({ }) });
+int size,i,last = 0;
+    size = sizeof (pattern);
+    if (!size)
+        return ls_files; /* Match everything */
+    pattern = fix_pattern (pattern);
+    matched = M_REGEXP->match(pattern,ls_files[0]);
+    for (i = 0; i <sizeof (matched); i++)
+    {
+        last = index (ls_files[0],matched[i],last);
+        if (last == EINDEX)
+        {
+            throw "Error! wiz_soul->ls_match() couldnt find a match";
+            return;
+        }
+        ret[0] += ({ ls_files[0][last] });
+        ret[1] += ({ ls_files[1][last] });
+        ret[2] += ({ ls_files[2][last] });
+    }
+    return ret;
+}
+
+/* Takes a path and returns an array of everything before the last slash
+ *   and everything after. ie for path = "std/object/a",
+ *   ret = ({ "std/object","a"  });
+ */
+array split_path (string path)
+{
+int pos;
+    pos = sizeof (path)-1;
+    while (pos>=0 && path[pos] != '/')
+        pos--;
+    if (pos == -1)
+        return ({ path, "" });
+    return ({ path [..pos-1], path [pos+1..] });
+}
+
+/* Patterns as used by the regexp () efun and the normal unix
+ *  like shells dont correspond exactly. This function
+ *  maps the unix shell into the internal regexp model
+ */
+string fix_pattern (string pattern) {
+int size;
+    if (!(size = sizeof (pattern)))
+        return pattern;
+    if (pattern[0] == '*')
+    {
+        pattern = pattern [1..];
+        size --;
+    }
+    else
+    {
+          pattern = "^" + pattern;   /* Force matching at begining of line */
+        size ++;
+    }
+    if (pattern [size-1] != '*')
+        pattern += "$"; /* Force matching at end on line */
+    else
+        pattern = pattern [..size-2];
+    return pattern;
+}
+
+
+ACTION_FS ACTION_SECURE
+cat_file(path) {
+int i,size;
+    CHECK_SECURE;
+    if (!path) return 0;
+    if (!(path = valid_read(path))) {
+        notify_fail("Illegal path in \"cat\".\n");
+        return 0;
+    }
+    size = file_size (path);
+    if (size < 0) {
+            write ("Invalid file.\n");
+            return 1;
+            }
+    for (i = 0;i < (size/MAX_CHAR) + 1 ; i++) {
+      call_out ("slow_cat",i*10,({path,i }));  
+        /* 10 seconds between each listing */
+      }
+    return 1;
+}
+
+slow_cat (array path_count ) {
+string words;
+
+           words = grab_chunk(path_count[0], path_count[1]);
+    OUTPUT_FILE->scat(words);
+        if (find_call_out ("slow_cat") >= 0) write ("!PAUSE BREAK!");
+}
+
+grab_chunk(string name, int segment)
+{
+int size;
+string words;
+    size = file_size(name);
+    if (size < 0) return 0;
+    if (segment >= 0)
+        words = grab_file(name, segment*MAX_CHAR,((segment+1)* MAX_CHAR)-1);
+    else
+    {
+        words = grab_file(name, size - MAX_CHAR, size);
+    }
+    return words;
+}
+
+ACTION_FS ACTION_SECURE
+tail_file(path) {
+int size;
+string words;
+
+    if (path != "/bad.log") // naughty little hack for 'err' by Jenna, Mar 01
+        CHECK_SECURE;
+    if (!path) return 0;
+    if (!(path = valid_read(path))) {
+        notify_fail("Illegal path in \"tail\".\n");
+        return 0;
+    }
+    words = grab_chunk(path, -1);
+    if (OUTPUT_FILE->scat(words, -1, 20) < 0) {
+        write("Bad file name.\n");
+        return 1;
+    }
+    return 1;
+}
+
+ACTION_GD
+/* unsecure action - move to wiz_effects */
+origin_object(str)
+{
+object ob;
+    CHECK_SECURE;
+    if (!str) return 0;
+#if 0
+    ob = present(str);
+    if (!ob)
+        ob = present(str,environment(myself));
+#endif
+    if (!ob)
+        ob = find_item(str);
+    if (!ob)
+        return 0;
+    ob = ob[0];
+    write(ob);
+    if (str = creator(ob))
+        write(" (" + capitalize(str) + ")");
+    write("\n");
+    return 1;
+}
+
+ACTION_PLAYER ACTION_SECURE
+grant_wiz_level(str) {
+    int rec_lev;
+
+    CHECK_SECURE;
+    if (!str || !query_ip_number(this_player()))
+        return 0;
+    grantee = find_player(str);
+    if (!grantee) {
+        write(str+" is not within range.\n");
+        return 1;
+    }
+    rec_lev = grantee->query_wiz();
+    if (rec_lev >= GOD) {
+        write("You can't mess with a god!\n");
+        return 1;
+    }
+    if (rec_lev > wiz_level) {
+        write("You can't change a more powerful wizard!\n");
+        return 1;
+    }
+    if (wiz_level < SHUTDOWN) {
+        write("You are not an elder and can't grant power!\n");
+        return 1;
+    }
+    if ((wiz_level < GOD && rec_lev >= ELDER) ||
+        (wiz_level < ELDER && rec_lev >= SENIOR)) {
+        write("You may not grant power to your peers.\n");
+        return 1;
+    }
+    write("What wiz_level do you want to grant "+str +"?\n"+
+        str + " is wiz_level "+rec_lev+" now.\n");
+    input_to("grant_wiz_level2");
+    return 1;
+}
+
+grant_wiz_level2(str) {
+    int rec_lev;
+    if (!str) {
+        grantee = 0;
+        write("Aborted.\n");
+        return 1;
+    }
+    if (!grantee || this_player() != myself) {
+        write("Level setting error.\n");
+        return 1;
+/*        illegal_patch("grant_wiz_level2");*/
+    }
+    rec_lev = atoi (str);
+    if (!rec_lev) {
+        write("Invalid integer.\n");
+        return 1;
+    }
+    if (rec_lev <= 0 && wiz_level < GOD) {
+        write("Only a god can take away wizard status");
+        return 1;
+    }
+    if ((wiz_level < GOD && rec_lev >= ELDER) ||
+        (wiz_level < ELDER && rec_lev >= SENIOR)) {
+        write("You may not promote someone to the status of a peer"+
+            " or higher.\n");
+        return 1;
+    }
+    SET_HANDSHAKE(str)
+        if (grantee->set_wiz_level(handshake))
+            write("wiz_level "+str+" granted.\n");
+    grantee = 0;
+}
+
+/*SPLIT*/
+valid_dir_read(str)
+{
+    return valid_file(str, "r", "/");
+}
+
+/*SPLIT*/
+valid_write(str)
+{
+    return valid_file(str, "w", "");
+}
+
+/*SPLIT*/
+valid_dir_write(str)
+{
+    return valid_file(str, "w", "/");
+}
+
+update(num)
+{
+    if (num == 1)
+        wiz_level = myself->query_wiz();
+}
+
+
+ACTION_FS
+work(str)
+{
+    int GDdir = (index(GDdirs, str) != EINDEX);
+
+    CHECK_SECURE;
+
+    if (!str) str = name;
+    if (GDdir) str = "/"+str;
+
+    write("Working on the property of "+str+"\n");
+    if (GDdir)
+    {
+        cd( str );
+        log = "errors";
+    }
+    else
+    {
+        cd("~" + str);
+        log = str;
+    }
+    return 1;
+}
+
+query_log() { return log; }
+
+ACTION_FS ACTION_SECURE
+cd(str)
+{
+string temp,junk, str1;
+int x; string a,b;
+string msg;
+    CHECK_SECURE;
+    if (str)
+    {
+        str = valid_dir_read(str + "/");
+        x = file_size(str + "/");
+        if (x != EISDIR)
+        {
+            write("No such directory : "+ str +" from wiz_soul.\n");
+            return 1;
+        }
+        pwd = str + "/";
+    }
+    write("pwd: " + pwd + "\n");
+    if ( query_cd_prompt() )
+        this_player()->set_prompt( "/" +
+                /* FILENAME->contract(str) */ str
+                + " > " );
+    /* 950930 Hunter        added display of '.message' to 'cd' command */
+    if ( file_size( pwd +".message" ) > 0)
+    {
+        msg = grab_file( pwd + ".message" );
+        write( "msg: " + implode( explode(msg, "\n"), "\nmsg: ") +"\n");
+    }
+    return 1;
+}
+
+/*SPLIT*/
+query_pwd() {
+    return pwd;
+}
+
+/*
+ * needs to be cleaned up - with a sensible syntax added for multiple
+ * args. *sigh*.
+ * ACTION_SECURE because objects being called may check wiz_level of
+ * caller.
+ */
+int ACTION_FS ACTION_SECURE
+call(str) 
+{
+    string with, what, item, func_name, vb;
+    object ob;
+    int result; /* could be anything - not just int */
+    int callmany = 0;        /* flag set if we are doing a callall */
+    int callcount;        /* count of objects to call */
+    int moveresult;        /* flag if the result of the call should be moved */
+                        /* onto the wizard */
+    int i;
+    int call_remote;
+    int powercall;
+    array allargs;
+    array ret;
+    array printme = ({ });        /* info to be printed */
+
+    myself->notify_fail("format: call <item> <function> [args].\n");
+    CHECK_SECURE;
+    if (!str) return 0;
+
+    allargs = explode(str, " ");
+    if (sizeof(allargs) < 2) return 0;
+
+    item = allargs[0];
+    with = allargs[1];
+
+    if (sizeof(allargs) > 2) what = implode(allargs[2..], " ");
+
+    vb = query_verb();
+    if (vb == "call!" || vb == "callall!") powercall = 1;
+    if (vb == "callall" || vb == "callall!") callmany = 1;
+
+    ob = find_item(item);
+    if ( intp(ob) )
+    {
+        notify_fail("Unable to find "+item+".\n");
+        return 0;
+    }
+
+    notify_fail("Call failed: tail /bad.log for error.\n"); /* Jenna 2000 */
+
+    if (!pointerp(ob))
+        ob = ({ ob });                /* coax ob into an array */
+    if (callmany)
+        callcount = sizeof(ob);
+    else
+        callcount = 1;
+    for (i = 0; i < callcount; i ++)
+    {
+        call_remote = (stringp(ob[i]) && ob[i][0..1] == "//");
+        if ( !call_remote )
+            func_name = "modules/disass"->function_exists(with, ob[i]);
+        if ( call_remote || (func_name && sizeof(func_name) > 0) )
+        {
+            log_action("called",str);
+                result = eval_func(ob[i], with, what, "call_feedback", 
+                ({ ob[i], with, powercall }) );
+#if 0
+                ret = DUMP->dump(result,10, 0, -1);
+                if (stringp(ret))
+                    ret = explode(ret, "\n");
+                ret[0] = "Returned: "+ret[0];
+                printme += ret + ({ "From "+ file_name(ob[i])+"->"
+                +with+"(...)" });
+#endif
+        }
+        else
+        {
+            write("Function does not exist (Effective return value 0).\n");
+        }
+    }
+    return 1;
+}
+
+call_feedback( ret, info )
+/* info is: ({ objectname, funcname }) */
+{
+array result;
+    result = DUMP->dump(ret,10, 0, -1);
+    if (stringp(result))
+        result = explode(result, "\n");
+    result[0] = "Returned: "+result[0];
+    result = ({ "" }) + result + ({ "From "+ info[0]+"->" +info[1]+"(...)" });
+
+#if 0
+    if (this_player())
+        MORE->more( result );
+    else
+#endif
+        tell_object( myself, implode(result, "\n")+"\n");
+
+
+    if (info[2] && objectp(ret))
+    {
+        move_object(ret, myself);
+    }
+}
+
+rcall_back( foo )
+{
+    tell_object( myself, "Got Return Value for remote call.\n");
+}
+
+// Moved from wiz/effects (where it no longer worked) 
+// by Jenna, July 2001
+int ACTION_PLAYER ACTION_SECURE
+in_room(str)
+{
+    object place, old_room;
+    string cmd, verb, room;
+    array allargs;
+
+    if (this_player() != myself)
+	return 0;
+
+    notify_fail("in <location> <command>\n");
+
+    if (!str) return 0;
+
+    allargs = STRINGS->split_first(str, " ");
+    if (sizeof(allargs) < 2) return 0;
+    room = allargs[0];
+    cmd = allargs[1];
+    verb = query_verb();
+    place = find_item(room);
+    if (pointerp(place))
+        place = place[0];
+    if (!place) place = find_living(room);
+    if (!place) 
+    {
+        write("Invalid location.\n");
+        return 1;
+    }
+    old_room = environment(myself);
+    if (verb == "in") move_object(myself, place);
+    else
+	move_object(myself, environment(place));
+    command(cmd, myself);
+    move_object(myself, old_room);
+    return 1;
+}
+
+/* no caller level check - this is to CUT DOWN wiztoys :) */
+
+/* Called from another soul to check if we are busy */
+
+query_busy() {
+/*    if (in_editor(myself)) return "editing"; */
+    return myself->query_caution();
+}
+
+
+/* ask another soul if they are busy, print a message if so.  Returns 0
+ * if this is a retry of the same player within CONFIRM_TIME HBs,
+ * in any case, if the other player is busy, it prints their caution
+ * message.
+ */
+
+check_if_busy(ob) {
+    object theirsoul;
+    string their_reason;
+
+    if (!ob)                /* sanity check */
+        return 0;
+
+    theirsoul = ob->query_soul(query_soul_type());
+
+    if (!theirsoul)        /* soul off can't be editing :) */
+        return 0;
+
+    their_reason =  theirsoul->query_busy();
+
+/* If they aint busy, we clear out the pending player (so next time
+ * he is queried, we are warned again).
+ */
+    if (!their_reason) {
+        busy_player = 0;
+        busy_check_time = 0;
+        return 0;
+        }
+
+/*
+ * See if this is a confirm
+ */
+    if (ob == busy_player) {
+        if (busy_check_time + CONFIRM_TIME > (myself->query_age())) {
+            write("Ok - but they are still busy " + their_reason + ".\n");
+            busy_player = 0;
+            busy_check_time = 0;
+            return 0;
+            }
+        write("Your last \"confirm\" on " + ob->query_real_name() +
+              " timed out.\n");
+        }
+/*
+ * Different player or busy check timed out - print the message.
+ */
+     busy_player = ob;
+     busy_check_time = myself->query_age();
+     write(ob->query_real_name() + " is busy " + their_reason + ".\n");
+     write("To confirm your command, try again within " + CONFIRM_TIME +
+           " seconds.\n");
+     return their_reason;
+    }
+
+
+/* Gandalf the Nasty */
+
+snoop_trace(str) 
+{
+  int i, p;
+  object scan_ob,ob;
+  array on_list, by_list,people;
+
+    p = 0;
+
+  CHECK_SECURE;
+  if (mob_snoop)
+	write("You are snooping "+mob_snoop->describe_me()+".\n");
+  if (str == "*") {
+      array o = users();
+      for (i = 0; i < sizeof(o); i++)
+          if (o[i]->query_tracked())
+              write(o[i]->query_real_name() + " ");
+      write("Ok.\n");
+      return 1;
+      }
+
+  if (str)
+  {
+      if (!(ob = find_living(lower_case(str))))
+      {
+          write ("No such player.\n");
+          return 1;
+      }
+      if (!(ob = query_snoop(ob)))
+          write (str + " is not snooped.\n");
+      else
+          write (str + " is snooped by " + ob->query_real_name() + ".\n");
+      return 1;
+  }
+
+  people = users();
+  on_list = allocate(sizeof(people)); /* array of who they snoop */
+  by_list = allocate(sizeof(people)); /* who snoops them */
+
+  /* thank God (dredd) for index() - makes this much faster... */
+  for (i = 0; i < sizeof(people); i ++)
+  {
+       scan_ob = people[i];
+       ob = query_snoop(scan_ob);
+       if (ob) {
+           by_list[i] = index(people, ob) + 1; /* 0 = not snooped */
+           on_list[by_list[i] - 1] = i + 1;
+           }
+  }
+
+  /* Now print out the snoop traces. */
+  for (i=0; i<sizeof(people); i++) {
+      if (!by_list[i]) {  /* top of a sequence, if snooping at all */
+          if (on_list[i]) { /* snooping - traverse the on_list */
+              int j;
+              j = i + 1;
+              p = 1;        /* flag - we found one */
+              while (j) {
+                  int tmp;
+                  write(people[j-1]->query_real_name()); /* our name */
+                  tmp = on_list[j - 1]; /* save who we snoop */
+                  on_list[j - 1] = 0;   /* avoid loops later */
+                  if (tmp) {
+                      write(" -> ");
+                      by_list[tmp - 1] = 0; /* dont terminate prematurely */
+                      }
+                  else
+                      write("\n");
+                  j = tmp; /* and go print his trace */
+                  }
+              }
+           } /* (!by_list - i.e. trace) */
+  } /* for i in people */
+  if (!p)
+      write("No snoops found.\n");
+  return 1;
+}
+
+/*
+ * Send a note to someone's what-happened buffer.
+ */
+
+/*
+ * More stuff - hunter and calthron
+ */
+
+more_file(path)
+{
+    int ret;
+    string msg;
+	
+    if (this_player() != myself) return;
+    if (!path) return;
+    if (!(path = valid_read(path))) {
+        notify_fail("Illegal path in \"more\".\n");
+        return 0;
+    }
+
+    path = fill_in_extension(path);
+
+    ret = file_size(path);
+    if (ret == ENOFILE )
+    {
+        notify_fail("The file " + path + " doesn't exist.\n");
+        return 0;
+    }
+    if (ret == EISDIR)
+    {
+        notify_fail("You cannot more a directory.\n");
+        return 0;
+    }
+
+    if (myself->query_caution())
+    {
+        notify_fail("Use more only from the command line!\n");
+        return 0;
+    }
+
+    msg = getenv("vimsg");
+    if (msg)
+	myself->checked_say(myself->query_name() + " " + msg+".\n");
+
+    this_player()->push_caution(MORE_CAUTION);
+    more_file = path;
+
+    Ticket = random(1000000) + 1;
+
+    MORE->more(Ticket, "more_done");
+    return 1;
+}
+
+more_done()
+{
+    Ticket = (-1);
+    myself->pop_caution();
+    more_file = "";
+    tell_object(myself, "Ok.\n");
+}
+
+/* Line oriented file read.  Will go away */
+
+request_page(tckt, strt, fend) {
+  array hack, temp;
+
+  if (tckt != Ticket && tckt)
+    return ({ 0 , ({ "" }) });
+  if (strt > fend)
+  {
+    int t;
+    t = fend;
+    fend = strt;
+    strt = t;
+  }
+  /* temp hack to fix stuff */
+  hack = explode(grab_file(more_file), "\n");
+  temp = hack[strt..fend];
+/*  temp = grab_file(more_file, strt, fend);
+  if (stringp(temp))
+    return ({ Ticket = random(1000000), explode(temp, "\n") }); */
+  if (pointerp(temp))
+    return ({ Ticket = random(1000000), temp });
+  tell_object(myself, "File " + more_file + " does not exist.\n");
+  return ({ 0 , ({ "" }) });
+}
+
+/*
+ * String-oriented file access request.  strt, fend are
+ * character locations.
+ */
+
+request_file_chunk(tckt, strt, fend) {
+  string hack;
+
+  if (tckt != Ticket && tckt)
+    return ({ 0 , ({ "" }) });
+  if (strt > fend)
+  {
+    int t;
+    t = fend;
+    fend = strt;
+    strt = t;
+  }
+  if (strt < 0)
+    strt = 0;
+#if 0
+  if (fend >= file_size(more_file) && file_size(more_file) > 0)
+    fend = 0;
+#endif
+  hack = grab_file(more_file, strt, fend);
+  if (stringp(hack))
+    return ({ Ticket = random(1000000) + 1, hack });
+  tell_object(myself, "File " + more_file + " does not exist.\n");
+  return ({ 0 , ({ "" }) });
+}
+
+more_size(num) {
+  int result;
+  result = (num * 100) / file_size(more_file);
+  if (result < 0)
+    return 0;
+  if (result > 100)
+    return 100;
+  return result;
+}
+
+query_more_size() { return file_size(more_file); }
+
+#if 0
+query_destruct()
+{
+        if (effsoul) destruct(effsoul);
+}
+#endif
+
+log_action(actiontype, notes)
+{
+        catch LOG->log("MORE", MACHINE+myself->query_real_name()+
+                " "+actiontype+": "+notes+"\n");;
+}
+
+
+/*
+ * Try and figure out what they typed, then schedule
+ */
+ACTION_FS ACTION_SECURE
+grep (strn) {
+string path;
+int i,recurse=0, listall = 0, verbose = 0;
+array switches;
+
+  CHECK_SECURE;
+  notify_fail ("Grep syntax is: grep [-r] [-verbose] [-listall] "
+        +"<search string> [<path>].\n");
+  if ( !stringp (strn)) return ;
+
+  switches = COMARGS -> split_args (strn, ({ "r","listall","verbose" }),
+        ({ }));
+  if (!sizeof(switches[0]) || !switches[0][0]) return 0;
+  strn = switches[0][0];
+  recurse = switches[1][0];
+  listall = switches[1][1];
+  verbose = switches[1][2];
+  if (sizeof (switches[0]) == 2) {
+          if (!(path = valid_dir_read(switches[0][1]))) {
+            notify_fail("Illegal path in \"ls\". Path was "
+                + switches[0][1] + ".\n");
+            return 0;
+            }
+    }
+    else path = pwd;
+        LOG -> log ("MORE", capitalize (name)
+            + " did a grep search of the path " + path + ".\n");
+        write ("Searching for " + strn + " in /"+ path + "\n" +
+          "Recurse is " + (recurse? "ON" : "OFF") +
+          " and list all is " + (listall ? "ON" : "OFF") + ".\n");
+        main_grep (strn, path,recurse,listall,verbose);
+        return 1;
+}
+
+nosave int GrepFileCount;
+
+main_grep(
+        string pattern, 
+        path, 
+        int recurse, 
+        int listall, 
+        int verbose
+        )
+{
+    array files, match ;
+    int size,i;
+    string pat;
+
+    if (path[sizeof(path)-1..] == "*")
+        path = path[..sizeof(path)-2];
+    size = file_size (path);
+
+    if (size >= 0)
+    {  
+        /* Was only one file */
+        GrepFileCount ++;
+        scan_file(pattern,path,listall,verbose);
+        return 1;
+    }
+    if (verbose)
+        write ("Starting scan of the directory " + path + "\n");
+    if (size == EISDIR)
+    { /* A simple directory, no regexp stuff in path */
+        files = ls (path);
+        files = files[0];  /* Ditch the file sizes,timestamps */
+        for (i = sizeof (files); i --; )
+        {
+              if (file_size (path + files[i]) == EISDIR && !recurse) continue;
+                call_out ("main_grep",20+i,pattern, path+files[i],
+                        recurse,listall,verbose);
+        }
+            return 1;
+    }
+        /* We have (probably) a regexp to do */
+    match = split_path (path);
+    if (file_size (match[0]) != EISDIR) {
+        write ("Invalid path /" + match[0] + "\n");
+        return 1;
+    }
+    files = ls (match[0]);
+    files = files[0];
+    if (recurse)
+    {
+        for (i = sizeof (files);i--;)
+        {
+            if (file_size (match[0]+"/" + files[i]) == EISDIR)  
+                /* A directory */
+                call_out ("main_grep",20+i,pattern, match[0]+"/"
+                        +files[i]+match[1],recurse,listall,verbose);
+        }
+    }
+    pat = fix_pattern(match[1]);
+    files = M_REGEXP->match(pat,files);
+    for (i = sizeof (files);i--;)
+    {
+        if (file_size (match[0]+"/" + files[i]) != EISDIR) 
+                /* Not a directory */
+        {
+            GrepFileCount ++;
+            call_out ("scan_file",i,pattern, match[0]+"/"+files[i],
+                listall,verbose);
+        }
+    }
+    return 1;
+}
+
+
+scan_file(string pattern, string path,int show_failure, int verbose)
+{
+    int bottom,top,size,last=0,matches=0;
+    string data;
+    array mat;
+
+    GrepFileCount --;
+    if (!(path = valid_read("/"+path) ) ) return 0;
+
+    size = file_size (path);
+    for ( bottom = 0,top = 10240; bottom < size;)
+    {
+        if (top > size) top = size;
+        data = grab_file(path,bottom,top);
+
+        mat = M_REGEXP->match(pattern, [ data ]);
+        if (mat && sizeof(mat))
+        {
+            if (verbose)
+                write ("Found a match in /" + path + "\n");
+            else
+                write("/"+path+"\n");
+            return;
+        }
+        bottom = top;
+        top += 10240;
+    }
+    if (show_failure)
+        write ("Not in /" + path + "\n");
+    if (GrepFileCount == 0)        /* any more files left? */
+    {
+        /*write( "Grep done\n" );*/
+    }
+}
+
+query_backups()
+{
+    return getenv("edit backups");
+}
+
+set_backups(int i)
+{
+    return setenv("edit backups", i);
+}
+
+int
+backup_file( string filename )
+{
+string backupname = filename+"~";
+    if ( query_backups() )
+    {
+        write( "creating backup of "+filename+" to "+backupname+"\n");
+        if (filename[0..0] == "/")
+        {
+            filename = filename[1..];
+            backupname = backupname[1..];
+        }
+        if (file_size(backupname) != ENOFILE)        /* backup exists? */
+        {
+            rm(backupname);
+        }
+        cp( filename, backupname );
+        if ( file_size( filename ) != file_size( backupname ) )
+        {
+            write("ERROR! Could not create backup, file system problems?\n");
+            return BACKUP_FAILED;        /* failure */
+        }
+        else
+            return BACKUP_SUCCESS;        /* success */
+    }
+    return BACKUP_NONE;                /* no attempt */
+}
+
+query_cd_prompt()
+{
+    return getenv("cdprompt");
+}
+
+int ACTION_GD
+action_unset( str )
+{
+    CHECK_SECURE;
+    notify_fail( "unset <variable>\n");
+    return myself->remove_store( str );
+}
+
+int ACTION_GD
+action_set( str )
+{
+    array p;
+    int arg;
+
+    CHECK_SECURE;
+    if ( !str || !stringp(str)) return 0;
+
+    if (!(p = STRINGS->split_first(str, " ")))
+    {
+        notify_fail( "set <variable> <value>\n" );
+        return 0;
+    }
+    arg = ARG_PARSER->make_args(p[1]);
+    if (pointerp(arg))
+        arg = arg[0];
+    else
+        arg = 0;
+    setenv(p[0], arg);
+    return 1;
+}
+
+nosave array PrivateStore = ({ 
+/*        "alias", "old_store_name", "new_store_name", */
+        "clone", "clone_message", "clonemsg",
+        "dest", "destruct_message", "destmsg",
+        "home", "home_message", "homemsg",
+        "tin", "t_in", "tinmsg",
+        "tout", "t_out", "toutmsg",
+        "soul", "soulname", "soulname",
+	"vi", "vi_more_message", "vimsg"
+        });
+
+getenv(string label, passwd)
+{
+int i;
+int Private = 0;
+(int|array|string) value;
+string foo;
+/* coax the label into the new preferred name */
+/* temporary code, remove after Sept 1995 */
+    for (i = 0; i < sizeof(PrivateStore); i += 3)
+    {
+        if (label == PrivateStore[i] || label == PrivateStore[i+1]
+                || label == PrivateStore[i+2])
+        {
+            label = PrivateStore[i+2];
+            Private = 1;
+            if ( (value = myself->query_store( foo = PrivateStore[i] ))
+                || (value = myself->query_store( foo = PrivateStore[i], 
+                    myself->query_real_name()[0] ))
+                || (value = myself->query_store( foo = PrivateStore[i+1] ))
+                || (value = myself->query_store( foo = PrivateStore[i+1], 
+                    myself->query_real_name()[0] ))
+                )
+            {
+                myself->remove_store( foo );
+                myself->remove_store( foo, myself->query_real_name()[0] );
+                myself->add_store( label, value );
+                if (pointerp(value)) value = value + ({ });
+                return value;
+            }
+        }
+    }
+    value = myself->query_store( label, passwd );
+    if (pointerp(value)) value = value + ({ });
+    return value;
+}
+
+int
+setenv(string label, value, passwd)
+{
+int i;
+int Private = 0;
+/* coax the label into the new preferred name */
+    for (i = 0; i < sizeof(PrivateStore); i += 3)
+    {
+        if (label == PrivateStore[i] || label == PrivateStore[i+1])
+        {
+            label = PrivateStore[i+2];
+            Private = 1;
+            myself->remove_store( PrivateStore[i] );
+            myself->remove_store( PrivateStore[i], 
+                myself->query_real_name()[0] );
+            myself->remove_store( PrivateStore[i+1] );
+            myself->remove_store( PrivateStore[i+1], 
+                myself->query_real_name()[0] );
+        }
+    }
+    return myself->add_store(label, value, passwd);
+}
+
+/*
+ * send a message out
+ */
+write_stdout( string msg )
+{
+    tell_object( myself, msg );
+}
+
+write_stderr( string msg )
+{
+    tell_object( myself, msg );
+}
+
+query_dot()
+{
+    if (effsoul)
+        return effsoul->query_dot();
+    return 0;
+}
+
+/*
+ * Virtual ls here - some dirs may want to return different
+ * things depending on the uid & level of the caller.
+ * Neat implementation, btw.
+ */
+
+virtual_ls( str ) 
+{
+    object ob;
+    array ret;
+    array vls;
+    int i;
+    int c;
+
+    notify_fail( "vls <object>\n" );
+    if (!str) return 0;
+
+    ob = find_item(str);
+    if (intp(ob)) return 0;
+
+    vls = ob[0]->GetVirtualLS();        /* get Virtual filesystem */
+    if (vls == 0)
+    {
+        notify_fail( "No virtual directory for "
+        + (objectp(ob[0])?file_name(ob[0]):ob[0])+"\n");
+        return 0;
+    }
+    ret = allocate(1 + sizeof(vls[0]));
+    ret[0] = "vls : " + (objectp(ob[0])?file_name(ob[0]):ob[0])+"/";
+    i = 0; c = 1;
+    for (i = 0; i < sizeof(vls[0]); i ++)
+    {
+        if (stringp(vls[0][i]))
+        {
+            ret[c] = "  " + vls[0][i] 
+                + ("modules/disass"->function_exists( "GetVirtualLS", vls[1][i] )?"/":"");
+            c ++;
+        }
+    }
+    ret = ret[..c-1];
+    MORE->more(ret);
+    return 1;
+}
+
+#if 0
+/*
+ * with a given file, replace a given string with another
+ */
+simple_file_string_replace( string filename, string find, string replace )
+{
+int filePos = 0;
+string fileChunk;
+}
+#endif
+
+file_string_replace()
+{
+    notify_fail("sr not supported yet - pester Hunter.\n");
+}
+
+// Jenna Dec 00
+exec(str)
+{
+    string dir = "players/" + 
+	this_player()->query_real_name() + "/open/";
+    string on = dir + "exec-tmp";
+    string fn = on + ".lpc";
+    
+
+    notify_fail("Usage: exec <code>\n");
+    if (!str)
+	return 0;
+    if (file_size(dir) != -2)
+    {
+	notify_fail("You need an /open directory to use 'exec'.\n");
+	return 0;
+    }
+    if (file_size(fn) > 0)
+    {
+	notify_fail("File "+fn+" already exists -- "+
+	    "exec will not overwrite this file.\n");
+	return 0;
+    }
+    if (index(str, "return ") == -1)
+	str = "return " + str;
+    if (index(str, ";") == -1)
+	str += ";";
+    write_file(fn, "inherit \"RO/Servers\";\n\nmy_fun() { " + str + "}");
+    update_file("/"+on);
+    call_out("execute_exec", 2, on, str);
+    call_out("cleanup_exec", 4, fn);
+    return 1;
+}
+
+execute_exec(on, str)
+{
+    object me = find_object(on);
+    if (!me)
+	write("Failed to execute: " + str + "\n");
+    else
+    {
+	log_action("executes", str);
+        call_feedback(me->my_fun(), [ "EXEC", str, 0 ]);
+    }
+}
+
+cleanup_exec(fn)
+{
+    rm(fn);
+}
+
+
+
+

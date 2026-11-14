@@ -1,0 +1,193 @@
+/*
+ * lib/plural.c
+ * Copyright Shattered World mudlib
+ *
+ * Pseudo English Grammar - plural rules.
+ *
+ * written by Dredd - sometime in the past.
+ * Hunter ??? - random changes
+ * Jenna Aug 98 - fixed the "two some rationses" problem (I hope)
+ */
+
+inherit "RO/Servers";
+nosave array Exceptions;
+
+#define EXCEPTION_FILE "lib/plural_exceptions"
+
+reset()
+{
+    string f; 
+    int i;
+    array args;
+
+	f = grab_file(EXCEPTION_FILE);
+	f = SCRIPTS->filterscript(f);
+	Exceptions = allocate(sizeof(f)*2);
+	for (i = 0; i < sizeof(f); i ++)
+	{
+        args =  STRINGS->split_first(f[i], ":");
+        if (args && sizeof(args) == 2)
+        {
+            Exceptions[i*2] = "%" + args[0];
+            Exceptions[i*2+1] = args[1];
+        }
+	}
+}
+
+array query_exceptions() { return Exceptions; }
+
+/* attempt to pluralise 'str' */
+/* Argh - anyone know grammar? */
+string plural(string str)
+{
+    int l;
+    int i;
+    string l1, l2, l3;
+    string noun1,noun2,noun3;
+    array args;
+
+	if (str[..1] == "a ") str = str[2..];
+	if (str[..2] == "an ") str = str[3..];
+	if (str[..4] == "some ") 
+		str = singular(str[5..]);
+
+    args = STRINGS->split_first(str, " of ");
+    if (args && sizeof(args) == 2)
+		return plural(args[0])+" of "+args[1];
+
+    args = STRINGS->split_first(str, " ");
+    if (args && sizeof(args) == 2 && args[1][0] == '(')
+    {
+        int br;
+
+        br = index(args[1], ")");
+        if (br != -1)
+        {
+            noun2 = args[1][1..br-1];
+            noun3 = args[1][br+1..];
+		    return plural(args[0])+" ("+noun2+")"+noun3;
+        }
+    }
+
+	l = sizeof(str);
+	if (l == 0) return "";
+	l1 = str[l-1..];
+	l2 = str[l-2..];
+	l3 = str[l-3..];
+/* check if exception */
+#if 0
+	if (!Exceptions) Exceptions = [ ];
+/* what a hack? -Hunter */
+/* the reason Exceptions would be 0 is that this file can't read it,
+ * ie /lib/plural.c has not been suid'd, or the exception file is
+ * corrupt -Hunter, 11th Sept 1992 */
+#endif
+	if (!pointerp(Exceptions))
+	{
+		Exceptions = [ ];
+/* time for some IDIOT checking */
+		"lib/alert"->siren(
+	"error in lib/plural - alert an elder wizard or higher!..\n"+
+	" either /lib/plural_exceptions is corrupt, or /lib/plural.c\n"+
+	" needs to be suid on.\n", 60);
+	}
+	if ((i = index(Exceptions, "%"+str)) >= 0 && (i%2 == 0))
+		return Exceptions[i+1];
+
+    /* we should really do pair dectection .. */
+
+    /* standard exceptions */
+    if (l3 == "ves") return str;
+    if (l3 == "ces") return str;
+
+    /* 'siblant' words */
+	if (l1 == "s" || l1 == "x" || l2 == "sh" || l2 == "ch" ||
+		l2 == "zh" || l1 == "j")
+		return str+"es";
+
+/* '-e wds' is a word ending in a silent 'e' -> drop the 'e' */
+/* ha! detect a silent word in LPC! :-) */
+
+/* '-y words' end in y preceeded by a consonant and also -quy */
+	if (l1 == "y" && (STRINGS->is_consonant(l2[..0]) || l3 == "quy"))
+		return str[..l-2]+"ies";
+/* -o wrds add "s" or "es" */
+/* exception -oo */
+	if (l1 == "o" && l2 != "oo")
+		return str+"s";
+	if (l2 == "fe")
+		return str[..l-3] + "ves";
+	if (l3 == "man")
+		return str[..l-4] + "men";
+#if 0 
+	if (l3 == "pus")
+		return str[..l-4] + "pi"
+#endif
+	return str+"s";
+}
+
+string singular(string str)
+/* return the singular version of str
+ */
+{
+int l;
+int i;
+string l1, l2, l3;
+	l = sizeof(str);
+	l1 = str[l-1..];
+	l2 = str[l-2..];
+	l3 = str[l-3..];
+/* check if exception */
+	if ((i = index(Exceptions, str)) >= 0 && (i%2 == 1) )
+		return Exceptions[i-1][1..];
+	if (l3 == "men")
+		return str[..l-4] +"man";
+/* '-y words' end in y preceeded by a consonant and also -quy */
+	if (l3 == "ies")
+		return str[..l-4] +"y";
+
+	if (l3 == "ves")
+		return str[..l-4] +"fe";
+/* 'siblant' words */
+	if (l2 == "es")
+		return str[..l-3];
+
+	if (l1 == "s" && l2 != "ss")
+		return str[..l-2];
+	return str;
+}
+
+/* --- ing */
+/* add_ing - adds "ing" to a word - Nostromo 5th Sept '92 */
+
+array ing_except = [ "be", "see","pout" ];  /* Dont want poutting */
+
+string double(string word) 
+{
+  int len = sizeof(word)-1;
+      /* why repeated - cos I was experimenting */
+  return word + ((word[len-1..len-1] != word[len..])?word[len..]:"") + "ing";
+}
+
+string add_ing(string word) 
+{
+  int ind;
+  if (stringp(word)) {
+     int len = sizeof(word)-1;
+     if (len < 2) return "";
+     if (index(ing_except, word) > -1 || 
+          word[len] == 'y' || 		/* ending in -y */
+           word[len] == word[len-1] || /* last 2 the same ? */
+            word[len-1..] == "er" ||
+             word[len-1..] == "ow")  		/* for er words */ 
+        return word + "ing";
+     if (len < 2 || word[len] == 'e')    /* ending in -e drop e add -ing */
+        return word[0..len-1] + "ing";
+     if (STRINGS->is_vowel(word[len-1..len-1]) &&
+               word[len-2] != word[len-1])
+        return double(word); /* :) */
+     return word + "ing";
+  }
+  return "";
+}
+

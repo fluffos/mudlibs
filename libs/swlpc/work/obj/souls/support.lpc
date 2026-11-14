@@ -1,0 +1,2413 @@
+inherit "obj/souls/base_soul";
+inherit "std/txted";
+inherit "room/W/world_enum";
+
+/* Now I think about it though, the aliases could be better done
+ * by using dynamic add_actions.  Llati (except this would be incredibly 
+ * ugly - G).
+ * Aliases changed to use executive soul (13/4/94) - G.
+ * 950306 Hunter   	added 'cls' command
+ * 950406 Paladin  	changed start/stop messages
+ * 951003 Hunter	added environment(myself) to help test
+ * 951004 Hunter	added "doc/quality/" to man path
+ * 951017 Hunter	added "title" command
+ * 960617 Belgarion	removed support for recursive aliases (since they
+ *			were abused, and G's patch caught most of the cheats)
+ * 981222 Jenna		allowed ">>>" help redirects
+ * 990131 Zeni		added hilite list (with color output) and hilite reset
+ * 990202 Jenna		added "wrong_command" function to help newbies with
+ *			basic commands (e.g. "fight", "money") 
+ * 990503 Rhys		support for split input/output windows, changed 'set'
+ *			to use set_term_rcw
+ * 990603 Rhys		help: all objects that respond to 'query_help',
+ *			plus (maybe) a file, get displayed
+ * 990720 Jenna		Added "tip"
+ * 990820 Jenna		Added "unlearn"
+ * 000307 Jenna		Added feeble message.
+ * 000323 Jenna		Added "follow road".
+ * 000707 Jenna		Added "wiztip"
+ * 010308 Dodinas	Changed 'worldmap'
+ * 010418 Dodinas	Changed default prompt, added colour to prompts
+ * 010618 Jenna		Added "You are a Berserker Knight", etc.
+ * 010627 Dodinas       Added messages from items
+ * 010706 Dodinas	Changed worldmap/areamap to be smoother
+ * 010709 Dodinas	Added "plot" command so people can mark their worldmap
+ * 010716 Dodinas	Added "minimap" commands
+ * 010730 Jenna		Added 'doc/wiz' as a man directory
+ */
+
+#include "law.h"
+#include <ansi.h>
+#include <windows.h>
+
+#define current_room (file_name(environment(myself)))
+#define DEFAULT_PROMPT "[HP=%h/%H SP=%s/%S] "
+#define BIGMAP "open/bigmap"
+
+nosave object execr = 0;	/* execution soul */
+nosave int input_window = 0;
+
+/*
+ * find & initialise executor.
+ * basic program:
+ *	L ALIAS_LOOP:
+ *	    S ALIAS:
+ *		pause
+ *	L<ALIAS_LOOP
+ * new commands are C]'d to alias
+ * immediate commands are C['d
+ */
+
+int find_execr() {
+string go = "[Command start]";
+string stop = "[Command end]"; 
+    if (objectp(execr))
+	return 1;
+    execr = myself->query_soul("generic/executor");
+    if (!execr) return 0;
+    execr->do_program( "LMALIAS_LOOP:TM"+"PITM"
+	+"LMCMD_LOOP:CECMD_REG:L>CMD_LOOP:L<CMD_LOOP:"
+	+"L<ALIAS_LOOP:smirk");
+#if 0
+    execr->do_program( "LMALIAS_LOOP:TM"+stop+"\nPITM"+go
+	+"\nLMCMD_LOOP:CECMD_REG:L>CMD_LOOP:L<CMD_LOOP:"
+	+"L<ALIAS_LOOP:smirk");
+#endif
+    }
+
+string more_file;
+int Ticket, MoreLength;
+/* The alias stuff is below */
+array commands;			/* Save storage for commands */
+array subs;			/* What is substituted. each command is 
+				 * seperated by a '#^' */
+nosave int doing_cmds;		/* set to 1 while we are processing commands 
+				 * (no recursive aliases) */
+int debug;			/* Debug mode on */
+
+reset(arg)
+{
+	"obj/souls/base_soul"::reset(arg);
+	"std/txted"::reset(arg);
+	if (!arg) {
+		add_id("support");
+		add_id("support soul");
+		set_soul_type("generic", "support");
+		MoreLength = 0;
+	}
+}
+
+set_prompt(str)
+{
+    notify_fail("prompt <string>\n");
+    if (str == 0) return 0;
+    if (str == "off") 
+    {
+        myself->set_prompt("");
+    }
+    else if (lower_case(str) == "cronus")
+    {
+        if (myself->query_store("hilite_on"))
+            myself->set_prompt(COLOUR->colour("{k[{wHP=%c{w/{G%H{w SP=%C{w/{G%S{k] "));
+        else
+            myself->set_prompt("[HP=%h/%H SP=%s/%S] ");
+    }
+    else if (lower_case(str) == "oceanus")
+    {
+        if (myself->query_store("hilite_on"))
+            myself->set_prompt(COLOUR->colour("{c[{CHealth: %p%{c] "));
+        else
+            myself->set_prompt("[Health: %p%] ");
+    }
+    else if (lower_case(str) == "rhea")
+    {
+        if (myself->query_store("hilite_on"))
+            myself->set_prompt(COLOUR->colour("{r[{R%h{r/{R%H{rhp {R%s{r/{R%S{rsp] "));
+        else
+            myself->set_prompt("[%h/%Hhp %s/%Ssp] ");
+    }
+    else if (lower_case(str) == "atlas")
+    {
+        if (myself->query_store("hilite_on"))
+            myself->set_prompt(COLOUR->colour("{G<< {Y%h/%Hhp {C%s/%Ssp {G>> "));
+        else
+            myself->set_prompt("<< %h/%Hhp %s/%Ssp >> ");
+    }
+    else if (lower_case(str) == "themis")
+    {
+        if (myself->query_store("hilite_on"))
+            myself->set_prompt("%c/%C:");
+    }
+    else
+    {
+        if (index(str,"{") != -1) str = COLOUR->colour(str);
+        myself->set_prompt(str + " ");
+    }
+    write("Ok.\n");
+    return 1;
+}
+
+init()
+{
+    "obj/souls/base_soul"::init();
+    "std/txted"::init();
+    if (myself == this_player()) 
+    {
+/*		check_bulletins(); */
+        
+        /* a hacky fix */
+    if (myself->query_prompt() == 0)
+            myself->set_prompt(DEFAULT_PROMPT);
+
+    add_action("set_prompt", "prompt");
+
+	add_action("score", "score", 2);
+        add_action("show_skills", "skills", 2);
+	add_action("unlearn", "unlearn");
+        /* end of movement soul stuf */
+	add_action("help", "help");
+	add_action("faq", "faq");
+     /* add_action("cmd_title", "title"); */
+	if (myself->query_wiz() || WHOIS->is_test_char())
+	{
+		add_id("no_wet_obj");
+		add_action("help","man");
+		add_action("new_race","newrace");
+	  	add_action("changelog","changelog",4);
+        add_action("todo", "todo");
+		add_action("longwiztip", "wiztip");
+	}
+	if (myself->is_player()) {
+		add_action("longbug", "bug");
+		add_action("longtypo", "typo");
+		add_action("longidea", "idea");
+		add_action("longtip", "tip");
+	}
+
+	/* the alias stuff */
+    add_action("command_parse", "", 1);
+    add_action("set_debug", "debug");
+    add_action("add_alias", "alias");
+	add_action("clear_screen", "cls");
+
+    commands = myself->query_store("commands", "dict");
+    subs = myself->query_store("subs","subs");
+	if (WHOIS->is_apprentice())
+	{
+		add_action("help","man");
+	}		 
+	/* The two following add_actions. They dont really belong in this soul 
+		but the code is at least portable. */
+	add_action ("start_follow","follow", 3);
+	add_action ("stop_follow","halt");
+
+	/* ansi commands */
+	add_action("hilite","hilite");
+	add_action("split_screen", "splitscreen", 5);
+	add_action("ansi","ansi");
+	add_action("set_more","set");
+
+	add_action ("find_player","find", 1);
+
+	add_action("ear_muffs", "earmuffs", 3);
+	add_action("describe","describe",3);
+	add_action("toggle_brief","brief",3);
+	add_action("toggle_monitor","monitor");
+
+	add_action("review_buf", "what-happened", 4);
+
+	/* Functions to guide players to more appropriate help files/commands */
+	add_action("wrong_command", "weapons");
+	add_action("wrong_command", "fight");
+	add_action("wrong_command", "whois");
+	add_action("wrong_command", "money");
+	add_action("wrong_command", "items");
+	add_action("wrong_command", "stats");
+	add_action("wrong_command", "armour");
+
+    add_action("do_door", "lock");
+    add_action("do_door", "unlock");
+    add_action("do_door", "open");
+    add_action("do_door", "close");
+    add_action("do_door", "knock");
+    add_action("do_door", "slam");
+    add_action("do_door", "kick");   
+    add_action("do_door", "uninstall");
+    add_action("do_door", "smash");
+    add_action("do_door", "break");
+    add_action("do_door", "prise");
+
+    add_action("worldmap", "worldmap");
+    add_action("areamap", "areamap");
+    add_action("plot", "plot");
+    add_action("unplot","unplot");
+    add_action("legend","legend");
+    add_action("minimap","minimap");
+
+    add_action("gathering","gather");
+    add_action("mining","mine");
+    add_action("finding","find");
+    add_action("surveying", "survey");
+    add_action("search", "search");
+
+        /* I dont really want this here. Hmm, will try and think of somewhere better */
+    if (myself->is_player())
+	CITIZEN_SERV->update_citizen(myself->query_real_name());
+
+    /* Is this an appropriate place for this?  I guess so */
+    if (myself->query_store("splitscreen_on") && input_window == 0)
+		split_screen("on");
+    }	
+}
+
+search(arg)
+{
+    return environment(myself)->search(arg);
+}
+
+do_door(str)
+{
+    return environment(myself)->do_door(str);
+}
+
+
+query_destruct()
+{
+    if (input_window > 0)
+    {
+	myself->delete_window(input_window);
+	input_window = -1;
+    }
+}
+
+toggle_monitor(str)
+{
+    return myself->toggle_monitor(str);
+}
+
+review_buf(str)
+{
+    array catch_buf;
+
+    if (str) return 0;
+
+    catch_buf = myself->query_catch();
+    
+    if (!pointerp(catch_buf)) 
+    {
+        write("Nothing.  How boring.\n");
+        return 1;
+    }
+
+    MORE->more(implode(catch_buf, "\n"), "catch_seen");
+    return 1;
+}
+
+catch_seen() 
+{
+    write("Do you want to delete your what-happened buffer (default is 'yes')? ");
+    input_to("catch_buf_del");
+    return 1;
+}
+
+catch_buf_del(s) 
+{
+    write("What-happened buffer ");
+    if ((!stringp(s)) || s[0..0] == "n") {
+    write("retained.\n");
+    return 1;
+    }
+    write("deleted.\n");
+    myself->set_catch(0);
+    return 1;
+}
+
+
+describe(str)
+{
+    return myself->describe(str);
+}
+
+ear_muffs(str)
+{
+    notify_fail("Earmuffs on or earmuffs off?\n");
+    if (!str) {
+    if (myself->query_muffled()) write("Your earmuffs are currently on.\n");
+    else write("Your earmuffs are currently off.\n");
+    return 1;
+    }
+    if (str == "on") myself->set_muffled(1);
+    else if (str == "off") myself->set_muffled(0);
+    else return 0;
+    write("Ok.\n");
+    return 1;
+}
+
+toggle_brief(str)
+{
+    return myself->toggle_brief(str);
+}
+
+
+ansi(str)
+{
+    notify_fail("Try `hilite on' instead.\n");
+    return 0;
+}
+
+
+array harr = [ "on", "off", "list" ] + ANSI->query_hilite_list();
+
+hilite(str, quiet)
+{
+    int x, i, col;
+    array words, rest;
+
+    array schemes = [
+	"standard",
+	[ "tell", YELLOW, "say", GREEN, "shout", RED,
+	  "exits", PURPLE, "roomnames", WHITE,
+	  "things", FAINT_YELLOW, "people", FAINT_GREEN,
+	  "combat", FAINT_RED, "hits", RED ],
+	"bright",
+	[ "tell", YELLOW, "say", CYAN, "shout", WHITE,
+	  "exits", PURPLE, "roomnames", WHITE,
+	  "things", YELLOW, "people", GREEN,
+	  "combat", RED, "hits", INVERSE_RED ],
+	"subdued",
+	[ "tell", GREEN, "say", FAINT_GREEN, "shout", FAINT_PURPLE,
+	  "exits", FAINT_CYAN, "roomnames", CYAN,
+	  "things", FAINT_GREEN, "people", FAINT_PURPLE,
+	  "combat", FAINT_RED, "hits", RED ]
+	];
+
+    notify_fail("Usage: hilite <" + implode(harr, ", ") + ">\n");
+    if (!str) return 0;
+    words = explode(str, " ");
+    if (index(harr, words[0]) == -1)
+    {
+	x = index(schemes, words[0]);
+	if (x == -1)
+		return 0;
+	write("Your hilite settings now use the \""+words[0]+
+	    "\" scheme.\n");
+	for (i = 0; i < sizeof(schemes[x+1]); i+=2)
+	    myself->add_store("hilite_"+schemes[x+1][i], schemes[x+1][i+1]);
+	return 1;	    
+    }
+    if (words[0] == "on")
+    {
+       myself->add_store("hilite_on", 1);
+       // myself->set_prompt(ANSI->faint(ANSI->scolor(0,"> ")));
+       write("Hilighting turned " + ANSI->bold("on") + ".\n");
+    }
+    else if (words[0] == "off")
+    {
+        myself->add_store("hilite_on", 0);
+        // myself->set_prompt("> ");
+	write("Hilighting turned off.\n");
+    }
+    else if  (words[0] == "list")
+    {
+	array tmp = [];
+
+	for (i = 0; i < sizeof(schemes); i += 2)
+	    tmp += [ "\"" + schemes[i] + "\"" ];
+	color_list();
+	write("Available hilite schemes: " +
+	    STRINGS->array2string(tmp) + ".\n");
+    }
+    else
+    {
+        if (sizeof(words) < 2) return 0;
+        rest = implode(words[1..], " ");
+        col = ANSI->get_color(rest);
+        if (col == 0 && rest != "normal")
+        {
+            write("Available colors include: normal, black, white, red, "+
+		"blue, green, yellow, cyan, grey. Most of these may also "+
+		"be preceeded by inverse or faint.\n");
+            return 1;
+        }
+        myself->add_store("hilite_"+words[0], col);
+	if (!quiet)
+            write("Hilighting for \""+words[0]+"\":  " + rest + ".\n");
+    }
+    return 1;
+}
+
+color_list()
+{
+        array list = ANSI->query_hilite_list();
+        string str;
+        int x,i;
+        object ob = this_player();
+        
+        write("\t\t\tHilite Preferences\n");
+        
+        for (i=0;i<sizeof(list);i++)
+        {
+                x=ob->query_store( ("hilite_"+list[i]) );
+                if (x<=0)
+                str = "undefined";
+                else str = ANSI->get_color_str(x);
+
+                if (list[i] != "wiz" || ob->query_wiz())
+                  write ( capitalize (list[i]) + " color is: "
+                        + ANSI->scolor(x,str) + ".\n");
+
+        }
+}               
+                        /* added color_reset function here */
+color_reset()
+{
+        array list=
+        ({"tell","say","shout","exits","rooms","roomnames","exits","combat"});
+        
+        string str;
+        int x;
+        int i;
+        for (i=0;i<sizeof(list);i++){
+                str = list[i];
+                if (str == "tell") x = YELLOW;
+                else if (str == "say") x= GREEN;
+                else if (str == "shout") x= RED;
+                else if (str == "exits") x= PURPLE;
+                else if (str == "wiz") x= CYAN;
+                else if (str == "roomnames") x = WHITE;
+                else if (str == "rooms") x = WHITE;
+                else if (str == "combat") x = WHITE;
+          this_player()->add_store("hilite_"+str, x);
+                
+                }
+     write ("Hilite reset.\n");
+}
+
+room_reset() 
+{
+    object o = environment(myself);
+    if (o) {
+        tell_object(myself, "Already reset.\n");	/* heh */
+	}
+    return 1;
+}
+
+split_screen((string | int) cmd)
+{
+    notify_fail("split <on | off> to turn split-screen mode on or off\n");
+    if (cmd == "on")
+    {
+	if (input_window > 0 && myself->query_window_data(input_window))
+	{
+	    write("Split screen mode already on.\n");
+	    return 1;
+	}
+	if (myself->query_store("hilite_on") == 0)
+	    write("WARNING: split screen mode uses ANSI escapes.  You have " +
+		    "hilite mode off, which implies your terminal does not " +
+		    "support them.\n");
+	input_window = myself->create_window(WIN_INPUT, WIN_BOTTOM, 2);
+	if (input_window > 0)
+	{
+	    myself->set_current_input_window(input_window);
+	    myself->add_store("splitscreen_on", 1);
+	}
+    }
+    else if (cmd == "off")
+    {
+	if (input_window > 0)
+	{
+	    myself->delete_window(input_window);
+	    input_window = 0;
+	    myself->add_store("splitscreen_on", 0);
+	}
+	else
+	    write("Split screen mode not currently on anyway.\n");
+    }
+    else
+	return 0;
+    return 1;
+}
+
+new_race()
+{
+	"obj/souls/races/convert" -> choose_race();
+	return 1;
+}
+
+go_northwest() { command("northwest", myself); return 1; }
+go_northeast() { command("northeast", myself); return 1; }
+go_southwest() { command("southwest", myself); return 1; }
+go_southeast() { command("southeast", myself); return 1; }
+go_up() { command("up", myself); return 1; }
+go_down() { command("down", myself); return 1; }
+
+show_skills(arg) 
+{
+        SCORE_SERV->show_skills_expanded(arg);
+        return 1;
+}
+
+unlearn(str) {
+	int i;
+
+	notify_fail("Format: \"unlearn <skillname>\"\n");
+	if (!str) return 0;
+	i = this_player()->query_skill(str);
+	if (!i) {
+		notify_fail("You do not possess any skill called \""+
+			str + "\".\n");
+		return 0;
+		}
+	if (i > 25) {
+		write("You are too proficient in that skill to unlearn it.\n");
+		return 1;
+		}
+ 	if (!this_player()->remove_skill(str)) {
+		write("You cannot do that now.\n");
+		return 1;
+		}
+	write("You have unlearned your " + str + " skill.\n");
+	return 1;
+	} 
+
+score() 
+{
+    int intoxicated, intox_level,i,x, pts, max_pts;
+    string pad, skillstring, out;
+    array guilds;
+    array can_breathe = myself->query_I_breathe();
+    string Race = myself -> query_race();
+
+    if (myself->query_ghost()) 
+    {
+        write("You are in an immaterial state with no scores.\n");
+        return 1; 
+    }
+
+    if (!myself->query_brief())
+        COLOUR->cwrite("{#l\n");
+
+    COLOUR->cwrite("You are {G" +
+        (myself->query_invis()>=10?"Invisible":myself->short()) +"}.\n");
+    pts = myself->query_hp();
+    max_pts = myself->max_hp();
+    out = "You have ";
+    if (myself->query_store("hilite_on"))
+	out += myself->cond_colour(pts, max_pts, pts);
+    else 
+	out += pts;
+    out += " hit points (of {g" + max_pts + "}) and ";
+    pts = myself->query_sp();
+    max_pts = myself->max_sp();
+    if (myself->query_store("hilite_on"))
+        out += myself->cond_colour(pts, max_pts, pts);
+    else
+	out += pts;
+    out += " spell points (of {g" + max_pts + "}).\n";
+    COLOUR->cwrite(out);
+
+    if (myself->query_brief())
+	return 1;
+
+    if (myself->is_player())
+    {
+        guilds = GUILD_SERV->find_all(myself->query_real_name());
+        if (!sizeof(guilds))
+        {
+            write("You are a godless " + myself->query_gender() + ".\n");
+        }
+        else
+        {
+            for (i = 0; i < sizeof(guilds); i++)
+                guilds[i] = STRINGS->cap_words(GUILD_SERV->query_occupation(guilds[i]));
+            write("You are a " + myself->query_gender() + " " +
+                implode(guilds, " ") + ".\n");
+        }
+    }
+    COLOUR->cwrite("Action: " + 
+	colour_action(myself->action_type(myself->query_action())) +
+	"\tReaction: " + 
+	colour_action(myself->action_type(myself->query_reaction())) + 
+	"\n\n");
+    pad = SCORE_SERV->show_build(myself);
+    write ("You are "+pad+"\n");
+    pad = SCORE_SERV->show_internal(myself);
+    write ("Also you are "+pad+"\n\n");
+    COLOUR->cwrite("To list your skills type \'{gskills}\'.\n");
+    intoxicated = myself->query_intoxication();
+    if (!intoxicated)
+        write("You are sober.\n");
+    else 
+    {
+        if (stringp(intoxicated))  /* stupid error */
+	{
+          intoxicated = atoi(intoxicated);
+          myself->set_intoxication(intoxicated);
+          /* What else can we do ? */
+	}
+        intox_level = (myself->query_con() + 4) / intoxicated;
+        if (intox_level == 0)
+            write("You are in a drunken stupor.\n");
+        else if (intox_level == 1)
+            write("You are roaring drunk.\n");
+        else if (intox_level == 2)
+            write("You are somewhat drunk.\n");
+        else if (intox_level == 3)
+            write("You are quite tipsy.\n");
+        else
+            write("You are slightly tipsy.\n");
+    }
+
+    if (myself->query_feeble())
+        COLOUR->cwrite("{RYou are enfeebled!\n");
+
+    myself->eat_food(0);
+    if (pointerp(can_breathe))
+    {
+        write("You can breathe "+implode(can_breathe, ", ")+".\n");
+    }
+
+    if (objectp(query_following()))
+    {
+        write("You are following "+query_following()->query_name()+".\n");
+    }
+
+    if (myself->query_wimpy())
+        write("Wimpy mode set at " + myself->query_wimpy() + " %.\n");
+/* do food level here! */
+    myself->show_age(); 
+
+    /* Effects from items -- Dodinas 010627 */
+    array special = contents(myself);
+    if (special) x = sizeof(special);
+
+    string extra_score = "";
+    for (i = 0; i < x; i ++)
+    {
+        string tmp_extra_score;
+        tmp_extra_score = special[i]->extra_score();
+        if (tmp_extra_score)
+        {
+            extra_score += (tmp_extra_score + "\n");
+        }
+    }
+    if (extra_score != "") {
+        write("\n" + extra_score);
+    }
+
+    COLOUR->cwrite("{#l\n");
+    return 1;
+}
+
+colour_action(str)
+{
+    if (str == "attack" || str == "riposte")
+	return "{r"+str+"}";
+    return "{g"+str+"}";
+}
+
+set_more(str) 
+{
+    string opt, state;
+    array args;
+    int r, c, w;
+
+    notify_fail("set rows <number of rows>\n" +
+		"    cols <number of cols>\n" +
+		"    wrap <on | off>\n");
+    if (!str) return 0;
+    args = STRINGS->split_first(str, " ");
+    if (!args) return 0;
+    opt = args[0]; state = args[1];
+    r = myself->query_term_rows();
+    c = myself->query_term_cols();
+    w = myself->query_term_wrap();
+    if (opt == "rows")
+    {
+	r = atoi(state);
+	if (!r)
+	    return 0;
+    }
+    else if (opt == "cols")
+    {
+	c = atoi(state);
+	if (!c)
+	    return 0;
+    }
+    else if (opt == "wrap")
+    {
+	if (state == "on")
+	    w = 1;
+	else if (state == "off")
+	    w = 0;
+	else
+	    return 0;
+    }
+    else
+	return 0;
+    myself->set_term_rcw(r, c, w);
+    write("Your terminal options are now:\n"+
+	    "screen width is " + c + ", height is " + r + ", lines " +
+	    ((w == 1) ? "are" : "are not") + " automatically wrapped.\n");
+    return 1;
+}
+
+faq(str)
+{
+    return help("start");
+}
+
+nosave array files;
+
+help(what)
+{
+        array con;
+        int x;
+        (array | string) temp;
+        array combination;
+
+        if (what && !this_player()->query_wiz()
+            && !WHOIS->is_apprentice())
+                what = lower_case(what);
+
+        files = query_help_files(what);
+        con = ({ environment(myself) }) + contents(myself)
+                    + contents(environment(myself));
+
+        combination = [];
+
+        for (x = 0; x < sizeof(con); x++)
+        {
+                if (temp = con[x]->query_help(what, files))
+                        if (stringp(temp))
+                                combination += explode(temp, "\n");
+                        else if (arrayp(temp))
+                                combination += temp;
+        }
+        /* query_help()s may have zeroed out help files from 'files' */
+        temp = ({ });
+        for (x = 0; x < sizeof(files); x++)
+            if (files[x])
+                temp += ({ files[x] });
+        files = temp;
+        notify_fail("What would you like help on?\n");
+        if (sizeof(files) >= 1)
+        {
+                if (file_size(files[0]) == -2)
+                {
+                        write(query_verb()+" sub topics: "+what+":\n");
+                        if (query_verb() == "man") /* HACK - G */
+                            write (OUTPUT_FILE -> format_ls(ls(files[0]),78,1));
+                        else
+                            write (implode(ls(files[0])[0], ", ") + "\n");
+                        return 1;
+                }
+                if (sizeof(combination))
+                {
+                        /* not as efficient as grabbing the file piece by
+                         * piece, but this won't happen too often - most
+                         * likely only for "help" by itself */
+                        /* combination += explode(grab_file(files[0]), "\n"); */
+                        if (this_player()->query_store("hilite_on")) {
+                                combination = COLOUR->colour(combination);
+                        } else {
+                                combination = COLOUR->stripcolour(combination);
+                        }
+                        MORE->more(combination);
+                }
+                else
+                {
+                        Ticket = random(1000000) + 1;
+                        more_file = files[0];
+                        if (myself->query_wiz() || WHOIS->is_apprentice()
+                                        || WHOIS->is_test_char())
+                                write(query_verb()+" file: "+more_file+"\n");
+                        // MORE->more(Ticket, "help_done");
+                        string fileinfo = explode(grab_file(files[0]), "\n");
+                        if (this_player()->query_store("hilite_on")) {
+                            fileinfo = COLOUR->colour(fileinfo);
+                        } else {
+                                fileinfo = COLOUR->stripcolour(fileinfo);
+                        }
+                        MORE->more(fileinfo, "help_done");
+                }
+                return 1;
+        }
+        else if (sizeof(combination) > 0)
+        {
+                if (this_player()->query_store("hilite_on")) {
+                        combination = COLOUR->colour(combination);
+                } else {
+                        combination = COLOUR->stripcolour(combination);
+                }
+                MORE->more(combination);
+                return 1;
+        }
+    if (!myself->query_wiz() && !WHOIS->is_apprentice(myself))
+        LOG->log("HELP", " " + what);
+    return;
+}
+
+help_done() 
+{
+    Ticket = (-1);
+    more_file = "";
+    MoreLength = 0;
+	if (sizeof(files) > 1)
+	{
+		write("\nOther help files are:\n");
+		write(implode(files[1..],", ")+".\n");
+	}
+	files = ({ });
+}
+
+array query_help_files((string|int) context)
+/* given a context, (the arg in 'help arg' that the player types),
+ * return an array of possible files that the help comes from 
+ *  Hunter 30th Sept 1992 
+ * Also this supports the 'man' functions
+ */
+{
+    array ret = ({ });
+    string fn; 
+    array fa;
+    int x;
+    	fn = file_name(environment(myself));
+    	if (fn)
+		fa = explode(fn, "/");
+    	else
+		fa = ({ });
+
+	if (myself->query_ghost() && !context)
+	    context = "ghost"; /* are we dead? -> special help */
+	if (intp(context) || context == "") 	/* default to basic help */
+		return ({ "doc/"+query_verb() });
+	if (context == "topics" && query_verb() == "help") /* HACK - G */
+	    return ({ "doc/helpdir" });
+    	for (x = sizeof(fa) - 2; x >= (-1); x--) 
+					/* check wizard's help directories */
+	{
+		fn = implode(fa[0..x] + ({ "doc", "helpdir", context }) , "/");
+        	if (file_size(fn) >= 0) {
+			string tmp = grab_file(fn);
+
+			if (tmp && sizeof(tmp) > 3 && tmp[..2] == ">>>") {
+						/* Redirect help - Jenna */
+				tmp = tmp[..sizeof(tmp)-2];
+				if (tmp[3] == '/')
+					fn = tmp[3..];
+				else
+					fn = implode(fa[0..x] + ({ "doc", "helpdir", tmp[3..] }), "/");
+				}
+			ret += ({ fn });
+			}
+	}
+	if (myself->query_wiz() || WHOIS->is_apprentice()
+				|| WHOIS->is_test_char())
+				/* allow access to /doc.. */
+	{
+	    array manuals = ({ "doc/wiz/", "doc/w/", "doc/LPC/", "doc/build/", 
+		"doc/efun/", "doc/emfun/", "doc/lfun/", "doc/lib/", 
+		"doc/std/", "doc/souls/", "doc/vi/", "doc/references/", 
+		"doc/quality/",
+		"doc/" });
+	    int l;
+		for (l = 0; l < sizeof(manuals); l = l + 1 )
+		{
+			if (file_size(manuals[l]+context) != -1)
+				/* allow directories */
+				ret = ret + ({manuals[l]+context});
+		}
+	}
+	return ret;
+}
+
+nosave array lastnote;	/* { file, subject } */
+
+/* slightly modified to allow multi-line
+ * reports, and to support nicer messages on the wiz board.
+ */
+
+longbug(arg) 
+{
+    if (this_player()->query_quest_points() < 50)
+	write("Thank you for taking the time to report a problem with "+
+	    "the game. If possible, please try to:\n"+
+	    "(1) Say exactly what the problem is\n"+
+	    "(2) Tell us what messages you received (ideally, copy and paste "+
+		"some text)\n"+
+	    "(3) Write the report from a relevant room.\n");
+    return get_report("BUGS", "bug report", arg);
+}
+
+changelog (arg) {
+	return get_report("CHANGELOG","change log",arg);
+}
+
+longidea(arg) {
+	return get_report("IDEA", "ideas", arg);
+}
+
+longtypo(arg) {
+	return get_report("TYPO", "typo report", arg);
+}
+
+longtip(arg) {
+	return get_report("TIP", "tip report", arg);
+}
+
+longwiztip(arg) {
+        return get_report("WIZTIP", "wiztip report", arg);
+}
+
+todo(arg)
+{
+    return get_report("TODO", "Todo report", arg);
+}
+
+
+get_report(string file,string  type, arg) 
+{
+  myself->push_caution("writing notes");
+  write(capitalize(type) + " ");
+  if ((!arg) || arg == "") {
+		if (pointerp(lastnote) && lastnote[0] == file ) {
+	    write("Your last " + type + " was entitled: " + lastnote[1]
+		+ "\nHit <return> to add a followup annotation to that report.\n");
+	    }
+		else
+	    lastnote = ({ file, 0 });
+	write("subject: ");
+	input_to("report_subject");
+	return 1;
+	}
+  lastnote = ({ file, arg }); /* nonzero third arg after it's submitted, for future bug reports */
+  write("Subject: " + arg + "\n");
+  report_subject(arg);
+  return 1;
+}
+
+nosave string report_text;
+
+report_subject(a) {
+  if (!a || a == "") {
+		if (!lastnote) {
+	    write("Aborted.\n");
+	    lastnote = 0;
+	    myself->pop_caution();	
+	    return 1;
+	    }
+  	lastnote[1] = "Re: " + lastnote[1];
+	}
+  else lastnote[1] = a;
+  get_message();
+  return 1;
+}
+
+finished_msg (string msg) 
+{
+    log_report(lastnote[0], lastnote[1], msg);
+    myself->pop_caution();
+    return 1;
+}
+
+aborted_msg () { myself->pop_caution();  return 1; }
+
+
+log_report(file, subj, body) {
+string f;
+  if (!subj) {
+		notify_fail("Give a meaningful argument.\n");
+		return 0;
+    }
+
+/* before formatting - send it to the matching bbs - G */
+	if (file == "IDEA") {
+    f = "room/wiz/idearoom"->log_message(file,
+	    capitalize(myself->query_real_name()),
+	    current_room,
+	    subj, body);
+	  }
+	 else if (file == "CHANGELOG") { 
+    f = "room/wiz/changeroom"->log_message(file,
+	    capitalize(myself->query_real_name()),
+	    current_room,
+	    subj, body);
+	  }
+	  else if (file == "TIP") {
+    f = "room/wiz/tiproom"->log_message(file,
+            capitalize(myself->query_real_name()),
+            current_room,
+            subj, body);
+	  }
+          else if (file == "WIZTIP") {
+    f = "room/wiz/wiztiproom"->log_message(file,
+            capitalize(myself->query_real_name()),
+            current_room,
+            subj, body);
+          }
+    else if (file == "TODO")
+    {
+        f = "players/hunter/room/wizroom"->log_message(file,
+             capitalize(myself->query_real_name()), current_room, subj, body);
+    }
+
+	  else {
+	    f = "room/wiz/bugroom"->log_message(file,
+		    capitalize(myself->query_real_name()),
+		    current_room,
+		    subj, body);
+		  }
+	   
+
+	if (body)
+	    subj = subj + " -> " + body;
+/* format the string to fit on the screen : Hunter*/
+    subj = STRINGS->split_string(subj,55);
+    LOG->log(file, capitalize(myself->query_real_name()) + " @" 
+		+ current_room + " <"+today()+">\n");
+    nice_log(file,  subj );
+    smart_report(file,subj);
+    write("Ok.\n");
+    return 1;
+}
+
+smart_report(str,txt) 
+{
+    string who;
+    if (!str || !current_room) return;
+
+    who = STRINGS->match_head(current_room, ({ "players/", "guilds/" }));
+
+    if (who)
+    {
+    who = who[..(sizeof(who)-2)];
+	LOG->log(who + ".rep", str+" "+capitalize(myself->query_real_name()) +
+		" @"+current_room + " <" + today()+ ">\n");
+	nice_log(who+".rep", txt);
+    }
+}
+
+nice_log(file, txt) {
+int i;
+/*	for (i= 0; i < sizeof(txt); i ++)
+		log_file(file,"  "+txt[i]+"\n");   */
+	/* I dont like that sort of loggin. The date gets added in from of
+		each line. So I changed it.
+		Yeah - but you can't `cat * | sort -n | less' to see everything that's been happening, you nong... */
+	LOG->log (file,implode (txt,"")+"\n");	
+}
+
+today() { 
+string ret;
+	return DATE->packed();
+
+	ret = ctime(time());
+	return ret[..15]+" "+ret[20..];
+}
+
+more_done() 
+{
+    Ticket = (-1);
+    more_file = "";
+    MoreLength = 0;
+}
+	
+/* All the below is for the alias stuff. Written by Llati 92 */
+/* Default command delimeter for multiple commands */
+
+#define DELIMETER   ";"
+#define REPEAT	    "@"	
+
+/* Max number of commands and subs */
+#define MAX_COMMANDS 20
+/* upped to 10, since now aliases can't invoke other aliases */
+#define MAX_SUBS 30
+
+
+
+list_definitions() {
+int i,p;
+array com;
+string ans;
+    if (!commands || !sizeof (commands)) {
+	write ("You have no aliases.\n");
+	return (1);
+	}
+    write ("Your aliases are:\n");
+    for (i=0;i < sizeof(commands);i++) {
+	ans = commands[i] + "   \t";
+	com = explode (subs[i],"#^");
+	for (p=0;p <sizeof(com);p++) ans += com[p] + " ;";
+	write(ans + "\n");
+    }
+}
+
+add_alias(str) 
+{
+    string parm;
+    array p;
+    array args;
+    int i,x;
+    if (!objectp(execr)) find_execr();
+    if(!str) {
+	list_definitions();
+	return (1);
+	}
+    if (str == "clear" ) {
+	commands = subs =0;
+	write ("All aliases have been removed.\n");
+	return (1);
+	}
+    if (str == "stop") {
+	if (execr) {
+	    execr->do_program("C=CMD_REG:");
+	    return 1;
+	    }
+	}
+    if (str == "continue" || str == "cont") {
+	if (execr) {
+	    execr->un_pause();
+	    return 1;
+	    }
+	}
+    if ( (commands) && ( (i = index (commands,str)) > -1) ) {
+	write ("Removing old alias.\n");
+	if (i == 0) { if (sizeof(commands) == 1) { commands =0; subs =0; } else { commands = commands[1..]; subs = subs[1..] ; }  }
+
+	else if (i == sizeof(commands) -1) { commands = commands[0..i-1]; subs = subs[0..i-1]; }
+	     else { commands = commands[0..i-1] + commands[i+1..];
+		    subs = subs[0..i-1] + subs[i+1..]; }
+        myself -> add_store("commands",commands,"dict");
+        myself -> add_store("subs",subs,"subs");
+	return (1);
+	}
+    args = STRINGS->split_first(str, "=");
+    if(!args) 
+    {
+	write ("Invalid format. Try something like alias qw = get all;sing;smile\n");
+	return (1);
+	}	
+    str = STRINGS -> strip_whitespace(args[0]);
+    parm = STRINGS -> strip_whitespace(args[1]);
+    if(index (str,' ') > -1) 
+    {
+	    write("Left hand side must be a single word!\n");
+	    return 1;
+    }
+    if(str == "alias" || str == "pause") 
+    {
+	    write("Can't redefine `" + str + "'!\n");
+	    return 1;
+    }
+    if (commands && sizeof(commands) >= MAX_COMMANDS && 
+	!this_player()->query_wiz() && (str != REPEAT)) {
+	write ("You can not define any more aliases. You are at the maximum allowed limit.\n");
+	return (1);
+	}
+     p =  explode (parm + DELIMETER,DELIMETER); 
+     if (!p) {
+	write ("You need to give a string of commands after the = sign.\n" +
+	  "eg alias mysing = say Climb every mountain, ford every stream.\n");
+	return 1;
+	}
+     if (sizeof(p) >= MAX_SUBS) {
+	write ("You have too many actions attached to that alias.\n");
+	return (1);
+	}
+     for (x=0; x<sizeof(p); x++) { /* recursion fix, reported by anonymous. */
+	p[x] = STRINGS -> strip_whitespace (p[x]);
+	}
+#if 1
+/* we allow recursion now because the executor has recursion/loop control, and
+ * if they get into trouble, they can unalias or quit.
+ */
+/*
+ * We don't allow recursion now because players abused the facility (ever see
+ * a member of Ravnos reach >300 skill overnight?), so G added in a hack to
+ * drop the cheaters' skills. Well and truly obsolete now, so this is back
+ * in. Belgarion 960617.
+ */
+     if (index (p, str) >= 0) {
+	write ("You can not make recursive commands.\n");
+	return 1;
+	}
+     if (subs) for (x=0; x < sizeof (subs) ; x++ ) 
+	if (index (explode (subs[x] + "#^", "#^"),str) >= 0 ) {
+		write ("You cant make command loops.\n");
+		return 1;
+		}
+#endif
+     parm = "";
+     for (i = 0;i < sizeof(p);i++) {
+	parm += p[i] + "#^";
+	}
+     if ( (commands && (i = index(commands,str) ) > -1) ) {
+	subs[i] = parm;
+	if (str != REPEAT) write ("Substitution made.\n");
+	return (1);
+	} 
+#if 1
+     if (commands && p) 		
+       for (i = 0;i < sizeof(p);i++)
+  	  for (x = 0; x < sizeof(commands);x++) {
+     	    if ( p[i] == commands[x] ) {
+  		  write("You are not allowed to have recursive commands. " +
+			"It was abused in large-scale overnight sessions.\n");
+		  return 1;
+		  } 
+	  }
+#endif
+     if (!commands) commands = ({str}); else commands += ({str});
+     if (!subs) subs = ({parm}); else subs += ({parm});
+     write ("Done.\n");
+     myself -> add_store("commands",commands,"dict");
+     myself -> add_store("subs",subs,"subs");
+     return (1);
+}
+
+set_debug(str) {
+    if(!id(str)) return 0;
+    write("Debug "+ ({"off", "on"})[debug = !debug] +".\n");
+	write (doing_cmds + " pending commands; time: " + find_call_out("do_aliased_command") + "\n");
+	write ("currently commands are " + DUMP -> dump(commands) + "\n\n\n");
+	write ("currently subs are " + DUMP -> dump(subs) + "\n\n\n");
+    return 1;
+}
+
+command_parse(arg) {
+array cmds,in;  /* cmds */
+int i,recursive,p;
+string act;   /* first word typed */
+    if (!objectp(execr)) find_execr();
+    if (debug) write ("arg is " + arg + "\n");
+    if (doing_cmds > 0) {	/* don't expand aliases while processing aliased commands */
+	i = find_call_out("do_aliased_command");
+	if (i >= 0 && i < 100)	/* there's a fucking bug in call_out... */
+	    return 0;
+	doing_cmds = 0;
+	}
+    act = query_verb(); 
+    if (!commands) return;	
+    /* Repeat last command auto-alias added by Paladin 950406 */
+    if ((act != REPEAT) && (index(commands, act) < 0)) {
+
+	if (arg) add_alias (REPEAT+"="+act+" "+arg+"\n");
+	else add_alias (REPEAT+"="+act+"\n");
+	return; 
+    }
+    if (index(commands, act) < 0) return;
+    if (arg) in = explode(arg+" "," ");
+    if (execr && !execr->is_paused()) {	/* punish players for recursive aliasing - G */
+        array snames = myself->query_skill_names();
+        if (pointerp(snames) && sizeof(snames) > 0) {	/* G */
+	    int x = random(sizeof(snames));
+	    int y;
+	    for (y = 0; y < sizeof(snames); y++) {
+	        if (myself->query_skill(snames[(x+y) % sizeof(snames)]) > 20) {
+		    myself->add_skill(snames[(x+y) % sizeof(snames)], -random(2));
+		    break;
+		    }
+	        }
+	    }
+        }
+    i = index (commands,act);
+    if (debug) write ("cmd issued : "+act+"\n" +
+	  "indexed to :" +i+"\n" +
+	  "sub command : "+subs[i]+"\n ");
+    cmds = explode (subs[i],"#^");
+    p=0;
+    if (in) {
+        for (i = 0;i < sizeof(cmds) ;i++)   {
+	  if (cmds[i] == "$") {
+	    if (sizeof(in)-1 <p ) {
+		write ("You do not have enough arguments in the line you typed for substitution.\n");
+		return 1;
+		}
+	    cmds [i] = in[p]; 
+	    p++;
+	    }
+	  } 
+	if (sizeof(in)-1  >= p )
+           cmds [sizeof(cmds)-1] = cmds[sizeof(cmds)-1] + " " +implode (in [p..(sizeof(in)-1)], " " );
+	}   
+
+    if (execr) {
+	/* We're using C= rather than C] to stop people from recursively generating huge commands */
+	execr->do_program("C=CMD_REG:" + implode(cmds, "") + "");
+	execr->un_pause();
+	if (debug)
+	    execr->show_stats("all");
+	return 1;
+	}
+
+    doing_cmds = 0;
+    for (recursive =0;recursive < sizeof(cmds);recursive++) {
+      call_out("do_aliased_command", 0.2 * (int2real(recursive) + 1.0),
+					 cmds[recursive]);    
+	doing_cmds++;	/* count number of pending commands */
+	if (debug) write ("command is:" +cmds[recursive]+"\n");
+	if (recursive > MAX_SUBS) {
+	   write ("Recursion to deep in dictionary. Weird!\n");
+	   recursive =0;
+	   return (0);
+	   }
+	}
+     recursive =0;
+     return (1);
+}
+
+do_aliased_command(c) {
+    if (doing_cmds < 0) { /* we have some error; ignore it. */
+	return 0;
+	}
+    catch { command(c, myself); };  
+    doing_cmds--;
+    }
+
+check_bulletins()
+{
+array storeinfo;
+int i, op;
+object board;
+	storeinfo = myself->query_store("BULLETIN");
+	op = 0;
+	if (!pointerp(storeinfo))
+		return "No Bulletin timestamps";
+	if (!myself->query_wiz())
+		return "Not a wizard";
+	for (i = 0; i < sizeof(storeinfo); i += 4)
+	{
+		board = storeinfo[i+1]->query_bull_board();
+		if ((board->query_last_addition() > storeinfo[i+2]) && !storeinfo[i+3])
+		{
+			if (!op) 
+				write("\n");
+			write("Unread bulletin(s) at "+storeinfo[i+1]+"\n");
+			op = 1;
+		}
+	}
+	if (op)
+		write("\n");
+	return 1;
+}
+
+request_file_chunk(ticket, start, end) {
+    array temp;
+  	if (ticket != Ticket && ticket)
+    		return ({ 0, ({ "" }) });
+         if (start > end && end)
+         {
+	     int swap;
+           	swap = end;
+           	end = start;
+           	start = swap;
+         }
+         if (start < 0)
+           	start = 0;
+         temp = grab_file(more_file, start, end);
+         if (stringp(temp))
+           	return ({ Ticket = random(1000000) + 1, temp });
+         write("The file " + more_file + " doesn't exist.\n");
+         return ({ 0, ({ "" }) });
+}
+
+query_more_size() {
+	return file_size(more_file);
+}      
+
+
+/*
+ *  following   L- 25/1/93
+ *		Following is achieved through the use of move_hooks.
+ * 		When a person wants to follow someone, they put a move_hook
+ *		call on them. Removing the move_hook stops the following.
+ *
+ * 	This doesnt really belong in this soul, but I made it nice 
+ * 	  and compact so it could be moved easily. myself is the owner of the
+ *		object.
+ *
+ */
+object following = 0;
+
+
+(int|object) query_following() { return following; }
+
+start_follow (who) {
+string lstr;
+	if (!stringp(who)) {
+		notify_fail ("Who or what do you want to follow?\n");
+		return 0;
+		}
+  	lstr = who + "    ";
+	if (lstr[..3] == "road" || 
+	    lstr[..4] == "track" || 
+	    lstr[..4] == "trail")
+		return follow_road(who);
+        who = lower_case(who);
+	do_follow(who, 0);
+	return 1;
+}
+
+do_follow(who, quiet) {
+	object them = present (who,environment(myself));
+	string move_hooks;
+	int i;
+	if (!objectp(them)) {
+		notify_fail(capitalize(who) + " is not here.\n");
+		return 0;
+		}
+	if (!them->query_living()) {
+		write ("You can't follow that! It isn't alive!.\n");
+		return 1;
+		}
+	if (them == myself) {
+		write ("You follow yourself round in circles.\n");
+		say (capitalize(them -> query_name()) +
+			" follows " + GENDER-> obj(them) + "self.\n");
+		return 1;
+		}
+	move_hooks = myself -> query_move_hooks();
+	for (i = sizeof (move_hooks);i;) {
+		i -= 2;
+		if (move_hooks[i+1] == "follow") {
+			write ("You cant follow someone while someone is following you.\n");
+			return 1;
+			}
+		}
+	move_hooks = them -> query_move_hooks ();
+	for (i = sizeof (move_hooks);i;) {
+		i -= 2;
+		if (move_hooks[i] == this_object() && move_hooks[i+1] == "follow") {
+			write ("You are already following them.\n");
+			return 1;
+			}
+		}
+	write ("You start to follow " + capitalize (who) + ".\n");
+	if (!myself->query_invis() && !quiet)
+	{
+	    myself->checked_say (capitalize(myself->query_name()) + " starts to follow " + capitalize (who) + ".\n",them);
+	    tell_object (them,capitalize(myself -> query_name() ) + " starts to follow you.\n");
+	}
+	them -> add_move_hook (this_object(),"follow");
+	following = them;
+	return 1;
+}
+
+
+follow (object caller, string str, (string|object) destination) 
+{
+	if ((caller->query_ghost() || !present(caller,environment(myself))) 
+        && (find_call_out("do_command") == -1)) 
+    {
+		tell_object (myself,capitalize(caller->query_name()) + " seems to have escaped you!\n");
+		follow_done();
+		caller->follow_done();
+		return 0;
+	}
+	call_out ("do_command",0.2,str);
+	return 0;
+}
+
+stop_follow(str, quiet)
+{
+    return follow_done(quiet);
+}
+
+follow_done(quiet) 
+{
+    int i;	
+    array move_hooks;
+
+    if (stop_follow_road(quiet))
+	return 1;
+
+/* Are we following anyone? */
+	if (objectp(following) ) 
+       {
+	    if (!quiet)
+	    {
+		tell_object (myself,"You stop following " + capitalize(following-> query_name()) + ".\n");		
+		myself -> checked_say (capitalize(myself->query_name()) + " stops following " + capitalize(following-> query_name()) + ".\n",following);		
+		tell_object (following ,capitalize(myself -> query_name()) + " has stopped following you.\n");
+       	    }
+            following -> remove_move_hook(this_object(),"follow");  
+	}
+    else if (!quiet)
+    {
+        write("You stop following and stop being followed.\n");
+    }
+    following = 0;
+
+    /* OK, now to stop anyone from following us. Do it carefully though! */
+	move_hooks = myself -> query_move_hooks();
+	for (i=sizeof (move_hooks);i;)
+    {
+		i -= 2;
+		if (move_hooks[i+1] == "follow") 
+        {	
+            if (move_hooks[i]) move_hooks[i]->follow_done(quiet);
+		} /* Cute hey? */
+	}
+	return 1;
+}
+
+do_command (string str) { command (str,myself); return 1;}
+
+follow_road(string str) {
+    array a, opt;
+    string where, what, dir;
+    array r = environment(myself)->query_roads();
+    int x, i;
+
+	if (!str) return 0;
+	a = explode(str, " ");
+	what = a[0];
+	notify_fail("There is no "+what+" here.\n");
+	if (!r)
+	    return 0;
+	x = index(r, what);
+	if (x == -1) 
+	    return 0;
+	opt = r[x+1];
+	if (sizeof(a) == 1) {
+	    string not_here = myself->query_prev_room();
+
+	    x = index(opt, not_here);
+	    if (x != -1)
+		opt = opt[..x-1] + opt[x+1..];
+/*	    write("R: picking direction.\n");  */
+	    if (sizeof(opt) > 1) {
+		dir = environment(myself)->query_direction(not_here);
+		if (!dir) {
+		    write("In which direction do you want to follow "+
+			"the "+what+"?\n");
+		    return 1;
+		    }
+		dir = DIRECTION->opposite_dir(dir);
+		where = environment(myself)->query_exit(dir);
+		x = index(opt, where);
+		if (x == -1) {
+		    write("In which direction do you wish to follow "+
+		        "the "+what+"?\n");
+		    return 1;
+		    }
+/*		write("R: Going in dir: "+dir+".\n");  */
+		}
+            else if (!sizeof(opt)) {
+                dir = DIRECTION->opposite_dir(environment(myself)->query_direction(not_here)); 
+                where = environment(myself)->query_exit(dir);
+/*		write("R: no continuation: looking for "+where+".\n"); */
+                for (i = 0; i < sizeof(r); i++)
+                    if (arrayp(r[i]))
+                        if (index(r[i], where) != -1) {
+                            what = r[i-1];
+/*			    write("R: found a "+what+" to follow.\n"); */
+                            i = 99;
+                            } 
+                if (i < 99) {
+                    write("The "+what+" ends here.\nYou stop following the "+
+                        what+".\n");
+                    return 1;
+ 		    }
+                }
+	    else {
+		where = opt[0];
+	        dir = environment(myself)->query_direction(where);	
+		}
+	    }
+	else {
+	    a[1] = DIRECTION->full_dir(a[1]);	
+	    where = environment(myself)->query_exit(a[1]);
+	    if (!where  || index(opt, where) == -1) {
+		write("The " +what+ " does run in the direction "+
+		    a[1]+"!\n");
+		return 1;
+		}
+	    dir = environment(myself)->query_direction(where);
+/*	    write("R: specified dir:"+dir+".\n"); */
+	    }
+	stop_follow_road();
+	write("You follow the "+what+" " + dir + ".\n");
+	// do_command(dir);
+	command(dir, myself);
+	a = myself->query_hooks("move");
+	myself->add_hook("move", this_object(), "stop_if_following_road");	
+	call_out("follow_road", 0.6, what);
+	return 1;
+	}
+
+stop_follow_road(quiet) {
+    myself->remove_hook("move", this_object(), "stop_if_following_road");
+    if (find_call_out("follow_road") != -1) {
+        if (!quiet)
+                tell_object(myself, "You stop following the road.\n");
+        remove_call_out("follow_road");
+        return 1;
+        }
+    return 0;
+    }
+
+stop_if_following_road() { /* called by move_hook, must return 0 */
+    stop_follow_road();
+    return 0;
+    }
+	
+/* End of movement code. */
+
+clear_screen()
+{
+    int height, count;
+
+    /* fill the screen with '\n's before erasing, to preserve any scrollback */
+    /* buffers that might be in use */
+    height = this_player()->query_term_rows();
+    for (count = 0; count < height; count++)
+	write("\n");
+    write( ERASE_SCREEN + MOVE_CURSOR(1, 1) );
+    return 1;
+}
+
+/* cmd_action added, hunter 951017 */
+cmd_title( str )
+{
+    if (!str)
+    {
+	notify_fail( "title <your new title>\n");
+	return 0;
+    }
+    notify_fail( "The gods frown upon you, ooh, Bad Karma.\n");
+    if (myself->query_store("no_title"))
+    {
+	return 0;
+    }
+    if ( ( index(str, "(") != -1 ) || (index(str, "[") != -1) )
+    {
+	return 0;
+    }
+/* get rid of escape chars, so players can't abuse it */
+    str = STRINGS->string_replace( str, "", "" );
+    myself->set_title( str );
+    LOG->log("TITLES", capitalize(myself->query_real_name()) + " " +str);
+    write( "You become " + myself->short() + "\n");
+    return 1;
+}
+
+find_player(str)
+{
+    notify_fail("find who?\n");
+    string  res;
+        
+    res = FINGER->finger(str);
+
+    return res;
+}
+
+wrong_command(str) {
+        string v = query_verb();
+        string lv = v + "           ";
+        string nf;
+
+        if (v == "weapons" || v == "money" || v == "items")
+                nf = "\"i\" (for inventory)";
+	else if (v == "armour")
+		nf = "\"i\" (for inventory) or \"worn\"";
+        else if (v == "fight")
+                nf = "\"kill <enemy>\"";
+        else if (v == "whois")
+                nf = "\"find <name>\" or \"who\"";
+	else if (v == "stats")
+		nf = "\"score\" (or \"sc\" for short)";
+        if (nf)
+                notify_fail("Perhaps you mean " + nf + "?\n");
+        return 0;
+        }
+
+
+// New, faster stuff by Dodinas and Jenna - 2001
+
+#define WORLDMAP        ("room/W/obj/map"->query_worldmap(myself))
+#define AREAMAP		("room/W/obj/map")
+#define FEATURES        "room/W/features"
+
+plot(str) {
+    if(index(environment(this_player())->query_property(), "is_world") == -1)
+    {
+        write("This command is only available in the wilderness.\n");
+        return 1;
+    }
+
+    array features, args;
+    int i;
+    string key, desc;
+    args = STRINGS->split_first(str, ", ");
+
+    if (!str || !arrayp(args) || sizeof(args) != 2) {
+        write("The syntax is: plot <symbol>, <description>\n");
+        return 1;
+    }
+
+    key = STRINGS->capitalize_all(args[0]);
+    desc = args[1];
+
+    if (sizeof(key) != 2) {
+        write("The symbol must be 2 characters long.\n");
+        return 1;
+    }
+
+    features =  myself->query_store("worldmap_features");
+    if (features) {
+        for (i = 0; i < sizeof(features); i++) {
+            if (features[i][0] == key) {
+                COLOUR->cwrite("{RYou are already using that symbol!\n");
+                return 1;
+            }
+        }
+    }
+
+    array tmparray = [ key, desc ];
+    tmparray += (environment(myself))->query_coords();
+    array world_features = [];
+    if (features)
+        world_features += features;
+    world_features += [ tmparray ];
+    myself->add_store("worldmap_features",world_features);
+    COLOUR->cwrite("{CYou note your current location on your map.\n");
+    return 1;
+}
+
+unplot(str) {
+    if (!str) {
+        notify_fail("The syntax is: unplot <symbol>\n");
+        return 0;
+    }
+
+    array features;
+    int i;
+    str = STRINGS->capitalize_all(str);
+
+    features =  myself->query_store("worldmap_features");
+    if (features) {
+        for (i = 0; i < sizeof(features); i++) {
+            if (features[i][0] == str) {
+                features = features[..i-1] + features[i+1..];
+                myself->add_store("worldmap_features",features);
+                COLOUR->cwrite("{CYou scribble out a symbol on your map.\n");
+                return 1;
+            }
+        }
+    }
+    write("You don't have any symbols like that on your map.\n");
+    return 1;
+}
+
+legend() {
+    array features;
+    string ret;
+    int i;
+
+    features =  myself->query_store("worldmap_features");
+    if (!features || sizeof(features) == 0) {
+        write("You have not plotted any features on your map.\n");
+        return 1;
+    }
+
+    ret = "{GYou have plotted the following features on your map:\n";
+    ret += "{g----------------------------------------------------\n";
+    for (i = 0; i < sizeof(features); i++) {
+        ret += "{C"+features[i][0]+"}";
+        ret += " - ";
+        ret += "{c"+capitalize(features[i][1])+"}";
+        ret += "\n";
+    }
+    COLOUR->cwrite(ret);
+    return 1;
+}
+
+minimap(str) 
+{
+#if 0
+    if (str == "on") 
+    {
+        this_player()->remove_store("minimap");
+        write("Minimap turned on.\n");
+        return 1;
+    }
+    if (str == "off") 
+    {
+        this_player()->add_store("minimap",1);
+        write("Minimap turned off.\n");
+        return 1;
+    }
+#endif
+    /* Generate a 15 x 9 map */
+    do_minimap(7,4);
+    return 1;	
+}
+
+do_minimap(xdiff,ydiff) 
+{
+    array coords = environment(this_player())->query_coords();
+    int x1, x2, y1, y2;
+
+    if(index(environment(this_player())->query_property(), "is_world") == -1)
+    {
+        write("This command is only available in the wilderness.\n");
+        return 1;
+    }
+    // (diff*2) determines how big of an area is displayed.
+
+    x1 = coords[0] - xdiff;
+    x2 = coords[0] + xdiff;
+    y1 = coords[1] - ydiff;
+    y2 = coords[1] + ydiff;
+    string map = "", s;
+    int i;
+
+    if (x1 < 1) x1 = 1;
+    if (x2 > 360) x2 = 360;
+    if (y1 < 1) y1 = 1;
+    if (y2 > 360) y2 = 360;
+
+    /* Bug: What if x = 133, y = 1 and you go south? */
+    /* One south = 313,360 in reality */
+    /* y1 = 356, y2 = 366 */
+    /* -2257 */
+
+    /* Each line of BIGMAP contains 5 characters describing the line
+       number, 360 characters describing the world, and 1 for the \n */
+    /* i & y2 = 283, x1 = 249, x2 = 257 */
+    /* 28069, 28077 */
+    for (i = y2; i >= y1; i--) {
+        // Line numbers
+        s = grab_file(BIGMAP,
+            ((((360-i)-1)*366)+0),((((360-i)-1)*366)+4));
+        // Landscape
+        s += grab_file(BIGMAP,
+            ((((360-i)-1)*366)+5+x1),((((360-i)-1)*366)+5+x2));
+
+        map += s;
+        map += "\n";
+
+    }
+    return showmap(this_player(), map, 1, 0, 0, 1);
+}
+
+worldmap()
+{
+    if(index(environment(this_player())->query_property(), "is_world") == -1)
+    {
+        return showmap(this_player(), WORLDMAP, 16, 1, 1);
+    }
+    return showmap(this_player(), WORLDMAP, 16, 1);
+}
+
+areamap()
+{
+    object map = "room/W/obj/map";
+    array coords = environment(this_player())->query_coords();
+    int x1, x2, y1, y2;
+
+    if(index(environment(this_player())->query_property(), "is_world") == -1)
+    {
+        write("This command is only available in the wilderness.\n");
+        return 1;
+    }
+
+    // (diff*2) determines how big of an area is displayed.
+    int diff = 25;
+
+    x1 = STRINGS->itoa(coords[0] - diff);
+    x2 = STRINGS->itoa(coords[0] + diff);
+    y1 = STRINGS->itoa(coords[1] - diff);
+    y2 = STRINGS->itoa(coords[1] + diff);
+    string map = AREAMAP->
+		 terrain("4,8," + x1 + "," + y1 + "," + x2 + "," + y2);
+    return showmap(this_player(), map, 8, 0);
+}
+
+showmap(object pob, string map, int increment, int legend, int noplot, int minimap)
+{
+    int i, ansi;
+    string ret;
+    array a, location;
+
+    ansi = pob->query_store("hilite_on");
+    if (noplot) {
+        ret = "You are not currently in a world room.\n";
+    } else {
+        if (ansi) 
+            ret = ANSI->scolor(35, "@");
+        else
+            ret = "@";
+        ret += " is approximately where you are.\n";
+    }
+
+    a = explode(map, "\n");
+
+    location = environment(pob)->query_coords();
+
+    for (i = 0; i < sizeof(a); i++)
+    {
+        ret += domap(a[i], location, ansi, increment, noplot);
+	if (legend)
+            ret += dolegend(legend + i, ansi);
+	ret += "\n";
+    }
+
+    tell_object(pob, ret);
+    if (!minimap) {
+    COLOUR->ctell_object(pob, 
+        "     {G+} - {cforest  {Gl} - {cfield  {g%}"
+        +" - {cjungle  {g&} - {cmarsh  {k^} - {cmountains\n"
+        +"     {Y&} - {cdesert  {B~} - {cwater  {G^} - {chills"
+        +"   {Y%} - {cbeach  {W%} - {cice plains\n");
+    COLOUR->ctell_object(pob, "{cIf you have plotted any personal "
+	+"features, you can view them with '{Clegend{c'.\n");	
+    }
+    return 1;
+}
+
+string
+domap(string str, array location, int ansi, int increment, int noplot) 
+{
+    string ret = str[..4];
+    int line = atoi(ret);
+    ret = ""; // No longer show line numbers - Dod 010716
+
+    /* Show player on the map if the room he's in is on the line number,
+       or if it's within the increment range */
+
+    if (location[1] <= line + (increment / 2) &&
+        location[1] >= line - ((increment / 2)) &&
+	!noplot) 
+    {
+        ret += plotplayer(str[5..], location[0], increment, ansi);
+    } 
+    else 
+    {
+        ret += showcolour(str[5..], ansi);
+    }
+
+    return ret;
+}
+
+dolegend(int line, int ansi) 
+{
+    int y;
+    string ret;
+
+    line -= 4;
+    if (line < -2)
+	return "";
+    if (line == -2)
+	return " " + (ansi ? ANSI->scolor(32, "Legend") : "Legend");
+    if (line == -1)
+	return " " + (ansi ? ANSI->scolor(132,"------") : "------");
+
+    array a = FEATURES->query_abbrevs();
+   
+    if (line >= sizeof(a))
+	return "";
+
+    array c = FEATURES->query_names() + [ ];
+
+    for (y = 0; y < sizeof(c); y++) 
+    {
+            c[y] += ":";
+            c[y] += a[y];
+    }
+    c = SORT->sort(c);
+    for (y = 0; y < sizeof(c); y++)
+            c[y] = explode(c[y], ":");
+
+    if (ansi) 
+        return "  " +
+	       ANSI->scolor(36,c[line][1]) +
+               ANSI->scolor(137," - ") +
+               ANSI->scolor(136,c[line][0]);
+ 
+    return "  " + c[line][1] + " - " + c[line][0];
+}
+
+showcolour(str, int ansi)
+{
+    int i = 0;
+    string a, ret, newstr, lastchar, c;
+
+    ret = "";
+    newstr = "";
+    lastchar = "";
+    c = "";
+    for (i = 0; i < sizeof(str); i++)
+    {
+        a = str[i..i];
+
+        if (a == lastchar) {
+            newstr += c;
+            continue;
+        }
+
+        /* Terrain Types
+
+            Under_Under     1
+            Underground     2
+            Sea Bed         3
+            Reef            4
+            Open Water      5
+            Under Surface   6
+            Surface         7
+            Marsh           8
+            Beach           9
+            Mid Air         a
+            Field           b
+            Forest          c
+            Tree Tops       d
+            Jungle          e
+            Jungle Canopy   f
+            Fresh Water     g
+            Desert          h
+            Cave            i
+            Water Cave      j
+            Mountains       k
+            Ice             l
+            Road            m
+            Ruins           n
+            Hills           o
+        */
+
+        switch (a)
+        {
+            case "7":
+            case "5":
+            c = "~";
+            newstr += "{B"+c;
+            break;
+
+            case "c":
+            c = "+";
+            newstr += "{G"+c;
+            break;
+
+            case "b":
+            c = "l";
+            newstr += "{G"+c;
+            break;
+
+            case "k":
+            c = "^";
+            newstr += "{k"+c;
+            break;
+
+            case "o":
+            c = "^";
+            newstr += "{G"+c;
+            break;
+
+            case "h":
+            c = "&";
+            newstr += "{Y"+c;
+            break;
+
+            case "|": // Rivers
+            c = "~";
+            newstr += "{B"+c;
+            break;
+
+            case "8":
+            c = "&";
+            newstr += "{g"+c;
+            break;
+
+            case "9":
+            c = "%";
+            newstr += "{Y"+c;
+            break;
+
+            case "e":
+            c = "%";
+            newstr += "{g"+c;
+            break;
+
+            case "#":
+            c = "#";
+            newstr += "{c"+c;
+            break;
+
+            case "?":
+            c = "?";
+            newstr += "{C"+c;
+            break;
+
+            case "(":
+            c = ":";
+            newstr += "{W"+c;
+            break;
+
+            case ")":
+            c = ":";
+            newstr += "{y"+c;
+            break;
+
+            case "l":
+            c = "I";
+            newstr += "{W"+c;
+            break;
+
+            default:
+            if (is_upper(a[0]))
+                newstr += "{C" + a;
+            else
+                newstr += a;
+        }
+        lastchar = a;
+    }
+    if (ansi) ret = COLOUR->convertcolour(newstr);
+    else ret = COLOUR->stripcolour(newstr);
+    return ret;
+}
+
+plotplayer(str, int playerx, int increment, int ansi)
+{
+    string ret;
+    int x = 4;
+    int i = 0;
+
+    if (increment < 16) // areamap - plot player in middle
+    {
+	x = sizeof(str) / 2;
+    }
+    else
+    {
+	x = (2*(playerx + (increment / 2))) / increment;
+    }
+    ret = showcolour(str[..x-1], ansi);
+    ret += ansi ? ANSI->scolor(35, "@") : "@";
+    ret += showcolour(str[x+1..], ansi);
+    return ret;
+}
+
+
+int is_upper(int ch) 
+{
+    return (ch >= 'A' && ch <= 'Z');
+} 
+
+
+  
+/* check out the landscape */
+surveying()
+{
+	int i;
+    object room = environment(myself);
+    array wc = room->query_coords();
+
+    array features = W_FEATURES->get_features_array(wc[0], wc[1], wc[2], 50);
+
+    if (!sizeof(features))
+    {
+        write("You survey the landscape and see nothing around you.\n");
+        return 1;
+    }
+
+	for (i=sizeof(features);i--;)
+	{
+		array feats = features[i];
+		write("You see " + feats[0] + " " + feats[2] + ".\n");
+	}
+	return 1;
+}
+
+/* collect natural resources */
+gathering(arg) 
+{
+    object room = environment(myself);
+    int wood = room->query_wood();
+    int rocks = room->query_rocks();
+    int fodder = room->query_fodder();
+
+
+    notify_fail("What do you wish to gather?\n");
+
+    if (!arg) return 0;
+
+    if (present(arg,room)) 
+    {
+        write("There is already some here ! ("+arg+" that is).\n");
+        return 1;
+    }
+
+    if (arg=="wood") 
+    {
+        if (wood==0) 
+        {
+                        write("There isn't any wood here.\n");
+                        this_player()->checked_say(capitalize(this_player()->query_name())+
+                        " fails to gather any wood.\n");
+                        return 1;
+        }
+
+        if (wood<11) room->add_wood(-1);
+        move_object(clone_object(W_PATH+"obj/wood"),room);
+        write("You gather some wood.\n");
+        this_player()->checked_say(capitalize(this_player()->query_name())+ " gathers some wood.\n");
+        return 1;
+    }
+
+        if (arg=="rock") 
+    {
+                if (rocks==0) {
+                        write("There isn't any rock here.\n");
+                        this_player()->checked_say(capitalize(this_player()->query_name())+
+                        " fails to gather any rocks.\n");
+                        return 1;
+                }
+                if (rocks<11) room->add_rocks(-1);
+                move_object(WEAPONER->make("rock"), room);
+                write("You gather a rock.\n");
+                this_player()->checked_say(capitalize(this_player()->query_name())+
+                " gathers a rock.\n");
+                return 1;
+        }
+
+        if (arg=="fodder") 
+    {
+                if (fodder==0) {
+                        write("There isn't any fodder here.\n");
+                        this_player()->checked_say(capitalize(this_player()->query_name())+
+                        " fails to gather any fodder.\n");
+                        return 1;
+                }
+                if (fodder<11) fodder--;
+                move_object(clone_object(W_PATH+"obj/fodder"),room);
+                write("You gather some fodder.\n");
+                this_player()->checked_say(capitalize(this_player()->query_name())+
+                " gathers some fodder.\n");
+                return 1;
+        }
+
+        notify_fail("You can't gather "+arg+".\n");
+        return 0;
+}
+
+// collect natural resources 
+// Revamped by Jenna
+// Aug 00
+// for new mining system
+mining(arg)
+{
+    object axe, ore;
+    object room = environment(this_player());
+    int minerals = room->query_minerals();
+    array wc = room->query_coords();
+
+    if (this_player()->query_race() != "grmkel")
+    {
+	axe = this_player()->query_wielded();
+	if (!axe ||
+	    !axe->id("axe") ||
+	    axe->query_broken())
+        {
+	    write("You need a pick or axe of some kind to "+
+	        "mine.\n");
+	    return 1;
+	}
+    }
+
+    if (this_player()->query_ghost())
+    {
+        write("You can't mine as a ghost.\n");
+        return 1;
+    }
+
+    write("You hack away at the earth" + (axe ? " with your "+
+	axe->query_name() : "") + ", searching for minerals.\n");
+    say(this_player()->query_name() + " hacks away at the "+
+	"earth"+ (axe ? " with " + GENDER->pos(this_player()) +
+	" " + axe->query_name() : "") + ", searching for "+
+	"minerals.\n");
+    if (axe)
+    {	
+        axe->damage_object(2, "impact");
+        if (axe->query_broken())
+        {
+    	    write("Your "+axe->query_name()+" shatters!\n");
+ 	    say(this_player()->query_name()+"'s "+axe->query_name()+
+		" shatters!\n");
+        }	 
+    }
+    this_player()->eat_food(-2, -1); // hungry messages only
+    if (minerals < 1 ||
+	ore_overload(room, 5) ||
+	!random(minerals+1) ||
+        !W_INFO->is_in_ground(room->query_level()) ||
+	MINERALS_SERV->mined_out(wc[0]+","+wc[1]+","+wc[2]))
+    {
+        write("You fail to find any minerals.\n");
+        return 1;
+    }
+    room->add_minerals(-1);
+    ore = MINERALS_SERV->make_mineral();
+    write("You uncover some " + ore->query_name() + "!\n");
+    say(this_player()->query_name() + " uncovers some " +
+	ore->query_name() + ".\n");
+    transfer(ore, room);
+    return 1;
+}
+
+// returns 1 if room contains more than n ores just lying around
+// -- introduced to stop world rooms building up tons of useless
+// ores.
+ore_overload(room, n)
+{
+    int i, count;
+    array c;
+
+    if (!room || !n)
+	return 0;
+    c = contents(room);
+    for (i = 0; i < sizeof(c); i++)
+    {
+	count += c[i]->id("ore");
+	if (count > n)
+	    return 1;
+    }
+    return 0;
+}
+
+/* search for water */
+finding(arg) 
+{
+    object room = environment(this_player());
+    int water = room->query_water();
+
+    notify_fail("What do you wish to find?\n");
+    if (!arg) return 0;
+
+    if (present(arg,room) ) 
+    {
+        notify_fail("There is already some here ! ("+arg+" that is).\n");
+        return 0;
+    }
+
+    if (arg=="water") 
+    {
+        if (water==0) {
+                        write("There isn't any water here.\n");
+                        this_player()->checked_say(capitalize(this_player()->query_name())+
+                        " fails to find any water.\n");
+                        return 1;
+        }
+
+        if (water<11) room->add_water(-1);
+        move_object(clone_object(W_PATH+"obj/water"),room);
+        write("You find some water.\n");
+        this_player()->checked_say(capitalize(this_player()->query_name())+ " finds some water.\n");
+        return 1;
+    }
+
+    write("You can't find "+arg+".\n");
+    return 1;
+}
+

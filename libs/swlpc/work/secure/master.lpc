@@ -1,0 +1,439 @@
+/*
+ * secure/master: Loaded, suid GOD*2, at the start of the game.
+ * Nothing can update this - it requires a reboot.
+ *
+ * It is suid'd *before* reset is called.  Reset is NOT caught-applied!
+ * it MUST NOT FAIL.
+ *
+ * Currently does the following:
+ *    Loads all the objects named in the initial_objects entry in its
+ * savefile;
+ *    Loads armageddon (RO/shut), trusts him up to SHUTDOWN level
+ *    Loads closed/log/comands, and trusts it to GOD
+ */
+
+#include "security.h"
+#include "Servers.h"
+/* is including Servers.h a security problem?? */
+
+#define    SAVE    "closed/master_save"
+
+array log_list;
+
+query_destruct(who) 
+{
+    write("Destructing " + file_name(this_object()) + 
+                " could be bad for your health!\n");
+    return 1;
+}
+
+array initial_objects;
+
+int started = 0;
+
+reset(arg) 
+{
+    if (arg || started) return;
+    started = 1;
+
+    call_out("start", 0);
+}
+
+trust_logger() 
+{
+    object o;
+
+    catch "RO/logger"->load_me_up();;
+    o = find_object("RO/logger");
+    if (o) set_uid_me(o, ED_LOG + 2);
+
+#if 0
+    catch "secure/data_log"->load_me_up();;
+    o = find_object("secure/data_log");
+    if (o) set_uid_me(o, GOD + 2);
+#endif
+}
+
+int ransetup = 0;
+
+nosave start() 
+{
+    int x;
+    string err;
+
+    /* don't run twice */
+    if (ransetup) return;
+
+    /* Log our start up */
+    trust_logger();
+    catch LOG->log_now("GAME_LOG", query_host_name()
+        + ", Master loaded.\n");;
+    catch LOG->log_now("ENTER", query_host_name() + " rebooted.\n");;
+
+    restore_object(SAVE);
+
+    /* Virtual object root directory */
+    err = catch 
+    {
+        object o = clone_object("RO/Root/RootDir");
+        set_uid_me(o, GOD + 2);
+        rename_object(o, "");
+        o->start_virtual();
+    };
+
+    /* Wizard logging stuff */
+    wizard_logging();
+
+    if (err) LOG->log_now("STARTUP", "master.c:1:"+err+"\n");
+
+    /* Load saved initial objects */
+    if (initial_objects && !("secure/which_mud"->is_wiz_mud()))
+    for (x=0; x < sizeof(initial_objects); x++)
+        call_out("load_initial_object", 0.1, initial_objects[x]);
+
+
+    /* Shutdown stuff */
+    suid_armageddon();
+
+    /* Datagram server */
+    catch OBJ_DATAGRAM_SERV -> reset (); ;
+
+
+    /* We're basically setup */
+    ransetup = 1;
+
+    /* we're living? */ 
+    enable_commands();
+
+    /* Virtual object support - on */
+    set_forecurse_ok();
+}    
+
+wizard_logging()
+{
+    string err;
+
+    err = catch {
+    "closed/log/commands"->ping();
+    object o = find_object("closed/log/commands");
+    set_uid_me(o, GOD + 2 );
+    o->start();
+    };
+
+    if (err) LOG->log_now("STARTUP", "master.c:1:"+err+"\n");
+}
+
+rumour_handler()
+{
+    catch 
+    {
+        object o = clone_object("P/special/Src/Rumour");
+        set_uid_me(o, GOD+2);
+        o->start_virtual();
+    };
+}
+
+
+suid_dg_serv() 
+{
+    object o;
+
+    o = find_object (OBJ_DATAGRAM_SERV);
+    if (!objectp(o)) 
+    {
+        throw "Master could not find OBJ_DATAGRAM_SERV to suid, shouldnt be possible!\n";
+        return;
+    }
+    set_uid_me(o, SEND_DATAGRAM);
+}
+
+/*
+ * Game shutdown code.
+ */
+quit() 
+{
+    AUTOSAVE_SERV->save_me(1);
+}
+
+suid_armageddon() 
+{
+    object o;
+
+    /* SHUT_DAEMON calls this, so should already be loaded */
+    catch SHUT_DAEMON->load_me_up(1);;
+    catch set_uid_me(find_object(SHUT_DAEMON), SHUTDOWN+101);;
+}
+
+nosave log_shout(str) 
+{
+    SHOUT->shout("Game driver shouts:" + str);
+    LOG->log("GAME_DRIVER", str);
+}
+
+nosave load_initial_object(what) 
+{
+    string err;
+    //if (caller() != 0) return;
+    if (arrayp(what))
+    {
+        object o;
+        int l;
+
+        if (sizeof(what) == 2)
+        {
+            o = load_object(what[0]);
+            l = what[1];
+        }
+        else if (sizeof(what) == 3)
+        {
+            o = load_object(what[0]);
+            if (o) o = o->(what[1])();
+            l = what[2];
+        }
+
+        if (index(what[0], "players") == -1)
+        {
+            if (o && l) 
+            {
+                LOG->log_now("STARTUP", "trusting "+file_name(o));
+                set_uid_me(o, l);
+                err = catch what[0]->reset(1);;
+                if (err) LOG->log_now("STARTUP", "error: " + err);
+            }
+        }
+    }
+    else
+    {
+        what->reset(1);
+    }
+}
+
+/*
+ * Reload master object.
+ */
+
+#if 0
+/* sigh - the driver keeps a pointer to master */
+
+reload_master() 
+{
+    if (caller() && (query_su_level(caller()) < GOD))
+    return 0;
+    if (find_object("secure/mistress")) {
+    write("Already a secure/mistress (what the hell is going on here?)\n");
+    return 0;
+    }
+    rename_object(this_object(), "secure/mistress");
+    (int|string) k = catch "secure/master"->load_me_up(1);;
+    if (k) {
+    LOG->log("MASTER", k);
+    rename_object(this_object(), "secure/master");
+    return;
+    }
+    set_uid_me(find_object("secure/master"), GOD*2);
+    destruct(this_object());
+}
+#endif
+
+/*
+ * Re-instatement for armageddon
+ */
+armageddon_dested() 
+{
+    if (this_player() && (this_player()->query_wiz() > SHUTDOWN))
+        return;
+    call_out("suid_armageddon", 1);
+}
+
+check_should_log(s) 
+{
+    if (query_su_level(previous_object()) < GOD)
+    return random(10);
+    if (!pointerp(log_list))
+    return 0;
+    if (index(log_list, lower_case(s)) >= 0)
+    return 1;
+    return 0;
+}
+
+add_log_entry(s) 
+{
+    if (query_su_level(previous_object()) < GOD) return random(10);
+    if (check_should_log(s)) return 1;
+
+    log_list += ({ lower_case(s) });
+    save_me();
+    return 1;
+}
+
+nosave save_me() 
+{
+    save_object(SAVE);
+ }
+
+dgram_recv(a) 
+{
+    call_out("do_dgr", 0.0, a);
+}
+
+#define SPOTCODE "<SPOTTY>"
+
+do_dgr(a) 
+{
+
+#if 0
+    if (pointerp(a) && (sizeof(a) == 3)
+    && (pointerp(a[2]) && (sizeof(a[2]) > 0) && a[2][0] == SPOTCODE)) {
+        catch "players/gandalf/closed/spotty/rec"->recv(a);;
+        return;
+        }
+#endif
+
+    catch "secure/remote/rwho"->recv(a);;
+}
+
+/*
+ * Name: compile_error
+ * Purpose: compiler biffed a compiler error - log it! 
+ */
+compile_error(errs)
+{
+    int i;
+
+    for (i = 0; i < sizeof(errs); i++)
+    {
+        LOG->smartlog(errs[i]);
+    }
+
+    /* force a save so a wiz can see what's happened */
+    LOG->save_me();
+}
+
+/*
+ * This is called on any find_object which (a) wants
+ * to load the object, and (b) didn't find the object
+ * in the hash table.  Looks for a loaded object whose
+ * name is a prefix of the requested object; if one is
+ * found, GetVirtualObject is called in the found object.  If an
+ * object is returned, it is renamed.  Currently, longer
+ * filenames (that exist) override calls to GetVirtualObject
+ * in shorter filenames.  It is nice in some ways (less
+ * programming to do), but somewhat limiting in others.
+ *
+ * This is a likely cause of unloadable object
+ * errors when the game is just starting up,
+ * as it will not recursively look for objects
+ * to load (to prevent *inadvertent* crashes).
+ * It is unclear how to solve this without a driver rewrite - G.
+ *
+ * NB: This requires that your "virtual room controllers"
+ * all be loaded (and treated as directories).
+ */
+
+int forecurse = 0;
+
+set_forecurse_ok() 
+{
+    forecurse = 1;
+}
+
+nosave object last_found;
+nosave string last_query;
+
+FindObject(string s) 
+{
+    string st;
+
+    if (!forecurse)    /* initglobals is called after reset!  sheesh */
+        return 0;    /* that's why 0 means "in recursion" */
+    forecurse = 0;
+
+#if 0
+    catch ("(Master loads:) " + s)->spug();;    /* so I can see it on console - G */
+#endif
+
+    array components = explode(s, "/");
+    (object|string) c = 0;
+    if (s[0] == '/') st = "/";
+    else st = "";
+
+    int x = sizeof(components);
+    int y = x;
+
+    /* find a loaded prefix OR valid file name */
+
+    while ((!c) && (--x >= 0)) 
+    {
+        string oname = st + implode(components[..x], "/");
+#if 0
+    catch ("(Master loads:) " + oname)->spug();;    /* so I can see it on console - G */
+#endif
+        c = find_object(oname);
+        if (!c) 
+        {
+            string j = oname + ".lpc"; /* a hack */
+            if (file_size(j) > 0) c = oname;
+        }
+    }
+
+    if (x == (sizeof(components) - 1)) /* used to be || !c */
+    {    
+        /* couldn't find an appropriate .c file or prefix object */
+        set_forecurse_ok();
+        return(0);
+    }
+
+    /* use the root object, created earlier. */
+    if (!c) 
+    {    
+        c = "";
+        if (!find_object(c)) 
+        {    
+            /* looks wierd, eh? :) */
+            set_forecurse_ok();
+            return(0);
+        }
+    }
+
+/* If we have a string here, and x = sizeof(components)-1, the full filename
+ * existed.  If c is a string, a partial match exists.  If c is an object,
+ *  we have a direct match on a controller.
+ */
+
+    object o;
+    string cerr = catch { o = c->GetVirtualObject(s); };    
+            /* error means C didn't load; this is ok. */
+    set_forecurse_ok();
+
+    if (cerr) 
+    {
+        if (objectp(c))
+            "RO/logger"->log("VIRTUAL", file_name(c) + ": " + cerr);
+        else 
+            "RO/logger"->log("VIRTUAL", c + ": " + cerr);
+        return 0;
+    }
+
+    if (o) 
+    {
+        if (objectp(o)) 
+        {
+            if (file_name(o) != s) rename_object(o, s);
+
+            last_query = s;
+            last_found = o;
+            return o;
+        }
+    }
+    return 0;
+}
+
+show_stats()
+{
+    write("Master Stats:\n");
+    write("Forecurse = "+forecurse+"\n");
+    if (last_found)
+    write("Last object found = "+file_name(last_found)+"\n");
+    write("Last query = "+last_query+"\n");
+}
+

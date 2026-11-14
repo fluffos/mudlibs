@@ -1,0 +1,401 @@
+/*****************************************************
+ * Generic flight soul.				     *
+ * 						     *
+ * Primarily designed for players. May work for      *
+ * monsters but have yet to check.		     *
+ *****************************************************/
+
+inherit "obj/souls/base_soul";
+
+#define SKY_BOX "players/darkryln/flight/skybox"
+
+int MAX_HEIGHT = 5;
+int flying=0; 			/* Are we flying? */
+string save_short;
+
+reset(arg)
+{
+    ::reset(arg);
+    set_soul_type("capability", "flight");
+    add_id("flight");
+}
+
+init()
+{
+    ::init();
+    if (this_player() != myself) return;
+    add_action("fly", "fly");
+    add_action("land", "land");
+    add_action("fly", "up", 1);
+    add_action("fly", "down", 1);
+    add_action("fly", "north", 1);
+    add_action("fly", "south", 1);
+    add_action("fly", "east", 1);
+    add_action("fly", "west", 1);
+}
+
+fly(str)
+{
+object env, skyb, below, above, origin, origin_str, exit, final_origin,
+	tmpo, test;
+string dir, oldmin, oldmout, dest;
+
+    if(query_verb() == "fly" && !str)
+    {
+	if(flying) 
+	{
+	    write("You are already flying.\n");
+	    return 1;
+	}
+/*	if (index(myself->query_disable(), "flight") != -1)
+	{
+	    write("You try to fly, but due to disabilities cannot!\n");
+	    myself->checked_say(myself->query_name() + " struggles " +
+		"to fly, but due to disabilities cannot!\n");
+	    return 1;
+	}
+*/
+        write("You begin hovering in the air.\n");
+	myself->checked_say(myself->query_name()+" levitates into "+
+	    "the air.\n");
+ 	save_short = myself->short();
+	myself->set_short(save_short + " [flying]");
+
+	flying=1;
+	return 1;
+    }
+
+    if(!flying) return 0;
+
+    flying=1;
+
+    if(query_verb() == "fly")
+    {
+	if(str=="n") dir="north";
+	else if(str=="s") dir="south";
+   	else if(str=="w") dir="west";
+	else if(str=="e") dir="east";
+	else if(str=="u" || str=="up") dir="up";
+	else if(str=="d" || str=="down") dir="down";
+	else
+	{
+	    notify_fail("You cannot fly in that direction.\n");
+	    return 0;
+	}
+    }
+    else
+    {
+        if(query_verb()=="n" || query_verb()=="north") dir="north";
+        else if(query_verb()=="s" || query_verb()=="south") dir="south";
+        else if(query_verb()=="w" || query_verb()=="west") dir="west";
+        else if(query_verb()=="e" || query_verb()=="east") dir="east";
+        else if(query_verb()=="u" || query_verb()=="up") dir="up";
+        else if(query_verb()=="d" || query_verb()=="down") dir="down";
+	else
+	{
+	    notify_fail("You cannot fly in that direction.\n");
+	    return 0;
+	}
+    }
+
+    env=environment(myself);
+    if(!env) return 0;
+    origin_str=env->query_origin_room();
+    if(!origin_str) origin_str=file_name(environment(myself));
+
+    if(env->query_property("NO_TELEPORT") || env->query_property("no_fly"))
+    {
+	notify_fail("A strange mystical force prevents you from "+
+	   "flying anywhere.\n");
+	return 0;
+    }
+    if(env->query_outdoors() < 3)
+    {
+	notify_fail("There is nowhere to fly from here.\n");
+	return 0;
+    }
+
+    /* ARE WE GOING UP? */
+
+    test=load_object(origin_str);
+
+    if(!test)
+    {
+	write("For some obscure reason you cannot fly in that direction.\n");
+	return 1;
+    }
+
+    flying = 1;  /* We have to be flying */
+
+    if(dir=="up")
+    {
+	origin=load_object(origin_str);
+	if(!origin) 
+	{
+	    write("You seem to be stuck in a bug. Ask for help.\n");
+	    return 1;
+	}
+	if(env->query_height() >= MAX_HEIGHT)
+	{
+	    write("You cannot go any higher. The air is too thin.\n");
+	    return 1;
+	}
+	if((dest=env->query_exit("up")))
+	{
+	    above=load_object(dest);
+	}
+	else if((dest=env->query_exit("climb")))
+	{
+	    above=load_object(dest);
+	}
+	else 
+	{
+	    above=origin->query_sky_box(env->query_height()+1);
+	    if(!above) above=clone_object(SKY_BOX);
+	    origin->add_sky_box(env->query_height()+1, above);
+ 	}
+
+ 	origin->set_purge_flag(1);   /* This is for virtual sea boxes */
+
+	oldmin=myself->query_msgin();
+	oldmout=myself->query_msgout();
+	myself->setmin("flies into the room from below");
+	myself->setmout("flies into the sky");
+
+	write("You fly upwards into the sky above.\n");
+	myself->move_player("above", above);
+
+  	myself->setmin(oldmin);
+	myself->setmout(oldmout);
+	return 1;
+    }
+
+    /* ARE WE GOING DOWN?? */
+
+    if(dir=="down")
+    {
+	origin=load_object(origin_str);
+	if(!origin) 
+	{
+	    write("You seem to be stuck in a bug. Ask for help.\n");
+	    return 1;
+	}
+	/* This is a bit restrictive but hey... */
+        if(env->query_exit("down"))
+	{
+	    write("You are going to have to land first.\n");
+	    return 1;
+        }
+	if(!function_exists("query_height", env))
+	{
+	    write("You cannot fly downwards from here.\n");
+	    return 1;
+	}
+	if(env->query_height() <= 0)
+	{
+	    write("You cannot fly downwards from here.\n");
+	    return 1;
+ 	}
+
+	if((dest=env->query_exit("down")))
+	{
+	    below=load_object(dest);
+	    if(below->query_outdoors() < 3)
+	    {
+	 	write("There is nowhere to fly downwards from here.\n");
+		return 1;
+	    }
+	}
+	else
+	{
+	    below=origin->query_sky_box(env->query_height()-1);
+	    if(!below) below=clone_object(SKY_BOX);
+	    else 
+	    {
+	   	if(below->query_outdoors() < 3)
+		{
+		    write("You cannot find an entrance downwards.\n");
+	 	    return 1;
+		}
+	    }
+	    origin->add_sky_box(env->query_height()-1, below);
+	}
+
+	oldmin=myself->query_msgin();
+	oldmout=myself->query_msgout();
+	myself->setmin("flies into the room from above");
+	myself->setmout("flies");
+
+	write("You fly downwards.\n");
+	myself->move_player("downwards", below);
+
+  	myself->setmin(oldmin);
+	myself->setmout(oldmout);
+	return 1;
+    }
+
+    /* OK - SO WE ARE EITHER GOING NORTH, SOUTH, EAST, OR WEST */
+
+    origin=load_object(origin_str);
+    if(!origin) 
+    {
+        write("You seem to be stuck in a bug. Ask for help.\n");
+        return 1;
+    }
+
+    dest=origin->query_exit(dir);
+    if(!dest)
+    {
+	/* Beginning from the topmost room, traverse in the down direction
+	   looking for a 'dir' exit */
+
+	tmpo=origin;
+	int count=0;
+	while(!dest && count <= 20)
+	{
+	    if(!tmpo->query_exit("down"))
+	    {
+		write("You cannot fly in that direction.\n");
+		return 1;
+	    }	
+	    tmpo=load_object(tmpo->query_exit("down"));
+	    dest=tmpo->query_exit(dir);
+	    count++;
+	}    
+ 	if(!dest || count >= 20)
+	{
+	    notify_fail("You fly a little ways "+dir+" but don't get far.\n");
+	    return 0;
+	}
+    }
+
+    exit=load_object(dest);
+    if(!exit)
+    {
+	notify_fail("You cannot fly in that direction.\n");
+	return 0;
+    }
+
+    /* Go UP as far as we can */
+
+    int heightoffset=0;
+    while(!final_origin && heightoffset < 20)
+    {
+	if(exit->query_exit("up"))
+	    exit=load_object(exit->query_exit("up"));
+	else if(exit->query_exit("climb"))
+	    exit=load_object(exit->query_exit("climb"));
+	else
+	    final_origin=exit;
+  	heightoffset++;
+    }
+
+    if(!final_origin)
+    {
+	write("For some obscure reason, which has yet to be resolved, "+
+	      "you cannot fly in that direction.\n");
+  	return 1;
+    }
+    if(final_origin->query_sea_type() == "sea controller")
+    {
+	write("A black void of darkness lies to the "+dir+". You will "+
+	       "have to go around this.\n");
+ 	return 1;
+    }
+
+    final_origin->set_purge_flag(1);    /* This is for virtual sea boxes */
+    
+    skyb=final_origin->query_sky_box(env->query_height());
+    if(!skyb) skyb=clone_object(SKY_BOX);
+    final_origin->add_sky_box(env->query_height(), skyb);
+
+    oldmin=myself->query_msgin();
+    oldmout=myself->query_msgout();
+    myself->setmin("flies in from the "+get_opposite(dir));
+    myself->setmout("flies");
+
+    write("You fly "+dir+"wards.\n");
+    myself->move_player(dir+"ward", skyb);
+
+    if(final_origin->query_weather_obj())
+	if(!(final_origin->query_weather_obj())->query_night())
+    	    if(final_origin->query_outdoors() > 2)
+           	tell_room(final_origin, "A shadow flies overhead.\n");
+
+    myself->setmin(oldmin);
+    myself->setmout(oldmout);
+    return 1;
+}
+    
+land()
+{
+object env=environment(myself);
+string origin_str=env->query_origin_room();
+object origin;
+
+    if(origin_str) origin = load_object(origin_str);
+
+    notify_fail("You aren't flying.\n");
+    if(!flying) return 0;
+
+    if(env->query_height() >= 1 && !(origin->query_outdoors() < 3))
+    {
+	notify_fail("You are flying high above the ground. You cannot "+
+	    "land here.\n");
+	return 0;
+    }
+
+    if(env->query_medium("water"))
+    {
+	write("You float down and land in the water.\n");
+	myself->checked_say(myself->query_name()+" floats down from "+
+	    "the air and lands in the water.\n");
+    }	
+    else if(env->query_height() == 1 && origin)
+    {
+	if(origin->query_outdoors() < 3)
+            write("You float down and land on the building below.\n");
+        myself->checked_say(myself->query_name()+" floats down from "+
+	    "the air and lands.\n");
+    }
+    else
+    {
+	write("You float down and land on the ground below.\n");
+        myself->checked_say(myself->query_name()+" floats down from "+
+	    "the air and lands.\n");
+    }
+
+    if(save_short) myself->set_short(save_short);
+    flying=0;
+
+    env->init();
+    return 1;
+}
+
+array dirs = ({ "west", "east", "north", "south" });
+array oppo = ({ "east", "west", "south", "north" });
+
+get_opposite(d)
+{
+    int i=index(dirs, d);
+    if(i<0) return 0;
+    return oppo[i];
+}
+
+query_destruct()
+{
+    if(myself) 
+    {
+	if(environment(myself)) environment(myself)->init();
+	myself->setmin("arrives");
+   	myself->setmout("leaves");
+        if(save_short && stringp(save_short)) myself->set_short(save_short);
+    }
+}
+
+query_flying() { return flying; }
+set_flying(f)  { flying = f; }
+
+query_max_height() { return MAX_HEIGHT; }
+set_max_height(m)  { MAX_HEIGHT=m; }
+

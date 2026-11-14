@@ -1,0 +1,329 @@
+/*
+ * 001207 - Greebo
+ *
+ * Keeps track of, compiles and publishes http pages that have been
+ * registered with it.
+ *
+ * Uses: http_server_class.lpc
+ *
+ */
+
+inherit "RO/base_object";
+inherit "std/http/sws";
+
+#define ABSOLUTE "doc/html/dynamic/"
+#define REALLY_LONG_OFF_TIME 2147483640
+
+import "std/http/http_server_class" h_class;
+class h_class pages[0];
+
+nosave int touched;
+nosave int next_page;
+
+reset(arg) {
+	::reset(arg);
+	if (arg) return;
+	add_id(["server", "http_pages_server", "http_pages", "http_server"]);
+	restore_object(file_name(this_object()));
+	AUTOSAVE_SERV->set_auto_save(this_object());
+	touched = 1;
+	next_page = -1;
+	call_out("process_pages", 10);
+}
+
+
+int pages_source_index(string source)
+{
+	int i;
+
+	if (!sizeof(pages)) return (-1);
+	for (i=sizeof(pages);i--;)
+	{
+		if (pages[i].source == source)
+			return i;
+	}
+	return -1;
+}
+
+
+int page_add(string source, int refresh_rate)
+{
+	class h_class new_page;
+	int i;
+
+	if (pages_source_index(source) > -1)
+	{
+		notify_fail("That source is already specified.\n");
+		return 0;
+	}
+	new_page = create h_class;
+	new_page.targets = [];
+	new_page.source = source;
+	new_page.refresh_rate = refresh_rate;
+	new_page.refresh_time = time();
+	pages += [new_page];
+	touched = 1;
+	save_me();
+	return 1;
+}
+
+
+int page_removeby_source(string source)
+{
+	int i;
+
+	if ((i=pages_source_index(source)) < 0)
+	{
+		notify_fail("No such source exists.\n");
+		return 0;
+	}
+	pages = pages[..i-1] + pages[i+1..];
+	touched = 1;
+	save_me();
+	return 1;
+}
+
+
+int touch_page(string source)
+{
+	int i;
+
+	if ((i=pages_source_index(source)) < 0)
+	{
+		notify_fail("No such source exists.\n");
+		return 0;
+	}
+	pages[i].refresh_time = time();
+	touched = 1;
+	return 1;
+}
+
+
+int touch_page_num(int i)
+{
+	notify_fail("No such source exists.\n");
+
+	if (!sizeof(pages) || (i < 1) || (i > sizeof(pages)))
+		return 0;
+	pages[i-1].refresh_time = time();
+	touched = 1;
+	return 1;
+}
+
+
+int next_page_refresh_time()
+{
+        int i;
+        int t = REALLY_LONG_OFF_TIME;
+
+	next_page = -1;
+        if (!sizeof(pages)) return -1;
+        for (i=sizeof(pages);i--; ) {
+                if (pages[i].refresh_time < t) {
+                        next_page = i;
+                        t = pages[i].refresh_time;
+                }
+        }
+	touched = 0;
+        return next_page;
+}
+
+
+process_pages()
+{
+	if (touched == 1)
+		next_page_refresh_time();
+	if (next_page == -1)
+	{
+	}
+	else if (pages[next_page].refresh_time < time())
+	{
+		process_page();
+		touched = 1;
+	}
+	else
+	{
+		tell_greebo("Polling - no action");
+	}
+	call_out("process_pages", 5);
+}
+
+
+int process_page()
+{
+	string errval;
+	array html_pages;
+
+	pages[next_page].refresh_time = time() + ((pages[next_page].refresh_rate)*60);
+
+	errval = catch { html_pages = (pages[next_page].source)->http_generate(); } ;
+
+	if (errval)
+	{
+		tell_greebo((pages[next_page].source) + " is not ready");
+		LOG->log("HTTP", (pages[next_page].source) + " is not ready.\n");
+		return 0;
+	}
+
+	if (!arrayp(html_pages))
+	{
+		tell_greebo((pages[next_page].source) + " returned an int");
+		LOG->log("HTTP", (pages[next_page].source) + " returned an int.\n");
+		return 0;
+	}
+
+	int i;
+
+	tell_greebo("Writing " + (pages[next_page].source));
+	pages[next_page].targets = [];
+	for (i = 0; i < sizeof(html_pages);i++)
+	{
+		pages[next_page].targets += [html_pages[i][0]];
+		write_page(html_pages[i][0], html_pages[i][1], html_pages[i][2], html_pages[i][3]);
+	}
+	return 1;
+}
+
+
+write_page(string target, string title, string body, int no_date)
+{
+	string ret;
+
+	ret = "<html>\n<head>\n<title>" + title;
+	ret += "</title>\n";
+	ret += "<META HTTP-EQUIV=\"Pragma\" CONTENT=\"no-cache\">\n";
+	ret += "<META HTTP-EQUIV=\"Expires\" CONTENT=\"-1\">\n";
+	ret += "<META HTTP-EQUIV=\"REFRESH\" CONTENT=\"185\">\n";
+	ret += "<link REL=\"STYLESHEET\" HREF=\"/sw.css\" TYPE=\"text/css\">\n";
+	ret += "</head>\n<body>\n";
+	/* <body bgcolor=\"#000000\" text=\"#FF9900\" vlink=\"#0000FF\" link=\"#0000FF\" alink=\"#0000FF\">\n"; */
+	ret += body; 
+	if (!no_date)
+	{
+		ret += "<p align=\"center\"><i><font size=\"-1\">File last modified: " + ctime(time()) + "</font></i></p>";
+	}
+	ret += "\n</body>\n</html>\n";
+	if (file_size(ABSOLUTE + target) != -1)
+	{
+		rm(ABSOLUTE + target);
+	}
+	write_file(ABSOLUTE + target, ret);
+	return 1;
+}
+
+
+get_pages()
+{
+	int i;
+	string ret;
+
+	ret = "";
+	if (!sizeof(pages))
+	{
+	}
+	else for (i = 0; i < sizeof(pages); i++)
+	{
+		ret += (i+1) + " : " + pages[i].source + ".\n";
+	}
+	ret += "\nThere are " + sizeof(pages) + " sources registered at present.\n\n";
+	return ret;
+}
+
+
+get_page(string source)
+{
+	int i;
+
+	if ((i=pages_source_index(source)) < 0)
+	{
+		notify_fail("No such source exists.\n");
+		return 0;
+	}
+	return get_page_num(i+1);
+}
+
+
+get_page_num(int i)
+{
+	notify_fail("No such source exists.\n");
+
+	if (!sizeof(pages) || (i < 1) || (i > sizeof(pages)))
+		return 0;
+
+	string ret;
+	i--;
+
+	ret = "Source number\t : " + (i + 1) + "\n";
+	ret += "Source\t\t : " + pages[i].source + "\n";
+	ret += "Target(s)\t : ";
+
+	int j, k = sizeof(pages[i].targets);
+
+	for (j=0; j < k; j++)
+	{
+		ret += pages[i].targets[j];
+		if (j != (k-1))
+			ret += ", ";
+	}
+	ret += "\n";
+	ret += "Refresh rate\t : " + pages[i].refresh_rate + " minute(s)\n";
+	ret += "Refresh time\t : " + ctime(pages[i].refresh_time) + "\n";
+	return ret;
+}
+
+
+show_stats()
+{
+	array ret;
+
+	ret = get_pages();
+	ret += "Goto /std/http/manage for more details and easier access.\n";
+	ret += "Also see: http://www.shattered.org/dynamic/pages.htm\n";
+	return ret;
+}
+
+
+save_me () { save_object(file_name(this_object())); }
+
+
+tell_greebo(str)
+{
+	"players/greebo/http/http_listener_room"->complain(str);
+}
+
+
+http_generate()
+{
+	string ret;
+	array tab = ["<b>No.</b>", "<b>Target</b>", "<b>Source</b>", "<b>Refresh Rate</b>", "<b>Refresh Time</b>"];
+	int i;
+
+	ret = H1("List of Shattered World's dynamically created pages");
+	if (!sizeof(pages))
+	{
+		ret += TEXT("There are no pages registered at present.");
+		return [["pages.htm", "List of dynamically created pages",
+			 ret, 0]];
+	}
+	else for (i = 0; i < sizeof(pages); i++)
+	{
+		string temp = "";
+		int j, k = sizeof(pages[i].targets);
+
+		tab += [(i+1)];
+
+		for (j=0; j < k; j++)
+		{
+			temp += ("<a href=\"" + (pages[i].targets[j]) + "\">" + (pages[i].targets[j]) +"</a>");
+			if (j != (k-1))
+				temp += ", ";
+		}
+		tab += [temp];
+		tab += [(pages[i].source)];
+		tab += [(pages[i].refresh_rate)];
+		tab += [(ctime(pages[i].refresh_time))];
+	}
+	ret += TABLE(tab, 5, 1, 90, "CENTER", [5,20,35,10,30]);
+	return [["pages.htm", "List of dynamically created pages",
+		 ret, 0]];
+}

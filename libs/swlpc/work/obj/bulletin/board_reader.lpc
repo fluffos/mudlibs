@@ -1,0 +1,298 @@
+
+ /* 
+  * Shattered Worlds bulletin board reader.
+  *
+  * For information see the main bulletin board file.
+  *
+  * PLEASE note that we are using the main data array
+  * of the board here, and that we have no business modifiying it!
+  */
+  
+#include <Servers.h>
+
+inherit "std/object";
+
+object bboard;
+array notes_to_read =[];
+int started_reading;
+
+reset(second)
+{
+  if (!second) {
+		add_id("inhibit_insanity");
+		add_id ( "board_reader" );
+		add_property ("NO_GET");
+  }
+}
+
+init() {
+  ::init ();
+	add_action("list", "list");
+	add_action("read_note", "read");
+	add_action("catchup","catchup");
+	this_player () -> add_move_hook (this_object(),"dest_me");
+}
+
+init_reader (object bb) { bboard = bb; }
+
+/* format of list command: */
+/*	list - list all new notes */
+/*	list thread <note> - list all new headers in thread that <note> is in */
+/*	list "string" - list all notes with the given "string" in their title */
+/*	keyword 'old'|| 'all' at end => deal with all notes */
+/*	keyword 'old X' at end => deal with all notes newer than x days */
+/*	keyword 'last X' at end => deal with last x notes */
+/*	keyword 'from <note>' at end => deal with notes from <note> to end */
+list (args)
+{
+    array argv;
+    int argcount;
+    int note_num;
+    int old, no_of_notes;
+    string search;
+    array notes;
+
+	no_of_notes = bboard -> number_of_notes();
+  if (no_of_notes == 0) {
+	  notify_fail("There are no notes on the board.\n");
+	  return 0;
+  }
+  notify_fail("Usage: list\n       list thread <note_num>\n       list \"<search string>\"\n   + old [<number of days]\n  or last [<number of notes>]\n  or from <note number>\n");
+  if (args) argv = explode(args, " ");
+    else
+	argv = [ "" ];
+  argcount = sizeof(argv);
+  if (argv[argcount-1] == "old" || argv[argcount-1] == "all")
+	  notes = bboard -> threaded_notes(0,0);
+  else if (argcount > 1 && argv[argcount-2] == "old") 
+  {
+	   if (!(old = atoi(argv[argcount-1]))) return 0;
+  	   notes = bboard -> threaded_notes(time()-(old*24*60*60),0);
+  }
+  else if (argv[argcount-1] == "last" || (argcount > 1 && argv[argcount-2] == "last")) {
+	    if (argv[argcount-1] == "last") old = 20;
+	    else if (!(old = atoi(argv[argcount-1]))) return 0;
+	    if (old > no_of_notes) old = no_of_notes;
+			notes = bboard -> threaded_notes( bboard -> creation_time(no_of_notes-old),0);
+  }
+  else if (argcount > 1 && argv[argcount-2] == "from" && 
+            (old = atoi(argv[argcount-1])) ) 
+  {
+		if (--old < 0 || old >= no_of_notes) return invalid_note(1);
+
+		notes = bboard -> threaded_notes(
+	            bboard -> creation_time(old),0);
+  }
+  else {
+      notes = bboard -> threaded_notes (query_last_read(),0);
+      notes = notes[1..];
+      }
+
+    if (argv[0] == "" || argv[0] == "old" || argv[0] == "all" || argv[0] == "last" || argv[0] == "from")
+	list_all(notes);
+    else if (argcount > 1 && argv[0] == "thread" && 
+        (note_num = atoi(argv[1])))
+    {
+	note_num--;
+	if (note_num < 0 || note_num >= no_of_notes)
+	    return invalid_note(0);
+	notes = bboard -> threaded_notes(bboard-> creation_time(note_num),0);
+	/* Strip off the unwanted notes. */
+	for (note_num = 1; note_num < sizeof (notes); note_num ++ ){
+	  if (index (notes[note_num],"Following")  <0) break;
+	  }
+	notes = notes[..note_num-1];
+	list_all(notes);
+    }
+    else 
+    {
+        if (args[0] == '"' && args[sizeof(args)-1] == '"')
+	        list_all(bboard -> threaded_notes(0,0), args[1..sizeof(args)-2]);
+        else
+	        return 0;
+    }
+    return 1;
+}
+
+/* unread notes are already sorted into threaded order */
+list_all(array unread_notes, search)
+{
+  if (sizeof(unread_notes) == 0) {
+	  write("No unread notes.\n");
+	  return 1;
+	  }
+  if (search) {
+    unread_notes = regexp (search,unread_notes);
+	  }
+	"std/more"->more(implode(unread_notes, ""));
+}
+
+int query_last_read () {
+  return this_player () -> query_store ("brd/" + bboard -> query_board_name());
+}  
+
+set_last_read (int timestamp) {
+    this_player()->add_store("brd/" + bboard -> query_board_name(), timestamp);
+}    
+
+/* format of read command: */
+/*	read <note> - read <note> */
+/*	read all - read all unread notes */
+/*	read thread <note> - read all unread/old notes in thread that <note> is in */
+/*	keyword 'old' at end => deal with all notes */
+/*	keyword 'old X' at end => deal with all notes newer than x days */
+/*	keyword 'last X' at end => deal with last x notes */
+/*	keyword 'from <note>' at end => deal with notes from <note> to end */
+read_note(args)
+{
+    array argv;
+    int argc,no_of_notes;
+    int from, base;
+
+  started_reading = time();
+	no_of_notes = bboard -> number_of_notes();
+  if (no_of_notes == 0) {
+		notify_fail("There are no notes on the board.\n");
+		return 0;
+  }
+  if (!args || !sizeof (args) ) {
+  	return 0;
+     }
+  argv = explode(args, " ");
+  argc = sizeof(argv);
+  if (argc > 1 && argv[argc-2] == "from" && (from = atoi(argv[argc-1]))) 
+  {
+		from--;
+		if (from < 0 || from >= no_of_notes)
+	    return invalid_note(1);
+	  notes_to_read = bboard -> threaded_notes(bboard -> creation_time(from),1);  
+  }
+  else if (argv[argc-1] == "old") 
+  {
+		from = 0;
+  }
+  else if (argc > 1 && argv[argc-2] == "old" && (from = atoi(argv[argc-1]))) 
+  {
+	  from = bboard->find_note(time()-from*24*60*60);
+	  if (from < 0) {
+	    write("No notes newer than that.\n");
+	    return 1;
+  	}
+  }
+  else if (argv[0] == "last" || (argc > 1 && argv[argc-2] == "last" && 
+    (from = atoi(argv[argc-1]))) ) 
+    {
+		if (from < 0)
+	    from = 20;
+		from = no_of_notes - from;
+		if (from < 0)
+	    from = 0;
+  }
+  else if (argv[0] == "all" ) {
+		notes_to_read = bboard -> threaded_notes (query_last_read(),1);
+		if (sizeof(notes_to_read)< 2) {
+	    write("No unread notes.\n");
+	    return 1;
+		}
+	  notes_to_read = notes_to_read [1..];	
+  }
+  else if (argc > 1 && argv[0] == "thread" && 
+    (base = atoi(argv[1]))) 
+  {
+		base--;
+		if (base < 0 || base >= no_of_notes)
+	    return invalid_note(1);
+		notes_to_read = bboard -> threaded_notes(bboard-> creation_time(base),1);
+		/* Strip off the unwanted notes. */
+		for (base = 1; base < sizeof (notes_to_read); base ++ ){
+	 	 if (index (notes_to_read[base],"Following")  <0) break;
+	  }
+		notes_to_read = notes_to_read[..base-1];
+		started_reading = query_last_read () ; /* Dont update the read all stuff */
+  }
+  else if (from = atoi(argv[0])) 
+  {
+		if (--from < 0 || from >= no_of_notes)
+	    return invalid_note(1);
+	  notes_to_read = [ bboard -> show_note (from,1) ];
+  }
+  else {
+		notify_fail("Type 'help board' for help on the read command.\n");
+		return 0;	/* I would use notify fail but for that *@^#%!$ default read one */
+  }
+    
+  this_player()->push_caution("reading notes");
+  next_note ();
+  return 1;
+}
+
+grab_input () { 
+	write ("> "); 
+	input_to ("next_note"); 
+}
+
+next_note (arg) {
+string tmp;
+
+  if (arg && sizeof (arg)) {
+    notes_to_read = [ ];
+	  this_player() -> pop_caution ();
+	  command (arg,this_player());
+	  return 0;
+	  }
+	if (!sizeof (notes_to_read) ) {
+	  write ("Finished.\n");
+	  this_player() -> pop_caution ();
+	  set_last_read (started_reading);
+	  return 1;
+	  }  
+  tmp = notes_to_read[0];
+  notes_to_read = notes_to_read [1..];  
+	"std/more" -> more (tmp,"grab_input");
+}	  
+
+catchup(days)
+{
+    int num_days;
+    int old_date, new_date;
+    int num_notes;
+    int total_notes;
+
+    notify_fail("Usage: catchup <number of days ago>\n");
+    if (!days || days == "")
+	return 0;
+	  num_days = atoi (days);
+	  total_notes = bboard -> number_of_notes();
+    old_date = query_last_read ();
+    new_date = time()-(num_days*24*60*60);
+    set_last_read (new_date);
+    num_notes = (bboard->find_position(old_date) < 0) ? 0:(total_notes-1) -bboard->find_position(old_date);
+    write("Number of unread notes was "+num_notes+",\n");
+    num_notes = (bboard->find_position(new_date) < 0) ? 0:(total_notes-1) -bboard->find_position(new_date);
+    write("                       now "+num_notes);
+    if (bboard->find_position(new_date) == bboard->number_of_notes())
+	write(" (All notes)\n");
+    else
+	write("\n");
+    return 1;
+}
+
+dest_me () { destruct (this_object()); }
+
+int
+invalid_note(int ret_value) {
+
+ if (ret_value == 1)
+   write("Not that many notes.\n");
+  else
+   notify_fail("Not that many notes.\n");
+  return ret_value;
+}  
+   
+show_stats () {
+   write ("Bboard is ");
+   DUMP -> dump (bboard);
+   write ("\nLast note read was timestamped " + ctime(query_last_read()) + ".\n");
+   DUMP -> dump (notes_to_read);
+}
+        

@@ -1,0 +1,264 @@
+/*
+ * A control object for a set of sea-boxes - really a "plains"
+ * manager with locally inserted maps.
+ * By Rhys.  Hacked by seoman.  Commented by Gandalf :)
+ *
+ **** PROBABLY DEFUNCT - G.
+ *
+ * To use, inherit this file.
+ * Call set_room_box(string), string being the filename of your
+ * generic room box (usually /std/roomtype/room_box).
+ * set_light_mode(l) - to set the default light.
+ * set_outdoors_mode(o) - to set up the "outdoorness" of the place.
+ * call initialise()
+ */
+
+#define ROOM_BOX "std/roomtype/room_box"
+
+array hash_table;
+int hash_size;
+array all_exits;
+int x_dim, y_dim, z_dim;
+string room_box;
+int light_or_outdoors;
+array local_maps;
+
+reset(arg)
+{
+    if (arg) return;
+    room_box = ROOM_BOX;
+    initialise();
+}
+
+set_room_box(s) { room_box = s; }
+
+set_light_mode(l) { light_or_outdoors = l; }
+set_outdoors_mode(o) { light_or_outdoors = o; }
+
+new_box(x, y, z)
+{
+    object new_box;
+
+    new_box = clone_object(room_box);
+    new_box->set_all_exits(all_exits);
+    new_box->set_controller(this_object());
+    if (new_box->set_coord(x, y, z))
+        return new_box;
+}
+
+move_to(ob, dir, x, y, z)
+{
+    object ret;
+
+    if (x < 0 || y < 0 || z < 0 ||
+        x >= x_dim || y >= y_dim || z >= z_dim)
+        return 0;
+    ret = hash_retrieve(x, y, z);
+    if (!ret)
+    {
+        if (ob->query_inserted())
+	{
+	    if (ob->contains_other())
+		return new_box(x, y, z);
+	    hash_remove(ob->query_x(), ob->query_y(), ob->query_z());
+	}
+        hash_insert(ob, x, y, z);
+        return description(x, y, z);
+    }
+    else if (objectp(ret) || stringp(ret))
+        return ret;
+    else if (pointerp(ret))
+        return ret[index(ret, dir) + 1];
+}
+
+hash_func(x, y, z) { return (x + x_dim*y + x_dim*y_dim*z)%hash_size; }
+
+hash_insert(thing, x, y, z)
+{
+    int pos;
+    array node;
+
+    pos = hash_func(x, y, z);
+    node = allocate(3);
+    node[0] = thing;
+    node[1] = ({x, y, z});
+    node[2] = hash_table[pos];
+    hash_table[pos] = node;
+    return 1;
+}
+
+hash_retrieve(x, y, z)
+{
+    array node;
+    object ret;
+
+    ret = 0;
+    node = hash_table[hash_func(x, y, z)];
+    while (node)
+    {
+        if ((node[1])[0] == x && (node[1])[1] == y && (node[1])[2] == z)
+        {
+            ret = node[0];
+            node = 0;
+        }
+        else
+            node = node[2];
+    }
+    return ret;
+}
+
+hash_remove(x, y, z)
+{
+    int pos;
+    array node, node2;
+
+    pos = hash_func(x, y, z);
+    node2 = 0;
+    node = hash_table[pos];
+    while (node)
+    {
+        if ((node[1])[0] == x && (node[1])[1] == y && (node[1])[2] == z)
+        {
+            if (node2) node2[2] = node[2];
+            else hash_table[pos] = node[2];
+            node = 0; /* dealloc when ref count goes to 0 (hopefully) */
+        }
+        else
+        {
+            node2 = node;
+            node = node[2];
+        }
+    }
+}
+
+init()
+{
+    array coord;
+    object start;
+
+    coord = start_loc(this_player()->query_prev_room(), query_verb());
+    start = hash_retrieve(coord[0], coord[1], coord[2]);
+    if (!start)
+        start = new_box(coord[0], coord[1], coord[2]);
+    else if (pointerp(start) || stringp(start))
+    {
+        if (pointerp(start)) start = start[0];
+        this_player()->move_player("somewhere#"+start);
+        return;
+    }
+    if (start)
+    {
+        start->arrive_message(this_player());
+        move_object(this_player(), start);
+    }
+    if (environment(this_player()) == this_object())
+    	add_action("goto_endo", "endo", 0);
+}
+
+long() {
+    write("You should never see this message - mail Gandalf about it please.\n");
+    write("Type 'endo' to get to the endo.\n");
+}
+
+goto_endo()
+{ this_player()->move_player("to the endo#room/city/endo"); return 1;}
+
+initialise()
+{
+    hash_size = 199;
+    x_dim = 10; y_dim = 10; z_dim = 10;
+    all_exits = ({"north", "y", -1, "south", "y", 1,
+                "east", "x", 1, "west", "x", -1,
+                "up", "z", -1, "down", "z", 1});
+    hash_table = allocate(hash_size);
+    /* put rooms in hash table here, or call make_local_map */
+}
+
+make_local_map(x1, y1, z1, x2, y2, z2, places, map)
+{
+    int x, y, z, pos;
+    int dx, dy, dz;
+
+    if (local_maps)
+        local_maps += allocate(1);
+    else
+        local_maps = allocate(1);
+    local_maps[sizeof(local_maps)-1] = ({x1, y1, z1, x2, y2, z2, places, map});
+    dx = (x1<x2)?1:-1;
+    dy = (y1<y2)?1:-1;
+    dz = (z1<z2)?1:-1;
+    pos = -1;
+    for (z = z1; z != z2+dz; z += dz)
+        for (y = y1; y != y2+dy; y += dy)
+            for (x = x1; x != x2+dx; x += dx)
+                if (map[++pos]) {
+                    hash_insert(places[map[pos]-1], x, y, z);
+		}
+}
+
+start_loc(from, dir)
+{
+    return ({5, 5, 5});
+}
+
+local_map_start(from, dir)
+{
+    int map, place, d;
+    int x, y, z;
+    int xrange, yrange, zrange;
+
+    for (map = 0; map < sizeof(local_maps); map++)
+        if ((place = index((local_maps[map])[6], from)) >= 0)
+            if ((place = index((local_maps[map])[7], place+1)) >= 0)
+            {
+                xrange = local_maps[map][0] - local_maps[map][3];
+                if (xrange < 0) xrange = -xrange;
+                yrange = local_maps[map][1] - local_maps[map][4];
+                if (yrange < 0) yrange = -yrange;
+                xrange++; yrange++;
+                z = (local_maps[map])[2] + place/(xrange*yrange)*((local_maps[map][2]>local_maps[map][5])?-1:1);
+                place = place%(xrange*yrange);
+                y = (local_maps[map])[1] + place/xrange*((local_maps[map][1]>local_maps[map][4])?-1:1);
+                x = (local_maps[map])[0] + place%xrange*((local_maps[map][0]>local_maps[map][3])?-1:1);
+                if ((d = index(all_exits, dir)) >= 0)
+                {
+                    if (all_exits[d+1] == "x")
+                        x += all_exits[d+2];
+                    else if (all_exits[d+1] == "y")
+                        y += all_exits[d+2];
+                    else if (all_exits[d+1] == "z")
+                        z += all_exits[d+2];
+                    return ({x, y, z});
+                }
+            }
+}
+
+description(x, y, z)
+{
+    array exits;
+    string temp;
+
+    temp = "";
+    if (x > 0) temp = temp +"&west";
+    if (x < 9) temp = temp +"&east";
+    if (y > 0) temp = temp +"&north";
+    if (y < 9) temp = temp +"&south";
+    if (z > 0) temp = temp +"&up";
+    if (z < 9) temp = temp +"&down";
+<<<<<<< controller.lpc
+    exits = explode(temp[1..], "&");
+    return ({"A strange void",
+=======
+    exits = explode(extract(temp, 1), "&");
+    return ({"A strange void",
+>>>>>>> 1.3
+        "This is a strange void stretching all about you.\n",
+        exits, 1});
+}
+
+query_light_rather_than_outdoors()
+{
+    if (light_or_outdoors == LIGHT)
+        return 1;
+    else return 0;
+}

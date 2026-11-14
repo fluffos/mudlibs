@@ -1,0 +1,524 @@
+/* 
+ * NPC_SERVER 
+ * ----------
+ * 
+ * All monsters are registered with this object through /std/monsterer.c. 
+ * Uses standard hashing of the _race_ of the monster. 
+ * 
+ * MONSTERER uses:
+ *   NPC_SERVER->regster_npc(mon);
+ * You can also use: 
+ *   NPC_SERVER->register_npc(mon, [ locations ], move speed);
+ * 
+ * Hence, although all monsters are 'registered' you can make them 
+ * specially registered if you use the latter method. Where:
+ *
+ *   locations = array of locations for where the npc should walk to.
+ *     eg. locations = [ "room/city/market7", 50,
+ * 		          "room/city/market5", 10,
+ *			  "room/city/pr1", 40 ];
+ *   NB: The numbers are the percentage chance of the monster going to
+ *        (or being located in) that location. It is not essential that
+ *        the figures add up to 100. Though it's more consistent.
+ *
+ *   move speed = how fast the monster walks there.
+ *
+ * Within the hash table, the data is stored as follows:
+ * 
+ *    data = [ object npc,
+ *              array locations,
+ *              int move speed,
+ *              int service_flag 
+ *           ]
+ */
+
+#include "Servers.h"
+inherit "std/hash";
+
+import "std/hash_class" chash;
+
+#define HASH_SIZE 100
+#define SERVICE_INTERVAL 120        /* 2 minutes between npc services */
+#define SERVICE_REGISTERED_PERC 60  /* % we'll service a registered npc */
+#define SERVICEES 3
+#define MAX_SERVICEES 3
+#define TRACKER_SOUL "players/darkryln/npc/track"
+
+#define TD(x) catch tell_object(find_living("darkryln"), x);
+
+int num_created = 0;
+int num_living = 0;
+
+array service_queue = [ ];
+array std_mons = [ ];
+array registered_npcs = [ ];
+array known_races = [ ];
+array locations = 
+
+    [  
+    "room/city/market7",
+	"room/city/market5",
+	"room/city/market4",
+	"room/city/market3",
+  	"room/city/market2"
+    ];
+
+reset(arg)
+{
+    int i;
+    array tmp;
+
+    ::reset(arg);
+    if(arg) return;
+    if(is_cloned(this_object())) 
+    {
+	destruct(this_object());
+	return 1;
+    }
+    setup_hash(0, HASH_SIZE, 1);
+    known_races = [ ];
+    tmp = MONSTERER->query_monsters();
+    for(i=0; i<sizeof(tmp); i++)
+    	if(stringp(tmp[i])) known_races += [ tmp[i] ];
+}
+
+query_known_races() { return known_races; }
+
+register_npc(npc, locations, service_time)
+{
+    int hash_val, i;
+    string race;
+
+    if(!npc) return 0;
+    if(!npc->query_living()) return 0;
+    if(npc->is_player()) return 0;
+
+    race=npc->query_std_mon_type();
+    if(!race) return 0;
+
+    if(!is_cloned(npc)) return 0;
+
+    hash_val = hash(race);
+    if(hash_val < 0) return 0;
+
+    if(query_hash(hash_val, npc)) return 0;
+
+    add_hash(hash_val, [ npc, locations, service_time, 0 ] );
+
+    num_created++;
+    num_living++;
+
+    if(locations || service_time)
+	if(index(registered_npcs, npc) == -1)
+	    registered_npcs += [ npc ];
+
+    if((i=index(std_mons, race, 0, 3)) == -1)
+        std_mons += [ race, 1, 1 ];
+    else
+    {
+        std_mons[i+1] += 1;
+        std_mons[i+2] += 1;
+    }
+
+    return 1;
+}
+
+query_npcs(race)
+{
+class chash node;
+array ret = [ ];
+
+    if(!race) return 0;
+    int h=hash(race);
+
+    node = query_hash(h, 0, 1);
+    if(!node) return 0;
+
+    while(node.link)
+    {
+        if(objectp(node.data[0]))
+        {
+            if(node.data[0]->query_std_mon_type() == race)
+	            ret += [ node.data[0] ];
+        }
+        else  /* We need to delete the monster from the array */
+        {
+            
+        }
+	    node = node.link;
+    }
+    if(objectp(node.data[0]))
+	if(node.data[0]->query_std_mon_type() == race)
+	    ret += [ node.data[0] ];
+
+    return ret;
+}
+
+/********************************************************************/
+/* The add_hash function has been rewritten so as to allow dead     */
+/* monsters (which have been killed dested etc) to be overwritten   */
+/* in the hash table 						    */
+/********************************************************************/
+
+add_hash(int hash_pos, data)
+{
+class chash tmp, prev;
+class chash incoming = create chash;
+int pos;
+
+    incoming.link = 0;
+    incoming.hash_value = hash_pos;
+    incoming.data = data;
+    pos = hash_pos % hash_size;
+    tmp = hash_table[pos];
+    if(!tmp)
+    {
+  	hash_table[pos] = incoming;  /* Nothing here */
+    }
+    else
+    {
+	while(tmp.link)
+	{
+	    if(!tmp.data[0])   /* THIS MONSTER IS DEAD! */
+	    {
+		incoming.link = tmp.link;
+		if(prev) 
+		    prev.link = incoming;  /* OVERWRITE DEAD MONSTER */
+		else
+		    hash_table[pos] = incoming;  
+		num_living--;
+		return 1;
+	    }
+	    prev = tmp;
+	    tmp = tmp.link;
+	}
+	tmp.link = incoming;   /* STICK IT AT THE END */
+    }
+    return 1;
+}
+
+/********************************************************************/
+/* I've rewritten the query_hash function so when we go through the */
+/* linked list at each hash location (if necessary) then we check   */
+/* the data field of data[0] for the current object.		    */
+/********************************************************************/
+
+query_hash_location(int pos)
+{
+    pos = pos % hash_size;
+    return hash_table[pos];
+}
+
+query_hash(int hash, last, cl)
+{
+int pos, found = 0;
+class chash node;
+
+    pos = hash % hash_size;
+    node = hash_table[pos];
+    while(node)
+    {
+	if(!last) 
+   	{
+	    if(cl) return node;
+	    else return node.data;
+	}
+	if(pointerp(node.data))
+	{
+	    if(node.data[0] == last) 
+	    {
+		if(cl) return node;
+		else return node.data;
+	    }
+	}
+
+	node = node.link;
+    }
+    return 0;
+}
+
+hash(key)
+{
+    int h,i;
+    if(!stringp(key)) return -1;
+    for(i=0; i<sizeof(key); i++)
+   	h=(47*h+key[i]) % HASH_SIZE;
+    return h;
+}
+
+/*******************************************************************/
+/* 								   */
+/* There is only one call out going with this object - Every 2     */
+/* minutes a call it made to the function below. It checks         */
+/* through the servicees in the queue at that time. If any of them */
+/* are finished with their service then they get turfed out.       */
+/* Once these checks have been made, more servicees are loaded     */
+/* into the queue and subsequently serviced. A monster has more of */
+/* a chance of being serviced if they are in the REGISTERED_NPC    */
+/* array. You can put your monster in here by supplying an array   */
+/* of home locations when you register.                            */
+/* 								   */
+/*  eg. NPC_SERVER->register_npc(npc,["room/city/market7",30],3) */
+/* 								   */
+/* When your monster is serviced he will walk to the centre market */
+/* 30% of the time. All other times he will walk to a random       */
+/* location. See comments above.				   */
+/* 								   */
+/*******************************************************************/
+
+npc_service()
+{
+    int servicees, i, pos;
+    string rc;
+    array tmp = [ ];
+    object who;
+
+    tmp = service_queue;
+    for(i=0; i<sizeof(service_queue); i++)
+	if(service_queue[i]) tmp += [ service_queue[i] ];
+    service_queue = tmp;
+
+    if(sizeof(service_queue) >= MAX_SERVICEES) 
+    {
+	if(find_call_out("npc_service") == -1)
+	    call_out("npc_service", SERVICE_INTERVAL);
+	return 0;
+    }
+
+    servicees = MAX_SERVICEES - sizeof(service_queue);
+
+    for(i=0; i<servicees; i++)
+    {
+	if(random(100) < SERVICE_REGISTERED_PERC && sizeof(registered_npcs))
+	{
+	    if(sizeof(registered_npcs))
+	    {
+		/* 1 servicee = a registered npc */
+	    	pos = random(sizeof(registered_npcs));
+	    	who = registered_npcs[pos];
+		if(!who || !environment(who)) registered_npcs = 
+		    registered_npcs[..pos-1]+registered_npcs[pos+1..];
+	    	/* TD("Random servicee: "+who+"\n"); */
+	    }
+	}
+ 	else
+	{
+	    /* Choose a random race. Then choose a random critter. */
+	    pos = random(sizeof(known_races));
+	    rc = known_races[random(sizeof(known_races))];
+	    /* TD("Random race: "+rc+"\n"); */
+	}
+
+	if(who)
+	    do_service(who);
+    }
+
+    if(find_call_out("npc_service") == -1)
+	call_out("npc_service", SERVICE_INTERVAL);
+}
+
+do_service(who)
+{
+    int pos, move_speed;
+    string type, new_location;
+    array info, homes;
+    object new_location_ob, tracker_soul;
+
+    if(!who) return 0;
+
+    type = who->query_std_mon_type();
+    if(!type) return 0;
+
+    pos = hash(type);
+    if(pos < 0) return 0;
+
+    info = query_hash(pos, who);
+    if(!info || !pointerp(info)) return 0;
+
+    if(pointerp((homes=info[1])))    /* THIS GUY HAS A HOME! */
+    {
+	if(environment(who))
+	{
+	    if(index(homes, file_name(environment(who)) != -1))
+		return 0;
+	    pos = random(sizeof(homes)) / 2; /* TRUNCATE */
+	    pos = pos * 2;
+	    new_location = homes[pos];
+	}
+	else
+	{
+	    remove_hash(pos, who);
+	    return 0;
+	}
+    }
+    else   	/* I don't have a home! Wahhh! Gimme a random one */
+    {
+	new_location = get_random_location();
+    }
+
+    if(pointerp(info))
+    {
+	move_speed = info[2];
+    }
+    if(!move_speed)
+	move_speed = random(4)+2;   /* 2 to 5 second walk time */
+
+    if(!load_object(new_location)) return 0;
+    tracker_soul = present("tracker_soul", who);
+    if(tracker_soul)  
+	tracker_soul->clear_route();
+    else	
+	tracker_soul = clone_object(TRACKER_SOUL);
+
+    tracker_soul->set_move_speed(move_speed);
+    tracker_soul->set_sf_callbacks("arrived", "lost", this_object());
+    tracker_soul->goto(new_location);
+
+    return 1; 
+}
+
+get_random_location()
+{
+    return locations[random(sizeof(locations))];
+}
+
+/*********************************************************************/
+/* Arrive function. A monster who was given one of our tracker souls */
+/* has arrived at their new location. Firstly, remove them from the  */
+/* queue if they are in it. Secondly, remove their hash table entry  */
+/* flag which signifies they are no longer being serviced. Then      */
+/* destroy their tracker soul. 					     */
+/*********************************************************************/
+
+arrived(who)
+{
+    int i;
+    string type;
+    array info;
+    object track;
+
+    if(!who) return 0;
+
+    i=index(service_queue, who);
+    if(i>=0) service_queue=service_queue[..i-1]+service_queue[i+1..]; 
+    
+    type = who->query_std_mon_type();
+    if(!type) return 0;
+
+    i = hash(type);
+    if(i<0) return 0;
+    info = query_hash(i, who);
+    if(!info) return 0;
+    info[3] = 0;	      /* WE ARE NO LONGER BEING SERVICED */
+    add_hash(i, info);        /* RESTORE THE NEW INFO */
+ 
+    track = present("tracker_soul", who);
+    if(track) 
+    {
+	move_object(track, "RO/void");
+     	destruct(track);
+    }
+ 
+} 
+
+lost(who)
+{
+    object track;
+
+    if(!who) return 0;
+ 
+    track = present("tracker_soul", who);
+    if(track)
+    {
+	move_object(track, "RO/void");
+  	destruct(track);
+    }
+}
+
+abort_server()
+{
+    remove_call_out("npc_service");
+}
+
+show_stats(full)
+{
+    int i;
+    string ret = "";
+
+    ret += "Total monsters registered (May be dested): "+num_created+"\n";
+    ret += "Service queue: \n";
+    ret += (sizeof(service_queue)?implode(service_queue," "):" None")+"\n";
+    ret += "Standard Monster types known: \n";
+    ret += (sizeof(std_mons) ? "" : " None.\n");
+
+    if(full)
+    {
+        update_living();
+    }
+    for(i=0; i<sizeof(std_mons); i=i+3)
+    {
+        ret += " Type: "+std_mons[i]+" --- Created: "+std_mons[i+1]+
+            " --- Living: "+std_mons[i+2]+"\n";
+    }
+
+    ret += "\nNumber of monsters created: "+num_created+".\n";
+    ret += "Number of monsters living: "+num_living+".\n\n";
+
+    if(!full)
+    {
+        ret += "When the load is low - call update_living.\n";
+    }
+    MORE->more(ret);
+}
+
+update_living()
+{
+    int i, hsh, tmp;
+    class chash node;
+    class chash prev;
+
+    num_living = 0;
+
+    for(i=0; i<sizeof(std_mons); i=i+3)
+    {
+        hsh = hash(std_mons[i]);
+    	hsh = hsh % HASH_SIZE;
+        node = hash_table[hsh];
+        prev = 0;
+
+        while(node.link)
+        {
+            if(pointerp(node.data[0]))
+            {
+                if(!objectp(node.data[0]))
+                {
+                    if(prev)
+                    {
+                        prev.link = node.link;
+                        node = node.link;
+                    }
+                    else
+                    {
+                        hash_table[hsh] = node.link;
+                        node = node.link;
+                    }
+                }
+                else
+                {
+                    prev = node;
+                    node = node.link;        
+                }
+            }
+  			else
+ 			{
+				prev = node;
+				node = node.link;
+			}
+        }
+        tmp = sizeof(query_npcs(std_mons[i]));
+        std_mons[i+2] = tmp;
+        num_living += tmp;
+    }
+    write("Living monsters should now be up to date.\n");
+}
+

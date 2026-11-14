@@ -1,0 +1,890 @@
+/*
+    Shattered Worlds perception object.
+
+    Dredd. Modified from the original stuff in the US player.c
+
+    980121 Dredd Changed the who function
+    980228 Greebo bug fixed the who function
+    981211 Jenna   Hilited exits in brief mode
+    991116 Jenna   Added new form of diag/hp/sp command (specific damage) 	
+    000517 Jenna   Got rid of old door code
+*/
+
+inherit "obj/souls/base_soul";
+inherit "RO/Servers";
+
+#include "security.h"
+
+
+#define write(x) tell_object(myself,x)
+
+int temp_blind;
+object room; 
+
+reset(arg)
+{
+    ::reset(arg);    
+    if (!arg) {
+        add_id("perception");
+        set_soul_type("generic", "perception");
+    }
+}
+
+init() 
+{
+    ::init();
+    if (myself == this_player()) 
+    {
+        add_action("look", "look", 1);
+        add_action("scan", "scan");
+        add_action("examine", "examine", 3);
+        add_action("glance", "glance", 3);
+        add_action("who", "who");
+        add_action("whoami", "whoami");
+        add_action("idle","idle");
+        add_action("inventory", "i");    
+        add_action("inventory", "inv");    
+        add_action("inventory", "inventory");    
+        add_action("do_read", "read");
+        add_action("diagnoses", "diagnoses", 4);
+        add_action("diagnoses", "diagnosis");
+        add_action("diagnoses", "hp");
+        add_action("diagnoses", "sp");
+	    add_action("old_diagnoses", "body");
+        add_action("peer","peer",0);
+        add_action("consider","consider",3);
+        add_action("smell","smell");
+        /* add_action("taste","taste"); */
+    }
+}
+
+smell(str)
+{
+    object o;
+    string msg;
+
+    notify_fail("Smell what?\n");
+
+    if (!str) return 0;
+
+    o = present(str,myself);
+    if (!o) o = present(str, environment(myself));
+    if (!o) return 0;
+
+    msg = o->query_property("smell");
+
+    if (!msg) 
+    {
+        write("That doesn't have much of an odor.\n");
+        return 1;
+    }
+
+    write(msg[1]);
+    return 1;
+}
+
+consider(str)
+{
+    object ob;
+    int mystr, obstr;
+
+    notify_fail("Consider what?\n");
+    if (!str) return 0;
+
+    ob = present(lower_case(str), environment(myself));
+
+    if (!ob) 
+    {
+        write("No " + str + " here !\n");
+        return 1;
+    }
+    if (!living(ob)) 
+    {
+        write(str + " is not a living thing !\n");
+        return 1;
+    }
+    if (ob == myself) 
+    {
+        write("You're as good as yourself!\n");
+        return 1;
+    }
+
+    mystr = myself->query_str() * 4 + myself->query_con() * 4 + 
+            myself->query_siz() * 4 + myself->query_dex() * 4 +
+            myself->query_skill("offense") + myself->query_skill("defence");
+
+    obstr = ob->query_str() * 4 + ob->query_con() * 4 + 
+            ob->query_siz() * 4 + ob->query_dex() * 4 +
+            ob->query_skill("offense") + ob->query_skill("defence");
+
+
+    if (mystr * 2 < obstr)
+    {
+        write("You feel very scared about combat with " + ob->query_name() + ".\n");
+    }
+    else if (mystr + 60 < obstr)
+    {
+        write("You feel weaker than " + ob->query_name() + ".\n");
+    }
+    else if (mystr / 2 > obstr)
+    {
+        write("You feel very confident about combat with " + ob->query_name() + ".\n");
+    }
+    else if (mystr - 60 > obstr)
+    {
+        write("You feel stronger than " + ob->query_name() + ".\n");
+    }
+    else
+    {
+        write("You feel about the same as " + ob->query_name() + ".\n");
+    }
+    return 1;
+}
+
+idle()
+{
+    array idle = USER_SERV->query_idle();
+    int i;
+    string tmp;
+
+    for (i = 0; i < sizeof(idle); i+=2)
+    {
+	if (idle[i] <  1)
+	    tmp = "{Gactive}";
+	else if (idle[i] < 5)
+	    tmp = "{Y"+idle[i]+"}";
+	else
+	    tmp = "{R"+idle[i]+"}";
+	COLOUR->cwrite(FORMAT->right_justify(tmp, 9) +
+	    "  " + idle[i+1] + "\n");
+    }
+    return 1;
+}
+
+who()
+{
+    int ansi;
+    string out;
+
+    ansi = myself->query_store("hilite_on");
+
+    if (ansi)
+        out = USER_SERV->ansi_who();
+    else
+        out = USER_SERV->who();
+
+    write(out);
+    return 1;
+}
+
+whoami()
+{
+    write(myself->short()+"\n");
+    return 1;
+}
+
+
+
+inventory()
+{
+    object ob;
+    string str, w_dif;
+    int i, x, siz, kg;
+    int money;
+
+    if (cant_see()) return 1;   
+    if (myself->test_dark()) return 1;
+    str = LOOK->query_contents_look(myself);
+    siz = myself->query_siz() * 8;
+    myself->recalc_carry();  /* Ensure they have the right amount. */
+    kg = myself->query_weight_carried();
+    money = myself->query_money();
+
+    if ((!str || str == "")&& (money ==0)) 
+        write("You are carrying nothing.\n");
+    else 
+    {
+	write("Inventory: ");
+    if (money != 0)
+    {
+        write(NUMBERS_SERV->int_to_english(money, myself->query_int()) +
+        " gold coin"+ ((myself->query_money()!=1)?"s":""));
+    }
+    if (str)
+    {
+        if (money) write(", " + str);
+        else write(str);
+    }
+    else write(".");
+    x = 100 * kg / myself->query_max_can_carry();
+    w_dif = x > 90 ? "(with extreme difficulty) " :
+	x > 75 ? "(with great difficulty) " :
+	x > 50 ? "(with some difficulty) " : "";
+    if(kg > 0)
+	  write("\nYou are carrying "+w_dif+
+	    "approximately "+ENGLISH->int_to_english(kg, 
+	     myself->query_int())+" stone in weight.\n"); /* Dark. 24/7/95 */
+    else if (kg == 0)
+        write("\nYou're carrying no weight.\n");
+    }
+    return 1;
+}
+
+// Rewritten by Jenna for new doors
+// Sep 2000
+scan()
+{
+    object where, ex, door;
+    array dd;
+    int i, flag;
+    string desc, exit;
+
+    where = environment(myself);
+
+    dd = where->query_dest_dir();
+
+    if (!dd)
+	return 0;
+    for (i = 1; i < sizeof(dd); i += 2)
+    {
+        ex = find_object(dd[i-1]);
+        if (ex)
+        {
+	    door = where->query_door(dd[i]);
+	    if (door && door->is_closed())
+		desc = "a closed door.\n";
+	    else
+                desc = LOOK->query_living_contents(ex);
+            if (desc)
+            {
+                write("To the " + dd[i] + " there is: " + desc);
+                flag = 1;
+            }
+        }
+    }
+    if (!flag)
+        write("There is nothing around you.\n");
+    return 1;
+}
+
+#if 0
+scan()
+{
+    object where, ex;
+    array dd;
+    int i, flag;
+    string desc;
+
+    where = environment(myself);
+
+    dd = where->query_dest_dir();
+
+    if (dd)
+      for (i = 0; i < sizeof(dd); i++)
+      {
+        string exit = where->query_exit(dd[i],1);
+        if (exit) ex = find_object(exit);
+        if (ex)
+        {
+            string exdesc = explode(dd[i], "#")[0];
+
+            desc = LOOK->query_living_contents(ex);
+            if (desc)
+            {
+                write("To the " + exdesc + " there is: " + desc);
+                flag = 1;
+            }
+        }
+      }
+    if (flag == 0)
+    {
+        write("There is nothing around you.\n");
+    }
+
+    return 1;    
+}
+#endif
+
+examine(str) 
+{ 
+    notify_fail("Examine what?\n");
+    if (!str) return 0;
+    return look("at " + str); 
+}
+
+
+glance() {  return look(0,1); }
+
+#if 0
+look_door(string item)
+{
+    int i;
+    array dest_dir;
+    array allargs;
+
+    notify_fail("There are no doors here.\n");
+    i = 1;
+    /* if (room->query_type() != "door") return 0; */
+    if (arrayp(room->query_dest_dir()) == 0)  
+        return 0;
+    dest_dir = room->query_dest_dir();
+    while (i < sizeof(dest_dir)) 
+    {
+        string dirn, code, des;
+        allargs = explode(dest_dir[i], "#");
+        if (sizeof(allargs) > 1)
+        {
+            dirn = allargs[0];
+            code = allargs[1];
+            if (!item || item == dirn) 
+            {
+                des = "guilds/tguild/doors"->query_door_desc(room);
+                write (des);
+                if (code[0] == "0"[0])
+                    write("The door is open.\n");
+                else if (code[0] == "1"[0])        
+                    write("The door is closed and unlocked.\n");
+                else if (code[0] == "2"[0])        
+                    write("The door is closed and locked.\n");
+                return 1;
+            }
+        }
+        i+=2;
+    }
+}
+#endif
+
+/* 
+ * look at the roof if indoors look at weather if outdoors and look
+ * at rocs if any above 
+ */
+look_sky()
+{
+    string sh;
+
+    notify_fail("What sky?\n");
+    if (room->query_outdoors() < 2) 
+    {
+        write("You look up and see the ceiling of the room "
+        +"you are in.\n");
+        return 1;
+    }
+    else if (room->query_weather_obj())
+    {
+        sh = room->query_weather();
+        if (sh == 0)
+            write("You look towards the sky and see that the " +
+                "weather controller is playing silly buggers.\n");
+        else
+            write(sh);
+        return 1;
+    }
+    return 0;
+}
+
+look_living(object ob, quiet)
+{
+    int i, x;
+    array special;
+
+    if (ob != myself && !quiet) 
+    {
+        if (!myself->query_invis()) 
+        tell_object(ob, myself->query_name() + " looks you over.\n");
+        myself->checked_say(myself->query_name() + " examines " 
+        + ob->query_name() + ".\n", ({ myself, ob }) );
+    }
+    special = contents(ob);
+    if (special) special = special + ob->GetAliasedLS(0)[1];
+    else special + ob->GetAliasedLS(0)[1];
+    if (special) x = sizeof(special);
+            
+    string extra_str = "";
+    for (i = 0; i < x; i ++) 
+    {
+        if (special[i]->query_disguised()) return 1;
+        string tmp_extra_str;
+        tmp_extra_str = special[i]->extra_look();
+        if (tmp_extra_str) 
+        {
+            tmp_extra_str = "lib/emote"->emote_string( ob, tmp_extra_str );
+            extra_str += (tmp_extra_str + "\n");
+        }
+    }
+    write(extra_str);
+    return 1;
+}
+
+look_room(int remote)
+{
+    string sh;
+    array temp, ex;
+    int i;
+
+    room = environment(myself);
+    if (remote && myself->query_brief()) 
+    {
+	    int hilite = 0;
+        string tempitem = "";
+        string rs = room_short();
+
+        if (!rs) rs = "A dark room";
+        write(rs);
+	    if (myself->is_player())
+		hilite = ANSI->hilite(myself, "exits");
+        temp = room->query_dest_dir(1);
+        if (temp) 
+        {
+            ex = allocate(sizeof(temp)/2);
+            for (i = 0; i < sizeof(temp); i += 2) 
+            ex[i/2] = explode(temp[i+1], "#")[0]; 
+            /* Bel 2 July '95 */
+            if (sizeof(ex)) 
+            tempitem = " " + ANSI->scolor(hilite,"<"+implode(ex, " ") + ">") + ".\n";
+        }
+        if (tempitem == "" ) tempitem =  ".\n";
+        write(tempitem);
+    } 
+    else 
+    {
+            room_long();
+    }
+    sh = LOOK->query_contents_look(room, myself);
+    if( sh && sh != "" )
+    {
+#ifdef NORTH_MUDLIB
+            write(sh);
+#else
+            write("You see " + sh);
+#endif
+    }
+    return 1;
+}
+/*
+ * this is a whopping big function that caters for a shitload of 
+ * special cases. It probably should be broken up a bit - Hunter 951217
+ */
+look(str, remote)
+{
+    object ob; 
+    string local_item, item, sh;
+    int weight, i, done;
+    array temp;
+    array allargs;
+
+    if (cant_see()) return 1;   
+    if (myself->test_dark()) return 1;
+    if (!((stringp(room) && load_object(room)) || (objectp(room))))
+        room = environment(myself); /* Just in case: Belgarion. */
+
+    if (!str) return look_room(remote);
+
+    notify_fail("Look at what?\n");
+
+    allargs = STRINGS->split_first(str, " ");
+
+    if (allargs && sizeof(allargs) > 1)
+    {
+        if ((allargs[0] == "at")  || (allargs[0] == "in"))
+            item = lower_case(allargs[1]);
+        else
+            item = lower_case(implode(allargs, " "));
+        
+    }
+    else
+    {
+        item = lower_case(str);
+    }
+
+    if (item == "") return 0;
+
+    local_item = room->query_item_description(item);
+    if (local_item != 0) 
+    {
+            write(local_item+".\n");
+            return 1;
+    }    
+
+#if 0
+    if (item == "door")
+        return look_door(local_item);
+    allargs = STRINGS->split_first(item, " ");
+    if (allargs && (sizeof(allargs) > 1) && (allargs[1] == "door"))
+        return look_door(allargs[0]);
+#endif
+
+    if (item == "sky") return look_sky();
+    if (item == "prints" || item == "footprints" || item == "floor") 
+    {
+        if (room->query_prints() == 1 && !(room->query_medium("water"))) 
+           write(room->query_prints_long());
+        else 
+        write("You don't seem to be able to leave prints here.\n");
+        return 1;
+    }
+    ob = present(item, myself);
+    if (!ob && room->id(item)) 
+        ob = room;
+    if (!ob) 
+        ob = present(item, room);
+    if (!ob)
+	ob = room->find_door(item);
+    if (!ob) 
+    {
+        int j = peer(str);
+        notify_fail("There is no "+item+" here.\n");
+        return j;
+    }
+    catch {temp = ob->query_ids();};
+    if (pointerp(temp) && sizeof(temp)) 
+    {
+        if (index(temp, item) == -1) 
+        item = temp[0];
+    }
+    ob->long(item);
+    weight = ob->query_weight();
+    if (!living(ob)) 
+    {
+        if (weight >= 5)
+        write("It looks very heavy.\n");
+        else if (weight >= 3)
+        write("It looks heavy.\n");
+    }
+    if (!ob->can_put_and_get(item)) return 1;
+    if (living(ob)) look_living(ob);
+    if (ob == room)  return 1;  /* Jenna 7/94 */
+    sh = LOOK->query_contents_look(ob);
+    if (sh && sh != "")  
+    {
+        if (living(ob)) 
+            write(capitalize(item) + " is carrying: "+sh);
+        else 
+            write(capitalize(item) + " contains: "+sh);
+    }
+    return 1;
+}
+
+do_read(str)
+{
+    object out;
+    object it;
+    string local_item;
+
+    if (cant_see()) return 1;   
+    notify_fail("Read What?\n");
+    if (!str) return 0;
+
+    it = present(str, this_player());
+    out = environment(this_player());
+    if (!it) it = present(str, out);
+    if (it) return it->read(str);
+
+    if (room) local_item = room->query_item_description(str);
+    if (local_item)
+    {
+        write(local_item+".\n");
+        return 1;
+    }
+    return 0;
+}
+
+old_diagnoses()
+{
+int i, x;
+array body_locations, body_hps;
+    
+    body_locations = myself->query_body();
+    body_hps = myself->query_hp("all");
+        x = sizeof(body_locations);
+        if (!body_hps) myself->setup_hps();
+        for (i = 0; i <x; i+=2) {
+          tell_object(myself, body_hps[i+1] + " of " + body_hps[i] +
+                        " in "+ body_locations[i] + "\n");
+        }
+        return 1;
+}
+
+/* New diags - Jenna Nov 99 */
+diagnoses() {
+    write("You have " + myself->query_hp() + " hit points (of " + 
+        myself->max_hp() + ") and " + myself->query_sp() + 
+        " spell points (of " + myself->max_sp() +").\n");
+    tell_object (myself, diags());
+    if (this_player()->query_wiz())
+        old_diagnoses();
+    return 1; 
+    }
+
+diags(alt) {
+  object me;
+  real calc;
+  string ret = "";
+  string label;
+  int i, j, redo, range;
+  array body, hps, dtype1, dtype2;
+  array dam = [ "minimal", "minor", "significant", "great", "major",
+        "severe", "extreme" ];
+  string blanks = "                              ";
+
+    if (alt && objectp(alt))
+        me = alt; /* Alternative */
+    else 
+        me = myself;
+    range = sizeof(dam) - 1;
+    body = me->query_body();
+    hps = me->query_hp("all");
+    for (i = 0; i < sizeof(body); i+=2) {
+     if (hps[i] != hps[i+1]) {
+       ret += capitalize(body[i])+blanks[..(20-sizeof(body[i]))];
+       if (stringp(hps[i+1])) 
+        ret += capitalize(hps[i+1])+"\n";
+      else {
+        if (hps[i+1] > hps[i]) 
+                hps[i+1] = hps[i];
+        if (hps[i] > 400) 
+                redo = 1;    /* Check if their body hp sounds right */
+        calc = range-range*(hps[i+1]+hps[i])/(hps[i]+hps[i]);
+        if (hps[i+1] <= -hps[i]) 
+                ret += ("Severed");
+        else 
+                ret += (capitalize(dam[real2int(calc)])); 
+        dtype1 = me->query_body_damage(body[i]);
+	if (pointerp(dtype1)) {
+            for (j = 0, dtype2 = [ ]; j < sizeof(dtype1); j += 2) {
+	      label = "std/damage"->query_live_effect(dtype1[j], 
+                            (dtype1[j+1] * 3 / hps[i]) + 1);
+	      if (label)
+		dtype2 += [ label ];		
+	      }	
+            ret += " (" + STRINGS->array2string(dtype2) + ")";
+	    }
+	ret += "\n";
+        }
+       }         
+      }
+    if (sizeof(ret))
+        ret = "Body Location        Damage\n"+
+              "----------------------------------------\n" + ret;
+    if (redo) 
+        me->setup_hps();
+    return ret;
+    }
+
+#if 0
+/* Taken the some more numbers out: Paladin 950405 */
+diagnoses() { 
+    write(myself->query_hp() + " hit points (of " + myself->max_hp() + ") and ");
+    write(myself->query_sp() + " spell points (of " + myself->max_sp() +").\n");
+    tell_object (myself, diags()); 
+    if (this_player()->query_wiz()) old_diagnoses(); 
+    return 1; }
+
+diags(alt) {
+object me;
+real calc;
+string ret;
+int i, redo, range;
+array body, hps;
+array dam = ({ "minimal damage", "minor damage", 
+        "significant damage", "great damage", "major damage",
+        "severe damage", "extreme damage" });
+string blanks = "                         ";
+    if (alt && objectp(alt)) me = alt; /* Alternative */
+    else me = myself;
+    range = sizeof(dam)-1;
+    ret = me->query_name()+"'s damage status :\n";
+    body = me->query_body();
+    hps = me->query_hp("all");
+    for (i = 0; i < sizeof(body); i+=2) {
+      ret += capitalize(body[i])+blanks[..(20-sizeof(body[i]))]+" : ";
+      if (stringp(hps[i+1])) ret += capitalize(hps[i+1])+".\n";
+      else {
+        if (hps[i+1] > hps[i]) hps[i+1] = hps[i];
+        if (hps[i] > 400) redo = 1;    /* Check if their body hp sounds right */ 
+        calc = range-range*(hps[i+1]+hps[i])/(hps[i]+hps[i]);
+        if (hps[i] == hps[i+1]) ret += ("Unaffected.\n");
+        else if (hps[i+1] <= -hps[i]) ret += ("Severed.\n");    
+        else ret += (capitalize(dam[real2int(calc)])+".\n"); } }
+    if (redo) me->setup_hps();
+    return ret;}
+#endif
+
+/* Blindness added by squawk */
+
+cant_see() 
+{
+    if ( (temp_blind) || !(index(myself->query_disable(),"blind")==-1) )
+    { 
+        write("You are unable to see.\n");
+        return 1;
+    }
+    return 0;
+}
+
+query_blindness()
+{
+    if ( (temp_blind) || !(index(myself->query_disable(),"blind")==-1) ) return 1;
+    return 0;
+}
+
+blind(time)
+{
+    if (!time) return 0;
+    temp_blind=1;
+    tell_object(myself,"You suddenly go blind.\n");
+    SKILL_SERV->add_skill(myself,"defence", -20, time);
+    SKILL_SERV->add_skill(myself,"offense", -20, time);
+    SKILL_SERV->add_skill(myself,"dodge", -20, time);
+    call_out("end_blindness",(time));
+    return 1;
+}
+
+end_blindness() 
+{
+    temp_blind=0;
+    tell_object(myself,"Your sight returns to you!\n");
+    return;
+}
+
+/* perception stuff taken from room/room and room/door and placed here. 
+     - Zaphoid 950602 (2nd June 1995) */
+
+
+/* function set_room() gets called whenever they enter a room */
+set_room(obj) { room = obj; }
+
+query_look(Exception)
+{
+    return query_room_look() +
+     LOOK->query_contents_look(room, Exception);
+}
+
+query_room_look(int remote)
+{
+    string Error;
+    string roomdesc;
+    string exit; 
+    string t;
+    array OutStr;
+    int OutPos;
+
+    OutStr = allocate(4);
+
+    /* need to change this for new light system */
+    if (!room || room->query_light() == 0) 
+        return "It is dark.\n";
+
+    /* long desc */
+    OutPos = 0;
+    if (t = room->query_long())
+        OutStr[OutPos++] = t;
+    else if (t = room->long())
+        OutStr[OutPos++] = t;
+
+    /* extra look */
+    catch {OutStr[OutPos] = room->extra_look();};
+    if (OutStr[OutPos])
+        OutPos++;
+
+    /* weather */
+    if (room->query_weather_obj() && room->query_outdoors())
+        OutStr[OutPos++] = room->query_weather();
+
+    /* footprints */
+    if (room->query_prints())
+    OutStr[OutPos++] = room->query_prints_short();
+
+    /* changed from query_dest_dir: Bel 2 July '95 */
+    if (remote == 0)
+    {
+        if (room->describe_exits() == 0) exit = "";
+	    else exit = room->describe_exits();
+    }
+    else exit = "";
+
+    roomdesc = implode(OutStr[0..OutPos-1], "");
+    if (roomdesc == 0) roomdesc = "";
+//    roomdesc = ANSI->scolor(hilite(myself, "rooms"),roomdesc); 
+    
+    return roomdesc + exit; 
+}
+
+
+room_long(str, int remote) 
+{
+    int i;
+    if (!room) return; /* ? */
+
+    if (room->query_light() <= 0) /* have to change for new light system */
+    {
+       write("It is dark.\n");
+       return;
+    }
+    if (!str)
+    {
+        write(query_room_look(remote));
+        return;
+    }
+}
+
+/* 960222 Belgarion - finally fixed it to work with the new system. */
+
+peer (dir)
+{
+    array DestDir = room->query_dest_dir();
+    object ob;
+    array lookwhere;
+    string seen;
+    int targ_light, i;
+    object old_room = room;
+
+    notify_fail("Peer where?\n");
+    if (!DestDir)
+        return;
+    if (!dir)
+        return;
+    lookwhere = VISION->rooms_seen(this_player(), dir);
+    if (!lookwhere)
+        return;
+
+/* should be a property? */
+    if (room->stop_peer(dir))
+    {
+        write ("You cannot see that way.\n");
+        return 1;
+    }
+    targ_light = lookwhere[0]->query_light();
+    if (targ_light < 1)
+    {
+        write ("You peer into darkness.\n");
+        if (!this_player()->query_wiz())
+            return 1;
+    }
+    tell_object(this_player(), "Nearby you see:\n");
+    room = lookwhere[0];
+    room_long(0,1);
+    seen = LOOK->query_contents_look(lookwhere[0], 0);
+    if (seen && seen != "")
+        tell_object(this_player(), "There you see: "+ seen);
+
+    seen = "";
+    for (i = 1; i < sizeof(lookwhere); i++)
+    {
+        targ_light = lookwhere[i]->query_light();
+        if (targ_light < 1)
+        {
+            seen = seen +  "Darkness.\n";
+            if (!this_player()->query_wiz())
+                break;
+        }
+        seen = seen + lookwhere[i]->short() + ".\n";
+    }
+    if (seen != "")
+        tell_object(this_player(), "In the distance you see:\n"+seen);
+    room = old_room;
+    return 1;
+}
+
+room_short() {
+    return room->short();
+}

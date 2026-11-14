@@ -1,0 +1,238 @@
+/* Datagram socket communication server.
+ *
+ * Uses: Provides a gateway between the mudlib and the 
+ *       driver for passing datagrams between the various
+ *       muds. This usage should be secure, and independant
+ *       of which actual machine socket the driver is using
+ *       to communicate.
+ *
+ *       The server implements an internal port system which
+ *       can be used to direct messages to the correct destination.
+ *       Just which ports can be used is specified by the data file,
+ *       which must also be located in a secure place. No other objects
+ *       should be aware that there are internal ports available.
+ *
+ *       The use of ports is rather misleading, its just a convenient
+ *       way of specifying which service the dg is using, and its shorter
+ *       to send a number rather than a string.
+ *       
+ *       The security is based on the use of capabilities, and the
+ *       correct location of this file and the other transmitting objects.
+ *
+ *       Transmitting objects must set up their security capability
+ *       before they load, Receiving ones will be contacted if any
+ *       information arrives on their port and have no need of capabilities.
+ *
+ * Author: Llati@SW 940808, based upon code by Gandalf@SW
+ */
+
+ /* Functions for use:
+  *
+  * int request_service (string service)  Get a capability for a service.
+  *                                          Senders only!
+  * int tx_dgram (string service,int capability_value, array dest, data) 
+  *             dest is the ip machine [ domain, domain, domain, domain, port ]
+  *
+  * The receiving objects will be called with (calling_ip, data)
+  */
+
+#include "security.h"
+#include "Config.h"
+
+inherit BASE;
+inherit "RO/cap_provider";
+inherit "RO/cap_user";
+
+import "RO/remote/permission_class" p_class;
+
+#define PERMISSIONS_FILE "RO/remote/permissions"
+#define LOWEST_AVAIL_PORT 100
+#define HIGHEST_AVAIL_PORT 100000
+
+#define TL(a) tell_object (find_player("llati"),a) 
+
+class p_class perm [0]; 
+
+int sent = 0, recv = 0,ignored=0; 
+/* Number of datagrams send, received and ignored since loading */
+int load_time = time();
+
+reset () { 
+	add_id ("remote_server"); 
+	OBJ_MASTER -> suid_dg_serv();
+	call_out ("load_permissions",1); /* should be trusted by this time. */
+/*	call_out ("load_rhosts",15);  Not needed, hopefully */
+	}
+
+
+/* Get an incoming datagram and send it to the correct place  
+ * machine: is the machine ip and port number the datagram came from 
+ *             its format is [ a, b, c, d, port ]
+ * status : negative means there was some sort of error
+ * data : [ mudlib_port, sent data ]
+ *
+ * This is a nosave function, but that doesnt stop the GD from calling it.
+ */
+
+nosave
+dgram_recv (array machine, int status, array data) {
+int i,mudlib_port; 
+  /* Dont do anything with the status info atm, not sure what should be done */
+
+  recv ++;  
+  mudlib_port = data[0];
+/*   if (find_player("llati")) DUMP -> dump (data[1],0,0,find_player("llati"));  */
+  for (i =  sizeof (perm) ; i --; ) {
+    if (perm[i].port == mudlib_port) {
+      object o;
+      int c;
+
+      o = find_object (perm[i].recv);
+      if (!o) {
+      /*	TL ("Loading : " + perm[i].recv + ".\n"); */
+         o = load_object (perm[i].recv);
+         o -> reset ();
+         }
+      c = lookup_cap (perm[i].service);
+      if (!c) {
+        throw "Invalid capability in OBJ_DATAGRAM_SERV. Service was " +perm[i].service + ".\n";
+        break;
+        }
+      o ->  (perm[i].recv_func) (c,machine,data[1]); 
+      return;
+      }
+  }
+  ignored ++ ;
+  /* Not a valid port. Oh well, just throw it away */
+}
+
+request_service (string serv, int their_cap) {
+int i;
+
+	add_cap (serv, their_cap);
+  for (i = sizeof (perm); i-- ; ) {
+   	if (perm[i].service == serv) {
+   	  invalidate_cap (serv); /* If we had issued it before cancel it */
+   	  perm[i].trans -> dg_capability (make_cap(serv,0), their_cap);
+   	  /* Give out the number key, using a call back! */
+   	  }
+   	}
+  return 0;
+}
+   	  
+/* dest is the ip machine [ domain, domain, domain, domain,port ] */   	  
+int tx_dgram (string serv,int capability_value, array dest, data) {
+int i;   	  
+	if (!auth_user(serv, capability_value)) {
+	  /* I used to just return 0 here, but I think an error will be
+	           far more useful, especially in tracking down capability
+	           problems */
+	  throw "Invalid capability used while calling OBJ_DATAGRAM_SERV. The service was " + serv + ".\n";
+	  return 0 ;
+	  }
+	for (i = sizeof (perm); i--; ) {
+	  if (serv == perm[i].service)  {
+	    sent ++;
+	    return send_dgram (dest[0], dest[1], dest[2], dest[3], dest[4], [perm[i].port, data] ); 
+	    }
+	}
+	return 0;
+}
+	                                    
+	
+load_permissions() {
+string file;
+array afile;
+int i;
+
+  /* Just loads up the permissions file. It doesnt check to see if you
+    have made any stupid mistakes, though. DONT do things like have shared
+    ports. */
+
+	perm = [ ];
+  file = grab_file (PERMISSIONS_FILE);
+  if (!file) {
+  	throw "Could not find permissions file for the datagram server.\n";
+  	return;
+  	}
+  afile = explode (file,"\n");	
+  for (i=0; i <sizeof (afile); i++) {
+  	if (afile[i] == "" || afile[i][0] == ' ' || afile[i][0] == '#')  
+  	  continue;
+  	if (index (afile[i],"SERVICE") >= 0 &&  
+		       index (afile[i+1],"TRANSMITTER") >= 0 &&
+					 index (afile[i+2],"RECEIVER") >= 0 &&
+					 index (afile[i+3],"RECEIVER_FUNC") >= 0 &&
+					 index (afile[i+4],"PORT") >= 0) {
+
+			class p_class build = create p_class;		 
+			build.service = find_eq (afile[i]);
+			build.trans = find_eq (afile[i+1]);
+			build.recv = find_eq (afile[i+2]);
+			build.recv_func = find_eq (afile[i+3]);
+			build.port = atoi (find_eq(afile[i+4]));
+			if (build.port < LOWEST_AVAIL_PORT || build.port > HIGHEST_AVAIL_PORT) {
+				throw "Invalid port number " +  build.port + ".\n";
+				destruct (this_object());
+				}
+			perm += [ build ];  
+			i+= 4;
+			continue;
+			}
+  	throw "Problem loading permissions file for the datagram server. The problem line was :\n" + afile[i];
+  	destruct (this_object());
+  	}
+}  
+  	 
+
+string find_eq (string line) { /* Parse a line and find out what is after the = */
+int i,j;
+
+/* TL ("\n parsing line : " + line); */ 
+  i = index (line, "=");
+  if (i < 0) {
+    throw "The line " + line + " has no equals sign in it.\n";
+    destruct (this_object());
+    }
+  line = line [i+1..];
+  /* strip the whitespace */
+  if (!sizeof(line)) {
+    throw "Null string found after equals sign.\n";
+    destruct (this_object());
+    }
+  i = 0;
+
+  while (line[i] <= 32 && i <= sizeof(line))
+    i ++;
+  j = sizeof(line)-1;
+  while (line[j] <= 32 && j >= 0)
+    j --;
+  line = line[i..j];  
+  if (!sizeof (line)) { 
+    throw "Null string found after equals sign.\n";
+    destruct (this_object());
+    }
+  return line;  
+}  
+
+show_stats () {
+real hours_elapsed;
+
+	BASE::show_stats();
+	
+	write ("Valid services are:\n");
+  DUMP -> dump (perm + [ ]);
+	"RO/cap_user" :: show_stats();
+	write ("Loaded at " + ctime(load_time)); 
+	hours_elapsed = (time() - load_time) / 3600.0;
+  write ("\nTotal datagrams sent : " + sent + " ("+sent/hours_elapsed + " per hour).\n" + 
+    "Total datagrams received : " + recv + " ("+recv/hours_elapsed + " per hour).\n" + 
+    "Total datagrams ignored : " + ignored + " ("+ignored/hours_elapsed + " per hour).\n" ); 
+}
+
+query_no_external_save () { return 1; }
+
+load_rhosts () {
+  load_object (RHOST_SERV);
+  RHOST_SERV -> reset();
+}

@@ -1,0 +1,299 @@
+/*
+ * Wearable objects base code
+ * All objects able to be worn should inherit this
+ *
+ * Hunter of Shattered World, March 1994
+ */
+
+inherit "std/object";
+
+#include "materials.h"
+
+array cover;
+
+show_stats()
+{
+    ::show_stats();
+    write(
+	"cover   : " + (cover ? implode(cover,",") : "<none>") + "\n"
+    );
+}
+ 	   
+reset(NotFirst) 
+{
+    ::reset(NotFirst);
+    if (!NotFirst)
+    {
+	this_object()->add_property("WEAR");	/* assume people will want to wear it */
+    }
+}
+
+query_worn() 
+{ 
+array f = query_property("worn");
+    if (f)
+	return f[1];
+    return 0;
+}
+
+int can_wear(object who)
+/* an abstract function to test if the object can be worn by "who"
+ * return 0 if it can't, 1 if it can
+ * you should set notify_fail()'s if 0 is to be returned.
+ */
+{
+array f;
+object wearer;
+array failed;
+
+    /* you can only wear it if it has the property wear */
+    if ( !find_property("wear") )
+    {
+	notify_fail("This isn't meant to be worn.\n");
+	return 0;
+    }
+
+    /* is someone already wearing it ? */
+    f = this_object()->query_property("worn");
+    if (f) 
+    {
+	wearer = f[1];
+	if (wearer == who)
+	{
+    	    notify_fail("You're already wearing it!\n");
+	    return 0;
+	}
+	else if (wearer)
+	{
+	    notify_fail(wearer->query_name()+" is currently wearing it.\n");
+	    return 0;
+	}
+    }
+ 
+#if 0 
+    /* can it fit on the wearer's body */
+    failed = test_wearers_body(who);
+    if (sizeof(failed) != 0)
+    {
+	failed = collapse_cover(failed);
+	error = "To wear "+short()+" you need to have ";
+	if (sizeof(failed) == 1)
+		error += failed[0] + ".\n";
+	else
+	    error += implode(failed[..sizeof(failed)-2], ", ")+" and "
+		+failed[sizeof(failed)-1]+".\n";
+	notify_fail(error);
+	return 0;
+    }
+#endif
+    return 1;
+}
+
+
+int can_remove(object who)
+/* an abstract function to test if the object can be removed by "who"
+ * return 0 if it can't, 1 if it can
+ * you should set notify_fail()'s if 0 is to be returned.
+ */
+{
+    if ( !query_worn() )
+    {
+	notify_fail("It is not being worn at this moment.\n");
+ 	return 0;
+    }
+    return 1;
+}
+
+
+int wear_object(object who)
+{
+    return this_object()->add_property("worn", who);
+}
+
+
+int remove_object(object who)
+{
+    int x,y;
+    x = this_object()->remove_property("worn");
+    if (who) y = who->stop_wearing(this_object());
+    return x || y;
+}
+
+
+int wear(str) 
+{
+    notify_fail("What would you like to wear?\n");
+    if (!id(str)) return 0;
+    if ( !this_object()->can_wear(this_player()) ) return 0;
+    return wear_object(this_player());
+}
+
+
+drop(silently) 
+{
+object who = query_worn();
+    if (::drop(silently))
+	return 1;
+    if (who) 
+    {
+	who->stop_wearing(this_object());
+	remove_property("worn");
+	if (!silently)
+	    tell_object(who, "You drop your worn armour.\n");
+    }
+    return;
+}
+
+int remove(str) 
+{
+    if (!id(str)) return 0;
+    if ( !this_object()->can_remove(this_player()) ) return 0;
+    return remove_object(this_player());
+}
+
+query_destruct() 
+{
+object who = query_worn();
+    if (!who)
+	return;
+    remove_object(who);
+}
+
+
+set_cover(cv) 
+{
+    if (!cv)
+	return;
+    if (!pointerp(cv))
+	cover = ({ cv });
+    else
+	cover = cv;
+    return 1;
+}
+
+query_cover()
+/* added Hunter 931208 */
+{
+    return cover;
+}
+
+set_size() { }
+set_under() { }
+
+wear_ob() 
+{
+    object ob = environment(this_object())->wear(this_object());
+
+    if (!ob) this_object()->add_property("worn", environment(this_object()));
+    return(ob);
+}
+
+
+add_property(str, arg2, arg3)
+{
+int ret = ::add_property(str, arg2, arg3);
+array f;
+    if (lower_case(str) == "broken")
+    {
+	f = query_property("worn");
+	if (arrayp(f) && sizeof(f) > 1 && f[1])
+	{
+            f[1]->stop_wearing(this_object());
+	    call_out("remove_property", 0, "worn");
+	}
+    }
+    return ret;
+}
+
+
+expand_cover(array arg)
+{
+    if (index(arg, "legs") != -1 ||
+	index(arg, "leg") != -1)
+	arg = ARRAY->subtract(arg, ({ "legs", "leg" }) ) 
+		+ ({ "left leg", "right leg" });
+    if (index(arg, "arms") != -1 ||
+	index(arg, "arm") != -1)
+	arg = ARRAY->subtract(arg, ({ "arms", "arm" }) )
+		+ ({ "left arm", "right arm" });
+    if (index(arg, "hands") != -1 ||
+	index(arg, "hand") != -1)
+	arg = ARRAY->subtract(arg, ({ "hands", "hand" }) )
+		+ ({ "left hand", "right hand" });
+    if (index(arg, "feet") != -1 || index(arg, "foot") != -1)
+	arg = ARRAY->subtract(arg, ({ "foot", "feet" }) )
+		+ ({ "left foot", "right foot" });
+    return arg;
+}
+
+collapse_cover(array ret)
+{
+    if (index(ret, "left leg") != -1 && index(ret, "right leg") != -1)
+	ret = ARRAY->subtract(ret, ({ "left leg", "right leg" }) )+ ({ "legs" });
+    if (index(ret, "left arm") != -1 && index(ret, "right arm") != -1)
+	ret = ARRAY->subtract(ret, ({"left arm", "right arm"}) )+({"arms"});
+    if (index(ret, "left hand") != -1 && index(ret, "right hand") != -1)
+	ret = ARRAY->subtract(ret, ({ "left hand", "right hand"}))+({"hands"});
+    if (index(ret, "left foot") != -1 && index(ret, "right foot") != -1)
+	ret = ARRAY->subtract(ret, ({ "left foot", "right foot" }))+({"feet"});
+    return ret;
+}
+
+array test_wearers_body(object who)
+/*
+ * return the body array names of parts of the wearer that the clothing
+ * needs but can't find.
+ */
+{
+array failed = ({ });
+array body = who->query_body();
+array cvr = expand_cover(query_cover());
+int i, j, limb_not_found;
+    for (i = 0; i < sizeof(cvr); i ++)
+    {
+	if (cvr[i] == "all")
+	{
+		/* do nothing */
+	}
+	else if (cvr[i] == "left hand" && 
+		 index(body, "left middle hand") != -1)
+	{
+	// stupid hack for rings because arachean bodies don't 
+	// expand properly. - Jenna Aug 00
+	}
+	else if (cvr[i] == "neck" && 
+		(index(body, "thorax") == -1 && 
+		 (index(body, "chest") == -1 
+		 || index(body, "head") == -1)))
+	    failed += ({ "neck" });
+	else if (cvr[i] == "face" && index(body, "head") == -1)
+	    failed += ({ "head" });
+	else if (index( ({ "backside", "face", "neck" }) , cvr[i]) != -1)
+	{
+	} 
+	else 
+	{
+	    limb_not_found = 1;
+	    for (j = 0; j < sizeof(body); j += 2)
+	        if (index(body[j], cvr[i]) != -1)
+		    limb_not_found = 0;
+	    if (limb_not_found)
+	        failed = failed + ({ cvr[i] });
+	}
+    }
+    if (query_property("SKIRT") || id("skirt"))
+	failed = ARRAY->subtract(failed, ({ "left leg", "right leg",
+		"left foot", "right foot", "tail" }) );
+    return failed;
+}
+
+(int|string) short()
+{
+(int|string) ret = ::short();
+    if (ret && find_property("WORN"))
+	ret += " (worn)";
+    return ret;
+}
+
+int wearable() { return 1; }
+

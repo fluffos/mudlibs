@@ -1,0 +1,97 @@
+
+/*
+ * Simple room allow talking over the muds.
+ *
+ * By: Llati 940911
+ * Modified: Gandalf 950800.  Massive object creation caused by
+ * other end.  Not good.  Now creates one object id'ing to the virtual
+ * people in the room.
+ */
+
+inherit "RO/cap_user";
+inherit "RO/cap_provider";
+inherit "room/room";  /* This is a security hole, perhaps we need a secure/room */
+
+#include <Servers.h>
+#define RROOM "rroom"
+
+/* These must be one character long! */
+#define ENTER 1         /* Someone entered a remote room, make a dummy */
+#define EXIT  2         /* Someone exited the remote room */ 
+
+
+reset(arg) {
+	invalidate_cap (RROOM);
+	OBJ_DATAGRAM_SERV -> request_service (RROOM,make_cap(RROOM, 0)); 
+	if (arg) return;
+	set_short ("The common room.");
+	set_long ("This strangely proportioned room acts as a meeting place " +
+	  "of different worlds. People from far away places can come here and " +
+	  "talk.\n");
+	set_dest_dir ( ["room/wiz/changeroom","north"] );  
+}
+
+catch_tell (a) {
+	send (a);
+}
+
+nosave send (a) {
+array hosts;
+int x;
+ 
+  hosts = RHOST_SERV -> query_active_hosts();
+	if (!sizeof(hosts)) return ;
+	for (x = sizeof (hosts); x--; ) {
+		OBJ_DATAGRAM_SERV -> tx_dgram(RROOM,lookup_cap(RROOM),hosts[x],a);
+	}
+}
+
+dg_capability (int dg_cap, int verify_cap) {
+
+  if (auth_user (RROOM, verify_cap)) 
+    add_cap (RROOM, dg_cap);
+}    
+    
+recv (int verify_cap, array calling_ip,data) {
+int i;
+array cont;
+    /*data :  message */
+
+	if (!auth_user (RROOM, verify_cap)) return;
+#if 0
+	if (pointerp(data)) {
+	  if (data [0] == ENTER) {
+	    object o;
+	    string name;
+	     name = data[1];
+	     o = clone_object ("obj/monster");
+	     o -> set_name (name);
+	     o -> add_id (name+"_dummy");
+	     transfer (o, this_object());
+	     /* Dont need to tell the room they entered, should be sent from remote room */
+	     }
+	  else if (data[0] == EXIT) {
+	    object o; 
+	    string name;
+	     name = data[1];
+	     o = present (name + "_dummy",this_object());
+	     if (o) destruct(o);
+	    } 
+	  return ;
+	}    
+#endif
+	cont = contents (this_object());
+  for (i = sizeof (cont); i--; ) {	
+  	if (living (cont[i])) tell_object (cont[i],data);
+  	}
+}
+
+init () {
+	::init ();
+	send ( [ ENTER , this_player() -> query_real_name() ]);
+	}
+
+exit (object o) {
+  ::exit(o);
+	send ([ EXIT , o -> query_real_name() ]);
+	}

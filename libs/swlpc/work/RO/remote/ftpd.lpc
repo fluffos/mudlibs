@@ -1,0 +1,251 @@
+
+/*
+ * Simple intermud ftp. Its very restricted, but then its meant to be.
+ *
+ * Currently allows you to:
+ *  Only request a file, and only from the remote FTP_DIR
+ *	Only have that file placed in FTP_DIR
+ *	Restricted access (as according the the permissions file)
+ *	Restricted size of FTP_DIR.
+ *
+ * The initiating server does all the packet tracking, etc.
+ *
+ * To use call 
+ *  int request_ftp (int ip1, int ip2, int ip3, int ip4, string nfile)  
+ *     where: ip* is the internet address of the remote machine
+ *            nfile is the name of the file you wish to retrieve.
+ *   if the call returns anything other than 1 then it has failed.
+ *    The file will be placed in FTP_DIR (defined below)
+ *
+ *  If the link is bad then you will notice that your data transfer
+ *   appears to be very sporadic. mftp tries to deal with this (be 
+ *   patient) but it will stop if the performance becomes too bad.
+ *  Feel free to change any of the #defines below if you desire.
+ *
+ * By: Llati 940917
+ * 
+ * Packets are of the form [ packet type, filename,  info ]
+ * Valid packet types are:
+ */
+
+#define FILE_REQUEST 1  /* info : (int) starting_point  */
+#define FILE_TX 2       /* info : (int) starting_point, (string) file_text */
+#define FILE_COMPLETE 3 /* info : 0 */
+#define NO_FILE 4       /* info : 0 */
+
+#include <security.h>
+#include <Servers.h>
+
+inherit "RO/cap_user";
+inherit "RO/cap_provider";
+
+#define FTP_DIR "open/ftp/"
+#define PERMISSIONS_FILE "RO/remote/mftp_permissions"
+#define FTP_CAP "mudftp"
+#define MAX_SIZE 100   /* Maximum size of the local directory */
+#define RETRY_TIME 20 /* Send again if we havent received anything */
+#define MAX_RETRY 3    /* If any one file transmission fails 3 times then give up */
+
+#define TL(x) tell_object (find_player("llati"),x)
+
+array perm = [ ]; /* array of distributed boards */ 
+int retries;        /* Number of times we have had a problem with the current file */
+array ftp_from;     /* ip address of the place we are ftp'ing from */
+string file, wiz = "no one";
+
+reset(arg) {
+	invalidate_cap (FTP_CAP);
+	OBJ_DATAGRAM_SERV -> request_service (FTP_CAP,make_cap(FTP_CAP, 0)); 
+	if (arg) return;
+	load_permissions();
+}
+
+dg_capability (int dg_cap, int verify_cap) {
+
+  if (auth_user (FTP_CAP, verify_cap)) 
+    add_cap (FTP_CAP, dg_cap);
+}    
+    
+/* Start a ftp transfer. Args are :
+ * ip1 : A part of ip address
+ * ip2 : B part of ip address
+ * ip3 : C part of ip address
+ * ip4 : D part of ip address
+ * nfile: file you wish to grab
+ * 
+ * A zero or negative return value indicates an error 
+ */
+ 
+int request_ftp (int ip1, int ip2, int ip3, int ip4, string nfile) {
+object wiz_soul;
+array hosts;
+int x;
+ 
+  wiz_soul = caller();
+  if (!wiz_soul) return -1;
+  wiz_soul = wiz_soul -> query_myself();
+  if (!wiz_soul) return -2;
+  wiz = wiz_soul -> query_real_name();
+  if (!wiz) return -3;
+  if (index (perm, wiz) < 0) return -4;
+  
+  if (!check_size ()) return -5;
+  if (!valid_file(nfile)) return -6;
+  if (find_call_out ("retry") >= 0) {
+  	write ("Still trying to mftp a previous file.\n");
+  	return -7;
+  	}
+  if (file_size (FTP_DIR + nfile) != -1) {
+  	write ("There is already a file in the local ftp directory of that name.\n");
+  	return -8;
+  	} 	
+  hosts = RHOST_SERV -> query_active_hosts();
+	if (!sizeof(hosts)) return ;
+	ftp_from = 0;
+	retries = 0;
+	file = nfile;
+	for (x = sizeof (hosts); x--; ) {
+		if (ip1 == hosts[x][0] && ip2 == hosts[x][1] && ip3 == hosts[x][2] && ip4 == hosts[x][3]) {
+		  ftp_from = hosts[x];
+			OBJ_DATAGRAM_SERV -> tx_dgram(FTP_CAP,lookup_cap(FTP_CAP),hosts[x],
+		     [ FILE_REQUEST, file, 0] );
+		  call_out ("retry",RETRY_TIME, file);   
+		  return 1;
+		  }   
+	}
+	write ("Starting ftp transfer.\n");
+	return 0;
+}
+
+retry (string ffile) {
+int size;
+
+	retries ++;
+	if (retries > MAX_RETRY) {
+		tell_object (find_player (wiz), "Ftp failed. Exceeded maximum errors.\n");
+		throw "Could not ftp file. Exceeded maximum errors.\n";
+		return;
+		}
+	size = file_size (FTP_DIR + ffile);
+	if (size < 0) size = 0;
+	OBJ_DATAGRAM_SERV -> tx_dgram(FTP_CAP,lookup_cap(FTP_CAP),ftp_from,
+			[ FILE_REQUEST, file, size ] );
+	call_out ("retry",RETRY_TIME, file);
+}		
+		         	
+recv (int verify_cap, array calling_ip,array data) {
+int size;
+
+	if (!auth_user (FTP_CAP, verify_cap)) return;
+	size = file_size (FTP_DIR + data[1]);
+	if (data[0] == FILE_REQUEST) {
+	  string out;
+	  
+		if (!valid_file(data[1])) return;
+		if (size == -1) {
+			OBJ_DATAGRAM_SERV -> tx_dgram(FTP_CAP,lookup_cap(FTP_CAP),calling_ip,
+			   [ NO_FILE, data[1], 0] );
+			return;
+			}
+		if (size == data[2]) {
+			OBJ_DATAGRAM_SERV -> tx_dgram(FTP_CAP,lookup_cap(FTP_CAP),calling_ip,
+			   [ FILE_COMPLETE, data[1], 0] );
+			return;
+			}
+		if (size > data[2] + 1000)
+		  size = data[2] + 1000;
+		out = grab_file (FTP_DIR + data[1], data[2], size);
+		OBJ_DATAGRAM_SERV -> tx_dgram(FTP_CAP,lookup_cap(FTP_CAP),calling_ip,
+		    [ FILE_TX, data[1], data[2], out] );
+		return ;
+		}
+	if (data[0] == FILE_TX) {
+		if (size == -1) size = 0;
+	 	if (data[1] != file) return; /* Someone sending us junk */
+	 	if (data[2] != size) return; /* An old packet found us */
+	 	remove_call_out("retry");
+	 	write_file (FTP_DIR + file, data[3]);
+	 	if (!check_size()) {
+	 		throw FTP_DIR + " is full. It must be below " + MAX_SIZE + "k";
+	 		return;
+	 		}
+	 	call_out ("retry",RETRY_TIME, file);
+		size = file_size (FTP_DIR + file);
+		OBJ_DATAGRAM_SERV -> tx_dgram(FTP_CAP,lookup_cap(FTP_CAP),ftp_from,
+			[ FILE_REQUEST, file, size ] );
+		if (retries) retries --;
+		tell_object (find_player (wiz),"Received ftp packet.\n");	
+		return;
+		}
+	if (data [0] == FILE_COMPLETE && data[1] == file) {
+		remove_call_out ("retry");
+		tell_object (find_player (wiz),"Finished ftp transfer.\n");	
+		return ;
+		}	
+	if (data [0] == NO_FILE ) {
+		remove_call_out ("retry");
+		tell_object (find_player (wiz),"No file of that name.\n");
+		return ;
+		}	
+	return ;  /* Someone sent us crap. */
+}	
+	 	 	
+
+/* return 1 if directory isnt full, otherwise 0 */
+int check_size () {
+array files;
+int total, i;
+
+	files = ls (FTP_DIR);
+	for (i = sizeof (files[0]); i--; ) {
+		total += files[1][i];
+		}
+	return total < MAX_SIZE;
+}
+
+
+load_permissions () {
+string file;
+array afile;
+int i;
+
+  /* Just loads up the permissions file. It doesnt check to see if you
+      have made any stupid mistakes, though. */
+
+    perm = [ ];
+    file = grab_file (PERMISSIONS_FILE);
+    if (!file) {
+      throw "Could not find permissions file for the distributed board server.\n";
+			return;
+      }
+     afile = explode (file,"\n");
+     for (i=0; i <sizeof (afile); i++) {
+       if (afile[i] == "" || afile[i][0] == ' ' || afile[i][0] == '#')
+         continue;
+       perm += [ afile[i] ];
+       }  
+}
+       
+show_stats () {
+    write ("People allowed to mftp are : " + implode (perm,", ") + ".\n");
+    if (find_call_out ("retry") >= 0) 
+    {
+  	write (capitalize(wiz) + " is currently requesting the file : " 
+		+ file + ".\n"); 
+    }
+    else 
+    {
+  	write ("Last requested file was " + file + " by " 
+		+ capitalize(wiz) + ".\n");
+    } 
+   write("OBJ_DATAGRAM_SERV = "+OBJ_DATAGRAM_SERV+"\n");
+    ::show_stats();
+}
+
+int valid_file (string arg) {
+	if (index (arg, "..") >= 0 || arg[0] == '/') return 0;
+	return 1;
+}
+
+query_no_external_save () { return 1; }
+

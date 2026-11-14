@@ -1,0 +1,103 @@
+/*
+ * Generic auto-load stuff
+ * for players/rooms/etc.
+ *
+ * Anything that wants to maintain a `limited' save
+ */
+inherit "RO/Servers";
+
+array auto_load;
+
+/*
+ * A delayed load so we don't crunch the mud
+ */
+delayed_obj(arg)
+{
+    int x = 0;
+    object ob;
+    object serv;
+    string err;
+    string server;
+
+    server = 0;
+    if (stringp(arg[x])) server = SERVLIST->query_server(arg[x]);
+
+    if (server) 
+    {
+        serv = load_object(server);
+        err = catch ob = serv->make_auto(arg[x+1]);;
+    	if (err) LOG->log("AUTO_LOAD", "server error "+arg[x]+ ": " + err +"\n");
+    	if (ob) move_object(ob, this_object());
+    }
+    else
+    {
+	    err = catch { ob = clone_object(arg[x]); } ;
+	    if (err) LOG->log("AUTO_LOAD", "error loading "+arg[x]+ ": " + err +"\n");
+	    else 
+        {
+		    if (ob) move_object(ob, this_object());
+	        err = catch { ob->init_arg(arg[x+1]); };
+	        if (err) LOG->log("AUTO_LOAD", "error initialising "+arg[x]+ ": " + err +"\n");
+	    }
+    }
+}
+
+load_auto_obj(arg) 
+{
+    string file, argument, rest, err, server;
+    object ob, serv;
+    int x = 0;
+    real count = 1.0;
+
+    if (!arg) 
+    {
+        arg = auto_load;
+    }
+    if (pointerp(arg)) 
+    {
+	    while (x < sizeof(arg)) 
+        {
+            call_out("delayed_obj", count, [ arg[x], arg[x+1]] );
+            count = count + 0.5;
+	        x += 2;
+	    }
+	}
+    else
+    {
+        LOG->log("AUTO_LOAD", "load_auto_obj: non-pointer arg="+arg+"\n");
+    }
+}
+
+compute_auto_str() 
+{
+    array obj;
+    int i;
+    (array|string) arg;
+
+    auto_load = [ ];
+    obj = contents (this_object());
+    i = sizeof (obj);
+    while (i--) 
+    {
+	    arg = obj[i]->query_auto_load();
+	    if (!arg) continue;
+	    if (pointerp(arg)) 
+        {
+	        if (sizeof(arg) == 2 && arg[0] != 0)
+	            auto_load += arg;
+	        else if (sizeof(arg) == 1 && arg[0] != 0)
+    		    auto_load += arg + [ 0 ]; 
+            /* else ignore it */
+	    }
+	    else 
+        {
+	        int x = index(arg, ":");
+	        if (x < 0)
+		        auto_load += [ arg, 0 ];
+	        else
+		        auto_load += [ arg[..x-1], arg[x+1..] ];
+	    }
+    }
+    return auto_load; /* Put this in for debugging */  
+}
+

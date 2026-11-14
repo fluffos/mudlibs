@@ -1,0 +1,350 @@
+/*
+        Shattered World's Standard Armor Generator.
+
+        By Dredd the Dreddfullest.
+        (geoff@bruce.cs.monash.edu.au)
+
+    19980517 D     Support for persistence
+    19990813 Jenna Added protection types ("cut", "impact", etc)
+    20000309 Jenna Added more materials: dragon/drake scale/plate, voidian
+    20000819 Jenna Added "custom" armour type - if the arg "name" to
+		   make_auto() or create_armour() is an array, the first
+		   arg of which is "custom", then the rest of the array
+		   is interpreted as the body areas it will cover. E.g.
+		   ARMOURER->create_armour("chainmail",["custom","tail"]);
+		   makes a chainmail tailplate.
+    20010714 Jenna Added is_standard(ob).
+    20010718 Jenna Specified arg types for make()
+    20010724 Dredd Added in material types, reworked arrays.
+    20010831 Bel   Added the "caller" parameter for SHOP_SERVER->get_cheapest().
+		   Let's track where the money is being spent *properly*.
+
+*/
+
+/*
+ * WEAR possibilities:
+ *      Area    type            desc
+ *      hands   gloves          1 layer only
+ *      arms    sleeves         inner layer; soft materials only
+ *      arms    vambrace        outer layer; may be jointed
+ *      legs    pants           inner - soft
+ *      legs    greaves         outer - hard should only cover half
+ *      feet    boots
+ *      head    hood            may be worn inside helmet (padding)
+ *      head    helmet
+ *      chest   shirt           innermost layer; must be soft
+ *      chest
+ */
+
+/*
+ * short:               an adjective for the construction type.
+ * folds:               stored folded in pack - same enc as when worn.
+ * under:               can be worn under other armour
+                        1-under, 2-over
+ * slices:              not resistant to slicing attack
+ * weight:              grams, whole body suit (not underdax)
+ * enc:                 whole suit, worn.  If carried, double enc if not folded.
+ * ac:                  per location.  some locs can wear undergarments.
+ * blunt_mod:           percentage of AC used against blunt attacks.
+ */
+
+inherit "RO/Servers";
+inherit "std/materials";
+
+array acm, armour_types;
+#define ATYPEF_0 1
+
+reset() {
+  acm = [
+   [ "leather",  1,  1,  1,  3000,  300,  1000,  50, 0 | ATYPEF_0 ,
+	[ "cut", 1, "impact", 2 ], 50, MAT_LEATHER ],
+   [ "hard leather",  1,  0,  1,  5000,  400,  1400,  60, 0 | ATYPEF_0 ,
+	[ "cut", 3, "impact", 3 ], 50, MAT_LEATHER ],
+   [ "cuirbolli",  0,  0,  1,  6000,  600,  1800,  90, 0 | ATYPEF_0 ,
+	[ "cut", 3, "impact", 3, "puncture", 1 ], 100, MAT_LEATHER ],
+   [ "ringmail",  1,  1,  0,  12000,  1000,  2800,  80, 0 | ATYPEF_0 ,
+	[ "cut", 5, "impact", 2, "puncture", 1 ], 100, MAT_BRONZE ],
+   [ "byzantine",  1,  0,  0,  9000,  800,  2600,  70, 0 | ATYPEF_0 ,
+	[ "cut", 3, "impact", 5, "puncture", 3 ], 100, MAT_BRONZE ],
+   [ "lamellar",  1,  0,  0,  21500,  1500,  3200,  110, 0 | ATYPEF_0 ,
+	[ "cut", 4, "impact", 6, "puncture", 3 ], 100, MAT_BRONZE ],
+   [ "scalemail",  0,  0,  0,  24000,  1800,  3400,  100, 0 | ATYPEF_0 ,
+	[ "cut", 5, "impact", 7, "puncture", 5 ], 100, MAT_BRONZE ],
+   [ "chainmail",  1,  1,  0,  24000,  1500,  3800,  85, 0 | ATYPEF_0 ,
+	[ "cut", 6, "impact", 6, "puncture", 6 ], 100, MAT_STEEL ],
+   [ "brigadine",  0,  0,  0,  26500,  1600,  4000,  110, 0 | ATYPEF_0 ,
+	[ "cut", 6, "impact", 8, "puncture", 5 ], 100, MAT_STEEL ]
+    ];
+acm += [
+   [ "plate",  0,  0,  0,  30000,  2000,  4400,  130, 0 | ATYPEF_0,
+	[ "cut", 7, "impact", 7, "puncture", 6 ], 100, MAT_STEEL ],
+   [ "mithril",  0,  0,  0,  14000,  1200,  4400,  130, 0 | ATYPEF_0,
+	[ "cut", 10, "impact", 7, "puncture", 8 ], 100, MAT_MITHRIL ],
+   [ "dragon scale", 0, 0, 0, 22000, 1600, 3600, 110, 0 | ATYPEF_0,
+        [ "cut", 4, "impact", 2, "puncture", 6, "heat", 8 ], 100, MAT_DRAGON  ],
+   [ "dragon plate", 0, 0, 0, 22000, 1600, 3600, 110, 0 | ATYPEF_0,
+        [ "cut", 7, "impact", 5, "puncture", 6, "heat", 8 ], 100, MAT_DRAGON  ],
+   [ "drake scale",  0, 0, 0, 14000, 1400, 2000, 100, 0 | ATYPEF_0,
+        [ "cut", 2, "cold", 12, "magic", 4 ], 100, MAT_DRAGON  ],
+   [ "drake plate",  0, 0, 0, 14000, 1400, 2000, 100, 0 | ATYPEF_0,
+        [ "cut", 6, "impact", 4, "puncture", 3, "cold", 12, "magic", 4 ], 100, 
+        MAT_DRAGON  ],
+   [ "voidian",      0, 0, 0,  8000, 1400, 1800, 100, 0 | ATYPEF_0,
+ 	[ "cut", 3, "puncture", 4, "magic", 10 ], 100, MAT_MAGICAL ]
+   ];
+
+  armour_types = [
+   "cloak",  [ "chest", "abdomen" ],   9,  2,  8,  8 ,
+   "shirt",  [ "chest", "arm" ],   3,  1,  8,  8 ,
+   "pants", [ "leg",  "abdomen" ],     3,  1,  10,  10 ,
+   "sleeves", [ "arm" ],    4,  1,  5,  5 ,
+   "coif", [ "head" ],      5,  1,  5,  5 ,
+   "gauntlets", [ "hand" ], 2,  0,  5,  5 ,
+   "boots", [ "foot" ],     2,  0,  7,  7 ,
+   "greaves", [ "leg" ],    4,  0,  15,  15 ,
+   "skirt", [ "abdomen" ],  4,  0,  15,  15 ,
+   "hauberk", [ "chest",  "abdomen" ], 7,  0,  28,  28 ,
+   "helmet", [ "head" ],    6,  0,  10,  10 ,
+   "cuirass", [ "chest" ],  6,  0,  20,  20 ,
+   "vambraces", [ "arm" ],  4,  0,  10,  10 ,
+   "shield", [ "left arm", "chest" ],  8,  3,  25,  25 ,
+   "custom", [ ], 4, 0, 25, 10
+   ];
+
+  }
+
+
+
+// armour_types access
+#define COVER 1
+#define LAYER 2
+#define A_WEIGHT 5
+
+// acm array access
+#define M_UNDER 2
+#define M_WEIGHT 4
+#define ABSORB 6
+#define PROTECTIONS  9
+#define PROTECTION_PERC  10
+#define MATERIAL 11
+
+// default size
+#define MEDIUM 12
+
+/*
+** Automatic creation (emulated persistence)
+*/
+object make_auto(array args)
+{
+    object arm;
+    arm = create_armour(args[0], args[1], args[2], 0);
+    if (sizeof(args) > 3)
+	arm->set_damage(args[3]);
+    return arm;
+}
+
+armour_exists(str)
+{
+    return (index(armour_types, str) != -1);
+}
+
+make(string mat, string name, size, optpoint, (object|int) source)
+{
+    string who;
+    array armcost;
+    int n,m, max;
+    object callr = caller();
+
+        /* we trust the itemer to do the right thing; nothing else. */
+        if ((file_name(callr) == ITEMER) && objectp(source))
+            callr = source;
+
+        who = query_su_name(callr);
+        if (!who) who = "#treasury";
+        if (optpoint) return create_armour(mat, name, size, optpoint);
+
+        if (!is_cloned(callr) && callr->query_living())
+                return create_armour(mat, name, size);
+
+        m = "modules/misc"->array_index(acm, 0, mat);
+        n = index(armour_types, name);
+        if (n < 0 || m < 0) max = 0;
+        else max = acm[m][M_WEIGHT] * armour_types[n+A_WEIGHT] / 400;
+        armcost = SHOP_SERVER->get_cheapest(mat+" "+name, who, max, 0,
+		callr);
+        if (!armcost) {
+/*              LOG->log("NPC_BUY", "0 coins: "+ who + " creates " + 
+                (mat+" "+name) +" for " + file_name(callr) + ".");
+*/              return create_armour(mat, name, size, optpoint);
+        }
+        LOG->log("NPC_BUY", STRINGS->itoa(armcost[1]) + " coins: "+
+                who + " bought " + armcost[0]->short() + " (requested " + 
+                (mat+" "+name) + ") from " +              
+                armcost[2] + " (" + armcost[2]->query_short_desc() +
+                ") for " + file_name(callr) + ".");
+        return armcost[0];
+}
+
+create_armour(mat, auto_name, size, optpoint)
+{
+    int i, m, n, wght; 
+    string alt, b, name;
+    object am;
+    array cov;
+
+    if (mat == "any")
+    {
+        m = random(5);
+        mat = acm[m][0];
+    }
+    else
+    {
+        m = "modules/misc"->array_index(acm, 0, mat);
+        if (m < 0) return;
+    }
+
+	if (arrayp(auto_name))
+	{
+	    if (auto_name[0] == "custom")
+	    {
+		cov = auto_name[1..];
+		name = auto_name[1]+"plate";
+		n = index(armour_types, "custom");
+	    }
+	    else return 0;
+	}
+    else
+	{
+	    name = auto_name;
+	    n = index(armour_types, name);
+	}
+
+    if (n < 0) return;
+    if (!size) size = MEDIUM;
+    if (optpoint) am = optpoint;
+    else am = clone_object("obj/armour");
+
+    am->set_name(name);
+    am->add_id(mat);
+    am->add_id(name);
+	if (!cov) cov = armour_types[n + COVER];
+    am->set_cover(cov);
+	am->set_layer(armour_types[n + LAYER]);
+    wght = ( acm[m][M_WEIGHT] * size * armour_types[n + A_WEIGHT] )
+                                                         / 2000000;
+    if (!wght) wght = 1;
+    am->set_weight(wght);
+    am->set_under( acm[m][M_UNDER] );
+    b = mat + " " + name;
+    am->set_short(b);
+    am->add_id(mat+" "+name);
+    am->set_long("A " + capitalize(b) + ", it has some small writing upon it.\n");
+    am->set_type(name);
+    am->set_read("Made by an accredited member of the SCAA.\n");
+    am->set_value(acm[m][M_WEIGHT] * armour_types[n+A_WEIGHT] / 400);
+    am->set_ac(acm[m][ABSORB] / 3);
+    am->set_robust(acm[m][ABSORB]);
+    am->set_material(acm[m][MATERIAL]);
+    am->set_invoke("worn");
+    for (i = 0; i < sizeof(acm[m][PROTECTIONS]); i += 2)
+	am->add_protection(acm[m][PROTECTIONS][i], acm[m][PROTECTIONS][i + 1],
+			cov, acm[m][PROTECTION_PERC]);
+    if (!optpoint) am->set_auto("ARMOURER", ({ mat,auto_name,size }));
+        return am;
+}
+
+/* a clothing support thing - sigh */
+fix_layer(object o)
+{
+    int n;
+
+        n = index(armour_types, o->query_type());
+        if (n < 0) n = index(armour_types, o->query_type() + "s");
+    if (n < 0) return 0;
+
+    o->set_layer(armour_types[n + LAYER]);
+    return 1;
+}
+
+test(str) {
+int count;
+string ret = "";
+
+    if (str == "materials")
+    {
+        ret += "Armor Materials:\n";
+        for (count = 0; count < sizeof(acm); count++)
+        {
+            //write(acm[count]+(count == sizeof(acm)-SIZEOF_ACM?".\n":", "));
+            ret += acm[count][0]+(count == sizeof(acm)?".\n":", ");
+        }
+        return ret;
+    }
+
+    if (str == "types")
+    {
+        ret += "Armor types:\n";
+        for (count = 0; count < sizeof(armour_types); count += 6)
+        {
+            //write(armour_types[count]+" ("+implode(armour_types[count+1],"+")+ ")"+
+            //(count == sizeof(armour_types)-5?".\n":", "));
+            ret += armour_types[count]+" ("+implode(armour_types[count+1],"+")+ ")"+
+                (count == sizeof(armour_types)-5?".\n":", ");
+        }
+        return ret;
+    }
+}
+
+query_acm() { return acm + []; }
+
+query_armour_types() { return armour_types + []; }
+
+/* query_standard_protections(object armour)
+ *     or
+ * query_standard_protections(string material, string type)
+ *
+ * Returns array of protections this armour has when brand new, e.g.
+ * leather hauberk returns:
+ * ["cut", 2, ["chest", "abdomen"], "impact", 3, ["chest", "abdomen"]]
+ */
+query_standard_protections(arg1, arg2) 
+{
+    array ret = [];
+    int i, n, m;
+
+    if (objectp(arg1)) {
+	arg2 = arg1->query_type();
+	arg1 = arg1->query_material();  /* ??? set_auto? */
+	}
+    if (!stringp(arg2)) return 0;
+    m = "modules/misc"->array_index(acm, 0, arg1);
+    n = index(armour_types, arg2);
+    if (m == -1 || n == -1)
+	return 0;
+    for (i = 0, ret = [ ]; i < sizeof(acm[m][PROTECTIONS]); i += 2)
+	ret += [ acm[m][PROTECTIONS][i], acm[m][PROTECTIONS][i + 1],
+		armour_types[n + COVER] ];
+    return ret;
+}
+
+// returns 1 if this is a standard armour object
+// Jenna, July 2001
+is_standard(ob)
+{
+    array al;
+
+    if (!objectp(ob)) return 0;
+    al = ob->query_auto_load();
+    if (!arrayp(al) || sizeof(al) != 2
+	    || al[0] != "ARMOURER"
+	    || !arrayp(al[1])
+    	|| sizeof(al[1]) < 2)
+    {
+	    return 0;
+    }
+    if ("modules/misc"->array_index(acm, 0, al[1][0]) == -1) return 0;
+    if (index(armour_types, al[1][1], 0, 6) == -1)
+	return 0;
+    return 1;
+}
+

@@ -1,0 +1,270 @@
+/*
+ * A general purpose (standardised) text reader/writer for things like
+ * BBs's, mail readers, etc.  Some code ripped from the mail reader/bbs.
+ *
+ * To use by inheriting:
+ *	Inherit this object from your bbs, mail reader, or whatever.
+ *	Setuid your object so it can write to the ed() file you specify.
+ *	Put a ::init() in your object.
+ *
+ *	Write some or all of the following routines:
+ *	    line_prompt()  - print the current prompt (default: line-no>)
+ *	    restart_prompt() - print the prompt used at the start of standard
+ *			       text input (or on exit from ed())
+ *	    query_ed_file()- filename to use when in ed() (can depend on
+ *			     this_player()) - default: open/TxtEd_<playername>
+ *	    		     Should generate a unique name if multiple players
+ *			     can edit simultaneously (and each player should
+ *			     have his own copy of your object!).
+ *
+ *	Write the following hooks in your object:
+ *	    finished_msg(msg) - Called when the player has completed
+ *	        the text of a message.  msg is a simple string.
+ *	    aborted_msg() - Called if the player aborted message input (with ~q)
+ *
+ *	Call get_message() to allow the player to enter a message.
+ *
+ *		Takes an optional parameter 'str' - the head of the
+ *		message. (added by Belgarion.)
+ * To use by cloning:
+ *	Clone one up, and suid it to a level which allows it to write to /open -
+ *	currently level 1.
+ *	If you want to attach the edit help command to the player (no need),
+ *	you should move the cloned object to the player.
+ *	Since you want some control object to receive the messages, etc, you
+ *	should write the hooks, and any prompts you want (above) in the object;
+ *	use set_controller(yourob) to set it up.  
+ *
+ * Revision history:
+ *   Original version: Llati. (I think. ;) )
+ *   950509 Belgarion - updated so that players can't spam the game with
+ *		incredibly long messages (crashes the mud)
+ *   950511 B	      - added support for vi (for wizards)
+ */
+
+inherit "RO/Servers";
+
+#define MAX_MESSAGE_SIZE 8000
+/*
+ * #define USE_VI (this_player()->query_wiz() > 20)
+ * (vi deleted for the present)
+ */
+#define USE_VI 0
+
+nosave object controller = this_object();
+nosave int line_num;
+nosave string msg;
+
+
+check_func(f, a)
+{
+    (int|string) v;
+    if (!f) return 0;
+    v = controller->(f)(a);
+    if (!v) v = this_object()->(f)(a);
+    return v;
+}
+
+
+init() {
+	add_action("ed_help", "H");
+}
+
+reset(arg) {
+	if (!arg) {
+		/*fuck!*/
+		line_num = 0;
+		msg = 0;
+	}
+	return 1; 
+}
+
+/*
+ * Printed at the start of basic text entry and when continuing after ed()
+ */
+restart_prompt() {
+write("Enter text. '**' - end; ~q - abort; ~e - edit; ~p - print\n");
+	return 1;
+}
+
+/*
+ * Called on each new line.
+ */
+line_prompt() {
+	if (line_num < 100) write(" ");
+	if (line_num < 10)  write(" ");
+	write(line_num + ">");
+	return 1;
+}
+
+/*
+ * Called to get the name of the file(s) the user can read/write.
+ */
+query_ed_file() {
+    return "open/TxtEd_" + this_player()->query_real_name();
+    }
+
+/*
+ * Functions for ed() to call.
+ */
+valid_read(f) {
+    object ce = controller;
+    string ef = check_func("query_ed_file");
+    if (f && (f != ef)) write("Are you serious?\n");
+    return ef;
+    }
+
+valid_write(f) {
+    return valid_read(f);
+}
+
+/*
+ * Should be called to get the body of a message.
+ */
+get_message(str)
+{
+    line_num = 1;
+    msg = "";
+/* Sizeof check is just in case - it shouldn't be a problem, tho. */
+    if (stringp(str) && (sizeof(str) < MAX_MESSAGE_SIZE))
+    {
+	msg = str;
+	line_num = sizeof(explode(msg, "\n")) + 1;
+    }
+    check_func("restart_prompt");
+    check_func("line_prompt");
+    input_to("read_text");
+    return 1;
+}
+
+aborted_msg() {
+    write("Aborted.\n");
+    }
+
+/*
+ * Input_to loop to read lines of text from player.
+ */
+read_text(str) 
+{
+	object ca;
+	if (str == "~q") {
+		write("Aborted.\n");
+		msg = 0;
+        check_func("aborted_msg");
+		return 1;
+	}
+	if (str == "**") {
+		if (line_num == 1) {
+			write("No text entered.  ");
+			msg = 0;
+            check_func("aborted_msg");
+			return end_it();
+		}
+        check_func("finished_msg", msg);
+		return end_it();
+	}
+	if (str == "~p") {
+	    write(msg);
+        check_func("line_prompt");
+	    input_to("read_text");
+	    return 1;
+	    }
+	if (str == "~e") {
+	    edit_file(msg);
+	    return 1;
+	    }
+	msg = msg + str + "\n";
+/* Me stuffing around below - Bel. */
+	if (sizeof(msg) > MAX_MESSAGE_SIZE)
+	{
+		write("Your message is too long. Try expressing it a little " +
+			"more succinctly.\n");
+		return read_text("~q"); /* so I'm lazy. ;) */
+	}
+/* ---- end: Bel. */
+	line_num++;
+    check_func("line_prompt");
+	input_to("read_text");
+    return 1;
+}
+
+end_it() {
+    if (controller == this_object()) return 1;
+    call_out("dest_me", 1);
+    return 1;
+    }
+
+dest_me() { destruct(this_object()); }
+
+
+/*
+ * Edit_file - throw them into the editor on the given string.
+ */
+
+edit_file(str) {
+/* pulled from the old mail reader */
+  if (USE_VI)
+  {
+    write("Entering vi...\n");
+    return "std/vi_daemon"->edit(str, "vi_done");
+  }
+  object ca;
+  string ef = check_func("query_ed_file");
+  rm(ef);
+  write_file(ef, str);
+  write("Entering Ed - 'w' to write, 'q' or 'Q' to exit, !H for help.\n");
+  // ed(ca->query_ed_file(), "recover_edfile");
+  return;
+}
+
+/*
+ * Used to retrieve the file when they leave the editor.
+ */
+vi_done(str)
+{
+  msg = str;
+  if (sizeof(msg) > MAX_MESSAGE_SIZE)
+  {
+    write("Your message is too long. Try expressing it a little more " +
+	"succinctly.\n");
+    return read_text("~q");
+  }
+  input_to("read_text");
+  line_num = 1+ sizeof(explode(msg, "\n"));
+  check_func("restart_prompt");
+  check_func("line_prompt");
+  return 1;
+}
+
+recover_edfile(str) {
+    (string|array) mess;
+    string ef = check_func("query_ed_file");
+    if (file_size(ef) > MAX_MESSAGE_SIZE)
+    {
+	    write("Your message is too long. Try expressing it a little more " +
+		"succinctly.\n");
+	    rm(ef);
+	    return read_text("~q");
+    }
+    mess = grab_file(ef);
+    rm(ef);
+    line_num = 1+ sizeof(explode(mess, "\n"));
+    if (pointerp(mess)) msg = implode(mess, "");
+    else msg = mess;
+    input_to("read_text");
+    check_func("restart_prompt");
+    check_func("line_prompt");
+    return 1;
+}
+
+ed_help() {
+#if 0
+    if (in_editor(this_player())) {
+#endif
+	OUTPUT_FILE->cat("doc/helpdir/ed");
+        return 1;
+#if 0
+	}
+    return 0;
+#endif
+}

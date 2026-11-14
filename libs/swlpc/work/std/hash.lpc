@@ -1,0 +1,199 @@
+/*
+ * General purpose hash object.
+ *   Just inherit/clone it and use the functions!
+ *
+ *  See docs above each function for more details, but in summary 
+ *  setup_hash (string file,int size, int start_new)  
+ *  add_hash (int hash_value, mixed data)
+ *  query_hash (int hash_value, mixed last)
+ *  remove_hash (hash_value [, mixed data] )
+ *  save_me ()	  - usually called by save server
+ *  show_stats () - returns the hash array (Just stat the object)
+ *  dump_hash ()  - returns a pointer to the hash array,NOT a copy! 
+ *
+ * Note that you have to do your own hashing.
+ *
+ *	Version 1.0 by Llati@SW June 93
+ *  Version 1.1 Updated to use the new classes stuff :L Feb 94
+ */
+#include <Servers.h>
+
+inherit BASE;
+
+import "std/hash_class" chash;
+
+class chash hash_table[0] ;
+int hash_size = 0;
+nosave string save_file = 0;
+
+
+/* 	Data storage: We use a combined hash table with linked list
+ *      You mean an "external hash table" ? - D
+ *			Stuffed if I know the real terms... - L
+ * 	
+ * 	As pointed out above you supply your own hash value. This 
+ * 	 is because of the flexibility it provides the programmer.
+ *	We could store all the incoming data, hashing it ourselves,
+ *	 but would you be able to retrieve it again?
+ *
+ *	The structure of the data storage nodes is:
+ *		[ link, hash_value, data ];
+ *
+ *	link: The link to the next node in the list 	
+ *	hash_value: Because our hash table is smaller than the size 
+ *		of the hash_value, we need to store this
+ *		to allow us to distinguish between nodes.
+ *	data: The stuff to be stored.
+ * 
+ *	This doesnt strike me as being terribly efficient, but I 
+ *	dont know any better.
+ */
+
+
+/*	Function : setup_hash (string file, int size, int start_new)  
+ *
+ *	Must be called first when you wish to use this object
+ *	file: file name of where the data is to be stored.
+ *		If you arnt going to save your data, file = 0
+ *	size: needs to be used only once, when the hash table is set up.  
+ *		should dynamically resize on day. (not supported initially)
+ *	start_new: if you are going to set up a new hash data store. 
+ *
+ *	Returns 1 for success
+ *
+ */
+int 
+setup_hash ( (string|int) file, int size, int start_new) {
+ 
+	save_file = file;
+	if (start_new) {
+	  if (file && (file_size (file + ".o") >= 0 || file_size (file + ".o.bak") >= 0 )) {
+		write ("For safeties sake I dont want to overwrite the old data file. Please make sure there is not a file named " + file + ".\n");
+		return 0;
+		}
+	  hash_size = size;
+	  hash_table = allocate (size);
+	  return 1;
+	  }
+	else if (!restore_object (file,this_object())) {
+		write ("Could not restore from save file.\n");
+		return 0;
+		}
+	if (size && size != hash_size) {
+		/* Opps, dont match. add code for dynamic resizeing here! */
+		write ("We dont currently support dynamic hash resizeing in the hash obj.\n");
+		return 0;
+		}
+	return 1;
+}
+
+/*
+ *	Function: add_hash (int hash_pos, mixed data)
+ *
+ *	NOTE: no checks are done on incoming data, duplicates are not detected.
+ */
+
+int
+add_hash (int hash_pos, data)  {
+class chash tmp;
+class chash incoming = create chash;
+int pos;
+
+	if (!hash_size) {
+		write ("The hash table has not been initialised yet.\n");
+		return 0;
+		}
+	incoming.link = 0 ;
+	incoming.hash_value = hash_pos;
+	incoming.data = data;
+	pos = hash_pos % hash_size;
+	tmp = hash_table [pos];
+	if (!tmp) {
+	  hash_table[pos] = incoming;
+	  }
+	 else {
+	   while (tmp.link) tmp = tmp.link;
+	   tmp.link = incoming;
+	   }
+	if (save_file) AUTOSAVE_SERV -> set_auto_save (this_object());
+	return 1;
+}		 
+
+/* Function : query_hash (int hash_position,mixed last)
+ *
+ *	Returns whatever was in the hash table, or 0 if nothing was there.
+ *	last is a pointer to whatever data you searched for at hash_postition
+ *	before and it returned another bit of data. This is a result
+ *	of using a hash table and linked lists. 
+ *
+ */
+
+query_hash (int hash, last) {
+int pos, found = 0;
+class chash node;
+
+	pos = hash % hash_size;
+	node = hash_table[pos];
+	while (node) {
+		if (node.hash_value == hash) {
+	    	  if (!last || found) return node.data;
+		  if (node.data == last) found = 1; /* Ptr comparison */
+		}
+		node = node.link;
+	}
+	return 0;
+}
+
+/*
+ *	Function : remove_hash(int hash_value [, mixed data] )
+ *
+ *	Removes the data at hash_value position, returning
+ *		the old data
+ *	The data field is only necessary if your hash_value
+ *		isnt unique. 
+ *
+ */
+
+remove_hash (int hash, data) {
+class chash node, last_node =0;
+
+    node = hash_table[hash%hash_size];
+    while (node)
+    {
+        if (hash == node.hash_value && (!data || data == node.data) ) {
+            if (last_node) last_node.link = node.link;
+            else hash_table[hash%hash_size] = node.link;
+	    return node.data;
+        }
+        else
+        {
+            last_node = node;
+            node = node.link;
+        }
+    }
+    AUTOSAVE_SERV -> set_auto_save (this_object());
+    return 0;	
+}
+
+show_stats() {
+int i;
+	::show_stats();
+  write ("Save file is (null means none): " + save_file + ".\n");
+  for (i=0;i<hash_size;i++) {
+	  write ("num("+i+"):\n");
+    DUMP->dump(hash_table[i]);
+	}
+}
+
+save_me () {
+	save_object (save_file,this_object());
+	return 1;
+}
+
+dump_hash() {
+	return hash_table;
+}
+
+reset (arg) {
+	add_id ( ["hash_table"] );
+	}

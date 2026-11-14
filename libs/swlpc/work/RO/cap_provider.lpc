@@ -1,0 +1,78 @@
+/*
+ * Capability manager for service providers - inheritable object.
+ * Shattered World Mudlib
+ *
+ * A capability will never be 0.
+ *
+ * Security Consideration:
+ *   - These vars should never be dumped to savefiles.
+ *
+ * See also: /RO/cap_user.c.
+ */
+
+#define BIG_INT	1073741822
+
+nosave array ourcapnames = ({});	/* our (internal) names for */
+					/* capabilities we are providing */
+nosave array ourcaps = ({});		/* capabilities we have given them */
+					/* (which they use to talk to us) */
+nosave array ourcapuses = ({});		/* num uses of a cap.  0 is */
+					/* uncounted. */
+
+/*
+ * make_cap(name, uses): find a capability, add some new uses to it.
+ * If it isn't registered, make it.
+ */
+nosave int 
+make_cap(string name, int uses) 
+{
+    int x = index(ourcapnames, name);
+    if (x >= 0) {
+	if (!uses)
+	    ourcapuses[x] = 0;
+	else
+	    ourcapuses[x] += uses;
+	return ourcaps[x];
+	}
+    x = random(BIG_INT) + 1;
+    ourcaps += ({ x });
+    ourcapnames += ({ name });
+    ourcapuses += ({ uses });
+    return x;
+}
+
+/*
+ * Make sure an old capability is deregistered.
+ */
+nosave 
+invalidate_cap(string name) 
+{
+    int x = index(ourcapnames, name);
+    if (x >= 0) {
+	ourcapnames = ourcapnames[..x-1] + ourcapnames[x+1..];
+	ourcaps = ourcaps[..x-1] + ourcaps[x+1..];
+	ourcapuses = ourcapuses[..x-1] + ourcapuses[x+1..];
+	}
+}
+
+/*
+ * Given a capability and a name, ensure it matches our
+ * perception of what it _should_ be.
+ * This also decrements num_uses for fixed-use caps.
+ */
+nosave 
+auth_user(string name, int cap) 
+{
+    int x = index(ourcapnames, name);
+    if (x < 0)
+	return 0;	/* unauthenticated */
+    if (cap != ourcaps[x])
+	return 0;
+    if (!ourcapuses[x])	/* not counted */
+	return 1;
+    ourcapuses[x]--;
+    if (!ourcapuses[x]) /* last use... */
+	invalidate_cap(name);
+    return 1;
+}
+

@@ -1,0 +1,172 @@
+/*
+ * Aged_prop - generic properties that depend on logged in age.
+ * Essentially like callout, but saveable.
+ *
+ ***** WARNING - THIS FILE MAY GO AWAY - in favour of the (simpler,
+ * more maintainable, more reasonable) inherited age_{event,call_out}.c
+ * objects.  This one is more useful as a central server type thing;
+ * it should NOT be inherited by living (insecure - remote calls).
+ *
+ * Each property has:
+ *	a name
+ *	an expiry time
+ *	an object to call back to (a string name or 0).
+ *	a function to call in the object.
+ *	a parameter to pass to it.
+ *
+ * The callback is always:
+ *	obj->fname(this_object(), propname).
+ *
+ * The object is always the (string name of) the caller that added the
+ * property; it is sufficient to give a string function name argument
+ * for the callback to happen.  The fact that the call is always sent
+ * back to the caller is a simple security hack.  The parameter should
+ * be simple - no arrays and no object pointers (this is because they
+ * will cause problems in save files).
+ *
+ * Callbacks to cloned objects that don't have names, or that can't be
+ * found, will silently fail if the object has since been destructed and
+ * isn't reloaded by the standard mechanisms.  This means that in general
+ * one should set the property - and deal with the callback - in a server.
+ * Only certain player souls are renamed in a consistent fashion; most
+ * monster souls aren't..
+ *
+ * Properties can be added, queried for presence & expiry time (a delay
+ * in logged on seconds), expired immediately, or deleted.
+ *
+ * It is expected that some (internal) routines will flog this module
+ * pretty hard - hence the care with arrays.  Entries with a non-string
+ * name are considered unused.
+ */
+
+#include <Config.h>
+#include "security.h"
+
+inherit "RO/living/age";
+
+/*
+ * All in one (flat) array - speed, etc.
+ * time, name, obj, func, arg
+ */
+
+#define	A_NUM	5
+#define	A_SLOP	6
+
+#define	A_TIME(x)	age_props[(x) * A_NUM]
+#define	A_NAME(x)	age_props[(x) * A_NUM + 1]
+#define	A_FUNC(x)	age_props[(x) * A_NUM + 2]
+#define	A_OBJ(x)	age_props[(x) * A_NUM + 3]
+#define	A_PARAM(x)	age_props[(x) * A_NUM + 4]
+
+array aged_props = [ ];
+int   aged_prop_num   = 0;	/* no. of entries */
+
+/*
+ * Swap properties at two indices (note: an index is the entry
+ * number, not the array offset).
+ */
+
+nosave aged_prop_swap(int i, int j) {
+    (real|int|string) tmp;
+    int x = A_NUM;
+    i *= A_NUM;
+    j *= A_NUM;
+    while (x > 0) {
+	x--;
+        tmp = aged_props[i+x];
+        aged_props[i+x] = aged_props[j+x];
+        aged_props[j+x] = tmp;
+	}
+    }
+
+/*
+ * Filter up a property at index i, based on time.
+ * returns the final index.
+ */
+
+int aged_prop_up(int i) {
+    while (i > 0) {			/* for each elt */
+	int j = (i - 1) / 2;		/* find a parent */
+	if (A_TIME[i] >= A_TIME[j])
+	    return i;			/* in its place already */
+	aged_prop_swap(i, j);		/* else move it up */
+	i = j;				/* and process some more */
+	}
+    return i;
+    }
+
+/*
+ * filter one down; happens when a property is expired (or deleted).
+ */
+
+int aged_prop_down(int i) {
+    while (i < aged_prop_num) {
+	int j = i * 2 + 1;		/* left child */
+	if (j >= aged_prop_num)		/* there isn't one */
+	    return i;
+	int k = j + 1;			/* right child */
+	if (k < aged_prop_num) {	/* if it exists */
+	    if (A_TIME[k] <= A_TIME[j])
+		j = k;			/* and is smaller, use it */
+	    }
+	if (A_TIME[i] >= A_TIME[j])
+	    return i;
+	aged_prop_swap(i, j);
+	i = j;
+	}
+    return i;
+    }
+
+/*
+ * Add a property.  Give property name & delay, and, optionally, a call back
+ * function and argument.  The callback will be performed in the caller.
+ * Only ONE caller/propname pair is allowed.
+ */
+
+add_aged_prop(string pname, (int|real) delay, (int|string) callfun, (int|string|real) arg) {
+    if ((aged_prop_num + A_SLOP * 2) * A_NUM < sizeof(aged_props)) /* hysterisis */
+	aged_props = aged_props[..(aged_prop_num + A_SLOP) * A_NUM];
+    if (aged_prop_num * A_NUM >= sizeof(aged_props))	/* next one would be added after the end */
+	aged_props += allocate(A_SLOP * A_NUM);
+
+    (int|string|object) o = caller();	/* save this whether or not we do the callback */
+    if (o)
+	o = file_name(o);
+
+    if (realp(delay)) {		/* ages are currently in ints */
+	delay = real2int(delay + 0.5);
+	}
+
+    delay += query_age();
+    A_TIME(aged_prop_num) = delay;
+    A_NAME(aged_prop_num) = pname;
+    A_OBJ(aged_prop_num) = o;
+    if (stringp(callfun)) {
+        A_FUNC(aged_prop_num) = callfun;
+        A_ARG(aged_prop_num) = arg;
+	}
+    else {
+        A_FUNC(aged_prop_num) = 0;
+        A_ARG(aged_prop_num) = 0;
+	}
+    aged_prop_num++;
+    if (aged_prop_up(aged_prop_num - 1) < 1)
+        new_aged_callout();
+    }
+
+new_aged_callout() {
+    while (remove_call_out("aged_callout") > (-1)) {
+	/* nothing */
+	}
+    if (aged_prop_num < 1)
+	return;
+    call_out("aged_callout", A_TIME(0) - query_age());
+    }
+
+aged_callout() {
+    if (aged_prop_num < 1)
+	return;
+    int age = query_age();
+    while (age <= A_TIME(0)) {
+	}
+    }

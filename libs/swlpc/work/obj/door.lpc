@@ -1,0 +1,1207 @@
+inherit "std/object";
+
+#define FILE	"obj/door"
+#define LOCK	"obj/lock"
+#define JEN(x)  catch tell_room(load_object("players/jenna/door/bug_room"), "[door:"+file_name(this_object())+"] "+x+"\n");
+
+#define HP	150	/* a factor in calculating query_break_point() */
+
+int open, strength, sp;
+array installed, locks, magicks, smashers;
+
+reset(arg) 
+{
+    ::reset(arg);
+    if (!arg)
+    {
+	set_id("door");
+	add_property("BREAK", 0, query_break_point());
+        set_strength(0);
+	smashers = [];
+
+    }
+}
+
+init()
+{
+    ::init();
+    add_action("install", "install");
+    add_action("uninstall", "uninstall");
+    add_action("smash", "smash");
+    add_action("smash", "break");
+    add_action("remove", "remove");
+    add_action("lock", "lock");
+    add_action("unlock", "unlock");
+}
+
+me() { return "a "+describe_strength()+" door"; }
+
+describe_me() { return me() + (is_open() ? " (open)" : ""); }
+
+install(str) 
+{
+    int i, x;
+    string dir, other_room_name;
+    object other_room;
+    array a, dw;
+
+    notify_fail("Perhaps you mean \"install door <direction>\"?\n");
+    if (!str) return 0;
+    dw = environment(this_player())->query_doorways();
+    if (!dw || !sizeof(dw))
+    {
+	notify_fail("There is no appropriate doorway here to install "+
+	    "the door.\n");
+	return 0;
+    }
+    if (id(str))
+    {
+        if (sizeof(dw) > 2)
+        {
+            notify_fail("In which doorway do you wish to install the door?\n");
+            return 0;
+        }
+        dir = dw[0];
+        x = 1;
+    }
+    else
+    {
+	a = explode(str, " ");
+        dir = a[sizeof(a)-1];
+	str = implode(a[..sizeof(a)-2], " ");
+	if (!id(str))
+	    return 0;
+        x = index(dw, dir);
+        if (x == -1)
+        {
+            notify_fail("There is no doorway in the direction "+dir+".\n");
+            return 0;
+        }
+        x++;
+    }
+    if (dw[x])
+    {
+	notify_fail("There is already a door installed in the doorway. You "+
+	    "will need to uninstall it first.\n");
+	return 0;
+    }
+    if (!this_player()->can_cut())
+    {
+	notify_fail("You need to wield some kind of tool, like a knife, "+
+		"to install the door.\n");
+	return 0;
+    }
+    if (find_property("broken"))
+    {
+	notify_fail("The door is broken - you can't install it.\n");
+	return 0;
+    }
+    environment(this_player())->add_door(dir, this_object());
+    other_room_name = environment(this_player())->query_exit(dir);
+    other_room = load_object(other_room_name);
+    installed = [ file_name(environment(this_player())), other_room_name ];
+    if (other_room)
+    {
+	string other_dir = other_room->query_direction(installed[0]);
+	other_room->add_door(other_dir, this_object());
+	tell_room(other_room, "Someone puts up "+me()+" in the "+
+		other_dir+" doorway.\n");
+    }
+    set_open(1);
+    if (transfer(this_object(), "room/storage"))
+        move_object(this_object(), "room/storage");
+    write("You install "+me()+" into the "+dir+" doorway.\n");
+    say(this_player()->query_name() + " installs " + me() + 
+	" into the " + dir + " doorway.\n");
+    return 1;
+}
+
+uninstall(str) 
+{
+    int i, x;
+    string where, other_room_name;
+    object door, other_room;
+    array a;
+
+    notify_fail("Perhaps you mean \"uninstall door <direction>\"?\n");
+    if (!id(str)) return 0;
+    if (!installed)
+    {
+	notify_fail("The door is not installed!\n");
+	return 0;
+    }
+    if (this_player()->query_attack() &&
+	present(this_player()->query_attack(), environment(this_player())))
+    {
+	write("You don't have time during combat!\n");
+	return 1;
+    }
+    if (!this_player()->can_cut())
+    {
+        notify_fail("You need to wield some kind of tool, like a knife, "+
+	    "to uninstall the door.\n");
+        return 0;
+    }
+    if (file_name(environment(this_player())) != installed[0])
+    {
+	notify_fail("You can't uninstall the door from this side!\n");
+	return 0;
+    }
+    if (!is_open())
+    {
+	notify_fail("You need to open the door before you can uninstall it.\n");
+	return 0;
+    }
+    if (find_property("NO_GET"))
+    {
+	notify_fail("Hmm, this door's hinges aren't visible... it can't be "+
+		"uninstalled.\n");
+	return 0;
+    }
+    write("You begin uninstalling the door...\n");
+    say(this_player()->query_name()+" begins uninstalling "+me()+".\n");
+    tell_other_side(this_player(), "Someone begins uninstalling "+me()+".\n");
+    call_out("uninstall2", 3+random(2), this_player(), environment(this_player()));
+    return 1;
+}
+
+uninstall2(who, where)
+{
+    if (!who || !where || !present(who, where) || who->query_ghost() ||
+	(this_player()->query_attack() &&
+	present(this_player()->query_attack(), environment(this_player()))))
+		return;
+    tell_other_side(who, "Someone removes "+me()+" from the "+
+                "doorway.\n");
+    remove_door(who);
+    tell_object(who, "You remove " + me() + " from the doorway.\n");
+    who->say(who->query_name() + " uninstalls " + me() +
+        " from the doorway.\n");
+    return 1;
+}
+
+open(str)
+{
+    notify_fail("What do you want to open?\n");
+    if (str != "door")
+	return 0;
+    if (!installed)
+    {
+	notify_fail("You can't open a door unless it's installed in a doorway!\n");
+	return 0;
+    }
+    if (is_open())
+    {
+	notify_fail("The door is already open.\n");
+	return 0;
+    }
+    if (is_locked())
+    {
+	write("The door is locked!\n");
+	say(this_player()->query_name()+" struggles to open "+
+	    me()+ ".\n");
+	return 1;
+    }	
+    set_open(1);
+    write("You open "+me()+".\n");
+    say(this_player()->query_name()+" opens "+me()+".\n");
+    tell_other_side(this_player(), "The "+describe_strength()+
+	" door swings open.\n");
+    return 1;
+}
+
+slam(str) { return close(str); }
+
+close(str)
+{
+    notify_fail("What do you want to close?\n");
+    if (str != "door")
+	return 0;
+    if (!installed)
+    {
+	notify_fail("You can't close a door unless it's installed in a doorway!\n");
+	return 0;
+    }
+    if (!is_open())
+    {
+	notify_fail("The door is already closed.\n");
+	return 0;
+    }
+    set_open(0);
+    write("You close "+me()+".\n");
+    say(this_player()->query_name()+" closes "+me()+".\n");
+    tell_other_side(this_player(), "The "+describe_strength()+
+	" door swings closed.\n");
+    return 1;
+}
+
+unlock(str)
+{
+    int i;
+    string ret;
+    array a, keys;
+    object key;
+
+    notify_fail("Perhaps you mean \"unlock door\" or \"unlock door "+
+	"with <which> key\"?\n");
+    if (id(str))
+        a = [ str, 0 ];
+    else
+    {
+        a = STRINGS->split_around(str, [" with "]);
+        if (!a || !id(a[0]))
+            return 0;
+    }
+    if (!installed)
+    {
+        notify_fail("The door is not installed!\n");
+        return 0;
+    }
+    if (is_open())
+    {
+        notify_fail("This door is already open!\n");
+        return 0;
+    }
+    if (!locks || !sizeof(locks))
+    {
+        notify_fail("This door doesn't have any locks!\n");
+        return 0;
+    }
+    if (a[1])
+    {
+        key = find_keys(this_player(), lower_case(a[1]), 1);
+        if (!key)
+        {
+            notify_fail("You don't have "+a[1]+".\n");
+            return 0;
+        }
+        for (i = 0; i < sizeof(locks); i += 3)
+        {
+            ret = key->short()+" in the door's " +
+                describe_lock(locks[i+1]);
+            if (!locks[i+2])
+            {
+                write("The door's "+describe_lock(locks[i+1])+
+                    " is already unlocked.\n");
+            }
+            else if (locks[i] && key->query_code() != locks[i])
+            {
+                write("You try " + ret + ", but it doesn't fit.\n");
+                say(this_player()->query_name()+ " tries " + ret +
+                    ", but it doesn't fit.\n");
+            }
+            else
+            {
+                write("You try " + ret + " and it turns!\n");
+                say(this_player()->query_name() + " tries " + ret +
+                    " and it turns!\n");
+                locks[i+2] = 0;
+                broadcast("The door clicks.\n");
+                if (key->id("xarus_key")) /* 'key' spell */
+                {
+                    key->melt_me();
+                    return 1;
+                }
+            }
+        }
+        return 1;
+    }
+    else
+    {
+	say(this_player()->query_name() + " tries to unlock " + me() + 
+	    ".\n");
+	for (i = 0; i < sizeof(locks); i += 3)
+	{
+	    if (locks[i+2]) // ie is locked
+	    {
+		key = find_keys(this_player(), locks[i]);
+		if (key)
+		{
+		    write("You unlock the " + describe_lock(locks[i+1]) +
+			" with " + key->query_short() + ".\n");
+		    locks[i+2] = 0;
+		    broadcast("The door clicks.\n");
+                    if (key->id("xarus_key")) /* 'key' spell */
+                    {
+                        key->melt_me();
+                        return 1;
+                    }
+		}
+		else
+		{
+		    array tried = find_all_keys(this_player());
+		    if (!tried)
+		    {
+			write("You don't have any keys.\n");
+			return 1;
+		    }
+		    array tnames = allocate(sizeof(tried));
+		    int j;
+
+		    for (j = 0; j < sizeof(tried); j++)
+			tnames[j] = tried[j]->query_short();
+		    write("You try " + STRINGS->array2string(tnames) +
+			" in " + me() + "'s " + describe_lock(locks[i+1]) +
+			", but " + (sizeof(tnames) > 1 ? "they don't" :
+			"it doesn't" ) + " fit.\n");
+		}
+	    }
+	    else
+	    {
+		write("The " + describe_lock(locks[i+1]) + 
+		    " is already unlocked.\n");
+	    }
+	}
+    }
+    return 1;
+}
+
+lock(str)
+{
+    int i;
+    string ret;
+    array a, keys;
+    object key;
+
+    notify_fail("Perhaps you mean \"lock door\" or \"lock door "+
+	"with <which> key\"?\n");
+    if (id(str))
+        a = [ str, 0 ];
+    else
+    {
+        a = STRINGS->split_around(str, [" with "]);
+        if (!a || !id(a[0]))
+            return 0;
+    }
+    if (!installed)
+    {
+        notify_fail("The door is not installed!\n");
+        return 0;
+    }
+    if (is_open())
+    {
+        notify_fail("You need to close the door before you can lock it.\n");
+        return 0;
+    }
+    if (!locks || !sizeof(locks))
+    {
+        notify_fail("This door doesn't have any locks!\n");
+        return 0;
+    }
+    if (a[1])
+    {
+        key = find_keys(this_player(), lower_case(a[1]), 1);
+        if (!key)
+        {
+            notify_fail("You don't have "+a[1]+".\n");
+            return 0;
+        }
+        for (i = 0; i < sizeof(locks); i += 3)
+        {
+            ret = key->short()+" in the door's " +
+                describe_lock(locks[i+1]);
+            if (locks[i+2])
+            {
+                write("The door's "+describe_lock(locks[i+1])+
+                    " is locked.\n");
+            }
+            else if (locks[i] && key->query_code() != locks[i])
+            {
+                write("You try " + ret + ", but it doesn't fit.\n");
+                say(this_player()->query_name()+ " tries " + ret +
+                    ", but it doesn't fit.\n");
+            }
+            else
+            {
+                write("You try " + ret + " and it turns!\n");
+                say(this_player()->query_name() + " tries " + ret +
+                    " and it turns!\n");
+                locks[i+2] = 1;
+                broadcast("The door clicks.\n");
+            }
+        }
+        return 1;
+    }
+    else
+    {
+	say(this_player()->query_name() + " tries to lock " + me() + 
+	    ".\n");
+	for (i = 0; i < sizeof(locks); i += 3)
+	{
+	    if (!locks[i+2]) // ie is unlocked
+	    {
+		key = find_keys(this_player(), locks[i]);
+		if (key)
+		{
+		    write("You lock the " + describe_lock(locks[i+1]) +
+			" with " + key->query_short() + ".\n");
+		    locks[i+2] = 1;
+		    broadcast("The door clicks.\n");
+		}
+		else
+		{
+		    array tried = find_all_keys(this_player());
+		    if (!tried)
+		    {
+			write("You don't have any keys.\n");
+			return 1;
+		    }
+		    array tnames = allocate(sizeof(tried));
+		    int j;
+
+		    for (j = 0; j < sizeof(tried); j++)
+			tnames[j] = tried[j]->query_short();
+		    write("You try " + STRINGS->array2string(tnames) +
+			" in " + me() + "'s " + describe_lock(locks[i+1]) +
+			", but " + (sizeof(tnames) > 1 ? "they don't" :
+			"it doesn't" ) + " fit.\n");
+		}
+	    }
+	    else
+	    {
+		write("The " + describe_lock(locks[i+1]) + 
+		    " is already locked.\n");
+	    }
+	}
+    }
+    return 1;
+}
+
+find_all_keys(object who)
+{
+    int i;
+    array keys = [];
+    array c = contents(who);
+
+    for (i = 0; i < sizeof(c); i++)
+    {
+	if (c[i]->query_key() && !c[i]->id("soul"))
+	    keys += [ c[i] ];
+	else if (c[i]->id("keyring") && arrayp(c[i]->query_keys()))
+	    keys += c[i]->query_keys();
+    }
+    if (sizeof(keys))
+        return keys;
+    return 0;
+}
+
+find_keys(object who, code, int specific_key)
+{
+    array c = contents(who);
+    array keys = find_all_keys(who);
+    int i;
+
+    if (!keys) return 0;
+    for (i = 0; i < sizeof(keys); i++)
+    {
+	if (specific_key)
+	{
+	    if (keys[i]->id(code))
+		return keys[i];
+	}
+	else
+	{
+	    if (keys[i]->query_code() == code)
+		return keys[i];
+	}
+    }
+    return 0;
+}
+
+knock (str)
+{
+    if (!str)
+	return 0;
+    if (index(str, "on ") == 0)
+	str = str[3..];
+    if (!id(str))
+	return 0;
+    if (!installed)
+    {
+	notify_fail("The door is not installed.\n");
+	return 0;
+    }
+    if (is_open())
+    {
+	notify_fail("The door is open!\n");
+	return 0;
+    }
+    write("You knock on "+me()+".\n");
+    this_player()->checked_say(this_player()->query_name()+
+       " knocks on " + me() + ".\n");
+    tell_other_side(this_player(), "Someone knocks on "+me()+
+	".\n");
+    return 1;
+}
+
+kick(str)
+{
+    if (!str || !id(str))
+        return 0;
+    if (!installed)
+    {
+        notify_fail("The door is not installed.\n");
+        return 0;
+    }
+    if (is_open())
+    {
+        notify_fail("The door is open!\n");
+        return 0;
+    }
+    write("You kick "+me()+".\n");
+    this_player()->checked_say(this_player()->query_name()+
+       " kicks " + me() + ".\n");
+    tell_other_side(this_player(), "Someone kicks "+me()+
+        "!\n");
+    return 1;
+}
+
+prise(str)
+{
+    int i, x;
+    array a;
+
+    if (!str)
+	return 0;
+    notify_fail("Perhaps you mean \"prise lock from door\"?\n");
+    a = STRINGS->split_around(str, [ " from " ]);
+    if (!a)
+	return 0;
+    if (!id(a[1]))
+	return 0;
+    if (!locks || ! sizeof(locks))
+    {
+	notify_fail("This door has no locks fitted.\n");
+	return 0;
+    }
+    if (!open)
+    {
+	notify_fail("You must open the door before you can prise any "+
+	    "locks from it.\n");
+	return 0;
+    }
+    if (file_name(environment(this_player())) != installed[0])
+    {
+        notify_fail("You can't prise the locks out from this side!\n");
+        return 0;
+    }
+    if (this_player()->query_attack() &&
+	present(this_player()->query_attack(), environment(this_player())))
+    {
+	write("You don't have time during combat!\n");
+	return 1;
+    }
+    if (find_property("no_get_locks"))
+    {
+	notify_fail("Hmm, this lock is deeply embedded into the door - "+
+		"you can't prise it out.\n");
+	return 0;
+    }
+    if (!this_player()->can_cut())
+    {
+        notify_fail("You need to wield some kind of tool, like a knife, "+
+                "to prise off the lock.\n");
+        return 0;
+    }
+    if (a[0] == "locks")
+	a[0] = "lock";
+    x = find_lock(a[0]);
+    if (x == -1)
+    {
+	notify_fail("There is no such lock fitted to "+me()+".\n");
+	return 0;
+    }
+    write("You begin prising the lock from the door...\n");
+    say(this_player()->query_name()+" begins prising a lock from "+me()+".\n");
+    call_out("prise2", 3+random(2), this_player(), 
+	environment(this_player()), a[0]);
+    return 1;
+}
+
+prise2(who, where, what)
+{
+    object lock;
+    int x = find_lock(what);
+
+    if (!who || !where || !present(who, where) || x == -1 || who->query_ghost() ||
+	(who->query_attack() && present(who->query_attack(), environment(who))))
+        	return 0;
+    lock = clone_object(LOCK);
+    lock->set_power(locks[x+1]);
+    lock->set_code(locks[x]);
+    tell_object(who, "You prise the "+describe_lock(locks[x+1])+" from "+
+	me()+".\n");
+    who->say(who->query_name()+" prises the "+describe_lock(locks[x+1])+
+        " from " +me()+".\n");
+    tell_other_side(who, "You hear some clanking sounds coming "+
+        "from "+me()+".\n");
+    if (transfer(lock, who))
+    {
+	tell_object(who, "You fumble the lock and it falls to the ground.\n");
+	who->say(who->query_name()+" drops a "+describe_lock(locks[x+1])+
+	    ".\n");
+	move_object(lock, where);
+    }
+    locks = locks[..x-1] + locks[x+3..];
+    return 1;
+}
+
+/* Returns a key object that fits this lock. "which" is an offset,
+ * 0 for lock number 0, 1 for lock number 1, etc */
+make_key(which)
+{
+    object key;
+
+    if (!locks || !sizeof(locks))
+	return;
+    if (which < 0 || which >= sizeof(locks) / 3)
+	return;
+    key = clone_object("obj/key");
+    key->set_type(COLOURS->random_colour());
+    key->set_code(locks[which*3]);
+    return key;
+}
+
+smash(str) 
+{
+    int x, hit;
+    string tmp;
+    object wep, other_room;
+
+    notify_fail("Perhaps you mean \"smash door\"?\n");
+    if (str != "door")
+    {
+	if (!str)
+	    return 0;
+	x = index(str, "door with ");
+	if (x != 0)
+	    return 0;
+	wep = present(str[10..], this_player());
+	if (!wep)
+	{
+	    write("You don't have "+str[10..]+"!\n");
+	    return 1;
+	}
+	if (this_player()->query_wielded() != wep)
+	{
+	    write("You must wield "+str[10..]+" first.\n");
+	    return 1;
+	}
+    }
+    else
+	wep = this_player()->query_wielded();
+    if (query_broken() && !installed)
+    {
+	notify_fail("The door is already broken!\n");
+	return 0;
+    }
+    if (add_smash_store(this_player()))
+    {
+	write("You are recovering from the previous smash.\n");
+	return 1;
+    }	
+    hit = (this_player()->query_str() + this_player()->query_siz()) / 4;
+    if (wep)	
+    {
+	string type = wep->damage_type();
+	if (wep->query_broken())
+	{
+	    write("You can't do that with a broken weapon.\n");
+	    return 1;
+	}
+	hit = (type == "impact" ? wep->weapon_class() + 5 : 
+				   wep->weapon_class());
+	hit += this_player()->query_str() / 6;
+	type = (type == "cut" ? "whack" :
+		type == "impact" ? "pound" : "smash");
+	write("You "+type+" at "+me()+" with your "+wep->query_name() +
+		"!\n");
+	say(this_player()->query_name() + " " + PLURAL->plural(type) +
+		" at "+me()+" with " + GENDER->pos(this_player()) +
+		" " + wep->query_name() + "!\n");
+	wep->damage_object(strength+1, "impact");
+	if (wep->query_broken())
+	{
+	    write("Your "+wep->query_name()+" shatters!\n");
+	    say(this_player()->query_name()+"'s "+wep->query_name()+
+		" shatters!\n");
+	}
+	if (!random(2))
+	{	
+	    this_player()->damage("exhaustion", 1);
+	    if (this_player()->query_hp() < 9)
+		write("You're nearly dead from exhaustion!\n");
+	    else if (this_player()->query_hp() < 35)
+		write("You're growing weak with exhaustion!\n");
+	}
+    }
+    else
+    {
+	write("You slam your body into "+me()+"!\n");
+	say(this_player()->query_name() + " slams " + 
+		GENDER->pos(this_player()) + " body into "+me()+
+		"!\n");
+	this_player()->hit_player("impact", strength+random(strength));
+	if (this_player()->query_hp() < (strength+1) * 8)
+	    write("OUCH! That hurt!\n");
+	type = "slam";
+    }
+    if (!random(2))
+	this_player()->eat_food(-1, -1);
+    if (installed)
+	tell_other_side(this_player(), "Something "+PLURAL->plural(type)+
+		" into "+me()+" from the other side!\n");
+    if (!find_property("NO_SMASH"))
+        damage_object(hit, "impact");
+    add_smash_store(this_player());
+    return 1;
+}
+
+add_smash_store(who)
+{
+    int x;
+    if (objectp(who))
+    {
+	x = index(smashers, who);
+	if (x == -1)
+	    smashers += [ who ];
+	call_out("remove_smash_store", 1.5, who);
+    }
+    return (x != -1);
+}
+
+query_smashers() { return smashers; }
+
+remove_smash_store(who)
+{
+    int x;
+    if (objectp(who))
+    {
+	x = index(smashers, who);
+	if (x != -1)
+	    smashers = smashers[..x-1] + smashers[x+1..];
+    }
+}
+
+damage_object(amt, type)
+{
+    int d;
+    int before = query_broken();
+
+    ::damage_object(amt, type);
+    d = (query_damage() * 100) / query_break_point();   
+    if (query_broken())
+    {
+	if (before && installed && sizeof(installed))
+	{
+	    broadcast("The door breaks off its hinges and falls to the ground!\n");
+	    remove_door(this_player());
+	    if (find_property("NO_GET")) /* or they'd lie around forever */
+	    {
+		transfer(this_object(), "RO/void");
+		destruct(this_object());
+		return;
+	    }	
+	}
+	else if (!before)
+	{
+	    broadcast("The door disintegrates! It bursts open!\n");
+	    set_open(1);
+	}
+	return;
+    }
+    if (installed && sizeof(installed) && d > 95) /* chance of breaking open */
+    {
+	if (!random(3))
+	{
+	    broadcast("The door bursts open!\n");
+	    set_open(1);
+	}
+	else
+	    broadcast("The door rocks on its hinges, almost splintering!\n");
+	return;
+    }
+
+    if (d < random(90) || amt < strength + 5 )
+	broadcast("The door appears unmoved.\n");
+    else
+    {
+	array a = [ "buckles", "warps", "splinters", "shakes", "shudders" ];
+	int r1 = random(sizeof(a));
+	int r2 = random(sizeof(a));
+	string tmp = a[r1];
+	if (r1 != r2)
+	    tmp += " and " + a[r2];
+	if (!random(1))
+	    tmp += " under the assault";
+	broadcast("The door " + tmp + "!\n");
+    }
+}
+
+query_break_point()
+{
+    return ((strength+1) * (strength+1) * (strength+1) * HP);
+}
+
+remove_door(pob)
+{
+    int i;
+    object aroom;
+
+    if (!pob || !installed)
+	return;
+    for (i = 0; i < sizeof(installed); i++)
+    {
+	aroom = load_object(installed[i]);
+	if (aroom)
+	    aroom->remove_door(this_object());
+    }	
+    installed = 0;
+    set_strength(query_strength()); /* update short(), etc */
+    move_object(this_object(), environment(pob));
+}
+
+query_room1() 
+{
+    if (!installed)
+	return 0;
+    return load_object(installed[0]);
+}
+
+query_room2()
+{
+    if (!installed)
+	return 0;
+    return load_object(installed[1]);
+}
+
+tell_other_side(who, str)
+{
+    object other_room;
+    string here, there;
+
+    if (!installed || !who || !environment(who)) return;
+    here = file_name(environment(who));
+    there = (here == installed[0] ? installed[1] : installed[0]);
+    if (!there) return;
+    other_room = load_object(there);
+    if (!other_room) return;
+    tell_room(other_room, str);
+    other_room->save_to_database();
+}
+
+broadcast(str) 
+{
+    object e = environment(this_object());
+
+    if (installed)
+    {
+	if (query_room1())
+	{
+	    tell_room(query_room1(), str);
+	    query_room1()->save_to_database();
+	}
+	if (query_room2())
+	{
+	    tell_room(query_room2(), str);
+	    query_room2()->save_to_database();
+	}
+    }
+    else if (e)
+    {
+	if (e->query_living())
+	    e = environment(e);
+	tell_room(environment(this_object()), str);
+    }
+}
+
+long(str)
+{
+    string ret = "This is a " + describe_strength() + " door. ";
+    int extra_strength;
+
+    extra_strength = strength - 10;
+    if (extra_strength > 0)
+	ret += "It has been additionally reinforced with " +
+		(extra_strength > 1 ? 
+			(ENGLISH->int_to_english(extra_strength, -1) + 
+			" metal bands. ") :
+			"a metal band. ");
+    if (query_broken())
+	ret += "It is broken and hanging from its hinges.\n";
+    else
+    {	
+	ret += describe_damage();
+	if (installed)
+	    ret += " It is " + (open ? "open." : "closed.");
+	ret += "\n";
+    }
+    if (locks && sizeof(locks))
+    {
+	int i, x;
+	array a1 = [], a2 = [];
+	array final;
+
+	for (i = 0; i < sizeof(locks); i += 3)
+	{
+	    x = index(a1, describe_lock(locks[i+1]));
+	    if (x == -1)
+	    {
+		a1 += [ describe_lock(locks[i+1]) ];
+		a2 += [ 1 ];
+	    }
+	    else
+		a2[x]++;
+	}
+	for (final = [], i = 0; i < sizeof(a1); i++)
+	    final += [ ENGLISH->int_to_english(a2[i], 1000) + " " + a1[i] + 
+		(a2[i] > 1 ? "s" : "") ];
+	ret += "It is fitted with " + STRINGS->array2string(final) + ".\n";
+    }
+    if (magicks)
+    {
+	ret += " It is faintly humming.\n";
+    }
+    write(ret);
+}
+
+describe_strength(x)
+{
+    if (!x)
+	x = strength;
+    array a = [ "rickety wooden",
+		"thin wooden",
+		"wooden",
+		"thick wooden",
+		"heavy wooden",
+		"thin metal",
+		"metal",
+		"thick metal",
+		"reinforced metal",
+		"double-reinforced metal",
+		"massive vault-like"
+		];
+    if (x >= sizeof(a))
+	x = sizeof(a) - 1;
+    return a[x];
+}
+
+describe_damage()
+{
+    int d = (query_damage() * 100) / query_break_point();
+
+    return	d < 10 ? "" :
+		d < 25 ? "It is somewhat battered." :
+		d < 50 ? "It appears to have been battered." :
+		d < 75 ? "It is battered and damaged." :
+		d < 88 ? "It is heavily battered and damaged." : 
+			   "It is heavily battered and damaged, and is " +
+			   "barely hanging together.";
+}
+
+describe_lock(int str)
+{
+    return      str < 1 ? "feeble-looking lock" :
+                str < 2 ? "tiny lock" :
+                str < 3 ? "small lock" :
+                str < 4 ? "fairly small lock" :
+                str < 5 ? "solid-looking lock" :
+                str < 6 ? "large lock" :
+                str < 7 ? "large thick lock" :
+                str < 8 ? "very large thick lock" :
+                str < 9 ? "enormous thick lock" :
+                str < 10 ? "enormous plated lock" :
+                          "enormous reinforced lock"; 
+}
+
+is_locked(int all_locks)
+{
+    int i, total;
+
+    if(!arrayp(locks))
+	locks = [];
+    for (i = 2, total = 0; i < sizeof(locks); i += 3)
+	if (locks[i])
+	{
+	    if (!all_locks)
+	        return 1;
+	    total++;
+	}
+    if (all_locks)
+	return total == sizeof(locks) / 3;
+    return 0;
+}
+
+add_lock(keycode, stren)
+{
+    if (!arrayp(locks))
+        locks = [ ];
+    locks += [ keycode, stren, 0 ];
+}
+
+remove_lock(keycode, stren)
+{
+    int x;
+
+    if (!arrayp(locks))
+        locks = [ ];
+    if (!keycode)
+	x = index(locks, stren) - 1;
+    else
+	x = index(locks, keycode);
+    if (x > -1)
+        locks = locks[..x-1] + locks[x+3..];
+}
+
+query_locks()
+{
+    if (!locks)
+	locks = [];
+    return locks;
+}
+
+find_lock(str)
+{
+    array a, ql;
+    int s, x, i;
+    string desc, door_name;
+    object door;
+
+    if (!str || ! locks || !sizeof(locks))
+        return -1;
+    for (i = 1; i < sizeof(locks); i += 3)
+	if (str == "lock" || str == describe_lock(locks[i]))
+	    return i-1;
+    return -1;
+}
+
+set_specific_lock(x, closed)
+{
+    if (!locks || x < 0 || x >= sizeof(locks))
+	return 0;
+    locks[x] = closed;
+    return 1;
+}
+
+force_unlock_door()
+{
+    int i;
+
+    for (i = 2; i < sizeof(locks); i += 3)
+	set_specific_lock(i, 0);
+    broadcast("The door clicks.\n");
+}
+
+force_open_door()
+{
+    set_open(1);
+    broadcast(capitalize(me()) + " swings open.\n");
+}
+
+force_lock_door()
+{
+    int i;
+
+    for (i = 2; i < sizeof(locks); i += 3)
+        set_specific_lock(i, 1);
+    broadcast("The door clicks.\n");
+}
+
+force_close_door()
+{
+    set_open(0);
+    broadcast(capitalize(me()) + " swings shut.\n");
+}
+
+
+set_open(n) { open = n; }
+is_open() { return open; }
+is_closed() { return !open; }
+
+set_strength(n) 
+{ 
+    int i;
+    array a;
+
+    strength = n; 
+    if (!installed || !sizeof(installed))
+	set_short("a " + describe_strength() + " door");
+    else
+	set_short(0);
+    set_id( [ "door", describe_strength() + " door" ] );
+    a = explode(describe_strength(), " ");
+    if (sizeof(a) > 1)
+	for(i = 0; i < sizeof(a); i++)
+	    add_id(a[i]+ " door");
+    set_weight((strength + 2) * 2);
+    change_property("BREAK", 0, query_break_point());
+}
+
+query_strength() { return strength; }
+
+query_installed() { return installed; }
+
+set_sp(int n) { sp = n; }
+add_sp(int n) { sp += n; }
+query_sp() { return sp; }
+
+set_installed(arg) 
+{
+    if (arg && !arrayp(arg)) return;
+    installed = arg;
+}
+
+set_locks(arg)
+{
+    if (arrayp(arg))
+	locks = arg + [];
+    else
+	locks = arg;
+}
+
+set_magicks(arg) { magicks = arg; }
+
+init_arg(args) 
+{
+    int i;
+
+    if (!arrayp(args) || sizeof(args) != 9)
+	return;
+    set_strength(args[1]);
+    set_damage(args[2]);
+    set_open(args[3]);
+    set_sp(args[4]);
+    set_installed(args[5]);
+    set_locks(args[6]);
+    set_magicks(args[7]);
+    if (arrayp(args[8]))
+	for (i = 0; i < sizeof(args[8]); i++)
+	    add_property(args[8][i]);
+    JEN("loaded "+describe_me());
+    if (arrayp(locks))
+	JEN("sizeof locks = "+sizeof(locks));
+    else
+	JEN("no locks");
+}
+
+query_auto_load() 
+{
+    int i;
+    array preserve_these = [ "NO_GET", "NO_GET_LOCKS", "NO_PICK_LOCKS", 
+	"BROKEN", "NO_SMASH" ];
+    array a = [];
+
+    if (find_property("NO_SAVE"))
+	return 0;
+
+    for (i = 0; i < sizeof(preserve_these); i++)
+	if (find_property(preserve_these[i]))
+	    a += [ preserve_these[i] ];
+    if (!sizeof(a))
+	a = 0;     
+    return [ FILE, 
+	     [ describe_me(), strength, query_damage(), open, sp,
+	       installed, locks, magicks, a ] ];	
+}
+
+

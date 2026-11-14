@@ -1,0 +1,227 @@
+/*
+ * /lib/direction
+ *
+ * A bunch of movement/direction support
+ *
+ * 20000507 Dredd updated to be a little quicker and have more functions
+ * 2000     Greebo all the bearing/description stuff
+ * 20010214 Jenna - added "cfs" abbreviation for "cliff-face-south" etc
+ */
+
+array abbreviated;
+array standard;
+array opposite;
+array cardinal;
+
+reset()
+{
+//    abbreviated = [ "n","s","e","w","u","d","ne","nw","se","sw" ];
+    abbreviated = [ "n","s","e","w","u","d","ne","nw","se","sw",
+		"climb", "enter", "in", "out", "cfe",
+		"cfs", "cfw", "cfn",
+		"cde", "cdw", "cdn",
+		"cds", "stairs" ];
+    standard = [ "north","south","east","west","up","down",
+		   "northeast","northwest","southeast","southwest", 
+            "climb", "enter", "in", "out", "cliff-face-east",
+            "cliff-face-south", "cliff-face-west", "cliff-face-north",
+            "cliff-drop-east", "cliff-drop-west", "cliff-drop-north",
+            "cliff-drop-south", "stairs" ] ;
+    opposite = [ "south", "north", "west", "east", "down", "up",
+        "southwest", "southeast", "northwest", "northeast",
+        "down", "leave", "out", "in", "cliff-drop-west", 
+        "cliff-drop-north", "cliff-drop-east", "cliff-drop-south",
+        "cliff-face-west", "cliff-face-east", "cliff-face-south",
+        "cliff-face-north", "down" ];
+    cardinal = standard[..5];
+}
+
+query_standard()
+{
+    return standard;
+}
+
+query_abbreviated()
+{
+    return abbreviated;
+}
+
+is_cardinal(string str)
+{
+    int i;
+    i = index(cardinal, str);
+    if (i == -1) return 0;
+    return 1;
+}
+
+is_standard(string str)
+{
+    int i;
+    i = index(standard, str);
+    if (i == -1) return 0;
+    return 1;
+}
+
+string full_dir(string arg)
+{
+    int i;
+
+	if ((i = index(abbreviated, arg)) >= 0) 
+    {
+		return standard[i];
+    }
+	return arg;
+}
+
+string opposite_dir(string dir)
+{
+    int back;
+
+    back = index(standard, dir);
+    if (back < 0) return 0;
+
+    return opposite[back];
+}
+
+/* Added by Greebo - 000308 */
+
+const PI = 3.14159265358979323846; /* quite enough precision really */
+
+/* returns a bearing in radians or degs from x, y to x1, y1 */
+
+get_bearing(int x, int y, int x1, int y1, int degs)
+{
+        real dir;
+        real x_abs = int2real(x1 - x);
+        real y_abs = int2real(y1 - y);
+
+        if ((x_abs == 0.0) && (y_abs < 0.0))
+        {
+                dir = (1.5 * PI);
+        }
+        else if ((x_abs == 0.0) && (y_abs > 0.0))
+        {
+                dir = (0.5 * PI);
+        }
+        else if ((x_abs > 0.0) && (y_abs >= 0.0))
+        {
+                dir = "modules/math"->atan(y_abs / x_abs);
+        }
+        else if ((x_abs < 0.0) && (y_abs > 0.0))
+        {
+                dir = (PI) - ("modules/math"->atan(y_abs / (-x_abs)));
+        }
+        else if ((x_abs < 0.0) && (y_abs <= 0.0))
+        {
+                dir = (PI) + ("modules/math"->atan(y_abs / x_abs));
+        }
+        else if ((x_abs > 0.0) && (y_abs < 0.0))
+        {
+                dir = (2 * PI) - ("modules/math"->atan((-y_abs) / x_abs));
+        }
+        else
+        {
+                dir = -1.0;
+        }
+	if (!degs)
+	{
+	        return dir;
+	}
+	else
+	{
+		return real2int(dir * 180 / PI);
+	}
+}
+
+
+get_bearing_string(int x, int y, int x1, int y1)
+{
+    array dirs = ["east", "northeast", "north", "northwest",
+                      "west", "southwest", "south", "southeast", "east"];
+	int dir = get_bearing(x, y, x1, y1, 1);
+
+	if (dir < 0)
+	{
+		return "";
+	} 
+    return dirs[((dir + 22) / 45)];
+}
+
+
+get_elevation(int z, int z1, int dist, int degs)
+{
+	real elevation;
+        real z_abs = int2real(z1 - z);
+	real r_dist = int2real(dist);
+
+	if (z_abs == 0.0) {
+		elevation = -91.0;
+	}
+	else {
+		elevation = "modules/math"->atan(z_abs / r_dist);
+	}
+
+        if (!degs)
+        {
+                return elevation;
+        }
+        else
+        {
+                return real2int(elevation * 180 / PI);
+        }
+}
+
+
+get_elevation_string(int z, int z1, int dist)
+{
+        array elevs = ["down below", "below", "lower", "",
+                      "higher", "above", "up above"];
+        int elev = get_elevation(z, z1, dist, 1);
+
+        if (elev < (-90))
+        {
+                return "";
+        } 
+        return elevs[((elev + 105) / 30)];
+}
+
+
+get_direction_string(int x, int y, int z, int x1, int y1, int z1)
+{
+        string bear, elev, range;
+	
+	int dist = "lib/imath"->sqrt(((x - x1) * (x - x1)) + ((y - y1) * (y - y1)));
+	if (dist <= 3)
+		range = "nearby";
+	else if (dist <= 6)
+		range = "a short distance away";
+        else if (dist <= 10)
+                range = "away";
+        else if (dist <= 15)
+                range = "off";
+        else if (dist <= 20)
+                range = "far off";
+        else if (dist <= 25)
+                range = "in the distance";
+        else if (dist <= 30)
+                range = "far off in the distance";
+	else
+		range = "on the horizon";
+
+	bear = get_bearing_string(x, y, x1, y1);
+	elev = get_elevation_string(z, z1, dist);
+	if ((bear == "") && (elev == ""))
+	{
+		return "right here";
+	}
+	else if (bear == "")
+	{
+		return elev;
+	}
+	else if (elev == "")
+	{
+		return (range + " " + bear);
+	}
+	return (range + " " + bear + " and " + elev);
+}
+

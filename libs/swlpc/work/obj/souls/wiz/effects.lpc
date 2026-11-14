@@ -1,0 +1,2088 @@
+/*
+ * Boring wizard stuff; effects etc in this soul.
+ *  All wizards can do this stuff.
+ *
+ * Dredd 1992 - cut from Shattered World's wiz_soul
+ * which is getting too big for it's own good.
+ */
+
+/*
+ * 941114 Hunter     	changed switch uses to COMARGS-> ...
+ * 941214 Hunter     	added -m switch to pow_dump()
+ * 950404 Hunter     	sent output from 'people' to MORE
+ * 950527 Hunter     	general cleanup
+ * 950723 Hunter     	fixing up find_item() calls to match new usage
+ *		     	of find_item()
+ * 950816 Hunter     	added 'mftp' command
+ * 950827 Hunter	added query_destruct() function - to clean up
+ *			snoopers. snooper objects are also renamed when
+ *			cloned.
+ * 950828 Darkryln      modified pointer to /obj/souls/communication
+ *                       to /obj/souls/communicate.
+ * 950911 Hunter	wiz_soul now dests itself if you are not a wizard.
+ * 950918 Hunter	added 'vls' command.
+ * 951017 Hunter	file shifted from obj/souls/wiz_effects.c to
+ *			obj/souls/wiz/effects.c
+ * 960216 Belgarion	removed most array addition in the people (and
+ *			similar) commands, and server listings.
+ * 010220 Jenna		Moved 'err' to wiz_soul to use '/bad.log'
+ * 010718 Zaphoid	Changed the 'bugs' command to use the bug list code
+ *			in the bugs Bulletin Board (Jennas work)
+ * 010718 Zaphoid	Removed Hunters "which" command and added new one.
+ * 010719 Jenna		Moved 'in' and 'at' to wiz_soul.
+ * 010725 Zaphoid	Added the fixed and notabug commands so bug reports 
+ *			can be fixed from anywhere. (calls Jenna's functs.)
+ * 			Also added a check to clear any cautions when first
+ *			loaded.
+ * 010814 Zaphoid	Fixed home() so it displays room desc and moves you
+ *			nicly to your home.
+ */
+
+inherit "obj/souls/base_soul";
+inherit "RO/modules";
+
+#include <Consts.h>
+#include <security.h>
+#include <handshake.h>
+#include <errors.h>
+#include <board.h>     /* For the notes command */
+
+#if 0
+/* now in inherited object */
+object myself;          /* object pointer to owner */
+#endif
+
+object mywiz;           /* object pointer to owner's wiz_soul */
+object snooper, dot;    /* snoop stuff */
+int wiz_level;          /* grumble hack hack hack */
+
+#define TIME "<"+DATE->packed()+" "\
+	+explode(query_host_name(),".")[0]+"> "
+
+show_stats()
+{
+array ret = ::show_stats();
+    return ret + [ "mywiz    : " + DUMP->dump(mywiz, 0, 0, -1) ];
+}
+
+reset(arg)
+{
+    string Caution;
+    ::reset(arg);
+    if (!arg) 
+    {
+        set_soul_type("wizard", "effects");
+        add_id( [ "wiz_effects", "ND", "soul" ] );
+	/* clear any cautions */
+	Caution = this_player()->query_caution();
+	while (Caution != 0)
+	{
+	    this_player()->pop_caution();
+	    Caution = this_player()->query_caution();
+	}
+    }
+}
+
+set_owner(obj) { if (!mywiz) mywiz = obj; } /* temp hack so stuff works */
+
+fuck_fuck_fuck() 
+{
+    object ws;
+    ws = myself->query_soul("wizard/wiz_soul");
+    if (ws) mywiz = ws;
+}
+
+init()
+{
+    ::init();
+    if (myself != this_player() ) return;
+    if (this_player()->is_player()) 
+    {
+        wiz_level = myself->query_wiz();
+	    if (!wiz_level)
+	    {
+	        destruct(this_object());
+	        return;
+	    }
+        if (myself->query_store("wiz_light",  myself->query_real_name()[0]))
+            myself->add_store("wiz_light", 0, myself->query_real_name()[0]);
+        call_out("fuck_fuck_fuck",0.1);
+	/*add_action("info_which","which"); - removed by Zaphoid 010718 */
+        add_action("read_log","typos");
+        add_action("bug_list","bugs");
+        add_action("bug_fix","bugfix");
+        add_action("bug_not","notabug");
+        add_action("read_log","ideas");
+        add_action("read_log","rep");
+        add_action("read_log","err");
+        add_action("read_log","log");
+        
+        add_action("wiz_shout", "wizshout", 3);
+        add_action("do_ring","bell");
+	    add_action("new_notes", "notes"); 
+
+        add_action("list_servers", "servers", 4);
+	    add_action("set_backups", "backups" );
+        
+        add_action("set_store","set"); 
+        add_action("review", "review");
+        
+        add_action("set_home","sethome");
+        add_action("do_set_pretitle","pretitle",5);
+        add_action("set_stuff", "title");
+        add_action("set_stuff", "god");
+        add_action("remove_god", "xgod");
+       
+	    add_action("cmd_rpeople", "rpeople", 4); 
+        add_action("list_peoples","people",3);
+        add_action("list_wizards","wizards",6);
+        add_action("list_players","players",6);
+        add_action("date", "date");
+#if 0
+        add_action("rwho", "rwho");
+        add_action("rwho", "rhosts");
+        add_action("send_rtell", "rtell");
+#endif
+        add_action("send_rwiz", "rwiz");
+
+        add_action("user_caution", "caution");
+        add_action("finger", "finger", 1); 
+        add_action("postitnote", "postitnote", 4);
+        add_action("wizmud", "wizmud"); 
+        
+        add_action("pow_dump","i!");    
+	    add_action("virtual_ls", "vls");
+        add_action("wiz_light","light");
+
+        add_action("visible", "vis");
+        add_action("invisible", "invis");
+
+        add_action("dump_status", "status");
+
+        if (wiz_level >= APPRENTICE) 
+	    {
+            add_action("teleport", "goto");
+            add_action("teleportd", "gotod");
+        }
+
+        if (wiz_level >= CREATE) 
+ 	    {
+            add_action("trans", "trans", 3);
+            add_action("power_trans", "trans!");
+            add_action("power_get", "get!");
+            add_action("power_divest", "drop!");
+            add_action("power_divest", "give!");
+            add_action("power_divest", "put!");
+            add_action("whereis","where",3);
+            add_action("home","home",3);
+
+            add_action("local_commands", "loc");
+            add_action("long_local_commands", "localcmd", 4);
+            add_action("query_local_commands", "which");
+            add_action("echo_to","echoto",0);
+            add_action("echo","echo",0); 
+            add_action("echo_all","echoall",0);
+            add_action("enter","climbin",3);
+            add_action("sexit","exit",0);
+
+//            add_action("in_room", "in");
+//            add_action("in_room", "at");
+            add_action("force_player", "force");
+
+            add_action("gag_it", "gag");
+            add_action("gag_it", "rgag");
+            add_action("spell_zap", "zap!");
+            add_action("heal", "heal");
+            add_action("pacifism_curse", "pacify");
+
+            add_action("dot_cmd", "dot");
+#if XVERB
+            add_action("echo"); add_xverb("#");
+            add_action("dot_cmd"); add_xverb(".");
+#else
+            add_action("echo", "#", -1);
+            add_action("dot_cmd", ".", -1);
+#endif
+            add_action("map", "map");
+	        add_action("mftp", "mftp");
+            add_action("profile", "profile");
+        }
+
+        dot = environment(myself);
+    }
+}
+
+dump_status()
+{
+    M_DISASS->dump_status();
+    return 1;
+}
+
+profile(arg)
+{
+    int i;
+    int x;
+    array topfuns;
+
+    notify_fail("profile <top number of functions>\n");
+    if (!arg) return 0;
+    x = atoi(arg);
+    if (x == 0) return 0;
+
+    topfuns = M_DISASS->top_functions();
+
+    x = x * 3;
+    if (x > sizeof(topfuns)) x = sizeof(topfuns);
+
+    for (i = 0; i < x; i+=3)
+    {
+        write(topfuns[i+2] + ": " + topfuns[i] + "->" + topfuns[i+1] + "\n");
+    }
+    return 1;
+}
+
+visible(str)
+{
+    myself->vis(str);
+    write(display_invis_level() + "\n");
+    return 1;
+}
+
+invisible(str)
+{
+    if (!str || str == "")
+    {
+	write("Your current invisibility level is "+
+	    myself->query_invis()+".\n");
+	return 1;
+    }
+    myself->invis(str);
+    write(display_invis_level() + "\n");
+    return 1;
+}
+
+display_invis_level()
+{
+    return (myself->query_invis() ? "You are now at invisibility level " + 
+	myself->query_invis() + "." : "You are now visible.");
+}
+
+#if 0
+show_usage()
+{
+        write("Rusage: "+rusage()+"\n");
+        return 1;
+}
+#endif
+
+finger(str)
+{
+	object find;
+
+        notify_fail("Finger who?\n");
+        int res;
+
+#if 0        
+        if (stringp(str) && strlen(str) > 1 && index(str, "@") >= 0) {
+            external_program("finger", "finger_done", [ str ], 0, 0, 0);
+            return 1;
+            }
+        else
+#endif
+
+            res = FINGER->finger(str);
+
+#if 0
+        find = clone_object(FINGER);
+        res = find->finger(str);
+        destruct(find); 
+#endif
+/*      if (!res)
+                res = list_peoples(); */
+        return res;
+}
+
+finger_done(s) {
+    write("Ok.\n");
+    }
+
+remove_god(str) { myself->remove_god(str); return 1; }
+
+set_stuff(str)
+{
+        myself->("set_"+query_verb())(str);
+        return 1;
+}
+
+date()
+{
+    write("The date and time are:  "+ctime(time())+"\n");
+    return 1;
+}
+
+wiz_shout(str)
+{
+    string msg;
+    array list;
+    int i;
+
+    if (!str) return 0;
+    if (this_player() != myself) return;
+    list = users();
+    while (i < sizeof(list)) {
+        if (list[i]->query_wiz() && list[i] != myself
+            && environment(list[i])) { /* for people getting on but not giving p
+asswd */
+                if (list[i]->query_caution())
+                        list[i]->add_note(capitalize(myself->query_real_name()) 
+                                +" wizshouts: "+str+"\n");
+                else 
+                {
+                    msg = capitalize(myself->query_real_name())+
+                            " wizshouts: "+str+"\n";
+                    msg = ANSI->scolor(ANSI->hilite(list[i], "wiz"), msg);
+                    tell_object(list[i], msg);
+                }
+                
+        }
+        i++;
+    }
+    write("You wizshout: "+str+"\n");
+    return 1;
+}
+
+string
+switches_row(array sw, array st)
+{
+int i, pos;
+array ret = allocate(sizeof(sw));
+string adds;
+    pos = 0;
+    for (i = 0; i < sizeof(sw); i ++)
+    {
+	if (sw[i])
+	{
+	    adds = FORMAT->left_justify( st[i*2], st[i*2+1] );
+	    if (st[i*2+1]&& (sizeof(adds) > st[i*2+1]))
+	        adds = adds[0..st[i*2+1]-2] + "..";
+	    ret[pos++] = adds;
+	}
+    }
+    return implode(ret, "");
+}
+
+list_users(list, options) 
+{
+int i=0,j,tmpl, tmpi, pos, strt, lend, rpos;
+(int|string) tmpr;
+object fred;
+array switches;
+array ret = allocate(2 + sizeof(list));
+object o_wiz_soul;
+    if (!options || options == "")
+                options = "-a -b -n -l -i -env";
+    switches = COMARGS->split_args(options, 
+	[ "a", "b", "ear", "n", "sex", "r", "l", "i", "env" ],
+	[ ] );
+    ret[0] = "Load Average : "+M_DISASS->command_load() + " cmds/s, " +
+        M_DISASS->compile_load() + " compiled lines/s";
+    ret[1] = switches_row(switches[1], [
+                "Address", 16,
+                "B", 1,
+                "E", 1,
+                " Name", 14,
+                "Sex", 4, 
+                "Race", 10,
+                "Level", 9,
+                "Idle", 6,
+                "Location",0
+        ] );
+    rpos = 2;
+    strt = 0;
+    while(i<sizeof(list)) {
+        string name;
+        string outstr;
+        string ip1, ip2;
+        int invis;
+        string idle;
+
+        pos = strt;
+        ip1 = list[pos]?query_ip_number(list[pos]):"ZZZZZZZ";   
+        for (j =strt + 1 ; j < sizeof(list); j ++)
+        {
+                if (list[j] && (ip2 = query_ip_number(list[j])) < ip1)
+                {
+                        pos = j;
+                        ip1 = ip2;
+                }
+        }
+/*
+        if (pos == strt+1) 
+                strt = pos; 
+*/
+        invis = (list[pos]->short() == 0);
+        name = list[pos]->query_real_name();
+        if (!name) name = list[pos]->query_name();
+        if (!name) name = "[login]";    
+        name = capitalize(name);        
+
+        idle = (list[pos]->query_idle())/60;
+        if (idle < 0) 
+                idle = 0;
+        idle = (idle?(idle+"m"):"");
+
+        if (environment(list[pos]))
+        {
+/*        array t; what's this for? */
+            tmpr = file_name(environment(list[pos]));
+            if (tmpr[0..1] == "P/") {
+		string inside;
+                if (environment(list[pos]))
+		  inside = environment(list[pos])->query_real_name();
+                if (inside) tmpr = "inside "+ capitalize(inside) +" ("+tmpr+")";}
+            tmpr = FILENAME->contract(tmpr);
+        }
+        else 
+                tmpr = "<no environment>";
+
+        if (!(present("hidden_peo", list[pos]) && myself->query_wiz() < SENIOR))
+        ret[rpos++] = switches_row(switches[1], [
+                ip1, 16,
+                ( (o_wiz_soul = list[pos]->query_soul("wizard/wiz_soul") )
+			&& o_wiz_soul->query_busy( ))?"*":" ", 1,
+                (list[pos]->query_muffled()?"*":" "), 1,
+                (invis?("("+name+")"):(" "+name+" ")), 14,
+                (list[pos]->query_gender() == "male")?" M":
+                        ((list[pos]->query_gender() == "female")?" F":" ?"), 4,
+                list[pos]->query_race(), 10,
+                LEVELS->query_desc(list[pos]), 9,
+                idle, 6,
+                tmpr,0
+        ] );
+
+        list[pos] = 0;  
+        i += 1;
+    }
+    ret = ret[..(rpos - 1)];
+    MORE->more( ret );
+    return 1;
+}
+
+int
+set_store(str)
+{
+string mess, curr;
+array alist;
+int i;
+    notify_fail("Set <clone, home, dest, in, out, tin, tout, soul> message?\n"
+        +"Set <elan> (on|off)?\n");
+    if (!str) 
+	return 0;
+    if (str[0..3] == "elan")
+    {
+		curr = "";
+		if (str == "elan on")
+                        mywiz->setenv("WIZARD_ELAN", 1);
+                else if (str == "elan off")
+                        mywiz->setenv("WIZARD_ELAN", 0);
+                else
+                	curr = "currently ";
+		write("You have "+curr+["disabled","enabled"]
+		    [myself->query_store("WIZARD_ELAN")] +
+		    " elan cost for people 'telling' you stuff.\n");
+		int n = "obj/souls/communicate"->elan_worth(myself->query_wiz());
+		write("Elan cost to talk to you is " + n + ".\n") ;
+                return 1;
+        }
+        alist = explode(str, " ");
+        if (sizeof(alist) < 2) return;
+        str = alist[0];
+        mess = implode(alist[1..], " ");
+        if (str == "in" || str == "out") {
+                myself->("setm"+str)(mess);
+                write("Ok.\n");
+                return 1;
+        }
+#if 0
+        alist = [
+                "clone", "clone_message", 1,
+                "dest",  "destruct_message", 1,
+                "home", "home_message", 0, 
+                "tin",  "t_in", 0, 
+                "tout", "t_out", 0,
+                "soul", "soulname", 1
+        ];
+    for (i = 0; i < sizeof(alist); i += 3) 
+    {     
+        if (str == alist[i]) 
+ 	{  
+#if 0
+            if (alist[i+2]) 
+	 	mywiz->setenv(alist[i+1], mess, 
+			myself->query_real_name()[0]);
+            else 
+#endif
+		mywiz->setenv(alist[i+1], mess);
+            write("Ok.\n");
+            return 1;
+        }
+    }
+#endif
+    return;
+}
+
+
+
+review() {
+int p;
+    write(  "out:\t\t" + myself->query_msgout() +
+	  "\nin:\t\t" + myself->query_msgin() +
+	  "\ntout:\t\t" + mywiz->getenv("t_out") +
+	  "\ntin:\t\t" + mywiz->getenv("t_in") + 
+	  "\nhome:\t\t" + mywiz->getenv("homemsg")+
+          "\nvi/more:\t"+ mywiz->getenv("vimsg")+
+	  "\nclone:\t\t" + mywiz->getenv("clonemsg")+
+	  "\ndest:\t\t"+ mywiz->getenv("destmsg",p)+
+	  "\ni! defaults:\t"+mywiz->getenv("I!_DEFAULTS")+
+	  "\ncaution:\t");
+    myself->display_cautions();
+    write(  "elan cost:\t"+ myself->query_soul("generic/communicate")->elan_worth(myself->query_wiz()) +
+	" ("+(myself->query_store("WIZARD_ELAN")?"on":"off")+")\n");
+    write(  "backups:\t"+ (mywiz->query_backups()?"on":"off")+"\n");
+    return 1;
+}
+
+
+query_help(what) {
+    if (this_player() != myself) return;
+
+    if (what == "wiz_levels" || what == "wiz_level") {
+	write("Any Wizard can:\n");
+	write("        wizl)ist, peo)ple, wiz)shout,\n        set <home, in, tin, out, tout, clone, dest, soul> review,\n");
+	write("        caution, title, god, xgod, light.\n");
+	write("Apprentice Wizards (level "+APPRENTICE+") can:\n");
+        write("        ls, cd, pwd, man, pager,\n        cat, more, tail, view, page, goto.\n");
+	if (wiz_level >= CREATE) {
+	    write("Level "+CREATE+" Wizards can:\n");
+	    write("        get!, drop!, give!, put!,\n        echoto, echo (#), echoall,\n        at, in, zap!, heal, gag, rgag, dot, map,\n");
+	    write("        ori)gin, whe)re, sta)t, dump, i!,\n        cl)one, des)truct\n");
+	    write("        upd)ate (ud), loa)d, log, err, rep, rmlog, rmrep, rmerr\n        tra)ns, trans!, cli)mbin, exit, hom)e,\n");
+	    write("        rm, mkdir, rmdir, cp, mv,\n        call, loc)alcmd, clean)room, trust, force, date, work, vi.\n");
+	}
+        if (wiz_level >= INVIS)
+	    write("Level "+INVIS+" Wizards can: invis, vis\n");
+        if (wiz_level >= STAT)
+            write("Level "+STAT+" Wizards can: read other wizard's files\n");
+        if (wiz_level >= SNOOP)
+            write("Level "+SNOOP+" Wizards can: snoop\n");
+        if (wiz_level >= SENIOR) 
+            write("Level "+SENIOR+" Wizards can: edit other wizard's files\n");
+        if (wiz_level >= SHUTDOWN)
+            write("Level "+SHUTDOWN+" Wizards can: shutdown, time, promote\n");
+        if (wiz_level >= EDIT_STANDARD)
+            write("Level "+EDIT_STANDARD+" Wizards can: edit files in /room and /obj, and log files.\n");
+        return "--";
+    }
+    return 0;
+}
+
+/* Zaphoid Jul 2001 - redefined bugs command to call the bug board and list
+   outstanding bugs - in arg supplied then read individual bug */
+bug_list(num)
+{
+	object reader, board;
+	board = find_object("obj/bulletin/board_serv/bug");
+	if (!num)
+	{
+		board->list_unaddressed_notes();
+		return 1;
+	}
+	else
+	{
+		reader = clone_object("obj/bulletin/board_reader");
+		move_object(reader, this_player());
+		reader->init_reader(board);
+		reader->read_note(num);
+		destruct(reader);
+		return 1;
+	}
+}
+
+/* Zaphoid Jul 2001 - added fixed and notabug to the wiz soul - bugs can
+			now be fixed from anywhere. */
+bug_fix(num)
+{
+	if (!num)
+	{
+		notify_fail("Usage: bugfix <post number>\n");
+		return 0;
+	}
+	else
+	{
+		"room/wiz/bugroom"->fixed(num);
+		return 1;
+	}
+}
+
+bug_not(num)
+{
+	if (!num)
+	{
+		notify_fail("Usage: notabug <post number>\n");
+		return 0;
+	}
+	else
+	{
+		"room/wiz/bugroom"->notabug(num);
+		return 1;
+	}
+}
+
+// Jenna Feb 2001 - made non-nosave
+/* nosave */ read_log(arg)
+{
+string which, who;
+array logs;
+int i;
+
+        which = query_verb();
+        if (arg) who = arg;
+        else who = mywiz->query_log(); /* should get directory we're working in */
+
+        logs = [
+                "typos", "TYPO",
+                "ideas", "IDEA",
+                "bugs", "BUGS",
+                "rep", who + ".rep",
+            /*  "err", who + ".err", */
+                "log", who
+        	];
+        for (i = 0; i < sizeof(logs); i += 2) {
+                if (which == logs[i])
+                        return mywiz->more_file("/log/"+logs[i+1]);
+        }
+        return;
+}
+
+cmd_rpeople( )
+{
+    "RO/remote/rwho"->show_people();
+    return 1;
+}
+
+list_peoples(options) {
+    object list = users();
+    	return list_users(list, options);	
+}
+
+list_wizards(options) {
+array user = users();
+array list = allocate(sizeof(user));
+int count, pos;
+    pos = 0;
+    for (count = 0; count < sizeof(user); count ++)
+	if (user[count]->query_wiz()) 
+		list[pos++] = user[count];
+    return list_users(list[..(pos - 1)],options);
+}
+
+list_players(options) {
+array user = users();
+array list = allocate(sizeof(user));
+int count, pos;
+    pos = 0;
+    for (count = 0; count < sizeof(user); count ++)
+	if (!user[count]->query_wiz()) list[pos++] = user[count];
+    return list_users(list[..(pos - 1)],options);
+}
+
+set_home(str) {
+string x;
+	if (!str) {
+		notify_fail("sethome <path to room>\n");
+		return 0;
+	}
+	write("Checking to see if that room exists ..\n");
+	x = catch str->reset(1);;
+	if (x) {
+		write("That room did not load :\n"+x+"\n");
+		return 1;
+	}
+	this_player()->set_home(str);
+	write("Ok, your starting home is set to "+str+"\n");
+	return 1;
+}
+
+do_set_pretitle(str) {
+        if (this_player() != myself) return;
+	if (str) write("Pretitle set to \""+str+"\".\n");
+	else write("Pretitle cleared.\n");
+	this_player()->set_pretitle(str);
+	return 1;
+}
+ 
+user_caution(str)
+{
+string Caution;
+    	if (this_player() != myself) return;
+	if (str == 0)
+    	{ /* pop a caution */
+    		Caution = this_player()->query_caution();
+    		if (Caution != 0)
+        	{
+        		write("Removing <" + Caution + ">\n");
+        		this_player()->pop_caution();
+        	}
+    		else
+        	{
+        		write("No caution to remove\n");
+        		return 1;
+        	}
+    	}
+	else
+    		this_player()->push_caution(str);
+	write("Caution stack: ");
+	this_player()->display_cautions();
+	return 1;
+}
+
+postitnote(str)
+{
+    string who;
+    string what;
+    object p;
+    string msg;
+    array allargs;
+
+
+	notify_fail("Usage: " + query_verb() + " who <message>\n");
+    if (!str) return 0;
+
+    allargs = STRINGS->split_first(str, " ");
+    if (sizeof(allargs) < 2) return 0;
+
+    what = allargs[1];
+    who = lower_case(allargs[0]);
+    p = find_player(who);
+    if (!p) {
+	notify_fail(capitalize(who) + " not found.\n");
+	return 0;
+	}
+    msg = capitalize(myself->query_real_name()) + " (" + ctime(time()) + "): " + what + "\n";
+    p -> add_note(msg);
+    if (query_ip_number(p))
+       tell_object(p, "NOTE: " + msg);
+    return 1;
+}
+
+wizmud() { 
+    if (WHICH_MUD->is_wiz_mud())
+        write("You are on the Wizard mud.\n");
+    else
+        write("You are on the Player mud.\n");
+    return 1;
+}
+
+gag_it(str)
+{
+object liv, ob;
+    if (this_player() != myself) return; 
+    notify_fail("gag <player>\n");
+    if (!str) return;
+    liv = find_player(str);
+    if (!liv) 
+	liv = mywiz->find_item(str);
+    if (intp(liv)) 
+    {
+        notify_fail("Can't find "+str+".\n");
+        return 0;
+    }
+    if (arrayp(liv))
+	liv = liv[0];
+    if (liv->query_wiz() > myself->query_wiz()) {
+        write("You are not allowed to do that!\n");
+        return 1;
+    }
+    ob = present("shout_curse", liv);
+    if (query_verb() == "gag") {
+     	if (ob) {
+    	    write(str + " already has a sore throat.\n");
+       	    return 1;
+    	}
+	ob = clone_object("obj/shout_curse");
+	ob->set_wiz_curse();
+	ob->start(liv);
+    }
+    else {
+    	if (!ob) {
+       		write(str + " has no sore throat.\n");
+        	return 1;
+    	}
+    	tell_object(liv, "Your throat feels better now.\n");
+    	move_object(ob, environment(liv));
+    	destruct(ob);
+    }
+    write("Done.\n");
+    return 1;
+}
+
+spell_zap(arg) {
+    object ob;
+    if (this_player() != myself) return;
+    if (!arg) ob = myself->query_attack();
+    else ob = present(lower_case(arg), environment(myself));
+    if (!ob) 
+    {
+ 	ob = mywiz->find_item(arg);
+	if (pointerp(ob))
+	    ob = ob[0];
+    }
+    if ((!ob || !living(ob)) || (ob == myself)) 
+    {
+	notify_fail("At whom?\n");
+	return 0;
+    }
+    ob->damage("death",1000000);
+    return 1;
+}
+
+heal(name) {
+object ob, it;
+    notify_fail("Usage: heal <living creature>\n");
+    if (!name) return 0;
+    it = lower_case(name);
+    ob = find_player(it);
+    if (!ob) ob = find_living(it);
+    if (!ob) 
+    {
+	ob = mywiz->find_item(it);
+	if (pointerp(ob))
+	    ob = ob[0];
+    }
+    if (!ob) {
+	notify_fail("No such person/item is playing now.\n");
+	return 0;
+    }
+    ob->heal_self(100000);
+    if (myself->query_invis(0) < INVIS_ACTION)
+        tell_object(ob, "You are healed by " + myself->query_name() + ".\n");
+    write("Ok.\n");
+    return 1;
+}
+
+#if 0
+home()
+{
+    object old_env;
+
+    if (myself->query_invis() < INVIS_TELEPORT)
+        call_other(myself,"remote_say",myself->query_name() + " " + myself->query_store("home_message") + ".\n");
+    move_object(myself,PlayerHome(name) + "/workroom");
+    command("glance", myself);
+    return 1;
+}
+#endif
+
+local_commands(s) 
+{
+    object ob;
+    array c;
+    int x;
+    if (this_player() != myself) return;
+    if (!s)
+	ob = this_player();
+    else
+    {
+	ob = mywiz->find_item(s);
+	if (pointerp(ob))
+	    ob = ob[0];
+    }
+    if (!objectp(ob)) return 0;
+	
+    (ob->query_objects())->show_stats();
+    return 1;
+#if 0
+    c = localcmd(ob);
+    for (x=0; x<sizeof(c); x+= 3) {
+	if (c[x] == "")
+	    tell_object(myself, "["+file_name(c[x+1])+":"+c[x+2]+"] ");
+	else
+	    tell_object(myself, c[x] + " ");
+	}
+    tell_object(myself, "\n");
+    return 1;
+#endif
+}
+
+int
+long_local_commands(s) 
+{
+    object ob;
+    array c;
+    array d, ret;
+    array switches;
+    int x,i;
+    string f,t ;
+    string action;
+    string obj;
+    object o;	
+    string func;
+
+    if (this_player() != myself) return;
+    ob = this_player();
+    if (s)
+    {
+	switches = COMARGS->split_args( s, [ ], [ "a", "o", "f" ] );
+	if (sizeof(switches[0]) != 0)	/* look for another character */
+	{
+	    ob = mywiz->find_item(switches[0][0]);
+	    if (intp(ob))
+	    {
+		notify_fail("localcmd: could not find object " 
+			+ switches[0][0]+"\n");
+		return 0;
+	    }
+	    else
+		ob = ob[0];
+	}
+	action = switches[2][0];
+	obj = switches[2][1];
+	func = switches[2][2];
+	if (stringp(obj))
+	{	
+		if (obj == "")
+		{
+			notify_fail("localcmd: no object specified\n");
+			return 0;
+		}
+		o = mywiz->find_item(obj);
+		if (pointerp(o))
+		    o = o[0];
+		if (o)
+		    obj = file_name(o);
+	}
+    } 
+	notify_fail("Localcmd Who?\n");
+    if (!objectp(ob)) return 0;
+
+    ret = (ob->query_actions())->show_stats();
+    MORE->more(ret);
+
+#if 0
+    c = localcmd(ob);
+    d = allocate(sizeof(c)/3+1);
+    d[0] = "Command       Object->Function()";
+    i = 1;
+    for (x=0; x<sizeof(c); x+= 3) {
+	f = file_name(c[x+1]);
+	if (action && action != c[x][..sizeof(action)-1]) {}
+	else if (func && func != c[x+2][..sizeof(func)-1]) {}
+ 	else if (!objectp(c[x+1]))
+	{
+	    d[i] = "'"+c[x]+"' - no object binding!";
+	}
+	else if (obj && obj != file_name(c[x+1])[..sizeof(obj)-1]) {}
+	else
+	{ 
+		t = "'"+c[x]+"'";
+		d[i] = FORMAT->left_justify(t,14) +  
+			f+"->"+ c[x+2]+"()";
+		i = i +1;
+	}
+    }
+    MORE->more(d[..i-1]);
+#endif
+    return 1;
+}
+
+int
+query_local_commands(s) 
+{
+    object ob, commobj;
+    array ret, cmd;
+    string funct, command;
+    int i;
+
+    if (this_player() != myself) return;
+    ob = this_player();
+    if (s != "")
+    {
+	    ret = ob->query_actions()->query(s);
+	    if (ret && sizeof(ret) > 0)
+        {
+	    for (i=0; i < sizeof(ret); i++)
+            {
+                commobj = ret[i][0];
+                funct   = ret[i][1];
+                command = ret[i][2];
+                write(file_name(commobj)+"->"+funct+"() ("+command+")\n");
+            }
+        }
+        else
+        {
+            write("Action not currently defined.\n");
+        }
+    }
+    else
+    {
+        notify_fail("which: no command specified\n");
+        return 0;
+    }
+    return 1;
+}
+
+echo(str) {
+    if (this_player() != myself) return;
+    if (!str) {
+        notify_fail("Echo what?\n");
+        return 0;
+    }
+    write("You echo: ");
+    tell_room(environment(myself), str + "\n");
+    return 1;
+}
+
+echo_to(str) 
+{
+    object ob, it;
+    string msg;
+    array allargs;
+
+    notify_fail("Echoto what ?\n");
+    if (this_player() != myself) return 0;
+
+    allargs = STRINGS->split_first(str, " ");
+    if (sizeof(allargs) < 2) return 0;
+
+    it = lower_case(allargs[0]);
+    msg = allargs[1];
+
+    ob = find_player(it);
+    if (!ob) ob = find_living(it);
+    if (!ob) ob = mywiz->find_item(it);
+    if (pointerp(ob))
+	ob = ob[0];
+    if (!ob) {
+        write("No player with that name.\n");
+        return 1;
+    }
+    tell_object(ob, msg + "\n");
+    write("You echo: " + msg + "\n");
+    return 1;
+}
+
+echo_all(str) {
+    if (this_player() != myself) return;
+    if (!str) {
+        notify_fail("Echoall what?\n");
+        return 0;
+    }
+    SHOUT->shout(str + "\n");
+    write("You echo: " + str + "\n");
+    log_action("echoalls",str);	
+    return 1;
+}
+
+#if 0
+in_room(str)
+{
+    object place, old_room;
+    string cmd, verb, room;
+    array allargs;
+
+    if (this_player() != myself) return 0;
+
+    notify_fail("in <location> <command>\n");
+
+    if (!str) return 0;
+
+    allargs = STRINGS->split_first(str, " ");
+    if (sizeof(allargs) < 2) return 0;
+    room = allargs[0];
+    cmd = allargs[1];
+
+    verb = query_verb();
+    place = mywiz->find_item(room);
+    if (pointerp(place))
+	place = place[0];
+    if (!place) place = find_living(room);
+    if (!place) {
+        write("Invalid location.\n");
+        return 1;
+    }
+    old_room = environment(myself);
+    if (verb == "in") move_object(myself, place);
+    else move_object(myself, environment(place));
+    command(cmd, myself);
+    move_object(myself, old_room);
+    return 1;
+}
+#endif
+
+force_player(str)
+{
+    string who, what;
+    object ob;
+    int flag;
+    array allargs;
+
+    if (this_player() != myself) return;
+    if (myself->query_wiz() < CONTROL) return 0;
+
+    notify_fail("Force <who> <what>?\n");
+    if (!str) return 0;
+
+    allargs = STRINGS->split_first(str, " ");
+    if (sizeof(allargs) < 2) return 0;
+    who = lower_case(allargs[0]);
+    what = allargs[1];
+
+	ob = find_player(who);
+	if (ob) flag = 1;
+	if (!ob) ob = find_living(who);
+	if (!ob) ob = mywiz->find_item(who);
+	if (pointerp(ob))
+	    ob = ob[0];
+	if (!ob) return 0;
+	ob->force_us(what);
+	if (flag && ob) 
+		log_action("forces " + ob->query_real_name(), what);
+	write("Ok.\n");
+	return 1;
+}
+
+enter(str) {
+    object ob;
+
+    if (!str || this_player() != myself) return 0;
+    ob = present(str,environment(myself));
+    if (!ob) ob = mywiz->find_item(str);
+    if (pointerp(ob))
+	ob = ob[0];
+    if (!ob) return 0;
+    move_object(myself,ob);
+    command("glance", myself);
+    return 1;
+}
+
+sexit() {
+    object ob;
+
+    ob = environment(environment(myself));
+    if (ob) {
+        move_object(myself,ob);
+        command("glance", myself);
+    } 
+    else write("Nowhere to exit to.\n");
+    return 1;
+}
+
+pacifism_curse(str)
+{
+object Target;
+object Curse;
+	if (this_player() != myself) return;
+	if (!str) return;
+	notify_fail(capitalize(str) + " is not logged on.\n");
+	Target = find_player(str);
+	if (!Target) return;
+	Curse = clone_object("players/freeze/obj/pacifism_curse");
+	if (Curse) Curse->start(Target);
+	return 1;
+}
+
+int
+teleport(dest)
+{
+    object ob, old_env;
+    string x; 
+    int i;
+
+    if (!dest) 
+    {
+        notify_fail("Teleport where?\n");
+        return 0;
+    }
+    ob = find_player(dest);
+    if (ob && mywiz->check_if_busy(ob)) 
+    { /* if they are busy, warn and await confirm */
+	return 1;
+    }
+    if (!ob) ob = find_living(dest);
+    if (ob) ob = environment(ob);
+    if (!ob) ob = mywiz->find_item(dest);
+    if (pointerp(ob))
+	ob = ob[0];
+/*    if (!ob) ob = pwd + dest;  */
+    if (ob) {
+	myself -> move_player ("X",ob);
+        return 1;
+    }
+
+    dest = mywiz->valid_read(dest);  /* only for wizzes... */
+
+    if (!dest) 
+    {
+        write("Invalid monster name or file name.\n");
+        return 1;
+    }
+
+/*    if (file_size(dest) < 1) dest = pwd + dest; */
+    x = catch myself->move_player("X",dest);;
+    if (x) write("Goto "+dest+" Error: "+x+"\n");
+
+    return 1;
+}
+
+/* emergency goto - can go from nowhere */
+teleportd(dest)
+{
+    object ob, old_env;
+    string x; 
+    int i;
+
+    if (!dest) 
+    {
+        notify_fail("Teleport where?\n");
+        return 0;
+    }
+
+    if (ob && mywiz->check_if_busy(ob)) 
+    { /* if they are busy, warn and await confirm */
+	    return 1;
+    }
+    ob = mywiz->find_item(dest);
+    if (pointerp(ob)) ob = ob[0];
+
+    if (ob) 
+    {
+	    move_object(myself, ob);
+        return 1;
+    }
+    return 1;
+}
+
+map(str)
+{
+    string Item;
+    int Size, MapBrief;
+    object Place;
+    array allargs;
+
+    MapBrief = myself->query_store("map_brief");
+    if (str && (str[..4] == "brief"))
+    {
+        MapBrief = atoi(str[6..]);
+        write("Mapper brief mode set to " + MapBrief + "\n");
+	    myself->add_store("map_brief", MapBrief);
+        return 1;
+    }
+    
+    Place = environment(myself);
+    Size = 30;
+    if (str)
+    {
+        allargs = STRINGS->split_first(str, " ");
+        Item = allargs[0];
+        if (sizeof(allargs) == 2)
+        {
+            Size = atoi(allargs[1]);
+            Place = mywiz->find_item(Item);
+	        if (pointerp(Place)) Place = Place[0];
+        }
+        else
+        {
+            if (index("0123456789", str[..1][0]) >= 0)
+            {
+                    Size = atoi(str);
+            }
+            else
+	        {
+                Place = mywiz->find_item(str);
+	            if (pointerp(Place)) Place = Place[0];
+	        }
+        }
+    }
+
+    if (!Place) return 0;
+    
+    "players/billy/etc/mapper"->map(Place, Size, MapBrief);
+    return 1;
+}
+
+
+/* dot commands added by Billy */
+dot_help()
+{
+write("Dot commands:\n" + 
+"(\".\" can be used as an abbreviation for \"dot \")\n\n" +
+"dot <object>             - place your dot on an object, for instance:\n" +
+"dot env                  - place the dot at your environment\n" +
+"dot                      - tell you where the dot is\n" +
+"dot <direction>          - move your dot in a dest_dir direction\n" +
+"dot <command>            - execute the command at the dot\n" +
+"dot l                    - look at the surrounds of the dot\n" +
+"dot listen to            - listen to sounds inside the dot\n" +
+"dot listen at            - listen at the environment of your dot\n" +
+"dot listen               - does \"listen to\" for rooms or \"listen at\" otherwise\n" +
+"dot quiet                - don't listen at the dot\n" +
+"dot help                 - this message\n\n" +
+"Also using \".\" in other commands is valid: eg.\n" +
+"    call . query_short\n");
+}
+
+dot_cmd(str)
+{
+int Which;
+object NewDot;
+object OldEnv;
+array TranslateFrom;
+array TranslateTo;
+int Size;
+int NewBrief;
+
+    if (this_player() != myself) return;
+    TranslateFrom = DIRECTION->query_abbreviated();
+    TranslateTo = DIRECTION->query_standard();
+
+    /* kick any snooper into its right position */
+    if (snooper) snooper->follow();
+    
+    /* dot location report */
+    if (!str || sizeof(str) == 0)
+    { /* say where we are */
+    if (dot)
+        write("Dot is at: " + file_name(dot) + "\n");
+    else
+        write("Dot is in limbo.\n");
+    return 1;
+    }
+
+/* help */
+if (str == "help" || str == "?")
+    { /* give help */
+    dot_help();
+    return 1;
+    }
+
+/* listening */
+if (str[0..5] == "listen")
+    {
+    if (dot)
+        {
+        if (str == "listen" || str == "listen to" || str == "listen at")
+            { /* a command for us */
+            if (snooper)
+                { /* already there! */
+                notify_fail("You are already listening " + 
+                                            snooper->query_status() + ".\n");
+                return 0;
+                }
+            if (str == "listen")
+                { /* listen either to or at depending on whether it is a room */
+                if (environment(dot) == 0)
+                    str = "listen to";
+                else
+                    str = "listen at";
+                }
+            if (str == "listen to")
+                { /* listen inside the dot object */
+                snooper = clone_object("closed/snooper", "snooper");
+                if (snooper)
+                    {
+                    move_object(snooper, dot); /* this will tell wizzes */
+                    snooper->set_listener(this_player());
+                    snooper->set_subject(dot, 0, 0);
+                    write("Now listening to " + file_name(dot) + ".\n");
+                    }
+	        return 1;
+                }
+            else 
+                { /* listen at the dot object's environment */
+                snooper = clone_object("closed/snooper");
+                if (snooper)
+                    {
+                    /* tell higher-level wizzes */
+                    if (dot->wiz_level() >= wiz_level)
+                        tell_object(dot, myself->query_name() +
+                                 " has put a snoop on you.\n");
+                    
+                    /* put the snooper there */
+                    move_object(snooper, environment(dot));
+                    snooper->set_listener(this_player());
+                                                        /* follow if living */
+                    snooper->set_subject(dot, 1, living(dot));
+                    write("Now listening at " + file_name(dot) + ".\n");
+                    }
+	        return 1;
+                }
+            }
+        }
+    }
+
+if (str == "quiet")
+    { /* get rid of the snooper */
+    if (!snooper)
+        {
+        notify_fail("You weren't listening!\n");
+        return 0;
+        }
+    destruct(snooper);
+    snooper = 0;
+    write("Listening turned off.\n");
+    return 1;
+    }
+
+/* look */
+if (str == "l")
+    {
+    object AtObj;
+    object InObj;
+    int Count;
+    array Contents;
+    string Cont;
+    for (AtObj = dot; AtObj != 0; AtObj = environment(AtObj))
+        {
+        write("********** " + file_name(AtObj) + 
+                                            " **********\n");
+        if (AtObj->query_room())
+            write(AtObj->query_look());
+        else
+            {
+            AtObj->long();
+            Contents = contents(AtObj);
+            for (Count = 0; Count < sizeof(Contents); Count++)
+                Contents[Count] = Contents[Count]->short();
+            Cont = implode(Contents, ", ");
+            if (Cont)
+                write("Contains: " + Cont + ".\n");
+            write("\n");
+            }
+        }
+    return 1;
+    }
+
+/* try a destination direction */
+if (dot)
+    {
+    array DestDir;
+    int Trans;
+    /* try to translate to a direction */
+    Trans = index(TranslateFrom, str);
+    if (Trans != EINDEX)
+        str = TranslateTo[Trans];
+        
+    /* see if str is in the dest_dir first */
+    DestDir = dot->query_dest_dir();
+    if (DestDir)
+        {
+        Which = index(DestDir, str);
+        if (Which % 2 == 1)
+            { /* make sure it's matching a direction */
+            (DestDir[Which-1])->stupid_fucking_loadup_function();
+            NewDot = find_object(DestDir[Which-1]);
+            if (NewDot)
+                { /* update the dot */
+                dot = NewDot;
+                write("New dot: " + file_name(dot) + ".\n");
+                if (snooper)
+                    snooper->change_subject(dot);
+                return 1;
+                }
+            }
+        }
+    }
+
+/* wasn't a direction so try find_item */
+    NewDot = mywiz->find_item(str);
+    if (pointerp(NewDot))
+    { /* new dot */
+        dot = NewDot[0];
+        write("New dot: " + file_name(dot) + ".\n");
+        if (snooper)
+            snooper->change_subject(dot);
+        return 1;
+    }
+
+/* wasn't anything else so do a command at the dot */
+write("At " + file_name(dot) + ":\n");
+OldEnv = environment(myself);
+move_object(myself, dot);
+command(str, myself);
+move_object(myself, OldEnv);
+return 1;
+}
+
+query_dot() { return dot; }
+
+/* array addition in here probably should be fixed up... */
+pow_dump(str) 
+{
+/* switches allowed:
+ * -l	living()
+ * -o	object filename
+ * -c	creator()
+ * -u	suid name and level
+ * -v	value
+ * -w	weight
+ * -s	short desc
+ * -i	id's
+ * -d "<default switches>"
+ * -m <id>  display objects that id to
+ */
+    array switches;
+    array checkwho;
+    object who;
+    array gear;
+    int i, j;
+    string defaults;
+    int short_width, id_width; 	
+    array ret = [ ];
+    string line = "";
+	if (!str) str = "";
+	defaults = mywiz->getenv("I!_DEFAULTS");
+	if (!stringp(defaults))
+		defaults = " -o -s";
+	if (index(str,"-d") < 0)
+		str = str + " "+defaults;	/* add defaults */
+	switches = COMARGS->split_args(str,
+		[ "l","o","c","u","v", "w", "s", "i" ],
+		[ "d", "S", "I", "m" ]
+		);
+	if (stringp(switches[2][0]))		/* setting defaults */
+	{
+		mywiz->setenv("I!_DEFAULTS",switches[2][0]);
+		write("Setting i! defaults to \""+switches[2][0]+"\"\n");
+		return 1;
+	}	
+	if (stringp(switches[2][1])) 
+	{	
+		short_width = atoi(switches[2][1]);
+	}
+	else
+	{
+		short_width = 20;
+	}
+	if (stringp(switches[2][2])) 
+	{	
+		id_width = atoi(switches[2][2]);
+	}
+	else
+	{
+		id_width = 20;
+	}
+	if (sizeof(switches[0]) == 0)
+	{
+		checkwho = [this_player()];
+	}
+	else
+	{
+	    checkwho = [];
+	    for (i = 0; i < sizeof(switches[0]); i ++)
+	    {
+		who = mywiz->find_item(switches[0][i]);
+		if (intp(who))
+		    ret+=[ "Could not find "+switches[0][i] ];
+		else if (pointerp(who))
+		    checkwho += who;
+		else 
+		    checkwho += [ who ];
+	    }
+	}
+    for (j = 0; j < sizeof(checkwho); j ++)
+    {
+	who = checkwho[j];
+	ret += [ "Inventory for "+who ];
+	gear = contents(who);
+
+    // hack for now to get souls.
+    array gls;
+    gls = who->GetAliasedLS(0);
+    if (gls) gear += gls[1];
+
+/*	write(" # GD"); */
+	line = " # "; 
+
+			/* print out the header, depending on switches */
+	line += switches_row(switches[1], [
+		"L", 2,
+		"Object",30,
+		"Creator",12,
+		"Suid",12,
+		"Value",6,
+		"Wght",5,
+		"Short", short_width+1,
+		"Id's", id_width+1
+		] ) ;
+	ret += [ line ];
+	if (sizeof(gear) == 0)
+	{
+	    ret += [ "nothing in inventory" ];
+   	}
+	else for (i = 0; i < sizeof(gear); i = i + 1)
+	{
+	    string tmp = FORMAT->right_justify((i+1) +":", 3);
+#if 0
+		/* annoying because it effects the items! -- Dredd */
+		/* hence gear[i] can become 0 - people aren't wielding etc */
+		tmp = tmp + (gear[i]->get()?"G":" ");
+		tmp = tmp + (gear[i]->drop()?" ":"D");
+#endif
+		if (switches[1][0])
+			tmp = tmp + (living(gear[i])?"L":" ");
+		tmp = tmp + " ";
+		if (switches[1][1])
+		{
+	 	    string t2;
+			t2 = file_name(gear[i]);
+			if (t2[0..7] == "players/")
+				t2 = "~"+t2[8..];
+			tmp += FORMAT->left_justify(t2, 30);
+		}
+		if (switches[1][2])
+			tmp += FORMAT->left_justify(query_su_name(
+				gear[i]), 12);
+		if (switches[1][3])
+		{
+		    string s = query_su_name(gear[i]);
+			tmp += FORMAT->left_justify(
+				(stringp(s)?(s+"("):"<none>(")+	/* constant-fold bug if "(" is outside */
+				query_su_level(gear[i])+")", 12);
+		}
+		if (switches[1][4])
+		{
+			tmp += FORMAT->right_justify(
+				""+gear[i]->query_value(), 5)+" ";
+		}
+		if (switches[1][5])
+		{ 
+			tmp += FORMAT->right_justify(
+				""+gear[i]->query_weight(), 4)+" ";
+		}
+		if (switches[1][6])
+		{
+		    string shrt;
+			catch shrt = gear[i]->short();; 
+			if (!shrt)
+				shrt = "<no short>";
+			if (sizeof(shrt) > short_width)
+				shrt = shrt[..short_width-3]+"..";
+			tmp += FORMAT->left_justify(shrt, short_width)+" ";
+		}
+		if (switches[1][7])
+		{
+		    string ids;
+			catch ids = gear[i]->query_ids();;
+			if (!ids)
+				ids = "<no Id's>";
+			else	
+				ids = implode(ids,",");
+			if (sizeof(ids) > id_width)
+				ids = ids[..id_width-3]+"..";
+			tmp += FORMAT->left_justify(ids, id_width);
+		}
+		if ( stringp(switches[2][3]) && !gear[i]->id(switches[2][3]))
+		{
+		    /* do nothing */
+		}
+		else
+		{
+		    ret += [ tmp ];
+		}
+	}
+    }
+    MORE->more(ret);
+    return 1;	
+}
+
+power_trans(str) { 
+    return trans("! "+str); 
+}
+
+trans(arg)
+{
+    string str, dest;
+    object ob, where_from, to;
+    string out, sh;
+    array allargs;
+
+    notify_fail("trans <who> [<where>]\n");
+    if (!arg) return 0;
+
+    allargs = STRINGS->split_first(arg, " ");
+    if (allargs && allargs[1]) 
+    {
+        str = allargs[0];
+        dest = allargs[1];
+    }
+    else
+    { 
+        str = arg;
+        /* dest = "@"+myself->query_real_name();  */
+    }
+
+    ob = find_player(str);
+    if (ob && mywiz->check_if_busy(ob))
+        return 1;
+    if (!ob) ob = find_living(str);
+    if (!ob) 
+	ob = mywiz->find_item(str);
+    if (pointerp(ob))
+	ob = ob[0];
+    if (!ob) {
+        notify_fail("Unable to find "+str+".\n");
+        return 0;
+    }
+    where_from = environment(ob);
+        sh = ob->query_name();
+        if (!sh) sh = ob->short();
+        if (!sh) sh = "Something";
+    out = ob->query_store("t_in");
+    if (!out)
+        out = sh + " arrives in a puff of smoke.\n";
+    else
+        out = sh + " " + out + ".\n";
+    if (dest)
+        to = mywiz->find_item(dest);
+    if (pointerp(to)) to = to[0];
+
+    if (to) 
+    {
+        tell_room(to, out);
+        move_object(ob, to);
+    } 
+    else 
+    {
+        tell_room(environment(myself),out);
+        move_object(ob, environment(myself));
+    }
+    out = ob->query_store("t_out");
+    if (!out)
+        out = sh + " dissappears in a puff of smoke.\n";
+    else
+        out = sh + " " + out + ".\n";
+    if (where_from) tell_room(where_from, out);
+    tell_object(ob, "\nYou are magically transfered somewhere...\n\n");
+    log_action("transes", ob->query_real_name() );
+    command("glance", ob);
+    return 1;
+}
+
+power_get(str) {
+object handle;
+    handle = myself->query_soul("generic/handle");
+    return handle->pick_up(str);
+}
+power_divest(str) {
+object handle;
+    handle = myself->query_soul("generic/handle");
+    return handle->divest(str);
+}
+
+whereis(str) {
+    object ob;
+    if (!str)
+        return 0;
+    ob = find_player(str);
+    if (!ob) ob = find_living(str);
+    if (!ob) ob = find_object(str);
+    if (!ob) ob = mywiz->find_item(str);
+    if (pointerp(ob))
+	ob = ob[0];
+    if (!ob) {
+        write(str + " not found.\n");
+        return 1;
+    }
+    ob = environment(ob);
+    if (!ob) {
+        write(str + " is not in a place.\n");
+        return 1;
+    }
+    write(ob);
+    write("\n"+ob->short()+".\n");
+    return 1;
+}
+
+/*
+ * Fixed home so the room desc comes up when you arrive. - Zaph.
+ *
+ */
+home() {
+    object old_env, pers_soul;
+
+    if (myself->query_invis() < INVIS_TELEPORT)
+        myself->remote_say((myself->query_name()) + " " 
+		+ mywiz->getenv("home_message") + ".\n");
+    if (myself->query_home())
+    {
+	/*
+        move_object(myself, myself->query_home());
+	*/
+	myself->move_player("home",myself->query_home());
+    }
+    else
+    {
+	/*
+        move_object(myself,PlayerHome(myself->query_real_name()) 
+		+ "/workroom");
+	*/
+	myself->move_player("home",PlayerHome(myself->query_real_name())+"/workroom");
+    }
+    if (myself->query_invis() < INVIS_TELEPORT)
+        myself->checked_say(myself->query_name() + " " +
+	mywiz->getenv("t_in") + ".\n");
+/*
+    tell_object(myself, "You return to " + 
+	environment(myself)->query_short_desc() +
+	".\n");
+    pers_soul = find_object("perception",myself);
+    pers_soul->glance();
+*/
+    return 1;
+}
+
+wiz_light(str) {
+int state;
+    notify_fail("light { on | off } - to turn your wiz light on or off.\n");
+    	if (!str || ((state = index( [ "off", "on" ], str)) < 0))
+            return;
+    mywiz->setenv("wiz_light", state, myself->query_real_name()[0]);
+    if (state) 
+	myself->add_light(10);
+    else
+	myself->add_light(-10);
+    write("light now at "+myself->query_total_light()+"\n");
+    return 1;
+}
+
+log_action(actiontype, info)
+{
+        log_file("MORE",TIME+myself->query_real_name()+ " "+ actiontype+":"+
+                info+"\n");
+}
+
+send_rwiz(s) {
+    notify_fail("Usage: " + query_verb() + " message\n");
+    if (!s)
+        return 0;
+    RTALK->send_rwiz(myself->query_real_name(), s + "\n");
+    return 1;
+}
+
+list_servers(foo)
+{
+int i, pos;
+array ret;
+string server, label;
+array servlist;
+    servlist = SERVLIST->query_servers();
+    ret = allocate((sizeof(servlist) / 3) + 3);
+    pos = 3;
+    for (i = 0; i < sizeof(servlist); i += 3)
+    {
+        ret[pos++] = FORMAT->left_justify(servlist[i], 20)
+                + " " + FORMAT->left_justify(servlist[i+1], 20)
+                + " " + servlist[i+2];
+    }
+    ret[1] = FORMAT->left_justify("Include File", 20) + " "
+        + FORMAT->left_justify("Label", 20)
+        + "Object";
+    ret[2] =
+        "-------------------- ------------------- ----------------------------------";
+    if (stringp(foo))
+    {
+        /* regexp doesn't like 0s in its arrays */
+        ret = M_REGEXP->match(foo, ret[1..]); 
+        ret = [ "Servers matching \""+foo+"\"" ] + ret;
+    }
+    else
+    {
+        ret[0] = "Servers:";
+    }
+    MORE->more(ret);
+    return 1;
+}
+
+do_ring() {
+    write("You ring the bell loudly!\n");
+    myself->checked_say(capitalize (myself-> query_name()) + 
+        " rings a bell." + 
+        "\n"); 
+    return 1;
+}
+
+// Originally written by Paladin
+// Fixed by Llati
+// Tweaked by Jenna (Dec 00)
+new_notes(arg) 
+{
+    int i,ltime;
+    object board;
+    array boards;
+    string ret;
+
+    boards = BOARD_SERV -> query_boards ();
+    if (arg && arg != "all")
+    {
+	array unread_notes;
+        object reader;
+
+        if (index(boards, arg) == EINDEX) 
+	{
+            write ("No such board! Use \"notes all\" to list all boards.\n");
+            return 1;
+        }
+        board = load_object (BOARD_SERV + "/" +arg);
+        ltime = this_player()->query_store("brd/"+arg);
+        unread_notes = board->threaded_notes(ltime, 1);
+        reader = clone_object (BBOARD_NOTE_READER);
+        move_object (reader,this_player());
+        reader -> display (unread_notes,arg);
+        return 1;
+    }
+    ret = "";
+    for (i = 0; i < sizeof(boards); i++) 
+    {
+        int number;
+
+	board = load_object (BOARD_SERV + "/" +boards[i]);
+        ltime = this_player()->query_store("brd/"+boards[i]);
+        unread_notes = board->threaded_notes(ltime, 0);
+        number = sizeof(unread_notes);
+	if (arg == "all" || number)
+	{
+            ret += FORMAT->left_justify(capitalize(boards[i])+":", 20) +
+		   FORMAT->left_justify(
+			NUMBERS_SERV->int_to_english(number, 100),
+			20) + 
+		   " " + ctime(ltime) + "\n";
+	}
+    }
+    if (ret != "")
+	write("Status of unread notes:\n" +
+	      "Board name:\t    Unread notes:\t" +
+	      " Last read on:\n" + ret);
+    else
+	write("There are no unread notes on any board.\n");
+    return 1;
+}
+
+/* info_which added, Hunter 941214 */
+int
+info_which(str)
+{
+(int|array|object) res;
+int i;
+    if (!stringp(str))
+    {
+	notify_fail("which <objectspec>\n");
+	return 0;
+    }
+    res = mywiz->find_item(str);
+    if (intp(res))
+    {
+	write(str+" - no match (or equivalent to zero)\n");
+	return 1;
+    }
+    if (!pointerp(res))
+    {
+	res = [ res ];	/* cast into array */
+    }
+    write(str+" matches:\n");
+    for (i = 0; i < sizeof(res); i ++)
+    {
+	if (objectp( res[i] )) 
+ 	{
+	    write( "  object: " + file_name(res[i]) );
+	    if (environment(res[i]))
+	        write("(in "+file_name(environment(res[i]))+")");
+	    write("\n");
+	}
+	else if (stringp( res[i] ))
+	{
+	    write( "  string: \"" + res[i]+"\"\n");
+	}
+	else if (pointerp(res[i]))
+	{
+	    write( "  array: (hah! want me to print it)\n");
+ 	}
+	else if (intp(res[i]))
+	{
+	    write( "  integer: " + res[i]+"\n" );
+	}
+    }
+    return 1;
+}
+
+set_backups(str)
+{
+    if (str == "on")
+    {
+	mywiz->set_backups(1);
+    }
+    else if (str == "off")
+    {
+	mywiz->set_backups(0);
+    }
+    write("Backups set to "+ (mywiz->query_backups()?"on":"off")+"\n");
+    return 1;
+}
+
+mftp( str )
+{
+array switches;
+    notify_fail("Usage: mftp <Server> <file>\n");
+    if (!str)
+	return 0;
+    switches = COMARGS->split_args(str,  [], [] );
+    if ( sizeof(switches[0]) != 2)
+	return 0;
+    "RO/remote/mftp"->request_ftp( switches[0][0], switches[0][1] );
+    return 1;
+}
+
+query_destruct()
+{
+    if (snooper)		/* don't leave snoopers laying around */
+	destruct(snooper);
+    return 0;
+}
+
+virtual_ls( str ) 
+{
+    object ob;
+    array ret;
+    array vls;
+    int i;
+    int c;
+
+    notify_fail( "vls <object>\n" );
+    if (!str) return 0;
+
+    ob = mywiz->find_item(str);
+    if (intp(ob)) return 0;
+
+    vls = ob[0]->GetVirtualLS();	/* get Virtual filesystem */
+    if (vls == 0)
+    {
+	    notify_fail( "No virtual filesystem available for "
+    	+ (objectp(ob[0])?file_name(ob[0]):ob[0])+"\n");
+    	return 0;
+    }
+    ret = allocate(1 + sizeof(vls[0]));
+    ret[0] = "vls : " + (objectp(ob[0])?file_name(ob[0]):ob[0])+"/";
+    i = 0; c = 1;
+    for (i = 0; i < sizeof(vls[0]); i ++)
+    {
+	if (stringp(vls[0][i]))
+	{
+	    ret[c] = "  " + vls[0][i] 
+		+ (vls[1][i]->GetVirtualLS()?"/":"");
+	    c ++;
+	}
+    }
+    ret = ret[..c-1];
+    MORE->more(ret);
+    return 1;
+}
+

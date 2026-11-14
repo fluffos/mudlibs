@@ -1,0 +1,194 @@
+
+Parsing Commands.
+=================
+
+Aim: 	to produce a "simple" parser which is "smart"
+	AND supports the old system (via an inheritable object etc).
+
+	Must be fast and space efficient.
+
+
+Current System.
+---------------
+
+We have 4 individual types of actions -
+* add(<func>, "", 1);		Suck ALL input.
+* add(<func>, "'", -N); 	Match first N letters (no space necessary)
+				[note: only ever used for 1 letter commands]
+* add(<func>, "word", N);	Match the first N letters (or more).
+* add(<func>, "word");		Match on "word" match.
+
+Actions get added from a variety of objects for varying lengths of time -
+* rooms - Usually actions added by rooms are very temporary
+	  with players running through many rooms.
+* items - these are semi-permanent and tend to remain in a players
+	  inventory for a short length of time.
+* souls - these are often effective for the entire login time of the
+	  player.
+
+Actions are kept in LIFO order (and searched in that order for
+a match).
+
+This is an ugly system with the only identified object being
+the "actor" (who gives the command); all other parsing is done
+by individual object:functions.
+
+
+Suggested System.
+----------------
+
+Replacing add_action().
+
+Unfortunetly we must be able to accommodate most of the current system
+within the any suggested system [ unless there is a straight-forward
+transformation we could apply ].
+Unless we make serious changes some kind of list structure must
+be kept to maintain the current in-order searching of
+verbs.
+
+[ I'll discuss supporting the current system first ]
+
+To aim for speed we'd ideally maintain a hash table for matches
+but this is only realistic for complete word matches.
+
+I suggest the following restrictions: 
+	"xverb" matches be restricted to 1 letter and 
+	kept in a seperate list for initial matching 
+	(these have 'maximum' priority).
+
+	Because input-trappers are generally used to 
+	disable commands or perform a task that needs to be always perform:
+	removal of non-priority (in-order) trapping of input.
+	Input trappers shall be kept in a seperate list
+	which shall be checked FIRST. Cases throughout the mudlib
+	which do not conform to this will have to be dealt
+	with appropriately.
+
+An efficient system to implement these would have a "temporary"
+list constructed from rooms generally [ note exits could even
+by removed from being added and have the moving object simply 
+query the room for an exit - especially since only room.c would
+need to be changed ].
+
+A more permanent system for all other actions would be appropriate.
+We can use a hash table for full word matches. For partial word
+matches we can add every instance possible for a partial match
+to the hash table (ie. add(<func>, "inventory", 1) would
+add "i", "in", "inv", "inve", "inven", etc..). Although this
+is somewhat space inefficient we still maintain our
+fast-match capability using the hash_value() efun.
+If we use an external hash table we can also still keep the
+order of matches. 
+
+
+This reduces to 
+	
+array temporary_matches;	/* list of "temporary" matches" 
+				   only 1 object has matches here */
+array trap_input[MAX_TRAP];	/* list of input trappers */
+array xverbs[MAX_XVERB];	/* list of single characters to match */
+array word_table;		/* hash table of the rest of the words */
+
+/* all input runs through catch input */
+catch_input(string input)
+{
+
+	/* call all input trappers - return 1 stops processing */
+	/* check temporary array */
+	/* check for matches in xverbs */
+	/* check hash table */
+
+
+	/* 
+	   If we ever get a "match" (from the checks) then
+	   we call the object:function(string) [ if old system ]
+	   If it returns 1 we finish
+	   else if 0 check for more matches
+	   if we end up with a 0 "notify_fail"
+	   (default "What ?")
+	*/
+}
+
+* add_action() could be added as an emulated efun.
+
+
+Preferred System.
+=================
+
+Here's a rundown of what I think the system *should* work like.
+I'm not interested in perfect english but analysing intent of a 
+sentence. Some example sentences -
+
+* burp, fart, sing, dance, etc..
+* smile gandalf, kill fearsome, get sword, etc..
+* smile at gandalf, look at harry, look in box, etc..
+* get the sword, get a sword, 
+* get a sword from the box, get all the swords from the box,
+* get all from the corpse, give all flowers to harry,
+* get the sword and an apple from the haystack,
+* get 4 blue potions and the 2nd pink sword
+* get 4 potions and sword 2 
+* look under the wall
+* look behind dredd and harry
+* drop the book, the orange knives, 2 green apples.
+* empty the bag on the ground.
+* turn the hand on the clock to 5 o'clock
+
+Clearly it is difficult to support all these types of sentences
+without substantial overhead. But to be able to break down
+sentences and identify objects referred to makes programming
+commands *much* easier (and centralised the identification process).
+
+First we must examine how mud commands are structured:
+( [ bracketed items are optional ] ).
+
+sentence:
+ 	command [quantity] [article] [noun-list] 
+			[ [ preposition ] [ noun-list ] ] 
+
+conjunction: "and"
+
+command: imperative ( most mud verbs )
+	| query ( "who", "what", "where" )
+
+quantity: "all" | word-number | number
+
+article: "the" | "a" 
+
+noun-list: [ adjective ] noun
+	| [ adjective ] noun "," noun-list
+	| noun-list conjunction [ adjective ] noun 
+
+
+We want to identify the following -
+actor - (easy) the object which gives the command
+primary participants - objects which the actions occur upon
+secondary participants - varied role (bags etc)
+
+With extra information about commands (when they're being added)
+we can also identify incomplete sentences and prompt the user
+for completion or clarification [ ala Zork style ] without having 
+to re-type the entire sentence.
+
+When we've identified primary participants etc these
+can be passed directly to the object:function performing the
+action (relieving it of the job of string parsing).
+
+In addition to this I believe all actions should
+have a "time" associated with them and players should be
+able to "command-ahead" with their commands being queued
+while they wait for their actions to be performed.
+
+This system is more difficult to implement.
+
+Integrating this system with support for the old system
+will require some nasty hack-work.
+
+Anyway - I think the first part of this (supporting the old
+system) should be fairly straightforward to implement
+and will see about doing it soon.
+
+Feedback Welcome.
+
+Dredd
+

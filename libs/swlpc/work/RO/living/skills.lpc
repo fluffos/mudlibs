@@ -1,0 +1,321 @@
+/*
+ * Skills, base code stripped from my stats stuff.
+ * No learning done here.  Prototype for skills/resistances code.
+ */
+
+#include <Config.h>
+#include "security.h"
+
+inherit "RO/living/tmp_expire";
+
+array skill_names = [ ];
+array perm_skills = [ ];		/* learned skills eventually end up here */
+array tmp_skills = [ ];		/* saved, again. */
+array tmp_skill_adjust = [ ];		/* list of "name", amt, time to add it, callb, param */
+
+/*
+ * The same as the above, but for skills.
+ */
+
+nosave int make_skill(string type) {
+    int x = index(skill_names, type);
+    if (x < 0) {
+        skill_names += [ type ];
+        perm_skills += [ 0 ];
+        tmp_skills += [ 0 ];
+	last_learn += [ 0 ];
+	x = sizeof(skill_names) - 1;
+        }
+    return x;
+    }
+
+add_skill(string type, int amount, int time, callb, param, prev) 
+{
+    if (!type || !amount || (time < 0))
+	return 0;
+    if (caller() != this_object())
+	prev = caller();
+    int x = make_skill(type);
+    if (!time) {		/* perma-skills */
+	if (type != "elan")
+	    log_stat(type, perm_skills[x], tmp_skills[x], amount, this_player(), previous_object(), prev);
+	perm_skills[x] += amount;
+	do_stat_callb(callb, param);
+	return;
+	}
+    if ((tmp_skills[x] + amount) > 50)
+	log_stat(type + "(" + time/60 + ")", perm_skills[x], tmp_skills[x], amount,
+		this_player(), previous_object(), prev);
+    tmp_skill_adjust = insert_adjust(tmp_skill_adjust, type, -amount, time, callb, param);
+    tmp_skills[x] += amount;
+}
+
+/*
+ * Learning.  Someone outside checked one of our skills against
+ * someone else's, and we won.  Parameters are the difficulty of the
+ * task, relative to someone with skills of 50% (i.e. was this a big
+ * event for us, that we would notice even if we were stupid), and
+ * any situation pressure modifier (which will almost always be zero).
+ * If difficulty is 0, we assume it's 50%.  
+ *
+ * People who want to fiddle with this should note that it takes several
+ * years of practice to become *really* proficient at something in real life if
+ * you're reasonably intelligent; mud time runs at 12 * real time...
+ *
+ * Interpretation of stats:
+ *	Int is your chance of actually learning something (how much you notice
+ * about the world, etc, how much strikes you as worth thinking about), and
+ * how fast you'll think about it.
+ *	Wis is interpreted as `what you've seen/thought about in the past', and
+ * determines how much you can draw from the experience.  Intelligent people
+ * learn quicker & more often; wise people learn more each time.
+ *	Chu is taken to be your `coolness under pressure'.  Presumably, whoever
+ * called this already factored our chu into the action's success chance, if
+ * it was performed under pressure (only learn on success).  We factor chu
+ * into how much they learned under extreme pressure.
+ *
+ * Note: Jenna Nov 98 --- changed apply_skill() so that learn() is now called
+ * on failure, too. See notes accompanying that fun for details.
+ *
+ */
+
+learn(string skill, int difficulty, int pressure) 
+{
+	string log;
+
+    if (index(skill_learn, skill) >= 0)
+	return 0;
+
+    int orig_skill = query_skill(skill);
+    if (orig_skill < 4) orig_skill = 4;
+    if (orig_skill > 97) orig_skill = 97;
+
+    if (!difficulty)
+	difficulty = 50;
+    if (difficulty > 97) difficulty = 97;		/* everyone had at least a 1 in 25 chance */
+    if (difficulty < 1) difficulty = 1;
+    if (!heroism)		/* scaled: 1->20K; 10K is long term max, 5K is average */
+	heroism = 5000;
+
+    if (pressure > 30)			/* NO single modifier is more than 30 - for now */
+	pressure = 30;
+
+    pressure += query_situation_pressure();
+    if (pressure > 97) pressure = 97;	/* facing 5 angry dragons wielding a potato peeler */
+    if (pressure < 1) pressure = 1;	/* having a smoke and listening to beethoven */
+
+/*
+ * Succeeding under pressure eventually counts a lot more than difficulty levels (as skills get high).
+ * For the newbies, succeeding at all must be positive, and especially under pressure.
+ * Chutzpah is both heroism (wrt pressure) and brazenness (wrt doing unlikely things).
+ */
+
+    int d =  (difficulty - orig_skill)/2 + 50;
+    heroism = (heroism * 297 + (d + pressure) * 100 + d * pressure) / 300;
+
+/*
+ * First: do we learn at all?  Average difficulty, 25 int gives about 1/2 chance of learning.
+ * You have much less chance if it wasn't an outstanding feat, but will still
+ * (on average) learn a little if you are being cautious.  If you're succeeding
+ * in being really ace, you'll almost always learn.  It's much harder for people
+ * of low int to learn while being cautious about what they attack - this
+ * mirrors the dullards of real life :)
+ * When I've thought enough about it, I'll factor their real skill value into
+ * their learning chance (though I guess it's factored into their success chance anyway).
+ */
+
+    if (query_int() * 2 + (difficulty - pressure) < random(100))
+        return 0;	/* comes out at 4% minimum */
+
+/*
+ * If we're gonna learn, use the opportunity to check chu (only people
+ * who notice a lot of things learn to be cool :)
+ * We slowly lower the chu of people who always do easy things, and who
+ * always have low pressure situations.  Because of the inclusion of
+ * situation pressure (it's rare to have high pressure), continuous extreme
+ * derring-do results in chu drifting up to around 45 or so (people who
+ * do hard things in easy situations or vice versa drift to .
+ * We should probably have a similar system applying to all stats.
+ * It's a pity it's so easy for a player to appear daring - just
+ * attack a second char with extremely high parry and action/reaction parry.
+ * Oh well - one day we'll fix that...
+ * NB: The messages are deliberately different to the quest-based
+ * ones (`you feel self-confident').
+ */
+
+    if ((!random(100)) && index(stat_learn, "chu") < 0) {	/* 1->25 is so fucking granular, can't adjust it often */
+	int x = query_chu(1) * CHUTZ_DRIFT->query_drift_factor(); 
+			/* check the _actual_ stat only (not tmp stats) */
+	log = "* " + capitalize(this_object()->query_real_name());
+	if (this_object()->is_player())
+		log += " the PLAYER (" + this_object()->query_quest_points() +
+			" qps)";
+	else
+		log += " the level " + this_object()->query_level() + " " +
+			this_object()->query_std_mon_type(); 
+	if (x > heroism + 500) {	/* never adjust it if it's 1 */
+            stat_learn = insert_adjust(stat_learn, "chu", -1, random(300) + random(300), 0, "You feel complacent.");
+	    log += " lost 1 chutzpah to ";
+	    if (this_object()->is_player())
+		CHUTZ_DRIFT->add_drift_factor(-1);	
+/* Modify the drift factor so we don't end up continually adjusting player
+ * stats in one direction
+ * 950828 Jenna
+ */
+	    }
+	else if (x < heroism - 500) {
+            stat_learn = insert_adjust(stat_learn, "chu", 1, random(300) + random(300), 0, "You feel daring.");
+	    log += " gained 1 chutzpah to ";
+	    if (this_object()->is_player())
+		CHUTZ_DRIFT->add_drift_factor(1);	
+	    }
+	else
+	    log += "had chutz unchanged on ";
+	log +=  (x/CHUTZ_DRIFT->query_drift_factor()) + "\n\tHeroism (" + 
+		heroism + ") v Chutz (" + x + ")\n\t(Skill: "+
+		skill + "; Difficulty: " + difficulty + "; Pressure: " 
+		+ pressure + 
+		")\n\tCurrent Drift Factor              : " + 
+		CHUTZ_DRIFT->query_drift_factor() + 
+		"\n\tDrift Scale: (Lose Chutz)---" +
+		(heroism + 500) / (x / CHUTZ_DRIFT->query_drift_factor()) + 
+		"<--(No Change)-->" +
+		(heroism - 500) / (x / CHUTZ_DRIFT->query_drift_factor()) + 
+		"---(Gain Chutz)\n"; 
+	LOG->log("CHUTZ_DRIFT", log);
+	}
+
+/*
+ * Now, how much was it worth?  The original skill server put learning
+ * at 1-5%.  Difficulty counts - if it was a 50% chance, the assumption
+ * is that you had a `normal' struggle, with `normal' time to observe -
+ * wisdom is the only multiplier.  If it was high difficulty, you only
+ * observe a lot if you have high chu.  If it was low difficulty, you may
+ * learn more of it if you have low chu (because it was more commensurate with
+ * your ability to observe under pressure, though there was less to
+ * observe).  High chu chars still have the advantage - they have a
+ * higher initial success chance.  Wisdom is multiplied in, and int and
+ * current skill value affects your learning time.  Time used to be
+ * skill_val * 18 secs; we preserve that for int 25 chars.
+ */
+    int chu = query_chu();	/* minimum 1 */
+    if (chu < 1) chu = 1;
+
+    int obs = chu * 4 - pressure + 100; /* 8->200+, observation % */
+    if (obs > 200)
+	obs = 200;		/* maximum observable is 100% */
+    obs = 1 + random(obs);	/* half on average */
+    int amt = obs * query_wis(0) * difficulty;	/* high wis = 25 */
+/* normalise to 1->5 for high wis, avg everything else (up to 10 if lucky). */
+    amt = amt / 50000 + 1;
+
+/* design a time.  If learning more, or already have high perm skill, take longer. */
+    int time = query_int(0);
+    if (time > 35) time = 35;	/* sigh.  Too many magic numbers here. */
+    if (time < 8) time = 8;	/* low int shouldn't be penalised too much */
+    time = 450 / time * (query_skill(skill, 0) + amt);
+    make_skill(skill);	/* be sure it's there */
+#if 0
+    catch { tell_object(find_player("gandalf"),
+	this_object()->query_real_name() + " learns " + amt + " of " + skill + " in " + time + "\n"); };
+#endif
+    skill_learn = insert_adjust(skill_learn, skill, amt, time, 0, 0);
+    return 1;
+}
+
+/*
+ * Apply_skill - applies a skill.  Does automatic learning.  See the comments at the top.
+ * Returns 1 for succeeded, 0 for failed.
+ */
+
+int apply_skill(string skill, int difficulty, int pressure) {
+    int orig_skill = query_skill(skill);
+    if (orig_skill < 4) orig_skill = 4;
+
+    if (!difficulty)
+	difficulty = 50;
+    if (difficulty > 97) difficulty = 97;		/* everyone had at least a 1 in 25 chance */
+    if (difficulty < 1) difficulty = 1;
+/*
+ * Quick hack for the auto defence server
+ */
+    catch { "RO/living/StatsTrack"->skill_used(skill, orig_skill, difficulty); };
+
+    if (pressure > 30)			/* NO single modifier is more than 30 - for now */
+	pressure = 30;
+
+    int p = pressure + query_situation_pressure();
+    if (p > 97) p = 97;	/* facing 5 angry dragons wielding a potato peeler */
+    if (p < 1) p = 1;	/* having a smoke and listening to beethoven */
+
+    /* The following is to penalise players that rush into rooms, make an attack,
+     * then go out of the room long enough for it to take effect, avoiding all
+     * consequences.
+     * It's (to be) used in adjusting `base pressure', which is going to decrease
+     * as your HPs or SPs increase, so going outside to wait, rest, think, think,
+     * or recuperate should decrease it, ultimately lowering chu.
+     */
+    skill_avg = (skill_avg * 99 + orig_skill * p + skill_avg * (100 - p) / 100) / 100;
+
+    int c = query_chu() * 4;
+    if (c < 1) c = 1;
+
+    /* skill rolled against:	(C1 P1)  (C1 P100) (C25 P1) (C25 P100)  (C50 P100)
+     *		difficulty +	   2         99       0         50	    33
+     * i.e. with 25 chu, effect of pressure is halved.  This seems right.
+     */
+
+    if (random(orig_skill) > random(difficulty + p * p / (c + p))) {
+	learn(skill, difficulty, pressure);
+	return 1;
+	}
+    /* Jenna Nov 98 --- decided to allow learning on failure, too. The 
+     *			reason is that (1) in reality, failure often teaches
+     *			us at least as much as success; and (2) newbies,
+     *			who fail a lot, are taking a long time to improve their
+     *			skills initially whereas experienced players can
+     *			improve their skills relatively fast. This seems 
+     *			backward and needlessly discouraging.        
+     */ 
+    learn(skill, difficulty, pressure);
+    return 0;
+    }
+
+nosave sob(n, o) {
+    if (!o)
+	return "";
+    if (o == this_object())
+	return "; " + n + "=<self>";
+    return "; " + n + "=<" + query_su_name(o) + " : " + file_name(o) + ">";
+    }
+
+nosave log_stat(string type, int perm, int tmp, int amount, tp, po, ca) {
+    string np = "";
+    if (!(this_object() -> is_player()))
+	return;
+    if (query_su_level(this_object()) < GOD) {
+	return;
+	np = "[NOSAVE]";
+	}
+    if (ca && (ca != this_object()))
+    LOG->log("STATS", this_object()->query_real_name() + np + ":" + type + ":<" + perm + "/" + tmp + ">+=" + amount +
+	sob("caller", ca) + sob("player", tp) + sob("prev", po) + "\n");
+    }
+
+/*
+ * Query: query_skill(name, flag).
+ * If flag is nonzero, you get just their permanent stat.
+ */
+
+array query_skill_names() {
+    return skill_names + [ ];
+    }
+
+int query_skill(string type, int f) {
+    int x = index(skill_names, type);
+    if (x < 0)
+	return 0;
+    if (f)
+	return perm_skills[x];
+    return perm_skills[x] + tmp_skills[x];
+    }

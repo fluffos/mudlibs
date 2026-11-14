@@ -1,0 +1,184 @@
+/*
+ * Generic Wieldable Object
+ *
+ * This object should be inherited if the object is to be wielded in
+ * combat. By itself, this object is not a weapon.
+ *
+ * Examples of objects that should inherit this:
+ *   weapons
+ *   wands
+ *   magic rods and staves
+ *
+ * Revision History
+ * 940314 Hunter      - Adapted this from the /obj/weapon.c object, wielded
+ *			object removed (now tests environment() to see if
+ *		 	this_object() is being wielded.
+ * 000417 Jenna		Now wield_func calls on unwield as well
+ */
+
+inherit "std/object";
+
+#define File(x) file_name(x)
+
+object wield_func;
+
+show_stats() 
+{
+    ::show_stats();
+    write(
+	"wielded: " + query_wielded()+"\n"+
+	"wield_func: " + (wield_func ? File(wield_func) : "none") + "\n"
+	);
+}
+
+reset(NotFirst) 
+{
+    ::reset(NotFirst);
+    if (NotFirst)
+	return;
+}
+
+
+init()
+{
+    ::init();
+}
+
+
+/* 
+ * can_wield() returns 1 if the player object "who" can wield the object
+ * onto the environment() of this_object(). Why not check this_player()?
+ * "who" may be putting the weapon onto environment(), that's why :-)
+ */
+int can_wield(object who)
+{
+    if ( query_wielded() )
+    {
+	notify_fail("It is already wielded.\n");
+	return 0;
+    }
+    return 1;
+}
+
+/*
+ * can_unwield() returns 1 if the object can be unwielded. Mundane checks
+ * here, plus if you have a cursed weapon, just override this function.
+ *
+ * "who" is assumed to be taking the object off environment()
+ */
+int can_unwield(object who)
+{ 
+    if ( !query_wielded() )
+    {
+	notify_fail("It is not being wielded.\n");
+	return 0;
+    }
+    return 1;
+}
+
+
+int wield((int|string) what) 
+{
+    notify_fail("What would you like to wield?\n");
+    if ( !id(what) )
+	return 0;
+    if ( !can_wield(this_player()) )
+	return 0;
+    return wield_object();
+}
+
+int unwield((int|string) what) 
+{
+    notify_fail("What would you like to unwield?\n");
+    if ( !id(what) )
+	return 0;
+    if ( !can_unwield(this_player()) )
+	return 0;
+    return unwield_object();
+}
+
+/*
+ * wield_object() causes this_object() to be wielded by environment(
+ * The checking to see if "who" is able to wield it is done in can_wield()
+ */
+int wield_object() 
+{
+    if (wield_func && !wield_func->wield(this_object())) 
+    {
+	/* do nothing */
+    }
+    else
+    {
+        environment()->wield( this_object() );
+    }
+    return (query_wielded() == environment() );
+}
+
+/*
+ * unwield_object() causes this_object() to be unwielded by "who"
+ */
+int unwield_object(object who)
+{
+    if (wield_func && !wield_func->unwield(this_object())) 
+        return 0;
+    query_wielded()->stop_wielding( this_object() );
+    return 1;
+}
+
+
+short() 
+{
+(int|string) sht = ::short();
+    if ( stringp(sht) )
+    {
+	return (query_wielded() ? sht + " (wielded)" : sht);
+    }
+    else
+    {
+	return sht;
+    }
+}
+
+
+int drop(silently) 
+{
+    if (::drop(silently))	/* can it be dropped? */
+	return 1;
+    if (query_wielded()) 
+    {
+	if (!silently)
+     	{
+            tell_object( query_wielded(), "You drop what you were wielding.\n");
+	}
+	unwield_object( query_wielded() );
+    }
+    return 0;
+}
+
+
+/*
+ * This function is called by the wielder when the
+ * object is being unwielded. This does any local cleanup
+ * needed. Use unwield_object() for your own code.
+ */
+int un_wield((int|string) str) 
+{ 
+    return 1;
+}
+
+set_wield_func(ob) { wield_func = ob; }
+
+(int|object) query_wielded() 
+{ 
+    if ( environment() )
+    {
+	if ( environment()->query_wielded() == this_object() )
+	    return environment();
+    }
+    return 0;
+}
+
+query_wield_func() { return wield_func; }
+
+int wieldable() { return 1; }
+

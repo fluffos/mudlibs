@@ -1,0 +1,793 @@
+/*
+ *    User server - if you want to hear shouts you must register here
+ *    users() & find_player() server.
+ *
+ *    Note since players are "named" objects with their names
+ *    we can ignore find_player() altogether.
+ *    Dredd - 1993.
+ * 
+ *  19980914 Dredd Updated to maintain 'who' lists who(), ansi_who(), wiz_who()
+ *                 Caches whos() (cause they're sorts)
+ *  20000405 Jenna Put time limit on "playerkiller" flag & made criminals
+ *                 (ie bountied players) appear yellow too.
+ *  20000719 Jenna Re-ordered "idle/reading notes/vi-ing/etc" flags.
+ *  20010116 Zaphoid added http_title() and http_body() for web server stuff.
+ *  20010118 Greebo changed to http_generate() after mods to server.
+ *  20010406 Dodinas changed http_generate() for change of web design.
+ *  20010714 Greebo fixed bug with half connected players in add_user().
+ */
+
+inherit "RO/base_object";
+inherit "RO/base/hilite";
+inherit "RO/living_defs";
+inherit "std/http/sws";
+
+
+#include <ansi.h>
+#include <security.h>
+#include <board.h>
+
+#define CLEAN_TIME 1200
+
+#define MIN_WIZ 1200
+#define MIN_LORD 200
+#define IDLE_TIME 180
+
+#define PK_FLAG_LENGTH  2592000
+
+array users = [ ];
+    /* a list of user objects logged into the game */
+array names = [ ];
+    /* a parallel query_real_name() cache array of strings */
+
+
+array who_levels = [ ];
+    /* a list of user `levels' array of ints */
+array  who_cache = [ ];
+    /* parallel cache of who information (for output) */
+array who_names = [ ];
+    /* parallel a list of user query_real_names */
+
+string whoinfo = "";
+string ansiwho = "";
+    /* full output string caches */
+
+int changed;
+    /* has some info changed requiring a recalc? */
+
+object bboard = load_object (BOARD_SERV + "/bountyboard");
+
+reset(arg)
+{
+    if (!arg)  
+    {
+        call_out("clean_up", CLEAN_TIME);    
+        add_id ( ["server","users"] );
+    }
+}
+
+show_stats () 
+{
+    int i,p=0;
+    string out;
+    array niceout;
+
+    i = sizeof (users);
+    if (!i) write ("There are no users.\n");
+    else 
+    {
+        write ("Current and link dead users are:\n");
+        out = implode(names, ", ");
+        write(out + "\n");
+
+        write("users size = "+sizeof(users)+"\n");
+        write("who_cache size = "+sizeof(who_cache)+"\n");
+        write("who_levels size = "+sizeof(who_levels)+"\n");
+        write("who_names size = "+sizeof(who_names)+"\n");
+#if 0
+        out = implode(users,", ");
+        niceout = STRINGS->split_string(out,50);
+        for (i = 0; i < sizeof(niceout); i++) 
+        {
+            write (niceout[i]+ "\n");
+        }
+#endif
+    }
+}    
+
+fix()
+{
+    int i;
+    array u = users();
+
+    for (i = 0; i < sizeof(u); i++)
+    {
+        if (u[i]) add_user(u[i]);
+    }
+}
+
+add_user(object arg)
+{
+    string rname;
+
+    if (index(users, arg) != -1) return 0;
+
+    rname = arg->query_real_name();
+
+    if (rname == "[0]") return 0; /* added Greebo 010714 */
+
+    users = users + [ arg ];
+
+    if (rname == 0) rname = "No one";
+    names = names + [ rname ];
+
+    add_who(arg);
+
+    return 1;
+}
+
+remove_user(string arg)
+{
+    int x;    
+
+    x = index(names, arg);
+    if (x != -1) 
+    {
+        users = users[..x-1] + users[x+1..];
+        names = users[..x-1] + users[x+1..];
+    }
+
+    remove_who(arg);
+
+    return 1;
+}
+
+find_player(string arg)
+{
+    int i;
+
+    for (i = 0; i < sizeof(users); i++) 
+    {
+        if (users[i] && users[i]->query_real_name() == arg)
+            return users[i];
+    }
+}
+
+#if 0
+users() { return users; }
+#endif
+
+query_users() { return users; }
+
+clean_up()
+{
+#if 0
+    int i;
+
+    call_out("clean_up", CLEAN_TIME);    
+
+    for (i = sizeof(users) - 1; i >= 0; i--) 
+    {
+        if (!users[i]) 
+        { 
+            /* dead monster probably - clean me up */
+            remove_user(names[i]);
+        }
+    }
+#endif
+}
+
+query_next_time() { return find_call_out("clean_up"); }
+
+idle() 
+{
+    array list,out = [ ];
+    int i,hidden,idle_time;
+
+    list = users();
+    for (i = sizeof (list); i --; ) 
+    {
+        hidden = list[i]->query_invis();
+        if (hidden) continue;
+        if (present("hidden_who", list[i]) ||
+list[i]->query_store("hidden_who")) continue;  
+        idle_time = list[i] -> query_idle ();
+        idle_time = idle_time /60;
+#if 0
+    if (list[i]->query_wiz())
+      out += [ "wizard  " + capitalize(list[i]->query_name()) ];
+    else 
+#endif
+    if (!idle_time)
+          out += [ "active  " + capitalize (list[i] -> query_name()) ];
+        else 
+            out += [ idle_time + "        "[sizeof (idle_time+"")..] +
+capitalize (list[i]->query_name()) ];
+    }
+    if (!sizeof (out))  
+        return ("No one\n");  
+    else 
+        return (implode (out,"\n") + "\n");
+}
+
+
+// new, prettier version by Jenna Jun 01
+query_idle()
+{
+    array list, out;
+    int i, x, idle_time;
+
+    list = users();
+    for (i = sizeof (list); i --; )
+    {
+        if (!list[i] ||
+//            list[i]->query_invis() ||
+	    !list[i]->short() ||
+            list[i]->query_name() == "[0]" ||
+            present("hidden_who", list[i]) ||
+            list[i]->query_store("hidden_who"))
+        {
+            continue;
+        }
+        idle_time = list[i]->query_idle() / 60;
+        if (!out)
+            out = [ idle_time, ENGLISH->pretty_name(list[i]->query_real_name()) ];
+        else
+        {
+            x = find_insert_position(out, idle_time);
+            out = out[..x-1] +
+                  [ idle_time, ENGLISH->pretty_name(list[i]->query_real_name()) ] +
+                  out[x..];
+        }
+    }
+    return out;
+}
+
+find_insert_position(array a, int n)
+{
+    int i;
+
+    if (n < 1)
+        return 0;
+    for (i  = 0; i < sizeof(a); i += 2)
+        if (n < a[i])
+            return i;
+    return i;
+}
+
+int update_who(object ob)
+{
+    set_who(ob, -1);
+}
+
+int add_who(object ob)
+{
+    int x;
+    int lvl;
+    int lord;
+
+    /* determine an internal 'level' for sorting */
+    lvl = ob->query_wiz();
+    if (lvl != 0) lvl = lvl + MIN_WIZ;
+#if 0
+    lord = PEERAGE_SERV->query_station_value(ob->query_real_name());
+    if (lord != -1)
+    {
+        lvl = lvl + ((lord+1)*MIN_LORD); 
+    }
+#endif
+    lvl = lvl + ob->query_quest_points();
+
+    /* determine the insertion point */
+    for (x = 0; x < sizeof(who_levels); x++)
+    {
+        if (lvl > who_levels[x]) break;
+    }
+
+    who_levels = who_levels[..x-1] + [ lvl ] + who_levels[x..];
+    who_names = who_names[..x-1] + [ ob->query_real_name() ] + who_names[x..];
+    who_cache = who_cache[..x-1] + [ "" ] + who_cache[x..];
+
+    set_who(ob, x);
+}
+
+
+set_who(object ob, int x)
+{
+    /* now work out the who information line to add */
+    /* Activity Pre-title   Name & title             Guilds */
+    if (x == -1)
+    {
+        x = index(who_names, ob->query_real_name());
+    }
+
+    if (x == -1) return 0;
+
+    string pad = "                                                 ";
+    string activity;
+
+// Replaced by Jenna 2000, because busy vi-ing wizzes were getting
+// represented as "idle".
+#if 0
+    if (ob->query_idle() > IDLE_THRESHOLD) activity = "idle";
+    if (activity == 0) activity = ob->query_caution();
+    if (activity == 0 && (ob->query_guest())) activity = "guest";
+    if (activity == 0) activity = "";
+#endif
+
+    activity = ob->query_caution();
+    if (!activity && ob->query_guest())
+        activity = "guest";
+    if (!activity && ob->query_idle() > IDLE_THRESHOLD)
+        activity = "idle";
+    if (!activity)
+        activity = "";
+
+    activity = activity + pad;
+
+    string pretitle = ob->query_pretitle();
+    if (pretitle == 0) pretitle = "";
+    pretitle = pretitle + pad;
+
+    string name;
+
+    if (ob->query_real_name()) 
+        name = capitalize(ob->query_real_name()) + " " + ob->query_title();
+    if (name == 0) name = "Invisible";
+    name = name + pad;
+
+    string gods = capitalize(ob->query_race());
+    if (gods == 0) gods = "";
+    if (gods == "Vampire") gods = "Human";
+
+    activity = activity[..7];
+    pretitle = pretitle[..7];
+    name = name[..39];
+    gods = gods[..11];
+
+    who_cache[x] = activity + " " + pretitle + " " + name + " " + gods;
+
+    changed = 1;
+
+    return 1;
+}
+
+remove_who(string name)
+{
+    int x;
+
+    x = index(who_names, name);
+    if (x == -1) return 0;
+
+    who_cache = who_cache[..x-1] + who_cache[x+1..];
+    who_names = who_names[..x-1] + who_names[x+1..];
+    who_levels = who_levels[..x-1] + who_levels[x+1..];
+
+    changed = 1;
+
+    return 1;
+}
+
+query_caution_string(ob) 
+{
+string caution = ob->query_caution();
+
+        if (!caution && ob->query_guest()) 
+        {
+                caution = "guest";
+        }
+        if (!caution && ob->query_idle() > IDLE_THRESHOLD) 
+        {
+                caution = "idle";
+        }
+        if (!caution) 
+        {
+                caution = "";
+        }
+        return caution;
+}
+
+query_pretitle_string(ob)
+{
+string pretitle = ob->query_pretitle();
+
+        if (pretitle == 0) 
+        {
+                pretitle = "";
+        }
+        return pretitle;
+}
+
+query_name_string(ob) 
+{
+string name = capitalize(ob->query_real_name()) + " " + ob->query_title();
+
+        if (name == 0) 
+        {
+                name = "Invisible";
+        }
+        return name;
+}
+
+query_race_string(ob) 
+{
+string gods = capitalize(ob->query_race());
+
+        if (gods == 0) 
+        {
+                gods = "";
+        }
+        if (gods == "Vampire") 
+        {
+                gods = "Human";
+        }
+        return gods;
+}
+
+checkchange()
+{
+    int x;
+    int count;
+    int flag;
+    int pk;
+    int colour;
+    array awho = allocate(sizeof(who_cache)+12);
+    array twho = allocate(sizeof(who_cache)+12);
+
+    if (changed == 0) return 0;
+
+    twho[count] =
+    "                     Shattered World Players\n" +
+    "                     ~~~~~~~~~~~~~~~~~~~~~~~";
+    /* "\n" + implode(who_cache, "\n") + "\n\n"; */
+
+    awho[count++] =  "                     " +
+                        ANSI->scolor(INVERSE_BLUE, "Shattered World Players");
+
+    while (x < sizeof(who_cache) && who_levels[x] > MIN_WIZ)
+    {
+        if (flag == 0)
+        {
+            twho[count] = "";
+            awho[count++] = "";
+            twho[count] = "Immortals\n"+
+                          "~~~~~~~~~";
+            awho[count++] = ANSI->scolor(INVERSE_RED, "Immortals");
+            flag = 1;
+        }
+        twho[count] = who_cache[x];
+        awho[count++] = ANSI->scolor(RED, who_cache[x]);
+        x++;
+    }
+
+    flag = 0;
+    while (x < sizeof(who_cache) && who_levels[x] > MIN_LORD)
+    {
+        if (flag == 0)
+        {
+            twho[count] = "";
+            awho[count++] = "";
+            twho[count] = "    Lords\n" +
+                          "    ~~~~~";
+            awho[count++] = ANSI->scolor(INVERSE_GREEN, "    Lords");
+            flag = 1;
+        }
+        twho[count] = who_cache[x];
+            colour = check_killers(who_names[x], GREEN);
+        awho[count++] = ANSI->scolor(colour, who_cache[x]);
+        x++;
+    }
+
+    flag = 0;
+    while (x < sizeof(who_cache))
+    {
+        object ob;
+        if (flag == 0)
+        {
+            twho[count] = "";
+            awho[count++] = "";
+            twho[count] = "  Mortals\n"+
+                          "  ~~~~~~~";
+            awho[count++] = ANSI->reverse("  Mortals");
+            flag = 1;
+        }
+        twho[count] = who_cache[x];
+        colour = check_killers(who_names[x], -1);
+        if (colour == -1)
+            awho[count++] = who_cache[x];
+        else
+            awho[count++] = ANSI->scolor(colour, who_cache[x]);
+        x++;
+    }
+    twho[count] = "";
+    awho[count++] = "";
+
+    whoinfo = /* "\n" + */  implode(twho, "\n") /* + "\n\n" */;
+    ansiwho = /* "\n" + */  implode(awho, "\n") /* + "\n\n" */;
+
+    changed = 0;
+}
+
+check_killers(who, default_colour)
+{
+    int pk;
+    object ob;
+
+    if (!who) return default_colour;
+
+    ob = find_player(who);
+    if (!ob) ob = find_living(who);
+    if (!ob) return default_colour;
+
+    if (bboard && bboard->query_bounty(ob->query_name()) > 0) return PURPLE;
+
+    pk = ob->query_store("playerkiller");
+    if (pk)
+    {
+        if (time() > pk + PK_FLAG_LENGTH) 
+            ob->remove_store("playerkiller");
+        else
+            return YELLOW;
+    }
+    return default_colour;
+}
+
+query_bboard() { return bboard; }
+
+who() 
+{
+    checkchange();
+    return whoinfo;
+}
+
+ansi_who()
+{
+    checkchange();
+    return ansiwho;
+}
+
+wiz_who()
+{
+}
+
+has_changed() { changed = 1; }
+
+http_generate()
+{
+int x, pos;
+int flag;
+string result;
+object player;
+
+        /* if (changed == 0) return 0; never want this */
+
+        result = "players/dodinas/web/whoson"->whoson1();
+
+        while (x < sizeof(who_cache) && who_levels[x] > MIN_WIZ)
+        {
+                if (flag == 0)
+                {
+                        result += "<table width=\"100%\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\">";
+                        result += "<tr><td colspan=\"3\"><div align=\"center\">";
+                        result += "<font color=\"#00FFFF\"><b><font face=\"Courier New, Courier, mono\" size=\"2\">Shattered World Players</font></b></font></div>";
+                        result += "</td></tr><tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr><tr>";
+                        result += "<td><font face=\"Courier New, Courier, mono\" size=\"2\" color=\"#FF0000\">Immortals</font></td>";
+                        result += "<td>&nbsp;</td><td>&nbsp;</td></tr>";
+                        flag = 1;
+                }
+                if (player = find_living(who_names[x]))
+                {
+                        result += "<TR>";
+                        
+                        result += "<TD WIDTH=\"25%\">";
+                        result += "<div align=\"right\"><font face=\"Courier New, Courier, mono\" color=\"#FF0000\" size=\"2\">";
+                        result += query_pretitle_string(player);
+                        result += "&nbsp";
+                        result += "</font></div></TD>";
+
+                        result += "<TD WIDTH=\"50%\">";
+                        result += "<font face=\"Courier New, Courier, mono\" size=\"2\" color=\"#FF0000\">";
+                        result += query_name_string(player);
+                        result += "</font></TD>";
+
+                        result += "<TD WIDTH=\"25%\">";
+                        result += "<font face=\"Courier New, Courier, mono\" size=\"2\" color=\"#FF0000\">";
+                        result += query_race_string(player);
+                        result += "</font></TD>";
+                        
+                        result += "</TR>";
+                }
+                x++;
+        }
+        if (flag == 1) 
+        {
+                result += "</TABLE>";
+        }
+
+        flag = 0;
+        while (x < sizeof(who_cache) && who_levels[x] > MIN_LORD)
+        {
+                if (flag == 0)
+                {
+                        result += "<table width=\"100%\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\">";
+                        result += "<tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr><tr>";
+                        result += "<td><font face=\"Courier New, Courier, mono\" size=\"2\" color=\"#00FF00\">Lords</font></td>";
+                        result += "<td>&nbsp;</td><td>&nbsp;</td></tr>";
+                        flag = 1;
+                }
+                if (player = find_living(who_names[x]))
+                {
+                        result += "<TR>";
+                        
+                        result += "<TD WIDTH=\"25%\">";
+                        result += "<div align=\"right\"><font face=\"Courier New, Courier, mono\" size=\"2\" color=\"#00FF00\">";
+                        result += query_pretitle_string(player);
+                        result += "&nbsp";
+                        result += "</font></div></TD>";
+
+                        result += "<TD WIDTH=\"50%\">";
+                        result += "<font face=\"Courier New, Courier, mono\" size=\"2\" color=\"#00FF00\">";
+                        result += query_name_string(player);
+                        result += "</font></TD>";
+
+                        result += "<TD WIDTH=\"25%\">";
+                        result += "<font face=\"Courier New, Courier, mono\" size=\"2\" color=\"#00FF00\">";
+                        result += query_race_string(player);
+                        result += "</font></TD>";
+                        
+                        result += "</TR>";
+                }
+                x++;
+        }
+        if (flag == 1) 
+        {
+                result += "</TABLE>";
+        }
+
+        flag = 0;
+        while (x < sizeof(who_cache))
+        {
+                if (flag == 0)
+                {
+                        result += "<table width=\"100%\" border=\"0\" cellspacing=\"0\" cellpadding=\"0\">";
+                        result += "<tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr><tr>";
+                        result += "<td><font face=\"Courier New, Courier, mono\" size=\"2\" color=\"#FFFFFF\">Mortals</font></td>";
+                        result += "<td>&nbsp;</td><td>&nbsp;</td></tr>";
+                        flag = 1;
+                }
+                if (player = find_living(who_names[x]))
+                {
+                        result += "<TR>";
+                        
+                        result += "<TD WIDTH=\"25%\">";
+                        result += "<div align=\"right\"><font face=\"Courier New, Courier, mono\" size=\"2\" color=\"#FFFFFF\">";
+                        result += query_pretitle_string(player);
+                        result += "&nbsp";
+                        result += "</font></div></TD>";
+
+                        result += "<TD WIDTH=\"50%\">";
+                        result += "<font face=\"Courier New, Courier, mono\" size=\"2\" color=\"#FFFFFF\">";
+                        result += query_name_string(player);
+                        result += "</font></TD>";
+
+                        result += "<TD WIDTH=\"25%\">";
+                        result += "<font face=\"Courier New, Courier, mono\" size=\"2\" color=\"#FFFFFF\">";
+                        result += query_race_string(player);
+                        result += "</font></TD>";
+                        
+                        result += "</TR>";
+                }
+                x++;
+        }
+        if (flag == 1) 
+        {
+                result += "</TABLE>";
+        }
+
+        result += "players/dodinas/web/whoson"->whoson2();
+
+        /* changed = 0; not up to this function to change this */
+        return [["whoson.htm", "Who's On?", result, 1]];
+}
+
+#if 0
+list_users(list, options) 
+{
+    int i=0,j,tmpl, tmpi, pos, strt, lend, rpos;
+    (int|string) tmpr;
+    object fred;
+    array switches;
+    array ret = allocate(2 + sizeof(list));
+    object o_wiz_soul;
+
+    if (!options || options == "")
+                options = "-a -b -n -l -i -env";
+
+    switches = COMARGS->split_args(options, 
+    [ "a", "b", "ear", "n", "sex", "r", "l", "i", "env" ],
+    [ ] );
+    ret[0] = "Load Average : "+query_load_average();
+    ret[1] = switches_row(switches[1], [
+                "Address", 16,
+                "B", 1,
+                "E", 1,
+                " Name", 14,
+                "Sex", 4, 
+                "Race", 10,
+                "Level", 9,
+                "Idle", 6,
+                "Location",0
+        ] );
+    rpos = 2;
+    strt = 0;
+    while(i<sizeof(list)) {
+        string name;
+        string outstr;
+        string ip1, ip2;
+        int invis;
+        string idle;
+
+        pos = strt;
+        ip1 = list[pos]?query_ip_number(list[pos]):"ZZZZZZZ";   
+        for (j =strt + 1 ; j < sizeof(list); j ++)
+        {
+                if (list[j] && (ip2 = query_ip_number(list[j])) < ip1)
+                {
+                        pos = j;
+                        ip1 = ip2;
+                }
+        }
+/*
+        if (pos == strt+1) 
+                strt = pos; 
+*/
+        invis = (list[pos]->short() == 0);
+        name = list[pos]->query_real_name();
+        if (!name) name = list[pos]->query_name();
+        if (!name) name = "[login]";    
+        name = capitalize(name);        
+
+        idle = (list[pos]->query_idle())/60;
+        if (idle < 0) 
+                idle = 0;
+        idle = (idle?(idle+"m"):"");
+
+        if (environment(list[pos]))
+        {
+/*        array t; what's this for? */
+            tmpr = file_name(environment(list[pos]));
+            if (tmpr[0..1] == "P/") {
+        string inside;
+                if (environment(list[pos]))
+          inside = environment(list[pos])->query_real_name();
+                if (inside) tmpr = "inside "+ capitalize(inside) +"
+("+tmpr+")";}
+            tmpr = FILENAME->contract(tmpr);
+        }
+        else 
+                tmpr = "<no environment>";
+
+        if (!(present("hidden_peo", list[pos]) && this_player()->query_wiz() <
+SENIOR))
+        ret[rpos++] = switches_row(switches[1], [
+                ip1, 16,
+                ( (o_wiz_soul = list[pos]->query_soul("wizard/wiz_soul") )
+            && o_wiz_soul->query_busy( ))?"*":" ", 1,
+                (list[pos]->query_muffled()?"*":" "), 1,
+                (invis?("("+name+")"):(" "+name+" ")), 14,
+                (list[pos]->query_gender() == "male")?" M":
+                        ((list[pos]->query_gender() == "female")?" F":" ?"), 4,
+                list[pos]->query_race(), 10,
+                LEVELS->query_desc(list[pos]), 9,
+                idle, 6,
+                tmpr,0
+        ] );
+
+        list[pos] = 0;  
+        i += 1;
+    }
+    ret = ret[..(rpos - 1)];
+    return ret;
+}
+
+#endif

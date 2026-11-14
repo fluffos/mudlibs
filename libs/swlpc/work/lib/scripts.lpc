@@ -1,0 +1,76 @@
+/*
+ * scriptfile reader
+ *
+ * Hunter
+ *
+ * 951004 Fuck me - array slices everywhere.  We should make all
+ * CPU intensive things particularly dificult to write - G.
+ * Rewritten; old behaviour (which I've changed) appears to be that
+ * catenations of lines are interrupted by comment lines.
+ * Presumably, this was unintentional, and isn't abused anywhere :)
+ *
+ * 951004 thanks to Belgarion - who tested, found a couple bugs, produced
+ *	  a fixed version (which I ignored :), and a testing object (which
+ *	  I used).
+ */
+
+inherit "RO/Servers";
+
+/* filterscript
+ * filter a string into array
+ * omiting remarks ('^#...'), striping whitespace
+ * and appending lines that end in "\"
+ */
+
+array filterscript(string str) {
+
+    if (!str)
+    	return ({ });
+    array lines = explode(str, "\n");		/* array is compacted in place */
+
+/*
+ * We do the following:
+ *    Spin past any comments
+ *    for each collection of continued lines, count them up stripping slashes, and compacting them in as we go
+ *    After the end of a collection is found, implode the stripped lines into a long string
+ */
+    int x = 0;		/* where we are up to in reading the array */
+    int y = 0;		/* where we are up to in writing to it */
+    int z = 0;		/* the length of the current block of catenated lines (rel. to y) */
+
+    for (x = 0; x < sizeof(lines); x++) {
+	string s = STRINGS->strip_whitespace(lines[x]);
+	if (s[0] == '#')
+	    continue;
+
+	if (sizeof(s) > 1 &&  s[sizeof(s)-1..] == "\\") {	/* part of line block */
+	    lines[y+z] = s[..sizeof(s)-2];			/* move it down (for implode) */
+	    z++;						/* and count it */
+	    continue;
+	    }
+/*
+ * If we're here, it's the end of a block of lines - time to implode.
+ */
+
+	lines[y+z] = s;		/* non continued line - note: z = total lines - 1 */
+
+	if (z > 0) {		/* it was a block; compact it down */
+	    lines[y] = implode(lines[y..y+z], ""); /* more than one line */
+	    }
+	y++;					/* saved a line */
+	z = 0;					/* next block starts at next line */
+	}
+/*
+ * In an (erroneous) script file, the last line may have had a continuation
+ * mark on it.  If this is the case, we will have a block left over,
+ * waiting to be compacted in; y will give its intended location, and z
+ * will be its (actual) length.  So we do so here, just in case.
+ * We should really log the error (using caller()) somewhere.
+ */
+    if (z > 0) {
+	/* should log it here */
+	lines[y] = implode(lines[y..y+z-1], "");	/* get the lines */
+	y++;					/* and count 'the new line :) */
+	}
+    return lines[..y-1];			/* return compacted set */
+}

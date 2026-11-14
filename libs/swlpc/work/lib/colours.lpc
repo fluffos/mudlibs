@@ -1,0 +1,192 @@
+/*
+ * Colours server.
+ * Shattered World Mudlib
+ *
+ * This object maintains a collection of colour names, and their
+ * RGB (Red Blue Green) components.
+ *
+ * Upon loading, this object will try to restore itself. If it
+ * fails, it will attempt to rebuild itself from /lib/rgb.txt
+ */
+
+inherit "RO/Servers";
+
+const RGBfile = "lib/rgb.txt";
+const ColoursSavefile = "lib/colours";
+
+/*
+ * an array of strings - the names of the colours
+ */
+array colours;
+array RGB;	/* Red-Green-Blue component */
+array normalizedRGB;	/* RGB such that R+G+B=1 */
+array HSI;	/* Hue-Saturation-Intensity component */
+array CMYK;	/* Cyan-Magenta-Yellow-Black component */
+
+reset(argh)
+{
+    if (!argh)
+    {
+	restore_object( ColoursSavefile, this_object() );
+	if (intp(colours))
+	{
+	    call_out("load_colours", 0);
+	}
+    }
+}
+
+nosave
+contains_numbers(string foo)
+{
+int i;
+    for (i = 0; i < 10; i ++)
+    {
+	if (index(foo, i+"") != -1)
+	    return 1;
+    }
+    return 0;
+}
+
+nosave
+contains_uppercase(string foo)
+{
+int i;
+    for (i = 0; i < sizeof(foo); i ++)
+    {
+	if (foo[i..i] != " " && foo[i..i] == capitalize(foo[i..i]))
+	    return 1;
+    }
+    return 0;
+}
+
+nosave
+new_colour( string col, int R, int G, int B )
+{
+/* this function is *very* *very* array intensive.
+ * But, a rebuild of the arrays is anticipated to be a once-off,
+ * ever, event. So, I'm lazy. -Hunter
+ */
+    colours += [ col ];
+    RGB += [ ({ R, G, B ] });
+#if 0
+    normalizedRGB += [ ({ (R+0.0)/(R+G+B), 
+	(G+0.0)/(R+G+B), 
+	(B+0.0)/(R+G+B) ] });
+#endif
+}
+
+load_colours()
+{
+array colourfile = explode(grab_file(RGBfile), "\n");
+int i;
+array foo;
+string colname;
+    colours = [ ];
+    RGB = [ ];
+    normalizedRGB = [ ];
+    for (i = 0; i < sizeof(colourfile); i ++)
+    {
+	foo = explode( strip_string(colourfile[i]), " ");
+  	colname = implode(foo[3..], " ");
+    	if (!contains_numbers(colname) && !contains_uppercase(colname))
+	{
+	    new_colour( colname, 
+		atoi(colourfile[i][0..2]),	/* red */
+		atoi(colourfile[i][4..6]), 	/* green */
+		atoi(colourfile[i][8..10])	/* blue */
+		);
+	}
+    }
+    /* save the object now, it does not need to be saved regularly */
+    save_object( ColoursSavefile, this_object());
+}
+
+query_colours() { return colours; }
+
+
+string strip_string(string foo)
+{
+string bar = "";
+int i;
+int last_space = 1;
+    for ( i = 0; i < sizeof(foo); i ++ )
+    {
+	if ( (foo[i..i] == " ") || (foo[i..i] == "\t") )
+	{
+	    if (last_space)
+	    {
+	    }
+	    else
+	    {
+	    	bar += " ";
+		last_space = 1;
+	    }
+	}
+	else
+	{
+	    bar += foo[i..i];
+	    last_space = 0;
+	}
+    }
+    return bar;
+}
+
+/*
+ * query_rgb:
+ *  given a colour, what is its RGB components?
+ */
+(int|array)
+query_rgb( string colour )
+{
+int i;
+    i = index( colours, colour );
+    if (i == -1)
+	return 0;	/* no such colour */
+    return RGB[i];
+}
+
+/*
+ * query_colours_near:
+ *  given a colour, what are other similar colours.
+ * 'colour' is the name of the colour, and 'range' is 0..255, the smaller
+ * the number, the closer the selection.
+ */
+(array)
+query_colours_near( string colour, int range )
+{
+array cols;
+int numcols;
+int i;
+int distance;
+int nearRGB;
+int dR;
+int dG;
+int dB;
+int j;
+    cols = allocate(20);		/* preallocate */
+    nearRGB = query_rgb( colour );
+    if ( !pointerp(nearRGB) )
+	return [ ];	/* unknown colour, so no matches */
+    for (i = 0; i < sizeof(colours); i ++)
+    {
+	/* use Euclidian method to determine closeness */
+	dR = nearRGB[0] - RGB[i][1];
+	dG = nearRGB[1] - RGB[i][1];
+	dB = nearRGB[2] - RGB[i][2];
+ 	distance = "lib/imath"->sqrt( dR*dR + dG*dG + dB*dB );
+	if (distance <= range)
+	{
+	    numcols ++;
+	    j = index(cols, 0);
+	    if (j == -1)
+	    {
+		j = sizeof(cols);
+		cols = cols + allocate(sizeof(cols));
+	    }
+	    cols[j] = colours[i];
+	}
+    }
+    return cols[..numcols-1];
+}
+
+ 

@@ -1,0 +1,147 @@
+/*
+ * Aliased - inheritable object used to keep track of the
+ * loaded objects controlled by a virtual directory.  Will not
+ * save.  Will have nothing to do with finding, cloning, or loading
+ * new objects - caller uses "aliased_object(short_name, obj)" to
+ * install a new object.  Does not rename the objects themselves -
+ * it works fine if this isn't done.
+ *
+ *	GetAliasedObject, GetAliasedLS (nonstatic).
+ *			- gets objects/directories of loaded objects
+ *			   based on names relative to this_object.
+ *			  If name is 0 (in LS), returns the full list,
+ *			  otherwise return objects whose names are
+ *			  prefixes of this name.
+ *
+ * Despite the fact that these are intended to be "local directories",
+ * this object won't treat GetAliasedObject("x/y") as x->GetAliasedObject("y") (if it
+ * has an object "x" but not "x/y").  Use Hierachy.c if you must have
+ * that.
+ *
+ * WARNINGS: "GetVirtualObject" is a misnomer, as we won't clone objects!
+ */
+
+inherit "RO/Servers";
+
+nosave array vnames = [ ];	/* names of virtual objects (excluding the */
+				/* current object prefix) */
+nosave array vobs = [ ];	/* actual loaded objects.  Storing cloneable */
+				/* string names here is possible, though */
+				/* problematic */
+
+
+query_destruct()
+{
+    int i;
+    for (i = 0; i < sizeof(vobs); i++)
+    {
+        if (vobs[i]) destruct(vobs[i]);
+    }
+}
+
+/*
+ * Add a managed object to the list.  Choose a slot by
+ * finding a deleted object (i.e. a null one).  Names
+ * should be relative to this object (i.e. not full path names).
+ */
+
+nosave int aliased_object(string name, object obj) 
+{
+    int x = index(vobs, 0);
+
+    /* no space; double the size of the table */
+    if (x < 0) {			
+	x = sizeof(vobs);
+	vobs += allocate(1 + x);
+	vnames += allocate(1 + x);
+	}
+    vnames[x] = name;
+    vobs[x] = obj;
+    return 1;
+}
+
+/*
+ * Return a loaded subobject, relative to this object.
+ */
+
+GetAliasedObject(string name) 
+{
+    int x = index(vnames, name);
+    if (x < 0) return 0;
+
+    /* may have been deleted */
+    while (x >= 0) 
+    {			
+        /* supposedly, object or string */
+        if (vobs[x]) return vobs[x];
+        /* otherwise, clean out the name */
+	    vnames[x] = 0;			
+        /* and look again */
+	    x = index(vnames, name, x);	
+	}
+    return 0;				/* dested */
+}
+
+/*
+ * GetAliasedLS - get an LS relative to this dir.
+ * Returns a list of [ name ] [ objects ]
+ *
+ * If name is supplied, only returns items with
+ * names having a prefix that matches the given
+ * prefix (use 0 to get a full LS).
+ *
+ * Slow - has to build a new array as it goes, also
+ * takes the opportunity to compact the array (since it
+ * has to examine each item anyway).
+ */
+
+GetAliasedLS((int | string) name) 
+{
+    int x = 0;	/* index into main arrays */
+    int y = 0;	/* index into arrays being built */
+    int z = 0;	/* compaction index */
+
+    array newnames = allocate(sizeof(vnames));	/* returned arrays */
+    array newobs   = allocate(sizeof(vobs));
+
+    if (name == "") name = 0;
+
+    /* force differentiation from prefixes */
+    if (stringp(name)) name = name + "/";
+
+    while (x < sizeof(vnames)) {
+    /* does the entry exist? */
+	if (stringp(vnames[x]) && objectp(vobs[x])) 
+    {		
+        /* yes - compact it in */
+	    vnames[z] = vnames[x];				
+	    vobs[z] = vobs[x];
+        /* is it one we want? */
+	    if (intp(name) || vnames[z][..sizeof(name) - 1] == name) 
+        {
+            /* yes - store it */
+	        newnames[y] = vnames[z];			
+	        newobs[y] = vobs[z];
+	        y++;
+		}
+	    z++;
+	    }
+	else 
+    {			
+        /* object doesn't exist - clean 'em out properly */
+	    vnames[x] = 0;
+	    vobs[x] = 0;
+	}
+	x++;
+	}
+
+    /* is there lots of wasted space in main array? (30% hysterisis) */
+    if (z * 3 < x * 2) 
+    {	
+	vnames = vnames[..z-1];	/* yes - truncate them */
+	vobs   = vobs[..z-1];	/* happens because objects get destructed */
+	}
+
+    return [ newnames[..y-1], newobs[..y-1] ];
+}
+

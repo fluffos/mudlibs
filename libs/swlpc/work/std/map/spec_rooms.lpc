@@ -1,0 +1,347 @@
+/*
+ * Spec_rooms: an extension to the pub list.
+ * In Servers.h as SPEC_ROOMS.
+ *
+ * NB: This is supposed to get very limited use - a list of the
+ * `significant to NPCs' rooms in the game is all that's intended -
+ * so that they can find a house to rob, etc.  It's not intended
+ * for anything _really_ common (forests, roads, etc) - the MapKnower
+ * or world code will be extended to deal with that.
+ *
+ * We *do* use it to seed the map builder, though, and it's
+ * pretty good at finding new zones.
+ *
+ * Whenever a room is loaded, the room notifies the mapknower.
+ * The mapknower builds its map, and calls loaded_room in
+ * this object (with the room name).
+ * This object calls query_spec_room in the room to get a list
+ * of special room types in the mud; it builds a list of all
+ * room names and their types, and all types and the rooms of
+ * that type, so that intelligent monsters can know about them.
+ * It also uses query_sell to determine whether the room is saleable -
+ * backrooms of sellable shops/pubs/etc set this, and front rooms for
+ * shops without back rooms (like the markets).  This can be used to
+ * seed the real estate manager.
+ */
+
+#include <Config.h>
+
+int num_rooms = 0;					/* in case we expand the room arrays in chunks */
+array room_names = ({ });			/* names of rooms */
+array property_names = ({ });		/* names of properties */
+array property_counts = ({ });		/* per-property count of rooms having that property */
+
+array property_bitmap_1 = ({ });	/* per-room property map */
+array property_bitmap_2 = ({ });
+
+array bad_rooms = ({ });	/* rooms which used to load, but now don't */
+
+/*
+ * These properties must NOT exist in vast arrays of cloned rooms!
+ */
+
+array interesting_properties = ({
+	"no_map",
+	"key_room"
+	});
+
+show_stats() {
+	int x = 0;
+	while (x < sizeof(property_names)) {
+		write(property_names[x] + ": " + property_counts[x] + "\n");
+		x++;
+	}
+	write("Num rooms: " + num_rooms + "\n");
+	write("Bad rooms: " + sizeof(bad_rooms) + "\n");
+	return 1;
+}
+
+reset(arg) {
+	if (arg)
+		return;
+
+	if (file_size(file_name(this_object()) + ".o") > 0) {
+		restore_object(file_name(this_object()));
+	}
+	/* Checking whether rooms still exist will load them.
+	   Delay this until after the flurry of startup.
+	  */
+	call_out("check_rooms", 300);	/* 5 mins */
+}
+
+/* check_rooms(): occasionally people make test rooms, etc, which they
+ * later delete.  We want to lose our record of them, so monsters don't
+ * keep trying to go there (or the itemer buy from there, etc).  Also,
+ * if a place that used to be a general store is updated to become an
+ * armoury, we want to know about that as well...
+ *
+ * This function is called when spec_rooms is first loaded.
+ * It will schedule 1 room to be checked per second.
+ */
+
+check_rooms() {
+	int x;
+	for (x = 0; x < num_rooms; x++) {
+		call_out("check_one_room", x, room_names[x]);
+		}
+	}
+
+check_one_room(string rm) {
+	loaded_room(rm);
+	}
+
+/* A room failed to load - put it on the bad rooms list */
+
+remove_room(string rm, int bad) {
+	int x;
+	if (bad) {
+		if (index(bad_rooms, rm) < 0)
+			bad_rooms += ({ rm });
+		}
+
+	x = index(room_names, rm);
+	if (x < 0)
+		return;
+
+	countprops(x, -1);
+	room_names[x] = 0;
+
+	int last_room = num_rooms - 1;
+	if (last_room > x) {
+		room_names[x] = room_names[last_room];
+		property_bitmap_1[x] = property_bitmap_1[last_room];
+		property_bitmap_2[x] = property_bitmap_2[last_room];
+		room_names[last_room] = 0;
+		}
+	
+	num_rooms = last_room;
+	set_needs_save();
+	}
+
+countprops(int x, int add) {
+	}
+
+save_me() {
+    save_object(file_name(this_object()));
+}
+
+set_needs_save() {
+    AUTOSAVE_SERV->set_auto_save(this_object());
+    }
+
+/*
+ * This is the hook called by the mapknower.
+ */
+
+nosave int use_all_properties = 0;
+set_use_all_properties(int x) {
+	use_all_properties = x;
+	}
+
+array get_loaded_room_properties(string room) {
+	(array|string|int) rtype=0;
+
+	catch rtype = room->query_spec_room();;
+
+	if (!rtype)
+		rtype = ({ });
+
+	if (stringp(rtype))
+		rtype = ({ rtype });
+
+	int sellable = 0;
+	catch sellable = room->query_sell();;
+	if (sellable) {
+		rtype += ({ "sellable" });
+		}
+
+	array rprops;
+	catch rprops = room->query_property();;
+
+	if (stringp(rprops))
+		rprops = ({ rprops });
+
+	if (!arrayp(rprops))
+		rprops = ({ });
+
+	if (!use_all_properties) {
+		int p1 = 0;
+		int p2 = 0;
+		while (p1 < sizeof(rprops)) {
+			if (index(interesting_properties, rprops[p1]) >= 0) {
+				rprops[p2++] = rprops[p1];
+				}
+			p1++;
+			}
+		rprops = rprops[..p2 - 1];
+		}
+
+	rtype += rprops;
+
+	if (arrayp(rtype)) {
+		return rtype;
+		}
+	
+	return ({ });
+	}
+
+loaded_room(string room) {
+	object o;
+	catch o = load_object(room);;
+	array rtype = ({ });
+	int bad = 0;
+	if (o) {
+		rtype = get_loaded_room_properties(room);
+		}
+	else
+		bad = 1;
+
+	if (arrayp(rtype)) {
+		int x = 0;
+		int rindex = index(room_names, room);
+		if (rindex < 0 && sizeof(rtype)) {
+			if (num_rooms >= sizeof(room_names)) {
+				array tmp = allocate(10);
+				room_names += tmp;
+				property_bitmap_1 += tmp;
+				property_bitmap_2 += tmp;
+				}
+			room_names[num_rooms] = room;
+			property_bitmap_1[num_rooms] = 0;
+			property_bitmap_2[num_rooms] = 0;
+			rindex = num_rooms;
+			num_rooms++;
+			}
+
+		if (rindex >= 0) {
+			/* run through all properties, adding or removing them as necessary */
+			for (x = 0; x < sizeof(rtype); x++) {
+				if (index(property_names, rtype[x]) < 0) {
+					property_names += ({ rtype[x] });
+					property_counts += ({ 0 });
+					}
+				}
+		
+			int stopAt = sizeof(property_names);
+			if (stopAt > 32)
+				stopAt = 32;
+
+			int map = property_bitmap_1[rindex];
+			int setone = 0;
+
+			for (x = 0; x < stopAt; x++) {
+				int mask = 1 << x;
+				int hasprop = 0;
+				if (index(rtype, property_names[x]) >= 0) {
+					hasprop = mask;
+					setone++;
+					}
+				if ((map & mask) != hasprop) {
+					set_needs_save();
+					if (hasprop) {
+						map |= hasprop;
+						property_counts[x]++;
+						}
+					else {
+						map &= ~mask;
+						property_counts[x]--;
+						}
+					}
+				}
+			property_bitmap_1[rindex] = map;
+
+			stopAt = sizeof(property_names);
+			map = property_bitmap_2[rindex];
+
+			for (x = 32; x < stopAt; x++) {
+				int mask = 1 << (x - 32);
+				int hasprop = 0;
+				if (index(rtype, property_names[x]) >= 0) {
+					hasprop = mask;
+					setone++;
+					}
+				if ((map & mask) != hasprop) {
+					set_needs_save();
+					if (hasprop) {
+						map |= hasprop;
+						property_counts[x]++;
+						}
+					else {
+						map &= ~mask;
+						property_counts[x]--;
+						}
+					}
+				}
+			property_bitmap_2[rindex] = map;
+
+			if (!setone)
+				remove_room(room, bad);
+			}
+		}
+	}
+
+query_known_room_types() {
+	return property_names;
+}
+
+query_known_room_names() {
+	return room_names[..num_rooms - 1];
+}
+
+query_by_type(string ty) {
+	int x = index(property_names, ty);
+	if (x < 0)
+		return 0;
+	array p = property_bitmap_1;
+	if (x >= 32) {
+		p = property_bitmap_2;
+		x -= 32;
+		}
+
+	int mask = 1 << x;
+	int y = 0;
+	array out = allocate(num_rooms);
+	int nout = 0;
+	for (y = 0; y < num_rooms; y++) {
+		if (p[y] & mask)
+			out[nout++] = room_names[y];
+		}
+	return out[..nout - 1];
+	}
+
+query_by_room(string room) {
+	int ri = index(room_names, room);
+	if (ri < 0)
+		return 0;
+	array out = allocate(sizeof(property_names));
+	int nout = 0;
+	int x;
+	int map = property_bitmap_1[ri];
+	for (x = 0; x < sizeof(property_names); x++) {
+		int offs = x;
+		if (x == 32)
+			map = property_bitmap_2[ri];
+		if (x > 31)
+			offs = x - 32;
+		int mask = (1 << offs);
+		if (map & mask)
+			out[nout++] = property_names[x];
+		}
+	return out[..nout - 1];
+    }
+
+trim_rooms() {
+	int x = num_rooms - 1;
+	room_names = room_names[..x];
+	property_bitmap_1 = property_bitmap_1[..x];
+	property_bitmap_2 = property_bitmap_2[..x];
+	}
+
+
+rebuild_counts() {
+	int x = num_rooms - 1;
+	room_names = room_names[..x];
+	property_bitmap_1 = property_bitmap_1[..x];
+	property_bitmap_2 = property_bitmap_2[..x];
+	}
+

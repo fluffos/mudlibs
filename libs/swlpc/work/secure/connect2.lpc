@@ -1,0 +1,468 @@
+/*
+** Mud HTTP Web Server
+**      - one object per connection.
+**
+** Must handle HTTP 0.9, 1.0 and 1.1 (keep alive)
+**
+** Author: Dredd, Shattered World 1999
+**
+*/
+
+inherit "RO/ioprocess";		
+inherit "RO/Servers";
+
+#if 1
+#define TD(s) catch tell_object(find_player("dredd"), "http("+file_name(this_object())+"): " + (s) + "\n");
+#else
+#define TD(s) (1)
+#endif
+
+
+const Version = "0.1";
+
+/* HTTP types handled */
+const HTTP09 = 0;
+const HTTP10 = 1;
+const HTTP11 = 2;
+
+const  eoreq = "\r\n";
+
+/* Document Root */
+const DocRoot = "doc/html";
+
+/* Random Status */
+int logged_in  = 0;
+int keep_alive = 0;
+int version = 0;
+
+array reqbuffer = [];
+int count = -1;
+int ok = 0;
+
+
+/* Mud connection stuff */
+reset() {  }
+
+logon()
+{
+    if (logged_in) return 1;
+    logged_in = 1;
+    /* enable_commands(); */
+    call_out("timeout", 60);
+
+    /* redirect_input(this_object(), "handle_request", 1); */
+}
+
+/* block shouts */
+catch_shout(str) { return 1; }
+
+timeout() 
+{
+    write("\nTimeout\n");
+    disconnect();
+}
+
+disconnect()
+{
+    out_binary("Connect to Shattered World via port 23 please!\n" +
+        "This is Shattered World's experimental Mud HTTP server.\n");
+    call_out("die", 0.5);
+}
+
+die()
+{
+    destruct(this_object());
+}
+
+
+/* Main request handler */
+// FIX: FUCKED - doesn't finish after "Content-length:"
+catch_input(req)
+{
+    array reqparts;
+    string reqtype, reqbody, err;
+
+    TD("REQ:#" + req+"#\n");
+
+    err = catch
+    {
+    if (::catch_input(req)) return 1;
+
+    /* Keep sucking it in until we have a completed request */
+    /* unless it's a 0.9 request */
+    /* Need to handle content bodies (with Content-length: .. ) */
+    // TD("count=" + count+"\n");
+
+    if (strlen(req) != 0 || count > 0)
+    {
+        if (ok) count = count - strlen(req);
+
+        if ((sizeof(reqbuffer) == 0) && (index(req, "HTTP") == -1))
+        {
+            reqbuffer = [ req ];
+        }
+        else
+        {
+            if (index(req, "Content-Length:") != -1) 
+            {
+                count = atoi(req[16..]);
+                ok = 1;
+            }
+            if (index(req, "Content-length:") != -1) 
+            {
+                count = atoi(req[16..]);
+                ok = 1;
+            }
+            reqbuffer = reqbuffer + [ req ];
+            
+            if (!ok || count != 0) return 1;
+        }
+    }
+
+    if (sizeof(reqbuffer) < 1) return 1;
+
+    count = -1;
+    ok = 0;
+
+    /* Reset keep alive - need to request it */
+    keep_alive = 0;
+
+    /* Parse the first line */
+    reqparts = explode(reqbuffer[0], " ");
+
+    /* Check it has two parts to the request */
+    if (sizeof(reqparts) < 2) 
+    {
+        disconnect();
+        return 1;
+    }
+
+    reqtype = reqparts[0];
+    reqbody = reqparts[1];
+
+    if (sizeof(reqparts) > 2)
+    {
+        version = reqparts[2][sizeof(reqparts[2])-1] - '0' + 1;
+
+        if (version < 0 || version > 2)
+        {
+            out_binary(error_code(505, version));
+            disconnect();
+            return 1;
+        }
+    }
+
+    switch (version)
+    {
+        case 0:
+            handle09(reqtype, reqbody, reqbuffer);
+            break;
+        case 1:
+            handle10(reqtype, reqbody, reqbuffer);
+            break;
+        case 2:
+            keep_alive = 1;
+            handle11(reqtype, reqbody, reqbuffer);
+            break;
+    }
+
+    /* clear buffer and content-length for next input */
+    reqbuffer = [];
+
+    if (!keep_alive) disconnect();
+    };
+
+    if (err)
+    {
+        out_binary(error_code(500, err));
+    }
+
+    return 1;
+}
+
+
+/*
+ * The simplest HTTP request
+ * Simple parse - handle and return
+ */
+handle09(string req, string what, array buf)
+{
+    string s;
+
+    switch (req)
+    {
+        case "GET":
+            s = get(what, 0);            
+            out_binary(s);
+            return;
+        case "HEAD":
+            s = get(what, 1);            
+            out_binary(s);
+            return;
+    }
+    out_binary(error_code(501, req));
+}
+
+handle10(string req, string what, array buf)
+{
+    int i, x, prev = -1;
+    string s, body, count;
+
+    /* ignore leading whitespace */
+    for (x = 0; x < sizeof(buf); x++)
+        if (buf[x] != "\r\n") break;
+
+    /* check for specials such as keep-alive */
+    for (i = x; i < sizeof(buf); i++)
+    {
+        if (buf[i][..10] == "Connection:")
+        {
+            if ( (index(buf[i], "Keep-Alive") != -1)
+                || (index(buf[i], "keep-alive") != -1) )
+                keep_alive = 1;
+            else if ( (index(buf[i], "Close") != -1)
+                || (index(buf[i], "close") != -1) )
+                disconnect();
+        }
+        else if (strlen(buf[i]) == 0) prev = i;
+    }
+
+    if (prev != -1) body = implode(buf[prev..], "\r\n");
+
+
+    /* now process request */
+    switch (req)
+    {
+        case "GET":
+            s = get10(what, 0);            
+            out_binary(s);
+            return;
+        case "HEAD":
+            s = get10(what, 1);            
+            out_binary(s);
+            return;
+        case "POST":
+            s = post(what, body); 
+            out_binary(s);
+            return;
+    }
+    out_binary(error_code(501, req));
+}
+
+handle11(string req, string what, array buf)
+{
+    string s;
+
+    switch (req)
+    {
+        case "GET":
+            s = get10(what, 0);            
+            out_binary(s);
+            return;
+        case "HEAD":
+            s = get10(what, 1);            
+            out_binary(s);
+            return;
+        case "POST":
+            s = post(what, buf); 
+            out_binary(s);
+            return;
+        case "PUT":
+        case "DELETE":
+        case "TRACE":
+        case "OPTIONS":
+            break;
+    }
+    out_binary(error_code(501, req));
+}
+
+
+return_code(string code, int lastm, int length, string content)
+{
+    return "HTTP/1."+(version-1)+ " " + code + 
+        "\nDate: " + ctime(time()) + 
+        "\nServer: Shattered/"+Version+" (LPC)"+
+        /* "Last-Modified: Tue, 21 Sep 1999 14:46:36 GMT"+ */
+        "\nAccept-Ranges: bytes"+
+        "\nContent-Length: "+length+
+        "\nContent-Type: "+content+"\r\n\r\n";
+}
+
+return_cookie(string code, int lastm, int length, string content, string cookie)
+{
+    return "HTTP/1."+(version-1)+ " " + code + 
+        "\nDate: " + ctime(time()) + 
+        "\nServer: Shattered/"+Version+" (LPC)"+
+        /* "Last-Modified: Tue, 21 Sep 1999 14:46:36 GMT"+ */
+        "\nAccept-Ranges: bytes"+
+        "\nCookie: "+cookie+
+        "\nContent-Length: "+length+
+        "\nContent-Type: "+content+"\r\n\r\n";
+}
+
+/*
+ * HTTP support functions
+ */
+
+string get(string what)
+{
+    string filen;
+    string ret;
+    int sz;
+
+    filen = DocRoot + what;
+    sz = file_size(filen);
+
+    if (sz == -2 || what[sizeof(what)-1] == '/') filen = filen + "index.html";
+    sz = file_size(filen);
+    if (sz == -1) return error_code(404, what);
+
+    ret = grab_file(filen);
+    return ret;
+}
+
+string get10(string what, int head)
+{
+    string filen;
+    string ret;
+    string content;
+    int sz;
+
+    filen = DocRoot + what;
+    sz = file_size(filen);
+
+    if (sz == -2 || what[sizeof(what)-1] == '/') filen = filen + "index.html";
+    sz = file_size(filen);
+    if (sz == -1) return error_code(404, what);
+    if (sz == 0) return error_code(204, what);
+    ret = grab_file(filen);
+
+    content = determine_content(ret);
+
+    if (!head) ret = return_code(200, time(), sz, content) + ret;
+    return ret;
+}
+
+string pre_template = "<html><body><FORM NAME=\"form1\">\
+<TEXTAREA NAME=\"textarea1\" ROWS=6 COLS=55>";
+string post_template="</TEXTAREA></FORM></body></html>";
+
+string post(string what, string body)
+{
+    string ret;
+    string err;
+    array arp, pairs;
+    int x;
+
+    TD("post: " + what + ", body="+body+"\n");
+
+#if 0
+    ret = pre_template + body + post_template;
+    return return_code(200, time(), strlen(ret),  "text/html") + ret;
+#endif
+    
+    /* this is what should happen - fire up another LPC program */
+    arp = explode(body, "&");
+    pairs = allocate(sizeof(arp));
+    for (x = 0; x < sizeof(pairs); x++)
+    {
+        pairs[x] = explode(arp[x], "=");
+    }
+
+    /* should really produce and use a dictionary object */
+    err = catch ret = what->handle_cgi(pairs);;
+
+    if (err || !ret || sizeof(ret) < 3)
+        return error_code(500, "Failed CGI - POST " + err);
+    
+    /* return value should be a [ code, type, return body ] struct */
+    if (sizeof(ret) == 3)
+        return return_code(ret[0], time(), strlen(ret[2]),  ret[1]) + ret[2];
+    return return_cookie(ret[0],time(),strlen(ret[2]), ret[3],ret[1])+ret[2];
+}
+
+string determine_content(string str)
+{
+    return "text/html";
+}
+
+/*
+ * Error handling output/stuff
+ */
+
+string error_code(int code, string what)
+{
+    switch (code)
+    {
+        case 100: /* continue - HTTP 1.1 */
+        case 101: /* switching protocols */
+        case 200: /* OK */
+        case 201: /* Created */
+        case 202: /* Accepted */
+        case 203: /* Non-authorative information */
+        case 205: /* Reset content */
+        case 206: /* Partial content */
+        case 300: /* Multiple choices */
+        case 301: /* Moved permanently */
+        case 302: /* Moved temporarily */
+        case 303: /* See Other */
+        case 304: /* Not Modified */
+        case 305: /* Use Proxy */
+            break;
+        case 204: /* No content */
+            return html_page("204 No Content", 
+                "204 No Content, code "+ code + " requesting " + what );
+        case 400:
+            return html_page("400 Bad Request", 
+                "400 Bad Request, code "+ code + " requesting " + what );
+        case 401: /* Unauthorized */
+        case 402: /* Payment Required */
+        case 403: /* Forbidden */
+            break;
+        case 404:
+            return html_page("404 Not Found", "The requested URL " 
+                + what + " was not found on this server.");
+        case 405: /* Method Not Allowed */
+        case 406: /* Not Acceptable */
+        case 407: /* Proxy Authentication Required */
+        case 408: /* Request Timeout */
+        case 409: /* Conflict */
+        case 410: /* Gone */
+        case 411: /* Length Required */
+        case 412: /* Precondition Failed */
+        case 413: /* Request Entity Too Large */
+        case 414: /* Request URI Too Long */
+        case 415: /* Unsupported Media Type */
+        case 500: /* Internal Server Error */
+            return html_page("500 Internal Server Error", 
+                "Internal Server Error\nError: "+what+".");
+            break;
+        case 501:
+            return html_page("501 Method Not Implemented", 
+                "Method Not Implemented\nMethod was "+what+".");
+        case 502: /* Bad Gateway */
+        case 503: /* Service Unavailable */
+        case 504: /* Gateway Timeout */
+            break;
+        case 505: /* HTTP Version Not Supported */
+            return html_page("505 HTTP Version Not Supported", 
+                "HTTP Version Not Supported\nVersion Requested was 1."+what+".");
+    }
+
+    return html_page("400 Bad Request", 
+        "400 Bad Request, code "+ code + " requesting " + what );
+}
+
+/*
+ * Package up a string as an HTML page for output
+ */
+
+string html_page(string code, string what)
+{
+    return "HTTP/1.1 " + code + "\nDate: "+ctime(time())+
+    "\nServer: Shattered/0.1 (LPC)\nConnection: close\n"+
+    "Content-Type: text/html\r\n\r\n<HTML>" +
+    "<TITLE>" + code + "</TITLE><BODY><H1>" + code + "</H1>\n" + 
+    what + "</BODY></HTML>\n\r\n\r\n";
+}
+

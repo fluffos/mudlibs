@@ -1,0 +1,151 @@
+/*
+ * Logger - called by "log_file" and "smart_log" from within the 
+ * game driver.
+ *
+ * Critical to mudlib.
+ *
+ * + shouldn't write directly; should buffer etc.
+ */
+
+/*
+ * 951017 Hunter 	log() now adds a "\n" if there isn't one
+ * 951017 Hunter	added hooks to log file calls
+ * 960328 Gandalf	removed hooks; insecure (this is a level 500 object)
+ */
+
+inherit "RO/Servers";
+
+#define TIME DATE->packed()
+
+/* #define WRITE_THROUGH */
+array files = ({ });
+array what = ({ });
+
+reset()
+{
+    call_out("trust_request", 1);
+}
+
+trust_request()
+{
+	"secure/master"->trust_logger();
+}
+
+show_stats(all)
+{
+array ret;
+    ret = ({ "Currently being logged."});
+    ret += explode(DUMP->dump(files, 0, 0, -1), "\n");
+    if (all)
+        ret += explode(DUMP->dump(what, 0, 0, -1), "\n");
+    return ret;
+}
+
+log_now(string filen, string newstring)
+{
+	string ns = fix_log_string(newstring);
+	log(filen, ns);
+	save_me();
+	return 1;
+}
+
+log(string filen, string newstring)
+{
+    int i;
+    string ns;
+
+	ns = fix_log_string(newstring);
+	i = index(files, filen, 0, 1);
+	if (i == -1) {
+		i = sizeof(files);
+		creator(this_object());
+		files = files + ({ filen });
+		what = what + ({ ({}) });
+	}
+	what[i] = what[i] + ({ make_date() + " "+ ns });
+#ifdef WRITE_THROUGH
+	save_me();
+#else
+	AUTOSAVE_SERV->set_auto_save(this_object());
+#endif
+	return 1;
+} 
+
+/* should return a compressed date/time sig */ 
+string make_date()
+{
+	return TIME;
+}
+
+/*
+ * Smart log writes immediately (although some buffering would be nice)..
+ */
+smartlog(string error)
+{
+    array allargs, fileargs;
+    string who;
+    object on;
+
+#if 0
+    allargs = STRINGS->split_first(error, " ");
+    if (!allargs || sizeof(allargs) < 1) 
+    {
+	    log("errors", error);
+        return;
+    }
+#endif
+
+    fileargs = explode(error, "/"); 
+	if (fileargs && (sizeof(fileargs) > 1) && (fileargs[0] == "players")) 
+    {
+		who = fileargs[1];
+		on = find_player(who);
+	}
+    else
+    {
+        who = "errors";
+    }
+
+	if (on) 
+    {
+		tell_object(on, error + "\n");
+	}
+
+	log(who, error);
+}
+
+/*
+ *	write out all the stuff we've been building up..
+ */
+save_me()
+{
+    int i;
+
+	for (i = 0; i < sizeof(files); i++) 
+	{
+		catch write_file("log/"+files[i], implode(what[i], ""));;
+	}
+	what = ({ });
+	files = ({ });
+}
+
+string
+fix_log_string(string str)
+{
+/* add a "\n" if there isn't one. */
+    int sl = sizeof(str);
+
+    if (str[sl-1..sl-1] != "\n")
+    {
+	    return str + "\n";
+    }
+    return str;
+}
+
+
+query_destruct()
+{
+	save_me();
+	write("Destructing the logger is a bad idea!\n");
+	return 1;	/* can't allow destruct by lower levels, now we have object renaming */
+}

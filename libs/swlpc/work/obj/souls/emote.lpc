@@ -1,0 +1,1257 @@
+/*
+ * This soul_com.c has been extensively modified and extended
+ * (from the standard US release - who knows who is responsible?)
+ * at The Shattered World Lpmud. Ideas came from many,
+ * most of the hard work was done by  roddi@bruce.cs.monash.oz.au
+ * (aka Thumpa).
+ */
+
+/*
+ * History:
+ * 950109 Belgarion    fix the "Someone" invis problem
+ * 950829 Hunter    completed emote_registry() code.
+ * 950912 Hunter    a little more completion of emote_registry().
+ * 951002 Hunter    added a little more of the emote_registry
+ * 000315 Jenna	    added "handshake"
+ * 010315 Jenna     let NPCs hear emotes directed at them (what's with
+ *		    this mob->emoted(), anyway?)	
+ */
+
+inherit "obj/souls/base_soul";
+
+array vsimple;
+#if 0
+string cap_name;
+#endif
+
+#define EMOTES    "std/emotes"
+
+reset(arg)
+{
+    ::reset(arg);
+    if (!arg)
+    {
+    add_id("emote_soul");
+    set_soul_type("generic", "emote");
+    }
+}
+        
+init() 
+{ 
+    ::init();
+    add_action("poss_soul_cmd", "", -1);
+    add_action("emote_hook", "", -1);
+}
+    
+
+cap_name() 
+{
+    if (myself->query_ghost()) 
+    return "Something";
+    else 
+    return myself->query_name();
+}
+
+nosave array preps = ({
+    "to", "on", "in", "at", "under", "behind"
+    });
+
+string qv;        /* The current emotion */
+
+int
+poss_soul_cmd(str) 
+{
+    string arg;
+    string who;
+    array ret, arr;
+    int i;
+
+    qv = lower_case(myself->query_verb());
+    if (!qv) return 0;
+    if (str) 
+    {
+        str = lower_case(str);
+        arr = explode(str, " ");
+        if (sizeof(arr) > 1) 
+        {
+            if (index(preps, arr[0]) > -1) str = implode(arr[1..], " ");
+        }
+/* Next four lines added to [hopefully] fix the invis problem. - Belgarion */
+        who = str;
+        if (present(who, environment(myself)))
+        {
+            object o = present(who, environment(myself));
+            if (o) str = o->query_name();
+            else str = "Someone";
+        }
+    }
+    if (this_object()->(this_object()->query_prefix()+qv)(str, who)) return 1;
+    ret = EMOTES->action(myself, qv);
+    if (ret && pointerp(ret)) 
+    {
+    while (remove_call_out("remove_action") > 0) i++;
+
+    tell_object(myself, ret[0]);
+    myself->checked_say(ret[1]);
+    myself->set_current_action(ret[2]);
+    call_out("remove_action", 3, myself); 
+    return 1;
+    }
+}
+
+remove_action(pob)
+{
+    pob->set_current_action(0);
+}
+
+ghost() 
+{
+    return myself->query_ghost(); 
+}
+
+nosave 
+general(mymesg, others) 
+{
+    write(mymesg + "\n");
+    myself->checked_say(this_object()->cap_name() + " " + others + "\n");
+    return 1;
+}
+
+nosave 
+specific(mymesg, others, whom, target) 
+{
+    if (this_object()->ghost()) 
+    return 0;
+    whom = present(lower_case(whom), environment(myself));
+    if (!whom || !whom->query_living() || whom == myself) 
+    return 0;
+    write(mymesg + "\n");
+    myself->checked_say (this_object()->cap_name() + " " + others + "\n", whom);
+    if (whom->query_npc()) 
+        whom->emoted(qv);
+/*    else   */
+    tell_object(whom, this_object()->cap_name() + " " + target + "\n");
+    return 1;
+}
+
+/* recip param added 9/1/95 by Belgarion to fix "Someone" bug. */
+simple(arg,nverb,head,tale, recip)
+{
+object who;
+    if (!arg) 
+    return 0;
+    if (head) 
+    head=" "+head;
+    else 
+    head="";
+    if (!tale) 
+    tale=".";
+    if (recip == 0) recip = arg;
+    who = present(lower_case(recip), environment(myself)); /* B. */
+    if (!who || !who->query_living() || who == myself) 
+    return 0;
+    arg = capitalize(arg);
+    write("You "+nverb+head+" "+arg+tale+"\n");
+    myself -> checked_say (this_object()->cap_name()+" "+nverb+"s"+head+" "+arg+tale+"\n",
+        who);
+    if (who->query_npc()) 
+        who->emoted(qv);   // ?? Jenna wonders why, Mar 2001 
+/*    else  */
+    tell_object(who, this_object()->cap_name()+ " "+nverb+"s"+head+" you"+tale+"\n");
+    return 1;
+}
+
+comm_ah() { return general("You say 'ah'.", "finally gets the idea into "+
+           GENDER->pos()+" thick skull and gives an 'ah' of comprehension.");
+}
+
+comm_pant() { 
+    return general("You pant.", "hangs "+GENDER->pos()
+    +" tongue out and pants."); 
+}
+
+/* "who" or "recip" argument added to most fn's by Belgarion: recip is
+   the real name of the person; str is the name to be shown. */
+comm_sit(str, who) { 
+    if (!str) return general("You sit down.", "sits down.");
+    str = capitalize(str);    
+    return specific("You sit on "+str+"'s lap.", "sits on "+str+"'s lap.",
+    who, "sits on your lap.");
+}
+
+comm_apologise(str, who) {
+    if (!str) return general("You apologise for breathing.", 
+         "apologises for using your oxygen.");
+     str = capitalize(str);
+     return specific("You beg "+str+"'s pardon.", "begs "+str+"'s pardon.",
+         who, "begs your pardon."); 
+}
+
+comm_blow(str, who) {
+    if (!str) return 0; /* handled byEMOTES*/
+    str = capitalize(str);
+    return specific("You blow a raspberry at "+str+".",
+        "blows a huge wet slobbing raspberry at "+str+"!",
+        who, "drenches you with a huge wet slobbing raspberry!");
+}
+  
+comm_fart(str, who) {
+    if (!str) return 0; /* handled byEMOTES*/
+    str = capitalize(str);
+    return specific("You fart in "+str+"'s general direction.", "farts in "+str+"'s general direction.", who, "farts in your general direction.");
+}
+
+comm_nod(str, who) {
+    if (!str) return 0; /* handled by EMOTES*/
+    str = capitalize(str);
+    return specific("You nod in confirmation at "+str+".", "nods at "+str+".", who, "nods in confirmation to you.");
+}
+
+comm_bite(str, who) {
+     if (!str) return general("You bite your tongue!  Aarghh!",
+                              "bellows with pain.");
+     str = capitalize(str);
+     return specific("You sink your fangs into "+str+".", "bites "+str+".", who,
+            "bites you!  ** CHOMP! **");
+}
+
+comm_bearhug(str, who) {
+    notify_fail("Bearhug whom?\n"); 
+    if (!str) return 0; 
+    str = capitalize(str);
+     return specific("You wrap "+str+" in a huge bearhug.", "engulfs "+str+" in a bearhug.", who,
+            "envelops you in a HUGE bearhug!  Mmmmm!");
+}
+
+comm_beam(str, who) {
+     if (!str) return general("You beam happily.",
+                              "beams happily.");
+     str = capitalize(str);
+     return specific("You beam happily at "+str+".", 
+                     "beams happily at "+str+".", who,
+                     "beams happily at you.");
+}
+
+comm_blink(str, who) {
+     if (!str) return general("You blink in disbelief.",
+                              "blinks in disbelief.");
+     str = capitalize(str);
+     return specific("You blink at "+str+".", "blinks at "+str+".", who,
+                     "blinks at you.");
+}
+
+comm_BLINK(str, who) {
+     if (!str) return general("You [5mblink[m in disbelief.",
+                              "[5mblinks[m in disbelief.");
+     str = capitalize(str);
+     return specific("You [5mblink[m at "+str+".", "[5mblinks[m at "+str+".", who,
+                     "[5mblinks[m at you.");
+}
+
+comm_bow(str, who) {
+    if (!str)
+        return general("You bow to your audience.", "bows gracefully.");
+    notify_fail("Bow to who?\n");
+    str = capitalize(str);
+    return specific("You bow to " + str + ".", "bows to " + str + ".",
+            who, "bows before you.");
+}
+
+comm_cackle() { return general("You cackle gleefully.",
+         "throws " + GENDER->pos() + " head back and cackles with glee!"); }
+
+comm_comfort(str, who) {
+    notify_fail("Comfort who?\n");
+    if (!str) return 0;
+    str = capitalize(str);
+    return specific("You comfort " + str + ".", "comforts " + str + ".",
+            who, "comforts you.");
+}
+
+comm_comp(str, recip) {
+    object who;
+    string sex, string1, string2, string3, name, what;
+    int temp;
+
+    if (str) who = present(lower_case(recip), environment(myself));
+    if (!str || !who) return general("Compliment WHO, you lovely person ?",
+        "compliments "+GENDER->obj()+"self.");
+    sex = GENDER->pos(who);
+    what = GENDER->sub(who);
+    str = capitalize(str);
+    name = capitalize(myself->query_name());
+    string1 = "";
+    string2 = "";
+    string3 = "";
+    temp = random(6);
+    if (temp == 0) {
+        string1 = "You compliment "+str+" on "+sex+" breasts.";
+        string2 = "compliments "+str+" on "+sex+" breasts.";
+        string3 = "compliments you on your breasts.";
+    }
+    if (temp == 1) {
+        string1 = "You compliment "+str+" on "+sex+" personality.";
+        string2 = "compliments "+str+" on "+sex+" personality, but "+
+            "thinks better of it.";
+        string3 = "compliments you on your personality, but thinks "+
+            "better of it.";
+    }
+    if (temp == 2) {
+        string1 = "You compliment "+str+" on "+sex+" choice of armour.";
+        string2 = "compliments "+str+" on "+sex+" choice of "+
+            "rather gauche armour.";
+        string3 = "compliments you on your choice of armour, and then "+
+            "snickers.";
+    }
+    if (temp == 3) {
+        string1 = "You compliment "+str+" on "+sex+" physique.";
+        string2 = "compliments "+str+" on "+sex+" voluptuous body - "+
+            "well, voluptuous if you're a toad fish.";
+        string3 = "compliments you on your voluptuous body, and then "+
+                  "adds 'If you're a toad fish.'";
+    } 
+    if (temp == 4) {
+        string1 = "You compliment "+str+" on "+sex+" personal hygiene, "+
+             "but then again, you ARE standing upwind of "+str+".";
+        string2 = "compliments "+str+" on "+sex+" personal hygiene, but "+
+             "then again, "+name+" IS standing upwind of "+str+".";
+        string3 = "compliments you on your personal hygiene, but then "+
+             "again, "+name+" IS standing upwind of you.";
+    }
+    if (temp == 5) {
+        string1 = "You say "+str+" looks much better without "+sex+
+            " moustache, but then realize "+what+
+            " has just pulled the hairs out of "+sex+" nose.";
+        string2 = "says "+str+" looks much better without "+sex+
+            " moustache, but you only recall "+sex+
+            " screams as "+what+" took "+
+            "the hairs out of "+sex+" nose in the morning.";
+        string3 = "says you look much better without your moustache, "+
+            "but you only remember pulling the hairs out of your nose "+
+            "this morning.";
+    }
+    return specific(string1, string2, recip, string3);
+}
+
+
+comm_cry(str, who) { 
+    if (!str) return general("Waaaaah!", "bursts into tears.");
+    notify_fail("Cry on who?\n");
+    str = capitalize(str);
+    return specific("You cry on "+str+"'s shoulder.",
+        "cries on "+str+"'s shoulder.", who,
+        "cries on your shoulder.");
+}
+
+comm_cuddle(str, who) { 
+    notify_fail("Cuddle who?\n");
+    if (!str) return 0;
+    str = capitalize(str);
+    return specific("You cuddle " + str + ".", "cuddles " + str + ".",
+                who, "cuddles you.");
+}
+
+comm_dance(str, who) {
+    if (!str)
+        return general("Feels silly, doesn't it?", "dances around, looking like a goose without a partner.");
+    return simple(str, "sweep",0," across the dance floor.", who);
+}
+
+comm_drool() {
+     return general("You drool.",
+          "drools, trailing tendrils of spit in "+GENDER->pos()+" wake.");
+}
+
+comm_faint() {
+    return general("You faint.", "rolls "+GENDER->pos()+" eyes and faints.");
+}
+
+comm_flex() {
+     string str;
+     int temp;
+
+     temp = random(3);
+     if (temp == 0) str = " flexes "+GENDER->pos()+" huge muscles.";
+     if (temp == 1) str = "'s huge muscles burst out of " +
+         GENDER->pos()+" armour.";
+     if (temp == 2) str = "'s muscles balloon outwards.";
+     write("You flex your muscles.\n");
+     say(this_object()->cap_name()+str+"\n");
+     return 1;
+}
+
+
+
+comm_flutter(str, who) {
+   if (!str) return general("You flutter your eyelashes seductively.",
+                            "seems to be having trouble seeing.");
+    notify_fail("Flutter eyelashes at who?\n");
+    if (!str) return 0;
+   str = capitalize(str);
+   return specific("You flutter your eyelashes at "+str+".",
+          "flutters "+GENDER->pos()+" eyelashes at "+str+".", who,
+          "flutters "+GENDER->pos()+" eyelashes at you seductively.");
+}
+
+comm_fondle(str, who) {
+    if (!str) return general("You play with yourself - how rude!",
+                "plays with "+GENDER->obj()+"self.");
+    return simple(str,"fondle",0,0, who);
+}
+
+comm_french(str, who) {
+    notify_fail("French kiss who?\n");
+    if (!str) return 0;
+    str = capitalize(str);
+ return specific("You give " + str + " a REAL kiss...it lasts a long time...",
+ "gives " + str + " a deep and passionate kiss...it seems to take forever...",
+ who, "gives you a deep and passionate kiss...it seems to take forever...");
+}
+
+comm_frown(str, who) {
+    if (!str) return general("Is something wrong?", "frowns.");
+    return simple(str,"frown",0,0, who); }
+
+
+comm_gaze(str, who) {
+    if (!str) return general("You gaze at the blue, blue sky.",
+        "gazes at the blue sky above.");
+    notify_fail("Gaze at who?\n");
+    str = capitalize(str);
+    return specific("You gaze at "+str+" with wide, innocent eyes.",
+        "gazes at "+str+" with wide, innocent eyes.", who,
+        "gazes at you with wide, innocent eyes.");
+}
+
+
+comm_glare(str, who) {
+    notify_fail("Glare at who?\n");
+    if (!str) return 0;
+    str = capitalize(str);
+    return specific("You glare stonily at " + str + ".",
+                "glares at " + str + ".", who, "glares at you.");
+}
+
+comm_grope(str, who) {
+    notify_fail("Grope who?\n");
+    if (!str) return 0;
+    str = capitalize(str);
+    return specific("<Well, what sort of noise do you expect here?>",
+                "gropes " + str + ".", who, "gropes you.");
+}
+
+comm_grovel(str, who) {
+    if (!str) return general("You grovel shamelessly.", "grovels shamelessly.");
+    notify_fail("Grovel before who?\n");
+    str = capitalize(str);
+    return specific("You grovel before " + str + ".",
+                "grovels before " + str + ".", who, "grovels before you.");
+}
+
+comm_growl(str, who) {
+    if (!str) return general("You growl.", "growls.");
+    return simple(str,"growl","at", 0, who);
+}
+
+comm_handshake(str, who) 
+{
+    if (!str)
+        return general("You shake hands with yourself.", "shakes " + GENDER->pos() + " own hand.");
+    str = capitalize(str);
+    return specific("You shake hands with " + str + ".",
+                "shakes " + str + "'s hand.", who, "shakes your hand.");
+}
+
+comm_hiss(str, who) {
+    if (!str) return general("You hiss loudly.", "hisses like a snake.");
+    str = capitalize(str);
+    notify_fail("Hiss at who?\n");
+    return specific("You hiss at " + str + ".",
+                "hisses at " + str + ".", who, "hisses in your face.");
+}
+
+
+comm_hold(str, who) {
+    notify_fail("Hold who?\n");
+    if (!str) return 0;
+    str = capitalize(str);
+    return specific("You hold " + str + ".", "holds " + str + ".",
+                who, "holds you.");
+}
+
+
+comm_hug(str, who) { return simple(str,"hug",0,0, who); }
+
+comm_hum() {
+    int temp;
+
+    temp = random(4);
+
+    if (temp == 0) return general("You hum to yourself, with Dredd "+
+        "supplying a counter melody.", "and Dredd hum along together.");
+    if (temp == 1) return general("You hum a cheery tune.",
+        "hums cheerfully to "+GENDER->obj()+"self.");
+    if (temp == 2) return general("You hum a dreary tune.",
+        "hums a depressing tune.");
+    if (temp == 3) return general("You hum to yourself.",
+        "hums to "+GENDER->obj()+"self.");
+}
+
+/* drunk and happy - G :)  Verses off the net. */
+
+comm_sing(str) {
+    array ret;
+    if (myself->query_percent_intoxication()) {
+    ret = EMOTES->sing_verse(myself, -1); /* random verse */
+    }
+    else
+    ret = EMOTES->action(myself, "sing");
+    if (ret && pointerp(ret)) {
+    tell_object(myself, ret[0]);
+    say(ret[1]);
+    return 1;
+        }
+    }
+
+comm_ising(str, who) {
+    string string1, string2;
+    int temp;
+
+    if (!str) return general("You sing about your tiny genitals.",
+        "sings about "+GENDER->pos()+" tiny genitals.");
+    str = capitalize(str);
+    temp = random(4);
+    if (temp == 0) {
+        string1 = "what a boofhead "+str+" is.";
+        string2 = "what a boofhead you are.";
+    }
+    if (temp == 1) {
+        string1 = "the poultry "+str+" has had the pleasure to have known.";
+        string2 = "the poultry you have had the pleasure to have known.";
+    }
+    if (temp == 2) {
+        string1 = str+"'s tiny genitals.";
+        string2 = "your tiny genitals.";
+    }
+    if (temp == 3) {
+        string1 = "the pus leaking out of the sores on "+str+"'s bottom.";
+        string2 = "the pus leaking out of the sores on your bottom.  "+
+                  "(How the !@#$ did "+GENDER->sub()+" find out about them?!?)";
+    }
+    return specific("You sing about "+string1, "sings about "+string1, who,
+        "sings about "+string2);
+}
+
+comm_sob(str, who) {
+        if (!str)
+                return general("You sob inconsolably.", "sobs inconsolably.");
+    str = capitalize(str);
+    return specific("You sob on " + str + "'s shoulder.",
+            "sobs on " + str + "'s shoulder.", who,
+            "sobs on your shoulder. Oh, the poor thing!");
+}
+        
+comm_insult(str, who) {
+    int temp, x;
+    string inslt;
+#if 0
+    /* Oh dear, but it got deleted :( */
+    if (random(17)+15 < myself->query_int()) {
+    return  "players/thumpa/obj/book"->abuse(str);
+    }
+#endif
+
+    if (!str) return general("Insult WHO, you stupid geek?", 
+        "insults "+GENDER->obj()+"self.");
+    temp = random(8);
+    str = capitalize(str);
+    if (temp == 0) inslt = " a fetid dingo kidney";
+    if (temp == 1) inslt = " a pool of putrescent pus";
+    if (temp == 2) inslt = " a boiled eye-ball gobbling hairy-nosed git";
+    if (temp == 3) inslt = " a geriatric pensioner molesting pervert";
+    if (temp == 4) inslt = " a scabby-bottomed spotted toad";
+    if (temp == 5) inslt = " an embryo sucking fiend";
+    if (temp == 6) inslt = " a shaved gerbil tail puller";
+    if (temp == 7) inslt = " the product of a bored housewife and a crazed "+
+        "rottweiller";
+    return specific ("You call "+str+inslt+".",
+        "calls "+str+inslt+"!", who,
+        "calls you"+inslt+"!");
+}
+
+comm_kick(str, who) {
+    if (!str) return general("You kick yourself!", "kicks "+GENDER->obj()+"self.");
+    str = capitalize(str);
+    return specific("You kick " + str + ".", "kicks " + str + ".",
+                who, "kicks you.  OUCH!");
+}
+
+/* special because of the frog curse.  sigh. */
+comm_kiss(str, recip) {
+    object who;
+    if (this_object()->ghost() || !str)
+        return 0;
+    who = present(recip, environment(myself));
+    if (!who || !who->query_living() || who == myself)
+        return 0;
+    tell_object(who, this_object()->cap_name() + " kisses you.\n");
+    str = capitalize(str);
+    myself -> checked_say (this_object()->cap_name() + " kisses " + str + ".\n", who);
+    write("You kiss " + str + ".\n");
+    return 1;
+}
+
+comm_knee(str, who) {
+    if (!str) return general("Yes, it's still there.",
+        "examines "+GENDER->pos()+" knee.");
+    str = capitalize(str);
+    return specific("You knee "+str+"!", "knees "+str+".", who,
+        "knees you where it hurts!  AARGH!");
+}
+
+comm_kneel(str, who) {
+    if (!str) return general("You kneel.", "kneels.");
+    str = capitalize(str);
+    return specific("You kneel before "+str+".",
+        "kneels before "+str+".", who,
+        "kneels before you.");
+}
+
+
+comm_leak(str, who) {
+    if (!str) return general("You relieve yourself in a corner.",
+        "skulks off to a corner and relieves "+GENDER->obj()+"self.");
+    str = capitalize(str);
+    if (GENDER->sub() == "she")    /* girls can't aim properly :-) */
+        return specific("Anatomical considerations throw your aim off "+
+           "considerably.", "lets go with the proverbial Yang Tze and "+
+           "drenches you all!", who,
+           "explodes into a cascade of liquid.");
+    return specific("Your aim proves little short of deadly.",
+        "whips out his huge fire hose and drenches "+str+"!", who,
+        "pisses all over you!");
+}
+
+comm_lick(str, who) {
+    if (!str) return general("You lick yourself!", "licks "+GENDER->obj()+"self!");
+    return simple(str,"lick",0,0,who);
+}
+
+comm_love(str, who) {
+    if (!str) return 0;
+    str = capitalize(str);
+    return specific("You tell your true feelings to " + str + ".",
+                "whispers softly to " + str + ".",
+                who, "whispers to you sweet words of love.");
+}
+
+
+comm_mumble() { return general("You mumble to yourself.", "mumbles to "+GENDER->obj()+"self."); }
+
+comm_nibble(str, who) {
+    if (!str) return 0;
+    str = capitalize(str);
+    return specific("You nibble " + str + "'s ear.",
+                "nibbles " + str + "'s ear.", who, "nibbles your ear.");
+}
+
+
+comm_nudge(str, who) {
+    return simple(str, "nudge",0,0, who);
+}
+
+comm_prod(str, who) {
+    return simple(str, "prod",0,0,who);
+}
+
+
+comm_pat(str, who) {
+    if (!str) return general("You pat yourself on the back!",
+         "pats "+GENDER->obj()+"self!");
+    str = capitalize(str);
+    return specific("You pat "+str+" on the head.", "pats "+str+" on the head.",
+       who, "pats you on the head.");
+}
+
+comm_peer(str, who) {
+    if (!str) return general("You peer at the sky.", "peers at the sky.");
+    str = capitalize(str);
+    return specific("You peer at " + str + " quizzically.", "peers at " + str 
+                      + " quizzically.", who, "peers at you quizzically.");
+}
+
+comm_pick(str, who) {
+    if (!str) return general("You pick your nose.", "picks "+GENDER->pos()+
+        " nose.");
+    str = capitalize(str);
+    return specific("You pick "+str+"'s nose.",
+        "puts on a miner's helmet and picks "+str+"'s nose.", who,
+        "picks your nose!");
+}
+
+comm_point(str, who) {
+    if (!str) return general("You point at the sky.", "points at the sky.");
+    return simple(str, "point", "at",0,who);
+}
+
+comm_poke(str, who) {
+    return simple(str, "poke", 0, " in the ribs.", who);
+}
+ 
+
+comm_puke(str, who) {
+    if (!str)
+        return general("You puke on your shoes.", "doubles over and pukes.");
+    str = capitalize(str);
+    return specific("You puke on " + str + ".", "pukes on " + str + ".",
+            who, "pukes all over you!");
+}
+
+comm_punch(str, who) {
+    if (!str) return general("You do some shadow boxing!", "shadow boxes!");
+    str = capitalize(str);
+    return specific("You punch "+str+"!",
+        "punches "+str+"!", who,
+        "punches you!");
+}
+
+
+comm_ruffle(str, who) {
+if (!str) return general("You make ruffling sounds.", "makes ruffling sounds.");
+    str = capitalize(str);
+    return specific("You ruffle " + str + "'s hair playfully.",
+                "ruffles on " + str + "'s hair playfully.",
+            who, "ruffles your hair playfully.");
+}
+
+
+comm_shake(str, who) {
+    if (!str)
+        return general("You shake your head.", "shakes " + GENDER->pos() + " head.");
+    str = capitalize(str);
+/*
+    return specific("You shake hands with " + str + ".",
+                "shakes " + str + "'s hand.", who, "shakes your hand.");
+*/
+    return specific("You shake your head at " + str + ".",
+                "shakes his head at " + str + ".", who, "shakes his head at you.");
+}
+
+
+comm_slap(str, who) { return simple(str, "slap", 0,"!", who); }
+comm_smile(str, who) {
+    if (this_object()->ghost()) {
+        write("You smile inwardly.\n");
+    return 1;
+    }
+    if (!str) return general("You smile happily.", "smiles happily.");
+    return simple(str, "smile", "at", 0, who);
+}
+
+comm_snap() {
+    return general("You snap your fingers.",
+                   "snaps " + GENDER->pos() + " fingers.");
+}
+
+comm_snarl(str, who) {
+    if (!str) return general("You snarl angrily.", "snarls angrily.");
+    return simple(str,"snarl", "angrily at",0,who);
+}
+
+comm_sneer (str, who) {
+    if (!str) return general("You sneer disdainfully.", "sneers.");
+    str = capitalize(str);
+    return specific("You sneer at "+str+".", "sneers at "+str+".", who,
+                    "sneers at you!");
+}
+
+comm_sniff(str, who) {
+    if (!str) return general("You sniff.", "sniffs.");
+    return simple(str, "sniff",0,0,who);
+}
+
+
+comm_spank(str, who) { return simple(str, "spank", 0, "!", who); }
+comm_snuggle(str, who) { return simple(str, "snuggle", "up to",0,who); }
+
+comm_spit(str, who) {
+    if (!str) return general("You spit.", "spits on the ground.");
+    return simple(str,"spit","on",0,who);
+}
+
+comm_squeeze(str, who) {
+    if (!str) return 0;
+    return specific("You squeeze on " + str + " fondly.",
+                "squeezes " + str + " fondly.",
+            who, "squeezes you fondly.");
+}
+
+comm_stare(str, who) {
+    if (!str) return general("You stare into space.", "stares into space.");
+    str = capitalize(str);
+    return specific("You stare dreamily at " + str + ".",
+                "stares dreamily at " + str + ".",
+            who, "stares deep into your eyes.");
+}
+
+comm_strangle(str, who) {
+    if (!str) return general("Urk!  Gak!  You strangle yourself!",
+        "wrings "+GENDER->pos()+" own neck!");
+    str = capitalize(str);
+    return specific("You throttle "+str+"!",
+        "strangles "+str+"!", who,
+        "wraps "+GENDER->pos()+" fingers around your neck and squeezes!");
+}
+
+
+
+comm_tackle(str, who) {
+    if (!str) return 0;
+    str = capitalize(str);
+    return specific("You tackle " + str + " to the ground.",
+                "tackles " + str + " to the ground.", who, "tackles you!");
+}
+
+comm_taunt(str, who) { return simple(str, "taunt",0,0,who); }
+comm_thank(str, who) { return simple(str, "thank",0,0,who); }
+
+comm_tongue(str, who) {
+     if (!str) return general("You poke your tongue out.", "pokes "+GENDER->pos()+" tongue out.");
+    str = capitalize(str);
+     return specific("You poke your tongue out at "+str+".",
+          "pokes "+GENDER->pos()+" tongue out at "+str+".", who,
+          "pokes "+GENDER->pos()+" tongue out at you!");
+}
+
+comm_twiddle() {
+    return general("You twiddle your thumbs.",
+               "twiddles " + GENDER->pos() + " thumbs.");
+}
+
+comm_wave(str, who) {
+    if (!str) return general("You wave.", "waves.");
+    return simple(str, "wave", "at",0,who);
+}
+
+
+comm_whistle(str, who) {
+    if (!str)
+        return general("You whistle appreciatively.", "whistles appreciatively.");
+    return simple(str,"whistle","appreciatively at", 0, who);
+}
+
+comm_wiggle(str) {
+    string string1;
+    int temp;
+
+    if (!str) return general("You wiggle your bottom.",
+               "wiggles " + GENDER->pos() + " bottom.");
+    temp = random(2);
+    if (temp == 0) string1 = "horizontally";
+    else string1 = "vertically";
+    return general("You wiggle your "+str+" "+string1+".",
+        "vigourously wiggles "+GENDER->pos()+" "+str+" "+string1+".");
+}
+
+comm_wink(str, who) {
+    if (!str) return general("You wink.", "winks suggestively.");
+    return simple(str, "wink", "suggestively at", 0, who);
+}
+
+comm_worship(str, who) {
+    if (!str) return 0;
+    str = capitalize(str);
+    return specific("You worship at " + str + "'s feet.",
+                "worships at " + str + "'s feet.",
+            who, "worships at your feet.");
+}
+
+
+comm_agree(str, who)
+{
+  if (!str) return general("You agree whole-heartedly.", "agrees whole-heartedly.");
+  else return simple(str,"agree","whole-heartedly with",0,who);
+}
+
+comm_beep(str, who)
+{ if (!str) return general("Beep Beep!", "goes \"Beep! Beep!\"");
+   return simple(str, "beep", 0, " on the nose.", who); }
+
+comm_boggle(str, who)
+{
+  if (!str)
+    return general("You boggle at the concept.",
+      "boggles at the concept.");
+  else
+    return simple(str,"boggle","at", 0, who);
+}
+
+
+comm_caress(str, who)
+{
+  if (!str) return 0;
+  str = capitalize(str);
+    return specific(
+      "You gently caress "+str+" on the cheek.",
+      "gently caresses "+str+"'s cheek.",who,
+      "gently runs "+GENDER->pos()+" finger down your cheek.");
+}
+
+comm_cheer(str, who)
+{
+  if (!str)
+     return general( "You cheer enthusiastically.", "cheers enthusiastically.");
+  return simple(str,"cheer",0," enthusiastically.", who);
+}
+
+comm_cower(str, who)
+{
+  if (!str) return general("You cower in a corner.","cowers in a corner.");
+  return simple(str,"cower","from",0,who);
+}
+
+comm_die(str)
+{
+  return general("You fall down, acting dead.",
+    "rolls over and does "+GENDER->pos()+" best to look dead.");
+}
+
+comm_disagree(str, who)
+{
+  if (!str) return general("You disagree.","disagrees.");
+  return simple(str,"disagree","with",0,who);
+}
+
+comm_duck(str, who)
+{
+  if (!str) return general("You duck out of the way.","ducks out of the way.");
+  return simple(str, "duck", "out of the way of",0,who);
+}
+
+comm_duh(str, who)
+{
+   if (!str) return general("You duh.", "duhs.");
+   return simple(str, "scream", "\"DUH!\" at", 0, who);
+}
+
+comm_flash(str, who)
+{
+    if (!str) return general("You drop your trousers.",
+        "drops "+GENDER->pos()+" trousers.");
+    str = capitalize(str);
+    return specific(
+        "You flash "+str+".",
+        "flashes "+str+".",who,
+        "unzips "+GENDER->pos()+" pants and shows you "+GENDER->pos()+" pride.");
+}
+
+comm_give(str, who)
+{
+  string dest;
+  array args;
+
+  if (!str) return 0;
+
+  args = STRINGS->split_first(str, " ");
+
+  if (!args) return 0;
+
+  if (sizeof(args) == 2 && args[1] == "finger")
+    return simple(args[0],"give",0," the finger.", who);
+  return 0;
+}
+
+comm_grab(str, who) { return simple(str, "grab", 0," by the arm.", who); }
+comm_hold(str, who) { return simple(str, "hold", 0, " tightly.", who); }
+comm_howl(str, who)
+{
+  if (!str) return general("You howl in pain.","howls in agony.");
+  return simple(str,"howl","at",0,who);
+}
+
+comm_ignore(str, who)
+{
+   if (!str)
+      return general("You whistle, and kick at nothing on the floor.",
+             "whistles, and kicks at nothing on the floor.");
+   return simple(str, "ignore",0,0,who);
+}
+
+comm_mock(str, who) { return simple(str,"mock",0," outrageously.", who); }
+comm_mgrin(str, who) {
+  if (!str) return
+     general("You grin mischievously.", "grins mischievously.");
+  return simple(str,"grin","mischievously at",0,who);
+}
+
+
+comm_pinch(str, who)
+{
+if (!str) return;
+str = capitalize(str);
+  return specific( "You pinch "+str+" who yips out in pain.",
+    "pinches "+str+", who yelps out in pain.", who, "pinches you.");
+}
+
+comm_puzzle(str, who)
+{
+   if (!str) return general("You look puzzled.", "looks puzzled.");
+   return simple(str, "look", "puzzled at",0,who);
+}
+
+comm_raise(str, who)
+{
+   if (!str) return general("You raise an eyebrow.", "raises an eyebrow.");
+   return simple(str, "raise", "an eyebrow at",0,who);
+}
+
+comm_recoil(str, who)
+{
+  if (!str) 
+    return general("You recoil in horror.","recoils in horror.");
+  else
+    return simple(str,"recoil","from", " in fear.", who);
+}
+
+comm_roll(str, who)
+{
+  if (!str)
+    return general("You roll your eyes.","rolls "+GENDER->pos()+" eyes.");
+  str = capitalize(str);
+    return specific("You roll your eyes at " +str+".",
+      "rolls "+GENDER->pos()+" eyes at "+str+".",who,
+      "rolls "+GENDER->pos()+" eyes at you.");
+}
+
+comm_scratch() { return general("You scratch your head.",
+"scratches "+GENDER->pos()+" head."); }
+
+
+comm_swear(str, who) {
+    if (!str) return general("Don't cuss!", "swears.");
+    str = capitalize(str);
+    return specific("You swear at "+str+".", 
+        "swears at "+str+".", who,
+        "spits in the dust at your feet and swears at you!");
+}
+
+comm_tap(str, who)
+{
+  if (!str) return general("You tap your foot.",
+      "taps "+GENDER->pos()+" foot impatiently.");
+  return simple(str,"tap",0," on the shoulder.", who);
+}
+
+comm_tickle(str, who) { return simple(str,"tickle",0," playfully.", who); }
+
+comm_goodluck (str, who) {
+     notify_fail("Wish good luck to whom?\n");
+     if (!str) return 0;
+          str = capitalize(str);
+          return specific ("You wish "+str+" good luck.","wishes "+str+
+                             " good luck.", who,"wishes you good luck.");
+}
+
+comm_highfive (str, who) {
+      notify_fail("Give a highfive to whom?\n");
+      if (!str) return 0;
+       str = capitalize(str);
+      return specific ("You highfive "+str+"!","highfives "+str+"!",
+                     who,"gives you a highfive!");
+}
+
+comm_thump(str, who){
+      notify_fail("Thump whom?\n");
+      if(!str) return 0;
+      str=capitalize(str);
+      return specific("You thump "+str+" playfully.","thumps "+str+
+                     " playfully.",who,"thumps you playfully.");
+}
+
+query_prefix() { return "comm_"; }
+
+long() { write("It is transparent.\n"); }
+
+#if 0
+nosave array emoteVerbs = ({ });    /* flat array of verbs */
+nosave array emoteXref = ({ });        /* flat array of integers, used
+                     * as crossrefs to emoteDictionary */
+nosave array emoteDictionary = ({ });   /* array of arrays */
+#endif
+nosave array emoteRegistry = ({ });
+
+/*
+ * emoteDictionary's elements consist of:
+ *  ({ 
+ *  int refcount,    [number of things in emoteVerbs that points to this
+ *            dictionary entry, dispose if refcount == 0]
+ *  object owner,    [object that registered the emote, dispose if
+ *            owner == 0 or no longer in scope]
+ *  int emotetype,     [bitmasked int used as type of emote, undefined
+ *            as yet]
+ *  string msgself,    [the message myself sees]
+ *  string msgothers,    [the message others in scope see]
+ *  (string|int) msgtarget,    [the message the target of an emote sees,
+ *                if no valid target, emote fails]
+ *  array adverbs,    [valid adverbs for this emote]
+ *  array prepositions    [valid prepositions]
+ */
+ 
+int
+add_emote_registry( 
+    (string|array) verbs,
+    (int) emotetype,
+    (string) msgself,
+    (string) msgothers,
+    (string|int) msgtarget,
+    (int|array) adverbs,
+    (int|array|string) prepositions
+    )
+{
+int i;
+object po = caller();
+    if ( stringp(verbs) )
+    {
+    verbs = ({ verbs });
+    }
+    if ( intp(adverbs) )
+    {
+    adverbs = ({ });
+    }
+    if (intp(prepositions))
+    {
+    prepositions = ({ });
+    }
+    if (stringp(prepositions))
+    {
+    prepositions = ({ prepositions });
+    }
+    /* look for empty slot, if one exists */
+    for (i = 0; i < sizeof(emoteRegistry); i += 8)
+    {
+    if (intp(emoteRegistry[i]) || intp(emoteRegistry[i+1]))
+    {
+        /* found blank slot */
+        emoteRegistry[i] = verbs;
+        emoteRegistry[i+1] = po;
+        emoteRegistry[i+2] = emotetype;
+        emoteRegistry[i+3] = msgself;
+        emoteRegistry[i+4] = msgothers;
+        emoteRegistry[i+5] = msgtarget;
+        emoteRegistry[i+6] = adverbs;
+        emoteRegistry[i+7] = prepositions;
+        return 1;
+    }
+    }
+    emoteRegistry += ({ verbs, po, emotetype, msgself, msgothers, 
+    msgtarget, adverbs, prepositions ,
+    0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0
+     });
+#if 0
+    for (i = 0; i < sizeof( verbs ); i ++)
+    {
+    /* or perhaps we should have only add_action, of "" */
+/*     add_action( "emote_hook", verbs[i] ); */
+    }
+#endif
+    return 1;
+}
+
+int
+valid_emote_object( (int|object) ob )
+{
+object envenv;
+    if (intp(ob))    /* object no longer exists? */
+    return 0;
+    if (present( ob, myself ))
+    return 1;
+    envenv = environment( myself );
+    if (envenv && present( ob, envenv ))
+    return 1;
+    return 0;
+}
+
+emote_hook( str )
+{
+    string vb = myself->query_verb();
+    int i;
+    object target;
+/*     return 0; */
+/* search through the emote registry for the verb */
+    i = 0;
+
+    while (i < sizeof( emoteRegistry ))
+    {
+    if ( valid_emote_object( emoteRegistry[i+1] ))
+    {
+        if ( index( emoteRegistry[i], vb) != -1 )
+        { /* found it */
+        break;
+        }
+        else
+        {
+        i = i + 7;    /* move to next record */
+        }
+    }
+    else
+    {
+        /* object is no longer in scope - remove it */
+        /* remove it by tagging the array as empty */
+#if 0
+        emoteRegistry = emoteRegistry[..i-1] + emoteRegistry[i+7..];
+#else
+        emoteRegistry[i] = 0;
+        emoteRegistry[i+1] = 0;
+#endif
+        i = i + 7;
+    }
+    }
+    if (i >= sizeof(emoteRegistry))
+    {
+    return 0;        /* emote not found */
+    }
+/* otherwise we now have found an emote */
+    write("Emote found.\n");
+    if (stringp(str))
+    {
+        target = present( str, environment( myself ) );
+        if (!target)
+        target = present( str, myself );
+    }
+    write("Msg Self: " + emote_string( emoteRegistry[i+3], vb, target ) +"\n");
+    write("Msg Others: " + emote_string( emoteRegistry[i+4], vb, target ) 
+    + "\n");
+    if (stringp( emoteRegistry[i+5] ))
+        write("Msg target: " + emote_string( emoteRegistry[i+5], vb, target ) 
+    + "\n");
+    return 0;
+}
+
+
+string
+emote_string( string str, string verb, (int|object) target )
+{
+array arr;
+    arr = ({ "n", myself->query_name(),
+    "g", myself->query_gender(),
+    "s", GENDER->sub( myself ),
+    "o", GENDER->obj( myself ),
+    "p", GENDER->pos( myself ),
+    "v", verb
+    });
+    if (objectp(target))
+    {
+    arr += ({ "N", target->query_name(),
+        "G", target->query_gender(),
+        "S", GENDER->sub( target ),
+        "O", GENDER->obj( target ),
+        "P", GENDER->pos( target )
+    });
+    }
+    return ENGLISH->fix_up_english( STRINGS->format_string( str, arr ) );
+}
+

@@ -1,0 +1,125 @@
+/*
+ *	Quest stuff below; mainly written by Billy
+ *	(aka zik@yoyo.cc.monash.edu.au); Shattered World 1992
+ *	
+ *	V 1.1 941116 -  Redone by Llati to mesh into the new quest stuff 
+ *  19980914 Dredd Made into a server (mostly)
+ *
+ *	Valid calls:
+ *	int quests_completed()     returns the number of quests they have done
+ *	(int|array) query_quests((int|string) str) 
+ *	                           if (str) then boolean test to see if they have 
+ *                             done it, otherwise returns all the quests done.
+ *	add_quest(string q)        Call every time they (re)do a quest. Gives out
+ *                             rewards and checks for lord status.
+ *	remove_quest (string arg)  removes a quest from their list. 
+ *	int query_quest_points ()  returns the number of quest points completed.
+ */
+
+
+int quests_completed() {
+    return sizeof(quests);
+    }
+
+(int|array) query_quests((int|string) str) {
+    if (!stringp(str))
+        return quests + [ ];
+    if (index(quests, str) > -1) 
+    	return 1;
+    return 0;
+    }
+
+
+add_quest(string q) 
+{
+    if (this_object()->query_guest()) {
+    	tell_object (this_object(),"You're a guest; you don't solve quests (don't be distressed - it's all for the best)\n");
+    	return 0;
+	}
+
+    if (!QUEST_SERV->query_quest(q))
+        return;
+
+    int reward = QUEST_SERV->quest_done(q, name);	/* call it here, so it's counted */
+    if (query_quests(q)) { /* second & succeeding times, we give them gems */
+	track_action("QUEST", "again:"+q, "reward="+reward);
+	if (reward > 1) {
+	    object o;
+            { o = GEMMER->make(reward/30 + 1, 0, 0, 0, 0); } 
+            if (o) {
+	        o->set_value(reward);
+	        move_object(o, this_object());
+	        tell_object (this_object(),"You have completed this quest before, but receive a gemstone for your efforts.\n");
+	        }
+	    else
+	        tell_object (this_object(),"We are short on gems.\n");
+            }
+	else
+	    tell_object (this_object(),"Congratulations.\n");
+	    
+	return;
+	}
+  track_action("QUEST", "first:"+q, "reward="+reward);
+  quest_add_stats(q);
+  quests += [q];
+  LOG->log("QUESTS", ctime(time()) + " " + cap_name + " solved " + 
+    	capitalize(q) + "'s quest.\n");
+  if (this_player())
+        LOG->log("QUESTS", 
+        	"      added by "+ this_player()->query_real_name()+"\n");
+  EVENT_NOTIFY->event_notify(name, "QUEST", q);
+  this_object()->send_cmds();
+  PEERAGE_SERV -> update_lord_station(name); /* won't update non-lords */
+  if (PEERAGE_SERV -> query_station_value (name) == -1)
+		TOP_LIST_SERV->update(name, query_quest_points(), query_age());
+  return 1;
+}
+
+int
+remove_quest (string arg) {
+int i;
+
+  if (!sizeof (quests)) return 0;
+  if ( (i = index (quests, arg)) >= 0) {
+		quests = quests[..(i-1)] + quests[(i+1)..];
+		return 1;
+	}
+  return 0;
+}
+    
+
+/* There isnt any reason for anything except add_quest to call this */
+nosave quest_add_stats(string Quest) {
+int Count;
+array Change, Stat;
+array Mesg;
+    
+	Stat = ["str", "int", "pow", "con", "chu", "siz", "dex", "san", "wis"];
+	Mesg = ["feel stronger", "feel cleverer", "see the world with sharper eyes",
+		"feel healthier", "feel more confident", "grow larger",
+		"become more graceful in your movements", 
+		"begin to think more clearly", "feel wiser", "receive a gemstone"];
+	Change = QUEST_SERV->query_rewards(Quest);
+	if (!Change) {
+    tell_object (this_object(),"Not a valid quest. This should never happen, tell a wiz!\n");
+    return;
+    }
+	for (Count = 0; Count < sizeof(Change); Count++) {
+		if (index(Stat, Change[Count])>-1) {
+			add_stat(Change[Count],1);
+    			tell_object (this_object(),"You " +
+				 Mesg[index (Stat,Change[Count])] + ".\n");
+    		}
+		else {
+			add_skill(Change[Count], 10);
+    			tell_object (this_object(),"You feel more skilled in "+
+				Change[Count]+".\n");
+			
+		}
+	}
+}
+
+
+int query_quest_points() {
+	return QUEST_SERV->query_quest_points(this_object());
+}

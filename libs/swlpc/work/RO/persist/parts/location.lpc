@@ -1,0 +1,95 @@
+/*
+ * For objects that need it, keep track of their eventual
+ * location (i.e. when whoever was carrying it logged out,
+ * etc).  Players have an enhanced version (because it's more than
+ * just a minor annoyance if their home won't load :)
+ *
+ * NOTE: These objects should NEVER be directly saved as part of
+ * an inventory - they are not actually attached to the player,
+ * but happen to reside within that location (and they could
+ * independently leave; can't have unique items lying around
+ * in some player backroom forever).  Thus, we define
+ * query_no_external_save, but allow external restores (just
+ * in case restoration gets implemented by the general purpose
+ * code).
+ *
+ * Container objects should always call save_me() in inventory
+ * items which return a positive to query_no_external_save(),
+ * and should save persistent objects by their string names (in
+ * fact, I should fix the driver to always save string names in
+ * this case).
+ */
+
+#include <Config.h>
+
+inherit "RO/persist/parts/check";
+
+string save_location;
+string home_location;
+
+query_no_external_save() {
+	return 1;
+	}
+
+/*
+ * First, try to get the save location.
+ * If that fails, try to go to the home location.
+ * If that fails, return true.
+ */
+
+locn_start() {
+	if (environment(this_object()))
+		return;
+
+	object loc;
+	if (stringp(save_location))
+		loc = load_object(save_location);
+
+	if (!loc) {
+		if (stringp(home_location))
+			loc = load_object(home_location);
+		}
+	
+	if (!loc) {
+		LOG->log("PERSISTENCE", file_name(this_object()) + 
+					" - Home location load failure: " + home_location);
+		return 0;
+		}
+	move_object(this_object(), loc);
+	}
+
+locn_set_home(string h) {
+	home_location = h;
+	}
+
+locn_set_save((int|string) h) {
+	if (intp(h))
+		h = file_name(environment(this_object()));
+	save_location = h;
+	}
+
+/*
+ * This is called to checkpoint the current location of a
+ * persistent object (i.e. whenever it saves).  If the location
+ * is not itself a true persistent object, we
+ * ask the area server to remember the location.
+ */
+
+remember_location() {
+	object e = environment(this_object());
+	if (!e) {
+		save_location = home_location;
+		return;
+		}
+	(object|string|int) handle = name_of(e);
+	if (stringp(handle)) {
+		save_location = handle;
+		if (!persistent_name_of(e)) {
+#if 0
+			"RO/persist/area/locations"->remember(save_location);
+#endif
+			}
+		}
+	else
+		save_location = home_location;
+	}

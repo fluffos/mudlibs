@@ -1,0 +1,341 @@
+/*
+ * Catalog player for Shattered World Core Mudlib (SWLPC 0.9.1 -> FluffOS).
+ */
+
+string name;
+string password;
+int hp;
+int max_hp;
+nosave int guest;
+
+int cmd_look(string arg);
+int cmd_read(string arg);
+int cmd_score(string arg);
+int cmd_inventory(string arg);
+int cmd_help(string arg);
+int cmd_emote(string arg);
+int cmd_go(string dir);
+int cmd_quit(string arg);
+
+void create() {
+  seteuid(getuid());
+  hp = 50;
+  max_hp = 50;
+}
+
+string query_name() { return name; }
+string query_password() { return password; }
+int query_hp() { return hp; }
+int query_mhp() { return max_hp; }
+int query_level() { return 1; }
+int is_player() { return 1; }
+
+string save_path() {
+  if (guest || !name || name == "")
+    return 0;
+  return sprintf("/data/%c/%s", name[0], name);
+}
+
+void ensure_letter_dir() {
+  string d;
+
+  if (guest || !name)
+    return;
+  d = sprintf("/data/%c", name[0]);
+  if (file_size("/data") != -2)
+    mkdir("/data");
+  if (file_size(d) != -2)
+    mkdir(d);
+}
+
+int restore_me(string n) {
+  name = n;
+  guest = 0;
+  return restore_object(save_path());
+}
+
+void setup_new(string n, string pw) {
+  name = n;
+  password = pw;
+  hp = 50;
+  max_hp = 50;
+  guest = 0;
+}
+
+void setup_guest() {
+  name = "guest";
+  password = "";
+  hp = 50;
+  max_hp = 50;
+  guest = 1;
+}
+
+void save_me() {
+  string p;
+
+  p = save_path();
+  if (!p)
+    return;
+  ensure_letter_dir();
+  save_object(p);
+}
+
+void wire_commands() {
+  enable_commands();
+  add_action("cmd_look", "look");
+  add_action("cmd_look", "l");
+  add_action("cmd_read", "read");
+  add_action("cmd_score", "score");
+  add_action("cmd_score", "sc");
+  add_action("cmd_inventory", "inventory");
+  add_action("cmd_inventory", "i");
+  add_action("cmd_help", "help");
+  add_action("cmd_emote", "emote");
+  add_action("cmd_quit", "quit");
+}
+
+void enter_world() {
+  object dest;
+
+  set_living_name(name);
+  wire_commands();
+  dest = 0;
+  catch(dest = load_object("/room/city/inn"));
+  if (!dest)
+    catch(dest = load_object("/RO/void"));
+  if (dest)
+    efun::move_object(dest);
+  write("\nWelcome to Shattered World (mlib-0.9.1), " + capitalize(name || "Guest") + ".\n");
+  write("Commands: look, look at <item>, read sign, emote <action>, score, inventory,\n");
+  write("north/south/east/west/up/down (n/s/e/w/u/d), help, quit.\n\n");
+  cmd_look(0);
+  save_me();
+}
+
+mixed process_input(string str) {
+  object env;
+  string verb, rest;
+
+  if (!str)
+    return 0;
+  while (strlen(str) && (str[0] == ' ' || str[<1] == ' ')) {
+    if (str[0] == ' ')
+      str = str[1..];
+    else
+      str = str[0..<2];
+  }
+  if (str == "")
+    return 1;
+  if (str[0] == ':') {
+    cmd_emote(str[1..]);
+    return 1;
+  }
+  if (sscanf(str, "%s %s", verb, rest) != 2) {
+    verb = str;
+    rest = 0;
+  }
+  verb = lower_case(verb);
+  switch (verb) {
+    case "look":
+    case "l":
+      cmd_look(rest);
+      return 1;
+    case "read":
+      cmd_read(rest);
+      return 1;
+    case "score":
+    case "sc":
+      cmd_score(rest);
+      return 1;
+    case "inventory":
+    case "i":
+      cmd_inventory(rest);
+      return 1;
+    case "help":
+      cmd_help(rest);
+      return 1;
+    case "emote":
+      cmd_emote(rest);
+      return 1;
+    case "quit":
+      cmd_quit(rest);
+      return 1;
+    case "north":
+    case "n":
+    case "south":
+    case "s":
+    case "east":
+    case "e":
+    case "west":
+    case "w":
+    case "up":
+    case "u":
+    case "down":
+    case "d":
+      cmd_go(verb);
+      return 1;
+  }
+  env = environment();
+  if (env && function_exists("room_cmd", env)) {
+    if (env->room_cmd(verb, rest))
+      return 1;
+  }
+  return 0;
+}
+
+int cmd_look(string arg) {
+  object env, *inv;
+  string out, brief, item;
+  int i;
+
+  env = environment();
+  if (!env) {
+    write("You are nowhere.\n");
+    return 1;
+  }
+  if (arg && sscanf(arg, "at %s", arg) == 1)
+    ;
+  if (arg && arg != "") {
+    arg = lower_case(arg);
+    if (function_exists("query_item", env)) {
+      item = env->query_item(arg);
+      if (stringp(item) && item != "") {
+        write(item);
+        if (item[<1] != '\n')
+          write("\n");
+        return 1;
+      }
+    }
+    write("You see nothing special.\n");
+    return 1;
+  }
+  brief = env->query_short();
+  if (brief && brief != "")
+    write(brief + "\n");
+  out = env->query_long();
+  if (!out || out == "")
+    out = "You see nothing special.";
+  write(out);
+  if (out[<1] != '\n')
+    write("\n");
+  if (function_exists("query_exit_string", env))
+    write(env->query_exit_string());
+  inv = all_inventory(env);
+  for (i = 0; i < sizeof(inv); i++) {
+    if (inv[i] != this_object() && inv[i]->query_name())
+      write(capitalize(inv[i]->query_name()) + " is here.\n");
+  }
+  return 1;
+}
+
+int cmd_read(string arg) {
+  object env;
+  string txt;
+
+  env = environment();
+  if (!env || !arg || arg == "") {
+    write("Read what?\n");
+    return 1;
+  }
+  arg = lower_case(arg);
+  if (function_exists("query_read", env)) {
+    txt = env->query_read(arg);
+    if (stringp(txt) && txt != "") {
+      write(txt);
+      if (txt[<1] != '\n')
+        write("\n");
+      return 1;
+    }
+  }
+  write("There is nothing written there.\n");
+  return 1;
+}
+
+int cmd_emote(string arg) {
+  if (!arg || arg == "") {
+    write("Emote what?\n");
+    return 1;
+  }
+  write("You emote: " + capitalize(name || "someone") + " " + arg + "\n");
+  say(capitalize(name || "someone") + " " + arg + "\n");
+  return 1;
+}
+
+int cmd_score(string arg) {
+  write(capitalize(name || "someone") + " (level " + query_level() + (guest ? ", guest" : "") + ")\n");
+  write("hp: " + hp + "/" + max_hp + "\n");
+  return 1;
+}
+
+int cmd_inventory(string arg) {
+  object *inv;
+  string brief;
+  int i, n;
+
+  inv = all_inventory(this_object());
+  n = sizeof(inv);
+  if (!n) {
+    write("You are empty-handed.\n");
+    return 1;
+  }
+  write("You are carrying:\n");
+  for (i = 0; i < n; i++) {
+    brief = inv[i]->query_short();
+    if (!brief || brief == "")
+      brief = inv[i]->query_name();
+    if (brief && brief != "")
+      write("  " + brief + "\n");
+  }
+  return 1;
+}
+
+int cmd_help(string arg) {
+  write("Shattered World Core Mudlib (SWLPC 0.9.1 / FluffOS):\n");
+  write("  look [at <item>]     - inspect room or detail\n");
+  write("  read <item>          - read signs\n");
+  write("  emote / :<text>      - express an action\n");
+  write("  n, s, e, w, u, d     - move between core rooms\n");
+  write("  score / inventory    - character status and belongings\n");
+  write("  quit                 - save and log out\n");
+  return 1;
+}
+
+int cmd_go(string dir) {
+  object env, dest;
+  string path;
+
+  if (!dir)
+    dir = query_verb();
+  env = environment();
+  if (!env) {
+    write("You are nowhere.\n");
+    return 1;
+  }
+  if (function_exists("query_exit", env))
+    path = env->query_exit(dir);
+  else
+    path = 0;
+  if (!path) {
+    write("You cannot go that way.\n");
+    return 1;
+  }
+  dest = 0;
+  catch(dest = load_object(path));
+  if (!dest) {
+    write("That exit leads nowhere (" + path + ").\n");
+    return 1;
+  }
+  efun::move_object(dest);
+  cmd_look(0);
+  return 1;
+}
+
+int cmd_quit(string arg) {
+  if (!guest)
+    write("Saving " + capitalize(name || "someone") + ".\n");
+  else
+    write("Goodbye, guest.\n");
+  save_me();
+  destruct(this_object());
+  return 1;
+}

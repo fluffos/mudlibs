@@ -1,0 +1,290 @@
+/*
+ *  General purpose dictionary object.
+ *
+ *  Just inherit/clone it and use the functions!
+ * 
+ *  setup(string savefile,int primesize, int start_new)  
+ *  add(key, data) - 
+ *  query(key) - 
+ *  remove(key) -
+ *
+ *  save_me ()	  - usually called by save server
+ *  show_stats () - returns the hash array (Just stat the object)
+ *  dump_hash ()  - returns a pointer to the hash array,NOT a copy! 
+ *
+ *  19991117 Dredd Upgraded Llati's /std/hash.lpc
+ */
+
+inherit "RO/Servers";
+
+import "RO/lib/dict_class" chash;
+
+/* Key hash table vars */
+class chash   hash_table[0];
+int           hash_size = 0;
+nosave string save_file = 0;
+
+/* Some accounting vars */
+int no_items;
+int no_neg_query;
+int no_pos_query;
+
+
+/*	 
+ * Function : setup_hash (string file, int size, int start_new)  
+ *
+ *	Must be called first when you wish to use this object
+ *	file: file name of where the data is to be stored.
+ *		If you arnt going to save your data, file = 0
+ *	size: needs to be used only once, when the hash table is set up.  
+ *		should dynamically resize on day. (not supported initially)
+ *	start_new: if you are going to set up a new hash data store. 
+ *
+ *	Returns 1 for success
+ *
+ */
+
+int setup( (string|int) file, int size, int start_new) 
+{
+	save_file = file;
+
+	if (start_new) 
+    {
+	    if (file && (file_size (file + ".o") >= 0 || file_size (file + ".o.bak") >= 0 )) 
+        {
+		    write ("For safeties sake I dont want to overwrite the old data file. Please make sure there is not a file named " + file + ".\n");
+		    return 0;
+        }
+	    hash_size = size;
+	    hash_table = allocate(size);
+        no_items = 0;
+	    return 1;
+	}
+
+	if (!restore_object(file)) 
+    {
+	    LOG->log("CONTAINER", "Could not restore from save file " + file + ".\n");
+		return 0;
+    }
+	if (size && size != hash_size) 
+    {
+		/* Opps, dont match. add code for dynamic resizeing here! */
+		LOG->log("CONTAINER", "We dont currently support dynamic hash resizeing in the hash obj.\n");
+		return 0;
+	}
+	return 1;
+}
+
+/*
+ *	Name: add(key, data)
+ */
+
+int add(key, xdata)  
+{
+    class chash tmp;
+    class chash incoming = create chash;
+    int pos;
+    int x;
+
+	if (!hash_size) 
+    {
+		throw("The dictionary table has not been initialised yet.\n");
+		return 0;
+	}
+
+	incoming.key = key;
+	incoming.data = xdata;
+
+	pos = hash_value(key) % hash_size;
+	tmp = hash_table[pos];
+	if (!tmp) 
+    {
+	    hash_table[pos] = [ incoming ];
+	}
+	else 
+    {
+        hash_table[pos] = tmp + [ incoming ];
+	}
+
+	AUTOSAVE_SERV->set_auto_save(this_object());
+
+    no_items++;
+	return 1;
+}		 
+
+/*
+ * Name: replace
+ * Purpose: actually replace data with an existing key
+ *      with new data.
+ */
+int replace(key,data)
+{
+    class chash node;
+
+    node = internal_query(key);
+
+	if (node) 
+    {
+        node.data = data;
+	    AUTOSAVE_SERV->set_auto_save(this_object());
+        return 1;
+    }
+    else
+    {
+        return add(key,data);
+    }
+}
+
+/* 
+ * Name: query(key)
+ *
+ *	Returns whatever was in the hash table, or 0 if nothing was there.
+ *	last is a pointer to whatever data you searched for at hash_postition
+ *	before and it returned another bit of data. This is a result
+ *	of using a hash table and linked lists. 
+ *
+ */
+
+query(key) 
+{
+    class chash node;
+
+    node = internal_query(key);
+
+	if (node) 
+    {
+	    if (node.key == key) return node.data;
+	}
+
+    no_neg_query++;
+	return 0;
+}
+
+internal_query(key)
+{
+    int pos, found = 0;
+    int x;
+    array nodel;
+    class chash node;
+
+	if (!hash_size) 
+    {
+		throw("The dictionary table has not been initialised yet.\n");
+		return 0;
+	}
+
+	pos = hash_value(key) % hash_size;
+	nodel = hash_table[pos];
+	if (nodel) 
+    {
+        for (x = 0; x < sizeof(nodel); x++)
+        {
+            node = nodel[x];
+		    if (node.key == key) 
+            {
+                no_pos_query++;
+                return node;
+            }
+        }
+	}
+	return 0;
+}
+
+/*
+ *	Function : remove_hash(int hash_value [, mixed data] )
+ *
+ *	Removes the data at hash_value position, returning
+ *		the old data
+ *	The data field is only necessary if your hash_value
+ *		isnt unique. 
+ *
+ */
+
+remove(key) 
+{
+    int pos, found = 0;
+    int x;
+    array nodel;
+    class chash node;
+
+    if (!hash_size) return 0;
+
+	pos = hash_value(key) % hash_size;
+	nodel = hash_table[pos];
+	if (nodel) 
+    {
+        for (x = 0; x < sizeof(nodel); x++)
+        {
+            node = nodel[x];
+		    if (node.key == key) 
+            {
+                hash_table[pos] = nodel[..x-1] + nodel[x+1..];
+                AUTOSAVE_SERV->set_auto_save(this_object());
+                no_items--;
+                return 1;
+            }
+        }
+	}
+
+	return 0;
+}
+
+show_stats() 
+{
+    int i;
+    for (i=0; i<hash_size; i++) 
+    {
+	    write ("num("+i+"): ");
+        DUMP->dump(hash_table[i]);
+	}
+    write("Save file is        : " + save_file + ".\n");
+    write("Hash table size     : "+ hash_size +"\n");
+    write("No items in table   : "+ no_items +"\n");
+    write("+ve queries / Total : "+ no_pos_query + "/" + (no_pos_query+
+            no_neg_query) + "\n");
+}
+
+query_no_items() { return no_items; }
+
+save_me() 
+{
+    if (!save_file) return 0;
+	save_object(save_file,this_object());
+	return 1;
+}
+
+dump_hash() 
+{
+	return hash_table;
+}
+
+reset() 
+{
+}
+
+/*
+ * Name: keys
+ * Purpose: Returns a list of the keys (as a packed array).
+ */
+keys()
+{
+    int i, x, count;
+    string to_add;
+    array nodel;
+    class chash node;
+    array keys = allocate(no_items);
+
+    for (i = 0; i < sizeof(hash_table); i++)
+    {
+        nodel = hash_table[i];
+        if (nodel)
+        {
+            for (x = 0; x < sizeof(nodel); x++)
+            {
+                node = nodel[x];
+                keys[count++] = node.key;
+            }
+        }
+    }
+    return keys[..count-1];
+}

@@ -1,0 +1,502 @@
+/*
+ * Tracker, for use with mapknower.  mmcg@bruce.cs.monash.edu.au, 1991.
+ * Manages intelligent movement.
+ *
+ * Some code ripped from Squawk's skeleton key, and my router monster.
+ * It inherits obj/key because it's used as the key object
+ * to pick doors (by monsters), rather than having a seperate key.
+ *
+ * Use the following functions to set it up:
+ *	set_can_pick(0) - can't pick locks (default).
+ *	set_can_pick(1) - skeleton key.
+ *		NB: may later add options to pick particular doors.
+ *	set_sf_callbacks("a", "b") - set the success callback in the object
+ *		to "a", and the failure callback to "b".  Fail callback 
+ * 	 	only happens if something strange happens while travelling 
+ *		- can't get through a door, usually, or the map has changed.
+ *		Set them to 0 if you dont want callbacks.
+ *	clear_track() - clear all callbacks, etc, for a current track session.
+ *	goto(filename) - kick start it (go to a location).
+ *	set_move_speed(real t) - set time between moves to "t" seconds.
+ *		NB: There will occasionally be a longer delay as the mapper
+ *		recalculates routes (when entering new areas; too complicated
+ *		to explain here).
+ */
+
+inherit "obj/key";
+inherit "obj/souls/base_soul";
+
+#include <Objects.h>
+
+#define OWNER environment(this_object())
+
+#define	HUNT_BYNAME	1
+#define	HUNT_OBJECT	2
+#define	GOTO_ROOM	3
+
+int debug = 0;
+
+int action_type;
+(string | object) destination;
+string final_loc;
+int can_pick = 0;
+int can_amaze = 0;	/* can we manage (old style) mazes? */
+
+array routes = ({ });
+int count = 0;
+int route_count = 0;	/* so we can ignore old routes */
+
+real move_time = 0.4;
+
+set_move_speed(real s) {
+    if (s < 0.1)
+	s = 0.1;
+    move_time = s;
+    }
+
+drop() {
+    return 1;
+    }
+
+query_auto_load() { return 0; }
+
+reset(arg)
+{
+        ::reset(arg);
+	if (arg) return;
+	set_short(0);
+        routes=({});			/* empty routes to start with */
+	move_time=0.4;
+	set_soul_type("generic", "tracker");
+	add_id("tracker_soul");
+	add_id("tollbooth pass");	/* NPCs and zombies don't pay tolls :) */
+	add_id("soul");			/* keys as souls */
+	add_id("ND");
+    add_property("no_save");
+}
+					 
+
+/*
+ * Courtesy functions, in case it's used by a wizard direct.
+ */
+
+got_there() {
+    TO("[Arrived]\n");
+    }
+
+didnt_get_there() {
+    TO("[Failed to get there]\n");
+    }
+
+init() {
+    set_soul_type("generic", "track");
+    ::init();
+    if (this_player() && ((this_player()->query_wiz() > 0) || this_player() -> query_npc())) {
+        add_action("goto", "walk");
+        add_action("hunt_object", "track");
+        add_action("set_pick", "skel");
+        add_action("set_debug", "debug");
+	}
+    }
+
+set_debug(s) {
+    if (id(s)) {
+	debug = !debug;
+	write("Debug: " + debug + "\n");
+	return 1;
+	}
+    return 0;
+    }
+
+/*
+ * If the router should act as a skeleton key, call `set_can_pick(1)'.
+ * Default: 0.
+ * Very few things should use this - I mean *very* few.  Give your monster
+ * an appropriate key (and never give a player a skeleton key) - G.
+ */
+
+set_can_pick(a) { can_pick = a; }
+
+/*
+ * If it should traverse old style mazes, set_can_maze(1).
+ * Default: 0.
+ * For players under autonomous control, and for any NPC that wants to use it.
+ */
+
+set_can_maze(a) { can_amaze = a; }
+
+get_type()
+{
+	return "wierd";
+}
+
+
+/*
+ * Call set_pick to pick a lock in a particular direction.
+ * Returns the current door state, or (-1) if it isn't a door.
+ * WARNING: still uses the old key code system.
+ */
+
+set_pick(string arg) 
+{
+	int i;
+	string dirn, code, state;
+	array dest_dir;
+    array allargs;
+
+	if(arg=="e") arg="east";
+	if(arg=="n") arg="north";
+	if(arg=="w") arg="west";
+	if(arg=="s") arg="south";
+
+	dest_dir = environment(OWNER) -> query_dest_dir();
+	if (!dest_dir)
+	    return (-1);
+	for ( i=0; i < sizeof(dest_dir); i= i+2) 
+    {
+        allargs = STRINGS->split_first(dest_dir[i+1], "#");
+        if (allargs && sizeof(allargs) == 2)
+        {
+            dirn = allargs[0];
+            code = allargs[1];
+			if (dirn == arg) 
+            {
+			    state = code[0..0];
+			    code = code[1..];
+				if (can_pick)
+				    set_code(code);
+				state = atoi(state);
+				return state;
+			}
+		}
+	}
+        return (-1);
+}
+
+/* int type added to argument who to prevent game crashing bug
+ *  - 940710 Hunter 
+ */
+hunt_object((string | object | int) who) {
+    object them;
+    destination = who;
+    if (intp(who))
+	return 0;
+    if (objectp(who)) {
+	action_type = HUNT_OBJECT;
+	them = who;
+	}
+    else {
+        action_type = HUNT_BYNAME;
+	them = find_living(who);
+	if (!them)
+	    return (-1);
+	if (!environment(them))
+	    return (-1);
+	}
+    return initialise(file_name(environment(them)));
+    }
+
+goto(string where) {
+    destination = where;
+    action_type = GOTO_ROOM;
+    return initialise(where);
+    }
+
+map_to(string where) 
+{
+    object o = environment(OWNER);
+
+    if (o) return MAPKNOWER->find_route(file_name(environment(OWNER)),
+                        where, this_object(), "await_track", route_count);
+}
+
+new_route() {
+    route_count++;	/* earlier routes will be ignored */
+    }
+
+await_track(r, rc){
+	if (rc < route_count)
+	    return;
+	if (rc > route_count)
+	    throw("Route count too high?  Tracker soul...");
+    if (!pointerp(r)) {
+		failed();
+		return 0;
+	}
+	if (!pointerp(routes))
+	    routes = ({ });
+	routes= r+routes[count..] ;
+	count = 0;
+        call_out("do_moves", move_time);
+	if (debug) {
+	    TO(implode(routes, "\n") + "\n");
+	    }
+}
+    
+do_moves() {
+    int x;
+    int rval;
+    if (!(this_object()->do_move()))
+        call_out("do_moves", move_time);
+    }
+
+/*
+ * do_move - return 1 if we need to awai a callback or have
+ * reached our destination or failed.  Otherwise return 0.
+ */
+
+int door_state = 1;	/* the final door state we want after going through this door; 1 = locked, 2 = closed, 3 = open. */
+int doing_door = 0;	/* 0 = no door, otherwise countdown through moves. */
+string move_dirn;	/* usually forward, sometimes backward to (eg) lock a door */
+string last_room;	/* if we are stopping to lock a door */
+string dest_room;	/* where we expect to end up */
+string this_room;	/* room being processed; if we expected to move but didn't, we fail. */
+array pre_act = ({ });	/* to be done before we can process the next move cmd */
+array post_act = ({ });	/* to be done after processing move cmd */
+int sub_state;		/* 0: process next move.  1: in subs.  2: process door.  More to follow. */
+
+initialise(s) {
+    final_loc = s;
+    count = 0;
+    doing_door = 0;
+    sub_state = 0;
+    routes = ({ });
+    new_route();
+    if (s)
+        return map_to(s);
+    }
+
+string exit_to(string r) 
+{
+    array allargs;
+    string rdd, ocode;
+    int x;
+    /* need to find a reverse direction on an exit */
+    array dd = environment(OWNER)->query_dest_dir();
+    if (!dd || !pointerp(dd)) return 0;
+
+    for (x = 0;x < sizeof(dd) ; x += 2) 
+    {
+	if (dd[x] == r) 
+    {
+        allargs = STRINGS->split_first(dd[x], "#");
+	    if (allargs && sizeof(allargs) == 2)
+		    return rdd;
+	    }
+	}
+    return 0;
+    }
+
+do_move() {
+	int x;
+	(int|string) cmd = 0;
+	string dn;	/* will be move direction */
+	string codes;
+	string code;
+	string ex_type;
+	int should_move = 0;
+
+        this_room = file_name(environment(OWNER));
+
+	if (sizeof(routes) > count + 2)
+	    dest_room = routes[count+2];
+	else
+	    dest_room = final_loc;
+
+	if ((doing_door < door_state) && !sizeof(pre_act)) {	/* be sure we complete cmds before trying next move */
+	    if (this_room == final_loc) {	/* are we there? */
+	        found();
+	        return 1;
+	        }
+
+	    if (count >= sizeof(routes)) {
+		doing_door = 0;
+		if (map_to(final_loc))
+		    failed();
+                return 1;
+		}
+
+	    doing_door = 0;
+	    if (this_room != routes[count]) {			/* if they wimpied, or we need an intermediate re-map... */
+		    x = index(routes, this_room, count);	/* wimpy check */
+		    if (x < 0) {
+		        doing_door = 0;
+			if (map_to(routes[count]))
+			    failed();
+                        return 1;
+		        }
+		    count = x;
+	         }
+	    /* check whether the next move has conditions */
+	    dn = routes[count+1];
+	    if ((x = index(dn, "#")) >= 0) {
+		int done_pick = 0;	/* only pick with one key :) */
+	        codes = dn[x+1..];
+		dn = dn[..x - 1];
+		while (strlen(codes) > 0) {
+		    code = codes;
+		    if ((x = index(codes, ";")) >= 0) {
+			code = code[..x-1];
+			codes = codes[x+1..];
+			}
+		    else
+			codes = "";
+		    if (code == "")
+			continue;
+		    if ((x = index(code, ":")) < 0) { /* old style door code - this will one day disappear */
+			code = "0:" + code;
+			x = 1;
+			}
+		    ex_type = code[..x];
+		    code = code[x+1..];
+		    if (ex_type == "0:") {	/* door */
+			if (done_pick)
+			    continue;
+	        	int oldstate = set_pick(dn);
+			done_pick = 1;		/* if we can't pick it, he'll have to rely on a key anyway */
+	        	if (oldstate >= 0) {	/* if not, fall through and attempt to go through amyway */
+			    door_state = 3 - oldstate;
+		    	    doing_door = 3 + oldstate;
+			    }
+			move_dirn = dn;
+			sub_state = 2;		/* process door when travelling through */
+			}
+		    if (ex_type == "1:" & can_amaze) {	/* ignore given dirn; exit always actually leads to the given location */
+			dn = exit_to(code);	/* mapper will have added it to code, if necc. */
+			}
+		    if (ex_type == "2:") {	/* any of these preconditions may be satisfied */
+			(int|string|array) pre = OWNER->satisfy_any(explode(code, ":"), 1);
+			if (!pre) {
+			    TO("You can't go " + dn + ".\n");
+			    return failed();
+			    }
+			if (stringp(pre)) {
+			    TO(pre);
+			    return failed();
+			    }
+			pre_act += pre;
+			sub_state = 1;
+			}
+		    if (ex_type == "3:") {	/* all of these preconditions must be satisfied */
+			(int|string|array) pre = OWNER->satisfy_all(explode(code, ":"), 1);
+			if (!pre) {
+			    TO("You can't go " + dn + ".\n");
+			    return failed();
+			    }
+			if (stringp(pre)) {
+			    TO(pre);
+			    return failed();
+			    }
+			pre_act += pre;
+			}
+		    }
+		}
+	    }
+
+/*
+ * Deal with pending commands (door unlock, etc)
+ * Doors: unlock, open, move, close, lock: 5->1.
+ * Unlock is done automatically.
+ */
+	if (doing_door && doing_door >= door_state && !sizeof(pre_act)) {
+	    doing_door--;
+	    dest_room = this_room;
+	    if (doing_door == 4)
+		cmd = "unlock " + move_dirn + " door";
+	    else if (doing_door == 3)
+		cmd = "open " + move_dirn + " door";
+	    else if (doing_door == 2) {
+		cmd = move_dirn;
+	        last_room = this_room;
+		should_move = 1;
+		if (sizeof(routes) > count+2)
+		    dest_room = routes[count+2];	/* for lock */
+		else
+		    dest_room = 0;
+		}
+	    else if (doing_door == 1) {
+		move_dirn = exit_to(last_room);
+		if (!move_dirn) move_dirn = "";
+		cmd = "close " + move_dirn + " door";
+		}
+	    else if (doing_door == 0)
+		cmd = "lock " + move_dirn + " door";
+	    else doing_door = 0;
+	    }
+	else {	/* we may be doing a setup command */
+	    if (sizeof(pre_act)) {
+		cmd = pre_act[0];
+		pre_act = pre_act[1..];
+		dest_room = this_room;
+		}
+	    else {	/* we are moving; install things to do afterwards */
+	        cmd = dn;
+		should_move = 1;
+		pre_act = post_act;
+		post_act = ({});
+		}
+	    }
+
+	if (stringp(cmd)) {
+	    TO("[" + cmd + "]");
+            command(cmd, OWNER);
+	    }
+/*
+ * We need to make sure we moved, in case the route failed.
+ * If not, players could loop in a single room.
+ */
+	if (!should_move)
+	    return 0;
+	if (this_room == dest_room)
+	    return 0;
+	if (sizeof(pre_act))
+	    return 0;
+	if (doing_door && (doing_door != 2) && (doing_door >= door_state))
+	    return 0;
+	if (file_name(environment(OWNER)) != this_room) {
+            count=count+2;
+            return 0;
+	    }
+	failed();
+	return 1;
+}
+
+query_routes() {
+    return routes;
+    }
+
+TO(str){
+	    tell_object(OWNER, str+"\n");
+}
+
+query_no_external_save() { return 1; }
+
+nosave string success = 0;
+nosave string failure = 0;
+
+set_sf_callbacks((int|string) s, (int|string) f) {
+    success = s;
+    failure = f;
+    }
+
+found(){
+    routes = ({ });
+    doing_door = 0;
+    sub_state = 0;
+    if (success)
+	call_other(OWNER, success);
+    else
+	got_there();
+    return 1;
+}
+
+failed(){
+    doing_door = 0;
+    sub_state = 0;
+    routes = ({ });
+    if (failure)
+	    call_other(OWNER, failure);
+    else
+	    didnt_get_there();
+    return 1;
+}

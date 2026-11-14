@@ -1,0 +1,141 @@
+/*
+ * Ripped from room/room
+ * (looks like it was originally written by Billy - you can tell
+ * by the horrible variable names :-) )
+*/
+
+inherit "RO/Servers";
+
+/*
+ * History:
+ * 981116 Dredd     add query_living_contents()
+ * 950725 ivory		swnorth uses "a\nb\nc" instead of "a, b and c" now
+ * 951007 Hunter	fixed 'RO/Server' usage.
+ * 990301 Jenna		Added hilites to objects and things
+ */
+
+#define MAX_LOOK 30
+
+query_living_contents(obj, exception)
+{
+    array content;
+    int i;
+
+    if (!obj) return 0;
+    content = contents(obj);
+
+    if (!exception) exception = [];
+    else if (!pointerp(exception))
+        exception = [exception];
+
+    for (i = 0; i < sizeof(content); i++)
+    {
+        if (!content[i]->query_living()) content[i] = 0;
+    }
+
+    return describe_contents(content, exception);
+}
+
+query_contents_look((object|string) obj, exception)
+{
+    array content;
+
+    if (!exception) exception = [];
+    else if (!pointerp(exception))
+        exception = [exception];
+    content = contents(obj);
+    return describe_contents(content, exception);
+}
+
+/* Modified by Jenna Mar 99 for hilites */
+describe_contents(content, exception)
+{
+    int item, pos;
+    string desc;
+    array itemcount, alive;
+    string list_delim,final_delim;
+    int hilitet = 0;
+    int hilitep = 0;
+
+    if (!content) return 0;
+#ifdef NORTH_MUDLIB
+    list_delim = final_delim = ",\n";
+#else
+    list_delim = ", ";  final_delim = " and ";
+#endif  /* list_delimma crap by ivory 7-25-95 */
+
+    for (item = 0; item < sizeof(exception); item++)
+    {   /* discard all exceptions from the desciption */
+        pos = index(content, exception[item]);
+        if (pos >= 0)
+        {
+            content = content[..pos-1] + content[pos+1..];
+            item--;
+        }
+    }
+    itemcount = [];
+    alive = [ ];
+    for (item = 0; item < sizeof(content); item++)
+    {
+        desc = 0;
+        if (content[item])
+            desc = content[item]->short();
+        if (desc)
+        {
+	    string ldesc = desc + "     ";  /* No out of subscript errors */ 
+            if (ldesc[..1] == "A ")
+                desc = "a "+desc[2..];
+            else if (ldesc[..2] == "An ")
+                desc = "an "+desc[3..];
+	    else if (ldesc[..3] == "The ")
+		desc = "the "+desc[4..];
+            pos = index(itemcount, desc);
+            if (pos < 0) {
+                itemcount += [1, desc];
+		if (content[item]->query_living())
+			alive += [ desc ];
+		}
+            else
+                itemcount[pos-1]++;
+        }
+    }
+    if (this_player()) {
+    	hilitet = ANSI->hilite(this_player(), "things");
+	hilitep = ANSI->hilite(this_player(), "people");
+	}
+    for (item = 0; item < sizeof(itemcount); item+=2)
+    {
+        if (itemcount[item] == 1) {
+            itemcount[item] = 0;
+	    if (index(alive, itemcount[item+1]) != -1)
+		itemcount[item+1] = ANSI->scolor(hilitep, itemcount[item+1]);
+	    else
+		itemcount[item+1] = ANSI->scolor(hilitet, itemcount[item+1]);
+	    }
+        else
+        {
+	    string p = PLURAL->plural(itemcount[item+1]);
+
+            itemcount[item] = ENGLISH->int_to_english(itemcount[item], 20) + " ";
+            if (index(alive, itemcount[item+1]) != -1)
+                itemcount[item+1] = ANSI->scolor(hilitep, p);
+            else
+                itemcount[item+1] = ANSI->scolor(hilitet, p);
+        }
+        if (item > 0)
+            if (item < sizeof(itemcount) - 2)
+                itemcount[item-1] += list_delim;
+            else
+                itemcount[item-1] += final_delim;
+#ifdef NORTH_MUDLIB
+        if( itemcount[item] > 0 )
+            itemcount[item] = capitalize( itemcount[item] );
+        else
+            itemcount[item+1] = capitalize( itemcount[item+1] );
+#endif
+    }
+    if (sizeof(itemcount))
+        return implode(itemcount, "")+".\n";
+    else
+        return 0;
+}

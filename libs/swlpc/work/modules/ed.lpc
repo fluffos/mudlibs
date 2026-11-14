@@ -1,0 +1,66 @@
+#!/u/geoff/swlpc/bin/lpc
+
+#if 0
+/*
+ *
+ * LPC / C interface - to ed() shared object library.
+ * ed() doesn't standalone (yet) - needs in-game support
+ * Needs more security checks in here.
+ *
+ */
+#endif
+
+#include <security.h>
+
+int handle;
+
+void reset()
+{
+    handle = load_shared_object("modules/ed.so");
+}
+
+void query_destruct()
+{
+    unload_shared_object(handle);
+}
+
+int ed_cmd(obj, str)
+{
+    return ext_c_call(handle, "lpc_ed_cmd", obj, str);
+}
+
+int ed_start(string file, (int | object) cb_ob, (int | string) cb_fun)
+{
+    object tp = this_player();
+
+    if (!tp) 
+    {
+        throw("ed(): no command giver\n");
+        return 0;
+    }
+    if (!query_ip_number(tp)) 
+    {
+        throw("ed(): interactive objects only\n");
+        return 0;
+    }
+    if (tp->query_wiz() < LOCAL_ED)
+    {
+        throw("ed(): no permission\n");
+        return 0;
+    }
+    if (tp->query_store("ed_prompt"))
+    {
+        throw("ed(): no recursive ed()\n");
+        return 0;
+    }
+
+    if (!cb_ob) cb_ob = this_player();
+    if (!cb_fun) cb_fun = "finish_ed";
+
+    tp->add_store("ed_prompt", tp->query_prompt());
+    tp->set_prompt(":");
+    tp->redirect_input(tp->query_soul(), "catch_ed");
+
+    return ext_c_call(handle, "lpc_ed_start", tp, file, cb_ob, cb_fun);
+}
+

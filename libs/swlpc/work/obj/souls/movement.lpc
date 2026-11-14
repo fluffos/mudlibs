@@ -1,0 +1,448 @@
+/*
+ * Shattered Worlds Mudlib Movement Soul
+ *
+ * The bulk of this code was formerly in RO/living.c, where
+ * it became too large and unwieldy. 
+ */
+
+/* History
+ * 930418 Rattcherryh	"silent" movement added
+ * 950829 Hunter	code shifted to separate object
+ * 950905 Hunter	more fixing here and there to get it to work
+ * 990912 Dredd         continuous walking stuff
+ * 000301 Jenna		Cosmetic my_name() changes
+ * 000517 Jenna		do_move() changes to check the env for blocked
+ *			moves (e.g. doors)
+ * 010226 Jenna		little change to do_move() to stop new this_player()
+ *			bugs
+ */
+
+#include <security.h>
+
+inherit "obj/souls/base_soul";
+inherit "std/map/track";		/* get a tracking object */
+
+int speed;
+string dir;
+object pob;
+int on=0;
+
+reset(arg)
+{
+    "obj/souls/base_soul"::reset(arg);
+    "std/map/track"::reset(arg);
+    if ( arg ) return ;
+    remove_id("key");
+    add_id("movement");
+    add_id("movement soul");
+    add_id("ND");
+    set_soul_type( "generic", "movement" );
+}
+
+query_weight() { return 0; }
+
+/* This routine is called from objects that moves the player. 
+ * Special: direction "X" means teleport.
+ */
+
+/*
+ * move_player() is typically called by myself.
+ *
+ * Geez - it's a big ugly function.
+ */
+int
+move_player(
+    string dir, 		/* The direction in which myself travels */
+    (string|object) dest	/* Where we will end up */
+    )
+{
+#if 0
+object ob;
+int i;
+#endif
+
+int is_ghost = myself->query_ghost();
+int is_npc = myself->query_npc();
+array disable = myself->query_disable();
+string msgout = myself->query_msgout();
+string msgin = myself->query_msgin();
+int is_silent = (msgout == "silent");
+int is_invis = myself->query_invis();
+string cap_name = myself->query_name();
+string cap_name2 = capitalize(myself->my_name());
+int wiz = myself->query_wiz();
+object fromenv;
+object ob;
+string here;    
+string mmsgin, mmsgout;
+string catch_message;
+int see_in_dark;			/* perception shit */
+int is_light;
+string current_room = file_name(environment(myself));	/* where we start at */
+    if ( !is_ghost && disable && pointerp(disable) && dir != "X" 
+	&& (index(disable, "motor") > -1)) 
+    {
+	tell_object(this_object(), "Your disabilites don't allow " 
+		+ "you to move!\n");
+	if ( !is_silent )
+	{
+	    myself->checked_say(cap_name + " struggles to leave " + dir +
+		", but due to disabilities can't!\n");
+	}
+	return 0;
+    }
+    
+/* make sure the destination is loaded */
+    catch_message = catch dest ->stupid_fucking_load_up_func();;
+    if (catch_message) 
+    {
+	tell_object( myself, "There seems to be a disturbance " +
+		"in reality in that direction.\nYou decide not to " +
+		"leave that way.\n");
+	if (dir != "X") 
+	{
+	    if ( !is_silent )
+	    {
+		myself->checked_say("A mysterious force prevents "  + cap_name 
+		+ " leaving " + dir + ".\n");
+	    }
+	    if (stringp(dest))
+		LOG->log("BAD_DEST", dir + " from " +
+			current_room + " to " + dest + "\n");
+	    else
+		LOG->log("BAD_DEST", dir + " from " +
+			current_room + " to " + file_name(dest) + "\n");
+	}
+	return 0;
+    }
+    
+/* the destination exists ... */
+    
+/* are we teleporting? */
+    fromenv = environment(this_object());
+    if (dir == "X" && !wiz && (fromenv->realm() == "NT" 
+	|| fromenv->query_property("no_teleport") 
+	|| dest->realm() == "NT" || dest->query_property("no_teleport") )
+	) 
+    {
+	tell_object(myself, "Your attempt to leave failed.\n");
+	return 0;
+    }
+/* test movement hooks */
+    if ( myself->test_binary_hook( "move", this_object(), dir, dest )
+	&& !(wiz && !myself->query_store("wiz_move_hooks"))
+	)
+    {
+	return 0;	/* refuse to move */
+    }
+    
+/* we are allowed to move at this point */
+    here = file_name(fromenv);
+    if (stringp(dest))
+	current_room = dest;
+    else
+	current_room = file_name(dest);
+   
+    myself->add_store( "previousroom", here ); 
+    
+/* work out some messages */
+    if (dir == "X") 
+    {
+	mmsgout = myself->query_store("toutmsg");
+	mmsgin = myself->query_store("tinmsg");
+	if (!mmsgout)
+	    mmsgout = "disappears in a puff of smoke";
+	if (!mmsgin)
+	    mmsgin = "arrives in a puff of smoke";
+    }
+		/* this check should go into myself->query_msgout() */
+    if (!msgout)		
+	msgout = "leaves";
+
+		/* argh! perception stuff! */
+    see_in_dark = myself->query_store("infravision") ;
+    /* is_light = set_light(0); */
+    is_light = 1;
+    if (is_light < 0)
+	is_light = 0;
+    if ( !is_ghost && (dir != "X") && !is_npc 
+	&& !myself->add_weight(0) && !wiz) 
+    {
+	tell_object(myself, "You collapse under your load!\n");
+	if ( !is_silent )
+	    myself->checked_say(cap_name + " collapses under load!\n");
+	return;
+    }
+/* perform the actual move */
+    move_object( myself, dest ); 
+    ob = environment( this_object() );
+/* let other objects know about the move */
+    myself->test_advisory_hook( "postmove", here, ob);
+#ifdef MAPPER_OBJECT
+    MAPPER_OBJECT->add_valid_move(dir + "\t" + here + "\t" + file_name(ob));
+#endif
+    if (ob != fromenv) 
+    {
+	if ( is_ghost ) 
+ 	{
+	    if ( !is_silent )
+		tell_room(fromenv, cap_name + " " + msgout + " " 
+			+ dir + ".\n");
+	}
+	else if (dir == "X" && is_invis < INVIS_TELEPORT) 
+	{
+	    if ( !is_silent )
+		tell_room(fromenv, cap_name + " " + mmsgout + ".\n");
+	}
+	else if (is_invis < NO_SHORT)
+	    if (is_light) 
+	    {
+		if (msgout != "silent")
+		    tell_room(fromenv, cap_name + " " + msgout + " " 
+			+ dir + ".\n");
+	    }
+	    else 
+	    {
+		if (msgout != "silent") 
+		{
+		int	x;
+		array	people = contents(fromenv);
+		    if (pointerp(people) && sizeof(people))
+			for (x = 0; x < sizeof(people); x ++)
+			    if (living(people[x]) 
+				&& people[x]->query_store("infravision") 
+				&& people[x] != this_object())
+			    {
+				tell_object(people[x], cap_name + " " 
+				+ msgout + " " + dir + ".\n");
+			    }
+		}
+	    }
+	    is_light = 1; /* set_light(0); */
+	    if (is_light < 0)
+		is_light = 0;
+	    if ( wiz ) 
+ 	    {
+		if (stringp(dest))
+		    tell_object(this_object(), dest + "\n");
+		else
+		    tell_object(this_object(), file_name(dest) + "\n");
+	    }
+	    if (!msgin)
+		msgin = "arrives";
+	    if (is_ghost && is_light) 
+	    {
+		if (msgin != "silent")
+		    myself->checked_say(cap_name2 + " " + msgin + ".\n");
+	    }
+	    else if (is_invis < INVIS_TELEPORT && dir == "X") 
+  	    {
+		if (mmsgin != "silent")
+		    myself->checked_say(cap_name2 + " " + mmsgin + ".\n");
+	    }
+	    else if (is_invis < NO_SHORT)
+		if (is_light) 
+	  	{
+		    if (msgin != "silent")
+			myself->checked_say(cap_name2 + " " + msgin + ".\n");
+		}
+		else 
+		{
+		    if (msgout != "silent") 
+		    {
+		    int	x;
+		    array	people = contents(environment(this_object()));
+			if (pointerp(people) && sizeof(people))
+			    for (x = 0; x < sizeof(people); x ++)
+				if (living(people[x]) 
+			 	    && people[x]->query_store("infravision") 
+				    && people[x] != this_object())
+				    tell_object(people[x], cap_name2 + " " +
+					msgin + ".\n");
+		    }
+		}
+#if 0
+		if (!query_ip_number(this_object()) && !receive_host) 
+		{
+			 /*is_npc*/
+		    return 1;
+		}
+#endif
+		if (!is_light && !see_in_dark) 
+		{
+		    tell_object(this_object(), "A dark area.\n");
+		    return 1;
+		}
+	}
+	myself->did_a_move(); /* So an inherited one can be used */
+	myself->force_us("glance");   /* Jenna 99 replaced:  command("glance"); */
+	return 1;
+}
+
+init()
+{
+    array dirn;
+    int i;
+
+    ::init();
+    /* The below line was extended to cover all add_actions 
+     * by Jenna May 2000 */
+    if (myself == this_player())
+    {
+        if (myself->query_wiz())
+        {
+            /* myself is set in ::init() */
+	        add_action("goto", "walk-to");	/* undocumented for now. */
+	        add_action("go_home", "home");	/* undocumented for now. */
+        }
+
+	    add_action("walking", "walk");
+	    add_action("running", "run");
+	    add_action("halting","stop");
+
+	    /* Standard directions */
+	    dirn = DIRECTION->query_standard();
+	    for (i = 0; i < sizeof(dirn); i++)
+	    {
+	        add_action("move", dirn[i]);
+	    }
+
+	    dirn = DIRECTION->query_abbreviated();
+	    for (i = 0; i < sizeof(dirn); i++)
+	    {
+	        add_action("abbrev_move", dirn[i]);
+	    }
+    }
+}
+
+
+move(str)
+{
+    string dirn = query_verb();
+
+    return do_move(dirn, str, this_player());
+}
+
+abbrev_move(str)
+{
+    string abbr = query_verb();
+    string dirn;
+
+    dirn = DIRECTION->full_dir(abbr);
+
+    if (!dirn) return 0;
+
+    return do_move(dirn, str, this_player());
+}
+
+
+do_move(string dirn, str, pob)
+{
+    string ex;
+    object room;
+
+    if (!pob) pob = this_player();
+    room = environment(pob);
+    if (!room) return 0;
+
+    /* check for closed doors and other impediments */
+    ex = room->move(dirn, str, pob);
+    if (intp(ex)) return ex; /* notify_fail should be set by room */
+
+    /* else - move them there */
+    pob->move_player(dirn, ex);
+    return 1; 
+}
+
+go_home()
+{
+	(string|int) home = myself->query_home();
+	if (stringp(home))
+	{
+		goto(home);
+		return 1;
+	}
+	notify_fail("You have no home.\n");
+	return 0;
+}
+
+walking(dir) 
+{
+	notify_fail("walk <direction>?\n");
+	if (!dir) return 0;
+
+	dir=DIRECTION->full_dir(dir);
+	if (!environment(myself)->query_exit(dir,1)) 
+    {
+		notify_fail("You can't walk "+dir+".\n");
+		return 0;
+	}
+
+	write("You start walking "+dir+".\n");
+	travelling(myself,dir,3);
+	return 1;
+}		
+
+
+running(dir) 
+{
+	notify_fail("run <direction>?\n");
+	if (!dir) return 0;
+
+	dir=DIRECTION->full_dir(dir);
+	if (!environment(myself)->query_exit(dir,1)) 
+    {
+		notify_fail("You can't run "+dir+".\n");
+		return 0;
+	}
+
+	write("You start running "+dir+".\n");
+	travelling(myself,dir,1);
+	return 1;
+}		
+
+
+travelling(POB,DIR,SPEED) 
+{
+	if (!POB || !DIR || !SPEED ) return 0;
+
+	speed=SPEED;
+	pob=POB;
+	dir=DIR;
+
+	if (!on) 
+    {
+		on=1;
+		call_out("go_walking", 1);
+	}
+}
+
+go_walking() 
+{
+	object room=environment(pob);
+	if (!on) return 1;
+	if (!room->query_exit(dir,1) ) 
+    {
+		write("You can't go "+dir+".\n");
+		return 1;
+	}
+
+	tell_object(pob,"You continue "+dir+".\n");
+	command(dir,pob);
+	call_out("walking",speed);
+
+	return 1;
+}
+
+halting(arg) 
+{
+    notify_fail("stop <combat,walking,running>?\n");
+    if (arg != "walking" && arg != "running") return 0;
+
+	write("You stop " + arg + ".\n");
+
+	on=0;
+
+	return 1;
+}
+

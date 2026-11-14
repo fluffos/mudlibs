@@ -1,0 +1,461 @@
+/*
+ *
+ * Old Style LPmud add_action handler/parser emulator
+ *
+ * To be incorporated into living objects
+ *
+ * Copyright (C) 1999, 2000 Geoff Wong (Dredd@Shattered World)
+ *
+ * Parsing Commands - Emulating LPmud add_action().
+ * 
+ * Aim: 	to produce a "simple" parser which is "smart"
+ * 	AND supports the old system (via an inheritable object etc).
+ * 
+ * 	Must be fast and space efficient.
+ * 
+ * We have 4 individual types of actions -
+ * add(<func>, "", 1);		Suck ALL input.
+ * add(<func>, "'", -N); 	Match first N letters (no space necessary)
+ *				[note: only ever used for 1 letter commands]
+ * add(<func>, "word", N);	Match the first N letters (or more).
+ * add(<func>, "word");		Match on "word" match.
+ *
+ * Actions get added from a variety of objects for varying lengths of time -
+ * rooms - Usually actions added by rooms are very temporary
+ *  	  with players running through many rooms.
+ * items - these are semi-permanent and tend to remain in a players
+ *	  inventory for a short length of time.
+ * souls - these are often effective for the entire login time of the
+ *	  player.
+ *
+ * Actions are kept in LIFO order (and searched in that order for
+ * a match).
+ * 
+ * This is an ugly system with the only identified object being
+ * the "actor" (who gives the command); all other parsing is done
+ * by individual object:functions.
+ * 
+ * Ideally we'd use a hash table for addition of verbs but be able
+ * remove all of an objects actions in a single removal (at least quickly).
+ * An external hash table would keep the addition order.
+ *
+ * Also: certain special cases (xverbs, catchall) have a priority
+ * based upon their order of addition. These must be run in 
+ * order once the hash table lookup is done.
+ *
+ * Basically matching a verb needs to result in an ordered  list 
+ * of obj->fun() pairs that we might go down to execute.
+ * (we could add catchalls to every possible match in hash table?
+ *
+ */
+
+inherit "RO/Servers";
+inherit "RO/parse/parse_types";
+
+const DEFAULT_NOTIFY  = "What ?\n";
+nosave string fail_msg;
+
+nosave string current_verb;
+
+nosave string xverbs;
+nosave array  xverb_dispatch = [];
+
+nosave array  catchalls = [];
+nosave array  fallthrough = [];
+
+/* all the functions (hashed) */
+nosave object  actions;
+
+/* all the objects (hashed) - with speed removal lists */
+nosave object  objects;
+
+nosave int no_actions = 0;
+
+/* shadow'ing the bag */
+nosave array shadow;
+
+reset()
+{
+    if (!actions) 
+    {
+        actions = clone_object("RO/parse/bag");
+        actions->setup(0, 371, 1);
+    }
+    shadow = actions->dump_hash();
+
+    if (!objects)
+    {
+        objects = clone_object("RO/parse/bag");
+        objects->setup(0, 93, 1);
+    }
+    xverbs = "";
+    catchalls = [];
+    fallthrough = [];
+    xverb_dispatch = [];
+}
+
+init_parser()
+{
+    reset();
+}
+
+query_destruct()
+{
+    if (actions) destruct(actions);
+    if (objects) destruct(objects);
+}
+
+parse_stats()
+{
+    write("Xverbs " + sizeof(xverbs) + "\n");
+    write("Catchall " + sizeof(catchalls) + "\n");
+    write("Fallthroughs " + sizeof(fallthrough) + "\n");
+    write("Known verbs " + no_actions + "\n");
+}
+
+/* keep a list of objects and associated additions for easy removal? */
+/* (object on/off list? - don't modify hash table? */
+/* could work except for objects which change which actions they add */
+
+add_action(object obj, string func, string action, int match, object from)
+{
+    if (!obj) return;
+
+    // write("add_action: " + func + ":" + action + " from: " + file_name(from) + "\n");
+
+    if ((action == "") && (match == -1)) 
+    {
+        add_fallthrough(obj,func);
+        return;
+    }
+
+    if (action == "") 
+    {
+        add_catchall(obj, func);
+        return;
+    }
+
+    if (match == -1) 
+    {
+        add_xverb(obj, func, action);
+        return;
+    }
+
+    if (match > 0) 
+    {
+        add_naction(obj, func, action, match);
+        return;
+    }
+
+    add_subaction(obj, func, action);
+}
+
+add_subaction(object obj, string func, string action)
+{
+    array mtch;
+    array tuple;
+
+    if (!actions) throw("Actions not initialised in "+file_name(this_object())+"\n");
+    tuple = [ obj, func, action ];
+    mtch = actions->add(action, tuple);
+    objects->add(file_name(obj), [ P_EXACT, action,  tuple ]);
+}
+
+add_naction(object obj, string func, string action, int match)
+{
+    int i, c;
+
+    c = sizeof(action) - match;
+
+    for (i = 0; i <= c; i++)
+    {
+        add_subaction(obj, func, action[0..(match+i-1)]);
+    }
+}
+
+/*
+ * Name: remove_action
+ * Purpose: remove all actions associated with a particular object
+ *
+ * Notes: for fast removal this would imply hashing on a particular object?
+ */
+remove_action(object o)
+{
+    array al;
+    int i, j;
+
+
+    al = objects->query(file_name(o));
+    if (!al) 
+    {
+        // write("remove_actions failed for: " + file_name(o) + "\n");
+        return;
+    }
+
+    // write("remove " + sizeof(al) + " actions for: " + file_name(o) + "\n");
+
+    for (i = 0; i < sizeof(al); i++)
+    {
+        if (al[i][0] == P_XVERB)
+        {
+            remove_xverb(al[i][1]);
+        }
+        else if (al[i][0] == P_CATCHALL)
+        {
+            remove_catchall(al[i][1]);
+        }
+        else if (al[i][0] == P_FALLTHROUGH)
+        {
+            remove_fallthrough(al[i][1]);
+        }
+        else
+        {
+            // P_EXACT 
+            // write("removing from: " + shadow[al[i][1]][al[i][2]][0] + "\n");
+            actions->remove(al[i][1], al[i][2]);
+        }
+    }
+    objects->erase(file_name(o));
+}
+
+/*
+ * Name: add_xverb
+ * Purpose: add an xverb match (done by index'ing a char into a string)
+ */
+
+add_xverb(object o, string f, string a)
+{
+    string l = a[0..0];
+
+#if 0
+    if (index(xverbs, l) >= -1)
+    {
+        throw("xverb " + l + " already exists.\n");
+        return;
+    }
+#endif
+
+    xverbs = xverbs + l;
+    xverb_dispatch = xverb_dispatch + [ [ o, f ] ];
+
+    objects->add(file_name(o), [ P_XVERB, sizeof(xverbs)-1]);
+}
+
+/*
+ * Name: remove_xverb
+ * Purpose: Removes an xverb given a specific location.
+ */
+
+remove_xverb(int i)
+{
+    xverbs = xverbs[..i-1] + xverbs[i+1..];
+    xverb_dispatch = xverb_dispatch[..i-1] + xverb_dispatch[i+1..];
+}
+
+/*
+ * Catchall/Fallthrough handling
+ */
+
+add_catchall(object o, string fun)
+{
+    catchalls = catchalls + [ [ o, fun, 0 ] ];
+    objects->add(file_name(o), [ P_CATCHALL, sizeof(catchalls)-1]);
+}
+
+add_fallthrough(object o, string fun)
+{
+    fallthrough = fallthrough + [ [ o, fun, 0 ] ];
+    objects->add(file_name(o), [ P_FALLTHROUGH, sizeof(fallthrough)-1]);
+}
+
+remove_catchall(int i)
+{
+    catchalls = catchalls[..i-1] + catchalls[i+1..];
+}
+
+remove_fallthrough(int i)
+{
+    fallthrough = fallthrough[..i-1] + fallthrough[i+1..];
+}
+
+/*
+ * Name: handle_action
+ *
+ * Purpose: actual find all the matches and dispatch them until
+ *  one return 1.
+ *
+ */
+handle_action(string in)
+{
+    string rest, command, last_verb;
+    array match;
+    int i, x, flag;
+    int sp;
+
+    if (in == "") return 0;
+
+    sp = index(in, " ");
+    if (sp != -1) 
+    {
+        command = in[..sp-1];
+        rest = in[sp+1..];
+    }
+    else 
+    {
+        command = in;
+        rest = 0;
+    }
+
+    last_verb = query_verb();
+
+    // handle catchalls
+    set_verb(command);
+    for (i = sizeof(catchalls)-1; i >= 0; i--)
+    {
+        if (catchalls[i][0])
+            if ((catchalls[i][0])->(catchalls[i][1])(rest)) 
+            {
+                set_verb(last_verb);
+                return 1;
+            }
+        // else remove_catchall(i);
+    }
+
+    set_verb(command);
+    // else it could be a general match
+    match = match_action(in, command, rest);
+    for (i = sizeof(match)-1; i >= 0; i--)
+    {
+#if 0
+        if (!arrayp(match[i]))
+        {
+            string f = match[i];
+            throw("Illegal parser match: " + f + "\n");
+        }
+
+        if (sizeof(match[i]) != 3) 
+            throw("Illegal parser match size.\n");
+
+        //if (match[i][0])
+        //    write("HA1: "+file_name(match[i][0])+"->"+match[i][1] +" (" +match[i][2] + ")\n");
+        //else
+        //    write("HA1: no object!?\n");
+#endif
+
+        if (match[i][2] == 0) 
+        {
+            rest = in[1..];
+            set_verb(in[0..0]);
+        }
+        else 
+        {
+            rest = in[sizeof(match[i][2])+1..];
+            set_verb(match[i][2]);
+        }
+        if (rest == "") rest = 0;
+
+        if (match[i][0])
+        {
+            if ((match[i][0])->(match[i][1])(rest)) 
+            {
+                set_verb(last_verb);
+                return 1;
+            }
+        }
+    }
+
+    // handle fallthroughs
+    set_verb(command);
+    for (i = sizeof(fallthrough)-1; i >= 0; i--)
+    {
+        if (fallthrough[i][0])
+            if ((fallthrough[i][0])->(fallthrough[i][1])(rest)) 
+            {
+                set_verb(last_verb);
+                return 1;
+            }
+        // else remove_fallthrough(i);
+    }
+
+    // We failed - notify failure.
+    tell_object(this_object(), this_object()->query_notify());
+    set_verb(last_verb);
+    return 1;
+}
+
+/*
+ * Name: match_action(input string)
+ * Purpose:
+ *  Actually find all matches and return a list of them
+ *  Returns a list of possible matches (in order)
+ *  FIX: handle catchalls ("") somehow (insert everywhere?)
+ */
+match_action(string input, string command, rest)
+{
+    int h, i, sp; 
+    array possible;
+    int count = 0;
+    array matches = allocate(10);
+
+    notify_fail(DEFAULT_NOTIFY);
+
+    if (!input) return 0;
+    if (!xverbs) xverbs = "";
+
+    /* Fix - should get all matches */
+    while ((i = index(xverbs, input[0], i+1)) > -1)
+    {
+        matches[count++] = [ xverb_dispatch[i][0], xverb_dispatch[i][1], 0 ];
+    }
+
+    /* Truncate array */
+    if (count)
+        matches = matches[..count-1];
+    else 
+        matches = [];
+
+    /* Find all hash table matches */
+    if (actions) possible = actions->query(command);
+#if 0
+    if (possible && sizeof(possible))
+        write("actions query: " + command + " returned size: " + sizeof(possible) + "\n");
+    else
+        write("actions query: " + command + " failed on actions\n");
+#endif
+
+    if (possible) matches = possible + matches;
+
+    return matches;
+}
+
+notify_fail(string str)
+{
+    fail_msg = str;
+}
+
+query_notify()
+{
+    return fail_msg;
+}
+
+set_verb(string x)
+{
+    current_verb = x;
+}
+
+query_verb()
+{
+    return current_verb;
+}
+
+exit(obj)
+{
+    if (obj)
+	remove_action(obj);
+}
+
+query_actions() { return actions; }
+query_objects() { return objects; }
+query_xverbs() { return xverbs; }
+query_catchalls() { return catchalls; }
+

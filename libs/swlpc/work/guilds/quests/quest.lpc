@@ -1,0 +1,623 @@
+/**************************************************************************
+ ***			Central Quest Server			quest.c ***
+ **************************************************************************/
+
+/*  Useful functions are:
+ * real quest_done(string quest_name, string playername) 
+ *  logs acheivement and returns a real indicating the value of doing that quest
+ * int query_max_quest_points ()    returns the absolute maximum 
+ * int query_remaining ( int silently, who, (int|string) guild_name)
+ *        if (guild_name) quests remaining in that guild, otherwise total quests
+ * int query_quest_group (string group_name) boolean, checks if that group exists.
+ * int query_quest_points((object|int) who)
+          Total number of quest points of player
+ * int query_number_of_quests()     total available quests
+ * int query_quest (string qname)    returns 1 if the quest exists.
+ * array query_rewards (string qname) an array of the stats to increase.
+ * class c_quest[]  query_all_quests((int|string) guild_name) 
+ *        returns the info. on all the quests, or just the ones for the guild
+ */
+  
+ 
+
+/*
+ * This code was originally written by Michael (Zik) Saleeba but has since
+ *   been modified almost past recognition.
+ *
+ * V 1.1 941104 Changed to use data files and classes :L
+ *          It now reads a file ./quest.spec to get its quest info 
+ *            and reads ./guilds.spec to get the different group info.
+ *          It only uses these if they have been changed in the last
+ *            three days, otherwise it uses its save file.
+ * 
+ */
+
+inherit "RO/base_object";
+
+#include "security.h"
+
+#include "stats.h"
+
+#include "/RO/lib/parse_types.h"
+
+#define QUEST_DIR "guilds/quests/"
+#define QUEST_DATA "quest.spec"
+#define GUILD_DATA "guild.spec"
+#define SAVE_FILE file_name(this_object())
+
+#define PERC_DEPRECIATION 10.0  /* Percentage of a reduction to be done every week */
+
+
+import "guilds/quests/quest_class" c_quest;
+
+class c_quest quest[0];
+int frequency,depreciation;  /* depreciation is the last time we reduced them */
+int minfreq, maxfreq;
+array guilds,     /* Name of the different groups that require quest completions */
+   guild_quests;  /* Parallel array (with guilds) specifying which quests are required,
+                            uses bit strings matched in order to the quest var. */
+   
+#define TB(x) 1
+
+show_stats() {
+int count,i,points;
+	::show_stats();
+	write("Maximum Quest points attainable : "+query_max_quest_points()+"\n");
+	write("Total quest completions : "+frequency+" (min: " + minfreq + "; max: " + maxfreq + ")\n");
+	write("Quests defined: "+(sizeof(quest) == 0?"<none>":"")+"\n");
+	for (count = 0 ; count < sizeof(quest) ; count ++)
+		write(quest[count].name+
+	    ("            "[sizeof(quest[count].name)..])+
+		" \""+quest[count].short+"\""+("                     "[sizeof(quest[count].short)..])+
+		"  pts: "+ quest[count].rating+
+		"  num: "+ quest[count].freq+
+		"  perc: " + 100 * quest[count].freq/ frequency +
+		"  val: " + quest_value(quest[count].name) +
+		"\n");
+	write ("Quest points per guild:\n");
+	for (count = sizeof (guilds); count --; ) {
+	  points = 0;
+	  if (guild_quests[count]) {
+			for (i = sizeof (quest);i--;) {
+				points += BIT-> test_bit (guild_quests[count],i) * quest[i].rating;
+			}
+		}		
+		write (guilds[count] + "\t\t\t" + 	points + " points.\n");
+	}
+}
+
+reset(NotFirst) {
+    ::reset (NotFirst);
+    if (!NotFirst) {
+	if (!query_data_consistency()  || !restore_object(SAVE_FILE)) {
+	    load_quest_list();
+	    load_guild_list();
+	    }
+        }
+    if (time() > depreciation + 86400*7) {
+  	int i;
+  	
+  	frequency = 1;
+  	for (i = sizeof (quest) ;i--;) {
+  		quest[i].freq = real2int(0.5 + int2real(quest[i].freq) * (100.0 - PERC_DEPRECIATION)/100.0);
+  		if (quest[i].freq < 1)	/* G */
+		    quest[i].freq = 1;
+  		frequency += quest[i].freq;
+  		}
+  	  depreciation = time();	
+	  AUTOSAVE_SERV->set_auto_save(this_object());
+	  }
+    }
+
+/* There isnt any need to read in the data files everytime, and then
+ *   parse them, they only need to be read if they have been changed.
+ *   If they have been modified in the last 3 days then we reparse them 
+ * Returns 1 if the save file is ok, otherwise 0
+ */
+int query_data_consistency () {
+array files;
+int quest_time, guild_time,i,reload_period;
+
+	files = ls (QUEST_DIR);
+	i = index (files[0],QUEST_DATA);
+	quest_time = files[2][i];
+	i = index (files[0],GUILD_DATA);
+	guild_time = files[2][i];
+	reload_period = 3600*24*3;
+	if (time() < quest_time + reload_period || time() < guild_time + reload_period) { 
+	  return 0;
+	 }   
+	return 1; 
+}
+
+load_quest_list () {
+string str;
+array found,old_quests = ({ }) , old_stats = ({ });
+int i,p;
+class c_quest record;
+
+	/* First store the old quest completion data */
+	restore_object (SAVE_FILE);
+	
+	for (i = sizeof (quest); i--;) {
+		old_quests += ({ quest[i].name });
+		old_stats += ({ quest[i].freq });
+		}
+
+	/* Read in the data file and parse */
+  str = grab_file ("guilds/quests/quest.spec");
+	found = "RO/lib/parse_file" -> filterscript (
+	   ({ "NAME","SHORT","LONG","HARDNESS","REWARDS"}),
+	   ({ STRING, STRING, STRING, INT, STRING|VAR_ARGS  }),
+	    str);
+	if (!found) {
+	  throw "Could not load quest specification file for quest server.\n";	
+	  return 0;
+	  }
+	/* Slot data into our internal form */  
+	quest = ({ });
+  for (i = sizeof (found);i--;) {	
+		record = create c_quest;
+		record.name = found[i][0];
+		record.short = found[i][1];
+		record.desc = found[i][2];
+		record.rating = found[i][3];
+		if (found[i][4]) {
+			record.reward = found[i][4];
+			}
+		 else {
+		  record.reward = ({ });
+	  }
+		quest += ({ record });
+	}
+	/* Restore quest completion data. Need to rebuild frequency as well. */
+	frequency= 0;
+	for (i = sizeof (quest); i--;) {
+		p = index (old_quests,quest[i].name);
+		if (p >= 0) {
+			quest[i].freq = old_stats[p];
+			frequency += old_stats[p];
+			}
+		}
+	if (!frequency) frequency = 1; /* just so show_stats doesnt divide by zero error */
+}
+
+load_guild_list () {
+string str;
+array found,qsts;
+int i,p,x;
+
+  str = grab_file ("guilds/quests/guild.spec");
+	found = "RO/lib/parse_file" -> filterscript (
+	   ({ "GROUP","QUESTS"}),
+	   ({ STRING, STRING|VAR_ARGS }),
+	    str);
+	if (!found) {
+	  throw "Could not load guild specification file for quest server.\n";	
+	  return 0;
+	  }
+	guilds = ({ });
+	guild_quests = ({ });  
+	for (i = sizeof (found);i--;) {  
+		guilds += ({ found[i][0] });
+		qsts = ({ });
+		if (!found[i][1]) {
+		  guild_quests += ({ 0 });
+		  continue;
+		  }
+		for (p = sizeof (found[i][1]);p--;) {
+		  x = name_index (found[i][1][p]);
+		  if (x <0) {
+		  	throw "Could not find quest (" + found[i][1][p] + ") for guild (" + found[i][0] + ")\n";
+		  	return;
+			  }
+		  qsts = BIT-> set_bit (qsts,x,1);
+			}
+		guild_quests += ({ qsts });			
+		}
+  AUTOSAVE_SERV->set_auto_save(this_object());
+}  
+
+
+/*
+ * real quest_done(string quest, string playername);
+ * logs the fact that a quest was done (quests done are counted), and
+ * returns a floating point number (0.0->1.0) indicating the value attached
+ * to doing that quest a second or successive time.  The function is based
+ * on the number of times other quests have been completed.
+ * At the moment, the quests are weighted by a force based (least squares)
+ * method, multiplied by quest difficulty.  It is unclear whether the `quest
+ * difficulty' factor should stay (they are based on first-time difficulty),
+ * and it seems that a simple linear function could actually work better in the
+ * long term (i.e. is a quest is done 15 times as often, it should be worth
+ * 1/15th as much).  The least squares is intended to give hard quests far greater
+ * worth now (early on).
+ *
+ * 950925: Took the difficulty factor out of the calculations - G.
+ * 000821: Capped reward limit, to prevent enormous gems being handed out
+ *         when new quests are added - Jenna Aug 2000
+ */
+
+/*
+ * This is the VALUE (not SP) of the gem they should get.
+ */
+
+int quest_reward(string quest) {
+    int r = real2int(quest_value(quest) * 500.0);
+    if (r > 150000)
+	r = 150000;
+    return r;
+    }
+
+/*
+ * Now we just use:
+ *	Num times done: num + 1/num quests
+ *	Value: total completions / num times done.
+ *	returned value - this with a median of 1.0
+ */
+
+real quest_value(string quest_name) {
+ 
+    int x = name_index(quest_name);
+    if (x < 0) return 0.0;
+    int z = quest[x].freq;
+    int num = sizeof(quest);
+    real rnum = 1.0 / int2real(num) + int2real(z);
+    real V = int2real(frequency + 1) / (rnum);
+    return V*V/1000.0;
+}
+
+real quest_done(string quest_name, string playername) {
+    int x = name_index(quest_name);
+    if (x < 0)
+	return 0.0;
+    real reward = quest_reward(quest_name);
+    frequency++;
+    quest[x].freq++;
+    minfreq = frequency;
+    maxfreq = 0;
+    for (x = sizeof(quest); x-- ;) {
+        int z = quest[x].freq;
+        if (z < minfreq)
+            minfreq = z;
+        if (z > maxfreq)
+            maxfreq = z;
+        }
+    AUTOSAVE_SERV->set_auto_save(this_object());
+    return reward;
+    }
+
+save_me() {
+	if ("secure/which_mud"->is_wiz_mud())  return;
+	save_object(SAVE_FILE);
+}
+
+/*
+ * Calculates the maximum number of obtainable quest points
+ */
+int query_max_quest_points() {
+int tot=0,i;
+
+	for (i = sizeof (quest); i--;) {
+		tot += quest[i].rating;
+		}
+	return tot;
+}
+
+
+/*
+ * Counts the number of quests that a player has yet to complete.
+ * If guild is specified then it only counts the relevant guild quests.
+ * Returns the number and echoes it if not 'silent'.
+ */
+query_remaining ( int silently, who, (int|string) guild_name) {
+object Who;
+int i,QuestCount = 0;
+array QuestsDone;
+    
+    if (!who)
+    	Who = this_player();
+    else
+    	Who = who;
+
+    QuestsDone = Who->query_quests();
+    QuestCount = 0;
+    guild_name = lower_case (guild_name);
+    if (!guild_name) {
+    	for (i = 0; i < sizeof(quest); i++) {
+        if (index(QuestsDone, quest[i].name) == -1)
+            QuestCount++;
+        }
+      }
+     else { 
+       int p;
+       p = index (guilds,guild_name);
+       if (p <0) return 0;
+       for (i = sizeof (quest);i--;) {
+       	if (BIT->test_bit(guild_quests[p],i) &&
+       	     index (QuestsDone, quest[i].name) == -1)
+       	        QuestCount++;
+       }
+    }   
+     	  
+    if (!silently) 
+        {
+        if (QuestCount == 0)
+            write("You have solved all the quests!\n");
+        else 
+	    write("You have " + QuestCount + " quest" + 
+	          ((QuestCount == 1) ? " " : "s ") + "to solve.\n");
+        }
+    return QuestCount;
+}
+
+
+/*
+ * Calculates the number of quest points a player has obtained
+ */
+int query_quest_points((object|int) who) {
+object Who;
+int Total =0, Count;
+array QuestsDone;
+
+	if (who)
+			Who = who;
+	else
+			Who = this_player();
+
+	QuestsDone = Who->query_quests();
+	if (!pointerp(QuestsDone)) 
+			return 0;
+	for (Count = sizeof (quest); Count --;) {
+			if (index(QuestsDone, quest[Count].name) != -1)
+					Total += quest[Count].rating;
+			}
+	return Total;
+}
+
+/*
+ * Returns the number of quests
+ */
+int query_number_of_quests()  { return sizeof(quest); }
+
+
+/*
+ * Returns all the information available about quests in a huge array
+ */
+class c_quest  
+query_all_quests((int|string) guild_name) {
+int i,gld;
+class c_quest out[0];
+
+	if (!guild_name) return quest ;
+	gld = index (guilds,guild_name);
+	if (gld == -1) throw "No such guild: " + guild_name + "\n";
+	if (!guild_quests[gld]) return ({ }); 
+	for (i=sizeof (quest);i--;) {
+		if (BIT -> test_bit (guild_quests[gld],i)) out += ({ quest[i]});
+		}
+	return out;
+}
+
+/* an array of the stats to increase. */
+array query_rewards (string qname)  {
+int i;
+
+	i = name_index (qname);
+	if (i < 0) return ;
+	return quest[i].reward;
+}
+
+/*    returns 1 if the quest exists. */
+int query_quest (string qname) {
+	if (name_index(qname) > -1) return 1;
+	return 0;
+}
+
+int name_index(string quest_name){
+int i;
+	for (i = sizeof (quest); i -- ;) {
+		if (quest_name == quest[i].name) return i;
+	}
+	return -1;
+}	
+
+int query_quest_group (string group_name) {
+  group_name = lower_case (group_name);
+	if (index (guilds,group_name) >=0) return 1;
+	return 0;
+}
+
+http_generate()
+{
+  array ret = allocate(4);
+  ret[0] = "quests.htm";
+  ret[1] = "Shattered World's Quests";
+  /*
+   * For the returned string, we want to return an explanation; and a table
+   * holding the level of the quest, the name of the quest, the description
+   * of the quest, and the guilds that want to complete it to become lords.
+   * (We don't include the lord levels here.)
+   */
+
+  string body;
+
+  body = "Explanation of the captions:\n<DL>" +
+    "<DT><STRONG>Level</STRONG>" +
+		"<DD>The difficulty of the quest, on a scale of one to " +
+		"ten. Note that this is an approximation only; a given " +
+		"quest may be harder or easier for a particular race " +
+		"or guild compared to some other race or guild.\n" +
+    "<DT><STRONG>Name</STRONG>" +
+		"<DD>The name of the quest.\n" +
+    "<DT><STRONG>Description</STRONG>" +
+		"<DD>The description of the quest, as shown to players " +
+		"in the game.\n" +
+    "<DT><STRONG>Needed for guilds</STRONG>" +
+		"<DD>Members of guilds listed in this column need to " +
+		"complete this quest in order to become a lord in " +
+		"the game. These only admit you to the lowest level " +
+		"of lorddom; higher levels have additional quest " +
+		"requirements. For example, to become the king or " +
+		"queen, you have to complete <em>all</em> the quests. " +
+		"If you aren't a member of a guild, you are required to " +
+		"complete all the quests to become a lord. Some quests " +
+		"are not required by any guilds in this fashion; " +
+		"these are typically required to become Barons, Counts, " +
+		"or suchlike. Finally, note that quests are a necessary, " +
+		"but <em>not</em> sufficient, condition to reach the " +
+		"higher lord levels.\n" +
+    "</DL><TABLE border=\"1\" summary=\"This table shows the list of " +
+        "Shattered World's currently known quests. It is sorted by " +
+        "difficulty, easiest to hardest. Note that difficulty is an " +
+	"approximation only; some races or guilds may find certain " +
+	"quests harder than other races or guilds would.\">\n" +
+    "<CAPTION>Shattered World's Quests</CAPTION>\n" +
+    "<TR><TH>Level<TH>Name<TH>Description<TH>Needed for guilds\n";
+
+/*
+ * The problem with doing this as a straight iteration through the
+ * array is that the array is not sorted. Yes, the quest.spec is
+ * *usually* kept in order, but we can't rely on that. In addition,
+ * we need to filter out "special" characters, like "&", "<", and ">".
+ * Hence this hack.
+ */
+  array data = [ [ ], [ ], [ ], [ ], [ ], [ ], [ ], [ ], [ ], [ ] ];
+              /*  1    2    3    4    5    6    7    8    9    10 */
+
+  int i, j;
+  int level;
+  int k = 0;
+
+  for (i = 0; i < sizeof(quest); i++) {
+    level = quest[i].rating - 1;
+    data[level] = data[level] +
+	[ [ quest[i].name, quest[i].short, quest[i].desc ] ];
+  }
+
+  array quest_body = allocate(sizeof(quest) + 1);
+  array quest_name = allocate(sizeof(quest));
+
+  quest_body[0] = "<TR>";
+  for (i = 0; i < 10; i++) {
+    TB("Doing data[" + i + "]");
+    if (sizeof(data[i]) >= 1) {
+      quest_body[k] += "<TD rowspan=\"" + sizeof(data[i]) +
+		"\" align=\"center\">" + (i+1) + "\n";
+      for (j = 0; j < sizeof(data[i]); j++) {
+        TB("Quest #"+j);
+        quest_body[k] += "<TD>" + http_sanitise(data[i][j][1]) + "\n";
+        quest_body[k] += "<TD>" + http_sanitise(data[i][j][2]) + "\n";
+	quest_body[k] += "<TD>";
+	quest_name[k] = data[i][j][0];
+        /*body += "<TD>" + get_guilds(data[i][j][0]) + "\n";*/
+	quest_body[++k] = "<TR>";
+      }
+    }
+  }
+
+  data = 0; /* we don't need it any more. */
+
+  /* Now we need to add the guilds to the table. */
+  /* The assignment is probably redundant, but hey. */
+  quest_body = analyse_guilds(quest_body, quest_name);
+
+  body += implode(quest_body, "\n");
+  body += "</TABLE>";
+
+  ret[2] = body;
+
+  return [ ret ];
+}
+
+/* helper functions */
+
+array analyse_guilds(array body, array name)
+{
+  array god = GUILD_SERV->query_gods() + [ ];
+  class c_quest valid_quest[0];
+  int i, j, k;
+  array has_god = allocate(sizeof(name));
+  array tmp;
+
+  for (i = 0; i < sizeof(god); i++) {
+    /* Get the god's occupation, and its list of quests. Then add the
+       data to the appropriate quests' info. */
+    valid_quest = query_all_quests(god[i]);
+    god[i] = GUILD_SERV->query_occupation(god[i]);
+    god[i] = PLURAL->plural(god[i]);
+    tmp = explode(god[i], " ");
+    for (j = 0; j < sizeof(tmp); j++)
+      tmp[j] = capitalize(tmp[j]);
+    god[i] = implode(tmp, " ");
+    for (j = 0; j < sizeof(valid_quest); j++) {
+      k = index(name, valid_quest[j].name);
+      if (k < 0)
+        TB("Could not find entry for quest " + valid_quest[j].name);
+      else {
+	if (has_god[k]) body[k] += ", ";
+	body[k] += god[i];
+	has_god[k] = 1;
+      }
+    }
+  }
+
+  for (i = 0; i < sizeof(has_god); i++)
+    if (!has_god[i])
+      body[i] += "(None)";
+
+  return body;
+}
+
+string http_sanitise(string what)
+{
+  /*
+   * Given an input string, returns a string containing the exact same
+   * text, but with the following changes:
+   *
+   *   * ">" becomes "&gt;"
+   *   * "<" becomes "&lt;"
+   *   * "&" becomes "&amp;"
+   */
+
+  if (!stringp(what))
+    return;
+  array temp;
+  string ret = "";
+  int index_lt;
+  int index_gt;
+  int index_amp;
+  int current_offset = 0;
+  int trim_to;
+  string special;
+
+  index_lt = index(what, "<");
+  index_gt = index(what, ">");
+  index_amp = index(what, "&");
+
+  while ((index_lt > -1) || (index_gt > -1) || (index_amp > -1)) {
+    if (((index_lt < index_gt) || (index_gt == -1)) &&
+        ((index_lt < index_amp) || (index_amp == -1)) &&
+        (index_lt > -1)) {
+      trim_to = index_lt;
+      index_lt = index(what, "<", trim_to + 1);
+      special = "&lt;";
+    } else if ((index_gt < index_amp) && index_gt > -1) {
+      trim_to = index_gt;
+      index_gt = index(what, ">", trim_to + 1);
+      special = "&gt;";
+    } else {
+      trim_to = index_amp;
+      index_amp = index(what, "&", trim_to + 1);
+      special = "&amp;";
+    }
+    ret = ret + what[current_offset..trim_to - 1] + special;
+    current_offset = trim_to + 1;
+    /* sanity check */
+    if (sizeof(ret) > sizeof(what) * 6)
+      index_lt = index_gt = index_amp = -2;
+  }
+
+  ret = ret + what[current_offset..];
+  return ret;
+}

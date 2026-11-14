@@ -1,0 +1,377 @@
+/*                              NPC AI Soul 
+ *                              -----------
+ *
+ * Makes monsters do smart things in response to various situations. It's
+ * intended that this soul will grow as more responses are coded.
+ *
+ * To make a monster react, call monster->react("to_what", arg1, arg2...).
+ * For example, obj/projectile calls monster->react("distance_weapon").
+ * Obj/monster calls this soul (if present). It also makes sure that the
+ * monster isn't under player control. 
+ *
+ * Coding New Monster Reactions:
+ * -----------------------------
+ * Please follow the formats below. In particular, explicitly stating
+ * all possible monster responses *before* formulating rules helps
+ * to predict a wide range of scenarios.
+ *
+ * Current Reactions:
+ * ------------------
+ *  1. 	Monster is hit (nearly hit) by a distance weapon
+ *	Args:
+ *		- "distance_attack"
+ *		- object attacker
+ * 		- string direction of attacker
+ *	Possible responses:
+ *		1. Monster does nothing.
+ *		2. Monster fires back own distance weapon.
+ *		3. Monster charges at attacker.
+ *		4. Monster runs off somewhere else.
+ * 	Rules:
+ *		1. Else if hp below wimpy, run off somewhere else.
+ *		2. If has shootable weapon, almost always fire it.
+ *		3. If has throwable weapon, 50% chance of throwing it.
+ *		4. Else 75% chance of running at attacker.
+ *		5. Else do nothing.
+ *
+ * 2.	Monster's distance attack succeeds
+ *	Args:
+ *		- "sucessful_distance_attack"
+ *		- object target
+ *		- string direction of target
+ *	Possible responses:
+ *		1. Monster does nothing.
+ *		2. Monster attacks again.	
+ *	Rules:
+ *		1. 75% chance of attacking again.
+ *		2. Else do nothing.
+ *
+ * 3.   Monster is attacked and attacker leaves.
+ *      Args:
+ *		- object attacker
+ *		- string direction attacker leaves
+ *	Possible responses:
+ *		1. Monster does nothing
+ *		2. Monster does distance attack
+ *		3. Monster chases attacker
+ *	Rules:
+ *		1. If no_wander, mob sick or random chance, stay put
+ *              2. Else chase player/monster 
+ *		3. Special rules for leaving onto Rocs
+ *
+ * 950831 Jenna		Coded initial IQ soul, including "distance_attack".
+ * 000808 Jenna		Mobs chasing players try to open doors
+ */
+
+#define DEBUG 0
+
+inherit "obj/souls/base_soul";
+
+reset(arg) 
+{
+	::reset(arg);
+	if (!arg) {
+		add_id( [ "soul", "ND", "monster_IQ", "monster_intelligence" ] );
+		set_soul_type("npc", "iq");
+		}
+	// if (is_cloned(this_object())) call_out("check_env", 2);
+}
+
+// check_env() { if (!environment(this_object())) destruct(this_object()); }
+
+init() 
+{
+	::init();
+	if (!myself || !myself->query_NPC()) return;
+    add_action("kill", "kill");
+
+#if 0
+    // some stuff for non-human NPCs who aren't getting all
+    // the "standard" souls.
+    add_action("nonhuman_communicate","ask");
+    add_action("nonhuman_communicate","say");
+    add_action("nonhuman_communicate", "Say");
+    add_action("nonhuman_communicate", "\"", -1);
+    add_action("nonhuman_communicate", "'", -1);
+#endif
+
+	myself->set_catch_tell_ob(this_object());
+}
+
+#if 0
+nonhuman_communicate(str) 
+{
+    array replace = [ "feline", "mee-ow", "canine", "woof",
+        "rodent", "squeeeeak", "fish", "blbbbb", "insect", "skktcch",
+        "centipede", "skktcch", "crustacean", "chhk-chkk" ];
+    int i, j, x;
+    string r, punc;
+
+
+    x = index(replace, myself->query_race());
+    if (x != -1) {
+        punc = str[sizeof(str)-1..];
+        if (stringp(str))
+            i = sizeof(explode(str, " "));
+        if (i) {
+            str = "";
+            for (j = 1; j <= i; j++)
+                str += replace[x+1] + " ";
+            if (punc == "!" || punc == "?" || punc == ".")
+                str = str[..(sizeof(str)-2)] + punc;
+            }
+        }
+    return communicate(str);
+}
+#endif
+
+/* All reactions go through this fun */
+react(to_what, arg1, arg2, arg3) 
+{
+	real reaction_time;
+
+	if (!"modules/disass"->function_exists(to_what, this_object())) return;
+	if (!myself || !myself->query_NPC()) return;
+
+	call_out(to_what, calc_reaction_time(), arg1, arg2, arg3);
+}
+
+calc_reaction_time() {
+	real rt = 2.0;
+
+	rt += random(10) - ((myself->query_dex() + myself->query_int()) / 10.0);
+        if (rt < 0.3)
+                rt = 0.3;
+	return rt;
+	}
+
+distance_attack(attacker, direction) {
+ object o;
+ string name;
+
+ if (!myself->query_wimp_out()) {
+ 	myself->random_move();
+ 	return;
+	}
+ if ((o = present("distance weapon", myself)) && random(8)) {
+	if (o->query_shootable()) {
+		name = o->query_name();
+		if (!name)
+			name = pointerp(o->query_shootable()) ?
+				o->query_shootable()[0] :
+				o->query_shootable();
+		/* For souls */
+		if (myself->init_command("shoot " + name + " " + direction + 
+			" at " + attacker->query_real_name())) {
+				if (!random(7)
+				    && find_call_out("attack_by_dis") == -1)
+					call_out("attack_by_dis", 
+						10 + random(5), attacker, 
+						direction); 
+				/* Maybe wait a while, then send 
+				   another pot shot down, to 
+				   catch dodging players */
+				return;
+				}
+		/* if shooting didn't work (maybe no ammo),
+		   try something else */
+		}
+	else if (o->query_throwable() && random(2)) {
+		myself->init_command("throw " + o->query_name() + 
+			" " + direction + " at " +
+			attacker->query_real_name());
+		return; 
+		}
+	}
+ if (random(100) < 75) {
+	charge_at_attacker(attacker, random(3), direction);
+	return;
+	}
+ tell_room(environment(myself), myself->query_name() +
+	" glares " + direction + "wards angrily.\n");
+	/* Cute, but might be inappropriate in some situations */
+ }
+
+charge_at_attacker(who, counter, direction) 
+{
+        array b = myself->query_I_breathe();
+	object e = environment(myself);
+        object ex = e->query_exit(direction);
+	object door;
+        int i, flag;
+
+        if (!myself->query_can_wander())
+                return;         /* Monsters who guard things */
+        if (direction == "onto the roc's back") 
+	{
+                if (myself->query_int() < random(8))
+                    myself->init_command("ride roc");
+                else
+                    myself->init_command("kill roc");
+                return;
+        }
+        if (!ex) return;
+        for (flag = 0, i = 0; i < sizeof(b); i++)
+                if (ex->query_medium(b[i]))
+                        flag = 1;
+        if (!flag)
+                return; /* Don't charge somewhere you can't breathe */
+	door = e->query_door(direction);
+	if (door && door->is_closed())
+	{
+	    if (myself->has_hands())
+	        myself->init_command("open "+direction+" door");
+	    else
+		myself->init_command("kick "+direction+" door");
+	}
+        if (!myself->init_command(direction))
+        /* Can't charge at player: better get out of here! */
+                myself->random_move();
+        if (!present(who, environment(myself)) && counter > 0)
+                call_out("charge_at_attacker", random(2) + 1, who, counter - 1, direction);
+}
+
+sucessful_distance_attack(target, direction) {
+	if (find_call_out("attack_by_dis") == -1)
+		call_out("attack_by_dis", calc_reaction_time(), target, direction);
+	}
+
+attack_by_dis(target, direction) {
+	object o;
+	string name;
+
+	if ((o = present("distance weapon", myself)) && random(100) < 75) {
+		if (o->query_shootable()) {
+			name = o->query_name();	
+			if (!name)
+				name = pointerp(o->query_shootable()) ?
+					o->query_shootable()[0] :
+					o->query_shootable();
+			/* For souls */
+			return myself->init_command("shoot " + name + 
+				" " + direction + " at " +
+				target->query_real_name()); 
+			}
+		else if (o->query_throwable()) 
+			return myself->init_command("throw " + o->query_name() + 
+				" " + direction + " at " +
+				target->query_real_name()); 
+		}
+	}
+
+attacker_flees(who, where) {
+	int r = random(100);
+	int myscore;
+
+	if (!myself || !objectp(who) || !stringp(where)) return;
+	if (random(10) > 2 && attack_by_dis(who, where)) 
+		return;
+        if (!myself->query_can_wander()) return;
+	if (!intp(myself->query_hp()) || !intp(who->query_hp())) {
+#if 0
+		jen("[IQ]: No int hp!!!\n[IQ]: Myself: " + myself->short() +
+			"\n[IQ]: Who: " + who->short() + "\nLocation: " +
+			file_name(environment(myself)) + "\n");
+		LOG->log("jenna.iq", "Bad Return on query_hp()!\nMyself: " + myself->short() +
+                        "\nWho: " + who->short() + "\n[IQ]: Location: " +
+                        file_name(environment(myself)) + "\nMyself->query_hp(): " +
+			((stringp(myself->query_hp()) || intp(myself->query_hp())) ?
+			myself->query_hp() : (pointerp(myself->query_hp()) ?
+			("array of size " + sizeof(myself->query_hp()) + ": el 0: " +
+			myself->query_hp()[0]) : "object?")) + "\nWho->query_hp(): " +
+                        ((stringp(who->query_hp()) || intp(who->query_hp())) ?
+                        who->query_hp() : (pointerp(who->query_hp()) ?
+                        ("array of size " + sizeof(who->query_hp()) + ": el 0: " +
+                        who->query_hp()[0]) : "object?")) + "\n");
+#endif
+		return;
+		}
+	myscore = (myself->query_hp(0) * 2) - who->query_hp(0) + myself->query_chu();
+	if (DEBUG || present("jenna", environment(myself)))
+		jen("[IQ]: " + myself->short() + " scored " + myscore + " to charge "+
+			"vs " + r + ".\n"); 
+	if (myscore < 20) myscore = 20;
+	if (myscore > 80) myscore = 80;
+	if (r > myscore && where != "onto the roc's back") return;
+	charge_at_attacker(who, random(3), where);	
+	return 1;
+	}
+
+catch_tell(str) 
+{
+	object bastard;
+	int x;
+    int inct;
+
+    if (!myself) return;
+    if (inct) return;
+    inct = 1;
+    bastard = myself->query_attack();
+	if (!bastard) return;
+	if(!index(str, bastard->query_name() + " leaves")) 
+    {
+		/* Don't chase newbies - J */
+	    if (bastard->query_quest_points() < random(20)) 
+        {
+            inct = 0;
+            return 0;
+        }
+	    x = index(str, ".");
+	    react("attacker_flees", bastard, str[sizeof(bastard->query_name() + " leaves")+1..x-1]); 
+        inct = 0;
+	    return 1;
+	    }
+    inct = 0;
+	return 0;	
+}
+
+jen(str) {
+	object j = find_player("jenna");
+	if (j) tell_object(j, str);
+	}
+
+
+/* npc kill func */
+kill(str)
+{
+    object ob;
+
+    notify_fail("Kill what?\n");
+
+    if (myself->query_ghost()) return 0;
+    if (!str) return 0;
+    ob = present(lower_case(str), environment(myself));
+    if (!ob) 
+    {
+        write("No " + str + " here !\n");
+        return 1;
+    }
+
+    if (!ob->query_living()) 
+    {
+        write(str + " is not a living thing !\n");
+        return 1;
+    }
+
+    if (ob == myself)  return 0;
+
+    /* Jenna 99-00: to prevent players running in, "kill mob", running out,
+     * etc, to continually get first attack */
+    if (find_call_out("attack_cycle") != -1)  
+    {
+	    if (ob == myself->query_attack()) write("Yes, yes.\n");
+	    else
+	    {
+	    write("You start attacking "+ob->my_name()+"!\n");
+	    myself->attacked_by(ob); /* Not attack_object(ob), which */
+				     /* causes instant attack */
+	    }
+        return 1;
+    }
+
+    if (!myself->attack_object(ob))
+        write("You can't attack " + ob->query_name() + "!\n");
+
+    return 1;
+}
+

@@ -1,0 +1,474 @@
+/*
+ * Points_store - for HP, SP, hunger, fatigue, colored mana, etc, that
+ * may regenerate (or degenerate) automatically.  All points are real
+ * numbers.  All times are in logged-in seconds.  Gandalf, 1995, 1996.
+ *
+ * Synopsis:
+ *	There are a collection of "points" types - eg SP, HP, etc.
+ *	Each has a name, a current value, a "default" value, and a
+ *	regeneration half-life.  Each regenerates towards its default
+ *	level (this may be up or down), at a speed proportional to
+ *	the difference between the actual and default levels.  A
+ *	regeneration half-life of (int)0 implies no regeneration.  In case
+ *	you hadn't realised, the regeneration half-life should be set to
+ *	the number of seconds to regenerate half-way towards the default
+ *	value from the current value (e.g. from 0 to HP/2).
+ *
+ *	There are also a collection of forced "regeneration sources",
+ *	e.g. "drunk", "HP-potion", etc, added using add_points_timed,
+ *	in which you specify that X points should be added over the next
+ *	Y seconds.  Points added from the same source will be added
+ *	consecutively (scheduled to happen one after the other); points
+ *	added from different sources will be added in parallel.  Usually,
+ *	point additions from potions, etc, should be consecutive - we will
+ *	settle on a standard collection of sources soon (potion, drunk,
+ *	food, etc) - do NOT use random names to add things faster, it is here
+ *	to prevent people from (eg) drinking 30 beers to get instantaneous
+ *	complete healing (instead, it lasts 30 times as long).
+ *
+ * INTERFACE:
+ *
+ *	make_points(string name, real curr, real max, int regen)
+ *    Creates a "points type" ("name"), with an initial value of curr,
+ * a default level of "max", and a base regeneration half-life,
+ * in seconds, of regen.  All those reals can be ints (but will
+ * be converted).  If "name" already exists, it is replaced with the
+ * new values (but all pending forced regenerations, etc, remain).
+ *    example: make_points("HP", 100, 300, 10000/query_con());
+ * 	For reference: Old point regeneration speeds in player (from RO):
+ *		(1/30) HP/sec (sober); (1/6) HP/sec (drunk).
+ *
+ *	array query_point_names() - The obvious.
+ *
+ *	(int|real) query_points(string name)
+ *    Returns the current points value for "name" (real),
+ * or (int) 0 if "name" isn't defined.  Recalculates current point value
+ * whenever it is called; it is unwise to attempt to directly access the
+ * points arrays.
+ *
+ *	(int|real) add_points_timed(string name, string source, real amt, int secs)
+ *    Organises for "amt" points to be added gradually to "name",
+ * such that the full amount has been added in "secs" seconds (this
+ * is called "forced regeneration" in the sequel).  "Source" is just
+ * an identifier, used for scheduling/removal purposes. If more than one
+ * forced regeneration is scheduled from the same source, they will
+ * be done consecutively; different sources are done in parallel.
+ *
+ *	example: add_points_timed("SP", "potion", 50.0, 50);
+ *			- adds 50 SP at 1 pt/sec
+ *
+ **** BASIS:
+ *
+ *    Players have a "maximum comfort level" for points.
+ *    Players may have access to (or be afflicted by) spells which
+ * continually add (or drain) some number of points per second, for
+ * a certain number of total points (and total seconds).  These are
+ * implemented by add_points_timed.
+ *
+ * When a value is queried, it is recalculated by considering the
+ * time since it was last calculated, the base regeneration rate, and
+ * any forced regenerations defined for that value.  The calculation
+ * is designed to "usually" regenerate points towards their maximums (from
+ * either above or below), but also to allow spells, etc, to force points
+ * higher or lower than the default level for limited periods of time.
+ *
+ * Starting from the last known points value (and recalc time), each forced
+ * regeneration for the elapsed period is added on (linearly).  Given that
+ * forced regenerations are continuous, we can calculate the steady state
+ * value for the stat (when regen speed = decay speed).  Then, the regeneration
+ * amount to apply is calculated by applying the (supplied) regeneration
+ * half-life to calculate the amount of change towards the effective
+ * steady-state value (i.e. after adding on the forced regens).  This
+ * enables us to account for the fact that (eg) if we fed the player
+ * 300 points in the last 10 seconds, we have to integrate the natural
+ * regen rate to get the final value.  It works well.
+ *
+ * This allows players to obtain and use outrageously high points values -
+ * but only temporarily.  Note that the half-life calculations are only
+ * an approximation, but are very fast and are (except in unusual circumstances)
+ * reasonably close to the true value; if a player is unlucky enough to
+ * query a points value precisely once per half half-life, his regeneration
+ * rate will lag by at most about 10%.  Do not attempt to fix this - G.
+ *
+ * BUGS:
+ * * it would be fairer if base_regen were calculated as an
+ * integral (over the variation in curr since the last calculation);
+ * the current system (calculated at the end) tends to exhibit
+ * stronger normalisation towards "max".  This helps players with
+ * low HP that are under curses, but hurts players at high HP that
+ * are using spells.
+ *
+ * * Bleeding (and general haemmorage) support (i.e. points store integrity).
+ *	-- should this simply determine max_points?  Or modify regen as well?
+ *	-- point stores as pressure vessels?
+ *	-- Should HP, etc, simply be a derived quantity?
+ *
+ * * It'd be nice to have point regeneration speeds proportional to
+ * other points values (i.e. HP regeneration depending on fatigue or food) - but
+ * this gets nasty to keep track of.  One day, it will, along the
+ * following lines: specify A depends on B, and a regen rate for A
+ * depending on Bcurr/Bmax.  Unfortunately, the desireable relationships
+ * between colored and colorless mana can only be approximated by
+ * such an arrangement (the "drain level" for colorless should depend
+ * on the amount drained by all colors - which in turn affects the
+ * drain levels).  Approximating it in this way is player-friendly;
+ * the mana they use (by querying it) tends to be regenerated first
+ * and therefore at the highest rate.
+ *
+ * * Should have named "external" regen providers (i.e. guild souls),
+ * which can be explicitly added, deleted, and queried by this object;
+ * this way, wizards who forget to fix up guild-provided stuff when
+ * players get kicked out if the guild won't be so easy to exploit,
+ * and "healing" ego-weapons are a hell of a lot easier to do.  But
+ * they can be implemented by adding a wrapper.
+ *
+ * * A callback on timed regen expiry, so that the
+ * presence or otherwise of souls can be periodically checked.
+ */
+
+inherit "RO/living/age";	/* standard time management object */
+
+#define	NOTUSED	"**Not Used**"
+
+/* Flat arrays - coz this will be in every monster as well */
+
+array point_store = [ ];	 		/* name, last time, curr, max, base_regen */
+array point_timed_regen = [ ]; 	/* regens: name, source, amt/sec, end */
+
+#if 0
+/* (UNUSED) */
+array point_dependent_regen = [ ];	/* dependent regens: name, from, mult/sec, end time */
+#endif
+
+/* a "stat" routine */
+
+show_stats() {
+    show_points();
+    }
+
+show_points() {
+    int now = query_age();
+	array n = query_point_names();
+    int x = 0;
+	write("Points defined: " + implode(n, ", ") + "\n");
+	write("Points forced regenerations:\n\tName\tSource\tEnd\tAmt/sec\n");
+	while (x < sizeof(point_timed_regen)) {
+		if (point_timed_regen[x] != NOTUSED) {
+			write( "\t" + point_timed_regen[x]
+				 + "\t" + point_timed_regen[x+1]
+				 + "\t" + query_age_short(point_timed_regen[x+3] - now)
+				 + "\t" + point_timed_regen[x+2]
+				 + "\n");
+			}
+		x += 4;
+		}
+
+    write("Points array at age: " + query_age_short(now)
+		  + "\n\tName\ttime\tdiff\toldcurr\tnewcurr\tmax\tregen\n");
+    while (x < sizeof(point_store)) {
+	write(	 "\t" +	point_store[x]
+		+"\t" +	query_age_short(point_store[x+1])
+		+"\t" +	query_age_short(now - point_store[x+1])
+		+"\t" + point_store[x+2]
+		+"\t" + query_points(point_store[x])	/* hack :) */
+		+"\t" + point_store[x+3]
+		+"\t" + point_store[x+4]
+		+"\n");
+	x += 5;
+	}
+    }
+
+/*
+ * Install a new set of parameters for a points store.
+ * Regen is regeneration half-life (in seconds).
+ * Max is actually `default value'.
+ */
+
+make_points(string name, (int|real) curr, (int|real) max, (int|real) regen) {
+    int x = index(point_store, name);
+
+    curr = as_real(curr);
+    max = as_real(max);
+    regen = as_real(regen);
+    if (regen < 1.0)
+		regen = 0;	/* no regen */
+
+    if (x < 0)
+	x = index(point_store, NOTUSED);
+
+    if (x < 0) {
+	x = sizeof(point_store);
+	point_store += [ NOTUSED,    0, 0, 0, 0,
+			  NOTUSED, 0, 0, 0, 0,
+			  NOTUSED, 0, 0, 0, 0,
+			  NOTUSED, 0, 0, 0, 0
+			];
+	}
+
+	point_store[x] = name;
+    point_store[x+1] = query_age();
+    point_store[x+2] = curr;
+    point_store[x+3] = max;
+    point_store[x+4] = regen;
+    }
+
+/*
+ * Return an array of the points names currently in use.
+ */
+
+array query_point_names() {
+	array n = allocate(sizeof(point_store)/5);
+	int x = 0;
+	int y = 0;
+	while (x < sizeof(point_store)) {
+	    if (point_store[x] != NOTUSED)
+		n[y++] = point_store[x];
+	    x += 5;
+	    }
+	return n[..y-1];
+	}
+
+/*
+ * int points_source_index(string name, string source) - returns the index
+ * of a forced regen of name from source, or -1 if none.  Internal use.
+ * It is unclear whether it is better to search on points name or source name.
+ */
+
+int points_source_index(string name, string source) {
+	int x = (-1);
+	source = "#" + source;
+
+	while (1) {
+		x = index(point_timed_regen, name, x + 1);
+		if (x < 0)
+			return (-1);
+		if (point_timed_regen[x+1] == source)
+			return x;
+		}
+	return (-1);
+	}
+
+/*
+ * add_points_timed("hp", "drunk", 80, 50): schedule a forcing regeneration of
+ *	80HP over 50 seconds.  If we already have a regen due to "drunk",
+ *	then alter it - adds 50 secs to the time and 80 HP to the regen,
+ *	and so may affect the current regen rate.
+ *
+ * Returns the recalculated value of the player's points, or 0 if
+ * there was no point value with that name (i.e. no effect).
+ */
+
+(int|real) add_points_timed(string name, string source,
+							(real|int) amt, int sec) {
+
+	int x = index(point_store, name);
+	if (x < 0)						/* no such stat */
+		return 0;
+	real p = query_points(name);	/* ensure we have the updated values */
+	if (!amt)						/* no addition - no change */
+		return p;
+	amt = as_real(amt);
+	if (sec < 1)		/* force min delivery time (to ensure they get it!) */
+		sec = 1;
+
+	/*
+	 * See if we are already getting regen from that source.
+	 * If not, make an entry for it.  Otherwise, add to existing entry.
+	 */
+
+	int y = points_source_index(name, source);
+
+	if (y < 0) {
+		int when = query_age() + sec;	/* adding a new one: End time. */
+		y = index(point_timed_regen, NOTUSED);
+		if (y < 0)	/* extend array */
+			point_timed_regen += [ name, "#" + source,
+									amt/int2real(sec), when  ];
+		else {
+			point_timed_regen[y] = name;
+			point_timed_regen[y+1] = "#" + source;
+			point_timed_regen[y+2] = amt/int2real(sec);
+			point_timed_regen[y+3] = when;
+		}
+	}
+	else {		/* already getting a regen from that source; add more */
+		int howlong = point_timed_regen[y+3] - query_age();	/* original time */
+		real total = point_timed_regen[y+2] * int2real(howlong); /* org regen */
+		total += amt;			/* final regen */
+		howlong += sec;			/* final time */
+		point_timed_regen[y+2] = total / int2real(howlong); /* final rate */
+		point_timed_regen[y+3] = query_age() + howlong;
+	}
+	return p;
+}
+
+/*
+ * The following removes all forced regens matching the
+ * given strings.  It can be used to (eg) remove the regenerative
+ * effects from a given source (eg drunkenness or poison), or to
+ * remove all regeneration to a particular attribute (eg HP).
+ * BUG: Should expire all regenerations (to this time) before
+ * removing them (this can be done by calling query_points() for
+ * each name).  I'll think about it.
+ */
+
+remove_forced_regen((int|string) name, (int|string) source) {
+	if (intp(name) && intp(source)) {
+		point_timed_regen = [ ];
+		return;
+	}
+	int x = (-1);
+	if (intp(name)) {
+		source = "#" + source;
+		while (1) {
+			x = index(point_timed_regen, source, x+1);
+			if (x < 0)
+				return;
+			point_timed_regen[x] = NOTUSED;
+			point_timed_regen[x - 1] = NOTUSED;
+		}
+	}
+	if (intp(source)) {
+		while (1) {
+			x = index(point_timed_regen, name, x+1);
+			if (x < 0)
+				return;
+			point_timed_regen[x] = NOTUSED;
+			point_timed_regen[x + 1] = NOTUSED;
+		}
+	}
+	x = points_source_index(name, source);
+	if (x >= 0) {
+		point_timed_regen[x] = NOTUSED;
+		point_timed_regen[x + 1] = NOTUSED;
+	}
+}
+
+/*
+ * Returns integer 0 if points value isn't defined.
+ * Otherwise returns (real) current # of points.
+ * Expires pending regenerations, etc.
+ * BUG: auto-regen is slightly generous when forced regens expired before
+ * the points were queried, and slightly ungenerous when calculating partial
+ * half-life regens (but not too badly, and the approximation used is quick).
+ */
+
+(int|real) query_points(string name) {
+	int x = index(point_store, name);
+	if (x < 0)
+		return 0;
+	int age = query_age();
+	int last_time = point_store[x+1];
+	real oldv = point_store[x+2];				/* base value */
+	if (last_time >= age)		/* (granular!): nothing's happened since then */
+		return oldv;			/* restrict recalcs to 1 per sec */
+
+	real forcev = 0.0;
+	real newv = 0.0;
+
+	/*
+	 * The following loop adds up total forced regeneration from all sources.
+	 * It should usually be quick (there is only 1 entry per source).
+	 */
+
+	int y = (-1);
+	while (1) {
+		y = index(point_timed_regen, name, y+1);
+		if (y < 0)
+			break;
+		if (point_timed_regen[y+3] <= age) {	/* use it and expire it */
+			forcev += point_timed_regen[y+2]
+						* int2real(point_timed_regen[y+3] - last_time);
+			point_timed_regen[y] = NOTUSED;
+			point_timed_regen[y+1] = NOTUSED;
+		}
+		else					/* still current */
+		forcev += point_timed_regen[y+2] * (age - last_time);
+	}
+
+	/*
+	 * forcev is now total points increase ignoring base regen (but with all
+	 * forced regens).  Base regen always drifts towards max, but is faster
+	 * when we are further away.  Since forced regen is simulated as constant
+	 * over time, we know that points values should settle at a steady state,
+	 * with (forced regen per half life) + (regen per half life) = 0, after
+	 * some suitably long interval.  We use this steady state value here as
+	 * the basis for the value to regenerate towards.
+	 */
+
+	if (realp(point_store[x+4])) {	/* no regen if int (=0) */
+
+		/* How many half-lives have expired? */
+		real half_lives = int2real(age - last_time) / point_store[x+4];
+
+		/* If we force-add F points per half life, steady state is at max+2f */
+		real steady_state = 2.0 * forcev / half_lives + point_store[x+3];
+
+		/* More than 10 half lives => just under 0.1% diff from steady state,
+		 * so simply use SS value.  This is slightly generous to people whose
+		 * forced regens expired within the last half life.
+		 */
+		if (half_lives > 10.0)
+			newv = steady_state;
+		else {
+			/*
+			 * Use a nasty approximation, linear for the last fraction of
+			 * a half-life.
+			 */
+			array some_mults = [ 1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0,
+								  128.0, 256.0, 512.0, 1024.0, 2048.0 ];
+			real dmult = some_mults[real2int(half_lives)];
+
+			/* Value after some integral number of time periods */
+			newv = (oldv - steady_state) / dmult + steady_state;
+
+			/*
+			 * Fractional part to go (most calculations will be fractional).
+			 * We add in a final linear approximation - accurate if calc'd
+			 * very often (or rarely, as calc above swamps it), never worse
+			 * than about 1/6th slower than actual regen rate (when calc'd at
+			 * exactly 0.5 half-life intervals).  Do NOT try to `fix' this
+			 * calc to be more generous (unless it is UNgenerous for intervals
+			 * less than 0.5 - don't want spamming loops).
+			 */
+
+			half_lives = half_lives - int2real(real2int(half_lives));
+			dmult = (1.0 - half_lives / 2);
+			newv = (newv - steady_state) * dmult + steady_state;
+			}
+		}
+	else {
+		newv = oldv + forcev;	/* new value: no regen */
+		}
+
+	point_store[x+2] = newv;
+	point_store[x+1] = age;
+	return newv;
+}
+
+/*
+ * use_points(name, amt) - use up some points immediately.
+ * Use add_points_timed with a 0 second delay to (essentially)
+ * add them immediately.
+ */
+
+(int|real) use_points(string name, (int|real) amt) {
+	int x = index(point_store, name);
+	if (x < 0)
+		return 0;
+	real curr = query_points(name);
+	curr = curr - as_real(amt);
+	point_store[x+2] = curr;
+	return curr;
+	}
+
+/*
+ * Convert an int or real to a real.
+ */
+
+real as_real((int|real) x) {
+    if (intp(x))
+        return int2real(x);
+    return x;
+}
+

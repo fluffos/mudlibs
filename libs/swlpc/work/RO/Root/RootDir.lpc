@@ -1,0 +1,133 @@
+/*
+ * This is the `root directory' for the virtual object
+ * scheme.  It's called "" by secure/master, and given GOD
+ * privs.  It creates the local & remote persistent object
+ * controllers (that includes the player server).
+ *
+ * DO NOT FUCK WITH THIS UNLESS YOU CAN EDIT FROM
+ * OUTSIDE/KILL MUD IF NECCESSARY.
+ */
+
+#include "Servers.h"
+#include "security.h"
+
+#define	LOG_OBJ	"room/wiz/noisy_room"
+
+inherit "RO/Root/Loaded";
+
+/*
+ * List of basic directory names, objects to clone, and su levels,
+ * that form the root of the virtual file system.
+ * The virtual dirs start with a slash (for matching purposes only).
+ */
+
+array base_dirs = [
+	"RO/Root/Players",		"P/p",		GOD + 2,	0,
+	"RO/Root/Npc",		    "P/npc",	GOD + 2,	0,
+	"RO/Root/Item",		    "P/item",	GOD + 2,	0,
+	"RO/Root/Persistence",	"P",		GOD + 2,	0,
+	"RO/Root/Remote",		"Remote",	GOD + 2,	0,	/* not used */
+	"players/gandalf/Doc/doc_dir",	"doc",		21,		"doc"	/* TEST FEATURE */
+	 ]; 
+
+query_destruct(who) {
+    catch write("Indestructible.\n");;
+    return 1;
+    }
+
+reset(arg) {
+    return;
+    }
+
+/*
+ * Startup.  Loads the logger object, but that's all.
+ */
+
+object log_ob;
+
+start_virtual() 
+{
+    string err;
+    int x;
+    object o;
+
+    if (query_su_level(this_object()) < GOD) return 0;
+    if (query_su_level(caller()) < GOD) return 0;
+
+    catch 
+    {
+	    log_ob = load_object(LOG_OBJ);
+	    log_ob->log("Root", "loaded.");
+	};
+
+    /* Preload all root objects */
+    for (x  = 0; x < sizeof(base_dirs); x = x + 4)
+    {
+	    o = ::GetVirtualObject(base_dirs[x+1]);
+	    if (!o) 
+        {				
+	        catch {
+		        o = clone_object(base_dirs[x], base_dirs[x+1]);
+		        set_uid_me(o, base_dirs[x+2], base_dirs[x+3]);
+		        o->start_virtual();
+		    };
+	        if (o) aliased_object(base_dirs[x+1], o);
+        }
+    }
+
+}
+
+/*
+ * Implement the virtual root.
+ */
+
+GetVirtualObject(string s) 
+{
+    int x = 0;
+
+    object o = ::GetVirtualObject(s);
+    /* they want one direct */
+    if (o)		return o;
+
+    while (x < sizeof(base_dirs)) {
+	int l = sizeof(base_dirs[x+1]);
+	if ((base_dirs[x+1] == s[..l - 1])
+		&& ((s[l..l] == "/")
+			|| (sizeof(s) <= l))) {	/* probable object, just load it */
+	    o = ::GetVirtualObject(base_dirs[x+1]);
+	    if (!o) {				/* not there - make one */
+	        catch {
+		    o = clone_object(base_dirs[x], base_dirs[x+1]);
+		    set_uid_me(o, base_dirs[x+2], base_dirs[x+3]);
+		    o->start_virtual();
+		    };
+	        if (o)
+		    aliased_object(base_dirs[x+1], o);
+		}
+	    if (o) {				/* if it all worked */
+		if (l == sizeof(s))		/* did we want the object itself? */
+		    return o;			/* yep */
+		if (s[l..l] == "/")		/* did they want a subobject? */
+		    return o->GetVirtualObject(s);
+		}
+	    }
+	/* No match, or it wasnt loaded - try another */
+	x += 4;
+	}
+
+    catch {
+        log_ob->log("Root", "Failed to load `" + s + "'\n");
+        };
+    return 0;
+}
+
+/*
+ * Quic hack to su the test doc dir.
+ */
+
+fix_open_doc() 
+{
+    object o = load_object("open/doc");
+    set_uid_me(o, 20, "open");
+    o->start_virtual();
+}

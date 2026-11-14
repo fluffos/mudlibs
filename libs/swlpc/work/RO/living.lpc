@@ -1,0 +1,2363 @@
+/*
+ * Shattered Worlds Mudlib
+ * Living object
+ *
+ * From a number of wizards.
+ */
+
+/*
+ * 950617 Hunter      	added familyname functions. added query_death_hook()
+ * 950824 Hunter	added "RO/hooks" to inherit tree
+ * 951019 Hunter	added ping_new_soul() code for soul_init()'s
+ * 990611 Jenna		let NPCs see where they're moving
+ * 990721 Jenna		Allowed for multiple death-hooks
+ * 990830 Jenna		Added protections, new hit_player() & damage()
+ * 990904 Jenna		Added set_damage_type()
+ * 000225 Jenna		Added my_name()
+ * 000307 Jenna		Added set_feeble(int time), query_feeble()
+ * 000311 Jenna		Added can_cut()
+ * 000330 Jenna		Moved in brief stuff from secure/body
+ * 000808 Jenna		Added 'has_hands' (references same fun in handle)
+ * 001013 Jenna		Added 'receive' to stop ghosts getting things
+ * 010330 Jenna		Failure to supply a damage type arg to hit_player()
+ *			or damage() now errors out
+ * 010821 Jenna		set_feeble now takes an arg for auo-message
+ *			broadcasting
+ * 010821 Jenna		sever_limb() now returns the object
+ */
+
+inherit "RO/Olight";		/* get rid of this shit... */
+inherit "RO/ioprocess";
+inherit "RO/Root/Loaded";	/* soul names, etc */
+inherit "RO/living/stats";	/* new stats stuff. */
+inherit "RO/store";			/* dredd's general store, split out */
+inherit "RO/affiliation";	/* base memory for social affiliations */
+inherit "RO/Servers";
+inherit "RO/living_defs";
+inherit "RO/hooks";					/* Hunter's Hook code */
+inherit	"RO/persist/inh/mob_cont";	/* mobile persistent container */
+inherit	"RO/living/points_store";	/* regenerative points store */
+inherit "RO/parse/action_parser";
+
+#include "Config.h"
+#include "/RO/gender.h"
+#include "/RO/living_vars.h"
+
+/*
+ * If you are going to copy this file think about how quickly
+ * you will lose your wizhood - DON'T DO IT.
+ *
+ * First try one of the following:
+ *
+ * 0. Use the monsterer for its specified purpose!
+ *
+ * 1. Do clone_object(), and then configure it. This object is specially
+ *    prepared for configuration.
+ *
+ * 2. If you still is not pleased with that, create a new empty
+ *    object, and make an inheritance of this object on the first line.
+ *    This will automatically copy all variables and functions from the
+ *    original object. Then, add the functions you want to change. The
+ *    original function can still be accessed with '::' prepended on the
+ *    name.
+ *
+ */
+
+
+#include <security.h>
+
+/*
+ * The following routines are defined for usage:
+ * stop_fight		Stop a fight.  Good for scroll of taming, etc.
+ * hit_player		Called when fighting (unfortunetly - hook to fight).
+ * move_player		Called by the object that moves the monster.
+ * query_name		Gives the name to external objects.
+ * query_real_name	Give the uncapitalized name, even if invisible.
+ * my_name		Returns query_name() for players & short() for npcs.
+ * attacked_by		Tells us who are attacking us.
+ * show_stats		Dump local status. (hook to stat server)
+ * stop_wielding	Called when we drop a weapon (stupid functions).
+ * stop_wearing		Called when we drop an armour.
+ * set_feeble		Enfeeble a creature (can't dodge attacks)
+ * query_feeble		Return the number of seconds until unfeebled
+ * query_hp		Query the number of hit points we have
+ * query_max_hp		Query our maximum number of hit points.
+ * query_level		Give our level to external objects (monsters mainly).
+ * query_value		Always return 0. Can't sell this object.
+ * query_npc		Return 1 if npc otherwise 0.
+ * get			Always return 0. Can't take this object.
+ * attack		Should be called from heart_beat. (hook to fight)
+ * query_attack		Stupid name for query_attacker()
+ * wield		Called by weapons (more stupid functions).
+ * wear			Called by armour.
+ * add_weight		Used when picking up things.
+ * heal_self		Enable wizards to heal this object.
+ * can_put_and_get	Can look at inventory, but not take things from it.
+ * can_cut		Returns 1 if damage_type of hands or wielded ob=="cut"
+ * attack_object	Called when starting to attack an object.
+ * test_if_any_here	For monsters. Call this one if you suspect no enemy
+ *			is here any more. This will be checked, and the
+ *			heart beat turned off in that case.
+ *			Return 1 if anyone there, 0 if none.
+ * force_us		Force us to do a command (hmm).
+ * query_sp		Return how many spell points the character has.
+ * query_living	 returns 1 if the object is inherited from living
+ * query_base_armour    Returns the basic armour modifer.
+ * set_base_armour	  - typical uses are hard skin, rings of protection
+ * query_armour	(locn)  Returns the amount of armour on that body location
+ * query_all_armour     returns the armour array (doesnt show base_armour)
+ * query_protections    Returns an array of registered protections 
+ * absorb_damage	Returns the amt of damage that would be sent to damage()   
+ * query_brief		Returns 1 if in brief mode
+ */
+
+query_living()		{ return 1; }
+query_sp()		{ return sp; }
+query_creation_date()	{ return creation_time; }
+
+/* Silly to save livings as inventory */
+
+query_no_external_save() { return 1; }
+query_no_external_restore() { return 1; }
+
+/* courtesy function */
+reset() 
+{ 
+    "RO/parse/action_parser"::reset();
+    return 1; 
+}
+
+query_destruct()
+{
+    array souls;
+    int i;
+
+    "RO/parse/action_parser"::query_destruct();
+    LIVING_SERVER->remove_living(this_object(), query_real_name());
+    "RO/Root/Loaded"::query_destruct();
+}
+
+receive(ob)
+{
+	if (query_ghost()) return 1;
+}
+
+add_bleeding(int am) 
+{
+    if ((bleeding += am) < 0) 
+	bleeding = 0;
+    if (bleeding > 0 && find_call_out ("auto_bleed") < 0) 
+	call_out("auto_bleed", 2);
+}
+
+query_bleeding() { return bleeding; }
+
+auto_bleed()
+{
+    if (query_ghost()) return;
+    if (!bleeding)  return;
+   	if (query_ghost()) return;
+#ifdef TRACK_ACTION
+    track_action("HEALTH", "bleed", "bleeding="+bleeding);
+#endif
+    damage("bleeding",bleeding);
+		tell_object(this_object(), "You are bleeding");
+    if (bleeding > 2) {
+       tell_object(this_object(), " profusely.\n");
+       checked_say(query_name() +"'s life blood gushes out over the ground.\n");
+        }
+     else {
+       tell_object(this_object(), ".\n");
+       checked_say(cap_name + " seems to be bleeding.\n");
+       }
+    if (!present("blood_pool", environment(this_object()))) 
+    {
+        object o;
+        o = clone_object("obj/blood_pool");
+        o->set_type(query_race());
+        catch move_object(o, environment(this_object())) ;;
+    }
+    call_out("auto_bleed", 4);
+}
+
+/* Type of damage done by bare hands -- usually "impact" */
+set_damage_type(string dtype) { dam_type = dtype; }
+query_damage_type() { return dam_type; }
+
+/* Return 1 if creature's weaponless damage type is "cut"
+ * (which is the case with monsters with claws, etc), or
+ * if it's currently wielded weapon can cut. For use with
+ * dismember, skin, etc.    - Jenna Mar 2000
+ */ 
+can_cut() {
+    array a;
+    object w;
+	
+    if (dam_type == "cut") return 1;
+    w = query_wielded();
+    if (w) {
+	a = w->query_damage_type();
+	if (a)
+	    return index(a, "cut") != -1;
+	}
+    return 0;
+    }
+
+has_hands()
+{
+    object h = query_soul("generic/handle");
+    if (!h) h = present("handle", this_object());
+    if (h) return h->has_hands();
+}
+
+has_head()
+{
+    int i;
+ 
+    for (i = 0; i < sizeof(body_locations); i+=2)
+	if (body_locations[i] == "head" ||
+	    index(body_locations[i], " head") != -1)
+		return 1;
+   return 0;
+}
+
+/*
+ * This function is called from other players when they want to make
+ * damage to us. We return how much damage we received, which will
+ * change the attackers score. This routine is probably called from
+ * heart_beat() from another player. Takes into account armour.
+ * The hit stuff should really be in another function *sigh* 
+ * really an icky hack for backward compatability.- geoff
+ */
+
+/* a hit player stub for backward compat shit */
+hit_player(string dtype, dam, locn, callb) {
+    return (FIGHT_SERV->hit_player(this_object(), dtype, dam, locn, callb));
+}
+
+/*
+ * doing damage to a player, don't want armour? call this function directly
+ *
+ * No, don't! See 'man lfun/damage' first  - Jenna 99
+ */
+
+damage(string dtype, int amount, locn, callb)
+{
+int temp;
+
+    if (!valid_hit()) return 0;
+    amount = amount * 2;
+#ifdef TRACK_ACTION
+    track_action("HEALTH", "damage-chk", "amount="+amount + "; locn="+locn);
+#endif
+    if (locn && intp(temp = damage_body(dtype, amount, locn, callb)) && temp >= 0)
+	amount = temp;
+    hit_point = hit_point - amount;
+    if (hit_point<0) return this_object()->death();
+    return amount;
+}
+
+/*
+ *        Standard body location classes -
+ *       '1'-'9' - relative size.
+ *       '*' - critical location (die if double negative in this area).
+ *       'm' - motor limb etc. (50% maim)
+ *       'h' - handling limb (ie. arm) (100% main)
+ *       's' - sight/feeler/sensitive appendage etc. (100% maim)
+ *       'f' - flying limb.
+ *
+ *       format : size + anything.
+ *
+ * Critical Limb Hits: when a single hit does limb max_hp damage,
+ * or reaches -max_hp hit points.
+ *  "cut"        - severs limb
+ *  "impact"     - stun
+ *  "puncture"   - bleed, can cause instant death
+ *
+ * Should have a callback-object: when message-inducing hit is 
+ * done (often a death-inducing hit), will call:
+ *  callb->hit_result(pob, result);
+ * allow messages to be sent in the right order, e.g.
+ * > You slash Ogre viciously in the abdomen.
+ * > Ogre's abdomen is laid open! His intestines spill onto the
+ * > ground!
+ * > Ogre died.
+ */
+damage_body(string dtype, int amount, locn, callb)
+{
+    int x;
+
+    if (!body_locations) 
+        return 0;
+    x = index(body_locations, locn);
+    if (x == -1) 
+    {
+        locn = random_location();
+        x = index(body_locations, locn);
+    }
+    if (!body_hps)
+        setup_hps();
+    if (!intp(body_hps[x+1]))
+        return 0;
+    body_hps[x+1] -= amount;
+
+#ifdef TRACK_ACTION
+    track_action("HEALTH", "body-damage", "amount="+amount + "; locn="+locn);
+#endif
+
+    /* check classes and do disabilities here.. */
+    if (dtype == "cut" &&
+        (body_hps[x+1] <= -body_hps[x])) /* limb is out of juice; or */
+#if 0
+/* no crit hits - Jen Dec 99 */
+         || amount >= body_hps[x]))     /* critical hit on limb */
+#endif
+    {        
+        body_hps[x+1] = "severed";
+        if (index(body_locations[x+1], '*') != -1)
+        {
+            if (callb)
+                callb->hit_result(this_object(), dtype, amount, locn, "death");
+            if (body_locations[x] == "head")
+            {
+                notify_hit("Your head is severed!\n",
+                    cap_name+"'s head is severed!\n");
+		sever_limb("head");
+            }
+            else
+            {
+                notify_hit("Your "+body_locations[x]+" is laid open! " +
+                    "Your internal organs spill onto the ground!\n",
+                    cap_name+"'s "+body_locations[x]+" is laid open! " +
+                    capitalize(GENDER->pos(this_object())) + 
+		    " internal organs spill onto the ground!\n");
+		object guts = clone_object("obj/intestines");
+		move_object(guts, environment(this_object()));
+            }
+            return this_object()->death();
+        }
+        else
+	    sever_limb(body_locations[x]);	
+    }
+    else if (dtype == "puncture")
+    {
+        int how_bad = (amount * 50) / body_hps[x];
+        int r = random(100) + 1;
+
+        if (body_hps[x+1] <= -body_hps[x]) /* limb is out of juice; or */
+#if 0
+            || r <= how_bad)              /* critical hit on limb */
+#endif
+        {
+            body_hps[x+1] = "speared";
+            if (index(body_locations[x+1], '*') != -1)
+            {
+                if (callb)
+                    callb->hit_result(this_object(), dtype, amount, locn, "death");
+                notify_hit("Your " + body_locations[x]+" is speared! "+
+                    "A terrible pain fills you...\n",
+                    cap_name+"'s "+body_locations[x]+" is speared! A strange "+
+                    "expression crosses " + GENDER->pos(this_object()) + 
+		    " face...\n");
+                return this_object()->death();
+            }
+            add_bleeding(MAIM_BLOOD);  /* Should be about 2-3 */
+            do_disabilities();
+        }
+        else if (how_bad / 25 > 0)
+            add_bleeding(how_bad/25);
+    }
+    else if (dtype == "impact")
+    {
+        int how_bad = (amount * 50) / body_hps[x];
+        int r = random(100) + 1;
+
+        if (body_hps[x+1] <= -body_hps[x]) /* limb is out of juice; or */
+#if 0
+            || amount >= body_hps[x])     /* critical hit on limb */ 
+#endif
+        {
+            body_hps[x+1] = "crushed";
+            if (index(body_locations[x+1], '*') != -1)
+            {
+                if (callb)
+                    callb->hit_result(this_object(), dtype, amount, locn, "death");
+                notify_hit("Your " + body_locations[x]+" is crushed!\n",
+                    cap_name+"'s "+body_locations[x]+" is crushed!\n");
+                return this_object()->death();
+            }
+            add_bleeding(CRUSHED_BLOOD);
+            do_disabilities();
+            }
+        else if (r <= how_bad)
+        {
+            if (index(body_locations[x+1], 's') != -1)
+            {
+                if (callb)
+                    callb->hit_result(this_object(), dtype, amount, locn, "stunned");
+		notify_hit("You feel stunned and unable to focus!\n",
+                    cap_name+" looks stunned and confused.\n");
+		this_object()->set_feeble((how_bad/5)+1, 1);
+//		call_out("broadcast_recovery", (how_bad/5)+1.1);
+            }
+            else
+            {
+            /* something else? drop weapon if 'h'?*/
+            }
+        }
+    }
+    else if (dtype == "sonic" && body_hps[x+1] <= -body_hps[x])
+	body_hps[x+1] = "imploded";
+
+    /* record damage type now - J */
+    record_new_damage(dtype, amount, locn);
+
+    if (stringp(body_hps[x+1]))
+    {
+	int res;
+
+        if (callb)
+            res = callb->hit_result(this_object(), dtype, amount, locn, body_hps[x+1]);
+
+	if (!res)
+	  notify_hit("Your "+body_locations[x]+" is "+
+	    body_hps[x+1]+"!\n",
+            cap_name+"'s "+body_locations[x]+" is "+
+	    body_hps[x+1]+"!\n");
+    }
+    return amount;
+}
+
+// Sends messages to FIGHT_SERV for display; done this way
+// primarily so the appropriate colour tags can be attached
+// Jenna Feb 2001
+notify_hit(msg, msg2)
+{
+    object att_who = this_object()->query_attack();
+
+    checked_say(msg2, att_who);
+    FIGHT_SERV->combat_msg(this_object(), msg);
+    if (att_who)
+	FIGHT_SERV->combat_msg(att_who, msg2);
+}
+
+broadcast_recovery() 
+{
+    if (query_feeble() || query_ghost()) return;
+    tell_object(this_object(), "You recover from the stunning blow.\n");
+    checked_say(cap_name+" seems to regain focus.\n");
+}
+
+sever_limb(string loc) 
+{
+	int x = index(body_locations, loc);
+	object limb;
+	string tmpname;
+
+	if (x == -1) return 0;
+
+#ifdef TRACK_ACTION
+    track_action("HEALTH", "limb-sever", "locn="+loc);
+#endif
+
+    tmpname = this_object()->short();
+    if (this_object()->is_player() || !tmpname || sizeof(tmpname) > 12)
+                tmpname = capitalize(name);
+    add_bleeding (SEVER_BLOOD);
+    do_disabilities();
+    limb = clone_object("obj/corpse");
+    limb->set_corpse_name(tmpname);
+    limb->set_was_player(!is_npc);  /* for butcher, bounty */
+    catch limb->set_body(loc);;
+    move_object(limb, environment(this_object())); 
+	return limb; 
+}     
+
+/* body_damage stores the amount of each type of damage
+ * currently received. Rather than storing absolute amounts,
+ * it stores a percentage of the current damage that is due
+ * to each type. Thus it doesn't require updating every time
+ * the creature's hit points changes; instead, each time new
+ * damage is received, the old percentages are downgraded
+ * accordingly, until they reach zero and are removed. - Jenna
+ */
+record_new_damage(dtype, amt, locn) {
+    int x, perc, i, flag, j;
+    array new;
+
+    if (!pointerp(body_damage))
+	body_damage = allocate(sizeof(body_locations));
+    x = index(body_locations, locn);
+    if (x == -1)
+	return;
+    if (body_hps[x+1] == body_hps[x]
+	|| stringp(body_hps[x+1]))
+	perc = 100;
+    else
+        perc = (100 * amt) / (body_hps[x] - body_hps[x+1]);
+    if (!body_damage[x] || perc == 100) {
+	body_damage[x] = [ dtype, 100 ];
+	return;
+	}
+    new = allocate(sizeof(body_damage[x]));
+    for (i = 0, j = 0, flag = 0; i < sizeof(body_damage[x]); i+=2) {
+	new[j] = body_damage[x][i];
+	new[j+1] = (body_damage[x][i+1] * (100-perc)) / 100;
+	if (new[j] == dtype) {
+		new[j+1] += perc;
+		flag = 1;
+		}
+	if (new[j+1] > 0)
+		j += 2;
+	}
+    if (!flag) {
+	new += [ dtype, perc ];
+	j += 2;
+	}
+    body_damage[x] = new[..(j-1)];
+    }
+
+query_body_damage(locn, dtype) {
+    int x, i, tmp, limbdam;
+    array ret = [ ];
+
+    if (!pointerp(body_damage))
+        body_damage = allocate(sizeof(body_locations));
+    if (!locn)
+	return body_damage;
+    x = index(body_locations, locn);
+    if (x == -1)
+	return 0;
+    if (!body_damage[x])
+	return 0;
+    limbdam = body_hps[x] - body_hps[x+1];
+    if (dtype) {
+	i = index(dtype, body_damage[x]);
+	if (i == -1)
+		return 0;
+	return (body_damage[x][i+1] * limbdam) / 100;
+	}
+    for (i = 0; i < sizeof(body_damage[x]); i+=2) {
+	tmp = (body_damage[x][i+1] * limbdam) / 100;
+	if (tmp > 0)
+		ret += [ body_damage[x][i], tmp ];
+	}
+    return ret;
+    }
+
+/*
+  	Defined disabilities so far -
+	move, fly, handle, sense.
+
+	Goes through body array and check to see if 
+	more than half of a type is damaged then add disability
+	(or remove).
+
+	if >= 50% of motor limbs maimed; no movement.
+	if 100% of perception limbs maimed; no perception.
+	if 100% of handling limbs maimed; no handling.
+	(no of actions should depend on number of handling limbs).
+*/
+do_disabilities()
+{
+int m_maim, m_num, h_maim, h_num, p_maim, p_num, f_num, f_main;
+int i,z, flag;
+	if (!body_locations) return;
+	disable = [ ];
+	z = sizeof(body_locations);
+	for (i = 1; i < z; i+=2) {
+		flag = stringp(body_hps[i]);
+		if (index(body_locations[i], 'm') != -1) {
+			m_num++;
+			if (flag) m_maim++;
+		}
+		if (index(body_locations[i], 's') != -1) {
+			p_num++;
+			if (flag) p_maim++;
+		}
+		if (index(body_locations[i], 'h') != -1) {
+			h_num++;
+			if (flag) h_maim++;
+		}
+		if (index(body_locations[i], 'f') != -1) {
+		  f_num++;
+		  if (flag) f_main ++;
+		}
+	}
+	if ( ((m_maim-1) * 2) >= (m_num / 2) || !m_num ) disable += [ "motor" ];
+	if ( h_maim == h_num ) disable += [ "handle" ];
+	if ( p_maim == p_num ) disable += [ "perception" ];
+	if ( f_main == f_num ) disable += [ "flight" ];
+	return disable;
+}
+
+setup_hps()
+{
+    int i, x, z;
+    string bl;
+
+	if (!body_locations) return;
+
+	body_hps = allocate(sizeof(body_locations));
+	z = sizeof(body_locations);
+	for (i = 0; i < z; i+=2) 
+    {
+		bl = body_locations[i+1];
+		x = 0;	
+		if (stringp(bl)) x = atoi(bl);
+		else x = 1; /* bl; */
+		x = x*(max_hp() / 10 +1);
+			/* probably need a better fn than this */
+		body_hps[i] = x; /* max hp of location */
+		if (!max_hp) {
+		    max_hp = hit_point;
+#if 0
+		    LOG->log("MONSTERS", "No max HP: " + 
+			file_name(this_object()) + ", " + short() + "\n");
+#endif
+		    }
+		body_hps[i + 1] = x*hit_point/max_hp(); /* current hp of loc */
+	}
+#ifdef TRACK_ACTION
+    track_action("HEALTH", "set-hp", "hp="+hit_point);
+#endif
+}
+
+recalc_hps()
+{
+    int i, x, z;
+    
+    if (!body_hps) return setup_hps();
+    z = sizeof(body_locations);
+    for (i = 0; i < z; i+=2)
+    {
+	    x = atoi(body_locations[i+1]);
+        // Going to use max_hp, instead of max_hp() because max_hp() calls 
+        // this fn and is the only thing that calls this fn 
+	    x = x*(max_hp/10 + 1);
+
+        // Shit this is FUCKED. Well, lets hack *grumble* 
+        // it cant handle all the severed stuff 
+        if (!stringp(body_hps[i+1])) 
+        {
+            if (body_hps[i])
+                body_hps[i + 1] = x*body_hps[i + 1]/body_hps[i];
+            else
+                body_hps[i + 1] = x;
+	    }
+	    body_hps[i] = x;
+    }
+}
+
+random_location()
+{
+int i, total, sz, size;
+	if (!body_locations) return -1;
+	if (!body_hps) setup_hps();
+	total = 0;
+	
+	for (i = 1; i < sizeof(body_locations); i += 2)
+	    if (intp(body_hps[i]))
+		if (sz = atoi(body_locations[i]))
+		    total+= sz;
+	if (!total) return 0;
+	total = random(total);
+	for (i = 1; i < sizeof(body_locations); i += 2)
+	{
+	    if (intp(body_hps[i]))
+		if (sz = atoi(body_locations[i]))
+		    total -= sz;
+	    if (total <= 0)
+		return body_locations[i - 1];
+	}
+}
+
+query_body_location(loc)
+{
+    if (!body_locations || !loc) return 0;
+    return (index(body_locations, loc) >= 0);
+}
+
+set_death_hook(ob, fn) 
+{
+    int x;
+
+    if (!ob) 
+	return;
+    if (!fn) 
+	fn = "death";
+    if (!death_hook)
+	death_hook = [ ];
+    query_death_hook(); // to weed out old dested hooks - Jenna Mar 01
+    x = index(death_hook, ob);
+    if (x != -1)
+	remove_death_hook(ob);
+    death_hook += [ ob, fn ];
+    return 1;
+}
+
+/* from ratty - G */
+int remove_death_hook(object ob)
+{
+    int x;
+
+    if (!death_hook)
+	death_hook = [ ];
+    x = index(death_hook, ob);
+    if (x == -1)
+	return;
+    death_hook = ARRAY->delete(death_hook, x, 1);
+    return 1;
+}
+
+query_death_hook()
+{
+    int i;
+
+    if (arrayp(death_hook))
+	for (i = sizeof(death_hook)-2; i >= 0; i-=2)
+	    if (!death_hook[i])
+		death_hook = death_hook[..(i-1)] + death_hook[(i+2)..];
+    return death_hook;
+}
+
+death()
+{
+        int i, rtmp = 0;
+
+        if (death_hook && sizeof(death_hook) > 1)
+            for (i = sizeof(death_hook)-2; i >= 0; i -= 2)
+                if (death_hook[i])
+                    catch { rtmp += death_hook[i]->(death_hook[i+1])(); } ;
+
+        if (rtmp) return;
+
+        death_no_hook();
+}
+
+death_no_hook() 
+{
+object o, cor;
+int x;
+    if (!(this_object() ->creature_immortal()))
+    { /* this creature is killable so die */
+        /* We died ! */
+#ifdef TRACK_ACTION
+	if (attacker_ob) 
+    {
+	    track_action("HEALTH", "death",
+			"age="+query_age()
+			+ "; killer=" + file_name(attacker_ob)
+			+ "; killer-name=" + attacker_ob->query_name()
+			+ "; killer-class=" + attacker_ob->query_npc());
+	}
+	else
+	    track_action("HEALTH", "death", "age="+query_age());
+#endif
+
+        cor = make_corpse();
+        make_ghost();
+/*        if (!is_npc)  */ /* Jenna April 200 */
+	    death_adjust();
+        if (allies) 
+	    stop_being_ally();
+        if (o = query_soul("generic/support")) o->stop_follow (0, 1);  
+        if (attacker_ob) attacker_ob->notify("DEATH", this_object());
+    /* If this is a player, log the death for future reference */
+        checked_say(cap_name + " died.\n");
+        if (!is_npc)
+        {
+            if (attacker_ob)
+            {
+                string aname = attacker_ob->query_real_name();
+		array o = attacker_ob->query_owner();
+
+		if (aname)
+		    aname = capitalize(aname);
+		else
+		    aname = "unknown";	
+                if (o) {
+		    if (stringp(o[0]))
+	                aname += " (under control of "+capitalize(o[0]) + ")";
+		    else if (objectp(o[0]))
+			aname += " (under control of "+capitalize(o[0]->query_name()) +")";
+		    }
+                LOG->log("DEATHS", cap_name + ": " + query_level()
+                    + " killed by " + aname + " in " + current_room + ".\n");
+                if (!attacker_ob->query_NPC()) /* player or controlled monster */
+                {
+                    if (environment( this_object() )->query_property("city"))
+                        LOG->log("CRIME", cap_name + " killed in "
+                        + environment(this_object())->query_short_desc() +
+                        " by " + aname + "\n");
+             /* "std/player_death"->add_death(this_object(), attacker_ob); */
+                }
+            }
+            else
+                LOG->log("DEATHS", cap_name + ": "+ query_level()
+                    + " - killer unknown in "+current_room+".\n");
+        }
+	if (!this_object()->second_life(0)) 
+	{
+/* monsters have souls too!  All other objects were xferred to corpse. */
+	array conts; int s;
+	    conts = contents(this_object());
+            s = sizeof(conts);
+            for (x=0; x<s; x++)
+            if (conts[x]) 
+		destruct(conts[x]);
+            move_object(this_object(), "RO/void");
+            destruct(this_object());
+            return;
+        }
+        repair_limb();
+        hit_point = 0;
+        heal_self(max_hp());
+        if (!is_npc && name != "guest") 
+	    this_object()->save_me();
+    }
+}
+
+uncon() 
+{
+    object un;
+
+	if (this_object() ->creature_immortal()) return;
+	un = clone_object("players/dredd/uncon/grey");
+/* make an unconcsious body and move it the current location */
+	move_object(this_object(), un);	
+#ifdef TRACK_ACTION
+	track_action("HEALTH", "unconsciousness", "");
+#endif
+	return 1;
+}
+
+set_gender(g) {
+/*    if (gender == "male" || gender == "female") */
+	gender = g;
+}
+
+query_gender() { return gender; }
+
+make_corpse()
+{
+    object corpse, env;
+    string tmpname; /* Jenna Nov 99 */
+
+	tmpname = this_object()->short();
+	if (this_object()->is_player() || !tmpname || sizeof(tmpname) > 12)
+	    tmpname = capitalize(name);		
+
+	corpse = clone_object("obj/corpse");
+	corpse->set_corpse_name(tmpname);
+#if 1
+	if (this_object()->query_alias())
+		  corpse->add_id("corpse of "+this_object()->query_alias());
+	corpse->set_size(query_siz());
+	catch corpse->set_body(body_locations + [], body_hps + []);;
+	catch MISC_LIB->transfer_all(this_object(), corpse);;
+#endif
+	corpse->set_was_player(!is_npc);	/* for butcher, bounty */
+    env = environment(this_object());
+    if (env) move_object(corpse, environment(this_object()));
+	return corpse;
+}
+
+nosave death_adjust() 
+{
+    string filen;
+    int i;
+
+	add_bleeding(-query_bleeding());
+	stat_death_adjust();	/* players & npc lose skills on death */
+	add_pow(-1);
+	return 1;
+}
+
+make_ghost()
+{
+    ghost = 1;
+    msgin = "drifts around";
+    msgout = "blows";
+    set_light(1);
+    if (!is_npc) this_object()->soul("on");
+    return 1;
+}
+
+valid_hit()
+{
+    if (query_wiz() && !query_npc()) return 0; /* You can't hit a wizard */
+    if (ghost) return 0;		/* or someone who is dead... */
+
+    /* or someone who is link-dead... */
+    if (this_object() ->is_player() 
+        && !query_ip_number(this_object())
+	&& this_object()->query_idle() > 15) // Jenna Nov 00
+		return 0;  			
+    return 1;
+}
+
+query_name()
+{
+string fn = this_object()->query_family_name();
+
+// Commented out to avoid "ghost of some mist" - Jenna Oct 00
+//    if (ghost)
+//	return NAME_OF_GHOST;
+    if (this_object()->query_store("test_fn"))
+    {
+	if (stringp(fn))
+	    return cap_name + " " + fn;
+    }
+    return cap_name;
+}
+
+query_real_name() { return name; }
+
+my_name() { return query_npc() ? this_object()->short() : query_name(); }
+
+(int|string)
+query_family_name()
+{
+    return this_object()->query_store("familyname");
+}
+
+set_family_name( (int|string) nme )
+{
+    return this_object()->add_store("familyname", nme);
+}
+
+
+query_npc() { 
+	if (receive_host) return 0;
+	return is_npc; 
+}
+
+/*
+ * This routine is called when we are attacked by a player.
+ */
+
+set_attack(ob) 
+{
+    if (ob != this_object())
+	attacker_ob = ob;
+}
+
+/* New attacked_by() with auto-ally stuff broken out 
+ * by Jenna, June 2000
+ */
+attacked_by(ob, recur) {
+    object tmpo = attacker_ob;
+
+    if (ob && !ob->query_ghost() && ob != this_object())
+	set_attack(ob);
+    else
+	return 0;
+    if (attacker_ob != tmpo && !recur) 
+    {
+        add_hunt(tmpo);
+	if (allies)
+	    make_allies_attack(ob);
+	else if (this_object()->query_NPC() 
+		 && find_call_out("find_allies") == -1)
+	    call_out("find_allies", 2);
+    }
+#ifdef TRACK_ACTION
+    track_action("FIGHT", "attacked-by",
+        "attacker-obj="+file_name(attacker_ob) +
+        "; attacker-name="+attacker_ob->query_real_name() +
+        "; attacker-class="+attacker_ob->query_npc());
+#endif
+    this_object()->start_attack_cycle();
+    return attacker_ob;
+}
+
+find_allies()
+{
+    int i;
+    array ret = [];
+    array c;
+    string r = query_race();
+
+    if (!environment(this_object()))
+	return;
+    c = contents(environment(this_object()));
+    if (!attacker_ob)
+	return 0;
+    for (i = 0; i < sizeof(c); i++)
+        if (c[i] != this_object() 
+	    && c[i] != attacker_ob
+	    && c[i]->query_race() == r
+	    && c[i]->query_NPC())
+	            ret += [ c[i] ];
+    if (sizeof(ret))
+    {
+        add_team(ret);
+	call_out("make_allies_attack",1, attacker_ob);
+        return 1;
+    }
+}
+
+make_allies_attack(ob)
+{
+    int ally;
+    int delete_me = -1;
+
+    if (!allies)
+	return;
+    for (ally = 0; ally < sizeof(allies); ally++) 
+    {
+        if (objectp(allies[ally]))
+              allies[ally]->attacked_by(ob,1); /* 1 prevents loop */
+        else 
+	      call_out("clean_allies", 1);
+    }
+}
+
+clean_allies()
+{
+    int ally;
+    int delete_me = -1;
+
+    while(find_call_out("clean_allies") != -1)
+	remove_call_out("clean_allies");
+    if (!allies)
+	return;
+    for (ally = 0; ally < sizeof(allies); ally ++)
+	if (!objectp(allies[ally]))
+	    delete_me = ally;
+    if (delete_me != -1)
+    {
+	allies = allies[..delete_me-1] + allies[delete_me+1..];
+	call_out("clean_allies", 1);
+    }
+}
+
+/* return the wielded weapon */
+query_wielded() { return name_of_weapon; }
+
+stop_wielding() {
+int i;
+array default_weapon,inv;
+
+    if (!name_of_weapon) return;
+#ifdef TRACK_ACTION
+    track_action("APPAREL", "wield-stop", "name="+name_of_weapon->query_name());
+#endif
+    name_of_weapon->un_wield();
+    if (name_of_weapon->is_protection()
+	&& name_of_weapon->query_invoke() == "wield")
+		name_of_weapon->uninvoke();
+    name_of_weapon = 0;
+    inv = contents (this_object());
+    for (i = sizeof (inv) ;i;) {
+	i --;
+	if (inv[i] -> id ("race_soul")) {
+	  weapon_class = inv[i] -> query_weapon_class();
+	  break ;
+	}
+    }
+    if (!weapon_class) weapon_class = WEAPON_CLASS_OF_HANDS;
+}
+
+query_wc () { return weapon_class; }
+set_wc (int arg) { weapon_class = arg;  }
+
+stop_wearing(ob) 
+{
+    int x;
+    array a,b;
+
+    if (!sizeof(armour)) return;
+    call_out("stat_check", 1); // Jenna Sep 00
+    if (ob == "all") {
+			armour = [];
+#ifdef TRACK_ACTION
+    		track_action("APPAREL", "wear-stop", "ALL");
+#endif
+			return; /* quick hack - Dredd */
+    }
+    armour = ARRAY->remove(armour, ob);
+    if (ob->is_protection() 
+	&& ob->query_invoke() == "worn")
+		ob->uninvoke();
+#if 0
+    checked_say(cap_name + " removes " + ob->query_name() + ".\n");
+   	track_action("APPAREL", "wear-stop", "name="+ob->query_name());
+    tell_object(this_object(),"Ok.\n");
+#endif
+}
+
+// When removing items, check if this will cause stat-death.
+// Jenna 000826, after introduction of magic rings & amulets
+stat_check() { this_object()->stat_zero_check(-1); }
+
+query_prev_room() { return prev_room; }
+
+query_level() { return level; /*(str+con+san+iq+dex+pow+cha)/7;*/ }
+query_wiz() {
+    if (wiz_level < GOD)
+        return wiz_level;
+    else
+	return wiz_level + random(wiz_level * 100);
+}
+query_action() { return action; }
+query_reaction() { return reaction;}
+
+max_hp()
+{
+    int ret;
+    
+    ret = 20+query_siz()+query_str()*2+query_con()*6;
+    if (ret != max_hp && !query_npc())
+    {
+	if (!max_hp)
+	    max_hp = ret;
+    	hit_point = hit_point*ret/max_hp;
+    	if (hit_point > ret) hit_point = ret;
+    	max_hp = ret;
+    	recalc_hps();
+    }
+#ifdef TRACK_ACTION
+    	track_action("HEALTH", "max-hp", "max-hp="+max_hp);
+#endif
+    return ret;
+}
+
+max_sp() { return 20+query_pow()*8+query_int(); }
+
+query_value() { return 0; }/* This object is not worth anything in the shop ! */
+
+get() { return 0; } /* It is never possible to pick up a player ! */
+
+set_action(str, silent) { action = action_value(str);
+		  if (action > 3) action = 0;
+		  if (!silent)
+		      tell_object(this_object(), "Action set to "+action_type(action)+".\n");
+		return 1;
+}
+
+set_reaction(str, silent) { reaction = action_value(str);
+		  if (reaction > 4) reaction = 0;
+		  if ((query_dex() < 15 || query_skill("defence") < 90)
+			&& (reaction == 4)) reaction = 0;
+		  if (!silent)
+		      tell_object(this_object(), "Reaction set to "+action_type(reaction)+".\n");
+		return 1;
+}
+
+action_value(str) {
+	if (str == "attack") return 0;
+	if (str == "parry") return  1;
+	if (str == "dodge") return  2;
+	if (str == "riposte") return  3;
+}
+
+query_action_name() { return action_type(action); }
+query_reaction_name() { return action_type(reaction); }
+
+action_type(act)
+{
+	if (act == 0) return "attack";
+	if (act == 1) return "parry";
+	if (act == 2) return "dodge";
+	if (act == 3) return "riposte";
+	return "attack";
+}
+
+set_feeble(int length, msgs) 
+{
+    if (query_feeble())
+	end_feeble();
+    if (length < 1) return;
+    this_object()->add_store("feeble", 1);
+    call_out("end_feeble", length, msgs);
+    return 1;
+}
+
+query_feeble() 
+{
+    if (find_call_out("end_feeble") == -1) 
+    {
+	if (query_store("feeble"))
+	    this_object()->remove_store("feeble");
+	return 0;
+    }
+    if (!query_store("feeble"))
+	this_object()->add_store("feeble", 1);
+    return 1;
+ }
+
+end_feeble(msgs) 
+{
+    if (query_feeble()) {
+	remove_call_out("end_feeble");
+	}
+    this_object()->remove_store("feeble");
+    if (msgs)
+	broadcast_recovery();
+}
+
+query_attack() { return attacker_ob; }
+
+/* Wield a weapon. */
+wield(w) 
+{
+    if (disable && pointerp(disable) && index(disable, "handle") > -1) {
+	tell_object(this_object(), "You're too disabled to wield a weapon!\n");
+	return 1;
+	}
+    if (name_of_weapon) stop_wielding();
+    name_of_weapon = w;
+    weapon_class = w ->weapon_class();
+    if (w->is_protection()
+	&& w->query_invoke() == "wield")
+		w->invoke();
+    checked_say(cap_name + " wields " + w ->query_name() + ".\n");
+#ifdef TRACK_ACTION
+    	track_action("APPAREL", "wield", w->query_name());
+#endif
+    tell_object(this_object(),"Ok.\n");
+}
+
+/* Wear some armour. */
+wear(object a) 
+{
+    object old;
+
+    if (!a) return 0;
+#if 0
+    if (sizeof(armour)) 
+    {
+			old = test_type(a);
+			if (old) return old;
+    }
+#endif
+    armour += [ a ];
+    if (a->is_protection()
+	&& a->query_invoke() == "worn")
+		a->invoke();
+#if 0
+    checked_say(cap_name + " wears " + a ->query_name() + ".\n");
+    track_action("APPAREL", "wear", a->query_name());
+    tell_object(this_object(), "Ok.\n");
+#endif
+    call_out("stat_check", 1); // Jenna Sep 00
+    return 0;
+}
+
+/* test to see if we have armour of this type already */
+test_type(a)
+{
+    int i;
+
+	for (i = sizeof(armour) ; i; ) 
+    {
+		i --;
+		if (armour[i] && (a->query_type() == armour[i] ->query_type())) 
+			return (armour[i]);	
+	}
+	return 0;
+}
+
+/* 
+	return the armour class of a specific body location.
+
+	a temporary 1-1 hack will have to do for now :(
+*/
+query_armour(locn) 
+{
+int amt, i;
+
+	if (!locn || index(body_locations,locn) <0) return 0;
+	if (!sizeof(armour)) return base_armour;
+	for (i = sizeof(armour); i; ) {
+		i --;
+		if (armour[i]) amt += armour[i] ->query_armour (locn);	
+		}
+	return (amt + base_armour);
+}
+
+query_all_armour() { return armour; }
+
+add_base_armour ((int) arg) { base_armour += arg; }
+query_base_armour () { return base_armour; }
+
+add_protection(object obj) {
+    if (index(prots, obj) != -1)
+	return;
+    prots += [ obj ];
+    }
+
+remove_protection(obj) {
+    prots = ARRAY->remove(prots, obj);
+    }
+
+query_protections() { return prots; }
+
+absorb_damage(dtype, amt, locn) {
+    int i;
+    int temp;
+
+    for (i = 0; i < sizeof(prots); i++) {
+	if (!objectp(prots[i]))
+		temp = i;
+	else
+        	amt = prots[i]->absorb_damage(dtype, amt, locn);
+	}
+    /* Occasionally protections are dested without being removed
+     * from the player's prot list. The only known case is when a 
+     * player is resouled, and their protection souls are moved
+     * to room/storage before being dested. Since the souls have
+     * no living environment, they don't know who to remove themselves
+     * from. It's simple enough to remove them here.
+     */
+    if (temp)
+	prots = prots[..temp-1] + prots[temp+1..];
+    return amt;
+    }
+
+add_weight(w) {
+/*
+    if (w + local_weight > level + 10 && (!query_wiz()))
+	return 0;
+*/
+    if (!query_wiz() && w + local_weight > query_max_can_carry())
+	return 0;
+    local_weight += w;
+    return 1;
+}
+
+query_weight_carried() { return local_weight; }
+
+query_max_can_carry() {
+    int i = (query_str() + query_siz() + query_con()) / 2;
+    i += this_object()->query_extra_carry(); /* Rocs, etc */
+    if (i < 1) i = 1;
+    return i;
+    }
+ 
+repair_limb(locn)
+{
+    int i;
+
+    if (!body_locations) return -1;
+    if (!body_hps) setup_hps();
+    if (!body_hps || !sizeof(body_hps)) return -1;
+    i = 0;
+    if (locn)
+	if ((i = index(body_locations, locn)) < 0)
+	{ i = 0; locn = 0; }
+    do
+    {
+	if (!intp(body_hps[i+1]))
+	    body_hps[i+1] = -body_hps[i];
+	i += 2;
+	if (i >= sizeof(body_hps)) locn = "finished";
+    } while (!locn);
+    do_disabilities();
+}
+
+heal_self(h, locn) {
+    int i, sb;
+    
+    if (!h || h < 0)
+	return;
+    hit_point += h;
+    if (query_bleeding() > 0) {
+    	sb = h / bleeding;
+	    add_bleeding (-sb);
+    }
+    if (hit_point > max_hp())
+	hit_point = max_hp();
+#ifdef TRACK_ACTION
+    track_action("HEALTH", "heal",
+	"locn="+locn+"; amount="+h+"; result-hp="+hit_point);
+#endif
+
+#if 0
+    sp += h / 2;
+    if (sp > max_sp())
+	sp = max_sp();
+#endif
+    if (!body_locations) return;
+    if (!body_hps) setup_hps();
+    if (locn)
+    {
+	if ((i = index(body_locations, locn)) < 0)
+	{ i = 0; locn = 0; }
+    }
+    else
+	i = 0;
+    do
+    {
+	if (intp(body_hps[i+1]))
+	{
+	    if ((body_hps[i+1] = body_hps[i+1] + h) > body_hps[i])
+		body_hps[i+1] = body_hps[i];
+	}
+	i+=2;
+	if (i >= sizeof(body_hps)) locn = "finished";
+    } while (!locn);
+}
+
+add_sp(x) {
+	if (x < 0 && query_wiz())  /* Jenna 2000 */
+		return;
+	sp += x;
+	if (sp > max_sp()) sp = max_sp();
+#ifdef TRACK_ACTION
+	track_action("HEALTH", "add-sp", "amount="+x+"; result-sp="+sp);
+#endif
+}
+
+can_put_and_get(str) { return str != 0; }
+
+attack_object(ob) {
+
+    if (!ob) {
+			stop_hunter();
+			return 0;
+    }
+    if (ob == this_object() || ob->query_ghost()) return 0;
+
+#ifdef TRACK_ACTION
+	track_action("FIGHT", "attack",
+	    "who="+file_name(ob) +
+	    "; who-name="+ob->query_real_name() +
+	    "; who-class="+ob->query_npc());
+#endif
+    ob->attacked_by(this_object());
+    attacked_by(ob);
+/*    this_object()->start_attack_cycle();  No need! attacked_by does this */
+	  FIGHT_SERV->attack(this_object());
+	  return 1;
+}
+
+query_ghost() { return ghost; }
+
+/*
+ * If no one is here (except ourself), then turn off the heart beat.
+ * Nah! - I want monsters to bash up other monsters.
+ * Nah, fuck that - turns out to be too expensive (you moron!)
+ */
+
+test_if_any_here() {
+    object ob;
+    array what;
+    int i;
+    ob = environment();
+    if (!ob) return;
+    what = contents(ob);
+    for (i = 0; i < sizeof(what); i++) {
+	    ob = what[i];
+	    if (ob) {
+		if (ob != this_object() && living(ob) && !ob ->query_npc())
+		    return 1;
+      	    }
+    }
+    return 0;
+}
+
+stop_hunter() {
+/*    hunter = 0; */
+    tell_object(this_object(), "You are no longer hunted.\n");
+}
+
+force_us(cmd) {
+    int other_lev;
+    other_lev = query_su_level(previous_object());
+    if ((query_wiz() > other_lev) && (other_lev < GOD)) {
+	tell_object(this_object(), this_player() ->query_name() +
+		    " tried to force you to " + cmd + ".\n");
+	return;
+    }
+    tell_object(this_object(), this_player() ->query_name() +
+		" forced you to '" + cmd + "'.\n");
+    command(cmd);
+}
+
+/* This is used by the shop etc. */
+/* Should now only be used by MOVE->move_money(), not by other code. */
+
+add_money(int m) 
+{
+	object clr = caller();
+/*	if (!this_object()->is_player()) return; */
+	/* I want to fix present2 so it uses MOVE->move_money() instead.
+	   *sighs* don't have time to do a proper job right now. Bel. */
+	if ((file_name(clr) != MOVE) && (file_name(clr) != "RO/lib/present2"))
+	{
+		LOG->log("MONEY.leaks", "add_money() in living called by " +
+			file_name(clr) + "\n");
+	}
+	money = money + m;
+#ifdef TRACK_ACTION
+	track_action("MONEY", "add-money", "amount=" + m + "; result=" + money);
+#endif
+/*	catch add_worth(m);; */
+	 }
+
+query_money() { return money; }
+
+run_away() 
+{
+    object here;
+    array dd;
+    int i, j;
+
+    here = environment();
+    dd = here->query_dest_dir();
+    if ((!pointerp(dd)) || (sizeof(dd) < 2)) 
+    {
+	    dd = DIRECTION->query_abbreviated();
+	    j = random(sizeof(dd));
+	    while (i < 14 && here == environment()) 
+        {
+		    notify_fail("");
+		    i++; j++;
+		    if (j >= sizeof(dd)) j = 0;
+		    command(dd[j]);
+	    }
+    }
+    else {
+	/* should really run back to where we came from */
+	if (prev_room) i = index(dd, prev_room) + 1;
+	if (!i) i = random(sizeof(dd) / 2) * 2 + 1;
+	command(dd[i]);
+	prev_room = 0;
+		/* forget where we ran from - so we don't run between only 2 locs */
+	}
+    if (here == environment()) {
+	checked_say(cap_name + " tried, but failed to run away.\n");
+	tell_object(this_object(),
+	    "Your legs tried to run away, but failed.\n");
+    } else {
+	tell_object(this_object(), "Your legs run away with you!\n");
+    }
+#ifdef TRACK_ACTION
+	track_action("GENERAL", "fleed", "");
+#endif
+	return 1;
+}
+
+query_hp(locn) 
+{
+    int x;
+
+	if (!locn)  return hit_point;
+	if (!body_hps) setup_hps();
+	if (locn == "all") return body_hps;
+	x = index(body_locations, locn);
+	if (x < 0) return "invalid location";
+	else return body_hps[x+1];	
+}
+
+query_max_hp(locn) 
+{
+    int x;
+
+	if (!locn)  return max_hp();
+	max_hp(); /* in case max hp has changed */
+	if (!body_hps) setup_hps();
+	x = index(body_locations, locn);
+	if (x < 0) return "invalid location";
+	else return body_hps[x];	
+}
+
+query_wimpy() { return wimpy; }
+query_current_room() { return current_room; }
+
+/* this determines whether we're in trouble based on a % run */
+/* return 0 for a wimp out! else returns a status string */
+query_wimp_out() 
+{
+    string pro;
+
+    if (query_hp() < (max_hp() * wimpy / 100)) return 0;
+    else {
+    int x,i; string junk;
+            /* go through body locations */
+	    pro = "Hp:"+hit_point+"; Sp:"+sp;
+            if (!body_hps) setup_hps();
+            x = sizeof(body_hps);
+            for(i = 0; i < x; i += 2)
+                    if (index(body_locations[i+1], "*") > -1) {
+                    if (intp(body_hps[i+1]) && body_hps[i]
+                                     < body_hps[i+1] * wimpy /100)
+                            return 0;
+		    if (body_hps[i+1] > 700)
+			recalc_hps();    /* Jenna 2000 */
+                    pro=pro+"; "+capitalize(body_locations[i]) +
+                            ":"+body_hps[i+1];
+                    }
+    }
+    return pro;
+}
+
+checked_say(string str,(int|object|array) ob) 
+{
+    /* if (query_invis() >= INVIS_ACTION) return; */
+	if (ob) say(str, ob);
+	else say(str,this_object()); /* We need the second parameter otherwise the say happens around this_player() */
+}
+
+int
+query_invis(int num) 
+{
+    /* if (!x || (x < level)) return is_invis; */
+    if (!num) return is_invis;
+    return -is_invis;
+}
+
+stop_fight()
+{
+    remove_hunt(attacker_ob);
+    attacker_ob = 0;
+}
+
+/* 
+	All of the following breathing code added by
+	Rob Rendell - rendell@bruce.cs.monash.edu.au
+	aka Nevyn on the Shattered World.
+
+	note: This stuff needs to be in living.c because breathing
+	is a function of the object in question (ie. you keep
+	drowning if you're still under water). But I think this should
+	be a generic state machine -- Dredd.
+
+	Well, what ever is the case I added remove_can_breathe, and
+	  did a few mods here and there. -- Llati
+*/
+
+array I_breathe;
+
+/* call this with a new medium the living thing can breathe - anything means
+    they can breathe anything (strangely enough) */
+
+add_can_breathe(medium)
+{
+	if (stringp(I_breathe))
+		I_breathe = explode(I_breathe, "&");
+	if (I_breathe && (index (I_breathe,medium) >= 0) )
+		return ; 
+	if (stringp(medium))
+		medium = [medium];
+	if (medium[0] == "anything" || !I_breathe)
+		I_breathe = medium;
+	else
+		I_breathe += medium;
+}
+
+/* Ho ho, its Llati again, sickening aint it? oh, i wrote the fn below */
+remove_can_breathe (medium ) {
+int i;
+	if (!I_breathe) return;
+	i = index (I_breathe,medium);
+	if (i < 0) return 0;
+	I_breathe = I_breathe[..i-1] + I_breathe [i+1..];
+	return 1;
+}
+
+/* test_breath should be called from the init of every room, with length =
+    the starting point of breath holding (10 is the default, if nothing is
+    passed) */
+
+test_breath(length)
+{
+	if (environment() && !I_can_breathe(environment()->query_medium()))
+		if (find_call_out("breath_routine") <= 0 && find_call_out("fail_breath") <= 0)
+		{
+			if (length == 0)
+				length = 10;
+			call_out("breath_routine", 5, length);
+		}
+}
+
+/* we must roll under con*length to keep holding our breath.  length decrements
+    each call (minimum 1) */
+
+breath_routine(length)
+{
+	if (!I_can_breathe(environment()->query_medium()))
+		if (random(100) < query_con()*length)
+		{
+			if (length > 1)
+				length -= 1;
+			tell_object(this_object(), "You manage to hold your breath.\n");
+			checked_say(cap_name+" seems to be having difficulty breathing.\n");
+			call_out("breath_routine", 5, length);
+		}
+		else
+		{
+			tell_object(this_object(), "You cannot hold your breath any longer!\n");
+			fail_breath();
+		}
+}
+
+/* if the room has a function query_inhale_object defined returning an object,
+    the function "inhale" in that object will be called, otherwise 1-25 points
+	of damage is done on the living object.  If inhale returns 0, no more
+	drowning occurs, otherwise the return value is the delay on the next call.
+*/
+
+fail_breath()
+{
+	int temp;
+	array medium;
+
+	medium = environment()->query_medium();
+	if (stringp(medium))
+		medium = [medium];
+	if (!I_can_breathe(medium))
+	{
+		if (environment()->query_inhale_object())
+		{
+			if (temp = environment()->query_inhale_object()->inhale(this_object()))
+				call_out("fail_breath", temp);
+		}
+		else
+		{
+			damage("suffocation", random(25)+1);
+			call_out("fail_breath", 5);
+		}
+		if (!medium)
+			medium = ["air"];
+		tell_object(this_object(), "You inhale "+medium[0]+"!\n");
+		checked_say(cap_name+" inhales "+medium[0]+"!\n");
+	}
+}
+
+/* tests if the living thing can breathe in this medium.  If no_supply is 0, a
+    test is made for air supplies in inventory, otherwise only the medium is
+    considered. */
+
+query_I_breathe() { return I_breathe; }
+
+I_can_breathe(medium, no_supply)
+{
+	string s1, s2;
+	int i;
+	object ob;
+	array what;
+
+	if (!medium)
+		medium = ["air"];
+	if (stringp(medium))
+		medium = [medium];
+	if (stringp(I_breathe)) /* backdating thing */
+		I_breathe = explode(I_breathe, "&");
+	if (!I_breathe)
+		I_breathe = ["air"];
+	if (query_wiz() || ghost ||
+		index(I_breathe, "anything") >= 0 ||
+		index(medium, "magic") >= 0)
+		return 1;
+	for (i = 0; i < sizeof(medium); i++)
+		if (index(I_breathe, medium[i]) >= 0)
+			return 1;
+	if (no_supply)
+		return 0;
+	what  =  contents(this_object());
+	for (i = 0; i < sizeof(what); i++) {
+	ob = what[i];
+	if (ob)
+	{
+		if (ob->query_breath_supply() && I_can_breathe(ob->query_medium(), 1))
+		{
+			ob->use_breath_supply();
+			call_out("test_breath", 5);
+			return 1;
+		}
+	}
+	}
+	return 0;
+}
+
+/* New show_damage() - Jenna Nov 99 */
+show_damage()
+{
+    string ret, ret2;
+    int i, j, x;
+    array bdam, aret;
+
+    if (!body_hps)
+	setup_hps();
+    for (i = 0, bdam = [ ]; i < sizeof(body_hps); i+=2)
+    {
+	string temp;
+	array dtype1, dtype2;
+
+	if (stringp(body_hps[i+1]))
+	    temp = body_hps[i+1];
+	else
+	{
+	    dtype1 = query_body_damage(body_locations[i]);
+	    if (pointerp(dtype1) && sizeof(dtype1))
+	    {
+                for (j = 0, dtype2 = [ ]; j < sizeof(dtype1); j += 2)
+                dtype2 += [ "std/damage"->query_live_effect(dtype1[j],
+                       (dtype1[j+1] * 3 / max_hp(body_locations[i])) + 1) ];
+                temp = STRINGS->array2string(dtype2);
+            }
+        }
+        if (temp)
+        {
+	    x = index(bdam, temp);
+	    if (x == -1)
+		bdam += [ temp, [ body_locations[i] ] ];
+	    else
+		bdam[x+1] += [ body_locations[i] ];
+        }
+    }
+    if (sizeof(bdam))
+    {
+	aret = allocate(sizeof(bdam)/2);
+        for (i = 0; i < sizeof(bdam); i+= 2)
+        {
+	    if (sizeof(bdam[i+1]) == 1)
+		aret[i/2] = bdam[i+1][0] + " is ";
+	    else
+	        aret[i/2] = STRINGS->array2string(bdam[i+1]) + " are ";
+	    aret[i/2] = GENDER->pos(this_object()) + " " +
+		aret[i/2] + bdam[i];
+	}
+	ret = capitalize(STRINGS->array2string(aret));	
+    }
+    else
+        ret = capitalize(GENDER->sub(this_object()));
+
+    ret2 = (hit_point < max_hp()/5) ? " looks near death!\n" :
+    	   (hit_point < max_hp()/3) ? " seems to be in some pain.\n":
+	   (hit_point*6 < max_hp()*5) ? " looks somewhat pale.\n" : 0;
+    if (!sizeof(bdam))
+    {
+	if (!ret2)
+	    return capitalize(GENDER->sub(this_object())) + " is in good shape.\n";
+	return capitalize(GENDER->sub(this_object())) + ret2;
+    }
+    else
+    {
+	if (!ret2)
+	    return ret + ", but otherwise " + 
+		GENDER->sub(this_object()) + " is in good shape.\n";
+	return ret + ", and " + GENDER->sub(this_object()) + ret2;
+    }
+}
+
+query_disable()
+{
+	if (!disable) disable = [ ];
+	return disable;
+}
+
+/* This routine is called from objects that moves the player. *\
+ * Special: direction "X" means teleport.                     *
+ *                                                            *
+ * The bits for moving silently between rooms and for         *
+ * allowing players to see rooms in the dark added by:        *
+ * Rattcherryh, 18th April 1993.                              *
+ *                                                            *
+ * Rewritten by Jenna, 18th July 2001, to remove some redun-  *
+ * dancy, and to allow some players to see certain people     *
+ * moving and others not (previously it was all-or-nothing).  *
+ * This should make things easier for future enhancement of   *
+ * light/silent movement/perception abilities.
+\*                                                            */
+
+move_player(dir, dest)
+{
+    int i;
+    string mmsgin, mmsgout, catch_message;
+    string cap_name2 = capitalize(my_name());
+    object ob, fromenv;
+
+    // Part 1: check if this is a valid move
+
+    if (!dest)
+    {
+        LOG->log("BAD_DEST", dir + " from " + current_room +
+                " has no destination.\n");
+    }
+    if (!ghost 
+	&& dir != "X"
+	&& !is_npc     /* hmm */
+	&& !query_wiz()
+        && !this_object()->add_weight(0))
+    {
+        tell_object(this_object(),"You try to move but collapse under "+
+	    "the weight of all you're carrying!\n");
+        broadcast_move(cap_name2 + " tries to leave but collapses under " +
+	    "the weight of " + GENDER->pos(this_object()) + " load!\n");
+        return 0;
+    }
+    if (!ghost 
+	&& dir != "X"
+	&& disable 
+	&& arrayp(disable) 
+        && (index(disable, "motor") > -1))
+    {
+        tell_object(this_object(), "Your injuries don't allow " +
+            "you to move!\n");
+	broadcast_move(cap_name2 + " struggles to leave " + dir + 
+	    ", but can't due to " + GENDER->pos(this_object()) + 
+	    " injuries!\n");
+        return 0;
+    }
+    catch_message = catch dest ->stupid_fucking_load_up_func();;
+    if (catch_message)
+    {
+        tell_object(this_object(), "There seems to be a disturbance " +
+            "in reality in that direction.\nYou decide not to " +
+            "leave that way.\n");
+        if (dir != "X")
+        {
+	    broadcast_move("A mysterious force prevents "  + cap_name +
+                " from leaving " + dir + ".\n");
+            if (stringp(dest) || intp(dest))
+                LOG->log("BAD_DEST", dir + " from " +
+                        current_room + " to " + dest + "\n");
+            else
+                LOG->log("BAD_DEST", dir + " from " +
+                        current_room + " to " + file_name(dest) + "\n");
+        }
+        return;
+    }
+    fromenv = environment(this_object());
+    if (dir == "X" 
+	&& !query_wiz() 
+	&& (fromenv->realm() == "NT" 
+	    || fromenv->query_property("no_teleport") 
+	    || dest->realm() == "NT" 
+	    || dest->query_property("no_teleport") ))
+    {
+        tell_object(this_object(), "Your attempt to leave failed.\n");
+        return 0;
+    }
+    /* test movement hooks */
+    if ( test_binary_hook( "move", this_object(), dir, dest )
+        && !(query_wiz() && !query_store("wiz_move_hooks")) )
+    {
+        return 0;       /* refuse to move */
+    }
+
+    // Part 2: move the player
+
+    if (fromenv)
+        prev_room = file_name(fromenv);
+
+    move_object(this_object(), dest);
+    ob = environment(this_object());
+
+#ifdef MAPPER_OBJECT
+    MAPPER_OBJECT->add_valid_move(dir + "\t" + here + "\t" + file_name(ob));
+#endif
+
+    // Part 3: Setup strings for message broadcasting
+
+    if (!msgin)
+ 	msgin = "arrives";
+    if (!msgout)
+	msgout = "leaves";
+    if (dir == "X")
+    {
+        mmsgout = query_store("toutmsg");
+        mmsgin = query_store("tinmsg");
+        if (!mmsgout)
+                mmsgout = "disappears in a puff of smoke";
+        if (!mmsgin)
+                mmsgin = "arrives in a puff of smoke";
+    }
+
+    // Part 4: Broadcast messages
+
+    if (ob != fromenv)
+    {
+        if (ghost)
+        {
+            broadcast_move(NAME_OF_GHOST + " " + msgout + " " + dir + ".\n",
+		fromenv);
+            broadcast_move(NAME_OF_GHOST + " " + msgin + ".\n");
+        }
+        else if (dir == "X")
+        {
+            broadcast_move(cap_name2 + " " + mmsgout + ".\n", fromenv);
+	    broadcast_move(cap_name2 + " " + mmsgin + ".\n");
+        }
+	else
+	{
+	    broadcast_move(cap_name2 + " " + msgout + " " + dir + ".\n",
+		fromenv);
+	    broadcast_move(cap_name2 + " " + msgin + ".\n");
+	}
+    }
+
+    // Part 5: force a 'glance', if this player can see.
+
+    if (query_wiz())
+	tell_object(this_object(), (stringp(dest) ? dest: file_name(dest)) + 
+	    "\n");
+
+    this_object() -> did_a_move(); /* So an inherited one can be used */
+
+    if (can_see())
+	command("glance");
+    else
+	tell_object(this_object(), "A dark area.\n");
+    test_advisory_hook( "postmove", prev_room, dest);
+
+#if 0
+    /* Show minimap */
+    if (!is_npc 
+	&& !query_store("minimap")
+	&& !query_brief()
+	&& environment(this_object())->query_property("is_world")) 
+	{
+            object support = query_soul("generic/support");
+            if (support) support->minimap();
+        }
+    }
+#endif
+
+    return 1;
+}
+
+
+// Return 1 if this player can see, else 0.
+// Defaults to environment if no arg supplied.
+// Intended for future enhancement.
+can_see(e)
+{
+    if (!objectp(e))
+	e = environment();
+    return set_light(0) > 0;
+}
+
+// Compares my invisibility level with the perception ability of
+// everyone present. At the moment this is pretty crude, but it's
+// written for future enhancement, when we have a decent light
+// system.
+//
+// One of the first things to do will probably be to break out
+// the 'how good is my perception' stuff: i.e. let players
+// tell us what their perception is, rather than have us
+// calculate it for them.
+//
+// But for the moment: normal perception is the room's light
+// less 1. So in an average room of light == 1, your perception
+// is 0; in a dark room of 0 light, your perception is -1.
+// If it is dark, your "infravision" store is taken into
+// account, so in a dark room an "infravision" score of 1 will
+// allow you to see normally.
+//
+// If you're a wiz, you have excellent perception, based on your
+// wizlevel.
+//
+// Compared to that is the player's invisibility. If perception is
+// equal to or greater than his invis level, he will be seen.
+//
+// Thus, any invis level will currently hide your movement in a room
+// of light == 1 (except from wizzes), but in brighter rooms, you need
+// a correspondingly higher invis level. In the dark, players can
+// only see you if their "infravision" is enough to counter the
+// room's darkness level, and if you're not also invisible.
+//
+// In the future I expect that various people will be given better
+// or worse perception than others.
+//
+// Jenna July 2001.
+broadcast_move(str, where)
+{
+    int i, l, invis, percep, cap;
+    array c;
+
+    if (!where)
+	where = environment();
+
+    invis = query_invis();
+    l = where->query_light();
+
+    c = contents(where);
+    for (i = 0; i < sizeof(c); i++)
+	if (c[i] != this_object()
+	    && c[i]->query_living())
+	{
+	    percep = l - 1; /* room's light level */
+	    if (l < 1)
+	    {
+		cap = c[i]->query_store("infravision");
+		/* infra can't make you see better than normal */
+		if (cap + percep > 0)
+		    percep = 0;
+		else
+		    percep += cap;
+	    }
+            percep += c[i]->query_wiz(); /* big wiz bonus */
+	    if (percep >= invis)
+		tell_object(c[i], str);
+        }
+}
+
+
+int
+add_move_hook( (string|object) obj, string func )
+{
+    return add_hook( "move", obj, func );
+}
+
+
+int
+remove_move_hook(obj, func)
+{
+    return remove_hook( "move", obj, func );
+}
+
+query_move_hooks() 
+{
+    return query_hooks( "move" );
+}
+
+/*
+	Written by Rob Rendell - rendell@bruce.cs.monash.edu.au
+	aka. Nevyn on the Shattered World.
+	(please retain this header).   - Dredd
+*/
+
+show_appearance()
+{
+    string phys, temp1, temp2;
+    int flag;
+    int last_rand;
+
+    phys = SCORE_SERV->show_build(this_object()); 
+
+    flag = 0;
+    if (query_dex() > 25)
+	temp1 = capitalize(subjective(this_object()))+" moves with an inhuman grace";
+    else if (query_dex() > 16)
+	temp1 = capitalize(subjective(this_object()))+" moves with a cat-like grace";
+    else if (query_dex() < 6)
+	temp1 = capitalize(subjective(this_object()))+" seems to blunder into everything";
+    if (query_pow() > 25)
+	temp2 = possessive(this_object())+" eyes almost glow with intensity";
+    else if (query_pow() > 16)
+	temp2 = possessive(this_object())+" eyes are very intense";
+    if (query_san() < 5)
+	if (temp2) temp2 += ", but have a manic gleam to them";
+	else temp2 = possessive(this_object())+" eyes have a manic gleam to them";
+    if (temp1 && temp2)
+	temp1 += ", and "+temp2;
+    else if (temp2)
+	temp1 = capitalize(temp2);
+    if (temp1)
+	phys += "  "+temp1;
+    if (phys[strlen(phys) - 1] != '.') phys += ".";
+#if 0
+    write(cap_name+" is "+phys+"  ");
+    show_damage();
+#endif
+    return cap_name+" is "+phys+"  " + show_damage();
+}
+
+array hunting;
+add_hunt(ob)
+{
+	if (!ob) return;
+	if (!hunting) hunting = [ ob ];
+	else 
+		if (index(hunting, ob) == -1) hunting = [ ob ] + hunting;
+	return;
+}
+
+query_hunt()
+{
+	if (!pointerp(hunting)) return;
+	return hunting;
+}
+
+remove_hunt(ob) { 
+	if (ob == "all") hunting = 0;
+	else hunting = ARRAY->remove(hunting, ob);
+}
+
+/*
+	 Teams stuff - originally by Rob Rendell.
+*/
+
+add_team(team_list)
+{
+    int ally;
+
+    if (!team_list) return;
+    if (objectp(team_list)) team_list = [team_list];
+    add_allies(team_list);
+    for (ally = 0; ally < sizeof(allies); ally++)
+	if (allies[ally])
+	    allies[ally]->add_allies(allies + [ this_object() ]);
+}
+
+add_allies(list)
+{
+    int ally;
+
+    if (!allies) allies = [];
+    for (ally = 0; ally < sizeof(list); ally++)
+	if (index(allies, list[ally]) < 0 && list[ally] != this_object())
+	    allies += [ list[ally] ];
+}
+
+stop_being_ally()
+{
+    int ally, s;
+    s = sizeof(allies);
+    for (ally = 0; ally < s; ally++)
+	if (allies[ally])
+	    allies[ally]->remove_ally(this_object());
+}
+
+remove_ally(who) { allies = ARRAY->remove(allies, who); }
+query_allies() { return allies; }
+
+nosave int casting;
+
+string combat_spell;
+add_spell(time, callb)
+{
+	if (is_casting()) return 0;
+	if (time) casting = 1;
+	if (time) call_out("finished_casting", time);
+	combat_spell = callb;
+#ifdef TRACK_ACTION
+    track_action("SPELL", "cast-start", "spell="+callb);
+#endif
+	return 1;
+}
+
+query_spell() { return combat_spell; }
+finished_casting(callb) { casting = 0; }
+is_casting() { return casting; }
+
+/*
+	Notify - if the appropriate string is stored in
+	the generic store then the call back is called.
+
+	* DEATH - if you wish to be notified of an opponents death.
+*/
+
+notify(str, param)
+{
+string retv;
+int y;
+	retv = query_store(str);
+	if (!retv) return;
+	y = index(retv, ".");
+	if (y == -1) return;
+	retv[..y-1]->(retv[y+1..])(param);
+}
+
+/* Brief stuff */
+nosave int in_temp_brief = 0;
+nosave int lastmovechecktime;
+
+query_in_temp_brief() { return in_temp_brief; }
+query_brief() { return brief; }
+
+toggle_brief() {
+    brief = !brief;
+    if (brief) {
+        in_temp_brief = 0;
+        write("Brief mode.\n");
+        }
+    else
+        write("Verbose mode.\n");
+    return 1;
+}
+
+did_a_move() {
+    if (time() - lastmovechecktime <= 1) {
+      /* We are moving fast */
+          if (!in_temp_brief && !brief) {
+            in_temp_brief = 1;
+            brief = 1;
+            }
+        }
+    else
+	check_temp_brief();
+    lastmovechecktime = time();
+}
+
+check_temp_brief() 
+{
+    if (in_temp_brief && (time() - lastmovechecktime > 1)) {
+        /* Get out of brief */
+        in_temp_brief = 0;
+        brief = 0;
+        }
+}
+
+query_msgin() { return msgin; }
+query_msgout() { return msgout; }
+
+setmin(m) { msgin = m; }
+setmout(m) { msgout = m; }
+
+set_body(bl) {
+	if (!pointerp(bl)) bl = [ bl ];
+	body_locations = bl;
+	body_damage = allocate(sizeof(body_locations));
+	setup_hps();
+	do_disabilities ();
+	return 1;
+}
+
+query_body() { return body_locations; }
+
+/*
+ * set_race is in monster.c, but not player.c.
+ * I do NOT like people changing race in game - G.
+ */
+
+internal_set_race(r) {
+        if (query_su_level(caller()) < GOD)
+		return;
+	race = r;
+#ifdef TRACK_ACTION
+    track_action("RACE", "set-race", "race="+r);
+#endif
+	}
+
+/* added by dredd for vamp (let's try em again) */
+/* another exception added by Jenna for new entry processes */
+
+set_race(r) {
+         if (r != "vampire"
+             && file_name(caller())[..12] != "std/adventure")
+		return;
+	 LOG->log("RACES", query_name() + " changed from " + race +
+		" to " + r + ".\n");
+         race = r;
+#ifdef TRACK_ACTION
+         track_action("RACE", "set-race", "race="+r);
+#endif
+}
+
+query_race() { return race; }
+
+/* soul won't be added if you already have one, or if someone owns it. */
+
+int add_soul(object o) 
+{
+    // if (o->query_myself() && (o->query_myself() != this_object())) return 0;
+    string n = o->query_soul_type();
+    /* no, we dont rename souls here any more */
+    aliased_object(n, o);	
+    // call_out( "ping_new_soul", 0.5, o );	
+    /* after a time, init the soul */
+    o->soul_init(this_object());
+    return 1;
+}
+
+int query_soul(string n) {
+    return "RO/Root/Loaded"::GetAliasedObject(n);
+    }
+

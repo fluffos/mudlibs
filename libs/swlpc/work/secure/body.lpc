@@ -1,0 +1,1426 @@
+
+inherit "RO/cap_provider";
+inherit "RO/living";
+
+#include "vars.h"
+
+#include "Config.h"
+#include "handshake.h"
+#include "security.h"
+#include "time.h"
+#include "gender.h"
+#include "debug.h"
+
+#define SAVE_INTERVAL 600 /* How many seconds between auto-saves? */
+#define MAX_QUIET_TIME 300 /* seconds between checks of interactive status. */
+                           /* two consecutive negative checks, and the player */
+                           /* self destructs.  By Gandalf the nasty. */
+#define SKILLOUTPUT "RO/score"
+
+#include "wiz_support.h"
+#include "password.h"
+#include "start.h"
+#include "souls.h"
+#include "trust.h"
+#include "quests.h"
+#include "sleep.h"
+
+string	desc_hook;
+
+/*
+ * set it to 0 (not x).
+ */
+
+set_is_guest(x) {
+	is_guest = 0;
+	return 1;
+	}
+
+query_guest() 
+{
+/* "guest" is always a guest */
+    if (query_real_name() == "guest")
+	return 1;
+    else
+	return is_guest;
+}
+
+query_no_external_save(ob) 
+{
+    if (ob && (query_su_level(ob) >= GOD)) return 0;
+    return 1;
+}
+
+query_no_external_restore(ob) 
+{
+    if (/* ob && */ (query_su_level(ob) < GOD)) { /* I wanna know if this fucks up */
+        illegal_patch("Restore to body.lpc");
+        return 1;
+	}
+    return 0;
+}
+
+/* Last time they actually typed 'save' - can use this (sometimes) to
+ * work out who is using game crashing bugs to save their items.
+ */
+
+int real_save_time = 0;
+
+save_character() 
+{
+    real_save_time = time();
+    save_me();
+    write("Ok.\n");
+    return 1;
+}
+
+/* This makes sure the amount we claim to be carrying is correct. */
+nosave int last_money;
+
+array alii;
+
+reset(arg) {
+    if (arg) {
+	if (query_wiz()) return;
+	/* These occasionally get screwed up.  Don't ask me why. */
+	if (ghost == 1 /* name == NAME_OF_GHOST */) {
+	    ghost = 1;
+	    msgin = "drifts around";
+	    msgout = "blows";
+	} else {
+	    ghost = 0;
+	    msgin = "arrives";
+	    msgout = "leaves";
+	}
+	recalc_carry();	    /* Make sure we're carrying the right amount. */
+	return;
+    }
+    /*
+     * With arg = 0 this function should only be entered once!
+     */
+    enable_commands();
+    if (myself) return;
+#if 0
+    if (creator(this_object())) {
+        illegal_patch("cloned player.lpc");
+	dest_player();
+	return;
+    }
+#endif
+    level = -1;
+    name = "logon";
+    cap_name = "Logon";
+    msgin = "arrives"; msgout = "leaves";
+    add_store("t_in", "arrives in a puff of smoke");
+    add_store("t_out", "disappears in a puff of smoke");
+    title = "the title-less";
+    if (!alii)
+	alii = [ ];
+    gods = [NO_GOD];
+    /* treasure = 0; */
+    gender = 0;
+}
+
+set_god(al) 
+{
+	if (!al) return;
+	if (lower_case(al) == lower_case(NO_GOD)) return;
+	if (query_gods(al)) return;
+    if (gods[0] == NO_GOD)
+	    gods[0] = al;
+	else
+		gods = gods + [ al ];
+    USER_SERV->update_who(this_object());
+	return 1;
+}
+
+query_gods(name)
+{
+    if (!name) return gods;
+	if (my_index(gods, name) > -1) return 1;
+	return 0;
+}
+
+remove_god(name)
+{
+	int i;
+
+    if (!name) return;
+	if (lower_case(name) == lower_case(NO_GOD)) return;
+    if ((i = my_index(gods, name)) < 0) return;
+	if (sizeof(gods) == 1)
+		gods[0] = NO_GOD;
+	else if (i == 0)
+		gods = gods[1..];
+	else
+		gods = gods[..i-1] + gods[i+1..];
+    USER_SERV->update_who(this_object());
+    return 1;
+}
+
+my_index(arr, elt)
+{
+	int i;
+	for (i = 0; i < sizeof(arr); i++)
+        if (lower_case(arr[i]) == lower_case(elt)) return i;
+	return -1;
+}
+
+show_gods()
+{
+	int i;
+	string ret;
+
+	if (!gods) return;
+	for (i = 0; i < sizeof(gods); i++)
+		if (i == 0) ret = gods[0];
+		else ret += ", "+gods[i];
+	return ret;
+}
+
+short() 
+{
+
+	int	i;
+
+	string	Caution,
+		NamePart,
+		Second, dh, race;
+
+	dh = query_desc_hook();
+	if (dh && dh != "") 
+    {
+		int	rtmp;
+		catch { rtmp = dh->short(); };
+		if (rtmp) return rtmp;
+	}
+
+	Caution = query_caution();
+
+	if (!Caution)
+		Caution = "";
+	else
+		Caution = " <" + Caution + ">";
+
+	if (query_guest())
+		Caution += " [guest]";
+
+	if (!query_ip_number(this_object()))
+		Caution += " [link-dead]";
+
+	if (query_current_action())
+		Second = query_current_action();
+	else
+		Second = query_title();
+
+	if (query_pretitle())
+		NamePart = query_pretitle() + " " + cap_name + " " +
+			Second;
+	else
+		NamePart = cap_name + " " + Second;
+
+	i = query_invis();
+
+    race = query_race();
+    if (!race) race = "Human";
+    else race = capitalize(race);
+    if (race == "Vampire") race = "Human";
+
+	if (i < 0)
+		return cap_name + " " + query_title() + " (" +
+			race + ") (" + query_invis() + ")" + Caution;
+
+	if (i >= NO_SHORT)
+		return 0;
+
+	if (ghost) return "ghost of " + cap_name;
+
+	return NamePart + " (" + race + ")" + Caution;
+
+}
+
+set_current_action(str) { current_action = str; }
+
+query_current_action() {
+
+	return current_action;
+
+}
+
+long() 
+{
+	string s;
+    string gods;
+    string subj;
+    object dh;
+
+	if (dh = query_desc_hook()) 
+    {
+		int	rtmp;
+		catch { rtmp = dh->long(); };
+		if (rtmp)
+			return 0;
+	}
+
+	// Jenna Nov 00 - to stop "0 (male draconian)" at Stadium, etc
+	s = short();
+	if (!s) s = cap_name + " (invisible)";
+
+	write(s + " (" + capitalize(gender) + ").\n");
+
+	if (this_player()->query_wiz() && query_wiz()) {
+		if (query_wiz() >= GOD) {
+			write("==> god\n");
+		}
+		else if (query_wiz() >= ELDER) {
+			write("==> elder wizard\n");
+		}
+		else if (query_wiz() >= SENIOR) {
+			write ("==> senior wizard\n");
+		}
+		else if (query_wiz() > EXPLORE) {
+			write("==> wizard\n");
+		}
+		else if (query_wiz()) {
+			write("==> apprentice wizard\n");
+		}
+	}
+
+	if (description) write(cap_name + description + ". ");
+
+	if (ghost) 
+    {
+        write("\n");
+        return 0;
+    }
+
+#if 0
+    gods = show_gods();
+    if (gender == "male") subj = "He ";
+    else subj = "She ";
+    if (gods) write(subj +" appears to worship "+gods+". ");
+#endif
+
+    write(show_appearance());
+
+	return 1;
+
+}
+
+query_long() { return long(); }
+
+/* Identify ourself. */
+id(str) {
+    int i;
+
+    i = query_invis();
+    if (this_player())
+        i = query_invis(this_player()->query_wiz());
+    if (i < 0 && str == name)
+        return 1;
+    if (i >= NO_ID)
+        return 0;
+    if (ghost)
+	return str == "ghost of " + name;
+    if (str == name)
+	return 1;
+    if (index(alii, str) >= 0)
+	return 1;
+    return 0;
+}
+
+// alii (alias) functions
+// by Jenna Jun 2001
+// I don't know who wrote alii or how long ago, but it looks
+// handy so I've added these functions to manipulate it
+
+query_alii() { return alii + [ ]; }
+
+add_alii(str)
+{
+    int i;
+
+    if (arrayp(str))
+    {
+	for (i = 0; i < sizeof(str); i++)
+	    add_alii(str[i]);
+	return 1;
+    }
+    if (!stringp(str))
+	return;
+    if (index(alii, str) == -1)
+    {
+	alii += [ str ];
+	return 1;
+    }
+}
+
+remove_alii(str)
+{
+    int i, x;
+
+    if (arrayp(str))
+    {
+	for (i = 0; i < sizeof(str); i++)
+	    remove_alii(str[i]);
+	return 1;
+    }
+    if (!stringp(str))
+	return;
+    x = index(alii, str);
+    if (x != -1)
+    {
+	alii = alii[..x-1] + alii[x+1..];
+	return 1;
+    }
+}
+
+
+query_title() {
+
+	return title;
+
+}
+
+destruct_inventory(flag)
+{
+    array con;
+    int i;
+    object e;
+
+    con = contents(this_object());
+    while(i < sizeof(con)) 
+    {
+	if (con[i]) 
+        {
+            if (flag) 
+            {
+            	if (!(con[i]->query_auto_load()))
+	                destruct(con[i]);
+            }
+	    else destruct(con[i]);
+        }
+	i++;
+    }
+}
+
+#if 0
+/* sorry - changed query_soul - G. (now in living) */
+set_wiz_level(key){
+    string lev;
+    int new_level;
+
+    if (!query_ip_number(this_player())) {
+        write("Sorry, but you are not a player.\n");
+        return 0;
+    }
+    lev = call_other(call_other(this_player(), "query_soul"),
+	"get_handshake",key);
+    if (lev) new_level = atoi(lev);
+    if (!new_level) return 0;
+    if (new_level > 99) {	    /* quick patch .. wulkwa */
+        write("You must edit to increase beyond level 99.\n");
+        return 0;
+    }
+    if (wiz_level == 0 && new_level != 0)
+	dont_trust(); /* automatic logging on first wiz promotion */
+    wiz_level = new_level;
+    tell_object(myself,"You were promoted to level " + lev + " by " +
+        capitalize(this_player()->query_real_name() + ".\n"));
+    tell_object(myself,"Remember to read the help files to determine your new abilities.\n");
+    LOG->log("PROMOTIONS",ctime(time()) + " " + capitalize(name) + " was promoted to level " + lev +
+        " by " + capitalize(this_player()->query_real_name()) +
+	".\n");
+    save_me();
+    soul = 0;
+    soul("on");
+    return 1;
+}
+#endif
+
+#if 0
+/* Brief stuff - moved to RO/living */
+nosave int in_temp_brief = 0;
+nosave int lastmovechecktime;
+#endif
+nosave int was_interactive;
+nosave int still_idle = 0;
+
+autoregular()
+{
+    call_out("autoregular", INTERVAL_BETWEEN_REGULAR);
+    if (query_ip_number(this_object())) was_interactive = LINK_ALIVE;
+    if (was_interactive && !query_ip_number(this_object())
+                 && environment(this_object())) 
+    {
+	    /* this implements a delay in link death --D */
+        if (was_interactive == LINK_ALIVE) save_me(1);
+	    if (was_interactive > 0) was_interactive--;
+	    if (was_interactive <= 0)
+	    {
+        	tell_room(environment(this_object()), query_name() +
+                 " just died a link death.\n");
+#ifdef TRACK_ACTION
+		    track_action("LOGINS", "link-death", "");
+#endif
+		    LOGIN_SERVER->notify_linkdeath(this_object());
+	    }
+    }
+
+    if (still_idle == 0 && query_idle() > IDLE_THRESHOLD)
+    {
+        still_idle = 1;
+        USER_SERV->update_who(this_object());
+    }
+    else if (query_idle() <= IDLE_THRESHOLD)
+    {
+        still_idle = 0;
+        USER_SERV->update_who(this_object());
+    }
+}
+
+#if 0
+query_brief() { return brief; }
+
+toggle_brief() {
+    brief = !brief;
+    if (brief) {
+        in_temp_brief = 0;
+        write("Brief mode.\n");
+        }
+    else
+        write("Verbose mode.\n");
+    return 1;
+}
+
+did_a_move() {
+    if (time() - lastmovechecktime <= 1) {
+      /* We are moving fast */
+	  if (!in_temp_brief && !brief) {
+	    in_temp_brief = 1;
+	    brief = 1;
+	    }
+	}
+    lastmovechecktime = time();
+}
+#endif
+
+/* The quit command */
+
+nosave object route = 0;
+nosave int to_home = 0;
+
+nosave cmdquit() {
+    if (query_real_name() != "gandalf" && query_wiz())	/* testing */
+	return quit();
+    if (this_object()->query_attack()
+	&& present(this_object()->query_attack(), environment(this_object()))) {
+	write("You can't quit while fighting!\n");
+	return 1;
+        }
+    command ("halt",this_object()); /* Stop following anyone, or being followed */      
+    call_out("quit", 60);		/* assume a problem after 1 minute */
+    if (route) {
+#if 0
+	return quit();
+#endif
+	if (to_home) {
+	    tell_object(this_object(), "You give up your homeward journey and head straight for the exit instead.\n");
+	    been_home();
+	    return 1;
+	    }
+#if 1
+	return quit(); /* Jenna Dec 99 - while we're having mapper trouble */
+#endif
+	tell_object(this_object(), "You are already leaving.\n");
+	return 1;
+	}
+
+    string err = catch { 
+        move_object((route = clone_object("std/map/track")), this_object());
+        };
+    if (err)
+    {
+	    tell_object(this_object(), "I am too disoriented to guide you back to reality...\n");
+	    return quit();	/* don't let them get trapped in bugs */
+	}
+
+    route->set_can_pick(0);		/* non skeleton key (if they are carrying a key, the router will make them unlock it) */
+    (int|string) h = query_home();	/* check for their home. */
+
+    if (stringp(h)) {
+	object o = find_object(h);
+	if (!o) {
+	    catch h->load_up_you_stupid_prick();;
+	    o = find_object(h);
+	    }
+	if (o) {
+	    if (o == environment(this_object())) { /* if they are at home, they have probably dropped what they want to */
+		quit();
+		return 1;
+		}
+    	    route->set_sf_callbacks("at_home", "been_home");
+	    if (!route->goto(h)) {
+		to_home = 1;
+		tell_object(this_object(), "You start off homewards.\n");
+		return 1;
+		}
+	    tell_object(this_object(), "You have no idea how to get home from here.\n");
+	    tell_object(this_object(), "(Ok, *I* have no idea how to get you home)\n");
+	    }
+	else
+	    tell_object(this_object(), "If you have a home, something aint working at the moment.\n");
+	}
+
+    been_home();
+
+    flush_output();
+#if 0
+    if (!disconnect_player()) {
+        write("Bye...\n");
+        flush_output();
+	return quit();
+	}
+#endif
+    return 1;
+    }
+
+at_home() {
+    if (!route || caller() != route)
+	return 0;
+    tell_object(this_object(), "Home at last...\n");
+/*
+    command("drop all", this_object());
+*/
+    catch environment(this_object())->exit();;
+    tell_object(this_object(), "You sleep...\n");
+    quit();	/* make this been_home() to have them journey to the exit */
+    }
+
+been_home() {
+    if (to_home) {
+	tell_object(this_object(), "You change your mind.\n");
+	}
+    to_home = 0;
+    route->clear_track();
+    route->set_sf_callbacks("quit", "quit");
+    if (route->goto("room/city/quit")) {
+	tell_object(this_object(), "Game driver says: I should have learned to read maps better.\n");
+	quit();
+	return 1;
+	}
+    tell_object(this_object(), "You head towards the reality exit.\n");
+    }
+
+disconnect_player() {
+    if (query_su_level(caller()) < GOD)
+	return 0;
+    object ob;
+    if (catch ob = clone_object("secure/Logons/Null");)
+	return 0;
+    switch_interactive(ob, this_object());
+    ob->start();
+    return 1;
+    }
+
+quit() 
+{
+    string err;
+
+    if (find_call_out("im_quitting") != -1)
+    {
+	write("You are already quitting.\n");
+	return 1;
+    }
+    if (time() - query_last_login() < 5) // no fast logouts - inv issues
+    {
+            write("Preserving inventory...\n");
+            call_out("quit", 5);
+            return 1;
+    }
+    call_out("im_quitting", 10); // just a flag - Jenna Mar 01
+    err = catch {
+    power = 0;
+    hunting = 0;
+    if (query_in_temp_brief()) brief =0;
+#if 0
+    if (find_call_out("restore_objects") != -1)
+    {
+	restore_objects();
+	restore_souls();
+//	write("You're quitting too fast!\n"+
+//		"Quit aborted because you are attempting to quit "+
+//		"before your inventory was restored.\n");
+//	return 1;
+    }
+#endif
+    drop_unique_items();
+    save_me(1);
+    if(objectp(environment(this_object())))
+        catch { environment(this_object())->exit(this_object()); };
+    destruct_inventory();
+    inventory = 0;
+    LOGIN_SERVER->notify_logout(this_object());	/* added Hunter 951015 */
+    tell_object(this_object(), "Saving " + capitalize(name) + ".\n");
+    checked_say(cap_name + " left the game.\n");
+    if (is_guest) {
+	  log_enter("(gone)");
+	  /* "std/banish"->add(name, -300); *//* Don't banish the name for 5 mins */
+	  }
+	else log_enter("(leaves)");
+    flush_output();
+    };
+    catch if (err) LOG->log("QUIT", err);;
+    dest_player();
+    return 1;
+}
+
+drop_unique_items() 
+{
+    int i = -1;
+    array con = contents(this_object());
+    while (++i < sizeof(con))
+        if (con[i]->query_property("unique")) 
+            command("drop " + con[i]->query_name(), this_object());
+}
+
+im_quitting() { }
+
+valid_attack(ob) {
+    return 1;
+}
+
+wimp_out() {
+    if (!random(query_san()+1)) {
+	checked_say(cap_name + " cackles manically.\n");
+	tell_object(this_object(), "You know you should run, but you are possesed by a manic fury and stay!\n");
+	}
+	else run_away();
+}
+
+test_dark() {
+    if (query_total_light () <= 0 && !query_store ("infravision")) {
+	write("It is dark.\n");
+	return 1;
+    }
+    return 0;
+}
+
+query_weight() { return (query_siz() * 8) + local_weight; }
+
+add_weight(w) {
+    int max;
+
+    recalc_carry();
+    max = query_str() + query_siz();
+    if (disable && index(disable, "handle") > -1) max = max / 2;
+    if (w + local_weight > max || w + local_weight < 0) return 0;
+    local_weight += w;
+    return 1;
+}
+
+#include "death.h"
+#include "needs.h"
+
+/* call_outs should really be restarted from saved values */
+start_call_outs() 
+{
+int i;
+    while (remove_call_out("timeout") != -1) i = 0;
+    call_out("autoheal", INTERVAL_BETWEEN_HEALING);
+    call_out("autosanity", INTERVAL_BETWEEN_SANITY);
+    call_out("sleeper_check", 1, 0);
+    call_out("autoregular", INTERVAL_BETWEEN_REGULAR);
+    if (!query_wiz()) call_out("hunger", INTERVAL_BETWEEN_FOOD);
+}
+
+autosanity()
+{
+	add_skill("elan",1);
+    call_out("autosanity", INTERVAL_BETWEEN_SANITY);
+}
+
+start_attack_cycle() 
+{
+	if (!combat_soul) {
+		combat_soul = find_object(query_name()+"/combat");
+		if (!combat_soul) return;
+	}
+	combat_soul->start_attack_cycle();
+}
+
+add_hp(int arg) {
+    hit_point += arg;
+    if (hit_point > max_hp()) hit_point = max_hp();
+    if (hit_point < 0) hit_point = 0;
+}
+
+set_wimpy(x) {
+	if (!intp(x)) return;
+	wimpy = x;
+}
+
+query_monitor() { return monitor; }
+
+toggle_monitor() {
+    monitor = !monitor;
+    if (monitor)
+        write("HP monitoring mode.\n");
+    else
+        write("That's-only-a-flesh-wound mode.\n");
+    return 1;
+}
+
+save_me(flag) {
+    if (query_su_level(this_object()) < GOD)	/* pointless to try, though one day the save system will change */
+	return;
+	query_age();			/* ensure age is updated */
+    compute_auto_str();
+    compute_inventory(flag);
+    catch "std/top_list"->update(name, query_quest_points(), query_age());;
+    if ((name != "guest")) {
+	if (!is_guest) {
+	    save_object(PLAYER_SERV -> GetPlayerSavefile(name, this_object()));
+#ifdef TRACK_ACTION
+	    track_action("SAVEFILE", "save", "age="+query_age());
+#endif
+	    }
+	else
+	    rm(PLAYER_SERV -> GetPlayerSavefile(name, this_object()) + ".o");
+	}
+}
+
+/* This is a fucking ugly piece of work.  It's used by the logon
+ * code when someone tries to log on AND no savefile is found AND
+ * find_player() on the playername returns an object - we save a temp
+ * savefile copy in "closed/kickstart_player".
+ *
+ * Hmm - this should now be redundant (with the switching stuff) - G.
+ */
+request_kickstart_save() {
+    compute_auto_str();
+    compute_inventory(1); /* no inventory cloned up */
+    save_object("closed/kickstart_player");
+    return 1;
+}
+
+illegal_patch(what) {
+    write("You are struck by a mental bolt from the interior of the game.\n");
+    LOG->log("ILLEGAL",
+	     capitalize(this_player()->query_real_name()) + " " +
+	     what + "\n");
+    return 0;
+}
+
+compute_inventory(flag)
+{
+int x,i;
+#if 0
+	inventory = contents(this_object());
+#else
+	remember_persistence();	/* hack to put it here */
+#endif
+
+	if (!inventory) return;
+	x = sizeof(inventory);
+	for (i = 0; i < x; i++) {
+		if (objectp(inventory[i])) {
+		if (living(inventory[i])) inventory[i] = 0;
+		else if (inventory[i]->query_auto_load()) inventory[i] = 0;
+		else if (inventory[i]->id("soul")) inventory[i] = 0;	
+		else if (flag && !inventory[i]->query_always_save()) inventory[i] = 0;
+		}
+	}
+	
+}
+
+describe(str) {
+    string junk1,junk2;
+    if (!str) {
+	description = 0;
+	write("Your description has been cleared.\n");
+	return 1;
+    }
+    if (str) description = " " + str;
+    write("Your description now says:\n");
+    write(cap_name + description + ".\n");
+    return 1;
+}
+
+remote_cmd(key) {
+    string str;
+    str = soul->get_handshake(key);
+    if (str) command(str);
+}
+
+remote_snoop(key) {
+    object ob;
+    int ob_level;
+    string str;
+    private;
+    str = soul->get_handshake(key);
+    if (!str) {
+	snoop();
+	return 1;
+    }
+    ob = find_living(str);
+    if (!ob) {
+	write("No such player.\n");
+	return 1;
+    }
+    if (query_wiz() < SNOOP) {
+	write("You fail.\n");
+	return 1;
+    }
+    ob_level = ob->query_wiz();
+    if (ob_level >= query_wiz() && query_wiz() < ALL_POWER) {
+	write("You fail.\n");
+	return 1;
+    }
+    snoop(ob);
+}
+
+/* giggle - G */
+query_destruct(ob) 
+{ 
+    object tp;
+    string stp;
+
+    tp = this_player();
+    if (tp) stp = ", user " + tp->query_real_name();
+    if (!wiz_level) return 0;
+
+    if (!soul) 
+    {
+	    if (ob && (wiz_level > query_su_level(ob))) 
+        {
+	        tell_object(this_object(), "Your wiz soul has been destructed!\n");
+	        tell_object(this_object(), "Object " + file_name(ob) + stp +
+			    " attempted to destruct you.\n");
+	        return 1;	/* no destruct */
+	    }
+
+        USER_SERV->remove_user(name);
+        "RO/living"::query_destruct(ob);
+	    return 0;
+	}
+
+    if (ob && (query_su_level(soul) > query_su_level(ob))) 
+    {
+	    tell_object(this_object(), "Object " + file_name(ob) + stp +
+			" attempted to destruct you.\n");
+	    return 1;	/* no destruct */
+    }
+
+    USER_SERV->remove_user(name);
+    "RO/living"::query_destruct(ob);
+
+    return 0;		/* destruct ok */
+}
+
+remote_say(str, ignore) {
+    if (ignore)
+        say(str, ignore);
+    else
+        say(str);
+}
+
+set_ac(num) 
+{
+    private;
+    base_armour = num;
+}
+
+catch_shout(str)
+{
+    int flag;
+    object who = this_player();
+
+    if (environment(myself) && 
+        environment(myself)->query_property("block_shout")) return 1;
+
+    if (who && who->query_wiz() && !query_wiz()) flag = 1;
+#if 0
+    if (who && (who->query_wiz() > 9999)) flag = 1; 
+    "players/jenna/jfuns"->tell_jen("[SHOUT]: Checking for " + myself->query_name() + "...\n");
+#endif
+
+    if ((!muffled) || (str[0] == '!') || flag) 
+    {
+    	if (query_caution()) add_note(str);
+    	else 
+        {
+            string append = "";
+		    if (str[sizeof(str)-1..] == "\n") 
+            {
+			    str = str[..sizeof(str)-2];
+                append = "\n";
+            }
+            tell_object(this_object(), ANSI->scolor(ANSI->hilite(this_object(),
+                    "shout"), str) + append);
+	    }
+    }
+    return 1;
+}
+
+query_muffled() { return muffled; }
+
+update (num) {
+    if (num == 6) muffled = soul->query_muffled();
+}
+
+is_player() { return 1; }
+
+query_call_outs() 
+{
+    return query_call_out( "timeout" )
+	+ query_call_out( "intoxicate" )
+	+ query_call_out( "autoheal" )
+	+ query_call_out( "hunger" )
+	+ query_call_out( "auto_bleed" )
+	+ query_call_out( "breath_routine" )
+	+ query_call_out( "fail_breath" )
+	+ query_call_out( "test_breath" )
+	+ query_call_out( "finished_casting" );
+}
+
+query_call_out( str )
+{
+int i;
+    if ( (i = find_call_out(str)) != -1)
+	return [ str, i ];
+    return [ ];
+}
+
+dump_call_out(str) {
+    int i;
+    if ((i = find_call_out(str)) >= 0)
+        write(str + ":\t" + i + "\n");
+}
+
+/* Was nosave, but i changed it temporarily to debug with  :L */
+dest_player() {
+    kill_callouts("timeout");
+    kill_callouts("intoxicate");
+    kill_callouts("autoheal");  
+    kill_callouts("hunger");
+    flush_output();
+    terminate_all_windows();
+#ifdef TRACK_ACTION
+    track_action("LOGINS", "destruct", "");
+#endif
+    destruct(this_object());
+    }
+
+kill_callouts(s) {
+int i;
+    while ((remove_call_out(s)) != -1) 
+	i = 0	;  /* changed this, dredd */
+}
+
+echo_string(str) 
+{
+    if (!str || str == "") write("\n");
+    else if (str[..1] == "-n")
+    {
+    	write(str[3..] + "\n");
+	}
+    else
+	{
+	    write(str);
+	}
+    return 1;
+}
+
+
+set_title(t) 
+{
+    if (!t) {
+	write("Your title is " + title + ".\n");
+	return 1;
+    }
+    title = t;
+    USER_SERV->update_who(this_object());
+    return 1;
+}
+
+set_pretitle(t) 
+{ 
+    pretitle = t; 
+    USER_SERV->update_who(this_object());
+}
+
+query_pretitle() 
+{
+	return pretitle;
+}
+
+light(str) {
+    if (query_verb() == "light") if (!query_wiz()) return;
+    if (str == "on") set_light(1);
+    if (str == "off") set_light(-1);
+    return 1;
+}
+
+// Jenna July 01 -- removed message broadcasting from
+// these funs -- it should be handled by whatever is
+// setting the invis level. (Ditto for vis().)
+// invis((string|int) str, (string|int) alt_msg) 
+invis((string|int) str)
+{
+    int invis;
+    
+    if (stringp(str)) 
+       invis = atoi (str);
+    else
+       invis = str;
+
+    if (!invis)
+        return 0;
+
+//    if (!alt_msg)
+//	alt_msg = "disappears.";
+
+    if (invis >= 100 && query_wiz() < ALL_POWER)
+       invis = 100;
+/*
+    if (invis >= INV7 && query_wiz() < CINV7) invis = INV7 - 1;
+    if (invis >= INV6 && query_wiz() < CINV6) invis = INV6 - 1;
+    if (invis >= INV5 && query_wiz() < CINV5) invis = INV5 - 1;
+    if (invis >= INV4 && query_wiz() < CINV4) invis = INV4 - 1;
+    if (invis >= INV3 && query_wiz() < CINV3) invis = INV3 - 1;
+    if (invis >= INV2 && query_wiz() < CINV2) invis = INV2 - 1;
+    if (invis >= INV1 && query_wiz() < CINV1) invis = INV1;
+*/
+    if (is_invis)
+	vis();
+    is_invis = invis;
+
+//    if (query_verb() == "invis")
+//	    write("You are now invisible = "+is_invis+".\n");
+//
+//    if (is_invis < INVIS_ACTION)
+//        remote_say(cap_name + " " + alt_msg + "\n");
+
+    if (is_invis >= SOMEONE)
+        cap_name = "Someone";
+
+    if (is_invis >= 100)  /* Jenna Mar 01 */
+	USER_SERV->remove_who(name);
+
+    if (soul) soul->update(2);
+
+    return 1;
+}
+
+vis() 
+{
+    if (!is_invis) {
+	tell_object(this_object(),"You are not invisible.\n");
+	return 1;
+    }
+    if (is_invis >= 100)
+	USER_SERV->add_who(this_object());
+    is_invis = 0;
+    cap_name = capitalize(name);
+
+//    if (query_verb() == "vis") {
+//	    tell_object(this_object(),"You are now visible.\n");
+//	    remote_say(cap_name + " appears in puff of smoke.\n");
+//	}
+
+    if (soul) soul->update(2);
+    return 1;
+}
+
+set_home(str) { home = str; }
+query_home() { return home; }
+
+set_muffled(int x) { muffled = x; }
+query_muffled() { return muffled; }
+
+#define MAX_SCAR	5
+nosave make_scar() 
+{
+    if (query_age()  < 8 * 3600)
+	return;
+    scar |= 1 << random(MAX_SCAR);
+}
+
+query_scar()
+{
+    return scar;
+}
+
+nosave int istracked = 0;
+
+catch_input(str)
+{
+    int x;
+
+#ifdef TRACK_ACTION
+	track_action("COMMANDS", "input", str + ""); /* before :: */
+#endif
+	x = ::catch_input(str);
+
+	check_temp_brief();
+#if 0
+/* moved to RO/living */
+	if (in_temp_brief && (time() - lastmovechecktime > 1)) {
+			/* Get out of brief */
+	    in_temp_brief = 0;
+	    brief = 0;
+	    }
+#endif
+
+/* 950910 Hunter	updated untrustworthy logger stuff */
+    if ( (WHOIS->is_apprentice( this_object() ) && 
+	!WHOIS->is_test_char( this_object() ) ) ||
+	query_store ("untrusted")
+	)
+    {
+	"closed/log/commands"->log( name, "lib/hex"->int2hex( time())+": " +
+	str + "\n" );
+    }
+    /*
+    if (!(trusted()))
+	"players/billy/closed/logger"->log_action(name, str);
+    */
+
+return x;
+}
+
+recalc_carry(flag) {
+array obj;
+int i;
+
+    if (!myself) return 0;
+    if (last_money != money || flag) {
+    local_weight = 0;
+    obj = contents (myself);
+    i = sizeof (obj);
+    while (i--) {
+	local_weight += obj[i] -> query_weight();
+    }
+    local_weight += money / 5000;
+    last_money = money;
+    }
+}
+
+switch_me(ob)
+{
+    if (query_su_level(caller()) < GOD) return 0;
+    switch_interactive(ob);
+    ob->kickstart();
+    return 1;
+}
+
+nosave array action_processors = [ ];
+
+add_action_processor(object o) {
+    if (index(action_processors, o) < 0) {
+	int x = index(action_processors, 0);
+	if (x >= 0)
+	    action_processors[x] = o;
+	else
+	    action_processors = action_processors + [ o ];
+	}
+    if (wiz_level) {
+	tell_object(this_object(), "Action catcher " + file_name(o) + " added by " + file_name(caller()) + "\n");
+	}
+    return 1;
+}
+
+/*
+ * Called after other possible actions are processed (this is currently
+ * invoked by an add_action of length 0).  Won't be called if another
+ * action succeeded.
+ */
+
+nosave post_catch_action(s) {
+    int x = sizeof(action_processors);
+    while (x-- > 0) {
+	object o = action_processors[x];
+	if (o) {
+	    int ret;
+	    if (!(catch {ret = o->catch_action(this_player(), query_verb(), s); } )) {
+		if (ret)
+		    return 1;
+		}
+	    }
+	}
+    return 0;
+}
+
+/*
+ * A neat-o little hack for when you go link dead - Gandalf.
+ * NB: the catch_tell array IS saved (for when you return).
+ */
+
+catch_tell(s) {
+    if (receive_host) remote_output(s);
+    else if (!query_ip_number(this_object())) {
+	add_note(s);
+	}
+}
+
+add_note(s) {
+	if (!stringp(s))
+	    return 0;
+	while ( sizeof(s) && (s[sizeof(s) - 1] == "\n")) {
+	    s = s[..sizeof(s) - 2];
+	    }
+	if (!pointerp(catch_buf)) {
+	    catch_buf = [ s ];
+	    return 1;
+	    }
+	if (sizeof(catch_buf) < 70) {
+	    catch_buf += [ s ] ;
+	    return;
+	    }
+	catch_buf = catch_buf[1..] + [ s ];
+        return;
+}
+
+/* this usurps all of more, so it's written to manage multiples later... */
+
+
+query_catch() { return catch_buf; }
+
+set_catch(x) { catch_buf = x; }
+
+/*
+ * Switch_interactive stuff.  This is temporary while we
+ * decide on soul stuff; we need a better system than having
+ * to log them in and link-death them, and providing
+ * passwords all the time!
+ */
+
+nosave failswitch(who) {
+	notify_fail(capitalize(who) + " not logged in (log them in and link-death them).\n");
+	return 0;
+	}
+
+nosave object other_me;
+
+nosave switch_player(who) {
+
+    if (!who || !stringp(who)) return 0;
+    other_me = find_player(who);
+    if (!other_me)
+	other_me = find_living(who);
+    if (!other_me) {
+	failswitch(who);
+	return 0;
+	}
+    if (other_me->query_invis() >= NO_SHORT) {
+	failswitch(who);
+	return 0;
+	}
+    if (query_su_level(other_me) < GOD) {
+#if 0
+	if (wiz_level < GOD) { /* gods have a test feature :) */
+	    failswitch(who);
+	    return 0;
+	    }
+#endif
+	write("Note: Changing to " + who + " will make it impossible to change back!\n");
+	}
+
+    /* cant let them just switch - maybe site restrictions. */
+    if (query_ip_number(other_me) && wiz_level < GOD) {
+	notify_fail(capitalize(who) + " is already connected to another character.\n");
+	return 0; /* hmm - should test whether ignoring this will crash it. */
+	}
+
+    if (!other_me->query_password_ok("")) {	/* if a random string works, no passwd */
+	write("Password: ");
+	input_to("otherpass", 1);
+	return 1;
+	}
+    return otherpass(0);
+}
+
+nosave otherpass(s) {
+    string pass;
+    if (!other_me->query_password_ok(s)) {
+	write("Password incorrect.\n");
+	return 1;
+	}
+    write("Switching to " + other_me->query_real_name() + "\n");
+    tell_object(other_me, capitalize(query_real_name()) + " inhabits your soul.\n");
+    switch_interactive(other_me);
+    command("glance", other_me);
+    return 1;
+}
+
+set_ip_number(ip) {
+    if (query_su_level(caller()) < GOD)
+	return 0;
+    called_from_ip = ip;
+    return 1;
+}
+
+get_ip_number() {
+    return called_from_ip;
+    }
+
+
+/*
+
+	Description Hooks
+	Added By:	Rattcherryh.
+	Date:		22nd August 1993
+
+*/
+
+set_desc_hook(string file) {
+
+	if (!file)
+		return 0;
+
+	desc_hook = file;
+
+	return 1;
+
+}
+
+query_desc_hook() {
+
+	return desc_hook;
+
+}
+
+reset_desc_hook() {
+
+	desc_hook = "";
+
+	return 1;
+
+}
+
+/* Some other functions that I added -R */
+
+query_description() {
+
+	return description;
+
+}
+
+/* Last time they logged in */
+query_last_login () {
+	return time_stamp;
+	}
+
+/* killer function - maybe obsolete */
+
+you_killed(object ob)
+{
+    object bountyb = find_object("obj/bulletin/board_serv/bountyboard");
+    if (ob->is_player() == 1 
+	&& (!bountyb || bountyb->query_bounty(ob->query_real_name()) < 0 ))
+    {
+            add_store("playerkiller", time());
+    }
+}
+

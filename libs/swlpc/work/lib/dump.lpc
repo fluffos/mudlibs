@@ -1,0 +1,129 @@
+/*
+ * Modified to preallocate array sizes, do less general addition
+ * and slicing.  Motivated by a game crasher (blew out mud size).
+ *
+ * What the FUCK is the use of implode() if you build
+ * your arrays using array addition? - G.
+ */
+
+inherit "RO/Servers";
+
+reset() {}
+
+/* dump to write_to(or failing that this_player) the contents of 
+ * the variable 'arg'. If write_to is int == -1 then return the string,
+ * don't dump it.
+ */
+dump(arg, tab, inhibit, write_to) {
+	string out = "";
+	string ret;
+
+	if (!inhibit)
+		out += indent(tab);
+	if (intp(arg)) {
+	  string str_num;
+		str_num = arg+"";
+		str_num = "           "[sizeof(str_num)..]+str_num;    
+		ret = out+"integer : "+str_num+"\t0x"+HEX->int2hex(arg);
+		}
+	else if (realp(arg)) {
+		ret = out + "real    : "+arg;
+	}
+	else if (stringp(arg)) {
+		arg = STRINGS->string_replace(arg, "\"", "\\\"");
+		arg = STRINGS->string_replace(arg, "\n", "\\n\n");
+		ret = out + "string  : \""+arg+"\"";
+#if 0
+		if (BITSTR->is_bitstr(arg))
+		{
+			indent(tab);
+			write("(bitstr)? "+RANGE->bitstr2range(arg,0)+"\n");
+		}
+#endif
+	}
+	else if (objectp(arg)) {
+	    string shrt;
+		catch shrt = arg->short();;
+		ret = out + "object  : <"+file_name(arg)+"> "+
+		(stringp(shrt)?"\""+shrt+"\"":"");
+	}
+	else if (pointerp(arg)) {
+	    int i;
+		array rret = allocate(sizeof(arg) + 2);
+		rret[0] = out+"array of size "+sizeof(arg)+" : {";
+		out += indent(tab + 2);
+		for (i = 0; i < sizeof(arg); i ++) {
+			string recret = dump(arg[i], tab + 2, 1, -1);
+			rret[i+1] = out + "["+i+"] "+recret;
+		}
+		out = indent(tab);
+		rret[sizeof(arg) + 1] = out+ "}";
+		ret = implode(rret, "\n");
+	}
+	else
+		ret = out + "Unknown data type.";
+
+	if (write_to != -1)
+		tell_object ( write_to?write_to:this_player(), ret+"\n");
+	else
+		return ret;
+}
+
+/*
+ * This is OK, memory-wise - G.
+ */
+
+string indent(tab) {
+	return "                                            "[..tab-1];
+}
+
+string
+dump_variable(arg)
+{
+    if (stringp(arg))
+	return "\""+arg+"\"";
+    else if (realp(arg) || intp(arg))
+	return ""+arg;
+    else if (pointerp(arg))
+	return "*array["+sizeof(arg)+"]*";
+    else if (objectp(arg))
+	return "*object "+file_name(arg)+"*";
+    else
+	return "*unknown type*";
+}
+
+/*
+ * estimate_size() estimates the memory usage of
+ * a given data structure in bytes
+ */
+int 
+estimate_size(what)
+{
+    if (stringp(what))
+    {
+	return 9 + sizeof(what);	/* assumes unshared strings (+ 9: null byte, tag, ptr) */
+    }
+    else if (intp(what))
+    {
+	return 4 + 4;		/* 32 bit  (plus tag - G) */
+    }
+    else if (realp(what))
+    {
+	return 4 + 4;		/* float */
+    }
+    else if (pointerp(what))
+    {
+    int i;
+    int tot = 0;
+	for (i = 0; i < sizeof(what); i ++)
+   	{
+	    tot += estimate_size(what[i]);
+	}
+	return tot;
+    }
+    else if (objectp(what))
+    {	/* heh - should we include full overhead?  */
+	return 4;		/* pointer to the object */
+    }
+}
+

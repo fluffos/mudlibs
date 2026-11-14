@@ -1,0 +1,245 @@
+/*
+ * Jenna's amazing... GENERIC SEAT OBJECT 
+ *
+ * Inherit this to create your seat
+ * 
+ * 940308 Hunter   Added 'get into %id' and 'get in %id' actions
+ */
+
+inherit "std/object";
+
+object seat, seat_ob;
+array things;
+int x, number;
+string seat_id, seat_name, orig_desc, orig_short, sat_in;
+string you_sit_mess, you_stand_mess, they_sit_mess, they_stand_mess;
+
+reset(arg) 
+{
+    ::reset(arg);
+    if(!arg) 
+    {
+        set_weight(2);
+        set_you_sit_mess("Ahhhh! You settle into");
+ 	set_they_sit_mess("settles into");
+	set_you_stand_mess("You stand up from");
+	set_they_stand_mess("stretches once, then gets out of");
+    }
+}
+
+init() 
+{
+    ::init();
+    add_action("sit","sit");
+/*    add_action("sit","get");			Who added this? It is silly */
+    add_action("stand","stand");
+    add_action("quit","quit");
+    add_action("wiz_get", "get!");
+    seat_id = query_alias();
+}
+
+quit() 
+{		   /* Tidy up before a player quits  */ 
+    if (sat_in == this_player()->query_real_name())
+    tidy_up();
+}
+
+short(str) 
+{                /* Because its so difficult to interrupt a trans, */
+    if (sat_in)  
+    {     /* each "look" checks if the player's still around*/
+	if(sat_in == 0) 
+	    tidy_up();
+	else 
+	{
+	    object me;
+	    me = find_living(sat_in); 
+	    if (!me || !present(me, environment()) || me->query_ghost()) 
+		tidy_up();
+	}
+    }
+    return ::short();
+}
+
+sit(what) 
+{
+    string stuff;
+    array allargs;
+    object me;
+
+    if (!what) return 0;
+
+    
+    if (stuff = STRINGS->match_head(what, [ "in " , "on " ] ))
+    {
+     	what = what[3..];
+    }
+    else if (stuff = STRINGS->match_head(what, [ "into " , "onto " ] ))
+    {
+	    what = what[5..];
+    }
+    me = present(what, environment(this_player()));
+    if (!me || me != this_object()) return 0;
+    allargs = STRINGS->split_first(what, " ");
+    if (allargs & sizeof(allargs) == 2)
+	    seat_name = seat_id + " " + atoi(allargs[1]);
+    else
+	    seat_name = "the " + seat_id;	
+    if (this_player()->query_ghost()) 
+    {
+	    write("You drift right through " + seat_name + "!\n");
+	    say("Some mist drifts around " + seat_name + ".\n");
+	    return 1;
+    }
+    if (sat_in == this_player()->query_real_name()) 
+    {
+	write("You're already sitting here!\n"); 
+	return 1;
+    }
+    if (seat_hog()) 
+    {
+	write("You can't sit in two seats at once!\n");
+	return 1;		
+    }
+    if (sat_in) 
+    {
+	notify_fail(capitalize(sat_in)+" is already sitting here.\n");
+#if 0
+	say(this_player()->query_name()+ " tries to sit on "+
+		capitalize(sat_in)+"'s " + seat_id + ".\n");
+#endif
+	return 0;	
+    } 
+    write(you_sit_mess + " " + seat_name + ".\n");
+    say(this_player()->query_name() + " " + they_sit_mess + " " +
+		seat_name + ".\n");
+    orig_short = this_object()->short();
+    set_short(orig_short + " (occupied by " +
+		this_player()->query_name() + ")"); 
+    sat_in = this_player()->query_real_name();
+		/* Occupied seats have a different long_desc and the
+		player an extra title bit and a move_hook */
+    this_player()->add_move_hook(this_object(),"no_move");
+    orig_desc =long_desc; 
+    set_long(long_desc+capitalize(sat_in)+ " is comfortably seated here.\n");
+    add_property("NO_GET", capitalize(seat_name) + " is occupied!\n");
+	/* Can't get seats when someone's sitting on them :)  */
+    return 1;
+}
+
+stand(str) 
+{
+    if (sat_in == this_player()->query_real_name()) 
+    {
+ 	write(you_stand_mess+" " + seat_name + ".\n");
+	say(this_player()->query_name()+" "+they_stand_mess+" "+
+			seat_name + ".\n");
+	tidy_up();
+	return 1;
+    }
+    else 
+	notify_fail("You are already standing!\n");
+}
+
+tidy_up() 
+{		/* remove move_hooks, adjust the seat's short, clear */
+    			/* the string sat_in and let players GET the seat */
+    set_long(orig_desc);
+    this_object()->set_short(orig_short);
+    remove_property("NO_GET");  
+    if(sat_in && find_living(sat_in)) 
+   	find_living(sat_in)->remove_move_hook(this_object(),"no_move");
+    sat_in = 0;
+    return 1;
+}
+
+query_destruct() 
+{	/* tidy before dests */
+    tidy_up();
+}
+
+wiz_get(str) 
+{		/* tidy before a wizard get!s either the player or seat */
+    if (this_player()->query_wiz()) 
+	if (str == seat_id || str == sat_in)
+	tidy_up();
+}
+
+no_move(who, dir, dest) 
+{
+    if (this_player()->query_wiz()) 
+    {
+	/* The move_hook routine doesn't hook wizzies... hence: */
+	write("Using your awesome wiz smoothness, you rise from "+
+		seat_name + " and \nleave in one continuous motion.\n");
+	say(this_player()->query_name()+" "+they_stand_mess+" "+
+	        seat_name + ".\n"); 
+	tidy_up();
+	return 0;
+    }
+    if (this_player()->query_ghost()) { /* It's a bit much to make dead */ 
+	tidy_up();		    /* players have to stand up */	
+	return 0;
+    }
+    write("Perhaps you should stand up first?\n");
+    return 1;	
+}
+
+seat_hog() 
+{
+	/* check for other seats */
+    things = contents(environment(this_object()));
+    for (x = 0; x < sizeof(things); x++)
+	if (things[x]->check_sit()) 
+	    return 1;
+    return 0; 
+}
+
+check_sit() 
+{
+    if (sat_in == this_player()->query_real_name()) 
+	return 1;
+    return 0;
+}	
+
+set_you_sit_mess(s) 
+{
+    if(!s || !stringp(s)) 
+	return 0;
+    you_sit_mess = s;
+	return 1;
+}
+
+set_they_sit_mess(s) 
+{
+    if(!s || !stringp(s)) 
+	return 0;
+    they_sit_mess = s;
+    return 1;
+}
+
+set_you_stand_mess(s) 
+{
+    if(!s || !stringp(s)) 
+	return 0;
+    you_stand_mess = s;
+    return 1;
+}
+
+set_they_stand_mess(s) 
+{
+    if(!s || !stringp(s)) 
+	return 0;
+    they_stand_mess = s;
+    return 1;
+}
+ 
+show_stats(arg) 
+{
+    ::show_stats(arg);
+    write("You_sit_mess: "+you_sit_mess+
+		"\nThey_sit_mess: "+they_sit_mess+
+		"\nYou_stand_mess: "+you_stand_mess+
+		"\nThey_stand_mess: "+they_stand_mess+"\n");
+}
+

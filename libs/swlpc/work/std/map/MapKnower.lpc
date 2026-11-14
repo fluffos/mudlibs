@@ -1,0 +1,2175 @@
+/*
+ * MapKnower - mmcg@bruce.cs.monash.edu.au, 1991 (Gandalf @ Shattered World).
+ *
+ * Updated (test) version, for world code: can't sensibly treat
+ * the world as a single area.
+ *
+ * The world is a 3-D coord system, with collections of (old-style)
+ * areas embedded within it.  We have a world server, from which
+ * we can obtain lists of entrances to these areas (though not the
+ * area names), and blockages in the world (usually to wall off
+ * an area).  Areas under the old map system (still supported)
+ * always store a single exit to each adjacent area - simple, but
+ * surprisingly functional - and the route calculated was the
+ * one that traversed the minimal no. of areas.  With the outside world
+ * now representing a single area, this won't work so well - by
+ * an accident of fate (when the map was being built), a route
+ * within a city to a spot 3 rooms away could involve walking
+ * out the gates, around the walls, backj in the other side.
+ *
+ * BUT: the cool thing about having a MapKnower is that it, uhh,
+ * knows about the map.  In particular, it can work out which
+ * areas (eg collections of rooms) are directly connected to
+ * which other areas.  Since `areas' here are simply a device to
+ * allow route calculation through arbitrary graphs, and `real' areas
+ * (like Sanom, or Merenth) are no longer directly connected,
+ * but are instead embedded in (quite distant) parts of the world,
+ * we now have a way of figuring out all of the rooms within Sanom (or
+ * Merenth) - and hence of working out all of the entrances to
+ * a given city.  This gives us a hell of a lot more than routes :)
+ *
+ * SO: we list the old concepts and define some new ones:
+ *	1. A room is an old-style room, with a dest-dir.  Each is in an area.
+ *	2. An area is an old-style area, containing only old-style rooms.
+ *	   As before, each area lists ONE exit to each adjacent area.
+ *	   Areas are defined by this object (as part of auto-mapping).
+ *	   Each area is in a cluster.
+ *	3. A CONTROLLER is an area controller, as before.  Controllers
+ *	   behave like areas, but have virtual rooms and their own
+ *	   mapping algorithms.  Each controller knows _all_ of its
+ *	   exits to adjacent areas and controllers (including the exit
+ *	   and entrance rooms, as before).
+ *	4. A CLUSTER is a collection of directly-connected areas (that
+ *	   don't traverse any rooms managed by a controller).  We merge
+ *	   areas into clusters incrementally - each new area is initially
+ *	   placed in its own cluster, and whenever a join is found
+ *	   between two areas, the clusters are merged (the algorithm is
+ *	   incremental and O(1) amortised).  We keep an array of integers
+ *	   (one per area) listing which cluster it is currently mapped to.
+ *	   All area controllers get a cluster ID of (-1).
+ *	5. Controllers (or rooms they control) never belong to clusters.
+ *
+ **** ORIGINAL COMMENTS
+ *
+ * Server allowing routes to be quickly computed between rooms.
+ * Will also return a list of rooms within some distance of a room,
+ * or along a particular direction from a room (jan 95 - G).
+ * This server should be called for general room->room movements.
+ * It deals with individual rooms, but understands the existence
+ * of area controllers, and refers mapping tasks through an area
+ * to the individual controllers (it does *not* want to have to keep
+ * arrays containing a billion rooms in a virtual sea, and so will not
+ * save them).
+ *
+ * See std/map/track.c for mapper usage.
+ *
+ * Call this_object()->save_me() to dump the map to a savefile (when you are
+ * setting this up, use massacre.c to build the entire map, then call save();
+ * the .o file is loaded whenever this file is).
+ *
+ * Assigns rough x,y coords using standard dest_dirs of connecting rooms.
+ * Other dirns (to rooms) are placed in different areas.
+ * Areas are effectively rooms with dest_dirs to other areas.
+ *
+ * Hack 1: Handles SW's standard doors - rooms beyond doors have directions
+ * of dir#0code.  When returning routes, directions may have codes - eg west#0iacd
+ * 0, 1, 2 are for door states.
+ *
+ * Hack 1a: rooms which change dest dirs (directions but not destinations) get
+ * a direction of 'dir#3:objname'.  Routing objects in the room should try to find
+ * the appropriate exit (or give up if it's a player - it's probably a maze :).
+ *
+ * Hack 2: Room box controllers are treated as a single area; the controller
+ * is responsible for computing routes between entrances and exits.  If
+ * a room name is given as "a/b", and 'a' exists as a known room box controller,
+ * all room will be placed in the same area, and the given controller will be
+ * called to compute routes between its rooms (it is supplied with the full path
+ * name when this happens).  New controllers are added to the mapknower in two
+ * ways: the controller should call MAPKNOWER->add_controller(file_name(this_object()))
+ * whenever loaded, and all controlled rooms should call add_location with the controller
+ * as the third argument.
+ *
+ * NOTE: We NEED some standard hooks in rooms to manage this stuff properly.
+ *
+ * Some code is ripped from my postscript mapper monster.
+ *
+ * ASSUMPTIONS:
+ *	Controlled rooms with exits to other areas do not change their
+ *	external exits, and are nosave.
+ *
+ * BUGS: Num rooms is limited by the size of your arrays (we dont use arrays
+ * of arrays here, it gets a little excessive :).
+ *	 You have to be sure that cloned (and destructed) rooms don't
+ * 	 keep adding themselves (too expensive - will fill array with name#uniquenum).
+ *	 Ideally, all such rooms will be virtual objects with known names.
+ *	 Doesn't handle updates in room dest dirs - not that anyone uses them!
+ *	 Doesn't understand rooms where different players may have different exits.
+ *	 Doesn't understand virtual rooms whose controllers aren't a contraction
+ *	 of the room name (that's ok - neither does the driver :)
+ *	 Assumes that X,Y changes are ok, but Z changes always get new areas.
+ *
+ * WARNING: uses hash_value in savefiles, if hash_value (efun) changes the
+ * savefile will have to be rebuilt.
+ */
+
+#include <Servers.h>
+
+#define	ROOM_TABLE_SIZE 4903	
+    /* max number of rooms; should be a fairly large prime. */
+#define AREA_TABLE_SIZE	1000	
+    /* needn't be prime.  Max areas. */
+#define MAX_AREA_EFFECT	100	
+    /* max num rooms that can have an area effect applied.  Should be cached */
+
+/* We keep caches of the last N inter- and intra- area searches - this helps
+ * a lot when many monsters are trying to get to the same place.  You should
+ * tune this based on the numbers of monsters trying to use this mapper.
+ * NB: actual array is twice this size, plus an initial status array.
+ * INTER_AREA: there are a few areas between which paths are required 95% of the time.
+ */
+
+#define	INTER_AREA_CACHE 100
+
+/* these are usually bigger, but it's well worth saving them - they are
+ * more costly to compute, and there are more of them.
+ */
+
+#define	INTRA_AREA_CACHE 250
+
+array inter_cache;
+array intra_cache;
+
+#define DEBUG
+/* debug */
+#ifdef DEBUG
+#define	TG(s)	{ catch { tell_object(find_player("gandalf"), (s)+"\n"); } ; }
+#else
+#define TG(s)
+#endif
+
+nosave array std_dirs;		/* list of n,s,e,w */
+
+array cluster_list;		/* 1 entry per area, listing the ID of the lowest area known to be (weakly) connected to this one */
+array scc_list;			/* SCCs */
+array seen_list;		/* rooms that have been seen, hashed on name */
+array dd_list;			/* the array of values assoc'd with rooms */
+array area_list;		/* area dest_dirs.  0 if no connections out yet */
+array reverse_area_list;
+array controller_list;		/* known controllers and their area numbers */
+array bad_rooms;		/* rooms which changed dest dir (for the worse) since notifying us */
+array bad_areas;		/* areas containing bad rooms (marked as high cost by routing algs) */
+int next_area;			/* first entry in area_list is a temp var */
+int named_rooms;		/* name has been seen, perhaps in a dest dir */
+nosave int loaded_rooms; 	/* rooms actually loaded this reboot */
+int known_rooms;		/* rooms whose dest dirs we have */
+int new_loc_calls;
+int nclusters;
+int nsccs;
+
+nosave array room_backtrack;	/* for intra-area heuristic search */
+nosave array area_backtrack;	/* array of area numbers for area backtrack */
+
+/*
+ * courtesy functions
+ */
+
+short() { return "Map Seer"; }
+
+long() { write(short() + ".\n"	+
+		"It's a navigation server.\n");
+	 show_stats();
+}
+
+show_stats() {
+    write("Areas: " + next_area
+		+ ".\nSccs: " + nsccs
+		+ ".\nClusters: " + nclusters
+		+ ".\nControllers: " + sizeof(controller_list) / 2
+    		+ ".\nNamed rooms: " + named_rooms
+		+ ".\nLoaded rooms: " + loaded_rooms
+		+ ".\nKnown rooms: " + known_rooms
+		+ ".\nBad rooms: " + sizeof(bad_rooms)
+		+ ".\nAdd-loc calls: " + new_loc_calls + ".\n");
+    write("Controllers: " + implode(controller_list, " ") + "\n");
+    write("Caches: inter: " + cache_stats(inter_cache) + "\n" +
+    	  "	intra: " + cache_stats(intra_cache) + "\n");
+    return 1;
+}
+
+reset(arg) {
+    if (arg)
+	return;
+
+    if (file_size(file_name(this_object()) + ".o") > 0) {
+	restore_object(file_name(this_object()));
+	}
+    else {
+        seen_list = allocate(ROOM_TABLE_SIZE);
+        dd_list = allocate(ROOM_TABLE_SIZE);
+        area_list = allocate(AREA_TABLE_SIZE);
+	bad_rooms = ({});
+	bad_areas = ({});
+    }
+
+    area_backtrack = allocate(AREA_TABLE_SIZE);
+    room_backtrack = allocate(ROOM_TABLE_SIZE);
+
+    if (!controller_list)
+	controller_list = ({ });
+
+    if (!reverse_area_list)
+        reverse_area_list = allocate(AREA_TABLE_SIZE);
+
+    if (!cluster_list)
+        cluster_list = allocate(AREA_TABLE_SIZE);
+
+    if (!scc_list)
+        scc_list = allocate(AREA_TABLE_SIZE);
+
+    std_dirs = ({ "north",	0,	1,
+		  "south",	0,	-1,
+		  "east",	1,	0,
+		  "west",	-1,	0,
+		  "northeast",	1,	1,
+		  "southeast",	1,	-1,
+		  "northwest",	-1,	1,
+		  "southwest",	-1,	-1
+		  });
+
+    init_caches();
+}
+
+/*
+ * Save - not usually called, except after we have rebuilt the
+ * initial loadable map and want to make it permanent.
+ * Also called (now) when a room gets marked as bad.
+ */
+
+set_needs_save() {
+    if (!"secure/which_mud"->is_wiz_mud()) {
+	    AUTOSAVE_SERV->set_auto_save(this_object());
+    }
+}
+
+save_me() {
+    save_object(file_name(this_object()));
+}
+
+/*
+ * HASHING FUNCTIONS.
+ *
+ * These are used to keep track of large arrays of rooms and room dest_dirs.
+ * It is better to have the arrays in this object (rather than query the
+ * rooms) because we don't want heaps of rooms loaded whenever we try to
+ * compute a path.  NOTE: These algorithms dont allow for room deletion.
+ */
+
+/*
+ * hash a string to an array location
+ */
+
+/*
+ * Find a name in the array, return its spot (if found) or a place where
+ * it could be put (if not found).
+ */
+hash_name(name) 
+{
+    int finished;
+    int h;
+    int ihash = hash_value(name) % sizeof(seen_list);
+    int x;
+
+    while (!finished) 
+    {
+	    h = (ihash + x) % sizeof(seen_list);
+	    if (!finished) 
+        {
+	        if (!(seen_list[h])) return h;
+
+	        if (seen_list[h] == name) return h;
+	    }
+	    /* else we have to rehash */
+	    x += 1;
+        if (x >= ROOM_TABLE_SIZE) finished = 1;
+    }
+/* I wanna know when this happens... */
+   throw("Out of hash table space");
+}
+
+/*
+ * Quick routine to strip the key code off a direction, returning
+ * the base direction.
+ */
+
+strip_code(s) 
+{
+    int x;
+    x = index(s, '#');
+    if (x < 0)
+       return s;
+    else
+       return s[..x-1];
+}
+
+/*
+ * Given a room name, check whether there is a known controller for it.
+ * All such rooms have a controller name which is a contraction
+ * of the room name.
+ */
+
+controller_name(room) {
+    int maxlen = 0;
+    int x = 0;
+    (int|string) y = 0;
+    while (x < sizeof(controller_list)) {
+	string c = controller_list[x];
+	if (room[..sizeof(c)-1] == c && sizeof(c) > maxlen) {
+	    y = c;
+	    maxlen = sizeof(c);
+	    }
+	x += 2;
+	}
+    return y;
+}
+
+/*
+ * Given a controller name, if it has an area, return it, otherwise
+ * allocate one.
+ */
+
+controller_area((object|string) contr) {
+    string cname;
+    if (objectp(contr))
+	cname = file_name(contr);
+    else
+	cname = contr;
+    int x = index(controller_list, cname);
+    if (x >= 0)
+	return controller_list[x+1];
+    else {
+	controller_list += ({ cname, next_area });
+	area_list[next_area] = ({ });
+	reverse_area_list[next_area] = ({ });
+	cluster_list[next_area] = (-1);	
+	scc_list[next_area] = (-1);	
+	nsccs++;
+	nclusters++;
+	return next_area++;
+	}
+}
+
+/*
+ * Explicitly add a controller.
+ * Just uses the above to allocate an area.
+ */
+
+add_controller((object|string) contr) {
+    return controller_area(contr);
+}
+
+/*
+ * This hook is called when a room gets initialised with a dest_dir.
+ * This should be called with the filename of the room.  If the room
+ * is a member of a controlled (room box) area, the room name given
+ * should be "controller/roomid", and (preferably) only rooms which
+ * connect the controller's area to other areas should be given (the
+ * controller could manage a huge area, and will be called to compute
+ * routes through itself anyway; we seek to minimise the rooms stored
+ * here).  All room names with this format will be added to a single
+ * area, and will be ignored if all their exits are internal to
+ * that area.  This prevents the mapknower from being overloaded by large
+ * virtual areas (the area controllers compute their own routes).
+ *
+ * This looks for an adjacent room in one of the standard directions.
+ * It will place a room in the same area as another iff the directions
+ * from a->b and b->a are the reverse (they are both std dirs and their
+ * dx, dy are negatives of each other).  Otherwise, the room gets a new area.
+ * In some parts of the mud this leads to a lot of areas (e.g. up/d stairwells).
+ *
+ * If a room has been seen in a dest dir, but never loaded, it gets area (-1)
+ * and its info list stores the list of rooms that have mentioned it in its
+ * dest dir (unless, of course, the room is in a controlled area, in which
+ * case it is always added to that controller's area, though the mapknower may
+ * retain a record of it if it connects to any other areas).
+ */
+
+add_location(string room, dd, (int|string) controller) 
+{
+    int h;
+    array old_dd; /* if seen but never loaded, this is external refs */
+    array entry;
+    int x, y;
+    int i1, i2;
+    int area;
+    int changed_dd;
+
+
+    /* ignore unconnected rooms */
+    if (!pointerp(dd)) return 0;	
+	
+    /* in case they fiddle it on us */
+    dd = dd + ({ });		
+
+    /* should have been called by the room itself; be sure it's loaded */
+    if (!find_object(room)) return 0;
+	
+    call_out("try_spec_room", 0, room);
+	if (room->query_property("no_map")) return;
+    new_loc_calls++;
+
+/*
+ * If the room is in a controlled area, we are disinterested in
+ * exits to other rooms in the same area, so we strip all references
+ * to them from our dest dir (and when _they_ were added, the same will
+ * have happened to them).  The area controller itself will manage
+ * all intra-area routing.
+ */
+
+    if (controller) {
+    /* find all exits to different areas */
+	area = controller_area(controller);	/* be sure it's assigned */
+        old_dd = ({ });
+        for (x = 0; x < sizeof(dd); x += 2) {
+    /* we really should look in seen list before computing controller name, because hash is fast. */
+	    (int|string) c = controller_name(dd[x]);
+	    if (c != controller)
+	        old_dd += dd[x..x+1];
+	    }
+    /* if there were no other exits, discard the room; area controller manages it. */
+        if (!sizeof(old_dd)) {
+	    return 0;
+	    }
+    /* otherwise, we will be saving this room with the shortened dd */
+        dd = old_dd;
+        old_dd = 0;
+        }
+
+    old_dd = 0;
+
+    h = hash_name(room);
+
+    if (!seen_list[h]) {
+/*
+ * Room never seen, even in ddir of another loaded room
+ * If it's controlled, area has already been assigned (it must
+ * have useful exits for us to have gotten here).
+ */
+/* if it's in bad rooms, but not in seen list, at some stage we gave up on the room totally */
+	if (index(bad_rooms, room) >= 0) {
+	    return 0;
+	    }
+	if (!controller) {	/* a room alone... make it an area. */
+	    area = next_area++;
+	    area_list[area] = ({ });
+	    reverse_area_list[area] = ({ });
+	    cluster_list[area] = area;
+	    scc_list[area] = area;
+		nsccs++;
+	    nclusters++;
+	    }
+	seen_list[h] = room;
+	dd_list[h] = ({ area, 0, 0, 0, 0 }); /* x, y are 0 */
+	named_rooms++;
+	loaded_rooms++;
+	known_rooms++;
+	}
+    else { /* room name has been seen before - was it ever fully loaded? */
+
+	/*
+	 * Check to see that the room's not changing its exits from reset to reset.
+	 * This check is somewhat expensive, and should usually be turned off (by
+	 * uncommenting the return after the if statement) after rebuilding the
+	 * map several times.
+	 */
+
+	if (dd_list[h][0] != (-1)) {	/* in an area already -> processed the first time it was loaded */
+	/* return(0); */
+	/* Yes - if the dd is different to its previous dd, mark it as bad (or alter it), as follows:
+	 * If it simply has additional destinations, add them;
+	 * If the destinations are the same but the directions are different, alter the
+	 * directions in both the dd list and (if present) in the area list.
+	 * If some destinations are missing, if they are to a room in the same area,
+	 * mark the room as bad and the area as high cost (I should really split
+	 * areas); if not, delete the area link.
+	 * If the room isn't already marked as bad, drop out and add new area links;
+	 * if it's marked already, they're probably unreliable, so don't re-add them.
+	 */
+	    array ndd = dd_list[h][4];
+	    area = dd_list[h][0];
+	    int was_bad = 0;
+	    for (x = 0; x < sizeof(dd); x+= 2) {
+		int nh = hash_name(dd[x]);
+		if ((y = index(ndd, nh)) < 0) {	/* missing room from new dest dir which was in old dd */
+		    if ((!seen_list[nh])		/* not there anyway */
+		       || (dd_list[nh][0] < 0)) {	/* or not in an area */
+			   continue;
+			   }
+		    }
+		else {
+		    if (strip_code(dd[x+1]) != strip_code(ndd[y+1])) {
+			if (index(ndd[y+1],"#") < 0)
+			    ndd[y+1] += "#1:" + dd[x];
+			else {
+			    if ((i1 = index(ndd[y+1],"1:")) < 0)
+			        ndd[y+1] += ";1:" + dd[x];
+			    else
+				if (ndd[y+1][i1..i1 + sizeof(dd[x])] != "1:"+dd[x]+";") {
+				    was_bad++;
+				    del_area_link(ndd[y], ndd[y+1]);
+				    }
+			    }
+			}
+		    }
+		}
+	    for (x=0; x < sizeof(ndd); x+=2) {
+		if ((y = index(dd, seen_list[ndd[x]])) < 0) {	/* missing room from old dest dir */
+		    was_bad++;
+		    if ((!seen_list[nh])		/* not there anyway */
+		       || (dd_list[nh][0] < 0)) {	/* or not in an area */
+			   continue;
+			   }
+		    }
+		}
+		if (was_bad) {
+		    TG(room + " - bad")
+		    if (index(bad_rooms, room) < 0) {
+			bad_rooms += ({ room });
+			set_needs_save();
+			}
+		    }
+	    return (0);
+	    }
+	else { /* Room was mentioned in another dd but never added before - we have a list of rooms that have seen it.
+		* Each of these rooms must have been loaded and assigned an area at some stage.
+		* If it isn't controlled, look at its DD for a standard direction
+		* leading to a loaded, uncontrolled room, and set its area, x, y to match (if
+		* no such rooms in standard directions, it gets its own area, of course).
+		* If it is controlled, we will have deleted all references to/from it to
+		* rooms in the same area; we simply need to set up the reversal of the prior
+		* references to it.
+		*/
+
+	    old_dd = dd_list[h][4]; /* save list of incoming links to room */
+				    /* we use this later for area linkage */
+	    dd_list[h][4] = 0;	    /* reset outgoing links; we'll save them later */
+
+/* If the room has a controller, we _know_ what area it should be in, and we
+ * don't care what its x/y coordinates are (controller does all intra-area
+ * mapping, we just provide it with two rooms within its area).  So assign
+ * it to the controller's area.
+ */
+	    if (controller) {
+		area = controller_area(controller);
+		        dd_list[h] = ({ area,
+					0, /* x */
+					0, /* y */
+				        0, /* used for backtracking */
+				        0 });
+		}
+	    else {
+/* No controller.  Look at all rooms in its dest dir; if any are (a) loaded into
+ * an area, and (b) have opposing directions for link to it and link back here,
+ * and (c) are not themselves controlled (which would mean they have their own area),
+ * add the room to that area, giving x/y coords appropriate to the direction.
+ */
+	        x = (-1);
+	        area = (-1);
+	        while ((x+=2) < sizeof(dd)) {
+		    if (controller_name(dd[x-1])) {
+			continue;
+			}
+		    if (0 > (i1 = index(std_dirs, strip_code(dd[x])))) {
+		        continue;
+		        }
+    /* This exit is in a reasonable direction. */
+		    y = hash_name(dd[x-1]);
+		    if (seen_list[y] && dd_list[y][0] != (-1)) {
+    /* found a loaded, connecting room.  see if it has an exit to us */
+		        if (0 > (i2 = index(dd_list[y][4], h))) {
+			    continue;
+			    }
+    /* it does - see if the direction is in std dirs */
+		        if (0 > (i2 = index(std_dirs,
+					    strip_code(dd_list[y][4][i2 + 1])))) {
+			    continue;
+			    }
+    /* It is - make sure it's the reverse of ours */
+		        if ((std_dirs[i1+1] != (-(std_dirs[i2+1])))
+		           || (std_dirs[i1+2] != (-(std_dirs[i2+2])))) {
+			     continue;
+			     }
+    /* Good god!  We found a match! */
+		        area = dd_list[y][0];
+		        dd_list[h] = ({ area,
+				        dd_list[y][1] - std_dirs[i1+1],
+				        dd_list[y][2] - std_dirs[i1+2],
+				        0,
+				        0 });
+		        break;	/* out of while loop */
+		        }	/* if seen_list... */
+		    } /* while() thru dest dirs */
+		}
+/* at this point, if area is positive, we've assigned its dd.  Else it gets its own
+ * area.
+ */
+	    if (area < 0) {
+		seen_list[h] = room;
+		dd_list[h] = ({ next_area, 0, 0, 0, 0 }); /* x, y are 0 */
+		area = next_area++;
+		area_list[area] = ({ });
+		reverse_area_list[area] = ({ });
+		cluster_list[area] = area;
+		scc_list[area] = area;
+		nsccs++;
+		nclusters++;
+		}
+	    loaded_rooms++;
+	    known_rooms++;
+	    } /* if (room never loaded) */
+	} /* if (room never seen) */
+
+/* Now we have set up the room in an area, and, if no controller, assigned
+ * X and Y coordinates.  Run through its dest dir again, looking at all rooms
+ * it connects to.  For each room listed, ensure it is in the seen array (if
+ * it's a new room, add with area (-1)).  If the room found has area -1, add
+ * this room to its entry as mentioning that room, so that from/to queries
+ * can work to things just off the map (this is much nicer for the city);
+ * Otherwise, add the connection(s) between the two areas.  Then, run through
+ * the list of prior references to this room, adding the area back-links from
+ * those rooms to this area - this way, all incoming area dest dirs get updated.
+ */
+
+/* this never got done in the buggy rooms ... G */
+
+     if (old_dd) { /* other rooms had mentioned us - these are
+		    * already in array, add area link from there to here
+		    */
+	 for (x = 0; x < sizeof(old_dd); x+=2) {
+	     i1 = old_dd[x];		/* names in old_dd are already hashed */
+	     add_area_link(i1, h, old_dd[x+1]);
+	     }
+	 }
+
+/* ensure rooms named in our dd are in the array, and, if they are and
+ * are in an area, add the area link from here to there.  If they aren't
+ * in an area, add a back link from them to us (so that when they are
+ * finally loaded, they will be able to check for an area).  Convert all
+ * names in dd into hash values.
+ */
+
+     for (x = 0; x < sizeof(dd); x += 2) {
+	 i1 = hash_name(dd[x]);
+	 if (!seen_list[i1]) {						/* add 'em in as seen rooms */
+	     seen_list[i1] = dd[x];					/* chuck the name in the seen list */
+	     dd_list[i1] = ({ (-1), 0, 0, 0, ({ h, dd[x+1] }) });	/* and start its ref'd area list */
+	     named_rooms++;
+	     }
+	 else
+	     if (dd_list[i1][0] < 0) { /* seen but unloaded */
+		 if (index(dd_list[i1][4], h) < 0)
+		     dd_list[i1][4] = dd_list[i1][4] + ({ h, dd[x+1] });
+		 }
+	     else	/* seen *and* loaded - add link here->there */
+	 	 add_area_link(h, i1, dd[x+1]);
+	 dd[x] = i1;
+	 }
+
+/* finally, save the transformed dd into our entry */
+    dd_list[h][4] = dd;
+}
+
+try_spec_room(string room) {
+    catch SPEC_ROOMS->loaded_room(room);;
+    }
+
+/*
+ * Delete a link between two areas (used if the
+ * original connection is found to be bad).  Won't
+ * un-cluster them.
+ */
+
+nosave del_area_link(fromroom, fromdir) {
+    int fromarea = dd_list[fromroom][0];
+    if (fromarea < 0)
+		return;	/* never loaded? */
+
+    array aentry = area_list[fromarea];
+    int x = 0;	/* want to act on all the x mod 3 == 1 pairs (aentry == toarea, fromroom, fromdir) */
+    int ns = 0;
+    while (x >= 0) {
+	x = index(aentry, fromroom, x+1);
+	if ((x % 3) == 1) {
+            TG("Deleting area link " + fromarea + ": " + seen_list[fromroom] + "; " + aentry[x+1])
+	    aentry = aentry[..x-2] + aentry[x+2..];
+	    ns=1;
+	    x -= 1;
+	    }
+	}
+    if (ns) {
+	set_needs_save();
+        area_list[fromarea] = aentry;
+	}
+    }
+
+/*
+ * Convert a room ID to an area ID.
+ */
+
+representative_room(int areaID) {
+	if (areaID < 0)
+		return (-1);
+	array a = area_list[areaID];
+	if (!a || !arrayp(a))
+		return (-1);
+	if (sizeof(a) < 3)
+		return (-1);
+	return a[1];	/* first from room */
+	}
+
+area_id(int roomNo) {
+    if (arrayp(dd_list[roomNo]))
+	    return dd_list[roomNo][0];
+    return 0;
+	}
+
+/*
+ * Given an area ID, find which cluster it is assigned to.
+ */
+
+scc_id(int area) {
+	return find_component_base(scc_list, area);
+	}
+
+cluster_id(int area) {
+	return find_component_base(cluster_list, area);
+	}
+
+/* Called when two areas have just had a link
+ * installed (or discovered).  If neither is a controlled area,
+ * link them into the same cluster.  Returns the no. of areas which
+ * were controlled areas (0, 1 or 2).
+ */
+
+link_clusters(area1, area2) {
+	int c1 = cluster_id(area1);
+	int c2 = cluster_id(area2);
+
+	if (c1 >= 0 && c2 >= 0 && c1 != c2) {
+		nclusters = join_components(nclusters, cluster_list, c1, c2);
+		/* To do: run through stripping dest dirs */
+		return 0;
+		}
+
+	if (c1 < 0 && c2 < 0)
+		return 2;
+
+	return 1;
+	}
+
+
+link_sccs(area1, area2) {
+	int c1 = scc_id(area1);
+	int c2 = scc_id(area2);
+
+	if (c1 >= 0 && c2 >= 0 && c1 != c2) {
+		nsccs = join_components(nsccs, scc_list, c1, c2);
+		/* To do: run through stripping dest dirs */
+		return 0;
+		}
+
+	if (c1 < 0 && c2 < 0)
+		return 2;
+
+	return 1;
+	}
+
+
+/*
+ * add_area_link(fromroom, toroom, dir) - used by the above.
+ * Looks up the area that the room referenced by roomindex resides in and
+ * adds a link from that area to 'area', specifying that you leave in
+ * direction 'dir' from room 'roomindex'.  If a link already exists, and
+ * it is not a door link (dirn contains a #), the link won't be replaced
+ * with this one, otherwise it will.  If either other area is a controller,
+ * we record all exits between them; this lets the MapKnower ask the
+ * area controller(s) for the best exit to use (it also lets us
+ * control routing between multiple controlled areas, which saves
+ * wizzes implementing it in each controller).
+ */
+
+nosave add_area_link(fromroom, toroom, dir) {
+	int r = add_area_link_u(area_list, fromroom, toroom, dir);
+	if (r) {	/* new link */
+		add_area_link_u(reverse_area_list, toroom, fromroom, dir);
+		if (r > 0) {	/* between noncontrolled areas */
+    		int fromarea = dd_list[fromroom][0];
+    		int toarea = dd_list[toroom][0];
+			link_clusters(fromarea, toarea);
+			/* Quickie SCC check: see if toroom's area has a link back to
+			 * fromroom's.  We collapse longer cycles elsewhere.
+			 */
+			if (scc_id(fromarea) != scc_id(toarea)) {
+				int x;
+				array aentry = area_list[toarea];
+				for (x = 0; x < sizeof(aentry); x += 3) {
+					if (area_id(aentry[x]) == fromarea) {
+						link_sccs(fromarea, toarea);
+						break;
+						}
+					}
+				}
+			}
+		}
+	}
+
+/*
+ * actually add a link.  Returns 0 if no change, -1 if one or both were
+ * controlled, 1 if neither was controlled.
+ */
+
+nosave add_area_link_u(array alist, fromroom, toroom, dir) {
+    int i;
+    int fromarea = dd_list[fromroom][0];
+    int toarea = dd_list[toroom][0];
+
+    if (fromarea == toarea)
+		return 0;
+
+    array aentry = alist[fromarea];
+
+	/* don't want to call cluster_id until we have made the link */
+	int havecontroller = (cluster_list[fromarea] == (-1)) || (cluster_list[toarea] == (-1));
+	
+
+/* See whether we already have a link to our area.  Have to be careful -
+ * area dest-dirs are `toroom, fromroom, dir'; area & fromroom are both
+ * numbers.  If either or both areas are controlled, we record _all_ exits.
+ */
+	int found = 0;
+    int i = 0;
+    for (i = 0; i < sizeof(aentry); i += 3) {
+		if (area_id(aentry[i]) != toarea)
+			continue;
+		if (!havecontroller) {
+			found = 1;	/* found an exit to the same area - good enough */
+			break;	/* only keep one link between non-controlled areas */
+			}
+		/* we have a controller - check whether we already have the exit */
+		if (alist[i+1] == fromroom)
+			return 0;
+		}
+
+    if (!found) {
+	   	alist[fromarea] += ({ toroom, fromroom, dir });
+	   	if (havecontroller)
+			return -1;
+		return 1;
+	   	}
+
+	/* we already had an exit to the area */
+    if (index(dir, "#") >= 0)
+		return 0;
+
+/* update if old route required a key and new route doesn't */
+    if (index(aentry[i+2], "#") >= 0) {
+		alist[fromarea] = aentry[.. i-1]
+			    + aentry[i+3..]
+			    + ({ toroom, fromroom, dir });
+		return 1;
+	}
+    return 0;
+}
+
+/*
+ * Support for basic directional, area effects.
+ * Given a room name, a distance, and a set of directions or
+ * flood attributes, return all rooms that can be reached within
+ * that distance & flood, to a max of MAX_AREA_EFFECT.
+ * Gandalf, Jan 95.
+ */
+
+find_flood(string fromroom,
+	   int dist,
+	   (int|array|string) dirns,
+	   (int|array) prev) {
+
+    array build = allocate(MAX_AREA_EFFECT);
+    int bstart = 0;
+    int bend = 1;
+
+    if (pointerp(prev)) {
+	build = prev + build;
+	bend = sizeof(prev);
+	}
+
+    int x;
+    int h = hash_name(fromroom);
+
+    int bdist = 0;
+    int bdstart = bend;	/* here-bend is the outer room frontier */
+
+    if (!seen_list[h])
+	return 0;
+
+    if (stringp(dirns))
+	dirns = ({ dirns });
+
+    build[bstart] = h;
+    while (bstart < bend && bdist < dist) {
+	h = build[bstart];
+	array dd = dd_list[h][4];
+	for (x = 0; (bdist < dist) &&
+		    (x < sizeof(dd)) &&
+		    (bend < MAX_AREA_EFFECT); x += 2) {
+	    if (intp(dirns) || (index(dirns, strip_code(dd[x+1])) >= 0)) {
+		if (index(build, dd[x]) < 0) {
+		    build[bend++] = dd[x];
+		    }
+		}
+	    }
+	bstart++;
+	if (bstart >= bdstart) {
+	    bdstart = bend;
+	    bdist++;
+	    }
+	}
+
+    array realthing = allocate(bend);
+    for (x = 0; x < bend; x++) {
+	realthing[x] = seen_list[build[x]];
+	}
+
+    return realthing;
+}
+
+
+
+/*
+ * This queue stuff is ripped from hunter's code - G.
+ */
+
+/*
+ * Simple queue data structure management object, this time with
+ * weights.
+ *
+ * Hunter of Shattered Worlds (hacked)
+ */
+
+nosave array Queue;
+nosave array Weights;
+nosave array Seen;
+
+clear() { 
+	Queue = ({ });
+	Weights = ({ });
+	Seen = ({ });
+	return 1;
+}
+
+popw() {
+array Ret;
+	if ((!Queue) || nil()) return 0; 
+	Ret = ({ Queue[0], Weights[0] });
+	Seen += ({ Queue[0] });
+	Queue = Queue[1..];
+	Weights = Weights[1..];
+	return Ret;
+}
+
+pop() {
+int Ret;
+	if ((!Queue) || nil()) return 0; 
+	Ret = Queue[0];
+	Seen += ({ Ret });
+	Queue = Queue[1..];
+	Weights = Weights[1..];
+	return Ret;
+}
+
+push(arg, weight) {
+	int pos = 0;
+	if (!Queue) Queue = ({ });
+	if (!Weights) Weights = ({ });
+	if (weight >= 0)
+	    while ((pos < sizeof(Weights))
+	      && (Weights[pos] <= weight))
+		  pos++;
+	    else
+		pos = sizeof(Weights);
+	if (pos >= sizeof(Weights)) {
+	    Queue += ({arg});
+	    Weights += ({ weight });
+	    }
+	else {
+	    Queue = Queue[..pos-1] + ({ arg }) + Queue[pos..];
+	    Weights = Weights[..pos-1] + ({ weight }) + Weights[pos..];
+	}
+	return 1;
+}
+
+nil() { return ((!pointerp(Queue)) || (sizeof(Queue) == 0)); }
+
+seen(x) { return ((index(Seen, x) != (-1)) || (index(Queue, x) != (-1))); }
+
+/*
+ * Cache stuff so that we don't have to recompute too often.  Cache indexes
+ * are stored as strings; if they are an integer, the slot is free.
+ * Each cache slot is a pair: a string, and an (array) path.  The first item
+ * in a cache array is an array of 3 stats: the first free cache slot, the
+ * number of queries, and the number of hits.
+ */
+
+init_caches() {
+    if (!pointerp(inter_cache)) {
+        inter_cache = allocate(1 + (INTER_AREA_CACHE * 2));
+        inter_cache[0] = ({ 1, 1, 0 }); /* nextfree, reads, hits */
+	}
+    if (!pointerp(intra_cache)) {
+        intra_cache = allocate(1 + (INTRA_AREA_CACHE * 2));
+        intra_cache[0] = ({ 1, 1, 0 }); /* nextfree, reads, hits */
+	}
+    return 1;
+}
+
+/* check_cache - do an associative lookup, if found, move closer to head of list
+ * and return path.  Cache elts: c[0] - stats.  c[x, x+1]: iden, path
+ * Cache retention algorithm changed - G - We want to move a cache item 1 towards
+ * the head of the cache per hit (asymptotically, this is optimal, but has a poor
+ * startup time).  However, path accesses tend to be clustered; when the cache is
+ * full, but a new path is added, we expect that the new path, or something similar,
+ * will be accessed again in the near future (eg when 20 monsters decide to make a
+ * run for the pub).  So, when swapping, we have a random chance of swapping with
+ * the adjacent elt (80% of the time), or a random higher elt.
+ */
+
+check_cache(c, s) {
+    int x;
+    int swaploc;
+    array pa;	/* for swap */
+    string ps;
+
+    if (!stringp(s))	/* should throw an error */
+	return 0;
+
+    c[0][1]++;	/* num queries */
+    if ((x = index(c, s)) < 0)
+	return 0;
+    c[0][2]++;	/* num hits */
+
+    pa = c[x+1];	/* found it: pa is path */
+
+    if (!pointerp(pa)) return 0;	/* this won't allow recomputations if it's in cache and stats change */
+
+    if (x >= 3) {			/* second or successive entry; swap adjacent elts so we */
+	if (random(1000) > 200)		/* This is coz we always add new items to the end. */
+		swaploc = x-2;
+	else
+		swaploc = random(x/2) * 2 + 1;
+	c[x+1] = c[swaploc + 1];	/* eventually settle down to an optimal cache ordering */
+	c[swaploc + 1] = pa;		/* would it be better to do a heap-like cache? */
+	c[x] = c[swaploc];
+	c[swaploc] = s;
+	}
+
+    return pa;
+}
+
+/* add_cache - adds an elt to cache, returns the cache. */
+/* NB: cache size must be odd and >= 3 */
+
+nosave add_cache(c, s, p) {
+    int x;
+    int prev;
+    int next;
+
+if (!arrayp(c)) return;
+if (!sizeof(c)) return;
+if (!sizeof(c[0])) return;
+
+/* Find a cache entry */
+    x = c[0][0];
+    if (x >= sizeof(c)) { /* full cache - put this in as the last entry */
+	x = sizeof(c) - 2;	/* cache size must be odd */
+	}
+    else
+	c[0][0] += 2;
+
+    c[x] = s;
+    c[x+1] = p;
+    return c;
+}
+
+cache_stats(c) {
+    return "Entries: " + (c[0][0] / 2) + "/" + (sizeof(c)/2) +
+			"	Hits: " + c[0][2] + "/" + c[0][1] +
+			"		" + ((c[0][2] * 100) / c[0][1]) + "%";
+    }
+
+/*
+ * rebuild the cluster list from scratch (for when the
+ * clustering has been screwed by a (since-deleted) wiz:
+ *
+ * Make a new cluster array
+ * Initialise it with a seperate cluster ID for each area, except:
+ * areas currently listed as area (-1) are initialised to that in the
+ * new array (these are controllers)
+ * Running forward through the area list, use the area exits to
+ * join clusters.
+ * Assign the result to the cluster list.
+ *
+ * Written because the (not yet deleted) author screwed the original algorithm.
+ */
+
+rebuild_cluster_list() {
+	array newlist = allocate(AREA_TABLE_SIZE);
+	int x = 0;
+	int nclust = next_area;
+	while (x < next_area) {
+		if (cluster_list[x] < 0) {
+			newlist[x] = (-1);
+			nclust--;
+			}
+		else {
+			newlist[x] = x;
+			}
+		x++;
+		}
+	write("cl: 1 \n");
+	/* cluster the current areas */
+	x = 0;
+	while (x < next_area) {
+		int y = 0;
+		array aentry = area_list[x];
+		if (aentry && (newlist[x] >= 0)) {
+			/* get our area's initial cluster ID */
+			int clus = find_component_base(newlist, x);
+			while (y < sizeof(aentry)) {
+				/* aentry - toroom, fromroom, fromdir */
+				int aid = area_id(aentry[y]);
+				if (aid >= 0 && newlist[aid] >= 0)
+					nclust = join_components(nclust, newlist, x, area_id(aentry[y]));
+				y += 3;
+				}
+			}
+		x++;
+		}
+	write("cl: 2; nclust = " + nclust + " \n");
+	/* resolve chains */
+	int cnum = 0;
+	x = 0;
+	while (x < next_area) {
+		if (newlist[x] >= 0) {
+			if (newlist[x] < x) {
+				newlist[x] = newlist[newlist[x]];
+				}
+			else {
+				cnum++;
+				}
+			}
+		x++;
+		}
+	write("cl: 3; cnum = " + cnum + " \n");
+	cluster_list = newlist;
+	nclusters = cnum;
+	}
+
+/*
+ * Traverse an area graph, taking many parameters and returning
+ * many results :)
+ *
+ * Arguments:
+ *		1. The area graph (probably area_list)
+ *		2. The room to start from.
+ *		3. A terminator list (cluster ID map or SCC map) 
+ *		4. Backtrack_ids, filled in with (PrevArea + 1)
+ *		5. Numbers, areas are sequentially numbered when seen
+ *		6. First number to use, must be >= 1.
+ *		7. Seen_sequence, has areas IDs added in the order seen
+ *		8. First_seen - the first slot to use in seen_sequence.
+ *		9. From_move - the source room in each exit traversed
+ *		10. To_move - the target room in each exit traversed
+ *		11. dir_move - the direction of each exit traversed
+ *		12. move_count - first slot to use in the above 3 arrays
+ *		12. Flags, described below.
+ *
+ * The area graph and start area must be supplied.  Of the rest,
+ * any array can be null, and will not be filled in.  If there
+ * is a terminator list, it will be used to restrict the search
+ * to the areas having the same IDs as the start area.  The
+ * backtrack IDs and numbers arrays are marked with the previous
+ * area seen and sequential ordering for each area; these arrays
+ * are also used for loop detection, and a search will terminate
+ * at any room where either quantity is nonzero (if neither of
+ * these are supplied, or if we aren't marking enough stuff in them,
+ * an internal array will be created to control backtracking).
+ *
+ * The return value is a 3-element array: the final values of
+ * the number, first_seen, and move_count integers.  Even if we
+ * are not actually recording these values in arrays (because no
+ * arrays were supplied), the quantities will still be incremented
+ * and returned.
+ */
+
+#define F_log_interior 	(1)		/* put interior nodes in seen_list */
+#define F_log_leaves 	(2)		/* put leav nodes in seen_list */
+#define F_log_external 	(4)		/* put external nodes in seen_list */
+
+#define F_mark_interior (16)	/* mark all interior (non-leaf) nodes */
+#define F_mark_leaves 	(32)	/* mark leaves (numbering or backtrack) */
+#define F_mark_external (64)	/* mark reached external nodes */
+
+#define F_exits_internal (128)	/* log exits to internal nodes */
+#define F_exits_external (256)	/* log exits to external nodes */
+#define F_exits_first_only (8)		/* not implemented */
+
+find_reachable(area_list,		/* graph to traverse */
+			   terminators,		/* clusters/SCCs */
+			   x,				/* start area */
+			   backtrack_ids,	/* prev area IDs */
+			   numbers,			/* order seen */
+			   nextid,			/* first ID */
+			   seen_sequence,	/* seen sequence (area output queue) */
+			   seen_count,		/* where to start in seen array */
+			   from_move,		/* seen sequence for moves */
+			   to_move,			/* seen sequence */
+			   dir_move,		/* seen sequence */
+			   move_count,		/* first free slot in move array */
+			   flags) {			/* 1: all interior areas. 2: breadth */
+
+	/* Flags:
+	 *	log_xxx - log traversed areas in seen_sequence.
+	 *	mark_xxx - mark areas in backtrack_id or numbers
+	 *	exits_xxx - log exits from internal areas to other areas.
+	 */
+
+	int log_interior = 0 != (flags & F_log_interior );	/* all interior = fill (else only log moves that leave the cluster) */
+	int log_leaves = 0 != (flags & F_log_leaves);
+	int log_external = 0 != (flags & F_log_external);
+
+	int mark_interior = 0 != (flags & F_mark_interior);	/* all interior = fill (else only log moves that leave the cluster) */
+	int mark_leaves = 0 != (flags & F_mark_leaves);
+	int mark_external = 0 != (flags & F_mark_external);
+
+	int exits_internal = 0 != (flags & F_exits_internal);
+	int exits_external = 0 != (flags & F_exits_external);
+
+	int have_numbers = arrayp(numbers);
+	int have_terminators = arrayp(terminators);
+	int have_backtrack = arrayp(backtrack_ids);
+	int have_seen = arrayp(seen_sequence);
+	int have_from = arrayp(from_move);
+	int have_to = arrayp(to_move);
+	int have_dir = arrayp(dir_move);
+
+	int have_exits = (have_from || have_to || have_dir)
+				  && (exits_internal || exits_external);
+
+	/* we need to ensure we can detect loops and previously processed rooms.
+	 * We never push external areas on the stack, so it is sufficient to
+	 * ensure we can record all internal nodes.
+	 */
+
+	int have_internal = 0;
+	array internal;
+
+	if (!mark_interior || !mark_leaves) {	/* not logging everything */
+		have_internal = 1;
+		}
+
+	if (log_external && !mark_external) {	/* externals will be pushed */
+		have_internal = 1;
+		}
+
+	if (!have_numbers && !have_backtrack) {	/* nowhere to log it! */
+		have_internal = 1;
+		}
+
+	if (have_internal) {
+		internal = allocate(next_area);
+		}
+
+	int num_added = 0;
+
+	array area_stack = allocate(next_area);
+	array previd_stack = allocate(next_area);
+
+	int stacktop = 0;
+
+	int term;
+	if (have_terminators) {
+		if (x >= 0)
+			term = find_component_base(terminators, area_id(x));
+		}
+
+	area_stack[stacktop] = x;
+	previd_stack[stacktop++] = x;
+
+	while (stacktop > 0) {
+		int included = (-1);
+		int push = 1;
+		int room_id = area_stack[--stacktop];
+		int area = area_id(room_id);
+		int prev_room = previd_stack[stacktop];
+
+		if (area < 0)
+			continue;
+
+		/* check whether the area was already reached */
+
+		int done1 = (have_numbers && numbers[area]);
+		int done2 = (have_backtrack && backtrack_ids[area]);
+		int done3 = (have_internal && internal[area]);
+
+		if (done1 || done2 || done3)
+			continue;
+
+		/*
+		 * For any node we see, the internal list must be updated.
+		 * For other lists, we must work out the node type first,
+		 * which implies processing all of the exits (unless
+		 * it is external).
+		 */
+
+		if (have_internal)
+			internal[area] = 1;
+
+		/*
+		 * If this is an external node, we need not process exits.
+		 */
+
+		int do_exits = 1;
+		int mark_node = mark_interior;
+		int log_node = log_interior;
+		int is_leaf = 0;
+
+		if (have_terminators) {
+			int t = find_component_base(terminators, area);
+			if (t != term) {
+				do_exits = 0;
+				mark_node = mark_external;
+				log_node = log_external;
+				}
+			}
+
+		/*
+		 * Check exits to find out what we are.
+		 * While we're here, log exits and push destinations.
+		 */
+
+        /* internal or leaf */
+	    array exits = area_list[area];
+		if (do_exits && arrayp(exits)) 
+        {	
+			int i;
+			for (i = 0; i < sizeof(exits); i += 3) {
+				/* if we are processing the reverse graph, either the
+				 * exit or the entrance could be in our area - check both.
+				 */
+				int log_exit = 0;
+				int Tr = exits[i];
+				int Fr = exits[i+1];
+				int Ta = area_id(Tr);
+				if (Ta == area) {
+					Fr = Tr;
+					Tr = (exits[i+1]);
+					Ta = area_id(Tr);
+					}
+				if (Ta == area) { /* this is really an error */
+					throw("Exit from area " + Ta + " to itself.");
+					continue;
+					}
+
+				/*
+				 * Check whether the target area was already reached.
+				 * If it was, we won't push or log it again.
+				 */
+
+				int target_reached = 0;
+
+				if (Ta >= 0) {
+					target_reached += (have_numbers && numbers[Ta]);
+					target_reached += (have_backtrack && backtrack_ids[Ta]);
+					target_reached += (have_internal && internal[Ta]);
+					}
+				else {			/* don't process exits to unloaded rooms */
+					continue;
+					}
+
+				int tc = term;
+				if (have_terminators)
+					tc = find_component_base(terminators, Ta);
+
+				if (tc != term) {	/* external exit; we are a leaf */
+					mark_node = mark_leaves;
+					log_node = log_leaves;
+					is_leaf = 1;
+					if (exits_external)
+						log_exit = 1;
+					if (!mark_external && !log_external)
+						target_reached = 1;
+					}
+				else {
+					if (exits_internal)
+						log_exit = 1;
+					}
+				if (log_exit) {
+					if (have_from)
+						from_move[move_count] = Fr;
+					if (have_to)
+						to_move[move_count] = Tr;
+					if (have_dir)
+						dir_move[move_count] = exits[i + 2];
+					move_count++;
+					}
+				if (!target_reached) {
+					/* we will push controlled areas multiple times.  Ho hum */
+					area_stack[stacktop] = Tr;
+					previd_stack[stacktop++] = Fr;
+					}
+				}
+			}
+	
+		if (mark_node) {
+			if (have_numbers)
+				numbers[area] = nextid;
+			nextid++;
+			if (have_backtrack)
+				backtrack_ids[area] = prev_room + 1;
+			}
+		
+		if (log_node) {
+			if (have_seen)
+				seen_sequence[seen_count] = area;
+			seen_count++;
+			}
+		}
+
+	return ({ nextid, seen_count, move_count });
+	}
+
+/*
+ * Calculate strongly connected components.
+ */
+
+rebuild_scc_list() {
+	array newlist = allocate(AREA_TABLE_SIZE);
+	int x = 0;
+	int y;
+	int nscc = next_area;
+	while (x < next_area) {
+		if (scc_list[x] < 0) {
+			newlist[x] = (-1);
+			nscc--;
+			}
+		else {
+			newlist[x] = x;
+			}
+		x++;
+		}
+	write("sl: 1 \n");
+
+	/*
+	 * scc the current areas.
+	 */
+
+	array numbers = allocate(AREA_TABLE_SIZE);
+	int nextid = 1;
+	x = (-1);
+	while (1) {
+		x = index(numbers, 0, x+1);	/* find first untouched node */
+		if (x < 0)
+			break;
+		if (x >= next_area)
+			break;	/* numbered them all */
+		if (newlist[x] < 0)
+			continue;	/* controller */
+
+		array res = find_reachable(area_list,		/* graph to traverse */
+			   cluster_list,	/* clusters/SCCs */
+			   representative_room(x),				/* start area */
+			   0,				/* prev area IDs */
+			   numbers,			/* order seen */
+			   nextid,			/* first ID */
+			   0,				/* seen sequence (area output queue) */
+			   0,				/* where to start in seen array */
+			   0,				/* seen sequence for moves */
+			   0,				/* seen sequence */
+			   0,				/* seen sequence */
+			   0,				/* first free slot in move array */
+			 F_mark_interior | F_mark_leaves);				/* flags: */
+
+		nextid = res[0];
+		}
+
+	array seen_list = allocate(AREA_TABLE_SIZE);
+	array othernumbers = allocate(AREA_TABLE_SIZE);	/* so it doesn't continually alloc it own backtrack array */
+
+	for (x = 0; x < next_area; x++) {
+		int i = index(numbers, x+1);	/* find next id */
+		if (i < 0)						/* already in SCC */
+			continue;
+		if (newlist[i] != i)	/* in SCC */
+			continue;
+		res = find_reachable(reverse_area_list,	/* graph to traverse */
+			   cluster_list,	/* clusters/SCCs */
+			   representative_room(i),				/* start area */
+			   0,				/* prev area IDs */
+			   othernumbers,		/* order seen */
+			   1,				/* first ID */
+			   seen_list,		/* seen sequence (area output queue) */
+			   0,				/* where to start in seen array */
+			   0,				/* seen sequence for moves */
+			   0,				/* seen sequence */
+			   0,				/* seen sequence */
+			   0,				/* first free slot in move array */
+			 F_mark_interior | F_mark_leaves | F_log_interior | F_log_leaves );
+
+		int nareas = res[1];
+		if (nareas != res[0] - 1)
+			write("Bad counts: " + nareas + ", " + res[0]);
+		for (y = 0; y < nareas; y++) {
+			nscc = join_components(nscc, newlist, i, seen_list[y]);
+			}
+		}
+		
+	write("cl: 2; nscc = " + nscc + " \n");
+	/* resolve chains */
+	int cnum = 0;
+	x = 0;
+	while (x < next_area) {
+		if (newlist[x] >= 0) {
+			if (newlist[x] < x) {
+				newlist[x] = newlist[newlist[x]];
+				}
+			else {
+				cnum++;
+				}
+			}
+		x++;
+		}
+	write("cl: 3; cnum = " + cnum + " \n");
+	scc_list = newlist;
+	nsccs = cnum;
+	}
+
+/*
+ * Rebuild area exits - for times when you've had to un-fuck the map.
+ * Expensive.
+ */
+
+rebuild_area_exits() {
+	}
+
+rebuild_area_entrances() {
+	}
+
+/*
+ * Given an array (eg cluster list) and two components
+ * within it (to be joined), join them.
+ */
+
+find_component_base(array a, int x) {
+	if (a[x] < 0)
+		return a[x];
+	
+	int top = x;
+	while (a[x] != x)
+		x = a[x];
+
+	while (top != x) {
+		int y = a[top];
+		a[top] = x;
+		top = y;
+		}
+	
+	return x;
+	}
+
+int join_components(int ncomps, array a, int x1, int x2) {
+	int c1 = find_component_base(a, x1);
+	int c2 = find_component_base(a, x2);
+	if (c1 != c2)
+		ncomps--;
+	if (c1 < c2)
+		a[c2] = c1;
+	else
+		a[c1] = c2;
+	return ncomps;
+	}
+
+/*
+ * For map builder.
+ */
+
+get_controllers() {
+	return controller_list;
+	}
+
+get_seen_list() {
+	return seen_list;
+	}
+
+/*
+ * The following stuff is for calculation of routes through the
+ * graph.  It is done as a multistep process - after a monster calls
+ * this, giving FROM, TO, and a call back routine, it should compute a
+ * partial route between FROM and TO, and call the monster's callback
+ * routine, giving it an array of rooms to get to and the direction
+ * to leave in; if this is zero, the MapKnower may not know how to get
+ * to the place.  An empty array means FROM and TO were the same place.
+ * The first room in the list may be the FROM room, in which case the monster
+ * should simply make the associated move; if not, the monster should
+ * re-call this object asking directions from his room to the first room
+ * in the list.
+ * A monster moves as follows:
+ *    Call this object with FROM, TO, and callback rtne.
+ *    when the callback happens:
+ *	If the given array is 0, there is no route (yet)
+ *	If the array is ({ }), FROM = TO
+ *    Otherwise, for each element in the array:
+ *	Check whether we are in the designated room.
+ *	    If so, move in the indicated direction (using command()).
+ *	    If not, ask the server for a route to the named room, follow it,
+ *		and go back to using the old route.
+ *
+ * This routine returns one of the following:
+ *     -1 - Bad room name(s)
+ *	0 - search started; await callback.
+ *	1 - callback ob or callback routine nonexistent
+ *	2 - FROM never seen - will not call callback (even with 0).
+ *	3 - TO never seen - will not call callback
+ *
+ * The second param is given as an extra parameter on the callback (it need
+ * not be used) - for accounting purposes for the object (it's really hard to
+ * manage your callbacks when another object has the callouts and you can't
+ * even tell whether it's got one scheduled for you or not).  It was actually
+ * added when I decided that "track.lpc" needed to be able to change its
+ * mind about what route it was taking; in this case, param is a sequence
+ * number which is incremented by track (see std/map/track.c).
+ */
+
+find_route(fromroom, to, ob, callback, param) {
+    int Fh, Th;
+    int a1 = (-1), a2 = (-1);
+
+    if (!objectp(ob) || !stringp(callback))
+	// || !function_exists(callback, ob))
+	    return 1;
+    
+/* make sure that we can get to interior rooms of a controlled
+ * area (that we may not have seen yet)
+ */
+
+    string c1 = controller_name(fromroom);
+    string c2 = controller_name(to);
+    if (c1 && c1 == c2) {
+	    /* same (controlled) area - strip args and pass them in */
+	    return c1->find_route(fromroom, to, ob, callback, param);
+	}
+
+    if (c1)
+		a1 = controller_area(c1);
+    else {
+        Fh = hash_name(fromroom);
+        if (!seen_list[Fh] || (catch { forced_load(Fh); })) {
+	    /* room has never been seen; loading it wont */
+	    	return (2);	  /* add any usable links */
+	    	}
+        if ((a1 = dd_list[Fh][0]) < 0) {
+	    	return(2);
+	    	}
+		}
+
+    if (c2)
+	a2 = controller_area(c2);
+    else {
+        Th = hash_name(to);
+        if (!seen_list[Th] || (catch { forced_load(Th); })) {
+	    return (3);
+	    }
+        if ((a2 = dd_list[Th][0]) < 0) {
+	    return(3);
+	    }
+	}
+
+	/*
+	 * We have rooms, their areas (which are real areas).
+	 * Choose a search algorithm.
+	 */
+
+    if (a1 == a2)
+		return intra_area_search(Fh, Th, ob, callback, param);
+	
+	return inter_area_search(Fh, Th, ob, callback, param);
+}
+
+forced_load(HashNum) {
+    if (dd_list[HashNum][0] != (-1)) /* already in an area */
+	return;
+    seen_list[HashNum] -> short();
+    }
+
+/* inter area search - given (from area, to area, ob, callback) return a list
+ * of rooms to get to and directions to go.  Routes are cached whenever the from
+ * and to rooms are not controlled (because of the way we calculate this,
+ * routes that traverse controlled areas will cache the route to the exit
+ * to the controlled area, then from the exit of the controlled area to the
+ * destination room; the controllers are responsible for choosing routes
+ * within their own area).
+ *
+ * The algorithm is as follows:
+ *	If source and destination are within the same SCC, calculate a direct route,
+ *	without leaving the SCC.  These are cached as inter-area routes.
+ *
+ *	Otherwise, *attempt* to get a route which remains within the cluster.
+ *	If this works, use it.
+ *
+ *	Otherwise, we have a list of plausible cluster exits to use.  Use the
+ *	reverse area list to build a list of plausible cluster entrances that
+ *	will reach the target room.  If any exits and entrances are to/from the
+ *	same controller, we will route through it: use the controller to find
+ *	the closest exit/entrance pair (if it doesn't work, choose a pair
+ *	arbitrarily), save the route from the start room to the controlled area
+ *	and from the exit of the controlled area to the end room, and allow
+ *	the router object to call back to get the route through the controlled
+ *	area.
+ *
+ *	Otherwise, we need to traverse multiple controlled areas.  This
+ *	is rare (and expensive).  Calculate a simgle, complete, inter-area
+ *	route.  Run through the area list picking out the sequence of
+ *	controlled areas to traverse.
+ */
+
+inter_area_search(Fh, Th, ob, callback, param) {
+	int Fa = area_id(Fh);
+	int Ta = area_id(Th);
+    array path;
+    int ca;
+    int x;
+    array prevarea;
+	int usecluster = (-1);
+	if (cluster_id(Fa) == cluster_id(Ta))
+		usecluster = cluster_id(Fa);
+	usecluster = cluster_id(Ta);
+
+	/*
+	 * If both rooms are in valid clusters, any cached route will be valid.
+	 * Otherwise, the correct exit (or entrance) to use to a controlled
+	 * area depends on the location of the room therein.
+	 */
+	if (cluster_id(Fa) >= 0 && cluster_id(Ta) >= 0) {
+    	if (x = check_cache(inter_cache, Fa + "." + Ta)) {
+	    	do_call_other(ob, callback, x, param);
+	    	return 0;
+			}
+		}
+
+	/*
+	 * If the rooms are in the same SCC, we are guaranteed a reasonable
+	 * path within the cluster.  If they are in the same cluster, we may
+	 * or may not find a route within the cluster (but it's the first
+	 * step in computing exits, so...)
+	 */
+
+    path = ({ });
+    area_backtrack = allocate(sizeof(area_list));	/* initialise to 0, not that we have to here */
+    clear();
+    area_backtrack[Fa] = (-1); /* no area to backtrack to */
+    push(Fa, (-1));
+    while (1) {
+	if (nil()) { /* didn't find it */
+	    do_call_other(ob, callback, 0, param);	/* clear backtrack? */
+	    clear();
+	    return 0;
+	    }
+	ca = pop();
+	if (ca == Ta) {	/* found it - backtrack */
+	    path = ({ });
+	    while (ca != Fa) {
+		int pa = area_backtrack[ca];
+		prevarea = area_list[pa];
+		area_backtrack[ca] = 0;
+		x = 0;
+		while (x < sizeof(prevarea) && area_id(prevarea[x]) != ca) {
+			x += 3;
+			}
+		if (x >= sizeof(prevarea))
+			throw("Internal error in find_route (backtrack)");
+		path = ({ seen_list[prevarea[x+1]], prevarea[x+2] }) + path;
+		ca = pa;
+		}
+	    inter_cache = add_cache(inter_cache, Fa + "." + Ta, path);
+	    do_call_other(ob, callback, path, param);
+	    clear();
+	    return 0;
+	    }
+	for (x = 0; x < sizeof(area_list[ca]); x += 3) {
+		int id = area_id(area_list[ca][x]);
+	    if (!seen(id)) {
+			if ((usecluster < 0) || (usecluster == cluster_id(id))) {
+				push(id, -1);
+				area_backtrack[id] = ca;
+				}
+		}
+	    }
+	}
+}
+
+/*
+ * intra_area_search(fromroom, toroom, ob, callback) - both "rooms" here
+ * are hash numbers.  Use a heuristic on the x/y coords of the two
+ * rooms (which are guaranteed to be in the same area).
+ */
+
+#define abs(x)	(((x)>=0)? (x) : (-(x)))
+#define AbsTo(x, y) (abs(tx - (x)) + abs(ty - (y)))
+
+intra_area_search(fh, th, ob, callback, param) {
+    array path;
+    int tmp;
+    int ca;
+    int x;
+    int tx;
+    int ty;
+    array prevdd;
+
+    int pushcnt = 0, tstcnt = 0;
+
+    if (fh == th) {
+	    do_call_other(ob, callback, ({}), param);
+	    return 0;
+	}
+
+    if (x = check_cache(intra_cache, fh + "#" + th)) {
+	    do_call_other(ob, callback, x, param);
+	    return 0;
+	}
+
+    room_backtrack = allocate(sizeof(seen_list));	/* initialise to 0, to support a fast homing heuristic */
+
+    int myarea = dd_list[th][0];
+
+    tx = dd_list[th][1];
+    ty = dd_list[th][2];
+    path = ({ });
+    clear();
+    room_backtrack[fh] = (-1); /* no room to backtrack to */
+    push(fh, AbsTo(dd_list[fh][1], dd_list[fh][2]));
+    while (1) {
+	if (nil()) { /* didn't find it */
+	    do_call_other(ob, callback, 0, param);
+	    clear();
+	    return 0;
+	    }
+	ca = (pop());
+	tstcnt++;
+	if (ca == th) {	/* found it - backtrack */
+	    path = ({ });
+	    do {
+		tmp = ca;
+	        ca = room_backtrack[ca] - 1;	/* 0 entries were unused */
+		if (ca < 0)
+		    break;
+		prevdd = dd_list[ca];
+		x = index(prevdd[4], tmp);
+		if (x < 0) {
+		    throw("Internal error in find_route (intra_area)\n");
+		    }
+		path = ({ seen_list[ca], prevdd[4][x+1] }) + path;
+		}
+		   while (ca != fh); /* do */
+	    intra_cache = add_cache(intra_cache, fh + "#" + th, path);
+	    do_call_other(ob, callback, path, param);
+	    clear();
+	    return 0;
+	    }
+	/* ca != th -> need to search further.  If no dd, discard */
+	if (pointerp(dd_list[ca][4])) {
+	    for (x = 0; x < sizeof(dd_list[ca][4]); x += 2) {
+	        tmp = dd_list[ca][4][x];
+	        if ((!seen(tmp)) && (dd_list[tmp][0] == myarea)) {
+		    push(tmp, AbsTo(dd_list[tmp][1], dd_list[tmp][2]));
+		    room_backtrack[tmp] = ca+1;
+		    pushcnt++;
+		    }
+	        }
+	    }
+	else {
+	/*
+	 * If we got here, a room which was reached in an intra-area search had no dest dir listed.
+	 * Apparently when I wrote the code, I was under the impression that this should never happen.
+	 * But now, some years down the track, it appears to (for a very particular set of rooms - depends
+	 * on the order they are loaded).  Anyone know why? - G.
+	 * UPDATE: I remember finding the bug, kicking myself and fixing it.  But I cant remember what it was - G :)
+	 *
+	 * Addendum: room/city/pr1 doesn't appear to have a dest dir with the MapKnower, when
+	 * the map is generated from a clean mud (the city guards get caught there).
+	 */
+	    TG("Mapknower: dest dir fuckup detected for " +
+			seen_list[ca] + " looking for " + seen_list[th] + "\n")
+	    }
+	}
+}
+
+do_call_other(ob, callback, path, param) {
+    call_out("do_callback", 1, ({ ob, callback, path, param }));
+    }
+
+do_callback(a) {
+    if (objectp(a[0]))
+    call_other(a[0], a[1], a[2], a[3]);
+    }
+
+/*
+ * Tests, check functions, etc.
+ */
+
+show_room(w) {
+    int h;
+    int x;
+    h = hash_name(w);
+    (int|string) co = controller_name(w);
+    if (co)
+	write("Area controller: " + co + "; assigned area " + controller_area(co) + "\n");
+    else
+	write(w + " has no assigned area controller.\n");
+    if (!(seen_list[h])) {
+	write(w + " not known (as a room) by MapKnower\n");
+	return;
+	}
+    write(w + " : hashes to " + h + "; area " + dd_list[h][0] + " (" + dd_list[h][1] + ", " + dd_list[h][2] + ")\n");
+    if (dd_list[h][0] < 0) {
+	write ("not loaded; seen in the following places:\n");
+	}
+    else
+		write("Dest-dir list:\n");
+
+    if (pointerp(dd_list[h][4])) {
+        for (x = 0; x < sizeof(dd_list[h][4]); x += 2) {
+	    write(seen_list[dd_list[h][4][x]] + " [" + dd_list[h][4][x] + "] : " + dd_list[h][4][x+1] + "\n");
+	    }
+	}
+    else
+	write("DEST DIR LIST NOT INITIALISED\n");
+    show_area(dd_list[h][0]);
+}
+
+show_area(a, rev) {
+    write("Area stats: area " + a + " has cluster ID " + cluster_id(a) + "; dd list:\n");
+	show_area_dds(area_list, a);
+	if (rev) {
+		write("REVERSE dd list:\n");
+		show_area_dds(reverse_area_list, a);
+		}
+	return 1;
+	}
+
+count_groups(array ltype, int nelts, array a) {
+	int x;
+	int c = 0;
+	for (x = 0; x < nelts; x++) {
+		int r = ltype[x];
+		if (r >= 0)
+			a[r]++;
+		if (r == x)
+			c++;
+		}
+	return c;
+	}
+
+show_clusters() {
+	array a = allocate(next_area);
+	write("Areas in each cluster ("
+			+ count_groups(cluster_list, next_area, a) + ")\n");
+	int x;
+	for (x = 0; x < next_area; x++) {
+		if (a[x] < 0)
+			write(x + ": controller ");
+		else
+			if (a[x] > 0)
+				write(x + ": " + a[x] + " ");
+		}
+	write("\n");
+	}
+
+show_sccs() {
+	array a = allocate(next_area);
+	write("Areas in each SCC (" + count_groups(scc_list, next_area, a) + ")\n");
+	int x;
+	for (x = 0; x < next_area; x++) {
+		if (a[x] < 0)
+			write(x + ": controller ");
+		else
+			if (a[x] > 0)
+				write(x + ": " + a[x] + " ");
+		}
+	write("\n");
+	}
+
+/*
+ * This one shows all SCCs that are mapped into the same cluster.
+ * These clusters are `suspicious', in that they must contain rooms
+ * that you can't get to from within the cluster.
+ */
+
+show_scc_clusters() {
+	array cc = allocate(next_area);
+	array sc = allocate(next_area);
+	write("Clusters: " + count_groups(cluster_list, next_area, cc) + "\n");
+	write("Sccs: " + count_groups(scc_list, next_area, sc) + "\n");
+	write("Clusters with non-matching SCC counts:\n");
+	int x, y;
+	for (x = 0; x < next_area; x++) {
+		if (cluster_list[x] < 0)
+			continue;
+		if (scc_list[x] < 0) {
+			write("SCC " + x + " negative!\n");
+			continue;
+			}
+		int cl = cluster_list[x];
+		if (x != cl)
+			continue;
+
+		if (scc_list[x] == cl) {
+			if (cc[cl] == sc[cl]) {
+				continue;
+				}
+			}
+
+		/* bad */
+		write("Cluster " + cl + "(" + cc[cl] + " areas) has SCCs ");
+		for (y = x; y < next_area; y++) {
+			if (cl != cluster_list[y])
+				continue;
+			/* only print it for new sccs, not every area */
+			if (scc_list[y] != y)
+				continue;
+			write(scc_list[y] + "(" + sc[y] + ") ");
+			/* if it has no exits or no entries, mark it */
+			if (sc[y] > 1)
+				continue;
+			if (sizeof(area_list[y]) < 1)
+				write("OUT ");
+			if (sizeof(reverse_area_list[y]) < 1)
+				write("IN ");
+			}
+		write("\n");
+		}
+	}
+
+/*
+ * Show all SCC exits for which the target room does not have a back-exit.
+ * (Despite being in different SCCs, the target room could have a back
+ * exit if it is part of a controlled area).
+ * Useful for checking for map anomalies.
+ */
+
+show_unidirectional() {
+	int x, y;
+	for (x = 0; x < sizeof(seen_list); x++) {
+		if (!seen_list[x])
+			continue;
+		if (dd_list[x][0] < 0)
+			continue;
+		int Fs = scc_id(area_id(x));
+		array exits = dd_list[x][4];
+		for (y = 0; y < sizeof(exits); y+=2) {
+			int Tr = exits[y];
+			if (dd_list[Tr][0] < 0)	/* not mapped */
+				continue;
+			int Ts = scc_id(area_id(Tr));
+			if (Ts == Fs)
+				continue;
+			array backlinks = dd_list[Tr][4];
+			int z;
+			int found = 0;
+			for (z = 0; z < sizeof(backlinks); z+= 2) {
+				if (backlinks[z] == x) {
+					found = 1;
+					break;
+					}
+				}
+			if (!found) {
+#if 0
+				write("Unidirectional link: " + room_id_desc(x)
+					/* + " -> " + room_id_desc(Tr) */
+					+ "\n");
+				break;
+#else
+				write("Unidirectional link: " + room_id_desc(x)
+					+ " -> " + room_id_desc(Tr) 
+					+ "\n");
+#endif
+				}
+			}
+		}
+	}
+
+
+room_id_desc(int h) {
+	int area = area_id(h);
+	int scc = scc_id(area);
+	int clus = cluster_id(area);
+	return seen_list[h] + " [" + h + "," + area + "," + scc + "," + clus + "] ";
+	}
+
+show_area_dds(area_list, a) {
+    int x;
+    for (x = 0; x < sizeof(area_list[a]); x += 3) {
+		write(area_id(area_list[a][x]) + " : "
+			+ room_id_desc(area_list[a][x+1])
+			+ " -> " + area_list[a][x+2] + " -> "
+			+ room_id_desc(area_list[a][x]) + "\n"
+			);
+		}
+    }
+
+
+show_incoming(string room1, string room2) {
+	int fh = hash_name(room1);
+	int fa = area_id(fh);
+	int th = hash_name(room2);
+	int ta = area_id(th);
+
+	array fn = allocate(next_area);
+	array tn = allocate(next_area);
+
+	array res = find_reachable(reverse_area_list,		/* graph to traverse */
+			   cluster_list,	/* clusters/SCCs */
+			   fh,				/* start area */
+			   0,				/* prev area IDs */
+			   fn,				/* order seen */
+			   1,				/* first ID */
+			   0,				/* seen sequence (area output queue) */
+			   0,				/* where to start in seen array */
+			   0,				/* seen sequence for moves */
+			   0,				/* seen sequence */
+			   0,				/* seen sequence */
+			   0,				/* first free slot in move array */
+			 F_mark_interior | F_mark_leaves);				/* flags: */
+
+	res = find_reachable(reverse_area_list,		/* graph to traverse */
+			   cluster_list,	/* clusters/SCCs */
+			   th,				/* start area */
+			   0,				/* prev area IDs */
+			   tn,				/* order seen */
+			   1,				/* first ID */
+			   0,				/* seen sequence (area output queue) */
+			   0,				/* where to start in seen array */
+			   0,				/* seen sequence for moves */
+			   0,				/* seen sequence */
+			   0,				/* seen sequence */
+			   0,				/* first free slot in move array */
+			 F_mark_interior | F_mark_leaves);				/* flags: */
+
+	write("Areas from which " + room1 + " and " + room2 + " are reachable: ");
+	int x;
+	for (x = 0; x < next_area; x++) {
+		if (!fn[x] || !tn[x])	/* area couldn't reach both destinations */
+			continue;
+		write(x + " ");
+		}
+	write("\n");
+	}
+
+

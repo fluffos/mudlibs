@@ -1,0 +1,888 @@
+/*
+ * More server
+ * Originally by Calthron of Shattered Worlds
+ *
+ * History
+ *   1.0  	Calthron
+ * 		Multiple player support added - Hunter 1992
+ *   		'caretaker ' becomes Hunter August 1992 
+ *		more->flush(obj player) added, Hunter 921201
+ *		more->flush() modified to completely clear the given
+ *		player, Belgarion 27 Feb 2001.
+ *		Fixed cller (was previous_object(), now caller()
+ *		- Jenna 02 April 2001.
+ */
+
+#include <Consts.h>
+inherit "RO/Servers";
+
+#define BOLD_ON		"[1m"
+#define BOLD_OFF	"[0m"
+
+#define WRITE(str, pos)		tell_object(find_living(NAME(pos)), str)
+
+/* more prompt could be a macro, but is curretly a function */
+#define MORE_PROMPT more_prompt(pos)
+                                                
+/* These are defined for searching */
+#define	SEARCH_FORW		 1
+#define	SEARCH_BACK		-1
+#define PRINT_SIZE		2048
+#define GRAB_SIZE		10240
+
+/* This is defined for better management of the server */
+/* it is the size of the 'struct' that is in the array of jobs */
+#define STACK_CONTAINS		9
+
+/* Error reporting */
+#define LOG_FILE		"MORE.err"
+
+/* stored info in player's store:
+	screen columns
+	screen lines
+	ANSI chars
+*/
+ 
+/* to make this piece of code readable */
+#define	NAME(pos)			MoreStack[(pos) + 0]
+#define	LOOP(pos)			MoreStack[(pos) + 1]
+#define	DATA(pos)			MoreStack[(pos) + 2]
+#define	CALLER(pos)			MoreStack[(pos) + 3]
+#define	RET_FN(pos)			MoreStack[(pos) + 4]
+#define	OPTIONS(pos)			MoreStack[(pos) + 5]
+#define	FINISHED(pos)			MoreStack[(pos) + 6]
+#define	SEARCH(pos)			MoreStack[(pos) + 7]
+#define DONEMESG(pos)			MoreStack[(pos) + 8]
+
+/* int loop;		/*	- this is redefined in functions as local */
+/* string file;		/* 	- where use, this is also defined local */
+string mesg;		/* 	an error message, gets flushed to LOG_FILE */
+array MoreStack = [];		/* the stack of jobs */
+
+reset() { } 
+
+#define LEFT(x,y) (FORMAT->left_justify(x, y))
+
+show_stats() 
+/* revised and enlarged, Hunter 921201 */
+/* 950601 Hunter   now returns array */
+{
+array ret = ({ });
+int i;
+    ret = ({ "Sizeof stack :" + sizeof(MoreStack) + " == " 
+		+ sizeof(MoreStack) / STACK_CONTAINS + " current users" });
+    for (i = 0; i < sizeof(MoreStack); i += STACK_CONTAINS)
+    {
+	ret += ({ 
+	 	LEFT(NAME(i)+"", 12) + LEFT(LOOP(i)+"", 8) +
+			LEFT((intp(CALLER(i)) ? "<no caller>" :
+			     file_name(CALLER(i))), 20) +
+			(intp(DATA(i))?"Ticket request ":"Passed Data   ")
+			});
+    }
+    return ret;
+} /* show_stats */
+
+query_stack() { return MoreStack; }
+
+/*
+ * return function added by Hunter 29/2/1992 for a means of handshaking with
+ * the caller when the more is finished
+ */
+int more(	(array|int|string) str, 	/* the text to be printed */
+		(int|string) return_func, 	/* optional return function */
+		location, 
+		(string|int) done_mesg		/* optional 'Done' message */
+    )
+{
+    object cller = caller();   /* previous_object(); */
+    array temp, add;
+    array opts;
+    int pos, return_result;
+
+	opts = ({ this_player()->query_term_cols(),
+		this_player()->query_output_height() - 1,
+		this_player()->query_store("hilite_on") });
+    	if (!str) 
+        {
+#if 0
+    	    LOG->log(LOG_FILE, "Zero argument.  Caller was " 
+			+file_name(cller) +"\n");
+#endif
+	    return 0;
+    	}
+    	if (!stringp(done_mesg))
+	    done_mesg = "Done";
+
+    	if (pointerp(str) || intp(str))
+    	{ /* either a soul passing ticket to us or passing an array */
+            MoreStack = MoreStack + ({ 
+		this_player()->query_real_name(),	/* who to write to */
+		0, 			/* loop */
+		str, 			/* ticket/array */
+		cller,			/* who to call at end */
+		return_func,		/* function to call at end */
+		opts,			/* more's options */
+		0,			/* are we finished? */
+		({ 0, 0 }),		/* last search details */
+		done_mesg		/* done message */
+	    });
+    	}
+    	else
+    	{
+    	    if (str == "") 
+	    {	
+      	    	add = ({ "\n" });
+      	    	LOG->log(LOG_FILE, "Null string argument.  Caller was " 
+			+file_name(cller) + " created by " 
+			+query_su_name(cller)+"\n");
+            	if (environment(cller))
+        	    LOG->log(LOG_FILE, "Environment of object was " 
+			+ file_name(environment(cller)));
+      	        LOG->log(LOG_FILE, "\n");
+	        return 0;
+    	    }
+    	    else
+    	    {
+      	        if (index(str, "\n") == -1)
+		    str += "\n";
+      	    	add = explode(str, "\n");
+            }
+	    MoreStack += ({ 
+		this_player()->query_real_name(),	/* who to write to */
+		0, 			/* loop */
+		add,			/* the array of strings */
+		cller,			/* who to call at end */
+		return_func,		/* function to call at end */
+		opts,			/* more's options */
+		0,			/* are we finished? */
+		({ 0, 0 }),		/* last search details */
+		done_mesg
+	    });
+    	}
+	this_player()->push_caution("reading");
+    	pos = index(MoreStack, this_player()->query_real_name());
+    	LOOP(pos) = adjust_for_diff(pos, location);
+    	if (OPTIONS(pos)[1] >= MAX_CAT_LINES)
+  	OPTIONS(pos)[1] = MAX_CAT_LINES - 1;
+    	if (!(return_result = print_a_page(pos, 0)) || location < 0)
+    	{
+    	    if (location < 0 && return_result == 1)
+	    more_prompt(pos);
+    	    input_to("more_more"); 	/* we still have more to show */
+    	} 
+    	else	
+    	    done_more(pos);		/* all of it has been showed already */
+        return 1;
+} /* more */
+
+int flush((object|string) player)	
+/* removes more job belonging to that player from the stack ,
+ * used for link dead players etc. */
+/* returns 0 if that player didn't have a job, 1 otherwise */
+{
+    int pos;
+    int result = 0;
+	if (objectp(player))
+		player = player->query_real_name();
+	while ((pos = index(MoreStack, player)) > -1) {
+/*	if (pos == -1) 
+		return 0;*/
+		MoreStack = MoreStack[..pos - 1] + MoreStack[pos + STACK_CONTAINS..];
+		result = 1;
+	}
+	return result;
+}
+
+print_a_page(pos, diff, highlight)
+{
+    int a, timestamp, linecost, lineno, end;
+    string hex, text;
+    int a_file, tempint;
+    array file, t;
+  	end = OPTIONS(pos)[1] - 1;
+  	if (!is_a_file(pos))
+  	{
+    	    a = (LOOP(pos) + diff > 0) ? LOOP(pos) + diff : 0;
+	    if ( intp( DATA(pos) ) )
+		DATA(pos) = "" + DATA(pos);
+    if (!arrayp(DATA(pos)))
+        DATA(pos) = ({ DATA(pos) });
+	    if (a > sizeof(DATA(pos)))
+	   	a = sizeof(DATA(pos));
+	    LOOP(pos) = a;
+    	    end += a;
+    	    a_file = 0;
+  	}
+  	else
+  	{
+    	    array temp;
+    	    a = adjust_for_diff(pos, diff, highlight);
+    	    LOOP(pos) = a;
+    	    tempint = a + PRINT_SIZE;
+    	    if (tempint > CALLER(pos)->query_more_size())
+      		tempint = CALLER(pos)->query_more_size();
+    	    catch (temp = CALLER(pos)->request_file_chunk(DATA(pos), 
+			a, tempint));;
+    	    if (!pointerp(temp))
+    	    {
+      		LOG->log(LOG_FILE, "print_a_page request failed " + mesg 
+			+ ".  Caller was " + file_name(CALLER(pos)) 
+			+ " created by " + query_su_name(CALLER(pos)) + "\n");
+      		done_more(pos);
+      		return 1;
+    	    }
+    	    DATA(pos) = temp[0];
+	    if (DATA(pos) == 0)
+      		return 1;
+    	    if (sizeof(temp[1]) < 1)
+      		return 1;
+    	    if ((file = explode(temp[1], "\n")) == 0)
+		return 1;
+    	    a_file = 1;
+  	}
+  	t = (a_file) ? file : DATA(pos);
+  	for (lineno = (a_file) ? 0 : a; lineno < end && lineno < sizeof(t); 
+		lineno++)
+  	{
+    	    if ((sizeof(t[lineno]) >= 8) &&
+      			(index(hex = t[lineno][0..7], " ") == -1) &&
+      			(intp(timestamp = HEX->hex2int(hex))))
+      		text = DATE->packed(timestamp) + t[lineno][8..];
+    	    else
+      		text = t[lineno];
+    	    if (OPTIONS(pos)[2] && stringp(highlight))
+      		text = STRINGS->string_replace(text, highlight, 
+			"[1m"+highlight+"[0m");
+    	    text = strip_nl(text);
+    	    WRITE(text + "\n", pos);
+    	    linecost = sizeof(text);
+    	    if (a_file)
+      		LOOP(pos) += sizeof(t[lineno]) + 1;
+    	    else
+      		LOOP(pos)++;
+    	    end -= linecost / OPTIONS(pos)[0];
+  	}
+	if (!FINISHED(pos) && (is_eof(pos) == -1 &&
+        	LOOP(pos) < sizeof(DATA(pos))) || (is_eof(pos) == 0) &&
+        	lineno >= end && size(LOOP(pos), pos) != 100)
+    	    more_prompt(pos);
+  	else
+    	    return 1;
+} /* print_a_page */
+
+more_more(str)
+{
+    int pos;
+    string strbefore;
+    string frag;
+    string nstr;
+
+	pos = index(MoreStack, this_player()->query_real_name());
+	if (pos < 0) return 1;
+	strbefore = str; /* needed for searching */
+	if (!str || str == "")
+	{
+	    print(pos);
+	    return 1;
+	}
+	if (str == "b" || str == "f" || str == "r")
+	{
+	    if (str != "f")
+		FINISHED(pos) = 0;
+	    print(pos, ((str == "b") ? -2: ((str == "f") ? 1: -1)) *
+		(OPTIONS(pos)[1] - 1));
+	    return 1;
+	}
+    if  (nstr = STRINGS->match_head(str, ({ "help", "h ", "h"})))
+	{
+	    handle_help(nstr, pos);
+	    input_to("more_more");
+	    return 1;
+	}
+	if (str == "n")
+	{
+	    if (SEARCH(pos)[0])
+	    {
+		if (is_a_file(pos))
+		    file_search(SEARCH(pos)[1], SEARCH(pos)[0]);
+		else
+		    string_search(SEARCH(pos)[1], SEARCH(pos)[0]);
+		return 1;
+	    }
+	    WRITE("You have had no previous search.\n", pos);
+	}
+	if (str == "/" || str == "?")
+	{
+	    WRITE("Search for ", pos);
+	    if (str == "/")
+		    input_to("get_search_forw");
+	    else
+		    input_to("get_search_back");
+	    return 1;
+	}
+    if (nstr = STRINGS->match_head(str, ({ "/ ", "? ", "/", "?" })))
+    {
+	    if (is_a_file(pos))
+		file_search(nstr, (strbefore[0] == '/') 
+			? SEARCH_FORW : SEARCH_BACK);
+	    else
+		string_search(nstr, (strbefore[0] == '/') 
+			? SEARCH_FORW: SEARCH_BACK);
+	    return 1;
+	}
+	if (str == "g")
+	{
+	    WRITE("Goto line number ", pos);
+	    input_to("get_line");
+	    return 1;
+	}
+    if (nstr = STRINGS->match_head(str, ({ "g ", "g" }) ))
+    {
+	    FINISHED(pos) = 0;
+	    LOOP(pos) = 0;
+	    LOOP(pos) = adjust_for_diff(pos, atoi(nstr) - 1);
+	    print(pos);
+	    return 1;
+	}
+	if (str == "G")
+	{
+	    LOOP(pos) = 0;
+	    LOOP(pos) = adjust_for_diff(pos, -OPTIONS(pos)[1] + 1);
+	    print(pos);
+	    return 1;
+	}
+	if (str == "q")
+	{
+	    done_more(pos);
+	    return 1;
+	}
+	more_prompt(pos);
+	input_to("more_more");
+	return 1;
+} /* more_more */
+
+#define JEN(x)  catch tell_object(find_player("jenna"), "[more:] "+x+"\n");
+
+done_more(pos) {
+	int quiet_pop;
+	object pob = find_living(NAME(pos));
+
+	if (RET_FN(pos))
+	{
+	    catch CALLER(pos)->(RET_FN(pos))(pob);; 	 
+
+	    // And now a brutal hack to prevent the "You have messages 
+	    // in your what-happened buffer" coming up as you finish
+	    // reading what-happened   - Jenna Jun 01
+	    if (RET_FN(pos) == "catch_seen")
+		quiet_pop = 1;
+	}
+	if (pob) 
+	    pob->pop_caution(quiet_pop);
+
+	MoreStack = MoreStack[..pos - 1] + MoreStack[pos + STACK_CONTAINS..];
+} /* done_more */
+
+handle_help(str, pos)
+{
+  if (!str || str == "" || str == "h" || str == "help")
+  {
+    WRITE("Help is available by typing h followed by any command.\n", pos);
+    WRITE("\nCurrent commands are:\n", pos);
+    WRITE("  h, help      This help screen.\n", pos);
+    WRITE("  <return>     Display the next screen.\n", pos);
+    WRITE("  f            Forward (skip) one screen.\n", pos);
+    WRITE("  b            Backward (skip) one screen.\n", pos);
+    WRITE("  r            Display this screen again.\n", pos);
+    WRITE("  g[n]         Goto line number n.\n", pos);
+    WRITE("  /            Search forward for text.\n", pos);
+    WRITE("  ?            Search backward for text.\n", pos);
+    WRITE("  n            Search again.\n", pos);
+    WRITE("  G            Goto the last line.\n", pos);
+    WRITE("  q            Quit more-ing.\n", pos);
+  }
+  else if (str == "b")
+    WRITE("Skip backward one screen.\n", pos);
+  else if (str == "f")
+    WRITE("Skip forward one screen.\n", pos);
+  else if (str == "r")
+    WRITE("Redisplay this screen.\n", pos);
+  else if (str == "g")
+    WRITE("Goto line number given after this line.\n", pos);
+  else if (str == "/")
+    WRITE("Search forward for text in this document.\n", pos);
+  else if (str == "?")
+    WRITE("Search backward for text in this document.\n", pos);
+  else if (str == "n")
+    WRITE("Search again in same direction as last using same string.\n", pos);
+  else if (str == "G")
+    WRITE("Displays the last screen of the file.\n", pos);
+  else if (str == "q")
+    WRITE("Quit more-ing.\n", pos);
+    more_prompt(pos);
+} /* handle_help */
+
+get_search_forw(str)
+{
+  int pos;
+  pos = index(MoreStack, this_player()->query_real_name());
+  if (!str || str == "") 
+  {
+    more_prompt(pos);
+    input_to("more_more");
+    return 1;
+  }
+  if (is_a_file(pos))
+    file_search(str, SEARCH_FORW);
+  else
+    string_search(str, SEARCH_FORW);
+    return 1;
+} /* get_search_forw */
+
+get_search_back(str)
+{
+  int pos;
+  pos = index(MoreStack, this_player()->query_real_name());
+  if (!str || str == "") 
+  {
+    more_prompt(pos);
+    input_to("more_more");
+    return 1;
+  }
+  if (is_a_file(pos))
+    file_search(str, SEARCH_BACK);
+  else
+    string_search(str, SEARCH_BACK);
+    return 1;
+} /* get_search_back */
+
+string_search(str, direction, with_time)
+{
+  int pos, loop, offset, found;
+  string file;
+  array t;
+  pos = index(MoreStack, this_player()->query_real_name());
+  SEARCH(pos)[0] = direction;
+  SEARCH(pos)[1] = str;
+  if (direction == SEARCH_BACK)
+    FINISHED(pos) = 0;
+  found = 0;
+  if (with_time)
+    do
+    {
+      t = DATA(pos);
+      loop = (LOOP(pos) - 1 > 0) ? DATA(pos) - 1 : 0;
+      for (; (direction == SEARCH_FORW && loop < sizeof(t)) ||
+             (direction == SEARCH_BACK && loop >= 0);
+             loop += direction)
+      {
+        string hex, text;
+        int timestamp;
+        if (stringp(t[loop]) && (strlen(t[loop]) >= 8) &&
+          (index(hex = t[loop][0..7], " ") == -1) &&
+          (intp(timestamp = HEX->hex2int(hex))))
+          text = DATE->packed(timestamp) + t[loop][8..];
+        else
+          text = t[loop];
+        text = strip_nl(text);
+        if (index(text, str) != -1)
+        {
+          LOOP(pos) = loop;
+          print(pos, -OPTIONS(pos)[1] / 2 + 1, str);
+          if (direction == SEARCH_BACK)
+            LOOP(pos) = adjust_for_diff(pos, -OPTIONS(pos)[1] / 2 + 1, str);
+          found = 1;
+          return 1;
+        }
+      }
+      LOOP(pos) = loop;
+    }
+    while (!found && loop >= 0 && sizeof(t) > loop);
+  else
+  {
+    int max;
+    max = sizeof(DATA(pos));
+    loop = (LOOP(pos) - 1 > 0) ? LOOP(pos) - 1 : 0;
+    if (direction == SEARCH_BACK)
+    {
+      max = loop;
+      loop = 0;
+    }
+    t = DATA(pos)[loop..max];
+    file = implode(t, "\n");
+    if (index(file, str) != -1)
+    {
+      while (loop < max)
+      {
+        if (direction == SEARCH_FORW)
+        {
+          t = DATA(pos)[loop .. ((loop + max) / 2)];
+          file = implode(t, "\n");
+          if (index(file, str) != -1)
+            max = (loop + max) / 2;
+          else
+            loop = ((loop + max) / 2 + 1);
+        }
+        else
+        {
+          t = DATA(pos)[((loop + max) / 2 + 1) .. max];
+          file = implode(t, "\n");
+          if (index(file, str) != -1)
+            loop = ((loop + max) / 2 + 1);
+          else
+            max = (loop + max) / 2;
+        }
+      }
+      LOOP(pos) = loop;
+      print(pos, -OPTIONS(pos)[1] / 2 + 1, str);
+      if (direction == SEARCH_BACK)
+        LOOP(pos) = adjust_for_diff(pos, -OPTIONS(pos)[1] / 2 + 1, str);
+      found = 1;
+      return 1;
+    }
+  }
+  if (!found)
+    WRITE("Not found.\n", pos);
+    more_prompt(pos);
+  input_to("more_more");
+  return 1;
+} /* string_search */
+
+file_search(str, direction, with_time)
+{
+  int pos, loop, offset, found, strt, fend;
+  string file;
+  array t, temp;
+  pos = index(MoreStack, this_player()->query_real_name());
+  SEARCH(pos)[0] = direction;
+  SEARCH(pos)[1] = str;
+  if (direction == SEARCH_BACK)
+    FINISHED(pos) = 0;
+  found = 0;
+  if (with_time)
+    do
+    {
+      strt = LOOP(pos);
+      if (direction == SEARCH_BACK)
+      {
+        strt -= GRAB_SIZE;
+        if (strt < 0)
+          strt = 0;
+        fend = adjust_for_diff(pos, -OPTIONS(pos)[1] + 1);
+      }
+      else
+      {
+        fend = strt + GRAB_SIZE;
+        if (fend >= CALLER(pos)->query_more_size())
+          fend = CALLER(pos)->query_more_size();
+      }
+      catch (temp = CALLER(pos)->request_file_chunk(DATA(pos), strt, fend));;
+      if (temp[0] == 0 || sizeof(temp[1]) < 1 || explode(temp[1], "\n") == 0)
+      {
+        done_more(pos);
+        return 1;
+      }
+      DATA(pos) = temp[0];
+      t = explode(temp[1], "\n");
+      loop = (direction == SEARCH_FORW) ? 0 : sizeof(t) - 1;
+      for (; ((direction == SEARCH_FORW) && (loop < sizeof(t) - 1)) ||
+             ((direction == SEARCH_BACK) && (loop >= 0));
+             loop += direction)
+      {
+        string hex, text;
+        int timestamp;
+        
+        if (stringp(t[loop]) && (strlen(t[loop]) >= 8) &&
+          (index(hex = t[loop][0..7], " ") == -1) &&
+          (intp(timestamp = HEX->hex2int(hex))))
+            text = DATE->packed(timestamp) + t[loop][8..];
+        else
+          text = t[loop];
+        text = strip_nl(text);
+        if (index(text, str) != -1)
+        {
+          print(pos, -OPTIONS(pos)[1] / 2 + 1, str);
+          found = 1;
+          return 1;
+        }
+        if (!found)
+          LOOP(pos) += (sizeof(t[loop]) + 1) * direction;
+      }
+    }
+    while (!found &&
+      (direction == SEARCH_FORW &&
+        fend != CALLER(pos)->query_more_size()) ||
+      (direction == SEARCH_BACK &&
+        strt != 0));
+  else
+  {
+    int max;
+    do
+    {
+      strt = LOOP(pos);
+      fend = strt + GRAB_SIZE;
+      if (direction == SEARCH_BACK)
+      {
+        strt -= GRAB_SIZE;
+        if (strt < 0)
+          strt = 0;
+        fend = adjust_for_diff(pos, -OPTIONS(pos)[1] + 1);
+      }
+      else if (fend >= CALLER(pos)->query_more_size())
+        fend = CALLER(pos)->query_more_size();
+      catch (temp = CALLER(pos)->request_file_chunk(DATA(pos), strt, fend));;
+      DATA(pos) = temp[0];
+      file = temp[1];
+      if (index(file, str) != -1)
+      {
+        loop = 0;
+        max = sizeof(file);
+        while (loop < max)
+        {
+          if (direction == SEARCH_FORW)
+          {
+            if (index(file[loop .. (loop + max) / 2], str) != -1)
+              max = (loop + max) / 2;
+            else
+              loop = ((loop + max) / 2 + 1);
+          }
+          else
+          {
+            if (index(file[((loop + max) / 2 + 1) .. max], str) != -1)
+              loop = ((loop + max) / 2 + 1);
+            else
+              max = (loop + max) / 2;
+          }
+        }
+        while (file[loop] != "\n"[0])
+          loop--;
+        LOOP(pos) = strt + loop + 1;
+        print(pos, -OPTIONS(pos)[1] / 2 + 1, str);
+        found = 1;
+        return 1;
+      }
+      else
+        LOOP(pos) = fend;
+    } while (!found &&
+             ((strt > 0 && direction == SEARCH_BACK) ||
+             (fend != CALLER(pos)->query_more_size() && direction == SEARCH_FORW)));
+  }
+  if (!found)
+    WRITE("Not found.\n", pos);
+    more_prompt(pos);
+  input_to("more_more");
+  return 1;
+} /* file_search */
+
+get_line(str) 
+{
+  int pos;
+  pos = index(MoreStack, this_player()->query_real_name());
+  if (!str || str == "" || atoi(str) != 0)
+  {
+    if (str && str != "")
+      WRITE("Bad line number.\n", pos);
+    more_prompt(pos);
+    input_to("more_more");
+    return 1;
+  }
+  FINISHED(pos) = 0;
+  LOOP(pos) = 0;
+  LOOP(pos) = adjust_for_diff(pos, str - 1);
+  print(pos);
+  return 1;
+} /* get_line */
+
+is_a_file(pos) {
+  if (intp(DATA(pos)))
+    return 1;
+  return 0;
+} /* is_a_file */
+
+size(loop, pos) 
+{
+  int result, tempint;
+  
+  if (!is_a_file(pos))
+  {
+    result = (loop * 100) / sizeof(DATA(pos));
+    if (result > 100 || result < 0)
+      return (result > 100) ? 100 : 0;
+    return result;
+  }
+  mesg = catch (tempint = CALLER(pos)->query_more_size());;
+  if (mesg || tempint <= 1)
+  {
+    LOG->log(LOG_FILE, "size failed " + mesg + ".  Caller was " +
+      file_name(CALLER(pos)) + " created by " +
+      query_su_name(CALLER(pos)) + "\n");
+    done_more(pos);
+    return 1;
+  }
+  result = (loop * 100) / (tempint - 1);
+  if (result > 100 || result < 0)
+    return (result > 100) ? 100 : 0;
+  return result;
+} /* size */
+
+/* is_eof */
+is_eof(pos) 
+{
+    /* Not a file at all */
+    if (!intp(DATA(pos))) return -1; 
+    return (DATA(pos) == 0) || size(LOOP(pos), pos) == 100;
+} 
+
+print(pos, diff, highlight) {
+  if (!print_a_page(pos, diff, highlight)) 
+  {
+    input_to("more_more");
+    return;
+  }
+  else
+  {
+    if (FINISHED(pos))
+    {
+      done_more(pos);
+      return;
+    }
+    else
+    {
+      FINISHED(pos) = 1;
+    more_prompt(pos);
+      input_to("more_more");
+      return;
+    }
+  }
+} /* print */
+
+
+adjust_for_diff(pos, diff, highlight, with_time)
+{
+  int a, lineno, tempint, timestamp;
+  array temp;
+  string t, text, hex;
+  
+  if (!diff)
+    return LOOP(pos);
+  if (!is_a_file(pos))
+  {
+    if (LOOP(pos) || diff > 0)
+      a = LOOP(pos);
+    else
+      a = sizeof(DATA(pos));
+    a += diff;
+    if (a < 0)
+      return 0;
+    if (a > sizeof(DATA(pos)))
+      return sizeof(DATA(pos));
+    return a;
+  }
+
+/* It is a file */
+
+  if (!LOOP(pos) && diff < 0)
+    a = CALLER(pos)->query_more_size();
+  else
+    a = LOOP(pos);
+  if (diff > 0)
+  {
+    tempint = a + GRAB_SIZE;
+    if (tempint > CALLER(pos)->query_more_size())
+      tempint = CALLER(pos)->query_more_size();
+    catch (temp = CALLER(pos)->request_file_chunk(DATA(pos), a, tempint));;
+    DATA(pos) = temp[0];
+    for (lineno = LOOP(pos);
+      lineno < sizeof(temp[1]) && diff > 0; diff--)
+    {
+      tempint = index(temp[1], "\n", lineno);
+      t = temp[1][lineno..tempint - 1];
+      if (with_time && (sizeof(t) >= 8) &&
+        (index(hex = t[0..7], " ") == -1) &&
+        (intp(timestamp = HEX->hex2int(hex))))
+        text = DATE->packed(timestamp) + t[8..];
+      else
+        text = t;
+      if (OPTIONS(pos)[2] && stringp(highlight))
+        text = STRINGS->string_replace(text, highlight, "[1m"+highlight+"[0m");
+      lineno += sizeof(t) + 1;
+      diff -= sizeof(text) / OPTIONS(pos)[0];
+    }
+    return a + lineno;
+  }
+  else
+  {
+    int start;
+    
+    tempint = a - GRAB_SIZE;
+    if (tempint < 0)
+      tempint = 0;
+    catch (temp = CALLER(pos)->request_file_chunk(DATA(pos), tempint, a - 1));;
+    start = tempint;
+    DATA(pos) = temp[0];
+    for (lineno = sizeof(temp[1]) - 1; lineno > 0 && diff < 0; diff++)
+    {
+      for (tempint = lineno - 100;
+          (index(temp[1][.. lineno - 1], "\n", tempint + 1) == -1) &&
+            (tempint >= 0);
+	  tempint -= 100) { }
+      for ( ;
+          (index(temp[1][.. lineno - 1], "\n", tempint + 1) >= 0);
+          tempint = index(temp[1][.. lineno - 1], "\n", tempint + 1)) { }
+      if (tempint < 0)
+      {
+        lineno = 0;
+        break;
+      }
+      t = temp[1][++tempint.. lineno];
+      if (with_time && (sizeof(t) >= 8) &&
+        (index(hex = t[0..7], " ") == -1) &&
+        (intp(timestamp = HEX->hex2int(hex))))
+        text = DATE->packed(timestamp) + t[8..];
+      else
+        text = t;
+      if (OPTIONS(pos)[2] && stringp(highlight))
+        text = STRINGS->string_replace(text, highlight, "[1m"+highlight+"[0m");
+      lineno = tempint - 1;
+      diff += sizeof(text) / OPTIONS(pos)[0];
+    }
+    if (lineno <= 0)
+      return start;
+    return start + lineno;
+  }
+} /* adjust_for_diff */
+
+
+strip_nl(X) 
+{
+    int	ind = index(X, "\n");
+
+    if (ind > 0)
+	X = X[0..ind - 1];
+    else if (ind == 0)
+	X = "";
+    for (ind = sizeof(X)-1; ind >= 0; ind --)
+    {
+	if (X[ind..ind] == " ")
+	{
+	    X = X[..ind-1];
+	}
+	else
+	    break;
+    }
+    return X;
+}
+
+more_prompt(pos)
+{
+	WRITE("-- More ",pos);
+	if (size(LOOP(pos),pos) == 100)
+		WRITE( (OPTIONS(pos)[2]) ? (BOLD_ON+DONEMESG(pos)+BOLD_OFF)
+			 : DONEMESG(pos), pos);
+	else
+		WRITE( (OPTIONS(pos)[2] ? ("? ("+BOLD_ON) : "? (") +
+			size(LOOP(pos), pos) +
+			(OPTIONS(pos)[2] ? ("%"+BOLD_OFF+")") : "%)"),pos);
+	WRITE(" (Enter h for help : q to quit) --",pos);
+}

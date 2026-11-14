@@ -1,0 +1,435 @@
+/*
+ * 3-D VIRTUAL ROOM MANAGER.
+ *	- Also works in 2-D :)
+ *
+ * Manages a set of (grid-positioned) rooms, some of which
+ * fall into "subregions" which are not managed by this
+ * object (eg: a vast plain, with Sanom in the middle).
+ * Allows one to give names to particular rooms in this
+ * area rather than forcing grid coordinate names on everything;
+ * this particularly helps with entrances/exits between this
+ * area and subareas or outside areas.
+ *
+ * Do the following:
+ *	READ the code.
+ *	INHERIT this object.
+ *	Write the following routines in the inheriting object:
+ *	    
+ *	    init_room(ob, roomname) -	set descs, etc, of a newly cloned
+ *					room (dest dir is set by this object).
+ */
+
+#include "Servers.h"
+
+#define	MAX_MOVES	100	/* max moves per call to return */
+
+#ifdef DEBUG
+#define TG(s) tell_object(find_player("gandalf"), "Roomtest: " + (s) + "\n")
+#else
+#define TG(s) (1)
+#endif
+
+/*
+ * This is used internally
+ */
+
+#define myname (file_name(this_object()) + "/")
+
+/*
+ * Coordinate system.
+ */
+
+nosave string coordstr = "%d,%d,%d";	/* match string for names of rooms not listed in the special rooms array */
+nosave int numcoords = 3;		/* and how many coordinates we have */
+
+nosave array movenames = ({ "south", "", "north", "west", "", "east", "down", "", "up" });
+nosave array dircombine = ({ 0, 1 }); /* dirns that may be combined with other dirns when generating dest dirs */
+
+/*
+ * Special rooms array:  "$roomname", "@coords", is_exit, ({ extra dest dir })
+ * Is_exit is true if this contains a link to the outside world.
+ * Coords are stored like this for fast index lookup (when ensuring that
+ * a room given by coordinates doesn't overlay a named room).
+ * Dest dir entries that aren't on_map (or that are covered by one of the
+ * extra_dest_dir entries) aren't added.
+ */
+
+/* elements in a room description - algs will still work if you increase this */
+
+#define	ELTS_PER_SPECROOM	4
+
+array special_rooms = ({
+	"$nw",       "@3,3,3",  1, ({ "players/dredd/workroom", "up" }),
+	"$entrance", "@0,2,0",     1, ({ "players/gandalf/workroom", "up" }),
+	"$NW",       "@99,-99,-99",  0, 0
+	});
+
+/*
+ * Convert a string to a coordinate array.  Returns 0 if the
+ * coordinates shouldn't exist.
+ */
+
+(int | array) scancoords(string c) {
+    int x;
+    array coords = explode(c, ",");
+    TG("Scancoords: " + c);
+    for (x=sizeof(coords); x-- > 0; ) {
+	int d = atoi(coords[x]);
+	if (!d && coords[x] != "0")
+	    return 0;
+	coords[x] = d;
+	}
+    if (!on_map(coords)) /* on map is true for everything within this area */
+	return 0;
+    TG("ScanCoords: " + c + " on map.");
+    return coords;
+}
+
+/*
+ * Convert a coordinate array to a string.  Implode won't do
+ * it directly, coz it strips zero values - we have to convert
+ * all to strings first.
+ */
+
+string makecoord(array c) {
+    array d = allocate(sizeof(c));
+    int x;
+    for (x=0; x<sizeof(c); x++)
+	d[x] = c[x] + "";
+    return implode(d, ",");
+    }
+
+/* Lookup a room by coordinate.
+ * If it's on the map, return ({ full_name, ({ x, y,... }) is_exit, dest_dir })
+ * If not, return 0.
+ */
+
+array look_by_coords(array c) {
+    string coords = makecoord(c);
+    int x;
+
+    if ((x = index(special_rooms, "@" + coords)) < 0) {
+	if (on_map(c)) {
+            return ({ myname + coords, c }) + special_rooms[x+1..x + ELTS_PER_SPECROOM - 2];
+	    }
+	return 0;
+	}
+    return ({ myname + special_rooms[x-1][1..], c }) + special_rooms[x+1..x + ELTS_PER_SPECROOM - 2];
+}
+
+/* Look up a room by name.  Make sure we don't understand .../coords when the */
+/* location is filled by a specially named room. */
+
+array look_by_name(string name) {
+    array coords;
+    (int|string) n;
+    int x;
+
+    n = name[sizeof(myname)..];
+    TG("Byname: " + n);
+    if ((x = index(special_rooms, "$" + n)) >= 0) {
+	coords = scancoords(special_rooms[x+1][1..]);
+	TG("Found at " + (special_rooms[x+1][1..]));
+        return ({ name, coords }) + special_rooms[x+2..x + ELTS_PER_SPECROOM - 1];
+	}
+/* not named - check that there's nothing else overlaying it */
+    if (index(special_rooms, "@" + n) >= 0)
+	return 0;
+    coords = scancoords(n);
+    if (on_map(coords))
+        return ({ name, coords }) + allocate(ELTS_PER_SPECROOM - 2);
+    return 0;
+}
+
+/*
+ * Based on the room location, calculate dest dir.
+ * Possible moves are each direction by itself, and
+ * all combinations of dirns where the components
+ * appear in the dircombine array (combined in the
+ * order they appear).  Each generated exit is checked
+ * using both on_map(coords) and link_exists(fromcoords, tocoords);
+ * things in the extra dest dir aren't checked this way (though
+ * if the dest room matches one of our exit coords, it replaces the
+ * exit to those coords).
+ * Final num exits is at most:
+ *    2 * uncombined exits + 3^combined exits - 1 + extra dest dir
+ *     ^ each gets (+/- 1)     ^ all combs except (0,0,0...)
+ */
+
+/*
+ * Use a small lookup table for 3^x-1.
+ */
+
+nosave array threex = ({ 1, 3, 9, 27, 81 });
+
+array compute_dd(array coords, (int|array) extra) {
+    if (!pointerp(extra))
+	extra = ({ });
+    int sdc = sizeof(dircombine);
+    array moves = allocate(sizeof(extra) + (numcoords - sdc) * 4
+			  + ((threex[sdc]) - 1) * 2);
+    int upto = 0;
+    int depth;
+    array loops = allocate(sdc);
+    array newcoords = coords + ({ });
+
+/* first, shove in the predefined exits (these are likely to be the most "interesting" to players) */
+
+    for (depth = 0; depth < sizeof(extra);) {
+	moves[upto++] = extra[depth++];
+	moves[upto++] = extra[depth++];
+	}
+
+/* For each possible singleton move, add it.  We want all these
+ * to be before the combined moves (coz players find it easier to parse)
+ */
+
+    for (depth = 0; depth < numcoords; depth++) {
+	int dx = (-1);
+	while (dx < 2) {
+	    newcoords[depth] += dx;
+	    upto = try_add_exit(moves, upto, coords, newcoords);
+	    newcoords[depth] = coords[depth];
+	    dx += 2;
+	    }
+	}
+
+/*
+ * Now, do the combined directions.  Effectively count in
+ * trinary starting at -1,-1,-1,-1,... going to 1,1,1,1,... skipping all
+ * numbers with less than 2 nonzero bits (coz those exits were added already).
+ * When I get time, I'll organise it to add all 2-combinations, then all
+ * 3-combinations, and so on.  Don't you just love combinatorical
+ * algorithms? :)
+ * NB: The LSB is dircombine[0].
+ */
+
+    int x = (-1);
+    while ((++x) < sdc) {
+	int y = dircombine[x];
+	loops[x] = (-1);
+	newcoords[y] = coords[y] - 1;
+	}
+
+    int nn0 = sdc;
+    depth = 0;
+    while (depth < sdc) {
+	int y;
+	if (nn0 > 1) {
+	    upto = try_add_exit(moves, upto, coords, newcoords);
+	    }
+	while (depth < sdc && loops[depth] == 1) {
+	    y = dircombine[depth];
+	    loops[depth] = (-1);
+	    newcoords[y] = coords[y] - 1;
+	    depth++;
+	    }
+	if (depth < sdc) {
+	    int l = loops[depth];
+	    nn0 += l+l+1;
+	    loops[depth]++;
+	    y = dircombine[depth];
+	    newcoords[y] = coords[y] + loops[depth];
+	    depth = 0;
+	    }
+	}
+    return moves[..upto - 1];
+}
+
+/* ancilliary function for compute_dd.
+ * Givem from, to coords, make a direction string,
+ * be sure it's not already used in the dd, check that
+ * the link should exist, compute a destination room
+ * name by coords, if it comes back positive, add
+ * the link.  Return where we're up to in the moves array.
+ */
+
+try_add_exit(moves, upto, from, to) {
+    int x;
+    string mname = "";
+    if (!link_exists(from, to))
+	return upto;
+    for (x=0; x < numcoords; x++) {
+	mname += movenames[x * 3 + to[x] - from[x] + 1];
+	}
+    if (index(moves, mname) >= 0)
+	return upto;
+    array roomdesc = look_by_coords(to);
+    if (roomdesc) {
+	moves[upto++] = roomdesc[0];
+	moves[upto++] = mname;
+	}
+    return upto;
+}
+
+/*
+ * Given a room identifier of the form:
+ *    file_name(this_object()) + "/" + desc, where
+ * desc is either a known name or an in-range x/y coordinate
+ * pair, create the room and (if a known name - i.e. an exit;
+ * adding entrances is optional) add it to the mapknower (entrances
+ * are optional because of the way the mapknower is designed).
+ * This is called directly by secure/master.
+ */
+
+nosave string room_template = "room/room";
+
+set_room_template(string t) {
+	room_template = t;
+	}
+
+object GetVirtualObject(string name) {
+    array dd;
+    array rdesc;
+    object o;
+    MAPKNOWER->add_controller(file_name(this_object()));	/* just add it; it's fast enough */
+    rdesc = look_by_name(name);
+    if (!rdesc) {
+	return 0;
+	}
+    dd = compute_dd(rdesc[1], rdesc[3]);
+    object room = clone_object(room_template);
+    room->set_controller(file_name(this_object()));
+    room->set_dest_dir(dd);
+    if (rdesc[2]) /* connection to external location */
+        MAPKNOWER->add_location(rdesc[0], dd);
+    this_object()->init_room(room, name);
+    return room;
+}
+
+/*
+ * Given two rooms known by this controller, compute an optimal length (though
+ * random) route between them.  Called by the mapknower when the from and to
+ * rooms are both in this area.  This routine assumes that there are no obstacles
+ * in the volume with the two rooms at opposite corners.  If there are, you
+ * should use this from within a higher level routine (which computes points
+ * to get to and uses this routine to produce the subroutes).
+ */
+
+(int|array)
+find_route(string from, string to, object ob, string callback) {
+    array fr, fc, tc;
+    if (!(fr = look_by_name(from)))
+	return (-1);
+    fc = fr[1] + ({ }) ; /* we change it */
+    if (!(tc = look_by_name(to)))
+	return (-1);
+    tc = tc[1];
+
+    int maxdiag = 0, totmoves = 0;
+    int x;
+    array dc = allocate(sizeof(fc));
+
+#define Abs(x) ((x)>=0? (x) : -(x))
+
+    for (x=0; x < sizeof(dc); x++) {
+	int j = (dc[x] = tc[x] - fc[x]);
+	j = Abs(j);
+	if (index(dircombine, x) >= 0) {
+	    if (j > maxdiag)
+	        maxdiag = j;
+	    }
+	else
+	    totmoves += j;
+	}
+
+    totmoves += maxdiag; /* totmoves = required moves */
+
+/* give a maximum of MAX_MOVES per call, otherwise force recursion */
+    if (totmoves > MAX_MOVES)
+	totmoves = MAX_MOVES;
+
+    totmoves *= 2;	/* we'll just count up to it */
+
+    array runner = allocate(totmoves);
+    array noncomb = allocate(numcoords - sizeof(dircombine));
+    array sel = allocate(sizeof(dc)); /* selections for an individual move */
+    int y = 0;
+
+    /* array of non-combining forms */
+
+    for (x = 0, y = 0; x < numcoords; x++)
+	if (index(dircombine, x) < 0)
+	    noncomb[y++] = x;
+
+    /* priority order for generating move names */
+
+    array genorder = dircombine + noncomb;
+
+    int upto = 0;
+
+    /* generate as many moves as we can, randomly choosing one at a time (subject to constraints) */
+    /* fr is always the from room */
+
+    while (upto < totmoves) {
+    /* choose a random move type, from (-1) to sizeof(noncomb) - 1.
+     * -1 means use a combined one
+     */
+	TG("Current room: " + fr[0] + "; coords + " + makecoord(fr[1]));
+	int maxrnd = (-1);
+	int maxloc = (-2);
+	if (maxdiag) {
+	    maxloc = (-1);
+	    maxrnd = random(maxdiag + 1);
+	    }
+	for (x = 0; x < sizeof(noncomb); x++) {
+	    int r = dc[noncomb[x]];
+	    if (r) {
+	        r = random(Abs(r) + 1);
+	        if (r > maxrnd) {
+		    maxrnd = r;
+		    maxloc = x;
+		    }
+	        }
+	    }
+	for (x=0; x<sizeof(sel); x++)
+	    sel[x] = 0;
+
+/* if move type is >= 0, it's a non-combined move type, otherwise it's
+ * a combined one, and we need to further select its components.
+ */
+	if (maxloc >= 0) {
+	    sel[noncomb[maxloc]] = 1;
+	    }
+	else { /* same again - choose *each* component that random(maxdiag) is less than */
+	    int thresh = random(maxdiag);
+	    for (x=0; x < sizeof(dircombine); x++) {
+		int r = dc[dircombine[x]];
+		if (Abs(r) > thresh)
+		    sel[dircombine[x]] = 1;
+		}
+	    maxdiag--; /* we're decreasing all instances of max diagonal, at least */
+	    }
+/* Now sel[...] has all the dcs to change.  Run through them in priority order.
+ */
+	string dirn = "";
+	for (x=0; x < sizeof(genorder); x++) {
+	    y = genorder[x];
+	    if (sel[y]) {
+	        int chg = (dc[y] < 0? -1 : 1);
+	        string mydir = movenames[y*3+chg+1];
+		dirn  += mydir;
+		fc[y] += chg;
+		dc[y] -= chg;
+		}
+	    }
+	runner[upto++] = fr[0];
+	runner[upto++] = dirn;
+	TG("Sel: " + makecoord(sel) + "; maxdiag: " + maxdiag + "; fc: " + makecoord(fc) + "; dc: " + makecoord(dc) + " -> " +
+		dirn);
+	fr = look_by_coords(fc);
+	TG("Expected room: " + fr[0] + "; coords " + makecoord(fr[1]) + " computed coords: " + makecoord(fc));
+	}
+    do_call_other(ob, callback, runner);
+    return runner;
+}
+
+/* courtesy functions for mapper */
+
+do_call_other(ob, callback, path) {
+    call_out("do_callback", 1, ({ ob, callback, path }));
+}
+
+do_callback(a) {
+    call_other(a[0], a[1], a[2]);
+}

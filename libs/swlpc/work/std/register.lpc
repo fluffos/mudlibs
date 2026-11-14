@@ -1,0 +1,199 @@
+/*
+	Test character register -Dredd.
+	Apprentice register -Hunter
+*/
+#include <security.h>
+#include <Servers.h>
+
+array names;	/* name of char, wizard who owns it */
+array Apprentices;		/* name of char, wizard who granted them */
+
+/*
+ * APPRENTICE_QP defines the ratio of minimum quest points for
+ * a player to have to be able to get wiz_wheels
+ */
+#define APPRENTICE_QP 2/3
+
+array wiz_search(foo)
+{
+array tmp, buf, ret = [ ];
+int i, j;
+string wiz;
+    tmp = foo + [ ];
+    for (i = 1; i < sizeof(tmp); i +=2)
+    {
+	if (stringp(tmp[i]))
+	{
+	    wiz = tmp[i];
+	    buf = [ tmp[i-1][1..] ];
+	    for (j = i+2; j < sizeof(tmp); j +=2)
+		if (wiz == tmp[j])
+		{
+		    buf += [ capitalize(tmp[j-1][1..]) ];
+		    tmp[j] = 0;
+	  	}
+	    ret += [
+		FORMAT->left_justify(capitalize(wiz), 15) + implode(buf, ", ")
+		 ];
+        }
+    }
+    return ret;
+}
+
+show_stats()
+{
+int i, j;
+array tmp = [ ];
+int max_qp;
+string wiz;
+    tmp = [ "Registered Test Characters" ];
+    tmp += [ "--------------------------" ];
+    tmp += wiz_search(names);
+    tmp += [ "" ];
+    tmp += [ "Registered Apprentice Wizards" ];
+    tmp += [ "-----------------------------" ];
+    tmp += wiz_search(Apprentices);
+    max_qp = QUEST_SERV->query_max_quest_points();
+    tmp += [ "To become an apprentice, a player needs "
+	+ (max_qp * APPRENTICE_QP )
+	+ " quest points (out of "+max_qp+")",  
+	"(or an Elder or higher to register them)" ];
+    return tmp;
+}
+
+reset(arg)
+{
+	if (!arg) {
+		if (!restore_object(file_name(this_object())))
+		{
+			names = [ ];
+			Apprentices = [ ];
+		}
+	}
+}
+
+add_character(name, wizard)
+{
+	if (!query_ip_number(this_player()) || this_player()->query_wiz() < SENIOR) return;
+	if (!find_player(wizard)) {
+		write("No such wizard on the game.\n");
+		return 1;
+	}
+	if (name[..4] == "guest") {
+	    write("No guests.");
+	    return;
+	    }
+	restore_object(file_name(this_object()));
+	names = names + [ "%"+name, wizard ];
+	save_object(file_name(this_object()));
+	return 1;
+}
+
+add_apprentice(name, wizard)
+{
+object player,board;
+int qp;
+int max_qp;
+int qp_needed;
+    if (!query_ip_number(this_player()) || this_player()->query_wiz() < SENIOR) 
+	return;
+    if (!find_player(wizard)) {
+	write("No such wizard on the game.\n");
+	return 0;
+    }
+	if (name[..4] == "guest") {
+	    write("No guests.");
+	    return;
+	    }
+    qp = FINGER->query_quest_points(lower_case(name));
+    max_qp = QUEST_SERV->query_max_quest_points();
+    qp_needed = max_qp * APPRENTICE_QP;
+    if ( (qp < qp_needed) && !WHOIS->is_test_char(name) )
+    {
+	if (this_player()->query_wiz() < ELDER)
+	{
+	    write(capitalize(name)+" needs "+qp_needed
+		+" quest points before being allowed to get wiz_wheels ("
+		+ (qp_needed-qp) + " more)\n");
+	    return 0;
+	}
+	else
+	{
+	    write("Warning. "+capitalize(name)+" is short of the normal"
+		+" quest point quota by "+(qp_needed-qp)+" points, but as "
+		+"you are an Elder or higher, I'll let you do this.\n");
+	}
+    }
+    restore_object(file_name(this_object()));
+    Apprentices = Apprentices + [ "%"+name, wizard ];
+    save_object(file_name(this_object()));
+    board = load_object ("room/adv_inner");
+    board = present ("bulletin",board);
+    board -> create_note (
+	"Apprentice Register", 
+	capitalize(name)+" has become an Apprentice",
+	"\n"
+	+capitalize(this_player()->query_real_name())+" has registered "
+	+capitalize(name)+" as an apprentice to "
+	+capitalize(wizard)+".\n\nTEST_REGISTER.\n"
+	);
+    return 1;
+}
+
+remove_character(name)
+{
+string fname;
+int x;
+	fname = "%"+name;
+	restore_object(file_name(this_object()));
+	x = index(names, fname);
+	if (x < 0) return;
+	names = names[..x - 1] +  names[x+2..];	
+	save_object(file_name(this_object()));
+	return 1;
+}
+
+remove_apprentice(name)
+{
+string fname;
+int x;
+	fname = "%"+name;
+	restore_object(file_name(this_object()));
+	x = index(Apprentices, fname);
+	if (x < 0) return;
+	Apprentices = Apprentices[..x - 1] +  Apprentices[x+2..];	
+	save_object(file_name(this_object()));
+	return 1;
+}
+
+query_test_char(name) 
+{
+string fname;
+int pos;
+ 	fname = "%"+name;
+	check_data ();
+	if ((pos = index(names, fname)) < 0) return 0;
+	return names[pos+1];
+}
+
+query_apprentice(name) 
+{
+string fname;
+int pos;
+ 	fname = "%"+name;
+	check_data ();
+	if ((pos = index(Apprentices, fname)) < 0) return 0;
+	return Apprentices[pos+1];
+}
+
+check_data () {
+	if (!names || !sizeof (names))
+	restore_object(file_name(this_object()));
+}
+
+
+remove_player(who)
+{
+    remove_apprentice(who);	/* if who is an apprentice, bye bye */
+}
+

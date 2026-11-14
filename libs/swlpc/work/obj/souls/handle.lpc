@@ -1,0 +1,899 @@
+/*
+ * Handling object every living thing that wants to handle stuff
+ * should have one! 
+ *
+ * Dredd.
+ * 
+ * why? To break down player.c into smaller chunks.
+ *
+ * 030200 Jenna	Added function has_hands() for use in do_wield()
+ */
+
+/*
+ * 920730 Hunter	Added add actions for remove, wield and wear
+ * 920827 Dredd		rewritten
+ * 930120 Llati		Added wear all
+ * 931213 Hunter	Added `worn'
+ * 940130 Hunter	Added support for disabilities
+ * 940313 Hunter	Added 'unwield'
+ * 940603 Hunter 	Added handle_hooks 
+ * 940604 Gandalf	Fixed the cunt so it'd compile again
+ * 940913 Jenna		Allowed for environmental items
+ * 950824 Hunter	changed usage of hooks to use RO/hooks
+ * 950825 Hunter	added 'eat' action
+ * 950829 Hunter	handle_hooks changed to use RO/hooks. Removed
+ *			add_handle_hook() and remove_handle_hook() lfuns
+ * 990519 Rhys		make list_worn() list uncovered locations
+ * 990929 Jenna		added "compare"
+ * 000204 Jenna		added has_hands() and check in do_wield()
+ * 000330 Jenna		added 'remove all'
+ * 010319 Jenna		cosmetic change to 'give' (now "to you.")
+ */
+
+/* #define OLD_HANDLE_HOOKS */
+
+inherit "obj/souls/base_soul";
+
+#include "security.h"
+
+#define PARSE "RO/lib/handle_parse"
+#define DESCRIBE "RO/lib/describe"
+#define SAY "lib/say"
+
+#define WRITE(str) tell_object(this_player(), str)
+
+nosave int power;
+nosave string it;
+
+reset(arg) {
+	::reset(arg);
+	if (!arg) {
+		add_id( "handle" );
+		set_soul_type("generic", "handle");
+	}
+}
+
+init() 
+{
+    ::init();
+    if (myself == this_player())
+    {
+	if (!myself->query_ghost())
+	{
+	    add_action("divest","give");
+    	add_action("divest","drop");
+    	add_action("divest", "put");
+
+    	add_action("pick_up", "get");
+    	add_action("pick_up","take");
+
+	    add_action("do_wield", "wield");
+	    add_action("do_unwield", "unwield");
+	    add_action("do_unwield", "sheath");
+	    add_action("do_remove", "remove");
+	    add_action("do_wear", "wear");
+	    add_action("list_worn", "worn");
+	    add_action("list_worn", "equipment", 2);
+	    add_action("action_eat", "eat");
+	    add_action("action_eat", "consume");
+	    add_action("action_eat", "devour");
+	    add_action("compare", "compare");
+	}
+    }
+}
+
+/* new stuff -- drop & give & put */
+divest(str, pow)
+{
+    array items, not_here, here, cant_drop, here_obj, allargs;
+    string output, verb, item_list, finish = "", dest;
+    object obj, dest_ob;
+    int i,x,y,z, r;
+
+	verb = query_verb();
+	notify_fail("What would you like to "+verb+"?\nPerhaps "+
+		"\"help "+verb+"\" would be of assistance.\n");
+	if (!str) return;
+
+	if (index(myself->query_disable(), "handle") != -1)
+	{
+	    notify_fail("You have nothing you can handle things with.\n");
+	    return 0;
+  	}
+
+	if (verb[sizeof(verb)-1] == '!') {
+		verb = verb[..sizeof(verb)-2]; 
+		pow = 1;
+	}
+
+	if (verb == "give" || verb == "put") 
+    {
+	    if (myself->test_dark() && !pow) 
+        {
+			write("It is too dark for that!\n");	
+			return 1;
+		}
+
+        if (verb == "give")
+        {
+            allargs = STRINGS->split_first(str, " to ");
+            if (!allargs) return;
+        }
+        else if (verb == "put")
+        {
+            allargs = STRINGS->split_first(str, " in ");
+            if (!allargs) return;
+        }
+        item_list = allargs[0];
+        dest = allargs[1];
+
+		if(dest) dest = lower_case(dest);
+		dest_ob = present(dest, environment(myself));
+		if (!dest_ob) dest_ob = present(dest, myself);
+		if (!dest_ob) {
+			write(capitalize(dest) + " is not here.\n");
+			return 1;
+		}
+		if (verb == "give") {
+			if (!pow &&
+			    (!dest_ob->query_living() || dest_ob->query_ghost())) {
+				write("You can't give anything to "+capitalize(dest)+".\n");
+				return 1;
+			}
+			// finish = " to "+ capitalize(dest); /* unnecessary */
+		}
+		if (verb == "put") {
+			if (dest_ob->query_living() && !pow) {
+				write("You can't put something in "+capitalize(dest)+".\n");
+				return 1;
+			}
+			finish = " in "+ dest;	
+		}
+	}
+
+	if (verb == "drop") 
+    {
+		item_list = str;
+		dest_ob = environment(myself);
+		finish = "";
+	}
+
+	items = PARSE->parse(item_list, myself, pow, "drop", 0); 
+	if (!items) return;
+
+	here = items[0];
+	here_obj = items[1];
+	not_here = items[2];
+	cant_drop = items[3];
+
+/* hack - can be done better */
+	if (verb != "drop") {
+		if (dest_ob->receive(here_obj)) 
+			return 0;
+	}
+
+	if (here && sizeof(here)) 
+    {
+		for (i = 0, y = 0; i < sizeof(here_obj); i++) {
+			if (!here_obj[i]) continue;
+			if (pow) move_object(here_obj[i], dest_ob);
+			else {
+				r = transfer(here_obj[i], dest_ob);
+				if (r) 
+                {
+					if (here_obj[i]->short()) 
+                    {
+					    cant_drop = cant_drop + 
+                            ({ lower_case(here_obj[i]->short()) });
+					    here = here[..y-1] + here[y+1..];
+					    y--;
+					}
+                    else
+                    {
+					    here = here[..y-1] + here[y+1..];
+					    y--;
+                    }
+				}
+				else { 	/* ok to move.. */
+					z = here_obj[i]->query_light();
+			/* would be shit if query_light() dest the object! */
+					if (z) {
+						dest_ob->add_light(z);
+						myself->add_light(-z);			
+					}
+					
+				}
+
+			}
+			y++;
+		}
+		if (x=(here && sizeof(here))) {
+			output = DESCRIBE->add_commas(here);
+			if (verb == "give") // Jenna Mar 01
+			{
+			    SAY->tell_all(myself, verb, output + " to " +
+				dest_ob->query_name(), dest_ob);
+			    tell_object(dest_ob, myself->query_name() +
+				" " + PLURAL->plural(verb) + " " +
+				output + " to you.\n");
+			}
+			else
+			    SAY->tell_all(myself, verb, output + finish); 
+		}
+	}
+
+	if (y = (not_here && sizeof(not_here))) {
+		output = DESCRIBE->add_commas(not_here);
+		tell_object(myself, "You don't have "+output+".\n");	
+	}
+
+	if (z = (cant_drop && sizeof(cant_drop))) 
+    {
+		output = DESCRIBE->add_commas(cant_drop);
+		tell_object(myself, "You can't "+verb+" "+output+finish+".\n");	
+	}
+
+	if (x || y ||  z) return 1;
+}
+
+pick_up(str, pow)
+{
+    array items, not_here, here, cant_drop, here_obj;
+    string output, verb, item_list, container, finish, prep, reason = "";
+    object obj, container_ob;
+    int x,y,z,i, r;
+    array allargs;
+
+	verb = query_verb();
+	notify_fail(capitalize(verb)+" what?\n");
+ 	if (!str) return;
+	if (verb[sizeof(verb)-1] == '!') {
+		verb = verb[..sizeof(verb)-2]; 
+		pow = 1;
+	}
+
+    if (myself->test_dark() && !pow) {
+		notify_fail("It is too dark for that!\n");	
+		return 0;
+	}
+	if (index(myself->query_disable(), "handle") != -1) 
+    {
+		notify_fail("You can't pick anything up.\n");
+		return 0;
+    }
+    
+    allargs = STRINGS->split_first(str, " from ");
+    if (allargs && sizeof(allargs) == 2)
+    {
+        item_list = allargs[0];
+        container = lower_case(allargs[1]);
+		container_ob = present(container, environment(myself));
+		if (!container_ob) container_ob = present(container, myself);
+		if (!container_ob) 
+		{
+			notify_fail(capitalize(container) + " is not here.\n");
+			return 0;
+		}
+		if (container_ob->query_living() && !pow) 
+		{
+			notify_fail("You can't take stuff from "+capitalize(container) + ".\n");
+			return 1;
+		}
+		finish = " from "+container;
+	}
+	else 
+    {
+		item_list = str;
+		container_ob = environment(myself);
+		finish = "";
+	}
+
+	items = PARSE->parse(item_list, container_ob, pow, "get", 1); 
+	if (!items) 
+		return;
+
+	here = items[0];
+	here_obj = items[1];
+	not_here = items[2];
+	cant_drop = items[3];
+
+	if (here && sizeof(here)) {
+		for (i = 0, y = 0; i < sizeof(here_obj); i++) {
+			if (!here_obj[i]) continue;
+			if (pow) move_object(here_obj[i], myself);
+			else {
+				r = transfer(here_obj[i], myself);
+				if (r) 
+                {
+                    string sh;
+
+                    sh = here_obj[i]->short();
+                    if (sh) cant_drop = cant_drop + [ lower_case(sh) ];
+					here = here[..y-1] + here[y+1..];
+					y--;
+					if (r == 1) reason = " because you're carrying too much";
+				}
+				else { /* ok to get */
+					z = here_obj[i]->query_light();
+					if (z) {
+						myself->add_light(z);
+						container_ob->add_light(-z);					
+					}
+				}
+			}
+			y++;
+		}
+		if (x=(here && sizeof(here))) {
+			output = DESCRIBE->add_commas(here);
+			SAY->tell_all(myself, verb, output + finish); 
+		}
+	}
+
+	if (y = (not_here && sizeof(not_here))) {
+		output = DESCRIBE->add_commas(not_here);
+		if (container_ob && container_ob->query_items() &&
+		    (index(container_ob->query_items(), not_here[0]) != -1)) 
+			/* If you want every item to show up in a 'get all'
+			   (which would be silly, because you cant get them)
+			   parse needs to be modified. This is how I justify
+			   not_here[0] :) */	
+			tell_object(myself, "You can't get " +
+				output + ".\n");
+		else {
+			if (sizeof(not_here) > 1) prep = " are ";
+			else prep = " is ";
+			tell_object(myself, capitalize(output) + prep + "not here.\n");	
+		}
+	}
+
+	if (i = (cant_drop && sizeof(cant_drop))) {
+		output = DESCRIBE->add_commas(cant_drop);
+		tell_object(myself, "You can't "+verb+" "+output+finish+reason+".\n");	
+	}
+
+	if (x || y ||  i) return 1;
+}
+
+do_wear(str)
+{
+    object it;
+    array items, p;
+    string name, plr;
+
+        if (index(myself->query_disable(), "handle") != -1)
+        {
+            notify_fail("You cannot handle anything, hence you cannot wear anything.\n");
+            return 0;
+        }
+        notify_fail("What do you want to wear?\n");
+        if (!str) return 0;
+        if (str == "all") return wear_all(this_player());
+        if (str == "all silent") return wear_all(this_player(), 1);
+        if (!(it = present(str, this_player()))) return 0;
+
+        /*items = PARSE->parse(str, this_player(), 0, "wear", 1);  return 1;*/
+    return wear_item(str, it);
+}
+
+wear_item(string str, object it, int silent)
+{
+    string plr = "", name;
+    int p;
+
+    if ( poll_handle_hooks(it, "wear") ) return 0;
+
+    if (it->wearable())
+    {
+        int r;
+        r = it->wear(str);
+        if (r)
+        {
+            name = it->query_name();
+            if (!silent && name)
+            {
+                WRITE("You wear the "+name+".\n");
+                if (name[sizeof(name)-1] != 's') plr  = "a ";
+                myself->checked_say(myself->query_name() + " wears "
+                    + plr + name + ".\n");
+            }
+            myself->wear(it);
+        }
+        return r;
+    }
+
+        if (!(p = it->query_property("WEAR"))
+        || !it->id(str) || it->query_hidden()) return 0;
+
+        notify_fail("You are already wearing it.\n");
+        if (it->find_property("worn")) return 0;
+
+        notify_fail("You can't wear this, it doesn't fit.\n");
+        if (arrayp(p) && sizeof(p) > 1 && 
+            it->query_valid_hook(p[1])) return it->call_function(p[1]);
+    if (!silent) WRITE("You wear the "+it ->query_name()+".\n");
+        it->add_property("worn");
+
+    myself->wear(it);
+        return 1;
+}
+
+#define MAX_LAYER 9
+
+wear_all(object ob, int silent)
+{
+    array items;
+    int i, l, ret;
+    string name,p;
+
+        items = contents (ob);
+    for (l = 0; l <= MAX_LAYER; l++)
+    {
+            for (i = 0; i < sizeof (items); i++)
+        {
+            if (items[i]->query_layer() == l)
+            {
+                name = items[i] ->query_type();
+                ret = wear_item(name, items[i], silent) || ret;
+            }
+            }
+    }
+    if (silent) return 1;
+    notify_fail("You have nothing to wear.\n");
+        return ret;
+}
+
+do_remove(str)
+{
+    object it;
+
+    notify_fail("What do you want to remove?\n");
+    if (!str) return;
+    if (index(myself->query_disable(), "handle") != -1)
+    {
+        notify_fail("You have nothing you can handle things with!\n");
+        return 0;
+    }
+    if (str == "all") return remove_all(this_player());
+    if (str == "all silent") return remove_all(this_player(), 1);
+    if (!(it = present(str, this_player()))) return 0;
+    return remove_item(str, it);
+}
+
+remove_all(object ob, int silent)
+{
+    array items;
+    int i, l, ret;
+    string name,p;
+
+    items = contents (ob);
+    for (l = MAX_LAYER; l >= 0; l--)
+        for (i = 0; i < sizeof (items); i++)
+            if (items[i]->query_layer() == l)
+            {
+                name = items[i] ->query_type();
+                ret = remove_item(name, items[i], silent) || ret;
+            }
+    if (silent) return 1;
+    notify_fail("You have nothing to remove.\n");
+    return ret;
+}
+
+remove_item(string str, object it, int silent)
+{
+    array mat;
+    array p;
+    int res;
+    int i;
+    string plr = "", name;
+
+    if (poll_handle_hooks(it, "remove")) return 0;
+
+    if (it->wearable())
+    {
+        res = it->remove(str);
+        if (res)
+        {
+            name = it->short();
+	    if (!silent)
+ 	    {
+                WRITE("You remove the "+name+".\n");
+                if (name[sizeof(name)-1] != 's')
+                       plr  = "a ";
+                myself->checked_say(myself->query_name() + " removes "
+                        + plr + it->short() + ".\n");
+	    }
+            myself->stop_wearing(it);
+            return res;
+        }
+    }
+    else
+    {
+            if (!(p = it->query_property("WORN"))
+                || !it->id(str) || it->query_hidden()) return 0;
+            notify_fail("You are not wearing it.\n");
+            if (!it->find_property("worn")) return 0;
+            notify_fail("You can't remove this.\n");
+            if (it->query_valid_hook(p[1]))
+		return it->call_function(p[1]);
+            it->remove_property("worn");
+	    if (!silent)
+	    {
+                WRITE("You remove the "+it ->query_name()+".\n");
+		myself->checked_say(myself->query_name() + " removes "+
+		    it->short() + ".\n");
+	    }
+            myself->stop_wearing(it);
+    }
+    return 0;
+}
+
+has_hands(str) {
+    int i;
+    array tmp = myself->query_body();
+
+    for (i = 0; i < sizeof(tmp); i += 2)
+    if (tmp[i] == "hand" || index(tmp[i], " hand") != -1
+        || tmp[i] == "tentacle" || index(tmp[i], " tentacle") != -1
+        || (this_player()->query_race() == "avian" && str == "sheath") )
+            return 1;
+    return 0;
+    }
+
+do_wield(str)
+{
+    object it;
+
+	notify_fail("What do you want to wield?\n");
+	if (!str) return;
+
+	if (index(myself->query_disable(), "handle") != -1)
+	{
+	    notify_fail("You can't wield anything.\n");
+	    return 0;
+	}
+        if (!has_hands(str))
+	{
+	    notify_fail("You need a hand to wield something.\n");
+	    return 0;
+	}
+	if (!(it = present(str, myself))) return;
+	if (!it->id(str) || it->query_hidden()) return;
+  	if ( poll_handle_hooks(it, "wield" ) ) return;
+
+	if (it->wieldable()) return it->wield(str);
+	notify_fail("You can't wield this, it's not really a weapon.\n");
+	return;
+}
+
+do_unwield(str)
+{
+object it;
+    notify_fail("What do you want to sheath?\n");
+    if (!str)
+	return 0;
+    if ( !(it = present(str, myself)) ) return 0;
+    notify_fail("You can't sheath that.\n");
+    if ( poll_handle_hooks(it, "unwield") ) return 0;
+    if (it->wieldable())
+    {
+	if (it->unwield(str) && it)
+	{
+	    write("You sheath " + it->query_name() + ".\n");
+	    say(myself->query_name() + " sheaths " + it->query_name() + ".\n");
+	    return 1;
+	}
+    }
+    return 0;
+}
+
+array default_plural_cover = ({
+		"arm",		-1, 0,
+		"hand",		-1, 0,
+		"foot",		-1, 0,
+		"leg",		-1, 0,
+		"wing",		-1, 0,
+		"paw",		-1, 0,
+		"horn",		-1, 0,
+		"tentacle",	-1, 0,
+		"fin",		-1, 0
+		});
+
+list_worn(str)
+{
+    array result = ({ });
+    array body;
+    int body_pos;
+    array armour;
+    int pos;
+    array covered;
+    int covered_pos;
+    int num_covered;
+    array plural_cover;
+    string line;
+    int len;
+    array protected;
+    int armour_class;
+
+    body = this_player()->query_body() + ({ });
+    /* Add an empty array so we get a copy of the body array */
+    for (body_pos = 1; body_pos < sizeof(body); body_pos += 2)
+	body[body_pos] = -1;
+    plural_cover = default_plural_cover + ({ });
+    armour = this_player()->query_all_armour();
+    for (pos = 0; pos < sizeof(armour); pos++)
+    {
+	if (!objectp(armour[pos]))
+	    continue;
+	line = armour[pos]->query_name();
+	if (!stringp(line))
+	{
+	    line = armour[pos]->short();
+	    if (!stringp(line))
+		line = "something";
+	}
+	line = "  " + line;
+	armour_class = armour[pos]->armour_class();
+	covered = armour[pos]->query_cover();
+	if (arrayp(covered))
+	{
+	    /* make "covered" a copy */
+	    covered += ({ });
+	    len = sizeof(covered);
+	    for (covered_pos = 0; covered_pos < len; covered_pos++)
+	    {
+		num_covered = 0;
+		for (body_pos = 0; body_pos < sizeof(body); body_pos += 2)
+		{
+		    if (index(body[body_pos], covered[covered_pos]) != -1)
+		    {
+			/* match! */
+			num_covered++;
+			if (body[body_pos + 1] == -1)
+			    body[body_pos + 1] = armour_class;
+			else
+			    body[body_pos + 1] += armour_class;
+		    }
+		}
+		if (num_covered > 1)
+		{
+		    if (index(plural_cover, covered[covered_pos]) == -1)
+			plural_cover += ({ covered[covered_pos], -1, -1 });
+		    covered[covered_pos] = PLURAL->plural(covered[covered_pos]);
+		}
+	    }
+	    line += " on your ";
+	    if (len == 1)
+		line += covered[0] + ".";
+	    else
+		line += implode(covered[..len - 2], ", ") + " and " +
+			covered[len  - 1] + ".";
+	}
+	result += ({ line });
+    }
+    result += ({ "" });
+    protected = allocate(5);
+    for (pos = 0; pos < sizeof(protected); pos++)
+	protected[pos] = ({ });
+    for (body_pos = 0; body_pos < sizeof(body); body_pos += 2)
+    {
+	armour_class = body[body_pos + 1];
+	if (armour_class < 0)
+	    armour_class = 0;
+	else if (armour_class == 0)
+	    armour_class = 1;
+	else if (armour_class > 5)
+	    armour_class = 4;
+	else
+	    armour_class = armour_class/3 + 2;
+	for (pos = 0; pos < sizeof(plural_cover); pos += 3)
+	    if (index(body[body_pos], plural_cover[pos]) != -1)
+		if (plural_cover[pos + 1] == -1)
+		{
+		    plural_cover[pos + 1] = armour_class;
+		    plural_cover[pos + 2] = sizeof(protected[armour_class]);
+		    pos = sizeof(plural_cover);
+		    break;
+		}
+		else if (plural_cover[pos + 1] == armour_class)
+		{
+		    if (plural_cover[pos + 2] >= 0)
+		    {
+			protected[armour_class][plural_cover[pos + 2]] = 
+				PLURAL->plural(plural_cover[pos]);
+			plural_cover[pos + 2] = -1;
+		    }
+		    break;
+		}
+	if (pos == sizeof(plural_cover))
+	    protected[armour_class] += ({ body[body_pos] });
+    }
+    for (pos = sizeof(protected) - 1; pos >= 0; pos--)
+    {
+	len = sizeof(protected[pos]);
+	if (len > 0)
+	{
+	    line = "You are " +
+		    ({ "completely uncovered", "unarmoured",
+		    "lightly protected", "protected", "well protected" })[pos]
+		    + " in the ";
+	    if (len == 1)
+		line += protected[pos][0] + ".";
+	    else
+		line += implode(protected[pos][..len - 2], ", ") + " and " +
+			protected[pos][len  - 1] + ".";
+	    result += ({ line });
+	}
+    }
+    MORE->more(result);
+    return 1;
+}
+
+compare(str) {    /* Jenna Sep 99 */
+    array obs, names, what;
+    int i;
+    string ret = "You estimate that ";
+
+    notify_fail("Compare what to what?\n");
+    if (!str || index(str, " to ") == -1)
+        return 0;
+    names = STRINGS->split_first(str, " to ");
+    obs = allocate(2);
+    for (i = 0; i < 2; i++) {
+        obs[i] = present(names[i], this_player());
+        if (!obs[i]) {
+            notify_fail("You do not have " + names[i] + ".\n");
+            return 0;
+            }
+        }
+    what = allocate(2);
+    for (i = 0; i < 2; i++)
+        what[i] = obs[i]->weapon_class() || obs[i]->id("weapon") ? "a weapon" :
+                  obs[i]->query_clothing() ? "clothing" : 
+                                        "something you can't compare";
+    if (what[0] != what[1]) {
+        write(capitalize(names[0]) + " is " + what[0] + " and " +
+            names[1] + " is " + what[1] + " - you must "+
+            "compare similar items!\n");
+        return 1;
+        }
+    if (what[0] == "a weapon") {
+        int dif = obs[0]->weapon_class() - obs[1]->weapon_class();
+        int j;
+        array dtypes = allocate(2);
+
+        if (dif < 0) {
+            object tmp = obs[1];
+
+            obs[1] = obs[0];
+            obs[0] = tmp;
+            dif *= -1;
+            }
+        ret +=  dif < 2 ? "both weapons would do very similar damage" :
+                dif < 4 ? obs[0]->short() + " would do more damage" :
+                dif < 6 ? obs[0]->short() + " would do a lot more damage" :
+                          obs[0]->short() + " is much more powerful";
+        for (i = 0; i < 2; i++) {
+            array tmp1 = obs[i]->query_damage_type();
+            array tmp2 = [ ];
+
+            for (j = 0; j < sizeof(tmp1); j += 2)
+                tmp2 += [ PLURAL->plural(tmp1[j]) ];
+            dtypes[i] = sizeof(tmp2) == 1 ? tmp2[0] :
+                        sizeof(tmp2) == 2 && tmp1[1] > 50 ? "mostly " + tmp2[0] +
+                                " but also " + STRINGS->array2string(tmp2[1..]) :
+                        STRINGS->array2string(tmp2) + " equally";
+            }
+        for (i = 0; i < 2; i++) 
+            if (index(dtypes[i], " ") == -1 
+                && index(dtypes[(!i)], " ") != -1)
+                    dtypes[i] = "only " + dtypes[i];
+        if (dtypes[0] == dtypes[1]) {
+            if (dif > 1) 
+                ret += ", although both inflict " + dtypes[0] + ".\n";
+            else
+                ret += ".\n";
+            }
+        else {
+            if (dif < 2) 
+                ret += ", although " + obs[0]->short() + " ";
+            else
+                ret += ", although it "; 
+            ret += dtypes[0] +
+                    " while " + obs[1]->short() + " " +
+                    dtypes[1] + ".\n";
+            }
+        }
+    else if (what[0] == "clothing") {
+        int dif = obs[0]->armour_class() - obs[1]->armour_class();
+
+        if (dif < 0) {
+            object tmp = obs[1];
+
+            obs[1] = obs[0];
+            obs[0] = tmp;
+            dif *= -1;
+            }
+        ret +=  dif < 1 ? "both pieces of clothing would protect about equally well" :
+                dif < 2 ? obs[0]->query_short() + " would probably protect a little better" :
+                dif < 3 ? obs[0]->query_short() + " would probably protect you better" :
+                dif < 4 ? obs[0]->query_short() + " would protect you better" :
+                        obs[0]->query_short() + " would protect you a lot better";
+        ret += ".\n";
+        }
+    write(ret);
+    return 1;
+    }
+
+query_owner() { return myself->query_real_name(); }
+
+/*
+ * Handle Hooks
+ *  - called whenever the player handles something (eg, wield)
+ *  - to add a hook, call add_handle_hook(object, function [, type of handle)
+ *  - if that function returns 1 when called, the handling is blocked
+ *  - call remove_handle_hook(object [, function]) to remove the hook
+ *
+ * The function called is given the arguments:
+ *  (object caller, object what, string action attempted)
+ * action attempted ::= wield | unwield | drop | get | wear | remove
+ */
+#if OLD_HANDLE_HOOKS
+add_handle_hook(
+    (string|object) retobject, 
+    string retfunction, 
+    (string) rethandle)
+{
+    return  myself->add_hook( rethandle, retobject, retfunction );
+}
+remove_handle_hook(
+    (string|object) retobject,
+    (string|int) retfunction)
+{
+    return myself->remove_hook( "wield", retobject, retfunction )
+	+ myself->remove_hook( "unwield", retobject, retfunction )
+	+ myself->remove_hook( "drop", retobject, retfunction )
+	+ myself->remove_hook( "get", retobject, retfunction )
+	+ myself->remove_hook( "wear", retobject, retfunction )
+	+ myself->remove_hook( "remove", retobject, retfunction );
+}
+query_handle_hooks() { return 0; /* return handle_hooks;*/ }
+#endif
+
+
+/*
+ * poll_handle_hooks returns 1 if the action has been blocked
+ */
+poll_handle_hooks(object what, string actiontype)
+/* actiontype ::= wield | unwield | drop | get | wear | remove */
+{
+    return myself->test_binary_hook( actiontype, myself, what, actiontype );
+}
+
+#if 0
+query_handle_hook(ob, fun)
+{
+int i;
+array _hooks = handle_hooks + ({ });
+    if(!ob || !fun) return 0;
+    for(i=0; i<sizeof(_hooks); i += 3)
+    {
+	if(_hooks[i] == ob && !fun) return 1;
+	if(_hooks[i] == ob && _hooks[i+1] == fun) return 1;
+    }
+    return 0;
+}
+#endif
+
+action_eat( str )
+{
+object it;
+    notify_fail("What do you want to eat?\n");
+    if (!str) return 0;
+    if ( !(it = present(str, myself)) ) return 0;
+    notify_fail("You can't eat that.\n");
+    if ( myself->test_binary_hook( "eat", it ) ) return 0;
+    if (it->is_food()) return it->eat(str);
+    return 0;
+}
+    
+

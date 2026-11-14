@@ -1,0 +1,173 @@
+/*
+ * This does all the remote communication between the muds.
+ *
+ * Its was previously in an object written by Gandalf@SW and
+ * was split out by Llati in Oct 94.
+ */
+
+#include <security.h>
+
+inherit "RO/cap_user";
+inherit "RO/cap_provider";
+
+#include <Servers.h>
+#define TELL_CAP "rtell"
+#define WIZ_CAP "rwiz"
+
+
+reset() {
+	invalidate_cap (TELL_CAP);
+	invalidate_cap (WIZ_CAP);
+	OBJ_DATAGRAM_SERV -> request_service (TELL_CAP,make_cap(TELL_CAP, 0)); 
+	OBJ_DATAGRAM_SERV -> request_service (WIZ_CAP,make_cap(WIZ_CAP, 0)); 
+}
+
+dg_capability (int dg_cap, int verify_cap) {
+
+  if (auth_user (TELL_CAP, verify_cap)) 
+    add_cap (TELL_CAP, dg_cap);
+   else if (auth_user (WIZ_CAP, verify_cap)) 
+    add_cap (WIZ_CAP, dg_cap);
+}    
+    
+      
+
+/*
+ * RTELL
+ */
+
+recv_rtell (int verify_cap, array calling_ip,array data) {
+    /*data :  fromname, toname, message */
+object o;
+
+    if (!auth_user (TELL_CAP, verify_cap))
+	return;
+    if (sizeof (data) == 2) { /* Conformation that the rtell worked */
+	o = find_living(data[0]);
+	if (o) 
+	    tell_object(o, "Message reached " + capitalize(data[1]) + " on [" + ip_as_str(calling_ip) + "]\n");
+	return;
+	}  
+
+/* We are receiving a rtell from someone else */  
+    o = find_living(data[1]);
+    if (!o) return;
+    string ropts = o->query_store("rwho");
+    if (!ropts) ropts = "";
+    if (0 <= index(ropts, "muffs")) return;
+    int x = index(ropts, "noconf");
+    string ncon = "";
+    if (x >= 0)
+	ncon = "NOREPL ";
+    if (o -> query_caution ()) 
+	o -> add_note  (ncon + "[" + ip_as_str(calling_ip) + "] " + capitalize(data[0]) + " remotely tells you: " + data[2]);
+    else 	
+	tell_object(o, ncon + "[" + ip_as_str(calling_ip) + "] " + capitalize(data[0]) + " remotely tells you: " + data[2]);
+    if (x >= 0) return;
+    call_out("rtell_repl", 0.1, calling_ip,data[0],data[1]);
+}
+
+rtell_repl(array calling_ip, string orig_tx, string orig_rx ) {	
+/* message reached player here; reply. */
+    OBJ_DATAGRAM_SERV -> tx_dgram("rtell",lookup_cap("rtell"),
+               calling_ip, [orig_tx, orig_rx ] );
+    }
+
+/* fling a remote tell packet off to all known sites :) */
+
+send_rtell(string from, string to, string msg) {
+array hosts;
+
+ array hosts,data;
+ int x;
+ object local_player;
+
+ 
+	hosts = RHOST_SERV -> query_active_hosts();
+	data = [ from, to, msg ];
+	local_player = find_player (to);
+	if (local_player) 
+	  tell_object (local_player, capitalize(from) + " tells you: " + msg);
+	if (!sizeof(hosts)) return "No other hosts known. Message only sent locally.\n";
+	for (x = sizeof (hosts); x--; ) {
+		OBJ_DATAGRAM_SERV -> tx_dgram("rtell",lookup_cap("rtell"),hosts[x],data);
+		hosts [x] = ip_as_str (hosts[x]); /* Text formating for below */
+	}
+	return "Sent to : local mud, " + implode (hosts," , ") + "\n"; 	
+}
+
+/* RWIZ */
+
+
+recv_rwiz (int verify_cap, array calling_ip,array data) {
+  /* data: [ fromname, message] if sending out rwiz */
+  /* data: [ fromname, ({ array of people reached] }) if receiving conformation */
+  
+	if (!auth_user (WIZ_CAP, verify_cap)) return;
+	if (stringp(data[1])) {
+	   array notified;
+	   notified = wiz_shout (data[0], data[1], 0);
+	   call_out("rwiz_repl",0.1,calling_ip,data[0],notified);
+	 }
+	 else {
+	   object o = find_living (data[0]);
+     if (o) {
+       if (!sizeof (data[1])) 
+         tell_object (o, "Rwiz reached no one on ["+ ip_as_str(calling_ip) + "]\n");
+        else 
+         tell_object (o, "Rwiz reached " + implode(data[1],",") + " on [" + ip_as_str(calling_ip) + "]\n");
+				}		
+		}		
+}
+
+/* A local wiz_shout, Returns a list of all the people it told */
+array wiz_shout (string sender,string message, (int|string) avoid) {
+array logons;
+array notified = [ ];
+int i;
+string name;
+
+   logons = users ();
+   sender = capitalize (sender);
+   for (i = sizeof (logons); i --; ) {
+       name = logons[i] -> query_real_name();
+       if (!logons[i] -> query_wiz() ||  ( avoid && index (avoid, name) >= 0) ) 
+	         continue;
+       notified += [ name ];
+       if (logons[i] -> query_caution ())  
+	         logons[i] -> add_note  (sender + " rwizshouts: " + message );
+       else	
+	        tell_object (logons[i], sender +  " rwizshouts: " + message );
+   }  
+   return notified;
+}    
+
+	/* Found some wizards. notified is a list of the ones contacted */
+rwiz_repl (array dest_ip, string wiz_sender, array notified) {	
+    OBJ_DATAGRAM_SERV -> tx_dgram("rwiz",lookup_cap("rwiz"),
+          dest_ip, [ wiz_sender, notified ] );
+    }
+	
+/* fling a remote wiz shout packet off to all known sites :) */
+
+send_rwiz(string from,string msg) {
+array hosts;
+
+ array hosts,data;
+ int x;
+
+ 
+	hosts = RHOST_SERV -> query_active_hosts();
+	data = [ from, msg ];
+	wiz_shout (from,msg,from);
+	if (!sizeof(hosts)) return "No other hosts known. Message only wiz shouted locally\n";
+	for (x = sizeof (hosts); x--; ) {
+		OBJ_DATAGRAM_SERV -> tx_dgram("rwiz",lookup_cap("rwiz"),hosts[x],data);
+		hosts [x] = ip_as_str (hosts[x]); /* Text formating for below */
+	}
+	return "Sent to the local machine and " + implode (hosts," , ") + "\n"; 	
+}
+
+ip_as_str (array a) {
+  return RHOST_SERV -> ip_as_str (a);
+  }

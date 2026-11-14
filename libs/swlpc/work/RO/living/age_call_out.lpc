@@ -1,0 +1,59 @@
+/*
+ * age_call_out - age-based call-outs that save in savefiles.
+ * Part of the new living stuff.  By Gandalf.
+ *
+ * This object implements a limited form of call-out: granularity is
+ * 1 second, and called-out functions cannot be given parameters.
+ * Thus, it doesn't replace the general callouts.  However, many of
+ * the more complex systems (stats expiry, etc) can be usefully managed
+ * by this object.
+ */
+
+inherit "RO/living/age_event";
+
+/*
+ * Call this function to start the loop running, or to update the callout
+ * time.  It also serves as the loop itself.
+ */
+
+age_call_out_check() {
+
+	/*
+	 * First, any pending events are scheduled to expire immediately.
+	 */
+
+	int y = query_first_event_delay();	/* time to next scheduled event */
+	while (y < 1) {
+		if (y < 0)
+			return;
+		if (y == 0) {			/* schedule this as a real callout */
+			string s = remove_first_event();
+			call_out(s, 0);
+			}
+		y = query_first_event_delay();
+		}
+
+	/*
+	 * If we are here, we have a future event.  Set up a callout.
+	 */
+	
+	while (find_call_out("age_call_out_check") != (-1))
+		remove_call_out("age_call_out_check");
+	
+	call_out("age_call_out_check", y);
+	}
+
+/*
+ * As for the rest, we need some wrapper functions that add events
+ * and call age_call_out_check() so that our own callout is rescheduled
+ * appropriately.  Can't exactly add delete/query until the queueing
+ * object manages them appropriately, so this will have to do for now.
+ *
+ * This MUST be STATIC.
+ */
+
+nosave add_age_call_out(int seconds, string fname) {
+	add_delayed_event(seconds, fname);
+	age_call_out_check();
+	}
+

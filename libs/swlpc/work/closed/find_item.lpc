@@ -1,0 +1,461 @@
+/*
+ * Shattered World Mudlib (Wizard support)
+ * find_item() code.
+ *
+ * This code used to be in the wiz_soul, but is now split into
+ * its own file.
+ */
+
+/*
+ * History:
+ * 940615 Hunter    	added SERVLIST support to find_item()
+ * 941215 Hunter    	added wildcards to find_item()
+ * 950104 Hunter    	added last_object ("it") to find_item()
+ * 950527 Hunter    	added "me" to find_item()
+ * 950528 Hunter    	added remote object supprt to find_item()
+ * 950914 Hunter	find_item() moved from closed/wiz_soul.c to
+ *			separate file.
+ * 950919 Hunter	added root object, ie the thing with the filename
+ *			"", support.
+ */
+
+
+/*
+ * #include's
+ */
+#include <Config.h>
+#include <security.h>
+#include <errors.h>
+
+/*
+ * inherit's
+ */
+inherit "RO/Servers"; 
+inherit "RO/modules"; 
+
+nosave string last_object;	/* last thing found by find_item() - "it" */
+
+/*
+ * This is from the general purpose object tracer (from Genesis).
+ * find_item() returns int 0 if nothing found, otherwise
+ * it returns an array of (possible) matches.
+ * Promise: it will never return an empty array.
+ */
+(int|array)
+find_item(str)
+{
+array path;
+object ob;
+int count;
+string server;
+    if (!str)
+	return 0;
+    if (server = SERVLIST->query_server(str)) {
+	server->stupid_load_function();
+	return (last_object = find_object(server));
+    }
+    if (str == "it")
+    {
+	return ({last_object});
+    }
+    if (str == "me")
+    {
+	return ({ this_object()->query_myself() });
+    }
+    if (str == "" || str == "/")
+    {
+	return ({ find_object("") });
+    }
+    if (str[0..1] == "//")	/* //Server/path/file format */
+    {
+	int i = index(str, "/", 2);
+	string servername = str[2..i-1];
+write("Looking for server \""+servername+"\"\n");
+	if ( !intp (RHOST_SERV->query_host( servername )) )
+	    return ({ str });
+	else
+	    return 0;
+    }
+    if (str[0..0] == "$")	/* environment variable */
+    {
+	return ({ this_object()->getenv( str[1..] ) });
+    }
+    path = explode(str, ":");
+    ob = this_player();
+
+    if (path) for (count = 0; ob && count < sizeof(path); count++)
+    {
+        ob = find_item2(path[count], ob);
+	    if ( pointerp(ob) )
+	    {
+	    if (count == sizeof(path)-1)
+	    {
+		/* last iteration of loop - so do nothing */
+	    }
+	    else
+	    {
+		ob = ob[0]; 	/* grab first */
+	    }
+	    }
+    }
+    if (!pointerp(ob))	/* single object matches */
+    {
+	ob = ({ ob });
+    }
+    if (count < sizeof(path)) notify_fail("path not found.\n");
+    if (sizeof(ob) == 1)
+	last_object = ob[0];
+    else
+	last_object = 0;
+    if (pointerp(ob) && sizeof(ob) > 0 && intp(ob[0]))
+	ob = 0;
+    return ob;
+}
+
+nosave 
+find_item2(str, obj)
+{
+    object ob;
+    array aobj, args; 
+    string tmp, tmp2;
+    int tmpi, i;
+    array mobj;
+    string rgxpatt;
+
+    if (str == "env")
+    {
+	return environment(obj);
+    }
+    if (str == "*")	/* simple case wildcard */
+    {
+	return contents(obj);
+    }
+    if (tmp = STRINGS->match_head(str, ({ "@" })) )
+    {
+        if (ob = load_object(PLAYER_ONAME(tmp)))
+            return ob;
+	else
+            return find_living(tmp);
+    }
+    if (tmp = STRINGS->match_head(str, ({ "/" }) ) ) 
+    {
+        catch tmp->stupid_call_to_load_it_up();;
+        ob = find_object(tmp);
+        if (ob) return ob;
+
+        catch str->stupid_call_to_load_it_up();;
+        return find_object(str);
+    }
+    if (tmp = STRINGS->match_head(str, ({ "#" }) ) ) 
+    {
+        tmpi = atoi(tmp);
+	    aobj = contents (obj);
+	    i = sizeof (aobj);
+	    if (tmpi < 1 || tmpi > i) return 0;
+            return aobj[tmpi-1];
+    }
+    if (str == ".") return this_object()->query_dot();
+    args = STRINGS->split_first(str, "(");
+    if (args && sizeof(args) == 2)
+    {
+	return eval_func(obj, args[0], args[1][..sizeof(args[1])-2]);
+    }
+#if 0
+    ob = present(str, obj);
+#else
+    aobj = contents(obj);
+    mobj = ({ });	/* matching objects */
+    rgxpatt = str;
+    if (rgxpatt[0..0] == "*")	/* condition the pattern */
+	rgxpatt = "."+rgxpatt;
+    rgxpatt = "^"+rgxpatt+"$";
+    if (aobj) for (i = 0; i < sizeof(aobj); i ++)
+    {
+	(int|array) objids = aobj[i]->query_ids();
+    array foo;
+	//if (intp(objids)) objids = aobj[i]->query_ids();
+	if (pointerp(objids))
+ 	{
+	    foo = M_REGEXP->match( rgxpatt, objids );
+	    if (sizeof(foo) > 0)
+	        mobj += ({ aobj[i] });
+	}
+    }
+    if (mobj && sizeof(mobj) > 0) ob = mobj;
+    else ob = 0;
+#endif
+    if (!ob && environment(obj)) ob = present(str, environment(obj));
+    if (!ob) {
+    string st1;
+        st1 = this_object()->valid_read(str);
+        catch st1->stupid_call_to_load_it_up();;
+        ob = find_object(st1);
+    }
+    if (!ob) {
+    string st2;
+        st2 = this_object()->valid_read(this_object()->query_pwd() + str);
+        catch st2->stupid_call_to_load_it_up();;
+        ob = find_object(st2);
+    }
+    return ob;
+}
+
+/* used by ACTION_FS commands */
+valid_read(str)
+{
+    return valid_file(str, "r", "");
+}
+
+
+query_it( )
+{
+    return last_object;
+}
+
+void
+set_it( it )
+{
+    last_object = it;
+}
+
+
+
+getenv(string label, passwd)
+{
+    return 0;	/* abstract function, inheritors should override */
+}
+
+string
+query_pwd( )
+{
+    return "";	/* abstract function, inheritors should override */
+}
+
+
+/*
+ * this function may throw an error, be prepared to catch it
+ */
+nosave 
+eval_func( 
+	(string|object) ob, /* what object to call */
+	with, /* function to call */
+	what, /* what arguments to feed it */
+	(int|string) callbackfunc,	/* should we delay the response? */
+	callbackarg		/* if we delay, do we need to give */
+					/* more information? */
+	)
+{
+/*
+ * if ob is a string, and the first two chars are "//", then
+ * it is assumed that we are calling a remote object.
+ */
+int ret; /* actually has arbitrary type */
+array whatexp;
+int x;
+int delaycallback;
+
+    if (!what) what = "";
+
+    if ( stringp(ob) && ob[0..1] == "//" )
+    {
+    int j = index(ob, "/", 2);
+    string servername = ob[2..j-1];
+    array serveraddr = RHOST_SERV->query_host(servername);
+	if ( intp(serveraddr) )
+	{
+	    throw( "eval_func: failed address lookup for \""+servername+"\"");
+	    return 0;
+	}
+	else
+	{
+	int arg = ARG_PARSER->make_args(what);
+	    if (pointerp(arg))
+		arg = arg[0];
+	    else
+		arg = 0;
+#if 0
+write(   "servername = \"" + servername + "\"\n"
+	+"object     = \"" + ob[j+1..] +"\"\n"
+	+"function   = \"" + with +"\"\n");
+write("arg = " );DUMP->dump(arg);
+#endif
+	    ret = RCALL->remote_call( servername, "eval_func_rcall",
+			ob[j+1..], with, arg, ({ callbackfunc, callbackarg }) );
+	    if (ret != 1) 
+	    {
+		throw("eval_func: RCALL returned != 1 (errval = "+ret+"\n");
+		return 0;
+	    }
+	    delaycallback = 1;
+	}
+    }
+    else
+    {
+    	whatexp = ARG_PARSER ->make_args(what);
+    	x = sizeof(whatexp);
+    /* ugly hack time */
+    	if (x == 1) ret = ob->(with)(whatexp[0]);
+    	else if (x == 2) ret = ob->(with)(whatexp[0], whatexp[1]);
+    	else if (x == 3) ret = ob->(with)(whatexp[0], whatexp[1], whatexp[2]);
+    	else if (x == 4) ret = ob->(with)(whatexp[0], whatexp[1], whatexp[2],
+		whatexp[3]);
+    	else if (x == 5) ret = ob->(with)(whatexp[0], whatexp[1], whatexp[2],
+		whatexp[3], whatexp[4]);
+    	else if (x == 6) ret = ob->(with)(whatexp[0], whatexp[1], whatexp[2],
+		whatexp[3], whatexp[4], whatexp[5]);
+    	else if (x == 7) ret = ob->(with)(whatexp[0], whatexp[1], whatexp[2],
+		whatexp[3], whatexp[4], whatexp[5], whatexp[6]);
+    	else if (x == 8) ret = ob->(with)(whatexp[0], whatexp[1], whatexp[2],
+		whatexp[3], whatexp[4], whatexp[5], whatexp[6], whatexp[7]);
+    	else if (x == 9) ret = ob->(with)(whatexp[0], whatexp[1], whatexp[2],
+		whatexp[3], whatexp[4], whatexp[5], whatexp[6], whatexp[7],
+		whatexp[8]);
+    	else if (x == 10) ret = ob->(with)(whatexp[0], whatexp[1], whatexp[2],
+		whatexp[3], whatexp[4], whatexp[5], whatexp[6], whatexp[7],
+		whatexp[8], whatexp[9]);
+    	else ret = ob->(with)(what);
+    }
+    if (!intp(callbackfunc) && !delaycallback)	/* give a delayed response? */
+    {	
+	call_out( callbackfunc, 0, ret, callbackarg );
+	return 0;
+    }
+    return ret;
+}
+
+eval_func_rcall( ret, args )
+{
+    call_out( args[0], 0, ret, args[1] ); 
+}
+
+/* used by ACTION_FS commands */
+valid_file(str, what, dir)
+{
+    str = compute_path (str);
+    if (!query_valid_file(str+dir, what))
+    {
+        if (dir == "/")
+	    dir = "directory ";
+        if (what == "r")
+            write("Can't read " + dir + str + "\n");
+        else
+            write("Can't write " + dir + str + "\n");
+        return 0;
+    }
+    return str;
+}
+
+
+string
+compute_path(str)
+{
+array exploded, stack = ({ });
+string pwd = this_object()->query_pwd();
+string name = (this_object()->query_myself())->query_real_name();
+int i;
+    if (!stringp(str))
+	return remove_trailing_slash( pwd );
+    str = strip_whitespace(str);
+    if (str[0] != '/' && str[0] != '~')
+	str = pwd + str;
+    exploded = explode(str, "/");
+    if (!pointerp(exploded))
+	return "";
+    for (i=0;i < sizeof(exploded);i++)
+    {
+	if (exploded[i] == ".." && sizeof(stack) > 0)
+	{
+	    stack = stack[..sizeof(stack)-2];
+	}
+	else if (exploded[i] == "~")
+	{
+	    stack = ({ PlayerHome(name) });
+	}
+	else if (exploded[i][..0] == "~")
+ 	{
+	    stack = ({"players", exploded[i][1..] }) ;
+	}
+	else if (exploded[i] != ".")
+	{
+	    stack += ({ exploded[i] });
+	}
+    }
+    if (!sizeof(stack))
+	return "";
+    return implode(stack, "/");
+}
+
+string strip_whitespace(string text)
+{ return STRINGS->strip_whitespace(text); }
+
+/*
+ * add a leading slash to a filename, if it doesn't already have one
+ */
+string
+add_slash( string filename )
+{
+    if ( filename[0..0] != "/" )
+    {
+	filename = "/" + filename;
+    }
+    return filename;
+}
+
+/*
+ * remove a leading slash from a filename, if it already has one
+ */
+string
+remove_slash( string filename )
+{
+    if ( filename[0..0] == "/" )
+    {
+	filename = filename[1..];
+    }
+    return filename;
+}
+
+
+/*
+ * glue a path name to a filename
+ */
+string
+build_filename( string path, string file )
+{
+int i = sizeof( path ) - 1;
+     if ( path[i..i] == "/" )
+	return path + file;
+    return path + "/" + file;
+}
+
+/*
+ * add a trailing slash, as if it is a directory name
+ */
+string
+add_trailing_slash( string path )
+{
+int i = sizeof( path ) - 1;
+    if ( path[i..i] == "/" )
+	return path;
+    return path + "/";
+}
+
+/*
+ * remove a trailing slash
+ */
+string
+remove_trailing_slash( string path )
+{
+int i = sizeof( path ) - 1;
+    if ( path[i..i] == "/" )
+	return path[0..i-1];
+    return path;
+}
+
+/*
+ * Find something called The Dot(tm).
+ * It's actually up to inheritors to implement this.
+ */
+query_dot()
+{
+    return 0;
+}

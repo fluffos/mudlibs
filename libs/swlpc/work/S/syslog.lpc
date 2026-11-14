@@ -1,0 +1,122 @@
+/*
+ * System Message Log
+ * Aaron Wigley <aka Hunter>
+ *
+ * Maintains a system log of messages written to it.
+ */
+
+/* possible Priorities include:
+ *  LOG_ALERT	This priority should essentially never be used, it applies
+ *		to messages so importaint that all users should be aware
+ *		of them.
+ *  LOG_SALERT	System Alert, issued only to people who may be able
+ *		to fix them.
+ *  LOG_WARNING	Issued when an abnormal condition has been detected.
+ *  LOG_NOTICE	Messages considered `importaint information'.
+ *  LOG_INFO	Information level messages.
+ *  LOG_DEBUG	Debug level messages.
+ */
+
+inherit "RO/Servers";
+
+#include "syslog.h"
+
+#define SYSLOGFILE "open/syslog"
+
+nosave array KnownPriority = [ LOG_DEBUG, LOG_INFO, LOG_NOTICE, LOG_WARNING,
+	LOG_SALERT, LOG_ALERT ];
+nosave array PriorityNames = [ "LOG_DEBUG", "LOG_INFO", "LOG_NOTICE", 
+	"LOG_WARNING", "LOG_SALERT", "LOG_ALERT" ];
+
+/*
+ * AlertAll lists the priorities at which _Everyone_ on the mud
+ * should get the message
+ */
+nosave array AlertAll = [ LOG_ALERT ];
+
+/*
+ * AlertWizards is the same as AlertAll, except that only wizards will
+ * hear it
+ */
+nosave array AlertWizards = [ LOG_SALERT ];
+
+array Syslog;
+
+reset(arg)
+{
+    if (!arg)
+    {
+	if (is_cloned(this_object()))
+	{
+	    destruct(this_object());
+	    return 0;
+	}
+	Syslog = [ ];			/* wipe the syslog each startup */
+	syslog(LOG_NOTICE, "Syslog loaded");
+    }
+}
+
+/*
+ * Receive a message to the systemlog of the stated priority.
+ * Returns 0 if it was not noticed, 1 if successful.
+ */
+int
+syslog(priority, string message)
+{
+object PrevObj = caller();
+string ObjName = (objectp(PrevObj))?(file_name(PrevObj)):("<noprev>");
+int timestamp = time();
+object EnvObj = environment(PrevObj);
+string EnvName = (objectp(EnvObj))?(file_name(EnvObj)):("<noenv>");
+
+    if (index(KnownPriority, priority) == -1)
+	return 0;	/* unknown priority type */
+    Syslog += [ timestamp, priority, ObjName, EnvName, message ];
+
+    /* now, there may be special needs with this message */
+    if (index(AlertAll, priority) != -1)
+    {
+	SHOUT->shout("[SYSLOG "+query_priority_name(priority)+"]: "
+		+message+"\n");
+    }
+    if (index(AlertWizards, priority) != -1)
+    {
+	SHOUT->wiz_shout("[SYSLOG "+query_priority_name(priority)+"]: "
+		+message+"\n");
+    }
+    return 1;
+}
+
+/*
+ * returns all log messages of a given priority
+ * returns 0 if unknown priority, otherwise an array of messages
+ */
+(array|int)
+query_logs(priority)
+{
+array ret = [ ];
+int i;
+int l = sizeof(Syslog);
+    if (index(KnownPriority, priority) == -1)
+	return 0;
+    for (i = 0; i < l; i += 5)
+    {
+	if (Syslog[i+1] == priority)
+	{
+	    ret += [ Syslog[i], Syslog[i+2], Syslog[i+3], Syslog[i+4] ];
+	}
+    }
+    return ret;
+}
+
+(int|string)
+query_priority_name(priority)
+{
+int i = index(KnownPriority, priority);
+    if (i == -1)
+	return 0;
+    return PriorityNames[i];
+}
+
+query_Syslog() { return Syslog; }
+

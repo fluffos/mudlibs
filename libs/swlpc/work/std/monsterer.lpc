@@ -1,0 +1,907 @@
+/*
+    Standard monster producer for Shattered World Lpmud.
+
+    By rendell@bruce.cs.monash.oz.au
+    and geoff@bruce.cs.monash.oz.au
+    aka Rhys and Dredd.
+    
+
+    Functions -
+
+*   object make(string montype, int level, string gender[, string name]);
+	returns a monster of the specified type (i.e. troll, shark, human etc),
+    of the specified level and gender, with the optional name.  If the type is
+    unknown, or if one of the non-optional arguments are left out, returns 0
+	montype can be an array from which one string is randomly used as the
+	monster type.
+
+*   array body(string body_description)
+	returns the 'body array' of the specified type.  Allowable formats for
+    body_description are:
+	o One of the pre-defined body types (e.g. "biped", "quadruped", etc)
+	o A single limb specified in the form "{name,flags}" (note - _no_ space
+    after the comma (e.g. "{horn,1}", "{gooby bit,1m}" etc)
+	o A number of the above, with either + or - between them, adding or
+    subtracting the following part from the whole
+		(e.g. "biped+wings+{left horn,1}+{right horn,1}",
+		      "insect-{leg}-{leg}+{claw,1h}+{claw,1h}")
+	    note that when subtracting a limb of {} format, the size and flags
+    need not be specified.
+
+*   array test(string type)
+	returns the body of the named type of monster if this object can create
+    such a beast, 0 otherwise.  This was a debugging function, but wizards may
+    wish to 'call' it to see what the body array looks like, so I left it in.
+	The type can take 3 'special' values (on the assumption that no-one
+    will create a monster called any of these names :-) :
+	o monster_types - this will cause test to 'write' all the monster types
+    known.
+	o body_types - 'write' all the body types.
+	o special_types - 'write' all monsters that use the 'special' function
+    calls (c.f.).
+	o races - 'write' all monster races.
+
+*   int new_monster(string type)
+	starts an input_to sequence prompting you to enter the particulars
+    of a new monster.  The questions are fairly self-explanitory to anyone
+    familiar with /std/monster.c, apart from the one concerning the body
+    of the monster - whatever is entered at this question will eventually be
+    passed to the function 'body', so the comments on that (above) are
+    applicable.
+
+*   int new_special(string type)
+	starts an input_to sequence prompting you for 'special' functions
+    and parameter values to be called on the monster type (for things such
+    as giving all dragons a default breath weapon, and aquatic creatures
+    swim skills and the ability to breathe water)
+
+    both new_monster and new_special prompt for a 'similar' monster type -
+    if such a type is specified, then all other data is assumed to
+    be the same as that of the similar monster.
+
+*   string query_monster_info(string race)
+	returns a string containing information regarding the named monster
+    type, this is intended as a debugging tool.
+
+950906 Jenna	Added /obj/souls/npc/iq onto monsters
+950921 Gandalf	Cached body descriptions.
+981221 Jenna	Added /obj/souls/support onto monsters
+000215 Jenna	Added /obj/souls/communicate onto non-human mobs
+*/
+
+inherit "RO/Servers";
+
+#include "security.h"
+
+#define SAVE_FILE "std/monsters"
+
+#define ALIAS 0
+#define RACE 1
+#define SIZE 2
+#define WC 3
+#define AC 4
+#define AGGRESS 5
+#define WIMP 6
+#define BODY 7
+#define DTYPE 8         /* Jenna Sep 99 */
+
+array bodies = [];
+array monsters = [];
+array special = [];
+
+reset(arg) {
+    int i;
+
+    if (arg) return;
+    restore_object(SAVE_FILE);
+}
+
+make(string montype, int level, string gender, (string | int)name, mons_pointer)
+{
+    int x, y;
+    int scale;
+    object ret;
+
+    if (!level) level = 1;
+    if (!montype || !level || !gender) return;
+    if (pointerp(montype)) montype = montype[random(sizeof(montype))];
+    x = index(monsters, montype);
+    if (x < 0)
+    {
+	LOG->log("NEW_MONSTERS", "Monster type was "+montype+", called by "+file_name(caller())+".\n");
+	return;
+    }
+    while(stringp(monsters[x]))
+	x++;
+    if (mons_pointer) ret = mons_pointer;
+    else 
+    {
+        if (name && name != "none" && NPC_PERSIST_SERV->find_npc(name) == 0) 
+        {
+            name = lower_case(name);
+            ret = NPC_PERSIST_SERV->load_npc(name);
+            if (ret) 
+            {
+		LOG->log("belgarion.monsters", "Monster " + name +
+			" created a second time. Caller was " + file_name(caller()) + "\n");
+                resoul_npc(ret);
+                return ret;
+            }
+            ret = NPC_PERSIST_SERV->make_npc(name);
+        }
+        else ret = clone_object("obj/monster");
+    }
+    set_this_player(ret);
+    if (!name)
+	    name = lower_case(NAMER->make_name(montype));
+    if (name == "none") name = 0;
+    if (name)
+    {
+	if (montype != "human")
+	{
+	    ret->set_short(capitalize(name)+" the "+montype);
+	    ret->set_name(name);
+	    ret->add_id(montype);
+	}
+	else
+	{
+	    ret->set_name(name);
+	    ret->add_id(montype);
+        ret->set_rumours(1, 5);
+	}
+    }
+    else 
+    {
+	    ret->set_short("a "+lower_case(montype));
+        ret->set_name(montype);
+	    ret->add_id(montype);
+    }
+    ret->set_std_mon_type(montype);
+    ret->set_level(level);
+    ret->set_race(monsters[x][RACE]);
+    ret->add_id(monsters[x][RACE]);
+    ret->set_gender(gender);
+    if (level > monsters[x][SIZE])
+	scale = 10 + (level/(monsters[x][SIZE]+1));
+    else
+	scale = 10 - (monsters[x][SIZE]/level);
+    if (scale < 4) scale = 4;
+    ret->add_siz(monsters[x][SIZE]*scale/10-ret->query_siz());
+    ret->set_wc(monsters[x][WC]*scale/10);
+    ret->set_ac(monsters[x][AC]*scale/10);
+    ret->set_aggressive(monsters[x][AGGRESS]);
+    ret->set_wimpy(monsters[x][WIMP]*(ret->query_max_hp())/100);
+    ret->set_body(body(monsters[x][BODY]));
+    ret->set_damage_type(monsters[x][DTYPE]); /* Jenna Sep 99 */
+    ret->set_can_wander(1);
+    ret->clear_log_me();
+
+    resoul_npc(ret);
+
+    x = index(special, montype);
+    while (x >= 0)
+    {
+	while (stringp(special[x]))
+	    x++;
+	for (y = 0; y < sizeof(special[x]); y+=2)
+	{
+	    int z;
+	    array tmpargs = [ 0, 0, 0, 0, 0, 0 ];
+	    if (pointerp(special[x][y+1]))
+ 	        for (z = 0; z < sizeof(special[x][y+1]); z++)
+		    tmpargs[z] = special[x][y+1][z];
+	    ret->(special[x][y])(tmpargs[0], tmpargs[1], tmpargs[2],
+		tmpargs[3], tmpargs[4], tmpargs[5]);
+#if 0
+/* allowed more than two args - Jenna Dec 99 */
+	    if (!special[x][y+1] || sizeof(special[x][y+1]) == 0)
+		call_other(ret, special[x][y]);
+	    else if (sizeof(special[x][y+1]) == 1)
+		call_other(ret, special[x][y], special[x][y+1][0]);
+	    else if (sizeof(special[x][y+1]) == 2)
+		call_other(ret, special[x][y], special[x][y+1][0], special[x][y+1][1]);
+#endif
+	}
+	x++;
+	y = index(special[x..], montype);
+	if (x > sizeof(special) || y < 0)
+	    x = -1;
+	else
+	    x += y;
+    }
+    return ret;
+}
+
+/*
+ * Restores a saved npc.
+ */
+restore(string name)
+{
+    object ret;
+
+    name = lower_case(name);
+    ret = NPC_PERSIST_SERV->load_npc(name);
+    if (ret) 
+    {
+        resoul_npc(ret);
+        return ret;
+    }
+    return 0;
+}
+
+array  advanced_races = [ 
+    "humanoid",
+    "small humanoid",
+    "dragon",
+    "undead",
+    "golem",
+    "mephit",
+    "archon",
+    "triton",
+    "draconian",
+    "fairy",
+    "giant",
+    "demon",
+    "centaur",
+    "primate"
+    ];
+
+
+array npc_souls = [
+    "obj/souls/movement", "obj/souls/state",
+    "obj/souls/perception", "obj/souls/npc/iq",
+    "obj/souls/support", "obj/souls/communicate" ];
+
+array npc_advanced = [
+    "obj/souls/handle", "obj/souls/emote" ];
+
+resoul_npc(object ret)
+{
+    string race;
+    object o;
+    int i;
+
+    for (i = 0; i < sizeof(npc_souls); i++)
+    {
+        o = clone_object(npc_souls[i]);
+        o->init();
+        ret->add_soul(o);
+    }
+
+    race = ret->query_race();
+    if (index(advanced_races, race) != -1)
+    {
+        for (i = 0; i < sizeof(npc_advanced); i++)
+        {
+            o = clone_object(npc_advanced[i]);
+            o->init();
+            ret->add_soul(o);
+        }
+    }
+
+    setup_commands(ret);
+    NPC_SERV->register_npc(ret);
+}
+
+/*
+ * Ok, this is expensive, needs a rewrite.  As a hack,
+ * we add a little cache here to speed things up,
+ * and build flat arrays.  I'm assuming the arrays need
+ * to be unshared here (which is spastic, but...)
+ * NB: this cuts 40% off creation time for large numbers of monsters.
+ *
+ * But this is still fucking expensive the first time...
+ */
+
+nosave array body_cache = allocate(40);	/* random; 40's fine */
+
+body(descr) {
+    array body, new_bit;
+    int pos, next, sub;
+    string part, oper;
+
+    int slot = index(body_cache, descr);		/* look for the body string */
+    if (slot >= 0)					/* if found */
+	return body_cache[slot+1] + ({ });		/* return a copy of the array (they're flat) */
+
+    slot = index(body_cache, 0);			/* else find an unused slot */
+    if (slot < 0)					/* if none */
+	slot = random(sizeof(body_cache)/2) * 2;	/* we'll overwrite a random slot */
+
+    string odesc = descr;
+
+    descr = "+"+descr;
+    body = ({});
+    while (descr && descr != "")
+    {
+	oper = descr[0..0];
+	descr = descr[1..];
+	pos = index(descr, '+');
+	if (pos < 0) pos = sizeof(descr);
+	next = index(descr, '-');
+	if (next < 0) next = sizeof(descr);
+	if (next < pos) pos = next;
+	next = index(descr, '}');
+	if (next < 0) next = sizeof(descr);
+	if (next < pos) pos = next;
+	part = descr[0..pos-1];
+	if (part[0] == '{' && descr[pos] == '}')
+	{
+	    new_bit = STRINGS->split_first(part[1..], ",");
+	    if (!new_bit)
+		new_bit = ({ part[1..], 0 });
+	    pos++;
+	}
+	else if (part[0] == '[' && descr[pos] == ']')
+	{
+	    new_bit = test(part[1..]);
+	    if (!pointerp(new_bit)) return 0;
+	}
+	else
+	{
+	    next = index(bodies, part);
+	    if (next < 0) 
+		return 0;
+	    new_bit = bodies[next+1];
+	}
+	if (oper == "+")
+	    body += new_bit;
+	else if (oper == "-")
+	    for (sub = 0; sub < sizeof(new_bit); sub += 2)
+	    {
+		next = index(body, new_bit[sub]);
+		if (next >= 0)
+		    body = body[..next-1]+body[next+2..];
+	    }
+	descr = descr[pos..];
+    }
+    body_cache[slot] = odesc;
+    body_cache[slot+1] = body + ({ });
+    return body;
+}
+
+test(montype)
+{
+    int x;
+    array thing;
+
+    if (!montype) return 0;
+    if (montype == "monster_types" || montype == "body_types" || 
+	montype == "special_types")
+    {
+	if (montype == "monster_types")
+	    thing = monsters;
+	else if (montype == "body_types")
+	    thing = bodies;
+	else if (montype == "special_types")
+	    thing = special;
+	for (x = 0; x < sizeof(thing); x++)
+	    if (stringp(thing[x]))
+		write(thing[x]+((x < sizeof(thing)-2)?", ":"\n"));
+	return;
+    }
+    if (montype == "races") {
+	write(implode(query_races(),", ")+"\n");
+	return;
+    }
+    x = index(monsters, montype);
+    if (x < 0) return 0;
+    while(stringp(monsters[x]))
+	x++;
+    return body(monsters[x][BODY]);
+}
+
+nosave int state;
+nosave array new;
+nosave int pos;
+
+new_monster(montype)
+{
+    if (this_player()->query_wiz() < SENIOR) return 0;
+    state = -1;
+    if (!montype)
+    {
+	write("call new_monster with the type of the monster.\n");
+	return 0;
+    }
+    montype = lower_case(montype);
+    if (index(monsters, montype) >= 0)
+    {
+	write("That monster type exists already.\n");
+	return 0;
+    }
+    new = ({montype, 0});
+    input_to("new_monst2");
+    write("Enter type of similar monster (return for new one)\n");
+    return 1;
+}
+
+new_monst2(reply)
+{
+    if (state == -1)
+	if (!reply || reply == "")
+	{
+	    new[1] = allocate(DTYPE+1);
+	    state++;
+	    write("Enter aliases, separated by commas (no spaces), for this monster\n");
+	}
+	else
+	{
+	    pos = index(monsters, reply);
+	    if (pos < 0)
+		write("Cannot find that type.\nEnter type of similar monster(return for none)\n");
+	    else
+	    {
+		monsters = monsters[..pos]+({new[0]})+monsters[pos+1..];
+		save_object(SAVE_FILE);
+		return 1;
+	    }
+	}
+    else if (state == ALIAS)
+    {
+	if (!reply || reply == "")
+	    new[1][ALIAS] = 0;
+	else
+	    new[1][ALIAS] = explode(reply, ",");
+	write("enter the race:");
+	state++;
+    }
+    else if (state == RACE)
+	if (!reply || reply == "")
+	    write("enter the race:");
+	else
+	{
+	    new[1][RACE] = reply;
+	    write("enter typical size (note, this is also the typical level)\n");
+	    state++;
+	}
+    else if (state == SIZE)
+    if (!reply || reply == "")
+	    write("enter typical size (note, this is also the typical level)\n");
+	else
+	{
+        pos = atoi(reply);
+	    new[1][SIZE] = pos;
+	    write("enter typical weapon class:");
+	    state++;
+	}
+    else if (state == WC)
+	if (!reply || reply == "")
+	    write("enter typical weapon class:");
+	else
+	{
+        pos = atoi(reply);
+	    new[1][WC] = pos;
+	    write("enter typical armour class:");
+	    state++;
+	}
+    else if (state == AC)
+	if (!reply || reply == "")
+	    write("enter typical armour class:");
+	else
+	{
+        pos = atoi(reply);
+	    new[1][AC] = pos;
+	    write("Is this an agressive monster? (y/n)\n");
+	    state++;
+	}
+    else if (state == AGGRESS)
+    {
+	if (reply == "y" || reply == "yes")
+	    new[1][AGGRESS] = 1;
+	else if (reply == "n" || reply == "no")
+	    new[1][AGGRESS] = 0;
+	else
+	{
+	    write("Is this an agressive monster? (y/n)\n");
+	    state--;
+	}
+	state++;
+	if (state != AGGRESS)
+	    write("What % of full hp will this type of monster flee on?\n");
+    }
+    else if (state == WIMP)
+	if (!reply || reply == "")
+    {
+	    write("What % of full hp will this type of monster flee on?\n");
+    }
+	else
+	{
+        pos = atoi(reply);
+	    new[1][WIMP] = pos;
+	    write("What body equation for this monster?\n");
+	    state++;
+	}
+    else if (state == BODY)
+	if (!body(reply))
+	{
+	    write("What body equation for this monster?\n");
+	    write("eg. fish, quadruped+wings, biped-{head}+{tentacle,3s*} etc\n");
+	}
+	else
+	{
+	    new[1][BODY] = reply;
+	    write("What damage type will this monster do with no weapon? "+
+			"(e.g. cut, impact...)\n");
+	    state++;
+	  }
+    else if (state == DTYPE)
+        if (!reply || reply == "")
+        {
+		write("What damage type will this monster do with no weapon? "+
+			"(e.g. cut, impact...)\n");
+        }
+        else
+        {
+ 	    new[1][DTYPE] = reply;
+	    write("Ok, here's how it looks:\nType: "+new[0]+"\n");
+	    write("   Aliases:      "+((new[1][ALIAS]) ? implode(new[1][ALIAS], ", "):"none")+"\n");
+	    write("   Race:         "+new[1][RACE]+"\n");
+	    write("   Typical Size: "+new[1][SIZE]+"\n");
+	    write("   Typical WC:   "+new[1][WC]+"\n");
+	    write("   Typical AC:   "+new[1][AC]+"\n");
+	    write("   Aggressive:   "+((new[1][AGGRESS]) ? "Yes":"No")+"\n");
+	    write("   Wimpy:        "+new[1][WIMP]+"%\n");
+	    write("   Body:\n"+ dump_body_array(body(new[1][BODY]))+"\n");
+	    write("   Damage Type:  "+new[1][DTYPE]+"\n");
+	    write("\n\nCommit this monster (yes) ?");
+	    state++;
+	}
+    else if (state == DTYPE+1)
+	if (reply == "yes")
+	{
+	    monsters += new;
+		save_object(SAVE_FILE);
+	    write("Ok.  Done.\n");
+	    return 1;
+	}
+	else 
+	{
+	    write("Ok.  Abandoning "+new[0]+".\n");
+	    return 1;
+	}
+    input_to("new_monst2");
+}
+
+new_special(montype)
+{
+    if (this_player()->query_wiz() < SENIOR) return 0;
+    state = 0;
+    if (!montype)
+    {
+	write("call new_special with the type of the monster.\n");
+	return 0;
+    }
+    montype = lower_case(montype);
+    if (index(monsters, montype) < 0)
+    {
+	write("That monster type does not exist.\n");
+	return 0;
+    }
+    pos = index(special, montype);
+    if (pos >= 0)
+	write("current special calls for "+montype+":\n");
+    while (pos >= 0)
+    {
+	int i;
+
+	while (stringp(special[pos]))
+	    pos++;
+	for (i = 0; i < sizeof(special[pos]); i+=2)
+	    write(special[pos][i]+"("+my_list(special[pos][i+1])+");\n");
+	pos++;
+	i = index(special[pos..], montype);
+	if (i < 0 || pos > sizeof(special))
+	    pos = -1;
+	else
+	    pos += i;
+    }
+    new = ({montype, 0});
+    input_to("new_spec2");
+    write("Enter type of monster with same special (return for new one)\n");
+    return 1;
+}
+
+my_list(arr)
+{
+    int i;
+    string ret;
+    string fore, after;
+    array line;
+
+    for (i = 0; i < sizeof(arr); i++)
+    {
+	if (!ret)
+	    ret = "";
+	else
+	    ret += ", ";
+	if (stringp(arr[i]))
+	{
+	    after = arr[i];
+	    ret += "\"";
+	    line = STRINGS->split_first(after, "\n");
+	    while (line)
+	    {
+		ret += line[0] + "\\n";
+		line = STRINGS->split_first(line[1], "\n");
+	    }
+	    ret += after+"\"";
+	}
+	else ret += arr[i];
+    }
+    return ret;
+}
+
+new_spec2(reply)
+{
+    if (state == 0)
+	if (!reply || reply == "")
+	{
+	    new[1] = ({});
+	    state++;
+	    write("Enter function name (return to finish, ~q to abort, ~l to list)\n");
+	}
+	else
+	{
+	    pos = index(special, reply);
+	    if (pos < 0)
+		write("Cannot find that type.\nEnter type of monster with same special (return for new one)\n");
+	    else
+	    {
+		special = special[..pos]+({new[0]})+special[pos+1..];
+		save_object(SAVE_FILE);
+		write("Ok.  Inserted.\n");
+		return 1;
+	    }
+	}
+    else if (state == 1)
+	if (!reply || reply == "" || reply == "~q" || reply == "~l")
+	    if (sizeof(new[1]) && reply != "~q" && reply != "~l")
+	    {
+		special += new;
+		save_object(SAVE_FILE);
+		write("Ok.  Inserted.\n");
+		return 1;
+	    }
+	    else if (reply == "~l")
+	    {
+		int i;
+
+		for (i = 0; i < sizeof(new[1]); i+=2)
+		    write(new[1][i]+"("+my_list(new[1][i+1])+");\n");
+		write("Enter function name (return to finish, ~q to abort, ~l to list)\n");
+	    }
+	    else
+	    {
+		write("Aborting.\n");
+		return;
+	    }
+	else
+	{
+	    new[1] += ({reply, ({})});
+	    write("how many parameters?\n");
+	    state++;
+	}
+    else if (state == 2)
+	if (!reply || reply == "")
+	    write("how many parameters?\n");
+	else
+	{
+        pos = atoi(reply);
+	    state++;
+	    if (pos)
+		write("enter param 1:\n");
+	    else
+	    {
+		state = 1;
+		write("Enter function name (return to finish, ~q to abort, ~l to list)\n");
+	    }
+	}
+    else
+    {
+	new[1][sizeof(new[1])-1] += ({to_param(reply) });
+	state++;
+	if (state < 3+pos)
+	    write("enter param "+(state - 2)+":\n");
+	else
+	{
+	    state = 1;
+	    write("Enter function name (return to finish, ~q to abort, ~l to list)\n");
+	}
+    }
+    input_to("new_spec2");
+}
+
+to_param(str)
+{
+    int ret;
+    int len, pos, prev;
+    string result;
+    array args;
+
+    if (!str || str == "") return 0;
+
+    ret = atoi(str);
+    if (str == "" + ret)
+	return ret;
+    if (str[0] == '"')
+    {
+	pos = index(str, "\"", 1);
+	len = strlen(str);
+	if (pos == len - 1)
+	{
+	    result = "";
+	    prev = 0;
+	    str = str[1..len - 2];
+	    while ((pos = index(str, "\\n", prev)) != -1)
+	    {
+		result += str[prev..pos - 1] + "\n";
+		prev = pos + 2;
+	    }
+	    return result + str[prev..];
+	}
+    }
+    return str;
+}
+
+/* query_monster_info : by Hunter of Shattered Worlds */
+
+query_monster_info(montype, level) {
+int x, y;
+int scale;
+string ReturnString;
+
+    if (!montype || !level) return monsters;
+    x = index(monsters, montype);
+    if (x < 0)
+    {
+	return;
+    }
+	ReturnString = capitalize(montype)+"\n\n"; 
+    while(stringp(monsters[x]))
+	x++;
+    ReturnString += "Race : "+monsters[x][RACE]+"\n";
+    if (level > monsters[x][SIZE])
+	scale = 10 + (level/monsters[x][SIZE]);
+    else
+	scale = 10 - (monsters[x][SIZE]/level);
+    if (scale < 4) scale = 4;
+    ReturnString += "Size : "+(monsters[x][SIZE]*scale/10)+"\n";
+    ReturnString += "Weapon Class : "+(monsters[x][WC]*scale/10)+"\n";
+    ReturnString += "Armor Class : "+(monsters[x][AC]*scale/10)+"\n";
+    ReturnString += "Damage Type: "+(monsters[x][DTYPE])+"\n";
+    ReturnString += "Aggressiveness : "+(monsters[x][AGGRESS])+"\n";
+    ReturnString += "Wimpy : "+(monsters[x][WIMP])+"%\n\n";
+
+    ReturnString += "Body array :\n";
+    ReturnString += dump_body_array(test(montype)) +"\n";
+	
+/* need dump of body array */
+    x = index(special, montype);
+    while (x >= 0)
+    {
+	ReturnString += "Special function calls:\n"; 	
+	while (stringp(special[x]))
+	    x++;
+	for (y = 0; y < sizeof(special[x]); y+=2)
+	{
+	    if (!special[x][y+1] || sizeof(special[x][y+1]) == 0)
+		ReturnString += special[x][y]+"()\n";
+	    else if (sizeof(special[x][y+1]) == 1)
+		ReturnString += special[x][y]+"("+special[x][y+1][0]+")\n";
+	    else if (sizeof(special[x][y+1]) == 2)
+		ReturnString += special[x][y]+"("+special[x][y+1][0]+","+
+			special[x][y+1][1]+")\n";
+	}
+	x++;
+	y = index(special[x..], montype);
+	if (x > sizeof(special) || y < 0)
+	    x = -1;
+	else
+	    x += y;
+    }
+    return ReturnString;
+}
+
+query_bodies() { return bodies; }
+
+dump_body_array(bod) {
+int count;
+string ret;
+	ret = "";
+    	for(count = 0; count < sizeof(bod); count += 2) {
+		ret += "{"+bod[count]+","+bod[count+1]+"} ";
+		} 
+	ret += "\n";
+	return ret;
+}
+
+/* find all monsters of race 'montype' */
+/* returns flat array of strings == names */
+query_race_members(montype) {
+array out;
+int i, w;
+	out = ({ });
+	i = sizeof(monsters)-1;
+	while (i >= 0) {
+	    if (pointerp(monsters[i])) { w = (montype == monsters[i][RACE]); }
+	    else {
+		if (w) out += ({ monsters[i] });
+	    }		
+            i += -1;	
+	}
+	return out;
+}
+
+query_races() {
+int i;
+int x;
+array races;
+string race;
+	races = allocate(sizeof(monsters));
+	x = (-1);
+	for (i = 0; i < sizeof(monsters); i ++) {
+	    if (pointerp(monsters[i]) && index(races, race = monsters[i][RACE]) < 0)
+		races[++x] = race;
+	}
+	return races[..x];
+}
+
+query_monsters() { return monsters; }
+
+/* wizard query function => reports all races and members */ 
+/* "more" type output */
+
+nosave array r;
+
+nosave race_more(str) {
+    write("\n");
+    list_races(r);
+}
+
+list_races(montype) {
+int i;
+array races;
+	if (montype) {
+	    if (stringp(montype)) {
+	    write(montype+("............"[sizeof(montype)..])+": "+
+		implode(query_race_members(montype), ", ")+".\n");
+	    return;
+	    } else if (pointerp(montype)) races = montype;
+	    else return;
+	}
+	else races = query_races();
+	for (i = 0; i < sizeof(races); i ++) {
+	    list_races(races[i]);
+	    if (i > 19) {
+		r = races[21..]; 
+		write("-------- press enter to continue -------"); 
+		input_to("race_more");
+		return;
+	    }
+	}
+} 		 		
+
+/*
+ * Ormuzd 950727: Allows NPCs to use souls that they have (in combat).
+ * 950922 Fixed - G.  Was fucking up all monster creation.
+ */
+
+setup_commands(ob) 
+{
+    string ob_race= ob->query_std_mon_type();
+    object soul;
+    string ssoul;
+    array locals = [];
+
+    ssoul = "obj/souls/npc/"+ob_race;
+    soul=load_object(ssoul);
+    if (!soul) soul = clone_object("obj/souls/npc/general");
+    else soul = clone_object(ssoul);
+    soul->init();
+    ob->add_soul(soul);
+    // FIX:
+    // locals=localcmd(ob);
+    ob->add_commands(locals);
+}
+

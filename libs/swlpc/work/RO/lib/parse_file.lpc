@@ -1,0 +1,131 @@
+
+/*
+ * scriptfile reader, 941029 Llati
+ */
+
+/* filterscript
+ * filter a string into array
+ * Lines starting with a '#' are ignored.
+ * Lines finishing with a '\' are concatenated
+ *
+ * Match is an array of strings which should be matched in the file
+ * The function is case independant.
+ *
+ * Types are the type of object to be read.
+ *
+ * IMPORTANT: It is assumed that the first element in match starts
+ *            a new definition in the incoming string. There MUST be
+ *            a corresponding entry in the incoming string! 
+ *
+ * It returns a 2D array of all the ones it could match with.
+ */
+
+#include <Servers.h>
+
+#include "parse_types.h"
+
+#define DEBUG 0
+
+
+array filterscript(array match,array types,string str) {
+array in,out = [ ], record;
+int i,x,equ,last = -1;
+string field, line;
+
+	if (!str) return [ ];
+	in = explode(str, "\n");
+	for (i = sizeof (match); i--; )  
+		match [i] = lower_case (match[i]);
+
+	in = build_data (in);
+	for (i = 0; i < sizeof (in); i++) {
+		line = in[i];
+#if DEBUG		
+	DUMP -> dump (line);	
+	DUMP -> dump (record);
+#endif	
+		equ = index (line, "=");
+		field = line[..equ-1];	
+	  field =  STRINGS -> strip_whitespace(field);
+	  x = index (match, lower_case (field));
+	  if (x < 0) {
+	  	write ("Unknown label used (" + field + ") in line (" + line + ").\n");
+	  	return 0;
+	  	}
+	  if (!x) {
+	  	/* Start a new record */
+	  	if (record) out += [ record ] ;
+	  	record = allocate (sizeof (match));
+	  	last = -1;
+	  	}
+	  if (record[x]) {
+	  	write ("Attempting to overwrite a previous setting (" + record[x] + ") with (" + line + ")\n");
+	  	return 0;
+	  	}
+	  /* Now we just need to clean up the rest of the line */
+	  line =  STRINGS -> strip_whitespace(line[equ+1..]);	
+	  /* If res is a null string the slot will be left as zero */
+	  if (sizeof (line)) {
+	  	record[x] = make_type (line,types[x]);
+			}
+		}	
+	if (record) out += [ record ];	
+#if DEBUG	
+	DUMP -> dump (out);
+#endif	
+	return out ;
+}	
+	
+(int|real|string|array) make_type	(string data,int type) {
+
+	if (type == STRING) return STRINGS -> strip_whitespace(data);
+	if (type == INT) return atoi (data);
+	if (type == REAL) return ator (data);
+	if (type & VAR_ARGS) {
+		array result= [ ],elem; 
+		int i;
+
+		elem = explode (data,",");
+		for (i = 0; i < sizeof (elem); i++) 
+			result += [ make_type (elem[i],type^VAR_ARGS) ];
+		return result;
+		}	
+	if (pointerp (type)) {
+		array result,elem; 
+		int i,front = -1,back;
+
+		result = allocate (sizeof (type));
+		elem = explode (data,",");
+		if  (sizeof (type) != sizeof (elem)) {
+		  throw "Not enough elements for the data structure in the line (" + data + ") got " + sizeof (elem) + " needed " + sizeof (data) + ".\n";
+		  return;
+		  }
+		for (i = 0; i < sizeof (type) && i < sizeof (elem); i++ ) {
+			result[i] = make_type (elem[i],type[i]);
+		}
+		return result;
+	}
+	throw "Undefined data type in data definition.\n";
+}	
+
+
+/* Throw away comments. Concatenate lines that dont have an = in them */
+array build_data (array temp) {
+int i ,size;
+array out = [ ];
+string s;
+
+	size = sizeof (temp);
+	for (i = 0; i < size; i++) { 
+		s = STRINGS -> strip_whitespace(temp[i]);
+		if (!sizeof (s)) continue;
+		if (s[0] == '#') continue;
+		if (index (s,"=") >=0) {
+			out += [ s ];
+			}
+		 else {
+		  out[sizeof (out)-1] += "\n"+s;
+		 }
+	}
+	return out;
+}

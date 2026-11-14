@@ -1,0 +1,215 @@
+/* 000704 - Greebo - added clear_inactive_citizens to purge inactives */
+
+/*================================================================= */
+/* CITIZEN SERVER - Holds records of citizens and wanna-be citizens */
+/*================================================================= */
+
+
+inherit "RO/base_object";
+#include <law.h>
+
+
+string citizens[0];	/* Array of current citizens */
+string emails[0];	/* Parallel array of citizen emails */
+int last_on[0];	/* Parallel array of when they were last here */
+
+reset(arg) { 
+	::reset (arg);
+	if (arg) return ;
+	add_id ( ({"serv","citizen_serv" }) );
+	restore_object(file_name(this_object()));
+	call_out("clear_inactive_citizens", 30);
+}
+
+save_me() { 
+	if ("secure/which_mud"->is_wiz_mud())  return;
+	save_object(file_name(this_object())); 
+	}
+
+int add_citizen(string who,string email)  {
+int i;
+
+   if(index(citizens, who)!=-1) return 0;
+who = lower_case(who);
+   citizens+=({ who });
+   emails+=({ email });
+   last_on += ({time() });
+   save_me();
+   return 1;
+}
+
+int remove_player (string who) {
+  NEW_CITIZEN_SERV -> remove_applicant (who);
+	return remove_citizen (who);
+}	
+	
+
+string remove_citizen(string who)  {
+int i;
+string address;
+
+  if((i=index(citizens, who)) < 0) return 0;
+  address = emails [i];
+	citizens=citizens[..i-1] + citizens[i+1..];
+	emails=emails[..i-1]+emails[i+1..];
+	last_on = last_on [..i-1] + last_on [i+1..];
+  save_me();
+  return address;
+}
+
+int update_citizen (string who) {
+int i;
+
+  if((i=index(citizens, who)) < 0) return 0;
+  last_on[i] = time();
+  emails[i] = find_player(who)->query_store("email");
+  AUTOSAVE_SERV -> set_auto_save (this_object());
+  return 1;
+}
+
+show_stats()  {
+int j;
+
+	::show_stats();
+	if(!citizens) { write("Load failure.\n"); return; }
+	write("Number of citizens = "+sizeof(citizens)+"\n");
+	for(j=0;j<sizeof(citizens);j++)  {
+		write("\n  "+capitalize(citizens[j])+" ... (email) "+emails[j]+ 
+		   "\n\t Last on : " + ctime (last_on[j]) ); 
+   }
+   write ("\n");
+   return 1;
+}
+
+/* If they are a citizen returns the last time they were on */
+int query_citizen(string who) {
+int i;
+who = lower_case(who);
+   if((i = index(citizens, who))==-1) return 0;
+   return last_on[i];
+}
+
+(int|string) query_email (string who) {
+int i;
+   if((i = index(citizens, who))==-1) return 0;
+   return emails[i];
+}
+
+query_num_citizens() { return sizeof(citizens); }
+
+query_active()
+{
+    return query_active_since(time() - 604800);
+}
+
+string query_all_citizens (pretty, noemail) {  /* Just list em all */
+    string out;
+    int i, size;
+
+    out = "  Citizen                     Last Visit";
+    if (!noemail)
+	out += "    E-mail";
+    out += "\n-------------------------------------------------------------------\n";
+    for (i = 0; i < sizeof(citizens); i++) {
+	out += "  ";
+	out += FORMAT->left_justify(pretty ? ENGLISH->pretty_name(citizens[i]) :
+			                     capitalize(citizens[i]), 28);
+	out += ctime(last_on[i])[..10] + "  ";
+	if (!noemail)
+	    out += emails[i];
+	out += "\n";
+	}
+    out += "Active players -- 1 day: " + query_active_since (time() - 86400) +
+               ", 1 week: " +   query_active_since (time() - 604800) + 
+               ", 3 weeks: " + query_active_since (time() - 1814400) + "\n";
+    return out;
+    }
+
+#if 0
+string query_all_citizens (pretty, noemail) {  /* Just list em all */
+array out;
+string space = "               "; /* 15 spaces */
+int i, size;
+
+  size = sizeof (citizens);
+	out = allocate (size+1);
+	for (i = size; i --; ) {
+		out [i] = capitalize (citizens[i]) + space [sizeof (citizens[i])..];
+		out [i] += ctime (last_on[i])[..10] + "   " + emails[i] ;
+		}
+	out [size] = "Active players -- 1 day: " + query_active_since (time() - 86400) +
+	               ", 1 week: " +  	query_active_since (time() - 604800) + 
+	               ", 3 weeks: " + query_active_since (time() - 1814400) ;
+	return "Name           Last on       Email\n" + implode (out,"\n");
+}	
+#endif
+
+list_all_citizens() { return query_all_citizens(1, 1); }
+
+/* Number of citizens logged in between 'since' and now */
+int query_active_since ( int since) 
+{
+int i,count=0;
+
+	for (i = sizeof (last_on); i--;) {
+		if (last_on[i] > since) count ++;
+		}
+	return count;
+}
+
+query_active_citizens(int since)
+{
+    int i,count=0, x;
+
+	for (i = sizeof (last_on); i--;) 
+    {
+		if (last_on[i] > since) count ++;
+	}
+
+    array who = allocate(count);
+
+	for (i = sizeof (last_on); i--;) 
+    {
+        if (last_on[i] > since)
+        {
+            who[x] = citizens[i];
+            x++;
+        }
+	}
+    return who;
+}
+	
+clear_inactive_citizens()
+{
+	int i,count,x=0;
+
+	for (i = sizeof(last_on); i--;) 
+	{
+		if (last_on[i] < (time() - 4838400)) count++;
+	}
+
+	if (count) {
+		array who = allocate(count);
+	
+		for (i = sizeof(last_on); i--;) 
+		{
+			if (last_on[i] < (time() - 4838400))
+			{
+				who[x] = citizens[i];
+				x++;
+			}
+		}
+		for (i = sizeof(who); i--;)
+		{
+			remove_citizen(who[i]);
+		}
+		LAW_BOARD->create_note("Law Scribes",
+		    "Citizenship revoked",
+		    "\nThe Law Offices wish to advise that due to inactivity" +
+		    " as stipulated in law 543, the following players have" +
+		    " had their citizenship revoked:\n\n" +
+		    implode(STRINGS->cap_array(who), ", ") + ".\n");
+        }
+	return 1;
+}
+

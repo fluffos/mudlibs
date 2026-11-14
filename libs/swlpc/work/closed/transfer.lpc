@@ -1,0 +1,116 @@
+/*
+ * Money Handling Functions
+ *
+ * Exist to try and maintain a 0-leak economy for money.
+ *
+ * Dredd 1992 - Part of the Economy Package for Shattered World.
+ *
+ * 19950214 Paladin Added code so when this move money in the bank
+ *			it will try and identify what caused this.
+ * 19980824 Dredd Added shift_money() function
+ */
+
+inherit "RO/Servers";
+
+#define MAX_COINS 100000000
+move_money((int) amount, (object|string) from, (object|string) target)
+{
+    object mon;
+
+	if (amount <= 0 || amount > MAX_COINS) 
+    { 
+	/* strangeness happening! - abort */
+		return;
+	}
+
+	if (stringp(from)) {
+		BANK->add_account(from, -amount);		
+	}
+	else 
+    {
+		if (!from->is_money()) 
+        { 
+            /* ok - it's not a money object! */
+			if (from->query_living()) 
+            {
+				if (from->query_money() < amount) return 0;
+				from->add_money(-amount);
+				if (amount > 1000 && from->is_player())
+					from->save_me();
+			}
+			else /* where the fuck else does money come from? */
+			    BANK->add_account("#stolen", -amount);
+		}
+	}
+
+	if (stringp(target)) 
+    {
+		object clr;	/* So we can try to track what moves the money */
+		if (caller()) clr = caller();
+		else clr = this_object();
+		BANK->add_account(target, amount, clr);		
+	}
+	else 
+    {
+		if (!target->is_money()) 
+        { 
+            /* ok - it's not a money object! */
+			if (target->query_living()) target->add_money(amount, from);
+			else  
+            {
+				mon = MONEYER->make(amount);
+				move_object(mon, target);
+			}
+		}
+		else 
+        {
+            target->add_money(amount);
+		}
+	}
+	return 1;
+}
+
+/*
+ * Requires from/to to have query_money(), add_money() functions
+ * Bank free transaction - LOGS leaks
+ *
+ * Returns: 0 - failed, 1 - ok.
+ */
+int
+shift_money(int amount, object from, object to)
+{
+    int f, t, dif, nf, new_dif;
+
+	if (amount < -MAX_COINS || amount > MAX_COINS) 
+        return 0;
+    
+    if (amount == 0) return 1;
+    
+    f = from->query_money();
+    t = to->query_money();
+    dif = t - f;
+
+    from->add_money(-amount);
+    to->add_money(amount);
+
+    nf = from->query_money();
+    if (nf == f)
+    {
+        LOG->log("LEAKS", "Money leak (1) from "+file_name(caller())+"(" +
+                file_name(from) + "," + file_name(to) + ")\n");
+        return 1;
+    }
+    t = to->query_money();
+    new_dif = t - nf;
+
+    if (dif != new_dif)
+    {
+        LOG->log("LEAKS", "Money leak (2) from "+file_name(caller())+"(" +
+                file_name(from) + "," + file_name(to) + ")\n");
+        return 1;
+    }
+
+    return 1;
+}
+
+

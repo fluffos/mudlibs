@@ -1,0 +1,351 @@
+/*
+ * Remote Function Caller
+ *
+ * Author:
+ *  Aaron Wigley <wigs@yoyo.cc.monash.edu.au> (aka Hunter)
+ * Abstract:
+ *  Using the Shattered Worlds Game driver dgram service, provide a
+ *  mechanism to call arbitary functions in arbitary remote objects.
+ * Security Considerations:
+ *  This may seem to be unsecure, but all this code provides is a transport
+ *  mechanism that is very easy to use without knowledge of datagrams.
+ *  Security services should be implemented elsewhere.
+ *
+ * History:
+ *  950421 Hunter   	prototype
+ *  950525 Hunter   	prototype finally works! Yay!
+ *  950529 Hunter   	changed address specification for remote_call()
+ *  950612 Hunter   	added callback ticket information
+ *  950814 Hunter   	fixed callback bug
+ */
+
+#include <security.h>
+#include <types.h>
+#include <Consts.h>
+
+inherit "RO/cap_user";
+inherit "RO/cap_provider";
+inherit "RO/Servers";
+
+#define RCALL_CAP "rcall"
+
+#define RCALL_OUT 	0x01
+#define RCALL_RESULT 	0x02
+#define RCALL_NO_OBJ 	0x03
+#define RCALL_NO_FUNC	0x04
+
+#define RETRY_TIME 30
+#define MAX_FAILS 4
+
+/*
+ * Type declarations
+ */
+#define Address (array|string)
+
+/*
+ * Macros
+ */
+#if 0
+#define DEBUG(x) if (find_living("hunter")) \
+	tell_object(find_living("hunter"), "RCALL: "+x+"\n");
+#else
+#define DEBUG(x) 
+#endif
+
+/*
+ * error return values
+ */
+#define ERR_NONE	0
+#define ERR_UNKNOWN	-1
+#define ERR_BAD_HOST	-2
+#define ERR_NO_HOSTS	-3
+#define ERR_UNKNOWN_CALL	-4
+#define ERR_UNKNOWN_CALL_AT_TX	-5
+
+/*
+ * Global Vars
+ */
+
+nosave int nextTicket;
+nosave array callsWaiting;
+nosave array callsGot;
+
+/*
+ * initial setting up
+ */
+reset(arg) 
+{
+    invalidate_cap( RCALL_CAP );
+    OBJ_DATAGRAM_SERV->request_service( RCALL_CAP, make_cap(RCALL_CAP, 0) ); 
+    if (arg) 
+	return;
+    nextTicket = 0;
+    callsWaiting = ({ });
+}
+
+dg_capability (int dg_cap, int verify_cap) 
+{
+    if ( auth_user( RCALL_CAP, verify_cap ) ) 
+    {
+        add_cap( RCALL_CAP, dg_cap );
+    }
+}    
+    
+
+/*
+ * log a new call:
+ *  - assign it a ticket number
+ *  - add it to the calls waiting
+ *  - find the host it should go to
+ */
+nosave int
+new_call(
+    Address addr, 		/* where we are sending the info to? */
+    (object|string) sender, 	/* who from this end is sending it */
+    string callbackfunc, 	/* how to advise a response? */
+    string robj,		/* remote object */ 
+    string rfunc, 		/* remote function */
+    unknown arg1, 		/* single argument to pass */
+    unknown callbackticket	/* when we callback, something to give */
+    )
+{
+array newinfo;
+int thisTicket = nextTicket;
+int addrExists;
+Address addrtest;
+    addrtest = RHOST_SERV->query_host( addr );
+    if ( intp(addrtest) )
+    {
+	return ERR_BAD_HOST;
+    }
+    if (pointerp(addrtest))	
+    {
+	addr = addrtest;
+    }
+    newinfo = ({ thisTicket, 0, addr, sender, callbackfunc, robj, 
+	rfunc, arg1, callbackticket });
+    nextTicket ++;
+    callsWaiting += ({ newinfo });
+    return thisTicket;
+}
+
+
+/*
+ * transmit the call, as if it has not been transmitted before
+ */
+int 
+tx_call( int jobNumber )
+{
+int i;
+int pos = -1;
+array callinfo;
+    for (i = sizeof(callsWaiting)-1; i >= 0; i --)
+    {
+	if ( jobNumber == callsWaiting[i][0] )
+	{
+	    pos = i;
+	    break;
+	}
+    }
+    if ( pos == -1 )
+    {
+	/* unknown call! */
+	return ERR_UNKNOWN_CALL_AT_TX;
+    }
+    callinfo = callsWaiting[pos];
+
+    OBJ_DATAGRAM_SERV->tx_dgram( RCALL_CAP, lookup_cap(RCALL_CAP), 
+	callinfo[2], ({ RCALL_OUT, callinfo[0], callinfo[5], 
+	callinfo[6], callinfo[7] }) );
+    callinfo[1] ++;	/* increment call out count */
+    return 1;
+}
+
+void
+tx_reply( Address where, int jobNumber, unknown result )
+{
+DEBUG( "tx_reply: replying to #"+jobNumber )
+    OBJ_DATAGRAM_SERV->tx_dgram( RCALL_CAP, lookup_cap(RCALL_CAP),
+	where, ({ RCALL_RESULT, jobNumber, result }) );
+}
+
+
+/*
+ * We've got a response from the remote rcall server, so
+ * look up which object it belongs to
+ */
+int 
+rcall_result( int jobNumber, ret )
+{
+int i;
+int pos = -1;
+array callinfo;
+DEBUG( "got rcall reply for job "+jobNumber )
+    for (i = sizeof(callsWaiting)-1; i >= 0; i -- )
+    {
+	if ( jobNumber == callsWaiting[i][0] )
+	{
+	    pos = i;
+	    break;
+	}
+    }
+    if ( pos == -1 )
+    {
+	/* unknown call! */
+	return ERR_UNKNOWN_CALL;
+    }
+    callinfo = callsWaiting[pos];
+DEBUG( "this matches to job #" + pos )
+/* ({ nextTicket, 0, ftp_from, sender, callbackfunc, robj,  rfunc, arg1 }); */
+DEBUG( "calling callback" )
+    catch callinfo[3]->(callinfo[4])( ret, callinfo[8] ); ;
+DEBUG( "callback done" )
+    callsWaiting = callsWaiting[..pos-1] + callsWaiting[pos+1..];
+DEBUG("removed from list")
+    return 1;
+}
+
+/*
+ * Entry Point:
+ *  - provide the IP address of the object, information about the
+ *    destination object, the calling object's callback hook, and
+ *    the argument (one only)
+ */
+int
+remote_call( 
+    Address addr, 		/* where to send info? */
+    string callbackfunc, 	/* what function will get return value?*/
+    string robj, 		/* remote object's name */
+    string rfunc, 		/* remote function */
+    unknown arg1,		/* single arg to pass over */
+    unknown callbackticket	/* info (optional) to gve back to 
+				 * callback function */
+    )
+{
+int ticket;
+object obj = caller();
+int tx_result;
+    ticket = new_call( addr, obj, callbackfunc, robj, rfunc, arg1,
+	callbackticket );
+    if (ticket < 0)
+	return ticket;
+    tx_result = tx_call( ticket );
+    if (tx_result < 0)
+	return tx_result;
+    return 1;
+}
+
+string
+debug_packet( data )
+{
+    if (data[0] == RCALL_OUT) 
+    {
+	return "<call request: \""+data[2]+"\"->"+data[3]+"(...)>";
+    }
+    if (data[0] == RCALL_NO_OBJ)
+    {
+	return "<reply: no object>";
+    }
+    if (data[0] == RCALL_NO_FUNC)
+    {
+	return "<reply: no function>";
+    }
+    if (data[0] == RCALL_RESULT)
+    {
+	return "<reply to "+data[1]+": return>";
+    }
+    return "unknown packet";
+}
+
+/*
+ * check if we have received a response yet for a call?
+ */
+retry( int jobNumber )
+{
+}		
+
+
+/*
+ * Yay! We've just recieved a packet from someone. What is it?
+ */
+recv( int verify_cap, array calling_ip, array data ) 
+{
+    if (!auth_user (RCALL_CAP, verify_cap)) 
+	return;
+DEBUG( "recv: authorised. sender "+calling_ip[0]+"."+calling_ip[1]+"."
+	+calling_ip[2]+"."+calling_ip[3]+":"+calling_ip[4]+" "
+	+debug_packet( data ) )
+
+    if (data[0] == RCALL_OUT) 
+    {
+/* we've just received a call request */
+    object what;
+    int ret;
+	what = find_object( data[2] );
+	if ( !what )
+	{
+DEBUG( "recv: sending 'no object'" )
+	    OBJ_DATAGRAM_SERV->tx_dgram( RCALL_CAP, lookup_cap(RCALL_CAP), 
+		calling_ip, ({ RCALL_NO_OBJ, data[1] }) );
+	}
+	else if ( !"modules/disass"->function_exists( data[3], what ) )
+	{
+DEBUG( "recv: sending 'no function'" )
+	    OBJ_DATAGRAM_SERV->tx_dgram( RCALL_CAP, lookup_cap(RCALL_CAP),
+		calling_ip, ({ RCALL_NO_FUNC, data[1] }) );
+	}
+	else
+	{
+/* perform the call */
+/* should put a catch in here */
+	    ret = what->(data[3])( data[4] );
+DEBUG( "recv: sending reply" )
+	    call_out("tx_reply", 0, calling_ip, data[1], ret );
+	}
+    }
+    else if (data[0] == RCALL_RESULT)
+    {
+DEBUG( "recv: got reply!" )
+/* we've just received the response from a call - the return value */
+	rcall_result( data[1], data[2] );
+    }
+    else if (data[0] == RCALL_NO_OBJ)
+    {
+/* we've just heard back that the object doesn't exist */
+    }
+    else if (data[0] == RCALL_NO_FUNC)
+    {
+/* the object exists, but the function doesn't exist */
+	rcall_result( data[1], 0 );
+    }
+}	
+
+show_stats () 
+{
+array foo;
+int i;
+    write("OBJ_DATAGRAM_SERV = "+OBJ_DATAGRAM_SERV+"\n");
+    ::show_stats();
+    write("next ticket:  " + nextTicket+"\n");
+    foo = ({ });
+    foo += ({ "Ticket   ?   To       Call To             Return to   "});
+    for (i = 0; i < sizeof(callsWaiting); i += 8)
+    {
+	foo += ({
+	callsWaiting[i][0] + " " + callsWaiting[i][1] +" "
+	+ callsWaiting[i][2][0]+"."
+	+ callsWaiting[i][2][1]+"."
+	+ callsWaiting[i][2][2]+"."
+	+ callsWaiting[i][2][3]+":"
+	+ callsWaiting[i][2][4]+" "
+	+ callsWaiting[i][5]+"->"+callsWaiting[i][6]+"(...) "
+	+ callsWaiting[i][3] +"->"+callsWaiting[i][4]+"()"
+	});
+    }
+    write( implode( foo, "\n" ) +"\n\n");
+}
+
+query_no_external_save () { return 1; }
+
+query_calls_waiting() { return callsWaiting; }
+

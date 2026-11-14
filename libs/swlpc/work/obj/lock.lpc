@@ -1,0 +1,183 @@
+/* 
+ * A door lock
+ * 
+ * Can be fitted to doors
+ *
+ * Originally written by Llati (?), adapted by Jenna for
+ * use with new door system.
+ */
+
+inherit "std/object";
+
+string code;
+int power;
+
+reset(arg) 
+{
+    if (!arg) 
+    {
+        set_power(0);
+    }
+}
+
+init (arg) 
+{
+        ::init(arg);
+        add_action ("fit","fit");
+	add_action ("try", "try");
+}
+
+query_auto_load()
+{
+    return [ "obj/lock", [ code, power ] ];
+}
+
+init_arg(a)
+{
+    if (!arrayp(a))
+	return;
+    set_code(a[0]);
+    set_power(a[1]); 
+}
+
+long(str)
+{
+    int extra_strength;
+    string ret = "";
+
+    extra_strength = power - 10;
+    if (extra_strength > 0)
+        ret = "It is additionally protected by " +
+                (extra_strength > 1 ?
+                        (ENGLISH->int_to_english(extra_strength, -1) +
+                        " anti-thief spikes.") :
+                        "an anti-thief spike.");
+     write("This is " + me() + ". " + ret + "\n" +
+	"You could \"fit\" it to a door, "+
+	"or \"try keys in lock\" to see if you have anything that fits "+
+	"this lock.\n");
+    return 1;
+}
+
+set_power(int arg) 
+{
+    power = arg;
+    set_short (me());
+    set_id ( [  "lock", "locksmith", "door lock", 
+		describe_lock() + " lock", me() ] );
+    set_weight((arg/2)+1);
+}
+
+set_code(str) { code = str; }
+
+/* Returns a key object that fits this lock */
+make_key()
+{
+    object key = clone_object("obj/key");
+    key->set_type(COLOURS->random_colour());
+    key->set_code(code);
+    return key;
+}
+
+fit(str)
+{
+    string args;
+    object door;
+
+    notify_fail("Perhaps you mean \"fit lock to <direction> door\"?\n");
+    if (!str)
+	return 0;
+    args = STRINGS->split_around(str, [ " to " ]);
+    if (!args)
+	return 0;
+    if (!id(args[0]))
+	return 0;
+    if (index(args[1], "door") == -1)
+    {
+	notify_fail("This lock can only be fitted to a door.\n");
+	return 0;
+    }
+    door = present(args[1], this_player());
+    if (!door)
+        door = environment(this_player())->find_door(args[1]);
+    if (!door)
+    {
+	notify_fail("There is no such door here to fit the lock to.\n");
+	return 0;
+    }
+    if (door->query_installed() && !door->is_open())
+    {
+	notify_fail("You need to open "+door->me()+" before you "+
+	    "can fit "+me()+" to it.\n");
+	return 0;
+    }
+    door->add_lock(code, power);
+    write("You fit " + me() + " to " + door->me() + ".\n");
+    say(this_player()->query_name() + " fits " + me() + " to " +
+	door->me() + ".\n");
+    if (door->query_installed())
+	door->tell_other_side(this_player(), "You hear some clanking "+
+	    "noises coming from " + door->me() + ".\n");
+    destruct(this_object());
+    return 1;
+}
+
+try(str)
+{
+    int i;
+    array c, keys, right_keys;
+
+    notify_fail("Perhaps you mean \"try keys in lock\"?\n");
+    if (!str || index(str, "keys in ") != 0)
+        return 0;
+    if (!id(str[8..]))
+        return 0;
+    keys = [];
+    c = contents(this_player());
+    for (i = 0; i < sizeof(c); i++)
+    {
+        if (c[i]->query_key() && !c[i]->id("soul"))
+	    keys += [ c[i] ];
+	else if (c[i]->id("keyring") && arrayp(c[i]->query_keys()))
+	    keys += c[i]->query_keys();
+    }
+    right_keys = [];
+    for (i = 0; i < sizeof(keys); i++)
+	if (keys[i]->query_code() == code)
+            right_keys += [ keys[i]->short() ];
+    say(this_player()->query_name()+" fiddles with "+me()+".\n");
+    if (sizeof(right_keys))
+        write(capitalize(STRINGS->array2string(right_keys))+" fits in "+
+            short()+".\n");
+    else
+        write("You do not possess any keys to fit "+me()+".\n");
+    return 1;
+}
+
+me() 
+{ 
+    return STRINGS->indefinite(describe_lock()) + " " +
+	describe_lock() + " lock";
+}
+
+describe_lock()
+{
+    int str = power;
+    return      str < 1 ? "feeble-looking" :
+                str < 2 ? "tiny" :
+                str < 3 ? "small" :
+                str < 4 ? "fairly small" :
+                str < 5 ? "solid-looking" :
+                str < 6 ? "large" :
+                str < 7 ? "large thick" :
+                str < 8 ? "very large thick" :
+                str < 9 ? "enormous thick" :
+                str < 10 ? "enormous plated" :
+                          "enormous reinforced";
+}
+
+query_code() { return code; }
+query_power() { return power; }
+query_strength() { return power; }
+
+

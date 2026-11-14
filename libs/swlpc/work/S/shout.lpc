@@ -1,0 +1,141 @@
+/*
+ * Shout server - if you want to hear shouts you must register here
+ * Dredd - 1993.
+ */
+
+inherit "RO/Servers";
+
+/*
+ * 940512 Hunter    Added history list of shouts
+ * 950530 Hunter    show_stats() now returns array
+ * 950709 Hunter    added optional function hook to shout(). shout()
+ *		    now returns array of who got the message
+ * 960731 Belgarion List of people who received the shout no longer
+ *		    built up with array addition.
+ * 010827 Jenna	    Added 'unlisten()'
+ */
+
+const ShoutHistorySize = 20;
+
+nosave array listen = ({ });
+nosave array history_list = allocate(ShoutHistorySize);
+nosave array history_times = allocate(ShoutHistorySize);
+nosave int history_head = 0;
+#define CLEAN_TIME 300
+
+reset(arg)
+{
+int i;
+    if (!arg)  {
+	call_out("clean_up", CLEAN_TIME);	
+	for (i = 0; i < ShoutHistorySize; i ++)
+	{
+	    history_list[i] = 0;
+	}
+    }
+}
+
+listen((string | object) arg)
+{
+	if (index(listen, arg) == -1)
+		listen = listen + ({ arg });
+}
+
+unlisten((string | object) arg)
+{ 
+    int x = index(listen, arg);
+    if (x != -1)
+	listen[x] = 0;
+}
+
+is_listening((string | object) arg)
+{
+    return index(listen, arg) != -1;
+}
+
+array
+shout(string what, (int|string) testfunc)
+{
+int i;
+object po = previous_object();
+int x;
+string err;
+array whoGotIt = allocate(sizeof(listen));
+int where = 0;
+
+/* add the message to the recent history list */
+    history_list[history_head] = what;
+    history_times[history_head] = time();
+    history_head = (history_head + 1) % ShoutHistorySize;
+/* broadcast the message */
+    for (i = 0; i < sizeof(listen); i++) 
+    {
+	err = catch if (listen[i]) 
+	{
+	    if (stringp(testfunc) && !po->(testfunc)( listen[i] ) )
+	    {
+		/* do nothing - we have a valid hook, and it won't let us */
+	    }
+	    else
+	    {
+		listen[i]->catch_shout(what);
+		whoGotIt[where++] = listen[i];
+	    }
+	};
+    if (err) LOG->log("SHOUT", "catch_shout ("+file_name(listen[i])+"): " + err
+            + "\n");
+    }
+    whoGotIt = whoGotIt[..(where - 1)];
+    return whoGotIt;
+}
+
+/*
+ * send the message to all wizards
+ */
+wiz_shout(string what)
+{
+int i;
+	history_list[history_head] = what;
+	history_times[history_head] = time();
+	history_head = (history_head + 1) % ShoutHistorySize;
+
+	for (i = 0; i < sizeof(listen); i++) {
+		if (listen[i] && listen[i]->query_wiz()) 
+			listen[i]->catch_shout(what);
+	}
+}
+
+clean_up()
+{
+int i;
+	call_out("clean_up", CLEAN_TIME);	
+	for (i = sizeof(listen) - 1; i >= 0; i--) {
+		if (!listen[i]) { 
+			/* dead monster probably - clean me up */
+			listen = listen[..i-1] + listen[i+1..];
+		}
+	}
+}
+
+query_next_time() { return find_call_out("clean_up"); }
+query_listen() { return listen; }
+
+show_stats () {
+int i, j;
+array ret;
+    ret = ({ "Objects currently listening are :" });
+    ret += explode(DUMP->dump(listen, 0, 0, -1), "\n");
+    ret += ({ "Shout History:" });
+	for (i = 0; i < ShoutHistorySize; i ++)
+	{
+	    j = (i + history_head) % ShoutHistorySize;
+	    if (stringp(history_list[j]))
+		ret += ({ ctime(history_times[j])+":"+history_list[j] });
+	}
+    return ret;
+}
+
+array query_history()
+{
+    return ({ history_head, history_list, history_times });
+}

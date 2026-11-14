@@ -1,0 +1,560 @@
+/*
+ *	No more numbers for your skills! Blah! Dredd 1992.
+ *
+ *	o if you don't like it then suck Gandalf's dick.
+ *	o if you don't like Gandalf's dick, try Billys - young flesh!
+ *
+ * 030200 Jenna	Tweaked descriptive messages
+ * 011000 Jenna Reformatted "skills" output 
+ * 021000 Jenna "skills" now writes to monsters instead of MORE
+ * 211100 Jenna allowed "skills combat", "skills guild", etc
+ * 060701 Dodinas Added Ke'ting skills "stealth", "disguise"
+ * 060701 Dodinas Skill List is now read from std/skill_data file 
+ */
+inherit "RO/Servers";
+inherit "RO/base/hilite";
+
+array	template =({
+	"a neophyte of ",
+	"a beginner of ",
+	"adequate at ",
+	"reasonable at ",
+	"confident at ",
+	"experienced at ",
+	"very good at ",
+	"excellent at ",
+	"outstanding at ",
+	"an expert of ",
+    "amazing at ",
+    "scintillating at ",
+	"a master of ",
+	"an elite master at ",
+	"fabled for ",
+	"heroic at ",
+	"a superhero of ",
+	"legendary for ",
+    "a demigod of ",
+	"and godlike at "
+	});
+
+array	exptemplate =({
+	"a neophyte",
+	"a beginner",
+	"adequate",
+	"reasonable",
+	"confident",
+	"experienced",
+	"very good",
+	"excellent",
+	"outstanding",
+	"an expert",
+	"amazing",
+	"scintillating",
+	"a master",
+	"an elite master",
+	"fabled",
+	"heroic",
+	"a superhero",
+	"legendary",
+        "demigodlike",
+	"godlike"
+	});
+
+array	pretemplate = ({
+		"becoming ",
+		"almost ",
+		"",
+        "at least ",
+        "beyond "
+		});
+
+array	status = ({
+		" you have quite a way to go before you advance.\n",
+		" you are about half way to advancing.\n",
+		" you are just about to advance.\n"
+		});
+
+const SKILL_DATA = "std/skill_data";
+array ska = [];
+
+/* a bunch of tuneable variables */
+int INITIAL=10;
+int LOW_GRAIN=15;
+int HIGH_GRAIN=30;
+int SWITCH_LEVEL=9;
+int SWITCH_GRAIN=LOW_GRAIN * SWITCH_LEVEL;
+int MAX_SKILL=SWITCH_GRAIN + HIGH_GRAIN * (sizeof(template) - SWITCH_LEVEL);
+
+array dexplate, intplate, powplate, sanplate, chuplate, wisplate;
+
+reset(arg)
+{
+	if (!arg) {
+        dexplate = [
+                "slow and uncoordinated",
+                "somewhat clumsy",
+		"quite dexterous",
+                "quick and nimble",
+                "extremely agile",
+                "blindingly fast"
+                ];
+
+        powplate = [
+                "out of touch with the universe",
+                "unlucky",
+                "lucky",
+		"in touch with the universe",
+                "able to feel the power of the universe flowing through you",
+                "as one with the power of the universe"
+                ];
+
+        intplate = [
+                "unable to solve difficult problems",
+                "a little slow at learning",
+                "a quick learner",
+		"mentally agile",
+                "unable to understand why most people are so stupid",
+                "a genius"
+                ];
+
+        sanplate = [
+                "sure that everyone except you is insane",
+                "unable to focus with mental clarity",
+                "well-adjusted",
+		"clear-headed",
+                "lucid",
+                "extremely sound of mind"
+        	];
+
+        chuplate = [
+                "bashful and uncommunicative",
+                "feel shy around strangers",
+		"quite persuasive",
+		"bold",
+		"daring and dashing",
+		"fearless and audacious"
+        	];
+
+	wisplate = [
+        	"make terrible decisions",
+	        "tend to make poor judgements",
+	        "a good judge of character",
+	        "make sound judgements",
+		"shrewd",
+	        "sagacious"
+	        ];
+	array scp;
+        string f = grab_file(SKILL_DATA);
+        scp = SCRIPTS->filterscript(f);
+        if (!scp) return;
+        load_skills(scp);
+
+	}
+}
+
+/*
+ * Loads up the skill categories 
+ */
+
+load_skills(scp) {
+    int i;
+    int j = -2;
+    for (i = 0; i < sizeof(scp); i++) {
+        if (scp[i] == "" || !scp[i]) continue;
+        if (scp[i][0] == '%') {
+            j = j + 2;
+            ska += [ scp[i][1..] ];
+            ska += [ [ ] ];
+        } else {
+            ska[j+1] += [ scp[i] ];
+        }
+    }
+}
+
+/*
+ * Functions which choose the appropriate descriptions
+ */
+predesc(int sk)
+{
+    if (sk < INITIAL) return "";
+    if (sk < SWITCH_GRAIN) 
+        return pretemplate[(sk % LOW_GRAIN) / (1 + (LOW_GRAIN / sizeof(pretemplate)))];
+    if (sk < MAX_SKILL) 
+        return pretemplate[((sk - SWITCH_GRAIN) % HIGH_GRAIN) / (1 + (HIGH_GRAIN / sizeof(pretemplate)))];
+    return pretemplate[sizeof(pretemplate) - 1];
+}
+
+describe(int sk)
+{
+    if (sk < SWITCH_GRAIN) return exptemplate[sk/LOW_GRAIN];
+    if (sk < MAX_SKILL) 
+        return exptemplate[SWITCH_LEVEL + (sk-SWITCH_GRAIN)/HIGH_GRAIN];
+    return exptemplate[sizeof(exptemplate)-1];
+}
+
+#define COL1	"exits"  /* colours */
+#define COL2	"rooms"
+
+show_skills_expanded(arg)
+{
+    string border = ANSI->scolor(hilite(this_player(), COL1), "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
+    string border2 = ANSI->scolor(hilite(this_player(), COL1), "+--------------------------------+-----------------------------|\n");
+    string side = ANSI->scolor(hilite(this_player(), COL1), "| ");
+    array myskills = this_player()->query_skill_names();
+    array tmpskills, done;
+    object wep;
+    int i, j, sk, x;
+    string ret = "";
+    string tmp;
+
+    for (i = 0, done = []; i < sizeof(ska); i+= 2)
+    {
+	if (!i)
+	{
+	    ret += border + 
+		   side + 
+		   ANSI->scolor(hilite(this_player(), COL2), FORMAT->center_justify("COMBAT SKILLS", 61)) + 
+		   side + "\n" +
+		   border;
+	    tmpskills = get_these_skills(ska[i+1], myskills);
+	    done += tmpskills;
+	    for (j = 0; j < sizeof(tmpskills); j++)
+		ret += display_skill(tmpskills[j]);
+	    ret += border2;
+	    i += 2;
+	    tmpskills = get_these_skills(ska[i+1], myskills);
+	    done += tmpskills;
+	    for (j = 0; j < sizeof(tmpskills); j++)
+		ret += display_skill(tmpskills[j]);
+	    ret += border2 + side + "CURRENT ATTACK:                "+side;
+	    wep = this_player()->query_wielded();
+	    if (wep)
+		tmp = WEAPONER->query_mastery_type(wep);
+	    sk = 20 * (this_player()->query_dex() + this_player()->query_str() - 24);
+	    if (sk < 0)
+		sk = 0;
+	    sk += this_player()->query_skill("offense");
+	    if (tmp)
+		sk += this_player()->query_skill(tmp);
+	    sk /= 3;
+	    ret += FORMAT->left_justify(predesc(sk) + describe(sk), 28) + 
+		side + "\n";
+
+	    if (tmp) tmp = "Offense + " + capitalize(tmp);
+	    else tmp = "Offense";
+
+	    ret += side + FORMAT->left_justify(tmp, 31) + side + "Dam: ";
+	    if (wep) x = wep->weapon_class();
+	    else x = 0;
+
+	    x += this_player()->query_str() / 8; // max. damage
+        if (wep) sk = FIGHT_SERV->query_min_damage(this_player(), wep, x, 1);
+        else sk = 0;
+
+	    tmp = describe_damage(sk);
+	    if (describe_damage(x) != tmp) tmp += " - " + describe_damage(x);
+	    ret += FORMAT->left_justify(tmp, 23) + side + "\n";
+	}
+	else
+	{
+	    ret += border;
+	    tmp =  i == 4 ? STRINGS->capitalize_all(this_player()->query_race()) :
+		   i == 6 ? "GUILD" : "OTHER";
+	    ret +=   side + 
+		     ANSI->scolor(hilite(this_player(), COL2), FORMAT->center_justify(tmp+ " SKILLS", 61)) + 
+		     side + "\n" +
+		     border;
+	    if (i == sizeof(ska) - 2)
+	    {
+		for (j = 0, tmpskills = []; j < sizeof(myskills); j++)	
+		    if (index(done, myskills[j]) == -1)
+			tmpskills += [ myskills[j] ];
+	    }
+	    else 
+	    {
+	        tmpskills = get_these_skills(ska[i+1], myskills);
+		done += tmpskills;
+	    }
+	    for (j = 0; j < sizeof(tmpskills); j++)
+		ret += display_skill(tmpskills[j]);
+	}
+	if (arg)
+	{
+	    if ((i == 2 && (arg == "combat" || arg == "co")) ||
+		(i == 4 && (arg == "race" || arg == "ra" ||
+			    arg == this_player()->query_race() ||
+			    arg == this_player()->query_race()[..1])) ||
+		(i == 6 && (arg == "guild" || arg == "gu")) ||
+		(i == 8 && (arg == "other" || arg == "ot")))
+	    {
+		break;
+	    }
+	    ret = "";
+	}
+    }
+    if (ret == "")
+    {
+	write("Perhaps you mean \"skills\" or \"skills <category>\"?\n");
+	return 1;
+    }
+    ret += border;
+    if (this_player()->is_player()) // bc mobs get buggered by MORE
+	MORE->more(ret);
+    else
+	write(ret);
+    return 1;
+}
+
+get_these_skills(array target, array myskills)
+{
+    int i, x;
+    array ret = [ ];
+    for (i = 0; i < sizeof(target); i++)
+    {
+	x = index(myskills, target[i]);
+	if (x != -1)
+	{
+	    ret += [ target[i] ];
+	    myskills = myskills[..x-1] + myskills[x+1..];
+	}
+    }
+    return ret;
+}
+
+display_skill(string skill)
+{
+    string side = ANSI->scolor(hilite(this_player(), COL1), "| ");
+    int sk = this_player()->query_skill(skill, 0); // perm + tmp skills
+    if (sk < 1)
+	return "";
+    return side + FORMAT->left_justify(capitalize(skill), 31) + side +
+	FORMAT->left_justify(predesc(sk) + describe(sk), 28) + side + "\n";
+}
+
+describe_damage(int d)
+{
+    return      d <  2 ? "slight" :
+		d <  3 ? "v. low" :
+		d <  5 ? "low" :
+		d <  9 ? "moderate" :
+		d < 12 ? "significant" :
+		d < 14 ? "serious" :
+		d < 16 ? "v serious" :
+		d < 18 ? "severe" :
+		d < 20 ? "brutal" :
+		d < 22 ? "vicious" :
+		d < 26 ? "extreme" : "fatal";
+}
+
+#if 0
+/* it's be nice if these were sorted alphabetically */
+show_skills_expanded(arg) 
+{
+	array skill;
+	int i, w, x, y, z, sk;
+	string final, space;
+	
+	final = "Skill name          |\n--------------------------------------"+
+		"------------------------------------------\n";
+	
+	skill = this_player()->query_skill_names();
+
+	if(!arg) {
+	for (i = 0; i < sizeof(skill); i++) 
+    {
+		sk = this_player()->query_skill(skill[i], 1);
+		if (sk < 1) continue;
+		space = "                    "[..20 - sizeof(skill[i]) - 1];
+		final += skill[i] + space + "|\t" + predesc(sk) + describe(sk) +"\n";
+	}
+	write(final);
+	return 1;
+	}
+	else if(index(skill,arg) != -1) 
+    {
+		sk = this_player()->query_skill(arg);
+		if (sk < 1) return;
+		if (sk > MAX_SKILL)  
+        {
+			write("You are beyond godlike at " + arg + ". There is no advancement beyond this.\n");
+		}
+		else 
+        {
+			write("You are " + predesc(sk) + describe(sk) +
+			" at " + arg + ".\n"); /* + " and" + status[w]); */
+		}
+		return 1;
+	}
+	else 
+    {
+		write("You dont seem to have that skill.\n");
+		return 1;
+	}
+}
+#endif
+
+
+test2() {
+string out;
+	out = show_build(this_player());
+	write("You are "+out+"\n");
+	out = show_internal(this_player());
+	write("You are "+out+"\n");
+}
+
+/*
+	Common to examiner and owner of appearance.
+	Three stats described: str, con and siz
+	variations:	good, good and good
+			good and good, but bad
+			good, but bad and bad
+			bad, bad and bad
+	    average is considered good, unless there are no bads, in which
+	    case it's considered bad.
+
+	Modified by Jenna (Jan 2000).
+*/
+array str_descs = [ "feeble", 5, "weakly", 8, "somewhat weakly", 
+        12, "of average strength", 15, "reasonably strong", 18, "quite muscular",
+        22, "very muscular", 28, "extraordinarily strong", 38, "phenomenally strong", 20000000 ];
+array siz_descs = [ "tiny", 5, "small", 8, "short", 11, "of average size", 
+        14, "large", 18, "huge", 21, "XXX", 20000000 ];
+array con_descs = [ "skeletal", 4, "sickly", 7, "unhealthy", 
+        10, "in average health", 15, "healthy", 20, "robust", 20000000 ];
+
+show_build(object pob)
+{
+string name, con_desc, str_desc, siz_desc, phys;
+int i, s, con_good, str_good, siz_good, total, average;
+
+    name = pob->query_real_name();
+    if (!name)
+        name = pob->query_name();
+
+    /* strength */
+    s = pob->query_str();
+    str_good =  s < 12 ? -1 :
+		s >= 15 ? 1 : 0;
+
+    for (i = 1; i < sizeof(str_descs) && !str_desc; i += 2)
+	if (s < str_descs[i])
+	    str_desc = str_descs[i-1];
+
+    /* size */
+    s = pob->query_siz();
+    siz_good =	s < 11 ? -1 :
+		s >= 14 ? 1 : 0; 
+    for (i = 1; i < sizeof(siz_descs) && !siz_desc; i += 2)
+	if (s < siz_descs[i]) {
+	    siz_desc = siz_descs[i-1];
+	    if (siz_desc == "XXX")
+	        siz_desc = (s/3)+" feet tall";
+	    }
+
+    /* constitution */
+    s = pob->query_con();
+    con_good =  s < 10 ? -1 :
+		s >= 15 ? 1 : 0;
+    for (i = 1; i < sizeof(con_descs) && !con_desc; i += 2)
+	if (s < con_descs[i])
+	    con_desc = con_descs[i-1];
+
+
+    if (str_good == con_good && str_good == siz_good)
+	phys = str_desc + ", " + siz_desc + " and " + con_desc;
+    else
+    {
+        total = str_good + con_good + siz_good;
+        if (total > 0 && str_good >= 0 && con_good >= 0 && siz_good >= 0)
+            /* if everything is average or better, average = bad */
+            average = -1;
+        else
+            /* otherwise, average = good */
+            average = 1;
+
+        if (str_good == 0) str_good = average;
+        if (con_good == 0) con_good = average;
+        if (siz_good == 0) siz_good = average;
+
+        phys = str_desc;
+
+        if (siz_good == 1 && str_good == -1)
+            phys = siz_desc + ", but " + phys;
+        else if (siz_good == -1 && str_good == 1)
+            phys += ", but " + siz_desc;
+        else
+            phys += " and " + siz_desc;
+
+        total = str_good + siz_good;
+
+        if (con_good == 1)
+        {
+            if (total >= 0)
+                phys = con_desc + " and " + phys;
+            else
+                phys = con_desc + ", but " + phys;
+        }
+        else if (total > 0)
+            phys += ", but " + con_desc;
+        else
+            phys += " and " + con_desc;
+    }
+
+    return phys + ".";
+}
+
+/* 
+	Stuff only for the person in question.
+
+	* not quite perfect sentences yet.
+*/
+
+#define ND 6
+show_internal(pob)
+{
+array descriptions, tdesc, desc;
+int i, val, flag, lastd;
+string last;
+
+	descriptions = allocate(ND);
+	desc = allocate(ND);	
+	descriptions[0] = dexplate;
+	descriptions[1] = powplate;
+	descriptions[2] = intplate;
+	descriptions[3] = wisplate;
+	descriptions[4] = sanplate;
+	descriptions[5] = chuplate;
+	for (i = 0; i < ND; i++) {
+		flag = 0;
+		if (i == 0) val = pob->query_dex();
+		else if (i == 1) val = pob->query_pow();
+		else if (i == 2) val = pob->query_int();
+		else if (i == 3) val = pob->query_wis();
+		else if (i == 4) val = pob->query_san();
+		else if (i == 5) val = pob->query_chu();
+		tdesc = descriptions[i];
+                if        (val < 6)  desc[i] = tdesc[0] + ", ";
+                else if   (val < 9)  desc[i] = tdesc[1] + ", ";
+                else if  (val < 14) {
+                                     desc[i] = "";
+                                     flag = 1;
+                                   }
+                else if  (val < 18)  desc[i] = tdesc[2] + ", ";
+                else if  (val < 23)  desc[i] = tdesc[3] + ", ";
+                else if  (val < 30)  desc[i] = tdesc[4] + ", ";
+                else                 desc[i] = tdesc[5] + ", ";
+		if (!flag) lastd = i;
+	}
+	last = desc[ND-1];
+	desc[ND-1] = last[..sizeof(last)-3] + ".";
+	if (desc[ND-1] != ".") {
+		last = desc[ND-2];
+		desc[ND-2] = last[0..sizeof(last)-2] + " and ";
+	}
+	else {
+		last = desc[lastd];
+		desc[lastd] = last[0..sizeof(last)-3];
+	}
+	last = implode(desc, "");
+	return last;
+}

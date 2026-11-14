@@ -1,0 +1,366 @@
+/*
+ * Bastard Soul (tm).  G.
+ *
+ * Intelligence for Freddy Mercenary :)
+ *
+ * It's being developed here primarily because it's helping
+ * me split out living stuff.  It won't stay here.
+ */
+
+#include "RO/living_defs.h"
+
+#define	BLEED_TIME	4
+
+inherit "obj/souls/base_soul";
+
+#define	DEBUG
+
+#ifdef DEBUG
+#define	G(x)	{ catch { tell_object(find_player("gandalf"), "Bastard: " + (x) + "\n"); }; }
+#else
+#define G(x)	{}
+#endif
+
+/*
+ * Some flags for things that are happening now.
+ */
+
+int busy = 0;
+
+#define	SET(x)		(busy |= x)
+#define	RESET(x)	(busy &= ~x)
+#define	TEST(x)		(busy & x)
+#define	NOT(x)		(~TEST(x))
+
+#define	LOOTING		1
+#define	CHK_SELL	2
+
+array call_list = [ ];
+
+/*
+ * A little function to track call-outs while they're happening.
+ */
+
+in_progress(array x) {
+    if (find_call_out(x[0]) >= 0) {
+	call_out("in_progress", 1, x);
+	SET(x[1]);
+	if (index(call_list, x[0]) < 0)
+	    call_list += [ x[0] ];
+	G("Inprogress: " + x[0])
+	}
+    else {
+	RESET(x[1]);
+	int y = index(call_list, x[0]);
+	if (y >= 0)
+	    call_list = call_list[..y-1] + call_list[y+1..];
+	G("Finished: " + x[0])
+	}
+    }
+
+kill_soul() {
+    destruct(this_object());
+    }
+
+reset(a) {
+    ::reset(a);
+    if (a)
+	return;
+    if (!is_cloned(this_object()))
+	call_out("think", 1);
+    add_id("bastard");
+    }
+
+nosave array inuse = [ ];	/* updated on finding new item, and in shop */
+nosave array chk_sell = [ ];
+nosave array valueless = [ ];
+nosave array sell_at = [ ];
+nosave array shops = "players/dredd/economy/shop_server"->query_shops();
+
+array goal_stack = [ "choose_goal", ({] });	/* func, {args}, func, {args}, ... */
+array tasks = [ ];
+
+/**************************************
+ *
+ * HP management.
+ *
+ */
+
+/*
+ * HP as a percentage.
+ */
+
+real hp_percentage(int hp) {
+    real mymaxhp = int2real(myself->query_max_hp());
+    real myhp = int2real(hp);
+    if (mymaxhp < myhp)
+	mymaxhp = myhp;
+    if (mymaxhp < 1.0)
+	mymaxhp = 1.0;
+    return myhp / mymaxhp;
+    }
+
+/*
+ * Expected total bleeding cost (if time zero), or cost after given time.
+ */
+
+int bleeding_HP_cost(int time) {
+    time = (time + BLEED_TIME - 1) / BLEED_TIME;
+    int b = myself->query_bleeding();
+    if (b < 1)
+	return 0;
+    int tot = b * (b + 1) / 2;
+    if ((time < 1) || (time >= b))
+	return tot;
+    int part = (time - b) * (time - b - 1) / 2;
+    return tot - part;
+    }
+
+/*
+ * Hp regeneration options.
+ */
+
+int hp_regen() {
+    int flags = 0;
+    if (myself->query_intoxication() < 10) {
+	flags |= HP_DRINK;
+	}
+    if (myself->query_bleeding() > 0)
+	flags |= HP_BLEED;
+    }
+
+/*
+ * Choose_goal is used when we aren't busy and want to decide what
+ * to do next.  It assesses our situation, looking at things like HP,
+ * WC, AC, money, and food, and decides whether to try to earn money,
+ * drink drinks (for healing), buy a weapon, buy some armour, or go
+ * looking for something to kill.
+ */
+
+choose_goal() {
+    array worried_about = [ ];
+
+    worried_about = [ int2real(mymax - myself->query_hp()) / mymax, "healing", ({ ] }); /* 0->1 */
+    worried_about += [ int2real(20 - myself->query_wc()) / 40.0, "get_weapon" ];	/* 0->0.5 */
+    }
+
+/*
+ * get_contents - make an array of all carried items who respond
+ * to a particular id.
+ */
+
+get_contents(where, i) {
+    array c = contents(where);
+    int x = 0;
+    int y = (-1);
+    while (x < sizeof(c)) {
+	if (c[x]) {
+	    if (c[x]->id(i)) {
+		c[++y] = c[x];
+		}
+	    }
+	x++;
+	}
+    return c[..y];
+    }
+
+/*
+ * Choose_armour - check all the armour we are wearing, and
+ * the armour we are carrying; if any carried ones are better,
+ * wear it instead.  Return an array of armour in use (or useful).
+ */
+
+choose_armour() {
+    array armour = myself->query_all_armour();
+    if (!pointerp(armour))
+	armour = [ ];
+
+    array c = get_contents(myself, "armour");
+
+    int x = 0;
+
+    while (x < sizeof(c)) {
+	object a = c[x];
+	if (index(armour, a) < 0) { /* not worn */
+	    object worn = myself->test_type(a);
+	    if (worn) {
+		if (worn->query_armour() < a->query_armour()) {
+		    myself->stop_wearing(worn);
+		    a->wear("armour");
+		    }
+		}
+	    else /* we don't have any armour here */
+		a->wear("armour");
+	   } /* else it's a worn piece - don't process it. */
+	x++;
+	}
+    return myself->query_all_armour();
+    }
+
+/*
+ * choose_weapon() - if we are carrying a weapon of higher wc
+ * than our own, wield it.  Return all weapons to sell.  Always
+ * keep one spare weapon (not in returned array), in case the
+ * original breaks.  Take our hands as primary weapon if we have
+ * nothing better.
+ */
+
+choose_weapon() {
+    array weapons = get_contents(myself, "weapon");
+    object best = 0;
+    object spare = 0;
+    int bwc = myself->query_wc();	/* about 3 */
+    int swc = 0;
+
+    int x = 0;
+
+    while (x < sizeof(weapons)) {
+	object a = weapons[x];
+	int wc;
+	if (a) {
+	    if ((wc = a->weapon_class()) >= bwc) {
+		swc = bwc;
+		spare = best;
+		bwc = wc;
+		best = a;
+		}
+	    else if (wc >= swc) {
+		spare = a;
+		swc = wc;
+		}
+	    }
+	x++;
+	}
+
+    weapons = [ ];
+
+    if (best) {
+	best->wield("weapon");
+	weapons = [ best ];
+	}
+    if (spare)
+	weapons += [ spare ];
+
+    return weapons;
+    }
+
+/*
+ * Loot the area.  Just attempts to take everything at the moment.
+ * For use after killing things (and before fleeing :)
+ */
+
+loot_area() {
+    array o = contents(environment(myself));
+    int x = 0;
+    while (x < sizeof(o)) {
+	call_out("loot_item", 1, o[x++]);
+	}
+    in_progress( [ "loot_item", LOOTING ] );
+    }
+
+loot_item(o) {
+    (string | int) mynames = 0;
+
+    if (!objectp(o))
+	return 0;
+    if (environment(o) != environment(myself))
+	return;
+    mynames = o->query_ids();
+    if ((!arrayp(mynames)) || !sizeof(mynames))
+	return;
+    
+    command("get all from " + mynames[0], myself);
+    command("get " + mynames[0], myself);
+    }
+
+/*
+ * chose_all() - choose best armour, weapons, etc.
+ * Should be called just after acquiring new items.
+ * After that, call choose_sell.
+ */
+
+choose_all() {
+    array a = choose_armour();
+    a += choose_weapon();
+    inuse = a;
+    return;
+    }
+
+/*
+ * cont_check_sell - for each (unprocessed) item in inventory,
+ * add a call out to decide where to sell it.
+ */
+
+choose_sell() {
+    chk_sell = [ ];
+    valueless = [ ];
+    sell_at = [ ];
+    cont_check_sell();
+    }
+
+cont_check_sell() {
+    array c = contents(myself);
+    int x = (-1);
+    while ((++x) < sizeof(c)) {
+	G(c[x]->short())
+	if (c[x]) {
+	    if (c[x]->id("soul")) continue;
+	    if (index(inuse, c[x]) >= 0) continue;
+	    if (index(chk_sell, c[x]) >= 0) continue;
+	    if (index(valueless, c[x]) >= 0) continue;
+	    if (index(sell_at, c[x]) >= 0) continue;
+	    chk_sell = chk_sell + [ c[x] ];
+	    call_out("do_check_sell", 1);
+	    }
+	}
+    in_progress( [ "do_check_sell", CHK_SELL ] );
+    }
+
+do_check_sell() {
+    int best = (-1);
+    string where;
+    int second = (-2);
+    string where2;
+
+    if (!pointerp(chk_sell)) {
+	chk_sell = [ ];
+	return;
+	}
+    if (!sizeof(chk_sell))
+	return;
+    if (!pointerp(shops))
+	shops = "players/dredd/economy/shop_server"->query_shops();
+    int x = (-1);
+    while ((++x) < sizeof(shops)) {
+	if (!shops[x]->query_general_store())
+	    continue; /* not player run or doesan't buy arbitrary things */
+	int p = shops[x]->value_of(chk_sell[0]);
+	if (p > best) {
+	   second = best;
+	   best = p;
+	   where2 = where;
+	   where = shops[x];
+	   }
+	else if (p > second) {
+	   second = p;
+	   where2 = shops[x];
+	   }
+	}
+    if (best > 0 && index(sell_at, where) >= 0) {
+	sell_at += [ where, chk_sell[0] ];
+	G("Sell " + chk_sell[0]->short() + " at " + where)
+	}
+    else if (second > 0 && index(sell_at, where2) >= 0) {
+	sell_at += [ where2, chk_sell[0] ];
+	G("Sell " + chk_sell[0]->short() + " at " + where2 + " (second choice)")
+	}
+    else if (best > 0) {
+	sell_at += [ where, chk_sell[0] ];
+	G("Sell " + chk_sell[0]->short() + " at " + where)
+	}
+    else {
+	valueless += [ chk_sell[0] ];
+	G("Valueless: " + chk_sell[0]->short())
+	}
+    chk_sell = chk_sell[1..];
+    }

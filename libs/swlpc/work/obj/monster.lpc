@@ -1,0 +1,1522 @@
+
+/* A general purpose monster. Clone this object,
+ * and call local functions to configure it.
+ *
+ * Hacked so agressive monsters don't auto-attack really wimpy
+ * characters.
+ * 
+ * Use the monsterer to create monsters unless you know
+ * what you're doing -- Dredd.
+ */
+
+/*
+ * 940212 Hunter     shifted Bonding variable to add_store(). General tidy up.
+ *                   shifted string info to add_store(). 
+ * 950203 Ormuzd - added set_can_wander() and query_can_wander().
+ * 950515 Qarath - put a quick hack debug code into stop badly coded
+ *		   monster_died() routines. Logs all potential infinate loops
+ * 950727 Ormuzd - added setup_commands() to allow NPC to use their race/guild souls.
+ * 950822 Jenna  - added wield_best_weapon() to allow NPCs to use the best
+ *		   weapon in their possession.	
+ *		 - added query_NPC() fun to allow easy detection of which
+ *		   monsters are not controlled by a player
+ * 960804 G - nonagressive in any room marked `npc_non_aggressive' or `city'
+ * 960805 G - monster skills set to averages * assigned level.
+ * 960807 G - monster skills randomised a little (binomially, which is OK).
+ * 971026 Belgarion - added "set_no_regenerate" (some quests stuff up when
+ *		monsters wander back after death.) Yeah, I know, more hacks...
+ * 981211 Jenna - set minimum for monster load_chat and load_a_chats
+ * 990610 Jenna - enabled multiple catch_tell objects
+ * 991217 Jenna	- began converting set_spell_mess stuff to add_attack().
+ * 000309 Jenna - converted talk_ob to multiple catch_shout objects
+ * 000309 Jenna - made all monsters attempt to regenerate every death
+ * 000706 Jenna - added "wisdom" to monsters
+ * 010221 Jenna - allowed add_store("no_enter") to prevent mobs from
+ *		  wandering into certain rooms.
+ * 010404 Jenna - set_move() no longer works instantly
+ */
+
+inherit "RO/living";
+inherit "RO/base/id";
+inherit "RO/base/persist";
+
+#include "gender.h"
+#include "security.h"
+#include <errors.h>
+
+#define TD(x) catch tell_object(find_player("dredd"), x);
+#define JEN(x) catch tell_object(find_player("jenna"), query_name()+":] "+x+"\n");
+
+#define TALK_FREQ	300
+#define MIN_TALK_DELAY	7	/* Jenna Dec 98 */
+
+int test_loop = 0;
+
+array xtra_add_actions = ({ });    /*  ({ comm, object, func }) */
+array gods = ({ });
+string short_desc, long_desc;
+int aggressive, can_kill, no_regenerate;
+object kill_ob;
+
+int ac;	/* Jen 99 - used by the npc soul to install protections */
+
+int rumours = 0;        /* we can turn this on */
+
+array chat_head = ({ });
+int chat_chance = 1;
+
+array a_chat_head = ({ });
+int a_chat_chance = 1;
+
+array commands=({});
+int extra_comm=0;
+int comm_chance = 30;  /* % chance of monster doing a command */
+
+/*object head;*/
+nosave array talk_ob;	    /* Changed from nosave string by Jenna Mar 00 */
+array talk_func;    /* Vector of functions. */
+array talk_match;    /* Vector of strings. */
+array talk_type;    /* Vector of types. */
+array talk_alpha;  /* Vector of flags for 1st, last char of match are alpha */
+string the_text;
+string shout_function;
+string hold_func, hold_type;  /* kludgy things for backward compatability */
+string std_mon_type;
+
+int busy_catch_tell;          /* flag to prevent catch_tell loops */
+array catch_tell_ob;
+
+nosave object dead_ob;
+object init_ob;
+
+object xtra_attack_ob;
+string xtra_attack_func;
+
+int random_pick = 1;  /* default: sticky fingers */
+
+/* spell_crap is being removed and replaced with add_attack()
+ * - Jenna Dec 99
+ */
+int spell_chance, spell_dam;
+string spell_mess1, spell_mess2;
+
+array spells;
+#define SIZEOF_SPELLS		6
+#define SPELL_CMD_OFFSET	0
+#define SPELL_MSG_OFFSET	1
+#define SPELL_DAM_OFFSET	2
+#define SPELL_DTYPE_OFFSET	3
+#define SPELL_CHANCE_OFFSET	4
+#define SPELL_SP_OFFSET		5
+
+#define me this_object()
+
+object create_room;
+
+nosave int in_combat;
+nosave int is_talking;
+int is_persistent;
+
+show_stats() {
+	write("can_kill: "+can_kill+"\n");
+	if (kill_ob) write("kill_ob: "+file_name(kill_ob)+" (\""+kill_ob->short()+"\")\n");
+	if (query_info()) write("info: "+query_info()+"\n");
+	write("body array: "+
+	(pointerp(query_body())?MONSTERER->dump_body_array(query_body()):
+		"<none>")+"\n");
+}
+
+/* currently testing these overrides of living.c Oct98 Dredd */
+query_no_external_save() { return !is_persistent; }
+query_no_external_restore() { return 0; }
+
+set_persist(int x)
+{
+    is_persistent = x;
+    if (x != 0)
+    {
+        AUTOSAVE_SERV->set_auto_save(this_object());
+        /* set_persistent_id("P/npc/"+query_real_name()); */
+    }
+    else
+    {
+        /* set_persistent_id(0); */
+    }
+}
+
+query_destruct()
+{
+    if (is_persistent) save_me();
+    "RO/living"::query_destruct();
+}
+
+save_me(int final)
+{
+    NPC_PERSIST_SERV->save_npc(query_name());
+    AUTOSAVE_SERV->set_auto_save(this_object());
+}
+
+valid_attack(ob) {
+    /* Don't attack other monsters unless specifically allowed to. */
+    if (!objectp(ob)) return can_kill;
+	/* Don't attack in the city unless attacked */
+	if (environment(this_object())) {
+		if (environment(this_object())->query_property("npc_non_aggressive"))
+			return 0;
+		if (environment(this_object())->query_property("city"))
+			return 0;
+		}
+	/* Otherwise, kill any non NPC, or NPCs if we are allowed to */
+    return (!ob->query_npc(0) || can_kill);
+}
+
+reset(arg)
+{
+    ::reset(arg);
+    if (arg) return;
+    /* Only let this monster kill other monsters if specifically allowed. */
+    can_kill = 0;
+    is_npc = 1;
+    no_regenerate = 0;
+    enable_commands();
+/*    me = this_object(); */
+    create_room = 0;
+    set_match(this_object(), "wander","leaves"," ");
+    add_store("newbie_channel", 1); // off by default	
+}
+
+/*
+ * The one in living only lets gods do it.
+ */
+
+set_race(r) { race = r; }
+
+add_no_enter(r)
+{
+    int i;
+    array tmp = this_object()->query_store("no_enter");
+
+    if (stringp(r))
+	r = [ r ];
+    if (!arrayp(r)) return 0;
+    if (tmp)
+	r += tmp;
+    for (i = sizeof(r) - 1; i >= 0; i--)
+    	if (index(r, r[i]) < i)
+    	    r = r[..i-1] + r[i+1..];
+    this_object()->add_store("no_enter", r);
+    return 1;
+}
+
+random_move(int nowander)
+{
+    array dd, no_go;
+    int j;
+    object o;
+
+    o = environment(this_object());
+    if (!o) return;
+    dd = o->query_dest_dir();
+    no_go = this_object()->query_store("no_enter");
+    if (dd && no_go)
+    {
+	for (j = sizeof(dd) - 2; j >= 0; j -= 2)
+	{
+	    if (index(no_go, dd[j]) != -1)
+	        dd = dd[..j-1] + dd[j+2..];
+	}
+    }
+    if (dd && sizeof(dd))
+    {
+        j = (random((sizeof(dd))/2))*2 + 1;
+        if (j < sizeof(dd))
+            init_command(dd[j]);
+    }
+    if (random_pick) random_pickup();
+    return 1;
+}
+
+
+random_pickup() 
+{
+int c;
+    c = random(100);
+    if(c < random_pick) this_object()->pick_any_obj();
+}
+
+short() {
+	return short_desc+(sizeof(gods)?show_gods():"");
+}
+
+query_short() { return short_desc; }
+
+long() 
+{
+    write(this_object()->query_long());
+    write(this_object()->show_appearance());
+}
+
+/* necessary duplication? */
+query_long_desc () { return long_desc; }
+query_long() { return long_desc; } 
+
+#if 0
+/* id functions should be multiply inherited */
+id(str)
+{
+    if (index(name_list, str) > -1) return 1;
+}
+
+query_ids() { return name_list; }
+
+add_id(str) {
+        if (!str) return 0;
+        if (!name_list) name_list = ({ str });
+        else if (index(name_list, str) < 0)
+        name_list = name_list + ({  str });
+        return 1;
+}
+
+remove_id(str) {
+        int x;
+        if (!str || !name_list || (x = index(name_list, str)) < 0) return 0;
+        name_list = name_list[0 .. (x-1)] + name_list[(x+1)..];
+        return 1;
+}
+#endif
+
+can_put_and_get(str) 
+{
+    if (!str) return 0;
+    return 1;
+}
+
+catch_tell(str)
+{
+    string temp;
+
+    /* For remote logins by players! */
+    if (receive_host) {
+        remote_output(str);
+    }
+    if (query_catch_tell_ob()) {
+	int i;
+
+	if (!pointerp(catch_tell_ob))
+		"players/jenna/jfuns"->tell_jen("No array catch_tell_ob in " + file_name(this_object()) + ".\n");
+	for (i = 0; i < sizeof(catch_tell_ob); i++)
+		catch_tell_ob[i]->catch_tell(str);
+	}
+
+    /* in case test_match generates text */
+    if (busy_catch_tell)    return;
+
+/* quick hack to prevent self-catches - G.  I'm unsure whether monsters
+ * should hear themselves - it seems reasonable, but then...
+ * Probably should be in the communication soul, if anything.
+ */
+    {
+      array allargs;
+      allargs = STRINGS->split_first(str, " ");
+      if (allargs && !find_player(lower_case(allargs[0]))) return;
+               /* I *said* it was a hack! */
+    }
+
+    busy_catch_tell = 1;
+    if (talk_match) {
+		string kludge;
+
+		busy_catch_tell = 1;
+		kludge = catch test_match(str);;
+		if (kludge) alert_wizard(kludge);
+		
+/*		busy_catch_tell = 0; */
+    }
+    busy_catch_tell = 0; 
+}
+
+set_shout(str) 
+{
+	SHOUT->listen(this_object());
+	shout_function = str;
+}
+
+catch_shout(str)
+{
+    string temp;
+
+    if (query_catch_shout_ob())
+    {
+        int i;
+
+        for (i = 0; i < sizeof(talk_ob); i++)
+		if (talk_ob[i] != this_object())
+                	talk_ob[i]->catch_shout(str);
+
+	/* Support for old-style catch_shout */
+        if (shout_function && shout_function != "catch_shout")
+		call_out("send_shout", 1, str);
+    }
+}
+
+send_shout(str)
+{
+	if (arrayp(talk_ob) && sizeof(talk_ob) > 0)
+		talk_ob[0]->(shout_function)(str);
+}
+
+/*
+ * Call the following functions to setup the monster.
+ * Call them in the order they appear.
+ */
+
+set_name(n)
+{
+    name = lower_case(n);
+    set_living_name(name);
+    cap_name = capitalize(n);
+    add_id(cap_name);
+    add_id(name);
+    if (!short_desc) short_desc = cap_name;
+    if (!long_desc) long_desc = "You see nothing special.\n";
+
+    if (!body_locations) set_body(MONSTERER->body("biped"));
+}
+
+/* A level booster so monsters can grow .. */
+boost_level(int x)
+{
+    level = level + x;
+    add_str((x+x*3/4+random(x*2))/3);
+    add_con((x+x*3/4+random(x*2))/3);
+    add_pow((x+x*3/4+random(x*2))/3);
+    add_dex((x+x*3/4+random(x*2))/3);
+    add_chu((x+x*3/4+random(x*2))/3);
+    add_san((x+x*3/4+random(x*2))/3);
+    add_siz((x+x*3/4+random(x*2))/3);
+    add_int((x+x*3/4+random(x*2))/3);
+    add_wis((x+x*3/4+random(x*2))/3);
+}
+
+set_level(int l)
+{
+    level = l;
+    wimpy = 0;
+    if (!weapon_class)
+    weapon_class = WEAPON_CLASS_OF_HANDS;
+    if (!query_str()) add_str(3+(l+l*3/4+random(l*2))/3);
+    if (!query_con()) add_con(3+(l+l*3/4+random(l*2))/3);
+    if (!query_pow()) add_pow(3+(l+l*3/4+random(l*2))/3);
+    if (!query_dex()) add_dex(3+(l+l*3/4+random(l*2))/3);
+    if (!query_chu()) add_chu(3+(l+l*3/4+random(l*2))/3);
+    if (!query_san()) add_san(3+(l+l*3/4+random(l*2))/3);
+    if (!query_siz()) add_siz(random(8)+random(8)+random(8));
+    if (!query_int()) add_int(2+(l+l*3/4+random(l*2))/3);
+    if (!query_wis()) add_wis(2+(l+l*3/4+random(l*2))/3);
+	call_out("set_up_skills", 0.0);
+
+    action = 0;
+    if (!reaction) reaction = 2;
+    max_hp = max_hp();
+    if (!hit_point) hit_point = max_hp;
+    if (!sp) sp = max_sp();
+}
+
+set_up_skills() {
+	array sk = "RO/living/StatsTrack"->get_mon_skills();
+	int l = level;
+
+	if (arrayp(sk)) 
+    {
+		int x;
+		for (x = 0; x < sizeof(sk); x = x + 4) 
+        {
+            /* binomial distribution */
+			int rnd_skill = random(real2int(sk[x+1]) * l/2)  
+						  + random(real2int(sk[x+1]) * l/2)
+						  + random(real2int(sk[x+1]) * l/2)
+						  + random(real2int(sk[x+1]) * l/2); 
+			add_skill(sk[x], rnd_skill / 11); /* 10 is `average' level */
+		}
+	}
+
+	/*
+	 * Just in case the skills tracker is stuffed.
+	 */
+
+	if (!query_skill("offense"))
+			add_skill("offense",10 + l * 8+random(l*4));
+	if (!query_skill("defence"))
+			add_skill("defence",10 + l * 8+random(l*4));
+	if (!query_skill("dodge"))
+			add_skill("dodge",10 + l * 8);
+	if (!query_skill("rob_resist"))
+			add_skill("rob_resist",10 + l * 4+random(l*4));
+	if (!query_skill("distance-attacks"))
+			add_skill("distance-attacks", 10 + l * 4+random(l*4)); 
+	if (query_skill("immunity") < 20)
+			add_skill("immunity", 20 + (l * 5));
+	}
+
+/* Optional */
+set_std_mon_type(str) { std_mon_type = str ; }
+query_std_mon_type() { return std_mon_type; }
+
+/* Optional */
+set_hp(int hp) { max_hp = hp; hit_point = hp; recalc_hps(); }
+/* optional -- can only be lowered. */
+set_short(string sh) {
+    short_desc = sh;
+    if (!long_desc) long_desc = short_desc + "\n";
+}
+set_long(string lo) { long_desc = lo; }
+set_wc(int wc) { weapon_class = wc; }
+
+/* set_ac(int ac) { base_armour = ac; } */  /* Jenna Sep 99 */
+set_ac(int i) { ac = i; }
+query_ac() { return ac; }
+
+#define MAXCO 256
+set_move(n) 
+{
+    // This call_out is because otherwise the mob makes a move
+    // immediately upon being loaded, which gives you no chance to
+    // override it if you want, say, a cat that doesn't wander.
+    // Jenna Apr 2001
+
+    if (!n)
+    {
+	next_move(0); // to halt wandering, remove call_outs
+	call_out("next_move", 2, 0); // to stop souls overriding
+	return;
+    }
+
+    call_out("next_move", 5, n);
+}
+
+next_move(n)
+{
+    int i;
+
+    if (n == 0 || !query_can_wander())
+    {
+	while (find_call_out("next_move") != -1 && i < MAXCO)
+	{
+	    remove_call_out("next_move");
+            i++;
+        }
+	return;
+    }
+    object attacker=this_object()->query_attack();
+    if (attacker && (environment(attacker) == environment(this_object()))
+	|| !query_NPC()) /* dont move controlled mobs - Jenna 99 */
+    {
+        call_out("next_move", random(n)+random(n)+1, n);
+        return;
+    }
+
+    if (random(n)) call_out("random_move",1,1);
+    call_out("next_move", (random(n)+random(n)+1)*2, n);
+}
+
+/* optional
+ * 0: Peaceful.
+ * 1: Attack, IF the player is not "too wimpy" for the monster.
+ * 2: Attack on sight.
+ */
+
+set_aggressive(a) {
+    aggressive = a;
+}
+
+query_aggressive() { return aggressive; }
+
+/* optional
+ * 0: Can't attack other monsters.
+ * 1: Can attack other monsters.
+
+  This is FUCKED! - A monster should specify whether or not it can be attacked 
+     sigh - another rewrite ahead because cretins have written this stuff
+ */
+set_can_kill(a) { can_kill = a; }
+/*
+ * Now some functions for setting up spells !
+ */
+
+/*  The percent chance of casting a spell.  */
+set_chance(c) { spell_chance = c; }
+
+/* Can a monster regenerate after death? - default yes. */
+set_no_regenerate(c) { no_regenerate = c; }
+
+/* Message to the victim. */
+set_spell_mess1(m) { 
+	spell_mess1 = m; 
+	call_out("log_for_jen", 3);
+	}
+set_spell_mess2(m) { spell_mess2 = m; }
+set_spell_dam(d) { spell_dam = d; }
+
+query_spell_chance() { return spell_chance; }
+query_spell_mess1() { return spell_mess1; }
+query_spell_mess2() { return spell_mess2; }
+query_spell_dam() { return spell_dam; }
+
+log_for_jen() {
+	catch {
+		LOG->log("SPELLS", short() + " (" + file_name(this_object()) +
+		") in " + environment(this_object())->short() + " ("+
+		file_name(environment(this_object())) + ")");
+	       };	
+	}
+
+add_attack(string cmd, string msg, int dam, string dtype, int chance, int sp) {
+    object csoul = present("generic/combat", this_object()); 
+
+    if (!csoul)
+	return 0;
+    if (!spells)
+	spells = [ ];
+    if (index(spells, msg) != -1)
+        return;
+    spells += [ cmd, msg, dam, dtype, chance, sp ];
+    csoul->add_spell_attack(cmd);
+    return 1;
+    }
+
+/*
+ * Set the wimpy mode
+ * 0 = is wimpy on max_hp/4
+ * > 0 is a hp value to wimp out at
+ * -1 = is not wimpy.
+ * Bizarre, yes. But all in the name of backward compatibility. *sigh*
+ */
+set_wimpy(int wimp_value) { wimpy = wimp_value; }
+query_wimpy() { return wimpy; }
+
+/*
+ * Force the monster to do a command. The force_us() function isn't
+ * always good, because it checks the level of the caller, and this function
+ * can be called by a room.
+ */
+init_command(cmd) { return command(cmd, this_object()); }
+					// last arg added by Jenna Mar '01
+
+/* Load chat */
+
+set_chat_chance(c) { chat_chance = c; }
+set_a_chat_chance(c) { a_chat_chance = c; }
+
+remove_chat(str) { 
+int x;
+array a, b;
+    x = index(chat_head, str);
+    if (x == -1) return;
+    chat_head = chat_head[0..x-1] + chat_head[x+1..];
+    if (!sizeof (chat_head)) set_chat_chance (0);
+}
+
+query_chat() { return chat_head; }
+query_a_chat() { return a_chat_head; }
+
+load_chat(strs, chance) 
+{
+    if (pointerp(strs)) {
+	chat_head += strs;
+    }
+    else {
+    chat_head = ({ strs }) + chat_head;    
+    }
+    if (chance) chat_chance = chance;
+}
+
+set_rumours(int on, int chance)
+{
+   rumours = on; 
+   if (chance) chat_chance = chance;
+}
+
+/* Load attack chat */
+load_a_chat(strs, chance) {
+
+    if (pointerp(strs)) {
+	a_chat_head += strs;    
+    }
+    else {
+        a_chat_head = ({ strs }) + a_chat_head;    
+    }
+    if (chance) a_chat_chance = chance;
+}
+
+/* Catch the talk */
+
+#define BEGIN 1
+#define END 2
+
+query_catch_shout_ob() {
+        int i;
+
+        if (pointerp(talk_ob)) 
+        {
+            for (i = 0; i < sizeof(talk_ob); i++)
+                if (!talk_ob[i]) talk_ob = ARRAY->delete(talk_ob, i, 1);
+		    return sizeof(talk_ob);
+		}
+        return 0;
+	}
+
+add_catch_shout_ob(object ob) 
+{ 
+    SHOUT->listen(this_object());
+    return set_object(ob); 
+}
+
+set_object(object ob) 
+{ 
+    if (!talk_ob) talk_ob = [ ob ];
+    else if (index(talk_ob, ob) != -1) return 0;
+    else talk_ob = [ ob ] + talk_ob;
+    return 1;
+}
+
+set_function(str) { hold_func = str; }
+set_type(str) { hold_type = str; }
+
+set_match(ob, func, Ttype, match)
+{
+    int i;
+
+    if (!func)     /* assume old-style set up sequence */
+    {
+        match = ob;
+        func = hold_func;
+        Ttype = hold_type;
+	    ob = 0;
+    }
+    if (!func || !Ttype || !match) return 0;	
+    query_catch_shout_ob(); /* removes dested items from talk_ob */	
+    if (ob) set_object(ob);
+    match = lower_case(match);
+    if (!pointerp(talk_func))
+    {    
+        talk_func =  ({ func }) ;
+        talk_type =  ({ Ttype }) ;
+        talk_match = ({ match });
+    }
+    else
+    {
+        talk_func =  talk_func + ({ func });
+        talk_type =  talk_type + ({ Ttype });
+        talk_match = talk_match + ({ match });
+    }
+    talk_alpha = allocate(sizeof(talk_match));
+    for (i = 0; i < sizeof(talk_alpha); i++)
+    {
+        talk_alpha[i] = 0;
+        if (talk_match[i] && sizeof(talk_match[i]) > 0)
+        {
+            if (test_alpha(talk_match[i][0..0]))
+                talk_alpha[i] = BEGIN;
+            if (test_alpha(talk_match[i][strlen(talk_match[i])-1..strlen(talk_match[i])-1]))
+                talk_alpha[i] = talk_alpha[i] | END;
+        }
+    }
+}
+
+/* test the overheard string against those in the talk_* arrays */
+test_match(str) 
+{
+    string tmp, str1, str2;
+    int i;
+    real cotim = 0.0;
+
+    if (!talk_match || !talk_type || !talk_func || !talk_alpha) return;
+    if (!stringp(str)) return;
+
+    str = lower_case(str);
+    while (i < sizeof(talk_match) && i < sizeof(talk_alpha) &&
+		i < sizeof(talk_type) && i < sizeof(talk_func) )
+    {
+        array allargs;
+
+	if (!talk_ob || !sizeof(talk_ob))
+	    set_object(this_object());
+
+        if (talk_type[i])
+             allargs = STRINGS->split_first(str, " " + talk_type[i]);
+
+        if (allargs && sizeof(allargs) == 2)
+        {
+            if (!talk_match[i] || talk_match[i] == "") 
+            {
+		        cotim = cotim + 0.2;
+                call_out("delayed_fcall", cotim, ({ talk_ob[0],talk_func[i],str}));
+		        return;
+	        }
+            allargs = STRINGS->split_first(allargs[1], talk_match[i]);
+            while (allargs && sizeof(allargs) == 2)
+            {
+                str1 = allargs[0];
+                str2 = allargs[1];
+                if ((str1 == "" || !(talk_alpha[i]&BEGIN) || !test_alpha(str1[strlen(str1)-1..strlen(str1)-1])) &&
+                    (str2 == "" || !(talk_alpha[i]&END) || !test_alpha(str2[0..0])))
+                {
+#if 1
+		            cotim = cotim + 0.2;
+                    call_out("delayed_fcall", cotim, ({ talk_ob[0],talk_func[i],str}));
+		            return;	
+#endif
+                }
+                allargs = STRINGS->split_first(allargs[1], talk_match[i]);
+            }
+        }
+        i += 1;
+    }
+}
+
+/* To prevent recursive loops and stuff */
+delayed_fcall(ofs) {
+    if(objectp(ofs[0]) || (stringp(ofs[0]) && find_object(ofs[0])))
+        call_other(ofs[0], ofs[1], ofs[2]);
+    busy_catch_tell = 0;
+    return;
+}
+
+/* is a given chatacter alpha? */
+test_alpha(char)
+{
+    string c;
+
+    c = lower_case(char);
+    if (c[0] >= "a"[0] && c[0] <= "z"[0])
+        return 1;
+    else
+        return 0;
+}
+
+set_dead_ob(ob) {
+    dead_ob = ob;
+}
+
+query_talk_ob() { return talk_ob; }
+
+/*
+ * Monsters who can walk about and can find a way
+ * to the endoplasmatorium can try and regenerate themselves
+ * (only fair!)
+*/
+
+nosave object walk_soul;
+
+#if 0
+nosave int num_deaths = 0; /* code must be attached to the monster itself */
+#endif
+
+string regen_home = "room/city/endo";
+
+int set_regen_home(string spot)
+{
+    if (load_object(spot))
+    {
+        regen_home = spot;
+        return 1;
+    }
+    else return 0;
+}
+
+second_life() 
+{
+    disable = ({ });
+    if (query_hp() < 0) set_hp(max_hp());
+    attacker_ob = 0;
+    call_out("check_fucked_mapper", 6, environment(this_object()));
+/*    num_deaths++; */
+    if (environment(this_object())) { /* && !random(num_deaths)) */
+        walk_soul = present("tracker_soul", this_object());
+        if (walk_soul) {
+ 	    walk_soul->set_move_speed(3.0);
+	    walk_soul->set_sf_callbacks("remove_ghost", "dest_me");
+	    call_out("off_you_go", 3);
+    	    return 1;
+	    }
+        }
+
+    if (query_store("dead_again") == 1) return 0;
+    if (!no_regenerate && create_room &&
+	(index(I_breathe, "air") != -1 || index(I_breathe, "anything") != -1))
+	    return start_vampire();
+    return 0;
+}
+
+off_you_go()
+{
+    this_object()->init_command("walk " + regen_home);
+}
+
+start_vampire() 
+{
+    walk_soul = clone_object("std/map/track");
+    move_object(walk_soul, this_object());
+    if (!walk_soul)
+	return 0;
+    walk_soul->set_move_speed(3.0);
+    walk_soul->set_sf_callbacks("make_vampire", "dest_me");
+    this_object()->init_command("walk room/city/endo");
+    return 1;
+}
+
+make_vampire() 
+{
+    add_store("dead_again",1);
+    remove_ghost();
+}
+
+remove_ghost()
+{
+    if (!ghost) return 0;
+    add_store("dead_again",0);
+    remote_say("Some mist disappears.\n");
+    remote_say(cap_name + " appears in a solid form.\n");
+    ghost = 0;
+    /* set_light(-1); */
+    msgin = "arrives";
+    msgout = "leaves";
+    walk_soul = present("tracker_soul", this_object());
+    if (walk_soul)
+    {
+        walk_soul->set_sf_callbacks(0, 0);
+        if (create_room)
+	    this_object()->init_command("walk "+file_name(create_room));
+    }
+    return 1; 
+}
+
+/* If mob is a ghost and not moving, it's been fucked by the mapper.
+ * If the mapper errors out, the fail function (dest_me) is never
+ * called - Jenna March 2000
+ */
+check_fucked_mapper(where_was_i) {
+    if (ghost && environment(this_object()) == where_was_i)
+	dest_me();
+    }
+
+dest_me() 
+{ 
+    if (!random(4))
+	SHOUT->shout("A ghost wails eerily.\n");
+    destruct(this_object());
+}
+/*
+ * This is called before a creature is allowed to die.
+ * If it returns 0 the monster will die, otherwise it will survive.
+ * Note that if the monster survives, its exp_points should be set back
+ * to a higher value.
+ */
+creature_immortal()
+{
+    int tmp = 0;
+
+	if (dead_ob)
+		tmp= dead_ob->monster_died(this_object());
+
+	test_loop++;
+	if ((tmp!=0) && (test_loop>5)) 
+	{
+	log_file("qarath","\nCreature : "+file_name(this_object())+"\n"+
+	 "Location :"+file_name(environment(this_object()))+"\n"+
+	 "Attacker (last) : "+query_attack()+"\n"+
+	 "Attacker (owner): "+query_attack()->query_owner()+"\n"+
+	 "->monster_died() = "+tmp+"\n");
+		destruct(this_object());
+		return 0;
+	}
+	return tmp;
+}
+
+set_random_pick(r) { random_pick = r; }
+
+pick_any_obj() { /* Jenna Dec 99 */
+    int i;
+    array c;
+
+    if (!objectp(environment(this_object())) ) 
+	return;
+    if (!query_NPC())
+	return;
+    if (present("corpse", environment(this_object())))
+	init_command("get all from corpse");
+    init_command("get all");
+    c = contents(this_object());
+    for (i = 0; i < sizeof(c); i++)
+      if (c[i])
+	if (c[i]->id("corpse") || c[i]->query_quest_item())
+	    init_command("drop "+c[i]->query_short_desc());
+    init_command("wear all");
+    wield_best_weapon();
+    }
+
+#if 0
+pick_any_obj() {
+array obj;
+int weight,i;
+
+    /* Next line added by llati. It stops errors for when the monster
+	doesnt yet have a environment(like when it is first cloned) */
+    if (!objectp(environment(this_object())) ) return 1;
+    obj = contents (environment(this_object()));
+    i = sizeof (obj);
+    while(i--) {
+    if (obj[i] && obj[i] -> get (0) && obj[i] -> short()) {
+        weight = obj[i] -> query_weight (0);
+        if (!add_weight(weight)) {
+        remote_say(cap_name + " tries to take " + obj[i] -> short (0) +
+            " but fails.\n");
+        return;
+        }
+        if (transfer(obj[i], this_object())) return;
+        remote_say(cap_name + " takes " + obj[i] -> short (0) + ".\n");
+        if (obj[i] -> weapon_class (0))
+	if (!name_of_weapon ||
+	    name_of_weapon->weapon_class() < obj[i]->weapon_class())
+	    call_other(obj[i], "wield", call_other(obj[i],"query_name"));
+        else if (obj[i] -> armour_class (0))
+        call_other(obj[i], "wear", call_other(obj[i],"query_name"));
+        return;
+    }
+    }
+}
+#endif
+
+dumpa(str) 
+{
+    string foo;
+    if (STRINGS->match_head(str, ({ "players/" })) ) return 0;
+    if(!str) str = "MONSTER_DUMP";
+    save_object(str);
+}
+
+set_init_ob(ob) { init_ob = ob; }
+
+init() 
+{
+    int i;
+    if (!create_room && me) create_room = environment();
+    if (this_player() == this_object()) return;
+    if (query_ghost()) return;
+    if (init_ob)
+      if (init_ob->monster_init(this_object())) return;
+    if (this_player() -> query_invis() >= NO_SHORT) return;
+    object tsoul = present("thief soul", this_player());
+    if (tsoul && tsoul->ignore_me(this_object())) return;
+    if (attacker_ob) 
+    {
+	    if (attacker_ob == this_player())
+		    attacker_ob->start_attack_cycle();
+	    start_attack_cycle();
+	}
+    if (!this_object()->query_NPC())
+	return 0;
+    if (this_player()->query_living() && valid_attack(this_player())) {
+  	kill_ob = FIGHT_SERV->next_attacker(this_object());
+        if (aggressive > 1)
+            kill_ob = this_player();
+        if (aggressive) {	/* kill 'em if they aint too wimpy */
+  	    if (this_player()->query_max_hp() * query_chu() >= (max_hp * this_player()->query_chu() / 4))
+       	       kill_ob = this_player();
+	start_attack_cycle();
+  	}
+    }
+    if (this_player()->is_player()) {
+	if (!is_talking && chat_head && sizeof(chat_head))
+		if (find_call_out("start_talking") < 0)
+			call_out("start_talking", 2);
+	}
+    if (sizeof(xtra_add_actions)) 
+    {
+        for(i=0; i<sizeof(xtra_add_actions); i=i+3)
+            add_action("xtra_add_act", xtra_add_actions[i]);
+    }
+}
+
+xtra_add_act(str)
+{ 
+    int i=index(xtra_add_actions, query_verb());
+    if (i == -1) return 0;
+    if (xtra_add_actions[i+1])
+		return xtra_add_actions[i+1]->(xtra_add_actions[i+2])(str);
+}
+
+add_xtra_action(comm, ob, func)
+{
+    if(index(xtra_add_actions, comm) == -1)
+        xtra_add_actions += ({ comm, ob, func });
+}
+
+do_spell_attack(str) {
+    int i, x;
+    string tmp1, tmp2;
+
+    if (!spells || !sizeof(spells))
+	return 0;
+    for (x = -1, i = 0; i < sizeof(spells); i += SIZEOF_SPELLS)
+	if (str == spells[i+SPELL_CMD_OFFSET])
+	    x = i;
+    if (x == -1)
+	return 0;
+    if (query_sp() < spells[x+SPELL_SP_OFFSET])
+	return 0;
+    add_sp(-spells[x+SPELL_SP_OFFSET]);
+
+    tmp1 = STRINGS->string_replace(spells[x+SPELL_MSG_OFFSET],
+	"$m", query_name());
+    tmp2 = STRINGS->string_replace(tmp1, "$v", attacker_ob->query_name());
+    say(capitalize(tmp2) + "\n", attacker_ob);
+    tmp2 = STRINGS->string_replace(tmp1, "$v", "you");
+    FIGHT_SERV->combat_msg(attacker_ob, capitalize(tmp2) + "\n");
+    tmp1 = STRINGS->string_replace(spells[x+SPELL_MSG_OFFSET],
+	"$v", attacker_ob->query_name());
+    tmp2 = STRINGS->string_replace(tmp1, "$m", "you");
+    FIGHT_SERV->combat_msg(this_object(), capitalize(tmp2) + "\n");
+
+    return attacker_ob->hit_player(spells[x+SPELL_DTYPE_OFFSET],
+	spells[x+SPELL_DAM_OFFSET]);
+    }
+
+query_spells() { return spells; }
+
+list_spells() {
+    int i;
+    string ret, dis;
+    array others = [ ], c;
+
+    dis = "";
+    c = contents(this_object());
+    for (i = 0; i < sizeof(c); i++)
+        if (c[i]->id("distance weapon") && !c[i]->short() && c[i]->query_shootable())
+            dis += " \"" +
+                FORMAT->left_justify("fire "+c[i]->query_shootable_name()+" <direction>\"", 18) +
+                FORMAT->left_justify(c[i]->query_shoot_damage() + " dam", 10) +
+                FORMAT->left_justify(c[i]->query_sp_cost() + " sp", 10) + "\n"; 
+    if (dis != "" || (spells && sizeof(spells))) {
+	ret = "You have the following special attacks:\n";
+	if (arrayp(spells))
+	  for (i = 0; i < sizeof(spells); i += SIZEOF_SPELLS)
+	    ret +=  " \"" + 
+		FORMAT->left_justify(spells[i+SPELL_CMD_OFFSET] + "\"", 18) +
+		FORMAT->left_justify(spells[i+SPELL_DAM_OFFSET] + " dam", 10) +
+		FORMAT->left_justify(spells[i+SPELL_SP_OFFSET] + " sp", 10) +
+		"\n";
+	if (dis)
+	    ret += dis;
+	}
+    if (commands && sizeof(commands)) {
+	if (!ret)
+	    ret = "You";
+	else
+	    ret += "You also";
+	ret += " have the following powers:\n " + implode(commands, ", "); 
+	}
+    if (!ret)
+	ret = "You have no special attacks or powers.\n";
+    MORE->more(ret);
+    return 1;
+    }
+
+query_spell_commands() {
+    array ret = [ ];
+    int i;
+
+    if (!spells) return ret;
+    for (i = 0; i < sizeof(spells); i += SIZEOF_SPELLS)
+	ret += [ spells[i+SPELL_CMD_OFFSET] ];
+    return ret;
+    }
+
+start_attack_cycle() {
+int react_time;
+
+    if (!is_talking && a_chat_head && sizeof(a_chat_head))
+		 call_out("start_talking", 3);
+
+    wield_best_weapon(); 
+	/* This is called even if combat is continuing, not starting
+	   (tested in the next line), because it enables the monster
+	   to switch between a distance weapon and a close-up weapon. 
+		Jenna 950828 */
+    if (find_call_out("attack_cycle") > -1) return;
+    react_time = 120 / (1 + query_str() + query_chu() + query_dex());
+    if (react_time < 1) react_time = 1;
+    if (react_time > 5) react_time = 5;
+    in_combat = 1;
+    call_out("attack_cycle", react_time);
+}
+
+start_talking()
+{
+    int next_time, c;
+    string next_chat;
+
+    is_talking = 1;
+
+    if(query_ghost() || !query_NPC()) return;
+    if (attacker_ob && (0 <= index(contents(environment(this_object())), attacker_ob)) && a_chat_head && sizeof(a_chat_head)) 
+    {
+    	if (!a_chat_chance) return;			
+        c = random(sizeof(a_chat_head));
+        remote_say(a_chat_head[c]);
+    	next_time = random(TALK_FREQ/a_chat_chance) + 1;
+    } else if (!attacker_ob && chat_head && sizeof(chat_head)) 
+    {
+    	if (!chat_chance) return;		/*To stop errors when chat is stoped */
+        if (!rumours || (random(2) == 0))
+            next_chat = chat_head[random(sizeof(chat_head))];	/* -Squawk */
+        else
+            next_chat = cap_name + " says: " + RUMOUR->get_rumour();
+        remote_say(next_chat);
+    	next_time = random(TALK_FREQ/chat_chance) + 1;
+    }
+
+    if (random_pick) random_pickup();
+
+    if (next_time < MIN_TALK_DELAY)
+	next_time = MIN_TALK_DELAY;	/* Jenna Dec 98 */
+
+    if (test_if_any_here()) call_out("start_talking", next_time);
+    else is_talking = 0;
+}
+
+attack_cycle() 
+{
+    int x, c, react_time;
+    object attack_soul;
+
+    if (query_ghost()) return;
+    in_combat = 1;
+    if (!attacker_ob && kill_ob && present(kill_ob, environment(this_object())))
+    {
+    	attack_object(kill_ob);
+    	kill_ob = 0;
+   	react_time = 120 / (query_str() + query_chu() + query_dex());
+    if (react_time < 1) react_time = 1;
+    if (react_time > 5) react_time = 5;
+	call_out("attack_cycle", react_time);
+    	return; 
+    }
+
+    if (attacker_ob && present(attacker_ob, environment(this_object()))
+  	&& !attacker_ob->query_ghost() && query_NPC()) 
+    {
+        /* temporary Hack until combat soul has such usage */
+	if (xtra_attack_ob) 
+        {
+	        call_other(xtra_attack_ob,xtra_attack_func, this_object(),
+		    attacker_ob );	
+	}
+        /* end of hack */
+
+	if (spells && sizeof(spells)) 
+	{
+	    x = random(sizeof(spells)/SIZEOF_SPELLS)
+		* SIZEOF_SPELLS;
+
+        /* less special attacks when no sp */
+	    if (spells[x+SPELL_CHANCE_OFFSET] > random(100)
+	        && query_sp() > random(50)) 
+	             init_command(spells[x+SPELL_CMD_OFFSET]);
+	}
+
+        else if (random(100) < comm_chance && extra_comm)
+        {
+            if (commands && sizeof(commands) > 0)
+	            command(commands[random(sizeof(commands))], this_object()); 
+        }
+    }
+    FIGHT_SERV->attack(this_object());
+    if (attacker_ob && (wimpy==0) && (hit_point < max_hp/4) && random(2))
+	    this_object()->run_away();
+    else if (attacker_ob && (wimpy>0) && (hit_point <= wimpy) && random(2))
+	    this_object()->run_away();
+   
+
+    if (test_if_any_here()) {
+	react_time = 120 / (query_str() + query_chu() + query_dex() + 1);
+        if (react_time < 1) react_time = 1;
+        if (react_time > 5) react_time = 5;
+	call_out("attack_cycle", react_time);
+    }
+    else {
+	in_combat = 0;
+	return;
+    }
+}
+
+set_xtra_attack(ob, fun) {
+	if (!ob || !fun || !stringp(fun)) return 0;
+	xtra_attack_ob = ob;
+	xtra_attack_func = fun;
+	return 1;
+}
+ 	
+set_info(str) { add_store("info", str); }
+query_info() { return query_store("info"); }
+
+query_create_room() { return create_room; }
+
+nosave alert_wizard(mess)
+{
+	string wiz;
+	object them;
+
+	mess = "test_match error: "+mess+"monster: "+short();
+	if (create_room)
+		mess += " from "+file_name(create_room);
+	if (create_room && (wiz = query_su_name(create_room)))
+	{
+		if (them = find_player(wiz))
+			tell_object(them, mess+"\n");
+		log_file(wiz+".rep", mess+"\n");
+	}
+	log_file("CATCH_TELL", mess+"\n");
+	destruct(this_object());
+}
+
+
+quit()
+{
+	destruct(this_object());
+	return 1;
+}
+
+/*
+ * Functions set_no_bond() and query_no_bond() put in by Zaphoid
+ * so that monsters cannot be bonded if the owner wizards dont want them 
+ * to be bonded.
+ *
+ * should've been done using add_store, and query_store() -- Dredd.
+ * 940212 Hunter   now uses add_store() and query_store() :-)
+ */
+
+set_no_bond(cant_bond) {
+    return add_store("bondable", cant_bond);
+}
+
+query_no_bond() {
+    return query_store("bondable");
+}
+
+/*
+ * Functions set_no_disguise() and query_no_disguise() put in by Dodinas
+ * so that wizards can set if thieves can disguise themselves as particular
+ * monsters or not.
+ */
+
+set_no_disguise(cant_disguise) {
+    return add_store("disguiseable", cant_disguise);
+}
+
+query_no_disguise() {
+    return query_store("disguiseable");
+}
+
+query_medium(foo)
+{
+    if (environment())
+	return environment()->query_medium(foo);
+}
+
+remote_say(str)
+{
+    say(str, this_object() );
+    return 1;
+}
+
+emoted(string emotion)
+{
+    object o = present("reaction_soul", this_object());
+	if (!o) return;
+
+	o->emoted(emotion);
+}
+
+/* 950203 Ormuzd */
+
+int able_to_wander=1;
+int leaves_room=0;
+
+wander()
+{
+    object attacker= this_object()->query_attack();
+
+    if(!attacker) return;
+	if(environment(attacker) != environment(this_object())) return;
+    if(!able_to_wander) return;
+
+    if(leaves_room > 2)
+    {
+        call_out("random_move",1,1);
+        leaves_room=0;
+    }
+    else
+       leaves_room++; 
+}
+
+set_can_wander(int allow) { able_to_wander=allow; }
+query_can_wander() { 
+	if (!able_to_wander && !present("distance weapon", this_object()))
+		LOG->log("EASYMEAT", this_object()->query_name() +
+			" the " + this_object()->query_std_mon_type() +
+			" in " + file_name(environment(this_object())) +
+			" is NO_WANDER without a distance weapon.\n");
+	return able_to_wander; 
+	}
+
+/* 950727 Ormuzd */
+
+setup_commands() 
+{ 
+    // FIX:
+    // add_commands(localcmd(this_object())); 
+}
+
+/* Add any combat-type commands the monster has. Kind of a hack
+ * because it can't use many commands properly (it doesn't do
+ * args, for example).
+ */
+add_commands(locals)
+{
+    array nope = [ "help", "load", "unload", "fire", "shoot", "weapon_name" ];
+    int i;
+  
+    for(i=0; i< sizeof(locals); i=i+3)
+ 	if(stringp(locals[i]) && locals[i+1]->id("soul") )
+	    if(!locals[i+1]->id("handle") && !locals[i+1]->id("generic"))
+		if(index(commands, locals[i]) == -1 
+		   && index(nope, locals[i]) == -1)
+		    commands+= ({ locals[i] });   
+    extra_comm=1;
+}
+
+query_commands() { return commands; }
+
+query_xtra_actions() { return xtra_add_actions; }
+
+/* Darkryln */
+
+set_comm_chance(int c)  { comm_chance=c; }
+query_comm_chance()     { return comm_chance; }
+
+#if 0
+query_light() 
+{
+    object o;
+    o = environment(this_object());
+    if (o) return o->query_light();
+}
+#endif
+
+query_gods() { return gods; }
+
+query_god(g)
+{
+   int i=index(gods, g);
+   return (i<0?0:1);
+}
+
+add_god(string g) { if(sizeof(g)) gods += ({ g }); }
+
+remove_god(string g) 
+{
+    int i=index(gods,g); 
+    if(i>=0) gods=gods[..i-1]+gods[i+1..];
+}
+
+show_gods() 
+{ 
+    if (gods == 0 || sizeof(gods) == 0) return "";
+    return " ("+implode(gods, ", ")+")"; 
+}
+
+query_quests(arg) // because some code expects a return - Jenna May 01
+{
+    if (arg) return 0;
+    return [ ];
+}
+
+/* Make a monster wield the best weapon it has 
+	Jenna */
+
+wield_best_weapon() {
+	array stuff = contents(this_object());
+	int i, best_wep, best_wc;
+	object current_wep;
+
+	if (!query_NPC())
+		return;
+	for (best_wep = 0, best_wc = 0, i = 0; i < sizeof(stuff); i++)
+		if (stuff[i]->id("weapon"))
+			if (stuff[i]->weapon_class() > best_wc) {
+				best_wc = stuff[i]->weapon_class();
+				best_wep = i;
+				}
+	if (!best_wc)
+		return;
+	if (current_wep = this_object()->query_wielded()) {
+		if (current_wep == stuff[best_wep])
+			return; /* Already wielding best weapon */
+		init_command("unwield " + current_wep->query_name());
+		}
+	init_command("wield " + stuff[best_wep]->query_name());
+	return 1;
+	}
+
+regen_sp(n) {
+	if (!n || find_call_out("regen_sp") != -1) return;
+	add_sp(n);
+	call_out("regen_sp", 30, n);
+	}
+
+query_NPC() { return !(this_object()->query_owner()); }
+
+query_owner() {
+	/* Search NPC souls for an owner */
+	array a = contents(this_object());
+	int i;
+
+	for (i = 0; i < sizeof(a); i++)
+		if (a[i]->id("npc soul") && a[i]->query_owner())
+			return a[i]->query_owner();
+	return 0;
+	}
+
+
+/* Routing to Jenna's Monster IQ soul */
+react(arg1, arg2, arg3, arg4) {
+	object iq = present("monster_IQ", this_object());
+	if (iq)
+		iq->react(arg1, arg2, arg3, arg4);
+	}
+
+set_catch_tell_ob(o) { return add_catch_tell_ob(o); }
+
+add_catch_tell_ob(o) {
+	if (!catch_tell_ob)
+		catch_tell_ob = ({ });
+	if (stringp(catch_tell_ob) || objectp(catch_tell_ob))
+		catch_tell_ob = ({ catch_tell_ob });
+	if (index(catch_tell_ob, o) != -1)
+		return 0;
+	catch_tell_ob += ({ o });
+	return 1;
+	}
+
+query_catch_tell_ob() { 
+	int i;
+
+	if (pointerp(catch_tell_ob)) 
+		for (i = 0; i < sizeof(catch_tell_ob); i++)
+			if (!catch_tell_ob[i])
+				catch_tell_ob = ARRAY->delete(catch_tell_ob, i, 1);
+	return catch_tell_ob; 
+	}
+
+query_talk_match() { return talk_match; }

@@ -1,0 +1,157 @@
+/*
+ * Comargs.c
+ * Command line parser
+ * Written by Aaron Wigley <wigs@yoyo.cc.monash.edu.au> as part of the
+ * Shattered Worlds Mudlib.
+ * Usage:
+ *   call split_args( string, array1, array2 )
+ *   where string is the command line string,
+ *   array1 is an array of strings listing boolean switches
+ *   array2 is an array of optional arguments
+ *
+ *   it returns:
+ *    array (array3, array4, array5)
+ *    array3 = array of normal strings determined not to be switches
+ *    array4 = array of int mapped onto array1 above (1 == switch present)
+ *    array5 = array of strings mapped onto array2 above (int == no 
+ *	option present)
+ */
+
+/*
+ * NOTE! NOTE! NOTE! NOTE!
+ * 
+ *  This code has the possibility for modifying command lines
+ *  *before* the various souls handle the action. As such, consider
+ *  this code to be a possible security hole. 
+ *  This code must be kept somewhere protected from modification.
+ *  Also, try to limit the dependency of this object on other code.
+ */
+
+#include <Servers.h>
+
+/*
+ * Arguments:
+ *   string commandLine		- the string to be parsed
+ *   array switches		- array of string. Boolean switches to 
+ *				look for
+ *   array options		- array of string. Options to look for.
+ * Return Value:
+ *   array = ({ ar1, ar2, ar3 })
+ *   array ar1      		- array of normal words
+ *   array ar2 			- switches present
+ *   array ar3			- options given
+ */
+array 
+split_args( (int|string) commandLine, array switches, array options )
+{
+array words;
+array retWords = ({ });
+array retSwitches = allocate(sizeof(switches));
+array retOptions = allocate(sizeof(options));
+int i;
+int j;
+int k;
+string thisOption;
+    if (intp(commandLine))
+	return ({ ({ }), ({ }), ({ }) });
+    words = delim_split(commandLine);
+
+    for (i = 0; i < sizeof(words); i ++)
+    {
+	if (words[i][0..0] == "-")
+	{
+	    j = index( switches, words[i][1..] );
+	    if (j != -1)
+	    {
+	 	retSwitches[j] = 1;
+	    }
+	    else
+	    {
+		for (j = 0; j < sizeof(options); j ++)
+		{
+		    if (words[i][1..] == options[j]) 
+		    {
+			if (i == (sizeof(words)-1) )
+			    retOptions[j] = "";
+			else
+			    retOptions[j] = words[i+1];
+			i ++;
+			break;
+		    }
+		}
+		if (j == sizeof(options))	/* not found above? */
+		{
+		    for (j = 0; j < sizeof(options); j ++)
+		    {
+			thisOption = options[j];
+			if (words[i][1..sizeof(thisOption)] == thisOption)
+			{
+			    if (i == sizeof(words)-1)
+				retOptions[j] = "";
+ 			    else
+			        retOptions[j] = words[i][(1+sizeof(thisOption))..];
+			    break;
+			}
+		    }
+		    if (j == sizeof(options))
+		        retWords += ({  words[i] });
+	        }
+ 	    }
+	}
+	else
+	{
+	    retWords += ({ words[i] });
+	}
+    }
+    return ({ retWords, retSwitches, retOptions });
+}
+
+
+nosave string delimpairs = "[]\"\"{}''``()";
+
+array delim_split(string foo)
+{
+int i, j;
+array tmp = explode(foo, " ");
+array ret = ({ });
+(int|string) word = 0;
+string delim;
+    for (i = 0; i < sizeof(tmp); i ++)
+    {
+	if (intp(word))
+	{
+	    word = tmp[i];
+	}
+	else
+	{
+	    word += ((word == "")?"":" ")+tmp[i];
+	}
+	if (word != "")
+	{
+	    delim = word[0..0];
+	    j = index(delimpairs, delim);
+	    if ( (j != -1) && (j%2 == 0))	/* positive & even */ 
+	    {
+	        delim = delimpairs[j+1..j+1];
+	        if (word[sizeof(word)-1..sizeof(word)-1] == delim)
+	        {
+	    	    ret += ({ parse_string(word) });
+	    	    word = 0;
+	        }
+	    }
+	    else
+	    {
+	        ret += ({ word });
+	        word = 0;
+	    }
+	}
+    }
+    return ret;
+}
+
+parse_string(str)
+{
+    if (str[0..0] == "\"")
+    	str = str[1..sizeof(str)-2];
+    return str;
+}

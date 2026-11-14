@@ -1,0 +1,393 @@
+/* => /obj/distance_weapon.c
+ *
+ *	Inherits obj/weapon; allows throwable or shootable weapons.
+ *
+ *	'man distance_weapon' for information.
+ */
+
+inherit "obj/weapon";
+
+int throwable, impact, auto_l, dc, wield_override, spcost;
+object ammo;
+string shoot_mess1, shoot_mess2;
+(string|array) shootable;
+
+reset(arg) {
+	::reset(arg);
+	if (!arg)
+		add_id("distance weapon");
+	}
+
+show_stats() 
+{
+    ::show_stats();
+    write(
+		"throwable: " + throwable + " (Impact: " + impact + ")\n" +
+		"shootable: ");
+    if (pointerp(shootable))
+	DUMP->dump(shootable);
+    else 
+	write(shootable + "\n");
+    write(	"(Shoot Message1: " + shoot_mess1 + ")\n" +
+    		"(Shoot Message2: " + shoot_mess2 + ")\n" +
+		"(Autoload: " + auto_l + ")\n" +
+		"(SP Cost : " + spcost + ")\n" +
+		"distance class: " + dc + "\n" +
+		"ammo: " + (intp(ammo) ? ammo : ammo->short()) + "\n");
+}
+
+init (arg) 
+{
+    object e = environment(this_object());	
+    ::init(arg);
+    if (query_throwable())
+	add_action("propel", "throw");
+    if (query_shootable()) {
+	if (!e || !e->query_living() || e->is_player() || e->query_owner()) {
+		add_action("load", "load");
+		add_action("unload", "unload");
+		}
+	add_action("shoot", "shoot");
+	add_action("shoot", "fire");	
+	}
+}
+
+query_long()
+{
+string tmp;
+    if (stringp(query_shootable()))
+	tmp = PLURAL->plural(query_shootable()); 
+    else if (pointerp(query_shootable()))
+	tmp = PLURAL->plural(query_shootable()[0]);	
+    else if (query_throwable())
+	return ::query_long() + "You could probably throw this as a weapon.\n";
+    else	
+	return ::query_long();
+    if (ammo)
+	return ::query_long() + "It is loaded with " + ammo->short() + ".\n";
+    return ::query_long() + "It looks designed to shoot " + tmp + ".\n";
+}
+
+short() {
+	if (!ammo || !stringp(::short())) return ::short();
+	return ::short() + " (loaded)";
+	}	
+
+set_throwable(n) { throwable = n; }
+query_throwable() { return throwable; }
+set_shootable(o) { shootable = o; }
+query_shootable() { return shootable; }
+set_impact(n) { impact = n; }
+query_impact() { return impact; }
+set_autoload(n) { auto_l = n; }
+set_sp_cost(n) { spcost = n; }
+query_sp_cost() { return spcost; }
+set_distance_class(n) { dc = n; }
+query_distance_class() { return dc; }
+set_shoot_mess1(str) { shoot_mess1 = str; }
+query_shoot_mess1() { return shoot_mess1; }
+set_shoot_mess2(str) { shoot_mess2 = str; }
+query_shoot_mess2() { return shoot_mess2; }
+set_wield_override(n) { wield_override = n; }
+
+query_wield_override() { 
+	return wield_override;
+	}
+
+query_autoload() { 
+	object me = environment(this_object());
+	if (!me || me->is_player() || me->query_owner() || !intp(auto_l))
+		return auto_l; 
+	else
+		return 1; /* autoload NPCs distance weapons */
+	}
+
+set_class(n) {
+	call_out("check_for_wield_override", 1);
+	::set_class(n);
+	}
+
+check_for_wield_override() {
+	/* Not done immediately in case set_class() call
+	   precedes set_shootable()		*/ 
+	if (!weapon_class() && !query_shootable()) {
+		/* prevent wielding: this is a weapon that can only be
+			thrown (e.g. stone) */
+		set_wield_override(1);
+		}
+	}
+
+wield(what) { 
+	if (!weapon_class() && !query_shootable()) {
+		notify_fail("You can't wield this; it's not really a weapon.\n");
+		return 0;
+		} 
+	return ::wield(what); 
+	}
+	
+load(str) {
+	int i;
+
+	notify_fail("What do you wish to load?\n");
+	if (!str || !id(str)) 
+		return 0;
+	if (!query_shootable()) {
+		notify_fail("You can't load " + short() + ".\n");
+		return 0;
+		}
+	if (ammo) {
+		write("It is already loaded.\n");
+		return 1;
+		}
+	if (stringp(query_shootable())) 
+		if (!(ammo = find_ammo(query_shootable(), this_player()))) {
+			write("You don't have any " + PLURAL->plural(query_shootable())
+				+ "!\n");
+			return 1;
+			}
+	else if (pointerp(query_shootable())) {
+		for (i = 0; i < sizeof(query_shootable()); i++)
+			if(ammo = find_ammo(query_shootable()[i], this_player()))
+				break;
+		write("You don't have anything appropriate to shoot.\n");
+		return 1;
+		}
+	if (ammo->find_property("broken")) {
+		write("You can't load " + query_short() + " with " +
+			ammo->short() + "!\n");
+		ammo = 0;
+		return 1;
+		}
+	if (!ammo->find_property("projectile")) {
+		if (ammo->query_throwable()) /* Is throwable & shootable */
+			ammo = weapon_to_projectile(ammo);
+		else {
+			write("For some reason, this particular " + ammo->query_name() +
+				"won't fit. Apparently it's not "+
+				"meant to be used in this way.\n");
+			return 1;
+			}
+		}
+	transfer(ammo, "RO/storage");
+	write("You load " + short_desc + " with " + ammo->short() + ".\n");
+	say(this_player()->query_name() + " loads " + short_desc +
+		" with " + ammo->short() + ".\n");
+	return 1;
+	}
+
+find_ammo(type, where) {
+	object am;
+	int i;
+	array stuff;
+
+	am = present(type, where);	/* Check person first */
+	if (am) return am;
+	stuff = contents(where);	/* look for containers of ammo */
+	if (stuff && sizeof(stuff))
+		for (i = 0; i < sizeof(stuff); i++)
+			if (stuff[i]->find_property("container"))
+				if (am = find_ammo(type, stuff[i]))
+					return am;
+	return present(type, environment(where));
+					/* Finally, check env */
+	}
+
+unload(str) {
+	notify_fail("What do you wish to unload?\n");
+	if (!str || !id(str)) 
+		return 0;
+	if (!ammo) {
+		write(capitalize(short()) + " is not loaded.\n");
+		return 1;
+		}
+	transfer(ammo, this_player());
+	write("You unload " + query_short() + ".\n");
+	say(this_player()->query_name() + " unloads " + 
+		query_short() + ".\n");
+	ammo = 0;
+	return 1;
+	}
+
+propel(str) { 
+	int effective_dc, count = 0;
+	object dest, p;
+	array a;
+	string target;
+
+	notify_fail("Perhaps you mean \"throw " + query_name() + 
+		" <direction>\",\nor \"throw " + query_name() +
+		" <direction> at <target>\"?\n");
+	if (!str) 
+		return 0;
+	if (id(str)) {
+		write("Which direction do you wish to throw the " + str + " in?\n");
+		return 1;
+		}
+	if (index(str, " ") == -1) return 0;
+	a = explode(str, " ");
+	if (!id(a[0])) {
+		if (id(a[0] + " " + a[1]))  /* two word id */
+			count = 1;
+		else
+			return 0;
+		}
+	if (a[1 + count] == "at") {
+		notify_fail("You must provide a direction as well as a "+
+			"target; e.g. \"throw bow west at orc\".\n");
+		return 0;
+		}
+	if (!(dest = environment(this_player())->query_exit(a[1 + count]))) {
+		notify_fail("You can't throw in that direction from here.\n");
+		return 0;
+		}
+	if (environment(this_player())->query_medium("water")) {
+		notify_fail("You can't do that underwater!\n");
+		return 0;
+		}
+	if (sizeof(a) == 4 + count && a[2 + count] == "at")
+		target = a[3 + count]; 
+	if (this_player()->is_player() || this_player()->query_owner()) 
+		if (!query_wielded() && !query_wield_override()) {
+			write("Perhaps you should wield it first?\n");
+			return 1;	
+			}
+	write("You throw the " + query_short() + " " + a[1 + count] + 
+		"wards with all your might");
+	if (stringp(target))
+		write(", aiming for " + capitalize(target));
+	write(". It flies into "+ lower_case(dest->short()) + ".\n");
+	say(this_player()->query_name() + " throws " + query_short() + " " +
+		a[1 + count] + "wards with all " +
+		GENDER->pos(this_player()) + " might. It flies "+
+		"into " + lower_case(dest->short()) + ".\n");
+	if (query_wielded())
+		unwield_object(this_player());
+	effective_dc = (this_player()->query_str() * query_distance_class()) / 40; 
+	if (effective_dc < 1)
+		effective_dc = 1;
+	p = weapon_to_projectile(this_object());
+	p->flight(dest, a[1 + count], effective_dc - 1, this_player(), target, 1);
+							/* 1 is "thrown" flag */ 
+	return 1;
+	}
+
+shoot(str) { /* action only available if set_shootable(ammo) called */
+/* Note: Lots of notify_fail()s so that monsters can tell if their
+   distance attacks are working or not */
+	
+	int count = 0;
+	array a;
+	object dest;
+	string target;
+
+	notify_fail("Perhaps you mean \"shoot " + query_name() + 
+		" <direction>\",\nor \"shoot " + query_name() +
+		" <direction> at <target>\"?\n");
+	if (!str) 
+		return 0;
+	if (id(str)) {
+		notify_fail("Which direction do you wish to shoot the " + str + " in?\n");
+		return 0;
+		}
+	if (index(str, " ") == -1) return 0;
+	a = explode(str, " ");
+	if (!id(a[0]) && !id(a[0] + "_shooter")) {
+		if (id(a[0] + " " + a[1]) || id(a[0] + " " + a[1] + "_shooter"))
+			count = 1;
+		else
+			return 0;
+		}
+	if (a[1 + count] == "at") {
+		notify_fail("You must provide a direction as well as a "+
+			"target; e.g. \"shoot bow west at orc\".\n");
+		return 0;
+		}
+	if (!(dest = environment(this_player())->query_exit(a[1 + count]))) {
+		notify_fail("You can't shoot in that direction from here.\n");
+		return 0;
+		}
+	if (sizeof(a) == 4 + count && a[2 + count] == "at")
+		target = a[3 + count]; 
+	if (find_property("broken")) {
+		notify_fail("You can't use this, it's broken.\n");
+		return 0;
+		}
+	if (query_sp_cost()) {
+		if (this_player()->query_sp() < query_sp_cost()) {
+			notify_fail("You don't have enough spell points!\n");
+			return 0;
+			}
+		this_player()->add_sp(-query_sp_cost());
+		}
+	if (!ammo && query_autoload()) {
+		if (intp(query_autoload()) && query_autoload() == 1)
+			count ? load(a[0] + a[1]) : load(a[0]);
+		else if (stringp(query_autoload())) { 
+		    if("std/weaponer"->weapon_exists(query_autoload())) {
+			ammo = find_ammo(query_autoload(), this_player());
+			if (!ammo) 
+				ammo = "std/weaponer"->make(query_autoload());
+			if (!ammo->find_property("projectile"))
+				ammo = weapon_to_projectile(ammo);
+			}
+		    else  
+			ammo = clone_object(query_autoload());
+		    }
+		}
+	if (!ammo) {
+		notify_fail("Perhaps you should load the " + query_name() + " first?\n");
+		return 0;
+		}
+	if (!query_wielded() && !query_wield_override()) {
+		if (this_player()->query_NPC()) 
+			this_player()->init_command("wield " + this_object()->query_name());
+		else {
+			write("Perhaps you should wield it first?\n");
+			return 1;	
+			}
+		}
+	if (query_shoot_mess1())
+		write("You " + query_shoot_mess1());
+	else	
+		write("You shoot " + ammo->short() + " from the " + query_name());
+	if (stringp(target))
+		write(", aiming for " + capitalize(target));
+	write(". It flies into " + lower_case(dest->short()) + ".\n");
+	if (query_shoot_mess2())
+		say(this_player()->query_name() + " " + query_shoot_mess2());
+	else
+		say(this_player()->query_name() + " shoots " + 
+			ammo->short() + " from " + 
+			GENDER->pos(this_player()) + " " + query_name());
+	say(". It flies into " + lower_case(dest->short()) + ".\n");
+	ammo->flight(dest, a[1 + count], query_distance_class() - 1, this_player(), target, 0);
+	ammo = 0;
+	return 1;
+	} 
+
+weapon_to_projectile(w) {
+	object p;
+	array props;
+	int i;
+
+	if (!objectp(w)) 
+		return 0;
+	p = clone_object("obj/projectile");
+	p->set_id(w->id());
+	p->set_short(w->short());
+	p->set_long(w->query_long());
+	p->set_weight(w->query_weight());
+	if (w->query_throwable() || w->query_shootable()) {
+		p->set_weapon_object(w);
+		p->set_damage(query_throwable());
+		}
+	p->set_impact(query_impact());
+	props = dump_property();
+	if (sizeof(props))
+		for (i = 0; i < sizeof(props); i+= 3) 
+			w->add_property(props[i], props[i + 1], props[i + 2]);
+	transfer(w, "RO/storage");
+	return p;
+	}
+
+

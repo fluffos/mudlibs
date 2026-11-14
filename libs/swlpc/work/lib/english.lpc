@@ -1,0 +1,306 @@
+/*
+ * English Library
+ * Shattered Worlds Mudlib
+ *
+ * Various English-language generation routines, including things like
+ *  - integer to english converters
+ *  - fraction to english converters
+ */
+
+/* 
+ * 951117 Hunter	added real_fraction_to_english()
+ */
+
+/*
+ * Fixed so that if intel < 0 then intel check is not used.
+ * So that the fuck up with negative numbers no longer occurs.
+ * Rattcherryh.  06th October 1992
+ */
+
+string
+int_to_english(int num,int intel) 
+{
+array ret;
+int temp;
+string last;
+string res;
+int neg, max;
+	ret = [ ];
+	/* no intelligence checks yet */
+	if (!num) 
+		return "zero";	
+	if (intel >= 0) {
+		max = intel*intel*intel;
+		if (max < intel) /* overflow if stupid wiz has ridiculous int */
+			max = intel;
+		if (num > max*10)
+		{
+		    if (intel < 6)
+			return "many";
+		    else if (num > 1000000)
+			return "millions of";
+		    else if (num > 1000)
+		    	return "thousands of";
+		    else if (num > 100)
+		    	return "hundreds of";
+		}
+		if (num > max)	/* fudge the result */
+			num = max + ((num - max)*(75 + random(50))/100);
+	}
+	neg = (num < 0);
+	num = neg?-num:num;
+	if (num >= 1000000)
+	{
+		ret += [ int_to_english(num/1000000, intel)+" million"];
+		num = num % 1000000;	
+	}			
+	if (num >= 1000)
+	{
+		ret += [ int_to_english(num/1000, intel)+" thousand"];
+		num = num % 1000;
+	}
+	if (num >= 100)
+	{
+		ret += [ int_to_english(num/100, intel)+" hundred"];
+		num = num % 100;
+	}
+	last = "";
+	if (num >= 20)
+	{
+		temp = num / 10;
+		last = ["ten", "twenty", "thirty", "forty","fifty",
+			"sixty", "seventy","eighty", "ninety" ][temp-1] ;
+		num = num % 10; 	
+	}
+	if (num)
+	{
+		last += (temp?" ":"")+
+			[ "one", "two", "three", "four", "five", "six",
+				"seven","eight","nine", "ten",
+			"eleven","twelve","thirteen","fourteen","fifteen",
+			"sixteen","seventeen","eighteen","nineteen"][num-1];
+	}
+	res = sizeof(ret)?implode(ret, ", "):"";
+	if (sizeof(res) && sizeof(last))
+		res += " and ";
+	res += last;	
+	res = (neg?"minus ":"") + res;
+	return res;
+}
+
+/*
+ * RealFracTable is an array of fraction-to-english lookups
+ * (this is a lookup table for speed)
+ */
+nosave array RealFracTable = [
+	0.0, 		"zero",
+	1 / 10.0,	"one-tenth",
+	1 / 8.0, 	"one-eigth",
+	1 / 5.0,	"one-fifth",
+	1 / 4.0,	"one-quarter",
+	3 / 10.0,	"three-tenths",
+	1 / 3.0,	"one-third",
+	3 / 8.0, 	"three-eigths",
+	2 / 5.0,	"two-fifths",
+	1 / 2.0,	"one-half",
+	5 / 8.0, 	"five-eights",
+	2 / 3.0,	"two-thirds",
+	3 / 4.0, 	"three-quarters",
+	7 / 8.0,	"seven-eigths",
+	9/10.0,		"nine-tenths"
+	];
+	
+string
+real_fraction_to_english( real value )
+{
+}
+
+/*
+ * English language tokeniser, and untokeniser
+ * Hunter 950128
+ */
+nosave string endOfSentenceChars = ".!?";
+
+nosave string sentenceTokens = "\t\n .,?!;:`'()";
+
+nosave string whitespace = "\t\n ";
+nosave array punctuationMarks = [
+	" ", "\t", ".", ",", "\"", ";", ":", "!", "?", "(", ")", 
+	"``", "''", "'", "..."
+	];
+
+/*
+ * take a sentence (or a paragraph, complete with whitespace)
+ * and tokenise it. Any extra whitespace is ignored.
+ */
+
+nosave array specialTokens = [
+/*	"...",	/* ellipsis */
+/*	"..",  /* ellipsis */	/* ellipsis are tested for specially */
+	":-)",	/* smilies of all flavors */
+	":)",
+	";)",
+	";-)",
+	"``",
+	"''"
+	];
+
+array
+tokenize_sentence( sentence )
+{
+array tokens = [ ];
+int st, en;
+int sl = sizeof( sentence );
+string token;
+int i;
+int noToken;
+int gotEllipsis;
+int pms = sizeof( punctuationMarks );
+    st = 0;
+    while ( st < sl )           /* while inside sentence */
+    {
+        /* seek to next symbol */
+        en = st;
+	noToken = 1;
+	for (i = 0; i < pms; i ++)
+	{
+	    if ( sentence[st..st+sizeof(punctuationMarks[i])-1]
+			== punctuationMarks[i] )
+	    {
+	    	en = st + sizeof(punctuationMarks[i])-1;
+		noToken = 0;
+		break;
+	    }
+	}
+	if (noToken)
+	{
+            while ( index( sentenceTokens, sentence[en..en] ) == -1 )
+            {
+                en ++;
+                if (en == sl)       /* reached end of sentence */
+                {
+                    break;
+                }
+            }
+            if (en != st)
+	         en --;
+ 	}
+	gotEllipsis = 0;
+	while ( sentence[en..en] == "." ) /* could this be an ellipsis? */
+	{
+	    if (sentence[en+1..en+1] == ".")	/* next char a '.'? */
+	    {
+	  	gotEllipsis = 1;
+		en ++;
+	    }
+	    else break;
+	}
+	if (gotEllipsis)
+	{
+	    token = "...";
+	}
+	else
+	{
+	    for (i = 0; i < sizeof(specialTokens); i ++)
+	    {
+	        if ( sentence[st..st+sizeof(specialTokens[i])]
+			== specialTokens[i])
+	        {
+		    en = st+sizeof(specialTokens[i]);
+		    break;
+	        }
+	    }
+            token = sentence[st..en];
+	}
+        if ( index( " \n\t", token ) == -1 )
+                                /* don't bother with whitespace */
+        {
+            tokens += [ token ];
+        }
+        st = en + 1;		/* next character */
+    }
+    return tokens;
+}
+
+/*
+ * take a (badly formatted) english string/sentence/paragraph, and fix it up
+ * so that it is prettier :)
+ */
+string
+fix_up_english( string word )
+{
+array words = tokenize_sentence( word );
+int newSentence = 1;
+int firstWord = 1;
+int lastWasWord = 0;
+array outWords = [ ];
+int i;
+object ob;
+    for ( i = 0; i < sizeof( words ); i ++ )
+    {
+        if ( index( ".!?", words[i] ) != -1 )
+        {
+            outWords += [ words[i] + "  " ];
+            newSentence = 1;
+            lastWasWord = 0;
+        }
+        else if ( index( ",;:", words[i] ) != -1 )
+        {
+            outWords += [ words[i] + " " ];
+            lastWasWord = 0;
+        }
+	else if ( words[i] == "...")
+	{
+	    outWords += [ "... " ];
+	    lastWasWord = 0;
+	}
+	else if ( words[i] == "``" )
+	{
+	    outWords += [ " ``" ];
+	    lastWasWord = 0;
+	}
+	else if ( words[i] == "''" )
+	{
+	    outWords += [ "''" ];
+	    lastWasWord = 1;
+	}
+        else if ( newSentence )
+        {
+            outWords += [ capitalize( words[i] ) ];
+            newSentence = 0;
+            lastWasWord = 1;
+        }
+        /* is the word a player's name? */
+        else if ( ob = find_living( words[i] ) )
+        {
+            outWords += [ (lastWasWord?" ":"") + capitalize( words[i] ) ];
+            lastWasWord = 1;
+        }
+        else
+        {
+            outWords += [ (lastWasWord?" ":"") + words[i] ];
+            lastWasWord = 1;
+        }
+    }
+    return implode( outWords, "" ) + (lastWasWord?".":"");
+}
+
+translate(str)  { return fix_up_english(str); }
+
+/* Accept an array of strings and put commas etc in it  
+ * Args: array list is the list of strings, [string null_mesg is returned if the list is emprty 
+ */
+(string|int)
+array_to_english (array list, (int|string) null_mesg) {
+int sz;
+
+	sz = sizeof (list);
+	if (!sz) {
+		if (stringp(null_mesg)) return null_mesg; 
+		return 0;
+		}
+	if (sz == 1) return list[0];
+	if (sz >1) list [sz-1] = " and " + list[sz-1];
+	list [sz-2] = list[sz-2] + list [sz-1];
+	return implode (list[..(sz-2)],", ");
+}

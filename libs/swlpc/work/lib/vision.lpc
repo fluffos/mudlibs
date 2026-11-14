@@ -1,0 +1,86 @@
+/*
+ * Vision library for looking into the distance.
+ * Original Code by Rob Rendell (aka Rhys @ Shattered World).
+ * Modified by Dredd (Shattered World).  1992
+ *
+ * rooms_seen format:
+ * ({ room_name, dir, ({ rooms in dir }), dir1, ({ rooms in dir1}), etc })
+ */
+
+inherit "RO/Servers";
+
+#define RANGE 4
+array all_rooms_seen(object obj,rooms_seen,int range)
+{
+    string room_name;
+    array dest_dir, new, rooms_seen;
+    int dir, distance;
+
+    room_name = file_name(environment(obj));
+    if (rooms_seen && rooms_seen[0] == room_name) return rooms_seen;
+		 /* already looked here */
+    if (!range) range = RANGE;
+    rooms_seen = ({room_name});
+    dest_dir = environment(obj)->query_dest_dir();
+    for (dir = 1; dir < sizeof(dest_dir); dir+=2)
+    {
+	if (room_ok(room_name, dest_dir[dir]))
+	{
+	    new = ({dest_dir[dir], ({})});
+	    for (distance = 1; distance < range /* eyesight */ &&
+		(room_name = room_ok(room_name, dest_dir[dir])); distance++) {
+		new[1] = new[1] + ({ room_name });
+		}
+	    rooms_seen = rooms_seen + new;
+	    room_name = file_name(environment(obj));
+	}
+    }
+    return rooms_seen;
+}
+
+room_ok(room_name, string dir)
+{
+    string next_room, back_dir, err;
+    object door;
+
+    err = catch next_room = room_name->query_exit(dir);;
+    if (!err && next_room)
+    {
+	catch door = room_name->query_door(dir);;
+	if (!door || door->is_open())
+	{
+	    back_dir = DIRECTION->opposite_dir(dir);
+	    if (!back_dir || next_room->query_exit(back_dir) == room_name)
+		    return next_room;
+	}
+    }
+    return 0;
+}
+
+dir_can_see(what, rooms_seen)
+{
+    int dir;
+    string the_room;
+
+    if (!what) return;
+    if (!rooms_seen) return;
+    if (objectp(what)) the_room = file_name(environment(what));
+    else the_room = what;
+    for (dir = 1; dir < sizeof(rooms_seen); dir+=2)
+	if (index(rooms_seen[dir+1], the_room) >= 0)
+	    return rooms_seen[dir];
+}
+
+array rooms_seen(obj, dir, range)
+{
+array which, why;
+int dirn;
+	which = all_rooms_seen(obj, 0, range);
+	if (!which) return;
+	dir = DIRECTION->full_dir (dir);
+	dirn = index(which, dir);
+	if (dirn < 0) return;
+	why = which[dirn+1];
+	return why;	
+}
+

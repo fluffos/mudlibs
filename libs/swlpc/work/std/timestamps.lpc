@@ -1,0 +1,128 @@
+/*
+ * A timestamp registry.  Allows caches to jackpot with time.
+ * Caches can register timestamps with this object; when
+ * they query it, it gives a multiplier for the value in
+ * the cache based on the last time it was queried.
+ * Caches should probably use the file name of the room they
+ * appeared in as the key.  Caches that sit untouched for
+ * too long will be silently deleted.
+ *
+ * If you don't provide a string argument, file_name(previous_object())
+ * is used.
+ */
+
+/*
+ * 2 days between jackpots
+ */
+ 
+#define	JACKPOT_TIME	(48*3600)
+
+/*
+ * Only keep untouched records 30 days; after that, it's back to 1 again.
+ */
+#define	EXPIRY_TIME	(24*3600*30)
+
+array cache_list;	/* name, last time pairs */
+array culprits;		/* last person to rob cache */
+int upto_chk;		/* slowly scan, deleting old ones */
+
+show_stats() {
+int i;
+	write ("Treasure caches :\n\n"); 
+	for (i = 0; i < sizeof(cache_list)-1; i+=2) {
+	  write (cache_list[i]->query_short()+"\t");
+	  if (sizeof(cache_list[i]->query_short()) < 16) write ("\t");
+	  write ("  Mult: "+(((time()-query_time_stamp(cache_list[i])) / (48*3600)) + 1));
+	  write ("    "+ctime(query_time_stamp(cache_list[i]))+"    ");
+	  if (sizeof(culprits) <= (i/2)) culprits += [ "anon"+(i/2) ];
+	  if (!culprits[i/2]) culprits[i/2] = "anon";
+	  write (capitalize(culprits[i/2])+"\n");   
+	  }
+    write("\nTotal entries: " + sizeof(cache_list) / 2 + "\n");
+}
+
+reset(arg) {
+    if (!arg) {
+        if (!restore_object("std/timestamps")) {
+            cache_list = [ ];
+	    culprits = [ ];
+            upto_chk = 0;
+            }
+	if (!culprits) culprits = [ ];
+    }
+}
+
+query_cache_mult(s) {
+    int x;
+    int m;
+    x = query_and_set_time_stamp(s);
+    if ( x < 0 ) {
+	return 1;
+	}
+    m = ((time() - x) / JACKPOT_TIME) + 1;
+    return m;
+}
+
+expire_next() {
+    upto_chk = upto_chk + 2;
+    if (upto_chk >= sizeof(cache_list)) {
+        upto_chk = (-2);
+	return;
+	}
+    if ((time() - cache_list[upto_chk + 1]) > EXPIRY_TIME) {
+        cache_list = cache_list[..upto_chk - 1] + cache_list[upto_chk +2 ..];
+	culprits = culprits[..(upto_chk)/2 -1] + culprits[(upto_chk)/2+1..];
+	}
+/* save it anyway - we re-record whenever caches are robbed. */
+    save_object(file_name(this_object()));
+    return 1;
+}
+
+/*
+ * Returns the location of a string in the array; if no entry
+ * with that name, creates it and assigns it the current time.
+ */
+
+
+find_time_stamp(s) {
+    int x;
+    if (!pointerp(cache_list))
+        cache_list = [ ];
+    if (!stringp(s)) { /* This may not work, dont know why  */
+		s = file_name(previous_object());
+		}
+    x = index(cache_list, s);
+    if ( x < 0 ) {
+        cache_list += [ s, time() ];
+	if (this_player()) culprits += [ this_player()->query_real_name() ];
+	else culprits += [ "anon" ];
+	x = sizeof(cache_list) - 2;
+	}
+    call_out("expire_next", 1);
+    return x;
+}
+
+query_time_stamp(s) {
+    int x;
+    x = find_time_stamp(s);
+    if ( x < 0)
+	return x;
+    return cache_list[x+1];
+}
+
+query_and_set_time_stamp(s) {
+    int x;
+    int t;
+    x = find_time_stamp(s);
+    if ( x < 0 )
+	return (-1);
+    t = cache_list[x+1];
+    cache_list[x+1] = time();
+    if (this_player()) culprits [x/2] = this_player()->query_real_name();
+    else culprits[x/2] = "anon";
+    return t;
+}
+
+query_culprits () { return culprits; }
+query_cache_list () { return cache_list; }
+query_levels() { return [ ]; }

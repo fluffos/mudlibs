@@ -1,0 +1,216 @@
+/*
+ * This is a shut down daemon, that will take care of shutting down
+ * the game.
+ * Call the function "shut" with a number of minutes as an argument.
+ */
+
+/*
+ * History:
+ * 950818 ???		previous file, no history kept.
+ * 950818 Hunter	added stop_shut() function. Shouts also use
+ *			name of person who initiated shutdown.
+ * 950819 Gandalf	Shouts anonymised, caller logged instead.
+ *			Some things shouldn't be said :)
+ * 951022 Hunter	changed #include "Servers.h to inherit "Servers";
+ * exam time, '95 - G -	added multiple shutdown times (a hack).
+ *
+ * 000524 Jenna		Changed amount of time before announcing game
+ *			reboot from 5 minutes to 20 minutes (which
+ *			gives questing players more time).
+ * 010207 Jenna		Added 'secs_to_reboot' var to allow secure/connect
+ * 			to prevent players logging in just before reboots.
+ */
+
+inherit "RO/living";
+
+#include "time.h"
+
+array shut_times = [ MORNING, EVENING ];
+
+/*
+ * Any wiz should be able to boot it if it's been up more than 5 hours.
+ */
+
+nosave int loaded_time = time();	/* initialised when cloned */
+nosave int secs_to_shutdown;
+
+query_uptime() 
+{
+    return time() - loaded_time;
+}
+
+reset() 
+{
+    ::reset();
+	call_out ("request_suid",0.1);
+    move_object(this_object(),"RO/storage"); 
+    enable_commands();
+    cap_name = "Armageddon";
+    set_living_name("armageddon");
+    set_auto_shut();
+}
+
+request_suid () {
+	  "secure/master" -> suid_armageddon ();
+}	  
+
+/*
+ * players deserve a clean mud, and need to be kicked
+ * off after!
+ */
+
+/*
+ * just set all shutdown callouts.
+ */
+
+set_auto_shut() {
+    /* int out = MORNING - (time() + TIME_ADJUST) % DAY; */
+    int x;
+    int minim = 3600 * 25;
+    for (x = 0; x < sizeof(shut_times); x++) {
+        int out = shut_times[x] - (time() + TIME_ADJUST) % DAY;
+        if (out < 0) out += DAY;
+        if (out > 300 && WHICH_MUD->is_wiz_mud())
+	    out -= 300;	/* wizmuds reboot slightly before player mud */
+	if (out < minim)
+	    minim = out;
+        call_out("start_shut", out); 
+	}
+    }
+
+query_shutdown()
+{
+	int x = find_call_out("cont_shutting");
+        if (x > -1) return x+1+secs_to_shutdown;
+}
+
+start_shut() {
+	shut(20);
+}
+
+/* Removed the rather gauche `under orders' shit.
+ * Game functions should be anonymous - G.
+ */
+
+shut(minutes)
+{
+    string s_who;
+    if (this_player())
+    {
+	write("Ok.\n");
+	catch s_who = capitalize(this_player()->query_real_name());;
+    }
+    else
+    {
+	s_who = "Game Driver";
+    }
+    if (minutes == 0) {
+	if (this_player()) {
+	    write("Assuming 5 minutes.\n");
+	    }
+	minutes = 5;
+    }
+    LOG->log("GAME_LOG", "Shutdown scheduled by " + s_who + " in " + minutes + "m.\n");
+    if (find_call_out( "cont_shutting") != -1 )
+    {
+	while (find_call_out( "cont_shutting" ) != -1)
+	    remove_call_out( "cont_shutting" );
+	working_shout( "!"+query_name()+" shouts: Reboot rescheduled for "+ minutes +" minutes.\n");
+    }
+    secs_to_shutdown = minutes * 60;
+    call_out("cont_shutting", 1, secs_to_shutdown);
+}
+
+int transport_offer;
+
+int
+stop_shut()
+{
+    while ( find_call_out( "cont_shutting" ) > 0 )
+    {
+	remove_call_out( "cont_shutting" );
+    }
+    working_shout("!"+query_name()+" shouts: Shutdown cancelled.\n");
+    transport_offer = 0;
+    return 1;
+}
+
+cont_shutting(seconds) 
+{
+    string delay;
+    int new_delay;
+
+    if (seconds <= 0) {
+	working_shout("!" +  query_name() + " shouts: Bye!!!.\n");
+	AUTOSAVE_SERV->cut_save_time();
+	shutdown();
+	return;
+    }
+    if (seconds <= 300 && !transport_offer) {
+	working_shout("!" +  query_name() +
+	    " shouts: 'tell' me if you want a trip to the shop !\n");
+	transport_offer = 1;
+    }
+    new_delay = seconds * 3 / 4 - 10;
+    secs_to_shutdown = new_delay;
+    call_out("cont_shutting", seconds - new_delay, new_delay);
+    delay = "";
+    if (seconds > 59) {
+	delay = seconds / 60 + " minutes";
+	seconds = seconds % 60;
+    }
+    if (seconds != 0)
+	delay += " " +seconds + " seconds";
+    working_shout("!" +  query_name() + " shouts: Game restart in " + delay + ".\n");
+
+    AUTOSAVE_SERV->inside(seconds);
+    AUTOSAVE_SERV->cut_save_time();
+}
+
+catch_tell(str) 
+{
+    array args;
+
+    if (!transport_offer) return;
+
+    args = STRINGS->split_first(str, " tells you: ");
+    if (!args || sizeof(args) < 2) return;
+    this_player()->move_player(", holding hands with Armageddon", "room/city/market5");
+}
+
+short() { return "Armageddon"; }
+
+show_stats() {
+	/*::show_stats();*/
+	write("Scheduled shutdown : " + find_call_out("start_shut") + "\n");
+	write("Current shutdown   : " + find_call_out("cont_shutting") + "\n");
+	return 1;
+}
+
+query_destruct() 
+{
+    write("Destructing armageddon might not be a good idea!\n");
+    "secure/master"->armageddon_dested();
+    return 1;
+}
+
+/*
+ * Fucking shout is fucking fucked!
+ */
+
+working_shout(what) {
+    int x;
+    array a;
+    a = users();
+    if (pointerp(a)) {
+	for (x = 0; x<sizeof(a); x++)
+	    tell_object(a[x], what);
+	}
+    else
+	SHOUT->shout(what);
+}
+
+emergency() {
+	shutdown();
+}
+

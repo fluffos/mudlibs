@@ -1,0 +1,490 @@
+/*
+ * mail daemon
+ *
+ * Hunter of Shattered Worlds
+ *
+ * readmail(string who)
+ *  	return an array of strings that is the mail someone has stored
+ *	returns null array if no mail
+ *
+ * sendmail(string who, array/string mesg, <string from>)
+ *      send mail to the specified person
+ */
+
+/*
+ * History:
+ * 940525 Dredd		Added in a group alias mod (mainly for Asteroth's 
+ *			happiness).
+ * 950817 Hunter	tracking down lost new mail bug. *sigh*. Changed
+ *			call to lib objects to use Servers.c consts.
+ * 980721 Jenna		Added automatic alias for all guilds.
+ * 010718 Jenna		Changed above to only mail active guild members
+ */
+
+/*
+ * headers:
+ * From:		needed
+ * To:		needed 
+ * Subject:	needed
+ * Cc:		needed
+ * Status:		set by daemon
+ * Date:		set by daemon
+ * 
+ * file format..
+ * "
+ * <header>
+ * <blank line>
+ * <body>
+ * ***
+ * "
+ * */
+
+inherit "RO/Servers";
+#include "mail.h"
+
+array Headers = explode(BLANKHEADER,"\n");
+array Alias_names = [ ];
+array Alias_body = [ ];
+
+show_stats()
+{
+array ret;
+    ret = [ 
+	"MAIL_DIR: "+MAIL_DIR,
+    	"Headers :"
+	];
+    ret += DUMP->dump(Headers, 10, 0, -1);
+    ret += [ "Aliases names:" ];
+    ret += DUMP->dump(Alias_names, 10, 0, -1);
+    ret += [ "Aliases body:" ];
+    ret += DUMP->dump(Alias_body, 10, 0, -1);
+    return ret;
+}
+
+reset(arg)
+{
+    set_uid_me(this_object(), 701);
+    if (!arg)
+    {
+	catch build_aliases();;
+    }
+}
+
+build_aliases()
+{
+array tmp, tmpline;
+int i, sz;
+      if (file_size(ALIASES) < 1) return;
+      tmp = explode(grab_file(ALIASES), "\n");
+      sz = sizeof(tmp);
+      Alias_names = [ ];
+      Alias_body  = [ ];
+      for (i = 0; i < sz; i++) {
+          if (tmp[i][0..0] != "#")
+	  {
+              tmpline = explode(tmp[i], ":");
+              if (sizeof(tmpline) != 2) {     /* dud alias! */
+ /*                     Alias_names[i] = 0;
+                      Alias_body[i] = 0; */
+              }
+              else {
+                      Alias_names += [ tmpline[0] ];
+                      Alias_body += [ tmpline[1] ];
+              }
+	  }
+      }
+}
+
+array 
+readmail(who, folder)
+{
+    string mail;
+
+    /* grab the file, explode it */
+    if (!who)
+    {
+	if (!this_player())
+	{
+	    object ob;
+	    ob = caller();
+	    LOG->log("MAIL","Readmail(): !this_player() and !who, caller "
+		+file_name(ob)+"\n");
+	    return [];
+	}
+	else
+	    who = this_player()->query_real_name();
+    }
+    else who = lower_case(who);
+
+    if (who != this_player()->query_real_name() 
+	    && this_player()->query_wiz() < 700)
+    {
+	    LOG->log("MAIL", this_player()->query_real_name()
+		+" attempted to read "+who+"'s mail.\n");
+	    return [];
+    }
+
+    if (!stringp(folder)) folder = "";
+    else folder = "."+folder;
+
+    mail = grab_file(MAIL_DIR+who+folder, 0);
+
+    if (!mail) return [];
+    return explode(mail, DELIMITER);
+}
+
+int writemail(who, array mesgs, folder)
+{
+    int i;
+    string t;
+
+    if (!who) 
+    {
+        LOG->log("MAIL", "writemail: fucked up! - no who var\n");
+        return 0;
+    }
+
+    who = lower_case(who);
+#if 0
+    if (who != this_player()->query_real_name() 
+	    && this_player()->query_wiz() < 700)
+    {
+	    LOG->log("MAIL", this_player()->query_real_name()
+	    +" attempted to write "+who+"'s mail.\n");
+	    return 0;
+    }
+#endif
+
+    if (!stringp(folder)) t = "";
+    else t = "."+folder;
+
+    rm(MAIL_DIR+who+t);
+
+    string allmsgs = implode(mesgs, DELIMITER);
+    deliver_mail(who, (stringp(allmsgs)?allmsgs:""), folder);
+    return 1;
+}
+
+array sendmail(string receiver, (string|array) mesg, (string|int) from)  
+{
+/* receiver is a string of people people ..
+ *	should check they are actual people ..
+ * mesg can be either an array of strings or a single string ..
+ * from is optional. If it isn't there, then it is assumed that
+ * the sender is listed in the body of the mesg 
+ *
+ * returns an array of people the mail is sent to if successful
+ */
+    string subject;
+    string head;
+    array cc,rcs;
+    int i;
+
+    if (pointerp(mesg)) mesg = implode(mesg, "\n") +"\n";
+
+    // add a header if it doesn't have one.
+    head = query_head(mesg);
+    if (head == "") mesg = BLANKHEADER + "\n" + mesg;
+
+    if (stringp(from)) mesg = set_header(FROM, mesg, from);
+
+	/* neaten this up later */
+    mesg = set_header(DATE, mesg, ctime(time()));	
+    rcs = query_people(receiver);
+
+    /* It DOES happen */
+    if (!sizeof(rcs)) 
+    {  
+        if (this_player()) write ("You can not send mail to that person.\n");
+	    return rcs;
+    }
+
+    mesg = set_header(SUBJECT, mesg, 
+		((subject = query_header(SUBJECT, mesg)) != "")?
+		subject:"<none>");
+    mesg = set_header(TO, mesg, implode(rcs, ", "));
+    cc = query_people(query_header(CC, mesg));
+    if (sizeof(cc))
+	mesg = set_header(CC, mesg, implode(cc, ", "));
+    else
+	mesg = set_header(CC, mesg, "");
+    mesg = set_header(STATUS, mesg, STATUS_UNREAD);
+    rcs = ARRAY->common(rcs,cc)+ ARRAY->diff(rcs,cc);
+    /* notify the recipient here.. */
+    for (i = 0; i < sizeof(rcs); i ++)
+        post_mail(rcs[i], mesg);
+    return rcs;
+}
+
+/* 
+ * if the player is on?
+ *   Y - check if they have a mail reader?
+ * 	Y - send the mail to the mail reader, if they are reading mail. end.
+ *      N - send the player a note 'new mail has arrived'
+ * deliver_mail()
+ */
+int post_mail(string who, string what)
+{
+    object them = find_living(who);
+    object reader;
+    string body, head, cmess;
+    object whom = "/P/p"->load_player(lower_case(who));
+
+    if (!whom) return;
+
+    body = query_body(what);
+    head = query_head(what);
+
+    cmess = whom->crypt_string(body);
+    what = head + "\n\n"+ cmess;
+
+    if (them)
+    {
+	    reader = present("mailread", them);
+	    if ((reader && !reader->reading_mail()) || !reader)
+	        tell_object(them,"New mail has arrived from "
+	 	    +query_header(FROM, what)+"..\n"
+		    +Headers[SUBJECT]+query_header(SUBJECT, what)+"\n");
+	    if (reader)
+        {	
+            /* send a copy of the mail to the mail reader */
+		    /* a copy is still saved in the incoming mail box */
+	        reader->receive_mail(what);
+        } 
+    }
+
+    deliver_mail(who, what, "new");
+}
+
+/* 
+ * Note: This may now be called with more than one mail message (all
+ * in a single string) - to speed quitting mail when we have 100 messages
+ * in our mailbox - G :)
+ * If more than one message - guaranteed to be in form:
+ *    message <delim> message <delim> message <delim> - as you'd expect.
+ * Note: write the mail to the player's mail file only.. 
+ */
+int deliver_mail(string who, string what, folder)
+{
+    string f;
+
+    who = lower_case(who);
+    f = MAIL_DIR+who+(stringp(folder)?("."+folder):"");
+    if (file_size(f) > 0) what = DELIMITER + what;
+    if (what != "") write_file(f, what);
+}	
+
+string query_header(int headr, message)
+{
+    string tmp_str, old_header, rest_of_mess;
+    array allargs;
+    int n;
+
+    if (!stringp(message)) 
+    {
+	write ("DOW!!!!! the mailer just died. Please tell Llati "
+		+"everything that just happened so that he may fix it. "
+		+"Your mail is probably in big trouble.\n");
+	LOG->log("llati","Fucken mailer. header was ("+headr
+		+") the message was ("+message+") the previous_obj was (" 
+		+file_name(previous_object()) + ") and the caller ("
+		+ file_name(caller())+").");
+	return ;
+    }
+    
+    allargs = STRINGS->split_first(message, Headers[headr]);
+    if (!allargs || sizeof(allargs) < 2) return "";
+
+    allargs = STRINGS->split_first(allargs[1], "\n");
+    if (!allargs || sizeof(allargs) < 2) return "";
+
+    return allargs[0];
+}
+
+string set_header(int headr, string message, string new_header)
+{
+    int n;
+    string tmp_str, old_header, rest_of_mess, tmp_str2;
+    array allargs;
+
+    allargs = STRINGS->split_first(message, Headers[headr]);
+    if (allargs && sizeof(allargs) == 2) 
+    {
+        tmp_str = allargs[0];
+        allargs = STRINGS->split_first(allargs[1], "\n");
+    }
+
+    if (allargs && sizeof(allargs) == 2) 
+    {
+	    message = tmp_str + Headers[headr]+new_header+"\n"+allargs[1];
+    }
+    else
+    {
+	    if (headr == 0)
+        {
+	        message = Headers[0] +new_header+"\n"+ message;
+        }
+	    else
+	    {
+	        /* I can see a problem here is the previous header doesn't exist */
+            allargs = STRINGS->split_first(message, Headers[headr-1]);
+            if (allargs && sizeof(allargs) == 2) 
+            {
+                tmp_str = allargs[0];
+                allargs = STRINGS->split_first(allargs[1], "\n");
+            }
+            if (allargs && sizeof(allargs) == 2) 
+	            message = tmp_str + Headers[headr -1] + allargs[0] +"\n"
+                    + Headers[headr] + new_header+"\n"+allargs[1];
+	    }
+    }
+    return message;
+}
+
+/*
+ * We do "alias" expansion in here.. -- Dredd
+ */
+int no_recurse = 0;
+array query_people(string who)
+{
+/* return an array of people as listed in who */
+/* should also check they exist */
+array ret, tmpa;
+int i, a;
+    who = implode(explode(who, ","), " ");
+    if (!who) 
+        return [ ];
+    who = explode(who, " ");
+    ret = [ ];
+    for (i = 0; i < sizeof(who); i ++)
+    {
+	if (sizeof(who[i]))
+	{
+	    who[i] =  STRINGS->strip_whitespace(who[i]);
+                      /* check aliases.. */
+        if (!no_recurse &&  ((a = index(Alias_names, who[i])) > -1)) 
+	    {
+            	no_recurse = 1;
+                if (tmpa = query_people(Alias_body[a]))
+                    ret += tmpa;
+                no_recurse = 0;
+        }
+	    else if (who[i][0..0] == "`")
+	    {
+		/* dynamic alias? */
+		tmpa = ARG_PARSER->make_args(who[i]);
+		no_recurse = 1;
+		if (pointerp(tmpa))
+		{
+		    if (sizeof(tmpa) != 0) 
+		    {
+			if (stringp(tmpa[0]))
+			{
+			    ret += query_people(tmpa[0]);
+			}
+			else if (pointerp(tmpa[0]))
+			{
+			    ret += query_people(implode(tmpa[0], ","));
+			}
+		    }
+		}
+		no_recurse = 0;
+	    }
+            else 
+	    { /* else it's a name */
+                 who[i] = lower_case(who[i]);
+		 if (GUILD_SERV->god_exists(who[i]))
+                    ret += GUILD_SERV->query_actives(who[i]);
+				/* jenna's guild check */
+                 else if (WHOIS->is_player(who[i]) &&  (index(ret, who[i])  == -1))
+                     ret += [ who[i] ];
+            }
+	}
+    }
+    return ret;
+}
+
+string query_body(string mesg)
+{
+    array allargs;
+
+    allargs = STRINGS->split_first(mesg, Headers[NUMHEADERS - 1]);
+    if (!allargs || sizeof(allargs) < 2) return "";
+
+    allargs = STRINGS->split_first(allargs[1], "\n\n");
+    if (!allargs || sizeof(allargs) < 2) return "";
+
+    return allargs[1];
+}
+
+string query_head(string mesg)
+{
+    array allargs;
+
+#if 0
+    allargs = STRINGS->split_first(mesg, Headers[NUMHEADERS - 1]);
+    if (!allargs || sizeof(allargs) < 2) return "";
+#endif
+
+    allargs = STRINGS->split_first(mesg, "\n\n");
+    if (!allargs || sizeof(allargs) < 2) return "";
+
+    return allargs[0];
+}
+
+int query_mail(silent) 
+{
+    string name;
+    string new;
+    array mail;
+    int i;
+    int is_new = 0, is_mail = 0;
+
+    name = lower_case(this_player()->query_real_name());
+
+    if (file_size(MAIL_DIR+name) > 0) is_mail = 1;
+    if (file_size(MAIL_DIR+name+".new") > 0)
+    {
+        is_mail = 1;
+        is_new = 1;
+    }
+
+    if (pointerp(mail = readmail(name)) && sizeof(mail) >1)
+    {
+        is_mail = 1;
+    }
+
+    new = (is_new ? " NEW" : "");
+    string flag = (is_new ? "*** " : "");
+
+#if 0
+    while ((i < sizeof(mail)) && (is_new == 0))
+    {
+        if (query_header(STATUS, mail[i]) != STATUS_READ) new = " NEW";
+        i ++;
+    }
+#endif
+
+    if (silent || !is_mail) return is_mail;
+
+    write(flag + "There is" + new + " mail to you in the post office " +
+	"\n    (west from the endoplasmatorium).\n");
+
+    return is_mail;
+}
+
+find_item(foo) { return foo; } /* this hack needed for PARSER */
+
+remove_player(who)
+{
+string ret = "";
+    if (file_size(MAIL_DIR+who))
+    {
+	rm(MAIL_DIR+who);
+    }
+    if (file_size(MAIL_DIR+who+".new"))
+    {
+	rm(MAIL_DIR+who+".new");
+    }
+}
+

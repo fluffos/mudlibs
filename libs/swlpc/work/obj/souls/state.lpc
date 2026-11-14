@@ -1,0 +1,505 @@
+/*
+ * Normal body repetitive functions
+ * Remove more for body.c
+ * 
+ * Dredd 1992 - Shattered World.
+ * 
+ * 19981002 Dredd   Added "worn clothing" stuff into here (add scars asap)
+ * 
+ */
+inherit "obj/souls/base_soul";
+
+#define SAVE_INTERVAL 2400
+#define MAX_QUIET_TIME 300
+#define IDLE_TIME 180
+
+reset(arg)
+{
+    ::reset(arg);
+    if (!arg) {
+    add_id("state_soul", "worn_clothing");
+    set_soul_type("generic", "state");
+    }
+}
+
+init()
+{
+    ::init();
+    if (myself != this_player()) return;
+    add_action("save_character", "save");
+    add_action("terminal", "terminal");
+    if (myself->is_player()) start_call_outs();
+}
+
+terminal(str)
+{
+    notify_fail("terminal <term-type>.\n");
+    if (!str) return 0;
+
+    this_object()->add_store("term", str);
+    write("Terminal type set to " + str + "\n");
+    return 1;
+}
+
+save_character(str)
+{
+    notify_fail("Save what?\n");
+    if (str) return 0;
+
+    myself->save_character();
+    write("Ok.\n");
+    return 1;
+}
+
+/*
+ * Patches to destruct sleepers.  If called twice while player is non-
+ * interactive, it will destroy the player and inventory.  Called every
+ * MAX_QUIET_TIME seconds, currently 5 mins, so a player gets 5-10
+ * mins of grace after a disconnect.  Hacked to also check login times
+ * and warn the user of his impending demise.  Further hacked to implode
+ * them if they are idle for too long.
+ *
+ * Players do NOT get reimbursed for their inventory - too easy to make
+ * too much money...
+ *
+ * Gandalf's patch.
+ * Dredd's repatch to state.c :-)
+ */
+
+int telltime;
+ 
+sleeper_check(arg) 
+{
+    object o;
+
+    int is_interactive = query_ip_number(myself);
+    int time_ok = 1; /* still in hours - let reboot do the work */
+ 
+    if (!myself || myself->query_wiz()) return;
+
+    if (is_interactive)
+    {
+        if (myself->query_idle() > MAX_QUIET_TIME*2) 
+        {
+            /* quick hack - force a destruct */
+            is_interactive = 0;
+            arg = 1;
+        }
+#if 0
+        else if (myself->query_idle() > IDLE_TIME)
+        {
+            myself->push_caution("idle");
+        }
+        else
+        {
+            if (myself->query_caution() == "idle") myself->pop_caution();
+        }
+#endif
+        if (time_ok) 
+        {
+            call_out("sleeper_check", MAX_QUIET_TIME, 0);
+            return 1;
+        }
+
+
+        if (!arg) 
+        {
+            tell_object(myself, "You had better get to the shop!!!\n" +
+                 "The MUD is closing soon!\n");
+                       telltime = MAX_QUIET_TIME / 60 + 1;
+                       call_out("sleeper_check", 60, 1);
+                       return 1;
+        }
+        else 
+        {
+            if (telltime <= 0) 
+            {
+                write("Your time is up - see you later.\n");
+                myself->log_enter("(thrown off)");
+                dest_player();
+                return(1);
+            }
+            else 
+            {
+                telltime = telltime - 1;
+                write("You have " + telltime +
+                    " minutes to sell your stuff and quit!!!!\n");
+                call_out("sleeper_check", 60, 1);
+                return(1);
+            }
+        }
+    }
+
+    if (!arg) 
+    {
+        call_out("sleeper_check", MAX_QUIET_TIME, 1);
+        return 1;
+    }
+
+    /* non interactive twice in a row - self destruct */
+    o = environment(myself);
+    if (o) tell_room(o, myself->short() + " implodes from sheer boredom.\n" +
+                                  "Nothing remains.\n");
+    myself->log_enter("(implodes)");
+    dest_player();
+}
+
+
+#if 0
+/*
+ * quick check to ensure the player is allowed to be logged on now.
+ * called from sleeper_check and login.
+ */
+
+still_in_hours() {
+        int day;
+        int tm2;
+
+    day = ((time() + TIME_ADJUST)/DAY) % 7;
+    if (!( (day == 2) || (day == 3)) ) {
+    if (!allow(name)) {
+    tm2 = ((time()+TIME_ADJUST) % DAY);
+    if ((tm2 > MORNING) && (tm2 < EVENING)) { 
+    return 0;
+    } 
+      }
+    }
+    return 1;
+}
+#endif
+
+#if 0
+autoheal()
+{
+    if (myself->query_ghost()) return;
+    if (headache) {
+    headache -= 1;
+    if (headache == 0)
+        tell_object(myself, "You no longer have a head ache.\n");
+    }
+    if (myself->query_hps() < max_hp() || myself->query_sps() < max_sp()) {
+    if (intoxicated) heal_self(3);
+    else heal_self(1);
+    }
+    if (intoxicated) {
+    if ((intoxicated -= 1) == 0) {
+        headache = max_headache;
+        max_headache = 0;
+        tell_object(myself,
+           "You suddenly without reason get a bad head ache.\n");
+        if ((hit_point -= 3) < 0)
+        hit_point = 0;
+    }
+    }
+    call_out("autoheal", INTERVAL_BETWEEN_HEALING);
+}
+#endif
+
+#if 0
+hunger()
+{
+int stuffed, siz;
+    siz = myself->query_siz();
+    if (!ghost && query_ip_number(myself)) {
+    stuffed = myself->add_food(-1);
+    if (stuffed < 0) stuffed = myself->add_food(-myself->add_food(0));
+    if (stuffed == 0) {
+         tell_object(myself, "You are starving with hunger! You feel weaker.\n");
+         damage(3);
+         weakness = myself->query_str()/5+1;
+         if (query_str() <= 0) myself->damage("hunger", myself->max_hp()+1);
+    }
+    else if (stuffed <= siz / 3)  {
+        write("You are very hungry.\n");
+        damage("hunger", 1);
+    }
+    else if (stuffed < siz * 2 / 3)
+        write("You are quite hungry.\n");
+    else if (stuffed > siz * 3 / 2 )
+        write("You are comfortably full.\n");
+    else if (stuffed > siz * 2) 
+        write("You are really stuffed full of food!\n");
+    }
+    if (!myself->query_wiz()) call_out("hunger", INTERVAL_BETWEEN_FOOD);
+}
+
+
+intoxicate()
+{
+string cap_name;
+int n;
+
+    if (!intoxicated) return;
+    n = random(7);
+    if (n == 0) {
+    myself->checked_say(cap_name + " hiccups.\n");
+    write("You hiccup.\n");
+    } else if (n == 1) {
+    myself->checked_say(cap_name + " seems to fall, but takes a step and recovers.\n");
+    write("You stumble.\n");
+    } else if (n == 3) {
+    write("You feel drunk.\n");
+    myself->checked_say(cap_name + " looks drunk.\n");
+    } else if (n == 5) {
+    myself->checked_say(cap_name + " burps.\n");
+    write("You burp.\n");
+    }
+    call_out("intoxicate", 5 + random(56));
+}
+#endif
+
+/* needs cleaning up.. */
+/* cleaned up by Hunter 921004 */
+/* check for "inhibit_insanity" added. Hunter 921004 */
+sanity()
+{
+    if (!myself || !myself->is_player()) return;
+    if (myself->query_guest()) return;
+string cap_name = myself->query_name();
+    if ((myself->query_san() < 4) && ((50-myself->query_san()) > random(100) )
+        && query_ip_number(myself)
+        && !( present("inhibit_insanity", myself)  || environment(myself) -> query_property ("inhibit_insanity")) )  {
+    int san_action = random(6);
+    myself->checked_say( STRINGS->format_string( ({ 
+        "$NAME flees from the room.\n",
+        "$NAME gibbers.\n",
+        "$NAME drools.\n",
+        "$NAME looks stoned.\n",
+        "$NAME bursts into tears.\n",
+        "$NAME raves about Zarquon.\n"
+        })[san_action], ({ "NAME", cap_name }) ) );
+    tell_object(myself, ({
+        "You have to get away from this place!\n",
+        "You gibber.\n",
+        "You drool.\n",
+        "You feel the presence of a god.\n",
+        "You feel the world hates you.\n",
+        "You feel the mighty power of Zarquon.\n" 
+        })[san_action] );
+    if (!san_action) 
+        myself->run_away();
+    }
+    call_out("sanity", myself->query_san()*20);
+}
+
+
+nosave dest_player() {
+    kill_callouts("intoxicate");
+    kill_callouts("autosave");
+    kill_callouts("autoheal");  
+    kill_callouts("sanity");  
+    kill_callouts("sleeper_check");
+    kill_callouts("hunger");
+    myself->quit();
+}
+
+
+kill_callouts(s) {
+int i;
+    while ((remove_call_out(s)) != -1) 
+    i = 0    ;  /* changed this, dredd */
+}
+
+/* call_outs should really be restarted from saved values */
+start_call_outs()
+{
+int i;
+    if ((!myself->query_wiz()) && (!TEST_REGISTER->query_test_char(myself->query_real_name()))) {
+    call_out("autosave", SAVE_INTERVAL);
+    call_out("sleeper_check", MAX_QUIET_TIME, 0); /* Jenna 98 - no bored test chars */
+    }
+    call_out("sanity", 120); /* 2 mins to clear login procedure */
+#if 0
+    call_out("autoheal", INTERVAL_BETWEEN_HEALING);
+    if (!myself->query_wiz()) call_out("hunger", INTERVAL_BETWEEN_FOOD);
+#endif
+}
+
+autosave()
+{
+    if (!myself) return;
+    if (!myself->query_brief()) 
+        tell_object(myself,"\nAutosaving character...\n");
+    myself->save_me();
+    call_out("autosave", SAVE_INTERVAL);
+}
+
+/*
+ * Clothing controller object
+ * Originally devised by Calthron on Shattered Worlds
+ * 
+ * Code cleaned up by Hunter 931212. Calthron has a nice tendency not
+ * to document code. It will be fun working out how this works.
+ */
+
+
+array list;
+string extral;
+string gender;
+
+show_stats()
+{
+    ::show_stats();
+    write("list    : "); DUMP->dump(list);
+}
+
+extra_look() 
+{
+    string temp;
+
+    add_worn_object(); /* make sure it's up-to-date */
+    if (!gender) gender = myself->query_gender();
+    temp = capitalize(GENDER->sub(myself)) + " is ";
+    if (extral == "" || !extral)
+    {
+        if (myself->is_player() || myself->query_race() == "humanoid")
+    	    return temp + "stark naked. " + show_scar();
+        return 0;
+    }
+#if 0
+    if (gender == "male") 
+    {
+        if (find_article( ({ "backside" }) ))
+     	    return temp + "wearing " + extral;
+        return temp + "wearing " + extral + ", but is indecently dressed";
+    }
+    if (gender == "female") 
+    {
+        if (find_article( ({ "backside", "chest" }) ))
+      	    return temp + "wearing " + extral;
+        return temp + "wearing " + extral + ", but is indecently dressed";
+    }
+#endif
+    return temp + "wearing " + extral;
+}
+
+add_worn_object() 
+{
+  object ob;
+  array con;
+  int loop;
+  if (!myself) return 0;
+  con = contents(myself);
+  list = ({ });
+  for (loop = 0; loop < sizeof(con); loop++) 
+  {
+    if (con[loop]->query_clothing() &&
+      con[loop]->short_string() &&
+      con[loop]->query_worn())
+        list += ({ con[loop] });
+  }
+  extral = "";
+  change_extra_look();
+}
+
+change_extra_look() 
+{
+  int temp1, temp2;
+  if (!sizeof(list)) return;
+  temp1 = sizeof(list);
+  temp2 = 1;
+  extral = lower_case(list[0]->short_string());
+  while (temp2 < temp1) {
+    if (temp2 != temp1 - 1) {
+      extral += ", " + lower_case(list[temp2]->short_string());
+    } else 
+      extral += " and " + lower_case(list[temp2]->short_string());
+    temp2++;
+  }
+}
+
+
+find_article(array covers) 
+{
+int x;
+    if (!sizeof(list)) 
+	return 0;
+    for (x = 0; x < sizeof(list); x++) 
+    {
+        if (list[x] && list[x]->query_does_it_cover(covers) 
+		&& list[x]->query_over_clothing(1))
+            covers = ARRAY->subtract(covers, list[x]->query_cover());
+    }
+    return (sizeof(covers) == 0);
+}
+
+
+int query_decency(array arg) 
+{
+array check;
+    if (!myself) 
+	return -1;
+    if (!gender) gender = myself->query_gender();
+    if (extral == "" || !extral)
+        return 0;
+    if (arg)
+    	check = arg;
+    else if (gender == "male")
+    	check = ({ "backside" });
+    else if (gender == "female")
+    	check = ({ "backside", "chest" });
+    else 
+	check = ({ });
+    add_worn_object();
+    if (find_article(check))
+    	return 2;
+    return 1;
+}
+
+#define MAX_SCAR	5
+
+show_scar() 
+{
+    int i, j, first, old_value;
+    int r, scar;
+    array ret;
+    int m;
+    string cap_name = myself->query_name();
+    array body_locations = myself->query_body();
+
+    j = 1;
+    first = 1;
+    scar = myself->query_scar();
+    old_value = myself->query_scar();
+    m = sizeof(body_locations)/2;
+    ret = allocate( ((m>MAX_SCAR)?m:MAX_SCAR) + 1);
+    r = 0;
+    while(i < MAX_SCAR && (i < sizeof(body_locations)/2) ) 
+    {
+	if (scar & j) {
+	    old_value &= ~j;
+	    if (first) {
+		ret[r] = (cap_name + " has a scar on " 
+			+ GENDER->pos(myself) + " " 
+			+ body_locations[i*2]);
+		first = 0;
+		r ++;
+	    } else if (old_value) 
+	    {
+		ret[r] = (", " + GENDER->pos(myself) + " " 
+			+ body_locations[i*2]);
+		r++;
+	    } else {
+		ret[r] = (" and " + GENDER->pos(myself) + " " 
+			+ body_locations[i*2]);
+		r ++;
+	    }
+	}
+	j *= 2;
+	i += 1;
+    }
+    if (!first)
+    {
+	ret[r] = (".\n");
+	r ++;
+    }
+    else
+    {
+        return "";
+    }
+    return implode(ret[..r-1], "");
+}
+
+query_extral() {
+    return extral;
+}

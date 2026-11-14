@@ -1,0 +1,450 @@
+/*
+ * Shattered World's Standard Armour File.
+ * 
+ * Originally written by: Unknown.
+ * 
+ * Warning: Don't just copy this file. Use the /std/armourer or
+ * inherit it if you have to.
+ */
+
+/*
+ * 920913 - updated and damage_status() added. Rattcherryh
+ * 940130 - Added code to test the wearer's body array. Hunter 
+ * 940309 - Made use of /std/wearable.c. Hunter
+ * 951007 Hunter	no longer #includes Servers.h, as parents inherit it
+ * 981015 Dredd     Incorporated Hunter's clothing code...
+ * 990731 Jenna		Inherited std/protection as part of new damage
+ *			system
+ */
+
+inherit "std/wearable";
+inherit "std/protection";	/* Jenna July 99 */
+
+#include "materials.h"
+
+object worn_clothing;
+array partial = ({ });
+string type;
+string color;
+int layer;
+int size;
+int ac;
+
+show_stats()
+{
+    ::show_stats();
+    write(
+	"type    : " + type + "\t" +
+	"ac      : " + ac + "\n"
+    );
+    write("worn_clothing : "); DUMP->dump(worn_clothing);
+    write("layer    : "+layer+"\tsize     : <unimplemented>\n");
+    write("partial  : "+implode(partial, ", ")+"\n");
+}
+ 	   
+reset() 
+{
+    ::reset();
+    set_material(MAT_CLOTH);
+    add_id("armour");
+    add_property("wear");
+    type = "armour";
+}
+
+short()
+{
+    if (query_worn()) return 0;
+    return ::short();
+}
+
+short_string()
+{
+    string temp;
+    int len;
+
+    if (!(temp = ::short())) return 0;
+
+    len = sizeof(temp);
+    if (len < 7)
+        return 0;
+    if (temp[len - 7..] == " (worn)")
+        if (!find_covering(1) || no_non_partial_coverings())
+            return temp[..len - 8];
+    return 0;
+}
+
+query_long()
+{
+    if (query_worn() && find_covering(1) && !no_non_partial_coverings())
+        return ("You can't see through your " + find_covering_name(1) + ".\n");
+    return ::query_long() + "It " + damage_status() + ".\n";
+}
+
+damage_status() 
+{
+    int x;
+    array Messages;
+
+    Messages = DAMAGE_STATUS->query_messages();
+    if (!query_property("BREAK")) return Messages[0];
+    else if (query_damage() >= query_property("BREAK")[2])
+	    return Messages[sizeof(Messages)-1];
+    else
+    {
+        x = query_damage() * 10 / query_property("BREAK")[2];
+        if (x >= sizeof(Messages)) x = sizeof(Messages) -1;
+        if (x < 0) x = 0;
+	    return Messages[x];
+    }
+}
+
+test_type(String) 
+{
+    return (String == type ? this_object() : 0);
+}
+
+armour_class() { return ac; }
+query_type() { return type; }
+
+query_armour(locn) 
+{
+    int i;
+    array cover = this_object()->query_cover();
+
+/*  if (cover) return; */ /* EVERYTHING HAS COVER! */
+    if (!locn) return ac;
+    for (i = 0; i <  sizeof(cover); i++) 
+	if (locn && stringp(locn) && index(locn, cover[i]) != -1)
+	    return ac;
+}
+
+int can_wear(object who)
+{
+    array failed;
+    string error;
+
+    if (!::can_wear(who)) return 0;
+
+    /* can the armour be worn by someone? */
+    failed = test_wearers_body(who);
+    if (sizeof(failed) != 0)
+    {
+	failed = collapse_cover(failed);
+	error = "To wear "+short()+" you need to have ";
+	if (sizeof(failed) == 1)
+	{
+		error += failed[0] + ".\n";
+ 	}
+	else
+ 	{
+        error += implode(failed[..sizeof(failed)-2], ", ")+" and "
+		    +failed[sizeof(failed)-1]+".\n";
+	}
+	notify_fail(error);
+	return 0;
+    }
+    return 1;
+}
+
+int wear(str) 
+{
+    object who;
+    object ob;
+
+    if ( !(id(str)) ) return 0;
+
+    if (layer == 0) ARMOURER->fix_layer(this_object());
+
+    /* find any layers >= this one ... */
+    if (find_covering(1))
+    {
+        notify_fail("You can't put your " + query_name() + " on over your "
+        + find_covering_name(0) + "!\n");
+        return 0;
+    }
+
+    if ( !(::wear(str)) ) return 0;
+
+    test_worn_clothing();
+    if (worn_clothing) worn_clothing->add_worn_object();
+
+#if 0
+    who = environment();
+    ob = wear_ob();
+    if (!ob) 
+    {
+        return 1;
+    }
+    notify_fail("You already have an armour, " 
+        + ob->query_name() + ", of class " + type + ".\n");
+#endif
+
+    return 1;
+}
+
+int remove(str)
+{
+    if (!id(str)) return 0;
+    if (!query_worn()) 
+    {
+        notify_fail("You aren't wearing your "+query_name()+".\n");
+        return 0;
+    }
+    if (find_covering(1))
+    {
+        notify_fail("You have to remove your " + find_covering_name(1)
+        + " first.\n");
+        return 0;
+    }
+    if (!::remove(str)) return 0;
+    if (worn_clothing)
+        worn_clothing->add_worn_object();
+    return 1;
+}
+
+// Commented out by Jenna Oct 00 - I think this is a relic from
+// before armour inherited std/wearable. There's nothing here armour
+// needs to do that all wearable items don't.
+#if 0
+drop(silently) 
+{
+    object who = query_worn();
+
+    if (who && !silently) 
+    {
+	    notify_fail("You are still wearing your "+query_name()+"!\n");
+        return 1;
+    }
+    /* silent (forced) removal or we have a "who" - ok to remove */
+    remove_object(who);                                                        
+    return 0;
+}
+#endif
+
+set_ac(a)  { ac = a; }
+
+
+set_type(t) 
+{
+int x;
+	array AwkwardTypes = ({
+		"armour", "helmet", "shield", "ring", "amulet",
+		"boot", "glove", "cloak"
+//		, "vambrace", "gauntlet",
+//		"greave", "cuiras", "sleeve", "pant"
+		});
+	array Cover = ({
+		({ "chest", "abdomen" }), ({ "head" }), ({ "chest" }),
+		({ "hand" }), ({ "all" }), ({ "foot" }), ({ "hand" }),
+		({ "chest", "abdomen" })
+		});
+	array NewTypes = ({
+		"hauberk", "helmet", "shield", "ring", "amulet",
+		"boots", "gauntlets", "cloak"
+//		, "vambraces", "gauntlets",
+//		"greaves", "cuirass", "sleeves", "pants"
+		});
+
+	type = t;
+
+	add_id(t);
+
+	if ( (x = index(AwkwardTypes, type)) != -1) {
+		set_cover(Cover[x]);
+		type = NewTypes[x];
+	}
+
+}
+
+set_arm_light(l) { set_light(l); }
+set_robust(n) { change_property("break",0,n); }
+
+wear_ob() 
+{
+    object ob = environment(this_object())->wear(this_object());
+
+    if (!ob) wear_object(environment());
+    return(ob);
+}
+
+
+find_covering(arg)
+{
+    array temp;
+
+    if (arg)
+        temp = query_coverings();
+    else
+        temp = query_covered();
+
+    return (sizeof(temp) != 0);
+}
+
+
+int query_under_clothing(int arg) { return arg > layer; }
+int query_over_clothing(int arg) { return (arg <= layer); }
+int query_layer() { return layer; }
+
+
+int query_does_it_cover(array coverage)
+{
+    return (sizeof(ARRAY->common(coverage, query_cover())) > 0);
+}
+
+
+query_clothing() { return 1; }
+query_partial() { return partial; }
+
+string find_covering_name(int over)
+{
+    array covering = query_coverings();
+    int largest_layer;
+    int lindex;
+    int i;
+
+    if (sizeof(covering) == 0) return "";
+    largest_layer = covering[0]->query_underclothing();
+    lindex = 0;
+    i = 1;
+    while (i < sizeof(covering))
+    {
+        if (covering[i]->query_layer() > largest_layer)
+        {
+            lindex = i;
+            largest_layer = covering[i]->query_layer();
+        }
+        i ++;
+    }
+    return covering[lindex]->query_name();
+}
+
+/* 
+ * returns: an array of everything possibly covered by this item of clothing 
+ */
+array query_covered()
+{
+    array stuff = contents(environment());
+    array retv = allocate(sizeof(stuff));
+    int retc = 0;
+    int i;
+
+    /* if (!query_worn()) return ({ }); */
+
+    for (i = 0; i < sizeof(stuff); i ++)
+    {
+	if (stuff[i] && stuff[i]->query_clothing() 
+		&& stuff[i]->query_under_clothing(layer)
+		&& stuff[i]->query_worn()
+		&& stuff[i]->query_does_it_cover(query_cover())
+	)
+	{
+	    retv[retc] = stuff[i];
+	    retc ++;
+ 	}
+    }
+    retv = retv[..retc-1];
+    return retv;
+}
+
+
+/* 
+ * RETURNS: an array of everything possibly covering this item of clothing 
+ */
+array query_coverings()
+{
+    array stuff = contents(environment());
+    array retv = allocate(sizeof(stuff));
+    int retc = 0;
+    int i;
+    int layer_adj = 0;
+
+    if (query_worn()) layer_adj = 1;
+
+    for (i = 0; i < sizeof(stuff); i ++)
+    {
+	if (stuff[i] && stuff[i]->query_clothing() 
+		&& stuff[i]->query_over_clothing(layer + layer_adj)
+		&& stuff[i]->query_worn()
+		&& stuff[i]->query_does_it_cover(query_cover())
+	)
+	{
+	    retv[retc] = stuff[i];
+	    retc ++;
+ 	}
+    }
+    retv = retv[..retc-1];
+    return retv;
+}
+
+
+set_layer(int arg) { layer = arg; }
+set_partial(array i) { partial = i; }
+
+
+int no_non_partial_coverings() 
+{
+array coverings = query_coverings();
+array areas = query_cover();
+int i;
+    for (i = 0; i < sizeof(coverings); i ++)
+	areas = "lib/arrays"->subtract(areas, coverings[i]->query_full_cover());
+    return (sizeof(areas) != 0);
+}
+
+
+array query_full_cover()
+{
+    return ARRAY->subtract(query_cover(), partial);
+}
+
+
+query_naked() 
+{
+    if (!find_worn())
+    	return 1;
+    return (find_worn()->query_decency() == 0);
+}
+
+
+find_worn()
+{
+    test_worn_clothing();
+    return worn_clothing;
+}
+
+
+test_worn_clothing()
+{
+    if (!worn_clothing && environment() && environment()->living())
+    {
+	worn_clothing = present("worn_clothing", environment());
+#if 0
+	if (!worn_clothing)
+	{
+	    worn_clothing = clone_object(PATH+"worn_clothing");
+    	move_object(worn_clothing, environment());
+	}
+#endif
+    }
+}
+
+set_color(string str) { color = str; }
+query_color() { return color; }
+
+
+/* to distinguish clothing from armour
+ * query_is_clothing will return 1 if it is clothing
+ * Zeni Sept 15 '99
+ */
+
+int is_clothing;
+
+set_is_clothing(i)
+{
+    is_clothing = i;
+}
+
+query_is_clothing()
+{
+   return is_clothing;
+}

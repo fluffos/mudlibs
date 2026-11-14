@@ -1,0 +1,451 @@
+/*
+ * The combat soul.  Other souls that have combat will one day
+ * be able to register their options with it
+ *
+ * - Dredd - a combination of new stuff and old stuff ripped from 
+ * various places.
+ *
+ * 28NOV99 Jenna	Fixed bug with combat not initiating.
+ *			Lessened importance of chutzpah to combat
+ *			speed and made the whole thing less
+ *			granular (increased randomness).
+ * 19DEC99 Jenna	Added add_spell_attack() to make monsters'
+ *			set_spell_*()/add_attack() accessible 
+ * 24MAY00 Jenna	Slight change to "Yes, yes" trap.
+ */
+
+inherit "obj/souls/base_soul";
+
+nosave int in_combat;
+#define write(x) tell_object(myself, (x))
+
+#define TD(xx) catch tell_object(find_player("dredd"), xx);
+
+array spells;
+
+reset(arg)
+{
+    ::reset(arg);
+    if (!arg) 
+    {
+        add_id("combat");
+        set_soul_type("generic", "combat");
+    }
+}
+
+init()
+{
+    ::init();
+    if (myself == this_player()) 
+    {
+        /* myself is set in ::init() */
+        add_action("action", "action");
+        add_action("reaction", "reaction");
+        add_action("suicide_c", "suicide");
+        add_action("kill", "kill", 1);
+        add_action("kill", "attack");
+        add_action("toggle_wimpy", "wimpy");
+        add_action("stop_hunting_mode", "stop");
+	    add_action("do_spell_attack", "", -1); /* Jenna Dec 99 */
+        myself->set_combat_soul(this_object());
+    }
+
+    if(find_call_out("hack")==-1) call_out("hack", 2);  
+}
+
+hack() { if (myself) myself->set_combat_soul(this_object()); }
+
+action(str)
+{
+    return myself->set_action(str);
+}
+
+reaction(str)
+{
+    return myself->set_reaction(str);
+}
+
+/* the wimpy number is now a percentage */
+toggle_wimpy(arg) 
+{
+    int wimpy;
+
+    if (!arg) wimpy = 0;
+    else wimpy = atoi(arg);
+    if (wimpy > 100) {
+        wimpy = 100;
+        write ("Even you can't be that wimpy!\n");
+        }
+    if (wimpy)
+        write("Wimpy mode set at " + wimpy + " %.\n");
+    else
+        write("Brave mode.\n");
+    myself->set_wimpy(wimpy);
+    return 1;
+    }
+
+suicide_c(arg) {
+            write("Things aren't that bad, are they? (replying 'yes' will cause you to die): ");
+            input_to("suicide");
+            return 1;
+}
+
+suicide(reply) 
+{
+        if (myself->query_ghost()) {
+            notify_fail("You are alreay dead!\n");
+            return 0;
+        }
+        if (!reply)
+        {
+            write("Things aren't that bad, are they? (replying 'yes' will cause you to die) ");
+            input_to("suicide");
+            return 1;
+        }
+        else if (reply == "yes" || reply == "y")
+        {
+            write("You decide you've had enough and kill yourself!\n");
+            say(myself->query_name() + " ruthlessly commits suicide.\n");
+            myself->death();
+            return 1;
+        }
+        else if (reply == "no" || reply == "n" || reply == "" || !reply)
+        {
+            write("Congratulations, we're glad you've managed to find a different way around your\nproblems.\n");
+            return;
+        }
+        else return command(reply, this_player());
+}
+
+kill(str)
+{
+    object ob;
+    if (myself->query_ghost()) return 0;
+    if (!str) 
+    {
+        notify_fail("Kill what?\n");
+        return 0;
+    }
+    ob = present(lower_case(str), environment(myself));
+    if (!ob) 
+    {
+            write("No " + str + " here !\n");
+            return 1;
+    }
+    if (!living(ob)) 
+    {
+        write(str + " is not a living thing !\n");
+        myself->checked_say(myself->query_name() + " tries foolishly to attack " + str + ".\n");
+        return 1;
+    }
+    if (ob == myself) 
+    {
+        write("What? Attack yourself?\n");
+        return 1;
+    }
+    if ((!myself->query_npc()) && ((ob != myself->query_attack()) && myself->query_guest())) 
+    {
+            write("Don't be a fool - finish character generation first.\n");
+            return 1;
+        }
+    if ((ob != myself->query_attack()) && (ob->is_player()) && (ob->query_guest() != myself->query_guest())) 
+    {
+            write("Players don't attack guests, and guests don't attack players.\nIt's rude!\n");
+            return 1;
+        }
+    /* Jenna 99-00: to prevent players running in, "kill mob", running out,
+     * etc, to continually get first attack */
+    if (find_call_out("attack_cycle") != -1)  
+    {
+	if (ob == myself->query_attack())
+            write("Yes, yes.\n");
+	else
+	{
+	    write("You start attacking "+ob->my_name()+"!\n");
+	    myself->attacked_by(ob); /* Not attack_object(ob), which */
+				     /* causes instant attack */
+	}
+        return 1;
+    }
+
+/*    it = str; */
+    if (!myself->attack_object(ob))
+        write("You can't attack " + ob->query_name() + "!\n");
+    return 1;
+}
+
+stop_hunting_mode(arg) 
+{
+    notify_fail("stop <combat,walking,running>?\n");
+
+    /* Jenna Nov 99 - no arg defaults to "stop combat" */
+    if (arg && arg != "combat" && arg != "fighting") 
+	return 0;
+    if (find_call_out("actually_stop") != -1)
+    {
+        write("You are already trying to stop fighting.\n");
+        return 1;
+    }
+    write("You prepare to stop.\n");
+    call_out("actually_stop", 2);
+
+    return 1;
+}
+
+actually_stop()
+{
+    tell_object(myself, "You stop fighting.\n");
+    myself->set_attack(0);
+    myself->remove_hunt("all");
+    return 1;
+}
+
+/*
+ * Group combat - Gandalf.
+ *
+ * The assumption here is that Dredd's graphics rendering engine may one
+ * day be put to good use.
+ *
+ * NB: Agility is taken to be strength/size.
+ *
+ * Hits have a setup time before delivery; players have a `notice time' and
+ * a `reaction time' (depends on their reaction type).  The notice time is
+ * close to zero if the action is coming from the last guy they hit/were
+ * hit by, otherwise it's a magic number multiplied by the number of
+ * attackers in the room.  The combat server keeps us updated as to the
+ * number of attackers, etc.  We keep track of the motion of the body
+ * and the hilt.
+ *
+ * This is probably overkill, but it's kinda fun to have good combat - and
+ * relying on semi-realism means I don't have to have too many (empirically
+ * derived) magic numbers - well, not ones I don't understand, anyway.
+ */
+
+int num_attackers;      /* people who have hit you in room */
+int num_allies;         /* people hitting the same other obs in room */
+int team_number;        /* combat server's assigned number for our team */
+
+set_team_number(int x) {
+    team_number = x;
+    }
+
+set_num_attackers(int x) {
+    num_attackers = x;
+    }
+
+set_num_allies(int x) {
+    num_allies = x;
+    }
+
+/*
+ * Set up a reaction to an incoming hit.
+ * We need to set up our defensive posture for that point.
+ */
+
+#define A_ATTACK        0
+#define A_PARRY         1
+#define A_DODGE         2
+#define A_RIPOSTE       3
+#define A_NUM           4
+
+array actions_allocated = allocate(A_NUM);      /* player's designated actions
+*/
+array actions_inuse = allocate(A_NUM);          /* what we've scheduled */
+
+fix_actions(a) {
+    actions_allocated[myself->query_action()]++;
+    actions_allocated[myself->query_reaction()]++;
+    }
+
+new_combat() {
+    actions_allocated = allocate(A_NUM);
+    actions_inuse = allocate(A_NUM);
+    fix_actions();
+    }
+
+/*
+ * Called when a hit arrives.
+ * We calculate our recent activity, kludging for multiples (we
+ * tend to give the player the benefit of the doubt with respect
+ * to the spacing/arrival time of attacks).
+ */
+
+object last_parry;      /* who we'll switch to in a riposte */
+object last_hit_by;     /* last guy that thumped us - we assume we're keeping an
+eye on them */
+object last_hit;        /* last guy we thumped - we're looking at them at the time */
+object focus;           /* designated kill object */
+object slashing;        /* are we hitting something right now? */
+
+array ptimes;   /* parry times */
+array dtimes;   /* dodge times */
+array dstress;  /* dodge stress changers */
+array pstress;  /* parry stress changers */
+
+object env;
+
+incoming_hit(real curr_time, int hitnum, object ob, real delivery_time, locn) 
+{
+    int tempatt;
+
+    env = environment(myself);
+
+    /* Basic notice time: depends on intelligence (smarts) and wisdom (experience) */
+    real notice_time = 8.0 / int2real(random(myself->query_int() + myself->query_wis()) + 1);
+
+    /* If I'm fighting multiple enemies, it's harder to notice incoming hits */
+    /* Important: chutz & wis */
+    tempatt = (num_attackers -1) * (10 + random(6));
+    if (tempatt > 0)
+        notice_time += int2real(tempatt) / 
+                       int2real(myself->query_chu()+myself->query_wis());
+
+    if (ob == last_hit_by || ob == last_hit) {  /* we notice ripostes quickly */
+        notice_time /= 5.0;
+        }
+    if (notice_time > 5.0)      /* chu is really important for 2 or more attackers */
+        notice_time = 5.0;
+    if (notice_time + curr_time >= delivery_time)       /* we're gonna get hit before we see it coming. */
+        return 0;
+
+/*
+ * Ok, we saw the hit in progress.  If we're not too busy, we might
+ * attempt some sort of reaction to it...
+ *
+ * We have a `hilt' and a `body motion'.
+ *
+ * `Hilt' is probably moving (at some percentage of our capacity) towards
+ * blocking or slashing something.  Body is attempting to move at whatever
+ * capacity it requires (maybe >100%) to avoid being hit by the things that can't be
+ * blocked.  Body motion, more than hilt motion, determines the fatigue the
+ * player is suffering (taking a slash costs 3 * as much fatigue, because we
+ * assume they mean it).  If the hilt is going for a parry, we can add in the
+ * temporal stress from this hit to see whether attempting a parry will take
+ * us over capacity - if it is, we set a dodge - otherwise, we will either
+ * add it to the parry list, or dodge list, depending on which has more
+ * importance attached to it.  If the player likes ripostes, we shift his
+ * kill focus to whoever he parried last.  As a generic hack, your hilt is
+ * considered twice as close to the guy you last parried as to anyone else -
+ * the blow will be weaker, but faster.
+ */
+
+/*
+ * When we see a hit coming in, we want to parry or dodge.  We try to allocate
+ * `action slots' (really percentage times) in proportion to the player's
+ * preference.  When we have time to make a slash, if we like ripostes, we
+ * tend to take a short slash at the last guy we parried; if we
+ * like serious thumping, we tend to take a full swing at whoever
+ * we're focused on.  A riposte will change our kill focus for the
+ * next attack.  Again, we try to allocate in proportion.
+ * Note: action slots don't add to 100%, as they refer to different
+ * parts of combat.
+ */
+
+    if (actions_inuse[A_RIPOSTE] < actions_allocated[A_RIPOSTE]) {
+        actions_inuse[A_RIPOSTE]++;
+        /* If we're in the middle of a slash, we can't go riposte him yet */
+        if (!slashing || environment(slashing) != env) {
+            slashing = ob;
+            return A_RIPOSTE;
+            }
+        focus = ob;             /* go for him when we have time */
+        return A_PARRY;
+        }
+
+    if (actions_inuse[A_PARRY] < actions_allocated[A_PARRY]) {
+        actions_inuse[A_PARRY]++;
+        return A_PARRY;
+        }
+    return 0;
+}
+
+
+attack_cycle() 
+{
+    string pro;
+    object attacker_ob = myself->query_attack();
+    real attack_speed, div;
+    int brief, tmpdiv;
+
+    if (!attacker_ob) {
+        attacker_ob = myself->attacked_by(FIGHT_SERV->next_attacker(myself));
+            if (!(attacker_ob = myself->query_attack())) {
+                in_combat = 0;
+                return;
+            }
+	tell_object(myself, "You attack " + attacker_ob->my_name() + "!\n");
+    }
+    FIGHT_SERV->attack(myself);
+    if (!present(attacker_ob, environment(myself))) {
+                /* should we stay in attack mode? no */
+                in_combat = 0;
+                return;
+    }
+    if (!(pro = myself->query_wimp_out())) wimp_out();
+
+    /* no set-prompt */
+    if (myself->query_monitor()) {
+        brief = myself->query_brief();
+        if (!brief && !myself->query_wimpy()) 
+                tell_object(myself, (pro + "\n"));
+        else if (brief) tell_object(myself, "HPs: "+
+                myself->query_hp()+"\n");
+        }
+
+    tmpdiv =	random(myself->query_chu()) +
+		random(myself->query_dex()) +
+		random(myself->query_dex());
+    if (tmpdiv < 1)
+	tmpdiv = 1; // anti-div-by-0   - Jenna Aug 00
+    div = int2real(tmpdiv);
+    attack_speed = 120.0 / div;
+    if (attack_speed < 1.5) attack_speed = 1.5;
+    if (attack_speed > 6.5) attack_speed = 6.5;
+    call_out("attack_cycle", attack_speed);
+}
+
+start_attack_cycle() {
+    if (find_call_out("attack_cycle")>=0) return;
+/*    if (in_combat) return; */
+    in_combat = 1;
+    if (!myself) myself = this_player();
+    if (!myself) return;
+    int reaction_speed = 120 / (myself->query_chu() + myself->query_dex()
+                +myself->query_int());
+    if (reaction_speed < 1) reaction_speed = 1;
+    if (reaction_speed > 5) reaction_speed = 5;
+    call_out("attack_cycle", reaction_speed);
+}
+
+wimp_out() 
+{
+if (!random((myself->query_san())+1)) {
+    myself->checked_say(myself->query_name() + " cackles manically.\n");
+    tell_object(this_object(), "You know you should run, but you are possesed by a manic fury and stay!\n");
+    }
+    else myself->run_away();
+}
+
+add_spell_attack(string str) 
+{
+    if (!pointerp(spells)) spells = [ str ];   
+    else if (index(spells, str) == -1) spells += [ str ];
+}
+
+do_spell_attack(str) 
+{
+    int i;
+    string v = myself->query_verb();
+
+    if (!spells) return 0;
+    if (str)
+	v += " " + str;
+    for (i = 0; i < sizeof(spells); i++)
+	if (v == spells[i]) 
+    {
+	    myself->do_spell_attack(v);
+	    return 1;
+	}
+    return 0;
+}
+

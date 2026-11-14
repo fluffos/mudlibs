@@ -1,0 +1,321 @@
+/*
+ * New combat server - gandalf.
+ * Not finished yet.
+ * Object tracks who's doing what in any combats in progress.
+ * It notifies objects when they should make a decision about
+ * what to do next (for players, this is automatic), passing them
+ * parameters regarding their current combat.
+ * When the object decides what to do, it returns a descriptor for
+ * the action; if there is a subject, he is notified of the incoming attention.
+ * Some time later, he will `notice' it (the player gets the message),
+ * and begin to react.  Other than that, it's pretty much a standard
+ * combat server; the combat/body stuff decides how well he reacts under
+ * pressure, etc.
+ */
+
+#define TD(x) catch tell_object(find_player("dredd"), x);
+
+#include "Servers.h"
+#include "/RO/living_defs.h"
+#include "security.h"
+
+reset(arg)
+{
+    return;
+}
+
+/*
+ * Rounds.  There is only one call-out active at once - hope you don't lose it :)
+ * t is the `round time' - the combat server's measure of the current time, in 0.1 secs.
+ * If call outs are slow, it'll lose against real time.  That's cool, as everyone
+ * shares the same time dilation.
+ */
+
+nosave combat_round(int t) {
+    int atime = t - time_offset;	/* this time relative to the array entries */
+    int x = 0;
+    while (x < act_num) {
+	if (act_start[act_first] < t) {
+	    }
+	}
+    }
+
+nosave array damage =  [
+		 1, "'s armour",  "failed to penetrate",
+		 2, "", "scratched",
+		 3, "", "nicked",
+		 5, "", "struck",
+		 10, " forcefully", "clouted",
+		 20, " viciously", "thumped",
+		 30, " viciously", "hammered",
+		 50, " with a bone crunching sound", "smashed",
+		 100000000, " into small fragments", "massacred"
+		];
+
+/*
+ * In-game people who are fighting each other.
+ * This object schedules all fighting (single hits).
+ * When an object is due to initiate an attack, it
+ * calls ob->choose_attack(enemies), where `enemies'
+ * is a list of objects in the current 
+ */
+
+
+
+hit_player(object pob, int dam, locn) {
+int crit, reaction, action, armour_class;
+object a_ob;
+/* return 0-x for dam done, -1 for parry, -2 for dodge */
+
+    if (!pob->valid_hit()) return 0; 
+    if (!locn || index (pob-> query_body(),locn) == -1)
+    	 locn = pob->random_location();
+    a_ob = pob->query_attack();
+
+    if (a_ob) {
+	    int off = a_ob->query_skill("offense");
+	    reaction = pob->query_reaction();
+	    action = pob->query_action();
+	    armour_class = pob->query_armour();
+	    if (reaction == 2 /* dodge */ ) {
+		/* dodge all attacks! */
+		if (pob->apply_skill("dodge", off, 0)) return -2;
+		if (action == 2) if (pob->apply_skill("dodge",off, 0)) return -2;
+		a_ob->apply_skill("offense", pob->query_skill("dodge"), 0); /* give them a learning chance */
+	    }	
+	    if (reaction == 1 || reaction == 3 /* parry - should be #defined */) {
+		/* parry only for a_ob */
+		if (pob->apply_skill("defence", off, 0)) return -1;
+		if (action == 1) /* 2 chances! */ 
+		if (pob->apply_skill("defence",off, 0)) return -1;
+		a_ob->apply_skill("offense", pob->query_skill("defence"), 0); /* give them a learning chance */
+      	    }
+
+	    crit = (random(a_ob->query_skill("offense")) == a_ob->query_skill("offense",1)-1);
+    }
+
+    if (!(crit)) { /* critical hit? ignore armour */
+    	dam = dam - random(armour_class + 1) - pob->query_armour(locn);
+	armour_break(pob, locn, dam);
+    }
+    else {
+	dam = dam * 3;
+	tell_object(pob, "An extremely vicious, stomach churning blow, sinks into your body!\n");
+	pob->checked_say(pob->query_name() + " is smashed by an extremely vicious, stomach churning, blow.\n");
+    }
+    if (dam <= 0) return 0;
+    if (dam > pob->max_hp()) dam = pob->max_hp()+1;
+    pob->damage(dam, locn);
+    return dam;
+}
+
+/*
+ * Return true if there still is an agressor in the same room as the player.
+ */
+
+attack(pob) {
+int tmp,tmp2, tmp_hp;
+int whit, wc, brief;
+string name_att;
+(int|string) hitloc;
+object att_who, wweapon;
+
+   if (!pob) return;
+   att_who = pob->query_attack();
+   if (!att_who) return 0;
+
+   brief = pob->query_brief();
+   if (!brief) brief = att_who->query_brief();
+
+    /* stop attacking a non-interactive player */
+    if (att_who->is_player() && !query_ip_number(att_who)) return 0;
+    /* stop attacking if you are a non-interactive player */
+    if (pob->is_player() && !query_ip_number(pob)) return 0;
+
+    name_att = att_who->query_name();
+    if (!name_att || att_who->query_ghost() ||
+	environment(att_who) != environment(pob)) {
+	if (!pob->query_hunt() && name_att && !att_who->query_ghost())
+	{
+	    if (!brief) tell_object(pob, "You are now hunting " +
+			att_who->query_name() + ".\n");
+	    pob->add_hunt(att_who, 10);
+	}
+	att_who = 0;
+	catch pob->attacked_by(0);;	/* temp hack */
+
+	/* anyone else to attack in the room? check hunting array */
+	att_who = next_attacker(pob);
+	if (!att_who) return 0;
+	pob->attacked_by(att_who);
+	pob->remove_hunt(att_who);
+	if (attack(pob)) return 1;
+	return 0;
+    }
+
+    att_who->attacked_by(pob);
+    pob->attacked_by(att_who);
+
+    if (pob->query_spell()) return combat_spell(pob); 
+
+    if (pob->query_action() == 1 || pob->query_action() == 2) return 1;
+    wweapon = pob->query_wielded();
+    if (wweapon) {
+	wc = wweapon->weapon_class();
+	whit = wweapon->hit(att_who);
+    }
+    else   
+	if (!(wc = pob -> query_wc()) ) wc = WEAPON_CLASS_OF_HANDS;
+    wc += pob->query_str()/5;		/* strength bonus */
+    tmp_hp = att_who->query_max_hp();
+    if (!tmp_hp) tmp_hp = att_who->query_hp() + 1;
+
+
+    hitloc = att_who->random_location();
+    if (hitloc != -1)
+	tmp = hit_player(att_who, random(wc + whit), hitloc);
+     else
+	tmp = hit_player(att_who, random(wc + whit), hitloc);
+    if (whit > 0 && tmp == 0) tmp = 1;
+    tmp2 = tmp;
+    if (intp(hitloc)) if (hitloc < 0) hitloc = "body";
+
+	    /* Does the enemy still live ? */
+    if (att_who && !att_who->query_ghost()) {
+    	if (tmp2 > -1) {
+		string how, what;
+		int i;
+		for (i = 0; i < sizeof(damage); i += 3) {
+			if (tmp2 < damage[i]) {
+				how = damage[i+1];
+				what = damage[i+2];
+				break;
+			}
+		}
+		if (brief && tmp2 < 2) return 1;
+		tell_object(pob, "You " + what + " " + name_att +
+			    how + " in the " + hitloc + ".\n");
+		pob->checked_say(pob->query_name() + " " + what + " " +
+			name_att + how + " in the " + hitloc + ".\n");
+		if (how == "'s armour") how = "r armour"; /* yuck! awful hack */
+		if (pob->query_invis() <= INVIS_ACTION)
+		  tell_object(att_who, pob->query_name() + " " + what + " you" + how + ".\n");
+		weapon_break(pob, wweapon);
+		return 1;
+        }
+
+	if (tmp2 == -1) { /* you have been parried! */
+	string what;
+		if (!brief) {
+			tell_object(pob, "Your blow is parried by "+name_att+".\n");
+			pob->checked_say(pob->query_name() + "'s blow is blocked by " + name_att+".\n");
+			if (pob->query_invis() >= INVIS_ACTION)
+				  tell_object(pob,"Your blow is parried by "+name_att+".\n");
+		}
+		if ((random(att_who->query_skill("defence")))
+			 < att_who->query_skill("defence") / 5) /* critcal parry! */
+			weapon_break(pob, wweapon, att_who->query_str());
+		return 1;
+	 }
+	if (tmp2 == -2) {
+	if (!brief) {
+		tell_object(pob, "Your wild blow is dodged by "+name_att+".\n");
+		pob->checked_say(pob->query_name() + "'s wild blow is skillfully dodged by " + name_att+".\n");
+		if (pob->query_invis() >= INVIS_ACTION)
+		tell_object(pob,"Your wild blow is dodged by "+name_att+".\n");
+	}
+	if ((random(att_who->query_skill("dodge")))
+		 < att_who->query_skill("defence") / 5) /* critcal parry! */
+			weapon_break(pob, wweapon, 10 /* ground */);
+	return 1;
+       }
+     if (tmp == -3 ) { return 1; }
+	tell_object(pob, "Error tmp2 = " + tmp2 + ", REPORT it to Dredd please.\n");
+	return 1;
+    }
+    if (pob) {
+	    tell_object(pob, "You killed " + name_att + ".\n");
+	    pob->you_killed(name_att);
+	    att_who = next_attacker(pob);
+	    pob->attacked_by(att_who);
+	    pob->remove_hunt(att_who);
+    }
+    if (att_who) return 1;
+}
+
+next_attacker(pob)
+{
+array hunts;
+int i;
+object env, ob;
+string name;
+
+        if (!pob) return 0;
+	hunts = pob->query_hunt();
+	if (!hunts || !pointerp(hunts)) return;
+	env = environment(pob);
+	for (i = 0; i < sizeof(hunts); i++) {
+		if (!hunts[i] || !objectp(hunts[i])) continue;
+		name = hunts[i]->query_real_name();
+		if (name && env)
+			if (ob = present(name, env)) 
+				return ob;
+		
+	}
+	return 0;
+}
+
+combat_spell(pob)
+{
+string callb, a, b;
+int x;
+	if (pob->is_casting()) return 1;
+	callb = pob->query_spell();
+	pob->add_spell(0, 0);
+	x = index(callb, '.');
+	if (x == -1) {
+		write("Spell Failure -- contact a God.\n");
+		return 1;
+	}
+	a = callb[..x-1];
+	b = callb[x+1..];
+	return catch call_other(a, b, pob, pob->query_attack());;
+}
+
+weapon_break(object pob, (int | object) wweapon, int extra)
+{
+string what;
+	if (!wweapon) return;
+	if (wweapon && (what = wweapon->damage_object(random(pob->query_str() + extra)))) {
+		object obj;
+	 if (wweapon->query_broken()) {
+		 tell_object(pob,"Your weapon is shattered to pieces by the force of the blow!\n");
+		 pob->checked_say(pob->query_name() + "'s " + wweapon->query_name() + " is shattered to pieces.\n");
+		 pob->add_weight(-wweapon->query_weight());
+		 wweapon->un_wield();
+		 destruct(wweapon);
+		 wweapon = 0;
+	   }
+	}
+}
+
+armour_break(object pob, (int | string) locn, int extra)
+{
+array alla;
+object o;
+int i;
+	if (!locn) return;
+	alla = pob->query_all_armour();
+	if (!alla) return;
+	for (i = 0; i < sizeof(alla); i++) {
+		if (!objectp(alla[i])) continue;
+		if (alla[i]->query_armour(locn))
+			alla[i]->damage_object(extra);	
+		if (alla[i]->query_broken()) {
+			tell_object(pob,"Your "+alla[i]->query_name()+" is wrecked by the blow!\n");
+			pob->checked_say(pob->query_name() + "'s " + alla[i]->query_name() + " is destroyed beyond repair.\n");
+			destruct(alla[i]);
+		}
+	}
+	return 1;
+}

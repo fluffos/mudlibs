@@ -1,0 +1,200 @@
+/*
+ * Player server.  Should be created and renamed to (eg) P/p;
+ * /P itself is the general "persistence manager", and queries
+ * these objects to see which to get players from.
+ *
+ * This is an object that finds/creates players.  If it creates
+ * one, it will restore into him, but it won't trust him up - the
+ * caller needs to do this.
+ *
+ * Players are in a number of states, and may or may not have
+ * savefiles at a given point in time.  A quick synopsis is:
+ *
+ *	created	- there is an existing object of that name (poss. uninitialised)
+ *	loaded	- created, and has been initialised (from savefile or by create)
+ *	in-game - loaded and ageing
+ *	persistent - in-game and capable of saving/restoring.
+ *
+ * There are many other possible states, deriving from whether
+ * or not they are connected, properly logged in, etc.  They
+ * are dealt with elsewhere.
+ */
+
+#include "security.h"
+#include "Servers.h"
+
+inherit "RO/Root/Loaded";
+
+#define	SAVE_FILE	"P/players/pinfo"
+#define	BODY_OBJ	"secure/body"
+
+reset(a) {
+    if (a)
+        return;
+    }
+
+query_destruct() {
+    write("Destructing the player manager?  Jesus...\n");
+    return 1;
+    }
+
+/*
+ * Called by our creator (probably master.c).
+ * Kicks this object off.
+ */
+
+start_virtual() {
+    string err;
+    if (!caller())
+	return;
+    if (query_su_level(caller()) < GOD)
+	return;
+    err = catch restore_object(SAVE_FILE);;	/* won't touch virtuals */
+
+/* We don't actually have a savefile yet - G */
+#if 0
+    if (err) LOG->log_now("STARTUP", "RO/Players.c: "+err+"\n");
+#endif
+    }
+
+/*
+ * Give a filename for a virtual savefile.  This version gives each player
+ * a seperate savefile, and splits them into seperate directories based
+ * on the first letter of the name.  If the named object isn't one of those
+ * managed by this persistence server, we return 0 (NB: it is possible for
+ * requests for a player subobject to come here, in which case we return 0
+ * for the savefile).
+ *
+ * If we wanted to support seperate savefiles for subobjects, we'd
+ * need appropriate `getsavefile', `getrestorefile'.  Blecch.
+ */
+
+GetVirtualSavefile(n) {
+    if (!stringp(n))
+	return 0;
+    string myname = file_name(this_object()) + "/";
+    string prefix = n[..sizeof(myname) - 1];
+    if (prefix != myname)	/* not one of ours */
+	 return 0;
+    string suffix = n[sizeof(prefix)..];		/* player name */
+    if (index(suffix, "/") >= 0) return 0;		/* a subobject */
+    if (sizeof(suffix) < 1) return 0;
+    if (sizeof(suffix) > 15) return 0;
+    return "P/players/" + suffix[0..0] + "/" + suffix;	/* dir/first char/name.o */
+    }
+
+
+/*
+ * GetVirtualObject: If a player already has a savefile, then
+ * create him, restore into him if necessary.  If the caller
+ * was asking for a subobject, pass the request on to the
+ * player object.
+ *
+ * Note that if we get here, the named object didnt exist.
+ */
+
+GetVirtualObject(n) {
+    if (!stringp(n))
+	return 0;
+
+    string myname = file_name(this_object());
+    myname = myname + "/";
+    if (n[..sizeof(myname) - 1] != myname)	/* we don't deal with it here */
+	return 0;
+    string suffix = n[sizeof(myname)..];
+
+    int x = index(suffix, "/");
+    if (x < 0)
+        return load_player(suffix);
+    string pname = suffix[..x-1];
+    suffix = suffix[x+1..];
+    object o = load_player(pname);
+    if (o)
+        return o->GetVirtualObject(n);
+    }
+
+/*
+ * Given a plausible player name, return the
+ * appropriate savefile name and player object name (after renaming).
+ */
+
+GetPlayerSavefile(name) {
+    return GetVirtualSavefile(GetPlayerObjName(name));
+    }
+
+GetPlayerObjName(name) {
+    return file_name(this_object()) + "/" + name;
+    }
+
+/*
+ * Just checks to see if they have a save file. This is much
+ * faster than loading them!
+ * Will change if we ever give this object a savefile - probably
+ * check our arrays, then check for a savefile if not in our
+ * array (robustness).
+ */
+
+int player_exists(string name) {
+	(string|object) path = GetPlayerSavefile (name);
+	if (file_size (path+".o") >=0 || file_size (path+".o.bak") >=0)
+		return 1; /* file_size == -1 if not there */
+	return 0;
+}
+
+/*
+ * find_player() - find an "in-game" player (i.e. one that is ageing).
+ * Won't load a player object, won't return an object that's not in game.
+ */
+
+find_player(name) {
+    object o = find_object(GetPlayerObjName(name));
+    if (o && query_su_level(o) >= GOD)
+	return o;
+    return 0;			/* not really here */
+    }
+
+/*
+ * Return a handle on any "defined" player object - i.e. one
+ * that has a savefile.  If the player already exists in-game,
+ * return him instead.  Caller must trust him up if neccessary.
+ */
+
+(int|object) load_player(name) {
+    object o = find_object(GetPlayerObjName(name));
+    if (o)					/* whether he's trusted up or not */
+	return o;
+    o = GetAliasedObject(name);			/* have we loaded one? */
+    if (o)
+	return o;
+    if (!player_exists(name))			/* this checks for valid names */
+	return 0;
+
+    string sf = GetPlayerSavefile(name);	/* get restore file name */
+    o = clone_object(BODY_OBJ, name);		/* make a player object, with this name */
+    set_uid_me(o, 1, name);			/* suid'd under his own name, and at a low level */
+    restore_object(sf, o);			/* restore into him */
+    aliased_object(name, o);			/* add him to our list of directly managed objects */
+    string err = catch o->start_virtual();;	/* tell him he's been created */
+    catch {
+        tell_room("room/wiz/noisy_room", "Player server: made " + file_name(o) + "; err " + err + "\n");
+        };
+    return o;
+    }
+
+/*
+ * Make a new, empty player object if none can be loaded.
+ */
+
+make_player(string name) {
+    object o = load_player(name);
+    if (o)
+	return o;
+    o = clone_object(BODY_OBJ, name);		/* make a player object, with this name */
+    set_uid_me(o, 1, name);			/* suid'd under his own name, and at a low level */
+    aliased_object(name, o);			/* add him to our list of directly managed objects */
+    return o;
+    }
+
+show_stats() {
+    "lib/dump"->dump(GetAliasedLS());
+    }

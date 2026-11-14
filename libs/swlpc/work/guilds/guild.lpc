@@ -1,0 +1,1710 @@
+/************************************************************************
+*
+*				GUILD SERVER
+*
+* HISTORY
+* -------
+* 1.	/guilds/guild.c (original)
+*	Dredd's Generic Guilds membership controller object.
+*
+* 2.	/std/opinions.c
+*	Written by rendell@bruce.cs.monash.oz.au - aka Rhys
+*
+* 3. 	The above files were combined and re-written beyond the point of
+*	recognition (almost) by Jenna
+*
+* FUNCTIONS
+* ---------
+* 1. int join (string god, string name)
+*	Joins a player to the named guild (if so allowed). Calling this 
+*	fun automatically sets up the player with relevent souls, skills, etc
+*
+* 2. int remove (string god, string name)
+*	Removes a player from a guild, making any necessary adjustment to
+*	skills, etc.
+*
+* 3. int member (string god, string name)
+*	Return 1 if the player is a member of god, otherwise 0.
+ * NOTE: if, instead of a name, you pass an object handle, member() will
+ * instead check to see whether the designated object is carrying a
+ * (registered) instance of the appropriate guild soul (this uses the
+ * virtual object system, and works for all guilds besides xarus).  Thus,
+ * to check whether an NPC is a thief, you can use guilds->member("ke'ting",
+ * <NPC-object>).  Since all monsters have all skills, this method of
+ * checking membership is far preferable to looking for, e.g., a rob skill.
+ *
+
+* 3a.  query_soul_name("godname") - return the (virtual object) name of
+* the soul used by the given guild (e.g. "guilds/thief").  This string can
+* be used to check whether a player or NPC has a given soul - i.e.
+* <player_ob>->query_soul("guilds/thief");.  It is used by the member()
+* function (when passed an object).  NOTE: it works by locating the appropriate
+* guild server, querying it for its soul object name, and querying the base
+* instance of the soul for its virtual object name.  If any of these aren't
+* defined, it returns 0.  Works for NPCs as well.
+*
+*
+* 4. array membership(string god)
+*	Returns an array of all members of that guild.
+*
+* 5. string remove_all(string name)
+* OR string remove_player(string name)
+*	Removes the named player from every guild. Returns a string
+*	containing the guilds removed.
+*
+* 6. string can_join(string god, object pob) 
+*	Returns 0 if the player pointed to by 'pob' may join the guild
+*        'god', or a string - "The guilds X and Y do not currently 
+*	"have an alliance" or "Guilds X and Y are fundamentally 
+*	"opposed to each other."
+*
+* 7. string query_occupation(string god)
+*    string query_occupation(string occ)
+*	Returns the occupation of that guild (eg the arg "ke'ting" would 
+*	return "thief"), and vice versa ("siren" returns "psyche").
+*
+* 8. int find_any(string name)
+*	Returns 1 if the named player is joined to ANY guild.
+*
+* 9. array find_all(string name)
+*	Returns all guild gods worshipped by that player.
+*
+* 10. int|string query_GL(string god)
+*	Returns the name of the guild's Guild Leader, or 0 if that
+*	guild has no GL. Returns -1 if there is no such guild.
+*
+* 11. int|string is_GL(string playername)
+*	Returns 0 if the named player is not a Guild Leader. Returns
+*	the name of the guild if the player is a Guild Leader.
+*
+* 11A. int|string cant_be_GL(string playername, [string guildname])
+*	Returns 0 if there is no reason why the player can't be a GL,
+*       else returns a string explaining why. Used as a central method
+*       so that if laws change, only this fun needs to be updated.
+*
+* 11B. array query_GLs()
+*       Returns an array of lowercase GL names from all guilds. The
+*       array MAY NOT be as large as the number of gods due to 
+*       some guilds missing GLs.
+*
+* 12. int query_allied(string god1, string god2)
+*	Returns 1 if the two guilds named are currently allied, ie
+*	members can inter-join, otherwise 0.
+*
+* 13. array query_allies(string god)
+*	Returns an array containing all allied gods. If there are
+*	no allies, the array is size 0.
+*
+* 14. int query_objection(string god1, string god2)
+*	Returns 1 if the two guilds named have a fundamental objection
+*	to becoming allies, otherwise 0.
+*
+* 15. int query_rank(string god)
+*	Returns a number from 1 to the number of gods, based on the
+*	number of active members in the guild.
+*
+* 16. int query_GL_wage(string god)
+*	Returns the wage this GL will receive. Based entirely on guild
+*	ranking, and currently between 5,000 and 40,000 coins.
+*
+* 17. string standings([string god])
+*	If sent no arg, this fun returns a nice table listing each guild,
+*	active members, guild leader, powerscore, occupation, etc. If
+*	sent a god name, it returns a more detailed analysis of that
+*	guild. This fun only recalculates all its values if it can't
+*	find the table or a week or so has elapsed. Call this fun
+*	instead of generate_analysis().
+*
+* 18. string generate_analysis([string god])
+*	As above, but forcibly recalculates everything. Call this and
+*	put your feet up, because it freezes the mud for half a 
+*	minute. Only call this fun if something horrible has happened
+*	to the standings table, otherwise use standings().	
+*
+* 19. int add_alliance(string god1, string god2)
+*	Forms an alliance between the two guilds, unless prevented
+*	by a fundamental objection. It's not a good idea to call
+*	this fun because it interrupts the Guild Leader's control
+*	over his/her guild. 
+*
+* 20. int remove_alliance(string god1, string god2)
+*	Removes the alliance between two guilds. 
+*
+* 21. add_new_god(string god)
+*	Call this to start an input_to sequence creating a new guild.
+*	Do NOT call this function without bloody good reason. In 
+*	particular, do no not call this function to set up pseudo-
+*	guilds like Sid Vicious, as these disturb Guild Balance.  
+*	Elders and above only.
+*
+* 22. int remove_god(string god)
+*	Elders and above only. Removes all traces of a guild's
+*	existance, and does it so efficiently that you ain't
+*	never going to get it back. So don't call this.
+*
+* 23. int god_exists(string god)
+*	Returns 1 if the god exists as a guild, otherwise 0.
+*
+* 24. string query_compatabilities(string god)
+*	Returns a nicely formatted string listing the guild's
+*	compatability with all other guilds.
+*
+* 25. int set_morals(string god)
+*	Takes you into a friendly input_to sequence to let you
+*	make adjustments to the guild's morals. Morals are used
+*	to determine how compatable the guild is with other guilds,
+*	which then influences how easily guilds may ally.
+*
+* 25A. string query_morals(string god)
+*	Returns a nicely formatted string listing the guild's
+*    	"scores" in the moral code system.
+*
+* 26. int query_compatability(string god1, string god2)
+*	Returns an integer in the range roughly 0 to 400, which is a
+*	measure of how closely the morals of the two guilds coincide.
+*	The lower the number, the more compatable the guilds.
+*
+* 27. int query_num_actives(string god)
+*	Returns the number of active members of the guild. This is
+*	MUCH less CPU intensive than sizeof(query_actives(god)) because
+*	it doesn't recalculate; it scans the number from the standings
+*	table which is updated every week or so.
+*
+* 28. array query_actives(string god)
+*	Returns an array of all active members of the guild. Active
+*	is defined at the time of writing as having logged on in the
+*	last 20 days.
+*
+* 30. int query_powerscore(string god)
+*	Returns the summed total of each active member's quest points.
+*
+* 32. string query_spath(string god)
+*	Returns the filename of the server to which join(), remove(), 
+*	query_GL() calls are directed.
+*
+* 33. string set_spath(string god, string filename)
+*	Sets the filename of the server as described above. Note that
+*	this server must inherit "guilds/Xserver".
+*
+* 34. array query_gods()
+*	Returns an array of the current guild gods.
+*
+* 35. int query_ally_cost(string godname1, string godname2)
+*	Returns the amount of coins required in appeasement for these two
+*	guilds to ally. Considers active members compared to the average
+*	number of actives per guild and compatabilities. This can be most
+*	simply adjusted up or down by modifying the defined BASE_ALLY_COST.
+*	(default = 1000 coins) 	
+* 
+* 36. int set_dues(string godname, int amount)
+*	Redirects the call to the relevent guild server, which saves the
+*	amount (as per Xserver).
+*
+* 37. int query_dues(string godname)
+*	Returns the dues (in coins per member) as per the relevent guild 
+*	server.
+*
+* 38. int paid_dues(string godname, string|object player)
+*	Returns 1 if the player has paid his/her dues to this guild
+*	since the last reset (or 'MoonPhase', approx. 2 mud years).
+*	Also returns 1 for logged-on wizards.
+*
+* 39. int query_exempt_level(string godname)
+*	Returns minimum quest points a player must have before he is
+*	charged dues by the guild (redirected to specific guild svr).
+*
+* 40. int set_exempt_level (string godname, int exempt_level)
+*	Redirects to relevent guild server to set exempt level for dues.
+*
+* 41. object query_board(string godname)
+*	Returns the guild's bulletin board object (or 0).
+*/
+
+inherit "RO/Servers";
+#include "security.h"
+#include <Config.h>
+#include "law.h"
+
+#define DESERTER_WAIT		24 /* logged-in hours until you can rejoin */
+#define TOP_WAGE		200001
+#define BOTTOM_WAGE		20000
+#define VALUE_OF_PROPERTY	150000	/* how much an avg property is worth */
+				/* - used only as a guide for determining */
+				/* determining whether guild finances are "good" */
+				/* etc. Better to have an exagerrated figure 
+				/* here to encourange investment.   */
+#define REPLACE_CODE		"!#"
+#define REPLACE_CODE2		"@%"
+
+#define BASE_ALLY_COST          query_base_ally_factor()
+					/* the higher this is, the less */
+					/* easy it is for guilds to ally */
+#define DUES_SERV		"guilds/dues"
+#define GUILD_CLOCK		"guilds/adv_guild/guild_clock"
+#define JFUNS			"players/jenna/jfuns"
+
+array gods, occupations, spaths, morals, alliance, members, raw_standings;
+
+string standings;
+
+int last_standings, num_actives, base_ally_factor;
+
+nosave int busy;
+nosave array all_actives;   /* cache */
+nosave array tmp_actives; // used for compiling powerscore
+
+nosave string options = 
+" (1 = Religiously agree, 3 = Agree, 5 = Disagree, 7 = Religiously disagree)\n"+
+	"  Enter a number from 1 to 7: ";
+
+nosave array statements = ({
+    "\nSTATEMENT ONE: Individuality <-> Group\n\"We believe that the whole guild is "+
+	"more important than the individual. It would be almost "+
+	"expected for a member to sacrifice him/herself for the "+
+	"greater good of the group.\"\n",
+    "\nSTATEMENT TWO: Law and Order <-> Chaos and Change\n\"There is a moral code of order that we "+
+	"live by. We always try to do what we feel is morally right.\"\n",
+    "\nSTATEMENT THREE: Magic <-> Physicality\n\"I believe in what I can see and touch. Magic, "+
+	"illusions - all these make me slightly suspicious.\"\n",
+    "\nSTATEMENT FOUR: Independant <-> Resourcer\n\"I can't help but feel a little "+
+	"contempt for those who have to use crutches like animals and "+
+	"demons to help them survive. _I_ succeed using my own powers, "+
+	"not something else's.\n"
+	});
+
+nosave string new_god;
+nosave int current_statement;
+	
+reset(arg)
+{
+    if (arg) return;
+    if (!restore_object(file_name(this_object())))
+    {
+/*        LOG->log("GUILDS", "Unable to restore guild file\n");
+*/        gods = ({ });  
+	occupations = ({ });
+	morals = ({ ({ }) });
+	spaths = ({ });   
+	alliance = ({ ({ }) }); 
+	members = ({ ({ }) });
+	base_ally_factor = 100;
+    }
+   raw_standings = ({ }); 
+   new_god = "";
+   current_statement = 0;
+   busy = 0;	
+   all_actives = allocate(sizeof(gods));
+   GUILD_CLOCK->wake_up();
+   if (time() - last_standings > 86400)  /* recalc every 24 hours */
+	call_out("generate_analysis", 240); 
+   if (find_call_out("check_GLs") == -1)
+	call_out("check_GLs", 30);
+}
+
+show_stats() 
+{
+	DUMP->dump(gods);
+	DUMP->dump(spaths);
+	write("Raw Standings:\n");
+	DUMP->dump(raw_standings);
+}
+
+set_needs_update()
+{
+    if (!WHICH_MUD->is_wiz_mud())
+	AUTOSAVE_SERV->set_auto_save(this_object());
+}
+
+save_me() { if(!WHICH_MUD->is_wiz_mud()) save_object(file_name(this_object())); }
+
+
+/* Get the soul name for a given god (e.g. "guilds/healer").
+ * You can use <player>->query_soul("guilds/healer") to check whether
+ * a living is carrying that soul (hence, this will work to check whether
+ * NPCs are in a guild).
+ *
+ * WARNING: some guilds (xarus) are poorly written, and do not return
+ * a string soul name.
+ * Write your code to deal with this!
+ */
+
+query_soul_name(string god) {
+int x = index(gods, god);
+if (x < 0) {
+    return 0;
+    }
+
+if (stringp(spaths[x])) {
+    string sobj = spaths[x]->query_soul_obj();
+    if (stringp(sobj))
+        return sobj->query_soul_type();
+    }
+return 0;
+}
+
+
+query_spath(string god) {
+int x;
+	x = index(gods, god);
+	if (x < 0) {
+		write("Unknown god: " + god + "\n");
+		return 0;
+		}
+	return spaths[x];
+	}
+
+set_spath(string god, string fname) {
+int x;
+string orig;
+	god = lower_case(god);
+	x = index(gods, god);
+	if (x < 0) {
+		write("Unknown god: " + god + "\n");
+		return 0;
+		}
+	if (sizeof(spaths) < sizeof(gods)) {
+		orig = "nothing";
+		spaths += ({ fname });
+		}
+	else {
+		orig = spaths[x];
+		spaths[x] = fname;
+		}
+	save_me();
+	return "Server " + capitalize(god) + " changed from " +
+		orig + " to " + fname + "\n";
+	}
+
+query_gods() { return gods; }
+
+join(string god, string str)
+{
+int x;
+array tmp;
+string sname;
+object pob;
+/*    if (!restore_object(file_name(this_object()))) return 0;
+	Not good - Bel. */
+	god = lower_case(god);
+	str = lower_case(str);
+	if (!god_exists(god)) return 0; 	
+	if (!(pob = find_player(str)))
+		if (!(pob = load_object(PLAYER_ONAME(str))))
+			return 0; 
+	if (str == "guest" || pob->query_guest()) return 0;
+	x = index(members, god);
+	if (x < 0) return 0;
+	tmp = members[x+1];
+	if (index(tmp, str) != -1)
+		return 0;
+	members[x+1] = tmp + ({ str });
+	save_me();
+	sname = query_spath(god);
+	if (file_name(caller()) != sname) 
+		sname->join(str);
+	DUES_SERV->set_paid(god, str);
+		/* New members don't have to also pay dues -
+		   I assume they've just paid some kind of
+		   joining fee				*/
+	return 1;
+}
+
+member(string god, (string|object) str)
+{
+int x;
+array tmp;
+	god = lower_case(god);
+if (stringp(str))
+	str = lower_case(str);
+/*
+ * If `str' is an object, look for the appropriate guild soul instead.
+ */
+if (objectp(str)) 
+{
+  if (str->query_npc()) /* npcs are members if they have the soul */
+  {
+    if (str->query_soul(query_soul_name(god))) { /* if it returned an object */
+        return 1;
+        }
+    return 0;
+    }
+  str = str->query_real_name(); /* players are changed to strings */
+  }
+
+	if (god == "any")
+		return find_any(str);
+#if 0
+	if (god == "all")
+		return find_all(str);	
+#endif
+	if (!god_exists(god)) return;	
+	x  = index(members, god);
+	if (x < 0) return;
+	tmp = members[x+1];
+	if (index(tmp, str) > -1)  return 1;
+}
+
+query_occupation(godname) {
+	int x;
+	if (!godname) return 0;
+	x = index(gods, lower_case(godname));
+	if (x == -1) {
+	    x = index(occupations, godname);
+	    if (x != -1)
+		return gods[x];
+	    return 0;
+	    }
+	return occupations[x];
+	}
+
+find_any(str)
+{
+array gods;
+int i, x;
+	gods = god_exists();
+	if (!gods || !pointerp(gods)) return;
+	x = sizeof(gods);
+	for (i = 0; i < x; i++)
+		if (member(gods[i], str)) return 1;		
+}
+
+find_all(str) { /* added by Nostromo 9-Oct-92 */
+  array membership = ({ });
+  int i, x;
+  if (!gods || !pointerp(gods)) return;
+  x = sizeof(gods);
+  for (i = 0; i < x; i++)
+      if (member(gods[i], str))
+          membership += ({ gods[i] });
+  return membership;
+}
+
+membership(godname) {
+	int i;
+/*	if (!restore_object(file_name(this_object()))) return 0;*/
+	i = index(members, godname);
+	if (i < 0 ) return 0;
+	return members[i + 1];
+	}
+
+
+membership_analysis(godname, active) {
+	array dis1, dis2, mems, tmp;
+	string occ, ret;
+	int i, j, x;
+
+        if (!god_exists(godname)) return 0;
+	dis1 = ({ 0 });
+	dis2 = ({ query_occupation(godname) });
+        if (active)
+                mems = query_actives(godname);
+        else
+                mems = membership(godname);
+        for (i = 0; i < sizeof(mems); i++) {
+		tmp = find_all(mems[i]);
+
+		for (j = 0; j < sizeof(tmp); j++)
+			tmp[j] = query_occupation(tmp[j]);
+		occ = implode(tmp, " ");
+		x = index(dis2, occ);
+		if (x == -1) {
+			dis2 += ({ occ });
+			dis1 += ({ 1 });
+			}
+		if (x != -1)
+			dis1[x]++;
+		}
+        ret = "             Membership Analysis:";
+        if (active) ret += " Active members of ";
+        else ret += " All members of ";
+        ret += capitalize(godname) + "\n\nThe guild is comprised of:\n";
+	for (i = 0; i < sizeof(dis1); i++)
+		ret += "* " + dis1[i]+ 
+			(!i ? " pure " : " ") +
+                        (dis1[i] == 1 ? dis2[i] : PLURAL->plural(dis2[i])) + 
+			".\n";
+	ret += "Total: " + sizeof(mems) + ".\n";
+	return ret;
+	}					
+
+remove(string god,string  str)
+{
+int x,y;
+array tmp,a,b;
+string sname;
+/*    if (!restore_object(file_name(this_object()))) return 0;*/
+	god = lower_case(god);
+	str = lower_case(str);
+	if (god == "all") {
+            LOG->log("GUILDS", "remove(\"all\") called for " + str +
+		" by " +
+                file_name(caller()) + ".\n");
+		return remove_all(str);
+	}
+	if (!god_exists(god)) return;	
+	x  = index(members, god);
+	if (x < 0) 
+		return 0; 
+	tmp = members[x+1];
+	y = index(tmp, str);
+	if (y < 0) return;
+        LOG->log("GUILDS", str + " removed from " + capitalize(god) + " by " +
+                file_name(caller()) + ".\n");
+	a = tmp[ 0.. y-1];
+	b = tmp[ y+1..];
+	members[x+1] = a + b;
+	save_me();
+	sname = query_spath(god);
+	if (file_name(caller()) != sname) 
+		sname->remove(str);
+	if (str == query_GL(god))
+		sname->set_GL(0);
+	return 1;
+}
+
+remove_all(str) {
+	array g = find_all(str);
+	int i;
+
+        LOG->log("GUILDS", "remove_all() called for " + str + 
+		" by " +
+                file_name(caller()) + ".\n");
+	for (i = 0; i < sizeof(g); i++) 
+		remove(g[i], str);
+	return implode(g, " ");
+	}
+
+/*
+ * Support for the remove_player stuff
+ */
+
+remove_player(who) {
+        LOG->log("GUILDS", "remove_player() called for " + who + 
+		" by " +
+                file_name(caller()) + ".\n");
+    return remove_all(who);
+    }
+
+// Jenna Nov 00: added wait period for rejoining the same guild.
+can_join(god, pob)
+{
+    array their_gods;
+    int g1, g2, i, left, exempt;
+
+    if (!god || !pob)
+	return 1;
+    if (pob->query_guest())
+        return "Guests can't join guilds! You must finish the "+
+	    "newcomer tutorials first.\n";
+    if (!pob->is_player())
+        return "Only players may join guilds.\n";
+    god = lower_case(god);
+    if ((g1 = index(gods, god)) < 0)
+    {
+       invalid_god(god);
+       return "No such god - "+god+".\n";
+    }
+    their_gods = find_all(pob->query_real_name());
+    if (!their_gods)
+	return 0;
+    for (i = 0; i < sizeof(their_gods); i++)
+    {
+        if ((g2 = index(gods, lower_case(their_gods[i]))) < 0)
+        {
+            invalid_god(their_gods[i]);
+            return "No such god - "+their_gods[i]+".\n";
+        }
+        if (lower_case(their_gods[i]) != god
+            && !query_allied(lower_case(their_gods[i]), god))
+        {
+            if (query_objection(lower_case(their_gods[i]), god))
+                 return "The gods " + capitalize(their_gods[i]) +
+                        " and " + capitalize(god) + " have " +
+                        "irreconciliable differences.\n";
+            return "The gods " + capitalize(their_gods[i]) + " and " +
+                   capitalize(god) + " are not allied.\n";
+        }
+    }
+    left = pob->query_store("deserted_"+god);
+    if (left)
+    {
+	if (left > 900000000) /* old-style; uses time */
+	    left = 0; /* let 'em rejoin, purge old-style */
+
+        if (left + (DESERTER_WAIT * 60 * 60) < pob->query_age())
+            pob->remove_store("deserted_"+god);
+        else
+        {
+            // exemptions so wizards can easily fix fuckups
+            exempt = pob->query_store("allow_rejoin");
+            if (exempt)
+            {
+                exempt--;
+                if (exempt > 0)
+                    pob->add_store("allow_rejoin", exempt);
+                else
+                    pob->remove_store("allow_rejoin");
+            }
+            else
+                return "We do not accept deserters back into "+
+                    "the fold so easily. Come back when "+
+		    "you are "+ 
+		    pob->query_age_string(left+(DESERTER_WAIT*60*60), 2)+
+		    "old, and have had time to think "+
+                    "about your decisions.\n";
+        }
+    }
+    return 0;
+}
+
+invalid_god(name)
+{
+    LOG->log("GUILDS", "Unknown god name - "+name+".\n");
+    return 0;
+}
+
+add_new_god(name) /* call this function to add a new god */
+{
+    if (!name)
+    {
+        write("Call add_new_god with the name of the new god.\n");
+        return;
+    }
+    if (!this_player() || this_player()->query_wiz() < ELDER) 
+        return "You must be an Elder or higher to add a new guild.";
+    if ("room/city/GL_room"->query_message_status())
+	return "!!! You cannot add a god at this time! Alliance negotiations "+
+		"have begun, and adding a new god at this time would "+
+		"screw things up. Wait until after MoonPhase (see the "+
+		"calendar in the GL room in the adventurer's guild) "+
+		"before adding a new guild.";
+    new_god = capitalize(name);
+    name = lower_case(name);	
+    if (index(gods, name) > -1)
+    {
+        write(new_god+" is already a god on this mud!\n");
+        return 0;
+    }
+    gods = gods + ({ name });
+    morals = morals + allocate(1);
+    morals[sizeof(gods)-1] = allocate(sizeof(gods));
+    morals[sizeof(gods)-1][sizeof(gods)-1] = 0;
+    alliance = alliance + allocate(1);
+    alliance[sizeof(gods)-1] = allocate(sizeof(gods));
+    alliance[sizeof(gods)-1][sizeof(gods)-1] = 0;
+    members += ({ name, ({ }) });
+    current_statement = 0;
+    call_out("add_new_god1", 1);
+    }
+
+nosave add_new_god1()
+{
+    write("\n--------------New Guild Creation--------------\n"+
+	"What is the occupation of a member of " + new_god + "? E.g. "+
+	"Xarus answers 'mage', Ke'Ting answers 'thief': ");
+    input_to("add_new_god2");
+}
+   	
+add_new_god2(str) 
+{
+    if (!str) add_new_god1();	
+    occupations += ({ str });
+    write("\nWhat is the path and file name of the guild server that "+
+	"contains the join(), remove(), etc, funs as described "+
+	"in /guilds/README? (You can always change "+
+	"this later with the set_spath(godname, filename) call. An example "+
+	"answer to this question is: \"players/jenna/sguild/sserver\"):\n> ");
+    input_to("add_new_god3");
+}
+
+add_new_god3(str) 
+{
+	string g;
+	set_spath(new_god, str);
+	g = "#" + STRINGS->string_replace(lower_case(new_god), " ", "_");
+	BANK->add_account(g);
+	write("\nAdded Bank account for \"" + g + "\".\n");
+	set_morals1(new_god);
+}
+
+set_morals(str) {
+	if (this_player()->query_wiz() < SENIOR) 
+		write("You must be a Senior or higher to call this function.\n");
+	else
+		call_out("set_morals1", 1, str);
+	}
+
+nosave set_morals1(godname)
+{
+    current_statement = 0;
+    godname = capitalize(godname);
+    if (!godname || !god_exists(lower_case(godname))) return "Unknown God.";
+    if (godname != new_god)
+		new_god = godname;
+    write("\nYou are now going to be asked a series of questions about the "+
+	"worshippers of " + new_god + "'s morals. This is to define how "+
+	"compatably a member of " + new_god + " would be with the members "+
+	"of other guilds, and therefore how easy it is for him/her to become "+
+	"a member of both.\nFor each of the following statements, answer "+
+	"using the numbers 1 to 7, where a 1 indicates that a COMMITTED "+
+	"MEMBER of " + new_god + " religiously agrees with the statement and "+
+	"a 7 indicates a religious disagreement with the statement. A 4 shows "+
+	"a fairly ambivilent attitude to the statement.\n");
+    write(statements[current_statement] +
+		options);
+    input_to("set_morals2");
+}
+
+set_morals2(answer) 
+{
+    int ans, pos;
+
+    if (!answer || !(ans = atoi(answer)) || ans < 1 || ans > 7)
+    {
+        write("ERROR - invalid input\n" + statements[current_statement] +
+		options);
+        input_to("set_morals2");
+        return;
+    }
+    pos = index(gods, lower_case(new_god));
+    if (pos < 0) return "ERROR: Lost god name";		
+    morals[pos][current_statement] = ans;
+    current_statement++;
+    if (current_statement == sizeof(statements))
+    {
+	current_statement = 0;
+	write("\nYou will now be asked about your guild's FUNDAMENTAL "+
+		"OBJECTIONS. If your God(dess) has a fundamental "+
+		"objection to another guild, the two guilds will NEVER "+
+		"be allowed to share members. An examples of when you "+
+		"might answer 'yes' would be the Healers' guild (Chalana "+
+		"Arroy) and the Knights guild (Vulcan), which have irreconcilable "+
+		"moral codes.\nOnly answer 'yes' in extreme circumstances, as "+
+		"excessive fundamental objections defeat the purpose of the "+
+		"guild alliance system.\n");
+        write("Would "+capitalize(new_god)+" have a fundamental "+
+		"objection to His/Her worshippers joining "+
+		capitalize(gods[current_statement]) + " (or vice versa)?\n");
+        input_to("set_morals3");
+    }
+    else
+    {
+        write(statements[current_statement] + options);
+        input_to("set_morals2");
+    }
+}
+
+set_morals3(answer) /* handle y/n answer to co-joining question */
+{
+    int pos = index(gods, lower_case(new_god));	
+    if (pos < 0) return "Lost God name";	
+    if (answer == "yes" || answer == "y")
+    {
+        alliance[pos][current_statement] = -1;
+	if (pos == sizeof(gods) - 1)
+		alliance[current_statement] += allocate(1);
+        alliance[current_statement][pos] = -1;
+    }
+    else if (answer == "no" || answer == "n")
+    {
+        alliance[pos][current_statement] = query_allied(gods[pos], gods[current_statement]);
+	if (pos == sizeof(gods) - 1)
+		alliance[current_statement] += allocate(1);
+        alliance[current_statement][pos] = query_allied(gods[pos], gods[current_statement]);
+    }
+    else
+    {
+        write(">>> Please answer yes or no.\n");
+        write("Would "+capitalize(new_god)+" have a fundamental "+
+		"objection to His/Her worshippers joining "+
+		capitalize(gods[current_statement]) + " (or vice versa)?\n");
+        input_to("set_morals3");
+        return;
+    }
+    current_statement++;
+    if (current_statement == pos)
+	current_statement++;	
+    if (current_statement == sizeof(gods))
+    {
+	write ("\nGuild created/updated.\n");
+	save_me();
+	return;
+    }
+    write("Would "+capitalize(new_god)+" have a fundamental "+
+		"objection to His/Her worshippers joining "+
+		capitalize(gods[current_statement]) + " (or vice versa)?\n");
+    input_to("set_morals3");
+}
+
+god_exists(name)
+{
+    if (!stringp(name)) return gods;
+    return (index(gods, lower_case(name)) != -1);
+}
+
+is_GL(name) {
+	int i;
+	array a;
+
+	if (!stringp(name)) return 0;
+	name = lower_case(name);
+	a = find_all(name);
+	if (!sizeof(a)) return 0;
+	for (i = 0; i < sizeof(a); i++)
+		if (query_GL(a[i]) == name)
+			return a[i];
+	return 0;
+	}
+ 
+query_GL(godname) 
+{
+	if (!god_exists(godname)) return -1;
+	return query_spath(godname)->query_GL();
+}
+
+query_GLs() {
+	int i;
+	string tmp;
+	array ret = ({ });
+
+	for (i = 0; i < sizeof(gods); i++) {
+		tmp = query_GL(gods[i]);
+		if (tmp)
+			ret += ({ tmp });
+		}
+	return ret;
+	}
+
+cant_be_GL(string name, guildname) {
+	int i;
+
+	if (!name) return -1;
+	if(!CITIZEN_SERV->query_citizen(name))
+		return "You must be a citizen to become guild leader.\n";
+	if(!FINGER->is_active_player(name))
+		return "You must be an active player to become guild leader.\n";
+	if (stringp(guildname))
+		for (i = 0; i < sizeof(gods); i++)
+			if (gods[i] != guildname) /* bad infinite loop */
+				if (query_GL(gods[i]) == name)
+					return "You cannot be the guild leader of more "+
+						"than one guild.\n";
+	return 0;
+	}
+
+check_GLs() 
+{
+    int i;
+    string gl, res, s;
+
+    for (i = 0; i < sizeof(gods); i++) {
+	gl = query_GL(gods[i]);
+	if (gl)	{
+	    res = cant_be_GL(gl, gods[i]);
+	    if (res) {
+		s = query_spath(gods[i]);
+		if (!s->invalid_GL(res)) {
+		    s->remove_guild_leader();
+		    s->set_GL(0);
+		    }
+		}
+	    }
+	}
+}
+
+remove_god(name) 
+{
+    int s;
+
+    if (!name || !god_exists(name)) return 0; 
+    if (!this_player() || this_player()->query_wiz() < ELDER)
+        return "You must be an Elder or higher to  remove a guild.";
+    if ("room/city/GL_room"->query_message_status()) 
+	return "!!!Cannot remove god!!! Alliance negotiations have "+
+		"already begun. Removing a guild at this stage would "+
+		"seriously fuck things up. Wait until after MoonPhase "+
+		"(see the GL room's calendar) before removing the god."; 
+    s = sizeof(membership(name));
+    write("\n****************\n"+
+	    " REMOVING GUILD\n"+
+	    "****************\n\n"+
+	    "You are removing the guild of " + capitalize(name) + ". This "+
+	    "guild has " + s + " members (of which " + query_num_actives(name) +
+	    " are active). All these players will be ejected (permanently) "+
+	    "and all morals, server paths, Guild Leader's name, etc, will "+
+	    "be erased.\n");
+    new_god = name;
+    input_to("remove_god2");	 					
+    call_out("remove_god1a", 1, this_player());
+    return 1;
+}
+
+remove_god1a(who) 
+{
+    tell_object(who, "\nDo you really want to do this (yes/no) ? > ");
+}
+
+remove_god2(str) 
+{
+	int i, index;
+
+	if (!str || (lower_case(str) != "yes" && lower_case(str) != "y")) {
+		write("\nAborting.\n");
+		return 1;
+		}
+	index=index(gods, lower_case(new_god));
+   	for (i=0; i < sizeof(gods); i++) 
+    		alliance[i]=alliance[i][..index-1]+alliance[i][index+1..];
+	gods=gods[..index-1]+gods[index+1..];
+ 	alliance=alliance[..index-1]+alliance[index+1..];
+ 	morals=morals[..index-1]+morals[index+1..];
+	occupations = occupations[..index-1]+occupations[index+1..];
+	spaths = spaths[..index-1]+spaths[index+1..];
+	index = index(members, lower_case(new_god));
+	members = members[..index-1]+members[index+2..];
+	save_me();
+        return 1;
+}
+
+query_allied(string god1, string god2) 
+{
+	int i =  check_alliance(god1, god2);
+	return (i > 0) ? i : 0; 
+}
+
+query_objection(string god1, string god2)
+{
+	return (check_alliance(god1, god2) == -1);
+}
+
+check_alliance(god1, god2)
+{
+	int x, y;
+	x = index(gods, god1);		
+	y = index(gods, god2);
+	if (x < 0 || y < 0) return -1;
+	return alliance[x][y];
+}
+
+query_allies(godname) {
+	int i, j, x;
+	array a = ({ });
+
+	x = index(gods, godname);
+	if (x < 0) return -1;
+	for (i = 0; i <	sizeof(alliance[x]); i++)
+		if (alliance[x][i] > 0)
+			a += ({ gods[i] });
+	return a;
+	}
+
+add_alliance(god1, god2) { 
+	return set_alliance(god1, god2, query_ally_cost(god1, god2));
+	}
+
+remove_alliance(god1, god2) {
+	int i;
+	if (god2 == "all") {
+		if(god1 == "all") {
+			for (i = 0; i < sizeof(gods); i++)
+				remove_alliance(gods[i], "all");
+			}
+		else {
+			array allies = query_allies(god1);
+			if (!sizeof(allies)) return;
+			for (i = 0; i < sizeof(allies); i++)
+				remove_alliance(god1, allies[i]);
+			}
+		return 1;
+		}
+	set_alliance(god1, god2, 0);
+	set_alliance(god2, god1, 0);
+	return;
+	}
+
+set_alliance(god1, god2, i) {
+	int x, y;
+	x = index(gods, god1);		
+	y = index(gods, god2);
+	if (x < 0 || y < 0) return 0;
+	alliance[x][y] = i;
+/*	alliance[y][x] = i;     Jen July 99 */
+	set_needs_update();
+	GUILD_CLOCK->jen("Setting alliance between " + god1 + " and " +
+		god2 + " to " + i + ".\n");
+		/* Logging */
+	return 1 ;
+}
+
+query_compatability(string god1, string god2)
+{
+	int i, compat;
+	int s = sizeof(statements);
+	if (!god_exists(god1) || !god_exists(god2)) 
+		return -1;
+	for (i = 0; i < s; i++)	
+		compat += query_moral(god1, god2, i);
+	return (compat * 100) / (6 * s);
+}
+
+query_moral(god1, god2, moral) {
+	int x, y;
+	x = index(gods, god1);		
+	y = index(gods, god2);
+	if (x < 0 || y < 0) return -1;
+	return (morals[x][moral] - morals[y][moral]) *
+			  (morals[x][moral] - morals[y][moral]); 
+	/* Jenna can't remember how to square :) */
+	}
+
+query_compatabilities(string godname) {
+	string ret = FORMAT->center_justify(capitalize(godname) + "'s Compatabilities\n", 70);
+	int i, j, k;
+	string tmp;
+
+	ret +=	     "\n With Guild:         Individ'y  Goodness  Magic "+
+		     " Independence    OVERALL\n"+
+		     "------------------------------------------------" +
+		     "------------------------\n";	
+	if (index(gods, godname) == -1) return 0;
+	for (i = 0; i < sizeof(gods); i++) 
+		if (gods[i] != godname) {
+			ret += FORMAT->left_justify(capitalize(gods[i]), 23);
+			for (j = 0; j < sizeof(statements); j++) {
+				k = query_moral(godname, gods[i], j);
+				if (!k) tmp = "V High";
+				else if (k < 4) tmp = "High";
+				else if (k < 16) tmp = "Med";
+				else if (k < 25) tmp = "Low";
+				else tmp = "V Low";
+				ret += FORMAT->left_justify(tmp, 10);
+				}
+			ret += ": " + query_overall_compatability(godname, gods[i]) + "\n";
+			}
+	return ret;
+	}
+
+query_overall_compatability(god1, god2) {
+	int k = query_compatability(god1, god2);
+	if (query_objection(god1, god2))
+		return "--N/A--";
+	return (k < 50) ? "Very High" :
+		(k < 90) ? "High" :
+		(k < 120) ? "Medium" :
+		(k < 200) ? "Low" :
+		(k < 300) ? "Very Low" : "Opposed";
+	}
+
+query_morals(god1) {
+	string ret = "                     Moral Code of ";
+	int i, j;
+
+	if (!god1) 
+		ret += "all Gods\n";
+	else {
+		if (!god_exists(god1))
+			return "God \""+god1+"\" unknown.\n";
+		ret += capitalize(god1) + "\n\n";
+		}
+	for (i = 0; i < sizeof(statements); i++) {
+		ret += statements[i] + "\n";
+		if (god1)
+			ret += capitalize(god1) + "'s position: " +
+				query_morals2(god1, i) + "\n\n";
+		else {
+			for (j = 0; j < sizeof(gods); j++)
+				ret += "--- " + capitalize(gods[j]) +
+					": " + query_morals2(gods[j], i) + " "; 
+			ret += "\n\n";
+			}
+		}
+	return ret;
+	}
+
+query_morals2(which_god, which_moral) {
+        array response = ({     "X",
+                                "Religiously agree",
+                                "Strongly agree",
+                                "Generally agree",
+                                "Generally ambivilent",
+                                "Generally disagree",
+                                "Strongly disagree",
+                                "Religiously disagree"
+                        });
+	int x = index(gods, which_god);
+
+	if (x == -1) return "Unknown god: " + which_god + ".\n";
+	return response[morals[x][which_moral]];
+	}
+
+query_old_ally_cost(god1, god2, god1_base) {
+	/* allow sending a predetermined integer for god1 index */
+	int avg = query_num_total_actives() / sizeof(gods);
+	int cost, actives;
+
+	if (!god1 || !god_exists(god1))
+		return -1;
+	if (!god2)
+		return query_all_ally_costs(god1);
+	if (pointerp(god2)) {
+		int i, c;
+		for (i = 0, c = 0; i < sizeof(god2); i++)
+			c += query_ally_cost(god1, god2[i]);
+		return c;
+		}
+	if (!god1_base) {
+		/* Stop repeatedly calculating this bit */
+		actives = query_num_actives(god1);
+		god1_base = (BASE_ALLY_COST * actives * actives) / avg;
+		if (god2 == "get base cost")
+			return god1_base;
+		}
+	if (!god_exists(god2))
+		return -1;
+	actives = query_num_actives(god2);
+	cost = (god1_base * actives) / avg;
+	return cost * (100 + query_compatability(god1, god2)) / 100;
+	}
+
+query_ally_cost(god1, god2, god1_base) {
+        /* allow sending a predetermined integer for god1 index */
+        int cost, god2_base;
+
+        if (!god1 || !god_exists(god1))
+                return -1;
+        if (!god2)
+                return query_all_ally_costs(god1);
+        if (pointerp(god2)) {
+                int i, c;
+                for (i = 0, c = 0; i < sizeof(god2); i++)
+                        c += query_ally_cost(god1, god2[i]);
+                return c;
+                }
+        if (!god1_base) {
+                /* Stop repeatedly calculating this bit */
+        		int i, avg_ps;
+
+		for (i = 0, avg_ps = 0; i < sizeof(gods); i++)
+			avg_ps += query_powerscore(gods[i]);
+		avg_ps /= sizeof(gods);
+                god1_base = BASE_ALLY_COST * query_powerscore(god1) / avg_ps;
+                if (god2 == "get base cost")
+                        return god1_base;
+                }
+        if (!god_exists(god2))
+                return -1;
+        cost = (query_powerscore(god2) * query_powerscore(god1)) / 1000 * god1_base;
+        return cost * (100 + query_compatability(god1, god2)) / 100;
+        }
+
+query_all_ally_costs(godname) {
+	string ret = FORMAT->center_justify(capitalize(godname) + "'s Costs of Alliance\n", 70);
+	int i, j, cost1, cost2, base_cost, tmp;
+
+	ret += "\n Guild           Active Mems     Compat.      Allied?        Cost\n"+
+		 "---------------------------------------------------------------------\n";
+	base_cost = query_ally_cost(godname, "get base cost");
+	for (i = 0, cost1 = 0, cost2 = 0; i < sizeof(gods); i++)
+		if (gods[i] != godname) {
+			ret += " " + FORMAT->left_justify(capitalize(gods[i]), 20);
+			ret += FORMAT->left_justify(query_num_actives(gods[i]), 12);
+			ret += FORMAT->left_justify(query_overall_compatability(godname, gods[i]), 15);
+			if ((j = query_allied(godname, gods[i])) != 0) {
+				ret += "YES";
+				cost1 += j;
+				}
+			else 
+				ret += " - ";
+			if (query_objection(godname, gods[i]))
+				ret += "         --N/A--\n";
+			else {
+				tmp = query_ally_cost(godname, gods[i], base_cost);
+				ret += FORMAT->right_justify(
+					STRINGS->itoa(tmp), 12);
+				ret += " coins\n";
+				if (j)
+					cost2 += tmp;
+				}
+			}
+	ret += "\nTo establish these alliances, the guild paid " 
+		+ STRINGS->itoa(cost1) + " coins. To maintain the same "+
+		"alliances next MoonPhase would cost " + 
+		STRINGS->itoa(cost2) + " coins.\n";
+	return ret;
+	}
+
+query_total_members() {
+	int i, j;
+	array m, uniques = ({ });
+
+	for (i = 0; i < sizeof(gods); i++) {
+		m = membership(gods[i]); 
+		for (j = 0; j < sizeof(m); j++)
+			if (index(uniques, m[j]) == -1)
+				uniques += ({ m[j] });
+		}
+	return uniques;
+	}
+
+query_total_actives()
+{
+    int i;
+
+    num_actives = 0;
+
+    // Hopefully -- HOPEFULLY -- by the time this func is called,
+    // the actives for each guild will be already cached
+
+    for (i = 0; i < sizeof(gods); i++)
+	num_actives += sizeof(query_actives(gods[i]));
+    return num_actives;        
+}
+
+query_num_total_actives() {
+	if (!num_actives)
+	    return query_total_actives();
+	return num_actives;
+	}
+
+
+query_num_actives(string godname, recalc) {
+/* This fun merely scans the standings string for an active value, unless
+   the recalc arg is sent				*/
+	int pos, stop, i, num;
+	array a;
+
+	if (recalc || !standings)
+		return sizeof(query_actives(godname));
+	pos = index(standings, capitalize(godname));
+	a = explode(standings[pos..], "\n");
+	for (i = 0, stop = 0, num = 0; i < strlen(a[0]); i++) {
+		if (a[0][i..i] >= "0" && a[0][i..i] <= "9") {
+			stop = 1;
+			num = num * 10 + atoi(a[0][i..i]);
+			}
+		else if (stop)
+			break;
+		}
+	return num;
+	}
+
+query_actives(string godname)
+{
+    array total, actives;
+    array tsl;
+    int x, y;
+
+    y = index(gods, godname);
+    if (y == -1)
+	return 0;
+
+    if (all_actives[y]) /* return cached members */
+	return all_actives[y];
+
+    total = membership(godname);
+
+    for (x = 0, actives = [ ]; x < sizeof(total); x++)
+        if (FINGER->is_active_player(total[x]))
+	    actives = actives + [ total[x] ];
+
+    all_actives[y] = actives + [ ]; /* add to cache */
+
+    tsl = TOP_LIST_SERV->query_all_time_score("guild");
+    if (!sizeof(tsl) || sizeof(actives) > tsl[1])
+	TOP_LIST_SERV->add_all_time_score("guild", [ capitalize(godname),
+                  sizeof(actives), (query_GL(godname) ? capitalize(query_GL(godname))
+                  : "No-one") ] );
+
+    return actives;
+}
+
+query_powerscore(godname) {
+	int pos, stop, i;
+	string numstr;
+	array a;
+
+	if (!standings)
+		standings();
+	pos = index(standings, capitalize(godname));
+	a = explode(standings[pos..], "\n");
+	/* Step one: find the position that powerscore starts at */
+	for (i = strlen(a[0]), stop = 0; i > 0; i--) {
+		if (a[0][i..i] >= "0" && a[0][i..i] <= "9") {
+			stop = 1;
+			if (!numstr)
+				numstr = a[0][i..i];
+			else
+				numstr = a[0][i..i] + numstr;
+			}
+		else if (stop)
+			break;
+		}
+	return atoi(numstr);
+	}
+
+standings(godname)
+{
+    int i;
+
+    if (!godname) 
+	return interpret_standings();
+    return long_analysis(godname);
+}
+
+interpret_standings() {
+	int i, money; 
+	string ret = standings;
+	string gl, tmp;
+	
+	for (i = 0; i < sizeof(gods); i++) {
+		gl = query_GL(gods[i]);
+		if (!gl) 
+			gl = "   -";
+		gl = FORMAT->left_justify(capitalize(gl), 13);
+		if (sizeof(gl) > 13)
+		    gl = gl[..12];
+		ret = STRINGS->string_replace(ret, REPLACE_CODE + gods[i], gl);
+		money = query_money(gods[i]);
+		money += VALUE_OF_PROPERTY *
+		       sizeof(REAL_ESTATE->query_property_names(gods[i]));	
+		tmp =   (money <= 0) ?     "Bankrupt! " :
+			(money < 30000) ?  "Abysmal   " :
+			(money < 60000) ?  "Very Poor " :
+			(money < 100000) ? "Poor      " :
+			(money < 200000) ? "Fair      " :
+			(money < 300000) ? "Good      " :
+			(money < 600000) ? "Very Good " : 
+			(money < 1000000) ? "Healthy   " :
+			(money < 2000000) ? "Excellent " : "Phenomenal";
+		ret = STRINGS->string_replace(ret, REPLACE_CODE2 + gods[i], tmp);
+		}
+	return ret;
+	}
+
+generate_analysis() 
+{
+    int i, j;
+
+    if (busy)
+	return "Already busy compiling standings.";
+    busy = 1;
+    raw_standings = allocate(sizeof(gods));
+    call_out("build_raw_standings", 1, 0, 0);
+    return "Compiling standings (will take a while).";
+}
+
+build_raw_standings(int god, int member)
+{
+    // If this is the first member for this god, set tmp_actives
+    // (to prevent query_actives() changing halfway through the process
+    // and messing us up).
+
+    if (!member)
+    {
+	tmp_actives = query_actives(gods[god]);
+    }
+    // Are we finished for this guild?
+    if (member >= sizeof(tmp_actives))
+    {
+	int tsl, powerscore; 
+	
+	// See if this is an all-time record.
+
+        tsl = TOP_LIST_SERV->query_all_time_score("guild2");
+	powerscore = raw_standings[god];
+        if (!tsl || !sizeof(tsl) || powerscore > tsl[1])
+            TOP_LIST_SERV->add_all_time_score("guild2", 
+			[ capitalize(gods[god]), powerscore, 
+			  (query_GL(gods[god]) ? capitalize(query_GL(gods[god]))
+                          : "No-one") 
+			] );
+
+	// Convert powerscore (stored in raw_standings) into pretty string
+	short_analysis(god);
+
+	god++;
+
+	// Finished all guilds?
+	if (god >= sizeof(gods))
+	{
+	    call_out("finished_generating_analysis", 1);
+	    return 1;
+	}
+
+	// No, so do next guild.
+	call_out("build_raw_standings", 1, god, 0);
+	return 1;
+    }
+
+    // Add this member's quest pts to the guild's powerscore
+    raw_standings[god] += FINGER->query_quest_points(tmp_actives[member]);
+
+    call_out("build_raw_standings", 3, god, member+1);
+    return 1;
+}
+
+// requires that raw_standings be previously seeded with powerscore of
+// guild (this is a long, slow process, conducted by build_raw_standings)
+short_analysis(int god) 
+{
+    int i;
+    string ret, godname;
+
+    godname = gods[god];
+    ret = FORMAT->left_justify(capitalize(godname), 15);
+    ret += FORMAT->left_justify(capitalize(query_occupation(godname)), 15);
+    ret += " " + REPLACE_CODE + godname + " " + REPLACE_CODE2 + godname + " ";
+    ret += FORMAT->right_justify(query_num_actives(godname), 4);
+    ret += FORMAT->right_justify(raw_standings[god], 9) + "\n";
+    raw_standings[god] = ret;
+    return ret;
+}
+
+finished_generating_analysis() 
+{
+    array ordered = allocate(sizeof(gods));
+    int i;
+
+    standings = "TEMP: To scan num actives from.\n";
+    for (i = 0; i < sizeof(raw_standings); i++)
+        standings += raw_standings[i];
+    for (i = 0; i < sizeof(gods); i++)
+        ordered[query_rank(gods[i]) - 1] = raw_standings[i];
+    standings = FORMAT->center_justify("GUILD STANDINGS", 78);
+    standings += "\n    God            Occupation      Leader        Finances  Members  Power\n"+
+                   "-------------------------------------------------------------------------\n";
+    for (i = 0; i < sizeof(gods); i++) 
+    {
+	if (i < 9)
+            standings += " " + (i+1) + ". " + ordered[i];
+        else
+            standings += i + 1 + ". " + ordered[i];
+    }
+    standings += "\nPower is a combined measure of the number and strength "+
+        "of the guild's members.\n";
+    last_standings = time();
+    busy = 0;
+    if (!WHICH_MUD->is_wiz_mud())
+        save_object(file_name(this_object()));
+}
+
+long_analysis(godname) {
+	/* Returns an analysis containing:
+* Guild name
+* Occupation
+* GL name
+* Alliances
+* Bank balance and property owned
+* Dues
+* GL Mess
+	*/ 
+	int i, pos, tmp;
+	string ret, gl;
+	array a, b;
+
+	if (!godname || !god_exists(godname)) return;
+	godname = lower_case(godname);
+	ret = "*****************************************************"+
+		"************************\n";
+	ret += FORMAT->center_justify(
+		"--- " + capitalize(godname) + " ---", 70);
+	ret += "\n";
+	ret += FORMAT->center_justify(
+		"Guild of " + capitalize(PLURAL->plural(query_occupation(godname))), 
+		70);
+	ret += "\n\n* RANKED: " + 
+		capitalize(ENGLISH->int_to_english(query_rank(godname), 100));
+	ret += "\n* GUILD LEADER: ";
+	gl = query_spath(godname)->query_GL();
+	if (!gl)
+		ret += "None.\n";
+	else 
+		ret += ENGLISH->pretty_name(gl)+".\n";
+	ret += "  Guild Leader's Wage: " + STRINGS->itoa(query_GL_wage(godname)) + 
+		" coins p.a.\n";
+	ret += "* ACTIVE MEMBERS: " + query_num_actives(godname) +
+		" (from a total of " + sizeof(membership(godname)) + ")\n";
+	ret += "  Average Quest Points per Active Member: ";
+	tmp = query_powerscore(godname) / query_num_actives(godname);
+	ret += tmp + "\n";
+	ret += "* DUES: " + STRINGS->itoa(query_dues(godname)) + " coins, "+
+		"payable at " + query_exempt_level(godname) + " quest points.\n";
+	ret += "* BANK BALANCE: approx. ";
+ 	tmp = GUILD_SERV->query_money(godname) / 10000;
+	if (tmp < 1) 
+		ret += "zero.\n";
+	else 
+		ret += ENGLISH->int_to_english(tmp * 10000, 100) + " coins.\n";
+	ret += "* PROPERTY: Owns ";
+	a = REAL_ESTATE->query_property_names(godname);
+	if (!sizeof(a))
+		ret += "no property.\n";
+	else 
+		ret += JFUNS->array2string(a) + ".\n";
+	ret += "* ALLIES:";
+	a = query_allies(godname);
+	if (sizeof(a) < 1)
+		ret += " No other guilds.";
+	else { 
+		for (i = 0; i < sizeof(a); i++)
+			a[i] = capitalize(a[i]);
+		ret += "\t";
+		ret += implode(a, "\n\t\t");
+		}
+	ret +=  "\n  -----------------------\n"+
+		"  Guild Leader's Message:\n"+
+		"  -----------------------\n";
+	gl = query_spath(godname)->query_GL_mess();
+	if (gl)
+		ret += gl;
+	ret += "\n*****************************************************"+
+		"************************\n";
+	return ret;
+	}
+
+query_rank(godname) {
+	int i, pos;
+	array a = allocate(sizeof(gods));
+	string num1, num2; /* because SORT->sort don't work properly */
+	array tmp;
+
+	if (!godname || !god_exists(godname)) return 0;
+	for (i = 0; i < sizeof(gods); i++) {
+		pos = query_num_actives(gods[i]);
+		if (pos == -1)
+			pos = sizeof(query_actives(gods[i]));
+		num1 = (pos < 10) ? "000" + pos :
+			(pos < 100) ? "00" + pos : "0" + pos; 
+		pos = query_powerscore(gods[i]);
+		num2 = (pos < 10) ? "00000" + pos :
+			(pos < 100) ? "0000" + pos :
+			(pos < 1000) ? "000" + pos :
+			(pos < 10000) ? "00" + pos : "0" + pos;
+		a[i] = num1 + num2 + " " + gods[i];
+		}
+	SORT->sort(a);
+	for (i = 0; i < sizeof(gods); i ++) {
+		pos = index(a[i], " ");
+		if (a[i][(pos + 1)..] == godname)
+			return sizeof(gods) - i;
+		}
+	return -1;
+	}
+
+query_GL_wage(godname) 
+{
+	if (!godname || !god_exists(godname)) return 0;
+	return (sizeof(gods) - query_rank(godname)) *
+		((TOP_WAGE - BOTTOM_WAGE) / (sizeof(gods) - 1)) + BOTTOM_WAGE;
+}
+
+pay_GLs(exceptions) {
+	int i, cash;
+	string gl, message;
+
+	message = "Guild Leaders today received their wages, which were "+
+		"transferred directly into their bank accounts. The payments "+
+		"were:\n\n";
+	if (!exceptions) exceptions = ({ });
+	if (stringp(exceptions)) exceptions = ({ exceptions });
+        GUILD_CLOCK->jen("GUILD_SERV->pay_GLs() called by " +
+                file_name(caller()) + " with exceptions: " +
+                JFUNS->array2string(exceptions) + ".\n");
+	for (i = 0; i < sizeof(gods); i++) {
+		gl = query_GL(gods[i]);
+		cash = query_GL_wage(gods[i]);
+		if (!gl || index(exceptions, gods[i]) != -1) {
+			message += FORMAT->left_justify(capitalize(gods[i]) + " guild account:", 30);  
+			gl = query_account_name(gods[i]); /* Pay guild instead */
+			}
+		else
+			message += FORMAT->left_justify(capitalize(gl) + " of " + capitalize(gods[i]) +
+				":   ", 30);
+		message += FORMAT->right_justify(STRINGS->itoa(cash) + " coins.", 18) + "\n";
+		GUILD_CLOCK->jen("MOVING CASH: " + cash + " coins from Jenna to " +
+			gl + ".\n");
+		MOVE->move_money(cash, "jenna", gl);
+		}
+	object board = present("board", load_object("room/city/market7"));
+	GUILD_CLOCK->jen("Posting note:\n" + message);
+	if (board)
+		board->create_note("City Scribes", "Guild Leader Wages Paid",
+			message);
+	return 1;
+	}
+
+query_account_name(godname) {
+	if (!godname || !god_exists(godname)) return 0;
+	godname = lower_case(godname);
+//	return "#" + STRINGS->string_replace(godname, " ", "_");
+	return "#" + godname; // Jenna Oct 00 - stupid chalana_arroy
+	}
+
+query_money(godname) {
+	if (!query_account_name(godname)) return 0;
+	return BANK->query_account(query_account_name(godname));
+	}
+
+set_dues(godname, dues) {
+	string sname; 
+	if (!godname || !god_exists(godname)) return 0;
+	sname = query_spath(godname);
+	return sname->set_dues(dues);
+	}
+
+query_dues(godname) {
+	string sname;
+	if (!godname || !god_exists(godname)) return 0;
+	sname = query_spath(godname);
+	return sname->query_dues();
+	}
+
+paid_dues(godname,  who) {
+	return DUES_SERV->query_paid(godname, who);
+	}
+
+query_exempt_level(godname) {
+	string sname;
+	if (!godname || !god_exists(godname)) return -1;
+	sname = query_spath(godname);
+	return sname->query_exempt_level();
+	}
+
+set_exempt_level(godname, n) {
+        string sname;
+        if (!godname || !god_exists(godname)) return -1;
+        sname = query_spath(godname);
+        return sname->set_exempt_level(n);
+        }
+
+query_board(godname) {
+	if (!godname || !god_exists(godname)) return 0;
+	return query_spath(godname)->query_board();
+	}
+
+query_base_ally_factor() { return base_ally_factor; }
+set_base_ally_factor(n) { base_ally_factor = n; }
+
+update_base_ally_factor()
+{
+    array num_allies = allocate(sizeof(gods));
+    int i, avg_allies;
+
+    for (i = 0; i < sizeof(gods); i++)
+	num_allies[i] = sizeof(query_allies(gods[i]));
+    avg_allies = NUMBERS->median(num_allies);
+    if (avg_allies <= 2)
+	base_ally_factor -= 10;
+    else /* if (avg_allies >= 3) */
+	base_ally_factor += 10;
+    return base_ally_factor;
+}
+
+active_player(who)
+{
+    LOG->log("jenna.guild", "active_player("+who+") called by "+
+	file_name(caller()));
+    return FINGER->is_active_player(who);
+}
+
+

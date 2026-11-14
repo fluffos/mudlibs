@@ -1,0 +1,232 @@
+/*****************************************************************************\
+
+	Updated by: Rattcherryh (aka Andrew Mills)
+
+	Date:       7th August 1992
+
+	Rusting added by: Rattcherryh
+
+	Date:       29th September 1992
+
+\*****************************************************************************/
+
+inherit "std/object";
+#include <Servers.h>
+
+#define TIME 60
+#define RUST_DAMAGE 1000
+
+reset(Integer) {
+
+	::reset(Integer);
+
+	if (!Integer) {
+		set_id("wet_obj");
+		set_weight(0);
+		set_value(0);
+		add_property("NO_DROP");
+/* Dont add no_get, otherwise people dont get wet when they swim! */
+	}
+
+}
+
+init() {
+
+	int Index;
+	array Item;
+
+	if (this_player()->query_ghost() || 
+             (present("no_wet_obj", this_player()) &&
+		index(environment(this_player())->query_medium(), "water") == -1)) {
+		clean_up();
+		return;
+	}	
+
+	::init();
+
+	write("You are now rather wet.\n");
+
+	add_action("wet", "wet", 0);
+	add_action("wet", "splash", 0);
+
+	call_out("test_dry", TIME);
+
+	Item = contents(this_player());
+
+	for (Index = sizeof(Item) ; Index; ){
+		Index --;
+		Item[Index] -> notify_wet(1);
+	}
+
+}
+
+clean_up () {
+
+	while (remove_call_out("test_dry") != -1 ) {
+	}
+
+	transfer(this_object(), "RO/storage");	
+
+	destruct(this_object());
+
+}
+
+extra_look() 
+/* test for watery environment added, Hunter 931212. `He is soaking wet' when
+ * underwater is a little redundant */
+{
+object room = root_environment();
+array media = room->query_medium();
+    if (sizeof(media) == 1 && media[0] == "water")	
+	return 0;
+    if (present("wet_obj", environment()) == this_object())
+	return capitalize(GENDER->sub(environment())) + " is soaking wet";
+}
+
+wet(String) {
+
+	object Them;
+
+	Them = environment();
+
+	while (environment(Them))
+		Them = environment(Them);
+
+	if (Them->query_medium("water") && !Them->query_medium("air"))
+		return 0;
+
+	if (!String || !(Them = present(String, Them)))
+		return 0;
+
+	if (Them == this_player())
+		return 0;
+
+	if (present("wet_obj", Them))
+		present("wet_obj", Them)->reset_wet();
+	else
+		move_object(clone_object("obj/wet"), Them);
+
+	write("You splash " + Them->query_name() + ".\n");
+
+	tell_object(Them, this_player()->query_name() + " splashes you!\n");
+
+	this_player()->checked_say(this_player()->query_name() + " splashes " 
+		+ Them->query_name() + ".\n", Them);
+
+	return 1;
+
+}
+
+test_dry() {
+
+	string Error;
+	object Object, Temp;
+
+	Object = root_environment();
+	
+	if (!Object || !objectp(Object))
+		return;
+
+	Error = catch { 
+		if (!Object->query_medium("water") && (Object->query_outdoors() < 3 || 
+			!Object->query_weather_obj()->query_precipitation())) {
+			tell_object(environment(), "You have dried out a bit.\n");
+			find_rustables(environment(this_object()));
+			clean_up();
+		}
+		else {
+			find_rustables(environment(this_object()));
+			call_out("test_dry", TIME);
+		}
+	};
+
+	if (Error)
+		clean_up();
+
+}
+
+find_rustables( (int | object) Player) {
+
+	int Index;
+	array Contents;
+	array Rustables;
+
+	if (!Player)
+		Player = environment(this_object());
+
+	Contents = contents(Player);
+	Rustables = [
+		"plate", "brigadine", "chainmail", "scalemail", "lamellar",
+		"ringmail", "byzantine", "small knife", "knife", "dagger",
+		"stiletto", "sickle", "hand axe", "rapier", "light mace",
+		"shortsword", "broadsword", "longsword",
+		"bastardsword", "warhammer", "scimitar", "katana", "heavy mace",
+		"battleaxe", "great hammer", "naginata", "great sword",
+		"great axe", "halberd", "poleaxe"
+		];
+
+	for (Index = 0; Index < sizeof(Contents); Index ++)
+		if (common(Contents[Index]->query_ids(), Rustables) && Contents[Index]->id("rust-proof") == -1)
+			rust_object(environment(this_object()), Contents[Index]);
+
+}
+
+reset_wet() {
+
+	remove_call_out("test_dry");
+
+	call_out("test_dry", TIME);
+
+}
+
+rust_object(object Player, object Rusty) {
+
+	if (!Rusty)
+		return;
+
+	if (!Rusty->damage_object(random(RUST_DAMAGE))) {
+		if (Rusty->query_broken()) {
+			tell_object(Player,"Your " + Rusty->query_name() +
+				" rusts to powder and falls through your " +
+				"fingers.\n");
+			Player->checked_say(Player->query_name() + "'s " +
+				Rusty->query_name() + " has become so badly rusted " +
+				"that it crumbles to dust.\n");
+			Player->add_weight(-Rusty->query_weight());
+			Rusty->un_wield();
+			destruct(Rusty);
+			Rusty = 0;
+		}
+	}
+
+}
+
+common(First, Second) {
+
+	int Index;
+
+	if (!First || !Second)
+		return 0;
+
+	for (Index = 0; Index < sizeof(First); Index ++)
+		if (index(Second, First[Index]) != -1) 
+			return 1;
+
+	return 0;
+
+}
+
+object root_environment()
+/* added by Hunter, 931212 */
+/* return the environment that should be checked for weather, wetness, etc.
+ * checking for if the object or player is in a waterproof object */
+{
+object Env = environment(this_object());
+object Temp;
+    if (!Env)
+	return 0;
+    while (objectp(Temp = environment(Env))  
+	  && (!Env->query_property("WATERPROOF") || Env->query_property("OPEN")))
+	Env = Temp;
+    return Env;
+}

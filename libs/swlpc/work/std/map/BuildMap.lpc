@@ -1,0 +1,323 @@
+/*
+ * BuildMap - does the following:
+ *
+ *	Loads up all of the (known, reachable) map, in an order which
+ *	should help the MapKnower build contiguous areas
+ *	Uses spec_rooms, plus a few seeding rooms, to obtain the starting points.
+ *
+ * Based on my massacre object - gandalf.
+ */
+
+#include <Servers.h>
+
+/*
+ * Log files for the list of bad rooms (no exits), and for
+ * writing the map data to (for printable maps).
+ */
+
+#define NDD_LOG "BuildMap_Rooms"
+#define MAP_LOG "BuildMap_Map"
+
+/*
+ * The special room server.
+ */
+
+#define SPEC_SERV "std/map/spec_rooms"
+
+/*
+ * A collection of starting locations, beyond those provided
+ * by the special room server.
+ */
+
+array seed_locations =	({ "room/city/market5" });
+
+
+/* 
+ * To avoid the problems with the maximum of 1000 elements in arrays, we
+ * use an array of arrays to keep track of the rooms.  ARR_SIZE squared
+ * must be greater than the TABLE_SIZE value.  You should set TABLE_SIZE
+ * to, say, the number of files in your dungeon (a smaller value does
+ * save some space).
+ */
+
+#define ARR_SIZE 100	/* size of array chunks to allocate; n*n>=maxrooms */
+#define	TABLE_SIZE 9000	/* max number of rooms (must be less than ARR_SIZE^2) */
+
+array location_list;	/* room list; vector of vectors */
+
+array seen_list;	/* rooms that have been seen, hashed on name */
+
+int num_locations;		/* num elements in room list */
+int num_rooms_tried;	/* which room are we testing? */
+int num_dirs_tried;		/* and which dir are we up to? */
+int seed_array_locn;
+
+int copend = 0;
+
+/*
+ * interface to spec_rooms.
+ */
+
+array spec_room_types;
+int spec_room_upto = 0;
+
+/*
+ * call start() to initiate the main search.
+ * It first obtains the list of spec_room types.
+ * Then, it starts using the seed_locations array to provide map search
+ * starting points.  When the seed array is exhausted, it retrieves the
+ * rooms associated with the next spec_room_types item, and initialises
+ * the seed array with them.
+ */
+
+start() {
+	array types = SPEC_SERV->query_known_room_types();
+	if (arrayp(types)) {
+		spec_room_types = types;
+		spec_room_upto = 0;
+		}
+	call_out("next_seed", 1);
+	}
+
+next_seed() {
+	tell_room(this_object(), "*** Seeding from " + seed_array_locn + "\n");
+	if (arrayp(seed_locations)) {
+		if (sizeof(seed_locations) > seed_array_locn) {
+			if (stringp(seed_locations[seed_array_locn])) {
+				add_location(seed_locations[seed_array_locn]);
+				seed_array_locn++;
+				return;
+				}
+			seed_array_locn++;
+			call_out("next_seed", 1);
+			return;
+			}
+		}
+
+	if (arrayp(spec_room_types)) {
+		if (sizeof(spec_room_types) > spec_room_upto) {
+			tell_room(this_object(), "*** New spec_room seed "
+					+ spec_room_types[spec_room_upto]
+					+ "\n");
+			seed_locations = SPEC_SERV->query_by_type(
+					spec_room_types[spec_room_upto]);
+			spec_room_upto++;
+			seed_array_locn = 0;
+			call_out("next_seed", 1);
+			return;
+			}
+		}
+	/*
+	 * else nothing to do.
+	 */
+	}
+
+/*
+ * Call make_map if you also want all rooms and their
+ * exits logged to MAP_LOG.
+ */
+
+int make_map_log = 0;
+
+make_map() {
+    make_map_log = 1;
+	start();
+    }
+
+/*
+ * courtesy functions
+ */
+
+id(str) { return (str == "mapmaker"); }
+
+short() { return "a mud map loader"; }
+
+long() {
+	write("You see " + short() + ".\n");
+	show_stats();
+}
+
+show_stats() {
+    write("Locations known about: " + num_locations
+		 + ".\nCall outs pending: " + copend
+		 + ".\n");
+    return 1;
+}
+
+reset(arg) {
+
+    if (arg)
+	return;
+
+    num_rooms_tried = 0;
+    num_dirs_tried = 0;
+    num_locations = 0;
+    copend = 0;
+	seed_array_locn = 0;
+}
+
+init() {
+    return(1);
+    }
+
+/*
+ * get major and minor indices for room number "num"
+ */
+
+get_al1(num) {
+    return num / ARR_SIZE;
+    }
+
+get_al2(num) {
+    return num % ARR_SIZE;
+    }
+
+/*
+ * get the entry for room number 'num'
+ */
+
+get_room_name(num) {
+    return location_list[get_al1(num)][get_al2(num)];
+}
+
+/*
+ * hash a string to an array location
+ */
+
+rehash(string str, int hashnum) {
+    int h = hash_value(str) + hashnum * hashnum;
+
+    return h % TABLE_SIZE;
+}
+
+/*
+ * Add a location to the location tables.  Gets its dest_dirs and schedules
+ * call_outs to do_location them.
+ */
+
+add_location(name) {
+    copend++;
+    call_out("do_location_withseed", 1, name);
+    }
+
+do_location_withseed(name) {
+    do_location(name);
+    if (copend < 1)
+	next_seed();
+    }
+
+do_location(name) {
+    int h;
+    int major;
+    int minor;
+    int finished;
+    int alreadythere;
+    int x;
+    (int|string) controller;
+    array dd;
+
+    copend--;
+
+/*
+ * Add it to the hashed, seen location list, so we dont retrace our steps
+ * all the time...return without adding if the location was already there.
+ * Add it *before* trying to load it (so that logs work).
+ */
+
+    finished = 0;
+    x = 0;
+
+    if (!seen_list)
+	seen_list = allocate(ARR_SIZE);
+
+    while (!finished) {
+	h = rehash(name, x);
+        major = get_al1(h);
+        minor = get_al2(h);
+	if (!seen_list[major]) {
+	    finished = 1;
+	    seen_list[major] = allocate(ARR_SIZE);
+	    seen_list[major][minor] = name;
+	    }
+	if (!finished) {
+	    if (seen_list[major][minor] == name)
+		return 0;	/* already there */
+	    if (!seen_list[major][minor]) {
+		seen_list[major][minor] = name;
+		finished = 1;
+	    }
+	}
+	/* else we have to rehash */
+	x += 1;
+    }
+
+/*
+ * find its spot in the standard location list, allocating space when necc.
+ */
+
+    major = get_al1(num_locations);
+    minor = get_al2(num_locations);
+
+    if (!location_list)
+	location_list = allocate(ARR_SIZE);
+    if (!location_list[major])
+	location_list[major] = allocate(ARR_SIZE);
+
+    location_list[major][minor] = name;
+    num_locations += 1;
+/*
+ * Get its dest_dir array, which forces the room to load.
+ * If it's a controlled room, add the dest_dir known by the controller, so that
+ * we avoid loading rooms from within the controlled area.
+ * Otherwise, schedule callouts for the connecting rooms.
+ */
+    string err;
+    err = catch { dd = name->query_dest_dir(); };	/* load it first, to ensure controller registered */
+    if (err) {
+        LOG->log(NDD_LOG, name + "(ERR)" + err + "\n");
+	return;
+	}
+    controller = MAPKNOWER->controller_name(name);
+    tell_room(this_object(), name);
+
+    if (make_map_log) {
+    	string sho = name->short();
+        if (controller) 
+	   sho = "[" +  controller + "] " + sho;
+        LOG->log(MAP_LOG, "*\t" + name + "\t" + sho + "\n");
+	}
+
+    if (dd) {
+	x = 0;
+	while (x < sizeof(dd)) {
+	   if (make_map_log) {
+        	LOG->log(MAP_LOG, "+\t" + dd[x+1] + "\t" + dd[x] + "\n");
+	        }
+	   if (controller) {
+	       (int|string) j = MAPKNOWER->controller_name(dd[x]);	/* add things in new areas */
+	       if (j != controller)
+	           add_location(dd[x]);
+	       }
+	   else /* no controller */
+	       add_location(dd[x]);
+	   x+= 2;
+	   }
+	}
+    if (dd)
+	tell_room(this_object(), "(" + sizeof(dd)/2 + " exits) ");
+    else {
+        LOG->log(NDD_LOG, name + "(NO EXITS)\n");
+        tell_room(this_object(), "(NO EXITS) ");
+        }
+    if (controller) 
+	tell_room(this_object(), "[" + controller + "]\n");
+    else
+	tell_room(this_object(), "\n");
+
+    if (controller) {	/* get all exits from controller */
+	dd = controller->query_dest_dir();
+	}
+
+    return 1;
+}
+

@@ -1,0 +1,1653 @@
+/*
+ * Programmable execution soul (for NPCs and player aliases).
+ *
+ * NOTE: currently assumes "command" is to be done by myself->init_command.
+ * This means that it won't work on players at the moment (fucked if I'm
+ * adding init_command to body.c when you could init_command me to
+ * do godly things...).
+ *
+ * (C) Mike McGaughey, 1993 (aka Gandalf @ Shattered World).
+ *
+ * Implements a small stack-based command dispatch mechanism which
+ * allows structured loops, jumps, and recursion.  Uses a very compact
+ * program representation.  This is intended to be used as the `back end',
+ * or execution engine, for things like intelligent monsters, player
+ * alias execution, etc; other programs should be used to construct these
+ * strings (they are possible, though irritating, to construct by hand).
+ *
+ * This is not a general purpose programming language (like LPC); there
+ * are many things which cannot be done within this object.  It *does*
+ * allow a timed dispatch of a set of commands, with a little structuring
+ * language (loops, jumps, etc) built in.  Commands can either be simple strings
+ * (in which case a `command(string, myself)' is performed, or various
+ * internal commands.  It is also possible to call other objects, and wait
+ * for them to call back; thus, specialised applications (like calling out
+ * to the router to traverse a route, then re-starting when the destination
+ * has been reached) are possible without requiring the router to perform
+ * a series of add_actions.  However, in the simplest applications (eg
+ * controlling a player who has logged out), things *will* be done via
+ * add_actions.
+ *
+ * Programs are stored as strings; ^A->^E are used internally as
+ * marker characters.  Executes a single string (which may have embedded
+ * structuring commands).  Doesn't save; uses this_player()->storage.
+ *
+ * In the following, ^A refers to \001, etc, `stmt' is a single
+ * statement or a `group' of statements which are built by enclosing
+ * them in ^A...^C, seperating each statement by ^B.  NOTE: statements
+ * end at end of string, a ^B, or a ^C.  In particular, warble^A...^C
+ * will be treated as 1 statement; you probably need a ^B before the ^A.
+ * This is because some commands (like `repeat') are prefixes to other
+ * statements.
+ *
+ * Maintains a couple of tables:
+ *    A `global dictionary', which is saved using this_player()->add_store().
+ *    The dictionary stores named statements; you can save, erase, call,
+ *    and jump to them.  NOTE: in all cases, `jump' means `replace the currently
+ *    executing group with the jump target'.  If the group is nested within
+ *    another group, after the code attached to the jump target has been executed,
+ *    control passes back to the outer group.
+ *
+ *    A `nosave dictionary', which may be loaded from outside, or modified
+ *    within this object.  Entries are referred to by number, and are not
+ *    saved across boots.  Commands may be prefixed with a `substitute' cmd,
+ *    which will replace any occurrences of ^D$RN: in the statement with entry
+ *    number N before executing the statement. ($ Read).  It is used to specify
+ *    the object and function to call when performing a call_other.
+ *
+ *    A `group stack'.  Statement calls, repeats, pauses, and labels use it.
+ *
+ * Structuring commands (in statement sequences):
+ *    ^A	start of group.  Finds matching ^C, pushes everything *after* it
+ *		onto the group stack, and starts executing the group.
+ *    ^C	end of group.  ^A and ^C nestings must match.
+ *    ^B	statement separator, whether within a group or not
+ *    ^D	introduces an extended command (below)
+ *    ^E	used internally to mark labels, repeat counts, etc, on the group stack.
+ *
+ * Statements starting with anything else are treated as commands for
+ * command(s, myself).  There are no comments in these programs, and there
+ * is currently no escape mechanism for any of ^A->^E.
+ *
+ * Extended commands (all 3 characters: ^D followed by 2 chars, and optionally arguments):
+ *
+ *   ^DLMname:stmt	Parse statement, save the label, the statement, and the
+ *		stuff following it; start executing stmt.  ^D<name from within stmt
+ *		will jump back to the start of the statement.  ^D>name will jump out
+ *		past the end to the stuff following, deleting the saved label and stmt.
+ *		After stmt has finished executing (or is jumped out of), it, and the
+ *		label, disappear.  `Label Make'
+ *   ^DL<name:	jump back to label "name", start executing from there again.
+ *		The label stays in scope and can be jumped to again.  `Label Back'
+ *   ^DL>name:	Jump out past end of scope of group labelled `name' (which we must be in)
+ *		Start executing whatever followed the labelled group.  The group, and
+ *		the label, disappear.  `Label Forward'
+ *   ^DL=name:stmt Jump out past end of scope, and arrange to execute "stmt" before
+ *		we start to execute whatever followed the group. `Label Replace'
+ *
+ *   ^DDSname:stmt	store the next group as `name' in the global dictionary.  Doesn't
+ *		execute stmt; execution passes to whatever follows.  Overwrites name if it
+ *		already appears. `Dictionary Save'
+ *   ^DDEname:	erase `name' from the dictionary.  Not an error to erase a nonexistent name.
+ *   ^DDCname:	Look up name in global dict, do a "^DLname:" + (cmds).  Effectively a call.
+ *   ^DR*N:stmt	Do stmt N times.  N currently has to be an integer.
+ *
+ * NOTES:
+ *    I need to think about team monsters.
+ */
+
+/*
+ * When your program is debugged (no loops which don't execute any statements),
+ * define FAST to force jump, store, etc commands to be executed without any
+ * wait.  This can cause problems if you do have empty loops; be sure you
+ * put a ^DWO (wait one) in loops which may not have any cmds executed (i.e.
+ * if you have a conditional).  Note that the execution loop will, at a maximum, only
+ * spin through MAXSPIN empty commands even if FAST is defined.
+ */
+
+#define FAST
+#define	MAXSPIN 5
+
+#define	NAME_LEN	10
+#define	GROUP_CHUNK	10
+#define	MAX_GS_SIZE	50
+/* 2 per stored program */
+#define	MAX_PGM_SIZE	40
+#define	PROGRAM_CHUNK	10
+
+#define	EXEC_LOOP	"execute_cmds"
+
+inherit "obj/souls/base_soul";
+
+#define current_room (file_name(environment(myself)))
+
+int debug = 1;			/* Debug mode on */
+
+#define	G(s) { if (debug) catch {tell_object(find_player("dredd"), \
+	"Executive soul: " + (s) + "\n");};}
+
+array programs = ({ });
+object comm_soul;
+
+reset(arg)
+{
+	::reset(arg);
+	if (!arg) {
+		add_id( "executor" );
+		set_soul_type("generic", "executor");
+	}
+}
+
+init()
+{
+	::init();
+	if (myself == this_player()) 
+    {
+	    	programs = myself->query_store("programs", "dict");
+		if(myself->query_wiz()) add_id("no_wet_obj");
+		if (!pointerp(programs)) programs = ({ });
+		add_action("set_debug", "debug");
+	}
+    add_action("say_catch", "", -1);
+}
+
+say_catch(str)
+{
+    string v;
+
+    if (myself->query_wiz()) return 0;
+
+    v = query_verb();
+    if (str) v = v + " " + str;
+
+    if (myself->query_store("chat")) {	/* Jenna  Jan 99 */
+        if (!comm_soul) comm_soul = myself->query_soul("generic/communicate");
+        if (comm_soul) return comm_soul->communicate(v);
+	}
+    return 0;
+}
+
+set_debug(s) {
+    if (id(s)) {
+	debug = !debug;
+	write("Executive soul: debug ");
+	if (debug)
+	    write("on.\n");
+	else
+	    write("off.\n");
+	return 1;
+	}
+    return 0;
+    }
+
+update() {
+    myself->add_store("programs", "dict", programs);
+    }
+
+/*
+ * Time management.  Commands initially execute quickly,
+ * but run more and more slowly as more are executed.
+ * Periods of inactivity `roll back' the times, so that
+ * when a command is restarted, it executes faster again.
+ */
+
+/*
+ * These two arrays give the number of commands they
+ * can execute at each speed.  Speeds is the time per
+ * dispatched command (seconds).  Speedto is the command
+ * number at which we switch to a slower speed.
+ * EG: first 10 cmds are 0.1 secs apart, cmds 11-30 are 0.3,
+ * cmds after 5000 are 30 secs apart.
+ * Should probably dispatch these centrally, using a
+ * priority queue (based on num cmds, with rollback), so
+ * that everyone slows down uniformly as
+ * the system gets loaded (one day...).  Have to work out
+ * how combat could be integrated :)
+ */
+
+/* NOTE: sizeof(speeds) = sizeof(speedto) + 1 */
+
+nosave array speeds =  ({ 0.1, 0.2, 0.4, 0.7, 1.2, 2.2, 5.0, 10.0, 15.0, 20.0 });	/* secs apart to schedule each cmd; last entry is for >5000 */
+nosave array speedto = ({ 50, 100, 200, 500, 1000, 5000, 10000, 20000, 40000 });	/* num cmds to do at each speed */
+
+nosave int current_slice = 0;	/* what time slice we're in (in speeds) */
+nosave int effective_cmds = 0;	/* effective num commands, for time calculations */
+nosave int idle_since = time();	/* last time we went idle */
+
+nosave (int|real) constant_delay = 0;	/* if int, use variable delay - otherwise, seconds delay (fixed) */
+
+/*
+ * After idling a while, and starting a new program, we want to `roll back'
+ * the time slices so that they get a fair execution speed.  Essentially,
+ * we decrease their effective instructions by `unexecuting' commands as
+ * fast as they would have been executed if a program were running - eg
+ * if they have been idle 4 secs, after doing 8 cmds at 0.5 secs each, then 2
+ * cmds at 1 sec each, we'd roll them back so that their speed was the same
+ * as it was 4 secs before they went idle - 2*1 + 4 * 0.5 = back 6 commands,
+ * so their effective num commands on restart is 4.
+ *
+ * Note: this assumes that current_slice, effective_cmds and idle_since are
+ * correct; it sets all other parameters.  It can be used to calculate new time
+ * increments at any time, though it's rather inefficient unless idle times
+ * have to be taken into account.
+ */
+
+roll_back_time() {
+
+    real t = int2real(time() - idle_since);	/* time to roll back; -1 is for integer time() */
+    idle_since = time();
+
+/*
+ * Check whether we need a slice increment (i.e. make it slower)
+ */
+
+    if (current_slice < sizeof(speedto))	/* = speedto means slowest; speeds array has an extra entry for this */
+        if (effective_cmds > speedto[current_slice])
+    	    current_slice++;
+
+/*
+ * Now roll things back 
+ */
+
+    while ((t > 0.5) && (current_slice > 0)) {	/* 0.5 is for roundoff error in times */
+	int x = effective_cmds - speedto[current_slice - 1];	/* num cmds done at this speed */
+	real y = speeds[current_slice];				/* time per cmd */
+	if (t > int2real(x) * y) {			/* idle a long time; roll back to end of last segment */
+	    t -= int2real(x) * y;				/* take the total off their idle time */
+	    current_slice--;
+	    effective_cmds = speedto[current_slice];
+	    continue;				/* and try again... */
+	    }
+	/* otherwise, a partial rollback (in the same slice) */
+	effective_cmds -= real2int(t / y);	/* t secs at y secs/cmd */
+	t = 0.0;				/* and exit; no time. */
+	}
+    }
+
+/*
+ * Update and return cmd_wait in general use.
+ */
+
+real get_cmd_wait() {
+
+    effective_cmds++;
+    if (realp(constant_delay))
+	return constant_delay;
+
+    if (current_slice < sizeof(speedto)) {
+        if (effective_cmds > speedto[current_slice]) {
+    	    current_slice++;
+	    }
+	}
+
+    return speeds[current_slice];
+}
+
+set_fixed_delay(real t) {
+    if (t < 0.1)
+	t = 0.1;
+    constant_delay = t;
+    }
+
+set_variable_delay(cmdnum) {
+    constant_delay = 0;
+    idle_since = time();
+    int x = sizeof(speedto) - 1;
+    while ((x > 0) && (speedto[x] > cmdnum))
+	x--;
+    effective_cmds = cmdnum;
+    }
+
+
+/*
+ * Programs are stored as a series of strings, with each string representing
+ * a list of (possibly nested) statements.  The control characters ^A and ^C
+ * delimit groups of statements which are treated by other commands as a
+ * single statement; inside groups, ^B is used to seperate statements.  Each
+ * string must be balanced with respect to groupings (^A/^C); there is an implicit
+ * grouping around a string.
+ *
+ * Each statement has a `success' value (true or false); it is important that
+ * things use notify_fail() when a command should fail.  Statements leave their
+ * success/fail value on the top of the runtime stack.
+ *
+ * A quick list of structuring commands is:
+ *   ^A		group open cmd (scope).
+ *   ^B		statement seperator (in groups); end of string counts as a ^B.
+ *   ^C		group close cmd (and terminator for last cmd).
+ *   #*N:	repeat next command (or group) N times
+ *   #?		Skip next command if previous command failed
+ *   #:		Skip next command if previous command succeeded
+ *   #Lname:	label the next group `name', save it (and following stuff) on stack, call it.
+ *		It disappears when we leave the group.  Can be used for backwards gotos
+ *		(or forwards reductions/returns).
+ *   #Sname:	store the next group as `name' in the global dictionary.  Doesn't execute it.
+ *   #Ename:	erase `name' from the dictionary.
+ *   #Cname:	Look up name in global dict, do a "#Lname:" + (cmds).  A Call.
+ *   #>name:	Jump out of scope of group labelled `name' (which we must be in) (reduce)
+ *   #=name:stmt Reduce back to <name>, discarding it, and jump to stmt.
+ *		A simple infinite loop is "#Sloop:^A#=loop:#Cloop:^C"
+ *   #<name:	jump back to label "name", start executing from there again.
+ *		A better infinite loop is "#Lloop:#<loop:"
+ *
+ * Note that only ^B and ^C are statement terminators (end of string is ^C).
+ * If no name is provided for = or >, use `this group'.  If #< has no name,
+ * it will jump to a #L:.
+ * NOTE: all names here end with `:'.
+ */
+
+/*
+ * These routines execute a series of commands without
+ * user intervention.  Any input on the user's part suspends
+ * command execution, placing it on `hold', and telling him
+ * which routines are pending.
+ */
+
+/*
+ * Group call/return stack.  Stack starts from end of array;
+ * this way we can index() for the most recent instance of a name.
+ */
+
+nosave array group_stack = ({ });
+nosave int group_top = 0;
+nosave string curr_cmds = 0;
+nosave string curr_mlabel = 0;
+
+
+nosave int did_a_cmd = 0;	/* TRUE when we do a cmd, jump back, repeat, or call. */
+				/* i.e. the minimum necessary to ensure we don't */
+				/* get runaways processes. */
+nosave int had_error = 0;	/* true when we've had an error.  If so, error() will */
+				/* simply unschedule cmds.  If not, it will push a pause() first */
+				/* Reset by eval loop. */
+
+unschedule_cmds() {
+    idle_since = time();
+    did_a_cmd = 1;		/* to make sure the exec loop terminates also */
+    int x = 0;
+    while (remove_call_out(EXEC_LOOP) != (-1))
+	x = 1;
+    return x;
+    }
+
+schedule_next_cmd() {
+    if (find_call_out(EXEC_LOOP) == (-1))
+        call_out(EXEC_LOOP, get_cmd_wait());	/* schedule the next one */
+    }
+
+/*
+ * A list of commands and the routines that dispatch them.
+ * cmds1 are 1 char cmds; cmds3 are 3 char cmds.  Each cmd
+ * dispatcher parses any further parameters it needs.
+ */
+
+#define ELTS_PER_CMD	2
+
+string ctrla = "";
+string ctrlb = "";
+string ctrlc = "";
+string ctrld = "";
+string ctrle = "";
+
+nosave array cmds1 = ({
+    /* string */  /* exec rtne */
+	ctrla,	"group_start",
+	ctrlb,	"group_sep",
+	"\n",	"group_sep",	/* heh :) */
+	ctrlc,	"group_end"
+	});
+
+nosave array cmds3 = ({
+	ctrld + "LM",	"make_label",
+	ctrld + "DS",	"save_dict_stmt",	/* store follower in dictionary */
+	ctrld + "DE",	"erase_dict_stmt",	/* erase rtne in dict */
+	ctrld + "DC",	"call_dict_stmt",	/* call rtne in dict */
+	ctrld + "DJ",	"jump_dict_stmt",	/* jump to rtne in dict, replacing current group */
+	ctrld + "L<",	"back_to",		/* jump back to stacked label (or prior group if SL label) */
+	ctrld + "L=",	"forward_replace",	/* jump out of label, setting curr cmds */
+	ctrld + "L>",	"forward_past",		/* jump out of label, start execution after */
+	ctrld + "C[",	"c_register_prepend",	/* prepend statements to s_reg */
+	ctrld + "C]",	"c_register_append",	/* append statements to s_reg */
+	ctrld + "C=",	"c_register_set",	/* set a string register */
+	ctrld + "CC",	"c_register_call",	/* create an executing group containing the s-reg contents */
+	ctrld + "CG",	"c_register_goto",	/* replace the current group by the s-reg contents */
+	ctrld + "CH",	"c_register_head",	/* remove the first command from the s-register and execute it */
+	ctrld + "CE",	"c_register_ifelse",	/* CH, but if no command in reg, do following stmt */
+	ctrld + "R*",	"repeat",
+	ctrld + "WO",	"wait_one",		/* to ensure a comand takes *some* time in fast mode */
+	ctrld + "PA",	"pause",		/* pause unconditionally */
+	ctrld + "PI",	"pause_empty",		/* pause if no following cmds in curr_cmds */
+	ctrld + "TM",	"tell_myself",		/* grab the next group (in ^A->^C), tell it as a string */
+	
+/*
+ * these commands (starting with ctrle) are used internally
+ * as markers for stacked scopes.
+ */
+	ctrle + "LS",	"stacked_label",	/* in stack: this label, group, follower */
+	ctrle + "*S",	"stacked_repeat",	/* in stack: rept cmd, count, group, follower */
+	ctrle + "PS",	"stacked_pause",	/* a pause; we halt (saving the pause on stack) when we reach one */
+	ctrle + "PE",	"stacked_pause_end"	/* issued by un_pause().  Removes one stacked pause */
+	});
+
+/*
+ * Execute_cmds: get the first command from curr_cmds, and dispatch it,
+ * scheduling the next command.  If there are none left in curr_cmds, take
+ * the top command from the group stack and dispatch that.  If the stack
+ * is also empty, invoke finished_cmds(), and don't schedule another cmd.
+ */
+
+nosave int last_cmd_status = 0;		/* whether the last command succeeded or failed */
+nosave (int|string) last_cmd_error = 0;	/* result of the catch around command() */
+
+execute_cmds(int once) {
+    if (!myself) {
+	pause();
+	return;
+	}
+    int nspin = MAXSPIN;	/* maximum: spin through 5 structuring commands. */
+    did_a_cmd = 0;
+    had_error = 0;
+    if (!once)
+	schedule_next_cmd();
+
+    while (nspin-- && !did_a_cmd) { /* loop till we do something significant */
+
+        if ((!stringp(curr_cmds)) || !sizeof(curr_cmds)) {
+	    finished_group();
+	    continue;
+	    }
+
+/*
+ * Pick up the first cmd
+ */
+        int y = index(cmds1, curr_cmds[0..0]);
+        if (y >= 0) {
+	    curr_cmds = curr_cmds[1..];
+	    this_object()->(cmds1[y+1])();	/* bleagh */
+	    }
+        else {
+	    y = index(cmds3, curr_cmds[0..2]);
+	    if (y >= 0) {
+	        curr_cmds = curr_cmds[3..];
+	        this_object()->(cmds3[y+1])();	/* bleagh again */
+	        }
+	    else
+	        cc_as_command();
+	    }
+	}
+    }
+
+/****************** commands *********************/
+
+/*
+ * Called internally when we reach the end of curr_commands.
+ * This needs to pop the stack, skipping back over labels, re-issuing
+ * repeats, etc.
+ */
+
+finished_group() {
+    if (group_top < sizeof(group_stack)) {
+	curr_cmds = group_stack[group_top];
+	group_stack[group_top] = 0;
+	group_top++;
+	return 0;
+	}
+    curr_cmds = "";
+#ifndef FAST
+    did_a_cmd = 1;	/* terminate exec */
+#endif
+    finished_cmds();
+    }
+
+
+/*
+ * cc_as_command(): take the first command from
+ * curr_commands and treat it (by default) as
+ * a `force' on the current player.  If the
+ * command starts with ^D, throw an error (as it
+ * almost certainly *is* one!).
+ */
+
+cc_as_command() 
+{
+    int x = get_one_cmd(curr_cmds);
+    string c = curr_cmds[..x-1];
+    curr_cmds = curr_cmds[x+1..];
+    if (sizeof(c) > 0) 
+    {
+	    string first = c[0..0];
+	    if (first == ctrld) {
+	        return exec_error("Extended command `" + c[1..2] + "' unknown");
+	    }
+	    else if (first == ctrle)
+	        return exec_error("Stack command `" + c[1..2] + "' unknown");
+    	did_a_cmd = 1;
+    	tell_object(myself, "[" + c + "] ");
+    	last_cmd_status = 0;	/* just in case */
+        if (myself->is_player())
+        {
+	        last_cmd_error = catch { 
+                if (myself->query_wiz())
+				    myself->catch_input(c); 
+                else
+                    last_cmd_status = command(c, myself);
+				//myself->catch_input("]" + c); 
+                };
+        }
+	    else
+        {
+	        last_cmd_error = catch { last_cmd_status = myself->init_command(c); };
+        }
+	}
+    // G("Command error: "+last_cmd_error+"\n");
+}
+
+/* tell_myself: takes an arg delimited by ^B and tells it to the player.
+ */
+
+tell_myself() {
+    int x = index(curr_cmds, ctrlb);
+    if (x < 0)
+	x = sizeof(curr_cmds);
+    tell_object(myself, curr_cmds[..x-1]);
+    curr_cmds = curr_cmds[x+1..];
+    did_a_cmd = 1;
+    }
+
+/*
+ * Group start: start a new statement nesting level.
+ * Parse string for matching group end, place remainder on
+ * stack.  Curr_cmds has been stripped of initial ^A.
+ * Note: ^C should never appear in curr_cmds in the normal
+ * course of execution.
+ */
+
+push_group(str) {
+
+    if ((--group_top) < 0) {		/* grow the stack if necessary */
+	if (sizeof(group_stack) > MAX_GS_SIZE) {
+	    group_top = 0;
+	    return exec_error("push_group: Statement nesting too deep");
+	    }
+	group_stack = allocate(GROUP_CHUNK) + group_stack;
+	group_top += GROUP_CHUNK;
+	}
+
+    group_stack[group_top] = str;
+    return 0;
+    }
+
+/* Push a string if it consists of more than just ^B chars */
+
+push_if_used(str) {
+    if (!stringp(str))
+	return 0;
+
+    int x = sizeof(str);
+    int y = 0;
+    while (y < x) {
+	if (str[y..y] != ctrlb) {
+	    push_group(str[y..]);	/* continuation: from after terminator onwards */
+	    return 1;
+	    }
+	y++;
+	}
+    return 0;
+    }
+
+group_start() {
+
+    (int|string) loc = parse_group(curr_cmds);
+    if (stringp(loc)) {
+	return exec_error("group_start: " + loc);
+	}
+    string rest = curr_cmds[loc+1..];
+    (int|string) e = push_if_used(rest);
+    curr_cmds = curr_cmds[..loc - 1];
+    if (stringp(e))
+	return exec_error(e);
+    return 0;
+}
+
+/*
+ * Finding a ^C in an input string will be an error,
+ * as they should have been stripped by the corresponding
+ * ^A.  See `finished_group()' for definitions of what to do
+ * on group end (empty or null string).
+ */
+
+group_end() {
+    return exec_error("group_end: unbalanced group terminator");
+    }
+
+/*
+ * group_sep is just a seperator; it should have been stripped.
+ * ignore it, do next thing.
+ */
+
+group_sep() {
+    return 0;
+    }
+
+/*
+ * A command to place in (possibly) empty loops to force the
+ * next command to occur after a new time slice has been started.
+ */
+
+wait_one() {
+    did_a_cmd = 1;
+    return 0;
+    }
+
+/*
+ * Parse group: assumes the leading ^A has been found and
+ * stripped from a string.  Returns the integer location of
+ * the matching ^C, OR a string error message.
+ */
+
+(int|string) parse_group(string cmds) {
+
+    int nca = index(cmds, ctrla);	/* first ^A */
+    int ncc = index(cmds, ctrlc);	/* first ^C */
+    int x = 0;
+    int y = 1;				/* ^A/^C depth */
+
+    while (y > 0) {
+	if (nca < 0)			/* pretend there's one after the string */
+	    nca = sizeof(cmds) + 1;
+	if (ncc < 0)
+	    return "Unbalanced `start group' construct";
+	if (nca < ncc) {				/* if a ^A precedes the next ^C */
+	    y++;					/* then count the subgroup */
+	    nca = index(cmds, ctrla, nca+1);	/* and jump to the next open */
+	    }
+	else {						/* otherwise, close this subgroup */
+	    y--;
+	    x = ncc;					/* record the location of the end */
+	    ncc = index(cmds, ctrlc, x+1);		/* and find the next close char */
+	    }
+	}
+
+    return x;
+}
+
+/*
+ * get_one_cmd: like parse_group, except it assumes that
+ * no leading ^A has been stripped, and that the stmt ends
+ * at the first ^B or ^C or (if ^A appears before either of
+ * these) the matching ^C.  Returns the index of the terminator,
+ * which should only be stripped from the string if it's a ^B, as ^A may not
+ * be at the head of the string (this one works with leading repeat,
+ * etc, counts).
+ */
+
+(int|string) get_one_cmd(string s) {
+
+    (string|int) x = sizeof(s);
+    int y = 0;
+
+    int nca = index(s, ctrla); if (nca < 0) nca = x;
+    int ncb = index(s, ctrlb); if (ncb < 0) ncb = x;
+    int ncc = index(s, ctrlc); if (ncc < 0) ncc = x;
+
+    if ((nca < ncb) && (nca < ncc)) {	/* group */
+	x = parse_group(s[nca+1..]);
+	if (intp(x))
+	    return x + nca + 1;
+	else
+	    return x;
+	}
+
+    if (ncb < ncc)
+	return ncb;
+    else
+	return ncc;
+    }
+
+/* get a command; if it's a group, strip the enclosing ^A/^C. */
+
+(array|string) get_stripped_cmd(string s) {
+    (int|string) x = get_one_cmd(s);
+    if(stringp(x))
+	return x;
+    if (s[0..0] == ctrla) {	/* can't check for s[x]=ctrlc as the ctrla may have been embedded */
+	return ({ s[1..x-1], s[x+1..] });	/* strip ctrla/ctrlc */
+	}
+    return ({ s[..x-1], s[x+1..] });		/* ctrlb */
+    }
+
+/*
+ * Simple control flow.
+ */
+
+/*
+ * #L command (make label).
+ *
+ *    #Lname:stmt
+ *
+ * Save name, statement, and follow set on stack in a way that
+ * allows us to jump back to the label from within the statement (and
+ * re-execute it), or jump from within the label to the following stmt.
+ * We store, on stack (listed from top down):
+ *    ^Elabel, stmt, following stmt
+ * Then, a copy of stmt goes into curr_cmds for immediate execution.
+ * A #< will find label, retrieve the stmt from below it, leaving label
+ * (and following stmt) on stack.
+ * A #= or #> will find label and delete it and statement.
+ * Returning to a label will pop back past statement.
+ */
+
+(string|int) get_hd_label(s) {
+
+    int x = index(s, ":");
+    if (x < 0)
+	return ("#L: error: no colon terminating name");
+    if (x > NAME_LEN)
+	return ("#L: error: name too long (" + NAME_LEN + " chars max)");
+    return x;
+    }
+
+make_label() {
+    (int|string) x = get_hd_label(curr_cmds);
+
+    if (stringp(x))
+	return exec_error(x);
+
+    string label = curr_cmds[..x-1];	/* might be empty */
+    curr_cmds = curr_cmds[x+1..];
+
+    (array|string) y = get_stripped_cmd(curr_cmds);
+    if (stringp(y))
+	return exec_error(y);
+
+    push_if_used(y[1]);			/* following command (can be left off if empty) */
+
+    push_group(y[0]);			/* actual cmd can't be left off stack (we may jump to/past it) */
+    push_group(ctrle + "LS" + label);
+    curr_cmds = y[0];
+    }
+
+/*
+ * #<name: back_to.  Find a label on the stack,
+ * reexecute starting there.  Leaves label, etc, on stack.
+ */
+
+back_to() {
+    (int|string) x = get_hd_label(curr_cmds);
+    int was_ml = 0;
+
+    if (stringp(x))
+	return exec_error(x);
+
+    string label = curr_cmds[..x-1];
+    int y = index(group_stack, ctrle + "LS" + label, group_top);
+    if (y < 0) {
+	y = index(group_stack, ctrle + "ML" + label, group_top);
+	if (y > 0) {	/* won't be 0 */
+	    was_ml = 1;
+	    y--;
+	    }
+	}
+    if (y < 0) {			/* label not found */
+        curr_cmds = curr_cmds[x+1..];	/* strip error from curr_cmds */
+	return exec_error("back_to: label `" + label + "' not found");
+	}
+
+/* we simply discard curr_cmds and everything back to the label */
+
+    int sgs = sizeof(group_stack);
+
+    while (group_top < y) {
+	group_stack[group_top] = 0;
+	group_top++;
+	}
+
+    if (group_top < sgs - 2) {
+	if (was_ml) {
+            curr_cmds = group_stack[group_top];
+            group_stack[group_top++] = 0;
+	    }
+	else
+            curr_cmds = group_stack[y+1];
+	}
+    else
+	curr_cmds = 0;
+
+#ifndef FAST
+    did_a_cmd = 1;
+#endif
+    return 0;
+    }
+
+/*
+ * #>name: forward_past.  Like back_to, except clears the
+ * label (and group) from the stack, and works on ML labels.
+ */
+
+forward_past() {
+    (int|string) x = get_hd_label(curr_cmds);
+
+    if (stringp(x))
+	return exec_error(x);
+
+    string label = curr_cmds[..x-1];
+    int y = index(group_stack, ctrle + "LS" + label, group_top);
+    if (y < 0) {
+	y = index(group_stack, ctrle + "ML" + label, group_top);
+	if (y > 0)	/* won't be 0 */
+	    y--;	/* want to clear back to the label, not past it */
+	}
+    if (y < 0) {
+	curr_cmds = curr_cmds[x+1..];	/* for error recovery */
+	return exec_error("forward_past: label `" + label + "' not found");
+	}
+
+    int sgs = sizeof(group_stack);
+    y += 1;
+
+    if (y >= sgs)
+	y = sgs - 1;
+
+    while (group_top <= y) {	/* y is at label + 1 */
+	group_stack[group_top] = 0;
+	group_top++;
+	} /* should end up wiping to label, plus label itself, plus stored cmds */
+
+    if (group_top < sgs) {
+        curr_cmds = group_stack[group_top];
+	group_stack[group_top++] = 0;
+	}
+    else
+	curr_cmds = 0;
+
+    return 0;
+    }
+
+/*
+ * #>name: forward_replace.  Like forward_past, except replaces the
+ * label (and group) from the stack with the first cmd in current_cmds.
+ */
+
+forward_replace() {
+    (int|string) x = get_hd_label(curr_cmds);
+
+    if (stringp(x))
+	return exec_error(x);
+
+    string label = curr_cmds[..x-1];
+    int y = index(group_stack, ctrle + "LS" + label, group_top);
+    if (y < 0) {
+	y = index(group_stack, ctrle + "ML" + label, group_top);
+	if (y > 0)	/* won't be 0 */
+	    y--;	/* want to clear back to the label, not past it */
+	}
+    if (y < 0) {
+	curr_cmds = curr_cmds[x+1..];
+	return exec_error("forward_past: label `" + label + "' not found");
+	}
+
+    int sgs = sizeof(group_stack);
+    y += 1;
+
+    if (y >= sgs)
+	y = sgs - 1;
+
+    while (group_top <= y) {	/* clear to label and 1 past */
+	group_stack[group_top] = 0;
+	group_top++;
+	}
+
+    string cco = curr_cmds[x+1..];	/* our follower is the one given in the original cmds */
+
+    x = get_one_cmd(cco);
+    if (intp(x))
+	curr_cmds = cco[..x];
+    else
+	return exec_error(x);
+
+    return 0;
+    }
+
+/*
+ * Command registers.
+ */
+
+#if 0
+	ctrld + "C[",	"c_register_prepend",	/* prepend statements to s_reg */
+	ctrld + "C]",	"c_register_append",	/* append statements to s_reg */
+	ctrld + "C=",	"c_register_set",	/* set a string register */
+	ctrld + "CC",	"c_register_call",	/* create an executing group containing the s-reg contents */
+	ctrld + "CG",	"c_register_goto",	/* replace the current group by the s-reg contents */
+	ctrld + "CH",	"c_register_head",	/* remove the first command from the s-register and execute it */
+	ctrld + "CE",	"c_register_ifelse",
+#endif
+
+nosave array cmd_regs = ({ });
+
+int find_cmd_reg(string label) {
+    return index(cmd_regs, ctrle + label);
+    }
+
+int get_cmd_reg(string label) {
+    int x = index(cmd_regs, ctrle + label);
+    if (x < 0) {
+	cmd_regs = ({ ctrle + label, "" }) + cmd_regs;
+	return 0;
+	}
+    return x;
+    }
+
+query_register(string s) {
+    return get_cmd_reg(s);
+    }
+
+c_register_append() {
+    (int|string) x = get_hd_label(curr_cmds);
+
+    if (stringp(x))
+	return exec_error(x);
+
+    string label = curr_cmds[..x-1];
+    string cco = curr_cmds[x+1..];	/* our follower is the one given in the original cmds */
+
+    (array|string)C = get_stripped_cmd(cco);
+
+    if (stringp(C))
+	return exec_error(C);
+
+/* cco[..x] is command, cco[x+1..] is follower (curr_cmds) */
+    curr_cmds = C[1];
+    int y = get_cmd_reg(label);
+    if (y < 0) {
+	return exec_error("c_register_append: command register `" + label + "' not found");
+	}
+    cmd_regs[y+1] += ctrlb + C[0];
+    return 0;
+    }
+
+c_register_prepend() {
+    (int|string) x = get_hd_label(curr_cmds);
+
+    if (stringp(x))
+	return exec_error(x);
+
+    string label = curr_cmds[..x-1];
+    string cco = curr_cmds[x+1..];	/* our follower is the one given in the original cmds */
+
+    (array|string) C = get_stripped_cmd(cco);
+
+    if (stringp(C))
+	return exec_error(C);
+
+/* cco[..x] is command, cco[x+1..] is follower (curr_cmds) */
+    curr_cmds = C[1];
+    int y = get_cmd_reg(label);
+    if (y < 0) {
+	return exec_error("c_register_append: command register `" + label + "' not found");
+	}
+    cmd_regs[y+1] = C[0] + ctrlb + cmd_regs[y+1];
+    return 0;
+    }
+
+c_register_set() {
+    (int|string) x = get_hd_label(curr_cmds);
+
+    if (stringp(x))
+	return exec_error(x);
+
+    string label = curr_cmds[..x-1];
+    string cco = curr_cmds[x+1..];	/* our follower is the one given in the original cmds */
+
+    (string|array) C = get_stripped_cmd(cco);
+    if (stringp(C))
+	return exec_error(C);
+
+    curr_cmds = C[1];
+    int y = get_cmd_reg(label);
+    cmd_regs[y+1] = C[0];
+    return 0;
+    }
+
+c_register_call() {
+    (int|string) x = get_hd_label(curr_cmds);
+
+    if (stringp(x))
+	return exec_error(x);
+
+    string label = curr_cmds[..x-1];
+    curr_cmds = curr_cmds[x+1..];	/* our follower is the one given in the original cmds */
+    (string|int) y = push_if_used(curr_cmds);
+    curr_cmds = 0;
+    if (stringp(y))
+       return exec_error(y);
+
+    y = get_cmd_reg(label);
+    if (y < 0) {
+	return exec_error("c_register_call: command register `" + label + "' not found");
+	}
+    curr_cmds = cmd_regs[y+1];
+    return 0;
+    }
+
+c_register_head() {
+    (int|string) x = get_hd_label(curr_cmds);
+
+    if (stringp(x))
+	return exec_error(x);
+
+    string label = curr_cmds[..x-1];
+    curr_cmds = curr_cmds[x+1..];	/* our follower is the one given in the original cmds */
+    (string|int) y = push_if_used(curr_cmds);
+    curr_cmds = 0;
+    if (stringp(y))
+       return exec_error(y);
+
+    y = get_cmd_reg(label);
+    if (y < 0) {
+	return exec_error("c_register_call: command register `" + label + "' not found");
+	}
+    x = get_one_cmd(cmd_regs[y+1]);
+    if (stringp(x))
+	return exec_error(x);
+    curr_cmds = cmd_regs[y+1][..x];
+    cmd_regs[y+1] = cmd_regs[y+1][x+1..];
+    return 0;
+    }
+
+c_register_ifelse() {
+    (int|string) x = get_hd_label(curr_cmds);
+
+    if (stringp(x))
+	return exec_error(x);
+
+    string label = curr_cmds[..x-1];
+    curr_cmds = curr_cmds[x+1..];	/* our follower is the one given in the original cmds */
+    x = get_one_cmd(curr_cmds);
+    if (stringp(x))
+	return exec_error(x);
+    string cco = curr_cmds[x+1..];
+
+    (string|int) y = get_cmd_reg(label);
+    if (y < 0) {
+	return exec_error("c_register_call: command register `" + label + "' not found");
+	}
+    if (sizeof(cmd_regs[y+1])) {
+        x = get_one_cmd(cmd_regs[y+1]);
+        if (stringp(x))
+	    return exec_error(x);
+        (int|string)z = push_if_used(cco);
+        curr_cmds = cmd_regs[y+1][..x];
+        cmd_regs[y+1] = cmd_regs[y+1][x+1..];
+        if (stringp(z))
+           return exec_error(z);
+	}
+    return 0;
+    }
+
+
+
+/*
+ * Stack markers (^E commands).  These are interpreted as normal commands
+ * are, but shouldn't appear in a program (it turns out to be a bit faster
+ * to interpret them this way).  Curr_cmds is the string, with ^Ex stripped.
+ * The rest is on the stack.
+ */
+
+/*
+ * Found a label - strip it and its saved scope, returning to the
+ * continuation following.
+ */
+
+stacked_label() {
+    group_stack[group_top++] = 0;	/* kill the saved scope (jumpable statement) */
+    if (group_top < sizeof(group_stack)) {
+	curr_cmds = group_stack[group_top];	/* pick up the continuation */
+    	group_stack[group_top++] = 0;
+	}
+    else
+	curr_cmds = 0;
+    return;
+    }
+
+/*
+ * m-labels are like labels except they have no saved commands, and
+ * can be used to manipulate the comand stream _preceding_ them.
+ * you can't jump to them, etc - just use them as points into which
+ * commands may be inserted.
+ */
+
+stacked_c_register() {
+    if (group_top < sizeof(group_stack)) {
+	curr_cmds = group_stack[group_top];	/* pick up the continuation */
+    	group_stack[group_top++] = 0;
+	}
+    else
+	curr_cmds = 0;
+    return;
+    }
+
+/*
+ * Found a pause marker - stop again.
+ * Can really continue with a call to
+ * un_pause(), which discards the top
+ * pause from the stack (if any).
+ */
+
+stacked_pause() {
+    push_group(ctrle + "PS" + curr_cmds); /* save the time again */
+    did_a_cmd = 1;			  /* terminate exec loop */
+    unschedule_cmds();
+    /* curr_cmds = 0; */
+    }
+
+/*
+ * Command issued by un_pause.  Strip a pause marker off the top of the stack.
+ */
+
+stacked_pause_end() {
+    if (group_top < sizeof(group_stack)) {
+	if (group_stack[group_top][0..2] == (ctrle + "PS"))
+	    group_stack[group_top++] = 0;
+	}
+/*    curr_cmds = 0;	/* will fetch the next one */
+    }
+
+/*
+ * Repeat: will be count, scope, continuation on stack.
+ */
+
+stacked_repeat() {
+    int x = group_stack[group_top];		/* count is an int; no need to zero it */
+    if (x > 1) {
+	group_stack[group_top] = x - 1;		/* update the count */
+	x = push_group(ctrle + "*S" + curr_cmds);	/* replace the rept cmd (curr_cmds may have comments) */
+	curr_cmds = group_stack[group_top + 2];	/* get the loop scope again */
+#ifndef FAST
+        did_a_cmd = 1;	/* ensure we don't just spin in an empty loop */
+#endif
+	return x;
+	}
+/* otherwise, the loop ends */
+    group_stack[group_top + 1] = 0;	/* clean the inner scope string */
+    group_top += 3;			/* group_top now points past continuation */
+    if (group_top > sizeof(group_stack)) {
+	group_top = sizeof(group_stack);
+        curr_cmds = 0;
+	}
+    else {
+	curr_cmds = group_stack[group_top - 1];
+	group_stack[group_top - 1] = 0;
+	}
+    return;
+    }
+
+/*
+ * Repeat: place number and following cmd on stack, start
+ * executing command.
+ */
+
+repeat() {
+    (int|string) x = get_hd_label(curr_cmds);
+
+    if (stringp(x))
+	return exec_error(x);
+
+    string label = curr_cmds[..x-1];	/* might be empty */
+    curr_cmds = curr_cmds[x+1..];
+
+    (string|int) y = get_one_cmd(curr_cmds);
+    if (stringp(y))
+	return exec_error(y);
+    int z;
+    z = atoi(label);
+
+    if (z < 1) {	/* repeat 0 times */
+	curr_cmds = curr_cmds[y+1..];
+	return;
+	}
+
+    push_if_used(curr_cmds[y+1..]);	/* continuation: from after terminator onwards */
+    string nxt = curr_cmds[..y];	/* actual cmd: includes terminator */
+    push_group(nxt);
+    push_group(z);
+    push_group(ctrle + "*S" + label);
+    curr_cmds = nxt;			/* do the first one */
+    }
+
+/*
+ * Store and call programs (from the global dictionary).
+ * save_dict_stmt: #Sname:stmt
+ * call_dict_stmt: #Cname:
+ * erase_dict_stmt: #Ename:
+ * jump_dict_stmt: #Jname:
+ *
+ * Save places stmt into the global dictionary (as `name') without
+ * executing it.  Old entries are overwritten.
+ *
+ * The dictionary is saved in the player's store.
+ */
+
+save_dict_stmt() {
+    (int|string) x = get_hd_label(curr_cmds);
+
+    if (stringp(x))
+	return exec_error(x);
+
+    string label = curr_cmds[..x-1];	/* might be empty */
+    curr_cmds = curr_cmds[x+1..];
+
+    (string|int) y = get_one_cmd(curr_cmds);
+    if (stringp(y))
+	return exec_error(y);
+
+    string st = curr_cmds[..y];	/* actual cmd: includes terminator */
+    int z = index(programs, ctrle + label);
+
+    if (z < 0) {
+	z = index(programs, ctrle);
+	if (z < 0) {
+	    if (sizeof(programs) < MAX_PGM_SIZE) {
+		array nprg = allocate(PROGRAM_CHUNK);
+		int t;
+		for (t = sizeof(nprg)-2; t > 1; t = t - 2) {
+		    nprg[t] = ctrle;
+		    nprg[t+1] = 0;
+		    }
+		z = sizeof(programs);
+		programs = programs + nprg;
+		}
+	    else
+		return exec_error("Too many names in dictionary");
+	    }
+	}
+
+    programs[z] = ctrle + label;
+    programs[z+1] = st;
+    curr_cmds = curr_cmds[y+1..];
+    update();
+#ifndef FAST
+    did_a_cmd = 1;	/* probably don't need this one */
+#endif
+    }
+
+/*
+ * Erase an entry from the dictionary.
+ * It is not an error to erase a nonexistent entry.
+ */
+
+erase_dict_stmt() {
+    (int|string) x = get_hd_label(curr_cmds);
+
+    if (stringp(x))
+	return exec_error(x);
+
+    string label = curr_cmds[..x-1];	/* might be empty */
+    curr_cmds = curr_cmds[x+1..];
+
+    int z = index(programs, ctrle + label);
+
+    if (z < 0) {
+#if 0
+	return exec_error("Erase_dict: entry `" + label + "' not found");
+#else
+	return 0;
+#endif
+	}
+
+    programs[z] = ctrle;
+    programs[z+1] = 0;
+    update();
+#ifndef FAST
+    did_a_cmd = 1;	/* probably don't need this one */
+#endif
+    }
+
+/*
+ * Call a dictionary routine.  Arranges to save the
+ * routine's label, etc, in the same way as is done for #L,
+ * so that it can be jumped back to from within the routine.
+ * After running, control returns to just after the call.
+ */
+
+call_dict_stmt() {
+    (int|string) x = get_hd_label(curr_cmds);
+
+    if (stringp(x))
+	return exec_error(x);
+
+    string label = curr_cmds[..x-1];	/* might be empty */
+
+    int z = index(programs, ctrle + label);
+
+    if (z < 0)
+	return exec_error("Call_dict: entry `" + label + "' not found");
+
+    (string|int) y = push_if_used(curr_cmds[x+1..]);
+    if (stringp(y))
+       return exec_error(y);
+
+    curr_cmds = programs[z+1];
+    push_group(programs[z+1]);
+    push_group(ctrle + "LS" + label);
+#ifndef FAST
+    did_a_cmd = 1;	/* probably don't need this one */
+#endif
+    }
+
+/*
+ * This jump does *not* save the dictionary routine's
+ * label, etc, on the stack.  It discards current commands,
+ * replacing them with those in the dictionary.  Thus it is
+ * usable for, eg, finite state automata.
+ */
+
+jump_dict_stmt() {
+    (int|string) x = get_hd_label(curr_cmds);
+
+    if (stringp(x))
+	return exec_error(x);
+
+    string label = curr_cmds[..x-1];	/* might be empty */
+
+    int z = index(programs, ctrle + label);
+
+    if (z < 0)
+	return exec_error("Jump_dict: entry `" + label + "' not found");
+
+    curr_cmds = programs[z+1];
+#ifndef FAST
+    did_a_cmd = 1;	/* probably don't need this one */
+#endif
+    }
+
+/*
+ * Courtesy functions.
+ * Print a program.
+ */
+
+show_ind(i, s) {
+    if (i >= 0)
+        write("\n                                                   + "[..i*2+1]);
+    write(s);
+    }
+
+/* If indent is negative, it all goes on one line */
+show_program((string|int) p, int indent) {
+    if (indent < 0)
+	indent = (-100000); /* probably enough :) */
+    int i = indent;
+    if (intp(p)) {
+	write(" " + p + "\n");
+	return;
+	}
+    int sp = sizeof(p);
+    int x = 0;
+    int e = 0;
+
+    while (e < sp) {
+	string s = p[e..e];
+	e++;
+        int nca = index(p, ctrla, e); if (nca < 0) nca = sp;
+        int ncb = index(p, ctrlb, e); if (ncb < 0) ncb = sp;
+        int ncc = index(p, ctrlc, e); if (ncc < 0) ncc = sp;
+	if (ncc > nca) ncc = nca;
+	if (ncc > ncb) ncc = ncb;
+
+	if (s == ctrlb) {
+	    show_ind(i, "; ");
+	    }
+	else if (s == ctrla) {
+	    show_ind(i, "[");
+	    i++;
+	    }
+	else if (s == ctrlc) {
+	    i--;
+	    show_ind(i, "]");
+	    }
+	else if (s == ctrld) {
+	    show_ind(i, " #");
+	    }
+	else {
+	    write(p[e-1..ncc - 1]);
+	    e = ncc;
+	    }
+	}
+    if (i != indent)
+	write("\n*****WARNING: unbalanced groups*****\n");
+    }
+
+/****************** courtesy functions *********************/
+
+/*
+ * Show the top X entries of the stack.
+ */
+
+show_stack(int num) {
+    int x = group_top;
+    int y = sizeof(group_stack);
+
+    if (x < 0) x = 0; /* may have been a push error */
+
+    write("Stacked programs:\n");
+
+    while ((num > 0) && (x < y)) {
+	num--;
+	string s = group_stack[x++];
+	write(" (" + (y - x) + ") ");
+	if (s[..2] == ctrle + "ML") {
+	    write(" Mark " + s[3..] + "\n");
+	    continue;
+	    }
+	if (s[..2] == ctrle + "LS") {
+	    write(" Label " + s[3..] + " : ");
+	    continue;
+	    }
+	else if (s[..2] == ctrle + "*S") {
+	    write(" Repeat " + s[3..] + " (" + group_stack[x++] + " remaining) :");
+	    continue;
+	    }
+	else if (s[..2] == ctrle + "PS") {
+	    write(" Paused at " + s[3..] + " :\n");
+	    continue;
+	    }
+	else show_program(s, (-1));
+        write("\n-----------------------\n");
+	}
+    if (x < y) write ("(...)");
+    write("\n");
+}
+
+
+/*
+ * Show the current base execution state
+ */
+
+show_stats(s) {
+
+    ::show_stats(s);
+
+    if (!stringp(s))
+	s = "";
+
+    int f = index(s, "all") >= 0;
+    int lind = index(s, "long") < 0? -1: 0;
+    if (query_verb() == "stat")
+	f = 1;
+
+    write("Alias soul:\n  Stack space: " + sizeof(group_stack) + "; in use: " + (sizeof(group_stack) - group_top));
+    write("\nCall-out: " + find_call_out(EXEC_LOOP) + "\n");
+    if (f || (index(s, "curr") >= 0)) {
+        write("Current command:");
+        show_program(curr_cmds, lind);
+	}
+    if (f || (index(s, "stack") > 0))
+	show_stack(MAX_GS_SIZE + GROUP_CHUNK);
+    write("\n");
+    int x;
+    for (x = 0; x < sizeof(cmd_regs); x = x + 2) {
+	write(cmd_regs[x] + " ");
+	show_program(cmd_regs[x+1]);
+	}
+    write("Slice: " + current_slice + "	Speed: " + speeds[current_slice] + "	Const: " + constant_delay + "\n");
+    }
+
+/*
+ * finished_cmds(): called whenever the execution stack
+ * becomes empty or reaches a pause - no pending commands.  Doesn't disturb
+ * the stack or curr_cmds.
+ */
+
+finished_cmds() {
+    unschedule_cmds();	/* strip call outs, stop exec loop */
+    write("Done.\n");
+    }
+
+/*
+ * exec_error() - called with a string argument whenever
+ * an execution error is thrown.  Curr_cmds should have been
+ * stepped past the erroneous statement, stack should be undisturbed.
+ */
+
+exec_error(s) {
+    did_a_cmd = 1;	/* to make sure the exec loop terminates also */
+    if (!had_error) {
+        had_error = 1;
+	pause();
+        stat();
+	}
+    else
+        unschedule_cmds();	/* must have been a push.  Simply unschedule. */
+    tell_object(myself, "Execution error: " + s + "\n");
+    }
+
+/*
+ * pause() - should be called to pause execution until
+ * further notice.  Will put curr_commands on stack, and a pause
+ * marker (^EP) above it.
+ */
+
+pause() {
+    unschedule_cmds();	/* clean call outs, stop exec loop */
+    push_if_used(curr_cmds);
+    push_group(ctrle + "PS" + ctime(time()));
+    curr_cmds = 0;
+    }
+
+/*
+ * is_paused() - true if there is a pause marker on stack.
+ */
+
+is_paused() {
+    if (group_top < sizeof(group_stack)) {
+	if (group_stack[group_top][0..2] == (ctrle + "PS"))
+	    return 1;
+	}
+    return 0;
+    }
+
+/*
+ * pause_empty() - pauses execution if there are no commands following in
+ * the group.  Used primarily for a player's base command loop.
+ */
+
+pause_empty() {
+    unschedule_cmds();	/* clean call outs, stop exec loop */
+    push_if_used(curr_cmds);
+    push_group(ctrle + "PS" + ctime(time()));
+    curr_cmds = 0;
+    }
+
+/*
+ * un_pause() - strips a pause off the top of
+ * the stack (if there is one), and continues
+ * execution.  Note that pauses always appear
+ * by themselves (with comments) in a string.
+ * Throws away curr_cmds.
+ */
+
+un_pause() {
+    roll_back_time();
+    if (intp(curr_cmds))
+	curr_cmds = "";
+    curr_cmds = ctrle + "PE" + ctrlb + curr_cmds;
+    schedule_next_cmd(0);
+    }
+
+/*
+ * do_program(s) - called from outside, inserts
+ * s into current execution stream, returning to
+ * current program afterwards.
+ * To make sure it stops after this program, rather
+ * than simply continuing, call pause() first.
+ */
+
+do_program(s) 
+{
+    push_if_used(curr_cmds);
+    curr_cmds = s;
+    if (find_call_out(EXEC_LOOP) < 0) {
+	roll_back_time();
+	schedule_next_cmd(0);
+	}
+}
+
+/*
+ * do_cmd_array - perform a sequence of commands.
+ * optionally labels the sequence so that subsequent calls to
+ * add_program, label jumps, etc, will work.
+ */
+
+do_cmd_array(array a, (int|string) label) {
+    string s = make_cmd_group(a);
+    if (stringp(label))
+	s = ctrld + "SL" + label + ":" + s;
+    return do_program(s);
+    }
+
+/* sigh.  add a set of commands before or after a label (in one of the
+ * four standard places).  If the label doesn't exist, error.  The
+ * places are "[", "<", ">", "]" (start of group preceding label,
+ * just before label, just after label, at end of group after label).
+ */
+
+add_cmd_array(array a, string label, string where) {
+    string s = make_cmd_group(a);
+    s = ctrld + "S" + where + label + ":" + s;
+    return do_program(s);
+    }
+
+string make_cmd_group(array a) {
+    return ctrla + implode(a, ctrlb) + ctrlc;
+    }
+
+string add_cmd_prefix(string s) {
+    return ctrld + s;
+    }
+
+/*
+ * Test functions.
+ */
+
+test() {
+/* should give a recursion too deep error (after a while) */
+    string t1 = "DSdothings:l at skysmileyawnR*5:bounceleakDCdothings:snickerR*3:DCdothings:smile";
+    string t = "DSdothings:l at skysmileyawnR*5:bounceleakR*3:DCdothings:smile";
+    string t2 = "LMloop:smileL=loop:yawnL=loop:smilepuke"; /* should give an error */
+    string t3 = "LMloop:wL<loop:"; /* go west :) */
+    string t7 = "SLjj:S<jj:smileyawnpukespit"; /* go west :) */
+    string t6 = "R*3:R*5:eR*5:wsnicker";
+    show_program(t7);
+    do_program(t7);
+    }
+
+stat() { show_stats("all"); }
+
+query_dict() { return programs; }
+
+make_me_one() {
+       if (!is_cloned(this_object()))
+	   move_object(clone_object(file_name(this_object())), this_player());
+	else
+	   write("You're calling da clone, bubba\n");
+	}
+

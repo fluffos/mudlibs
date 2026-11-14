@@ -1,0 +1,116 @@
+/*
+ * Persistence - keeps track of the persistent ID of the object,
+ * and the savefile's expiry date (if it is never used or if a player
+ * never logs on).  The persistent ID is typically just the filename
+ * of the object.  Cloned objects must explicitly have their persistent
+ * IDs set if they are to be saved independently.  The expiry date is
+ * meaningless unless something checks it occasionally.
+ *
+ * NOTE: query_no_external_save in the object should be set up to
+ * ensure it is checkpointed.
+ */
+
+#include <security.h>
+
+string persistent_id;
+
+(string|int) query_persistent_id() {
+	if (stringp(persistent_id))
+		return persistent_id;
+	if (!is_cloned(this_object()))
+		return file_name(this_object());
+	return 0;
+	}
+
+(string|int) set_persistent_id(string s) {
+	if (!caller())
+		return;
+	if (query_su_level(caller()) < query_su_level(this_object()))
+		return;
+	if ((query_su_level(caller()) < GOD)
+		&& (query_su_name(caller()) != query_su_name(this_object())))
+			return;
+	persistent_id = s;
+	return;
+	}
+
+/*
+ * Called by servers that want to give us a savefile.
+ */
+
+persistent_internal_save(string savefile) {
+	if (!caller())
+		return;
+	if (query_su_level(caller()) < query_su_level(this_object()))
+		return;
+	if ((query_su_level(caller()) < GOD)
+		&& (query_su_name(caller()) != query_su_name(this_object())))
+			return;
+	save_object(savefile);
+	}
+
+persistent_internal_restore(string savefile) {
+	if (!caller())
+		return;
+	if (query_su_level(caller()) < query_su_level(this_object()))
+		return;
+	if ((query_su_level(caller()) < GOD)
+		&& (query_su_name(caller()) != query_su_name(this_object())))
+			return;
+	restore_object(savefile);
+	}
+
+persistent_internal_remove(string savefile) {
+	if (!caller())
+		return;
+	if (query_su_level(caller()) < query_su_level(this_object()))
+		return;
+	if ((query_su_level(caller()) < GOD)
+		&& (query_su_name(caller()) != query_su_name(this_object())))
+			return;
+	rm(savefile + ".o");
+	rm(savefile + ".o.bak");
+	}
+
+/*
+ * Absolute expiry times (stored as a unix timestamp).
+ * Originally for the vampire hacks (and other special-purpose npcs),
+ * but can also be used to record player expiry times (in the event that
+ * we start implementing things which write their savefile - and hence
+ * lose the timestamp - while they are away).  If it's used for players,
+ * we should probably just set their expiry timestamp whenever they save
+ * (assuming they are not time-limited players).
+ */
+
+int expiry_timestamp = 0;
+
+int query_savefile_expired() {
+	if (expiry_timestamp == 0)
+		return 0;
+	if (expiry_timestamp > time())
+		return 0;
+	return 1;
+}
+
+int query_expiry_timestamp() {
+	return expiry_timestamp;
+}
+
+int set_expiry_timestamp(int t) {
+	if (!caller())
+		return;
+	if (query_su_level(caller()) < query_su_level(this_object()))
+		return;
+	if ((query_su_level(caller()) < GOD)
+		&& (query_su_name(caller()) != query_su_name(this_object())))
+			return;
+	if (t == 0)
+		expiry_timestamp = 0;
+	else {
+		if (t < time() + 3600)
+			t += time();
+		expiry_timestamp = t;
+		}
+	return t;
+	}
+

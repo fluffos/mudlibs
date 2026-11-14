@@ -1,0 +1,129 @@
+#include "Servers.h"
+inherit "RO/base_object";
+
+int money;
+object creator;
+
+reset(arg) 
+{
+    if (arg) return;
+    money = 1;
+}
+
+
+query_auto_load() 
+{ 
+    return [ "closed/money", money ];
+}
+
+init_arg(int x)
+{
+    money = x;
+}
+
+get() { return 1; }
+
+query_weight() { return money/5000; }
+
+short() 
+{
+    int intel = 20;
+
+    if (money == 0) return 0;
+    if (money == 1) return "one gold coin";  
+    if (this_player())
+	intel = this_player()->query_int();
+    return NUMBERS_SERV->int_to_english(money, intel) + " gold coins";
+}
+
+query_short() { return short(); }
+
+long() { write(query_long()); }
+
+query_long() 
+{ 
+    if (money == 1) return "A solitairy gold coin.\n";
+    return "A heap of " + short() + ".\n";
+}
+
+/*
+ * If we are picked up by a player, then move the money to his "purse",
+ * and destruct this object.
+ */
+init() 
+{
+	object other;
+    if (environment())
+	{
+		if (living(environment(this_object()))) 
+        {
+			environment(this_object())->add_money(money, creator);
+			money = 0;
+			call_out("kill_me", 0.2);
+		} 
+        else 
+        {
+			other = present("money 2", environment());
+			if (other && other != this_object())
+			{
+				other->set_money(other->query_money()+money);
+				money = 0;
+				call_out("kill_me", 0.2);
+			}
+		}
+	}
+	return 1;
+}
+
+set_money(m) 
+{
+    if (m < 1) m = 0;
+    money = m;
+}
+
+set_owner(o) { creator = o; }
+query_owner() { return creator; }
+
+query_money() { return money; }
+query_value() { return money; }
+
+/*
+ *	A nasty hack so we can id any coins to a certain
+ *	number of coins (if the number is < the amt we have)
+ *
+ *	Dredd 1992.
+ */
+#define MAX_COINS 100000000
+id(str) 
+{
+    int l, x, succ;
+    object o;
+
+	if (str == "coin" || str == "coins" || str == "money") return 1;
+
+    succ = index(str, " coins");
+    if (succ == -1) succ = index(str, " gold");
+    if (succ == -1) succ = 0;
+
+    x = atoi(str);
+
+	if (succ && (x < money)) 
+    {
+		if (x < 0) x = 0;
+		if (x > MAX_COINS) x = MAX_COINS;
+        l = money - x;
+        o = MONEYER->make(l, creator);
+		o->mmm(environment());
+		money = x;
+		return 1;
+	}
+}
+
+mmm(o) { call_out("mmmm", 0.1, o); }
+mmmm(o) { move_object(this_object(), o); }
+
+kill_me() {
+    if (money < 1)
+	destruct(this_object());
+}
+

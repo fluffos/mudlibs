@@ -1,0 +1,643 @@
+/*
+ * Standard Weather Controlling Object on Shattered World.
+ * written by 
+ * Rhys (aka rendell@bruce.cs.monash.edu.au)
+ *
+ *o needs the appropriate interface in room.c to function.
+ */
+
+inherit "RO/Servers";
+
+#define SAVETIME 1800
+
+#define CLOUD 0
+#define PRECIPITATION 1
+#define HUMIDITY 2
+#define WIND 3
+#define TEMPERATURE 4
+#define NIGHT 5
+
+/*   
+    outdoorness    {none, indoors, indoors(windows), under cover, exposed}
+
+    cloud cover    {clear, light, heavy, overcast}
+    precipitation    {none, spitting, light, storm, thunder storm}
+    humidity    {none, fog, mist}
+    wind        {still, light, breezy, windy, strong wind, gale force}
+    temperature    {cold, chilly, temperate, warm, hot}
+    night    {day, night}
+*/
+
+int sky_cloud;
+int sky_precipitation;
+int sky_humidity;
+int sky_wind;
+int sky_temperature;
+int sky_night;
+
+
+/* show_stats added by Hunter of Shattered Worlds */
+show_stats() {
+	write(
+	"cloud        : "+sky_cloud+"\n"+
+	"precipitation: "+sky_precipitation+"\n"+
+	"humidity     : "+sky_humidity+"\n"+
+	"wind         : "+sky_wind+"\n"+
+	"temperature  : "+sky_temperature+"\n"+
+	"night        : "+sky_night+"\n"+
+	"\n");
+}
+
+reset(arg)
+{
+    if (arg) return;
+    restore_object("obj/weather"); 
+    dump();
+    if (CLOCK -> query_alarm (file_name(this_object()),"todays_weather") == -1)
+    	restart_clock();
+}
+
+dump()
+{
+    if (file_name(this_object()) == "obj/weather")
+	    save_object("obj/weather"); 
+    if (find_call_out("dump") <= 0)
+	call_out("dump", SAVETIME);
+}
+
+sky_query_long(arg, outdoors)
+{
+    string mess;
+
+    if (outdoors < 2)
+        return 0;
+    if ((arg == "sky") || (arg == "at sky") ||
+        ((outdoors == 2) && ((arg == "outdoors") || (arg == "outside"))))
+	{
+	    mess = desc_weather(outdoors);
+	    if (mess && mess != "")
+		tell_object(this_player(), capitalize(mess)+"\n");
+	}
+    else if ((arg == "sun") || (arg == "at sun"))
+        if (sky_night == 0)
+            tell_object(this_player(), "You now have sore eyes.\n");
+        else
+            tell_object(this_player(), "The sun has set!\n");
+    else if ((arg == "moon") || (arg == "at moon"))
+        tell_object(this_player(), moon(outdoors)+"\n");
+    else
+        return 0;
+    return 1;
+}
+
+
+query_sky_weather(outdoors)
+{
+    string mess;
+    if (outdoors) /* && (sky_precipitation || sky_humidity || sky_night)) */
+    {
+	    mess = desc_weather(outdoors);
+	    if (mess && mess != "")
+	        return capitalize(mess) + "\n";
+    }
+    return 0;
+}
+
+sky_query_weather(outdoors)
+{
+    string mess;
+    if (outdoors && (sky_precipitation || sky_humidity || sky_night))
+    {
+	mess = desc_weather(outdoors);
+	if (mess && mess != "")
+	    tell_object(this_player(), capitalize(mess)+"\n");
+    }
+}
+
+query_cloud() { return sky_cloud; }
+query_precipitation() { return sky_precipitation; }
+query_humidity() { return sky_humidity; }
+query_wind() { return sky_wind; }
+query_temperature() { return sky_temperature; }
+query_night() { return sky_night; }
+
+set_cloud(value)
+{
+    notify_people(CLOUD, value);
+    if (value >= 100)
+	CLOCK->add_alarm(CLOCK->query_abs_time()+15, this_object(), "set_cloud", value-100);
+    else
+	sky_cloud = value;
+}
+
+set_precipitation(value)
+{
+    notify_people(PRECIPITATION, value);
+    if (value >= 100)
+	CLOCK->add_alarm(CLOCK->query_abs_time()+15, this_object(), "set_precipitation", value-100);
+    else
+	sky_precipitation = value;
+}
+
+set_humidity(value)
+{
+    notify_people(HUMIDITY, value);
+    if (value >= 100)
+	CLOCK->add_alarm(CLOCK->query_abs_time()+15, this_object(), "set_humidity", value-100);
+    else
+	sky_humidity = value;
+}
+
+set_wind(value)
+{
+    notify_people(WIND, value);
+    if (value >= 100)
+	CLOCK->add_alarm(CLOCK->query_abs_time()+15, this_object(), "set_wind", value-100);
+    else
+	sky_wind = value;
+}
+
+set_temperature(value)
+{
+    notify_people(TEMPERATURE, value);
+    if (value >= 100)
+	CLOCK->add_alarm(CLOCK->query_abs_time()+15, this_object(), "set_temperature", value-100);
+    else
+	sky_temperature = value;
+}
+
+set_night(value)
+{
+    notify_people(NIGHT, value);
+    if (value >= 100)
+	CLOCK->add_alarm(CLOCK->query_abs_time()+15, this_object(), "set_night", value-100);
+    else
+	sky_night = value;
+}
+
+notify_people(weather_type, value)
+{
+    int i;
+    array user_arr;
+    string thing;
+
+    user_arr = users();
+    for (i = 0; i < sizeof(user_arr); i++)
+    {
+        if (environment(user_arr[i]) &&
+		environment(user_arr[i])->query_weather_obj() == this_object())
+	{
+	  if (!user_arr[i]->query_caution()) 
+	    { /* no weather for busy people - i.e. don't hassle editing wizzes */ 
+		thing=environment(user_arr[i])->sky_change_weather(weather_type, value);
+		if (thing && thing != "" && thing != "0")
+		    tell_object(user_arr[i], thing);
+	    }
+	}
+    }
+}
+
+query_sky_visible(outdoors) /* 0 = none, 1 = clouds, 2 = sky */
+{
+    if (outdoors <= 1 || sky_humidity) return 0;
+    else if (sky_precipitation == 4)
+    {
+	if (sky_temperature == 0) return 0;
+	else return 1;
+    }
+    else if (sky_cloud == 3) return 1;
+    else return 2;
+}
+
+desc_weather(outdoors)
+{
+    array sky;
+    int pos, visible;
+
+    sky = allocate(15);
+    for (pos = 0; pos < sizeof(sky); pos++)
+	sky[pos] = "";
+    pos = 2;
+    if (outdoors == 0)
+        return 0;
+    if (outdoors == 1)
+	if (sky_precipitation)
+	    return roof_precip();
+	else
+	    return 0;
+    visible = query_sky_visible(outdoors);
+    if (sky_humidity)
+        if (sky_precipitation)
+	{
+	    sky[pos++] = humidity();
+	    sky[pos++] = "  ";
+	    sky[pos++] = capitalize(precip());
+	    if (sky_precipitation != 4 || sky_temperature != 0)
+	    sky[pos++] = "bove.";
+	}
+        else
+            sky[pos++] = humidity();
+    else
+    {
+	sky[pos++] = precip();
+	if (visible)
+	{
+	    sky[pos++] = " ";
+	    sky[pos++] = temp();
+	    sky[pos++] = wind1();
+	    sky[pos++] = cloud();
+	    sky[pos++] = wind2();
+	}
+	else
+	    sky[pos++] = wind2();
+    }
+    if (outdoors == 2 && sky_precipitation)
+    {
+	sky[0] = roof_precip();
+	sky[1] = "  Outside, ";
+    }
+    else
+    {
+	if (outdoors == 2)
+	    sky[0] = "outside, ";
+	if (visible == 2 && sky_night)
+	{
+	    sky[pos++] = "  ";
+	    sky[pos++] = moon(outdoors);
+	}
+    }
+    return implode(sky, "");
+}
+
+cloud()
+{
+    string night;
+
+    if (sky_night)
+        night = " night ";
+    else
+        night = " ";
+    if (sky_cloud == 0)
+        return "clear"+night+"sky.";
+    else if (sky_cloud == 1)
+        return "lightly clouded"+night+"sky.";
+    else if (sky_cloud == 2)
+        return "cloudy"+night+"sky.";
+    else if (sky_cloud == 3)
+        return "heavily clouded"+night+"sky.";
+}
+
+temp()
+{
+    if (sky_precipitation < 2)
+    {
+        if (sky_temperature == 0)
+            return "cold, ";
+        else if (sky_temperature == 1)
+            return "chilly, ";
+        else if (sky_temperature == 2)
+            return "";
+        else if (sky_temperature == 3)
+            return "warm, ";
+        else if (sky_temperature == 4)
+            return "hot, ";
+    }
+    else
+        return "";
+}
+
+roof_precip()
+{
+    if ((sky_precipitation == 1) && (sky_temperature == 1))
+        return "occasional thuds sound from above.";
+    else if ((sky_precipitation == 2) && (sky_temperature == 1))
+        return "thuds sound from above.";
+    else if ((sky_precipitation == 2) && (sky_temperature > 1))
+        return "there is pattering from above.";
+    else if ((sky_precipitation > 2) && (sky_temperature > 0))
+        return "a continuous drumming noise sounds from above.";
+    else return "";
+}
+
+precip()
+{
+    if (sky_precipitation == 0)
+    {
+        if (sky_temperature == 0)
+            return "above is a";
+        else if (sky_temperature == 1)
+            return "above is a";
+        else if (sky_temperature == 2)
+            return "above is a";
+        else if (sky_temperature == 3)
+            return "above is a";
+        else if (sky_temperature == 4)
+            return "above is a";
+    }
+    else if (sky_precipitation == 1)
+    {
+        if (sky_temperature == 0)
+            return "occasional snow flakes drift down from a";
+        else if (sky_temperature == 1)
+            return "occasional hail stones fall from a";
+        else if (sky_temperature == 2)
+            return "it is lightly spitting from a";
+        else if (sky_temperature == 3)
+            return "it is lightly spitting from a";
+        else if (sky_temperature == 4)
+            return "it is lightly spitting from a";
+    }
+    else if (sky_precipitation == 2)
+    {
+        if (sky_temperature == 0)
+            return "a light snow falls from a";
+        else if (sky_temperature == 1)
+            return "hail stones fall from a";
+        else if (sky_temperature == 2)
+            return "rain falls from a";
+        else if (sky_temperature == 3)
+            return "warm rain falls from a";
+        else if (sky_temperature == 4)
+            return "hot rain falls from a";
+    }
+    else if (sky_precipitation == 3)
+    {
+        if (sky_temperature == 0)
+            return "snow falls from a";
+        else if (sky_temperature == 1)
+            return "rain and hail drums down from a";
+        else if (sky_temperature == 2)
+            return "rain drums the ground from a";
+        else if (sky_temperature == 3)
+            return "warm rain drums the ground from a";
+        else if (sky_temperature == 4)
+            return "hot rain drums the ground from a";
+    }
+    else if (sky_precipitation == 4)
+    {
+        if (sky_temperature == 0)
+            if (sky_wind > 3)
+            	return "a freezing blizzard obscures sight.";
+	    else
+            	return "snow fills the air, obscuring sight.";
+        else if (sky_temperature == 1)
+            return "sleet pours down from a";
+        else if (sky_temperature == 2)
+            return "torrential rain pours down from a";
+        else if (sky_temperature == 3)
+            return "hot torrential rain pours down from a";
+        else if (sky_temperature == 4)
+            return "steaming torrential rain pours down from a";
+    }
+    return "";
+}
+
+humidity()
+{
+    if (sky_humidity == 1)
+        return "a light mist dims sight.";
+    else if (sky_humidity == 2)
+        return "a heavy fog obscures sight.";
+    return "";
+}
+
+wind1()
+{
+    if (sky_wind == 0)
+        return "still, ";
+    else if (!sky_cloud)
+	return ""; /* can't see a 'roiling, clear sky' :) */
+    else if ((sky_wind == 1) || (sky_wind == 2))
+        return "slowly moving, ";
+    else if (sky_wind == 3)
+        return "moving, ";
+    else if (sky_wind == 4)
+        return "roiling, ";
+    else if (sky_wind == 5)
+        return "racing, ";
+    return "";
+}
+
+wind2()
+{
+    if (sky_wind == 0)
+        return "";
+    else if (sky_wind == 1)
+        return "  A gentle breeze stirs the air.";
+    else if (sky_wind == 2)
+        return "  A light wind stirs the air.";
+    else if (sky_wind == 3)
+        return "  There is a brisk wind.";
+    else if (sky_wind == 4)
+        return "  A strong wind is rushing past.";
+    else if (sky_wind == 5)
+        return "  A gale force wind tears the air.";
+    return "";
+}
+
+moon(outdoors)
+{
+    if (!CLOCK)
+        return "";
+    if (query_sky_visible(outdoors) == 2 && CLOCK->query_moon() != "new")
+        return "A "+CLOCK->query_moon()+" moon hangs in the sky.";
+    else
+        return "The moon is not visible.";
+}
+
+restart_clock() { call_out("todays_weather",0);
+}
+
+todays_weather()
+{
+    int dawn, dusk, mean_temp, cool_change, warm_change, humid, precip;
+    int new_wind, change, new_cloud;
+    int latest_fog, event_time, other;
+    int HOURS = CLOCK -> hours_in_day(), MINUTES = CLOCK -> minutes_in_hour();
+    string season,date; 
+
+	  if (CLOCK -> query_alarm ("obj/weather","todays_weather") != -1) return;
+    season = CLOCK->query_season();
+    if (season == "summer")
+    {
+        dawn = CLOCK -> convert_hours_minutes (5,0); /* 5 hours */
+        dusk = CLOCK -> convert_hours_minutes (21,0); /* 21 hours */
+        mean_temp = 3;
+        cool_change = 2;
+        warm_change = 4;
+        humid = 0;
+        precip = -1;
+    }
+    else if (season == "winter")
+    {
+        dawn = CLOCK -> convert_hours_minutes (7,0); 
+        dusk = CLOCK -> convert_hours_minutes (19,0); 
+        mean_temp = 1;
+        cool_change = 5;
+        warm_change = 2;
+        humid = 2;
+        precip = 1;
+    }
+    else
+    {
+        dawn = CLOCK -> convert_hours_minutes (6,0);
+        dusk = CLOCK -> convert_hours_minutes (20,0);
+        mean_temp = 2;
+        if (season == "autumn")
+        {
+            cool_change = 5;
+            warm_change = 5;
+        }
+        else
+        {
+            cool_change = 2;
+            warm_change = 2;
+        }
+        humid = 1;
+        precip = 0;
+    }
+    CLOCK->add_alarm(dawn + time (), this_object(), "set_night", 300);
+    CLOCK->add_alarm(dusk + time (), this_object(), "set_night", 301);
+    /* determine the day's wind change :) */
+    event_time = CLOCK -> convert_hours_minutes(random(HOURS),random(MINUTES));
+    new_wind = random(15);
+    if (new_wind < 3)
+	new_wind = 0;
+    else if (new_wind < 6)
+	new_wind = 1;
+    else if (new_wind < 10)
+	new_wind = 2;
+    else if (new_wind < 13)
+	new_wind = 3;
+    else if (new_wind < 15)
+	new_wind = 4;
+    else
+	new_wind = 5;
+    if (new_wind != sky_wind)
+	CLOCK->add_alarm(event_time + time(), this_object(), "set_wind", new_wind+100);
+    /* determine if it will be a still morning for fog/mist */
+    latest_fog = 24*MINUTES;
+    if (event_time > dawn) /* wind change comes after dawn */
+    {
+	if (!sky_wind && new_wind) /* if wind change is from still -> not */
+	    latest_fog = event_time;
+	else if (sky_wind) /* else if wind will be going at dawn time */
+	    latest_fog = 0;
+    }
+    else if (new_wind) /* wind change comes before dawn, and it'll be windy */
+	latest_fog = 0;
+    /* determine if there is a cool/warm change today */
+    change = 0;
+    if (sky_temperature == mean_temp)
+    {
+	if (random(10) < cool_change)
+	    change = -1;
+    }
+    else if (sky_temperature == mean_temp-1)
+    {
+	if (random(10) < warm_change)
+	    change = 1;
+    }
+    else
+	change = mean_temp - sky_temperature;
+    if (change)
+  event_time = CLOCK -> convert_hours_minutes(random(HOURS),random(MINUTES));
+    else
+	event_time = -1;
+    /* other = the time that it warms up after the sun rises */
+    other = dawn + random(4-mean_temp)*MINUTES+random(MINUTES);
+    if (other > event_time) /* change occurs before morning warming */
+    {
+	if (event_time > 0)
+	    CLOCK->add_alarm(event_time + time(), this_object(), "set_temperature",
+		sky_temperature+change+100);
+	CLOCK->add_alarm(other + time(), this_object(), "set_temperature",
+	    sky_temperature+change+101);
+	if (sky_temperature+change >= 2)
+	    latest_fog = 0; /* too warm for a fog */
+	else if (latest_fog > other && sky_temperature+change+1 >= 2)
+	    latest_fog = other; /* fog burned off by the morning sun */
+	/* other = time it cools off after the sun sets */
+	other = dusk+ CLOCK -> convert_hours_minutes(0,random(mean_temp)+random(MINUTES));
+	CLOCK->add_alarm(other + time(), this_object(), "set_temperature",
+	    sky_temperature+change+100);
+    }
+    else /* change occurs after morning warming... */
+    {
+	CLOCK->add_alarm(other + time(), this_object(), "set_temperature",
+	    sky_temperature+101);
+	/* other = time it cools off after the sun sets */
+	other = dusk+ CLOCK -> convert_hours_minutes(0,random(mean_temp)+random(MINUTES));
+	if (other > event_time) /* ...but before dusk cooling */
+	{
+	    if (sky_temperature+1 >= 2)
+		latest_fog = 0; /* too warm for a fog */
+	    else if (latest_fog > event_time && sky_temperature+change+1 >= 2)
+		latest_fog = event_time; /* burned off by the change */
+	    CLOCK->add_alarm(event_time + time(), this_object(), "set_temperature",
+		sky_temperature+change+101);
+	    CLOCK->add_alarm(other + time(), this_object(), "set_temperature",
+		sky_temperature+change+100);
+	}
+	else /* ...and after dusk cooling*/
+	{
+	    if (sky_temperature+1 >= 2)
+		latest_fog = 0; /* too warm for a fog */
+	    CLOCK->add_alarm(other + time(), this_object(), "set_temperature",
+		sky_temperature+100);
+	    CLOCK->add_alarm(event_time + time(), this_object(), "set_temperature",
+		sky_temperature+change+100);
+	}
+    }
+    if (latest_fog) /* a fog decends on cold still mornings */
+    {
+	CLOCK->add_alarm(dawn-15 + time(), this_object(), "set_humidity", humid+100);
+	/* determine time the fog lifts */
+	other = dawn + CLOCK -> convert_hours_minutes (0,random(3)+random(MINUTES));
+	if (other > latest_fog)
+	    other = latest_fog;
+	CLOCK->add_alarm(other + time(), this_object(), "set_humidity", 100);
+    }
+    if (change == -1 && random(2)) /* 50% chance of rain after a cool change */
+    {
+        new_cloud = 2+random(2);
+        if (new_cloud < sky_cloud)
+            new_cloud = sky_cloud;
+	CLOCK->add_alarm(event_time+random(10) + time(), this_object(),
+	    "set_cloud", 100+new_cloud);
+        precip += 2 + random(3);
+        if (precip > 4)
+            precip = 4;
+        if (precip < sky_precipitation)
+            precip = sky_precipitation;
+        if (precip > new_cloud+1)
+            precip = new_cloud+1;
+	CLOCK->add_alarm(event_time + 10 + random(10) + time(), this_object(),
+	    "set_precipitation", 100+precip);
+	CLOCK->add_alarm(event_time  + time()+
+	    CLOCK -> convert_hours_minutes(0,(random(9-mean_temp)+1)+random(MINUTES)),
+	    this_object(), "set_precipitation", 100);
+    }
+    else
+    {
+        event_time = CLOCK -> convert_hours_minutes(random(HOURS),random(MINUTES));
+	new_cloud = random(4);
+	CLOCK->add_alarm(event_time+random(10) + time(), this_object(),
+	    "set_cloud", 100+new_cloud);
+	if (new_cloud)
+	{
+	    precip += random(5);
+	    if (precip > 4) precip = 4;
+	    if (precip < 0) precip = 0;
+	    if (precip > new_cloud+1) precip = new_cloud+1;
+	    CLOCK->add_alarm(event_time + 10 + random(10) + time(), this_object(),
+		"set_precipitation", 100+precip);
+	    CLOCK->add_alarm(event_time  + time()+
+	  CLOCK -> convert_hours_minutes(0,(random(9-mean_temp)+1)+random(MINUTES)),
+		this_object(), "set_precipitation", 100);
+	}
+    }
+    date = CLOCK -> query_date();
+    date = date[index(date,'/')..];
+    CLOCK->add_alarm("00:00 "+(CLOCK->query_day() +1) +date,this_object(), "todays_weather", 0);
+}

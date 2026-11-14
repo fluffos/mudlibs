@@ -1,0 +1,135 @@
+/*
+ * Standard autosave server - for objects which don't
+ * change too often, but which have to be saved in the
+ * event of a game shutdown (we try to organise to spread
+ * disk access around as well).
+ *
+ * Objects should call set_auto_save(object) whenever their
+ * (important, saveable) state changes.  They will be
+ * called back (to ob->save_me) within some time (currently
+ * within 10 minutes), or when the game shuts down.  save_me(0)
+ * for a normal autosave, save_me(1) for a `shutdown soon' autosave.
+ *
+ * There is also a set_auto_call(ob, func, maxtime) for objects that
+ * want leisurely callbacks to particular functions (things that
+ * need to be done "eventually", but not urgently) - the network
+ * stuff uses this.  This will never have more than one pending
+ * call per obj/func, and so is useful for preventing spamming.
+ */
+
+inherit "RO/Servers";
+
+#define	MAX_SAVE_TIME	(10*60)
+#define	MIN_SAVE_TIME	30
+
+nosave int curr_save_time = MAX_SAVE_TIME;
+nosave array saveobjs = ({ });
+nosave array cbobjs = ({ });
+
+reset(a) {
+    if (!a)
+	saveobjs = ({ });
+    call_out("save_me", MIN_SAVE_TIME);
+}
+
+query_saveobjs() {
+	return saveobjs + ({ });
+	}
+
+show_stats() {
+    int x = 0;
+    while (x < sizeof(saveobjs)) {
+	  write(ctime(saveobjs[x+1]) + " : " + file_name(saveobjs[x]) + "\n");
+	  x += 2;
+	}
+	x=0;
+    while (x < sizeof(cbobjs)) {
+	  write(ctime(cbobjs[x+2]) + " : " + file_name(cbobjs[x]) + "\n");
+	  x += 3;
+	}
+    }
+
+set_auto_call(object ob, string func, int secs) {
+    int x = (-1);
+    if (secs < 1)
+	secs = 1;
+    int t = time() + secs;
+
+    do {
+	x = index(cbobjs, ob, x+1);
+	if (x >= 0 && cbobjs[x+1] == func)
+	    return;
+    } while (x >= 0);
+/*
+ * Find somewhere to put it
+ */
+    for (x = 0; x < sizeof(cbobjs); x += 3) {
+	if (cbobjs[x+2] > t) {
+	    cbobjs = cbobjs[..x-1] + ({ ob, func, t }) + cbobjs[x..];
+	    return;
+	    }
+	}
+    cbobjs = cbobjs + ({ ob, func, t });
+    return;
+}
+
+set_auto_save(object ob) {
+    if (index(saveobjs, ob) < 0) {
+	/* catch { tell_object(find_player("gandalf"), "Will save: " + file_name(ob)); } ; */
+        saveobjs = saveobjs + ({ ob, time() });
+	}
+    return 0;
+    }
+
+save_me(int final) 
+{
+    int x, y;
+    if (!saveobjs) saveobjs = ({ });
+    call_out("save_me", MIN_SAVE_TIME);
+    y = sizeof(saveobjs) -1;
+    for (x=0; x<y; x += 2) {
+	if (final || (saveobjs[x+1] < time() - curr_save_time)) {
+	    if (objectp(saveobjs[x])) {
+/*catch { tell_object(find_player("dredd"), "Saving: " + file_name(saveobjs[x])); } ;  */
+		catch { saveobjs[x]->save_me(final); };
+		}
+	    }
+	else
+	    break;
+	}
+    if (final)
+    saveobjs = saveobjs[x..];
+
+    for (x=0; x<sizeof(cbobjs); x += 3) {
+	if (final || (cbobjs[x+2] < time())) {
+	    if (objectp(cbobjs[x])) {
+		catch { cbobjs[x]->(cbobjs[x+1])(final); };
+		}
+	    }
+	else
+	    break;
+	}
+    cbobjs = cbobjs[x..];
+}
+
+/*
+ * Includes an NPC saver hack..
+ */
+cut_save_time() 
+{
+    curr_save_time = 0;
+    save_me(0);
+}
+
+nosave int savenpcs = 0;
+#define LOOT_TIME 60
+
+inside(int sec)
+{
+    if (sec < LOOT_TIME && !savenpcs)
+    {
+        savenpcs = 1;
+        NPC_SERV->save_me(1);
+    }
+}
+

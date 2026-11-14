@@ -1,0 +1,473 @@
+inherit "std/object";
+
+#define DECAY 240
+#define VIRUS_CHANCE	5	/* % of decaying corpses that realease a virus */
+#define TD(x) catch tell_object(find_player("dredd"), "corpse: "+x+"\n");
+
+/*
+	- This is a decaying corpse, created when monsters die. 
+	  It was re-written by Heroic to use /std/object 
+	- "WAS" variables added by Paladin 950221, so we can show some orig
+   	  stats of the living monster, if anyone can do it better tell me.
+   	  Note: I need body_was, as body doesnt not detail abilities 
+	- 950305: Ormuzd, added set_level() and query_level()
+	- 981111: Jenna, added decay_away() callback and fun, so that when
+		  corpses are "consumed by maggots", there is a chance that
+		  they will release a random virus (which has a chance of
+		  infecting all present living things).
+	- 991113: Jenna, changed some capitalization
+	- 991210: Jenna, made dismember() check for missing body parts 
+	- 000210: Jenna, fixed ID stuff when severing bits from corpses
+	- 001006: Jenna, fixed "skin" command
+	- 010617: Zaphoid, Decay now gives a message based on env medium
+	- 010812: Hydro, "skin" added skin size.
+*/ 
+
+int size,sum_of_bits, sp_was;
+string name,lord_id,name_id,descriptor;
+array missing,body,body_hp, body_was;
+int is_player_corpse;
+string race, race_was, killed_by, name_was;
+int level, size_was;
+
+// Used by Vorr for harvesting body parts from corpses
+// 2001/08/08 Rattcherryh
+int gi_con = 0;
+int gi_dex = 0;
+int gi_siz = 0;
+int gi_str = 0;
+
+reset(arg) 
+{
+	::reset(arg);
+	if(arg) return;
+	if (!is_cloned(this_object())) return; /* G */
+	missing = [ ];
+	set_corpse_name("no-one");
+	set_id(["corpse","remains"]);
+	add_property("decay", file_name(this_object()) + ":decay_away",DECAY*2);
+	/* add_property("prevent_insert","The corpse is too big.\n");  Should be dependant on size! */
+	add_property("search"); 
+}
+
+query_decay() {
+	if (find_call_out("decay") > DECAY) return 2;
+	return 1; }
+
+init() {
+	::init(); 
+	add_action("chop","hack");
+	add_action("chop","cut");
+	add_action("chop","chop");
+	add_action("chop","remove");
+	add_action("dismember","dismember");
+    add_action("skin", "skin");
+}
+
+/* Called when the corpse is getting setup this is our last chance at
+   accessing the creator monster statistics */
+set_corpse_name(str) 
+{
+    object creator;
+
+	name = str;
+	creator = caller();
+
+	if(creator && living(creator)) 
+    {
+	  if(stringp(creator->short()))
+	    lord_id = lower_case(creator->short());
+	  if(stringp(creator->query_real_name()))
+	    name_id = creator->query_real_name();
+	  if(creator->query_attack())
+	    killed_by=(creator->query_attack())->query_name();
+	  body_was = creator->query_body();
+	  level = creator->query_level();
+	  sp_was = creator->max_sp();
+	  size_was = creator->query_siz();
+	  name_was = creator->query_name();
+	  race_was = creator->query_std_mon_type();
+    }
+
+    if (creator && !name_id) /* ie creator is a corpse */
+            name_id = creator->query_name_id();
+
+// Used by Vorr for harvesting body parts from corpses
+// 2001/08/08 Rattcherryh
+    if (creator)
+    {
+      set_race(creator->query_std_mon_type());
+      set_con(creator->query_con());
+      set_dex(creator->query_dex());
+      set_siz(creator->query_siz());
+      set_str(creator->query_str());
+    }
+
+	set_body(MONSTERER->body("biped"));
+	set_size(3);
+}
+
+short() 
+{
+	if (!find_property("decay"))
+		return ::short();
+	if (find_property("hidden")) /* Stupid hack because this stupid */
+		return; 	     /* thing turns "" into 0 - Jenna 95 */ 	
+	return (query_property("decay")[2]<DECAY?"decayed ":"")+::short(); 
+}
+
+query_long() 
+{
+string ret;
+int i;
+	ret = "";
+	ret +=("This is the "+descriptor+" of "+name+
+	   ".\n It is possible to chop parts off it.\n");
+	if (!find_property("decay") ) return ret;
+	if (query_property("decay")[2]<DECAY)
+		ret +=("It is starting to decay pretty badly.\n");
+	if(sizeof(missing)) {
+		ret +=("It is missing its ");
+		if(sizeof(missing)>1) {
+			ret +=(implode(missing[0..sizeof(missing)-2])
+				,", ");
+			ret +=(" and ");
+		}
+		ret+=(missing[sizeof(missing)-1]+".\n");
+	}
+	return ret; 
+}
+
+search(arg) 
+{
+    /* Jenna Feb 95 */
+	if (arg && id(arg)) 
+    {	
+		string sh;
+		sh = LOOK->query_contents_look(this_object(),this_player());
+		if (!sh || sh == "") write ("You find nothing.\n");
+		else write ("You see " +sh);
+		return 1;
+	}
+	return 0; 
+}
+
+set_body(bod,bod_hp) 
+{
+	int i,sz,tm,tm1;
+
+	if(bod && !pointerp(bod)) 
+    {
+        array allargs = explode(bod, " ");
+		body=[bod,1];
+		set_id([bod,bod+" of "+lower_case(name),
+			     bod+" of "+lord_id,
+			     bod+" of "+name_id,
+			     "body_part"]);
+        if (allargs && sizeof(allargs) > 1) add_id(allargs[sizeof(allargs)-1]);
+		set_short(bod);
+		if(bod=="head") set_short("head of "+ name);
+		descriptor=bod;
+	} 
+    else 
+    {
+		body=bod+[];
+		descriptor="corpse";
+		set_id(["corpse","remains","corpse of "+lower_case(name),
+				"remains of "+lower_case(name), "corpse of "+name_id,
+				"remains of "+name_id,
+				"corpse of "+lord_id,"remains of "+lord_id]);
+		set_short("corpse of "+ name); 
+    }
+	sum_of_bits=0;
+	for(i=1;i<sizeof(body);i+=2) 
+    {
+		if(stringp(body[i]))
+        {
+			sz = atoi(body[i]);
+			body[i] = sz;
+        }
+		sum_of_bits += body[i]; 
+    }
+	body_hp=bod_hp;
+	if(!body_hp) body_hp=allocate(sizeof(body));
+	else 
+    {
+        for(i=0;i<sizeof(body_hp);i+=2)
+ 	    if(body_hp[i+1] == "severed" || body_hp[i+1] == "imploded")
+            {
+		missing += [body[i]];
+		tm += body[i+1]; 
+            }
+    }
+	set_weight(query_size()/3*(sum_of_bits-tm)/sum_of_bits); 
+}
+
+/*
+** Get a limb if we have a partial match (ie. leg instead of left leg)
+*/
+string get_bit(string what)
+{
+    int x, i;
+    if (!what) return;
+    if (!body) return;
+    for (x = 0; x < sizeof(body); x += 2)
+    {
+        i = index(body[x], what);
+        if (i != -1) return body[x];
+    }
+    return 0;
+}
+
+chop(str) 
+{
+	string bit,how,meat;
+    array allargs;
+
+	if (!stringp(str)) return 0;
+	notify_fail("chop <limb> from corpse.\n");
+
+    allargs = STRINGS->split_first(str, " from ");
+    if (!allargs || sizeof(allargs) != 2)
+        allargs = STRINGS->split_first(str, " off ");
+    if (!allargs || sizeof(allargs) != 2)
+    {
+			notify_fail(query_verb()+" what from what?\n");
+			return 0; 
+    }
+    if (!this_player()->can_cut()) /* no cut weapon */
+    {
+	write("You need to wield something sharp to do that!\n");
+	return 1;
+    }
+    bit = get_bit(allargs[0]);
+    meat = allargs[1];
+	if (!id(meat) || !bit) return 0;
+	if (!sever_limb(bit))
+    {
+		write("This corpse doesn't have a "+bit+" any more.\n");
+    }
+	else 
+    {
+		write("You "+query_verb()+" the "+bit+" from the corpse.\n");
+		say(implode([this_player()->query_name(),query_verb()+"s","the",bit,"from the corpse.\n"]," ")); 
+    }
+	if(sizeof(body)/2==sizeof(missing)) destruct(this_object());
+	return 1; 
+}
+
+dismember(str) 
+{
+	int i;
+	if (!id(str)) return;
+	if (sizeof(body)==2) 
+    {
+		notify_fail("This "+descriptor+" is already pretty dismembered.\n");
+		return; 
+    }
+    if (!this_player()->can_cut()) /* no cut weapon */
+    {
+        write("You need to wield something sharp to do that!\n");
+        return 1;
+    }
+
+	MISC_LIB  -> transfer_all (this_object (),environment(this_object()));
+	for(i=0;i<sizeof(body);i+=2)
+		if (random(3)) sever_limb(body[i]);
+	write("You chop the "+descriptor+" into its component bits, wrecking some in the process!\n");
+	say(this_player()->query_name()+" hacks a "+descriptor+" into pieces.\n");
+	destruct(this_object());
+	return 1; 
+}
+
+sever_limb(bit) 
+{
+	object obj;
+	int sz,i;
+
+	i=index(body,bit);
+	if(i<0) return 0;
+	if(body_hp[i]=="severed") return 0;
+	if(index(missing, bit) != -1) return 0;  /* Jenna Dec 99 */
+	sz=size*body[i+1]/sum_of_bits;
+	body_hp[i]="severed";
+	missing += [bit];
+    if (bit != "head")
+    {
+	    obj=clone_object("obj/corpse");
+    }
+    else
+    {
+	    obj=clone_object("obj/ball");
+    }
+	obj->set_corpse_name(name);
+	obj->set_lord_id(lord_id);
+	obj->set_killed_by(killed_by);
+	obj->set_race_was(race_was);
+	obj->set_level(level);
+	obj->set_body(bit);
+	obj->set_size(sz);
+	obj->set_was_player(is_player_corpse);
+	obj->set_race(race);
+	set_body(body,body_hp);
+	obj->add_id("severed bit");
+/*	set_weight(query_weight()-obj->query_weight());*/
+        if (query_property("decay"))
+	  obj->change_property("decay",0,query_property("decay")[2]);
+	if(transfer(obj,environment(this_object())))
+		transfer(obj,environment(this_player()));
+	return 1; 
+}
+
+// Fixed by Jenna Oct 00
+skin(arg)
+{
+    string sh;
+    object skin;
+    array new_ids1, new_ids2;
+    int i, j;
+
+    notify_fail("Skin what?\n");
+    if(!arg) return 0;
+    if(this_object()->id("carcass"))
+    {
+	write("This poor unfortunate creature has already "+
+	    "been skinned.\n");
+	return 1;
+    }
+    if(!id(arg))
+        return 0;
+    if (!this_player()->can_cut()) /* no cut weapon */
+    {
+        write("You need to wield something sharp to do that!\n");
+        return 1;
+    }
+    if (id("severed bit"))
+    {
+	write("You can only skin an entire corpse - not a portion of it.\n");
+	return 1;
+    }
+    say(this_player()->query_name() + " skins "+short()+".\n", this_player());
+    write("You skin the corpse. Ewwwww.\n");
+    skin = clone_object("obj/skin");
+    new_ids1 = [ lord_id, name_id ];
+    new_ids2 = [ "hide of %c", "skin of %c", "%c skin", "%c hide" ];
+    for (i = 0; i < sizeof(new_ids2); i++)
+	for (j = 0; j < sizeof(new_ids1); j++)
+	    if (stringp(new_ids1[j]))
+		skin->add_id(STRINGS->string_replace(new_ids2[i], "%c", new_ids1[j]));
+    skin->set_race(query_race());
+    skin->set_size(size_was);	
+    skin->set_name(name_was);	
+    transfer(skin, environment(this_object()));
+    // Instead of cloning a new object ...
+    this_object()->set_short("carcass");
+    this_object()->add_id("carcass");
+    return 1;
+}
+
+decay_away() {
+	object v;
+	array medium;
+	string monster, mediumtype;
+	if (!environment(this_object())) return;
+	medium = environment(this_object())->query_medium();
+	if (medium && index(medium,"water") > -1)
+	{
+		monster = "various small crustaceans";
+		mediumtype = "A pungent green cloud is released into the water.\n";
+	}
+	else if (medium && index(medium,"earth") > -1)
+	{
+		monster = "worms";
+		mediumtype = "A noxious aroma seeps into the earth.\n";
+	}
+	else
+	{
+		monster = "maggots";
+		mediumtype = "A noxious aroma fills the air.\n";
+	}
+	tell_room(environment(this_object()), "The corpse is consumed "+
+		"by "+monster+".\n");
+	if (random(100) + 1 <= VIRUS_CHANCE) {
+		v = "std/viruser"->make_virus();	
+		move_object(v, this_object());
+		tell_room(environment(this_object()), mediumtype);
+		v->spread();
+		v->destit();
+		}
+	this_object()->add_property ("container");
+	spill_contents (1);
+        /* fix for weight update problem (corpses) - gandalf */
+        object oldenv = environment(this_object());
+        move_object(this_object(), "RO/void");
+        if (oldenv)
+                oldenv->add_weight(-this_object()->query_weight());
+        destruct(this_object());
+	}
+
+show_stats() {
+	int i;
+	array ret = ::show_stats();
+	string temp;
+
+	ret += [
+		"Name: "+query_name()+"\t" + "Size: "+query_size(),
+		"Level: "+level
+	];
+	if(pointerp(body)) {
+		ret += [ "Body array:" ];
+		temp = "";
+		for(i=0;i<sizeof(body);i+=2)
+			temp += "{"+body[i]+","+body[i+1]+"} ";
+		ret += [ temp, "Body status array:" ];
+		for(i=0;i<sizeof(body_hp);i+=2)
+			temp += "{"+body_hp[i]+","+body_hp[i+1]+"} ";
+		ret += [ temp ];
+		if (arrayp(missing))
+		    ret += [ "Missing bits:", implode(missing, ",") + "" ];
+	} else ret += [ "Body : "+descriptor ];
+	return ret;
+}
+
+/* Functions below allow the setting/querying of corpse vars */ 
+query_body_was()	{ return body_was; }
+query_sp_was() 		{ return sp_was; }
+
+query_race(arg)		{ if (!arg || !race_was) return race; else return race_was; }
+set_race(str) 		{ race = str; add_id("corpse of "+str); }
+set_race_was(arg)	{ race_was = arg; }
+
+set_level(lev) 		{ level= lev;}
+query_level() 		{ return level;}
+
+set_was_player(x) 	{ is_player_corpse = x; }
+query_was_player() 	{ return is_player_corpse; }
+
+query_name() 		{ return name; }
+set_lord_id(str) 	{ lord_id=str; }
+query_lord_id()		{ return lord_id; }
+query_name_id()		{ return name_id; }
+
+query_body() 		{ return body; }
+query_missing() 	{ return missing; }
+query_body_hp() 	{ return body_hp; }
+can_put_and_get() 	{ return 1; }
+set_size(arg) 		{ size=arg; set_weight(size/3); }
+set_weight(n) 		{ if (n<1) n=1; ::set_weight(n); }
+query_size() 		{ return size; }
+
+set_killed_by(k)        { killed_by=k; }
+query_killer()          { return killed_by; }
+
+// Used by Vorr for harvesting body parts from corpses
+// 2001/08/08 Rattcherryh
+set_con(i) { gi_con = i; }
+set_dex(i) { gi_dex = i; }
+set_siz(i) { gi_siz = i; }
+set_str(i) { gi_str = i; }
+query_std_mon_type() { return race; }
+query_con() { return gi_con; }
+query_dex() { return gi_dex; }
+query_siz() { return gi_siz; }
+query_str() { return gi_str; }

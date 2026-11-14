@@ -1,0 +1,190 @@
+
+/*
+   Written by rendell@bruce.cs.monash.oz.au - aka Rhys.
+   On the Shattered World Lpmud.
+*/
+
+inherit "room/room";
+
+#include <Servers.h>
+
+reset(arg)
+{
+	::reset(arg);
+	call_out_functions = ["swimming"];
+	add_medium("water");
+}
+
+init()
+{
+	object wet;
+
+	if (wet = present("wet_obj", this_player()))
+		wet->reset_wet();
+	else
+	{
+		wet = clone_object("obj/wet");
+		if (transfer(wet, this_player()))
+			destruct(wet);
+	}
+	::init();
+	if (!query_medium("air"))
+	{
+		add_action("blub", "say", 0);
+		add_action("blub", "'", -1);
+		add_action("blub", "\"", -1);
+	}
+}
+
+swimming(arg, who)
+{
+	string dir;
+
+    if (who->query_ghost()) return 0;
+	dir = sink_dir(who);
+	if (dir)
+	{
+		if (!who->query_skill("swim"))
+		{
+			if (query_medium("air"))
+				tell_object(who, "You cannot keep yourself on the surface any longer!\n");
+			else
+				tell_object(who, "You cannot hold yourself at this depth.\n");
+			say(who->query_name()+" flails about in the water.\n", who);
+			command(dir, who);
+			return 0;
+		}
+		else
+		{
+			if (query_medium("air"))
+			{
+				tell_object(who, "You tread water for a bit longer.\n");
+				say(who->query_name()+" treads water.\n", who);
+			}
+			else
+			{
+				tell_object(who, "You manage to stay at this depth.\n");
+				say(who->query_name()+" is having difficulty staying at this depth.\n", who);
+			}
+		}
+	}
+	return [5, 0];
+}
+
+move()
+{
+    if (index(query_dest_dir(), query_verb()) > -1 &&
+		query_verb() != sink_dir(this_player()) &&
+		!this_player()->query_skill("swim"))
+    {
+        write("You attempt to swim "+query_verb()+", but fail.\n");
+        say(this_player()->query_name()+" attempts to swim "+query_verb()+", but fails.\n");
+        return 1;
+    }
+    return ::move();
+}
+
+drop(ob)
+{
+	call_out("sink", 1, ob);
+	return 0; /* ok to drop - however, it will sink :-) */
+}
+
+sink(ob)
+{
+	string dir;
+	int loc;
+	object destin;
+
+	if (environment(ob) != this_object())  /* no longer in this room */
+		return 0;
+	dir = sink_dir(ob);
+	if (dir)
+	{
+		if (dir == "up")
+			say(ob->short()+" floats up.\n");
+		else if (dir == "down")
+			say(ob->short()+" sinks down.\n");
+		else
+			say(ob->short()+" leaves "+dir+".\n");
+		loc = index(query_dest_dir(), dir)-1;
+		if (loc >= 0)
+		{
+			destin = find_object(query_dest_dir()[loc]);
+			if (!destin || transfer(ob, destin))
+				say("Something stops it.\n");
+			else
+			{
+				tell_room(destin, ob->short()+" arrives.\n");
+				destin->drop(ob);
+			}
+		}
+	}
+	return 1;
+}
+
+sink_dir(ob)
+{
+	int s, w, v;
+	string kludge;
+
+	s = ob->query_siz();
+	w = ob->query_weight();
+	v = ob->query_value();
+	if (w && s)
+		w = w/s;
+	else if (s)
+		w = s;
+	if (living(ob))
+		w -= 7; /* adjust for living things */
+	else if (v > 100 || ob->id("money"))
+		w = 2;  /* coins and valuable things are dense */
+	if (w == 0)
+		if (query_medium("air") || index(query_dest_dir(), "up") < 0)
+			return 0;
+		else
+			return "up";
+	else if (w > 1 || query_medium("air"))
+		if (index(query_dest_dir(), "down") < 0)
+			return 0;
+		else
+			return "down";
+	return 0;
+}
+
+blub(str)
+{
+	array words;
+    object ob;
+	int wd;
+
+	if (!str || str == "")
+	{
+		write("You blow some bubbles.\n");
+		say(this_player()->query_name()+" blows some bubbles.\n");
+		return 1;
+	}
+	words = explode(str, " ");
+	for (wd = 0; wd < sizeof(words); wd++)
+		if (strlen(words[wd]))
+			words[wd] = toblub(words[wd]);
+    ob = this_player()->query_soul("generic/communicate");
+    if (ob) ob->checked_say(implode(words, " "), 0);
+    else write("You blow some bubbles.\n");
+	return 1;
+}
+
+toblub(str)
+{
+	if (strlen(str) == 0)
+		return "";
+	else if (strlen(str) == 1)
+		return "b";
+	else if (strlen(str) == 2)
+		return "bb";
+	else if (strlen(str) == 3)
+		return "blb";
+	else if (strlen(str) == 4)
+		return "blub";
+	else return "blub"+toblub(str[4..]);
+}

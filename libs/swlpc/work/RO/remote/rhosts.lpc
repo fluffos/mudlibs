@@ -1,0 +1,646 @@
+/*
+ * This does rwho's at the moment.  The idea is to
+ * slowly accumulate a large list of known hosts (remembering
+ * every host that is ever told to us, deleting the reference if
+ * we haven't received a packet from it for a month or so), and,
+ * whenever we boot, fling off a `hello' to each of them.
+ * Whenever we get a `hello', we add it to our list of known
+ * hosts (if we didn't know it), and reply with a ping.  If we haven't
+ * queried a host for its list of known hosts for a day, and it's up,
+ * we send a request for the new list (we update the last query time
+ * when we send the ping, so that we don't re-send it for at least
+ * an hour).  Every so often, we request an rwho from each known
+ * host.  When we get such a request, we take our time about answering
+ * it.  If we have a host listed, but it hasn't talked to us for
+ * 30 days, we delete it.
+ *
+ * Version 1.3.0 Changed the entire datagram system from the
+ *      mudlib perspective. Seperated out rtell and rwho, leaving
+ *      this object to track hosts and players only.
+ *      Also now uses classes. 940831 Llati
+ *
+ * Version 1.3.1 Fixed the autoloading bug. Now the server
+ *      will only start up if it receives a datagram, or somone
+ *      uses it locally. This is much better!
+ *      Also barred the address 127.0.0.1 , because its no use here.
+ *
+ * Version 1.3.2 Changed the whole handshake system between the 
+ *      OBJ_DATAGRAM_SERV and the other objects. Now both sides
+ *      maintain a list of capabilities.
+ * 
+ * Version 1.3.3 Now uses switch() and changed the #defined message types
+ *                 to integers, since I couldnt see the point in
+ *                 sending strings (hell, humans dont read it)
+ * [actually, it was because I expect mudlibs to diverge!  Strings are
+ *  more reliable over time.  I'll change it back some time. - G]
+ * 951021 Hunter	added query_all_hosts()
+ */
+
+/*
+ * This is in a secure place - can't save here.
+ */
+
+
+inherit "RO/Servers";
+inherit "RO/cap_user";
+inherit "RO/cap_provider"; 
+
+#include <security.h>
+
+import "RO/remote/rhosts_class" r_class;
+
+#define	MYSAVEFILE	"open/save/rhosts"
+#define VER "1.3.3"
+
+#if 0
+#define G(x) catch {tell_object(find_player("llati"), "Rwho: " + (x)); }
+#else
+#define G(x) 1
+#endif
+
+#include <Consts.h>
+
+#define	GET_HOST_TIME	(3600*2)
+#define	RETRY_HOST_TIME	(30*60)
+#define	DOWNTIME	(20*60)
+#define	WHOTIME		(3*60)
+#define CAP_NAME "rhosts"
+
+/* How often to re-enter `hello' mode to pick up muds that were down */
+
+#define	HELLO_TIME	(3600 * 3)
+
+/* 30 day timeout on hosts */
+#define	DEL_TIME	(30*24*3600)
+
+nosave array myself = 0;
+
+/* status is used internally */
+
+class r_class allknown [0];	/* should be the only non-nosave var */
+
+nosave int next_hello_time;	/* next time to fall back to hello mode */
+nosave int last_save_time;
+nosave int save_due;
+
+nosave class r_class known [0]; /* active hosts */
+nosave array my_who = ({ });	/* name, idle, name, idle, ... */
+nosave array whoson = ({ });	/* other mud's people */
+nosave short_hosts = ({ });   /* List of ips known, seems reduntant to me. :L */
+nosave int known_increased = 0;
+nosave int allknown_increased = 0;
+
+#define	INIT   		"RHOSTS:init"
+#define	IDENT		"RHOSTS:ident"
+#define	HELLO		"RHOSTS:hello"
+#define	PING		"RHOSTS:ping"
+#define	WHO		"RHOSTS:who_req"
+#define	WHOR		"RHOSTS:who_repl"
+#define	KNOWN		"RHOSTS:hosts_req"
+#define	KNOWNR		"RHOSTS:hosts_repl"
+
+#define	WANTS_PING	1
+#define	WANTS_WHO	2
+#define	WANTS_KNOWN	4
+
+#define	ACT_STARTUP	1
+#define	ACT_HELLO	2
+#define	ACT_TROLLOP	3
+
+nosave int current_a = ACT_STARTUP;
+nosave int current_p = 0;
+
+nosave array latest_version = ({ VER, MUD_SHORT, MUD_NAME });
+
+check_version(array a) {
+    array lr = explode(a[0], ".");
+    array myv = explode(latest_version[0], ".");
+    int x = 0;
+    int y = sizeof(lr);
+    if (y > sizeof(myv))
+	y = sizeof(myv);
+    while (x < y) {
+	int aa, b;
+	aa = atoi (lr[x]);
+	b = atoi (myv[x]);
+	if (b > aa)
+	    return;
+	if (b < aa) {
+	    latest_version = a;
+	    return;
+	    }
+	x++;
+	}
+    if (sizeof(lr) > sizeof(myv))
+        latest_version = a;
+    }
+
+show_stats() {
+    write("Current action: " + current_a + "; Mud Entry: " + current_p + "\n");
+    write("Next call: " + find_call_out("main_loop") + "\n");
+    write("Known increased: " + known_increased + "; allknown increased: " + allknown_increased + "\n");
+    write("Next hello time: " + ctime(next_hello_time) + "\n");
+    write("Num hosts: " + sizeof(allknown)  + "; Up hosts: " + sizeof(known) + "\n");
+    write("Last save: " + ctime(last_save_time) + "; Save due: " + (save_due?"Yes":"No") + "\n");
+    if (pointerp(latest_version))
+	write("Version: " + VER + "; latest known: " + implode(latest_version, ", ") + "\n");
+	::show_stats();
+    }
+
+main_loop() {
+    call_out("main_loop", 10 + random(5));
+    if (current_a == ACT_STARTUP)
+	startup_packets();
+    else
+    if (current_a == ACT_HELLO)
+	send_hello();
+    else
+	trollop();
+}
+
+
+reset() {
+	 /* Every reset make a new cap. Woo! */
+  invalidate_cap (CAP_NAME);
+	OBJ_DATAGRAM_SERV -> request_service (CAP_NAME,make_cap (CAP_NAME,0));
+    if (!pointerp(myself)) {
+	restore_object(MYSAVEFILE);
+	current_a = ACT_STARTUP;
+	current_p = 0;
+	call_out("main_loop", 10, 0);
+  send_dg_to (({ 0, 0, 0, 0,DGRAM_PORT}), ({ INIT }) );
+    }
+}
+
+dg_capability (int dg_cap, int verify_cap) {
+		
+	if (!auth_user (CAP_NAME, verify_cap)) return;
+	add_cap (CAP_NAME, dg_cap);
+}	
+	
+set_needs_update() {
+    save_due = 1;
+    AUTOSAVE_SERV->set_auto_save(this_object());
+    }
+
+set_needs_callback(string fun, int secs) {
+    AUTOSAVE_SERV->set_auto_call(this_object(), fun, secs);
+    }
+
+save_me() { /* called by external save manager */
+    last_save_time = time();
+    save_due = 0;
+    save_object(MYSAVEFILE);
+    return 0;
+    }
+
+cmp_ip(a, b) {
+    return (a[0] == b[0]) && (a[1] == b[1]) && (a[2] == b[2]) 
+	&& (a[3] == b[3]);
+}
+
+cmp_ip_port(a, b) {
+    return a[4] == b[4] && cmp_ip(a, b);
+}
+
+/* index into the hosts array , this isnt declared properly because 
+ * the GD cant.*/
+ip_index(array in, ip) {
+int x ;
+int y ;
+class r_class a;
+
+    x = hash_value(ip);
+    for (y = sizeof (in); y--; ) {
+      a = in[y]; /* This intermediate step is needed for */
+		/* the type casting, SAD */
+	if (a.iphash == x && cmp_ip_port(a.addr, ip))
+	    return y;
+	} 
+    return -1 ;
+    }
+
+nosave send_dg_to (array place, data) {
+      OBJ_DATAGRAM_SERV -> tx_dgram(CAP_NAME,lookup_cap(CAP_NAME),place,data);
+      }
+
+startup_packets() {
+    current_a = ACT_STARTUP;
+    if (!pointerp(myself)) {
+        send_dg_to ( ({ 0, 0, 0, 0, DGRAM_PORT}), ({ INIT }) );
+	return;
+	}
+    if (!pointerp(allknown)) {
+	return;
+	}
+
+/* If we're here, it's time to send off leisurely reminders (to
+ * the next one on the list) that we're up.
+ */
+    current_a = ACT_HELLO;
+    current_p = 0;
+}
+
+nosave int last_who_time = 0;
+
+chk_who_update() {
+    if (time() - last_who_time > 60) {
+	array p = users();
+	array m = allocate(sizeof(p) * 2);
+	int x = sizeof(p) - 1;
+	int y = 0;
+
+	while (x >= 0) {
+	    if (p[x]) {
+		string s = p[x]->query_store("rwho");
+		if (stringp(s) && 0 <= index(s, "invis")) {
+		    x--;
+		    continue;
+		    }
+		m[y++] = p[x]->query_real_name();
+	        m[y++] = (p[x--]->query_idle());
+	        }
+            }
+	my_who = m[..y - 1];
+	last_who_time = time();
+	}
+}
+
+/*
+ * Startup - Hello pings spaced 10 seconds apart to known places.
+ * When they get the hello, they'll update their notion of our
+ * status (we're up, and we may have new players), and reply, at
+ * their leisure, with an `rwho' request.  If we are sending our
+ * hello to someone that hasn't talked to us for DEL_TIME seconds,
+ * we delete their entry (typically a month or so).
+ */
+
+nosave int in_hello = 0;
+
+send_hello() {
+    int a = current_p;
+    
+    current_p ++;
+    if (a < sizeof(allknown)) {
+send_dg_to(allknown[a].addr, ({ HELLO, MUD_SHORT, MUD_NAME, latest_version }));
+	if (time() > allknown[a].lastheard + DEL_TIME) {
+	    del_mud(a);	/* if it replies, we'll add it again */
+	    current_p --;
+	    }
+	return;
+	}
+    current_a = ACT_TROLLOP;
+    current_p = 0;
+    next_hello_time = time() + HELLO_TIME;
+}
+
+add_new(string x) {
+array where;
+int i;
+	notify_fail("add a.b.c.d.port\n");
+	where = explode(x, ".");
+	if (sizeof(where) < 5) return 0;
+	for (i = 0; i < sizeof(where); i++)
+		where[i] = atoi(where[i]);
+	/* send a few :-) */
+	send_dg_to(where,({ HELLO, MUD_SHORT, MUD_NAME, latest_version }));
+	send_dg_to(where,({ HELLO, MUD_SHORT, MUD_NAME, latest_version }));
+	send_dg_to(where,({ HELLO, MUD_SHORT, MUD_NAME, latest_version }));
+	send_dg_to(where,({ HELLO, MUD_SHORT, MUD_NAME, latest_version }));
+}
+
+/*
+ * Phase 2 - troll around looking for iwho packets or
+ * host updates.
+ */
+
+trollop() {
+    int a = current_p;
+    current_p ++;
+    chk_who_update();
+    if (a < sizeof(known)) {
+	
+	if (known[a].status & WANTS_PING) {
+	    send_dg_to(known[a].addr, ({ PING, MUD_SHORT, MUD_NAME }));
+	    }
+	if (known[a].status & WANTS_KNOWN) {
+	    send_dg_to(known[a].addr, ({ KNOWNR, short_hosts }) );
+	    }
+	if (known[a].status & WANTS_WHO)
+	    send_dg_to(known[a].addr, ({ WHOR, my_who }) );
+	
+	known[a].status &= ~(WANTS_PING | WANTS_KNOWN | WANTS_WHO);
+
+	if (!known[a].mname) {
+	    send_dg_to(known[a].addr, ({ IDENT }));
+	    known[a].mname = "(unknown)";
+	    }
+	if (known[a].hosttime < time()) {
+	    send_dg_to(known[a].addr, ({ KNOWN }));
+	    known[a].hosttime = time() + RETRY_HOST_TIME;
+	    }
+	if (known[a].whotime < time()) {
+	    send_dg_to(known[a].addr, ({ WHO }));
+	    known[a].whotime = time() + WHOTIME;
+	    }
+
+	if (known[a].lastheard + DOWNTIME < time()) {
+	    send_dg_to(known[a].addr, ({ PING, MUD_SHORT, MUD_NAME }));
+	    mud_down(a);	/* unless it comes up again :) */
+	    }
+	return;
+	}
+/* we cycled - if our list of known hosts has increased, now's
+ * the time to check it out.
+ */
+    current_p = 0;
+    if (allknown_increased || (time() > next_hello_time)) {
+	current_a = ACT_HELLO;
+	allknown_increased = 0;
+	next_hello_time = time() + HELLO_TIME;
+	return;
+	}
+    }
+
+/*
+ * Dgram receiver/response routine.
+ * For all senders, if they are new (and well-formatted)
+ * we remember them.
+ */
+
+recv(int verify_cap, array calling_ip,array data) {
+int khnum;
+int ahnum;
+
+  G("Recv");
+
+	if (!auth_user (CAP_NAME, verify_cap)) return;
+	
+  if (sizeof(data) < 1) return;
+
+  host_up(calling_ip);	/* will add it to known hosts if necessary */
+
+  khnum = ip_index(known, calling_ip);
+  ahnum = ip_index(allknown, calling_ip);
+
+  known[khnum].lastheard = time();
+  if (allknown[ahnum].lastheard + RETRY_HOST_TIME < time()) { /* it came up */
+  	set_needs_update();		/* make sure we remember it */
+	}
+  allknown[ahnum].lastheard = time();	/* save it anyway */
+
+  switch (data[0]) {
+  	case INIT:
+  		if ((sizeof(data) == 1) && !pointerp(myself)) myself = calling_ip;
+  		break;
+  	case HELLO:
+	   known[khnum].status |= WANTS_PING;
+	   if (sizeof(data) > 3) {
+	       check_version(data[3]);
+	       }
+	        /* Dont return, we want to do the ping stuff as well */
+	  case PING:     
+			if (sizeof(data) > 1 && stringp(data[1])) {
+			 known[khnum].mname = data[1][..20];
+			 allknown[ahnum].mname = data[1][..20];
+			 }
+			if (sizeof(data) > 2 && stringp(data[2])) {
+			 known[khnum].mlong = data[2][..80];
+			 allknown[ahnum].mlong = data[2][..80];
+			 }
+			break;
+	case IDENT:	
+		known[khnum].status |= WANTS_PING;
+		break;
+	case WHO:	
+		known[khnum].status |= WANTS_WHO;
+		break;
+	case KNOWN:	
+		known[khnum].status |= WANTS_KNOWN;
+		break;
+	case WHOR:	
+		if ((sizeof(data) > 1) && pointerp(data[1]))
+		   whoson[khnum] = data[1][..199];	/* max 200 players, please! */
+			known[khnum].whotime = time() + WHOTIME;
+			allknown[ahnum].whotime = time() + WHOTIME;
+			break;
+	case KNOWNR:
+		if ((sizeof(data) > 1) && pointerp(data[1])) {
+		    	add_known_hosts(data[1]);
+		    }
+		known[khnum].hosttime = time() + GET_HOST_TIME;
+		allknown[ahnum].hosttime = time() + GET_HOST_TIME;
+		break;
+	default:
+		  throw "Unknown message type to RHOST_SERV. Type was " + data[0] + ".\n";
+	}
+}	
+
+host_up(array ip) {
+    int h;
+    
+	h = ip_index(allknown, ip);
+    if (h < 0) {
+      class r_class new_host = create r_class;
+      /* new one! */
+      h = sizeof (allknown);
+	new_host.iphash = hash_value(ip);
+	new_host.addr = ip;
+	new_host.lastheard = time();
+	allknown += ({ new_host });
+	}
+    int k = ip_index(known, ip);
+    if (k < 0) {
+	k = sizeof(known);
+	known += ({ allknown[h] }) ;
+	whoson += ({ ({ }) });
+	}
+    known[k].lastheard = time();
+}
+
+mud_down(k) {
+    known = known[..k-1] + known[k+1..];
+    whoson = whoson[..k-1] + whoson[k+ 1..];
+    }
+
+/* should only be called from hello packet sequence when not in known db. */
+
+del_mud(a) {
+    allknown = allknown[..a-1] + allknown[a+1..];
+    set_needs_update();
+    }
+
+array query_active_hosts () 
+{ 
+/* Return the array of ips that are listening, but not HERE!!! */
+int i,h;
+array active = ({});
+    h = ip_index(known, myself);
+    for (i= sizeof (known); i--; ) 
+    {
+        if (i != h) 
+	    active += ({ known[i].addr });
+    }
+    return active;
+}	
+
+array
+query_all_hosts( )
+{
+/* return all known hosts */
+array ret = allocate( sizeof( allknown ) );
+int i;
+    for (i = sizeof(allknown); i --; )
+    {
+	ret[i] = allknown[i].addr;
+    }
+    return ret;
+}
+
+(int|array|string)
+query_host( (string|array) addr )
+{
+    int i;
+    int h;
+    int A, B, C, D, E;
+    string hn;	/* host name */
+    array args, port;
+
+    if (stringp(addr))
+    {
+        args = explode(addr, ".");
+        if (sizeof(args) == 4)
+        {
+            port = explode(args[4], ":");
+            if (sizeof(port) == 2)
+	            addr = ({ atoi(args[0]), atoi(args[1]),
+                          atoi(args[2]), atoi(port[0]), atoi(port[1]) });
+        }
+    }
+    for ( i = sizeof( known ); i -- ; )
+    {
+	hn = (implode( explode( known[i].mname, " "), ""));
+	if ( stringp(addr) ) 
+	{
+	    if (addr == hn || addr == known[i].mname)
+		return known[i].addr;
+	}
+	else if ( pointerp( addr) )
+	{
+	    if (addr[0] == known[i].addr[0] 
+		&& addr[1] == known[i].addr[1]
+		&& addr[2] == known[i].addr[2]
+		&& addr[3] == known[i].addr[3]
+		&& addr[4] == known[i].addr[4])
+	    {
+		return hn;
+	    }
+	}
+    }
+    return 0;		/* no match found */
+}
+
+
+add_known_hosts(array a) {
+    int x = 0;
+    int j = 0;
+
+    while (x < sizeof(a)) {
+	int h = ip_index(allknown, a[x]);
+	if (h < 0 && !cmp_ip (a[x], ({127,0,0,1}) ) ) { /* Not much good keeping that address */
+	    host_up(a[x]);	/* quick hack */
+	    mud_down(a[x]);	/* quick hack */
+	    h = ip_index(allknown, a[x]);
+	    allknown[h].lastheard = 0;	/* in case they're an old version */
+	    j = 1;
+	    }
+	x++;
+	}
+
+    if (j || !pointerp(short_hosts) || !sizeof(short_hosts)) {
+	allknown_increased = 1;
+	for (x = 0; x < sizeof(allknown); x++) {
+		short_hosts += ({ allknown[j].addr });
+	    }
+	set_needs_update();
+	}
+}
+
+ip_as_str(ip) {
+    return (ip[0] + "." + ip[1] + "." + ip[2] + "." + ip[3]);
+    }
+
+ladj(s, l) {
+    return (s + "                               ")[..l-1];
+    }
+
+radj(s, l) {
+    string j = ("                               " + s);
+    return j[sizeof(j) - l..];
+    }
+
+time_as_str(secs) {
+    (int|string) d = secs/3600/24;
+    (int|string) h = (secs/3600)%24;
+    (int|string) m = (secs/60)%60;
+    (int|string) s = (secs%60);
+    string o;
+    if (secs < 0) o = "(sent)";
+    else if (d>9) o = d + "d";
+    else if (d) o = d + "d" + h + "h";
+    else if (h) o = h + "h" + m + "m";
+    else if (m) o = m + "m" + s + "s";
+    else o = s + "s";
+    return o;
+}
+
+list_hosts(int all) {
+    class r_class j[0];
+    int x ;
+    if (all)
+	j = allknown;
+    else
+	j = known;
+
+	if (!sizeof (j) ) {
+	  write ("No hosts are known.\n");
+	  return 1;
+	  }
+    write("      Host       Last Rcv  Nxt Who   Nxt Hosts\n");
+    for (x=0;x < sizeof(j);x++) {
+	write(ladj(ip_as_str(j[x].addr),17)
+	    + ladj(time_as_str(time() - j[x].lastheard), 10)
+	    + ladj(time_as_str(j[x].whotime - time()), 10)
+	    + ladj(time_as_str(j[x].hosttime - time()), 10)
+	    + j[x].mname + "\n");
+	}
+}
+
+list_people() {
+    int x = 0;
+    int y = 0;
+    if (!sizeof(known)) {
+      write ("No hosts are currently known. Please allow time for the muds to communicate.\n");
+      return 1;
+      }
+    while (x < sizeof(known)) {
+	write(ip_as_str(known[x].addr) + " " + known[x].mname +
+		"  (" + time_as_str(time() - known[x].whotime + WHOTIME) + " ago) :\n");
+	x ++;
+	int z = 0;
+	if (!pointerp(whoson) || !pointerp(whoson[y]) || !sizeof(whoson[y]))
+	    write("     (noone)\n");
+	else {
+	    array a = whoson[y];
+	    while(z < sizeof(a)) {
+		string j = ladj(a[z] + " : " + time_as_str(a[z+1]), 18);
+		write(j);
+		z += 2;
+		if (!(z % 6)) write("\n");
+		}
+	    }
+	if (z % 6) write("\n");
+	y += 1;
+	}
+    }
+

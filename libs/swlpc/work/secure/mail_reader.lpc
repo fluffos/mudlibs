@@ -1,0 +1,720 @@
+/* 
+ * Shattered Worlds Mail reader
+ * Interfaces with the std/mail_daemon
+ * 
+ * History:
+ * 1.0  Who knows?
+ * 2.0  Major upgrade to use the mail_daemon    - Hunter
+ *      Added 'forward' and 'bounce'            - Hunter        921029
+ *      Added vi for wizards                    - Hunter        921029
+ *      Added better checking for curr_mess,  
+ *      (ie. set_curr_mess() func.)             - Hunter        921029
+ *      Fixed 'R'. Why the hell didnt H do it?    - Llati               930526
+ *  Put in the caution stuff, which had been commented out. *shrug* :L 940610
+ *  Made the reader inherit base soul, so player can only
+ *   possess one of these objects at a time     - Paladin       950329
+ *  Made the reader inherit std/txted, so players cannot spam
+ *   the game, making it crash. (also eliminates a lot of
+ *   otherwise duplicated code.)                - Belgarion     950509
+ *  Bug fixed input_to() stuff after Dredd's change to that
+ *   function.                                  - Belgarion     950623
+ *
+ * Yeah, but one of you gits added an autoload, hence causing dropped mail - G, sept 95.
+ *
+ * Put in a warning for players with overflowing mailboxes - Jen Aug 00
+ * Let players know when they have no mail instead of "Read what?" - Jen
+ * Replaced this_player()s and write()s with ME and TELLME - Jenna Jan 01
+ */
+
+#define TXTED "std/txted"
+
+inherit "obj/souls/base_soul";
+inherit TXTED;
+
+#include <mail.h>
+
+
+#define ME	(environment(this_object())) /* Jenna Jan 01 */
+#define TELLME(x)	tell_object(environment(this_object()), x)    /* Jenna Jan 01 */
+
+// Need to replace EDMODE and EDFILE from mail.h, which use write()
+// and this_player() -- Jenna Jan 01
+#undef EDMODE
+#define EDMODE (in_editor(ME))
+#undef EDFILE
+#define EDFILE ("open/mail/"+ME->query_real_name()+".ed")
+
+#define USE_VI (ME->query_wiz())
+#define MAX_MESSAGE_SIZE 8000
+
+#define query_cc(mesg) (MAILD->query_header(CC, mesg))
+#define query_status(mesg) (MAILD->query_header(STATUS, mesg))
+#define query_from(mesg) (MAILD->query_header(FROM, mesg))
+#define query_subject(mesg) (MAILD->query_header(SUBJECT, mesg))
+#define query_date(mesg) (MAILD->query_header(DATE, mesg))
+
+array Mail;
+
+nosave int curr_mess;
+nosave int modified;            /* set if Mail has been modified */
+nosave int new_mail;            /* set by mail_daemon if new mail has arrived
+                                   while reading/editing etc.. */
+                                /* new mail is saved in the *.new mail folder
+                                */
+nosave string new_message;
+nosave string new_subject;
+nosave string new_cc;
+nosave string new_dest;
+nosave int is_reading;          /* set if reading mail */
+
+show_stats()
+{
+        array ret = "obj/souls/base_soul"::show_stats();
+        ret += [
+        "curr_mess  : "+curr_mess+"\tmodified  : "+modified+"\t",
+        "new_mail   : "+new_mail+"\tis_reading: "+is_reading+"\n" ];
+        return ret;
+}
+ 
+reset(arg)
+{
+        TXTED::reset(arg);
+        "obj/souls/base_soul"::reset(arg);
+        set_soul_type ("generic", "mail/reader"); 
+        if (!arg) {
+                add_id( [ "mailread", "inhibit_insanity","mail_reader" ] );
+        }
+}
+
+init() 
+{
+    "obj/souls/base_soul"::init();
+    TXTED::init();
+    add_action("mail_to", "mail");
+    add_action("headers", "from");
+    add_action("read", "read");
+#if 0
+    add_action("ed_help", "H"); 
+/* Also done by txted. */
+#endif
+    load_mail();
+}
+
+query_ME() { return ME; }
+
+load_mail()
+{
+        Mail = MAILD->readmail(ME->query_real_name());
+        if (!pointerp(Mail)) Mail = [];
+        curr_mess = 1;          /* invalidate current message # */
+        modified = 0;           /* we can't have modified the mail yet */
+        load_new_mail();
+}
+
+/* due to the line "Mail += Temp" sometimes dying, the flushing of new
+  mail has been shifted to the end of the code block, so that mail is only
+  deleted if everything else works. - Hunter 921130 */ 
+
+load_new_mail()
+{
+    array Temp;
+
+    if (!pointerp(Mail)) 
+    {
+            TELLME("The mail is still being sorted. Please try again in 1 second.\n");
+            return 0;
+    } 
+
+    Temp = MAILD->readmail(ME->query_real_name(), "new");
+    if (sizeof(Temp))
+    {
+        /* DEBUG STUFF, Hunter 921130 */
+        if (!pointerp(Temp)) 
+        {
+                TELLME("DEBUG: mail_reader.load_new_mail: Temp not an array.\n");
+                TELLME("DEBUG: mail_reader.load_new_mail: Your new mail has not been deleted.\n");
+                Temp = [];
+        }
+        else
+        {
+            /* erase the new mail */
+            MAILD->writemail(ME->query_real_name(), [], "new");
+        }
+        Mail = Mail + Temp;
+        new_mail = 0;
+        modified = 1;
+    }
+
+    return 1;
+}
+
+/* 1. Check for and remove any mail marked as 'Deleted' */
+/* 2. Save the mail by calling the Daemon */
+save_mail()
+{
+    int i;
+
+    if (!modified) return;
+
+    array Out = allocate(sizeof(Mail)); /* speed hack - G */
+    int x = (-1);
+    for (i = 0; i < sizeof(Mail); i ++ )
+    {
+        if (!Mail[i]) 
+        {
+            log_file ("llati", "Mail bug. Call B this_player was " + ME-> query_real_name() + ".\n");
+            TELLME("Dow! llati hasnt found that mail bug yet! You know the one, you just had it happen to you....\n");
+            "room/post_dir/debug" -> debug (ME->query_real_name());
+            return ;
+        }
+
+        if (query_status(Mail[i]) != STATUS_DELETED) 
+        {
+            x++;
+            Out[x] = Mail[i];
+        }
+        else
+            TELLME("Deleting .. "+query_subject(Mail[i])+"\n");
+    }
+    Out = Out[..x];
+    Mail = Out;
+    MAILD->writemail(ME->query_real_name(), Mail);
+    modified = new_mail = 0;        /* all changes have been rewriten */
+    return 1;
+}
+
+read(str) 
+{
+    int n;
+
+    if (!load_new_mail()) return 1;
+    if (sizeof(Mail) == 0) 
+    {
+        TELLME("You have no mail.\n");
+        return 1;    // Jenna
+    }
+    if (str)
+        if (n = atoi(str)) 
+        {
+            set_curr_mess(n); 
+            print_message(curr_mess); 
+        }
+        else return;
+    ME->push_caution("reading mail");
+    new_mail = 0;
+    loop();
+    return 1; 
+}
+
+delete(int x) 
+{
+    if (!validate_curr_mess(x))
+    {
+        TELLME("Illegal message number " + x + "\n");
+        return;
+    }
+    Mail[x-1] = set_status(Mail[x-1],STATUS_DELETED);
+    TELLME("Message "+x+" marked for deletion\n");
+    return 1;
+}
+
+undelete(int x) 
+{
+    if (!validate_curr_mess(x))
+    {
+        TELLME("Illegal message number " + x + "\n");
+        return;
+    }
+    Mail[x-1] = set_status(Mail[x-1],STATUS_READ);
+    return 1;
+}
+
+print_message(int x) 
+{
+    if (!validate_curr_mess(x))
+    {
+        TELLME("Illegal message number " + x + "\n");
+        return;
+    }
+    TELLME("Message " + x + ":\n");
+    
+    if (!Mail[x-1]) 
+    {
+        log_file ("llati", "Mail bug. CAll C this_player was " + ME-> query_real_name() + ".\n");
+        TELLME("Dow! llati hasnt found that mail bug yet! You know the one, youjust had it happen to you....\n");
+        "room/post_dir/debug" -> debug (ME->query_real_name());
+        return ;
+    }
+
+    if (query_status(Mail[x-1]) != STATUS_DELETED)
+                Mail[x-1] = set_status(Mail[x-1], STATUS_READ);
+    // decrypt it - only the player ob in question can do it.
+    TELLME(MAILD->query_head(Mail[x-1]) + "\n\n");
+    ME->view_mail(MAILD->query_body(Mail[x-1]));
+}
+
+query_destruct()
+{
+    save_mail();
+}
+
+set_status(mesg, new_status) {
+        modified = 1;
+        return MAILD->set_header(STATUS, mesg, new_status);
+}
+
+
+set_cc(mesg, cc) {
+        modified = 1;
+        return MAILD->set_header(CC, mesg, cc);
+}
+
+set_from(mesg, new_from) {
+        modified = 1;
+        return MAILD->set_header(FROM, mesg, new_from);
+}
+
+set_subject(mesg, new_subject) {
+        modified = 1;
+        return MAILD->set_header(SUBJECT, mesg, new_subject);
+}
+
+query_body(mesg) { return (MAILD->query_body(mesg)); }
+
+/*
+ * list all mail headers 
+ */
+headers() 
+{
+    int i, n;
+    string tmp_str, tmp_str2, rest_of_mess;
+    string name;
+    string Status, From, Subject, Date;
+
+    if (!load_new_mail()) return 1;
+    if (sizeof(Mail) == 0) {
+        TELLME("No mail.\n");
+        return 1;
+    }
+    for (i=0; i<sizeof(Mail); i+= 1) {
+    if (!Mail[i]) {
+        log_file ("llati", "Mail bug. Call A .this_player was " + ME-> query_real_name() + ".\n");
+        TELLME("Dow! llati hasnt found that mail bug yet! You know the one, you just had it happen to you....\n");
+        "room/post_dir/debug" -> debug (ME->query_real_name());
+        continue ;
+        }
+        Status = query_status(Mail[i]);
+        TELLME((!Status || index(Status,STATUS_UNREAD) != -1)?"N":" ");
+        TELLME((Status == STATUS_DELETED)?"D":" ");
+        name = " "+(i+1);
+        name = FORMAT->left_justify(name,6);
+        TELLME(name);
+        From = query_from(Mail[i]);
+        name = FORMAT->left_justify(From,12);
+        TELLME(name);
+        Subject = query_subject(Mail[i]);
+        Date = query_date(Mail[i]);
+        TELLME(Subject+" ("+Date+")\n");
+    }
+    return 1;
+}
+
+loop() {
+
+    if (sizeof(Mail) == 0) {
+        TELLME("No messages.\n");
+        return;
+    }
+    is_reading = 1;
+    if (sizeof(Mail) > 50) // Jenna Aug 00
+        TELLME(  "     ******** WARNING: Your mailbox is too full! ********\n"+
+                "     **  You can only store up to fifty messages here! **\n"+
+                "     ****************************************************\n");
+    set_curr_mess(curr_mess);           /* possibly redundant - Hunter 921029 */
+    TELLME("[1 - " + (sizeof(Mail)) + " h d r R x ?]"); /* 'R' removed for now. */
+    if (curr_mess < 1 || curr_mess > sizeof(Mail))
+        TELLME(" (no current) ");
+    else 
+        TELLME(" (current: "+curr_mess+") ");
+    input_to("get_cmd", 0, ME);
+}
+
+// Jenna Feb 01 - made a lot of these returns return 1, rather
+//		  than zero (which caused problems with new GD).
+get_cmd(str) 
+{
+int n, new_has_arrived;
+string tmp;
+        if (new_mail)
+        {
+/* ignore new keypress */
+                TELLME("New Mail has arrived..\n");
+                TELLME("Reading in new mail ..\n");
+/* need to reset new_mail */
+                if (!load_new_mail()) return 1;
+                load_new_mail();
+                loop();
+                return 1;
+        }
+#if 0
+        if (str == "r")  {  reply_to_message(); loop(); return; }
+        if (str[0] == 'r' && (curr_mess = atoi(str[2..]))) 
+        { 
+                    reply_to_message(); loop(); return; 
+            }
+        if (str == "R") { ed_reply_to_message(); loop(); return; }
+        if (str[0] == 'R' && (curr_mess = atoi(str[2..]))) 
+        {
+                    ed_reply_to_message(); loop(); return; 
+            }
+#else
+        if (str == "r")  {  reply_to_message(); return 1; }
+    if (str[0] == 'r' && (curr_mess = atoi(str[2..]))) 
+        {
+                reply_to_message();
+                return 1;
+        }
+        if (str == "R") { ed_reply_to_message(); return 1; }
+    if (str[0] == 'R' && (curr_mess = atoi(str[2..]))) 
+        {
+                ed_reply_to_message();
+                return 1;
+        }
+#endif
+        if (str == "h") { headers(); loop(); return 1; }
+        if (str == "n") 
+        { 
+                set_curr_mess(curr_mess + 1); 
+                print_message(curr_mess); 
+                loop(); return 1; 
+        }
+        if (str == "." || str == "") { 
+                print_message(curr_mess); loop(); return 1; 
+        }
+        if (str == "l" && ME->query_wiz())
+        { 
+                save_message(curr_mess); loop(); return 1; 
+        }
+        if (str == "f") { forward_message(); /* loop() called internally */ return 1; }
+        if (str == "b") { bounce_message(); return 1; }
+    if (str[0] == 'm') { mail_to(str[2..]); loop();  return 1; }
+    if (str == "?") { help_msg(); loop(); return 1; }
+    if (str == "p" || str == "-") 
+        {
+                set_curr_mess(curr_mess-1); 
+                print_message(curr_mess ); 
+                loop(); return 1;
+    }
+    if (n = atoi(str))
+    {
+        set_curr_mess(n); 
+        print_message(curr_mess); 
+        loop(); return 1;
+    }
+    if (new_has_arrived) {
+        TELLME("New mail has arrived. Command ignored\n");
+        loop();
+        return 1;
+    }
+    if (str == "x" || str == "q") 
+    { 
+        is_reading = 0; 
+        save_mail();
+	TELLME("You stop reading mail.\n");
+        ME->pop_caution(); 
+        return 1;  
+    }
+    if (str[..0] == "d") 
+    { 
+        array r;
+        int i;
+        if (sizeof(str[1..]) > 0)
+        {
+            r = RANGE->unpack_range(str[1..],1,curr_mess);
+            for (i = 0; i < sizeof(r); i ++)
+                delete(r[i]);
+        }
+        else
+                delete(curr_mess);
+        loop();
+        return 1;
+    }
+    if (str == "u") { undelete(curr_mess); loop(); return 1; }
+    if (str[0] == 'u' && (curr_mess = atoi(str[2..]))) 
+    {
+        undelete(curr_mess); loop(); return 1; 
+    }
+    TELLME("Unrecognised command.\n");
+    loop();
+    return 1;
+}
+
+save_message(x) 
+{
+string name;
+    if (!validate_curr_mess(x))
+    {
+        TELLME("Illegal message number " + curr_mess + "\n");
+        return;
+    }
+    name = ME->query_real_name() + ".mbox";
+    log_file(name, Mail[x-1] + "\n");
+    return 1;
+}
+
+mail_to(str) {
+    if (!str || str == "") {
+        TELLME("No destination.\n");
+        if (is_reading)
+            loop();
+        return 1;
+    }
+    new_subject = 0;
+    new_cc = "";
+    new_message = 0;
+/* new_message gets passed to get_message() - don't want it at the top. */
+    mail_to_continue(str);
+    if (!is_reading) ME -> push_caution ("writing mail");
+    return 1;
+}
+
+mail_to_continue(string str) {
+    new_dest = str;
+    if (new_subject)
+        TELLME("Return to get '" + new_subject + "'\n");
+    TELLME("Subject: ");
+    input_to("get_subject");
+    return 1;
+}
+
+get_subject(str) {
+    if (str && str != "")
+        new_subject = str;
+    if (new_subject == 0) {
+        TELLME("No subject.\n");
+        if (is_reading)
+            loop();
+  else ME->pop_caution(); 
+        return 1; // used to be return 0 - Jenna Feb 01
+    }
+/* This bit is where txted comes in. ;) */
+    get_message(new_message);
+#if 0
+    TELLME("Give message.  '**' - send; '~q' - cancel, '~e' - edit, '~p' -
+print\n");
+    TELLME("]");
+    input_to("more_mail");
+#endif
+    return 1; // used to be return 0 - Jenna Feb 01
+}
+
+finished_msg(str)
+{
+  new_message = str;
+  TELLME("Cc:");
+  input_to("get_cc");
+  return 1;
+}
+
+aborted_msg()
+{
+  if (is_reading)
+    loop();
+  else
+    ME->pop_caution();
+  return;
+}
+
+get_cc(cc) 
+{
+    int count;
+    array temp;
+
+    new_cc = cc;
+    temp = send_mail(new_dest, new_subject, new_message, new_cc);
+    if (!sizeof (temp)) return;
+    TELLME("Mail sent to "+implode(temp, ", ")+"\n");
+    if (is_reading) loop();
+    else ME -> pop_caution ();
+}
+
+send_mail(string dest, string subj, string mess, cc) 
+{
+        // object receiver = load_object("/P/p/" + ME->query_real_name());
+        // string cmess = receiver->crypt_string(mess);
+        mess = BLANKHEADER + "\n"+ mess;
+        mess = set_from(mess, capitalize(ME->query_real_name()));
+        mess = set_subject(mess, subj);
+        mess = set_cc(mess, cc);
+/* other headers are set up by the mail daemon .. */
+        return MAILD->sendmail(dest, mess);
+}
+
+forward_message() 
+{
+        if (!validate_curr_mess(curr_mess))
+        {
+                TELLME("Illegal message number " + curr_mess + "\n");
+                return;
+        }
+        TELLME("Forward message to who? :");
+        input_to("forward_2", 0, ME);
+}
+
+forward_2(sucker)
+{
+    string mess;
+        if (stringp(sucker) && sucker != "")
+        {
+                mess = BLANKHEADER+"\n>"+Mail[curr_mess-1];
+                mess = set_from(mess, capitalize(ME->query_real_name()));
+                mess = set_subject(mess, query_subject(Mail[curr_mess-1])+" (forward)");
+                TELLME("Mail forwarded to "+implode(MAILD->sendmail(sucker,mess),", ")+"\n");
+        }
+        if (is_reading) loop();
+}
+
+bounce_message() 
+{
+        if (curr_mess > sizeof(Mail) || curr_mess < 1) {
+                TELLME("Illegal message number " + curr_mess + "\n");
+                return;
+        }
+        TELLME("Bounce message to who? :");
+        input_to("bounce_2", 0, ME);
+}
+
+bounce_2(sucker)
+{
+    string mess;
+        if (stringp(sucker) && sucker != "")
+        {
+                mess = BLANKHEADER+"\n"+query_body(Mail[curr_mess-1]);
+                mess = set_from(mess, query_from(Mail[curr_mess-1]));
+                mess = set_subject(mess, query_subject(Mail[curr_mess-1]));
+                TELLME("Mail bounced to "+implode(MAILD->sendmail(sucker,mess),", ")+"\n");
+        }
+        if (is_reading) loop();
+}
+
+notify_new_mail(dest, subj, name) 
+{
+    object ob;
+    if (ob = find_player(dest)) {
+        tell_object(ob,"You have new mail from " +
+                    name + ", " + subj + "\n");
+        ob = present("mailread", ob);
+        if (ob)
+            ob->invalidate();
+    }
+    TELLME("Sending mail to " + capitalize(dest) + ".\n");
+}
+
+/* This is the one spot I'm worried about... - B. */
+ed_reply_to_message() 
+{
+    int n;
+    string tmp_str, tmp_str2, rest_of_mess;
+    int strsize; /* ugly hack, but how else can it be done? */
+    string name;
+    int x;
+    array msg;
+
+        strsize = 0;
+        if (!curr_mess) {
+                TELLME("No curr_mess message.\n");
+                loop();
+                return 1;
+        }
+        name = query_from(Mail[curr_mess-1]);
+        new_subject = query_subject(Mail[curr_mess-1]);
+        if (new_subject[0..3] != "Re: ") new_subject = "Re: "+new_subject;
+        new_cc = "";
+        msg = explode(query_body(Mail[curr_mess-1]),"\n");
+        for (x=0; x<sizeof(msg); x++) {
+        if (strlen(msg[x])) {
+            if(msg[x][0] == ">"[0])
+                msg[x] = ">" + msg[x];
+            else
+                msg[x] = "> " + msg[x];
+            }
+            strsize += sizeof(msg[x]) + 1; /* +1 to cater for '\n'. */
+            if (strsize > MAX_MESSAGE_SIZE)
+            {
+                TELLME("Your message is too long. You will have to " +
+                        "reply using 'r' rather than 'R'.\n");
+                msg = 0;
+                loop();
+                return 1;
+            }
+        }
+        new_message = implode(msg, "\n") + "\n";
+        mail_to_continue(name);
+}
+
+reply_to_message() 
+{
+    int n;
+    string tmp_str, tmp_str2, rest_of_mess;
+    string name;
+
+    if (!curr_mess) 
+    {
+                TELLME("No curr_mess message.\n");
+                loop();
+                return 1;
+    }
+
+    name = query_from(Mail[curr_mess-1]);
+    new_subject = query_subject(Mail[curr_mess-1]);
+    new_subject = (new_subject[0..3] == "Re: ")?new_subject:"Re: "+new_subject;
+    new_cc = "";
+    new_message = 0;
+    mail_to_continue(name);
+}
+
+help_msg() 
+{
+    TELLME("x    Exit from mail reading mode.\n");
+    TELLME("d    Delete curr_mess message.\n");
+    TELLME("d <num>      Delete message number 'num'.\n");
+    TELLME("u    Undelete message\n");
+    TELLME("u <num>      Undelete message number 'num'.\n");
+    TELLME("?    This help message.\n");
+    TELLME("r    Reply to curr_mess message.\n");
+    TELLME("r <num>      Reply to message number 'num'.\n");
+    TELLME("R    Include their message in your reply (use ~e to edit it).\n");
+    TELLME("m <name> Mail a message to player 'name'.\n");
+    TELLME("h    Print all headers.\n");
+    TELLME("p    Print previous message.\n");
+    TELLME("n    Print next message.\n");
+    TELLME("f    Forward message.\n");
+    TELLME("b    Bounce message.\n");
+    if (ME->query_wiz())
+        TELLME("l        Append curr_mess message to /log/name.mbox\n");
+    return 1;
+}
+
+receive_mail(mesg)
+{
+        new_mail = 1;
+        return 1; 
+}
+
+reading_mail() { return is_reading; }
+
+set_curr_mess(int x)
+{
+    curr_mess = x;
+    if (curr_mess < 1)
+        curr_mess = 1;
+    if (curr_mess > sizeof(Mail))
+        curr_mess = sizeof(Mail);
+}
+
+validate_curr_mess(int x)
+{
+    return (x >= 1 && x <= sizeof(Mail));
+}
+
+

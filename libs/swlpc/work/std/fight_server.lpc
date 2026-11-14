@@ -1,0 +1,652 @@
+/*
+ * Combat server - well, general timed event server for objects
+ * that should take turns in `doing something', where events
+ * take a variable amount of time.  Maintains a list of `things in
+ * combat', identified by integers, along with the actions they
+ * have scheduled, who they are directed at, and how `disruptive'
+ * they will be when they come to fruition (how much attention they
+ * will require).
+ *
+ * The objects themselves determine the time it's going to take,
+ * and the player object will ultimately determine how much `energy'
+ * of whatever sort is wasted when doing it (high output/short time
+ * should be unilaterally required by the player to drain high
+ * amounts).
+ *
+ * We generally identify `things' by their object names.
+ *
+ * Updates :
+ * 28/3/95 [Qarath]
+ * - Made critical hits go up as skills increase (rather than high chance
+ *   of low level monsters). Damage reduced to 3x unless non-attack.
+ *   Critical hits 4x as likely if defender non-attacks.
+ * 29/3/95 [Qarath]
+ * - Made a maximum chance of a critical hit 12.5% (for attacking monsters)
+ *   and 50% for non-attacks
+ * 9/9/99  [Jenna]
+ * - Implemented damage typing (new damage absorption code, new damage
+ *   messages, etc).
+ * - Implemented "all" as an acceptable damage location.
+ * - Altered strength bonus to work linearly, not just in multiples of 5.
+ * 14/9/99 [Jenna]
+ * - Altered weapon_hit() calls so that damage is not duplicated if
+ *   weapon_hit() returns -1
+ * 7/3/00 [Jenna]
+ * - Added query_feeble() code.
+ * 30/8/00 [Jenna]
+ * - Allowed "callback" arg of attacker, for easy broadcasting of
+ *   attacks originating outside fight_server (e.g. mage spells). 
+ * 29/9/00 [Jenna]
+ * - Added "mastery" skills to increase min. damage done
+ * 18/4/01 [Jenna]
+ * - weapon_hit() funcs are now sent the location hit as 2nd arg 
+ */
+
+/* Gotta add some variety of messages; make combat more interesting - J */
+/* Idea: combat should become more brutal the longer it goes on, to */
+/*       prevent long, boring, no-hit battles                 - J   */
+
+inherit "RO/Servers";
+inherit "RO/base/hilite";
+
+#define TD(x) catch tell_object(find_player("jenna"), "[fight_serv:] "+x+"\n");
+
+#include "/RO/living_defs.h"
+#include "security.h"
+
+reset(arg)
+{
+    return;
+}
+
+bare_combat_msg(object pob, string mesg)
+{
+    tell_object(pob, ANSI->scolor(hilite(pob, "combat"), mesg));
+}
+
+combat_msg(object pob, string mesg)
+{
+    tell_object(pob, ANSI->scolor(hilite(pob, "hits"), mesg));
+}
+
+/*
+ * Combat is modeled as power (of various types) delivered at a particular
+ * instant - i.e. an event queue.  The player or monster object decides how
+ * much power to deliver & when & what type & where (and does the internal
+ * accounting for how much is actually used, etc); the `when' is determined
+ * by the `intelligence', and the body just deducts that many points (& adds
+ * extra fatigue if it's approaching your limits).
+ */
+
+nosave int   act_num = 0;        /* num used entries */
+nosave int   act_first = 0;        /* start of queue */
+
+nosave array act_names = allocate(20);    /* File names of things with scheduled combat rounds */
+nosave array act_start = allocate(20);    /* Unix time * 10 they started their current action (0 if none) */
+nosave array act_end = allocate(20);    /* time they are planning to finish */
+nosave array act_callo = allocate(20);    /* object to call back when the action should be performed (def: his combat soul) */
+nosave array act_callf = allocate(20);    /* fn to call back when the action should be performed */
+nosave array act_callp = allocate(20);    /* parameter to pass back when the action should be performed */
+
+nosave int time_offset = 0;        /* offset used for the times in the array (relative to now).  Updated when we can. */
+
+/*
+ * Rounds.  There is only one call-out active at once - hope you don't lose it :)
+ * t is the `round time' - the combat server's measure of the current time, in 0.1 secs.
+ * If call outs are slow, it'll lose against real time.  That's cool, as everyone
+ * shares the same time dilation.
+ */
+
+nosave combat_round(int t) {
+    int atime = t - time_offset;    /* this time relative to the array entries */
+    int x = 0;
+    while (x < act_num) {
+        if (act_start[act_first] < t) {
+            }
+        }
+    }
+
+/*
+ * In-game people who are fighting each other.
+ * This object schedules all fighting (single hits).
+ * When an object is due to initiate an attack, it
+ * calls ob->choose_attack(enemies), where `enemies'
+ * is a list of objects in the current 
+ */
+
+/* J - are the skill tests below under pressure? */
+
+/* hit_player
+ *
+ * Returns -1 for successful parry, -2 for successful dodge,
+ * and 0 - x represenging the damage arg sent through to damage().
+ * Note that since damage() inflicts 2 x <dam> damage, hit_player 
+ * returns half the actual damage done.
+ */
+hit_player(object pob, string dtype, int dam, locn, callb)
+{
+    int crit, reaction, action, armour_class, off_skill;
+    object a_ob;
+
+#if 0
+    /* Temporary changeover stuff:   Jenna Sep 99 */
+    if (intp(dtype))
+    {
+        locn = dam;
+        dam = dtype;
+        dtype = "impact";
+        LOG->log("DAMAGE","FIGHT_SERV: No dam type from " + file_name(caller()) + ".\n");
+    }
+
+    if (!objectp(pob))
+    {
+	LOG->log("DAMAGE", "FIGHT_SERV: Sent bad pob from " + file_name(caller()) + ".\n");
+	return 0;
+    }
+#endif
+
+    if (!pob->valid_hit())
+        return 0;
+
+    if (locn == "all")	/* we'll divide the dam into 3 equal hits */
+    {
+	if (dam >= 18)
+	{
+            int i, tmp, total;
+            for (i = 0, total = 0; i < 3; i++)
+                {
+                    tmp = hit_player(pob, dtype, dam/3, pob->random_location(), callb);
+                    if (tmp > 0)
+                         total += tmp;
+                 }
+             return (total > 0 ? total : tmp);
+	}
+	locn = pob->random_location(); /* Too small to divide up */
+     }
+
+    if (!locn || index(pob->query_body(),locn) == -1)
+         locn = pob->random_location();
+
+    action = pob->query_action();
+    reaction = pob->query_reaction();
+    armour_class = pob->query_armour(); /* ??? but no arg always returns 0! - Jenna */
+
+    a_ob = pob->query_attack();
+
+    if (a_ob && !pob->query_feeble() && environment(a_ob) == environment(pob))
+    {
+        int off = a_ob->query_skill("offense");
+        if (reaction == 2 /* dodge */ ) 
+        {
+            if (action == 2) /* dodge */
+                crit = a_ob->apply_skill("offense",2*pob->query_skill("dodge"), 0); 
+            else
+                crit = a_ob->apply_skill("offense",pob->query_skill("dodge"), 0); 
+            /* give them a learning chance */
+            pob->apply_skill("dodge",off, 0);
+            if (!crit)
+                return -2;
+        }
+        else if (reaction == 1 || reaction == 3 /* parry */ ) 
+        {
+            if (action == 1) /* parry */
+                crit = a_ob->apply_skill("offense", 2*pob->query_skill("defence"), 0); 
+            else
+                crit = a_ob->apply_skill("offense", pob->query_skill("defence"), 0); 
+            /* give them a learning chance */
+            pob->apply_skill("defence", off, 0);
+            if (!crit)
+                return -1;
+        }
+        else
+        {
+             crit = a_ob->apply_skill("offense",pob->query_skill("dodge")/3, 0);
+             if (!crit)
+                 return -1;
+        }
+    }
+    if (pob->query_feeble())
+    {
+	dam = dam < 7 ? dam * 3 :
+	      dam < 20 ? dam * 2 : dam * 3 / 2;
+    }
+    if (crit == 50)  
+    {
+        /* critical hit - triple damage (but no longer ignores armour) */
+        if (dam < 1) dam = 1;
+        dam *= 3;
+#if 0
+        if (action != 1 && reaction != 1) 
+            dam = dam * 2;        /* Penalty for action parry */
+#endif
+	if (dam > 12) 
+	{
+            combat_msg(pob,
+              "An extremely vicious, stomach churning blow sinks into your body!\n");
+            pob->checked_say(pob->query_name() + " is smashed by a vicious, stomach-churning blow!\n"); 
+	 }
+    }
+
+    dam = pob->absorb_damage(dtype, dam, locn);
+    if (pob->query_base_armour())    /* For changeover period only */
+    {
+            LOG->log("DAMAGE",pob->short()+" has base armour.\n");
+    }
+
+/*
+ *        dam = dam - (armour_class + 1) - pob->query_armour(locn);
+ *        armour_break(pob, locn, dam);
+ */
+
+    if (dam <= 0)
+        return 0;
+    if (dam > pob->max_hp())
+        dam = pob->max_hp()+1;       /* ??? why? damage() doubles it anyway */
+    if (objectp(callb) && callb->query_living())
+    {
+	do_combat_messages(callb, dtype, locn, dam, pob);
+	callb = 0;
+    }
+    pob->damage(dtype, dam, locn, callb);	
+    return dam;
+}
+
+next_attack(pob)
+{
+    if (pob) attack(pob);
+}
+
+/*
+ * Return true if there still is an agressor in the same room as the player.
+ */
+
+attack(pob) 
+{
+    int tmp,tmp2, tmp_hp;
+    int whit, wc, brief, mindam, maxdam, dam;
+    string name_att, dtype;
+    (int|string) hitloc;
+    object att_who, wweapon;
+
+    if (!pob || pob->query_ghost()) return;
+    att_who = pob->query_attack();
+    if (!att_who || att_who == pob) return 0;
+
+    brief = pob->query_brief();
+    if (!brief) brief = att_who->query_brief();
+
+    /* stop attacking a non-interactive player */
+    if (att_who->is_player() && !query_ip_number(att_who)) return 0;
+    /* stop attacking if you are a non-interactive player */
+    if (pob->is_player() && !query_ip_number(pob)) return 0;
+
+    name_att = att_who->query_name();
+    if (!name_att || att_who->query_ghost() 
+        || environment(att_who) != environment(pob)) 
+    {
+        if (!pob->query_hunt() && name_att && !att_who->query_ghost())
+        {
+            if (!brief) 
+                combat_msg(pob, "You are now hunting " + att_who->query_name() + ".\n");
+            pob->add_hunt(att_who, 10);
+        }
+        att_who = 0;
+        catch pob->attacked_by(0);;    /* temp hack */
+
+        /* anyone else to attack in the room? check hunting array */
+        att_who = next_attacker(pob);
+        if (!att_who) return 0;
+        pob->attacked_by(att_who);
+        pob->remove_hunt(att_who);
+        call_out("next_attack", 1, pob);
+        return 1;
+    }
+
+    att_who->attacked_by(pob);
+    pob->attacked_by(att_who);
+    if (pob == att_who) return;
+
+    if (pob->query_spell())
+        return combat_spell(pob); 
+
+    if (pob->query_action() == 1 || pob->query_action() == 2)
+        return 1;
+
+    hitloc = att_who->random_location();
+
+    wweapon = pob->query_wielded();
+    if (wweapon) 
+    {
+	if (wweapon->query_broken()) /* Jenna Apr 01 */
+	    wc = 1;
+	else
+	    wc = wweapon->weapon_class();
+        whit = wweapon->hit(att_who, hitloc);
+	dtype = wweapon->damage_type();
+    }
+    else
+    {   
+        if ( !(wc = pob -> query_wc()) ) 
+            wc = WEAPON_CLASS_OF_HANDS;
+	dtype = pob->query_damage_type();
+    }
+    if (!dtype)
+	dtype = "impact";
+    wc += random(pob->query_str()) / 4;        /* strength bonus */
+    if (pob->query_feeble())
+	wc /= 3;		/* pussy hits from feeble people */
+    if (whit == -1)
+	return;
+    maxdam = wc + whit;
+    mindam = query_min_damage(pob, wweapon, maxdam);
+    dam = random(maxdam - mindam) + mindam + 1;
+//    TD(pob->query_name()+": min="+mindam+",max="+maxdam+",dam="+dam);
+    tmp = hit_player(att_who, dtype, dam, hitloc, this_object());
+    if (tmp == 0) 
+	tmp = 1;
+    tmp2 = tmp;
+
+    if (intp(hitloc) && hitloc < 0) 
+        hitloc = "body";
+
+    /* Does the enemy still live ? */
+    if (att_who && !att_who->query_ghost()) 
+    {
+        if (tmp2 > -1) /* some kind of hit */
+        {
+	    if (intp(att_who->query_hp(hitloc)))	/* sever mess already done by callb */
+	        do_combat_messages(pob, dtype, hitloc, tmp2);
+            weapon_break(pob, wweapon); /* should be in weapon->weapon_hit(), surely? - J */
+            return 1;
+        }
+        if (tmp2 == -1) /* you have been parried! */
+        { 
+            string what;
+
+            if (!brief) 
+            {
+                tell_object(pob, "Your blow is parried by "+name_att+".\n");
+                pob->checked_say(pob->query_name() + "'s blow is blocked by " + 
+                                 name_att + ".\n", att_who);
+                if (pob->query_invis() >= INVIS_ACTION)
+                    tell_object(pob,"Your blow is parried by "+name_att+".\n");
+            }
+#if 0
+            if ((random(att_who->query_skill("defence")))
+                < att_who->query_skill("defence") / 5) /* critcal parry! */
+                   weapon_break(pob, wweapon, 1);
+#endif
+            return 1;
+        }
+        if (tmp2 == -2) /* dodged! */
+        {
+            if (!brief) 
+            {
+                tell_object(pob, "Your wild blow is dodged by "+name_att+".\n");
+                pob->checked_say(pob->query_name() + "'s wild blow is skillfully dodged by " + 
+                                 name_att+".\n", att_who);
+                if (pob->query_invis() >= INVIS_ACTION)
+                    tell_object(pob,"Your wild blow is dodged by "+name_att+".\n");
+            }
+#if 0
+            if ((random(att_who->query_skill("dodge")))
+                < att_who->query_skill("defence") / 5) /* critical parry! */
+                  weapon_break(pob, wweapon, 1 /* ground */);
+#endif
+            return 1;
+        }
+        if (tmp == -3 ) 
+        { 
+            return 1;   /* ??? */
+        }
+        LOG->log("DAMAGE","FIGHT_SERV Error: tmp2 = " + tmp2 + " from hit_player, REPORT it to Dredd please.\n");
+        return 1;
+    }
+    if (pob) 
+    {
+        combat_msg(pob, "You killed " + name_att + ".\n");
+        pob->you_killed(att_who);
+        att_who = next_attacker(pob);
+        pob->attacked_by(att_who);
+        pob->remove_hunt(att_who);
+    }
+    if (att_who)
+        return 1;
+}
+
+// Masteries
+// ---------
+// Jenna Sep 2000
+//
+// When a player is using a weapon that he/she has no mastery skill
+// for (e.g. wielding a sword but has no "sword mastery" skill),
+// the damage dealt is random(max_damage) -- e.g. 0-16 for a sword
+// with weapon_class() of 16. This is the traditional way of
+// calculating damage.
+//
+// If the creature does have a mastery, his/her minimum damage can
+// be increased above zero, so that the damage done may be the range
+// 6-16, for example. To calculate min. damage, the following curve
+// is used:
+//
+//   min. damage = ((M / -(skill + M)) + 1) * max_damage
+//
+// where M is a constant, set by a God to about 100-400. You can
+// modify M to change the relationship between a mastery's skill
+// level and how much it affects minimum damage done. This is how
+// the curve behaves:
+// - when player has M/2 skill, their min. dam. will be 33% of max.
+// - when player has M skill, their min. damage will be 50% of max.
+// - when player has 2M skill, their min. damage will be 67% of max.
+// - when a player has 3M skill, their min. damage will be 75% of max:
+//
+// e.g. when M=200 and max. damage = 16:
+//                              Example skill   Example dam
+// Player Skill    % min dam.    when M=200    when max dam=16
+// -----------------------------------------------------------
+//     M/10            9%           20             1-16
+//     M/5            17%           40             2-16
+//     M/4            20%           50             3-16
+//     M/3            25%           67             4-16
+//     M/2            33%          100             5-16
+//     M              50%          200             8-16
+//     2M             67%          400            10-16
+//     3M             75%          600            12-16
+//     4M             80%          800            13-16
+//     5M             83%         1000            13-16
+//
+// Game balance issue: the effect of introducing weapon mastery skills
+// into the game will be to increase the average (but not maximum) damage
+// done by players. Monsters are less likely to benefit from masteries
+// because they lack the intelligence to develop and use masteries
+// optimally. This suggests it will be a game balance problem. However,
+// I don't expect this to be the case, because medium- and top-level
+// players rarely rely on melee combat to tackle tough monsters. Almost
+// invariably, they use guild/race powers. Because of this, I expect players
+// who develop masteries to have an easier time dispatching low-level
+// monsters, but not mid-level and above monsters. I expect these monsters
+// to stay about the same or increase slightly the damage they do,
+// since they rely much more on melee combat, but lack the AI
+// to fully exploit it. Low-level monsters and players won't be
+// affected, since they don't have enough skill to benefit from
+// masteries.
+
+#define M_CONSTANT	200.0
+#define MIN_MASTERY_SKILL	10
+
+query_min_damage(object pob, object w, int maxdam, int notest)
+{
+/*    object w = pob->query_wielded(); */
+    string mtype;
+    int s;
+    real calc;
+
+    if (!objectp(w)) return 0;
+
+    mtype = WEAPONER->query_mastery_type(w);
+    if (!mtype) return 0;
+    s = pob->query_skill(mtype);
+    if (!s)
+    {
+	s = MIN_MASTERY_SKILL;
+	pob->add_skill(mtype, MIN_MASTERY_SKILL);
+    }
+    if (!notest && !pob->apply_skill(mtype))
+	return 0;
+    calc = (M_CONSTANT / -(int2real(s) + M_CONSTANT)) + 1.0;
+    calc *= maxdam;
+    return real2int(calc);
+}
+
+/* Called by RO/living when a critical hit is done -- used to keep
+ * the messages in order.
+ */
+hit_result(pob, dtype, dam, locn, result) {
+    object en = pob->query_attack();
+    if (en)
+        do_combat_messages(en, dtype, locn, dam, pob);
+    }
+
+do_combat_messages(pob, dtype, hitloc, dam, att_who) {
+    array what_how = "std/damage"->query_hit_mess(dtype, dam);
+    string what = what_how[0];
+    string how = what_how[1];
+    string out;
+
+    if (!att_who)
+	att_who = pob->query_attack();
+    if (!att_who)
+        return;
+    if (pob->query_brief() && dam < 2)
+        return;
+    if (how != "")
+        how = " " + how;
+    out = "You " + what + " " + att_who->query_name() +
+        how + " in the " + hitloc + ".\n";
+    dam < 4 ? bare_combat_msg(pob, out) : combat_msg(pob, out);
+    pob->checked_say(pob->query_name() + " " + PLURAL->plural_first(what) + 
+        " " + att_who->query_name() + how + " in the " + hitloc + ".\n", 
+        att_who);
+    if (pob->query_invis() <= INVIS_ACTION)
+    {
+	out = pob->query_name() + " " + 
+             PLURAL->plural_first(what) + " you" + how + " in the "+
+                hitloc +".\n";
+	dam < 4 ? bare_combat_msg(att_who, out) : combat_msg(att_who, out);
+    }
+}
+
+next_attacker(pob)
+{
+    array hunts;
+    int i;
+    object env, ob;
+    string name;
+
+    if (!pob) return 0;
+    if (pob->query_spell())
+	pob->add_spell(0, 0);
+    hunts = pob->query_hunt();
+    if (!hunts || !pointerp(hunts)) return;
+    env = environment(pob);
+    for (i = 0; i < sizeof(hunts); i++) 
+    {
+        if (!hunts[i] || !objectp(hunts[i])) continue;
+        name = hunts[i]->query_real_name();
+        if (name && env)
+            if (ob = present(name,env))
+                if (!ob->query_ghost()) return ob;
+        return ob;
+        
+    }
+    return 0;
+}
+
+combat_spell(pob)
+{
+    string callb, a, b;
+    int x;
+
+    if (pob->is_casting()) return 1;
+    callb = pob->query_spell();
+    pob->add_spell(0, 0);
+    x = index(callb, '.');
+    if (x == -1) 
+    {
+        write("Spell Failure -- contact a God.\n");
+        return 1;
+    }
+    a = callb[..x-1];
+    b = callb[x+1..];
+    return catch a->(b)(pob, pob->query_attack());;
+}
+
+weapon_break(object pob, (int | object) wweapon, int extra)
+{
+    int already_broken;
+
+    if (!wweapon)
+	return;
+    already_broken = wweapon->query_broken();
+    wweapon->damage_object(1 + extra); 
+    if (already_broken)
+    {
+	array p = wweapon->query_property("break");
+	if (!p) return;
+	if (wweapon->query_damage() > 2 * p[2]) 
+	{
+            combat_msg(pob,
+            "Your weapon is shattered to pieces by the force of the blow!\n");
+                pob->checked_say(pob->query_name() + "'s " + 
+                wweapon->query_name() + " is shattered to pieces.\n");
+            pob->add_weight(-wweapon->query_weight());
+            wweapon->un_wield();
+            destruct(wweapon);  
+            wweapon = 0;
+	}
+    }
+    else if (wweapon->query_broken()) 
+    {
+            combat_msg(pob,
+            "Your weapon cracks under the force of the blow!\n");
+                pob->checked_say(pob->query_name() + "'s " + 
+                wweapon->query_name() + " cracks.\n");
+    }
+
+}
+
+#if 0
+/* 
+ * Put the below into obj/armour, kicked off by
+ * std/protection->absorb_damage()      - Jenna 99
+ */
+armour_break(object pob, (int | string) locn, int extra)
+{
+    array alla;
+    object o;
+    int i;
+
+    if (!locn) return;
+
+    alla = pob->query_all_armour();
+    if (!alla) return;
+
+    for (i = 0; i < sizeof(alla); i++) 
+    {
+        if (!objectp(alla[i])) continue;
+        if (alla[i]->query_armour(locn))
+            alla[i]->damage_object(extra);    
+        if (alla[i]->query_broken()) 
+        {
+            combat_msg(pob,
+            "Your "+alla[i]->query_name()+" is wrecked by the blow!\n");
+                pob->checked_say(pob->query_name() + "'s " + 
+                alla[i]->query_name() + " is destroyed beyond repair.\n");
+            pob->add_weight(-alla[i]->query_weight());
+            destruct(alla[i]);
+        }
+    }
+    return 1;
+}
+#endif
+

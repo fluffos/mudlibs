@@ -1,0 +1,171 @@
+/*
+ * RWHO server
+ * Shattered Worlds mudlib
+ *
+ * Maintain a list of who is on where.
+ * 
+ * Limitations:
+ *  It does not yet know when a new mud has come online - when RWHO
+ *  starts up, it's knowledge is fixed to what RHOST_SERV knows.
+ */
+
+/*
+ *History:
+ * 960913 Hunter   cleaned up reporting of downed servers
+ */
+
+inherit "RO/Servers";
+
+/*
+ * information to keep track of:
+ *  for each mud:
+ *   - time stamp (local time) of when last information received
+ *   - remote time of mud for time-of-day
+ *   - list of users. for each user, return the information 
+ *     given by PEOPLE.
+ */
+
+nosave array RWhoHosts;
+nosave array RWhoTimeStamp;
+nosave array RWhoLocalTime;
+nosave array RWhoPeople;
+nosave array RWhoLoads;
+
+/*
+ * INTEGRITY_TIME is how often the other RWHO servers are polled
+ */
+const INTEGRITY_TIME = 60;
+
+/*
+ * MAX_DOWNTIME is how long we will display downed remote hosts for,
+ * in seconds.
+ */
+const MAX_DOWNTIME = 600;
+
+reset( argh )
+{
+int i;
+    if (!argh)
+    {
+        /* find out what is around */
+        RWhoHosts = RHOST_SERV->query_all_hosts();
+        /* set up storage space for data */
+        RWhoTimeStamp = allocate( sizeof( RWhoHosts ) );
+        RWhoLocalTime = allocate( sizeof( RWhoHosts ) );
+        RWhoPeople = allocate( sizeof( RWhoHosts ) );
+        RWhoLoads = allocate( sizeof( RWhoHosts ) );
+        for (i = 0; i < sizeof( RWhoHosts ); i ++)
+        {
+            RWhoTimeStamp[i] = -1;
+            RWhoLocalTime[i] = "<unknown>";
+            RWhoPeople[i] = 0;
+            RWhoLoads[i] = "<unknown>";
+            call_out( "ping_people", 1, i );
+        }
+        call_out( "integrity_check", INTEGRITY_TIME );
+    }
+}
+
+integrity_check()
+{
+    call_out( "integrity_check", INTEGRITY_TIME );
+}
+
+ping_people( int i )
+{
+    call_out( "ping_people", 60, i );
+    if (pointerp( RWhoHosts[i] ))
+    {
+        RCALL->remote_call( RWhoHosts[i], "got_people_bundle", 
+            "RO/remote/rwho", "bundle_people_info", 0, i );
+    }
+}
+
+/*
+ * got_people_bundle is called by RCALL when it has a result.
+ * It gives back to us the bundle provided by bundle_people_info,
+ * and the token (i) we gave RCALL in ping_people.
+ */
+got_people_bundle( foo, i )
+{
+    if (pointerp(foo))
+    {
+        RWhoPeople[i] = foo[0];
+        RWhoLocalTime[i] = foo[1];
+        RWhoTimeStamp[i] = time();
+/*          RWhoLoads[i] = foo[2];*/
+    }
+}
+
+/*
+ * bundle_people_info is called by a remote site to get
+ * all the information it needs in one go.
+ */
+bundle_people_info( )
+{
+#if 0
+    return ({ PEOPLE->query_people(), LOCALTIME->local_ctime(), 
+        query_load_average() });
+#else
+    return ({ PEOPLE->query_people(), LOCALTIME->local_ctime() });
+#endif
+}
+
+query_all( )
+{
+    return ({ RWhoHosts, RWhoPeople, RWhoLocalTime, RWhoTimeStamp });
+}
+
+string 
+printable_time( int atime )
+{
+int ago;
+    ago = time() - atime;
+    return ""+ ago + " seconds";
+}
+
+show_who( )
+{
+    int i;
+    int j;
+
+    for (i = 0; i < sizeof(RWhoHosts); i ++)
+    {
+        if ( (RWhoTimeStamp[i] != -1)        /* is it up? */
+            && ( (time() - RWhoTimeStamp[i]) <= MAX_DOWNTIME) 
+           )
+        {
+            write( RHOST_SERV->query_host( RWhoHosts[i] )
+                +" (local time " + RWhoLocalTime[i]
+                +") [" + printable_time( RWhoTimeStamp[i] ) +" ago]\n");
+            for (j = 0; j < sizeof(RWhoPeople[i][0]); j ++)
+            {
+                if (stringp(RWhoPeople[i][2][j]))
+                {
+                    write( "  " + RWhoPeople[i][2][j] + "\n" );
+                }
+            }
+            write("\n");
+        }
+    }
+}
+
+show_people( )
+{
+    int i;
+    int j;
+
+    for (i = 0; i < sizeof(RWhoHosts); i ++)
+    {
+        if (RWhoTimeStamp[i] != -1)        /* is it up? */
+        {
+            write( RHOST_SERV->query_host( RWhoHosts[i] )
+                +" (local time " + RWhoLocalTime[i]
+                +") [" + (time()-RWhoTimeStamp[i]) + " seconds ago]\n");
+            write("  " + implode( PEOPLE->list_users( RWhoPeople[i] ), "\n  ")
+                +"\n");
+            write("\n");
+        }
+    }
+}
+

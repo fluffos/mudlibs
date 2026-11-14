@@ -1,0 +1,182 @@
+/*
+ * Virtual.c - a simple controller for named objects `owned' by
+ * this object (or whatever inherits it).  Not intended for large
+ * scale use (eg virtual areas) - it's intended to support uniquely
+ * named objects which are attached to, or owned by, some other object.
+ *
+ * Under development; currently provides the following:
+ *	name_virtual_object(name, callto, ob) - register a virtual object.
+ *	GetVirtualObject(name) - called by the driver to get hold of a named object, if
+ *				 the object doesn't already exist.
+ *	GetVirtualLS() - returns a listing (aka ls) of object names and loaded objects.
+ *
+ * name_virtual_object() commits an object to the list of owned objects.  Its
+ * parameters are:
+ *	name:	a `filename-like' string.  file_name(this_object()) will be prepended
+ *	     	to it whenever it's actually used.
+ *	ob:	An integer, object, or string.  If an integer, callto will be used to create
+ *		the object, if demanded.  If an object, it will be renamed according to "name",
+ *		and entered into the table (if there is another object of the same name in the
+ *		table, it will be summarily destructed; if this object appears under another
+ *		name in the table, it will be renamed and the other entry deleted).  If it's a
+ *		string, it will be used as the parameter to callto if GetVirtualObject
+ *		is called.
+ *	callto: a function name in this_object.  If the object is asked for by the driver, but
+ *		doesn't exist, this_object()->callto(name, object) will be called, where object
+ *		is whatever string or int was in the `obj' field when the object was registered.
+ *		called to create it.  If callto isn't a string, ob will be treated as the name of
+ *		the object to clone.
+ *
+ * This object DOES NOT SAVE - you'll need to set it up in reset() or whatever.
+ * Notice that when GetVirtualObject is called, it overwrites the parameter to
+ * `callto' with the object created (because GetVirtualObject shouldn't be called
+ * again to find that object, until it is destructed).  When the object is destructed,
+ * it will eventually be cleaned out.
+ */
+#include <Servers.h>
+
+nosave int vdelcnt = 0;
+nosave array vnames = [ ];	/* names of virtual objects (excluding the current object prefix) */
+nosave array vobs = [ ];	/* actual loaded objects.  Storing cloneable string names here is possible, though problematic */
+nosave array vcalls = [ ];	/* how to create one - the name of the function to call in this object to get one */
+
+/*
+ * Add a managed object to the list.
+ * You can consider this to be like `mv(name, inode)' (inodes have names, unfortunately)
+ */
+
+nosave int name_virtual_object(string name, (int|string) callto, (int|string|object) obj) {
+    int x = index(vnames, name);
+    int y = (-1);
+    string na = file_name(this_object()) + "/" + name;
+
+    if (intp (obj))	/* ensure ints are 0 */
+	obj = 0;
+    else
+	y = index(vobs, obj);		/* otherwise, we want to know if the object exists (use an object pointer) */
+
+    if (x < 0) {			/* name not found */
+	/* in the interests of keeping things in sync, if the name doesn't exist in the array but the given object
+	 * does, we just change its known name (hence the analogy with `mv').
+	 */
+	if (y >= 0) {			/* ob will be renamed later */
+	    vnames[x] = 0;
+	    x = y;
+	    vnames[x] = name;
+	    vcalls[x] = callto;
+	    }
+	else {					/* ob not there, nor name */
+	    x = index(vnames, 0);		/* look for a free slot (no name or object) */
+	    while (x >= 0) {
+	        if (!(vobs[x] || vcalls[x]))
+		    break;
+	        x = index(vnames, 0, x+1);
+	        }
+	    if (x < 0) {			/* none found: tack this on the end */
+	        vnames += [ name ];
+	        vcalls += [ callto ];
+	        vobs += [ obj ];
+	        x = sizeof(vnames) - 1;
+	        }
+	    else {				/* A free entry was found (no name or object) */
+	        vnames[x] = name;
+	        vcalls[x] = callto;
+	        vobs[x] = obj;
+	        }
+	    }
+	}
+    else {				/* we found the name in the array; check for the object */
+	if ((y >= 0) && (x != y)) {	/* object exists and is named differently to this one */
+	    vnames[x] = 0;		/* delete this occurrence of the name; we'll use the object direct */
+	    x = y;			/* and stuff ours in on top of where the copy of the object appears */
+	    }
+	vnames[x] = name;		/* set up this one */
+	vobs[x] = obj;			/* make sure the ob is in the array */
+	vcalls[x] = callto;		/* and drop out to get it renamed */
+	}
+/* x has the array location of the object we're using.  If it's an object, ensure it is named appropriately */
+    if (objectp(vobs[x])) {
+	object o = find_object(na);		/* see if there's another of that name */
+	if (objectp(o) && (o != vobs[x])) { 	/* *sigh*.  Must have been one of our objects. */
+	    string delname =  na + "/Deleted/" + (vdelcnt++);
+	    rename_object(o, delname);
+	    y = index(vobs, o);
+	    if (y >= 0) {		/* this test shouldn't fail - log if it does? */
+		vnames[y] = 0;
+		}
+	    destruct(o);
+	    }
+	rename_object(vobs[x], na);
+	}
+/* If object and call were both 0, we clean it out instead. */
+    if (!(vobs[x] || vcalls[x]))
+	vnames[x] = 0;
+    return 1;
+    }
+
+/*
+ * retrieve an object, create it if we have a name & call but no method.
+ */
+
+GetVirtualObject(string name) 
+{
+    string n = name[sizeof(file_name(this_object())) + 1..];
+    int x = index(vnames, n);
+    object o;
+    if (x < 0)
+	return 0;
+    if (objectp(vobs[x]))	/* somethings already there, just use it */
+	return vobs[x];
+    if (stringp(vcalls[x])) {
+        o = call_other(this_object(), vcalls[x], n, vobs[x]);
+         /* The next line commented out by Llati. G. said he was thinking
+             of persistent monsters when he coded this, but for my
+             use (bboards) I want them to reappear */
+	/* vcalls[x] = 0;			/* ensure it doesn't get recreated on destruct */
+        if (objectp(o)) {
+	    rename_object(o, name);
+	    vobs[x] = o;
+            return o;
+	    }
+	return 0;
+	}
+    if (stringp(vobs[x])) {	/* assume a string is a name to clone */
+	string err;
+	err = catch o = clone_object(vobs[x]);;
+	if (err) LOG->log_now("STARTUP", "virtual.c:1:"+err+"\n");
+	if (objectp(o)) {
+	    rename_object(o, name);	/* wouldn't be here if one existed */
+	    vobs[x] = o;
+	    return o;
+	    }
+	}
+    return 0;
+}
+
+/*
+ * GetVirtualLS() - like ls(), returns a list of [ name ] { size } - except
+ * size is the actual object or cloneable string.
+ * Cleans them out as it goes.
+ */
+
+GetVirtualLS((int | string) name) {
+    int x = 0, y = 0;
+    array a = allocate(sizeof(vnames));
+    array b = allocate(sizeof(vnames));
+    while (x < sizeof(vnames)) {
+	if (stringp(vnames[x]) &&
+	    (stringp(vcalls[x]) ||
+	     objectp(vobs[x]) ||
+	     stringp(vobs[x]))) {
+		 vnames[y] = vnames[x];
+		 vobs[y] = vobs[x];
+		 vcalls[y] = vcalls[x];
+		 y++;
+		 }
+	x++;
+	}
+    vnames = vnames[..y-1];
+    vcalls = vcalls[..y-1];
+    vobs = vobs[..y-1];
+    return [ vnames + ({ ], vobs + ({ }) });
+    }

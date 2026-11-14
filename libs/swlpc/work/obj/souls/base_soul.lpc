@@ -1,0 +1,172 @@
+/*
+ * Base soul, inherited by other souls.
+ * Interfaces with body code, etc.
+ */
+
+/* Jenna July 99 -- added add_ability() fun */
+
+inherit "RO/base_object";
+inherit "std/emoteable";
+inherit "RO/base/hilite";
+
+#include <syslog.h>
+
+nosave object myself;
+string filename;
+
+array abilities = [ ];
+
+query_myself() { return myself; }
+
+/*
+ * These two should be constant through the life of a soul (i.e. should 
+ * NOT depend on level). They're used to track opinions of people to 
+ * people with particular attributes (race, guild, etc).
+ */
+
+string soul_class = "base_soul";	/* "race", "guild", "cult", 
+					"capability" (generic commands) */
+string soul_specific = "unspecified";	/* "healers", "member" (cults), 
+					"orc", "dragon", "knight" */
+
+show_stats() {
+array ret = "RO/base_object"::show_stats();
+    if (!arrayp(ret))
+        ret = ({ ret });
+    ret += ({
+        "Soul type: " + query_soul_type(),
+    	"myself   : "+ (objectp(myself)?myself->query_real_name():"<no one>"),
+   	"source   : " + filename
+	});
+    return ret;
+}
+
+reset(NotFirst)
+{
+    "RO/base_object"::reset(NotFirst);
+    "std/emoteable"::reset(NotFirst);
+    if (!NotFirst)
+    {
+        filename = file_name(this_object());
+        if (index(filename, "#") != -1)
+	    filename = filename[..(index(filename, "#") - 1)];
+	add_id( ({"soul", "ND" }) );
+	add_property("NO_GET");
+	add_property("NO_DROP");
+	add_property("NO_SAVE");
+    }
+}
+
+id(s) 
+{
+    return (s == soul_class)
+	|| (s == soul_specific)
+	|| (s == soul_class + "/" + soul_specific)
+	|| "RO/base_object"::id(s);
+}
+
+/* Added Hunter 6/4/93
+ */
+
+override_myself(who) 
+{
+    if (!myself) 
+    {
+	    myself = who;
+    	// myself->add_soul(this_object());
+    }
+}
+
+/*
+ * record the player's affiliation (in the player).  Unique = 1 if all other
+ * affiliations in the same class should be stripped (we should log these).
+ */
+
+set_affiliation_level(real val, int is_unique) 
+{
+    if (!realp(val))
+	val = 1.0;
+    if (soul_class == "race") {	/* special hack to make sure races are ok */
+	val = 1.0;
+	is_unique = 1;
+    }
+    if (is_unique) {
+    array a = myself->query_affiliation_class(soul_class);
+    int x = 0;
+	while (x < sizeof(a)) 
+   	{
+	    array pp = explode(a[x], "/");
+	    myself->remove_affiliation(pp[0], pp[1]);
+	    x++;
+	}
+    }
+    myself->set_affiliation(soul_class, soul_specific, val);
+}
+
+init() 
+{
+    override_myself(this_player());
+    "std/emoteable"::init();
+    if (soul_class == "race")
+	set_affiliation_level(1.0, 1);
+/* DEBUG stuff */
+    if ( (soul_class == "base_soul") || (soul_specific == "unspecified") )
+	SYSLOG->syslog(LOG_DEBUG, "Soul_type not set");
+    if ( myself && myself == this_player() && 
+	myself->query_real_name() == "hunter" )
+    {
+        tell_object( myself, "soul init(): " + query_soul_type() + "\n");
+    }
+}
+
+
+#define ABILITY_PATH "obj/souls/ability/"
+
+add_ability(string str) 
+{
+	object o = load_object(ABILITY_PATH + str);
+	if (!myself || !o || present(str, myself)) return;
+	move_object(o = clone_object(ABILITY_PATH + str),myself);
+	return o;
+}
+		
+/*
+ * soul_init() is called by myself *after* all souls have been 
+ * added onto the person, when a restore_soul() has been done.
+ *
+ * put any code that depends on other souls already been cloned
+ * into this function when you inherit this code.
+ */
+soul_init()
+{
+    /* abstract function - does nothing */
+}
+
+/*
+ * These should NOT be modified, except when creating the soul - G.
+ */
+
+nosave set_soul_type(string cl, string sp) 
+{
+    soul_class = cl;
+    soul_specific = sp;
+}
+
+string query_soul_type() 
+{
+    return soul_class + "/" + soul_specific;
+}
+
+query_source() { return filename; }
+query_filename() { return filename; }
+
+/* Next two fns by Belgarion, 950922. */
+
+get() {
+    return 0;
+    }
+
+drop() {
+    return 1;
+    }
+

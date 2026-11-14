@@ -1,0 +1,111 @@
+/* 
+ * Edit Daemon shell.
+ * provides code to manage any text editor
+ * inherit this and put in your own code to edit the 
+ * file
+ *
+ * Hunter of Shattered Worlds
+ * October 1992
+ */
+
+inherit "RO/Servers";
+ 
+array Jobs ;
+/* format of Jobs array :
+ * { obj this_player(), obj return object, string return function,
+ *      string temp file name }
+ */
+reset(arg)
+{
+	if (!arg) Jobs = [ ];
+}
+
+show_stats()
+{
+int i;
+	if (sizeof(Jobs))
+	{
+		write("Current Edit Jobs:\n");
+		write("------------------\n");
+		for (i = 0; i < sizeof(Jobs); i += 4)
+		{
+			write(FORMAT->left_justify(
+				Jobs[i]->query_real_name(), 12));
+			write(FORMAT->left_justify(
+				file_name(Jobs[i+1])+"->"+Jobs[i+2], 40));
+			write("\n"); 
+		}
+	}
+}
+
+query_jobs() { return Jobs; }
+
+edit(str, retfunc)
+{
+object who;		/* who called the object (this_player()) */
+object what;		/* what called it - previous_object() */
+string tempfile;
+	who = this_player();
+	what = caller();
+	if (pointerp(str))
+		str = implode(str, "\n");
+	tempfile = "open/"+who->query_real_name()+".vi."+time();
+	rm(tempfile);
+	write_file(tempfile, str+"\n");
+	Jobs += [ who, what, retfunc, tempfile ];
+	this_object()->edit_file(tempfile);
+	return 1;
+}
+
+/*
+ * Edit_file - throw them into the editor on the given file
+ */
+/* Abstract function here only. 
+ * redefine this function as you wish to implement other
+ * editors
+ */
+edit_file(str) {
+    write("Entering Ed - 'w' to write, 'q' or 'Q' to exit, !H for help.\n");
+    ed(str, "edit_done");
+    return;
+}
+
+ed_help() {
+	OUTPUT_FILE -> cat("doc/helpdir/ed");
+        return 1;
+    return 0;
+}
+
+edit_done(ret)
+{
+object who;
+int i;
+string text;
+	this_player()->pop_caution();
+	i = index(Jobs, this_player());
+	if (i == -1)	
+	{
+		write("ERROR - THIS_PLAYER NOT IN JOBS LIST!!\n");
+		return 0;
+	}
+	text = grab_file(Jobs[i+3]);
+	rm(Jobs[i+3]);
+	if (Jobs[i+1])
+		call_other(Jobs[i+1], Jobs[i+2], text);
+	else
+	{
+		write("ERROR - NO RETURN OBJECT\n");
+	}
+	Jobs = Jobs[..i-1] + Jobs[i+4..];
+	return 1;
+}
+
+query_destruct()
+{
+	if (sizeof(Jobs))
+	{
+		ALERT->siren("\nWARNING! MUD CRASH IMMENENT! SAVE ALL FILES!\n\n");
+		return 1;
+	}
+	return 0;
+}

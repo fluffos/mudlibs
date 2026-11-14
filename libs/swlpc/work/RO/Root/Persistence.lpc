@@ -1,0 +1,157 @@
+/*
+ * Base persistent object server - /P - the root of the
+ * persistent object `directory tree'.  Created by the
+ * root directory.  Kicks off the top level persistent
+ * object servers (all of these are SU GOD, so don't
+ * fiddle with this unless you know what you're up to).
+ * Any security required here can be implemented by
+ * requiring the caller to be a god level object.
+ *
+ * GetVirtualObject: If its `subdirectories' aren't loaded,
+ * it loads and suid's them (currently, the source all comes
+ * from this directory).
+ */
+
+#include "security.h"
+#include "Servers.h"
+
+inherit "RO/Root/Loaded";
+
+/*
+ * Directory to get template files from.
+ */
+
+#define	HERE	"RO/Root/"
+
+/*
+ * The basic list of objects to create, along with their
+ * files, SU names and levels.  Note that this object doesnt have
+ * to be god level if the sub dirs share its SU name (and are
+ * of equal or lower level).
+ * 4 entries/name: "/"+subdir, file to clone, suid name, suid level.
+ */
+
+nosave array base_servs = [
+		"/p",	HERE + "Players",	"!player",	GOD + 2
+		];
+		       
+/*
+ * Given a name, return its descriptor.
+ */
+
+/*
+ * Save file is for expansion - other muds, mainly.
+ */
+
+#define	SAVE_FILE	"P/p_serv"
+
+reset(a) {
+    if (a)
+        return;
+    }
+
+query_destruct() {
+    write("Destructing the persistence server?  Piss off...\n");
+    return 1;
+    }
+
+nosave (int|array) GetTemplate(dirname) {
+    int x = index(base_servs, "/" + dirname);
+    if (x >= 0)
+	return base_servs[x..x+3];
+    /* add checks for dynamically created stuff later */
+    return 0;
+    }
+
+/*
+ * Called by our creator after suid'ing us.
+ * Kicks this object off.
+ */
+
+start_virtual() {
+    string err;
+    if (!caller())
+	return;
+    if (query_su_level(caller()) < GOD)
+	return;
+    err = catch restore_object(SAVE_FILE);;
+
+/* We don't actually have a savefile yet - G */
+#if 0
+    if (err) LOG->log_now("STARTUP", "/P: "+err+"\n");
+#endif
+    }
+
+/*
+ * GetVirtualObject: simply here to create and set up the
+ * immediate subdirectories of this object (which may include
+ * local shadows of remote servers).  If we got here,
+ * the implication is that a new one has been created (or
+ * that it is very early in the game startup).
+ * We use the virtual object management stuff simply because
+ * this is a critical system, and one day the in-driver routines
+ * (for finding objects) will change; I want to be able to log on
+ * when they do :).  Also, it lets me stat it.
+ */
+
+GetVirtualObject(n) {
+    if (!stringp(n))
+	return 0;
+
+/*
+ * If they wanted us, return us.
+ */
+    string myname = file_name(this_object());
+    if (n == myname)
+	return this_object();
+    myname = myname + "/";
+
+/*
+ * If we directly own the object, return it.
+ */
+
+    object o = ::GetVirtualObject(n);		/* look for the subobject */
+    if (o)
+	return o;
+
+/*
+ * Find base level object.
+ */
+
+    string suffix = n[sizeof(myname)..];
+    array components = explode(suffix, "/");
+    if (sizeof(components) < 1)				/* nothing there */
+	return 0;
+
+    string dirname = components[0];			/* subdirectory */
+
+    o = ::GetVirtualObject(myname + dirname);	/* look for the subobject */
+
+/*
+ * If it wasn't there, see if we should create it.
+ */
+
+    if (!o) {
+	(array|int) tmp = GetTemplate(dirname);		/* get clone template */
+	if (!arrayp(tmp))				/* not a valid name */
+	    return 0;
+	o = clone_object(tmp[1], myname + dirname);	/* make one */
+	set_uid_me(o, tmp[3], tmp[2]);			/* suid'd */
+	loaded_object(dirname, o);			/* add him to our list of managed objects */
+        string err = catch o->start_virtual();;		/* initialise him as a created object */
+   	if (err)
+	    LOG->log_now("STARTUP", "RO/Players.c: "+err+"\n");  
+	}
+
+    if (o) {								/* if we have a player... */
+	if (sizeof(components) > 1) {					/* but we want one of his subobjects */
+	    return o->GetVirtualObject(n);				/* so pass the request on to him */
+	    }
+	}
+
+    return o;
+    }
+
+show_stats() {
+    "lib/dump"->dump(GetVirtualLS());
+    }

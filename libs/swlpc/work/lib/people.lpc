@@ -1,0 +1,162 @@
+/*
+ * /lib/people 'server'
+ *
+ * Returns an array describing who is currently logged on.
+ * This information will then be used by the 'who' and
+ * 'people' commands on both this mud, and remote muds.
+ */
+
+/*
+ * History:
+ * 941020 Hunter	incept.
+ */
+
+inherit "RO/Servers";
+
+reset( )
+{
+}
+
+/*
+ * query_people():
+ * return a nested array of information about all logged in characters
+ */
+array 
+query_people( )
+{
+array Users;
+array IPaddresses;
+array Names;
+array Levels;
+array Rooms;
+array Idle;
+array Shorts;
+array Invis;
+array Cautions;
+array Genders;
+array Races;
+int i;
+int sz;
+object e;
+    Users = users();		/* query the game driver for who is around */
+    sz = sizeof( Users );
+    IPaddresses = allocate( sz );
+    Names = allocate( sz );
+    Shorts = allocate( sz );
+    Levels = allocate( sz );
+    Rooms = allocate( sz );
+    Idle = allocate( sz );
+    Invis = allocate( sz );
+    Cautions = allocate( sz );
+    Races = allocate( sz );
+    Genders = allocate( sz );
+    for (i = 0; i < sz; i ++)
+    {
+	IPaddresses[i] = query_ip_number( Users[i] );
+	Names[i] = Users[i]->query_real_name();
+    	if (intp(Names[i]))
+	{
+	    Names[i] = Users[i]->query_name();
+	    if (intp(Names[i]))
+		Names[i] = "<NoOne>";
+	    else
+		Names[i] = lower_case( Names[i] );
+	}
+	Shorts[i] = Users[i]->short();
+	Levels[i] = LEVELS->query_desc( Users[i] );
+	e = environment( Users[i] );
+	if (objectp(e))
+	    Rooms[i] = file_name( e );
+	else
+	    Rooms[i] = "<no environment>";
+	Idle[i] = Users[i]->query_idle();
+	Invis[i] = Users[i]->query_invis();
+	Cautions[i] = Users[i]->query_caution();
+	Races[i] = Users[i]->query_race();
+	Genders[i] = Users[i]->query_gender();
+    }
+    return [ IPaddresses, Names, Shorts, Levels, Rooms, Idle, Invis,
+	Cautions, Races, Genders ];
+}
+
+foo() { return list_users( query_people() ) ; }
+
+array
+list_users(list) 
+{
+int i=0,j,tmpl, tmpi, pos, strt, lend;
+(int|string) tmpr;
+array ret = allocate( sizeof( list[0] ) + 1);	/* preallocate */
+array retc = 0;
+
+    ret[0] = 
+	FORMAT->left_justify( "Address", 16 )
+        + "B"
+	+ FORMAT->left_justify( " Name", 14 )
+	+ FORMAT->left_justify( "Level", 9 )
+	+ FORMAT->left_justify( "Idle", 6 )
+	+ FORMAT->left_justify( "Location" );
+    retc = 1;
+    strt = 0;
+    while(i<sizeof(list[0])) 
+    {
+        string name;
+        string outstr;
+        string ip1, ip2;
+        int invis;
+        string idle;
+
+        pos = strt;
+        ip1 = list[0][i];
+/*
+        for (j =strt + 1 ; j < sizeof(list[0]); j ++)
+        {
+                if (list[j] && (ip2 = query_ip_number(list[j])) < ip1)
+                {
+                        pos = j;
+                        ip1 = ip2;
+                }
+        }
+*/
+        invis = list[6][i];
+        name = list[1][i];
+        name = capitalize(name);        
+
+        idle = (list[5][i])/60;
+        if (idle < 0) 
+                idle = 0;
+        idle = (idle?(idle+"m"):"");
+
+        tmpr = FILENAME->contract( list[4][i] );
+#if 0
+        if (environment(list[pos]))
+        {
+        array t;
+            tmpr = file_name(environment(list[pos]));
+            if (tmpr[0..1] == "P/") 
+	    {
+		string inside;
+                if (environment(list[pos]))
+		  inside = environment(list[pos])->query_real_name();
+                if (inside) 
+			tmpr = "inside "+ capitalize(inside) +" ("+tmpr+")";
+	    }
+            tmpr = FILENAME->contract(tmpr);
+        }
+        else 
+	        tmpr = "<no environment>";
+#endif
+        ret[retc] = 
+	    FORMAT->left_justify( ip1, 16 ) 
+	    + (stringp(list[7][i])?"*":" ")
+	    + FORMAT->left_justify( (invis?("("+name+")"):(" "+name+" ")), 14 )
+	    + FORMAT->left_justify( list[3][i], 9 )
+	    + FORMAT->left_justify( idle, 6 )
+            + tmpr;
+	retc ++;
+        i += 1;
+    }
+    ret = ret[..retc-1];
+    return ret;
+}
+

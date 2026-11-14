@@ -1,0 +1,1189 @@
+/*
+ *		 This is Shattered World's Generic Object.
+ *
+ * This file should be used for ALL non-living objects, to get a consistent
+ * set of actions applicable to them.
+ *
+ * o Use it to clone a copy, and setup local values.
+ * o Or inherit it for all normal objects handled by players.
+ *  (that need more than this standard file). 
+ * 
+ * o DON'T JUST COPY THE FILE - IF YOU ARE UNSURE - READ THE DOCS!
+ *
+ * o For Standard properties that are implemented, please refer to the
+ *  documentation doc/std/object.property
+ *
+ *	BREAK,< optional msg >, <damage points needed>
+ *	    -- if you attempt to break it, you do damage points equal to your
+ *	       str - this allows slow damage to armour from combat, etc.
+ *
+ * o Other stuff - G:
+ *	set/query_material(t) - set material - see "materials.h"
+ *	damage_object(x, type) - do damage to object (perhaps from fireballs
+ *		etc); if this gets too big, break it.  Types are listed in
+ *		"damage.h".  Handles standard materials - paper will catch
+ *		fire, glass (if frozen) will shatter, etc.  Returns 0 for
+ *		no effect, or a message specifying what happened.
+ */
+
+/* 
+ * modified extensively by Hunter of Shattered Worlds
+ * ( including implementation of standard properties)
+ */
+
+/*
+ * modified 7/1/95 by Belgarion of Shattered Worlds:
+ * set_fuel() did not check for any out_of_fuel call_out's -
+ * it just blithely modified the property. Any
+ * later calls to query_fuel() would remove the new
+ * fuel property.
+ * Also added a "add_fuel()" fn 8/1/95.
+ * 950120 Hunter     	added 'query_short()'
+ * 951122 Hunter	ditched 'id' code in favour of what is in 
+ *			RO/base/id.c. Ideally, std/object should
+ *			eventually inherit RO/base_object.c
+ * 980517 Dredd inherit RO/base/persist.c (support also in /secure/body.c)
+ * 990105 Jenna 	Added 'query_long_desc()'
+ * 000406 Jenna		Added unique items
+ */
+
+#define JEN(x)	catch tell_object(find_player("jenna"), "[UI:] "+x+"\n");
+
+inherit "std/object/light";
+inherit "RO/Servers";
+inherit "RO/base/id";
+inherit "RO/base/persist";
+inherit "RO/modules";
+
+#define WRITE(yarg) tell_object(this_player(),yarg)
+/*   #define DEST_USELESS_CLONES  */
+#include "materials.h"
+#include "damage.h"
+
+string short_desc, long_desc, info;
+int value, local_weight;
+array property, items;
+int material;
+int damage;	/* this gets to 10*minstrength, it breaks! */
+
+/* debugging call only, called by wiz soul when stat-ing an object */
+array
+show_stats() 
+{
+int count;
+array ret;
+    ret = "RO/base/id"::show_stats();
+    ret += ({
+	"short   : "+short_desc,
+	"long    : "+long_desc,
+	(info?"info :\n"+info:""),
+	"value   : "+value+"\t"+ "weight  : "+local_weight+
+		(query_light(0)?"\tlight   : "+query_light(0):"")+
+		"\tmaterial: "+material+"\tdamage: "+damage
+	});
+    if (items && sizeof(items) ) 
+    {
+	ret += ({"items   :"});
+	for (count = 0; count < sizeof(items); count += 2) 
+	{
+	    ret += ({ "  "+items[count]+", "+items[count+1] });
+	} 
+    }
+    if (is_light()) 
+    {
+	ret += ({ 
+		"fuel    : "+query_fuel()+"\t"+ "is_lit  : "+query_lit(),
+		"wet_msg : "+query_wet_msg()
+		});
+    }
+    if (property) 
+    {
+	ret += ({"properties:" });
+	for (count = 0; count < sizeof(property); count += 3)
+	{
+	    ret += ({ "     "+property[count]+","
+		+(pointerp(property[count+1])?"<array>":property[count+1])
+		+","+(pointerp(property[count+2])?"<array>":property[count+2])
+		});
+	}
+    }	
+    if ((count = find_call_out("decay")) != -1)
+    {
+	ret += ({ "call_out decay in "+count+" seconds." });
+    }
+    return ret;
+}
+	
+/* null reset in case someone uses '::reset()' to access it */
+reset(arg) {
+
+#ifdef DEST_USELESS_CLONES
+    if (!arg) /* temp hack to ensure crap gets cleaned out */
+        call_out("check_in_room", 60, 0);
+	LOG->log ("DESTd","this obj : " + file_name(this_object()) +  
+		"\nand it was made by :" + file_name(previous_object()) +"\n");
+#endif
+}
+
+#ifdef DEST_USELESS_CLONES
+check_in_room() {
+    if (!is_cloned(this_object()))
+       return 0;
+    if (!environment(this_object())) {
+	LOG->log ("DESTd",short() + " was time destructed.\n" +
+		"Its creator was :" + query_su_name(this_object()) + 
+		"\nand its file_name :" +file_name(this_object()) +"\n");
+        destruct(this_object());
+	}
+}
+#endif
+
+/* backward compatability hack below! */
+set_name(str) { add_id(str); }
+query_alias() { return name_list?name_list[0]:0; }
+
+/* Special items on the object that are worth detailed mention */
+/* eg "lock" on chest, "scene" on a painting etc. */
+/* usage same as for /room/room.c */
+/* fuck it - doesn't do much waste of space.- Dredd */
+
+set_items(arr) { items = arr; }
+query_items() { return items; }
+
+add_item(item, desc)
+{
+    if (!items) items = ({item, desc});
+    else items += ({item, desc});
+    return 1;
+}
+
+remove_item(item)
+{
+    int it;
+
+    if ((it = index(items, item)) < 0) return 0;
+    items = items[..it-1] + items[it+2..];
+    return 1;
+}
+
+/* std property management rountines :     */
+/* pity they're different from base_object */
+add_property(str, msg, val) 
+{
+string m, v;
+    if (!str) return 0;		/* idiot protection */
+    str = lower_case(str);	/* format the data */ 
+    if (!(m = msg)) m = 0;
+    if (!(v = val)) v = 0;
+    if (str == "broken") {
+	this_object()->remove_property("blessed");
+	this_object()->remove_property("enchanted");
+	this_object()->remove_property("magic");
+	this_object()->remove_property("locked");
+	spill_contents();
+	if (find_property("can_open")) 
+	    set_opened(1);
+	if (query_lit()) 
+	    out_of_fuel();
+    }		
+    /* add the property if it doesn't already exist */
+    if (!property) 
+	property = ({ str, m, v });
+    else if (index(property, str) < 0)
+	property = property + ({ str, m, v });
+    else 
+	return;		/* if it got here something is wrong! */
+    if (str == "decay")		/* special cases : */
+	if (intp(val) && val > 0) 
+	{
+            call_out("decay",val);	
+            remove_property("DECAY_TIMESTAMP");
+        } 
+    if (str == "unique" && !val) {
+//	object tmp = UNIQUE_ITEM->register_item(msg, this_object());
+	object tmp = this_object();
+	string cllr;
+	catch cllr = file_name(caller());; 
+	JEN("Registering Unique Item\nRequest from: "+cllr+
+	    "\nSent To       : "+file_name(this_object())+
+	    "\nUnique Item is: "+(tmp ? file_name(tmp) : "0")+
+	    "\nItems are " + (tmp == this_object() ? "" : "NOT ")+
+	    "a match.\n");
+/*
+	if (tmp != this_object()) {
+	    destruct(this_object());
+	    JEN("clone - desting");
+	    }
+*/
+	}
+    return 1;
+}
+
+remove_property(str) {
+int x;
+	/* just do the prerequisit idiot checking first */
+	/* note the check for x mod 3 - so array isn't stuffed up */
+	if (!str || !property || ((x = index(property, lower_case(str))) < 0)
+		|| x%3) return 0;
+	property = property[..x-1]+property[x+3..]; 
+	if (str == "decay")
+		while (remove_call_out("decay") > -1) x++; 
+	return 1;
+}
+
+change_property(str, msg, val) {
+    if (!str) return;
+    this_object()->remove_property(str);
+    this_object()->add_property(str, msg, val);
+    return 1;	
+}
+
+set_flag_property(x,str) { return x?this_object()->add_property(str)
+	:this_object()->remove_property(str); }
+	
+query_property(str) 
+{
+    int x;
+
+	if (!property || !stringp(str)) return 0;
+	str = lower_case(str);
+	if ((x= index(property,str)) == -1) return ;
+/* short cut to try to avoid etol */
+	if ((str != "decay") && (str != "light"))
+		return property[x..x+2];
+/* update decay if needed */
+	if ((str == "decay") && (find_call_out("decay") != -1))
+            property[x+2] = find_call_out("decay");  
+/* update light if needed */
+        if ((str == "light") && (find_call_out("out_of_fuel") != -1))
+            property[x+1][0] = find_call_out("out_of_fuel")/2;  
+	return property[x..x+2];
+}
+
+/* find_property is a faster method of testing for a property */
+/* use it in preference to query_property if you only need to test
+ * for presence of property */
+find_property(str) { return (property && stringp(str) && index(property, 
+		lower_case(str)) != -1); }
+  
+dump_property() { return (pointerp(property)?property:({ })) +({ }); }
+
+/* methods to deal with hooked std/object properties */
+get_function_ob(str) {
+	if (query_valid_hook(str)) return explode(str,":")[0];
+}
+
+get_function_name(str) {
+	if (query_valid_hook(str)) return explode(str,":")[1];
+}
+
+query_valid_hook(str) {
+	return (str && stringp(str) && index(str," ") == -1 && 
+		index(str,":") != -1 && sizeof(explode(str,":")) == 2);
+}
+	
+call_function(str) 
+{
+    string obj, func;
+
+	if (!(obj = get_function_ob(str) )) return;
+	func = get_function_name(str);
+	return obj->(func)(this_object());
+/* used to the catch return - blech! */
+}
+					
+short() 
+{ 
+    string ret;
+    array p;
+    /* hidden objects have no short desc */
+
+	if (!short_desc || find_property("hidden")) return;
+	ret = short_desc;
+	if (find_property("open")) ret += " (open)";
+	if (is_light()) {
+		if (query_lit()) ret += " (lit)";
+		if (query_fuel() == 0) ret += " (burnt out)";
+	} 
+	if (find_property("IDENTIFIED")) {
+	    if (find_property("ENCHANTED")) ret += " (enchanted)";
+	    if (find_property("BLESSED")) ret += " (blessed)";
+	    else if (find_property("CURSED")) ret += " (cursed)";
+	}
+	if (p = query_property("RUNE")) ret += " ("+p[1]+" rune)";
+	if (p = query_property("BROKEN")) ret += " ("+(p[1]?p[1]:"broken")+")";
+	if (find_property("WIELDED")) ret += " (wielded)";
+
+	return ret; 
+}
+
+(int|string)
+query_short()
+{
+    return short_desc;
+}
+
+query_name() 
+{
+    string orig, name;
+    array sd;
+
+    orig = short();
+	if (!stringp(orig)) return;
+	sd = explode(orig," ");	
+    if (!sd || sizeof(sd) < 1) return;
+
+    if (sd[0] == "An" ||
+        sd[0] == "an" ||
+        sd[0] == "a" ||
+        sd[0] == "A" ||
+        sd[0] == "the" ||
+        sd[0] == "The")
+    {
+        name = implode(sd[1..], " ");
+        return name;
+    }
+
+	return orig;
+}
+
+query_long_desc() { return long_desc; }
+
+long(str) 
+{
+	MORE->more(this_object()->query_long(str));
+}
+query_open_desc()
+/* this simply returns the descriptor of the object's open state */
+/* look at /doc/example/bottle1.c for a typical use */
+{
+	return (query_opened()?"It is open.\n":"It is closed.\n");
+}
+
+/* query_long() returns a single string that is the long description */
+/* modified by Calthron to get the string returning correctly. */
+query_long(str) 
+{
+    array a; 
+    int i;
+    string temp;
+    string ret;
+
+	ret = "";
+    	if (find_property("hidden")) return ret;
+	if (query_total_light() <= 0){
+		ret +=("It is too dark.\n");
+       		return ret;
+	}
+
+	if(find_property("CAN_OPEN")) 
+		ret += query_open_desc();
+	if (find_property("CONTAINER")) 
+		ret += (query_contents_weight()?
+			"There is something in it.\n":
+			"You can put things in it.\n");
+    if (a = query_property("RUNE"))
+        ret += "It has a " + a[1] + " rune upon it.\n";
+	if (find_property("BROKEN")) 
+		ret +=  "It looks broken.\n";
+	if (!str || str == "" || (name_list && index(name_list, str) != -1))
+		ret = this_object()->query_long_desc() + ret;
+	if (!pointerp(items))
+		return ret;
+    	for (i = 0; i < sizeof(items); i += 2) 
+        	if (items[i] == str) 
+            		return (items[i+1] + ".\n");
+	return ret;
+}
+
+get() { 
+array p;
+	if (find_property("hidden")) return 0;
+        if (this_object()->is_protection()
+            && this_object()->query_invoke() == "carried")
+	{
+	    call_out("invoke", 0.2); // allow time to be picked up
+	}
+	if (!(p = query_property("NO_GET"))) 
+	{
+	    if (find_property("broken")) spill_contents();
+	    return 1;
+	}
+	if (query_valid_hook(p[1])) return call_function(p[1]);
+	if (stringp(p[1]) && query_verb() == "get") WRITE(p[1]); 
+}
+
+drop(silently) 
+{
+array p;
+    if (environment(this_object()) != this_player()) 
+	silently = 1;	
+/* first check if the object can be dropped. If it can't, quit out. */
+    if (find_property("hidden")) 
+ 	return 1;
+    /* Below check for the sell command was added by Llati
+	to prevent lit torches being sold to the market.
+	This seems preferable to automatic no that was used before */
+    if (query_lit() && (query_verb() == "sell")  ) 
+    {
+        if (!silently)
+            WRITE("You should extinguish it first.\n");
+	return 1;
+    }
+    if ((p = query_property("NO_DROP")))
+    {
+	if (!silently && p[1] && query_verb() == "drop") 
+	    WRITE(p[1]);
+	return 1;
+    }
+/* if this point is reached, then the object will be dropped. So put clean-up
+ * code below */
+    if (find_property("WORN") && !query_lit()) 
+    {
+	this_object()->remove_property("worn");
+	if (!silently) 
+	    WRITE("You remove your worn "+query_name()+"\n");
+    }
+    if (find_property("wielded")) 
+	this_object()->remove_property("wielded");	
+    if (this_object()->is_protection()
+	&& this_object()->query_invoke() == "carried")
+		this_object()->uninvoke();
+    if (find_property("unique"))
+    	call_out("save_unique_item", 1);
+    return 0;
+}	
+
+save_unique_item() {
+    array p = query_property("unique");
+    object e = environment(this_object());
+    if (!p || !e) return;
+    if (environment(e))
+	e = environment(e);
+    change_property("unique", p[1], file_name(e));
+    UNIQUE_ITEM->save_item(p[1]);
+    return 1;
+}
+
+query_value() { return value; }
+
+query_weight() {
+	return query_contents_weight("anti-bag bug")/2 + local_weight;
+		/* Jenna 99 - prevent the "bag in a bag in a bag" trick */
+}
+
+query_info() { return info; }
+
+set_long(str) { long_desc = str; }
+set_value(v) { value = v; }
+set_weight(w) { local_weight = w; } 
+set_read(str) { 
+	if (!str) return this_object()->remove_property("READ");
+	return change_property("READ",str,0);
+}
+
+set_info(str) { info = str; }
+
+set_short(str) 
+{
+    short_desc = str;
+    if (!local_weight) local_weight = 1;
+    if (!long_desc) set_long("You see nothing special.\n");
+    if (stringp(short_desc)) add_id(lower_case(short_desc));
+}
+
+init() 
+{
+array p, p2;
+#if 0
+	if (environment() && !create_room)
+	{
+		create_room = environment();
+		while (environment(create_room))
+			create_room = environment(create_room);
+	}
+#endif
+/* get right down to the ultimate environment. - Bel. */
+	if (find_property("hidden")) return;
+	if (find_property("CAN_OPEN")) {
+		add_action("open","open");
+		add_action("close","close");
+	}
+	if (find_property("LIGHT")) {
+		add_action("light","light");
+    		add_action("extinguish","extinguish",3);
+	}
+/* Add action for read shifted to perception soul - Hunter */
+	if (find_property("BREAK")) {
+		add_action("break_object","break");
+		add_action("break_object","smash");
+	}
+	if (find_property("SEARCH")) add_action("search","search");
+
+/* reset state if illegal or object restored */
+        if (query_lit() && find_call_out("out_of_fuel") == -1) set_lit(1);
+	if ((p = query_property("DECAY")) && find_call_out("decay") == -1) {
+                if (!pointerp(p)) return;
+	p2 = query_property("DECAY_TIMESTAMP");
+	if (!pointerp(p2)) return;
+	if (p[2] <= time() - p2[1])
+            {
+                call_out("decay", 1);
+                return;
+            }
+            else 
+            {
+                p[2] = p[2] + p2[1] - time(); change_property(p[0],p[1],p[2]); 
+            }
+        }
+}
+
+/* Add_action handlers */
+
+search(str) {
+array co, found;
+int count;
+     notify_fail("Search what ?\n");	
+    if (!id(str) || query_hidden() || !find_property("search")) return 0;
+    found = ({ });
+    co = contents(this_object());
+    for (count = 0; count < sizeof(co); count ++) {
+	if (co[count]->query_hidden()) {
+	    found += ({ co[count] });
+	    co[count]->set_hidden(0);
+ 	}
+    }
+    if (sizeof(found) == 0) { 
+	WRITE("You find nothing.\n"); 
+	return 1; 
+    }
+    WRITE("You find ");
+    if (sizeof(found) == 1) WRITE(found[0]->short()+".\n");
+    else for (count = 0; count < sizeof(found)-1; count ++) {
+	WRITE(found[count]->short()
+		 + (count == sizeof(found) -2?" and "+found[count+1]->short()+
+		".\n":", ") );
+    }
+    return 1;
+}  	   	
+	 
+
+read(str) 
+{
+    array p;
+
+    notify_fail("Read what?\n");
+    if (!id(str) || query_hidden() || !(p = query_property("read")) ) return 0;
+
+    if (query_total_light() <= 0) 
+    {
+	    notify_fail("You can't read it in darkness.\n");
+	    return 0;
+    }	 
+
+    if (p[2] && p[2] < this_player()->query_int()) 
+    {
+        notify_fail("You peer at the strange writings until you realise you can't "+
+            "read it.\n"); 
+        return 0;
+    }
+    WRITE(query_property("READ")[1]);
+    return 1;
+}
+
+/* 
+ * Abstract decay method for the DECAY property
+ * All it does is destruct the object silently if 
+ * argument one of the decay property is not an ob:func reference,
+ * otherwise the ob->func is called with this_object() as argument
+ *
+ * suggested override often
+ */
+decay() 
+{
+    array p;
+    object o;
+    string lstr;
+
+	if (!(p = query_property("decay"))) return ;
+#if 1
+    /* bad fix - causing decay bugs */
+    /* new version reinstated - Jenna June 99 */ 
+	lstr = p[1] + "               ";
+	if (p[1] != file_name(this_object()) + ":decay_away"
+					     /* Jenna Nov 98 - to stop */
+	   && lstr[..10] == "obj/corpse#")   /* bug on reloading corpses */
+		p[1] = file_name(this_object()) + ":decay_away";
+#endif
+	if (query_valid_hook(p[1])) return call_function(p[1]);
+/* default decay : destruct the object silently */
+        if (stringp(p[1])) {
+            if (o = environment())
+                tell_room(o, p[1]);
+        }
+    this_object()->add_property ("container");
+    spill_contents (1);
+	/* fix for weight update problem (corpses) - gandalf */
+	object oldenv = environment(this_object());
+	move_object(this_object(), "RO/void");
+	if (oldenv)
+		oldenv->add_weight(-this_object()->query_weight());
+	destruct(this_object());
+}
+	
+/*
+ * Container management code below:
+ *
+ * Revised by Jenna 2001 to deal with situations when transfer()
+ * fails.
+ */
+spill_contents(silent) 
+{
+    array stuff = contents(this_object());
+    int count;
+
+    if (!arrayp(stuff))
+        return;
+    if (sizeof(stuff) && !silent)
+        WRITE("The contents of "+query_name()+" spills out.\n");
+    for (count = 0; count < sizeof(stuff); count ++)
+    {
+        if (stuff[count]->query_living())
+        {
+            tell_object(stuff[count], "You fall out of "+short_desc+".\n");
+            stuff[count]->move_player("out", environment(this_object()));
+        }
+        else
+	{
+	    if (transfer(stuff[count], environment(this_object())))
+	    {
+		/* failed to transfer into env - probably because the */
+		/* env is a player unable to take the extra weight    */
+
+		tell_object(environment(this_object()), "You drop " +
+		    stuff[count]->short()+".\n");
+
+		if (transfer(stuff[count], ultimate_env(this_object())))
+		{
+		    /* failed to transfer into ultimate env - so just move it */
+		    move_object(stuff[count], ultimate_env(this_object()));
+		}
+	    }
+	}
+    }
+}
+
+ultimate_env(e)
+{
+    int counter = 0; /* infinite loop protection */
+
+    while(environment(e) && counter < 15)
+    {
+	e = environment(e);
+	counter++;
+    }
+    return e;
+}
+
+add_weight(w) {
+    if (query_contents_weight() + w > query_max_weight())
+	return 0;
+    return 1;
+}
+
+can_put_and_get() { 
+	if (!find_property("CONTAINER")) return 0;
+	if (find_property("BROKEN")) {
+		WRITE("You can't when it is broken\n");
+		return 0;
+	}   
+	if (find_property("CAN_OPEN")) return find_property("open");
+	return 1;
+}
+
+prevent_insert() 
+{
+    array p;
+    int max;
+
+	if (find_property("hidden")) return 1;
+	this_object()->remove_property("worn");
+	this_object()->remove_property("wielded");
+    p = query_property("CONTAINER");
+    if (p) max = p[2];
+	if (query_contents_weight() > max) 
+    {
+		WRITE("You can't when there is stuff in it.\n");
+		return 1;
+	}
+	if (p = query_property("PREVENT_INSERT")) 
+	{
+	    WRITE(p[1]?p[1]:"");
+	    return 1;	
+	}
+}
+
+/* backwards container hack */
+set_max_weight(m) { 
+array p;
+	if (!(p = query_property("CONTAINER")))
+		p = ({ "CONTAINER", "", m }) ;
+	else p[2] = m;
+	change_property(p[0], p[1], p[2]);
+}
+	
+set_can_open(o) 
+{ 
+	return set_flag_property(o,"CAN_OPEN");
+}
+
+query_local_weight() { return query_contents_weight(); }
+query_contents_weight(double_containers) { 
+int w, count;
+array stuff;
+	stuff = contents(this_object());
+	w = 0;
+	for ( count = 0; count < sizeof(stuff); count ++) {
+		w += stuff[count]->query_weight();
+		if (double_containers && stuff[count]->query_property("container"))
+			w += stuff[count]->query_weight(); /* double it */
+		}
+	return w;
+}
+
+query_max_weight() { 
+array p;
+	if (p = query_property("container")) return p[2];
+}
+
+query_opened() { return find_property("OPEN"); }
+set_opened(x) { return (query_can_open()?set_flag_property(x,"OPEN"):0); }
+	
+query_can_open() { return find_property("CAN_OPEN"); }
+
+close(str) {
+	notify_fail("Close what ?\n");
+	if (!id(str) || query_hidden()) return 0;
+	if (find_property("BROKEN")) 
+	{
+		notify_fail("You can't close this, it is broken.\n");
+		return 0;
+	}
+        if (this_player()->query_ghost()) { 
+            notify_fail("You cannot while a ghost.\n");
+            return 0;
+        }
+	if (find_property("locked"))
+	{
+		notify_fail("You can't close it\n");
+		return;	
+	}
+	set_opened(0);
+	WRITE("Ok.\n");
+	return 1;
+}
+
+open(str) {
+	notify_fail("Open What ?\n");
+	if (!id(str) || query_hidden())
+		return 0;
+	if (query_opened()) {
+		notify_fail("It is already open.\n");
+		return 0;
+	}
+        notify_fail("You cannot while a ghost.\n"); if (this_player()->query_ghost()) return;
+	if (find_property("locked"))
+	{
+		notify_fail("You can't open it.\n");
+		return 0;
+	}
+	set_opened(1);
+	WRITE("Ok.\n");
+	return 1;
+}
+
+/* prohibit the object from being saved */
+query_no_external_save(obj) {
+array p;
+/* the object is about to be saved so save the current call_outs */ 
+        preserve_call_outs();
+	return find_property("NO_SAVE");
+}
+
+query_quest_item() { return find_property("NO_SAVE"); }
+
+set_quest_item(a) { return set_flag_property(a,"NO_SAVE"); }
+
+preserve_call_outs() {
+	if (query_property("decay")) {
+/* p[2] for "decay" is adjusted by query_property() */
+                change_property("DECAY_TIMESTAMP", time(),0);
+	}	
+        query_property("light");        
+}
+
+/* magical item stuff : */
+/* NOTE: this is only a flag that the item is magical
+ * and not the implementation of the magical effect 
+ */
+query_magic() {
+	return (find_property("MAGIC")  ||
+		find_property("ENCHANTED") ||
+		find_property("BLESSED") );
+}
+
+set_magic(x) {
+	set_flag_property(x,"MAGIC");
+}
+
+/* Light object code */
+/*
+ * The torch can't be sold when it is lit.
+ *
+ * Modified by Rhys for wet weather and Billy to use /std/object
+ * Added to std/object by Hunter
+ *
+ * Here is some example code for a reset() function:
+ *   set_full_name("an oil lamp");
+ *   add_id( ({"oil lamp", "lamp"}) );
+ *   set_fuel(500);
+ *   set_lit_desc("The lamp burns warmly, casting its sides into shadow.\n");
+ *   set_unlit_desc("It is carved with dark runes.\n");
+ *   set_water(0, "The " + query_name() + " gutters and the flame goes out\n") 
+ *						- if water-sensitive
+ *   set_water(1, "The " + query_name() + " gutters but does not go out\n") 
+ *						- ONLY if water-proof
+ * any of these calls to std/object will make that object into a torch
+ */
+/* std property for light info:
+"LIGHT",({ amount_of_fuel, long_lit_desc, long unlit_desc, wet_msg }) , is_lit
+*/
+
+/* query_light() { return set_light(0); } */
+
+init_light() {
+array p;
+	if (!(p = query_property("LIGHT"))) {
+		p = ({ "LIGHT" , ({ 600, 
+    	"It has been created by an incompetent wizard. It is lit.\n",
+    	"It has been created by an incompetent wizard. It is unlit.\n",
+	""
+		}), 0 });
+		this_object()->add_property(p[0], p[1], p[2]);
+	}
+	return p;	
+}
+
+/* Fn modified 7/1/95 by Belgarion */
+set_fuel(f) { 
+array p;
+	p = init_light();
+	p[1][0] = f; 
+	change_property(p[0], p[1], p[2]);
+/* Remaining section added by Belgarion */
+	if (find_call_out("out_of_fuel") > -1)
+	{
+		while (find_call_out("out_of_fuel") > -1)
+			remove_call_out("out_of_fuel");
+		call_out("out_of_fuel", f * 2);
+	}
+}
+
+query_fuel() {
+array p;
+
+	p=query_property("LIGHT");
+	if(arrayp(p))
+	    	if(arrayp(p[1])) return p[1][0];
+}
+
+/* add_fuel added 8/1/95 by Belgarion. */
+add_fuel(amount)
+{
+array p = query_property("LIGHT");
+	if (!p)
+	{
+		return 0;
+	}
+	set_fuel(p[1][0] + amount);
+	return 1; /* just so it's known that it *has* been stoked up. */
+}
+
+set_lit(x) {
+array p;
+	p = init_light();
+	p[2] = (x>0);
+	set_long(p[1][2-p[2]]);
+	change_property(p[0], p[1], p[2]);
+        if (x) call_out("out_of_fuel", query_fuel() * 2);
+        else remove_call_out("out_of_fuel");
+}
+
+query_lit() {
+array p;
+	if (p = query_property("LIGHT")) return p[2];
+}
+	
+set_lit_desc(d) { 
+array p;
+	p = init_light();
+	p[1][1] = d; if (p[2]) set_long(d); 
+	change_property(p[0], p[1], p[2]);
+}
+query_long_lit_desc() {
+array p;
+	if (p = query_property("LIGHT")) return p[1][1];
+}
+set_unlit_desc(d) { 
+array p;
+	p = init_light();
+	p[1][2] = d; if (!p[2]) set_long(d); 
+	change_property(p[0], p[1], p[2]);
+}
+query_long_unlit_desc() {
+array p;
+	if (p = query_property("LIGHT")) return p[1][2];
+}
+query_is_lit() { return query_lit(); }
+is_light() { return find_property("LIGHT"); }
+
+light(str) {
+object env;
+    if (!str || !id(str))
+	return 0;
+    if (query_broken()) {
+	notify_fail("It is broken, you cannot light it.\n");
+	return 0;
+    }	  
+    if (query_lit()) {
+	notify_fail("It is already lit.\n");
+	return 0;
+    }
+    if (query_fuel() ==  0) {
+    	notify_fail("You don't seem to be able to light it.\n");
+    	return 0;
+    }
+	if (present("wet_obj", this_player()))
+	{
+		if (query_wet_msg())
+			WRITE(query_wet_msg());
+		if (!query_waterproof())
+			{
+			WRITE("Your " + query_name() +
+				" is too wet to light.\n");
+			return 1;
+			}
+	}
+    set_lit(1);
+    if (add_light(1) >= 1) {
+        WRITE("You can see now!\n");
+        command("glance", this_player());
+	say(this_player()->query_name() + " lights " + query_name() + ".\n");
+    } else {
+        WRITE("Ok.\n");
+    }
+    return 1;
+}
+
+out_of_fuel() {
+    if (-1 != find_call_out("out_of_fuel")) {
+	while (-1 < find_call_out("out_of_fuel")) remove_call_out("out_of_fuel");
+	return;
+    }
+    if (add_light(-1) == 0)
+        say("The room darkens as " + query_name() + " goes out.\n");
+    else
+        say(capitalize(short_desc) + " goes out.\n");
+    set_fuel(0);
+    set_lit(0);
+    set_long(query_long_unlit_desc());
+}
+
+/* str is integer 1 for "quiet" response */
+extinguish(str) {
+    int i;
+    if (!(intp(str) && str == 1) && !id(str))
+	return 0;
+    if (!query_lit()) {
+	if (!intp(str) && str == 1)
+	    WRITE("It is not lit!\n");
+	return 1;
+    }
+    i = remove_call_out("out_of_fuel");
+    if (i == -1) {
+        WRITE("Error.\n");
+	destruct(this_object());
+	return 1;
+    }
+    set_fuel(i/2);
+    set_lit(0);
+    set_long(query_long_unlit_desc());
+    if (add_light(-1) == 0) {
+	WRITE("It turns dark.\n");
+	if (this_player()) {
+	    say(this_player()->query_name() +
+	        " extinguishes the only light source.\n");
+	    WRITE("You extinguish your light source.\n");
+	}
+    } else if (!(intp(str) && str == 1)) {
+        WRITE("Ok.\n");
+    }
+    return 1;
+}
+
+notify_wet(arg) { /* Added by Llati, to take out light specific
+		code from the wet obj. Also makes it much more
+		versitile 		Aug 92 */
+array p;
+	if (!arg) return;
+	if (query_is_lit()) {
+	  if (query_wet_msg()) write (query_wet_msg());
+	  if (!query_waterproof()) extinguish(1);
+	}
+}
+	
+
+/* waterproof stuff */
+set_water(b, m) {
+array p;
+	set_waterproof(b);
+	p = init_light();
+	p[1][3] = m;
+	change_property(p[0],p[1],p[2]);
+}
+
+query_wet_msg() { 
+array p;
+	if (p = query_property("LIGHT")) return p[1][3];
+}
+
+set_waterproof(x) 	{ return set_flag_property(x,"WATERPROOF"); }	
+query_waterproof() 	{ return find_property("WATERPROOF"); }
+
+query_broken() 		{ return find_property("BROKEN"); }
+set_broken(x) 		{ return set_flag_property(x,"broken"); }
+
+query_hidden() 		{ return find_property("HIDDEN"); }
+set_hidden(x) 		{ return set_flag_property(x,"hidden"); }
+	
+/*
+ * New, generic damage stuff.
+ */
+
+set_material(x) { material = x; }
+query_material() { return material; }
+
+break_object(str) {
+    string msg;
+    int before;
+
+    notify_fail("What do you want to break?\n");
+    if (!str || !id(str) || query_hidden()) return 0;
+    if (this_player()->query_ghost()) {
+        notify_fail("Your immaterial hands pass right through it.\n");
+        return 0;
+    }
+    if (query_broken())
+    {
+	notify_fail("It is already broken.\n");
+	return 0;
+    }
+    before = query_damage();
+    this_player()->checked_say(this_player()->query_name()+" whacks at "+query_short()+".\n");
+    WRITE("You whack at "+query_short()+".\n");
+    msg = this_object()->damage_object(
+	(this_player()->query_str()+this_player()->query_siz())/4, "impact");
+    if (stringp(msg))
+	WRITE("The "+msg);
+    else if (query_broken())
+	WRITE("You break the "+query_name()+"!\n");
+    else if (query_damage() > before)
+	WRITE("You damage the "+query_name()+".\n");
+    else {
+        notify_fail("Hitting the " + query_name() + " seems to have no effect.\n");
+        return 0;
+        }
+    return 1;
+}
+
+query_damage() { return damage; }
+set_damage(int Number) 
+{ 
+    array p = this_object()->query_property("break");
+    damage = Number; 
+    if (p && damage > p[2])
+	this_object()->add_property("broken");  // silently
+}
+
+/*
+ * This is called from everywhere when various types of damage are
+ * sustained (e.g. weapons during battle, people trying to smash it).
+ * If there is no BREAK property, it'll have a small random chance of
+ * doing a special action (currently limited to torches only), otherwise
+ * it'll do nothing.  Most things should have the break property, though,
+ * in which case the function returns 1, or a string message, when it
+ * breaks, else 0.
+ *
+ * Tweaked by Jenna May 2000 to use new typed damage system.
+ */
+damage_object(int amt, type) {
+    array p;
+    string msg;
+    array msgamt;
+
+    damage += amt;
+
+    if (query_broken()) return 0;
+
+    /* special cases */
+    if (!random(5)) {
+        if (type == "heat" && is_light() && !query_lit() && query_fuel()) {
+            set_lit(1);
+            msg = query_name() + " is lit by the heat";
+            }
+        }
+
+    if (!(p = query_property("BREAK")))
+        return(msg? msg + ".\n" : 0);
+    msg = p[1];
+    if (damage > p[2]) {
+        this_object()->add_property("BROKEN");
+	return (msg ? msg+".\n":1);	
+        }
+    return 0;
+}
+
+/* living things get put in objects all the time, and they 
+	should really be able to find out what their environments
+	medium is. This seems a semi reasonable solution.
+	I realise there are cases where this will error. : L */
+query_medium () {
+	return environment (this_object()) -> query_medium();
+	}
+
+query_destruct() {
+    catch environment()->inv_item_gone(this_object());;
+    catch {
+	if (find_property("unique"))
+	    LOG->log("UNIQUE", short_desc + " ("+ file_name(this_object()) +
+		") was destructed by " + file_name(caller()) + ".");
+	};
+/*
+	"std/obj_list"->remove();
+*/
+}
+
+/* return extra persistence arguments */
+query_auto_args()
+{
+    return ({ damage });
+}
+
+query_auto_load() 
+{
+    if (find_property("unique"))
+	return [ "UNIQUE_ITEM", query_property("unique")[1] ];
+    return ::query_auto_load();
+}
+
+

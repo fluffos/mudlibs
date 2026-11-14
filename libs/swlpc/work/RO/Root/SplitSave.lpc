@@ -1,0 +1,215 @@
+/*
+ * SplitRoot - management for named objects under a particular root,
+ * with savefiles split on the first character of the object name.
+ * Assumes:
+ *	This object has been named, and is the root of a virtual object tree
+ *	the savefiles are in myname/Save/[a-z]/name.o
+ *	the start object to clone is myname/Src/Base.c
+ *	the objects are to be named myname/name
+ *	the cloned objects are to be su'd to myname
+ */
+
+#include "security.h"
+#include "Servers.h"
+
+inherit "RO/Root/Loaded";
+
+nosave string system	=	"players";		/* in P/players */
+
+reset(a) {
+    if (a)
+        return;
+    }
+
+query_destruct() {
+    write("No.\n");
+    return 1;
+    }
+
+/*
+ * Called by our creator (probably master.c or /P).
+ * Kicks this object off.
+ */
+
+start_virtual() {
+    string err;
+    if (!caller())
+	return;
+    if (query_su_level(caller()) < GOD)
+	return;
+    err = catch restore_object(SAVE_FILE);;	/* won't touch virtuals */
+
+/* We don't actually have a savefile yet - G */
+#if 0
+    if (err) LOG->log_now("STARTUP", file_name(this_object()) + ": " +err+"\n");
+#endif
+    }
+
+/*
+ * Give a filename for a virtual savefile.
+ */
+
+GetVirtualSavefile(n) {
+    if (!stringp(n))
+	return 0;
+    string myname = file_name(this_object()) + "/";
+    string prefix = n[..sizeof(myname) - 1];
+    if (prefix != myname)	/* not one of ours */
+	 return 0;
+    string suffix = n[sizeof(prefix)..];		/* player name */
+    if (index(suffix, "/") >= 0) return 0;		/* don't deal with subobjects */
+    if (sizeof(suffix) < 1) return 0;
+    if (sizeof(suffix) > 15) return 0;
+    return "P/" + system + "/" + suffix[0..0] + "/" + suffix;	/* dir/first char/name.o */
+    }
+
+
+/*
+ * GetVirtualObject: If a player already has a savefile, then
+ * create him, restore into him if necessary.  If the caller
+ * was asking for a subobject, pass the request on to the
+ * player object.
+ */
+
+GetVirtualObject(n) {
+    if (!stringp(n))
+	return 0;
+
+/*
+ * If they wanted us, return us!
+ */
+    string myname = file_name(this_object());
+    if (n == myname)
+	return this_object();
+    myname = myname + "/";
+
+/*
+ * Let the virtual object manager handle it if the requested item
+ * is already loaded and ready to go...
+ */
+
+    object o = ::GetVirtualObject(n);
+    if (o)
+	return o;
+
+/*
+ * Object wasn't there.  Get the player name.
+ */
+
+    string suffix = n[sizeof(myname)..];
+    array components = explode(suffix, "/");		/* in case they want his subobjects */
+    if (sizeof(components) < 1)				/* nothing there */
+	return 0;
+
+    string pname = components[0];			/* actual player name */
+
+/*
+ * Whether or not they want a given player or one of
+ * his components, we need the player object available
+ * so that we can pass on a virtual object request
+ * for a component.  Look for him in game, then see if we
+ * can create him.
+ */
+
+    o = ::GetVirtualObject(myname + pname);	/* look for him in our directory first */
+
+/*
+ * If it wasn't there, see if we can create it.
+ */
+
+    if (!o) {
+	(object|string) sf = GetVirtualSavefile(myname + pname);	/* get restore file name */
+	if (!stringp(sf))						/* not a valid name */
+	    return 0;
+	if (file_size(sf + ".o") <= 0 && file_size (sf + ".o.bak") <= 0) {	/* no savefile */
+	  return 0;							/* therefore no preexisting object */
+	  }   
+	o = clone_object(load_obj, pname);			/* make a player object */
+	set_uid_me(o, obj_level, myname);				/* suid'd under his own name, and at a low level */
+	rename_object(o, pname);
+	restore_object(sf, o);						/* restore into him */
+	loaded_object(pname, o);					/* add him to our list of directly managed objects */
+        string err = catch o->start_virtual();;				/* initialise him as a created object */
+   	if (err)
+	    LOG->log_now("STARTUP", file_name(this_object()) + ": " +err+"\n");  
+	}
+
+    if (o) {								/* if we have a player... */
+	if (sizeof(components) > 1) {					/* but we want one of his subobjects */
+	    return o->GetVirtualObject(n);				/* so pass the request on to him */
+	    }
+	}
+
+/*
+ * Well, we got him or we didn't...
+ */
+
+    return o;
+    }
+
+/*
+ * Given a plausible player name, return the
+ * appropriate savefile name and player object name (after renaming).
+ */
+
+GetPlayerSavefile(name) {
+    return GetVirtualSavefile(GetPlayerObjName(name));
+    }
+
+GetPlayerObjName(name) {
+    return file_name(this_object()) + "/" + name;
+    }
+
+/*
+ * Grab a player object for anyone local to the system.
+ * returns 0 of ther haven't been created yet.  Maybe this
+ * should be a simul_efun?
+ *
+ * It's not altogether useful, and may disappear :)
+ */
+
+load_subobject(name) {
+	object o;
+	o = load_object(GetPlayerObjName(name));
+/* this leaves a log trace whenever a new player is created */
+#if 0
+    if (!o) {
+        LOG->log_now("STARTUP", "Players.c:1:load_player():"+name+":"+GetPlayerObjName(name)+"\n");
+        }
+#endif
+    return o;
+    }
+
+/*
+ * Should this be logged on players, or should it include
+ * temporary player obs?  For now, we assume it's just logged
+ * in ones (though they may be link dead).
+ */
+
+find_subobject(name) {
+    object o = load_object(GetPlayerObjName(name));
+    if (o && query_su_level(o) >= GOD)
+	return o;
+    return 0;			/* not really here */
+    }
+
+/*
+ * Just checks to see if they have a save file. This is much
+ * faster than loading them!
+ * Will change if we ever give this object a savefile - probably
+ * check our arrays, then check for a savefile if not in our
+ * array (robustness).
+ */
+
+int player_exists(string name) {
+
+	(string|object) path = GetPlayerSavefile (name);
+	if (objectp(path)) return 2;
+	if (file_size (path+".o") >=0 || file_size (path+".o.bak") >=0)
+		return 1; /* file_size == -1 if not there */
+	return 0;
+}
+
+show_stats() {
+    "lib/dump"->dump(GetVirtualLS());
+    }

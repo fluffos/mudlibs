@@ -1,0 +1,297 @@
+/*
+ * Stat server to show a players/monsters stat breakdown.
+ *
+ * Taken from living.c where it shouldn't have been - Dredd.
+ */
+
+/*
+ * 950606 Hunter   	major change to show_living() format
+ * 950617 Hunter   	added display for familyname var in RO/living.
+ *                 	added display of various hooks.
+ * 950722 Hunter   	added display of banish status.
+ * 950824 Hunter	changed hooks stuff to match RO/hooks
+ * 980824 Jenna		added query_stat_name(string stat)
+ */
+
+#include "security.h"
+inherit  "RO/Servers";
+
+/*
+ * given an object, return useful state-type information on it.
+ */
+(int|array|string)
+show_stats(ob, (int|string) arg)
+{
+    if (!ob)
+	return 0;
+    if (ob->query_living() > 0)
+	return show_living(ob, arg);
+    else
+	return ob->show_stats(arg);
+    return;
+}
+
+
+array
+show_living(pob, arg)
+{
+int i,x,j,first;
+array skills, new_armour;
+object tob, weapon;
+array ret;
+string line, foo;
+array co, body, hooks;
+int bstatus;
+array hooks_ret;
+
+    if (arg == "store")
+   	return show_living_store(pob);
+    ret = ({
+	(pob->query_pretitle()? ("\"" + pob->query_pretitle() + " ") :  "") + " \"" + pob->query_real_name() + "\"",
+	"  title    : " + pob->query_title(),
+	"  positions: " + LEVELS->query_long_desc(pob),
+	"  email    : " + pob->query_store("email"),
+	"  family   : " + pob->query_family_name(),
+	"  wizard   : " + pob->query_wiz(),
+	"  quests   : completed " + pob->query_quest_points() + " of "
+	+ QUEST_SERV ->query_max_quest_points () + " quest points.",
+/*
+ * Display State Information
+ */
+	"misc. state info -",
+	"  sp       : " + pob->query_sp() + " (max "+pob->max_sp()+")",
+	"  hp       : " + pob->query_hp() + " (max "+pob->max_hp()+")",
+	"  age      : " + pob->query_age_string(),
+   	"  race     : " + pob-> query_race(),
+	"  gender   : " + pob->query_gender()
+	});
+    /* banish status */
+    bstatus = BANISH_SERV->banished( pob->query_real_name() );
+    ret += ({ "  banished : " + ((bstatus == 0)?"no":"yes") });
+    if (pob->query_invis())
+	ret += ({ "  invis    :"+pob->query_invis() });
+    if ( function_exists( "query_aggressive", pob ) )
+	ret += ({ "  aggressive: " + pob->query_aggressive() });
+    tob = pob->query_attacker();
+    if (tob && living(tob))
+	ret += ({ "  attack   : " + tob->query_name() });
+/*
+ * Display Skills
+ */
+    skills = pob->query_stat_names();
+    line = "";
+/*
+ * Display Statistics
+ */
+    ret += ({  "stats -" });
+    for (x = 0; x < sizeof(skills); x++)
+    {
+	int base =  pob->query_stat(skills[x], 1);
+	int add = pob->query_stat(skills[x], 0) - base;
+	if (add >= 0)
+	    line += skills[x] + ":" + base + "+" + add + " ";
+	else
+	    line += skills[x] + ":" + base + (add + " ");
+	if (sizeof(line) > 60)
+	{
+	    ret += ({ "  " + line });
+	    line = "";
+	}
+    }
+    if (line != "" )
+        ret += ({ "  "+line });
+/*
+ * Display Body
+ */
+    body = pob->query_body();
+    if (body)
+    {
+	ret += ({ "body -" });
+	foo = STRINGS->split_string( MONSTERER->dump_body_array(body) , 60 );
+	for (i = 0; i < sizeof(foo); i ++)
+	    foo[i] = "  " + foo[i];
+ 	ret += foo;
+    }
+/*
+ * Display Equipment
+ */
+    ret += ({ "inventory/gear -",
+	"  coins    : " + pob->query_money(),
+	"  carry    : " + pob->query_weight_carried()
+	});
+    new_armour = pob->query_all_armour();
+    if ( pointerp(new_armour) ) 
+    {
+ 	line = "  armour   : ";
+   	x = sizeof(new_armour);
+   	for (i = 0; i<x; i++)
+	{
+	    if (new_armour[i])
+        	line += new_armour[i]->query_name() + ": "
+			+new_armour[i]->armour_class() + " ";
+	    if (sizeof(line) > 60)
+	    {
+		ret += ({ line });
+		line = "      ";
+	    }
+	}
+	if (line != "      ")
+	    ret += ({ line });
+    }
+    weapon = pob->query_wielded();
+    if (weapon) {
+  	ret += ({
+	    "  weapon class: " + weapon->weapon_class(),
+	    "  weapon      : " + weapon->query_name()
+	});
+    }
+/*
+ * Display Skills
+ */
+    skills = pob->query_skill_names();
+    if (skills) {
+	ret += ({ "skills -" });
+	line = "";
+	for (x=0; x<sizeof(skills); x++)
+	{
+	    int base =  pob->query_skill(skills[x], 1);
+	    int add = pob->query_skill(skills[x], 0) - base;
+	    if (add >= 0)
+	        line += (skills[x] + ":" + base + "+" + add + " ");
+	    else
+	        line += (skills[x] + ":" + base + (add + " "));
+	    if (sizeof(line) > 60)
+	    {
+		ret += ({ "  " + line });
+		line = "";
+	    }
+	}
+	if (line != "")
+	    ret += ({ "  " + line });
+    }
+/*
+ * Display Call Outs
+ */
+    co = pob->query_call_outs();
+    if ( pointerp(co) && sizeof(co) > 0)
+    {
+	ret += ({ "pending call outs -" });
+	for (i = 0; i < sizeof(co); i += 2)
+	{
+	    ret += ({ "  " + co[i] + " ("+co[i+1]+" seconds)" });
+	}
+    }
+    if (foo = pob->query_info())
+    {
+	ret += ({ "info - ", foo });
+    }
+/*
+ * Display Hooks
+ */
+    ret += query_hook_info(pob);
+
+    ret += ({ "Login Status -" ,
+	"  interactive     : " + (query_ip_number(pob) ? "yes" : "no"),
+ 	"  last logged in: " + ctime (pob->query_last_login())
+	});
+    if (i = query_su_name(pob))
+    {
+	if (pob->query_create_room())
+		i = i + " in "+ file_name(pob->query_create_room());
+        ret += ({ "creator:\t" + i });
+    }
+    return ret;
+}
+
+array
+show_living_store(pob)
+{
+array storage = pob->query_storage() + ({ });
+int i;
+array ret = ({ "Storage:" });
+string inlinetype;
+/*    storage = SORT->sort( storage, 3, 0 ); */
+
+    if (sizeof(storage) == 0)
+    {
+	ret += ({ " *Empty Storage*"});
+    }
+    for (i = 0; i < sizeof(storage); i += 3)
+    {
+	if ( storage[i+2] )
+		inlinetype = "*protected*";
+	else if ( pointerp(storage[i+1]) )
+		inlinetype = "*array*";
+	else if ( stringp(storage[i+1]) )
+		inlinetype = "\""+storage[i+1]+"\"";
+	else
+		inlinetype = ""+storage[i+1];
+	ret += ({ "  \""+storage[i][1..sizeof(storage[i])-2]+"\" = "
+		+ inlinetype
+	});
+    }
+    return ret;
+}
+
+
+query_hook_info( object pob )
+{
+int x, i, j, first;
+array hooks_ret, hooks;
+/*
+ * We *must* not change the contents of the 'hooks' variable, as 
+ * it is the actual (shared) array with the object itself.
+ */
+    hooks = pob->query_hooks(0);	/* query all of its hooks */
+    if ( pointerp(hooks) )
+    {
+	/* find out how big to preallocate array */
+	x = 1;
+	for (i = 0; i < sizeof(hooks);  i += 2)
+	{
+	    for (j = 0; j < sizeof(hooks[i+1]); j += 2)
+	    {
+		if ( !intp(hooks[i+1][j]))
+		    x ++;
+	    }
+	}
+	hooks_ret = allocate( x );
+	hooks_ret[0] = "Function Hooks -";
+	x = 1;
+	for (i = 0; i < sizeof( hooks); i += 2)
+	{
+	    first = 1;
+	    for (j = 0; j < sizeof(hooks[i+1]); j += 2)
+	    {
+		if ( !intp(hooks[i+1][j]) )
+		{
+		    hooks_ret[x] = FORMAT->left_justify( 
+			first?("  "+hooks[i]+":"):(""), 12) 
+			+ hooks[i+1][j]+"->"+hooks[i+1][j+1]+"()";
+		    x ++;
+		    first = 0;
+		}
+	    }
+	}
+	return hooks_ret;
+    }
+/* end of hooks */
+    return ({ });
+}
+
+string query_stat_name(s) {
+        array ret = ({ "strength",
+                        "constitution",
+                        "intelligence",
+                        "life force", /* "power", */
+                        "dexterity",
+                        "chutzpah",
+                        "sanity",
+                        "size",
+			"wisdom" });
+        array compare =  ({ "str", "con", "int", "pow", "dex", "chu", "san", "siz", "wis" });
+        int i = index(compare, s);
+        if (i == -1) return 0;
+        return ret[i];
+        }
+

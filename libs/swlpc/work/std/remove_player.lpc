@@ -1,0 +1,116 @@
+/*
+ * Player removal object.
+ * Call "remove_player" in this object with the name of the player
+ * you want to remove; it will:
+ *
+ * Call remove_player(playername) in a list of "standard places" - notably
+ * the bank accounts;
+ * Call remove_player(name, arg) in each of his autoloading objects, where
+ * arg is the autoload argument.  It is intended that autoloading objects
+ * should use this call to remove the player from the list of people that
+ * may receive "guidance" (souls), keys should return themselves to their
+ * owner (safety deposit box keys to the bank, real estate keys to the estate
+ * agent), etc.
+ */
+
+#include <Config.h>
+#include <security.h>
+#include <cult.h>
+#include <mail.h>
+#include <law.h>
+
+
+string name;
+int level, wiz_level;
+int age;
+array auto_load;
+nosave array autos;
+
+array places;
+
+reset(arg) {
+    if (!places) {
+	places = [
+		TOP_LIST_SERV,			/* fix high score list */
+		BANK,				/* piff his bank account */
+		REAL_ESTATE,			/* and all his properties */
+		GUILD_SERV,			/* get any unloaded guilds */
+		PEERAGE_SERV,			/* piff them off the PB */
+		CULT_SERV,			/* Throw them out of any cults */
+		TEST_REGISTER,			/* were they an apprentice? */
+		CITIZEN_SERV,   /* remove them from citizenship */
+		MDAEMON            /* The mail deamon */
+		/* "players/dredd/master/master"   /* nuke them! */
+		];
+	}
+    return 1;
+    }
+
+/*
+ * This goes through all their stuff calling remove_player on it.
+ * You'll have to remove their save file yourself.
+ */
+
+remove_player(who) {
+    int x;
+    (int|string) ret;
+    int cv;
+
+    who = lower_case(who);
+    if (who == "guest" || query_su_level(caller ()) < SENIOR)
+			return 0;
+    string theirname = PLAYER_ONAME(who);
+    object them = load_object(theirname);
+/*
+    if (!them) {
+	write("Not found; removing anyway\n");
+	}
+*/
+    if (them) {
+    if (who != them->query_real_name()) {
+	lg(who + ": Had a different name on file (" + name + ")\n");
+	return 0;
+	}
+    if (them->query_wiz()) {
+	lg(who + ": wizard (not removed).\n");
+	return 0;
+	}
+    }
+    if (places) {
+        x = sizeof(places);
+	while (x > 0) {
+	    x--;
+	    cv = 0;
+	    cv = catch { ret = places[x]->remove_player(who); } ;
+	    if (cv) ret = cv;
+	    lg(who + ": " + places[x] + " - " + ret + "\n");
+	    }
+	}
+/*
+ * Go through their autoloading objects calling remove_player in each
+ */
+        if (auto_load) {
+    if (stringp(auto_load)) autos = explode(auto_load, "^!");
+	else if (pointerp(auto_load)) autos = auto_load;
+    if (autos) {
+	string arg, thing;
+	x = sizeof(autos) - 2;
+	while (x > 0) {
+	    cv = 0;
+	    cv = catch { ret = autos[x]->remove_player(who, autos[x+1]); } ;
+	    if (cv) ret = cv;
+	    lg(who + ": " + autos[x] + "(" + autos[x+1] + ") - " + ret + "\n");
+	    x-=2;
+	    }
+	}
+    }
+/*
+ * That's it.
+ */
+    return 1;
+}
+
+lg(s) {
+    LOG->log("REMOVE", s);
+    }
+

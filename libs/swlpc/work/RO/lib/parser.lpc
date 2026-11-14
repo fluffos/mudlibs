@@ -1,0 +1,376 @@
+/*
+ * Lots of nice parsing stuff 
+ *
+ * Originally for wiz_soul.c support
+ * Notes: need to be documented!
+ *
+ */
+inherit "RO/Servers";
+
+reset() { }
+
+array allints = "0123456789";
+
+int is_int(string str)
+{
+    if (index(allints, str[0..0]) > -1) return 1;
+    return 0;
+}
+
+array split_string(string str, string delimiter)
+{
+int i, j, done;
+array res, temp;
+string s;
+    res = ({ });
+    if (str == "")
+        return res;
+    temp = explode(str, delimiter);
+    s = "";    
+    for (i = 0; i < sizeof(temp); i ++)
+    {
+        done = 1;    
+        s = (s == "")?temp[i]:s+delimiter+temp[i];
+        if (char_count(s, "\"")%2 == 1)
+            done = 0;
+        else if (char_count(s, "`")%2 == 1)
+            done = 0;    
+        else if (char_count(s, "({") 
+            != char_count(s, "})"))
+            done = 0; 
+        if (done)
+        {
+            res += ({ s });
+            s = "";
+        }
+    }
+    if (s != "")
+        res += ({ s });        /* this could be an error condition */
+    return res;
+}
+
+int char_count(string str,string chr)
+{
+int i;
+int t;
+    i = t = 0;
+    while ( i < sizeof(str))
+    {
+        if (chr == str[i..i+sizeof(chr)-1])
+        {
+            t ++;
+            i += sizeof(chr);
+        }
+        else i++;
+    }
+    return t;
+}
+
+#if 0
+array allnums = ({ "0", "1", "2", "3", "4", "5", "6", "7", "8", "9" });
+#endif
+array singles = ({ "@", "$", "^", "\"", "`" });
+array doubles = ({ "({", "0x" });
+
+array make_args(arg)
+{
+    array temp, t2, ret;
+    array ta;
+    int i,d,x;
+    real r;
+    string start, rest;
+    string str;
+    object prevobj = caller();
+
+    temp = next_argument(arg);
+    ret = ({ });
+    while (stringp(temp[0]))
+    {
+        if (temp[0][0] == ',')
+        {
+            temp[0] = temp[0][1..];
+        }
+        temp[0] = STRINGS->strip_whitespace(temp[0]);
+        if (temp[0][..0] != "\"" && temp[0][..0] != "`" 
+            && temp[0][..1] != "({"
+            && char_count(temp[0], ".") == 1 
+            && ( (r = ator(temp[0]))
+            ||  (r = ator(temp[0][1..])) ) )
+        {
+            /* reals */
+            ret = ret + ({ r });
+        }
+        else if (is_int(temp[0]))
+        {
+            /* integer -  whatever you change here, */
+            /* put the check for reals before ints  */
+            x = atoi(temp[0]);
+            ret = ret + ({ x });
+        }
+        else if ((temp[0][0] == '#'||temp[0][0] == '-') && is_int(temp[0][1..]))
+        {
+            x = atoi(temp[0][1..]);
+            if (temp[0][0] == '-') x = -x;
+            ret = ret + ({ x });
+        }
+        else if ( (sizeof(temp[0]) > 1) &&
+            (index(singles, start=temp[0][0..0]) != -1) )
+        {
+            /* things denoted by 1 start char */
+            rest = temp[0][1..];
+            if (start == "\"")
+            {
+                /* quoted strings */
+                int end = index(rest, "\"");    
+                if (end != -1) rest = rest[..end-1];
+                ret = ret + ({ contract_string(rest) });
+            }
+            else if (start == "^")
+            {
+                /* object */
+                ret = ret + ({ find_item(rest, prevobj) });
+            }
+            else if (start == "@")
+            {
+                /* living object */
+                ret = ret + ({ find_item(temp[0], prevobj) });
+            }
+            else if (start == "$")
+            {
+                /* environment variables */
+                ret = ret + ({ find_item(temp[0], prevobj) });
+            }
+        }
+        else if (sizeof(temp[0]) > 6 && start == "`"
+            && (sizeof(ta = STRINGS->split_string(rest, "->") == 2)) )
+        {
+                /* function call */
+                int bl;
+                string obj, fnc, args;
+
+                ta = STRINGS->split_string(rest, "->");                
+                bl = index(ta[1], "(");
+                if (bl != -1)
+                {
+                    args = ta[1][bl+1..(sizeof(ta[1])-2)];
+                    fnc = ta[1][..bl-1];
+                }
+                else
+                {
+                    fnc = ta[1];
+                }
+
+                t2 = make_args(args) + ({0,0,0,0,0,0,0,0,0,0,0});
+                obj = find_item(ta[0][1..], prevobj);
+                ret = ret + ({ call_other(obj, fnc, 
+                    t2[0], t2[1], t2[2], t2[3], t2[4], t2[5], 
+                    t2[6], t2[7], t2[8], t2[9], t2[10] ) });
+        }
+        else if (sizeof(temp[0]) > 2 && temp[0][0..1] == "0x")
+        {
+            /* hex numbers */
+            ret = ret + ({ HEX->hex2int(temp[0][2..]) });
+        }
+        else if (sizeof(temp[0]) > 2 && temp[0][0..1] == "({")
+        {
+            /* arrays */    
+            int end;
+
+            rest = temp[0][2..];
+            end = index(temp[0], ")}");
+            if (end != -1) rest = rest[..end-1];
+            ret = ret + ({ make_args(rest) });
+        }
+        else
+        {
+            /* variable type not recognised .. */
+            ret = ret + ({ temp[0] });
+                        /* interesting code - this */
+                        /* is just to show how it */
+                        /* stuff it doesn't recognise */
+        }
+        temp = next_argument(temp[1]);
+    }
+    return ret;
+}
+
+string contract_string(string str)
+{
+int i;
+    i = 0;
+    while (i < sizeof(str))
+    {
+    if (str[i..i] == "\\")
+    {
+        if (str[i+1..i+1] == "\\")
+            str = str[..i] + str[i+2..];
+        else if (str[i+1..i+1] == "n")
+            str = str[..i-1]+"\n"+str[i+2..];
+        else if (str[i+1..i+1] == "t")
+            str = str[..i-1]+"\t"+str[i+2..];
+        else if (str[i+1..i+1] == "\"")
+            str = str[..i-1] + str[i+1..];
+            else if ( STRINGS->is_numeric( str[i+1..i+1] )
+            && STRINGS->is_numeric( str[i+2..i+2] )
+            && STRINGS->is_numeric( str[i+3..i+3] ) )
+        {
+        int ch = atoi( str[i+3..i+3] )
+            + atoi( str[i+2..i+2] ) * 8
+            + atoi( str[i+1..i+1] ) * 64;
+            str[i] = ch;
+            str = str[..i] + str[i+4..];
+        }
+    }
+    i ++;
+    }
+    return str;
+}
+
+array query_switches(string str,array sw)
+/* split a command line string up into component parts:
+ * string str
+ * array sw
+ *
+ *eg: query_switches("-o fred basset -p jill", ({"o", "p", "q" }) )
+ * returns ({ "", "fred basset", "jill", 0 });
+ * eg: query_switches("hello -o world", ({"o"}) )
+ * returns ({"hello", "world"})
+ */
+{
+    array ret, allargs;
+    int i, j;
+    string rest;
+    string s, arg;
+
+    ret = allocate(sizeof(sw)+1);
+
+    allargs = STRINGS->split_first(str, "-");
+    ret[0] = allargs[0];
+    if (sizeof(allargs) == 2) 
+    {
+        rest = allargs[1];
+        rest = split_string(rest, " -");
+        for (i = 0; i < sizeof(rest); i ++)
+        {
+            allargs = STRINGS->split_first(rest[i], " ");
+            s = allargs[0];
+            if (sizeof(allargs) == 2) arg = allargs[1];
+            else arg = "";
+
+            for (j = 0; j < sizeof(sw); j ++)
+            {
+                if (sw[j] == s[..sizeof(sw)-1])
+                    ret[j+1] = arg;
+            }
+        }
+    }
+    if (stringp(ret[0]))
+        ret[0] = STRINGS->strip_whitespace(ret[0]);
+    return ret;
+}
+
+string switches_row(array switches, array fields)
+{
+    int i;
+    string tmp = "";
+
+    if (sizeof(switches) != (sizeof(fields)/2)+1)
+    return 0;
+    for (i = 0; i < sizeof(switches)-1; i ++)
+    {
+    if (stringp(switches[i+1]))
+        tmp = tmp + FORMAT->left_justify(stringp(fields[i*2])?    
+            fields[i*2]:(fields[i*2]+""),fields[i*2+1]);
+    }
+    return tmp;
+}
+
+array next_argument(str)
+{
+    int detect_char = -1;
+    array valid_open_chars = ({ "\"", "'", "[", "`", "({", "(" });
+    array valid_close_chars = ({ "\"", "'", "]", "`", "})", ")" });
+    int open_pos;
+    int i = 0; 
+    int char_count = 0;
+    int detect_size;
+
+    if (str == 0)
+        return ({ 0, 0 });
+    str = STRINGS->strip_whitespace(str);
+    if (sizeof(str) <= 0)
+        return ({ str, 0 });
+    open_pos = index(str, ",");
+    if (open_pos == -1)
+        open_pos = 9999999;
+    for (i = 0; i < sizeof(valid_open_chars); i ++)
+    {
+        int temp;    
+        temp =index(str, valid_open_chars[i]);    
+        if ((temp >= 0) && (temp < open_pos))
+        {
+            open_pos = temp;
+            detect_char = i;
+        }
+    }
+    if (detect_char == -1) 
+    {
+        i = index(str, ",");
+        if (i >= 0)
+            return ({ str[..i-1], str[i+1..] });
+        return ({ str, 0 });
+    }
+    detect_size = sizeof(valid_open_chars[detect_char]);
+    i = open_pos+detect_size;
+    char_count = 1;
+    while (i < sizeof(str))
+    {
+        if (str[i..i+detect_size-1] == valid_close_chars[detect_char]
+            && str[i-1..i-1] != "\\")
+        {
+            char_count = char_count - 1;
+            if (char_count == 0)
+            {    /* all done, almost */
+                string this_arg = str[..i+detect_size-1];
+                string next_arg = (sizeof(str) <= i+detect_size+1)
+                    ?0:str[i+detect_size+1..];
+                return ({ this_arg, next_arg });
+            } /*str[i+detect_size+1..] });*/
+            /* assume there is a comma after it */
+            i = i + detect_size;
+        }
+        else if (str[i..i+detect_size-1] == valid_open_chars[detect_char]
+            && str[i-1..i-1] != "\\")
+        {
+            char_count = char_count + 1;
+            i = i + detect_size;
+        } 
+        else
+            i = i + 1;
+    }
+    return ({ str, 0 });        /* something has gone wrong in the
+                     * expression */
+}
+
+#ifndef SERVLIST
+#define SERVLIST "S/servers"
+#endif
+
+find_item(obj, prevobj)
+{
+    string server;
+
+    if (server = SERVLIST->query_server(obj))
+    return server;
+    if (objectp(prevobj))
+    {
+        (int|array) glob;
+        glob = prevobj->find_item(obj);
+        if (intp(glob))
+            return 0;
+        else
+            return glob[0];
+    }
+    return 0;
+}
+

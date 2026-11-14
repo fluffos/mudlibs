@@ -1,0 +1,220 @@
+
+/*
+ * This does all the remote board communication between the muds.
+ *
+ * Boards which are distributed need to have their names in the 
+ * secure listing PERMISSIONS_FILE, as defined below.
+ *  
+ * Difficulties:
+ * The server needs to be robust to handle all the fade in's and out's
+ * of all the boards. Hopefully it will maintain a consistent
+ * set of notes across all the diverse boards. It also needs to
+ * take into account that the net drops packets, sometimes by the bucketload.
+ *
+ * Algorithm:
+ * For the trivial case of when all the boards are active then there
+ * are no real problems (assuming that the network isnt dropping packets).
+ * Messages are sent as soon as they are written to all the active hosts.
+ *
+ * To ensure consistency across the board (har har) a board type will 
+ * periodically and randomly send out a hash_value of its message data.
+ * This is compared at the receiving site against the local value and if
+ * any discrepancy is found it asks for a list of the timestamps of
+ * the original board.
+ *
+ * It compares the list against its local timestamp list and sends out
+ * the appropriate requests to fill in any missing articles.
+ *
+ * To ensure that deleted messages dont keep on reappearing the boards
+ * need to keep a short term history of deleted notes and will send 
+ * out kill commands if appropriate.
+ *
+ * by Llati Sep 94.
+ */
+
+inherit "RO/Servers";
+inherit "RO/cap_user";
+inherit "RO/cap_provider";
+
+#include <Consts.h>
+#include <board.h>
+
+import BBOARD_CLASS c_board;
+
+/* Message classifications */
+#define NEW_NOTE 1      /* ({ NEW_NOTE, board_name, class c_board new_note }) */
+#define REMOVE_NOTE 2   /* ({ REMOVE_NOTE, board_name, timestamp }) */
+#define BBOARD_HASHVALUE 3 /* ({ BBOARD_HASHVALUE, boardname,hashvalue }) */
+#define NOTE_TIMES 4    /* ({ NOTE_TIMES, boardname, array times }) */
+#define REQUEST_NOTE 5  /* ({ REQUEST_NOTE, boardname, timestamp }) */
+ 
+#define PERMISSIONS_FILE "RO/remote/remote_boards"
+#define CAP_NAME "rboard"
+
+#define DEBUG 0
+
+array perm = ({ }); /* array of distributed boards */ 
+array local_board = ({ }); /* matched array with all the local board objects */
+
+reset() {
+	invalidate_cap (CAP_NAME);
+	OBJ_DATAGRAM_SERV -> request_service (CAP_NAME,make_cap(CAP_NAME,0)); 
+	load_permissions ();
+}
+
+dg_capability (int dg_cap, int verify_cap) {
+
+	if (auth_user (CAP_NAME, verify_cap))
+    add_cap (CAP_NAME, dg_cap);
+}
+
+int query_distributed_board (string board_name) {
+	if (index (perm,board_name) >= 0) return 1;
+	return 0;
+}
+
+register_board (string board_name, object board) {
+int i;
+
+	i = index (perm, board_name);
+	if (i>=0) { 
+		local_board [i] = board;
+		call_out ("check_consistency",300, board_name);
+		}
+}
+
+check_consistency (string board_name) {
+int hashv,i;
+
+	i = index (perm, board_name);
+	if (!local_board[i]) return;
+	hashv = local_board[i] -> query_data_hash();
+	dgram_send (BBOARD_HASHVALUE, board_name, hashv);
+}
+
+distribute_note (string board_name, class c_board new_note) { 
+	dgram_send (NEW_NOTE, board_name, new_note);
+}
+
+distribute_remove_note (string board_name, int timestamp) {
+  dgram_send (REMOVE_NOTE, board_name, timestamp);
+}
+
+nosave dgram_send (int type, string board_name, arg2) {
+ array hosts,data;
+ int x;
+
+#if DEBUG
+DUMP -> dump ("Dgram send from board " + board_name ,0,0,find_player("llati"));
+DUMP -> dump ("Type: " +  type,0,0,find_player("llati"));
+DUMP -> dump (arg2,0,0,find_player("llati"));
+#endif
+
+  if (!query_distributed_board(board_name)) return 0;
+	hosts = RHOST_SERV -> query_active_hosts();
+	if (!sizeof(hosts)) return ;
+	data = ({ type, board_name , arg2 });
+	for (x = sizeof (hosts); x--; ) {
+		OBJ_DATAGRAM_SERV -> tx_dgram(CAP_NAME,lookup_cap(CAP_NAME),hosts[x],data);
+	}
+}	
+
+recv_rboard (int cap_verify, array calling_ip, data ) {
+int i,type;
+
+/* data is : ({ type, board_name, note }) */
+
+#if DEBUG
+DUMP -> dump ("Rx dgram from ",0,0,find_player("llati"));
+DUMP -> dump (calling_ip,0,0,find_player("llati"));
+DUMP -> dump (data, 0, 0, find_player("llati"));  
+#endif
+
+	if (!auth_user (CAP_NAME, cap_verify)) return;
+	
+	type = data[0];
+	i = index (perm, data[1]);
+	if (i < 0) return; /* We dont keep track of that board locally */
+
+	if (!local_board[i]) return; /* The board isnt loaded, lets not disturb it */
+	
+	switch (type) {
+		
+		case NEW_NOTE: 
+	  	local_board[i] -> add_note (data[2]);
+	  	break;
+	  case REMOVE_NOTE: 
+	    local_board[i] -> remove_note (data[2],1);
+	    break;
+	  case BBOARD_HASHVALUE:
+	   	if (data[2] != local_board[i] -> query_data_hash()) {
+				OBJ_DATAGRAM_SERV -> tx_dgram(CAP_NAME, lookup_cap(CAP_NAME),
+				         calling_ip,({NOTE_TIMES, data[1], local_board[i]->query_message_timestamps() })); 
+				}
+			break;
+		case NOTE_TIMES:
+			 array diff, tstamps, removed;
+			 int x, local_expiry;
+
+			 tstamps = local_board[i] -> query_message_timestamps();
+			 removed = local_board[i] -> query_removed_notes ();
+			 local_expiry = time () -local_board[i] -> query_expiry() ;
+			 diff = "lib/arrays" -> subtract (data[2],tstamps);
+			 /* What they have which we dont. */
+
+#if DEBUG
+        DUMP -> dump ("list of differing timestamps ",0,0,find_player("llati"));
+				DUMP -> dump (diff, 0,0,find_player("llati"));
+#endif				
+			 for (x=sizeof (diff); x--;)  {
+				/* ignore the ones older than the local expiry */ 
+				if (diff[x] < local_expiry) continue;
+				if (index (removed, diff[x]) >= 0) {
+					/* Its a removed note, but they still have it! */
+					distribute_remove_note (data[1], diff[x]) ;
+					continue;
+					}
+				 OBJ_DATAGRAM_SERV -> tx_dgram(CAP_NAME, lookup_cap(CAP_NAME),
+						calling_ip,({REQUEST_NOTE, data[1], diff[x]}) );
+				}    
+				/* We dont send out the ones that we have and they dont, 
+				 they may have a different expiry time on their board */
+				break; 
+		case REQUEST_NOTE:
+			   OBJ_DATAGRAM_SERV -> tx_dgram(CAP_NAME, lookup_cap(CAP_NAME),
+				      calling_ip,({NEW_NOTE, data[1], local_board[i]-> query_note(data[2]) }) );
+				 break;
+		default:
+			throw "Unknown note type in " +file_name (this_object());
+		}     
+}	
+	
+
+load_permissions () {
+string file;
+array afile;
+int i;
+
+  /* Just loads up the permissions file. It doesnt check to see if you
+      have made any stupid mistakes, though. */
+
+    perm = ({ });
+    file = grab_file (PERMISSIONS_FILE);
+    if (!file) {
+      throw "Could not find permissions file for the distributed board server.\n";
+			return;
+      }
+     afile = explode (file,"\n");
+     for (i=0; i <sizeof (afile); i++) {
+       if (afile[i] == "" || afile[i][0] == ' ' || afile[i][0] == '#')
+         continue;
+       perm += ({ afile[i] });
+       }  
+    local_board = allocate (sizeof (perm));   
+}
+       
+show_stats () {
+  write ("Distributed boards are : " + implode (perm,",") + ".\n");
+  ::show_stats();
+}
+

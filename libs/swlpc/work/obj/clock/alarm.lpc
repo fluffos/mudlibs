@@ -1,0 +1,235 @@
+/*
+	Game Clock for Shattered World Lpmud.
+	Extensively revised from the original by
+	Rhys aka rendell@bruce.cs.monash.oz.au
+	(in particular the addition of the add_alarm function).
+
+	Completely redone by Llati, too many changes to list. 1/94 
+*/
+#include <Servers.h>
+#include <time.h>
+
+inherit BASE ;
+
+import "obj/clock/alarm_decl" alarm_type;
+
+#define SAVE_FILE ("obj/clock/save/"+explode(query_host_name(),".")[0])
+
+
+
+/* groups of <int time of day>, <file name or pointer>, <string function>,
+    <array args> */
+
+
+class alarm_type alarms[0];
+
+show_stats() {
+int count;
+int t;
+
+	write ("Alarms:");
+	if (!alarms || !pointerp(alarms)) write("<none>\n");
+	else {
+		write("\n   (time, object, function)\n");
+		for (count = 0; count < sizeof(alarms); count ++) {
+			t = alarms[count].time;
+			write(t + "   "+CLOCK -> query_time(t)+" "+CLOCK -> query_date(t)+", "+
+			(objectp(alarms[count].obj)?
+			  file_name(alarms[count].obj):
+			  alarms[count].obj)+", "+
+			alarms[count].function+"\n");
+		}
+	}
+	write ("find_call_out (\"alarm_due\") returns " + find_call_out ("alarm_due") + ".\n");
+}
+  
+reset(arg) {
+    if(!arg) {
+   	  if (!restore_object (SAVE_FILE,this_object()) ) {
+   	  	LOG -> log_file ("CLOCK","The game clock could not restore its save file.\n");
+   	  	} 
+      add_id (["alarm server","server"]);
+		if (file_name(this_object()) == CLOCK)
+			schedule_alarms();
+    }
+    return;
+}
+
+schedule_alarms () {
+int i,size;
+int current_time = time();
+
+	size = sizeof (alarms);
+	for (i = 0; i < size; i++ ) {
+	  	if (current_time > alarms[i].time) {
+	  		/* For some reason (perhaps the mud wasnt up) it didnt get called */ 	
+	  		/* Better late than never, I spose */
+	  		call_out ("alarm_due",120 + (i*10),alarms[i].time);
+	  		}
+	  	else 
+	  		call_out ("alarm_due",alarms[i].time - current_time, alarms[i].time);
+	  	}
+}	  	
+
+alarm_due (int atime) {  /* atime is the time that the alarm was supposed to go off */
+int i;
+class alarm_type tmp = create alarm_type;
+
+	i = timeindex (atime);
+	if (i < 0) {
+		/* We must have done a remove_alarm. Unforuantly we couldnt
+			specifically remove the call_out, in the general case,
+			(well, not without a lot of stuffing around) so we
+			just ignore it. */
+		return ;
+		} 
+	tmp = alarms[i];	
+	alarms = alarms[..i-1] + alarms[i+1..];
+  AUTOSAVE_SERV -> set_auto_save (this_object());
+	tmp.obj -> (tmp.function) (tmp.args);
+	/* I dont do a catch on this because I want the error to be logged,
+		in the normal places. Besides, it doesnt matter if it errors here */
+}	
+	
+int	
+add_alarm((int|string) ktime, (string|object) call_obj, string function, args)
+{
+    int abs_time, hour, minute, da, mo, ye;
+    string date;
+    int MIN,HRS,DAYS,MON;
+    array allargs;
+    class alarm_type tmp = create alarm_type;
+    
+    MIN = CLOCK -> minutes_in_hour ();
+    HRS = CLOCK -> hours_in_day();
+    DAYS = CLOCK -> days_in_month();
+    MON = CLOCK -> months_in_year();
+
+	if (objectp(call_obj)) call_obj = file_name (call_obj);
+	if (index (call_obj,"#") >= 0) {
+		throw ("You can not add an alarm for a cloned object. You should probably be using call_outs instead. " +
+			"The reason for this is that next reboot the clock will be unable to fulfill the alarm request.\n" +
+    			"The call back object was " + call_obj + " and the function " + function + ".\n");
+		return ;
+	}
+  if (intp(ktime)) {
+    if (ktime < time()/2) {
+    	throw "Please use absolute times or game dates only when scheduling an alarm.\n" +
+    	  "The call object was ("+ call_obj + ") and the function (" + function + ").\n";
+    	/* I would rather do this than set an arbitrary limit to denote a maximum 
+    		offset. Besides, being constricted in your actions is sometimes a 
+    		good thing */
+    	return 0;
+    	}
+	  abs_time = ktime;
+	}
+    else 
+    {
+    	int gmin; /* Game minutes till the alarm */
+
+        /* They arnt going to use real seconds, but game time. */
+        allargs = explode(ktime, ":");
+        if (sizeof(allargs) > 1)
+        {
+            hour = atoi(allargs[0]);
+            allargs = explode(allargs[1], " ");
+            minute = atoi(allargs[0]);
+            if (sizeof(allargs) > 1)
+            date = implode(allargs[1..], " ");
+	    	gmin = minute + hour*MIN ;
+	    }  
+	    else 
+        {
+			throw ("Incorrect syntax used while scheduling an alarm. Please use 24 hour time.\n" +
+    		"The call back object was " + call_obj + " and the function " + function + ".\n");
+		    return 0;
+	    }
+		if (date && sizeof(date) > 0) 
+        {
+            allargs = explode(date, "/");
+            if (sizeof(allargs) == 3)
+            {
+                da = allargs[0];
+                mo = allargs[1];
+                ye = allargs[2];
+			    gmin = gmin * REAL_SEC_TO_GAME_MIN 
+                            + CLOCK -> date_to_seconds (date);
+            }
+	   	    else 
+            {
+	   				throw ("Incorrect syntax used while scheduling an alarm. Please use a %d:%d %d/%d/%d format" + 
+    			"The call back object was " + call_obj + " and the function " + function + ".\n");
+	   	      return 0;
+	   	    }
+	   	    abs_time = gmin;
+	    }
+		else 
+        {
+	   		 /* Check to see if the time is already passed, and if so
+	   		 	we assume that they meant tomorrow */
+	      if (gmin < CLOCK -> query_hour() * MIN + CLOCK -> query_minute())
+	        gmin += MIN * HRS ;
+	      gmin += (CLOCK->query_day()-1 + (CLOCK->query_month()-1)*DAYS + CLOCK->query_year()*DAYS*MON)*MIN*HRS;
+	      abs_time = gmin*REAL_SEC_TO_GAME_MIN;
+		}
+   }
+    if (abs_time < time()){
+    	throw ("Tried to schedule a call back from the game clock for a time that has already passed.\n"+
+    			"The call back object was " + call_obj + " and the function " + function + ".\n");
+    	return ;
+    	}
+    tmp.time = abs_time;
+    tmp.obj = call_obj;
+    tmp.function = function;
+    tmp.args = args;	
+    alarms += [ tmp ];
+    AUTOSAVE_SERV -> set_auto_save (this_object());
+    call_out ("alarm_due",abs_time- time(),abs_time);
+    return abs_time;
+}
+
+int
+remove_alarm ((string|object) ob, string func) {
+int i;
+
+	if (objectp(ob)) ob = file_name (ob);
+	for (i = sizeof (alarms); i--; ) {
+		if (alarms[i].obj == ob && alarms[i].function == func) {
+			alarms = alarms [..i-1] + alarms [i+1..];
+  		AUTOSAVE_SERV -> set_auto_save (this_object());
+			return 1;
+			}
+		}
+	return 0;
+}
+
+/* Test if you have an alarm outstanding.
+   NOTE: It returns -1 if false. NOT zero.  */
+int  
+query_alarm((string|object) ob, string func) { 
+int i;
+
+		if (objectp(ob)) ob = file_name (ob);
+		for (i = sizeof (alarms); i--;) {
+			if (alarms[i].obj == ob && alarms[i].function == func ) 
+			  return alarms[i].time;
+			}
+		return -1;
+}
+
+int
+timeindex (int t)  {
+	/* This is a hack until Geoff finds a nice way to index on subelements
+	of an array of classes */
+int i;
+
+	for (i = sizeof (alarms); i--; ) {
+		if (alarms[i].time == t) return i;
+		}
+	return i; 	/* -1 if not found*/
+}
+
+save_me() {
+	save_object (SAVE_FILE ,this_object()  );
+	}
+	

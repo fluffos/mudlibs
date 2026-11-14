@@ -1,0 +1,170 @@
+/* obj/projectile -> for info 'man projectile' */
+
+inherit "std/object";
+inherit "RO/Servers";
+
+object weapon_object;
+int impact, dam;
+
+reset(arg) {
+	::reset(arg);
+	if (!arg) {
+		add_property("projectile");
+		}
+	}
+
+show_stats() {
+	::show_stats();
+	write("Weapon object: ");
+	if (query_weapon_object()) 
+		write(file_name(query_weapon_object()));
+	else
+		write(" None.");
+	write(	"\nDamage: " + query_damage() +
+		"\nImpact: " + query_impact() + "\n");
+	}
+
+set_weapon_object(obj) { weapon_object = obj; }
+query_weapon_object() { return weapon_object; }
+set_impact(n) { impact = n; }
+query_impact() { return impact; }
+set_damage(n) { dam = n; }
+query_damage() { return dam; }
+
+flight(location, direction, dc, attacker, target, thrown, wind_modifier) {
+ int i;
+ string next_location;
+ array things = contents(location);
+
+ transfer(this_object(), location); /* might as well physically move it */
+ if (sizeof(things))
+	for (i = 0; i < sizeof(things); i++)
+		if (things[i]->query_living() && things[i]->short()) 
+			if (!target 
+			    || things[i] == present(target, environment(this_object())) 
+			    || !attacker->apply_skill("distance-attacks"))
+	/* If you specify a target, you're not more likely to hit it, but
+	   you're less likely to hit other things. It's tested against your
+	   skill */
+				if (try_to_hit_me(things[i], dc, attacker, direction, thrown, wind_modifier)) {
+					end_flight();
+					return;
+					}
+ if (dc < 1 ||
+     !(next_location = location->query_exit(direction))) {
+	tell_room(location, capitalize(this_object()->short()) +
+		" smacks into the ground beside you.\n");
+	end_flight();
+	}
+ else  {
+	tell_room(location, capitalize(this_object()->short()) +
+		" flies through the air. It whisks past you and disappears " +
+		direction + " into the " + lower_case(next_location->short()) +
+		".\n");
+	flight(next_location, direction, dc - 1, attacker, target, thrown, wind_modifier);
+	}
+ }
+ 
+
+try_to_hit_me(who, dc, attacker, direction, thrown, wind_modifier) {
+	int total_dam = query_damage();
+	int dif;
+	string hit_loc;
+	object iq;
+
+	dif = (who->query_dex() - who->query_siz()) * 2 + wind_modifier;
+	if (attacker->query_wiz())
+		tell_object(attacker, "[Wiz Info: Hit Diff'y: " +
+			dif + " (Targ. Dex: " + who->query_dex() +
+			", Targ. Size: " + who->query_siz() + 
+			", Wind: " + wind_modifier + ")]\n");
+	if (who->query_NPC())
+		who->react("distance_attack", attacker, DIRECTION->opposite_dir(direction));
+	if (attacker->query_NPC())
+		attacker->react("sucessful_distance_attack", who, direction);
+		/* "sucessful" means "hit or pretty close" :) */
+	if (!attacker->apply_skill("distance-attacks", dif)) 
+		return 0;
+	if (thrown)
+		total_dam = (attacker->query_str() * total_dam) / 40;
+		/* Throwing isn't as powerful as shooting. With STR of 20, you'll
+		   cause about half shooting damage */
+
+	total_dam = ((3 + dc) * total_dam) / 4;
+	/* The closer the target is, the more damage. For example, if you
+	   hit a target 2 locations away with a Class 2 weapon (eg a bow),
+	   you'll do only 3/4 (75%) normal damage. See:
+
+	Distance Class:Distance  1     2     3     4     5
+	--------------------------------------------------
+	1 (Sling)               3/4    -     -     -     -
+	2 (Bow)                  1    3/4    -     -     -
+	3 (Crossbow)            5/4    1    3/4    -     -
+	4 (Long Bow)            6/4   5/4    1    3/4    -
+	5 (Magic)               7/4   6/4   5/4    1    3/4
+	*/
+
+	hit_loc = who->random_location();
+	tell_object(who, capitalize(short()) + " flies in from the " +
+		DIRECTION->opposite_dir(direction) + " and "+
+		"slams into your " + hit_loc + "!\n");
+	who->checked_say(who->query_name() + " is struck in the " + 
+		hit_loc + " by " + short() +
+		" from the " + DIRECTION->opposite_dir(direction) + ".\n");
+	if (query_impact() > 0)
+		set_impact(100); /* break arrow */
+	if (attacker->query_wiz())
+		tell_object(attacker, "[Damage: Want: " + total_dam);
+	total_dam = 2 * who->hit_player(total_dam / 2, hit_loc); 
+	if (attacker->query_wiz())
+		tell_object(attacker, ", Gave: " + total_dam + ".]\n"); 
+	if (environment(who)->query_light() > 0) {
+		if (total_dam < 1)
+			tell_object(attacker, capitalize(direction) + 
+				"wards, you see " +
+				short() + " glance off a " + who->query_race() +
+				"'s " + hit_loc + ".\n");
+		else
+			tell_object(attacker, capitalize(direction) + 
+				"wards, you see " +
+				short() + " strike a " + who->query_race() +
+				" in the " + hit_loc + ".\n");
+		}
+	who->attacked_by(attacker);
+	attacker->attacked_by(who);
+	return 1;
+	}
+
+
+end_flight() {
+	if (query_impact() < 0) {
+		transfer(this_object(), "RO/void");
+		destruct(this_object());
+		}
+	else if (random(100) < query_impact())
+		add_property("BROKEN");
+	if (query_weapon_object())
+		projectile_to_weapon();
+	}
+
+projectile_to_weapon() {
+	object w;
+	array p;
+	int i;
+	if (!query_weapon_object()) {
+		write("ERROR: Tried to turn projectile into weapon with no "+
+			"weapon_obj.\n");
+		return 0;
+		}
+	if (find_property("BROKEN"))
+		query_weapon_object()->add_property("BROKEN");
+	transfer(query_weapon_object(), environment(this_object()));
+	transfer(this_object(), "RO/void");
+	destruct(this_object());
+	}
+
+query_destruct() {
+	if (caller() != this_object() && query_weapon_object())
+		destruct(query_weapon_object());
+	/* Ensure no loose weapons are left lying around in /RO/storage */
+	}

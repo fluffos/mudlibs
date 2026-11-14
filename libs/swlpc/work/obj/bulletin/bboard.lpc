@@ -1,0 +1,605 @@
+
+ /* 
+  * Shattered Worlds bulletin board. Based on the Jul 94 version
+  * and redone by Llati because he thought it was a ugly, bloated 
+  * thing. Previous version was influenced by Rhys, Hunter and Gandalf.
+  *
+  * The major change involved removing all the support for laws
+  * (it would be more appropropriate to put it elsewhere) and
+  * splitting up the organisation of the code into 3 parts.
+  *
+  * Part 1: The actual board. It contains all the posted data.
+  * Part 2: The remote board server. Used to maintain data compatibility
+  *            across the muds.
+  * Part 3: The board reader.
+  * Part 4: The board writer (used to write/edit a note)
+  */
+
+ /* Relevent functions are :
+  *   int create_note (string writer, string title, string text)
+  *                  a simple function for those that dont want to 
+  *                  read this file and understand it. 
+  *   int find_note (int creation_time)     Returns the array position of a 
+             note at timestamp. -1 if there is no such note.
+  *   int find_position (int creation_time) Returns the note at or BEFORE
+             the time. -1 if at the end of array.
+  *   int add_note (class board new_note)   We have a new note to add
+  *   int remove_note(int timestamp)        Remove a note.
+  *   int number_of_notes ()                Number of notes on board.
+  *   string show_note (int indx,int full_note)  Give a listing of note indx
+  *   int creation_time (int pos)           Return the time at which a note was made.
+  *   class c_board query_note (time)       Return the note
+  *   array threaded_notes (int timestamp, int full_note)
+  *       Give a threaded array of notes (as strings) starting at the timestamp
+  */
+
+/* This code assumes that the messages are naturally sorted in an oldest first 
+   sorting AND each note has a unique time stamp. In essence a note
+   is identified by its time of creation, so it had better be unique!
+   I realise that there are better ways of doing this, but its not
+   a big restriction. 
+   
+   I have taken alot of care to try and hide the actual data structure
+   storage method from all other objects. This was intentional. Please
+   dont go adding implementation dependant calls (eg a query_note(index_no))
+   Its not meant to happen!
+   
+ */
+  
+#include <board.h>
+#include <security.h>
+#include <Servers.h>
+
+#define TPN	capitalize(this_player()->query_real_name())
+
+#define BBOARD_EDITOR "obj/bulletin/board_writer"
+#define BBOARD_READER "obj/bulletin/board_reader"
+#define SAVE_FILE_LOC "open/board/"
+
+#define EXPIRE (60*24*60*60)	/* default is notes expire after 60 days */
+
+#define	BOARD_ROOM	"room/wiz/boardroom"
+
+inherit "std/object";
+
+import BBOARD_CLASS c_board;
+
+nosave string board_name;  /* Unique name for the board. */
+array removed_notes = []; /* Timestamps of notes that got removed by someone, 
+                              not expired. Used by distributed boards. */
+
+class c_board messages[0];   /* All the posted messages */
+
+nosave int expiry;   /* Number of seconds until we expire the note */
+nosave string archive_file;/* Where do we put the expired notes */
+
+reset(second)
+{
+  if (!second) {
+		add_id ( ["board", "bulletin","bulletin board"] );
+		board_name = 0;
+		archive_file = "log/expired_notes";
+		expiry =EXPIRE;
+		set_short ("uninitialized board");
+		set_long ("A quaint little bulletin board.  Type 'help board' for help.\n" );
+		add_property ("NO_GET");
+  }
+}
+
+init() {
+  ::init ();
+  if (board_name) {
+		add_action("remove_post", "remove");
+		add_action("get_reader", "list");
+		add_action("get_reader", "read");
+		add_action("get_reader", "catchup");
+		add_action("start_edit", "edit");
+		add_action("start_post", "post");
+		add_action("start_mail", "reply");
+		add_action("start_followup", "followup");
+  }
+}
+
+/* Initialization functions */
+int
+set_board_name(string new_name)
+{ 
+	board_name = new_name; 
+	add_id (board_name);
+	restore_board(); 
+	set_short (capitalize (board_name) +"'s board");
+	call_out("tell_board_room", 1, new_name);	/* make sure it's moved in */
+	return 1;
+}
+
+tell_board_room(new_name) {
+	catch { BOARD_ROOM -> new_board(new_name, file_name(environment(this_object()))); } ;
+	}
+
+/* set_archive_file (0) stops them being logged */ 
+int
+set_archive_file((string|int) new_file)
+{ archive_file = new_file; return 1; }
+
+int
+set_expiry (int seconds)
+{ expiry = seconds; return 1; }
+
+string
+query_board_name()
+{ return board_name; }
+
+log_error(string error)
+{
+  say("The board says :"+error+"\n");
+  write("The board says :"+error+"\n");
+	LOG -> log ("BOARD", "Board "+board_name+": "+error+"\n");
+}
+
+restore_board()
+{
+  if (!board_name) {
+    throw "Board name not set.\n";
+  	return 0;
+  	}
+	if (!restore_object(SAVE_FILE_LOC + board_name)) {
+		log_error ("Could not find save file for the board called " + board_name + ".\n");
+	}
+	if (!removed_notes) removed_notes = [ ]; /* Backward compat hack. Take out ina few weeks 940909 */
+	check_expire ();
+}
+
+set_needs_save() {
+#if 0
+    AUTOSAVE_SERV -> set_auto_save (this_object());
+#else
+    save_me();
+#endif
+    }
+
+save_me () {
+  save_object(SAVE_FILE_LOC + board_name);
+  return 1;
+}
+
+
+object get_editor(object destin)
+{
+  object editor;
+
+  editor = present("board_editor", destin);
+  if (editor) {
+    write ("You already have a board editor on you. This shouldnt happen, so it has been removed.\n");
+    destruct (editor);
+    return 0;
+    }
+	editor = clone_object(BBOARD_EDITOR);
+	move_object(editor, this_player());
+	return editor;
+}
+
+int ok_post(arg)
+{
+	if (!arg) {
+	   write ("Please specify a title for your post. ie \"post Shattrd Wrlds iz K001!!!! Yeah!!1!!\"\n");
+	   return 0;
+	   }
+	return 1;
+}
+
+/*
+ * start_post:
+ *    arg - note title
+ *    callb - callback object (o->note_done() will be called if !0);
+ *
+ */
+int start_post (arg, callbo)
+{
+
+  class c_board new_note = make_note();
+  object editor;
+
+    if (!this_object()->ok_post(arg)) return 1;
+    if (this_player()->query_guest()) {
+        write("Guests may not post!\n");
+        return 1;
+    }
+
+  if (! (editor = get_editor(this_player()))) return 1;
+	new_note.title = arg;   
+	new_note.follow = -1;
+	editor -> start_new_note (this_object(),new_note, callbo);
+  return 1;
+}
+
+int start_edit (arg)
+{
+
+  int note;
+  object editor;
+
+	notify_fail ("That is a invalid number. Please specify a valid note.\n");
+	if (!stringp(arg) || !(note = atoi (arg))) return 0;
+	note --;
+	if (!valid_note (note)) return 0;
+	if (TPN != messages[note].owner && this_player() -> query_wiz () < SENIOR) {
+	  write ("You can only edit notes that you have written.\n");
+	  return 1;
+	  }
+  if (! (editor = get_editor(this_player())))return 1;
+	editor->start_edit(this_object(),messages[note]);
+	return 1;
+}
+
+int start_mail (arg)
+{
+
+  int note;
+  object sender;
+
+	notify_fail ("That is a invalid number. Please specify a valid note to reply to.\n");
+ 	if (!stringp(arg) || !(note = atoi (arg))) return 0;
+	note --;
+	if (!valid_note (note)) return 0;
+  if (! (sender = clone_object("obj/bulletin/mail_sender")))return 1;
+  move_object (sender, this_player());
+	sender->mail_to(messages[note].owner);
+	return 1;
+}
+
+
+int start_followup (arg)
+{
+  object editor;
+  class c_board new_note = make_note();
+  int note;
+
+    if (this_player()->query_guest()) {
+        write("Guests may not post!\n");
+        return 1;
+    }
+
+	notify_fail ("That is a invalid number. Please specify a valid note.\n");
+	if (!stringp(arg) || !(note = atoi (arg))) return 0;
+	note --;
+	if (!valid_note (note)) return 0;
+  if (! (editor = get_editor(this_player()))) return 1;
+	new_note.follow = note;
+	new_note.title = "Re: " + messages[note].title; /* Well, at the start at least */
+  editor -> start_followup (this_object(),new_note);
+  return 1;
+}
+
+
+/* I wrote the readers this way because
+ *   a) I like to split my code up if I can
+ *   b) One reader per person makes the code simplier
+ *   c) Quite often boards are placed in high traffic zones and 
+ *       there is no point cloning up a reader just for a passer by. 
+ */
+int get_reader(arg)
+{
+  object reader;
+
+  reader = present("board_reader", this_player());
+  if (reader) {
+    reader->init_reader(this_object());
+    return 0;
+  }
+	reader = clone_object(BBOARD_READER);
+	move_object(reader, this_player());
+	reader->init_reader(this_object(),messages);
+	if (query_verb() == "list") {
+	   return reader->list(arg);
+	   }
+	 else if (query_verb() == "read" ) {
+	   return reader->read_note (arg);
+	   }
+	  else return reader->catchup(arg); 
+}
+
+class c_board query_note (int timestamp) {
+int i;
+
+	i = find_note(timestamp);
+	if (i <0) return;
+	return messages[i];
+}
+
+add_local_note (class c_board new_note) {
+ /* Got a local addition (from this mud) */
+
+ add_note (new_note);
+ distribute_note (new_note);
+ return 1;
+}
+ 
+
+int add_note (class c_board new_note) {
+int pos;
+
+	pos = find_position (new_note.date);
+	if (pos == -1) { /* adding a note to the end of the list */
+	  messages += [ new_note ];
+	  }
+	else if (!pos && new_note.date < messages[0].date) {
+ /* Due to the way I structured the binary search I need this little hack */
+		  messages = [new_note ] + messages ;
+		}
+	 else if (messages[pos].date != new_note.date) {
+	 	 messages = messages[..pos] + [new_note] + messages[pos+1..]; 
+	 }
+	  else {
+	    int a,b;
+	    /* Shit, we have a clash with timestamps. Fairly unlikely to happen
+	     *   unless some player is being a wanker. Use hash_value() to deal
+	     *   with it
+	     */
+
+	     a = hash_value (new_note);
+	     b = hash_value (messages[pos]);
+	     if (a > b) {
+	       new_note.date ++;
+	       add_note (new_note);
+	       }
+	       else if (a < b)  {
+	         class c_board tmp;
+	         tmp = messages[pos];
+	         messages[pos] = new_note;
+	         tmp.date ++;
+	         add_note (tmp);
+	         }
+	         else { /* We seem to have been sent the same note twice, probably. Discard it */
+      			throw "BBoard error, there is already a note in that slot !\n";
+	    			return 0;
+      			}
+	    }
+	save_me();
+	say ("A note appears on the board.\n",this_object());
+	return 1;
+}
+
+
+ /* Do a binary search to find the right region.
+  * Returns a valid number even if it doesnt find the note,
+  * except when the timestamp is later than the oldest note 
+  * (which usually means they have read all the notes). 
+  */
+int find_position (int timestamp) 
+{
+int i, l, h;
+
+
+  l = 0;
+  h = sizeof (messages);
+  if (timestamp < 0) {
+     throw "You must specify a valid time when searching for a bulletin board note.\n";
+     return -1;
+     }
+  if (!h || messages[h-1].date < timestamp) return -1;
+  while (1) {
+    i = (l+h)/2;
+    if (messages[i].date == timestamp || l == i) 
+      return i;
+    if (messages[i].date > timestamp)
+          h = i;
+    else
+          l = i;
+    }
+}    
+
+/* Finds a real note. -1 is failure */
+int 
+find_note (int timestamp)
+{
+int note;
+
+	note =  find_position (timestamp);
+	if (note < 0) return note;
+	if (messages[note].date != timestamp) return -1;
+	return note;
+}	
+
+int
+valid_note(int number)
+{
+    if (number < 0 || number >= sizeof(messages))
+	return 0;
+    else
+	return 1;
+}
+
+/* Gives back a threaded array of messages starting after the note listed */
+/* If !full_note then you only get the header */
+array
+threaded_notes(int date, int full_note) {
+int note, pos,base;
+array result = [ ];
+
+  note = find_position (date);
+  if (note < 0) return [];
+ /* Make a threaded list of index numbers */ 
+  for (; note < sizeof(messages); note++) {
+      if (messages[note].follow >= 0 &&
+          (pos = index (result, messages[note].follow) ) >=0 ) {
+        result = result [..pos] + [ note ] + result [pos+1..];
+        }
+      else {
+        result += [ note ];
+      }
+  }  
+  /* Use the threaded list to produce the output */
+  for (note=sizeof(result);note--;) {
+    base = result[note];
+    result[note] = show_note (base,full_note);
+    }
+  return result;
+}
+
+string show_note (int indx,int full_note) {
+string out;
+    out = indx+1 + ": " + messages[indx].title + " (" 
+       +messages[indx].owner + ", " + messages[indx].writer_title + ", " + 
+           ctime(messages[indx].date)[4..15]+")";
+    if (messages[indx].follow >= 0)
+      out = "  " + out + " [Following "+(messages[indx].follow+1)+"]";
+    if (full_note)  out += "\n" + messages[indx].body;  
+       else out += "\n";
+    return out;
+}   
+
+    
+
+int ok_remove(arg)
+{
+int num;
+	if (!arg) { 
+	  write ("Remove which note?\n");
+	  return 0;
+	  }
+	num = atoi (arg) -1;  
+	if (!valid_note(num)) {
+		write ("That is not a valid number.\n");
+		return 0;
+		}
+	if (TPN != messages[num].owner && this_player() -> query_wiz () < SENIOR) {
+	  write ("You can only remove notes that you have written.\n");
+	  return 0;
+	  }
+	return 1;  
+}
+
+remove_post (arg) {
+int num;
+  if (!this_object()->ok_remove(arg)) return 1;
+  num = atoi (arg) -1;  
+	if (!valid_note(num)) {
+		write ("That is not a valid number.\n");
+		return 1;
+		}
+	if ( remove_note (messages[num].date,0)) {
+	  write ("You remove the note from the board.\n");
+	  say (capitalize (TPN) + " removes a note from the board.\n",this_player());
+	  return 1;
+	  }
+	log_error ("Tried to remove note from board but failed. Note number was " +arg+ ".\n");
+}  
+	  
+
+/* I know its easier to have the element number passed in here, but 
+  I think its safer this way. */
+int remove_note(int timestamp, int remote_command)
+{
+int num, after, subst;
+
+  num = find_position (timestamp);
+  if (num == -1) return 0; /* No such note! */
+
+	if (archive_file)
+	  LOG -> log ("Boards/"+archive_file, "\n**\nAuthor: " +messages[num].owner + 
+	        "\nDate: " + ctime (messages[num].date) + 
+	        "\nTitle: " +  messages[num].title + 
+	        "\nMessage:\n" + messages[num].body);
+  subst = messages[num].follow;
+  for (after = num+1; after < sizeof(messages); after++) {
+		if (messages[after].follow > num)
+				messages[after].follow--;
+		else if (messages[after].follow == num)
+		{
+				messages[after].follow = subst;
+				if (subst < 0)
+			subst = after-1;	/* we're about to decrease the size of the array...*/
+		}
+	}	
+  if (messages[num].date +expiry > time() && RBOARD_SERV -> query_distributed_board(board_name))
+     removed_notes += [ timestamp ];
+  messages = messages[..num-1] + messages[num+1..];
+  set_needs_save();
+  if (remote_command)
+    say ("A note disappears from the board.\n",this_object());
+  else {
+   if (RBOARD_SERV -> query_distributed_board (board_name))
+      RBOARD_SERV ->distribute_remove_note (board_name, timestamp) ;
+      }
+  return 1;
+}
+
+query_removed_notes() {
+	return removed_notes + [ ];
+}
+
+check_expire ()  {
+int i;
+
+	if (RBOARD_SERV -> query_distributed_board (board_name)) 
+  	RBOARD_SERV -> register_board (board_name, this_object());
+	for (i = 0; i < sizeof(messages) && time() > messages[i].date + expiry;) {
+	  remove_note(messages[i].date,0);
+    set_needs_save();
+    }
+  for (i = sizeof (removed_notes); i--; ) {
+   if (removed_notes[i] +expiry > time()) break;   
+   }
+  removed_notes = removed_notes[..i];
+  call_out ("check_expire",18000); /* Check every 5 hours */  
+  set_needs_save();
+}
+
+show_stats () {
+  ::show_stats();
+  DUMP -> dump (messages);
+  write ("Board name: " + board_name +
+    "\nExpiry time: " + expiry + "(" + expiry/86400 + " days)" +
+    "\nArchive log: " + archive_file + ".\n");
+  write ("Removed notes: "); DUMP -> dump (removed_notes);
+}
+
+int create_note (string writer, string title, string text) {
+class c_board note;
+
+	note = make_note();
+	note.owner = writer;
+	note.title = title;
+	note.body  = text;
+	note.follow = -1;
+	if (lower_case(writer) != this_player()->query_real_name())
+	  note.writer_title = "Automated posting";	
+	return add_local_note (note);
+}	
+  
+class c_board make_note () {
+class c_board new = create c_board;
+
+  new.date = time();
+  new.owner = TPN;
+  new.writer_title = "lib/levels" -> query_long_desc (this_player());
+  return new; 
+}  
+
+int number_of_notes () { return sizeof(messages); }
+
+int creation_time (int pos) { return messages[pos].date; }
+
+long (arg) {
+	::long (arg);
+	write ("There are " + sizeof(messages) + " notes posted on the board.\n");
+	}
+
+distribute_note (class c_board new_note) {
+  if (RBOARD_SERV -> query_distributed_board(board_name)) 
+    RBOARD_SERV -> distribute_note(board_name,new_note);
+}
+
+int query_data_hash () {
+  return hash_value (messages);
+  }
+
+array query_message_timestamps () {
+array times = [ ];
+int i;
+
+	for (i = 0; i < sizeof (messages) ; i++) {
+	  times += [ messages[i].date ];
+	  }
+  return times;
+}

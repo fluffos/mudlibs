@@ -1,0 +1,565 @@
+/*
+ *  Shattered World's Login Object - Dredd.
+ *  Most of it replaced - Gandalf.
+ *
+ * HACK HACK HACK: if you login as `guest', it chooses a random name
+ * for you (std/namer), and tells newplayer to create a one-time login. - G
+ * It may be a hack, but it's a bloody good one :)
+ *
+ * New interface:
+ *	Gets player name, password.  Does NOT do start location, gender for 
+ *	new characters, etc - these belong elsewhere.
+ *
+ *	Uses the player server to get the player.
+ *	If it's a new character (no object created by server), it clones a 
+ *	body and calls ob->start_new_player(name, passwd).
+ *	If it's a reconnection to a (god level) link dead object, it calls 
+ *	ob->reconnected().
+ *	If it's a login of an existing character, which was not previously 
+ *	loaded (as a god level object) before they logged in, it calls 
+ * 	ob->restart_player().
+ *	NB: a player body might already be loaded if, for instance, someone 
+ *	stat'd or fingered it.
+ *	In this case, it'll have low privs, and the logon object will dest
+ *	it and reload it from its savefile.
+ *
+ *	Objects wishing to create a player zombie should use ob->start_noninteractive() (which
+ *	ignores all the mail checks, etc).
+ */
+
+inherit "RO/ioprocess";		/* so they can see what the hell they are doing */
+
+#define LOGIN_OBJDIR "secure/Logons/"
+
+#define SHUTDOWN_NAME "shutdown"
+#define SHUTDOWN_UGLY "P/players/s/shutdown.o"
+
+/* #define NO_SAVE */
+
+#include "Config.h"
+
+#include "time.h"
+#include "security.h"
+
+nosave int new_player;		/* Is this the first time for this player? (i.e. no load) */
+nosave object my_body;		/* did we find a body for him? */
+
+/*
+ * We need the following for queries from the GD, etc.
+ */
+
+nosave int wiz_level;
+nosave string my_name;
+nosave int guest_character;
+nosave int logged_in;
+
+query_no_external_save() {
+    return 1;
+    }
+
+logon() {
+    if (logged_in) return 1;
+    set_this_player(this_object());
+    logged_in = 1;
+
+    /* enable_commands(); */
+    call_out("show_banner", 2); /* fast connect kludge for mudwho, relayd, etc */
+    input_to("logon2");
+    call_out("timeout", 120);
+    call_out("timeout", 300);
+    return 1;
+    }
+
+show_banner() {
+int tm1;
+array bann;
+
+/* kludge - cant use cat, command_giver isn't set */
+bann = grab_file("RO/banner");
+if (stringp(bann)) {
+    tell_object(this_object(), bann);
+    }
+
+tm1 = ctime(time());
+tell_object(this_object(), "Welcome to the Shattered World (version " +
+	MUD_VERSION + ")!\n" +
+        "The local time (AEST) is " + tm1 + ".\n\n");
+
+tell_object(this_object(), 
+	"New players: choose a name for your character, or enter `guest'.\n\n"+
+        "What is your name: ");
+}
+
+nosave kickoff(both)
+{
+	destruct(this_object());
+}
+
+slow_dest(both) {
+    call_out("kickoff", 0.5, both);
+    }
+
+reset() {
+   return;
+}
+
+timeout() {
+    write("\nTimeout\n");
+    slow_dest();
+}
+
+/*
+ * Logon2: get their name, check it.
+ */
+
+(int|string) barred_reason = 0;
+
+nosave logon2(str) {
+    int Banish;
+
+    remove_call_out("timeout");
+    remove_call_out("show_banner");
+
+    if (!str || str == "") {
+        write("Come back another time then!\n");
+    	slow_dest(0);
+        return 1;
+    }
+
+    // Jenna Feb 01 - because players who log in just before
+    // reboot can get saved before their inventory restores.
+    catch
+    {
+        int sd = SHUT_DAEMON->query_shutdown();
+        if (sd > 0 && sd < 45)
+        {
+            write(
+                "I'm sorry, the game is about to reboot. Please "+
+                "try again in "+sd+" seconds!\n");
+            slow_dest();
+            return 1;
+        }
+    };
+
+/*
+ * If it's the name of a comms prac student, we want to pre-fetch
+ * or generate an assigned login name, and use that instead.
+ */
+	
+
+    str = lower_case(str);
+
+    if (!valid_name(str)) {
+        input_to("logon2");
+        write("Give name again: ");
+        return 1;
+    }
+
+/*
+ * Check name status.
+ */
+
+    Banish = "std/banish"->banished(str);
+    if (Banish != 0) {
+        if (Banish == -1)
+	    write("That name is banished!\n");
+        else if (Banish == -2)
+	    write("That name is reserved for a former hero.\n");
+        else if (Banish > 0)
+	    write("You are frozen for " + Banish + " more game days.\n");
+        slow_dest(1);
+        return 1;
+    }
+
+ /* Check that the file system hasnt been lost, since the mud is quite
+  * capable of running (once started) without accessing the disk.
+  * We must stop people logging in if this happens because they will
+  * create new characters which may be saved over their real data files
+  * when we find the disk again.
+  * Rather arbitrarily we check to see if we can find the shutdown character,
+  * since he should always be there.
+  */
+
+#ifdef NFS
+    if ((str != SHUTDOWN_NAME) &&
+	 (file_size(PLAYER_SERV->GetPlayerSavefile(SHUTDOWN_NAME) + ".o") == -1)) {
+        write ("Could not find the default player save file. It is likely " +
+          "that the file system has been temporarily detatched. Please " +
+          "try later.\n");
+        slow_dest ();
+        return 1;
+        }
+#endif
+
+/*
+ * Crash recovery - *sigh*.
+ * We get zero-length savefiles when we did save_objects on a full disk.
+ * This is to be nice to players again. - G.
+ */
+
+    if (file_size(PLAYER_SERV->GetPlayerSavefile(str) + ".o") == 0) {
+        write("It appears you have a valid character, but we lost you due\n"
+	    + "to some game-driver stupidity.  Mail Dredd or Gandalf; we will attempt\n"
+	    + "to reconstruct you as far as possible.\n");
+        }
+
+
+/*
+ * If he's logging in as guest, there's not a hell of a lot more
+ * to do here.
+ */
+	
+	if (str == "guest") {
+		string n;
+		catch { n = "std/namer"->make_name("human"); };
+		if (stringp(n)) {
+			guest_character = 1;
+			str = lower_case(n);
+    			Banish = "std/banish"->banished(str);
+    			if (Banish != 0) {
+				write("Oops!  Sorry - due to a stupid hack by a lazy god, I'm going\n");
+				write("to have to ask you to log in again (I happened to randomly\n");
+				write("generate a name which is banished from use in the game).\n");
+				slow_dest();
+				return 1;
+			}
+		}
+	}
+
+    string body_name = PLAYER_SERV->GetPlayerObjName(str);
+
+/*
+ * Recover some of his variables.  If the object exists but isn't
+ * suid GOD, we'll query his vital statistics (passwd, wiz level,
+ * etc), directly, then dest him (he may have been fiddled with;
+ * we stick to things that are hard to change from outside).
+ * If he's suid god, we keep him.
+ */
+    my_body = find_body(str);
+    my_name = str;
+
+    if (my_body) {
+	/*
+	 * If they are a guest, but exist as a player, we have accidentally
+	 * chosen a name that exists in the game.  For the moment, we
+	 * just do the unprofessional thing; when I rewrite connect.c (yet
+	 * again!) I'll fix it.
+	 */
+	
+	if (guest_character) {
+		write("Oops!  Sorry - due to a stupid hack by a lazy god, I'm going\n");
+		write("to have to ask you to log in again (I happened to randomly\n");
+		write("generate a name which was already in use in the game).\n");
+		slow_dest();
+		return 1;
+		}
+
+	wiz_level = my_body->query_wiz();
+	}
+    else {
+	if (!guest_character)
+		write("New character.\n");
+	new_player = 1;
+	wiz_level = 0;
+	}
+
+/*
+ * Check various reasons why they shouldn't be here.
+ * We make liberal use of catch - I'd prefer logins still
+ * to work while people are screwing around with other objects.
+ */
+
+    catch barred_reason = BAR_IP_SERV->query_ip_ok(
+           query_ip_number(this_object()),my_name,wiz_level);;
+
+    if (stringp(barred_reason)) {
+        write(barred_reason);
+        slow_dest(1);
+        return 1;
+    }
+
+    if (!wiz_level && "secure/which_mud"->is_wiz_mud()
+        && !("std/register"->query_test_char(my_name))) {
+	    write(grab_file("admin/playermud_loc"));
+	    slow_dest(1);
+	    return 1;
+	    }
+
+/*
+ * New players enter passwds
+ */
+
+	if (guest_character) {
+		start_player();
+		return;
+		}
+
+	if (new_player) {
+	    toggle_echo();
+	    write("Pick a password that is difficult to guess (at least 6 letters).\nPassword: ");
+    	    input_to("new_password", 1);
+	    return 1;
+    	    }
+
+#if 0
+/*
+ * Extra security hacks for dickhead wizzes.
+ */
+
+	if (my_body->query_password_ok("")) {      /* if a random string works, no passwd */
+	if (wiz_level > 0) {
+	    write("You are a wizard without any password.\n" +
+	          "Talk to a god.\n");
+	    slow_dest(1);
+	    return 1;
+	    }
+	else {
+	    if (my_name != "guest") 
+	      write("You have no password!\nSet it with the `password' command.\n");
+	    make_player();
+	    return 1;
+	    }
+	}
+#endif
+
+    set_prompt("");
+    toggle_echo();
+    write("Password: ");
+    input_to("check_password", 1);
+    return 1;
+}
+
+/*
+ * Check that a player name is valid. Only allow
+ * lowercase letters.
+ */
+
+valid_name(arg) {
+    int i, length;
+    array outlawed = ({
+	"fuck","shit","wank","dick","cock","suck","arse","cunt"
+	});
+
+    if (arg == "logon") {
+        write("Invalid name.\n");
+        return 0;
+        }
+
+    length = sizeof(arg);
+
+    if (length > 20) {
+        write("Name too long.\n");
+        return 0;
+    }
+
+    if (length < 3) {
+        write("Name too short.\n");
+        return 0;
+        }
+
+    i=0;
+    while(i<length) {
+        if (arg[i] < 'a' || arg[i] > 'z') {
+	    write("Invalid characters in name:" + arg + "\n");
+	    write("Character number was " + i + ".\n");
+	    return 0;
+            }
+        i += 1;
+	}
+    
+/*
+ * Llati's hack.  A pity the driver doesn't understand that
+ * 'hancock' is a reasonable name (maybe `cock' should be allowed
+ * as a suffix - eg `llatiscock'... :)
+ */
+
+    for (i = sizeof (outlawed); i --; ) {
+    	if (index (arg , outlawed[i]) >= 0 ) {
+		/* Hee! - G :) */
+	    write("That name is reserved for a former hero.\n");
+	    return 0;
+	    }	
+        }
+
+    return 1;
+    }
+
+nosave check_password(p) 
+{
+    write("\n");
+    if (my_body->query_password_ok("")) {      /* if a random string works, no passwd */
+        write("You have no password! Set it with the 'password' cmd.\n");
+	}
+    else if ((!stringp(p)) || (!my_body->query_password_ok(p))) {
+        write("Wrong password.\n");
+        slow_dest(1);
+        return 1;
+        }
+    make_player();
+    return 1;
+}
+
+/*
+ * Give a new password to a player.
+ */
+
+nosave string mypass;
+
+nosave new_password(p) {
+    write("\n");
+    if (!p || p == "") {
+        write("Try again another time then.\n");
+        slow_dest(1);
+        return 1;
+        }
+
+    if (strlen(p) < 6) {
+        write("The password must be at least 6 characters long.\n");
+	toggle_echo();
+        write("Password: ");
+        input_to("new_password", 1);
+        return 1;
+        }
+
+    if (mypass == 0) {
+        mypass = p;
+	toggle_echo();
+        write("Password: (again) ");
+        input_to("new_password", 1);
+        return 1;
+        }
+
+    if (mypass != p) {
+        write("Your passwords didn't match.\n");
+        slow_dest(1);
+        return 1;
+        }
+
+    toggle_echo();
+    make_player();
+    return 1;
+    }
+
+/*
+ * Check whether any existing copy is god level (in which case they can switch to it).
+ * It would be nice to not tell them when they're switching to a (god created) new
+ * player - but it'd probably make bugs in the startup shit hard to find.
+ */
+
+nosave make_player() {
+    int i;
+
+    if (my_name == SHUTDOWN_NAME) {
+        shutdown();
+        return 1;
+    }
+
+    if (my_body && (query_su_level(my_body) >= GOD)) {
+        write("You are already playing.\n");
+        write("Throw the other copy out? ");
+        input_to("try_throw_out");
+        return 1;
+    }
+
+    if (my_body && (query_su_level(my_body) < GOD)) {
+	/* don't leave a security time window */
+	/* where stats can be changed without logging */
+	rename_object(my_body, file_name(my_body) + "/dest/" + random(100000));
+	destruct(my_body);
+	my_body = 0;
+	}
+
+    call_out("start_player", 0.5);	/* fucking destruct */
+}
+
+/*
+ * When they are already on, we notify them and ask whether to
+ * reconnect.  If they want to, we simply reconnect them.  Note
+ * that they may have been loaded by a wizard (for stat, etc, purposes);
+ * in this case (for safety), we already dested the other one.
+ */
+
+nosave try_throw_out(str) {
+    slow_dest(0);	/* don't kill the body */
+    if (str == "" || (str[0] != 'y' && str[0] != 'Y')) {
+        write("Leaving your logged in character alone.\n");
+        return 1;
+        }
+    if (!switch_interactive(my_body)) {
+        write("There was some error - please try again\n");
+        return 1;
+        }
+
+    my_body->reconnected();	/* login, and things called through login, are the only cause of this call */
+    my_body = 0;
+    return 1;
+}
+
+
+/*
+ * If we have a valid body, use it.
+ * otherwise, create one.
+ */
+
+nosave start_player() 
+{
+    object ob;
+
+    if (!my_body) my_body = find_body(my_name);
+
+    if (!(new_player || my_body)) {
+	write("Game flaw in the new load up sequence.  Talk to a god\n");
+	slow_dest(1);
+	return 1;
+	}
+
+    if (!my_body) {					/* otherwise, new player: just make one */
+	my_body = clone_object("secure/body");
+        rename_object(my_body, PLAYER_SERV->GetPlayerObjName(my_name));	/* needs a name */
+	}
+
+    /* Jenna Feb 2000 - to correct screwed bodies */
+    array b = MONSTERER->test(my_body->query_race());
+    if (arrayp(b) && hash_value(my_body->query_body()) != hash_value(b)) 
+            my_body->set_body(b);
+
+    set_uid_me(my_body, GOD+1, my_name);
+
+    /* whatever happens, we're committed now */
+    switch_interactive(my_body);
+    set_this_player(my_body);
+    my_body->init_parser();
+
+    if (guest_character)			/* body was newly cloned */
+        my_body->start_one_shot(my_name);
+    else if (new_player)				/* body was newly cloned */
+        my_body->start_new_player(my_name, mypass);
+    else
+	my_body->restart_player(barred_reason);
+
+/*    my_body->set_prompt(); */
+
+    slow_dest(0);	/* kill this object only! */
+    return 1;
+}
+
+
+/*
+ * Hook to load the body.
+ */
+
+nosave find_body(string name) 
+{
+    object o = PLAYER_SERV->load_player(name);
+    set_this_player(this_object());
+    return o;
+}
+
+/*
+ * Courtesy (for `people' queries)
+ */
+
+query_wiz() { return wiz_level; }
+
+query_real_name() { return "[" + my_name + "]"; }
+query_name() { return "[" + my_name + "]"; }

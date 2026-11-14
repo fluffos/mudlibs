@@ -1,0 +1,97 @@
+/*
+ * Temp expire stuff.
+ *
+ * Just 3 functions:
+ *	expire_array -	called by your "tmp modify expiry function" to update
+ *			pending changes to a set of stats or skills
+ *
+ *	new_expire_time(string fun, array a, int time)
+ *		called to set up a callout to "fun" at the expiry time of the first
+ *		iten in "a", or at "time", whichever is sooner.  "fun" would usually
+ *		call expire_array.
+ *
+ *	insert_tmp_modify(...)
+ *		Schedule a stat change in a modify array.  Call new_expire_time after doing this.
+ *	
+ */
+
+#include <Config.h>
+#include "security.h"
+
+inherit "RO/living/age";
+
+/*
+ * Expire all stats or skills due to go within the next 5 seconds - works on player age.
+ * Give it:
+ *	a flat array of names
+ *	a flat array of (corresponding) items to adjust
+ *	a corresponding flat array listing the times they were last adjusted
+ *	an array listing skill, amt, time, created by insert_adjust.
+ * Returns the new array.
+ * Schedules callbacks for expired stats.
+ * 
+ */
+
+nosave array expire_arr(array names, array arr, (int|array) last_adj, array tmparr) {
+    int age = query_age();
+    int x = 0;
+    while (x < sizeof(tmparr)) {
+	if (tmparr[x+2] > age)
+	    break;
+	if (tmparr[x+1] != 0) {
+	    int y = index(names, tmparr[x]);
+	    if (y < 0) {
+    		LOG->log("STATS", this_object()->query_real_name() + ":" + tmparr[x] + ": Expiring nonexistent stat/skill\n");
+	        }
+	    else {
+	        arr[y] += tmparr[x+1];
+	        call_out("expire_callback", 0, tmparr[x+3], tmparr[x+4], tmparr[x+5]);
+		if (pointerp(last_adj))
+		    last_adj[y] = age;
+		}
+	    }
+	x += 6;
+	}
+    return(tmparr[x..]);
+    }
+
+nosave expire_callback(ob, string fun, arg) {
+    if (stringp(ob) || objectp(ob))
+        ob->(fun)(arg);
+    }
+
+/*
+ * Set up a callout for expiry.
+ * Time should be the max time you are prepared to wait before recalc.
+ */
+
+new_expire_time(string fun, array adj, int time) {
+    int nxt = query_age() + time;
+
+    while (-1 != find_call_out(fun))
+	remove_call_out(fun);
+
+    if (sizeof(adj) > 1)
+	if (nxt > adj[2])
+	    nxt = adj[2];
+
+    call_out(fun, nxt - query_age());
+    }
+
+nosave insert_tmp_modify(fun, arr, ty, amt, time, call_ob, call_fun, param) {
+    time += query_age();
+    if (!pointerp(arr))
+	arr = [ ];
+    int x = 0;
+    while (x < sizeof(arr)) {
+	if (arr[x+2] < time)
+	    x += 6;
+	else
+	    break;
+	}
+    arr = arr[..x-1] + [ ty, amt, time, call_ob, call_fun, param ] + arr[x..];
+    if (x < 1)
+	new_expire_time(fun, arr, time);
+    return arr;
+    }
+

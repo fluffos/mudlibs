@@ -1,0 +1,91 @@
+/*
+ * EXPERIMENTAL.  UNFINISHED (I'm being called away - G)
+ *
+ * Code which really abuses callouts and needn't save should use ::callout.
+ *
+ * Call-outs don't save nicely to savefiles.
+ * This is a source of continual amusement to the players.
+ * As it turns out, just about every object can be saved,
+ * so we simply usurp the `call-out' functions so that
+ * we have a local copy of what should have happened when,
+ * before passing them on to the real call-outs.
+ *
+ * We also rely on the driver's global variable initialisation
+ * code (generated automatically, and reasonably robust) to kick
+ * this object off.
+ */
+
+array COlist = ::call_out("COstartup", 5);		/* HACK: give 5 secs for restore to happen */
+int   	   object_age = 0;				/* saved/restored with object */
+nosave int object_age_time = time();			/* last time we queried age */
+
+query_age() {
+    int t = time();
+    object_age += t - object_age_time;
+    object_age_time = t;
+    return object_age;
+    }
+
+COstartup() {
+    if (!arrayp(COlist))
+	return 0;
+    int x = 0;
+    real fa = int2real(query_age());
+    array l = COlist;
+    COlist = 0;
+    while (x < sizeof(l)) {
+	call_out(l[x], l[x+1] - fa, l[x+2]);
+	x += 3;
+	}
+    }
+
+/*
+ * Cant do varargs, which is why this is still experimental.
+ * Also easy to abuse (with huge numbers of call outs, like massacre);
+ * the alternative requires searching for the minimum time when doing
+ * a call out.
+ */
+
+call_out(string func, (int|real) when, args) {
+    int x, y;
+    real tsave;
+
+    if (intp(when))
+	when = int2real(when);
+    if (!arrayp(COlist))
+	COlist = ({ });
+
+    tsave = int2real(query_age()) + when;
+
+    ::call_out("call_out_alarm", when);		/* fix up the call out */
+
+    x = index(COlist, "## unused ##");
+    if (x < 0) {
+	x = sizeof(COlist);
+	COlist += allocate(x + 3);	/* double the list size */
+	y = sizeof(COlist) - 3;
+	while (y >= x) {
+	    COlist[y] = "## unused ##";
+	    y = y - 3;
+	    }
+	}
+
+    COlist[x] = func;
+    COlist[x+1] = tsave;
+    COlist[x+2] = args;
+    y = x / 3;
+    while (y > 0) {
+	x = (y / 2);
+	if (COlist[y * 3 + 1] >= COlist[x * 3 + 1])
+	    break;
+	(int|string|object|array) tmp = COlist[y * 3 + 2];
+	COlist[y * 3 + 2] = COlist[y];
+
+    }
+
+/*
+ * Clear one pending callout.
+ */
+
+call_out_alarm() {
+    }

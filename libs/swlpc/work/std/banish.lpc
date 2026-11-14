@@ -1,0 +1,255 @@
+/*
+	/std/banish.c
+
+	Object which keeps track of banished names.
+	
+	Dredd at Shattered World.
+	Billy at Shattered World added freezing times. 
+			(The bits with capitalised identifiers!)
+	
+	o did this to save disk space, pointless having all
+	those files in /banish. Although this adds a little
+	to memory usage the cost is worthwhile, IMHO
+
+	CHANGES: fixed to work with ginormous activity/numbers of names.
+	    The old system managed to blow the mud out to 35M when I
+	    queried a list after a player purge.  - G.
+		Changed to not log banishments for less than 10 mins;
+		any guest or non-tour-completing char is banished for
+		5 mins (maybe I should simply remove that hack :).
+
+Added a hack that will only power-death-banish someone for TIMEBANISHED
+seconds, currently one month (calling with -1 gets the month).  Calling
+with -2 and below will banish them for that many secs.
+Forever-banished names are now placed at the end of the list, power
+death names are put at the head - this is so banished_list() will
+always end up cleaning out the old names.
+
+*/
+
+/* 3 months */
+#include <Servers.h>
+#define	TIMEBANISHED	(2592000 * 3)
+#define BANISH "std/BANISHED"
+
+/* give PDC a (negative) time to unbanish them, returns true if still banished
+*/
+#define PDC(x)	((-(x)) > time())
+array names;
+array times;
+
+
+reset(arg) {
+	if (arg) return;
+	restore_object(BANISH);
+	if (!names) names = [ ];
+	if (!times) times = [ ];
+	call_out("clean", 5);	/* once/day is plenty */
+	}
+
+save_me() {
+	save_object(BANISH);
+    }
+
+set_needs_save() {
+    AUTOSAVE_SERV->set_auto_save(this_object());
+    }
+
+/*
+Ok, so Dredd doesn't document his code. But I'm going to document MY changes.
+I'm fucked if I'm going to document his stuff though, so:
+
+PARAMETERS: int time - -1 for banish a player for TIME_BANISHED due to power
+			death,
+                        0 for banish forever,
+			+ve to banish for that many game days
+			-ve (below -2) to banish for that many real seconds.
+
+Oh, ok. I give in :-(
+PARAMETERS: string str - the name of the person to banish (lowercase, please)
+ACTION: Banishes the name, also logs the banishment in /log/BANISH just so we 
+		can check up later.
+RETURNS:    1 - if added
+	    0 - if already there
+*/
+add(string str, int banish_time)
+{
+    if (!str) return 0;
+    if(str == "guest")
+        return(0);
+    if (banish_time == (-1))
+        banish_time = -(time() + TIMEBANISHED);
+    else {
+        if (banish_time < 0)
+	    banish_time -= time();
+        }
+
+/* for speed when manipulating huge numbers of players */
+/* changed so one can alter the time on a name */
+
+    int idx = index(names, str);
+    if (idx < 0)
+	idx = index(names, 0);	/* find a vacant entry */
+    if (idx < 0) {
+	names = allocate(20) + names;
+	times = allocate(20) + times;
+	idx = 0;
+	}
+	
+
+    string HowLong;
+    string ByWhom;
+    names[idx] = str;
+
+    if (banish_time < 0) { /* power banishment - name at head of list */
+        times[idx] = banish_time;
+		/* actually, this could be them freezing themselves */
+        HowLong = "due to power death";
+        }
+    else if (banish_time == 0) { /* permanent banishment - end of list */
+        times[idx] = 0;
+        HowLong = "permanently";
+        }
+    else {
+        times[idx] = CLOCK->query_abs_day() + banish_time;
+        HowLong = "for " + banish_time + " days";
+        }
+
+    set_needs_save();
+    if (!this_player() || !this_player()->query_real_name())
+	    ByWhom = "the unknown banisher (" + caller()->short() +")";
+    else
+            ByWhom = capitalize(this_player()->query_real_name());
+	if (times[idx] > time() + 600) {
+		/* don't log the 5 min banish of guest chars! */
+    	LOG->log("BANISH", capitalize(str) + " banished " + HowLong +
+			" by " + ByWhom + "\n");
+		}
+    return 1;
+}
+
+
+/*
+NAME:		remove
+ACTION: 	Grumble, grumble. Wish he'd document it himself... Well, it 
+		unbanishes a name, ok?
+PARAMETERS:	string str - the name to banish
+RETURNS:	1 - if removed
+		0 - if couldn't be found
+*/
+remove(str)
+{
+int x;
+array a, b;
+	x = index(names, str);
+	if (x >= 0) {
+		names[x] = 0;
+		times[x] = 0;
+		set_needs_save();
+		return 1;
+	}
+	return 0;
+}
+
+/*
+NAME:		banished
+ACTION:		returns the banish status of a name
+PARAMETERS:	string str - the name under question
+RETURNS:	-1 if name is banished 
+		-2 if banished due to power death,
+   		the number of days if temporarily banished, 
+		else returns 0 if not banished 
+*/
+banished(str) {
+	int PersonIndex;
+	int Count;
+	PersonIndex = index(names, str);
+	if (PersonIndex > -1) { /* note the Zik-style indentation! */
+		if (CLOCK->query_abs_day() < times[PersonIndex])
+		    /* still banished for a while - return how long */
+		    return times[PersonIndex] - 
+		    	CLOCK->query_abs_day();
+	        else {
+	            if (times[PersonIndex] > 0) { /* out of date time banishment - remove it */
+	                remove(str);
+	                return 0;
+	                }
+		    else if (times[PersonIndex] < 0) {
+			if(PDC(times[PersonIndex]))
+		            return -2; /* power death permanent banishment */
+			else
+			    remove(str);
+			}
+		    else
+		        return -1; /* permanent banishment */
+	            }
+	        }
+	return 0;
+}
+
+
+/*
+ * Clean(): clean out arrays.  Should be called periodically.
+ */
+
+clean() {
+    int now = time();
+    int today = CLOCK->query_abs_day();
+    array newnames = allocate(sizeof(names));
+    array newtimes = allocate(sizeof(times));
+    int old = 0;
+    int new = 0;
+
+    while (old < sizeof(names)) {
+	if (intp(names[old])) {
+	    old++;
+	    continue;
+	    }
+	int x = times[old];
+	if ((x < 0) && !PDC(x)) {	/* power death expired */
+	    old++;
+	    continue;
+	    }
+	else if ((x > 0) && (x < today)) {/* tmp banish expired */
+	    old++;
+	    continue;
+	    }
+	newnames[new] = names[old];
+	newtimes[new] = times[old];
+	old++;
+	new++;
+	}
+    names = newnames[..new];
+    times = newtimes[..new];
+    set_needs_save();
+    return new;
+    }
+
+/*
+NAME: 	 banished_list
+RETURNS: an array containing interleaved names and times for banished people.
+	 The times are set to 0 if the person is banished permanently, and
+	 -1 if banished due to power death.
+	 Names which are 0 are unused but havent been cleaned yet (once/day)
+*/
+
+banished_list() {
+
+    int Today = CLOCK->query_abs_day();
+    array Banishes = allocate(sizeof(names) * 2);
+    int x = 0;
+
+    while (x < sizeof(names)) {
+	int t = times[x];
+        if (t < 0)	/* power death banished */
+	    t = (-1);
+        else if (t > Today)	/* temporary banishment */
+            t -= Today;
+	Banishes[x+x] = names[x];
+	Banishes[x+x+1] = t;
+	x = x + 1;
+	}
+    return Banishes;
+}
+
+

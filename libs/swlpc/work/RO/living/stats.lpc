@@ -1,0 +1,1174 @@
+/*
+ * Replacement living stats/skills, totally rewritten - mmcg.
+ * (Being rewritten again to produce skillnet, and to separate
+ * skills from stats, and to integrate stats better into other
+ * `life processes')
+ *
+ * This portion of the stats stuff is intended to managed SAVED
+ * SKILLS & STATS, including learning, temp modifies, etc.
+ *
+ ****** WARNINGS:
+ *
+ * Major comments which apply to people calling these functions
+ * from outside the (living) object containing them:
+ *
+ * (1) YOU SHOULD USE THIS OBJECT FOR ALL STAT & SKILL MODIFICATIONS
+ * THAT SHOULD EVENTUALLY TIME OUT.  Otherwise I'll be
+ * royally pissed off; this system is here to fix a HUGE problem
+ * with wizards fucking up temporary modifications to stats/skills.
+ *
+ * (2) YOU SHOULD NEVER USE A PERMANENT MODIFICATION TO INCREASE
+ * ANYTHING UNLESS IT CAN ONLY HAPPEN ONCE.  Skills are automatically
+ * learned within this code; permanent stat increases are only due to 
+ * quest completion, etc.  There is still a problem with `semipermanent'
+ * changes - i.e. extra stats from guilds that you might get kicked out
+ * of, or race changers, both of which are abused by players.  I've
+ * not worked out an optimal solution; prime concern is efficiency,
+ * because skill queries should really be attached to every action (including
+ * going west!).
+ *
+ * Permanent skill modifications which happen as a consequence of repeatable
+ * actions should be coded by calling learn(), which factors intelligence etc
+ * into the time taken to learn, rather than by calling add_skill() direct.
+ * This includes the swimming pool!
+ *
+ ******** LEGALESE (because I feel like it, that's why...)
+ *
+ * Copyright (C) 1994 Mike McGaughey (Gandalf@Shattered World)
+ * Permission to use this software is granted provided that in all
+ * future versions or modifications of this file, this copyright
+ * notice is preserved in its entirety, and as long as this code
+ * is not used in any system or product for which monetary or
+ * other recompense is required from its users for the use or
+ * aquisition of this code, or for the maintenance of the system,
+ * or any related parts of the hardware (net connections, etc) of
+ * the computer upon which this code is used, without written
+ * permission from the Author (Mike McGaughey).
+ *
+ * email: mmcg@cs.monash.edu.au
+ *
+ ******* SYNOPSIS
+ *
+ * Manages all permanent and all timed temporary modifications
+ * to a player's skills and stats in a way which is consistent
+ * over logins.  A `timed modification' is one which expires after
+ * a time measured in seconds-logged-in (it uses query_age() to
+ * retrieve this).  Semipermanent modifications (guild affiliations,
+ * etc) are not yet handled here, which still leads to some possibility
+ * for abuse; in future, provision will be made to do so.
+ *
+ ******* INTERFACE (internal)
+ *
+ *   nosave start_stats() - should be called when initialising a monster
+ *	or after a player has been successfully restored from a savefile.
+ *   nosave clean_stats() - should be called just before a save_object(),
+ *	to clean out zeroed skills.
+ *
+ ******* INTERFACE (external)
+ *
+ *   query_stat("wis") to query the value of a particular stat.
+ *   query_{chu/str/wis/int/con/etc}() - for the usual stats.
+ *   query_stat_names() - return an array of the names of the stats stored by this object.
+ *
+ *   add_stat("stat", amount, time, callback, param)
+ *   add_{chu/wis/...}(amount, time, callback, param)
+ *
+ *	Adds `amount' to the given stat for `time' logged-in seconds (defined
+ *   as time spent while the player's object is loaded and can save).  If
+ *   time is 0, the stat is added permanently.  Otherwise, on expiry, "callback"
+ *   is examined.  If it's "a.b", then a->b(param) is called.  Otherwise, if param
+ *   is a string, then it is written to the player (with a newline added).
+ *
+ *   query_skill("skill")
+ *   add_skill("skill", amt, time, callback, param)
+ *   query_skill_names()
+ *	As for stats, except there are no explicit functions for common skill names.
+ *
+ *   apply_skill("skill", difficulty, pressure)
+ *
+ *	Roll a skill value against "difficulty".  Returns 0 for failure, nonzero for
+ *   success.  Does automatic learning on
+ *   success using learn().  `pressure' is a parameter, 0-100, which should be nonzero only
+ *   in the event that the action being attempted is new and unusual for the
+ *   player, or is being judged by an expert (guild master, etc), and so should
+ *   have different success probabilities than normal practice.  Jenna has
+ *   coded up an approximation to the `pressure' caused by being in combat, etc;
+ *   this is factored in automatically.
+ *
+ *   learn("skill", difficulty, pressure)
+ *	Decides whether to schedule a permanent increase to "skill" of some (generally small)
+ *   amount (depending on stats & pressure), some time in the future (depending
+ *   on many things).  Should not be called if apply_skill was used.  If the
+ *   player is already learning that skill, nothing will be learned.  Returns
+ *   0 for no learn, nonzero if learning was scheduled.
+ *
+ *   new_expire_time(secs)
+ *	Force the next stat expiry check to be at most (secs+5) or the
+ *   time of the next scheduled expiry, whichever is less.  For restarting
+ *   the callout.  One day, the only expiries for which a call out will
+ *   be required are those having callbacks.
+ *
+ ******* COMMENTS:
+ *
+ * It's far more satisfactory to do away with the skill server,
+ * now that we have multiple inheritance - an objects stats,
+ * and all adjustments to them, should be saved with the object!
+ * This object assumes it is part of a living object which has a
+ * working query_age() function giving the (logged-in) age of the
+ * object.  It allows for the fact that the object might have a
+ * savefile, and is designed to be extremely robust with respect
+ * to savefiles.  It will call_out this_object()->stat_zero(statname)
+ * if any stat is reduced to or below zero (even temporarily); skills
+ * do not cause this to happen (they are silently removed).
+ * It is otherwise completely self-contained (and should remain so).
+ *
+ * Functions:
+ *
+ *   add_stat("stat", amount, time, callback, param)
+ *   add_{chu/wis/...}(amount, time, callback, param)
+ *
+ *	Adds `amount' to the given stat for `time' logged-in seconds (defined
+ *   as time spent while the player's object is loaded and can save).  If
+ *   time is 0, the stat is added permanently.  When the time expires, the
+ *   stat is altered again by -amount, and callback and param are examined;
+ *   if callback is a string and contains a period, it is taken as a separator
+ *   between an object name and function, and ob->fun(param) is called.
+ *   The callback is routed through the anonymity server, /RO/Anonymous, to
+ *   ensure certain security holes aren't opened.
+ *	If callback is not a string but param is, it is written as a message to
+ *   this_object - i.e. tell_object(this_object(), param + "\n") 
+ *	If the specified time was zero, it does the callback immediately the (permanent)
+ *   stat change is performed.
+ *	Using the explicit forms (query_chu, etc) is probably to be preferred, as
+ *	it prevents typos being added to players as new stats.
+ *
+ *   query_skill("bonking");
+ *   add_skill("bonking", -20, 300, 0, "You feel you have recovered somewhat.")
+ *   query_skill_names()
+ *
+ *	As for stats, except there are no explicit skill-naming function calls.
+ *   Querying a value like this no longer performs automatic learning (which it used
+ *   to do - query_skill_value was the one that didn't); apply_skill replaces
+ *   this.
+ *
+ *   nosave stat_death_adjust()
+ *	Expire all tmp_modifies to physically based stats - str, dex, siz, con
+ *	Deduct a small random number (0-4) from each skill > 30%, cancels any
+ *	scheduled learning.
+ *
+ *   learn("skill", difficulty, pressure)
+ *
+ *	Learn is a function which should be called after a player has successfully
+ *   accomplished a skill-based task (which was _not_ tested using apply_skill -
+ *   apply_skill does automatic learning).  "Skill" is the skill to be learned.
+ *   Difficulty was the difficulty of the original task - basically, how likely it
+ *   is that someone with skills at 50% will fail in the attempt.  Pressure is the
+ *   amount of pressure in the given situation (0-100), explained under `apply_skill'.
+ *   The function applies several criteria to decide whether they should learn anything
+ *   from an experience, and if so, how much they should learn and how long it will
+ *   take before the appropriate realisation (or manual dexterity) hits them.  It's
+ *   based on int, wis, chu, their current skill level, and the parameters.  If they
+ *   learned, it's scheduled as a delayed skill adjustment.  They will not learn a
+ *   skill if they are already in the process of realising something about it - this
+ *   limits the effectiveness of player spamming (and recursive aliases).  If
+ *   difficulty isn't specified (i.e. is 0), it's normalised to 50%.
+ *
+ *	NOTE: the current learning system is heavily intellectually based.  We
+ *   need to be able to specify, per skill, how much learning is based on intellect (always
+ *   quite a lot, as there is intuition, etc, to consider), and how much it is based
+ *   on increasing manual dexterity or strengthening the appropriate muscles.
+ *   Actually, I know how to do all this *properly* (without affecting any of your
+ *   current code); I'll implement it when I have a lot of time on my hands.
+ *
+ *   apply_skill("skill", difficulty, pressure)
+ *
+ *	Attempt a skill based task.  `Difficulty' is the value to roll the skill
+ *   against.  `Pressure' is an estimate of how much the given situation should
+ *   affect their concentration on the task (it's used in factoring in their
+ *   chutzpah).  If they failed, the function returns 0.  If they succeeded, an automatic
+ *   learning check is done, and the function returns 1.  Difficulty and pressure should
+ *   be the same numbers as you would pass to apply_skill.  Deciding whether or
+ *   not they succeeded is currently simple - roll a couple of random numbers, adjust
+ *   for pressure and chutzpah - but this may change in the future.
+ *	Difficulty is normalised to 4%->96%.  Pressure is different: the combat
+ *   server (and perhaps other objects in future), are queried to find a reasonable
+ *   value for the `basic situation pressure' on the player, and the given parameter is
+ *   added; the result is normalised to 4-96%.  Lots of things are factored in to this.
+ *	Comments: You should generally select `difficulty' based simply on the opposing
+ *   skill of their opponent, or, if it's a class of inanimate object (like a lock), on
+ *   a scale of about 1->50 (this allows for things like the `lock strength inflation'
+ *   that happened as harder locks were introduced).  If you think such inflation is
+ *   unlikely, go ahead and use 1-100.  If the difficulty of success also depends on the
+ *   some of the players (or opponent's) stats, factor them directly into the difficulty
+ *   before passing it - the learning model makes more sense if this is done anyway,
+ *   and things like high dex (if it matters) will cause them to learn the skill more
+ *   often (as it should be).
+ *	Pressure is a measure of how much distracting activity relating to the player
+ *   is visible to him (or, if he's blind, how much he's worrying about the possibility
+ *   of such activity :)  You should almost ALWAYS specify a pressure of zero.  There
+ *   may be circumstances where a nonzero pressure is warranted, but if
+ *   your calculations involve any values which aren't directly related to the
+ *   task he is undertaking (eg: higher pressure if he's under exam conditions, etc), you
+ *   should tell a god about them; it may be a good idea to include them in the
+ *   general calculations.  I am certainly interested in ideas here.
+ *
+ *   new_expire_time(secs)
+ *
+ *	Force the next stat-expiry check to be at most secs+5 logged-on seconds
+ *   in the future.  May be useful for restarting players if their call-outs
+ *   are buggered (that's why it's nonstatic).  Doesn't affect the actual
+ *   expiry or learning time of any stat or skill modification, just makes
+ *   sure that the call-out is in place.
+ *
+ ****** BUGS
+ * Seems robust, though there's not much provision for some other `normal'
+ * stat modifications and tests.  Should add ways of directly testing
+ * skills against other skills, rather than the half-interface we have here.
+ *
+ *   Modified by Jenna May 95 because although the above's intentions are
+ *   good, there was no actual calculation of situation pressure with the
+ *   result that players' chutzpah was going ptttttth.
+ */
+
+// inherit "secure/data_log_inh";
+
+#include <Config.h>
+#include "security.h"
+#define CHUTZ_DRIFT	"std/chutz_drift"
+
+array stat_names = ({ });
+array perm_stats = ({ });		/* tmp stats should _never_ be added into these */
+array tmp_stats = ({ });		/* these are saved, and represent the time we are up to */
+
+array skill_names = ({ });
+array perm_skills = ({ });		/* learned skills eventually end up here */
+array tmp_skills = ({ });		/* saved, again. */
+
+array tmp_stat_adjust = ({ });		/* list of "name", amt, time to add it, callb, param */
+array tmp_skill_adjust = ({ });		/* expiry time is in player-age time (logged in time) */
+
+array skill_learn = ({ });		/* name, amt, when, callb, param - for permanent learning */
+array stat_learn = ({ });		/* for delayed stat `learning'.  We are careful here... */
+array last_stat = ({ });		/* player ages.  For learning fatigue; not used yet. */
+array last_learn = ({ });		/* player ages.  For learning fatigue; not used yet. */
+
+int heroism = 5000;			/* track how heroic they are over time, 0-10000-20000 (stupidity factor) */
+int skill_avg = 30;			/* skill use tracking (relative to pressure) */
+
+#if 0 
+   I replaced this with query_situation_pressure, so we DO recalculate it and
+   if you don't like it, fine.
+nosave int situation = 4;		/* so we don't have to recalculate it.  
+					   A measure the base pressure on the character */
+#endif
+
+/*
+ * Expire all stats or skills due to go within the next 5 seconds - works on player age.
+ */
+
+nosave expire_arr(age, names, arr, last_adj, tmparr, is_stat, is_temp) {
+    int x = 0;
+    while (x < sizeof(tmparr)) {
+	if (tmparr[x+2] > age)
+	    break;
+	if (tmparr[x+1] != 0) {
+	    int y = index(names, tmparr[x]);
+	    if (y < 0) {
+    		if (this_object() -> is_player())
+    		    LOG->log("STATS", this_object()->query_real_name() + ":" + tmparr[x] + ": Expiring nonexistent stat/skill\n");
+	        }
+	    else {
+#if 0
+		track_action((is_stat? "TEMP-STATS" : "TEMP_SKILLS"),
+			     "expire:"+tmparr[x],
+			     "orig="+arr[y] + "; new=" + (tmparr[x+1]+arr[y]));
+#endif
+	        arr[y] += tmparr[x+1];
+	        if (!is_stat && tmparr[x+1] > 0 && !this_object()->query_wiz()
+			&& !is_temp) 
+			"players/dodinas/colour"->ctell_object(this_object(),
+				"{gYou feel more proficient at {G"+tmparr[x]+"{g!\n");
+		do_stat_callb(tmparr[x+3], tmparr[x+4]);
+		if (pointerp(last_adj))
+		    last_adj[y] = age;
+		}
+	    }
+	x += 5;
+	}
+    return(tmparr[x..]);
+    }
+
+nosave expire_stat() {
+    int x = 0;
+    int y;
+    int age = this_object()->query_age() + 5;
+
+    tmp_stat_adjust = expire_arr(age, stat_names, tmp_stats, 0, tmp_stat_adjust, 1, 1);
+    tmp_skill_adjust = expire_arr(age, skill_names, tmp_skills, 0, tmp_skill_adjust, 0, 1);
+    skill_learn = expire_arr(age, skill_names, perm_skills, last_learn, skill_learn, 0, 0);
+    stat_learn = expire_arr(age, stat_names, perm_stats, last_stat, stat_learn, 1, 0);
+    stat_zero_check(-1);
+
+    new_expire_time(1200);	/* check every 20 mins minimum */
+    }
+
+
+nosave do_stat_callb(callb, param) {
+    if (stringp(callb) || stringp(param))
+        call_out("real_stat_callb", 0, ({ callb, param }));
+    }
+
+nosave real_stat_callb(a) {
+    (string|int) callb = a[0], param = a[1];
+    if (stringp(callb)) {	/* based on dredd's hack.  Should really use 0 for this and put the msg in param */
+	int x = index(callb, ".");
+	if (x < 0)
+	    tell_object(this_object(), callb + ".\n");
+	else
+	    ANON_SERV->route_call(callb[..x-1], callb[x+1..], param);	/* close a security hole */
+	    /* (callb[..x-1])->(callb[x+1..])(param); */
+	}
+    else if (stringp(param))
+	    tell_object(this_object(), param + "\n");
+    }
+
+/*
+ * Fix/restart the callouts for stat/skill expiry.
+ */
+
+new_expire_time(int time) {
+    int nxt = this_object()->query_age() + time;	/* check every 20 mins minimum */
+
+    while (-1 != find_call_out("expire_stat"))
+	remove_call_out("expire_stat");
+
+    if (sizeof(tmp_stat_adjust) > 1)
+	if (nxt > tmp_stat_adjust[2])
+	    nxt = tmp_stat_adjust[2];
+
+    if (sizeof(tmp_skill_adjust) > 1)
+	if (nxt > tmp_skill_adjust[2])
+	    nxt = tmp_skill_adjust[2];
+
+    if (sizeof(skill_learn) > 1)
+	if (nxt > skill_learn[2])
+	    nxt = skill_learn[2];
+
+    if (sizeof(stat_learn) > 1)
+	if (nxt > stat_learn[2])
+	    nxt = stat_learn[2];
+
+    call_out("expire_stat", nxt - this_object()->query_age());
+    }
+
+/*
+ * Callable from outside.  Add a stat, with a timeout.
+ * If time is 0, it's added permanently (`learned').
+ * Having log_stat here (rather than in player.c) is ugly.  Ho hum.
+ */
+
+nosave make_stat(string type) {
+    int x = index(stat_names, type);
+    if (x < 0) {
+        stat_names += ({ type });
+        perm_stats += ({ 0 });
+        tmp_stats += ({ 0 });
+        last_stat += ({ 0 });
+	x = sizeof(stat_names) - 1;
+        }
+    return x;
+    }
+
+add_stat(string type, int amount, int time, callb, param, prev) {
+    if (!type || !amount || (time < 0))
+	return 0;
+    if (caller() != this_object())
+	prev = caller();
+    int x = make_stat(type);
+    if (!time) {		/* perma-stats */
+	if (type != "san" && file_name(caller())[..12] != "std/adventure")
+	    log_stat(type, perm_stats[x], tmp_stats[x], amount, this_player(), previous_object(), prev);
+#if 0
+	track_action("PERM-STATS",
+		     type,
+		     "orig=" + perm_stats[x]+"; add="+amount);
+#endif
+	perm_stats[x] += amount;
+	do_stat_callb(callb, param);
+        stat_zero_check(x);
+	return;
+	}
+    if ((tmp_stats[x] + amount) > 10)
+	log_stat(type + "(" + time/60 + ")", perm_stats[x], tmp_stats[x], amount, this_player(), previous_object(), prev);
+    tmp_stat_adjust = insert_adjust(tmp_stat_adjust, type, -amount, time, callb, param);
+#if 0
+		track_action("TEMP-STATS",
+			     "initiate:"+type,
+			     "orig=" + tmp_stats[x] +
+			     "; add=" + amount +
+			     "; duration=" + time);
+#endif
+    tmp_stats[x] += amount;
+    stat_zero_check(x);
+    }
+
+nosave stat_zero_check((int|string) x) {
+    if (stringp(x)) {
+	int y = index(stat_names, x);
+//	if (x >= 0)
+	if (y >= 0) 	// Jenna Sep 00 - was a typo?
+//          if (tmp_stats[y] + perm_stats[y] <= 0)
+//        --Replaced with below line by Jenna Sep 2000--
+	    if (query_stat(x, 0) <= 0)
+		this_object()->stat_zero(x);
+	return;
+	}
+    if (x == (-1)) {
+	array negs = ({ });
+	for (x = 0; x < sizeof(stat_names); x++)
+//          if (tmp_stats[x] + perm_stats[x] <= 0)
+//        --Replaced with below line by Jenna Sep 2000--
+	    if (query_stat(stat_names[x], 0) <= 0)
+		negs += ({ stat_names[x] });
+	if (!sizeof(negs))
+	    return;
+	if (sizeof(negs) == 1)
+	    this_object()->stat_zero(negs[0]);
+        else
+	    this_object()->stat_zero(negs);
+	return;
+	}
+//  if (tmp_stats[x] + perm_stats[x] <= 0)
+// --Replaced with below line by Jenna Sep 2000--
+    if (query_stat(stat_names[x], 0) <= 0)
+	this_object()->stat_zero(stat_names[x]);
+    }
+
+/*
+ * The same as the above, but for skills.
+ */
+
+nosave int make_skill(string type) {
+    int x = index(skill_names, type);
+    if (x < 0) {
+        skill_names += ({ type });
+        perm_skills += ({ 0 });
+        tmp_skills += ({ 0 });
+	last_learn += ({ 0 });
+	x = sizeof(skill_names) - 1;
+        }
+    return x;
+    }
+
+add_skill(string type, int amount, int time, callb, param, prev) {
+    if (!type || !amount || (time < 0))
+	return 0;
+    if (caller() != this_object())
+	prev = caller();
+    int x = make_skill(type);
+    if (!time) {		/* perma-skills */
+	if (type != "elan" && file_name(caller())[..12] != "std/adventure")
+	    log_stat(type, perm_skills[x], tmp_skills[x], amount, this_player(), previous_object(), prev);
+	perm_skills[x] += amount;
+#if 0
+	track_action("PERM-SKILLS",
+		     type,
+		     "orig=" + perm_skills[x]+"; add="+amount);
+#endif
+	do_stat_callb(callb, param);
+        if (perm_skills[x] < 1) /* Jenna July 99 */
+       		remove_skill(type);
+	return;
+	}
+    if ((tmp_skills[x] + amount) > 50)
+	log_stat(type + "(" + time/60 + ")", perm_skills[x], tmp_skills[x], amount,
+		this_player(), previous_object(), prev);
+    tmp_skill_adjust = insert_adjust(tmp_skill_adjust, type, -amount, time, callb, param);
+#if 0
+		track_action("TEMP-SKILLS",
+			     "initiate:"+type,
+			     "orig=" + tmp_skills[x] +
+			     "; add=" + amount +
+			     "; duration=" + time);
+#endif
+    tmp_skills[x] += amount;
+    }
+
+remove_skill(type) {
+    int x = index(skill_names, type);
+
+    if (x == -1 || tmp_skills[x])
+        return 0;
+    skill_names = ARRAY->delete(skill_names, x, 0);
+    perm_skills = ARRAY->delete(perm_skills, x, 0);
+    tmp_skills = ARRAY->delete(tmp_skills, x, 0);
+    last_learn = ARRAY->delete(last_learn, x, 0);
+    return 1;
+    }
+
+query_skill_learn() { return skill_learn + []; }
+
+/*
+ * Learning.  Someone outside checked one of our skills against
+ * someone else's, and we won.  Parameters are the difficulty of the
+ * task, relative to someone with skills of 50% (i.e. was this a big
+ * event for us, that we would notice even if we were stupid), and
+ * any situation pressure modifier (which will almost always be zero).
+ * If difficulty is 0, we assume it's 50%.  
+ *
+ * People who want to fiddle with this should note that it takes several
+ * years of practice to become *really* proficient at something in real life if
+ * you're reasonably intelligent; mud time runs at 12 * real time...
+ *
+ * Interpretation of stats:
+ *	Int is your chance of actually learning something (how much you notice
+ * about the world, etc, how much strikes you as worth thinking about), and
+ * how fast you'll think about it.
+ *	Wis is interpreted as `what you've seen/thought about in the past', and
+ * determines how much you can draw from the experience.  Intelligent people
+ * learn quicker & more often; wise people learn more each time.
+ *	Chu is taken to be your `coolness under pressure'.  Presumably, whoever
+ * called this already factored our chu into the action's success chance, if
+ * it was performed under pressure (only learn on success).  We factor chu
+ * into how much they learned under extreme pressure.
+ */
+
+
+#define DEFAULT_DIFFICULTY 100
+#define MIN_DIFFICULTY 1
+#define MAX_DIFFICULTY 200
+
+#define MAX_LOCAL_PRESSURE 30
+#define MIN_PRESSURE 1
+#define MAX_PRESSURE 200
+
+learn(string skill, int difficulty, int pressure) {
+	string log;
+
+    if (index(skill_learn, skill) >= 0)
+	return 0;
+
+    int orig_skill = query_skill(skill);
+    if (orig_skill < MIN_DIFFICULTY) orig_skill = MIN_DIFFICULTY;
+    if (orig_skill > MAX_DIFFICULTY) orig_skill = MAX_DIFFICULTY;
+
+    if (!difficulty) difficulty = DEFAULT_DIFFICULTY;
+    if (difficulty > MAX_DIFFICULTY) difficulty = MAX_DIFFICULTY;		
+                        /* everyone had at least a 1 in 25 chance */
+    if (difficulty < MIN_DIFFICULTY) difficulty = MIN_DIFFICULTY;
+    if (!heroism)	heroism = 5000;
+            /* scaled: 1->20K; 10K is long term max, 5K is average */
+
+    if (pressure > MAX_LOCAL_PRESSURE) pressure = MAX_LOCAL_PRESSURE;
+            /* NO single modifier is more than 30 - for now */
+
+    pressure += query_situation_pressure();
+    if (pressure > MAX_PRESSURE) pressure = MAX_PRESSURE;	
+                /* facing 5 angry dragons wielding a potato peeler */
+   if (pressure < MIN_PRESSURE) pressure = MIN_PRESSURE;	
+                /* having a smoke and listening to beethoven */
+
+/*
+ * Succeeding under pressure eventually counts a lot more than difficulty 
+ * levels (as skills get high).
+ * For the newbies, succeeding at all must be positive, and especially 
+ * under pressure.
+ * Chutzpah is both heroism (wrt pressure) and brazenness 
+ * (wrt doing unlikely things).
+ */
+
+    int d =  (difficulty - orig_skill)/2 + DEFAULT_DIFFICULTY;
+    heroism = (heroism * 298 + (d + pressure) * 100) / 300;
+
+/*
+ * First: do we learn at all?  Average difficulty, 25 int gives about 1/2 chance of learning.
+ * You have much less chance if it wasn't an outstanding feat, but will still
+ * (on average) learn a little if you are being cautious.  If you're succeeding
+ * in being really ace, you'll almost always learn.  It's much harder for people
+ * of low int to learn while being cautious about what they attack - this
+ * mirrors the dullards of real life :)
+ * When I've thought enough about it, I'll factor their real skill value into
+ * their learning chance (though I guess it's factored into their success chance anyway).
+ */
+
+    int lc;
+
+    lc = query_int() * 2 + (difficulty - pressure) / 2;
+    /* a 4% minimum */
+    if (lc < 4) lc = 4;
+
+    if (lc < random(100)) return 0;	
+
+/*
+ * If we're gonna learn, use the opportunity to check chu (only people
+ * who notice a lot of things learn to be cool :)
+ * We slowly lower the chu of people who always do easy things, and who
+ * always have low pressure situations.  Because of the inclusion of
+ * situation pressure (it's rare to have high pressure), continuous extreme
+ * derring-do results in chu drifting up to around 45 or so (people who
+ * do hard things in easy situations or vice versa drift to .
+ * We should probably have a similar system applying to all stats.
+ * It's a pity it's so easy for a player to appear daring - just
+ * attack a second char with extremely high parry and action/reaction parry.
+ * Oh well - one day we'll fix that...
+ * NB: The messages are deliberately different to the quest-based
+ * ones (`you feel self-confident').
+ */
+
+    if ((!random(100)) && index(stat_learn, "chu") < 0) {	/* 1->25 is so fucking granular, can't adjust it often */
+	int x = query_chu(1) * CHUTZ_DRIFT->query_drift_factor(); 
+			/* check the _actual_ stat only (not tmp stats) */
+	log = "* " + capitalize(this_object()->query_real_name());
+	if (this_object()->is_player())
+		log += " the PLAYER (" + this_object()->query_quest_points() +
+			" qps)";
+	else
+		log += " the level " + this_object()->query_level() + " " +
+			this_object()->query_std_mon_type(); 
+	if (x > heroism + 500) {	/* never adjust it if it's 1 */
+            stat_learn = insert_adjust(stat_learn, "chu", -1, random(300) + random(300), 0, "You feel complacent.");
+	    log += " lost 1 chutzpah to ";
+	    if (this_object()->is_player())
+		CHUTZ_DRIFT->add_drift_factor(-1);	
+/* Modify the drift factor so we don't end up continually adjusting player
+ * stats in one direction
+ * 950828 Jenna
+ */
+	    }
+	else if (x < heroism - 500) {
+            stat_learn = insert_adjust(stat_learn, "chu", 1, random(300) + random(300), 0, "You feel daring.");
+	    log += " gained 1 chutzpah to ";
+	    if (this_object()->is_player())
+		CHUTZ_DRIFT->add_drift_factor(1);	
+	    }
+	else
+	    log += "had chutz unchanged on ";
+	log +=  (x/CHUTZ_DRIFT->query_drift_factor()) + "\n\tHeroism (" + 
+		heroism + ") v Chutz (" + x + ")\n\t(Skill: "+
+		skill + "; Difficulty: " + difficulty + "; Pressure: " 
+		+ pressure + 
+		")\n\tCurrent Drift Factor              : " + 
+		CHUTZ_DRIFT->query_drift_factor() + 
+		"\n\tDrift Scale: (Lose Chutz)---" +
+		(heroism + 500) / (x / CHUTZ_DRIFT->query_drift_factor()) + 
+		"<--(No Change)-->" +
+		(heroism - 500) / (x / CHUTZ_DRIFT->query_drift_factor()) + 
+		"---(Gain Chutz)\n"; 
+        if (this_object()->is_player())   /* Jenna 2000 - cut log size */
+	    LOG->log("CHUTZ_DRIFT", log);
+	}
+
+/*
+ * Now, how much was it worth?  The original skill server put learning
+ * at 1-5%.  Difficulty counts - if it was a 50% chance, the assumption
+ * is that you had a `normal' struggle, with `normal' time to observe -
+ * wisdom is the only multiplier.  If it was high difficulty, you only
+ * observe a lot if you have high chu.  If it was low difficulty, you may
+ * learn more of it if you have low chu (because it was more commensurate with
+ * your ability to observe under pressure, though there was less to
+ * observe).  High chu chars still have the advantage - they have a
+ * higher initial success chance.  Wisdom is multiplied in, and int and
+ * current skill value affects your learning time.  Time used to be
+ * skill_val * 18 secs; we preserve that for int 25 chars.
+ */
+    int chu = query_chu();	/* minimum 1 */
+    if (chu < 1) chu = 1;
+
+    int obs = chu * 4 - (pressure/(MAX_PRESSURE/100)) + 100; 
+                                    /* 8->200+, observation % */
+    if (obs > 200) obs = 200;		/* maximum observable is 200% */
+    obs = 1 + random(obs);	        /* half on average */
+    int amt = obs * query_wis(0) * difficulty;	/* high wis = 25 */
+/* normalise to 1->5 for high wis, avg everything else (up to 10 if lucky). */
+    amt = amt / 50000 + 2 - orig_skill / 150;
+
+/* design a time.  If learning more, or already have high perm skill, take longer. */
+    int time = query_int(0);
+    if (time > 35) time = 35;	/* sigh.  Too many magic numbers here. */
+    if (time < 8) time = 8;	/* low int shouldn't be penalised too much */
+    time = 450 / time * (query_skill(skill, 0) + amt);
+    make_skill(skill);	/* be sure it's there */
+/*
+ * Quick hack for the auto defence server
+ */
+    catch {
+	if (this_object()->is_player())
+	    "RO/living/StatsTrack"->player_skill_learned(skill, query_skill(skill), amt, time);
+	else
+	    "RO/living/StatsTrack"->npc_skill_learned(skill, query_skill(skill), amt, time);
+	};
+
+#if 0
+    catch { tell_object(find_player("gandalf"),
+	this_object()->query_real_name() + " learns " + amt + " of " + skill + " in " + time + "\n"); };
+#endif
+    skill_learn = insert_adjust(skill_learn, skill, amt, time, 0, 0);
+    return 1;
+    }
+
+/*
+ * Apply_skill - applies a skill.  Does automatic learning.  See the comments at the top.
+ * Returns 1 for succeeded, 0 for failed.
+ */
+
+int apply_skill(string skill, int difficulty, int pressure) 
+{
+    int orig_skill = query_skill(skill);
+    if (orig_skill < 4) orig_skill = 4;
+    if (orig_skill > 500) orig_skill = 500;
+
+    if (!difficulty) difficulty = 100;
+    if (difficulty < 1) difficulty = 1;
+/*
+ * Quick hack for the auto defence server
+ */
+    catch {
+	if (this_object()->is_player())
+	    "RO/living/StatsTrack"->player_skill_used(skill, orig_skill, difficulty);
+	else
+	    "RO/living/StatsTrack"->npc_skill_used(skill, orig_skill, difficulty);
+	};
+
+    if (pressure > 30)			/* NO single modifier is more than 30 - for now */
+	pressure = 30;
+
+    int p = pressure + query_situation_pressure();
+    if (p > 97) p = 97;	/* facing 5 angry dragons wielding a potato peeler */
+    if (p < 1) p = 1;	/* having a smoke and listening to beethoven */
+
+    /* The following is to penalise players that rush into rooms, make an attack,
+     * then go out of the room long enough for it to take effect, avoiding all
+     * consequences.
+     * It's (to be) used in adjusting `base pressure', which is going to decrease
+     * as your HPs or SPs increase, so going outside to wait, rest, think, think,
+     * or recuperate should decrease it, ultimately lowering chu.
+     */
+    skill_avg = (skill_avg * 99 + orig_skill * p + skill_avg * (100 - p) / 100) / 100;
+
+    int c = query_chu() * 4;
+    if (c < 1) c = 1;
+
+    /* skill rolled against:	(C1 P1)  (C1 P100) (C25 P1) (C25 P100)  (C50 P100)
+     *		difficulty +	   2         99       0         50	    33
+     * i.e. with 25 chu, effect of pressure is halved.  This seems right.
+     * Made this binomial - G.
+     */
+
+    int actdiff = difficulty + p * p / (c + p);
+    int roll;
+#if 0
+    if (random(orig_skill) + random(orig_skill) > 
+    random(actdiff) + random(actdiff))  
+#endif
+    roll = random(100) + 1;
+    if (roll < (orig_skill * 100 / (orig_skill + actdiff + 1))+1)
+    {
+	    learn(skill, difficulty, pressure);
+	    return roll;
+	}
+    return 0;
+}
+
+/* Jenna's Pressure Hack
+ *  Hey, maybe not what G intended but it's better than what's there at
+ *  the mo (nothing).  [thanks, J, good job.  When we regularise monster
+ *  & player toughness calculations, we can do better comparisons - G]
+ *
+ * * Points       Situation
+ * -----------------------------------------------------
+ *  10     Being in combat
+ *  10     Having less than half max hp
+ *  30     Having less than a quarter hp 
+ *  10     Opponent is only slightly weaker than player
+ *  30     Opponent is on par with player
+ *  50     Opponent is stronger than player
+ *  70     Opponent is much stronger than player
+ *   x     Multiple opponents: as above but half the points
+ *         (eg pressure from being in combat with two monsters, each
+ *             on par with strength = 55 ( 10 (combat) + 30 (monster on par)
+ *             + 15 (second monster on par) 
+ *
+ * Monster - Player comparisons
+ * ----------------------------
+ * Player score calculated by:
+ * 1. Armour class
+ * 2. Weapon class
+ * 3. Action skill / 5
+ * 4. Reaction skill / 5
+ * -  No magic/powers scores, unfortunately
+ *
+ * Weak Player: 10	}
+ * Medium Player: 40	} (roughly)
+ * Tough Player: 80	}
+ *
+ * Monster score calculated by:
+ * 1. Monster level * HARDNESS (3)
+ *
+ * Weak Monster: 15
+ * Medium Monster: 30
+ * Tough Monster: 70
+ *
+ * (If you want to modify hardness:
+ *	HARDNESS = 	1	2	3	4	5
+ *	--------------------------------------------------
+ *	"Weak" mons	15	8	5	4	3
+ *	"Medium"	30	15	10	7	6
+ *	"Tough"		70	35	23	18	14
+ *	IE with harness of 4, we're saying that level 18 monsters
+ *	are "tough" while level 7 monsters are "medium")
+ *
+ * Compare scores:
+ * Same = within 8 points
+ * Some dif = within 15 points
+ * Major dif = more than 15 points
+ *
+ *
+ * NB: Actions: attack(0), parry(1), dodge(2), riposte(3)
+*/
+
+#define HARDNESS	3
+
+query_situation_pressure() {
+	int pressure, player_score, monster_score, i;
+	array which_skill = ({ "offense", "defence", "dodge", "offense" });
+	array others;
+	object pob = this_object();
+	object monster = pob->query_attack();
+
+	if (!monster || !present(monster, environment(pob))) return 0;
+		/* Not in combat = 0 pressure */	
+	player_score = pob->query_skill(which_skill[pob->query_action()]) / 5;
+	player_score += pob->query_skill(which_skill[pob->query_reaction()]) / 5;
+	player_score += pob->query_wc();
+	player_score += pob->query_armour();
+	pressure = 10; /* combat */
+	pressure += query_monster_pressure(player_score, monster);
+	others = contents(environment(pob));
+	for (i = 0; i < sizeof(others); i++)	
+		if (others[i] != pob && others[i] != monster && living(others[i])
+			&& others[i]->query_attack() == pob) 
+				pressure += query_monster_pressure(player_score, others[i]) / 2;
+	if (pob->query_hp() * 4 < pob->query_max_hp())
+		pressure += 30;
+	else if (pob->query_hp() * 2 < pob->query_max_hp())
+		pressure += 10; 
+	return pressure;
+	}
+
+query_monster_pressure(player_score, monster) {
+	int monster_score = monster->query_level() * HARDNESS;
+	return (monster_score > player_score + 15) ? 70 :
+		(monster_score > player_score + 7) ? 50 :
+		(monster_score + 7 > player_score) ? 30 :
+		(monster_score + 15 > player_score) ? 10 : 0;
+	}
+
+/* End of Jenna's bit */	
+
+nosave sob(n, o) {
+    if (!o)
+	return "";
+    if (o == this_object())
+	return "; " + n + "=<self>";
+    return "; " + n + "=<" + query_su_name(o) + " : " + file_name(o) + ">";
+    }
+
+nosave log_stat(string type, int perm, int tmp, int amount, tp, po, ca) {
+    string np = "";
+    if (!(this_object() -> is_player()))
+	return;
+    if (query_su_level(this_object()) < GOD) {
+	return;
+	np = "[NOSAVE]";
+	}
+    if (ca && (ca != this_object()))
+    LOG->log("STATS", this_object()->query_real_name() + np + ":" + type + ":<" + perm + "/" + tmp + ">+=" + amount +
+	sob("caller", ca) + sob("player", tp) + sob("prev", po) + "\n");
+    }
+
+nosave insert_adjust(arr, ty, amt, time, callb, param) 
+{
+    new_expire_time(time);
+    time += this_object()->query_age();
+    if (!pointerp(arr))
+	arr = ({ });
+    int x = 0;
+    while (x < sizeof(arr)) {
+	if (arr[x+2] < time)
+	    x += 5;
+	else
+	    break;
+	}
+    arr = arr[..x-1] + ({ ty, amt, time, callb, param }) + arr[x..];
+    return arr;
+}
+
+/*
+ * Query: query_stat(name, flag).
+ * If flag is nonzero, you get just their permanent stat.
+ */
+
+array query_skill_names() {
+    return skill_names + ({ });
+    }
+
+array query_stat_names() {
+    return stat_names + ({ });
+    }
+
+// Modified by Jenna Aug 2000
+//
+// Benefit: allows easy use of objects with stat & skill
+// enhancing properties. (The previous system required
+// all temporary stat/skill adjustments to come with a
+// time limit, which isn't appropriate for a magic ring.)
+//
+// Issue: will generate infinite loops if any object's
+// stat_bonus() function has a query_stat() call within it.
+
+int query_stat(string type, int f) {
+    int x = index(stat_names, type);
+    int i, bonus;
+    array p;
+
+    if (x < 0) return 0;
+    if (f) return perm_stats[x];
+
+    if (!tmp_stats || sizeof(tmp_stats) == 0)
+        tmp_stats = allocate(sizeof(perm_stats));
+
+    bonus = 0;
+    p = this_object()->query_protections();
+    if (arrayp(p))
+    {
+	if (index(p, this_object()->query_wielded()) == -1)
+	    p += [ this_object()->query_wielded() ];
+	for (i = 0; i < sizeof(p); i++)
+	    if (objectp(p[i]))
+	        catch bonus += p[i]->stat_bonus(type);;
+    }
+    return perm_stats[x] + tmp_stats[x] + bonus;
+    }
+
+int query_skill(string type, int f) {
+    int x = index(skill_names, type);
+    int i, bonus;
+    array p;
+
+    if (x < 0)
+        return 0;
+    if (f)
+        return perm_skills[x];
+    bonus = 0;
+    p = this_object()->query_protections();
+    if (arrayp(p))
+    {
+        if (index(p, this_object()->query_wielded()) == -1)
+	    p += [ this_object()->query_wielded() ];
+	for (i = 0; i < sizeof(p); i++)
+	    if (objectp(p[i]))
+	        catch bonus += p[i]->skill_bonus(type);;
+    }
+    return perm_skills[x] + tmp_skills[x] + bonus;
+    }
+
+// Old version - Jenna Aug 00
+#if 0
+int query_stat(string type, int f) {
+    int x = index(stat_names, type);
+    if (x < 0)
+	return 0;
+    if (f)
+	return perm_stats[x];
+    return perm_stats[x] + tmp_stats[x];
+    }
+
+int query_skill(string type, int f) {
+    int x = index(skill_names, type);
+    if (x < 0)
+	return 0;
+    if (f)
+	return perm_skills[x];
+    return perm_skills[x] + tmp_skills[x];
+    }
+#endif
+
+/*
+ * This is really a brutal hack to prevent wizzes from fucking up with stats.
+ *
+ * Moved from secure/death.h by Jenna April 2000 to allow monsters to stat-die.
+ */
+
+stat_zero(x) {
+    if (this_object()->query_ghost()) return 0;
+    if (stringp(x))
+        stat_death(x);
+    else if (arrayp(x)) {
+        stat_death(x[0]);
+        }
+    }
+
+stat_death(ty) {
+    int x;
+
+    while (find_call_out("stat_death") != -1)
+        remove_call_out("stat_death");
+
+    if (ty == "str") tell_object(this_object(), "Your strength is reduced to "+
+	"nothing.\nYou cannot breathe, your heart is too weak to pump blood!\n");
+    else if (ty == "con") tell_object(this_object(), "Your constitution is "+
+	"totally drained.\nYour internal organs pack it in!\n");
+    else if (ty == "int") tell_object(this_object(), "Your intelligence is "+
+	"destroyed.\nYour brain falls apart.\n");
+    else if (ty == "wis") tell_object(this_object(), "Your instincts have "+
+	"deserted you.\nYour autonomic nervous system fails\n");
+    else if (ty == "chu") tell_object(this_object(), "You have no chutzpah!  You "+
+	"die of embarrasement...\n");
+    else if (ty == "san") tell_object(this_object(), "Your sanity leaves you "+
+	"totally!  Your mind floats free...\n");
+    else if (ty == "dex") tell_object(this_object(), "Your dexterity is reduced "+
+	"to nothing!  You trip and split your skull open.\n");
+    else if (ty == "siz") tell_object(this_object(), "Your body has shrunk to "+
+	"nothing!  You leave this plane for another.\n");
+    else tell_object(this_object(), "Your " + ty + " is reduced to 0!\n");
+    x = query_stat(ty, 1); /* perm stats only */
+    if (x < 1)
+	add_stat(ty, 1-x);
+    /* stat_death_adjust() takes care of any temp stats */
+    this_object()->death();
+    }
+
+/*
+ * stat_death_adjust: if we get killed, we lose all skill learning we
+ * were doing, and expire all physically based tmp modifies.
+ * Ultimately, we would like to make physical stats based solely on
+ * the body, meaningless until we inhabit a new one, and mental stats take a
+ * small random change from death (intel/wis may change up or down - death is
+ * a real learning experience, but a bit of a shock to the system; power
+ * and sanity will decrease).  Chu is un tmp-modified because it could
+ * go either way :)
+ * Skills are decreased by random(5) if > 33%.
+ */
+
+nosave stat_death_adjust() {
+    array physical = ({ "str", "con", "dex", "chu", "siz" });
+    skill_learn = ({ });
+    stat_learn = ({ });
+    array new_ts = allocate(sizeof(tmp_stat_adjust));
+    int x = 0, y = 0;
+    /*
+     * Expire the tmp stats - have to reorder array.
+     * Make 2 passes - put modified skills at the front first.
+     */
+    while (x < sizeof(tmp_stat_adjust)) {
+	if (index(physical, tmp_stat_adjust[x]) >= 0) {
+	    new_ts[y++] = tmp_stat_adjust[x];	/* name */
+	    new_ts[y++] = tmp_stat_adjust[x+1];	/* amt */
+	    new_ts[y++] = 0;			/* expiry */
+	    new_ts[y++] = tmp_stat_adjust[x+3];	/* callback */
+	    new_ts[y++] = tmp_stat_adjust[x+4];	/* param */
+	    tmp_stat_adjust[x] = 0;	/* it has been moved */
+	    }
+	x += 5;
+	}
+    /* copy the remainder in */
+    x = 0;
+    while (x < sizeof(tmp_stat_adjust)) {
+	if (tmp_stat_adjust[x]) {		/* copied already? */
+	    new_ts[y++] = tmp_stat_adjust[x];	/* name */
+	    new_ts[y++] = tmp_stat_adjust[x+1];	/* amt */
+	    new_ts[y++] = tmp_stat_adjust[x+2];	/* expiry */
+	    new_ts[y++] = tmp_stat_adjust[x+3];	/* callback */
+	    new_ts[y++] = tmp_stat_adjust[x+4];	/* param */
+	    }
+	x += 5;
+	}
+    tmp_stat_adjust = new_ts;
+    new_expire_time(0);				/* fix the callout */
+/* Now subtract a little from the learned skills */
+    for (x = 0; x < sizeof(skill_names); x++)
+	if (perm_skills[x] > 33)
+	    perm_skills[x] -= random(5);
+    }
+
+/*
+ * Backward compat hooks.
+ * Probably useful for preventing misspellings in standard stat names :)
+ */
+
+add_str(int am) { return add_stat("str", am, 0, 0, 0, caller()); }
+add_int(int am) { return add_stat("int", am, 0, 0, 0, caller()); }
+add_dex(int am) { return add_stat("dex", am, 0, 0, 0, caller()); }
+add_con(int am) { return add_stat("con", am, 0, 0, 0, caller()); }
+add_san(int am) { return add_stat("san", am, 0, 0, 0, caller()); }
+add_chu(int am) { return add_stat("chu", am, 0, 0, 0, caller()); }
+add_pow(int am) { return add_stat("pow", am, 0, 0, 0, caller()); }
+add_siz(int am) { return add_stat("siz", am, 0, 0, 0, caller()); }
+add_wis(int am) { return add_stat("wis", am, 0, 0, 0, caller()); }
+
+/*
+ * And again...
+ */
+
+query_weakness() { return 0; } /* for hunger weakness */
+query_vision(f) { return 14 ; } /* temp hack */
+query_str(f) { return query_stat("str", f) - query_weakness();}
+query_int(f) { return query_stat("int", f);}
+query_dex(f) { return query_stat("dex", f);}
+query_con(f) { return query_stat("con", f);}
+query_san(f) { return query_stat("san", f);}
+query_chu(f) { return query_stat("chu", f);}
+query_pow(f) { return query_stat("pow", f);}
+query_siz(f) { return query_stat("siz", f);}
+query_wis(f) { return query_stat("wis", f);}
+
+/*
+ * start_stats - should be called from the startup for
+ * the living object, after restore_object and check_old_stats if
+ * necessary.  Starts callouts, deletes expired stats, etc.
+ */
+
+nosave start_stats() {
+    new_expire_time(0);
+    }
+
+/*
+ * clean_stats() - clean up before a save_object().
+ */
+
+nosave clean_stats() {
+    }
+
+/*
+ * check_old_stats() - crud to restore players from old savefiles.
+ * This will disappear when the old files are deleted (the function
+ * will remain, though empty, in case new changeovers are required).
+ */
+
+#include "/RO/stats.h"
+
+array stats = 0;		/* stat values - should be restored normally */
+
+nosave check_old_stats() {
+    int x;
+    int avg;
+    array s = STATNAMES;
+    if (arrayp(stats)) {
+	write("Very old version of savefile - talk to a god\n");
+	this_object()->flush_output();
+	destruct(this_object());
+	return 0;
+	}
+    if ((!arrayp(last_stat)) || (sizeof(last_stat) != sizeof(stat_names)))
+	last_stat = allocate(sizeof(stat_names));
+    if ((!arrayp(last_learn)) || (sizeof(last_learn) != sizeof(skill_names)))
+	last_learn = allocate(sizeof(skill_names));
+    }
+
+query_heroism(int x) {
+    return heroism;
+    }
+
+query_skill_avg(int x) {
+    return skill_avg;
+    }

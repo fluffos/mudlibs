@@ -1,0 +1,186 @@
+/*
+ * This is a small, centralised event management object which works
+ * using player ages.  It saves and restores just like it should :)
+ * It should be inherited; it may only be manipulated by the inheriting object.
+ *
+ * It does not DO the call-outs; age_call_out (which inherits this)
+ * should be used if you want an active event loop.
+ *
+ * The package should still be devastatingly fast
+ * in the presence of enormous numbers of scheduled events; however,
+ * in general, each system using this package should be written to
+ * get by with only one `call-out' (though this is by no means a
+ * requirement for its use).
+ *
+ * Gandalf.
+ *
+ * NB: I'll get round to adding query_all_scheduled_events type thingies
+ * one day.
+ */
+
+inherit "RO/living/age";
+
+array timed_event_list = allocate(10);
+int timed_event_num = 0;
+
+/*
+ * Return the age at which the next event should be done,
+ * or (-1) for none scheduled.
+ */
+
+int query_first_event_age() {
+	if (timed_event_num < 1)
+		return (-1);
+	return timed_event_list[0];
+	}
+
+/*
+ * Return seconds until first event is scheduled
+ */
+
+int query_first_event_delay() {
+	int a = query_first_event_age();
+	if (a < 0)
+		return a;
+	if (a <= query_age())
+		return 0;
+	return a - query_age();
+	}
+
+/*
+ * Add a (delay, string) pair.
+ *
+ * This MUST be STATIC.
+ */
+
+nosave add_delayed_event(int seconds, string param) {
+	if (seconds < 0)
+		seconds = 0;
+	seconds += query_age();
+
+	if (timed_event_num >= sizeof(timed_event_list)) {
+		timed_event_list += allocate(4+sizeof(timed_event_list));
+		}
+
+	timed_event_list[timed_event_num++] = seconds;
+	timed_event_list[timed_event_num++] = param;
+	filter_up(timed_event_num - 2);
+	}
+
+/*
+ * Unconditionally remove the first (delay, string) pair.
+ * Return the string, or 0 if none.  Truncate the array if it's getting
+ * very empty.
+ *
+ * This MUST be STATIC.
+ */
+
+nosave remove_first_event() {
+	if (timed_event_num < 1)
+		return 0;
+	string s = timed_event_list[1];
+	timed_event_num -= 2;
+	timed_event_list[0] = timed_event_list[timed_event_num];
+	timed_event_list[1] = timed_event_list[timed_event_num + 1];
+	timed_event_list[timed_event_num] = 0;	/* cleanliness */
+	timed_event_list[timed_event_num + 1] = 0;
+	filter_down(0);
+
+	if (timed_event_num * 4 < sizeof(timed_event_list))
+		timed_event_list = timed_event_list[..timed_event_num * 2 + 1];
+	return s;
+	}
+
+/*
+ * Remove a collection of events.
+ */
+
+nosave remove_named_events(string e) {
+	int x = index(timed_event_list, e);
+	while (x >= 0) {
+		timed_event_num -= 2;
+		timed_event_list[x-1] = timed_event_list[timed_event_num];
+		timed_event_list[x] = timed_event_list[timed_event_num + 1];
+		timed_event_list[timed_event_num] = 0;	/* cleanliness */
+		timed_event_list[timed_event_num + 1] = 0;
+		filter_up(x-1);
+		filter_down(x-1);
+		x = index(timed_event_list, e);
+		}
+	}
+
+nosave query_named_events(string e) {
+	array a = allocate(sizeof(timed_event_list));
+	int x = (-1);
+	int y = 0;
+	while (1) {
+		y = index(timed_event_list, e, y);
+		if (y < 0)
+			return a[..x];
+		a[++x] = timed_event_list[y-1];
+		y++;
+		}
+	}
+
+/*
+ * Heap management.
+ */
+
+nosave filter_up(int x) {
+	int y;
+	while (x > 0) {
+		y = (x / 2 - 1) & ~1;
+
+		if (timed_event_list[y] < timed_event_list[x])
+			return;
+
+		int t1 = timed_event_list[x];
+		timed_event_list[x] = timed_event_list[y];
+		timed_event_list[y] = t1;
+		
+		string t2 = timed_event_list[x + 1];
+		timed_event_list[x + 1] = timed_event_list[y + 1];
+		timed_event_list[y + 1] = t2;
+
+		x = y;
+		}
+	}
+
+nosave filter_down(int x) {
+	int y;
+	while (x < timed_event_num) {
+		y = x * 2 + 2;	/* left child */
+
+		if (y >= timed_event_num)
+			return;
+
+		if (y < timed_event_num - 2) {	/* has a right child */
+			if (timed_event_list[y] > timed_event_list[y+2])
+				y += 2;
+			}
+
+		if (timed_event_list[y] >= timed_event_list[x])
+			return;
+
+		int t1 = timed_event_list[x];
+		timed_event_list[x] = timed_event_list[y];
+		timed_event_list[y] = t1;
+		
+		string t2 = timed_event_list[x + 1];
+		timed_event_list[x + 1] = timed_event_list[y + 1];
+		timed_event_list[y + 1] = t2;
+
+		x = y;
+		}
+	}
+
+show_stats() {
+	write("Age: " + query_age_short() + "; size " + sizeof(timed_event_list)
+		+ "; Actions:\n");
+	int x = 0;
+	while (x < timed_event_num) {
+		write(query_age_short(timed_event_list[x]) + ": " +
+			  timed_event_list[x+1] + "\t");
+		x += 2;
+		}
+	}

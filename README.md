@@ -1,12 +1,12 @@
-# mudlibs — 279 restored LPC mudlibs (228 unique games), playable in the browser
+# mudlibs — 280 restored LPC mudlibs (229 unique games), playable in the browser
 
 **▶ Play now, no install: https://mudlibs.fluffos.info/** (English default; Chinese UI at https://mudlibs.fluffos.info/zh/)
 
 ![Screenshot of the mudlibs.fluffos.info game gallery](docs/site-preview.png)
 
-This repository is a working museum of LPC MUDs. It holds **279 restored
-mudlibs from 228 distinct game codebases**: 211 Chinese MUDs from the golden
-age of the Chinese MUD scene (mid-1990s to about 2015) and 68 games and
+This repository is a working museum of LPC MUDs. It holds **280 restored
+mudlibs from 229 distinct game codebases**: 211 Chinese MUDs from the golden
+age of the Chinese MUD scene (mid-1990s to about 2015) and 69 games and
 base libraries in English and other languages. Each one has been recovered
 from an archive, converted to UTF-8 and fixed to run on the modern
 [FluffOS](https://github.com/fluffos/fluffos) driver.
@@ -428,6 +428,7 @@ classes it's found.
 | 192 | `heaven7` | Heaven7 | `mudbytes_mar302010.zip / 10000/heaven7_2v07.tar.gz (Heaven7 v2.07)` | 40397 | WASM playable |
 | 193 | `nanny` | NannyMUD | `https://ftp.lysator.liu.se/pub/lpmud/nannymud/nannylib.tgz` | 40398 | WASM playable |
 | 194 | `tamedhon` | Tamedhon | `https://codeberg.org/td-mudlib` | 40399 | WASM playable |
+| 195 | `swlpc` | Shattered World (SWLPC 0.9.1) | `http://www.shattered.org/ (mlib-0.9.1.tar.bz2)` | 40400 | WASM playable |
 | 901 | `discworld` | Discworld MUD lib (v3) | `dw_fluffos_v3.zip` | 40206 | WASM playable |
 | 901-1 | `dw_fluffos_v1` | Discworld MUD lib (v1) | `dw_fluffos_v1.tar.gz` | 40271 | WASM playable |
 | 901-2 | `dw_fluffos_v2` | Discworld MUD lib (v2) | `dw_fluffos_v2.zip` | 40272 | WASM playable |

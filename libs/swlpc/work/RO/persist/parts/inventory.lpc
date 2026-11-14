@@ -1,0 +1,62 @@
+/*
+ * Inventory management for persistent objects; simply gets the
+ * inventory and changes all references to persistent objects into
+ * references to their names.
+ *
+ * This is not intended to manage souls or autoloading objects.
+ */
+
+inherit "RO/persist/parts/check";
+
+array inventory;
+
+/*
+ * This can't accidentally recurse; inventories are trees.
+ * However, the driver imposes a limit on saved object nesting
+ * depth anyway.
+ */
+
+remember_inventory() {
+	inventory = contents(this_object());
+	if (!inventory)
+		return;
+	int x = sizeof(inventory);
+	while (x > 0) {
+		x--;
+		if (objectp(inventory[x])) {
+			inventory[x]->remember_persistence();
+			}
+		}
+	inventory = name_of(inventory);
+}
+
+/*
+ * recover_inventory can recurse if some idiot deliberately
+ * manipulates it to do so.
+ */
+
+recover_inventory() {
+	if (!arrayp(inventory))
+		return;
+	int x = sizeof(inventory);
+	while (x > 0) {
+		x--;
+		if (stringp(inventory[x])) {
+			object ob = load_object(inventory[x]);
+			if (ob)
+				inventory[x] = ob;
+			}
+		if (objectp(inventory[x])) {
+			inventory[x]->recover_persistence();
+			if (!environment(inventory[x]))		/* nonpersistent */
+				move_object(inventory[x], this_object());
+			}
+		}
+	}
+
+/*
+ * For objects that set their location, and want to check whether
+ * we have container code.
+ */
+
+query_is_persistent_container() { return 1; }

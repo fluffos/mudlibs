@@ -1,0 +1,291 @@
+/*
+ * Quicky object that keeps track of all
+ * skills used in the game, and tracks the averages of
+ * the skills and the value they're rolled against.
+ *
+ * If this doesn't load, driver will attempt to compile it about
+ * 300 times a minute (with 15 players).  So leave it alone :)
+ *
+ * Intention: to provide a base set of numbers we can
+ * eventually use to assign "defensive" skills to monsters.
+ *
+ * 960805 (G) - added query fns, etc.  Monsters now set up their skills
+ *   using this (so they have `offensive' skills in line with those in
+ *   use in-game by players).
+ *
+ *	 Eventually, defensive skills will be added; all will be named
+ *	`react_to_X', where X is the offensive skill, and, when a skill is
+ *	 being used by P, P->skill(X) * 2 will be rolled against
+ *	 target->skill(X) + target->skill(react_to_X).  This is because of
+ *	 one is good at rob, one expects to have some acumen about *being*
+ *	 robbed, whether or not one has the explicit rob_resist skill.
+ *	 The same goes for fireballs, dodge (you react to them dodging, and maybe
+ *	 manage to hit them anyway - note that they've already reacted to you
+ *	 attempting to hit them, using react_to_attack), etc.
+ */
+
+#include "/RO/Servers.h"
+
+/*
+ * Continuous tracking, so no point in using autosave serv;
+ * save time is 2 hours, time to purge memory of unused skills
+ * is 3 months (christmas, etc, make this long time necessary).
+ */
+
+/* now 1 hour - G */
+#define	SAVE_TIME		3600
+#define	SKILL_PURGE_TIME	7776000
+#define SAVEFILE		"open/skill_track"
+
+/*
+ * The following magic numbers are used to decide what "level" a
+ * monster should be to be given `average' base skills (i.e. skills
+ * equal to the average that it is rolled against in mud).
+ *
+ * It will need tweaking - have to keep an eye on what happens when
+ * this finally goes in-game - because this code doesn't account for
+ * stats added in from elsewhere.  Note that some stats will be
+ * low, some much higher; monsters should drift (on average) to a
+ * defense level suitable to combat the level of use of various
+ * skills by players.
+ */
+
+real skills_magic_lev = 10.0;	/* level 50 monster gets off/def/dodge at 450; but other stats will be lower, so... */
+/* temporarily set fast, to give server time to track (couple days) */
+real skills_prev_decay = 5.0;	/* 1/30 skill decay per save period for unused skills */
+
+/*
+ * Record skill levels.
+ */
+
+array player_skills = [ ];
+array npc_skills = [ ];
+
+nosave array player_recent = [ ];
+nosave array npc_recent = [ ];
+
+/*
+ * No point in using the autosave server, as this is
+ * expected to continually self-adjust.  We'll simply
+ * save every two hours :)
+ */
+
+restore_me() {
+    restore_object(SAVEFILE);
+    }
+
+save_me() {
+    if (WHICH_MUD->is_wiz_mud())
+	return;
+    save_object(SAVEFILE);
+    }
+
+auto_save() {
+    call_out("auto_save", SAVE_TIME);
+    npc_recalc_base();		/* integrate any changes we've accumulated */
+    player_recalc_base();	/* integrate any changes we've accumulated */
+    save_me();		/* stuff it to savefile */
+    }
+
+/*
+ * shouldnt save on the wizmud, ho hum.
+ */
+
+reset(a) {
+    if (a)
+	return;
+    restore_me();
+    call_out("auto_save", SAVE_TIME);
+    }
+
+/*
+ * For each skill used this session, we record:
+ *	name
+ *	number of uses since last save
+ *	total value of the skill
+ *	total that it was rolled against
+ *
+ * Should also add an idea of the "level" of the player that attacked,
+ * so we can adequately match defenses to levels - but this is hard to
+ * obtain.  Since the only code that should call this server is the
+ * base stats code (which I maintain), I'll adjust it to do better
+ * when it becomes possible to.
+ */
+
+(int|real) query_player_skill_avg(string sk) {
+		return query_skill_avg(player_skills, sk, 0);
+		}
+
+(int|real) query_player_skill_against(string sk) {
+		return query_skill_avg(player_skills, sk, 1);
+		}
+(int|real) query_npc_skill_avg(string sk) {
+		return query_skill_avg(npc_skills, sk, 0);
+		}
+(int|real) query_npc_skill_against(string sk) {
+		return query_skill_avg(npc_skills, sk, 1);
+		}
+	
+(int|real) query_skill_avg(array ska, string skn, int res) {
+	int x = index(ska, skn);
+	if (x < 0)
+		return 0;
+	return ska[x+1+res];
+	}
+
+array get_mon_skills() {
+	return player_skills;
+	}
+
+#define	UNUSED	"## unused ##"
+
+player_skill_used(string skill, (int|real) val, (int|real) against) {
+    player_recent = skill_used_i(player_recent, skill, val, against);
+    }
+
+npc_skill_used(string skill, (int|real) val, (int|real) against) {
+    npc_recent = skill_used_i(npc_recent, skill, val, against);
+    }
+
+array skill_used_i(array recent_skill_uses, string skill, (int|real) val, (int|real) against) {
+    int x = index(recent_skill_uses, skill);
+    if (x < 0)
+	x = index(recent_skill_uses, UNUSED);
+    if (x < 0) {
+	x = sizeof(recent_skill_uses);
+	int y = x;
+	recent_skill_uses += allocate(4 + sizeof(recent_skill_uses));	/* double its size */
+	while (y < sizeof(recent_skill_uses)) {
+	    recent_skill_uses[y++] = UNUSED;	/* skill name */
+	    recent_skill_uses[y++] = 0;		/* num uses */
+	    recent_skill_uses[y++] = 0.0;	/* accumulated avg */
+	    recent_skill_uses[y++] = 0.0;	/* accumulated avg against */
+	    }
+	}
+
+    if (intp(against))
+	against = int2real(against);
+    if (intp(val))
+	val = int2real(val);
+
+    recent_skill_uses[x++] = skill;	/* in case it was unused */
+    recent_skill_uses[x++]++;		/* blecch - probably exposes compiler bugs :) */
+    recent_skill_uses[x++] += val;
+    recent_skill_uses[x] += against;
+    return recent_skill_uses;
+    }
+
+/*
+ * recalc_base:
+ *	Integrate changes into base skill array.
+ *	Decay ALL skills, including unused ones (if skills are
+ *	    rarely used by monsters, monster competence should decay!
+ *	    Hopefully the result is that players adjust their
+ *	    strategy as they become aware of these monster
+ *	    deficiencies, so monsters toughen up again... unfortunately,
+ *	    monsters won't exercise many player skills, so can't benefit
+ *	    from this idea).
+ */
+
+npc_recalc_base() {
+    npc_skills = recalc_base(npc_skills, npc_recent);
+    }
+
+player_recalc_base() {
+    player_skills = recalc_base(player_skills, player_recent);
+    }
+
+array recalc_base(array def_skill_base, array recent_skill_uses) {
+    int x = 0;
+    int now = time();
+    int y;
+
+    for (x = 0; x < sizeof(recent_skill_uses); x += 4) {
+	string sk = recent_skill_uses[x];
+	if (sk == UNUSED)
+	    continue;
+	y = index(def_skill_base, sk);
+	if (y < 0) {			/* only happens when new skills are introduced */
+	    y = sizeof(def_skill_base);
+	    def_skill_base += [ sk, 50.0, 50.0, time() ];	/* assume average is 50%; it'll drift in time... */
+	    }
+	def_skill_base[y+1] += (recent_skill_uses[x+2] / int2real(recent_skill_uses[x+1])) / skills_prev_decay; /* avg val */
+	def_skill_base[y+2] += (recent_skill_uses[x+3] / int2real(recent_skill_uses[x+1])) / skills_prev_decay; /* avg against */
+	def_skill_base[y+3] = now;	/* mark it as used */
+	}
+/*
+ * Ok, each entry is (prev average) + (today's avg / decay).
+ * Normalise them all back down to account for decay of unused
+ * skills.  This isn't perfect, but results in totally unused
+ * (and presumably useless) skills eventually having lower
+ * resistances, perhaps making the useful skills again, and oft-used skills
+ * drifting up (albeit more slowly than the unused ones drift down).
+ * We purge any skills unused for SKILL_PURGE_TIME.
+ */
+
+    y = 0;
+    x = 0;
+    while (x < sizeof(def_skill_base)) {
+	if (now - def_skill_base[x+3] < SKILL_PURGE_TIME) {			/* gonna keep this one */
+    	    real decay = (skills_prev_decay / (1.0 + skills_prev_decay));	/* if decaying all */
+	    if (index(recent_skill_uses, def_skill_base[x]) < 0) {		/* HACK: no decay if not used */
+		decay = 1.0;							/* so we can track quickly without */
+		}								/* decaying overnight :) */
+	    def_skill_base[y++] = def_skill_base[x++];		/* name */
+	    def_skill_base[y++] = def_skill_base[x++] * decay;
+	    def_skill_base[y++] = def_skill_base[x++] * decay;
+	    def_skill_base[y++] = def_skill_base[x++];		/* time */
+	    }
+	else {
+	    x += 4;
+	    }
+	}
+    def_skill_base = def_skill_base[..y - 1];
+/*
+ * Clean out the track array.
+ */
+    x = 0;
+    while (x < sizeof(recent_skill_uses)) {
+	recent_skill_uses[x++] = UNUSED;
+	recent_skill_uses[x++] = 0;
+	recent_skill_uses[x++] = 0.0;	/* avg */
+	recent_skill_uses[x++] = 0.0;	/* against */
+	}
+    return def_skill_base;
+    }
+
+/*
+ * stats check
+ * dammit - this is useful enough that I should format it better.
+ */
+
+show_stats_i(array def_skill_base, array recent_skill_uses) {
+    array them = allocate(sizeof(def_skill_base) / 4);
+    int x = 0;
+    while (x < sizeof(them)) {
+	them[x] = (def_skill_base[x*4] + "                    ")[..20]
+		+ "     " + def_skill_base[x*4+1]
+		+ "     " + def_skill_base[x*4+2]
+		+ "     " + ctime(def_skill_base[x*4+3]);
+	x++;
+	}
+    array upd = allocate(sizeof(recent_skill_uses) / 3);
+    int y = 0;
+    x = 0;
+    while (x < sizeof(recent_skill_uses)) {
+	if (recent_skill_uses[x] != UNUSED) {
+	    upd[y++] = "+ " + (recent_skill_uses[x]+ "                    ")[..20]
+		     + "     " + recent_skill_uses[x+1]
+		     + "     " + (recent_skill_uses[x+2] / int2real(recent_skill_uses[x+1]))
+		     + "     " + (recent_skill_uses[x+3] / int2real(recent_skill_uses[x+1]))
+		     ;
+	    }
+	x += 4;
+	}
+    return them + upd[..y-1];
+    }
+
+show_stats() {
+    return [ "PLAYERS" ] + show_stats_i(player_skills, player_recent)
+	 + [ "NPCS" ]    + show_stats_i(npc_skills, npc_recent);
+    }

@@ -1,0 +1,391 @@
+/*  
+ * Protection
+ * ~~~~~~~~~~
+ * std/protection.lpc
+ *
+ * by Jenna (mid-99)
+ * based on concepts developed by Jenna & Darkryln 95-96
+ *
+ * An inheritable protection object, which can be used to
+ * bestow protection against various types of damage. Used by
+ * obj/armour and should be inherited by anything that wishes
+ * to offer armour-like properties (e.g. souls, amulets).
+ *
+ * This file is deliberately small; the number-crunching
+ * and storage of data types is performed by std/damage.
+ *
+ * To add protection to an object:
+ * 1) If the object is armour (i.e. inherits "obj/armour"),
+ *    then it already inherits this file. Otherwise, you
+ *    will need to inherit "std/protection" manually.
+ * 2) Use add_protection() to set up what sort of protection
+ *    your object will bestow. See the documentation
+ *    acommpanying that function (below) for the format. You
+ *    can call add_protection() multiple times.
+ * 3) Use set_invoke() to specify when the protection works.
+ *    See the docs with that fun (below) for details.
+ *
+ * Modification history:
+ * 19990801	Jenna	Created file
+ *
+ */
+
+inherit "RO/Servers";
+
+#include "protection.h";
+
+array protections = [ ];
+string invoke = "carried";
+int invoked;
+
+is_protection() { return 1; }
+
+/* add_protection(type, amt, [loc], [perc], [rejuv], [obj], [fun])
+ * 
+ * e.g. add_protection("heat", 3, ["chest", "abdomen"]);
+ *
+ * Args:
+ * (string|array) type
+ *    The type of damage protected against (e.g. "heat"). For a
+ *    list of acceptable damage types, call DAMAGE->query_types().
+ *    <type> may be an array, which is the same as calling
+ *    add_protection() multiple times with different <type>s (but
+ *    all other args the same). 
+ *    "all" is an acceptable form of protection, but strongly
+ *    discouraged: remember that the game contains many forms of
+ *    non-physical damage which most forms of armour shouldn't
+ *    protect against (e.g. siren scream).
+ * (int) amt
+ *    The maximum points of damage the protection will absorb.
+ *    (As a guide, standard armour offers between 2 (leather)
+ *    and 10 (mithril) points of damage protection.)
+ *    Note that the number you use here for physical forms of 
+ *    protection (like armour) should usually be lower than for
+ *    non-physical protection (like anti-spell amulets), because
+ *    physical damage is often done in multiple, relatively
+ *    small hits, whereas non-physical damage is often done
+ *    in infrequent, high-damage hits. An object that provides
+ *    15 points of protection against heat is very good but not
+ *    fantastic, whereas 15 pts of protection against cut damage
+ *    would be 50% better than mithril armour.
+ * (string|array) loc
+ *    The body locations protected. "all" is an acceptable location
+ *    (and the default when omitted). The location is stored as an
+ *    array, even when sent a string. 
+ * (int) perc
+ *    The maximum percentage of damage absorbed (default is 100%),
+ *    up to <amt> points as specified above. E.g. If the protection  
+ *    is sent 10 damage to absorb and its perc is 50, it will absorb 
+ *    <amt> damage or 5 points, whichever is less. Should be used
+ *    for protection objects which tend to soften blows without
+ *    blocking them, or to compensate for a high <amt>.
+ * (int) rejuv
+ *    The amount of protection per second the armour will rejuvinate
+ *    (default is all, which is implemented as 0). Should be used for
+ *    protections that can be "over-heated" (whether actually by
+ *    heat or some other temporary effect). Example: if <amt> == 10,
+ *    <rejuv> == 1 and the protection absorbs 6 points of damage,
+ *    an immediate subsequent hit will only have up to 4 pts
+ *    absorbed. Another subsequent hit within 1 second would have 0
+ *    damage absorbed, and the protection won't be able to absorb the 
+ *    entireity of a 10-point hit for 10 seconds (recovering 1 pt per
+ *    second).
+ * (object) obj
+ *    callback object (default: none).
+ * (string) fun
+ *    callback function (default: none). The callback object and func
+ *    are called immediately following any damage absorption, and
+ *    called with the same args as absorb_damage(), i.e.:
+ *       ob->fun(string type, int damage-absorbed, string loc);
+ *    Note that with common forms of protection - or in the thick of
+ *    battle - the callback can be invoked quite often.
+ */
+add_protection((string|array) type, amt, locn, perc, rejuv, obj, fun) {
+    int i;
+    array l;
+
+    if (pointerp(type)) {
+        for (i = 0; i < sizeof(type); i++) 
+            add_protection(type[i], amt, locn, perc, rejuv, obj, fun);
+	return;
+	}
+    if (!perc)
+        perc = 100;
+    if (!locn)
+        locn = "all";
+    l = stringp(locn) ? [ locn ] : locn;
+    protections += [ [ type, amt, l, perc, rejuv, obj, fun, 0 ]  ];
+    if (find_call_out("check_invoked") == -1)
+	call_out("check_invoked", 2);
+    }
+
+/* set_invoke(string when)
+ *
+ * Specify when the protection actually works. <when> may be:
+ *   "carried" : (default) When object is carried (e.g. souls)
+ *   "worn"    : When object is worn (e.g. armour)
+ *   "wield"   : When object is wielded (e.g. magic sword)
+ *   "none"    : You're going to do your own invoke code
+ * Armour defaults to set_invoke("worn") unless you override it.
+ */
+set_invoke(string when) { 
+	invoke = when; 
+	check_invoked();
+	}
+
+query_invoke() { return invoke; }
+
+invoke() { 
+    invoked = 1;
+    if (!environment() 
+	|| !environment(this_object())->query_living())
+		return 0;
+    environment()->add_protection(this_object());
+    return 1;
+    }
+
+uninvoke() { 
+    invoked = 0;
+    if (!environment() 
+	|| !environment(this_object())->query_living())
+		return 0;
+    environment()->remove_protection(this_object());
+    return 1;
+    }
+
+query_invoked() { return invoked; }
+
+check_invoked() { /* A quick safety check */
+    if (!invoked && invoke == "carried")
+	invoke();
+    }
+
+/* remove_protection(string type, string location)
+ *
+ * Call to remove a protection. Generally, objects don't need to do
+ * this. You may need it if you create an object that destroys
+ * armour, or some temporary form of protection.
+ *
+ * Note that the location arg is used to identify which
+ * protection you want to remove, and thus you should send the same
+ * location that you used to add_protection(). Note: when location ==
+ * "all", all protections of that type in all locations are removed.
+ * This is bad in rare cases only; generally a single object does not
+ * have more than one protection for a particular type and location.
+ *
+ * remove_protection("all","all") gets rid of all protections
+ * bestowed by this object.
+ */
+remove_protection(type, locn) {
+    int i;
+    array l;
+
+    if (type == "all" && locn == "all") {
+        protections = [ ];
+        return 1;
+        }
+    l = stringp(locn) ? [ locn ] : locn;
+    for (i = 0; i < sizeof(protections); i++)
+        if (protections[i][TYPE] == type 
+		&& (protections[i][LOC] == l || locn == "all")) {
+		    protections = ARRAY->delete(protections, i, 0);
+		    return 1;
+		    }
+    return 0;
+    }    
+
+/* modify_protection(string type, int amount, string|array locn)
+ *
+ * Generally used to reduce the amount of protection bestowed by
+ * the object (e.g. because the armour is getting worn). As such,
+ * <amount> is usually negative.
+ *
+ * If a protection in this object of <type> and <locn> does not
+ * already exist, no modification is made.
+ *
+ * <locn> may equal "all", but be aware that in rare cases, this
+ * this can actually modify more than one protection in the object.
+ */
+int modify_protection(string type, int amount, locn) {
+    int i;
+    array l;
+
+    l = stringp(locn) ? [ locn ] : locn;
+    for (i = 0; i < sizeof(protections); i++)
+        if (protections[i][TYPE] == type 
+		&& (protections[i][LOC] == l || locn == "all")) {
+		    protections[i][AMT] += amount;
+		    return 1;
+		    }
+    return 0;
+    }
+
+/* query_protection(string type, string location, int noperc)
+ *
+ * Returns an integer that is the summed <amt>s of protection
+ * provided for this <type> of damage in this body <locn>.
+ * 
+ * If <noperc>, the protection's <perc> is not considered and
+ * fire/10/50% protection returns the same as fire/10/100% 
+ * (that is, 10).
+ *
+ * If !<noperc>, the number returned is <amt> * <perc> / 100,
+ * so that fire/10/50% returns the same as fire/5/100%
+ * (that is, 5).
+ */
+int query_protection(type, locn, noperc) {
+    int i, total_prot, xdam;
+
+    if(!type) return protections;
+    if(!locn) return -1;
+    for (total_prot = 0, i = 0; i < sizeof(protections); i++)
+        if (DAMAGE->is_same_type(type, protections[i][TYPE])
+            && is_protected(locn, protections[i][LOC])) {
+		    xdam = protections[i][AMT];
+		    if (!noperc) {
+			if (xdam > 100)
+			    xdam = 100;
+			xdam = (xdam * protections[i][PERC]) / 100;
+			}
+                total_prot += xdam;
+		    }
+    return total_prot;
+    }
+
+// Is locn1 covered by locn2?
+// Usually locn1 is the location being hit and locn2 is a location (or
+// array of locations) covered by armour.
+int is_protected(string locn1, locn2) 
+{
+    int i;
+    array expanded;
+
+    if (stringp(locn2))
+    {
+        if (locn1 == locn2 || locn2 == "all" || locn1 == "any")
+            return 1;
+	expanded = this_object()->expand_cover( [locn2] );
+	if (sizeof(expanded) > 1 && index(expanded, locn1) != -1)
+	    return 1;
+    }
+    else if (pointerp(locn2))
+        for (i = 0; i < sizeof(locn2); i++)
+            if (is_protected(locn1, locn2[i]))
+                return 1;
+    return 0;
+}
+
+#if 0
+int is_protected(string locn1, locn2) { /* Is locn1 covered by locn2? */
+    int i;
+
+    if (stringp(locn2)) {
+        if (locn1 == locn2 || locn2 == "all" || locn1 == "any")
+        return 1;
+        }
+    else if (pointerp(locn2)) 
+	for (i = 0; i < sizeof(locn2); i++)
+	    if (is_protected(locn1, locn2[i]))
+		return 1;
+    return 0;
+    }
+#endif
+
+int absorb_damage(type, amt, locn) {
+    int i, deduct;
+    object pob = environment(this_object());
+
+    if (!query_invoked() || this_object()->query_broken())
+	return amt;
+    if (pointerp(type)) {
+        for (i = 0; i < sizeof(type); i++)
+            amt -= absorb_damage(type[i], amt, locn);
+        return amt;
+        }
+    if (pointerp(locn)) {
+        for (i = 0; i < sizeof(locn); i++)
+            amt -= absorb_damage(type, amt, locn[i]);
+        return amt;
+        }
+    if (amt < 1)
+	return 0;
+    if (pob != caller()) {
+	uninvoke();
+#if 0
+	object j = find_player("jenna");
+	if (j) {
+		tell_object(j, "[Armour:] Weirdness in " + file_name(this_object()) + ".\n");
+		tell_object(j, "[A:] env = " + file_name(pob) + " ( " + pob->short() + ".\n");
+		tell_object(j, "[A:] caller = " + file_name(caller()) + " ( " + caller()->short() + ").\n");
+		}
+#endif
+	return 0;
+	}
+    for (i = 0; i < sizeof(protections); i++)
+        if (DAMAGE->is_same_type(type, protections[i][TYPE])
+            && is_protected(locn, protections[i][LOC])) {
+                deduct = protections[i][AMT] - protections[i][USED];
+                if (deduct > (amt * protections[i][PERC]) / 100)
+                    deduct = (amt * protections[i][PERC]) / 100;
+                if (deduct > amt)
+                        deduct = amt;
+                if (deduct) {
+                    amt -= deduct;
+		    call_out("damage_self", 0.2, deduct, type);
+                    if (protections[i][REJUV]) {
+                        if (!protections[i][USED]
+                            || find_call_out("rejuv_prot") == -1)
+                             call_out("rejuv_prot", 1, i);
+                        protections[i][USED] += deduct;
+                        }
+                    if (protections[i][CALLBACK_OBJ])
+                        (protections[i][CALLBACK_OBJ])->
+                            (protections[i][CALLBACK_FUN])(type, deduct, locn);
+
+                    }
+                }
+    return amt;
+    }
+
+damage_self(amt, type)
+{
+    string n = this_object()->query_name();  /* pre-"(broken)" */
+    int already_broken = this_object()->query_broken();
+
+    this_object()->damage_object(amt, type);
+    if (this_object()->query_broken() && !already_broken)
+    {
+	object me = this_object()->query_worn();
+	if (!me)
+	    me = environment(this_object());
+	if (me)
+	{
+	    tell_object(me, "Your "+n+" splinters!\n");
+	    me->checked_say(me->query_name()+"'s "+n+
+		" splinters!\n");
+	}
+    }
+}
+
+rejuv_prot(x) {
+    if (x < 0 || x >= sizeof(protections))
+        return;
+    protections[x][USED] -= protections[x][REJUV];
+    if (protections[x][USED] > 0)
+        call_out("rejuv_prot", 1, x);
+    else if (protections[x][USED] < 0)
+        protections[x][USED] = 0;
+    }
+
+describe_protections() {
+    return DAMAGE->describe_protections(this_object());
+    }
+
+set_all_protections(a) { protections = a; }
+
+query_destruct() {
+	if (query_invoked())
+		uninvoke();
+	}
+
+

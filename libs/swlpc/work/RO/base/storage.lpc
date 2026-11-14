@@ -1,0 +1,132 @@
+/*
+ * RO/base/storage.c
+ * Shattered Worlds Mudlib
+ * 
+ * This is a Shattered World's Base Object Component.
+ *
+ * Storage:
+ * --------
+ * This object provides a dictionary object - data is stored under
+ * a string label.
+ *
+ */
+
+/*
+ * History:
+ *  950925 Gandalf	renamed the FUCKING STUPID add(), remove(), query() 
+ *			fns to add_prop(), remove_prop(), etc.
+ *  951120 Hunter	shifted code from RO/base_object.c to 
+ *			RO/base/storage.c
+ *  000430 Dredd    Some changes - adding a 0 property actually adds it
+ *                  with a 1. Want to make is easier to replace
+ *                  code in objects such as room/room.
+ */
+
+inherit "RO/Servers";
+
+/*
+ * provide some global variables (non-nosave because this stuff may
+ * be dumped to a save file sometime).
+ */
+
+	/* Parallel array of properties */
+array name_store = [];	/* abstract and physical physical properties */
+array data_store = [];
+
+reset(arg) 
+{
+    /* Null function, just to make the parents happy*/ 
+    /* All objects should still call reset() in this object though,
+     * as in future something may be added to it -Hunter */
+}
+
+/* 
+ * std store management rountines :  
+ * Only one field of data is stored per store, if more information is
+ * required, then it should be a struct
+ * 
+ * There is currently no point in storing data that has a zero value 
+ * because you cant tell whether it is there or not (by using query_prop())
+ */
+int 
+add_property(string label, str)
+{
+    int i;
+
+    if (!str) str = 1;
+
+    label = lower_case(label);
+    if ((i = index(name_store, label)) >= 0) 
+    {
+	    data_store[i] += str;
+	    return 1;
+    }
+    name_store += [ label ];
+    data_store += [ str ];  
+    return 1;
+}
+
+/* To remove some data.
+ *	If you specify part it will try and remove that
+ *	portion of the data. Its not that smart though,
+ *	so dont use nested arrays.
+ *
+ *	Dont try to make part a number, use add() instead !
+ */
+
+int remove_property(string str,part) 
+{   
+    int i,x;
+
+    str = lower_case(str);
+    if ((i = index (name_store,str)) >= 0) 
+    {
+	    if (!part) {
+	        name_store = name_store [..i-1] + name_store [i+1..];
+	        data_store = data_store [..i-1] + data_store [i+1..];
+	        return 1;
+	    }
+	    if ((x = index(data_store[i],part)) >= 0) {
+	        data_store[i] = data_store [i][..x-1] 
+		    + data_store [i][(x+ sizeof(part))..];
+	        return 1;
+	    }
+    }
+    return 0;
+}
+
+/*
+ * Returns a copy of the property array if a specific property
+ * isn't queried.
+ */
+(int|array) query_property((int|string) str) 
+{
+    int i;
+
+    if (intp(str)) return (name_store + []);
+
+    str = lower_case(str);
+    i = index(name_store,str);
+    if (i >= 0) return data_store [i];
+    return 0;
+}
+
+/*
+ * Stats.
+ */
+array show_stats(arg) 
+{
+    array ret = allocate(sizeof(name_store) + 1);
+    int i = 0;
+    int j = 0;
+
+    if (sizeof(name_store)) {
+        ret[i++] = "Store:";
+	for (j = 0; j < sizeof(name_store); j++) {
+	    ret[i++] = "  " + FORMAT->left_justify(name_store[j], 20)
+		     + "= " + DUMP->dump_variable(data_store[j]);
+	    }
+        }
+    return ret[..i-1];
+}
+
