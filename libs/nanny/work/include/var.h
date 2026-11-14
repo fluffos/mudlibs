@@ -1,0 +1,11 @@
+
+#define HOMEDIR  "HOME"
+#define WORKROOM "WROOM"
+#define START    "START"
+#define MIN      "MIN"
+#define MMIN     "MMIN"
+#define MOUT     "MOUT"
+#define MMOUT    "MMOUT"
+#define MCLONE   "MCLONE"
+#define MDEST    "MDEST"
+#define TITLE    "TITLE"

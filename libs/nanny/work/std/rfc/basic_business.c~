@@ -1,0 +1,162 @@
+/* Written by Mats */
+
+#pragma strict_types
+#pragma save_types
+
+inherit "/std/room";
+
+/*** variables ***/
+
+private mixed *sell_list = ({});      /* all these could be in one array */
+private int *numbers = ({});
+private int *current = ({});
+
+private object storeroom;
+private object *restored;
+
+/*** useful defines ***/
+
+#define ERROR(X) tell_object(find_player(creator(this_object())||"")||this_player()||this_object(),"ERROR "+(X))
+
+/*** Setup functions ***/
+
+void store(object o) {
+  move_object(o,storeroom || (storeroom=clone_object("/std/rfc/store")));
+}
+
+varargs void add_sell(mixed ob, int n)
+{
+  mixed o;
+  if(objectp(ob))
+    o=ob;
+  else {
+    if(sscanf(ob,"a %s",ob) || sscanf(ob,"an %s",ob))
+      ob="@/std/lib->make("+ob+")";
+    else
+      ob=expand_file_name(ob);
+    /*
+    o=eval(ob);
+    if(stringp(o)) o=clone_object(o);
+    */
+  }
+  sell_list += ({ob});
+  numbers += ({n || 1});
+  current += ({n || 1});
+  
+  if(objectp(ob))
+    store(o);
+}
+
+void restore_items() {
+  int i;
+  mixed o;
+
+  if (!restored) restored = allocate(sizeof(sell_list));
+  for(i=0;i<sizeof(sell_list);i++)
+    if (!restored[i] && current[i] && !objectp(sell_list[i])) {
+      current[i]--;
+      o=eval(sell_list[i]);
+      if(stringp(o)) o=clone_object(o);
+      restored[i] = o;
+      store(o);
+    }
+
+}
+
+int list(string arg, string what) {
+  int i;
+  object *all;
+  restore_items();
+  all = all_inventory(storeroom);
+  for(i=0;i<sizeof(all);i++) {
+    write(sprintf("%2d. %-20'.'s%4d\n",i+1,all[i]->short(),2*all[i]->query_value()));
+  }
+  return 1;
+}
+
+int buy(string arg, string what) {
+  object o;
+  int i;
+
+  restore_items();
+  if (!(o = present(what,storeroom))) {
+    write("There is no "+what+" in store.\n");
+    return 1;
+  }
+  if (this_player()->query_money() < 2*o->query_value()) {
+    write("You can't afford "+o->short()+".\n");
+    return 1;
+  }
+  this_player()->add_money(-2*o->query_value());
+  if( transfer(o, this_player()) ) {
+    write("You cannot carry any more. The "+o->short()+" is laid\n"+
+          "on the ground in front of you.\n");
+    move_object(o, this_object());
+  }
+
+  if ((i=member_array(o,restored))!=-1)
+    restored[i] = 0;
+
+  write("Ok.\n");
+  return 1;
+}
+
+/* should be changed
+void remove_sell(mixed ob)
+{
+  int i;
+  if(stringp(ob))
+  {
+    if(sscanf(ob,"a %s",ob) || sscanf(ob,"an %s",ob))
+    {
+      ob="@/std/lib->make("+ob+")";
+    }else{
+      ob=expand_file_name(ob);
+    }
+  }
+
+  i=member_array(ob,local_objects);
+  if(i==-1) return;
+  i&=~1;
+  local_objects=local_objects[0..i-1]+local_objects[i+2..0x7ffffff];
+}
+
+*/
+/*** functions called by mudlib / driver ***/
+mixed *query_sell_list() { return sell_list; }
+object query_storeroom() { return storeroom; }
+int *query_current() { return current; }
+object *query_restored() { return restored; }
+
+/* All commands go through here */
+int do_cmd(string what)
+{
+  if(::do_cmd(what)) return 1;
+
+  if (query_verb()=="buy") return buy("",what);
+  if (query_verb()=="list") return list("",what);
+}
+
+/* Don't forget to call ::reset(arg), or add_sell
+ * will not work properly
+ */
+void reset(int arg)
+{
+  int i;
+
+  ::reset(arg);
+  for(i=0;i<sizeof(numbers);i++)
+  {
+    current[i] = numbers[i];
+    if (restored[i]) destruct(restored[i]);
+  }
+  restored = 0;
+}
+
+/* Clean up takes into account which objects where cloned
+ * in this room and which were not.
+ */
+int clean_up(int refs)
+{
+  return ::clean_up(refs);
+}

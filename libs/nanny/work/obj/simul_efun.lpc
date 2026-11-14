@@ -1,0 +1,678 @@
+#pragma strict_types
+#pragma save_types
+
+mapping profiled = ([]);
+
+#define PROFILING /* Milamber */
+
+#ifdef PROFILING
+#define PROFILE(X) profiled["X"]++
+mapping query_simulefun_profile_info() {
+  PROFILE(query_simulefun_profile_info);
+  return profiled + ([]);
+}
+#else
+#define PROFILE(X)
+#endif
+
+int query_prevent_shadow() { return 1; } /* Lpd 920120 */
+
+void log_file(string file, string str) {
+  PROFILE(log_file);
+  write_file("/log/" + file, str);
+}
+
+varargs string extract(string str, int start, mixed end) {
+  int len, iend;
+
+  PROFILE(extract);
+  if (!str) return 0;
+  len = strlen(str);
+  if (undefinedp(end)) iend = len - 1;
+  else iend = (int)end;
+  if (start < 0) start = 0;
+  if (iend >= len) iend = len - 1;
+  if (start > iend) return "";
+  return str[start..iend];
+}
+
+varargs string creator(object ob) {
+  string fname, wiz;
+
+  PROFILE(creator);
+  if (!ob) ob = previous_object();
+  if (!ob) return 0;
+  fname = file_name(ob);
+  if (sscanf(fname, "/players/%s/%*s", wiz) == 2 ||
+    sscanf(fname, "players/%s/%*s", wiz) == 2)
+    return wiz;
+  return 0;
+}
+
+varargs string line_break(string s, string pre, int width) {
+  int e;
+  string done, a, b;
+
+  PROFILE(line_break);
+
+  if (!stringp(pre)) pre = "";
+
+  if (!width) {
+    if (this_player())
+      width = this_player()->query_cols();
+
+    if (!width)
+      width = 80;
+
+    width -= strlen(pre) + 2;
+  }
+
+  done = "";
+  while (strlen(s)) {
+    e = 5000;
+    if (strlen(s) >= 5000) {
+      e = 5000;
+      while (e >= 0 && s[e] != ' ') e--;
+      if (e == -1) return done + "   " + s + "\n";
+    }
+    done += sprintf("%s%-=*s", pre, width, s[0..e - 1]);
+    pre = "                                                                                                               "[1..strlen(pre)];
+    s = s[e + 1..strlen(s) - 1];
+    if (!strlen(s)) {
+      if (done[<1] != '\n') done += "\n";
+      return done;
+    }
+    for (e = strlen(done) - 1; e >= 0 && done[e] != '\n'; e--);
+
+    a = 0;
+    b = "";
+    sscanf(s, "%s %s", a, b);
+    while (a && strlen(a) + strlen(done) - e <= width + 2) {
+      done += " " + a;
+      s = b;
+      a = 0;
+      b = "";
+      sscanf(s, "%s %s", a, b);
+    }
+    done += "\n";
+  }
+  return done;
+}
+
+string big_linebreak(string s, int width) {
+  log_file("FIX", "big_linebreak: " + file_name(previous_object()) + "\n");
+  PROFILE(big_linebreak);
+  if (!width) width = 79;
+  return line_break(s, "", width);
+}
+
+/*
+ * filter_objects() has been renamed to filter_array().
+ */
+mixed *filter_objects(mixed *list, string str, object ob, mixed extra) {
+  log_file("FIX", "filter_objects: " + file_name(previous_object()) + "\n");
+  PROFILE(filter_objects);
+  return filter_array(list, str, ob, extra);
+}
+
+/*
+ * The old 'slice_array' is no longer needed. Use range argument inside
+ * a pair of brackets instead.
+ */
+mixed *slice_array(mixed *arr, int from, int to) {
+  PROFILE(slice_array);
+  log_file("FIX", "slice_array: " + file_name(previous_object()) + "\n");
+  return arr[from..to];
+}
+
+string substitute_string(string str, string from, string to, int all) {
+  string tmp1, tmp2;
+  log_file("FIX", "substitute_string: " + file_name(previous_object()) + "\n");
+
+  PROFILE(substitute_string);
+  if (all) return replace_string(str, from, to);
+
+
+  if (sscanf(str, "%s" + from + "%s", tmp1, tmp2) == 2)
+    str = tmp1 + to + tmp2;
+  return str;
+}
+
+string itoa(int i) {
+  PROFILE(itoa);
+  return "" + i;
+}
+
+object load_object(mixed s) {
+  PROFILE(load_object);
+  if (objectp(s)) return s;
+  catch(call_other(s, "?"));
+  return find_object(s);
+}
+
+string query_ip_name(mixed arg) {
+  string ip_num;
+
+  PROFILE(query_ip_name);
+
+  if (stringp(arg))
+    ip_num = arg;
+  else if (objectp(arg))
+    ip_num = query_ip_number(arg);
+  else
+    ip_num = query_ip_number(previous_object());
+
+  return (string)"/obj/daemon/dnsd"->query_hostname(ip_num);
+}
+
+string _query_ident(object ob) {
+  PROFILE(_query_ident);
+  if (!ob) ob = previous_object();
+  return (string)"/obj/daemon/identd"->query_ident(ob);
+}
+
+
+string implode_nicely(string *dum, string del) {
+  int s;
+  PROFILE(implode_nicely);
+  if (!del) del = "and";
+  switch (s = sizeof(dum)) {
+    default:
+      return implode(dum[0..s - 2], ", ") + " " + del + " " + dum[s - 1];
+    case 2:
+      return dum[0] + " " + del + " " + dum[1];
+    case 1:
+      return dum[0];
+    case 0:
+      return "";
+  }
+} /* implode_nicely */
+
+
+#define to_m(X) ((X)[0]*1000+(X)[1]/1000000)
+
+
+mapping mapping_rusage() {
+  mapping u, r;
+
+  PROFILE(mapping_rusage);
+
+  r = rusage();
+  u = ([
+    "minflt": r["minflt"],
+    "majflt": r["majflt"],
+    "nswap": r["nswap"],
+    "inblk": r["inblock"],
+    "outblk": r["oublock"],
+    "msnd": r["msgsnd"],
+    "srcv": r["msgrcv"],
+    "sigs": r["nsignals"],
+    "vctx": r["nvcsw"],
+    "ictx": r["nivcsw"],
+    "sysc": 0,
+    "ioch": 0,
+    "rtime": r["utime"] + r["stime"],
+    "utime": r["utime"],
+    "stime": r["stime"],
+    "ttime": r["utime"] + r["stime"],
+    "tftime": 0,
+    "dftime": 0,
+    "ktime": 0,
+    "ltime": 0,
+    "slptime": 0,
+    "wtime": 0,
+    "stoptime": 0,
+    "brksize": r["maxrss"],
+    "stksize": 0,
+  ]);
+  return u;
+}
+
+string expand_file_name(string s) {
+  mixed tmp, i;
+
+  PROFILE(expand_file_name);
+
+  if (sscanf(s, "an %*s") || sscanf(s, "a %*s"))
+    return s;
+
+  switch (s[0]) {
+    case '@': return s;
+    case '/':
+      tmp = explode(s, "/");
+      break;
+
+    case '~':
+      if (s[1] == '/')
+        s = "/players/" + creator(previous_object()) + s[1..strlen(s)];
+      else
+        s = "/players/" + s[1..strlen(s)];
+      tmp = explode(s, "/");
+      break;
+
+    default:
+      tmp = explode(file_name(previous_object()), "/");
+      tmp[<1] = ".";
+      tmp += explode(s, "/");
+  }
+
+  tmp -= ({ ".", "" });
+  while (-1 != (i = member_array("..", tmp))) {
+    tmp = tmp[0..i - 2] + tmp[i + 1..100000];
+  }
+
+  return "/" + implode(tmp, "/");
+}
+
+private mapping object_light = ([]);
+
+private int sum_light(object ob) {
+  int total;
+  object *inv;
+  int i;
+
+  if (!ob) return 0;
+  total = object_light[ob];
+  inv = all_inventory(ob);
+  for (i = 0; i < sizeof(inv); i++)
+    total += sum_light(inv[i]);
+  return total;
+}
+
+int set_light(int l) {
+  mixed val;
+  object obj, root;
+
+  PROFILE(set_light);
+
+  obj = previous_object();
+  if (obj) {
+    if (l) {
+      object_light[obj] += l;
+      if (!object_light[obj])
+        map_delete(object_light, obj);
+    }
+    root = obj;
+    while (environment(root))
+      root = environment(root);
+    l = sum_light(root);
+  } else
+    l = 0;
+  map_delete(object_light, 0);
+  if (this_player()) {
+#if 0
+    if (environment(this_player()) &&
+      (environment(this_player()) == environment(previous_object()) ||
+        environment(this_player()) == previous_object()) &&
+      environment(this_player())->query_property("own_light_code")) {
+      l = (int)environment(this_player())->query_light(l);
+    }
+#else
+    for (obj = previous_object(); obj; obj = environment(obj)) {
+      /* A value of 0 will be treated as no value, tough luck */
+      if (!(val = (mixed)obj->query_property("own_light_code")))
+        continue;
+      if (intp(val))
+        l = val;
+      else if (stringp(val))
+        l = (int)call_other(obj, val, l);
+      else {
+        throw("Bad type of 'own_light_code' property value for \"" +
+          file_name(obj) + "\".\n");
+      }
+      break;
+    }
+#endif
+    if (l < 1) {
+      if (this_player()->query_property("night_vision"))
+        l = 1;
+    } else {
+      if (this_player()->query_property("blinded"))
+        l = 0;
+    }
+  }
+  return l;
+}
+
+object *_get_all_obj() {
+  PROFILE(_get_all_obj);
+  return objects();
+}
+
+object _next_object(object obj) {
+  object *all;
+  int i;
+  PROFILE(_next_object);
+  log_file("FIX", "_next_object: " + file_name(previous_object()) + "\n");
+
+  if ((i = member_array(obj, all = _get_all_obj())) == -1)
+    return 0;
+  else if (++i >= sizeof(all))
+    return all[0];
+  else
+    return all[i];
+}
+
+object _prev_object(object obj) {
+  object *all;
+  int i;
+  PROFILE(_prev_object);
+  log_file("FIX", "_prev_object: " + file_name(previous_object()) + "\n");
+  if ((i = member_array(obj, all = _get_all_obj())) == -1)
+    return 0;
+  else if (--i < 0)
+    return all[<1];
+  else
+    return all[i];
+}
+
+
+varargs int *frnd(int max, int min, int nr, int seed) {
+  /* A fast and dirty random generator for integers.
+   * Based on FORTRAN-77.
+   * Period is only about 2**30.
+   *
+   * BEWARE: There are no sanity checks on things here,
+   * as that would slow it down and LPC is slow enough as
+   * it is. It is YOUR responsibility to give valid values.
+   *
+   * max is the max numberr the generator will give,
+   * min is the smallest,
+   * nr is the size of the returned array and
+   * seed is the starting seed. seed should be in between
+   * min and max.
+   */
+
+  int i;
+  int rr, *tmp;
+
+  tmp = ({});
+  rr = seed;
+  for (i = 0; i < nr; i++) {
+    rr = (rr * 8121 + 28411) % 134456;
+    tmp += ({ min + (max - min + 1) * rr / 134456 });
+  }
+  return tmp;
+} /* frnd */
+
+/* FluffOS compatibility shims for LPMud 3.x / NannyMUD efuns */
+mixed *m_indices(mapping m) { return mapp(m) ? keys(m) : ({}); }
+mixed *indices(mapping m) { return mapp(m) ? keys(m) : ({}); }
+mixed *m_values(mapping m) { return mapp(m) ? values(m) : ({}); }
+int m_sizeof(mapping m) { return mapp(m) ? sizeof(m) : 0; }
+mapping m_delete(mapping m, mixed k) { if (mapp(m)) map_delete(m, k); return m; }
+mapping _m_delete(mapping m, mixed k) { return m_delete(m, k); }
+
+mapping mkmapping(mixed *keys_arr, mixed *vals_arr) {
+  mapping res;
+  int i, n;
+  res = ([]);
+  if (!pointerp(keys_arr) || !pointerp(vals_arr)) return res;
+  n = sizeof(keys_arr);
+  if (sizeof(vals_arr) < n) n = sizeof(vals_arr);
+  for (i = 0; i < n; i++)
+    res[keys_arr[i]] = vals_arr[i];
+  return res;
+}
+
+int atoi(string s) {
+  int i;
+  if (!stringp(s)) return 0;
+  if (sscanf(s, "%d", i) == 1) return i;
+  return 0;
+}
+
+varargs void add_worth(int amount, object ob) {}
+
+varargs string replace(string str, string from, string to) {
+  if (!stringp(str)) return str;
+  if (!stringp(to)) to = "";
+  return replace_string(str, from, to);
+}
+
+varargs void _syslog(string msg, mixed rest) {}
+
+int _isclone(object ob) {
+  if (!ob) ob = previous_object();
+  return ob ? clonep(ob) : 0;
+}
+
+object _next_clone(object ob) {
+  object *all;
+  int i;
+  if (!ob) ob = previous_object();
+  if (!ob) return 0;
+  all = children(base_name(ob));
+  if (!sizeof(all)) return 0;
+  i = member_array(ob, all);
+  if (i == -1) return all[0];
+  return all[(i + 1) % sizeof(all)];
+}
+
+mixed *_file_stat(string file) {
+  mixed *s;
+  if (!stringp(file)) return 0;
+  s = stat(file);
+  if (!pointerp(s) || !sizeof(s)) return 0;
+  return ({ 0644, s[0], s[1], s[1], s[2] });
+}
+
+string version() {
+  return "NannyMUD/FluffOS";
+}
+
+int getoid(object ob) {
+  int id;
+  if (!ob) return 0;
+  if (sscanf(file_name(ob), "%*s#%d", id) == 2) return id;
+  return 0;
+}
+
+int _acl_str2num(string rights) {
+  return 0;
+}
+
+void _destruct(object ob) {
+  if (ob) destruct(ob);
+}
+
+mixed *_object_stat(object ob) {
+  return ({ 0, 0, time(), 0 });
+}
+
+varargs int tail(string fname) {
+  int offset;
+  string str;
+
+  if (!stringp(fname)) return 0;
+  offset = file_size(fname);
+  if (offset < 0) return 0;
+  offset -= 54 * 20;
+  if (offset < 0) offset = 0;
+  str = read_bytes(fname, offset, 1080);
+  if (!str) return 0;
+  if (offset)
+    str = str[strsrch(str, "\n") + 1..];
+  write(str);
+  return 1;
+}
+
+varargs mixed *exclude_array(mixed *arr, int from, int to) {
+  if (!pointerp(arr)) return ({});
+  if (undefinedp(to)) to = from;
+  if (from < 0) from = 0;
+  if (to < from) return arr;
+  return arr[0..from - 1] + arr[to + 1..<1];
+}
+
+varargs int cat(string file, int start, int num) {
+  string content;
+  string *lines;
+  int len, i, end;
+
+  content = read_file(file);
+  if (!content) return 0;
+  if (!start) {
+    write(content);
+    return 0;
+  }
+  lines = explode(content, "\n");
+  len = sizeof(lines);
+  if (start < 1) start = 1;
+  end = (start - 1) + num;
+  if (end > len) end = len;
+  for (i = start - 1; i < end; i++)
+    write(lines[i] + "\n");
+  return end - (start - 1);
+}
+
+varargs void move_object(mixed item, mixed dest) {
+  if (undefinedp(dest)) {
+    if (previous_object())
+      previous_object()->_fluffos_move_to(item);
+    return;
+  }
+  if (stringp(item))
+    item = load_object(item);
+  if (objectp(item))
+    item->_fluffos_move_to(dest);
+}
+
+varargs int command(string str, object ob) {
+  if (!ob) ob = previous_object();
+  if (!ob) return 0;
+  return (int)ob->_fluffos_cmd(str);
+}
+
+int transfer(mixed item, mixed dest) {
+  int weight;
+  object from;
+
+  if (stringp(item)) item = load_object(item);
+  if (stringp(dest)) dest = load_object(dest);
+  if (!objectp(item) || !objectp(dest)) return 3;
+
+  weight = (int)item->query_weight();
+  if (!item) return 3;
+
+  from = environment(item);
+  if (from) {
+    if (living(from)) {
+      if (item->drop() || !item) return 2;
+    } else if (environment(from)) {
+      if (!from->can_put_and_get() || !from) return 3;
+    }
+  }
+
+  if (environment(dest) && !living(dest)) {
+    if (item->prevent_insert()) return 4;
+    if (!dest->can_put_and_get() || !dest) return 5;
+  }
+
+  if (living(dest)) {
+    if (!item->get() || !item) return 6;
+  }
+
+  if (environment(dest) && weight) {
+    if (!dest->add_weight(weight) || !dest) return 1;
+  }
+
+  if (from && environment(from) && weight)
+    from->add_weight(-weight);
+
+  move_object(item, dest);
+  return 0;
+}
+
+string process_string(string str) {
+  int start, end, colon, bar;
+  string tag, func, objpath, argstr, result;
+  string *args;
+  object target;
+  mixed err, val;
+
+  if (!stringp(str)) return str;
+  start = strsrch(str, "@@");
+  if (start == -1) return str;
+  end = strsrch(str, "@@", start + 2);
+  if (end == -1) return str;
+
+  tag = str[start + 2..end - 1];
+  bar = strsrch(tag, "|");
+  if (bar != -1) {
+    argstr = tag[bar + 1..<1];
+    tag = tag[0..bar - 1];
+    args = explode(argstr, "|");
+  } else {
+    args = ({});
+  }
+
+  colon = strsrch(tag, ":");
+  if (colon == -1) {
+    func = tag;
+    target = previous_object();
+  } else {
+    func = tag[0..colon - 1];
+    objpath = tag[colon + 1..<1];
+    target = find_object(objpath);
+    if (!target) catch(target = load_object(objpath));
+  }
+
+  result = "";
+  if (target) {
+    err = catch(val = call_other(target, ({ func }) + args));
+    if (!err) {
+      if (stringp(val)) result = val;
+      else if (intp(val) && val) result = "" + val;
+    }
+  }
+  return str[0..start - 1] + result + process_string(str[end + 2..<1]);
+}
+
+void _disconnect(object ob) {
+  PROFILE(_disconnect);
+  if (objectp(ob)) efun::remove_interactive(ob);
+}
+
+int _object_cpu(object ob) {
+  PROFILE(_object_cpu);
+  return 0;
+}
+
+int _object_memory(object ob) {
+  PROFILE(_object_memory);
+  return objectp(ob) ? efun::memory_info(ob) : 0;
+}
+
+void _set_prompt(string p) {
+  PROFILE(_set_prompt);
+}
+
+varargs string file_name(object ob) {
+  string f;
+  if (!ob) ob = previous_object();
+  if (!objectp(ob)) return 0;
+  f = efun::file_name(ob);
+  if (strlen(f) > 0 && f[0] == '/')
+    return f[1..];
+  return f;
+}
+
+private nosave int _boot_time = time();
+
+int *_driver_stat() {
+  PROFILE(_driver_stat);
+  return ({ _boot_time, memory_info(), 0, 0 });
+}
+
+#ifndef __PACKAGE_SOCKETS__
+varargs int socket_create(int mode, string read_cb, string close_cb) { return -1; }
+int socket_bind(int fd, int port) { return -1; }
+int socket_listen(int fd, string listen_cb) { return -1; }
+int socket_accept(int fd, string read_cb, string write_cb) { return -1; }
+varargs int socket_connect(int fd, string addr, string read_cb, string write_cb) { return -1; }
+varargs int socket_write(int fd, mixed message, mixed addr) { return -1; }
+int socket_close(int fd) { return 0; }
+string socket_error(int err) { return "sockets unsupported"; }
+varargs string socket_address(mixed arg) { return ""; }
+#endif

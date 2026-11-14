@@ -17,8 +17,8 @@ Decisions below are verified in-tree; human must close/comment on GitHub.
 | 14 | CISTOMS | **Onboarded** `libs/cistoms/` (189, port 40394) | Boot + name → Void; Casimir castle reachable. CVS checkout of testsuite tree. User-named lead. |
 | 25 | MofN | **Onboarded as noboot** `libs/mofn/` (191, port 40396) | CVS tree converted; empty `include/` + MySQL `db_connect` auth → `wasm_status=noboot`. |
 | 29 | SWLPC 0.9.1 | **Defer (LDMud)** | Archive verified (341 `.lpc`). Amylaar-style (`array`, `reset(arg)`). Needs LDMud→FluffOS campaign, not a quick MudOS bring-up. |
-| 22 | NannyMUD lib | **Defer (historic LDMud/Amylaar)** | `nannylib.tgz` from lysator verified. Classic; queue with other Amylaar ports. |
 | 28 | Heaven7 | **Onboarded & closed** `libs/heaven7/` (192, port 40397) | Boot + register(`hero`) → Tempus square/Town Hall/gardens + WASM `wasm_client.js` + `lpcc --batch` 472/472 (0 warnings, 0 errors). `NOTES.md`. |
+| 22 | NannyMUD lib | **Onboarded & closed** `libs/nanny/` (193, port 40398) | `nannylib.tgz` (1996-03-29) converted; `lpcc --batch` 544/544 viable files (0 warnings, 0 errors); native (`guest` + `testera`) & WASM (`testerw`) tested through village/church/guild/shop/Harry; banner stamped. `NOTES.md`. |
 | 23 | Silberland | **Defer (LDMud/German)** | URL reachable (codeberg); LDMud family. |
 | 24 | Tamedhon | **Defer (LDMud)** | codeberg td-mudlib; open-source part only. |
 | 26 | UNItopia | **Defer (LDMud)** | Wayback mudlib.tar.gz verified in issue comment (516 `.c`). |

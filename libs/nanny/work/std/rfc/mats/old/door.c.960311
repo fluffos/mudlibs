@@ -1,0 +1,198 @@
+/* Written by Mats */
+
+#pragma strict_types
+#pragma save_types
+
+inherit "/std/stationary";
+ 
+int opened,unlocked;
+string code;
+string direction;  /* separate */
+mixed other;  /* separate */
+int copyroom;  /* separate */
+string first,second;  /* separate */
+
+void reset(int arg) {
+  opened = unlocked = 0;
+  if (arg) return;
+  set_long("The $N is $S.\n");
+} 
+
+/******* Setup functions ********/
+
+void set_first(string room,string dir) {  /* separate */
+  first = expand_file_name(room);
+  add_property("f_dir",dir);
+}
+
+void set_second(string room,string dir) {  /* separate */
+  second = expand_file_name(room);
+  add_property("s_dir",dir);
+}
+
+void set_lock(string c,string desc) {
+  code = c;
+  if (desc) add_property("lock_desc",desc);
+}
+
+/******* Functions called by mudlib ********/
+
+int query_opened() { return opened; }
+int query_unlocked() { return unlocked; }
+void set_opened(int n) { opened = n; }
+void set_unlocked(int n) { unlocked = n; }
+
+string query_type() { return other?"door":"$N"; }  /* separate */
+
+varargs mixed copy(string fun, mixed a) {  /* separate */
+  object c;
+  if (c = present(other || query_name(),load_object(first))) {
+    return call_other(c,fun,a);
+  }
+}
+
+varargs string replace_vars(mixed mess, string extra) {
+  if (!stringp(mess)) return mess;
+  if (extra) mess = replace(mess,"$X",extra);
+  mess = replace(mess,"$D",query_type());
+  mess = replace(mess,"$N",query_name());
+  mess = replace(mess,"$S",opened? "open" : "closed");
+  return replace(mess,"$V",query_verb());
+}
+
+void setup_door() {  /* separate */
+  object e;
+
+  if (!(e = environment(this_object()))) return;
+
+  if (first == "/"+file_name(e)) {
+    direction = query_property("f_dir");
+    other = query_property("s_dir")+" door";
+    first->add_exit(direction,second,0,"@/"+file_name(this_object())+
+		    "->check_door()");
+  }
+  else if (second == "/"+file_name(e)) {
+    copyroom = 1;
+    direction = query_property("s_dir");
+    other = query_property("f_dir")+" door";
+    second->add_exit(direction,first,0,"@/"+file_name(this_object())+
+		     "->check_door()");
+  }
+  if (query_name() == "thing")
+    set_name(direction + " door");
+  else
+    other = 0;
+  remove_property("f_dir");
+  remove_property("s_dir");
+}
+
+#define LOCK_DESC "It's a ordinary lock.\n"
+#define ROOM_DESC "There is a $S $D to the $X"
+#define CHECK_MESS "The $N is closed.\n"
+#define OPEN_MESS "\bPRON $V\b$ the $N.\n"
+#define UNLOCK_MESS "\bPRON $V\b$ the $N with $X.\n"
+
+string query_in_long_short() {
+  if (!direction) setup_door();  /* separate */
+  if (copyroom) opened = copy("query_opened");  /* separate */
+  return replace_vars(eval(query_property("room_desc")) || ROOM_DESC,
+		      direction);
+}
+
+varargs string query_long(string s) {
+  if (!direction) setup_door();
+  if (copyroom) opened = copy("query_opened");
+  if (s && sscanf(s,"%*slock"))
+    return eval(query_property("lock_desc")) || LOCK_DESC;
+  return replace_vars(::query_long(s));
+}
+
+string check_door(string arg, mixed str)
+{ 
+  if (str=="query") return 0;
+  if (!direction) setup_door();
+  if (copyroom) opened = copy("query_opened");
+  if (opened) return 0;
+  return replace_vars(eval(query_property("check_mess") || CHECK_MESS));
+}
+
+int id(string s) {  /* separate */
+  if (!direction) setup_door();
+  if (::id(s) || s=="door" || s==(direction+" door") || s==direction) return 1;
+  if (code) {
+    if (s=="lock") return 1;
+    if (sscanf(s,"%s lock",s)) return id(s);
+  }
+}
+
+/******* Command functions ********/
+
+mixed open_door(string name) {
+  if (!direction) setup_door();
+  if (copyroom) {
+    opened = copy("query_opened");
+    unlocked = copy("query_unlocked");
+  }
+  if (!id(name)) {
+    notify_fail(capitalize(query_verb())+" what?\n");
+    return 0;
+  }
+
+  if (opened == (query_verb() == "open"))
+     return replace_vars("The $N is already $S.\n");
+
+  if (code && !unlocked)
+    return replace_vars("You can't $V it. The $N is locked.\n");
+
+  opened=(query_verb() == "open");
+  if (copyroom) copy("set_opened",opened);
+  first->compute_extra_long();
+  second->compute_extra_long();
+  return replace_vars(eval(query_property("open_mess") || OPEN_MESS));
+}
+
+mixed unlock_door(string str) {
+  string door,key;
+  object k;
+
+  if (!direction) setup_door();
+  if (copyroom) unlocked = copy("query_unlocked");
+  if (!str || !sscanf(str,"%s with %s",door,key)) {
+    key = "key";
+    door = str;
+  }
+  if (!id(door) || !code) {
+    notify_fail(capitalize(query_verb())+" what?\n");
+    return 0;
+  }
+
+  if (unlocked == (query_verb() == "unlock"))
+    return replace_vars("The $N is already $Ved.\n");
+  if (!(k = present(key,this_player())))
+    return "You don't have a "+key+".\n";
+  if (k->query_name()) key = k->query_name();
+  if (k->query_property("code") == code ||
+      k->query_code() == code) {
+    unlocked = query_verb() == "unlock";
+    if (copyroom) copy("set_unlocked",unlocked);
+    return replace_vars(eval(query_property("unlock_mess") || UNLOCK_MESS),key);
+  }
+  return replace_vars("The $X doesn't fit in $N.\n",key);
+}
+
+int do_cmd(string what) {
+  mixed tmp;
+  switch(query_verb()) {
+    case "open":
+    case "close":
+      tmp = open_door(what);
+      break;
+    case "lock":
+    case "unlock":
+      tmp = unlock_door(what);
+  }
+  if (stringp(tmp))
+    "/std/msg"->msg(tmp);
+  if (tmp) return 1;
+  return ::do_cmd(what);
+}

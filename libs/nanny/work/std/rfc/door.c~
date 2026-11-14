@@ -1,0 +1,120 @@
+/* Written by Mats */
+
+#pragma strict_types
+#pragma save_types
+
+inherit "/std/rfc/basic_lock";
+ 
+string direction;
+mixed other;
+int copyroom;
+string first,second;
+
+/******* Setup functions ********/
+
+void set_first(string dir,string room) {
+  first = expand_file_name(room);
+  add_property("f_dir",dir);
+}
+
+void set_second(string dir,string room) {
+  second = expand_file_name(room);
+  add_property("s_dir",dir);
+}
+
+/******* Functions called by mudlib ********/
+
+string query_class() { return other?"door":"$N"; }
+string query_dir() { return direction; }
+
+varargs mixed copy(string fun, mixed a) {
+  object c;
+  if (c = present(other || query_name(),load_object(first))) {
+    return call_other(c,fun,a);
+  }
+}
+
+void setup_door() {
+  object e;
+
+  if (!(e = environment(this_object()))) return;
+
+  if (first == "/"+file_name(e)) {
+    direction = query_property("f_dir");
+    other = query_property("s_dir")+" door";
+    first->add_exit(direction,second,0,"@/"+file_name(this_object())+
+		    "->check_door()");
+  }
+  else if (second == "/"+file_name(e)) {
+    copyroom = 1;
+    direction = query_property("s_dir");
+    other = query_property("f_dir")+" door";
+    second->add_exit(direction,first,0,"@/"+file_name(this_object())+
+		     "->check_door()");
+  }
+  if (query_name() == "thing")
+    set_name(direction + " door");
+  else
+    other = 0;
+  remove_property("f_dir");
+  remove_property("s_dir");
+}
+
+#define ROOM_DESC "There is a $S $D to the $X"
+#define CHECK_MESS "The $N is closed.\n"
+
+string query_in_long_short() {
+  if (!direction) setup_door();
+  if (copyroom) opened = copy("query_opened");
+  return replace_vars(eval(query_property("room_desc")) || ROOM_DESC,
+		      direction);
+}
+
+varargs string query_long(string s) {
+  if (!direction) setup_door();
+  if (copyroom) opened = copy("query_opened");
+  return query_lock_long(s) || replace_vars(::query_long(s));
+}
+
+string check_door(string arg, mixed str)
+{ 
+  if (str=="query") return 0;
+  if (!direction) setup_door();
+  if (copyroom) opened = copy("query_opened");
+  if (opened) return 0;
+  return replace_vars(eval(query_property("check_mess") || CHECK_MESS));
+}
+
+int id(string s) {
+  if (!direction) setup_door();
+  return ::id(s) || s=="door" || s==(direction+" door") ||
+    s==direction || id_lock(s);
+}
+
+/******* Command functions ********/
+
+mixed open_it(mixed arg) {
+  if (!direction) setup_door();
+  if (copyroom) {
+    opened = copy("query_opened");
+    unlocked = copy("query_unlocked");
+  }
+  if (arg = ::open_it(arg)) {
+    if (copyroom) copy("set_opened",opened);
+    first->compute_extra_long();
+    second->compute_extra_long();
+  }
+  return arg;
+}
+
+mixed unlock_it(mixed arg) {
+  string door,key;
+  object k;
+
+  if (!direction) setup_door();
+  if (copyroom) unlocked = copy("query_unlocked");
+  if (arg = ::unlock_it(arg)) {
+    if (copyroom) copy("set_unlocked",unlocked);
+  }
+  return arg;
+}
